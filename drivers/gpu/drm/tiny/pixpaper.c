@@ -536,7 +536,7 @@ static void pixpaper_spi_sync(struct spi_device *spi, struct spi_message *msg,
 		err->errno_code = ret;
 }
 
-static void pixpaper_send_cmd(struct pixpaper_panel *panel, u8 cmd,
+static noinline void pixpaper_send_cmd(struct pixpaper_panel *panel, u8 cmd,
 			      struct pixpaper_error_ctx *err)
 {
 	if (err->errno_code)
@@ -556,7 +556,7 @@ static void pixpaper_send_cmd(struct pixpaper_panel *panel, u8 cmd,
 	pixpaper_spi_sync(panel->spi, &msg, err);
 }
 
-static void pixpaper_send_data(struct pixpaper_panel *panel, u8 data,
+static noinline void pixpaper_send_data(struct pixpaper_panel *panel, u8 data,
 			       struct pixpaper_error_ctx *err)
 {
 	if (err->errno_code)
