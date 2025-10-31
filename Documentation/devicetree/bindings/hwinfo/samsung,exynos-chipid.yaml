@@ -33,6 +33,16 @@ properties:
               - samsung,exynosautov9-chipid
               - samsung,exynosautov920-chipid
           - const: samsung,exynos850-chipid
+      - items:
+          - const: google,gs101-chipid
+
+  nvmem-cells:
+    maxItems: 2
+
+  nvmem-cell-names:
+    items:
+      - const: product-id
+      - const: chip-id
 
   reg:
     maxItems: 1
@@ -47,7 +57,46 @@ properties:
 
 required:
   - compatible
-  - reg
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            oneOf:
+              - enum:
+                  - samsung,exynos4210-chipid
+                  - samsung,exynos850-chipid
+              - items:
+                  - enum:
+                      - samsung,exynos5433-chipid
+                      - samsung,exynos7-chipid
+                      - samsung,exynos7870-chipid
+                      - samsung,exynos8890-chipid
+                  - const: samsung,exynos4210-chipid
+              - items:
+                  - enum:
+                      - samsung,exynos2200-chipid
+                      - samsung,exynos7885-chipid
+                      - samsung,exynos8895-chipid
+                      - samsung,exynos9610-chipid
+                      - samsung,exynos9810-chipid
+                      - samsung,exynos990-chipid
+                      - samsung,exynosautov9-chipid
+                      - samsung,exynosautov920-chipid
+                  - const: samsung,exynos850-chipid
+    then:
+      required:
+        - reg
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: google,gs101-chipid
+    then:
+      required:
+        - nvmem-cells
+        - nvmem-cell-names
 
 additionalProperties: false
 
