@@ -486,6 +486,20 @@ bool resctrl_arch_mbm_cntr_assign_enabled(struct rdt_resource *r);
 int resctrl_arch_mbm_cntr_assign_set(struct rdt_resource *r, bool enable);
 
 /*
+ * Convert a bandwidth control value to the appropriate form for
+ * consumption by the hardware driver for resource r.
+ *
+ * For example, it simplifies the x86 RDT implementation to round the
+ * value to a suitable step here and then treat the resulting value as
+ * opaque when programming the hardware MSRs later on.
+ *
+ * Architectures for which this pre-conversion hook is not useful
+ * should supply an implementation of this function that just returns
+ * val unmodified.
+ */
+u32 resctrl_arch_preconvert_bw(u32 val, const struct rdt_resource *r);
+
+/*
  * Update the ctrl_val and apply this config right now.
  * Must be called on one of the domain's CPUs.
  */
