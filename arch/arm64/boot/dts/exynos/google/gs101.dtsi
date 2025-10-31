@@ -571,6 +571,23 @@
 		#size-cells = <1>;
 		ranges = <0x0 0x0 0x0 0x40000000>;
 
+		otp: efuse@10000000 {
+			compatible = "google,gs101-otp";
+			reg = <0x10000000 0xf084>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+			clocks = <&cmu_misc CLK_GOUT_MISC_OTP_CON_TOP_PCLK>;
+			clock-names = "pclk";
+
+			product_id: product-id@0 {
+				reg = <0x0 0x4>;
+			};
+
+			chip_id: chip-id@4 {
+				reg = <0x4 0x10>;
+			};
+		};
+
 		cmu_misc: clock-controller@10010000 {
 			compatible = "google,gs101-cmu-misc";
 			reg = <0x10010000 0x10000>;
