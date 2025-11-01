@@ -3567,6 +3567,22 @@ static void __split_folio_to_order(struct folio *folio, int old_order,
 		ClearPageCompound(&folio->page);
 }
 
+static void __split_folio_and_update_stats(struct folio *folio, int old_order,
+		int new_order, bool is_anon)
+{
+	int nr_new_folios = 1UL << (old_order - new_order);
+
+	folio_split_memcg_refs(folio, old_order, new_order);
+	split_page_owner(&folio->page, old_order, new_order);
+	pgalloc_tag_split(folio, old_order, new_order);
+	__split_folio_to_order(folio, old_order, new_order);
+
+	if (is_anon) {
+		mod_mthp_stat(old_order, MTHP_STAT_NR_ANON, -1);
+		mod_mthp_stat(new_order, MTHP_STAT_NR_ANON, nr_new_folios);
+	}
+}
+
 /**
  * __split_unmapped_folio() - splits an unmapped @folio to lower order folios in
  * two ways: uniform split or non-uniform split.
@@ -3623,8 +3639,6 @@ static int __split_unmapped_folio(struct folio *folio, int new_order,
 	for (split_order = start_order;
 	     split_order >= new_order;
 	     split_order--) {
-		int nr_new_folios = 1UL << (old_order - split_order);
-
 		/* order-1 anonymous folio is not supported */
 		if (is_anon && split_order == 1)
 			continue;
@@ -3645,15 +3659,7 @@ static int __split_unmapped_folio(struct folio *folio, int new_order,
 			}
 		}
 
-		folio_split_memcg_refs(folio, old_order, split_order);
-		split_page_owner(&folio->page, old_order, split_order);
-		pgalloc_tag_split(folio, old_order, split_order);
-		__split_folio_to_order(folio, old_order, split_order);
-
-		if (is_anon) {
-			mod_mthp_stat(old_order, MTHP_STAT_NR_ANON, -1);
-			mod_mthp_stat(split_order, MTHP_STAT_NR_ANON, nr_new_folios);
-		}
+		__split_folio_and_update_stats(folio, old_order, split_order, is_anon);
 		/*
 		 * If uniform split, the process is complete.
 		 * If non-uniform, continue splitting the folio at @split_at
