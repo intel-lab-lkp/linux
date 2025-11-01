@@ -112,7 +112,7 @@ properties:
 
   mediatek,wed:
     $ref: /schemas/types.yaml#/definitions/phandle-array
-    minItems: 2
+    minItems: 1
     maxItems: 2
     items:
       maxItems: 1
@@ -338,11 +338,12 @@ allOf:
             - const: netsys0
             - const: netsys1
 
-        mediatek,infracfg: false
-
         mediatek,sgmiisys:
           minItems: 2
           maxItems: 2
+
+        mediatek,wed:
+          maxItems: 1
 
   - if:
       properties:
@@ -384,6 +385,9 @@ allOf:
         mediatek,sgmiisys:
           minItems: 2
           maxItems: 2
+
+        mediatek,wed:
+          minItems: 2
 
   - if:
       properties:
@@ -428,6 +432,9 @@ allOf:
             - const: xgp1
             - const: xgp2
             - const: xgp3
+
+        mediatek,wed:
+          minItems: 2
 
 patternProperties:
   "^mac@[0-2]$":
