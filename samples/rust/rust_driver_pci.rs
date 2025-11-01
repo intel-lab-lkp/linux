@@ -56,7 +56,7 @@ impl SampleDriver {
         // Note that we need `try_write8`, since `offset` can't be checked at compile-time.
         bar.try_write8(data, offset)?;
 
-        Ok(bar.read32(Regs::COUNT))
+        Ok(u32::from_le(bar.read32(Regs::COUNT)))
     }
 }
 
