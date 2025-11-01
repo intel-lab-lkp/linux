@@ -11350,12 +11350,7 @@ static int drxj_open(struct drx_demod_instance *demod)
 	    (demod->my_common_attr == NULL) ||
 	    (demod->my_ext_attr == NULL) ||
 	    (demod->my_i2c_dev_addr == NULL) ||
-	    (demod->my_common_attr->is_opened)) {
-		return -EINVAL;
-	}
-
-	/* Check arguments */
-	if (demod->my_ext_attr == NULL)
+	    (demod->my_common_attr->is_opened))
 		return -EINVAL;
 
 	dev_addr = demod->my_i2c_dev_addr;
