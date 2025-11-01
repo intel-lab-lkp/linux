@@ -107,7 +107,7 @@ extern const char *const gpio_suffixes[];
 		if (con_id)								\
 			snprintf(propname, sizeof(propname), "%s-%s", con_id, __gs);	\
 		else									\
-			snprintf(propname, sizeof(propname), "%s", __gs);		\
+			strscpy(propname, __gs);					\
 		1;									\
 	     });									\
 	     __suffixes++)
