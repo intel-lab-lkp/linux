@@ -816,6 +816,8 @@ void svm_enable_lbrv(struct kvm_vcpu *vcpu)
 	/* Move the LBR msrs to the vmcb02 so that the guest can see them. */
 	if (is_guest_mode(vcpu))
 		svm_copy_lbrs(svm->vmcb, svm->vmcb01.ptr);
+	else
+		vmcb_mark_dirty(svm->vmcb, VMCB_LBR);
 }
 
 static void svm_disable_lbrv(struct kvm_vcpu *vcpu)
