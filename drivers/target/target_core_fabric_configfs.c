@@ -275,12 +275,11 @@ static struct config_group *target_fabric_make_mappedlun(
 	unsigned long long mapped_lun;
 	int ret = 0;
 
-	buf = kzalloc(strlen(name) + 1, GFP_KERNEL);
+	buf = kstrdup(name, GFP_KERNEL);
 	if (!buf) {
 		pr_err("Unable to allocate memory for name buf\n");
 		return ERR_PTR(-ENOMEM);
 	}
-	snprintf(buf, strlen(name) + 1, "%s", name);
 	/*
 	 * Make sure user is creating iscsi/$IQN/$TPGT/acls/$INITIATOR/lun_$ID.
 	 */
