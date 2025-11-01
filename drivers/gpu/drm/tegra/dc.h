@@ -447,10 +447,23 @@ int tegra_dc_rgb_exit(struct tegra_dc *dc);
 #define BASE_COLOR_SIZE_888    (  8 << 0)
 #define BASE_COLOR_SIZE_101010 ( 10 << 0)
 #define BASE_COLOR_SIZE_121212 ( 12 << 0)
+#define CMU_ENABLE_MASK        (1 << 20)
+#define CMU_ENABLE_DISABLE     (0 << 20)
+#define CMU_ENABLE_ENABLE      (1 << 20)
 
 #define DC_DISP_SHIFT_CLOCK_OPTIONS		0x431
 #define  SC1_H_QUALIFIER_NONE	(1 << 16)
 #define  SC0_H_QUALIFIER_NONE	(1 <<  0)
+
+/* Nvdisplay */
+#define DC_DISP_CORE_HEAD_SET_CONTROL_OUTPUT_LUT	0x431
+#define  OUTPUT_LUT_MODE_MASK        (3 << 5)
+#define  OUTPUT_LUT_MODE_INTERPOLATE (1 << 5)
+#define  OUTPUT_LUT_SIZE_MASK        (3 << 1)
+#define  OUTPUT_LUT_SIZE_SIZE_1025   (2 << 1)
+
+#define DC_DISP_COREPVT_HEAD_SET_OUTPUT_LUT_BASE	0x432
+#define DC_DISP_COREPVT_HEAD_SET_OUTPUT_LUT_BASE_HI	0x433
 
 #define DC_DISP_DATA_ENABLE_OPTIONS		0x432
 #define DE_SELECT_ACTIVE_BLANK  (0 << 0)
