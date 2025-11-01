@@ -146,12 +146,13 @@ static int desc_set_label(struct gpio_desc *desc, const char *label)
 	struct gpio_desc_label *new = NULL, *old;
 
 	if (label) {
-		new = kzalloc(struct_size(new, str, strlen(label) + 1),
-			      GFP_KERNEL);
+		int size = strlen(label) + 1;
+
+		new = kzalloc(struct_size(new, str, size), GFP_KERNEL);
 		if (!new)
 			return -ENOMEM;
 
-		strcpy(new->str, label);
+		strscpy(new->str, label, size);
 	}
 
 	old = rcu_replace_pointer(desc->label, new, 1);
