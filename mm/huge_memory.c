@@ -3629,14 +3629,20 @@ static int __split_unmapped_folio(struct folio *folio, int new_order,
 {
 	const bool is_anon = folio_test_anon(folio);
 	int old_order = folio_order(folio);
-	int start_order = uniform_split ? new_order : old_order - 1;
 	int split_order;
 
+	/* For uniform split, folio is split to new_order directly. */
+	if (uniform_split) {
+		if (mapping)
+			xas_split(xas, folio, old_order);
+		__split_folio_and_update_stats(folio, old_order, new_order, is_anon);
+		return 0;
+	}
+
 	/*
-	 * split to new_order one order at a time. For uniform split,
-	 * folio is split to new_order directly.
+	 * For non-uniform, split to new_order one order at a time.
 	 */
-	for (split_order = start_order;
+	for (split_order = old_order - 1;
 	     split_order >= new_order;
 	     split_order--) {
 		/* order-1 anonymous folio is not supported */
@@ -3649,21 +3655,16 @@ static int __split_unmapped_folio(struct folio *folio, int new_order,
 			 * irq is disabled to allocate enough memory, whereas
 			 * non-uniform split can handle ENOMEM.
 			 */
-			if (uniform_split)
-				xas_split(xas, folio, old_order);
-			else {
-				xas_set_order(xas, folio->index, split_order);
-				xas_try_split(xas, folio, old_order);
-				if (xas_error(xas))
-					return xas_error(xas);
-			}
+			xas_set_order(xas, folio->index, split_order);
+			xas_try_split(xas, folio, old_order);
+			if (xas_error(xas))
+				return xas_error(xas);
 		}
 
 		__split_folio_and_update_stats(folio, old_order, split_order, is_anon);
 		/*
-		 * If uniform split, the process is complete.
-		 * If non-uniform, continue splitting the folio at @split_at
-		 * as long as the next @split_order is >= @new_order.
+		 * Continue splitting the folio at @split_at as long as the
+		 * next @split_order is >= @new_order.
 		 */
 		folio = page_folio(split_at);
 		old_order = split_order;
