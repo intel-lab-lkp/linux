@@ -243,3 +243,168 @@ impl<'a> LockSet<'a> {
         unsafe { self.acquire_ctx.as_mut().reinit(self.class) };
     }
 }
+
+#[kunit_tests(rust_kernel_lock_set)]
+mod tests {
+    use crate::c_str;
+    use crate::prelude::*;
+    use crate::sync::Arc;
+    use pin_init::stack_pin_init;
+
+    use super::*;
+
+    #[test]
+    fn test_lock_set_basic_lock_unlock() -> Result {
+        stack_pin_init!(let class = Class::new_wound_wait(c_str!("test")));
+
+        let mutex = Arc::pin_init(Mutex::new(10, &class), GFP_KERNEL)?;
+        let mut lock_set = KBox::pin_init(LockSet::new(&class)?, GFP_KERNEL)?;
+
+        // SAFETY: Both `lock_set` and `mutex` uses the same class.
+        unsafe { lock_set.lock(&mutex)? };
+
+        lock_set.with_locked(&mutex, |v| {
+            assert_eq!(*v, 10);
+        })?;
+
+        lock_set.release_all_locks();
+        assert!(!mutex.is_locked());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_lock_set_with_locked_mutates_data() -> Result {
+        stack_pin_init!(let class = Class::new_wound_wait(c_str!("test")));
+
+        let mutex = Arc::pin_init(Mutex::new(5, &class), GFP_KERNEL)?;
+        let mut lock_set = KBox::pin_init(LockSet::new(&class)?, GFP_KERNEL)?;
+
+        // SAFETY: Both `lock_set` and `mutex` uses the same class.
+        unsafe { lock_set.lock(&mutex)? };
+
+        lock_set.with_locked(&mutex, |v| {
+            assert_eq!(*v, 5);
+            // Increment the value.
+            *v += 7;
+        })?;
+
+        lock_set.with_locked(&mutex, |v| {
+            // Check that mutation took effect.
+            assert_eq!(*v, 12);
+        })?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_lock_all_success() -> Result {
+        stack_pin_init!(let class = Class::new_wound_wait(c_str!("test")));
+
+        let mutex1 = Arc::pin_init(Mutex::new(1, &class), GFP_KERNEL)?;
+        let mutex2 = Arc::pin_init(Mutex::new(2, &class), GFP_KERNEL)?;
+        let mut lock_set = KBox::pin_init(LockSet::new(&class)?, GFP_KERNEL)?;
+
+        let res = lock_set.lock_all(
+            // `locking_algorithm` closure
+            |lock_set| {
+                // SAFETY: Both `lock_set` and `mutex1` uses the same class.
+                let _ = unsafe { lock_set.lock(&mutex1)? };
+
+                // SAFETY: Both `lock_set` and `mutex2` uses the same class.
+                let _ = unsafe { lock_set.lock(&mutex2)? };
+                Ok(())
+            },
+            // `on_all_locks_taken` closure
+            |lock_set| {
+                lock_set.with_locked(&mutex1, |v| *v += 10)?;
+                lock_set.with_locked(&mutex2, |v| *v += 20)?;
+                Ok((
+                    lock_set.with_locked(&mutex1, |v| *v)?,
+                    lock_set.with_locked(&mutex2, |v| *v)?,
+                ))
+            },
+        )?;
+
+        assert_eq!(res, (11, 22));
+        assert!(!mutex1.is_locked());
+        assert!(!mutex2.is_locked());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_with_different_input_type() -> Result {
+        stack_pin_init!(let class = Class::new_wound_wait(c_str!("test")));
+
+        let mutex1 = Arc::pin_init(Mutex::new(1, &class), GFP_KERNEL)?;
+        let mutex2 = Arc::pin_init(Mutex::new("hello", &class), GFP_KERNEL)?;
+        let mut lock_set = KBox::pin_init(LockSet::new(&class)?, GFP_KERNEL)?;
+
+        lock_set.lock_all(
+            // `locking_algorithm` closure
+            |lock_set| {
+                // SAFETY: Both `lock_set` and `mutex1` uses the same class.
+                unsafe { lock_set.lock(&mutex1)? };
+
+                // SAFETY: Both `lock_set` and `mutex2` uses the same class.
+                unsafe { lock_set.lock(&mutex2)? };
+
+                Ok(())
+            },
+            // `on_all_locks_taken` closure
+            |lock_set| {
+                lock_set.with_locked(&mutex1, |v| assert_eq!(*v, 1))?;
+                lock_set.with_locked(&mutex2, |v| assert_eq!(*v, "hello"))?;
+                Ok(())
+            },
+        )?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_lock_all_retries_on_deadlock() -> Result {
+        stack_pin_init!(let class = Class::new_wound_wait(c_str!("test")));
+
+        let mutex = Arc::pin_init(Mutex::new(99, &class), GFP_KERNEL)?;
+        let mut lock_set = KBox::pin_init(LockSet::new(&class)?, GFP_KERNEL)?;
+        let mut first_try = true;
+
+        let res = lock_set.lock_all(
+            // `locking_algorithm` closure
+            |lock_set| {
+                if first_try {
+                    first_try = false;
+                    // Simulate deadlock on first attempt.
+                    return Err(EDEADLK);
+                }
+                // SAFETY: Both `lock_set` and `mutex` uses the same class.
+                unsafe { lock_set.lock(&mutex) }
+            },
+            // `on_all_locks_taken` closure
+            |lock_set| {
+                lock_set.with_locked(&mutex, |v| {
+                    *v += 1;
+                    *v
+                })
+            },
+        )?;
+
+        assert_eq!(res, 100);
+        Ok(())
+    }
+
+    #[test]
+    fn test_with_locked_on_unlocked_mutex() -> Result {
+        stack_pin_init!(let class = Class::new_wound_wait(c_str!("test")));
+
+        let mutex = Arc::pin_init(Mutex::new(5, &class), GFP_KERNEL)?;
+        let mut lock_set = KBox::pin_init(LockSet::new(&class)?, GFP_KERNEL)?;
+
+        let ecode = lock_set.with_locked(&mutex, |_v| {}).unwrap_err();
+        assert_eq!(EINVAL, ecode);
+
+        Ok(())
+    }
+}

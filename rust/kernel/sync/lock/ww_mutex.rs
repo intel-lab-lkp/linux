@@ -287,3 +287,154 @@ unsafe fn lock_common<'a, T: ?Sized>(
 
     Ok(MutexGuard::new(mutex))
 }
+
+#[kunit_tests(rust_kernel_ww_mutex)]
+mod tests {
+    use crate::prelude::*;
+    use crate::sync::Arc;
+    use crate::{c_str, define_class};
+    use pin_init::stack_pin_init;
+
+    use super::*;
+
+    // A simple coverage on `define_class` macro.
+    define_class!(TEST_WOUND_WAIT_CLASS, wound_wait, c_str!("test"));
+    define_class!(TEST_WAIT_DIE_CLASS, wait_die, c_str!("test"));
+
+    #[test]
+    fn test_ww_mutex_basic_lock_unlock() -> Result {
+        stack_pin_init!(let class = Class::new_wound_wait(c_str!("test")));
+
+        let mutex = Arc::pin_init(Mutex::new(42, &class), GFP_KERNEL)?;
+
+        let ctx = KBox::pin_init(AcquireCtx::new(&class), GFP_KERNEL)?;
+
+        // SAFETY: Both `ctx` and `mutex` uses the same class.
+        let guard = unsafe { ctx.lock(&mutex)? };
+        assert_eq!(*guard, 42);
+
+        // Drop the lock.
+        drop(guard);
+
+        // SAFETY: Both `ctx` and `mutex` uses the same class.
+        let mut guard = unsafe { ctx.lock(&mutex)? };
+        *guard = 100;
+        assert_eq!(*guard, 100);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_ww_mutex_trylock() -> Result {
+        stack_pin_init!(let class = Class::new_wound_wait(c_str!("test")));
+
+        let mutex = Arc::pin_init(Mutex::new(123, &class), GFP_KERNEL)?;
+
+        let ctx = KBox::pin_init(AcquireCtx::new(&class), GFP_KERNEL)?;
+
+        // `try_lock` on unlocked mutex should succeed.
+        // SAFETY: Both `ctx` and `mutex` uses the same class.
+        let guard = unsafe { ctx.try_lock(&mutex)? };
+        assert_eq!(*guard, 123);
+
+        // Now it should fail immediately as it's already locked.
+        // SAFETY: Both `ctx` and `mutex` uses the same class.
+        assert!(unsafe { ctx.try_lock(&mutex).is_err() });
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_ww_mutex_is_locked() -> Result {
+        stack_pin_init!(let class = Class::new_wait_die(c_str!("test")));
+
+        let mutex = Arc::pin_init(Mutex::new("hello", &class), GFP_KERNEL)?;
+
+        let ctx = KBox::pin_init(AcquireCtx::new(&class), GFP_KERNEL)?;
+
+        // Should not be locked initially.
+        assert!(!mutex.is_locked());
+
+        // SAFETY: Both `ctx` and `mutex` uses the same class.
+        let guard = unsafe { ctx.lock(&mutex)? };
+        assert!(mutex.is_locked());
+
+        drop(guard);
+        assert!(!mutex.is_locked());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_ww_acquire_context_done() -> Result {
+        stack_pin_init!(let class = Class::new_wound_wait(c_str!("test")));
+
+        let mutex1 = Arc::pin_init(Mutex::new(1, &class), GFP_KERNEL)?;
+        let mutex2 = Arc::pin_init(Mutex::new(2, &class), GFP_KERNEL)?;
+
+        let ctx = KBox::pin_init(AcquireCtx::new(&class), GFP_KERNEL)?;
+
+        // Acquire multiple mutexes with the same context.
+        // SAFETY: Both `ctx` and `mutex1` uses the same class.
+        let guard1 = unsafe { ctx.lock(&mutex1)? };
+        // SAFETY: Both `ctx` and `mutex2` uses the same class.
+        let guard2 = unsafe { ctx.lock(&mutex2)? };
+
+        assert_eq!(*guard1, 1);
+        assert_eq!(*guard2, 2);
+
+        // SAFETY: It's called exactly once here and nowhere else.
+        unsafe { ctx.done() };
+
+        // We shouldn't be able to lock once it's `done`.
+        // SAFETY: Both `ctx` and `mutex1` uses the same class.
+        assert!(unsafe { ctx.lock(&mutex1).is_err() });
+        // SAFETY: Both `ctx` and `mutex2` uses the same class.
+        assert!(unsafe { ctx.lock(&mutex2).is_err() });
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_with_global_classes() -> Result {
+        let mutex1 = Arc::pin_init(Mutex::new(100, &TEST_WOUND_WAIT_CLASS), GFP_KERNEL)?;
+        let mutex2 = Arc::pin_init(Mutex::new(200, &TEST_WAIT_DIE_CLASS), GFP_KERNEL)?;
+
+        let ww_ctx = KBox::pin_init(AcquireCtx::new(&TEST_WOUND_WAIT_CLASS), GFP_KERNEL)?;
+        let wd_ctx = KBox::pin_init(AcquireCtx::new(&TEST_WAIT_DIE_CLASS), GFP_KERNEL)?;
+
+        // SAFETY: Both `ww_ctx` and `mutex1` uses the same class.
+        let ww_guard = unsafe { ww_ctx.lock(&mutex1)? };
+        // SAFETY: Both `wd_ctx` and `mutex2` uses the same class.
+        let wd_guard = unsafe { wd_ctx.lock(&mutex2)? };
+
+        assert_eq!(*ww_guard, 100);
+        assert_eq!(*wd_guard, 200);
+
+        assert!(mutex1.is_locked());
+        assert!(mutex2.is_locked());
+
+        drop(ww_guard);
+        drop(wd_guard);
+
+        assert!(!mutex1.is_locked());
+        assert!(!mutex2.is_locked());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_mutex_without_ctx() -> Result {
+        let mutex = Arc::pin_init(Mutex::new(100, &TEST_WOUND_WAIT_CLASS), GFP_KERNEL)?;
+        let guard = mutex.lock()?;
+
+        assert_eq!(*guard, 100);
+        assert!(mutex.is_locked());
+
+        drop(guard);
+
+        assert!(!mutex.is_locked());
+
+        Ok(())
+    }
+}
