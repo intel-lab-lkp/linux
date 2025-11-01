@@ -6,6 +6,7 @@
  ******************************************************************************/
 
 #include <drv_types.h>
+#include <linux/etherdevice.h>
 #include <linux/unaligned.h>
 
 void init_mlme_ap_info(struct adapter *padapter)
@@ -1185,7 +1186,7 @@ int rtw_acl_add_sta(struct adapter *padapter, u8 *addr)
 	list_for_each(plist, phead) {
 		paclnode = list_entry(plist, struct rtw_wlan_acl_node, list);
 
-		if (!memcmp(paclnode->addr, addr, ETH_ALEN)) {
+		if (ether_addr_equal(paclnode->addr, addr)) {
 			if (paclnode->valid == true) {
 				added = true;
 				break;
@@ -1238,7 +1239,7 @@ void rtw_acl_remove_sta(struct adapter *padapter, u8 *addr)
 		paclnode = list_entry(plist, struct rtw_wlan_acl_node, list);
 
 		if (
-			!memcmp(paclnode->addr, addr, ETH_ALEN) ||
+			ether_addr_equal(paclnode->addr, addr) ||
 			is_broadcast_ether_addr(addr)
 		) {
 			if (paclnode->valid) {
