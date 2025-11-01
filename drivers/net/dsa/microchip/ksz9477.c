@@ -1355,8 +1355,12 @@ void ksz9477_config_cpu_port(struct dsa_switch *ds)
 	}
 }
 
+static u8 reserved_mcast_map[8] = { 0, 1, 3, 16, 32, 33, 2, 17 };
+
 int ksz9477_enable_stp_addr(struct ksz_device *dev)
 {
+	u8 all_ports = (1 << dev->info->port_cnt) - 1;
+	u8 i, def_port, ports, update;
 	const u32 *masks;
 	u32 data;
 	int ret;
@@ -1366,23 +1370,94 @@ int ksz9477_enable_stp_addr(struct ksz_device *dev)
 	/* Enable Reserved multicast table */
 	ksz_cfg(dev, REG_SW_LUE_CTRL_0, SW_RESV_MCAST_ENABLE, true);
 
-	/* Set the Override bit for forwarding BPDU packet to CPU */
-	ret = ksz_write32(dev, REG_SW_ALU_VAL_B,
-			  ALU_V_OVERRIDE | BIT(dev->cpu_port));
-	if (ret < 0)
-		return ret;
+	/* The reserved multicast address table has 8 entries.  Each entry has
+	 * a default value of which port to forward.  It is assumed the host
+	 * port is the last port in most of the switches, but that is not the
+	 * case for KSZ9477 or maybe KSZ9897.  For LAN937X family the default
+	 * port is port 5, the first RGMII port.  It is okay for LAN9370, a
+	 * 5-port switch, but may not be correct for the other 8-port
+	 * versions.  It is necessary to update the whole table to forward to
+	 * the right ports.
+	 * Furthermore PTP messages can use a reserved multicast address and
+	 * the host will not receive them if this table is not correct.
+	 */
+	def_port = BIT(dev->info->port_cnt - 1);
+	if (is_lan937x(dev))
+		def_port = BIT(4);
+	for (i = 0; i < 8; i++) {
+		data = reserved_mcast_map[i] <<
+			dev->info->shifts[ALU_STAT_INDEX];
+		data |= ALU_STAT_START |
+			masks[ALU_STAT_DIRECT] |
+			masks[ALU_RESV_MCAST_ADDR] |
+			masks[ALU_STAT_READ];
+		ret = ksz_write32(dev, REG_SW_ALU_STAT_CTRL__4, data);
+		if (ret < 0)
+			return ret;
 
-	data = ALU_STAT_START | ALU_RESV_MCAST_ADDR | masks[ALU_STAT_WRITE];
+		/* wait to be finished */
+		ret = ksz9477_wait_alu_sta_ready(dev);
+		if (ret < 0)
+			return ret;
 
-	ret = ksz_write32(dev, REG_SW_ALU_STAT_CTRL__4, data);
-	if (ret < 0)
-		return ret;
+		ret = ksz_read32(dev, REG_SW_ALU_VAL_B, &data);
+		if (ret < 0)
+			return ret;
 
-	/* wait to be finished */
-	ret = ksz9477_wait_alu_sta_ready(dev);
-	if (ret < 0) {
-		dev_err(dev->dev, "Failed to update Reserved Multicast table\n");
-		return ret;
+		ports = data & dev->port_mask;
+		if (ports == def_port) {
+			/* Change the host port. */
+			update = BIT(dev->cpu_port);
+
+			/* The host port is correct so no need to update the
+			 * the whole table but the first entry still needs to
+			 * set the Override bit for STP.
+			 */
+			if (update == def_port && i == 0)
+				ports = 0;
+		} else if (ports == 0) {
+			/* No change to entry. */
+			update = 0;
+		} else if (ports == (all_ports & ~def_port)) {
+			/* This entry does not forward to host port.  But if
+			 * the host needs to process protocols like MVRP and
+			 * MMRP the host port needs to be set.
+			 */
+			update = ports & ~BIT(dev->cpu_port);
+			update |= def_port;
+		} else {
+			/* No change to entry. */
+			update = ports;
+		}
+		if (update != ports) {
+			data &= ~dev->port_mask;
+			data |= update;
+			/* Set Override bit for STP in the first entry. */
+			if (i == 0)
+				data |= ALU_V_OVERRIDE;
+			ret = ksz_write32(dev, REG_SW_ALU_VAL_B, data);
+			if (ret < 0)
+				return ret;
+
+			data = reserved_mcast_map[i] <<
+			       dev->info->shifts[ALU_STAT_INDEX];
+			data |= ALU_STAT_START |
+				masks[ALU_STAT_DIRECT] |
+				masks[ALU_RESV_MCAST_ADDR] |
+				masks[ALU_STAT_WRITE];
+			ret = ksz_write32(dev, REG_SW_ALU_STAT_CTRL__4, data);
+			if (ret < 0)
+				return ret;
+
+			/* wait to be finished */
+			ret = ksz9477_wait_alu_sta_ready(dev);
+			if (ret < 0)
+				return ret;
+
+			/* No need to check the whole table. */
+			if (i == 0 && !ports)
+				break;
+		}
 	}
 
 	return 0;
