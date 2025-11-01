@@ -103,25 +103,25 @@
 	cpu_opp_table: opp-table-cpu {
 		compatible = "operating-points-v2";
 		opp-shared;
-		opp00 {
-			opp-hz = /bits/ 64 <1199999988>;
-			opp-microvolt = <1000000>;
-			clock-latency-ns = <500000>;
+		opp-1200000000 {
+			opp-hz = <0x00 0x47868c00>;
+			clock-latency-ns = <0x7a120>;
+			opp-microvolt = <0xf4240>;
 		};
-		opp01 {
-			opp-hz = /bits/ 64 <599999994>;
-			opp-microvolt = <1000000>;
-			clock-latency-ns = <500000>;
+		opp-600000000 {
+			opp-hz = <0x00 0x23c34600>;
+			clock-latency-ns = <0x7a120>;
+			opp-microvolt = <0xf4240>;
 		};
-		opp02 {
-			opp-hz = /bits/ 64 <399999996>;
-			opp-microvolt = <1000000>;
-			clock-latency-ns = <500000>;
+		opp-400000000 {
+			opp-hz = <0x00 0x17d78400>;
+			clock-latency-ns = <0x7a120>;
+			opp-microvolt = <0xf4240>;
 		};
-		opp03 {
-			opp-hz = /bits/ 64 <299999997>;
-			opp-microvolt = <1000000>;
-			clock-latency-ns = <500000>;
+		opp-300000000 {
+			opp-hz = <0x00 0x11e1a300>;
+			clock-latency-ns = <0x7a120>;
+			opp-microvolt = <0xf4240>;
 		};
 	};
 
