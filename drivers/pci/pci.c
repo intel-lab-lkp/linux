@@ -4912,11 +4912,8 @@ void pci_reset_secondary_bus(struct pci_dev *dev)
 	ctrl |= PCI_BRIDGE_CTL_BUS_RESET;
 	pci_write_config_word(dev, PCI_BRIDGE_CONTROL, ctrl);
 
-	/*
-	 * PCI spec v3.0 7.6.4.2 requires minimum Trst of 1ms.  Double
-	 * this to 2ms to ensure that we meet the minimum requirement.
-	 */
-	msleep(2);
+	/* Double this to 2ms to ensure that we meet the minimum requirement */
+	msleep(2 * PCI_T_RST_SEC_BUS_DELAY_MS);
 
 	ctrl &= ~PCI_BRIDGE_CTL_BUS_RESET;
 	pci_write_config_word(dev, PCI_BRIDGE_CONTROL, ctrl);
