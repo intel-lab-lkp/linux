@@ -54,7 +54,7 @@ DEFINE_PER_CPU(vector_irq_t, vector_irq) = {
 void __init init_ISA_irqs(void)
 {
 	struct irq_chip *chip = legacy_pic->chip;
-	int i;
+	int i, nr_legacy;
 
 	/*
 	 * Try to set up the through-local-APIC virtual wire mode earlier.
@@ -66,7 +66,9 @@ void __init init_ISA_irqs(void)
 
 	legacy_pic->init(0);
 
-	for (i = 0; i < nr_legacy_irqs(); i++) {
+	nr_legacy = nr_legacy_irqs();
+
+	for (i = 0; i < nr_legacy; i++) {
 		irq_set_chip_and_handler(i, chip, handle_level_irq);
 		irq_set_status_flags(i, IRQ_LEVEL);
 	}
@@ -74,7 +76,7 @@ void __init init_ISA_irqs(void)
 
 void __init init_IRQ(void)
 {
-	int i;
+	int i, nr_legacy;
 
 	/*
 	 * On cpu 0, Assign ISA_IRQ_VECTOR(irq) to IRQ 0..15.
@@ -84,7 +86,10 @@ void __init init_IRQ(void)
 	 * then this vector space can be freed and re-used dynamically as the
 	 * irq's migrate etc.
 	 */
-	for (i = 0; i < nr_legacy_irqs(); i++)
+
+	nr_legacy = nr_legacy_irqs();
+
+	for (i = 0; i < nr_legacy; i++)
 		per_cpu(vector_irq, 0)[ISA_IRQ_VECTOR(i)] = irq_to_desc(i);
 
 	BUG_ON(irq_init_percpu_irqstack(smp_processor_id()));
@@ -94,6 +99,7 @@ void __init init_IRQ(void)
 
 void __init native_init_IRQ(void)
 {
+	int nr_legacy;
 	/* Execute any quirks before the call gates are initialised: */
 	x86_init.irqs.pre_vector_init();
 
@@ -106,7 +112,9 @@ void __init native_init_IRQ(void)
 
 	lapic_assign_system_vectors();
 
-	if (!acpi_ioapic && !of_ioapic && nr_legacy_irqs()) {
+	nr_legacy = nr_legacy_irqs();
+
+	if (!acpi_ioapic && !of_ioapic && nr_legacy) {
 		/* IRQ2 is cascade interrupt to second interrupt controller */
 		if (request_irq(2, no_action, IRQF_NO_THREAD, "cascade", NULL))
 			pr_err("%s: request_irq() failed\n", "cascade");
