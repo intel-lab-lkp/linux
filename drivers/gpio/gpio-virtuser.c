@@ -342,7 +342,7 @@ static ssize_t gpio_virtuser_direction_do_read(struct file *file,
 	struct gpio_virtuser_line_data *data = file->private_data;
 	struct gpio_desc *desc = data->ad.desc;
 	char buf[32];
-	int dir;
+	int dir, len;
 
 	if (!atomic)
 		dir = gpiod_get_direction(desc);
@@ -351,9 +351,9 @@ static ssize_t gpio_virtuser_direction_do_read(struct file *file,
 	if (dir < 0)
 		return dir;
 
-	snprintf(buf, sizeof(buf), "%s\n", dir ? "input" : "output");
+	len = snprintf(buf, sizeof(buf), "%s\n", dir ? "input" : "output");
 
-	return simple_read_from_buffer(user_buf, size, ppos, buf, strlen(buf));
+	return simple_read_from_buffer(user_buf, size, ppos, buf, len);
 }
 
 static int gpio_virtuser_set_direction(struct gpio_desc *desc, int dir, int val)
