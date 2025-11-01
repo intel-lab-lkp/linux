@@ -163,12 +163,11 @@ static struct se_tpg_np *lio_target_call_addnptotpg(
 	int ret;
 	char buf[MAX_PORTAL_LEN + 1] = { };
 
-	if (strlen(name) > MAX_PORTAL_LEN) {
-		pr_err("strlen(name): %d exceeds MAX_PORTAL_LEN: %d\n",
-			(int)strlen(name), MAX_PORTAL_LEN);
+	if (strscpy(buf, name, sizeof(buf)) < 0) {
+		pr_err("IPv6 iSCSI network portal address"
+		       " '%s' is too long\n", name);
 		return ERR_PTR(-EOVERFLOW);
 	}
-	snprintf(buf, MAX_PORTAL_LEN + 1, "%s", name);
 
 	str = strstr(buf, "[");
 	if (str) {
