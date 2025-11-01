@@ -77,6 +77,8 @@ struct pci_pme_device {
  */
 #define PCIE_RESET_READY_POLL_MS 60000 /* msec */
 
+#define PCIE_LINK_STATUS_CHECK_MS 1
+
 static void pci_dev_d3_sleep(struct pci_dev *dev)
 {
 	unsigned int delay_ms = max(dev->d3hot_delay, pci_pm_d3hot_delay);
@@ -4632,7 +4634,7 @@ static int pcie_wait_for_link_status(struct pci_dev *pdev,
 		pcie_capability_read_word(pdev, PCI_EXP_LNKSTA, &lnksta);
 		if ((lnksta & lnksta_mask) == lnksta_match)
 			return 0;
-		msleep(1);
+		msleep(PCIE_LINK_STATUS_CHECK_MS);
 	} while (time_before(jiffies, end_jiffies));
 
 	return -ETIMEDOUT;
