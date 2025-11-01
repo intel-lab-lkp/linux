@@ -2928,7 +2928,7 @@ static int do_change_type(const struct path *path, int ms_flags)
  *
  * Returns true if the mount tree can be copied, false otherwise.
  */
-static inline bool may_copy_tree(const struct path *path)
+static inline bool may_copy_tree(const struct path *path, bool cross_ns)
 {
 	struct mount *mnt = real_mount(path->mnt);
 	const struct dentry_operations *d_op;
@@ -2946,18 +2946,21 @@ static inline bool may_copy_tree(const struct path *path)
 	if (!is_mounted(path->mnt))
 		return false;
 
-	return check_anonymous_mnt(mnt);
+	if (check_anonymous_mnt(mnt))
+		return true;
+
+	return cross_ns;
 }
 
 
-static struct mount *__do_loopback(const struct path *old_path, int recurse)
+static struct mount *__do_loopback(const struct path *old_path, int recurse, bool cross_ns)
 {
 	struct mount *old = real_mount(old_path->mnt);
 
 	if (IS_MNT_UNBINDABLE(old))
 		return ERR_PTR(-EINVAL);
 
-	if (!may_copy_tree(old_path))
+	if (!may_copy_tree(old_path, cross_ns))
 		return ERR_PTR(-EINVAL);
 
 	if (!recurse && __has_locked_children(old, old_path->dentry))
@@ -2994,7 +2997,7 @@ static int do_loopback(const struct path *path, const char *old_name,
 	if (!check_mnt(mp.parent))
 		return -EINVAL;
 
-	mnt = __do_loopback(&old_path, recurse);
+	mnt = __do_loopback(&old_path, recurse, false);
 	if (IS_ERR(mnt))
 		return PTR_ERR(mnt);
 
@@ -3007,7 +3010,7 @@ static int do_loopback(const struct path *path, const char *old_name,
 	return err;
 }
 
-static struct mnt_namespace *get_detached_copy(const struct path *path, bool recursive)
+static struct mnt_namespace *get_detached_copy(const struct path *path, bool recursive, bool cross_ns)
 {
 	struct mnt_namespace *ns, *mnt_ns = current->nsproxy->mnt_ns, *src_mnt_ns;
 	struct user_namespace *user_ns = mnt_ns->user_ns;
@@ -3032,7 +3035,7 @@ static struct mnt_namespace *get_detached_copy(const struct path *path, bool rec
 			ns->seq_origin = src_mnt_ns->ns.ns_id;
 	}
 
-	mnt = __do_loopback(path, recursive);
+	mnt = __do_loopback(path, recursive, cross_ns);
 	if (IS_ERR(mnt)) {
 		emptied_ns = ns;
 		return ERR_CAST(mnt);
@@ -3046,9 +3049,9 @@ static struct mnt_namespace *get_detached_copy(const struct path *path, bool rec
 	return ns;
 }
 
-static struct file *open_detached_copy(struct path *path, bool recursive)
+static struct file *open_detached_copy(struct path *path, bool recursive, bool cross_ns)
 {
-	struct mnt_namespace *ns = get_detached_copy(path, recursive);
+	struct mnt_namespace *ns = get_detached_copy(path, recursive, cross_ns);
 	struct file *file;
 
 	if (IS_ERR(ns))
@@ -3070,12 +3073,13 @@ static struct file *vfs_open_tree(int dfd, const char __user *filename, unsigned
 	struct path path __free(path_put) = {};
 	int lookup_flags = LOOKUP_AUTOMOUNT | LOOKUP_FOLLOW;
 	bool detached = flags & OPEN_TREE_CLONE;
+	bool cross_ns = flags & OPEN_TREE_CROSSNS;
 
 	BUILD_BUG_ON(OPEN_TREE_CLOEXEC != O_CLOEXEC);
 
 	if (flags & ~(AT_EMPTY_PATH | AT_NO_AUTOMOUNT | AT_RECURSIVE |
 		      AT_SYMLINK_NOFOLLOW | OPEN_TREE_CLONE |
-		      OPEN_TREE_CLOEXEC))
+		      OPEN_TREE_CLOEXEC | OPEN_TREE_CROSSNS))
 		return ERR_PTR(-EINVAL);
 
 	if ((flags & (AT_RECURSIVE | OPEN_TREE_CLONE)) == AT_RECURSIVE)
@@ -3096,7 +3100,7 @@ static struct file *vfs_open_tree(int dfd, const char __user *filename, unsigned
 		return ERR_PTR(ret);
 
 	if (detached)
-		return open_detached_copy(&path, flags & AT_RECURSIVE);
+		return open_detached_copy(&path, flags & AT_RECURSIVE, cross_ns);
 
 	return dentry_open(&path, O_PATH, current_cred());
 }
