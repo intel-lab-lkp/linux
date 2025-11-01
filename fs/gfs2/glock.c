@@ -696,7 +696,7 @@ __acquires(&gl->gl_lockref.lock)
 skip_inval:
 	if (gfs2_withdrawn(sdp)) {
 		if (target != LM_ST_UNLOCKED)
-			target = LM_OUT_ERROR;
+			target = LM_ST_UNLOCKED;
 		goto out;
 	}
 
@@ -719,7 +719,7 @@ skip_inval:
 			 * been unlocked implicitly.
 			 */
 			if (target != LM_ST_UNLOCKED) {
-				target = LM_OUT_ERROR;
+				target = LM_ST_UNLOCKED;
 				goto out;
 			}
 		} else {
