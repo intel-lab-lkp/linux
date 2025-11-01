@@ -715,6 +715,12 @@ nfsd4_cb_layout_done(struct nfsd4_callback *cb, struct rpc_task *task)
 			nfsd_file_put(fl);
 		}
 		return 1;
+	case -NFS4ERR_RETRY_UNCACHED_REP:
+		/*
+		 * client has seen and replied to this request,
+		 * no need to fence the client
+		 */
+		return 1;
 	case -NFS4ERR_NOMATCHING_LAYOUT:
 		trace_nfsd_layout_recall_done(&ls->ls_stid.sc_stateid);
 		task->tk_status = 0;
