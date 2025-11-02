@@ -10,6 +10,7 @@
 	model = "Raspberry Pi 5";
 
 	aliases {
+		ethernet0 = &rp1_eth;
 		serial10 = &uart10;
 	};
 
