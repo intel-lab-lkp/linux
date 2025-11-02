@@ -333,6 +333,19 @@ static int snd_wavefront_card_new(struct device *pdev, int dev,
 	return 0;
 }
 
+__printf(3, 4) static int scnprintf_append(char *buf, size_t size, const char *fmt, ...)
+{
+	va_list args;
+	size_t len = strlen(buf);
+
+	if (len >= size)
+		return len;
+	va_start(args, fmt);
+	len = vscnprintf(buf + len, size - len, fmt, args);
+	va_end(args);
+	return len;
+}
+
 static int
 snd_wavefront_probe (struct snd_card *card, int dev)
 {
@@ -492,26 +505,27 @@ snd_wavefront_probe (struct snd_card *card, int dev)
 	   length restrictions
 	*/
 
-	sprintf(card->longname, "%s PCM 0x%lx irq %d dma %d",
-		card->driver,
-		chip->port,
-		cs4232_pcm_irq[dev],
-		dma1[dev]);
+	scnprintf(card->longname, sizeof(card->longname),
+		  "%s PCM 0x%lx irq %d dma %d",
+		  card->driver,
+		  chip->port,
+		  cs4232_pcm_irq[dev],
+		  dma1[dev]);
 
 	if (dma2[dev] >= 0 && dma2[dev] < 8)
-		sprintf(card->longname + strlen(card->longname), "&%d", dma2[dev]);
+		scnprintf_append(card->longname, sizeof(card->longname),
+				 "&%d", dma2[dev]);
 
-	if (cs4232_mpu_port[dev] > 0 && cs4232_mpu_port[dev] != SNDRV_AUTO_PORT) {
-		sprintf (card->longname + strlen (card->longname), 
-			 " MPU-401 0x%lx irq %d",
-			 cs4232_mpu_port[dev],
-			 cs4232_mpu_irq[dev]);
-	}
+	if (cs4232_mpu_port[dev] > 0 && cs4232_mpu_port[dev] != SNDRV_AUTO_PORT)
+		scnprintf_append(card->longname, sizeof(card->longname),
+				 " MPU-401 0x%lx irq %d",
+				 cs4232_mpu_port[dev],
+				 cs4232_mpu_irq[dev]);
 
-	sprintf (card->longname + strlen (card->longname), 
-		 " SYNTH 0x%lx irq %d",
-		 ics2115_port[dev],
-		 ics2115_irq[dev]);
+	scnprintf_append(card->longname, sizeof(card->longname),
+			 " SYNTH 0x%lx irq %d",
+			 ics2115_port[dev],
+			 ics2115_irq[dev]);
 
 	return snd_card_register(card);
 }	
