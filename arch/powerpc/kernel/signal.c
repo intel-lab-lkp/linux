@@ -6,6 +6,7 @@
  *    Extracted from signal_32.c and signal_64.c
  */
 
+#include <linux/entry-common.h>
 #include <linux/resume_user_mode.h>
 #include <linux/signal.h>
 #include <linux/uprobes.h>
@@ -21,11 +22,6 @@
 #include <asm/tm.h>
 
 #include "signal.h"
-
-/* This will be removed */
-#ifdef CONFIG_GENERIC_ENTRY
-#include <linux/entry-common.h>
-#endif /* CONFIG_GENERIC_ENTRY */
 
 #ifdef CONFIG_VSX
 unsigned long copy_fpr_to_user(void __user *to,
@@ -374,11 +370,9 @@ void signal_fault(struct task_struct *tsk, struct pt_regs *regs,
 				   task_pid_nr(tsk), where, ptr, regs->nip, regs->link);
 }
 
-#ifdef CONFIG_GENERIC_ENTRY
 void arch_do_signal_or_restart(struct pt_regs *regs)
 {
 	BUG_ON(regs != current->thread.regs);
-	local_paca->generic_fw_flags |= GFW_RESTORE_ALL;
+	regs->exit_flags |= _TIF_RESTOREALL;
 	do_signal(current);
 }
-#endif /* CONFIG_GENERIC_ENTRY */
