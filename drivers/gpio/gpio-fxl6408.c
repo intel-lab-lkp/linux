@@ -43,6 +43,10 @@
 
 #define FXL6408_NGPIO			8
 
+struct fxl6408_chip {
+	struct regmap *regmap;
+};
+
 static const struct regmap_range rd_range[] = {
 	{ FXL6408_REG_DEVICE_ID, FXL6408_REG_DEVICE_ID },
 	{ FXL6408_REG_IO_DIR, FXL6408_REG_OUTPUT },
@@ -105,6 +109,7 @@ static int fxl6408_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct gpio_desc *reset_gpio;
+	struct fxl6408_chip *chip;
 	int ret;
 	struct gpio_regmap_config gpio_config = {
 		.parent = dev,
@@ -114,6 +119,10 @@ static int fxl6408_probe(struct i2c_client *client)
 		.reg_dir_out_base = GPIO_REGMAP_ADDR(FXL6408_REG_IO_DIR),
 		.ngpio_per_reg = FXL6408_NGPIO,
 	};
+
+	chip = devm_kzalloc(dev, sizeof(*chip), GFP_KERNEL);
+	if (!chip)
+		return -ENOMEM;
 
 	reset_gpio = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_LOW);
 	if (IS_ERR(reset_gpio))
@@ -128,6 +137,9 @@ static int fxl6408_probe(struct i2c_client *client)
 	if (ret)
 		return ret;
 
+	chip->regmap = gpio_config.regmap;
+	i2c_set_clientdata(client, chip);
+
 	/* Disable High-Z of outputs, so that our OUTPUT updates actually take effect. */
 	ret = regmap_write(gpio_config.regmap, FXL6408_REG_OUTPUT_HIGH_Z, 0);
 	if (ret)
@@ -135,6 +147,16 @@ static int fxl6408_probe(struct i2c_client *client)
 
 	return PTR_ERR_OR_ZERO(devm_gpio_regmap_register(dev, &gpio_config));
 }
+
+static int fxl6408_resume(struct device *dev)
+{
+	struct fxl6408_chip *chip = dev_get_drvdata(dev);
+
+	regcache_mark_dirty(chip->regmap);
+	return regcache_sync(chip->regmap);
+}
+
+static DEFINE_SIMPLE_DEV_PM_OPS(fxl6408_pm_ops, NULL, fxl6408_resume);
 
 static const __maybe_unused struct of_device_id fxl6408_dt_ids[] = {
 	{ .compatible = "fcs,fxl6408" },
@@ -151,6 +173,7 @@ MODULE_DEVICE_TABLE(i2c, fxl6408_id);
 static struct i2c_driver fxl6408_driver = {
 	.driver = {
 		.name	= "fxl6408",
+		.pm	= pm_sleep_ptr(&fxl6408_pm_ops),
 		.of_match_table = fxl6408_dt_ids,
 	},
 	.probe		= fxl6408_probe,
