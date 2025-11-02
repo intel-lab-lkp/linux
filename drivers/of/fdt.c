@@ -852,6 +852,7 @@ void __init early_init_dt_check_for_usable_mem_range(void)
 	const __be32 *prop, *endp;
 	int len, i;
 	unsigned long node = chosen_node_offset;
+	int t_len = (dt_root_addr_cells + dt_root_size_cells) * sizeof(__be32);
 
 	if ((long)node < 0)
 		return;
@@ -859,7 +860,7 @@ void __init early_init_dt_check_for_usable_mem_range(void)
 	pr_debug("Looking for usable-memory-range property... ");
 
 	prop = of_get_flat_dt_prop(node, "linux,usable-memory-range", &len);
-	if (!prop || (len % (dt_root_addr_cells + dt_root_size_cells)))
+	if (!prop || len % t_len)
 		return;
 
 	endp = prop + (len / sizeof(__be32));
