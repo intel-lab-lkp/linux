@@ -1153,6 +1153,23 @@ void free_screen_info(struct screen_info *si);
 void efi_cache_sync_image(unsigned long image_base,
 			  unsigned long alloc_size);
 
+struct __packed smbios_entry_point {
+	char anchor[4];
+	u8 ep_checksum;
+	u8 ep_length;
+	u8 major_version;
+	u8 minor_version;
+	u16 max_size_entry;
+	u8 ep_rev;
+	u8 reserved[5];
+	char int_anchor[5];
+	u8 int_checksum;
+	u16 st_length;
+	u32 st_address;
+	u16 number_of_entries;
+	u8 bcd_rev;
+};
+
 struct efi_smbios_record {
 	u8	type;
 	u8	length;
