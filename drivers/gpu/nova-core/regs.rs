@@ -25,6 +25,13 @@ register!(NV_PMC_BOOT_0 @ 0x00000000, "Basic revision information about the GPU"
 });
 
 impl NV_PMC_BOOT_0 {
+    pub(crate) fn use_boot42_instead(self) -> bool {
+        // "Future" GPUs (some time after Rubin) will set `architecture_0`
+        // to 0, and `architecture_1` to 1, and put the architecture details in
+        // boot42 instead.
+        self.architecture_0() == 0 && self.architecture_1() == 1
+    }
+
     /// Combines `architecture_0` and `architecture_1` to obtain the architecture of the chip.
     pub(crate) fn architecture(self) -> Result<Architecture> {
         Architecture::try_from(
@@ -33,6 +40,32 @@ impl NV_PMC_BOOT_0 {
     }
 
     /// Combines `architecture` and `implementation` to obtain a code unique to the chipset.
+    pub(crate) fn chipset(self) -> Result<Chipset> {
+        self.architecture()
+            .map(|arch| {
+                ((arch as u32) << Self::IMPLEMENTATION_RANGE.len())
+                    | u32::from(self.implementation())
+            })
+            .and_then(Chipset::try_from)
+    }
+
+    /// Returns the revision information of the chip.
+    pub(crate) fn revision(self) -> crate::gpu::Revision {
+        crate::gpu::Revision {
+            major: self.major_revision(),
+            minor: self.minor_revision(),
+        }
+    }
+}
+
+register!(NV_PMC_BOOT_42 @ 0x00000108, "Extended architecture information" {
+    7:0     implementation as u8, "Implementation version of the architecture";
+    15:8    architecture as u8 ?=> Architecture, "Architecture value";
+    19:16   minor_revision as u8, "Minor revision of the chip";
+    23:20   major_revision as u8, "Major revision of the chip";
+});
+
+impl NV_PMC_BOOT_42 {
     pub(crate) fn chipset(self) -> Result<Chipset> {
         self.architecture()
             .map(|arch| {

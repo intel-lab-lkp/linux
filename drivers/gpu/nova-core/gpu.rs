@@ -154,6 +154,17 @@ impl TryFrom<regs::NV_PMC_BOOT_0> for Spec {
     }
 }
 
+impl TryFrom<regs::NV_PMC_BOOT_42> for Spec {
+    type Error = Error;
+
+    fn try_from(boot42: regs::NV_PMC_BOOT_42) -> Result<Self> {
+        Ok(Self {
+            chipset: boot42.chipset()?,
+            revision: boot42.revision(),
+        })
+    }
+}
+
 impl fmt::Display for Revision {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:x}.{:x}", self.major, self.minor)
@@ -169,9 +180,34 @@ pub(crate) struct Spec {
 
 impl Spec {
     fn new(bar: &Bar0) -> Result<Spec> {
+        // Some brief notes about boot0 and boot42, in chronological order:
+        //
+        // NV04 through Volta:
+        //
+        //    Not supported by Nova. boot0 is necessary and sufficient to identify these GPUs.
+        //    boot42 may not even exist on some of these GPUs.boot42
+        //
+        // Turing through Blackwell:
+        //
+        //     Supported by both Nouveau and Nova. boot0 is still necessary and sufficient to
+        //     identify these GPUs. boot42 exists on these GPUs but we don't need to use it.
+        //
+        // Rubin:
+        //
+        //     Only supported by Nova. Need to use boot42 to fully identify these GPUs.
+        //
+        // "Future" (after Rubin) GPUs:
+        //
+        //    Only supported by Nova. NV_PMC_BOOT's ARCH_0 (bits 28:24) will be zeroed out, and
+        //    ARCH_1 (bit 8:8) will be set to 1, which will mean, "refer to NV_PMC_BOOT_42".
+
         let boot0 = regs::NV_PMC_BOOT_0::read(bar);
 
-        Spec::try_from(boot0)
+        if boot0.use_boot42_instead() {
+            Spec::try_from(regs::NV_PMC_BOOT_42::read(bar))
+        } else {
+            Spec::try_from(boot0)
+        }
     }
 }
 
