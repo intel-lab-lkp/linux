@@ -145,6 +145,12 @@ static int minix_unlink(struct inode * dir, struct dentry *dentry)
 	struct minix_dir_entry * de;
 	int err;
 
+	if (inode->i_nlink < 1) {
+		printk(KERN_CRIT "minix-fs error: inode (ino: %ld) "
+		       "has corrupted nlink", inode->i_ino);
+		return -EFSCORRUPTED;
+	}
+
 	de = minix_find_entry(dentry, &folio);
 	if (!de)
 		return -ENOENT;
@@ -207,6 +213,13 @@ static int minix_rename(struct mnt_idmap *idmap,
 		err = -ENOTEMPTY;
 		if (dir_de && !minix_empty_dir(new_inode))
 			goto out_dir;
+
+		err = -EFSCORRUPTED;
+		if (new_inode->i_nlink == 0 || (dir_de && new_inode->i_nlink != 2)) {
+			printk(KERN_CRIT "minix-fs error: inode (ino: %ld) "
+			       "has corrupted nlink", new_inode->i_ino);
+			goto out_dir;
+		}
 
 		err = -ENOENT;
 		new_de = minix_find_entry(new_dentry, &new_folio);
