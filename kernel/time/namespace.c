@@ -480,10 +480,15 @@ const struct proc_ns_operations timens_for_children_operations = {
 struct time_namespace init_time_ns = {
 	.ns.ns_type	= ns_common_type(&init_time_ns),
 	.ns.__ns_ref	= REFCOUNT_INIT(3),
+	.ns.__ns_ref_active = ATOMIC_INIT(1),
 	.user_ns	= &init_user_ns,
 	.ns.inum	= ns_init_inum(&init_time_ns),
 	.ns.ops		= &timens_operations,
+	.ns.ns_owner_entry = LIST_HEAD_INIT(init_time_ns.ns.ns_owner_entry),
+	.ns.ns_owner = LIST_HEAD_INIT(init_time_ns.ns.ns_owner),
 	.frozen_offsets	= true,
+	.ns.ns_list_node = LIST_HEAD_INIT(init_time_ns.ns.ns_list_node),
+	.ns.ns_unified_list_node = LIST_HEAD_INIT(init_time_ns.ns.ns_unified_list_node),
 };
 
 void __init time_ns_init(void)
