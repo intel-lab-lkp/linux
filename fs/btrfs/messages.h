@@ -168,7 +168,7 @@ do {										\
 #endif
 
 #else
-#define ASSERT(cond, args...)			(void)(cond)
+#define ASSERT(cond, args...)			BUILD_BUG_ON_INVALID(cond)
 #endif
 
 #ifdef CONFIG_BTRFS_DEBUG
