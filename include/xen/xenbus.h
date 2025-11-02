@@ -87,6 +87,7 @@ struct xenbus_device {
 	struct completion down;
 	struct work_struct work;
 	struct semaphore reclaim_sem;
+	bool vanished;
 
 	/* Event channel based statistics and settings. */
 	atomic_t event_channels;

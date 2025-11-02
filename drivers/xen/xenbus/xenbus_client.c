@@ -275,6 +275,8 @@ abort:
  */
 int xenbus_switch_state(struct xenbus_device *dev, enum xenbus_state state)
 {
+	if (dev->vanished)
+		return 0;
 	return __xenbus_switch_state(dev, state, 0);
 }
 

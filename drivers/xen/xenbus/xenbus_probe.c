@@ -444,6 +444,9 @@ static void xenbus_cleanup_devices(const char *path, struct bus_type *bus)
 		info.dev = NULL;
 		bus_for_each_dev(bus, NULL, &info, cleanup_dev);
 		if (info.dev) {
+			dev_warn(&info.dev->dev,
+			         "device forcefully removed from xenstore\n");
+			info.dev->vanished = true;
 			device_unregister(&info.dev->dev);
 			put_device(&info.dev->dev);
 		}
@@ -659,6 +662,28 @@ void xenbus_dev_changed(const char *node, struct xen_bus_type *bus)
 		return;
 
 	dev = xenbus_device_find(root, &bus->bus);
+	/* Backend domain crash results in not coordinated frontend removal,
+	 * without going through XenbusStateClosing. Check if the device
+	 * wasn't replaced to point at another backend in the meantime.
+	 */
+	if (dev && !strncmp(node, "device/", sizeof("device/")-1)) {
+		int backend_id;
+		int err = xenbus_gather(XBT_NIL, root,
+				        "backend-id", "%i", &backend_id,
+					NULL);
+		if (!err && backend_id != dev->otherend_id) {
+			/* It isn't the same device, assume the old one
+			 * vanished and new one needs to be probed.
+			 */
+			dev_warn(&dev->dev,
+				 "backend-id mismatch (%d != %d), reconnecting\n",
+				 backend_id, dev->otherend_id);
+			dev->vanished = true;
+			device_unregister(&dev->dev);
+			put_device(&dev->dev);
+			dev = NULL;
+		}
+	}
 	if (!dev)
 		xenbus_probe_node(bus, type, root);
 	else
