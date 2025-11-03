@@ -75,6 +75,7 @@ static inline bool wg_check_packet_protocol(struct sk_buff *skb)
 
 static inline void wg_reset_packet(struct sk_buff *skb, bool encapsulating)
 {
+	unsigned int napi_id = skb_napi_id(skb);
 	u8 l4_hash = skb->l4_hash;
 	u8 sw_hash = skb->sw_hash;
 	u32 hash = skb->hash;
@@ -84,6 +85,10 @@ static inline void wg_reset_packet(struct sk_buff *skb, bool encapsulating)
 		skb->l4_hash = l4_hash;
 		skb->sw_hash = sw_hash;
 		skb->hash = hash;
+	} else {
+#ifdef CONFIG_NET_RX_BUSY_POLL
+		skb->napi_id = napi_id;
+#endif
 	}
 	skb->queue_mapping = 0;
 	skb->nohdr = 0;
