@@ -509,6 +509,22 @@ config MCP4728
 	  To compile this driver as a module, choose M here: the module
 	  will be called mcp4728.
 
+config MCP47FEB02
+	tristate "MCP47F(E/V)B|(0/1/2)(1/2/4/8)DAC driver"
+	depends on I2C
+	help
+          Say yes here if you want to build a driver for the Microchip
+          MCP47FEB01, MCP47FEB11, MCP47FEB21, MCP47FEB02, MCP47FEB12,
+          MCP47FEB22, MCP47FVB01, MCP47FVB11, MCP47FVB21, MCP47FVB02,
+          MCP47FVB12, MCP47FVB02, MCP47FVB12, MCP47FVB22, MCP47FVB04,
+          MCP47FVB14, MCP47FVB24, MCP47FVB04, MCP47FVB08, MCP47FVB18,
+          MCP47FVB28, MCP47FEB04, MCP47FEB14 and MCP47FEB24 having up to 8
+          channels, 8-bit, 10-bit or 12-bit digital-to-analog converter (DAC)
+          with I2C interface.
+
+          To compile this driver as a module, choose M here: the module
+          will be called mcp47feb02.
+
 config MCP4821
 	tristate "MCP4801/02/11/12/21/22 DAC driver"
 	depends on SPI
