@@ -13701,6 +13701,7 @@ F:	arch/mips/kvm/
 KERNEL VIRTUAL MACHINE FOR POWERPC (KVM/powerpc)
 M:	Madhavan Srinivasan <maddy@linux.ibm.com>
 R:	Nicholas Piggin <npiggin@gmail.com>
+R:	Gautam Menghani <gautam@linux.ibm.com>
 L:	linuxppc-dev@lists.ozlabs.org
 L:	kvm@vger.kernel.org
 S:	Maintained (Book3S 64-bit HV)
