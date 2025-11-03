@@ -268,15 +268,16 @@ static struct file *open_file_as_root(const char *filename, int flags, umode_t m
 	get_fs_root(init_task.fs, &root);
 	task_unlock(&init_task);
 
-	cred = prepare_creds();
+	CLASS(prepare_creds, cred)();
 	if (!cred)
 		return ERR_PTR(-ENOMEM);
+
 	cred->fsuid = GLOBAL_ROOT_UID;
 	old_cred = override_creds(cred);
 
 	fp = file_open_root(&root, filename, flags, mode);
 
-	put_cred(revert_creds(old_cred));
+	revert_creds(old_cred);
 
 	return fp;
 }
