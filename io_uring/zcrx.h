@@ -63,8 +63,7 @@ struct io_zcrx_ifq {
 };
 
 #if defined(CONFIG_IO_URING_ZCRX)
-int io_zcrx_return_bufs(struct io_ring_ctx *ctx,
-			void __user *arg, unsigned nr_arg);
+int io_zcrx_ctrl(struct io_ring_ctx *ctx, void __user *arg, unsigned nr_arg);
 int io_register_zcrx_ifq(struct io_ring_ctx *ctx,
 			 struct io_uring_zcrx_ifq_reg __user *arg);
 void io_unregister_zcrx_ifqs(struct io_ring_ctx *ctx);
@@ -97,8 +96,8 @@ static inline struct io_mapped_region *io_zcrx_get_region(struct io_ring_ctx *ct
 {
 	return NULL;
 }
-static inline int io_zcrx_return_bufs(struct io_ring_ctx *ctx,
-				      void __user *arg, unsigned nr_arg)
+static inline int io_zcrx_ctrl(struct io_ring_ctx *ctx,
+			       void __user *arg, unsigned nr_arg)
 {
 	return -EOPNOTSUPP;
 }

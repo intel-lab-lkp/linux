@@ -541,6 +541,25 @@ struct io_mapped_region *io_zcrx_get_region(struct io_ring_ctx *ctx,
 	return ifq ? &ifq->region : NULL;
 }
 
+int io_zcrx_ctrl(struct io_ring_ctx *ctx, void __user *arg, unsigned nr_args)
+{
+	struct zcrx_ctrl ctrl;
+	struct io_zcrx_ifq *ifq;
+
+	if (nr_args)
+		return -EINVAL;
+	if (copy_from_user(&ctrl, arg, sizeof(ctrl)))
+		return -EFAULT;
+	if (ctrl.op >= __ZCRX_CTRL_LAST)
+		return -EOPNOTSUPP;
+
+	ifq = xa_load(&ctx->zcrx_ctxs, ctrl.zcrx_id);
+	if (!ifq)
+		return -ENXIO;
+
+	return -EINVAL;
+}
+
 int io_register_zcrx_ifq(struct io_ring_ctx *ctx,
 			  struct io_uring_zcrx_ifq_reg __user *arg)
 {
@@ -966,7 +985,7 @@ static void io_return_buffers(struct io_zcrx_ifq *ifq,
 }
 
 __maybe_unused
-int io_zcrx_return_bufs(struct io_ring_ctx *ctx,
+static int io_zcrx_return_bufs(struct io_ring_ctx *ctx,
 			void __user *arg, unsigned nr_arg)
 {
 	struct io_uring_zcrx_rqe rqes[IO_ZCRX_SYS_REFILL_BATCH];
