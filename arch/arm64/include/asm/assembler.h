@@ -609,6 +609,7 @@ alternative_endif
 	and	\ttbr, \ttbr, #TTBR_BADDR_MASK_52
 #else
 	mov	\ttbr, \phys
+	and	\ttbr, \ttbr, #TTBRx_EL1_BADDR_MASK
 #endif
 	.endm
 

@@ -1603,7 +1603,7 @@ static inline void update_mmu_cache_range(struct vm_fault *vmf,
 #ifdef CONFIG_ARM64_PA_BITS_52
 #define phys_to_ttbr(addr)	(((addr) | ((addr) >> 46)) & TTBR_BADDR_MASK_52)
 #else
-#define phys_to_ttbr(addr)	(addr)
+#define phys_to_ttbr(addr)	(addr & TTBRx_EL1_BADDR_MASK)
 #endif
 
 /*
