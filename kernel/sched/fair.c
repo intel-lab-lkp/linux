@@ -3772,6 +3772,14 @@ static void reweight_entity(struct cfs_rq *cfs_rq, struct sched_entity *se,
 {
 	bool curr = cfs_rq->curr == se;
 
+	if (curr && se->on_rq && cfs_rq->nr_queued == 1 &&
+		se->vruntime < cfs_rq->min_vruntime) {
+		s64 rel_deadline = se->deadline - se->vruntime;
+
+		se->vruntime = cfs_rq->min_vruntime;
+		se->deadline = se->vruntime + rel_deadline;
+	}
+
 	if (se->on_rq) {
 		/* commit outstanding execution time */
 		update_curr(cfs_rq);
