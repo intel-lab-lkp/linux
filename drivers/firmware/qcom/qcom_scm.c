@@ -26,6 +26,7 @@
 #include <linux/of_platform.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/platform_device.h>
+#include <linux/reboot-mode.h>
 #include <linux/reset-controller.h>
 #include <linux/sizes.h>
 #include <linux/types.h>
@@ -43,6 +44,7 @@ struct qcom_scm {
 	struct icc_path *path;
 	struct completion waitq_comp;
 	struct reset_controller_dev reset;
+	struct reboot_mode_driver reboot_mode;
 
 	/* control access to the interconnect path */
 	struct mutex scm_bw_lock;
@@ -129,6 +131,8 @@ static const u8 qcom_scm_cpu_warm_bits[QCOM_SCM_BOOT_MAX_CPUS] = {
 #define QCOM_DLOAD_FULLDUMP	1
 #define QCOM_DLOAD_MINIDUMP	2
 #define QCOM_DLOAD_BOTHDUMP	3
+
+#define QCOM_EDL_MASK		BIT(0)
 
 static const char * const qcom_scm_convention_names[] = {
 	[SMC_CONVENTION_UNKNOWN] = "unknown",
@@ -2326,6 +2330,18 @@ static const struct kernel_param_ops download_mode_param_ops = {
 	.set = set_download_mode,
 };
 
+static int qcom_scm_reboot_mode_write(struct reboot_mode_driver *reboot,
+				      unsigned int magic)
+{
+	struct qcom_scm *scm = container_of(reboot, struct qcom_scm, reboot_mode);
+	int ret = -EOPNOTSUPP;
+
+	if (scm->dload_mode_addr)
+		ret = qcom_scm_io_rmw(scm->dload_mode_addr, QCOM_EDL_MASK, magic);
+
+	return ret;
+}
+
 module_param_cb(download_mode, &download_mode_param_ops, NULL, 0644);
 MODULE_PARM_DESC(download_mode, "download mode: off/0/N for no dump mode, full/on/1/Y for full dump mode, mini for minidump mode and full,mini for both full and minidump mode together are acceptable values");
 
@@ -2368,6 +2384,12 @@ static int qcom_scm_probe(struct platform_device *pdev)
 	scm->reset.nr_resets = 1;
 	scm->reset.of_node = pdev->dev.of_node;
 	ret = devm_reset_controller_register(&pdev->dev, &scm->reset);
+	if (ret)
+		return ret;
+
+	scm->reboot_mode.dev = &pdev->dev;
+	scm->reboot_mode.write = qcom_scm_reboot_mode_write;
+	ret = devm_reboot_mode_register(&pdev->dev, &scm->reboot_mode);
 	if (ret)
 		return ret;
 
