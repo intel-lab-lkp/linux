@@ -1129,40 +1129,42 @@ again:
 	return 0;
 }
 
-static int copy_to_nullb(struct nullb *nullb, struct page *source,
-	unsigned int off, sector_t sector, size_t n, bool is_fua)
+static int copy_to_nullb(struct nullb *nullb, void *source, loff_t pos,
+			 size_t n, bool is_fua)
 {
 	size_t temp, count = 0;
 	unsigned int offset;
 	struct nullb_page *t_page;
+	sector_t sector;
 
 	while (count < n) {
+		sector = pos >> SECTOR_SHIFT;
 		temp = min_t(size_t, nullb->dev->blocksize, n - count);
 
 		if (null_cache_active(nullb) && !is_fua)
 			null_make_cache_space(nullb, PAGE_SIZE);
 
-		offset = (sector & SECTOR_MASK) << SECTOR_SHIFT;
+		offset = pos & (PAGE_SIZE - 1);
 		t_page = null_insert_page(nullb, sector,
 			!null_cache_active(nullb) || is_fua);
 		if (!t_page)
 			return -ENOSPC;
 
-		memcpy_page(t_page->page, offset, source, off + count, temp);
+		memcpy_to_page(t_page->page, offset, source, temp);
 
 		__set_bit(sector & SECTOR_MASK, t_page->bitmap);
 
 		if (is_fua)
 			null_free_sector(nullb, sector, true);
 
+		source += temp;
 		count += temp;
-		sector += temp >> SECTOR_SHIFT;
+		pos += temp;
 	}
 	return 0;
 }
 
-static int copy_from_nullb(struct nullb *nullb, struct page *dest,
-	unsigned int off, sector_t sector, size_t n)
+static int copy_from_nullb(struct nullb *nullb, void *dest, loff_t pos, size_t n)
 {
 	size_t temp, count = 0;
 	unsigned int offset;
@@ -1171,26 +1173,20 @@ static int copy_from_nullb(struct nullb *nullb, struct page *dest,
 	while (count < n) {
 		temp = min_t(size_t, nullb->dev->blocksize, n - count);
 
-		offset = (sector & SECTOR_MASK) << SECTOR_SHIFT;
-		t_page = null_lookup_page(nullb, sector, false,
+		offset = pos & (PAGE_SIZE - 1);
+		t_page = null_lookup_page(nullb, pos >> SECTOR_SHIFT, false,
 			!null_cache_active(nullb));
 
 		if (t_page)
-			memcpy_page(dest, off + count, t_page->page, offset,
-				    temp);
+			memcpy_from_page(dest, t_page->page, offset, temp);
 		else
-			memzero_page(dest, off + count, temp);
+			memset(dest, 0, temp);
 
+		dest += temp;
 		count += temp;
-		sector += temp >> SECTOR_SHIFT;
+		pos += temp;
 	}
 	return 0;
-}
-
-static void nullb_fill_pattern(struct nullb *nullb, struct page *page,
-			       unsigned int len, unsigned int off)
-{
-	memset_page(page, off, 0xff, len);
 }
 
 blk_status_t null_handle_discard(struct nullb_device *dev,
@@ -1234,8 +1230,8 @@ static blk_status_t null_handle_flush(struct nullb *nullb)
 	return errno_to_blk_status(err);
 }
 
-static int null_transfer(struct nullb *nullb, struct page *page,
-	unsigned int len, unsigned int off, bool is_write, sector_t sector,
+static int null_transfer(struct nullb *nullb, void *p,
+	unsigned int len, bool is_write, loff_t pos,
 	bool is_fua)
 {
 	struct nullb_device *dev = nullb->dev;
@@ -1243,23 +1239,26 @@ static int null_transfer(struct nullb *nullb, struct page *page,
 	int err = 0;
 
 	if (!is_write) {
-		if (dev->zoned)
+		if (dev->zoned) {
 			valid_len = null_zone_valid_read_len(nullb,
-				sector, len);
+				pos >> SECTOR_SHIFT, len);
+
+			if (valid_len && valid_len != len)
+				valid_len -= (pos & (SECTOR_SIZE - 1));
+		}
 
 		if (valid_len) {
-			err = copy_from_nullb(nullb, page, off,
-				sector, valid_len);
-			off += valid_len;
+			err = copy_from_nullb(nullb, p, pos, valid_len);
+			p += valid_len;
 			len -= valid_len;
 		}
 
 		if (len)
-			nullb_fill_pattern(nullb, page, len, off);
-		flush_dcache_page(page);
+			memset(p, 0xff, len);
+		flush_dcache_page(virt_to_page(p));
 	} else {
-		flush_dcache_page(page);
-		err = copy_to_nullb(nullb, page, off, sector, len, is_fua);
+		flush_dcache_page(virt_to_page(p));
+		err = copy_to_nullb(nullb, p, pos, len, is_fua);
 	}
 
 	return err;
@@ -1276,25 +1275,26 @@ static blk_status_t null_handle_data_transfer(struct nullb_cmd *cmd,
 	struct nullb *nullb = cmd->nq->dev->nullb;
 	int err = 0;
 	unsigned int len;
-	sector_t sector = blk_rq_pos(rq);
-	unsigned int max_bytes = nr_sectors << SECTOR_SHIFT;
-	unsigned int transferred_bytes = 0;
+	loff_t pos = blk_rq_pos(rq) << SECTOR_SHIFT;
+	unsigned int nr_bytes = nr_sectors << SECTOR_SHIFT;
 	struct req_iterator iter;
 	struct bio_vec bvec;
 
 	spin_lock_irq(&nullb->lock);
 	rq_for_each_segment(bvec, rq, iter) {
+		void *p = bvec_kmap_local(&bvec);;
+
 		len = bvec.bv_len;
-		if (transferred_bytes + len > max_bytes)
-			len = max_bytes - transferred_bytes;
-		err = null_transfer(nullb, bvec.bv_page, len, bvec.bv_offset,
-				     op_is_write(req_op(rq)), sector,
-				     rq->cmd_flags & REQ_FUA);
+		if (len > nr_bytes)
+			len = nr_bytes;
+		err = null_transfer(nullb, p, nr_bytes, op_is_write(req_op(rq)),
+				    pos, rq->cmd_flags & REQ_FUA);
+		kunmap_local(p);
 		if (err)
 			break;
-		sector += len >> SECTOR_SHIFT;
-		transferred_bytes += len;
-		if (transferred_bytes >= max_bytes)
+		pos += len;
+		nr_bytes -= len;
+		if (!nr_bytes)
 			break;
 	}
 	spin_unlock_irq(&nullb->lock);
@@ -1949,7 +1949,7 @@ static int null_add_dev(struct nullb_device *dev)
 		.logical_block_size	= dev->blocksize,
 		.physical_block_size	= dev->blocksize,
 		.max_hw_sectors		= dev->max_sectors,
-		.dma_alignment		= dev->blocksize - 1,
+		.dma_alignment		= 1,
 	};
 
 	struct nullb *nullb;
