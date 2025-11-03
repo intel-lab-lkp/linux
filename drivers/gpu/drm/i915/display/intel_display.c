@@ -7256,6 +7256,22 @@ static void intel_atomic_dsb_prepare(struct intel_atomic_state *state,
 	intel_color_prepare_commit(state, crtc);
 }
 
+static int
+dcb_vmin_vblank_start(struct intel_crtc_state *crtc_state)
+{
+	return (intel_vrr_dcb_vmin_vblank_start_next(crtc_state) < 0) ?
+		intel_vrr_dcb_vmin_vblank_start_final(crtc_state) :
+		intel_vrr_dcb_vmin_vblank_start_next(crtc_state);
+}
+
+static int
+dcb_vmax_vblank_start(struct intel_crtc_state *crtc_state)
+{
+	return (intel_vrr_dcb_vmax_vblank_start_next(crtc_state) < 0) ?
+		intel_vrr_dcb_vmax_vblank_start_final(crtc_state) :
+		intel_vrr_dcb_vmax_vblank_start_next(crtc_state);
+}
+
 static void intel_atomic_dsb_finish(struct intel_atomic_state *state,
 				    struct intel_crtc *crtc)
 {
@@ -7340,6 +7356,13 @@ static void intel_atomic_dsb_finish(struct intel_atomic_state *state,
 		intel_vrr_dcb_increment_flip_count(new_crtc_state, crtc);
 		intel_vrr_send_push(new_crtc_state->dsb_commit, new_crtc_state);
 		intel_dsb_wait_for_delayed_vblank(state, new_crtc_state->dsb_commit);
+
+		if (new_crtc_state->vrr.dc_balance.enable) {
+			intel_dsb_wait_scanline_in(state, new_crtc_state->dsb_commit,
+						   dcb_vmin_vblank_start(new_crtc_state),
+						   dcb_vmax_vblank_start(new_crtc_state));
+		}
+
 		intel_vrr_check_push_sent(new_crtc_state->dsb_commit,
 					  new_crtc_state);
 		intel_dsb_interrupt(new_crtc_state->dsb_commit);
