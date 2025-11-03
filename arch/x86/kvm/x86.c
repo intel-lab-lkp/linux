@@ -10874,6 +10874,9 @@ void __kvm_vcpu_update_apicv(struct kvm_vcpu *vcpu)
 	kvm_apic_update_apicv(vcpu);
 	kvm_x86_call(refresh_apicv_exec_ctrl)(vcpu);
 
+	if (apic->apicv_active && !is_guest_mode(vcpu))
+		kvm_apic_update_hwapic_isr(vcpu);
+
 	/*
 	 * When APICv gets disabled, we may still have injected interrupts
 	 * pending. At the same time, KVM_REQ_EVENT may not be set as APICv was
