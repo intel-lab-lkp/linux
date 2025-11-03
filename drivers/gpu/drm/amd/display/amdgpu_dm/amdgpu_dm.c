@@ -12813,9 +12813,16 @@ void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
 		parse_edid_displayid_vrr(connector, edid);
 
 	if (edid && (sink->sink_signal == SIGNAL_TYPE_DISPLAY_PORT ||
+		     sink->sink_signal == SIGNAL_TYPE_DISPLAY_PORT_MST ||
 		     sink->sink_signal == SIGNAL_TYPE_EDP)) {
-		if (amdgpu_dm_connector->dc_link &&
-		    amdgpu_dm_connector->dc_link->dpcd_caps.allow_invalid_MSA_timing_param) {
+		/* For MST, check monitor range from EDID directly since the dc_link
+		 * points to the MST hub, not the actual display
+		 */
+		if ((sink->sink_signal == SIGNAL_TYPE_DISPLAY_PORT_MST ||
+		     (amdgpu_dm_connector->dc_link &&
+		      amdgpu_dm_connector->dc_link->dpcd_caps.allow_invalid_MSA_timing_param)) &&
+		    connector->display_info.monitor_range.min_vfreq &&
+		    connector->display_info.monitor_range.max_vfreq) {
 			amdgpu_dm_connector->min_vfreq = connector->display_info.monitor_range.min_vfreq;
 			amdgpu_dm_connector->max_vfreq = connector->display_info.monitor_range.max_vfreq;
 			if (amdgpu_dm_connector->max_vfreq - amdgpu_dm_connector->min_vfreq > 10)

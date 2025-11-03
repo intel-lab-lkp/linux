@@ -472,6 +472,9 @@ static int dm_dp_mst_get_modes(struct drm_connector *connector)
 			}
 		}
 
+		/* Update connector with EDID first so display_info.monitor_range is populated */
+		drm_edid_connector_update(&aconnector->base, aconnector->drm_edid);
+
 		if (aconnector->dc_sink) {
 			amdgpu_dm_update_freesync_caps(
 					connector, aconnector->drm_edid);
@@ -487,8 +490,6 @@ static int dm_dp_mst_get_modes(struct drm_connector *connector)
 					0, sizeof(aconnector->mst_downstream_port_present));
 		}
 	}
-
-	drm_edid_connector_update(&aconnector->base, aconnector->drm_edid);
 
 	ret = drm_edid_connector_add_modes(connector);
 
@@ -679,9 +680,11 @@ dm_dp_add_mst_connector(struct drm_dp_mst_topology_mgr *mgr,
 	if (connector->max_bpc_property)
 		drm_connector_attach_max_bpc_property(connector, 8, 16);
 
+	/* Reuse VRR property from master connector for MST connectors */
 	connector->vrr_capable_property = master->base.vrr_capable_property;
 	if (connector->vrr_capable_property)
-		drm_connector_attach_vrr_capable_property(connector);
+		drm_object_attach_property(&connector->base,
+					   connector->vrr_capable_property, 0);
 
 	drm_object_attach_property(
 		&connector->base,
