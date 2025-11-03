@@ -38,6 +38,13 @@ properties:
     minItems: 1
     maxItems: 2
 
+  qcom,warm-reset:
+    description: |
+      The PON (Power-On) peripheral provides support for warm reset, which can
+      be used as a fallback mechanism when a warm reset cannot be achieved
+      through the standard firmware interface.
+    type: boolean
+
   pwrkey:
     type: object
     $ref: /schemas/input/qcom,pm8941-pwrkey.yaml#
