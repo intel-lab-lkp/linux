@@ -1273,11 +1273,11 @@ static u32 calc_checksum(struct page *page)
 	return checksum;
 }
 
-static int write_protect_page(struct vm_area_struct *vma, struct folio *folio,
-			      pte_t *orig_pte)
+static int write_protect_page_addr(struct vm_area_struct *vma, struct folio *folio,
+				   unsigned long address, pte_t *orig_pte)
 {
 	struct mm_struct *mm = vma->vm_mm;
-	DEFINE_FOLIO_VMA_WALK(pvmw, folio, vma, 0, 0);
+	DEFINE_FOLIO_VMA_WALK(pvmw, folio, vma, address, 0);
 	int swapped;
 	int err = -EFAULT;
 	struct mmu_notifier_range range;
@@ -1287,10 +1287,10 @@ static int write_protect_page(struct vm_area_struct *vma, struct folio *folio,
 	if (WARN_ON_ONCE(folio_test_large(folio)))
 		return err;
 
-	pvmw.address = page_address_in_vma(folio, folio_page(folio, 0), vma);
-	if (pvmw.address == -EFAULT)
-		goto out;
+	if (address < vma->vm_start || address >= vma->vm_end)
+		return err;
 
+	pvmw.address = address;
 	mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, mm, pvmw.address,
 				pvmw.address + PAGE_SIZE);
 	mmu_notifier_invalidate_range_start(&range);
@@ -1360,21 +1360,26 @@ out_unlock:
 	page_vma_mapped_walk_done(&pvmw);
 out_mn:
 	mmu_notifier_invalidate_range_end(&range);
-out:
 	return err;
 }
 
-/**
- * replace_page - replace page in vma by new ksm page
- * @vma:      vma that holds the pte pointing to page
- * @page:     the page we are replacing by kpage
- * @kpage:    the ksm page we replace page by
- * @orig_pte: the original value of the pte
- *
- * Returns 0 on success, -EFAULT on failure.
- */
-static int replace_page(struct vm_area_struct *vma, struct page *page,
-			struct page *kpage, pte_t orig_pte)
+static int write_protect_page(struct vm_area_struct *vma, struct folio *folio,
+			      pte_t *orig_pte)
+{
+	unsigned long address;
+
+	if (WARN_ON_ONCE(folio_test_large(folio)))
+		return -EFAULT;
+
+	address = page_address_in_vma(folio, folio_page(folio, 0), vma);
+	if (address == -EFAULT)
+		return -EFAULT;
+
+	return write_protect_page_addr(vma, folio, address, orig_pte);
+}
+
+static int replace_page_addr(struct vm_area_struct *vma, struct page *page,
+			     struct page *kpage, unsigned long addr, pte_t orig_pte)
 {
 	struct folio *kfolio = page_folio(kpage);
 	struct mm_struct *mm = vma->vm_mm;
@@ -1384,17 +1389,16 @@ static int replace_page(struct vm_area_struct *vma, struct page *page,
 	pte_t *ptep;
 	pte_t newpte;
 	spinlock_t *ptl;
-	unsigned long addr;
 	int err = -EFAULT;
 	struct mmu_notifier_range range;
 
-	addr = page_address_in_vma(folio, page, vma);
-	if (addr == -EFAULT)
+	if (addr < vma->vm_start || addr >= vma->vm_end)
 		goto out;
 
 	pmd = mm_find_pmd(mm, addr);
 	if (!pmd)
 		goto out;
+
 	/*
 	 * Some THP functions use the sequence pmdp_huge_clear_flush(), set_pmd_at()
 	 * without holding anon_vma lock for write.  So when looking for a
@@ -1465,6 +1469,29 @@ out_mn:
 	mmu_notifier_invalidate_range_end(&range);
 out:
 	return err;
+}
+
+
+/**
+ * replace_page - replace page in vma by new ksm page
+ * @vma:      vma that holds the pte pointing to page
+ * @page:     the page we are replacing by kpage
+ * @kpage:    the ksm page we replace page by
+ * @orig_pte: the original value of the pte
+ *
+ * Returns 0 on success, -EFAULT on failure.
+ */
+static int replace_page(struct vm_area_struct *vma, struct page *page,
+			struct page *kpage, pte_t orig_pte)
+{
+	unsigned long addr;
+	struct folio *folio = page_folio(page);
+
+	addr = page_address_in_vma(folio, page, vma);
+	if (addr == -EFAULT)
+		return -EFAULT;
+
+	return replace_page_addr(vma, page, kpage, addr, orig_pte);
 }
 
 /*
@@ -2033,6 +2060,20 @@ chain_append:
 	goto out;
 }
 
+static struct ksm_stable_node *alloc_init_stable_node_dup(unsigned long kpfn,
+							  int nid __maybe_unused)
+{
+	struct ksm_stable_node *stable_node = alloc_stable_node();
+
+	if (stable_node) {
+		INIT_HLIST_HEAD(&stable_node->hlist);
+		stable_node->kpfn = kpfn;
+		stable_node->rmap_hlist_len = 0;
+		DO_NUMA(stable_node->nid = nid);
+	}
+	return stable_node;
+}
+
 /*
  * stable_tree_insert - insert stable tree node pointing to new ksm page
  * into the stable tree.
@@ -2091,14 +2132,10 @@ again:
 		}
 	}
 
-	stable_node_dup = alloc_stable_node();
+	stable_node_dup = alloc_init_stable_node_dup(kpfn, nid);
 	if (!stable_node_dup)
 		return NULL;
 
-	INIT_HLIST_HEAD(&stable_node_dup->hlist);
-	stable_node_dup->kpfn = kpfn;
-	stable_node_dup->rmap_hlist_len = 0;
-	DO_NUMA(stable_node_dup->nid = nid);
 	if (!need_chain) {
 		rb_link_node(&stable_node_dup->node, parent, new);
 		rb_insert_color(&stable_node_dup->node, root);
