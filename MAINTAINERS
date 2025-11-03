@@ -16712,6 +16712,7 @@ R:	kernel-team@meta.com
 S:	Maintained
 F:	Documentation/networking/device_drivers/ethernet/meta/
 F:	drivers/net/ethernet/meta/
+F:	drivers/net/phy/fbnic_phy.c
 
 METHODE UDPU SUPPORT
 M:	Robert Marko <robert.marko@sartura.hr>

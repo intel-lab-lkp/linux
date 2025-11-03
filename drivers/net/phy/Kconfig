@@ -230,6 +230,12 @@ config DAVICOM_PHY
 	help
 	  Currently supports dm9161e and dm9131
 
+config FBNIC_PHY
+	tristate "FBNIC PHY"
+	help
+	  Supports the Meta Platforms 25G/50G/100G Ethernet PHY included in
+	  fbnic network driver.
+
 config ICPLUS_PHY
 	tristate "ICPlus PHYs"
 	help
