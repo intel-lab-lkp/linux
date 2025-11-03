@@ -164,6 +164,12 @@ static inline int vgic_write_guest_lock(struct kvm *kvm, gpa_t gpa,
 	return ret;
 }
 
+static inline bool vgic_model_needs_bcst_kick(struct kvm *kvm)
+{
+	return (cpus_have_final_cap(ARM64_HAS_ICH_HCR_EL2_TDS) &&
+		kvm->arch.vgic.vgic_model == KVM_DEV_TYPE_ARM_VGIC_V3);
+}
+
 /*
  * This struct provides an intermediate representation of the fields contained
  * in the GICH_VMCR and ICH_VMCR registers, such that code exporting the GIC
