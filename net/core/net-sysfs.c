@@ -770,6 +770,39 @@ static ssize_t threaded_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(threaded);
 
+static ssize_t disable_pause_on_panic_show(struct device *dev,
+					    struct device_attribute *attr,
+					    char *buf)
+{
+	struct net_device *ndev = to_net_dev(dev);
+	ssize_t ret = -EINVAL;
+
+	rcu_read_lock();
+	if (dev_isalive(ndev))
+		ret = sysfs_emit(buf, fmt_dec, READ_ONCE(ndev->disable_pause_on_panic));
+	rcu_read_unlock();
+
+	return ret;
+}
+
+static int modify_disable_pause_on_panic(struct net_device *dev, unsigned long val)
+{
+	if (val != 0 && val != 1)
+		return -EINVAL;
+
+	WRITE_ONCE(dev->disable_pause_on_panic, val);
+
+	return 0;
+}
+
+static ssize_t disable_pause_on_panic_store(struct device *dev,
+					     struct device_attribute *attr,
+					     const char *buf, size_t len)
+{
+	return netdev_store(dev, attr, buf, len, modify_disable_pause_on_panic);
+}
+static DEVICE_ATTR_RW(disable_pause_on_panic);
+
 static struct attribute *net_class_attrs[] __ro_after_init = {
 	&dev_attr_netdev_group.attr,
 	&dev_attr_type.attr,
@@ -800,6 +833,7 @@ static struct attribute *net_class_attrs[] __ro_after_init = {
 	&dev_attr_carrier_up_count.attr,
 	&dev_attr_carrier_down_count.attr,
 	&dev_attr_threaded.attr,
+	&dev_attr_disable_pause_on_panic.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(net_class);

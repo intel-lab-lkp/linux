@@ -3,4 +3,5 @@
 # Makefile for the Linux Ethernet layer.
 #
 
-obj-y					+= eth.o
+obj-y					+= eth.o \
+					   pause_panic.o
