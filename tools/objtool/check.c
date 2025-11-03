@@ -237,6 +237,76 @@ static bool is_rust_noreturn(const struct symbol *func)
 		str_ends_with(func->name, "_fail"));
 }
 
+static bool __dead_end_function(struct objtool_file *, struct symbol *, int);
+
+/*
+ * Check if the target of a sibling_call instruction is a dead_end function.
+ * Note insn must be a sibling call.
+ */
+static inline bool __dead_end_sibling_call(struct objtool_file *file,
+					   struct instruction *insn,
+					   int recursion) {
+	struct instruction *dest = insn->jump_dest;
+
+	if (!dest) {
+		/* sibling call to another file */
+		return false;
+	}
+
+	/* local sibling call */
+	if (recursion == 5) {
+		/*
+		 * Infinite recursion: two functions have
+		 * sibling calls to each other.  This is a very
+		 * rare case.  It means they aren't dead ends.
+		 */
+		return false;
+	}
+
+	return __dead_end_function(file, insn_func(dest), recursion+1);
+}
+
+/*
+ * Handling split functions. Mimic the workflow in __dead_end_function.
+ */
+static bool __dead_end_split_func(struct objtool_file *file,
+				  struct symbol *func, int recursion)
+{
+	char section_name[256];
+	struct section *sec;
+	struct instruction *insn;
+	int n;
+
+	/*
+	 * Use a fixed-size buffer (max 256) to avoid malloc. If the section
+	 * length exceeds this limit, we return a conservative value. This is
+	 * a safe fallback and does not compromise functional correctness.
+	 */
+	n = sizeof(section_name);
+	if (snprintf(section_name, n, ".text.split.%s", func->name) >= n) {
+		fprintf(stderr, "Error: Function name '%s' too long.\n", func->name);
+		return false;
+	}
+
+	sec = find_section_by_name(file->elf, section_name);
+	if (!sec)
+		return false;
+
+	sec_for_each_insn(file, sec, insn) {
+		if (insn->type == INSN_RETURN)
+			return false;
+	}
+
+	sec_for_each_insn(file, sec, insn) {
+		if (is_sibling_call(insn)) {
+			if (!__dead_end_sibling_call(file, insn, recursion))
+				return false;
+		}
+	}
+
+	return true;
+}
+
 /*
  * This checks to see if the given function is a "noreturn" function.
  *
@@ -298,33 +368,16 @@ static bool __dead_end_function(struct objtool_file *file, struct symbol *func,
 	 */
 	func_for_each_insn(file, func, insn) {
 		if (is_sibling_call(insn)) {
-			struct instruction *dest = insn->jump_dest;
-
-			if (!dest)
-				/* sibling call to another file */
-				return false;
-
-			/* local sibling call */
-			if (recursion == 5) {
-				/*
-				 * Infinite recursion: two functions have
-				 * sibling calls to each other.  This is a very
-				 * rare case.  It means they aren't dead ends.
-				 */
-				return false;
-			}
-
 			/*
 			 * A function can have multiple sibling calls. All of
 			 * them need to be dead ends for the function to be a
 			 * dead end too.
 			 */
-			if (!__dead_end_function(file, insn_func(dest), recursion+1))
+			if (!__dead_end_sibling_call(file, insn, recursion))
 				return false;
 		}
 	}
-
-	return true;
+	return __dead_end_split_func(file, func, recursion);
 }
 
 static bool dead_end_function(struct objtool_file *file, struct symbol *func)
