@@ -1238,13 +1238,9 @@ static int machine_constraints_voltage(struct regulator_dev *rdev,
 		target_min = current_uV;
 		target_max = current_uV;
 
-		if (current_uV < rdev->constraints->min_uV) {
+		if ((current_uV < rdev->constraints->min_uV) ||
+		    (current_uV > rdev->constraints->max_uV)) {
 			target_min = rdev->constraints->min_uV;
-			target_max = rdev->constraints->min_uV;
-		}
-
-		if (current_uV > rdev->constraints->max_uV) {
-			target_min = rdev->constraints->max_uV;
 			target_max = rdev->constraints->max_uV;
 		}
 
