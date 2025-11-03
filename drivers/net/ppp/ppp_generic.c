@@ -499,6 +499,17 @@ static ssize_t ppp_read(struct file *file, char __user *buf,
 	return ret;
 }
 
+static void ppp_update_dev_features(struct ppp *ppp)
+{
+	struct net_device *dev = ppp->dev;
+
+	if (!(dev->priv_flags & IFF_NO_QUEUE) || ppp->xc_state ||
+	    ppp->flags & (SC_COMP_TCP | SC_CCP_UP))
+		dev->features &= ~(NETIF_F_SG | NETIF_F_FRAGLIST);
+	else
+		dev->features |= NETIF_F_SG | NETIF_F_FRAGLIST;
+}
+
 static bool ppp_check_packet(struct sk_buff *skb, size_t count)
 {
 	/* LCP packets must include LCP header which 4 bytes long:
@@ -825,6 +836,7 @@ static long ppp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case PPPIOCSFLAGS:
 		if (get_user(val, p))
 			break;
+		rtnl_lock();
 		ppp_lock(ppp);
 		cflags = ppp->flags & ~val;
 #ifdef CONFIG_PPP_MULTILINK
@@ -835,6 +847,12 @@ static long ppp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		ppp_unlock(ppp);
 		if (cflags & SC_CCP_OPEN)
 			ppp_ccp_closed(ppp);
+
+		ppp_xmit_lock(ppp);
+		ppp_update_dev_features(ppp);
+		ppp_xmit_unlock(ppp);
+		netdev_update_features(ppp->dev);
+		rtnl_unlock();
 		err = 0;
 		break;
 
@@ -1641,6 +1659,8 @@ static void ppp_setup(struct net_device *dev)
 	dev->flags = IFF_POINTOPOINT | IFF_NOARP | IFF_MULTICAST;
 	dev->priv_destructor = ppp_dev_priv_destructor;
 	dev->pcpu_stat_type = NETDEV_PCPU_STAT_TSTATS;
+	dev->features = NETIF_F_SG | NETIF_F_FRAGLIST;
+	dev->hw_features = dev->features;
 	netif_keep_dst(dev);
 }
 
@@ -3070,13 +3090,17 @@ ppp_set_compress(struct ppp *ppp, struct ppp_option_data *data)
 	if (data->transmit) {
 		state = cp->comp_alloc(ccp_option, data->length);
 		if (state) {
+			rtnl_lock();
 			ppp_xmit_lock(ppp);
 			ppp->xstate &= ~SC_COMP_RUN;
 			ocomp = ppp->xcomp;
 			ostate = ppp->xc_state;
 			ppp->xcomp = cp;
 			ppp->xc_state = state;
+			ppp_update_dev_features(ppp);
 			ppp_xmit_unlock(ppp);
+			netdev_update_features(ppp->dev);
+			rtnl_unlock();
 			if (ostate) {
 				ocomp->comp_free(ostate);
 				module_put(ocomp->owner);
@@ -3497,6 +3521,7 @@ ppp_connect_channel(struct channel *pch, int unit)
 
 	pn = ppp_pernet(pch->chan_net);
 
+	rtnl_lock();
 	mutex_lock(&pn->all_ppp_mutex);
 	ppp = ppp_find_unit(pn, unit);
 	if (!ppp)
@@ -3520,6 +3545,7 @@ ppp_connect_channel(struct channel *pch, int unit)
 		ppp->dev->priv_flags |= IFF_NO_QUEUE;
 	else
 		ppp->dev->priv_flags &= ~IFF_NO_QUEUE;
+	ppp_update_dev_features(ppp);
 	spin_unlock_bh(&pch->downl);
 	if (pch->file.hdrlen > ppp->file.hdrlen)
 		ppp->file.hdrlen = pch->file.hdrlen;
@@ -3537,6 +3563,10 @@ ppp_connect_channel(struct channel *pch, int unit)
 	spin_unlock(&pch->upl);
  out:
 	mutex_unlock(&pn->all_ppp_mutex);
+	if (ret == 0)
+		netdev_update_features(ppp->dev);
+	rtnl_unlock();
+
 	return ret;
 }
 
