@@ -14,6 +14,7 @@
 #include "intel_psr.h"
 #include "intel_vrr.h"
 #include "intel_vrr_regs.h"
+#include "intel_dmc_regs.h"
 #include "skl_prefill.h"
 #include "skl_watermark.h"
 
@@ -610,6 +611,20 @@ void intel_vrr_set_transcoder_timings(const struct intel_crtc_state *crtc_state)
 		intel_de_write(display,
 			       EMP_AS_SDP_TL(display, cpu_transcoder),
 			       EMP_AS_SDP_DB_TL(crtc_state->vrr.vsync_start));
+}
+
+void
+intel_vrr_dcb_increment_flip_count(struct intel_crtc_state *crtc_state,
+				   struct intel_crtc *crtc)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	enum pipe pipe = crtc->pipe;
+
+	if (!crtc_state->vrr.dc_balance.enable)
+		return;
+
+	intel_de_write(display, PIPEDMC_DCB_FLIP_COUNT(pipe),
+		       ++crtc->dc_balance.flip_count);
 }
 
 void intel_vrr_send_push(struct intel_dsb *dsb,
