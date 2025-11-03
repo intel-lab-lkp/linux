@@ -589,6 +589,12 @@ static void ar5523_data_rx_cb(struct urb *urb)
 		goto skip;
 	}
 
+	if (rxlen < sizeof(struct ar5523_rx_desc)) {
+		ar5523_dbg(ar, "RX: Bad descriptor (len=%d is too small)\n",
+			   rxlen);
+		goto skip;
+	}
+
 	skb_reserve(data->skb, sizeof(*chunk));
 	skb_put(data->skb, rxlen - sizeof(struct ar5523_rx_desc));
 
