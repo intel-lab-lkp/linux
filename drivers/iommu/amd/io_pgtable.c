@@ -367,11 +367,14 @@ static int iommu_v1_map_pages(struct io_pgtable_ops *ops, unsigned long iova,
 		if (!iommu_pages_list_empty(&freelist))
 			updated = true;
 
+		if (prot & IOMMU_PROT_IE)
+			paddr = __sme_set(paddr);
+
 		if (count > 1) {
-			__pte = PAGE_SIZE_PTE(__sme_set(paddr), pgsize);
+			__pte = PAGE_SIZE_PTE(paddr, pgsize);
 			__pte |= PM_LEVEL_ENC(7) | IOMMU_PTE_PR | IOMMU_PTE_FC;
 		} else
-			__pte = __sme_set(paddr) | IOMMU_PTE_PR | IOMMU_PTE_FC;
+			__pte = paddr | IOMMU_PTE_PR | IOMMU_PTE_FC;
 
 		if (prot & IOMMU_PROT_IR)
 			__pte |= IOMMU_PTE_IR;
