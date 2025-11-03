@@ -68,6 +68,7 @@ struct omap_mbox_fifo {
 
 struct omap_mbox_match_data {
 	u32 intr_type;
+	bool is_exclusive;
 };
 
 struct omap_mbox_device {
@@ -336,16 +337,21 @@ static const struct mbox_chan_ops omap_mbox_chan_ops = {
 static int omap_mbox_suspend(struct device *dev)
 {
 	struct omap_mbox_device *mdev = dev_get_drvdata(dev);
+	const struct omap_mbox_match_data *mbox_dev_data;
 	u32 usr, fifo, reg;
+
+	mbox_dev_data = of_device_get_match_data(dev);
 
 	if (pm_runtime_status_suspended(dev))
 		return 0;
 
-	for (fifo = 0; fifo < mdev->num_fifos; fifo++) {
-		if (mbox_read_reg(mdev, MAILBOX_MSGSTATUS(fifo))) {
-			dev_err(mdev->dev, "fifo %d has unexpected unread messages\n",
-				fifo);
-			return -EBUSY;
+	if (mbox_dev_data->is_exclusive) {
+		for (fifo = 0; fifo < mdev->num_fifos; fifo++) {
+			if (mbox_read_reg(mdev, MAILBOX_MSGSTATUS(fifo))) {
+				dev_err(mdev->dev, "fifo %d has unexpected unread messages\n",
+					fifo);
+				return -EBUSY;
+			}
 		}
 	}
 
@@ -378,8 +384,9 @@ static const struct dev_pm_ops omap_mbox_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(omap_mbox_suspend, omap_mbox_resume)
 };
 
-static const struct omap_mbox_match_data omap2_data = { MBOX_INTR_CFG_TYPE1 };
-static const struct omap_mbox_match_data omap4_data = { MBOX_INTR_CFG_TYPE2 };
+static const struct omap_mbox_match_data omap2_data = { MBOX_INTR_CFG_TYPE1, true };
+static const struct omap_mbox_match_data omap4_data = { MBOX_INTR_CFG_TYPE2, true };
+static const struct omap_mbox_match_data am654_data = { MBOX_INTR_CFG_TYPE2, false };
 
 static const struct of_device_id omap_mailbox_of_match[] = {
 	{
@@ -396,11 +403,11 @@ static const struct of_device_id omap_mailbox_of_match[] = {
 	},
 	{
 		.compatible	= "ti,am654-mailbox",
-		.data		= &omap4_data,
+		.data		= &am654_data,
 	},
 	{
 		.compatible	= "ti,am64-mailbox",
-		.data		= &omap4_data,
+		.data		= &am654_data,
 	},
 	{
 		/* end */
