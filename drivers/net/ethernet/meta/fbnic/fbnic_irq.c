@@ -122,6 +122,7 @@ static irqreturn_t fbnic_mac_msix_intr(int __always_unused irq, void *data)
 {
 	struct fbnic_dev *fbd = data;
 	struct fbnic_net *fbn;
+	u64 link_down_events;
 
 	if (fbd->mac->get_link_event(fbd) == FBNIC_LINK_EVENT_NONE) {
 		fbnic_wr32(fbd, FBNIC_INTR_MASK_CLEAR(0),
@@ -130,10 +131,17 @@ static irqreturn_t fbnic_mac_msix_intr(int __always_unused irq, void *data)
 	}
 
 	fbn = netdev_priv(fbd->netdev);
+	link_down_events = fbn->link_down_events;
+
+	/* If the link is up this would be a loss event */
+	if (fbd->pmd_state == FBNIC_PMD_SEND_DATA)
+		link_down_events++;
 
 	/* Record link down events */
-	if (!fbd->mac->get_link(fbd, fbn->aui, fbn->fec))
+	if (!fbd->mac->get_link(fbd, fbn->aui, fbn->fec)) {
+		fbn->link_down_events = link_down_events;
 		phylink_mac_change(fbn->phylink, false);
+	}
 
 	return IRQ_HANDLED;
 }
