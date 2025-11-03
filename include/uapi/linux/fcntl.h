@@ -79,6 +79,16 @@
  */
 #define RWF_WRITE_LIFE_NOT_SET	RWH_WRITE_LIFE_NOT_SET
 
+/* Set/Get delegations */
+#define F_GETDELEG		(F_LINUX_SPECIFIC_BASE + 15)
+#define F_SETDELEG		(F_LINUX_SPECIFIC_BASE + 16)
+
+/* Argument structure for F_GETDELEG and F_SETDELEG */
+struct delegation {
+	short		d_type;		/* F_RDLCK, F_WRLCK, F_UNLCK */
+	unsigned int	d_flags;
+};
+
 /*
  * Types of directory notifications that may be requested.
  */
