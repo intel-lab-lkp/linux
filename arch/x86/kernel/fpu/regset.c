@@ -3,6 +3,7 @@
  * FPU register's regset abstraction, for ptrace, core dumps, etc.
  */
 #include <linux/sched/task_stack.h>
+#include <linux/string.h>
 #include <linux/vmalloc.h>
 
 #include <asm/fpu/api.h>
@@ -157,21 +158,15 @@ int xstateregs_set(struct task_struct *target, const struct user_regset *regset,
 		return -EFAULT;
 
 	if (!kbuf) {
-		tmpbuf = vmalloc(count);
-		if (!tmpbuf)
-			return -ENOMEM;
-
-		if (copy_from_user(tmpbuf, ubuf, count)) {
-			ret = -EFAULT;
-			goto out;
-		}
+		tmpbuf = vmemdup_user(ubuf, count);
+		if (IS_ERR(tmpbuf))
+			return PTR_ERR(tmpbuf);
 	}
 
 	fpu_force_restore(fpu);
 	ret = copy_uabi_from_kernel_to_xstate(fpu->fpstate, kbuf ?: tmpbuf, &target->thread.pkru);
 
-out:
-	vfree(tmpbuf);
+	kvfree(tmpbuf);
 	return ret;
 }
 
