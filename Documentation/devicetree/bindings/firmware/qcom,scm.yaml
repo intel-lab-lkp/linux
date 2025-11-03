@@ -122,6 +122,10 @@ properties:
           - description: offset of the download mode control register
     description: TCSR hardware block
 
+patternProperties:
+  "^mode-.*$":
+    maxItems: 1
+
 allOf:
   # Clocks
   - if:
