@@ -1183,8 +1183,6 @@ nfsd_is_write_dio_possible(loff_t offset, unsigned long len,
 
 	if (unlikely(!nf->nf_dio_mem_align || !dio_blocksize))
 		return false;
-	if (unlikely(dio_blocksize > PAGE_SIZE))
-		return false;
 	if (unlikely(len < dio_blocksize))
 		return false;
 
