@@ -785,6 +785,8 @@ static void intel_vrr_tg_enable(const struct intel_crtc_state *crtc_state,
 			       VRR_DCB_FLIPLINE(crtc_state->vrr.flipline - 1));
 		intel_de_write(display, TRANS_VRR_DCB_ADJ_FLIPLINE_CFG_LIVE(cpu_transcoder),
 			       VRR_DCB_ADJ_FLIPLINE(crtc_state->vrr.flipline - 1));
+		intel_de_write(display, TRANS_VRR_DCB_ADJ_FLIPLINE_CFG(cpu_transcoder),
+			       VRR_DCB_ADJ_FLIPLINE(crtc_state->vrr.flipline - 1));
 		intel_de_write(display, PIPEDMC_DCB_VMIN(pipe),
 			       crtc_state->vrr.dc_balance.vmin - 1);
 		intel_de_write(display, PIPEDMC_DCB_VMAX(pipe),
