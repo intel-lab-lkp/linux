@@ -1317,6 +1317,7 @@ int acpi_processor_power_state_has_changed(struct acpi_processor *pr)
 	int cpu;
 	struct acpi_processor *_pr;
 	struct cpuidle_device *dev;
+	int ret = 0;
 
 	if (disabled_by_idle_boot_param())
 		return 0;
@@ -1345,8 +1346,18 @@ int acpi_processor_power_state_has_changed(struct acpi_processor *pr)
 			cpuidle_disable_device(dev);
 		}
 
-		/* Populate Updated C-state information */
-		acpi_processor_get_power_info(pr);
+		/*
+		 * Populate Updated C-state information
+		 * The same idle state is used for all CPUs, cpuidle of all CPUs
+		 * should be disabled.
+		 */
+		ret = acpi_processor_get_power_info(pr);
+		if (ret) {
+			pr_err("Get processor-%u power information failed, disable cpuidle of all CPUs\n",
+			       pr->id);
+			goto release_lock;
+		}
+
 		acpi_processor_setup_cpuidle_states(pr);
 
 		/* Enable all cpuidle devices */
@@ -1354,18 +1365,19 @@ int acpi_processor_power_state_has_changed(struct acpi_processor *pr)
 			_pr = per_cpu(processors, cpu);
 			if (!_pr || !_pr->flags.power_setup_done)
 				continue;
-			acpi_processor_get_power_info(_pr);
-			if (_pr->flags.power) {
+			ret = acpi_processor_get_power_info(_pr);
+			if (!ret && _pr->flags.power) {
 				dev = per_cpu(acpi_cpuidle_device, cpu);
 				acpi_processor_setup_cpuidle_dev(_pr, dev);
 				cpuidle_enable_device(dev);
 			}
 		}
+release_lock:
 		cpuidle_resume_and_unlock();
 		cpus_read_unlock();
 	}
 
-	return 0;
+	return ret;
 }
 
 void acpi_processor_register_idle_driver(void)
