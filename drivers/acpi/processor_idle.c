@@ -983,8 +983,12 @@ static int acpi_processor_evaluate_lpi(acpi_handle handle,
 		if (obj_get_integer(pkg_elem + 2, &lpi_state->flags))
 			lpi_state->flags = 0;
 
-		if (obj_get_integer(pkg_elem + 3, &lpi_state->arch_flags))
-			lpi_state->arch_flags = 0;
+		if (obj_get_integer(pkg_elem + 3, &lpi_state->arch_flags)) {
+			pr_err("Get state-%d architecture specific context loss flags failed, disable it.\n",
+			       state_idx);
+			lpi_state->flags = 0;
+			continue;
+		}
 
 		if (obj_get_integer(pkg_elem + 4, &lpi_state->res_cnt_freq))
 			lpi_state->res_cnt_freq = 1;
