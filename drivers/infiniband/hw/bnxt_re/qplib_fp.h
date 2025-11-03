@@ -268,7 +268,7 @@ struct bnxt_qplib_q {
 };
 
 struct bnxt_qplib_qp {
-	struct bnxt_qplib_pd		*pd;
+	u32				pd_id;
 	struct bnxt_qplib_dpi		*dpi;
 	struct bnxt_qplib_chip_ctx	*cctx;
 	u64				qp_handle;
@@ -279,6 +279,7 @@ struct bnxt_qplib_qp {
 	u8				wqe_mode;
 	u8				state;
 	u8				cur_qp_state;
+	u8				is_user;
 	u64				modify_flags;
 	u32				max_inline_data;
 	u32				mtu;
@@ -343,9 +344,11 @@ struct bnxt_qplib_qp {
 	struct list_head		rq_flush;
 	u32				msn;
 	u32				msn_tbl_sz;
+	u32				psn_sz;
 	bool				is_host_msn_tbl;
 	u8				tos_dscp;
 	u32				ugid_index;
+	u16				dev_cap_flags;
 };
 
 #define BNXT_RE_MAX_MSG_SIZE	0x80000000
@@ -611,6 +614,11 @@ static inline void *bnxt_qplib_get_swqe(struct bnxt_qplib_q *que, u32 *swq_idx)
 static inline void bnxt_qplib_swq_mod_start(struct bnxt_qplib_q *que, u32 idx)
 {
 	que->swq_start = que->swq[idx].next_idx;
+}
+
+static inline u32 bnxt_qplib_get_stride(void)
+{
+	return sizeof(struct sq_sge);
 }
 
 static inline u32 bnxt_qplib_get_depth(struct bnxt_qplib_q *que, u8 wqe_mode, bool is_sq)
