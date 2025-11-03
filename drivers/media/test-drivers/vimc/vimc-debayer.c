@@ -15,9 +15,6 @@
 
 #include "vimc-common.h"
 
-/* TODO: Add support for more output formats, we only support RGB888 for now. */
-#define VIMC_DEBAYER_SOURCE_MBUS_FMT	MEDIA_BUS_FMT_RGB888_1X24
-
 enum vimc_debayer_rgb_colors {
 	VIMC_DEBAYER_RED = 0,
 	VIMC_DEBAYER_GREEN = 1,
@@ -73,6 +70,7 @@ static const u32 vimc_debayer_src_mbus_codes[] = {
 	MEDIA_BUS_FMT_RGB888_1X7X4_SPWG,
 	MEDIA_BUS_FMT_RGB888_1X7X4_JEIDA,
 	MEDIA_BUS_FMT_RGB888_1X32_PADHI,
+	MEDIA_BUS_FMT_ARGB8888_1X32,
 };
 
 static const struct vimc_debayer_pix_map vimc_debayer_pix_map_list[] = {
@@ -170,7 +168,7 @@ static int vimc_debayer_init_state(struct v4l2_subdev *sd,
 
 	mf = v4l2_subdev_state_get_format(sd_state, 1);
 	*mf = sink_fmt_default;
-	mf->code = VIMC_DEBAYER_SOURCE_MBUS_FMT;
+	mf->code = vimc_debayer_src_mbus_codes[0];
 
 	return 0;
 }
@@ -239,6 +237,14 @@ static void vimc_debayer_adjust_sink_fmt(struct v4l2_mbus_framefmt *fmt)
 	vimc_colorimetry_clamp(fmt);
 }
 
+static void vimc_debayer_set_rgb_mbus_fmt_default(struct v4l2_mbus_framefmt *fmt)
+{
+	fmt->colorspace = V4L2_COLORSPACE_SRGB;
+	fmt->quantization = V4L2_QUANTIZATION_FULL_RANGE;
+	fmt->xfer_func = V4L2_XFER_FUNC_SRGB;
+	fmt->ycbcr_enc = V4L2_YCBCR_ENC_DEFAULT;
+}
+
 static int vimc_debayer_set_fmt(struct v4l2_subdev *sd,
 				struct v4l2_subdev_state *sd_state,
 				struct v4l2_subdev_format *fmt)
@@ -250,12 +256,30 @@ static int vimc_debayer_set_fmt(struct v4l2_subdev *sd,
 	if (fmt->which == V4L2_SUBDEV_FORMAT_ACTIVE && vdebayer->src_frame)
 		return -EBUSY;
 
-	/*
-	 * Do not change the format of the source pad, it is propagated from
-	 * the sink.
-	 */
-	if (VIMC_IS_SRC(fmt->pad))
-		return v4l2_subdev_get_fmt(sd, sd_state, fmt);
+	if (VIMC_IS_SRC(fmt->pad)) {
+		struct v4l2_mbus_framefmt *source_fmt;
+		struct v4l2_mbus_framefmt *sink_fmt;
+
+		/* Validate the requested source format */
+		if (!vimc_debayer_src_code_is_valid(fmt->format.code))
+			return -EINVAL;
+
+		/* Get current formats */
+		source_fmt = v4l2_subdev_state_get_format(sd_state, 1);
+		sink_fmt = v4l2_subdev_state_get_format(sd_state, 0);
+
+		/* Update source format with appropriate properties for RGB output */
+		source_fmt->code = fmt->format.code;
+		source_fmt->width = sink_fmt->width;   /* Size should match */
+		source_fmt->height = sink_fmt->height; /* Size should match */
+		source_fmt->field = sink_fmt->field;   /* Field handling should match */
+
+		/* Set appropriate colorimetry for RGB output */
+		vimc_debayer_set_rgb_mbus_fmt_default(source_fmt);
+
+		fmt->format = *source_fmt;
+		return 0;
+	}
 
 	/* Set the new format in the sink pad. */
 	vimc_debayer_adjust_sink_fmt(&fmt->format);
@@ -278,8 +302,25 @@ static int vimc_debayer_set_fmt(struct v4l2_subdev *sd,
 
 	/* Propagate the format to the source pad. */
 	format = v4l2_subdev_state_get_format(sd_state, 1);
-	*format = fmt->format;
-	format->code = VIMC_DEBAYER_SOURCE_MBUS_FMT;
+
+	/* Propagate size and field from sink, but maintain source code */
+	format->width = fmt->format.width;
+	format->height = fmt->format.height;
+	format->field = fmt->format.field;
+
+	/*
+	 * Source code should always be valid (set during init or via set_fmt).
+	 * If somehow it's not, this is a bug - log warning and fix it.
+	 */
+	if (!vimc_debayer_src_code_is_valid(format->code)) {
+		dev_warn(vdebayer->ved.dev,
+			 "%s: Invalid source code 0x%x, resetting to default\n",
+			 vdebayer->sd.name, format->code);
+		format->code = vimc_debayer_src_mbus_codes[0];
+	}
+
+	/* Set appropriate colorimetry for RGB output */
+	vimc_debayer_set_rgb_mbus_fmt_default(format);
 
 	return 0;
 }
@@ -297,19 +338,45 @@ static void vimc_debayer_process_rgb_frame(struct vimc_debayer_device *vdebayer,
 					   unsigned int rgb[3])
 {
 	const struct vimc_pix_map *vpix;
-	unsigned int i, index;
+	unsigned int index;
 
 	vpix = vimc_pix_map_by_code(vdebayer->hw.src_code);
-	index = VIMC_FRAME_INDEX(lin, col, vdebayer->hw.size.width, 3);
-	for (i = 0; i < 3; i++) {
-		switch (vpix->pixelformat) {
-		case V4L2_PIX_FMT_RGB24:
-			vdebayer->src_frame[index + i] = rgb[i];
-			break;
-		case V4L2_PIX_FMT_BGR24:
-			vdebayer->src_frame[index + i] = rgb[2 - i];
-			break;
-		}
+	if (!vpix) {
+		dev_dbg(vdebayer->ved.dev, "Invalid source code: 0x%x\n",
+			vdebayer->hw.src_code);
+		return;
+	}
+
+	index = VIMC_FRAME_INDEX(lin, col, vdebayer->hw.size.width, vpix->bpp);
+
+	switch (vpix->pixelformat) {
+	case V4L2_PIX_FMT_RGB24:
+		/* RGB24: R-G-B */
+		vdebayer->src_frame[index + 0] = rgb[0]; /* Red */
+		vdebayer->src_frame[index + 1] = rgb[1]; /* Green */
+		vdebayer->src_frame[index + 2] = rgb[2]; /* Blue */
+		break;
+
+	case V4L2_PIX_FMT_BGR24:
+		/* BGR24: B-G-R */
+		vdebayer->src_frame[index + 0] = rgb[2]; /* Blue */
+		vdebayer->src_frame[index + 1] = rgb[1]; /* Green */
+		vdebayer->src_frame[index + 2] = rgb[0]; /* Red */
+		break;
+
+	case V4L2_PIX_FMT_ARGB32:
+		/* ARGB32: A-R-G-B (set alpha to 255) */
+		vdebayer->src_frame[index + 0] = 255;    /* Alpha */
+		vdebayer->src_frame[index + 1] = rgb[0]; /* Red */
+		vdebayer->src_frame[index + 2] = rgb[1]; /* Green */
+		vdebayer->src_frame[index + 3] = rgb[2]; /* Blue */
+		break;
+
+	default:
+		dev_dbg(vdebayer->ved.dev,
+			"Unsupported pixel format for debayer: 0x%x\n",
+			vpix->pixelformat);
+		break;
 	}
 }
 
