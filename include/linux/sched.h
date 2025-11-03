@@ -2425,4 +2425,6 @@ extern void migrate_enable(void);
 
 DEFINE_LOCK_GUARD_0(migrate, migrate_disable(), migrate_enable())
 
+void set_tif_resched_if_polling(int cpu);
+
 #endif

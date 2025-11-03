@@ -408,6 +408,13 @@ void tick_nohz_full_kick_cpu(int cpu)
 	if (!tick_nohz_full_cpu(cpu))
 		return;
 
+	/*
+	 * When idle=poll, with the tick disabled (therefore idle CPU looping
+	 * at cpu_idle_poll), if a new timer is added from an interrupt,
+	 * the cpu_idle_poll only exits when TIF_NEED_RESCHED gets set.
+	 */
+	set_tif_resched_if_polling(cpu);
+
 	irq_work_queue_on(&per_cpu(nohz_full_kick_work, cpu), cpu);
 }
 

@@ -324,7 +324,7 @@ static void do_idle(void)
 		 * idle as we know that the IPI is going to arrive right away.
 		 */
 		if (cpu_idle_force_poll || tick_check_broadcast_expired()) {
-			tick_nohz_idle_restart_tick();
+			tick_nohz_idle_stop_tick();
 			cpu_idle_poll();
 		} else {
 			cpuidle_idle_call();

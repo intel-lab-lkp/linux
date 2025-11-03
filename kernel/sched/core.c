@@ -988,6 +988,11 @@ static bool set_nr_if_polling(struct task_struct *p)
 	return true;
 }
 
+void set_tif_resched_if_polling(int cpu)
+{
+	set_nr_if_polling(cpu_rq(cpu)->idle);
+}
+
 #else
 static inline bool set_nr_and_not_polling(struct thread_info *ti, int tif)
 {
@@ -998,6 +1003,11 @@ static inline bool set_nr_and_not_polling(struct thread_info *ti, int tif)
 static inline bool set_nr_if_polling(struct task_struct *p)
 {
 	return false;
+}
+
+void set_tif_resched_if_polling(int cpu)
+{
+	set_tsk_need_resched(cpu_rq(cpu)->idle);
 }
 #endif
 
