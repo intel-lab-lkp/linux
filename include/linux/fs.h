@@ -2111,8 +2111,17 @@ bool inode_owner_or_capable(struct mnt_idmap *idmap,
 /*
  * VFS helper functions..
  */
-int vfs_create(struct mnt_idmap *, struct inode *,
-	       struct dentry *, umode_t, bool);
+
+struct createdata {
+	struct mnt_idmap *idmap;	// idmap of the mount the inode was found from
+	struct inode *dir;		// inode of parent directory
+	struct dentry *dentry;		// dentry of the child file
+	umode_t mode;			// mode of the child file
+	bool excl;			// whether the file must not yet exist
+};
+
+int vfs_create(struct createdata *);
+
 struct dentry *vfs_mkdir(struct mnt_idmap *, struct inode *,
 			 struct dentry *, umode_t, struct delegated_inode *);
 int vfs_mknod(struct mnt_idmap *, struct inode *, struct dentry *,

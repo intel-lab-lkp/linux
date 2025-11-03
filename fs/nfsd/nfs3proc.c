@@ -258,6 +258,7 @@ nfsd3_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	struct nfsd_attrs attrs = {
 		.na_iattr	= iap,
 	};
+	struct createdata cargs = { };
 	__u32 v_mtime, v_atime;
 	struct inode *inode;
 	__be32 status;
@@ -344,7 +345,13 @@ nfsd3_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	status = fh_fill_pre_attrs(fhp);
 	if (status != nfs_ok)
 		goto out;
-	host_err = vfs_create(&nop_mnt_idmap, inode, child, iap->ia_mode, true);
+
+	cargs.idmap = &nop_mnt_idmap;
+	cargs.dir = inode;
+	cargs.dentry = child;
+	cargs.mode = iap->ia_mode;
+	cargs.excl = true;
+	host_err = vfs_create(&cargs);
 	if (host_err < 0) {
 		status = nfserrno(host_err);
 		goto out;

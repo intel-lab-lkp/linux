@@ -1527,11 +1527,12 @@ nfsd_create_locked(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		   struct nfsd_attrs *attrs,
 		   int type, dev_t rdev, struct svc_fh *resfhp)
 {
-	struct dentry	*dentry, *dchild;
-	struct inode	*dirp;
-	struct iattr	*iap = attrs->na_iattr;
-	__be32		err;
-	int		host_err = 0;
+	struct dentry		*dentry, *dchild;
+	struct inode		*dirp;
+	struct iattr		*iap = attrs->na_iattr;
+	__be32			err;
+	int			host_err = 0;
+	struct createdata	cargs = { };
 
 	dentry = fhp->fh_dentry;
 	dirp = d_inode(dentry);
@@ -1552,8 +1553,12 @@ nfsd_create_locked(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	err = 0;
 	switch (type) {
 	case S_IFREG:
-		host_err = vfs_create(&nop_mnt_idmap, dirp, dchild,
-				      iap->ia_mode, true);
+		cargs.idmap = &nop_mnt_idmap;
+		cargs.dir = dirp;
+		cargs.dentry = dchild;
+		cargs.mode = iap->ia_mode;
+		cargs.excl = true;
+		host_err = vfs_create(&cargs);
 		if (!host_err)
 			nfsd_check_ignore_resizing(iap);
 		break;

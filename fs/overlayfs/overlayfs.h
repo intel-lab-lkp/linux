@@ -235,7 +235,12 @@ static inline int ovl_do_create(struct ovl_fs *ofs,
 				struct inode *dir, struct dentry *dentry,
 				umode_t mode)
 {
-	int err = vfs_create(ovl_upper_mnt_idmap(ofs), dir, dentry, mode, true);
+	struct createdata cargs = { .idmap = ovl_upper_mnt_idmap(ofs),
+				    .dir = dir,
+				    .dentry = dentry,
+				    .mode = mode,
+				    .excl = true };
+	int err = vfs_create(&cargs);
 
 	pr_debug("create(%pd2, 0%o) = %i\n", dentry, mode, err);
 	return err;

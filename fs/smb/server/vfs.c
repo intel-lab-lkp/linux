@@ -173,6 +173,7 @@ void ksmbd_vfs_query_maximal_access(struct mnt_idmap *idmap,
  */
 int ksmbd_vfs_create(struct ksmbd_work *work, const char *name, umode_t mode)
 {
+	struct createdata cargs = { };
 	struct path path;
 	struct dentry *dentry;
 	int err;
@@ -188,8 +189,12 @@ int ksmbd_vfs_create(struct ksmbd_work *work, const char *name, umode_t mode)
 	}
 
 	mode |= S_IFREG;
-	err = vfs_create(mnt_idmap(path.mnt), d_inode(path.dentry),
-			 dentry, mode, true);
+	cargs.idmap = mnt_idmap(path.mnt);
+	cargs.dir = d_inode(path.dentry);
+	cargs.dentry = dentry;
+	cargs.mode = mode;
+	cargs.excl = true;
+	err = vfs_create(&cargs);
 	if (!err) {
 		ksmbd_vfs_inherit_owner(work, d_inode(path.dentry),
 					d_inode(dentry));

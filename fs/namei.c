@@ -3460,23 +3460,22 @@ static inline umode_t vfs_prepare_mode(struct mnt_idmap *idmap,
 
 /**
  * vfs_create - create new file
- * @idmap:	idmap of the mount the inode was found from
- * @dir:	inode of the parent directory
- * @dentry:	dentry of the child file
- * @mode:	mode of the child file
- * @want_excl:	whether the file must not yet exist
+ * @args:	struct createdata describing create to be done
  *
  * Create a new file.
  *
  * If the inode has been found through an idmapped mount the idmap of
- * the vfsmount must be passed through @idmap. This function will then take
- * care to map the inode according to @idmap before checking permissions.
+ * the vfsmount must be passed through @args->idmap. This function will then take
+ * care to map the inode according to @args->idmap before checking permissions.
  * On non-idmapped mounts or if permission checking is to be performed on the
  * raw inode simply pass @nop_mnt_idmap.
  */
-int vfs_create(struct mnt_idmap *idmap, struct inode *dir,
-	       struct dentry *dentry, umode_t mode, bool want_excl)
+int vfs_create(struct createdata *args)
 {
+	struct mnt_idmap *idmap = args->idmap;
+	struct inode *dir = args->dir;
+	struct dentry *dentry = args->dentry;
+	umode_t mode = args->mode;
 	int error;
 
 	error = may_create(idmap, dir, dentry);
@@ -3490,7 +3489,7 @@ int vfs_create(struct mnt_idmap *idmap, struct inode *dir,
 	error = security_inode_create(dir, dentry, mode);
 	if (error)
 		return error;
-	error = dir->i_op->create(idmap, dir, dentry, mode, want_excl);
+	error = dir->i_op->create(idmap, dir, dentry, mode, args->excl);
 	if (!error)
 		fsnotify_create(dir, dentry);
 	return error;
@@ -4382,12 +4381,20 @@ retry:
 
 	idmap = mnt_idmap(path.mnt);
 	switch (mode & S_IFMT) {
-		case 0: case S_IFREG:
-			error = vfs_create(idmap, path.dentry->d_inode,
-					   dentry, mode, true);
+		case 0:
+		case S_IFREG:
+		{
+			struct createdata args = { .idmap = idmap,
+						   .dir = path.dentry->d_inode,
+						   .dentry = dentry,
+						   .mode = mode,
+						   .excl = true };
+
+			error = vfs_create(&args);
 			if (!error)
 				security_path_post_mknod(idmap, dentry);
 			break;
+		}
 		case S_IFCHR: case S_IFBLK:
 			error = vfs_mknod(idmap, path.dentry->d_inode,
 					  dentry, mode, new_decode_dev(dev));

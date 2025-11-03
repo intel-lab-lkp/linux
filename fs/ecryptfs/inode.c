@@ -187,9 +187,14 @@ ecryptfs_do_create(struct inode *directory_inode,
 	struct inode *inode;
 
 	rc = lock_parent(ecryptfs_dentry, &lower_dentry, &lower_dir);
-	if (!rc)
-		rc = vfs_create(&nop_mnt_idmap, lower_dir,
-				lower_dentry, mode, true);
+	if (!rc) {
+		struct createdata args = { .idmap = &nop_mnt_idmap,
+					   .dir = lower_dir,
+					   .dentry = lower_dentry,
+					   .mode = mode,
+					   .excl = true };
+		rc = vfs_create(&args);
+	}
 	if (rc) {
 		printk(KERN_ERR "%s: Failure to create dentry in lower fs; "
 		       "rc = [%d]\n", __func__, rc);
