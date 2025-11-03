@@ -265,12 +265,9 @@ static void hisi_lpc_comm_out(void *hostdata, unsigned long pio,
  * @buffer: a buffer where read/input data bytes are stored
  * @dwidth: the data width required writing to the target I/O port
  * @count: how many data units whose length is dwidth will be read
- *
- * When success, the data read back is stored in buffer pointed by buffer.
- * Returns 0 on success, -errno otherwise.
  */
-static u32 hisi_lpc_comm_ins(void *hostdata, unsigned long pio, void *buffer,
-			     size_t dwidth, unsigned int count)
+static void hisi_lpc_comm_ins(void *hostdata, unsigned long pio, void *buffer,
+			      size_t dwidth, unsigned int count)
 {
 	struct hisi_lpc_dev *lpcdev = hostdata;
 	unsigned char *buf = buffer;
@@ -278,7 +275,7 @@ static u32 hisi_lpc_comm_ins(void *hostdata, unsigned long pio, void *buffer,
 	unsigned long addr;
 
 	if (!lpcdev || !buf || !count || !dwidth || dwidth > LPC_MAX_DWIDTH)
-		return -EINVAL;
+		return;
 
 	iopara.opflags = 0;
 	if (dwidth > 1)
@@ -292,11 +289,11 @@ static u32 hisi_lpc_comm_ins(void *hostdata, unsigned long pio, void *buffer,
 
 		ret = hisi_lpc_target_in(lpcdev, &iopara, addr, buf, dwidth);
 		if (ret)
-			return ret;
+			return;
 		buf += dwidth;
 	} while (--count);
 
-	return 0;
+	return;
 }
 
 /*
