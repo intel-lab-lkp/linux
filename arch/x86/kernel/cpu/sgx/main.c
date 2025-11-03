@@ -466,11 +466,11 @@ static struct sgx_epc_page *__sgx_alloc_epc_page_from_node(int nid)
 /**
  * __sgx_alloc_epc_page() - Allocate an EPC page
  *
- * Iterate through NUMA nodes and reserve ia free EPC page to the caller. Start
+ * Iterate through NUMA nodes and reserve a free EPC page to the caller. Start
  * from the NUMA node, where the caller is executing.
  *
  * Return:
- * - an EPC page:	A borrowed EPC pages were available.
+ * - an EPC page:	A borrowed EPC page if available.
  * - NULL:		Out of EPC pages.
  */
 struct sgx_epc_page *__sgx_alloc_epc_page(void)
@@ -899,8 +899,8 @@ static struct miscdevice sgx_dev_provision = {
  * /dev/sgx_provision is supported.
  *
  * Return:
- * -0:		SGX_ATTR_PROVISIONKEY is appended to allowed_attributes
- * -EINVAL:	Invalid, or not supported file descriptor
+ * - 0:		SGX_ATTR_PROVISIONKEY is appended to allowed_attributes
+ * - -EINVAL:	Invalid, or not supported file descriptor
  */
 int sgx_set_attribute(unsigned long *allowed_attributes,
 		      unsigned int attribute_fd)
