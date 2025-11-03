@@ -859,6 +859,8 @@ struct drm_connector *drm_bridge_connector_init(struct drm_device *drm,
 			return ERR_PTR(ret);
 	}
 
+	bridge_connector->bridge_hdmi_cec   = drm_bridge_get(bridge_hdmi_cec);
+
 	if (bridge_hdmi_cec &&
 	    bridge_hdmi_cec->ops & DRM_BRIDGE_OP_HDMI_CEC_ADAPTER) {
 		struct drm_bridge *bridge = bridge_hdmi_cec;
@@ -894,7 +896,6 @@ struct drm_connector *drm_bridge_connector_init(struct drm_device *drm,
 	bridge_connector->bridge_hdmi       = drm_bridge_get(bridge_hdmi);
 	bridge_connector->bridge_hdmi_audio = drm_bridge_get(bridge_hdmi_audio);
 	bridge_connector->bridge_dp_audio   = drm_bridge_get(bridge_dp_audio);
-	bridge_connector->bridge_hdmi_cec   = drm_bridge_get(bridge_hdmi_cec);
 
 	return connector;
 }
