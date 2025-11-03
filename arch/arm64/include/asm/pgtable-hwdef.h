@@ -333,6 +333,20 @@
  * TTBR_ELx[1] is RES0 in this configuration.
  */
 #define TTBR_BADDR_MASK_52	(TTBRx_EL1_BADDR_MASK & ~GENMASK(1, 1))
+
+/*
+ * A 52 bit physical address gets stored in TTBR_BADDR_MASK_52 i.e
+ * GENMASK(47, 2) in a folded manner. Shifting PA[51:0] right ward
+ * by 46 bits aligns PA[51:48] into TTBRx_EL1[5:2] which gets ORed
+ * subsequently for the final TTBRx_EL1 encoding.
+ *
+ * 47                                              5          2  0
+ * +----------------------------------------------+-----------+--+
+ * |                      PA[47:X]                | PA[51:48] |  |
+ * +----------------------------------------------+-----------+--+
+ *
+ */
+#define TTBR_BADDR_52_PA_PIVOT 46
 #endif
 
 #ifdef CONFIG_ARM64_VA_BITS_52

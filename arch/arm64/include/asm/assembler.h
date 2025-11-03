@@ -605,7 +605,7 @@ alternative_endif
  */
 	.macro	phys_to_ttbr, ttbr, phys
 #ifdef CONFIG_ARM64_PA_BITS_52
-	orr	\ttbr, \phys, \phys, lsr #46
+	orr	\ttbr, \phys, \phys, lsr #TTBR_BADDR_52_PA_PIVOT
 	and	\ttbr, \ttbr, #TTBR_BADDR_MASK_52
 #else
 	mov	\ttbr, \phys
