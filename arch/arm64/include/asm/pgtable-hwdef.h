@@ -332,7 +332,7 @@
 /*
  * TTBR_ELx[1] is RES0 in this configuration.
  */
-#define TTBR_BADDR_MASK_52	GENMASK_ULL(47, 2)
+#define TTBR_BADDR_MASK_52	(TTBRx_EL1_BADDR_MASK & ~GENMASK(1, 1))
 #endif
 
 #ifdef CONFIG_ARM64_VA_BITS_52
