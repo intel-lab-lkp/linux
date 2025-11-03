@@ -822,7 +822,7 @@ static int pef2256_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, pef2256);
 
-	ret = mfd_add_devices(pef2256->dev, 0, pef2256_devs,
+	ret = devm_mfd_add_devices(pef2256->dev, 0, pef2256_devs,
 			      ARRAY_SIZE(pef2256_devs), NULL, 0, NULL);
 	if (ret) {
 		dev_err(pef2256->dev, "add devices failed (%d)\n", ret);
