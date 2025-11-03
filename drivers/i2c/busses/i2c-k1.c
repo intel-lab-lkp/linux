@@ -160,7 +160,8 @@ static int spacemit_i2c_handle_err(struct spacemit_i2c_dev *i2c)
 
 	if (i2c->status & (SPACEMIT_SR_BED | SPACEMIT_SR_ALD)) {
 		spacemit_i2c_reset(i2c);
-		return -EAGAIN;
+		if (i2c->status & SPACEMIT_SR_ALD)
+			return -EAGAIN;
 	}
 
 	return i2c->status & SPACEMIT_SR_ACKNAK ? -ENXIO : -EIO;
@@ -490,6 +491,8 @@ static int spacemit_i2c_xfer(struct i2c_adapter *adapt, struct i2c_msg *msgs, in
 	spacemit_i2c_calc_timeout(i2c);
 
 	spacemit_i2c_init(i2c);
+
+	spacemit_i2c_clear_int_status(i2c, SPACEMIT_I2C_INT_STATUS_MASK);
 
 	spacemit_i2c_enable(i2c);
 
