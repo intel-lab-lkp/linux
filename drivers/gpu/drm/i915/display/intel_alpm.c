@@ -57,31 +57,43 @@ static int get_silence_period_symbols(const struct intel_crtc_state *crtc_state)
 		1000 / 1000;
 }
 
-static void get_lfps_cycle_min_max_time(const struct intel_crtc_state *crtc_state,
+static void get_lfps_cycle_min_max_time(struct intel_dp *intel_dp,
+					const struct intel_crtc_state *crtc_state,
 					int *min, int *max)
 {
-	if (crtc_state->port_clock < 540000) {
-		*min = 65 * LFPS_CYCLE_COUNT;
-		*max = 75 * LFPS_CYCLE_COUNT;
+	struct intel_display *display = to_intel_display(intel_dp);
+
+	if (intel_dp_is_edp(intel_dp)) {
+		if (crtc_state->port_clock < 540000) {
+			*min = DISPLAY_VER(display) < 35 ? 65 * LFPS_CYCLE_COUNT : 140;
+			*max = DISPLAY_VER(display) < 35 ? 75 * LFPS_CYCLE_COUNT : 800;
+		} else {
+			*min = 140;
+			*max = 800;
+		}
 	} else {
-		*min = 140;
-		*max = 800;
+		*min = 320;
+		*max = 1600;
+		return;
 	}
 }
 
-static int get_lfps_cycle_time(const struct intel_crtc_state *crtc_state)
+static int get_lfps_cycle_time(struct intel_dp *intel_dp,
+			       const struct intel_crtc_state *crtc_state)
 {
 	int tlfps_cycle_min, tlfps_cycle_max;
 
-	get_lfps_cycle_min_max_time(crtc_state, &tlfps_cycle_min,
+	get_lfps_cycle_min_max_time(intel_dp, crtc_state, &tlfps_cycle_min,
 				    &tlfps_cycle_max);
 
 	return tlfps_cycle_min +  (tlfps_cycle_max - tlfps_cycle_min) / 2;
 }
 
-static int get_lfps_half_cycle_clocks(const struct intel_crtc_state *crtc_state)
+static int get_lfps_half_cycle_clocks(struct intel_dp *intel_dp,
+				      const struct intel_crtc_state *crtc_state)
 {
-	return get_lfps_cycle_time(crtc_state) * crtc_state->port_clock / 1000 /
+	return get_lfps_cycle_time(intel_dp, crtc_state) *
+		crtc_state->port_clock / 1000 /
 		1000 / (2 * LFPS_CYCLE_COUNT);
 }
 
@@ -112,7 +124,7 @@ static int get_establishment_period(struct intel_dp *intel_dp,
 	if (lttpr_count) {
 		int tlw = 13000;
 		int tcs = 10000;
-		int tlfps_period = get_lfps_cycle_time(crtc_state);
+		int tlfps_period = get_lfps_cycle_time(intel_dp, crtc_state);
 		int tdcs = (SILENCE_PERIOD_TIME + t1 + tcs +
 			    (lttpr_count - 1) * (tlw + tlfps_period));
 		int tacds = 70000;
@@ -171,7 +183,7 @@ static int _lnl_compute_aux_less_wake_time(struct intel_dp *intel_dp,
 	int establishment_period = get_establishment_period(intel_dp, crtc_state);
 	int switch_to_active = get_switch_to_active(crtc_state);
 
-	return DIV_ROUND_UP(tphy2_p2_to_p0 + get_lfps_cycle_time(crtc_state) +
+	return DIV_ROUND_UP(tphy2_p2_to_p0 + get_lfps_cycle_time(intel_dp, crtc_state) +
 			    establishment_period + switch_to_active, 1000);
 }
 
@@ -189,7 +201,7 @@ _lnl_compute_aux_less_alpm_params(struct intel_dp *intel_dp,
 						       aux_less_wake_time);
 	silence_period = get_silence_period_symbols(crtc_state);
 
-	lfps_half_cycle = get_lfps_half_cycle_clocks(crtc_state);
+	lfps_half_cycle = get_lfps_half_cycle_clocks(intel_dp, crtc_state);
 
 	if (aux_less_wake_lines > ALPM_CTL_AUX_LESS_WAKE_TIME_MASK ||
 	    silence_period > PORT_ALPM_CTL_SILENCE_PERIOD_MASK ||
