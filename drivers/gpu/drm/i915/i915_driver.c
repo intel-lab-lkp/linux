@@ -223,9 +223,6 @@ static int i915_driver_early_probe(struct drm_i915_private *dev_priv)
 	struct intel_display *display = dev_priv->display;
 	int ret = 0;
 
-	if (i915_inject_probe_failure(dev_priv))
-		return -ENODEV;
-
 	intel_device_info_runtime_init_early(dev_priv);
 
 	intel_step_init(dev_priv);
@@ -275,6 +272,7 @@ err_workqueues:
 	i915_workqueues_cleanup(dev_priv);
 	return ret;
 }
+ALLOW_ERROR_INJECTION(i915_driver_early_probe, ERRNO);
 
 /**
  * i915_driver_late_release - cleanup the setup done in
@@ -317,9 +315,6 @@ static int i915_driver_mmio_probe(struct drm_i915_private *dev_priv)
 	struct intel_gt *gt;
 	int ret, i;
 
-	if (i915_inject_probe_failure(dev_priv))
-		return -ENODEV;
-
 	ret = intel_gmch_bridge_setup(dev_priv);
 	if (ret < 0)
 		return ret;
@@ -357,6 +352,7 @@ err_uncore:
 
 	return ret;
 }
+ALLOW_ERROR_INJECTION(i915_driver_mmio_probe, ERRNO);
 
 /**
  * i915_driver_mmio_release - cleanup the setup done in i915_driver_mmio_probe()
@@ -463,9 +459,6 @@ static int i915_driver_hw_probe(struct drm_i915_private *dev_priv)
 	struct intel_display *display = dev_priv->display;
 	struct pci_dev *pdev = to_pci_dev(dev_priv->drm.dev);
 	int ret;
-
-	if (i915_inject_probe_failure(dev_priv))
-		return -ENODEV;
 
 	if (HAS_PPGTT(dev_priv)) {
 		if (intel_vgpu_active(dev_priv) &&
@@ -594,6 +587,7 @@ err_perf:
 	i915_perf_fini(dev_priv);
 	return ret;
 }
+ALLOW_ERROR_INJECTION(i915_driver_hw_probe, ERRNO);
 
 /**
  * i915_driver_hw_remove - cleanup the setup done in i915_driver_hw_probe()
