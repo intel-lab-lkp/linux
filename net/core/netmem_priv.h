@@ -22,6 +22,14 @@ static inline void netmem_clear_pp_magic(netmem_ref netmem)
 
 static inline bool netmem_is_pp(netmem_ref netmem)
 {
+	/* net_iov may be part of a page pool.  For net_iov, ->pp in
+	 * net_iov.desc can be used to determine if the pages belong to
+	 * a page pool.  Ensure that the ->pp either points to its page
+	 * pool or is set to NULL if it does not.
+	 */
+	if (netmem_is_net_iov(netmem))
+		return !!netmem_to_nmdesc(netmem)->pp;
+
 	return (netmem_get_pp_magic(netmem) & PP_MAGIC_MASK) == PP_SIGNATURE;
 }
 
