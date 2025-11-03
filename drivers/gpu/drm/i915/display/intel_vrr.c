@@ -627,6 +627,18 @@ intel_vrr_dcb_increment_flip_count(struct intel_crtc_state *crtc_state,
 		       ++crtc->dc_balance.flip_count);
 }
 
+void intel_vrr_dcb_reset_flip_count(const struct intel_crtc_state *crtc_state,
+				    struct intel_crtc *crtc)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	enum pipe pipe = crtc->pipe;
+
+	if (!crtc_state->vrr.dc_balance.enable)
+		return;
+
+	intel_de_write(display, PIPEDMC_DCB_FLIP_COUNT(pipe), 0);
+}
+
 void intel_vrr_send_push(struct intel_dsb *dsb,
 			 const struct intel_crtc_state *crtc_state)
 {
