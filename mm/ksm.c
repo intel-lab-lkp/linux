@@ -3261,6 +3261,215 @@ again:
 }
 
 #ifdef CONFIG_MEMORY_FAILURE
+
+static struct rb_node *find_stable_node_in_tree(struct ksm_stable_node *dup_node,
+						const struct rb_root *root)
+{
+	struct rb_node *node;
+	struct ksm_stable_node *stable_node, *dup;
+
+	for (node = rb_first(root); node; node = rb_next(node)) {
+		stable_node = rb_entry(node, struct ksm_stable_node, node);
+		if (!is_stable_node_chain(stable_node))
+			continue;
+		hlist_for_each_entry(dup, &stable_node->hlist, hlist_dup) {
+			if (dup == dup_node)
+				return node;
+		}
+		cond_resched();
+	}
+	return NULL;
+}
+
+static struct ksm_stable_node *find_chain_head(struct ksm_stable_node *dup_node)
+{
+	struct rb_node *node;
+	int nid;
+
+	if (!is_stable_node_dup(dup_node))
+		return NULL;
+
+	for (nid = 0; nid < ksm_nr_node_ids; nid++) {
+		node = find_stable_node_in_tree(dup_node, root_stable_tree + nid);
+		if (node)
+			return rb_entry(node, struct ksm_stable_node, node);
+	}
+
+	return NULL;
+}
+
+static struct folio *find_healthy_folio(struct ksm_stable_node *chain_head,
+					struct ksm_stable_node *failing_node,
+					struct ksm_stable_node **healthy_stable_node)
+{
+	struct ksm_stable_node *dup;
+	struct hlist_node *hlist_safe;
+	struct folio *healthy_folio;
+
+	if (!is_stable_node_chain(chain_head) ||
+	    !is_stable_node_dup(failing_node))
+		return NULL;
+
+	hlist_for_each_entry_safe(dup, hlist_safe, &chain_head->hlist,
+				  hlist_dup) {
+		if (dup == failing_node)
+			continue;
+
+		healthy_folio = ksm_get_folio(dup, KSM_GET_FOLIO_TRYLOCK);
+		if (healthy_folio) {
+			*healthy_stable_node = dup;
+			return healthy_folio;
+		}
+	}
+
+	return NULL;
+}
+
+static struct folio *create_new_stable_node_dup(struct ksm_stable_node *chain_head,
+						struct folio *healthy_folio,
+						struct ksm_stable_node **new_stable_node)
+{
+	struct folio *new_folio;
+	struct page *new_page;
+	unsigned long kpfn;
+	int nid;
+
+	if (!is_stable_node_chain(chain_head))
+		return NULL;
+
+	new_page = alloc_page(GFP_HIGHUSER_MOVABLE);
+	if (!new_page)
+		return NULL;
+
+	new_folio = page_folio(new_page);
+	copy_highpage(new_page, folio_page(healthy_folio, 0));
+
+	kpfn = folio_pfn(new_folio);
+	nid = get_kpfn_nid(kpfn);
+	*new_stable_node = alloc_init_stable_node_dup(kpfn, nid);
+	if (!*new_stable_node) {
+		folio_put(new_folio);
+		return NULL;
+	}
+
+	stable_node_chain_add_dup(*new_stable_node, chain_head);
+	folio_set_stable_node(new_folio, *new_stable_node);
+
+	/* Lock the folio before adding to LRU, consistent with ksm_get_folio */
+	folio_lock(new_folio);
+	folio_add_lru(new_folio);
+
+	return new_folio;
+}
+
+static void migrate_to_target_dup(struct ksm_stable_node *failing_node,
+				  struct folio *failing_folio,
+				  struct folio *target_folio,
+				  struct ksm_stable_node *target_dup)
+{
+	struct ksm_rmap_item *rmap_item;
+	struct hlist_node *hlist_safe;
+	struct page *target_page = folio_page(target_folio, 0);
+	int err;
+
+	hlist_for_each_entry_safe(rmap_item, hlist_safe, &failing_node->hlist, hlist) {
+		struct mm_struct *mm = rmap_item->mm;
+		const unsigned long addr = rmap_item->address & PAGE_MASK;
+		struct vm_area_struct *vma;
+		pte_t orig_pte = __pte(0);
+
+		guard(mmap_read_lock)(mm);
+
+		vma = find_mergeable_vma(mm, addr);
+		if (!vma)
+			continue;
+
+		folio_lock(failing_folio);
+
+		err = write_protect_page_addr(vma, failing_folio, addr, &orig_pte);
+		if (err) {
+			folio_unlock(failing_folio);
+			continue;
+		}
+
+		err = replace_page_addr(vma, &failing_folio->page, target_page, addr, orig_pte);
+		if (!err) {
+			hlist_del(&rmap_item->hlist);
+			rmap_item->head = target_dup;
+			DO_NUMA(rmap_item->nid = target_dup->nid);
+			hlist_add_head(&rmap_item->hlist, &target_dup->hlist);
+			target_dup->rmap_hlist_len++;
+			failing_node->rmap_hlist_len--;
+		}
+		folio_unlock(failing_folio);
+	}
+}
+
+static bool ksm_recover_within_chain(struct ksm_stable_node *failing_node)
+{
+	struct folio *failing_folio, *healthy_folio, *target_folio;
+	struct ksm_stable_node *healthy_stable_node, *chain_head, *target_dup;
+	struct folio *new_folio = NULL;
+	struct ksm_stable_node *new_stable_node = NULL;
+
+	if (!is_stable_node_dup(failing_node))
+		return false;
+
+	guard(mutex)(&ksm_thread_mutex);
+
+	failing_folio = ksm_get_folio(failing_node, KSM_GET_FOLIO_NOLOCK);
+	if (!failing_folio)
+		return false;
+
+	chain_head = find_chain_head(failing_node);
+	if (!chain_head) {
+		folio_put(failing_folio);
+		return false;
+	}
+
+	healthy_folio = find_healthy_folio(chain_head, failing_node, &healthy_stable_node);
+	if (!healthy_folio) {
+		folio_put(failing_folio);
+		return false;
+	}
+
+	new_folio = create_new_stable_node_dup(chain_head, healthy_folio, &new_stable_node);
+
+	if (new_folio && new_stable_node) {
+		target_folio = new_folio;
+		target_dup = new_stable_node;
+
+		/* Release healthy_folio since we're using new_folio */
+		folio_unlock(healthy_folio);
+		folio_put(healthy_folio);
+	} else {
+		target_folio = healthy_folio;
+		target_dup = healthy_stable_node;
+	}
+
+	/*
+	 * failing_folio was locked in memory_failure(). Unlock it before
+	 * acquiring mmap_read_lock to avoid lock inversion deadlock.
+	 */
+	folio_unlock(failing_folio);
+	migrate_to_target_dup(failing_node, failing_folio, target_folio, target_dup);
+	folio_lock(failing_folio);
+
+	folio_unlock(target_folio);
+	folio_put(target_folio);
+
+	if (failing_node->rmap_hlist_len == 0) {
+		folio_set_stable_node(failing_folio, NULL);
+		__stable_node_dup_del(failing_node);
+		free_stable_node(failing_node);
+		folio_put(failing_folio);
+		return true;
+	}
+
+	folio_put(failing_folio);
+	return false;
+}
+
 /*
  * Collect processes when the error hit an ksm page.
  */
@@ -3275,6 +3484,12 @@ void collect_procs_ksm(const struct folio *folio, const struct page *page,
 	stable_node = folio_stable_node(folio);
 	if (!stable_node)
 		return;
+
+	if (ksm_recover_within_chain(stable_node)) {
+		pr_info("ksm: recovery successful, no need to kill processes\n");
+		return;
+	}
+
 	hlist_for_each_entry(rmap_item, &stable_node->hlist, hlist) {
 		struct anon_vma *av = rmap_item->anon_vma;
 
