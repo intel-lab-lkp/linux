@@ -360,6 +360,12 @@ struct vgic_cpu {
 	struct list_head ap_list_head;
 
 	/*
+	 * List of IRQs that have not made it onto an LR, but still
+	 * notionally par of the AP list
+	 */
+	struct list_head overflow_ap_list_head;
+
+	/*
 	 * Members below are used with GICv3 emulation only and represent
 	 * parts of the redistributor.
 	 */

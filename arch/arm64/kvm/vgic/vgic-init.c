@@ -331,6 +331,7 @@ int kvm_vgic_vcpu_init(struct kvm_vcpu *vcpu)
 	vgic_cpu->rd_iodev.base_addr = VGIC_ADDR_UNDEF;
 
 	INIT_LIST_HEAD(&vgic_cpu->ap_list_head);
+	INIT_LIST_HEAD(&vgic_cpu->overflow_ap_list_head);
 	raw_spin_lock_init(&vgic_cpu->ap_list_lock);
 	atomic_set(&vgic_cpu->vgic_v3.its_vpe.vlpi_count, 0);
 
@@ -455,6 +456,7 @@ static void __kvm_vgic_vcpu_destroy(struct kvm_vcpu *vcpu)
 	vgic_flush_pending_lpis(vcpu);
 
 	INIT_LIST_HEAD(&vgic_cpu->ap_list_head);
+	INIT_LIST_HEAD(&vgic_cpu->overflow_ap_list_head);
 	kfree(vgic_cpu->private_irqs);
 	vgic_cpu->private_irqs = NULL;
 

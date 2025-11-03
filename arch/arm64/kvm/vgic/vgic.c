@@ -687,6 +687,15 @@ static void vgic_prune_ap_list(struct kvm_vcpu *vcpu)
 retry:
 	raw_spin_lock(&vgic_cpu->ap_list_lock);
 
+	/*
+	 * Replug the overflow list into the ap_list so that we can walk the
+	 * whole thing in one go. Note that we only replug it once,
+	 * irrespective of how many tries we perform.
+	 */
+	if (!list_empty(&vgic_cpu->overflow_ap_list_head))
+		list_splice_tail_init(&vgic_cpu->overflow_ap_list_head,
+				      &vgic_cpu->ap_list_head);
+
 	list_for_each_entry_safe(irq, tmp, &vgic_cpu->ap_list_head, ap_list) {
 		struct kvm_vcpu *target_vcpu, *vcpuA, *vcpuB;
 		bool target_vcpu_needs_kick = false;
@@ -914,12 +923,33 @@ static void summarize_ap_list(struct kvm_vcpu *vcpu,
  *   if they were made pending sequentially. This may mean that we don't
  *   always present the HPPI if other interrupts with lower priority are
  *   pending in the LRs. Big deal.
+ *
+ * Additional complexity comes from dealing with these overflow interrupts,
+ * as they are not easy to locate on exit (the ap_list isn't immutable while
+ * the vcpu is running, and new interrupts can be added).
+ *
+ * To deal with this, we play some games with the ap_list:
+ *
+ * - On entering the guest, interrupts that haven't made it onto the LRs are
+ *   placed on an overflow list. These entries are still notionally part of
+ *   the ap_list (the vcpu field still points to the owner).
+ *
+ * - On exiting the guest, the overflow list is used to handle the
+ *   deactivations signaled by EOIcount, by walking the list and
+ *   deactivating EOIcount interrupts from the overflow list.
+ *
+ * - The overflow list is then spliced back with the rest of the ap_list,
+ *   before pruning of idle interrupts.
+ *
+ * - Interrupts that are made pending while the vcpu is running are added to
+ *   the ap_list itself, never to the overflow list. This ensures that these
+ *   new interrupts are not evaluated for deactivation when the vcpu exits.
  */
 static void vgic_flush_lr_state(struct kvm_vcpu *vcpu)
 {
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 	struct ap_list_summary als;
-	struct vgic_irq *irq;
+	struct vgic_irq *irq, *last = NULL;
 	int count = 0;
 
 	lockdep_assert_held(&vgic_cpu->ap_list_lock);
@@ -933,6 +963,7 @@ static void vgic_flush_lr_state(struct kvm_vcpu *vcpu)
 		scoped_guard(raw_spinlock,  &irq->irq_lock) {
 			if (likely(vgic_target_oracle(irq) == vcpu)) {
 				vgic_populate_lr(vcpu, irq, count++);
+				last = irq;
 			}
 		}
 
@@ -951,6 +982,21 @@ static void vgic_flush_lr_state(struct kvm_vcpu *vcpu)
 		vcpu->arch.vgic_cpu.vgic_v3.used_lrs = count;
 		vgic_v3_configure_hcr(vcpu, &als);
 	}
+
+	/*
+	 * Move the end of the list to the overflow list, unless:
+	 *
+	 * - either we didn't inject anything at all
+	 * - or we injected everything there was to inject
+	 */
+	if (!count ||
+	    (last && list_is_last(&last->ap_list, &vgic_cpu->ap_list_head))) {
+		INIT_LIST_HEAD(&vgic_cpu->overflow_ap_list_head);
+		return;
+	}
+
+	vgic_cpu->overflow_ap_list_head = vgic_cpu->ap_list_head;
+	list_cut_position(&vgic_cpu->ap_list_head, &vgic_cpu->overflow_ap_list_head, &last->ap_list);
 }
 
 static inline bool can_access_vgic_from_kernel(void)
