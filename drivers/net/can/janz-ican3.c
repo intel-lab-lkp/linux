@@ -62,7 +62,7 @@
 #define DESC_VALID		0x80
 #define DESC_WRAP		0x40
 #define DESC_INTERRUPT		0x20
-#define DESC_IVALID		0x10
+#define DESC_INVALID		0x10
 #define DESC_LEN(len)		(len)
 
 /* Janz ICAN3 Firmware Messages */
@@ -1723,11 +1723,11 @@ static netdev_tx_t ican3_xmit(struct sk_buff *skb, struct net_device *ndev)
 	ican3_put_echo_skb(mod, skb);
 
 	/*
-	 * the programming manual says that you must set the IVALID bit, then
+	 * the programming manual says that you must set the INVALID bit, then
 	 * interrupt, then set the valid bit. Quite weird, but it seems to be
 	 * required for this to work
 	 */
-	desc.control |= DESC_IVALID;
+	desc.control |= DESC_INVALID;
 	memcpy_toio(desc_addr, &desc, sizeof(desc));
 
 	/* generate a MODULbus interrupt to the microcontroller */
