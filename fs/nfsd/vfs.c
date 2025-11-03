@@ -1322,26 +1322,8 @@ nfsd_issue_write_dio(struct svc_rqst *rqstp, struct svc_fh *fhp, struct nfsd_fil
 			kiocb->ki_flags &= ~IOCB_DIRECT;
 
 		host_err = vfs_iocb_iter_write(file, kiocb, &iter[i]);
-		if (host_err < 0) {
-			/*
-			 * VFS will return -ENOTBLK if DIO WRITE fails to
-			 * invalidate the page cache. Retry using buffered IO.
-			 */
-			if (unlikely(host_err == -ENOTBLK)) {
-				kiocb->ki_flags &= ~IOCB_DIRECT;
-				*cnt = in_count;
-				kiocb->ki_pos = in_offset;
-				return nfsd_buffered_write(rqstp, file,
-							   nvecs, cnt, kiocb);
-			} else if (unlikely(host_err == -EINVAL)) {
-				struct inode *inode = d_inode(fhp->fh_dentry);
-
-				pr_info_ratelimited("nfsd: Direct I/O alignment failure on %s/%ld\n",
-						    inode->i_sb->s_id, inode->i_ino);
-				host_err = -ESERVERFAULT;
-			}
+		if (host_err < 0)
 			return host_err;
-		}
 		*cnt += host_err;
 		if (host_err < iter[i].count) /* partial write? */
 			break;
