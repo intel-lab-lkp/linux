@@ -1175,6 +1175,8 @@ struct nfsd_write_dio_seg {
 
 struct nfsd_write_dio_args {
 	struct nfsd_file		*nf;
+	int				flags_buffered;
+	int				flags_direct;
 	unsigned int			nsegs;
 	struct nfsd_write_dio_seg	segment[3];
 };
@@ -1287,21 +1289,13 @@ nfsd_buffered_write(struct svc_rqst *rqstp, struct file *file,
 }
 
 static int
-nfsd_issue_dio_write(struct svc_rqst *rqstp, struct svc_fh *fhp, u32 *stable_how,
-		     struct kiocb *kiocb, unsigned int nvecs, unsigned long *cnt,
-		     struct nfsd_write_dio_args *args)
+nfsd_issue_dio_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
+		     struct kiocb *kiocb, unsigned int nvecs,
+		     unsigned long *cnt, struct nfsd_write_dio_args *args)
 {
 	struct file *file = args->nf->nf_file;
 	ssize_t host_err;
 	unsigned int i;
-
-	/*
-	 * Any buffered IO issued here will be misaligned, use
-	 * sync IO to ensure it has completed before returning.
-	 * Also update @stable_how to avoid need for COMMIT.
-	 */
-	kiocb->ki_flags |= (IOCB_DSYNC|IOCB_SYNC);
-	*stable_how = NFS_FILE_SYNC;
 
 	nfsd_write_dio_iters_init(rqstp->rq_bvec, nvecs, kiocb->ki_pos,
 				  *cnt, args);
@@ -1309,11 +1303,11 @@ nfsd_issue_dio_write(struct svc_rqst *rqstp, struct svc_fh *fhp, u32 *stable_how
 	*cnt = 0;
 	for (i = 0; i < args->nsegs; i++) {
 		if (args->segment[i].use_dio) {
-			kiocb->ki_flags |= IOCB_DIRECT;
+			kiocb->ki_flags = args->flags_direct;
 			trace_nfsd_write_direct(rqstp, fhp, kiocb->ki_pos,
 						args->segment[i].iter.count);
 		} else
-			kiocb->ki_flags &= ~IOCB_DIRECT;
+			kiocb->ki_flags = args->flags_buffered;
 
 		host_err = vfs_iocb_iter_write(file, kiocb,
 					       &args->segment[i].iter);
@@ -1337,15 +1331,16 @@ nfsd_direct_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	args.nf = nf;
 
 	/*
-	 * Check if IOCB_DONTCACHE can be used when issuing buffered IO;
-	 * if so, set it to preserve intent of NFSD_IO_DIRECT (it will
-	 * be ignored for any DIO issued here).
+	 * IOCB_DONTCACHE preserves the intent of NFSD_IO_DIRECT when
+	 * writing unaligned segments or handling fallback I/O.
 	 */
+	args.flags_buffered = kiocb->ki_flags;
 	if (args.nf->nf_file->f_op->fop_flags & FOP_DONTCACHE)
-		kiocb->ki_flags |= IOCB_DONTCACHE;
+		args.flags_buffered |= IOCB_DONTCACHE;
 
-	return nfsd_issue_dio_write(rqstp, fhp, stable_how, kiocb, nvecs,
-				    cnt, &args);
+	args.flags_direct = kiocb->ki_flags | IOCB_DIRECT;
+
+	return nfsd_issue_dio_write(rqstp, fhp, kiocb, nvecs, cnt, &args);
 }
 
 /**
