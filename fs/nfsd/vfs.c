@@ -1272,23 +1272,6 @@ no_dio:
 }
 
 static int
-nfsd_buffered_write(struct svc_rqst *rqstp, struct file *file,
-		    unsigned int nvecs, unsigned long *cnt,
-		    struct kiocb *kiocb)
-{
-	struct iov_iter iter;
-	int host_err;
-
-	iov_iter_bvec(&iter, ITER_SOURCE, rqstp->rq_bvec, nvecs, *cnt);
-	host_err = vfs_iocb_iter_write(file, kiocb, &iter);
-	if (host_err < 0)
-		return host_err;
-	*cnt = host_err;
-
-	return 0;
-}
-
-static int
 nfsd_issue_dio_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		     struct kiocb *kiocb, unsigned int nvecs,
 		     unsigned long *cnt, struct nfsd_write_dio_args *args)
@@ -1371,6 +1354,7 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	u32			stable = *stable_how;
 	struct kiocb		kiocb;
 	struct svc_export	*exp;
+	struct iov_iter		iter;
 	errseq_t		since;
 	__be32			nfserr;
 	int			host_err;
@@ -1431,10 +1415,13 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	case NFSD_IO_DONTCACHE:
 		if (file->f_op->fop_flags & FOP_DONTCACHE)
 			kiocb.ki_flags |= IOCB_DONTCACHE;
-		fallthrough; /* must call nfsd_buffered_write */
+		fallthrough;
 	case NFSD_IO_BUFFERED:
-		host_err = nfsd_buffered_write(rqstp, file,
-					       nvecs, cnt, &kiocb);
+		iov_iter_bvec(&iter, ITER_SOURCE, rqstp->rq_bvec, nvecs, *cnt);
+		host_err = vfs_iocb_iter_write(file, &kiocb, &iter);
+		if (host_err < 0)
+			break;
+		*cnt = host_err;
 		break;
 	}
 	if (host_err < 0) {
