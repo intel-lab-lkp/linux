@@ -27,6 +27,7 @@ config FBNIC
 	select FBNIC_PHY
 	select NET_DEVLINK
 	select PAGE_POOL
+	select PCS_XPCS
 	select PHYLINK
 	select PLDMFW
 	help
