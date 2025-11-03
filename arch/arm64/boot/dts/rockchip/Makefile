@@ -130,6 +130,9 @@ dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3566-lubancat-1.dtb
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3566-nanopi-r3s.dtb
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3566-bigtreetech-cb2-manta.dtb
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3566-bigtreetech-pi2.dtb
+dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-9tripod-x3568-v4.dtb
+dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-9tripod-x3568-v4-camera-demo.dtbo
+dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-9tripod-x3568-v4-video-demo.dtbo
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-bpi-r2-pro.dtb
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-evb1-v10.dtb
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-fastrhino-r66s.dtb
@@ -251,6 +254,14 @@ rk3568-wolfvision-pf5-vz-2-uhd-dtbs := rk3568-wolfvision-pf5.dtb \
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3576-armsom-sige5-v1.2-wifibt.dtb
 rk3576-armsom-sige5-v1.2-wifibt-dtbs := rk3576-armsom-sige5.dtb \
 	rk3576-armsom-sige5-v1.2-wifibt.dtbo
+
+dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-9tripod-x3568-v4-camera-demo.dtb
+rk3568-9tripod-x3568-v4-camera-demo-dtbs := rk3568-9tripod-x3568-v4.dtb \
+	rk3568-9tripod-x3568-v4-camera-demo.dtbo
+
+dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-9tripod-x3568-v4-video-demo.dtb
+rk3568-9tripod-x3568-v4-video-demo-dtbs := rk3568-9tripod-x3568-v4.dtb \
+	rk3568-9tripod-x3568-v4-video-demo.dtbo
 
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3588-edgeble-neu6a-wifi.dtb
 rk3588-edgeble-neu6a-wifi-dtbs := rk3588-edgeble-neu6a-io.dtb \
