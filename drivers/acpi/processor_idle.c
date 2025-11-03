@@ -956,6 +956,9 @@ static int acpi_processor_evaluate_lpi(acpi_handle handle,
 			lpi_state->entry_method = ACPI_CSTATE_INTEGER;
 			lpi_state->address = obj->integer.value;
 		} else {
+			pr_debug("Entry method of state-%d is illegal, disable it.\n",
+				 state_idx);
+			lpi_state->flags = 0;
 			continue;
 		}
 
