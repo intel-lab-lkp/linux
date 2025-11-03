@@ -629,6 +629,8 @@ retry:
 			mod_delayed_work(system_wq,
 					 &dev->mode_config.output_poll_work,
 					 0);
+
+		connector->status_changed = true;
 	}
 
 	/*
@@ -732,6 +734,17 @@ EXPORT_SYMBOL(drm_helper_probe_single_connector_modes);
  */
 void drm_kms_helper_hotplug_event(struct drm_device *dev)
 {
+	struct drm_connector *connector;
+	struct drm_connector_list_iter conn_iter;
+
+	mutex_lock(&dev->mode_config.mutex);
+	drm_connector_list_iter_begin(dev, &conn_iter);
+	drm_for_each_connector_iter(connector, &conn_iter) {
+		connector->status_changed = false;
+	}
+	drm_connector_list_iter_end(&conn_iter);
+	mutex_unlock(&dev->mode_config.mutex);
+
 	drm_sysfs_hotplug_event(dev);
 	drm_client_dev_hotplug(dev);
 }
@@ -747,6 +760,10 @@ EXPORT_SYMBOL(drm_kms_helper_hotplug_event);
 void drm_kms_helper_connector_hotplug_event(struct drm_connector *connector)
 {
 	struct drm_device *dev = connector->dev;
+
+	mutex_lock(&dev->mode_config.mutex);
+	connector->status_changed = false;
+	mutex_unlock(&dev->mode_config.mutex);
 
 	drm_sysfs_connector_hotplug_event(connector);
 	drm_client_dev_hotplug(dev);
