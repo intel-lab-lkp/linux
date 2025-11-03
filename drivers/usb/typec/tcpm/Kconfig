@@ -11,6 +11,14 @@ config TYPEC_TCPM
 
 if TYPEC_TCPM
 
+config TCPM_LOG_DISABLE_WRAPAROUND
+	bool "Disable TCPM log wraparound"
+	depends on DEBUG_FS
+	help
+	  When set, TCPM log do not wraparound and clears when dumped.
+	  When not set(i.e. default), TCPM log wraps around when full and do
+	  not clear when dumped.
+
 config TYPEC_TCPCI
 	tristate "Type-C Port Controller Interface driver"
 	depends on I2C

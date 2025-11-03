@@ -591,6 +591,7 @@ struct tcpm_port {
 	int logbuffer_head;
 	int logbuffer_tail;
 	u8 *logbuffer[LOG_BUFFER_ENTRIES];
+	bool log_disable_wraparound;
 #endif
 };
 
@@ -723,7 +724,7 @@ static void _tcpm_log(struct tcpm_port *port, const char *fmt, va_list args)
 
 	vsnprintf(tmpbuffer, sizeof(tmpbuffer), fmt, args);
 
-	if (tcpm_log_full(port)) {
+	if (port->log_disable_wraparound && tcpm_log_full(port)) {
 		port->logbuffer_head = max(port->logbuffer_head - 1, 0);
 		strcpy(tmpbuffer, "overflow");
 	}
@@ -748,6 +749,10 @@ static void _tcpm_log(struct tcpm_port *port, const char *fmt, va_list args)
 		  tmpbuffer);
 	port->logbuffer_head = (port->logbuffer_head + 1) % LOG_BUFFER_ENTRIES;
 
+	if (!port->log_disable_wraparound && port->logbuffer_head ==
+	    port->logbuffer_tail)
+		port->logbuffer_tail =
+			(port->logbuffer_tail + 1) % LOG_BUFFER_ENTRIES;
 abort:
 	mutex_unlock(&port->logbuffer_lock);
 }
@@ -863,7 +868,7 @@ static int tcpm_debug_show(struct seq_file *s, void *v)
 		seq_printf(s, "%s\n", port->logbuffer[tail]);
 		tail = (tail + 1) % LOG_BUFFER_ENTRIES;
 	}
-	if (!seq_has_overflowed(s))
+	if (port->log_disable_wraparound && !seq_has_overflowed(s))
 		port->logbuffer_tail = tail;
 	mutex_unlock(&port->logbuffer_lock);
 
@@ -871,15 +876,57 @@ static int tcpm_debug_show(struct seq_file *s, void *v)
 }
 DEFINE_SHOW_ATTRIBUTE(tcpm_debug);
 
+static int tcpm_log_disable_wraparound_show(struct seq_file *s, void *v)
+{
+	struct tcpm_port *port = s->private;
+
+	mutex_lock(&port->logbuffer_lock);
+	seq_printf(s, "%d\n", port->log_disable_wraparound ? 1 : 0);
+	mutex_unlock(&port->logbuffer_lock);
+
+	return 0;
+}
+
+static ssize_t tcpm_log_disable_wraparound_write(struct file *file,
+						 const char __user *user_buf,
+						 size_t count, loff_t *ppos)
+{
+	struct seq_file *seq_f = file->private_data;
+	bool log_disable_wraparound;
+	struct tcpm_port *port;
+	int err;
+
+	port = seq_f->private;
+	err = kstrtobool_from_user(user_buf, count, &log_disable_wraparound);
+	if (err)
+		return err;
+
+	mutex_lock(&port->logbuffer_lock);
+	if (port->log_disable_wraparound == log_disable_wraparound)
+		goto exit;
+
+	port->logbuffer_tail = port->logbuffer_head;
+	port->log_disable_wraparound = log_disable_wraparound;
+exit:
+	mutex_unlock(&port->logbuffer_lock);
+	return count;
+}
+
+DEFINE_SHOW_STORE_ATTRIBUTE(tcpm_log_disable_wraparound);
+
 static void tcpm_debugfs_init(struct tcpm_port *port)
 {
 	char name[NAME_MAX];
 
 	mutex_init(&port->logbuffer_lock);
+	port->log_disable_wraparound =
+		IS_ENABLED(CONFIG_TCPM_LOG_DISABLE_WRAPAROUND);
 	snprintf(name, NAME_MAX, "tcpm-%s", dev_name(port->dev));
 	port->dentry = debugfs_create_dir(name, usb_debug_root);
 	debugfs_create_file("log", S_IFREG | 0444, port->dentry, port,
 			    &tcpm_debug_fops);
+	debugfs_create_file("tcpm_log_disable_wraparound", 0644, port->dentry,
+			    port, &tcpm_log_disable_wraparound_fops);
 }
 
 static void tcpm_debugfs_exit(struct tcpm_port *port)
