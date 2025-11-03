@@ -673,6 +673,13 @@ config NFT_SYNPROXY
 	  server. This allows to avoid conntrack and server resource usage
 	  during SYN-flood attacks.
 
+config NFT_MATH
+	tristate "Netfilter nf_tables math expression support"
+	depends on NETFILTER_ADVANCED
+	help
+	  The math expression allows performing mathematical operations like
+	  increase to packet fields.
+
 if NF_TABLES_NETDEV
 
 config NF_DUP_NETDEV
