@@ -323,6 +323,10 @@
 	status = "okay";
 };
 
+&pon {
+	qcom,warm-reset;
+};
+
 &qupv3_id_0 {
 	status = "okay";
 };
@@ -509,6 +513,11 @@
 			regulator-max-microvolt = <3312000>;
 		};
 	};
+};
+
+&scm {
+	qcom,dload-mode = <&tcsr_regs 0x13000>;
+	mode-edl = <0x1>;
 };
 
 &sdhc_1 {
