@@ -19,6 +19,12 @@ properties:
               - aspeed,ast2500-mac
               - aspeed,ast2600-mac
           - const: faraday,ftgmac100
+      - items:
+          - enum:
+              - aspeed,ast2600-mac01
+              - aspeed,ast2600-mac23
+          - const: aspeed,ast2600-mac
+          - const: faraday,ftgmac100
 
   reg:
     maxItems: 1
@@ -69,6 +75,12 @@ properties:
   mdio:
     $ref: /schemas/net/mdio.yaml#
 
+  scu:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      Phandle to the SCU (System Control Unit) syscon node for Aspeed platform.
+      This reference is used by the MAC controller to configure the RGMII delays.
+
 required:
   - compatible
   - reg
@@ -88,6 +100,44 @@ allOf:
     else:
       properties:
         resets: false
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: aspeed,ast2600-mac01
+    then:
+      properties:
+        rx-internal-delay-ps:
+          minimum: 0
+          maximum: 1395
+          multipleOf: 45
+        tx-internal-delay-ps:
+          minimum: 0
+          maximum: 1395
+          multipleOf: 45
+      required:
+        - scu
+        - rx-internal-delay-ps
+        - tx-internal-delay-ps
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: aspeed,ast2600-mac23
+    then:
+      properties:
+        rx-internal-delay-ps:
+          minimum: 0
+          maximum: 7750
+          multipleOf: 250
+        tx-internal-delay-ps:
+          minimum: 0
+          maximum: 7750
+          multipleOf: 250
+      required:
+        - scu
+        - rx-internal-delay-ps
+        - tx-internal-delay-ps
 
 unevaluatedProperties: false
 
