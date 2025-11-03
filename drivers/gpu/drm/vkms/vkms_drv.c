@@ -198,6 +198,9 @@ static int vkms_create(struct vkms_config *config)
 	if (ret)
 		goto out_devres;
 
+	/* init kms poll for handling hpd */
+	drm_kms_helper_poll_init(&vkms_device->drm);
+
 	drm_client_setup(&vkms_device->drm, NULL);
 
 	return 0;
@@ -240,6 +243,7 @@ static void vkms_destroy(struct vkms_config *config)
 
 	fdev = config->dev->faux_dev;
 
+	drm_kms_helper_poll_fini(&config->dev->drm);
 	drm_dev_unregister(&config->dev->drm);
 	drm_atomic_helper_shutdown(&config->dev->drm);
 	devres_release_group(&fdev->dev, NULL);
