@@ -575,7 +575,7 @@ static int follow_fault_pfn(struct vm_area_struct *vma, struct mm_struct *mm,
  * returned initial pfn are provided; subsequent pfns are contiguous.
  */
 static long vaddr_get_pfns(struct mm_struct *mm, unsigned long vaddr,
-			   unsigned long npages, int prot, unsigned long *pfn,
+			   unsigned long npages, int *prot, unsigned long *pfn,
 			   struct vfio_batch *batch)
 {
 	unsigned long pin_pages = min_t(unsigned long, npages, batch->capacity);
@@ -583,7 +583,7 @@ static long vaddr_get_pfns(struct mm_struct *mm, unsigned long vaddr,
 	unsigned int flags = 0;
 	long ret;
 
-	if (prot & IOMMU_WRITE)
+	if (*prot & IOMMU_WRITE)
 		flags |= FOLL_WRITE;
 
 	mmap_read_lock(mm);
@@ -593,6 +593,7 @@ static long vaddr_get_pfns(struct mm_struct *mm, unsigned long vaddr,
 		*pfn = page_to_pfn(batch->pages[0]);
 		batch->size = ret;
 		batch->offset = 0;
+		*prot &= ~IOMMU_MMIO;
 		goto done;
 	} else if (!ret) {
 		ret = -EFAULT;
@@ -607,7 +608,7 @@ retry:
 		unsigned long addr_mask;
 
 		ret = follow_fault_pfn(vma, mm, vaddr, pfn, &addr_mask,
-				       prot & IOMMU_WRITE);
+				       *prot & IOMMU_WRITE);
 		if (ret == -EAGAIN)
 			goto retry;
 
@@ -621,6 +622,9 @@ retry:
 				ret = -EFAULT;
 			}
 		}
+
+		if (vma->vm_flags & VM_IO)
+			*prot |= IOMMU_MMIO;
 	}
 done:
 	mmap_read_unlock(mm);
@@ -701,7 +705,7 @@ static long vfio_pin_pages_remote(struct vfio_dma *dma, unsigned long vaddr,
 			cond_resched();
 
 			/* Empty batch, so refill it. */
-			ret = vaddr_get_pfns(mm, vaddr, npage, dma->prot,
+			ret = vaddr_get_pfns(mm, vaddr, npage, &dma->prot,
 					     &pfn, batch);
 			if (ret < 0)
 				goto unpin_out;
@@ -842,7 +846,7 @@ static int vfio_pin_page_external(struct vfio_dma *dma, unsigned long vaddr,
 
 	vfio_batch_init_single(&batch);
 
-	ret = vaddr_get_pfns(mm, vaddr, 1, dma->prot, pfn_base, &batch);
+	ret = vaddr_get_pfns(mm, vaddr, 1, &dma->prot, pfn_base, &batch);
 	if (ret != 1)
 		goto out;
 
