@@ -223,23 +223,23 @@ static struct lock_class_key af_family_kern_slock_keys[AF_MAX];
  */
 
 #define _sock_locks(x)						  \
-  x "AF_UNSPEC",	x "AF_UNIX"     ,	x "AF_INET"     , \
-  x "AF_AX25"  ,	x "AF_IPX"      ,	x "AF_APPLETALK", \
-  x "AF_NETROM",	x "AF_BRIDGE"   ,	x "AF_ATMPVC"   , \
-  x "AF_X25"   ,	x "AF_INET6"    ,	x "AF_ROSE"     , \
-  x "AF_DECnet",	x "AF_NETBEUI"  ,	x "AF_SECURITY" , \
-  x "AF_KEY"   ,	x "AF_NETLINK"  ,	x "AF_PACKET"   , \
-  x "AF_ASH"   ,	x "AF_ECONET"   ,	x "AF_ATMSVC"   , \
-  x "AF_RDS"   ,	x "AF_SNA"      ,	x "AF_IRDA"     , \
-  x "AF_PPPOX" ,	x "AF_WANPIPE"  ,	x "AF_LLC"      , \
-  x "27"       ,	x "28"          ,	x "AF_CAN"      , \
-  x "AF_TIPC"  ,	x "AF_BLUETOOTH",	x "IUCV"        , \
-  x "AF_RXRPC" ,	x "AF_ISDN"     ,	x "AF_PHONET"   , \
-  x "AF_IEEE802154",	x "AF_CAIF"	,	x "AF_ALG"      , \
-  x "AF_NFC"   ,	x "AF_VSOCK"    ,	x "AF_KCM"      , \
-  x "AF_QIPCRTR",	x "AF_SMC"	,	x "AF_XDP"	, \
-  x "AF_MCTP"  , \
-  x "AF_MAX"
+	x "AF_UNSPEC",	x "AF_UNIX",	x "AF_INET", \
+	x "AF_AX25",	x "AF_IPX",	x "AF_APPLETALK", \
+	x "AF_NETROM",	x "AF_BRIDGE",	x "AF_ATMPVC", \
+	x "AF_X25",	x "AF_INET6",	x "AF_ROSE", \
+	x "AF_DECnet",	x "AF_NETBEUI",	x "AF_SECURITY", \
+	x "AF_KEY",	x "AF_NETLINK",	x "AF_PACKET", \
+	x "AF_ASH",	x "AF_ECONET",	x "AF_ATMSVC", \
+	x "AF_RDS",	x "AF_SNA",	x "AF_IRDA", \
+	x "AF_PPPOX",	x "AF_WANPIPE",	x "AF_LLC", \
+	x "27",	x "28",	x "AF_CAN", \
+	x "AF_TIPC",	x "AF_BLUETOOTH",	x "IUCV", \
+	x "AF_RXRPC",	x "AF_ISDN",	x "AF_PHONET", \
+	x "AF_IEEE802154",	x "AF_CAIF",	x "AF_ALG", \
+	x "AF_NFC",	x "AF_VSOCK",	x "AF_KCM", \
+	x "AF_QIPCRTR",	x "AF_SMC",	x "AF_XDP", \
+	x "AF_MCTP", \
+	x "AF_MAX"
 
 static const char *const af_family_key_strings[AF_MAX+1] = {
 	_sock_locks("sk_lock-")
@@ -579,14 +579,17 @@ int __sk_receive_skb(struct sock *sk, struct sk_buff *skb,
 		rc = sk_backlog_rcv(sk, skb);
 
 		mutex_release(&sk->sk_lock.dep_map, _RET_IP_);
-	} else if ((err = sk_add_backlog(sk, skb, READ_ONCE(sk->sk_rcvbuf)))) {
-		bh_unlock_sock(sk);
-		if (err == -ENOMEM)
-			reason = SKB_DROP_REASON_PFMEMALLOC;
-		if (err == -ENOBUFS)
-			reason = SKB_DROP_REASON_SOCKET_BACKLOG;
-		sk_drops_inc(sk);
-		goto discard_and_relse;
+	} else {
+		err = sk_add_backlog(sk, skb, READ_ONCE(sk->sk_rcvbuf));
+		if (err) {
+			bh_unlock_sock(sk);
+			if (err == -ENOMEM)
+				reason = SKB_DROP_REASON_PFMEMALLOC;
+			if (err == -ENOBUFS)
+				reason = SKB_DROP_REASON_SOCKET_BACKLOG;
+			sk_drops_inc(sk);
+			goto discard_and_relse;
+		}
 	}
 
 	bh_unlock_sock(sk);
@@ -3653,7 +3656,7 @@ void sk_send_sigurg(struct sock *sk)
 }
 EXPORT_SYMBOL(sk_send_sigurg);
 
-void sk_reset_timer(struct sock *sk, struct timer_list* timer,
+void sk_reset_timer(struct sock *sk, struct timer_list *timer,
 		    unsigned long expires)
 {
 	if (!mod_timer(timer, expires))
@@ -3661,7 +3664,7 @@ void sk_reset_timer(struct sock *sk, struct timer_list* timer,
 }
 EXPORT_SYMBOL(sk_reset_timer);
 
-void sk_stop_timer(struct sock *sk, struct timer_list* timer)
+void sk_stop_timer(struct sock *sk, struct timer_list *timer)
 {
 	if (timer_delete(timer))
 		__sock_put(sk);
@@ -3720,7 +3723,7 @@ void sock_init_data_uid(struct socket *sock, struct sock *sk, kuid_t uid)
 	sk->sk_sndtimeo		=	MAX_SCHEDULE_TIMEOUT;
 
 	sk->sk_stamp = SK_DEFAULT_STAMP;
-#if BITS_PER_LONG==32
+#if BITS_PER_LONG == 32
 	seqlock_init(&sk->sk_stamp_seq);
 #endif
 	atomic_set(&sk->sk_zckey, 0);
