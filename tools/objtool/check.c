@@ -314,7 +314,13 @@ static bool __dead_end_function(struct objtool_file *file, struct symbol *func,
 				return false;
 			}
 
-			return __dead_end_function(file, insn_func(dest), recursion+1);
+			/*
+			 * A function can have multiple sibling calls. All of
+			 * them need to be dead ends for the function to be a
+			 * dead end too.
+			 */
+			if (!__dead_end_function(file, insn_func(dest), recursion+1))
+				return false;
 		}
 	}
 
