@@ -204,8 +204,10 @@ static void fw_cfg_io_cleanup(void)
 		iounmap(fw_cfg_dev_base);
 		release_mem_region(fw_cfg_p_base, fw_cfg_p_size);
 	} else {
+#ifdef CONFIG_HAS_IOPORT_MAP
 		ioport_unmap(fw_cfg_dev_base);
 		release_region(fw_cfg_p_base, fw_cfg_p_size);
+#endif
 	}
 }
 
@@ -258,6 +260,7 @@ static int fw_cfg_do_platform_probe(struct platform_device *pdev)
 			return -EFAULT;
 		}
 	} else {
+#ifdef CONFIG_HAS_IOPORT_MAP
 		if (!request_region(fw_cfg_p_base,
 				    fw_cfg_p_size, "fw_cfg_io"))
 			return -EBUSY;
@@ -266,6 +269,10 @@ static int fw_cfg_do_platform_probe(struct platform_device *pdev)
 			release_region(fw_cfg_p_base, fw_cfg_p_size);
 			return -EFAULT;
 		}
+#else
+		dev_err(&pdev->dev, "IO region given but CONFIG_HAS_IOPORT_MAP=n");
+		return -EINVAL;
+#endif
 	}
 
 	/* were custom register offsets provided (e.g. on the command line)? */
