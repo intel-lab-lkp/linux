@@ -625,6 +625,7 @@ tape_generic_remove(struct ccw_device *cdev)
 	}
 	DBF_LH(3, "(%08x): tape_generic_remove(%p)\n", device->cdev_id, cdev);
 
+	disable_delayed_work_sync(&device->tape_dnr);
 	spin_lock_irq(get_ccwdev_lock(device->cdev));
 	switch (device->tape_state) {
 		case TS_INIT:
