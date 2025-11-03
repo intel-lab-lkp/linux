@@ -1855,6 +1855,17 @@ const struct attribute_group amdgpu_vbios_version_attr_group = {
 	.is_visible = amdgpu_vbios_version_attrs_is_visible,
 };
 
+/**
+ * DOC: uma_carveout
+ *
+ * This file is both readable and writable. When read, it shows the
+ * index of the current setting. Writing a valid index to this file
+ * allows users to change the UMA carveout size to the selected option
+ * on the next boot.
+ *
+ * The available options and their corresponding indices can be read
+ * from the uma_carveout_options file.
+ */
 static ssize_t uma_carveout_show(struct device *dev,
 				 struct device_attribute *attr,
 				 char *buf)
@@ -1904,6 +1915,12 @@ static ssize_t uma_carveout_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(uma_carveout);
 
+/**
+ * DOC: uma_carveout_options
+ *
+ * This is a read-only file that lists all available UMA allocation
+ * options and their corresponding indices.
+ */
 static ssize_t uma_carveout_options_show(struct device *dev,
 					 struct device_attribute *attr,
 					 char *buf)
