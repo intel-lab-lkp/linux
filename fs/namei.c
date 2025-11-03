@@ -3489,6 +3489,9 @@ int vfs_create(struct createdata *args)
 	error = security_inode_create(dir, dentry, mode);
 	if (error)
 		return error;
+	error = try_break_deleg(dir, args->delegated_inode);
+	if (error)
+		return error;
 	error = dir->i_op->create(idmap, dir, dentry, mode, args->excl);
 	if (!error)
 		fsnotify_create(dir, dentry);
@@ -4359,6 +4362,8 @@ static int may_mknod(umode_t mode)
 static int do_mknodat(int dfd, struct filename *name, umode_t mode,
 		unsigned int dev)
 {
+	struct delegated_inode delegated_inode = { };
+	struct createdata cargs = { };
 	struct mnt_idmap *idmap;
 	struct dentry *dentry;
 	struct path path;
@@ -4383,18 +4388,16 @@ retry:
 	switch (mode & S_IFMT) {
 		case 0:
 		case S_IFREG:
-		{
-			struct createdata args = { .idmap = idmap,
-						   .dir = path.dentry->d_inode,
-						   .dentry = dentry,
-						   .mode = mode,
-						   .excl = true };
-
-			error = vfs_create(&args);
+			cargs.idmap = idmap,
+			cargs.dir = path.dentry->d_inode,
+			cargs.dentry = dentry,
+			cargs.delegated_inode = &delegated_inode;
+			cargs.mode = mode,
+			cargs.excl = true,
+			error = vfs_create(&cargs);
 			if (!error)
 				security_path_post_mknod(idmap, dentry);
 			break;
-		}
 		case S_IFCHR: case S_IFBLK:
 			error = vfs_mknod(idmap, path.dentry->d_inode,
 					  dentry, mode, new_decode_dev(dev));
@@ -4406,6 +4409,11 @@ retry:
 	}
 out2:
 	end_creating_path(&path, dentry);
+	if (is_delegated(&delegated_inode)) {
+		error = break_deleg_wait(&delegated_inode);
+		if (!error)
+			goto retry;
+	}
 	if (retry_estale(error, lookup_flags)) {
 		lookup_flags |= LOOKUP_REVAL;
 		goto retry;
