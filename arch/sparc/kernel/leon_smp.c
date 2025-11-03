@@ -372,7 +372,7 @@ static struct smp_funcall {
 static DEFINE_SPINLOCK(cross_call_lock);
 
 /* Cross calls must be serialized, at least currently. */
-static void leon_cross_call(void *func, cpumask_t mask, unsigned long arg1,
+static void leon_cross_call(void *func, const cpumask_t *mask, unsigned long arg1,
 			    unsigned long arg2, unsigned long arg3,
 			    unsigned long arg4)
 {
@@ -403,14 +403,11 @@ static void leon_cross_call(void *func, cpumask_t mask, unsigned long arg1,
 		{
 			register int i;
 
-			cpumask_clear_cpu(smp_processor_id(), &mask);
-			cpumask_and(&mask, cpu_online_mask, &mask);
 			for (i = 0; i <= high; i++) {
-				if (cpumask_test_cpu(i, &mask)) {
+				if (cpu_for_ipi(mask, i)) {
 					ccall_info.processors_in[i] = 0;
 					ccall_info.processors_out[i] = 0;
 					leon_send_ipi(i, LEON3_IRQ_CROSS_CALL);
-
 				}
 			}
 		}
@@ -420,7 +417,7 @@ static void leon_cross_call(void *func, cpumask_t mask, unsigned long arg1,
 
 			i = 0;
 			do {
-				if (!cpumask_test_cpu(i, &mask))
+				if (!cpu_for_ipi(mask, i))
 					continue;
 
 				while (!ccall_info.processors_in[i])
@@ -429,7 +426,7 @@ static void leon_cross_call(void *func, cpumask_t mask, unsigned long arg1,
 
 			i = 0;
 			do {
-				if (!cpumask_test_cpu(i, &mask))
+				if (!cpu_for_ipi(mask, i))
 					continue;
 
 				while (!ccall_info.processors_out[i])

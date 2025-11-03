@@ -4,6 +4,7 @@
 
 #include <linux/interrupt.h>
 #include <linux/ftrace.h>
+#include <linux/smp.h>
 
 #include <asm/traps.h>
 #include <asm/head.h>
@@ -79,6 +80,16 @@ int sparc32_classify_syscall(unsigned int syscall);
 #endif
 
 #ifdef CONFIG_SPARC32
+
+#ifdef CONFIG_SMP
+static inline bool cpu_for_ipi(const cpumask_t *mask, unsigned int cpu)
+{
+	return cpumask_test_cpu(cpu, mask) &&
+	       cpumask_test_cpu(cpu, cpu_online_mask) &&
+	       cpu != smp_processor_id();
+}
+#endif /* CONFIG_SMP */
+
 /* setup_32.c */
 struct linux_romvec;
 void sparc32_start_kernel(struct linux_romvec *rp);

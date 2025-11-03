@@ -54,7 +54,7 @@ void smp_bogo(struct seq_file *);
 void smp_info(struct seq_file *);
 
 struct sparc32_ipi_ops {
-	void (*cross_call)(void *func, cpumask_t mask, unsigned long arg1,
+	void (*cross_call)(void *func, const cpumask_t *mask, unsigned long arg1,
 			   unsigned long arg2, unsigned long arg3,
 			   unsigned long arg4);
 	void (*resched)(int cpu);
@@ -65,29 +65,29 @@ extern const struct sparc32_ipi_ops *sparc32_ipi_ops;
 
 static inline void xc0(void *func)
 {
-	sparc32_ipi_ops->cross_call(func, *cpu_online_mask, 0, 0, 0, 0);
+	sparc32_ipi_ops->cross_call(func, cpu_online_mask, 0, 0, 0, 0);
 }
 
 static inline void xc1(void *func, unsigned long arg1)
 {
-	sparc32_ipi_ops->cross_call(func, *cpu_online_mask, arg1, 0, 0, 0);
+	sparc32_ipi_ops->cross_call(func, cpu_online_mask, arg1, 0, 0, 0);
 }
 static inline void xc2(void *func, unsigned long arg1, unsigned long arg2)
 {
-	sparc32_ipi_ops->cross_call(func, *cpu_online_mask, arg1, arg2, 0, 0);
+	sparc32_ipi_ops->cross_call(func, cpu_online_mask, arg1, arg2, 0, 0);
 }
 
 static inline void xc3(void *func, unsigned long arg1, unsigned long arg2,
 		       unsigned long arg3)
 {
-	sparc32_ipi_ops->cross_call(func, *cpu_online_mask,
+	sparc32_ipi_ops->cross_call(func, cpu_online_mask,
 				    arg1, arg2, arg3, 0);
 }
 
 static inline void xc4(void *func, unsigned long arg1, unsigned long arg2,
 		       unsigned long arg3, unsigned long arg4)
 {
-	sparc32_ipi_ops->cross_call(func, *cpu_online_mask,
+	sparc32_ipi_ops->cross_call(func, cpu_online_mask,
 				    arg1, arg2, arg3, arg4);
 }
 
