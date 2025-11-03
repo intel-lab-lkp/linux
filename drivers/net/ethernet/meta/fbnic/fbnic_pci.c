@@ -207,6 +207,10 @@ static void fbnic_service_task(struct work_struct *work)
 {
 	struct fbnic_dev *fbd = container_of(to_delayed_work(work),
 					     struct fbnic_dev, service_task);
+	struct fbnic_net *fbn = netdev_priv(fbd->netdev);
+
+	if (netif_running(fbd->netdev))
+		fbnic_phylink_pmd_training_complete_notify(fbn);
 
 	rtnl_lock();
 
