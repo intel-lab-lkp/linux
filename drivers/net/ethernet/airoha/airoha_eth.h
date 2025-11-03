@@ -185,19 +185,27 @@ struct airoha_queue {
 	spinlock_t lock;
 	struct airoha_queue_entry *entry;
 	struct airoha_qdma_desc *desc;
-	u16 head;
-	u16 tail;
 
 	int queued;
 	int ndesc;
-	int free_thr;
-	int buf_size;
 
 	struct napi_struct napi;
-	struct page_pool *page_pool;
-	struct sk_buff *skb;
 
-	struct list_head tx_list;
+	union {
+		struct { /* rx */
+			u16 head;
+			u16 tail;
+			int buf_size;
+
+			struct page_pool *page_pool;
+			struct sk_buff *skb;
+		};
+
+		struct { /* tx */
+			struct list_head tx_list;
+			int free_thr;
+		};
+	};
 };
 
 struct airoha_tx_irq_queue {
