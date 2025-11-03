@@ -626,6 +626,15 @@ int genphy_c45_read_pma(struct phy_device *phydev)
 	case MDIO_CTRL1_SPEED10G:
 		phydev->speed = SPEED_10000;
 		break;
+	case MDIO_CTRL1_SPEED25G:
+		phydev->speed = SPEED_25000;
+		break;
+	case MDIO_CTRL1_SPEED50G:
+		phydev->speed = SPEED_50000;
+		break;
+	case MDIO_CTRL1_SPEED100G:
+		phydev->speed = SPEED_100000;
+		break;
 	default:
 		phydev->speed = SPEED_UNKNOWN;
 		break;

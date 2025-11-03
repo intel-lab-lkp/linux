@@ -116,6 +116,12 @@
 #define MDIO_CTRL1_SPEED10G		(MDIO_CTRL1_SPEEDSELEXT | 0x00)
 /* 10PASS-TS/2BASE-TL */
 #define MDIO_CTRL1_SPEED10P2B		(MDIO_CTRL1_SPEEDSELEXT | 0x04)
+/* 100 Gb/s */
+#define MDIO_CTRL1_SPEED100G		(MDIO_CTRL1_SPEEDSELEXT | 0x0c)
+/* 25 Gb/s */
+#define MDIO_CTRL1_SPEED25G		(MDIO_CTRL1_SPEEDSELEXT | 0x10)
+/* 50 Gb/s */
+#define MDIO_CTRL1_SPEED50G		(MDIO_CTRL1_SPEEDSELEXT | 0x14)
 /* 2.5 Gb/s */
 #define MDIO_CTRL1_SPEED2_5G		(MDIO_CTRL1_SPEEDSELEXT | 0x18)
 /* 5 Gb/s */
@@ -137,9 +143,12 @@
 #define MDIO_SPEED_10G			0x0001	/* 10G capable */
 #define MDIO_PMA_SPEED_2B		0x0002	/* 2BASE-TL capable */
 #define MDIO_PMA_SPEED_10P		0x0004	/* 10PASS-TS capable */
+#define MDIO_PMA_SPEED_50G		0x0008	/* 50G capable */
 #define MDIO_PMA_SPEED_1000		0x0010	/* 1000M capable */
 #define MDIO_PMA_SPEED_100		0x0020	/* 100M capable */
 #define MDIO_PMA_SPEED_10		0x0040	/* 10M capable */
+#define MDIO_PMA_SPEED_100G		0x0200	/* 100G capable */
+#define MDIO_PMA_SPEED_25G		0x0800	/* 25G capable */
 #define MDIO_PMA_SPEED_2_5G		0x2000	/* 2.5G capable */
 #define MDIO_PMA_SPEED_5G		0x4000	/* 5G capable */
 #define MDIO_PCS_SPEED_10P2B		0x0002	/* 10PASS-TS/2BASE-TL capable */
