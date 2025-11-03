@@ -46,24 +46,31 @@ Returns 0 on success, error on failure.
                ipv4 or ipv6 address using sizeof(struct sockaddr_in) or
                sizeof(struct sockaddr_in6).
 
-  ------------------------------------------------------------------
-  |                     BIND Type Checks                           |
-  |       @optname             |         @address contains         |
-  |----------------------------|-----------------------------------|
-  | SCTP_SOCKOPT_BINDX_ADD     | One or more ipv4 / ipv6 addresses |
-  | SCTP_PRIMARY_ADDR          | Single ipv4 or ipv6 address       |
-  | SCTP_SET_PEER_PRIMARY_ADDR | Single ipv4 or ipv6 address       |
-  ------------------------------------------------------------------
+.. table:: BIND Type Checks
 
-  ------------------------------------------------------------------
-  |                   CONNECT Type Checks                          |
+  +----------------------------+-----------------------------------+
   |       @optname             |         @address contains         |
-  |----------------------------|-----------------------------------|
+  +============================+===================================+
+  | SCTP_SOCKOPT_BINDX_ADD     | One or more ipv4 / ipv6 addresses |
+  +----------------------------+-----------------------------------+
+  | SCTP_PRIMARY_ADDR          | Single ipv4 or ipv6 address       |
+  +----------------------------+-----------------------------------+
+  | SCTP_SET_PEER_PRIMARY_ADDR | Single ipv4 or ipv6 address       |
+  +----------------------------+-----------------------------------+
+
+.. table:: CONNECT Type Checks
+
+  +----------------------------+-----------------------------------+
+  |       @optname             |         @address contains         |
+  +============================+===================================+
   | SCTP_SOCKOPT_CONNECTX      | One or more ipv4 / ipv6 addresses |
+  +----------------------------+-----------------------------------+
   | SCTP_PARAM_ADD_IP          | One or more ipv4 / ipv6 addresses |
+  +----------------------------+-----------------------------------+
   | SCTP_SENDMSG_CONNECT       | Single ipv4 or ipv6 address       |
+  +----------------------------+-----------------------------------+
   | SCTP_PARAM_SET_PRIMARY     | Single ipv4 or ipv6 address       |
-  ------------------------------------------------------------------
+  +----------------------------+-----------------------------------+
 
 A summary of the ``@optname`` entries is as follows::
 
@@ -228,26 +235,33 @@ The security module performs the following operations:
 security_sctp_bind_connect()
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Checks permissions required for ipv4/ipv6 addresses based on the ``@optname``
-as follows::
+as follows:
 
-  ------------------------------------------------------------------
-  |                   BIND Permission Checks                       |
+.. table:: BIND Permission Checks
+
+  +----------------------------+-----------------------------------+
   |       @optname             |         @address contains         |
-  |----------------------------|-----------------------------------|
+  +============================+===================================+
   | SCTP_SOCKOPT_BINDX_ADD     | One or more ipv4 / ipv6 addresses |
+  +----------------------------+-----------------------------------+
   | SCTP_PRIMARY_ADDR          | Single ipv4 or ipv6 address       |
+  +----------------------------+-----------------------------------+
   | SCTP_SET_PEER_PRIMARY_ADDR | Single ipv4 or ipv6 address       |
-  ------------------------------------------------------------------
+  +----------------------------+-----------------------------------+
 
-  ------------------------------------------------------------------
-  |                 CONNECT Permission Checks                      |
+.. table:: CONNECT Permission Checks
+
+  +----------------------------+-----------------------------------+
   |       @optname             |         @address contains         |
-  |----------------------------|-----------------------------------|
+  +============================+===================================+
   | SCTP_SOCKOPT_CONNECTX      | One or more ipv4 / ipv6 addresses |
+  +----------------------------+-----------------------------------+
   | SCTP_PARAM_ADD_IP          | One or more ipv4 / ipv6 addresses |
+  +----------------------------+-----------------------------------+
   | SCTP_SENDMSG_CONNECT       | Single ipv4 or ipv6 address       |
+  +----------------------------+-----------------------------------+
   | SCTP_PARAM_SET_PRIMARY     | Single ipv4 or ipv6 address       |
-  ------------------------------------------------------------------
+  +----------------------------+-----------------------------------+
 
 
 `SCTP LSM Support`_ gives a summary of the ``@optname``
