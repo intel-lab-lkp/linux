@@ -90,7 +90,7 @@ else
 libcurve25519-$(CONFIG_CRYPTO_LIB_CURVE25519_GENERIC) += curve25519-fiat32.o
 endif
 # clang versions prior to 18 may blow out the stack with KASAN
-ifeq ($(call clang-min-version, 180000),)
+ifneq ($(CONFIG_CC_IS_GCC)$(call clang-min-version, 180000),y)
 KASAN_SANITIZE_curve25519-hacl64.o := n
 endif
 
