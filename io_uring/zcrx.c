@@ -931,6 +931,16 @@ static const struct memory_provider_ops io_uring_pp_zc_ops = {
 #define IO_ZCRX_MAX_SYS_REFILL_BUFS		(1 << 16)
 #define IO_ZCRX_SYS_REFILL_BATCH		32
 
+struct io_uring_zcrx_sync_refill {
+	__u32		zcrx_id;
+	/* the number of entries to return */
+	__u32		nr_entries;
+	/* pointer to an array of struct io_uring_zcrx_rqe */
+	__u64		rqes;
+	__u64		__resv[2];
+};
+
+
 static void io_return_buffers(struct io_zcrx_ifq *ifq,
 			      struct io_uring_zcrx_rqe *rqes, unsigned nr)
 {
@@ -955,6 +965,7 @@ static void io_return_buffers(struct io_zcrx_ifq *ifq,
 	}
 }
 
+__maybe_unused
 int io_zcrx_return_bufs(struct io_ring_ctx *ctx,
 			void __user *arg, unsigned nr_arg)
 {
