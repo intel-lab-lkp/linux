@@ -19,7 +19,9 @@ description: |
 
 properties:
   compatible:
-    const: samsung,s2mpg10-pmic
+    enum:
+      - samsung,s2mpg10-pmic
+      - samsung,s2mpg11-pmic
 
   clocks:
     $ref: /schemas/clock/samsung,s2mps11.yaml
@@ -39,15 +41,15 @@ properties:
   wakeup-source: true
 
 patternProperties:
-  "^vinb([1-9]|10)m-supply$":
+  "^vinb([1-9]|10)[ms]-supply$":
     description:
       Phandle to the power supply for each buck rail of this PMIC. There is a
       1:1 mapping of supply to rail, e.g. vinb1m-supply supplies buck1m.
 
   "^vinl([1-9]|1[0-5])m-supply$":
     description: |
-      Phandle to the power supply for one or multiple LDO rails of this PMIC.
-      The mapping of supply to rail(s) is as follows:
+      Phandle to the power supply for one or multiple LDO rails of the S2MPG10
+      PMIC. The mapping of supply to rail(s) is as follows:
         vinl1m - ldo13m
         vinl2m - ldo15m
         vinl3m - ldo1m, ldo5m, ldo7m
@@ -63,6 +65,25 @@ patternProperties:
         vinl13m - ldo30m
         vinl14m - ldo21m
         vinl15m - ldo10m, ldo22m, ldo26m, ldo27m
+
+  "^vinb[abd]-supply$":
+    description: |
+      Phandle to the power supply for the additional buck rails of the S2MPG11
+      PMIC. The mapping of supply to rail is as follows::
+        vinba - bucka
+        vinbb - buck boost
+        vinbd - buckd
+
+  "^vinl[1-6]s-supply$":
+    description: |
+      Phandle to the power supply for one or multiple LDO rails of the S2MPG11
+      PMIC. The mapping of supply to rail(s) is as follows:
+        vinl1s - ldo1s, ldo2s
+        vinl2s - ldo8s, ldo9s
+        vinl3s - ldo3s, ldo5s, ldo7s, ldo15s
+        vinl4s - ldo10s, ldo11s, ldo12s, ldo14s
+        vinl5s - ldo4s, ldo6s
+        vinl6s - ldo13s
 
 required:
   - compatible
@@ -81,3 +102,23 @@ allOf:
       properties:
         regulators:
           $ref: /schemas/regulator/samsung,s2mpg10-regulator.yaml
+
+      patternProperties:
+        "[^m]-supply$": false
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: samsung,s2mpg11-pmic
+    then:
+      properties:
+        clocks: false
+
+        regulators:
+          $ref: /schemas/regulator/samsung,s2mpg11-regulator.yaml
+
+        system-power-controller: false
+
+      patternProperties:
+        "m-supply$": false
