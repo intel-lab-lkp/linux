@@ -28,6 +28,7 @@
 #include "amdgpu.h"
 #include "amdgpu_atombios.h"
 #include "amdgpu_atomfirmware.h"
+#include "atomfirmware.h"
 #include "amdgpu_i2c.h"
 #include "amdgpu_display.h"
 
@@ -1877,6 +1878,10 @@ void amdgpu_atombios_fini(struct amdgpu_device *adev)
 	if (adev->mode_info.atom_context) {
 		kfree(adev->mode_info.atom_context->scratch);
 		kfree(adev->mode_info.atom_context->iio);
+		kfree(adev->mode_info.atom_context->uma_carveout_options);
+		adev->mode_info.atom_context->uma_carveout_options = NULL;
+		adev->mode_info.atom_context->uma_carveout_nr = 0;
+		adev->mode_info.atom_context->uma_carveout_index = 0;
 	}
 	kfree(adev->mode_info.atom_context);
 	adev->mode_info.atom_context = NULL;
@@ -1891,16 +1896,19 @@ void amdgpu_atombios_fini(struct amdgpu_device *adev)
  *
  * Initializes the driver info and register access callbacks for the
  * ATOM interpreter (r4xx+).
- * Returns 0 on sucess, -ENOMEM on failure.
+ * Returns 0 on success, -ENOMEM on memory allocation error, or -EINVAL on ATOM ROM parsing error
  * Called at driver startup.
  */
 int amdgpu_atombios_init(struct amdgpu_device *adev)
 {
 	struct card_info *atom_card_info =
 	    kzalloc(sizeof(struct card_info), GFP_KERNEL);
+	int rc;
 
-	if (!atom_card_info)
-		return -ENOMEM;
+	if (!atom_card_info) {
+		rc = -ENOMEM;
+		goto out_card_info;
+	}
 
 	adev->mode_info.atom_card_info = atom_card_info;
 	atom_card_info->dev = adev_to_drm(adev);
@@ -1913,8 +1921,16 @@ int amdgpu_atombios_init(struct amdgpu_device *adev)
 
 	adev->mode_info.atom_context = amdgpu_atom_parse(atom_card_info, adev->bios);
 	if (!adev->mode_info.atom_context) {
-		amdgpu_atombios_fini(adev);
-		return -ENOMEM;
+		rc = -ENOMEM;
+		goto out_atom_ctx;
+	}
+
+	rc = amdgpu_atomfirmware_get_uma_carveout_info(adev);
+
+	if (rc) {
+		drm_dbg(adev_to_drm(adev), "Failed to get UMA carveout info: %d\n", rc);
+		if (rc != -ENODEV)
+			goto out_uma_info;
 	}
 
 	mutex_init(&adev->mode_info.atom_context->mutex);
@@ -1930,6 +1946,12 @@ int amdgpu_atombios_init(struct amdgpu_device *adev)
 	}
 
 	return 0;
+
+out_uma_info:
+out_atom_ctx:
+	amdgpu_atombios_fini(adev);
+out_card_info:
+	return rc;
 }
 
 int amdgpu_atombios_get_data_table(struct amdgpu_device *adev,

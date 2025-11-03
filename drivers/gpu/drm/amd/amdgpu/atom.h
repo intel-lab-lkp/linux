@@ -153,6 +153,10 @@ struct atom_context {
 	uint8_t vbios_ver_str[STRLEN_NORMAL];
 	uint8_t date[STRLEN_NORMAL];
 	uint8_t build_num[STRLEN_NORMAL];
+
+	uint8_t uma_carveout_index;
+	uint8_t uma_carveout_nr;
+	struct uma_carveout_option *uma_carveout_options;
 };
 
 extern int amdgpu_atom_debug;

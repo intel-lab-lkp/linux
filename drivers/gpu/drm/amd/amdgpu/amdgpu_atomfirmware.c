@@ -21,12 +21,14 @@
  *
  */
 
+#include "linux/slab.h"
 #include <drm/amdgpu_drm.h>
 #include "amdgpu.h"
 #include "atomfirmware.h"
 #include "amdgpu_atomfirmware.h"
 #include "atom.h"
 #include "atombios.h"
+#include "atomfirmware.h"
 #include "soc15_hw_ip.h"
 
 union firmware_info {
@@ -294,6 +296,79 @@ static int convert_atom_mem_type_to_vram_type(struct amdgpu_device *adev,
 	}
 
 	return vram_type;
+}
+
+static int __amdgpu_atomfirmware_get_uma_carveout_info_v2_3(struct amdgpu_device *adev,
+							    union igp_info *igp_info)
+{
+	struct atom_context *ctx = adev->mode_info.atom_context;
+	struct uma_carveout_option *opts;
+
+	opts = kzalloc(sizeof(igp_info->v23.UMASizeControlOption), GFP_KERNEL);
+
+	if (!opts)
+		goto out_mem;
+
+	memcpy(opts, igp_info->v23.UMASizeControlOption,
+		sizeof(igp_info->v23.UMASizeControlOption));
+
+	ctx->uma_carveout_index = igp_info->v23.UMACarveoutIndex;
+	ctx->uma_carveout_nr = igp_info->v23.UMACarveoutIndexMax;
+	ctx->uma_carveout_options = opts;
+
+	return 0;
+
+out_mem:
+	return -ENOMEM;
+}
+
+static int __amdgpu_atomfirmware_get_uma_carveout_info(struct amdgpu_device *adev,
+						       u8 frev, u8 crev,
+						       union igp_info *igp_info)
+{
+	switch (frev) {
+	case 2:
+		switch (crev) {
+		case 3:
+			return __amdgpu_atomfirmware_get_uma_carveout_info_v2_3(adev, igp_info);
+		break;
+		default:
+			break;
+		}
+		break;
+	default:
+		break;
+	}
+	return -ENODEV;
+}
+
+int amdgpu_atomfirmware_get_uma_carveout_info(struct amdgpu_device *adev)
+{
+	struct amdgpu_mode_info *mode_info = &adev->mode_info;
+	union igp_info *igp_info;
+	u16 data_offset, size;
+	u8 frev, crev;
+	int index;
+
+	if (!(adev->flags & AMD_IS_APU))
+		return -ENODEV;
+
+	if (!amdgpu_acpi_is_set_uma_allocation_size_supported())
+		return -ENODEV;
+
+	index = get_index_into_master_table(atom_master_list_of_data_tables_v2_1,
+					    integratedsysteminfo);
+
+	if (!amdgpu_atom_parse_data_header(mode_info->atom_context,
+					  index, &size,
+					  &frev, &crev, &data_offset)) {
+		return -EINVAL;
+	}
+
+	igp_info = (union igp_info *)
+			(mode_info->atom_context->bios + data_offset);
+
+	return __amdgpu_atomfirmware_get_uma_carveout_info(adev, frev, crev, igp_info);
 }
 
 int
