@@ -1453,8 +1453,7 @@ static int user_event_set_call_visible(struct user_event *user, bool visible)
 	const struct cred *old_cred;
 	struct cred *cred;
 
-	cred = prepare_creds();
-
+	CLASS(prepare_creds, cred)();
 	if (!cred)
 		return -ENOMEM;
 
@@ -1477,7 +1476,6 @@ static int user_event_set_call_visible(struct user_event *user, bool visible)
 		ret = trace_remove_event_call(&user->call);
 
 	revert_creds(old_cred);
-	put_cred(cred);
 
 	return ret;
 }
