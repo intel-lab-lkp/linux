@@ -101,6 +101,20 @@ static int fbnic_stop(struct net_device *netdev)
 	return 0;
 }
 
+static int fbnic_init(struct net_device *netdev)
+{
+	struct fbnic_net *fbn = netdev_priv(netdev);
+
+	return fbnic_phylink_connect(fbn);
+}
+
+static void fbnic_uninit(struct net_device *netdev)
+{
+	struct fbnic_net *fbn = netdev_priv(netdev);
+
+	phylink_disconnect_phy(fbn->phylink);
+}
+
 static int fbnic_uc_sync(struct net_device *netdev, const unsigned char *addr)
 {
 	struct fbnic_net *fbn = netdev_priv(netdev);
@@ -529,6 +543,8 @@ static int fbnic_bpf(struct net_device *netdev, struct netdev_bpf *bpf)
 static const struct net_device_ops fbnic_netdev_ops = {
 	.ndo_open		= fbnic_open,
 	.ndo_stop		= fbnic_stop,
+	.ndo_init		= fbnic_init,
+	.ndo_uninit		= fbnic_uninit,
 	.ndo_validate_addr	= eth_validate_addr,
 	.ndo_start_xmit		= fbnic_xmit_frame,
 	.ndo_features_check	= fbnic_features_check,

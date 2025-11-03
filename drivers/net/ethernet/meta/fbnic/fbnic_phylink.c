@@ -132,9 +132,8 @@ fbnic_phylink_pcs_get_state(struct phylink_pcs *pcs, unsigned int neg_mode,
 
 	state->duplex = DUPLEX_FULL;
 
-	state->link = (fbd->pmd_state == FBNIC_PMD_SEND_DATA) &&
-		      (rd32(fbd, FBNIC_PCS(MDIO_STAT1, 0)) &
-		       MDIO_STAT1_LSTATUS);
+	state->link = !!(rd32(fbd, FBNIC_PCS(MDIO_STAT1, 0)) &
+			 MDIO_STAT1_LSTATUS);
 }
 
 static int
@@ -265,6 +264,39 @@ int fbnic_phylink_init(struct net_device *netdev)
 }
 
 /**
+ * fbnic_phylink_connect - Connect phylink structure to IRQ and enable it
+ * @fbn: FBNIC Netdev private data struct phylink device attached to
+ *
+ * Return: zero on success, negative on failure
+ *
+ * This function connects the phylink structure to the IRQ and then enables it
+ * to resume operations. With this function completed the PHY will be able to
+ * obtain link and notify the netdev of its current state.
+ **/
+int fbnic_phylink_connect(struct fbnic_net *fbn)
+{
+	struct fbnic_dev *fbd = fbn->fbd;
+	struct phy_device *phydev;
+	int err;
+
+	phydev = mdiobus_get_phy(fbd->mdio_bus, 0);
+	if (!phydev) {
+		dev_err(fbd->dev, "No PHY found\n");
+		return -ENODEV;
+	}
+
+	/* We don't need to poll, the MAC will notify us of events */
+	phydev->irq = PHY_MAC_INTERRUPT;
+	phy_attached_info(phydev);
+
+	err = phylink_connect_phy(fbn->phylink, phydev);
+	if (err)
+		dev_err(fbd->dev, "Error connecting phy, err: %d\n", err);
+
+	return err;
+}
+
+/**
  * fbnic_phylink_pmd_training_complete_notify - PMD training complete notifier
  * @fbn: FBNIC Netdev private data struct phylink device attached to
  *
@@ -285,5 +317,5 @@ void fbnic_phylink_pmd_training_complete_notify(struct fbnic_net *fbn)
 		return;
 
 	fbd->pmd_state = FBNIC_PMD_SEND_DATA;
-	phylink_mac_change(fbn->phylink, true);
+	phy_mac_interrupt(fbd->netdev->phydev);
 }

@@ -16,6 +16,7 @@
 char fbnic_driver_name[] = DRV_NAME;
 
 MODULE_DESCRIPTION(DRV_SUMMARY);
+MODULE_SOFTDEP("pre: fbnic_phy");
 MODULE_LICENSE("GPL");
 
 static const struct fbnic_info fbnic_asic_info = {
