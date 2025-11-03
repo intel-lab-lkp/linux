@@ -49,7 +49,6 @@ void intel_alpm_init(struct intel_dp *intel_dp)
 		return;
 
 	intel_dp->alpm_dpcd = dpcd;
-	mutex_init(&intel_dp->alpm.lock);
 }
 
 static int get_silence_period_symbols(const struct intel_crtc_state *crtc_state)
