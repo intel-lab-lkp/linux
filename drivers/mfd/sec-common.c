@@ -15,6 +15,7 @@
 #include <linux/mfd/samsung/core.h>
 #include <linux/mfd/samsung/irq.h>
 #include <linux/mfd/samsung/s2mpg10.h>
+#include <linux/mfd/samsung/s2mpg11.h>
 #include <linux/mfd/samsung/s2mps11.h>
 #include <linux/mfd/samsung/s2mps13.h>
 #include <linux/module.h>
@@ -82,6 +83,39 @@ static const struct mfd_cell s2mpg10_devs[] = {
 	MFD_CELL_OF("s2mpg10-gpio", NULL, NULL, 0, 0, "samsung,s2mpg10-gpio"),
 };
 
+static const struct mfd_cell s2mpg11_devs[] = {
+	MFD_CELL_NAME("s2mpg11-meter"),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_BUCKBOOST),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_BUCK1),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_BUCK2),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_BUCK3),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_BUCK4),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_BUCK5),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_BUCK6),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_BUCK7),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_BUCK8),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_BUCK9),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_BUCK10),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_BUCKD),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_BUCKA),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_LDO1),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_LDO2),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_LDO3),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_LDO4),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_LDO5),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_LDO6),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_LDO7),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_LDO8),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_LDO9),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_LDO10),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_LDO11),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_LDO12),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_LDO13),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_LDO14),
+	MFD_CELL_BASIC("s2mpg11-regulator", NULL, NULL, 0, S2MPG11_LDO15),
+	MFD_CELL_OF("s2mpg11-gpio", NULL, NULL, 0, 0, "samsung,s2mpg11-gpio"),
+};
+
 static const struct mfd_cell s2mps11_devs[] = {
 	MFD_CELL_NAME("s2mps11-regulator"),
 	MFD_CELL_NAME("s2mps14-rtc"),
@@ -125,8 +159,13 @@ static void sec_pmic_dump_rev(struct sec_pmic_dev *sec_pmic)
 	unsigned int val;
 
 	/* For s2mpg1x, the revision is in a different regmap */
-	if (sec_pmic->device_type == S2MPG10)
+	switch (sec_pmic->device_type) {
+	case S2MPG10:
+	case S2MPG11:
 		return;
+	default:
+		break;
+	}
 
 	/* For each device type, the REG_ID is always the first register */
 	if (!regmap_read(sec_pmic->regmap_pmic, S2MPS11_REG_ID, &val))
@@ -230,6 +269,10 @@ int sec_pmic_probe(struct device *dev, int device_type, unsigned int irq,
 	case S2MPG10:
 		sec_devs = s2mpg10_devs;
 		num_sec_devs = ARRAY_SIZE(s2mpg10_devs);
+		break;
+	case S2MPG11:
+		sec_devs = s2mpg11_devs;
+		num_sec_devs = ARRAY_SIZE(s2mpg11_devs);
 		break;
 	case S2MPS11X:
 		sec_devs = s2mps11_devs;
