@@ -294,26 +294,24 @@ void flush_thread(void)
 
 void disable_TSC(void)
 {
-	preempt_disable();
+	guard(preempt)();
 	if (!test_and_set_thread_flag(TIF_NOTSC))
 		/*
 		 * Must flip the CPU state synchronously with
 		 * TIF_NOTSC in the current running context.
 		 */
 		cr4_set_bits(X86_CR4_TSD);
-	preempt_enable();
 }
 
 static void enable_TSC(void)
 {
-	preempt_disable();
+	guard(preempt)();
 	if (test_and_clear_thread_flag(TIF_NOTSC))
 		/*
 		 * Must flip the CPU state synchronously with
 		 * TIF_NOTSC in the current running context.
 		 */
 		cr4_clear_bits(X86_CR4_TSD);
-	preempt_enable();
 }
 
 int get_tsc_mode(unsigned long adr)
@@ -363,7 +361,7 @@ static void set_cpuid_faulting(bool on)
 
 static void disable_cpuid(void)
 {
-	preempt_disable();
+	guard(preempt)();
 	if (!test_and_set_thread_flag(TIF_NOCPUID)) {
 		/*
 		 * Must flip the CPU state synchronously with
@@ -371,12 +369,11 @@ static void disable_cpuid(void)
 		 */
 		set_cpuid_faulting(true);
 	}
-	preempt_enable();
 }
 
 static void enable_cpuid(void)
 {
-	preempt_disable();
+	guard(preempt)();
 	if (test_and_clear_thread_flag(TIF_NOCPUID)) {
 		/*
 		 * Must flip the CPU state synchronously with
@@ -384,7 +381,6 @@ static void enable_cpuid(void)
 		 */
 		set_cpuid_faulting(false);
 	}
-	preempt_enable();
 }
 
 static int get_cpuid_mode(void)
@@ -594,21 +590,19 @@ static __always_inline void amd_set_core_ssb_state(unsigned long tifn)
 
 		msr |= x86_amd_ls_cfg_ssbd_mask;
 
-		raw_spin_lock(&st->shared_state->lock);
+		guard(raw_spinlock_irq)(&st->shared_state->lock);
 		/* First sibling enables SSBD: */
 		if (!st->shared_state->disable_state)
 			wrmsrq(MSR_AMD64_LS_CFG, msr);
 		st->shared_state->disable_state++;
-		raw_spin_unlock(&st->shared_state->lock);
 	} else {
 		if (!__test_and_clear_bit(LSTATE_SSB, &st->local_state))
 			return;
 
-		raw_spin_lock(&st->shared_state->lock);
+		guard(raw_spinlock_irq)(&st->shared_state->lock);
 		st->shared_state->disable_state--;
 		if (!st->shared_state->disable_state)
 			wrmsrq(MSR_AMD64_LS_CFG, msr);
-		raw_spin_unlock(&st->shared_state->lock);
 	}
 }
 #else
@@ -687,20 +681,16 @@ static unsigned long speculation_ctrl_update_tif(struct task_struct *tsk)
 
 void speculation_ctrl_update(unsigned long tif)
 {
-	unsigned long flags;
-
 	/* Forced update. Make sure all relevant TIF flags are different */
-	local_irq_save(flags);
+	guard(irqsave)();
 	__speculation_ctrl_update(~tif, tif);
-	local_irq_restore(flags);
 }
 
 /* Called from seccomp/prctl update */
 void speculation_ctrl_update_current(void)
 {
-	preempt_disable();
+	guard(preempt)();
 	speculation_ctrl_update(speculation_ctrl_update_tif(current));
-	preempt_enable();
 }
 
 static inline void cr4_toggle_bits_irqsoff(unsigned long mask)
@@ -961,9 +951,8 @@ void amd_e400_c1e_apic_setup(void)
 {
 	if (boot_cpu_has_bug(X86_BUG_AMD_APIC_C1E)) {
 		pr_info("Switch to broadcast mode on CPU%d\n", smp_processor_id());
-		local_irq_disable();
+		guard(irq)();
 		tick_broadcast_force();
-		local_irq_enable();
 	}
 }
 
