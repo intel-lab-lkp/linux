@@ -1855,11 +1855,102 @@ const struct attribute_group amdgpu_vbios_version_attr_group = {
 	.is_visible = amdgpu_vbios_version_attrs_is_visible,
 };
 
+static ssize_t uma_carveout_show(struct device *dev,
+				 struct device_attribute *attr,
+				 char *buf)
+{
+	struct drm_device *ddev = dev_get_drvdata(dev);
+	struct amdgpu_device *adev = drm_to_adev(ddev);
+	struct atom_context *ctx = adev->mode_info.atom_context;
+
+	return sysfs_emit(buf, "%u\n", ctx->uma_carveout_index);
+}
+static ssize_t uma_carveout_store(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf, size_t count)
+{
+	struct drm_device *ddev = dev_get_drvdata(dev);
+	struct amdgpu_device *adev = drm_to_adev(ddev);
+	struct atom_context *ctx = adev->mode_info.atom_context;
+	struct uma_carveout_option *opt;
+	unsigned long val;
+	uint8_t flags;
+	int r;
+
+	r = kstrtoul(buf, 10, &val);
+	if (r)
+		return r;
+
+	if (val >= ctx->uma_carveout_nr)
+		return -EINVAL;
+
+	opt = &ctx->uma_carveout_options[val];
+
+	if (!opt->uma_carveout_option_flags.flags.Auto &&
+	    !opt->uma_carveout_option_flags.flags.Custom) {
+		drm_err_once(ddev, "Option %ul not supported due to lack of Custom/Auto flag", r);
+		return -EINVAL;
+	}
+
+	flags = opt->uma_carveout_option_flags.all8;
+	flags &= ~((uint8_t)opt->uma_carveout_option_flags.flags.Custom);
+
+	r = amdgpu_acpi_set_uma_allocation_size(adev, val, flags);
+	if (r)
+		return r;
+	ctx->uma_carveout_index = val;
+
+	return count;
+}
+static DEVICE_ATTR_RW(uma_carveout);
+
+static ssize_t uma_carveout_options_show(struct device *dev,
+					 struct device_attribute *attr,
+					 char *buf)
+{
+	struct drm_device *ddev = dev_get_drvdata(dev);
+	struct amdgpu_device *adev = drm_to_adev(ddev);
+	struct atom_context *ctx = adev->mode_info.atom_context;
+	ssize_t size = 0;
+
+	for (int i = 0; i < ctx->uma_carveout_nr; i++) {
+		size += sysfs_emit_at(buf, size, "%d: %s (%u GB)\n",
+				      i,
+				      ctx->uma_carveout_options[i].optionName,
+				      ctx->uma_carveout_options[i].memoryCarvedGb);
+	}
+
+	return size;
+}
+static DEVICE_ATTR_RO(uma_carveout_options);
+
+static struct attribute *amdgpu_uma_attrs[] = {
+	&dev_attr_uma_carveout.attr,
+	&dev_attr_uma_carveout_options.attr,
+	NULL
+};
+
+const struct attribute_group amdgpu_uma_attr_group = {
+	.attrs = amdgpu_uma_attrs
+};
+
 int amdgpu_atombios_sysfs_init(struct amdgpu_device *adev)
 {
-	if (adev->mode_info.atom_context)
-		return devm_device_add_group(adev->dev,
+	int r;
+
+	if (adev->mode_info.atom_context) {
+		r = devm_device_add_group(adev->dev,
 					     &amdgpu_vbios_version_attr_group);
+		if (r)
+			return r;
+	}
+	if (adev->mode_info.atom_context->uma_carveout_options &&
+	    adev->mode_info.atom_context->uma_carveout_nr) {
+		r = devm_device_add_group(adev->dev,
+					   &amdgpu_uma_attr_group);
+		if (r)
+			return r;
+	}
 
 	return 0;
 }
