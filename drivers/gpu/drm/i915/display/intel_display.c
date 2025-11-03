@@ -1148,6 +1148,7 @@ static void intel_pre_plane_update(struct intel_atomic_state *state,
 	if (intel_crtc_vrr_disabling(state, crtc)) {
 		intel_vrr_disable(old_crtc_state);
 		intel_vrr_dcb_reset_flip_count(old_crtc_state, crtc);
+		intel_vrr_dcb_balance_reset(old_crtc_state, crtc);
 		intel_crtc_update_active_timings(old_crtc_state, false);
 	}
 
