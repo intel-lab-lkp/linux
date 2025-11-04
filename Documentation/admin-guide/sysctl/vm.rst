@@ -46,6 +46,7 @@ Currently, these files are in /proc/sys/vm:
 - lowmem_reserve_ratio
 - max_map_count
 - mem_profiling         (only if CONFIG_MEM_ALLOC_PROFILING=y)
+- memcg_stats_flush_threshold
 - memory_failure_early_kill
 - memory_failure_recovery
 - min_free_kbytes
@@ -513,6 +514,53 @@ Enabling memory profiling introduces a small performance overhead for all
 memory allocations.
 
 The default value depends on CONFIG_MEM_ALLOC_PROFILING_ENABLED_BY_DEFAULT.
+
+
+memcg_stats_flush_threshold
+============================
+
+Control the threshold for flushing memory cgroup statistics when reading
+memory.stat from userspace. Memory cgroup stats are updated frequently in
+per-CPU counters, but these updates need to be periodically aggregated
+(flushed) to provide accurate statistics.
+
+**Important**: This setting ONLY affects userspace reads of memory.stat files.
+Internal kernel paths continue to use the default threshold (or ratelimited
+flushing) to maintain optimal performance in latency-sensitive code paths.
+
+When set to 0 (default), userspace reads use the automatic threshold:
+MEMCG_CHARGE_BATCH * num_online_cpus()
+
+This means on systems with many CPU cores, the threshold can become very high
+(e.g., 64 * 256 = 16,384 updates on a 256-core system), potentially resulting
+in stale statistics when reading memory.stat.
+
+Setting this to a non-zero value overrides the automatic calculation for
+userspace reads only. Lower values result in fresher statistics when reading
+memory.stat but may increase overhead due to more frequent flushing.
+
+Examples:
+
+- On a 256-core system with default (0):
+  Userspace reads use threshold = 64 * 256 = 16,384 updates
+  Internal kernel paths use default thresholds (unaffected)
+
+- Setting to 2048:
+  Userspace reads use threshold = 2,048 updates (much fresher stats)
+  Internal kernel paths use default thresholds (performance maintained)
+
+- Setting to 1024:
+  Userspace reads use threshold = 1,024 updates (even fresher stats)
+  Internal kernel paths use default thresholds (performance maintained)
+
+Note: Memory cgroup statistics are also flushed automatically every 2 seconds
+regardless of this threshold.
+
+Recommended for systems with high core counts where the default threshold
+results in statistics that are too stale for monitoring or management tools,
+while keeping internal kernel operations performant.
+
+Default: 0 (auto-calculate based on CPU count)
 
 
 memory_failure_early_kill

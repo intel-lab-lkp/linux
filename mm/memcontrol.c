@@ -63,6 +63,7 @@
 #include <linux/seq_buf.h>
 #include <linux/sched/isolation.h>
 #include <linux/kmemleak.h>
+#include <linux/sysctl.h>
 #include "internal.h"
 #include <net/sock.h>
 #include <net/ip.h>
@@ -556,10 +557,40 @@ static u64 flush_last_time;
 
 #define FLUSH_TIME (2UL*HZ)
 
-static bool memcg_vmstats_needs_flush(struct memcg_vmstats *vmstats)
+#define FLUSH_DEFAULT_THRESHOLD (MEMCG_CHARGE_BATCH * num_online_cpus())
+
+/*
+ * Threshold for number of stat updates before triggering a flush.
+ *
+ * Default: 0
+ *   - When set to 0 (the default), the threshold is calculated as:
+ *         FLUSH_DEFAULT_THRESHOLD
+ *     (i.e. MEMCG_CHARGE_BATCH * num_online_cpus())
+ *
+ * Tunable:
+ *   - This value can be overridden at runtime using the sysctl:
+ *         /proc/sys/vm/memcg_stats_flush_threshold
+ *   - Useful for systems with many CPU cores, where the default threshold may
+ *     result in stale stats; a lower value leads to more frequent flushing.
+ */
+static int memcg_stats_flush_threshold __read_mostly;
+
+#ifdef CONFIG_SYSCTL
+static const struct ctl_table memcg_sysctl_table[] = {
+	{
+		.procname	= "memcg_stats_flush_threshold",
+		.data		= &memcg_stats_flush_threshold,
+		.maxlen		= sizeof(memcg_stats_flush_threshold),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+	},
+};
+#endif
+
+static bool memcg_vmstats_needs_flush(struct memcg_vmstats *vmstats, int threshold)
 {
-	return atomic_read(&vmstats->stats_updates) >
-		MEMCG_CHARGE_BATCH * num_online_cpus();
+	return atomic_read(&vmstats->stats_updates) > threshold;
 }
 
 static inline void memcg_rstat_updated(struct mem_cgroup *memcg, int val,
@@ -581,7 +612,7 @@ static inline void memcg_rstat_updated(struct mem_cgroup *memcg, int val,
 		 * flushable as well and also there is no need to increase
 		 * stats_updates.
 		 */
-		if (memcg_vmstats_needs_flush(statc->vmstats))
+		if (memcg_vmstats_needs_flush(statc->vmstats, FLUSH_DEFAULT_THRESHOLD))
 			break;
 
 		stats_updates = this_cpu_add_return(statc_pcpu->stats_updates,
@@ -594,9 +625,9 @@ static inline void memcg_rstat_updated(struct mem_cgroup *memcg, int val,
 	}
 }
 
-static void __mem_cgroup_flush_stats(struct mem_cgroup *memcg, bool force)
+static void __mem_cgroup_flush_stats_threshold(struct mem_cgroup *memcg, bool force, int threshold)
 {
-	bool needs_flush = memcg_vmstats_needs_flush(memcg->vmstats);
+	bool needs_flush = memcg_vmstats_needs_flush(memcg->vmstats, threshold);
 
 	trace_memcg_flush_stats(memcg, atomic_read(&memcg->vmstats->stats_updates),
 		force, needs_flush);
@@ -610,6 +641,20 @@ static void __mem_cgroup_flush_stats(struct mem_cgroup *memcg, bool force)
 	css_rstat_flush(&memcg->css);
 }
 
+static void __mem_cgroup_flush_stats(struct mem_cgroup *memcg, bool force)
+{
+	__mem_cgroup_flush_stats_threshold(memcg, force, FLUSH_DEFAULT_THRESHOLD);
+}
+
+static void mem_cgroup_flush_stats_threshold(struct mem_cgroup *memcg, int threshold)
+{
+	if (mem_cgroup_disabled())
+		return;
+
+	memcg = memcg ? : root_mem_cgroup;
+	__mem_cgroup_flush_stats_threshold(memcg, false, threshold);
+}
+
 /*
  * mem_cgroup_flush_stats - flush the stats of a memory cgroup subtree
  * @memcg: root of the subtree to flush
@@ -621,13 +666,24 @@ static void __mem_cgroup_flush_stats(struct mem_cgroup *memcg, bool force)
  */
 void mem_cgroup_flush_stats(struct mem_cgroup *memcg)
 {
-	if (mem_cgroup_disabled())
-		return;
+	mem_cgroup_flush_stats_threshold(memcg, FLUSH_DEFAULT_THRESHOLD);
+}
 
-	if (!memcg)
-		memcg = root_mem_cgroup;
+/*
+ * mem_cgroup_flush_stats_user - flush stats when reading memory.stat from userspace
+ * @memcg: root of the subtree to flush
+ *
+ * This function uses a potentially custom threshold set via sysctl
+ * (memcg_stats_flush_threshold). It should only be used for userspace reads
+ * of memory.stat where fresher stats are desired. Internal kernel paths
+ * should use mem_cgroup_flush_stats() to maintain performance.
+ */
+void mem_cgroup_flush_stats_user(struct mem_cgroup *memcg)
+{
+	int threshold = READ_ONCE(memcg_stats_flush_threshold);
 
-	__mem_cgroup_flush_stats(memcg, false);
+	threshold = threshold ? : FLUSH_DEFAULT_THRESHOLD;
+	mem_cgroup_flush_stats_threshold(memcg, threshold);
 }
 
 void mem_cgroup_flush_stats_ratelimited(struct mem_cgroup *memcg)
@@ -1474,7 +1530,7 @@ static void memcg_stat_format(struct mem_cgroup *memcg, struct seq_buf *s)
 	 *
 	 * Current memory state:
 	 */
-	mem_cgroup_flush_stats(memcg);
+	mem_cgroup_flush_stats_user(memcg);
 
 	for (i = 0; i < ARRAY_SIZE(memory_stats); i++) {
 		u64 size;
@@ -4544,7 +4600,7 @@ static int memory_numa_stat_show(struct seq_file *m, void *v)
 	int i;
 	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
 
-	mem_cgroup_flush_stats(memcg);
+	mem_cgroup_flush_stats_user(memcg);
 
 	for (i = 0; i < ARRAY_SIZE(memory_stats); i++) {
 		int nid;
@@ -5175,6 +5231,10 @@ int __init mem_cgroup_init(void)
 
 	memcg_pn_cachep = KMEM_CACHE(mem_cgroup_per_node,
 				     SLAB_PANIC | SLAB_HWCACHE_ALIGN);
+
+#ifdef CONFIG_SYSCTL
+	register_sysctl_init("vm", memcg_sysctl_table);
+#endif
 
 	return 0;
 }
