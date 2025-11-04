@@ -2046,6 +2046,60 @@ int of_find_last_cache_level(unsigned int cpu)
 }
 
 /**
+ * of_iommu_map_id_legacy_cell_count - Determine the cell count for iommu-map.
+ *
+ * @map: pointer to the iommu-map property data that needs to be translated.
+ * @map_len: length of @map in bytes.
+ * @cell_count: value of #iommu-cells.
+ *
+ * It is the legacy case where the tuple representing iommu-map is always
+ * multiple of 4 and #iommu-cells > 1.
+ *
+ * Return: > 0 for success, 0 for failure.
+ */
+static u32 of_iommu_map_id_legacy_cell_count(const __be32 *map, int map_len)
+{
+	u32 phandle1, phandle2;
+
+	phandle1 = be32_to_cpup(map + 1);
+
+	for (map_len -= 4 * sizeof(*map), map += 4; map_len > 0;
+		map_len -= 4 * sizeof(*map), map += 4) {
+		u32 len;
+
+		phandle2 = be32_to_cpup(map + 1);
+		len = be32_to_cpup(map + 3);
+		if (phandle1 != phandle2 || len != 1)
+			break;
+	}
+
+	if (!map_len)
+		return 1;
+
+	return 0;
+}
+
+/**
+ * of_iommu_map_id_cell_count - Determine the cell count for iommu-map parsing.
+ *
+ * @map: pointer to the iommu-map property that needs to be translated.
+ * @map_len: length of @map in bytes.
+ *
+ * Use #iommu-cells property while parsing iommu-map. Detect and use legacy
+ * case where iommu-map is parsed as if cells = 1.
+ *
+ * Return: number of cells that the caller should be considered while parsing
+ * the @map. It is > 0 for success, 0 for failure.
+ */
+static int of_iommu_map_id_cell_count(const __be32 *map, int map_len)
+{
+	if (map_len % 4 != 0)
+		return 0;
+
+	return of_iommu_map_id_legacy_cell_count(map, map_len);
+}
+
+/**
  * of_map_id_cell_count - parse the cell count.
  *
  * @map: pointer to the property data that needs to be translated, eg: msi-map/iommu-map.
@@ -2082,7 +2136,10 @@ static int of_map_id_cell_count(const __be32 *map, const char *map_name,
 		return 0;
 	}
 
-	return 1;
+	if (cells > 1 && !strcmp(map_name, "iommu-map"))
+		return of_iommu_map_id_cell_count(map, map_len);
+
+	return cells;
 }
 
 /*
