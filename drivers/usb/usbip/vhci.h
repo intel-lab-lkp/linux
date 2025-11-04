@@ -72,15 +72,9 @@ enum hub_speed {
 	HUB_SPEED_SUPER,
 };
 
-/* Number of supported ports. Value has an upperbound of USB_MAXCHILDREN */
-#ifdef CONFIG_USBIP_VHCI_HC_PORTS
-#define VHCI_HC_PORTS CONFIG_USBIP_VHCI_HC_PORTS
-#else
-#define VHCI_HC_PORTS 8
-#endif
-
-/* Each VHCI has 2 hubs (USB2 and USB3), each has VHCI_HC_PORTS ports */
-#define VHCI_PORTS	(VHCI_HC_PORTS*2)
+/* Number of supported ports. Value has an upperbound of USB_SS_MAXPORTS */
+#define VHCI_DEFAULT_HC_PORTS 8
+#define VHCI_MAX_HC_PORTS USB_SS_MAXPORTS
 
 #define VHCI_DEFAULT_NR_HCS 1
 #define VHCI_MAX_NR_HCS 128
@@ -100,7 +94,7 @@ struct vhci {
 struct vhci_hcd {
 	struct vhci *vhci;
 
-	u32 port_status[VHCI_HC_PORTS];
+	u32 port_status[VHCI_MAX_HC_PORTS];
 
 	unsigned resuming:1;
 	unsigned long re_timeout;
@@ -112,12 +106,16 @@ struct vhci_hcd {
 	 * wIndex shows the port number and begins from 1.
 	 * But, the index of this array begins from 0.
 	 */
-	struct vhci_device vdev[VHCI_HC_PORTS];
+	struct vhci_device vdev[VHCI_MAX_HC_PORTS];
 };
 
 extern unsigned int vhci_num_controllers;
+extern unsigned int vhci_hc_ports;
 extern struct vhci *vhcis;
 extern struct attribute_group vhci_attr_group;
+
+/* Each VHCI has 2 hubs (USB2 and USB3), each has vhci_hc_ports ports */
+#define VHCI_PORTS	(vhci_hc_ports * 2)
 
 /* vhci_hcd.c */
 void rh_port_connect(struct vhci_device *vdev, enum usb_device_speed speed);
@@ -135,7 +133,7 @@ int vhci_tx_loop(void *data);
 
 static inline __u32 port_to_rhport(__u32 port)
 {
-	return port % VHCI_HC_PORTS;
+	return port % vhci_hc_ports;
 }
 
 static inline int port_to_pdev_nr(__u32 port)
