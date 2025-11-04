@@ -74,6 +74,7 @@ struct io_uring_sqe {
 		__u32		install_fd_flags;
 		__u32		nop_flags;
 		__u32		pipe_flags;
+		__u32		bpf_op_flags;
 	};
 	__u64	user_data;	/* data to be passed back at completion time */
 	/* pack this to avoid bogus arm OABI complaints */
@@ -428,6 +429,13 @@ enum io_uring_op {
 #define IORING_SEND_VECTORIZED		(1U << 5)
 
 /*
+ * sqe->bpf_op_flags		top 8bits is for storing bpf op
+ *				The other 24bits are used for bpf prog
+ */
+#define IORING_BPF_OP_BITS	(8)
+#define IORING_BPF_OP_SHIFT	(24)
+
+/*
  * cqe.res for IORING_CQE_F_NOTIF if
  * IORING_SEND_ZC_REPORT_USAGE was requested
  *
@@ -631,6 +639,7 @@ struct io_uring_params {
 #define IORING_FEAT_MIN_TIMEOUT		(1U << 15)
 #define IORING_FEAT_RW_ATTR		(1U << 16)
 #define IORING_FEAT_NO_IOWAIT		(1U << 17)
+#define IORING_FEAT_BPF			(1U << 18)
 
 /*
  * io_uring_register(2) opcodes and arguments

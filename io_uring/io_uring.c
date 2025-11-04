@@ -3851,6 +3851,7 @@ static int __init io_uring_init(void)
 	register_sysctl_init("kernel", kernel_io_uring_disabled_table);
 #endif
 
+	io_bpf_init();
 	return 0;
 };
 __initcall(io_uring_init);
