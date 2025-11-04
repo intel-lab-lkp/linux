@@ -324,6 +324,36 @@ static bool nested_svm_check_bitmap_pa(struct kvm_vcpu *vcpu, u64 pa, u32 size)
 	    kvm_vcpu_is_legal_gpa(vcpu, addr + size - 1);
 }
 
+/*
+ * According to the APM, VMRUN exits with SVM_EXIT_ERR if:
+ * - The type of event_inj is not one of the defined values.
+ * - The type is SVM_EVTINJ_TYPE_EXEPT, but the vector does not
+ *   correspond to an exception (no NMIs and no reserved values).
+ *
+ * These checks are only performed if SVM_EVTINJ_VALID is set.
+ */
+static bool nested_svm_check_event_inj(u32 event_inj)
+{
+	u32 type = event_inj & SVM_EVTINJ_TYPE_MASK;
+	u8 vector = event_inj & SVM_EVTINJ_VEC_MASK;
+
+	if (!(event_inj & SVM_EVTINJ_VALID))
+		return true;
+
+	if (type != SVM_EVTINJ_TYPE_INTR && type != SVM_EVTINJ_TYPE_NMI &&
+	    type != SVM_EVTINJ_TYPE_EXEPT && type != SVM_EVTINJ_TYPE_SOFT)
+		return false;
+
+	if (type == SVM_EVTINJ_TYPE_EXEPT) {
+		if (vector >= FIRST_EXTERNAL_VECTOR)
+			return false;
+
+		if ((1 << vector) & SVM_EVNTINJ_INVALID_EXEPTS)
+			return false;
+	}
+	return true;
+}
+
 static bool __nested_vmcb_check_controls(struct kvm_vcpu *vcpu,
 					 struct vmcb_ctrl_area_cached *control,
 					 unsigned long l1_cr0)
@@ -352,6 +382,9 @@ static bool __nested_vmcb_check_controls(struct kvm_vcpu *vcpu,
 	       !vmcb12_is_intercept(control, INTERCEPT_NMI))) {
 		return false;
 	}
+
+	if (CC(!nested_svm_check_event_inj(control->event_inj)))
+		return false;
 
 	return true;
 }
