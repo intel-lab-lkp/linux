@@ -734,21 +734,125 @@ static void read_from_bdev_async(struct zram *zram, struct page *page,
 	submit_bio(bio);
 }
 
-static int zram_writeback_slots(struct zram *zram, struct zram_pp_ctl *ctl)
-{
-	unsigned long blk_idx = 0;
-	struct page *page = NULL;
+enum {
+	ZRAM_WB_WORK_ALLOCATED = 0,
+	ZRAM_WB_WORK_COMPLETED,
+};
+struct zram_writeback_work {
+	struct completion *done;
+	unsigned long blk_idx;
+	struct page *page;
 	struct zram_pp_slot *pps;
 	struct bio_vec bio_vec;
 	struct bio bio;
-	int ret = 0, err;
-	u32 index;
+	unsigned long flags;
+};
 
-	page = alloc_page(GFP_KERNEL);
-	if (!page)
+static int zram_writeback_complete(struct zram *zram, struct zram_writeback_work *work)
+{
+	u32 index = 0;
+	int err;
+
+	if (!test_and_clear_bit(ZRAM_WB_WORK_COMPLETED, &work->flags))
+		return 0;
+
+	err = blk_status_to_errno(work->bio.bi_status);
+	if (err)
+		return err;
+
+	index = work->pps->index;
+	atomic64_inc(&zram->stats.bd_writes);
+	zram_slot_lock(zram, index);
+	/*
+	 * Same as above, we release slot lock during writeback so
+	 * slot can change under us: slot_free() or slot_free() and
+	 * reallocation (zram_write_page()). In both cases slot loses
+	 * ZRAM_PP_SLOT flag. No concurrent post-processing can set
+	 * ZRAM_PP_SLOT on such slots until current post-processing
+	 * finishes.
+	 */
+	if (!zram_test_flag(zram, index, ZRAM_PP_SLOT))
+		goto next;
+
+	zram_free_page(zram, index);
+	zram_set_flag(zram, index, ZRAM_WB);
+	zram_set_handle(zram, index, work->blk_idx);
+	work->blk_idx = 0;
+	atomic64_inc(&zram->stats.pages_stored);
+	spin_lock(&zram->wb_limit_lock);
+	if (zram->wb_limit_enable && zram->bd_wb_limit > 0)
+		zram->bd_wb_limit -=  1UL << (PAGE_SHIFT - 12);
+	spin_unlock(&zram->wb_limit_lock);
+
+next:
+	zram_slot_unlock(zram, index);
+	release_pp_slot(zram, work->pps);
+	work->pps = NULL;
+	return 0;
+}
+
+static void zram_writeback_endio(struct bio *bio)
+{
+	struct zram_writeback_work *work = bio->bi_private;
+
+	set_bit(ZRAM_WB_WORK_COMPLETED, &work->flags);
+	clear_bit(ZRAM_WB_WORK_ALLOCATED, &work->flags);
+	complete(work->done);
+}
+
+static struct zram_writeback_work *zram_writeback_next_work(struct zram_writeback_work **pool,
+	int size, int *off)
+{
+	struct zram_writeback_work *work = NULL;
+	int i = 0;
+
+	for (i = *off; i < size + *off; i++) {
+		work = pool[i % size];
+		if (!work->page)
+			continue;
+
+		if (!test_and_set_bit(ZRAM_WB_WORK_ALLOCATED, &work->flags)) {
+			*off = (i + 1) % size;
+			return work;
+		}
+	}
+	return NULL;
+}
+
+#define ZRAM_WRITEBACK_BIO_SIZE (32)
+static int zram_writeback_slots(struct zram *zram, struct zram_pp_ctl *ctl)
+{
+	int ret = 0, err, i = 0, off = 0;
+	int work_pool_size = 0;
+	struct zram_writeback_work work_prealloc[2] = {0};
+	struct zram_writeback_work *work_pool[ZRAM_WRITEBACK_BIO_SIZE] = {NULL};
+	struct zram_writeback_work *work = NULL;
+	DECLARE_COMPLETION_ONSTACK(done);
+	u32 index = 0;
+	struct blk_plug plug;
+
+	for (i = 0; i < ARRAY_SIZE(work_pool); i++) {
+		if (i < ARRAY_SIZE(work_prealloc)) {
+			work_pool[i] = &work_prealloc[i];
+		} else {
+			work_pool[i] = kzalloc(sizeof(*work), GFP_KERNEL);
+			if (!work_pool[i])
+				break;
+		}
+		work_pool[i]->done = &done;
+		work_pool[i]->flags = 0;
+		work_pool[i]->page = alloc_page(GFP_KERNEL);
+		if (!work_pool[i]->page)
+			break;
+		work = work_pool[i];
+	}
+	if (!work)
 		return -ENOMEM;
+	work_pool_size = i;
+	set_bit(ZRAM_WB_WORK_ALLOCATED, &work->flags);
 
-	while ((pps = select_pp_slot(ctl))) {
+	blk_start_plug(&plug);
+	while ((work->pps = select_pp_slot(ctl))) {
 		spin_lock(&zram->wb_limit_lock);
 		if (zram->wb_limit_enable && !zram->bd_wb_limit) {
 			spin_unlock(&zram->wb_limit_lock);
@@ -757,15 +861,15 @@ static int zram_writeback_slots(struct zram *zram, struct zram_pp_ctl *ctl)
 		}
 		spin_unlock(&zram->wb_limit_lock);
 
-		if (!blk_idx) {
-			blk_idx = alloc_block_bdev(zram);
-			if (!blk_idx) {
+		if (!work->blk_idx) {
+			work->blk_idx = alloc_block_bdev(zram);
+			if (!work->blk_idx) {
 				ret = -ENOSPC;
 				break;
 			}
 		}
 
-		index = pps->index;
+		index = work->pps->index;
 		zram_slot_lock(zram, index);
 		/*
 		 * scan_slots() sets ZRAM_PP_SLOT and relases slot lock, so
@@ -775,22 +879,32 @@ static int zram_writeback_slots(struct zram *zram, struct zram_pp_ctl *ctl)
 		 */
 		if (!zram_test_flag(zram, index, ZRAM_PP_SLOT))
 			goto next;
-		if (zram_read_from_zspool(zram, page, index))
+		if (zram_read_from_zspool(zram, work->page, index))
 			goto next;
 		zram_slot_unlock(zram, index);
 
-		bio_init(&bio, zram->bdev, &bio_vec, 1,
+		bio_init(&work->bio, zram->bdev, &work->bio_vec, 1,
 			 REQ_OP_WRITE | REQ_SYNC);
-		bio.bi_iter.bi_sector = blk_idx * (PAGE_SIZE >> 9);
-		__bio_add_page(&bio, page, PAGE_SIZE, 0);
+		work->bio.bi_iter.bi_sector = work->blk_idx * (PAGE_SIZE >> 9);
+		work->bio.bi_end_io = zram_writeback_endio;
+		work->bio.bi_private = work;
+		__bio_add_page(&work->bio, work->page, PAGE_SIZE, 0);
 
-		/*
-		 * XXX: A single page IO would be inefficient for write
-		 * but it would be not bad as starter.
-		 */
-		err = submit_bio_wait(&bio);
+		list_del_init(&work->pps->entry);
+		submit_bio(&work->bio);
+
+		do {
+			work = zram_writeback_next_work(work_pool, work_pool_size, &off);
+			if (!work) {
+				blk_finish_plug(&plug);
+				wait_for_completion_io(&done);
+				blk_start_plug(&plug);
+			}
+		} while (!work);
+		err = zram_writeback_complete(zram, work);
 		if (err) {
-			release_pp_slot(zram, pps);
+			release_pp_slot(zram, work->pps);
+			work->pps = NULL;
 			/*
 			 * BIO errors are not fatal, we continue and simply
 			 * attempt to writeback the remaining objects (pages).
@@ -800,43 +914,37 @@ static int zram_writeback_slots(struct zram *zram, struct zram_pp_ctl *ctl)
 			 * the most recent BIO error.
 			 */
 			ret = err;
-			continue;
 		}
+		cond_resched();
+		continue;
 
-		atomic64_inc(&zram->stats.bd_writes);
-		zram_slot_lock(zram, index);
-		/*
-		 * Same as above, we release slot lock during writeback so
-		 * slot can change under us: slot_free() or slot_free() and
-		 * reallocation (zram_write_page()). In both cases slot loses
-		 * ZRAM_PP_SLOT flag. No concurrent post-processing can set
-		 * ZRAM_PP_SLOT on such slots until current post-processing
-		 * finishes.
-		 */
-		if (!zram_test_flag(zram, index, ZRAM_PP_SLOT))
-			goto next;
-
-		zram_free_page(zram, index);
-		zram_set_flag(zram, index, ZRAM_WB);
-		zram_set_handle(zram, index, blk_idx);
-		blk_idx = 0;
-		atomic64_inc(&zram->stats.pages_stored);
-		spin_lock(&zram->wb_limit_lock);
-		if (zram->wb_limit_enable && zram->bd_wb_limit > 0)
-			zram->bd_wb_limit -=  1UL << (PAGE_SHIFT - 12);
-		spin_unlock(&zram->wb_limit_lock);
 next:
 		zram_slot_unlock(zram, index);
-		release_pp_slot(zram, pps);
-
+		release_pp_slot(zram, work->pps);
+		work->pps = NULL;
 		cond_resched();
 	}
+	blk_finish_plug(&plug);
 
-	if (blk_idx)
-		free_block_bdev(zram, blk_idx);
-	if (page)
-		__free_page(page);
+	if (work)
+		clear_bit(ZRAM_WB_WORK_ALLOCATED, &work->flags);
+	for (i = 0; i < work_pool_size; i++) {
+		while (test_bit(ZRAM_WB_WORK_ALLOCATED, &work_pool[i]->flags))
+			wait_for_completion_io(&done);
+		err = zram_writeback_complete(zram, work_pool[i]);
+		if (err) {
+			release_pp_slot(zram, work_pool[i]->pps);
+			work->pps = NULL;
+			ret = err;
+		}
 
+		if (work_pool[i]->blk_idx)
+			free_block_bdev(zram, work_pool[i]->blk_idx);
+		if (work_pool[i]->page)
+			__free_page(work_pool[i]->page);
+		if (i >= ARRAY_SIZE(work_prealloc))
+			kfree(work_pool[i]);
+	}
 	return ret;
 }
 
