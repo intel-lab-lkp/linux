@@ -795,17 +795,6 @@ static void svm_recalc_msr_intercepts(struct kvm_vcpu *vcpu)
 	 */
 }
 
-void svm_copy_lbrs(struct vmcb *to_vmcb, struct vmcb *from_vmcb)
-{
-	to_vmcb->save.dbgctl		= from_vmcb->save.dbgctl;
-	to_vmcb->save.br_from		= from_vmcb->save.br_from;
-	to_vmcb->save.br_to		= from_vmcb->save.br_to;
-	to_vmcb->save.last_excp_from	= from_vmcb->save.last_excp_from;
-	to_vmcb->save.last_excp_to	= from_vmcb->save.last_excp_to;
-
-	vmcb_mark_dirty(to_vmcb, VMCB_LBR);
-}
-
 void svm_enable_lbrv(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
@@ -814,8 +803,10 @@ void svm_enable_lbrv(struct kvm_vcpu *vcpu)
 	svm_recalc_lbr_msr_intercepts(vcpu);
 
 	/* Move the LBR msrs to the vmcb02 so that the guest can see them. */
-	if (is_guest_mode(vcpu))
-		svm_copy_lbrs(svm->vmcb, svm->vmcb01.ptr);
+	if (is_guest_mode(vcpu)) {
+		svm_copy_lbrs(&svm->vmcb->save, &svm->vmcb01.ptr->save);
+		vmcb_mark_dirty(svm->vmcb, VMCB_LBR);
+	}
 }
 
 static void svm_disable_lbrv(struct kvm_vcpu *vcpu)
@@ -830,8 +821,10 @@ static void svm_disable_lbrv(struct kvm_vcpu *vcpu)
 	 * Move the LBR msrs back to the vmcb01 to avoid copying them
 	 * on nested guest entries.
 	 */
-	if (is_guest_mode(vcpu))
-		svm_copy_lbrs(svm->vmcb01.ptr, svm->vmcb);
+	if (is_guest_mode(vcpu)) {
+		svm_copy_lbrs(&svm->vmcb01.ptr->save, &svm->vmcb->save);
+		vmcb_mark_dirty(svm->vmcb01.ptr, VMCB_LBR);
+	}
 }
 
 static struct vmcb *svm_get_lbr_vmcb(struct vcpu_svm *svm)
