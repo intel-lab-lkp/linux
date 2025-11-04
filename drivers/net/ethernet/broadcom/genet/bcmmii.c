@@ -147,6 +147,16 @@ void bcmgenet_phy_pause_set(struct net_device *dev, bool rx, bool tx)
 	mutex_unlock(&phydev->lock);
 }
 
+void bcmgenet_set_pause_panic(struct bcmgenet_priv *priv)
+{
+	u32 reg;
+
+	/* Disable pause frame generation and reception */
+	reg = bcmgenet_umac_readl(priv, UMAC_CMD);
+	reg |= CMD_RX_PAUSE_IGNORE | CMD_TX_PAUSE_IGNORE;
+	bcmgenet_umac_writel(priv, reg, UMAC_CMD);
+}
+
 void bcmgenet_phy_power_set(struct net_device *dev, bool enable)
 {
 	struct bcmgenet_priv *priv = netdev_priv(dev);

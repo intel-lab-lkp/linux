@@ -738,6 +738,7 @@ int bcmgenet_mii_config(struct net_device *dev, bool init);
 int bcmgenet_mii_probe(struct net_device *dev);
 void bcmgenet_mii_exit(struct net_device *dev);
 void bcmgenet_phy_pause_set(struct net_device *dev, bool rx, bool tx);
+void bcmgenet_set_pause_panic(struct bcmgenet_priv *priv);
 void bcmgenet_phy_power_set(struct net_device *dev, bool enable);
 void bcmgenet_mii_setup(struct net_device *dev);
 
