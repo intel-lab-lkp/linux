@@ -575,9 +575,6 @@ static void fnic_scsi_init(struct fnic *fnic)
 {
 	struct Scsi_Host *host = fnic->host;
 
-	snprintf(fnic->name, sizeof(fnic->name) - 1, "%s%d", DRV_NAME,
-			 host->host_no);
-
 	host->transportt = fnic_fc_transport;
 }
 
@@ -732,6 +729,8 @@ static int fnic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	fnic->pdev = pdev;
 	fnic->fnic_num = fnic_id;
+	snprintf(fnic->name, sizeof(fnic->name) - 1, "%s%d", DRV_NAME,
+		 fnic->fnic_num);
 
 	/* Find model name from PCIe subsys ID */
 	if (fnic_get_desc_by_devid(pdev, &desc, &subsys_desc) == 0) {
