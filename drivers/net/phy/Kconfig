@@ -132,7 +132,7 @@ config ADIN1100_PHY
 config AMCC_QT2025_PHY
 	tristate "AMCC QT2025 PHY"
 	depends on RUST_PHYLIB_ABSTRACTIONS
-	depends on RUST_FW_LOADER_ABSTRACTIONS
+	select RUST_FW_LOADER_ABSTRACTIONS
 	help
 	  Adds support for the Applied Micro Circuits Corporation QT2025 PHY.
 
