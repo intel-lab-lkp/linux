@@ -2045,9 +2045,43 @@ int of_find_last_cache_level(unsigned int cpu)
 	return cache_level;
 }
 
+/**
+ * of_map_id_cell_count - parse the cell count.
+ *
+ * @map: pointer to the property data that needs to be translated, eg: msi-map/iommu-map.
+ * @map_name: name to identify the details of @map.
+ * @map_len: length of @map in bytes.
+ *
+ * Return: number of cells that the caller should be considered while parsing
+ * the @map. It is > 0 for success, 0 for failure.
+ */
 static int of_map_id_cell_count(const __be32 *map, const char *map_name,
 				int map_len)
 {
+	const char *cells_prop_name __free(kfree) = NULL;
+	struct device_node *node __free(device_node) = NULL;
+	u32 cells;
+	int ret;
+
+	/* map + 1 is a controller. */
+	node = of_find_node_by_phandle(be32_to_cpup(map + 1));
+	if (!node) {
+		pr_err("Failed to find controller node from phandle\n");
+		return 0;
+	}
+
+	/* get #<name>-cells property from #<name>-map */
+	cells_prop_name = kasprintf(GFP_KERNEL, "#%.*scells",
+			(int)strlen(map_name) - 3, map_name);
+	if (!cells_prop_name)
+		return 0;
+
+	ret = of_property_read_u32(node, cells_prop_name, &cells);
+	if (ret) {
+		pr_err("%pOF: Failed to read %s property\n", node, cells_prop_name);
+		return 0;
+	}
+
 	return 1;
 }
 
