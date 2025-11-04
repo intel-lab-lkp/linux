@@ -545,6 +545,7 @@ static int arche_platform_probe(struct platform_device *pdev)
 	return 0;
 
 err_coldboot:
+	unregister_pm_notifier(&arche_pdata->pm_notifier);
 	mutex_unlock(&arche_pdata->platform_state_mutex);
 err_device_remove:
 	device_remove_file(&pdev->dev, &dev_attr_state);
