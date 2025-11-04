@@ -34,8 +34,8 @@ struct t10_pi_tuple {
 	__be32 ref_tag;		/* Target LBA or indirect LBA */
 };
 
-#define T10_PI_APP_ESCAPE cpu_to_be16(0xffff)
-#define T10_PI_REF_ESCAPE cpu_to_be32(0xffffffff)
+#define T10_PI_APP_ESCAPE 0xffff
+#define T10_PI_REF_ESCAPE 0xffffffff
 
 static inline u32 t10_pi_ref_tag(struct request *rq)
 {
