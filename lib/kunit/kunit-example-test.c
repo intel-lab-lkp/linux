@@ -6,8 +6,9 @@
  * Author: Brendan Higgins <brendanhiggins@google.com>
  */
 
-#include <kunit/test.h>
+#include <kunit/ftrace_stub.h>
 #include <kunit/static_stub.h>
+#include <kunit/test.h>
 
 /*
  * This is the most fundamental element of KUnit, the test case. A test case
@@ -152,7 +153,7 @@ static void example_all_expect_macros_test(struct kunit *test)
 }
 
 /* This is a function we'll replace with static stubs. */
-static int add_one(int i)
+static KUNIT_STUBBABLE int add_one(int i)
 {
 	/* This will trigger the stub if active. */
 	KUNIT_STATIC_STUB_REDIRECT(add_one, i);
@@ -219,6 +220,29 @@ static void example_static_stub_using_fn_ptr_test(struct kunit *test)
 	/* Return add_one() to normal. */
 	kunit_deactivate_static_stub(test, add_one_fn_ptr);
 	KUNIT_EXPECT_EQ(test, add_one(1), 2);
+}
+
+/*
+ * This test shows the use of dynamic stubs.
+ */
+static void example_ftrace_stub_test(struct kunit *test)
+{
+#if !IS_ENABLED(CONFIG_KUNIT_FTRACE_STUBS)
+	kunit_skip(test, "KUNIT_FTRACE_STUBS not enabled");
+#else
+	/* By default, function is not stubbed. */
+	KUNIT_EXPECT_EQ(test, add_one(1), 2);
+
+	/* Replace add_one() with subtract_one(). */
+	kunit_activate_ftrace_stub(test, add_one, subtract_one);
+
+	/* add_one() is now replaced. */
+	KUNIT_EXPECT_EQ(test, add_one(1), 0);
+
+	/* Return add_one() to normal. */
+	kunit_deactivate_ftrace_stub(test, add_one);
+	KUNIT_EXPECT_EQ(test, add_one(1), 2);
+#endif
 }
 
 static const struct example_param {
@@ -506,6 +530,7 @@ static struct kunit_case example_test_cases[] = {
 	KUNIT_CASE(example_all_expect_macros_test),
 	KUNIT_CASE(example_static_stub_test),
 	KUNIT_CASE(example_static_stub_using_fn_ptr_test),
+	KUNIT_CASE(example_ftrace_stub_test),
 	KUNIT_CASE(example_priv_test),
 	KUNIT_CASE_PARAM(example_params_test, example_gen_params),
 	KUNIT_CASE_PARAM_WITH_INIT(example_params_test_with_init, kunit_array_gen_params,

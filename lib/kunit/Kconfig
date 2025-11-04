@@ -70,6 +70,17 @@ config KUNIT_ALL_TESTS
 
 	  If unsure, say N.
 
+config KUNIT_FTRACE_STUBS
+	bool "Support for stubbing out functions in KUnit tests with ftrace and kernel livepatch"
+	depends on FTRACE=y && FUNCTION_TRACER=y && MODULES=y && DEBUG_KERNEL=y && KALLSYMS_ALL=y
+	help
+	  Builds support for stubbing out functions for the duration of KUnit
+	  test cases or suites using ftrace.
+	  See KUNIT_EXAMPLE_TEST for an example.
+
+	  NOTE: this does not work on all architectures (like UML) and
+	  relies on a lot of magic (see the dependencies list).
+
 config KUNIT_DEFAULT_ENABLED
 	bool "Default value of kunit.enable"
 	default y

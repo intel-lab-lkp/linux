@@ -29,3 +29,7 @@ obj-$(CONFIG_KUNIT_TEST) +=		assert_test.o
 endif
 
 obj-$(CONFIG_KUNIT_EXAMPLE_TEST) +=	kunit-example-test.o
+
+ifeq ($(CONFIG_KUNIT_FTRACE_STUBS),y)
+kunit-objs +=				ftrace_stub.o
+endif
