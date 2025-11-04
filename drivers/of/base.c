@@ -2045,6 +2045,12 @@ int of_find_last_cache_level(unsigned int cpu)
 	return cache_level;
 }
 
+static int of_map_id_cell_count(const __be32 *map, const char *map_name,
+				int map_len)
+{
+	return 1;
+}
+
 /*
  * Look at the documentation of of_map_id.
  */
@@ -2053,6 +2059,7 @@ static int of_map_id_or_funcid(const struct device_node *np, u32 id,
 		struct device_node **target, u32 *id_out)
 {
 	u32 map_mask, masked_id;
+	u32 cell_count, total_cells;
 	int map_len;
 	const __be32 *map = NULL;
 
@@ -2068,7 +2075,13 @@ static int of_map_id_or_funcid(const struct device_node *np, u32 id,
 		return 0;
 	}
 
-	if (!map_len || map_len % (4 * sizeof(*map))) {
+	cell_count = of_map_id_cell_count(map, map_name, map_len);
+	if (!cell_count)
+		return -EINVAL;
+
+	total_cells = 2 + cell_count + 1;
+
+	if (!map_len || map_len % (total_cells * sizeof(*map))) {
 		pr_err("%pOF: Error: Bad %s length: %d\n", np,
 			map_name, map_len);
 		return -EINVAL;
@@ -2085,12 +2098,12 @@ static int of_map_id_or_funcid(const struct device_node *np, u32 id,
 		of_property_read_u32(np, map_mask_name, &map_mask);
 
 	masked_id = map_mask & id;
-	for ( ; map_len > 0; map_len -= 4 * sizeof(*map), map += 4) {
+	for ( ; map_len > 0; map_len -= total_cells * sizeof(*map), map += total_cells) {
 		struct device_node *phandle_node;
 		u32 id_base = be32_to_cpup(map + 0);
 		u32 phandle = be32_to_cpup(map + 1);
 		u32 out_base = be32_to_cpup(map + 2);
-		u32 id_len = be32_to_cpup(map + 3);
+		u32 id_len = be32_to_cpup(map + total_cells - 1);
 
 		if (id_base & ~map_mask) {
 			pr_err("%pOF: Invalid %s translation - %s-mask (0x%x) ignores id-base (0x%x)\n",
