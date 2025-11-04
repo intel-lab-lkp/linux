@@ -4,4 +4,4 @@
 
 // Cut here.
 
-::kernel::concat_literals!(ARCH_STATIC_BRANCH_ASM("{symb} + {off} + {branch}", "{l_yes}"))
+::kernel::concat_literals!(ARCH_STATIC_BRANCH_ASM("{real_key} + {branch}", "{l_yes}"))
