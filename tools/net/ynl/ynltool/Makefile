@@ -24,7 +24,7 @@ all: $(YNLTOOL)
 
 $(YNLTOOL): $(OBJS) $(LIBS)
 	@echo -e "\tLINK $@"
-	@$(CC) $(CFLAGS) -o $@ $(OBJS) $(LIBS) -lmnl
+	@$(CC) $(CFLAGS) -o $@ $(OBJS) $(LIBS) -lmnl -lm
 
 %.o: %.c main.h json_writer.h
 	@echo -e "\tCC $@"
