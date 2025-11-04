@@ -1012,12 +1012,39 @@ int enter_svm_guest_mode(struct kvm_vcpu *vcpu, u64 vmcb12_gpa, bool from_vmrun)
 	return 0;
 }
 
+static int nested_svm_vmrun_read_vmcb12(struct kvm_vcpu *vcpu, u64 vmcb12_gpa)
+{
+	struct vcpu_svm *svm = to_svm(vcpu);
+	struct kvm_host_map map;
+	struct vmcb *vmcb12;
+	int ret;
+
+	ret = kvm_vcpu_map(vcpu, gpa_to_gfn(vmcb12_gpa), &map);
+	if (ret)
+		return ret;
+
+	vmcb12 = map.hva;
+
+	nested_copy_vmcb_control_to_cache(svm, &vmcb12->control);
+	nested_copy_vmcb_save_to_cache(svm, &vmcb12->save);
+
+	if (!nested_vmcb_check_save(vcpu) ||
+	    !nested_vmcb_check_controls(vcpu)) {
+		vmcb12->control.exit_code    = SVM_EXIT_ERR;
+		vmcb12->control.exit_code_hi = 0;
+		vmcb12->control.exit_info_1  = 0;
+		vmcb12->control.exit_info_2  = 0;
+		ret = -1;
+	}
+
+	kvm_vcpu_unmap(vcpu, &map);
+	return ret;
+}
+
 int nested_svm_vmrun(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
 	int ret;
-	struct vmcb *vmcb12;
-	struct kvm_host_map map;
 	u64 vmcb12_gpa;
 	struct vmcb *vmcb01 = svm->vmcb01.ptr;
 
@@ -1038,8 +1065,11 @@ int nested_svm_vmrun(struct kvm_vcpu *vcpu)
 		return ret;
 	}
 
+	if (WARN_ON_ONCE(!svm->nested.initialized))
+		return -EINVAL;
+
 	vmcb12_gpa = svm->vmcb->save.rax;
-	ret = kvm_vcpu_map(vcpu, gpa_to_gfn(vmcb12_gpa), &map);
+	ret = nested_svm_vmrun_read_vmcb12(vcpu, vmcb12_gpa);
 	if (ret == -EINVAL) {
 		kvm_inject_gp(vcpu, 0);
 		return 1;
@@ -1048,23 +1078,6 @@ int nested_svm_vmrun(struct kvm_vcpu *vcpu)
 	}
 
 	ret = kvm_skip_emulated_instruction(vcpu);
-
-	vmcb12 = map.hva;
-
-	if (WARN_ON_ONCE(!svm->nested.initialized))
-		return -EINVAL;
-
-	nested_copy_vmcb_control_to_cache(svm, &vmcb12->control);
-	nested_copy_vmcb_save_to_cache(svm, &vmcb12->save);
-
-	if (!nested_vmcb_check_save(vcpu) ||
-	    !nested_vmcb_check_controls(vcpu)) {
-		vmcb12->control.exit_code    = SVM_EXIT_ERR;
-		vmcb12->control.exit_code_hi = 0;
-		vmcb12->control.exit_info_1  = 0;
-		vmcb12->control.exit_info_2  = 0;
-		goto out;
-	}
 
 	/*
 	 * Since vmcb01 is not in use, we can use it to store some of the L1
@@ -1085,7 +1098,7 @@ int nested_svm_vmrun(struct kvm_vcpu *vcpu)
 		goto out_exit_err;
 
 	if (nested_svm_merge_msrpm(vcpu))
-		goto out;
+		return ret;
 
 out_exit_err:
 	svm->nested.nested_run_pending = 0;
@@ -1098,10 +1111,6 @@ out_exit_err:
 	svm->vmcb->control.exit_info_2  = 0;
 
 	nested_svm_vmexit(svm);
-
-out:
-	kvm_vcpu_unmap(vcpu, &map);
-
 	return ret;
 }
 
