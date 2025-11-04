@@ -41,6 +41,35 @@
 					 IAA_DECOMP_CHECK_FOR_EOB | \
 					 IAA_DECOMP_STOP_ON_EOB)
 
+/*
+ * If set, the driver must have a way to submit the req, then
+ * poll its completion status for success/error.
+ */
+#define IAA_REQ_POLL_FLAG		0x00000002
+
+/*
+ * The maximum compress/decompress batch size for IAA's batch compression
+ * and batch decompression functionality.
+ */
+#define IAA_CRYPTO_MAX_BATCH_SIZE 8U
+
+/*
+ * Used to create per-CPU structure comprising of IAA_CRYPTO_MAX_BATCH_SIZE
+ * reqs for batch [de]compressions.
+ *
+ * @reqs:  Used to submit up to IAA_CRYPTO_MAX_BATCH_SIZE parallel
+ *         compress/decompress jobs to the accelerator.
+ * @mutex: Used to protect the per-CPU batch compression/decompression context
+ *         from preemption/process migration; and to allow upper layers in the
+ *         kernel to use synchronous/asynchronous compress/decompress calls to
+ *         IAA. In other words, don't make any assumptions, and protect
+ *         compression/decompression data.
+ */
+struct iaa_batch_ctx {
+	struct iaa_req **reqs;
+	struct mutex mutex;
+};
+
 #define IAA_COMP_MODES_MAX  IAA_MODE_NONE
 
 enum iaa_mode {
@@ -51,6 +80,7 @@ enum iaa_mode {
 struct iaa_req {
 	struct scatterlist *src;
 	struct scatterlist *dst;
+	struct scatterlist sg_src;
 	unsigned int slen;
 	unsigned int dlen;
 	u32 flags;

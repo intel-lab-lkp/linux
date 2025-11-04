@@ -55,6 +55,9 @@ static struct wq_table_entry **pkg_global_comp_wqs;
 static struct crypto_acomp *deflate_crypto_acomp;
 DEFINE_MUTEX(deflate_crypto_acomp_lock);
 
+/* Per-cpu iaa_reqs for batching. */
+static struct iaa_batch_ctx __percpu *iaa_batch_ctx;
+
 LIST_HEAD(iaa_devices);
 DEFINE_MUTEX(iaa_devices_lock);
 
@@ -1901,13 +1904,14 @@ static int iaa_compress(struct iaa_compression_ctx *ctx, struct iaa_req *req,
 					  ctx->mode, iaa_device->compression_modes[ctx->mode]);
 
 	if (likely(!ctx->use_irq)) {
+		req->drv_data = idxd_desc;
 		iaa_submit_desc_movdir64b(wq, idxd_desc);
 
 		/* Update stats */
 		update_total_comp_calls();
 		update_wq_comp_calls(wq);
 
-		if (ctx->async_mode)
+		if (req->flags & IAA_REQ_POLL_FLAG)
 			return -EINPROGRESS;
 
 		ret = check_completion(dev, idxd_desc->iax_completion, true, false);
@@ -1989,13 +1993,14 @@ static int iaa_decompress(struct iaa_compression_ctx *ctx, struct iaa_req *req,
 	desc = iaa_setup_decompress_hw_desc(idxd_desc, src_addr, slen, dst_addr, *dlen);
 
 	if (likely(!ctx->use_irq)) {
+		req->drv_data = idxd_desc;
 		iaa_submit_desc_movdir64b(wq, idxd_desc);
 
 		/* Update stats */
 		update_total_decomp_calls();
 		update_wq_decomp_calls(wq);
 
-		if (ctx->async_mode)
+		if (req->flags & IAA_REQ_POLL_FLAG)
 			return -EINPROGRESS;
 
 		ret = check_completion(dev, idxd_desc->iax_completion, false, false);
@@ -2198,6 +2203,301 @@ out:
 	return ret;
 }
 
+static int iaa_comp_poll(struct iaa_compression_ctx *ctx, struct iaa_req *req)
+{
+	struct idxd_desc *idxd_desc;
+	struct idxd_device *idxd;
+	struct iaa_wq *iaa_wq;
+	struct pci_dev *pdev;
+	struct device *dev;
+	struct idxd_wq *wq;
+	bool compress_op;
+	int ret;
+
+	idxd_desc = req->drv_data;
+	if (!idxd_desc)
+		return -EAGAIN;
+
+	compress_op = (idxd_desc->iax_hw->opcode == IAX_OPCODE_COMPRESS);
+	wq = idxd_desc->wq;
+	iaa_wq = idxd_wq_get_private(wq);
+	idxd = iaa_wq->iaa_device->idxd;
+	pdev = idxd->pdev;
+	dev = &pdev->dev;
+
+	ret = check_completion(dev, idxd_desc->iax_completion, compress_op, true);
+	if (ret == -EAGAIN)
+		return ret;
+	if (ret)
+		goto out;
+
+	req->dlen = idxd_desc->iax_completion->output_size;
+
+	/* Update stats */
+	if (compress_op) {
+		update_total_comp_bytes_out(req->dlen);
+		update_wq_comp_bytes(wq, req->dlen);
+	} else {
+		update_total_decomp_bytes_in(req->slen);
+		update_wq_decomp_bytes(wq, req->slen);
+	}
+
+	if (compress_op && ctx->verify_compress) {
+		dma_addr_t src_addr, dst_addr;
+
+		req->compression_crc = idxd_desc->iax_completion->crc;
+
+		dma_sync_sg_for_device(dev, req->dst, 1, DMA_FROM_DEVICE);
+		dma_sync_sg_for_device(dev, req->src, 1, DMA_TO_DEVICE);
+
+		src_addr = sg_dma_address(req->src);
+		dst_addr = sg_dma_address(req->dst);
+
+		ret = iaa_compress_verify(ctx, req, wq, src_addr, req->slen,
+					  dst_addr, req->dlen);
+	}
+
+out:
+	/* caller doesn't call crypto_wait_req, so no acomp_request_complete() */
+	dma_unmap_sg(dev, req->dst, 1, DMA_FROM_DEVICE);
+	dma_unmap_sg(dev, req->src, 1, DMA_TO_DEVICE);
+
+	idxd_free_desc(idxd_desc->wq, idxd_desc);
+	percpu_ref_put(&iaa_wq->ref);
+
+	return ret;
+}
+
+static __always_inline void iaa_set_req_poll(
+	struct iaa_req *reqs[],
+	int nr_reqs,
+	bool set_flag)
+{
+	int i;
+
+	for (i = 0; i < nr_reqs; ++i) {
+		set_flag ? (reqs[i]->flags |= IAA_REQ_POLL_FLAG) :
+			   (reqs[i]->flags &= ~IAA_REQ_POLL_FLAG);
+	}
+}
+
+/**
+ * This API provides IAA compress batching functionality for use by swap
+ * modules.
+ *
+ * @ctx:  compression ctx for the requested IAA mode (fixed/dynamic).
+ * @parent_req: The "parent" iaa_req that contains SG lists for the batch's
+ *              inputs and outputs.
+ * @unit_size: The unit size to apply to @parent_req->slen to get the number of
+ *             scatterlists it contains.
+ *
+ * The caller should check the individual sg->lengths in the @parent_req for
+ * errors, including incompressible page errors.
+ *
+ * Returns 0 if all compress requests in the batch complete successfully,
+ * -EINVAL otherwise.
+ */
+static int iaa_comp_acompress_batch(
+	struct iaa_compression_ctx *ctx,
+	struct iaa_req *parent_req,
+	unsigned int unit_size)
+{
+	struct iaa_batch_ctx *cpu_ctx = raw_cpu_ptr(iaa_batch_ctx);
+	int nr_reqs = parent_req->slen / unit_size;
+	int errors[IAA_CRYPTO_MAX_BATCH_SIZE];
+	int *dlens[IAA_CRYPTO_MAX_BATCH_SIZE];
+	bool compressions_done = false;
+	struct sg_page_iter sgiter;
+	struct scatterlist *sg;
+	struct iaa_req **reqs;
+	int i, err = 0;
+
+	mutex_lock(&cpu_ctx->mutex);
+
+	reqs = cpu_ctx->reqs;
+
+	__sg_page_iter_start(&sgiter, parent_req->src, nr_reqs,
+			     parent_req->src->offset/unit_size);
+
+	for (i = 0; i < nr_reqs; ++i, ++sgiter.sg_pgoffset) {
+		sg_set_page(reqs[i]->src, sg_page_iter_page(&sgiter), PAGE_SIZE, 0);
+		reqs[i]->slen = PAGE_SIZE;
+	}
+
+	for_each_sg(parent_req->dst, sg, nr_reqs, i) {
+		sg->length = PAGE_SIZE;
+		dlens[i] = &sg->length;
+		reqs[i]->dst = sg;
+		reqs[i]->dlen = PAGE_SIZE;
+	}
+
+	iaa_set_req_poll(reqs, nr_reqs, true);
+
+	/*
+	 * Prepare and submit the batch of iaa_reqs to IAA. IAA will process
+	 * these compress jobs in parallel.
+	 */
+	for (i = 0; i < nr_reqs; ++i) {
+		errors[i] = iaa_comp_acompress(ctx, reqs[i]);
+
+		if (likely(errors[i] == -EINPROGRESS)) {
+			errors[i] = -EAGAIN;
+		} else if (unlikely(errors[i])) {
+			*dlens[i] = errors[i];
+			err = -EINVAL;
+		} else {
+			*dlens[i] = reqs[i]->dlen;
+		}
+	}
+
+	/*
+	 * Asynchronously poll for and process IAA compress job completions.
+	 */
+	while (!compressions_done) {
+		compressions_done = true;
+
+		for (i = 0; i < nr_reqs; ++i) {
+			/*
+			 * Skip, if the compression has already completed
+			 * successfully or with an error.
+			 */
+			if (errors[i] != -EAGAIN)
+				continue;
+
+			errors[i] = iaa_comp_poll(ctx, reqs[i]);
+
+			if (errors[i]) {
+				if (likely(errors[i] == -EAGAIN)) {
+					compressions_done = false;
+				} else {
+					*dlens[i] = errors[i];
+					err = -EINVAL;
+				}
+			} else {
+				*dlens[i] = reqs[i]->dlen;
+			}
+		}
+	}
+
+	/*
+	 * For the same 'reqs[]' to be usable by
+	 * iaa_comp_acompress()/iaa_comp_adecompress(),
+	 * clear the IAA_REQ_POLL_FLAG bit on all iaa_reqs.
+	 */
+	iaa_set_req_poll(reqs, nr_reqs, false);
+
+	mutex_unlock(&cpu_ctx->mutex);
+	return err;
+}
+
+/**
+ * This API provides IAA decompress batching functionality for use by swap
+ * modules.
+ *
+ * @ctx:  compression ctx for the requested IAA mode (fixed/dynamic).
+ * @parent_req: The "parent" iaa_req that contains SG lists for the batch's
+ *              inputs and outputs.
+ * @unit_size: The unit size to apply to @parent_req->dlen to get the number of
+ *             scatterlists it contains.
+ *
+ * The caller should check @parent_req->dst scatterlist's component SG lists'
+ * @length for errors and handle @length != PAGE_SIZE.
+ *
+ * Returns 0 if all decompress requests complete successfully,
+ * -EINVAL otherwise.
+ */
+static int iaa_comp_adecompress_batch(
+	struct iaa_compression_ctx *ctx,
+	struct iaa_req *parent_req,
+	unsigned int unit_size)
+{
+	struct iaa_batch_ctx *cpu_ctx = raw_cpu_ptr(iaa_batch_ctx);
+	int nr_reqs = parent_req->dlen / unit_size;
+	int errors[IAA_CRYPTO_MAX_BATCH_SIZE];
+	int *dlens[IAA_CRYPTO_MAX_BATCH_SIZE];
+	bool decompressions_done = false;
+	struct scatterlist *sg;
+	struct iaa_req **reqs;
+	int i, err = 0;
+
+	mutex_lock(&cpu_ctx->mutex);
+
+	reqs = cpu_ctx->reqs;
+
+	for_each_sg(parent_req->src, sg, nr_reqs, i) {
+		reqs[i]->src = sg;
+		reqs[i]->slen = sg->length;
+	}
+
+	for_each_sg(parent_req->dst, sg, nr_reqs, i) {
+		dlens[i] = &sg->length;
+		reqs[i]->dst = sg;
+		reqs[i]->dlen = PAGE_SIZE;
+	}
+
+	iaa_set_req_poll(reqs, nr_reqs, true);
+
+	/*
+	 * Prepare and submit the batch of iaa_reqs to IAA. IAA will process
+	 * these decompress jobs in parallel.
+	 */
+	for (i = 0; i < nr_reqs; ++i) {
+		errors[i] = iaa_comp_adecompress(ctx, reqs[i]);
+
+		/*
+		 * If it failed desc allocation/submission, errors[i] can
+		 * be 0 or error value from software decompress.
+		 */
+		if (likely(errors[i] == -EINPROGRESS)) {
+			errors[i] = -EAGAIN;
+		} else if (unlikely(errors[i])) {
+			*dlens[i] = errors[i];
+			err = -EINVAL;
+		} else {
+			*dlens[i] = reqs[i]->dlen;
+		}
+	}
+
+	/*
+	 * Asynchronously poll for and process IAA decompress job completions.
+	 */
+	while (!decompressions_done) {
+		decompressions_done = true;
+
+		for (i = 0; i < nr_reqs; ++i) {
+			/*
+			 * Skip, if the decompression has already completed
+			 * successfully or with an error.
+			 */
+			if (errors[i] != -EAGAIN)
+				continue;
+
+			errors[i] = iaa_comp_poll(ctx, reqs[i]);
+
+			if (errors[i]) {
+				if (likely(errors[i] == -EAGAIN)) {
+					decompressions_done = false;
+				} else {
+					*dlens[i] = errors[i];
+					err = -EINVAL;
+				}
+			} else {
+				*dlens[i] = reqs[i]->dlen;
+			}
+		}
+	}
+
+	/*
+	 * For the same 'reqs[]' to be usable by
+	 * iaa_comp_acompress()/iaa_comp_adecompress(),
+	 * clear the IAA_REQ_POLL_FLAG bit on all iaa_reqs.
+	 */
+	iaa_set_req_poll(reqs, nr_reqs, false);
+
+	mutex_unlock(&cpu_ctx->mutex);
+	return err;
+}
+
 static void compression_ctx_init(struct iaa_compression_ctx *ctx, enum iaa_mode mode)
 {
 	ctx->mode = mode;
@@ -2222,9 +2522,19 @@ static int iaa_comp_acompress_main(struct acomp_req *areq)
 	if (iaa_alg_is_registered(crypto_tfm_alg_driver_name(tfm), &idx)) {
 		ctx = iaa_ctx[idx];
 
-		acomp_to_iaa(areq, &req, ctx);
-		ret = iaa_comp_acompress(ctx, &req);
-		iaa_to_acomp(unlikely(ret) ? ret : req.dlen, areq);
+		if (likely(areq->slen == areq->unit_size) || !areq->unit_size) {
+			acomp_to_iaa(areq, &req, ctx);
+			ret = iaa_comp_acompress(ctx, &req);
+			iaa_to_acomp(unlikely(ret) ? ret : req.dlen, areq);
+		} else {
+			acomp_to_iaa(areq, &req, ctx);
+			ret = iaa_comp_acompress_batch(ctx, &req, areq->unit_size);
+			/* 
+			 * Set the acomp_req's dlen to be the first SG list's
+			 * compressed length/error value.
+			 */
+			areq->dlen = req.dst->length;
+		}
 	}
 
 	return ret;
@@ -2240,9 +2550,19 @@ static int iaa_comp_adecompress_main(struct acomp_req *areq)
 	if (iaa_alg_is_registered(crypto_tfm_alg_driver_name(tfm), &idx)) {
 		ctx = iaa_ctx[idx];
 
-		acomp_to_iaa(areq, &req, ctx);
-		ret = iaa_comp_adecompress(ctx, &req);
-		iaa_to_acomp(unlikely(ret) ? ret : req.dlen, areq);
+		if (likely(areq->dlen == areq->unit_size) || !areq->unit_size) {
+			acomp_to_iaa(areq, &req, ctx);
+			ret = iaa_comp_adecompress(ctx, &req);
+			iaa_to_acomp(unlikely(ret) ? ret : req.dlen, areq);
+		} else {
+			acomp_to_iaa(areq, &req, ctx);
+			ret = iaa_comp_adecompress_batch(ctx, &req, areq->unit_size);
+			/* 
+			 * Set the acomp_req's dlen to be the first SG list's
+			 * decompressed length/error value.
+			 */
+			areq->dlen = req.dst->length;
+		}
 	}
 
 	return ret;
@@ -2527,9 +2847,31 @@ static struct idxd_device_driver iaa_crypto_driver = {
  * Module init/exit.
  ********************/
 
+static void iaa_batch_ctx_dealloc(void)
+{
+	int cpu;
+	u8 i;
+
+	if (!iaa_batch_ctx)
+		return;
+
+	for_each_possible_cpu(cpu) {
+		struct iaa_batch_ctx *cpu_ctx = per_cpu_ptr(iaa_batch_ctx, cpu);
+
+		if (cpu_ctx && cpu_ctx->reqs) {
+			for (i = 0; i < IAA_CRYPTO_MAX_BATCH_SIZE; ++i)
+				kfree(cpu_ctx->reqs[i]);
+			kfree(cpu_ctx->reqs);
+		}
+	}
+
+	free_percpu(iaa_batch_ctx);
+}
+
 static int __init iaa_crypto_init_module(void)
 {
-	int ret = 0;
+	int cpu, ret = 0;
+	u8 i;
 
 	INIT_LIST_HEAD(&iaa_devices);
 
@@ -2591,6 +2933,39 @@ static int __init iaa_crypto_init_module(void)
 		goto err_sync_attr_create;
 	}
 
+	/* Allocate batching resources for iaa_crypto. */
+	iaa_batch_ctx = alloc_percpu_gfp(struct iaa_batch_ctx, GFP_KERNEL | __GFP_ZERO);
+	if (!iaa_batch_ctx) {
+		pr_debug("Failed to allocate per-cpu iaa_batch_ctx\n");
+		goto batch_ctx_fail;
+	}
+
+	for_each_possible_cpu(cpu) {
+		struct iaa_batch_ctx *cpu_ctx = per_cpu_ptr(iaa_batch_ctx, cpu);
+		int nid = cpu_to_node(cpu);
+
+		cpu_ctx->reqs = kcalloc_node(IAA_CRYPTO_MAX_BATCH_SIZE,
+					     sizeof(struct iaa_req *),
+					     GFP_KERNEL, nid);
+
+		if (!cpu_ctx->reqs)
+			goto reqs_fail;
+
+		for (i = 0; i < IAA_CRYPTO_MAX_BATCH_SIZE; ++i) {
+			cpu_ctx->reqs[i] = kzalloc_node(sizeof(struct iaa_req),
+							GFP_KERNEL, nid);
+			if (!cpu_ctx->reqs[i]) {
+				pr_debug("Could not alloc iaa_req reqs[%d]\n", i);
+				goto reqs_fail;
+			}
+
+			sg_init_table(&cpu_ctx->reqs[i]->sg_src, 1);
+			cpu_ctx->reqs[i]->src = &cpu_ctx->reqs[i]->sg_src;
+		}
+
+		mutex_init(&cpu_ctx->mutex);
+	}
+
 	if (iaa_crypto_debugfs_init())
 		pr_warn("debugfs init failed, stats not available\n");
 
@@ -2598,6 +2973,11 @@ static int __init iaa_crypto_init_module(void)
 out:
 	return ret;
 
+reqs_fail:
+	iaa_batch_ctx_dealloc();
+batch_ctx_fail:
+	driver_remove_file(&iaa_crypto_driver.drv,
+			   &driver_attr_sync_mode);
 err_sync_attr_create:
 	driver_remove_file(&iaa_crypto_driver.drv,
 			   &driver_attr_verify_compress);
@@ -2629,6 +3009,7 @@ static void __exit iaa_crypto_cleanup_module(void)
 	iaa_unregister_acomp_compression_device();
 	iaa_unregister_compression_device();
 
+	iaa_batch_ctx_dealloc();
 	iaa_crypto_debugfs_cleanup();
 	driver_remove_file(&iaa_crypto_driver.drv,
 			   &driver_attr_sync_mode);
