@@ -311,7 +311,7 @@ static unsigned int vfio_pci_get_group_from_dev(const char *bdf)
 	return group;
 }
 
-static void vfio_pci_group_setup(struct vfio_pci_device *device, const char *bdf)
+void vfio_pci_group_setup(struct vfio_pci_device *device, const char *bdf)
 {
 	struct vfio_group_status group_status = {
 		.argsz = sizeof(group_status),
@@ -331,9 +331,8 @@ static void vfio_pci_group_setup(struct vfio_pci_device *device, const char *bdf
 	ioctl_assert(device->group_fd, VFIO_GROUP_SET_CONTAINER, &device->container_fd);
 }
 
-static void vfio_pci_container_get_device_fd(struct vfio_pci_device *device,
-					      const char *bdf,
-					      const char *vf_token)
+void __vfio_container_get_device_fd(struct vfio_pci_device *device,
+				     const char *bdf, const char *vf_token)
 {
 	char *arg = (char *) bdf;
 
@@ -356,32 +355,46 @@ static void vfio_pci_container_get_device_fd(struct vfio_pci_device *device,
 
 	if (vf_token)
 		free((void *) arg);
+}
 
+static void vfio_container_get_device_fd(struct vfio_pci_device *device,
+					  const char *bdf,
+					  const char *vf_token)
+{
+	__vfio_container_get_device_fd(device, bdf, vf_token);
 	VFIO_ASSERT_GE(device->fd, 0);
 }
 
-static void vfio_pci_container_setup(struct vfio_pci_device *device,
-				      const char *bdf, const char *vf_token)
+void vfio_container_set_iommu(struct vfio_pci_device *device)
 {
 	unsigned long iommu_type = device->iommu_mode->iommu_type;
+	int ret;
+
+	ret = ioctl(device->container_fd, VFIO_CHECK_EXTENSION, iommu_type);
+	VFIO_ASSERT_GT(ret, 0, "VFIO IOMMU type %lu not supported\n", iommu_type);
+
+	ioctl_assert(device->container_fd, VFIO_SET_IOMMU, (void *)iommu_type);
+}
+
+void vfio_container_open(struct vfio_pci_device *device)
+{
 	const char *path = device->iommu_mode->container_path;
 	int version;
-	int ret;
 
 	device->container_fd = open(path, O_RDWR);
 	VFIO_ASSERT_GE(device->container_fd, 0, "open(%s) failed\n", path);
 
 	version = ioctl(device->container_fd, VFIO_GET_API_VERSION);
 	VFIO_ASSERT_EQ(version, VFIO_API_VERSION, "Unsupported version: %d\n", version);
+}
 
+static void vfio_pci_container_setup(struct vfio_pci_device *device,
+				      const char *bdf, const char *vf_token)
+{
+	vfio_container_open(device);
 	vfio_pci_group_setup(device, bdf);
-
-	ret = ioctl(device->container_fd, VFIO_CHECK_EXTENSION, iommu_type);
-	VFIO_ASSERT_GT(ret, 0, "VFIO IOMMU type %lu not supported\n", iommu_type);
-
-	ioctl_assert(device->container_fd, VFIO_SET_IOMMU, (void *)iommu_type);
-
-	vfio_pci_container_get_device_fd(device, bdf, vf_token);
+	vfio_container_set_iommu(device);
+	vfio_container_get_device_fd(device, bdf, vf_token);
 }
 
 static void vfio_pci_device_setup(struct vfio_pci_device *device)
@@ -471,7 +484,7 @@ static const struct vfio_iommu_mode iommu_modes[] = {
 
 const char *default_iommu_mode = "iommufd";
 
-static const struct vfio_iommu_mode *lookup_iommu_mode(const char *iommu_mode)
+const struct vfio_iommu_mode *lookup_iommu_mode(const char *iommu_mode)
 {
 	int i;
 
@@ -488,7 +501,12 @@ static const struct vfio_iommu_mode *lookup_iommu_mode(const char *iommu_mode)
 	VFIO_FAIL("Unrecognized IOMMU mode: %s\n", iommu_mode);
 }
 
-static void vfio_device_bind_iommufd(int device_fd, int iommufd, const char *vf_token)
+const char *iommu_mode_container_path(const char *iommu_mode)
+{
+	return lookup_iommu_mode(iommu_mode)->container_path;
+}
+
+int __vfio_device_bind_iommufd(int device_fd, int iommufd, const char *vf_token)
 {
 	struct vfio_device_bind_iommufd args = {
 		.argsz = sizeof(args),
@@ -502,7 +520,14 @@ static void vfio_device_bind_iommufd(int device_fd, int iommufd, const char *vf_
 		args.token_uuid_ptr = (u64) token_uuid;
 	}
 
-	ioctl_assert(device_fd, VFIO_DEVICE_BIND_IOMMUFD, &args);
+	return ioctl(device_fd, VFIO_DEVICE_BIND_IOMMUFD, &args);
+}
+
+static void vfio_device_bind_iommufd(int device_fd, int iommufd, const char *vf_token)
+{
+	int ret = __vfio_device_bind_iommufd(device_fd, iommufd, vf_token);
+
+	VFIO_ASSERT_EQ(ret, 0, "Failed VFIO_DEVICE_BIND_IOMMUFD ioctl\n");
 }
 
 static u32 iommufd_ioas_alloc(int iommufd)
@@ -525,23 +550,31 @@ static void vfio_device_attach_iommufd_pt(int device_fd, u32 pt_id)
 	ioctl_assert(device_fd, VFIO_DEVICE_ATTACH_IOMMUFD_PT, &args);
 }
 
-static void vfio_pci_iommufd_setup(struct vfio_pci_device *device,
-				    const char *bdf, const char *vf_token)
+void vfio_pci_iommufd_cdev_open(struct vfio_pci_device *device, const char *bdf)
 {
 	const char *cdev_path = vfio_pci_get_cdev_path(bdf);
 
 	device->fd = open(cdev_path, O_RDWR);
 	VFIO_ASSERT_GE(device->fd, 0);
 	free((void *)cdev_path);
+}
 
+void vfio_pci_iommufd_iommudev_open(struct vfio_pci_device *device)
+{
 	/*
 	 * Require device->iommufd to be >0 so that a simple non-0 check can be
 	 * used to check if iommufd is enabled. In practice open() will never
 	 * return 0 unless stdin is closed.
 	 */
-	device->iommufd = open("/dev/iommu", O_RDWR);
-	VFIO_ASSERT_GT(device->iommufd, 0);
+	 device->iommufd = open("/dev/iommu", O_RDWR);
+	 VFIO_ASSERT_GT(device->iommufd, 0);
+}
 
+static void vfio_pci_iommufd_setup(struct vfio_pci_device *device,
+				    const char *bdf, const char *vf_token)
+{
+	vfio_pci_iommufd_cdev_open(device, bdf);
+	vfio_pci_iommufd_iommudev_open(device);
 	vfio_device_bind_iommufd(device->fd, device->iommufd, vf_token);
 	device->ioas_id = iommufd_ioas_alloc(device->iommufd);
 	vfio_device_attach_iommufd_pt(device->fd, device->ioas_id);
