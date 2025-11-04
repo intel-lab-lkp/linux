@@ -678,7 +678,7 @@ void fnic_mq_map_queues_cpus(struct Scsi_Host *host)
 {
 	struct fnic *fnic = *((struct fnic **) shost_priv(host));
 	struct pci_dev *l_pdev = fnic->pdev;
-	int intr_mode = fnic->config.intr_mode;
+	int intr_mode = vnic_dev_get_intr_mode(fnic->vdev);
 	struct blk_mq_queue_map *qmap = &host->tag_set.map[HCTX_TYPE_DEFAULT];
 
 	if (intr_mode == VNIC_DEV_INTR_MODE_MSI || intr_mode == VNIC_DEV_INTR_MODE_INTX) {
