@@ -7,6 +7,7 @@ Unsorted Documentation
    :maxdepth: 2
 
    crc32
+   gpio-rpmsg
    lzo
    magic-number
    remoteproc
