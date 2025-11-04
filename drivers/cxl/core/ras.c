@@ -139,6 +139,16 @@ void cxl_unmask_proto_interrupts(struct device *dev)
 	pci_aer_unmask_internal_errors(pdev);
 }
 
+void cxl_mask_proto_interrupts(struct device *dev)
+{
+	if (!dev || !dev_is_pci(dev))
+		return;
+
+	struct pci_dev *pdev __free(pci_dev_put) = pci_dev_get(to_pci_dev(dev));
+
+	pci_aer_mask_internal_errors(pdev);
+}
+
 static void cxl_dport_map_ras(struct cxl_dport *dport)
 {
 	struct cxl_register_map *map = &dport->reg_map;
