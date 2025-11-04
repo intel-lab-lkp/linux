@@ -146,15 +146,13 @@ static int clk_mt8173_apmixed_probe(struct platform_device *pdev)
 	struct clk_hw *hw;
 	int r;
 
-	base = of_iomap(node, 0);
-	if (!base)
-		return -ENOMEM;
+	base = devm_of_iomap(&pdev->dev, node, 0, NULL);
+	if (IS_ERR(base))
+		return PTR_ERR(base);
 
 	clk_data = mtk_alloc_clk_data(CLK_APMIXED_NR_CLK);
-	if (IS_ERR_OR_NULL(clk_data)) {
-		r = -ENOMEM;
-		goto unmap_io;
-	}
+	if (IS_ERR_OR_NULL(clk_data))
+		return -ENOMEM;
 
 	fhctl_parse_dt(fhctl_node, pllfhs, ARRAY_SIZE(pllfhs));
 	r = mtk_clk_register_pllfhs(node, plls, ARRAY_SIZE(plls),
@@ -188,8 +186,6 @@ unregister_plls:
 				  ARRAY_SIZE(pllfhs), clk_data);
 free_clk_data:
 	mtk_free_clk_data(clk_data);
-unmap_io:
-	iounmap(base);
 	return r;
 }
 
