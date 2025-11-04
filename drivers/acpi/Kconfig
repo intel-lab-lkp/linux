@@ -492,7 +492,11 @@ config ACPI_WATCHDOG
 
 config ACPI_EXTLOG
 	tristate "Extended Error Log support"
-	depends on X86_MCE && X86_LOCAL_APIC && EDAC
+	depends on X86_MCE && X86_LOCAL_APIC
+	select EDAC
+	select PCIEAER
+	select ACPI_APEI
+	select ACPI_APEI_PCIEAER
 	select UEFI_CPER
 	help
 	  Certain usages such as Predictive Failure Analysis (PFA) require
