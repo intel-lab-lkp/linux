@@ -2046,6 +2046,35 @@ int of_find_last_cache_level(unsigned int cpu)
 }
 
 /**
+ * of_iommu_map_id_actual_cell_count - determine the cell count for iommu-map.
+ *
+ * @map: pointer to the iommu-map property data that needs to be translated.
+ * @map_len: length of @map in bytes.
+ * @cell_count: value of #iommu-cells.
+ *
+ * The tuple represnting the iommu-map is in the format of
+ * 2 + cell_count(of #iommu-cells) + 1.
+ *
+ * Return: > 0 for success, 0 for failure.
+ */
+static u32 of_iommu_map_id_actual_cell_count(const __be32 *map, int map_len, u32 cell_count)
+{
+	u32 total_cell_count = 2 + cell_count + 1;
+
+	if (map_len % total_cell_count != 0)
+		return 0;
+
+	for (; map_len > 0; map_len -= total_cell_count * sizeof(*map), map += total_cell_count)
+		if (be32_to_cpup(map + total_cell_count - 1) != 1)
+			break;
+
+	if (map_len <= 0)
+		return cell_count;
+
+	return 0;
+}
+
+/**
  * of_iommu_map_id_legacy_cell_count - Determine the cell count for iommu-map.
  *
  * @map: pointer to the iommu-map property data that needs to be translated.
@@ -2091,12 +2120,14 @@ static u32 of_iommu_map_id_legacy_cell_count(const __be32 *map, int map_len)
  * Return: number of cells that the caller should be considered while parsing
  * the @map. It is > 0 for success, 0 for failure.
  */
-static int of_iommu_map_id_cell_count(const __be32 *map, int map_len)
+static int of_iommu_map_id_cell_count(const __be32 *map, int map_len, u32 cells)
 {
-	if (map_len % 4 != 0)
-		return 0;
+	u32 legacy_iommu_cells;
 
-	return of_iommu_map_id_legacy_cell_count(map, map_len);
+	if (map_len % 4 != 0)
+		legacy_iommu_cells = of_iommu_map_id_legacy_cell_count(map, map_len);
+
+	return legacy_iommu_cells ? : of_iommu_map_id_actual_cell_count(map, map_len, cells);
 }
 
 /**
@@ -2137,22 +2168,82 @@ static int of_map_id_cell_count(const __be32 *map, const char *map_name,
 	}
 
 	if (cells > 1 && !strcmp(map_name, "iommu-map"))
-		return of_iommu_map_id_cell_count(map, map_len);
+		return of_iommu_map_id_cell_count(map, map_len, cells);
 
 	return cells;
 }
 
-/*
- * Look at the documentation of of_map_id.
+/**
+ * of_map_id_untranslated - handle mapping of id that can't be translated.
+ *
+ * @map: pointer to the property data that needs to be translated, eg: msi-map/iommu-map.
+ * @cell_count: cell_count related to @map property.
+ * @id: input id that is given for translation.
+ * @arg: argument passed to the @fn.
+ * @pargs: filled by the contents of @map and pass to the @fn.
+ * @fn: Callback function that operated on @dev and @fn.
+ *
+ * The function populates the phandle args structure with the node and
+ * specifier cells, then invokes the callback function. The callback is
+ * responsible for releasing the node reference via of_node_put().
+ *
+ * Return: 0 on success, -EAGAIN, by fn() if ID doesn't match (continue searching),
+ *	   and standard error code on failure.
+ */
+static int of_map_id_untranslated(const __be32 *map, u32 cell_count, u32 id,
+			void *arg, struct of_phandle_args *pargs,
+			of_map_id_cb fn)
+{
+	struct device_node *phandle_node;
+	u32 id_base = be32_to_cpup(map + 0);
+	u32 phandle = be32_to_cpup(map + 1);
+	int ret, i;
+
+	if (!pargs || !fn)
+		return -EINVAL;
+
+	phandle_node = of_find_node_by_phandle(phandle);
+	if (!phandle_node)
+		return -ENODEV;
+
+	pargs->np = phandle_node;
+	pargs->args_count = cell_count;
+	for (i = 0; i < cell_count; ++i)
+		pargs->args[i] = be32_to_cpup(map + 2 + i);
+
+	/* fn() is responsible for calling of_node_put(pargs->np). */
+	ret = fn(id, id_base, arg, pargs);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+/**
+ * of_map_id_or_funcid - map an id through downstream mapping.
+ *
+ * @arg - optional argument and is passed onto @fn.
+ * @pargs - optional argument and is passed onto @fn.
+ * @fn - optional argument and is callback.
+ * Look at the documentation of of_map_id() for additional info.
+ *
+ * This is a wrapper function that includes iommu-map functionality,
+ * IOMMU specifier of which contains #iommu-cells > 1, i.e., tuple
+ * length that can be parsed by of_map_id() is > 4.
+ *
+ * Return: 0 on success or a standard error code on failure.
  */
 static int of_map_id_or_funcid(const struct device_node *np, u32 id,
 		const char *map_name, const char *map_mask_name,
-		struct device_node **target, u32 *id_out)
+		struct device_node **target, u32 *id_out,
+		void *arg, struct of_phandle_args *pargs,
+		of_map_id_cb fn)
 {
 	u32 map_mask, masked_id;
 	u32 cell_count, total_cells;
 	int map_len;
 	const __be32 *map = NULL;
+	bool mapped_id_or_funcid = false;
 
 	if (!np || !map_name || (!target && !id_out))
 		return -EINVAL;
@@ -2163,7 +2254,7 @@ static int of_map_id_or_funcid(const struct device_node *np, u32 id,
 			return -ENODEV;
 		/* Otherwise, no map implies no translation */
 		*id_out = id;
-		return 0;
+		goto bypass_or_callback;
 	}
 
 	cell_count = of_map_id_cell_count(map, map_name, map_len);
@@ -2195,6 +2286,15 @@ static int of_map_id_or_funcid(const struct device_node *np, u32 id,
 		u32 phandle = be32_to_cpup(map + 1);
 		u32 out_base = be32_to_cpup(map + 2);
 		u32 id_len = be32_to_cpup(map + total_cells - 1);
+		int ret;
+
+		if (cell_count > 1) {
+			ret = of_map_id_untranslated(map, cell_count, id, arg, pargs, fn);
+			if (ret && ret != -EAGAIN)
+				return ret;
+			mapped_id_or_funcid = true;
+			continue;
+		}
 
 		if (id_base & ~map_mask) {
 			pr_err("%pOF: Invalid %s translation - %s-mask (0x%x) ignores id-base (0x%x)\n",
@@ -2226,7 +2326,13 @@ static int of_map_id_or_funcid(const struct device_node *np, u32 id,
 		pr_debug("%pOF: %s, using mask %08x, id-base: %08x, out-base: %08x, length: %08x, id: %08x -> %08x\n",
 			np, map_name, map_mask, id_base, out_base,
 			id_len, id, masked_id - id_base + out_base);
-		return 0;
+		goto bypass_or_callback;
+	}
+
+	if (cell_count > 1) {
+		if (mapped_id_or_funcid)
+			return 0;
+		return -EINVAL;
 	}
 
 	pr_info("%pOF: no %s translation for id 0x%x on %pOF\n", np, map_name,
@@ -2235,7 +2341,9 @@ static int of_map_id_or_funcid(const struct device_node *np, u32 id,
 	/* Bypasses translation */
 	if (id_out)
 		*id_out = id;
-	return 0;
+
+bypass_or_callback:
+	return fn ? fn(id, id, arg, pargs) : 0;
 }
 
 /**
@@ -2261,6 +2369,7 @@ int of_map_id(const struct device_node *np, u32 id,
 	const char *map_name, const char *map_mask_name,
 	struct device_node **target, u32 *id_out)
 {
-	return of_map_id_or_funcid(np, id, map_name, map_mask_name, target, id_out);
+	return of_map_id_or_funcid(np, id, map_name, map_mask_name, target, id_out,
+					NULL, NULL, NULL);
 }
 EXPORT_SYMBOL_GPL(of_map_id);

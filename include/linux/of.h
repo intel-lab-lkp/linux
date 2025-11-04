@@ -22,8 +22,12 @@
 
 #include <asm/byteorder.h>
 
+struct of_phandle_args;
+
 typedef u32 phandle;
 typedef u32 ihandle;
+typedef int (*of_map_id_cb)(u32 id, u32 id_base, void *arg,
+				struct of_phandle_args *pargs);
 
 struct property {
 	char	*name;
