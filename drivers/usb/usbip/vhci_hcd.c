@@ -10,6 +10,7 @@
 #include <linux/kthread.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/printk.h>
 #include <linux/slab.h>
 #include <linux/string_choices.h>
 
@@ -44,7 +45,12 @@ static int vhci_get_frame_number(struct usb_hcd *hcd);
 static const char driver_name[] = "vhci_hcd";
 static const char driver_desc[] = "USB/IP Virtual Host Controller";
 
-int vhci_num_controllers = VHCI_NR_HCS;
+unsigned int vhci_num_controllers = VHCI_DEFAULT_NR_HCS;
+module_param_named(num_controllers, vhci_num_controllers, uint, 0444);
+MODULE_PARM_DESC(num_controllers, "Number of USB/IP virtual host controllers (range: 0-"
+		 __MODULE_STRING(VHCI_MAX_NR_HCS) ", default: "
+		 __MODULE_STRING(VHCI_DEFAULT_NR_HCS) ")");
+
 struct vhci *vhcis;
 
 static const char * const bit_desc[] = {
@@ -1532,8 +1538,14 @@ static int __init vhci_hcd_init(void)
 	if (usb_disabled())
 		return -ENODEV;
 
-	if (vhci_num_controllers < 1)
+	if (vhci_num_controllers < 1) {
+		pr_warn("num_controllers less than 1, setting to 1\n");
 		vhci_num_controllers = 1;
+	} else if (vhci_num_controllers > VHCI_MAX_NR_HCS) {
+		pr_warn("num_controllers too high, limiting to %d\n",
+			VHCI_MAX_NR_HCS);
+		vhci_num_controllers = VHCI_MAX_NR_HCS;
+	}
 
 	vhcis = kcalloc(vhci_num_controllers, sizeof(struct vhci), GFP_KERNEL);
 	if (vhcis == NULL)

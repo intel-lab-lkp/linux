@@ -82,11 +82,8 @@ enum hub_speed {
 /* Each VHCI has 2 hubs (USB2 and USB3), each has VHCI_HC_PORTS ports */
 #define VHCI_PORTS	(VHCI_HC_PORTS*2)
 
-#ifdef CONFIG_USBIP_VHCI_NR_HCS
-#define VHCI_NR_HCS CONFIG_USBIP_VHCI_NR_HCS
-#else
-#define VHCI_NR_HCS 1
-#endif
+#define VHCI_DEFAULT_NR_HCS 1
+#define VHCI_MAX_NR_HCS 128
 
 #define MAX_STATUS_NAME 16
 
@@ -118,7 +115,7 @@ struct vhci_hcd {
 	struct vhci_device vdev[VHCI_HC_PORTS];
 };
 
-extern int vhci_num_controllers;
+extern unsigned int vhci_num_controllers;
 extern struct vhci *vhcis;
 extern struct attribute_group vhci_attr_group;
 
