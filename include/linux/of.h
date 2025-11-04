@@ -410,6 +410,12 @@ extern int of_phandle_iterator_args(struct of_phandle_iterator *it,
 extern int of_alias_get_id(const struct device_node *np, const char *stem);
 extern int of_alias_get_highest_id(const char *stem);
 
+extern int of_map_id_or_funcid(const struct device_node *np, u32 id,
+	       const char *map_name, const char *map_mask_name,
+	       struct device_node **target, u32 *id_out,
+	       void *arg, struct of_phandle_args *pargs,
+	       of_map_id_cb fn);
+
 bool of_machine_compatible_match(const char *const *compats);
 
 /**
@@ -912,6 +918,15 @@ static inline void of_property_clear_flag(struct property *p, unsigned long flag
 static inline int of_map_id(const struct device_node *np, u32 id,
 			     const char *map_name, const char *map_mask_name,
 			     struct device_node **target, u32 *id_out)
+{
+	return -EINVAL;
+}
+
+static inline int of_map_id_or_funcid(const struct device_node *np, u32 id,
+	       const char *map_name, const char *map_mask_name,
+	       struct device_node **target, u32 *id_out,
+	       void *arg, struct of_phandle_args *pargs,
+	       of_map_id_cb fn)
 {
 	return -EINVAL;
 }

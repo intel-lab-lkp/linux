@@ -16,6 +16,7 @@
 #include <linux/pci.h>
 #include <linux/slab.h>
 #include <linux/fsl/mc.h>
+#include <linux/platform_device.h>
 
 #include "iommu-priv.h"
 
@@ -41,22 +42,60 @@ static int of_iommu_xlate(struct device *dev,
 	return ret;
 }
 
+/**
+ * of_iommu_map_xlate - Translate IOMMU mapping and release node reference.
+ *
+ * @id: bitmap for function id parsing(platform devices) or base id.
+ * @id_base: checked against @id
+ * @arg: Device to configure.
+ * @iommu_spec: IOMMU specifier from device tree.
+ *
+ * Wrapper function that calls of_iommu_xlate() to configure the IOMMU
+ * mapping for a device, then releases the device tree node reference.
+ * This is used as a callback function for of_map_id_or_funcid().
+ *
+ * When the cell_count > 1, the relation between input id(@id) and the
+ * output specifier is complex to define, like linear case when cell_count = 1,
+ * Handle such cases where linear relation can't be established between
+ * the @id and the output with the below relation:
+ * a) For platform devices, @id_base represents the function id, which is
+ * compared against the input @id, all maintained in bitmap relation.
+ * b) For other devices, it performs exact ID matching.
+ *
+ * Return: 0 on success, -EAGAIN if ID doesn't match
+ * and standard negative error code on failure.
+ */
+static int of_iommu_map_xlate(u32 id, u32 id_base,
+			void *arg, struct of_phandle_args *iommu_spec)
+{
+	struct device *dev = arg;
+	int ret;
+
+	if (iommu_spec->args_count > 1) {
+		if (dev_is_platform(dev)) {     /* case a. */
+			if (!(BIT(id_base - 1) & id))
+				return -EAGAIN;
+		} else if (id_base != id) {     /* case b. */
+			return -EAGAIN;
+		}
+
+	}
+
+	ret = of_iommu_xlate(dev, iommu_spec);
+	of_node_put(iommu_spec->np);
+	return ret;
+}
+
 static int of_iommu_configure_dev_id(struct device_node *master_np,
 				     struct device *dev,
 				     const u32 *id)
 {
 	struct of_phandle_args iommu_spec = { .args_count = 1 };
-	int err;
 
-	err = of_map_id(master_np, *id, "iommu-map",
-			 "iommu-map-mask", &iommu_spec.np,
-			 iommu_spec.args);
-	if (err)
-		return err;
-
-	err = of_iommu_xlate(dev, &iommu_spec);
-	of_node_put(iommu_spec.np);
-	return err;
+	return of_map_id_or_funcid(master_np, *id, "iommu-map",
+			"iommu-map-mask", &iommu_spec.np,
+			 iommu_spec.args, dev, &iommu_spec,
+			 of_iommu_map_xlate);
 }
 
 static int of_iommu_configure_dev(struct device_node *master_np,

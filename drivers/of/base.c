@@ -2181,7 +2181,7 @@ static int of_map_id_cell_count(const __be32 *map, const char *map_name,
  * @id: input id that is given for translation.
  * @arg: argument passed to the @fn.
  * @pargs: filled by the contents of @map and pass to the @fn.
- * @fn: Callback function that operated on @dev and @fn.
+ * @fn: Callback function that operates on @arg.
  *
  * The function populates the phandle args structure with the node and
  * specifier cells, then invokes the callback function. The callback is
@@ -2233,7 +2233,7 @@ static int of_map_id_untranslated(const __be32 *map, u32 cell_count, u32 id,
  *
  * Return: 0 on success or a standard error code on failure.
  */
-static int of_map_id_or_funcid(const struct device_node *np, u32 id,
+int of_map_id_or_funcid(const struct device_node *np, u32 id,
 		const char *map_name, const char *map_mask_name,
 		struct device_node **target, u32 *id_out,
 		void *arg, struct of_phandle_args *pargs,
