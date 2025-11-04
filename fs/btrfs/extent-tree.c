@@ -5768,7 +5768,7 @@ static noinline int do_walk_down(struct btrfs_trans_handle *trans,
 
 	ret = check_next_block_uptodate(trans, root, path, wc, next);
 	if (ret)
-		return ret;
+		goto out_unlock;
 
 	level--;
 	ASSERT(level == btrfs_header_level(next));
