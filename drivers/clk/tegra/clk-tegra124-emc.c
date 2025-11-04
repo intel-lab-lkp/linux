@@ -444,6 +444,7 @@ static int load_timings_from_dt(struct tegra_clk_emc *tegra,
 				u32 ram_code)
 {
 	struct emc_timing *timings_ptr;
+	struct emc_timing *new_timings;
 	struct device_node *child;
 	int child_count = of_get_child_count(node);
 	int i = 0, err;
@@ -451,10 +452,15 @@ static int load_timings_from_dt(struct tegra_clk_emc *tegra,
 
 	size = (tegra->num_timings + child_count) * sizeof(struct emc_timing);
 
-	tegra->timings = krealloc(tegra->timings, size, GFP_KERNEL);
-	if (!tegra->timings)
+	new_timings  = krealloc(tegra->timings, size, GFP_KERNEL);
+	if (!new_timings) {
+		kfree(tegra->timings);
+		tegra->timings = NULL;
+		tegra->num_timings = 0;
 		return -ENOMEM;
+	}
 
+	tegra->timings = new_timings;
 	timings_ptr = tegra->timings + tegra->num_timings;
 	tegra->num_timings += child_count;
 
