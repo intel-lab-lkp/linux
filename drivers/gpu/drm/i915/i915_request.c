@@ -657,7 +657,7 @@ bool __i915_request_submit(struct i915_request *request)
 	if (request->sched.semaphores &&
 	    i915_sw_fence_signaled(&request->semaphore))
 		engine->saturated |= request->sched.semaphores;
-
+	/*It seems that breadcrumbs are being emitted here.*/
 	engine->emit_fini_breadcrumb(request,
 				     request->ring->vaddr + request->postfix);
 
