@@ -290,6 +290,142 @@ The available attributes are:
     'sync' mode. This is to ensure correct iaa_crypto behavior until true
     async polling without interrupts is enabled in iaa_crypto.
 
+  - g_comp_wqs_per_iaa
+
+    Number of compress-only WQs. The default is 1, but is applicable only
+    if the device has more than 1 WQ. If the device has exactly 1 WQ
+    configured, "g_comp_wqs_per_iaa" is a don't care.
+
+    If the IAA device has more than "g_comp_wqs_per_iaa" WQs configured,
+    the last "g_comp_wqs_per_iaa" number of WQs will be considered as
+    "compress only". The remaining WQs will be considered as "decomp only".
+
+    If the device has less than or equal to "g_comp_wqs_per_iaa" WQs, all
+    the device's WQs will be considered "generic", i.e., the driver will
+    submit compress and decompress jobs to all the WQs configured for the
+    device.
+
+    For e.g., if an IAA "X" has 2 WQs, this will set up 1 decompress WQ and
+    1 compress WQ::
+
+      echo 1 > /sys/bus/dsa/drivers/crypto/g_comp_wqs_per_iaa
+
+     wqX.0: decompress jobs only.
+     wqX.1: compress jobs only.
+
+    This setting would typically benefit workloads that see a high
+    level of compress and decompress activity.
+
+    If an IAA has 1 WQ, that WQ will be considered "generic": the driver
+    will submit compress and decompress jobs to the same WQ (this is
+    independent of the "g_comp_wqs_per_iaa" setting):
+
+     wqX.0: compress and decompress jobs.
+
+    This would typically benefit workloads that see significant cold
+    memory being reclaimed, and consequently, high swapout and low swapin
+    activity.
+
+  - distribute_comps
+
+    Distribute compressions to all IAAs on package (default is Y).
+
+    Assuming the WQ type has been established as
+    compress-only/decompress-only/generic, this setting will determine if
+    the driver will distribute compress jobs to all IAAs on a package
+    (default behavior) or not.
+
+    If this is turned off, the driver will dispatch compress jobs to a
+    given IAA "compression enabled" WQ only from cores that are mapped to
+    that IAA using an algorithm that evenly distributes IAAs per package
+    to cores per package. For e.g., on a Sapphire Rapids server with
+    56-physical-cores and 4 IAAs per package, with Hyperthreading, 28
+    logical cores will be assigned to each IAA. With the
+    "distribute_comps" driver parameter turned off, the driver will send
+    compress jobs only to it's assigned IAA device.
+
+    Enabling "distribute_comps" would typically benefit workloads in
+    terms of batch compress latency and throughput.
+
+  - distribute_decomps
+
+    Distribute decompressions to all IAAs on package (default is Y).
+
+    Assuming the WQ type has been established as
+    compress-only/decompress-only/generic, this setting will determine if
+    the driver will distribute decompress jobs to all IAAs on a package
+    (default behavior) or not.
+
+    Enabling "distribute_decomps" would typically benefit workloads that
+    see a high level of compress and decompress activity, especially
+    p99 decompress latency.
+
+    Recommended settings for best compress/decompress latency, throughput
+    and hence memory savings for a moderately contended server that
+    has more than 1 IAA device enabled on a given package:
+
+      2 WQs per IAA
+      g_comp_wqs_per_iaa = 1 (separate WQ for comps/decomps per IAA)
+      distribute_decomps = Y
+      distribute_comps = Y
+
+    For a system that has only 1 IAA device enabled on a given package,
+    the recommended settings are:
+
+      1 WQ per IAA
+      g_comp_wqs_per_iaa = 0 (same WQ for comps/decomps)
+      distribute_decomps = N
+      distribute_comps = N
+
+    Examples:
+
+    For a Sapphire Rapids server with 2 packages, 56 cores and 4 IAAs per
+    package, each IAA has 2 WQs, and these settings are in effect::
+
+      echo 1 > /sys/bus/dsa/drivers/crypto/g_comp_wqs_per_iaa
+      echo 1 > /sys/bus/dsa/drivers/crypto/distribute_comps
+      echo 0 > /sys/bus/dsa/drivers/crypto/distribute_decomps
+
+    This enables the following behavior:
+
+      wqX.0: decompress jobs only.
+      wqX.1: compress jobs only.
+
+    Compress jobs from all cores on package-0 will be distributed in
+    round-robin manner to [iax1, iax3, iax5, iax7]'s wqX.1, to maximize
+    compression throughput/latency/memory savings:
+
+      wq1.1
+      wq3.1
+      wq5.1
+      wq7.1
+
+    Likewise, compress jobs from all cores on package-1 will be
+    distributed in round-robin manner to [iax9, iax11, iax13, iax15]'s
+    wqX.1, to maximize compression throughput/latency/memory savings for
+    workloads running on package-1:
+
+      wq9.1
+      wq11.1
+      wq13.1
+      wq15.1
+
+    Decompress jobs will be submitted from mapped logical cores only, as
+    follows:
+
+      package-0:
+
+        CPU   0-13,112-125   14-27,126-139  28-41,140-153  42-55,154-167
+        IAA:  iax1           iax3           iax5           iax7
+        WQ:   wq1.0          wq3.0          wq5.0          wq7.0
+
+      package-1:
+
+        CPU   56-69,168-181  70-83,182-195  84-97,196-209   98-111,210-223
+        IAA:  iax9           iax11          iax13           iax15
+        WQ:   wq9.0          wq11.0         wq13.0          wq15.0
+
+
 .. _iaa_default_config:
 
 IAA Default Configuration
