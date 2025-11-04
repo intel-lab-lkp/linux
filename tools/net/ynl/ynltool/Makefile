@@ -10,24 +10,29 @@ CFLAGS := -Wall -Wextra -Werror -O2
 ifeq ("$(DEBUG)","1")
   CFLAGS += -g -fsanitize=address -fsanitize=leak -static-libasan
 endif
-CFLAGS += -I../lib
+CFLAGS += -I../lib -I../generated -I../../../include/uapi/
 
 SRCS := $(wildcard *.c)
 OBJS := $(patsubst %.c,$(OUTPUT)%.o,$(SRCS))
 
 YNLTOOL := $(OUTPUT)ynltool
+LIBS := ../lib/ynl.a ../generated/netdev-user.o
 
 include $(wildcard *.d)
 
 all: $(YNLTOOL)
 
-$(YNLTOOL): $(OBJS)
+$(YNLTOOL): $(OBJS) $(LIBS)
 	@echo -e "\tLINK $@"
-	@$(CC) $(CFLAGS) -o $@ $(OBJS)
+	@$(CC) $(CFLAGS) -o $@ $(OBJS) $(LIBS) -lmnl
 
 %.o: %.c main.h json_writer.h
 	@echo -e "\tCC $@"
 	@$(COMPILE.c) -MMD -c -o $@ $<
+
+../generated/netdev-user.o: ../generated/netdev-user.c
+	@echo -e "\tCC $@"
+	@$(CC) $(filter-out -Werror -fsanitize=address -fsanitize=leak -static-libasan,$(CFLAGS)) -MMD -c -o $@ $<
 
 clean:
 	rm -f *.o *.d *~
