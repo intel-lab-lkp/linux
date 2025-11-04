@@ -307,4 +307,6 @@ void vfio_pci_iommufd_cdev_open(struct vfio_pci_device *device, const char *bdf)
 void vfio_pci_iommufd_iommudev_open(struct vfio_pci_device *device);
 int __vfio_device_bind_iommufd(int device_fd, int iommufd, const char *vf_token);
 
+void vfio_device_set_vf_token(int fd, const char *vf_token);
+
 #endif /* SELFTESTS_VFIO_LIB_INCLUDE_VFIO_UTIL_H */
