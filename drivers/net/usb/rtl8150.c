@@ -719,14 +719,15 @@ static netdev_tx_t rtl8150_start_xmit(struct sk_buff *skb,
 
 static void set_carrier(struct net_device *netdev)
 {
-	rtl8150_t *dev = netdev_priv(netdev);
-	short tmp;
+    rtl8150_t *dev = netdev_priv(netdev);
+    short tmp;
 
-	get_registers(dev, CSCR, 2, &tmp);
-	if (tmp & CSCR_LINK_STATUS)
-		netif_carrier_on(netdev);
-	else
-		netif_carrier_off(netdev);
+    /* Only use tmp if get_registers() succeeds */
+    if (!get_registers(dev, CSCR, 2, &tmp) &&
+        (tmp & CSCR_LINK_STATUS))
+        netif_carrier_on(netdev);
+    else
+        netif_carrier_off(netdev);
 }
 
 static int rtl8150_open(struct net_device *netdev)
@@ -741,6 +742,10 @@ static int rtl8150_open(struct net_device *netdev)
 
 	set_registers(dev, IDR, 6, netdev->dev_addr);
 
+	/* Fix: initialize memory before using it (KMSAN uninit-value) */
+	memset(dev->rx_skb->data, 0, RTL8150_MTU);
+	memset(dev->intr_buff, 0, INTBUFSIZE);
+
 	usb_fill_bulk_urb(dev->rx_urb, dev->udev, usb_rcvbulkpipe(dev->udev, 1),
 		      dev->rx_skb->data, RTL8150_MTU, read_bulk_callback, dev);
 	if ((res = usb_submit_urb(dev->rx_urb, GFP_KERNEL))) {
@@ -749,6 +754,7 @@ static int rtl8150_open(struct net_device *netdev)
 		dev_warn(&netdev->dev, "rx_urb submit failed: %d\n", res);
 		return res;
 	}
+
 	usb_fill_int_urb(dev->intr_urb, dev->udev, usb_rcvintpipe(dev->udev, 3),
 		     dev->intr_buff, INTBUFSIZE, intr_callback,
 		     dev, dev->intr_interval);
@@ -759,6 +765,7 @@ static int rtl8150_open(struct net_device *netdev)
 		usb_kill_urb(dev->rx_urb);
 		return res;
 	}
+
 	enable_net_traffic(dev);
 	set_carrier(netdev);
 	netif_start_queue(netdev);
