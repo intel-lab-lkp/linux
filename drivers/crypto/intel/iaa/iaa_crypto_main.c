@@ -2390,6 +2390,36 @@ static int iaa_comp_acompress_batch(
 	return err;
 }
 
+/*
+ * Find the two largest source buffers in @slens for a decompress batch,
+ * and pass their indices back in @idx_max and @idx_next_max.
+ *
+ * Returns true if there is no second largest source buffer, only a max buffer.
+ */
+static bool decomp_batch_get_max_slens_idx(
+	struct iaa_req *reqs[],
+	int nr_pages,
+	int *idx_max,
+	int *idx_next_max)
+{
+	int i, max_i = 0, next_max_i = 0;
+
+	for (i = 0; i < nr_pages; ++i) {
+		if (reqs[i]->slen >= reqs[max_i]->slen) {
+			next_max_i = max_i;
+			max_i = i;
+		} else if ((next_max_i == max_i) ||
+			   (reqs[i]->slen > reqs[next_max_i]->slen)) {
+			next_max_i = i;
+		}
+	}
+
+	*idx_max = max_i;
+	*idx_next_max = next_max_i;
+
+	return (next_max_i == max_i);
+}
+
 /**
  * This API provides IAA decompress batching functionality for use by swap
  * modules.
@@ -2412,13 +2442,14 @@ static int iaa_comp_adecompress_batch(
 	unsigned int unit_size)
 {
 	struct iaa_batch_ctx *cpu_ctx = raw_cpu_ptr(iaa_batch_ctx);
+	bool max_processed = false, next_max_processed = false;
 	int nr_reqs = parent_req->dlen / unit_size;
 	int errors[IAA_CRYPTO_MAX_BATCH_SIZE];
 	int *dlens[IAA_CRYPTO_MAX_BATCH_SIZE];
+	int i = 0, max_i, next_max_i, err = 0;
 	bool decompressions_done = false;
 	struct scatterlist *sg;
 	struct iaa_req **reqs;
-	int i, err = 0;
 
 	mutex_lock(&cpu_ctx->mutex);
 
@@ -2438,10 +2469,27 @@ static int iaa_comp_adecompress_batch(
 	iaa_set_req_poll(reqs, nr_reqs, true);
 
 	/*
+	 * Get the indices of the two largest decomp buffers in the batch.
+	 * Submit them first. This improves latency of the batch.
+	 */
+	next_max_processed = decomp_batch_get_max_slens_idx(reqs, nr_reqs,
+							    &max_i, &next_max_i);
+
+	i = max_i;
+
+	/*
 	 * Prepare and submit the batch of iaa_reqs to IAA. IAA will process
 	 * these decompress jobs in parallel.
 	 */
-	for (i = 0; i < nr_reqs; ++i) {
+	for (; i < nr_reqs; ++i) {
+		if ((i == max_i) && max_processed)
+			continue;
+		if ((i == next_max_i) && max_processed && next_max_processed)
+			continue;
+
+		if (max_processed && !next_max_processed)
+			i = next_max_i;
+
 		errors[i] = iaa_comp_adecompress(ctx, reqs[i]);
 
 		/*
@@ -2455,6 +2503,15 @@ static int iaa_comp_adecompress_batch(
 			err = -EINVAL;
 		} else {
 			*dlens[i] = reqs[i]->dlen;
+		}
+
+		if (i == max_i) {
+			max_processed = true;
+			i = -1;
+		}
+		if (i == next_max_i) {
+			next_max_processed = true;
+			i = -1;
 		}
 	}
 
