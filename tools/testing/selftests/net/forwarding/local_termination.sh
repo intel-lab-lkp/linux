@@ -430,6 +430,8 @@ standalone()
 	h1_create
 	h2_create
 	macvlan_create $h2
+	setup_wait_dev $h1
+	setup_wait_dev $h2
 
 	run_test $h1 $h2 $skip_ptp $no_unicast_flt "$h2"
 
@@ -448,6 +450,8 @@ test_bridge()
 	bridge_create $vlan_filtering
 	simple_if_init br0 $H2_IPV4/24 $H2_IPV6/64
 	macvlan_create br0
+	setup_wait_dev $h1
+	setup_wait_dev $h2
 
 	run_test $h1 br0 $skip_ptp $no_unicast_flt \
 		"vlan_filtering=$vlan_filtering bridge"
@@ -480,6 +484,8 @@ test_vlan()
 	h1_vlan_create
 	h2_vlan_create
 	macvlan_create $h2.100
+	setup_wait_dev $h1
+	setup_wait_dev $h2
 
 	run_test $h1.100 $h2.100 $skip_ptp $no_unicast_flt "VLAN upper"
 
@@ -505,6 +511,8 @@ vlan_over_bridged_port()
 	h2_vlan_create
 	bridge_create $vlan_filtering
 	macvlan_create $h2.100
+	setup_wait_dev $h1
+	setup_wait_dev $h2
 
 	run_test $h1.100 $h2.100 $skip_ptp $no_unicast_flt \
 		"VLAN over vlan_filtering=$vlan_filtering bridged port"
@@ -536,6 +544,8 @@ vlan_over_bridge()
 	simple_if_init br0
 	vlan_create br0 100 vbr0 $H2_IPV4/24 $H2_IPV6/64
 	macvlan_create br0.100
+	setup_wait_dev $h1
+	setup_wait_dev $h2
 
 	if [ $vlan_filtering = 1 ]; then
 		bridge vlan add dev $h2 vid 100 master
