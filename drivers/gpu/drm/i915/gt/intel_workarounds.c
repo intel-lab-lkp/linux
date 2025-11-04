@@ -1404,7 +1404,7 @@ xehp_init_mcr(struct intel_gt *gt, struct i915_wa_list *wal)
 	 * we'll just steer to a hardcoded "2" since that value will work
 	 * everywhere.
 	 */
-	__set_mcr_steering(wal, MCFG_MCR_SELECTOR, 0, 2);
+	__set_mcr_steering(wal, STEER_SEMAPHORE, 0, 2);
 	__set_mcr_steering(wal, SF_MCR_SELECTOR, 0, 2);
 
 	/*

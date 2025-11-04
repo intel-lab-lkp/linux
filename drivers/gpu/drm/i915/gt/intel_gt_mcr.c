@@ -354,7 +354,7 @@ void intel_gt_mcr_lock(struct intel_gt *gt, unsigned long *flags)
 		intel_uncore_forcewake_get(gt->uncore, FORCEWAKE_GT);
 
 		err = wait_for(intel_uncore_read_fw(gt->uncore,
-						    MTL_STEER_SEMAPHORE) == 0x1, 100);
+						    STEER_SEMAPHORE) == 0x1, 100);
 	}
 
 	/*
@@ -393,7 +393,7 @@ void intel_gt_mcr_unlock(struct intel_gt *gt, unsigned long flags)
 	spin_unlock_irqrestore(&gt->mcr_lock, flags);
 
 	if (GRAPHICS_VER_FULL(gt->i915) >= IP_VER(12, 70)) {
-		intel_uncore_write_fw(gt->uncore, MTL_STEER_SEMAPHORE, 0x1);
+		intel_uncore_write_fw(gt->uncore, STEER_SEMAPHORE, 0x1);
 
 		intel_uncore_forcewake_put(gt->uncore, FORCEWAKE_GT);
 	}
@@ -418,7 +418,7 @@ void intel_gt_mcr_lock_sanitize(struct intel_gt *gt)
 	lockdep_assert_not_held(&gt->mcr_lock);
 
 	if (GRAPHICS_VER_FULL(gt->i915) >= IP_VER(12, 70))
-		intel_uncore_write_fw(gt->uncore, MTL_STEER_SEMAPHORE, 0x1);
+		intel_uncore_write_fw(gt->uncore, STEER_SEMAPHORE, 0x1);
 }
 
 /**
