@@ -20,6 +20,7 @@
 #include <linux/percpu.h>
 #include <linux/sched/isolation.h>
 #include <linux/xarray.h>
+#include <linux/units.h>
 
 #include <asm/cpu.h>
 #include <asm/cputype.h>
@@ -144,6 +145,8 @@ int __init parse_acpi_topology(void)
  */
 static DEFINE_PER_CPU_READ_MOSTLY(unsigned long, arch_max_freq_scale) =  1UL << (2 * SCHED_CAPACITY_SHIFT);
 static cpumask_var_t amu_fie_cpus;
+static DEFINE_PER_CPU(unsigned long, core_delta);
+static DEFINE_PER_CPU(unsigned long, const_delta);
 
 struct amu_cntr_sample {
 	u64		arch_const_cycles_prev;
@@ -246,6 +249,7 @@ static void amu_scale_freq_tick(void)
 	 * arch_max_freq_scale and the use of SCHED_CAPACITY_SHIFT.
 	 */
 	scale = core_cnt - prev_core_cnt;
+	this_cpu_write(core_delta, scale);
 	scale *= this_cpu_read(arch_max_freq_scale);
 	scale = div64_u64(scale >> SCHED_CAPACITY_SHIFT,
 			  const_cnt - prev_const_cnt);
@@ -253,6 +257,7 @@ static void amu_scale_freq_tick(void)
 	scale = min_t(unsigned long, scale, SCHED_CAPACITY_SCALE);
 	this_cpu_write(arch_freq_scale, (unsigned long)scale);
 
+	this_cpu_write(const_delta, const_cnt - prev_const_cnt);
 	amu_sample->last_scale_update = jiffies;
 }
 
@@ -288,7 +293,7 @@ int arch_freq_get_on_cpu(int cpu)
 	unsigned int start_cpu = cpu;
 	unsigned long last_update;
 	unsigned int freq = 0;
-	u64 scale;
+	u64 delta_core_kHz;
 
 	if (!amu_fie_cpu_supported(cpu) || !arch_scale_freq_ref(cpu))
 		return -EOPNOTSUPP;
@@ -340,14 +345,11 @@ int arch_freq_get_on_cpu(int cpu)
 			break;
 		}
 	}
-	/*
-	 * Reversed computation to the one used to determine
-	 * the arch_freq_scale value
-	 * (see amu_scale_freq_tick for details)
-	 */
-	scale = arch_scale_freq_capacity(cpu);
-	freq = scale * arch_scale_freq_ref(cpu);
-	freq >>= SCHED_CAPACITY_SHIFT;
+
+	if (check_mul_overflow(per_cpu(core_delta, cpu), arch_timer_get_cntfrq(), &delta_core_kHz))
+		return -EINVAL;
+
+	freq = div_u64(delta_core_kHz, per_cpu(const_delta, cpu) * HZ_PER_KHZ);
 	return freq;
 }
 
