@@ -118,6 +118,28 @@
 #define  CSR_TLBREHI_PS_SHIFT		0
 #define  CSR_TLBREHI_PS			(0x3fUL << CSR_TLBREHI_PS_SHIFT)
 
+#define csr_read(csr)				\
+({						\
+	register unsigned long __v;		\
+	__asm__ __volatile__(			\
+		"csrrd %[val], %[reg]\n\t"	\
+		: [val] "=r" (__v)		\
+		: [reg] "i" (csr)		\
+		: "memory");			\
+	__v;					\
+})
+
+#define csr_write(v, csr)			\
+({						\
+	register unsigned long __v = v;		\
+	__asm__ __volatile__ (			\
+		"csrwr %[val], %[reg]\n\t"	\
+		: [val] "+r" (__v)		\
+		: [reg] "i" (csr)		\
+		: "memory");			\
+	__v;					\
+})
+
 #define EXREGS_GPRS			(32)
 
 #ifndef __ASSEMBLER__
@@ -147,6 +169,36 @@ struct handlers {
 void vm_init_descriptor_tables(struct kvm_vm *vm);
 void vm_install_exception_handler(struct kvm_vm *vm, int vector, handler_fn handler);
 
+static inline void local_irq_enable(void)
+{
+	unsigned int flags = CSR_CRMD_IE;
+
+	register unsigned int mask asm("$t0") = CSR_CRMD_IE;
+
+	__asm__ __volatile__(
+		"csrxchg %[val], %[mask], %[reg]\n\t"
+		: [val] "+r" (flags)
+		: [mask] "r" (mask), [reg] "i" (LOONGARCH_CSR_CRMD)
+		: "memory");
+}
+
+static inline void local_irq_disable(void)
+{
+	unsigned int flags = 0;
+
+	register unsigned int mask asm("$t0") = CSR_CRMD_IE;
+
+	__asm__ __volatile__(
+		"csrxchg %[val], %[mask], %[reg]\n\t"
+		: [val] "+r" (flags)
+		: [mask] "r" (mask), [reg] "i" (LOONGARCH_CSR_CRMD)
+		: "memory");
+}
+
+static inline void cpu_relax(void)
+{
+	asm volatile("nop" ::: "memory");
+}
 #else
 #define PC_OFFSET_EXREGS		((EXREGS_GPRS + 0) * 8)
 #define ESTAT_OFFSET_EXREGS		((EXREGS_GPRS + 1) * 8)

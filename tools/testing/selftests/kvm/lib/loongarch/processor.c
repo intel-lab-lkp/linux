@@ -373,3 +373,8 @@ void vcpu_arch_set_entry_point(struct kvm_vcpu *vcpu, void *guest_code)
 	regs.pc = (uint64_t)guest_code;
 	vcpu_regs_set(vcpu, &regs);
 }
+
+uint32_t guest_get_vcpuid(void)
+{
+	return csr_read(LOONGARCH_CSR_CPUID);
+}
