@@ -5,6 +5,7 @@
 
 #include <linux/device.h>
 #include <linux/fpga/fpga-mgr.h>
+#include <linux/err.h>
 
 struct fpga_bridge;
 
@@ -63,6 +64,10 @@ struct fpga_bridge {
 
 #define to_fpga_bridge(d) container_of(d, struct fpga_bridge, dev)
 
+#define fpga_bridge_register(parent, name, br_ops, priv) \
+	__fpga_bridge_register(parent, name, br_ops, priv, THIS_MODULE)
+
+#ifdef CONFIG_FPGA_BRIDGE
 struct fpga_bridge *of_fpga_bridge_get(struct device_node *node,
 				       struct fpga_image_info *info);
 struct fpga_bridge *fpga_bridge_get(struct device *dev,
@@ -81,12 +86,78 @@ int of_fpga_bridge_get_to_list(struct device_node *np,
 			       struct fpga_image_info *info,
 			       struct list_head *bridge_list);
 
-#define fpga_bridge_register(parent, name, br_ops, priv) \
-	__fpga_bridge_register(parent, name, br_ops, priv, THIS_MODULE)
 struct fpga_bridge *
 __fpga_bridge_register(struct device *parent, const char *name,
 		       const struct fpga_bridge_ops *br_ops, void *priv,
 		       struct module *owner);
 void fpga_bridge_unregister(struct fpga_bridge *br);
+
+#else
+static inline struct fpga_bridge *
+of_fpga_bridge_get(struct device_node *node, struct fpga_image_info *info)
+{
+	return ERR_PTR(-EOPNOTSUPP);
+}
+
+static inline struct fpga_bridge *
+fpga_bridge_get(struct device *dev, struct fpga_image_info *info)
+{
+	return ERR_PTR(-EOPNOTSUPP);
+}
+
+static inline void fpga_bridge_put(struct fpga_bridge *bridge)
+{
+}
+
+static inline int fpga_bridge_enable(struct fpga_bridge *bridge)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int fpga_bridge_disable(struct fpga_bridge *bridge)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int fpga_bridges_enable(struct list_head *bridge_list)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int fpga_bridges_disable(struct list_head *bridge_list)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline void fpga_bridges_put(struct list_head *bridge_list)
+{
+}
+
+static inline int fpga_bridge_get_to_list(struct device *dev,
+					  struct fpga_image_info *info,
+					  struct list_head *bridge_list)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int of_fpga_bridge_get_to_list(struct device_node *np,
+					     struct fpga_image_info *info,
+					     struct list_head *bridge_list)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline struct fpga_bridge *
+__fpga_bridge_register(struct device *parent, const char *name,
+		       const struct fpga_bridge_ops *br_ops, void *priv,
+		       struct module *owner)
+{
+	return ERR_PTR(-EOPNOTSUPP);
+}
+
+static inline void fpga_bridge_unregister(struct fpga_bridge *br)
+{
+}
+#endif
 
 #endif /* _LINUX_FPGA_BRIDGE_H */
