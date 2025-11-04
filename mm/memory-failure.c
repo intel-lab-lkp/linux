@@ -60,9 +60,12 @@
 #include <linux/pagewalk.h>
 #include <linux/shmem_fs.h>
 #include <linux/sysctl.h>
+
+#define CREATE_TRACE_POINTS
+#include <trace/events/memory-failure.h>
+
 #include "swap.h"
 #include "internal.h"
-#include "ras/ras_event.h"
 
 #define SOFT_OFFLINE_ENABLED		BIT(0)
 #define SOFT_OFFLINE_SKIP_HUGETLB	BIT(1)
