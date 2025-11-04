@@ -96,8 +96,13 @@ struct inode *bfs_iget(struct super_block *sb, unsigned long ino)
 	i_uid_write(inode, le32_to_cpu(di->i_uid));
 	i_gid_write(inode,  le32_to_cpu(di->i_gid));
 	set_nlink(inode, le32_to_cpu(di->i_nlink));
-	inode->i_size = BFS_FILESIZE(di);
 	inode->i_blocks = BFS_FILEBLOCKS(di);
+	/* For directories i_eoffset == 0xffffffff means "unused" */
+	/* Calculate file size from number of used blocks instead */
+	if (S_ISDIR(inode->i_mode) && le32_to_cpu(di->i_eoffset) == U32_MAX)
+		inode->i_size = inode->i_blocks * BFS_BSIZE;
+	else
+		inode->i_size = BFS_FILESIZE(di);
 	inode_set_atime(inode, le32_to_cpu(di->i_atime), 0);
 	inode_set_mtime(inode, le32_to_cpu(di->i_mtime), 0);
 	inode_set_ctime(inode, le32_to_cpu(di->i_ctime), 0);
