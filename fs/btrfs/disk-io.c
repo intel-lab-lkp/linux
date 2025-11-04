@@ -1671,18 +1671,22 @@ static void backup_super_roots(struct btrfs_fs_info *info)
 		struct btrfs_root *extent_root = btrfs_extent_root(info, 0);
 		struct btrfs_root *csum_root = btrfs_csum_root(info, 0);
 
-		btrfs_set_backup_extent_root(root_backup,
-					     extent_root->node->start);
-		btrfs_set_backup_extent_root_gen(root_backup,
-				btrfs_header_generation(extent_root->node));
-		btrfs_set_backup_extent_root_level(root_backup,
-					btrfs_header_level(extent_root->node));
+		if (unlikely(!extent_root || !csum_root)) {
+			btrfs_warn(info, "failed to get extent or csum root for backup");
+		} else {
+			btrfs_set_backup_extent_root(root_backup,
+						     extent_root->node->start);
+			btrfs_set_backup_extent_root_gen(root_backup,
+					btrfs_header_generation(extent_root->node));
+			btrfs_set_backup_extent_root_level(root_backup,
+						btrfs_header_level(extent_root->node));
 
-		btrfs_set_backup_csum_root(root_backup, csum_root->node->start);
-		btrfs_set_backup_csum_root_gen(root_backup,
-					       btrfs_header_generation(csum_root->node));
-		btrfs_set_backup_csum_root_level(root_backup,
-						 btrfs_header_level(csum_root->node));
+			btrfs_set_backup_csum_root(root_backup, csum_root->node->start);
+			btrfs_set_backup_csum_root_gen(root_backup,
+						       btrfs_header_generation(csum_root->node));
+			btrfs_set_backup_csum_root_level(root_backup,
+							 btrfs_header_level(csum_root->node));
+		}
 	}
 
 	/*
