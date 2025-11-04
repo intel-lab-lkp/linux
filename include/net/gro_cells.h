@@ -10,6 +10,7 @@ struct gro_cell;
 
 struct gro_cells {
 	struct gro_cell __percpu	*cells;
+	struct lock_class_key		cells_bh_key;
 };
 
 int gro_cells_receive(struct gro_cells *gcells, struct sk_buff *skb);

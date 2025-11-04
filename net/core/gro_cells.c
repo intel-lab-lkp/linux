@@ -88,6 +88,7 @@ int gro_cells_init(struct gro_cells *gcells, struct net_device *dev)
 
 		__skb_queue_head_init(&cell->napi_skbs);
 		local_lock_init(&cell->bh_lock);
+		lockdep_set_class(&cell->bh_lock, &gcells->cells_bh_key);
 
 		set_bit(NAPI_STATE_NO_BUSY_POLL, &cell->napi.state);
 
