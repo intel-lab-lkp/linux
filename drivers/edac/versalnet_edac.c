@@ -758,7 +758,17 @@ static void versal_edac_release(struct device *dev)
 	kfree(dev);
 }
 
-static int init_versalnet(struct mc_priv *priv, struct platform_device *pdev)
+static void remove_mc(struct mc_priv *priv, int i)
+{
+	struct mem_ctl_info *mci;
+
+	mci = priv->mci[i];
+	device_unregister(mci->pdev);
+	edac_mc_del_mc(mci->pdev);
+	edac_mc_free(mci);
+}
+
+static int init_mc(struct mc_priv *priv, struct platform_device *pdev, int i)
 {
 	u32 num_chans, rank, dwidth, config;
 	struct edac_mc_layer layers[2];
@@ -766,87 +776,90 @@ static int init_versalnet(struct mc_priv *priv, struct platform_device *pdev)
 	struct device *dev;
 	enum dev_type dt;
 	char *name;
+	int rc;
+
+	config = priv->adec[CONF + i * ADEC_NUM];
+	num_chans = FIELD_GET(MC5_NUM_CHANS_MASK, config);
+	rank = 1 << FIELD_GET(MC5_RANK_MASK, config);
+	dwidth = FIELD_GET(MC5_BUS_WIDTH_MASK, config);
+
+	switch (dwidth) {
+	case XDDR5_BUS_WIDTH_16:
+		dt = DEV_X16;
+		break;
+	case XDDR5_BUS_WIDTH_32:
+		dt = DEV_X32;
+		break;
+	case XDDR5_BUS_WIDTH_64:
+		dt = DEV_X64;
+		break;
+	default:
+		dt = DEV_UNKNOWN;
+	}
+
+	if (dt == DEV_UNKNOWN)
+		return 0;
+
+	/* Find the first enabled device and register that one. */
+	layers[0].type = EDAC_MC_LAYER_CHIP_SELECT;
+	layers[0].size = rank;
+	layers[0].is_virt_csrow = true;
+	layers[1].type = EDAC_MC_LAYER_CHANNEL;
+	layers[1].size = num_chans;
+	layers[1].is_virt_csrow = false;
+
+	rc = -ENOMEM;
+	mci = edac_mc_alloc(i, ARRAY_SIZE(layers), layers,
+			    sizeof(struct mc_priv));
+	if (!mci) {
+		edac_printk(KERN_ERR, EDAC_MC, "Failed memory allocation for MC%d\n", i);
+		return rc;
+	}
+	priv->mci[i] = mci;
+	priv->dwidth = dt;
+
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+	if (!dev)
+		goto err_mc_free;
+	dev->release = versal_edac_release;
+	name = kmalloc(32, GFP_KERNEL);
+	sprintf(name, "versal-net-ddrmc5-edac-%d", i);
+	dev->init_name = name;
+	rc = device_register(dev);
+	if (rc)
+		goto err_mc_free;
+
+	mci->pdev = dev;
+
+	platform_set_drvdata(pdev, priv);
+
+	mc_init(mci, dev);
+	rc = edac_mc_add_mc(mci);
+	if (rc) {
+		edac_printk(KERN_ERR, EDAC_MC, "Failed to register MC%d with EDAC core\n", i);
+		goto err_unreg;
+	}
+	return 0;
+err_unreg:
+	device_unregister(mci->pdev);
+err_mc_free:
+	edac_mc_free(mci);
+	return rc;
+}
+
+static int init_versalnet(struct mc_priv *priv, struct platform_device *pdev)
+{
 	int rc, i;
 
 	for (i = 0; i < NUM_CONTROLLERS; i++) {
-		config = priv->adec[CONF + i * ADEC_NUM];
-		num_chans = FIELD_GET(MC5_NUM_CHANS_MASK, config);
-		rank = 1 << FIELD_GET(MC5_RANK_MASK, config);
-		dwidth = FIELD_GET(MC5_BUS_WIDTH_MASK, config);
-
-		switch (dwidth) {
-		case XDDR5_BUS_WIDTH_16:
-			dt = DEV_X16;
-			break;
-		case XDDR5_BUS_WIDTH_32:
-			dt = DEV_X32;
-			break;
-		case XDDR5_BUS_WIDTH_64:
-			dt = DEV_X64;
-			break;
-		default:
-			dt = DEV_UNKNOWN;
-		}
-
-		if (dt == DEV_UNKNOWN)
-			continue;
-
-		/* Find the first enabled device and register that one. */
-		layers[0].type = EDAC_MC_LAYER_CHIP_SELECT;
-		layers[0].size = rank;
-		layers[0].is_virt_csrow = true;
-		layers[1].type = EDAC_MC_LAYER_CHANNEL;
-		layers[1].size = num_chans;
-		layers[1].is_virt_csrow = false;
-
-		rc = -ENOMEM;
-		mci = edac_mc_alloc(i, ARRAY_SIZE(layers), layers,
-				    sizeof(struct mc_priv));
-		if (!mci) {
-			edac_printk(KERN_ERR, EDAC_MC, "Failed memory allocation for MC%d\n", i);
-			goto err_alloc;
-		}
-
-		priv->mci[i] = mci;
-		priv->dwidth = dt;
-
-		dev = kzalloc(sizeof(*dev), GFP_KERNEL);
-		dev->release = versal_edac_release;
-		name = kmalloc(32, GFP_KERNEL);
-		sprintf(name, "versal-net-ddrmc5-edac-%d", i);
-		dev->init_name = name;
-		rc = device_register(dev);
-		if (rc)
-			goto err_alloc;
-
-		mci->pdev = dev;
-
-		platform_set_drvdata(pdev, priv);
-
-		mc_init(mci, dev);
-		rc = edac_mc_add_mc(mci);
+		rc = init_mc(priv, pdev, i);
 		if (rc) {
-			edac_printk(KERN_ERR, EDAC_MC, "Failed to register MC%d with EDAC core\n", i);
-			goto err_alloc;
+			while (i--)
+				remove_mc(priv, i);
+			return rc;
 		}
 	}
 	return 0;
-
-err_alloc:
-	while (i--) {
-		mci = priv->mci[i];
-		if (!mci)
-			continue;
-
-		if (mci->pdev) {
-			device_unregister(mci->pdev);
-			edac_mc_del_mc(mci->pdev);
-		}
-
-		edac_mc_free(mci);
-	}
-
-	return rc;
 }
 
 static void remove_versalnet(struct mc_priv *priv)
@@ -857,9 +870,6 @@ static void remove_versalnet(struct mc_priv *priv)
 	for (i = 0; i < NUM_CONTROLLERS; i++) {
 		device_unregister(priv->mci[i]->pdev);
 		mci = edac_mc_del_mc(priv->mci[i]->pdev);
-		if (!mci)
-			return;
-
 		edac_mc_free(mci);
 	}
 }
