@@ -800,13 +800,24 @@ static void release_gid_table(struct ib_device *device,
 		return;
 
 	for (i = 0; i < table->sz; i++) {
+		int cnt = 200;
+
 		if (is_gid_entry_free(table->data_vec[i]))
 			continue;
 
-		WARN_ONCE(true,
-			  "GID entry ref leak for dev %s index %d ref=%u\n",
+		WARN_ONCE(table->data_vec[i]->state != GID_TABLE_ENTRY_PENDING_DEL,
+			  "GID entry ref leak for dev %s index %d ref=%u, state: %d\n",
 			  dev_name(&device->dev), i,
-			  kref_read(&table->data_vec[i]->kref));
+			  kref_read(&table->data_vec[i]->kref), table->data_vec[i]->state);
+
+		while ((kref_read(&table->data_vec[i]->kref) > 0) && (cnt > 0)) {
+			cnt--;
+			msleep(10);
+		}
+
+		if (cnt <= 0)
+			pr_warn_ratelimited("Possibly kref leak, ref:%u, state: %d\n",
+				kref_read(&table->data_vec[i]->kref), table->data_vec[i]->state);
 	}
 
 	mutex_destroy(&table->lock);
