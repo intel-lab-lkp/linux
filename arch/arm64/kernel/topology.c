@@ -334,13 +334,12 @@ int arch_freq_get_on_cpu(int cpu)
 					break;
 			}
 
+			if (ref_cpu >= nr_cpu_ids) {
+				cpufreq_cpu_put(policy);
+				return cpufreq_quick_get(start_cpu);
+			}
+
 			cpufreq_cpu_put(policy);
-
-			if (ref_cpu >= nr_cpu_ids)
-				/* No alternative to pull info from */
-				return -EAGAIN;
-
-			cpu = ref_cpu;
 		} else {
 			break;
 		}
