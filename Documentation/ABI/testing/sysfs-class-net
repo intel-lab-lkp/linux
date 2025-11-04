@@ -352,3 +352,19 @@ Description:
 		0  threaded mode disabled for this dev
 		1  threaded mode enabled for this dev
 		== ==================================
+
+What:		/sys/class/net/<iface>/disable_pause_on_panic
+Date:		Nov 2025
+KernelVersion:	6.20
+Contact:	netdev@vger.kernel.org
+Description:
+		Boolean value to control whether to disable pause frame
+		generation on panic. This is helpful in environments where
+		the link partner may incorrect respond to pause frames (e.g.:
+		improperly configured Ethernet switches)
+
+		Possible values:
+		== ==================================
+		0  threaded mode disabled for this dev
+		1  threaded mode enabled for this dev
+		== ==================================
