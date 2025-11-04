@@ -153,7 +153,7 @@ static struct logic_pio_hwaddr *find_io_range(unsigned long pio)
 	rcu_read_unlock();
 
 	if (!found_range)
-		pr_err("PIO entry token 0x%lx invalid\n", pio);
+		pr_err_ratelimited("PIO entry token 0x%lx invalid\n", pio);
 
 	return found_range;
 }
