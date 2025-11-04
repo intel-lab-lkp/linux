@@ -1812,6 +1812,22 @@ phys_addr_t __init_memblock memblock_reserved_kern_size(phys_addr_t limit, int n
 	return total;
 }
 
+static phys_addr_t __init memblock_addrs_overlap_size(phys_addr_t base1, phys_addr_t size1,
+		phys_addr_t base2, phys_addr_t size2)
+{
+	phys_addr_t start, end;
+
+	if (!memblock_addrs_overlap(base1, size1, base2, size2))
+		return 0;
+
+	memblock_cap_size(base1, &size1);
+	memblock_cap_size(base2, &size2);
+	start = max(base1, base2);
+	end = min(base1 + size1, base2 + size2);
+
+	return end - start;
+}
+
 /**
  * memblock_estimated_nr_free_pages - return estimated number of free pages
  * from memblock point of view
@@ -1826,7 +1842,22 @@ phys_addr_t __init_memblock memblock_reserved_kern_size(phys_addr_t limit, int n
  */
 unsigned long __init memblock_estimated_nr_free_pages(void)
 {
-	return PHYS_PFN(memblock_phys_mem_size() - memblock_reserved_size());
+	int memory_idx, reserved_idx;
+	struct memblock_type *memory_type = &memblock.memory;
+	struct memblock_type *reserved_type = &memblock.reserved;
+	struct memblock_region *memory_region, *reserved_region;
+	phys_addr_t phys_mem_size = 0;
+
+	for_each_memblock_type(memory_idx, memory_type, memory_region) {
+		phys_mem_size += memory_region->size;
+		for_each_memblock_type(reserved_idx, reserved_type, reserved_region) {
+			phys_mem_size -= memblock_addrs_overlap_size(memory_region->base,
+					memory_region->size, reserved_region->base,
+					reserved_region->size);
+		}
+	}
+
+	return PHYS_PFN(phys_mem_size);
 }
 
 /* lowest address */
