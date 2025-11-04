@@ -1,7 +1,7 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-2.0
 
-ALL_TESTS="ping_ipv4 ping_ipv6 learning flooding pvid_change"
+ALL_TESTS="ping_ipv4 ping_ipv6 learning flooding pvid_change mst_state_no_bypass"
 NUM_NETIFS=4
 source lib.sh
 
@@ -112,6 +112,39 @@ pvid_change()
 
 	ping_ipv4 " with bridge port $swp1 PVID deleted"
 	ping_ipv6 " with bridge port $swp1 PVID deleted"
+}
+
+mst_state_no_bypass()
+{
+	local mac=de:ad:be:ef:13:37
+
+	# Test that port state isn't bypassed when MST is enabled and VLAN
+	# filtering is disabled
+	RET=0
+
+	# MST can be enabled only when there are no VLANs
+	bridge vlan del vid 1 dev $swp1
+	bridge vlan del vid 1 dev $swp2
+	bridge vlan del vid 1 dev br0 self
+
+	ip link set br0 type bridge mst_enabled 1
+	check_err $? "Could not enable MST"
+
+	bridge link set dev $swp1 state disabled
+	check_err $? "Could not set port state"
+
+	$MZ $h1 -c 1 -p 64 -a $mac -t ip -q
+
+	bridge fdb show brport $swp1 | grep -q de:ad:be:ef:13:37
+	check_fail $? "FDB entry found when it shouldn't be"
+
+	log_test "VLAN filtering disabled and MST enabled port state no bypass"
+
+	ip link set br0 type bridge mst_enabled 0
+	bridge link set dev $swp1 state forwarding
+	bridge vlan add vid 1 dev $swp1 pvid untagged
+	bridge vlan add vid 1 dev $swp2 pvid untagged
+	bridge vlan add vid 1 dev br0 self
 }
 
 trap cleanup EXIT
