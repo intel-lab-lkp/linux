@@ -7,8 +7,18 @@ struct uring_bpf_data {
 	struct file     *file;
 	u32		opf;
 
+	/* Buffer 1 metadata - readable for bpf prog */
+	u32		buf1_len;		/* buffer 1 length, bytes 12-15 */
+	u64		buf1_addr;		/* buffer 1 address or offset, bytes 16-23 */
+
+	/* Buffer 2 metadata - readable for bpf prog (plain only) */
+	u64		buf2_addr;		/* buffer 2 address, bytes 24-31 */
+	u32		buf2_len;		/* buffer 2 length, bytes 32-35 */
+	u32		__pad;			/* padding, bytes 36-39 */
+
 	/* writeable for bpf prog */
-	u8              pdu[64 - sizeof(struct file *) - sizeof(u32)];
+	u8              pdu[64 - sizeof(struct file *) - 4 * sizeof(u32) -
+		2 * sizeof(u64)];
 };
 
 typedef int (*uring_io_prep_t)(struct uring_bpf_data *data,

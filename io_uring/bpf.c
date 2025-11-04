@@ -11,8 +11,10 @@
 #include <linux/btf.h>
 #include <linux/btf_ids.h>
 #include <linux/filter.h>
+#include <linux/uio.h>
 #include "io_uring.h"
 #include "uring_bpf.h"
+#include "rsrc.h"
 
 #define MAX_BPF_OPS_COUNT	(1 << IORING_BPF_OP_BITS)
 
@@ -28,7 +30,7 @@ static inline unsigned char uring_bpf_get_op(unsigned int op_flags)
 
 static inline unsigned int uring_bpf_get_flags(unsigned int op_flags)
 {
-	return op_flags & ((1U << IORING_BPF_OP_SHIFT) - 1);
+	return op_flags & IORING_BPF_CUSTOM_FLAGS_MASK;
 }
 
 static inline struct uring_bpf_ops *uring_bpf_get_ops(struct uring_bpf_data *data)
@@ -36,17 +38,76 @@ static inline struct uring_bpf_ops *uring_bpf_get_ops(struct uring_bpf_data *dat
 	return &bpf_ops[uring_bpf_get_op(data->opf)];
 }
 
+static int io_bpf_prep_buffers(struct io_kiocb *req,
+			       const struct io_uring_sqe *sqe,
+			       struct uring_bpf_data *data,
+			       unsigned int op_flags)
+{
+	u8 buf1_type, buf2_type;
+
+	/* Extract buffer configuration from bpf_op_flags */
+	buf1_type = IORING_BPF_BUF1_TYPE(op_flags);
+	buf2_type = IORING_BPF_BUF2_TYPE(op_flags);
+
+	/* Prepare buffer 1 */
+	if (buf1_type == IORING_BPF_BUF_TYPE_PLAIN) {
+		/* Plain user buffer: addr=sqe->addr, len=sqe->len */
+		data->buf1_addr = READ_ONCE(sqe->addr);
+		data->buf1_len = READ_ONCE(sqe->len);
+	} else if (buf1_type == IORING_BPF_BUF_TYPE_FIXED) {
+		/* Fixed buffer: index=sqe->buf_index, offset=sqe->addr, len=sqe->len */
+		req->buf_index = READ_ONCE(sqe->buf_index);
+		data->buf1_addr = READ_ONCE(sqe->addr);  /* offset within fixed buffer */
+		data->buf1_len = READ_ONCE(sqe->len);
+
+		/* Validate buffer index */
+		if (unlikely(!req->ctx->buf_table.nr))
+			return -EFAULT;
+		if (unlikely(req->buf_index >= req->ctx->buf_table.nr))
+			return -EINVAL;
+	} else if (buf1_type == IORING_BPF_BUF_TYPE_NONE) {
+		data->buf1_addr = 0;
+		data->buf1_len = 0;
+	} else {
+		return -EINVAL;
+	}
+
+	/* Prepare buffer 2 (plain only - io_uring only supports one fixed buffer) */
+	if (buf2_type == IORING_BPF_BUF_TYPE_PLAIN) {
+		/* Plain user buffer: addr=sqe->addr3, len=sqe->optlen */
+		data->buf2_addr = READ_ONCE(sqe->addr3);
+		data->buf2_len = READ_ONCE(sqe->optlen);
+	} else if (buf2_type == IORING_BPF_BUF_TYPE_NONE) {
+		data->buf2_addr = 0;
+		data->buf2_len = 0;
+	} else {
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+
 int io_uring_bpf_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
 	struct uring_bpf_data *data = io_kiocb_to_cmd(req, struct uring_bpf_data);
 	unsigned int op_flags = READ_ONCE(sqe->bpf_op_flags);
 	struct uring_bpf_ops *ops;
+	int ret;
 
 	if (!(req->ctx->flags & IORING_SETUP_BPF))
 		return -EACCES;
 
+	if (uring_bpf_get_flags(op_flags))
+		return -EINVAL;
+
 	data->opf = op_flags;
 	ops = &bpf_ops[uring_bpf_get_op(data->opf)];
+
+	/* Prepare buffers based on buffer type flags */
+	ret = io_bpf_prep_buffers(req, sqe, data, op_flags);
+	if (ret)
+		return ret;
 
 	if (ops->prep_fn)
 		return ops->prep_fn(data, sqe);
