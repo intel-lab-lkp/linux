@@ -4093,6 +4093,12 @@ static bool e1000_tbi_should_accept(struct e1000_adapter *adapter,
 				    u8 status, u8 errors,
 				    u32 length, const u8 *data)
 {
+	/* Guard against OOB on data[length - 1] */
+	if (unlikely(!length))
+		return false;
+	/* Upper bound: length must not exceed rx_buffer_len */
+	if (unlikely(length > adapter->rx_buffer_len))
+		return false;
 	struct e1000_hw *hw = &adapter->hw;
 	u8 last_byte = *(data + length - 1);
 
