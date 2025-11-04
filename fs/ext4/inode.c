@@ -818,6 +818,7 @@ found:
 		if (map->m_flags & EXT4_MAP_NEW &&
 		    !(map->m_flags & EXT4_MAP_UNWRITTEN) &&
 		    !(flags & EXT4_GET_BLOCKS_ZERO) &&
+		    !(flags & EXT4_GET_BLOCKS_DIO) &&
 		    !ext4_is_quota_file(inode) &&
 		    ext4_should_order_data(inode)) {
 			loff_t start_byte =
@@ -3729,9 +3730,9 @@ retry:
 	 * happening and thus expose allocated blocks to direct I/O reads.
 	 */
 	else if (((loff_t)map->m_lblk << blkbits) >= i_size_read(inode))
-		m_flags = EXT4_GET_BLOCKS_CREATE;
+		m_flags = EXT4_GET_BLOCKS_CREATE | EXT4_GET_BLOCKS_DIO;
 	else if (ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS))
-		m_flags = EXT4_GET_BLOCKS_IO_CREATE_EXT;
+		m_flags = EXT4_GET_BLOCKS_IO_CREATE_EXT | EXT4_GET_BLOCKS_DIO;
 
 	if (flags & IOMAP_ATOMIC)
 		ret = ext4_map_blocks_atomic_write(handle, inode, map, m_flags,
