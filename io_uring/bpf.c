@@ -7,6 +7,9 @@
 #include "io_uring.h"
 #include "uring_bpf.h"
 
+static DEFINE_MUTEX(uring_bpf_ctx_lock);
+static LIST_HEAD(uring_bpf_ctx_list);
+
 int io_uring_bpf_issue(struct io_kiocb *req, unsigned int issue_flags)
 {
 	return -ECANCELED;
@@ -23,4 +26,16 @@ void io_uring_bpf_fail(struct io_kiocb *req)
 
 void io_uring_bpf_cleanup(struct io_kiocb *req)
 {
+}
+
+void uring_bpf_add_ctx(struct io_ring_ctx *ctx)
+{
+	guard(mutex)(&uring_bpf_ctx_lock);
+	list_add(&ctx->bpf_node, &uring_bpf_ctx_list);
+}
+
+void uring_bpf_del_ctx(struct io_ring_ctx *ctx)
+{
+	guard(mutex)(&uring_bpf_ctx_lock);
+	list_del(&ctx->bpf_node);
 }

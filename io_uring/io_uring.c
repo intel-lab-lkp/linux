@@ -105,6 +105,7 @@
 #include "rw.h"
 #include "alloc_cache.h"
 #include "eventfd.h"
+#include "uring_bpf.h"
 
 #define SQE_COMMON_FLAGS (IOSQE_FIXED_FILE | IOSQE_IO_LINK | \
 			  IOSQE_IO_HARDLINK | IOSQE_ASYNC)
@@ -351,6 +352,9 @@ static __cold struct io_ring_ctx *io_ring_ctx_alloc(struct io_uring_params *p)
 	INIT_HLIST_HEAD(&ctx->cancelable_uring_cmd);
 	io_napi_init(ctx);
 	mutex_init(&ctx->mmap_lock);
+
+	if (ctx->flags & IORING_SETUP_BPF)
+		uring_bpf_add_ctx(ctx);
 
 	return ctx;
 
@@ -2854,6 +2858,9 @@ static __cold void io_ring_ctx_free(struct io_ring_ctx *ctx)
 
 	if (!(ctx->flags & IORING_SETUP_NO_SQARRAY))
 		static_branch_dec(&io_key_has_sqarray);
+
+	if (ctx->flags & IORING_SETUP_BPF)
+		uring_bpf_del_ctx(ctx);
 
 	percpu_ref_exit(&ctx->refs);
 	free_uid(ctx->user);

@@ -7,6 +7,10 @@ int io_uring_bpf_issue(struct io_kiocb *req, unsigned int issue_flags);
 int io_uring_bpf_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe);
 void io_uring_bpf_fail(struct io_kiocb *req);
 void io_uring_bpf_cleanup(struct io_kiocb *req);
+
+void uring_bpf_add_ctx(struct io_ring_ctx *ctx);
+void uring_bpf_del_ctx(struct io_ring_ctx *ctx);
+
 #else
 static inline int io_uring_bpf_issue(struct io_kiocb *req, unsigned int issue_flags)
 {
@@ -20,6 +24,13 @@ static inline void io_uring_bpf_fail(struct io_kiocb *req)
 {
 }
 static inline void io_uring_bpf_cleanup(struct io_kiocb *req)
+{
+}
+
+static inline void uring_bpf_add_ctx(struct io_ring_ctx *ctx)
+{
+}
+static inline void uring_bpf_del_ctx(struct io_ring_ctx *ctx)
 {
 }
 #endif

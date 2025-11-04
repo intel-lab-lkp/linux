@@ -465,6 +465,11 @@ struct io_ring_ctx {
 	struct io_mapped_region		ring_region;
 	/* used for optimised request parameter and wait argument passing  */
 	struct io_mapped_region		param_region;
+
+#ifdef CONFIG_IO_URING_BPF
+	/* added to uring_bpf_ctx_list */
+	struct list_head		bpf_node;
+#endif
 };
 
 /*
