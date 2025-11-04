@@ -350,6 +350,7 @@ int fnic_set_intr_mode(struct fnic *fnic)
 		fnic->cq_count = 3;
 		fnic->intr_count = 1;
 		fnic->err_intr_offset = 0;
+		fnic->copy_wq_base = fnic->rq_count + fnic->raw_wq_count;
 
 		FNIC_ISR_DBG(KERN_DEBUG, fnic->host, fnic->fnic_num,
 			     "Using MSI Interrupts\n");
@@ -376,6 +377,7 @@ int fnic_set_intr_mode(struct fnic *fnic)
 		fnic->wq_copy_count = 1;
 		fnic->cq_count = 3;
 		fnic->intr_count = 3;
+		fnic->copy_wq_base = fnic->rq_count + fnic->raw_wq_count;
 
 		FNIC_ISR_DBG(KERN_DEBUG, fnic->host, fnic->fnic_num,
 			     "Using Legacy Interrupts\n");
