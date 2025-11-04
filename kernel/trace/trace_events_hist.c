@@ -80,7 +80,7 @@ enum { ERRORS };
 #undef C
 #define C(a, b)		b
 
-static const char *err_text[] = { ERRORS };
+static const char * const err_text[] = { ERRORS };
 
 struct hist_field;
 
