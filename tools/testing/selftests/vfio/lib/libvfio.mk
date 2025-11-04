@@ -18,7 +18,9 @@ $(shell mkdir -p $(LIBVFIO_O_DIRS))
 
 CFLAGS += -I$(VFIO_DIR)/lib/include
 
+LDLIBS += -luuid
+
 $(LIBVFIO_O): $(OUTPUT)/%.o : $(VFIO_DIR)/%.c
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(TARGET_ARCH) -c $< -o $@
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(TARGET_ARCH) -c $< $(LDLIBS) -o $@
 
 EXTRA_CLEAN += $(LIBVFIO_O)

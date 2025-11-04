@@ -114,7 +114,7 @@ FIXTURE_VARIANT_ADD_ALL_IOMMU_MODES(anonymous_hugetlb_1gb, SZ_1G, MAP_HUGETLB | 
 
 FIXTURE_SETUP(vfio_dma_mapping_test)
 {
-	self->device = vfio_pci_device_init(device_bdf, variant->iommu_mode);
+	self->device = vfio_pci_device_init(device_bdf, variant->iommu_mode, NULL);
 }
 
 FIXTURE_TEARDOWN(vfio_dma_mapping_test)

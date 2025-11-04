@@ -11,6 +11,7 @@
 #include <sys/mman.h>
 
 #include <uapi/linux/types.h>
+#include <uuid/uuid.h>
 #include <linux/limits.h>
 #include <linux/mman.h>
 #include <linux/types.h>
@@ -21,6 +22,8 @@
 #include <vfio_util.h>
 
 #define PCI_SYSFS_PATH	"/sys/bus/pci/devices"
+
+#define VF_TOKEN_ARG "vf_token="
 
 #define ioctl_assert(_fd, _op, _arg) do {						       \
 	void *__arg = (_arg);								       \
@@ -328,7 +331,37 @@ static void vfio_pci_group_setup(struct vfio_pci_device *device, const char *bdf
 	ioctl_assert(device->group_fd, VFIO_GROUP_SET_CONTAINER, &device->container_fd);
 }
 
-static void vfio_pci_container_setup(struct vfio_pci_device *device, const char *bdf)
+static void vfio_pci_container_get_device_fd(struct vfio_pci_device *device,
+					      const char *bdf,
+					      const char *vf_token)
+{
+	char *arg = (char *) bdf;
+
+	/*
+	 * If a vf_token exists, argument to VFIO_GROUP_GET_DEVICE_FD
+	 * will be in the form of the following example:
+	 * "0000:04:10.0 vf_token=bd8d9d2b-5a5f-4f5a-a211-f591514ba1f3"
+	 */
+	if (vf_token) {
+		size_t sz = strlen(bdf) + strlen(" "VF_TOKEN_ARG) +
+			    strlen(vf_token) + 1;
+
+		arg = calloc(1, sz);
+		VFIO_ASSERT_NOT_NULL(arg);
+
+		snprintf(arg, sz, "%s %s%s", bdf, VF_TOKEN_ARG, vf_token);
+	}
+
+	device->fd = ioctl(device->group_fd, VFIO_GROUP_GET_DEVICE_FD, arg);
+
+	if (vf_token)
+		free((void *) arg);
+
+	VFIO_ASSERT_GE(device->fd, 0);
+}
+
+static void vfio_pci_container_setup(struct vfio_pci_device *device,
+				      const char *bdf, const char *vf_token)
 {
 	unsigned long iommu_type = device->iommu_mode->iommu_type;
 	const char *path = device->iommu_mode->container_path;
@@ -348,8 +381,7 @@ static void vfio_pci_container_setup(struct vfio_pci_device *device, const char 
 
 	ioctl_assert(device->container_fd, VFIO_SET_IOMMU, (void *)iommu_type);
 
-	device->fd = ioctl(device->group_fd, VFIO_GROUP_GET_DEVICE_FD, bdf);
-	VFIO_ASSERT_GE(device->fd, 0);
+	vfio_pci_container_get_device_fd(device, bdf, vf_token);
 }
 
 static void vfio_pci_device_setup(struct vfio_pci_device *device)
@@ -456,12 +488,19 @@ static const struct vfio_iommu_mode *lookup_iommu_mode(const char *iommu_mode)
 	VFIO_FAIL("Unrecognized IOMMU mode: %s\n", iommu_mode);
 }
 
-static void vfio_device_bind_iommufd(int device_fd, int iommufd)
+static void vfio_device_bind_iommufd(int device_fd, int iommufd, const char *vf_token)
 {
 	struct vfio_device_bind_iommufd args = {
 		.argsz = sizeof(args),
 		.iommufd = iommufd,
 	};
+	uuid_t token_uuid = {0};
+
+	if (vf_token) {
+		VFIO_ASSERT_EQ(uuid_parse(vf_token, token_uuid), 0);
+		args.flags = VFIO_DEVICE_BIND_FLAG_TOKEN;
+		args.token_uuid_ptr = (u64) token_uuid;
+	}
 
 	ioctl_assert(device_fd, VFIO_DEVICE_BIND_IOMMUFD, &args);
 }
@@ -486,7 +525,8 @@ static void vfio_device_attach_iommufd_pt(int device_fd, u32 pt_id)
 	ioctl_assert(device_fd, VFIO_DEVICE_ATTACH_IOMMUFD_PT, &args);
 }
 
-static void vfio_pci_iommufd_setup(struct vfio_pci_device *device, const char *bdf)
+static void vfio_pci_iommufd_setup(struct vfio_pci_device *device,
+				    const char *bdf, const char *vf_token)
 {
 	const char *cdev_path = vfio_pci_get_cdev_path(bdf);
 
@@ -502,12 +542,14 @@ static void vfio_pci_iommufd_setup(struct vfio_pci_device *device, const char *b
 	device->iommufd = open("/dev/iommu", O_RDWR);
 	VFIO_ASSERT_GT(device->iommufd, 0);
 
-	vfio_device_bind_iommufd(device->fd, device->iommufd);
+	vfio_device_bind_iommufd(device->fd, device->iommufd, vf_token);
 	device->ioas_id = iommufd_ioas_alloc(device->iommufd);
 	vfio_device_attach_iommufd_pt(device->fd, device->ioas_id);
 }
 
-struct vfio_pci_device *vfio_pci_device_init(const char *bdf, const char *iommu_mode)
+struct vfio_pci_device *vfio_pci_device_init(const char *bdf,
+					      const char *iommu_mode,
+					      const char *vf_token)
 {
 	struct vfio_pci_device *device;
 
@@ -519,9 +561,9 @@ struct vfio_pci_device *vfio_pci_device_init(const char *bdf, const char *iommu_
 	device->iommu_mode = lookup_iommu_mode(iommu_mode);
 
 	if (device->iommu_mode->container_path)
-		vfio_pci_container_setup(device, bdf);
+		vfio_pci_container_setup(device, bdf, vf_token);
 	else
-		vfio_pci_iommufd_setup(device, bdf);
+		vfio_pci_iommufd_setup(device, bdf, vf_token);
 
 	vfio_pci_device_setup(device);
 	vfio_pci_driver_probe(device);
