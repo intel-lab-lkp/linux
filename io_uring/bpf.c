@@ -109,6 +109,8 @@ int io_uring_bpf_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	if (ret)
 		return ret;
 
+	/* ctx->uring_lock is held */
+	data->issue_flags = 0;
 	if (ops->prep_fn)
 		return ops->prep_fn(data, sqe);
 	return -EOPNOTSUPP;
@@ -126,6 +128,9 @@ static int __io_uring_bpf_issue(struct io_kiocb *req)
 
 int io_uring_bpf_issue(struct io_kiocb *req, unsigned int issue_flags)
 {
+	struct uring_bpf_data *data = io_kiocb_to_cmd(req, struct uring_bpf_data);
+
+	data->issue_flags = issue_flags;
 	if (issue_flags & IO_URING_F_UNLOCKED) {
 		int idx, ret;
 
@@ -143,6 +148,8 @@ void io_uring_bpf_fail(struct io_kiocb *req)
 	struct uring_bpf_data *data = io_kiocb_to_cmd(req, struct uring_bpf_data);
 	struct uring_bpf_ops *ops = uring_bpf_get_ops(data);
 
+	/* ctx->uring_lock is held */
+	data->issue_flags = 0;
 	if (ops->fail_fn)
 		ops->fail_fn(data);
 }
@@ -152,6 +159,8 @@ void io_uring_bpf_cleanup(struct io_kiocb *req)
 	struct uring_bpf_data *data = io_kiocb_to_cmd(req, struct uring_bpf_data);
 	struct uring_bpf_ops *ops = uring_bpf_get_ops(data);
 
+	/* ctx->uring_lock is held */
+	data->issue_flags = 0;
 	if (ops->cleanup_fn)
 		ops->cleanup_fn(data);
 }
@@ -324,6 +333,104 @@ static struct bpf_struct_ops bpf_uring_bpf_ops = {
 	.owner = THIS_MODULE,
 };
 
+/*
+ * Helper to copy data between two iov_iters using page extraction.
+ * Extracts pages from source iterator and copies them to destination.
+ * Returns number of bytes copied or negative error code.
+ */
+static ssize_t io_bpf_copy_iters(struct iov_iter *src, struct iov_iter *dst,
+				 size_t len)
+{
+#define MAX_PAGES_PER_LOOP 32
+	struct page *pages[MAX_PAGES_PER_LOOP];
+	size_t total_copied = 0;
+	bool need_unpin;
+
+	/* Determine if we'll need to unpin pages later */
+	need_unpin = user_backed_iter(src);
+
+	/* Process pages in chunks */
+	while (len > 0) {
+		struct page **page_array = pages;
+		size_t offset, copied = 0;
+		ssize_t extracted;
+		unsigned int nr_pages;
+		size_t chunk_len;
+		int i;
+
+		/* Extract up to MAX_PAGES_PER_LOOP pages */
+		chunk_len = min_t(size_t, len, MAX_PAGES_PER_LOOP * PAGE_SIZE);
+		extracted = iov_iter_extract_pages(src, &page_array, chunk_len,
+						   MAX_PAGES_PER_LOOP, 0, &offset);
+		if (extracted <= 0) {
+			if (total_copied > 0)
+				break;
+			return extracted < 0 ? extracted : -EFAULT;
+		}
+
+		nr_pages = DIV_ROUND_UP(offset + extracted, PAGE_SIZE);
+
+		/* Copy pages to destination iterator */
+		for (i = 0; i < nr_pages && copied < extracted; i++) {
+			size_t page_offset = (i == 0) ? offset : 0;
+			size_t page_len = min_t(size_t, extracted - copied,
+						PAGE_SIZE - page_offset);
+			size_t n;
+
+			n = copy_page_to_iter(pages[i], page_offset, page_len, dst);
+			copied += n;
+			if (n < page_len)
+				break;
+		}
+
+		/* Clean up extracted pages */
+		if (need_unpin)
+			unpin_user_pages(pages, nr_pages);
+
+		total_copied += copied;
+		len -= copied;
+
+		/* Stop if we didn't copy all extracted data */
+		if (copied < extracted)
+			break;
+	}
+
+	return total_copied;
+#undef MAX_PAGES_PER_LOOP
+}
+
+/*
+ * Helper to import a buffer into an iov_iter for BPF memcpy operations.
+ * Handles both plain user buffers and fixed/registered buffers.
+ *
+ * @req: io_kiocb request
+ * @iter: output iterator
+ * @buf_type: buffer type (plain or fixed)
+ * @addr: buffer address
+ * @offset: offset into buffer
+ * @len: length from offset
+ * @direction: ITER_SOURCE for source buffer, ITER_DEST for destination
+ * @issue_flags: io_uring issue flags
+ *
+ * Returns 0 on success, negative error code on failure.
+ */
+static int io_bpf_import_buffer(struct io_kiocb *req, struct iov_iter *iter,
+				u8 buf_type, u64 addr, unsigned int offset,
+				u32 len, int direction, unsigned int issue_flags)
+{
+	if (buf_type == IORING_BPF_BUF_TYPE_PLAIN) {
+		/* Plain user buffer */
+		return import_ubuf(direction, (void __user *)(addr + offset),
+				   len - offset, iter);
+	} else if (buf_type == IORING_BPF_BUF_TYPE_FIXED) {
+		/* Fixed buffer */
+		return io_import_reg_buf(req, iter, addr + offset,
+					 len - offset, direction, issue_flags);
+	}
+
+	return -EINVAL;
+}
+
 __bpf_kfunc_start_defs();
 __bpf_kfunc void uring_bpf_set_result(struct uring_bpf_data *data, int res)
 {
@@ -339,11 +446,91 @@ __bpf_kfunc struct io_kiocb *uring_bpf_data_to_req(struct uring_bpf_data *data)
 {
 	return cmd_to_io_kiocb(data);
 }
+
+/**
+ * io_uring_bpf_req_memcpy - Copy data between io_uring BPF request buffers
+ * @data: BPF request data containing buffer metadata
+ * @dest: Destination buffer descriptor (with buf_id and offset)
+ * @src: Source buffer descriptor (with buf_id and offset)
+ * @len: Number of bytes to copy
+ *
+ * Copies data between two different io_uring BPF request buffers (buf_id 1 and 2).
+ * Supports: plain-to-plain, fixed-to-plain, and plain-to-fixed.
+ * Does not support copying within the same buffer (src and dest must be different).
+ *
+ * Returns: Number of bytes copied on success, negative error code on failure
+ */
+__bpf_kfunc int io_uring_bpf_req_memcpy(struct uring_bpf_data *data,
+					struct bpf_req_mem_desc *dest,
+					struct bpf_req_mem_desc *src,
+					unsigned int len)
+{
+	struct io_kiocb *req = cmd_to_io_kiocb(data);
+	struct iov_iter dst_iter, src_iter;
+	u8 dst_type, src_type;
+	u64 dst_addr, src_addr;
+	u32 dst_len, src_len;
+	int ret;
+
+	/* Validate buffer IDs */
+	if (dest->buf_id < 1 || dest->buf_id > 2 ||
+	    src->buf_id < 1 || src->buf_id > 2)
+		return -EINVAL;
+
+	/* Don't allow copying within the same buffer */
+	if (src->buf_id == dest->buf_id)
+		return -EINVAL;
+
+	/* Extract source buffer metadata */
+	if (src->buf_id == 1) {
+		src_type = IORING_BPF_BUF1_TYPE(data->opf);
+		src_addr = data->buf1_addr;
+		src_len = data->buf1_len;
+	} else {
+		src_type = IORING_BPF_BUF2_TYPE(data->opf);
+		src_addr = data->buf2_addr;
+		src_len = data->buf2_len;
+	}
+
+	/* Extract destination buffer metadata */
+	if (dest->buf_id == 1) {
+		dst_type = IORING_BPF_BUF1_TYPE(data->opf);
+		dst_addr = data->buf1_addr;
+		dst_len = data->buf1_len;
+	} else {
+		dst_type = IORING_BPF_BUF2_TYPE(data->opf);
+		dst_addr = data->buf2_addr;
+		dst_len = data->buf2_len;
+	}
+
+	/* Validate offsets and lengths */
+	if (src->offset + len > src_len || dest->offset + len > dst_len)
+		return -EINVAL;
+
+	/* Initialize source iterator */
+	ret = io_bpf_import_buffer(req, &src_iter, src_type,
+				   src_addr, src->offset, src_len,
+				   ITER_SOURCE, data->issue_flags);
+	if (ret)
+		return ret;
+
+	/* Initialize destination iterator */
+	ret = io_bpf_import_buffer(req, &dst_iter, dst_type,
+				   dst_addr, dest->offset, dst_len,
+				   ITER_DEST, data->issue_flags);
+	if (ret)
+		return ret;
+
+	/* Extract pages from source iterator and copy to destination */
+	return io_bpf_copy_iters(&src_iter, &dst_iter, len);
+}
+
 __bpf_kfunc_end_defs();
 
 BTF_KFUNCS_START(uring_bpf_kfuncs)
 BTF_ID_FLAGS(func, uring_bpf_set_result)
 BTF_ID_FLAGS(func, uring_bpf_data_to_req)
+BTF_ID_FLAGS(func, io_uring_bpf_req_memcpy)
 BTF_KFUNCS_END(uring_bpf_kfuncs)
 
 static const struct btf_kfunc_id_set uring_kfunc_set = {

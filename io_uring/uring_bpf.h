@@ -14,11 +14,20 @@ struct uring_bpf_data {
 	/* Buffer 2 metadata - readable for bpf prog (plain only) */
 	u64		buf2_addr;		/* buffer 2 address, bytes 24-31 */
 	u32		buf2_len;		/* buffer 2 length, bytes 32-35 */
-	u32		__pad;			/* padding, bytes 36-39 */
+	u32		issue_flags;		/* issue_flags from io_uring, bytes 36-39 */
 
 	/* writeable for bpf prog */
 	u8              pdu[64 - sizeof(struct file *) - 4 * sizeof(u32) -
 		2 * sizeof(u64)];
+};
+
+/*
+ * Descriptor for io_uring BPF request buffer.
+ * Used by io_uring_bpf_req_memcpy() to identify which buffer to copy from/to.
+ */
+struct bpf_req_mem_desc {
+	u8		buf_id;		/* Buffer ID: 1 or 2 */
+	unsigned int	offset;		/* Offset into buffer */
 };
 
 typedef int (*uring_io_prep_t)(struct uring_bpf_data *data,
