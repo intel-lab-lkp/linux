@@ -7,6 +7,7 @@
 #include <linux/crypto.h>
 #include <linux/idxd.h>
 #include <uapi/linux/idxd.h>
+#include <linux/scatterlist.h>
 
 #define IDXD_SUBDRIVER_NAME		"crypto"
 
@@ -29,8 +30,6 @@
 #define IAA_ERROR_COMP_BUF_OVERFLOW	0x19
 #define IAA_ERROR_WATCHDOG_EXPIRED	0x24
 
-#define IAA_COMP_MODES_MAX		2
-
 #define FIXED_HDR			0x2
 #define FIXED_HDR_SIZE			3
 
@@ -41,6 +40,23 @@
 					 IAA_DECOMP_FLUSH_OUTPUT | \
 					 IAA_DECOMP_CHECK_FOR_EOB | \
 					 IAA_DECOMP_STOP_ON_EOB)
+
+#define IAA_COMP_MODES_MAX  IAA_MODE_NONE
+
+enum iaa_mode {
+	IAA_MODE_FIXED = 0,
+	IAA_MODE_NONE = 1,
+};
+
+struct iaa_req {
+	struct scatterlist *src;
+	struct scatterlist *dst;
+	unsigned int slen;
+	unsigned int dlen;
+	u32 flags;
+	u32 compression_crc;
+	void *drv_data; /* for driver internal use */
+};
 
 /* Representation of IAA workqueue */
 struct iaa_wq {
@@ -137,10 +153,6 @@ int add_iaa_compression_mode(const char *name,
 			     iaa_dev_comp_free_fn_t free);
 
 void remove_iaa_compression_mode(const char *name);
-
-enum iaa_mode {
-	IAA_MODE_FIXED,
-};
 
 struct iaa_compression_ctx {
 	enum iaa_mode	mode;
