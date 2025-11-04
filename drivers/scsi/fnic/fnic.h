@@ -484,7 +484,7 @@ extern struct workqueue_struct *fnic_fip_queue;
 extern const struct attribute_group *fnic_host_groups[];
 
 void fnic_clear_intr_mode(struct fnic *fnic);
-int fnic_set_intr_mode(struct fnic *fnic);
+int fnic_set_intr_mode(struct fnic *fnic, unsigned int mode);
 int fnic_set_intr_mode_msix(struct fnic *fnic);
 void fnic_free_intr(struct fnic *fnic);
 int fnic_request_intr(struct fnic *fnic);

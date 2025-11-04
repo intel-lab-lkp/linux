@@ -319,20 +319,25 @@ int fnic_set_intr_mode_msix(struct fnic *fnic)
 	return 1;
 }
 
-int fnic_set_intr_mode(struct fnic *fnic)
+int fnic_set_intr_mode(struct fnic *fnic, unsigned int intr_mode)
 {
 	int ret_status = 0;
 
 	/*
 	 * Set interrupt mode (INTx, MSI, MSI-X) depending
 	 * system capabilities.
-	 *
+	 */
+	if (intr_mode != VNIC_DEV_INTR_MODE_MSIX)
+		goto try_msi;
+	/*
 	 * Try MSI-X first
 	 */
 	ret_status = fnic_set_intr_mode_msix(fnic);
 	if (ret_status == 0)
 		return ret_status;
-
+try_msi:
+	if (intr_mode != VNIC_DEV_INTR_MODE_MSI)
+		goto try_intx;
 	/*
 	 * Next try MSI
 	 * We need 1 RQ, 1 WQ, 1 WQ_COPY, 3 CQs, and 1 INTR
@@ -358,7 +363,7 @@ int fnic_set_intr_mode(struct fnic *fnic)
 
 		return 0;
 	}
-
+try_intx:
 	/*
 	 * Next try INTx
 	 * We need 1 RQ, 1 WQ, 1 WQ_COPY, 3 CQs, and 3 INTRs

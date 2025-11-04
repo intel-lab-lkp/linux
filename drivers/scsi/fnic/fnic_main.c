@@ -97,6 +97,10 @@ module_param(pc_rscn_handling_feature_flag, uint, 0644);
 MODULE_PARM_DESC(pc_rscn_handling_feature_flag,
 		 "PCRSCN handling (0 for none. 1 to handle PCRSCN (default))");
 
+static unsigned int fnic_intr_mode = VNIC_DEV_INTR_MODE_MSIX;
+module_param(fnic_intr_mode, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(fnic_intr_mode, "Interrupt mode, 1 = INTx, 2 = MSI, 3 = MSIx (default: 3)");
+
 struct workqueue_struct *reset_fnic_work_queue;
 struct workqueue_struct *fnic_fip_queue;
 
@@ -869,7 +873,11 @@ static int fnic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	fnic_get_res_counts(fnic);
 
-	err = fnic_set_intr_mode(fnic);
+	/* Override interrupt selection during kdump */
+	if (reset_devices)
+		fnic_intr_mode = VNIC_DEV_INTR_MODE_INTX;
+
+	err = fnic_set_intr_mode(fnic, fnic_intr_mode);
 	if (err) {
 		dev_err(&fnic->pdev->dev, "Failed to set intr mode, "
 			     "aborting.\n");
