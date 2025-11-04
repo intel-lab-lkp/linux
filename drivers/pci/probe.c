@@ -2196,6 +2196,18 @@ static void pci_configure_mps(struct pci_dev *dev)
 		return;
 	}
 
+	/*
+	 * Unless MPS strategy is PCIE_BUS_TUNE_OFF (don't touch MPS at all),
+	 * start off by setting Root Ports' MPS to MPSS. This only applies to
+	 * Root Ports without an upstream bridge (root bridges), as other Root
+	 * Ports will have downstream bridges. Depending on the MPS strategy
+	 * and MPSS of downstream devices, the Root Port's MPS may be
+	 * overridden later.
+	 */
+	if (!bridge && pci_pcie_type(dev) == PCI_EXP_TYPE_ROOT_PORT &&
+	    pcie_bus_config != PCIE_BUS_TUNE_OFF)
+		pcie_set_mps(dev, 128 << dev->pcie_mpss);
+
 	if (!bridge || !pci_is_pcie(bridge))
 		return;
 
