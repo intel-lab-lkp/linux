@@ -2045,28 +2045,12 @@ int of_find_last_cache_level(unsigned int cpu)
 	return cache_level;
 }
 
-/**
- * of_map_id - Translate an ID through a downstream mapping.
- * @np: root complex device node.
- * @id: device ID to map.
- * @map_name: property name of the map to use.
- * @map_mask_name: optional property name of the mask to use.
- * @target: optional pointer to a target device node.
- * @id_out: optional pointer to receive the translated ID.
- *
- * Given a device ID, look up the appropriate implementation-defined
- * platform ID and/or the target device which receives transactions on that
- * ID, as per the "iommu-map" and "msi-map" bindings. Either of @target or
- * @id_out may be NULL if only the other is required. If @target points to
- * a non-NULL device node pointer, only entries targeting that node will be
- * matched; if it points to a NULL value, it will receive the device node of
- * the first matching target phandle, with a reference held.
- *
- * Return: 0 on success or a standard error code on failure.
+/*
+ * Look at the documentation of of_map_id.
  */
-int of_map_id(const struct device_node *np, u32 id,
-	       const char *map_name, const char *map_mask_name,
-	       struct device_node **target, u32 *id_out)
+static int of_map_id_or_funcid(const struct device_node *np, u32 id,
+		const char *map_name, const char *map_mask_name,
+		struct device_node **target, u32 *id_out)
 {
 	u32 map_mask, masked_id;
 	int map_len;
@@ -2148,5 +2132,31 @@ int of_map_id(const struct device_node *np, u32 id,
 	if (id_out)
 		*id_out = id;
 	return 0;
+}
+
+/**
+ * of_map_id - Translate an ID through a downstream mapping.
+ * @np: root complex device node.
+ * @id: device ID to map.
+ * @map_name: property name of the map to use.
+ * @map_mask_name: optional property name of the mask to use.
+ * @target: optional pointer to a target device node.
+ * @id_out: optional pointer to receive the translated ID.
+ *
+ * Given a device ID, look up the appropriate implementation-defined
+ * platform ID and/or the target device which receives transactions on that
+ * ID, as per the "iommu-map" and "msi-map" bindings. Either of @target or
+ * @id_out may be NULL if only the other is required. If @target points to
+ * a non-NULL device node pointer, only entries targeting that node will be
+ * matched; if it points to a NULL value, it will receive the device node of
+ * the first matching target phandle, with a reference held.
+ *
+ * Return: 0 on success or a standard error code on failure.
+ */
+int of_map_id(const struct device_node *np, u32 id,
+	const char *map_name, const char *map_mask_name,
+	struct device_node **target, u32 *id_out)
+{
+	return of_map_id_or_funcid(np, id, map_name, map_mask_name, target, id_out);
 }
 EXPORT_SYMBOL_GPL(of_map_id);
