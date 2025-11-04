@@ -81,6 +81,9 @@ properties:
       High-Speed Peripheral device needed to configure clock selection,
       clock low-power mode and clock delay.
 
+  power-domains:
+    maxItems: 1
+
 required:
   - compatible
   - reg
