@@ -1187,12 +1187,11 @@ static int cxl_rch_handle_error_iter(struct pci_dev *dev, void *data)
 	if (!is_cxl_mem_dev(dev) || !cxl_error_is_native(dev))
 		return 0;
 
-	/* Protect dev->driver */
-	device_lock(&dev->dev);
+	guard(device)(&dev->dev);
 
 	err_handler = dev->driver ? dev->driver->err_handler : NULL;
 	if (!err_handler)
-		goto out;
+		return 0;
 
 	if (info->severity == AER_CORRECTABLE) {
 		if (err_handler->cor_error_detected)
@@ -1203,8 +1202,6 @@ static int cxl_rch_handle_error_iter(struct pci_dev *dev, void *data)
 		else if (info->severity == AER_FATAL)
 			err_handler->error_detected(dev, pci_channel_io_frozen);
 	}
-out:
-	device_unlock(&dev->dev);
 	return 0;
 }
 
