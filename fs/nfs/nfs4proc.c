@@ -4458,6 +4458,8 @@ out:
 #if IS_ENABLED(CONFIG_NFS_V4_1)
 static bool should_request_dir_deleg(struct inode *inode)
 {
+	if (!directory_delegations)
+		return false;
 	if (!inode)
 		return false;
 	if (!S_ISDIR(inode->i_mode))
