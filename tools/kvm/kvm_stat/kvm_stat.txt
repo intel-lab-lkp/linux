@@ -103,8 +103,8 @@ OPTIONS
 --pid=<pid>::
 	limit statistics to one virtual machine (pid)
 
--s::
---set-delay::
+-s<delay>::
+--set-delay=<delay>::
         set delay between refreshs (value range: 0.1-25.5 secs)
 
 -t::
