@@ -799,15 +799,25 @@ static void release_gid_table(struct ib_device *device,
 	if (!table)
 		return;
 
+	mutex_lock(&table->lock);
 	for (i = 0; i < table->sz; i++) {
 		if (is_gid_entry_free(table->data_vec[i]))
 			continue;
 
-		WARN_ONCE(true,
-			  "GID entry ref leak for dev %s index %d ref=%u\n",
+		WARN_ONCE(table->data_vec[i]->state != GID_TABLE_ENTRY_PENDING_DEL,
+			  "GID entry ref leak for dev %s index %d ref=%u, state: %d\n",
 			  dev_name(&device->dev), i,
-			  kref_read(&table->data_vec[i]->kref));
+			  kref_read(&table->data_vec[i]->kref), table->data_vec[i]->state);
+		/*
+		 * The entry may be sitting in the WQ waiting for
+		 * free_gid_work(), flush it to try to clean it.
+		 */
+		mutex_unlock(&table->lock);
+		flush_workqueue(ib_wq);
+		mutex_lock(&table->lock);
 	}
+
+	mutex_unlock(&table->lock);
 
 	mutex_destroy(&table->lock);
 	kfree(table->data_vec);
