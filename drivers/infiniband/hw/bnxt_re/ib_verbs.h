@@ -96,6 +96,11 @@ struct bnxt_re_qp {
 	struct bnxt_re_cq	*scq;
 	struct bnxt_re_cq	*rcq;
 	struct dentry		*dentry;
+	/* Below members added for DV support */
+	bool			is_dv_qp;
+	struct bnxt_re_dv_umem *sq_umem;
+	struct bnxt_re_dv_umem *rq_umem;
+	const struct ib_gid_attr *sgid_attr;
 };
 
 struct bnxt_re_cq {
@@ -113,6 +118,8 @@ struct bnxt_re_cq {
 	int			resize_cqe;
 	void			*uctx_cq_page;
 	struct hlist_node	hash_entry;
+	bool			is_dv_cq;
+	struct bnxt_re_dv_umem	*umem_handle;
 	struct bnxt_re_ucontext *uctx;
 };
 
@@ -304,4 +311,9 @@ void bnxt_re_unlock_cqs(struct bnxt_re_qp *qp, unsigned long flags);
 struct bnxt_re_user_mmap_entry*
 bnxt_re_mmap_entry_insert(struct bnxt_re_ucontext *uctx, u64 mem_offset,
 			  enum bnxt_re_mmap_flag mmap_flag, u64 *offset);
+u8 __from_ib_qp_type(enum ib_qp_type type);
+int bnxt_re_setup_qp_hwqs(struct bnxt_re_qp *qp, bool is_dv_qp);
+void bnxt_re_qp_free_umem(struct bnxt_re_qp *qp);
+int bnxt_re_query_qp_attr(struct bnxt_re_qp *qp, struct ib_qp_attr *qp_attr,
+			  int attr_mask, struct ib_qp_init_attr *qp_init_attr);
 #endif /* __BNXT_RE_IB_VERBS_H__ */
