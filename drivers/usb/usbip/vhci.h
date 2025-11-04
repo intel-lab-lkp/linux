@@ -76,8 +76,17 @@ enum hub_speed {
 #define VHCI_DEFAULT_HC_PORTS 8
 #define VHCI_MAX_HC_PORTS USB_SS_MAXPORTS
 
+/*
+ * Number of supported virtual host controllers. Value has upperbound of
+ * maximum possible usb busses.
+ * It is limited by a bus ID allocation in [1 .. USB_MAXBUS - 1] range,
+ * resulting in maximum of USB_MAXBUS - 1 usb busses allocated.
+ * Additionally, each virtual host controller registers 2 usb hubs (USB2.0
+ * & USB3.0), therefore maximum number of virtual host controllers is:
+ * (USB_MAXBUS - 1) / 2
+ */
 #define VHCI_DEFAULT_NR_HCS 1
-#define VHCI_MAX_NR_HCS 128
+#define VHCI_MAX_NR_HCS 31
 
 #define MAX_STATUS_NAME 16
 
