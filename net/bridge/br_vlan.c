@@ -911,6 +911,7 @@ int br_vlan_filter_toggle(struct net_bridge *br, unsigned long val,
 	br_manage_promisc(br);
 	recalculate_group_addr(br);
 	br_recalculate_fwd_mask(br);
+	br_mst_static_branch_toggle(br);
 	if (!val && br_opt_get(br, BROPT_MCAST_VLAN_SNOOPING_ENABLED)) {
 		br_info(br, "vlan filtering disabled, automatically disabling multicast vlan snooping\n");
 		br_multicast_toggle_vlan_snooping(br, false, NULL);

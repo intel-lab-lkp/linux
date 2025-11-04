@@ -194,6 +194,18 @@ void br_mst_vlan_init_state(struct net_bridge_vlan *v)
 		v->state = v->port->state;
 }
 
+void br_mst_static_branch_toggle(struct net_bridge *br)
+{
+	/* enable the branch only if both VLAN filtering and MST are enabled
+	 * otherwise port state bypass can lead to learning race conditions
+	 */
+	if (br_opt_get(br, BROPT_VLAN_ENABLED) &&
+	    br_opt_get(br, BROPT_MST_ENABLED))
+		static_branch_enable(&br_mst_used);
+	else
+		static_branch_disable(&br_mst_used);
+}
+
 int br_mst_set_enabled(struct net_bridge *br, bool on,
 		       struct netlink_ext_ack *extack)
 {
@@ -224,11 +236,7 @@ int br_mst_set_enabled(struct net_bridge *br, bool on,
 	if (err && err != -EOPNOTSUPP)
 		return err;
 
-	if (on)
-		static_branch_enable(&br_mst_used);
-	else
-		static_branch_disable(&br_mst_used);
-
+	br_mst_static_branch_toggle(br);
 	br_opt_toggle(br, BROPT_MST_ENABLED, on);
 	return 0;
 }
