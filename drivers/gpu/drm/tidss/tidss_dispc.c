@@ -1315,6 +1315,13 @@ static inline int check_pixel_clock(struct dispc_device *dispc,
 {
 	unsigned long round_clock;
 
+	/*
+	 * For VP's with external clocking, clock operations must be
+	 * delegated to respective driver, so we skip the check here.
+	 */
+	if (dispc->tidss->is_ext_vp_clk[hw_videoport])
+		return 0;
+
 	round_clock = clk_round_rate(dispc->vp_clk[hw_videoport], clock);
 	/*
 	 * To keep the check consistent with dispc_vp_set_clk_rate(), we
