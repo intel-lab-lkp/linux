@@ -934,9 +934,9 @@ static int mlx5_pci_init(struct mlx5_core_dev *dev, struct pci_dev *pdev,
 		goto err_clr_master;
 	}
 
-	if (pci_enable_atomic_ops_to_root(pdev, PCI_EXP_DEVCAP2_ATOMIC_COMP32) &&
-	    pci_enable_atomic_ops_to_root(pdev, PCI_EXP_DEVCAP2_ATOMIC_COMP64) &&
-	    pci_enable_atomic_ops_to_root(pdev, PCI_EXP_DEVCAP2_ATOMIC_COMP128))
+	if (pci_enable_atomic_ops_to_root(pdev, PCI_EXP_DEVCAP2_ATOMIC_COMP32 |
+						PCI_EXP_DEVCAP2_ATOMIC_COMP64 |
+						PCI_EXP_DEVCAP2_ATOMIC_COMP128))
 		mlx5_core_dbg(dev, "Enabling pci atomics failed\n");
 
 	dev->iseg_base = dev->bar_addr;
