@@ -63,6 +63,9 @@ typedef __u32			xfs_nlink_t;
 #include <linux/xattr.h>
 #include <linux/mnt_idmapping.h>
 #include <linux/debugfs.h>
+#ifdef CONFIG_XFS_HEALTH_MONITOR
+# include <linux/seq_buf.h>
+#endif
 
 #include <asm/page.h>
 #include <asm/div64.h>
