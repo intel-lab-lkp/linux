@@ -69,7 +69,6 @@ struct conntrack_gc_work {
 	u32			avg_timeout;
 	u32			count;
 	u32			start_time;
-	bool			exiting;
 	bool			early_drop;
 };
 
@@ -91,7 +90,7 @@ static DEFINE_MUTEX(nf_conntrack_mutex);
  * allowing non-idle machines to wakeup more often when needed.
  */
 #define GC_SCAN_INITIAL_COUNT	100
-#define GC_SCAN_INTERVAL_INIT	GC_SCAN_INTERVAL_MAX
+#define GC_SCAN_INTERVAL_INIT	(GC_SCAN_INTERVAL_MAX / 2)
 
 #define GC_SCAN_MAX_DURATION	msecs_to_jiffies(10)
 #define GC_SCAN_EXPIRED_MAX	(64000u / HZ)
@@ -1639,19 +1638,17 @@ static void gc_worker(struct work_struct *work)
 		next_run = 1;
 
 early_exit:
-	if (gc_work->exiting)
-		return;
-
 	if (next_run)
 		gc_work->early_drop = false;
 
-	queue_delayed_work(system_power_efficient_wq, &gc_work->dwork, next_run);
+	if (gc_work->count > GC_SCAN_INITIAL_COUNT || gc_work->next_bucket > 0)
+		mod_delayed_work(system_power_efficient_wq, &gc_work->dwork, next_run);
 }
 
 static void conntrack_gc_work_init(struct conntrack_gc_work *gc_work)
 {
+	/* work is started on first conntrack allocation. */
 	INIT_DELAYED_WORK(&gc_work->dwork, gc_worker);
-	gc_work->exiting = false;
 }
 
 static struct nf_conn *
@@ -1709,6 +1706,15 @@ __nf_conntrack_alloc(struct net *net,
 	 * this is inserted in any list.
 	 */
 	refcount_set(&ct->ct_general.use, 0);
+
+	/* Re-arm gc_work if needed, but do not modify
+	 * in case it was already pending.
+	 */
+	if (unlikely(!delayed_work_pending(&conntrack_gc_work.dwork)))
+		queue_delayed_work(system_power_efficient_wq,
+				   &conntrack_gc_work.dwork,
+				   GC_SCAN_INTERVAL_INIT);
+
 	return ct;
 out:
 	atomic_dec(&cnet->count);
@@ -2458,13 +2464,12 @@ static int kill_all(struct nf_conn *i, void *data)
 void nf_conntrack_cleanup_start(void)
 {
 	cleanup_nf_conntrack_bpf();
-	conntrack_gc_work.exiting = true;
 }
 
 void nf_conntrack_cleanup_end(void)
 {
 	RCU_INIT_POINTER(nf_ct_hook, NULL);
-	cancel_delayed_work_sync(&conntrack_gc_work.dwork);
+	disable_delayed_work_sync(&conntrack_gc_work.dwork);
 	kvfree(nf_conntrack_hash);
 
 	nf_conntrack_proto_fini();
@@ -2687,7 +2692,6 @@ int nf_conntrack_init_start(void)
 		goto err_proto;
 
 	conntrack_gc_work_init(&conntrack_gc_work);
-	queue_delayed_work(system_power_efficient_wq, &conntrack_gc_work.dwork, HZ);
 
 	ret = register_nf_conntrack_bpf();
 	if (ret < 0)
