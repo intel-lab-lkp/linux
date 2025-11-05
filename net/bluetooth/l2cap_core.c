@@ -1688,6 +1688,11 @@ int l2cap_register_user(struct l2cap_conn *conn, struct l2cap_user *user)
 	struct hci_dev *hdev = conn->hcon->hdev;
 	int ret;
 
+	/* Hold a reference to hdev to prevent it from being freed while
+	 * we have registered users.
+	 */
+	hci_dev_hold(hdev);
+
 	/* We need to check whether l2cap_conn is registered. If it is not, we
 	 * must not register the l2cap_user. l2cap_conn_del() is unregisters
 	 * l2cap_conn objects, but doesn't provide its own locking. Instead, it
@@ -1717,6 +1722,10 @@ int l2cap_register_user(struct l2cap_conn *conn, struct l2cap_user *user)
 
 out_unlock:
 	hci_dev_unlock(hdev);
+
+	if (ret)
+		hci_dev_put(hdev);
+
 	return ret;
 }
 EXPORT_SYMBOL(l2cap_register_user);
@@ -1735,6 +1744,9 @@ void l2cap_unregister_user(struct l2cap_conn *conn, struct l2cap_user *user)
 
 out_unlock:
 	hci_dev_unlock(hdev);
+
+	/* Release the reference we took in l2cap_register_user */
+	hci_dev_put(hdev);
 }
 EXPORT_SYMBOL(l2cap_unregister_user);
 
