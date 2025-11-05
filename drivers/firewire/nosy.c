@@ -265,19 +265,13 @@ set_phy_reg(struct pcilynx *lynx, int addr, int val)
 static int
 nosy_open(struct inode *inode, struct file *file)
 {
-	int minor = iminor(inode);
+	struct miscdevice *misc = file->private_data;
 	struct client *client;
-	struct pcilynx *tmp, *lynx = NULL;
+	struct pcilynx *lynx;
 
-	mutex_lock(&card_mutex);
-	list_for_each_entry(tmp, &card_list, link)
-		if (tmp->misc.minor == minor) {
-			lynx = lynx_get(tmp);
-			break;
-		}
-	mutex_unlock(&card_mutex);
-	if (lynx == NULL)
-		return -ENODEV;
+	/* misc_open() set file->private_data to the miscdevice already. */
+	lynx = container_of(misc, struct pcilynx, misc);
+	lynx_get(lynx);
 
 	client = kmalloc(sizeof *client, GFP_KERNEL);
 	if (client == NULL)
