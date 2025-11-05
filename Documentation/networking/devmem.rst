@@ -215,8 +215,8 @@ Freeing frags
 -------------
 
 Frags received via SCM_DEVMEM_DMABUF are pinned by the kernel while the user
-processes the frag. The user must return the frag to the kernel via
-SO_DEVMEM_DONTNEED::
+processes the frag. Users should return tokens to the kernel via
+SO_DEVMEM_DONTNEED when they are done processing the data::
 
 	ret = setsockopt(client_fd, SOL_SOCKET, SO_DEVMEM_DONTNEED, &token,
 			 sizeof(token));
@@ -234,6 +234,72 @@ can be less than the tokens provided by the user in case of:
 
 (a) an internal kernel leak bug.
 (b) the user passed more than 1024 frags.
+
+
+Autorelease Control
+~~~~~~~~~~~~~~~~~~~
+
+The SO_DEVMEM_AUTORELEASE socket option controls what happens to outstanding
+tokens (tokens not released via SO_DEVMEM_DONTNEED) when the socket closes::
+
+	int autorelease = 0;  /* 0 = manual release, 1 = automatic release */
+	ret = setsockopt(client_fd, SOL_SOCKET, SO_DEVMEM_AUTORELEASE,
+			 &autorelease, sizeof(autorelease));
+
+	/* Query current setting */
+	int current_val;
+	socklen_t len = sizeof(current_val);
+	ret = getsockopt(client_fd, SOL_SOCKET, SO_DEVMEM_AUTORELEASE,
+			 &current_val, &len);
+
+When autorelease is disabled (default):
+
+- Outstanding tokens are NOT released when the socket closes
+- Outstanding tokens are only released when the dmabuf is unbound
+- Provides better performance by eliminating xarray overhead (~10% CPU reduction)
+- Kernel tracks tokens via atomic reference counters in net_iov structures
+
+When autorelease is enabled:
+
+- Outstanding tokens are automatically released when the socket closes
+- Backwards compatible behavior
+- Kernel tracks tokens in an xarray per socket
+
+Important: In both modes, applications should call SO_DEVMEM_DONTNEED to
+return tokens as soon as they are done processing. The autorelease setting only
+affects what happens to tokens that are still outstanding when close() is called.
+
+The autorelease setting can only be changed when the socket has no outstanding
+tokens. If tokens are present, setsockopt returns -EBUSY.
+
+
+Performance Considerations
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Disabling autorelease provides approximately ~10% CPU utilization improvement in
+RX workloads by:
+
+- Eliminating xarray allocations and lookups for token tracking
+- Using atomic reference counters instead
+- Reducing lock contention on the xarray spinlock
+
+However, applications must ensure all tokens are released via
+SO_DEVMEM_DONTNEED before closing the socket, otherwise the backing pages will
+remain pinned until the dmabuf is unbound.
+
+
+Caveats
+~~~~~~~
+
+- With autorelease disabled, sockets cannot switch between different dmabuf
+  bindings. This restriction exists because tokens in this mode do not encode
+  the binding information necessary to perform the token release.
+
+- Applications using manual release mode (autorelease=0) must ensure all tokens
+  are returned via SO_DEVMEM_DONTNEED before socket close to avoid resource
+  leaks during the lifetime of the dmabuf binding. Tokens not released before
+  close() will only be freed when the dmabuf is unbound.
+
 
 TX Interface
 ============
