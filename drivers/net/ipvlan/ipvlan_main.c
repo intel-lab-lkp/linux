@@ -908,7 +908,8 @@ static int ipvlan_device_event(struct notifier_block *unused,
 }
 
 /* the caller must held the addrs lock */
-int ipvlan_add_addr(struct ipvl_dev *ipvlan, void *iaddr, bool is_v6)
+int ipvlan_add_addr(struct ipvl_dev *ipvlan, void *iaddr, bool is_v6,
+		    const u8 *hwaddr)
 {
 	struct ipvl_addr *addr;
 
@@ -927,6 +928,8 @@ int ipvlan_add_addr(struct ipvl_dev *ipvlan, void *iaddr, bool is_v6)
 		addr->atype = IPVL_IPV6;
 #endif
 	}
+	if (hwaddr)
+		ether_addr_copy(addr->hwaddr, hwaddr);
 
 	list_add_tail_rcu(&addr->anode, &ipvlan->addrs);
 
@@ -939,7 +942,7 @@ int ipvlan_add_addr(struct ipvl_dev *ipvlan, void *iaddr, bool is_v6)
 	return 0;
 }
 
-static void ipvlan_del_addr(struct ipvl_dev *ipvlan, void *iaddr, bool is_v6)
+void ipvlan_del_addr(struct ipvl_dev *ipvlan, void *iaddr, bool is_v6)
 {
 	struct ipvl_addr *addr;
 
@@ -980,7 +983,7 @@ static int ipvlan_add_addr6(struct ipvl_dev *ipvlan, struct in6_addr *ip6_addr)
 			  "Failed to add IPv6=%pI6c addr for %s intf\n",
 			  ip6_addr, ipvlan->dev->name);
 	else
-		ret = ipvlan_add_addr(ipvlan, ip6_addr, true);
+		ret = ipvlan_add_addr(ipvlan, ip6_addr, true, NULL);
 	spin_unlock_bh(&ipvlan->addrs_lock);
 	return ret;
 }
@@ -1051,7 +1054,7 @@ static int ipvlan_add_addr4(struct ipvl_dev *ipvlan, struct in_addr *ip4_addr)
 			  "Failed to add IPv4=%pI4 on %s intf.\n",
 			  ip4_addr, ipvlan->dev->name);
 	else
-		ret = ipvlan_add_addr(ipvlan, ip4_addr, false);
+		ret = ipvlan_add_addr(ipvlan, ip4_addr, false, NULL);
 	spin_unlock_bh(&ipvlan->addrs_lock);
 	return ret;
 }

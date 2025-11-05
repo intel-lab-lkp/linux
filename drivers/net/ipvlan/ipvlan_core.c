@@ -320,8 +320,36 @@ void ipvlan_skb_crossing_ns(struct sk_buff *skb, struct net_device *dev)
 		skb->dev = dev;
 }
 
-static int ipvlan_rcv_frame(struct ipvl_addr *addr, struct sk_buff **pskb,
-			    bool local)
+static int ipvlan_macnat_rx_skb(struct ipvl_addr *addr, int addr_type,
+				struct sk_buff *skb)
+{
+	/* Here we have non-shared skb and free to modify it. */
+	struct ethhdr *eth = eth_hdr(skb);
+
+	if (addr_type == IPVL_ARP) {
+		struct arphdr *arph = arp_hdr(skb);
+		u8 *arp_ptr = (u8 *)(arph + 1);
+		u8 *dsthw = arp_ptr + addr->master->dev->addr_len + sizeof(u32);
+		const u8 *phy_addr = addr->master->phy_dev->dev_addr;
+
+		/* Some access points may do ARP-proxy and answers us back.
+		 * Client may treat this as address-conflict.
+		 */
+		if (ether_addr_equal(eth->h_source, phy_addr) &&
+		    ether_addr_equal(eth->h_dest, phy_addr) &&
+		    is_zero_ether_addr(dsthw)) {
+			return NET_RX_DROP;
+		}
+		if (ether_addr_equal(dsthw, phy_addr))
+			ether_addr_copy(dsthw, addr->hwaddr);
+	}
+
+	ether_addr_copy(eth->h_dest, addr->hwaddr);
+	return NET_RX_SUCCESS;
+}
+
+static int ipvlan_rcv_frame(struct ipvl_addr *addr, int addr_type,
+			    struct sk_buff **pskb, bool local)
 {
 	struct ipvl_dev *ipvlan = addr->master;
 	struct net_device *dev = ipvlan->dev;
@@ -331,10 +359,8 @@ static int ipvlan_rcv_frame(struct ipvl_addr *addr, struct sk_buff **pskb,
 	struct sk_buff *skb = *pskb;
 
 	len = skb->len + ETH_HLEN;
-	/* Only packets exchanged between two local slaves need to have
-	 * device-up check as well as skb-share check.
-	 */
-	if (local) {
+
+	if (local || ipvlan_is_macnat(ipvlan->port)) {
 		if (unlikely(!(dev->flags & IFF_UP))) {
 			kfree_skb(skb);
 			goto out;
@@ -345,6 +371,13 @@ static int ipvlan_rcv_frame(struct ipvl_addr *addr, struct sk_buff **pskb,
 			goto out;
 
 		*pskb = skb;
+		if (!local && ipvlan_is_macnat(ipvlan->port)) {
+			if (ipvlan_macnat_rx_skb(addr, addr_type, skb) !=
+			    NET_RX_SUCCESS) {
+				kfree_skb(skb);
+				goto out;
+			}
+		}
 	}
 
 	if (local) {
@@ -435,7 +468,8 @@ static bool is_ipv6_usable(const struct in6_addr *addr)
 	       !ipv6_addr_any(addr);
 }
 
-static void __ipvlan_addr_learn(struct ipvl_dev *ipvlan, void *addr, bool is_v6)
+static void __ipvlan_addr_learn(struct ipvl_dev *ipvlan, void *addr, bool is_v6,
+				const u8 *hwaddr)
 {
 	const ipvl_hdr_type atype = is_v6 ? IPVL_IPV6 : IPVL_IPV4;
 	struct ipvl_addr *ipvladdr, *oldest = NULL;
@@ -461,7 +495,7 @@ static void __ipvlan_addr_learn(struct ipvl_dev *ipvlan, void *addr, bool is_v6)
 		list_del_rcu(&oldest->anode);
 	}
 
-	ipvlan_add_addr(ipvlan, addr, is_v6);
+	ipvlan_add_addr(ipvlan, addr, is_v6, hwaddr);
 
 out_unlock:
 	spin_unlock_bh(&ipvlan->addrs_lock);
@@ -470,8 +504,9 @@ out_unlock:
 }
 
 static void ipvlan_addr_learn(struct ipvl_dev *ipvlan, void *lyr3h,
-			      int addr_type)
+			      int addr_type, const u8 *hwaddr)
 {
+	struct ipvl_addr *ipvladdr;
 	void *addr = NULL;
 	bool is_v6;
 
@@ -520,8 +555,16 @@ static void ipvlan_addr_learn(struct ipvl_dev *ipvlan, void *lyr3h,
 		return;
 	}
 
-	if (!ipvlan_ht_addr_lookup(ipvlan->port, addr, is_v6))
-		__ipvlan_addr_learn(ipvlan, addr, is_v6);
+	/* handle situation when MAC changed, but IP is the same. */
+	ipvladdr = ipvlan_ht_addr_lookup(ipvlan->port, addr, is_v6);
+	if (ipvladdr && !ether_addr_equal(ipvladdr->hwaddr, hwaddr)) {
+		/* del_addr is safe to call, because we are inside xmit. */
+		ipvlan_del_addr(ipvladdr->master, addr, is_v6);
+		ipvladdr = NULL;
+	}
+
+	if (!ipvladdr)
+		__ipvlan_addr_learn(ipvlan, addr, is_v6, hwaddr);
 }
 
 static noinline_for_stack int ipvlan_process_v4_outbound(struct sk_buff *skb)
@@ -717,7 +760,7 @@ static int ipvlan_xmit_mode_l3(struct sk_buff *skb, struct net_device *dev)
 				consume_skb(skb);
 				return NET_XMIT_DROP;
 			}
-			ipvlan_rcv_frame(addr, &skb, true);
+			ipvlan_rcv_frame(addr, addr_type, &skb, true);
 			return NET_XMIT_SUCCESS;
 		}
 	}
@@ -744,6 +787,8 @@ static int ipvlan_xmit_mode_l2(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	same_mac_addr = ether_addr_equal(eth->h_dest, eth->h_source);
+	if (same_mac_addr && ipvlan_is_macnat(ipvlan->port))
+		goto out_drop;
 
 	lyr3h = NULL;
 	if (!ipvlan_is_vepa(ipvlan->port)) {
@@ -751,7 +796,8 @@ static int ipvlan_xmit_mode_l2(struct sk_buff *skb, struct net_device *dev)
 
 		if (ipvlan_is_macnat(ipvlan->port)) {
 			if (lyr3h)
-				ipvlan_addr_learn(ipvlan, lyr3h, addr_type);
+				ipvlan_addr_learn(ipvlan, lyr3h, addr_type,
+						  eth->h_source);
 			/* Mark SKB in advance */
 			skb = skb_share_check(skb, GFP_ATOMIC);
 			if (!skb)
@@ -769,47 +815,74 @@ static int ipvlan_xmit_mode_l2(struct sk_buff *skb, struct net_device *dev)
 			ipvlan_multicast_enqueue(ipvlan->port, nskb, true);
 		}
 
-		goto tx_phy_dev;
+		goto tx_frame_out;
 	}
 
 	if (ipvlan_is_vepa(ipvlan->port))
 		goto tx_phy_dev;
 
-	if (!same_mac_addr &&
+	if (ipvlan_is_macnat(ipvlan->port) &&
 	    ether_addr_equal(eth->h_dest, ipvlan->phy_dev->dev_addr)) {
 		/* It is a packet from child with destination to main port.
 		 * Pass it to main.
 		 */
-		skb = skb_share_check(skb, GFP_ATOMIC);
-		if (!skb)
-			return NET_XMIT_DROP;
 		skb->pkt_type = PACKET_HOST;
 		skb->dev = ipvlan->phy_dev;
 		dev_forward_skb(ipvlan->phy_dev, skb);
 		return NET_XMIT_SUCCESS;
-	} else if (same_mac_addr) {
-		if (lyr3h) {
-			addr = ipvlan_addr_lookup(ipvlan->port, lyr3h, addr_type, true);
-			if (addr) {
-				if (ipvlan_is_private(ipvlan->port)) {
-					consume_skb(skb);
-					return NET_XMIT_DROP;
-				}
-				ipvlan_rcv_frame(addr, &skb, true);
-				return NET_XMIT_SUCCESS;
-			}
+	}
+
+	if (lyr3h) {
+		addr = ipvlan_addr_lookup(ipvlan->port, lyr3h, addr_type, true);
+		if (addr) {
+			if (ipvlan_is_private(ipvlan->port))
+				goto out_drop;
+
+			ipvlan_rcv_frame(addr, addr_type, &skb, true);
+			return NET_XMIT_SUCCESS;
 		}
+	}
+
+tx_frame_out:
+	/* We don't know destination. Now we have to handle case for
+	 * non-learnable bridge and learnable case.
+	 */
+	if (!ipvlan_is_macnat(ipvlan->port)) {
 		skb = skb_share_check(skb, GFP_ATOMIC);
 		if (!skb)
 			return NET_XMIT_DROP;
+		if (same_mac_addr) {
+			/* Packet definitely does not belong to any of the
+			 * virtual devices, but the dest is local. So forward
+			 * the skb for the main. At the RX side we just return
+			 * RX_PASS for it to be processed further on the stack.
+			 */
+			dev_forward_skb(ipvlan->phy_dev, skb);
+			return NET_XMIT_SUCCESS;
+		}
+	} else {
+		/* Packet to outside on learnable. Fix source eth-addr. */
+		struct sk_buff *orig_skb = skb;
 
-		/* Packet definitely does not belong to any of the
-		 * virtual devices, but the dest is local. So forward
-		 * the skb for the main-dev. At the RX side we just return
-		 * RX_PASS for it to be processed further on the stack.
-		 */
-		dev_forward_skb(ipvlan->phy_dev, skb);
-		return NET_XMIT_SUCCESS;
+		skb = skb_unshare(skb, GFP_ATOMIC);
+		if (!skb)
+			return NET_XMIT_DROP;
+
+		skb_reset_mac_header(skb);
+		ether_addr_copy(skb_eth_hdr(skb)->h_source,
+				ipvlan->phy_dev->dev_addr);
+
+		/* ToDo: Handle ICMPv6 for neighbours discovery.*/
+		if (lyr3h && addr_type == IPVL_ARP) {
+			struct arphdr *arph;
+			/* must reparse new skb */
+			if (skb != orig_skb && lyr3h && addr_type == IPVL_ARP)
+				lyr3h = ipvlan_get_L3_hdr(ipvlan->port, skb,
+							  &addr_type);
+			arph = (struct arphdr *)lyr3h;
+			ether_addr_copy((u8 *)(arph + 1),
+					ipvlan->phy_dev->dev_addr);
+		}
 	}
 
 tx_phy_dev:
@@ -884,8 +957,7 @@ static rx_handler_result_t ipvlan_handle_mode_l3(struct sk_buff **pskb,
 
 	addr = ipvlan_addr_lookup(port, lyr3h, addr_type, true);
 	if (addr)
-		ret = ipvlan_rcv_frame(addr, pskb, false);
-
+		ret = ipvlan_rcv_frame(addr, addr_type, pskb, false);
 out:
 	return ret;
 }
@@ -953,7 +1025,8 @@ static rx_handler_result_t ipvlan_handle_mode_l2(struct sk_buff **pskb,
 		return RX_HANDLER_PASS;
 
 	if (ipvlan_is_l2_mcast(port, skb, &need_eth_fix)) {
-		if (ipvlan_external_frame(skb, port)) {
+		if (ipvlan_is_macnat(port) ||
+		    ipvlan_external_frame(skb, port)) {
 			/* External frames are queued for device local
 			 * distribution, but a copy is given to master
 			 * straight away to avoid sending duplicates later
