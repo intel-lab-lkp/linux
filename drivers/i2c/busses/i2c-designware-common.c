@@ -34,6 +34,91 @@
 
 #include "i2c-designware-core.h"
 
+/*
+ * Byte offset between consecutive 16-bit registers
+ */
+#define DW_IC_REG_STEP_BYTES			2
+
+/*
+ * Bit shift to combine two 16-bit values into 32-bit word
+ */
+#define DW_IC_REG_WORD_SHIFT			16
+
+/*
+ * Default bus capacitance in picofarads
+ */
+#define DW_IC_DEFAULT_BUS_CAPACITANCE_PF	100
+
+/*
+ * Standard HCNT adjustment
+ */
+#define DW_IC_HCNT_ADJUST_STANDARD		3
+
+/*
+ * Number of disable attempts
+ */
+#define DW_IC_DISABLE_TIMEOUT_ATTEMPTS		100
+
+/*
+ * Minimum retry delay in microseconds
+ */
+#define DW_IC_DISABLE_RETRY_DELAY_MIN		25
+
+/*
+ * Maximum retry delay in microseconds
+ */
+#define DW_IC_DISABLE_RETRY_DELAY_MAX		250
+
+/*
+ * Mask to check if controller is active
+ */
+#define DW_IC_ENABLE_STATUS_ACTIVE_MASK		1
+
+/*
+ * Abort poll timeout in microseconds
+ */
+#define DW_IC_ABORT_TIMEOUT_US			10
+
+/*
+ * Total abort timeout in microseconds
+ */
+#define DW_IC_ABORT_TOTAL_TIMEOUT_US		100
+
+/*
+ * Poll interval in microseconds
+ */
+#define DW_IC_BUSY_POLL_TIMEOUT_US		1100
+
+/*
+ * Total timeout in microseconds
+ */
+#define DW_IC_BUSY_TOTAL_TIMEOUT_US		20000
+
+/*
+ * TX FIFO depth bit shift in DW_IC_COMP_PARAM_1
+ */
+#define DW_IC_TX_FIFO_DEPTH_SHIFT		16
+
+/*
+ * RX FIFO depth bit shift in DW_IC_COMP_PARAM_1
+ */
+#define DW_IC_RX_FIFO_DEPTH_SHIFT		8
+
+/*
+ * FIFO depth field mask
+ */
+#define DW_IC_FIFO_DEPTH_MASK			0xff
+
+/*
+ * FIFO depth value offset (0-based to 1-based)
+ */
+#define DW_IC_FIFO_DEPTH_OFFSET			1
+
+/*
+ * Minimum valid FIFO depth
+ */
+#define DW_IC_MIN_FIFO_DEPTH			2
+
 static const char *const abort_sources[] = {
 	[ABRT_7B_ADDR_NOACK] =
 		"slave address not acknowledged (7bit mode)",
@@ -106,7 +191,7 @@ static int dw_reg_read_word(void *context, unsigned int reg, unsigned int *val)
 	struct dw_i2c_dev *dev = context;
 
 	*val = readw(dev->base + reg) |
-		(readw(dev->base + reg + 2) << 16);
+		(readw(dev->base + reg + DW_IC_REG_STEP_BYTES) << DW_IC_REG_WORD_SHIFT);
 
 	return 0;
 }
@@ -116,7 +201,7 @@ static int dw_reg_write_word(void *context, unsigned int reg, unsigned int val)
 	struct dw_i2c_dev *dev = context;
 
 	writew(val, dev->base + reg);
-	writew(val >> 16, dev->base + reg + 2);
+	writew(val >> DW_IC_REG_WORD_SHIFT, dev->base + reg + DW_IC_REG_STEP_BYTES);
 
 	return 0;
 }
@@ -165,7 +250,7 @@ int i2c_dw_init_regmap(struct dw_i2c_dev *dev)
 	if (reg == swab32(DW_IC_COMP_TYPE_VALUE)) {
 		map_cfg.reg_read = dw_reg_read_swab;
 		map_cfg.reg_write = dw_reg_write_swab;
-	} else if (reg == (DW_IC_COMP_TYPE_VALUE & 0x0000ffff)) {
+	} else if (reg == lower_16_bits(DW_IC_COMP_TYPE_VALUE)) {
 		map_cfg.reg_read = dw_reg_read_word;
 		map_cfg.reg_write = dw_reg_write_word;
 	} else if (reg != DW_IC_COMP_TYPE_VALUE) {
@@ -223,7 +308,7 @@ static int i2c_dw_validate_speed(struct dw_i2c_dev *dev)
 
 #define MSCC_ICPU_CFG_TWI_DELAY		0x0
 #define MSCC_ICPU_CFG_TWI_DELAY_ENABLE	BIT(0)
-#define MSCC_ICPU_CFG_TWI_SPIKE_FILTER	0x4
+#define MSCC_ICPU_CFG_TWI_SPIKE_FILTER	BIT(2)
 
 static int mscc_twi_set_sda_hold_time(struct dw_i2c_dev *dev)
 {
@@ -384,7 +469,7 @@ int i2c_dw_fw_parse_and_configure(struct dw_i2c_dev *dev)
 	i2c_parse_fw_timings(device, t, false);
 
 	if (device_property_read_u32(device, "snps,bus-capacitance-pf", &dev->bus_capacitance_pF))
-		dev->bus_capacitance_pF = 100;
+		dev->bus_capacitance_pF = DW_IC_DEFAULT_BUS_CAPACITANCE_PF;
 
 	dev->clk_freq_optimized = device_property_read_bool(device, "snps,clk-freq-optimized");
 
@@ -434,7 +519,8 @@ u32 i2c_dw_scl_hcnt(struct dw_i2c_dev *dev, unsigned int reg, u32 ic_clk,
 	 * The reason why we need to take into account "tf" here,
 	 * is the same as described in i2c_dw_scl_lcnt().
 	 */
-	return DIV_ROUND_CLOSEST_ULL((u64)ic_clk * (tSYMBOL + tf), MICRO) - 3 + offset;
+	return DIV_ROUND_CLOSEST_ULL((u64)ic_clk * (tSYMBOL + tf), MICRO) -
+				     DW_IC_HCNT_ADJUST_STANDARD + offset;
 }
 
 u32 i2c_dw_scl_lcnt(struct dw_i2c_dev *dev, unsigned int reg, u32 ic_clk,
@@ -512,7 +598,7 @@ void __i2c_dw_disable(struct dw_i2c_dev *dev)
 	struct i2c_timings *t = &dev->timings;
 	unsigned int raw_intr_stats, ic_stats;
 	unsigned int enable;
-	int timeout = 100;
+	int timeout = DW_IC_DISABLE_TIMEOUT_ATTEMPTS;
 	bool abort_needed;
 	unsigned int status;
 	int ret;
@@ -539,8 +625,9 @@ void __i2c_dw_disable(struct dw_i2c_dev *dev)
 
 		regmap_write(dev->map, DW_IC_ENABLE, enable | DW_IC_ENABLE_ABORT);
 		ret = regmap_read_poll_timeout(dev->map, DW_IC_ENABLE, enable,
-					       !(enable & DW_IC_ENABLE_ABORT), 10,
-					       100);
+					       !(enable & DW_IC_ENABLE_ABORT),
+					       DW_IC_ABORT_TIMEOUT_US,
+					       DW_IC_ABORT_TOTAL_TIMEOUT_US);
 		if (ret)
 			dev_err(dev->dev, "timeout while trying to abort current transfer\n");
 	}
@@ -552,7 +639,7 @@ void __i2c_dw_disable(struct dw_i2c_dev *dev)
 		 * in that case this test reads zero and exits the loop.
 		 */
 		regmap_read(dev->map, DW_IC_ENABLE_STATUS, &status);
-		if ((status & 1) == 0)
+		if (!(status & DW_IC_ENABLE_STATUS_ACTIVE_MASK))
 			return;
 
 		/*
@@ -560,7 +647,8 @@ void __i2c_dw_disable(struct dw_i2c_dev *dev)
 		 * transfer supported by the driver (for 400kHz this is
 		 * 25us) as described in the DesignWare I2C databook.
 		 */
-		usleep_range(25, 250);
+		usleep_range(DW_IC_DISABLE_RETRY_DELAY_MIN,
+			     DW_IC_DISABLE_RETRY_DELAY_MAX);
 	} while (timeout--);
 
 	dev_warn(dev->dev, "timeout in disabling adapter\n");
@@ -635,7 +723,8 @@ int i2c_dw_wait_bus_not_busy(struct dw_i2c_dev *dev)
 
 	ret = regmap_read_poll_timeout(dev->map, DW_IC_STATUS, status,
 				       !(status & DW_IC_STATUS_ACTIVITY),
-				       1100, 20000);
+				       DW_IC_BUSY_POLL_TIMEOUT_US,
+				       DW_IC_BUSY_TOTAL_TIMEOUT_US);
 	if (ret) {
 		dev_warn(dev->dev, "timeout waiting for bus ready\n");
 
@@ -699,12 +788,14 @@ int i2c_dw_set_fifo_size(struct dw_i2c_dev *dev)
 	if (ret)
 		return ret;
 
-	tx_fifo_depth = ((param >> 16) & 0xff) + 1;
-	rx_fifo_depth = ((param >> 8)  & 0xff) + 1;
+	tx_fifo_depth = ((param >> DW_IC_TX_FIFO_DEPTH_SHIFT) &
+			 DW_IC_FIFO_DEPTH_MASK) + DW_IC_FIFO_DEPTH_OFFSET;
+	rx_fifo_depth = ((param >> DW_IC_RX_FIFO_DEPTH_SHIFT)  &
+			 DW_IC_FIFO_DEPTH_MASK) + DW_IC_FIFO_DEPTH_OFFSET;
 	if (!dev->tx_fifo_depth) {
 		dev->tx_fifo_depth = tx_fifo_depth;
 		dev->rx_fifo_depth = rx_fifo_depth;
-	} else if (tx_fifo_depth >= 2) {
+	} else if (tx_fifo_depth >= DW_IC_MIN_FIFO_DEPTH) {
 		dev->tx_fifo_depth = min_t(u32, dev->tx_fifo_depth,
 				tx_fifo_depth);
 		dev->rx_fifo_depth = min_t(u32, dev->rx_fifo_depth,
