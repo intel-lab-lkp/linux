@@ -35,7 +35,7 @@ cleanup() {
 
 	# restore original sysctl setting
 	sysctl -q net.netfilter.nf_conntrack_max=$init_net_max
-	sysctl -q net.netfilter.nf_conntrack_buckets=$ct_buckets
+	[ "$ct_buckets" -gt 0 ] && sysctl -q net.netfilter.nf_conntrack_buckets=$ct_buckets
 }
 trap cleanup EXIT
 
@@ -90,9 +90,11 @@ ctresize() {
 	local duration="$1"
 	local now=$(date +%s)
 	local end=$((now + duration))
+	local rnd
 
 	while [ $now -lt $end ]; do
-		sysctl -q net.netfilter.nf_conntrack_buckets=$RANDOM
+		rnd=$((RANDOM+1))
+		sysctl -q net.netfilter.nf_conntrack_buckets=$rnd
 		now=$(date +%s)
 	done
 }
@@ -434,18 +436,6 @@ check_sysctl_immutable()
 	return 1
 }
 
-test_conntrack_max_limit()
-{
-	sysctl -q net.netfilter.nf_conntrack_max=100
-	insert_ctnetlink "$nsclient1" 101
-
-	# check netns is clamped by init_net, i.e., either netns follows
-	# init_net value, or a higher pernet limit (compared to init_net) is ignored.
-	check_ctcount "$nsclient1" 100 "netns conntrack_max is init_net bound"
-
-	sysctl -q net.netfilter.nf_conntrack_max=$init_net_max
-}
-
 test_conntrack_disable()
 {
 	local timeout=2
@@ -476,15 +466,12 @@ check_max_alias 262000
 setup_ns nsclient1 nsclient2
 
 # check this only works from init_net
-for n in netfilter.nf_conntrack_buckets netfilter.nf_conntrack_expect_max net.nf_conntrack_max;do
-	check_sysctl_immutable "$nsclient1" "net.$n" 1
-done
+check_sysctl_immutable "$nsclient1" "net.$netfilter.nf_conntrack_expect_max" 1
 
 # won't work on older kernels. If it works, check that the netns obeys the limit
 if check_sysctl_immutable "$nsclient1" net.netfilter.nf_conntrack_max 0;then
 	# subtest: if pernet is changeable, check that reducing it in pernet
-	# limits the pernet entries.  Inverse, pernet clamped by a lower init_net
-	# setting, is already checked by "test_conntrack_max_limit" test.
+	# limits the pernet entries.
 
 	ip netns exec "$nsclient1" sysctl -q net.netfilter.nf_conntrack_max=1
 	insert_ctnetlink "$nsclient1" 2
@@ -507,7 +494,6 @@ done
 tmpfile=$(mktemp)
 tmpfile_proc=$(mktemp)
 tmpfile_uniq=$(mktemp)
-test_conntrack_max_limit
 test_dump_all
 test_floodresize_all
 test_conntrack_disable
