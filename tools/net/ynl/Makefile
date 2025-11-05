@@ -12,7 +12,7 @@ endif
 libdir  ?= $(prefix)/$(libdir_relative)
 includedir ?= $(prefix)/include
 
-SUBDIRS = lib generated samples
+SUBDIRS = lib generated samples tests
 
 all: $(SUBDIRS) libynl.a
 
@@ -48,5 +48,6 @@ install: libynl.a lib/*.h
 	@echo -e "\tINSTALL pyynl"
 	@pip install --prefix=$(DESTDIR)$(prefix) .
 	@make -C generated install
+	@make -C tests install
 
 .PHONY: all clean distclean install $(SUBDIRS)
