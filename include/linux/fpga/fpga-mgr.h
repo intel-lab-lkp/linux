@@ -10,6 +10,7 @@
 
 #include <linux/mutex.h>
 #include <linux/platform_device.h>
+#include <linux/err.h>
 
 struct fpga_manager;
 struct sg_table;
@@ -217,6 +218,19 @@ struct fpga_manager {
 
 #define to_fpga_manager(d) container_of(d, struct fpga_manager, dev)
 
+#define fpga_mgr_register_full(parent, info) \
+	__fpga_mgr_register_full(parent, info, THIS_MODULE)
+
+#define fpga_mgr_register(parent, name, mops, priv) \
+	__fpga_mgr_register(parent, name, mops, priv, THIS_MODULE)
+
+#define devm_fpga_mgr_register_full(parent, info) \
+	__devm_fpga_mgr_register_full(parent, info, THIS_MODULE)
+
+#define devm_fpga_mgr_register(parent, name, mops, priv) \
+	__devm_fpga_mgr_register(parent, name, mops, priv, THIS_MODULE)
+
+#if IS_ENABLED(CONFIG_FPGA)
 struct fpga_image_info *fpga_image_info_alloc(struct device *dev);
 
 void fpga_image_info_free(struct fpga_image_info *info);
@@ -232,30 +246,95 @@ struct fpga_manager *fpga_mgr_get(struct device *dev);
 
 void fpga_mgr_put(struct fpga_manager *mgr);
 
-#define fpga_mgr_register_full(parent, info) \
-	__fpga_mgr_register_full(parent, info, THIS_MODULE)
 struct fpga_manager *
 __fpga_mgr_register_full(struct device *parent, const struct fpga_manager_info *info,
 			 struct module *owner);
 
-#define fpga_mgr_register(parent, name, mops, priv) \
-	__fpga_mgr_register(parent, name, mops, priv, THIS_MODULE)
 struct fpga_manager *
 __fpga_mgr_register(struct device *parent, const char *name,
 		    const struct fpga_manager_ops *mops, void *priv, struct module *owner);
 
 void fpga_mgr_unregister(struct fpga_manager *mgr);
 
-#define devm_fpga_mgr_register_full(parent, info) \
-	__devm_fpga_mgr_register_full(parent, info, THIS_MODULE)
 struct fpga_manager *
 __devm_fpga_mgr_register_full(struct device *parent, const struct fpga_manager_info *info,
 			      struct module *owner);
-#define devm_fpga_mgr_register(parent, name, mops, priv) \
-	__devm_fpga_mgr_register(parent, name, mops, priv, THIS_MODULE)
 struct fpga_manager *
 __devm_fpga_mgr_register(struct device *parent, const char *name,
 			 const struct fpga_manager_ops *mops, void *priv,
 			 struct module *owner);
+
+#else
+static inline struct fpga_image_info *fpga_image_info_alloc(struct device *dev)
+{
+	return NULL;
+}
+
+static inline void fpga_image_info_free(struct fpga_image_info *info)
+{
+}
+
+static inline int fpga_mgr_load(struct fpga_manager *mgr,
+				struct fpga_image_info *info)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int fpga_mgr_lock(struct fpga_manager *mgr)
+{
+	return 0;
+}
+
+static inline void fpga_mgr_unlock(struct fpga_manager *mgr)
+{
+}
+
+static inline struct fpga_manager *of_fpga_mgr_get(struct device_node *node)
+{
+	return ERR_PTR(-EOPNOTSUPP);
+}
+
+static inline struct fpga_manager *fpga_mgr_get(struct device *dev)
+{
+	return ERR_PTR(-EOPNOTSUPP);
+}
+
+static inline void fpga_mgr_put(struct fpga_manager *mgr)
+{
+}
+
+static inline struct fpga_manager *
+__fpga_mgr_register_full(struct device *parent, const struct fpga_manager_info *info,
+			 struct module *owner)
+{
+	return ERR_PTR(-EOPNOTSUPP);
+}
+
+static inline struct fpga_manager *
+__fpga_mgr_register(struct device *parent, const char *name,
+		    const struct fpga_manager_ops *mops, void *priv, struct module *owner)
+{
+	return ERR_PTR(-EOPNOTSUPP);
+}
+
+static inline void fpga_mgr_unregister(struct fpga_manager *mgr)
+{
+}
+
+static inline struct fpga_manager *
+__devm_fpga_mgr_register_full(struct device *parent, const struct fpga_manager_info *info,
+			      struct module *owner)
+{
+	return ERR_PTR(-EOPNOTSUPP);
+}
+
+static inline struct fpga_manager *
+__devm_fpga_mgr_register(struct device *parent, const char *name,
+			 const struct fpga_manager_ops *mops, void *priv,
+			 struct module *owner)
+{
+	return ERR_PTR(-EOPNOTSUPP);
+}
+#endif
 
 #endif /*_LINUX_FPGA_MGR_H */
