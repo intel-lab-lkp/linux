@@ -4,6 +4,7 @@
 
 #include <linux/ethtool.h>
 #include <net/netdev_lock.h>
+#include <net/gso.h>
 
 #include "ipvlan.h"
 
@@ -71,6 +72,41 @@ fail:
 	return err;
 }
 
+static int ipvlan_receive(struct ipvl_dev *ipvlan, struct sk_buff *skb)
+{
+	struct sk_buff *segs;
+	struct sk_buff *nskb;
+	ssize_t mac_hdr_size;
+	int ret, len;
+
+	skb->pkt_type = PACKET_HOST;
+	skb->protocol = eth_type_trans(skb, skb->dev);
+	ipvlan_skb_crossing_ns(skb, ipvlan->dev);
+	ipvlan_mark_skb(skb, ipvlan->phy_dev);
+	if (skb_shinfo(skb)->gso_size == 0) {
+		len = skb->len + ETH_HLEN;
+		ret = netif_rx(skb);
+		ipvlan_count_rx(ipvlan, len, ret == NET_RX_SUCCESS, false);
+		return ret;
+	}
+
+	mac_hdr_size = skb->network_header - skb->mac_header;
+	__skb_push(skb, mac_hdr_size);
+	segs = skb_gso_segment(skb, 0);
+	dev_kfree_skb(skb);
+	if (IS_ERR(segs))
+		return NET_RX_DROP;
+
+	skb_list_walk_safe(segs, segs, nskb) {
+		skb_mark_not_on_list(segs);
+		__skb_pull(segs, mac_hdr_size);
+		len = segs->len + ETH_HLEN;
+		ret = netif_rx(segs);
+		ipvlan_count_rx(ipvlan, len, ret == NET_RX_SUCCESS, false);
+	}
+	return ret;
+}
+
 static int ipvlan_port_rcv(struct sk_buff *skb, struct net_device *wdev,
 			   struct packet_type *pt, struct net_device *orig_wdev)
 {
@@ -111,19 +147,8 @@ static int ipvlan_port_rcv(struct sk_buff *skb, struct net_device *wdev,
 		goto out;
 
 	addr = ipvlan_addr_lookup(port, lyr3h, addr_type, true);
-	if (addr) {
-		struct ipvl_dev *ipvlan = addr->master;
-		int ret, len;
-
-		ipvlan_skb_crossing_ns(skb, ipvlan->dev);
-		skb->protocol = eth_type_trans(skb, skb->dev);
-		skb->pkt_type = PACKET_HOST;
-		ipvlan_mark_skb(skb, port->dev);
-		len = skb->len + ETH_HLEN;
-		ret = netif_rx(skb);
-		ipvlan_count_rx(ipvlan, len, ret == NET_RX_SUCCESS, false);
-		return NET_RX_SUCCESS;
-	}
+	if (addr)
+		return ipvlan_receive(addr->master, skb);
 
 out:
 	dev_kfree_skb(skb);
