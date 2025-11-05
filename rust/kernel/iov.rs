@@ -10,6 +10,7 @@
 use crate::{
     alloc::{Allocator, Flags},
     bindings,
+    fs::file,
     prelude::*,
     types::Opaque,
 };
@@ -292,8 +293,12 @@ impl<'data> IovIterDest<'data> {
     /// that the file will appear to contain `contents` even if takes multiple reads to read the
     /// entire file.
     #[inline]
-    pub fn simple_read_from_buffer(&mut self, ppos: &mut i64, contents: &[u8]) -> Result<usize> {
-        if *ppos < 0 {
+    pub fn simple_read_from_buffer(
+        &mut self,
+        ppos: &mut file::Offset,
+        contents: &[u8],
+    ) -> Result<usize> {
+        if ppos.is_negative() {
             return Err(EINVAL);
         }
         let Ok(pos) = usize::try_from(*ppos) else {
@@ -306,8 +311,8 @@ impl<'data> IovIterDest<'data> {
         // BOUNDS: We just checked that `pos < contents.len()` above.
         let num_written = self.copy_to_iter(&contents[pos..]);
 
-        // OVERFLOW: `pos+num_written <= contents.len() <= isize::MAX <= i64::MAX`.
-        *ppos = (pos + num_written) as i64;
+        // OVERFLOW: `pos+num_written <= contents.len() <= isize::MAX <= file::Offset::MAX`.
+        *ppos += num_written as isize;
 
         Ok(num_written)
     }

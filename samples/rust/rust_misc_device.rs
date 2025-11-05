@@ -187,7 +187,7 @@ impl MiscDevice for RustMiscDevice {
 
         let inner = me.inner.lock();
         // Read the buffer contents, taking the file position into account.
-        let read = iov.simple_read_from_buffer(&mut kiocb.ki_pos_mut().0, &inner.buffer)?;
+        let read = iov.simple_read_from_buffer(kiocb.ki_pos_mut(), &inner.buffer)?;
 
         Ok(read)
     }
