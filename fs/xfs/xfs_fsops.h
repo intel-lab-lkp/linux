@@ -15,4 +15,15 @@ int xfs_fs_goingdown(struct xfs_mount *mp, uint32_t inflags);
 int xfs_fs_reserve_ag_blocks(struct xfs_mount *mp);
 void xfs_fs_unreserve_ag_blocks(struct xfs_mount *mp);
 
+#ifdef CONFIG_XFS_LIVE_HOOKS
+struct xfs_shutdown_hook {
+	struct xfs_hook			shutdown_hook;
+};
+
+int xfs_shutdown_hook_add(struct xfs_mount *mp, struct xfs_shutdown_hook *hook);
+void xfs_shutdown_hook_del(struct xfs_mount *mp, struct xfs_shutdown_hook *hook);
+void xfs_shutdown_hook_setup(struct xfs_shutdown_hook *hook,
+		notifier_fn_t mod_fn);
+#endif /* CONFIG_XFS_LIVE_HOOKS */
+
 #endif	/* __XFS_FSOPS_H__ */
