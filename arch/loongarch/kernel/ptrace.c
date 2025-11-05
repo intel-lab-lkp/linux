@@ -581,13 +581,15 @@ static int ptrace_hbp_get_addr(unsigned int note_type,
 	return 0;
 }
 
-static int ptrace_hbp_set_ctrl(unsigned int note_type,
+static int ptrace_hbp_set(unsigned int note_type,
 			       struct task_struct *tsk,
-			       unsigned long idx, u32 uctrl)
+			       unsigned long idx, u64 addr,
+				   u64 mask, u32 uctrl)
 {
 	int err;
 	struct perf_event *bp;
 	struct perf_event_attr attr;
+	struct arch_hw_breakpoint *info;
 	struct arch_hw_breakpoint_ctrl ctrl;
 	struct thread_info *ti = task_thread_info(tsk);
 
@@ -597,6 +599,17 @@ static int ptrace_hbp_set_ctrl(unsigned int note_type,
 
 	attr = bp->attr;
 
+	/* addr */
+	/* Kernel-space address cannot be monitored by user-space */
+	if ((unsigned long)addr >= XKPRANGE)
+		return -EINVAL;
+	attr.bp_addr = addr;
+
+	/* mask */
+	info = counter_arch_bp(bp);
+	info->mask = mask;
+
+	/* ctrl */
 	switch (note_type) {
 	case NT_LOONGARCH_HW_BREAK:
 		ctrl.type = LOONGARCH_BREAKPOINT_EXECUTE;
@@ -619,46 +632,6 @@ static int ptrace_hbp_set_ctrl(unsigned int note_type,
 		attr.disabled = 1;
 		clear_ti_thread_flag(ti, TIF_LOAD_WATCH);
 	}
-
-	return modify_user_hw_breakpoint(bp, &attr);
-}
-
-static int ptrace_hbp_set_mask(unsigned int note_type,
-			       struct task_struct *tsk,
-			       unsigned long idx, u64 mask)
-{
-	struct perf_event *bp;
-	struct perf_event_attr attr;
-	struct arch_hw_breakpoint *info;
-
-	bp = ptrace_hbp_get_initialised_bp(note_type, tsk, idx);
-	if (IS_ERR(bp))
-		return PTR_ERR(bp);
-
-	attr = bp->attr;
-	info = counter_arch_bp(bp);
-	info->mask = mask;
-
-	return modify_user_hw_breakpoint(bp, &attr);
-}
-
-static int ptrace_hbp_set_addr(unsigned int note_type,
-			       struct task_struct *tsk,
-			       unsigned long idx, u64 addr)
-{
-	struct perf_event *bp;
-	struct perf_event_attr attr;
-
-	/* Kernel-space address cannot be monitored by user-space */
-	if ((unsigned long)addr >= XKPRANGE)
-		return -EINVAL;
-
-	bp = ptrace_hbp_get_initialised_bp(note_type, tsk, idx);
-	if (IS_ERR(bp))
-		return PTR_ERR(bp);
-
-	attr = bp->attr;
-	attr.bp_addr = addr;
 
 	return modify_user_hw_breakpoint(bp, &attr);
 }
@@ -733,10 +706,6 @@ static int hw_break_set(struct task_struct *target,
 					 offset, offset + PTRACE_HBP_ADDR_SZ);
 		if (ret)
 			return ret;
-
-		ret = ptrace_hbp_set_addr(note_type, target, idx, addr);
-		if (ret)
-			return ret;
 		offset += PTRACE_HBP_ADDR_SZ;
 
 		if (!count)
@@ -746,21 +715,17 @@ static int hw_break_set(struct task_struct *target,
 					 offset, offset + PTRACE_HBP_MASK_SZ);
 		if (ret)
 			return ret;
-
-		ret = ptrace_hbp_set_mask(note_type, target, idx, mask);
-		if (ret)
-			return ret;
 		offset += PTRACE_HBP_MASK_SZ;
 
 		ret = user_regset_copyin(&pos, &count, &kbuf, &ubuf, &ctrl,
 					 offset, offset + PTRACE_HBP_CTRL_SZ);
 		if (ret)
 			return ret;
+		offset += PTRACE_HBP_CTRL_SZ;
 
-		ret = ptrace_hbp_set_ctrl(note_type, target, idx, ctrl);
+		ret = ptrace_hbp_set(note_type, target, idx, addr, mask, ctrl);
 		if (ret)
 			return ret;
-		offset += PTRACE_HBP_CTRL_SZ;
 
 		user_regset_copyin_ignore(&pos, &count, &kbuf, &ubuf,
 					  offset, offset + PTRACE_HBP_PAD_SZ);
