@@ -27,6 +27,57 @@
 #include <linux/dax.h>
 #include <linux/fs.h>
 
+#ifdef CONFIG_XFS_LIVE_HOOKS
+/* Call downstream hooks for a media error. */
+static inline void
+xfs_media_error_hook(
+	struct xfs_mount		*mp,
+	enum xfs_failed_device		fdev,
+	xfs_daddr_t			daddr,
+	uint64_t			bbcount,
+	bool				pre_remove)
+{
+	struct xfs_media_error_params	p = {
+		.mp			= mp,
+		.fdev			= fdev,
+		.daddr			= daddr,
+		.bbcount		= bbcount,
+		.pre_remove		= pre_remove,
+	};
+
+	xfs_hooks_call(&mp->m_media_error_hooks, 0, &p);
+}
+
+/* Call the specified function during a media error. */
+int
+xfs_media_error_hook_add(
+	struct xfs_mount		*mp,
+	struct xfs_media_error_hook	*hook)
+{
+	return xfs_hooks_add(&mp->m_media_error_hooks, &hook->error_hook);
+}
+
+/* Stop calling the specified function during a media error. */
+void
+xfs_media_error_hook_del(
+	struct xfs_mount		*mp,
+	struct xfs_media_error_hook	*hook)
+{
+	xfs_hooks_del(&mp->m_media_error_hooks, &hook->error_hook);
+}
+
+/* Configure media error hook functions. */
+void
+xfs_media_error_hook_setup(
+	struct xfs_media_error_hook	*hook,
+	notifier_fn_t			mod_fn)
+{
+	xfs_hook_setup(&hook->error_hook, mod_fn);
+}
+#else
+# define xfs_media_error_hook(...)		((void)0)
+#endif /* CONFIG_XFS_LIVE_HOOKS */
+
 struct xfs_failure_info {
 	xfs_agblock_t		startblock;
 	xfs_extlen_t		blockcount;
@@ -215,6 +266,9 @@ xfs_dax_notify_logdev_failure(
 	if (error)
 		return error;
 
+	xfs_media_error_hook(mp, XFS_FAILED_LOGDEV, daddr, bblen,
+			mf_flags & MF_MEM_PRE_REMOVE);
+
 	/*
 	 * In the pre-remove case the failure notification is attempting to
 	 * trigger a force unmount.  The expectation is that the device is
@@ -248,15 +302,19 @@ xfs_dax_notify_dev_failure(
 	uint64_t		bblen;
 	struct xfs_group	*xg = NULL;
 
-	if (!xfs_has_rmapbt(mp)) {
-		xfs_debug(mp, "notify_failure() needs rmapbt enabled!");
-		return -EOPNOTSUPP;
-	}
-
 	error = xfs_dax_translate_range(xfs_group_type_buftarg(mp, type),
 			offset, len, &daddr, &bblen);
 	if (error)
 		return error;
+
+	xfs_media_error_hook(mp, type == XG_TYPE_RTG ?
+			XFS_FAILED_RTDEV : XFS_FAILED_DATADEV,
+			daddr, bblen, mf_flags & MF_MEM_PRE_REMOVE);
+
+	if (!xfs_has_rmapbt(mp)) {
+		xfs_debug(mp, "notify_failure() needs rmapbt enabled!");
+		return -EOPNOTSUPP;
+	}
 
 	if (type == XG_TYPE_RTG) {
 		start_bno = xfs_daddr_to_rtb(mp, daddr);
