@@ -325,13 +325,29 @@ static int netc_unlock_ierb_with_warm_reset(struct netc_blk_ctrl *priv)
 				 1000, 100000, true, priv->prb, PRB_NETCRR);
 }
 
+static int netc_get_phy_addr(struct device_node *np)
+{
+	struct device_node *phy_node;
+	u32 addr;
+	int err;
+
+	phy_node = of_parse_phandle(np, "phy-handle", 0);
+	if (!phy_node)
+		return 0;
+
+	err = of_property_read_u32(phy_node, "reg", &addr);
+	of_node_put(phy_node);
+	if (err)
+		return err;
+
+	return addr;
+}
+
 static int imx95_enetc_mdio_phyaddr_config(struct platform_device *pdev)
 {
 	struct netc_blk_ctrl *priv = platform_get_drvdata(pdev);
 	struct device_node *np = pdev->dev.of_node;
-	struct device_node *phy_node;
-	int bus_devfn, err;
-	u32 addr;
+	int bus_devfn, addr;
 
 	/* Update the port EMDIO PHY address through parsing phy properties.
 	 * This is needed when using the port EMDIO but it's harmless when
@@ -346,14 +362,15 @@ static int imx95_enetc_mdio_phyaddr_config(struct platform_device *pdev)
 			if (bus_devfn < 0)
 				return bus_devfn;
 
-			phy_node = of_parse_phandle(gchild, "phy-handle", 0);
-			if (!phy_node)
-				continue;
+			addr = netc_get_phy_addr(gchild);
+			if (addr < 0)
+				return addr;
 
-			err = of_property_read_u32(phy_node, "reg", &addr);
-			of_node_put(phy_node);
-			if (err)
-				return err;
+			/* The default value of LaBCR[MDIO_PHYAD_PRTAD ] is
+			 * 0, so no need to set the register.
+			 */
+			if (!addr)
+				continue;
 
 			switch (bus_devfn) {
 			case IMX95_ENETC0_BUS_DEVFN:
@@ -479,6 +496,39 @@ end:
 	return 0;
 }
 
+static int imx94_enetc_mdio_phyaddr_config(struct netc_blk_ctrl *priv,
+					   struct device_node *np)
+{
+	int bus_devfn, addr;
+
+	bus_devfn = netc_of_pci_get_bus_devfn(np);
+	if (bus_devfn < 0)
+		return bus_devfn;
+
+	addr = netc_get_phy_addr(np);
+	if (addr <= 0)
+		return addr;
+
+	switch (bus_devfn) {
+	case IMX94_ENETC0_BUS_DEVFN:
+		netc_reg_write(priv->ierb, IERB_LBCR(IMX94_ENETC0_LINK),
+			       LBCR_MDIO_PHYAD_PRTAD(addr));
+		break;
+	case IMX94_ENETC1_BUS_DEVFN:
+		netc_reg_write(priv->ierb, IERB_LBCR(IMX94_ENETC1_LINK),
+			       LBCR_MDIO_PHYAD_PRTAD(addr));
+		break;
+	case IMX94_ENETC2_BUS_DEVFN:
+		netc_reg_write(priv->ierb, IERB_LBCR(IMX94_ENETC2_LINK),
+			       LBCR_MDIO_PHYAD_PRTAD(addr));
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
 static int imx94_ierb_init(struct platform_device *pdev)
 {
 	struct netc_blk_ctrl *priv = platform_get_drvdata(pdev);
@@ -491,6 +541,10 @@ static int imx94_ierb_init(struct platform_device *pdev)
 				continue;
 
 			err = imx94_enetc_update_tid(priv, gchild);
+			if (err)
+				return err;
+
+			err = imx94_enetc_mdio_phyaddr_config(priv, gchild);
 			if (err)
 				return err;
 		}
