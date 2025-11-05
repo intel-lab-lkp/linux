@@ -6143,6 +6143,7 @@ DEFINE_EVENT(xfs_healthmon_event_class, name, \
 	TP_PROTO(const struct xfs_mount *mp, const struct xfs_healthmon_event *event), \
 	TP_ARGS(mp, event))
 DEFINE_HEALTHMONEVENT_EVENT(xfs_healthmon_insert);
+DEFINE_HEALTHMONEVENT_EVENT(xfs_healthmon_merge);
 DEFINE_HEALTHMONEVENT_EVENT(xfs_healthmon_push);
 DEFINE_HEALTHMONEVENT_EVENT(xfs_healthmon_pop);
 DEFINE_HEALTHMONEVENT_EVENT(xfs_healthmon_format);

@@ -143,12 +143,112 @@ xfs_healthmon_free_head(
 	return 0;
 }
 
+static bool
+xfs_healthmon_merge_events(
+	struct xfs_healthmon_event		*existing,
+	const struct xfs_healthmon_event	*new)
+{
+	if (!existing)
+		return false;
+
+	/* type and domain must match to merge events */
+	if (existing->type != new->type ||
+	    existing->domain != new->domain)
+		return false;
+
+	switch (existing->type) {
+	case XFS_HEALTHMON_RUNNING:
+	case XFS_HEALTHMON_UNMOUNT:
+		/* should only ever be one of these events anyway */
+		return false;
+
+	case XFS_HEALTHMON_LOST:
+		existing->lostcount += new->lostcount;
+		return true;
+
+	case XFS_HEALTHMON_SHUTDOWN:
+		/* yes, we can race to shutdown */
+		existing->flags |= new->flags;
+		return true;
+
+	case XFS_HEALTHMON_SICK:
+	case XFS_HEALTHMON_CORRUPT:
+	case XFS_HEALTHMON_HEALTHY:
+		switch (existing->domain) {
+		case XFS_HEALTHMON_FS:
+			existing->fsmask |= new->fsmask;
+			return true;
+		case XFS_HEALTHMON_AG:
+		case XFS_HEALTHMON_RTGROUP:
+			if (existing->group == new->group){
+				existing->grpmask |= new->grpmask;
+				return true;
+			}
+			return false;
+		case XFS_HEALTHMON_INODE:
+			if (existing->ino == new->ino &&
+			    existing->gen == new->gen) {
+				existing->imask |= new->imask;
+				return true;
+			}
+			return false;
+		default:
+			ASSERT(0);
+			return false;
+		}
+		return false;
+
+	case XFS_HEALTHMON_MEDIA_ERROR:
+		/* physically adjacent errors can merge */
+		if (existing->daddr + existing->bbcount == new->daddr) {
+			existing->bbcount += new->bbcount;
+			return true;
+		}
+		if (new->daddr + new->bbcount == existing->daddr) {
+			existing->daddr = new->daddr;
+			existing->bbcount += new->bbcount;
+			return true;
+		}
+		return false;
+
+	case XFS_HEALTHMON_BUFREAD:
+	case XFS_HEALTHMON_BUFWRITE:
+	case XFS_HEALTHMON_DIOREAD:
+	case XFS_HEALTHMON_DIOWRITE:
+	case XFS_HEALTHMON_DATALOST:
+		/* logically adjacent file ranges can merge */
+		if (existing->fino != new->fino || existing->fgen != new->fgen)
+			return false;
+
+		if (existing->fpos + existing->flen == new->fpos) {
+			existing->flen += new->flen;
+			return true;
+		}
+
+		if (new->fpos + new->flen == existing->fpos) {
+			existing->fpos = new->fpos;
+			existing->flen += new->flen;
+			return true;
+		}
+		return false;
+	}
+
+	return false;
+}
+
 /* Insert an event onto the start of the list. */
 static inline void
 __xfs_healthmon_insert(
 	struct xfs_healthmon		*hm,
 	struct xfs_healthmon_event	*event)
 {
+	if (xfs_healthmon_merge_events(hm->first_event, event)) {
+		trace_xfs_healthmon_merge(hm->mp, hm->first_event);
+		kfree(event);
+		wake_up(&hm->wait);
+		return;
+	}
+
 	event->next = hm->first_event;
 	if (!hm->first_event)
 		hm->first_event = event;
@@ -166,6 +266,13 @@ __xfs_healthmon_push(
 	struct xfs_healthmon		*hm,
 	struct xfs_healthmon_event	*event)
 {
+	if (xfs_healthmon_merge_events(hm->last_event, event)) {
+		trace_xfs_healthmon_merge(hm->mp, hm->last_event);
+		kfree(event);
+		wake_up(&hm->wait);
+		return;
+	}
+
 	if (!hm->first_event)
 		hm->first_event = event;
 	if (hm->last_event)
