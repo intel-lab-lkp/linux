@@ -1085,6 +1085,8 @@ int __init early_init_dt_scan_chosen(char *cmdline)
 	p = of_get_flat_dt_prop(node, "bootargs", &l);
 	if (p != NULL && l > 0)
 		strscpy(cmdline, p, min(l, COMMAND_LINE_SIZE));
+	if (l > COMMAND_LINE_SIZE)
+		pr_warn("cmdline overflows from bootargs\n");
 
 handle_cmdline:
 	/*
