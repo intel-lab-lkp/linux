@@ -477,6 +477,10 @@ struct address_space_operations {
 				sector_t *span);
 	void (*swap_deactivate)(struct file *file);
 	int (*swap_rw)(struct kiocb *iocb, struct iov_iter *iter);
+
+	/* Callback for dealing with IO errors during readahead or writeback */
+	void (*ioerror)(struct address_space *mapping, int direction,
+			loff_t pos, u64 len, int error);
 };
 
 extern const struct address_space_operations empty_aops;

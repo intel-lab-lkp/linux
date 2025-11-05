@@ -822,6 +822,8 @@ cache in your filesystem.  The following members are defined:
 		int (*swap_activate)(struct swap_info_struct *sis, struct file *f, sector_t *span)
 		int (*swap_deactivate)(struct file *);
 		int (*swap_rw)(struct kiocb *iocb, struct iov_iter *iter);
+		void (*ioerror)(struct address_space *mapping, int direction,
+				loff_t pos, u64 len, int error);
 	};
 
 ``read_folio``
@@ -1031,6 +1033,11 @@ cache in your filesystem.  The following members are defined:
 
 ``swap_rw``
 	Called to read or write swap pages when SWP_FS_OPS is set.
+
+``ioerror``
+        Called to deal with IO errors during readahead or writeback.
+        This may be called from interrupt context, and without any
+        locks necessarily being held.
 
 The File Object
 ===============

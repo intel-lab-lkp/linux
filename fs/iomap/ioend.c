@@ -55,6 +55,10 @@ static u32 iomap_finish_ioend_buffered(struct iomap_ioend *ioend)
 
 	/* walk all folios in bio, ending page IO on them */
 	bio_for_each_folio_all(fi, bio) {
+		if (ioend->io_error)
+			iomap_mapping_ioerror(inode->i_mapping, WRITE,
+					folio_pos(fi.folio) + fi.offset,
+					fi.length, ioend->io_error);
 		iomap_finish_folio_write(inode, fi.folio, fi.length);
 		folio_count++;
 	}
