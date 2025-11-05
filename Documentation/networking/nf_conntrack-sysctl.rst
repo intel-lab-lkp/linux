@@ -19,7 +19,6 @@ nf_conntrack_buckets - INTEGER
 	loading, the default size is calculated by dividing total memory
 	by 16384 to determine the number of buckets. The hash table will
 	never have fewer than 1024 and never more than 262144 buckets.
-	This sysctl is only writeable in the initial net namespace.
 
 nf_conntrack_checksum - BOOLEAN
 	- 0 - disabled

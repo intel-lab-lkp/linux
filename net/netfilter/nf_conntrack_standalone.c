@@ -660,7 +660,6 @@ static struct ctl_table nf_ct_sysctl_table[] = {
 	},
 	[NF_SYSCTL_CT_BUCKETS] = {
 		.procname       = "nf_conntrack_buckets",
-		.data           = &init_net.ct.nf_conntrack_htable_size,
 		.maxlen         = sizeof(unsigned int),
 		.mode           = 0644,
 		.proc_handler   = nf_conntrack_hash_sysctl,
@@ -1047,7 +1046,6 @@ static int nf_conntrack_standalone_init_sysctl(struct net *net)
 	/* Don't allow non-init_net ns to alter global sysctls */
 	if (!net_eq(&init_net, net)) {
 		table[NF_SYSCTL_CT_EXPECT_MAX].mode = 0444;
-		table[NF_SYSCTL_CT_BUCKETS].mode = 0444;
 	}
 
 	cnet->sysctl_header = register_net_sysctl_sz(net, "net/netfilter",
