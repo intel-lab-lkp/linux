@@ -838,14 +838,14 @@ static void __iso_sock_close(struct sock *sk)
 	case BT_CONNECT:
 	case BT_CONNECTED:
 	case BT_CONFIG:
-		if (iso_pi(sk)->conn->hcon)
+		if (iso_pi(sk)->conn && iso_pi(sk)->conn->hcon)
 			iso_sock_disconn(sk);
 		else
 			iso_chan_del(sk, ECONNRESET);
 		break;
 
 	case BT_CONNECT2:
-		if (iso_pi(sk)->conn->hcon &&
+		if (iso_pi(sk)->conn && iso_pi(sk)->conn->hcon &&
 		    (test_bit(HCI_CONN_PA_SYNC, &iso_pi(sk)->conn->hcon->flags) ||
 		    test_bit(HCI_CONN_PA_SYNC_FAILED, &iso_pi(sk)->conn->hcon->flags)))
 			iso_sock_disconn(sk);
