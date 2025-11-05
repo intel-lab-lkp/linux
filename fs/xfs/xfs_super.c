@@ -819,6 +819,7 @@ xfs_mount_free(
 	if (mp->m_ddev_targp)
 		xfs_free_buftarg(mp->m_ddev_targp);
 
+	debugfs_remove(mp->m_debugfs_uuid);
 	debugfs_remove(mp->m_debugfs);
 	kfree(mp->m_rtname);
 	kfree(mp->m_logname);
@@ -1967,6 +1968,16 @@ xfs_fs_fill_super(
 	if (!sb->s_root) {
 		error = -ENOMEM;
 		goto out_unmount;
+	}
+
+	if (xfs_debugfs && mp->m_debugfs && !xfs_has_nouuid(mp)) {
+		char	name[UUID_STRING_LEN + 1];
+
+		snprintf(name, UUID_STRING_LEN + 1, "%pU", &mp->m_sb.sb_uuid);
+		mp->m_debugfs_uuid = debugfs_create_symlink(name, xfs_debugfs,
+				mp->m_super->s_id);
+	} else {
+		mp->m_debugfs_uuid = NULL;
 	}
 
 	return 0;
