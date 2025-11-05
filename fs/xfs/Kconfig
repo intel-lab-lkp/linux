@@ -130,6 +130,14 @@ config XFS_RT
 
 	  If unsure, say N.
 
+config XFS_HEALTH_MONITOR
+	bool "Report filesystem health events to userspace"
+	depends on XFS_FS
+	select XFS_LIVE_HOOKS
+	default y
+	help
+	  Report health events to userspace programs.
+
 config XFS_DRAIN_INTENTS
 	bool
 	select JUMP_LABEL if HAVE_ARCH_JUMP_LABEL
