@@ -504,10 +504,15 @@ static int mtk_pcie_startup_port(struct mtk_gen3_pcie *pcie)
 		ltssm_index = PCIE_LTSSM_STATE(val);
 		ltssm_state = ltssm_index >= ARRAY_SIZE(ltssm_str) ?
 			      "Unknown state" : ltssm_str[ltssm_index];
-		dev_err(pcie->dev,
-			"PCIe link down, current LTSSM state: %s (%#x)\n",
-			ltssm_state, val);
-		return err;
+		dev_warn(pcie->dev,
+			 "PCIe link down, current LTSSM state: %s (%#x)\n",
+			 ltssm_state, val);
+
+		/*
+		 * Ignore the timeout, as the link may come up later,
+		 * such as when the PCI power control enables power to the
+		 * device, at which point it triggers a rescan.
+		 */
 	}
 
 	mtk_pcie_enable_msi(pcie);
