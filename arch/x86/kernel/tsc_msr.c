@@ -10,10 +10,14 @@
 #include <linux/thread_info.h>
 
 #include <asm/apic.h>
+#include <asm/bitops.h>
 #include <asm/cpu_device_id.h>
+#include <asm/div64.h>
 #include <asm/intel-family.h>
 #include <asm/msr.h>
+#include <asm/msr-index.h>
 #include <asm/param.h>
+#include <asm/processor.h>
 #include <asm/tsc.h>
 
 #define MAX_NUM_FREQS	16 /* 4 bits to select the frequency */
@@ -233,4 +237,118 @@ unsigned long cpu_khz_from_msr(void)
 	setup_force_cpu_cap(X86_FEATURE_TSC_RELIABLE);
 
 	return res;
+}
+
+/*
+ * MSR-based CPU/TSC frequency discovery for AMD Zen CPUs.
+ *
+ * Return processor base frequency in KHz, or 0 on failure.
+ */
+unsigned long cpu_khz_from_msr_amd(void)
+{
+	u64 hwcr, pstatedef;
+	unsigned long cpufid, cpudfsid, p0_freq;
+
+	if (boot_cpu_data.x86_vendor != X86_VENDOR_AMD)
+		return 0;
+
+	/*
+	 * This register mapping is only valid for Zen and later CPUs.
+	 * X86_FEATURE_ZEN is not set yet, so we just check the cpuid.
+	 * Families newer than 0x1A haven't been released yet.
+	 */
+	if (boot_cpu_data.x86 < 0x17 || boot_cpu_data.x86 > 0x1A)
+		return 0;
+
+	/*
+	 * PPR states for MSR0000_0010:
+	 * The TSC increments at the P0 frequency. The TSC counts at the
+	 * same rate in all P-states, all C states, S0, or S1.
+	 */
+
+	/* Read the Hardware Configuration MSR (MSRC001_0015) */
+	if (rdmsrq_safe(MSR_K7_HWCR, &hwcr))
+		return 0;
+
+	/*
+	 * Check TscFreqSel (bit 24) is set.
+	 * This verifies the TSC does actually increment at P0 frequency.
+	 * E.g. VMs may be configured to increment at a different rate.
+	 */
+	if (!(hwcr & BIT_64(24)))
+		return 0;
+
+	/* Read the zeroth PStateDef MSR (MSRC001_0064) */
+	if (rdmsrq_safe(MSR_AMD_PSTATE_DEF_BASE, &pstatedef))
+		return 0;
+
+	/* Check PstateEn is set (bit 63) */
+	if (!(pstatedef & BIT_64(63)))
+		return 0;
+
+	switch (boot_cpu_data.x86) {
+	case 0x17:
+	case 0x19:
+		/* CpuFid is the first 8 bits (7:0) */
+		cpufid = pstatedef & 0xff;
+
+		/* Values between 0Fh-00h are reserved */
+		if (cpufid <= 0x0F)
+			return 0;
+
+		/* The PPR defines the core multiplier as CpuFid*25 MHz */
+		p0_freq = cpufid * 25 * 1000;
+
+		/* CpuDfsId is the next 6 bits (13:8) */
+		cpudfsid = (pstatedef >> 8) & 0x3f;
+
+		/* Calculate the core divisor */
+		switch (cpudfsid) {
+		case 0x08:
+			/* VCO/1 */
+			break;
+		case 0x09:
+			/* VCO/1.125 */
+			p0_freq = mul_u64_u32_div(p0_freq, 1125, 1000);
+			break;
+		case 0x0A ... 0x1A:
+		case 0x1C:
+		case 0x1E:
+		case 0x20:
+		case 0x22:
+		case 0x24:
+		case 0x26:
+		case 0x28:
+		case 0x2A:
+		case 0x2C:
+			/* VCO/<Value/8> */
+			p0_freq /= cpudfsid / 8;
+			break;
+		default:
+			/* Reserved */
+			return 0;
+		}
+		break;
+	case 0x1A:
+		/* CpuFid is the first 12 bits (11:0) */
+		cpufid = pstatedef & 0xfff;
+
+		/* Values between 00Fh-000h are reserved */
+		if (cpufid <= 0x00F)
+			return 0;
+
+		/* CpuFid: <Value>*5 MHz */
+		p0_freq = cpufid * 5 * 1000;
+		break;
+	default:
+		return 0;
+	}
+
+	/*
+	 * TSC frequency determined by MSR is always considered "known"
+	 * because it is reported by HW.
+	 */
+	setup_force_cpu_cap(X86_FEATURE_TSC_KNOWN_FREQ);
+
+	return p0_freq;
 }
