@@ -592,7 +592,6 @@ iwl_mld_handle_wowlan_info_notif(struct iwl_mld *mld,
 				 struct iwl_rx_packet *pkt)
 {
 	const struct iwl_wowlan_info_notif *notif;
-	struct iwl_wowlan_info_notif *converted_notif __free(kfree) = NULL;
 	u32 len = iwl_rx_packet_payload_len(pkt);
 	int wowlan_info_ver = iwl_fw_lookup_notif_ver(mld->fw,
 						      PROT_OFFLOAD_GROUP,
@@ -609,10 +608,10 @@ iwl_mld_handle_wowlan_info_notif(struct iwl_mld *mld,
 							5))
 			return true;
 
-		converted_notif = kzalloc(struct_size(converted_notif,
-						      mlo_gtks,
-						      notif_v5->num_mlo_link_keys),
-					  GFP_ATOMIC);
+		struct iwl_wowlan_info_notif *converted_notif __free(kfree) =
+			kzalloc(struct_size(converted_notif, mlo_gtks, notif_v5->num_mlo_link_keys),
+				GFP_ATOMIC);
+
 		if (!converted_notif) {
 			IWL_ERR(mld,
 				"Failed to allocate memory for converted wowlan_info_notif\n");
@@ -996,8 +995,6 @@ static void iwl_mld_mlo_rekey(struct iwl_mld *mld,
 			      struct iwl_mld_wowlan_status *wowlan_status,
 			      struct ieee80211_vif *vif)
 {
-	struct iwl_mld_old_mlo_keys *old_keys __free(kfree) = NULL;
-
 	IWL_DEBUG_WOWLAN(mld, "Num of MLO Keys: %d\n", wowlan_status->num_mlo_keys);
 
 	if (!wowlan_status->num_mlo_keys)
@@ -1785,15 +1782,14 @@ iwl_mld_send_proto_offload(struct iwl_mld *mld,
 			   struct ieee80211_vif *vif,
 			   u8 ap_sta_id)
 {
-	struct iwl_proto_offload_cmd_v4 *cmd __free(kfree);
+	struct iwl_proto_offload_cmd_v4 *cmd __free(kfree) = kzalloc(sizeof(*cmd),
+		GFP_KERNEL);
 	struct iwl_host_cmd hcmd = {
 		.id = PROT_OFFLOAD_CONFIG_CMD,
 		.dataflags[0] = IWL_HCMD_DFL_NOCOPY,
 		.len[0] = sizeof(*cmd),
 	};
 	u32 enabled = 0;
-
-	cmd = kzalloc(hcmd.len[0], GFP_KERNEL);
 
 #if IS_ENABLED(CONFIG_IPV6)
 	struct iwl_mld_vif *mld_vif = iwl_mld_vif_from_mac80211(vif);
