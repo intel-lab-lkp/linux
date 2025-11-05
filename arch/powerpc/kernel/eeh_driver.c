@@ -812,6 +812,35 @@ static void eeh_clear_slot_attention(struct pci_dev *pdev)
 	ops->set_attention_status(slot->hotplug, 0);
 }
 
+static const char *eeh_pe_get_loc(struct eeh_pe *pe)
+{
+	struct pci_bus *bus = eeh_pe_bus_get_nolock(pe);
+	struct device_node *dn;
+	const char *location = NULL;
+
+	while (bus) {
+		dn = pci_bus_to_OF_node(bus);
+		if (!dn) {
+			bus = bus->parent;
+			continue;
+		}
+
+		if (pci_is_root_bus(bus))
+			location = of_get_property(dn, "ibm,io-base-loc-code",
+						   NULL);
+		else
+			location = of_get_property(dn, "ibm,slot-location-code",
+						   NULL);
+
+		if (location)
+			return location;
+
+		bus = bus->parent;
+	}
+
+	return "N/A";
+}
+
 /**
  * eeh_handle_normal_event - Handle EEH events on a specific PE
  * @pe: EEH PE - which should not be used after we return, as it may
@@ -846,7 +875,7 @@ void eeh_handle_normal_event(struct eeh_pe *pe)
 
 	pci_lock_rescan_remove();
 
-	bus = eeh_pe_bus_get(pe);
+	bus = eeh_pe_bus_get_nolock(pe);
 	if (!bus) {
 		pr_err("%s: Cannot find PCI bus for PHB#%x-PE#%x\n",
 			__func__, pe->phb->global_number, pe->addr);
@@ -886,14 +915,14 @@ void eeh_handle_normal_event(struct eeh_pe *pe)
 	/* Log the event */
 	if (pe->type & EEH_PE_PHB) {
 		pr_err("EEH: Recovering PHB#%x, location: %s\n",
-			pe->phb->global_number, eeh_pe_loc_get(pe));
+			pe->phb->global_number, eeh_pe_get_loc(pe));
 	} else {
 		struct eeh_pe *phb_pe = eeh_phb_pe_get(pe->phb);
 
 		pr_err("EEH: Recovering PHB#%x-PE#%x\n",
 		       pe->phb->global_number, pe->addr);
 		pr_err("EEH: PE location: %s, PHB location: %s\n",
-		       eeh_pe_loc_get(pe), eeh_pe_loc_get(phb_pe));
+		       eeh_pe_get_loc(pe), eeh_pe_get_loc(phb_pe));
 	}
 
 #ifdef CONFIG_STACKTRACE
@@ -1098,7 +1127,7 @@ recover_failed:
 		eeh_pe_state_clear(pe, EEH_PE_PRI_BUS, true);
 		eeh_pe_dev_mode_mark(pe, EEH_DEV_REMOVED);
 
-		bus = eeh_pe_bus_get(pe);
+		bus = eeh_pe_bus_get_nolock(pe);
 		if (bus)
 			pci_hp_remove_devices(bus);
 		else
@@ -1222,7 +1251,7 @@ void eeh_handle_special_event(void)
 				    (phb_pe->state & EEH_PE_RECOVERING))
 					continue;
 
-				bus = eeh_pe_bus_get(phb_pe);
+				bus = eeh_pe_bus_get_nolock(phb_pe);
 				if (!bus) {
 					pr_err("%s: Cannot find PCI bus for "
 					       "PHB#%x-PE#%x\n",
