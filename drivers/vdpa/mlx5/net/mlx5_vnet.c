@@ -4057,6 +4057,12 @@ static int mlx5_vdpa_set_attr(struct vdpa_mgmt_dev *v_mdev, struct vdpa_device *
 	ndev = to_mlx5_vdpa_ndev(mvdev);
 	mdev = mvdev->mdev;
 	config = &ndev->config;
+	if (!(ndev->mvdev.status & VIRTIO_CONFIG_S_DRIVER_OK)) {
+		ndev->mvdev.mlx_features |= BIT_ULL(VIRTIO_NET_F_MAC);
+	} else {
+		mlx5_vdpa_warn(mvdev, "device running, skip updating MAC\n");
+		return err;
+	}
 
 	down_write(&ndev->reslock);
 	if (add_config->mask & (1 << VDPA_ATTR_DEV_NET_CFG_MACADDR)) {
