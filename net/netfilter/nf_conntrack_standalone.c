@@ -155,7 +155,7 @@ static void *ct_seq_start(struct seq_file *seq, loff_t *pos)
 	st->time_now = ktime_get_real_ns();
 	rcu_read_lock();
 
-	nf_conntrack_get_ht(&st->hash, &st->htable_size);
+	nf_conntrack_get_ht(&init_net, &st->hash, &st->htable_size);
 
 	if (*pos == 0) {
 		st->skip_elems = 0;
@@ -1131,6 +1131,12 @@ static void nf_conntrack_pernet_exit(struct list_head *net_exit_list)
 		nf_conntrack_fini_net(net);
 
 	nf_conntrack_cleanup_net_list(net_exit_list);
+
+	list_for_each_entry(net, net_exit_list, exit_list) {
+		if (net_eq(net, &init_net))
+			kvfree(net->ct.nf_conntrack_hash);
+		net->ct.nf_conntrack_hash = NULL;
+	}
 }
 
 static struct pernet_operations nf_conntrack_net_ops = {

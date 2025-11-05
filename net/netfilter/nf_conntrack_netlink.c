@@ -1244,7 +1244,8 @@ restart:
 			spin_unlock(lockp);
 			goto out;
 		}
-		hlist_nulls_for_each_entry(h, n, &nf_conntrack_hash[cb->args[0]],
+		hlist_nulls_for_each_entry(h, n,
+					   &init_net.ct.nf_conntrack_hash[cb->args[0]],
 					   hnnode) {
 			ct = nf_ct_tuplehash_to_ctrack(h);
 			if (nf_ct_is_expired(ct)) {

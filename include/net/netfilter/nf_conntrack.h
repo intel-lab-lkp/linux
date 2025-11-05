@@ -332,7 +332,8 @@ extern seqcount_spinlock_t nf_conntrack_generation;
 
 /* must be called with rcu read lock held */
 static inline void
-nf_conntrack_get_ht(struct hlist_nulls_head **hash, unsigned int *hsize)
+nf_conntrack_get_ht(struct net *net, struct hlist_nulls_head **hash,
+		    unsigned int *hsize)
 {
 	struct hlist_nulls_head *hptr;
 	unsigned int sequence, hsz;
@@ -340,7 +341,8 @@ nf_conntrack_get_ht(struct hlist_nulls_head **hash, unsigned int *hsize)
 	do {
 		sequence = read_seqcount_begin(&nf_conntrack_generation);
 		hsz = nf_conntrack_htable_size;
-		hptr = nf_conntrack_hash;
+		hptr = net->ct.nf_conntrack_hash;
+		hptr = init_net.ct.nf_conntrack_hash;
 	} while (read_seqcount_retry(&nf_conntrack_generation, sequence));
 
 	*hash = hptr;

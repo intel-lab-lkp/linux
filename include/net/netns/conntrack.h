@@ -92,6 +92,7 @@ struct netns_ct {
 	unsigned int		sysctl_max;
 
 	struct ip_conntrack_stat __percpu *stat;
+	struct hlist_nulls_head *nf_conntrack_hash;
 	struct nf_ct_event_notifier __rcu *nf_conntrack_event_cb;
 	struct nf_ip_net	nf_ct_proto;
 #if defined(CONFIG_NF_CONNTRACK_LABELS)
