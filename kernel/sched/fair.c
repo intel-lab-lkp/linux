@@ -3294,6 +3294,9 @@ static void task_numa_work(struct callback_head *work)
 	struct vm_area_struct *vma;
 	unsigned long start, end;
 	unsigned long nr_pte_updates = 0;
+	unsigned long nr_scanned = 0;
+	unsigned long total_migrated = 0;
+	unsigned long total_scanned = 0;
 	long pages, virtpages;
 	struct vma_iterator vmi;
 	bool vma_pids_skipped;
@@ -3359,6 +3362,7 @@ static void task_numa_work(struct callback_head *work)
 	if (!mmap_read_trylock(mm))
 		return;
 
+	trace_sched_numa_balance_start(p);
 	/*
 	 * VMAs are skipped if the current PID has not trapped a fault within
 	 * the VMA recently. Allow scanning to be forced if there is no
@@ -3477,6 +3481,10 @@ retry_pids:
 			end = min(end, vma->vm_end);
 			nr_pte_updates = change_prot_numa(vma, start, end);
 
+			nr_scanned = (end - start) >> PAGE_SHIFT;
+			total_migrated += nr_pte_updates;
+			total_scanned += nr_scanned;
+
 			/*
 			 * Try to scan sysctl_numa_balancing_size worth of
 			 * hpages that have at least one present PTE that
@@ -3486,8 +3494,8 @@ retry_pids:
 			 * areas faster.
 			 */
 			if (nr_pte_updates)
-				pages -= (end - start) >> PAGE_SHIFT;
-			virtpages -= (end - start) >> PAGE_SHIFT;
+				pages -= nr_scanned;
+			virtpages -= nr_scanned;
 
 			start = end;
 			if (pages <= 0 || virtpages <= 0)
@@ -3528,6 +3536,8 @@ out:
 		mm->numa_scan_offset = start;
 	else
 		reset_ptenuma_scan(p);
+
+	trace_sched_numa_balance_end(p, total_scanned, total_migrated);
 	mmap_read_unlock(mm);
 
 	/*

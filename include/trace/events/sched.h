@@ -804,6 +804,66 @@ TRACE_EVENT(sched_skip_cpuset_numa,
 		  __entry->ngid,
 		  MAX_NUMNODES, __entry->mem_allowed)
 );
+
+TRACE_EVENT(sched_numa_balance_start,
+
+	TP_PROTO(struct task_struct *tsk),
+
+	TP_ARGS(tsk),
+
+	TP_STRUCT__entry(
+		__array(char,	comm, TASK_COMM_LEN)
+		__field(pid_t,	pid)
+		__field(pid_t,	tgid)
+		__field(pid_t,	ngid)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, tsk->comm, TASK_COMM_LEN);
+		__entry->pid		 = task_pid_nr(tsk);
+		__entry->tgid		 = task_tgid_nr(tsk);
+		__entry->ngid		 = task_numa_group_id(tsk);
+	),
+
+	TP_printk("comm=%s pid=%d tgid=%d ngid=%d",
+		  __entry->comm,
+		  __entry->pid,
+		  __entry->tgid,
+		  __entry->ngid)
+);
+
+TRACE_EVENT(sched_numa_balance_end,
+
+	TP_PROTO(struct task_struct *tsk, unsigned long scanned, unsigned long migrated),
+
+	TP_ARGS(tsk, scanned, migrated),
+
+	TP_STRUCT__entry(
+		__array(char,		comm, TASK_COMM_LEN)
+		__field(pid_t,		pid)
+		__field(pid_t,		tgid)
+		__field(pid_t,		ngid)
+		__field(unsigned long,	migrated)
+		__field(unsigned long,	scanned)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, tsk->comm, TASK_COMM_LEN);
+		__entry->pid		 = task_pid_nr(tsk);
+		__entry->tgid		 = task_tgid_nr(tsk);
+		__entry->ngid		 = task_numa_group_id(tsk);
+		__entry->migrated	 = migrated;
+		__entry->scanned	 = scanned;
+	),
+
+	TP_printk("comm=%s pid=%d tgid=%d ngid=%d scanned=%lu migrated=%lu",
+		  __entry->comm,
+		  __entry->pid,
+		  __entry->tgid,
+		  __entry->ngid,
+		  __entry->scanned,
+		  __entry->migrated)
+);
 #endif /* CONFIG_NUMA_BALANCING */
 
 /*
