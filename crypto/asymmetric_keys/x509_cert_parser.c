@@ -60,12 +60,12 @@ EXPORT_SYMBOL_GPL(x509_free_certificate);
  */
 struct x509_certificate *x509_cert_parse(const void *data, size_t datalen)
 {
-	struct x509_certificate *cert __free(x509_free_certificate);
-	struct x509_parse_context *ctx __free(kfree) = NULL;
 	struct asymmetric_key_id *kid;
 	long ret;
 
-	cert = kzalloc(sizeof(struct x509_certificate), GFP_KERNEL);
+	struct x509_certificate *cert __free(x509_free_certificate) = kzalloc(
+		sizeof(struct x509_certificate), GFP_KERNEL);
+
 	if (!cert)
 		return ERR_PTR(-ENOMEM);
 	cert->pub = kzalloc(sizeof(struct public_key), GFP_KERNEL);
@@ -74,7 +74,10 @@ struct x509_certificate *x509_cert_parse(const void *data, size_t datalen)
 	cert->sig = kzalloc(sizeof(struct public_key_signature), GFP_KERNEL);
 	if (!cert->sig)
 		return ERR_PTR(-ENOMEM);
-	ctx = kzalloc(sizeof(struct x509_parse_context), GFP_KERNEL);
+
+	struct x509_parse_context *ctx __free(kfree) = kzalloc(
+		sizeof(struct x509_parse_context), GFP_KERNEL);
+
 	if (!ctx)
 		return ERR_PTR(-ENOMEM);
 

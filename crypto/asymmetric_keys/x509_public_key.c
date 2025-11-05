@@ -148,13 +148,13 @@ not_self_signed:
  */
 static int x509_key_preparse(struct key_preparsed_payload *prep)
 {
-	struct x509_certificate *cert __free(x509_free_certificate);
-	struct asymmetric_key_ids *kids __free(kfree) = NULL;
-	char *p, *desc __free(kfree) = NULL;
+	char *p;
 	const char *q;
 	size_t srlen, sulen;
 
-	cert = x509_cert_parse(prep->data, prep->datalen);
+	struct x509_certificate *cert __free(x509_free_certificate) =
+		x509_cert_parse(prep->data, prep->datalen);
+
 	if (IS_ERR(cert))
 		return PTR_ERR(cert);
 
@@ -187,7 +187,7 @@ static int x509_key_preparse(struct key_preparsed_payload *prep)
 		q = cert->raw_serial;
 	}
 
-	desc = kmalloc(sulen + 2 + srlen * 2 + 1, GFP_KERNEL);
+	char *desc __free(kfree) = kmalloc(sulen + 2 + srlen * 2 + 1, GFP_KERNEL);
 	if (!desc)
 		return -ENOMEM;
 	p = memcpy(desc, cert->subject, sulen);
@@ -197,7 +197,9 @@ static int x509_key_preparse(struct key_preparsed_payload *prep)
 	p = bin2hex(p, q, srlen);
 	*p = 0;
 
-	kids = kmalloc(sizeof(struct asymmetric_key_ids), GFP_KERNEL);
+	struct asymmetric_key_ids *kids __free(kfree) = kmalloc(
+		sizeof(struct asymmetric_key_ids), GFP_KERNEL);
+
 	if (!kids)
 		return -ENOMEM;
 	kids->id[0] = cert->id;
