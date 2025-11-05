@@ -2636,9 +2636,27 @@ int nf_conntrack_set_hashsize(const char *val, const struct kernel_param *kp)
 	return nf_conntrack_hash_resize(hashsize);
 }
 
-int nf_conntrack_init_start(void)
+static unsigned int nf_conntrack_htable_autosize(void)
 {
 	unsigned long nr_pages = totalram_pages();
+	unsigned int ht_size;
+
+	ht_size = (((nr_pages << PAGE_SHIFT) / 16384)
+			   / sizeof(struct hlist_head));
+	if (BITS_PER_LONG >= 64 &&
+	    nr_pages > (4 * (1024 * 1024 * 1024 / PAGE_SIZE)))
+		ht_size = 262144;
+	else if (nr_pages > (1024 * 1024 * 1024 / PAGE_SIZE))
+		ht_size = 65536;
+
+	if (nf_conntrack_htable_size < 1024)
+		ht_size = 1024;
+
+	return ht_size;
+}
+
+int nf_conntrack_init_start(void)
+{
 	int max_factor = 8;
 	int ret = -ENOMEM;
 	int i;
@@ -2650,17 +2668,8 @@ int nf_conntrack_init_start(void)
 		spin_lock_init(&nf_conntrack_locks[i]);
 
 	if (!nf_conntrack_htable_size) {
-		nf_conntrack_htable_size
-			= (((nr_pages << PAGE_SHIFT) / 16384)
-			   / sizeof(struct hlist_head));
-		if (BITS_PER_LONG >= 64 &&
-		    nr_pages > (4 * (1024 * 1024 * 1024 / PAGE_SIZE)))
-			nf_conntrack_htable_size = 262144;
-		else if (nr_pages > (1024 * 1024 * 1024 / PAGE_SIZE))
-			nf_conntrack_htable_size = 65536;
+		nf_conntrack_htable_size = nf_conntrack_htable_autosize();
 
-		if (nf_conntrack_htable_size < 1024)
-			nf_conntrack_htable_size = 1024;
 		/* Use a max. factor of one by default to keep the average
 		 * hash chain length at 2 entries.  Each entry has to be added
 		 * twice (once for original direction, once for reply).
