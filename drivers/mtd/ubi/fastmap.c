@@ -1644,3 +1644,15 @@ err:
 	kfree(new_fm);
 	goto out_unlock;
 }
+
+void ubi_free_fastmap(struct ubi_device *ubi)
+{
+	int i;
+
+	if (ubi->fm) {
+		for (i = 0; i < ubi->fm->used_blocks; i++)
+			kmem_cache_free(ubi_wl_entry_slab, ubi->fm->e[i]);
+		kfree(ubi->fm);
+		ubi->fm = NULL;
+	}
+}
