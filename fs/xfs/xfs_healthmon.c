@@ -1337,16 +1337,23 @@ static const struct file_operations xfs_healthmon_fops = {
  */
 long
 xfs_ioc_health_monitor(
-	struct xfs_mount		*mp,
+	struct file			*file,
 	struct xfs_health_monitor __user *arg)
 {
 	struct xfs_health_monitor	hmo;
 	struct xfs_healthmon		*hm;
 	struct xfs_healthmon_event	*event;
+	struct xfs_inode		*ip = XFS_I(file_inode(file));
+	struct xfs_mount		*mp = ip->i_mount;
 	int				fd;
 	int				ret;
 
 	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (ip->i_ino != mp->m_sb.sb_rootino)
+		return -EPERM;
+	if (current_user_ns() != &init_user_ns)
 		return -EPERM;
 
 	if (copy_from_user(&hmo, arg, sizeof(hmo)))

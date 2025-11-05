@@ -99,10 +99,10 @@ struct xfs_healthmon_event {
 };
 
 #ifdef CONFIG_XFS_HEALTH_MONITOR
-long xfs_ioc_health_monitor(struct xfs_mount *mp,
+long xfs_ioc_health_monitor(struct file *file,
 		struct xfs_health_monitor __user *arg);
 #else
-# define xfs_ioc_health_monitor(mp, hmo)	(-ENOTTY)
+# define xfs_ioc_health_monitor(file, hmo)	(-ENOTTY)
 #endif /* CONFIG_XFS_HEALTH_MONITOR */
 
 #endif /* __XFS_HEALTHMON_H__ */

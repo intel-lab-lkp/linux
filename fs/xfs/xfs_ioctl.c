@@ -1424,7 +1424,7 @@ xfs_file_ioctl(
 		return xfs_ioc_commit_range(filp, arg);
 
 	case XFS_IOC_HEALTH_MONITOR:
-		return xfs_ioc_health_monitor(mp, arg);
+		return xfs_ioc_health_monitor(filp, arg);
 	case XFS_IOC_MEDIA_ERROR:
 		return xfs_ioc_media_error(mp, arg);
 
