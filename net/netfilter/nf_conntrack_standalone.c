@@ -16,6 +16,7 @@
 
 #include <net/netfilter/nf_log.h>
 #include <net/netfilter/nf_conntrack.h>
+#include <net/netfilter/nf_conntrack_bpf.h>
 #include <net/netfilter/nf_conntrack_core.h>
 #include <net/netfilter/nf_conntrack_l4proto.h>
 #include <net/netfilter/nf_conntrack_expect.h>
@@ -1080,8 +1081,12 @@ static void nf_conntrack_standalone_fini_sysctl(struct net *net)
 
 static void nf_conntrack_fini_net(struct net *net)
 {
+	struct nf_conntrack_net *ctnet = nf_ct_pernet(net);
+
 	if (enable_hooks)
 		nf_ct_netns_put(net, NFPROTO_INET);
+
+	disable_delayed_work_sync(&ctnet->gc_work.dwork);
 
 	nf_conntrack_standalone_fini_proc(net);
 	nf_conntrack_standalone_fini_sysctl(net);
@@ -1186,7 +1191,7 @@ out_start:
 
 static void __exit nf_conntrack_standalone_fini(void)
 {
-	nf_conntrack_cleanup_start();
+	cleanup_nf_conntrack_bpf();
 	unregister_pernet_subsys(&nf_conntrack_net_ops);
 #ifdef CONFIG_SYSCTL
 	unregister_net_sysctl_table(nf_ct_netfilter_header);

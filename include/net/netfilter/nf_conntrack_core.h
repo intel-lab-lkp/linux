@@ -35,7 +35,6 @@ int nf_conntrack_proto_init(void);
 void nf_conntrack_proto_fini(void);
 
 int nf_conntrack_init_start(void);
-void nf_conntrack_cleanup_start(void);
 
 void nf_conntrack_init_end(void);
 void nf_conntrack_cleanup_end(void);

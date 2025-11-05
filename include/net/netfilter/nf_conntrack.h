@@ -47,6 +47,26 @@ struct nf_conntrack_net_ecache {
 	struct hlist_nulls_head dying_list;
 };
 
+/**
+ *	struct conntrack_gc_work - gc state
+ *	@dwork: delayed GC work item
+ *	@net: net namespace the gc worker belongs to
+ *	@next_bucket: next conntrack hash bucket to work on
+ *	@avg_timeout: average timeout of conntracks seen
+ *	@count: non-expired conntracks seen
+ *	@start_time: nfct_time_stamp taken on start of work function
+ *	@early_drop: remove non-assured and closing conntracks too
+ */
+struct conntrack_gc_work {
+	struct delayed_work	dwork;
+	possible_net_t		net;
+	u32			next_bucket;
+	u32			avg_timeout;
+	u32			count;
+	u32			start_time;
+	bool			early_drop;
+};
+
 struct nf_conntrack_net {
 	/* only used when new connection is allocated: */
 	atomic_t count;
@@ -62,6 +82,7 @@ struct nf_conntrack_net {
 #ifdef CONFIG_NF_CONNTRACK_EVENTS
 	struct nf_conntrack_net_ecache ecache;
 #endif
+	struct conntrack_gc_work gc_work;
 };
 
 #include <linux/types.h>

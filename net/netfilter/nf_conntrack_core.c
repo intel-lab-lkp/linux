@@ -60,15 +60,6 @@ EXPORT_SYMBOL_GPL(nf_conntrack_locks);
 __cacheline_aligned_in_smp DEFINE_SPINLOCK(nf_conntrack_expect_lock);
 EXPORT_SYMBOL_GPL(nf_conntrack_expect_lock);
 
-struct conntrack_gc_work {
-	struct delayed_work	dwork;
-	u32			next_bucket;
-	u32			avg_timeout;
-	u32			count;
-	u32			start_time;
-	bool			early_drop;
-};
-
 static __read_mostly struct kmem_cache *nf_conntrack_cachep;
 static DEFINE_SPINLOCK(nf_conntrack_locks_all_lock);
 static __read_mostly bool nf_conntrack_locks_all;
@@ -94,8 +85,6 @@ static DEFINE_MUTEX(nf_conntrack_mutex);
 
 #define MIN_CHAINLEN	50u
 #define MAX_CHAINLEN	(80u - MIN_CHAINLEN)
-
-static struct conntrack_gc_work conntrack_gc_work;
 
 void nf_conntrack_lock(spinlock_t *lock) __acquires(lock)
 {
@@ -1518,11 +1507,15 @@ static void gc_worker(struct work_struct *work)
 	u32 end_time, start_time = nfct_time_stamp;
 	struct conntrack_gc_work *gc_work;
 	unsigned int expired_count = 0;
+	struct nf_conntrack_net *cnet;
 	unsigned long next_run;
+	struct net *net;
 	s32 delta_time;
 	long count;
 
 	gc_work = container_of(work, struct conntrack_gc_work, dwork.work);
+	net = read_pnet(&gc_work->net);
+	cnet = nf_ct_pernet(net);
 
 	i = gc_work->next_bucket;
 
@@ -1545,7 +1538,7 @@ static void gc_worker(struct work_struct *work)
 
 		rcu_read_lock();
 
-		nf_conntrack_get_ht(&init_net, &ct_hash, &hashsz);
+		nf_conntrack_get_ht(net, &ct_hash, &hashsz);
 		if (i >= hashsz) {
 			rcu_read_unlock();
 			break;
@@ -1553,8 +1546,6 @@ static void gc_worker(struct work_struct *work)
 
 		hlist_nulls_for_each_entry_rcu(h, n, &ct_hash[i], hnnode) {
 			unsigned int nf_conntrack_max95 = 0;
-			struct nf_conntrack_net *cnet;
-			struct net *net;
 			long expires;
 
 			tmp = nf_ct_tuplehash_to_ctrack(h);
@@ -1573,6 +1564,9 @@ static void gc_worker(struct work_struct *work)
 				goto early_exit;
 			}
 
+			if (!net_eq(net, nf_ct_net(tmp)))
+				break;
+
 			if (nf_ct_is_expired(tmp)) {
 				nf_ct_gc_expired(tmp);
 				expired_count++;
@@ -1582,7 +1576,6 @@ static void gc_worker(struct work_struct *work)
 			expires = clamp(nf_ct_expires(tmp), GC_SCAN_INTERVAL_MIN, GC_SCAN_INTERVAL_CLAMP);
 			expires = (expires - (long)next_run) / ++count;
 			next_run += expires;
-			net = nf_ct_net(tmp);
 
 			if (gc_work->early_drop)
 				nf_conntrack_max95 = nf_conntrack_max(net) / 100u * 95u;
@@ -1590,7 +1583,6 @@ static void gc_worker(struct work_struct *work)
 			if (nf_conntrack_max95 == 0 || gc_worker_skip_ct(tmp))
 				continue;
 
-			cnet = nf_ct_pernet(net);
 			if (atomic_read(&cnet->count) < nf_conntrack_max95)
 				continue;
 
@@ -1600,6 +1592,11 @@ static void gc_worker(struct work_struct *work)
 
 			/* load ->status after refcount increase */
 			smp_acquire__after_ctrl_dep();
+
+			if (!net_eq(net, nf_ct_net(tmp))) {
+				nf_ct_put(tmp);
+				break;
+			}
 
 			if (gc_worker_skip_ct(tmp)) {
 				nf_ct_put(tmp);
@@ -1650,10 +1647,19 @@ early_exit:
 		mod_delayed_work(system_power_efficient_wq, &gc_work->dwork, next_run);
 }
 
-static void conntrack_gc_work_init(struct conntrack_gc_work *gc_work)
+static void conntrack_gc_work_init(struct conntrack_gc_work *gc_work, struct net *net)
 {
 	/* work is started on first conntrack allocation. */
 	INIT_DELAYED_WORK(&gc_work->dwork, gc_worker);
+	write_pnet(&gc_work->net, net);
+}
+
+static void gc_set_early_drop(struct net *net)
+{
+	struct nf_conntrack_net *n = nf_ct_pernet(net);
+
+	if (!n->gc_work.early_drop)
+		n->gc_work.early_drop = true;
 }
 
 static struct nf_conn *
@@ -1674,8 +1680,7 @@ __nf_conntrack_alloc(struct net *net,
 
 	if (unlikely(ct_count > ct_max)) {
 		if (!early_drop(net, hash)) {
-			if (!conntrack_gc_work.early_drop)
-				conntrack_gc_work.early_drop = true;
+			gc_set_early_drop(net);
 			atomic_dec(&cnet->count);
 			if (net == &init_net)
 				net_warn_ratelimited("nf_conntrack: table full, dropping packet\n");
@@ -1715,9 +1720,9 @@ __nf_conntrack_alloc(struct net *net,
 	/* Re-arm gc_work if needed, but do not modify
 	 * in case it was already pending.
 	 */
-	if (unlikely(!delayed_work_pending(&conntrack_gc_work.dwork)))
+	if (unlikely(!delayed_work_pending(&cnet->gc_work.dwork)))
 		queue_delayed_work(system_power_efficient_wq,
-				   &conntrack_gc_work.dwork,
+				   &cnet->gc_work.dwork,
 				   GC_SCAN_INTERVAL_INIT);
 
 	return ct;
@@ -2467,15 +2472,9 @@ static int kill_all(struct nf_conn *i, void *data)
 	return 1;
 }
 
-void nf_conntrack_cleanup_start(void)
-{
-	cleanup_nf_conntrack_bpf();
-}
-
 void nf_conntrack_cleanup_end(void)
 {
 	RCU_INIT_POINTER(nf_ct_hook, NULL);
-	disable_delayed_work_sync(&conntrack_gc_work.dwork);
 
 	nf_conntrack_proto_fini();
 	nf_conntrack_helper_fini();
@@ -2707,8 +2706,6 @@ int nf_conntrack_init_start(void)
 	if (ret < 0)
 		goto err_proto;
 
-	conntrack_gc_work_init(&conntrack_gc_work);
-
 	ret = register_nf_conntrack_bpf();
 	if (ret < 0)
 		goto err_kfunc;
@@ -2716,7 +2713,6 @@ int nf_conntrack_init_start(void)
 	return 0;
 
 err_kfunc:
-	cancel_delayed_work_sync(&conntrack_gc_work.dwork);
 	nf_conntrack_proto_fini();
 err_proto:
 	nf_conntrack_helper_fini();
@@ -2784,6 +2780,8 @@ int nf_conntrack_init_net(struct net *net)
 
 	if (!net_eq(net, &init_net))
 		net->ct.nf_conntrack_hash = init_net.ct.nf_conntrack_hash;
+
+	conntrack_gc_work_init(&cnet->gc_work, net);
 
 	return 0;
 
