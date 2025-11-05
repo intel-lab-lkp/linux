@@ -29,6 +29,11 @@ properties:
     description:
       Regulator to power on the multiplexer.
 
+  enable-gpios:
+    description:
+      External gpio output that signals mux-gpios are in a valid state.
+      Logic low when state of the mux is idle, high otherwise.
+
   '#mux-control-cells':
     enum: [ 0, 1 ]
 
