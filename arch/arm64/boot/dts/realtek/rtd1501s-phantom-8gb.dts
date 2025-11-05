@@ -1,0 +1,26 @@
+// SPDX-License-Identifier: (GPL-2.0-or-later OR BSD-2-Clause)
+/*
+ * Realtek RTD1501S Phantom EVB
+ *
+ * Copyright (c) 2024 Realtek Semiconductor Corp.
+ */
+
+/dts-v1/;
+
+#include "rtd1501s-phantom.dtsi"
+
+/ {
+	compatible = "realtek,phantom", "realtek,rtd1501s";
+	model = "Realtek Phantom EVB Chromium (8GB)";
+
+	memory: memory@40000 {
+		device_type = "memory";
+		reg = <0x00000000 0x00050000 0x00000000 0x7ffb0000>,
+		      <0x00000000 0x8a100000 0x00000000 0x0def0000>,
+		      <0x00000000 0x98700000 0x00000000 0x07900000>,
+		      <0x00000000 0xa0600000 0x00000000 0x5ea00000>,
+		      <0x00000001 0x00000000 0x00000000 0xa0000000>,
+		      <0x00000001 0xa0600000 0x00000000 0x5fa00000>;
+	};
+};
+

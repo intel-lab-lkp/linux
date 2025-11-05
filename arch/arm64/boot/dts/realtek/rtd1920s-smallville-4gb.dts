@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: (GPL-2.0-or-later OR BSD-2-Clause)
+/*
+ * Realtek RTD1920S Smallville EVB
+ *
+ * Copyright (c) 2024 Realtek Semiconductor Corp.
+ */
+
+/dts-v1/;
+
+#include "rtd1920s-smallville.dtsi"
+
+/ {
+	compatible = "realtek,smallville", "realtek,rtd1920s";
+	model = "Realtek Smallville EVB (4GB)";
+
+	memory: memory@40000 {
+		device_type = "memory";
+		reg = <0x00000000 0x00050000 0x00000000 0x7ffb0000>,
+		      <0x00000000 0x8a100000 0x00000000 0x0def0000>,
+		      <0x00000000 0x98700000 0x00000000 0x07900000>,
+		      <0x00000000 0xa1000000 0x00000000 0x5e000000>;
+	};
+};
+
