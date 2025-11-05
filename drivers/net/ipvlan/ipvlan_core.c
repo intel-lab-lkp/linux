@@ -285,9 +285,10 @@ void ipvlan_process_multicast(struct work_struct *work)
 
 		if (tx_pkt) {
 			if (ipvlan_is_macnat(port)) {
-				/* Inject packet to main dev */
+				/* Inject as rx-packet to main dev. */
 				nskb = skb_clone(skb, GFP_ATOMIC);
 				if (nskb) {
+					consumed = true;
 					local_bh_disable();
 					nskb->pkt_type = pkt_type;
 					nskb->dev = port->dev;
@@ -295,17 +296,13 @@ void ipvlan_process_multicast(struct work_struct *work)
 					local_bh_enable();
 				}
 			}
-
-			/* If the packet originated here, send it out. */
-			skb->dev = port->dev;
-			skb->pkt_type = pkt_type;
-			dev_queue_xmit(skb);
-		} else {
-			if (consumed)
-				consume_skb(skb);
-			else
-				kfree_skb(skb);
+			/* Tx was done in ipvlan_xmit_mode_l2(). */
 		}
+		if (consumed)
+			consume_skb(skb);
+		else
+			kfree_skb(skb);
+
 		dev_put(dev);
 		cond_resched();
 	}
@@ -764,10 +761,15 @@ static int ipvlan_xmit_mode_l2(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	if (is_multicast_ether_addr(eth->h_dest)) {
-		skb_reset_mac_header(skb);
-		ipvlan_skb_crossing_ns(skb, NULL);
-		ipvlan_multicast_enqueue(ipvlan->port, skb, true);
-		return NET_XMIT_SUCCESS;
+		struct sk_buff *nskb = skb_clone(skb, GFP_ATOMIC);
+
+		if (nskb) {
+			skb_reset_mac_header(nskb);
+			ipvlan_skb_crossing_ns(nskb, NULL);
+			ipvlan_multicast_enqueue(ipvlan->port, nskb, true);
+		}
+
+		goto tx_phy_dev;
 	}
 
 	if (ipvlan_is_vepa(ipvlan->port))
