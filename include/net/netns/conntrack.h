@@ -89,10 +89,11 @@ struct netns_ct {
 	u8			sysctl_acct;
 	u8			sysctl_tstamp;
 	u8			sysctl_checksum;
-	unsigned int		sysctl_max;
 
+	unsigned int nf_conntrack_htable_size;
 	struct ip_conntrack_stat __percpu *stat;
 	struct hlist_nulls_head *nf_conntrack_hash;
+	unsigned int nf_conntrack_max;
 	struct nf_ct_event_notifier __rcu *nf_conntrack_event_cb;
 	struct nf_ip_net	nf_ct_proto;
 #if defined(CONFIG_NF_CONNTRACK_LABELS)

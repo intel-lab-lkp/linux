@@ -717,7 +717,7 @@ void nf_conntrack_expect_pernet_fini(struct net *net)
 int nf_conntrack_expect_init(void)
 {
 	if (!nf_ct_expect_hsize) {
-		nf_ct_expect_hsize = nf_conntrack_htable_size / 256;
+		nf_ct_expect_hsize = init_net.ct.nf_conntrack_htable_size / 256;
 		if (!nf_ct_expect_hsize)
 			nf_ct_expect_hsize = 1;
 	}

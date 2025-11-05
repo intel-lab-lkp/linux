@@ -77,6 +77,7 @@ struct nf_conntrack_net {
 	unsigned int users6;
 	unsigned int users_bridge;
 #ifdef CONFIG_SYSCTL
+	unsigned int htable_size_user;
 	struct ctl_table_header	*sysctl_header;
 #endif
 #ifdef CONFIG_NF_CONNTRACK_EVENTS
@@ -345,10 +346,8 @@ static inline bool nf_ct_should_gc(const struct nf_conn *ct)
 struct kernel_param;
 
 int nf_conntrack_set_hashsize(const char *val, const struct kernel_param *kp);
-int nf_conntrack_hash_resize(unsigned int hashsize);
+int nf_conntrack_hash_resize(struct net *net, unsigned int hashsize);
 
-extern struct hlist_nulls_head *nf_conntrack_hash;
-extern unsigned int nf_conntrack_htable_size;
 extern seqcount_spinlock_t nf_conntrack_generation;
 
 /* must be called with rcu read lock held */
@@ -361,9 +360,8 @@ nf_conntrack_get_ht(struct net *net, struct hlist_nulls_head **hash,
 
 	do {
 		sequence = read_seqcount_begin(&nf_conntrack_generation);
-		hsz = nf_conntrack_htable_size;
+		hsz = net->ct.nf_conntrack_htable_size;
 		hptr = net->ct.nf_conntrack_hash;
-		hptr = init_net.ct.nf_conntrack_hash;
 	} while (read_seqcount_retry(&nf_conntrack_generation, sequence));
 
 	*hash = hptr;
@@ -394,9 +392,7 @@ static inline struct nf_conntrack_net *nf_ct_pernet(const struct net *net)
 static inline unsigned int nf_conntrack_max(const struct net *net)
 {
 #if IS_ENABLED(CONFIG_NF_CONNTRACK)
-	return min(init_net.ct.sysctl_max, net->ct.sysctl_max);
-#else
-	return 0;
+	return net->ct.nf_conntrack_max;
 #endif
 }
 

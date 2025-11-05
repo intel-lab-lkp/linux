@@ -687,7 +687,7 @@ void nf_conntrack_proto_pernet_init(struct net *net)
 }
 
 module_param_call(hashsize, nf_conntrack_set_hashsize, param_get_uint,
-		  &nf_conntrack_htable_size, 0600);
+		  &init_net.ct.nf_conntrack_htable_size, 0600);
 
 MODULE_ALIAS("ip_conntrack");
 MODULE_ALIAS("nf_conntrack-" __stringify(AF_INET));

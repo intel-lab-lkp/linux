@@ -1221,6 +1221,7 @@ ctnetlink_dump_table(struct sk_buff *skb, struct netlink_callback *cb)
 	unsigned long last_id = cb->args[1];
 	struct nf_conntrack_tuple_hash *h;
 	struct hlist_nulls_node *n;
+	unsigned int htable_size;
 	struct nf_conn *nf_ct_evict[8];
 	struct nf_conn *ct;
 	int res, i;
@@ -1229,7 +1230,8 @@ ctnetlink_dump_table(struct sk_buff *skb, struct netlink_callback *cb)
 	i = 0;
 
 	local_bh_disable();
-	for (; cb->args[0] < nf_conntrack_htable_size; cb->args[0]++) {
+	htable_size = net->ct.nf_conntrack_htable_size;
+	for (; cb->args[0] < htable_size; cb->args[0]++) {
 restart:
 		while (i) {
 			i--;
@@ -1240,12 +1242,12 @@ restart:
 
 		lockp = &nf_conntrack_locks[cb->args[0] % CONNTRACK_LOCKS];
 		nf_conntrack_lock(lockp);
-		if (cb->args[0] >= nf_conntrack_htable_size) {
+		if (cb->args[0] >= htable_size) {
 			spin_unlock(lockp);
 			goto out;
 		}
 		hlist_nulls_for_each_entry(h, n,
-					   &init_net.ct.nf_conntrack_hash[cb->args[0]],
+					   &net->ct.nf_conntrack_hash[cb->args[0]],
 					   hnnode) {
 			ct = nf_ct_tuplehash_to_ctrack(h);
 			if (nf_ct_is_expired(ct)) {

@@ -156,7 +156,7 @@ static void *ct_seq_start(struct seq_file *seq, loff_t *pos)
 	st->time_now = ktime_get_real_ns();
 	rcu_read_lock();
 
-	nf_conntrack_get_ht(&init_net, &st->hash, &st->htable_size);
+	nf_conntrack_get_ht(net, &st->hash, &st->htable_size);
 
 	if (*pos == 0) {
 		st->skip_elems = 0;
@@ -536,27 +536,27 @@ EXPORT_SYMBOL_GPL(nf_conntrack_count);
 /* Sysctl support */
 
 #ifdef CONFIG_SYSCTL
-/* size the user *wants to set */
-static unsigned int nf_conntrack_htable_size_user __read_mostly;
-
 static int
 nf_conntrack_hash_sysctl(const struct ctl_table *table, int write,
 			 void *buffer, size_t *lenp, loff_t *ppos)
 {
+	struct net *net = table->extra1;
+	struct nf_conntrack_net *cnet;
+	unsigned int size_old;
 	int ret;
 
-	/* module_param hashsize could have changed value */
-	nf_conntrack_htable_size_user = nf_conntrack_htable_size;
+	cnet = nf_ct_pernet(net);
+	size_old = net->ct.nf_conntrack_htable_size;
 
 	ret = proc_dointvec(table, write, buffer, lenp, ppos);
 	if (ret < 0 || !write)
 		return ret;
 
 	/* update ret, we might not be able to satisfy request */
-	ret = nf_conntrack_hash_resize(nf_conntrack_htable_size_user);
+	ret = nf_conntrack_hash_resize(net, cnet->htable_size_user);
 
 	/* update it to the actual value used by conntrack */
-	nf_conntrack_htable_size_user = nf_conntrack_htable_size;
+	cnet->htable_size_user = net->ct.nf_conntrack_htable_size;
 	return ret;
 }
 
@@ -645,7 +645,7 @@ enum nf_ct_sysctl_index {
 static struct ctl_table nf_ct_sysctl_table[] = {
 	[NF_SYSCTL_CT_MAX] = {
 		.procname	= "nf_conntrack_max",
-		.data		= &init_net.ct.sysctl_max,
+		.data		= &init_net.ct.nf_conntrack_max,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
@@ -660,10 +660,12 @@ static struct ctl_table nf_ct_sysctl_table[] = {
 	},
 	[NF_SYSCTL_CT_BUCKETS] = {
 		.procname       = "nf_conntrack_buckets",
-		.data           = &nf_conntrack_htable_size_user,
+		.data           = &init_net.ct.nf_conntrack_htable_size,
 		.maxlen         = sizeof(unsigned int),
 		.mode           = 0644,
 		.proc_handler   = nf_conntrack_hash_sysctl,
+		.extra1		= &init_net,
+		.maxlen         = sizeof(unsigned int),
 	},
 	[NF_SYSCTL_CT_CHECKSUM] = {
 		.procname	= "nf_conntrack_checksum",
@@ -926,7 +928,7 @@ static struct ctl_table nf_ct_sysctl_table[] = {
 static struct ctl_table nf_ct_netfilter_table[] = {
 	{
 		.procname	= "nf_conntrack_max",
-		.data		= &init_net.ct.sysctl_max,
+		.data		= &init_net.ct.nf_conntrack_max,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
@@ -1017,8 +1019,10 @@ static int nf_conntrack_standalone_init_sysctl(struct net *net)
 		return -ENOMEM;
 
 	table[NF_SYSCTL_CT_COUNT].data = &cnet->count;
+	table[NF_SYSCTL_CT_BUCKETS].data = &cnet->htable_size_user;
+	table[NF_SYSCTL_CT_BUCKETS].extra1 = net;
 	table[NF_SYSCTL_CT_CHECKSUM].data = &net->ct.sysctl_checksum;
-	table[NF_SYSCTL_CT_MAX].data = &net->ct.sysctl_max;
+	table[NF_SYSCTL_CT_MAX].data = &net->ct.nf_conntrack_max;
 	table[NF_SYSCTL_CT_LOG_INVALID].data = &net->ct.sysctl_log_invalid;
 	table[NF_SYSCTL_CT_ACCT].data = &net->ct.sysctl_acct;
 #ifdef CONFIG_NF_CONNTRACK_EVENTS
@@ -1097,7 +1101,6 @@ static int nf_conntrack_pernet_init(struct net *net)
 	int ret;
 
 	net->ct.sysctl_checksum = 1;
-	net->ct.sysctl_max = init_net.ct.sysctl_max;
 
 	ret = nf_conntrack_standalone_init_sysctl(net);
 	if (ret < 0)
@@ -1138,8 +1141,7 @@ static void nf_conntrack_pernet_exit(struct list_head *net_exit_list)
 	nf_conntrack_cleanup_net_list(net_exit_list);
 
 	list_for_each_entry(net, net_exit_list, exit_list) {
-		if (net_eq(net, &init_net))
-			kvfree(net->ct.nf_conntrack_hash);
+		kvfree(net->ct.nf_conntrack_hash);
 		net->ct.nf_conntrack_hash = NULL;
 	}
 }
@@ -1167,8 +1169,6 @@ static int __init nf_conntrack_standalone_init(void)
 		ret = -ENOMEM;
 		goto out_sysctl;
 	}
-
-	nf_conntrack_htable_size_user = nf_conntrack_htable_size;
 #endif
 
 	nf_conntrack_init_end();

@@ -1330,7 +1330,7 @@ static int __init nf_nat_init(void)
 	int ret, i;
 
 	/* Leave them the same for the moment. */
-	nf_nat_htable_size = nf_conntrack_htable_size;
+	nf_nat_htable_size = init_net.ct.nf_conntrack_htable_size;
 	if (nf_nat_htable_size < CONNTRACK_LOCKS)
 		nf_nat_htable_size = CONNTRACK_LOCKS;
 

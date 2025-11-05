@@ -63,6 +63,7 @@ EXPORT_SYMBOL_GPL(nf_conntrack_expect_lock);
 static __read_mostly struct kmem_cache *nf_conntrack_cachep;
 static DEFINE_SPINLOCK(nf_conntrack_locks_all_lock);
 static __read_mostly bool nf_conntrack_locks_all;
+static unsigned int conntrack_htable_autosize __ro_after_init;
 
 /* serialize hash resizes and nf_ct_iterate_cleanup */
 static DEFINE_MUTEX(nf_conntrack_mutex);
@@ -184,9 +185,6 @@ static void nf_conntrack_all_unlock(void)
 	spin_unlock(&nf_conntrack_locks_all_lock);
 }
 
-unsigned int nf_conntrack_htable_size __read_mostly;
-EXPORT_SYMBOL_GPL(nf_conntrack_htable_size);
-
 seqcount_spinlock_t nf_conntrack_generation __read_mostly;
 static siphash_aligned_key_t nf_conntrack_hash_rnd;
 
@@ -208,9 +206,9 @@ static u32 hash_conntrack_raw(const struct nf_conntrack_tuple *tuple,
 			&key);
 }
 
-static u32 scale_hash(u32 hash)
+static u32 scale_hash(const struct net *net, u32 hash)
 {
-	return reciprocal_scale(hash, nf_conntrack_htable_size);
+	return reciprocal_scale(hash, net->ct.nf_conntrack_htable_size);
 }
 
 static u32 __hash_conntrack(const struct net *net,
@@ -225,7 +223,7 @@ static u32 hash_conntrack(const struct net *net,
 			  const struct nf_conntrack_tuple *tuple,
 			  unsigned int zoneid)
 {
-	return scale_hash(hash_conntrack_raw(tuple, zoneid, net));
+	return scale_hash(net, hash_conntrack_raw(tuple, zoneid, net));
 }
 
 static bool nf_ct_get_tuple_ports(const struct sk_buff *skb,
@@ -722,9 +720,12 @@ ____nf_conntrack_find(struct net *net, const struct nf_conntrack_zone *zone,
 	struct hlist_nulls_head *ct_hash;
 	struct hlist_nulls_node *n;
 	unsigned int bucket, hsize;
+	bool restart;
 
 begin:
-	nf_conntrack_get_ht(&init_net, &ct_hash, &hsize);
+	restart = false;
+
+	nf_conntrack_get_ht(net, &ct_hash, &hsize);
 	bucket = reciprocal_scale(hash, hsize);
 
 	hlist_nulls_for_each_entry_rcu(h, n, &ct_hash[bucket], hnnode) {
@@ -738,13 +739,19 @@ begin:
 
 		if (nf_ct_key_equal(h, tuple, zone, net))
 			return h;
+
+		if (net_eq(net, nf_ct_net(ct)))
+			continue;
+
+		restart = true;
+		break;
 	}
 	/*
 	 * if the nulls value we got at the end of this lookup is
 	 * not the expected one, we must restart lookup.
 	 * We probably met an item that was moved to another chain.
 	 */
-	if (get_nulls_value(n) != bucket) {
+	if (restart || get_nulls_value(n) != bucket) {
 		NF_CT_STAT_INC_ATOMIC(net, search_restart);
 		goto begin;
 	}
@@ -876,7 +883,7 @@ nf_conntrack_hash_check_insert(struct nf_conn *ct)
 					   nf_ct_zone_id(nf_ct_zone(ct), IP_CT_DIR_REPLY));
 	} while (nf_conntrack_double_lock(hash, reply_hash, sequence));
 
-	ct_hash = init_net.ct.nf_conntrack_hash;
+	ct_hash = net->ct.nf_conntrack_hash;
 	max_chainlen = MIN_CHAINLEN + get_random_u32_below(MAX_CHAINLEN);
 
 	/* See if there's one in the list already, including reverse */
@@ -1077,7 +1084,7 @@ static int nf_ct_resolve_clash_harder(struct sk_buff *skb, u32 repl_idx)
 	zone = nf_ct_zone(loser_ct);
 	net = nf_ct_net(loser_ct);
 
-	ct_hash = init_net.ct.nf_conntrack_hash;
+	ct_hash = net->ct.nf_conntrack_hash;
 
 	/* Reply direction must never result in a clash, unless both origin
 	 * and reply tuples are identical.
@@ -1219,13 +1226,13 @@ __nf_conntrack_confirm(struct sk_buff *skb)
 		sequence = read_seqcount_begin(&nf_conntrack_generation);
 		/* reuse the hash saved before */
 		hash = *(unsigned long *)&ct->tuplehash[IP_CT_DIR_REPLY].hnnode.pprev;
-		hash = scale_hash(hash);
+		hash = scale_hash(net, hash);
 		reply_hash = hash_conntrack(net,
 					   &ct->tuplehash[IP_CT_DIR_REPLY].tuple,
 					   nf_ct_zone_id(nf_ct_zone(ct), IP_CT_DIR_REPLY));
 	} while (nf_conntrack_double_lock(hash, reply_hash, sequence));
 
-	ct_hash = init_net.ct.nf_conntrack_hash;
+	ct_hash = net->ct.nf_conntrack_hash;
 
 	/* We're not in hash table, and we refuse to set up related
 	 * connections for unconfirmed conns.  But packet copies and
@@ -1356,7 +1363,7 @@ nf_conntrack_tuple_taken(const struct nf_conntrack_tuple *tuple,
 
 	rcu_read_lock();
  begin:
-	nf_conntrack_get_ht(&init_net, &ct_hash, &hsize);
+	nf_conntrack_get_ht(net, &ct_hash, &hsize);
 	hash = __hash_conntrack(net, tuple, nf_ct_zone_id(zone, IP_CT_DIR_REPLY), hsize);
 
 	hlist_nulls_for_each_entry_rcu(h, n, &ct_hash[hash], hnnode) {
@@ -1463,7 +1470,7 @@ static noinline int early_drop(struct net *net, unsigned int hash)
 		unsigned int hsize, drops;
 
 		rcu_read_lock();
-		nf_conntrack_get_ht(&init_net, &ct_hash, &hsize);
+		nf_conntrack_get_ht(net, &ct_hash, &hsize);
 		if (!i)
 			bucket = reciprocal_scale(hash, hsize);
 		else
@@ -2328,14 +2335,17 @@ get_next_corpse(int (*iter)(struct nf_conn *i, void *data),
 		const struct nf_ct_iter_data *iter_data, unsigned int *bucket)
 {
 	struct nf_conntrack_tuple_hash *h;
+	struct net *net = iter_data->net;
 	struct nf_conn *ct;
 	struct hlist_nulls_node *n;
+	unsigned int htable_size;
 	spinlock_t *lockp;
 
-	for (; *bucket < nf_conntrack_htable_size; (*bucket)++) {
+	htable_size = net->ct.nf_conntrack_htable_size;
+	for (; *bucket < htable_size; (*bucket)++) {
 		struct hlist_nulls_head *hslot;
 
-		hslot = &init_net.ct.nf_conntrack_hash[*bucket];
+		hslot = &net->ct.nf_conntrack_hash[*bucket];
 		if (hlist_nulls_empty(hslot))
 			continue;
 
@@ -2543,8 +2553,8 @@ void *nf_ct_alloc_hashtable(unsigned int *sizep, int nulls)
 	if (nr_slots > (INT_MAX / sizeof(struct hlist_nulls_head)))
 		return NULL;
 
-	hash = kvcalloc(nr_slots, sizeof(struct hlist_nulls_head), GFP_KERNEL);
-
+	hash = kvcalloc(nr_slots, sizeof(struct hlist_nulls_head),
+			GFP_KERNEL_ACCOUNT);
 	if (hash && nulls)
 		for (i = 0; i < nr_slots; i++)
 			INIT_HLIST_NULLS_HEAD(&hash[i], i);
@@ -2553,7 +2563,7 @@ void *nf_ct_alloc_hashtable(unsigned int *sizep, int nulls)
 }
 EXPORT_SYMBOL_GPL(nf_ct_alloc_hashtable);
 
-int nf_conntrack_hash_resize(unsigned int hashsize)
+int nf_conntrack_hash_resize(struct net *net, unsigned int hashsize)
 {
 	int i, bucket;
 	unsigned int old_size;
@@ -2569,7 +2579,7 @@ int nf_conntrack_hash_resize(unsigned int hashsize)
 		return -ENOMEM;
 
 	mutex_lock(&nf_conntrack_mutex);
-	old_size = nf_conntrack_htable_size;
+	old_size = net->ct.nf_conntrack_htable_size;
 	if (old_size == hashsize) {
 		mutex_unlock(&nf_conntrack_mutex);
 		kvfree(hash);
@@ -2586,11 +2596,12 @@ int nf_conntrack_hash_resize(unsigned int hashsize)
 	 * though since that required taking the locks.
 	 */
 
-	for (i = 0; i < nf_conntrack_htable_size; i++) {
-		while (!hlist_nulls_empty(&init_net.ct.nf_conntrack_hash[i])) {
+	old_size = net->ct.nf_conntrack_htable_size;
+	for (i = 0; i < old_size; i++) {
+		while (!hlist_nulls_empty(&net->ct.nf_conntrack_hash[i])) {
 			unsigned int zone_id;
 
-			h = hlist_nulls_entry(init_net.ct.nf_conntrack_hash[i].first,
+			h = hlist_nulls_entry(net->ct.nf_conntrack_hash[i].first,
 					      struct nf_conntrack_tuple_hash, hnnode);
 			ct = nf_ct_tuplehash_to_ctrack(h);
 			hlist_nulls_del_rcu(&h->hnnode);
@@ -2602,11 +2613,11 @@ int nf_conntrack_hash_resize(unsigned int hashsize)
 		}
 	}
 
-	old_size = nf_conntrack_htable_size;
-	old_hash = init_net.ct.nf_conntrack_hash;
+	old_size = net->ct.nf_conntrack_htable_size;
+	old_hash = net->ct.nf_conntrack_hash;
 
-	init_net.ct.nf_conntrack_hash = hash;
-	nf_conntrack_htable_size = hashsize;
+	net->ct.nf_conntrack_hash = hash;
+	net->ct.nf_conntrack_htable_size = hashsize;
 
 	write_seqcount_end(&nf_conntrack_generation);
 	nf_conntrack_all_unlock();
@@ -2635,7 +2646,7 @@ int nf_conntrack_set_hashsize(const char *val, const struct kernel_param *kp)
 	if (rc)
 		return rc;
 
-	return nf_conntrack_hash_resize(hashsize);
+	return nf_conntrack_hash_resize(&init_net, hashsize);
 }
 
 static unsigned int nf_conntrack_htable_autosize(void)
@@ -2651,7 +2662,7 @@ static unsigned int nf_conntrack_htable_autosize(void)
 	else if (nr_pages > (1024 * 1024 * 1024 / PAGE_SIZE))
 		ht_size = 65536;
 
-	if (nf_conntrack_htable_size < 1024)
+	if (ht_size < 1024)
 		ht_size = 1024;
 
 	return ht_size;
@@ -2659,7 +2670,6 @@ static unsigned int nf_conntrack_htable_autosize(void)
 
 int nf_conntrack_init_start(void)
 {
-	int max_factor = 8;
 	int ret = -ENOMEM;
 	int i;
 
@@ -2669,23 +2679,7 @@ int nf_conntrack_init_start(void)
 	for (i = 0; i < CONNTRACK_LOCKS; i++)
 		spin_lock_init(&nf_conntrack_locks[i]);
 
-	if (!nf_conntrack_htable_size) {
-		nf_conntrack_htable_size = nf_conntrack_htable_autosize();
-
-		/* Use a max. factor of one by default to keep the average
-		 * hash chain length at 2 entries.  Each entry has to be added
-		 * twice (once for original direction, once for reply).
-		 * When a table size is given we use the old value of 8 to
-		 * avoid implicit reduction of the max entries setting.
-		 */
-		max_factor = 1;
-	}
-
-	init_net.ct.nf_conntrack_hash = nf_ct_alloc_hashtable(&nf_conntrack_htable_size, 1);
-	if (!init_net.ct.nf_conntrack_hash)
-		return -ENOMEM;
-
-	init_net.ct.sysctl_max = max_factor * nf_conntrack_htable_size;
+	conntrack_htable_autosize = nf_conntrack_htable_autosize();
 
 	nf_conntrack_cachep = kmem_cache_create("nf_conntrack",
 						sizeof(struct nf_conn),
@@ -2721,7 +2715,6 @@ err_helper:
 err_expect:
 	kmem_cache_destroy(nf_conntrack_cachep);
 err_cachep:
-	kvfree(init_net.ct.nf_conntrack_hash);
 	return ret;
 }
 
@@ -2759,7 +2752,31 @@ void nf_conntrack_init_end(void)
 int nf_conntrack_init_net(struct net *net)
 {
 	struct nf_conntrack_net *cnet = nf_ct_pernet(net);
+	unsigned int ht_size = conntrack_htable_autosize;
 	int ret = -ENOMEM;
+	int max_factor = 1;
+
+	net->ct.nf_conntrack_max = conntrack_htable_autosize;
+
+	if (&init_net == net &&
+	    init_net.ct.nf_conntrack_htable_size) {
+		/* Use a max. factor of one by default to keep the average
+		 * hash chain length at 2 entries.  Each entry has to be added
+		 * twice (once for original direction, once for reply).
+		 * When a table size is given we use the old value of 8 to
+		 * avoid implicit reduction of the max entries setting.
+		 */
+		ht_size = init_net.ct.nf_conntrack_htable_size;
+		max_factor = 8;
+	}
+
+	net->ct.nf_conntrack_hash = nf_ct_alloc_hashtable(&ht_size, 1);
+	if (!net->ct.nf_conntrack_hash)
+		return ret;
+
+	net->ct.nf_conntrack_htable_size = ht_size;
+	cnet->htable_size_user = ht_size;
+	net->ct.nf_conntrack_max = ht_size * max_factor;
 
 	BUILD_BUG_ON(IP_CT_UNTRACKED == IP_CT_NUMBER);
 	BUILD_BUG_ON_NOT_POWER_OF_2(CONNTRACK_LOCKS);
@@ -2767,7 +2784,7 @@ int nf_conntrack_init_net(struct net *net)
 
 	net->ct.stat = alloc_percpu(struct ip_conntrack_stat);
 	if (!net->ct.stat)
-		return ret;
+		goto err_stat;
 
 	ret = nf_conntrack_expect_pernet_init(net);
 	if (ret < 0)
@@ -2778,15 +2795,14 @@ int nf_conntrack_init_net(struct net *net)
 	nf_conntrack_ecache_pernet_init(net);
 	nf_conntrack_proto_pernet_init(net);
 
-	if (!net_eq(net, &init_net))
-		net->ct.nf_conntrack_hash = init_net.ct.nf_conntrack_hash;
-
 	conntrack_gc_work_init(&cnet->gc_work, net);
 
 	return 0;
 
 err_expect:
 	free_percpu(net->ct.stat);
+err_stat:
+	kvfree(net->ct.nf_conntrack_hash);
 	return ret;
 }
 
