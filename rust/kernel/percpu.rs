@@ -2,7 +2,7 @@
 //! Per-CPU variables.
 //!
 //! See the [`crate::define_per_cpu!`] macro, the [`DynamicPerCpu`] type, and the [`PerCpu<T>`]
-//! trait.
+//! trait. Example usage can be found in `samples/rust/rust_percpu.rs`.
 
 pub mod cpu_guard;
 mod dynamic;
