@@ -890,7 +890,8 @@ int of_pci_get_max_link_speed(struct device_node *node)
 	u32 max_link_speed;
 
 	if (of_property_read_u32(node, "max-link-speed", &max_link_speed) ||
-	    max_link_speed == 0 || max_link_speed > 4)
+	    max_link_speed == 0 ||
+	    max_link_speed > pcie_max_supported_link_speed())
 		return -EINVAL;
 
 	return max_link_speed;
