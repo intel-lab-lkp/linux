@@ -31,6 +31,9 @@ struct drm_mode_create_dumb;
 #define DRIVER_MINOR		0
 #define DRIVER_PATCHLEVEL	1
 
+#define GET_URB_TIMEOUT	HZ
+#define MODESET_GET_URB_TIMEOUT	(HZ*2)
+
 struct udl_device;
 
 struct urb_node {
@@ -72,7 +75,7 @@ static inline struct usb_device *udl_to_usb_device(struct udl_device *udl)
 int udl_modeset_init(struct udl_device *udl);
 struct drm_connector *udl_connector_init(struct drm_device *dev);
 
-struct urb *udl_get_urb(struct udl_device *udl);
+struct urb *udl_get_urb(struct udl_device *udl, long timeout);
 
 int udl_submit_urb(struct udl_device *udl, struct urb *urb, size_t len);
 void udl_sync_pending_urbs(struct udl_device *udl);
