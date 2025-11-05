@@ -338,11 +338,13 @@ allOf:
             - const: netsys0
             - const: netsys1
 
-        mediatek,infracfg: false
-
         mediatek,sgmiisys:
           minItems: 2
           maxItems: 2
+
+        mediatek,wed:
+          minItems: 1
+          maxItems: 1
 
   - if:
       properties:
