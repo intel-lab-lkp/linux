@@ -329,7 +329,6 @@ int nf_conntrack_hash_resize(unsigned int hashsize);
 extern struct hlist_nulls_head *nf_conntrack_hash;
 extern unsigned int nf_conntrack_htable_size;
 extern seqcount_spinlock_t nf_conntrack_generation;
-extern unsigned int nf_conntrack_max;
 
 /* must be called with rcu read lock held */
 static inline void
@@ -367,6 +366,15 @@ extern unsigned int nf_conntrack_net_id;
 static inline struct nf_conntrack_net *nf_ct_pernet(const struct net *net)
 {
 	return net_generic(net, nf_conntrack_net_id);
+}
+
+static inline unsigned int nf_conntrack_max(const struct net *net)
+{
+#if IS_ENABLED(CONFIG_NF_CONNTRACK)
+	return min(init_net.ct.sysctl_max, net->ct.sysctl_max);
+#else
+	return 0;
+#endif
 }
 
 int nf_ct_skb_network_trim(struct sk_buff *skb, int family);

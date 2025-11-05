@@ -92,12 +92,15 @@ nf_conntrack_log_invalid - INTEGER
 	Log invalid packets of a type specified by value.
 
 nf_conntrack_max - INTEGER
-        Maximum number of allowed connection tracking entries. This value is set
-        to nf_conntrack_buckets by default.
+        Maximum number of allowed connection tracking entries per netns.
+        This value is set to nf_conntrack_buckets by default.
+
         Note that connection tracking entries are added to the table twice -- once
         for the original direction and once for the reply direction (i.e., with
         the reversed address). This means that with default settings a maxed-out
         table will have a average hash chain length of 2, not 1.
+
+        The limit of other netns cannot be greater than init_net netns.
 
 nf_conntrack_tcp_be_liberal - BOOLEAN
 	- 0 - disabled (default)
