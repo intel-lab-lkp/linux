@@ -297,7 +297,6 @@ void txgbe_down(struct wx *wx)
 void txgbe_up(struct wx *wx)
 {
 	wx_configure(wx);
-	wx_ptp_init(wx);
 	txgbe_up_complete(wx);
 }
 
