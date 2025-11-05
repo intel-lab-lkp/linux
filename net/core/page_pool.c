@@ -211,7 +211,7 @@ static int page_pool_init(struct page_pool *pool,
 		return -EINVAL;
 
 	if (pool->p.pool_size)
-		ring_qsize = min(pool->p.pool_size, 16384);
+		ring_qsize = min(pool->p.pool_size, PAGE_POOL_MAX_RING_SIZE);
 
 	/* DMA direction is either DMA_FROM_DEVICE or DMA_BIDIRECTIONAL.
 	 * DMA_BIDIRECTIONAL is for allowing page used for DMA sending,
