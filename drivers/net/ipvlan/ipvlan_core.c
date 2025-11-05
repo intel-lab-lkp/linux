@@ -4,6 +4,7 @@
 
 #include <net/flow.h>
 #include <net/ip.h>
+#include <net/ip6_checksum.h>
 
 #include "ipvlan.h"
 
@@ -769,13 +770,122 @@ out:
 	return ipvlan_process_outbound(skb);
 }
 
+static void ipvlan_macnat_patch_tx_arp(struct ipvl_dev *ipvlan,
+				       struct sk_buff *skb)
+{
+	struct arphdr *arph;
+	int addr_type;
+
+	arph = (struct arphdr *)ipvlan_get_L3_hdr(ipvlan->port, skb,
+						 &addr_type);
+	ether_addr_copy((u8 *)(arph + 1), ipvlan->phy_dev->dev_addr);
+}
+
+#if IS_ENABLED(CONFIG_IPV6)
+
+static u8 *ipvlan_search_icmp6_ll_addr(struct sk_buff *skb, u8 icmp_option)
+{
+	/* skb is ensured to pullable for all ipv6 payload_len by caller */
+	struct ipv6hdr *ip6h = ipv6_hdr(skb);
+	struct icmp6hdr *icmph;
+	int ndsize, curr_off;
+
+	icmph = (struct icmp6hdr *)(ip6h + 1);
+	ndsize = (int)htons(ip6h->payload_len);
+	curr_off = sizeof(*icmph);
+
+	if (icmph->icmp6_type != NDISC_ROUTER_SOLICITATION)
+		curr_off += sizeof(struct in6_addr);
+
+	while ((curr_off + 2) < ndsize) {
+		u8  *data = (u8 *)icmph + curr_off;
+		u32 opt_len = data[1] << 3;
+
+		if (unlikely(opt_len == 0))
+			return NULL;
+
+		if (data[0] != icmp_option) {
+			curr_off += opt_len;
+			continue;
+		}
+
+		if (unlikely(opt_len < ETH_ALEN + 2))
+			return NULL;
+
+		if (unlikely(curr_off + opt_len > ndsize))
+			return NULL;
+
+		return data + 2;
+	}
+
+	return NULL;
+}
+
+static void ipvlan_macnat_patch_tx_ipv6(struct ipvl_dev *ipvlan,
+					struct sk_buff *skb)
+{
+	struct ipv6hdr *ip6h;
+	struct icmp6hdr *icmph;
+	u8 icmp_option;
+	u8 *lladdr;
+	u16 ndsize;
+
+	if (unlikely(!pskb_may_pull(skb, sizeof(*ip6h))))
+		return;
+
+	if (ipv6_hdr(skb)->nexthdr != NEXTHDR_ICMP)
+		return;
+
+	if (unlikely(!pskb_may_pull(skb, sizeof(*ip6h) + sizeof(*icmph))))
+		return;
+
+	ip6h = ipv6_hdr(skb);
+	icmph = (struct icmp6hdr *)(ip6h + 1);
+
+	/* Patch Source-LL for solicitation, Target-LL for advertisement */
+	if (icmph->icmp6_type == NDISC_NEIGHBOUR_SOLICITATION ||
+	    icmph->icmp6_type == NDISC_ROUTER_SOLICITATION)
+		icmp_option = ND_OPT_SOURCE_LL_ADDR;
+	else if (icmph->icmp6_type == NDISC_NEIGHBOUR_ADVERTISEMENT)
+		icmp_option = ND_OPT_TARGET_LL_ADDR;
+	else
+		return;
+
+	ndsize = (int)htons(ip6h->payload_len);
+	if (unlikely(!pskb_may_pull(skb, sizeof(*ip6h) + ndsize)))
+		return;
+
+	lladdr = ipvlan_search_icmp6_ll_addr(skb, icmp_option);
+	if (!lladdr)
+		return;
+
+	ether_addr_copy(lladdr, ipvlan->phy_dev->dev_addr);
+
+	ip6h = ipv6_hdr(skb);
+	icmph = (struct icmp6hdr *)(ip6h + 1);
+	icmph->icmp6_cksum = 0;
+	icmph->icmp6_cksum = csum_ipv6_magic(&ip6h->saddr, &ip6h->daddr,
+					     ndsize,
+					     IPPROTO_ICMPV6,
+					     csum_partial(icmph,
+							  ndsize,
+							  0));
+	skb->ip_summed = CHECKSUM_COMPLETE;
+}
+#else
+static void ipvlan_macnat_patch_tx_ipv6(struct ipvl_dev *ipvlan,
+					struct sk_buff *skb)
+{
+}
+#endif
+
 static int ipvlan_xmit_mode_l2(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ipvl_dev *ipvlan;
 	struct ipvl_addr *addr;
 	struct ethhdr *eth;
 	bool same_mac_addr;
-	int addr_type;
+	int addr_type = -1;
 	void *lyr3h;
 
 	ipvlan = netdev_priv(dev);
@@ -862,8 +972,6 @@ tx_frame_out:
 		}
 	} else {
 		/* Packet to outside on learnable. Fix source eth-addr. */
-		struct sk_buff *orig_skb = skb;
-
 		skb = skb_unshare(skb, GFP_ATOMIC);
 		if (!skb)
 			return NET_XMIT_DROP;
@@ -872,17 +980,10 @@ tx_frame_out:
 		ether_addr_copy(skb_eth_hdr(skb)->h_source,
 				ipvlan->phy_dev->dev_addr);
 
-		/* ToDo: Handle ICMPv6 for neighbours discovery.*/
-		if (lyr3h && addr_type == IPVL_ARP) {
-			struct arphdr *arph;
-			/* must reparse new skb */
-			if (skb != orig_skb && lyr3h && addr_type == IPVL_ARP)
-				lyr3h = ipvlan_get_L3_hdr(ipvlan->port, skb,
-							  &addr_type);
-			arph = (struct arphdr *)lyr3h;
-			ether_addr_copy((u8 *)(arph + 1),
-					ipvlan->phy_dev->dev_addr);
-		}
+		if (addr_type == IPVL_ARP)
+			ipvlan_macnat_patch_tx_arp(ipvlan, skb);
+		else if (addr_type == IPVL_ICMPV6 || addr_type == IPVL_IPV6)
+			ipvlan_macnat_patch_tx_ipv6(ipvlan, skb);
 	}
 
 tx_phy_dev:
