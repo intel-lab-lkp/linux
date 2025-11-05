@@ -261,7 +261,7 @@ extern "C" fn blob_read<T: BinaryWriter>(
     // SAFETY:
     // - `ppos` is a valid `file::Offset` pointer.
     // - We have exclusive access to `ppos`.
-    let pos: &mut file::Offset = unsafe { &mut *ppos };
+    let pos = unsafe { file::Offset::from_raw(ppos) };
 
     let mut writer = UserSlice::new(UserPtr::from_ptr(buf.cast()), count).writer();
 
@@ -316,7 +316,7 @@ extern "C" fn blob_write<T: BinaryReader>(
     // SAFETY:
     // - `ppos` is a valid `file::Offset` pointer.
     // - We have exclusive access to `ppos`.
-    let pos: &mut file::Offset = unsafe { &mut *ppos };
+    let pos = unsafe { file::Offset::from_raw(ppos) };
 
     let mut reader = UserSlice::new(UserPtr::from_ptr(buf.cast_mut().cast()), count).reader();
 

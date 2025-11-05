@@ -325,7 +325,7 @@ impl UserSliceReader {
         let read = self.read_slice_partial(out, offset_index)?;
 
         // OVERFLOW: `offset + read <= data.len() <= isize::MAX <= Offset::MAX`
-        *offset += read as i64;
+        *offset += read as isize;
 
         Ok(read)
     }
@@ -518,7 +518,7 @@ impl UserSliceWriter {
         let written = self.write_slice_partial(data, offset_index)?;
 
         // OVERFLOW: `offset + written <= data.len() <= isize::MAX <= Offset::MAX`
-        *offset += written as i64;
+        *offset += written as isize;
 
         Ok(written)
     }
