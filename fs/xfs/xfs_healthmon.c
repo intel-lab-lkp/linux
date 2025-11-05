@@ -21,6 +21,7 @@
 #include "xfs_health.h"
 #include "xfs_healthmon.h"
 #include "xfs_fsops.h"
+#include "xfs_notify_failure.h"
 
 #include <linux/anon_inodes.h>
 #include <linux/eventpoll.h>
@@ -67,6 +68,7 @@ struct xfs_healthmon {
 	/* live update hooks */
 	struct xfs_shutdown_hook	shook;
 	struct xfs_health_hook		hhook;
+	struct xfs_media_error_hook	mhook;
 
 	/* filesystem mount, or NULL if we've unmounted */
 	struct xfs_mount		*mp;
@@ -518,6 +520,59 @@ out_unlock:
 	return NOTIFY_DONE;
 }
 
+#if defined(CONFIG_MEMORY_FAILURE) && defined(CONFIG_FS_DAX)
+/* Add a media error event to the reporting queue. */
+STATIC int
+xfs_healthmon_media_error_hook(
+	struct notifier_block		*nb,
+	unsigned long			action,
+	void				*data)
+{
+	struct xfs_healthmon		*hm;
+	struct xfs_healthmon_event	*event;
+	struct xfs_media_error_params	*p = data;
+	enum xfs_healthmon_domain	domain = 0; /* shut up gcc */
+	int				error;
+
+	hm = container_of(nb, struct xfs_healthmon, mhook.error_hook.nb);
+
+	mutex_lock(&hm->lock);
+
+	trace_xfs_healthmon_media_error_hook(p, hm->events,
+			hm->lost_prev_event);
+
+	error = xfs_healthmon_start_live_update(hm);
+	if (error)
+		goto out_unlock;
+
+	switch (p->fdev) {
+	case XFS_FAILED_LOGDEV:
+		domain = XFS_HEALTHMON_LOGDEV;
+		break;
+	case XFS_FAILED_RTDEV:
+		domain = XFS_HEALTHMON_RTDEV;
+		break;
+	case XFS_FAILED_DATADEV:
+		domain = XFS_HEALTHMON_DATADEV;
+		break;
+	}
+
+	event = xfs_healthmon_alloc(hm, XFS_HEALTHMON_MEDIA_ERROR, domain);
+	if (!event)
+		goto out_unlock;
+
+	event->daddr = p->daddr;
+	event->bbcount = p->bbcount;
+	error = xfs_healthmon_push(hm, event);
+	if (error)
+		kfree(event);
+
+out_unlock:
+	mutex_unlock(&hm->lock);
+	return NOTIFY_DONE;
+}
+#endif
+
 static inline void
 xfs_healthmon_reset_outbuf(
 	struct xfs_healthmon		*hm)
@@ -570,6 +625,9 @@ static const unsigned int domain_map[] = {
 	[XFS_HEALTHMON_AG]		= XFS_HEALTH_MONITOR_DOMAIN_AG,
 	[XFS_HEALTHMON_INODE]		= XFS_HEALTH_MONITOR_DOMAIN_INODE,
 	[XFS_HEALTHMON_RTGROUP]		= XFS_HEALTH_MONITOR_DOMAIN_RTGROUP,
+	[XFS_HEALTHMON_DATADEV]		= XFS_HEALTH_MONITOR_DOMAIN_DATADEV,
+	[XFS_HEALTHMON_RTDEV]		= XFS_HEALTH_MONITOR_DOMAIN_RTDEV,
+	[XFS_HEALTHMON_LOGDEV]		= XFS_HEALTH_MONITOR_DOMAIN_LOGDEV,
 };
 
 static const unsigned int type_map[] = {
@@ -580,6 +638,7 @@ static const unsigned int type_map[] = {
 	[XFS_HEALTHMON_HEALTHY]		= XFS_HEALTH_MONITOR_TYPE_HEALTHY,
 	[XFS_HEALTHMON_UNMOUNT]		= XFS_HEALTH_MONITOR_TYPE_UNMOUNT,
 	[XFS_HEALTHMON_SHUTDOWN]	= XFS_HEALTH_MONITOR_TYPE_SHUTDOWN,
+	[XFS_HEALTHMON_MEDIA_ERROR]	= XFS_HEALTH_MONITOR_TYPE_MEDIA_ERROR,
 };
 
 /* Render event as a V0 structure */
@@ -633,6 +692,12 @@ xfs_healthmon_format_v0(
 		hme.e.inode.mask = xfs_healthmon_inode_mask(event->imask);
 		hme.e.inode.ino = event->ino;
 		hme.e.inode.gen = event->gen;
+		break;
+	case XFS_HEALTHMON_DATADEV:
+	case XFS_HEALTHMON_LOGDEV:
+	case XFS_HEALTHMON_RTDEV:
+		hme.e.media.daddr = event->daddr;
+		hme.e.media.bbcount = event->bbcount;
 		break;
 	default:
 		break;
@@ -903,6 +968,7 @@ xfs_healthmon_detach_hooks(
 	 * through the health monitoring subsystem from xfs_fs_put_super, so
 	 * it is now time to detach the hooks.
 	 */
+	xfs_media_error_hook_del(hm->mp, &hm->mhook);
 	xfs_shutdown_hook_del(hm->mp, &hm->shook);
 	xfs_health_hook_del(hm->mp, &hm->hhook);
 	return;
@@ -1056,12 +1122,17 @@ xfs_ioc_health_monitor(
 	if (ret)
 		goto out_healthhook;
 
+	xfs_media_error_hook_setup(&hm->mhook, xfs_healthmon_media_error_hook);
+	ret = xfs_media_error_hook_add(mp, &hm->mhook);
+	if (ret)
+		goto out_shutdownhook;
+
 	/* Queue up the first event that lets the client know we're running. */
 	event = xfs_healthmon_alloc(hm, XFS_HEALTHMON_RUNNING,
 			XFS_HEALTHMON_MOUNT);
 	if (!event) {
 		ret = -ENOMEM;
-		goto out_shutdownhook;
+		goto out_mediahook;
 	}
 	__xfs_healthmon_push(hm, event);
 
@@ -1073,13 +1144,15 @@ xfs_ioc_health_monitor(
 			O_CLOEXEC | O_RDONLY);
 	if (fd < 0) {
 		ret = fd;
-		goto out_shutdownhook;
+		goto out_mediahook;
 	}
 
 	trace_xfs_healthmon_create(mp, hmo.flags, hmo.format);
 
 	return fd;
 
+out_mediahook:
+	xfs_media_error_hook_del(mp, &hm->mhook);
 out_shutdownhook:
 	xfs_shutdown_hook_del(mp, &hm->shook);
 out_healthhook:
