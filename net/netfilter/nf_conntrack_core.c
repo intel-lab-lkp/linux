@@ -824,13 +824,13 @@ out_unlock:
 EXPORT_SYMBOL_GPL(nf_conntrack_find_get);
 
 static void __nf_conntrack_hash_insert(struct nf_conn *ct,
-				       unsigned int hash,
-				       unsigned int reply_hash)
+				       struct hlist_nulls_head *head_orig,
+				       struct hlist_nulls_head *head_repl)
 {
 	hlist_nulls_add_head_rcu(&ct->tuplehash[IP_CT_DIR_ORIGINAL].hnnode,
-			   &nf_conntrack_hash[hash]);
+			   head_orig);
 	hlist_nulls_add_head_rcu(&ct->tuplehash[IP_CT_DIR_REPLY].hnnode,
-			   &nf_conntrack_hash[reply_hash]);
+			   head_repl);
 }
 
 static bool nf_ct_ext_valid_pre(const struct nf_ct_ext *ext)
@@ -926,7 +926,9 @@ nf_conntrack_hash_check_insert(struct nf_conn *ct)
 	smp_wmb();
 	/* The caller holds a reference to this object */
 	refcount_set(&ct->ct_general.use, 2);
-	__nf_conntrack_hash_insert(ct, hash, reply_hash);
+	__nf_conntrack_hash_insert(ct,
+				   &nf_conntrack_hash[hash],
+				   &nf_conntrack_hash[reply_hash]);
 	nf_conntrack_double_unlock(hash, reply_hash);
 	NF_CT_STAT_INC(net, insert);
 	local_bh_enable();
@@ -1302,7 +1304,9 @@ chaintoolong:
 	 * setting ct->timeout. The RCU barriers guarantee that no other CPU
 	 * can find the conntrack before the above stores are visible.
 	 */
-	__nf_conntrack_hash_insert(ct, hash, reply_hash);
+	__nf_conntrack_hash_insert(ct,
+				   &nf_conntrack_hash[hash],
+				   &nf_conntrack_hash[reply_hash]);
 
 	/* IPS_CONFIRMED unset means 'ct not (yet) in hash', conntrack lookups
 	 * skip entries that lack this bit.  This happens when a CPU is looking
