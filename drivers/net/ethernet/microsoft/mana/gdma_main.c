@@ -1505,7 +1505,7 @@ static int irq_setup(unsigned int *irqs, unsigned int len, int node,
 		     bool skip_first_cpu)
 {
 	const struct cpumask *next, *prev = cpu_none_mask;
-	cpumask_var_t cpus __free(free_cpumask_var);
+	cpumask_var_t cpus __free(free_cpumask_var) = NULL;
 	int cpu, weight;
 
 	if (!alloc_cpumask_var(&cpus, GFP_KERNEL))
