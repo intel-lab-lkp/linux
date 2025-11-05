@@ -76,9 +76,19 @@ xfs_media_error_hook_setup(
 	xfs_hook_setup(&hook->error_hook, mod_fn);
 }
 #else
-# define xfs_media_error_hook(...)		((void)0)
+static inline void
+xfs_media_error_hook(
+	struct xfs_mount		*mp,
+	enum xfs_failed_device		fdev,
+	xfs_daddr_t			daddr,
+	uint64_t			bbcount,
+	bool				pre_remove)
+{
+	/* empty */
+}
 #endif /* CONFIG_XFS_LIVE_HOOKS */
 
+#if defined(CONFIG_MEMORY_FAILURE) && defined(CONFIG_FS_DAX)
 struct xfs_failure_info {
 	xfs_agblock_t		startblock;
 	xfs_extlen_t		blockcount;
@@ -447,3 +457,178 @@ xfs_dax_notify_failure(
 const struct dax_holder_operations xfs_dax_holder_operations = {
 	.notify_failure		= xfs_dax_notify_failure,
 };
+#endif /* CONFIG_MEMORY_FAILURE && CONFIG_FS_DAX */
+
+struct xfs_group_data_lost {
+	xfs_agblock_t		startblock;
+	xfs_extlen_t		blockcount;
+};
+
+static int
+xfs_report_one_data_lost(
+	struct xfs_btree_cur		*cur,
+	const struct xfs_rmap_irec	*rec,
+	void				*data)
+{
+	struct xfs_mount		*mp = cur->bc_mp;
+	struct xfs_inode		*ip;
+	struct xfs_group_data_lost	*lost = data;
+	xfs_fileoff_t			fileoff = rec->rm_offset;
+	xfs_extlen_t			blocks = rec->rm_blockcount;
+	const xfs_agblock_t		lost_end =
+			lost->startblock + lost->blockcount;
+	const xfs_agblock_t		rmap_end =
+			rec->rm_startblock + rec->rm_blockcount;
+	int				error = 0;
+
+	if (XFS_RMAP_NON_INODE_OWNER(rec->rm_owner) ||
+	    (rec->rm_flags & (XFS_RMAP_ATTR_FORK | XFS_RMAP_BMBT_BLOCK)))
+		return 0;
+
+	error = xfs_iget(mp, cur->bc_tp, rec->rm_owner, 0, 0, &ip);
+	if (error)
+		return 0;
+
+	if (lost->startblock > rec->rm_startblock) {
+		fileoff += lost->startblock - rec->rm_startblock;
+		blocks -= lost->startblock - rec->rm_startblock;
+	}
+	if (rmap_end > lost_end)
+		blocks -= rmap_end - lost_end;
+
+	xfs_inode_media_error(ip, XFS_FSB_TO_B(mp, fileoff),
+			XFS_FSB_TO_B(mp, blocks));
+
+	xfs_irele(ip);
+	return 0;
+}
+
+static int
+xfs_report_data_lost(
+	struct xfs_mount	*mp,
+	enum xfs_group_type	type,
+	xfs_daddr_t		daddr,
+	u64			bblen)
+{
+	struct xfs_group	*xg = NULL;
+	struct xfs_trans	*tp;
+	xfs_fsblock_t		start_bno, end_bno;
+	uint32_t		start_gno, end_gno;
+	int			error;
+
+	if (type == XG_TYPE_RTG) {
+		start_bno = xfs_daddr_to_rtb(mp, daddr);
+		end_bno = xfs_daddr_to_rtb(mp, daddr + bblen - 1);
+	} else {
+		start_bno = XFS_DADDR_TO_FSB(mp, daddr);
+		end_bno = XFS_DADDR_TO_FSB(mp, daddr + bblen - 1);
+	}
+
+	tp = xfs_trans_alloc_empty(mp);
+	start_gno = xfs_fsb_to_gno(mp, start_bno, type);
+	end_gno = xfs_fsb_to_gno(mp, end_bno, type);
+	while ((xg = xfs_group_next_range(mp, xg, start_gno, end_gno, type))) {
+		struct xfs_buf		*agf_bp = NULL;
+		struct xfs_rtgroup	*rtg = NULL;
+		struct xfs_btree_cur	*cur;
+		struct xfs_rmap_irec	ri_low = { };
+		struct xfs_rmap_irec	ri_high;
+		struct xfs_group_data_lost lost;
+
+		if (type == XG_TYPE_AG) {
+			struct xfs_perag	*pag = to_perag(xg);
+
+			error = xfs_alloc_read_agf(pag, tp, 0, &agf_bp);
+			if (error) {
+				xfs_perag_put(pag);
+				break;
+			}
+
+			cur = xfs_rmapbt_init_cursor(mp, tp, agf_bp, pag);
+		} else {
+			rtg = to_rtg(xg);
+			xfs_rtgroup_lock(rtg, XFS_RTGLOCK_RMAP);
+			cur = xfs_rtrmapbt_init_cursor(tp, rtg);
+		}
+
+		/*
+		 * Set the rmap range from ri_low to ri_high, which represents
+		 * a [start, end] where we looking for the files or metadata.
+		 */
+		memset(&ri_high, 0xFF, sizeof(ri_high));
+		if (xg->xg_gno == start_gno)
+			ri_low.rm_startblock =
+				xfs_fsb_to_gbno(mp, start_bno, type);
+		if (xg->xg_gno == end_gno)
+			ri_high.rm_startblock =
+				xfs_fsb_to_gbno(mp, end_bno, type);
+
+		lost.startblock = ri_low.rm_startblock;
+		lost.blockcount = min(xg->xg_block_count,
+				      ri_high.rm_startblock + 1) -
+							ri_low.rm_startblock;
+
+		error = xfs_rmap_query_range(cur, &ri_low, &ri_high,
+				xfs_report_one_data_lost, &lost);
+		xfs_btree_del_cursor(cur, error);
+		if (agf_bp)
+			xfs_trans_brelse(tp, agf_bp);
+		if (rtg)
+			xfs_rtgroup_unlock(rtg, XFS_RTGLOCK_RMAP);
+		if (error) {
+			xfs_group_put(xg);
+			break;
+		}
+	}
+
+	xfs_trans_cancel(tp);
+	return 0;
+}
+
+#define XFS_VALID_MEDIA_ERROR_FLAGS	(XFS_MEDIA_ERROR_DATADEV | \
+					 XFS_MEDIA_ERROR_LOGDEV | \
+					 XFS_MEDIA_ERROR_RTDEV)
+int
+xfs_ioc_media_error(
+	struct xfs_mount		*mp,
+	struct xfs_media_error __user	*arg)
+{
+	struct xfs_media_error		me;
+	enum xfs_failed_device		fdev;
+	enum xfs_group_type		type;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (copy_from_user(&me, arg, sizeof(me)))
+		return -EFAULT;
+
+	if (me.pad)
+		return -EINVAL;
+	if (me.flags & ~XFS_VALID_MEDIA_ERROR_FLAGS)
+		return -EINVAL;
+
+	switch (me.flags & XFS_MEDIA_ERROR_DEVMASK) {
+	case XFS_MEDIA_ERROR_DATADEV:
+		fdev = XFS_FAILED_DATADEV;
+		type = XG_TYPE_AG;
+		break;
+	case XFS_MEDIA_ERROR_LOGDEV:
+		fdev = XFS_FAILED_LOGDEV;
+		type = -1;
+		break;
+	case XFS_MEDIA_ERROR_RTDEV:
+		fdev = XFS_FAILED_RTDEV;
+		type = XG_TYPE_RTG;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	xfs_media_error_hook(mp, fdev, me.daddr, me.bbcount, false);
+
+	if (xfs_has_rmapbt(mp) && fdev != XFS_FAILED_LOGDEV)
+		return xfs_report_data_lost(mp, type, me.daddr, me.bbcount);
+
+	return 0;
+}

@@ -6,7 +6,9 @@
 #ifndef __XFS_NOTIFY_FAILURE_H__
 #define __XFS_NOTIFY_FAILURE_H__
 
+#if defined(CONFIG_MEMORY_FAILURE) && defined(CONFIG_FS_DAX)
 extern const struct dax_holder_operations xfs_dax_holder_operations;
+#endif
 
 enum xfs_failed_device {
 	XFS_FAILED_DATADEV,
@@ -14,7 +16,7 @@ enum xfs_failed_device {
 	XFS_FAILED_RTDEV,
 };
 
-#if defined(CONFIG_XFS_LIVE_HOOKS) && defined(CONFIG_MEMORY_FAILURE) && defined(CONFIG_FS_DAX)
+#if defined(CONFIG_XFS_LIVE_HOOKS)
 struct xfs_media_error_params {
 	struct xfs_mount		*mp;
 	enum xfs_failed_device		fdev;
@@ -40,5 +42,9 @@ struct xfs_media_error_hook { };
 # define xfs_media_error_hook_del(...)		((void)0)
 # define xfs_media_error_hook_setup(...)	((void)0)
 #endif /* CONFIG_XFS_LIVE_HOOKS */
+
+struct xfs_media_error;
+int xfs_ioc_media_error(struct xfs_mount *mp,
+		struct xfs_media_error __user *arg);
 
 #endif /* __XFS_NOTIFY_FAILURE_H__ */

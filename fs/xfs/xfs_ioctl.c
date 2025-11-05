@@ -42,6 +42,7 @@
 #include "xfs_handle.h"
 #include "xfs_rtgroup.h"
 #include "xfs_healthmon.h"
+#include "xfs_notify_failure.h"
 
 #include <linux/mount.h>
 #include <linux/fileattr.h>
@@ -1424,6 +1425,8 @@ xfs_file_ioctl(
 
 	case XFS_IOC_HEALTH_MONITOR:
 		return xfs_ioc_health_monitor(mp, arg);
+	case XFS_IOC_MEDIA_ERROR:
+		return xfs_ioc_media_error(mp, arg);
 
 	default:
 		return -ENOTTY;

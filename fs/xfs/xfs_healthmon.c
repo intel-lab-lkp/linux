@@ -523,7 +523,6 @@ out_unlock:
 	return NOTIFY_DONE;
 }
 
-#if defined(CONFIG_MEMORY_FAILURE) && defined(CONFIG_FS_DAX)
 /* Add a media error event to the reporting queue. */
 STATIC int
 xfs_healthmon_media_error_hook(
@@ -574,7 +573,6 @@ out_unlock:
 	mutex_unlock(&hm->lock);
 	return NOTIFY_DONE;
 }
-#endif
 
 /* Add a file io error event to the reporting queue. */
 STATIC int
