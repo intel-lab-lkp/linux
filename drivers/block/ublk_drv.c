@@ -914,62 +914,6 @@ static const struct block_device_operations ub_fops = {
 	.report_zones =	ublk_report_zones,
 };
 
-struct ublk_io_iter {
-	struct bio *bio;
-	struct bvec_iter iter;
-};
-
-/* return how many bytes are copied */
-static size_t ublk_copy_io_pages(struct ublk_io_iter *data,
-		struct iov_iter *uiter, int dir)
-{
-	size_t done = 0;
-
-	for (;;) {
-		struct bio_vec bv = bio_iter_iovec(data->bio, data->iter);
-		void *bv_buf = bvec_kmap_local(&bv);
-		size_t copied;
-
-		if (dir == ITER_DEST)
-			copied = copy_to_iter(bv_buf, bv.bv_len, uiter);
-		else
-			copied = copy_from_iter(bv_buf, bv.bv_len, uiter);
-
-		kunmap_local(bv_buf);
-
-		done += copied;
-		if (copied < bv.bv_len)
-			break;
-
-		/* advance bio */
-		bio_advance_iter_single(data->bio, &data->iter, copied);
-		if (!data->iter.bi_size) {
-			data->bio = data->bio->bi_next;
-			if (data->bio == NULL)
-				break;
-			data->iter = data->bio->bi_iter;
-		}
-	}
-	return done;
-}
-
-static bool ublk_advance_io_iter(const struct request *req,
-		struct ublk_io_iter *iter, unsigned int offset)
-{
-	struct bio *bio = req->bio;
-
-	for_each_bio(bio) {
-		if (bio->bi_iter.bi_size > offset) {
-			iter->bio = bio;
-			iter->iter = bio->bi_iter;
-			bio_advance_iter(iter->bio, &iter->iter, offset);
-			return true;
-		}
-		offset -= bio->bi_iter.bi_size;
-	}
-	return false;
-}
-
 /*
  * Copy data between request pages and io_iter, and 'offset'
  * is the start point of linear offset of request.
@@ -977,12 +921,36 @@ static bool ublk_advance_io_iter(const struct request *req,
 static size_t ublk_copy_user_pages(const struct request *req,
 		unsigned offset, struct iov_iter *uiter, int dir)
 {
-	struct ublk_io_iter iter;
+	struct req_iterator iter;
+	struct bio_vec bv;
+	size_t done = 0;
 
-	if (!ublk_advance_io_iter(req, &iter, offset))
-		return 0;
+	rq_for_each_bvec(bv, req, iter) {
+		size_t copied;
 
-	return ublk_copy_io_pages(&iter, uiter, dir);
+		if (offset >= bv.bv_len) {
+			offset -= bv.bv_len;
+			continue;
+		}
+
+		bv.bv_offset += offset;
+		bv.bv_len -= offset;
+		bv.bv_page += bv.bv_offset / PAGE_SIZE;
+		bv.bv_offset %= PAGE_SIZE;
+		if (dir == ITER_DEST)
+			copied = copy_page_to_iter(
+				bv.bv_page, bv.bv_offset, bv.bv_len, uiter);
+		else
+			copied = copy_page_from_iter(
+				bv.bv_page, bv.bv_offset, bv.bv_len, uiter);
+
+		done += copied;
+		if (copied < bv.bv_len)
+			break;
+
+		offset = 0;
+	}
+	return done;
 }
 
 static inline bool ublk_need_map_req(const struct request *req)
