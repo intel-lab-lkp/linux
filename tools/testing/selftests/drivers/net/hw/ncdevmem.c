@@ -83,6 +83,10 @@
 #define MSG_SOCK_DEVMEM 0x2000000
 #endif
 
+#ifndef SO_DEVMEM_AUTORELEASE
+#define SO_DEVMEM_AUTORELEASE 85
+#endif
+
 #define MAX_IOV 1024
 
 static size_t max_chunk;
@@ -97,6 +101,7 @@ static unsigned int ifindex;
 static unsigned int dmabuf_id;
 static uint32_t tx_dmabuf_id;
 static int waittime_ms = 500;
+static int autorelease = -1;
 
 /* System state loaded by current_config_load() */
 #define MAX_FLOWS	8
@@ -890,6 +895,16 @@ static int do_server(struct memory_buffer *mem)
 	if (enable_reuseaddr(socket_fd))
 		goto err_close_socket;
 
+	if (autorelease >= 0) {
+		ret = setsockopt(socket_fd, SOL_SOCKET, SO_DEVMEM_AUTORELEASE,
+				 &autorelease, sizeof(autorelease));
+		if (ret) {
+			pr_err("SO_DEVMEM_AUTORELEASE failed");
+			goto err_close_socket;
+		}
+		fprintf(stderr, "Set SO_DEVMEM_AUTORELEASE to %d\n", autorelease);
+	}
+
 	fprintf(stderr, "binding to address %s:%d\n", server_ip,
 		ntohs(server_sin.sin6_port));
 
@@ -1397,7 +1412,7 @@ int main(int argc, char *argv[])
 	int is_server = 0, opt;
 	int ret, err = 1;
 
-	while ((opt = getopt(argc, argv, "ls:c:p:v:q:t:f:z:")) != -1) {
+	while ((opt = getopt(argc, argv, "ls:c:p:v:q:t:f:z:A:")) != -1) {
 		switch (opt) {
 		case 'l':
 			is_server = 1;
@@ -1425,6 +1440,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'z':
 			max_chunk = atoi(optarg);
+			break;
+		case 'A':
+			autorelease = atoi(optarg);
 			break;
 		case '?':
 			fprintf(stderr, "unknown option: %c\n", optopt);
