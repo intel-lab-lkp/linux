@@ -1178,10 +1178,9 @@ intel_lt_phy_lane_reset(struct intel_encoder *encoder,
 	if (intel_de_wait_custom(display, XELPDP_PORT_CLOCK_CTL(display, port),
 				 XELPDP_LANE_PCLK_PLL_ACK(0),
 				 XELPDP_LANE_PCLK_PLL_ACK(0),
-				 XE3PLPD_MACCLK_TURNON_LATENCY_US,
-				 XE3PLPD_MACCLK_TURNON_LATENCY_MS, NULL))
+				 XE3PLPD_MACCLK_TURNON_LATENCY_US, 0, NULL))
 		drm_warn(display->drm, "PHY %c PLL MacCLK assertion Ack not done after %dus.\n",
-			 phy_name(phy), XE3PLPD_MACCLK_TURNON_LATENCY_MS * 1000);
+			 phy_name(phy), XE3PLPD_MACCLK_TURNON_LATENCY_US);
 
 	intel_de_rmw(display, XELPDP_PORT_CLOCK_CTL(display, port),
 		     XELPDP_FORWARD_CLOCK_UNGATE,
@@ -1192,7 +1191,7 @@ intel_lt_phy_lane_reset(struct intel_encoder *encoder,
 
 	if (intel_de_wait_custom(display, XELPDP_PORT_BUF_CTL2(display, port),
 				 lane_phy_current_status, 0,
-				 XE3PLPD_RESET_END_LATENCY_US, 2, NULL))
+				 XE3PLPD_RESET_END_LATENCY_US, 0, NULL))
 		drm_warn(display->drm,
 			 "PHY %c failed to bring out of Lane reset after %dus.\n",
 			 phy_name(phy), XE3PLPD_RESET_END_LATENCY_US);
@@ -1674,7 +1673,7 @@ void intel_lt_phy_pll_enable(struct intel_encoder *encoder,
 		if (intel_de_wait_custom(display, XELPDP_PORT_CLOCK_CTL(display, port),
 					 XELPDP_LANE_PCLK_PLL_ACK(0),
 					 XELPDP_LANE_PCLK_PLL_ACK(0),
-					 XE3PLPD_MACCLK_TURNON_LATENCY_US, 2, NULL))
+					 XE3PLPD_MACCLK_TURNON_LATENCY_US, 0, NULL))
 			drm_warn(display->drm, "PHY %c PLL MacCLK Ack assertion Timeout after %dus.\n",
 				 phy_name(phy), XE3PLPD_MACCLK_TURNON_LATENCY_US);
 
@@ -1702,7 +1701,7 @@ void intel_lt_phy_pll_enable(struct intel_encoder *encoder,
 		/* 16. Poll for PORT_BUF_CTL2 register PHY Pulse Status = 1 for Owned PHY Lanes. */
 		if (intel_de_wait_custom(display, XELPDP_PORT_BUF_CTL2(display, port),
 					 lane_phy_pulse_status, lane_phy_pulse_status,
-					 XE3PLPD_RATE_CALIB_DONE_LATENCY_US, 2, NULL))
+					 XE3PLPD_RATE_CALIB_DONE_LATENCY_US, 0, NULL))
 			drm_warn(display->drm, "PHY %c PLL rate not changed after %dus.\n",
 				 phy_name(phy), XE3PLPD_RATE_CALIB_DONE_LATENCY_US);
 
