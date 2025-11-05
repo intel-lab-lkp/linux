@@ -668,7 +668,7 @@ static void mlx5e_rx_compute_wqe_bulk_params(struct mlx5e_params *params,
 	info->refill_unit = DIV_ROUND_UP(info->wqe_bulk, split_factor);
 }
 
-#define DEFAULT_FRAG_SIZE (2048)
+#define DEFAULT_FRAG_SIZE (PAGE_SIZE / 2)
 
 static int mlx5e_build_rq_frags_info(struct mlx5_core_dev *mdev,
 				     struct mlx5e_params *params,
@@ -758,18 +758,16 @@ static int mlx5e_build_rq_frags_info(struct mlx5_core_dev *mdev,
 		/* No WQE can start in the middle of a page. */
 		info->wqe_index_mask = 0;
 	} else {
-		/* PAGE_SIZEs starting from 8192 don't use 2K-sized fragments,
-		 * because there would be more than MLX5E_MAX_RX_FRAGS of them.
-		 */
-		WARN_ON(PAGE_SIZE != 2 * DEFAULT_FRAG_SIZE);
+		/* PAGE_SIZEs above 8192 normally use linear SKBs. */
+		WARN_ON(PAGE_SIZE > 8192);
 
 		/* Odd number of fragments allows to pack the last fragment of
 		 * the previous WQE and the first fragment of the next WQE into
 		 * the same page.
-		 * As long as DEFAULT_FRAG_SIZE is 2048, and MLX5E_MAX_RX_FRAGS
-		 * is 4, the last fragment can be bigger than the rest only if
-		 * it's the fourth one, so WQEs consisting of 3 fragments will
-		 * always share a page.
+		 * As long as DEFAULT_FRAG_SIZE is (PAGE_SIZE / 2), and
+		 * MLX5E_MAX_RX_FRAGS is 4, the last fragment can be bigger than
+		 * the rest only if it's the fourth one, so WQEs consisting of 3
+		 * fragments will always share a page.
 		 * When a page is shared, WQE bulk size is 2, otherwise just 1.
 		 */
 		info->wqe_index_mask = info->num_frags % 2;
