@@ -728,6 +728,9 @@ begin:
 	nf_conntrack_get_ht(net, &ct_hash, &hsize);
 	bucket = reciprocal_scale(hash, hsize);
 
+	if (unlikely(!ct_hash))
+		return NULL;
+
 	hlist_nulls_for_each_entry_rcu(h, n, &ct_hash[bucket], hnnode) {
 		struct nf_conn *ct;
 
@@ -2579,6 +2582,14 @@ int nf_conntrack_hash_resize(struct net *net, unsigned int hashsize)
 		return -ENOMEM;
 
 	mutex_lock(&nf_conntrack_mutex);
+
+	if (!net->ct.nf_conntrack_hash) {
+		net->ct.nf_conntrack_hash = hash;
+		net->ct.nf_conntrack_htable_size = hashsize;
+		mutex_unlock(&nf_conntrack_mutex);
+		return 0;
+	}
+
 	old_size = net->ct.nf_conntrack_htable_size;
 	if (old_size == hashsize) {
 		mutex_unlock(&nf_conntrack_mutex);
@@ -2629,6 +2640,48 @@ int nf_conntrack_hash_resize(struct net *net, unsigned int hashsize)
 	kvfree(old_hash);
 	return 0;
 }
+
+/**
+ * nf_conntrack_hash_init - allocate initial conntrack table
+ *
+ * @net: network namespace to operate in
+ *
+ * In order to not waste memory, the hash table is not allocated
+ * on network namespace initialisation, but when userspace requests
+ * the functionality.
+ *
+ * Memory is released from the pernet_ops exit handler.
+ *
+ * Return: 0 on success, -errno on failure.
+ */
+int nf_conntrack_hash_init(struct net *net)
+{
+	int err = 0;
+
+	if (net->ct.nf_conntrack_hash)
+		return 0;
+
+	mutex_lock(&nf_conntrack_mutex);
+	if (!net->ct.nf_conntrack_hash) {
+		unsigned int size = READ_ONCE(net->ct.nf_conntrack_htable_size);
+		struct hlist_nulls_head *hash;
+
+		hash = nf_ct_alloc_hashtable(&size, 1);
+		if (hash) {
+			struct nf_conntrack_net *cnet = nf_ct_pernet(net);
+
+			net->ct.nf_conntrack_hash = hash;
+			net->ct.nf_conntrack_htable_size = size;
+			cnet->htable_size_user = size;
+		} else {
+			err = -ENOMEM;
+		}
+	}
+
+	mutex_unlock(&nf_conntrack_mutex);
+	return err;
+}
+EXPORT_SYMBOL_GPL(nf_conntrack_hash_init);
 
 int nf_conntrack_set_hashsize(const char *val, const struct kernel_param *kp)
 {
@@ -2769,10 +2822,6 @@ int nf_conntrack_init_net(struct net *net)
 		ht_size = init_net.ct.nf_conntrack_htable_size;
 		max_factor = 8;
 	}
-
-	net->ct.nf_conntrack_hash = nf_ct_alloc_hashtable(&ht_size, 1);
-	if (!net->ct.nf_conntrack_hash)
-		return ret;
 
 	net->ct.nf_conntrack_htable_size = ht_size;
 	cnet->htable_size_user = ht_size;

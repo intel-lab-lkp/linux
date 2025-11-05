@@ -121,6 +121,12 @@ static int tcf_connmark_init(struct net *net, struct nlattr *nla,
 	if (!tb[TCA_CONNMARK_PARMS])
 		return -EINVAL;
 
+	err = nf_conntrack_hash_init(net);
+	if (err) {
+		NL_SET_ERR_MSG_MOD(extack, "Cannot allocate conntrack table");
+		return err;
+	}
+
 	nparms = kzalloc(sizeof(*nparms), GFP_KERNEL);
 	if (!nparms)
 		return -ENOMEM;

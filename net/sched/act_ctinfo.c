@@ -181,6 +181,13 @@ static int tcf_ctinfo_init(struct net *net, struct nlattr *nla,
 				   "Missing required TCA_CTINFO_ACT attribute");
 		return -EINVAL;
 	}
+
+	err = nf_conntrack_hash_init(net);
+	if (err) {
+		NL_SET_ERR_MSG_MOD(extack, "Cannot allocate conntrack table");
+		return err;
+	}
+
 	actparm = nla_data(tb[TCA_CTINFO_ACT]);
 
 	/* do some basic validation here before dynamically allocating things */

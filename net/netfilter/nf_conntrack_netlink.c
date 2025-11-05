@@ -1227,6 +1227,9 @@ ctnetlink_dump_table(struct sk_buff *skb, struct netlink_callback *cb)
 	int res, i;
 	spinlock_t *lockp;
 
+	if (!net->ct.nf_conntrack_hash)
+		return skb->len;
+
 	i = 0;
 
 	local_bh_disable();
@@ -2379,17 +2382,21 @@ ctnetlink_create_conntrack(struct net *net,
 	if (tstamp)
 		tstamp->start = ktime_get_real_ns();
 
-	err = nf_conntrack_hash_check_insert(ct);
+	rcu_read_unlock();
+
+	err = nf_conntrack_hash_init(net);
 	if (err < 0)
 		goto err3;
 
-	rcu_read_unlock();
+	err = nf_conntrack_hash_check_insert(ct);
+	if (err < 0) {
+err3:
+		if (ct->master)
+			nf_ct_put(ct->master);
+		goto err1;
+	}
 
 	return ct;
-
-err3:
-	if (ct->master)
-		nf_ct_put(ct->master);
 err2:
 	rcu_read_unlock();
 err1:

@@ -421,6 +421,11 @@ __bpf_kfunc struct nf_conn *bpf_ct_insert_entry(struct nf_conn___init *nfct_i)
 	struct nf_conn *nfct = (struct nf_conn *)nfct_i;
 	int err;
 
+	if (!READ_ONCE(net->ct.nf_conntrack_hash)) {
+		nf_conntrack_free(nfct);
+		return NULL;
+	}
+
 	if (!nf_ct_is_confirmed(nfct))
 		nfct->timeout += nfct_time_stamp;
 	nfct->status |= IPS_CONFIRMED;

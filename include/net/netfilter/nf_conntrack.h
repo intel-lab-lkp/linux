@@ -347,6 +347,7 @@ struct kernel_param;
 
 int nf_conntrack_set_hashsize(const char *val, const struct kernel_param *kp);
 int nf_conntrack_hash_resize(struct net *net, unsigned int hashsize);
+int nf_conntrack_hash_init(struct net *net);
 
 extern seqcount_spinlock_t nf_conntrack_generation;
 

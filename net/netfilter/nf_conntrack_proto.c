@@ -580,6 +580,10 @@ int nf_ct_netns_get(struct net *net, u8 nfproto)
 {
 	int err;
 
+	err = nf_conntrack_hash_init(net);
+	if (err)
+		return err;
+
 	switch (nfproto) {
 	case NFPROTO_INET:
 		err = nf_ct_netns_inet_get(net);

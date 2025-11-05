@@ -1366,6 +1366,13 @@ static int tcf_ct_init(struct net *net, struct nlattr *nla,
 		NL_SET_ERR_MSG_MOD(extack, "Missing required ct parameters");
 		return -EINVAL;
 	}
+
+	err = nf_conntrack_hash_init(net);
+	if (err) {
+		NL_SET_ERR_MSG_MOD(extack, "Cannot allocate conntrack table");
+		return err;
+	}
+
 	parm = nla_data(tb[TCA_CT_PARMS]);
 	index = parm->index;
 	err = tcf_idr_check_alloc(tn, &index, a, bind);

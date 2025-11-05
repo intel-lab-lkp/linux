@@ -1402,6 +1402,12 @@ int ovs_ct_copy_action(struct net *net, const struct nlattr *attr,
 	if (err)
 		return err;
 
+	err = nf_conntrack_hash_init(net);
+	if (err) {
+		OVS_NLERR(log, "Failed to allocate conntrack table");
+		return err;
+	}
+
 	/* Set up template for tracking connections in specific zones. */
 	ct_info.ct = nf_ct_tmpl_alloc(net, &ct_info.zone, GFP_KERNEL);
 	if (!ct_info.ct) {
