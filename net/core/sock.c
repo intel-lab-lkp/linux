@@ -1161,6 +1161,46 @@ frag_limit_reached:
 }
 
 static noinline_for_stack int
+sock_devmem_set_autorelease(struct sock *sk, sockptr_t optval, unsigned int optlen)
+{
+	int val;
+
+	if (!sk_is_tcp(sk))
+		return -EBADF;
+
+	if (optlen < sizeof(int))
+		return -EINVAL;
+
+	if (copy_from_sockptr(&val, optval, sizeof(val)))
+		return -EFAULT;
+
+	/* Validate that val is 0 or 1 */
+	if (val != 0 && val != 1)
+		return -EINVAL;
+
+	sockopt_lock_sock(sk);
+
+	/* Can only change autorelease if:
+	 * 1. No tokens in the frags xarray (autorelease mode)
+	 * 2. No outstanding urefs (manual release mode)
+	 */
+	if (!xa_empty(&sk->sk_devmem_info.frags)) {
+		sockopt_release_sock(sk);
+		return -EBUSY;
+	}
+
+	if (atomic_read(&sk->sk_devmem_info.outstanding_urefs) > 0) {
+		sockopt_release_sock(sk);
+		return -EBUSY;
+	}
+
+	sk->sk_devmem_info.autorelease = !!val;
+
+	sockopt_release_sock(sk);
+	return 0;
+}
+
+static noinline_for_stack int
 sock_devmem_dontneed(struct sock *sk, sockptr_t optval, unsigned int optlen)
 {
 	struct dmabuf_token *tokens;
@@ -1351,6 +1391,9 @@ int sk_setsockopt(struct sock *sk, int level, int optname,
 #ifdef CONFIG_PAGE_POOL
 	case SO_DEVMEM_DONTNEED:
 		return sock_devmem_dontneed(sk, optval, optlen);
+
+	case SO_DEVMEM_AUTORELEASE:
+		return sock_devmem_set_autorelease(sk, optval, optlen);
 #endif
 	case SO_SNDTIMEO_OLD:
 	case SO_SNDTIMEO_NEW:
@@ -2207,6 +2250,14 @@ int sk_getsockopt(struct sock *sk, int level, int optname,
 		/* Paired with WRITE_ONCE() in sk_setsockopt() */
 		v.val = READ_ONCE(sk->sk_txrehash);
 		break;
+
+#ifdef CONFIG_PAGE_POOL
+	case SO_DEVMEM_AUTORELEASE:
+		if (!sk_is_tcp(sk))
+			return -EBADF;
+		v.val = sk->sk_devmem_info.autorelease;
+		break;
+#endif
 
 	default:
 		/* We implement the SO_SNDLOWAT etc to not be settable

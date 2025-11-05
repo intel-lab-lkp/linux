@@ -496,7 +496,7 @@ void tcp_init_sock(struct sock *sk)
 	xa_init_flags(&sk->sk_devmem_info.frags, XA_FLAGS_ALLOC1);
 	sk->sk_devmem_info.binding = NULL;
 	atomic_set(&sk->sk_devmem_info.outstanding_urefs, 0);
-	sk->sk_devmem_info.autorelease = true;
+	sk->sk_devmem_info.autorelease = false;
 }
 EXPORT_IPV6_MOD(tcp_init_sock);
 
