@@ -4061,6 +4061,44 @@ xelpd_plane_load_luts(struct intel_dsb *dsb, const struct intel_plane_state *pla
 		xelpd_program_plane_post_csc_lut(dsb, plane_state);
 }
 
+static u32 glk_3dlut_10(const struct drm_color_lut32 *color)
+{
+	return REG_FIELD_PREP(LUT_3D_DATA_RED_MASK, drm_color_lut32_extract(color->red, 10)) |
+		REG_FIELD_PREP(LUT_3D_DATA_GREEN_MASK, drm_color_lut32_extract(color->green, 10)) |
+		REG_FIELD_PREP(LUT_3D_DATA_BLUE_MASK, drm_color_lut32_extract(color->blue, 10));
+}
+
+static void glk_load_lut_3d(struct intel_dsb *dsb,
+			    struct intel_crtc *crtc,
+			    const struct drm_property_blob *blob)
+{
+	struct intel_display *display = to_intel_display(crtc->base.dev);
+	const struct drm_color_lut32 *lut = blob->data;
+	int i, lut_size = drm_color_lut32_size(blob);
+	enum pipe pipe = crtc->pipe;
+
+	WARN_ON(intel_de_read(display, LUT_3D_CTL(pipe)) & LUT_3D_READY);
+	intel_de_write_dsb(display, dsb, LUT_3D_INDEX(pipe), LUT_3D_AUTO_INCREMENT);
+	for (i = 0; i < lut_size; i++)
+		intel_de_write_dsb(display, dsb, LUT_3D_DATA(pipe), glk_3dlut_10(&lut[i]));
+	intel_de_write_dsb(display, dsb, LUT_3D_INDEX(pipe), 0);
+}
+
+static void glk_lut_3d_commit(struct intel_dsb *dsb, struct intel_crtc *crtc, bool enable)
+{
+	struct intel_display *display = to_intel_display(crtc);
+	enum pipe pipe = crtc->pipe;
+	u32 val;
+
+	WARN_ON(intel_de_read(display, LUT_3D_CTL(pipe)) & LUT_3D_READY);
+
+	if (enable)
+		val = LUT_3D_ENABLE | LUT_3D_READY | LUT_3D_BIND_PLANE_1;
+	else
+		val = 0;
+	intel_de_write_dsb(display, dsb, LUT_3D_CTL(pipe), val);
+}
+
 static const struct intel_color_funcs chv_color_funcs = {
 	.color_check = chv_color_check,
 	.color_commit_arm = i9xx_color_commit_arm,
@@ -4190,6 +4228,14 @@ static const struct intel_color_funcs ilk_color_funcs = {
 	.get_config = ilk_get_config,
 };
 
+void intel_color_plane_commit_arm(struct intel_dsb *dsb,
+				  const struct intel_plane_state *plane_state)
+{
+	struct intel_crtc *crtc = to_intel_crtc(plane_state->uapi.crtc);
+
+	glk_lut_3d_commit(dsb, crtc, !!plane_state->hw.lut_3d);
+}
+
 static void
 intel_color_load_plane_csc_matrix(struct intel_dsb *dsb,
 				  const struct intel_plane_state *plane_state)
@@ -4210,6 +4256,15 @@ intel_color_load_plane_luts(struct intel_dsb *dsb,
 		display->funcs.color->load_plane_luts(dsb, plane_state);
 }
 
+static void
+intel_color_load_3dlut(struct intel_dsb *dsb,
+		       const struct intel_plane_state *plane_state)
+{
+	struct intel_crtc *crtc = to_intel_crtc(plane_state->uapi.crtc);
+
+	glk_load_lut_3d(dsb, crtc, plane_state->hw.lut_3d);
+}
+
 void intel_color_plane_program_pipeline(struct intel_dsb *dsb,
 					const struct intel_plane_state *plane_state)
 {
@@ -4217,6 +4272,8 @@ void intel_color_plane_program_pipeline(struct intel_dsb *dsb,
 		intel_color_load_plane_csc_matrix(dsb, plane_state);
 	if (plane_state->hw.degamma_lut || plane_state->hw.gamma_lut)
 		intel_color_load_plane_luts(dsb, plane_state);
+	if (plane_state->hw.lut_3d)
+		intel_color_load_3dlut(dsb, plane_state);
 }
 
 void intel_color_crtc_init(struct intel_crtc *crtc)
