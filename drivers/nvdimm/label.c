@@ -734,13 +734,13 @@ static enum nvdimm_claim_class guid_to_nvdimm_cclass(guid_t *guid)
 {
 	if (guid_equal(guid, &nvdimm_btt_guid))
 		return NVDIMM_CCLASS_BTT;
-	else if (guid_equal(guid, &nvdimm_btt2_guid))
+	if (guid_equal(guid, &nvdimm_btt2_guid))
 		return NVDIMM_CCLASS_BTT2;
-	else if (guid_equal(guid, &nvdimm_pfn_guid))
+	if (guid_equal(guid, &nvdimm_pfn_guid))
 		return NVDIMM_CCLASS_PFN;
-	else if (guid_equal(guid, &nvdimm_dax_guid))
+	if (guid_equal(guid, &nvdimm_dax_guid))
 		return NVDIMM_CCLASS_DAX;
-	else if (guid_equal(guid, &guid_null))
+	if (guid_equal(guid, &guid_null))
 		return NVDIMM_CCLASS_NONE;
 
 	return NVDIMM_CCLASS_UNKNOWN;
@@ -751,13 +751,13 @@ static enum nvdimm_claim_class uuid_to_nvdimm_cclass(uuid_t *uuid)
 {
 	if (uuid_equal(uuid, &nvdimm_btt_uuid))
 		return NVDIMM_CCLASS_BTT;
-	else if (uuid_equal(uuid, &nvdimm_btt2_uuid))
+	if (uuid_equal(uuid, &nvdimm_btt2_uuid))
 		return NVDIMM_CCLASS_BTT2;
-	else if (uuid_equal(uuid, &nvdimm_pfn_uuid))
+	if (uuid_equal(uuid, &nvdimm_pfn_uuid))
 		return NVDIMM_CCLASS_PFN;
-	else if (uuid_equal(uuid, &nvdimm_dax_uuid))
+	if (uuid_equal(uuid, &nvdimm_dax_uuid))
 		return NVDIMM_CCLASS_DAX;
-	else if (uuid_equal(uuid, &uuid_null))
+	if (uuid_equal(uuid, &uuid_null))
 		return NVDIMM_CCLASS_NONE;
 
 	return NVDIMM_CCLASS_UNKNOWN;
@@ -768,20 +768,20 @@ static const guid_t *to_abstraction_guid(enum nvdimm_claim_class claim_class,
 {
 	if (claim_class == NVDIMM_CCLASS_BTT)
 		return &nvdimm_btt_guid;
-	else if (claim_class == NVDIMM_CCLASS_BTT2)
+	if (claim_class == NVDIMM_CCLASS_BTT2)
 		return &nvdimm_btt2_guid;
-	else if (claim_class == NVDIMM_CCLASS_PFN)
+	if (claim_class == NVDIMM_CCLASS_PFN)
 		return &nvdimm_pfn_guid;
-	else if (claim_class == NVDIMM_CCLASS_DAX)
+	if (claim_class == NVDIMM_CCLASS_DAX)
 		return &nvdimm_dax_guid;
-	else if (claim_class == NVDIMM_CCLASS_UNKNOWN) {
-		/*
-		 * If we're modifying a namespace for which we don't
-		 * know the claim_class, don't touch the existing guid.
-		 */
-		return target;
-	} else
+	if (claim_class == NVDIMM_CCLASS_NONE)
 		return &guid_null;
+
+	/*
+	 * If we're modifying a namespace for which we don't
+	 * know the claim_class, don't touch the existing guid.
+	 */
+	return target;
 }
 
 /* CXL labels store UUIDs instead of GUIDs for the same data */
@@ -790,20 +790,20 @@ static const uuid_t *to_abstraction_uuid(enum nvdimm_claim_class claim_class,
 {
 	if (claim_class == NVDIMM_CCLASS_BTT)
 		return &nvdimm_btt_uuid;
-	else if (claim_class == NVDIMM_CCLASS_BTT2)
+	if (claim_class == NVDIMM_CCLASS_BTT2)
 		return &nvdimm_btt2_uuid;
-	else if (claim_class == NVDIMM_CCLASS_PFN)
+	if (claim_class == NVDIMM_CCLASS_PFN)
 		return &nvdimm_pfn_uuid;
-	else if (claim_class == NVDIMM_CCLASS_DAX)
+	if (claim_class == NVDIMM_CCLASS_DAX)
 		return &nvdimm_dax_uuid;
-	else if (claim_class == NVDIMM_CCLASS_UNKNOWN) {
-		/*
-		 * If we're modifying a namespace for which we don't
-		 * know the claim_class, don't touch the existing uuid.
-		 */
-		return target;
-	} else
+	if (claim_class == NVDIMM_CCLASS_NONE)
 		return &uuid_null;
+
+	/*
+	 * If we're modifying a namespace for which we don't
+	 * know the claim_class, don't touch the existing uuid.
+	 */
+	return target;
 }
 
 static void reap_victim(struct nd_mapping *nd_mapping,
@@ -990,9 +990,7 @@ static int init_labels(struct nd_mapping *nd_mapping, int num_labels)
 		mutex_unlock(&nd_mapping->lock);
 	}
 
-	if (ndd->ns_current == -1 || ndd->ns_next == -1)
-		/* pass */;
-	else
+	if (ndd->ns_current != -1 && ndd->ns_next != -1)
 		return max(num_labels, old_num_labels);
 
 	nsindex = to_namespace_index(ndd, 0);
