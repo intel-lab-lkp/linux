@@ -110,6 +110,7 @@ pub mod mm;
 #[cfg(CONFIG_NET)]
 pub mod net;
 pub mod of;
+pub mod once_lite;
 #[cfg(CONFIG_PM_OPP)]
 pub mod opp;
 pub mod page;
