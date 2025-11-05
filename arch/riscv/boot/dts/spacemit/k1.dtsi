@@ -823,6 +823,28 @@
 				status = "disabled";
 			};
 
+			i2s0: i2s0@d4026000 {
+				compatible = "spacemit,k1-i2s";
+				reg = <0x0 0xd4026000 0x0 0x30>;
+				#sound-dai-cells = <0>;
+				clocks = <&syscon_mpmu CLK_I2S_153P6_BASE>,
+					 <&syscon_mpmu CLK_I2S_SYSCLK_SRC>,
+					 <&syscon_mpmu CLK_I2S_SYSCLK>,
+					 <&syscon_mpmu CLK_I2S_BCLK>,
+					 <&syscon_apbc CLK_SSPA0_BUS>,
+					 <&syscon_apbc CLK_SSPA0>;
+				clock-names = "153p6_base", "sysclk_src",
+					      "sysclk", "bclk",
+					      "sspa_bus", "sspa";
+				assigned-clocks = <&syscon_mpmu CLK_I2S_153P6_BASE>,
+						  <&syscon_mpmu CLK_I2S_SYSCLK_SRC>;
+				assigned-clock-rates = <307200000>, <307200000>;
+				resets = <&syscon_apbc RESET_SSPA0>;
+				dmas = <&pdma 22>, <&pdma 21>;
+				dma-names = "rx", "tx";
+				status = "disabled";
+			};
+
 			/* sec_uart1: 0xf0612000, not available from Linux */
 		};
 
