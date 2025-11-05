@@ -6,6 +6,7 @@
 #include <linux/device.h>
 #include <linux/fpga/fpga-mgr.h>
 #include <linux/fpga/fpga-bridge.h>
+#include <linux/err.h>
 
 struct fpga_region;
 
@@ -54,23 +55,58 @@ struct fpga_region {
 
 #define to_fpga_region(d) container_of(d, struct fpga_region, dev)
 
+#define fpga_region_register_full(parent, info) \
+	__fpga_region_register_full(parent, info, THIS_MODULE)
+
+#define fpga_region_register(parent, mgr, get_bridges) \
+	__fpga_region_register(parent, mgr, get_bridges, THIS_MODULE)
+
+#if IS_ENABLED(CONFIG_FPGA_REGION)
 struct fpga_region *
 fpga_region_class_find(struct device *start, const void *data,
 		       int (*match)(struct device *, const void *));
 
 int fpga_region_program_fpga(struct fpga_region *region);
 
-#define fpga_region_register_full(parent, info) \
-	__fpga_region_register_full(parent, info, THIS_MODULE)
 struct fpga_region *
 __fpga_region_register_full(struct device *parent, const struct fpga_region_info *info,
 			    struct module *owner);
 
-#define fpga_region_register(parent, mgr, get_bridges) \
-	__fpga_region_register(parent, mgr, get_bridges, THIS_MODULE)
 struct fpga_region *
 __fpga_region_register(struct device *parent, struct fpga_manager *mgr,
 		       int (*get_bridges)(struct fpga_region *), struct module *owner);
 void fpga_region_unregister(struct fpga_region *region);
+
+#else
+static inline struct fpga_region *
+fpga_region_class_find(struct device *start, const void *data,
+		       int (*match)(struct device *, const void *))
+{
+	return NULL;
+}
+
+static inline int fpga_region_program_fpga(struct fpga_region *region)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline struct fpga_region *
+__fpga_region_register_full(struct device *parent, const struct fpga_region_info *info,
+			    struct module *owner)
+{
+	return ERR_PTR(-EOPNOTSUPP);
+}
+
+static inline struct fpga_region *
+__fpga_region_register(struct device *parent, struct fpga_manager *mgr,
+		       int (*get_bridges)(struct fpga_region *), struct module *owner)
+{
+	return ERR_PTR(-EOPNOTSUPP);
+}
+
+static inline void fpga_region_unregister(struct fpga_region *region)
+{
+}
+#endif
 
 #endif /* _FPGA_REGION_H */
