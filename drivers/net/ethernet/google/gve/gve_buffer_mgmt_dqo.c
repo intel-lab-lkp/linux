@@ -8,6 +8,8 @@
 #include "gve.h"
 #include "gve_utils.h"
 
+#include "net/netdev_queues.h"
+
 int gve_buf_ref_cnt(struct gve_rx_buf_state_dqo *bs)
 {
 	return page_count(bs->page_info.page) - bs->page_info.pagecnt_bias;
@@ -263,6 +265,8 @@ struct page_pool *gve_rx_create_page_pool(struct gve_priv *priv,
 	if (priv->header_split_enabled) {
 		pp.flags |= PP_FLAG_ALLOW_UNREADABLE_NETMEM;
 		pp.queue_idx = rx->q_num;
+		if  (netif_rxq_has_unreadable_mp(priv->dev, rx->q_num))
+			pp.pool_size = PAGE_POOL_MAX_RING_SIZE;
 	}
 
 	return page_pool_create(&pp);
