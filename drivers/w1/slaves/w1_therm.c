@@ -17,6 +17,7 @@
 #include <linux/delay.h>
 #include <linux/hwmon.h>
 #include <linux/string.h>
+#include <linux/string_choices.h>
 #include <linux/jiffies.h>
 
 #include <linux/w1.h>
@@ -1609,7 +1610,7 @@ static ssize_t w1_slave_show(struct device *device,
 	for (i = 0; i < 9; ++i)
 		c -= snprintf(buf + PAGE_SIZE - c, c, "%02x ", info.rom[i]);
 	c -= snprintf(buf + PAGE_SIZE - c, c, ": crc=%02x %s\n",
-		      info.crc, (info.verdict) ? "YES" : "NO");
+		      info.crc, str_yes_no(info.verdict));
 
 	if (info.verdict)
 		memcpy(family_data, info.rom, sizeof(info.rom));
