@@ -27,8 +27,9 @@
 #include "btbcm.h"
 #include "btrtl.h"
 #include "btmtk.h"
+#include "hci_uart.h"
 
-#define VERSION "0.8"
+#define VERSION "1.0"
 
 static bool disable_scofix;
 static bool force_scofix;
@@ -896,6 +897,9 @@ struct qca_dump_info {
 #define BTUSB_ALT6_CONTINUOUS_TX	16
 #define BTUSB_HW_SSR_ACTIVE	17
 
+#define BTUSB_PROTO_LEGACY	0x00
+#define BTUSB_PROTO_H4		0x01
+
 struct btusb_data {
 	struct hci_dev       *hdev;
 	struct usb_device    *udev;
@@ -929,6 +933,7 @@ struct btusb_data {
 	struct sk_buff *evt_skb;
 	struct sk_buff *acl_skb;
 	struct sk_buff *sco_skb;
+	struct sk_buff *rx_skb;
 
 	struct usb_endpoint_descriptor *intr_ep;
 	struct usb_endpoint_descriptor *bulk_tx_ep;
@@ -942,6 +947,7 @@ struct btusb_data {
 
 	__u8 cmdreq_type;
 	__u8 cmdreq;
+	__u8 proto;
 
 	unsigned int sco_num;
 	unsigned int air_mode;
@@ -1265,11 +1271,34 @@ static int btusb_recv_acl(struct btusb_data *data, struct sk_buff *skb)
 	return 0;
 }
 
+static const struct h4_recv_pkt btusb_recv_pkts[] = {
+	{ H4_RECV_ACL,          .recv = hci_recv_frame },
+	{ H4_RECV_SCO,          .recv = hci_recv_frame },
+	{ H4_RECV_EVENT,        .recv = hci_recv_frame },
+	{ H4_RECV_ISO,          .recv = hci_recv_frame },
+};
+
+static int btusb_recv_h4(struct btusb_data *data, void *buffer, int count)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&data->rxlock, flags);
+	data->rx_skb = h4_recv_skb(data->hdev, NULL, NULL, data->rx_skb, buffer,
+				   count, btusb_recv_pkts,
+				   ARRAY_SIZE(btusb_recv_pkts));
+	spin_unlock_irqrestore(&data->rxlock, flags);
+
+	return 0;
+}
+
 static int btusb_recv_bulk(struct btusb_data *data, void *buffer, int count)
 {
 	struct sk_buff *skb;
 	unsigned long flags;
 	int err = 0;
+
+	if (data->proto == BTUSB_PROTO_H4)
+		return btusb_recv_h4(data, buffer, count);
 
 	spin_lock_irqsave(&data->rxlock, flags);
 	skb = data->acl_skb;
@@ -1950,12 +1979,14 @@ static int btusb_open(struct hci_dev *hdev)
 
 	data->intf->needs_remote_wakeup = 1;
 
-	if (test_and_set_bit(BTUSB_INTR_RUNNING, &data->flags))
-		goto done;
+	if (data->proto == BTUSB_PROTO_LEGACY) {
+		if (test_and_set_bit(BTUSB_INTR_RUNNING, &data->flags))
+			goto done;
 
-	err = btusb_submit_intr_urb(hdev, GFP_KERNEL);
-	if (err < 0)
-		goto failed;
+		err = btusb_submit_intr_urb(hdev, GFP_KERNEL);
+		if (err < 0)
+			goto failed;
+	}
 
 	err = btusb_submit_bulk_urb(hdev, GFP_KERNEL);
 	if (err < 0) {
@@ -2045,12 +2076,43 @@ static int btusb_flush(struct hci_dev *hdev)
 	return 0;
 }
 
+static struct urb *alloc_bulk_urb(struct hci_dev *hdev, struct sk_buff *skb)
+{
+	struct btusb_data *data = hci_get_drvdata(hdev);
+	struct urb *urb;
+	unsigned int pipe;
+
+	if (!data->bulk_tx_ep)
+		return ERR_PTR(-ENODEV);
+
+	urb = usb_alloc_urb(0, GFP_KERNEL);
+	if (!urb)
+		return ERR_PTR(-ENOMEM);
+
+	pipe = usb_sndbulkpipe(data->udev, data->bulk_tx_ep->bEndpointAddress);
+
+	if (data->proto == BTUSB_PROTO_H4) {
+		/* Prepend skb with frame type */
+		memcpy(skb_push(skb, 1), &hci_skb_pkt_type(skb), 1);
+	}
+
+	usb_fill_bulk_urb(urb, data->udev, pipe,
+			  skb->data, skb->len, btusb_tx_complete, skb);
+
+	skb->dev = (void *)hdev;
+
+	return urb;
+}
+
 static struct urb *alloc_ctrl_urb(struct hci_dev *hdev, struct sk_buff *skb)
 {
 	struct btusb_data *data = hci_get_drvdata(hdev);
 	struct usb_ctrlrequest *dr;
 	struct urb *urb;
 	unsigned int pipe;
+
+	if (data->proto == BTUSB_PROTO_H4)
+		return alloc_bulk_urb(hdev, skb);
 
 	urb = usb_alloc_urb(0, GFP_KERNEL);
 	if (!urb)
@@ -2078,34 +2140,14 @@ static struct urb *alloc_ctrl_urb(struct hci_dev *hdev, struct sk_buff *skb)
 	return urb;
 }
 
-static struct urb *alloc_bulk_urb(struct hci_dev *hdev, struct sk_buff *skb)
-{
-	struct btusb_data *data = hci_get_drvdata(hdev);
-	struct urb *urb;
-	unsigned int pipe;
-
-	if (!data->bulk_tx_ep)
-		return ERR_PTR(-ENODEV);
-
-	urb = usb_alloc_urb(0, GFP_KERNEL);
-	if (!urb)
-		return ERR_PTR(-ENOMEM);
-
-	pipe = usb_sndbulkpipe(data->udev, data->bulk_tx_ep->bEndpointAddress);
-
-	usb_fill_bulk_urb(urb, data->udev, pipe,
-			  skb->data, skb->len, btusb_tx_complete, skb);
-
-	skb->dev = (void *)hdev;
-
-	return urb;
-}
-
 static struct urb *alloc_isoc_urb(struct hci_dev *hdev, struct sk_buff *skb)
 {
 	struct btusb_data *data = hci_get_drvdata(hdev);
 	struct urb *urb;
 	unsigned int pipe;
+
+	if (data->proto == BTUSB_PROTO_H4)
+		return alloc_bulk_urb(hdev, skb);
 
 	if (!data->isoc_tx_ep)
 		return ERR_PTR(-ENODEV);
@@ -2320,10 +2362,9 @@ static int btusb_switch_alt_setting(struct hci_dev *hdev, int new_alts)
 	return 0;
 }
 
-static struct usb_host_interface *btusb_find_altsetting(struct btusb_data *data,
-							int alt)
+static struct usb_host_interface *
+btusb_find_altsetting(struct usb_interface *intf, int alt)
 {
-	struct usb_interface *intf = data->isoc;
 	int i;
 
 	BT_DBG("Looking for Alt no :%d", alt);
@@ -2376,9 +2417,9 @@ static void btusb_work(struct work_struct *work)
 			 * MTU >= 3 (packets) * 25 (size) - 3 (headers) = 72
 			 * see also Core spec 5, vol 4, B 2.1.1 & Table 2.1.
 			 */
-			if (btusb_find_altsetting(data, 6))
+			if (btusb_find_altsetting(data->isoc, 6))
 				new_alts = 6;
-			else if (btusb_find_altsetting(data, 3) &&
+			else if (btusb_find_altsetting(data->isoc, 3) &&
 				 hdev->sco_mtu >= 72 &&
 				 test_bit(BTUSB_USE_ALT3_FOR_WBS, &data->flags))
 				new_alts = 3;
@@ -3827,8 +3868,11 @@ static ssize_t force_poll_sync_write(struct file *file,
 	if (err)
 		return err;
 
-	/* Only allow changes while the adapter is down */
-	if (test_bit(HCI_UP, &data->hdev->flags))
+	/* Only allow changes while the adapter is down and it is using legacy
+	 * protocol.
+	 */
+	if (test_bit(HCI_UP, &data->hdev->flags) ||
+	    data->proto != BTUSB_PROTO_LEGACY)
 		return -EPERM;
 
 	if (data->poll_sync == enable)
@@ -3927,7 +3971,7 @@ static int btusb_hci_drv_supported_altsettings(struct hci_dev *hdev, void *data,
 		goto done;
 
 	for (i = 0; i <= 6; i++) {
-		if (btusb_find_altsetting(drvdata, i))
+		if (btusb_find_altsetting(drvdata->isoc, i))
 			rp->altsettings[rp->num++] = i;
 	}
 
@@ -4022,6 +4066,15 @@ static int btusb_probe(struct usb_interface *intf,
 	if (!data)
 		return -ENOMEM;
 
+	/* If alternate setting 1 is found, it means H4 mode is supported */
+	if (btusb_find_altsetting(intf, 1)) {
+		struct usb_device *udev = interface_to_usbdev(intf);
+
+		err = usb_set_interface(udev, ifnum_base, 1);
+		if (!err)
+			data->proto = BTUSB_PROTO_H4;
+	}
+
 	for (i = 0; i < intf->cur_altsetting->desc.bNumEndpoints; i++) {
 		ep_desc = &intf->cur_altsetting->endpoint[i].desc;
 
@@ -4041,8 +4094,16 @@ static int btusb_probe(struct usb_interface *intf,
 		}
 	}
 
-	if (!data->intr_ep || !data->bulk_tx_ep || !data->bulk_rx_ep)
-		return -ENODEV;
+	/* Check if all endpoints could be enumerated, legacy mode requires
+	 * interrupt and bulk endpoint while H4 mode only requires bulk
+	 * endpoints.
+	 */
+	if ((data->proto == BTUSB_PROTO_LEGACY && !data->intr_ep) ||
+	    !data->bulk_tx_ep || !data->bulk_rx_ep) {
+		BT_ERR("failed to enumerate endpoints");
+		err = -ENODEV;
+		goto out_free_dev;
+	}
 
 	if (id->driver_info & BTUSB_AMP) {
 		data->cmdreq_type = USB_TYPE_CLASS | 0x01;
@@ -4355,7 +4416,8 @@ static int btusb_probe(struct usb_interface *intf,
 	if (enable_autosuspend)
 		usb_enable_autosuspend(data->udev);
 
-	data->poll_sync = enable_poll_sync;
+	if (data->proto == BTUSB_PROTO_LEGACY)
+		data->poll_sync = enable_poll_sync;
 
 	err = hci_register_dev(hdev);
 	if (err < 0)
