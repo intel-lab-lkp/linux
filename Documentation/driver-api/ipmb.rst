@@ -48,35 +48,35 @@ CONFIG_IPMB_DEVICE_INTERFACE=y
 
 1) If you want the driver to be loaded at boot time:
 
-a) Add this entry to your ACPI table, under the appropriate SMBus::
+   a) Add this entry to your ACPI table, under the appropriate SMBus::
 
-     Device (SMB0) // Example SMBus host controller
-     {
-     Name (_HID, "<Vendor-Specific HID>") // Vendor-Specific HID
-     Name (_UID, 0) // Unique ID of particular host controller
-     :
-     :
-       Device (IPMB)
-       {
-         Name (_HID, "IPMB0001") // IPMB device interface
-         Name (_UID, 0) // Unique device identifier
-       }
-     }
+        Device (SMB0) // Example SMBus host controller
+        {
+        Name (_HID, "<Vendor-Specific HID>") // Vendor-Specific HID
+        Name (_UID, 0) // Unique ID of particular host controller
+        :
+        :
+          Device (IPMB)
+          {
+            Name (_HID, "IPMB0001") // IPMB device interface
+            Name (_UID, 0) // Unique device identifier
+          }
+        }
 
-b) Example for device tree::
+   b) Example for device tree::
 
-     &i2c2 {
-            status = "okay";
+        &i2c2 {
+               status = "okay";
 
-            ipmb@10 {
-                    compatible = "ipmb-dev";
-                    reg = <0x10>;
-                    i2c-protocol;
-            };
-     };
+               ipmb@10 {
+                       compatible = "ipmb-dev";
+                       reg = <0x10>;
+                       i2c-protocol;
+               };
+        };
 
-If xmit of data to be done using raw i2c block vs smbus
-then "i2c-protocol" needs to be defined as above.
+   If xmit of data to be done using raw i2c block vs smbus
+   then "i2c-protocol" needs to be defined as above.
 
 2) Manually from Linux::
 
