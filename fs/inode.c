@@ -1917,6 +1917,7 @@ static void iput_final(struct inode *inode)
 	const struct super_operations *op = inode->i_sb->s_op;
 	int drop;
 
+	might_sleep();
 	WARN_ON(inode_state_read(inode) & I_NEW);
 	VFS_BUG_ON_INODE(atomic_read(&inode->i_count) != 0, inode);
 
@@ -1969,7 +1970,6 @@ static void iput_final(struct inode *inode)
  */
 void iput(struct inode *inode)
 {
-	might_sleep();
 	if (unlikely(!inode))
 		return;
 
