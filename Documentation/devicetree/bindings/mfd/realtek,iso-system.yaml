@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mfd/realtek,iso-system.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Realtek ISO System Controller
+
+description: |
+  The Realtek ISO System Controller is a register area that contains
+  miscellaneous system registers for the SoC and serves as a parent node
+  for other functions.
+
+maintainers:
+  - James Tai <james.tai@realtek.com>
+  - Yu-Chun Lin <eleanor.lin@realtek.com>
+
+properties:
+  compatible:
+    items:
+      - enum:
+          - realtek,iso-system
+      - const: syscon
+      - const: simple-mfd
+
+  reg:
+    maxItems: 1
+
+  ranges:
+    maxItems: 1
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 1
+
+  reg-io-width:
+    const: 4
+
+patternProperties:
+  "^.*@[0-9a-f]+$":
+    type: object
+    description: Catch-all for other sub-devices in the ISO area.
+
+required:
+  - compatible
+  - reg
+  - ranges
+  - '#address-cells'
+  - '#size-cells'
+  - reg-io-width
+
+additionalProperties: false
+
+examples:
+  - |
+    iso: syscon@7000 {
+        compatible = "realtek,iso-system", "syscon", "simple-mfd";
+        reg = <0x7000 0x1000>;
+        ranges = <0x0 0x7000 0x1000>;
+        reg-io-width = <4>;
+        #address-cells = <1>;
+        #size-cells = <1>;
+    };
