@@ -90,6 +90,17 @@ works in this mode and hence it is L3-symmetric (L3s). This will have slightly l
 performance but that shouldn't matter since you are choosing this mode over plain-L3
 mode to make conn-tracking work.
 
+4.4 L2_MACNAT mode:
+-------------
+
+This mode is an extension for the L2 mode. It is primarily intended for
+desktop virtual machines for bridging to Wireless interfaces. In plain L2
+mode you have to configure IPs on slave interface to make it possible
+mux-ing frames between slaves/master. In the L2_MACNAT mode, ipvlan will
+learn itself IPv4/IPv6 address from outgoing packets. Moreover,
+the dev_add_pack() is configured on master interface to capture
+outgoing frames and mux-ing it to slave interfaces, if needed.
+
 5. Mode flags:
 ==============
 

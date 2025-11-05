@@ -284,6 +284,18 @@ void ipvlan_process_multicast(struct work_struct *work)
 		rcu_read_unlock();
 
 		if (tx_pkt) {
+			if (ipvlan_is_macnat(port)) {
+				/* Inject packet to main dev */
+				nskb = skb_clone(skb, GFP_ATOMIC);
+				if (nskb) {
+					local_bh_disable();
+					nskb->pkt_type = pkt_type;
+					nskb->dev = port->dev;
+					dev_forward_skb(port->dev, nskb);
+					local_bh_enable();
+				}
+			}
+
 			/* If the packet originated here, send it out. */
 			skb->dev = port->dev;
 			skb->pkt_type = pkt_type;
@@ -299,7 +311,7 @@ void ipvlan_process_multicast(struct work_struct *work)
 	}
 }
 
-static void ipvlan_skb_crossing_ns(struct sk_buff *skb, struct net_device *dev)
+void ipvlan_skb_crossing_ns(struct sk_buff *skb, struct net_device *dev)
 {
 	bool xnet = true;
 
@@ -412,6 +424,107 @@ struct ipvl_addr *ipvlan_addr_lookup(struct ipvl_port *port, void *lyr3h,
 	}
 
 	return addr;
+}
+
+static bool is_ipv4_usable(__be32 addr)
+{
+	return !ipv4_is_lbcast(addr) && !ipv4_is_multicast(addr) &&
+	       !ipv4_is_zeronet(addr);
+}
+
+static bool is_ipv6_usable(const struct in6_addr *addr)
+{
+	return !ipv6_addr_is_multicast(addr) && !ipv6_addr_loopback(addr) &&
+	       !ipv6_addr_any(addr);
+}
+
+static void __ipvlan_addr_learn(struct ipvl_dev *ipvlan, void *addr, bool is_v6)
+{
+	const ipvl_hdr_type atype = is_v6 ? IPVL_IPV6 : IPVL_IPV4;
+	struct ipvl_addr *ipvladdr, *oldest = NULL;
+	unsigned int naddrs = 0;
+
+	spin_lock_bh(&ipvlan->addrs_lock);
+
+	if (ipvlan_addr_busy(ipvlan->port, addr, is_v6))
+		goto out_unlock;
+
+	list_for_each_entry_rcu(ipvladdr, &ipvlan->addrs, anode) {
+		if (ipvladdr->atype != atype)
+			continue;
+		naddrs++;
+		if (!oldest || time_before64(ipvladdr->tstamp, oldest->tstamp))
+			oldest = ipvladdr;
+	}
+
+	if (naddrs < IPVLAN_MAX_MACNAT_ADDRS) {
+		oldest = NULL;
+	} else {
+		ipvlan_ht_addr_del(oldest);
+		list_del_rcu(&oldest->anode);
+	}
+
+	ipvlan_add_addr(ipvlan, addr, is_v6);
+
+out_unlock:
+	spin_unlock_bh(&ipvlan->addrs_lock);
+	if (oldest)
+		kfree_rcu(oldest, rcu);
+}
+
+static void ipvlan_addr_learn(struct ipvl_dev *ipvlan, void *lyr3h,
+			      int addr_type)
+{
+	void *addr = NULL;
+	bool is_v6;
+
+	switch (addr_type) {
+#if IS_ENABLED(CONFIG_IPV6)
+	/* No need to handle IPVL_ICMPV6, it never has valid src-address. */
+	case IPVL_IPV6: {
+		struct ipv6hdr *ip6h;
+
+		ip6h = (struct ipv6hdr *)lyr3h;
+		if (!is_ipv6_usable(&ip6h->saddr))
+			return;
+		is_v6 = true;
+		addr = &ip6h->saddr;
+		break;
+	}
+#endif
+	case IPVL_IPV4: {
+		struct iphdr *ip4h;
+		__be32 *i4addr;
+
+		ip4h = (struct iphdr *)lyr3h;
+		i4addr = &ip4h->saddr;
+		if (!is_ipv4_usable(*i4addr))
+			return;
+		is_v6 = false;
+		addr = i4addr;
+		break;
+	}
+	case IPVL_ARP: {
+		struct arphdr *arph;
+		unsigned char *arp_ptr;
+		__be32 *i4addr;
+
+		arph = (struct arphdr *)lyr3h;
+		arp_ptr = (unsigned char *)(arph + 1);
+		arp_ptr += ipvlan->port->dev->addr_len;
+		i4addr = (__be32 *)arp_ptr;
+		if (!is_ipv4_usable(*i4addr))
+			return;
+		is_v6 = false;
+		addr = i4addr;
+		break;
+	}
+	default:
+		return;
+	}
+
+	if (!ipvlan_ht_addr_lookup(ipvlan->port, addr, is_v6))
+		__ipvlan_addr_learn(ipvlan, addr, is_v6);
 }
 
 static noinline_for_stack int ipvlan_process_v4_outbound(struct sk_buff *skb)
@@ -561,8 +674,8 @@ out:
 	return ret;
 }
 
-static void ipvlan_multicast_enqueue(struct ipvl_port *port,
-				     struct sk_buff *skb, bool tx_pkt)
+void ipvlan_multicast_enqueue(struct ipvl_port *port,
+			      struct sk_buff *skb, bool tx_pkt)
 {
 	if (skb->protocol == htons(ETH_P_PAUSE)) {
 		kfree_skb(skb);
@@ -618,15 +731,61 @@ out:
 
 static int ipvlan_xmit_mode_l2(struct sk_buff *skb, struct net_device *dev)
 {
-	const struct ipvl_dev *ipvlan = netdev_priv(dev);
-	struct ethhdr *eth = skb_eth_hdr(skb);
+	struct ipvl_dev *ipvlan;
 	struct ipvl_addr *addr;
-	void *lyr3h;
+	struct ethhdr *eth;
+	bool same_mac_addr;
 	int addr_type;
+	void *lyr3h;
 
-	if (!ipvlan_is_vepa(ipvlan->port) &&
-	    ether_addr_equal(eth->h_dest, eth->h_source)) {
+	ipvlan = netdev_priv(dev);
+	eth = skb_eth_hdr(skb);
+	if (ipvlan_is_macnat(ipvlan->port) &&
+	    ether_addr_equal(eth->h_source, dev->dev_addr)) {
+		/* ignore tx-packets from host */
+		goto out_drop;
+	}
+
+	same_mac_addr = ether_addr_equal(eth->h_dest, eth->h_source);
+
+	lyr3h = NULL;
+	if (!ipvlan_is_vepa(ipvlan->port)) {
 		lyr3h = ipvlan_get_L3_hdr(ipvlan->port, skb, &addr_type);
+
+		if (ipvlan_is_macnat(ipvlan->port)) {
+			if (lyr3h)
+				ipvlan_addr_learn(ipvlan, lyr3h, addr_type);
+			/* Mark SKB in advance */
+			skb = skb_share_check(skb, GFP_ATOMIC);
+			if (!skb)
+				return NET_XMIT_DROP;
+			ipvlan_mark_skb(skb, ipvlan->phy_dev);
+		}
+	}
+
+	if (is_multicast_ether_addr(eth->h_dest)) {
+		skb_reset_mac_header(skb);
+		ipvlan_skb_crossing_ns(skb, NULL);
+		ipvlan_multicast_enqueue(ipvlan->port, skb, true);
+		return NET_XMIT_SUCCESS;
+	}
+
+	if (ipvlan_is_vepa(ipvlan->port))
+		goto tx_phy_dev;
+
+	if (!same_mac_addr &&
+	    ether_addr_equal(eth->h_dest, ipvlan->phy_dev->dev_addr)) {
+		/* It is a packet from child with destination to main port.
+		 * Pass it to main.
+		 */
+		skb = skb_share_check(skb, GFP_ATOMIC);
+		if (!skb)
+			return NET_XMIT_DROP;
+		skb->pkt_type = PACKET_HOST;
+		skb->dev = ipvlan->phy_dev;
+		dev_forward_skb(ipvlan->phy_dev, skb);
+		return NET_XMIT_SUCCESS;
+	} else if (same_mac_addr) {
 		if (lyr3h) {
 			addr = ipvlan_addr_lookup(ipvlan->port, lyr3h, addr_type, true);
 			if (addr) {
@@ -649,16 +808,14 @@ static int ipvlan_xmit_mode_l2(struct sk_buff *skb, struct net_device *dev)
 		 */
 		dev_forward_skb(ipvlan->phy_dev, skb);
 		return NET_XMIT_SUCCESS;
-
-	} else if (is_multicast_ether_addr(eth->h_dest)) {
-		skb_reset_mac_header(skb);
-		ipvlan_skb_crossing_ns(skb, NULL);
-		ipvlan_multicast_enqueue(ipvlan->port, skb, true);
-		return NET_XMIT_SUCCESS;
 	}
 
+tx_phy_dev:
 	skb->dev = ipvlan->phy_dev;
 	return dev_queue_xmit(skb);
+out_drop:
+	consume_skb(skb);
+	return NET_XMIT_DROP;
 }
 
 int ipvlan_queue_xmit(struct sk_buff *skb, struct net_device *dev)
@@ -674,6 +831,7 @@ int ipvlan_queue_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	switch(port->mode) {
 	case IPVLAN_MODE_L2:
+	case IPVLAN_MODE_L2_MACNAT:
 		return ipvlan_xmit_mode_l2(skb, dev);
 	case IPVLAN_MODE_L3:
 #ifdef CONFIG_IPVLAN_L3S
@@ -737,17 +895,22 @@ static rx_handler_result_t ipvlan_handle_mode_l2(struct sk_buff **pskb,
 	struct ethhdr *eth = eth_hdr(skb);
 	rx_handler_result_t ret = RX_HANDLER_PASS;
 
+	/* Ignore already seen packets. */
+	if (ipvlan_is_skb_marked(skb, port->dev))
+		return RX_HANDLER_PASS;
+
 	if (is_multicast_ether_addr(eth->h_dest)) {
 		if (ipvlan_external_frame(skb, port)) {
-			struct sk_buff *nskb = skb_clone(skb, GFP_ATOMIC);
-
 			/* External frames are queued for device local
 			 * distribution, but a copy is given to master
 			 * straight away to avoid sending duplicates later
 			 * when work-queue processes this frame. This is
 			 * achieved by returning RX_HANDLER_PASS.
 			 */
+			struct sk_buff *nskb = skb_clone(skb, GFP_ATOMIC);
+
 			if (nskb) {
+				ipvlan_mark_skb(skb, port->dev);
 				ipvlan_skb_crossing_ns(nskb, NULL);
 				ipvlan_multicast_enqueue(port, nskb, false);
 			}
@@ -770,6 +933,7 @@ rx_handler_result_t ipvlan_handle_frame(struct sk_buff **pskb)
 
 	switch (port->mode) {
 	case IPVLAN_MODE_L2:
+	case IPVLAN_MODE_L2_MACNAT:
 		return ipvlan_handle_mode_l2(pskb, port);
 	case IPVLAN_MODE_L3:
 		return ipvlan_handle_mode_l3(pskb, port);
