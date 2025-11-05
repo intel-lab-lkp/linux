@@ -8,7 +8,10 @@
 
 use core::marker::PhantomData;
 use core::ptr::NonNull;
-use kernel::types::ForeignOwnable;
+use kernel::{
+    fs::file,
+    types::ForeignOwnable, //
+};
 
 /// Wrapper for the kernel's `struct kiocb`.
 ///
@@ -61,8 +64,8 @@ impl<'a, T: ForeignOwnable> Kiocb<'a, T> {
     }
 
     /// Gets a mutable reference to the `ki_pos` field.
-    pub fn ki_pos_mut(&mut self) -> &mut i64 {
+    pub fn ki_pos_mut(&mut self) -> &mut file::Offset {
         // SAFETY: We have exclusive access to the kiocb, so we can write to `ki_pos`.
-        unsafe { &mut (*self.as_raw()).ki_pos }
+        unsafe { file::Offset::from_raw(&raw mut (*self.as_raw()).ki_pos) }
     }
 }

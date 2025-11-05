@@ -100,7 +100,11 @@ use core::pin::Pin;
 use kernel::{
     c_str,
     device::Device,
-    fs::{File, Kiocb},
+    fs::{
+        file,
+        File,
+        Kiocb, //
+    },
     ioctl::{_IO, _IOC_SIZE, _IOR, _IOW},
     iov::{IovIterDest, IovIterSource},
     miscdevice::{MiscDevice, MiscDeviceOptions, MiscDeviceRegistration},
@@ -183,7 +187,7 @@ impl MiscDevice for RustMiscDevice {
 
         let inner = me.inner.lock();
         // Read the buffer contents, taking the file position into account.
-        let read = iov.simple_read_from_buffer(kiocb.ki_pos_mut(), &inner.buffer)?;
+        let read = iov.simple_read_from_buffer(&mut kiocb.ki_pos_mut().0, &inner.buffer)?;
 
         Ok(read)
     }
@@ -199,7 +203,7 @@ impl MiscDevice for RustMiscDevice {
         let len = iov.copy_from_iter_vec(&mut inner.buffer, GFP_KERNEL)?;
 
         // Set position to zero so that future `read` calls will see the new contents.
-        *kiocb.ki_pos_mut() = 0;
+        *kiocb.ki_pos_mut() = file::Offset::from(0);
 
         Ok(len)
     }
