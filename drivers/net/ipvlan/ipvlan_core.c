@@ -133,6 +133,8 @@ bool ipvlan_addr_busy(struct ipvl_port *port, void *iaddr, bool is_v6)
 			break;
 		}
 	}
+	if (!ret)
+		ret = !!ipvlan_port_find_addr(port, iaddr, is_v6);
 	rcu_read_unlock();
 	return ret;
 }
@@ -469,17 +471,21 @@ static bool is_ipv6_usable(const struct in6_addr *addr)
 	       !ipv6_addr_any(addr);
 }
 
-static void __ipvlan_addr_learn(struct ipvl_dev *ipvlan, void *addr, bool is_v6,
-				const u8 *hwaddr)
+static int __ipvlan_addr_learn(struct ipvl_dev *ipvlan, void *addr, bool is_v6,
+			       const u8 *hwaddr)
 {
 	const ipvl_hdr_type atype = is_v6 ? IPVL_IPV6 : IPVL_IPV4;
 	struct ipvl_addr *ipvladdr, *oldest = NULL;
 	unsigned int naddrs = 0;
+	int ret = -1;
 
 	spin_lock_bh(&ipvlan->port->addrs_lock);
 
+	if (ipvlan_port_find_addr(ipvlan->port, addr, is_v6))
+		goto out_unlock; /* used by main. */
+
 	if (ipvlan_addr_busy(ipvlan->port, addr, is_v6))
-		goto out_unlock;
+		goto out_unlock; /* used by other ipvlan. */
 
 	list_for_each_entry_rcu(ipvladdr, &ipvlan->addrs, anode) {
 		if (ipvladdr->atype != atype)
@@ -497,15 +503,19 @@ static void __ipvlan_addr_learn(struct ipvl_dev *ipvlan, void *addr, bool is_v6,
 	}
 
 	ipvlan_add_addr(ipvlan, addr, is_v6, hwaddr);
+	ret = 0;
 
 out_unlock:
 	spin_unlock_bh(&ipvlan->port->addrs_lock);
 	if (oldest)
 		kfree_rcu(oldest, rcu);
+
+	return ret;
 }
 
-static void ipvlan_addr_learn(struct ipvl_dev *ipvlan, void *lyr3h,
-			      int addr_type, const u8 *hwaddr)
+/* return -1 if frame should be dropped. */
+static int ipvlan_addr_learn(struct ipvl_dev *ipvlan, void *lyr3h,
+			     int addr_type, const u8 *hwaddr)
 {
 	struct ipvl_addr *ipvladdr;
 	void *addr = NULL;
@@ -519,7 +529,7 @@ static void ipvlan_addr_learn(struct ipvl_dev *ipvlan, void *lyr3h,
 
 		ip6h = (struct ipv6hdr *)lyr3h;
 		if (!is_ipv6_usable(&ip6h->saddr))
-			return;
+			return 0;
 		is_v6 = true;
 		addr = &ip6h->saddr;
 		break;
@@ -532,7 +542,7 @@ static void ipvlan_addr_learn(struct ipvl_dev *ipvlan, void *lyr3h,
 		ip4h = (struct iphdr *)lyr3h;
 		i4addr = &ip4h->saddr;
 		if (!is_ipv4_usable(*i4addr))
-			return;
+			return 0;
 		is_v6 = false;
 		addr = i4addr;
 		break;
@@ -547,17 +557,18 @@ static void ipvlan_addr_learn(struct ipvl_dev *ipvlan, void *lyr3h,
 		arp_ptr += ipvlan->port->dev->addr_len;
 		i4addr = (__be32 *)arp_ptr;
 		if (!is_ipv4_usable(*i4addr))
-			return;
+			return 0;
 		is_v6 = false;
 		addr = i4addr;
 		break;
 	}
 	default:
-		return;
+		return 0;
 	}
 
 	/* handle situation when MAC changed, but IP is the same. */
 	ipvladdr = ipvlan_ht_addr_lookup(ipvlan->port, addr, is_v6);
+
 	if (ipvladdr && !ether_addr_equal(ipvladdr->hwaddr, hwaddr)) {
 		/* del_addr is safe to call, because we are inside xmit. */
 		ipvlan_del_addr(ipvladdr->master, addr, is_v6);
@@ -565,7 +576,9 @@ static void ipvlan_addr_learn(struct ipvl_dev *ipvlan, void *lyr3h,
 	}
 
 	if (!ipvladdr)
-		__ipvlan_addr_learn(ipvlan, addr, is_v6, hwaddr);
+		return __ipvlan_addr_learn(ipvlan, addr, is_v6, hwaddr);
+
+	return 0;
 }
 
 static noinline_for_stack int ipvlan_process_v4_outbound(struct sk_buff *skb)
@@ -905,9 +918,9 @@ static int ipvlan_xmit_mode_l2(struct sk_buff *skb, struct net_device *dev)
 		lyr3h = ipvlan_get_L3_hdr(ipvlan->port, skb, &addr_type);
 
 		if (ipvlan_is_macnat(ipvlan->port)) {
-			if (lyr3h)
-				ipvlan_addr_learn(ipvlan, lyr3h, addr_type,
-						  eth->h_source);
+			if (lyr3h && ipvlan_addr_learn(ipvlan, lyr3h, addr_type,
+						       eth->h_source) < 0)
+				goto out_drop;
 			/* Mark SKB in advance */
 			skb = skb_share_check(skb, GFP_ATOMIC);
 			if (!skb)
