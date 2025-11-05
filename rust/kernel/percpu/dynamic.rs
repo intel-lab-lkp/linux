@@ -18,7 +18,7 @@ use core::mem::{align_of, size_of, MaybeUninit};
 /// the memory location on any particular CPU has been initialized. This means that it cannot tell
 /// whether it should drop the *contents* of the allocation when it is dropped. It is up to the
 /// user to do this via something like [`core::ptr::drop_in_place`].
-pub struct PerCpuAllocation<T>(PerCpuPtr<T>);
+pub struct PerCpuAllocation<T>(pub(super) PerCpuPtr<T>);
 
 impl<T: Zeroable> PerCpuAllocation<T> {
     /// Dynamically allocates a space in the per-CPU area suitably sized and aligned to hold a `T`,
@@ -116,6 +116,14 @@ impl<T: Clone> DynamicPerCpu<T> {
         let arc = Arc::new(alloc, flags).ok()?;
 
         Some(Self { alloc: Some(arc) })
+    }
+}
+
+impl<T> DynamicPerCpu<T> {
+    /// Gets the allocation backing this per-CPU variable.
+    pub(crate) fn alloc(&self) -> &Arc<PerCpuAllocation<T>> {
+        // SAFETY: This type's invariant ensures that `self.alloc` is `Some`.
+        unsafe { self.alloc.as_ref().unwrap_unchecked() }
     }
 }
 
