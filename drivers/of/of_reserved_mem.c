@@ -148,6 +148,73 @@ static int __init early_init_dt_reserve_memory(phys_addr_t base,
 	return memblock_reserve(base, size);
 }
 
+static void * __init of_apply_rmem_fixups(const void *fdt, int node)
+{
+	int t_len = (dt_root_addr_cells + dt_root_size_cells) * sizeof(__be32);
+	int parent_node, new_node, child;
+	static char new_fdt[150000];
+	int len, err, alloc_size;
+	phys_addr_t base, size;
+	__be32 new_reg_prop[4];
+	const __be32 *prop;
+	const char *uname;
+
+	fdt_for_each_subnode(child, fdt, node) {
+		if (!of_fdt_device_is_available(fdt, child))
+			continue;
+
+		prop = of_get_flat_dt_prop(child, "reg", &len);
+		if (!prop ||
+		    !of_flat_dt_is_compatible(child, "raspberrypi,bootloader-config") ||
+		    (t_len - len) != sizeof(__be32) ||
+		    t_len != 4 * sizeof(__be32))
+			continue;
+
+		alloc_size = fdt_totalsize(fdt) + sizeof(__be32);
+		err = fdt_open_into(fdt, new_fdt, alloc_size);
+		if (err) {
+			pr_err("Failed to open FDT\n");
+			return ERR_PTR(err);
+		}
+
+		base = dt_mem_next_cell(dt_root_addr_cells, &prop);
+		size = dt_mem_next_cell(1, &prop);
+		new_reg_prop[0] = cpu_to_be32(upper_32_bits(base));
+		new_reg_prop[1] = cpu_to_be32(lower_32_bits(base));
+		new_reg_prop[2] = 0;
+		new_reg_prop[3] = cpu_to_be32(size);
+
+		parent_node = fdt_path_offset(new_fdt, "/reserved-memory");
+		if (parent_node < 0) {
+			pr_err("No reserved-memory node in the copied FDT\n");
+			return ERR_PTR(parent_node);
+		}
+
+		uname = fdt_get_name(fdt, child, NULL);
+		if (!uname) {
+			pr_err("Cannot retrieve the node name\n");
+			return ERR_PTR(-EINVAL);
+		}
+
+		new_node = fdt_subnode_offset(new_fdt, parent_node, uname);
+		if (new_node < 0) {
+			pr_err("No %s node in the copied FDT\n", uname);
+			return ERR_PTR(new_node);
+		}
+
+		err = fdt_setprop(new_fdt, new_node, "reg", new_reg_prop, sizeof(new_reg_prop));
+		if (err < 0) {
+			pr_warn("Cannot fix 'reg' property for node %s: %s\n",
+				uname, fdt_strerror(err));
+			return ERR_PTR(err);
+		}
+
+		return new_fdt;
+	}
+
+	return NULL;
+}
+
 /*
  * __reserved_mem_reserve_reg() - reserve all memory described in 'reg' property
  */
@@ -295,7 +362,8 @@ int __init fdt_scan_reserved_mem(void)
 	int node, child;
 	int dynamic_nodes_cnt = 0, count = 0;
 	int dynamic_nodes[MAX_RESERVED_REGIONS];
-	const void *fdt = initial_boot_params;
+	void *fdt = initial_boot_params;
+	void *fixed_fdt;
 
 	node = fdt_path_offset(fdt, "/reserved-memory");
 	if (node < 0)
@@ -304,6 +372,13 @@ int __init fdt_scan_reserved_mem(void)
 	if (__reserved_mem_check_root(node) != 0) {
 		pr_err("Reserved memory: unsupported node format, ignoring\n");
 		return -EINVAL;
+	}
+
+	fixed_fdt = of_apply_rmem_fixups(fdt, node);
+	if (!IS_ERR_OR_NULL(fixed_fdt)) {
+		initial_boot_params = fixed_fdt;
+		fdt = fixed_fdt;
+		node = fdt_path_offset(fdt, "/reserved-memory");
 	}
 
 	fdt_for_each_subnode(child, fdt, node) {
