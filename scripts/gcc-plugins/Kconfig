@@ -40,6 +40,6 @@ config GCC_PLUGIN_CLEANUP_ATTRIBUTE_WARN
 	def_bool y
 	help
 	  Warn when local automatic variables annotated with
-	  __attribute__((cleanup(...))) are declared without an initializer.
+	  __attribute__((cleanup(...))) are declared without an constructor.
 
 endif
