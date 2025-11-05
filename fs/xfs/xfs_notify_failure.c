@@ -22,6 +22,7 @@
 #include "xfs_notify_failure.h"
 #include "xfs_rtgroup.h"
 #include "xfs_rtrmap_btree.h"
+#include "xfs_file.h"
 
 #include <linux/mm.h>
 #include <linux/dax.h>
@@ -166,6 +167,10 @@ xfs_dax_failure_fn(
 	if (notify->mf_flags & MF_MEM_PRE_REMOVE)
 		invalidate_inode_pages2_range(mapping, pgoff,
 					      pgoff + pgcnt - 1);
+
+	xfs_inode_media_error(ip,
+			XFS_FSB_TO_B(mp, (u64)pgoff << PAGE_SHIFT),
+			XFS_FSB_TO_B(mp, (u64)pgcnt << PAGE_SHIFT));
 
 	xfs_irele(ip);
 	return error;

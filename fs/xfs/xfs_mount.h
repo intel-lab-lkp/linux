@@ -352,6 +352,9 @@ typedef struct xfs_mount {
 
 	/* Hook to feed media error events to a daemon. */
 	struct xfs_hooks	m_media_error_hooks;
+
+	/* Hook to feed file io error events to a daemon. */
+	struct xfs_hooks	m_file_ioerror_hooks;
 } xfs_mount_t;
 
 #define M_IGEO(mp)		(&(mp)->m_ino_geo)

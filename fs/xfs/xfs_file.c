@@ -222,6 +222,176 @@ xfs_ilock_iocb_for_write(
 	return 0;
 }
 
+#ifdef CONFIG_XFS_LIVE_HOOKS
+struct xfs_file_ioerror {
+	struct work_struct		work;
+	struct xfs_mount		*mp;
+	xfs_ino_t			ino;
+	loff_t				pos;
+	u64				len;
+	u32				gen;
+	int				error;
+	enum xfs_file_ioerror_type	type;
+};
+
+/* Call downstream hooks for a file io error update. */
+STATIC void
+xfs_file_report_ioerror(
+	struct work_struct	*work)
+{
+	struct xfs_file_ioerror	*ioerr =
+		container_of(work, struct xfs_file_ioerror, work);
+	struct xfs_file_ioerror_params	p = {
+		.ino		= ioerr->ino,
+		.gen		= ioerr->gen,
+		.pos		= ioerr->pos,
+		.len		= ioerr->len,
+	};
+	struct xfs_mount	*mp = ioerr->mp;
+
+	xfs_hooks_call(&mp->m_file_ioerror_hooks, ioerr->type, &p);
+	kfree(ioerr);
+}
+
+/* Queue a directio io error notification. */
+STATIC void
+xfs_dio_ioerror(
+	struct inode		*inode,
+	int			direction,
+	loff_t			pos,
+	u64			len,
+	int			error)
+{
+	struct xfs_inode	*ip = XFS_I(inode);
+	struct xfs_mount	*mp = ip->i_mount;
+	struct xfs_file_ioerror	*ioerr;
+
+	ioerr = kzalloc(sizeof(*ioerr), GFP_ATOMIC);
+	if (!ioerr) {
+		xfs_err(mp,
+ "lost ioerror report for ino 0x%llx %s pos 0x%llx len 0x%llx error %d",
+				ip->i_ino,
+				direction == WRITE ? "WRITE" : "READ",
+				pos, len, error);
+		return;
+	}
+
+	INIT_WORK(&ioerr->work, xfs_file_report_ioerror);
+	ioerr->mp = mp;
+	ioerr->ino = ip->i_ino;
+	ioerr->gen = VFS_I(ip)->i_generation;
+	ioerr->pos = pos;
+	ioerr->len = len;
+	if (direction == WRITE)
+		ioerr->type = XFS_FILE_IOERROR_DIRECT_WRITE;
+	else
+		ioerr->type = XFS_FILE_IOERROR_DIRECT_READ;
+	ioerr->error = error;
+	queue_work(mp->m_unwritten_workqueue, &ioerr->work);
+}
+
+/* Deal with a media error */
+void
+xfs_inode_media_error(
+	struct xfs_inode	*ip,
+	loff_t			pos,
+	u64			len)
+{
+	struct xfs_mount	*mp = ip->i_mount;
+	struct xfs_file_ioerror	*ioerr;
+
+	ioerr = kzalloc(sizeof(*ioerr), GFP_ATOMIC);
+	if (!ioerr) {
+		xfs_err(mp,
+ "lost data error report for ino 0x%llx pos 0x%llx len 0x%llx",
+				ip->i_ino,
+				pos, len);
+		return;
+	}
+
+	INIT_WORK(&ioerr->work, xfs_file_report_ioerror);
+	ioerr->mp = mp;
+	ioerr->ino = ip->i_ino;
+	ioerr->gen = VFS_I(ip)->i_generation;
+	ioerr->pos = pos;
+	ioerr->len = len;
+	ioerr->type = XFS_FILE_IOERROR_DATA_LOST;
+	ioerr->error = -EIO;
+	queue_work(mp->m_unwritten_workqueue, &ioerr->work);
+}
+
+/* Queue a buffered io error notification. */
+void
+xfs_vm_ioerror(
+	struct address_space	*mapping,
+	int			direction,
+	loff_t			pos,
+	u64			len,
+	int			error)
+{
+	struct inode		*inode = mapping->host;
+	struct xfs_inode	*ip = XFS_I(inode);
+	struct xfs_mount	*mp = ip->i_mount;
+	struct xfs_file_ioerror	*ioerr;
+
+	ioerr = kzalloc(sizeof(*ioerr), GFP_ATOMIC);
+	if (!ioerr) {
+		xfs_err(mp,
+ "lost ioerror report for ino 0x%llx %s pos 0x%llx len 0x%llx error %d",
+				ip->i_ino,
+				direction == WRITE ? "WRITE" : "READ",
+				pos, len, error);
+		return;
+	}
+
+	INIT_WORK(&ioerr->work, xfs_file_report_ioerror);
+	ioerr->mp = mp;
+	ioerr->ino = ip->i_ino;
+	ioerr->gen = VFS_I(ip)->i_generation;
+	ioerr->pos = pos;
+	ioerr->len = len;
+	if (direction == WRITE)
+		ioerr->type = XFS_FILE_IOERROR_BUFFERED_WRITE;
+	else
+		ioerr->type = XFS_FILE_IOERROR_BUFFERED_READ;
+	ioerr->error = error;
+	queue_work(mp->m_unwritten_workqueue, &ioerr->work);
+}
+
+/* Call the specified function after a file io error. */
+int
+xfs_file_ioerror_hook_add(
+	struct xfs_mount		*mp,
+	struct xfs_file_ioerror_hook	*hook)
+{
+	return xfs_hooks_add(&mp->m_file_ioerror_hooks, &hook->ioerror_hook);
+}
+
+/* Stop calling the specified function after a file io error. */
+void
+xfs_file_ioerror_hook_del(
+	struct xfs_mount		*mp,
+	struct xfs_file_ioerror_hook	*hook)
+{
+	xfs_hooks_del(&mp->m_file_ioerror_hooks, &hook->ioerror_hook);
+}
+
+/* Configure file io error update hook functions. */
+void
+xfs_file_ioerror_hook_setup(
+	struct xfs_file_ioerror_hook	*hook,
+	notifier_fn_t			mod_fn)
+{
+	xfs_hook_setup(&hook->ioerror_hook, mod_fn);
+}
+#else
+# define xfs_dio_ioerror		NULL
+#endif /* CONFIG_XFS_LIVE_HOOKS */
+
+static const struct iomap_dio_ops xfs_dio_read_ops = {
+	.ioerror	= xfs_dio_ioerror,
+};
+
 STATIC ssize_t
 xfs_file_dio_read(
 	struct kiocb		*iocb,
@@ -240,7 +410,8 @@ xfs_file_dio_read(
 	ret = xfs_ilock_iocb(iocb, XFS_IOLOCK_SHARED);
 	if (ret)
 		return ret;
-	ret = iomap_dio_rw(iocb, to, &xfs_read_iomap_ops, NULL, 0, NULL, 0);
+	ret = iomap_dio_rw(iocb, to, &xfs_read_iomap_ops, &xfs_dio_read_ops,
+			0, NULL, 0);
 	xfs_iunlock(ip, XFS_IOLOCK_SHARED);
 
 	return ret;
@@ -625,6 +796,7 @@ out:
 
 static const struct iomap_dio_ops xfs_dio_write_ops = {
 	.end_io		= xfs_dio_write_end_io,
+	.ioerror	= xfs_dio_ioerror,
 };
 
 static void
