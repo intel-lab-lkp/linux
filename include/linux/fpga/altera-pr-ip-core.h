@@ -11,7 +11,15 @@
 #ifndef _ALT_PR_IP_CORE_H
 #define _ALT_PR_IP_CORE_H
 #include <linux/io.h>
+#include <asm/errno.h>
 
+#if IS_ENABLED(CONFIG_ALTERA_PR_IP_CORE)
 int alt_pr_register(struct device *dev, void __iomem *reg_base);
+#else
+static inline int alt_pr_register(struct device *dev, void __iomem *reg_base)
+{
+	return -EOPNOTSUPP;
+}
+#endif
 
 #endif /* _ALT_PR_IP_CORE_H */
