@@ -92,10 +92,12 @@ patternProperties:
       clocks:
         items:
           - description: external memory clock
+          - description: data backbone clock
 
       clock-names:
         items:
           - const: emc
+          - const: dbb
 
       "#interconnect-cells":
         const: 0
@@ -115,6 +117,9 @@ patternProperties:
             reg:
               maxItems: 1
 
+            clocks:
+              maxItems: 1
+
       - if:
           properties:
             compatible:
@@ -124,6 +129,9 @@ patternProperties:
             reg:
               minItems: 2
 
+            clocks:
+              maxItems: 1
+
       - if:
           properties:
             compatible:
@@ -132,6 +140,9 @@ patternProperties:
           properties:
             reg:
               minItems: 2
+
+            clocks:
+              maxItems: 1
 
       - if:
           properties:
