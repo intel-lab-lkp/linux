@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 
+gcc-plugin-$(CONFIG_GCC_PLUGIN_CLEANUP_ATTRIBUTE_WARN) += cleanup_plugin.so
 gcc-plugin-$(CONFIG_GCC_PLUGIN_LATENT_ENTROPY)	+= latent_entropy_plugin.so
 gcc-plugin-cflags-$(CONFIG_GCC_PLUGIN_LATENT_ENTROPY)		\
 		+= -DLATENT_ENTROPY_PLUGIN
