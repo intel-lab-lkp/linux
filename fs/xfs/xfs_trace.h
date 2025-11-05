@@ -106,6 +106,7 @@ struct xfs_open_zone;
 struct xfs_healthmon_event;
 struct xfs_health_update_params;
 struct xfs_media_error_params;
+struct xfs_file_ioerror_params;
 
 #define XFS_ATTR_FILTER_FLAGS \
 	{ XFS_ATTR_ROOT,	"ROOT" }, \
@@ -6117,6 +6118,12 @@ DECLARE_EVENT_CLASS(xfs_healthmon_event_class,
 			__entry->offset = event->daddr;
 			__entry->length = event->bbcount;
 			break;
+		case XFS_HEALTHMON_FILERANGE:
+			__entry->ino = event->fino;
+			__entry->gen = event->fgen;
+			__entry->offset = event->fpos;
+			__entry->length = event->flen;
+			break;
 		}
 	),
 	TP_printk("dev %d:%d type %s domain %s mask 0x%x ino 0x%llx gen 0x%x offset 0x%llx len 0x%llx group 0x%x lost %llu",
@@ -6255,6 +6262,58 @@ TRACE_EVENT(xfs_healthmon_media_error_hook,
 		  __entry->lost_prev)
 );
 #endif
+
+#define XFS_FILE_IOERROR_STRINGS \
+	{ XFS_FILE_IOERROR_BUFFERED_READ,	"readahead" }, \
+	{ XFS_FILE_IOERROR_BUFFERED_WRITE,	"writeback" }, \
+	{ XFS_FILE_IOERROR_DIRECT_READ,		"directio_read" }, \
+	{ XFS_FILE_IOERROR_DIRECT_WRITE,	"directio_write" }, \
+	{ XFS_FILE_IOERROR_DATA_LOST,		"datalost" }
+
+
+TRACE_DEFINE_ENUM(XFS_FILE_IOERROR_BUFFERED_READ);
+TRACE_DEFINE_ENUM(XFS_FILE_IOERROR_BUFFERED_WRITE);
+TRACE_DEFINE_ENUM(XFS_FILE_IOERROR_DIRECT_READ);
+TRACE_DEFINE_ENUM(XFS_FILE_IOERROR_DIRECT_WRITE);
+TRACE_DEFINE_ENUM(XFS_FILE_IOERROR_DATA_LOST);
+
+TRACE_EVENT(xfs_healthmon_file_ioerror_hook,
+	TP_PROTO(const struct xfs_mount *mp,
+		 unsigned long action,
+		 const struct xfs_file_ioerror_params *p,
+		 unsigned int events, unsigned long long lost_prev),
+	TP_ARGS(mp, action, p, events, lost_prev),
+	TP_STRUCT__entry(
+		__field(dev_t, dev)
+		__field(dev_t, error_dev)
+		__field(unsigned long, action)
+		__field(unsigned long long, ino)
+		__field(unsigned int, gen)
+		__field(long long, pos)
+		__field(unsigned long long, len)
+		__field(unsigned int, events)
+		__field(unsigned long long, lost_prev)
+	),
+	TP_fast_assign(
+		__entry->dev = mp ? mp->m_super->s_dev : 0;
+		__entry->action = action;
+		__entry->ino = p->ino;
+		__entry->gen = p->gen;
+		__entry->pos = p->pos;
+		__entry->len = p->len;
+		__entry->events = events;
+		__entry->lost_prev = lost_prev;
+	),
+	TP_printk("dev %d:%d ino 0x%llx gen 0x%x op %s pos 0x%llx bytecount 0x%llx events %u lost_prev? %llu",
+		  MAJOR(__entry->dev), MINOR(__entry->dev),
+		  __entry->ino,
+		  __entry->gen,
+		  __print_symbolic(__entry->action, XFS_FILE_IOERROR_STRINGS),
+		  __entry->pos,
+		  __entry->len,
+		  __entry->events,
+		  __entry->lost_prev)
+);
 #endif /* CONFIG_XFS_HEALTH_MONITOR */
 
 #endif /* _TRACE_XFS_H */
