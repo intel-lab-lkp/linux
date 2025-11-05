@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Driver for (BCM4706)? GBit MAC core on BCMA bus.
  *
