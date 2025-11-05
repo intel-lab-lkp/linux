@@ -179,9 +179,9 @@ static int mlx5_data_direct_probe(struct pci_dev *pdev, const struct pci_device_
 	if (err)
 		goto err_disable;
 
-	if (pci_enable_atomic_ops_to_root(pdev, PCI_EXP_DEVCAP2_ATOMIC_COMP32) &&
-	    pci_enable_atomic_ops_to_root(pdev, PCI_EXP_DEVCAP2_ATOMIC_COMP64) &&
-	    pci_enable_atomic_ops_to_root(pdev, PCI_EXP_DEVCAP2_ATOMIC_COMP128))
+	if (pci_enable_atomic_ops_to_root(pdev, PCI_EXP_DEVCAP2_ATOMIC_COMP32 |
+						PCI_EXP_DEVCAP2_ATOMIC_COMP64 |
+						PCI_EXP_DEVCAP2_ATOMIC_COMP128))
 		dev_dbg(dev->device, "Enabling pci atomics failed\n");
 
 	err = mlx5_data_direct_vpd_get_vuid(dev);
