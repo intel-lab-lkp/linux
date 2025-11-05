@@ -4067,10 +4067,26 @@ static int mlx5_vdpa_set_attr(struct vdpa_mgmt_dev *v_mdev, struct vdpa_device *
 	down_write(&ndev->reslock);
 	if (add_config->mask & (1 << VDPA_ATTR_DEV_NET_CFG_MACADDR)) {
 		pfmdev = pci_get_drvdata(pci_physfn(mdev->pdev));
-		err = mlx5_mpfs_add_mac(pfmdev, config->mac);
-		if (!err)
+		if (!is_zero_ether_addr(ndev->config.mac)) {
+			if (mlx5_mpfs_del_mac(pfmdev, ndev->config.mac)) {
+				mlx5_vdpa_warn(mvdev,"failed to delete old MAC %pM from MPFS table\n",
+					ndev->config.mac);
+			}
+		}
+		err = mlx5_mpfs_add_mac(pfmdev, (u8 *)add_config->net.mac);
+		if (!err) {
+			mac_vlan_del(ndev, config->mac, 0, false);
 			ether_addr_copy(config->mac, add_config->net.mac);
+		} else {
+			mlx5_vdpa_warn(mvdev,"failed to add new MAC %pM to MPFS table\n",
+				(u8 *)add_config->net.mac);
+			up_write(&ndev->reslock);
+			return err;
+		}
 	}
+	if (mac_vlan_add(ndev, ndev->config.mac, 0, false))
+		mlx5_vdpa_warn(mvdev,"failed to add new MAC %pM to vlan table\n",
+			       (u8 *)add_config->net.mac);
 
 	up_write(&ndev->reslock);
 	return err;
