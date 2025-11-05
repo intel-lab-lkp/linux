@@ -165,6 +165,10 @@ int h4_deinit(void);
 struct sk_buff *h4_recv_buf(struct hci_uart *hu, struct sk_buff *skb,
 			    const unsigned char *buffer, int count,
 			    const struct h4_recv_pkt *pkts, int pkts_count);
+struct sk_buff *h4_recv_skb(struct hci_dev *hdev, u8 *alignment, u8 *padding,
+			    struct sk_buff *skb, const unsigned char *buffer,
+			    int count, const struct h4_recv_pkt *pkts,
+			    int pkts_count);
 #endif
 
 #ifdef CONFIG_BT_HCIUART_BCSP
