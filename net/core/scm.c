@@ -274,7 +274,7 @@ int put_cmsg(struct msghdr * msg, int level, int type, int len, void *data)
 		check_object_size(data, cmlen - sizeof(*cm), true);
 
 		if (can_do_masked_user_access())
-			cm = masked_user_access_begin(cm);
+			cm = masked_user_write_access_begin(cm);
 		else if (!user_write_access_begin(cm, cmlen))
 			goto efault;
 
