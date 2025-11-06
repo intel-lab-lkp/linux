@@ -385,6 +385,7 @@ static int cros_ec_chardev_probe(struct platform_device *pdev)
 	misc->fops = &chardev_fops;
 	misc->name = ec_platform->ec_name;
 	misc->parent = pdev->dev.parent;
+	misc->revocable = true;
 
 	dev_set_drvdata(&pdev->dev, misc);
 
