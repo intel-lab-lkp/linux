@@ -1585,7 +1585,8 @@ r535_disp_oneinit(struct nvkm_disp *disp)
 					union acpi_object argv4 = {
 						.buffer.type    = ACPI_TYPE_BUFFER,
 						.buffer.length  = sizeof(ctrl->backLightData),
-						.buffer.pointer = kmalloc(argv4.buffer.length, GFP_KERNEL),
+						.buffer.pointer = kmalloc(argv4.buffer.length,
+								GFP_KERNEL | __GFP_NOFAIL),
 					}, *obj;
 
 					obj = acpi_evaluate_dsm(handle, nbci ? &NBCI_DSM_GUID : &NVHG_DSM_GUID,
