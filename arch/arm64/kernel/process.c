@@ -969,3 +969,18 @@ int set_tsc_mode(unsigned int val)
 
 	return do_set_tsc_mode(val);
 }
+
+int set_unalign_atomic_ctl(unsigned int val)
+{
+	unsigned long valid_mask = PR_ARM64_UNALIGN_ATOMIC_EMULATE;
+	if (val & ~valid_mask)
+		return -EINVAL;
+
+	/*
+	 * TODO: check if this is running in a ARM v8.1 or greater.
+	 * Refuse otherwise.
+	 */
+
+	update_thread_flag(TIF_UNALIGN_ATOMIC_EMULATE, val & PR_ARM64_UNALIGN_ATOMIC_EMULATE);
+	return 0;
+}
