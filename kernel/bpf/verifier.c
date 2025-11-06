@@ -608,6 +608,23 @@ static bool is_atomic_load_insn(const struct bpf_insn *insn)
 	       insn->imm == BPF_LOAD_ACQ;
 }
 
+typedef int (*refine_state_fn)(struct bpf_verifier_env *env,
+			       struct bpf_verifier_state *st, void *ctx);
+
+static int bcf_refine(struct bpf_verifier_env *env,
+		      struct bpf_verifier_state *st, u32 reg_masks,
+		      refine_state_fn refine_cb, void *ctx);
+
+static bool bcf_requested(const struct bpf_verifier_env *env)
+{
+	return env->prog->aux->bcf_requested;
+}
+
+static void mark_bcf_requested(struct bpf_verifier_env *env)
+{
+	env->prog->aux->bcf_requested = true;
+}
+
 static int __get_spi(s32 off)
 {
 	return (-off - 1) / BPF_REG_SIZE;
@@ -23345,6 +23362,145 @@ out:
 		bpf_vlog_reset(&env->log, 0);
 	free_states(env);
 	return ret;
+}
+
+static int bcf_track(struct bpf_verifier_env *env,
+		     struct bpf_verifier_state *st,
+		     struct bpf_verifier_state *base)
+{
+	return -EOPNOTSUPP;
+}
+
+/*
+ * Backtracks through parent verifier states to identify the suffix of the path
+ * that is relevant for register refinement in bcf_track(). Using backtrack_insn(),
+ * this routine locates the instructions that define the target registers and any
+ * registers that are transitively related. All states visited during this process
+ * collectively define the path suffix.
+ *
+ * Returns the parent state of the last visited state, which serves as the base
+ * state from which bcf_track() begins its analysis.
+ * The jump history from the collected states determines the suffix to follow.
+ */
+static struct bpf_verifier_state *
+backtrack_states(struct bpf_verifier_env *env, struct bpf_verifier_state *cur,
+		 u32 reg_masks)
+{
+	struct bpf_verifier_state *base = NULL, *st = cur;
+	struct backtrack_state *bt = &env->bt;
+	struct bcf_refine_state *bcf = &env->bcf;
+	int first_idx = cur->first_insn_idx;
+	int last_idx = cur->insn_idx;
+	int subseq_idx = -1;
+	bool skip_first = true;
+	int i, err, log_level = 0;
+	u32 vstate_cnt;
+
+	if (!reg_masks)
+		return ERR_PTR(-EFAULT);
+
+	bt_init(bt, st->curframe);
+	bt->reg_masks[bt->frame] = reg_masks;
+	swap(env->log.level, log_level); /* Disable backtrack_insn() log. */
+
+	for (;;) {
+		u32 history = st->jmp_history_cnt;
+		struct bpf_jmp_history_entry *hist;
+
+		if (last_idx < 0 || !st->parent)
+			break;
+
+		for (i = last_idx;;) {
+			if (skip_first) {
+				err = 0;
+				skip_first = false;
+			} else {
+				hist = get_jmp_hist_entry(st, history, i);
+				err = backtrack_insn(env, i, subseq_idx, hist, bt);
+			}
+			if (err) /* Track the entire path. */
+				goto out;
+			if (bt_empty(bt)) { /* Base state found. */
+				base = st->parent;
+				goto out;
+			}
+			subseq_idx = i;
+			i = get_prev_insn_idx(st, i, &history);
+			if (i == -ENOENT)
+				break;
+			if (i >= env->prog->len)
+				goto out;
+		}
+
+		st = st->parent;
+		subseq_idx = first_idx;
+		last_idx = st->last_insn_idx;
+		first_idx = st->first_insn_idx;
+	}
+
+out:
+	bt_reset(bt);
+	swap(env->log.level, log_level);
+
+	/* Collect parents and follow their jmp history. */
+	vstate_cnt = 1;
+	st = cur->parent;
+	while (st != base) {
+		vstate_cnt++;
+		st = st->parent;
+	}
+	bcf->parents = kmalloc_array(vstate_cnt, sizeof(st), GFP_KERNEL_ACCOUNT);
+	if (!bcf->parents)
+		return ERR_PTR(-ENOMEM);
+	bcf->vstate_cnt = vstate_cnt;
+	st = cur;
+	while (vstate_cnt) {
+		bcf->parents[--vstate_cnt] = st;
+		st = st->parent;
+	}
+	bcf->cur_vstate = 0;
+	bcf->cur_jmp_entry = 0;
+	return base;
+}
+
+static int __used bcf_refine(struct bpf_verifier_env *env,
+			     struct bpf_verifier_state *st, u32 reg_masks,
+			     refine_state_fn refine_cb, void *ctx)
+{
+	struct bpf_reg_state *regs = st->frame[st->curframe]->regs;
+	struct bpf_verifier_state *base;
+	int i, err;
+
+	if (!env->bcf.available || st->speculative)
+		return 0;
+	/* BCF requested multiple times in an error path. */
+	if (bcf_requested(env))
+		return -EFAULT;
+
+	if (!reg_masks) {
+		for (i = 0; i < BPF_REG_FP; i++) {
+			if (regs[i].type == NOT_INIT)
+				continue;
+			if (regs[i].type != SCALAR_VALUE &&
+			    tnum_is_const(regs[i].var_off))
+				continue;
+			reg_masks |= (1 << i);
+		}
+	}
+
+	base = backtrack_states(env, st, reg_masks);
+	if (IS_ERR(base))
+		return PTR_ERR(base);
+
+	err = bcf_track(env, st, base);
+	if (!err && refine_cb)
+		err = refine_cb(env, st, ctx);
+
+	if (!err)
+		mark_bcf_requested(env);
+
+	kfree(env->bcf.parents);
+	return err ?: 1;
 }
 
 /* Lazily verify all global functions based on their BTF, if they are called

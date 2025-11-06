@@ -732,6 +732,18 @@ struct bpf_scc_info {
 
 struct bpf_liveness;
 
+struct bcf_refine_state {
+	/* The state list that decides the path suffix, on which bcf_track()
+	 * collects symbolic information for target registers.
+	 */
+	struct bpf_verifier_state **parents;
+	u32 vstate_cnt;
+	u32 cur_vstate;
+	u32 cur_jmp_entry;
+
+	bool available; /* if bcf_buf is provided. */
+};
+
 /* single container for all structs
  * one verifier_env per bpf_check() call
  */
@@ -838,6 +850,7 @@ struct bpf_verifier_env {
 	struct bpf_scc_info **scc_info;
 	u32 scc_cnt;
 	struct bpf_iarray *succ;
+	struct bcf_refine_state bcf;
 };
 
 static inline struct bpf_func_info_aux *subprog_aux(struct bpf_verifier_env *env, int subprog)
