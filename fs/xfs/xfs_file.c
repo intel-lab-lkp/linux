@@ -1312,13 +1312,6 @@ xfs_falloc_allocate_range(
 	loff_t			new_size = 0;
 	int			error;
 
-	/*
-	 * If always_cow mode we can't use preallocations and thus should not
-	 * create them.
-	 */
-	if (xfs_is_always_cow_inode(XFS_I(inode)))
-		return -EOPNOTSUPP;
-
 	error = xfs_falloc_newsize(file, mode, offset, len, &new_size);
 	if (error)
 		return error;

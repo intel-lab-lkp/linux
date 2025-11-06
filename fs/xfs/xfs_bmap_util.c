@@ -659,8 +659,21 @@ xfs_alloc_file_space(
 	xfs_bmbt_irec_t		imaps[1], *imapp;
 	int			error;
 
-	if (xfs_is_always_cow_inode(ip))
+	/*
+	 * If always_cow mode we can't use preallocations and thus should not
+	 * create them.
+	 */
+	if (xfs_is_always_cow_inode(ip)) {
+		/*
+		 * In stead of failing the fallocate, pretend it was successful
+		 * to avoid glibc posix_fallocate to fall back on writing actual
+		 * data that won't guarantee that the range can be overwritten
+		 * either.
+		 */
+		xfs_warn_once(mp,
+"Always CoW inodes do not support preallocations, faking fallocate success.");
 		return 0;
+	}
 
 	trace_xfs_alloc_file_space(ip);
 
