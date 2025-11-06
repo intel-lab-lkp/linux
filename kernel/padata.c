@@ -529,12 +529,14 @@ static void padata_init_squeues(struct parallel_data *pd)
 /* Initialize per-CPU reorder lists */
 static void padata_init_reorder_list(struct parallel_data *pd)
 {
+	static struct lock_class_key padata_list_key;
 	int cpu;
 	struct padata_list *list;
 
 	for_each_cpu(cpu, pd->cpumask.pcpu) {
 		list = per_cpu_ptr(pd->reorder_list, cpu);
 		__padata_list_init(list);
+		lockdep_set_class(&list->lock, &padata_list_key);
 	}
 }
 
