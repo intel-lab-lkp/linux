@@ -3096,6 +3096,8 @@ static int bpf_prog_load(union bpf_attr *attr, bpfptr_t uattr, u32 uattr_size)
 
 	/* run eBPF verifier */
 	err = bpf_check(&prog, attr, uattr, uattr_size);
+	if (prog->aux->bcf_requested)
+		return err;
 	if (err < 0)
 		goto free_used_maps;
 
