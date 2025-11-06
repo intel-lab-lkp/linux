@@ -2881,7 +2881,8 @@ static int bpf_prog_load(union bpf_attr *attr, bpfptr_t uattr, u32 uattr_size)
 			return -EINVAL;
 		/* The resumed analysis must only uses the old, first attr. */
 		memset(attr, 0, offsetof(union bpf_attr, bcf_buf));
-		return -ENOTSUPP;
+		prog = NULL;
+		goto verifier_check;
 	}
 
 	if (attr->bcf_fd || attr->bcf_buf_true_size || attr->bcf_flags)
@@ -3094,9 +3095,10 @@ static int bpf_prog_load(union bpf_attr *attr, bpfptr_t uattr, u32 uattr_size)
 	if (err)
 		goto free_prog_sec;
 
+verifier_check:
 	/* run eBPF verifier */
 	err = bpf_check(&prog, attr, uattr, uattr_size);
-	if (prog->aux->bcf_requested)
+	if (!prog || prog->aux->bcf_requested)
 		return err;
 	if (err < 0)
 		goto free_used_maps;

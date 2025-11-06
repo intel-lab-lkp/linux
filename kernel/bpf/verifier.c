@@ -33,6 +33,7 @@
 #include <net/xdp.h>
 #include <linux/trace_events.h>
 #include <linux/kallsyms.h>
+#include <linux/bcf_checker.h>
 
 #include "disasm.h"
 
@@ -20896,6 +20897,11 @@ static int do_check(struct bpf_verifier_env *env)
 		insn = &insns[env->insn_idx];
 		insn_aux = &env->insn_aux_data[env->insn_idx];
 
+		if (env->bcf.path_unreachable) {
+			env->bcf.path_unreachable = false;
+			goto process_bpf_exit;
+		}
+
 		if (++env->insn_processed > BPF_COMPLEXITY_LIMIT_INSNS) {
 			verbose(env,
 				"BPF program is too large. Processed %d insn\n",
@@ -24092,6 +24098,9 @@ static int do_check_common(struct bpf_verifier_env *env, int subprog)
 	struct bpf_reg_state *regs;
 	int ret, i;
 
+	if (env->cur_state)
+		goto skip_init;
+
 	env->prev_insn_idx = -1;
 	env->prev_linfo = NULL;
 	env->pass_cnt++;
@@ -24205,6 +24214,7 @@ static int do_check_common(struct bpf_verifier_env *env, int subprog)
 							  acquire_reference(env, 0) : 0;
 	}
 
+skip_init:
 	ret = do_check(env);
 
 	/* Invoked by bcf_track(), just return. */
@@ -24540,7 +24550,9 @@ static int do_check_subprogs(struct bpf_verifier_env *env)
 
 again:
 	new_cnt = 0;
-	for (i = 1; i < env->subprog_cnt; i++) {
+	/* env->cur_state indicates the resume mode, check the last subprog */
+	i = env->cur_state ? env->subprog : 1;
+	for (; i < env->subprog_cnt; i++) {
 		if (!subprog_is_global(env, i))
 			continue;
 
@@ -24549,8 +24561,10 @@ again:
 			continue;
 
 		env->subprog = i;
-		env->insn_idx = env->subprog_info[i].start;
-		WARN_ON_ONCE(env->insn_idx == 0);
+		if (!env->cur_state) {
+			env->insn_idx = env->subprog_info[i].start;
+			WARN_ON_ONCE(env->insn_idx == 0);
+		}
 		ret = do_check_common(env, i);
 		if (ret) {
 			return ret;
@@ -24580,7 +24594,10 @@ static int do_check_main(struct bpf_verifier_env *env)
 {
 	int ret;
 
-	env->insn_idx = 0;
+	if (env->subprog)
+		return 0;
+	if (!env->cur_state)
+		env->insn_idx = 0;
 	ret = do_check_common(env, 0);
 	if (!ret)
 		env->prog->aux->stack_depth = env->subprog_info[0].stack_depth;
@@ -25821,19 +25838,69 @@ static int do_request_bcf(struct bpf_verifier_env *env, union bpf_attr *attr,
 	return 0;
 }
 
+static int resume_env(struct bpf_verifier_env *env, union bpf_attr *attr,
+		      bpfptr_t uattr)
+{
+	bpfptr_t proof;
+	int cond, err;
+
+	unmark_bcf_requested(env);
+
+	cond = env->bcf.refine_cond;
+	if (attr->bcf_flags & BCF_F_PROOF_PATH_UNREACHABLE) {
+		cond = env->bcf.path_cond;
+		env->bcf.path_unreachable = true;
+	}
+	if (cond < 0)
+		return -EINVAL;
+
+	proof = make_bpfptr(attr->bcf_buf, uattr.is_kernel);
+	err = bcf_check_proof(env->bcf.exprs, cond, proof,
+			      attr->bcf_buf_true_size,
+			      (void *)bpf_verifier_vlog, env->log.level,
+			      &env->log);
+	if (err)
+		return err;
+
+	/* Drop the last history entry */
+	if (is_jmp_point(env, env->insn_idx))
+		env->cur_state->jmp_history_cnt--;
+
+	return 0;
+}
+
 int bpf_check(struct bpf_prog **prog, union bpf_attr *attr, bpfptr_t uattr, __u32 uattr_size)
 {
 	u64 start_time = ktime_get_ns();
 	struct bpf_verifier_env *env;
 	int i, len, ret = -EINVAL, err;
 	u32 log_true_size;
-	bool is_priv;
+	bool is_priv, resume;
+	struct fd bcf_fd;
 
 	BTF_TYPE_EMIT(enum bpf_features);
 
 	/* no program is valid */
 	if (ARRAY_SIZE(bpf_verifier_ops) == 0)
 		return -EINVAL;
+
+	resume = !!(attr->bcf_flags & BCF_F_PROOF_PROVIDED);
+	if (resume) {
+		struct file *f;
+
+		bcf_fd = fdget(attr->bcf_fd);
+		f = fd_file(bcf_fd);
+		if (!f)
+			return -EBADF;
+		env = f->private_data;
+		if (f->f_op != &bcf_fops ||
+		    atomic_cmpxchg(&env->bcf.in_use, 0, 1)) {
+			fdput(bcf_fd);
+			return -EINVAL;
+		}
+		is_priv = env->bpf_capable;
+		goto verifier_check;
+	}
 
 	/* 'struct bpf_verifier_env' can be global, but since it's not small,
 	 * allocate/free it every time bpf_check() is called
@@ -25968,6 +26035,12 @@ int bpf_check(struct bpf_prog **prog, union bpf_attr *attr, bpfptr_t uattr, __u3
 	if (ret < 0)
 		goto skip_full_check;
 
+verifier_check:
+	if (resume) {
+		ret = resume_env(env, attr, uattr);
+		if (ret)
+			goto skip_full_check;
+	}
 	ret = do_check_main(env);
 	ret = ret ?: do_check_subprogs(env);
 
@@ -25975,8 +26048,13 @@ int bpf_check(struct bpf_prog **prog, union bpf_attr *attr, bpfptr_t uattr, __u3
 		u64 vtime = ktime_get_ns() - start_time;
 
 		env->verification_time += vtime;
-		if (do_request_bcf(env, attr, uattr) == 0)
+		if (do_request_bcf(env, attr, uattr) == 0) {
+			if (resume) {
+				atomic_set(&env->bcf.in_use, 0);
+				fdput(bcf_fd);
+			}
 			return ret;
+		}
 
 		unmark_bcf_requested(env);
 		env->verification_time -= vtime;
@@ -25986,6 +26064,10 @@ int bpf_check(struct bpf_prog **prog, union bpf_attr *attr, bpfptr_t uattr, __u3
 		ret = bpf_prog_offload_finalize(env);
 
 skip_full_check:
+	if (resume) {
+		fd_file(bcf_fd)->private_data = NULL;
+		fdput(bcf_fd);
+	}
 	/* If bcf_requested(), the last state is preserved, free now. */
 	if (env->cur_state)
 		free_states(env);

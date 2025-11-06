@@ -745,6 +745,7 @@ struct bcf_refine_state {
 
 	bool available; /* if bcf_buf is provided. */
 	bool tracking; /* In bcf_track(). */
+	atomic_t in_use; /* The current env is in use. */
 	struct bcf_expr *exprs;
 	u32 expr_size;
 	u32 expr_cnt;
@@ -758,6 +759,7 @@ struct bcf_refine_state {
 	int checked_off;
 	int checked_sz;
 	bool access_checked;
+	bool path_unreachable;
 };
 
 /* single container for all structs
