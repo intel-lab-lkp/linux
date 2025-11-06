@@ -1606,6 +1606,9 @@ static int prepare_playback_urb(struct snd_usb_substream *subs,
 				    subs->cur_audiofmt->dsd_bitrev)) {
 			fill_playback_urb_dsd_bitrev(subs, urb, bytes);
 		} else {
+			if (bytes > ctx->buffer_size)
+				return -EPIPE;
+
 			/* usual PCM */
 			if (!subs->tx_length_quirk)
 				copy_to_urb(subs, urb, 0, stride, bytes);
