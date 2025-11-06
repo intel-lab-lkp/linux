@@ -1294,15 +1294,10 @@ static int drm_syncobj_array_find(struct drm_file *file_private,
 	struct drm_syncobj **syncobjs;
 	int ret;
 
-	handles = kmalloc_array(count_handles, sizeof(*handles), GFP_KERNEL);
-	if (handles == NULL)
-		return -ENOMEM;
-
-	if (copy_from_user(handles, user_handles,
-			   sizeof(uint32_t) * count_handles)) {
-		ret = -EFAULT;
-		goto err_free_handles;
-	}
+	handles = memdup_array_user(user_handles, count_handles,
+				    sizeof(*handles));
+	if (IS_ERR(handles))
+		return PTR_ERR(handles);
 
 	syncobjs = kmalloc_array(count_handles, sizeof(*syncobjs), GFP_KERNEL);
 	if (syncobjs == NULL) {
