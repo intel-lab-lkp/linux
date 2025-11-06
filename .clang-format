@@ -748,6 +748,8 @@ ForEachMacros:
   - 'ynl_attr_for_each_nested'
   - 'ynl_attr_for_each_payload'
   - 'zorro_for_each_dev'
+  - 'bcf_for_each_arg'
+  - 'bcf_for_each_pm_step'
 
 IncludeBlocks: Preserve
 IncludeCategories:
