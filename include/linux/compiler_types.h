@@ -253,7 +253,7 @@ struct ftrace_likely_data {
  * for W=1 build. This will allow clang to find unused functions. Remove the
  * __inline_maybe_unused entirely after fixing most of -Wunused-function warnings.
  */
-#ifdef KBUILD_EXTRA_WARN1
+#ifdef KBUILD_EXTRA_WARN2
 #define __inline_maybe_unused
 #else
 #define __inline_maybe_unused __maybe_unused
