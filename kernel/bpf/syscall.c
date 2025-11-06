@@ -2854,7 +2854,7 @@ static int bpf_prog_verify_signature(struct bpf_prog *prog, union bpf_attr *attr
 }
 
 /* last field in 'union bpf_attr' used by this command */
-#define BPF_PROG_LOAD_LAST_FIELD keyring_id
+#define BPF_PROG_LOAD_LAST_FIELD bcf_flags
 
 static int bpf_prog_load(union bpf_attr *attr, bpfptr_t uattr, u32 uattr_size)
 {
@@ -2867,6 +2867,24 @@ static int bpf_prog_load(union bpf_attr *attr, bpfptr_t uattr, u32 uattr_size)
 	char license[128];
 
 	if (CHECK_ATTR(BPF_PROG_LOAD))
+		return -EINVAL;
+
+	if (!!attr->bcf_buf != !!attr->bcf_buf_size ||
+	    (attr->bcf_flags & ~(BCF_F_PROOF_PROVIDED |
+				 BCF_F_PROOF_PATH_UNREACHABLE)))
+		return -EINVAL;
+
+	/* Check proof and resume the last analysis. */
+	if (attr->bcf_flags & BCF_F_PROOF_PROVIDED) {
+		if (attr->bcf_buf_true_size > attr->bcf_buf_size ||
+		    !attr->bcf_buf_size)
+			return -EINVAL;
+		/* The resumed analysis must only uses the old, first attr. */
+		memset(attr, 0, offsetof(union bpf_attr, bcf_buf));
+		return -ENOTSUPP;
+	}
+
+	if (attr->bcf_fd || attr->bcf_buf_true_size || attr->bcf_flags)
 		return -EINVAL;
 
 	if (attr->prog_flags & ~(BPF_F_STRICT_ALIGNMENT |
@@ -2900,6 +2918,9 @@ static int bpf_prog_load(union bpf_attr *attr, bpfptr_t uattr, u32 uattr_size)
 
 	bpf_cap = bpf_token_capable(token, CAP_BPF);
 	err = -EPERM;
+
+	if (attr->bcf_buf && !bpf_cap)
+		goto put_token;
 
 	if (!IS_ENABLED(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS) &&
 	    (attr->prog_flags & BPF_F_ANY_ALIGNMENT) &&

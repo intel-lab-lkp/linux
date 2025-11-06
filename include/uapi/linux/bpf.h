@@ -1484,6 +1484,15 @@ enum {
 	BPF_STREAM_STDERR = 2,
 };
 
+/* bcf_flags used in BPF_PROG_LOAD command to indicate if the verifier
+ * requests or the user provides proofs.
+ */
+enum {
+	BCF_F_PROOF_REQUESTED		= (1U << 0),
+	BCF_F_PROOF_PROVIDED		= (1U << 1),
+	BCF_F_PROOF_PATH_UNREACHABLE	= (1U << 2),
+};
+
 union bpf_attr {
 	struct { /* anonymous struct used by BPF_MAP_CREATE command */
 		__u32	map_type;	/* one of enum bpf_map_type */
@@ -1624,6 +1633,18 @@ union bpf_attr {
 		 * verification.
 		 */
 		__s32		keyring_id;
+		/* BCF buffer for both the condition to be proved required by
+		 * the verifier and the proof provided from user space.
+		 */
+		__aligned_u64	bcf_buf;
+		__u32		bcf_buf_size;
+		__u32		bcf_buf_true_size;
+		/* output: BCF fd for loading proof, set by the verifier when
+		 * proof is requested.
+		 */
+		__u32		bcf_fd;
+		/* input/output: proof requested or provided. */
+		__u32		bcf_flags;
 	};
 
 	struct { /* anonymous struct used by BPF_OBJ_* commands */
