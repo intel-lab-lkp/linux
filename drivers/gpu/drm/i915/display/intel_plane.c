@@ -45,7 +45,6 @@
 #include <drm/drm_panic.h>
 #include <drm/drm_print.h>
 
-#include "gem/i915_gem_object.h"
 #include "i9xx_plane_regs.h"
 #include "intel_cdclk.h"
 #include "intel_cursor.h"
@@ -1176,12 +1175,9 @@ intel_prepare_plane_fb(struct drm_plane *_plane,
 	if (ret < 0)
 		goto unpin_fb;
 
-	if (new_plane_state->uapi.fence) {
-		i915_gem_fence_wait_priority_display(new_plane_state->uapi.fence);
-
+	if (new_plane_state->uapi.fence)
 		intel_display_rps_boost_after_vblank(new_plane_state->hw.crtc,
 						     new_plane_state->uapi.fence);
-	}
 
 	/*
 	 * We declare pageflips to be interactive and so merit a small bias

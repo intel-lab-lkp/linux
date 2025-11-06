@@ -48,6 +48,8 @@ void intel_display_rps_boost_after_vblank(struct drm_crtc *crtc,
 	if (!display->parent->rps)
 		return;
 
+	display->parent->rps->priority_display(fence);
+
 	if (DISPLAY_VER(display) < 6)
 		return;
 

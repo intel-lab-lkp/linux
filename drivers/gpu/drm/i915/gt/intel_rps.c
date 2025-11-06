@@ -2915,6 +2915,14 @@ bool i915_gpu_turbo_disable(void)
 }
 EXPORT_SYMBOL_GPL(i915_gpu_turbo_disable);
 
+static void priority_display(struct dma_fence *fence)
+{
+	if (!dma_fence_is_i915(fence))
+		return;
+
+	i915_gem_fence_wait_priority_display(fence);
+}
+
 static void boost(struct dma_fence *fence)
 {
 	struct i915_request *rq;
@@ -2948,6 +2956,7 @@ static void ilk_irq_handler(struct drm_device *drm)
 }
 
 const struct intel_display_rps_interface i915_display_rps_interface = {
+	.priority_display = priority_display,
 	.boost = boost,
 	.mark_interactive = mark_interactive,
 	.ilk_irq_handler = ilk_irq_handler,

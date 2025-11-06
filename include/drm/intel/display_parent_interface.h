@@ -27,6 +27,7 @@ struct intel_display_rpm_interface {
 };
 
 struct intel_display_rps_interface {
+	void (*priority_display)(struct dma_fence *fence);
 	void (*boost)(struct dma_fence *fence);
 	void (*mark_interactive)(struct drm_device *drm, bool interactive);
 	void (*ilk_irq_handler)(struct drm_device *drm);
