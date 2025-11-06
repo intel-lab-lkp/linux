@@ -1001,8 +1001,6 @@ static irqreturn_t tps6598x_interrupt(int irq, void *data)
 		intev_len = TPS_65987_8_INTEVENT_LEN;
 
 	ret = tps6598x_block_read(tps, TPS_REG_INT_EVENT1, event1, intev_len);
-
-	ret = tps6598x_block_read(tps, TPS_REG_INT_EVENT1, event1, intev_len);
 	if (ret) {
 		dev_err(tps->dev, "%s: failed to read event1\n", __func__);
 		goto err_unlock;
