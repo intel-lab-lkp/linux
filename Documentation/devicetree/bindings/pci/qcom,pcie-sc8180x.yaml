@@ -77,6 +77,7 @@ unevaluatedProperties: false
 examples:
   - |
     #include <dt-bindings/clock/qcom,gcc-sc8180x.h>
+    #include <dt-bindings/gpio/gpio.h>
     #include <dt-bindings/interconnect/qcom,sc8180x.h>
     #include <dt-bindings/interrupt-controller/arm-gic.h>
 
@@ -164,5 +165,7 @@ examples:
 
             resets = <&gcc GCC_PCIE_0_BCR>;
             reset-names = "pci";
+
+            perst-gpios = <&tlmm 175 GPIO_ACTIVE_LOW>;
         };
     };
