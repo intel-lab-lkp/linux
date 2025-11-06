@@ -2005,6 +2005,9 @@ EXPORT_SYMBOL_GPL(iommu_group_has_isolated_msi);
  * This function should be used by IOMMU users which want to be notified
  * whenever an IOMMU fault happens.
  *
+ * This is a legacy API not supported by all drivers. New users should look
+ * to using domain->iopf_handler for the modern API.
+ *
  * The fault handler itself should return 0 on success, and an appropriate
  * error code otherwise.
  */
@@ -2012,7 +2015,8 @@ void iommu_set_fault_handler(struct iommu_domain *domain,
 					iommu_fault_handler_t handler,
 					void *token)
 {
-	if (WARN_ON(!domain || domain->cookie_type != IOMMU_COOKIE_NONE))
+	if (WARN_ON(!domain || domain->cookie_type != IOMMU_COOKIE_NONE ||
+		    !domain->owner->report_iommu_fault_supported))
 		return;
 
 	domain->cookie_type = IOMMU_COOKIE_FAULT_HANDLER;

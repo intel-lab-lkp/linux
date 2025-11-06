@@ -1018,6 +1018,7 @@ static const struct iommu_ops mtk_iommu_ops = {
 	.of_xlate	= mtk_iommu_of_xlate,
 	.get_resv_regions = mtk_iommu_get_resv_regions,
 	.owner		= THIS_MODULE,
+	.report_iommu_fault_supported = true,
 	.default_domain_ops = &(const struct iommu_domain_ops) {
 		.attach_dev	= mtk_iommu_attach_device,
 		.map_pages	= mtk_iommu_map,

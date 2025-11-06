@@ -1173,6 +1173,7 @@ static const struct iommu_ops rk_iommu_ops = {
 	.release_device = rk_iommu_release_device,
 	.device_group = generic_single_device_group,
 	.of_xlate = rk_iommu_of_xlate,
+	.report_iommu_fault_supported = true,
 	.default_domain_ops = &(const struct iommu_domain_ops) {
 		.attach_dev	= rk_iommu_attach_device,
 		.map_pages	= rk_iommu_map,
