@@ -383,4 +383,19 @@ config SPRD_IOMMU
 
 	  Say Y here if you want to use the multimedia devices listed above.
 
+config IOMMU_DEBUG_PAGEALLOC
+	bool "Debug page memory allocations against IOMMU"
+	depends on DEBUG_PAGEALLOC && IOMMU_API && PAGE_EXTENSION
+	help
+	  This config checks that a page is freed(unmapped) or mapped by the
+	  kernel is not mapped in any IOMMU domain. It can help with debugging
+	  use-after-free or out-of-bound maps from drivers doing DMA through
+	  the IOMMU API.
+	  This santaizer can have false-negative cases where some problems
+	  won't be detected.
+	  Expect overhead when enabling this and enabling the kernel command
+	  line iommu.debug_pagealloc.
+
+	  If unsure, say N here.
+
 endif # IOMMU_SUPPORT
