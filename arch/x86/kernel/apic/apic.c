@@ -241,6 +241,8 @@ u64 native_apic_icr_read(void)
 
 /**
  * lapic_get_maxlvt - get the maximum number of local vector table entries
+ *
+ * Return: the maximum number of local vector table entries
  */
 int lapic_get_maxlvt(void)
 {
@@ -2136,7 +2138,7 @@ out:
 /**
  * spurious_interrupt - Catch all for interrupts raised on unused vectors
  * @regs:	Pointer to pt_regs on stack
- * @vector:	The vector number
+ * @error_code:	The vector number
  *
  * This is invoked from ASM entry code to catch all interrupts which
  * trigger on an entry which is routed to the common_spurious idtentry
