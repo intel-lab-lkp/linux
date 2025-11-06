@@ -135,7 +135,7 @@ enum dc_edid_status dm_helpers_parse_edid_caps(
 	edid_caps->serial_number = le32_to_cpu(product_id.serial_number);
 	edid_caps->manufacture_week = product_id.week_of_manufacture;
 	edid_caps->manufacture_year = product_id.year_of_manufacture;
-	edid_caps->analog = !(edid_buf->input & DRM_EDID_INPUT_DIGITAL);
+	edid_caps->analog = !drm_edid_is_digital(drm_edid);
 
 	drm_edid_get_monitor_name(edid_buf,
 				  edid_caps->display_name,
