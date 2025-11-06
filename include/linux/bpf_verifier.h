@@ -752,6 +752,12 @@ struct bcf_refine_state {
 	u32 br_cond_cnt;
 	int path_cond; /* conjunction of br_conds */
 	int refine_cond; /* refinement condition */
+
+	/* Refinement specific */
+	u32 size_regno;
+	int checked_off;
+	int checked_sz;
+	bool access_checked;
 };
 
 /* single container for all structs
