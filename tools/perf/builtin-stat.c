@@ -373,6 +373,9 @@ static int read_counters_with_affinity(void)
 		if (evsel__is_bpf(counter))
 			continue;
 
+		if (evsel__is_tool(counter))
+			continue;
+
 		if (!counter->err)
 			counter->err = read_counter_cpu(counter, evlist_cpu_itr.cpu_map_idx);
 	}
@@ -396,6 +399,24 @@ static int read_bpf_map_counters(void)
 	return 0;
 }
 
+static int read_tool_counters(void)
+{
+	struct evsel *counter;
+
+	evlist__for_each_entry(evsel_list, counter) {
+		int idx;
+
+		if (!evsel__is_tool(counter))
+			continue;
+
+		perf_cpu_map__for_each_idx(idx, counter->core.cpus) {
+			if (!counter->err)
+				counter->err = read_counter_cpu(counter, idx);
+		}
+	}
+	return 0;
+}
+
 static int read_counters(void)
 {
 	int ret;
@@ -409,7 +430,13 @@ static int read_counters(void)
 		return ret;
 
 	// Read non-BPF and non-tool counters next.
-	return read_counters_with_affinity();
+	ret = read_counters_with_affinity();
+	if (ret)
+		return ret;
+
+	// Read the tool counters last. This way the duration_time counter
+	// should always be greater than any other counter's enabled time.
+	return read_tool_counters();
 }
 
 static void process_counters(void)
