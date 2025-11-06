@@ -3529,7 +3529,11 @@ static int set_ipsecrequest(struct sk_buff *skb,
 	if (!family)
 		return -EINVAL;
 
-	size_req = sizeof(struct sadb_x_ipsecrequest) +
+    /* Reject invalid/unsupported address families */
+    if (!socklen)
+        return -EINVAL;
+
+    size_req = sizeof(struct sadb_x_ipsecrequest) +
 		   pfkey_sockaddr_pair_size(family);
 
 	rq = skb_put_zero(skb, size_req);
