@@ -711,6 +711,8 @@ void tipc_mon_reinit_self(struct net *net)
 	struct tipc_monitor *mon;
 	int bearer_id;
 
+	rtnl_lock();
+
 	for (bearer_id = 0; bearer_id < MAX_BEARERS; bearer_id++) {
 		mon = tipc_monitor(net, bearer_id);
 		if (!mon)
@@ -720,6 +722,8 @@ void tipc_mon_reinit_self(struct net *net)
 			mon->self->addr = tipc_own_addr(net);
 		write_unlock_bh(&mon->lock);
 	}
+
+	rtnl_unlock();
 }
 
 int tipc_nl_monitor_set_threshold(struct net *net, u32 cluster_size)
