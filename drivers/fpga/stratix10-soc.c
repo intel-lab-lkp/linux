@@ -11,6 +11,7 @@
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
+#include <linux/sizes.h>
 
 /*
  * FPGA programming requires a higher level of privilege (EL3), per the SoC
