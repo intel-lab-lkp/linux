@@ -7252,7 +7252,7 @@ static int __ufshcd_issue_tm_cmd(struct ufs_hba *hba,
 
 	/* wait until the task management command is completed */
 	err = wait_for_completion_io_timeout(&wait,
-			msecs_to_jiffies(TM_CMD_TIMEOUT));
+			msecs_to_jiffies(hba->tm_cmd_timeout));
 	if (!err) {
 		ufshcd_add_tm_upiu_trace(hba, task_tag, UFS_TM_ERR);
 		dev_err(hba->dev, "%s: task management cmd 0x%.2x timed-out\n",
@@ -10563,6 +10563,7 @@ int ufshcd_alloc_host(struct device *dev, struct ufs_hba **hba_handle)
 	hba->dev = dev;
 	hba->dev_ref_clk_freq = REF_CLK_FREQ_INVAL;
 	hba->nop_out_timeout = NOP_OUT_TIMEOUT;
+	hba->tm_cmd_timeout = TM_CMD_TIMEOUT;
 	ufshcd_set_sg_entry_size(hba, sizeof(struct ufshcd_sg_entry));
 	INIT_LIST_HEAD(&hba->clk_list_head);
 	spin_lock_init(&hba->outstanding_lock);

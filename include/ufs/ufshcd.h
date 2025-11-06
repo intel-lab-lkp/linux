@@ -891,6 +891,7 @@ enum ufshcd_mcq_opr {
  * @dev_cmd: ufs device management command information
  * @last_dme_cmd_tstamp: time stamp of the last completed DME command
  * @nop_out_timeout: NOP OUT timeout value
+ * @tm_cmd_timeout: TM CMD timeout value
  * @dev_info: information about the UFS device
  * @auto_bkops_enabled: to track whether bkops is enabled in device
  * @vreg_info: UFS device voltage regulator information
@@ -1049,6 +1050,7 @@ struct ufs_hba {
 	struct ufs_dev_cmd dev_cmd;
 	ktime_t last_dme_cmd_tstamp;
 	int nop_out_timeout;
+	int tm_cmd_timeout;
 
 	/* Keeps information of the UFS device connected to this host */
 	struct ufs_dev_info dev_info;
