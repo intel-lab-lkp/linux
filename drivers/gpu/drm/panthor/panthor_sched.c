@@ -2352,8 +2352,12 @@ static void tick_work(struct work_struct *work)
 	if (drm_WARN_ON(&ptdev->base, ret))
 		goto out_dev_exit;
 
-	if (time_before64(now, sched->resched_target))
+	if (sched->resched_target != U64_MAX &&
+	    time_before64(now, sched->resched_target))
 		remaining_jiffies = sched->resched_target - now;
+	else if (sched->resched_target == U64_MAX &&
+		 time_before64(now, sched->last_tick + sched->tick_period))
+		remaining_jiffies = sched->last_tick + sched->tick_period - now;
 
 	full_tick = remaining_jiffies == 0;
 
