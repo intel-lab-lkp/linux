@@ -173,21 +173,41 @@ static void vsc85xx_get_stats(struct phy_device *phydev,
 		data[i] = vsc85xx_get_stat(phydev, i);
 }
 
-static int vsc85xx_led_cntl_set(struct phy_device *phydev,
-				u8 led_num,
-				u8 mode)
+static int vsc85xx_led_cntl_set_lock_unlock(struct phy_device *phydev,
+					    u8 led_num,
+					    u8 mode, bool lock)
 {
 	int rc;
 	u16 reg_val;
 
-	mutex_lock(&phydev->lock);
+	if (lock)
+		mutex_lock(&phydev->lock);
 	reg_val = phy_read(phydev, MSCC_PHY_LED_MODE_SEL);
 	reg_val &= ~LED_MODE_SEL_MASK(led_num);
 	reg_val |= LED_MODE_SEL(led_num, (u16)mode);
 	rc = phy_write(phydev, MSCC_PHY_LED_MODE_SEL, reg_val);
-	mutex_unlock(&phydev->lock);
+	if (lock)
+		mutex_unlock(&phydev->lock);
 
 	return rc;
+}
+
+static int vsc85xx_led_cntl_set(struct phy_device *phydev, u8 led_num,
+				u8 mode)
+{
+	return vsc85xx_led_cntl_set_lock_unlock(phydev, led_num, mode, true);
+}
+
+static int vsc8541_led_combine_disable_set(struct phy_device *phydev, u8 led_num,
+					   bool combine_disable)
+{
+	u16 reg_val;
+
+	reg_val = phy_read(phydev, MSCC_PHY_LED_BEHAVIOR);
+	reg_val &= ~LED_COMBINE_DIS_MASK(led_num);
+	reg_val |= LED_COMBINE_DIS(led_num, combine_disable);
+
+	return phy_write(phydev, MSCC_PHY_LED_BEHAVIOR, reg_val);
 }
 
 static int vsc85xx_mdix_get(struct phy_device *phydev, u8 *mdix)
@@ -2218,6 +2238,174 @@ static int vsc85xx_config_inband(struct phy_device *phydev, unsigned int modes)
 				reg_val);
 }
 
+static int vsc8541_led_brightness_set(struct phy_device *phydev,
+				      u8 index, enum led_brightness value)
+{
+	struct vsc8531_private *vsc8531 = phydev->priv;
+
+	if (index >= vsc8531->nleds)
+		return -EINVAL;
+
+	return vsc85xx_led_cntl_set_lock_unlock(phydev, index, value == LED_OFF ?
+				    VSC8531_FORCE_LED_OFF : VSC8531_FORCE_LED_ON, false);
+}
+
+static int vsc8541_led_hw_is_supported(struct phy_device *phydev, u8 index,
+				       unsigned long rules)
+{
+	struct vsc8531_private *vsc8531 = phydev->priv;
+	static const unsigned long supported = BIT(TRIGGER_NETDEV_LINK) |
+					       BIT(TRIGGER_NETDEV_LINK_1000) |
+					       BIT(TRIGGER_NETDEV_LINK_100) |
+					       BIT(TRIGGER_NETDEV_LINK_10) |
+					       BIT(TRIGGER_NETDEV_RX) |
+					       BIT(TRIGGER_NETDEV_TX);
+
+	if (index >= vsc8531->nleds)
+		return -EINVAL;
+
+	if (rules & ~supported)
+		return -EOPNOTSUPP;
+
+	return 0;
+}
+
+static int vsc8541_led_hw_control_get(struct phy_device *phydev, u8 index,
+				      unsigned long *rules)
+{
+	struct vsc8531_private *vsc8531 = phydev->priv;
+	u16 reg;
+
+	if (index >= vsc8531->nleds)
+		return -EINVAL;
+
+	reg = phy_read(phydev, MSCC_PHY_LED_MODE_SEL) & LED_MODE_SEL_MASK(index);
+	reg >>= LED_MODE_SEL_POS(index);
+	switch (reg) {
+	case VSC8531_LINK_ACTIVITY:
+		*rules = BIT(TRIGGER_NETDEV_LINK) |
+			 BIT(TRIGGER_NETDEV_RX) |
+			 BIT(TRIGGER_NETDEV_TX);
+		break;
+
+	case VSC8531_LINK_1000_ACTIVITY:
+		*rules = BIT(TRIGGER_NETDEV_LINK) |
+			 BIT(TRIGGER_NETDEV_LINK_1000) |
+			 BIT(TRIGGER_NETDEV_RX) |
+			 BIT(TRIGGER_NETDEV_TX);
+		break;
+
+	case VSC8531_LINK_100_ACTIVITY:
+		*rules = BIT(TRIGGER_NETDEV_LINK) |
+			 BIT(TRIGGER_NETDEV_LINK_100) |
+			 BIT(TRIGGER_NETDEV_RX) |
+			 BIT(TRIGGER_NETDEV_TX);
+		break;
+
+	case VSC8531_LINK_10_ACTIVITY:
+		*rules = BIT(TRIGGER_NETDEV_LINK) |
+			 BIT(TRIGGER_NETDEV_LINK_10) |
+			 BIT(TRIGGER_NETDEV_RX) |
+			 BIT(TRIGGER_NETDEV_TX);
+		break;
+
+	case VSC8531_LINK_100_1000_ACTIVITY:
+		*rules = BIT(TRIGGER_NETDEV_LINK) |
+			 BIT(TRIGGER_NETDEV_LINK_100) |
+			 BIT(TRIGGER_NETDEV_LINK_1000) |
+			 BIT(TRIGGER_NETDEV_RX) |
+			 BIT(TRIGGER_NETDEV_TX);
+		break;
+
+	case VSC8531_LINK_10_1000_ACTIVITY:
+		*rules = BIT(TRIGGER_NETDEV_LINK) |
+			 BIT(TRIGGER_NETDEV_LINK_10) |
+			 BIT(TRIGGER_NETDEV_LINK_1000) |
+			 BIT(TRIGGER_NETDEV_RX) |
+			 BIT(TRIGGER_NETDEV_TX);
+		break;
+
+	case VSC8531_LINK_10_100_ACTIVITY:
+		*rules = BIT(TRIGGER_NETDEV_LINK) |
+			 BIT(TRIGGER_NETDEV_LINK_10) |
+			 BIT(TRIGGER_NETDEV_LINK_100) |
+			 BIT(TRIGGER_NETDEV_RX) |
+			 BIT(TRIGGER_NETDEV_TX);
+		break;
+
+	case VSC8531_ACTIVITY:
+		*rules = BIT(TRIGGER_NETDEV_LINK) |
+			 BIT(TRIGGER_NETDEV_RX) |
+			 BIT(TRIGGER_NETDEV_TX);
+		break;
+
+	default:
+		*rules = 0;
+		break;
+	}
+
+	return 0;
+}
+
+static int vsc8541_led_hw_control_set(struct phy_device *phydev, u8 index,
+				      unsigned long rules)
+{
+	struct vsc8531_private *vsc8531 = phydev->priv;
+	bool combine_disable = false;
+	u16 mode = VSC8531_LINK_ACTIVITY;
+	bool has_rx, has_tx;
+	int ret;
+
+	if (index >= vsc8531->nleds)
+		return -EINVAL;
+
+	if (rules & BIT(TRIGGER_NETDEV_LINK))
+		mode = VSC8531_LINK_ACTIVITY;
+
+	if (rules & BIT(TRIGGER_NETDEV_LINK_10))
+		mode = VSC8531_LINK_10_ACTIVITY;
+
+	if (rules & BIT(TRIGGER_NETDEV_LINK_100))
+		mode = VSC8531_LINK_100_ACTIVITY;
+
+	if (rules & BIT(TRIGGER_NETDEV_LINK_1000))
+		mode = VSC8531_LINK_1000_ACTIVITY;
+
+	if (rules & BIT(TRIGGER_NETDEV_LINK_100) &&
+	    rules & BIT(TRIGGER_NETDEV_LINK_1000))
+		mode = VSC8531_LINK_100_1000_ACTIVITY;
+
+	if (rules & BIT(TRIGGER_NETDEV_LINK_10) &&
+	    rules & BIT(TRIGGER_NETDEV_LINK_1000))
+		mode = VSC8531_LINK_10_1000_ACTIVITY;
+
+	if (rules & BIT(TRIGGER_NETDEV_LINK_10) &&
+	    rules & BIT(TRIGGER_NETDEV_LINK_100))
+		mode = VSC8531_LINK_10_100_ACTIVITY;
+
+	/*
+	 * The VSC8541 PHY provides an option to control LED behavior. By
+	 * default, the LEDx combine function is enabled, meaning the LED
+	 * will be on when there is link/activity or duplex/collision. If
+	 * the combine function is disabled, the LED will be on only for
+	 * link or duplex.
+	 *
+	 * To control this behavior, we check the selected rules. If both
+	 * RX and TX activity are not selected, the LED combine function
+	 * is disabled; otherwise, it remains enabled.
+	 */
+	has_rx = !!(rules & BIT(TRIGGER_NETDEV_RX));
+	has_tx = !!(rules & BIT(TRIGGER_NETDEV_TX));
+	if (!has_rx && !has_tx)
+		combine_disable = true;
+
+	ret = vsc8541_led_combine_disable_set(phydev, index, combine_disable);
+	if (ret < 0)
+		return ret;
+
+	return vsc85xx_led_cntl_set_lock_unlock(phydev, index, mode, false);
+}
+
 static int vsc8514_probe(struct phy_device *phydev)
 {
 	struct vsc8531_private *vsc8531;
@@ -2322,6 +2510,7 @@ static int vsc85xx_probe(struct phy_device *phydev)
 	int rate_magic;
 	u32 default_mode[2] = {VSC8531_LINK_1000_ACTIVITY,
 	   VSC8531_LINK_100_ACTIVITY};
+	int phy_id;
 
 	rate_magic = vsc85xx_edge_rate_magic_get(phydev);
 	if (rate_magic < 0)
@@ -2342,6 +2531,26 @@ static int vsc85xx_probe(struct phy_device *phydev)
 				      sizeof(u64), GFP_KERNEL);
 	if (!vsc8531->stats)
 		return -ENOMEM;
+
+	phy_id = phydev->drv->phy_id & phydev->drv->phy_id_mask;
+	if (phy_id == PHY_ID_VSC8541) {
+		struct device_node *np;
+
+		/*
+		 * Check for LED configuration in device tree if available
+		 * or fall back to default `vsc8531,led-x-mode` DT properties.
+		 */
+		np = of_get_child_by_name(phydev->mdio.dev.of_node, "leds");
+		if (np) {
+			of_node_put(np);
+
+			/* default to link activity */
+			for (unsigned int i = 0; i < vsc8531->nleds; i++)
+				vsc8531->leds_mode[i] = VSC8531_LINK_ACTIVITY;
+
+			return 0;
+		}
+	}
 
 	return vsc85xx_dt_led_modes_get(phydev, default_mode);
 }
@@ -2548,6 +2757,10 @@ static struct phy_driver vsc85xx_driver[] = {
 	.get_sset_count = &vsc85xx_get_sset_count,
 	.get_strings    = &vsc85xx_get_strings,
 	.get_stats      = &vsc85xx_get_stats,
+	.led_brightness_set = vsc8541_led_brightness_set,
+	.led_hw_is_supported = vsc8541_led_hw_is_supported,
+	.led_hw_control_get = vsc8541_led_hw_control_get,
+	.led_hw_control_set = vsc8541_led_hw_control_set,
 },
 {
 	.phy_id		= PHY_ID_VSC8552,
