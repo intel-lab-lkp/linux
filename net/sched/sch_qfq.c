@@ -403,6 +403,36 @@ static int qfq_change_agg(struct Qdisc *sch, struct qfq_class *cl, u32 weight,
 	return 0;
 }
 
+static void qfq_destroy_class(struct Qdisc *sch, struct qfq_class *cl)
+{
+	gen_kill_estimator(&cl->rate_est);
+	qdisc_put(cl->qdisc);
+	kfree(cl);
+}
+
+static int qfq_delete_class(struct Qdisc *sch, unsigned long arg,
+			    struct netlink_ext_ack *extack)
+{
+	struct qfq_sched *q = qdisc_priv(sch);
+	struct qfq_class *cl = (struct qfq_class *)arg;
+
+	if (qdisc_class_in_use(&cl->common)) {
+		NL_SET_ERR_MSG_MOD(extack, "QFQ class in use");
+		return -EBUSY;
+	}
+
+	sch_tree_lock(sch);
+
+	qdisc_purge_queue(cl->qdisc);
+	qdisc_class_hash_remove(&q->clhash, &cl->common);
+	qfq_rm_from_agg(q, cl);
+
+	sch_tree_unlock(sch);
+
+	qfq_destroy_class(sch, cl);
+	return 0;
+}
+
 static int qfq_change_class(struct Qdisc *sch, u32 classid, u32 parentid,
 			    struct nlattr **tca, unsigned long *arg,
 			    struct netlink_ext_ack *extack)
@@ -511,6 +541,10 @@ set_change_agg:
 		new_agg = kzalloc(sizeof(*new_agg), GFP_KERNEL);
 		if (new_agg == NULL) {
 			err = -ENOBUFS;
+
+			if (existing)
+				goto delete_class;
+
 			gen_kill_estimator(&cl->rate_est);
 			goto destroy_class;
 		}
@@ -528,40 +562,14 @@ set_change_agg:
 	*arg = (unsigned long)cl;
 	return 0;
 
+delete_class:
+	qfq_delete_class(sch, (unsigned long)cl, extack);
+	return err;
+
 destroy_class:
 	qdisc_put(cl->qdisc);
 	kfree(cl);
 	return err;
-}
-
-static void qfq_destroy_class(struct Qdisc *sch, struct qfq_class *cl)
-{
-	gen_kill_estimator(&cl->rate_est);
-	qdisc_put(cl->qdisc);
-	kfree(cl);
-}
-
-static int qfq_delete_class(struct Qdisc *sch, unsigned long arg,
-			    struct netlink_ext_ack *extack)
-{
-	struct qfq_sched *q = qdisc_priv(sch);
-	struct qfq_class *cl = (struct qfq_class *)arg;
-
-	if (qdisc_class_in_use(&cl->common)) {
-		NL_SET_ERR_MSG_MOD(extack, "QFQ class in use");
-		return -EBUSY;
-	}
-
-	sch_tree_lock(sch);
-
-	qdisc_purge_queue(cl->qdisc);
-	qdisc_class_hash_remove(&q->clhash, &cl->common);
-	qfq_rm_from_agg(q, cl);
-
-	sch_tree_unlock(sch);
-
-	qfq_destroy_class(sch, cl);
-	return 0;
 }
 
 static unsigned long qfq_search_class(struct Qdisc *sch, u32 classid)
