@@ -43,6 +43,28 @@ struct pgtwalk {
 	bool p;
 };
 
+union oac {
+	unsigned int val;
+	struct {
+		struct {
+			unsigned short key : 4;
+			unsigned short	   : 4;
+			unsigned short as  : 2;
+			unsigned short	   : 4;
+			unsigned short k   : 1;
+			unsigned short a   : 1;
+		} oac1;
+		struct {
+			unsigned short key : 4;
+			unsigned short	   : 4;
+			unsigned short as  : 2;
+			unsigned short	   : 4;
+			unsigned short k   : 1;
+			unsigned short a   : 1;
+		} oac2;
+	};
+};
+
 static inline struct guest_fault *get_entries(struct pgtwalk *w)
 {
 	return w->raw_entries - LEVEL_MEM;
@@ -824,37 +846,79 @@ static int access_guest_page_gpa(struct kvm *kvm, enum gacc_mode mode, gpa_t gpa
 	return rc;
 }
 
-static int access_guest_page_with_key_gpa(struct kvm *kvm, enum gacc_mode mode, gpa_t gpa,
-					  void *data, unsigned int len, u8 access_key)
+static int mvcos_key(void *to, const void *from, unsigned long size, u8 dst_key, u8 src_key)
 {
-	struct kvm_memory_slot *slot;
-	bool writable;
-	gfn_t gfn;
-	hva_t hva;
+	union oac spec = {
+		.oac1.key = dst_key,
+		.oac1.k = !!dst_key,
+		.oac2.key = src_key,
+		.oac2.k = !!src_key,
+	};
+	int exception = PGM_PROTECTION;
+
+	asm_inline volatile(
+		"	lr	%%r0,%[spec]\n"
+		"0:	mvcos	%[to],%[from],%[size]\n"
+		"1:	lhi     %[exc],0\n"
+		"2:\n"
+		EX_TABLE(0b, 2b)
+		EX_TABLE(1b, 2b)
+		: [size] "+d" (size), [to] "=Q" (*(char *)to), [exc] "+d" (exception)
+		: [spec] "d" (spec.val), [from] "Q" (*(const char *)from)
+		: "memory", "cc", "0");
+	return exception;
+}
+
+struct acc_page_key_context {
+	void *data;
+	int exception;
+	unsigned short offset;
+	unsigned short len;
+	bool store;
+	u8 access_key;
+};
+
+static void _access_guest_page_with_key_gpa(struct guest_fault *f)
+{
+	struct acc_page_key_context *context = f->priv;
+	void *ptr;
+	int r;
+
+	ptr = __va(PFN_PHYS(f->pfn) | context->offset);
+
+	if (context->store)
+		r = mvcos_key(ptr, context->data, context->len, context->access_key, 0);
+	else
+		r = mvcos_key(context->data, ptr, context->len, 0, context->access_key);
+
+	context->exception = r;
+}
+
+static int access_guest_page_with_key_gpa(struct kvm *kvm, enum gacc_mode mode, gpa_t gpa,
+					  void *data, unsigned int len, u8 acc)
+{
+	struct acc_page_key_context context = {
+		.offset = offset_in_page(gpa),
+		.len = len,
+		.data = data,
+		.access_key = acc,
+		.store = mode == GACC_STORE,
+	};
+	struct guest_fault fault = {
+		.gfn = gpa_to_gfn(gpa),
+		.priv = &context,
+		.write_attempt = mode == GACC_STORE,
+		.callback = _access_guest_page_with_key_gpa,
+	};
 	int rc;
 
-	gfn = gpa_to_gfn(gpa);
-	slot = gfn_to_memslot(kvm, gfn);
-	hva = gfn_to_hva_memslot_prot(slot, gfn, &writable);
+	if (KVM_BUG_ON((len + context.offset) > PAGE_SIZE, kvm))
+		return -EINVAL;
 
-	if (kvm_is_error_hva(hva))
-		return PGM_ADDRESSING;
-	/*
-	 * Check if it's a ro memslot, even tho that can't occur (they're unsupported).
-	 * Don't try to actually handle that case.
-	 */
-	if (!writable && mode == GACC_STORE)
-		return -EOPNOTSUPP;
-	hva += offset_in_page(gpa);
-	if (mode == GACC_STORE)
-		rc = copy_to_user_key((void __user *)hva, data, len, access_key);
-	else
-		rc = copy_from_user_key(data, (void __user *)hva, len, access_key);
+	rc = kvm_s390_faultin_gfn(NULL, kvm, &fault);
 	if (rc)
-		return PGM_PROTECTION;
-	if (mode == GACC_STORE)
-		mark_page_dirty_in_slot(kvm, slot, gfn);
-	return 0;
+		return rc;
+	return context.exception;
 }
 
 int access_guest_abs_with_key(struct kvm *kvm, gpa_t gpa, void *data,
@@ -978,17 +1042,100 @@ int access_guest_real(struct kvm_vcpu *vcpu, unsigned long gra,
 }
 
 /**
+ * __cmpxchg_with_key() - cmpxchg memory, honoring storage keys
+ * @ptr: Address of value to compare to *@old and exchange with
+ *       @new. Must be aligned to sizeof(*@ptr).
+ * @uval: Address where the old value of *@ptr is written to.
+ * @old: Old value. Compared to the content pointed to by @ptr in order to
+ *       determine if the exchange occurs. The old value read from *@ptr is
+ *       written to *@uval.
+ * @new: New value to place at *@ptr.
+ * @access_key: Access key to use for checking storage key protection.
+ *
+ * Perform a cmpxchg on guest memory, honoring storage key protection.
+ * @access_key alone determines how key checking is performed, neither
+ * storage-protection-override nor fetch-protection-override apply.
+ * In case of an exception *@uval is set to zero.
+ *
+ * Return:
+ * * 0: cmpxchg executed successfully
+ * * 1: cmpxchg executed unsuccessfully
+ * * PGM_PROTECTION: an exception happened when trying to access *@ptr
+ * * -EAGAIN: maxed out number of retries (byte and short only)
+ */
+static int __cmpxchg_with_key(union kvm_s390_quad *ptr, union kvm_s390_quad *old,
+			      union kvm_s390_quad new, int size, u8 access_key)
+{
+	union kvm_s390_quad tmp = { .sixteen = 0 };
+	int rc;
+
+	/*
+	 * The cmpxchg_key macro depends on the type of "old", so we need
+	 * a case for each valid length and get some code duplication as long
+	 * as we don't introduce a new macro.
+	 */
+	switch (size) {
+	case 1:
+		rc = __cmpxchg_key1(&ptr->one, &tmp.one, old->one, new.one, access_key);
+		break;
+	case 2:
+		rc = __cmpxchg_key2(&ptr->two, &tmp.two, old->two, new.two, access_key);
+		break;
+	case 4:
+		rc = __cmpxchg_key4(&ptr->four, &tmp.four, old->four, new.four, access_key);
+		break;
+	case 8:
+		rc = __cmpxchg_key8(&ptr->eight, &tmp.eight, old->eight, new.eight, access_key);
+		break;
+	case 16:
+		rc = __cmpxchg_key16(&ptr->sixteen, &tmp.sixteen, old->sixteen, new.sixteen,
+				     access_key);
+		break;
+	default:
+		return -EINVAL;
+	}
+	if (!rc && memcmp(&tmp, old, size))
+		rc = 1;
+	*old = tmp;
+	/*
+	 * Assume that the fault is caused by protection, either key protection
+	 * or user page write protection.
+	 */
+	if (rc == -EFAULT)
+		rc = PGM_PROTECTION;
+	return rc;
+}
+
+struct cmpxchg_key_context {
+	union kvm_s390_quad new;
+	union kvm_s390_quad *old;
+	int exception;
+	unsigned short offset;
+	u8 access_key;
+	u8 len;
+};
+
+static void _cmpxchg_guest_abs_with_key(struct guest_fault *f)
+{
+	struct cmpxchg_key_context *context = f->priv;
+
+	context->exception = __cmpxchg_with_key(__va(PFN_PHYS(f->pfn) | context->offset),
+						context->old, context->new, context->len,
+						context->access_key);
+}
+
+/**
  * cmpxchg_guest_abs_with_key() - Perform cmpxchg on guest absolute address.
  * @kvm: Virtual machine instance.
  * @gpa: Absolute guest address of the location to be changed.
  * @len: Operand length of the cmpxchg, required: 1 <= len <= 16. Providing a
  *       non power of two will result in failure.
- * @old_addr: Pointer to old value. If the location at @gpa contains this value,
- *            the exchange will succeed. After calling cmpxchg_guest_abs_with_key()
- *            *@old_addr contains the value at @gpa before the attempt to
- *            exchange the value.
+ * @old: Pointer to old value. If the location at @gpa contains this value,
+ *       the exchange will succeed. After calling cmpxchg_guest_abs_with_key()
+ *       *@old contains the value at @gpa before the attempt to
+ *       exchange the value.
  * @new: The value to place at @gpa.
- * @access_key: The access key to use for the guest access.
+ * @acc: The access key to use for the guest access.
  * @success: output value indicating if an exchange occurred.
  *
  * Atomically exchange the value at @gpa by @new, if it contains *@old.
@@ -1001,89 +1148,36 @@ int access_guest_real(struct kvm_vcpu *vcpu, unsigned long gra,
  *         * -EAGAIN: transient failure (len 1 or 2)
  *         * -EOPNOTSUPP: read-only memslot (should never occur)
  */
-int cmpxchg_guest_abs_with_key(struct kvm *kvm, gpa_t gpa, int len,
-			       __uint128_t *old_addr, __uint128_t new,
-			       u8 access_key, bool *success)
+int cmpxchg_guest_abs_with_key(struct kvm *kvm, gpa_t gpa, int len, union kvm_s390_quad *old,
+			       union kvm_s390_quad new, u8 acc, bool *success)
 {
-	gfn_t gfn = gpa_to_gfn(gpa);
-	struct kvm_memory_slot *slot = gfn_to_memslot(kvm, gfn);
-	bool writable;
-	hva_t hva;
-	int ret;
+	struct cmpxchg_key_context context = {
+		.old = old,
+		.new = new,
+		.offset = offset_in_page(gpa),
+		.len = len,
+		.access_key = acc,
+	};
+	struct guest_fault fault = {
+		.gfn = gpa_to_gfn(gpa),
+		.priv = &context,
+		.write_attempt = true,
+		.callback = _cmpxchg_guest_abs_with_key,
+	};
+	int rc;
 
-	if (!IS_ALIGNED(gpa, len))
+	lockdep_assert_held(&kvm->srcu);
+
+	if (len > 16 || !IS_ALIGNED(gpa, len))
 		return -EINVAL;
 
-	hva = gfn_to_hva_memslot_prot(slot, gfn, &writable);
-	if (kvm_is_error_hva(hva))
-		return PGM_ADDRESSING;
-	/*
-	 * Check if it's a read-only memslot, even though that cannot occur
-	 * since those are unsupported.
-	 * Don't try to actually handle that case.
-	 */
-	if (!writable)
-		return -EOPNOTSUPP;
-
-	hva += offset_in_page(gpa);
-	/*
-	 * The cmpxchg_user_key macro depends on the type of "old", so we need
-	 * a case for each valid length and get some code duplication as long
-	 * as we don't introduce a new macro.
-	 */
-	switch (len) {
-	case 1: {
-		u8 old;
-
-		ret = cmpxchg_user_key((u8 __user *)hva, &old, *old_addr, new, access_key);
-		*success = !ret && old == *old_addr;
-		*old_addr = old;
-		break;
-	}
-	case 2: {
-		u16 old;
-
-		ret = cmpxchg_user_key((u16 __user *)hva, &old, *old_addr, new, access_key);
-		*success = !ret && old == *old_addr;
-		*old_addr = old;
-		break;
-	}
-	case 4: {
-		u32 old;
-
-		ret = cmpxchg_user_key((u32 __user *)hva, &old, *old_addr, new, access_key);
-		*success = !ret && old == *old_addr;
-		*old_addr = old;
-		break;
-	}
-	case 8: {
-		u64 old;
-
-		ret = cmpxchg_user_key((u64 __user *)hva, &old, *old_addr, new, access_key);
-		*success = !ret && old == *old_addr;
-		*old_addr = old;
-		break;
-	}
-	case 16: {
-		__uint128_t old;
-
-		ret = cmpxchg_user_key((__uint128_t __user *)hva, &old, *old_addr, new, access_key);
-		*success = !ret && old == *old_addr;
-		*old_addr = old;
-		break;
-	}
-	default:
-		return -EINVAL;
-	}
-	if (*success)
-		mark_page_dirty_in_slot(kvm, slot, gfn);
-	/*
-	 * Assume that the fault is caused by protection, either key protection
-	 * or user page write protection.
-	 */
-	if (ret == -EFAULT)
-		ret = PGM_PROTECTION;
-	return ret;
+	rc = kvm_s390_faultin_gfn(NULL, kvm, &fault);
+	if (rc)
+		return rc;
+	*success = !context.exception;
+	if (context.exception == 1)
+		return 0;
+	return context.exception;
 }
 
 /**
