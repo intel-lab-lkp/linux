@@ -162,14 +162,18 @@ static void mem_avoid_memmap(char *str)
 {
 	static int i;
 
-	if (i >= MAX_MEMMAP_REGIONS)
-		return;
-
-	while (str && (i < MAX_MEMMAP_REGIONS)) {
+	while (str) {
 		int rc;
 		u64 start, size;
-		char *k = strchr(str, ',');
+		char *k;
 
+		if (i >= MAX_MEMMAP_REGIONS) {
+			/* Too many memmap regions, disable physical KASLR. */
+			memmap_too_large = true;
+			return;
+		}
+
+		k = strchr(str, ',');
 		if (k)
 			*k++ = 0;
 
@@ -190,10 +194,6 @@ static void mem_avoid_memmap(char *str)
 		mem_avoid[MEM_AVOID_MEMMAP_BEGIN + i].size = size;
 		i++;
 	}
-
-	/* More than 4 memmaps, fail kaslr */
-	if ((i >= MAX_MEMMAP_REGIONS) && str)
-		memmap_too_large = true;
 }
 
 /* Store the number of 1GB huge pages which users specified: */
