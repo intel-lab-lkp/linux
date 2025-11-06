@@ -341,6 +341,8 @@ unsigned int swsusp_header_flags;
  *	and get its index (if so)
  *
  *	This is called before saving image
+ *
+ *	Return: 0 on success, negative error code on failure.
  */
 static int swsusp_swap_check(void)
 {
@@ -367,6 +369,8 @@ static int swsusp_swap_check(void)
  *	@buf:		Address we're writing.
  *	@offset:	Offset of the swap page we're writing to.
  *	@hb:		bio completion batch
+ *
+ *	Return: 0 on success, negative error code on failure.
  */
 
 static int write_page(void *buf, sector_t offset, struct hib_bio_batch *hb)
@@ -528,6 +532,11 @@ static int swap_writer_finish(struct swap_map_handle *handle,
 
 /**
  *	save_image - save the suspend image data
+ *	@handle: swap map handle for writing the image
+ *	@snapshot: snapshot handle to read pages from
+ *	@nr_to_write: number of pages to write
+ *
+ *	Return: 0 on success, negative error on failure
  */
 
 static int save_image(struct swap_map_handle *handle,
@@ -676,6 +685,8 @@ static int compress_threadfn(void *data)
  * @handle: Swap map handle to use for saving the image.
  * @snapshot: Image to read data from.
  * @nr_to_write: Number of pages to save.
+ *
+ * Return: 0 on success, negative error code on failure.
  */
 static int save_compressed_image(struct swap_map_handle *handle,
 				 struct snapshot_handle *snapshot,
@@ -906,8 +917,9 @@ out_clean:
 
 /**
  *	enough_swap - Make sure we have enough swap to save the image.
+ *	@nr_pages: number of pages we need to save
  *
- *	Returns TRUE or FALSE after checking the total amount of swap
+ *	Return: TRUE or FALSE after checking the total amount of swap
  *	space available from the resume partition.
  */
 
@@ -930,6 +942,8 @@ static int enough_swap(unsigned int nr_pages)
  *	them synced (in case something goes wrong) but we DO not want to mark
  *	filesystem clean: it is not. (And it does not matter, if we resume
  *	correctly, we'll mark system clean, anyway.)
+ *
+ *	Return: 0 on success, negative error code on failure.
  */
 
 int swsusp_write(unsigned int flags)
@@ -1078,9 +1092,12 @@ static int swap_reader_finish(struct swap_map_handle *handle)
 }
 
 /**
- *	load_image - load the image using the swap map handle
- *	@handle and the snapshot handle @snapshot
- *	(assume there are @nr_pages pages to load)
+ *	load_image - load the image using the swap map and snapshot handles
+ *	@handle: pointer to the swap map used for reading swap pages
+ *	@snapshot: pointer to the snapshot handle that tracks image pages
+ *	@nr_to_read: number of pages to read from the snapshot
+ *
+ *	Return: 0 on success, negative error code on failure.
  */
 
 static int load_image(struct swap_map_handle *handle,
@@ -1195,6 +1212,8 @@ static int decompress_threadfn(void *data)
  * @handle: Swap map handle to use for loading data.
  * @snapshot: Image to copy uncompressed data into.
  * @nr_to_read: Number of pages to load.
+ *
+ * Return: 0 on success, negative error code on failure.
  */
 static int load_compressed_image(struct swap_map_handle *handle,
 				 struct snapshot_handle *snapshot,
@@ -1529,6 +1548,8 @@ out_clean:
  *	swsusp_read - read the hibernation image.
  *	@flags_p: flags passed by the "frozen" kernel in the image header should
  *		  be written into this memory location
+ *
+ *	Return: 0 on success, negative error code on failure.
  */
 
 int swsusp_read(unsigned int *flags_p)
@@ -1567,6 +1588,10 @@ static void *swsusp_holder;
 /**
  * swsusp_check - Open the resume device and check for the swsusp signature.
  * @exclusive: Open the resume device exclusively.
+ *
+ * Return:
+ *        0 if a valid hibernation image is found,
+ *        negative error code on failure.
  */
 
 int swsusp_check(bool exclusive)
@@ -1631,6 +1656,8 @@ void swsusp_close(void)
 
 /**
  *      swsusp_unmark - Unmark swsusp signature in the resume device
+ *
+ *      Return: 0 on success, negative error code on failure.
  */
 
 #ifdef CONFIG_SUSPEND
