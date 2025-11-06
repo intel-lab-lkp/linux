@@ -489,15 +489,24 @@ static ssize_t trigger_cntr_store(struct device *dev,
 			     const char *buf, size_t size)
 {
 	int ret;
-	unsigned long val;
+	unsigned long val, flags;
 	struct tmc_drvdata *drvdata = dev_get_drvdata(dev->parent);
 
 	ret = kstrtoul(buf, 16, &val);
 	if (ret)
 		return ret;
 
+	/* do not permit write if the sink is currently in use */
+	raw_spin_lock_irqsave(&drvdata->spinlock, flags);
+	if (coresight_get_mode(drvdata->csdev) != CS_MODE_DISABLED) {
+		ret = -EBUSY;
+		goto out;
+	}
 	drvdata->trigger_cntr = val;
-	return size;
+	ret = size;
+out:
+	raw_spin_unlock_irqrestore(&drvdata->spinlock, flags);
+	return ret;
 }
 static DEVICE_ATTR_RW(trigger_cntr);
 
@@ -514,7 +523,7 @@ static ssize_t buffer_size_store(struct device *dev,
 				 const char *buf, size_t size)
 {
 	int ret;
-	unsigned long val;
+	unsigned long val, flags;
 	struct tmc_drvdata *drvdata = dev_get_drvdata(dev->parent);
 
 	/* Only permitted for TMC-ETRs */
@@ -527,8 +536,18 @@ static ssize_t buffer_size_store(struct device *dev,
 	/* The buffer size should be page aligned */
 	if (val & (PAGE_SIZE - 1))
 		return -EINVAL;
+
+	/* do not permit write if the sink is currently in use */
+	raw_spin_lock_irqsave(&drvdata->spinlock, flags);
+	if (coresight_get_mode(drvdata->csdev) != CS_MODE_DISABLED) {
+		ret = -EBUSY;
+		goto out;
+	}
 	drvdata->size = val;
-	return size;
+	ret = size;
+out:
+	raw_spin_unlock_irqrestore(&drvdata->spinlock, flags);
+	return ret;
 }
 
 static DEVICE_ATTR_RW(buffer_size);
@@ -547,17 +566,27 @@ static ssize_t stop_on_flush_store(struct device *dev,
 {
 	int ret;
 	u8 val;
+	unsigned long flags;
 	struct tmc_drvdata *drvdata = dev_get_drvdata(dev->parent);
 
 	ret = kstrtou8(buf, 0, &val);
 	if (ret)
 		return ret;
+
+	/* do not permit write if the sink is currently in use */
+	raw_spin_lock_irqsave(&drvdata->spinlock, flags);
+	if (coresight_get_mode(drvdata->csdev) != CS_MODE_DISABLED) {
+		ret = -EBUSY;
+		goto out;
+	}
 	if (val)
 		drvdata->stop_on_flush = true;
 	else
 		drvdata->stop_on_flush = false;
-
-	return size;
+	ret = size;
+out:
+	raw_spin_unlock_irqrestore(&drvdata->spinlock, flags);
+	return ret;
 }
 
 static DEVICE_ATTR_RW(stop_on_flush);
