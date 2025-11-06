@@ -14866,11 +14866,13 @@ static int sanitize_check_bounds(struct bpf_verifier_env *env,
 }
 
 static int bcf_alu(struct bpf_verifier_env *env, struct bpf_reg_state *dst_reg,
-		   struct bpf_reg_state *src_reg, u8 op, bool alu32)
+		   struct bpf_reg_state *src_reg, u8 op, bool alu32,
+		   bool op_u32, bool op_s32)
 {
 	DEFINE_RAW_FLEX(struct bcf_expr, alu_expr, args, 2);
 	bool unary = (op == BPF_NEG);
 	int dst, src = 0, bits;
+	bool zext = alu32 || op_u32;
 
 	if (!env->bcf.tracking)
 		return 0;
@@ -14879,6 +14881,7 @@ static int bcf_alu(struct bpf_verifier_env *env, struct bpf_reg_state *dst_reg,
 		return 0;
 	}
 
+	alu32 |= (op_u32 || op_s32);
 	dst = bcf_reg_expr(env, dst_reg, alu32);
 	if (!unary)
 		src = bcf_reg_expr(env, src_reg, alu32);
@@ -14892,8 +14895,11 @@ static int bcf_alu(struct bpf_verifier_env *env, struct bpf_reg_state *dst_reg,
 	alu_expr->args[0] = dst;
 	alu_expr->args[1] = src;
 	dst_reg->bcf_expr = bcf_add_expr(env, alu_expr);
-	if (alu32)
+	if (zext)
 		bcf_zext_32_to_64(env, dst_reg);
+	else if (op_s32)
+		bcf_sext_32_to_64(env, dst_reg);
+
 	if (dst_reg->bcf_expr < 0)
 		return dst_reg->bcf_expr;
 
@@ -14922,6 +14928,7 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
 	u8 opcode = BPF_OP(insn->code);
 	u32 dst = insn->dst_reg;
 	int ret, bounds_ret;
+	bool op_u32, op_s32;
 
 	dst_reg = &regs[dst];
 	src_reg = dst_reg == ptr_reg ? off_reg : ptr_reg;
@@ -15034,6 +15041,8 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
 			if (dst_reg->bcf_expr < 0)
 				return dst_reg->bcf_expr;
 		}
+		op_u32 = fit_u32(dst_reg) && fit_u32(src_reg);
+		op_s32 = fit_s32(dst_reg) && fit_s32(src_reg);
 		/* A new variable offset is created.  Note that off_reg->off
 		 * == 0, since it's a scalar.
 		 * dst_reg gets the pointer type and since some positive
@@ -15062,7 +15071,9 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
 			memset(&dst_reg->raw, 0, sizeof(dst_reg->raw));
 		}
 
-		ret = bcf_alu(env, dst_reg, src_reg, opcode, false);
+		op_u32 &= fit_u32(dst_reg);
+		op_s32 &= fit_s32(dst_reg);
+		ret = bcf_alu(env, dst_reg, src_reg, opcode, false, op_u32, op_s32);
 		if (ret)
 			return ret;
 		break;
@@ -15102,6 +15113,8 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
 			if (dst_reg->bcf_expr < 0)
 				return dst_reg->bcf_expr;
 		}
+		op_u32 = fit_u32(dst_reg) && fit_u32(src_reg);
+		op_s32 = fit_s32(dst_reg) && fit_s32(src_reg);
 		/* A new variable offset is created.  If the subtrahend is known
 		 * nonnegative, then any reg->range we had before is still good.
 		 */
@@ -15130,7 +15143,9 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
 				memset(&dst_reg->raw, 0, sizeof(dst_reg->raw));
 		}
 
-		ret = bcf_alu(env, dst_reg, src_reg, opcode, false);
+		op_u32 &= fit_u32(dst_reg);
+		op_s32 &= fit_s32(dst_reg);
+		ret = bcf_alu(env, dst_reg, src_reg, opcode, false, op_u32, op_s32);
 		if (ret)
 			return ret;
 		break;
@@ -15787,6 +15802,7 @@ static int adjust_scalar_min_max_vals(struct bpf_verifier_env *env,
 	u8 opcode = BPF_OP(insn->code);
 	bool alu32 = (BPF_CLASS(insn->code) != BPF_ALU64);
 	int ret, dst_expr = dst_reg->bcf_expr;
+	bool op_u32, op_s32;
 
 	if (!is_safe_to_compute_dst_reg_range(insn, &src_reg)) {
 		__mark_reg_unknown(env, dst_reg);
@@ -15806,6 +15822,8 @@ static int adjust_scalar_min_max_vals(struct bpf_verifier_env *env,
 		if (dst_expr < 0)
 			return dst_expr;
 	}
+	op_u32 = fit_u32(dst_reg) && fit_u32(&src_reg);
+	op_s32 = fit_s32(dst_reg) && fit_s32(&src_reg);
 
 	/* Calculate sign/unsigned bounds and tnum for alu32 and alu64 bit ops.
 	 * There are two classes of instructions: The first class we track both
@@ -15887,7 +15905,9 @@ static int adjust_scalar_min_max_vals(struct bpf_verifier_env *env,
 	reg_bounds_sync(dst_reg);
 
 	dst_reg->bcf_expr = dst_expr;
-	ret = bcf_alu(env, dst_reg, &src_reg, opcode, alu32);
+	op_u32 &= fit_u32(dst_reg);
+	op_s32 &= fit_s32(dst_reg);
+	ret = bcf_alu(env, dst_reg, &src_reg, opcode, alu32, op_u32, op_s32);
 	if (ret)
 		return ret;
 
