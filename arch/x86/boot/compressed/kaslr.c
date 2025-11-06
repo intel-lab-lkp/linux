@@ -67,16 +67,11 @@ static unsigned long get_boot_seed(void)
 #define KASLR_COMPRESSED_BOOT
 #include "../../lib/kaslr.c"
 
-
-/* Only supporting at most 4 unusable memmap regions with kaslr */
-#define MAX_MEMMAP_REGIONS	4
-
-static bool memmap_too_large;
-
+static bool memmap_found;
 
 /*
  * Store memory limit: MAXMEM on 64-bit and KERNEL_IMAGE_SIZE on 32-bit.
- * It may be reduced by "mem=nn[KMG]" or "memmap=nn[KMG]" command line options.
+ * It may be reduced by "mem=nn[KMG]" command line options.
  */
 static u64 mem_limit;
 
@@ -88,8 +83,6 @@ enum mem_avoid_index {
 	MEM_AVOID_INITRD,
 	MEM_AVOID_CMDLINE,
 	MEM_AVOID_BOOTPARAMS,
-	MEM_AVOID_MEMMAP_BEGIN,
-	MEM_AVOID_MEMMAP_END = MEM_AVOID_MEMMAP_BEGIN + MAX_MEMMAP_REGIONS - 1,
 	MEM_AVOID_MAX,
 };
 
@@ -114,87 +107,6 @@ char *skip_spaces(const char *str)
 }
 #include "../../../../lib/ctype.c"
 #include "../../../../lib/cmdline.c"
-
-static int
-parse_memmap(char *p, u64 *start, u64 *size)
-{
-	char *oldp;
-
-	if (!p)
-		return -EINVAL;
-
-	/* We don't care about this option here */
-	if (!strncmp(p, "exactmap", 8))
-		return -EINVAL;
-
-	oldp = p;
-	*size = memparse(p, &p);
-	if (p == oldp)
-		return -EINVAL;
-
-	switch (*p) {
-	case '#':
-	case '$':
-	case '!':
-		*start = memparse(p + 1, &p);
-		return 0;
-	case '@':
-		/*
-		 * memmap=nn@ss specifies usable region, should
-		 * be skipped
-		 */
-		*size = 0;
-		fallthrough;
-	default:
-		/*
-		 * If w/o offset, only size specified, memmap=nn[KMG] has the
-		 * same behaviour as mem=nn[KMG]. It limits the max address
-		 * system can use. Region above the limit should be avoided.
-		 */
-		*start = 0;
-		return 0;
-	}
-
-	return -EINVAL;
-}
-
-static void mem_avoid_memmap(char *str)
-{
-	static int i;
-
-	if (i >= MAX_MEMMAP_REGIONS)
-		return;
-
-	while (str && (i < MAX_MEMMAP_REGIONS)) {
-		int rc;
-		u64 start, size;
-		char *k = strchr(str, ',');
-
-		if (k)
-			*k++ = 0;
-
-		rc = parse_memmap(str, &start, &size);
-		if (rc < 0)
-			break;
-		str = k;
-
-		if (start == 0) {
-			/* Store the specified memory limit if size > 0 */
-			if (size > 0 && size < mem_limit)
-				mem_limit = size;
-
-			continue;
-		}
-
-		mem_avoid[MEM_AVOID_MEMMAP_BEGIN + i].start = start;
-		mem_avoid[MEM_AVOID_MEMMAP_BEGIN + i].size = size;
-		i++;
-	}
-
-	/* More than 4 memmaps, fail kaslr */
-	if ((i >= MAX_MEMMAP_REGIONS) && str)
-		memmap_too_large = true;
-}
 
 /* Store the number of 1GB huge pages which users specified: */
 static unsigned long max_gb_huge_pages;
@@ -254,7 +166,7 @@ static void handle_mem_options(void)
 			break;
 
 		if (!strcmp(param, "memmap")) {
-			mem_avoid_memmap(val);
+			memmap_found = true;
 		} else if (IS_ENABLED(CONFIG_X86_64) && strstr(param, "hugepages")) {
 			parse_gb_huge_pages(param, val);
 		} else if (!strcmp(param, "mem")) {
@@ -812,9 +724,9 @@ static unsigned long find_random_phys_addr(unsigned long minimum,
 	if (minimum + image_size > mem_limit)
 		return 0;
 
-	/* Check if we had too many memmaps. */
-	if (memmap_too_large) {
-		debug_putstr("Aborted memory entries scan (more than 4 memmap= args)!\n");
+	/* Check if memmap= appears on the command line */
+	if (memmap_found) {
+		debug_putstr("memmap= found on the command line, disabling physical KASLR\n");
 		return 0;
 	}
 
