@@ -3924,6 +3924,9 @@ static int push_jmp_history(struct bpf_verifier_env *env, struct bpf_verifier_st
 	struct bpf_jmp_history_entry *p;
 	size_t alloc_size;
 
+	if (env->bcf.tracking)
+		return 0;
+
 	/* combine instruction flags if we already recorded this instruction */
 	if (env->cur_hist_ent) {
 		/* atomic instructions push insn_flags twice, for READ and
@@ -4735,7 +4738,7 @@ static int __mark_chain_precision(struct bpf_verifier_env *env,
 	struct bpf_reg_state *reg;
 	int i, fr, err;
 
-	if (!env->bpf_capable)
+	if (!env->bpf_capable || env->bcf.tracking)
 		return 0;
 
 	changed = changed ?: &tmp;
@@ -8877,6 +8880,9 @@ static struct bpf_verifier_state *find_prev_entry(struct bpf_verifier_env *env,
 	struct bpf_verifier_state_list *sl;
 	struct bpf_verifier_state *st;
 	struct list_head *pos, *head;
+
+	if (env->bcf.tracking)
+		return NULL;
 
 	/* Explored states are pushed in stack order, most recent states come first */
 	head = explored_state(env, insn_idx);
@@ -14302,7 +14308,8 @@ static bool can_skip_alu_sanitation(const struct bpf_verifier_env *env,
 {
 	return env->bypass_spec_v1 ||
 		BPF_SRC(insn->code) == BPF_K ||
-		cur_aux(env)->nospec;
+		cur_aux(env)->nospec ||
+		env->bcf.tracking;
 }
 
 static int update_alu_sanitation_state(struct bpf_insn_aux_data *aux,
@@ -14349,6 +14356,9 @@ static int sanitize_speculative_path(struct bpf_verifier_env *env,
 {
 	struct bpf_verifier_state *branch;
 	struct bpf_reg_state *regs;
+
+	if (env->bcf.tracking)
+		return 0;
 
 	branch = push_stack(env, next_idx, curr_idx, true);
 	if (!IS_ERR(branch) && insn) {
@@ -19384,6 +19394,9 @@ static int is_state_visited(struct bpf_verifier_env *env, int insn_idx)
 	int n, err, states_cnt = 0;
 	struct list_head *pos, *tmp, *head;
 
+	if (env->bcf.tracking)
+		return 0;
+
 	force_new_state = env->test_state_freq || is_force_checkpoint(env, insn_idx) ||
 			  /* Avoid accumulating infinitely long jmp history */
 			  cur->jmp_history_cnt > 40;
@@ -20045,7 +20058,7 @@ static int do_check(struct bpf_verifier_env *env)
 	struct bpf_insn *insns = env->prog->insnsi;
 	int insn_cnt = env->prog->len;
 	bool do_print_state = false;
-	int prev_insn_idx = -1;
+	int prev_insn_idx = env->prev_insn_idx;
 
 	for (;;) {
 		struct bpf_insn *insn;
@@ -20147,6 +20160,14 @@ static int do_check(struct bpf_verifier_env *env)
 		if (err)
 			return err;
 		err = do_check_insn(env, &do_print_state);
+		/*
+		 * bcf_track() only follows checked insns, errors during it
+		 * indicate a previously refined location; The refinement
+		 * is applied directly (see bcf_refine()), so analyzes the
+		 * insn again with the refined state.
+		 */
+		if (err && env->bcf.tracking)
+			err = do_check_insn(env, &do_print_state);
 		if (err >= 0 || error_recoverable_with_nospec(err)) {
 			marks_err = bpf_commit_stack_write_marks(env);
 			if (marks_err)
@@ -23244,6 +23265,7 @@ static int do_check_common(struct bpf_verifier_env *env, int subprog)
 	struct bpf_reg_state *regs;
 	int ret, i;
 
+	env->prev_insn_idx = -1;
 	env->prev_linfo = NULL;
 	env->pass_cnt++;
 
@@ -23357,6 +23379,10 @@ static int do_check_common(struct bpf_verifier_env *env, int subprog)
 	}
 
 	ret = do_check(env);
+
+	/* Invoked by bcf_track(), just return. */
+	if (env->bcf.tracking)
+		return ret;
 out:
 	if (!ret && pop_log)
 		bpf_vlog_reset(&env->log, 0);
@@ -23364,11 +23390,104 @@ out:
 	return ret;
 }
 
+struct env_backup {
+	u32 insn_idx;
+	u32 prev_insn_idx;
+	struct bpf_verifier_stack_elem *head;
+	int stack_size;
+	u32 id_gen;
+	struct bpf_verifier_state *cur_state;
+	const struct bpf_line_info *prev_linfo;
+	struct list_head *explored_states;
+	struct list_head free_list;
+	u32 log_level;
+	u32 prev_insn_processed, insn_processed;
+	u32 prev_jmps_processed, jmps_processed;
+};
+
+static void swap_env_states(struct env_backup *env_old,
+			    struct bpf_verifier_env *env)
+{
+	swap(env_old->insn_idx, env->insn_idx);
+	swap(env_old->prev_insn_idx, env->prev_insn_idx);
+	swap(env_old->head, env->head);
+	swap(env_old->stack_size, env->stack_size);
+	swap(env_old->id_gen, env->id_gen);
+	swap(env_old->cur_state, env->cur_state);
+	swap(env_old->prev_linfo, env->prev_linfo);
+	swap(env_old->explored_states, env->explored_states);
+	swap(env_old->free_list, env->free_list);
+	/* Disable log during bcf tracking */
+	swap(env_old->log_level, env->log.level);
+	swap(env_old->prev_insn_processed, env->prev_insn_processed);
+	swap(env_old->insn_processed, env->insn_processed);
+	swap(env_old->prev_jmps_processed, env->prev_jmps_processed);
+	swap(env_old->jmps_processed, env->jmps_processed);
+}
+
 static int bcf_track(struct bpf_verifier_env *env,
 		     struct bpf_verifier_state *st,
 		     struct bpf_verifier_state *base)
 {
-	return -EOPNOTSUPP;
+	struct bpf_reg_state *regs = st->frame[st->curframe]->regs;
+	struct bpf_reg_state *tracked_regs;
+	struct bpf_verifier_state *vstate = NULL;
+	struct env_backup env_old = { 0 };
+	struct bcf_refine_state *bcf = &env->bcf;
+	int err, i;
+
+	bcf->expr_cnt = 0;
+	bcf->path_cond = -1;
+	bcf->refine_cond = -1;
+
+	if (base) {
+		vstate = kzalloc(sizeof(struct bpf_verifier_state),
+				 GFP_KERNEL_ACCOUNT);
+		if (!vstate)
+			return -ENOMEM;
+		err = copy_verifier_state(vstate, base);
+		if (err) {
+			free_verifier_state(vstate, true);
+			return err;
+		}
+		vstate->parent = vstate->equal_state = NULL;
+		vstate->first_insn_idx = base->insn_idx;
+		clear_jmp_history(vstate);
+	}
+
+	/* Continue with the current id. */
+	env_old.id_gen = env->id_gen;
+	swap_env_states(&env_old, env);
+
+	env->bcf.tracking = true;
+	if (vstate) {
+		env->insn_idx = vstate->first_insn_idx;
+		env->prev_insn_idx = vstate->last_insn_idx;
+		env->cur_state = vstate;
+		err = do_check(env);
+	} else {
+		u32 subprog = st->frame[0]->subprogno;
+
+		env->insn_idx = env->subprog_info[subprog].start;
+		err = do_check_common(env, subprog);
+	}
+	env->bcf.tracking = false;
+
+	if (!err && !same_callsites(env->cur_state, st))
+		err = -EFAULT;
+
+	if (!err) {
+		tracked_regs = cur_regs(env);
+		for (i = 0; i < BPF_REG_FP; i++)
+			regs[i].bcf_expr = tracked_regs[i].bcf_expr;
+	}
+
+	free_verifier_state(env->cur_state, true);
+	env->cur_state = NULL;
+	while (!pop_stack(env, NULL, NULL, false))
+		;
+	swap_env_states(&env_old, env);
+	return err;
 }
 
 /*
@@ -23476,6 +23595,12 @@ static int __used bcf_refine(struct bpf_verifier_env *env,
 	/* BCF requested multiple times in an error path. */
 	if (bcf_requested(env))
 		return -EFAULT;
+	/* BCF requested during bcf_track(), known safe just refine. */
+	if (env->bcf.tracking) {
+		if (refine_cb)
+			return refine_cb(env, st, ctx);
+		return 0;
+	}
 
 	if (!reg_masks) {
 		for (i = 0; i < BPF_REG_FP; i++) {
@@ -23496,7 +23621,7 @@ static int __used bcf_refine(struct bpf_verifier_env *env,
 	if (!err && refine_cb)
 		err = refine_cb(env, st, ctx);
 
-	if (!err)
+	if (!err && (env->bcf.refine_cond >= 0 || env->bcf.path_cond >= 0))
 		mark_bcf_requested(env);
 
 	kfree(env->bcf.parents);

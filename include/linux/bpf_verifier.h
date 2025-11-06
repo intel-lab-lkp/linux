@@ -204,6 +204,7 @@ struct bpf_reg_state {
 	s32 subreg_def;
 	/* if (!precise && SCALAR_VALUE) min/max/tnum don't affect safety */
 	bool precise;
+	int bcf_expr;
 };
 
 enum bpf_stack_slot_type {
@@ -742,6 +743,14 @@ struct bcf_refine_state {
 	u32 cur_jmp_entry;
 
 	bool available; /* if bcf_buf is provided. */
+	bool tracking; /* In bcf_track(). */
+	struct bcf_expr *exprs;
+	u32 expr_size;
+	u32 expr_cnt;
+	u32 *br_conds; /* each branch condition */
+	u32 br_cond_cnt;
+	int path_cond; /* conjunction of br_conds */
+	int refine_cond; /* refinement condition */
 };
 
 /* single container for all structs

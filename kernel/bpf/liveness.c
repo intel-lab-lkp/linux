@@ -276,6 +276,8 @@ static struct per_frame_masks *alloc_frame_masks(struct bpf_verifier_env *env,
 
 void bpf_reset_live_stack_callchain(struct bpf_verifier_env *env)
 {
+	if (env->bcf.tracking)
+		return;
 	env->liveness->cur_instance = NULL;
 }
 
@@ -318,6 +320,9 @@ int bpf_mark_stack_read(struct bpf_verifier_env *env, u32 frame, u32 insn_idx, u
 {
 	int err;
 
+	if (env->bcf.tracking)
+		return 0;
+
 	err = ensure_cur_instance(env);
 	err = err ?: mark_stack_read(env, env->liveness->cur_instance, frame, insn_idx, mask);
 	return err;
@@ -339,6 +344,9 @@ int bpf_reset_stack_write_marks(struct bpf_verifier_env *env, u32 insn_idx)
 	struct bpf_liveness *liveness = env->liveness;
 	int err;
 
+	if (env->bcf.tracking)
+		return 0;
+
 	err = ensure_cur_instance(env);
 	if (err)
 		return err;
@@ -349,6 +357,8 @@ int bpf_reset_stack_write_marks(struct bpf_verifier_env *env, u32 insn_idx)
 
 void bpf_mark_stack_write(struct bpf_verifier_env *env, u32 frame, u64 mask)
 {
+	if (env->bcf.tracking)
+		return;
 	env->liveness->write_masks_acc[frame] |= mask;
 }
 
@@ -398,6 +408,8 @@ static int commit_stack_write_marks(struct bpf_verifier_env *env,
  */
 int bpf_commit_stack_write_marks(struct bpf_verifier_env *env)
 {
+	if (env->bcf.tracking)
+		return 0;
 	return commit_stack_write_marks(env, env->liveness->cur_instance);
 }
 
@@ -674,6 +686,9 @@ int bpf_update_live_stack(struct bpf_verifier_env *env)
 {
 	struct func_instance *instance;
 	int err, frame;
+
+	if (env->bcf.tracking)
+		return 0;
 
 	bpf_reset_live_stack_callchain(env);
 	for (frame = env->cur_state->curframe; frame >= 0; --frame) {
