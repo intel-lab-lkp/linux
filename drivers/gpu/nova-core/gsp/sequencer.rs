@@ -35,8 +35,8 @@ impl MessageFromGsp for fw::rpc_run_cpu_sequencer_v17_00 {
 
 const CMD_SIZE: usize = size_of::<fw::GSP_SEQUENCER_BUFFER_CMD>();
 
-struct GspSequencerInfo<'a> {
-    info: &'a fw::rpc_run_cpu_sequencer_v17_00,
+struct GspSequencerInfo {
+    cmd_index: u32,
     cmd_data: KVec<u8>,
 }
 
@@ -125,7 +125,7 @@ impl GspSeqCmd {
 }
 
 pub(crate) struct GspSequencer<'a> {
-    seq_info: GspSequencerInfo<'a>,
+    seq_info: GspSequencerInfo,
     bar: &'a Bar0,
     sec2_falcon: &'a Falcon<Sec2>,
     gsp_falcon: &'a Falcon<Gsp>,
@@ -336,7 +336,7 @@ impl<'a, 'b> IntoIterator for &'b GspSequencer<'a> {
         GspSeqIter {
             cmd_data,
             current_offset: 0,
-            total_cmds: self.seq_info.info.cmdIndex,
+            total_cmds: self.seq_info.cmd_index,
             cmds_processed: 0,
             dev: self.dev,
         }
@@ -355,38 +355,50 @@ pub(crate) struct GspSequencerParams<'a> {
 
 impl<'a> GspSequencer<'a> {
     pub(crate) fn run(cmdq: &mut Cmdq, params: GspSequencerParams<'a>, timeout: Delta) -> Result {
-        cmdq.receive_msg_from_gsp(timeout, |info, mut sbuf| {
-            let cmd_data = sbuf.flush_into_kvec(GFP_KERNEL)?;
-            let seq_info = GspSequencerInfo { info, cmd_data };
+        let seq_info = loop {
+            match cmdq.receive_msg_from_gsp(
+                timeout,
+                |info: &fw::rpc_run_cpu_sequencer_v17_00, mut sbuf| {
+                    let cmd_data = sbuf.flush_into_kvec(GFP_KERNEL)?;
+                    Ok(GspSequencerInfo {
+                        cmd_index: info.cmdIndex,
+                        cmd_data,
+                    })
+                },
+            ) {
+                Ok(seq_info) => break seq_info,
+                Err(ERANGE) => continue,
+                Err(e) => return Err(e),
+            }
+        };
 
-            let sequencer = GspSequencer {
-                seq_info,
-                bar: params.bar,
-                sec2_falcon: params.sec2_falcon,
-                gsp_falcon: params.gsp_falcon,
-                libos_dma_handle: params.libos_dma_handle,
-                gsp_fw: params.gsp_fw,
-                dev: params.dev,
-            };
+        let sequencer = GspSequencer {
+            seq_info,
+            bar: params.bar,
+            sec2_falcon: params.sec2_falcon,
+            gsp_falcon: params.gsp_falcon,
+            libos_dma_handle: params.libos_dma_handle,
+            gsp_fw: params.gsp_fw,
+            dev: params.dev,
+        };
 
-            dev_dbg!(params.dev, "Running CPU Sequencer commands");
+        dev_dbg!(params.dev, "Running CPU Sequencer commands");
 
-            for cmd_result in &sequencer {
-                match cmd_result {
-                    Ok(cmd) => cmd.run(&sequencer)?,
-                    Err(e) => {
-                        dev_err!(
-                            params.dev,
-                            "Error running command at index {}",
-                            sequencer.seq_info.info.cmdIndex
-                        );
-                        return Err(e);
-                    }
+        for cmd_result in &sequencer {
+            match cmd_result {
+                Ok(cmd) => cmd.run(&sequencer)?,
+                Err(e) => {
+                    dev_err!(
+                        params.dev,
+                        "Error running command at index {}",
+                        sequencer.seq_info.cmd_index
+                    );
+                    return Err(e);
                 }
             }
+        }
 
-            dev_dbg!(params.dev, "CPU Sequencer commands completed successfully");
-            Ok(())
-        })
+        dev_dbg!(params.dev, "CPU Sequencer commands completed successfully");
+        Ok(())
     }
 }
