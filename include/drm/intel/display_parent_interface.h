@@ -6,6 +6,7 @@
 
 #include <linux/types.h>
 
+struct dma_fence;
 struct drm_device;
 struct ref_tracker;
 
@@ -25,6 +26,12 @@ struct intel_display_rpm_interface {
 	void (*assert_unblock)(const struct drm_device *drm);
 };
 
+struct intel_display_rps_interface {
+	void (*boost)(struct dma_fence *fence);
+	void (*mark_interactive)(struct drm_device *drm, bool interactive);
+	void (*ilk_irq_handler)(struct drm_device *drm);
+};
+
 /**
  * struct intel_display_parent_interface - services parent driver provides to display
  *
@@ -40,6 +47,9 @@ struct intel_display_rpm_interface {
 struct intel_display_parent_interface {
 	/** @rpm: Runtime PM functions */
 	const struct intel_display_rpm_interface *rpm;
+
+	/** @rpm: RPS functions. Optional. */
+	const struct intel_display_rps_interface *rps;
 };
 
 #endif

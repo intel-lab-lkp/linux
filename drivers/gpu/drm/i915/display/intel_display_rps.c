@@ -3,12 +3,14 @@
  * Copyright © 2023 Intel Corporation
  */
 
+#include <linux/dma-fence.h>
+
 #include <drm/drm_crtc.h>
 #include <drm/drm_vblank.h>
+#include <drm/intel/display_parent_interface.h>
 
-#include "gt/intel_rps.h"
-#include "i915_drv.h"
 #include "i915_reg.h"
+#include "i915_request.h"
 #include "intel_display_core.h"
 #include "intel_display_irq.h"
 #include "intel_display_rps.h"
@@ -25,15 +27,10 @@ static int do_rps_boost(struct wait_queue_entry *_wait,
 			unsigned mode, int sync, void *key)
 {
 	struct wait_rps_boost *wait = container_of(_wait, typeof(*wait), wait);
-	struct i915_request *rq = to_request(wait->fence);
+	struct intel_display *display = to_intel_display(wait->crtc->dev);
 
-	/*
-	 * If we missed the vblank, but the request is already running it
-	 * is reasonable to assume that it will complete before the next
-	 * vblank without our intervention, so leave RPS alone.
-	 */
-	if (!i915_request_started(rq))
-		intel_rps_boost(rq);
+	display->parent->rps->boost(wait->fence);
+
 	dma_fence_put(wait->fence);
 
 	drm_crtc_vblank_put(wait->crtc);
@@ -48,6 +45,9 @@ void intel_display_rps_boost_after_vblank(struct drm_crtc *crtc,
 {
 	struct intel_display *display = to_intel_display(crtc->dev);
 	struct wait_rps_boost *wait;
+
+	if (!display->parent->rps)
+		return;
 
 	if (!dma_fence_is_i915(fence))
 		return;
@@ -77,12 +77,14 @@ void intel_display_rps_mark_interactive(struct intel_display *display,
 					struct intel_atomic_state *state,
 					bool interactive)
 {
-	struct drm_i915_private *i915 = to_i915(display->drm);
+	if (!display->parent->rps)
+		return;
 
 	if (state->rps_interactive == interactive)
 		return;
 
-	intel_rps_mark_interactive(&to_gt(i915)->rps, interactive);
+	display->parent->rps->mark_interactive(display->drm, interactive);
+
 	state->rps_interactive = interactive;
 }
 
@@ -102,7 +104,6 @@ void ilk_display_rps_disable(struct intel_display *display)
 
 void ilk_display_rps_irq_handler(struct intel_display *display)
 {
-	struct drm_i915_private *i915 = to_i915(display->drm);
-
-	gen5_rps_irq_handler(&to_gt(i915)->rps);
+	/* We expect these to be non-NULL when running on ILK */
+	display->parent->rps->ilk_irq_handler(display->drm);
 }
