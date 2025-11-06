@@ -2001,6 +2001,16 @@ static inline const char *pgtable_level_to_str(enum pgtable_level level)
 	}
 }
 
+/*
+ * IMPORTANT: pgtable_has_pmd_leaves() can only be called after
+ * early_initcall, since that's when __arch_has_pmd_leaves is set
+ */
+extern bool __arch_has_pmd_leaves;
+static inline bool pgtable_has_pmd_leaves(void)
+{
+	return __arch_has_pmd_leaves;
+}
+
 #endif /* !__ASSEMBLY__ */
 
 #if !defined(MAX_POSSIBLE_PHYSMEM_BITS) && !defined(CONFIG_64BIT)
