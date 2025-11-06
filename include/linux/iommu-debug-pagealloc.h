@@ -22,6 +22,7 @@ void __iommu_debug_unmap(struct iommu_domain *domain, unsigned long iova,
 			 size_t size);
 void __iommu_debug_remap(struct iommu_domain *domain, unsigned long iova,
 			 size_t size);
+void __iommu_debug_check_unmapped(const struct page *page, int numpages);
 
 static inline void iommu_debug_map(struct iommu_domain *domain,
 				   phys_addr_t phys, size_t size)
@@ -44,6 +45,12 @@ static inline void iommu_debug_remap(struct iommu_domain *domain,
 		__iommu_debug_remap(domain, iova, size);
 }
 
+static inline void iommu_debug_check_unmapped(const struct page *page, int numpages)
+{
+	if (static_branch_unlikely(&iommu_debug_initialized))
+		__iommu_debug_check_unmapped(page, numpages);
+}
+
 void iommu_debug_init(void);
 
 #else
@@ -63,6 +70,11 @@ static inline void iommu_debug_remap(struct iommu_domain *domain,
 }
 
 static inline void iommu_debug_init(void)
+{
+}
+
+static inline void iommu_debug_check_unmapped(const struct page *page,
+					      int numpages)
 {
 }
 
