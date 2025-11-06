@@ -91,6 +91,8 @@ static void imx93_pd_remove(struct platform_device *pdev)
 
 	of_genpd_del_provider(np);
 	pm_genpd_remove(&domain->genpd);
+	if (!(readl(domain->addr + MIX_FUNC_STAT_OFF) & FUNC_STAT_ISO_STAT_MASK))
+		clk_bulk_disable_unprepare(domain->num_clks, domain->clks);
 }
 
 static int imx93_pd_probe(struct platform_device *pdev)
