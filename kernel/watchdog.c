@@ -25,6 +25,7 @@
 #include <linux/stop_machine.h>
 #include <linux/sysctl.h>
 #include <linux/tick.h>
+#include <linux/sys_info.h>
 
 #include <linux/sched/clock.h>
 #include <linux/sched/debug.h>
@@ -52,6 +53,13 @@ static int __read_mostly watchdog_hardlockup_available;
 
 struct cpumask watchdog_cpumask __read_mostly;
 unsigned long *watchdog_cpumask_bits = cpumask_bits(&watchdog_cpumask);
+
+/*
+ * A bitmask to control what kinds of system info to be printed when
+ * system lockup is detected, it could be task, memory, lock etc. Refer
+ * include/linux/sys_info.h for detailed bit definition.
+ */
+static unsigned long lockup_si_mask;
 
 #ifdef CONFIG_HARDLOCKUP_DETECTOR
 
@@ -240,6 +248,7 @@ void watchdog_hardlockup_check(unsigned int cpu, struct pt_regs *regs)
 				clear_bit_unlock(0, &hard_lockup_nmi_warn);
 		}
 
+		sys_info(lockup_si_mask);
 		if (hardlockup_panic)
 			nmi_panic(regs, "Hard LOCKUP");
 
@@ -746,9 +755,11 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 	unsigned long touch_ts, period_ts, now;
 	struct pt_regs *regs = get_irq_regs();
 	int duration;
-	int softlockup_all_cpu_backtrace = sysctl_softlockup_all_cpu_backtrace;
+	int softlockup_all_cpu_backtrace;
 	unsigned long flags;
 
+	softlockup_all_cpu_backtrace = (lockup_si_mask & SYS_INFO_ALL_BT) ?
+					1 : sysctl_softlockup_all_cpu_backtrace;
 	if (!watchdog_enabled)
 		return HRTIMER_NORESTART;
 
@@ -846,6 +857,7 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 		}
 
 		add_taint(TAINT_SOFTLOCKUP, LOCKDEP_STILL_OK);
+		sys_info(lockup_si_mask & ~SYS_INFO_ALL_BT);
 		if (softlockup_panic)
 			panic("softlockup: hung tasks");
 	}
@@ -1177,6 +1189,13 @@ static const struct ctl_table watchdog_sysctls[] = {
 		.maxlen		= NR_CPUS,
 		.mode		= 0644,
 		.proc_handler	= proc_watchdog_cpumask,
+	},
+	{
+		.procname	= "lockup_sys_info",
+		.data		= &lockup_si_mask,
+		.maxlen         = sizeof(lockup_si_mask),
+		.mode		= 0644,
+		.proc_handler	= sysctl_sys_info_handler,
 	},
 #ifdef CONFIG_SOFTLOCKUP_DETECTOR
 	{
