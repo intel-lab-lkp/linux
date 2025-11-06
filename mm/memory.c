@@ -182,7 +182,7 @@ EXPORT_SYMBOL(__arch_has_pmd_leaves);
 
 static int __init init_arch_has_pmd_leaves(void)
 {
-	__arch_has_pmd_leaves = has_transparent_hugepage();
+	__arch_has_pmd_leaves = arch_has_pmd_leaves();
 	return 0;
 }
 early_initcall(init_arch_has_pmd_leaves);
