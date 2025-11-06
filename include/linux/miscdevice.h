@@ -92,6 +92,8 @@ struct miscdevice {
 	const struct attribute_group **groups;
 	const char *nodename;
 	umode_t mode;
+	bool revocable;
+	struct revocable_provider *rp;
 };
 
 extern int misc_register(struct miscdevice *misc);

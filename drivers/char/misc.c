@@ -50,6 +50,8 @@
 #include <linux/tty.h>
 #include <linux/kmod.h>
 #include <linux/gfp.h>
+#include <linux/fs_revocable.h>
+#include <linux/revocable.h>
 
 /*
  * Head entry for the doubly linked miscdevice list
@@ -157,10 +159,16 @@ static int misc_open(struct inode *inode, struct file *file)
 	 */
 	file->private_data = c;
 
-	err = 0;
 	replace_fops(file, new_fops);
-	if (file->f_op->open)
+
+	if (file->f_op->open) {
 		err = file->f_op->open(inode, file);
+		if (err)
+			goto fail;
+	}
+
+	if (c->revocable)
+		err = fs_revocable_replace(c->rp, file);
 fail:
 	mutex_unlock(&misc_mtx);
 	return err;
@@ -217,6 +225,10 @@ int misc_register(struct miscdevice *misc)
 		       misc->minor, misc->name);
 		return -EINVAL;
 	}
+
+	misc->rp = revocable_provider_alloc(misc);
+	if (!misc->rp)
+		return -ENOMEM;
 
 	INIT_LIST_HEAD(&misc->list);
 
@@ -290,6 +302,8 @@ void misc_deregister(struct miscdevice *misc)
 	if (misc->minor > MISC_DYNAMIC_MINOR)
 		misc->minor = MISC_DYNAMIC_MINOR;
 	mutex_unlock(&misc_mtx);
+
+	revocable_provider_revoke(misc->rp);
 }
 EXPORT_SYMBOL(misc_deregister);
 
