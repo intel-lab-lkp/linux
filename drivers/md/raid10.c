@@ -2820,11 +2820,15 @@ static bool narrow_write_error(struct r10bio *r10_bio, int i)
 				   choose_data_offset(r10_bio, rdev);
 		wbio->bi_opf = REQ_OP_WRITE;
 
-		if (submit_bio_wait(wbio) < 0)
+		if (submit_bio_wait(wbio)) {
 			/* Failure! */
-			ok = rdev_set_badblocks(rdev, wsector,
-						sectors, 0)
-				&& ok;
+			ok = false;
+			if (!rdev_set_badblocks(rdev, wsector, sectors, 0)) {
+				md_error(mddev, rdev);
+				bio_put(wbio);
+				break;
+			}
+		}
 
 		bio_put(wbio);
 		sect_to_write -= sectors;
@@ -2936,8 +2940,7 @@ static void handle_write_completed(struct r10conf *conf, struct r10bio *r10_bio)
 				rdev_dec_pending(rdev, conf->mddev);
 			} else if (bio != NULL && bio->bi_status) {
 				fail = true;
-				if (!narrow_write_error(r10_bio, m))
-					md_error(conf->mddev, rdev);
+				narrow_write_error(r10_bio, m);
 				rdev_dec_pending(rdev, conf->mddev);
 			}
 			bio = r10_bio->devs[m].repl_bio;
