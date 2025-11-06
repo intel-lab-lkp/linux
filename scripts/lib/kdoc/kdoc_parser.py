@@ -1430,6 +1430,25 @@ class KernelDoc:
 
         return proto
 
+    def idtentry_munge(self, ln, proto):
+        """
+        Handle DEFINE_IDTENTRY_*() definitions
+        """
+
+        name = None
+
+        # Replace DEFINE_IDTENTRY_IRQ with correct return type & function name
+        r = KernRe(r'DEFINE_IDTENTRY_IRQ\((.*?)\)')
+        if r.search(proto):
+            name = r.group(1)
+
+        if not name:
+            self.emit_msg(ln, f"Unrecognized IDTENTRY format:\n{proto}\n")
+        else:
+            proto = f"static inline void {name}((struct pt_regs *regs, unsigned long error_code)"
+
+        return proto
+
     def tracepoint_munge(self, ln, proto):
         """
         Handle tracepoint definitions
@@ -1499,13 +1518,13 @@ class KernelDoc:
             # Handle special declaration syntaxes
             #
             if 'SYSCALL_DEFINE' in self.entry.prototype:
-                self.entry.prototype = self.syscall_munge(ln,
-                                                          self.entry.prototype)
+                self.entry.prototype = self.syscall_munge(ln, self.entry.prototype)
+            elif 'DEFINE_IDTENTRY' in self.entry.prototype:
+                self.entry.prototype = self.idtentry_munge(ln, self.entry.prototype)
             else:
                 r = KernRe(r'TRACE_EVENT|DEFINE_EVENT|DEFINE_SINGLE_EVENT')
                 if r.search(self.entry.prototype):
-                    self.entry.prototype = self.tracepoint_munge(ln,
-                                                                 self.entry.prototype)
+                    self.entry.prototype = self.tracepoint_munge(ln, self.entry.prototype)
             #
             # ... and we're done
             #
