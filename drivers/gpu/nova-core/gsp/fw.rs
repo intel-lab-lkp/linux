@@ -543,6 +543,51 @@ impl GspMsgElement {
     }
 }
 
+#[expect(unused)]
+pub(crate) use r570_144::{
+    // GSP sequencer run structure with information on how to run the sequencer.
+    rpc_run_cpu_sequencer_v17_00,
+
+    // GSP sequencer structures.
+    GSP_SEQUENCER_BUFFER_CMD,
+    GSP_SEQ_BUF_OPCODE,
+
+    // GSP sequencer core operation opcodes.
+    GSP_SEQ_BUF_OPCODE_GSP_SEQ_BUF_OPCODE_CORE_RESET,
+    GSP_SEQ_BUF_OPCODE_GSP_SEQ_BUF_OPCODE_CORE_RESUME,
+    GSP_SEQ_BUF_OPCODE_GSP_SEQ_BUF_OPCODE_CORE_START,
+    GSP_SEQ_BUF_OPCODE_GSP_SEQ_BUF_OPCODE_CORE_WAIT_FOR_HALT,
+
+    // GSP sequencer delay opcode and payload.
+    GSP_SEQ_BUF_OPCODE_GSP_SEQ_BUF_OPCODE_DELAY_US,
+
+    // GSP sequencer register opcodes.
+    GSP_SEQ_BUF_OPCODE_GSP_SEQ_BUF_OPCODE_REG_MODIFY,
+    GSP_SEQ_BUF_OPCODE_GSP_SEQ_BUF_OPCODE_REG_POLL,
+    GSP_SEQ_BUF_OPCODE_GSP_SEQ_BUF_OPCODE_REG_STORE,
+    GSP_SEQ_BUF_OPCODE_GSP_SEQ_BUF_OPCODE_REG_WRITE,
+
+    // GSP sequencer delay payload structure.
+    GSP_SEQ_BUF_PAYLOAD_DELAY_US,
+
+    // GSP sequencer register payload structures.
+    GSP_SEQ_BUF_PAYLOAD_REG_MODIFY,
+    GSP_SEQ_BUF_PAYLOAD_REG_POLL,
+    GSP_SEQ_BUF_PAYLOAD_REG_STORE,
+    GSP_SEQ_BUF_PAYLOAD_REG_WRITE, //
+};
+
+// SAFETY: This struct only contains integer types for which all bit patterns
+// are valid.
+unsafe impl FromBytes for GSP_SEQUENCER_BUFFER_CMD {}
+
+// SAFETY: Padding is explicit and will not contain uninitialized data.
+unsafe impl AsBytes for rpc_run_cpu_sequencer_v17_00 {}
+
+// SAFETY: This struct only contains integer types for which all bit patterns
+// are valid.
+unsafe impl FromBytes for rpc_run_cpu_sequencer_v17_00 {}
+
 // SAFETY: Padding is explicit and will not contain uninitialized data.
 unsafe impl AsBytes for GspMsgElement {}
 
