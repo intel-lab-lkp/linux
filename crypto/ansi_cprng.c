@@ -329,8 +329,10 @@ static int cprng_init(struct crypto_tfm *tfm)
 		return PTR_ERR(ctx->tfm);
 	}
 
-	if (reset_prng_context(ctx, NULL, DEFAULT_PRNG_KSZ, NULL, NULL) < 0)
+	if (reset_prng_context(ctx, NULL, DEFAULT_PRNG_KSZ, NULL, NULL) < 0) {
+		crypto_free_cipher(ctx->tfm);
 		return -EINVAL;
+	}
 
 	/*
 	 * after allocation, we should always force the user to reset
