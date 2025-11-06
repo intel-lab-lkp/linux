@@ -1,0 +1,90 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/mediatek,mt8189-clock.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek Functional Clock Controller for MT8189
+
+maintainers:
+  - Qiqi Wang <qiqi.wang@mediatek.com>
+
+description: |
+  The clock architecture in MediaTek like below
+  PLLs -->
+          dividers -->
+                      muxes -->
+                               clock gate
+
+  The devices provide clock gate control in different IP blocks.
+
+properties:
+  compatible:
+    items:
+      - enum:
+        - mediatek,mt8189-camsys-main
+        - mediatek,mt8189-camsys-rawa
+        - mediatek,mt8189-camsys-rawb
+        - mediatek,mt8189-dbg-ao
+        - mediatek,mt8189-dem
+        - mediatek,mt8189-dispsys
+        - mediatek,mt8189-dvfsrc-top
+        - mediatek,mt8189-gce-d
+        - mediatek,mt8189-gce-m
+        - mediatek,mt8189-iic-wrap-e
+        - mediatek,mt8189-iic-wrap-en
+        - mediatek,mt8189-iic-wrap-s
+        - mediatek,mt8189-iic-wrap-ws
+        - mediatek,mt8189-imgsys1
+        - mediatek,mt8189-imgsys2
+        - mediatek,mt8189-infra-ao
+        - mediatek,mt8189-ipesys
+        - mediatek,mt8189-mdpsys
+        - mediatek,mt8189-mfgcfg
+        - mediatek,mt8189-mm-infra
+        - mediatek,mt8189-peri-ao
+        - mediatek,mt8189-scp-clk
+        - mediatek,mt8189-scp-i2c-clk
+        - mediatek,mt8189-ufscfg-ao
+        - mediatek,mt8189-ufscfg-pdn
+        - mediatek,mt8189-vdec-core
+        - mediatek,mt8189-venc
+      - const: syscon
+
+  reg:
+    maxItems: 1
+
+  '#clock-cells':
+    const: 1
+
+  '#reset-cells':
+    const: 1
+
+required:
+  - compatible
+  - reg
+  - '#clock-cells'
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - mediatek,mt8189-peri-ao
+              - mediatek,mt8189-ufscfg-ao
+              - mediatek,mt8189-ufscfg-pdn
+
+    then:
+      required:
+        - '#reset-cells'
+
+additionalProperties: false
+
+examples:
+  - |
+    clock-controller@11b21000 {
+        compatible = "mediatek,mt8189-iic-wrap-ws", "syscon";
+        reg = <0x11b21000 0x1000>;
+        #clock-cells = <1>;
+    };
