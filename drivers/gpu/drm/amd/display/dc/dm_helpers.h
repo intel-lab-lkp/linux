@@ -68,6 +68,7 @@ bool dm_helpers_is_same_edid(struct dc_sink *prev_sink,
 void dm_helpers_copy_edid_to_dc(struct dc_sink *dc_sink,
 				const void *edid, int len);
 
+void dm_helpers_sink_edid_free(struct dc_sink *sink);
 
 /*
  * Update DP branch info

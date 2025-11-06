@@ -65,6 +65,8 @@ void dc_sink_retain(struct dc_sink *sink)
 static void dc_sink_free(struct kref *kref)
 {
 	struct dc_sink *sink = container_of(kref, struct dc_sink, refcount);
+
+	dm_helpers_sink_edid_free(sink);
 	kfree(sink->dc_container_id);
 	kfree(sink);
 }

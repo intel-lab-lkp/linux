@@ -1007,6 +1007,11 @@ void dm_helpers_copy_edid_to_dc(struct dc_sink *dc_sink,
 	dc_sink->dc_edid.length = len;
 }
 
+void dm_helpers_sink_edid_free(struct dc_sink *sink)
+{
+	drm_edid_free(sink->drm_edid);
+}
+
 enum dc_edid_status dm_helpers_read_local_edid(
 		struct dc_context *ctx,
 		struct dc_link *link,
