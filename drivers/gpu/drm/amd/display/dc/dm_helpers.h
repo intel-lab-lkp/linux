@@ -65,6 +65,9 @@ enum dc_edid_status dm_helpers_parse_edid_caps(struct dc_link *link,
 /* Compare two EDIDs */
 bool dm_helpers_is_same_edid(struct dc_sink *prev_sink,
 			     struct dc_sink *current_sink);
+void dm_helpers_copy_edid_to_dc(struct dc_sink *dc_sink,
+				const void *edid, int len);
+
 
 /*
  * Update DP branch info

@@ -999,6 +999,14 @@ bool dm_helpers_is_same_edid(struct dc_sink *prev_sink,
                       new_edid->raw_edid, new_edid->length) == 0);
 }
 
+void dm_helpers_copy_edid_to_dc(struct dc_sink *dc_sink,
+				const void *edid,
+				int len)
+{
+	memmove(dc_sink->dc_edid.raw_edid, edid, len);
+	dc_sink->dc_edid.length = len;
+}
+
 enum dc_edid_status dm_helpers_read_local_edid(
 		struct dc_context *ctx,
 		struct dc_link *link,
