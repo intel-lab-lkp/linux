@@ -212,10 +212,8 @@ bool __static_call_fixup(void *tramp, u8 op, void *dest)
 		return false;
 	}
 
-	mutex_lock(&text_mutex);
 	if (op == RET_INSN_OPCODE || dest == &__x86_return_thunk)
 		__static_call_transform(tramp, RET, NULL, true);
-	mutex_unlock(&text_mutex);
 
 	return true;
 }
