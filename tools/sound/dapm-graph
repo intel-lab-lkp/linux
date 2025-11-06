@@ -174,7 +174,7 @@ process_dapm_component()
 
 	# Extract directory name into component name:
 	#   "./cs42l51.0-004a/dapm" -> "cs42l51.0-004a"
-	c_name="$(basename $(dirname "${c_dir}"))"
+	c_name="$(basename "$(dirname "${c_dir}")")"
     fi
 
     dbg_echo " * Component: ${c_name}"
@@ -201,7 +201,7 @@ process_dapm_component()
     >"${links_file}"
 
     # Iterate over widgets in the component dir
-    for w_file in ${c_dir}/*; do
+    for w_file in "${c_dir}"/*; do
 	process_dapm_widget "${tmp_dir}" "${c_name}" "${w_file}"
     done
 
