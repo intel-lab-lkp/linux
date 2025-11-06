@@ -19873,6 +19873,8 @@ static int is_state_visited(struct bpf_verifier_env *env, int insn_idx)
 		states_cnt++;
 		if (sl->state.insn_idx != insn_idx)
 			continue;
+		if (sl->state.children_unsafe)
+			goto miss;
 
 		if (sl->state.branches) {
 			struct bpf_func_state *frame = sl->state.frame[sl->state.curframe];
@@ -20185,6 +20187,8 @@ miss:
 		return err;
 	}
 
+	new->children_unsafe = cur->children_unsafe;
+	cur->children_unsafe = false;
 	cur->parent = new;
 	cur->first_insn_idx = insn_idx;
 	cur->dfs_depth = new->dfs_depth + 1;
@@ -24240,6 +24244,20 @@ static int __used bcf_refine(struct bpf_verifier_env *env,
 
 	if (!err && (env->bcf.refine_cond >= 0 || env->bcf.path_cond >= 0))
 		mark_bcf_requested(env);
+
+	for (i = 0; i < MAX_BPF_REG; i++)
+		regs[i].bcf_expr = -1;
+
+	/*
+	 * Mark the parents as children_unsafe, i.e., they are not safe for
+	 * state pruning anymore. Say s0 is contained in s1 (marked), then
+	 * exploring s0 will reach the same error state that triggers the
+	 * refinement. However, since the path they reach the pruning point
+	 * can be different, the path condition collected for s0 can be
+	 * different from s1's. Hence, pruning is not safe.
+	 */
+	for (i = 0; i < bcf->vstate_cnt - 1; i++)
+		bcf->parents[i]->children_unsafe = true;
 
 	kfree(env->bcf.parents);
 	return err ?: 1;
