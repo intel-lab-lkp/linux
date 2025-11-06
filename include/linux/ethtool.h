@@ -228,12 +228,32 @@ extern const struct link_mode_info link_mode_params[];
 
 extern const char ethtool_link_medium_names[][ETH_GSTRING_LEN];
 
+#define ETHTOOL_MEDIUM_FIBER_BITS (BIT(ETHTOOL_LINK_MEDIUM_BASES) | \
+				   BIT(ETHTOOL_LINK_MEDIUM_BASEL) | \
+				   BIT(ETHTOOL_LINK_MEDIUM_BASEF))
+
 static inline const char *phy_mediums(enum ethtool_link_medium medium)
 {
 	if (medium >= __ETHTOOL_LINK_MEDIUM_LAST)
 		return "unknown";
 
 	return ethtool_link_medium_names[medium];
+}
+
+static inline enum ethtool_link_medium ethtool_str_to_medium(const char *str)
+{
+	int i;
+
+	for (i = 0; i < __ETHTOOL_LINK_MEDIUM_LAST; i++)
+		if (!strcmp(phy_mediums(i), str))
+			return i;
+
+	return ETHTOOL_LINK_MEDIUM_NONE;
+}
+
+static inline int ethtool_linkmode_n_pairs(unsigned int mode)
+{
+	return link_mode_params[mode].pairs;
 }
 
 /* declare a link mode bitmap */
