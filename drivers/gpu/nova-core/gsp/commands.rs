@@ -11,6 +11,7 @@ use kernel::transmute::{
 };
 
 use super::fw::commands::*;
+use super::fw::GspStaticConfigInfo_t;
 use super::fw::MsgFunction;
 use crate::driver::Bar0;
 use crate::gsp::cmdq::Cmdq;
@@ -22,6 +23,17 @@ use crate::gsp::cmdq::{
 };
 use crate::gsp::GSP_PAGE_SIZE;
 use crate::sbuffer::SBufferIter;
+
+// SAFETY: Padding is explicit and will not contain uninitialized data.
+unsafe impl AsBytes for GspStaticConfigInfo_t {}
+
+// SAFETY: This struct only contains integer types for which all bit patterns
+// are valid.
+unsafe impl FromBytes for GspStaticConfigInfo_t {}
+
+pub(crate) struct GspStaticConfigInfo {
+    pub gpu_name: [u8; 40],
+}
 
 /// Message type for GSP initialization done notification.
 struct GspInitDone {}
@@ -47,6 +59,57 @@ pub(crate) fn gsp_init_done(cmdq: &mut Cmdq, timeout: Delta) -> Result {
             Err(e) => break Err(e),
         }
     }
+}
+
+impl MessageFromGsp for GspStaticConfigInfo_t {
+    const FUNCTION: MsgFunction = MsgFunction::GetGspStaticInfo;
+}
+
+impl CommandToGspBase for GspStaticConfigInfo_t {
+    const FUNCTION: MsgFunction = MsgFunction::GetGspStaticInfo;
+}
+
+impl CommandToGsp for GspStaticConfigInfo_t {}
+
+// SAFETY: This struct only contains integer types and fixed-size arrays for which
+// all bit patterns are valid.
+unsafe impl Zeroable for GspStaticConfigInfo_t {}
+
+impl GspStaticConfigInfo_t {
+    fn init() -> impl Init<Self> {
+        init!(GspStaticConfigInfo_t {
+            ..Zeroable::init_zeroed()
+        })
+    }
+}
+
+pub(crate) fn get_gsp_info(cmdq: &mut Cmdq, bar: &Bar0) -> Result<GspStaticConfigInfo> {
+    cmdq.send_gsp_command(bar, GspStaticConfigInfo_t::init())?;
+    cmdq.receive_msg_from_gsp::<GspStaticConfigInfo_t, GspStaticConfigInfo>(
+        Delta::from_secs(5),
+        |info, _| {
+            let gpu_name_str = info
+                .gpuNameString
+                .get(
+                    0..=info
+                        .gpuNameString
+                        .iter()
+                        .position(|&b| b == 0)
+                        .unwrap_or(info.gpuNameString.len() - 1),
+                )
+                .and_then(|bytes| CStr::from_bytes_with_nul(bytes).ok())
+                .and_then(|cstr| cstr.to_str().ok())
+                .unwrap_or("invalid utf8");
+
+            let mut gpu_name = [0u8; 40];
+            let bytes = gpu_name_str.as_bytes();
+            let copy_len = core::cmp::min(bytes.len(), gpu_name.len());
+            gpu_name[..copy_len].copy_from_slice(&bytes[..copy_len]);
+            gpu_name[copy_len] = b'\0';
+
+            Ok(GspStaticConfigInfo { gpu_name })
+        },
+    )
 }
 
 // For now we hard-code the registry entries. Future work will allow others to

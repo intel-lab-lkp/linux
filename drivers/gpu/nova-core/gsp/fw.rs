@@ -547,6 +547,9 @@ pub(crate) use r570_144::{
     // GSP sequencer run structure with information on how to run the sequencer.
     rpc_run_cpu_sequencer_v17_00,
 
+    // GSP static configuration information.
+    GspStaticConfigInfo_t,
+
     // GSP sequencer structures.
     GSP_SEQUENCER_BUFFER_CMD,
     GSP_SEQ_BUF_OPCODE,
