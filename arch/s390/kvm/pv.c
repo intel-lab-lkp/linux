@@ -12,13 +12,16 @@
 #include <linux/minmax.h>
 #include <linux/pagemap.h>
 #include <linux/sched/signal.h>
-#include <asm/gmap.h>
 #include <asm/uv.h>
 #include <asm/mman.h>
 #include <linux/pagewalk.h>
 #include <linux/sched/mm.h>
 #include <linux/mmu_notifier.h>
 #include "kvm-s390.h"
+#include "dat.h"
+#include "gaccess.h"
+#include "gmap.h"
+#include "faultin.h"
 
 bool kvm_s390_pv_is_protected(struct kvm *kvm)
 {
@@ -299,35 +302,6 @@ done_fast:
 	return 0;
 }
 
-/**
- * kvm_s390_destroy_lower_2g - Destroy the first 2GB of protected guest memory.
- * @kvm: the VM whose memory is to be cleared.
- *
- * Destroy the first 2GB of guest memory, to avoid prefix issues after reboot.
- * The CPUs of the protected VM need to be destroyed beforehand.
- */
-static void kvm_s390_destroy_lower_2g(struct kvm *kvm)
-{
-	const unsigned long pages_2g = SZ_2G / PAGE_SIZE;
-	struct kvm_memory_slot *slot;
-	unsigned long len;
-	int srcu_idx;
-
-	srcu_idx = srcu_read_lock(&kvm->srcu);
-
-	/* Take the memslot containing guest absolute address 0 */
-	slot = gfn_to_memslot(kvm, 0);
-	/* Clear all slots or parts thereof that are below 2GB */
-	while (slot && slot->base_gfn < pages_2g) {
-		len = min_t(u64, slot->npages, pages_2g - slot->base_gfn) * PAGE_SIZE;
-		s390_uv_destroy_range(kvm->mm, slot->userspace_addr, slot->userspace_addr + len);
-		/* Take the next memslot */
-		slot = gfn_to_memslot(kvm, slot->base_gfn + slot->npages);
-	}
-
-	srcu_read_unlock(&kvm->srcu, srcu_idx);
-}
-
 static int kvm_s390_pv_deinit_vm_fast(struct kvm *kvm, u16 *rc, u16 *rrc)
 {
 	struct uv_cb_destroy_fast uvcb = {
@@ -342,7 +316,6 @@ static int kvm_s390_pv_deinit_vm_fast(struct kvm *kvm, u16 *rc, u16 *rrc)
 		*rc = uvcb.header.rc;
 	if (rrc)
 		*rrc = uvcb.header.rrc;
-	WRITE_ONCE(kvm->arch.gmap->guest_handle, 0);
 	KVM_UV_EVENT(kvm, 3, "PROTVIRT DESTROY VM FAST: rc %x rrc %x",
 		     uvcb.header.rc, uvcb.header.rrc);
 	WARN_ONCE(cc && uvcb.header.rc != 0x104,
@@ -391,7 +364,7 @@ int kvm_s390_pv_set_aside(struct kvm *kvm, u16 *rc, u16 *rrc)
 		return -EINVAL;
 
 	/* Guest with segment type ASCE, refuse to destroy asynchronously */
-	if ((kvm->arch.gmap->asce & _ASCE_TYPE_MASK) == _ASCE_TYPE_SEGMENT)
+	if (kvm->arch.gmap->asce.dt == TABLE_TYPE_SEGMENT)
 		return -EINVAL;
 
 	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
@@ -404,8 +377,7 @@ int kvm_s390_pv_set_aside(struct kvm *kvm, u16 *rc, u16 *rrc)
 		priv->stor_var = kvm->arch.pv.stor_var;
 		priv->stor_base = kvm->arch.pv.stor_base;
 		priv->handle = kvm_s390_pv_get_handle(kvm);
-		priv->old_gmap_table = (unsigned long)kvm->arch.gmap->table;
-		WRITE_ONCE(kvm->arch.gmap->guest_handle, 0);
+		priv->old_gmap_table = (unsigned long)dereference_asce(kvm->arch.gmap->asce);
 		if (s390_replace_asce(kvm->arch.gmap))
 			res = -ENOMEM;
 	}
@@ -415,7 +387,7 @@ int kvm_s390_pv_set_aside(struct kvm *kvm, u16 *rc, u16 *rrc)
 		return res;
 	}
 
-	kvm_s390_destroy_lower_2g(kvm);
+	gmap_pv_destroy_range(kvm->arch.gmap, 0, gpa_to_gfn(SZ_2G), false);
 	kvm_s390_clear_pv_state(kvm);
 	kvm->arch.pv.set_aside = priv;
 
@@ -449,7 +421,6 @@ int kvm_s390_pv_deinit_vm(struct kvm *kvm, u16 *rc, u16 *rrc)
 
 	cc = uv_cmd_nodata(kvm_s390_pv_get_handle(kvm),
 			   UVC_CMD_DESTROY_SEC_CONF, rc, rrc);
-	WRITE_ONCE(kvm->arch.gmap->guest_handle, 0);
 	if (!cc) {
 		atomic_dec(&kvm->mm->context.protected_count);
 		kvm_s390_pv_dealloc_vm(kvm);
@@ -532,7 +503,7 @@ int kvm_s390_pv_deinit_cleanup_all(struct kvm *kvm, u16 *rc, u16 *rrc)
 	 * cleanup has been performed.
 	 */
 	if (need_zap && mmget_not_zero(kvm->mm)) {
-		s390_uv_destroy_range(kvm->mm, 0, TASK_SIZE);
+		gmap_pv_destroy_range(kvm->arch.gmap, 0, asce_end(kvm->arch.gmap->asce), false);
 		mmput(kvm->mm);
 	}
 
@@ -570,7 +541,7 @@ int kvm_s390_pv_deinit_aside_vm(struct kvm *kvm, u16 *rc, u16 *rrc)
 		return -EINVAL;
 
 	/* When a fatal signal is received, stop immediately */
-	if (s390_uv_destroy_range_interruptible(kvm->mm, 0, TASK_SIZE_MAX))
+	if (gmap_pv_destroy_range(kvm->arch.gmap, 0, asce_end(kvm->arch.gmap->asce), true))
 		goto done;
 	if (kvm_s390_pv_dispose_one_leftover(kvm, p, rc, rrc))
 		ret = -EIO;
@@ -642,7 +613,7 @@ int kvm_s390_pv_init_vm(struct kvm *kvm, u16 *rc, u16 *rrc)
 	/* Inputs */
 	uvcb.guest_stor_origin = 0; /* MSO is 0 for KVM */
 	uvcb.guest_stor_len = kvm->arch.pv.guest_len;
-	uvcb.guest_asce = kvm->arch.gmap->asce;
+	uvcb.guest_asce = kvm->arch.gmap->asce.val;
 	uvcb.guest_sca = virt_to_phys(kvm->arch.sca);
 	uvcb.conf_base_stor_origin =
 		virt_to_phys((void *)kvm->arch.pv.stor_base);
@@ -669,7 +640,6 @@ int kvm_s390_pv_init_vm(struct kvm *kvm, u16 *rc, u16 *rrc)
 		}
 		return -EIO;
 	}
-	kvm->arch.gmap->guest_handle = uvcb.guest_handle;
 	return 0;
 }
 
@@ -704,26 +674,14 @@ static int unpack_one(struct kvm *kvm, unsigned long addr, u64 tweak,
 		.tweak[1] = offset,
 	};
 	int ret = kvm_s390_pv_make_secure(kvm, addr, &uvcb);
-	unsigned long vmaddr;
-	bool unlocked;
 
 	*rc = uvcb.header.rc;
 	*rrc = uvcb.header.rrc;
 
 	if (ret == -ENXIO) {
-		mmap_read_lock(kvm->mm);
-		vmaddr = gfn_to_hva(kvm, gpa_to_gfn(addr));
-		if (kvm_is_error_hva(vmaddr)) {
-			ret = -EFAULT;
-		} else {
-			ret = fixup_user_fault(kvm->mm, vmaddr, FAULT_FLAG_WRITE, &unlocked);
-			if (!ret)
-				ret = __gmap_link(kvm->arch.gmap, addr, vmaddr);
-		}
-		mmap_read_unlock(kvm->mm);
+		ret = kvm_s390_faultin_gfn_simple(NULL, kvm, gpa_to_gfn(addr), true);
 		if (!ret)
 			return -EAGAIN;
-		return ret;
 	}
 
 	if (ret && ret != -EAGAIN)

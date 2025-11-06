@@ -11,14 +11,42 @@
 #include <linux/err.h>
 #include <linux/pgtable.h>
 #include <linux/bitfield.h>
+#include <linux/kvm_host.h>
+#include <linux/kvm_types.h>
+#include <asm/diag.h>
 #include <asm/access-regs.h>
 #include <asm/fault.h>
-#include <asm/gmap.h>
 #include <asm/dat-bits.h>
 #include "kvm-s390.h"
+#include "dat.h"
+#include "gmap.h"
 #include "gaccess.h"
+#include "faultin.h"
 
 #define GMAP_SHADOW_FAKE_TABLE 1ULL
+
+union dat_table_entry {
+	unsigned long val;
+	union region1_table_entry pgd;
+	union region2_table_entry p4d;
+	union region3_table_entry pud;
+	union segment_table_entry pmd;
+	union page_table_entry pte;
+};
+
+#define WALK_N_ENTRIES 7
+#define LEVEL_MEM -2
+struct pgtwalk {
+	struct guest_fault raw_entries[WALK_N_ENTRIES];
+	gpa_t last_addr;
+	int level;
+	bool p;
+};
+
+static inline struct guest_fault *get_entries(struct pgtwalk *w)
+{
+	return w->raw_entries - LEVEL_MEM;
+}
 
 /*
  * raddress union which will contain the result (real or absolute address)
@@ -618,28 +646,16 @@ static int low_address_protection_enabled(struct kvm_vcpu *vcpu,
 static int vm_check_access_key_gpa(struct kvm *kvm, u8 access_key,
 				   enum gacc_mode mode, gpa_t gpa)
 {
-	u8 storage_key, access_control;
-	bool fetch_protected;
-	unsigned long hva;
+	union skey storage_key;
 	int r;
 
-	if (access_key == 0)
-		return 0;
-
-	hva = gfn_to_hva(kvm, gpa_to_gfn(gpa));
-	if (kvm_is_error_hva(hva))
-		return PGM_ADDRESSING;
-
-	mmap_read_lock(current->mm);
-	r = get_guest_storage_key(current->mm, hva, &storage_key);
-	mmap_read_unlock(current->mm);
+	scoped_guard(read_lock, &kvm->mmu_lock)
+		r = dat_get_storage_key(kvm->arch.gmap->asce, gpa_to_gfn(gpa), &storage_key);
 	if (r)
 		return r;
-	access_control = FIELD_GET(_PAGE_ACC_BITS, storage_key);
-	if (access_control == access_key)
+	if (access_key == 0 || storage_key.acc == access_key)
 		return 0;
-	fetch_protected = storage_key & _PAGE_FP_BIT;
-	if ((mode == GACC_FETCH || mode == GACC_IFETCH) && !fetch_protected)
+	if ((mode == GACC_FETCH || mode == GACC_IFETCH) && !storage_key.fp)
 		return 0;
 	return PGM_PROTECTION;
 }
@@ -682,8 +698,7 @@ static int vcpu_check_access_key_gpa(struct kvm_vcpu *vcpu, u8 access_key,
 				     enum gacc_mode mode, union asce asce, gpa_t gpa,
 				     unsigned long ga, unsigned int len)
 {
-	u8 storage_key, access_control;
-	unsigned long hva;
+	union skey storage_key;
 	int r;
 
 	/* access key 0 matches any storage key -> allow */
@@ -693,26 +708,23 @@ static int vcpu_check_access_key_gpa(struct kvm_vcpu *vcpu, u8 access_key,
 	 * caller needs to ensure that gfn is accessible, so we can
 	 * assume that this cannot fail
 	 */
-	hva = gfn_to_hva(vcpu->kvm, gpa_to_gfn(gpa));
-	mmap_read_lock(current->mm);
-	r = get_guest_storage_key(current->mm, hva, &storage_key);
-	mmap_read_unlock(current->mm);
+	scoped_guard(read_lock, &vcpu->kvm->mmu_lock)
+		r = dat_get_storage_key(vcpu->arch.gmap->asce, gpa_to_gfn(gpa), &storage_key);
 	if (r)
 		return r;
-	access_control = FIELD_GET(_PAGE_ACC_BITS, storage_key);
 	/* access key matches storage key -> allow */
-	if (access_control == access_key)
+	if (storage_key.acc == access_key)
 		return 0;
 	if (mode == GACC_FETCH || mode == GACC_IFETCH) {
 		/* it is a fetch and fetch protection is off -> allow */
-		if (!(storage_key & _PAGE_FP_BIT))
+		if (!storage_key.fp)
 			return 0;
 		if (fetch_prot_override_applicable(vcpu, mode, asce) &&
 		    fetch_prot_override_applies(ga, len))
 			return 0;
 	}
 	if (storage_prot_override_applicable(vcpu) &&
-	    storage_prot_override_applies(access_control))
+	    storage_prot_override_applies(storage_key.acc))
 		return 0;
 	return PGM_PROTECTION;
 }
@@ -1173,304 +1185,358 @@ int kvm_s390_check_low_addr_prot_real(struct kvm_vcpu *vcpu, unsigned long gra)
 }
 
 /**
- * kvm_s390_shadow_tables - walk the guest page table and create shadow tables
+ * walk_guest_tables() - walk the guest page table and pin the dat tables
  * @sg: pointer to the shadow guest address space structure
  * @saddr: faulting address in the shadow gmap
- * @pgt: pointer to the beginning of the page table for the given address if
- *	 successful (return value 0), or to the first invalid DAT entry in
- *	 case of exceptions (return value > 0)
- * @dat_protection: referenced memory is write protected
- * @fake: pgt references contiguous guest memory block, not a pgtable
+ * @w: will be filled with information on the pinned pages
+ * @wr: indicates a write access if true
+ *
+ * Return:
+ * * 0 in case of success,
+ * * a PIC code > 0 in case the address translation fails
+ * * an error code < 0 if other errors happen in the host
  */
-static int kvm_s390_shadow_tables(struct gmap *sg, unsigned long saddr,
-				  unsigned long *pgt, int *dat_protection,
-				  int *fake)
+static int walk_guest_tables(struct gmap *sg, unsigned long saddr, struct pgtwalk *w, bool wr)
 {
-	struct kvm *kvm;
-	struct gmap *parent;
-	union asce asce;
+	struct gmap *parent = sg->parent;
+	struct guest_fault *entries;
+	union dat_table_entry table;
 	union vaddress vaddr;
 	unsigned long ptr;
+	struct kvm *kvm;
+	union asce asce;
 	int rc;
 
-	*fake = 0;
-	*dat_protection = 0;
-	kvm = sg->private;
-	parent = sg->parent;
+	kvm = parent->kvm;
+	asce = sg->guest_asce;
+	entries = get_entries(w);
+
+	w->level = LEVEL_MEM;
+	w->last_addr = saddr;
+	if (asce.r)
+		return kvm_s390_get_guest_page(kvm, entries + LEVEL_MEM, gpa_to_gfn(saddr), false);
+
 	vaddr.addr = saddr;
-	asce.val = sg->orig_asce;
 	ptr = asce.rsto * PAGE_SIZE;
-	if (asce.r) {
-		*fake = 1;
-		ptr = 0;
-		asce.dt = ASCE_TYPE_REGION1;
-	}
+
+	if (!asce_contains_gfn(asce, gpa_to_gfn(saddr)))
+		return PGM_ASCE_TYPE;
 	switch (asce.dt) {
 	case ASCE_TYPE_REGION1:
-		if (vaddr.rfx01 > asce.tl && !*fake)
+		if (vaddr.rfx01 > asce.tl)
 			return PGM_REGION_FIRST_TRANS;
 		break;
 	case ASCE_TYPE_REGION2:
-		if (vaddr.rfx)
-			return PGM_ASCE_TYPE;
 		if (vaddr.rsx01 > asce.tl)
 			return PGM_REGION_SECOND_TRANS;
 		break;
 	case ASCE_TYPE_REGION3:
-		if (vaddr.rfx || vaddr.rsx)
-			return PGM_ASCE_TYPE;
 		if (vaddr.rtx01 > asce.tl)
 			return PGM_REGION_THIRD_TRANS;
 		break;
 	case ASCE_TYPE_SEGMENT:
-		if (vaddr.rfx || vaddr.rsx || vaddr.rtx)
-			return PGM_ASCE_TYPE;
 		if (vaddr.sx01 > asce.tl)
 			return PGM_SEGMENT_TRANSLATION;
 		break;
 	}
 
+	w->level = asce.dt;
 	switch (asce.dt) {
-	case ASCE_TYPE_REGION1: {
-		union region1_table_entry rfte;
-
-		if (*fake) {
-			ptr += vaddr.rfx * _REGION1_SIZE;
-			rfte.val = ptr;
-			goto shadow_r2t;
-		}
-		*pgt = ptr + vaddr.rfx * 8;
-		rc = gmap_read_table(parent, ptr + vaddr.rfx * 8, &rfte.val);
+	case ASCE_TYPE_REGION1:
+		w->last_addr = ptr + vaddr.rfx * 8;
+		rc = kvm_s390_get_guest_page_and_read_gpa(kvm, entries + w->level,
+							  w->last_addr, &table.val);
 		if (rc)
 			return rc;
-		if (rfte.i)
+		if (table.pgd.i)
 			return PGM_REGION_FIRST_TRANS;
-		if (rfte.tt != TABLE_TYPE_REGION1)
+		if (table.pgd.tt != TABLE_TYPE_REGION1)
 			return PGM_TRANSLATION_SPEC;
-		if (vaddr.rsx01 < rfte.tf || vaddr.rsx01 > rfte.tl)
+		if (vaddr.rsx01 < table.pgd.tf || vaddr.rsx01 > table.pgd.tl)
 			return PGM_REGION_SECOND_TRANS;
 		if (sg->edat_level >= 1)
-			*dat_protection |= rfte.p;
-		ptr = rfte.rto * PAGE_SIZE;
-shadow_r2t:
-		rc = gmap_shadow_r2t(sg, saddr, rfte.val, *fake);
-		if (rc)
-			return rc;
-		kvm->stat.gmap_shadow_r1_entry++;
-	}
+			w->p |= table.pgd.p;
+		ptr = table.pgd.rto * PAGE_SIZE;
+		w->level--;
 		fallthrough;
-	case ASCE_TYPE_REGION2: {
-		union region2_table_entry rste;
-
-		if (*fake) {
-			ptr += vaddr.rsx * _REGION2_SIZE;
-			rste.val = ptr;
-			goto shadow_r3t;
-		}
-		*pgt = ptr + vaddr.rsx * 8;
-		rc = gmap_read_table(parent, ptr + vaddr.rsx * 8, &rste.val);
+	case ASCE_TYPE_REGION2:
+		w->last_addr = ptr + vaddr.rsx * 8;
+		rc = kvm_s390_get_guest_page_and_read_gpa(kvm, entries + w->level,
+							  w->last_addr, &table.val);
 		if (rc)
 			return rc;
-		if (rste.i)
+		if (table.p4d.i)
 			return PGM_REGION_SECOND_TRANS;
-		if (rste.tt != TABLE_TYPE_REGION2)
+		if (table.p4d.tt != TABLE_TYPE_REGION2)
 			return PGM_TRANSLATION_SPEC;
-		if (vaddr.rtx01 < rste.tf || vaddr.rtx01 > rste.tl)
+		if (vaddr.rtx01 < table.p4d.tf || vaddr.rtx01 > table.p4d.tl)
 			return PGM_REGION_THIRD_TRANS;
 		if (sg->edat_level >= 1)
-			*dat_protection |= rste.p;
-		ptr = rste.rto * PAGE_SIZE;
-shadow_r3t:
-		rste.p |= *dat_protection;
-		rc = gmap_shadow_r3t(sg, saddr, rste.val, *fake);
-		if (rc)
-			return rc;
-		kvm->stat.gmap_shadow_r2_entry++;
-	}
+			w->p |= table.p4d.p;
+		ptr = table.p4d.rto * PAGE_SIZE;
+		w->level--;
 		fallthrough;
-	case ASCE_TYPE_REGION3: {
-		union region3_table_entry rtte;
-
-		if (*fake) {
-			ptr += vaddr.rtx * _REGION3_SIZE;
-			rtte.val = ptr;
-			goto shadow_sgt;
-		}
-		*pgt = ptr + vaddr.rtx * 8;
-		rc = gmap_read_table(parent, ptr + vaddr.rtx * 8, &rtte.val);
+	case ASCE_TYPE_REGION3:
+		w->last_addr = ptr + vaddr.rtx * 8;
+		rc = kvm_s390_get_guest_page_and_read_gpa(kvm, entries + w->level,
+							  w->last_addr, &table.val);
 		if (rc)
 			return rc;
-		if (rtte.i)
+		if (table.pud.i)
 			return PGM_REGION_THIRD_TRANS;
-		if (rtte.tt != TABLE_TYPE_REGION3)
+		if (table.pud.tt != TABLE_TYPE_REGION3)
 			return PGM_TRANSLATION_SPEC;
-		if (rtte.cr && asce.p && sg->edat_level >= 2)
+		if (table.pud.cr && asce.p && sg->edat_level >= 2)
 			return PGM_TRANSLATION_SPEC;
-		if (rtte.fc && sg->edat_level >= 2) {
-			*dat_protection |= rtte.fc0.p;
-			*fake = 1;
-			ptr = rtte.fc1.rfaa * _REGION3_SIZE;
-			rtte.val = ptr;
-			goto shadow_sgt;
-		}
-		if (vaddr.sx01 < rtte.fc0.tf || vaddr.sx01 > rtte.fc0.tl)
-			return PGM_SEGMENT_TRANSLATION;
 		if (sg->edat_level >= 1)
-			*dat_protection |= rtte.fc0.p;
-		ptr = rtte.fc0.sto * PAGE_SIZE;
-shadow_sgt:
-		rtte.fc0.p |= *dat_protection;
-		rc = gmap_shadow_sgt(sg, saddr, rtte.val, *fake);
-		if (rc)
-			return rc;
-		kvm->stat.gmap_shadow_r3_entry++;
-	}
-		fallthrough;
-	case ASCE_TYPE_SEGMENT: {
-		union segment_table_entry ste;
-
-		if (*fake) {
-			ptr += vaddr.sx * _SEGMENT_SIZE;
-			ste.val = ptr;
-			goto shadow_pgt;
+			w->p |= table.pud.p;
+		if (table.pud.fc && sg->edat_level >= 2) {
+			table.val = u64_replace_bits(table.val, saddr, ~_REGION3_MASK);
+			goto edat_applies;
 		}
-		*pgt = ptr + vaddr.sx * 8;
-		rc = gmap_read_table(parent, ptr + vaddr.sx * 8, &ste.val);
-		if (rc)
-			return rc;
-		if (ste.i)
+		if (vaddr.sx01 < table.pud.fc0.tf || vaddr.sx01 > table.pud.fc0.tl)
 			return PGM_SEGMENT_TRANSLATION;
-		if (ste.tt != TABLE_TYPE_SEGMENT)
-			return PGM_TRANSLATION_SPEC;
-		if (ste.cs && asce.p)
-			return PGM_TRANSLATION_SPEC;
-		*dat_protection |= ste.fc0.p;
-		if (ste.fc && sg->edat_level >= 1) {
-			*fake = 1;
-			ptr = ste.fc1.sfaa * _SEGMENT_SIZE;
-			ste.val = ptr;
-			goto shadow_pgt;
-		}
-		ptr = ste.fc0.pto * (PAGE_SIZE / 2);
-shadow_pgt:
-		ste.fc0.p |= *dat_protection;
-		rc = gmap_shadow_pgt(sg, saddr, ste.val, *fake);
+		ptr = table.pud.fc0.sto * PAGE_SIZE;
+		w->level--;
+		fallthrough;
+	case ASCE_TYPE_SEGMENT:
+		w->last_addr = ptr + vaddr.sx * 8;
+		rc = kvm_s390_get_guest_page_and_read_gpa(kvm, entries + w->level,
+							  w->last_addr, &table.val);
 		if (rc)
 			return rc;
-		kvm->stat.gmap_shadow_sg_entry++;
+		if (table.pmd.i)
+			return PGM_SEGMENT_TRANSLATION;
+		if (table.pmd.tt != TABLE_TYPE_SEGMENT)
+			return PGM_TRANSLATION_SPEC;
+		if (table.pmd.cs && asce.p)
+			return PGM_TRANSLATION_SPEC;
+		w->p |= table.pmd.p;
+		if (table.pmd.fc && sg->edat_level >= 1) {
+			table.val = u64_replace_bits(table.val, saddr, ~_SEGMENT_MASK);
+			goto edat_applies;
+		}
+		ptr = table.pmd.fc0.pto * (PAGE_SIZE / 2);
+		w->level--;
 	}
-	}
-	/* Return the parent address of the page table */
-	*pgt = ptr;
+	w->last_addr = ptr + vaddr.px * 8;
+	rc = kvm_s390_get_guest_page_and_read_gpa(kvm, entries + w->level,
+						  w->last_addr, &table.val);
+	if (rc)
+		return rc;
+	if (table.pte.i)
+		return PGM_PAGE_TRANSLATION;
+	if (table.pte.z)
+		return PGM_TRANSLATION_SPEC;
+	w->p |= table.pte.p;
+edat_applies:
+	if (wr && w->p)
+		return PGM_PROTECTION;
+
+	return kvm_s390_get_guest_page(kvm, entries + LEVEL_MEM, table.pte.pfra, wr);
+}
+
+static int _do_shadow_pte(struct gmap *sg, gpa_t raddr, union pte *ptep_h, union pte *ptep,
+			  struct guest_fault *f, bool p)
+{
+	union pgste pgste;
+	union pte newpte;
+	int rc;
+
+	scoped_guard(spinlock, &sg->host_to_rmap_lock)
+		rc = gmap_insert_rmap(sg, f->gfn, gpa_to_gfn(raddr), TABLE_TYPE_PAGE_TABLE);
+	if (rc)
+		return rc;
+
+	pgste = pgste_get_lock(ptep_h);
+	newpte = _pte(f->pfn, f->writable, !p, 0);
+	newpte.s.d |= ptep->s.d;
+	newpte.s.sd |= ptep->s.sd;
+	newpte.h.p &= ptep->h.p;
+	pgste = gmap_ptep_xchg(sg->parent, ptep_h, newpte, pgste, f->gfn);
+	pgste.vsie_notif = 1;
+	pgste_set_unlock(ptep_h, pgste);
+
+	newpte = _pte(f->pfn, 0, !p, 0);
+	pgste = pgste_get_lock(ptep);
+	pgste = __dat_ptep_xchg(ptep, pgste, newpte, gpa_to_gfn(raddr), sg->asce, sg->uses_skeys);
+	pgste_set_unlock(ptep, pgste);
+
 	return 0;
 }
 
-/**
- * shadow_pgt_lookup() - find a shadow page table
- * @sg: pointer to the shadow guest address space structure
- * @saddr: the address in the shadow aguest address space
- * @pgt: parent gmap address of the page table to get shadowed
- * @dat_protection: if the pgtable is marked as protected by dat
- * @fake: pgt references contiguous guest memory block, not a pgtable
- *
- * Returns 0 if the shadow page table was found and -EAGAIN if the page
- * table was not found.
- *
- * Called with sg->mm->mmap_lock in read.
- */
-static int shadow_pgt_lookup(struct gmap *sg, unsigned long saddr, unsigned long *pgt,
-			     int *dat_protection, int *fake)
+static int _do_shadow_crste(struct gmap *sg, gpa_t raddr, union crste *host, union crste *table,
+			    struct guest_fault *f, bool p)
 {
-	unsigned long pt_index;
-	unsigned long *table;
-	struct page *page;
+	union crste newcrste;
+	gfn_t gfn;
 	int rc;
 
-	spin_lock(&sg->guest_table_lock);
-	table = gmap_table_walk(sg, saddr, 1); /* get segment pointer */
-	if (table && !(*table & _SEGMENT_ENTRY_INVALID)) {
-		/* Shadow page tables are full pages (pte+pgste) */
-		page = pfn_to_page(*table >> PAGE_SHIFT);
-		pt_index = gmap_pgste_get_pgt_addr(page_to_virt(page));
-		*pgt = pt_index & ~GMAP_SHADOW_FAKE_TABLE;
-		*dat_protection = !!(*table & _SEGMENT_ENTRY_PROTECT);
-		*fake = !!(pt_index & GMAP_SHADOW_FAKE_TABLE);
-		rc = 0;
-	} else  {
-		rc = -EAGAIN;
+	lockdep_assert_held_write(&sg->kvm->mmu_lock);
+
+	gfn = f->gfn & gpa_to_gfn(is_pmd(*table) ? _SEGMENT_MASK : _REGION3_MASK);
+	scoped_guard(spinlock, &sg->host_to_rmap_lock)
+		rc = gmap_insert_rmap(sg, gfn, gpa_to_gfn(raddr), host->h.tt);
+	if (rc)
+		return rc;
+
+	newcrste = _crste_fc1(f->pfn, host->h.tt, f->writable, !p);
+	newcrste.s.fc1.d |= host->s.fc1.d;
+	newcrste.s.fc1.sd |= host->s.fc1.sd;
+	newcrste.h.p &= host->h.p;
+	newcrste.s.fc1.vsie_notif = 1;
+	newcrste.s.fc1.prefix_notif = host->s.fc1.prefix_notif;
+	gmap_crstep_xchg(sg->parent, host, newcrste, f->gfn);
+
+	newcrste = _crste_fc1(f->pfn, host->h.tt, 0, !p);
+	dat_crstep_xchg(table, newcrste, gpa_to_gfn(raddr), sg->asce);
+	return 0;
+}
+
+static int _gaccess_do_shadow(struct kvm_s390_mmu_cache *mc, struct gmap *sg,
+			      unsigned long saddr, struct pgtwalk *w)
+{
+	struct guest_fault *entries;
+	int flags, i, hl, gl, l, rc;
+	union crste *table, *host;
+	union pte *ptep, *ptep_h;
+
+	lockdep_assert_held(&sg->kvm->mmu_lock);
+	entries = get_entries(w);
+	ptep_h = NULL;
+	ptep = NULL;
+
+	rc = dat_entry_walk(NULL, gpa_to_gfn(saddr), sg->asce, DAT_WALK_ANY, TABLE_TYPE_PAGE_TABLE,
+			    &table, &ptep);
+	if (rc)
+		return rc;
+
+	/* A race occourred. The shadow mapping is already valid, nothing to do */
+	if ((ptep && !ptep->h.i) || (!ptep && crste_leaf(*table)))
+		return 0;
+
+	gl = get_level(table, ptep);
+	if (KVM_BUG_ON(gl < w->level, sg->kvm))
+		return -EFAULT;
+
+	/*
+	 * Skip levels that are already protected. For each level, protect
+	 * only the page containing the entry, not the whole table.
+	 */
+	for (i = gl ; i > w->level; i--)
+		gmap_protect_rmap(mc, sg, entries[i - 1].gfn, gpa_to_gfn(saddr),
+				  entries[i - 1].pfn, i, entries[i - 1].writable);
+
+	rc = dat_entry_walk(NULL, entries[LEVEL_MEM].gfn, sg->parent->asce, DAT_WALK_LEAF,
+			    TABLE_TYPE_PAGE_TABLE, &host, &ptep_h);
+	if (rc)
+		return rc;
+
+	hl = get_level(host, ptep_h);
+	/* Get the smallest granularity */
+	l = min(hl, w->level);
+
+	flags = DAT_WALK_SPLIT_ALLOC | (sg->parent->uses_skeys ? DAT_WALK_USES_SKEYS : 0);
+	/* If necessary, create the shadow mapping */
+	if (l < gl) {
+		rc = dat_entry_walk(mc, gpa_to_gfn(saddr), sg->asce, flags, l, &table, &ptep);
+		if (rc)
+			return rc;
 	}
-	spin_unlock(&sg->guest_table_lock);
+	if (l < hl) {
+		rc = dat_entry_walk(mc, entries[LEVEL_MEM].gfn, sg->parent->asce,
+				    flags, l, &host, &ptep_h);
+		if (rc)
+			return rc;
+	}
+
+	if (KVM_BUG_ON(l > TABLE_TYPE_REGION3, sg->kvm))
+		return -EFAULT;
+	if (l == TABLE_TYPE_PAGE_TABLE)
+		return _do_shadow_pte(sg, saddr, ptep_h, ptep, entries + LEVEL_MEM, w->p);
+	return _do_shadow_crste(sg, saddr, host, table, entries + LEVEL_MEM, w->p);
+}
+
+static inline int _gaccess_shadow_fault(struct kvm_vcpu *vcpu, struct gmap *sg, gpa_t saddr,
+					unsigned long seq, struct pgtwalk *walk)
+{
+	int rc;
+
+	if (kvm_s390_array_needs_retry_unsafe(vcpu->kvm, seq, walk->raw_entries))
+		return -EAGAIN;
+again:
+	rc = kvm_s390_mmu_cache_topup(vcpu->arch.mc);
+	if (rc)
+		return rc;
+	scoped_guard(read_lock, &vcpu->kvm->mmu_lock) {
+		if (kvm_s390_array_needs_retry_safe(vcpu->kvm, seq, walk->raw_entries))
+			return -EAGAIN;
+		scoped_guard(spinlock, &sg->parent->children_lock)
+			rc = _gaccess_do_shadow(vcpu->arch.mc, sg, saddr, walk);
+		if (rc == -ENOMEM)
+			goto again;
+		if (!rc)
+			kvm_s390_release_faultin_array(vcpu->kvm, walk->raw_entries, false);
+	}
 	return rc;
 }
 
 /**
- * kvm_s390_shadow_fault - handle fault on a shadow page table
- * @vcpu: virtual cpu
- * @sg: pointer to the shadow guest address space structure
+ * __kvm_s390_shadow_fault() - handle fault on a shadow page table
+ * @vcpu: virtual cpu that triggered the action
+ * @sg: the shadow guest address space structure
  * @saddr: faulting address in the shadow gmap
  * @datptr: will contain the address of the faulting DAT table entry, or of
  *	    the valid leaf, plus some flags
+ * @wr: whether this is a write access
  *
- * Returns: - 0 if the shadow fault was successfully resolved
- *	    - > 0 (pgm exception code) on exceptions while faulting
- *	    - -EAGAIN if the caller can retry immediately
- *	    - -EFAULT when accessing invalid guest addresses
- *	    - -ENOMEM if out of memory
+ * Return:
+ * * 0 if the shadow fault was successfully resolved
+ * * > 0 (pgm exception code) on exceptions while faulting
+ * * -EAGAIN if the caller can retry immediately
+ * * -EFAULT when accessing invalid guest addresses
+ * * -ENOMEM if out of memory
  */
-int kvm_s390_shadow_fault(struct kvm_vcpu *vcpu, struct gmap *sg,
-			  unsigned long saddr, unsigned long *datptr)
+static int __gaccess_shadow_fault(struct kvm_vcpu *vcpu, struct gmap *sg, gpa_t saddr,
+				  union mvpg_pei *datptr, bool wr)
 {
-	union vaddress vaddr;
-	union page_table_entry pte;
-	unsigned long pgt = 0;
-	int dat_protection, fake;
+	struct pgtwalk walk = {	.p = false, };
+	unsigned long seq;
 	int rc;
 
-	if (KVM_BUG_ON(!gmap_is_shadow(sg), vcpu->kvm))
+	seq = vcpu->kvm->mmu_invalidate_seq;
+	/* Pairs with the smp_wmb() in kvm_mmu_invalidate_end(). */
+	smp_rmb();
+
+	rc = walk_guest_tables(sg, saddr, &walk, wr);
+	if (datptr) {
+		datptr->val = walk.last_addr;
+		datptr->dat_prot = wr && walk.p;
+		datptr->not_pte = walk.level > TABLE_TYPE_PAGE_TABLE;
+		datptr->real = sg->guest_asce.r;
+	}
+	if (!rc)
+		rc = _gaccess_shadow_fault(vcpu, sg, saddr, seq, &walk);
+	if (rc)
+		kvm_s390_release_faultin_array(vcpu->kvm, walk.raw_entries, true);
+	return rc;
+}
+
+int gaccess_shadow_fault(struct kvm_vcpu *vcpu, struct gmap *sg, gpa_t saddr,
+			 union mvpg_pei *datptr, bool wr)
+{
+	int rc;
+
+	if (KVM_BUG_ON(!sg->is_shadow, vcpu->kvm))
 		return -EFAULT;
 
-	mmap_read_lock(sg->mm);
-	/*
-	 * We don't want any guest-2 tables to change - so the parent
-	 * tables/pointers we read stay valid - unshadowing is however
-	 * always possible - only guest_table_lock protects us.
-	 */
-	ipte_lock(vcpu->kvm);
-
-	rc = shadow_pgt_lookup(sg, saddr, &pgt, &dat_protection, &fake);
+	rc = kvm_s390_mmu_cache_topup(vcpu->arch.mc);
 	if (rc)
-		rc = kvm_s390_shadow_tables(sg, saddr, &pgt, &dat_protection,
-					    &fake);
+		return rc;
 
-	vaddr.addr = saddr;
-	if (fake) {
-		pte.val = pgt + vaddr.px * PAGE_SIZE;
-		goto shadow_page;
-	}
-
-	switch (rc) {
-	case PGM_SEGMENT_TRANSLATION:
-	case PGM_REGION_THIRD_TRANS:
-	case PGM_REGION_SECOND_TRANS:
-	case PGM_REGION_FIRST_TRANS:
-		pgt |= PEI_NOT_PTE;
-		break;
-	case 0:
-		pgt += vaddr.px * 8;
-		rc = gmap_read_table(sg->parent, pgt, &pte.val);
-	}
-	if (datptr)
-		*datptr = pgt | dat_protection * PEI_DAT_PROT;
-	if (!rc && pte.i)
-		rc = PGM_PAGE_TRANSLATION;
-	if (!rc && pte.z)
-		rc = PGM_TRANSLATION_SPEC;
-shadow_page:
-	pte.p |= dat_protection;
-	if (!rc)
-		rc = gmap_shadow_page(sg, saddr, __pte(pte.val));
-	vcpu->kvm->stat.gmap_shadow_pg_entry++;
+	ipte_lock(vcpu->kvm);
+	rc = __gaccess_shadow_fault(vcpu, sg, saddr, datptr, wr || sg->guest_asce.r);
 	ipte_unlock(vcpu->kvm);
-	mmap_read_unlock(sg->mm);
+
 	return rc;
 }
