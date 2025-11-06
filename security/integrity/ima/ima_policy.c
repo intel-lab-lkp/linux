@@ -1953,6 +1953,153 @@ static int ima_parse_rule(char *rule, struct ima_rule_entry *entry)
 	return result;
 }
 
+static bool template_has_field(const char *field_id, const struct ima_template_desc *template2)
+{
+	int j;
+
+	for (int j = 0; j < template2->num_fields; j++)
+		if (strcmp(field_id, template2->fields[j]->field_id) == 0)
+			return true;
+
+	return false;
+}
+
+static bool keyring_has_item(const char *item, const struct ima_rule_opt_list *keyrings)
+{
+	int j;
+
+	for (j = 0; j < keyrings->count; j++) {
+		if (strcmp(item, keyrings->items[j]) == 0)
+			return true;
+	}
+	return false;
+}
+
+static bool labels_has_item(const char *item, const struct ima_rule_opt_list *labels)
+{
+	int j;
+
+	for (j = 0; j < labels->count; j++) {
+		if (strcmp(item, labels->items[j]) == 0)
+			return true;
+	}
+	return false;
+}
+
+static bool ima_rules_equal(const struct ima_rule_entry *rule1, const struct ima_rule_entry *rule2)
+{
+	int i;
+
+	if (rule1->flags != rule2->flags)
+		return false;
+
+	if (rule1->action != rule2->action)
+		return false;
+
+	if (((rule1->flags & IMA_FUNC) && rule1->func != rule2->func) ||
+	    ((rule1->flags & (IMA_MASK | IMA_INMASK)) && rule1->mask != rule2->mask) ||
+	    ((rule1->flags & IMA_FSMAGIC) && rule1->fsmagic != rule2->fsmagic) ||
+	    ((rule1->flags & IMA_FSUUID) && !uuid_equal(&rule1->fsuuid, &rule2->fsuuid)) ||
+	    ((rule1->flags & IMA_UID) && !uid_eq(rule1->uid, rule2->uid)) ||
+	    ((rule1->flags & IMA_GID) && !gid_eq(rule1->gid, rule2->gid)) ||
+	    ((rule1->flags & IMA_FOWNER) && !uid_eq(rule1->fowner, rule2->fowner)) ||
+	    ((rule1->flags & IMA_FGROUP) && !gid_eq(rule1->fgroup, rule2->fgroup)) ||
+	    ((rule1->flags & IMA_FSNAME) && (strcmp(rule1->fsname, rule2->fsname) != 0)) ||
+	    ((rule1->flags & IMA_PCR) && rule1->pcr != rule2->pcr) ||
+	    ((rule1->flags & IMA_VALIDATE_ALGOS) &&
+	      rule1->allowed_algos != rule2->allowed_algos) ||
+	    ((rule1->flags & IMA_EUID) && !uid_eq(rule1->uid, rule2->uid)) ||
+	    ((rule1->flags & IMA_EGID) && !gid_eq(rule1->gid, rule2->gid)))
+		return false;
+
+	if (!rule1->template && !rule2->template) {
+		;
+	} else if (!rule1->template || !rule2->template) {
+		return false;
+	} else if (rule1->template->num_fields != rule2->template->num_fields) {
+		return false;
+	} else if (rule1->template->num_fields != 0) {
+		for (i = 0; i < rule1->template->num_fields; i++) {
+			if (!template_has_field(rule1->template->fields[i]->field_id,
+						rule2->template))
+				return false;
+		}
+	}
+
+	if (rule1->flags & IMA_KEYRINGS) {
+		if (!rule1->keyrings && !rule2->keyrings) {
+			;
+		} else if (!rule1->keyrings || !rule2->keyrings) {
+			return false;
+		} else if (rule1->keyrings->count != rule2->keyrings->count) {
+			return false;
+		} else if (rule1->keyrings->count != 0) {
+			for (i = 0; i < rule1->keyrings->count; i++) {
+				if (!keyring_has_item(rule1->keyrings->items[i], rule2->keyrings))
+					return false;
+			}
+		}
+	}
+
+	if (rule1->flags & IMA_LABEL) {
+		if (!rule1->label && !rule2->label) {
+			;
+		} else if (!rule1->label || !rule2->label) {
+			return false;
+		} else if (rule1->label->count != rule2->label->count) {
+			return false;
+		} else if (rule1->label->count != 0) {
+			for (i = 0; i < rule1->label->count; i++) {
+				if (!labels_has_item(rule1->label->items[i], rule2->label))
+					return false;
+			}
+		}
+	}
+
+	for (i = 0; i < MAX_LSM_RULES; i++) {
+		if (!rule1->lsm[i].rule && !rule2->lsm[i].rule)
+			continue;
+
+		if (!rule1->lsm[i].rule || !rule2->lsm[i].rule)
+			return false;
+
+		if (strcmp(rule1->lsm[i].args_p, rule2->lsm[i].args_p) != 0)
+			return false;
+	}
+
+	return true;
+}
+
+/**
+ * ima_rule_exists - check if a rule already exists in the policy
+ *
+ * Checking both the active policy and the temporary rules list.
+ */
+static bool ima_rule_exists(struct ima_rule_entry *new_rule)
+{
+	struct ima_rule_entry *entry;
+	struct list_head *ima_rules_tmp;
+
+	if (!list_empty(&ima_temp_rules)) {
+		list_for_each_entry(entry, &ima_temp_rules, list) {
+			if (ima_rules_equal(entry, new_rule))
+				return true;
+		}
+	}
+
+	rcu_read_lock();
+	ima_rules_tmp = rcu_dereference(ima_rules);
+	list_for_each_entry_rcu(entry, ima_rules_tmp, list) {
+		if (ima_rules_equal(entry, new_rule)) {
+			rcu_read_unlock();
+			return true;
+		}
+	}
+	rcu_read_unlock();
+
+	return false;
+}
+
 /**
  * ima_parse_add_rule - add a rule to ima_policy_rules
  * @rule: ima measurement policy rule
@@ -1993,7 +2140,15 @@ ssize_t ima_parse_add_rule(char *rule)
 		return result;
 	}
 
-	list_add_tail(&entry->list, &ima_temp_rules);
+	if (!ima_rule_exists(entry)) {
+		list_add_tail(&entry->list, &ima_temp_rules);
+	} else {
+		result = -EEXIST;
+		ima_free_rule(entry);
+		integrity_audit_msg(AUDIT_INTEGRITY_STATUS, NULL,
+				    NULL, op, "duplicate-policy", result,
+				    audit_info);
+	}
 
 	return len;
 }
