@@ -2233,7 +2233,7 @@ static u64 htab_map_mem_usage(const struct bpf_map *map)
 		usage += htab->elem_size * num_entries;
 
 		if (percpu)
-			usage += value_size * num_possible_cpus() * num_entries;
+			usage += (u64)value_size * num_possible_cpus() * num_entries;
 		else if (!lru)
 			usage += sizeof(struct htab_elem *) * num_possible_cpus();
 	} else {
@@ -2245,7 +2245,7 @@ static u64 htab_map_mem_usage(const struct bpf_map *map)
 		usage += (htab->elem_size + LLIST_NODE_SZ) * num_entries;
 		if (percpu) {
 			usage += (LLIST_NODE_SZ + sizeof(void *)) * num_entries;
-			usage += value_size * num_possible_cpus() * num_entries;
+			usage += (u64)value_size * num_possible_cpus() * num_entries;
 		}
 	}
 	return usage;
