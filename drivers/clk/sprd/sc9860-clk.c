@@ -2021,17 +2021,15 @@ MODULE_DEVICE_TABLE(of, sprd_sc9860_clk_ids);
 
 static int sc9860_clk_probe(struct platform_device *pdev)
 {
-	const struct of_device_id *match;
 	const struct sprd_clk_desc *desc;
 	int ret;
 
-	match = of_match_node(sprd_sc9860_clk_ids, pdev->dev.of_node);
-	if (!match) {
-		pr_err("%s: of_match_node() failed", __func__);
+	desc = of_device_get_match_data(&pdev->dev);
+	if (!desc) {
+		pr_err("%s: of_device_get_match_data() failed", __func__);
 		return -ENODEV;
 	}
 
-	desc = match->data;
 	ret = sprd_clk_regmap_init(pdev, desc);
 	if (ret)
 		return ret;
