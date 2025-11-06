@@ -16,6 +16,7 @@ use crate::gsp::cmdq::Cmdq;
 pub(crate) mod cmdq;
 pub(crate) mod commands;
 mod fw;
+mod sequencer;
 
 use fw::GspArgumentsCached;
 use fw::LibosMemoryRegionInitArgument;

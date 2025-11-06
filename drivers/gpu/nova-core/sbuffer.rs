@@ -162,7 +162,6 @@ where
     /// Read all the remaining data into a [`KVec`].
     ///
     /// `self` will be empty after this operation.
-    #[expect(unused)]
     pub(crate) fn flush_into_kvec(&mut self, flags: kernel::alloc::Flags) -> Result<KVec<u8>> {
         let mut buf = KVec::<u8>::new();
 
