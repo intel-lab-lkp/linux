@@ -20,6 +20,7 @@
 #include <linux/compiler_types.h>
 #include <linux/device.h>
 #include <linux/io.h>
+#include <linux/io-64-nonatomic-hi-lo.h>
 #include <linux/iopoll.h>
 #include <linux/kernel.h>
 #include <linux/math.h>

@@ -3,7 +3,7 @@
 
 config DRM_POWERVR
 	tristate "Imagination Technologies PowerVR (Series 6 and later) & IMG Graphics"
-	depends on (ARM64 || RISCV && 64BIT)
+	depends on ARM || ARM64 || RISCV
 	depends on DRM
 	depends on MMU
 	depends on PM

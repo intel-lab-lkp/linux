@@ -85,7 +85,7 @@ struct sg_table;
  *    notes on that constant apply here.
  */
 #define PVR_PAGE_TABLE_ADDR_SPACE_SIZE SZ_1T
-#define PVR_PAGE_TABLE_ADDR_BITS __ffs(PVR_PAGE_TABLE_ADDR_SPACE_SIZE)
+#define PVR_PAGE_TABLE_ADDR_BITS __ffs64(PVR_PAGE_TABLE_ADDR_SPACE_SIZE)
 #define PVR_PAGE_TABLE_ADDR_MASK (PVR_PAGE_TABLE_ADDR_SPACE_SIZE - 1)
 
 void pvr_mmu_flush_request_all(struct pvr_device *pvr_dev);
