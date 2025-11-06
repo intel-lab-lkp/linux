@@ -1316,7 +1316,7 @@ typedef struct drm_i915_gem_object *
 
 static inline bool igt_can_allocate_thp(struct drm_i915_private *i915)
 {
-	return i915->mm.gemfs && has_transparent_hugepage();
+	return i915->mm.gemfs && pgtable_has_pmd_leaves();
 }
 
 static struct drm_i915_gem_object *
