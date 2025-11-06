@@ -4,15 +4,50 @@ use kernel::build_assert;
 use kernel::device;
 use kernel::pci;
 use kernel::prelude::*;
-use kernel::transmute::AsBytes;
+use kernel::time::Delta;
+use kernel::transmute::{
+    AsBytes,
+    FromBytes, //
+};
 
 use super::fw::commands::*;
 use super::fw::MsgFunction;
 use crate::driver::Bar0;
 use crate::gsp::cmdq::Cmdq;
-use crate::gsp::cmdq::{CommandToGsp, CommandToGspBase, CommandToGspWithPayload};
+use crate::gsp::cmdq::{
+    CommandToGsp,
+    CommandToGspBase,
+    CommandToGspWithPayload,
+    MessageFromGsp, //
+};
 use crate::gsp::GSP_PAGE_SIZE;
 use crate::sbuffer::SBufferIter;
+
+/// Message type for GSP initialization done notification.
+struct GspInitDone {}
+
+// SAFETY: `GspInitDone` is a zero-sized type with no bytes, therefore it
+// trivially has no uninitialized bytes.
+unsafe impl AsBytes for GspInitDone {}
+
+// SAFETY: `GspInitDone` is a zero-sized type with no bytes, therefore it
+// trivially has no uninitialized bytes.
+unsafe impl FromBytes for GspInitDone {}
+
+impl MessageFromGsp for GspInitDone {
+    const FUNCTION: MsgFunction = MsgFunction::GspInitDone;
+}
+
+/// Waits for GSP initialization to complete.
+pub(crate) fn gsp_init_done(cmdq: &mut Cmdq, timeout: Delta) -> Result {
+    loop {
+        match cmdq.receive_msg_from_gsp::<GspInitDone, ()>(timeout, |_, _| Ok(())) {
+            Ok(()) => break Ok(()),
+            Err(ERANGE) => continue,
+            Err(e) => break Err(e),
+        }
+    }
+}
 
 // For now we hard-code the registry entries. Future work will allow others to
 // be added as module parameters.
