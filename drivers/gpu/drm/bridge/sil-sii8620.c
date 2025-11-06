@@ -505,7 +505,7 @@ static void sii8620_identify_sink(struct sii8620 *ctx)
 	else
 		ctx->sink_type = SINK_DVI;
 
-	drm_edid_get_monitor_name(ctx->edid, sink_name, ARRAY_SIZE(sink_name));
+	drm_edid_raw_get_monitor_name(ctx->edid, sink_name, ARRAY_SIZE(sink_name));
 
 	dev_info(dev, "detected sink(type: %s): %s\n",
 		 sink_str[ctx->sink_type], sink_name);

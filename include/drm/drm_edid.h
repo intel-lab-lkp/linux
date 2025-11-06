@@ -454,8 +454,8 @@ int drm_add_modes_noedid(struct drm_connector *connector,
 
 int drm_edid_header_is_valid(const void *edid);
 bool drm_edid_is_valid(struct edid *edid);
-void drm_edid_get_monitor_name(const struct edid *edid, char *name,
-			       int buflen);
+void drm_edid_raw_get_monitor_name(const struct edid *edid, char *name,
+				   int bufsize);
 struct drm_display_mode *drm_mode_find_dmt(struct drm_device *dev,
 					   int hsize, int vsize, int fresh,
 					   bool rb);
@@ -490,5 +490,8 @@ u32 drm_edid_get_panel_id(const struct drm_edid *drm_edid);
 bool drm_edid_match(const struct drm_edid *drm_edid,
 		    const struct drm_edid_ident *ident);
 bool drm_edid_has_quirk(struct drm_connector *connector, enum drm_edid_quirk quirk);
+void drm_edid_get_monitor_name(const struct drm_edid *drm_edid,
+			       char *name,
+			       int bufsize);
 
 #endif /* __DRM_EDID_H__ */
