@@ -49,7 +49,14 @@ static inline void nft_connlimit_do_eval(struct nft_connlimit *priv,
 
 	err = nf_conncount_add(ct, priv->list);
 	if (err) {
-		if (err != -EINVAL) {
+		if (err == -EINVAL) {
+			/* Call gc to update the list count if any connection has
+			 * been closed already. This is useful to softlimit
+			 * connections like limiting bandwidth based on a number
+			 * of open connections.
+			 */
+			nf_conncount_gc_list(nf_ct_net(ct), priv->list);
+		} else {
 			regs->verdict.code = NF_DROP;
 			return;
 		}
