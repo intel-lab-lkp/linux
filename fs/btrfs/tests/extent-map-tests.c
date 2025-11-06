@@ -1036,7 +1036,8 @@ static int test_rmap_block(struct btrfs_fs_info *fs_info,
 		if (IS_ERR(dev)) {
 			test_err("cannot allocate device");
 			ret = PTR_ERR(dev);
-			goto out;
+			btrfs_free_chunk_map(map);
+			goto out_free;
 		}
 		map->stripes[i].dev = dev;
 		map->stripes[i].physical = test->data_stripe_phys_start[i];
