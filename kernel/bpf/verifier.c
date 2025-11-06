@@ -20051,6 +20051,63 @@ static int do_check_insn(struct bpf_verifier_env *env, bool *do_print_state)
 	return 0;
 }
 
+static struct bpf_jmp_history_entry *
+get_top_jmp_entry(struct bpf_verifier_env *env)
+{
+	struct bcf_refine_state *bcf = &env->bcf;
+	struct bpf_verifier_state *vstate;
+next:
+	if (bcf->cur_vstate >= bcf->vstate_cnt)
+		return NULL;
+	vstate = bcf->parents[bcf->cur_vstate];
+	if (bcf->cur_jmp_entry >= vstate->jmp_history_cnt) {
+		bcf->cur_vstate++;
+		bcf->cur_jmp_entry = 0;
+		goto next;
+	}
+	return &vstate->jmp_history[bcf->cur_jmp_entry];
+}
+
+enum { PATH_MATCH, PATH_MISMATCH, PATH_DONE };
+
+static int bcf_match_path(struct bpf_verifier_env *env)
+{
+	struct bcf_refine_state *bcf = &env->bcf;
+	struct bpf_jmp_history_entry *top = get_top_jmp_entry(env);
+	struct bpf_verifier_state *last_state;
+	int prev_idx;
+
+	last_state = bcf->parents[bcf->vstate_cnt - 1];
+	if (!top)
+		return last_state->last_insn_idx == env->prev_insn_idx ?
+			       PATH_DONE :
+			       PATH_MATCH;
+
+	prev_idx = top->prev_idx;
+	/* entry->prev_idx is u32:20, compiler does not sign extend this */
+	if (prev_idx == 0xfffff)
+		prev_idx = -1;
+
+	if (prev_idx == env->prev_insn_idx) {
+		if (top->idx == env->insn_idx) {
+			bcf->cur_jmp_entry++;
+			/* Check if we have consumed the last entry */
+			top = get_top_jmp_entry(env);
+			if (!top &&
+			    last_state->last_insn_idx == env->prev_insn_idx)
+				return PATH_DONE;
+			return PATH_MATCH;
+		}
+		return PATH_MISMATCH;
+	}
+
+	/* cur_state is branch taken, but the recorded one is not */
+	if (is_jmp_point(env, env->insn_idx))
+		return PATH_MISMATCH;
+
+	return PATH_MATCH;
+}
+
 static int do_check(struct bpf_verifier_env *env)
 {
 	bool pop_log = !(env->log.level & BPF_LOG_LEVEL2);
@@ -20111,6 +20168,15 @@ static int do_check(struct bpf_verifier_env *env)
 			err = push_jmp_history(env, state, 0, 0);
 			if (err)
 				return err;
+		}
+
+		if (env->bcf.tracking) {
+			int path = bcf_match_path(env);
+
+			if (path == PATH_MISMATCH)
+				goto process_bpf_exit;
+			else if (path == PATH_DONE)
+				return 0;
 		}
 
 		if (signal_pending(current))
