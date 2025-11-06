@@ -2833,7 +2833,7 @@ void intel_cx0_powerdown_change_sequence(struct intel_encoder *encoder,
 				 XELPDP_PORT_POWERDOWN_UPDATE_TIMEOUT_US, 2, NULL))
 		drm_warn(display->drm,
 			 "PHY %c failed to bring out of Lane reset after %dus.\n",
-			 phy_name(phy), XELPDP_PORT_RESET_START_TIMEOUT_US);
+			 phy_name(phy), XELPDP_PORT_POWERDOWN_UPDATE_TIMEOUT_US);
 }
 
 void intel_cx0_setup_powerdown(struct intel_encoder *encoder)
