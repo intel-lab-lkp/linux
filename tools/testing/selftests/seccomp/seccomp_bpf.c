@@ -5057,17 +5057,23 @@ __naked __nocf_check noinline int probed_uprobe(void)
 }
 #pragma GCC diagnostic pop
 
-#else
+int __nocf_check noinline probed_uretprobe(void)
+{
+	return 1;
+}
+
+#else /* !__x86_64__ */
+
 noinline int probed_uprobe(void)
 {
 	return 1;
 }
-#endif
 
 noinline int probed_uretprobe(void)
 {
 	return 1;
 }
+#endif /* __x86_64__ */
 
 static int parse_uint_from_file(const char *file, const char *fmt)
 {
