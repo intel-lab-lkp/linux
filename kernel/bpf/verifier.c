@@ -15959,6 +15959,57 @@ static int adjust_reg_min_max_vals(struct bpf_verifier_env *env,
 	return 0;
 }
 
+static int bcf_mov(struct bpf_verifier_env *env, struct bpf_reg_state *dst_reg,
+		   struct bpf_reg_state *src_reg, u32 sz, bool bit32, bool sext)
+{
+	int src_expr, ext_sz, bitsz = bit32 ? 32 : 64;
+
+	if (!env->bcf.tracking)
+		return 0;
+	if (tnum_is_const(dst_reg->var_off)) {
+		dst_reg->bcf_expr = -1;
+		return 0;
+	}
+
+	src_expr = bcf_reg_expr(env, src_reg, bit32 || sz == 32);
+	if (sz != 32) /* u/s16 u/s8 */
+		src_expr = bcf_extract(env, sz, src_expr);
+
+	if (sext) {
+		ext_sz = bitsz - sz;
+		dst_reg->bcf_expr =
+			bcf_extend(env, ext_sz, bitsz, true, src_expr);
+		if (bit32)
+			bcf_zext_32_to_64(env, dst_reg);
+	} else {
+		ext_sz = 64 - sz;
+		dst_reg->bcf_expr =
+			bcf_extend(env, ext_sz, 64, false, src_expr);
+	}
+	if (dst_reg->bcf_expr < 0)
+		return dst_reg->bcf_expr;
+
+	return 0;
+}
+
+static int bcf_mov32(struct bpf_verifier_env *env, struct bpf_reg_state *dst,
+		     struct bpf_reg_state *src)
+{
+	return bcf_mov(env, dst, src, 32, true, false);
+}
+
+static int bcf_sext32(struct bpf_verifier_env *env, struct bpf_reg_state *dst,
+		      struct bpf_reg_state *src, u32 sz)
+{
+	return bcf_mov(env, dst, src, sz, true, true);
+}
+
+static int bcf_sext64(struct bpf_verifier_env *env, struct bpf_reg_state *dst,
+		      struct bpf_reg_state *src, u32 sz)
+{
+	return bcf_mov(env, dst, src, sz, false, true);
+}
+
 /* check validity of 32-bit and 64-bit arithmetic operations */
 static int check_alu_op(struct bpf_verifier_env *env, struct bpf_insn *insn)
 {
@@ -16084,8 +16135,12 @@ static int check_alu_op(struct bpf_verifier_env *env, struct bpf_insn *insn)
 						if (no_sext)
 							assign_scalar_id_before_mov(env, src_reg);
 						copy_register_state(dst_reg, src_reg);
-						if (!no_sext)
+						if (!no_sext) {
 							dst_reg->id = 0;
+							err = bcf_sext64(env, dst_reg, src_reg, insn->off);
+							if (err)
+								return err;
+						}
 						coerce_reg_to_size_sx(dst_reg, insn->off >> 3);
 						dst_reg->subreg_def = DEF_NOT_SUBREG;
 					} else {
@@ -16110,8 +16165,12 @@ static int check_alu_op(struct bpf_verifier_env *env, struct bpf_insn *insn)
 						 * range otherwise dst_reg min/max could be incorrectly
 						 * propagated into src_reg by sync_linked_regs()
 						 */
-						if (!is_src_reg_u32)
+						if (!is_src_reg_u32) {
 							dst_reg->id = 0;
+							err = bcf_mov32(env, dst_reg, src_reg);
+							if (err)
+								return err;
+						}
 						dst_reg->subreg_def = env->insn_idx + 1;
 					} else {
 						/* case: W1 = (s8, s16)W2 */
@@ -16120,8 +16179,12 @@ static int check_alu_op(struct bpf_verifier_env *env, struct bpf_insn *insn)
 						if (no_sext)
 							assign_scalar_id_before_mov(env, src_reg);
 						copy_register_state(dst_reg, src_reg);
-						if (!no_sext)
+						if (!no_sext) {
 							dst_reg->id = 0;
+							err = bcf_sext32(env, dst_reg, src_reg, insn->off);
+							if (err)
+								return err;
+						}
 						dst_reg->subreg_def = env->insn_idx + 1;
 						coerce_subreg_to_size_sx(dst_reg, insn->off >> 3);
 					}
