@@ -4,6 +4,7 @@
 
 use core::mem::size_of;
 use kernel::alloc::flags::GFP_KERNEL;
+use kernel::bindings;
 use kernel::device;
 use kernel::io::poll::read_poll_timeout;
 use kernel::prelude::*;
@@ -46,6 +47,7 @@ pub(crate) enum GspSeqCmd {
     RegWrite(fw::GSP_SEQ_BUF_PAYLOAD_REG_WRITE),
     RegModify(fw::GSP_SEQ_BUF_PAYLOAD_REG_MODIFY),
     RegPoll(fw::GSP_SEQ_BUF_PAYLOAD_REG_POLL),
+    DelayUs(fw::GSP_SEQ_BUF_PAYLOAD_DELAY_US),
     RegStore(fw::GSP_SEQ_BUF_PAYLOAD_REG_STORE),
 }
 
@@ -64,6 +66,10 @@ impl GspSeqCmd {
             fw::GSP_SEQ_BUF_OPCODE_GSP_SEQ_BUF_OPCODE_REG_POLL => {
                 // SAFETY: We're using the union field that corresponds to the opCode.
                 Ok(GspSeqCmd::RegPoll(unsafe { cmd.payload.regPoll }))
+            }
+            fw::GSP_SEQ_BUF_OPCODE_GSP_SEQ_BUF_OPCODE_DELAY_US => {
+                // SAFETY: We're using the union field that corresponds to the opCode.
+                Ok(GspSeqCmd::DelayUs(unsafe { cmd.payload.delayUs }))
             }
             fw::GSP_SEQ_BUF_OPCODE_GSP_SEQ_BUF_OPCODE_REG_STORE => {
                 // SAFETY: We're using the union field that corresponds to the opCode.
@@ -96,6 +102,7 @@ impl GspSeqCmd {
                 opcode_size + size_of::<fw::GSP_SEQ_BUF_PAYLOAD_REG_MODIFY>()
             }
             GspSeqCmd::RegPoll(_) => opcode_size + size_of::<fw::GSP_SEQ_BUF_PAYLOAD_REG_POLL>(),
+            GspSeqCmd::DelayUs(_) => opcode_size + size_of::<fw::GSP_SEQ_BUF_PAYLOAD_DELAY_US>(),
             GspSeqCmd::RegStore(_) => opcode_size + size_of::<fw::GSP_SEQ_BUF_PAYLOAD_REG_STORE>(),
         }
     }
@@ -159,6 +166,21 @@ impl GspSeqCmdRunner for fw::GSP_SEQ_BUF_PAYLOAD_REG_POLL {
     }
 }
 
+impl GspSeqCmdRunner for fw::GSP_SEQ_BUF_PAYLOAD_DELAY_US {
+    fn run(&self, sequencer: &GspSequencer<'_>) -> Result {
+        dev_dbg!(sequencer.dev, "DelayUs: val=0x{:x}\n", self.val);
+        // SAFETY: `usleep_range_state` is safe to call with any parameter.
+        unsafe {
+            bindings::usleep_range_state(
+                self.val as usize,
+                self.val as usize,
+                bindings::TASK_UNINTERRUPTIBLE,
+            )
+        };
+        Ok(())
+    }
+}
+
 impl GspSeqCmdRunner for fw::GSP_SEQ_BUF_PAYLOAD_REG_STORE {
     fn run(&self, sequencer: &GspSequencer<'_>) -> Result {
         let addr = self.addr as usize;
@@ -176,6 +198,7 @@ impl GspSeqCmdRunner for GspSeqCmd {
             GspSeqCmd::RegWrite(cmd) => cmd.run(seq),
             GspSeqCmd::RegModify(cmd) => cmd.run(seq),
             GspSeqCmd::RegPoll(cmd) => cmd.run(seq),
+            GspSeqCmd::DelayUs(cmd) => cmd.run(seq),
             GspSeqCmd::RegStore(cmd) => cmd.run(seq),
         }
     }
