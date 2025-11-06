@@ -854,13 +854,6 @@ static void amd_iommu_report_page_fault(struct amd_iommu *iommu,
 						   PCI_FUNC(devid), domain_id);
 				goto out;
 			}
-
-			if (!report_iommu_fault(&dev_data->domain->domain,
-						&pdev->dev, address,
-						IS_WRITE_REQUEST(flags) ?
-							IOMMU_FAULT_WRITE :
-							IOMMU_FAULT_READ))
-				goto out;
 		}
 
 		if (__ratelimit(&dev_data->rs)) {
