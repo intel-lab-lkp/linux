@@ -5,6 +5,7 @@
 use core::mem::size_of;
 use kernel::alloc::flags::GFP_KERNEL;
 use kernel::device;
+use kernel::io::poll::read_poll_timeout;
 use kernel::prelude::*;
 use kernel::time::Delta;
 use kernel::transmute::FromBytes;
@@ -40,13 +41,36 @@ struct GspSequencerInfo<'a> {
 
 /// GSP Sequencer Command types with payload data.
 /// Commands have an opcode and a opcode-dependent struct.
-#[allow(dead_code)]
-pub(crate) enum GspSeqCmd {}
+#[allow(clippy::enum_variant_names)]
+pub(crate) enum GspSeqCmd {
+    RegWrite(fw::GSP_SEQ_BUF_PAYLOAD_REG_WRITE),
+    RegModify(fw::GSP_SEQ_BUF_PAYLOAD_REG_MODIFY),
+    RegPoll(fw::GSP_SEQ_BUF_PAYLOAD_REG_POLL),
+    RegStore(fw::GSP_SEQ_BUF_PAYLOAD_REG_STORE),
+}
 
 impl GspSeqCmd {
     /// Creates a new GspSeqCmd from a firmware GSP_SEQUENCER_BUFFER_CMD.
-    pub(crate) fn from_fw_cmd(_cmd: &fw::GSP_SEQUENCER_BUFFER_CMD) -> Result<Self> {
-        Err(EINVAL)
+    pub(crate) fn from_fw_cmd(cmd: &fw::GSP_SEQUENCER_BUFFER_CMD) -> Result<Self> {
+        match cmd.opCode {
+            fw::GSP_SEQ_BUF_OPCODE_GSP_SEQ_BUF_OPCODE_REG_WRITE => {
+                // SAFETY: We're using the union field that corresponds to the opCode.
+                Ok(GspSeqCmd::RegWrite(unsafe { cmd.payload.regWrite }))
+            }
+            fw::GSP_SEQ_BUF_OPCODE_GSP_SEQ_BUF_OPCODE_REG_MODIFY => {
+                // SAFETY: We're using the union field that corresponds to the opCode.
+                Ok(GspSeqCmd::RegModify(unsafe { cmd.payload.regModify }))
+            }
+            fw::GSP_SEQ_BUF_OPCODE_GSP_SEQ_BUF_OPCODE_REG_POLL => {
+                // SAFETY: We're using the union field that corresponds to the opCode.
+                Ok(GspSeqCmd::RegPoll(unsafe { cmd.payload.regPoll }))
+            }
+            fw::GSP_SEQ_BUF_OPCODE_GSP_SEQ_BUF_OPCODE_REG_STORE => {
+                // SAFETY: We're using the union field that corresponds to the opCode.
+                Ok(GspSeqCmd::RegStore(unsafe { cmd.payload.regStore }))
+            }
+            _ => Err(EINVAL),
+        }
     }
 
     pub(crate) fn new(data: &[u8], dev: &device::Device<device::Bound>) -> Result<Self> {
@@ -64,7 +88,16 @@ impl GspSeqCmd {
     /// Get the size of this command in bytes, the command consists of
     /// a 4-byte opcode, and a variable-sized payload.
     pub(crate) fn size_bytes(&self) -> usize {
-        0
+        let opcode_size = size_of::<fw::GSP_SEQ_BUF_OPCODE>();
+        match self {
+            // For commands with payloads, add the payload size in bytes.
+            GspSeqCmd::RegWrite(_) => opcode_size + size_of::<fw::GSP_SEQ_BUF_PAYLOAD_REG_WRITE>(),
+            GspSeqCmd::RegModify(_) => {
+                opcode_size + size_of::<fw::GSP_SEQ_BUF_PAYLOAD_REG_MODIFY>()
+            }
+            GspSeqCmd::RegPoll(_) => opcode_size + size_of::<fw::GSP_SEQ_BUF_PAYLOAD_REG_POLL>(),
+            GspSeqCmd::RegStore(_) => opcode_size + size_of::<fw::GSP_SEQ_BUF_PAYLOAD_REG_STORE>(),
+        }
     }
 }
 
@@ -83,9 +116,68 @@ pub(crate) trait GspSeqCmdRunner {
     fn run(&self, sequencer: &GspSequencer<'_>) -> Result;
 }
 
-impl GspSeqCmdRunner for GspSeqCmd {
-    fn run(&self, _seq: &GspSequencer<'_>) -> Result {
+impl GspSeqCmdRunner for fw::GSP_SEQ_BUF_PAYLOAD_REG_WRITE {
+    fn run(&self, sequencer: &GspSequencer<'_>) -> Result {
+        let addr = self.addr as usize;
+        let val = self.val;
+        let _ = sequencer.bar.try_write32(val, addr);
         Ok(())
+    }
+}
+
+impl GspSeqCmdRunner for fw::GSP_SEQ_BUF_PAYLOAD_REG_MODIFY {
+    fn run(&self, sequencer: &GspSequencer<'_>) -> Result {
+        let addr = self.addr as usize;
+        if let Ok(temp) = sequencer.bar.try_read32(addr) {
+            let _ = sequencer
+                .bar
+                .try_write32((temp & !self.mask) | self.val, addr);
+        }
+        Ok(())
+    }
+}
+
+impl GspSeqCmdRunner for fw::GSP_SEQ_BUF_PAYLOAD_REG_POLL {
+    fn run(&self, sequencer: &GspSequencer<'_>) -> Result {
+        let addr = self.addr as usize;
+        let mut timeout_us = i64::from(self.timeout);
+
+        // Default timeout to 4 seconds.
+        timeout_us = if timeout_us == 0 { 4000000 } else { timeout_us };
+
+        // First read.
+        sequencer.bar.try_read32(addr)?;
+
+        // Poll the requested register with requested timeout.
+        read_poll_timeout(
+            || sequencer.bar.try_read32(addr),
+            |current| (current & self.mask) == self.val,
+            Delta::ZERO,
+            Delta::from_micros(timeout_us),
+        )
+        .map(|_| ())
+    }
+}
+
+impl GspSeqCmdRunner for fw::GSP_SEQ_BUF_PAYLOAD_REG_STORE {
+    fn run(&self, sequencer: &GspSequencer<'_>) -> Result {
+        let addr = self.addr as usize;
+        let _index = self.index;
+
+        let _val = sequencer.bar.try_read32(addr)?;
+
+        Ok(())
+    }
+}
+
+impl GspSeqCmdRunner for GspSeqCmd {
+    fn run(&self, seq: &GspSequencer<'_>) -> Result {
+        match self {
+            GspSeqCmd::RegWrite(cmd) => cmd.run(seq),
+            GspSeqCmd::RegModify(cmd) => cmd.run(seq),
+            GspSeqCmd::RegPoll(cmd) => cmd.run(seq),
+            GspSeqCmd::RegStore(cmd) => cmd.run(seq),
+        }
     }
 }
 
