@@ -90,6 +90,14 @@
 #define RTL8211F_LEDCR_MASK			GENMASK(4, 0)
 #define RTL8211F_LEDCR_SHIFT			5
 
+/* RTL8211F(D)(I)-VD-CG CLKOUT configuration is specified via magic values
+ * to undocumented register pages. The names here do not reflect the datasheet.
+ * Unlike other PHY models, CLKOUT configuration does not go through PHYCR2.
+ */
+#define RTL8211FVD_CLKOUT_PAGE			0xd05
+#define RTL8211FVD_CLKOUT_REG			0x11
+#define RTL8211FVD_CLKOUT_EN			BIT(8)
+
 /* RTL8211F RGMII configuration */
 #define RTL8211F_RGMII_PAGE			0xd08
 
@@ -585,6 +593,11 @@ static int rtl8211f_disable_clk_out(struct phy_device *phydev)
 	if (!priv->disable_clk_out)
 		return 0;
 
+	if (phydev->drv->phy_id == RTL_8211FVD_PHYID)
+		return phy_modify_paged(phydev, RTL8211FVD_CLKOUT_PAGE,
+					RTL8211FVD_CLKOUT_REG,
+					RTL8211FVD_CLKOUT_EN, 0);
+
 	return phy_modify_paged(phydev, RTL8211F_PHYCR_PAGE,
 				RTL8211F_PHYCR2, RTL8211F_CLKOUT_EN, 0);
 }
@@ -662,6 +675,13 @@ static int rtl8211f_config_init(struct phy_device *phydev)
 			str_enabled_disabled(val_rxdly));
 	}
 
+	ret = rtl8211f_disable_clk_out(phydev);
+	if (ret) {
+		dev_err(dev, "clkout configuration failed: %pe\n",
+			ERR_PTR(ret));
+		return ret;
+	}
+
 	/* RTL8211FVD has no PHYCR2 register */
 	if (phydev->drv->phy_id == RTL_8211FVD_PHYID)
 		return 0;
@@ -671,13 +691,6 @@ static int rtl8211f_config_init(struct phy_device *phydev)
 			       RTL8211F_PHYCR2_PHY_EEE_ENABLE, 0);
 	if (ret)
 		return ret;
-
-	ret = rtl8211f_disable_clk_out(phydev);
-	if (ret) {
-		dev_err(dev, "clkout configuration failed: %pe\n",
-			ERR_PTR(ret));
-		return ret;
-	}
 
 	return genphy_soft_reset(phydev);
 }
