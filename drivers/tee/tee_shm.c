@@ -722,7 +722,14 @@ void tee_shm_put(struct tee_shm *shm)
 	struct tee_device *teedev;
 	bool do_release = false;
 
-	if (!shm || !shm->ctx || !shm->ctx->teedev)
+	/* checking pointer */
+	if (IS_ERR_OR_NULL(shm) || !virt_addr_valid(shm))
+		return;
+
+	if (IS_ERR_OR_NULL(shm->ctx) || !virt_addr_valid(shm->ctx))
+		return;
+
+	if (IS_ERR_OR_NULL(shm->ctx->teedev) || !virt_addr_valid(shm->ctx->teedev))
 		return;
 
 	teedev = shm->ctx->teedev;
