@@ -82,10 +82,27 @@ static struct hinic3_msg_desc *get_mbox_msg_desc(struct hinic3_mbox *mbox,
 						 enum mbox_msg_direction_type dir,
 						 u16 src_func_id)
 {
+	struct hinic3_hwdev *hwdev = mbox->hwdev;
 	struct hinic3_msg_channel *msg_ch;
+	u16 id;
 
-	msg_ch = (src_func_id == MBOX_MGMT_FUNC_ID) ?
-		&mbox->mgmt_msg : mbox->func_msg;
+	if (src_func_id == MBOX_MGMT_FUNC_ID) {
+		msg_ch = &mbox->mgmt_msg;
+	} else if (HINIC3_IS_VF(hwdev)) {
+		/* message from pf */
+		msg_ch = mbox->func_msg;
+		if (src_func_id != hinic3_pf_id_of_vf(hwdev) || !msg_ch)
+			return NULL;
+	} else if (src_func_id > hinic3_glb_pf_vf_offset(hwdev)) {
+		/* message from vf */
+		id = (src_func_id - 1) - hinic3_glb_pf_vf_offset(hwdev);
+		if (id >= 1)
+			return NULL;
+
+		msg_ch = &mbox->func_msg[id];
+	} else {
+		return NULL;
+	}
 
 	return (dir == MBOX_MSG_SEND) ?
 		&msg_ch->recv_msg : &msg_ch->resp_msg;
@@ -409,6 +426,13 @@ int hinic3_init_mbox(struct hinic3_hwdev *hwdev)
 	if (err)
 		goto err_destroy_workqueue;
 
+	if (HINIC3_IS_VF(hwdev)) {
+		/* VF to PF mbox message channel */
+		err = hinic3_init_func_mbox_msg_channel(hwdev);
+		if (err)
+			goto err_uninit_mgmt_msg_ch;
+	}
+
 	err = hinic3_init_func_mbox_msg_channel(hwdev);
 	if (err)
 		goto err_uninit_mgmt_msg_ch;
@@ -424,8 +448,8 @@ int hinic3_init_mbox(struct hinic3_hwdev *hwdev)
 	return 0;
 
 err_uninit_func_mbox_msg_ch:
-	hinic3_uninit_func_mbox_msg_channel(hwdev);
-
+	if (HINIC3_IS_VF(hwdev))
+		hinic3_uninit_func_mbox_msg_channel(hwdev);
 err_uninit_mgmt_msg_ch:
 	uninit_mgmt_msg_channel(mbox);
 
@@ -576,7 +600,13 @@ static void write_mbox_msg_attr(struct hinic3_mbox *mbox,
 {
 	struct hinic3_hwif *hwif = mbox->hwdev->hwif;
 	u32 mbox_int, mbox_ctrl, tx_size;
+	u16 func = dst_func;
 
+	/* VF can send non-management messages only to PF. We set DST_FUNC field
+	 * to 0 since HW will ignore it anyway.
+	 */
+	if (HINIC3_IS_VF(mbox->hwdev) && dst_func != MBOX_MGMT_FUNC_ID)
+		func = 0;
 	tx_size = ALIGN(seg_len + MBOX_HEADER_SZ, MBOX_SEG_LEN_ALIGN) >> 2;
 
 	mbox_int = MBOX_INT_SET(dst_aeqn, DST_AEQN) |
@@ -587,7 +617,7 @@ static void write_mbox_msg_attr(struct hinic3_mbox *mbox,
 
 	mbox_ctrl = MBOX_CTRL_SET(1, TX_STATUS) |
 		    MBOX_CTRL_SET(0, TRIGGER_AEQE) |
-		    MBOX_CTRL_SET(dst_func, DST_FUNC);
+		    MBOX_CTRL_SET(func, DST_FUNC);
 
 	hinic3_hwif_write_reg(hwif, HINIC3_FUNC_CSR_MAILBOX_INT_OFF, mbox_int);
 	hinic3_hwif_write_reg(hwif, HINIC3_FUNC_CSR_MAILBOX_CONTROL_OFF,
