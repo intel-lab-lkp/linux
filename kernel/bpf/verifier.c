@@ -5286,6 +5286,10 @@ static void copy_register_state(struct bpf_reg_state *dst, const struct bpf_reg_
 	*dst = *src;
 }
 
+static int bcf_mov(struct bpf_verifier_env *env, struct bpf_reg_state *dst_reg,
+		   struct bpf_reg_state *src_reg, u32 sz, bool bit32,
+		   bool sext);
+
 static void save_register_state(struct bpf_verifier_env *env,
 				struct bpf_func_state *state,
 				int spi, struct bpf_reg_state *reg,
@@ -5294,6 +5298,11 @@ static void save_register_state(struct bpf_verifier_env *env,
 	int i;
 
 	copy_register_state(&state->stack[spi].spilled_ptr, reg);
+
+	if (env->bcf.tracking && !tnum_is_const(reg->var_off) &&
+	    size != BPF_REG_SIZE)
+		bcf_mov(env, &state->stack[spi].spilled_ptr, reg, size * 8,
+			false, false);
 
 	for (i = BPF_REG_SIZE; i > BPF_REG_SIZE - size; i--)
 		state->stack[spi].slot_type[i - 1] = STACK_SPILL;
@@ -5437,6 +5446,7 @@ static int check_stack_write_fixed_off(struct bpf_verifier_env *env,
 
 		/* regular write of data into stack destroys any spilled ptr */
 		state->stack[spi].spilled_ptr.type = NOT_INIT;
+		state->stack[spi].spilled_ptr.bcf_expr = -1;
 		/* Mark slots as STACK_MISC if they belonged to spilled ptr/dynptr/iter. */
 		if (is_stack_slot_special(&state->stack[spi]))
 			for (i = 0; i < BPF_REG_SIZE; i++)
@@ -5566,6 +5576,7 @@ static int check_stack_write_var_off(struct bpf_verifier_env *env,
 
 		/* Erase all other spilled pointers. */
 		state->stack[spi].spilled_ptr.type = NOT_INIT;
+		state->stack[spi].spilled_ptr.bcf_expr = -1;
 
 		/* Update the slot type. */
 		new_type = STACK_MISC;
@@ -8025,6 +8036,11 @@ static int check_mem_access(struct bpf_verifier_env *env, int insn_idx, u32 regn
 			coerce_reg_to_size(&regs[value_regno], size);
 		else
 			coerce_reg_to_size_sx(&regs[value_regno], size);
+
+		if (env->bcf.tracking && regs[value_regno].bcf_expr >= 0)
+			err = bcf_mov(env, &regs[value_regno],
+				      &regs[value_regno], size * 8, false,
+				      is_ldsx);
 	}
 	return err;
 }
