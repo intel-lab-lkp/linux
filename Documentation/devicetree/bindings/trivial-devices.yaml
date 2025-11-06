@@ -97,8 +97,6 @@ properties:
           - dfrobot,sen0322
             # DH electronics GmbH on-board CPLD trivial SPI device
           - dh,dhcom-board
-            # DA9053: flexible system level PMIC with multicore support
-          - dlg,da9053
             # DMARD05: 3-axis I2C Accelerometer
           - domintech,dmard05
             # DMARD06: 3-axis I2C Accelerometer
