@@ -62,6 +62,10 @@ void dm_helpers_free_gpu_mem(
 enum dc_edid_status dm_helpers_parse_edid_caps(struct dc_link *link,
 					       struct dc_sink *sink);
 
+/* Compare two EDIDs */
+bool dm_helpers_is_same_edid(struct dc_sink *prev_sink,
+			     struct dc_sink *current_sink);
+
 /*
  * Update DP branch info
  */
