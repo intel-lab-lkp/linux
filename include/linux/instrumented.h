@@ -42,6 +42,20 @@ static __always_inline void instrument_write(const volatile void *v, size_t size
 }
 
 /**
+ * instrument_write_after - instrument regular write access
+ * @v: address of access
+ * @size: size of access
+ *
+ * Instrument a regular write access. The instrumentation should be inserted
+ * after the actual write happens.
+ */
+static __always_inline void instrument_write_after(const volatile void *v,
+						   size_t size)
+{
+	kmsan_unpoison_memory((const void *)v, size);
+}
+
+/**
  * instrument_read_write - instrument regular read-write access
  * @v: address of access
  * @size: size of access
