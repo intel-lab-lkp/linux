@@ -24,28 +24,35 @@ static inline void nft_connlimit_do_eval(struct nft_connlimit *priv,
 					 const struct nft_pktinfo *pkt,
 					 const struct nft_set_ext *ext)
 {
-	const struct nf_conntrack_zone *zone = &nf_ct_zone_dflt;
-	const struct nf_conntrack_tuple *tuple_ptr;
+	struct nf_conntrack_tuple_hash *h;
 	struct nf_conntrack_tuple tuple;
 	enum ip_conntrack_info ctinfo;
 	const struct nf_conn *ct;
 	unsigned int count;
-
-	tuple_ptr = &tuple;
+	int err;
 
 	ct = nf_ct_get(pkt->skb, &ctinfo);
-	if (ct != NULL) {
-		tuple_ptr = &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple;
-		zone = nf_ct_zone(ct);
-	} else if (!nf_ct_get_tuplepr(pkt->skb, skb_network_offset(pkt->skb),
-				      nft_pf(pkt), nft_net(pkt), &tuple)) {
-		regs->verdict.code = NF_DROP;
-		return;
+	if (!ct) {
+		if (!nf_ct_get_tuplepr(pkt->skb, skb_network_offset(pkt->skb),
+				       nft_pf(pkt), nft_net(pkt), &tuple)) {
+			regs->verdict.code = NF_DROP;
+			return;
+		}
+
+		h = nf_conntrack_find_get(nft_net(pkt), &nf_ct_zone_dflt, &tuple);
+		if (!h) {
+			regs->verdict.code = NF_DROP;
+			return;
+		}
+		ct = nf_ct_tuplehash_to_ctrack(h);
 	}
 
-	if (nf_conncount_add(nft_net(pkt), priv->list, tuple_ptr, zone)) {
-		regs->verdict.code = NF_DROP;
-		return;
+	err = nf_conncount_add(ct, priv->list);
+	if (err) {
+		if (err != -EINVAL) {
+			regs->verdict.code = NF_DROP;
+			return;
+		}
 	}
 
 	count = READ_ONCE(priv->list->count);

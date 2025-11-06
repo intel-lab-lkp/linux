@@ -122,15 +122,21 @@ find_or_evict(struct net *net, struct nf_conncount_list *list,
 	return ERR_PTR(-EAGAIN);
 }
 
-static int __nf_conncount_add(struct net *net,
-			      struct nf_conncount_list *list,
-			      const struct nf_conntrack_tuple *tuple,
-			      const struct nf_conntrack_zone *zone)
+static int __nf_conncount_add(const struct nf_conn *ct,
+			      struct nf_conncount_list *list)
 {
 	const struct nf_conntrack_tuple_hash *found;
 	struct nf_conncount_tuple *conn, *conn_n;
+	const struct nf_conntrack_tuple *tuple;
+	const struct nf_conntrack_zone *zone;
 	struct nf_conn *found_ct;
 	unsigned int collect = 0;
+
+	if (!ct || nf_ct_is_confirmed(ct))
+		return -EINVAL;
+
+	tuple = &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple;
+	zone = nf_ct_zone(ct);
 
 	if ((u32)jiffies == list->last_gc)
 		goto add_new_node;
@@ -140,7 +146,7 @@ static int __nf_conncount_add(struct net *net,
 		if (collect > CONNCOUNT_GC_MAX_NODES)
 			break;
 
-		found = find_or_evict(net, list, conn);
+		found = find_or_evict(nf_ct_net(ct), list, conn);
 		if (IS_ERR(found)) {
 			/* Not found, but might be about to be confirmed */
 			if (PTR_ERR(found) == -EAGAIN) {
@@ -198,16 +204,13 @@ add_new_node:
 	return 0;
 }
 
-int nf_conncount_add(struct net *net,
-		     struct nf_conncount_list *list,
-		     const struct nf_conntrack_tuple *tuple,
-		     const struct nf_conntrack_zone *zone)
+int nf_conncount_add(const struct nf_conn *ct, struct nf_conncount_list *list)
 {
 	int ret;
 
 	/* check the saved connections */
 	spin_lock_bh(&list->list_lock);
-	ret = __nf_conncount_add(net, list, tuple, zone);
+	ret = __nf_conncount_add(ct, list);
 	spin_unlock_bh(&list->list_lock);
 
 	return ret;
@@ -308,21 +311,22 @@ static void schedule_gc_worker(struct nf_conncount_data *data, int tree)
 }
 
 static unsigned int
-insert_tree(struct net *net,
+insert_tree(const struct nf_conn *ct,
 	    struct nf_conncount_data *data,
 	    struct rb_root *root,
 	    unsigned int hash,
-	    const u32 *key,
-	    const struct nf_conntrack_tuple *tuple,
-	    const struct nf_conntrack_zone *zone)
+	    const u32 *key)
 {
 	struct nf_conncount_rb *gc_nodes[CONNCOUNT_GC_MAX_NODES];
+	const struct nf_conntrack_zone *zone = nf_ct_zone(ct);
+	const struct nf_conntrack_tuple *tuple;
 	struct rb_node **rbnode, *parent;
 	struct nf_conncount_rb *rbconn;
 	struct nf_conncount_tuple *conn;
 	unsigned int count = 0, gc_count = 0;
 	bool do_gc = true;
 
+	tuple = &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple;
 	spin_lock_bh(&nf_conncount_locks[hash]);
 restart:
 	parent = NULL;
@@ -340,8 +344,8 @@ restart:
 		} else {
 			int ret;
 
-			ret = nf_conncount_add(net, &rbconn->list, tuple, zone);
-			if (ret)
+			ret = nf_conncount_add(ct, &rbconn->list);
+			if (ret && ret != -EINVAL)
 				count = 0; /* hotdrop */
 			else
 				count = rbconn->list.count;
@@ -352,7 +356,7 @@ restart:
 		if (gc_count >= ARRAY_SIZE(gc_nodes))
 			continue;
 
-		if (do_gc && nf_conncount_gc_list(net, &rbconn->list))
+		if (do_gc && nf_conncount_gc_list(nf_ct_net(ct), &rbconn->list))
 			gc_nodes[gc_count++] = rbconn;
 	}
 
@@ -394,11 +398,9 @@ out_unlock:
 }
 
 static unsigned int
-count_tree(struct net *net,
+count_tree(struct net *net, const struct nf_conn *ct,
 	   struct nf_conncount_data *data,
-	   const u32 *key,
-	   const struct nf_conntrack_tuple *tuple,
-	   const struct nf_conntrack_zone *zone)
+	   const u32 *key)
 {
 	struct rb_root *root;
 	struct rb_node *parent;
@@ -422,7 +424,7 @@ count_tree(struct net *net,
 		} else {
 			int ret;
 
-			if (!tuple) {
+			if (!ct) {
 				nf_conncount_gc_list(net, &rbconn->list);
 				return rbconn->list.count;
 			}
@@ -437,19 +439,23 @@ count_tree(struct net *net,
 			}
 
 			/* same source network -> be counted! */
-			ret = __nf_conncount_add(net, &rbconn->list, tuple, zone);
+			ret = __nf_conncount_add(ct, &rbconn->list);
 			spin_unlock_bh(&rbconn->list.list_lock);
-			if (ret)
+			if (ret && ret != -EINVAL) {
 				return 0; /* hotdrop */
-			else
+			} else {
+				/* -EINVAL means add was skipped, update the list */
+				if (ret == -EINVAL)
+					nf_conncount_gc_list(net, &rbconn->list);
 				return rbconn->list.count;
+			}
 		}
 	}
 
-	if (!tuple)
+	if (!ct)
 		return 0;
 
-	return insert_tree(net, data, root, hash, key, tuple, zone);
+	return insert_tree(ct, data, root, hash, key);
 }
 
 static void tree_gc_worker(struct work_struct *work)
@@ -511,16 +517,14 @@ next:
 }
 
 /* Count and return number of conntrack entries in 'net' with particular 'key'.
- * If 'tuple' is not null, insert it into the accounting data structure.
+ * If 'ct' is not null, insert the tuple into the accounting data structure.
  * Call with RCU read lock.
  */
-unsigned int nf_conncount_count(struct net *net,
+unsigned int nf_conncount_count(struct net *net, const struct nf_conn *ct,
 				struct nf_conncount_data *data,
-				const u32 *key,
-				const struct nf_conntrack_tuple *tuple,
-				const struct nf_conntrack_zone *zone)
+				const u32 *key)
 {
-	return count_tree(net, data, key, tuple, zone);
+	return count_tree(net, ct, data, key);
 }
 EXPORT_SYMBOL_GPL(nf_conncount_count);
 
