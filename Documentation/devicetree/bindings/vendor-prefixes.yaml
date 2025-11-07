@@ -570,6 +570,8 @@ patternProperties:
     description: Foxconn Industrial Internet
   "^firefly,.*":
     description: Firefly
+  "^fiti,.*":
+    description: Fitipower Integrated Technology Inc.
   "^flipkart,.*":
     description: Flipkart Inc.
   "^focaltech,.*":
