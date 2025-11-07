@@ -20,6 +20,7 @@
 #include "panthor_gpu.h"
 #include "panthor_hw.h"
 #include "panthor_mmu.h"
+#include "panthor_pwr.h"
 #include "panthor_regs.h"
 #include "panthor_sched.h"
 
@@ -102,6 +103,7 @@ void panthor_device_unplug(struct panthor_device *ptdev)
 	panthor_fw_unplug(ptdev);
 	panthor_mmu_unplug(ptdev);
 	panthor_gpu_unplug(ptdev);
+	panthor_pwr_unplug(ptdev);
 
 	pm_runtime_dont_use_autosuspend(ptdev->base.dev);
 	pm_runtime_put_sync_suspend(ptdev->base.dev);
@@ -251,9 +253,13 @@ int panthor_device_init(struct panthor_device *ptdev)
 	if (ret)
 		goto err_rpm_put;
 
-	ret = panthor_gpu_init(ptdev);
+	ret = panthor_pwr_init(ptdev);
 	if (ret)
 		goto err_rpm_put;
+
+	ret = panthor_gpu_init(ptdev);
+	if (ret)
+		goto err_unplug_pwr;
 
 	ret = panthor_gpu_coherency_init(ptdev);
 	if (ret)
@@ -294,6 +300,9 @@ err_unplug_mmu:
 
 err_unplug_gpu:
 	panthor_gpu_unplug(ptdev);
+
+err_unplug_pwr:
+	panthor_pwr_unplug(ptdev);
 
 err_rpm_put:
 	pm_runtime_put_sync_suspend(ptdev->base.dev);
@@ -448,6 +457,7 @@ static int panthor_device_resume_hw_components(struct panthor_device *ptdev)
 {
 	int ret;
 
+	panthor_pwr_resume(ptdev);
 	panthor_gpu_resume(ptdev);
 	panthor_mmu_resume(ptdev);
 
@@ -457,6 +467,7 @@ static int panthor_device_resume_hw_components(struct panthor_device *ptdev)
 
 	panthor_mmu_suspend(ptdev);
 	panthor_gpu_suspend(ptdev);
+	panthor_pwr_suspend(ptdev);
 	return ret;
 }
 
@@ -570,6 +581,7 @@ int panthor_device_suspend(struct device *dev)
 		panthor_fw_suspend(ptdev);
 		panthor_mmu_suspend(ptdev);
 		panthor_gpu_suspend(ptdev);
+		panthor_pwr_suspend(ptdev);
 		drm_dev_exit(cookie);
 	}
 
