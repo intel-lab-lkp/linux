@@ -420,8 +420,11 @@ static unsigned int xhci_ring_expansion_needed(struct xhci_hcd *xhci, struct xhc
 /* Ring the host controller doorbell after placing a command on the ring */
 void xhci_ring_cmd_db(struct xhci_hcd *xhci)
 {
-	if (!(xhci->cmd_ring_state & CMD_RING_STATE_RUNNING))
+	if (!(xhci->cmd_ring_state & CMD_RING_STATE_RUNNING)) {
+		xhci_err(xhci, "%pS Failed to start cmd ring, sw cmd_ring_state %d\n",
+			 __builtin_return_address(0), xhci->cmd_ring_state);
 		return;
+	}
 
 	xhci_dbg(xhci, "// Ding dong!\n");
 

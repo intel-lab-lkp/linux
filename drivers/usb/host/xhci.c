@@ -491,6 +491,14 @@ static void xhci_set_cmd_ring_deq(struct xhci_hcd *xhci)
 	dma_addr_t deq_dma;
 	u64 crcr;
 
+	if (!list_empty(&xhci->cmd_list))
+		xhci_err(xhci, "%pS CMDDBG set cmd ring deq pendig commands\n",
+			 __builtin_return_address(0));
+	if (xhci->cmd_ring->dequeue != xhci->cmd_ring->enqueue)
+		xhci_err(xhci,"%pS CMDDBG set cmd ring deq: %p and enq %p mismatch\n",
+			 __builtin_return_address(0),
+			 xhci->cmd_ring->dequeue, xhci->cmd_ring->enqueue);
+
 	deq_dma = xhci_trb_virt_to_dma(xhci->cmd_ring->deq_seg, xhci->cmd_ring->dequeue);
 	deq_dma &= CMD_RING_PTR_MASK;
 
@@ -858,6 +866,14 @@ static void xhci_clear_command_ring(struct xhci_hcd *xhci)
 	struct xhci_segment *seg;
 
 	ring = xhci->cmd_ring;
+
+	if (!list_empty(&xhci->cmd_list))
+		xhci_err(xhci, "CMDDBG Clearing command ring with pendig commands\n");
+
+	if (ring->dequeue != ring->enqueue)
+		xhci_err(xhci,"CMDDBG clear cmd ring deq: %p and enq %p mismatch\n",
+			 ring->dequeue, ring->enqueue);
+
 	xhci_for_each_ring_seg(ring->first_seg, seg) {
 		/* erase all TRBs before the link */
 		memset(seg->trbs, 0, sizeof(union xhci_trb) * (TRBS_PER_SEGMENT - 1));
