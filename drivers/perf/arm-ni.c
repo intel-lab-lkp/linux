@@ -53,6 +53,7 @@
 
 #define NI_NUM_COUNTERS		8
 #define NI_CCNT_IDX		31
+#define NI_PMU_PA_SHIFT		12
 
 /* Event attributes */
 #define NI_CONFIG_TYPE		GENMASK_ULL(15, 0)
@@ -115,7 +116,6 @@ struct arm_ni {
 	struct device *dev;
 	void __iomem *base;
 	enum ni_part part;
-	int id;
 	int cpu;
 	int num_cds;
 	struct hlist_node cpuhp_node;
@@ -560,7 +560,7 @@ static int arm_ni_init_cd(struct arm_ni *ni, struct arm_ni_node *node, u64 res_s
 		.read = arm_ni_event_read,
 	};
 
-	name = devm_kasprintf(ni->dev, GFP_KERNEL, "arm_ni_%d_cd_%d", ni->id, cd->id);
+	name = devm_kasprintf(ni->dev, GFP_KERNEL, "arm_ni_%llx", res_start >> NI_PMU_PA_SHIFT);
 	if (!name)
 		return -ENOMEM;
 
@@ -623,7 +623,6 @@ static int arm_ni_probe(struct platform_device *pdev)
 	struct arm_ni *ni;
 	struct resource *res;
 	void __iomem *base;
-	static atomic_t id;
 	int ret, num_cds;
 	u32 reg, part;
 
@@ -674,7 +673,6 @@ static int arm_ni_probe(struct platform_device *pdev)
 	ni->base = base;
 	ni->num_cds = num_cds;
 	ni->part = part;
-	ni->id = atomic_fetch_inc(&id);
 	ni->cpu = cpumask_local_spread(0, dev_to_node(ni->dev));
 	platform_set_drvdata(pdev, ni);
 
