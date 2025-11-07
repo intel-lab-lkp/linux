@@ -1075,7 +1075,7 @@ static int fsi_slave_init(struct fsi_master *master, int link, uint8_t id)
 	rc = __fsi_get_new_minor(slave, fsi_dev_cfam, &slave->dev.devt,
 				 &slave->cdev_idx);
 	if (rc)
-		goto err_free;
+		goto err_put_device;
 
 	trace_fsi_slave_init(slave);
 
@@ -1112,6 +1112,9 @@ static int fsi_slave_init(struct fsi_master *master, int link, uint8_t id)
 
 err_free_ida:
 	fsi_free_minor(slave->dev.devt);
+err_put_device:
+	put_device(&slave->dev);
+	return rc;
 err_free:
 	of_node_put(slave->dev.of_node);
 	kfree(slave);
