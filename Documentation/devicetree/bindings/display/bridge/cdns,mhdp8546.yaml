@@ -30,10 +30,6 @@ properties:
 
   reg-names:
     minItems: 1
-    items:
-      - const: mhdptx
-      - const: j721e-intg
-      - const: mhdptx-sapb
 
   clocks:
     maxItems: 1
@@ -103,7 +99,10 @@ allOf:
           maxItems: 3
         reg-names:
           minItems: 2
-          maxItems: 3
+          items:
+            - const: mhdptx
+            - const: j721e-intg
+            - const: mhdptx-sapb
     else:
       properties:
         reg:
@@ -111,7 +110,9 @@ allOf:
           maxItems: 2
         reg-names:
           minItems: 1
-          maxItems: 2
+          items:
+            - const: mhdptx
+            - const: mhdptx-sapb
 
 required:
   - compatible
