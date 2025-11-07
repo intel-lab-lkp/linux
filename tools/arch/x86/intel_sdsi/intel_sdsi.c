@@ -856,7 +856,8 @@ int main(int argc, char *argv[])
 			break;
 		default:
 			fprintf(stderr, "No command specified\n");
-			return -1;
+			ret = -1;
+			break;
 		}
 
 		sdsi_free_dev(s);
