@@ -502,6 +502,9 @@ int rocket_job_open(struct rocket_file_priv *rocket_priv)
 	unsigned int core;
 	int ret;
 
+	if (unlikely(!scheds))
+		return -ENOMEM;
+
 	for (core = 0; core < rdev->num_cores; core++)
 		scheds[core] = &rdev->cores[core].sched;
 
@@ -509,8 +512,12 @@ int rocket_job_open(struct rocket_file_priv *rocket_priv)
 				    DRM_SCHED_PRIORITY_NORMAL,
 				    scheds,
 				    rdev->num_cores, NULL);
-	if (WARN_ON(ret))
+	if (WARN_ON(ret)) {
+		kfree(scheds);
 		return ret;
+	}
+
+	rocket_priv->scheds = scheds;
 
 	return 0;
 }
@@ -520,6 +527,7 @@ void rocket_job_close(struct rocket_file_priv *rocket_priv)
 	struct drm_sched_entity *entity = &rocket_priv->sched_entity;
 
 	kfree(entity->sched_list);
+	kfree(rocket_priv->scheds);
 	drm_sched_entity_destroy(entity);
 }
 
