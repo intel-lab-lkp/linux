@@ -804,7 +804,7 @@ int mxl111sf_i2c_xfer(struct i2c_adapter *adap,
 	int hwi2c = (state->chip_rev > MXL111SF_V6);
 	int i, ret;
 
-	if (mutex_lock_interruptible(&d->i2c_mutex) < 0)
+	if (!atomic_read(&d->init_ready) || mutex_lock_interruptible(&d->i2c_mutex) < 0)
 		return -EAGAIN;
 
 	for (i = 0; i < num; i++) {
