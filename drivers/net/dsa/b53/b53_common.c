@@ -1447,6 +1447,13 @@ static void b53_adjust_531x5_rgmii(struct dsa_switch *ds, int port,
 	else
 		off = B53_RGMII_CTRL_P(port);
 
+	/* Older driver versions incorrectly applied delays in
+	 * PHY_INTERFACE_MODE_RGMII mode. In order to not break old users, keep
+	 * interpreting RGMII as RGMII-ID.
+	 */
+	if (interface == PHY_INTERFACE_MODE_RGMII)
+		interface = PHY_INTERFACE_MODE_RGMII_ID;
+
 	/* Configure the port RGMII clock delay by DLL disabled and
 	 * tx_clk aligned timing (restoring to reset defaults)
 	 */
@@ -1458,19 +1465,24 @@ static void b53_adjust_531x5_rgmii(struct dsa_switch *ds, int port,
 	 * account for this internal delay that is inserted, otherwise
 	 * the switch won't be able to receive correctly.
 	 *
+	 * PHY_INTERFACE_MODE_RGMII_RXID means RX internal delay, make
+	 * sure that we enable the port RX clock internal sampling delay
+	 * to account for this internal delay that is inserted, otherwise
+	 * the switch won't be able to send correctly.
+	 *
+	 * PHY_INTERFACE_MODE_RGMII_ID means both RX and TX internal delay,
+	 * make sure that we enable delays for both.
+	 *
 	 * PHY_INTERFACE_MODE_RGMII means that we are not introducing
 	 * any delay neither on transmission nor reception, so the
-	 * BCM53125 must also be configured accordingly to account for
-	 * the lack of delay and introduce
-	 *
-	 * The BCM53125 switch has its RX clock and TX clock control
-	 * swapped, hence the reason why we modify the TX clock path in
-	 * the "RGMII" case
+	 * BCM53125 must also be configured accordingly.
 	 */
-	if (interface == PHY_INTERFACE_MODE_RGMII_TXID)
+	if (interface == PHY_INTERFACE_MODE_RGMII_TXID ||
+	    interface == PHY_INTERFACE_MODE_RGMII_ID)
 		rgmii_ctrl |= RGMII_CTRL_DLL_TXC;
-	if (interface == PHY_INTERFACE_MODE_RGMII)
-		rgmii_ctrl |= RGMII_CTRL_DLL_TXC | RGMII_CTRL_DLL_RXC;
+	if (interface == PHY_INTERFACE_MODE_RGMII_RXID ||
+	    interface == PHY_INTERFACE_MODE_RGMII_ID)
+		rgmii_ctrl |= RGMII_CTRL_DLL_RXC;
 
 	if (dev->chip_id != BCM53115_DEVICE_ID)
 		rgmii_ctrl |= RGMII_CTRL_TIMING_SEL;
