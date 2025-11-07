@@ -314,7 +314,7 @@ static __always_inline void __ns_ref_active_put(struct ns_common *ns)
 	}
 }
 #define ns_ref_active_put(__ns) \
-	do { if (__ns) __ns_ref_active_put(to_ns_common(__ns)); } while (0)
+	do { if ((__ns) &&  !is_initial_namespace(&(__ns)->ns)) __ns_ref_active_put(to_ns_common(__ns)); } while (0)
 
 static __always_inline struct ns_common *__must_check ns_get_unless_inactive(struct ns_common *ns)
 {
