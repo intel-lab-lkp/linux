@@ -8640,6 +8640,23 @@ static void ath11k_mac_op_flush(struct ieee80211_hw *hw, struct ieee80211_vif *v
 	ath11k_mac_flush_tx_complete(ar);
 }
 
+static void ath11k_mac_op_flush_sta(struct ieee80211_hw *hw,
+				    struct ieee80211_vif *vif,
+				    struct ieee80211_sta *sta)
+{
+	struct ath11k_vif *arvif = (void *)vif->drv_priv;
+	struct ath11k *ar = hw->priv;
+	struct peer_flush_params params = {
+		.peer_tid_bitmap = 0xFF,
+		.vdev_id = arvif->vdev_id,
+	};
+	int ret;
+
+	ret = ath11k_wmi_send_peer_flush_tids_cmd(ar, sta->addr, &params);
+	if (ret)
+		ath11k_warn(ar->ab, "failed to flush sta %pM: %d\n", sta->addr, ret);
+}
+
 static bool
 ath11k_mac_has_single_legacy_rate(struct ath11k *ar,
 				  enum nl80211_band band,
@@ -10095,6 +10112,7 @@ static const struct ieee80211_ops ath11k_ops = {
 	.set_bitrate_mask		= ath11k_mac_op_set_bitrate_mask,
 	.get_survey			= ath11k_mac_op_get_survey,
 	.flush				= ath11k_mac_op_flush,
+	.flush_sta			= ath11k_mac_op_flush_sta,
 	.sta_statistics			= ath11k_mac_op_sta_statistics,
 	CFG80211_TESTMODE_CMD(ath11k_tm_cmd)
 
