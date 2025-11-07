@@ -440,7 +440,6 @@ impl Cmdq {
     /// written to by its [`CommandToGsp::init_variable_payload`] method.
     ///
     /// Error codes returned by the command initializers are propagated as-is.
-    #[expect(unused)]
     pub(crate) fn send_gsp_command<M>(&mut self, bar: &Bar0, command: M) -> Result
     where
         M: CommandToGsp,

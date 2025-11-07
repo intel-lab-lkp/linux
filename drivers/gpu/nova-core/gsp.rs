@@ -13,6 +13,7 @@ use kernel::transmute::AsBytes;
 use crate::gsp::cmdq::Cmdq;
 
 pub(crate) mod cmdq;
+pub(crate) mod commands;
 mod fw;
 
 use fw::GspArgumentsCached;
