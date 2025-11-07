@@ -431,6 +431,12 @@ struct blk_mq_hw_ctx {
 	unsigned int		queue_num;
 
 	/**
+	 * @zwp_mutex: Mutex used for serializing dispatching of zoned writes
+	 * if zoned write pipelining is enabled.
+	 */
+	struct mutex		zwp_mutex;
+
+	/**
 	 * @nr_active: Number of active requests. Only used when a tag set is
 	 * shared across request queues.
 	 */

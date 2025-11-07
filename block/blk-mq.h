@@ -458,6 +458,42 @@ do {								\
 #define blk_mq_run_dispatch_ops(q, dispatch_ops)		\
 	__blk_mq_run_dispatch_ops(q, true, dispatch_ops)	\
 
+static inline struct mutex *blk_mq_zwp_mutex(struct blk_mq_hw_ctx *hctx)
+{
+	struct request_queue *q = hctx->queue;
+
+	/*
+	 * If pipelining zoned writes is disabled, do not serialize dispatch
+	 * operations.
+	 */
+	if (!blk_pipeline_zwr(q))
+		return NULL;
+
+	/*
+	 * If no I/O scheduler is active or if the selected I/O scheduler
+	 * uses multiple queues internally, serialize per hardware queue.
+	 */
+	if (!blk_queue_sq_sched(q))
+		return &hctx->zwp_mutex;
+
+	/* For single queue I/O schedulers, serialize per request queue. */
+	return &blk_mq_map_queue_type(q, HCTX_TYPE_DEFAULT, 0)->zwp_mutex;
+}
+
+#define blk_mq_run_dispatch_ops_serialized(hctx, dispatch_ops)	\
+do {								\
+	struct request_queue *q = hctx->queue;			\
+	struct mutex *m = blk_mq_zwp_mutex(hctx);		\
+								\
+	if (m) {						\
+		mutex_lock(m);					\
+		blk_mq_run_dispatch_ops(q, dispatch_ops);	\
+		mutex_unlock(m);				\
+	} else {						\
+		blk_mq_run_dispatch_ops(q, dispatch_ops);	\
+	}							\
+} while (0)
+
 static inline bool blk_mq_can_poll(struct request_queue *q)
 {
 	return (q->limits.features & BLK_FEAT_POLL) &&
