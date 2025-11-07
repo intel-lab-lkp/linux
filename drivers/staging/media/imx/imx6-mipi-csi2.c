@@ -716,6 +716,14 @@ err_parse:
 	return ret;
 }
 
+static void csi2_nf_cleanup(void *data)
+{
+	struct csi2_dev *csi2 = data;
+
+	v4l2_async_nf_unregister(&csi2->notifier);
+	v4l2_async_nf_cleanup(&csi2->notifier);
+}
+
 static int csi2_probe(struct platform_device *pdev)
 {
 	struct csi2_dev *csi2;
@@ -746,6 +754,10 @@ static int csi2_probe(struct platform_device *pdev)
 
 	ret = media_entity_pads_init(&csi2->sd.entity, CSI2_NUM_PADS,
 				     csi2->pad);
+	if (ret)
+		return ret;
+
+	ret = devm_add_action_or_reset(&pdev->dev, csi2_nf_cleanup, csi2);
 	if (ret)
 		return ret;
 
@@ -800,8 +812,6 @@ static int csi2_probe(struct platform_device *pdev)
 	return 0;
 
 clean_notifier:
-	v4l2_async_nf_unregister(&csi2->notifier);
-	v4l2_async_nf_cleanup(&csi2->notifier);
 	clk_disable_unprepare(csi2->dphy_clk);
 pllref_off:
 	clk_disable_unprepare(csi2->pllref_clk);
@@ -815,8 +825,6 @@ static void csi2_remove(struct platform_device *pdev)
 	struct v4l2_subdev *sd = platform_get_drvdata(pdev);
 	struct csi2_dev *csi2 = sd_to_dev(sd);
 
-	v4l2_async_nf_unregister(&csi2->notifier);
-	v4l2_async_nf_cleanup(&csi2->notifier);
 	v4l2_async_unregister_subdev(sd);
 	clk_disable_unprepare(csi2->dphy_clk);
 	clk_disable_unprepare(csi2->pllref_clk);
