@@ -771,30 +771,23 @@ static int csi2_probe(struct platform_device *pdev)
 	if (!csi2->base)
 		return -ENOMEM;
 
-	mutex_init(&csi2->lock);
+	ret = devm_mutex_init(&pdev->dev, &csi2->lock);
+	if (ret)
+		return ret;
 
 	csi2->num_clks = devm_clk_bulk_get_all(&pdev->dev, &csi2->clks);
 	if (csi2->num_clks < 0)
 		return dev_err_probe(&pdev->dev, csi2->num_clks, "Failed to get clocks\n");
 
-	ret = csi2_async_register(csi2);
-	if (ret)
-		goto clean_notifier;
+	return csi2_async_register(csi2);
 
-	return 0;
-
-clean_notifier:
-	mutex_destroy(&csi2->lock);
-	return ret;
 }
 
 static void csi2_remove(struct platform_device *pdev)
 {
 	struct v4l2_subdev *sd = platform_get_drvdata(pdev);
-	struct csi2_dev *csi2 = sd_to_dev(sd);
 
 	v4l2_async_unregister_subdev(sd);
-	mutex_destroy(&csi2->lock);
 	media_entity_cleanup(&sd->entity);
 }
 
