@@ -2327,6 +2327,7 @@ void netdev_unregister_kobject(struct net_device *ndev)
 	pm_runtime_set_memalloc_noio(dev, false);
 
 	device_del(dev);
+	put_device(dev);
 }
 
 /* Create sysfs entries for network device. */
@@ -2357,7 +2358,7 @@ int netdev_register_kobject(struct net_device *ndev)
 
 	error = device_add(dev);
 	if (error)
-		return error;
+		goto out_put_device;
 
 	error = register_queue_kobjects(ndev);
 	if (error) {
@@ -2367,6 +2368,10 @@ int netdev_register_kobject(struct net_device *ndev)
 
 	pm_runtime_set_memalloc_noio(dev, true);
 
+	return 0;
+
+out_put_device:
+	put_device(dev);
 	return error;
 }
 
