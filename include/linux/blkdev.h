@@ -865,6 +865,18 @@ static inline unsigned int disk_nr_zones(struct gendisk *disk)
 	return disk->nr_zones;
 }
 
+/*
+ * blk_pipeline_zwr() - Whether or not sequential zoned writes will be
+ *	pipelined per zone.
+ * @q: request queue pointer.
+ *
+ * Return: %true if and only if zoned writes will be pipelined per zone.
+ */
+static inline bool blk_pipeline_zwr(struct request_queue *q)
+{
+	return q->limits.features & BLK_FEAT_ORDERED_HWQ;
+}
+
 /**
  * bio_needs_zone_write_plugging - Check if a BIO needs to be handled with zone
  *				   write plugging
@@ -947,6 +959,11 @@ static inline unsigned int disk_nr_zones(struct gendisk *disk)
 }
 
 static inline bool bdev_zone_is_seq(struct block_device *bdev, sector_t sector)
+{
+	return false;
+}
+
+static inline bool blk_pipeline_zwr(struct request_queue *q)
 {
 	return false;
 }
