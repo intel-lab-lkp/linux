@@ -23,7 +23,8 @@ static struct msgqueue_entry *mqe_alloc(MsgQueue_t *msgq)
 {
 	struct msgqueue_entry *mq;
 
-	if ((mq = msgq->free) != NULL)
+	mq = msgq->free;
+	if (mq)
 		msgq->free = mq->next;
 
 	return mq;
@@ -99,7 +100,8 @@ struct message *msgqueue_getmsg(MsgQueue_t *msgq, int msgno)
 {
 	struct msgqueue_entry *mq;
 
-	for (mq = msgq->qe; mq && msgno; mq = mq->next, msgno--);
+	for (mq = msgq->qe; mq && msgno; mq = mq->next, msgno--)
+		; /* intentional: iterate to the msgno-th entry */
 
 	return mq ? &mq->msg : NULL;
 }
