@@ -597,13 +597,14 @@ static void mipi_csis_system_enable(struct mipi_csis_device *csis, int on)
 	mipi_csis_write(csis, MIPI_CSIS_DPHY_CMN_CTRL, val);
 }
 
-static void __mipi_csis_set_format(struct mipi_csis_device *csis,
-				   const struct mipi_csis_channel_params *params)
+static void mipi_csis_set_channel_params(struct mipi_csis_device *csis,
+					 unsigned int channel,
+					 const struct mipi_csis_channel_params *params)
 {
 	u32 val;
 
 	/* Color format */
-	val = mipi_csis_read(csis, MIPI_CSIS_ISP_CONFIG_CH(0));
+	val = mipi_csis_read(csis, MIPI_CSIS_ISP_CONFIG_CH(channel));
 	val &= ~(MIPI_CSIS_ISPCFG_PARALLEL | MIPI_CSIS_ISPCFG_PIXEL_MODE_MASK |
 		 MIPI_CSIS_ISPCFG_DATAFORMAT_MASK |
 		 MIPI_CSIS_ISPCFG_VIRTUAL_CHANNEL_MASK);
@@ -627,10 +628,15 @@ static void __mipi_csis_set_format(struct mipi_csis_device *csis,
 	val |= MIPI_CSIS_ISPCFG_DATAFORMAT(params->data_type);
 	val |= MIPI_CSIS_ISPCFG_VIRTUAL_CHANNEL(0);
 
-	mipi_csis_write(csis, MIPI_CSIS_ISP_CONFIG_CH(0), val);
+	mipi_csis_write(csis, MIPI_CSIS_ISP_CONFIG_CH(channel), val);
+
+	mipi_csis_write(csis, MIPI_CSIS_ISP_SYNC_CH(channel),
+			MIPI_CSIS_ISP_SYNC_HSYNC_LINTV(0) |
+			MIPI_CSIS_ISP_SYNC_VSYNC_SINTV(0) |
+			MIPI_CSIS_ISP_SYNC_VSYNC_EINTV(0));
 
 	/* Pixel resolution */
-	mipi_csis_write(csis, MIPI_CSIS_ISP_RESOL_CH(0),
+	mipi_csis_write(csis, MIPI_CSIS_ISP_RESOL_CH(channel),
 			MIPI_CSIS_ISP_RESOL_VRESOL(params->height) |
 			MIPI_CSIS_ISP_RESOL_HRESOL(params->width));
 }
@@ -711,16 +717,11 @@ static void mipi_csis_set_params(struct mipi_csis_device *csis,
 
 	mipi_csis_write(csis, MIPI_CSIS_CMN_CTRL, val);
 
-	__mipi_csis_set_format(csis, &params->channels[0]);
+	mipi_csis_set_channel_params(csis, 0, &params->channels[0]);
 
 	mipi_csis_write(csis, MIPI_CSIS_DPHY_CMN_CTRL,
 			MIPI_CSIS_DPHY_CMN_CTRL_HSSETTLE(params->hs_settle) |
 			MIPI_CSIS_DPHY_CMN_CTRL_CLKSETTLE(params->clk_settle));
-
-	mipi_csis_write(csis, MIPI_CSIS_ISP_SYNC_CH(0),
-			MIPI_CSIS_ISP_SYNC_HSYNC_LINTV(0) |
-			MIPI_CSIS_ISP_SYNC_VSYNC_SINTV(0) |
-			MIPI_CSIS_ISP_SYNC_VSYNC_EINTV(0));
 
 	val = mipi_csis_read(csis, MIPI_CSIS_CLK_CTRL);
 	val |= MIPI_CSIS_CLK_CTRL_WCLK_SRC(0);
