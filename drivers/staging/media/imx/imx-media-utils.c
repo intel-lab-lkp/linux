@@ -755,6 +755,7 @@ int imx_media_pipeline_set_stream(struct imx_media_dev *imxmd,
 {
 	struct v4l2_subdev *sd;
 	int ret = 0;
+	struct media_pad *pad;
 
 	if (!is_media_entity_v4l2_subdev(entity))
 		return -EINVAL;
@@ -762,17 +763,19 @@ int imx_media_pipeline_set_stream(struct imx_media_dev *imxmd,
 
 	mutex_lock(&imxmd->md.graph_mutex);
 
+	pad = &entity->pads[0];
+
 	if (on) {
-		ret = __media_pipeline_start(entity->pads, &vdev->pipe);
+		ret = __media_pipeline_start(pad, &vdev->pipe);
 		if (ret)
 			goto out;
 		ret = v4l2_subdev_call(sd, video, s_stream, 1);
 		if (ret)
-			__media_pipeline_stop(entity->pads);
+			__media_pipeline_stop(pad);
 	} else {
 		v4l2_subdev_call(sd, video, s_stream, 0);
-		if (media_pad_pipeline(entity->pads))
-			__media_pipeline_stop(entity->pads);
+		if (media_pad_pipeline(pad))
+			__media_pipeline_stop(pad);
 	}
 
 out:
