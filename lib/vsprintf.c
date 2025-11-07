@@ -3049,6 +3049,34 @@ int scnprintf(char *buf, size_t size, const char *fmt, ...)
 EXPORT_SYMBOL(scnprintf);
 
 /**
+ * scnprintf_append - Append a formatted string to a buffer
+ * @buf: The buffer to append to (must be null-terminated)
+ * @size: The size of the buffer
+ * @fmt: Format string
+ * @...: Arguments for the format string
+ *
+ * This function appends a formatted string to an existing null-terminated
+ * buffer. It is safe to use in a chain of calls, as it returns the total
+ * length of the string.
+ *
+ * Returns: The total length of the string in @buf
+ */
+int scnprintf_append(char *buf, size_t size, const char *fmt, ...)
+{
+	va_list args;
+	size_t len;
+
+	len = strnlen(buf, size);
+	if (len >= size)
+		return len;
+	va_start(args, fmt);
+	len += vscnprintf(buf + len, size - len, fmt, args);
+	va_end(args);
+	return len;
+}
+EXPORT_SYMBOL(scnprintf_append);
+
+/**
  * vsprintf - Format a string and place it in a buffer
  * @buf: The buffer to place the result into
  * @fmt: The format string to use
