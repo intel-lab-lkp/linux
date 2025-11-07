@@ -101,11 +101,21 @@ tail:
  */
 static char kallsyms_get_symbol_type(unsigned int off)
 {
+	const u8 len = kallsyms_names[off];
+
+	off++;
+
+	/*
+	 * If MSB is 1, it is a "big" symbol, so we need to skip two bytes.
+	 */
+	if ((len & 0x80) != 0)
+		off++;
+
 	/*
 	 * Get just the first code, look it up in the token table,
 	 * and return the first char from this token.
 	 */
-	return kallsyms_token_table[kallsyms_token_index[kallsyms_names[off + 1]]];
+	return kallsyms_token_table[kallsyms_token_index[kallsyms_names[off]]];
 }
 
 
