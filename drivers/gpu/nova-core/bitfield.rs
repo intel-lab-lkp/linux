@@ -249,7 +249,17 @@ macro_rules! bitfield {
             { $process:expr } $prim_type:tt $to_type:ty => $res_type:ty $(, $comment:literal)?;
     ) => {
         ::kernel::macros::paste!(
+        // #[doc=::core::concat!(
+        //     "Inclusive range of the bits covered by the `",
+        //     ::core::stringify!($name),
+        //     "` field."
+        // )]
+        #[doc="Inclusive range of "]
+        #[doc=::core::stringify!($name)]
+        #[doc="foo"]
         const [<$field:upper _RANGE>]: ::core::ops::RangeInclusive<u8> = $lo..=$hi;
+
+        /// Mask of the bits making up this field.
         const [<$field:upper _MASK>]: $storage = {
             // Generate mask for shifting
             match ::core::mem::size_of::<$storage>() {
@@ -260,11 +270,13 @@ macro_rules! bitfield {
                 _ => ::kernel::build_error!("Unsupported storage type size")
             }
         };
+
+        /// Shift to apply to a value to align it with the start of this field.
         const [<$field:upper _SHIFT>]: u32 = $lo;
         );
 
         $(
-        #[doc="Returns the value of this field:"]
+        /// Returns the value of this field:
         #[doc=$comment]
         )?
         #[inline(always)]
@@ -280,7 +292,7 @@ macro_rules! bitfield {
 
         ::kernel::macros::paste!(
         $(
-        #[doc="Sets the value of this field:"]
+        /// Sets the value of this field:
         #[doc=$comment]
         )?
         #[inline(always)]
