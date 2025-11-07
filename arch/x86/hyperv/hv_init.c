@@ -34,6 +34,7 @@
 #include <clocksource/hyperv_timer.h>
 #include <linux/highmem.h>
 #include <linux/export.h>
+#include <asm/reboot.h>
 
 void *hv_hypercall_pg;
 
@@ -562,6 +563,7 @@ void __init hyperv_init(void)
 		 * failures here.
 		 */
 		hv_sleep_notifiers_register();
+		machine_ops.power_off = hv_machine_power_off;
 	} else {
 		hypercall_msr.guest_physical_address = vmalloc_to_pfn(hv_hypercall_pg);
 		wrmsrq(HV_X64_MSR_HYPERCALL, hypercall_msr.as_uint64);
