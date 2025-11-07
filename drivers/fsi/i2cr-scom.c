@@ -104,14 +104,20 @@ static int i2cr_scom_probe(struct device *dev)
 
 	ret = fsi_get_new_minor(fsi_dev, fsi_dev_scom, &scom->dev.devt, &didx);
 	if (ret)
-		return ret;
+		goto err_put_device;
 
 	dev_set_name(&scom->dev, "scom%d", didx);
 	cdev_init(&scom->cdev, &i2cr_scom_fops);
 	ret = cdev_device_add(&scom->cdev, &scom->dev);
 	if (ret)
-		fsi_free_minor(scom->dev.devt);
+		goto err_free_minor;
 
+	return ret;
+
+err_free_minor:
+	fsi_free_minor(scom->dev.devt);
+err_put_device:
+	put_device(&scom->dev);
 	return ret;
 }
 
