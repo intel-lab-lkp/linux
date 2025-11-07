@@ -1154,6 +1154,52 @@ static int mipi_csis_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 	return 0;
 }
 
+static int __mipi_csis_set_routing(struct v4l2_subdev *sd,
+				   struct v4l2_subdev_state *state,
+				   struct v4l2_subdev_krouting *routing)
+{
+	static const struct v4l2_mbus_framefmt format = {
+		.width = MIPI_CSIS_DEF_PIX_WIDTH,
+		.height = MIPI_CSIS_DEF_PIX_HEIGHT,
+		.code = mipi_csis_formats[0].code,
+		.field = V4L2_FIELD_NONE,
+		.colorspace = V4L2_XFER_FUNC_709,
+		.ycbcr_enc = V4L2_YCBCR_ENC_601,
+		.quantization = V4L2_QUANTIZATION_LIM_RANGE,
+		.xfer_func = V4L2_XFER_FUNC_SRGB,
+	};
+	int ret;
+
+	ret = v4l2_subdev_routing_validate(sd, routing,
+					   V4L2_SUBDEV_ROUTING_NO_1_TO_N);
+	if (ret)
+		return ret;
+
+	/* Only a single route is supported for now. */
+	if (routing->num_routes != 1 ||
+	    !(routing->routes[0].flags & V4L2_SUBDEV_ROUTE_FL_ACTIVE))
+		return -EINVAL;
+
+	ret = v4l2_subdev_set_routing_with_fmt(sd, state, routing, &format);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static int mipi_csis_set_routing(struct v4l2_subdev *sd,
+				 struct v4l2_subdev_state *state,
+				 enum v4l2_subdev_format_whence which,
+				 struct v4l2_subdev_krouting *routing)
+{
+	struct mipi_csis_device *csis = sd_to_mipi_csis_device(sd);
+
+	if (which == V4L2_SUBDEV_FORMAT_ACTIVE && csis->source.enabled_streams)
+		return -EBUSY;
+
+	return __mipi_csis_set_routing(sd, state, routing);
+}
+
 static int mipi_csis_enable_streams(struct v4l2_subdev *sd,
 				    struct v4l2_subdev_state *state,
 				    u32 pad, u64 streams_mask)
@@ -1240,22 +1286,22 @@ static int mipi_csis_disable_streams(struct v4l2_subdev *sd,
 static int mipi_csis_init_state(struct v4l2_subdev *sd,
 				struct v4l2_subdev_state *state)
 {
-	struct v4l2_subdev_format fmt = {
-		.pad = CSIS_PAD_SINK,
+	struct v4l2_subdev_route routes[] = {
+		{
+			.sink_pad = CSIS_PAD_SINK,
+			.sink_stream = 0,
+			.source_pad = CSIS_PAD_SOURCE,
+			.source_stream = 0,
+			.flags = V4L2_SUBDEV_ROUTE_FL_ACTIVE,
+		},
 	};
 
-	fmt.format.code = mipi_csis_formats[0].code;
-	fmt.format.width = MIPI_CSIS_DEF_PIX_WIDTH;
-	fmt.format.height = MIPI_CSIS_DEF_PIX_HEIGHT;
+	struct v4l2_subdev_krouting routing = {
+		.num_routes = ARRAY_SIZE(routes),
+		.routes = routes,
+	};
 
-	fmt.format.colorspace = V4L2_COLORSPACE_SMPTE170M;
-	fmt.format.xfer_func = V4L2_MAP_XFER_FUNC_DEFAULT(fmt.format.colorspace);
-	fmt.format.ycbcr_enc = V4L2_MAP_YCBCR_ENC_DEFAULT(fmt.format.colorspace);
-	fmt.format.quantization =
-		V4L2_MAP_QUANTIZATION_DEFAULT(false, fmt.format.colorspace,
-					      fmt.format.ycbcr_enc);
-
-	return mipi_csis_set_fmt(sd, state, &fmt);
+	return __mipi_csis_set_routing(sd, state, &routing);
 }
 
 static int mipi_csis_log_status(struct v4l2_subdev *sd)
@@ -1297,6 +1343,7 @@ static const struct v4l2_subdev_pad_ops mipi_csis_pad_ops = {
 	.get_fmt		= v4l2_subdev_get_fmt,
 	.set_fmt		= mipi_csis_set_fmt,
 	.get_frame_desc		= mipi_csis_get_frame_desc,
+	.set_routing		= mipi_csis_set_routing,
 	.enable_streams		= mipi_csis_enable_streams,
 	.disable_streams	= mipi_csis_disable_streams,
 };
