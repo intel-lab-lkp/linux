@@ -963,9 +963,13 @@ unsigned int cfg80211_classify8021d(struct sk_buff *skb,
 
 	switch (skb->protocol) {
 	case htons(ETH_P_IP):
+		if (!pskb_may_pull(skb, sizeof(struct iphdr)))
+			return 0;
 		dscp = ipv4_get_dsfield(ip_hdr(skb)) & 0xfc;
 		break;
 	case htons(ETH_P_IPV6):
+		if (!pskb_may_pull(skb, sizeof(struct ipv6hdr)))
+			return 0;
 		dscp = ipv6_get_dsfield(ipv6_hdr(skb)) & 0xfc;
 		break;
 	case htons(ETH_P_MPLS_UC):
