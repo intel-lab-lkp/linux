@@ -3786,6 +3786,7 @@ void __l2cap_le_connect_rsp_defer(struct l2cap_chan *chan)
 
 	BT_DBG("chan %p", chan);
 
+	memset(&rsp, 0, sizeof(rsp));
 	rsp.dcid    = cpu_to_le16(chan->scid);
 	rsp.mtu     = cpu_to_le16(chan->imtu);
 	rsp.mps     = cpu_to_le16(chan->mps);
