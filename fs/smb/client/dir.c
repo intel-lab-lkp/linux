@@ -566,7 +566,7 @@ out_free_xid:
 }
 
 int cifs_create(struct mnt_idmap *idmap, struct inode *inode,
-		struct dentry *direntry, umode_t mode, bool excl)
+		struct dentry *direntry, umode_t mode)
 {
 	int rc;
 	unsigned int xid = get_xid();

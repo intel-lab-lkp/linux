@@ -467,7 +467,7 @@ As of kernel 2.6.22, the following members are defined:
 .. code-block:: c
 
 	struct inode_operations {
-		int (*create) (struct mnt_idmap *, struct inode *,struct dentry *, umode_t, bool);
+		int (*create) (struct mnt_idmap *, struct inode *,struct dentry *, umode_t);
 		struct dentry * (*lookup) (struct inode *,struct dentry *, unsigned int);
 		int (*link) (struct dentry *,struct inode *,struct dentry *);
 		int (*unlink) (struct inode *,struct dentry *);
@@ -505,7 +505,10 @@ otherwise noted.
 	if you want to support regular files.  The dentry you get should
 	not have an inode (i.e. it should be a negative dentry).  Here
 	you will probably call d_instantiate() with the dentry and the
-	newly created inode
+        newly created inode. This operation should always provide O_EXCL
+        semantics (i.e. it should fail with -EEXIST if the file exists).
+        If the filesystem needs to mediate non-exclusive creation,
+        then the filesystem must also provide an ->atomic_open() operation.
 
 ``lookup``
 	called when the VFS needs to look up an inode in a parent
@@ -654,7 +657,11 @@ otherwise noted.
 	handled by f_op->open().  If the file was created, FMODE_CREATED
 	flag should be set in file->f_mode.  In case of O_EXCL the
 	method must only succeed if the file didn't exist and hence
-	FMODE_CREATED shall always be set on success.
+        FMODE_CREATED shall always be set on success. This method is
+        usually needed on filesystems where the dentry to be created could
+        unexpectedly become positive after the kernel has looked it up or
+        revalidated it. (e.g. another host racing in and creating the file
+        on an NFS server).
 
 ``tmpfile``
 	called in the end of O_TMPFILE open().  Optional, equivalent to
