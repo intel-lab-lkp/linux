@@ -5152,8 +5152,6 @@ static bool ext4_should_enable_large_folio(struct inode *inode)
 
 	if (!S_ISREG(inode->i_mode))
 		return false;
-	if (ext4_has_feature_verity(sb))
-		return false;
 	if (ext4_has_feature_encrypt(sb))
 		return false;
 
@@ -5175,7 +5173,8 @@ void ext4_set_inode_mapping_order(struct inode *inode)
 		return;
 
 	if (test_opt(inode->i_sb, DATA_FLAGS) == EXT4_MOUNT_JOURNAL_DATA ||
-	    ext4_test_inode_flag(inode, EXT4_INODE_JOURNAL_DATA))
+	    ext4_test_inode_flag(inode, EXT4_INODE_JOURNAL_DATA) ||
+	    ext4_has_feature_verity(inode->i_sb))
 		max_order = EXT4_SB(inode->i_sb)->s_min_folio_order;
 	else
 		max_order = EXT4_MAX_PAGECACHE_ORDER(inode);
