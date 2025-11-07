@@ -78,6 +78,17 @@ MODULE_PARM_DESC(drm_leak_fbdev_smem,
 		 "Allow unsafe leaking fbdev physical smem address [default=false]");
 #endif
 
+#define SCREEN_CLONE			0x0
+#define SCREEN_EXPAND_HORIZONTAL	0x1
+#define SCREEN_EXPAND_VERTICAL		0x2
+
+static bool drm_fbdev_screen_expand_mode_enabled;
+static int drm_fbdev_screen_mode = SCREEN_CLONE;
+module_param_named(screen_mode, drm_fbdev_screen_mode, int, 0444);
+MODULE_PARM_DESC(screen_mode,
+		 "Screen display of the fbdev. [0 = clone(default), 1 = expand horizontally,"
+		 "2 = expand vertically]");
+
 static LIST_HEAD(kernel_fb_helper_list);
 static DEFINE_MUTEX(kernel_fb_helper_lock);
 
@@ -1345,15 +1356,35 @@ int drm_fb_helper_set_par(struct fb_info *info)
 }
 EXPORT_SYMBOL(drm_fb_helper_set_par);
 
-static void pan_set(struct drm_fb_helper *fb_helper, int dx, int dy)
+static void pan_set_locked(struct drm_client_dev *client,
+			   int dx, int dy)
 {
 	struct drm_mode_set *mode_set;
+	int screen_x_offset = dx;
+	int screen_y_offset = dy;
 
-	mutex_lock(&fb_helper->client.modeset_mutex);
-	drm_client_for_each_modeset(mode_set, &fb_helper->client) {
-		mode_set->x += dx;
-		mode_set->y += dy;
+	drm_client_for_each_modeset(mode_set, client) {
+		if (drm_fbdev_screen_expand_mode_enabled) {
+			if (drm_fbdev_screen_mode == SCREEN_EXPAND_HORIZONTAL) {
+				mode_set->x += screen_x_offset;
+				mode_set->y += screen_y_offset;
+				screen_x_offset += mode_set->mode->hdisplay;
+			} else if (drm_fbdev_screen_mode == SCREEN_EXPAND_VERTICAL) {
+				mode_set->x += screen_x_offset;
+				mode_set->y += screen_y_offset;
+				screen_y_offset += mode_set->mode->vdisplay;
+			}
+		} else {
+			mode_set->x = screen_x_offset;
+			mode_set->y = screen_y_offset;
+		}
 	}
+}
+
+static void pan_set(struct drm_fb_helper *fb_helper, int dx, int dy)
+{
+	mutex_lock(&fb_helper->client.modeset_mutex);
+	pan_set_locked(&fb_helper->client, dx, dy);
 	mutex_unlock(&fb_helper->client.modeset_mutex);
 }
 
@@ -1387,10 +1418,8 @@ static int pan_display_legacy(struct fb_var_screeninfo *var,
 
 	mutex_lock(&client->modeset_mutex);
 	drm_modeset_lock_all(fb_helper->dev);
+	pan_set_locked(client, var->xoffset, var->yoffset);
 	drm_client_for_each_modeset(modeset, client) {
-		modeset->x = var->xoffset;
-		modeset->y = var->yoffset;
-
 		if (modeset->num_connectors) {
 			ret = drm_mode_set_config_internal(modeset);
 			if (!ret) {
@@ -1461,6 +1490,94 @@ static uint32_t drm_fb_helper_find_format(struct drm_fb_helper *fb_helper, const
 	return DRM_FORMAT_INVALID;
 }
 
+/*
+ * Check if the device supports extended mode
+ *
+ * return true if the device supports extended mode,
+ * otherwise return false.
+ */
+static bool drm_fb_helper_validate_extended_mode(struct drm_fb_helper *fb_helper,
+						 struct drm_fb_helper_surface_size *sizes)
+{
+	struct drm_client_dev *client = &fb_helper->client;
+	struct drm_device *dev = fb_helper->dev;
+	struct drm_mode_config *config = &dev->mode_config;
+	struct drm_mode_set *mode_set;
+	u32 crtc_count;
+
+	drm_client_for_each_modeset(mode_set, client) {
+		crtc_count++;
+
+		for (int j = 0; j < mode_set->num_connectors; j++) {
+			struct drm_connector *connector = mode_set->connectors[j];
+
+			if (connector->has_tile) {
+				drm_dbg_kms(client->dev,
+					    "Don't support extended with tile mode connector yet\n");
+				return false;
+			}
+		}
+	}
+
+	if (crtc_count < 2) {
+		drm_dbg_kms(client->dev,
+			    "Only support extended mode when device have mult-crtcs\n");
+		return false;
+	}
+
+	if (drm_fbdev_screen_mode == SCREEN_EXPAND_HORIZONTAL) {
+		u32 x = 0;
+
+		drm_client_for_each_modeset(mode_set, client) {
+			struct drm_display_mode *desired_mode;
+
+			desired_mode = mode_set->mode;
+			x = mode_set->x;
+			sizes->fb_width = sizes->surface_width  += desired_mode->hdisplay;
+			sizes->surface_height =
+				min_t(u32, desired_mode->vdisplay + mode_set->y,
+				      sizes->surface_height);
+			sizes->fb_height = min_t(u32, desired_mode->vdisplay + mode_set->y,
+						 sizes->fb_height);
+		}
+		sizes->fb_width = sizes->surface_width += x;
+
+		if (sizes->fb_width > config->max_width) {
+			drm_dbg_kms(client->dev,
+				    "screen_buffer total width %d > config width %d\n",
+				    sizes->fb_width, config->max_width);
+			return false;
+		}
+	} else if (drm_fbdev_screen_mode == SCREEN_EXPAND_VERTICAL) {
+		u32 y = 0;
+
+		drm_client_for_each_modeset(mode_set, client) {
+			struct drm_display_mode *desired_mode;
+
+			desired_mode = mode_set->mode;
+			y = mode_set->y;
+			sizes->fb_height = sizes->surface_height += desired_mode->vdisplay;
+			sizes->surface_width =
+				min_t(u32, desired_mode->hdisplay + mode_set->x,
+				      sizes->surface_width);
+			sizes->fb_width = min_t(u32, desired_mode->hdisplay + mode_set->x,
+						sizes->fb_width);
+		}
+		sizes->fb_height = sizes->surface_height += y;
+
+		if (sizes->fb_height > config->max_height) {
+			drm_dbg_kms(client->dev,
+				    "screen_buffer_total_height %d > config height %d\n",
+				    sizes->fb_height, config->max_height);
+			return false;
+		}
+	} else {
+		return false;
+	}
+
+	return true;
+}
+
 static int __drm_fb_helper_find_sizes(struct drm_fb_helper *fb_helper,
 				      struct drm_fb_helper_surface_size *sizes)
 {
@@ -1527,6 +1644,16 @@ static int __drm_fb_helper_find_sizes(struct drm_fb_helper *fb_helper,
 
 	/* first up get a count of crtcs now in use and new min/maxes width/heights */
 	crtc_count = 0;
+
+	/* Check if we support extended mode. If we do, we will adjust the sizes accordingly. */
+	if (drm_fbdev_screen_mode &&
+		drm_fb_helper_validate_extended_mode(fb_helper, sizes)) {
+		drm_fbdev_screen_expand_mode_enabled = true;
+		drm_dbg_kms(dev, "Extended mode: horizontal expansion, width: %d, height: %d\n",
+			    sizes->surface_width, sizes->surface_height);
+		return 0;
+	}
+
 	drm_client_for_each_modeset(mode_set, client) {
 		struct drm_display_mode *desired_mode;
 		int x, y, j;
