@@ -389,6 +389,9 @@ struct dvb_usb_device {
 	struct mutex i2c_mutex;
 	struct i2c_adapter i2c_adap;
 
+	/* Check in drivers to prevent read from uninitialized device */
+	atomic_t init_ready;
+
 	struct dvb_usb_adapter adapter[MAX_NO_OF_ADAPTER_PER_DEVICE];
 
 	/* remote control */

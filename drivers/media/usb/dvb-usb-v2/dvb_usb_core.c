@@ -988,6 +988,8 @@ int dvb_usbv2_probe(struct usb_interface *intf,
 exit:
 	usb_set_intfdata(intf, d);
 
+	atomic_set(&d->init_ready, 1);
+
 	return 0;
 err_free_all:
 	dvb_usbv2_exit(d);
@@ -1011,6 +1013,8 @@ void dvb_usbv2_disconnect(struct usb_interface *intf)
 
 	dev_dbg(&d->udev->dev, "%s: bInterfaceNumber=%d\n", __func__,
 			intf->cur_altsetting->desc.bInterfaceNumber);
+
+	atomic_set(&d->init_ready, 0);
 
 	if (d->props->exit)
 		d->props->exit(d);
