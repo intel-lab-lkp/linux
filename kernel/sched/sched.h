@@ -769,6 +769,14 @@ struct cfs_rq {
 #endif /* CONFIG_FAIR_GROUP_SCHED */
 };
 
+#ifdef CONFIG_FAIR_GROUP_SCHED
+struct cfs_rq_with_se {
+	struct cfs_rq		cfs_rq;
+	/* cfs_rq's sched_entity on parent runqueue */
+	struct sched_entity	se ____cacheline_aligned;
+};
+#endif
+
 #ifdef CONFIG_SCHED_CLASS_EXT
 /* scx_rq->flags, protected by the rq lock */
 enum scx_rq_flags {

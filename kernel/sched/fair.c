@@ -13359,10 +13359,11 @@ void free_fair_sched_group(struct task_group *tg)
 	int i;
 
 	for_each_possible_cpu(i) {
-		if (tg->cfs_rq)
-			kfree(tg->cfs_rq[i]);
-		if (tg->se)
-			kfree(tg->se[i]);
+		if (tg->cfs_rq && tg->cfs_rq[i]) {
+			struct cfs_rq_with_se *combined =
+				container_of(tg->cfs_rq[i], struct cfs_rq_with_se, cfs_rq);
+			kfree(combined);
+		}
 	}
 
 	kfree(tg->cfs_rq);
@@ -13371,6 +13372,7 @@ void free_fair_sched_group(struct task_group *tg)
 
 int alloc_fair_sched_group(struct task_group *tg, struct task_group *parent)
 {
+	struct cfs_rq_with_se *combined;
 	struct sched_entity *se;
 	struct cfs_rq *cfs_rq;
 	int i;
@@ -13387,16 +13389,13 @@ int alloc_fair_sched_group(struct task_group *tg, struct task_group *parent)
 	init_cfs_bandwidth(tg_cfs_bandwidth(tg), tg_cfs_bandwidth(parent));
 
 	for_each_possible_cpu(i) {
-		cfs_rq = kzalloc_node(sizeof(struct cfs_rq),
+		combined = kzalloc_node(sizeof(struct cfs_rq_with_se),
 				      GFP_KERNEL, cpu_to_node(i));
-		if (!cfs_rq)
+		if (!combined)
 			goto err;
 
-		se = kzalloc_node(sizeof(struct sched_entity_stats),
-				  GFP_KERNEL, cpu_to_node(i));
-		if (!se)
-			goto err_free_rq;
-
+		cfs_rq = &combined->cfs_rq;
+		se = &combined->se;
 		init_cfs_rq(cfs_rq);
 		init_tg_cfs_entry(tg, cfs_rq, se, i, parent->se[i]);
 		init_entity_runnable_average(se);
@@ -13404,8 +13403,6 @@ int alloc_fair_sched_group(struct task_group *tg, struct task_group *parent)
 
 	return 1;
 
-err_free_rq:
-	kfree(cfs_rq);
 err:
 	return 0;
 }
