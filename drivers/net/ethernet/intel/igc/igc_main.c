@@ -7761,6 +7761,8 @@ int igc_reinit_queues(struct igc_adapter *adapter)
 	if (netif_running(netdev))
 		err = igc_open(netdev);
 
+	igc_tsn_clear_schedule(adapter);
+
 	return err;
 }
 
