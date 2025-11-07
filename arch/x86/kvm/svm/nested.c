@@ -605,8 +605,10 @@ void nested_vmcb02_compute_g_pat(struct vcpu_svm *svm)
 	if (!svm->nested.vmcb02.ptr)
 		return;
 
-	/* FIXME: merge g_pat from vmcb01 and vmcb12.  */
-	svm->nested.vmcb02.ptr->save.g_pat = svm->vmcb01.ptr->save.g_pat;
+	if (nested_npt_enabled(svm))
+		svm->nested.vmcb02.ptr->save.g_pat = svm->nested.ctl.g_pat;
+	else
+		svm->nested.vmcb02.ptr->save.g_pat = svm->vmcb01.ptr->save.g_pat;
 }
 
 static void nested_vmcb02_prepare_save(struct vcpu_svm *svm, struct vmcb *vmcb12)
