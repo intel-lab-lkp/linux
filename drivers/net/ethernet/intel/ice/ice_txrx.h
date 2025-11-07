@@ -138,7 +138,6 @@ struct ice_txq_stats {
 	u64 restart_q;
 	u64 tx_busy;
 	u64 tx_linearize;
-	int prev_pkt; /* negative if no pending Tx descriptors */
 };
 
 struct ice_rxq_stats {
@@ -353,6 +352,8 @@ struct ice_tx_ring {
 	struct ice_tstamp_ring *tstamp_ring;
 
 	u32 txq_teid;			/* Added Tx queue TEID */
+
+	int prev_pkt; /* negative if no pending Tx descriptors */
 
 #define ICE_TX_FLAGS_RING_XDP		BIT(0)
 #define ICE_TX_FLAGS_RING_VLAN_L2TAG1	BIT(1)
