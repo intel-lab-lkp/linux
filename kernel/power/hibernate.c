@@ -349,8 +349,10 @@ static int create_image(int platform_mode)
 		goto Enable_irqs;
 	}
 
-	if (hibernation_test(TEST_CORE) || pm_wakeup_pending())
+	if (hibernation_test(TEST_CORE) || pm_wakeup_pending()) {
+		pm_wakeup_clear(0);
 		goto Power_up;
+	}
 
 	in_suspend = 1;
 	save_processor_state();
@@ -660,6 +662,7 @@ int hibernation_platform_enter(void)
 		goto Enable_irqs;
 
 	if (pm_wakeup_pending()) {
+		pm_wakeup_clear(0);
 		error = -EAGAIN;
 		goto Power_up;
 	}

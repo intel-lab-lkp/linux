@@ -1637,6 +1637,7 @@ static void device_suspend_late(struct device *dev, pm_message_t state, bool asy
 		goto Complete;
 
 	if (pm_wakeup_pending()) {
+		pm_wakeup_clear(0);
 		WRITE_ONCE(async_error, -EBUSY);
 		goto Complete;
 	}
@@ -1882,6 +1883,7 @@ static void device_suspend(struct device *dev, pm_message_t state, bool async)
 
 	if (pm_wakeup_pending()) {
 		dev->power.direct_complete = false;
+		pm_wakeup_clear(0);
 		WRITE_ONCE(async_error, -EBUSY);
 		goto Complete;
 	}

@@ -67,6 +67,7 @@ static int try_to_freeze_tasks(bool user_only)
 			break;
 
 		if (pm_wakeup_pending()) {
+			pm_wakeup_clear(0);
 			wakeup = true;
 			break;
 		}
