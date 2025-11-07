@@ -365,6 +365,7 @@ struct dvb_usb_adapter {
  * @usb_mutex: mutex for usb control messages
  * @i2c_mutex: mutex for i2c-transfers
  * @i2c_adap: device's i2c-adapter
+ * @init_ready: set when the device is initialized
  * @adapter: adapters
  * @rc_dev: rc device for the remote control
  * @rc_phys: rc path
@@ -388,6 +389,9 @@ struct dvb_usb_device {
 	/* i2c */
 	struct mutex i2c_mutex;
 	struct i2c_adapter i2c_adap;
+
+	/* Check in drivers to prevent read from uninitialized device */
+	atomic_t init_ready;
 
 	struct dvb_usb_adapter adapter[MAX_NO_OF_ADAPTER_PER_DEVICE];
 
