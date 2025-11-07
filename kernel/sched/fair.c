@@ -13170,6 +13170,18 @@ prio_changed_fair(struct rq *rq, struct task_struct *p, int oldprio)
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
 /*
+ * If a task gets attached to this cfs_rq and, before being queued,
+ * it gets migrated to another CPU (e.g., due to reasons like affinity change),
+ * this cfs_rq must remain on leaf cfs_rq list. This allows the
+ * removed load to decay properly; otherwise, it can cause a fairness problem.
+ */
+static inline void __cfs_rq_maybe_add_leaf(struct cfs_rq *cfs_rq)
+{
+	if (!cfs_rq_pelt_clock_throttled(cfs_rq))
+		list_add_leaf_cfs_rq(cfs_rq);
+}
+
+/*
  * Propagate the changes of the sched_entity across the tg tree to make it
  * visible to the root
  */
@@ -13177,14 +13189,7 @@ static void propagate_entity_cfs_rq(struct sched_entity *se)
 {
 	struct cfs_rq *cfs_rq = cfs_rq_of(se);
 
-	/*
-	 * If a task gets attached to this cfs_rq and before being queued,
-	 * it gets migrated to another CPU due to reasons like affinity
-	 * change, make sure this cfs_rq stays on leaf cfs_rq list to have
-	 * that removed load decayed or it can cause faireness problem.
-	 */
-	if (!cfs_rq_pelt_clock_throttled(cfs_rq))
-		list_add_leaf_cfs_rq(cfs_rq);
+	__cfs_rq_maybe_add_leaf(cfs_rq);
 
 	/* Start to propagate at parent */
 	se = se->parent;
@@ -13194,8 +13199,7 @@ static void propagate_entity_cfs_rq(struct sched_entity *se)
 
 		update_load_avg(cfs_rq, se, UPDATE_TG);
 
-		if (!cfs_rq_pelt_clock_throttled(cfs_rq))
-			list_add_leaf_cfs_rq(cfs_rq);
+		__cfs_rq_maybe_add_leaf(cfs_rq);
 	}
 
 	assert_list_leaf_cfs_rq(rq_of(cfs_rq));
