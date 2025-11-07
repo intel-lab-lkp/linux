@@ -158,6 +158,8 @@ impl super::Gsp {
 
         self.cmdq
             .send_gsp_command(bar, commands::SetSystemInfo::new(pdev))?;
+        self.cmdq
+            .send_gsp_command(bar, commands::SetRegistry::new())?;
 
         Ok(())
     }
