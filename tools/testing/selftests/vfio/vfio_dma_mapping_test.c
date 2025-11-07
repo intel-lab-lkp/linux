@@ -249,7 +249,12 @@ TEST_F(vfio_dma_map_limit_test, unmap_range)
 	u64 unmapped;
 	int rc;
 
-	vfio_pci_dma_map(self->device, region);
+	rc = __vfio_pci_dma_map(self->device, region);
+	if (rc == -EINVAL)
+		SKIP(return, "Unable to map at iova 0x%lx\n", region->iova);
+	else
+		ASSERT_EQ(rc, 0);
+
 	ASSERT_EQ(region->iova, to_iova(self->device, region->vaddr));
 
 	rc = __vfio_pci_dma_unmap(self->device, region, &unmapped);
@@ -263,7 +268,12 @@ TEST_F(vfio_dma_map_limit_test, unmap_all)
 	u64 unmapped;
 	int rc;
 
-	vfio_pci_dma_map(self->device, region);
+	rc = __vfio_pci_dma_map(self->device, region);
+	if (rc == -EINVAL)
+		SKIP(return, "Unable to map at iova 0x%lx\n", region->iova);
+	else
+		ASSERT_EQ(rc, 0);
+
 	ASSERT_EQ(region->iova, to_iova(self->device, region->vaddr));
 
 	rc = __vfio_pci_dma_unmap_all(self->device, &unmapped);
