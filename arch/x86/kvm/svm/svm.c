@@ -2673,6 +2673,12 @@ static int svm_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			return 1;
 		msr_info->data = svm->tsc_ratio_msr;
 		break;
+	case MSR_IA32_CR_PAT:
+		if (!(is_guest_mode(vcpu) && nested_npt_enabled(svm)))
+			msr_info->data = vcpu->arch.pat;
+		else
+			msr_info->data = svm->vmcb->save.g_pat;
+		break;
 	case MSR_STAR:
 		msr_info->data = svm->vmcb01.ptr->save.star;
 		break;
@@ -2862,14 +2868,17 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 
 		break;
 	case MSR_IA32_CR_PAT:
-		ret = kvm_set_msr_common(vcpu, msr);
-		if (ret)
-			break;
-
-		svm->vmcb01.ptr->save.g_pat = data;
-		if (is_guest_mode(vcpu))
-			nested_vmcb02_compute_g_pat(svm);
-		vmcb_mark_dirty(svm->vmcb, VMCB_NPT);
+		if (!kvm_pat_valid(data))
+			return 1;
+		if (!(is_guest_mode(vcpu) && nested_npt_enabled(svm))) {
+			vcpu->arch.pat = data;
+			svm->vmcb01.ptr->save.g_pat = data;
+			vmcb_mark_dirty(svm->vmcb01.ptr, VMCB_NPT);
+		}
+		if (is_guest_mode(vcpu)) {
+			svm->vmcb->save.g_pat = data;
+			vmcb_mark_dirty(svm->vmcb, VMCB_NPT);
+		}
 		break;
 	case MSR_IA32_SPEC_CTRL:
 		if (!msr->host_initiated &&
