@@ -966,6 +966,13 @@ static int bcmgenet_set_pauseparam(struct net_device *dev,
 	return 0;
 }
 
+static void bcmgenet_set_pauseparam_panic(struct net_device *dev)
+{
+	struct bcmgenet_priv *priv = netdev_priv(dev);
+
+	bcmgenet_set_pause_panic(priv);
+}
+
 /* standard ethtool support functions. */
 enum bcmgenet_stat_type {
 	BCMGENET_STAT_RTNL = -1,
@@ -1702,6 +1709,7 @@ static const struct ethtool_ops bcmgenet_ethtool_ops = {
 	.set_rxnfc		= bcmgenet_set_rxnfc,
 	.get_pauseparam		= bcmgenet_get_pauseparam,
 	.set_pauseparam		= bcmgenet_set_pauseparam,
+	.set_pauseparam_panic	= bcmgenet_set_pauseparam_panic,
 };
 
 /* Power down the unimac, based on mode. */
