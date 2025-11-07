@@ -984,6 +984,12 @@ int nested_svm_vmrun(struct kvm_vcpu *vcpu)
 
 	nested_copy_vmcb_control_to_cache(svm, &vmcb12->control);
 	nested_copy_vmcb_save_to_cache(svm, &vmcb12->save);
+	/*
+	 * To facilitate independent validation of the cached state
+	 * save area and the cached control area, we cache the vmcb12
+	 * g_pat with the cached controls.
+	 */
+	svm->nested.ctl.g_pat = vmcb12->save.g_pat;
 
 	if (!nested_vmcb_check_save(vcpu) ||
 	    !nested_vmcb_check_controls(vcpu)) {
