@@ -271,7 +271,7 @@ intel_memory_region_create(struct drm_i915_private *i915,
 	mem->instance = instance;
 
 	snprintf(mem->uabi_name, sizeof(mem->uabi_name), "%s%u",
-		 intel_memory_type_str(type), instance);
+		 intel_memory_type_str(type), instance % 100);
 
 	mutex_init(&mem->objects.lock);
 	INIT_LIST_HEAD(&mem->objects.list);
