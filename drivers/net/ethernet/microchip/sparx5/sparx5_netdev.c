@@ -300,7 +300,11 @@ int sparx5_register_netdevs(struct sparx5 *sparx5)
 
 	for (portno = 0; portno < sparx5->data->consts->n_ports; portno++)
 		if (sparx5->ports[portno]) {
-			err = register_netdev(sparx5->ports[portno]->ndev);
+			struct net_device *port_ndev = sparx5->ports[portno]->ndev;
+
+			port_ndev->dev.of_node = sparx5->ports[portno]->of_node;
+
+			err = register_netdev(port_ndev);
 			if (err) {
 				dev_err(sparx5->dev,
 					"port: %02u: netdev registration failed\n",
