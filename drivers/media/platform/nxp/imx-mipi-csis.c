@@ -350,6 +350,7 @@ struct mipi_csis_device {
 	struct {
 		struct v4l2_subdev *sd;
 		const struct media_pad *pad;
+		u64 enabled_streams;
 	} source;
 
 	struct v4l2_mbus_config_mipi_csi2 bus;
@@ -1019,64 +1020,6 @@ static struct mipi_csis_device *sd_to_mipi_csis_device(struct v4l2_subdev *sdev)
 	return container_of(sdev, struct mipi_csis_device, sd);
 }
 
-static int mipi_csis_s_stream(struct v4l2_subdev *sd, int enable)
-{
-	struct mipi_csis_device *csis = sd_to_mipi_csis_device(sd);
-	const struct v4l2_mbus_framefmt *format;
-	const struct csis_pix_format *csis_fmt;
-	struct v4l2_subdev_state *state;
-	int ret;
-
-	if (!enable) {
-		v4l2_subdev_disable_streams(csis->source.sd,
-					    csis->source.pad->index, BIT(0));
-
-		mipi_csis_stop_stream(csis);
-		if (csis->debug.enable)
-			mipi_csis_log_counters(csis, true);
-
-		pm_runtime_put(csis->dev);
-
-		return 0;
-	}
-
-	state = v4l2_subdev_lock_and_get_active_state(sd);
-
-	format = v4l2_subdev_state_get_format(state, CSIS_PAD_SINK);
-	csis_fmt = find_csis_format(format->code);
-
-	ret = mipi_csis_calculate_params(csis, csis_fmt);
-	if (ret < 0)
-		goto err_unlock;
-
-	mipi_csis_clear_counters(csis);
-
-	ret = pm_runtime_resume_and_get(csis->dev);
-	if (ret < 0)
-		goto err_unlock;
-
-	mipi_csis_start_stream(csis, format, csis_fmt);
-
-	ret = v4l2_subdev_enable_streams(csis->source.sd,
-					 csis->source.pad->index, BIT(0));
-	if (ret < 0)
-		goto err_stop;
-
-	mipi_csis_log_counters(csis, true);
-
-	v4l2_subdev_unlock_state(state);
-
-	return 0;
-
-err_stop:
-	mipi_csis_stop_stream(csis);
-	pm_runtime_put(csis->dev);
-err_unlock:
-	v4l2_subdev_unlock_state(state);
-
-	return ret;
-}
-
 static int mipi_csis_enum_mbus_code(struct v4l2_subdev *sd,
 				    struct v4l2_subdev_state *state,
 				    struct v4l2_subdev_mbus_code_enum *code)
@@ -1211,6 +1154,89 @@ static int mipi_csis_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 	return 0;
 }
 
+static int mipi_csis_enable_streams(struct v4l2_subdev *sd,
+				    struct v4l2_subdev_state *state,
+				    u32 pad, u64 streams_mask)
+{
+	struct mipi_csis_device *csis = sd_to_mipi_csis_device(sd);
+	u64 sink_streams;
+	int ret;
+
+	sink_streams = v4l2_subdev_state_xlate_streams(state, CSIS_PAD_SOURCE,
+						       CSIS_PAD_SINK,
+						       &streams_mask);
+	if (!sink_streams || !streams_mask)
+		return -EINVAL;
+
+	/* Start the CSIS with the first stream. */
+	if (!csis->source.enabled_streams) {
+		const struct v4l2_mbus_framefmt *format;
+		const struct csis_pix_format *csis_fmt;
+
+		format = v4l2_subdev_state_get_format(state, CSIS_PAD_SINK);
+		csis_fmt = find_csis_format(format->code);
+
+		ret = mipi_csis_calculate_params(csis, csis_fmt);
+		if (ret)
+			return ret;
+
+		mipi_csis_clear_counters(csis);
+
+		ret = pm_runtime_resume_and_get(csis->dev);
+		if (ret < 0)
+			return ret;
+
+		mipi_csis_start_stream(csis, format, csis_fmt);
+	}
+
+	ret = v4l2_subdev_enable_streams(csis->source.sd,
+					 csis->source.pad->index, sink_streams);
+	if (ret) {
+		if (!csis->source.enabled_streams) {
+			mipi_csis_stop_stream(csis);
+			pm_runtime_put(csis->dev);
+		}
+
+		return ret;
+	}
+
+	mipi_csis_log_counters(csis, true);
+
+	csis->source.enabled_streams |= streams_mask;
+
+	return 0;
+}
+
+static int mipi_csis_disable_streams(struct v4l2_subdev *sd,
+				     struct v4l2_subdev_state *state,
+				     u32 pad, u64 streams_mask)
+{
+	struct mipi_csis_device *csis = sd_to_mipi_csis_device(sd);
+	u64 sink_streams;
+
+	sink_streams = v4l2_subdev_state_xlate_streams(state, CSIS_PAD_SOURCE,
+						       CSIS_PAD_SINK,
+						       &streams_mask);
+	if (!sink_streams || !streams_mask)
+		return -EINVAL;
+
+	v4l2_subdev_disable_streams(csis->source.sd,
+				    csis->source.pad->index, sink_streams);
+
+	csis->source.enabled_streams &= ~streams_mask;
+
+	/* Stop the CSIS with the last stream. */
+	if (!csis->source.enabled_streams) {
+		mipi_csis_stop_stream(csis);
+		pm_runtime_put(csis->dev);
+
+		if (csis->debug.enable)
+			mipi_csis_log_counters(csis, true);
+	}
+
+	return 0;
+}
+
 static int mipi_csis_init_state(struct v4l2_subdev *sd,
 				struct v4l2_subdev_state *state)
 {
@@ -1263,7 +1289,7 @@ static const struct v4l2_subdev_core_ops mipi_csis_core_ops = {
 };
 
 static const struct v4l2_subdev_video_ops mipi_csis_video_ops = {
-	.s_stream	= mipi_csis_s_stream,
+	.s_stream		= v4l2_subdev_s_stream_helper,
 };
 
 static const struct v4l2_subdev_pad_ops mipi_csis_pad_ops = {
@@ -1271,6 +1297,8 @@ static const struct v4l2_subdev_pad_ops mipi_csis_pad_ops = {
 	.get_fmt		= v4l2_subdev_get_fmt,
 	.set_fmt		= mipi_csis_set_fmt,
 	.get_frame_desc		= mipi_csis_get_frame_desc,
+	.enable_streams		= mipi_csis_enable_streams,
+	.disable_streams	= mipi_csis_disable_streams,
 };
 
 static const struct v4l2_subdev_ops mipi_csis_subdev_ops = {
