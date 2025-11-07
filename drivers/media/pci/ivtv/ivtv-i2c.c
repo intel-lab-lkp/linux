@@ -711,8 +711,7 @@ int init_ivtv_i2c(struct ivtv *itv)
 	itv->i2c_algo.data = itv;
 	itv->i2c_adap.algo_data = &itv->i2c_algo;
 
-	sprintf(itv->i2c_adap.name + strlen(itv->i2c_adap.name), " #%d",
-		itv->instance);
+	scnprintf_append(itv->i2c_adap.name, sizeof(itv->i2c_adap.name), " #%d", itv->instance);
 	i2c_set_adapdata(&itv->i2c_adap, &itv->v4l2_dev);
 
 	itv->i2c_client = ivtv_i2c_client_template;
