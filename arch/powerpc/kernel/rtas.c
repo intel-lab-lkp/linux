@@ -769,6 +769,12 @@ EXPORT_SYMBOL_GPL(rtas_data_buf);
 
 unsigned long rtas_rmo_buf;
 
+DEFINE_SPINLOCK(rtas_errinjct_buf_lock);
+EXPORT_SYMBOL_GPL(rtas_errinjct_buf_lock);
+
+char rtas_errinjct_buf[1024] __aligned(SZ_1K);
+EXPORT_SYMBOL_GPL(rtas_errinjct_buf);
+
 /*
  * If non-NULL, this gets called when the kernel terminates.
  * This is done like this so rtas_flash can be a module.
