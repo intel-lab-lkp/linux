@@ -13,6 +13,7 @@
 #include <linux/perf_event.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/debugfs.h>
 
 /* Common registers */
 #define NI_NODE_TYPE		0x000
@@ -110,6 +111,7 @@ struct arm_ni_cd {
 	struct arm_ni_unit *units;
 	struct perf_event *evcnt[NI_NUM_COUNTERS];
 	struct perf_event *ccnt;
+	struct dentry *debug;
 };
 
 struct arm_ni {
@@ -476,6 +478,59 @@ static irqreturn_t arm_ni_handle_irq(int irq, void *dev_id)
 	}
 }
 
+static struct dentry *arm_ni_cd_debugfs;
+
+#ifdef CONFIG_DEBUG_FS
+static const char *arm_ni_node_type(enum ni_node_type type)
+{
+	switch (type) {
+	case NI_ASNI:
+		return "| ASNI ";
+	case NI_AMNI:
+		return "| AMNI ";
+	case NI_PMU:
+		return "| PMU  ";
+	case NI_HSNI:
+		return "| HSNI ";
+	case NI_HMNI:
+		return "| HMNI ";
+	case NI_PMNI:
+		return "| PMNI ";
+	default:
+		return "| ???? ";
+	}
+}
+
+static int arm_ni_cd_map_show(struct seq_file *s, void *data)
+{
+	struct arm_ni_cd *cd = s->private;
+
+	cd_for_each_unit(cd, unit) {
+		seq_printf(s, "%s#%-2d |", arm_ni_node_type(unit->type), unit->id);
+	}
+	seq_puts(s, "\n");
+
+	return 0;
+}
+
+DEFINE_SHOW_ATTRIBUTE(arm_ni_cd_map);
+
+static void arm_ni_cd_debugfs_init(struct arm_ni_cd *cd, u64 res_start)
+{
+	const char *name = "map";
+
+	if (res_start > 0)
+		name = devm_kasprintf(cd_to_ni(cd)->dev, GFP_KERNEL, "map_%llx",
+				res_start >> NI_PMU_PA_SHIFT);
+	if (!name)
+		return;
+
+	cd->debug = debugfs_create_file(name, 0444, arm_ni_cd_debugfs, cd, &arm_ni_cd_map_fops);
+}
+#else
+static void arm_ni_cd_debugfs_init(struct arm_ni_cd *cd, u64 res_start) {}
+#endif
+
 static int arm_ni_init_cd(struct arm_ni *ni, struct arm_ni_node *node, u64 res_start)
 {
 	struct arm_ni_cd *cd = ni->cds + node->id;
@@ -563,6 +618,7 @@ static int arm_ni_init_cd(struct arm_ni *ni, struct arm_ni_node *node, u64 res_s
 	name = devm_kasprintf(ni->dev, GFP_KERNEL, "arm_ni_%llx", res_start >> NI_PMU_PA_SHIFT);
 	if (!name)
 		return -ENOMEM;
+	arm_ni_cd_debugfs_init(cd, res_start);
 
 	return perf_pmu_register(&cd->pmu, name, -1);
 }
@@ -575,6 +631,7 @@ static void arm_ni_remove(struct platform_device *pdev)
 		writel_relaxed(0, cd->pmu_base + NI_PMCR);
 		writel_relaxed(U32_MAX, cd->pmu_base + NI_PMINTENCLR);
 		perf_pmu_unregister(&cd->pmu);
+		debugfs_remove(cd->debug);
 	}
 	cpuhp_state_remove_instance_nocalls(arm_ni_hp_state, &ni->cpuhp_node);
 }
@@ -787,9 +844,12 @@ static int __init arm_ni_init(void)
 
 	arm_ni_hp_state = ret;
 
+	arm_ni_cd_debugfs = debugfs_create_dir("arm-ni", NULL);
 	ret = platform_driver_register(&arm_ni_driver);
-	if (ret)
+	if (ret) {
 		cpuhp_remove_multi_state(arm_ni_hp_state);
+		debugfs_remove(arm_ni_cd_debugfs);
+	}
 	return ret;
 }
 
@@ -797,6 +857,7 @@ static void __exit arm_ni_exit(void)
 {
 	platform_driver_unregister(&arm_ni_driver);
 	cpuhp_remove_multi_state(arm_ni_hp_state);
+	debugfs_remove(arm_ni_cd_debugfs);
 }
 
 module_init(arm_ni_init);
