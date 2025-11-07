@@ -1052,6 +1052,7 @@ void svm_copy_vmrun_state(struct vmcb_save_area *to_save,
 	to_save->rsp = from_save->rsp;
 	to_save->rip = from_save->rip;
 	to_save->cpl = 0;
+	to_save->g_pat = from_save->g_pat;
 
 	if (kvm_cpu_cap_has(X86_FEATURE_SHSTK)) {
 		to_save->s_cet  = from_save->s_cet;
@@ -1890,6 +1891,20 @@ static int svm_set_nested_state(struct kvm_vcpu *vcpu,
 	if (WARN_ON_ONCE(ret))
 		goto out_free;
 
+	/*
+	 * If nested paging is enabled in vmcb12, then KVM_SET_MSRS restored
+	 * the guest PAT register to the PAT MSR. Move this to the guest PAT
+	 * register (svm->vmcb->save.g_pat) and restore the PAT MSR from
+	 * svm->vmcb01.ptr->save.g_pat).
+	 */
+	if ((kvm_state->hdr.svm.flags & KVM_STATE_SVM_VALID_GPAT) &&
+		nested_npt_enabled(svm)) {
+		ret = -EINVAL;
+		svm->vmcb->save.g_pat = vcpu->arch.pat;
+		if (!kvm_pat_valid(svm->vmcb01.ptr->save.g_pat))
+			goto out_free;
+		vcpu->arch.pat = svm->vmcb01.ptr->save.g_pat;
+	}
 	svm->nested.force_msr_bitmap_recalc = true;
 
 	kvm_make_request(KVM_REQ_GET_NESTED_STATE_PAGES, vcpu);
