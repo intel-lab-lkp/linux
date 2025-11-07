@@ -869,6 +869,9 @@ static void nested_vmcb02_prepare_control(struct vcpu_svm *svm,
 		}
 	}
 
+	if (kvm_cpu_cap_has(X86_FEATURE_ERAPS))
+		vmcb02->control.erap_ctl |= ERAP_CONTROL_CLEAR_RAP;
+
 	/*
 	 * Merge guest and host intercepts - must be called with vcpu in
 	 * guest-mode to take effect.
@@ -1163,6 +1166,9 @@ int nested_svm_vmexit(struct vcpu_svm *svm)
 	nested_svm_copy_common_state(svm->nested.vmcb02.ptr, svm->vmcb01.ptr);
 
 	kvm_nested_vmexit_handle_ibrs(vcpu);
+
+	if (kvm_cpu_cap_has(X86_FEATURE_ERAPS))
+		vmcb01->control.erap_ctl |= ERAP_CONTROL_CLEAR_RAP;
 
 	svm_switch_vmcb(svm, &svm->vmcb01);
 
