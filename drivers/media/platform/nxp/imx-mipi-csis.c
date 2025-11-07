@@ -55,7 +55,11 @@
 /* CSIS common control */
 #define MIPI_CSIS_CMN_CTRL			0x04
 #define MIPI_CSIS_CMN_CTRL_UPDATE_SHADOW(n)	BIT((n) + 16)
-#define MIPI_CSIS_CMN_CTRL_INTERLEAVE_MODE_DT	BIT(10)
+#define MIPI_CSIS_CMN_CTRL_INTERLEAVE_MODE_NONE	(0 << 10)
+#define MIPI_CSIS_CMN_CTRL_INTERLEAVE_MODE_DT	(1 << 10)
+#define MIPI_CSIS_CMN_CTRL_INTERLEAVE_MODE_VC	(2 << 10)
+#define MIPI_CSIS_CMN_CTRL_INTERLEAVE_MODE_VCDT	(3 << 10)
+#define MIPI_CSIS_CMN_CTRL_INTERLEAVE_MODE_MASK	GENMASK(11, 10)
 #define MIPI_CSIS_CMN_CTRL_LANE_NUMBER(n)	((n) << 8)
 #define MIPI_CSIS_CMN_CTRL_LANE_NUMBER_MASK	GENMASK(9, 8)
 #define MIPI_CSIS_CMN_CTRL_UPDATE_SHADOW_CTRL	BIT(2)
@@ -179,6 +183,8 @@
 #define MIPI_CSIS_ISPCFG_PARALLEL		BIT(11)
 #define MIPI_CSIS_ISPCFG_DATAFORMAT(fmt)	((fmt) << 2)
 #define MIPI_CSIS_ISPCFG_DATAFORMAT_MASK	GENMASK(7, 2)
+#define MIPI_CSIS_ISPCFG_VIRTUAL_CHANNEL(vc)	((vc) << 0)
+#define MIPI_CSIS_ISPCFG_VIRTUAL_CHANNEL_MASK	GENMASK(1, 0)
 
 /* ISP Image Resolution register */
 #define MIPI_CSIS_ISP_RESOL_CH(n)		(0x44 + (n) * 0x10)
@@ -588,7 +594,8 @@ static void __mipi_csis_set_format(struct mipi_csis_device *csis,
 	/* Color format */
 	val = mipi_csis_read(csis, MIPI_CSIS_ISP_CONFIG_CH(0));
 	val &= ~(MIPI_CSIS_ISPCFG_PARALLEL | MIPI_CSIS_ISPCFG_PIXEL_MODE_MASK |
-		 MIPI_CSIS_ISPCFG_DATAFORMAT_MASK);
+		 MIPI_CSIS_ISPCFG_DATAFORMAT_MASK |
+		 MIPI_CSIS_ISPCFG_VIRTUAL_CHANNEL_MASK);
 
 	/*
 	 * YUV 4:2:2 can be transferred with 8 or 16 bits per clock sample
@@ -607,6 +614,8 @@ static void __mipi_csis_set_format(struct mipi_csis_device *csis,
 		val |= MIPI_CSIS_ISPCFG_PIXEL_MODE_DUAL;
 
 	val |= MIPI_CSIS_ISPCFG_DATAFORMAT(csis_fmt->data_type);
+	val |= MIPI_CSIS_ISPCFG_VIRTUAL_CHANNEL(0);
+
 	mipi_csis_write(csis, MIPI_CSIS_ISP_CONFIG_CH(0), val);
 
 	/* Pixel resolution */
@@ -672,10 +681,14 @@ static void mipi_csis_set_params(struct mipi_csis_device *csis,
 	u32 val;
 
 	val = mipi_csis_read(csis, MIPI_CSIS_CMN_CTRL);
-	val &= ~MIPI_CSIS_CMN_CTRL_LANE_NUMBER_MASK;
+	val &= ~(MIPI_CSIS_CMN_CTRL_LANE_NUMBER_MASK |
+		 MIPI_CSIS_CMN_CTRL_INTERLEAVE_MODE_MASK);
+
 	val |= MIPI_CSIS_CMN_CTRL_LANE_NUMBER(lanes - 1);
+
 	if (csis->info->version == MIPI_CSIS_V3_3)
 		val |= MIPI_CSIS_CMN_CTRL_INTERLEAVE_MODE_DT;
+
 	mipi_csis_write(csis, MIPI_CSIS_CMN_CTRL, val);
 
 	__mipi_csis_set_format(csis, format, csis_fmt);
