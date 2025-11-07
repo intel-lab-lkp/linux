@@ -125,7 +125,8 @@ static int nvidia_configure(void)
 	pci_write_config_dword(nvidia_private.dev_2, NVIDIA_2_APLIMIT, aplimit);
 	pci_write_config_dword(nvidia_private.dev_3, NVIDIA_3_APBASE, apbase);
 	pci_write_config_dword(nvidia_private.dev_3, NVIDIA_3_APLIMIT, aplimit);
-	if (0 != (rc = nvidia_init_iorr(apbase, current_size->size * 1024 * 1024)))
+	rc = nvidia_init_iorr(apbase, current_size->size * 1024 * 1024);
+	if (rc)
 		return rc;
 
 	/* directory size is 64k */
@@ -291,8 +292,7 @@ static void nvidia_tlbflush(struct agp_memory *mem)
 }
 
 
-static const struct aper_size_info_8 nvidia_generic_sizes[5] =
-{
+static const struct aper_size_info_8 nvidia_generic_sizes[5] = {
 	{512, 131072, 7, 0},
 	{256, 65536, 6, 8},
 	{128, 32768, 5, 12},
@@ -302,8 +302,7 @@ static const struct aper_size_info_8 nvidia_generic_sizes[5] =
 };
 
 
-static const struct gatt_mask nvidia_generic_masks[] =
-{
+static const struct gatt_mask nvidia_generic_masks[] = {
 	{ .mask = 1, .type = 0}
 };
 
