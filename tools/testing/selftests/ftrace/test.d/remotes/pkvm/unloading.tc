@@ -1,11 +1,11 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-2.0
-# description: Test pkvm hypervisor non-consuming trace read
+# description: Test pkvm hypervisor trace buffer unloading
 # requires: remotes/hypervisor/write_event
 
 SOURCE_REMOTE_TEST=1
-. $TEST_DIR/remotes/trace.tc
+. $TEST_DIR/remotes/unloading.tc
 
 set -e
 setup_remote "hypervisor"
-test_trace
+test_unloading
