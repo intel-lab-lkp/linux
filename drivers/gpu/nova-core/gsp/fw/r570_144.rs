@@ -25,4 +25,5 @@
     unsafe_op_in_unsafe_fn
 )]
 use kernel::ffi;
+use kernel::prelude::Zeroable;
 include!("r570_144/bindings.rs");
