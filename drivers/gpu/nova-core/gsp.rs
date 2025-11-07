@@ -15,6 +15,7 @@ use crate::gsp::cmdq::Cmdq;
 pub(crate) mod cmdq;
 mod fw;
 
+use fw::GspArgumentsCached;
 use fw::LibosMemoryRegionInitArgument;
 
 pub(crate) use fw::{GspFwWprMeta, LibosParams};
@@ -101,6 +102,8 @@ pub(crate) struct Gsp {
     logrm: LogBuffer,
     /// Command queue.
     pub(crate) cmdq: Cmdq,
+    /// RM arguments.
+    rmargs: CoherentAllocation<GspArgumentsCached>,
 }
 
 impl Gsp {
@@ -127,11 +130,20 @@ impl Gsp {
 
         let cmdq = Cmdq::new(dev)?;
 
+        let rmargs = CoherentAllocation::<GspArgumentsCached>::alloc_coherent(
+            dev,
+            1,
+            GFP_KERNEL | __GFP_ZERO,
+        )?;
+        dma_write!(rmargs[0] = fw::GspArgumentsCached::new(&cmdq))?;
+        dma_write!(libos[3] = LibosMemoryRegionInitArgument::new("RMARGS", &rmargs))?;
+
         Ok(try_pin_init!(Self {
             libos,
             loginit,
             logintr,
             logrm,
+            rmargs,
             cmdq,
         }))
     }

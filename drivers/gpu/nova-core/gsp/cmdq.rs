@@ -11,7 +11,10 @@ use core::{
 
 use kernel::{
     device,
-    dma::CoherentAllocation,
+    dma::{
+        CoherentAllocation,
+        DmaAddress, //
+    },
     dma_write,
     io::poll::read_poll_timeout,
     prelude::*,
@@ -33,6 +36,7 @@ use crate::{
             MsgqTxHeader, //
         },
         PteArray,
+        GSP_PAGE_SHIFT,
         GSP_PAGE_SIZE, //
     },
     num,
@@ -378,6 +382,22 @@ pub(crate) struct Cmdq {
 }
 
 impl Cmdq {
+    /// Offset of the data after the PTEs.
+    const POST_PTE_OFFSET: usize = core::mem::offset_of!(GspMem, cpuq);
+
+    /// Offset of command queue ring buffer.
+    pub(crate) const CMDQ_OFFSET: usize = core::mem::offset_of!(GspMem, cpuq)
+        + core::mem::offset_of!(Msgq, msgq)
+        - Self::POST_PTE_OFFSET;
+
+    /// Offset of message queue ring buffer.
+    pub(crate) const STATQ_OFFSET: usize = core::mem::offset_of!(GspMem, gspq)
+        + core::mem::offset_of!(Msgq, msgq)
+        - Self::POST_PTE_OFFSET;
+
+    /// Number of page table entries for the GSP shared region.
+    pub(crate) const NUM_PTES: usize = size_of::<GspMem>() >> GSP_PAGE_SHIFT;
+
     /// Creates a new command queue for `dev`.
     pub(crate) fn new(dev: &device::Device<device::Bound>) -> Result<Cmdq> {
         let gsp_mem = DmaGspMem::new(dev)?;
@@ -580,5 +600,9 @@ impl Cmdq {
             .advance_cpu_read_ptr(u32::try_from(msg_header.length().div_ceil(GSP_PAGE_SIZE))?);
 
         result
+    }
+
+    pub(crate) fn dma_handle(&self) -> DmaAddress {
+        self.gsp_mem.0.dma_handle()
     }
 }
