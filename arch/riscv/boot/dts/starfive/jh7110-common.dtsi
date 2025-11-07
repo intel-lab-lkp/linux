@@ -5,7 +5,7 @@
  */
 
 /dts-v1/;
-#include "jh7110.dtsi"
+#include "jh711x.dtsi"
 #include "jh7110-pinfunc.h"
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/leds/common.h>
