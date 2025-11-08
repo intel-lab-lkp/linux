@@ -370,7 +370,7 @@ static void zloop_rw(struct zloop_cmd *cmd)
 	struct iov_iter iter;
 	struct bio_vec tmp;
 	sector_t zone_end;
-	int nr_bvec = 0;
+	unsigned short nr_bvec = blk_rq_nr_phys_segments(rq);
 	int ret;
 
 	atomic_set(&cmd->ref, 2);
@@ -436,9 +436,6 @@ static void zloop_rw(struct zloop_cmd *cmd)
 		if (zone->wp == zone_end)
 			zone->cond = BLK_ZONE_COND_FULL;
 	}
-
-	rq_for_each_bvec(tmp, rq, rq_iter)
-		nr_bvec++;
 
 	if (rq->bio != rq->biotail) {
 		struct bio_vec *bvec;
