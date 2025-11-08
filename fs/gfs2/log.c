@@ -1157,11 +1157,13 @@ out_withdraw:
 	 * never queued onto any of the ail lists. Here we add it to
 	 * ail1 just so that ail_drain() will find and free it.
 	 */
-	spin_lock(&sdp->sd_ail_lock);
-	if (tr && list_empty(&tr->tr_list))
-		list_add(&tr->tr_list, &sdp->sd_ail1_list);
-	spin_unlock(&sdp->sd_ail_lock);
-	tr = NULL;
+	if (gfs2_withdrawing(sdp)) {
+		spin_lock(&sdp->sd_ail_lock);
+		if (tr && list_empty(&tr->tr_list))
+			list_add(&tr->tr_list, &sdp->sd_ail1_list);
+		spin_unlock(&sdp->sd_ail_lock);
+		tr = NULL;
+	}
 	goto out_end;
 }
 
