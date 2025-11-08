@@ -30,6 +30,12 @@ Endpoint node mandatory properties
 - remote-endpoint: A phandle to the bus receiver's endpoint node.
 
 
+Endpoint node optional properties
+---------------------------------
+
+- crc: Enable CRC checksums.
+
+
 Example
 -------
 
