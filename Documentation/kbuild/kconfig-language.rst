@@ -118,7 +118,7 @@ applicable everywhere (see syntax).
   This is a shorthand notation for a type definition plus a value.
   Optionally dependencies for this default value can be added with "if".
 
-- dependencies: "depends on" <expr>
+- dependencies: "depends on" <expr> ["if" <expr>]
 
   This defines a dependency for this menu entry. If multiple
   dependencies are defined, they are connected with '&&'. Dependencies
@@ -133,6 +133,16 @@ applicable everywhere (see syntax).
 	depends on BAR
 	bool "foo"
 	default y
+
+  The dependency definition itself may be conditional by appending "if"
+  followed by an expression. If such expression is false (n) then this
+  dependency is ignored. One possible use case is:
+
+    config FOO
+	tristate
+	depends on BAZ if BAZ != n
+
+  meaning that FOO is constrained by the value of BAZ only when it is set.
 
 - reverse dependencies: "select" <symbol> ["if" <expr>]
 
