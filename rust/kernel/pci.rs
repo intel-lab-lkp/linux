@@ -24,8 +24,10 @@ use core::{
 };
 use kernel::prelude::*;
 
+mod err;
 mod id;
 
+pub use self::err::{ChannelState, ErrorHandler, ErsResult};
 pub use self::id::{Class, ClassMask, Vendor};
 
 /// An adapter for the registration of PCI drivers.
@@ -47,6 +49,7 @@ unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
             (*pdrv.get()).probe = Some(Self::probe_callback);
             (*pdrv.get()).remove = Some(Self::remove_callback);
             (*pdrv.get()).id_table = T::ID_TABLE.as_ptr();
+            (*pdrv.get()).err_handler = err::ErrorHandlerVTable::<T::ErrorHandler>::vtable_ptr();
         }
 
         // SAFETY: `pdrv` is guaranteed to be a valid `RegType`.
@@ -264,6 +267,14 @@ pub trait Driver: Send {
     // type IdInfo: 'static = ();
     // ```
     type IdInfo: 'static;
+
+    /// The PCI error handler implementation for this driver.
+    // TODO: Use `associated_type_defaults` once stabilized:
+    //
+    // ```
+    // type ErrorHandler: err::ErrorHandler = ();
+    // ```
+    type ErrorHandler: err::ErrorHandler;
 
     /// The table of device ids supported by the driver.
     const ID_TABLE: IdTable<Self::IdInfo>;

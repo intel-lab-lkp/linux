@@ -63,6 +63,8 @@ impl SampleDriver {
 impl pci::Driver for SampleDriver {
     type IdInfo = TestIndex;
 
+    type ErrorHandler = ();
+
     const ID_TABLE: pci::IdTable<Self::IdInfo> = &PCI_TABLE;
 
     fn probe(pdev: &pci::Device<Core>, info: &Self::IdInfo) -> Result<Pin<KBox<Self>>> {
