@@ -27,6 +27,14 @@ static int ___cfg80211_stop_ap(struct cfg80211_registered_device *rdev,
 	    dev->ieee80211_ptr->iftype != NL80211_IFTYPE_P2P_GO)
 		return -EOPNOTSUPP;
 
+	/* Clear CAC state if it was ongoing, even if beaconing hasn't started */
+	if (wdev->links[link_id].cac_started) {
+		wdev->links[link_id].cac_started = false;
+		cfg80211_set_cac_state(&rdev->wiphy,
+				       &wdev->links[link_id].ap.chandef,
+				       false);
+	}
+
 	if (!wdev->links[link_id].ap.beacon_interval)
 		return -ENOENT;
 
@@ -34,6 +42,7 @@ static int ___cfg80211_stop_ap(struct cfg80211_registered_device *rdev,
 	if (!err) {
 		wdev->conn_owner_nlportid = 0;
 		wdev->links[link_id].ap.beacon_interval = 0;
+
 		memset(&wdev->links[link_id].ap.chandef, 0,
 		       sizeof(wdev->links[link_id].ap.chandef));
 		wdev->u.ap.ssid_len = 0;
