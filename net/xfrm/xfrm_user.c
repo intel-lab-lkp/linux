@@ -3035,7 +3035,7 @@ static int xfrm_add_acquire(struct sk_buff *skb, struct nlmsghdr *nlh,
 	}
 
 	xfrm_state_free(x);
-	kfree(xp);
+	xfrm_policy_destroy(xp);
 
 	return 0;
 
