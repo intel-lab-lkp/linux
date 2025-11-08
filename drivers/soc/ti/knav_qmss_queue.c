@@ -1884,9 +1884,14 @@ err:
 
 static void knav_queue_remove(struct platform_device *pdev)
 {
-	/* TODO: Free resources */
-	pm_runtime_put_sync(&pdev->dev);
-	pm_runtime_disable(&pdev->dev);
+    struct knav_device *kdev = platform_get_drvdata(pdev);
+
+    knav_queue_stop_pdsps(kdev);
+    knav_queue_free_regions(kdev);
+    knav_free_queue_ranges(kdev);
+
+    pm_runtime_put_sync(&pdev->dev);
+    pm_runtime_disable(&pdev->dev);
 }
 
 static struct platform_driver keystone_qmss_driver = {
