@@ -4,7 +4,17 @@
 //!
 //! To make this driver probe, QEMU must be run with `-device pci-testdev`.
 
-use kernel::{c_str, device::Core, devres::Devres, pci, prelude::*, sync::aref::ARef};
+use kernel::{
+    c_str,
+    device::{
+        Bound,
+        Core, //
+    },
+    devres::Devres,
+    pci,
+    prelude::*,
+    sync::aref::ARef,
+};
 
 struct Regs;
 
@@ -63,7 +73,7 @@ impl SampleDriver {
 impl pci::Driver for SampleDriver {
     type IdInfo = TestIndex;
 
-    type ErrorHandler = ();
+    type ErrorHandler = Self;
 
     const ID_TABLE: pci::IdTable<Self::IdInfo> = &PCI_TABLE;
 
@@ -103,6 +113,39 @@ impl pci::Driver for SampleDriver {
             // Reset pci-testdev by writing a new test index.
             bar.write8(this.index.0, Regs::TEST);
         }
+    }
+}
+
+#[vtable]
+impl pci::ErrorHandler for SampleDriver {
+    type Driver = Self;
+
+    fn error_detected(
+        pdev: &pci::Device<Bound>,
+        error: pci::ChannelState,
+        _this: Pin<&Self::Driver>,
+    ) -> pci::ErsResult {
+        dev_info!(pdev.as_ref(), "error detected.\n");
+
+        match error {
+            pci::ChannelState::PermanentFailure => {
+                dev_err!(pdev.as_ref(), "Permanent failure detected.\n");
+                pci::ErsResult::Disconnect
+            }
+            _ => {
+                dev_info!(pdev.as_ref(), "Attempting recovery from error.\n");
+                pci::ErsResult::NeedReset
+            }
+        }
+    }
+
+    fn slot_reset(pdev: &pci::Device<Bound>, _this: Pin<&Self::Driver>) -> pci::ErsResult {
+        dev_info!(pdev.as_ref(), "slot reset.\n");
+        pci::ErsResult::Recovered
+    }
+
+    fn resume(pdev: &pci::Device<Bound>, _this: Pin<&Self::Driver>) {
+        dev_info!(pdev.as_ref(), "resume.\n");
     }
 }
 
