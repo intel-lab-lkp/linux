@@ -4871,7 +4871,7 @@ static inline void prepare_task(struct task_struct *next)
 	WRITE_ONCE(next->on_cpu, 1);
 }
 
-static inline void finish_task(struct task_struct *prev)
+static __always_inline void finish_task(struct task_struct *prev)
 {
 	/*
 	 * This must be the very last reference to @prev from this CPU. After
@@ -4933,7 +4933,7 @@ struct balance_callback balance_push_callback = {
 	.func = balance_push,
 };
 
-static inline struct balance_callback *
+static __always_inline struct balance_callback *
 __splice_balance_callbacks(struct rq *rq, bool split)
 {
 	struct balance_callback *head = rq->balance_callback;
@@ -4970,12 +4970,12 @@ struct balance_callback *splice_balance_callbacks(struct rq *rq)
  */
 static __always_inline void __balance_callbacks_ainline(struct rq *rq)
 {
-	do_balance_callbacks(rq, __splice_balance_callbacks(rq, false));
+	do_balance_callbacks_ainline(rq, __splice_balance_callbacks(rq, false));
 }
 
 static void __balance_callbacks(struct rq *rq)
 {
-	__balance_callbacks_ainline(rq);
+	do_balance_callbacks(rq, __splice_balance_callbacks(rq, false));
 }
 
 void balance_callbacks(struct rq *rq, struct balance_callback *head)
@@ -5006,7 +5006,7 @@ prepare_lock_switch(struct rq *rq, struct task_struct *next, struct rq_flags *rf
 #endif
 }
 
-static inline void finish_lock_switch(struct rq *rq)
+static __always_inline void finish_lock_switch(struct rq *rq)
 {
 	/*
 	 * If we are tracking spinlock dependencies then we have to
@@ -5014,7 +5014,7 @@ static inline void finish_lock_switch(struct rq *rq)
 	 * prev into current:
 	 */
 	spin_acquire(&__rq_lockp(rq)->dep_map, 0, 0, _THIS_IP_);
-	__balance_callbacks(rq);
+	__balance_callbacks_ainline(rq);
 	raw_spin_rq_unlock_irq(rq);
 }
 
@@ -5039,7 +5039,7 @@ static inline void kmap_local_sched_out(void)
 #endif
 }
 
-static inline void kmap_local_sched_in(void)
+static __always_inline void kmap_local_sched_in(void)
 {
 #ifdef CONFIG_KMAP_LOCAL
 	if (unlikely(current->kmap_ctrl.idx))
@@ -5138,7 +5138,7 @@ static __always_inline struct rq *finish_task_switch_ainline(struct task_struct 
 	finish_task(prev);
 	tick_nohz_task_switch();
 	finish_lock_switch(rq);
-	finish_arch_post_lock_switch();
+	finish_arch_post_lock_switch_ainline();
 	kcov_finish_switch(current);
 	/*
 	 * kmap_local_sched_out() is invoked with rq::lock held and
@@ -5279,7 +5279,7 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	switch_to(prev, next, prev);
 	barrier();
 
-	return finish_task_switch(prev);
+	return finish_task_switch_ainline(prev);
 }
 
 /*
