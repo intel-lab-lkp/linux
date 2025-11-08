@@ -29,7 +29,7 @@ static void region_setup(struct vfio_pci_device *device,
 	VFIO_ASSERT_NE(vaddr, MAP_FAILED);
 
 	region->vaddr = vaddr;
-	region->iova = (u64)vaddr;
+	region->iova = vfio_pci_get_next_iova(self->device, size);
 	region->size = size;
 
 	vfio_pci_dma_map(device, region);

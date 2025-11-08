@@ -14,6 +14,7 @@
 #include <uapi/linux/types.h>
 #include <linux/limits.h>
 #include <linux/mman.h>
+#include <linux/overflow.h>
 #include <linux/types.h>
 #include <linux/vfio.h>
 #include <linux/iommufd.h>
@@ -386,10 +387,66 @@ static void vfio_pci_group_setup(struct vfio_pci_device *device, const char *bdf
 	ioctl_assert(device->group_fd, VFIO_GROUP_SET_CONTAINER, &device->container_fd);
 }
 
+iova_t vfio_pci_get_next_iova(struct vfio_pci_device *device, size_t size)
+{
+	int idx = device->iova_range_idx;
+	struct vfio_iova_range *range = &device->iova_ranges[idx];
+
+	VFIO_ASSERT_LT(idx, device->nr_iova_ranges, "IOVA allocate out of space\n");
+	VFIO_ASSERT_GT(size, 0, "Invalid size arg, zero\n");
+	VFIO_ASSERT_EQ(size & (size - 1), 0, "Invalid size arg, non-power-of-2\n");
+
+	for (;;) {
+		iova_t iova, end;
+
+		iova = ALIGN(device->iova_next, size);
+
+		if (iova < device->iova_next || iova > range->end ||
+		    check_add_overflow(iova, size - 1, &end) ||
+		    end > range->end) {
+			device->iova_range_idx = ++idx;
+			VFIO_ASSERT_LT(idx, device->nr_iova_ranges,
+				       "Out of ranges for allocation\n");
+			device->iova_next = (++range)->start;
+			continue;
+		}
+
+		if (check_add_overflow(end, (iova_t)1, &device->iova_next) ||
+		    device->iova_next > range->end) {
+			device->iova_range_idx = ++idx;
+			if (idx < device->nr_iova_ranges)
+				device->iova_next = (++range)->start;
+		}
+
+		return iova;
+	}
+}
+
+static void vfio_pci_fill_iova_ranges(struct vfio_pci_device *device,
+				      struct vfio_iova_range *ranges, int nr)
+{
+	int i;
+
+	VFIO_ASSERT_GT(nr, 0, "Empty IOVA ranges\n");
+	device->nr_iova_ranges = nr;
+
+	device->iova_ranges = calloc(nr, sizeof(struct vfio_iova_range));
+	VFIO_ASSERT_NOT_NULL(device->iova_ranges);
+	memcpy(device->iova_ranges, ranges, nr * sizeof(struct vfio_iova_range));
+
+	device->iova_next = device->iova_ranges[0].start;
+
+	for (i = 0; i < device->nr_iova_ranges; i++) {
+		if (device->iova_ranges[i].end > device->iova_max)
+			device->iova_max = device->iova_ranges[i].end;
+	}
+}
+
 static void vfio_pci_container_setup(struct vfio_pci_device *device, const char *bdf)
 {
 	unsigned long iommu_type = device->iommu_mode->iommu_type;
 	const char *path = device->iommu_mode->container_path;
+	struct vfio_iommu_type1_info *iommu_info;
 	int version;
 	int ret;
 
@@ -408,6 +465,51 @@ static void vfio_pci_container_setup(struct vfio_pci_device *device, const char 
 
 	device->fd = ioctl(device->group_fd, VFIO_GROUP_GET_DEVICE_FD, bdf);
 	VFIO_ASSERT_GE(device->fd, 0);
+
+	iommu_info = calloc(1, sizeof(*iommu_info));
+	VFIO_ASSERT_NOT_NULL(iommu_info);
+	iommu_info->argsz = sizeof(*iommu_info);
+
+	ioctl_assert(device->container_fd, VFIO_IOMMU_GET_INFO, (void *)iommu_info);
+
+	if ((iommu_info->flags & VFIO_IOMMU_INFO_CAPS) &&
+	    iommu_info->argsz != sizeof(*iommu_info)) {
+		u32 next, info_size = iommu_info->argsz;
+		struct vfio_info_cap_header *hdr;
+		char *ptr;
+
+		iommu_info = realloc(iommu_info, info_size);
+		VFIO_ASSERT_NOT_NULL(iommu_info);
+
+		ioctl_assert(device->container_fd, VFIO_IOMMU_GET_INFO,
+			     (void *)iommu_info);
+		VFIO_ASSERT_EQ(iommu_info->argsz, info_size);
+		VFIO_ASSERT_GT(iommu_info->flags & VFIO_IOMMU_INFO_CAPS, 0);
+		VFIO_ASSERT_GT(iommu_info->cap_offset, 0);
+
+		next = iommu_info->cap_offset;
+		ptr = (char *)iommu_info;
+
+		while (next) {
+			hdr =  (struct vfio_info_cap_header *)(ptr + next);
+			if (hdr->id == VFIO_IOMMU_TYPE1_INFO_CAP_IOVA_RANGE) {
+				VFIO_ASSERT_EQ(hdr->version, 1);
+				break;
+			}
+
+			next = hdr->next;
+		}
+
+		if (next) {
+			struct vfio_iommu_type1_info_cap_iova_range *ranges;
+
+			ranges = (struct vfio_iommu_type1_info_cap_iova_range *)hdr;
+			vfio_pci_fill_iova_ranges(device, ranges->iova_ranges,
+						  ranges->nr_iovas);
+		}
+	}
+
+	free(iommu_info);
 }
 
 static void vfio_pci_device_setup(struct vfio_pci_device *device)
@@ -547,6 +649,10 @@ static void vfio_device_attach_iommufd_pt(int device_fd, u32 pt_id)
 static void vfio_pci_iommufd_setup(struct vfio_pci_device *device, const char *bdf)
 {
 	const char *cdev_path = vfio_pci_get_cdev_path(bdf);
+	struct iommu_ioas_iova_ranges *ioas_ranges;
+	struct vfio_iova_range *iova_ranges;
+	size_t size;
+	int ret, i;
 
 	device->fd = open(cdev_path, O_RDWR);
 	VFIO_ASSERT_GE(device->fd, 0);
@@ -563,6 +669,34 @@ static void vfio_pci_iommufd_setup(struct vfio_pci_device *device, const char *b
 	vfio_device_bind_iommufd(device->fd, device->iommufd);
 	device->ioas_id = iommufd_ioas_alloc(device->iommufd);
 	vfio_device_attach_iommufd_pt(device->fd, device->ioas_id);
+
+	ioas_ranges = calloc(1, sizeof(*ioas_ranges));
+	VFIO_ASSERT_NOT_NULL(ioas_ranges);
+	ioas_ranges->size = sizeof(*ioas_ranges);
+	ioas_ranges->ioas_id = device->ioas_id;
+
+	ret = ioctl(device->iommufd, IOMMU_IOAS_IOVA_RANGES, ioas_ranges);
+
+	VFIO_ASSERT_NE(ret, 0);
+	VFIO_ASSERT_EQ(errno, EMSGSIZE);
+	VFIO_ASSERT_NE(ioas_ranges->num_iovas, 0);
+
+	size = sizeof(*ioas_ranges) + (ioas_ranges->num_iovas *
+				       sizeof(struct iommu_iova_range));
+	ioas_ranges = realloc(ioas_ranges, size);
+	VFIO_ASSERT_NOT_NULL(ioas_ranges);
+
+	ioas_ranges->allowed_iovas = (uintptr_t)(ioas_ranges + 1);
+
+	ioctl_assert(device->iommufd, IOMMU_IOAS_IOVA_RANGES, ioas_ranges);
+
+	VFIO_ASSERT_EQ(sizeof(struct vfio_iova_range),
+		       sizeof(struct iommu_iova_range));
+
+	iova_ranges = (void *)ioas_ranges->allowed_iovas;
+
+	vfio_pci_fill_iova_ranges(device, iova_ranges, ioas_ranges->num_iovas);
+	free(ioas_ranges);
 }
 
 struct vfio_pci_device *vfio_pci_device_init(const char *bdf, const char *iommu_mode)

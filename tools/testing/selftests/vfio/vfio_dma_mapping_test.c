@@ -142,7 +142,7 @@ TEST_F(vfio_dma_mapping_test, dma_map_unmap)
 	else
 		ASSERT_NE(region.vaddr, MAP_FAILED);
 
-	region.iova = (u64)region.vaddr;
+	region.iova = vfio_pci_get_next_iova(self->device, size);
 	region.size = size;
 
 	vfio_pci_dma_map(self->device, &region);
@@ -233,7 +233,7 @@ FIXTURE_SETUP(vfio_dma_map_limit_test)
 	ASSERT_NE(region->vaddr, MAP_FAILED);
 
 	/* One page prior to the end of address space */
-	region->iova = ~(iova_t)0 & ~(region_size - 1);
+	region->iova = self->device->iova_max & ~(region_size - 1);
 	region->size = region_size;
 }
 
@@ -275,6 +275,9 @@ TEST_F(vfio_dma_map_limit_test, overflow)
 {
 	struct vfio_dma_region *region = &self->region;
 	int rc;
+
+	if (self->device->iova_max != UINT64_MAX)
+		SKIP(return, "IOMMU address space insufficient for overflow test\n");
 
 	region->size = self->mmap_size;
 
