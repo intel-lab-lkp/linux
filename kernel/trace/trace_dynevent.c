@@ -14,6 +14,7 @@
 
 #include "trace.h"
 #include "trace_output.h"	/* for trace_event_sem */
+#include "trace_probe.h"
 #include "trace_dynevent.h"
 
 DEFINE_MUTEX(dyn_event_ops_mutex);
@@ -144,9 +145,15 @@ static int create_dyn_event(const char *raw_command)
 		if (!ret || ret != -ECANCELED)
 			break;
 	}
-	mutex_unlock(&dyn_event_ops_mutex);
-	if (ret == -ECANCELED)
+	if (ret == -ECANCELED) {
+		/* Wrong dynamic event. Leave an error message. */
+		trace_probe_log_init("dynevent", 1, &raw_command);
+		trace_probe_log_err(0, BAD_DYN_EVENT);
+		trace_probe_log_clear();
 		ret = -EINVAL;
+	}
+
+	mutex_unlock(&dyn_event_ops_mutex);
 
 	return ret;
 }

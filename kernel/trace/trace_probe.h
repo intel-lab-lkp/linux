@@ -567,7 +567,8 @@ extern int traceprobe_define_arg_fields(struct trace_event_call *event_call,
 	C(BAD_ACCESS_FMT,	"Access memory address requires @"),	\
 	C(BAD_ACCESS_TYPE,	"Bad memory access type"),	\
 	C(BAD_ACCESS_LEN,	"This memory access length is not supported"), \
-	C(BAD_ACCESS_ADDR,	"Invalid access memory address"),
+	C(BAD_ACCESS_ADDR,	"Invalid access memory address"),	\
+	C(BAD_DYN_EVENT,	"Invalid dynamic event command"),
 
 #undef C
 #define C(a, b)		TP_ERR_##a
