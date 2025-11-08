@@ -4887,7 +4887,13 @@ static inline void finish_task(struct task_struct *prev)
 	smp_store_release(&prev->on_cpu, 0);
 }
 
-static void do_balance_callbacks(struct rq *rq, struct balance_callback *head)
+/*
+ * do_balance_callbacks_ainline - the always inline version of
+ * do_balance_callbacks, used for performance sensitive paths.
+ * If unsure, use do_balance_callbacks instead.
+ */
+static __always_inline void do_balance_callbacks_ainline(struct rq *rq,
+		struct balance_callback *head)
 {
 	void (*func)(struct rq *rq);
 	struct balance_callback *next;
@@ -4902,6 +4908,11 @@ static void do_balance_callbacks(struct rq *rq, struct balance_callback *head)
 
 		func(rq);
 	}
+}
+
+static void do_balance_callbacks(struct rq *rq, struct balance_callback *head)
+{
+	do_balance_callbacks_ainline(rq, head);
 }
 
 static void balance_push(struct rq *rq);
@@ -4952,9 +4963,19 @@ struct balance_callback *splice_balance_callbacks(struct rq *rq)
 	return __splice_balance_callbacks(rq, true);
 }
 
-static void __balance_callbacks(struct rq *rq)
+/*
+ * __balance_callbacks_ainline - the always inline version of
+ * __balance_callbacks, used for performance sensitive paths.
+ * If unsure, use __balance_callbacks instead.
+ */
+static __always_inline void __balance_callbacks_ainline(struct rq *rq)
 {
 	do_balance_callbacks(rq, __splice_balance_callbacks(rq, false));
+}
+
+static void __balance_callbacks(struct rq *rq)
+{
+	__balance_callbacks_ainline(rq);
 }
 
 void balance_callbacks(struct rq *rq, struct balance_callback *head)
@@ -5006,7 +5027,8 @@ static inline void finish_lock_switch(struct rq *rq)
 #endif
 
 #ifndef finish_arch_post_lock_switch
-# define finish_arch_post_lock_switch()	do { } while (0)
+# define finish_arch_post_lock_switch()		do { } while (0)
+# define finish_arch_post_lock_switch_ainline()	do { } while (0)
 #endif
 
 static inline void kmap_local_sched_out(void)
@@ -5054,6 +5076,9 @@ prepare_task_switch(struct rq *rq, struct task_struct *prev,
 
 /**
  * finish_task_switch - clean up after a task-switch
+ * finish_task_switch_ainline - the always inline version of this func
+ * used for performance sensitive paths
+ *
  * @prev: the thread we just switched away from.
  *
  * finish_task_switch must be called after the context switch, paired
@@ -5071,7 +5096,7 @@ prepare_task_switch(struct rq *rq, struct task_struct *prev,
  * past. 'prev == current' is still correct but we need to recalculate this_rq
  * because prev may have moved to another CPU.
  */
-static struct rq *finish_task_switch(struct task_struct *prev)
+static __always_inline struct rq *finish_task_switch_ainline(struct task_struct *prev)
 	__releases(rq->lock)
 {
 	struct rq *rq = this_rq();
@@ -5153,6 +5178,11 @@ static struct rq *finish_task_switch(struct task_struct *prev)
 	}
 
 	return rq;
+}
+
+static struct rq *finish_task_switch(struct task_struct *prev)
+{
+	return finish_task_switch_ainline(prev);
 }
 
 /**

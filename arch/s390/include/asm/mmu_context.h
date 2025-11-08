@@ -97,7 +97,12 @@ static inline void switch_mm(struct mm_struct *prev, struct mm_struct *next,
 }
 
 #define finish_arch_post_lock_switch finish_arch_post_lock_switch
-static inline void finish_arch_post_lock_switch(void)
+/*
+ * finish_arch_post_lock_switch_ainline - the always inline version of
+ * finish_arch_post_lock_switch, used for performance sensitive paths.
+ * If unsure, use finish_arch_post_lock_switch instead.
+ */
+static __always_inline void finish_arch_post_lock_switch_ainline(void)
 {
 	struct task_struct *tsk = current;
 	struct mm_struct *mm = tsk->mm;
@@ -118,6 +123,11 @@ static inline void finish_arch_post_lock_switch(void)
 		local_ctl_load(1, &get_lowcore()->user_asce);
 	local_ctl_load(7, &get_lowcore()->user_asce);
 	local_irq_restore(flags);
+}
+
+static inline void finish_arch_post_lock_switch(void)
+{
+	finish_arch_post_lock_switch_ainline();
 }
 
 #define activate_mm activate_mm
