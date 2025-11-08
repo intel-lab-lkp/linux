@@ -93,13 +93,16 @@ static inline bool ib_nl_is_good_ip_resp(const struct nlmsghdr *nlh)
 	if (ret)
 		return false;
 
+	if (!tb[LS_NLA_TYPE_DGID])
+		return false;
+
 	return true;
 }
 
 static void ib_nl_process_good_ip_rsep(const struct nlmsghdr *nlh)
 {
 	const struct nlattr *head, *curr;
-	union ib_gid gid;
+	union ib_gid gid = {};
 	struct addr_req *req;
 	int len, rem;
 	int found = 0;
