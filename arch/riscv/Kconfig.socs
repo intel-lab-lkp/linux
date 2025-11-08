@@ -54,14 +54,26 @@ config SOC_STARFIVE
 	help
 	  This enables support for StarFive SoC platform hardware.
 
-config ARCH_SUNXI
-	bool "Allwinner sun20i SoCs"
+menuconfig ARCH_SUNXI
+	bool "Allwinner RISC-V SoCs"
+
+if ARCH_SUNXI
+
+config ARCH_SUNXI_XUANTIE
+	bool "Allwinner Xuantie IP SoCs"
 	depends on MMU && !XIP_KERNEL
-	select ERRATA_THEAD
 	select SUN4I_TIMER
+	select ERRATA_THEAD
 	help
-	  This enables support for Allwinner sun20i platform hardware,
-	  including boards based on the D1 and D1s SoCs.
+	  This enables support for Allwinner Xuantie IP SoCs.
+
+config ARCH_SUNXI_ANDES
+	bool "Allwinner Andes IP SoCs"
+	select ERRATA_ANDES
+	help
+	  This enables support for Allwinner Andes IP SoCs.
+
+endif
 
 config ARCH_THEAD
 	bool "T-HEAD RISC-V SoCs"
