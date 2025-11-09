@@ -1499,6 +1499,12 @@ struct cfg80211_s1g_short_beacon {
  * @mbssid_config: AP settings for multiple bssid
  * @s1g_long_beacon_period: S1G long beacon period
  * @s1g_short_beacon: S1G short beacon data
+ * @control_port_vlan_id: VLAN ID for control port protocol frames; 0 means
+ *	no encapsulation. If set (nonzero) userspace expect to receive also
+ *	802.1Q tagged control port protocol frames. Verification of VLAN id
+ *	should be done in lower layer. Also 802.1Q header should be stripped.
+ *	For tx path userspace expect lower layer will add proper 802.1Q header
+ *	and setup VLAN id.
  */
 struct cfg80211_ap_settings {
 	struct cfg80211_chan_def chandef;
@@ -1534,6 +1540,7 @@ struct cfg80211_ap_settings {
 	struct cfg80211_mbssid_config mbssid_config;
 	u8 s1g_long_beacon_period;
 	struct cfg80211_s1g_short_beacon s1g_short_beacon;
+	u16 control_port_vlan_id;
 };
 
 
@@ -3321,6 +3328,12 @@ enum cfg80211_assoc_req_flags {
  *	valid iff @link_id >= 0
  * @ext_mld_capa_ops: extended MLD capabilities and operations set by
  *	userspace for the association
+ * @control_port_vlan_id: VLAN ID for control port protocol frames; 0 means
+ *	no encapsulation. If set (nonzero) userspace expects to receive
+ *	802.1Q tagged control port protocol frames. Verification of VLAN id
+ *	should be done in lower layer. Also 802.1Q header should be stripped.
+ *	For tx path userspace expects lower layer will add proper 802.1Q header
+ *	and setup VLAN id.
  */
 struct cfg80211_assoc_request {
 	struct cfg80211_bss *bss;
@@ -3342,6 +3355,7 @@ struct cfg80211_assoc_request {
 	const u8 *ap_mld_addr;
 	s8 link_id;
 	u16 ext_mld_capa_ops;
+	u16 control_port_vlan_id;
 };
 
 /**
@@ -3520,6 +3534,12 @@ struct cfg80211_bss_selection {
  * @edmg: define the EDMG channels.
  *	This may specify multiple channels and bonding options for the driver
  *	to choose from, based on BSS configuration.
+ * @control_port_vlan_id: VLAN ID for control port protocol frames; 0 means
+ *	no encapsulation. If set (nonzero) userspace expects to receive
+ *	802.1Q tagged control port protocol frames. Verification of VLAN id
+ *	should be done in lower layer. Also 802.1Q header should be stripped.
+ *	For tx path userspace expects lower layer will add proper 802.1Q header
+ *	and setup VLAN id.
  */
 struct cfg80211_connect_params {
 	struct ieee80211_channel *channel;
@@ -3554,6 +3574,7 @@ struct cfg80211_connect_params {
 	size_t fils_erp_rrk_len;
 	bool want_1x;
 	struct ieee80211_edmg edmg;
+	u16 control_port_vlan_id;
 };
 
 /**
@@ -5168,7 +5189,7 @@ struct cfg80211_ops {
 				   const u8 *buf, size_t len,
 				   const u8 *dest, const __be16 proto,
 				   const bool noencrypt, int link_id,
-				   u64 *cookie);
+				   u64 *cookie, u16 vlan_id);
 
 	int	(*get_ftm_responder_stats)(struct wiphy *wiphy,
 				struct net_device *dev,

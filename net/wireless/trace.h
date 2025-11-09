@@ -2223,8 +2223,9 @@ TRACE_EVENT(rdev_mgmt_tx,
 TRACE_EVENT(rdev_tx_control_port,
 	TP_PROTO(struct wiphy *wiphy, struct net_device *netdev,
 		 const u8 *buf, size_t len, const u8 *dest, __be16 proto,
-		 bool unencrypted, int link_id),
-	TP_ARGS(wiphy, netdev, buf, len, dest, proto, unencrypted, link_id),
+		 bool unencrypted, int link_id, u16 vlan_id),
+	TP_ARGS(wiphy, netdev, buf, len, dest, proto, unencrypted, link_id,
+		vlan_id),
 	TP_STRUCT__entry(
 		WIPHY_ENTRY
 		NETDEV_ENTRY
@@ -2232,6 +2233,7 @@ TRACE_EVENT(rdev_tx_control_port,
 		__field(__be16, proto)
 		__field(bool, unencrypted)
 		__field(int, link_id)
+		__field(u16, vlan_id)
 	),
 	TP_fast_assign(
 		WIPHY_ASSIGN;
@@ -2240,13 +2242,14 @@ TRACE_EVENT(rdev_tx_control_port,
 		__entry->proto = proto;
 		__entry->unencrypted = unencrypted;
 		__entry->link_id = link_id;
+		__entry->vlan_id = vlan_id;
 	),
 	TP_printk(WIPHY_PR_FMT ", " NETDEV_PR_FMT ", %pM,"
-		  " proto: 0x%x, unencrypted: %s, link: %d",
+		  " proto: 0x%x, unencrypted: %s, link: %d, vlan: %u",
 		  WIPHY_PR_ARG, NETDEV_PR_ARG, __entry->dest,
 		  be16_to_cpu(__entry->proto),
 		  BOOL_TO_STR(__entry->unencrypted),
-		  __entry->link_id)
+		  __entry->link_id, __entry->vlan_id)
 );
 
 TRACE_EVENT(rdev_set_noack_map,
