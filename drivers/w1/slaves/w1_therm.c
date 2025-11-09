@@ -961,9 +961,8 @@ static inline int temperature_from_RAM(struct w1_slave *sl, u8 rom[9])
  */
 static inline s8 int_to_short(int i)
 {
-	/* Prepare to cast to short by eliminating out of range values */
-	i = clamp(i, MIN_TEMP, MAX_TEMP);
-	return (s8) i;
+	/* Cast to short by eliminating out of range values */
+	return clamp_t(s8, i, MIN_TEMP, MAX_TEMP);
 }
 
 /* Interface Functions */
@@ -1702,7 +1701,7 @@ static ssize_t temperature_show(struct device *device,
 		return 0;
 	}
 
-	return sprintf(buf, "%d\n", temperature_from_RAM(sl, info.rom));
+	return sysfs_emit(buf, "%d\n", temperature_from_RAM(sl, info.rom));
 }
 
 static ssize_t ext_power_show(struct device *device,
@@ -1724,7 +1723,7 @@ static ssize_t ext_power_show(struct device *device,
 			"%s: Power_mode may be corrupted. err=%d\n",
 			__func__, SLAVE_POWERMODE(sl));
 	}
-	return sprintf(buf, "%d\n", SLAVE_POWERMODE(sl));
+	return sysfs_emit(buf, "%d\n", SLAVE_POWERMODE(sl));
 }
 
 static ssize_t resolution_show(struct device *device,
@@ -1746,7 +1745,7 @@ static ssize_t resolution_show(struct device *device,
 			__func__, SLAVE_RESOLUTION(sl));
 	}
 
-	return sprintf(buf, "%d\n", SLAVE_RESOLUTION(sl));
+	return sysfs_emit(buf, "%d\n", SLAVE_RESOLUTION(sl));
 }
 
 static ssize_t resolution_store(struct device *device,
@@ -1827,7 +1826,7 @@ static ssize_t alarms_show(struct device *device,
 			__func__, ret);
 	}
 
-	return sprintf(buf, "%hd %hd\n", tl, th);
+	return sysfs_emit(buf, "%hd %hd\n", tl, th);
 }
 
 static ssize_t alarms_store(struct device *device,
@@ -1969,7 +1968,7 @@ static ssize_t therm_bulk_read_show(struct device *device,
 		}
 	}
 show_result:
-	return sprintf(buf, "%d\n", ret);
+	return sysfs_emit(buf, "%d\n", ret);
 }
 
 static ssize_t conv_time_show(struct device *device,
@@ -1982,7 +1981,7 @@ static ssize_t conv_time_show(struct device *device,
 			"%s: Device is not supported by the driver\n", __func__);
 		return 0;  /* No device family */
 	}
-	return sprintf(buf, "%d\n", conversion_time(sl));
+	return sysfs_emit(buf, "%d\n", conversion_time(sl));
 }
 
 static ssize_t conv_time_store(struct device *device,
@@ -2024,7 +2023,7 @@ static ssize_t features_show(struct device *device,
 			 "%s: Device not supported by the driver\n", __func__);
 		return 0;  /* No device family */
 	}
-	return sprintf(buf, "%u\n", SLAVE_FEATURES(sl));
+	return sysfs_emit(buf, "%u\n", SLAVE_FEATURES(sl));
 }
 
 static ssize_t features_store(struct device *device,
