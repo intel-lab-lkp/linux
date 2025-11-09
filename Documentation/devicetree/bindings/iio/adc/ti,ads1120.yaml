@@ -1,0 +1,109 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/adc/ti,ads1120.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Texas Instruments ADS1120 4-channel, 16-bit, 2kSPS ADC
+
+maintainers:
+  - Ajith Anandhan <ajithanandhan0406@gmail.com>
+
+description: |
+  The ADS1120 is a precision, 16-bit, analog-to-digital converter (ADC)
+  that features two differential or four single-ended inputs through a
+  flexible input multiplexer.
+
+  Datasheet: https://www.ti.com/lit/gpn/ads1120
+
+properties:
+  compatible:
+    const: ti,ads1120
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    minItems: 1
+    maxItems: 2
+    description: |
+      Interrupts for the DRDY (data ready) pin(s). The device can output
+      DRDY on a dedicated pin or multiplex it with DOUT. If both pins are
+      wired, both interrupts can be specified.
+
+  interrupt-names:
+    minItems: 1
+    maxItems: 2
+    items:
+      enum:
+        - drdy
+        - dout
+
+  avdd-supply:
+    description: |
+      Analog power supply, typically 2.3V to 5.5V.
+
+  vref-supply:
+    description: |
+      Optional external voltage reference. Can be connected to either
+      REFP0/REFN0 or REFP1/REFN1 pins. If not supplied, the internal
+      2.048V reference is used.
+
+  ti,avdd-is-ref:
+    type: boolean
+    description: |
+      If present, indicates that the AVDD supply voltage is of sufficient
+      quality and stability to be used as the voltage reference instead of
+      the internal reference. This allows the driver to select AVDD as the
+      reference source for potentially better performance.
+
+  clocks:
+    maxItems: 1
+    description: |
+      Optional external clock input. If not specified, the internal
+      oscillator is used.
+
+  spi-max-frequency:
+    maximum: 4000000
+
+  spi-cpha: true
+
+  "#io-channel-cells":
+    const: 1
+
+required:
+  - compatible
+  - reg
+
+allOf:
+  - $ref: /schemas/spi/spi-peripheral-props.yaml#
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    spi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        adc@0 {
+            compatible = "ti,ads1120";
+            reg = <0>;
+            spi-max-frequency = <4000000>;
+            spi-cpha;
+
+            interrupts-extended = <&gpio1 25 IRQ_TYPE_EDGE_FALLING>;
+            interrupt-names = "drdy";
+
+            avdd-supply = <&reg_3v3>;
+            vref-supply = <&reg_vref_2v5>;
+
+            clocks = <&clk_4mhz>;
+
+            ti,avdd-is-ref;
+
+            #io-channel-cells = <1>;
+        };
+    };
+...
