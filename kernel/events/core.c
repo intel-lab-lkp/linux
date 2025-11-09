@@ -10356,12 +10356,14 @@ static int __perf_event_overflow(struct perf_event *event,
 		bool valid_sample = sample_is_allowed(event, regs);
 		unsigned int pending_id = 1;
 		enum task_work_notify_mode notify_mode;
+		unsigned long flags;
 
 		if (regs)
 			pending_id = hash32_ptr((void *)instruction_pointer(regs)) ?: 1;
 
 		notify_mode = in_nmi() ? TWA_NMI_CURRENT : TWA_RESUME;
 
+		local_irq_save(flags);
 		if (!event->pending_work &&
 		    !task_work_add(current, &event->pending_task, notify_mode)) {
 			event->pending_work = pending_id;
@@ -10387,6 +10389,7 @@ static int __perf_event_overflow(struct perf_event *event,
 			 */
 			WARN_ON_ONCE(event->pending_work != pending_id);
 		}
+		local_irq_restore(flags);
 	}
 
 	READ_ONCE(event->overflow_handler)(event, data, regs);
