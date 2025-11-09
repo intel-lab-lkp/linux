@@ -51,6 +51,8 @@ do {						\
 
 #define LSM_DEFINE_UNROLL(M, ...) UNROLL(MAX_LSM_COUNT, M, __VA_ARGS__)
 
+DEFINE_STATIC_KEY_FALSE(security_inode_permission_has_hooks);
+
 /*
  * These are descriptions of the reasons that can be passed to the
  * security_locked_down() LSM hook. Placing this array here allows
@@ -637,6 +639,12 @@ void __init security_add_hooks(struct security_hook_list *hooks, int count,
 	for (i = 0; i < count; i++) {
 		hooks[i].lsmid = lsmid;
 		lsm_static_call_init(&hooks[i]);
+	}
+
+	if (static_key_enabled(&static_calls_table.inode_permission->active->key)) {
+		if (!static_key_enabled(&security_inode_permission_has_hooks.key)) {
+			static_branch_enable(&security_inode_permission_has_hooks);
+		}
 	}
 
 	/*
@@ -2343,7 +2351,7 @@ int security_inode_follow_link(struct dentry *dentry, struct inode *inode,
 }
 
 /**
- * security_inode_permission() - Check if accessing an inode is allowed
+ * __security_inode_permission() - Check if accessing an inode is allowed
  * @inode: inode
  * @mask: access mask
  *
@@ -2356,7 +2364,7 @@ int security_inode_follow_link(struct dentry *dentry, struct inode *inode,
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_inode_permission(struct inode *inode, int mask)
+int __security_inode_permission(struct inode *inode, int mask)
 {
 	if (unlikely(IS_PRIVATE(inode)))
 		return 0;

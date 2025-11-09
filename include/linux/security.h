@@ -68,6 +68,8 @@ struct watch;
 struct watch_notification;
 struct lsm_ctx;
 
+DECLARE_STATIC_KEY_FALSE(security_inode_permission_has_hooks);
+
 /* Default (no) options for the capable function */
 #define CAP_OPT_NONE 0x0
 /* If capable should audit the security request */
@@ -421,7 +423,14 @@ int security_inode_rename(struct inode *old_dir, struct dentry *old_dentry,
 int security_inode_readlink(struct dentry *dentry);
 int security_inode_follow_link(struct dentry *dentry, struct inode *inode,
 			       bool rcu);
-int security_inode_permission(struct inode *inode, int mask);
+int __security_inode_permission(struct inode *inode, int mask);
+static inline int security_inode_permission(struct inode *inode, int mask)
+{
+	if (static_branch_unlikely(&security_inode_permission_has_hooks))
+		return __security_inode_permission(inode, mask);
+	return 0;
+}
+
 int security_inode_setattr(struct mnt_idmap *idmap,
 			   struct dentry *dentry, struct iattr *attr);
 void security_inode_post_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
