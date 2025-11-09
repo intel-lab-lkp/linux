@@ -163,6 +163,19 @@ endmenu
 
 endif
 
+config SWAP_TIER
+	default n
+	bool "Swap tier"
+	depends on SWAP && MEMCG && SYSFS
+	help
+          Swap tier is a concept proposed to group swap devices by
+          priority ranges, allowing cgroups to select and use a desired
+          swap_tier. This enables more flexible control over swap usage
+          across different workloads.
+          It is possible to assign a name for identifying a swap tier,
+          and to configure the priority range used for selecting swap
+          devices within that tier.
+
 menu "Slab allocator options"
 
 config SLUB

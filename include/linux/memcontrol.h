@@ -283,6 +283,10 @@ struct mem_cgroup {
 	/* per-memcg mm_struct list */
 	struct lru_gen_mm_list mm_list;
 #endif
+#ifdef CONFIG_SWAP_TIER
+	int tiers_onoff;
+	int tiers_mask;
+#endif
 
 #ifdef CONFIG_MEMCG_V1
 	/* Legacy consumer-oriented counters */
