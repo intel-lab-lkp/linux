@@ -787,7 +787,7 @@ static inline bool legitimize_path(struct nameidata *nd,
 	return __legitimize_path(path, seq, nd->m_seq);
 }
 
-static bool legitimize_links(struct nameidata *nd)
+static noinline bool legitimize_links(struct nameidata *nd)
 {
 	int i;
 	if (unlikely(nd->flags & LOOKUP_CACHED)) {
@@ -804,6 +804,11 @@ static bool legitimize_links(struct nameidata *nd)
 		}
 	}
 	return true;
+}
+
+static __always_inline bool need_legitimize_links(struct nameidata *nd)
+{
+	return nd->depth > 0;
 }
 
 static bool legitimize_root(struct nameidata *nd)
@@ -843,8 +848,10 @@ static bool try_to_unlazy(struct nameidata *nd)
 
 	BUG_ON(!(nd->flags & LOOKUP_RCU));
 
-	if (unlikely(!legitimize_links(nd)))
-		goto out1;
+	if (unlikely(need_legitimize_links(nd))) {
+		if (unlikely(!legitimize_links(nd)))
+			goto out1;
+	}
 	if (unlikely(!legitimize_path(nd, &nd->path, nd->seq)))
 		goto out;
 	if (unlikely(!legitimize_root(nd)))
@@ -878,8 +885,10 @@ static bool try_to_unlazy_next(struct nameidata *nd, struct dentry *dentry)
 	int res;
 	BUG_ON(!(nd->flags & LOOKUP_RCU));
 
-	if (unlikely(!legitimize_links(nd)))
-		goto out2;
+	if (unlikely(need_legitimize_links(nd))) {
+		if (unlikely(!legitimize_links(nd)))
+			goto out2;
+	}
 	res = __legitimize_mnt(nd->path.mnt, nd->m_seq);
 	if (unlikely(res)) {
 		if (res > 0)
