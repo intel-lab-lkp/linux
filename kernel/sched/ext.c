@@ -3658,6 +3658,7 @@ static __printf(1, 2) bool handle_lockup(const char *fmt, ...)
 {
 	struct scx_sched *sch;
 	va_list args;
+	bool ret;
 
 	guard(rcu)();
 
@@ -3669,9 +3670,9 @@ static __printf(1, 2) bool handle_lockup(const char *fmt, ...)
 	case SCX_ENABLING:
 	case SCX_ENABLED:
 		va_start(args, fmt);
-		scx_verror(sch, fmt, args);
+		ret = scx_verror(sch, fmt, args);
 		va_end(args);
-		return true;
+		return ret;
 	default:
 		return false;
 	}
