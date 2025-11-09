@@ -485,16 +485,9 @@
 			typec-power-opmode = "default";
 			pd-disable;
 
-			ports {
-				#address-cells = <0x1>;
-				#size-cells = <0x0>;
-
-				port@0 {
-					reg = <0x0>;
-
-					typec_hs_usb2phy0: endpoint {
-						remote-endpoint = <&usb2phy0_typec_hs>;
-					};
+			port {
+				typec_hs_usb2phy0: endpoint {
+					remote-endpoint = <&usb2phy0_typec_hs>;
 				};
 			};
 		};
