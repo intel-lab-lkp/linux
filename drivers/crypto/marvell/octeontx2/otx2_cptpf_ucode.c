@@ -458,13 +458,13 @@ static int cpt_ucode_load_fw(struct pci_dev *pdev, struct fw_info_t *fw_info,
 			     u16 rid)
 {
 	char filename[OTX2_CPT_NAME_LENGTH];
-	char eng_type[8] = {0};
+	char eng_type[8];
 	int ret, e, i;
 
 	INIT_LIST_HEAD(&fw_info->ucodes);
 
 	for (e = 1; e < OTX2_CPT_MAX_ENG_TYPES; e++) {
-		strcpy(eng_type, get_eng_type_str(e));
+		strscpy(eng_type, get_eng_type_str(e));
 		for (i = 0; i < strlen(eng_type); i++)
 			eng_type[i] = tolower(eng_type[i]);
 
