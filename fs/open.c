@@ -787,6 +787,14 @@ retry_deleg:
 	if (!error)
 		error = notify_change(idmap, path->dentry, &newattrs,
 				      &delegated_inode);
+	if (atomic_long_read(&inode->i_rwsem.owner) != (long)current) {
+		printk(KERN_ERR "BUG: About to unlock rwsem we don't own!\n");
+		printk(KERN_ERR "  inode=%p\n", inode);
+		printk(KERN_ERR "  i_rwsem.owner=%lx\n", atomic_long_read(&inode->i_rwsem.owner));
+		printk(KERN_ERR "  current=%p\n", current);
+		printk(KERN_ERR "  delegated_inode=%p\n", delegated_inode);
+		dump_stack();
+	}
 	inode_unlock(inode);
 	if (delegated_inode) {
 		error = break_deleg_wait(&delegated_inode);
