@@ -766,6 +766,9 @@ int chown_common(const struct path *path, uid_t user, gid_t group)
 	fs_userns = i_user_ns(inode);
 
 retry_deleg:
+	printk("DEBUG: [%s] retry_deleg: inode=%p, i_count=%d, i_rwsem.owner=%px\n",
+	       current->comm, inode, atomic_read(&inode->i_count),
+	       atomic_long_read(&inode->i_rwsem.owner));
 	newattrs.ia_vfsuid = INVALID_VFSUID;
 	newattrs.ia_vfsgid = INVALID_VFSGID;
 	newattrs.ia_valid =  ATTR_CTIME;
@@ -773,9 +776,13 @@ retry_deleg:
 		return -EINVAL;
 	if ((group != (gid_t)-1) && !setattr_vfsgid(&newattrs, gid))
 		return -EINVAL;
+	printk("DEBUG: [%s] before inode_lock: inode=%p, i_count=%d\n",
+	       current->comm, inode, atomic_read(&inode->i_count));
 	error = inode_lock_killable(inode);
 	if (error)
 		return error;
+	printk("DEBUG: [%s] after inode_lock: inode=%p, i_rwsem.owner=%px (current=%px)\n",
+	       current->comm, inode, atomic_long_read(&inode->i_rwsem.owner), current);
 	if (!S_ISDIR(inode->i_mode))
 		newattrs.ia_valid |= ATTR_KILL_SUID | ATTR_KILL_PRIV |
 				     setattr_should_drop_sgid(idmap, inode);
@@ -787,9 +794,17 @@ retry_deleg:
 	if (!error)
 		error = notify_change(idmap, path->dentry, &newattrs,
 				      &delegated_inode);
+	printk("DEBUG: [%s] before inode_unlock: inode=%p, i_rwsem.owner=%px, delegated_inode=%p\n",
+	       current->comm, inode, atomic_long_read(&inode->i_rwsem.owner), delegated_inode);
 	inode_unlock(inode);
+	printk("DEBUG: [%s] after inode_unlock: inode=%p, i_rwsem.owner=%px\n",
+	       current->comm, inode, atomic_long_read(&inode->i_rwsem.owner));
 	if (delegated_inode) {
+		printk("DEBUG: [%s] calling break_deleg_wait: inode=%p, i_count=%d, delegated_inode=%p\n",
+		       current->comm, inode, atomic_read(&inode->i_count), delegated_inode);
 		error = break_deleg_wait(&delegated_inode);
+		printk("DEBUG: [%s] after break_deleg_wait: inode=%p, i_count=%d, error=%d\n",
+		       current->comm, inode, atomic_read(&inode->i_count), error);
 		if (!error)
 			goto retry_deleg;
 	}
