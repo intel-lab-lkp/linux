@@ -556,6 +556,8 @@ int queue_limits_commit_update(struct request_queue *q,
 {
 	int error;
 
+	lockdep_assert_held(&q->limits_lock);
+
 	error = blk_validate_limits(lim);
 	if (error)
 		goto out_unlock;
