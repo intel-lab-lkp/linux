@@ -20,6 +20,15 @@
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <linux/stat.h>
+#ifdef AT_RENAME_NOREPLACE
+#undef AT_RENAME_NOREPLACE
+#endif
+#ifdef AT_RENAME_EXCHANGE
+#undef AT_RENAME_EXCHANGE
+#endif
+#ifdef AT_RENAME_WHITEOUT
+#undef AT_RENAME_WHITEOUT
+#endif
 #include <linux/fcntl.h>
 #define statx foo
 #define statx_timestamp foo_timestamp
