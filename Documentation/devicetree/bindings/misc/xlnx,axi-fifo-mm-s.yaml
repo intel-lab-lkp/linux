@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/misc/xlnx,axi-fifo-mm-s.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Xilinx AXI FIFO MM S Controller
+
+maintainers:
+  - Lakshmi lakshmi16796@gmail.com
+
+description: |
+  The Xilinx AXI FIFO Memory Mapped to Stream (MM2S / S2MM) core provides
+  a FIFO-based interface for moving data between AXI Memory-Mapped and
+  AXI-Stream domains. It supports both transmit and receive paths
+  and is typically used to offload DMA-style data transfers in
+  Xilinx SoCs or FPGA designs.
+
+properties:
+  compatible:
+    enum:
+      - xlnx,axi-fifo-mm-s-4.1
+
+  reg:
+    maxItems: 1
+    description:
+      Base address and size of the AXI FIFO MM S register space.
+
+  interrupts:
+    maxItems: 1
+    description:
+      Interrupt line from the AXI FIFO block, if available.
+
+  clocks:
+    maxItems: 1
+    description:
+      Reference clock for the AXI FIFO interface.
+
+  clock-names:
+    const: s_axi_aclk
+
+  resets:
+    maxItems: 1
+    description:
+      Reset line for the AXI FIFO interface.
+
+  reset-names:
+    const: s_axi_aresetn
+
+required:
+  - compatible
+  - reg
+  - clocks
+  - resets
+
+additionalProperties: true
+
+examples:
+  - |
+    axi_fifo_mm_s@43c00000 {
+        compatible = "xlnx,axi-fifo-mm-s-4.1";
+        reg = <0x43c00000 0x10000>;
+        interrupts = <0 59 4>;
+        clocks = <&clkc 15>;
+        clock-names = "s_axi_aclk";
+        resets = <&rstc 0>;
+        reset-names = "s_axi_aresetn";
+    };
+
