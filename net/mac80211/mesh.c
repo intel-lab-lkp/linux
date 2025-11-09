@@ -2,10 +2,13 @@
 /*
  * Copyright (c) 2008, 2009 open80211s Ltd.
  * Copyright (C) 2018 - 2024 Intel Corporation
+ * Copyright (C) 2025 Aerlync Labs Inc.
  * Authors:    Luis Carlos Cobo <luisca@cozybit.com>
  * 	       Javier Cardona <javier@cozybit.com>
+ *	       Sayooj K Karun <sayooj@aerlync.com>
  */
 
+#include <linux/printk.h>
 #include <linux/slab.h>
 #include <linux/unaligned.h>
 #include <net/sock.h>
@@ -25,9 +28,14 @@ bool mesh_action_is_path_sel(struct ieee80211_mgmt *mgmt)
 
 void ieee80211s_init(void)
 {
-	mesh_allocated = 1;
 	rm_cache = kmem_cache_create("mesh_rmc", sizeof(struct rmc_entry),
 				     0, 0, NULL);
+	if (!rm_cache) {
+		pr_warn("mac80211: failed to allocate mesh RMC cache; duplicate filtering disabled\n");
+		return;
+	}
+
+	mesh_allocated = 1;
 }
 
 void ieee80211s_stop(void)
@@ -35,6 +43,8 @@ void ieee80211s_stop(void)
 	if (!mesh_allocated)
 		return;
 	kmem_cache_destroy(rm_cache);
+	rm_cache = NULL;
+	mesh_allocated = 0;
 }
 
 static void ieee80211_mesh_housekeeping_timer(struct timer_list *t)
@@ -231,8 +241,8 @@ int mesh_rmc_check(struct ieee80211_sub_if_data *sdata,
 	struct rmc_entry *p;
 	struct hlist_node *n;
 
-	if (!rmc)
-		return -1;
+	if (!rmc || !rm_cache)
+		return 0;
 
 	/* Don't care about endianness since only match matters */
 	memcpy(&seqnum, &mesh_hdr->seqnum, sizeof(mesh_hdr->seqnum));
