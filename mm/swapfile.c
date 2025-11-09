@@ -49,6 +49,7 @@
 #include "swap_table.h"
 #include "internal.h"
 #include "swap.h"
+#include "swap_tier.h"
 
 static bool swap_count_continued(struct swap_info_struct *, pgoff_t,
 				 unsigned char);
@@ -1296,7 +1297,8 @@ static bool get_swap_device_info(struct swap_info_struct *si)
 
 /* Rotate the device and switch to a new cluster */
 static void swap_alloc_entry(swp_entry_t *entry,
-			    int order)
+			    int order,
+			    int mask)
 {
 	unsigned long offset;
 	struct swap_info_struct *si, *next;
@@ -1304,6 +1306,8 @@ static void swap_alloc_entry(swp_entry_t *entry,
 	spin_lock(&swap_avail_lock);
 start_over:
 	plist_for_each_entry_safe(si, next, &swap_avail_head, avail_list) {
+		if (swap_tiers_test_off(si->tier_idx, mask))
+			continue;
 		/* Rotate the device and switch to a new cluster */
 		plist_requeue(&si->avail_list, &swap_avail_head);
 		spin_unlock(&swap_avail_lock);
@@ -1376,6 +1380,7 @@ int folio_alloc_swap(struct folio *folio)
 {
 	unsigned int order = folio_order(folio);
 	unsigned int size = 1 << order;
+	int mask;
 	swp_entry_t entry = {};
 
 	VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
@@ -1400,8 +1405,8 @@ int folio_alloc_swap(struct folio *folio)
 	}
 
 again:
-	swap_alloc_entry(&entry, order);
-
+	mask = swap_tiers_collect_compare_mask(folio_memcg(folio));
+	swap_alloc_entry(&entry, order, mask);
 	if (unlikely(!order && !entry.val)) {
 		if (swap_sync_discard())
 			goto again;
@@ -2673,6 +2678,8 @@ static void _enable_swap_info(struct swap_info_struct *si)
 
 	/* Add back to available list */
 	add_to_avail_list(si, true);
+
+	swap_tiers_assign(si);
 }
 
 static void enable_swap_info(struct swap_info_struct *si, int prio,
@@ -2840,6 +2847,7 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 	spin_lock(&swap_lock);
 	spin_lock(&p->lock);
 	drain_mmlist();
+	swap_tiers_release(p);
 
 	swap_file = p->swap_file;
 	p->swap_file = NULL;
@@ -4004,6 +4012,7 @@ static int __init swapfile_init(void)
 		swap_migration_ad_supported = true;
 #endif	/* CONFIG_MIGRATION */
 
+	swap_tiers_init();
 	return 0;
 }
 subsys_initcall(swapfile_init);

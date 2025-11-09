@@ -26,6 +26,7 @@
 #include <linux/delayacct.h>
 #include <linux/zswap.h>
 #include "swap.h"
+#include "swap_tier.h"
 
 static void __end_swap_bio_write(struct bio *bio)
 {
@@ -233,6 +234,24 @@ static void swap_zeromap_folio_clear(struct folio *folio)
 	}
 }
 
+#if defined(CONFIG_SWAP_TIER) && defined(CONFIG_ZSWAP)
+static bool folio_swap_tier_zswap_test_off(struct folio *folio)
+{
+	struct mem_cgroup *memcg;
+
+	memcg = folio_memcg(folio);
+	if (memcg)
+		return swap_tier_test_off(memcg->tiers_mask,
+			TIER_MASK(SWAP_TIER_ZSWAP, TIER_ON_MASK));
+
+	return false;
+}
+#else
+static bool folio_swap_tier_zswap_test_off(struct folio *folio)
+{
+	return false;
+}
+#endif
 /*
  * We may have stale swap cache pages in memory: notice
  * them here and get rid of the unnecessary final write.
@@ -272,7 +291,7 @@ int swap_writeout(struct folio *folio, struct swap_iocb **swap_plug)
 	 */
 	swap_zeromap_folio_clear(folio);
 
-	if (zswap_store(folio)) {
+	if (folio_swap_tier_zswap_test_off(folio) || zswap_store(folio)) {
 		count_mthp_stat(folio_order(folio), MTHP_STAT_ZSWPOUT);
 		goto out_unlock;
 	}

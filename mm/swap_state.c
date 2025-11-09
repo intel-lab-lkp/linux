@@ -25,6 +25,7 @@
 #include "internal.h"
 #include "swap_table.h"
 #include "swap.h"
+#include "swap_tier.h"
 
 /*
  * swapper_space is a fiction, retained to simplify the path through
@@ -836,8 +837,100 @@ static ssize_t vma_ra_enabled_store(struct kobject *kobj,
 }
 static struct kobj_attribute vma_ra_enabled_attr = __ATTR_RW(vma_ra_enabled);
 
+#ifdef CONFIG_SWAP_TIER
+static ssize_t tiers_show(struct kobject *kobj,
+				     struct kobj_attribute *attr, char *buf)
+{
+	return swap_tiers_show_sysfs(buf);
+}
+
+static ssize_t tiers_store(struct kobject *kobj,
+				struct kobj_attribute *attr,
+				const char *buf, size_t count)
+{
+	struct tiers_desc desc[MAX_SWAPTIER] = {};
+	int nr = 0;
+	char *data, *p, *token;
+	int ret = 0;
+	bool is_add = true;
+
+	if (!count)
+		return -EINVAL;
+
+	data = kmemdup_nul(buf, count, GFP_KERNEL);
+	if (!data)
+		return -ENOMEM;
+
+	p = data;
+
+	if (*p == '+')
+		p++;
+	else if (*p == '-') {
+		is_add = false;
+		p++;
+	} else
+		return -EINVAL;
+
+	while ((token = strsep(&p, ", \t\n")) != NULL) {
+		if (!*token)
+			continue;
+
+		if (nr >= MAX_SWAPTIER) {
+			ret = -E2BIG;
+			goto out;
+		}
+
+		if (is_add) {
+			char *name, *prio_str;
+			int prio;
+
+			name = strsep(&token, ":");
+			prio_str = token;
+
+			if (!name || !prio_str || !*name || !*prio_str) {
+				ret = -EINVAL;
+				goto out;
+			}
+
+			if (strscpy(desc[nr].name, name, MAX_TIERNAME) < 0) {
+				ret = -EINVAL;
+				goto out;
+			}
+
+			if (kstrtoint(prio_str, 10, &prio)) {
+				ret = -EINVAL;
+				goto out;
+			}
+
+			desc[nr].prio_st = prio;
+		} else {
+			if (strscpy(desc[nr].name, token, MAX_TIERNAME) < 0) {
+				ret = -EINVAL;
+				goto out;
+			}
+			desc[nr].prio_st = 0;
+		}
+		nr++;
+	}
+
+	if (is_add)
+		ret = swap_tiers_add(desc, nr);
+	else
+		ret = swap_tiers_remove(desc, nr);
+
+out:
+	kfree(data);
+	return ret ? ret : count;
+}
+
+static struct kobj_attribute tier_attr = __ATTR_RW(tiers);
+#endif
+
 static struct attribute *swap_attrs[] = {
 	&vma_ra_enabled_attr.attr,
+#ifdef CONFIG_SWAP_TIER
+	&tier_attr.attr,
+#endif
 	NULL,
 };
 
