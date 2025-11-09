@@ -379,13 +379,17 @@ struct rtc_device *devm_rtc_allocate_device(struct device *dev)
 	rtc->dev.parent = dev;
 	err = devm_add_action_or_reset(dev, devm_rtc_release_device, rtc);
 	if (err)
-		return ERR_PTR(err);
+		goto err_put_device;
 
 	err = dev_set_name(&rtc->dev, "rtc%d", id);
 	if (err)
-		return ERR_PTR(err);
+		goto err_put_device;
 
 	return rtc;
+
+err_put_device:
+	put_device(&rtc->dev);
+	return ERR_PTR(err);
 }
 EXPORT_SYMBOL_GPL(devm_rtc_allocate_device);
 
