@@ -178,10 +178,7 @@ static void __exit_signal(struct release_task_post *post, struct task_struct *ts
 		tty = sig->tty;
 		sig->tty = NULL;
 	} else {
-		/*
-		 * If there is any task waiting for the group exit
-		 * then notify it:
-		 */
+		/* mt-exec, setup_new_exec() -> wait_for_notify_count() */
 		if (sig->notify_count > 0 && !--sig->notify_count)
 			wake_up_process(sig->group_exec_task);
 
@@ -768,8 +765,8 @@ static void exit_notify(struct task_struct *tsk, int group_dead)
 		list_add(&tsk->ptrace_entry, &dead);
 	}
 
-	/* mt-exec, de_thread() is waiting for group leader */
-	if (unlikely(tsk->signal->notify_count < 0))
+	/* mt-exec, de_thread() -> wait_for_notify_count() */
+	if (tsk->signal->notify_count < 0 && !++tsk->signal->notify_count)
 		wake_up_process(tsk->signal->group_exec_task);
 	write_unlock_irq(&tasklist_lock);
 

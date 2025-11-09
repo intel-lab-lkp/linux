@@ -905,42 +905,56 @@ static int exec_mmap(struct mm_struct *mm)
 	return 0;
 }
 
-static int de_thread(struct task_struct *tsk)
+static int kill_sub_threads(struct task_struct *tsk)
 {
 	struct signal_struct *sig = tsk->signal;
-	struct sighand_struct *oldsighand = tsk->sighand;
-	spinlock_t *lock = &oldsighand->siglock;
+	int err = -EINTR;
 
+	read_lock(&tasklist_lock);
+	spin_lock_irq(&tsk->sighand->siglock);
+	if (!((sig->flags & SIGNAL_GROUP_EXIT) || sig->group_exec_task)) {
+		sig->group_exec_task = tsk;
+		sig->notify_count = -zap_other_threads(tsk);
+		err = 0;
+	}
+	spin_unlock_irq(&tsk->sighand->siglock);
+	read_unlock(&tasklist_lock);
+
+	return err;
+}
+
+static int wait_for_notify_count(struct task_struct *tsk)
+{
+	for (;;) {
+		if (__fatal_signal_pending(tsk))
+			return -EINTR;
+		set_current_state(TASK_KILLABLE);
+		if (!tsk->signal->notify_count)
+			break;
+		schedule();
+	}
+	__set_current_state(TASK_RUNNING);
+	return 0;
+}
+
+static void clear_group_exec_task(struct task_struct *tsk)
+{
+	struct signal_struct *sig = tsk->signal;
+
+	/* protects against exit_notify() and __exit_signal() */
+	read_lock(&tasklist_lock);
+	sig->group_exec_task = NULL;
+	sig->notify_count = 0;
+	read_unlock(&tasklist_lock);
+}
+
+static int de_thread(struct task_struct *tsk)
+{
 	if (thread_group_empty(tsk))
 		goto no_thread_group;
 
-	/*
-	 * Kill all other threads in the thread group.
-	 */
-	spin_lock_irq(lock);
-	if ((sig->flags & SIGNAL_GROUP_EXIT) || sig->group_exec_task) {
-		/*
-		 * Another group action in progress, just
-		 * return so that the signal is processed.
-		 */
-		spin_unlock_irq(lock);
-		return -EAGAIN;
-	}
-
-	sig->group_exec_task = tsk;
-	sig->notify_count = zap_other_threads(tsk);
-	if (!thread_group_leader(tsk))
-		sig->notify_count--;
-
-	while (sig->notify_count) {
-		__set_current_state(TASK_KILLABLE);
-		spin_unlock_irq(lock);
-		schedule();
-		if (__fatal_signal_pending(tsk))
-			goto killed;
-		spin_lock_irq(lock);
-	}
-	spin_unlock_irq(lock);
+	if (kill_sub_threads(tsk) || wait_for_notify_count(tsk))
+		return -EINTR;
 
 	/*
 	 * At this point all other threads have exited, all we have to
@@ -948,26 +962,10 @@ static int de_thread(struct task_struct *tsk)
 	 * and to assume its PID:
 	 */
 	if (!thread_group_leader(tsk)) {
-		struct task_struct *leader = tsk->group_leader;
+		struct task_struct *leader = tsk->group_leader, *t;
 
-		for (;;) {
-			cgroup_threadgroup_change_begin(tsk);
-			write_lock_irq(&tasklist_lock);
-			/*
-			 * Do this under tasklist_lock to ensure that
-			 * exit_notify() can't miss ->group_exec_task
-			 */
-			sig->notify_count = -1;
-			if (likely(leader->exit_state))
-				break;
-			__set_current_state(TASK_KILLABLE);
-			write_unlock_irq(&tasklist_lock);
-			cgroup_threadgroup_change_end(tsk);
-			schedule();
-			if (__fatal_signal_pending(tsk))
-				goto killed;
-		}
-
+		cgroup_threadgroup_change_begin(tsk);
+		write_lock_irq(&tasklist_lock);
 		/*
 		 * The only record we have of the real-time age of a
 		 * process, regardless of execs it's done, is start_time.
@@ -1000,8 +998,8 @@ static int de_thread(struct task_struct *tsk)
 		list_replace_rcu(&leader->tasks, &tsk->tasks);
 		list_replace_init(&leader->sibling, &tsk->sibling);
 
-		tsk->group_leader = tsk;
-		leader->group_leader = tsk;
+		for_each_thread(tsk, t)
+			t->group_leader = tsk;
 
 		tsk->exit_signal = SIGCHLD;
 		leader->exit_signal = -1;
@@ -1021,23 +1019,11 @@ static int de_thread(struct task_struct *tsk)
 		release_task(leader);
 	}
 
-	sig->group_exec_task = NULL;
-	sig->notify_count = 0;
-
 no_thread_group:
 	/* we have changed execution domain */
 	tsk->exit_signal = SIGCHLD;
-
 	BUG_ON(!thread_group_leader(tsk));
 	return 0;
-
-killed:
-	/* protects against exit_notify() and __exit_signal() */
-	read_lock(&tasklist_lock);
-	sig->group_exec_task = NULL;
-	sig->notify_count = 0;
-	read_unlock(&tasklist_lock);
-	return -EAGAIN;
 }
 
 
@@ -1171,13 +1157,6 @@ int begin_new_exec(struct linux_binprm * bprm)
 	flush_itimer_signals();
 #endif
 
-	/*
-	 * Make the signal table private.
-	 */
-	retval = unshare_sighand(me);
-	if (retval)
-		goto out_unlock;
-
 	me->flags &= ~(PF_RANDOMIZE | PF_FORKNOEXEC |
 					PF_NOFREEZE | PF_NO_SETAFFINITY);
 	flush_thread();
@@ -1249,7 +1228,6 @@ int begin_new_exec(struct linux_binprm * bprm)
 	/* An exec changes our domain. We are no longer part of the thread
 	   group */
 	WRITE_ONCE(me->self_exec_id, me->self_exec_id + 1);
-	flush_signal_handlers(me, 0);
 
 	retval = set_cred_ucounts(bprm->cred);
 	if (retval < 0)
@@ -1293,8 +1271,9 @@ out_unlock:
 	up_write(&me->signal->exec_update_lock);
 	if (!bprm->cred)
 		mutex_unlock(&me->signal->cred_guard_mutex);
-
 out:
+	if (me->signal->group_exec_task == me)
+		clear_group_exec_task(me);
 	return retval;
 }
 EXPORT_SYMBOL(begin_new_exec);
@@ -1325,6 +1304,8 @@ int setup_new_exec(struct linux_binprm * bprm)
 {
 	/* Setup things that can depend upon the personality */
 	struct task_struct *me = current;
+	struct signal_struct *sig = me->signal;
+	int err = 0;
 
 	arch_pick_mmap_layout(me->mm, &bprm->rlim_stack);
 
@@ -1335,10 +1316,23 @@ int setup_new_exec(struct linux_binprm * bprm)
 	 * some architectures like powerpc
 	 */
 	me->mm->task_size = TASK_SIZE;
-	up_write(&me->signal->exec_update_lock);
-	mutex_unlock(&me->signal->cred_guard_mutex);
+	up_write(&sig->exec_update_lock);
+	mutex_unlock(&sig->cred_guard_mutex);
 
-	return 0;
+	if (sig->group_exec_task) {
+		spin_lock_irq(&me->sighand->siglock);
+		sig->notify_count = sig->nr_threads - 1;
+		spin_unlock_irq(&me->sighand->siglock);
+
+		err = wait_for_notify_count(me);
+		clear_group_exec_task(me);
+	}
+
+	if (!err)
+		err = unshare_sighand(me);
+	if (!err)
+		flush_signal_handlers(me, 0);
+	return err;
 }
 EXPORT_SYMBOL(setup_new_exec);
 

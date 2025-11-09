@@ -1343,13 +1343,13 @@ int zap_other_threads(struct task_struct *p)
 
 	for_other_threads(p, t) {
 		task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
-		count++;
 
 		/* Don't bother with already dead threads */
 		if (t->exit_state)
 			continue;
 		sigaddset(&t->pending.signal, SIGKILL);
 		signal_wake_up(t, 1);
+		count++;
 	}
 
 	return count;
