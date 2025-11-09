@@ -784,9 +784,21 @@ retry_deleg:
 		path,
 		from_vfsuid(idmap, fs_userns, newattrs.ia_vfsuid),
 		from_vfsgid(idmap, fs_userns, newattrs.ia_vfsgid));
+	printk(KERN_INFO "After security_path_chown: owner=%lx\n",
+       		atomic_long_read(&inode->i_rwsem.owner));
 	if (!error)
 		error = notify_change(idmap, path->dentry, &newattrs,
 				      &delegated_inode);
+	printk(KERN_INFO "After notify_change: owner=%lx, error=%d\n",
+       		atomic_long_read(&inode->i_rwsem.owner), error);
+	if (atomic_long_read(&inode->i_rwsem.owner) != (long)current) {
+   		printk(KERN_ERR "BUG: About to unlock rwsem we don't own!\n");
+    		printk(KERN_ERR "  inode=%p\n", inode);
+    		printk(KERN_ERR "  i_rwsem.owner=%lx\n", atomic_long_read(&inode->i_rwsem.owner));
+    		printk(KERN_ERR "  current=%p\n", current);
+    		printk(KERN_ERR "  delegated_inode=%p\n", delegated_inode);
+    		dump_stack();
+	}
 	inode_unlock(inode);
 	if (delegated_inode) {
 		error = break_deleg_wait(&delegated_inode);
