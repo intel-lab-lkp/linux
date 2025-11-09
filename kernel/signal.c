@@ -2376,6 +2376,10 @@ static int ptrace_stop(int exit_code, int why, unsigned long message,
 	if (!current->ptrace || __fatal_signal_pending(current))
 		return exit_code;
 
+	/* de_thread() -> wait_for_notify_count() waits for us */
+	if (current->signal->group_exec_task)
+		return exit_code;
+
 	set_special_state(TASK_TRACED);
 	current->jobctl |= JOBCTL_TRACED;
 
