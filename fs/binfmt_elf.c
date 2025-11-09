@@ -1021,7 +1021,9 @@ out_free_interp:
 	if (!(current->personality & ADDR_NO_RANDOMIZE) && snapshot_randomize_va_space)
 		current->flags |= PF_RANDOMIZE;
 
-	setup_new_exec(bprm);
+	retval = setup_new_exec(bprm);
+	if (retval)
+		goto out_free_dentry;
 
 	/* Do this so that we can load the interpreter, if need be.  We will
 	   change some of these later */
