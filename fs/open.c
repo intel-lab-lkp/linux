@@ -752,7 +752,7 @@ int chown_common(const struct path *path, uid_t user, gid_t group)
 {
 	struct mnt_idmap *idmap;
 	struct user_namespace *fs_userns;
-	struct inode *inode = path->dentry->d_inode;
+	struct inode *inode;
 	struct inode *delegated_inode = NULL;
 	int error;
 	struct iattr newattrs;
@@ -763,19 +763,27 @@ int chown_common(const struct path *path, uid_t user, gid_t group)
 	gid = make_kgid(current_user_ns(), group);
 
 	idmap = mnt_idmap(path->mnt);
-	fs_userns = i_user_ns(inode);
 
 retry_deleg:
+	inode = path->dentry->d_inode;
+	ihold(inode);
+	fs_userns = i_user_ns(inode);
 	newattrs.ia_vfsuid = INVALID_VFSUID;
 	newattrs.ia_vfsgid = INVALID_VFSGID;
 	newattrs.ia_valid =  ATTR_CTIME;
-	if ((user != (uid_t)-1) && !setattr_vfsuid(&newattrs, uid))
+	if ((user != (uid_t)-1) && !setattr_vfsuid(&newattrs, uid)) {
+		iput(inode);
 		return -EINVAL;
-	if ((group != (gid_t)-1) && !setattr_vfsgid(&newattrs, gid))
+	}
+	if ((group != (gid_t)-1) && !setattr_vfsgid(&newattrs, gid)) {
+		iput(inode);
 		return -EINVAL;
+	}
 	error = inode_lock_killable(inode);
-	if (error)
+	if (error) {
+		iput(inode);
 		return error;
+	}
 	if (!S_ISDIR(inode->i_mode))
 		newattrs.ia_valid |= ATTR_KILL_SUID | ATTR_KILL_PRIV |
 				     setattr_should_drop_sgid(idmap, inode);
@@ -790,9 +798,12 @@ retry_deleg:
 	inode_unlock(inode);
 	if (delegated_inode) {
 		error = break_deleg_wait(&delegated_inode);
-		if (!error)
+		if (!error) {
+			iput(inode);
 			goto retry_deleg;
+		}
 	}
+	iput(inode);
 	return error;
 }
 
