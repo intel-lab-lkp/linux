@@ -157,9 +157,15 @@
  */
 
 /* Flags for renameat2(2) (must match legacy RENAME_* flags). */
+#ifndef AT_RENAME_NOREPLACE
 #define AT_RENAME_NOREPLACE	0x0001
+#endif
+#ifndef AT_RENAME_EXCHANGE
 #define AT_RENAME_EXCHANGE	0x0002
+#endif
+#ifndef AT_RENAME_WHITEOUT
 #define AT_RENAME_WHITEOUT	0x0004
+#endif
 
 /* Flag for faccessat(2). */
 #define AT_EACCESS		0x200	/* Test access permitted for
