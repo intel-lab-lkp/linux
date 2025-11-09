@@ -23,6 +23,7 @@
 #include <net/mac80211.h>
 #include <net/ieee80211_radiotap.h>
 #include <linux/unaligned.h>
+#include <linux/if_vlan.h>
 
 #include "ieee80211_i.h"
 #include "driver-ops.h"
@@ -113,6 +114,43 @@ static inline bool should_drop_frame(struct sk_buff *skb, int present_fcs_len,
 		return true;
 
 	return false;
+}
+
+static bool ieee80211_is_vlan_control(struct ieee80211_sub_if_data *sdata,
+				      struct ethhdr *ehdr, u32 len)
+{
+	struct vlan_ethhdr *vhdr = (void *)ehdr;
+	u16 vlan_id;
+
+	if (ehdr->h_proto != cpu_to_be16(ETH_P_8021Q))
+		return false;
+
+	if (len < sizeof(struct vlan_ethhdr))
+		return false;
+
+	if (sdata->control_port_protocol != vhdr->h_vlan_encapsulated_proto)
+		return false;
+
+	vlan_id = be16_get_bits(vhdr->h_vlan_TCI, VLAN_VID_MASK);
+
+	return sdata->control_port_vlan_id == vlan_id;
+}
+
+bool ieee80211_is_control_port(struct ieee80211_sub_if_data *sdata,
+			       struct ethhdr *ehdr, u32 len)
+{
+	if (!sdata->control_port_over_nl80211)
+		return false;
+
+	/* If VLAN ID is configured, accept both VLAN-tagged (for backhaul STAs)
+	 * and non-VLAN (for regular clients) control port frames
+	 */
+	if (sdata->control_port_vlan_id)
+		return ieee80211_is_vlan_control(sdata, ehdr, len) ||
+		       ehdr->h_proto == sdata->control_port_protocol;
+
+	/* Otherwise, only accept non-VLAN control port frames */
+	return ehdr->h_proto == sdata->control_port_protocol;
 }
 
 static int
@@ -2642,7 +2680,7 @@ __ieee80211_data_to_8023(struct ieee80211_rx_data *rx, bool *port_control)
 		return RX_DROP_U_INVALID_8023;
 
 	ehdr = (struct ethhdr *) rx->skb->data;
-	if (ehdr->h_proto == rx->sdata->control_port_protocol)
+	if (ieee80211_is_control_port(sdata, ehdr, rx->skb->len))
 		*port_control = true;
 	else if (check_port_control)
 		return RX_DROP_U_NOT_PORT_CONTROL;
@@ -2693,7 +2731,7 @@ static bool ieee80211_frame_allowed(struct ieee80211_rx_data *rx, __le16 fc)
 	 * whether the frame was encrypted or not, and always disallow
 	 * all other destination addresses for them.
 	 */
-	if (unlikely(ehdr->h_proto == rx->sdata->control_port_protocol))
+	if (unlikely(ieee80211_is_control_port(rx->sdata, ehdr, rx->skb->len)))
 		return ieee80211_is_our_addr(rx->sdata, ehdr->h_dest, NULL) ||
 		       ether_addr_equal(ehdr->h_dest, pae_group_addr);
 
@@ -2710,10 +2748,24 @@ static void ieee80211_deliver_skb_to_local_stack(struct sk_buff *skb,
 	struct ieee80211_sub_if_data *sdata = rx->sdata;
 	struct net_device *dev = sdata->dev;
 
-	if (unlikely((skb->protocol == sdata->control_port_protocol ||
-		     (skb->protocol == cpu_to_be16(ETH_P_PREAUTH) &&
-		      !sdata->control_port_no_preauth)) &&
-		     sdata->control_port_over_nl80211)) {
+	if (unlikely(ieee80211_is_control_port(sdata, (void *)skb_mac_header(skb),
+					       skb_tail_pointer(skb) - skb_mac_header(skb)))) {
+		struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(skb);
+		struct ethhdr *ehdr = (void *)skb_mac_header(skb);
+		bool noencrypt = !(status->flag & RX_FLAG_DECRYPTED);
+
+		/* strip VLAN header if frame is VLAN-tagged */
+		if (sdata->control_port_vlan_id &&
+		    ehdr->h_proto == cpu_to_be16(ETH_P_8021Q)) {
+			skb_pull(skb, VLAN_HLEN);
+			skb->protocol = sdata->control_port_protocol;
+		}
+
+		cfg80211_rx_control_port(dev, skb, noencrypt, rx->link_id);
+		dev_kfree_skb(skb);
+	} else if (unlikely((skb->protocol == cpu_to_be16(ETH_P_PREAUTH) &&
+			     !sdata->control_port_no_preauth) &&
+			    sdata->control_port_over_nl80211)) {
 		struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(skb);
 		bool noencrypt = !(status->flag & RX_FLAG_DECRYPTED);
 

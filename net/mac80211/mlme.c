@@ -9902,6 +9902,7 @@ int ieee80211_mgd_assoc(struct ieee80211_sub_if_data *sdata,
 	sdata->control_port_over_nl80211 =
 					req->crypto.control_port_over_nl80211;
 	sdata->control_port_no_preauth = req->crypto.control_port_no_preauth;
+	sdata->control_port_vlan_id = req->control_port_vlan_id;
 
 	/* kick off associate process */
 	ifmgd->assoc_data = assoc_data;
