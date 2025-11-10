@@ -29,6 +29,167 @@
 	VFIO_ASSERT_EQ(__ret, 0, "ioctl(%s, %s, %s) returned %d\n", #_fd, #_op, #_arg, __ret); \
 } while (0)
 
+static struct vfio_info_cap_header *next_cap_hdr(void *buf, size_t bufsz,
+						 size_t *cap_offset)
+{
+	struct vfio_info_cap_header *hdr;
+
+	if (!*cap_offset)
+		return NULL;
+
+	/* Cap offset must be in bounds */
+	VFIO_ASSERT_LT(*cap_offset, bufsz);
+	/* There must be enough remaining space to contain the header */
+	VFIO_ASSERT_GE(bufsz - *cap_offset, sizeof(*hdr));
+
+	hdr = (struct vfio_info_cap_header *)((u8 *)buf + *cap_offset);
+
+	/* If there is a next, offset must increase by at least the header size */
+	if (hdr->next) {
+		VFIO_ASSERT_GT(hdr->next, *cap_offset);
+		VFIO_ASSERT_GE(hdr->next - *cap_offset, sizeof(*hdr));
+	}
+
+	*cap_offset = hdr->next;
+
+	return hdr;
+}
+
+static struct vfio_info_cap_header *vfio_iommu_info_cap_hdr(struct vfio_iommu_type1_info *buf,
+							    u16 cap_id)
+{
+	struct vfio_info_cap_header *hdr;
+	size_t cap_offset = buf->cap_offset;
+
+	if (!(buf->flags & VFIO_IOMMU_INFO_CAPS))
+		return NULL;
+
+	if (cap_offset)
+		VFIO_ASSERT_GE(cap_offset, sizeof(struct vfio_iommu_type1_info));
+
+	while ((hdr = next_cap_hdr(buf, buf->argsz, &cap_offset))) {
+		if (hdr->id == cap_id)
+			return hdr;
+	}
+
+	return NULL;
+}
+
+/* Return buffer including capability chain, if present. Free with free() */
+static struct vfio_iommu_type1_info *vfio_iommu_info_buf(struct vfio_pci_device *device)
+{
+	struct vfio_iommu_type1_info *buf;
+
+	buf = malloc(sizeof(*buf));
+	VFIO_ASSERT_NOT_NULL(buf);
+
+	*buf = (struct vfio_iommu_type1_info) {
+		.argsz = sizeof(*buf),
+	};
+
+	ioctl_assert(device->container_fd, VFIO_IOMMU_GET_INFO, buf);
+
+	buf = realloc(buf, buf->argsz);
+	VFIO_ASSERT_NOT_NULL(buf);
+
+	ioctl_assert(device->container_fd, VFIO_IOMMU_GET_INFO, buf);
+
+	return buf;
+}
+
+/*
+ * Return iova ranges for the device's container. Normalize vfio_iommu_type1 to
+ * report iommufd's iommu_iova_range. Free with free().
+ */
+static struct iommu_iova_range *vfio_iommu_iova_ranges(struct vfio_pci_device *device,
+						       size_t *nranges)
+{
+	struct vfio_iommu_type1_info_cap_iova_range *cap_range;
+	struct vfio_iommu_type1_info *buf;
+	struct vfio_info_cap_header *hdr;
+	struct iommu_iova_range *ranges = NULL;
+
+	buf = vfio_iommu_info_buf(device);
+	VFIO_ASSERT_NOT_NULL(buf);
+
+	hdr = vfio_iommu_info_cap_hdr(buf, VFIO_IOMMU_TYPE1_INFO_CAP_IOVA_RANGE);
+	if (!hdr)
+		goto free_buf;
+
+	cap_range = container_of(hdr, struct vfio_iommu_type1_info_cap_iova_range, header);
+	if (!cap_range->nr_iovas)
+		goto free_buf;
+
+	ranges = malloc(cap_range->nr_iovas * sizeof(*ranges));
+	VFIO_ASSERT_NOT_NULL(ranges);
+
+	for (u32 i = 0; i < cap_range->nr_iovas; i++) {
+		ranges[i] = (struct iommu_iova_range){
+			.start = cap_range->iova_ranges[i].start,
+			.last = cap_range->iova_ranges[i].end,
+		};
+	}
+
+	*nranges = cap_range->nr_iovas;
+
+free_buf:
+	free(buf);
+	return ranges;
+}
+
+/* Return iova ranges of the device's IOAS. Free with free() */
+struct iommu_iova_range *iommufd_iova_ranges(struct vfio_pci_device *device,
+					     size_t *nranges)
+{
+	struct iommu_iova_range *ranges;
+	int ret;
+
+	struct iommu_ioas_iova_ranges query = {
+		.size = sizeof(query),
+		.ioas_id = device->ioas_id,
+	};
+
+	ret = ioctl(device->iommufd, IOMMU_IOAS_IOVA_RANGES, &query);
+	VFIO_ASSERT_EQ(ret, -1);
+	VFIO_ASSERT_EQ(errno, EMSGSIZE);
+	VFIO_ASSERT_GT(query.num_iovas, 0);
+
+	ranges = malloc(query.num_iovas * sizeof(*ranges));
+	VFIO_ASSERT_NOT_NULL(ranges);
+
+	query.allowed_iovas = (uintptr_t)ranges;
+
+	ioctl_assert(device->iommufd, IOMMU_IOAS_IOVA_RANGES, &query);
+	*nranges = query.num_iovas;
+
+	return ranges;
+}
+
+struct iommu_iova_range *vfio_pci_iova_ranges(struct vfio_pci_device *device,
+					      size_t *nranges)
+{
+	struct iommu_iova_range *ranges;
+
+	if (device->iommufd)
+		ranges = iommufd_iova_ranges(device, nranges);
+	else
+		ranges = vfio_iommu_iova_ranges(device, nranges);
+
+	if (!ranges)
+		return NULL;
+
+	/* ranges should be valid, ascending, and non-overlapping */
+	VFIO_ASSERT_GT(*nranges, 0);
+	VFIO_ASSERT_LT(ranges[0].start, ranges[0].last);
+
+	for (size_t i = 1; i < *nranges; i++) {
+		VFIO_ASSERT_LT(ranges[i].start, ranges[i].last);
+		VFIO_ASSERT_LT(ranges[i - 1].last, ranges[i].start);
+	}
+
+	return ranges;
+}
+
 iova_t __to_iova(struct vfio_pci_device *device, void *vaddr)
 {
 	struct vfio_dma_region *region;
