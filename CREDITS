@@ -2866,6 +2866,13 @@ S: 12725 SW Millikan Way, Suite 400
 S: Beaverton, Oregon 97005
 S: USA
 
+N: Sachin Mokashi
+E: sachin.mokashi@intel.com
+D: Audio Driver (ASoC) hacks and bug fixes
+S: Brieger Str. 7
+S: 80997 Munich
+S: Germany
+
 N: Eberhard Mönkeberg
 E: emoenke@gwdg.de
 D: CDROM driver "sbpcd" (Matsushita/Panasonic/Soundblaster)
