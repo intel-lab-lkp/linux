@@ -3455,6 +3455,13 @@ int btrfs_relocate_chunk(struct btrfs_fs_info *fs_info, u64 chunk_offset,
 	block_group = btrfs_lookup_block_group(fs_info, chunk_offset);
 	if (!block_group)
 		return -ENOENT;
+
+	/* If we're relocating using the remap tree we're now done. */
+	if (should_relocate_using_remap_tree(block_group)) {
+		btrfs_put_block_group(block_group);
+		return 0;
+	}
+
 	btrfs_discard_cancel_work(&fs_info->discard_ctl, block_group);
 	length = block_group->length;
 	btrfs_put_block_group(block_group);
@@ -4154,6 +4161,14 @@ again:
 
 		chunk = btrfs_item_ptr(leaf, slot, struct btrfs_chunk);
 		chunk_type = btrfs_chunk_type(leaf, chunk);
+
+		/* Check if chunk has already been fully relocated. */
+		if (chunk_type & BTRFS_BLOCK_GROUP_REMAPPED &&
+		    btrfs_chunk_num_stripes(leaf, chunk) == 0) {
+			btrfs_release_path(path);
+			mutex_unlock(&fs_info->reclaim_bgs_lock);
+			goto loop;
+		}
 
 		if (!counting) {
 			spin_lock(&fs_info->balance_lock);
