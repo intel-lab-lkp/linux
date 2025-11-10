@@ -2295,10 +2295,8 @@ static int ftdi_jtag_probe(struct usb_serial *serial)
 	struct usb_interface *intf = serial->interface;
 	int ifnum = intf->cur_altsetting->desc.bInterfaceNumber;
 
-	if (ifnum == 0) {
-		dev_info(&intf->dev, "Ignoring interface reserved for JTAG\n");
+	if (ifnum == 0)
 		return -ENODEV;
-	}
 
 	return 0;
 }
@@ -2331,10 +2329,8 @@ static int ftdi_stmclite_probe(struct usb_serial *serial)
 	struct usb_interface *intf = serial->interface;
 	int ifnum = intf->cur_altsetting->desc.bInterfaceNumber;
 
-	if (ifnum < 2) {
-		dev_info(&intf->dev, "Ignoring interface reserved for JTAG\n");
+	if (ifnum < 2)
 		return -ENODEV;
-	}
 
 	return 0;
 }
