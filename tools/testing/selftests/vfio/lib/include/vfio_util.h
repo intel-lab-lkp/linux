@@ -13,6 +13,8 @@
 
 #include "../../../kselftest.h"
 
+#define ALIGN(x, a)	(((x) + (a - 1)) & (~((a) - 1)))
+
 #define VFIO_LOG_AND_EXIT(...) do {		\
 	fprintf(stderr, "  " __VA_ARGS__);	\
 	fprintf(stderr, "\n");			\
@@ -188,6 +190,13 @@ struct vfio_pci_device {
 	struct vfio_pci_driver driver;
 };
 
+struct iova_allocator {
+	struct iommu_iova_range *ranges;
+	size_t nranges;
+	size_t range_idx;
+	iova_t iova_next;
+};
+
 /*
  * Return the BDF string of the device that the test should use.
  *
@@ -211,6 +220,11 @@ void vfio_pci_device_reset(struct vfio_pci_device *device);
 
 struct iommu_iova_range *vfio_pci_iova_ranges(struct vfio_pci_device *device,
 					      size_t *nranges);
+
+int iova_allocator_init(struct vfio_pci_device *device,
+			    struct iova_allocator *allocator);
+void iova_allocator_deinit(struct iova_allocator *allocator);
+iova_t iova_allocator_alloc(struct iova_allocator *allocator, size_t size);
 
 int __vfio_pci_dma_map(struct vfio_pci_device *device,
 		       struct vfio_dma_region *region);

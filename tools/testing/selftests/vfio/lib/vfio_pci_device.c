@@ -12,11 +12,12 @@
 #include <sys/mman.h>
 
 #include <uapi/linux/types.h>
+#include <linux/iommufd.h>
 #include <linux/limits.h>
 #include <linux/mman.h>
+#include <linux/overflow.h>
 #include <linux/types.h>
 #include <linux/vfio.h>
-#include <linux/iommufd.h>
 
 #include "../../../kselftest.h"
 #include <vfio_util.h>
@@ -188,6 +189,68 @@ struct iommu_iova_range *vfio_pci_iova_ranges(struct vfio_pci_device *device,
 	}
 
 	return ranges;
+}
+
+int iova_allocator_init(struct vfio_pci_device *device,
+			struct iova_allocator *allocator)
+{
+	struct iommu_iova_range *ranges;
+	size_t nranges;
+
+	memset(allocator, 0, sizeof(*allocator));
+
+	ranges = vfio_pci_iova_ranges(device, &nranges);
+	if (!ranges)
+		return -ENOENT;
+
+	*allocator = (struct iova_allocator){
+		.ranges = ranges,
+		.nranges = nranges,
+		.range_idx = 0,
+		.iova_next = 0,
+	};
+
+	return 0;
+}
+
+void iova_allocator_deinit(struct iova_allocator *allocator)
+{
+	free(allocator->ranges);
+}
+
+iova_t iova_allocator_alloc(struct iova_allocator *allocator, size_t size)
+{
+	int idx = allocator->range_idx;
+	struct iommu_iova_range *range = &allocator->ranges[idx];
+
+	VFIO_ASSERT_LT(idx, allocator->nranges, "IOVA allocator out of space\n");
+	VFIO_ASSERT_GT(size, 0, "Invalid size arg, zero\n");
+	VFIO_ASSERT_EQ(size & (size - 1), 0, "Invalid size arg, non-power-of-2\n");
+
+	for (;;) {
+		iova_t iova, last;
+
+		iova = ALIGN(allocator->iova_next, size);
+
+		if (iova < allocator->iova_next || iova > range->last ||
+		    check_add_overflow(iova, size - 1, &last) ||
+		    last > range->last) {
+			allocator->range_idx = ++idx;
+			VFIO_ASSERT_LT(idx, allocator->nranges,
+				       "Out of ranges for allocation\n");
+			allocator->iova_next = (++range)->start;
+			continue;
+		}
+
+		if (check_add_overflow(last, (iova_t)1, &allocator->iova_next) ||
+		    allocator->iova_next > range->last) {
+			allocator->range_idx = ++idx;
+			if (idx < allocator->nranges)
+				allocator->iova_next = (++range)->start;
+		}
+
+		return iova;
+	}
 }
 
 iova_t __to_iova(struct vfio_pci_device *device, void *vaddr)
