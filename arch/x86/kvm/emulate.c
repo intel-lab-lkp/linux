@@ -4844,7 +4844,7 @@ int x86_decode_insn(struct x86_emulate_ctxt *ctxt, void *insn, int insn_len, int
 	ctxt->op_bytes = def_op_bytes;
 	ctxt->ad_bytes = def_ad_bytes;
 
-	/* Legacy prefixes. */
+	/* Legacy and REX/REX2 prefixes. */
 	for (;;) {
 		switch (ctxt->b = insn_fetch(u8, ctxt)) {
 		case 0x66:	/* operand-size override */
@@ -4887,8 +4887,19 @@ int x86_decode_insn(struct x86_emulate_ctxt *ctxt, void *insn, int insn_len, int
 		case 0x40 ... 0x4f: /* REX */
 			if (mode != X86EMUL_MODE_PROT64)
 				goto done_prefixes;
+			if (ctxt->rex_prefix == REX2_PREFIX)
+				break;
 			ctxt->rex_prefix = REX_PREFIX;
 			ctxt->rex.raw    = 0x0f & ctxt->b;
+			continue;
+		case 0xd5: /* REX2 */
+			if (mode != X86EMUL_MODE_PROT64)
+				goto done_prefixes;
+			if (ctxt->rex_prefix == REX2_PREFIX &&
+			    ctxt->rex.bits.m0 == 0)
+				break;
+			ctxt->rex_prefix = REX2_PREFIX;
+			ctxt->rex.raw    = insn_fetch(u8, ctxt);
 			continue;
 		case 0xf0:	/* LOCK */
 			ctxt->lock_prefix = 1;
@@ -4898,6 +4909,17 @@ int x86_decode_insn(struct x86_emulate_ctxt *ctxt, void *insn, int insn_len, int
 			ctxt->rep_prefix = ctxt->b;
 			break;
 		default:
+			goto done_prefixes;
+		}
+
+		if (ctxt->rex_prefix == REX2_PREFIX) {
+			/*
+			 * A legacy or REX prefix following a REX2 prefix
+			 * forms an invalid byte sequences. Likewise,
+			 * a second REX2 prefix following a REX2 prefix
+			 * with M0=0 is invalid.
+			 */
+			ctxt->rex_prefix = REX2_INVALID;
 			goto done_prefixes;
 		}
 
