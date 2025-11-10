@@ -524,6 +524,7 @@ static void iio_trig_release(struct device *device)
 			       CONFIG_IIO_CONSUMERS_PER_TRIGGER);
 	}
 	kfree(trig->name);
+	mutex_destroy(&trig->pool_lock);
 	kfree(trig);
 }
 
