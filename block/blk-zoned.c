@@ -784,8 +784,6 @@ static inline void disk_zone_wplug_add_bio(struct gendisk *disk,
 				struct blk_zone_wplug *zwplug,
 				struct bio *bio, unsigned int nr_segs)
 {
-	bool schedule_bio_work = false;
-
 	/*
 	 * Grab an extra reference on the BIO request queue usage counter.
 	 * This reference will be reused to submit a request for the BIO for
@@ -802,16 +800,6 @@ static inline void disk_zone_wplug_add_bio(struct gendisk *disk,
 	bio_clear_polled(bio);
 
 	/*
-	 * REQ_NOWAIT BIOs are always handled using the zone write plug BIO
-	 * work, which can block. So clear the REQ_NOWAIT flag and schedule the
-	 * work if this is the first BIO we are plugging.
-	 */
-	if (bio->bi_opf & REQ_NOWAIT) {
-		schedule_bio_work = !(zwplug->flags & BLK_ZONE_WPLUG_PLUGGED);
-		bio->bi_opf &= ~REQ_NOWAIT;
-	}
-
-	/*
 	 * Reuse the poll cookie field to store the number of segments when
 	 * split to the hardware limits.
 	 */
@@ -826,11 +814,6 @@ static inline void disk_zone_wplug_add_bio(struct gendisk *disk,
 	bio_list_add(&zwplug->bio_list, bio);
 	trace_disk_zone_wplug_add_bio(zwplug->disk->queue, zwplug->zone_no,
 				      bio->bi_iter.bi_sector, bio_sectors(bio));
-
-	zwplug->flags |= BLK_ZONE_WPLUG_PLUGGED;
-
-	if (schedule_bio_work)
-		disk_zone_wplug_schedule_bio_work(disk, zwplug);
 }
 
 /*
@@ -995,6 +978,7 @@ static bool blk_zone_wplug_handle_write(struct bio *bio, unsigned int nr_segs)
 {
 	struct gendisk *disk = bio->bi_bdev->bd_disk;
 	sector_t sector = bio->bi_iter.bi_sector;
+	bool schedule_bio_work = false;
 	struct blk_zone_wplug *zwplug;
 	gfp_t gfp_mask = GFP_NOIO;
 	unsigned long flags;
@@ -1041,8 +1025,10 @@ static bool blk_zone_wplug_handle_write(struct bio *bio, unsigned int nr_segs)
 	 * Add REQ_NOWAIT BIOs to the plug list to ensure that we will not see a
 	 * BLK_STS_AGAIN failure if we let the BIO execute.
 	 */
-	if (bio->bi_opf & REQ_NOWAIT)
+	if (bio->bi_opf & REQ_NOWAIT) {
+		bio->bi_opf &= ~REQ_NOWAIT;
 		goto plug;
+	}
 
 	/* If the zone is already plugged, add the BIO to the BIO plug list. */
 	if (zwplug->flags & BLK_ZONE_WPLUG_PLUGGED)
@@ -1062,7 +1048,12 @@ static bool blk_zone_wplug_handle_write(struct bio *bio, unsigned int nr_segs)
 	return false;
 
 plug:
+	schedule_bio_work = !(zwplug->flags & BLK_ZONE_WPLUG_PLUGGED);
+	zwplug->flags |= BLK_ZONE_WPLUG_PLUGGED;
+
 	disk_zone_wplug_add_bio(disk, zwplug, bio, nr_segs);
+	if (schedule_bio_work)
+		disk_zone_wplug_schedule_bio_work(disk, zwplug);
 
 	spin_unlock_irqrestore(&zwplug->lock, flags);
 
