@@ -561,9 +561,11 @@ static struct qedr_pbl *qedr_alloc_pbl_tbl(struct qedr_dev *dev,
 	return pbl_table;
 
 err:
-	for (i--; i >= 0; i--)
+	for (i--; i >= 0; i--) {
 		dma_free_coherent(&pdev->dev, pbl_info->pbl_size,
 				  pbl_table[i].va, pbl_table[i].pa);
+		pbl_table[i].va = NULL;
+	}
 
 	qedr_free_pbl(dev, pbl_info, pbl_table);
 
