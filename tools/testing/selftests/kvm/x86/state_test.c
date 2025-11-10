@@ -167,6 +167,12 @@ static void __attribute__((__flatten__)) guest_code(void *arg)
 			asm volatile ("vmovupd %0, %%zmm16" :: "m" (buffer));
 		}
 
+		if (supported_xcr0 & XFEATURE_MASK_APX) {
+			/* mov $0xcccccccc, %r16 */
+			asm volatile (".byte 0xd5, 0x18, 0xb8, 0xcc, 0xcc,"
+				      "0xcc, 0xcc, 0x00, 0x00, 0x00, 0x00");
+		}
+
 		if (this_cpu_has(X86_FEATURE_MPX)) {
 			uint64_t bounds[2] = { 10, 0xffffffffull };
 			uint64_t output[2] = { };
