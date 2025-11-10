@@ -23,7 +23,14 @@
 
 void blk_queue_rq_timeout(struct request_queue *q, unsigned int timeout)
 {
-	WRITE_ONCE(q->rq_timeout, timeout);
+	/*
+	 * Use WRITE_ONCE() to write q->rq_timeout once. Use data_race() to
+	 * suppress KCSAN race reports against the write below.
+	 */
+	data_race(({
+		WRITE_ONCE(q->rq_timeout, timeout);
+		0;
+	}));
 }
 EXPORT_SYMBOL_GPL(blk_queue_rq_timeout);
 
