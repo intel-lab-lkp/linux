@@ -610,10 +610,10 @@ struct patch_site {
 	u8 len;
 };
 
-static void __init_or_module analyze_patch_site(struct patch_site *ps,
-						struct alt_instr *p, struct alt_instr *end)
+static struct alt_instr * __init_or_module analyze_patch_site(
+	struct patch_site *ps, struct alt_instr *p, struct alt_instr *end)
 {
-	struct alt_instr *r;
+	struct alt_instr *r = NULL;
 	u8 buff_sz;
 	u8 *repl;
 
@@ -622,48 +622,54 @@ static void __init_or_module analyze_patch_site(struct patch_site *ps,
 	 * more padding. To ensure consistent patching find the max padding for
 	 * all alt_instr entries for this site (nested alternatives result in
 	 * consecutive entries).
+	 * Find the last alt_instr eligible for patching at the site.
 	 */
 	ps->instr = instr_va(p);
-	ps->len = p->instrlen;
-	for (r = p+1; r < end && instr_va(r) == ps->instr; r++) {
-		ps->len = max(ps->len, r->instrlen);
-		p->instrlen = r->instrlen = ps->len;
+	ps->len = 0;
+	for (; p < end && instr_va(p) == ps->instr; p++) {
+		ps->len = max(ps->len, p->instrlen);
+
+		BUG_ON(p->cpuid >= (NCAPINTS + NBUGINTS) * 32);
+		/*
+		 * Patch if either:
+		 * - feature is present
+		 * - feature not present but ALT_FLAG_NOT is set to mean,
+		 *   patch if feature is *NOT* present.
+		 */
+		if (!boot_cpu_has(p->cpuid) != !(p->flags & ALT_FLAG_NOT))
+			r = p;
 	}
 
 	BUG_ON(ps->len > sizeof(ps->buff));
-	BUG_ON(p->cpuid >= (NCAPINTS + NBUGINTS) * 32);
 
-	/*
-	 * Patch if either:
-	 * - feature is present
-	 * - feature not present but ALT_FLAG_NOT is set to mean,
-	 *   patch if feature is *NOT* present.
-	 */
-	if (!boot_cpu_has(p->cpuid) == !(p->flags & ALT_FLAG_NOT)) {
+	if (!r) {
+		/* Nothing to patch, use original instruction. */
 		memcpy(ps->buff, ps->instr, ps->len);
-		return;
+		return p;
 	}
 
-	repl = (u8 *)&p->repl_offset + p->repl_offset;
+	repl = (u8 *)&r->repl_offset + r->repl_offset;
 	DPRINTK(ALT, "feat: %d*32+%d, old: (%pS (%px) len: %d), repl: (%px, len: %d) flags: 0x%x",
-		p->cpuid >> 5, p->cpuid & 0x1f,
+		r->cpuid >> 5, r->cpuid & 0x1f,
 		ps->instr, ps->instr, ps->len,
-		repl, p->replacementlen, p->flags);
+		repl, r->replacementlen, r->flags);
 
-	memcpy(ps->buff, repl, p->replacementlen);
-	buff_sz = p->replacementlen;
+	memcpy(ps->buff, repl, r->replacementlen);
+	buff_sz = r->replacementlen;
 
-	if (p->flags & ALT_FLAG_DIRECT_CALL)
-		buff_sz = alt_replace_call(ps->instr, ps->buff, p);
+	if (r->flags & ALT_FLAG_DIRECT_CALL)
+		buff_sz = alt_replace_call(ps->instr, ps->buff, r);
 
 	for (; buff_sz < ps->len; buff_sz++)
 		ps->buff[buff_sz] = 0x90;
 
-	__apply_relocation(ps->buff, ps->instr, ps->len, repl, p->replacementlen);
+	__apply_relocation(ps->buff, ps->instr, ps->len, repl, r->replacementlen);
 
 	DUMP_BYTES(ALT, ps->instr, ps->len, "%px:   old_insn: ", ps->instr);
 	DUMP_BYTES(ALT, repl, p->replacementlen, "%px:   rpl_insn: ", repl);
 	DUMP_BYTES(ALT, ps->buff, ps->len, "%px: final_insn: ", ps->instr);
+
+	return p;
 }
 
 /*
@@ -702,10 +708,11 @@ void __init_or_module noinline apply_alternatives(struct alt_instr *start,
 	 * So be careful if you want to change the scan order to any other
 	 * order.
 	 */
-	for (a = start; a < end; a++) {
+	a = start;
+	while (a < end) {
 		struct patch_site ps;
 
-		analyze_patch_site(&ps, a, end);
+		a = analyze_patch_site(&ps, a, end);
 
 		optimize_nops(ps.instr, ps.buff, ps.len);
 		text_poke_early(ps.instr, ps.buff, ps.len);
