@@ -75,6 +75,12 @@ module_param(lapic_timer_advance, bool, 0444);
 /* step-by-step approximation to mitigate fluctuation */
 #define LAPIC_TIMER_ADVANCE_ADJUST_STEP 8
 
+/* IPI tracking window and runtime toggle (runtime-adjustable) */
+static bool ipi_tracking_enabled = true;
+static unsigned long ipi_window_ns = 50 * NSEC_PER_MSEC;
+module_param(ipi_tracking_enabled, bool, 0644);
+module_param(ipi_window_ns, ulong, 0644);
+
 static bool __read_mostly vector_hashing_enabled = true;
 module_param_named(vector_hashing, vector_hashing_enabled, bool, 0444);
 
@@ -1111,6 +1117,65 @@ static bool kvm_lowest_prio_delivery(struct kvm_lapic_irq *irq)
 static int kvm_apic_compare_prio(struct kvm_vcpu *vcpu1, struct kvm_vcpu *vcpu2)
 {
 	return vcpu1->arch.apic_arb_prio - vcpu2->arch.apic_arb_prio;
+}
+
+/*
+ * Track IPI communication for directed yield when a unique receiver exists.
+ * This only writes sender/receiver context and timestamp; ignores self-IPI.
+ */
+void kvm_track_ipi_communication(struct kvm_vcpu *sender, struct kvm_vcpu *receiver)
+{
+	if (!sender || !receiver || sender == receiver)
+		return;
+	if (unlikely(!READ_ONCE(ipi_tracking_enabled)))
+		return;
+
+	WRITE_ONCE(sender->arch.ipi_context.last_ipi_receiver, receiver->vcpu_idx);
+	WRITE_ONCE(sender->arch.ipi_context.pending_ipi, true);
+	WRITE_ONCE(sender->arch.ipi_context.ipi_time_ns, ktime_get_mono_fast_ns());
+
+	WRITE_ONCE(receiver->arch.ipi_context.last_ipi_sender, sender->vcpu_idx);
+}
+
+/*
+ * Check if 'receiver' is the recent IPI target of 'sender'.
+ *
+ * Rationale:
+ * - Use a short window to avoid stale IPI inflating boost priority
+ *   on throughput-sensitive workloads.
+ */
+bool kvm_vcpu_is_ipi_receiver(struct kvm_vcpu *sender, struct kvm_vcpu *receiver)
+{
+	u64 then, now;
+
+	if (unlikely(!READ_ONCE(ipi_tracking_enabled)))
+		return false;
+
+	then = READ_ONCE(sender->arch.ipi_context.ipi_time_ns);
+	now = ktime_get_mono_fast_ns();
+	if (READ_ONCE(sender->arch.ipi_context.pending_ipi) &&
+	    READ_ONCE(sender->arch.ipi_context.last_ipi_receiver) ==
+	    receiver->vcpu_idx &&
+	    now - then <= ipi_window_ns)
+		return true;
+
+	return false;
+}
+
+void kvm_vcpu_clear_ipi_context(struct kvm_vcpu *vcpu)
+{
+	WRITE_ONCE(vcpu->arch.ipi_context.pending_ipi, false);
+	WRITE_ONCE(vcpu->arch.ipi_context.last_ipi_sender, -1);
+	WRITE_ONCE(vcpu->arch.ipi_context.last_ipi_receiver, -1);
+}
+
+/*
+ * Reset helper: clear ipi_context and zero ipi_time for hard reset paths.
+ */
+void kvm_vcpu_reset_ipi_context(struct kvm_vcpu *vcpu)
+{
+	kvm_vcpu_clear_ipi_context(vcpu);
+	WRITE_ONCE(vcpu->arch.ipi_context.ipi_time_ns, 0);
 }
 
 /* Return true if the interrupt can be handled by using *bitmap as index mask

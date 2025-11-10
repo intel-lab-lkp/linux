@@ -1522,6 +1522,7 @@ static inline void kvm_vcpu_kick(struct kvm_vcpu *vcpu)
 }
 #endif
 
+bool kvm_vcpu_is_ipi_receiver(struct kvm_vcpu *sender, struct kvm_vcpu *receiver);
 int kvm_vcpu_yield_to(struct kvm_vcpu *target);
 void kvm_vcpu_on_spin(struct kvm_vcpu *vcpu, bool yield_to_kernel_mode);
 

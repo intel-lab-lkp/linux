@@ -1052,6 +1052,14 @@ struct kvm_vcpu_arch {
 	int pending_external_vector;
 	int highest_stale_pending_ioapic_eoi;
 
+	/* IPI tracking for directed yield (x86 only) */
+	struct {
+		int last_ipi_sender;    /* vCPU ID of last IPI sender */
+		int last_ipi_receiver;  /* vCPU ID of last IPI receiver */
+		bool pending_ipi;       /* Pending IPI response */
+		u64 ipi_time_ns;        /* Monotonic ns when IPI was sent */
+	} ipi_context;
+
 	/* be preempted when it's in kernel-mode(cpl=0) */
 	bool preempted_in_kernel;
 
