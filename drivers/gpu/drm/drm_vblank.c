@@ -1596,12 +1596,13 @@ void drm_crtc_vblank_restore(struct drm_crtc *crtc)
 }
 EXPORT_SYMBOL(drm_crtc_vblank_restore);
 
-static int drm_queue_vblank_event(struct drm_device *dev, unsigned int pipe,
+static int drm_queue_vblank_event(struct drm_vblank_crtc *vblank,
 				  u64 req_seq,
 				  union drm_wait_vblank *vblwait,
 				  struct drm_file *file_priv)
 {
-	struct drm_vblank_crtc *vblank = drm_vblank_crtc(dev, pipe);
+	struct drm_device *dev = vblank->dev;
+	unsigned int pipe = vblank->pipe;
 	struct drm_pending_vblank_event *e;
 	ktime_t now;
 	u64 seq;
@@ -1822,7 +1823,7 @@ int drm_wait_vblank_ioctl(struct drm_device *dev, void *data,
 		/* must hold on to the vblank ref until the event fires
 		 * drm_vblank_put will be called asynchronously
 		 */
-		return drm_queue_vblank_event(dev, pipe, req_seq, vblwait, file_priv);
+		return drm_queue_vblank_event(vblank, req_seq, vblwait, file_priv);
 	}
 
 	if (req_seq != seq) {
