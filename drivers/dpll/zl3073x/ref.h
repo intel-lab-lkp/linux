@@ -18,6 +18,7 @@ struct zl3073x_dev;
 struct zl3073x_ref {
 	s64	ffo;
 	u8	config;
+	u8	mon_status;
 };
 
 int zl3073x_ref_state_fetch(struct zl3073x_dev *zldev, u8 index);
@@ -61,6 +62,18 @@ static inline bool
 zl3073x_ref_is_enabled(const struct zl3073x_ref *ref)
 {
 	return !!FIELD_GET(ZL_REF_CONFIG_ENABLE, ref->config);
+}
+
+/**
+ * zl3073x_ref_is_status_ok - check the given input reference status
+ * @ref: pointer to ref state
+ *
+ * Return: true if the status is ok, false otherwise
+ */
+static inline bool
+zl3073x_ref_is_status_ok(const struct zl3073x_ref *ref)
+{
+	return ref->mon_status == ZL_REF_MON_STATUS_OK;
 }
 
 #endif /* _ZL3073X_REF_H */
