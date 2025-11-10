@@ -1029,6 +1029,7 @@ int alc_alloc_spec(struct hda_codec *codec, hda_nid_t mixer_nid)
 {
 	struct alc_spec *spec = kzalloc(sizeof(*spec), GFP_KERNEL);
 	int err;
+	bool mutex_initialized = false;
 
 	if (!spec)
 		return -ENOMEM;
@@ -1040,14 +1041,22 @@ int alc_alloc_spec(struct hda_codec *codec, hda_nid_t mixer_nid)
 	/* FIXME: do we need this for all Realtek codec models? */
 	codec->spdif_status_reset = 1;
 	codec->forced_resume = 1;
+
 	mutex_init(&spec->coef_mutex);
 
 	err = alc_codec_rename_from_preset(codec);
 	if (err < 0) {
-		kfree(spec);
-		return err;
+		codec_err(codec, "Failed to rename codec: %d\n", err);
+		goto error;
 	}
 	return 0;
+
+error:
+	if (mutex_initialized)
+		mutex_destroy(&spec->coef_mutex);
+	codec->spec = NULL;
+	kfree(spec);
+	return err;
 }
 EXPORT_SYMBOL_NS_GPL(alc_alloc_spec, "SND_HDA_CODEC_REALTEK");
 
