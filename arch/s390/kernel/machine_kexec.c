@@ -224,7 +224,7 @@ void machine_crash_shutdown(struct pt_regs *regs)
 /*
  * Do normal kexec
  */
-static void __do_machine_kexec(void *data)
+static void __noreturn __do_machine_kexec(void *data)
 {
 	unsigned long data_mover, entry, diag308_subcode;
 	struct kimage *image = data;
