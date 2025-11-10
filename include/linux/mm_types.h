@@ -629,9 +629,9 @@ static_assert(sizeof(struct ptdesc) <= sizeof(struct page));
 	const struct ptdesc *:		(const struct folio *)(pt),	\
 	struct ptdesc *:		(struct folio *)(pt)))
 
-#define page_ptdesc(p)			(_Generic((p),			\
-	const struct page *:		(const struct ptdesc *)(p),	\
-	struct page *:			(struct ptdesc *)(p)))
+#define page_ptdesc(p)			(_Generic((p),					\
+	const struct page *:		(const struct ptdesc *)_compound_head(p),	\
+	struct page *:			(struct ptdesc *)_compound_head(p)))
 
 #ifdef CONFIG_HUGETLB_PMD_PAGE_TABLE_SHARING
 static inline void ptdesc_pmd_pts_init(struct ptdesc *ptdesc)
