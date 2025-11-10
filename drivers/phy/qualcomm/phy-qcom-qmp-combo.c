@@ -1649,6 +1649,7 @@ struct qmp_regulator_data {
 };
 
 static struct qmp_regulator_data qmp_phy_vreg_l[] = {
+	{ .name = "vdda-aux", .enable_load = 36000 },
 	{ .name = "vdda-phy", .enable_load = 21800 },
 	{ .name = "vdda-pll", .enable_load = 36000 },
 };
