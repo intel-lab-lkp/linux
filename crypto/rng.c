@@ -81,8 +81,7 @@ static void crypto_rng_show(struct seq_file *m, struct crypto_alg *alg)
 	__maybe_unused;
 static void crypto_rng_show(struct seq_file *m, struct crypto_alg *alg)
 {
-	seq_printf(m, "type         : rng\n");
-	seq_printf(m, "seedsize     : %u\n", seedsize(alg));
+	seq_printf(m, "type         : rng\nseedsize     : %u\n", seedsize(alg));
 }
 
 static const struct crypto_type crypto_rng_type = {
