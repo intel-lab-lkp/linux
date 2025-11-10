@@ -29,24 +29,16 @@
 static bool
 connlimit_mt(const struct sk_buff *skb, struct xt_action_param *par)
 {
-	struct net *net = xt_net(par);
 	const struct xt_connlimit_info *info = par->matchinfo;
-	struct nf_conntrack_tuple tuple;
-	const struct nf_conntrack_tuple *tuple_ptr = &tuple;
-	const struct nf_conntrack_zone *zone = &nf_ct_zone_dflt;
-	enum ip_conntrack_info ctinfo;
-	const struct nf_conn *ct;
+	struct net *net = xt_net(par);
 	unsigned int connections;
+	bool refcounted = false;
+	struct nf_conn *ct;
 	u32 key[5];
 
-	ct = nf_ct_get(skb, &ctinfo);
-	if (ct != NULL) {
-		tuple_ptr = &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple;
-		zone = nf_ct_zone(ct);
-	} else if (!nf_ct_get_tuplepr(skb, skb_network_offset(skb),
-				      xt_family(par), net, &tuple)) {
+	ct = nf_ct_get_or_find(net, skb, xt_family(par), &refcounted);
+	if (!ct)
 		goto hotdrop;
-	}
 
 	if (xt_family(par) == NFPROTO_IPV6) {
 		const struct ipv6hdr *iph = ipv6_hdr(skb);
@@ -59,18 +51,19 @@ connlimit_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		for (i = 0; i < ARRAY_SIZE(addr.ip6); ++i)
 			addr.ip6[i] &= info->mask.ip6[i];
 		memcpy(key, &addr, sizeof(addr.ip6));
-		key[4] = zone->id;
+		key[4] = nf_ct_zone(ct)->id;
 	} else {
 		const struct iphdr *iph = ip_hdr(skb);
 
 		key[0] = (info->flags & XT_CONNLIMIT_DADDR) ?
 			 (__force __u32)iph->daddr : (__force __u32)iph->saddr;
 		key[0] &= (__force __u32)info->mask.ip;
-		key[1] = zone->id;
+		key[1] = nf_ct_zone(ct)->id;
 	}
 
-	connections = nf_conncount_count(net, info->data, key, tuple_ptr,
-					 zone);
+	connections = nf_conncount_count(net, ct, info->data, key);
+	if (refcounted)
+		nf_ct_put(ct);
 	if (connections == 0)
 		/* kmalloc failed, drop it entirely */
 		goto hotdrop;
