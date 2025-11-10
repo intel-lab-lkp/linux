@@ -1031,6 +1031,7 @@ void kvm_set_cpu_caps(void)
 		F(AVX_VNNI_INT16),
 		F(PREFETCHITI),
 		F(AVX10),
+		SCATTERED_F(APX),
 	);
 
 	kvm_cpu_cap_init(CPUID_7_2_EDX,
@@ -1393,7 +1394,7 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 	switch (function) {
 	case 0:
 		/* Limited to the highest leaf implemented in KVM. */
-		entry->eax = min(entry->eax, 0x24U);
+		entry->eax = min(entry->eax, 0x29U);
 		break;
 	case 1:
 		cpuid_entry_override(entry, CPUID_1_EDX);
@@ -1636,6 +1637,11 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 		entry->eax = 0;
 		entry->ecx = 0;
 		entry->edx = 0;
+		break;
+	}
+	case 0x29: {
+		/* No APX sub-features are supported yet */
+		entry->eax = entry->ebx = entry->ecx = entry->edx = 0;
 		break;
 	}
 	case KVM_CPUID_SIGNATURE: {

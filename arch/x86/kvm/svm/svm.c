@@ -5271,6 +5271,14 @@ static __init void svm_set_cpu_caps(void)
 	 */
 	kvm_cpu_cap_clear(X86_FEATURE_BUS_LOCK_DETECT);
 	kvm_cpu_cap_clear(X86_FEATURE_MSR_IMM);
+
+	/*
+	 * If the APX xfeature bit is not supported, meaning that VMCB
+	 * support for EGPRs is unavailable, then the APX feature should
+	 * not be exposed to the guest.
+	 */
+	if (!(kvm_caps.supported_xcr0 & XFEATURE_MASK_APX))
+		kvm_cpu_cap_clear(X86_FEATURE_APX);
 }
 
 static __init int svm_hardware_setup(void)
