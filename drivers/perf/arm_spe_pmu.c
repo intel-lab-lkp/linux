@@ -761,6 +761,20 @@ static irqreturn_t arm_spe_pmu_irq_handler(int irq, void *dev)
 		if (!(handle->aux_flags & PERF_AUX_FLAG_TRUNCATED)) {
 			arm_spe_perf_aux_output_begin(handle, event);
 			isb();
+
+			/*
+			 * A non-zero state indicates that an error occurred in
+			 * arm_spe_perf_aux_output_begin(), for example, if the
+			 * buffer overflowed and failed to get a valid limit.
+			 *
+			 * Since the PERF_HES_STOPPED flag has been set, the
+			 * afterwards disable callback exits immediately and
+			 * the buffer disable flow is skipped (see
+			 * arm_spe_pmu_stop()). Explicitly disable the profiling
+			 * buffer here.
+			 */
+			if (event->hw.state)
+				arm_spe_pmu_disable_and_drain_local();
 		}
 		break;
 	case SPE_PMU_BUF_FAULT_ACT_SPURIOUS:
