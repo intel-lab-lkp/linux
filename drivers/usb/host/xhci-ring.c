@@ -3988,7 +3988,7 @@ static int xhci_ist_in_microseconds(u32 hcs_params2)
 {
 	int ist = HCS_IST_VALUE(hcs_params2);
 
-	if (HCS_IST_UNIT(hcs_params2))
+	if (hcs_params2 & HCS_IST_UNIT)
 		ist *= 8;
 	return ist;
 }
@@ -4157,7 +4157,7 @@ static int xhci_queue_isoc_tx(struct xhci_hcd *xhci, gfp_t mem_flags,
 		/* use SIA as default, if frame id is used overwrite it */
 		sia_frame_id = TRB_SIA;
 		if (!(urb->transfer_flags & URB_ISO_ASAP) &&
-		    HCC_CFC(xhci->hcc_params)) {
+		    (xhci->hcc_params & HCC_CFC)) {
 			frame_id = xhci_get_isoc_frame_id(xhci, urb, i);
 			if (frame_id >= 0)
 				sia_frame_id = TRB_FRAME_ID(frame_id);
@@ -4241,7 +4241,7 @@ static int xhci_queue_isoc_tx(struct xhci_hcd *xhci, gfp_t mem_flags,
 	}
 
 	/* store the next frame id */
-	if (HCC_CFC(xhci->hcc_params))
+	if (xhci->hcc_params & HCC_CFC)
 		xep->next_frame_id = urb->start_frame + num_tds * urb->interval;
 
 	if (xhci_to_hcd(xhci)->self.bandwidth_isoc_reqs == 0) {
@@ -4320,7 +4320,7 @@ int xhci_queue_isoc_tx_prepare(struct xhci_hcd *xhci, gfp_t mem_flags,
 	check_interval(urb, ep_ctx);
 
 	/* Calculate the start frame and put it in urb->start_frame. */
-	if (HCC_CFC(xhci->hcc_params) && !list_empty(&ep_ring->td_list)) {
+	if ((xhci->hcc_params & HCC_CFC) && !list_empty(&ep_ring->td_list)) {
 		if (GET_EP_CTX_STATE(ep_ctx) ==	EP_STATE_RUNNING) {
 			urb->start_frame = xep->next_frame_id;
 			goto skip_start_over;
