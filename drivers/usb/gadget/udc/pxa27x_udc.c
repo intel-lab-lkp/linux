@@ -1462,7 +1462,7 @@ static int pxa_udc_wakeup(struct usb_gadget *_gadget)
 	return 0;
 }
 
-static void udc_enable(struct pxa_udc *udc);
+static int udc_enable(struct pxa_udc *udc);
 static void udc_disable(struct pxa_udc *udc);
 
 /**
@@ -1519,17 +1519,21 @@ static int should_disable_udc(struct pxa_udc *udc)
 static int pxa_udc_pullup(struct usb_gadget *_gadget, int is_active)
 {
 	struct pxa_udc *udc = to_gadget_udc(_gadget);
+	int ret = 0;
 
-	if (!udc->gpiod && !udc->udc_command)
-		return -EOPNOTSUPP;
+	if (!udc->gpiod && !udc->udc_command) {
+		ret = -EOPNOTSUPP;
+		goto out;
+	}
 
 	dplus_pullup(udc, is_active);
 
 	if (should_enable_udc(udc))
-		udc_enable(udc);
+		ret = udc_enable(udc);
 	if (should_disable_udc(udc))
 		udc_disable(udc);
-	return 0;
+out:
+	return ret;
 }
 
 /**
@@ -1691,12 +1695,18 @@ static void udc_init_data(struct pxa_udc *dev)
  * Enables the udc device : enables clocks, udc interrupts, control endpoint
  * interrupts, sets usb as UDC client and setups endpoints.
  */
-static void udc_enable(struct pxa_udc *udc)
+static int udc_enable(struct pxa_udc *udc)
 {
-	if (udc->enabled)
-		return;
+	int ret = 0;
 
-	clk_enable(udc->clk);
+	if (udc->enabled)
+		goto out;
+
+	ret = clk_enable(udc->clk);
+	if (ret < 0) {
+		dev_err(udc->dev, "failed to enable clock=%d\n", ret);
+		goto out;
+	}
 	udc_writel(udc, UDCICR0, 0);
 	udc_writel(udc, UDCICR1, 0);
 	udc_clear_mask_UDCCR(udc, UDCCR_UDE);
@@ -1726,6 +1736,8 @@ static void udc_enable(struct pxa_udc *udc)
 	pio_irq_enable(&udc->pxa_ep[0]);
 
 	udc->enabled = 1;
+out:
+	return ret;
 }
 
 /**
@@ -2078,6 +2090,7 @@ recursion_detected:
 static void pxa27x_change_configuration(struct pxa_udc *udc, int config)
 {
 	struct usb_ctrlrequest req ;
+	int setup_result;
 
 	dev_dbg(udc->dev, "config=%d\n", config);
 
@@ -2092,7 +2105,11 @@ static void pxa27x_change_configuration(struct pxa_udc *udc, int config)
 	req.wLength = 0;
 
 	set_ep0state(udc, WAIT_ACK_SET_CONF_INTERF);
-	udc->driver->setup(&udc->gadget, &req);
+
+	setup_result = udc->driver->setup(&udc->gadget, &req);
+	if (setup_result < 0)
+		dev_dbg(udc->dev, "driver setup failed=%d\n", setup_result);
+
 	ep_write_UDCCSR(&udc->pxa_ep[0], UDCCSR0_AREN);
 }
 
@@ -2108,6 +2125,7 @@ static void pxa27x_change_configuration(struct pxa_udc *udc, int config)
 static void pxa27x_change_interface(struct pxa_udc *udc, int iface, int alt)
 {
 	struct usb_ctrlrequest  req;
+	int setup_result;
 
 	dev_dbg(udc->dev, "interface=%d, alternate setting=%d\n", iface, alt);
 
@@ -2121,7 +2139,11 @@ static void pxa27x_change_interface(struct pxa_udc *udc, int iface, int alt)
 	req.wLength = 0;
 
 	set_ep0state(udc, WAIT_ACK_SET_CONF_INTERF);
-	udc->driver->setup(&udc->gadget, &req);
+
+	setup_result = udc->driver->setup(&udc->gadget, &req);
+	if (setup_result < 0)
+		dev_dbg(udc->dev, "driver setup failed=%d\n", setup_result);
+
 	ep_write_UDCCSR(&udc->pxa_ep[0], UDCCSR0_AREN);
 }
 
