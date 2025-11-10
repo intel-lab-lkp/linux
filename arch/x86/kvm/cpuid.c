@@ -1063,6 +1063,10 @@ void kvm_set_cpu_caps(void)
 		F(AVX10_512),
 	);
 
+	kvm_cpu_cap_init(CPUID_29_0_EBX,
+		F(APX_NCI_NDD_NF),
+	);
+
 	kvm_cpu_cap_init(CPUID_8000_0001_ECX,
 		F(LAHF_LM),
 		F(CMP_LEGACY),
@@ -1640,8 +1644,10 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 		break;
 	}
 	case 0x29: {
-		/* No APX sub-features are supported yet */
-		entry->eax = entry->ebx = entry->ecx = entry->edx = 0;
+		if (!(kvm_caps.supported_xcr0 & XFEATURE_MASK_APX)) {
+			entry->eax = entry->ebx = entry->ecx = entry->edx = 0;
+			break;
+		}
 		break;
 	}
 	case KVM_CPUID_SIGNATURE: {
