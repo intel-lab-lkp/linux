@@ -179,6 +179,7 @@
 #define TwoMemOp    ((u64)1 << 55)  /* Instruction has two memory operand */
 #define IsBranch    ((u64)1 << 56)  /* Instruction is considered a branch. */
 #define ShadowStack ((u64)1 << 57)  /* Instruction affects Shadow Stacks. */
+#define InvertedWidthPolarity ((u64)1 << 58) /* Instruction uses inverted REX2.W polarity */
 
 #define DstXacc     (DstAccLo | SrcAccHi | SrcWrite)
 
@@ -992,6 +993,16 @@ EM_ASM_2W(btr);
 EM_ASM_2W(btc);
 
 EM_ASM_2R(cmp, cmp_r);
+
+static inline bool is_64bit_operand_size(struct x86_emulate_ctxt *ctxt)
+{
+	/*
+	 * Most instructions interpret REX.W=1 as 64-bit operand size.
+	 * Some REX2 opcodes invert this logic.
+	 */
+	return ctxt->d & InvertedWidthPolarity ?
+	       ctxt->rex.bits.w == 0 : ctxt->rex.bits.w == 1;
+}
 
 static int em_bsf_c(struct x86_emulate_ctxt *ctxt)
 {
@@ -2472,7 +2483,7 @@ static int em_sysexit(struct x86_emulate_ctxt *ctxt)
 
 	setup_syscalls_segments(&cs, &ss);
 
-	if (ctxt->rex.bits.w)
+	if (is_64bit_operand_size(ctxt))
 		usermode = X86EMUL_MODE_PROT64;
 	else
 		usermode = X86EMUL_MODE_PROT32;
@@ -4486,7 +4497,8 @@ static struct opcode rex2_opcode_table[256]  __ro_after_init;
 static struct opcode rex2_twobyte_table[256] __ro_after_init;
 
 static const struct opcode undefined = D(Undefined);
-static const struct opcode notimpl   = N;
+static const struct opcode pfx_d5_a1 = I(SrcImm64 | NearBranch | IsBranch | InvertedWidthPolarity, \
+					 em_jmp_abs);
 
 #undef D
 #undef N
@@ -4543,6 +4555,7 @@ static bool is_ibt_instruction(struct x86_emulate_ctxt *ctxt)
 		return true;
 	case SrcNone:
 	case SrcImm:
+	case SrcImm64:
 	case SrcImmByte:
 	/*
 	 * Note, ImmU16 is used only for the stack adjustment operand on ENTER
@@ -4895,9 +4908,6 @@ int x86_decode_insn(struct x86_emulate_ctxt *ctxt, void *insn, int insn_len, int
 
 done_prefixes:
 
-	if (ctxt->rex.bits.w)
-		ctxt->op_bytes = 8;
-
 	/* Determine opcode byte(s): */
 	if (ctxt->rex_prefix == REX2_INVALID) {
 		/*
@@ -4935,6 +4945,9 @@ done_prefixes:
 		opcode = opcode_table[ctxt->b];
 	}
 	ctxt->d = opcode.flags;
+
+	if (is_64bit_operand_size(ctxt))
+		ctxt->op_bytes = 8;
 
 	if (ctxt->d & ModRM)
 		ctxt->modrm = insn_fetch(u8, ctxt);
@@ -5594,6 +5607,6 @@ void __init kvm_init_rex2_opcode_table(void)
 	undefine_row(&rex2_twobyte_table[0x30]);
 	undefine_row(&rex2_twobyte_table[0x80]);
 
-	/* Mark opcode not yet implemented: */
-	rex2_opcode_table[0xa1] = notimpl;
+	/* Define the REX2-specific absolute jump (0xA1) opcode */
+	rex2_opcode_table[0xa1] = pfx_d5_a1;
 }
