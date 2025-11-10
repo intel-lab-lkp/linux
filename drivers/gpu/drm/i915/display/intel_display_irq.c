@@ -7,7 +7,6 @@
 #include <drm/drm_vblank.h>
 #include <drm/intel/display_parent_interface.h>
 
-#include "i915_irq.h"
 #include "i915_reg.h"
 #include "icl_dsi_regs.h"
 #include "intel_crtc.h"
@@ -32,6 +31,74 @@
 #include "intel_psr.h"
 #include "intel_psr_regs.h"
 #include "intel_uncore.h"
+
+static void gen2_irq_reset(struct intel_uncore *uncore, struct i915_irq_regs regs)
+{
+	intel_uncore_write(uncore, regs.imr, 0xffffffff);
+	intel_uncore_posting_read(uncore, regs.imr);
+
+	intel_uncore_write(uncore, regs.ier, 0);
+
+	/* IIR can theoretically queue up two events. Be paranoid. */
+	intel_uncore_write(uncore, regs.iir, 0xffffffff);
+	intel_uncore_posting_read(uncore, regs.iir);
+	intel_uncore_write(uncore, regs.iir, 0xffffffff);
+	intel_uncore_posting_read(uncore, regs.iir);
+}
+
+/*
+ * We should clear IMR at preinstall/uninstall, and just check at postinstall.
+ */
+static void gen2_assert_iir_is_zero(struct intel_uncore *uncore, i915_reg_t reg)
+{
+	u32 val = intel_uncore_read(uncore, reg);
+
+	if (val == 0)
+		return;
+
+#if 0	/* FIXME */
+	drm_WARN(&uncore->i915->drm, 1,
+		 "Interrupt register 0x%x is not zero: 0x%08x\n",
+		 i915_mmio_reg_offset(reg), val);
+#endif
+	intel_uncore_write(uncore, reg, 0xffffffff);
+	intel_uncore_posting_read(uncore, reg);
+	intel_uncore_write(uncore, reg, 0xffffffff);
+	intel_uncore_posting_read(uncore, reg);
+}
+
+static void gen2_irq_init(struct intel_uncore *uncore, struct i915_irq_regs regs,
+			  u32 imr_val, u32 ier_val)
+{
+	gen2_assert_iir_is_zero(uncore, regs.iir);
+
+	intel_uncore_write(uncore, regs.ier, ier_val);
+	intel_uncore_write(uncore, regs.imr, imr_val);
+	intel_uncore_posting_read(uncore, regs.imr);
+}
+
+static void gen2_error_reset(struct intel_uncore *uncore, struct i915_error_regs regs)
+{
+	intel_uncore_write(uncore, regs.emr, 0xffffffff);
+	intel_uncore_posting_read(uncore, regs.emr);
+
+	intel_uncore_write(uncore, regs.eir, 0xffffffff);
+	intel_uncore_posting_read(uncore, regs.eir);
+	intel_uncore_write(uncore, regs.eir, 0xffffffff);
+	intel_uncore_posting_read(uncore, regs.eir);
+}
+
+static void gen2_error_init(struct intel_uncore *uncore, struct i915_error_regs regs,
+			    u32 emr_val)
+{
+	intel_uncore_write(uncore, regs.eir, 0xffffffff);
+	intel_uncore_posting_read(uncore, regs.eir);
+	intel_uncore_write(uncore, regs.eir, 0xffffffff);
+	intel_uncore_posting_read(uncore, regs.eir);
+
+	intel_uncore_write(uncore, regs.emr, emr_val);
+	intel_uncore_posting_read(uncore, regs.emr);
+}
 
 static void
 intel_display_irq_regs_init(struct intel_display *display, struct i915_irq_regs regs,
