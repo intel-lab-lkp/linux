@@ -8924,7 +8924,7 @@ static bool yield_deboost_rate_limit(struct rq *rq, u64 now_ns)
  * Returns false with appropriate debug logging if any validation fails,
  * ensuring only safe and meaningful yield operations proceed.
  */
-static bool __maybe_unused yield_deboost_validate_tasks(struct rq *rq, struct task_struct *p_target,
+static bool yield_deboost_validate_tasks(struct rq *rq, struct task_struct *p_target,
 					  struct task_struct **p_yielding_out,
 					  struct sched_entity **se_y_out,
 					  struct sched_entity **se_t_out)
@@ -8973,7 +8973,7 @@ static bool __maybe_unused yield_deboost_validate_tasks(struct rq *rq, struct ta
  * the appropriate level for vruntime adjustments and EEVDF field updates
  * (deadline, vlag) to maintain scheduler consistency.
  */
-static bool __maybe_unused yield_deboost_find_lca(struct sched_entity *se_y, struct sched_entity *se_t,
+static bool yield_deboost_find_lca(struct sched_entity *se_y, struct sched_entity *se_t,
 				    struct sched_entity **se_y_lca_out,
 				    struct sched_entity **se_t_lca_out,
 				    struct cfs_rq **cfs_rq_common_out)
@@ -9069,7 +9069,7 @@ static u64 yield_deboost_apply_debounce(struct rq *rq, struct sched_entity *se_t
  * and implements reverse-pair debounce (~300us) to reduce ping-pong effects.
  * Returns 0 if no penalty needed, otherwise returns clamped penalty value.
  */
-static u64 __maybe_unused yield_deboost_calculate_penalty(struct rq *rq, struct sched_entity *se_y_lca,
+static u64 yield_deboost_calculate_penalty(struct rq *rq, struct sched_entity *se_y_lca,
 				    struct sched_entity *se_t_lca, struct sched_entity *se_t,
 				    int nr_queued)
 {
@@ -9157,7 +9157,7 @@ static u64 __maybe_unused yield_deboost_calculate_penalty(struct rq *rq, struct 
  * scheduler state consistency. Returns true on successful application,
  * false if penalty cannot be safely applied.
  */
-static void __maybe_unused yield_deboost_apply_penalty(struct rq *rq, struct sched_entity *se_y_lca,
+static void yield_deboost_apply_penalty(struct rq *rq, struct sched_entity *se_y_lca,
 				 struct cfs_rq *cfs_rq_common, u64 penalty)
 {
 	u64 new_vruntime;
@@ -9210,6 +9210,52 @@ static void yield_task_fair(struct rq *rq)
 	se->deadline += calc_delta_fair(se->slice, se);
 }
 
+/*
+ * yield_to_deboost - deboost the yielding task to favor the target on the same rq
+ * @rq: runqueue containing both tasks; rq->lock must be held
+ * @p_target: task to favor in scheduling
+ *
+ * Cooperates with yield_to_task_fair(): buddy provides immediate preference;
+ * this routine applies a bounded vruntime penalty at the cgroup LCA so the
+ * target keeps advantage beyond the buddy effect. EEVDF fields are updated
+ * to keep scheduler state consistent.
+ *
+ * Only operates on tasks resident on the same rq; throttled hierarchies are
+ * rejected early. Penalty is bounded by granularity and queue-size caps.
+ *
+ * Intended primarily for virtualization workloads where a yielding vCPU
+ * should defer to a target vCPU within the same runqueue.
+ * Does not change runnable order directly; complements buddy selection with
+ * a bounded fairness adjustment.
+ */
+static void yield_to_deboost(struct rq *rq, struct task_struct *p_target)
+{
+	struct task_struct *p_yielding;
+	struct sched_entity *se_y, *se_t, *se_y_lca, *se_t_lca;
+	struct cfs_rq *cfs_rq_common;
+	u64 penalty;
+
+	/* Step 1: validate tasks and inputs */
+	if (!yield_deboost_validate_tasks(rq, p_target, &p_yielding, &se_y, &se_t))
+		return;
+
+	/* Step 2: find LCA in cgroup hierarchy */
+	if (!yield_deboost_find_lca(se_y, se_t, &se_y_lca, &se_t_lca, &cfs_rq_common))
+		return;
+
+	/* Step 3: update clock and current accounting */
+	update_rq_clock(rq);
+	if (se_y_lca != cfs_rq_common->curr)
+		update_curr(cfs_rq_common);
+
+	/* Step 4: calculate penalty (caps + debounce) */
+	penalty = yield_deboost_calculate_penalty(rq, se_y_lca, se_t_lca, se_t,
+						  cfs_rq_common->nr_queued);
+
+	/* Step 5: apply penalty and update EEVDF fields */
+	yield_deboost_apply_penalty(rq, se_y_lca, cfs_rq_common, penalty);
+}
+
 static bool yield_to_task_fair(struct rq *rq, struct task_struct *p)
 {
 	struct sched_entity *se = &p->se;
@@ -9221,6 +9267,10 @@ static bool yield_to_task_fair(struct rq *rq, struct task_struct *p)
 	/* Tell the scheduler that we'd really like se to run next. */
 	set_next_buddy(se);
 
+	/* Apply deboost under rq lock. */
+	yield_to_deboost(rq, p);
+
+	/* Complete the standard yield path. */
 	yield_task_fair(rq);
 
 	return true;
