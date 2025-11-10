@@ -4773,7 +4773,6 @@ int x86_decode_insn(struct x86_emulate_ctxt *ctxt, void *insn, int insn_len, int
 	ctxt->_eip = ctxt->eip;
 	ctxt->fetch.ptr = ctxt->fetch.data;
 	ctxt->fetch.end = ctxt->fetch.data + insn_len;
-	ctxt->opcode_len = 1;
 	ctxt->intercept = x86_intercept_none;
 	if (insn_len > 0)
 		memcpy(ctxt->fetch.data, insn, insn_len);
@@ -4877,20 +4876,24 @@ done_prefixes:
 	if (ctxt->rex.bits.w)
 		ctxt->op_bytes = 8;
 
-	/* Opcode byte(s). */
-	opcode = opcode_table[ctxt->b];
-	/* Two-byte opcode? */
+	/* Determine opcode byte(s): */
 	if (ctxt->b == 0x0f) {
-		ctxt->opcode_len = 2;
+		/* Escape byte: start two-byte opcode sequence */
 		ctxt->b = insn_fetch(u8, ctxt);
-		opcode = twobyte_table[ctxt->b];
-
-		/* 0F_38 opcode map */
 		if (ctxt->b == 0x38) {
+			/* Three-byte opcode */
 			ctxt->opcode_len = 3;
 			ctxt->b = insn_fetch(u8, ctxt);
 			opcode = opcode_map_0f_38[ctxt->b];
+		} else {
+			/* Two-byte opcode */
+			ctxt->opcode_len = 2;
+			opcode = twobyte_table[ctxt->b];
 		}
+	} else {
+		/* Single-byte opcode */
+		ctxt->opcode_len = 1;
+		opcode = opcode_table[ctxt->b];
 	}
 	ctxt->d = opcode.flags;
 
