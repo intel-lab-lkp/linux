@@ -34,10 +34,10 @@ mod private {
 ///
 ///     // Checks the link status as reported by registers in the C22 namespace
 ///     // and updates current link state.
-///     dev.genphy_read_status::<phy::C22>();
+///     dev.genphy_read_status::<C22>();
 ///     // Checks the link status as reported by registers in the C45 namespace
 ///     // and updates current link state.
-///     dev.genphy_read_status::<phy::C45>();
+///     dev.genphy_read_status::<C45>();
 /// }
 /// ```
 pub trait Register: private::Sealed {
