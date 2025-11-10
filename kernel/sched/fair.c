@@ -81,6 +81,11 @@ static unsigned int normalized_sysctl_sched_base_slice	= 700000ULL;
 
 __read_mostly unsigned int sysctl_sched_migration_cost	= 500000UL;
 
+/*
+ * vCPU debooster sysctl control
+ */
+unsigned int sysctl_sched_vcpu_debooster_enabled __read_mostly = 1;
+
 static int __init setup_sched_thermal_decay_shift(char *str)
 {
 	pr_warn("Ignoring the deprecated sched_thermal_decay_shift= option\n");

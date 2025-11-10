@@ -1264,6 +1264,13 @@ struct rq {
 	unsigned int		push_busy;
 	struct cpu_stop_work	push_work;
 
+	/* vCPU debooster rate-limit */
+	u64			yield_deboost_last_time_ns;
+	/* per-rq debounce state to avoid cross-CPU races */
+	pid_t			yield_deboost_last_src_pid;
+	pid_t			yield_deboost_last_dst_pid;
+	u64			yield_deboost_last_pair_time_ns;
+
 #ifdef CONFIG_SCHED_CORE
 	/* per rq */
 	struct rq		*core;
@@ -2784,6 +2791,8 @@ extern int sysctl_resched_latency_warn_ms;
 extern int sysctl_resched_latency_warn_once;
 
 extern unsigned int sysctl_sched_tunable_scaling;
+
+extern unsigned int sysctl_sched_vcpu_debooster_enabled;
 
 extern unsigned int sysctl_numa_balancing_scan_delay;
 extern unsigned int sysctl_numa_balancing_scan_period_min;
