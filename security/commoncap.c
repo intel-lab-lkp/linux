@@ -358,7 +358,12 @@ int cap_inode_killpriv(struct mnt_idmap *idmap, struct dentry *dentry)
 	return error;
 }
 
+#ifdef CONFIG_SECURITY_COMMONCAP_KUNIT_TEST
+bool rootid_owns_currentns(vfsuid_t rootvfsuid);
+bool rootid_owns_currentns(vfsuid_t rootvfsuid)
+#else
 static bool rootid_owns_currentns(vfsuid_t rootvfsuid)
+#endif
 {
 	struct user_namespace *ns;
 	kuid_t kroot;
