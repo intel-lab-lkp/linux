@@ -645,8 +645,18 @@ static int fuse_create_open(struct mnt_idmap *idmap, struct inode *dir,
 	if (!ff)
 		goto out_put_forget_req;
 
-	if (!fm->fc->dont_mask)
-		mode &= ~current_umask();
+	if (!fm->fc->dont_mask) {
+		/*
+		 * If the parent has a default ACL, the umask is
+		 * ignored, the default ACL is inherited, the
+		 * permission bits are set based on the inherited
+		 * default ACL
+		 */
+		struct posix_acl *p =
+			get_inode_acl(dir, ACL_TYPE_DEFAULT);
+		if (!p || p == ERR_PTR(-EOPNOTSUPP))
+			mode &= ~current_umask();
+	}
 
 	flags &= ~O_NOCTTY;
 	memset(&inarg, 0, sizeof(inarg));
@@ -872,8 +882,18 @@ static int fuse_mknod(struct mnt_idmap *idmap, struct inode *dir,
 	struct fuse_mount *fm = get_fuse_mount(dir);
 	FUSE_ARGS(args);
 
-	if (!fm->fc->dont_mask)
-		mode &= ~current_umask();
+	if (!fm->fc->dont_mask) {
+		/*
+		 * If the parent has a default ACL, the umask is
+		 * ignored, the default ACL is inherited, the
+		 * permission bits are set based on the inherited
+		 * default ACL
+		 */
+		struct posix_acl *p =
+			get_inode_acl(dir, ACL_TYPE_DEFAULT);
+		if (!p || p == ERR_PTR(-EOPNOTSUPP))
+			mode &= ~current_umask();
+	}
 
 	memset(&inarg, 0, sizeof(inarg));
 	inarg.mode = mode;
@@ -919,8 +939,18 @@ static struct dentry *fuse_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	struct fuse_mount *fm = get_fuse_mount(dir);
 	FUSE_ARGS(args);
 
-	if (!fm->fc->dont_mask)
-		mode &= ~current_umask();
+	if (!fm->fc->dont_mask) {
+		/*
+		 * If the parent has a default ACL, the umask is
+		 * ignored, the default ACL is inherited, the
+		 * permission bits are set based on the inherited
+		 * default ACL
+		 */
+		struct posix_acl *p =
+			get_inode_acl(dir, ACL_TYPE_DEFAULT);
+		if (!p || p == ERR_PTR(-EOPNOTSUPP))
+			mode &= ~current_umask();
+	}
 
 	memset(&inarg, 0, sizeof(inarg));
 	inarg.mode = mode;
