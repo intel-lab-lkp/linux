@@ -62,7 +62,6 @@
 
 		led-lan {
 			color = <LED_COLOR_ID_GREEN>;
-			default-state = "off";
 			function = LED_FUNCTION_LAN;
 			gpios = <&gpio4 RK_PB5 GPIO_ACTIVE_HIGH>;
 			linux,default-trigger = "netdev";
@@ -78,7 +77,6 @@
 
 		led-wan {
 			color = <LED_COLOR_ID_GREEN>;
-			default-state = "off";
 			function = LED_FUNCTION_WAN;
 			gpios = <&gpio4 RK_PC0 GPIO_ACTIVE_HIGH>;
 			linux,default-trigger = "netdev";

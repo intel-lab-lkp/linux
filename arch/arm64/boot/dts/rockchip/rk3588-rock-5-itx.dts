@@ -88,11 +88,12 @@
 		pinctrl-0 = <&led_pins>;
 
 		power-led1 {
+			default-state = "on";
 			gpios = <&gpio0 RK_PB7 GPIO_ACTIVE_HIGH>;
-			linux,default-trigger = "default-on";
 		};
 
 		hdd-led2 {
+			default-state = "on";
 			gpios = <&gpio0 RK_PC0 GPIO_ACTIVE_HIGH>;
 			linux,default-trigger = "disk-activity";
 		};
