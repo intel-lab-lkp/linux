@@ -6404,7 +6404,7 @@ static bool nested_vmx_exit_handled_cr(struct kvm_vcpu *vcpu,
 
 	switch ((exit_qualification >> 4) & 3) {
 	case 0: /* mov to cr */
-		reg = (exit_qualification >> 8) & 15;
+		reg = vmx_get_exit_qual_gpr(vcpu);
 		val = kvm_gpr_read(vcpu, reg);
 		switch (cr) {
 		case 0:
