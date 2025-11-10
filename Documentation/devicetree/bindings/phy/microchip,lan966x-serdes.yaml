@@ -41,6 +41,30 @@ properties:
       - The macro to be used. The macros are defined in
         dt-bindings/phy/phy-lan966x-serdes.
 
+  microchip,s0-tx-inverted:
+    type: boolean
+    description: Invert the TX N and P signals for Serdes 0
+
+  microchip,s1-tx-inverted:
+    type: boolean
+    description: Invert the TX N and P signals for Serdes 1
+
+  microchip,s2-tx-inverted:
+    type: boolean
+    description: Invert the TX N and P signals for Serdes 2
+
+  microchip,s0-rx-inverted:
+    type: boolean
+    description: Invert the RX N and P signals for Serdes 0
+
+  microchip,s1-rx-inverted:
+    type: boolean
+    description: Invert the RX N and P signals for Serdes 1
+
+  microchip,s2-rx-inverted:
+    type: boolean
+    description: Invert the RX N and P signals for Serdes 2
+
 required:
   - compatible
   - reg
