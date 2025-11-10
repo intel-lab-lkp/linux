@@ -216,8 +216,14 @@ int virtio_gpu_vram_create(struct virtio_gpu_device *vgdev,
 		return ret;
 	}
 
-	virtio_gpu_cmd_resource_create_blob(vgdev, &vram->base, params, NULL,
-					    0);
+	ret = virtio_gpu_cmd_resource_create_blob(vgdev, &vram->base, params,
+						  NULL, 0);
+	if (ret) {
+		drm_gem_free_mmap_offset(obj);
+		kfree(vram);
+		return ret;
+	}
+
 	if (params->blob_flags & VIRTGPU_BLOB_FLAG_USE_MAPPABLE) {
 		ret = virtio_gpu_vram_map(&vram->base);
 		if (ret) {

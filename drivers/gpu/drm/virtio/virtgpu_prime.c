@@ -257,8 +257,11 @@ static int virtgpu_dma_buf_init_obj(struct drm_device *dev,
 	params.blob_flags = VIRTGPU_BLOB_FLAG_USE_SHAREABLE;
 	params.size = attach->dmabuf->size;
 
-	virtio_gpu_cmd_resource_create_blob(vgdev, bo, &params,
-					    ents, nents);
+	ret = virtio_gpu_cmd_resource_create_blob(vgdev, bo, &params,
+						  ents, nents);
+	if (ret)
+		goto err_import;
+
 	bo->guest_blob = true;
 
 	dma_buf_unpin(attach);

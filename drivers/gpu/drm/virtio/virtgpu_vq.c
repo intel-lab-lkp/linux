@@ -1393,6 +1393,10 @@ int virtio_gpu_cmd_map(struct virtio_gpu_device *vgdev,
 	struct virtio_gpu_vbuffer *vbuf;
 	struct virtio_gpu_resp_map_info *resp_buf;
 
+	if (vgdev->has_blob_alignment &&
+	    !IS_ALIGNED(offset, vgdev->blob_alignment))
+		return -EINVAL;
+
 	resp_buf = kzalloc(sizeof(*resp_buf), GFP_KERNEL);
 	if (!resp_buf)
 		return -ENOMEM;
@@ -1426,7 +1430,7 @@ void virtio_gpu_cmd_unmap(struct virtio_gpu_device *vgdev,
 	virtio_gpu_queue_ctrl_buffer(vgdev, vbuf);
 }
 
-void
+int
 virtio_gpu_cmd_resource_create_blob(struct virtio_gpu_device *vgdev,
 				    struct virtio_gpu_object *bo,
 				    struct virtio_gpu_object_params *params,
@@ -1435,6 +1439,10 @@ virtio_gpu_cmd_resource_create_blob(struct virtio_gpu_device *vgdev,
 {
 	struct virtio_gpu_resource_create_blob *cmd_p;
 	struct virtio_gpu_vbuffer *vbuf;
+
+	if (vgdev->has_blob_alignment &&
+	    !IS_ALIGNED(params->size, vgdev->blob_alignment))
+		return -EINVAL;
 
 	cmd_p = virtio_gpu_alloc_cmd(vgdev, &vbuf, sizeof(*cmd_p));
 	memset(cmd_p, 0, sizeof(*cmd_p));
@@ -1456,6 +1464,8 @@ virtio_gpu_cmd_resource_create_blob(struct virtio_gpu_device *vgdev,
 
 	if (nents)
 		bo->attached = true;
+
+	return 0;
 }
 
 void virtio_gpu_cmd_set_scanout_blob(struct virtio_gpu_device *vgdev,
