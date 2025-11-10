@@ -783,6 +783,38 @@ static void altera_pcie_retrain(struct altera_pcie *pcie)
 	}
 }
 
+/**
+ * altera_pcie_set_mps_to_mpss - Set RP MPS to its maximum supported value
+ * @pcie: Altera PCIe controller instance
+ *
+ * The Max Payload Size (MPS) in the Device Control (DEVCTL) register of
+ * the PCIe root port defaults to 128 bytes. This must be updated to the
+ * Max Payload Size Supported (MPSS) value of the Device Capabilities
+ * (DEVCAP) register, before the bus is scanned otherwise the kernel will
+ * limit all downstream devices to negotiate to 128 bytes.
+ *
+ * We cannot use pcie_set_mps() here, as this logic must run
+ * before the RP's pci_dev is created and the bus is enumerated.
+ */
+static void altera_pcie_set_mps_to_mpss(struct altera_pcie *pcie)
+{
+	u16 devcap, devctl;
+
+	altera_read_cap_word(pcie, pcie->root_bus_nr, RP_DEVFN, PCI_EXP_DEVCAP,
+			     &devcap);
+	altera_read_cap_word(pcie, pcie->root_bus_nr, RP_DEVFN, PCI_EXP_DEVCTL,
+			     &devctl);
+
+	/* Clear MPS bits in Device Control register */
+	devctl &= ~PCI_EXP_DEVCTL_PAYLOAD;
+
+	/* Set MPS in Device Control to MPSS from Device Capabilities */
+	devctl |= (devcap & PCI_EXP_DEVCAP_PAYLOAD) << 5;
+
+	altera_write_cap_word(pcie, pcie->root_bus_nr, RP_DEVFN, PCI_EXP_DEVCTL,
+			      devctl);
+}
+
 static int altera_pcie_intx_map(struct irq_domain *domain, unsigned int irq,
 				irq_hw_number_t hwirq)
 {
@@ -1031,6 +1063,12 @@ static int altera_pcie_probe(struct platform_device *pdev)
 		writel(CFG_AER,
 		       pcie->hip_base + pcie->pcie_data->port_conf_offset +
 		       pcie->pcie_data->port_irq_enable_offset);
+
+		/*
+		 * Set RP's MPS value to its MPSS value before bus scan to avoid
+		 * kernel defaulting to 128 bytes.
+		 */
+		altera_pcie_set_mps_to_mpss(pcie);
 	}
 
 	bridge->sysdata = pcie;
