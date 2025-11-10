@@ -17,6 +17,11 @@
 #define PLL_CONF_SERDES_125MHZ	2
 #define PLL_CONF_BYPASS		3
 
+#define LAN966X_SERDES_MAX	3
+#define LAN966X_SERDES_DIR	2
+#define LAN966X_SERDES_TX	0
+#define LAN966X_SERDES_RX	1
+
 #define lan_offset_(id, tinst, tcnt,			\
 		   gbase, ginst, gcnt, gwidth,		\
 		   raddr, rinst, rcnt, rwidth)		\
@@ -129,6 +134,7 @@ struct serdes_ctrl {
 	struct device		*dev;
 	struct phy		*phys[SERDES_MAX];
 	int			ref125;
+	bool			inverted[LAN966X_SERDES_MAX][LAN966X_SERDES_DIR];
 };
 
 struct serdes_macro {
@@ -387,6 +393,11 @@ static int lan966x_sd6g40_setup(struct serdes_macro *macro, u32 idx, int mode)
 
 	conf.refclk125M = macro->ctrl->ref125;
 
+	if (macro->ctrl->inverted[idx][LAN966X_SERDES_TX])
+		conf.txinvert = 1;
+	if (macro->ctrl->inverted[idx][LAN966X_SERDES_RX])
+		conf.rxinvert = 1;
+
 	if (mode == PHY_INTERFACE_MODE_QSGMII)
 		conf.mode = LAN966X_SD6G40_MODE_QSGMII;
 	else
@@ -595,6 +606,18 @@ static int serdes_probe(struct platform_device *pdev)
 	val = FIELD_GET(PLL_CONF_MASK, val);
 	ctrl->ref125 = (val == PLL_CONF_125MHZ ||
 			val == PLL_CONF_SERDES_125MHZ);
+
+	for (i = 0; i < LAN966X_SERDES_MAX; ++i) {
+		u8 prop[25];
+
+		sprintf(prop, "microchip,s%d-tx-inverted", i);
+		if (device_property_read_bool(ctrl->dev, prop))
+			ctrl->inverted[i][LAN966X_SERDES_TX] = true;
+
+		sprintf(prop, "microchip,s%d-rx-inverted", i);
+		if (device_property_read_bool(ctrl->dev, prop))
+			ctrl->inverted[i][LAN966X_SERDES_RX] = true;
+	}
 
 	dev_set_drvdata(&pdev->dev, ctrl);
 
