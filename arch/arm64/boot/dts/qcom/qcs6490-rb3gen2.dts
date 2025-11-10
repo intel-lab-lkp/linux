@@ -1230,6 +1230,7 @@
 };
 
 &usb_1_qmpphy {
+	vdda-aux-supply = <&vreg_l7c_3p0>;
 	vdda-phy-supply = <&vreg_l6b_1p2>;
 	vdda-pll-supply = <&vreg_l1b_0p912>;
 
