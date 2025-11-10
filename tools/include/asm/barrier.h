@@ -10,7 +10,7 @@
 #include "../../arch/powerpc/include/asm/barrier.h"
 #elif defined(__riscv)
 #include "../../arch/riscv/include/asm/barrier.h"
-#elif defined(__s390__)
+#elif defined(__s390x__)
 #include "../../arch/s390/include/asm/barrier.h"
 #elif defined(__sh__)
 #include "../../arch/sh/include/asm/barrier.h"

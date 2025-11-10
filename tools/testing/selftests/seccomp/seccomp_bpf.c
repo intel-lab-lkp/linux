@@ -150,7 +150,7 @@ struct seccomp_data {
 #  define __NR_seccomp 338
 # elif defined(__powerpc__)
 #  define __NR_seccomp 358
-# elif defined(__s390__)
+# elif defined(__s390x__)
 #  define __NR_seccomp 348
 # elif defined(__xtensa__)
 #  define __NR_seccomp 337
@@ -1822,7 +1822,7 @@ TEST_F(TRACE_poke, getpid_runs_normally)
 		}						\
 	} while (0)
 # define SYSCALL_RET_SET_ON_PTRACE_EXIT
-#elif defined(__s390__)
+#elif defined(__s390x__)
 # define ARCH_REGS		s390_regs
 # define SYSCALL_NUM(_regs)	(_regs).gprs[2]
 # define SYSCALL_RET_SET(_regs, _val)			\

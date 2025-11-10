@@ -72,7 +72,7 @@ check_psi_entry(struct __test_metadata *_metadata,
 {
 	unsigned int i;
 	int exp_nr = exp_entry->nr;
-#if defined __s390__ || defined __s390x__
+#ifdef __s390x__
 	/* s390 is the only architecture that has 16-bit syscall numbers */
 	exp_nr &= 0xffff;
 #endif

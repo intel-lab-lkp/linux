@@ -59,7 +59,7 @@ int main(void)
 		goto error;
 
 
-#if defined(__LP64__) && (!defined(__s390__) && !defined(__s390x__))
+#if defined(__LP64__) && !defined(__s390x__)
 	/*
 	 * We haven't found a reliable way to find an invalid address when
 	 * running a 32bit userspace on a 64bit kernel, so only run this test

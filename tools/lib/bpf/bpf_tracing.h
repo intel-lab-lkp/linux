@@ -41,7 +41,7 @@
 #if defined(__x86_64__)
 	#define bpf_target_x86
 	#define bpf_target_defined
-#elif defined(__s390__)
+#elif defined(__s390x__)
 	#define bpf_target_s390
 	#define bpf_target_defined
 #elif defined(__arm__)

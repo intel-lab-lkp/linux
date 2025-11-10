@@ -12,7 +12,7 @@
 #  define __NR_bpf 280
 # elif defined(__sparc__)
 #  define __NR_bpf 349
-# elif defined(__s390__)
+# elif defined(__s390x__)
 #  define __NR_bpf 351
 # elif defined(__mips__) && defined(_ABIO32)
 #  define __NR_bpf 4355

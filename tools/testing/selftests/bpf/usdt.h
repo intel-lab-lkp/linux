@@ -310,7 +310,7 @@ struct usdt_sema { volatile unsigned short active; };
 #endif /* USDT_ARG_CONSTRAINT */
 
 #ifndef USDT_NOP
-#if defined(__ia64__) || defined(__s390__) || defined(__s390x__)
+#if defined(__ia64__) || defined(__s390x__)
 #define USDT_NOP			nop 0
 #else
 #define USDT_NOP			nop

@@ -125,7 +125,7 @@ static inline struct rseq_abi *rseq_get_abi(void)
 #include <rseq-ppc.h>
 #elif defined(__mips__)
 #include <rseq-mips.h>
-#elif defined(__s390__)
+#elif defined(__s390x__)
 #include <rseq-s390.h>
 #elif defined(__riscv)
 #include <rseq-riscv.h>

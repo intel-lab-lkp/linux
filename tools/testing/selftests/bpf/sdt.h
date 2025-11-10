@@ -230,7 +230,7 @@ __extension__ extern unsigned long long __sdt_unsp;
 #endif
 
 /* The ia64 and s390 nop instructions take an argument. */
-#if defined(__ia64__) || defined(__s390__) || defined(__s390x__)
+#if defined(__ia64__) || defined(__s390x__)
 #define _SDT_NOP	nop 0
 #else
 #define _SDT_NOP	nop

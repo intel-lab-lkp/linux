@@ -445,7 +445,7 @@ static int write_cpudesc(struct feat_fd *ff,
 {
 #if defined(__powerpc__) || defined(__hppa__) || defined(__sparc__)
 #define CPUINFO_PROC	{ "cpu", }
-#elif defined(__s390__)
+#elif defined(__s390x__)
 #define CPUINFO_PROC	{ "vendor_id", }
 #elif defined(__sh__)
 #define CPUINFO_PROC	{ "cpu type", }
