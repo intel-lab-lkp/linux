@@ -16,8 +16,8 @@
 #include "key.h"
 #include "aes_cmac.h"
 
-#define CMAC_TLEN 8 /* CMAC TLen = 64 bits (8 octets) */
-#define CMAC_TLEN_256 16 /* CMAC TLen = 128 bits (16 octets) */
+#define CMAC_TLEN IEEE80211_CMAC_128_MIC_LEN
+#define CMAC_TLEN_256 IEEE80211_CMAC_256_MIC_LEN
 #define AAD_LEN 20
 
 static const u8 zero[CMAC_TLEN_256];
