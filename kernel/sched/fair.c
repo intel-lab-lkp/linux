@@ -8966,6 +8966,66 @@ static bool __maybe_unused yield_deboost_validate_tasks(struct rq *rq, struct ta
 }
 
 /*
+ * Find the lowest common ancestor (LCA) in the cgroup hierarchy for EEVDF.
+ * We walk up both entity hierarchies under rq->lock protection.
+ * Task migration requires task_rq_lock, ensuring parent chains remain stable.
+ * We locate the first common cfs_rq where both entities coexist, representing
+ * the appropriate level for vruntime adjustments and EEVDF field updates
+ * (deadline, vlag) to maintain scheduler consistency.
+ */
+static bool __maybe_unused yield_deboost_find_lca(struct sched_entity *se_y, struct sched_entity *se_t,
+				    struct sched_entity **se_y_lca_out,
+				    struct sched_entity **se_t_lca_out,
+				    struct cfs_rq **cfs_rq_common_out)
+{
+	struct sched_entity *se_y_lca, *se_t_lca;
+	struct cfs_rq *cfs_rq_common;
+
+#ifdef CONFIG_FAIR_GROUP_SCHED
+	se_t_lca = se_t;
+	se_y_lca = se_y;
+
+	while (se_t_lca && se_y_lca && se_t_lca->depth != se_y_lca->depth) {
+		if (se_t_lca->depth > se_y_lca->depth)
+			se_t_lca = se_t_lca->parent;
+		else
+			se_y_lca = se_y_lca->parent;
+	}
+
+	while (se_t_lca && se_y_lca) {
+		if (cfs_rq_of(se_t_lca) == cfs_rq_of(se_y_lca)) {
+			cfs_rq_common = cfs_rq_of(se_t_lca);
+			goto found_lca;
+		}
+		se_t_lca = se_t_lca->parent;
+		se_y_lca = se_y_lca->parent;
+	}
+	return false;
+#else
+	if (cfs_rq_of(se_y) != cfs_rq_of(se_t))
+		return false;
+	cfs_rq_common = cfs_rq_of(se_y);
+	se_y_lca = se_y;
+	se_t_lca = se_t;
+#endif
+
+found_lca:
+	if (!se_y_lca || !se_t_lca)
+		return false;
+
+	if (cfs_rq_common->nr_queued <= 1)
+		return false;
+
+	if (!se_y_lca->slice)
+		return false;
+
+	*se_y_lca_out = se_y_lca;
+	*se_t_lca_out = se_t_lca;
+	*cfs_rq_common_out = cfs_rq_common;
+	return true;
+}
+
+/*
  * sched_yield() is very simple
  */
 static void yield_task_fair(struct rq *rq)
