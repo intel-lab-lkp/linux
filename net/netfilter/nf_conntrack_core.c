@@ -428,6 +428,41 @@ bool nf_ct_get_tuplepr(const struct sk_buff *skb, unsigned int nhoff,
 }
 EXPORT_SYMBOL_GPL(nf_ct_get_tuplepr);
 
+struct nf_conn *
+nf_ct_get_or_find(struct net *net, const struct sk_buff *skb, u16 l3num,
+		  bool *refcounted)
+{
+	const struct nf_conntrack_tuple_hash *h;
+	const struct nf_conntrack_zone *zone;
+	struct nf_conntrack_tuple tuple;
+	enum ip_conntrack_info ctinfo;
+	struct nf_conn *ct;
+
+	ct = nf_ct_get(skb, &ctinfo);
+	if (ct && !nf_ct_is_template(ct))
+		return ct;
+
+	if (!nf_ct_get_tuplepr(skb, skb_network_offset(skb), l3num, net, &tuple))
+		return NULL;
+
+	if (ct)
+		zone = nf_ct_zone(ct);
+	else
+		zone = &nf_ct_zone_dflt;
+
+	h = nf_conntrack_find_get(net, zone, &tuple);
+	if (!h)
+		return NULL;
+
+	ct = nf_ct_tuplehash_to_ctrack(h);
+
+	/* refcount increased, nf_ct_put() is needed after done with it */
+	*refcounted = true;
+
+	return ct;
+}
+EXPORT_SYMBOL_GPL(nf_ct_get_or_find);
+
 bool
 nf_ct_invert_tuple(struct nf_conntrack_tuple *inverse,
 		   const struct nf_conntrack_tuple *orig)

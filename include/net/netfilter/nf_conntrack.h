@@ -201,6 +201,9 @@ bool nf_ct_get_tuplepr(const struct sk_buff *skb, unsigned int nhoff,
 		       u_int16_t l3num, struct net *net,
 		       struct nf_conntrack_tuple *tuple);
 
+struct nf_conn *nf_ct_get_or_find(struct net *net, const struct sk_buff *skb,
+				  u16 l3num, bool *refcounted);
+
 void __nf_ct_refresh_acct(struct nf_conn *ct, enum ip_conntrack_info ctinfo,
 			  u32 extra_jiffies, unsigned int bytes);
 
