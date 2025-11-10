@@ -924,7 +924,7 @@ static void *decode_register(struct x86_emulate_ctxt *ctxt, u8 modrm_reg,
 			     int byteop)
 {
 	void *p;
-	int highbyte_regs = (ctxt->rex_prefix == 0) && byteop;
+	int highbyte_regs = (ctxt->rex_prefix == REX_NONE) && byteop;
 
 	if (highbyte_regs && modrm_reg >= 4 && modrm_reg < 8)
 		p = (unsigned char *)reg_rmw(ctxt, modrm_reg & 3) + 1;
@@ -1080,10 +1080,12 @@ static void decode_register_operand(struct x86_emulate_ctxt *ctxt,
 {
 	unsigned int reg;
 
-	if (ctxt->d & ModRM)
+	if (ctxt->d & ModRM) {
 		reg = ctxt->modrm_reg;
-	else
-		reg = (ctxt->b & 7) | ((ctxt->rex_prefix & 1) << 3);
+	} else {
+		reg = (ctxt->b & 7) |
+		      (ctxt->rex.bits.b3 * BIT(3));
+	}
 
 	if (ctxt->d & Sse) {
 		op->type = OP_XMM;
@@ -1122,9 +1124,9 @@ static int decode_modrm(struct x86_emulate_ctxt *ctxt,
 	int rc = X86EMUL_CONTINUE;
 	ulong modrm_ea = 0;
 
-	ctxt->modrm_reg = ((ctxt->rex_prefix << 1) & 8); /* REX.R */
-	index_reg = (ctxt->rex_prefix << 2) & 8; /* REX.X */
-	base_reg = (ctxt->rex_prefix << 3) & 8; /* REX.B */
+	ctxt->modrm_reg = ctxt->rex.bits.r3 * BIT(3);
+	index_reg       = ctxt->rex.bits.x3 * BIT(3);
+	base_reg        = ctxt->rex.bits.b3 * BIT(3);
 
 	ctxt->modrm_mod = (ctxt->modrm & 0xc0) >> 6;
 	ctxt->modrm_reg |= (ctxt->modrm & 0x38) >> 3;
@@ -2466,7 +2468,7 @@ static int em_sysexit(struct x86_emulate_ctxt *ctxt)
 
 	setup_syscalls_segments(&cs, &ss);
 
-	if ((ctxt->rex_prefix & 0x8) != 0x0)
+	if (ctxt->rex.bits.w)
 		usermode = X86EMUL_MODE_PROT64;
 	else
 		usermode = X86EMUL_MODE_PROT32;
@@ -4851,7 +4853,8 @@ int x86_decode_insn(struct x86_emulate_ctxt *ctxt, void *insn, int insn_len, int
 		case 0x40 ... 0x4f: /* REX */
 			if (mode != X86EMUL_MODE_PROT64)
 				goto done_prefixes;
-			ctxt->rex_prefix = ctxt->b;
+			ctxt->rex_prefix = REX_PREFIX;
+			ctxt->rex.raw    = 0x0f & ctxt->b;
 			continue;
 		case 0xf0:	/* LOCK */
 			ctxt->lock_prefix = 1;
@@ -4865,15 +4868,14 @@ int x86_decode_insn(struct x86_emulate_ctxt *ctxt, void *insn, int insn_len, int
 		}
 
 		/* Any legacy prefix after a REX prefix nullifies its effect. */
-
-		ctxt->rex_prefix = 0;
+		ctxt->rex_prefix = REX_NONE;
+		ctxt->rex.raw = 0;
 	}
 
 done_prefixes:
 
-	/* REX prefix. */
-	if (ctxt->rex_prefix & 8)
-		ctxt->op_bytes = 8;	/* REX.W */
+	if (ctxt->rex.bits.w)
+		ctxt->op_bytes = 8;
 
 	/* Opcode byte(s). */
 	opcode = opcode_table[ctxt->b];
@@ -5137,7 +5139,8 @@ void init_decode_cache(struct x86_emulate_ctxt *ctxt)
 {
 	/* Clear fields that are set conditionally but read without a guard. */
 	ctxt->rip_relative = false;
-	ctxt->rex_prefix = 0;
+	ctxt->rex_prefix = REX_NONE;
+	ctxt->rex.raw = 0;
 	ctxt->lock_prefix = 0;
 	ctxt->rep_prefix = 0;
 	ctxt->regs_valid = 0;
