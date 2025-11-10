@@ -8812,12 +8812,12 @@ static bool emulator_guest_cpuid_is_intel_compatible(struct x86_emulate_ctxt *ct
 
 static ulong emulator_read_gpr(struct x86_emulate_ctxt *ctxt, unsigned reg)
 {
-	return kvm_register_read_raw(emul_to_vcpu(ctxt), reg);
+	return _kvm_gpr_read(emul_to_vcpu(ctxt), reg);
 }
 
 static void emulator_write_gpr(struct x86_emulate_ctxt *ctxt, unsigned reg, ulong val)
 {
-	kvm_register_write_raw(emul_to_vcpu(ctxt), reg, val);
+	_kvm_gpr_write(emul_to_vcpu(ctxt), reg, val);
 }
 
 static void emulator_set_nmi_mask(struct x86_emulate_ctxt *ctxt, bool masked)
