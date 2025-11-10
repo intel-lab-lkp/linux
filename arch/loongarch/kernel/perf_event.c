@@ -851,7 +851,7 @@ static int __init init_hw_perf_events(void)
 		return -ENODEV;
 
 	pr_info("Performance counters: ");
-	counters = ((read_cpucfg(LOONGARCH_CPUCFG6) & CPUCFG6_PMNUM) >> 4) + 1;
+	counters = ((read_cpucfg(LOONGARCH_CPUCFG6) & CPUCFG6_PMNUM) >> CPUCFG6_PMNUM_SHIFT) + 1;
 
 	loongarch_pmu.num_counters = counters;
 	loongarch_pmu.max_period = (1ULL << 63) - 1;
