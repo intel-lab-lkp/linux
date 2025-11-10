@@ -1,0 +1,58 @@
+.. SPDX-License-Identifier: GPL-2.0-only
+
+=============
+AD4134 driver
+=============
+
+Device driver for Analog Devices Inc. AD4134 and similar ADCs.
+
+Supported devices
+=================
+
+* `AD4134 <https://www.analog.com/AD4134>`_
+* `AD7134 <https://www.analog.com/AD7134>`_
+
+Wiring connections
+------------------
+
+AD4134 and similar ADCs can operate in a few different wiring configurations.
+
+Minimum I/O mode (SPI control mode)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The minimum I/O mode wiring allows AD4134 register and data access with the
+conventional set of SPI bus lines. The hardware configuration settings for using
+AD4134 in minimum I/O mode are:
+
++----------------------------+----------------------+--------------------+
+| Pin Function               |         Level        | Description        |
++============================+======================+====================+
+| PIN/SPI                    |         High         | SPI control mode   |
++----------------------------+----------------------+--------------------+
+| MODE                       |         Low          | ASRC slave mode    |
++----------------------------+----------------------+--------------------+
+| DCLKIO                     |         Low          | DCLK input         |
++----------------------------+----------------------+--------------------+
+| DCLKMODE                   |         Low          | Gated DCLK         |
++----------------------------+----------------------+--------------------+
+
+A possible connection schema that sets AD4134 digital interface for minimum I/O
+mode is:
+
+::
+
+                                 IOVDD
+      +------------------------+   |
+      |                PIN/SPI |<--+     +-------------+
+      |                        |         |     HOST    |
+      |                   DCLK |<--+     |             |
+      |           FORMAT1/SCLK |<--+---- | SCLK        |
+      |   AD4134      DEC2/SDI |<--------| SDO         |
+      |               DEC3/SDO |-------->| SDI         |
+      |                    ODR |<--------| GPIO        |
+      |             FORMAT0/CS |<--+     |             |
+      |                   MODE |<--+     +-------------+
+      |            DEC0/DCLKIO |<--+
+      |          DEC1/DCLKMODE |<--+
+      +------------------------+   |
+                                  GND
