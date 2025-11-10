@@ -728,35 +728,20 @@ static bool dsa_port_can_apply_vlan_filtering(struct dsa_port *dp,
 {
 	struct dsa_switch *ds = dp->ds;
 	struct dsa_port *other_dp;
-	int err;
 
-	/* VLAN awareness was off, so the question is "can we turn it on".
+	/* VLAN awareness was on, so the question is "can we turn it off".
 	 * We may have had 8021q uppers, those need to go. Make sure we don't
 	 * enter an inconsistent state: deny changing the VLAN awareness state
 	 * as long as we have 8021q uppers.
 	 */
-	if (vlan_filtering && dsa_port_is_user(dp)) {
-		struct net_device *br = dsa_port_bridge_dev_get(dp);
+	if (!vlan_filtering && dsa_port_is_user(dp)) {
 		struct net_device *upper_dev, *user = dp->user;
 		struct list_head *iter;
 
 		netdev_for_each_upper_dev_rcu(user, upper_dev, iter) {
-			struct bridge_vlan_info br_info;
-			u16 vid;
-
-			if (!is_vlan_dev(upper_dev))
-				continue;
-
-			vid = vlan_dev_vlan_id(upper_dev);
-
-			/* br_vlan_get_info() returns -EINVAL or -ENOENT if the
-			 * device, respectively the VID is not found, returning
-			 * 0 means success, which is a failure for us here.
-			 */
-			err = br_vlan_get_info(br, vid, &br_info);
-			if (err == 0) {
+			if (is_vlan_dev(upper_dev)) {
 				NL_SET_ERR_MSG_MOD(extack,
-						   "Must first remove VLAN uppers having VIDs also present in bridge");
+						   "Must first remove VLAN uppers from bridged ports");
 				return false;
 			}
 		}

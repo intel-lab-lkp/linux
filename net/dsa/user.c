@@ -3156,6 +3156,30 @@ dsa_prevent_bridging_8021q_upper(struct net_device *dev,
 	return NOTIFY_DONE;
 }
 
+/* Must be called under rcu_read_lock() */
+static int
+dsa_user_vlan_check_for_any_8021q_uppers(struct dsa_port *dp)
+{
+	struct dsa_switch *ds = dp->ds;
+	struct dsa_port *other_dp;
+
+	dsa_switch_for_each_user_port(other_dp, ds) {
+		struct net_device *user = other_dp->user;
+		struct net_device *upper_dev;
+		struct list_head *iter;
+
+		if (!dsa_port_bridge_same(dp, other_dp))
+			continue;
+
+		netdev_for_each_upper_dev_rcu(user, upper_dev, iter) {
+			if (is_vlan_dev(upper_dev))
+				return -EBUSY;
+		}
+	}
+
+	return 0;
+}
+
 static int
 dsa_user_check_8021q_upper(struct net_device *dev,
 			   struct netdev_notifier_changeupper_info *info)
@@ -3167,10 +3191,22 @@ dsa_user_check_8021q_upper(struct net_device *dev,
 	int err = NOTIFY_DONE;
 	u16 vid;
 
-	if (!br || !br_vlan_enabled(br))
+	if (!br)
 		return NOTIFY_DONE;
 
 	extack = netdev_notifier_info_to_extack(&info->info);
+
+	if (!br_vlan_enabled(br)) {
+		rcu_read_lock();
+		err = dsa_user_vlan_check_for_any_8021q_uppers(dp);
+		rcu_read_unlock();
+		if (err) {
+			NL_SET_ERR_MSG_MOD(extack,
+					   "VLAN uppers not supported with non filtering bridges");
+			return notifier_from_errno(err);
+		}
+	}
+
 	vid = vlan_dev_vlan_id(info->upper_dev);
 
 	/* br_vlan_get_info() returns -EINVAL or -ENOENT if the
