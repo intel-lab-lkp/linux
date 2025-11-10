@@ -162,9 +162,8 @@
  */
 #define DRM_REDUNDANT_VBLIRQ_THRESH_NS 1000000
 
-static bool
-drm_get_last_vbltimestamp(struct drm_device *dev, unsigned int pipe,
-			  ktime_t *tvblank, bool in_vblank_irq);
+static bool drm_get_last_vbltimestamp(struct drm_vblank_crtc *vblank,
+				      ktime_t *tvblank, bool in_vblank_irq);
 
 static unsigned int drm_timestamp_precision = 20;  /* Default to 20 usecs. */
 
@@ -253,7 +252,6 @@ static u32 __get_vblank_counter(struct drm_vblank_crtc *vblank)
 static void drm_reset_vblank_timestamp(struct drm_vblank_crtc *vblank)
 {
 	struct drm_device *dev = vblank->dev;
-	unsigned int pipe = vblank->pipe;
 	u32 cur_vblank;
 	bool rc;
 	ktime_t t_vblank;
@@ -267,7 +265,7 @@ static void drm_reset_vblank_timestamp(struct drm_vblank_crtc *vblank)
 	 */
 	do {
 		cur_vblank = __get_vblank_counter(vblank);
-		rc = drm_get_last_vbltimestamp(dev, pipe, &t_vblank, false);
+		rc = drm_get_last_vbltimestamp(vblank, &t_vblank, false);
 	} while (cur_vblank != __get_vblank_counter(vblank) && --count > 0);
 
 	/*
@@ -325,7 +323,7 @@ static void drm_update_vblank_count(struct drm_vblank_crtc *vblank,
 	 */
 	do {
 		cur_vblank = __get_vblank_counter(vblank);
-		rc = drm_get_last_vbltimestamp(dev, pipe, &t_vblank, in_vblank_irq);
+		rc = drm_get_last_vbltimestamp(vblank, &t_vblank, in_vblank_irq);
 	} while (cur_vblank != __get_vblank_counter(vblank) && --count > 0);
 
 	if (max_vblank_count) {
@@ -909,11 +907,10 @@ drm_crtc_get_last_vbltimestamp(struct drm_crtc *crtc, ktime_t *tvblank,
 	return ret;
 }
 
-static bool
-drm_get_last_vbltimestamp(struct drm_device *dev, unsigned int pipe,
-			  ktime_t *tvblank, bool in_vblank_irq)
+static bool drm_get_last_vbltimestamp(struct drm_vblank_crtc *vblank,
+				      ktime_t *tvblank, bool in_vblank_irq)
 {
-	struct drm_crtc *crtc = drm_crtc_from_index(dev, pipe);
+	struct drm_crtc *crtc = drm_crtc_from_vblank(vblank);
 
 	return drm_crtc_get_last_vbltimestamp(crtc, tvblank, in_vblank_irq);
 }
@@ -1552,7 +1549,6 @@ EXPORT_SYMBOL(drm_crtc_vblank_on);
 void drm_crtc_vblank_restore(struct drm_crtc *crtc)
 {
 	struct drm_device *dev = crtc->dev;
-	unsigned int pipe = drm_crtc_index(crtc);
 	struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(crtc);
 	ktime_t t_vblank;
 	int framedur_ns;
@@ -1575,7 +1571,7 @@ void drm_crtc_vblank_restore(struct drm_crtc *crtc)
 
 	do {
 		cur_vblank = __get_vblank_counter(vblank);
-		drm_get_last_vbltimestamp(dev, pipe, &t_vblank, false);
+		drm_get_last_vbltimestamp(vblank, &t_vblank, false);
 	} while (cur_vblank != __get_vblank_counter(vblank) && --count > 0);
 
 	diff_ns = ktime_to_ns(ktime_sub(t_vblank, vblank->time));
