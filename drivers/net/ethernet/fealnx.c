@@ -491,8 +491,8 @@ static int fealnx_init_one(struct pci_dev *pdev,
 
 	card_idx++;
 	sprintf(boardname, "fealnx%d", card_idx);
-
-	option = card_idx < MAX_UNITS ? options[card_idx] : 0;
+	if (card_idx >= 0)
+		option = card_idx < MAX_UNITS ? options[card_idx] : 0;
 
 	i = pci_enable_device(pdev);
 	if (i) return i;
@@ -623,7 +623,7 @@ static int fealnx_init_one(struct pci_dev *pdev,
 		np->default_port = option & 15;
 	}
 
-	if (card_idx < MAX_UNITS && full_duplex[card_idx] > 0)
+	if ((0 <= card_idx && MAX_UNITS > card_idx) && full_duplex[card_idx] > 0)
 		np->mii.full_duplex = full_duplex[card_idx];
 
 	if (np->mii.full_duplex) {
