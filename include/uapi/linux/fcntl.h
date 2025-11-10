@@ -156,10 +156,23 @@
  * as possible, so we can use them for generic bits in the future if necessary.
  */
 
-/* Flags for renameat2(2) (must match legacy RENAME_* flags). */
+/* Flags for renameat2(2) (must match legacy RENAME_* flags).
+ * stdio.h may define these differently, so check explicitly.
+ */
+#if !defined(AT_RENAME_NOREPLACE) || AT_RENAME_NOREPLACE != 0x0001
+#undef AT_RENAME_NOREPLACE
 #define AT_RENAME_NOREPLACE	0x0001
+#endif
+
+#if !defined(AT_RENAME_EXCHANGE) || AT_RENAME_EXCHANGE != 0x0002
+#undef AT_RENAME_EXCHANGE
 #define AT_RENAME_EXCHANGE	0x0002
+#endif
+
+#if !defined(AT_RENAME_WHITEOUT) || AT_RENAME_WHITEOUT != 0x0004
+#undef AT_RENAME_WHITEOUT
 #define AT_RENAME_WHITEOUT	0x0004
+#endif
 
 /* Flag for faccessat(2). */
 #define AT_EACCESS		0x200	/* Test access permitted for
