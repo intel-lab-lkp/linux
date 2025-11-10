@@ -318,8 +318,11 @@ map_id_range_down_base(unsigned extents, struct uid_gid_map *map, u32 id, u32 co
 static u32 map_id_range_down(struct uid_gid_map *map, u32 id, u32 count)
 {
 	struct uid_gid_extent *extent;
-	unsigned extents = map->nr_extents;
-	smp_rmb();
+/* Acquire semantics: pair with the writer's smp_store_release()
+ * when publishing a new map->nr_extents so that readers see the
+ * extent array contents that were written before nr_extents.
+ */
+	unsigned int extents = smp_load_acquire(&map->nr_extents);
 
 	if (extents <= UID_GID_MAP_MAX_BASE_EXTENTS)
 		extent = map_id_range_down_base(extents, map, id, count);
@@ -384,8 +387,11 @@ map_id_range_up_max(unsigned extents, struct uid_gid_map *map, u32 id, u32 count
 u32 map_id_range_up(struct uid_gid_map *map, u32 id, u32 count)
 {
 	struct uid_gid_extent *extent;
-	unsigned extents = map->nr_extents;
-	smp_rmb();
+/* Acquire semantics: pair with the writer's smp_store_release()
+ * when publishing a new map->nr_extents so that readers see the
+ * extent array contents that were written before nr_extents.
+ */
+	unsigned int extents = smp_load_acquire(&map->nr_extents);
 
 	if (extents <= UID_GID_MAP_MAX_BASE_EXTENTS)
 		extent = map_id_range_up_base(extents, map, id, count);
@@ -677,8 +683,11 @@ static void *m_start(struct seq_file *seq, loff_t *ppos,
 		     struct uid_gid_map *map)
 {
 	loff_t pos = *ppos;
-	unsigned extents = map->nr_extents;
-	smp_rmb();
+/* Acquire semantics: pair with the writer's smp_store_release()
+ * when publishing a new map->nr_extents so that readers see the
+ * extent array contents that were written before nr_extents.
+ */
+	unsigned int extents = smp_load_acquire(&map->nr_extents);
 
 	if (pos >= extents)
 		return NULL;
@@ -1099,8 +1108,12 @@ static ssize_t map_write(struct file *file, const char __user *buf,
 		map->forward = new_map.forward;
 		map->reverse = new_map.reverse;
 	}
-	smp_wmb();
-	map->nr_extents = new_map.nr_extents;
+	/* Release semantics: publish the extent arrays (map->forward/map->reverse
+	 * or map->extent) and then update map->nr_extents. Readers use
+	 * smp_load_acquire(&map->nr_extents) so they will see the array contents
+	 * written before this store.
+	 */
+	smp_store_release(&map->nr_extents, new_map.nr_extents);
 
 	*ppos = count;
 	ret = count;
