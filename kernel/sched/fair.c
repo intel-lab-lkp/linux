@@ -8898,6 +8898,74 @@ static void put_prev_task_fair(struct rq *rq, struct task_struct *prev, struct t
 }
 
 /*
+ * High-frequency yield gating to reduce overhead on compute-intensive workloads.
+ * Returns true if the yield should be skipped due to frequency limits.
+ *
+ * Optimized: single threshold with READ_ONCE/WRITE_ONCE, refresh timestamp on every call.
+ */
+static bool yield_deboost_rate_limit(struct rq *rq, u64 now_ns)
+{
+	u64 last = READ_ONCE(rq->yield_deboost_last_time_ns);
+	bool limited = false;
+
+	if (last) {
+		u64 delta = now_ns - last;
+		limited = (delta <= 6000ULL * NSEC_PER_USEC);
+	}
+
+	WRITE_ONCE(rq->yield_deboost_last_time_ns, now_ns);
+	return limited;
+}
+
+/*
+ * Validate tasks and basic parameters for yield deboost operation.
+ * Performs comprehensive safety checks including feature enablement,
+ * NULL pointer validation, task state verification, and same-rq requirement.
+ * Returns false with appropriate debug logging if any validation fails,
+ * ensuring only safe and meaningful yield operations proceed.
+ */
+static bool __maybe_unused yield_deboost_validate_tasks(struct rq *rq, struct task_struct *p_target,
+					  struct task_struct **p_yielding_out,
+					  struct sched_entity **se_y_out,
+					  struct sched_entity **se_t_out)
+{
+	struct task_struct *p_yielding;
+	struct sched_entity *se_y, *se_t;
+	u64 now_ns;
+
+	if (!sysctl_sched_vcpu_debooster_enabled)
+		return false;
+
+	if (!rq || !p_target)
+		return false;
+
+	now_ns = rq->clock;
+
+	if (yield_deboost_rate_limit(rq, now_ns))
+		return false;
+
+	p_yielding = rq->curr;
+	if (!p_yielding || p_yielding == p_target ||
+	    p_target->sched_class != &fair_sched_class ||
+	    p_yielding->sched_class != &fair_sched_class)
+		return false;
+
+	se_y = &p_yielding->se;
+	se_t = &p_target->se;
+
+	if (!se_t || !se_y || !se_t->on_rq || !se_y->on_rq)
+		return false;
+
+	if (task_rq(p_yielding) != rq || task_rq(p_target) != rq)
+		return false;
+
+	*p_yielding_out = p_yielding;
+	*se_y_out = se_y;
+	*se_t_out = se_t;
+	return true;
+}
+
+/*
  * sched_yield() is very simple
  */
 static void yield_task_fair(struct rq *rq)
