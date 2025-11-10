@@ -774,10 +774,8 @@ void of_pci_make_host_bridge_node(struct pci_host_bridge *bridge)
 	}
 
 	/* Check if there is a DT root node to attach the created node */
-	if (!of_root) {
-		pr_err("of_root node is NULL, cannot create PCI host bridge node\n");
+	if (!of_root)
 		return;
-	}
 
 	name = kasprintf(GFP_KERNEL, "pci@%x,%x", pci_domain_nr(bridge->bus),
 			 bridge->bus->number);
