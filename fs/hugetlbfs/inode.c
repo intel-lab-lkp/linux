@@ -447,8 +447,8 @@ retry:
 		 * a reference.  We must 'open code' vma locking as we do
 		 * not know if vma_lock is still attached to vma.
 		 */
-		down_write(&vma_lock->rw_sema);
 		i_mmap_lock_write(mapping);
+		down_write(&vma_lock->rw_sema);
 
 		vma = vma_lock->vma;
 		if (!vma) {
