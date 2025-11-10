@@ -67,7 +67,16 @@ pub mod property;
 ///
 /// A bus specific device should be defined as follows.
 ///
-/// ```ignore
+/// ```
+/// # use core::marker::PhantomData;
+/// # use kernel::{
+/// #     device,
+/// #     types::Opaque, //
+/// # };
+/// # mod bindings {
+/// #     #[expect(non_camel_case_types)]
+/// #     pub struct bus_device_type;
+/// # }
 /// #[repr(transparent)]
 /// pub struct Device<Ctx: device::DeviceContext = device::Normal>(
 ///     Opaque<bindings::bus_device_type>,
