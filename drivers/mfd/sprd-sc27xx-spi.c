@@ -10,6 +10,7 @@
 #include <linux/mfd/sc27xx-pmic.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
+#include <linux/reboot.h>
 #include <linux/regmap.h>
 #include <linux/spi/spi.h>
 #include <uapi/linux/usb/charger.h>
@@ -21,9 +22,47 @@
 #define SPRD_SC2730_IRQ_BASE		0x80
 #define SPRD_SC2730_IRQ_NUMS		10
 #define SPRD_SC2730_CHG_DET		0x1b9c
+
+#define SPRD_SC2730_PWR_PD_HW		0x1820
+#define SPRD_SC2730_SOFT_RST_HW		0x1824
+#define SPRD_SC2730_SLP_CTRL		0x1a48
+#define SPRD_SC2730_RST_STATUS		0x1bac
+#define SPRD_SC2730_SWRST_CTRL0		0x1bf8
+
 #define SPRD_SC2731_IRQ_BASE		0x140
 #define SPRD_SC2731_IRQ_NUMS		16
 #define SPRD_SC2731_CHG_DET		0xedc
+
+#define SPRD_SC2731_PWR_PD_HW		0xc2c
+#define SPRD_SC2731_SLP_CTRL		0xdf0
+#define SPRD_SC2731_RST_STATUS		0xee8
+
+/* PMIC power off and reset definition */
+#define SPRD_SC2730_LDO_XTL_EN		BIT(2)
+#define SPRD_SC2730_SLP_LDO_PD_EN	BIT(0)
+
+#define SPRD_SC2731_LDO_XTL_EN		BIT(3)
+#define SPRD_SC2731_SLP_LDO_PD_EN	BIT(0)
+
+#define SPRD_PMIC_PWR_OFF		BIT(0)
+#define SPRD_PMIC_RESET			BIT(0)
+#define SPRD_PMIC_SOFT_RST_EN		BIT(4)
+
+#define HWRST_STATUS_SECURITY		0x02
+#define HWRST_STATUS_RECOVERY		0x20
+#define HWRST_STATUS_NORMAL		0x40
+#define HWRST_STATUS_ALARM		0x50
+#define HWRST_STATUS_SLEEP		0x60
+#define HWRST_STATUS_FASTBOOT		0x30
+#define HWRST_STATUS_SPECIAL		0x70
+#define HWRST_STATUS_PANIC		0x80
+#define HWRST_STATUS_CFTREBOOT		0x90
+#define HWRST_STATUS_AUTODLOADER	0xa0
+#define HWRST_STATUS_IQMODE		0xb0
+#define HWRST_STATUS_SPRDISK		0xc0
+#define HWRST_STATUS_FACTORYTEST	0xe0
+#define HWRST_STATUS_WATCHDOG		0xf0
+#define HWRST_STATUS_MASK		0xff
 
 /* PMIC charger detection definition */
 #define SPRD_PMIC_CHG_DET_DELAY_US	200000
@@ -48,6 +87,14 @@ struct sprd_pmic_data {
 	u32 irq_base;
 	u32 num_irqs;
 	u32 charger_det;
+
+	u32 poweroff_reg;
+	u32 slp_ctrl_reg;
+	u32 slp_ctrl_mask;
+
+	u32 reset_reg;
+	u32 rst_sts_reg;
+	u32 swrst_ctrl_reg;
 };
 
 /*
@@ -59,12 +106,26 @@ static const struct sprd_pmic_data sc2730_data = {
 	.irq_base = SPRD_SC2730_IRQ_BASE,
 	.num_irqs = SPRD_SC2730_IRQ_NUMS,
 	.charger_det = SPRD_SC2730_CHG_DET,
+
+	.poweroff_reg = SPRD_SC2730_PWR_PD_HW,
+	.slp_ctrl_reg = SPRD_SC2730_SLP_CTRL,
+	.slp_ctrl_mask = SPRD_SC2730_LDO_XTL_EN | SPRD_SC2730_SLP_LDO_PD_EN,
+
+	.reset_reg = SPRD_SC2730_SOFT_RST_HW,
+	.rst_sts_reg = SPRD_SC2730_RST_STATUS,
+	.swrst_ctrl_reg = SPRD_SC2730_SWRST_CTRL0,
 };
 
 static const struct sprd_pmic_data sc2731_data = {
 	.irq_base = SPRD_SC2731_IRQ_BASE,
 	.num_irqs = SPRD_SC2731_IRQ_NUMS,
 	.charger_det = SPRD_SC2731_CHG_DET,
+
+	.poweroff_reg = SPRD_SC2731_PWR_PD_HW,
+	.slp_ctrl_reg = SPRD_SC2731_SLP_CTRL,
+	.slp_ctrl_mask = SPRD_SC2731_LDO_XTL_EN | SPRD_SC2731_SLP_LDO_PD_EN,
+
+	.rst_sts_reg = SPRD_SC2731_RST_STATUS,
 };
 
 enum usb_charger_type sprd_pmic_detect_charger_type(struct device *dev)
@@ -149,6 +210,77 @@ static const struct regmap_config sprd_pmic_config = {
 	.max_register = 0xffff,
 };
 
+static int sprd_pmic_poweroff(struct sys_off_data *off_data)
+{
+	struct sprd_pmic *ddata = off_data->cb_data;
+	const struct sprd_pmic_data *pdata = ddata->pdata;
+
+	regmap_clear_bits(ddata->regmap, pdata->slp_ctrl_reg, pdata->slp_ctrl_mask);
+
+	regmap_write(ddata->regmap, pdata->poweroff_reg, SPRD_PMIC_PWR_OFF);
+
+	mdelay(1000);
+
+	dev_err(ddata->dev, "Unable to poweroff system\n");
+
+	return NOTIFY_DONE;
+}
+
+static int sprd_pmic_restart(struct sys_off_data *off_data)
+{
+	struct sprd_pmic *ddata = off_data->cb_data;
+	const struct sprd_pmic_data *pdata = ddata->pdata;
+	u32 reboot_mode;
+
+	if (!off_data->cmd)
+		reboot_mode = HWRST_STATUS_NORMAL;
+	else if (!strcmp(off_data->cmd, "recovery"))
+		reboot_mode = HWRST_STATUS_RECOVERY;
+	else if (!strcmp(off_data->cmd, "alarm"))
+		reboot_mode = HWRST_STATUS_ALARM;
+	else if (!strcmp(off_data->cmd, "fastsleep"))
+		reboot_mode = HWRST_STATUS_SLEEP;
+	else if (!strcmp(off_data->cmd, "bootloader"))
+		reboot_mode = HWRST_STATUS_FASTBOOT;
+	else if (!strcmp(off_data->cmd, "panic"))
+		reboot_mode = HWRST_STATUS_PANIC;
+	else if (!strcmp(off_data->cmd, "special"))
+		reboot_mode = HWRST_STATUS_SPECIAL;
+	else if (!strcmp(off_data->cmd, "cftreboot"))
+		reboot_mode = HWRST_STATUS_CFTREBOOT;
+	else if (!strcmp(off_data->cmd, "autodloader"))
+		reboot_mode = HWRST_STATUS_AUTODLOADER;
+	else if (!strcmp(off_data->cmd, "iqmode"))
+		reboot_mode = HWRST_STATUS_IQMODE;
+	else if (!strcmp(off_data->cmd, "sprdisk"))
+		reboot_mode = HWRST_STATUS_SPRDISK;
+	else if (!strcmp(off_data->cmd, "tospanic"))
+		reboot_mode = HWRST_STATUS_SECURITY;
+	else if (!strcmp(off_data->cmd, "factorytest"))
+		reboot_mode = HWRST_STATUS_FACTORYTEST;
+	else
+		reboot_mode = HWRST_STATUS_NORMAL;
+
+	regmap_update_bits(ddata->regmap, pdata->rst_sts_reg,
+			   HWRST_STATUS_MASK, reboot_mode);
+
+	/*
+	 * On SC2731, this part is skipped because there is no reset register
+	 * and the restart must be performed using the watchdog.
+	 */
+	if (pdata->reset_reg) {
+		regmap_set_bits(ddata->regmap, pdata->swrst_ctrl_reg, SPRD_PMIC_SOFT_RST_EN);
+
+		regmap_write(ddata->regmap, pdata->reset_reg, SPRD_PMIC_RESET);
+
+		mdelay(1000);
+
+		dev_err(ddata->dev, "Unable to restart system\n");
+	}
+
+	return NOTIFY_DONE;
+}
+
 static int sprd_pmic_probe(struct spi_device *spi)
 {
 	struct sprd_pmic *ddata;
@@ -201,6 +333,22 @@ static int sprd_pmic_probe(struct spi_device *spi)
 				       &ddata->irq_chip, &ddata->irq_data);
 	if (ret) {
 		dev_err(&spi->dev, "Failed to add PMIC irq chip %d\n", ret);
+		return ret;
+	}
+
+	ret = devm_register_sys_off_handler(&spi->dev, SYS_OFF_MODE_RESTART,
+					    SYS_OFF_PRIO_HIGH,
+					    sprd_pmic_restart, ddata);
+	if (ret) {
+		dev_err(&spi->dev, "Failed to register restart handler: %d\n", ret);
+		return ret;
+	}
+
+	ret = devm_register_sys_off_handler(&spi->dev, SYS_OFF_MODE_POWER_OFF,
+					    SYS_OFF_PRIO_DEFAULT,
+					    sprd_pmic_poweroff, ddata);
+	if (ret) {
+		dev_err(&spi->dev, "Failed to register poweroff handler: %d\n", ret);
 		return ret;
 	}
 
