@@ -24,6 +24,7 @@ properties:
               - milkv,jupiter
               - spacemit,musepi-pro
               - xunlong,orangepi-rv2
+              - xunlong,orangepi-r2s
           - const: spacemit,k1
 
 additionalProperties: true
