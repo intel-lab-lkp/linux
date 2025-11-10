@@ -54,7 +54,7 @@ static inline void spsc_queue_init(struct spsc_queue *queue)
 
 static inline struct spsc_node *spsc_queue_peek(struct spsc_queue *queue)
 {
-	return queue->head;
+	return READ_ONCE(queue->head);
 }
 
 static inline int spsc_queue_count(struct spsc_queue *queue)
