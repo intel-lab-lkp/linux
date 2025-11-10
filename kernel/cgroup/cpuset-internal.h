@@ -172,8 +172,8 @@ struct cpuset {
 	/* Handle for cpuset.cpus.partition */
 	struct cgroup_file partition_file;
 
-	/* Remote partition silbling list anchored at remote_children */
-	struct list_head remote_sibling;
+	/* Whether cpuset is a remote partition */
+	bool remote_partition;
 
 	/* Used to merge intersecting subsets for generate_sched_domains */
 	struct uf_node node;
