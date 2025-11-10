@@ -1889,8 +1889,10 @@ done:
 	return ret;
 }
 
-static void drm_handle_vblank_events(struct drm_device *dev, unsigned int pipe)
+static void drm_handle_vblank_events(struct drm_vblank_crtc *vblank)
 {
+	struct drm_device *dev = vblank->dev;
+	unsigned int pipe = vblank->pipe;
 	struct drm_crtc *crtc = drm_crtc_from_index(dev, pipe);
 	bool high_prec = false;
 	struct drm_pending_vblank_event *e, *t;
@@ -1911,7 +1913,7 @@ static void drm_handle_vblank_events(struct drm_device *dev, unsigned int pipe)
 			     e->sequence, seq);
 
 		list_del(&e->base.link);
-		_drm_vblank_put(dev, pipe);
+		drm_vblank_put(vblank);
 		send_vblank_event(dev, e, seq, now);
 	}
 
@@ -1973,7 +1975,7 @@ bool drm_handle_vblank(struct drm_device *dev, unsigned int pipe)
 		       vblank->config.offdelay_ms > 0 &&
 		       !atomic_read(&vblank->refcount));
 
-	drm_handle_vblank_events(dev, pipe);
+	drm_handle_vblank_events(vblank);
 	drm_handle_vblank_works(vblank);
 
 	spin_unlock_irqrestore(&dev->event_lock, irqflags);
