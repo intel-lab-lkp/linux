@@ -653,21 +653,30 @@ static int dsa_user_port_attr_set(struct net_device *dev, const void *ctx,
 
 /* Must be called under rcu_read_lock() */
 static int
-dsa_user_vlan_check_for_8021q_uppers(struct net_device *user,
+dsa_user_vlan_check_for_8021q_uppers(struct dsa_port *dp,
 				     const struct switchdev_obj_port_vlan *vlan)
 {
-	struct net_device *upper_dev;
-	struct list_head *iter;
+	struct dsa_switch *ds = dp->ds;
+	struct dsa_port *other_dp;
 
-	netdev_for_each_upper_dev_rcu(user, upper_dev, iter) {
-		u16 vid;
+	dsa_switch_for_each_user_port(other_dp, ds) {
+		struct net_device *user = other_dp->user;
+		struct net_device *upper_dev;
+		struct list_head *iter;
 
-		if (!is_vlan_dev(upper_dev))
+		if (!dsa_port_bridge_same(dp, other_dp))
 			continue;
 
-		vid = vlan_dev_vlan_id(upper_dev);
-		if (vid == vlan->vid)
-			return -EBUSY;
+		netdev_for_each_upper_dev_rcu(user, upper_dev, iter) {
+			u16 vid;
+
+			if (!is_vlan_dev(upper_dev))
+				continue;
+
+			vid = vlan_dev_vlan_id(upper_dev);
+			if (vid == vlan->vid)
+				return -EBUSY;
+		}
 	}
 
 	return 0;
@@ -693,11 +702,11 @@ static int dsa_user_vlan_add(struct net_device *dev,
 	 */
 	if (br_vlan_enabled(dsa_port_bridge_dev_get(dp))) {
 		rcu_read_lock();
-		err = dsa_user_vlan_check_for_8021q_uppers(dev, vlan);
+		err = dsa_user_vlan_check_for_8021q_uppers(dp, vlan);
 		rcu_read_unlock();
 		if (err) {
 			NL_SET_ERR_MSG_MOD(extack,
-					   "Port already has a VLAN upper with this VID");
+					   "This VLAN already has an upper configured on a bridge port");
 			return err;
 		}
 	}
