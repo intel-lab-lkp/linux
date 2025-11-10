@@ -311,6 +311,67 @@ struct kvm_vmx {
 	u64 *pid_table;
 };
 
+/*
+ * 32-bit layout of the legacy instruction information field. This format
+ * supports the 16 legacy GPRs.
+ */
+struct base_insn_info {
+	u32 scale		: 2;	/* Scaling factor */
+	u32 reserved1		: 1;
+	u32 reg1		: 4;	/* First register index */
+	u32 asize		: 3;	/* Address size */
+	u32 is_reg		: 1;	/* 0: memory, 1: register */
+	u32 osize		: 2;	/* Operand size */
+	u32 reserved2		: 2;
+	u32 seg			: 3;	/* Segment register index */
+	u32 index		: 4;	/* Index register index */
+	u32 index_invalid	: 1;	/* 0: valid, 1: invalid */
+	u32 base		: 4;	/* Base register index */
+	u32 base_invalid	: 1;	/* 0: valid, 1: invalid */
+	u32 reg2		: 4;	/* Second register index */
+};
+
+/*
+ * 64-bit layout of the extended instruction information field, which
+ * supports EGPRs.
+ */
+struct ext_insn_info {
+	u64 scale		: 2;	/* Scaling factor */
+	u64 asize		: 2;	/* Address size */
+	u64 is_reg		: 1;	/* 0: memory, 1: register */
+	u64 osize		: 2;	/* Operand size */
+	u64 seg			: 3;	/* Segment register index */
+	u64 index_invalid	: 1;	/* 0: valid, 1: invalid */
+	u64 base_invalid	: 1;	/* 0: valid, 1: invalid */
+	u64 reserved1		: 4;
+	u64 reg1		: 5;	/* First register index */
+	u64 reserved2		: 3;
+	u64 index		: 5;	/* Index register index */
+	u64 reserved3		: 3;
+	u64 base		: 5;	/* Base register index */
+	u64 reserved4		: 3;
+	u64 reg2		: 5;	/* Second register index */
+	u64 reserved5		: 19;
+};
+
+/* Union for accessing either the legacy or extended format. */
+union insn_info {
+	struct base_insn_info base;
+	struct ext_insn_info  ext;
+	u32 word;
+	u64 dword;
+};
+
+/*
+ * Wrapper structure combining the instruction info and a flag indicating
+ * whether the extended layout is in use.
+ */
+struct vmx_insn_info {
+	/* true if using the extended layout */
+	bool extended;
+	union insn_info info;
+};
+
 static __always_inline struct vcpu_vt *to_vt(struct kvm_vcpu *vcpu)
 {
 	return &(container_of(vcpu, struct vcpu_vmx, vcpu)->vt);
