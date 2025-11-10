@@ -188,11 +188,11 @@ drm_crtc_vblank_crtc(struct drm_crtc *crtc)
 }
 EXPORT_SYMBOL(drm_crtc_vblank_crtc);
 
-static void store_vblank(struct drm_device *dev, unsigned int pipe,
+static void store_vblank(struct drm_vblank_crtc *vblank,
 			 u32 vblank_count_inc,
 			 ktime_t t_vblank, u32 last)
 {
-	struct drm_vblank_crtc *vblank = drm_vblank_crtc(dev, pipe);
+	struct drm_device *dev = vblank->dev;
 
 	assert_spin_locked(&dev->vblank_time_lock);
 
@@ -277,7 +277,7 @@ static void drm_reset_vblank_timestamp(struct drm_vblank_crtc *vblank)
 	 * +1 to make sure user will never see the same
 	 * vblank counter value before and after a modeset
 	 */
-	store_vblank(dev, pipe, 1, t_vblank, cur_vblank);
+	store_vblank(vblank, 1, t_vblank, cur_vblank);
 
 	spin_unlock(&dev->vblank_time_lock);
 }
@@ -384,7 +384,7 @@ static void drm_update_vblank_count(struct drm_vblank_crtc *vblank,
 	if (!rc && !in_vblank_irq)
 		t_vblank = 0;
 
-	store_vblank(dev, pipe, diff, t_vblank, cur_vblank);
+	store_vblank(vblank, diff, t_vblank, cur_vblank);
 }
 
 u64 drm_vblank_count(struct drm_vblank_crtc *vblank)
