@@ -2084,8 +2084,8 @@ static int complete_fast_rdmsr(struct kvm_vcpu *vcpu)
 static int complete_fast_rdmsr_imm(struct kvm_vcpu *vcpu)
 {
 	if (!vcpu->run->msr.error)
-		kvm_register_write(vcpu, vcpu->arch.cui_rdmsr_imm_reg,
-				   vcpu->run->msr.data);
+		kvm_gpr_write(vcpu, vcpu->arch.cui_rdmsr_imm_reg,
+			      vcpu->run->msr.data);
 
 	return complete_fast_msr_access(vcpu);
 }
@@ -2139,7 +2139,7 @@ static int __kvm_emulate_rdmsr(struct kvm_vcpu *vcpu, u32 msr, int reg,
 			kvm_rax_write(vcpu, data & -1u);
 			kvm_rdx_write(vcpu, (data >> 32) & -1u);
 		} else {
-			kvm_register_write(vcpu, reg, data);
+			kvm_gpr_write(vcpu, reg, data);
 		}
 	} else {
 		/* MSR read failed? See if we should ask user space */
@@ -2197,7 +2197,7 @@ EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_emulate_wrmsr);
 
 int kvm_emulate_wrmsr_imm(struct kvm_vcpu *vcpu, u32 msr, int reg)
 {
-	return __kvm_emulate_wrmsr(vcpu, msr, kvm_register_read(vcpu, reg));
+	return __kvm_emulate_wrmsr(vcpu, msr, kvm_gpr_read(vcpu, reg));
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_emulate_wrmsr_imm);
 
@@ -2301,7 +2301,7 @@ EXPORT_SYMBOL_FOR_KVM_INTERNAL(handle_fastpath_wrmsr);
 
 fastpath_t handle_fastpath_wrmsr_imm(struct kvm_vcpu *vcpu, u32 msr, int reg)
 {
-	return __handle_fastpath_wrmsr(vcpu, msr, kvm_register_read(vcpu, reg));
+	return __handle_fastpath_wrmsr(vcpu, msr, kvm_gpr_read(vcpu, reg));
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(handle_fastpath_wrmsr_imm);
 
