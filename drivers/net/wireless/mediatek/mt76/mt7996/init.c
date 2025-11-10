@@ -1137,7 +1137,7 @@ static int mt7996_variant_fem_init(struct mt7996_dev *dev)
 		adie_idx = (val & MT_PAD_GPIO_ADIE_SINGLE) ? 0 : 1;
 		adie_comb = u32_get_bits(val, MT_PAD_GPIO_ADIE_COMB_7992);
 	} else {
-		adie_idx = 0;
+		adie_idx = 1;
 		adie_comb = u32_get_bits(val, MT_PAD_GPIO_ADIE_COMB);
 	}
 
