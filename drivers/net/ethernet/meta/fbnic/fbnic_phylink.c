@@ -203,8 +203,6 @@ fbnic_phylink_mac_link_down(struct phylink_config *config, unsigned int mode,
 	struct fbnic_dev *fbd = fbn->fbd;
 
 	fbd->mac->link_down(fbd);
-
-	fbn->link_down_events++;
 }
 
 static void
