@@ -36,9 +36,9 @@ mod private {
 /// #     }, //
 /// # };
 /// fn link_change_notify(dev: &mut Device) {
-///     // read C22 BMCR register
+///     // Read C22 BMCR register.
 ///     dev.read(C22::BMCR);
-///     // read C45 PMA/PMD control 1 register
+///     // Read C45 PMA/PMD control 1 register.
 ///     dev.read(C45::new(Mmd::PMAPMD, 0));
 ///
 ///     // Checks the link status as reported by registers in the C22 namespace
