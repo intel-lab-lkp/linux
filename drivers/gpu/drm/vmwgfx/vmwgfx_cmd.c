@@ -150,6 +150,8 @@ struct vmw_fifo_state *vmw_fifo_create(struct vmw_private *dev_priv)
 	if (unlikely(min >= max)) {
 		drm_warn(&dev_priv->drm,
 			 "FIFO memory is not usable. Driver failed to initialize.");
+		vfree(fifo->static_buffer);
+		kfree(fifo);
 		return ERR_PTR(-ENXIO);
 	}
 
