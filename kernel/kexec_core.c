@@ -1270,6 +1270,22 @@ static ssize_t crash_size_store(struct kobject *kobj,
 }
 static struct kobj_attribute crash_size_attr = __ATTR_RW(crash_size);
 
+static ssize_t crash_cma_ranges_show(struct kobject *kobj,
+				     struct kobj_attribute *attr, char *buf)
+{
+
+	ssize_t len = 0;
+	int i;
+
+	for (i = 0; i < crashk_cma_cnt; ++i) {
+		len += sysfs_emit_at(buf, len, "%08llx-%08llx\n",
+				     crashk_cma_ranges[i].start,
+				     crashk_cma_ranges[i].end);
+	}
+	return len;
+}
+static struct kobj_attribute crash_cma_ranges_attr = __ATTR_RO(crash_cma_ranges);
+
 #ifdef CONFIG_CRASH_HOTPLUG
 static ssize_t crash_elfcorehdr_size_show(struct kobject *kobj,
 			       struct kobj_attribute *attr, char *buf)
@@ -1288,6 +1304,7 @@ static struct attribute *kexec_attrs[] = {
 #ifdef CONFIG_CRASH_DUMP
 	&crash_loaded_attr.attr,
 	&crash_size_attr.attr,
+	&crash_cma_ranges_attr.attr,
 #ifdef CONFIG_CRASH_HOTPLUG
 	&crash_elfcorehdr_size_attr.attr,
 #endif
