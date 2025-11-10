@@ -29,9 +29,8 @@
 #include <linux/seq_file.h>
 
 #include <drm/drm_print.h>
+#include <drm/intel/display_parent_interface.h>
 
-#include "i915_drv.h"
-#include "i915_irq.h"
 #include "intel_atomic.h"
 #include "intel_de.h"
 #include "intel_display_irq.h"
@@ -658,7 +657,6 @@ void intel_crtc_enable_pipe_crc(struct intel_crtc *crtc)
 void intel_crtc_disable_pipe_crc(struct intel_crtc *crtc)
 {
 	struct intel_display *display = to_intel_display(crtc);
-	struct drm_i915_private *dev_priv = to_i915(display->drm);
 	struct intel_pipe_crc *pipe_crc = &crtc->pipe_crc;
 	enum pipe pipe = crtc->pipe;
 
@@ -669,5 +667,5 @@ void intel_crtc_disable_pipe_crc(struct intel_crtc *crtc)
 
 	intel_de_write(display, PIPE_CRC_CTL(display, pipe), 0);
 	intel_de_posting_read(display, PIPE_CRC_CTL(display, pipe));
-	intel_synchronize_irq(dev_priv);
+	display->parent->irq->synchronize(display->drm);
 }

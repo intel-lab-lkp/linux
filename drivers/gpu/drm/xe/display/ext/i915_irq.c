@@ -73,13 +73,3 @@ void gen2_error_init(struct intel_uncore *uncore, struct i915_error_regs regs,
 	intel_uncore_write(uncore, regs.emr, emr_val);
 	intel_uncore_posting_read(uncore, regs.emr);
 }
-
-bool intel_irqs_enabled(struct xe_device *xe)
-{
-	return atomic_read(&xe->irq.enabled);
-}
-
-void intel_synchronize_irq(struct xe_device *xe)
-{
-	synchronize_irq(to_pci_dev(xe->drm.dev)->irq);
-}
