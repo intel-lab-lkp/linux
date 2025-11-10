@@ -188,6 +188,11 @@ drm_crtc_vblank_crtc(struct drm_crtc *crtc)
 }
 EXPORT_SYMBOL(drm_crtc_vblank_crtc);
 
+static struct drm_crtc *drm_crtc_from_vblank(struct drm_vblank_crtc *vblank)
+{
+	return drm_crtc_from_index(vblank->dev, vblank->pipe);
+}
+
 static void store_vblank(struct drm_vblank_crtc *vblank,
 			 u32 vblank_count_inc,
 			 ktime_t t_vblank, u32 last)
@@ -1605,7 +1610,7 @@ static int drm_queue_vblank_event(struct drm_vblank_crtc *vblank,
 	e->event.vbl.user_data = vblwait->request.signal;
 	e->event.vbl.crtc_id = 0;
 	if (drm_core_check_feature(dev, DRIVER_MODESET)) {
-		struct drm_crtc *crtc = drm_crtc_from_index(dev, pipe);
+		struct drm_crtc *crtc = drm_crtc_from_vblank(vblank);
 
 		if (crtc)
 			e->event.vbl.crtc_id = crtc->base.id;
@@ -1855,7 +1860,7 @@ static void drm_handle_vblank_events(struct drm_vblank_crtc *vblank)
 {
 	struct drm_device *dev = vblank->dev;
 	unsigned int pipe = vblank->pipe;
-	struct drm_crtc *crtc = drm_crtc_from_index(dev, pipe);
+	struct drm_crtc *crtc = drm_crtc_from_vblank(vblank);
 	bool high_prec = false;
 	struct drm_pending_vblank_event *e, *t;
 	ktime_t now;
