@@ -1420,7 +1420,7 @@ static void gfs2_evict_inode(struct inode *inode)
 	if (gfs2_rs_active(&ip->i_res))
 		gfs2_rs_deltree(&ip->i_res);
 
-	if (ret && ret != GLR_TRYFAILED && ret != -EROFS)
+	if (ret && ret != -EROFS)
 		fs_warn(sdp, "gfs2_evict_inode: %d\n", ret);
 out:
 	if (gfs2_holder_initialized(&gh))
