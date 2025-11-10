@@ -4850,4 +4850,7 @@ void btrfs_mark_bg_fully_remapped(struct btrfs_block_group *bg,
 	list_add_tail(&bg->bg_list, &fs_info->fully_remapped_bgs);
 
 	spin_unlock(&fs_info->unused_bgs_lock);
+
+	if (btrfs_test_opt(fs_info, DISCARD_ASYNC))
+		btrfs_discard_queue_work(&fs_info->discard_ctl, bg);
 }
