@@ -26,6 +26,9 @@
 #include <linux/if_vlan.h>
 #include <linux/of_net.h>
 #include <linux/phy_fixed.h>
+#include <linux/mfd/syscon.h>
+#include <linux/regmap.h>
+#include <linux/bitfield.h>
 #include <net/ip.h>
 #include <net/ncsi.h>
 
@@ -1833,6 +1836,146 @@ static bool ftgmac100_has_child_node(struct device_node *np, const char *name)
 	return ret;
 }
 
+static int ftgmac100_set_ast2600_rgmii_delay(struct ftgmac100 *priv,
+					     u32 rgmii_tx_delay,
+					     u32 rgmii_rx_delay)
+{
+	struct device *dev = priv->dev;
+	struct device_node *np;
+	u32 rgmii_delay_unit;
+	u32 rx_delay_index;
+	u32 tx_delay_index;
+	struct regmap *scu;
+	int dly_mask;
+	int dly_reg;
+	int mac_id;
+	int ret;
+
+	np = dev->of_node;
+
+	/* Add a warning to notify the existed dts based on AST2600. It is
+	 * recommended to update the dts to add the rx/tx-internal-delay-ps to
+	 * specify the RGMII delay and we recommend using the "rgmii-id" for
+	 * phy-mode property to tell the PHY enables TX/RX internal delay and
+	 * add the corresponding rx/tx-internal-delay-ps properties.
+	 */
+	if (priv->netdev->phydev->interface != PHY_INTERFACE_MODE_RGMII_ID)
+		dev_warn(dev, "Update the phy-mode to 'rgmii-id'.\n");
+
+	scu = syscon_regmap_lookup_by_phandle(np, "aspeed,scu");
+	if (IS_ERR(scu)) {
+		dev_err(dev, "failed to get aspeed,scu");
+		return PTR_ERR(scu);
+	}
+
+	ret = of_property_read_u32(np, "aspeed,rgmii-delay-ps",
+				   &rgmii_delay_unit);
+	if (ret) {
+		dev_err(dev, "failed to get aspeed,rgmii-delay-ps value\n");
+		return -EINVAL;
+	}
+
+	/* According to the register base address to specify the corresponding
+	 * values.
+	 */
+	switch (priv->res->start) {
+	case AST2600_MAC0_BASE_ADDR:
+		mac_id = 0;
+		break;
+	case AST2600_MAC1_BASE_ADDR:
+		mac_id = 1;
+		break;
+	case AST2600_MAC2_BASE_ADDR:
+		mac_id = 2;
+		break;
+	case AST2600_MAC3_BASE_ADDR:
+		mac_id = 3;
+		break;
+	default:
+		dev_err(dev, "Invalid mac base address");
+		return -EINVAL;
+	}
+
+	if (mac_id == 0 || mac_id == 1) {
+		if (rgmii_delay_unit != AST2600_MAC01_CLK_DLY_UNIT) {
+			dev_err(dev, "aspeed,rgmii-delay-ps %u is invalid\n",
+				rgmii_delay_unit);
+			return -EINVAL;
+		}
+		dly_reg = AST2600_MAC01_CLK_DLY;
+	} else {
+		if (rgmii_delay_unit != AST2600_MAC23_CLK_DLY_UNIT) {
+			dev_err(dev, "aspeed,rgmii-delay-ps %u is invalid\n",
+				rgmii_delay_unit);
+			return -EINVAL;
+		}
+		dly_reg = AST2600_MAC23_CLK_DLY;
+	}
+
+	tx_delay_index = DIV_ROUND_CLOSEST(rgmii_tx_delay, rgmii_delay_unit);
+	if (tx_delay_index >= 32) {
+		dev_err(dev, "The %u ps of TX delay is out of range\n",
+			rgmii_tx_delay);
+		return -EINVAL;
+	}
+
+	rx_delay_index = DIV_ROUND_CLOSEST(rgmii_rx_delay, rgmii_delay_unit);
+	if (rx_delay_index >= 32) {
+		dev_err(dev, "The %u ps of RX delay is out of range\n",
+			rgmii_rx_delay);
+		return -EINVAL;
+	}
+
+	/* Due to the hardware design reason, for MAC2/3 on AST2600, the zero
+	 * delay ns on RX is configured by setting value 0x1a.
+	 * List as below:
+	 * 0x1a -> 0   ns, 0x1b -> 0.25 ns, ... , 0x1f -> 1.25 ns,
+	 * 0x00 -> 1.5 ns, 0x01 -> 1.75 ns, ... , 0x19 -> 7.75 ns, 0x1a -> 0 ns
+	 */
+	if (mac_id == 2 || mac_id == 3)
+		rx_delay_index = (AST2600_MAC23_RX_DLY_0_NS + rx_delay_index) &
+				 AST2600_MAC_TX_RX_DLY_MASK;
+
+	if (mac_id == 0 || mac_id == 2) {
+		dly_mask = ASPEED_MAC0_2_TX_DLY | ASPEED_MAC0_2_RX_DLY;
+		tx_delay_index = FIELD_PREP(ASPEED_MAC0_2_TX_DLY, tx_delay_index);
+		rx_delay_index = FIELD_PREP(ASPEED_MAC0_2_RX_DLY, rx_delay_index);
+	} else {
+		dly_mask = ASPEED_MAC1_3_TX_DLY | ASPEED_MAC1_3_RX_DLY;
+		tx_delay_index = FIELD_PREP(ASPEED_MAC1_3_TX_DLY, tx_delay_index);
+		rx_delay_index = FIELD_PREP(ASPEED_MAC1_3_RX_DLY, rx_delay_index);
+	}
+
+	regmap_update_bits(scu, dly_reg, dly_mask, tx_delay_index | rx_delay_index);
+
+	return 0;
+}
+
+static int ftgmac100_set_internal_delay(struct ftgmac100 *priv)
+{
+	struct device_node *np = priv->dev->of_node;
+	u32 rgmii_tx_delay;
+	u32 rgmii_rx_delay;
+	int err;
+
+	if (!(of_device_is_compatible(np, "aspeed,ast2600-mac")))
+		return 0;
+
+	if (of_property_read_u32(np, "tx-internal-delay-ps", &rgmii_tx_delay))
+		/* Default to 0 ps delay */
+		rgmii_tx_delay = 0;
+
+	if (of_property_read_u32(np, "rx-internal-delay-ps", &rgmii_rx_delay))
+		/* Default to 0 ps delay */
+		rgmii_rx_delay = 0;
+
+	err = ftgmac100_set_ast2600_rgmii_delay(priv,
+						rgmii_tx_delay,
+						rgmii_rx_delay);
+
+	return err;
+}
+
 static int ftgmac100_probe(struct platform_device *pdev)
 {
 	struct resource *res;
@@ -2004,6 +2147,11 @@ static int ftgmac100_probe(struct platform_device *pdev)
 		if (of_device_is_compatible(np, "aspeed,ast2600-mac"))
 			iowrite32(FTGMAC100_TM_DEFAULT,
 				  priv->base + FTGMAC100_OFFSET_TM);
+
+		/* Configure RGMII delay if there are the corresponding compatibles */
+		err = ftgmac100_set_internal_delay(priv);
+		if (err)
+			goto err_phy_connect;
 	}
 
 	/* Default ring sizes */
