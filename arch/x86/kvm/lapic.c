@@ -1178,6 +1178,47 @@ void kvm_vcpu_reset_ipi_context(struct kvm_vcpu *vcpu)
 	WRITE_ONCE(vcpu->arch.ipi_context.ipi_time_ns, 0);
 }
 
+/*
+ * Clear IPI context on EOI at receiver side; clear sender's pending
+ * only when matches and is fresh.
+ *
+ * This function implements precise cleanup to avoid stale IPI boosts:
+ * 1) Always clear the receiver's IPI context (unconditional cleanup)
+ * 2) Conditionally clear the sender's pending flag only when:
+ *    - The sender vCPU still exists and is valid
+ *    - The sender's last_ipi_receiver matches this receiver
+ *    - The IPI was sent recently (within ~window)
+ */
+static void kvm_clear_ipi_on_eoi(struct kvm_lapic *apic)
+{
+	struct kvm_vcpu *receiver;
+	int sender_idx;
+	u64 then, now;
+
+	if (unlikely(!READ_ONCE(ipi_tracking_enabled)))
+		return;
+
+	receiver = apic->vcpu;
+	sender_idx = READ_ONCE(receiver->arch.ipi_context.last_ipi_sender);
+
+	/* Step 1: Always clear receiver's IPI context */
+	kvm_vcpu_clear_ipi_context(receiver);
+
+	/* Step 2: Conditionally clear sender's pending flag */
+	if (sender_idx >= 0) {
+		struct kvm_vcpu *sender = kvm_get_vcpu(receiver->kvm, sender_idx);
+
+		if (sender &&
+		    READ_ONCE(sender->arch.ipi_context.last_ipi_receiver) ==
+		    receiver->vcpu_idx) {
+			then = READ_ONCE(sender->arch.ipi_context.ipi_time_ns);
+			now = ktime_get_mono_fast_ns();
+			if (now - then <= ipi_window_ns)
+				WRITE_ONCE(sender->arch.ipi_context.pending_ipi, false);
+		}
+	}
+}
+
 /* Return true if the interrupt can be handled by using *bitmap as index mask
  * for valid destinations in *dst array.
  * Return false if kvm_apic_map_get_dest_lapic did nothing useful.
@@ -1259,6 +1300,10 @@ bool kvm_irq_delivery_to_apic_fast(struct kvm *kvm, struct kvm_lapic *src,
 	struct kvm_lapic **dst = NULL;
 	int i;
 	bool ret;
+	/* Count actual delivered targets to identify a unique recipient. */
+	int targets = 0;
+	int delivered = 0;
+	struct kvm_vcpu *unique = NULL;
 
 	*r = -1;
 
@@ -1280,8 +1325,26 @@ bool kvm_irq_delivery_to_apic_fast(struct kvm *kvm, struct kvm_lapic *src,
 		for_each_set_bit(i, &bitmap, 16) {
 			if (!dst[i])
 				continue;
-			*r += kvm_apic_set_irq(dst[i]->vcpu, irq, dest_map);
+			delivered = kvm_apic_set_irq(dst[i]->vcpu, irq, dest_map);
+			*r += delivered;
+			/* Fast path may still fan out; count delivered targets. */
+			if (delivered > 0) {
+				targets++;
+				unique = dst[i]->vcpu;
+			}
 		}
+
+		/*
+		 * Record unique recipient for IPI-aware boost:
+		 * only for LAPIC-originated APIC_DM_FIXED without
+		 * shorthand, and when exactly one recipient was
+		 * delivered; ignore self-IPI.
+		 */
+		if (src &&
+		    irq->delivery_mode == APIC_DM_FIXED &&
+		    irq->shorthand == APIC_DEST_NOSHORT &&
+		    targets == 1 && unique && unique != src->vcpu)
+			kvm_track_ipi_communication(src->vcpu, unique);
 	}
 
 	rcu_read_unlock();
@@ -1366,6 +1429,13 @@ int kvm_irq_delivery_to_apic(struct kvm *kvm, struct kvm_lapic *src,
 	struct kvm_vcpu *vcpu, *lowest = NULL;
 	unsigned long i, dest_vcpu_bitmap[BITS_TO_LONGS(KVM_MAX_VCPUS)];
 	unsigned int dest_vcpus = 0;
+	/*
+	 * Count actual delivered targets to identify a unique recipient
+	 * for IPI tracking in the slow path.
+	 */
+	int targets = 0;
+	int delivered = 0;
+	struct kvm_vcpu *unique = NULL;
 
 	if (kvm_irq_delivery_to_apic_fast(kvm, src, irq, &r, dest_map))
 		return r;
@@ -1389,7 +1459,13 @@ int kvm_irq_delivery_to_apic(struct kvm *kvm, struct kvm_lapic *src,
 		if (!kvm_lowest_prio_delivery(irq)) {
 			if (r < 0)
 				r = 0;
-			r += kvm_apic_set_irq(vcpu, irq, dest_map);
+			delivered = kvm_apic_set_irq(vcpu, irq, dest_map);
+			r += delivered;
+			/* Slow path can deliver to multiple vCPUs; count them. */
+			if (delivered > 0) {
+				targets++;
+				unique = vcpu;
+			}
 		} else if (kvm_apic_sw_enabled(vcpu->arch.apic)) {
 			if (!vector_hashing_enabled) {
 				if (!lowest)
@@ -1410,8 +1486,28 @@ int kvm_irq_delivery_to_apic(struct kvm *kvm, struct kvm_lapic *src,
 		lowest = kvm_get_vcpu(kvm, idx);
 	}
 
-	if (lowest)
-		r = kvm_apic_set_irq(lowest, irq, dest_map);
+	if (lowest) {
+		delivered = kvm_apic_set_irq(lowest, irq, dest_map);
+		r = delivered;
+		/*
+		 * Lowest-priority / vector-hashing paths ultimately deliver to
+		 * a single vCPU.
+		 */
+		if (delivered > 0) {
+			targets = 1;
+			unique = lowest;
+		}
+	}
+
+	/*
+	 * Record unique recipient for IPI-aware boost only for LAPIC-
+	 * originated APIC_DM_FIXED without shorthand, and when exactly
+	 * one recipient was delivered; ignore self-IPI.
+	 */
+	if (src && irq->delivery_mode == APIC_DM_FIXED &&
+	    irq->shorthand == APIC_DEST_NOSHORT &&
+	    targets == 1 && unique && unique != src->vcpu)
+		kvm_track_ipi_communication(src->vcpu, unique);
 
 	return r;
 }
@@ -1632,6 +1728,7 @@ void kvm_apic_set_eoi_accelerated(struct kvm_vcpu *vcpu, int vector)
 	trace_kvm_eoi(apic, vector);
 
 	kvm_ioapic_send_eoi(apic, vector);
+	kvm_clear_ipi_on_eoi(apic);
 	kvm_make_request(KVM_REQ_EVENT, apic->vcpu);
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_apic_set_eoi_accelerated);
@@ -2424,6 +2521,8 @@ static int kvm_lapic_reg_write(struct kvm_lapic *apic, u32 reg, u32 val)
 
 	case APIC_EOI:
 		apic_set_eoi(apic);
+		/* Precise cleanup for IPI-aware boost */
+		kvm_clear_ipi_on_eoi(apic);
 		break;
 
 	case APIC_LDR:
