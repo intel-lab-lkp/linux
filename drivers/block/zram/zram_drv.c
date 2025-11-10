@@ -823,7 +823,7 @@ static int zram_writeback_slots(struct zram *zram, struct zram_pp_ctl *ctl)
 		atomic64_inc(&zram->stats.pages_stored);
 		spin_lock(&zram->wb_limit_lock);
 		if (zram->wb_limit_enable && zram->bd_wb_limit > 0)
-			zram->bd_wb_limit -=  1UL << (PAGE_SHIFT - 12);
+			zram->bd_wb_limit -= 1;
 		spin_unlock(&zram->wb_limit_lock);
 next:
 		zram_slot_unlock(zram, index);
@@ -1529,9 +1529,8 @@ static ssize_t mm_stat_show(struct device *dev,
 }
 
 #ifdef CONFIG_ZRAM_WRITEBACK
-#define FOUR_K(x) ((x) * (1 << (PAGE_SHIFT - 12)))
-static ssize_t bd_stat_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t bd_stat_show(struct device *dev, struct device_attribute *attr,
+			    char *buf)
 {
 	struct zram *zram = dev_to_zram(dev);
 	ssize_t ret;
@@ -1539,9 +1538,9 @@ static ssize_t bd_stat_show(struct device *dev,
 	down_read(&zram->init_lock);
 	ret = sysfs_emit(buf,
 			"%8llu %8llu %8llu\n",
-			FOUR_K((u64)atomic64_read(&zram->stats.bd_count)),
-			FOUR_K((u64)atomic64_read(&zram->stats.bd_reads)),
-			FOUR_K((u64)atomic64_read(&zram->stats.bd_writes)));
+			atomic64_read(&zram->stats.bd_count),
+			atomic64_read(&zram->stats.bd_reads),
+			atomic64_read(&zram->stats.bd_writes));
 	up_read(&zram->init_lock);
 
 	return ret;

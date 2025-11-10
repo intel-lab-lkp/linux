@@ -211,8 +211,8 @@ reset             	WO	trigger device reset
 mem_used_max      	WO	reset the `mem_used_max` counter (see later)
 mem_limit         	WO	specifies the maximum amount of memory ZRAM can
 				use to store the compressed data
-writeback_limit   	WO	specifies the maximum amount of write IO zram
-				can write out to backing device as 4KB unit
+writeback_limit   	WO	specifies the maximum number of physical pages
+				zram can write out to backing device
 writeback_limit_enable  RW	show and set writeback_limit feature
 comp_algorithm    	RW	show and change the compression algorithm
 algorithm_params	WO	setup compression algorithm parameters
@@ -286,12 +286,9 @@ The bd_stat file represents a device's backing device statistics. It consists of
 a single line of text and contains the following stats separated by whitespace:
 
  ============== =============================================================
- bd_count	size of data written in backing device.
-		Unit: 4K bytes
+ bd_count	the number of physical pages currently stored on backing device
  bd_reads	the number of reads from backing device
-		Unit: 4K bytes
  bd_writes	the number of writes to backing device
-		Unit: 4K bytes
  ============== =============================================================
 
 9) Deactivate
@@ -409,17 +406,17 @@ assigned via /sys/block/zramX/writeback_limit is meaningless.)
 If admin wants to limit writeback as per-day 400M, they could do it
 like below::
 
-	$ MB_SHIFT=20
-	$ 4K_SHIFT=12
-	$ echo $((400<<MB_SHIFT>>4K_SHIFT)) > \
-		/sys/block/zram0/writeback_limit.
+	$ PAGE_SIZE=$(getconf PAGESIZE)
+	$ echo $((419430400/PAGE_SIZE)) > /sys/block/zram0/writeback_limit
 	$ echo 1 > /sys/block/zram0/writeback_limit_enable
+
+Note that writeback operates with physical pages, so please make sure that
+the limit value is in PAGE_SIZE units.
 
 If admins want to allow further write again once the budget is exhausted,
 they could do it like below::
 
-	$ echo $((400<<MB_SHIFT>>4K_SHIFT)) > \
-		/sys/block/zram0/writeback_limit
+	$ echo $((419430400/PAGE_SIZE)) > /sys/block/zram0/writeback_limit
 
 If an admin wants to see the remaining writeback budget since last set::
 
