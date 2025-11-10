@@ -950,17 +950,11 @@ EXPORT_SYMBOL(drm_crtc_vblank_count);
  *
  * This is the legacy version of drm_crtc_vblank_count_and_time().
  */
-static u64 drm_vblank_count_and_time(struct drm_device *dev, unsigned int pipe,
+static u64 drm_vblank_count_and_time(struct drm_vblank_crtc *vblank,
 				     ktime_t *vblanktime)
 {
-	struct drm_vblank_crtc *vblank = drm_vblank_crtc(dev, pipe);
 	u64 vblank_count;
 	unsigned int seq;
-
-	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs)) {
-		*vblanktime = 0;
-		return 0;
-	}
 
 	do {
 		seq = read_seqbegin(&vblank->seqlock);
@@ -993,7 +987,7 @@ static u64 drm_vblank_count_and_time(struct drm_device *dev, unsigned int pipe,
 u64 drm_crtc_vblank_count_and_time(struct drm_crtc *crtc,
 				   ktime_t *vblanktime)
 {
-	return drm_vblank_count_and_time(crtc->dev, drm_crtc_index(crtc),
+	return drm_vblank_count_and_time(drm_crtc_vblank_crtc(crtc),
 					 vblanktime);
 }
 EXPORT_SYMBOL(drm_crtc_vblank_count_and_time);
@@ -1136,18 +1130,18 @@ void drm_crtc_send_vblank_event(struct drm_crtc *crtc,
 				struct drm_pending_vblank_event *e)
 {
 	struct drm_device *dev = crtc->dev;
+	struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(crtc);
 	u64 seq;
-	unsigned int pipe = drm_crtc_index(crtc);
 	ktime_t now;
 
 	if (drm_dev_has_vblank(dev)) {
-		seq = drm_vblank_count_and_time(dev, pipe, &now);
+		seq = drm_vblank_count_and_time(vblank, &now);
 	} else {
 		seq = 0;
 
 		now = ktime_get();
 	}
-	e->pipe = pipe;
+	e->pipe = vblank->pipe;
 	send_vblank_event(dev, e, seq, now);
 }
 EXPORT_SYMBOL(drm_crtc_send_vblank_event);
@@ -1368,7 +1362,7 @@ void drm_crtc_vblank_off(struct drm_crtc *crtc)
 	spin_unlock(&dev->vbl_lock);
 
 	/* Send any queued vblank events, lest the natives grow disquiet */
-	seq = drm_vblank_count_and_time(dev, pipe, &now);
+	seq = drm_vblank_count_and_time(vblank, &now);
 
 	list_for_each_entry_safe(e, t, &dev->vblank_event_list, base.link) {
 		if (e->pipe != pipe)
@@ -1645,7 +1639,7 @@ static int drm_queue_vblank_event(struct drm_vblank_crtc *vblank,
 	if (ret)
 		goto err_unlock;
 
-	seq = drm_vblank_count_and_time(dev, pipe, &now);
+	seq = drm_vblank_count_and_time(vblank, &now);
 
 	drm_dbg_core(dev, "event on vblank count %llu, current %llu, crtc %u\n",
 		     req_seq, seq, pipe);
@@ -1713,7 +1707,7 @@ static void drm_wait_vblank_reply(struct drm_vblank_crtc *vblank,
 	 * to store the seconds. This is safe as we always use monotonic
 	 * timestamps since linux-4.15.
 	 */
-	reply->sequence = drm_vblank_count_and_time(vblank->dev, vblank->pipe, &now);
+	reply->sequence = drm_vblank_count_and_time(vblank, &now);
 	ts = ktime_to_timespec64(now);
 	reply->tval_sec = (u32)ts.tv_sec;
 	reply->tval_usec = ts.tv_nsec / 1000;
@@ -1878,7 +1872,7 @@ static void drm_handle_vblank_events(struct drm_vblank_crtc *vblank)
 
 	assert_spin_locked(&dev->event_lock);
 
-	seq = drm_vblank_count_and_time(dev, pipe, &now);
+	seq = drm_vblank_count_and_time(vblank, &now);
 
 	list_for_each_entry_safe(e, t, &dev->vblank_event_list, base.link) {
 		if (e->pipe != pipe)
@@ -2040,7 +2034,7 @@ int drm_crtc_get_sequence_ioctl(struct drm_device *dev, void *data,
 	else
 		get_seq->active = crtc->enabled;
 	drm_modeset_unlock(&crtc->mutex);
-	get_seq->sequence = drm_vblank_count_and_time(dev, pipe, &now);
+	get_seq->sequence = drm_vblank_count_and_time(vblank, &now);
 	get_seq->sequence_ns = ktime_to_ns(now);
 	if (!vblank_enabled)
 		drm_crtc_vblank_put(crtc);
@@ -2101,7 +2095,7 @@ int drm_crtc_queue_sequence_ioctl(struct drm_device *dev, void *data,
 		goto err_free;
 	}
 
-	seq = drm_vblank_count_and_time(dev, pipe, &now);
+	seq = drm_vblank_count_and_time(vblank, &now);
 	req_seq = queue_seq->sequence;
 
 	if (flags & DRM_CRTC_SEQUENCE_RELATIVE)
