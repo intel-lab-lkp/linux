@@ -372,6 +372,8 @@ struct vmx_insn_info {
 	union insn_info info;
 };
 
+static inline bool vmx_egpr_enabled(struct kvm_vcpu *vcpu __maybe_unused) { return false; }
+
 static inline struct vmx_insn_info vmx_get_insn_info(struct kvm_vcpu *vcpu __maybe_unused)
 {
 	struct vmx_insn_info insn;
