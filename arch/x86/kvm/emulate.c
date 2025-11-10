@@ -4475,6 +4475,19 @@ static const struct opcode opcode_map_0f_38[256] = {
 	N, N, X4(N), X8(N)
 };
 
+/*
+ * REX2 opcode tables.
+ *
+ * REX2-prefixed opcodes mostly follow the legacy tables but differ slightly
+ * for instructions that do not use R/X/B register bits. Initialize the REX2
+ * tables by copying the legacy ones, then mark mismatched rows as undefined.
+ */
+static struct opcode rex2_opcode_table[256]  __ro_after_init;
+static struct opcode rex2_twobyte_table[256] __ro_after_init;
+
+static const struct opcode undefined = D(Undefined);
+static const struct opcode notimpl   = N;
+
 #undef D
 #undef N
 #undef G
@@ -4761,6 +4774,11 @@ done:
 	return rc;
 }
 
+static inline bool emul_egpr_enabled(struct x86_emulate_ctxt *ctxt __maybe_unused)
+{
+	return false;
+}
+
 int x86_decode_insn(struct x86_emulate_ctxt *ctxt, void *insn, int insn_len, int emulation_type)
 {
 	int rc = X86EMUL_CONTINUE;
@@ -4881,7 +4899,24 @@ done_prefixes:
 		ctxt->op_bytes = 8;
 
 	/* Determine opcode byte(s): */
-	if (ctxt->b == 0x0f) {
+	if (ctxt->rex_prefix == REX2_INVALID) {
+		/*
+		 * A REX2 prefix was detected, but the prefix decoder
+		 * found invalid byte sequence.
+		 */
+		opcode = undefined;
+	} else if (ctxt->rex_prefix == REX2_PREFIX) {
+		/* REX2 prefix is only valid when EGPRs are enabled. */
+		if (!emul_egpr_enabled(ctxt)) {
+			opcode = undefined;
+		} else if (ctxt->rex.bits.m0) {
+			ctxt->opcode_len = 2;
+			opcode = rex2_twobyte_table[ctxt->b];
+		} else {
+			ctxt->opcode_len = 1;
+			opcode = rex2_opcode_table[ctxt->b];
+		}
+	} else if (ctxt->b == 0x0f) {
 		/* Escape byte: start two-byte opcode sequence */
 		ctxt->b = insn_fetch(u8, ctxt);
 		if (ctxt->b == 0x38) {
@@ -5525,4 +5560,40 @@ bool emulator_can_use_gpa(struct x86_emulate_ctxt *ctxt)
 		return false;
 
 	return true;
+}
+
+static void undefine_row(struct opcode *row)
+{
+	struct opcode *ptr = row;
+	int i;
+
+	/* Clear 16 entries per row */
+	for (i = 0; i < 0x10; i++, ptr++)
+		*ptr = undefined;
+}
+
+/*
+ * Populate REX2 opcode table:
+ *
+ * REX2-prefixed opcodes mostly reuse the legacy layout, except for those that
+ * neither reference extended register bits nor are newly introduced under the
+ * REX2 prefix. Initialize both single- and two-byte tables by cloning the
+ * legacy versions, then patch the table for some exceptions.
+ */
+void __init kvm_init_rex2_opcode_table(void)
+{
+	/* Copy legacy tables: */
+	memcpy(rex2_opcode_table, opcode_table, sizeof(opcode_table));
+	memcpy(rex2_twobyte_table, twobyte_table, sizeof(twobyte_table));
+
+	/* Undefine reserved opcode ranges: */
+	undefine_row(&rex2_opcode_table[0x40]);
+	undefine_row(&rex2_opcode_table[0x70]);
+	undefine_row(&rex2_opcode_table[0xa0]);
+	undefine_row(&rex2_opcode_table[0xe0]);
+	undefine_row(&rex2_twobyte_table[0x30]);
+	undefine_row(&rex2_twobyte_table[0x80]);
+
+	/* Mark opcode not yet implemented: */
+	rex2_opcode_table[0xa1] = notimpl;
 }

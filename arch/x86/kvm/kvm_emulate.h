@@ -589,4 +589,6 @@ static inline ulong *reg_rmw(struct x86_emulate_ctxt *ctxt, unsigned nr)
 	return reg_write(ctxt, nr);
 }
 
+void __init kvm_init_rex2_opcode_table(void);
+
 #endif /* _ASM_X86_KVM_X86_EMULATE_H */
