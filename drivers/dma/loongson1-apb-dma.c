@@ -336,8 +336,10 @@ ls1x_dma_prep_dma_cyclic(struct dma_chan *dchan, dma_addr_t buf_addr,
 	/* allocate the scatterlist */
 	sg_len = buf_len / period_len;
 	sgl = kmalloc_array(sg_len, sizeof(*sgl), GFP_NOWAIT);
-	if (!sgl)
+	if (!sgl) {
+		ls1x_dma_free_desc(&desc->vd);
 		return NULL;
+	}
 
 	sg_init_table(sgl, sg_len);
 	for (i = 0; i < sg_len; ++i) {
