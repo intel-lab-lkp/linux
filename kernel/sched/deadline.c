@@ -2907,11 +2907,43 @@ void __init init_sched_dl_class(void)
 					GFP_KERNEL, cpu_to_node(i));
 }
 
+/*
+ * This function always returns a non-empty bitmap in @cpus. This is because
+ * if a root domain has reserved bandwidth for DL tasks, the DL bandwidth
+ * check will prevent CPU hotplug from deactivating all CPUs in that domain.
+ */
+static void dl_get_task_effective_cpus(struct task_struct *p, struct cpumask *cpus)
+{
+	const struct cpumask *hk_msk;
+
+	hk_msk = housekeeping_cpumask(HK_TYPE_DOMAIN);
+	if (housekeeping_enabled(HK_TYPE_DOMAIN)) {
+		if (!cpumask_intersects(p->cpus_ptr, hk_msk)) {
+			/*
+			 * CPUs isolated by isolcpu="domain" always belong to
+			 * def_root_domain.
+			 */
+			cpumask_andnot(cpus, cpu_active_mask, hk_msk);
+			return;
+		}
+	}
+
+	/*
+	 * If a root domain holds a DL task, it must have active CPUs. So
+	 * active CPUs can always be found by walking up the task's cpuset
+	 * hierarchy up to the partition root.
+	 */
+	cpuset_cpus_allowed(p, cpus);
+}
+
+/* The caller should hold cpuset_mutex */
 void dl_add_task_root_domain(struct task_struct *p)
 {
 	struct rq_flags rf;
 	struct rq *rq;
 	struct dl_bw *dl_b;
+	unsigned int cpu;
+	struct cpumask msk;
 
 	raw_spin_lock_irqsave(&p->pi_lock, rf.flags);
 	if (!dl_task(p) || dl_entity_is_special(&p->dl)) {
@@ -2919,16 +2951,22 @@ void dl_add_task_root_domain(struct task_struct *p)
 		return;
 	}
 
-	rq = __task_rq_lock(p, &rf);
-
+	/*
+	 * Get an active rq, whose rq->rd traces the correct root
+	 * domain.
+	 * And the caller should hold cpuset_mutex, which gurantees
+	 * the cpu remaining in the cpuset until rq->rd is fetched.
+	 */
+	dl_get_task_effective_cpus(p, &msk);
+	cpu = cpumask_first_and(cpu_active_mask, &msk);
+	BUG_ON(cpu >= nr_cpu_ids);
+	rq = cpu_rq(cpu);
 	dl_b = &rq->rd->dl_bw;
+
 	raw_spin_lock(&dl_b->lock);
-
 	__dl_add(dl_b, p->dl.dl_bw, cpumask_weight(rq->rd->span));
-
 	raw_spin_unlock(&dl_b->lock);
-
-	task_rq_unlock(rq, p, &rf);
+	raw_spin_unlock_irqrestore(&p->pi_lock, rf.flags);
 }
 
 void dl_clear_root_domain(struct root_domain *rd)
