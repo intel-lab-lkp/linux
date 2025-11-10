@@ -741,9 +741,10 @@ __debug_object_init(void *addr, const struct debug_obj_descr *descr, int onstack
 	raw_spin_lock_irqsave(&db->lock, flags);
 
 	obj = lookup_object_or_alloc(addr, db, descr, onstack, false);
-	if (unlikely(!obj)) {
+	if (IS_ERR_OR_NULL(obj)) {
 		raw_spin_unlock_irqrestore(&db->lock, flags);
-		debug_objects_oom();
+		if (!obj)
+			debug_objects_oom();
 		return;
 	}
 
