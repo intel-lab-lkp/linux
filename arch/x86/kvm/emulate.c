@@ -1084,7 +1084,8 @@ static void decode_register_operand(struct x86_emulate_ctxt *ctxt,
 		reg = ctxt->modrm_reg;
 	} else {
 		reg = (ctxt->b & 7) |
-		      (ctxt->rex.bits.b3 * BIT(3));
+		      (ctxt->rex.bits.b3 * BIT(3)) |
+		      (ctxt->rex.bits.b4 * BIT(4));
 	}
 
 	if (ctxt->d & Sse) {
@@ -1124,9 +1125,12 @@ static int decode_modrm(struct x86_emulate_ctxt *ctxt,
 	int rc = X86EMUL_CONTINUE;
 	ulong modrm_ea = 0;
 
-	ctxt->modrm_reg = ctxt->rex.bits.r3 * BIT(3);
-	index_reg       = ctxt->rex.bits.x3 * BIT(3);
-	base_reg        = ctxt->rex.bits.b3 * BIT(3);
+	ctxt->modrm_reg	= (ctxt->rex.bits.r3 * BIT(3)) |
+			  (ctxt->rex.bits.r4 * BIT(4));
+	index_reg	= (ctxt->rex.bits.x3 * BIT(3)) |
+			  (ctxt->rex.bits.x4 * BIT(4));
+	base_reg	= (ctxt->rex.bits.b3 * BIT(3)) |
+			  (ctxt->rex.bits.b4 * BIT(4));
 
 	ctxt->modrm_mod = (ctxt->modrm & 0xc0) >> 6;
 	ctxt->modrm_reg |= (ctxt->modrm & 0x38) >> 3;
