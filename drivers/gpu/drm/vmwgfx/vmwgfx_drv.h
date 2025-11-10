@@ -632,7 +632,11 @@ static inline struct vmw_fpriv *vmw_fpriv(struct drm_file *file_priv)
  */
 static inline bool vmw_is_svga_v3(const struct vmw_private *dev)
 {
+#if defined(CONFIG_ARM64)
+	return true;
+#else
 	return dev->pci_id == VMWGFX_PCI_ID_SVGA3;
+#endif
 }
 
 /*
