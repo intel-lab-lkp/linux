@@ -143,7 +143,7 @@ static irqreturn_t fbnic_mac_msix_intr(int __always_unused irq, void *data)
 		 */
 		if (netif_carrier_ok(fbd->netdev))
 			fbn->link_down_events += link_down_event;
-		phylink_pcs_change(&fbn->phylink_pcs, false);
+		phylink_pcs_change(fbn->pcs, false);
 	}
 
 	return IRQ_HANDLED;
