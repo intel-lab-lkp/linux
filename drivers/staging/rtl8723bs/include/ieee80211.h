@@ -724,9 +724,9 @@ struct rtw_ieee802_11_elems {
 	u8 vht_op_mode_notify_len;
 };
 
-enum ParseRes { ParseOK = 0, ParseUnknown = 1, ParseFailed = -1 };
+enum parse_res { PARSE_OK = 0, PARSE_UNKNOWN = 1, PARSE_FAILED = -1 };
 
-enum ParseRes rtw_ieee802_11_parse_elems(u8 *start, uint len,
+enum parse_res rtw_ieee802_11_parse_elems(u8 *start, uint len,
 				struct rtw_ieee802_11_elems *elems,
 				int show_errors);
 
