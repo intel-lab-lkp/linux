@@ -21,6 +21,7 @@
 #include <linux/shmem_fs.h>
 #include <linux/dax.h>
 #include <linux/ksm.h>
+#include <linux/backing-dev.h>
 
 #include <asm/tlb.h>
 #include <asm/pgalloc.h>
@@ -1845,6 +1846,7 @@ static int collapse_file(struct mm_struct *mm, unsigned long addr,
 	struct page *dst;
 	struct folio *folio, *tmp, *new_folio;
 	pgoff_t index = 0, end = start + HPAGE_PMD_NR;
+	loff_t range_start, range_end;
 	LIST_HEAD(pagelist);
 	XA_STATE_ORDER(xas, &mapping->i_pages, start, HPAGE_PMD_ORDER);
 	int nr_none = 0, result = SCAN_SUCCEED;
@@ -1852,6 +1854,21 @@ static int collapse_file(struct mm_struct *mm, unsigned long addr,
 
 	VM_BUG_ON(!IS_ENABLED(CONFIG_READ_ONLY_THP_FOR_FS) && !is_shmem);
 	VM_BUG_ON(start & (HPAGE_PMD_NR - 1));
+
+	/*
+	 * For MADV_COLLAPSE on regular files, do a synchronous writeback
+	 * to ensure dirty folios are flushed before we attempt collapse.
+	 * This is a best-effort approach to avoid failing on the first
+	 * attempt when freshly-written executable text is still dirty.
+	 */
+	if (!is_shmem && cc && !cc->is_khugepaged && mapping_can_writeback(mapping)) {
+		range_start = (loff_t)start << PAGE_SHIFT;
+		range_end = ((loff_t)end << PAGE_SHIFT) - 1;
+		if (filemap_write_and_wait_range(mapping, range_start, range_end)) {
+			result = SCAN_FAIL;
+			goto out;
+		}
+	}
 
 	result = alloc_charge_folio(&new_folio, mm, cc);
 	if (result != SCAN_SUCCEED)
