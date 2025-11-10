@@ -2845,7 +2845,7 @@ static __init int kvm_arm_init(void)
 
 	err = kvm_sys_reg_table_init();
 	if (err) {
-		kvm_info("Error initializing system register tables");
+		kvm_info("Error initializing system register tables\n");
 		return err;
 	}
 
