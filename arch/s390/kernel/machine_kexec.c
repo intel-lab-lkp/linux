@@ -77,7 +77,7 @@ static void __do_machine_kdump(void *data)
  * Start kdump: create a LGR log entry, store status of all CPUs and
  * branch to __do_machine_kdump.
  */
-static noinline void __machine_kdump(void *image)
+static noinline void __noreturn __machine_kdump(void *image)
 {
 	struct mcesa *mcesa;
 	union ctlreg2 cr2_old, cr2_new;
