@@ -59,6 +59,8 @@ properties:
       - const: phy
       - const: common
 
+  vdda-aux-supply: true
+
   vdda-phy-supply: true
 
   vdda-pll-supply: true
