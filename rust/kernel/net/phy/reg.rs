@@ -25,7 +25,16 @@ mod private {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```
+/// # use kernel::net::phy::{
+/// #     self,
+/// #     Device,
+/// #     reg::{
+/// #         C22,
+/// #         C45,
+/// #         Mmd, //
+/// #     }, //
+/// # };
 /// fn link_change_notify(dev: &mut Device) {
 ///     // read C22 BMCR register
 ///     dev.read(C22::BMCR);
