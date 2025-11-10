@@ -4,6 +4,7 @@
 #define __KVM_FPU_H_
 
 #include <asm/fpu/api.h>
+#include <asm/kvm_vcpu_regs.h>
 
 typedef u32		__attribute__((vector_size(16))) sse128_t;
 #define __sse128_u	union { sse128_t vec; u64 as_u64[2]; u32 as_u32[4]; }
@@ -136,5 +137,10 @@ static inline void kvm_write_mmx_reg(int reg, const u64 *data)
 	_kvm_write_mmx_reg(reg, data);
 	kvm_fpu_put();
 }
+
+#ifdef CONFIG_X86_64
+static inline unsigned long kvm_read_egpr(int reg) { return 0; }
+static inline void kvm_write_egpr(int reg, unsigned long data) { }
+#endif
 
 #endif

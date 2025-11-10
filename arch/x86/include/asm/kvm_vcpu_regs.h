@@ -20,6 +20,22 @@
 #define __VCPU_REGS_R13 13
 #define __VCPU_REGS_R14 14
 #define __VCPU_REGS_R15 15
+#define __VCPU_XREG_R16 16
+#define __VCPU_XREG_R17 17
+#define __VCPU_XREG_R18 18
+#define __VCPU_XREG_R19 19
+#define __VCPU_XREG_R20 20
+#define __VCPU_XREG_R21 21
+#define __VCPU_XREG_R22 22
+#define __VCPU_XREG_R23 23
+#define __VCPU_XREG_R24 24
+#define __VCPU_XREG_R25 25
+#define __VCPU_XREG_R26 26
+#define __VCPU_XREG_R27 27
+#define __VCPU_XREG_R28 28
+#define __VCPU_XREG_R29 29
+#define __VCPU_XREG_R30 30
+#define __VCPU_XREG_R31 31
 #endif
 
 #endif /* _ASM_X86_KVM_VCPU_REGS_H */

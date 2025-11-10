@@ -400,9 +400,49 @@ static inline bool vcpu_match_mmio_gpa(struct kvm_vcpu *vcpu, gpa_t gpa)
 	return false;
 }
 
+#ifdef CONFIG_X86_64
+static inline unsigned long _kvm_gpr_read(struct kvm_vcpu *vcpu, int reg)
+{
+	switch (reg) {
+	case VCPU_REGS_RAX ... VCPU_REGS_R15:
+		return kvm_register_read_raw(vcpu, reg);
+	case VCPU_XREG_R16 ... VCPU_XREG_R31:
+		return kvm_read_egpr(reg);
+	default:
+		WARN_ON_ONCE(1);
+	}
+
+	return 0;
+}
+
+static inline void _kvm_gpr_write(struct kvm_vcpu *vcpu, int reg, unsigned long val)
+{
+	switch (reg) {
+	case VCPU_REGS_RAX ... VCPU_REGS_R15:
+		kvm_register_write_raw(vcpu, reg, val);
+		break;
+	case VCPU_XREG_R16 ... VCPU_XREG_R31:
+		kvm_write_egpr(reg, val);
+		break;
+	default:
+		WARN_ON_ONCE(1);
+	}
+}
+#else
+static inline unsigned long _kvm_gpr_read(struct kvm_vcpu *vcpu, int reg)
+{
+	return kvm_register_read_raw(vcpu, reg);
+}
+
+static inline void _kvm_gpr_write(struct kvm_vcpu *vcpu, int reg, unsigned long val)
+{
+	kvm_register_write_raw(vcpu, reg, val);
+}
+#endif
+
 static inline unsigned long kvm_gpr_read(struct kvm_vcpu *vcpu, int reg)
 {
-	unsigned long val = kvm_register_read_raw(vcpu, reg);
+	unsigned long val = _kvm_gpr_read(vcpu, reg);
 
 	return is_64_bit_mode(vcpu) ? val : (u32)val;
 }
@@ -411,7 +451,7 @@ static inline void kvm_gpr_write(struct kvm_vcpu *vcpu, int reg, unsigned long v
 {
 	if (!is_64_bit_mode(vcpu))
 		val = (u32)val;
-	return kvm_register_write_raw(vcpu, reg, val);
+	_kvm_gpr_write(vcpu, reg, val);
 }
 
 static inline bool kvm_check_has_quirk(struct kvm *kvm, u64 quirk)
