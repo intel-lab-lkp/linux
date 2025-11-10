@@ -372,6 +372,19 @@ struct vmx_insn_info {
 	union insn_info info;
 };
 
+static inline struct vmx_insn_info vmx_get_insn_info(struct kvm_vcpu *vcpu __maybe_unused)
+{
+	struct vmx_insn_info insn;
+
+	insn.extended  = false;
+	insn.info.word = vmcs_read32(VMX_INSTRUCTION_INFO);
+
+	return insn;
+}
+
+#define insn_attr(insn, attr) \
+	((insn).extended ? (insn).info.ext.attr : (insn).info.base.attr)
+
 static __always_inline struct vcpu_vt *to_vt(struct kvm_vcpu *vcpu)
 {
 	return &(container_of(vcpu, struct vcpu_vmx, vcpu)->vt);
@@ -779,16 +792,6 @@ static inline bool vmx_guest_state_valid(struct kvm_vcpu *vcpu)
 }
 
 void dump_vmcs(struct kvm_vcpu *vcpu);
-
-static inline int vmx_get_instr_info_reg(u32 vmx_instr_info)
-{
-	return (vmx_instr_info >> 3) & 0xf;
-}
-
-static inline int vmx_get_instr_info_reg2(u32 vmx_instr_info)
-{
-	return (vmx_instr_info >> 28) & 0xf;
-}
 
 static inline bool vmx_can_use_ipiv(struct kvm_vcpu *vcpu)
 {

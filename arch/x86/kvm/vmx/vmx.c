@@ -5925,29 +5925,27 @@ static int handle_monitor_trap(struct kvm_vcpu *vcpu)
 
 static int handle_invpcid(struct kvm_vcpu *vcpu)
 {
-	u32 vmx_instruction_info;
+	struct vmx_insn_info info;
 	unsigned long type;
 	gva_t gva;
 	struct {
 		u64 pcid;
 		u64 gla;
 	} operand;
-	int gpr_index;
 
 	if (!guest_cpu_cap_has(vcpu, X86_FEATURE_INVPCID)) {
 		kvm_queue_exception(vcpu, UD_VECTOR);
 		return 1;
 	}
 
-	vmx_instruction_info = vmcs_read32(VMX_INSTRUCTION_INFO);
-	gpr_index = vmx_get_instr_info_reg2(vmx_instruction_info);
-	type = kvm_gpr_read(vcpu, gpr_index);
+	info = vmx_get_insn_info(vcpu);
+	type = kvm_gpr_read(vcpu, insn_attr(info, reg2));
 
 	/* According to the Intel instruction reference, the memory operand
 	 * is read even if it isn't needed (e.g., for type==all)
 	 */
 	if (get_vmx_mem_address(vcpu, vmx_get_exit_qual(vcpu),
-				vmx_instruction_info, false,
+				info, false,
 				sizeof(operand), &gva))
 		return 1;
 
@@ -6084,7 +6082,9 @@ static int handle_notify(struct kvm_vcpu *vcpu)
 
 static int vmx_get_msr_imm_reg(struct kvm_vcpu *vcpu)
 {
-	return vmx_get_instr_info_reg(vmcs_read32(VMX_INSTRUCTION_INFO));
+	struct vmx_insn_info info = vmx_get_insn_info(vcpu);
+
+	return insn_attr(info, reg1);
 }
 
 static int handle_rdmsr_imm(struct kvm_vcpu *vcpu)
