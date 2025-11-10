@@ -3809,15 +3809,16 @@ int pci_rebar_set_size(struct pci_dev *pdev, int bar, int size)
 /**
  * pci_enable_atomic_ops_to_root - enable AtomicOp requests to root port
  * @dev: the PCI device
- * @cap_mask: mask of desired AtomicOp sizes, including one or more of:
- *	PCI_EXP_DEVCAP2_ATOMIC_COMP32
- *	PCI_EXP_DEVCAP2_ATOMIC_COMP64
- *	PCI_EXP_DEVCAP2_ATOMIC_COMP128
+ * @cap_mask: root port must support combinations of AtomicOp sizes
+ *	PCI_EXP_ROOT_PORT_ATOMIC_BASE
+ *	PCI_EXP_ROOT_PORT_ATOMIC_FULL
  *
  * Return 0 if all upstream bridges support AtomicOp routing, egress
  * blocking is disabled on all upstream ports, and the root port supports
- * the requested completion capabilities (32-bit, 64-bit and/or 128-bit
- * AtomicOp completion), or negative otherwise.
+ * all the requested completion capabilities (BASE: 32-bit, 64-bit or
+ * FULL: 32/64- and 128-bit AtomicOp completion). In that case enable the
+ * device to send AtomicOp requests. Otherwise, return negative and leave
+ * the enablement in the PCI config space untouched.
  */
 int pci_enable_atomic_ops_to_root(struct pci_dev *dev, u32 cap_mask)
 {

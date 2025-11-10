@@ -663,6 +663,14 @@
 #define  PCI_EXP_DEVCAP2_ATOMIC_COMP32	0x00000080 /* 32b AtomicOp completion */
 #define  PCI_EXP_DEVCAP2_ATOMIC_COMP64	0x00000100 /* 64b AtomicOp completion */
 #define  PCI_EXP_DEVCAP2_ATOMIC_COMP128	0x00000200 /* 128b AtomicOp completion */
+/* PCIe spec 7.0 6.15.3.1: Root ports may support one of 2 sets of Atomic Ops */
+#define  PCI_EXP_ROOT_PORT_ATOMIC_BASE		\
+	(PCI_EXP_DEVCAP2_ATOMIC_COMP32 |	\
+	 PCI_EXP_DEVCAP2_ATOMIC_COMP64)
+#define  PCI_EXP_ROOT_PORT_ATOMIC_FULL		\
+	(PCI_EXP_DEVCAP2_ATOMIC_COMP32 |	\
+	 PCI_EXP_DEVCAP2_ATOMIC_COMP64 |	\
+	 PCI_EXP_DEVCAP2_ATOMIC_COMP128)
 #define  PCI_EXP_DEVCAP2_LTR		0x00000800 /* Latency tolerance reporting */
 #define  PCI_EXP_DEVCAP2_TPH_COMP_MASK	0x00003000 /* TPH completer support */
 #define  PCI_EXP_DEVCAP2_OBFF_MASK	0x000c0000 /* OBFF support mechanism */
