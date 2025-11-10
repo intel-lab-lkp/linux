@@ -4787,9 +4787,14 @@ done:
 	return rc;
 }
 
-static inline bool emul_egpr_enabled(struct x86_emulate_ctxt *ctxt __maybe_unused)
+/* EGPR availability is controlled by the APX feature bit in XCR0. */
+static inline bool emul_egpr_enabled(struct x86_emulate_ctxt *ctxt)
 {
-	return false;
+	u64 xcr0;
+
+	ctxt->ops->get_xcr(ctxt, XCR_XFEATURE_ENABLED_MASK, &xcr0);
+
+	return xcr0 & XFEATURE_MASK_APX;
 }
 
 int x86_decode_insn(struct x86_emulate_ctxt *ctxt, void *insn, int insn_len, int emulation_type)

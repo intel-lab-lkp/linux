@@ -372,7 +372,14 @@ struct vmx_insn_info {
 	union insn_info info;
 };
 
-static inline bool vmx_egpr_enabled(struct kvm_vcpu *vcpu __maybe_unused) { return false; }
+/*
+ * EGPR availability is controlled by the APX xfeature bit in XCR0 and is
+ * only accessible in 64-bit mode.
+ */
+static inline bool vmx_egpr_enabled(struct kvm_vcpu *vcpu)
+{
+	return vcpu->arch.xcr0 & XFEATURE_MASK_APX && is_64_bit_mode(vcpu);
+}
 
 static inline struct vmx_insn_info vmx_get_insn_info(struct kvm_vcpu *vcpu)
 {
