@@ -30,74 +30,71 @@
 #include "intel_pmdemand.h"
 #include "intel_psr.h"
 #include "intel_psr_regs.h"
-#include "intel_uncore.h"
 
-static void gen2_irq_reset(struct intel_uncore *uncore, struct i915_irq_regs regs)
+static void irq_reset(struct intel_display *display, struct i915_irq_regs regs)
 {
-	intel_uncore_write(uncore, regs.imr, 0xffffffff);
-	intel_uncore_posting_read(uncore, regs.imr);
+	intel_de_write(display, regs.imr, 0xffffffff);
+	intel_de_posting_read(display, regs.imr);
 
-	intel_uncore_write(uncore, regs.ier, 0);
+	intel_de_write(display, regs.ier, 0);
 
 	/* IIR can theoretically queue up two events. Be paranoid. */
-	intel_uncore_write(uncore, regs.iir, 0xffffffff);
-	intel_uncore_posting_read(uncore, regs.iir);
-	intel_uncore_write(uncore, regs.iir, 0xffffffff);
-	intel_uncore_posting_read(uncore, regs.iir);
+	intel_de_write(display, regs.iir, 0xffffffff);
+	intel_de_posting_read(display, regs.iir);
+	intel_de_write(display, regs.iir, 0xffffffff);
+	intel_de_posting_read(display, regs.iir);
 }
 
 /*
  * We should clear IMR at preinstall/uninstall, and just check at postinstall.
  */
-static void gen2_assert_iir_is_zero(struct intel_uncore *uncore, i915_reg_t reg)
+static void assert_iir_is_zero(struct intel_display *display, i915_reg_t reg)
 {
-	u32 val = intel_uncore_read(uncore, reg);
+	u32 val = intel_de_read(display, reg);
 
 	if (val == 0)
 		return;
 
-#if 0	/* FIXME */
-	drm_WARN(&uncore->i915->drm, 1,
+	drm_WARN(display->drm, 1,
 		 "Interrupt register 0x%x is not zero: 0x%08x\n",
 		 i915_mmio_reg_offset(reg), val);
-#endif
-	intel_uncore_write(uncore, reg, 0xffffffff);
-	intel_uncore_posting_read(uncore, reg);
-	intel_uncore_write(uncore, reg, 0xffffffff);
-	intel_uncore_posting_read(uncore, reg);
+	intel_de_write(display, reg, 0xffffffff);
+	intel_de_posting_read(display, reg);
+	intel_de_write(display, reg, 0xffffffff);
+	intel_de_posting_read(display, reg);
 }
 
-static void gen2_irq_init(struct intel_uncore *uncore, struct i915_irq_regs regs,
-			  u32 imr_val, u32 ier_val)
+static void irq_init(struct intel_display *display, struct i915_irq_regs regs,
+		     u32 imr_val, u32 ier_val)
 {
-	gen2_assert_iir_is_zero(uncore, regs.iir);
+	assert_iir_is_zero(display, regs.iir);
 
-	intel_uncore_write(uncore, regs.ier, ier_val);
-	intel_uncore_write(uncore, regs.imr, imr_val);
-	intel_uncore_posting_read(uncore, regs.imr);
+	intel_de_write(display, regs.ier, ier_val);
+	intel_de_write(display, regs.imr, imr_val);
+	intel_de_posting_read(display, regs.imr);
 }
 
-static void gen2_error_reset(struct intel_uncore *uncore, struct i915_error_regs regs)
+static void error_reset(struct intel_display *display, struct i915_error_regs regs)
 {
-	intel_uncore_write(uncore, regs.emr, 0xffffffff);
-	intel_uncore_posting_read(uncore, regs.emr);
+	intel_de_write(display, regs.emr, 0xffffffff);
+	intel_de_posting_read(display, regs.emr);
 
-	intel_uncore_write(uncore, regs.eir, 0xffffffff);
-	intel_uncore_posting_read(uncore, regs.eir);
-	intel_uncore_write(uncore, regs.eir, 0xffffffff);
-	intel_uncore_posting_read(uncore, regs.eir);
+	intel_de_write(display, regs.eir, 0xffffffff);
+	intel_de_posting_read(display, regs.eir);
+	intel_de_write(display, regs.eir, 0xffffffff);
+	intel_de_posting_read(display, regs.eir);
 }
 
-static void gen2_error_init(struct intel_uncore *uncore, struct i915_error_regs regs,
-			    u32 emr_val)
+static void error_init(struct intel_display *display, struct i915_error_regs regs,
+		       u32 emr_val)
 {
-	intel_uncore_write(uncore, regs.eir, 0xffffffff);
-	intel_uncore_posting_read(uncore, regs.eir);
-	intel_uncore_write(uncore, regs.eir, 0xffffffff);
-	intel_uncore_posting_read(uncore, regs.eir);
+	intel_de_write(display, regs.eir, 0xffffffff);
+	intel_de_posting_read(display, regs.eir);
+	intel_de_write(display, regs.eir, 0xffffffff);
+	intel_de_posting_read(display, regs.eir);
 
-	intel_uncore_write(uncore, regs.emr, emr_val);
-	intel_uncore_posting_read(uncore, regs.emr);
+	intel_de_write(display, regs.emr, emr_val);
+	intel_de_posting_read(display, regs.emr);
 }
 
 static void
@@ -108,7 +105,7 @@ intel_display_irq_regs_init(struct intel_display *display, struct i915_irq_regs 
 	intel_dmc_wl_get(display, regs.ier);
 	intel_dmc_wl_get(display, regs.iir);
 
-	gen2_irq_init(to_intel_uncore(display->drm), regs, imr_val, ier_val);
+	irq_init(display, regs, imr_val, ier_val);
 
 	intel_dmc_wl_put(display, regs.iir);
 	intel_dmc_wl_put(display, regs.ier);
@@ -122,7 +119,7 @@ intel_display_irq_regs_reset(struct intel_display *display, struct i915_irq_regs
 	intel_dmc_wl_get(display, regs.ier);
 	intel_dmc_wl_get(display, regs.iir);
 
-	gen2_irq_reset(to_intel_uncore(display->drm), regs);
+	irq_reset(display, regs);
 
 	intel_dmc_wl_put(display, regs.iir);
 	intel_dmc_wl_put(display, regs.ier);
@@ -134,7 +131,7 @@ intel_display_irq_regs_assert_irr_is_zero(struct intel_display *display, i915_re
 {
 	intel_dmc_wl_get(display, reg);
 
-	gen2_assert_iir_is_zero(to_intel_uncore(display->drm), reg);
+	assert_iir_is_zero(display, reg);
 
 	intel_dmc_wl_put(display, reg);
 }
@@ -1979,8 +1976,7 @@ static void _vlv_display_irq_reset(struct intel_display *display)
 	else
 		intel_de_write(display, DPINVGTT, DPINVGTT_STATUS_MASK_VLV);
 
-	gen2_error_reset(to_intel_uncore(display->drm),
-			 VLV_ERROR_REGS);
+	error_reset(display, VLV_ERROR_REGS);
 
 	i915_hotplug_interrupt_update_locked(display, 0xffffffff, 0);
 	intel_de_rmw(display, PORT_HOTPLUG_STAT(display), 0, 0);
@@ -2075,8 +2071,7 @@ static void _vlv_display_irq_postinstall(struct intel_display *display)
 			       DPINVGTT_STATUS_MASK_VLV |
 			       DPINVGTT_EN_MASK_VLV);
 
-	gen2_error_init(to_intel_uncore(display->drm),
-			VLV_ERROR_REGS, ~vlv_error_mask());
+	error_init(display, VLV_ERROR_REGS, ~vlv_error_mask());
 
 	pipestat_mask = PIPE_CRC_DONE_INTERRUPT_STATUS;
 
@@ -2115,7 +2110,7 @@ static void ibx_display_irq_reset(struct intel_display *display)
 	if (HAS_PCH_NOP(display))
 		return;
 
-	gen2_irq_reset(to_intel_uncore(display->drm), SDE_IRQ_REGS);
+	irq_reset(display, SDE_IRQ_REGS);
 
 	if (HAS_PCH_CPT(display) || HAS_PCH_LPT(display))
 		intel_de_write(display, SERR_INT, 0xffffffff);
@@ -2123,9 +2118,7 @@ static void ibx_display_irq_reset(struct intel_display *display)
 
 void ilk_display_irq_reset(struct intel_display *display)
 {
-	struct intel_uncore *uncore = to_intel_uncore(display->drm);
-
-	gen2_irq_reset(uncore, DE_IRQ_REGS);
+	irq_reset(display, DE_IRQ_REGS);
 	display->irq.ilk_de_imr_mask = ~0u;
 
 	if (DISPLAY_VER(display) == 7)
