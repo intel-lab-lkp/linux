@@ -12,4 +12,8 @@
 #define __CXL_PRIVATE_H__
 int devm_cxl_add_endpoint(struct device *host, struct cxl_memdev *cxlmd,
 			  struct cxl_dport *parent_dport);
+
+struct cxl_cachedev *cxl_cachedev_alloc(struct cxl_dev_state *cxlds);
+struct cxl_cachedev *devm_cxl_cachedev_add_or_reset(struct device *host,
+						    struct cxl_cachedev *cxlcd);
 #endif /* __CXL_PRIVATE_H__ */
