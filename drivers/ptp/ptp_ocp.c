@@ -4866,16 +4866,6 @@ ptp_ocp_i2c_notifier_call(struct notifier_block *nb,
 {
 	struct device *dev, *child = data;
 	struct ptp_ocp *bp;
-	bool add;
-
-	switch (action) {
-	case BUS_NOTIFY_ADD_DEVICE:
-	case BUS_NOTIFY_DEL_DEVICE:
-		add = action == BUS_NOTIFY_ADD_DEVICE;
-		break;
-	default:
-		return 0;
-	}
 
 	if (!i2c_verify_adapter(child))
 		return 0;
@@ -4888,10 +4878,17 @@ ptp_ocp_i2c_notifier_call(struct notifier_block *nb,
 
 found:
 	bp = dev_get_drvdata(dev);
-	if (add)
+
+	switch (action) {
+	case BUS_NOTIFY_ADD_DEVICE:
 		ptp_ocp_symlink(bp, child, "i2c");
-	else
+		break;
+	case BUS_NOTIFY_DEL_DEVICE:
 		sysfs_remove_link(&bp->dev.kobj, "i2c");
+		break;
+	default:
+		return 0;
+	}
 
 	return 0;
 }
