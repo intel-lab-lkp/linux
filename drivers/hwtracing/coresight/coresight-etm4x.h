@@ -802,6 +802,7 @@ enum etm_impdef_type {
  * @ss_ctrl:	Controls the corresponding single-shot comparator resource.
  * @ss_status:	The status of the corresponding single-shot comparator.
  * @ss_pe_cmp:	Selects the PE comparator inputs for Single-shot control.
+ * @retain_ss_status: Retains single-shot status.
  * @addr_idx:	Address comparator index selector.
  * @addr_val:	Value for address comparator.
  * @addr_acc:	Address comparator access type.
@@ -846,6 +847,7 @@ struct etmv4_config {
 	u32				ss_ctrl[ETM_MAX_SS_CMP];
 	u32				ss_status[ETM_MAX_SS_CMP];
 	u32				ss_pe_cmp[ETM_MAX_SS_CMP];
+	u8				retain_ss_status;
 	u8				addr_idx;
 	u64				addr_val[ETM_MAX_SINGLE_ADDR_CMP];
 	u64				addr_acc[ETM_MAX_SINGLE_ADDR_CMP];
