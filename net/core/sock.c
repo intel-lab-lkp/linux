@@ -607,14 +607,15 @@ INDIRECT_CALLABLE_DECLARE(struct dst_entry *ipv4_dst_check(struct dst_entry *,
 struct dst_entry *__sk_dst_check(struct sock *sk, u32 cookie)
 {
 	struct dst_entry *dst = __sk_dst_get(sk);
+	struct dst_entry *old_dst;
 
 	if (dst && READ_ONCE(dst->obsolete) &&
 	    INDIRECT_CALL_INET(dst->ops->check, ip6_dst_check, ipv4_dst_check,
 			       dst, cookie) == NULL) {
 		sk_tx_queue_clear(sk);
 		WRITE_ONCE(sk->sk_dst_pending_confirm, 0);
-		RCU_INIT_POINTER(sk->sk_dst_cache, NULL);
-		dst_release(dst);
+		old_dst = unrcu_pointer(xchg(&sk->sk_dst_cache, RCU_INITIALIZER(NULL)));
+		dst_release(old_dst);
 		return NULL;
 	}
 
