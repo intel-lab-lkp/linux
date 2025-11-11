@@ -12,7 +12,9 @@ maintainers:
 
 properties:
   compatible:
-    const: ti,ina3221
+    enum:
+      - silergy,sq52210
+      - ti,ina3221
 
   reg:
     maxItems: 1
@@ -76,6 +78,18 @@ patternProperties:
           triggering the critical alert pin, then this property can be used
           exclude specific channels from the summation control function.
         type: boolean
+
+      alert-type:
+        description: |
+          The SQ52210 features a configurable alert function with four
+          types: SUL, BOL, BUL, and POL. Each channel can be configured to
+          select one of these types to enable the alert function. This alert
+          function can operate concurrently with both Critical and Warning
+          functions.
+
+          The configuration must use numerical values 0 through 3,
+          0 corresponds to SUL, 1 to BOL, 2 to BUL, and 3 to POL.
+        enum: [ 0, 1, 2, 3 ]
 
     required:
       - reg
