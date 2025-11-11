@@ -35,6 +35,7 @@
 #include <linux/device.h>
 #include <linux/hid.h>
 #include <linux/module.h>
+#include <linux/notifier.h>
 #include <linux/slab.h>
 #include <linux/input/mt.h>
 #include <linux/jiffies.h>
@@ -76,6 +77,7 @@ MODULE_LICENSE("GPL");
 #define MT_QUIRK_DISABLE_WAKEUP		BIT(21)
 #define MT_QUIRK_ORIENTATION_INVERT	BIT(22)
 #define MT_QUIRK_APPLE_TOUCHBAR		BIT(23)
+#define MT_QUIRK_REGISTER_LID_NOTIFIER BIT(24)
 
 #define MT_INPUTMODE_TOUCHSCREEN	0x02
 #define MT_INPUTMODE_TOUCHPAD		0x03
@@ -183,6 +185,8 @@ struct mt_device {
 	struct list_head reports;
 };
 
+static struct hid_device *lid_notify_hdev;
+
 static void mt_post_parse_default_settings(struct mt_device *td,
 					   struct mt_application *app);
 static void mt_post_parse(struct mt_device *td, struct mt_application *app);
@@ -227,6 +231,7 @@ static void mt_post_parse(struct mt_device *td, struct mt_application *app);
 #define MT_CLS_SMART_TECH			0x0113
 #define MT_CLS_APPLE_TOUCHBAR			0x0114
 #define MT_CLS_SIS				0x0457
+#define MT_CLS_REGISTER_LID_NOTIFIER 0x0115
 
 #define MT_DEFAULT_MAXCONTACT	10
 #define MT_MAX_MAXCONTACT	250
@@ -327,7 +332,9 @@ static const struct mt_class mt_classes[] = {
 			MT_QUIRK_CONTACT_CNT_ACCURATE |
 			MT_QUIRK_WIN8_PTP_BUTTONS,
 		.export_all_inputs = true },
-
+	{ .name = MT_CLS_REGISTER_LID_NOTIFIER,
+		.quirks = MT_QUIRK_REGISTER_LID_NOTIFIER,
+		.export_all_inputs = true },
 	/*
 	 * vendor specific classes
 	 */
@@ -1840,6 +1847,20 @@ static void mt_expired_timeout(struct timer_list *t)
 	clear_bit_unlock(MT_IO_FLAGS_RUNNING, &td->mt_io_flags);
 }
 
+static int mt_input_notifier(struct notifier_block *nb, unsigned long action, void *dev)
+{
+	if (action)
+		mt_set_modes(lid_notify_hdev, HID_LATENCY_NORMAL, TOUCHPAD_REPORT_NONE);
+	else if (!action)
+		mt_set_modes(lid_notify_hdev, HID_LATENCY_NORMAL, TOUCHPAD_REPORT_ALL);
+
+	return 0;
+}
+
+static struct notifier_block mt_lid_notifier_block = {
+	.notifier_call = mt_input_notifier
+};
+
 static int mt_probe(struct hid_device *hdev, const struct hid_device_id *id)
 {
 	int ret, i;
@@ -1919,6 +1940,11 @@ static int mt_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 	if (hdev->vendor == USB_VENDOR_ID_SIS_TOUCH)
 		hdev->quirks |= HID_QUIRK_NOGET;
+
+	if (mtclass->quirks & MT_CLS_REGISTER_LID_NOTIFIER) {
+		lid_notify_hdev = hdev;
+		register_lid_notifier(&mt_lid_notifier_block);
+	}
 
 	ret = hid_hw_start(hdev, HID_CONNECT_DEFAULT);
 	if (ret)
@@ -2149,6 +2175,10 @@ static const struct hid_device_id mt_devices[] = {
 	{ .driver_data = MT_CLS_WIN_8_FORCE_MULTI_INPUT_NSMU,
 		HID_DEVICE(BUS_I2C, HID_GROUP_MULTITOUCH_WIN_8,
 			USB_VENDOR_ID_ELAN, 0x32ae) },
+
+	{ .driver_data = MT_CLS_REGISTER_LID_NOTIFIER,
+		HID_DEVICE(BUS_I2C, HID_GROUP_MULTITOUCH_WIN_8,
+			USB_VENDOR_ID_ELAN, 0x323b) },
 
 	/* Elitegroup panel */
 	{ .driver_data = MT_CLS_SERIAL,
