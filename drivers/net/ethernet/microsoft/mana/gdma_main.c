@@ -1332,7 +1332,6 @@ int mana_gd_post_work_request(struct gdma_queue *wq,
 
 	if (wq->monitor_avl_buf && wqe_size > mana_gd_wq_avail_space(wq)) {
 		gc = wq->gdma_dev->gdma_context;
-		dev_err(gc->dev, "unsuccessful flow control!\n");
 		return -ENOSPC;
 	}
 
