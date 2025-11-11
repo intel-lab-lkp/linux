@@ -1242,3 +1242,88 @@ int cxl_accel_read_cache_info(struct cxl_dev_state *cxlds, bool hdmd)
 	return 0;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_accel_read_cache_info, "CXL");
+
+bool cxl_accel_caching_disabled(struct cxl_dev_state *cxlds)
+{
+	struct pci_dev *pdev = to_pci_dev(cxlds->dev);
+	int dvsec, rc;
+	u16 ctrl2;
+
+	if (!dev_is_pci(cxlds->dev))
+		return false;
+
+	dvsec = cxlds->cxl_dvsec;
+	rc = pci_read_config_word(pdev, dvsec + CXL_DVSEC_CTRL2_OFFSET, &ctrl2);
+	if (rc)
+		return false;
+
+	return FIELD_GET(CXL_DVSEC_DISABLE_CACHING, ctrl2);
+}
+
+int cxl_accel_set_cache_disable(struct cxl_dev_state *cxlds, bool disable)
+{
+	struct pci_dev *pdev = to_pci_dev(cxlds->dev);
+	int dvsec, rc;
+	u16 ctrl2;
+
+	if (!dev_is_pci(cxlds->dev))
+		return -EINVAL;
+
+	guard(device)(cxlds->dev);
+	dvsec = cxlds->cxl_dvsec;
+	rc = pci_read_config_word(pdev, dvsec + CXL_DVSEC_CTRL2_OFFSET, &ctrl2);
+	if (rc)
+		return rc;
+
+	if (FIELD_GET(CXL_DVSEC_DISABLE_CACHING, ctrl2) == disable)
+		return 1;
+
+	ctrl2 &= ~CXL_DVSEC_DISABLE_CACHING;
+	ctrl2 |= FIELD_PREP(CXL_DVSEC_DISABLE_CACHING, disable);
+	return pci_write_config_word(pdev, dvsec + CXL_DVSEC_DISABLE_CACHING,
+				     ctrl2);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_accel_set_cache_disable, "CXL");
+
+int cxl_accel_initiate_wbinvd(struct cxl_dev_state *cxlds)
+{
+	struct pci_dev *pdev = to_pci_dev(cxlds->dev);
+	int dvsec, rc;
+	u16 ctrl2;
+
+	if (!dev_is_pci(cxlds->dev))
+		return -EINVAL;
+
+	guard(device)(cxlds->dev);
+	if (cxl_accel_caching_disabled(cxlds) != 1)
+		return -EBUSY;
+
+	dvsec = cxlds->cxl_dvsec;
+	rc = pci_read_config_word(pdev, dvsec + CXL_DVSEC_CTRL2_OFFSET, &ctrl2);
+	if (rc)
+		return rc;
+
+	ctrl2 |= CXL_DVSEC_INIT_WBINVD;
+	return pci_write_config_word(pdev, dvsec + CXL_DVSEC_CTRL2_OFFSET,
+				     ctrl2);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_accel_initiate_wbinvd, "CXL");
+
+bool cxl_accel_cache_invalid(struct cxl_dev_state *cxlds)
+{
+	struct pci_dev *pdev = to_pci_dev(cxlds->dev);
+	int dvsec, rc;
+	u16 stat2;
+
+	if (!dev_is_pci(cxlds->dev))
+		return false;
+
+	guard(device)(cxlds->dev);
+	dvsec = cxlds->cxl_dvsec;
+	rc = pci_read_config_word(pdev, dvsec + CXL_DVSEC_STAT2_OFFSET, &stat2);
+	if (rc)
+		return false;
+
+	return FIELD_GET(CXL_DVSEC_CACHE_INVALID, stat2);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_accel_cache_invalid, "CXL");

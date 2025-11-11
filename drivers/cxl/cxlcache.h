@@ -32,4 +32,17 @@ int cxl_accel_read_cache_info(struct cxl_dev_state *cxlds, bool hdmd);
 struct cxl_cachedev *devm_cxl_add_cachedev(struct device *host,
 					   struct cxl_dev_state *cxlds);
 bool cxl_cachedev_is_type2(struct cxl_cachedev *cxlcd);
+
+int devm_cxl_snoop_filter_alloc(u32 gid, struct cxl_dev_state *cxlds);
+
+int devm_cxl_port_program_cache_idrt(struct cxl_port *port,
+				     struct cxl_dport *dport,
+				     struct cxl_cachedev *cxlcd);
+int cxl_dport_program_cache_idd(struct cxl_dport *dport,
+				struct cxl_cachedev *cxlcd);
+
+int cxl_accel_set_cache_disable(struct cxl_dev_state *cxlds, bool disable);
+bool cxl_accel_caching_disabled(struct cxl_dev_state *cxlds);
+bool cxl_accel_cache_invalid(struct cxl_dev_state *cxlds);
+int cxl_accel_initiate_wbinvd(struct cxl_dev_state *cxlds);
 #endif

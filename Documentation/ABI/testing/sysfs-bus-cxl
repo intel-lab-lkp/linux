@@ -624,3 +624,34 @@ Description:
 		The count is persistent across power loss and wraps back to 0
 		upon overflow. If this file is not present, the device does not
 		have the necessary support for dirty tracking.
+
+What:		/sys/bus/cxl/devices/cacheX/cache_disable
+Date:		Dec, 2025
+KernelVersion:	v6.19
+Contact:	linux-cxl@vger.kernel.org
+Description:
+		(RW) Reading this attribute returns whether the CXL cache of this
+		device is currently disabled. Writing a '1' to this attribute disables
+		the CXL cache of the device.
+
+What:		/sys/bus/cxl/devices/cacheX/cache_invalid
+Date:		Dec, 2025
+KernelVersion:	v6.19
+Contact:	linux-cxl@vger.kernel.org
+Description:
+		(RO) Whether the CXL cache of this device is currently invalid. Reading
+		this attribute while caching is enabled will always return 0. See the
+		"cache_disable" attribute for disabling caching.
+
+What:		/sys/bus/cxl/devices/cacheX/initiate_wbinvd
+Date:		Dec, 2025
+KernelVersion:	v6.19
+Contact:	linux-cxl@vger.kernel.org
+Description:
+		(WO) Writes to this attribute initiate an attempt to writeback and
+		invalidate this device's CXL cache. Writing to this attribute while
+		caching is enabled will result in a failure, see the "cache_disable"
+		attribute for disabling caching. The writeback and invalidate may take
+		some time to finish depending on the device. The result of this
+		operation can be found by reading the "cache_invalid" attribute of the
+		device.

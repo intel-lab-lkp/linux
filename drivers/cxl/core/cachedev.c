@@ -6,6 +6,7 @@
 #include "cxlpci.h"
 
 #include "../cxlcache.h"
+#include "../cxlpci.h"
 #include "private.h"
 
 static DEFINE_IDA(cxl_cachedev_ida);
@@ -110,9 +111,97 @@ static struct attribute_group cxl_cachedev_cache_attribute_group = {
 	.is_visible = cxl_cachedev_cache_visible,
 };
 
+static ssize_t cache_disable_store(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t n)
+{
+	struct cxl_cachedev *cxlcd = to_cxl_cachedev(dev);
+	struct cxl_dev_state *cxlds = cxlcd->cxlds;
+	bool disable;
+	int rc;
+
+	rc = kstrtobool(buf, &disable);
+	if (rc)
+		return rc;
+
+	rc = cxl_accel_set_cache_disable(cxlds, disable);
+	if (rc < 0)
+		return rc;
+
+	return n;
+}
+
+static ssize_t cache_disable_show(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	struct cxl_cachedev *cxlcd = to_cxl_cachedev(dev);
+	struct cxl_dev_state *cxlds = cxlcd->cxlds;
+
+	return sysfs_emit(buf, "%d\n", cxl_accel_caching_disabled(cxlds));
+}
+static DEVICE_ATTR_RW(cache_disable);
+
+static ssize_t cache_invalid_show(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	struct cxl_cachedev *cxlcd = to_cxl_cachedev(dev);
+	struct cxl_dev_state *cxlds = cxlcd->cxlds;
+
+	return sysfs_emit(buf, "%d\n", cxl_accel_cache_invalid(cxlds));
+}
+static DEVICE_ATTR_RO(cache_invalid);
+
+static ssize_t init_wbinvd_store(struct device *dev,
+				 struct device_attribute *attr, const char *buf,
+				 size_t n)
+{
+	struct cxl_cachedev *cxlcd = to_cxl_cachedev(dev);
+	struct cxl_dev_state *cxlds = cxlcd->cxlds;
+	int rc;
+
+	rc = cxl_accel_initiate_wbinvd(cxlds);
+	return rc ? rc : n;
+}
+static DEVICE_ATTR_WO(init_wbinvd);
+
+static struct attribute *cxl_cachedev_mgmt_attributes[] = {
+	&dev_attr_cache_disable.attr,
+	&dev_attr_cache_invalid.attr,
+	&dev_attr_init_wbinvd.attr,
+	NULL
+};
+
+static umode_t cxl_cachedev_mgmt_visible(struct kobject *kobj,
+					 struct attribute *a, int n)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct cxl_cachedev *cxlcd = to_cxl_cachedev(dev);
+	struct cxl_dev_state *cxlds = cxlcd->cxlds;
+	struct pci_dev *pdev = to_pci_dev(cxlds->dev);
+	u16 cap;
+	int rc;
+
+	rc = pci_read_config_word(pdev, cxlds->cxl_dvsec + CXL_DVSEC_CAP_OFFSET,
+				  &cap);
+	if (rc)
+		return 0;
+
+	if (!(cap & CXL_DVSEC_WBINVD_CAPABLE) &&
+	    a == &dev_attr_init_wbinvd.attr)
+		return 0;
+
+	return a->mode;
+}
+
+static struct attribute_group cxl_cachedev_mgmt_attribute_group = {
+	.attrs = cxl_cachedev_mgmt_attributes,
+	.is_visible = cxl_cachedev_mgmt_visible,
+};
+
 static const struct attribute_group *cxl_cachedev_attribute_groups[] = {
 	&cxl_cachedev_attribute_group,
 	&cxl_cachedev_cache_attribute_group,
+	&cxl_cachedev_mgmt_attribute_group,
 	NULL
 };
 
