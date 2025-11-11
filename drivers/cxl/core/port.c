@@ -1872,12 +1872,15 @@ struct cxl_port *cxl_pci_find_port(struct pci_dev *pdev,
 }
 EXPORT_SYMBOL_NS_GPL(cxl_pci_find_port, "CXL");
 
-struct cxl_port *cxl_mem_find_port(struct cxl_memdev *cxlmd,
+struct cxl_port *cxl_dev_find_port(struct device *cxldev,
 				   struct cxl_dport **dport)
 {
-	return find_cxl_port(grandparent(&cxlmd->dev), dport);
+	if (!is_cxl_memdev(cxldev))
+		return NULL;
+
+	return find_cxl_port(grandparent(cxldev), dport);
 }
-EXPORT_SYMBOL_NS_GPL(cxl_mem_find_port, "CXL");
+EXPORT_SYMBOL_NS_GPL(cxl_dev_find_port, "CXL");
 
 static int decoder_populate_targets(struct cxl_switch_decoder *cxlsd,
 				    struct cxl_port *port)

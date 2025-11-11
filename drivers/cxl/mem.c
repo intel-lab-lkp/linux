@@ -109,7 +109,7 @@ static int cxl_mem_probe(struct device *dev)
 		return rc;
 
 	struct cxl_port *parent_port __free(put_cxl_port) =
-		cxl_mem_find_port(cxlmd, &dport);
+		cxl_dev_find_port(&cxlmd->dev, &dport);
 	if (!parent_port) {
 		dev_err(dev, "CXL port topology not found\n");
 		return -ENXIO;
