@@ -41,7 +41,20 @@ bool intel_alpm_is_alpm_aux_less(struct intel_dp *intel_dp,
 		(crtc_state->has_lobf && intel_alpm_aux_less_wake_supported(intel_dp));
 }
 
-void intel_alpm_init(struct intel_dp *intel_dp)
+bool intel_alpm_source_supported(struct intel_connector *connector)
+{
+	struct intel_display *display = to_intel_display(connector);
+
+	if (!((connector->base.connector_type == DRM_MODE_CONNECTOR_DisplayPort &&
+	       DISPLAY_VER(display) >= 35) ||
+	    (connector->base.connector_type == DRM_MODE_CONNECTOR_eDP &&
+	     DISPLAY_VER(display) >= 20)))
+		return false;
+
+	return true;
+}
+
+void intel_alpm_get_sink_capability(struct intel_dp *intel_dp)
 {
 	u8 dpcd;
 
@@ -49,7 +62,6 @@ void intel_alpm_init(struct intel_dp *intel_dp)
 		return;
 
 	intel_dp->alpm_dpcd = dpcd;
-	mutex_init(&intel_dp->alpm.lock);
 }
 
 static int get_silence_period_symbols(const struct intel_crtc_state *crtc_state)
