@@ -16,6 +16,7 @@
 #include <linux/wait.h>
 #include <linux/sched.h>
 #include <linux/sched/signal.h>
+#include <uapi/linux/mount.h>
 #include <linux/mount.h>
 #include <linux/namei.h>
 #include <linux/uaccess.h>
@@ -109,11 +110,14 @@ struct autofs_wait_queue {
 #define AUTOFS_SBI_STRICTEXPIRE 0x0002
 #define AUTOFS_SBI_IGNORE	0x0004
 
+struct mnt_namespace;
+
 struct autofs_sb_info {
 	u32 magic;
 	int pipefd;
 	struct file *pipe;
 	struct pid *oz_pgrp;
+	struct mnt_namespace *owner;
 	int version;
 	int sub_version;
 	int min_proto;

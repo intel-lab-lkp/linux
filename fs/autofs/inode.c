@@ -251,6 +251,7 @@ static struct autofs_sb_info *autofs_alloc_sbi(void)
 	sbi->min_proto = AUTOFS_MIN_PROTO_VERSION;
 	sbi->max_proto = AUTOFS_MAX_PROTO_VERSION;
 	sbi->pipefd = -1;
+	sbi->owner = current->nsproxy->mnt_ns;
 
 	set_autofs_type_indirect(&sbi->type);
 	mutex_init(&sbi->wq_mutex);
