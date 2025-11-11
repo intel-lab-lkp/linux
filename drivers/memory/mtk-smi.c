@@ -244,6 +244,10 @@ static int mtk_smi_larb_config_port_gen2_general(struct device *dev)
 	struct arm_smccc_res res;
 	int i;
 
+	/* larb->mmu and larb->bank are set in bind(), may not be ready yet */
+	if (!larb->mmu || !larb->bank)
+		return 0;
+
 	if (BIT(larb->larbid) & larb->larb_gen->larb_direct_to_common_mask)
 		return 0;
 
