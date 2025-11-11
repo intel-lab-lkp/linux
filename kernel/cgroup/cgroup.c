@@ -4455,13 +4455,13 @@ static int cgroup_addrm_files(struct cgroup_subsys_state *css,
 			      struct cgroup *cgrp, struct cftype cfts[],
 			      bool is_add)
 {
-	struct cftype *cft, *cft_end = NULL;
+	struct cftype *cft;
 	int ret = 0;
 
 	lockdep_assert_held(&cgroup_mutex);
 
 restart:
-	for (cft = cfts; cft != cft_end && cft->name[0] != '\0'; cft++) {
+	for (cft = cfts; !(cft->flags & __CFTYPE_ADDRM_END) && cft->name[0] != '\0'; cft++) {
 		/* does cft->flags tell us to skip this file on @cgrp? */
 		if ((cft->flags & __CFTYPE_ONLY_ON_DFL) && !cgroup_on_dfl(cgrp))
 			continue;
@@ -4478,7 +4478,7 @@ restart:
 			if (ret) {
 				pr_warn("%s: failed to add %s, err=%d\n",
 					__func__, cft->name, ret);
-				cft_end = cft;
+				cft->flags |= __CFTYPE_ADDRM_END;
 				is_add = false;
 				goto restart;
 			}
@@ -4528,7 +4528,7 @@ static void cgroup_exit_cftypes(struct cftype *cfts)
 
 		/* revert flags set by cgroup core while adding @cfts */
 		cft->flags &= ~(__CFTYPE_ONLY_ON_DFL | __CFTYPE_NOT_ON_DFL |
-				__CFTYPE_ADDED);
+				__CFTYPE_ADDED | __CFTYPE_ADDRM_END);
 	}
 }
 

@@ -144,6 +144,7 @@ enum {
 	__CFTYPE_ONLY_ON_DFL	= (1 << 16),	/* only on default hierarchy */
 	__CFTYPE_NOT_ON_DFL	= (1 << 17),	/* not on default hierarchy */
 	__CFTYPE_ADDED		= (1 << 18),
+	__CFTYPE_ADDRM_END  = (1 << 19),
 };
 
 enum cgroup_attach_lock_mode {
