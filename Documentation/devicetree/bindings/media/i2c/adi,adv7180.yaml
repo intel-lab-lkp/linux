@@ -138,6 +138,31 @@ allOf:
       required:
         - ports
 
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - adi,adv7280
+              - adi,adv7280-m
+    then:
+      properties:
+        reg:
+          minItems: 1
+          maxItems: 3
+          description:
+            The ADV7280 and ADV7280-M have up to three register maps, which can be
+            accessed via the I2C port. The main register map, the VPP register map,
+            and the CSI register map. The main register map is mandatory. The other
+            register maps are optional and the default is used unless specified.
+
+        reg-names:
+          minItems: 1
+          items:
+            - const: main
+            - enum: [ csi, vpp ]
+            - enum: [ csi, vpp ]
+
 examples:
   - |
     i2c {
@@ -183,6 +208,25 @@ examples:
                                     adv7180_out: endpoint {
                                             remote-endpoint = <&vin4_in>;
                                     };
+                            };
+                    };
+            };
+    };
+
+  - |
+    i2c {
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            composite-in@20 {
+                    compatible = "adi,adv7280-m";
+                    reg = <0x20>, <0x42>, <0x44>;
+                    reg-names = "main", "vpp", "csi";
+
+                    port {
+                            adv7280_out: endpoint {
+                                    bus-width = <8>;
+                                    remote-endpoint = <&vin1ep>;
                             };
                     };
             };
