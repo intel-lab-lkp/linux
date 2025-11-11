@@ -1,0 +1,22 @@
+// SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
+/*
+ * Google Pixel 10 Pro (blazer) MP 1
+ *
+ * Copyright 2024-2025 Google LLC.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include "lga-muzel-common.dtsi"
+
+/ {
+	board-id = <0x070406>;
+	board-rev = <0x010000>;
+};
+
+&{/} {
+	model = "BLAZER MP 1 based on LGA";
+	compatible = "google,pixel-id-070406-rev-010000",
+		     "google,lga-blazer", "google,lga";
+};
