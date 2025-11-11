@@ -3397,6 +3397,34 @@ struct fwnode_handle *fwnode_get_phy_node(const struct fwnode_handle *fwnode)
 }
 EXPORT_SYMBOL_GPL(fwnode_get_phy_node);
 
+static int phy_get_features(struct phy_device *phydev)
+{
+	int err;
+
+	if (phydev->is_c45)
+		err = genphy_c45_pma_read_abilities(phydev);
+	else
+		err = genphy_read_abilities(phydev);
+
+	return err;
+}
+
+/**
+ * phy_get_Features_no_eee - read the PHY features, disabling all EEE
+ * @phydev: phy_device structure to be added to the MDIO bus
+ *
+ * Read the PHY features, and fill the @phydev->eee_disabled_modes to
+ * prevent EEE being used. This is intended to be used for PHY .get_feature
+ * methods where a PHY reports incorrect capabilities.
+ */
+int phy_get_features_no_eee(struct phy_device *phydev)
+{
+	linkmode_fill(phydev->eee_disabled_modes);
+
+	return phy_get_features(phydev);
+}
+EXPORT_SYMBOL_GPL(phy_get_features_no_eee);
+
 /**
  * phy_probe - probe and init a PHY device
  * @dev: device to probe and init
@@ -3442,10 +3470,8 @@ static int phy_probe(struct device *dev)
 	}
 	else if (phydrv->get_features)
 		err = phydrv->get_features(phydev);
-	else if (phydev->is_c45)
-		err = genphy_c45_pma_read_abilities(phydev);
-	else
-		err = genphy_read_abilities(phydev);
+	else 
+		err = phy_get_features(phydev);
 
 	if (err)
 		goto out;

@@ -207,8 +207,6 @@ void of_set_phy_eee_broken(struct phy_device *phydev)
 	if (!IS_ENABLED(CONFIG_OF_MDIO) || !node)
 		return;
 
-	linkmode_zero(modes);
-
 	if (of_property_read_bool(node, "eee-broken-100tx"))
 		linkmode_set_bit(ETHTOOL_LINK_MODE_100baseT_Full_BIT, modes);
 	if (of_property_read_bool(node, "eee-broken-1000t"))
