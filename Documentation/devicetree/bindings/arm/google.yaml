@@ -13,27 +13,18 @@ description: |
   ARM platforms using SoCs designed by Google branded "Tensor" used in Pixel
   devices.
 
-  Currently upstream this is devices using "gs101" SoC which is found in Pixel
-  6, Pixel 6 Pro and Pixel 6a.
+  These bindings for older Pixel devices don't use device tree overlays so
+  no separate SoC entry is added. This may change in the future.
 
-  Google have a few different names for the SoC:
-  - Marketing name ("Tensor")
-  - Codename ("Whitechapel")
-  - SoC ID ("gs101")
-  - Die ID ("S5P9845")
-
-  Likewise there are a couple of names for the actual device
-  - Marketing name ("Pixel 6")
-  - Codename ("Oriole")
-
-  Devicetrees should use the lowercased SoC ID and lowercased board codename,
-  e.g. gs101 and gs101-oriole.
+  Newer Pixel devices are expected to have the SoC device tree as the base
+  and specific board device trees as overlays.
 
 properties:
   $nodename:
     const: '/'
   compatible:
     oneOf:
+      # Google Tensor G1 AKA gs101 AKA whitechapel AKA Die ID S5P9845 boards
       - description: Google Pixel 6 or 6 Pro (Oriole or Raven)
         items:
           - enum:
@@ -41,13 +32,71 @@ properties:
               - google,gs101-raven
           - const: google,gs101
 
-  # Bootloader requires empty ect node to be present
-  ect:
-    type: object
-    additionalProperties: false
+      # Google Tensor G5 AKA lga (laguna) SoC and boards
+      - description: Tensor G5 SoC (laguna)
+        items:
+          - enum:
+              - google,soc-id-0005-rev-00  # A0
+              - google,soc-id-0005-rev-10  # B0
+          - const: google,lga
+      - description: Google Pixel 10 Board (Frankel)
+        items:
+          - enum:
+              - google,pixel-id-070302-rev-000000  # Proto 0
+              - google,pixel-id-070302-rev-010000  # Proto 1
+              - google,pixel-id-070302-rev-010100  # Proto 1.1
+              - google,pixel-id-070303-rev-010000  # EVT 1
+              - google,pixel-id-070303-rev-010100  # EVT 1.1
+              - google,pixel-id-070303-rev-010101  # EVT 1.1 Wingboard
+              - google,pixel-id-070304-rev-010000  # DVT 1
+              - google,pixel-id-070305-rev-010000  # PVT 1
+              - google,pixel-id-070306-rev-010000  # MP 1
+          - const: google,lga-frankel
+          - const: google,lga
+      - description: Google Pixel 10 Pro Board (Blazer)
+        items:
+          - enum:
+              - google,pixel-id-070402-rev-000000  # Proto 0
+              - google,pixel-id-070402-rev-010000  # Proto 1
+              - google,pixel-id-070402-rev-010100  # Proto 1.1
+              - google,pixel-id-070403-rev-010000  # EVT 1
+              - google,pixel-id-070403-rev-010100  # EVT 1.1
+              - google,pixel-id-070404-rev-010000  # DVT 1
+              - google,pixel-id-070405-rev-010000  # PVT 1
+              - google,pixel-id-070406-rev-010000  # MP 1
+          - const: google,lga-blazer
+          - const: google,lga
+      - description: Google Pixel 10 Pro XL Board (Mustang)
+        items:
+          - enum:
+              - google,pixel-id-070502-rev-000000  # Proto 0
+              - google,pixel-id-070502-rev-010000  # Proto 1
+              - google,pixel-id-070502-rev-010100  # Proto 1.1
+              - google,pixel-id-070502-rev-010101  # Proto 1.1 Wingboard
+              - google,pixel-id-070503-rev-010000  # EVT 1
+              - google,pixel-id-070503-rev-010100  # EVT 1.1
+              - google,pixel-id-070503-rev-010101  # EVT 1.1 Wingboard
+              - google,pixel-id-070504-rev-010000  # DVT 1
+              - google,pixel-id-070505-rev-010000  # PVT 1
+              - google,pixel-id-070506-rev-010000  # MP 1
+          - const: google,lga-mustang
+          - const: google,lga
 
-required:
-  - ect
+allOf:
+  # Bootloader requires empty ect node to be present
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: google,gs101
+    then:
+      properties:
+        ect:
+          type: object
+          additionalProperties: false
+
+      required:
+        - ect
 
 additionalProperties: true
 
