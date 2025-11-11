@@ -928,8 +928,23 @@ static int ocfs2_xattr_list_entries(struct inode *inode,
 	size_t result = 0;
 	int i, type, ret;
 	const char *name;
+	u16 count;
+	size_t max_entries;
+	struct super_block *sb = inode->i_sb;
 
-	for (i = 0 ; i < le16_to_cpu(header->xh_count); i++) {
+	count = le16_to_cpu(header->xh_count);
+	max_entries = (sb->s_blocksize - sizeof(struct ocfs2_xattr_header)) /
+		       sizeof(struct ocfs2_xattr_entry);
+
+	if (count > max_entries) {
+		ocfs2_error(sb,
+			    "xattr entry count %u exceeds maximum %zu in inode %llu\n",
+			    count, max_entries,
+			    (unsigned long long)OCFS2_I(inode)->ip_blkno);
+		return -EUCLEAN;
+	}
+
+	for (i = 0; i < count; i++) {
 		struct ocfs2_xattr_entry *entry = &header->xh_entries[i];
 		type = ocfs2_xattr_get_type(entry);
 		name = (const char *)header +
