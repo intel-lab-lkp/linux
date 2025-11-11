@@ -12,6 +12,10 @@
  * device-specific driver is required for discovery and portions of set up.
  */
 
+/* Controls whether failing to allocate snoop filter capacity is tolerated */
+static bool strict_snoop;
+module_param(strict_snoop, bool, 0644);
+
 /**
  * devm_cxl_add_cachedev - Add a CXL cache device
  * @host: devres alloc/release context and parent for the cachedev
@@ -54,6 +58,22 @@ struct cxl_cachedev *devm_cxl_add_cachedev(struct device *host,
 }
 EXPORT_SYMBOL_NS_GPL(devm_cxl_add_cachedev, "CXL");
 
+static int cxl_populate_snoop_gid(struct cxl_cachedev *cxlcd)
+{
+	struct cxl_cache_state *cstate = &cxlcd->cxlds->cstate;
+
+	for (struct cxl_dport *iter = cxlcd->endpoint->parent_dport;
+	     iter && !is_cxl_root(iter->port);
+	     iter = iter->port->parent_dport) {
+		if (iter->snoop_id != CXL_SNOOP_ID_NO_ID) {
+			cstate->snoop_id = iter->snoop_id;
+			return 0;
+		}
+	}
+
+	return -ENXIO;
+}
+
 static int cxl_cache_probe(struct device *dev)
 {
 	struct cxl_cachedev *cxlcd = to_cxl_cachedev(dev);
@@ -90,6 +110,21 @@ static int cxl_cache_probe(struct device *dev)
 
 		rc = devm_cxl_add_endpoint(endpoint_parent, dev, dport);
 		if (rc)
+			return rc;
+	}
+
+	rc = cxl_populate_snoop_gid(cxlcd);
+	if (rc) {
+		dev_dbg(&cxlcd->dev, "failed to get snoop id: %d\n", rc);
+		return rc;
+	}
+
+	rc = devm_cxl_snoop_filter_alloc_capacity(cxlcd);
+	if (rc) {
+		dev_dbg(&cxlcd->dev,
+			"failed to allocate snoop filter capacity: %d\n", rc);
+
+		if (strict_snoop)
 			return rc;
 	}
 

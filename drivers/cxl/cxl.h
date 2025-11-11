@@ -41,6 +41,7 @@ extern const struct nvdimm_security_ops *cxl_security_ops;
 
 #define   CXL_CM_CAP_CAP_ID_RAS 0x2
 #define   CXL_CM_CAP_CAP_ID_HDM 0x5
+#define   CXL_CM_CAP_CAP_ID_SNOOP 0x8
 #define   CXL_CM_CAP_CAP_HDM_VERSION 1
 
 /* HDM decoders CXL 2.0 8.2.5.12 CXL HDM Decoder Capability Structure */
@@ -152,6 +153,12 @@ static inline int ways_to_eiw(unsigned int ways, u8 *eiw)
 #define CXL_HEADERLOG_SIZE SZ_512
 #define CXL_HEADERLOG_SIZE_U32 SZ_512 / sizeof(u32)
 
+/* CXL 3.2 8.2.4.23 CXL Snoop Filter Capability Structure */
+#define CXL_SNOOP_GROUP_ID_OFFSET 0x0
+#define   CXL_SNOOP_GROUP_ID_MASK GENMASK(15, 0)
+#define CXL_SNOOP_FILTER_SIZE_OFFSET 0x4
+#define CXL_SNOOP_CAPABILITY_LENGTH 0x8
+
 /* CXL 2.0 8.2.8.1 Device Capabilities Array Register */
 #define CXLDEV_CAP_ARRAY_OFFSET 0x0
 #define   CXLDEV_CAP_ARRAY_CAP_ID 0
@@ -215,6 +222,7 @@ struct cxl_regs {
 	struct_group_tagged(cxl_component_regs, component,
 		void __iomem *hdm_decoder;
 		void __iomem *ras;
+		void __iomem *snoop;
 	);
 	/*
 	 * Common set of CXL Device register block base pointers
@@ -257,6 +265,7 @@ struct cxl_reg_map {
 struct cxl_component_reg_map {
 	struct cxl_reg_map hdm_decoder;
 	struct cxl_reg_map ras;
+	struct cxl_reg_map snoop;
 };
 
 struct cxl_device_reg_map {
@@ -693,6 +702,7 @@ struct cxl_dport {
 	struct access_coordinate coord[ACCESS_COORDINATE_MAX];
 	long link_latency;
 	int gpf_dvsec;
+	int snoop_id;
 };
 
 /**
@@ -759,6 +769,7 @@ struct cxl_dpa_info {
 	int nr_partitions;
 };
 
+#define CXL_SNOOP_ID_NO_ID (-1)
 
 /**
  * struct cxl_cache_state - State of a device's CXL cache
@@ -768,6 +779,7 @@ struct cxl_dpa_info {
 struct cxl_cache_state {
 	u64 size;
 	u32 unit;
+	int snoop_id;
 };
 
 /**
@@ -831,6 +843,8 @@ static inline struct cxl_dev_state *mbox_to_cxlds(struct cxl_mailbox *cxl_mbox)
 {
 	return dev_get_drvdata(cxl_mbox->host);
 }
+
+int devm_cxl_snoop_filter_alloc_capacity(struct cxl_cachedev *cxlcd);
 
 /**
  * struct cxl_region_ref - track a region's interest in a port

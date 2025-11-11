@@ -34,6 +34,8 @@
 static DEFINE_IDA(cxl_port_ida);
 static DEFINE_XARRAY(cxl_root_buses);
 
+static DEFINE_XARRAY(cxl_snoop_filters);
+
 /*
  * The terminal device in PCI is NULL and @platform_bus
  * for platform devices (for cxl_test)
@@ -810,6 +812,175 @@ static int cxl_dport_setup_regs(struct device *host, struct cxl_dport *dport,
 	return rc;
 }
 
+struct cxl_snoop_filter {
+	u64 size;
+	struct xarray dports;
+	struct xarray devs;
+	struct mutex lock; /* Used for filter allocations */
+};
+
+static int cxl_snoop_filter_add_dport(struct cxl_dport *dport, u32 gid)
+{
+	struct cxl_snoop_filter *sf;
+
+	sf = xa_load(&cxl_snoop_filters, gid);
+	if (sf)
+		return xa_insert(&sf->dports, (unsigned long)dport->dport_dev,
+				 dport, GFP_KERNEL);
+
+	return -ENXIO;
+}
+
+static struct cxl_snoop_filter *cxl_alloc_snoop_filter(u64 size)
+{
+	struct cxl_snoop_filter *sf;
+
+	sf = kzalloc(sizeof(*sf), GFP_KERNEL);
+	if (!sf)
+		return NULL;
+
+	sf->size = size;
+	xa_init(&sf->dports);
+	xa_init(&sf->devs);
+	mutex_init(&sf->lock);
+
+	return sf;
+}
+
+static void cxl_destroy_snoop_filter(struct cxl_snoop_filter *sf)
+{
+	xa_destroy(&sf->dports);
+	xa_destroy(&sf->devs);
+	mutex_destroy(&sf->lock);
+	kfree(sf);
+}
+
+static int cxl_create_snoop_filter(struct cxl_dport *dport, u32 gid, u64 size)
+{
+	struct cxl_snoop_filter *sf;
+	int rc;
+
+	sf = cxl_alloc_snoop_filter(size);
+	if (!sf)
+		return -ENOMEM;
+
+	rc = xa_insert(&sf->dports, (unsigned long)dport->dport_dev, dport,
+		       GFP_KERNEL);
+	if (rc) {
+		cxl_destroy_snoop_filter(sf);
+		return rc;
+	}
+
+	rc = xa_insert(&cxl_snoop_filters, gid, sf, GFP_KERNEL);
+	if (rc) {
+		cxl_destroy_snoop_filter(sf);
+
+		/*
+		 * The snoop filter insert failed due to a race, get the already
+		 * made snoop filter.
+		 */
+		if (rc == -EBUSY)
+			return cxl_snoop_filter_add_dport(dport, gid);
+
+		return rc;
+	}
+
+	return 0;
+}
+
+static void cxl_snoop_filter_free_capacity(void *data)
+{
+	struct cxl_cache_state *cstate = data;
+	struct cxl_snoop_filter *sf;
+
+	sf = xa_load(&cxl_snoop_filters, cstate->snoop_id);
+	if (!sf) {
+		pr_debug("failed to find snoop filter with id %d\n",
+			 cstate->snoop_id);
+		return;
+	}
+
+	guard(mutex)(&sf->lock);
+	sf->size += cstate->size;
+}
+
+/**
+ * devm_cxl_snoop_filter_alloc_capacity - Reserve snoop filter capacity for a
+ * CXL.cache device's cache.
+ * @cxlcd: Device to allocate capacity for
+ */
+int devm_cxl_snoop_filter_alloc_capacity(struct cxl_cachedev *cxlcd)
+{
+	struct cxl_dev_state *cxlds = cxlcd->cxlds;
+	struct cxl_cache_state *cstate = &cxlds->cstate;
+	struct cxl_snoop_filter *sf;
+	int gid = cstate->snoop_id;
+
+	sf = xa_load(&cxl_snoop_filters, gid);
+	if (!sf)
+		return -ENODEV;
+
+	guard(mutex)(&sf->lock);
+	if (cstate->size > sf->size)
+		return -EBUSY;
+
+	sf->size -= cstate->size;
+	return devm_add_action_or_reset(&cxlcd->dev,
+					cxl_snoop_filter_free_capacity, cstate);
+}
+EXPORT_SYMBOL_NS_GPL(devm_cxl_snoop_filter_alloc_capacity, "CXL");
+
+static void cxl_destroy_snoop_filters(void)
+{
+	struct cxl_snoop_filter *sf;
+	unsigned long gid;
+
+	xa_for_each(&cxl_snoop_filters, gid, sf)
+		cxl_destroy_snoop_filter(sf);
+
+	xa_destroy(&cxl_snoop_filters);
+}
+
+static int cxl_dport_setup_snoop_filter(struct cxl_dport *dport)
+{
+	struct cxl_port *port = dport->port;
+	struct cxl_port *parent_port;
+	u32 snoop, size;
+	int gid, rc;
+
+	/* Capability is only support by CXL root ports */
+	parent_port = parent_port_of(port);
+	if (!parent_port || !is_cxl_root(parent_port))
+		return 0;
+
+	if (!dport->reg_map.component_map.snoop.valid) {
+		dev_dbg(dport->dport_dev, "missing snoop filter capability\n");
+		return -ENXIO;
+	}
+
+	rc = cxl_map_component_regs(&dport->reg_map, &dport->regs.component,
+				    BIT(CXL_CM_CAP_CAP_ID_SNOOP));
+	if (rc)
+		return rc;
+
+	snoop = readl(dport->regs.snoop + CXL_SNOOP_GROUP_ID_OFFSET);
+	gid = FIELD_GET(CXL_SNOOP_GROUP_ID_MASK, snoop);
+
+	size = readl(dport->regs.snoop + CXL_SNOOP_FILTER_SIZE_OFFSET);
+	if (!size)
+		dev_warn(dport->dport_dev, "CXL snoop filter has no capacity\n");
+
+	rc = cxl_snoop_filter_add_dport(dport, gid);
+	if (rc) {
+		rc = cxl_create_snoop_filter(dport, gid, size);
+		if (rc)
+			return rc;
+	}
+
+	dport->snoop_id = gid;
+	return 0;
+}
+
 DEFINE_SHOW_ATTRIBUTE(einj_cxl_available_error_type);
 
 static int cxl_einj_inject(void *data, u64 type)
@@ -1177,6 +1348,7 @@ __devm_cxl_add_dport(struct cxl_port *port, struct device *dport_dev,
 	dport->dport_dev = dport_dev;
 	dport->port_id = port_id;
 	dport->port = port;
+	dport->snoop_id = CXL_SNOOP_ID_NO_ID;
 
 	if (rcrb == CXL_RESOURCE_NONE) {
 		rc = cxl_dport_setup_regs(&port->dev, dport,
@@ -1206,6 +1378,11 @@ __devm_cxl_add_dport(struct cxl_port *port, struct device *dport_dev,
 	if (component_reg_phys != CXL_RESOURCE_NONE)
 		dev_dbg(dport_dev, "Component Registers found for dport: %pa\n",
 			&component_reg_phys);
+
+	rc = cxl_dport_setup_snoop_filter(dport);
+	if (rc)
+		dev_dbg(dport->dport_dev,
+			"failed to set up snoop filter capability %d\n", rc);
 
 	cond_cxl_root_lock(port);
 	rc = add_dport(port, dport);
@@ -2585,6 +2762,7 @@ static void cxl_core_exit(void)
 	bus_unregister(&cxl_bus_type);
 	destroy_workqueue(cxl_bus_wq);
 	cxl_memdev_exit();
+	cxl_destroy_snoop_filters();
 	debugfs_remove_recursive(cxl_debugfs);
 }
 
