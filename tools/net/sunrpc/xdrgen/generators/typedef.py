@@ -58,7 +58,8 @@ def emit_typedef_declaration(environment: Environment, node: _XdrDeclaration) ->
     elif isinstance(node, _XdrOptionalData):
         raise NotImplementedError("<optional_data> typedef not yet implemented")
     elif isinstance(node, _XdrVoid):
-        raise NotImplementedError("<void> typedef not yet implemented")
+        template = get_jinja2_template(environment, "declaration", node.template)
+        print(template.render(name=node.name))
     else:
         raise NotImplementedError("typedef: type not recognized")
 
@@ -104,7 +105,8 @@ def emit_type_definition(environment: Environment, node: _XdrDeclaration) -> Non
     elif isinstance(node, _XdrOptionalData):
         raise NotImplementedError("<optional_data> typedef not yet implemented")
     elif isinstance(node, _XdrVoid):
-        raise NotImplementedError("<void> typedef not yet implemented")
+        template = get_jinja2_template(environment, "definition", node.template)
+        print(template.render(name=node.name))
     else:
         raise NotImplementedError("typedef: type not recognized")
 
@@ -165,7 +167,8 @@ def emit_typedef_decoder(environment: Environment, node: _XdrDeclaration) -> Non
     elif isinstance(node, _XdrOptionalData):
         raise NotImplementedError("<optional_data> typedef not yet implemented")
     elif isinstance(node, _XdrVoid):
-        raise NotImplementedError("<void> typedef not yet implemented")
+        template = get_jinja2_template(environment, "decoder", node.template)
+        print(template.render(name=node.name))
     else:
         raise NotImplementedError("typedef: type not recognized")
 
@@ -225,7 +228,8 @@ def emit_typedef_encoder(environment: Environment, node: _XdrDeclaration) -> Non
     elif isinstance(node, _XdrOptionalData):
         raise NotImplementedError("<optional_data> typedef not yet implemented")
     elif isinstance(node, _XdrVoid):
-        raise NotImplementedError("<void> typedef not yet implemented")
+        template = get_jinja2_template(environment, "encoder", node.template)
+        print(template.render(name=node.name))
     else:
         raise NotImplementedError("typedef: type not recognized")
 
