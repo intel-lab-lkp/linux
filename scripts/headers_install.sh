@@ -54,11 +54,16 @@ arch/x86/include/uapi/asm/auxvec.h:CONFIG_IA32_EMULATION
 arch/x86/include/uapi/asm/auxvec.h:CONFIG_X86_64
 "
 
+# generate sed regex to filter out ignored configs.
+# A subsequent 't' branches if any of these filters match.
+sed_filter_ignores=$(echo "$config_leak_ignores" \
+	| sed -ne "s@$INFILE:\(.*\)"'@\ts:^\1\\n::@p')
+
 scripts/unifdef -U__KERNEL__ -D__EXPORTED_HEADERS__ $TMPFILE > $OUTFILE
 [ $? -gt 1 ] && exit 1
 
 # Remove /* ... */ style comments, and find CONFIG_ references in code
-configs=$(sed -e '
+sed -e '
 :comment
 	s:/\*[^*][^*]*:/*:
 	s:/\*\*\**\([^/]\):/*\1:
@@ -68,9 +73,12 @@ configs=$(sed -e '
 	/\/\*/! b check
 	N
 	b comment
-:print
+:print'"
+	$sed_filter_ignores
+	t check
+	s@^\(.*\)\n.*@error: $INFILE leak \1 to user-space@
 	P
-	D
+	Q2"'
 :check
 	s:^\(CONFIG_[[:alnum:]_]*\):\1\n:
 	t print
@@ -78,25 +86,7 @@ configs=$(sed -e '
 	s:^[^[:alnum:]_][^[:alnum:]_]*::
 	t check
 	d
-' $OUTFILE)
-
-for c in $configs
-do
-	leak_error=1
-
-	for ignore in $config_leak_ignores
-	do
-		if echo "$INFILE:$c" | grep -q "$ignore$"; then
-			leak_error=
-			break
-		fi
-	done
-
-	if [ "$leak_error" = 1 ]; then
-		echo "error: $INFILE: leak $c to user-space" >&2
-		exit 1
-	fi
-done
+' $OUTFILE >&2 || exit 1
 
 rm -f $TMPFILE
 trap - EXIT
