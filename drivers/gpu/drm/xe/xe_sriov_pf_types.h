@@ -9,6 +9,7 @@
 #include <linux/mutex.h>
 #include <linux/types.h>
 
+#include "xe_sriov_pf_migration_types.h"
 #include "xe_sriov_pf_provision_types.h"
 #include "xe_sriov_pf_service_types.h"
 
@@ -43,6 +44,9 @@ struct xe_device_pf {
 
 	/** @provision: device level provisioning data. */
 	struct xe_sriov_pf_provision provision;
+
+	/** @migration: device level migration data. */
+	struct xe_sriov_pf_migration migration;
 
 	/** @service: device level service data. */
 	struct xe_sriov_pf_service service;
