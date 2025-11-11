@@ -691,7 +691,7 @@ static struct debug_obj *lookup_object_or_alloc(void *addr, struct debug_bucket 
 
 	/* Out of memory. Do the cleanup outside of the locked region */
 	debug_objects_enabled = false;
-	return NULL;
+	return ERR_PTR(-ENOMEM);
 }
 
 static void debug_objects_fill_pool(void)
@@ -741,9 +741,10 @@ __debug_object_init(void *addr, const struct debug_obj_descr *descr, int onstack
 	raw_spin_lock_irqsave(&db->lock, flags);
 
 	obj = lookup_object_or_alloc(addr, db, descr, onstack, false);
-	if (unlikely(!obj)) {
+	if (IS_ERR(obj)) {
 		raw_spin_unlock_irqrestore(&db->lock, flags);
-		debug_objects_oom();
+		if (PTR_ERR(obj) == -ENOMEM)
+			debug_objects_oom();
 		return;
 	}
 
@@ -818,11 +819,13 @@ int debug_object_activate(void *addr, const struct debug_obj_descr *descr)
 	raw_spin_lock_irqsave(&db->lock, flags);
 
 	obj = lookup_object_or_alloc(addr, db, descr, false, true);
-	if (unlikely(!obj)) {
-		raw_spin_unlock_irqrestore(&db->lock, flags);
-		debug_objects_oom();
-		return 0;
-	} else if (likely(!IS_ERR(obj))) {
+	if (IS_ERR(obj)) {
+		if (PTR_ERR(obj) == -ENOMEM) {
+			raw_spin_unlock_irqrestore(&db->lock, flags);
+			debug_objects_oom();
+			return 0;
+		}
+	} else {
 		switch (obj->state) {
 		case ODEBUG_STATE_ACTIVE:
 		case ODEBUG_STATE_DESTROYED:
@@ -1007,11 +1010,11 @@ void debug_object_assert_init(void *addr, const struct debug_obj_descr *descr)
 	raw_spin_lock_irqsave(&db->lock, flags);
 	obj = lookup_object_or_alloc(addr, db, descr, false, true);
 	raw_spin_unlock_irqrestore(&db->lock, flags);
-	if (likely(!IS_ERR_OR_NULL(obj)))
+	if (!IS_ERR(obj))
 		return;
 
 	/* If NULL the allocation has hit OOM */
-	if (!obj) {
+	if (PTR_ERR(obj) == -ENOMEM) {
 		debug_objects_oom();
 		return;
 	}
