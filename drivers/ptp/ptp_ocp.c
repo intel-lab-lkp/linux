@@ -1,28 +1,53 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2020 Facebook */
 
-#include <linux/bits.h>
+#include <linux/array_size.h>
+#include <linux/bitops.h>
 #include <linux/clk-provider.h>
 #include <linux/clkdev.h>
+#include <linux/container_of.h>
 #include <linux/crc16.h>
 #include <linux/debugfs.h>
+#include <linux/device.h>
 #include <linux/dpll.h>
 #include <linux/err.h>
 #include <linux/i2c.h>
-#include <linux/init.h>
-#include <linux/kernel.h>
+#include <linux/idr.h>
+#include <linux/interrupt.h>
+#include <linux/io.h>
+#include <linux/ioport.h>
+#include <linux/kstrtox.h>
+#include <linux/limits.h>
+#include <linux/math64.h>
+#include <linux/minmax.h>
 #include <linux/module.h>
 #include <linux/mtd/mtd.h>
+#include <linux/mutex.h>
 #include <linux/nvmem-consumer.h>
 #include <linux/pci.h>
 #include <linux/platform_data/i2c-ocores.h>
 #include <linux/platform_data/i2c-xiic.h>
 #include <linux/platform_device.h>
 #include <linux/ptp_clock_kernel.h>
+#include <linux/seq_file.h>
 #include <linux/serial_8250.h>
+#include <linux/slab.h>
 #include <linux/spi/altera.h>
 #include <linux/spi/spi.h>
 #include <linux/spi/xilinx_spi.h>
+#include <linux/spinlock.h>
+#include <linux/sprintf.h>
+#include <linux/stddef.h>
+#include <linux/string.h>
+#include <linux/sysfs.h>
+#include <linux/time.h>
+#include <linux/timekeeping.h>
+#include <linux/timer.h>
+#include <linux/types.h>
+#include <linux/workqueue.h>
+
+#include <asm/byteorder.h>
+
 #include <net/devlink.h>
 
 #define PCI_DEVICE_ID_META_TIMECARD		0x0400
