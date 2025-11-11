@@ -233,4 +233,18 @@ config CXL_MCE
 	def_bool y
 	depends on X86_MCE && MEMORY_FAILURE
 
+config CXL_CACHE
+	tristate "CXL: Cache Management Support"
+	depends on CXL_BUS
+	help
+	  Enables a driver that manages the CXL.cache capabilities of a CXL.cache
+	  capable CXL device. This driver validates and provides support for
+	  programming the CXL cache device topology. This driver is required for
+	  using multiple CXL.cache devices (Type 1 or Type 2) below a given
+	  CXL 3.0+ capable PCIe Root Port. This driver only provides CXL cache
+	  management and reporting capabilities, a vendor-specific device driver
+	  is expected to enable the full capabilities of the device.
+
+	  If unsure, say 'm'.
+
 endif
