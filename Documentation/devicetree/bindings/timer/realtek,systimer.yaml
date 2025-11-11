@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/timer/realtek,systimer.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Realtek SYSTIMER
+
+maintainers:
+  - Hao-Wen Ting <hao-wen.ting@realtek.com>
+
+description: |
+  The Realtek SYSTIMER is a 64-bit timer that can be used as a tick
+  broadcast timer on multi-core Realtek SoCs. It remains active during
+  deep CPU idle states where local timers are powered off, allowing all
+  CPUs to enter power-cut idle states simultaneously for better power
+  efficiency.
+
+  The timer operates at a fixed 1MHz frequency and supports oneshot mode
+  for tick broadcast functionality.
+
+properties:
+  compatible:
+    const: realtek,systimer
+
+  reg:
+    description: |
+      Physical base address and length of the timer's memory mapped
+      registers. The register range contains the 64-bit timestamp counter,
+      compare value registers, control and status registers.
+    maxItems: 1
+
+  interrupts:
+    description: |
+      Timer interrupt specifier. This interrupt is triggered when the
+      timer compare value matches the current timestamp counter.
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+  - interrupts
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    systimer: systimer@89420 {
+        compatible = "realtek,systimer";
+        reg = <0x89420 0x18>;
+        interrupts = <GIC_SPI 112 IRQ_TYPE_LEVEL_HIGH>;
+    };
