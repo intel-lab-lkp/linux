@@ -7,11 +7,11 @@
 #include <linux/string_helpers.h>
 
 #include <drm/drm_print.h>
+#include <drm/intel/display_parent_interface.h>
 
 #include "soc/intel_dram.h"
 
 #include "i915_drv.h"
-#include "i915_irq.h"
 #include "i915_reg.h"
 #include "intel_backlight_regs.h"
 #include "intel_cdclk.h"
@@ -1202,7 +1202,6 @@ static void hsw_assert_cdclk(struct intel_display *display)
 
 static void assert_can_disable_lcpll(struct intel_display *display)
 {
-	struct drm_i915_private *dev_priv = to_i915(display->drm);
 	struct intel_crtc *crtc;
 
 	for_each_intel_crtc(display->drm, crtc)
@@ -1247,7 +1246,7 @@ static void assert_can_disable_lcpll(struct intel_display *display)
 	 * gen-specific and since we only disable LCPLL after we fully disable
 	 * the interrupts, the check below should be enough.
 	 */
-	INTEL_DISPLAY_STATE_WARN(display, intel_irqs_enabled(dev_priv),
+	INTEL_DISPLAY_STATE_WARN(display, display->parent->irq->enabled(display->drm),
 				 "IRQs enabled\n");
 }
 

@@ -6,9 +6,8 @@
 #include <linux/iopoll.h>
 
 #include <drm/drm_print.h>
+#include <drm/intel/display_parent_interface.h>
 
-#include "i915_drv.h"
-#include "i915_irq.h"
 #include "i915_reg.h"
 #include "intel_backlight_regs.h"
 #include "intel_combo_phy.h"
@@ -628,8 +627,6 @@ static bool hsw_power_well_enabled(struct intel_display *display,
 
 static void assert_can_enable_dc9(struct intel_display *display)
 {
-	struct drm_i915_private *dev_priv = to_i915(display->drm);
-
 	drm_WARN_ONCE(display->drm,
 		      (intel_de_read(display, DC_STATE_EN) & DC_STATE_EN_DC9),
 		      "DC9 already programmed to be enabled.\n");
@@ -641,7 +638,7 @@ static void assert_can_enable_dc9(struct intel_display *display)
 		      intel_de_read(display, HSW_PWR_WELL_CTL2) &
 		      HSW_PWR_WELL_CTL_REQ(SKL_PW_CTL_IDX_PW_2),
 		      "Power well 2 on.\n");
-	drm_WARN_ONCE(display->drm, intel_irqs_enabled(dev_priv),
+	drm_WARN_ONCE(display->drm, display->parent->irq->enabled(display->drm),
 		      "Interrupts not disabled yet.\n");
 
 	 /*
@@ -655,9 +652,7 @@ static void assert_can_enable_dc9(struct intel_display *display)
 
 static void assert_can_disable_dc9(struct intel_display *display)
 {
-	struct drm_i915_private *dev_priv = to_i915(display->drm);
-
-	drm_WARN_ONCE(display->drm, intel_irqs_enabled(dev_priv),
+	drm_WARN_ONCE(display->drm, display->parent->irq->enabled(display->drm),
 		      "Interrupts not disabled yet.\n");
 	drm_WARN_ONCE(display->drm,
 		      intel_de_read(display, DC_STATE_EN) &
@@ -1281,12 +1276,10 @@ static void vlv_display_power_well_init(struct intel_display *display)
 
 static void vlv_display_power_well_deinit(struct intel_display *display)
 {
-	struct drm_i915_private *dev_priv = to_i915(display->drm);
-
 	valleyview_disable_display_irqs(display);
 
 	/* make sure we're done processing display irqs */
-	intel_synchronize_irq(dev_priv);
+	display->parent->irq->synchronize(display->drm);
 
 	vlv_pps_reset_all(display);
 

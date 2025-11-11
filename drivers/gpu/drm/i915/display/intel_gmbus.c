@@ -32,11 +32,11 @@
 #include <linux/i2c.h>
 #include <linux/iopoll.h>
 
-#include <drm/drm_print.h>
 #include <drm/display/drm_hdcp_helper.h>
+#include <drm/drm_print.h>
+#include <drm/drm_print.h>
+#include <drm/intel/display_parent_interface.h>
 
-#include "i915_drv.h"
-#include "i915_irq.h"
 #include "i915_reg.h"
 #include "intel_de.h"
 #include "intel_display_regs.h"
@@ -391,12 +391,11 @@ intel_gpio_setup(struct intel_gmbus *bus, i915_reg_t gpio_reg)
 
 static bool has_gmbus_irq(struct intel_display *display)
 {
-	struct drm_i915_private *i915 = to_i915(display->drm);
 	/*
 	 * encoder->shutdown() may want to use GMBUS
 	 * after irqs have already been disabled.
 	 */
-	return HAS_GMBUS_IRQ(display) && intel_irqs_enabled(i915);
+	return HAS_GMBUS_IRQ(display) && display->parent->irq->enabled(display->drm);
 }
 
 static int gmbus_wait(struct intel_display *display, u32 status, u32 irq_en)
