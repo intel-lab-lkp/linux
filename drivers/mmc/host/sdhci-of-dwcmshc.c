@@ -77,6 +77,10 @@
 #define CV18XX_RETRY_TUNING_MAX			50
 
 /* Rockchip specific Registers */
+#define DWCMSHC_EMMC_CTRL		0x52c
+#define  EMMC_CTRL_CARD_IS_EMMC		BIT(0)
+#define  EMMC_CTRL_ENH_STROBE_ENABLE	BIT(8)
+
 #define DWCMSHC_EMMC_DLL_CTRL		0x800
 #define DWCMSHC_EMMC_DLL_RXCLK		0x804
 #define DWCMSHC_EMMC_DLL_TXCLK		0x808
@@ -660,6 +664,14 @@ static void dwcmshc_rk3568_set_clock(struct sdhci_host *host, unsigned int clock
 			DLL_CMDOUT_TAPNUM_90_DEGREES |
 			DLL_CMDOUT_TAPNUM_FROM_SW;
 		sdhci_writel(host, extra, DECMSHC_EMMC_DLL_CMDOUT);
+
+		extra = sdhci_readl(host, DWCMSHC_EMMC_CTRL);
+		if (extra & EMMC_CTRL_CARD_IS_EMMC) {
+			extra |= EMMC_CTRL_ENH_STROBE_ENABLE;
+			sdhci_writel(host, extra, DWCMSHC_EMMC_CTRL);
+		} else {
+			dev_info(mmc_dev(host->mmc), "strobe mode not enabled!\n");
+		}
 	}
 
 	extra = DWCMSHC_EMMC_DLL_DLYENA |
