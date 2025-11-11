@@ -555,9 +555,11 @@ static ssize_t connector_status_store(struct config_item *item,
 		return -EINVAL;
 
 	scoped_guard(mutex, &connector->dev->lock) {
+		enum drm_connector_status old_status =
+			vkms_config_connector_get_status(connector->config);
 		vkms_config_connector_set_status(connector->config, status);
 
-		if (connector->dev->enabled)
+		if (connector->dev->enabled && old_status != status)
 			vkms_trigger_connector_hotplug(connector->dev->config->dev);
 	}
 
