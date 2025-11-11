@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (C) 2025 Advanced Micro Devices, Inc. */
+#include <linux/string_helpers.h>
 #include <linux/device.h>
 #include <linux/pci.h>
 #include "cxlpci.h"
@@ -32,10 +33,94 @@ static char *cxl_cachedev_devnode(const struct device *dev, umode_t *mode,
 	return kasprintf(GFP_KERNEL, "cxl/%s", dev_name(dev));
 }
 
+static ssize_t numa_node_show(struct device *dev, struct device_attribute *attr,
+			      char *buf)
+{
+	return sysfs_emit(buf, "%d\n", dev_to_node(dev));
+}
+static DEVICE_ATTR_RO(numa_node);
+
+static struct attribute *cxl_cachedev_attributes[] = {
+	&dev_attr_numa_node.attr,
+	NULL
+};
+
+static umode_t cxl_cachedev_visible(struct kobject *kobj, struct attribute *a,
+				    int n)
+{
+	if (!IS_ENABLED(CONFIG_NUMA) && a == &dev_attr_numa_node.attr)
+		return 0;
+	return a->mode;
+}
+
+static struct attribute_group cxl_cachedev_attribute_group = {
+	.attrs = cxl_cachedev_attributes,
+	.is_visible = cxl_cachedev_visible,
+};
+
+static ssize_t cache_size_show(struct device *dev, struct device_attribute *attr,
+			       char *buf)
+{
+	struct cxl_cachedev *cxlcd = to_cxl_cachedev(dev);
+	struct cxl_dev_state *cxlds = cxlcd->cxlds;
+	struct cxl_cache_state cstate = cxlds->cstate;
+
+	return sysfs_emit(buf, "%llu\n", cstate.size);
+}
+static DEVICE_ATTR_RO(cache_size);
+
+static ssize_t cache_unit_show(struct device *dev, struct device_attribute *attr,
+			       char *buf)
+{
+	struct cxl_cachedev *cxlcd = to_cxl_cachedev(dev);
+	struct cxl_dev_state *cxlds = cxlcd->cxlds;
+	struct cxl_cache_state cstate = cxlds->cstate;
+	char unit_buf[32];
+	int rc;
+
+	rc = string_get_size(cstate.size, 1, STRING_UNITS_2, unit_buf,
+			     sizeof(unit_buf) - 1);
+	if (rc <= 0)
+		return -ENXIO;
+
+	return sysfs_emit(buf, "%s\n", unit_buf);
+}
+static DEVICE_ATTR_RO(cache_unit);
+
+static struct attribute *cxl_cachedev_cache_attributes[] = {
+	&dev_attr_cache_size.attr,
+	&dev_attr_cache_unit.attr,
+	NULL
+};
+
+static umode_t cxl_cachedev_cache_visible(struct kobject *kobj,
+					  struct attribute *a, int n)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct cxl_cachedev *cxlcd = to_cxl_cachedev(dev);
+	struct cxl_dev_state *cxlds = cxlcd->cxlds;
+
+	if (!cxlds || cxlds->cstate.size == 0)
+		return 0;
+	return a->mode;
+}
+
+static struct attribute_group cxl_cachedev_cache_attribute_group = {
+	.attrs = cxl_cachedev_cache_attributes,
+	.is_visible = cxl_cachedev_cache_visible,
+};
+
+static const struct attribute_group *cxl_cachedev_attribute_groups[] = {
+	&cxl_cachedev_attribute_group,
+	&cxl_cachedev_cache_attribute_group,
+	NULL
+};
+
 static const struct device_type cxl_cachedev_type = {
 	.name = "cxl_cachedev",
 	.release = cxl_cachedev_release,
 	.devnode = cxl_cachedev_devnode,
+	.groups = cxl_cachedev_attribute_groups,
 };
 
 bool is_cxl_cachedev(const struct device *dev)
