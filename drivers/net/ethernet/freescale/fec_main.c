@@ -4069,10 +4069,8 @@ static int fec_enet_init(struct net_device *ndev)
 
 	WARN_ON(dsize != (1 << dsize_log2));
 #if defined(CONFIG_ARM) || defined(CONFIG_ARM64)
-	fep->rx_align = 0xf;
 	fep->tx_align = 0xf;
 #else
-	fep->rx_align = 0x3;
 	fep->tx_align = 0x3;
 #endif
 	fep->rx_pkts_itr = FEC_ITR_ICFT_DEFAULT;
@@ -4161,10 +4159,8 @@ static int fec_enet_init(struct net_device *ndev)
 		fep->csum_flags |= FLAG_RX_CSUM_ENABLED;
 	}
 
-	if (fep->quirks & FEC_QUIRK_HAS_MULTI_QUEUES) {
+	if (fep->quirks & FEC_QUIRK_HAS_MULTI_QUEUES)
 		fep->tx_align = 0;
-		fep->rx_align = 0x3f;
-	}
 
 	ndev->hw_features = ndev->features;
 
