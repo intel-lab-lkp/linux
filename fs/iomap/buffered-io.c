@@ -772,7 +772,7 @@ static struct folio *__iomap_get_folio(struct iomap_iter *iter,
 	if (!mapping_large_folio_support(iter->inode->i_mapping))
 		len = min_t(size_t, len, PAGE_SIZE - offset_in_page(pos));
 
-	if (iter->fbatch) {
+	if (iter->iomap.flags & IOMAP_F_FOLIO_BATCH) {
 		struct folio *folio = folio_batch_next(iter->fbatch);
 
 		if (!folio)
@@ -869,7 +869,7 @@ static int iomap_write_begin(struct iomap_iter *iter,
 	 * process so return and let the caller iterate and refill the batch.
 	 */
 	if (!folio) {
-		WARN_ON_ONCE(!iter->fbatch);
+		WARN_ON_ONCE(!(iter->iomap.flags & IOMAP_F_FOLIO_BATCH));
 		return 0;
 	}
 
@@ -1483,23 +1483,34 @@ static int iomap_zero_iter(struct iomap_iter *iter, bool *did_zero,
 	return status;
 }
 
-loff_t
+/**
+ * iomap_fill_dirty_folios - fill a folio batch with dirty folios
+ * @iter: Iteration structure
+ * @start: Start offset of range. Updated based on lookup progress.
+ * @end: End offset of range
+ *
+ * Returns the associated control flag if the folio batch is available and the
+ * lookup performed. The caller is responsible to set the flag on the associated
+ * iomap.
+ */
+unsigned int
 iomap_fill_dirty_folios(
 	struct iomap_iter	*iter,
-	loff_t			offset,
-	loff_t			length)
+	loff_t			*start,
+	loff_t			end)
 {
 	struct address_space	*mapping = iter->inode->i_mapping;
-	pgoff_t			start = offset >> PAGE_SHIFT;
-	pgoff_t			end = (offset + length - 1) >> PAGE_SHIFT;
+	pgoff_t			pstart = *start >> PAGE_SHIFT;
+	pgoff_t			pend = (end - 1) >> PAGE_SHIFT;
 
-	iter->fbatch = kmalloc(sizeof(struct folio_batch), GFP_KERNEL);
-	if (!iter->fbatch)
-		return offset + length;
-	folio_batch_init(iter->fbatch);
+	if (!iter->fbatch) {
+		*start = end;
+		return 0;
+	}
 
-	filemap_get_folios_dirty(mapping, &start, end, iter->fbatch);
-	return (start << PAGE_SHIFT);
+	filemap_get_folios_dirty(mapping, &pstart, pend, iter->fbatch);
+	*start = (pstart << PAGE_SHIFT);
+	return IOMAP_F_FOLIO_BATCH;
 }
 EXPORT_SYMBOL_GPL(iomap_fill_dirty_folios);
 
@@ -1508,16 +1519,20 @@ iomap_zero_range(struct inode *inode, loff_t pos, loff_t len, bool *did_zero,
 		const struct iomap_ops *ops,
 		const struct iomap_write_ops *write_ops, void *private)
 {
+	struct folio_batch fbatch;
 	struct iomap_iter iter = {
 		.inode		= inode,
 		.pos		= pos,
 		.len		= len,
 		.flags		= IOMAP_ZERO,
 		.private	= private,
+		.fbatch		= &fbatch,
 	};
 	struct address_space *mapping = inode->i_mapping;
 	int ret;
 	bool range_dirty;
+
+	folio_batch_init(&fbatch);
 
 	/*
 	 * To avoid an unconditional flush, check pagecache state and only flush
@@ -1529,11 +1544,11 @@ iomap_zero_range(struct inode *inode, loff_t pos, loff_t len, bool *did_zero,
 	while ((ret = iomap_iter(&iter, ops)) > 0) {
 		const struct iomap *srcmap = iomap_iter_srcmap(&iter);
 
-		if (WARN_ON_ONCE(iter.fbatch &&
+		if (WARN_ON_ONCE((iter.iomap.flags & IOMAP_F_FOLIO_BATCH) &&
 				 srcmap->type != IOMAP_UNWRITTEN))
 			return -EIO;
 
-		if (!iter.fbatch &&
+		if (!(iter.iomap.flags & IOMAP_F_FOLIO_BATCH) &&
 		    (srcmap->type == IOMAP_HOLE ||
 		     srcmap->type == IOMAP_UNWRITTEN)) {
 			s64 status;
