@@ -61,6 +61,11 @@ struct iommu_group {
 	int id;
 	struct iommu_domain *default_domain;
 	struct iommu_domain *blocking_domain;
+	/*
+	 * During a group device reset, @resetting_domain points to the physical
+	 * domain, while @domain points to the attached domain before the reset.
+	 */
+	struct iommu_domain *resetting_domain;
 	struct iommu_domain *domain;
 	struct list_head entry;
 	unsigned int owner_cnt;
@@ -2195,6 +2200,12 @@ int iommu_deferred_attach(struct device *dev, struct iommu_domain *domain)
 
 	guard(mutex)(&dev->iommu_group->mutex);
 
+	/*
+	 * This is a concurrent attach while a group device is resetting. Reject
+	 * it until iommu_dev_reset_done() attaches the device to group->domain.
+	 */
+	if (dev->iommu_group->resetting_domain)
+		return -EBUSY;
 	return __iommu_attach_device(domain, dev, NULL);
 }
 
@@ -2252,6 +2263,16 @@ struct iommu_domain *iommu_driver_get_domain_for_dev(struct device *dev)
 	struct iommu_group *group = dev->iommu_group;
 
 	lockdep_assert_held(&group->mutex);
+
+	/*
+	 * Driver handles the low-level __iommu_attach_device(), including the
+	 * one invoked by iommu_dev_reset_done(), in which case the driver must
+	 * get the resetting_domain over group->domain caching the one prior to
+	 * iommu_dev_reset_prepare(), so that it wouldn't end up with attaching
+	 * the device from group->domain (old) to group->domain (new).
+	 */
+	if (group->resetting_domain)
+		return group->resetting_domain;
 
 	return group->domain;
 }
@@ -2408,6 +2429,13 @@ static int __iommu_group_set_domain_internal(struct iommu_group *group,
 
 	if (WARN_ON(!new_domain))
 		return -EINVAL;
+
+	/*
+	 * This is a concurrent attach while a group device is resetting. Reject
+	 * it until iommu_dev_reset_done() attaches the device to group->domain.
+	 */
+	if (group->resetting_domain)
+		return -EBUSY;
 
 	/*
 	 * Changing the domain is done by calling attach_dev() on the new
@@ -3527,6 +3555,16 @@ int iommu_attach_device_pasid(struct iommu_domain *domain,
 		return -EINVAL;
 
 	mutex_lock(&group->mutex);
+
+	/*
+	 * This is a concurrent attach while a group device is resetting. Reject
+	 * it until iommu_dev_reset_done() attaches the device to group->domain.
+	 */
+	if (group->resetting_domain) {
+		ret = -EBUSY;
+		goto out_unlock;
+	}
+
 	for_each_group_device(group, device) {
 		/*
 		 * Skip PASID validation for devices without PASID support
@@ -3610,6 +3648,16 @@ int iommu_replace_device_pasid(struct iommu_domain *domain,
 		return -EINVAL;
 
 	mutex_lock(&group->mutex);
+
+	/*
+	 * This is a concurrent attach while a group device is resetting. Reject
+	 * it until iommu_dev_reset_done() attaches the device to group->domain.
+	 */
+	if (group->resetting_domain) {
+		ret = -EBUSY;
+		goto out_unlock;
+	}
+
 	entry = iommu_make_pasid_array_entry(domain, handle);
 	curr = xa_cmpxchg(&group->pasid_array, pasid, NULL,
 			  XA_ZERO_ENTRY, GFP_KERNEL);
@@ -3866,6 +3914,141 @@ err_unlock:
 	return ret;
 }
 EXPORT_SYMBOL_NS_GPL(iommu_replace_group_handle, "IOMMUFD_INTERNAL");
+
+/**
+ * iommu_dev_reset_prepare() - Block IOMMU to prepare for a device reset
+ * @dev: device that is going to enter a reset routine
+ *
+ * When certain device is entering a reset routine, it wants to block any IOMMU
+ * activity during the reset routine. This includes blocking any translation as
+ * well as cache invalidation (especially the device cache).
+ *
+ * This function attaches all RID/PASID of the device's to IOMMU_DOMAIN_BLOCKED
+ * allowing any blocked-domain-supporting IOMMU driver to pause translation and
+ * cahce invalidation, but leaves the software domain pointers intact so later
+ * the iommu_dev_reset_done() can restore everything.
+ *
+ * Return: 0 on success or negative error code if the preparation failed.
+ *
+ * Caller must use iommu_dev_reset_prepare() and iommu_dev_reset_done() together
+ * before/after the core-level reset routine, to unset the resetting_domain.
+ *
+ * These two functions are designed to be used by PCI reset functions that would
+ * not invoke any racy iommu_release_device(), since PCI sysfs node gets removed
+ * before it notifies with a BUS_NOTIFY_REMOVED_DEVICE. When using them in other
+ * case, callers must ensure there will be no racy iommu_release_device() call,
+ * which otherwise would UAF the dev->iommu_group pointer.
+ */
+int iommu_dev_reset_prepare(struct device *dev)
+{
+	struct iommu_group *group = dev->iommu_group;
+	unsigned long pasid;
+	void *entry;
+	int ret = 0;
+
+	if (!dev_has_iommu(dev))
+		return 0;
+
+	guard(mutex)(&group->mutex);
+
+	/*
+	 * Once the resetting_domain is set, any concurrent attachment to this
+	 * iommu_group will be rejected, which would break the attach routines
+	 * of the sibling devices in the same iommu_group. So, skip this case.
+	 */
+	if (dev_is_pci(dev)) {
+		struct group_device *gdev;
+
+		for_each_group_device(group, gdev) {
+			if (gdev->dev != dev)
+				return 0;
+		}
+	}
+
+	/* Re-entry is not allowed */
+	if (WARN_ON(group->resetting_domain))
+		return -EBUSY;
+
+	ret = __iommu_group_alloc_blocking_domain(group);
+	if (ret)
+		return ret;
+
+	/* Stage RID domain at blocking_domain while retaining group->domain */
+	if (group->domain != group->blocking_domain) {
+		ret = __iommu_attach_device(group->blocking_domain, dev,
+					    group->domain);
+		if (ret)
+			return ret;
+	}
+
+	/*
+	 * Stage PASID domains at blocking_domain while retaining pasid_array.
+	 *
+	 * The pasid_array is mostly fenced by group->mutex, except one reader
+	 * in iommu_attach_handle_get(), so it's safe to read without xa_lock.
+	 */
+	xa_for_each_start(&group->pasid_array, pasid, entry, 1)
+		iommu_remove_dev_pasid(dev, pasid,
+				       pasid_array_entry_to_domain(entry));
+
+	group->resetting_domain = group->blocking_domain;
+	return ret;
+}
+EXPORT_SYMBOL_GPL(iommu_dev_reset_prepare);
+
+/**
+ * iommu_dev_reset_done() - Restore IOMMU after a device reset is finished
+ * @dev: device that has finished a reset routine
+ *
+ * When certain device has finished a reset routine, it wants to restore its
+ * IOMMU activity, including new translation as well as cache invalidation, by
+ * re-attaching all RID/PASID of the device's back to the domains retained in
+ * the core-level structure.
+ *
+ * Caller must pair it with a successfully returned iommu_dev_reset_prepare().
+ *
+ * Note that, although unlikely, there is a risk that re-attaching domains might
+ * fail due to some unexpected happening like OOM.
+ */
+void iommu_dev_reset_done(struct device *dev)
+{
+	struct iommu_group *group = dev->iommu_group;
+	unsigned long pasid;
+	void *entry;
+
+	if (!dev_has_iommu(dev))
+		return;
+
+	guard(mutex)(&group->mutex);
+
+	/* iommu_dev_reset_prepare() was bypassed for the device */
+	if (!group->resetting_domain)
+		return;
+
+	/* iommu_dev_reset_prepare() was not successfully called */
+	if (WARN_ON(!group->blocking_domain))
+		return;
+
+	/* Re-attach RID domain back to group->domain */
+	if (group->domain != group->blocking_domain) {
+		WARN_ON(__iommu_attach_device(group->domain, dev,
+					      group->blocking_domain));
+	}
+
+	/*
+	 * Re-attach PASID domains back to the domains retained in pasid_array.
+	 *
+	 * The pasid_array is mostly fenced by group->mutex, except one reader
+	 * in iommu_attach_handle_get(), so it's safe to read without xa_lock.
+	 */
+	xa_for_each_start(&group->pasid_array, pasid, entry, 1)
+		WARN_ON(__iommu_set_group_pasid(
+			pasid_array_entry_to_domain(entry), group, pasid,
+			group->blocking_domain));
+
+	group->resetting_domain = NULL;
+}
+EXPORT_SYMBOL_GPL(iommu_dev_reset_done);
 
 #if IS_ENABLED(CONFIG_IRQ_MSI_IOMMU)
 /**

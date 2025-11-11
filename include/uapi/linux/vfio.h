@@ -963,6 +963,9 @@ struct vfio_device_bind_iommufd {
  * hwpt corresponding to the given pt_id.
  *
  * Return: 0 on success, -errno on failure.
+ *
+ * When a device gets reset, any attach will be rejected with -EBUSY until that
+ * reset routine finishes.
  */
 struct vfio_device_attach_iommufd_pt {
 	__u32	argsz;
