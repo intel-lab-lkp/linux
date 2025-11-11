@@ -1180,6 +1180,8 @@ struct dwc3_glue_ops {
  * @wakeup_pending_funcs: Indicates whether any interface has requested for
  *			 function wakeup in bitmap format where bit position
  *			 represents interface_id.
+ * @dma_addressable_bits: set if we need to configure a different
+ *			dma-bit-mask other than 64 bits.
  */
 struct dwc3 {
 	struct work_struct	drd_work;
@@ -1414,6 +1416,7 @@ struct dwc3 {
 	struct dentry		*debug_root;
 	u32			gsbuscfg0_reqinfo;
 	u32			wakeup_pending_funcs;
+	u32			dma_addressable_bits;
 };
 
 #define INCRX_BURST_MODE 0

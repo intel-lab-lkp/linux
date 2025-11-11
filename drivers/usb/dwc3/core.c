@@ -2190,6 +2190,9 @@ int dwc3_core_probe(const struct dwc3_probe_data *data)
 	dwc->xhci_resources[0].flags = res->flags;
 	dwc->xhci_resources[0].name = res->name;
 
+	/* Initialize dma addressable bit to 64 bits as default */
+	dwc->dma_addressable_bits = 64;
+
 	/*
 	 * Request memory region but exclude xHCI regs,
 	 * since it will be requested by the xhci-plat driver.
@@ -2204,6 +2207,9 @@ int dwc3_core_probe(const struct dwc3_probe_data *data)
 			dwc_res.start -= DWC3_GLOBALS_REGS_START;
 			dwc_res.start += DWC3_RTK_RTD_GLOBALS_REGS_START;
 		}
+
+		if (of_device_is_compatible(parent, "altr,agilex5-dwc3"))
+			dwc->dma_addressable_bits = 40;
 
 		of_node_put(parent);
 	}
@@ -2254,7 +2260,8 @@ int dwc3_core_probe(const struct dwc3_probe_data *data)
 
 	if (!dwc->sysdev_is_parent &&
 	    DWC3_GHWPARAMS0_AWIDTH(dwc->hwparams.hwparams0) == 64) {
-		ret = dma_set_mask_and_coherent(dwc->sysdev, DMA_BIT_MASK(64));
+		ret = dma_set_mask_and_coherent(dwc->sysdev,
+						DMA_BIT_MASK(dwc->dma_addressable_bits));
 		if (ret)
 			goto err_disable_clks;
 	}
