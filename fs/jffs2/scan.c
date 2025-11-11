@@ -442,6 +442,174 @@ static int jffs2_scan_xref_node(struct jffs2_sb_info *c, struct jffs2_eraseblock
 }
 #endif
 
+static inline uint32_t jffs2_calc_node_hdr_crc(const struct jffs2_unknown_node *node)
+{
+	struct jffs2_unknown_node crcnode;
+
+	crcnode.magic = node->magic;
+	crcnode.nodetype = cpu_to_je16(je16_to_cpu(node->nodetype) | JFFS2_NODE_ACCURATE);
+	crcnode.totlen = node->totlen;
+
+	return crc32(0, &crcnode, sizeof(crcnode) - 4);
+}
+
+static int jffs2_pre_scan_eraseblock(struct jffs2_sb_info *c, struct jffs2_eraseblock *jeb)
+{
+	int ret;
+	bool error_found = false;
+	unsigned char *buf;
+	uint32_t crc;
+	struct jffs2_unknown_node *node;
+	struct jffs2_raw_inode *ri;
+	struct jffs2_raw_dirent *rd;
+
+	uint32_t ofs = 0, buf_len = c->sector_size;
+	uint32_t retlen;
+
+	buf = kmalloc(buf_len, GFP_KERNEL);
+	if (!buf) {
+		JFFS2_WARNING("Unable to allocate scan buffer of size %u\n", buf_len);
+		return -ENOMEM;
+	}
+
+	ret = jffs2_fill_scan_buf(c, buf, jeb->offset, buf_len);
+	if (ret) {
+		JFFS2_WARNING("Unable to read eraseblock at 0x%08x\n", jeb->offset);
+		goto exit;
+	}
+
+	while (ofs < c->sector_size) {
+		if (c->sector_size - ofs < sizeof(struct jffs2_unknown_node)) {
+			/* Not enough space for a node header */
+			break;
+		}
+
+		if (*(uint32_t *)(&buf[ofs]) == 0xffffffff) {
+			/* Reached empty space */
+			ofs += 4;
+			continue;
+		}
+
+		node = (struct jffs2_unknown_node *)&buf[ofs];
+		if (je16_to_cpu(node->magic) != JFFS2_MAGIC_BITMASK) {
+			ofs += 4;
+			continue;
+		}
+
+		if (jffs2_calc_node_hdr_crc(node) != je32_to_cpu(node->hdr_crc)) {
+			JFFS2_WARNING("node header CRC failed at %#08x\n",
+				      jeb->offset + ofs);
+			ofs += 4;
+			error_found = true;
+			goto check;
+		}
+
+		if (!(je16_to_cpu(node->nodetype) & JFFS2_NODE_ACCURATE)) {
+			/* This is an obsoleted node */
+			ofs += PAD(je32_to_cpu(node->totlen));
+			continue;
+		}
+
+		switch (je16_to_cpu(node->nodetype)) {
+		case JFFS2_NODETYPE_INODE:
+			if (c->sector_size - ofs < sizeof(struct jffs2_raw_inode)) {
+				/* Not enough space for a full inode node */
+				ofs += 4;
+				goto check;
+			}
+
+			ri = (struct jffs2_raw_inode *)node;
+			crc = crc32(0, ri, sizeof(*ri) - 8);
+			if (crc != je32_to_cpu(ri->node_crc)) {
+				JFFS2_WARNING("inode node CRC failed at %#08x, read=%#08x, calc=%#08x\n",
+					      jeb->offset + ofs,
+					      je32_to_cpu(ri->node_crc), crc);
+				error_found = true;
+				goto check;
+			}
+
+			if (je32_to_cpu(ri->dsize)) {
+				crc = crc32(0, ri->data, je32_to_cpu(ri->csize));
+				if (je32_to_cpu(ri->data_crc) != crc) {
+					JFFS2_WARNING("Data CRC failed data node at 0x%08x: Read 0x%08x, calculated 0x%08x\n",
+						ofs, je32_to_cpu(ri->data_crc), crc);
+					error_found = true;
+					goto check;
+				}
+			}
+
+			ofs += PAD(je32_to_cpu(node->totlen));
+			break;
+		case JFFS2_NODETYPE_DIRENT:
+			if (c->sector_size - ofs < sizeof(struct jffs2_raw_dirent)) {
+				/* Not enough space for a full dirent node */
+				ofs += 4;
+				goto check;
+			}
+
+			rd = (struct jffs2_raw_dirent *)node;
+			crc = crc32(0, rd, sizeof(*rd) - 8);
+			if (je32_to_cpu(rd->node_crc) != crc) {
+				JFFS2_WARNING("Node CRC failed dirent node at 0x%08x: Read 0x%08x, calculated 0x%08x\n",
+					ofs, je32_to_cpu(rd->node_crc), crc);
+				error_found = true;
+				goto check;
+			}
+
+			if (strnlen(rd->name, rd->nsize) != rd->nsize) {
+				JFFS2_WARNING("Name in dirent node at 0x%08x contains zeroes\n", ofs);
+				error_found = true;
+				break;
+			}
+
+			if (rd->nsize) {
+				crc = crc32(0, rd->name, rd->nsize);
+				if (je32_to_cpu(rd->name_crc) != crc) {
+					JFFS2_WARNING("Name CRC failed dirent node at 0x%08x: Read 0x%08x, calculated 0x%08x\n",
+						ofs, je32_to_cpu(rd->name_crc), crc);
+					error_found = true;
+					goto check;
+				}
+			}
+
+			ofs += PAD(je32_to_cpu(node->totlen));
+			break;
+		default:
+			ofs += PAD(je32_to_cpu(node->totlen));
+			/* Other node types are not pre-checked */
+			break;
+		}
+	}
+
+check:
+	// find any error during pre-scan, if found, erase the block, and write back.
+	if (error_found) {
+			JFFS2_WARNING("Erasing block at 0x%08x error_count %d due to pre-scan errors\n",
+				jeb->offset);
+			struct erase_info instr;
+
+			instr.addr = jeb->offset;
+			instr.len = c->sector_size;
+			ret = mtd_erase(c->mtd, &instr);
+			if (ret) {
+				JFFS2_ERROR("Erase at 0x%08x failed during pre-scan: errno %d\n",
+					jeb->offset, ret);
+				goto exit;
+			}
+
+			ret = jffs2_flash_direct_write(c, jeb->offset, buf_len, &retlen, buf);
+			if (ret) {
+				JFFS2_ERROR("Write back at 0x%08x failed during pre-scan: errno %d\n",
+					jeb->offset, ret);
+				goto exit;
+			}
+	}
+exit:
+
+	kfree(buf);
+	return ret;
+}
+
 /* Called with 'buf_size == 0' if buf is in fact a pointer _directly_ into
    the flash, XIP-style */
 static int jffs2_scan_eraseblock (struct jffs2_sb_info *c, struct jffs2_eraseblock *jeb,
@@ -453,6 +621,10 @@ static int jffs2_scan_eraseblock (struct jffs2_sb_info *c, struct jffs2_eraseblo
 	int err;
 	int noise = 0;
 
+	err = jffs2_pre_scan_eraseblock(c, jeb);
+	if (err) // only log warning, continue scanning
+		JFFS2_WARNING("Pre-scan of eraseblock at 0x%08x failed: err=%d\n",
+			      jeb->offset, err);
 
 #ifdef CONFIG_JFFS2_FS_WRITEBUFFER
 	int cleanmarkerfound = 0;
