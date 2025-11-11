@@ -66,6 +66,9 @@
 #define INA3221_MASK_ENABLE_SCC_MASK	GENMASK(14, 12)
 
 #define SQ52210_ALERT_CONFIG_MASK	GENMASK(15, 4)
+#define SQ52210_MASK_ALERT_CHANNEL1 (BIT(15) | BIT(12) | BIT(9) | BIT(6))
+#define SQ52210_MASK_ALERT_CHANNEL2 (BIT(14) | BIT(11) | BIT(8) | BIT(5))
+#define SQ52210_MASK_ALERT_CHANNEL3 (BIT(13) | BIT(10) | BIT(7) | BIT(4))
 
 #define INA3221_CONFIG_DEFAULT		0x7127
 #define INA3221_RSHUNT_DEFAULT		10000
@@ -84,6 +87,9 @@ enum ina3221_fields {
 	/* Alert Flags: SF is the summation-alert flag */
 	F_SF, F_CF3, F_CF2, F_CF1,
 
+	/* Alert Flags: AFF is the alert function flag */
+	F_AFF3, F_AFF2, F_AFF1,
+
 	/* sentinel */
 	F_MAX_FIELDS
 };
@@ -99,6 +105,10 @@ static const struct reg_field ina3221_reg_fields[] = {
 	[F_CF3] = REG_FIELD(INA3221_MASK_ENABLE, 7, 7),
 	[F_CF2] = REG_FIELD(INA3221_MASK_ENABLE, 8, 8),
 	[F_CF1] = REG_FIELD(INA3221_MASK_ENABLE, 9, 9),
+
+	[F_AFF3] = REG_FIELD(SQ52210_ALERT_CONFIG, 1, 1),
+	[F_AFF2] = REG_FIELD(SQ52210_ALERT_CONFIG, 2, 2),
+	[F_AFF1] = REG_FIELD(SQ52210_ALERT_CONFIG, 3, 3),
 };
 
 enum ina3221_channels {
@@ -293,11 +303,39 @@ static int ina3221_read_value(struct ina3221_data *ina, unsigned int reg,
 	 * Shunt Voltage Sum register has 14-bit value with 1-bit shift
 	 * Other Shunt Voltage registers have 12 bits with 3-bit shift
 	 */
-	if (reg == INA3221_SHUNT_SUM || reg == INA3221_CRIT_SUM)
+	switch (reg) {
+	case INA3221_SHUNT_SUM:
+	case INA3221_CRIT_SUM:
 		*val = sign_extend32(regval >> 1, 14);
-	else
+		break;
+	case SQ52210_CURRENT1:
+	case SQ52210_CURRENT2:
+	case SQ52210_CURRENT3:
+	case SQ52210_POWER1:
+	case SQ52210_POWER2:
+	case SQ52210_POWER3:
+		*val = regval;
+		break;
+	case INA3221_BUS1:
+	case INA3221_BUS2:
+	case INA3221_BUS3:
+	case INA3221_SHUNT1:
+	case INA3221_SHUNT2:
+	case INA3221_SHUNT3:
+	case INA3221_WARN1:
+	case INA3221_WARN2:
+	case INA3221_WARN3:
+	case INA3221_CRIT1:
+	case INA3221_CRIT2:
+	case INA3221_CRIT3:
 		*val = sign_extend32(regval >> 3, 12);
-
+		break;
+	case SQ52210_ALERT_LIMIT1:
+	case SQ52210_ALERT_LIMIT2:
+	case SQ52210_ALERT_LIMIT3:
+		*val = regval >> 3;
+		break;
+	};
 	return 0;
 }
 
@@ -310,6 +348,56 @@ static const u8 ina3221_in_reg[] = {
 	INA3221_SHUNT3,
 	INA3221_SHUNT_SUM,
 };
+
+static const u8 alert_limit_reg[] = {
+	SQ52210_ALERT_LIMIT1,
+	SQ52210_ALERT_LIMIT2,
+	SQ52210_ALERT_LIMIT3,
+};
+
+static const u8 alert_flag[] = {
+	F_AFF1,
+	F_AFF2,
+	F_AFF3,
+};
+
+/*
+ * Turns alert limit values into register values.
+ * Opposite of the formula in ina3221_read_value().
+ */
+static u16 sq52210_alert_to_reg(struct ina3221_data *ina, int reg, long val)
+{
+	int regval;
+	/*
+	 * Formula to convert voltage_uv to register value:
+	 *     regval = (voltage_mv / scale) << shift
+	 * Results:
+	 *     bus_voltage: (1 / 8mV) << 3 = 1 mV
+	 */
+	switch (reg) {
+	case INA3221_BUS1:
+	case INA3221_BUS2:
+	case INA3221_BUS3:
+		/* clamp voltage */
+		regval = clamp_val(val, -32760, 32760);
+		return regval;
+	case SQ52210_CURRENT1:
+	case SQ52210_CURRENT2:
+	case SQ52210_CURRENT3:
+		/* signed register, result in mA */
+		regval = DIV_ROUND_CLOSEST(val * 8000, ina->current_lsb_uA);
+		return clamp_val(regval, -32760, 32760);
+	case SQ52210_POWER1:
+	case SQ52210_POWER2:
+	case SQ52210_POWER3:
+		regval = DIV_ROUND_CLOSEST(val * 8000, ina->power_lsb_uW);
+		return clamp_val(regval, 0, 65528);
+	default:
+		/* programmer goofed */
+		WARN_ON_ONCE(1);
+		return 0;
+	}
+}
 
 static int ina3221_read_chip(struct device *dev, u32 attr, long *val)
 {
@@ -372,6 +460,25 @@ static int ina3221_read_in(struct device *dev, u32 attr, int channel, long *val)
 		return 0;
 	case hwmon_in_enable:
 		*val = ina3221_is_enabled(ina, channel);
+		return 0;
+	case hwmon_in_crit:
+	case hwmon_in_lcrit:
+		reg = alert_limit_reg[channel];
+		ret = ina3221_read_value(ina, reg, &regval);
+		if (ret)
+			return ret;
+		/*
+		 * Scale of bus voltage (mV): LSB is 8mV
+		 */
+		*val = regval * 8;
+		return 0;
+	case hwmon_in_crit_alarm:
+	case hwmon_in_lcrit_alarm:
+		reg = alert_flag[channel];
+		ret = regmap_field_read(ina->fields[reg], &regval);
+		if (ret)
+			return ret;
+		*val = regval;
 		return 0;
 	default:
 		return -EOPNOTSUPP;
@@ -448,6 +555,58 @@ static int ina3221_read_curr(struct device *dev, u32 attr,
 	default:
 		return -EOPNOTSUPP;
 	}
+}
+
+static const u32 sq52210_alert_mask[][INA3221_NUM_CHANNELS] = {
+	[hwmon_curr_lcrit] = { BIT(15), BIT(14), BIT(13) },
+	[hwmon_in_crit] = { BIT(12), BIT(11), BIT(10) },
+	[hwmon_in_lcrit] = { BIT(9), BIT(8), BIT(7) },
+	[hwmon_power_crit] = { BIT(6), BIT(5), BIT(4) },
+};
+
+static int sq52210_alert_limit_write(struct ina3221_data *ina, u32 attr, int channel, long val)
+{
+	struct regmap *regmap = ina->regmap;
+	int ret, limit_reg, item;
+	u32 alert_group;
+
+	if (val < 0)
+		return -EINVAL;
+	item = channel % INA3221_NUM_CHANNELS;
+	switch (item) {
+	case 0:
+		alert_group = SQ52210_MASK_ALERT_CHANNEL1;
+		limit_reg = SQ52210_ALERT_LIMIT1;
+		break;
+	case 1:
+		alert_group = SQ52210_MASK_ALERT_CHANNEL2;
+		limit_reg = SQ52210_ALERT_LIMIT2;
+		break;
+	case 2:
+		alert_group = SQ52210_MASK_ALERT_CHANNEL3;
+		limit_reg = SQ52210_ALERT_LIMIT3;
+		break;
+	default:
+		break;
+	}
+	/*
+	 * Clear all alerts first to avoid accidentally triggering ALERT pin
+	 * due to register write sequence. Then, only enable the alert
+	 * if the value is non-zero.
+	 */
+	ret = regmap_update_bits(regmap, SQ52210_ALERT_CONFIG,
+				alert_group, 0);
+	if (ret < 0)
+		return ret;
+	ret = regmap_write(regmap, limit_reg,
+			sq52210_alert_to_reg(ina, ina3221_curr_reg[attr][item], val));
+	if (ret < 0)
+		return ret;
+
+	if (val)
+		return regmap_update_bits(regmap, SQ52210_ALERT_CONFIG,
+					alert_group, sq52210_alert_mask[attr][item]);
+	return 0;
 }
 
 static int ina3221_write_chip(struct device *dev, u32 attr, long val)
@@ -586,6 +745,21 @@ fail:
 	return ret;
 }
 
+static int ina3221_write_in(struct device *dev, u32 attr, int channel, long val)
+{
+	struct ina3221_data *ina = dev_get_drvdata(dev);
+
+	switch (attr) {
+	case hwmon_in_lcrit:
+		return sq52210_alert_limit_write(ina, attr, channel, val);
+	case hwmon_in_crit:
+		return sq52210_alert_limit_write(ina, attr, channel, val);
+	case hwmon_in_enable:
+		return ina3221_write_enable(dev, channel, val);
+	default:
+		return 0;
+	}
+}
 static int ina3221_read(struct device *dev, enum hwmon_sensor_types type,
 			u32 attr, int channel, long *val)
 {
@@ -620,7 +794,7 @@ static int ina3221_write(struct device *dev, enum hwmon_sensor_types type,
 		break;
 	case hwmon_in:
 		/* 0-align channel ID */
-		ret = ina3221_write_enable(dev, channel - 1, val);
+		ret = ina3221_write_in(dev, attr, channel - 1, val);
 		break;
 	case hwmon_curr:
 		ret = ina3221_write_curr(dev, attr, channel, val);
