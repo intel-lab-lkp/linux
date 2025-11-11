@@ -65,6 +65,8 @@
 
 #define INA3221_MASK_ENABLE_SCC_MASK	GENMASK(14, 12)
 
+#define SQ52210_ALERT_CONFIG_MASK	GENMASK(15, 4)
+
 #define INA3221_CONFIG_DEFAULT		0x7127
 #define INA3221_RSHUNT_DEFAULT		10000
 
@@ -105,6 +107,13 @@ enum ina3221_channels {
 	INA3221_NUM_CHANNELS
 };
 
+enum ina3221_alert_type {
+	SUL,
+	BOL,
+	BUL,
+	POL
+};
+
 /**
  * struct ina3221_input - channel input source specific information
  * @label: label of channel input source
@@ -121,9 +130,15 @@ struct ina3221_input {
 
 enum ina3221_ids { ina3221, sq52210 };
 
+struct ina3221_config {
+	bool has_alerts;	/* chip supports alerts and limits */
+	bool has_current;	/* chip has internal current reg */
+	bool has_power;		/* chip has internal power reg */
+};
 
 /**
  * struct ina3221_data - device specific information
+ * @config:	Used to store characteristics of different chips
  * @chip: Chip type identifier
  * @pm_dev: Device pointer for pm runtime
  * @regmap: Register map of the device
@@ -132,9 +147,11 @@ enum ina3221_ids { ina3221, sq52210 };
  * @reg_config: Register value of INA3221_CONFIG
  * @summation_shunt_resistor: equivalent shunt resistor value for summation
  * @summation_channel_control: Value written to SCC field in INA3221_MASK_ENABLE
+ * @alert_type_select: Used to store the alert trigger type
  * @single_shot: running in single-shot operating mode
  */
 struct ina3221_data {
+	const struct ina3221_config *config;
 	enum ina3221_ids chip;
 
 	struct device *pm_dev;
@@ -144,8 +161,22 @@ struct ina3221_data {
 	u32 reg_config;
 	int summation_shunt_resistor;
 	u32 summation_channel_control;
+	u32 alert_type_select;
 
 	bool single_shot;
+};
+
+static const struct ina3221_config ina3221_config[] = {
+	[ina3221] = {
+		.has_alerts = false,
+		.has_current = false,
+		.has_power = false,
+	},
+	[sq52210] = {
+		.has_alerts = true,
+		.has_current = true,
+		.has_power = true,
+	},
 };
 
 static inline bool ina3221_is_enabled(struct ina3221_data *ina, int channel)
@@ -772,7 +803,7 @@ static int ina3221_probe_child_from_dt(struct device *dev,
 				       struct ina3221_data *ina)
 {
 	struct ina3221_input *input;
-	u32 val;
+	u32 val, alert_type;
 	int ret;
 
 	ret = of_property_read_u32(child, "reg", &val);
@@ -790,6 +821,34 @@ static int ina3221_probe_child_from_dt(struct device *dev,
 	if (!of_device_is_available(child)) {
 		input->disconnected = true;
 		return 0;
+	}
+
+	if (ina->config->has_alerts) {
+		ret = of_property_read_u32(child, "alert-type", &alert_type);
+		if (ret < 0) {
+			dev_err(dev, "missing alert-type property of %pOFn\n", child);
+			return ret;
+		} else if (alert_type > POL) {
+			dev_err(dev, "invalid alert-type of %pOFn\n", child);
+			return -EINVAL;
+		}
+		switch (alert_type) {
+		/* val is channel value*/
+		case SUL:
+			ina->alert_type_select |= BIT(15 - val);
+			break;
+		case BOL:
+			ina->alert_type_select |= BIT(12 - val);
+			break;
+		case BUL:
+			ina->alert_type_select |= BIT(9 - val);
+			break;
+		case POL:
+			ina->alert_type_select |= BIT(6 - val);
+			break;
+		default:
+			break;
+		}
 	}
 
 	/* Save the connected input label if available */
@@ -847,6 +906,7 @@ static int ina3221_probe(struct i2c_client *client)
 		return -ENOMEM;
 
 	ina->chip = chip;
+	ina->config = &ina3221_config[chip];
 
 	ina->regmap = devm_regmap_init_i2c(client, &ina3221_regmap_config);
 	if (IS_ERR(ina->regmap)) {
@@ -1008,6 +1068,17 @@ static int ina3221_resume(struct device *dev)
 					 ina->summation_channel_control);
 		if (ret) {
 			dev_err(dev, "Unable to control summation channel\n");
+			return ret;
+		}
+	}
+
+	/* Restore alert config register value to hardware */
+	if (ina->config->has_alerts) {
+		ret = regmap_update_bits(ina->regmap, SQ52210_ALERT_CONFIG,
+					 SQ52210_ALERT_CONFIG_MASK,
+					 ina->alert_type_select);
+		if (ret) {
+			dev_err(dev, "Unable to select alert type\n");
 			return ret;
 		}
 	}
