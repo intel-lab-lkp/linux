@@ -23,20 +23,25 @@ TMPFILE=$OUTFILE.tmp
 
 trap 'rm -f $OUTFILE $TMPFILE' EXIT
 
-# SPDX-License-Identifier with GPL variants must have "WITH Linux-syscall-note"
-if [ -n "$(sed -n -e "/SPDX-License-Identifier:.*GPL-/{/WITH Linux-syscall-note/!p}" $INFILE)" ]; then
-	echo "error: $INFILE: missing \"WITH Linux-syscall-note\" for SPDX-License-Identifier" >&2
-	exit 1
-fi
-
+# returns 9 if GPL SPDX-License-Identifier omits "WITH Linux-syscall-note"
 sed -E -e '
+	/SPDX-License-Identifier:.*GPL-/{/WITH Linux-syscall-note/! Q9}
 	s/([[:space:](])(__user|__force|__iomem)[[:space:]]/\1/g
 	s/__attribute_const__([[:space:]]|$)/\1/g
 	s@^#include <linux/compiler.h>@@
 	s/(^|[^a-zA-Z0-9])__packed([^a-zA-Z0-9_]|$)/\1__attribute__((packed))\2/g
 	s/(^|[[:space:](])(inline|asm|volatile)([[:space:](]|$)/\1__\2__\3/g
 	s@#(ifndef|define|endif[[:space:]]*/[*])[[:space:]]*_UAPI@#\1 @
-' $INFILE > $TMPFILE || exit 1
+' $INFILE > $TMPFILE
+case $? in
+9)
+	echo "error: $INFILE: missing \"WITH Linux-syscall-note\" for SPDX-License-Identifier" >&2
+	exit 1
+	;;
+1)
+	exit 1
+	;;
+esac
 
 # The entries in the following list do not result in an error.
 # Please do not add a new entry. This list is only for existing ones.
