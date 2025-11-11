@@ -556,6 +556,74 @@ ucsi_register_altmodes_nvidia(struct ucsi_connector *con, u8 recipient)
 	return 0;
 }
 
+/*
+ * Check if an altmode is a duplicate. Some firmware implementations
+ * incorrectly return the same altmode multiple times, causing sysfs errors.
+ * Returns true if the altmode should be skipped.
+ */
+static bool ucsi_altmode_is_duplicate(struct ucsi_connector *con, u8 recipient,
+				      const struct ucsi_altmode *alt_batch, int batch_idx,
+				      u16 svid, u32 vdo, int offset)
+{
+	int k;
+
+	/* Check for duplicates within the current batch first */
+	for (k = 0; k < batch_idx; k++) {
+		if (alt_batch[k].svid == svid && alt_batch[k].mid == vdo) {
+			dev_warn_once(con->ucsi->dev,
+				      "con%d: Firmware bug: duplicate altmode SVID 0x%04x in same response at offset %d, ignoring. Please update your system firmware.\n",
+				      con->num, svid, offset);
+			return true;
+		}
+	}
+
+	/* Check for duplicates in already registered altmodes */
+	if (recipient == UCSI_RECIPIENT_SOP) {
+		for (k = 0; k < UCSI_MAX_ALTMODES; k++) {
+			if (!con->partner_altmode[k])
+				break;
+			/*
+			 * Some buggy firmware returns the same SVID multiple times
+			 * with different VDOs. This causes duplicate device registration
+			 * and sysfs errors. Check SVID only for partner altmodes.
+			 */
+			if (con->partner_altmode[k]->svid == svid) {
+				dev_warn(con->ucsi->dev,
+					 "con%d: Firmware bug: duplicate partner altmode SVID 0x%04x (VDO 0x%08x vs 0x%08x) at offset %d, ignoring. Please update your system firmware.\n",
+					 con->num, svid, con->partner_altmode[k]->vdo,
+					 vdo, offset);
+				return true;
+			}
+		}
+	} else if (recipient == UCSI_RECIPIENT_CON) {
+		for (k = 0; k < UCSI_MAX_ALTMODES; k++) {
+			if (!con->port_altmode[k])
+				break;
+			if (con->port_altmode[k]->svid == svid &&
+			    con->port_altmode[k]->vdo == vdo) {
+				dev_warn_once(con->ucsi->dev,
+					      "con%d: Firmware bug: duplicate port altmode SVID 0x%04x at offset %d, ignoring. Please update your system firmware.\n",
+					      con->num, svid, offset);
+				return true;
+			}
+		}
+	} else if (recipient == UCSI_RECIPIENT_SOP_P) {
+		for (k = 0; k < UCSI_MAX_ALTMODES; k++) {
+			if (!con->plug_altmode[k])
+				break;
+			if (con->plug_altmode[k]->svid == svid &&
+			    con->plug_altmode[k]->vdo == vdo) {
+				dev_warn_once(con->ucsi->dev,
+					      "con%d: Firmware bug: duplicate plug altmode SVID 0x%04x at offset %d, ignoring. Please update your system firmware.\n",
+					      con->num, svid, offset);
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
 static int ucsi_register_altmodes(struct ucsi_connector *con, u8 recipient)
 {
 	int max_altmodes = UCSI_MAX_ALTMODES;
@@ -604,6 +672,15 @@ static int ucsi_register_altmodes(struct ucsi_connector *con, u8 recipient)
 		for (j = 0; j < num; j++) {
 			if (!alt[j].svid)
 				return 0;
+
+			/*
+			 * Check for duplicates in current batch and already
+			 * registered altmodes. Skip if duplicate found.
+			 */
+			if (ucsi_altmode_is_duplicate(con, recipient, alt, j,
+						      alt[j].svid, alt[j].mid,
+						      i - num + j))
+				continue;
 
 			memset(&desc, 0, sizeof(desc));
 			desc.vdo = alt[j].mid;
