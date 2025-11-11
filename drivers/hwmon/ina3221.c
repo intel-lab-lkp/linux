@@ -69,6 +69,7 @@
 
 #define INA3221_CONFIG_DEFAULT		0x7127
 #define INA3221_RSHUNT_DEFAULT		10000
+#define SQ52210_SHUNT_LSB			40000000	/* pV/LSB */
 
 enum ina3221_fields {
 	/* Configuration */
@@ -134,6 +135,8 @@ struct ina3221_config {
 	bool has_alerts;	/* chip supports alerts and limits */
 	bool has_current;	/* chip has internal current reg */
 	bool has_power;		/* chip has internal power reg */
+	int calibration_value;	/* calculate current_lsb */
+	int power_lsb_factor;
 };
 
 /**
@@ -148,6 +151,8 @@ struct ina3221_config {
  * @summation_shunt_resistor: equivalent shunt resistor value for summation
  * @summation_channel_control: Value written to SCC field in INA3221_MASK_ENABLE
  * @alert_type_select: Used to store the alert trigger type
+ * @current_lsb_uA: The value of one LSB corresponding to the current register
+ * @power_lsb_uW: The value of one LSB corresponding to the power register
  * @single_shot: running in single-shot operating mode
  */
 struct ina3221_data {
@@ -162,6 +167,8 @@ struct ina3221_data {
 	int summation_shunt_resistor;
 	u32 summation_channel_control;
 	u32 alert_type_select;
+	long current_lsb_uA;
+	long power_lsb_uW;
 
 	bool single_shot;
 };
@@ -176,6 +183,13 @@ static const struct ina3221_config ina3221_config[] = {
 		.has_alerts = true,
 		.has_current = true,
 		.has_power = true,
+		/*
+		 * With this default value configuration,
+		 * the following formula can be obtained:
+		 * Current_LSB = Shunt_LSB / Rshunt
+		 */
+		.calibration_value = 256,
+		.power_lsb_factor = 20,
 	},
 };
 
@@ -729,6 +743,25 @@ static const struct hwmon_chip_info ina3221_chip_info = {
 };
 
 /* Extra attribute groups */
+
+/*
+ * Calculate the value corresponding to one LSB of the current and
+ * power registers.
+ * formula : Current_LSB = Shunt_LSB / Rshunt
+ *			 Power_LSB = power_lsb_factor * Current_LSB
+ */
+static int ina3221_set_shunt(struct ina3221_data *ina, unsigned long val)
+{
+	if (!val || val > SQ52210_SHUNT_LSB)
+		return -EINVAL;
+
+	ina->current_lsb_uA = DIV_ROUND_CLOSEST(SQ52210_SHUNT_LSB, val);
+	ina->power_lsb_uW = ina->config->power_lsb_factor *
+			    ina->current_lsb_uA;
+
+	return 0;
+}
+
 static ssize_t ina3221_shunt_show(struct device *dev,
 				  struct device_attribute *attr, char *buf)
 {
@@ -761,7 +794,17 @@ static ssize_t ina3221_shunt_store(struct device *dev,
 
 	/* Update summation_shunt_resistor for summation channel */
 	ina->summation_shunt_resistor = ina3221_summation_shunt_resistor(ina);
-
+	/*
+	 * The current and power registers can only be used when
+	 * all enabled channels have identical shunt resistors
+	 */
+	if (ina->summation_shunt_resistor) {
+		if (ina->config->has_current) {
+			ret = ina3221_set_shunt(ina, val);
+			if (ret < 0)
+				return ret;
+		}
+	}
 	return count;
 }
 
@@ -953,6 +996,16 @@ static int ina3221_probe(struct i2c_client *client)
 			ina->summation_channel_control |= BIT(14 - i);
 	}
 
+	/*
+	 * The current and power registers can only be used when
+	 * all enabled channels have identical shunt resistors
+	 */
+	if (ina->summation_shunt_resistor) {
+		ret = ina3221_set_shunt(ina, ina->summation_shunt_resistor);
+		if (ret < 0)
+			return ret;
+	}
+
 	ina->pm_dev = dev;
 	dev_set_drvdata(dev, ina);
 
@@ -970,8 +1023,8 @@ static int ina3221_probe(struct i2c_client *client)
 	}
 
 	hwmon_dev = devm_hwmon_device_register_with_info(dev, client->name, ina,
-							 &ina3221_chip_info,
-							 ina3221_groups);
+							&ina3221_chip_info,
+							ina3221_groups);
 	if (IS_ERR(hwmon_dev)) {
 		dev_err(dev, "Unable to register hwmon device\n");
 		ret = PTR_ERR(hwmon_dev);
@@ -1069,6 +1122,18 @@ static int ina3221_resume(struct device *dev)
 		if (ret) {
 			dev_err(dev, "Unable to control summation channel\n");
 			return ret;
+		}
+		/*
+		 * The calibration register can only be enabled when all
+		 * shunt resistor values are identical.
+		 */
+		if (ina->config->has_current) {
+			ret = regmap_write(ina->regmap, SQ52210_CALIBRATION,
+						ina->config->calibration_value);
+			if (ret) {
+				dev_err(dev, "Unable to set calibration value\n");
+				return ret;
+			}
 		}
 	}
 
