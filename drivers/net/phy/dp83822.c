@@ -1160,6 +1160,7 @@ static int dp83822_led_hw_control_get(struct phy_device *phydev, u8 index,
 		.name		= (_name),			\
 		/* PHY_BASIC_FEATURES */			\
 		.probe          = dp83822_probe,		\
+		.get_features	= phy_get_features_no_eee,	\
 		.soft_reset	= dp83822_phy_reset,		\
 		.config_init	= dp83822_config_init,		\
 		.read_status	= dp83822_read_status,		\
@@ -1180,6 +1181,7 @@ static int dp83822_led_hw_control_get(struct phy_device *phydev, u8 index,
 		.name		= (_name),			\
 		/* PHY_BASIC_FEATURES */			\
 		.probe          = dp8382x_probe,		\
+		.get_features	= phy_get_features_no_eee,	\
 		.soft_reset	= dp83822_phy_reset,		\
 		.config_init	= dp83825_config_init,		\
 		.get_wol = dp83822_get_wol,			\
@@ -1196,6 +1198,7 @@ static int dp83822_led_hw_control_get(struct phy_device *phydev, u8 index,
 		.name		= (_name),			\
 		/* PHY_BASIC_FEATURES */			\
 		.probe          = dp83826_probe,		\
+		.get_features	= phy_get_features_no_eee,	\
 		.soft_reset	= dp83822_phy_reset,		\
 		.config_init	= dp83826_config_init,		\
 		.get_wol = dp83822_get_wol,			\

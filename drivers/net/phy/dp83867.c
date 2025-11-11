@@ -1124,6 +1124,7 @@ static struct phy_driver dp83867_driver[] = {
 		/* PHY_GBIT_FEATURES */
 
 		.probe          = dp83867_probe,
+		.get_features	= phy_get_features_no_eee,
 		.config_init	= dp83867_config_init,
 		.soft_reset	= dp83867_phy_reset,
 

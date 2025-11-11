@@ -906,6 +906,7 @@ static int dp83869_phy_reset(struct phy_device *phydev)
 	PHY_ID_MATCH_MODEL(_id),				\
 	.name		= (_name),				\
 	.probe          = dp83869_probe,			\
+	.get_features	= phy_get_features_no_eee,		\
 	.config_init	= dp83869_config_init,			\
 	.soft_reset	= dp83869_phy_reset,			\
 	.config_intr	= dp83869_config_intr,			\
