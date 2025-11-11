@@ -491,6 +491,7 @@ static int adv7180_get_frame_interval(struct v4l2_subdev *sd,
 				      struct v4l2_subdev_frame_interval *fi)
 {
 	struct adv7180_state *state = to_state(sd);
+	bool progressive;
 
 	/*
 	 * FIXME: Implement support for V4L2_SUBDEV_FORMAT_TRY, using the V4L2
@@ -499,12 +500,14 @@ static int adv7180_get_frame_interval(struct v4l2_subdev *sd,
 	if (fi->which != V4L2_SUBDEV_FORMAT_ACTIVE)
 		return -EINVAL;
 
+	progressive = (state->field == V4L2_FIELD_NONE);
+
 	if (state->curr_norm & V4L2_STD_525_60) {
 		fi->interval.numerator = 1001;
-		fi->interval.denominator = 30000;
+		fi->interval.denominator = progressive ? 60000 : 30000;
 	} else {
 		fi->interval.numerator = 1;
-		fi->interval.denominator = 25;
+		fi->interval.denominator = progressive ? 50 : 25;
 	}
 
 	return 0;
