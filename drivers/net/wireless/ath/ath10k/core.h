@@ -838,6 +838,9 @@ enum ath10k_fw_features {
 	/* Firmware support IRAM recovery */
 	ATH10K_FW_FEATURE_IRAM_RECOVERY = 22,
 
+	/* Firmware does not support host capability QMI request */
+	ATH10K_FW_FEATURE_NO_HOST_CAP_QMI_REQ = 23,
+
 	/* keep last */
 	ATH10K_FW_FEATURE_COUNT,
 };
