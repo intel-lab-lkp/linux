@@ -551,11 +551,9 @@ DEFINE_SIMPLE_ATTRIBUTE(i915_edp_lobf_debug_fops,
 
 void intel_alpm_lobf_debugfs_add(struct intel_connector *connector)
 {
-	struct intel_display *display = to_intel_display(connector);
 	struct dentry *root = connector->base.debugfs_entry;
 
-	if (DISPLAY_VER(display) < 20 ||
-	    connector->base.connector_type != DRM_MODE_CONNECTOR_eDP)
+	if (!intel_alpm_source_supported(connector))
 		return;
 
 	debugfs_create_file("i915_edp_lobf_debug", 0644, root,
