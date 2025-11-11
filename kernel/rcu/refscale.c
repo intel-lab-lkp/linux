@@ -877,25 +877,29 @@ static void ref_bh_section(const int nloops)
 {
 	int i;
 
-	preempt_disable();
+	if (!IS_ENABLED(CONFIG_PREEMPT_RT))
+		preempt_disable();
 	for (i = nloops; i >= 0; i--) {
 		local_bh_disable();
 		local_bh_enable();
 	}
-	preempt_enable();
+	if (!IS_ENABLED(CONFIG_PREEMPT_RT))
+		preempt_enable();
 }
 
 static void ref_bh_delay_section(const int nloops, const int udl, const int ndl)
 {
 	int i;
 
-	preempt_disable();
+	if (!IS_ENABLED(CONFIG_PREEMPT_RT))
+		preempt_disable();
 	for (i = nloops; i >= 0; i--) {
 		local_bh_disable();
 		un_delay(udl, ndl);
 		local_bh_enable();
 	}
-	preempt_enable();
+	if (!IS_ENABLED(CONFIG_PREEMPT_RT))
+		preempt_enable();
 }
 
 static const struct ref_scale_ops bh_ops = {
