@@ -58,6 +58,7 @@ static int cxl_cache_probe(struct device *dev)
 {
 	struct cxl_cachedev *cxlcd = to_cxl_cachedev(dev);
 	struct cxl_dev_state *cxlds = cxlcd->cxlds;
+	struct device *endpoint_parent;
 	struct cxl_dport *dport;
 	int rc;
 
@@ -70,6 +71,16 @@ static int cxl_cache_probe(struct device *dev)
 	if (!parent_port) {
 		dev_err(dev, "CXL port topology not found\n");
 		return -ENXIO;
+	}
+
+	if (dport->rch)
+		endpoint_parent = parent_port->uport_dev;
+	else
+		endpoint_parent = &parent_port->dev;
+
+	scoped_guard(device, endpoint_parent) {
+		if (!cxlds->cxlmd)
+			cxl_dport_init_ras_reporting(dport, dev);
 	}
 
 	return 0;
