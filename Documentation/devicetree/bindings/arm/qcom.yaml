@@ -249,6 +249,13 @@ properties:
           - const: qcom,apq8096
 
       - items:
+          - const: arrow,apq8096sg-db820c
+          - const: arrow,apq8096-db820c
+          - const: qcom,apq8096-sbc
+          - const: qcom,apq8096sg
+          - const: qcom,apq8096
+
+      - items:
           - enum:
               - oneplus,oneplus3
               - oneplus,oneplus3t
