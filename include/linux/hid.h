@@ -634,6 +634,36 @@ enum hid_battery_status {
 	HID_BATTERY_REPORTED,		/* Device sent unsolicited battery strength report */
 };
 
+/**
+ * struct hid_battery - represents a single battery power supply
+ * @list: list node for linking into hid_device's battery list
+ * @dev: pointer to the parent hid_device
+ * @ps: the power supply device
+ * @capacity: current battery capacity
+ * @min: minimum battery value
+ * @max: maximum battery value
+ * @report_type: type of report (HID_INPUT_REPORT, HID_FEATURE_REPORT)
+ * @report_id: report ID for this battery
+ * @charge_status: current charge status
+ * @status: battery status (unknown, queried, reported)
+ * @avoid_query: if true, don't query battery (wait for device reports)
+ * @ratelimit_time: time for rate limiting battery updates
+ */
+struct hid_battery {
+	struct list_head list;
+	struct hid_device *dev;
+	struct power_supply *ps;
+	__s32 capacity;
+	__s32 min;
+	__s32 max;
+	__s32 report_type;
+	__s32 report_id;
+	__s32 charge_status;
+	enum hid_battery_status status;
+	bool avoid_query;
+	ktime_t ratelimit_time;
+};
+
 struct hid_driver;
 struct hid_ll_driver;
 
@@ -670,8 +700,16 @@ struct hid_device {
 #ifdef CONFIG_HID_BATTERY_STRENGTH
 	/*
 	 * Power supply information for HID devices which report
-	 * battery strength. power_supply was successfully registered if
-	 * battery is non-NULL.
+	 * battery strength. Each battery is tracked separately in the
+	 * batteries list.
+	 */
+	struct list_head batteries;		/* List of hid_battery structures */
+
+	/*
+	 * Legacy single battery support - kept for backwards compatibility.
+	 * Points to the first battery in the list if any exists.
+	 * power_supply was successfully registered if battery is non-NULL.
+	 * DEPRECATED: New code should iterate through batteries list instead.
 	 */
 	struct power_supply *battery;
 	__s32 battery_capacity;
