@@ -69,19 +69,15 @@ static int cxl_switch_port_probe(struct cxl_port *port)
 	return 0;
 }
 
-static int cxl_endpoint_port_probe(struct cxl_port *port)
+static int cxl_mem_endpoint_port_probe(struct cxl_port *port)
 {
 	struct cxl_memdev *cxlmd = to_cxl_memdev(port->uport_dev);
 	int rc;
-
-	if (!is_cxl_memdev(port->uport_dev))
-		return -EOPNOTSUPP;
 
 	/* Cache the data early to ensure is_visible() works */
 	read_cdat_data(port);
 	cxl_endpoint_parse_cdat(port);
 
-	get_device(&cxlmd->dev);
 	rc = devm_add_action_or_reset(&port->dev, schedule_detach, cxlmd);
 	if (rc)
 		return rc;
@@ -97,6 +93,23 @@ static int cxl_endpoint_port_probe(struct cxl_port *port)
 	device_for_each_child(&port->dev, NULL, discover_region);
 
 	return 0;
+}
+
+static int cxl_cache_endpoint_port_probe(struct cxl_port *port)
+{
+	/* No further set up required for CXL.cache devices */
+	return 0;
+}
+
+static int cxl_endpoint_port_probe(struct cxl_port *port)
+{
+	struct device *ep_dev = port->uport_dev;
+
+	get_device(ep_dev);
+	if (is_cxl_memdev(ep_dev))
+		return cxl_mem_endpoint_port_probe(port);
+	else
+		return cxl_cache_endpoint_port_probe(port);
 }
 
 static int cxl_port_probe(struct device *dev)
