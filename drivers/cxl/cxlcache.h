@@ -28,7 +28,8 @@ static inline struct cxl_cachedev *to_cxl_cachedev(struct device *dev)
 
 bool is_cxl_cachedev(const struct device *dev);
 
-int cxl_accel_read_cache_info(struct cxl_dev_state *cxlds);
+int cxl_accel_read_cache_info(struct cxl_dev_state *cxlds, bool hdmd);
 struct cxl_cachedev *devm_cxl_add_cachedev(struct device *host,
 					   struct cxl_dev_state *cxlds);
+bool cxl_cachedev_is_type2(struct cxl_cachedev *cxlcd);
 #endif

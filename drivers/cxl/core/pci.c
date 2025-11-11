@@ -1193,11 +1193,12 @@ EXPORT_SYMBOL_NS_GPL(cxl_port_get_possible_dports, "CXL");
 /**
  * cxl_accel_read_cache_info - Get the CXL cache information of a CXL cache device
  * @cxlds: CXL device state associated with cache device
+ * @hdmd: Whether the device uses HDM-D flows
  *
  * Returns 0 and populates the struct cxl_cache_state member of @cxlds on
  * success, error otherwise.
  */
-int cxl_accel_read_cache_info(struct cxl_dev_state *cxlds)
+int cxl_accel_read_cache_info(struct cxl_dev_state *cxlds, bool hdmd)
 {
 	struct cxl_cache_state *cstate = &cxlds->cstate;
 	struct pci_dev *pdev;
@@ -1237,6 +1238,7 @@ int cxl_accel_read_cache_info(struct cxl_dev_state *cxlds)
 	if (!cstate->size)
 		return -ENXIO;
 
+	cxlds->hdmd = hdmd;
 	return 0;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_accel_read_cache_info, "CXL");

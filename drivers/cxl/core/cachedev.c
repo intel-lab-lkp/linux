@@ -2,6 +2,7 @@
 /* Copyright (C) 2025 Advanced Micro Devices, Inc. */
 #include <linux/device.h>
 #include <linux/pci.h>
+#include "cxlpci.h"
 
 #include "../cxlcache.h"
 #include "private.h"
@@ -93,3 +94,22 @@ struct cxl_cachedev *devm_cxl_cachedev_add_or_reset(struct device *host,
 	return cxlcd;
 }
 EXPORT_SYMBOL_NS_GPL(devm_cxl_cachedev_add_or_reset, "CXL");
+
+bool cxl_cachedev_is_type2(struct cxl_cachedev *cxlcd)
+{
+	struct cxl_dev_state *cxlds = cxlcd->cxlds;
+	int dvsec = cxlds->cxl_dvsec;
+	u32 cap;
+	int rc;
+
+	if (!dev_is_pci(cxlds->dev))
+		return false;
+
+	rc = pci_read_config_dword(to_pci_dev(cxlds->dev),
+				   dvsec + CXL_DVSEC_CAP_OFFSET, &cap);
+	if (rc)
+		return rc;
+
+	return (cap & CXL_DVSEC_MEM_CAPABLE) && (cap & CXL_DVSEC_CACHE_CAPABLE);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_cachedev_is_type2, "CXL");

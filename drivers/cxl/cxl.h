@@ -42,6 +42,8 @@ extern const struct nvdimm_security_ops *cxl_security_ops;
 #define   CXL_CM_CAP_CAP_ID_RAS 0x2
 #define   CXL_CM_CAP_CAP_ID_HDM 0x5
 #define   CXL_CM_CAP_CAP_ID_SNOOP 0x8
+#define   CXL_CM_CAP_CAP_ID_CIDRT 0xD
+#define   CXL_CM_CAP_CAP_ID_CIDD 0xE
 #define   CXL_CM_CAP_CAP_HDM_VERSION 1
 
 /* HDM decoders CXL 2.0 8.2.5.12 CXL HDM Decoder Capability Structure */
@@ -159,6 +161,30 @@ static inline int ways_to_eiw(unsigned int ways, u8 *eiw)
 #define CXL_SNOOP_FILTER_SIZE_OFFSET 0x4
 #define CXL_SNOOP_CAPABILITY_LENGTH 0x8
 
+/* CXL 3.2 8.2.4.28 CXL Cache ID Route Table Capability Structure */
+#define CXL_CACHE_IDRT_CAP_OFFSET 0x0
+#define   CXL_CACHE_IDRT_CAP_CNT_MASK GENMASK(4, 0)
+#define   CXL_CACHE_IDRT_CAP_TYPE2_CNT_MASK GENMASK(11, 8)
+#define   CXL_CACHE_IDRT_CAP_COMMIT_REQUIRED BIT(16)
+#define CXL_CACHE_IDRT_STAT_OFFSET 0x8
+#define   CXL_CACHE_IDRT_STAT_COMMITTED BIT(0)
+#define CXL_CACHE_IDRT_TARGETN_OFFSET(n) (0x10 + (2 * (n)))
+#define   CXL_CACHE_IDRT_TARGETN_VALID BIT(0)
+#define   CXL_CACHE_IDRT_TARGETN_PORTN GENMASK(15, 8)
+
+/* CXL 3.2 8.2.4.29 CXL Cache ID Decoder Capability Structure */
+#define CXL_CACHE_IDD_CAP_OFFSET 0x0
+#define   CXL_CACHE_IDD_CAP_COMMIT_REQUIRED BIT(0)
+#define CXL_CACHE_IDD_CTRL_OFFSET 0x4
+#define   CXL_CACHE_IDD_CTRL_FWD_ID BIT(0)
+#define   CXL_CACHE_IDD_CTRL_ASGN_ID BIT(1)
+#define   CXL_CACHE_IDD_CTRL_TYPE2 BIT(2)
+#define   CXL_CACHE_IDD_CTRL_TYPE2_ID_MASK GENMASK(11, 8)
+#define   CXL_CACHE_IDD_CTRL_LOCAL_ID_MASK GENMASK(19, 16)
+#define CXL_CACHE_IDD_STAT_OFFSET 0x8
+#define   CXL_CACHE_IDD_STAT_COMMITTED BIT(0)
+#define CXL_CACHE_IDD_CAPABILITY_LENGTH 0xC
+
 /* CXL 2.0 8.2.8.1 Device Capabilities Array Register */
 #define CXLDEV_CAP_ARRAY_OFFSET 0x0
 #define   CXLDEV_CAP_ARRAY_CAP_ID 0
@@ -223,6 +249,8 @@ struct cxl_regs {
 		void __iomem *hdm_decoder;
 		void __iomem *ras;
 		void __iomem *snoop;
+		void __iomem *cidrt;
+		void __iomem *cidd;
 	);
 	/*
 	 * Common set of CXL Device register block base pointers
@@ -266,6 +294,8 @@ struct cxl_component_reg_map {
 	struct cxl_reg_map hdm_decoder;
 	struct cxl_reg_map ras;
 	struct cxl_reg_map snoop;
+	struct cxl_reg_map cidrt;
+	struct cxl_reg_map cidd;
 };
 
 struct cxl_device_reg_map {
@@ -609,7 +639,9 @@ struct cxl_dax_region {
  * @parent_dport: dport that points to this port in the parent
  * @decoder_ida: allocator for decoder ids
  * @reg_map: component and ras register mapping parameters
+ * @regs: component register mappings
  * @nr_dports: number of entries in @dports
+ * @nr_hdmd: number of type 2 devices using hdm-d flows below this port
  * @hdm_end: track last allocated HDM decoder instance for allocation ordering
  * @commit_end: cursor to track highest committed decoder for commit ordering
  * @dead: last ep has been removed, force port re-creation
@@ -618,6 +650,7 @@ struct cxl_dax_region {
  * @cdat_available: Should a CDAT attribute be available in sysfs
  * @pci_latency: Upstream latency in picoseconds
  * @component_reg_phys: Physical address of component register
+ * @cache_ida: cache id allocator
  */
 struct cxl_port {
 	struct device dev;
@@ -630,7 +663,9 @@ struct cxl_port {
 	struct cxl_dport *parent_dport;
 	struct ida decoder_ida;
 	struct cxl_register_map reg_map;
+	struct cxl_component_regs regs;
 	int nr_dports;
+	int nr_hdmd;
 	int hdm_end;
 	int commit_end;
 	bool dead;
@@ -642,6 +677,7 @@ struct cxl_port {
 	bool cdat_available;
 	long pci_latency;
 	resource_size_t component_reg_phys;
+	struct ida cache_ida;
 };
 
 /**
@@ -769,6 +805,7 @@ struct cxl_dpa_info {
 	int nr_partitions;
 };
 
+#define CXL_CACHE_ID_NO_ID (-1)
 #define CXL_SNOOP_ID_NO_ID (-1)
 
 /**
@@ -780,6 +817,7 @@ struct cxl_cache_state {
 	u64 size;
 	u32 unit;
 	int snoop_id;
+	int cache_id;
 };
 
 /**
@@ -797,6 +835,7 @@ struct cxl_cache_state {
  * @cxl_dvsec: Offset to the PCIe device DVSEC
  * @rcd: operating in RCD mode (CXL 3.0 9.11.8 CXL Devices Attached to an RCH)
  * @media_ready: Indicate whether the device media is usable
+ * @hdmd: Whether this device is using HDM-D flows
  * @dpa_res: Overall DPA resource tree for the device
  * @part: DPA partition array
  * @nr_partitions: Number of DPA partitions
@@ -815,6 +854,7 @@ struct cxl_dev_state {
 	int cxl_dvsec;
 	bool rcd;
 	bool media_ready;
+	bool hdmd;
 	struct resource dpa_res;
 	struct cxl_dpa_partition part[CXL_NR_PARTITIONS_MAX];
 	unsigned int nr_partitions;
@@ -965,6 +1005,10 @@ static inline int cxl_root_decoder_autoremove(struct device *host,
 	return cxl_decoder_autoremove(host, &cxlrd->cxlsd.cxld);
 }
 int cxl_endpoint_autoremove(struct device *ep_dev, struct cxl_port *endpoint);
+int cxl_endpoint_map_cache_id_regs(struct cxl_port *endpoint);
+int cxl_endpoint_get_cache_id(struct cxl_port *endpoint, int *cid);
+int cxl_endpoint_allocate_cache_id(struct cxl_port *endpoint, int id);
+void cxl_endpoint_free_cache_id(struct cxl_port *endpoint, int id);
 
 /**
  * struct cxl_endpoint_dvsec_info - Cached DVSEC info

@@ -750,6 +750,7 @@ static struct cxl_port *cxl_port_alloc(struct device *uport_dev,
 		dev->parent = uport_dev;
 
 	ida_init(&port->decoder_ida);
+	ida_init(&port->cache_ida);
 	port->hdm_end = -1;
 	port->commit_end = -1;
 	xa_init(&port->dports);
@@ -2413,6 +2414,234 @@ int cxl_decoder_autoremove(struct device *host, struct cxl_decoder *cxld)
 	return devm_add_action_or_reset(host, cxld_unregister, &cxld->dev);
 }
 EXPORT_SYMBOL_NS_GPL(cxl_decoder_autoremove, "CXL");
+
+static bool cache_decoder_committed(struct cxl_dport *dport)
+{
+	u32 cap, stat;
+
+	cap = readl(dport->regs.cidd + CXL_CACHE_IDD_CAP_OFFSET);
+	if (!(cap & CXL_CACHE_IDD_CAP_COMMIT_REQUIRED))
+		return true;
+
+	stat = readl(dport->regs.cidd + CXL_CACHE_IDD_STAT_OFFSET);
+	return (stat & CXL_CACHE_IDD_STAT_COMMITTED);
+}
+
+static bool cache_decoder_valid(struct cxl_dport *dport, int id, bool endpoint)
+{
+	struct pci_dev *pdev = to_pci_dev(dport->dport_dev);
+	bool flit_256b = cxl_pci_flit_256(pdev);
+	u32 ctrl;
+
+	if (id && !flit_256b)
+		return false;
+
+	ctrl = readl(dport->regs.cidd + CXL_CACHE_IDD_CTRL_OFFSET);
+	if ((endpoint || !flit_256b) &&
+	    !(ctrl & CXL_CACHE_IDD_CTRL_ASGN_ID))
+		return false;
+	else if (!(ctrl & CXL_CACHE_IDD_CTRL_FWD_ID))
+		return false;
+
+	return true;
+}
+
+static int cxl_dport_get_cache_id(struct cxl_dport *dport,
+				  struct cxl_port *endpoint)
+{
+	u32 ctrl;
+	int id;
+
+	if (!is_cxl_endpoint(endpoint))
+		return CXL_CACHE_ID_NO_ID;
+
+	ctrl = readl(dport->regs.cidd + CXL_CACHE_IDD_CTRL_OFFSET);
+	if (ctrl & CXL_CACHE_IDD_CTRL_TYPE2)
+		id = FIELD_GET(CXL_CACHE_IDD_CTRL_TYPE2_ID_MASK, ctrl);
+	else
+		id = FIELD_GET(CXL_CACHE_IDD_CTRL_LOCAL_ID_MASK, ctrl);
+
+	if (!cache_decoder_valid(dport, is_cxl_endpoint(endpoint), id) ||
+	    !cache_decoder_committed(dport))
+		return CXL_CACHE_ID_NO_ID;
+
+	return id;
+}
+
+static bool cache_idrt_committed(struct cxl_port *port)
+{
+	u32 cap, stat;
+
+	cap = readl(port->regs.cidrt + CXL_CACHE_IDRT_CAP_OFFSET);
+	if (!(cap & CXL_CACHE_IDRT_CAP_COMMIT_REQUIRED))
+		return true;
+
+	stat = readl(port->regs.cidrt + CXL_CACHE_IDRT_STAT_OFFSET);
+	return (stat & CXL_CACHE_IDRT_STAT_COMMITTED);
+}
+
+static bool cache_idrt_entry_valid(struct cxl_port *port, int id)
+{
+	u16 target;
+	u32 cap;
+
+	cap = readl(port->regs.cidrt + CXL_CACHE_IDRT_CAP_OFFSET);
+	if (FIELD_GET(CXL_CACHE_IDRT_CAP_CNT_MASK, cap) <= id)
+		return false;
+
+	target = readw(port->regs.cidrt + CXL_CACHE_IDRT_TARGETN_OFFSET(id));
+	return (target & CXL_CACHE_IDRT_TARGETN_VALID);
+}
+
+int cxl_endpoint_map_cache_id_regs(struct cxl_port *port)
+{
+	struct cxl_dport *parent_dport = port->parent_dport;
+	int rc;
+
+	if (!is_cxl_cachedev(port->uport_dev))
+		return -EINVAL;
+
+	port = parent_port_of(port);
+	while (port) {
+		if (!port->reg_map.component_map.cidrt.valid)
+			return -ENXIO;
+
+		scoped_guard(device, &port->dev) {
+			if (!port->regs.cidrt) {
+				rc = cxl_map_component_regs(
+					&port->reg_map, &port->regs,
+					BIT(CXL_CM_CAP_CAP_ID_CIDRT));
+				if (rc)
+					return rc;
+			}
+		}
+
+		/*
+		 * Parent dports of host bridges are cxl root (ACPI0017) dports
+		 * and don't have cache id decoders.
+		 */
+		if (is_cxl_root(parent_dport->port))
+			break;
+
+		if (!parent_dport->reg_map.component_map.cidd.valid)
+			return -ENXIO;
+
+		scoped_guard(device, &parent_dport->port->dev) {
+			if (!parent_dport->regs.cidd) {
+				rc = cxl_map_component_regs(
+					&parent_dport->reg_map,
+					&parent_dport->regs.component,
+					BIT(CXL_CM_CAP_CAP_ID_CIDD));
+				if (rc)
+					return rc;
+			}
+		}
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_endpoint_map_cache_id_regs, "CXL");
+
+/**
+ * cxl_endpoint_allocate_cache_id - Allocate a cache id @id on the endpoint's
+ * host bridge.
+ * @endpoint: Endpoint port representing a CXL.cache device
+ * @id: Cache id to attempt to allocate
+ *
+ * Returns rc < 0 if id allocation fails. Returns allocated id otherwise.
+ */
+int cxl_endpoint_allocate_cache_id(struct cxl_port *endpoint, int id)
+{
+	struct cxl_cachedev *cxlcd;
+	struct cxl_port *hb;
+	int nr_hdmd;
+	u32 cap;
+
+	if (!is_cxl_cachedev(endpoint->uport_dev) || id < 0)
+		return -EINVAL;
+	cxlcd = to_cxl_cachedev(endpoint->uport_dev);
+
+	hb = parent_port_of(endpoint);
+	while (!is_cxl_host_bridge(&hb->dev))
+		hb = parent_port_of(hb);
+
+	if (cxl_cachedev_is_type2(cxlcd) && cxlcd->cxlds->hdmd) {
+		cap = readl(hb->regs.cidrt + CXL_CACHE_IDRT_CAP_OFFSET);
+		nr_hdmd = FIELD_GET(CXL_CACHE_IDRT_CAP_TYPE2_CNT_MASK, cap);
+
+		guard(device)(&hb->dev);
+		if (hb->nr_hdmd + 1 >= nr_hdmd)
+			return -EINVAL;
+
+		hb->nr_hdmd++;
+	}
+
+	return ida_alloc_range(&hb->cache_ida, id, id, GFP_KERNEL);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_endpoint_allocate_cache_id, "CXL");
+
+void cxl_endpoint_free_cache_id(struct cxl_port *endpoint, int id)
+{
+	struct cxl_cachedev *cxlcd;
+	struct cxl_port *hb;
+
+	if (!is_cxl_cachedev(endpoint->uport_dev))
+		return;
+	cxlcd = to_cxl_cachedev(endpoint->uport_dev);
+
+	hb = endpoint;
+	while (!is_cxl_host_bridge(&hb->dev))
+		hb = parent_port_of(hb);
+
+	if (cxl_cachedev_is_type2(cxlcd) && cxlcd->cxlds->hdmd) {
+		guard(device)(&hb->dev);
+		hb->nr_hdmd--;
+	}
+
+	ida_free(&hb->cache_ida, id);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_endpoint_free_cache_id, "CXL");
+
+/**
+ * cxl_endpoint_get_cache_id - Get the cache id of a CXL.cache endpoint device
+ * @endpoint: Endpoint port representing cache device
+ * @cid: Pointer to store resulting cache id in
+ *
+ * Returns 0 and sets @cid to CXL_CACHE_ID_NO_ID if programmed cache id is
+ * invalid.
+ */
+int cxl_endpoint_get_cache_id(struct cxl_port *endpoint, int *cid)
+{
+	struct cxl_dport *dport = endpoint->parent_dport;
+	struct cxl_port *port = parent_port_of(endpoint);
+	bool ep = true;
+
+	if (!cid)
+		return -EINVAL;
+
+	*cid = cxl_dport_get_cache_id(dport, port);
+
+	while (!is_cxl_root(port)) {
+		if (!cache_idrt_entry_valid(port, *cid) ||
+		    !cache_idrt_committed(port)) {
+			*cid = CXL_CACHE_ID_NO_ID;
+			break;
+		}
+
+		if (!cache_decoder_valid(dport, ep, *cid) ||
+		    !cache_decoder_committed(dport)) {
+			*cid = CXL_CACHE_ID_NO_ID;
+			break;
+		}
+
+		dport = port->parent_dport;
+		port = dport->port;
+		ep = false;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_endpoint_get_cache_id, "CXL");
 
 /**
  * __cxl_driver_register - register a driver for the cxl bus

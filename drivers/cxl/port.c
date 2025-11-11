@@ -7,6 +7,7 @@
 #include "cxlmem.h"
 #include "cxlpci.h"
 #include "private.h"
+#include "cxlcache.h"
 
 /**
  * DOC: cxl port
@@ -95,10 +96,33 @@ static int cxl_mem_endpoint_port_probe(struct cxl_port *port)
 	return 0;
 }
 
+static void free_cache_id(void *data)
+{
+	struct cxl_cachedev *cxlcd = data;
+	int id = cxlcd->cxlds->cstate.cache_id;
+
+	cxl_endpoint_free_cache_id(cxlcd->endpoint, id);
+}
+
 static int cxl_cache_endpoint_port_probe(struct cxl_port *port)
 {
-	/* No further set up required for CXL.cache devices */
-	return 0;
+	struct cxl_cachedev *cxlcd = to_cxl_cachedev(port->uport_dev);
+	int rc, id;
+
+	rc = cxl_endpoint_map_cache_id_regs(port);
+	if (rc)
+		return rc;
+
+	rc = cxl_endpoint_get_cache_id(port, &id);
+	if (rc)
+		return rc;
+
+	rc = cxl_endpoint_allocate_cache_id(port, id);
+	if (rc < 0)
+		return rc;
+
+	cxlcd->cxlds->cstate.cache_id = id;
+	return devm_add_action_or_reset(&cxlcd->dev, free_cache_id, cxlcd);
 }
 
 static int cxl_endpoint_port_probe(struct cxl_port *port)
