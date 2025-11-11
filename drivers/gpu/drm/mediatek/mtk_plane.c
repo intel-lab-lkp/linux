@@ -11,12 +11,12 @@
 #include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_gem_atomic_helper.h>
+#include <drm/drm_gem_dma_helper.h>
 #include <linux/align.h>
 
 #include "mtk_crtc.h"
 #include "mtk_ddp_comp.h"
 #include "mtk_drm_drv.h"
-#include "mtk_gem.h"
 #include "mtk_plane.h"
 
 static const u64 modifiers[] = {
@@ -134,8 +134,8 @@ static void mtk_plane_update_new_state(struct drm_plane_state *new_state,
 				       struct mtk_plane_state *mtk_plane_state)
 {
 	struct drm_framebuffer *fb = new_state->fb;
+	struct drm_gem_dma_object *dma_obj;
 	struct drm_gem_object *gem;
-	struct mtk_gem_obj *mtk_gem;
 	unsigned int pitch, format;
 	u64 modifier;
 	dma_addr_t addr;
@@ -144,8 +144,8 @@ static void mtk_plane_update_new_state(struct drm_plane_state *new_state,
 	int offset;
 
 	gem = fb->obj[0];
-	mtk_gem = to_mtk_gem_obj(gem);
-	addr = mtk_gem->dma_addr;
+	dma_obj = to_drm_gem_dma_obj(gem);
+	addr = dma_obj->dma_addr;
 	pitch = fb->pitches[0];
 	format = fb->format->format;
 	modifier = fb->modifier;
