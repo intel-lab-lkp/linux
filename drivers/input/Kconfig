@@ -38,6 +38,17 @@ config INPUT_LEDS
 	  To compile this driver as a module, choose M here: the
 	  module will be called input-leds.
 
+config INPUT_LID_NOTIFIER
+	tristate "Include notifier for lid switch events"
+	help
+	  Say Y here if you would like to create a notifier to publish lid switch
+		events.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called lid-notifier.
+
 config INPUT_FF_MEMLESS
 	tristate "Support for memoryless force-feedback devices"
 	help

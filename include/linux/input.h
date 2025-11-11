@@ -592,3 +592,5 @@ int input_ff_create_memless(struct input_dev *dev, void *data,
 		int (*play_effect)(struct input_dev *, void *, struct ff_effect *));
 
 #endif
+
+int register_lid_notifier(struct notifier_block *notifier);
