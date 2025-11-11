@@ -782,4 +782,14 @@ config NXP_STM_TIMER
           Enables the support for NXP System Timer Module found in the
           s32g NXP platform series.
 
+config RTK_SYSTIMER
+	bool "Realtek SYSTIMER support"
+	depends on OF
+	select TIMER_OF
+	help
+	  This enables the global tick-broadcast timer on Realtek platforms.
+	  If your Realtek platform supports power-cut level CPU idle states,
+	  enabling this timer allows all CPUs to enter power-cut simultaneously
+	  to achieve lower power consumption.
+
 endmenu
