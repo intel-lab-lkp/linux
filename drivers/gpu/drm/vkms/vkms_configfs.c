@@ -537,8 +537,14 @@ static ssize_t connector_status_store(struct config_item *item,
 {
 	struct vkms_configfs_connector *connector;
 	enum drm_connector_status status;
+	struct vkms_connector *vkms_connector;
+	struct vkms_device *vkms_dev;
 
 	connector = connector_item_to_vkms_configfs_connector(item);
+	vkms_connector = connector->config->connector;
+	vkms_dev = connector->config->config->dev;
+	scoped_guard(mutex, &vkms_dev->drm.mode_config.mutex)
+		vkms_connector->base.status_changed = true;
 
 	if (kstrtouint(page, 10, &status))
 		return -EINVAL;

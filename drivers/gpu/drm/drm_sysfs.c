@@ -199,6 +199,7 @@ static ssize_t status_store(struct device *device,
 		return ret;
 
 	old_force = connector->force;
+	connector->status_changed = true;
 
 	if (sysfs_streq(buf, "detect"))
 		connector->force = 0;
