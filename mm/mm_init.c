@@ -2264,26 +2264,43 @@ void __init init_cma_pageblock(struct page *page)
 }
 #endif
 
-void set_zone_contiguous(struct zone *zone)
+/*
+ * Check if all pageblocks in the given PFN range belong to the given zone.
+ * The given range is expected to be within the zone's pfn range, otherwise
+ * false is returned.
+ */
+bool check_zone_contiguous(struct zone *zone, unsigned long start_pfn,
+			    unsigned long nr_pages)
 {
-	unsigned long block_start_pfn = zone->zone_start_pfn;
+	unsigned long end_pfn = start_pfn + nr_pages;
+	unsigned long block_start_pfn = start_pfn;
 	unsigned long block_end_pfn;
 
+	if (start_pfn < zone->zone_start_pfn || end_pfn > zone_end_pfn(zone))
+		return false;
+
 	block_end_pfn = pageblock_end_pfn(block_start_pfn);
-	for (; block_start_pfn < zone_end_pfn(zone);
+	for (; block_start_pfn < end_pfn;
 			block_start_pfn = block_end_pfn,
 			 block_end_pfn += pageblock_nr_pages) {
 
-		block_end_pfn = min(block_end_pfn, zone_end_pfn(zone));
+		block_end_pfn = min(block_end_pfn, end_pfn);
 
 		if (!__pageblock_pfn_to_page(block_start_pfn,
 					     block_end_pfn, zone))
-			return;
+			return false;
 		cond_resched();
 	}
 
-	/* We confirm that there is no hole */
-	zone->contiguous = true;
+	return true;
+}
+
+void set_zone_contiguous(struct zone *zone)
+{
+	unsigned long start_pfn = zone->zone_start_pfn;
+	unsigned long nr_pages = zone->spanned_pages;
+
+	zone->contiguous = check_zone_contiguous(zone, start_pfn, nr_pages);
 }
 
 /*
