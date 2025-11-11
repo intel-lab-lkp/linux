@@ -81,6 +81,16 @@ static int cxl_cache_probe(struct device *dev)
 	scoped_guard(device, endpoint_parent) {
 		if (!cxlds->cxlmd)
 			cxl_dport_init_ras_reporting(dport, dev);
+
+		if (!endpoint_parent->driver) {
+			dev_err(dev, "CXL port topology %s not enabled\n",
+				dev_name(endpoint_parent));
+			return -ENXIO;
+		}
+
+		rc = devm_cxl_add_endpoint(endpoint_parent, dev, dport);
+		if (rc)
+			return rc;
 	}
 
 	return 0;

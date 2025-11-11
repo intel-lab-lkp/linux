@@ -10,7 +10,7 @@
 
 #ifndef __CXL_PRIVATE_H__
 #define __CXL_PRIVATE_H__
-int devm_cxl_add_endpoint(struct device *host, struct cxl_memdev *cxlmd,
+int devm_cxl_add_endpoint(struct device *host, struct device *ep_dev,
 			  struct cxl_dport *parent_dport);
 
 struct cxl_cachedev *cxl_cachedev_alloc(struct cxl_dev_state *cxlds);

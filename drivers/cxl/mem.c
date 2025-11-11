@@ -139,7 +139,7 @@ static int cxl_mem_probe(struct device *dev)
 			return -ENXIO;
 		}
 
-		rc = devm_cxl_add_endpoint(endpoint_parent, cxlmd, dport);
+		rc = devm_cxl_add_endpoint(endpoint_parent, dev, dport);
 		if (rc)
 			return rc;
 	}

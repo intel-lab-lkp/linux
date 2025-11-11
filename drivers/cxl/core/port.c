@@ -844,10 +844,11 @@ static void cxl_debugfs_create_dport_dir(struct cxl_dport *dport)
 			    &cxl_einj_inject_fops);
 }
 
-static bool is_cxl_ep_device(struct device *dev)
+bool is_cxl_ep_device(struct device *dev)
 {
 	return is_cxl_memdev(dev) || is_cxl_cachedev(dev);
 }
+EXPORT_SYMBOL_NS_GPL(is_cxl_ep_device, "CXL");
 
 static int cxl_port_setup_endpoint(struct cxl_port *port)
 {
@@ -1424,10 +1425,26 @@ static struct device *endpoint_host(struct cxl_port *endpoint)
 	return &port->dev;
 }
 
+static void cxl_ep_dev_set_endpoint(struct device *ep_dev, struct cxl_port *ep)
+{
+	if (is_cxl_memdev(ep_dev))
+		to_cxl_memdev(ep_dev)->endpoint = ep;
+	else
+		to_cxl_cachedev(ep_dev)->endpoint = ep;
+}
+
+static struct cxl_port *cxl_ep_dev_get_endpoint(struct device *ep_dev)
+{
+	if (is_cxl_memdev(ep_dev))
+		return to_cxl_memdev(ep_dev)->endpoint;
+	else
+		return to_cxl_cachedev(ep_dev)->endpoint;
+}
+
 static void delete_endpoint(void *data)
 {
-	struct cxl_memdev *cxlmd = data;
-	struct cxl_port *endpoint = cxlmd->endpoint;
+	struct device *ep_dev = data;
+	struct cxl_port *endpoint = cxl_ep_dev_get_endpoint(ep_dev);
 	struct device *host = endpoint_host(endpoint);
 
 	scoped_guard(device, host) {
@@ -1436,21 +1453,25 @@ static void delete_endpoint(void *data)
 			devm_release_action(host, cxl_unlink_uport, endpoint);
 			devm_release_action(host, unregister_port, endpoint);
 		}
-		cxlmd->endpoint = NULL;
+		cxl_ep_dev_set_endpoint(ep_dev, NULL);
 	}
 	put_device(&endpoint->dev);
 	put_device(host);
 }
 
-int cxl_endpoint_autoremove(struct cxl_memdev *cxlmd, struct cxl_port *endpoint)
+int cxl_endpoint_autoremove(struct device *ep_dev, struct cxl_port *endpoint)
 {
 	struct device *host = endpoint_host(endpoint);
-	struct device *dev = &cxlmd->dev;
 
 	get_device(host);
 	get_device(&endpoint->dev);
-	cxlmd->depth = endpoint->depth;
-	return devm_add_action_or_reset(dev, delete_endpoint, cxlmd);
+
+	if (is_cxl_memdev(ep_dev))
+		to_cxl_memdev(ep_dev)->depth = endpoint->depth;
+	else
+		to_cxl_cachedev(ep_dev)->depth = endpoint->depth;
+
+	return devm_add_action_or_reset(ep_dev, delete_endpoint, ep_dev);
 }
 EXPORT_SYMBOL_NS_GPL(cxl_endpoint_autoremove, "CXL");
 

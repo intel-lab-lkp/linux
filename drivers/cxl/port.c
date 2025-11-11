@@ -178,12 +178,15 @@ static struct cxl_driver cxl_port_driver = {
 	},
 };
 
-int devm_cxl_add_endpoint(struct device *host, struct cxl_memdev *cxlmd,
+int devm_cxl_add_endpoint(struct device *host, struct device *ep_dev,
 			  struct cxl_dport *parent_dport)
 {
 	struct cxl_port *parent_port = parent_dport->port;
 	struct cxl_port *endpoint, *iter, *down;
 	int rc;
+
+	if (!is_cxl_ep_device(ep_dev))
+		return -EINVAL;
 
 	/*
 	 * Now that the path to the root is established record all the
@@ -193,22 +196,22 @@ int devm_cxl_add_endpoint(struct device *host, struct cxl_memdev *cxlmd,
 	     down = iter, iter = to_cxl_port(iter->dev.parent)) {
 		struct cxl_ep *ep;
 
-		ep = cxl_ep_load(iter, &cxlmd->dev);
+		ep = cxl_ep_load(iter, ep_dev);
 		ep->next = down;
 	}
 
 	/* Note: endpoint port component registers are derived from @cxlds */
-	endpoint = devm_cxl_add_port(host, &cxlmd->dev, CXL_RESOURCE_NONE,
+	endpoint = devm_cxl_add_port(host, ep_dev, CXL_RESOURCE_NONE,
 				     parent_dport);
 	if (IS_ERR(endpoint))
 		return PTR_ERR(endpoint);
 
-	rc = cxl_endpoint_autoremove(cxlmd, endpoint);
+	rc = cxl_endpoint_autoremove(ep_dev, endpoint);
 	if (rc)
 		return rc;
 
 	if (!endpoint->dev.driver) {
-		dev_err(&cxlmd->dev, "%s failed probe\n",
+		dev_err(ep_dev, "%s failed probe\n",
 			dev_name(&endpoint->dev));
 		return -ENXIO;
 	}
