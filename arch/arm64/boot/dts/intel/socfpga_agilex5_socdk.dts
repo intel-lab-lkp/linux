@@ -101,8 +101,15 @@
 };
 
 &usb0 {
-	status = "okay";
 	disable-over-current;
+};
+
+&usb31 {
+	status = "okay";
+};
+
+&dwc3 {
+	dr_mode = "host";
 };
 
 &watchdog0 {
