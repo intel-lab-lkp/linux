@@ -1480,7 +1480,7 @@ static int port_has_memdev(struct device *dev, const void *data)
 	if (port->depth != ctx->depth)
 		return 0;
 
-	return !!cxl_ep_load(port, ctx->cxlmd);
+	return !!cxl_ep_load(port, &ctx->cxlmd->dev);
 }
 
 static void cxl_detach_ep(void *data)
@@ -1505,7 +1505,7 @@ static void cxl_detach_ep(void *data)
 		parent_port = to_cxl_port(port->dev.parent);
 		device_lock(&parent_port->dev);
 		device_lock(&port->dev);
-		ep = cxl_ep_load(port, cxlmd);
+		ep = cxl_ep_load(port, &cxlmd->dev);
 		dev_dbg(&cxlmd->dev, "disconnect %s from %s\n",
 			ep ? dev_name(ep->ep) : "", dev_name(&port->dev));
 		cxl_ep_remove(port, ep);

@@ -265,8 +265,8 @@ static void cxl_region_decode_reset(struct cxl_region *cxlr, int count)
 		while (!is_cxl_root(to_cxl_port(iter->dev.parent)))
 			iter = to_cxl_port(iter->dev.parent);
 
-		for (ep = cxl_ep_load(iter, cxlmd); iter;
-		     iter = ep->next, ep = cxl_ep_load(iter, cxlmd)) {
+		for (ep = cxl_ep_load(iter, &cxlmd->dev); iter;
+		     iter = ep->next, ep = cxl_ep_load(iter, &cxlmd->dev)) {
 			struct cxl_region_ref *cxl_rr;
 			struct cxl_decoder *cxld;
 
@@ -327,8 +327,8 @@ static int cxl_region_decode_commit(struct cxl_region *cxlr)
 
 		if (rc) {
 			/* programming @iter failed, teardown */
-			for (ep = cxl_ep_load(iter, cxlmd); ep && iter;
-			     iter = ep->next, ep = cxl_ep_load(iter, cxlmd)) {
+			for (ep = cxl_ep_load(iter, &cxlmd->dev); ep && iter;
+			     iter = ep->next, ep = cxl_ep_load(iter, &cxlmd->dev)) {
 				cxl_rr = cxl_rr_load(iter, cxlr);
 				cxld = cxl_rr->decoder;
 				if (cxld->reset)
@@ -1038,7 +1038,8 @@ static int cxl_rr_ep_add(struct cxl_region_ref *cxl_rr,
 	struct cxl_port *port = cxl_rr->port;
 	struct cxl_region *cxlr = cxl_rr->region;
 	struct cxl_decoder *cxld = cxl_rr->decoder;
-	struct cxl_ep *ep = cxl_ep_load(port, cxled_to_memdev(cxled));
+	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
+	struct cxl_ep *ep = cxl_ep_load(port, &cxlmd->dev);
 
 	if (ep) {
 		rc = xa_insert(&cxl_rr->endpoints, (unsigned long)cxled, ep,
@@ -1113,7 +1114,7 @@ static int cxl_port_attach_region(struct cxl_port *port,
 				  struct cxl_endpoint_decoder *cxled, int pos)
 {
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
-	struct cxl_ep *ep = cxl_ep_load(port, cxlmd);
+	struct cxl_ep *ep = cxl_ep_load(port, &cxlmd->dev);
 	struct cxl_region_ref *cxl_rr;
 	bool nr_targets_inc = false;
 	struct cxl_decoder *cxld;
@@ -1290,7 +1291,7 @@ static int check_last_peer(struct cxl_endpoint_decoder *cxled,
 	}
 	cxled_peer = p->targets[pos - distance];
 	cxlmd_peer = cxled_to_memdev(cxled_peer);
-	ep_peer = cxl_ep_load(port, cxlmd_peer);
+	ep_peer = cxl_ep_load(port, &cxlmd_peer->dev);
 	if (ep->dport != ep_peer->dport) {
 		dev_dbg(&cxlr->dev,
 			"%s:%s: %s:%s pos %d mismatched peer %s:%s\n",
@@ -1357,7 +1358,7 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 	struct cxl_port *parent_port = to_cxl_port(port->dev.parent);
 	struct cxl_region_ref *cxl_rr = cxl_rr_load(port, cxlr);
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
-	struct cxl_ep *ep = cxl_ep_load(port, cxlmd);
+	struct cxl_ep *ep = cxl_ep_load(port, &cxlmd->dev);
 	struct cxl_region_params *p = &cxlr->params;
 	struct cxl_decoder *cxld = cxl_rr->decoder;
 	struct cxl_switch_decoder *cxlsd;
@@ -1606,8 +1607,8 @@ static void cxl_region_teardown_targets(struct cxl_region *cxlr)
 		while (!is_cxl_root(to_cxl_port(iter->dev.parent)))
 			iter = to_cxl_port(iter->dev.parent);
 
-		for (ep = cxl_ep_load(iter, cxlmd); iter;
-		     iter = ep->next, ep = cxl_ep_load(iter, cxlmd))
+		for (ep = cxl_ep_load(iter, &cxlmd->dev); iter;
+		     iter = ep->next, ep = cxl_ep_load(iter, &cxlmd->dev))
 			cxl_port_reset_targets(iter, cxlr);
 	}
 }
@@ -1643,8 +1644,8 @@ static int cxl_region_setup_targets(struct cxl_region *cxlr)
 		 * Descend the topology tree programming / validating
 		 * targets while looking for conflicts.
 		 */
-		for (ep = cxl_ep_load(iter, cxlmd); iter;
-		     iter = ep->next, ep = cxl_ep_load(iter, cxlmd)) {
+		for (ep = cxl_ep_load(iter, &cxlmd->dev); iter;
+		     iter = ep->next, ep = cxl_ep_load(iter, &cxlmd->dev)) {
 			rc = cxl_port_setup_targets(iter, cxlr, cxled);
 			if (rc) {
 				cxl_region_teardown_targets(cxlr);

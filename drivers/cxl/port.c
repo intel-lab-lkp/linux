@@ -177,7 +177,7 @@ int devm_cxl_add_endpoint(struct device *host, struct cxl_memdev *cxlmd,
 	     down = iter, iter = to_cxl_port(iter->dev.parent)) {
 		struct cxl_ep *ep;
 
-		ep = cxl_ep_load(iter, cxlmd);
+		ep = cxl_ep_load(iter, &cxlmd->dev);
 		ep->next = down;
 	}
 
