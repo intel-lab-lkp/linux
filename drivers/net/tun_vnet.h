@@ -214,7 +214,7 @@ static inline int tun_vnet_hdr_from_skb(unsigned int flags,
 
 	if (virtio_net_hdr_from_skb(skb, hdr,
 				    tun_vnet_is_little_endian(flags), true,
-				    vlan_hlen)) {
+				    false, vlan_hlen)) {
 		struct skb_shared_info *sinfo = skb_shinfo(skb);
 
 		if (net_ratelimit()) {
@@ -244,7 +244,7 @@ tun_vnet_hdr_tnl_from_skb(unsigned int flags,
 
 	if (virtio_net_hdr_tnl_from_skb(skb, tnl_hdr, has_tnl_offload,
 					tun_vnet_is_little_endian(flags),
-					vlan_hlen)) {
+					false, vlan_hlen)) {
 		struct virtio_net_hdr_v1 *hdr = &tnl_hdr->hash_hdr.hdr;
 		struct skb_shared_info *sinfo = skb_shinfo(skb);
 

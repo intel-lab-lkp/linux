@@ -121,6 +121,7 @@ static int raw_form_header(uint8_t *header,
 		vheader,
 		virtio_legacy_is_little_endian(),
 		false,
+		false,
 		0
 	);
 
