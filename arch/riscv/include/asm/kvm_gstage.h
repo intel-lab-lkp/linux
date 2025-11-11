@@ -69,4 +69,6 @@ void kvm_riscv_gstage_wp_range(struct kvm_gstage *gstage, gpa_t start, gpa_t end
 
 void kvm_riscv_gstage_mode_detect(void);
 
+int kvm_riscv_gstage_get_mapping_size(struct kvm_gstage *gstage, gpa_t addr);
+
 #endif
