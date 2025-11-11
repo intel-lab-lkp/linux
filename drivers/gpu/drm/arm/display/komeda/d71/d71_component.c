@@ -409,6 +409,8 @@ static const struct komeda_component_funcs d71_layer_funcs = {
 static int d71_layer_init(struct d71_dev *d71,
 			  struct block_header *blk, u32 __iomem *reg)
 {
+	struct komeda_kms_dev *kms = komeda_kms_attach(d71->mdev);
+	struct drm_device *drm = &kms->base;
 	struct komeda_component *c;
 	struct komeda_layer *layer;
 	u32 pipe_id, layer_id, layer_info;
@@ -421,7 +423,7 @@ static int d71_layer_init(struct d71_dev *d71,
 				 get_valid_inputs(blk),
 				 1, reg, "LPU%d_LAYER%d", pipe_id, layer_id);
 	if (IS_ERR(c)) {
-		DRM_ERROR("Failed to add layer component\n");
+		drm_err(drm, "Failed to add layer component\n");
 		return PTR_ERR(c);
 	}
 
@@ -527,6 +529,8 @@ static const struct komeda_component_funcs d71_wb_layer_funcs = {
 static int d71_wb_layer_init(struct d71_dev *d71,
 			     struct block_header *blk, u32 __iomem *reg)
 {
+	struct komeda_kms_dev *kms = komeda_kms_attach(d71->mdev);
+	struct drm_device *drm = &kms->base;
 	struct komeda_component *c;
 	struct komeda_layer *wb_layer;
 	u32 pipe_id, layer_id;
@@ -539,7 +543,7 @@ static int d71_wb_layer_init(struct d71_dev *d71,
 				 1, get_valid_inputs(blk), 0, reg,
 				 "LPU%d_LAYER_WR", pipe_id);
 	if (IS_ERR(c)) {
-		DRM_ERROR("Failed to add wb_layer component\n");
+		drm_err(drm, "Failed to add wb_layer component\n");
 		return PTR_ERR(c);
 	}
 
@@ -837,6 +841,8 @@ static const struct komeda_component_funcs d71_scaler_funcs = {
 static int d71_scaler_init(struct d71_dev *d71,
 			   struct block_header *blk, u32 __iomem *reg)
 {
+	struct komeda_kms_dev *kms = komeda_kms_attach(d71->mdev);
+	struct drm_device *drm = &kms->base;
 	struct komeda_component *c;
 	struct komeda_scaler *scaler;
 	u32 pipe_id, comp_id;
@@ -851,7 +857,7 @@ static int d71_scaler_init(struct d71_dev *d71,
 				 pipe_id, BLOCK_INFO_BLK_ID(blk->block_info));
 
 	if (IS_ERR(c)) {
-		DRM_ERROR("Failed to initialize scaler");
+		drm_err(drm, "Failed to initialize scaler");
 		return PTR_ERR(c);
 	}
 
@@ -945,6 +951,8 @@ static const struct komeda_component_funcs d71_splitter_funcs = {
 static int d71_splitter_init(struct d71_dev *d71,
 			     struct block_header *blk, u32 __iomem *reg)
 {
+	struct komeda_kms_dev *kms = komeda_kms_attach(d71->mdev);
+	struct drm_device *drm = &kms->base;
 	struct komeda_component *c;
 	struct komeda_splitter *splitter;
 	u32 pipe_id, comp_id;
@@ -959,7 +967,7 @@ static int d71_splitter_init(struct d71_dev *d71,
 				 "CU%d_SPLITTER", pipe_id);
 
 	if (IS_ERR(c)) {
-		DRM_ERROR("Failed to initialize splitter");
+		drm_err(drm, "Failed to initialize splitter");
 		return -1;
 	}
 
@@ -1015,6 +1023,8 @@ static const struct komeda_component_funcs d71_merger_funcs = {
 static int d71_merger_init(struct d71_dev *d71,
 			   struct block_header *blk, u32 __iomem *reg)
 {
+	struct komeda_kms_dev *kms = komeda_kms_attach(d71->mdev);
+	struct drm_device *drm = &kms->base;
 	struct komeda_component *c;
 	struct komeda_merger *merger;
 	u32 pipe_id, comp_id;
@@ -1030,7 +1040,7 @@ static int d71_merger_init(struct d71_dev *d71,
 				 "CU%d_MERGER", pipe_id);
 
 	if (IS_ERR(c)) {
-		DRM_ERROR("Failed to initialize merger.\n");
+		drm_err(drm, "Failed to initialize merger.\n");
 		return PTR_ERR(c);
 	}
 
@@ -1126,6 +1136,8 @@ static const struct komeda_component_funcs d71_improc_funcs = {
 static int d71_improc_init(struct d71_dev *d71,
 			   struct block_header *blk, u32 __iomem *reg)
 {
+	struct komeda_kms_dev *kms = komeda_kms_attach(d71->mdev);
+	struct drm_device *drm = &kms->base;
 	struct komeda_component *c;
 	struct komeda_improc *improc;
 	u32 pipe_id, comp_id, value;
@@ -1139,7 +1151,7 @@ static int d71_improc_init(struct d71_dev *d71,
 				 get_valid_inputs(blk),
 				 IPS_NUM_OUTPUT_IDS, reg, "DOU%d_IPS", pipe_id);
 	if (IS_ERR(c)) {
-		DRM_ERROR("Failed to add improc component\n");
+		drm_err(drm, "Failed to add improc component\n");
 		return PTR_ERR(c);
 	}
 
@@ -1253,6 +1265,8 @@ static const struct komeda_component_funcs d71_timing_ctrlr_funcs = {
 static int d71_timing_ctrlr_init(struct d71_dev *d71,
 				 struct block_header *blk, u32 __iomem *reg)
 {
+	struct komeda_kms_dev *kms = komeda_kms_attach(d71->mdev);
+	struct drm_device *drm = &kms->base;
 	struct komeda_component *c;
 	struct komeda_timing_ctrlr *ctrlr;
 	u32 pipe_id, comp_id;
@@ -1266,7 +1280,7 @@ static int d71_timing_ctrlr_init(struct d71_dev *d71,
 				 1, BIT(KOMEDA_COMPONENT_IPS0 + pipe_id),
 				 BS_NUM_OUTPUT_IDS, reg, "DOU%d_BS", pipe_id);
 	if (IS_ERR(c)) {
-		DRM_ERROR("Failed to add display_ctrl component\n");
+		drm_err(drm, "Failed to add display_ctrl component\n");
 		return PTR_ERR(c);
 	}
 
@@ -1280,6 +1294,8 @@ static int d71_timing_ctrlr_init(struct d71_dev *d71,
 int d71_probe_block(struct d71_dev *d71,
 		    struct block_header *blk, u32 __iomem *reg)
 {
+	struct komeda_kms_dev *kms = komeda_kms_attach(d71->mdev);
+	struct drm_device *drm = &kms->base;
 	struct d71_pipeline *pipe;
 	int blk_id = BLOCK_INFO_BLK_ID(blk->block_info);
 
@@ -1346,8 +1362,8 @@ int d71_probe_block(struct d71_dev *d71,
 		break;
 
 	default:
-		DRM_ERROR("Unknown block (block_info: 0x%x) is found\n",
-			  blk->block_info);
+		drm_err(drm, "Unknown block (block_info: 0x%x) is found\n",
+			blk->block_info);
 		err = -EINVAL;
 		break;
 	}
