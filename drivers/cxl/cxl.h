@@ -166,8 +166,13 @@ static inline int ways_to_eiw(unsigned int ways, u8 *eiw)
 #define   CXL_CACHE_IDRT_CAP_CNT_MASK GENMASK(4, 0)
 #define   CXL_CACHE_IDRT_CAP_TYPE2_CNT_MASK GENMASK(11, 8)
 #define   CXL_CACHE_IDRT_CAP_COMMIT_REQUIRED BIT(16)
+#define CXL_CACHE_IDRT_CTRL_OFFSET 0x4
+#define   CXL_CACHE_IDRT_CTRL_COMMIT BIT(0)
 #define CXL_CACHE_IDRT_STAT_OFFSET 0x8
 #define   CXL_CACHE_IDRT_STAT_COMMITTED BIT(0)
+#define   CXL_CACHE_IDRT_STAT_ERR_COMMIT BIT(1)
+#define   CXL_CACHE_IDRT_STAT_TIME_SCALE_MASK GENMASK(11, 8)
+#define   CXL_CACHE_IDRT_STAT_TIME_BASE_MASK GENMASK(15, 12)
 #define CXL_CACHE_IDRT_TARGETN_OFFSET(n) (0x10 + (2 * (n)))
 #define   CXL_CACHE_IDRT_TARGETN_VALID BIT(0)
 #define   CXL_CACHE_IDRT_TARGETN_PORTN GENMASK(15, 8)
@@ -179,10 +184,14 @@ static inline int ways_to_eiw(unsigned int ways, u8 *eiw)
 #define   CXL_CACHE_IDD_CTRL_FWD_ID BIT(0)
 #define   CXL_CACHE_IDD_CTRL_ASGN_ID BIT(1)
 #define   CXL_CACHE_IDD_CTRL_TYPE2 BIT(2)
+#define   CXL_CACHE_IDD_CTRL_COMMIT BIT(3)
 #define   CXL_CACHE_IDD_CTRL_TYPE2_ID_MASK GENMASK(11, 8)
 #define   CXL_CACHE_IDD_CTRL_LOCAL_ID_MASK GENMASK(19, 16)
 #define CXL_CACHE_IDD_STAT_OFFSET 0x8
 #define   CXL_CACHE_IDD_STAT_COMMITTED BIT(0)
+#define   CXL_CACHE_IDD_STAT_ERR_COMMIT BIT(1)
+#define   CXL_CACHE_IDD_STAT_TIME_SCALE_MASK GENMASK(11, 8)
+#define   CXL_CACHE_IDD_STAT_TIME_BASE_MASK GENMASK(15, 12)
 #define CXL_CACHE_IDD_CAPABILITY_LENGTH 0xC
 
 /* CXL 2.0 8.2.8.1 Device Capabilities Array Register */
@@ -726,6 +735,7 @@ struct cxl_rcrb_info {
  * @coord: access coordinates (bandwidth and latency performance attributes)
  * @link_latency: calculated PCIe downstream latency
  * @gpf_dvsec: Cached GPF port DVSEC
+ * @nr_cachedevs: Number of CXL.cache devices with a cache id below this dport
  */
 struct cxl_dport {
 	struct device *dport_dev;
@@ -739,6 +749,7 @@ struct cxl_dport {
 	long link_latency;
 	int gpf_dvsec;
 	int snoop_id;
+	int nr_cachedevs;
 };
 
 /**
@@ -1009,6 +1020,7 @@ int cxl_endpoint_map_cache_id_regs(struct cxl_port *endpoint);
 int cxl_endpoint_get_cache_id(struct cxl_port *endpoint, int *cid);
 int cxl_endpoint_allocate_cache_id(struct cxl_port *endpoint, int id);
 void cxl_endpoint_free_cache_id(struct cxl_port *endpoint, int id);
+int devm_cxl_endpoint_program_cache_id(struct cxl_port *endpoint, int id);
 
 /**
  * struct cxl_endpoint_dvsec_info - Cached DVSEC info

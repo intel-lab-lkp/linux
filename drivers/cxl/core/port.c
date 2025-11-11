@@ -2546,7 +2546,7 @@ EXPORT_SYMBOL_NS_GPL(cxl_endpoint_map_cache_id_regs, "CXL");
  * cxl_endpoint_allocate_cache_id - Allocate a cache id @id on the endpoint's
  * host bridge.
  * @endpoint: Endpoint port representing a CXL.cache device
- * @id: Cache id to attempt to allocate
+ * @id: Cache id to attempt to allocate, CXL_CACHE_ID_NO_ID for any id
  *
  * Returns rc < 0 if id allocation fails. Returns allocated id otherwise.
  */
@@ -2570,13 +2570,16 @@ int cxl_endpoint_allocate_cache_id(struct cxl_port *endpoint, int id)
 		nr_hdmd = FIELD_GET(CXL_CACHE_IDRT_CAP_TYPE2_CNT_MASK, cap);
 
 		guard(device)(&hb->dev);
-		if (hb->nr_hdmd + 1 >= nr_hdmd)
+		if (hb->nr_hdmd == nr_hdmd)
 			return -EINVAL;
 
 		hb->nr_hdmd++;
 	}
 
-	return ida_alloc_range(&hb->cache_ida, id, id, GFP_KERNEL);
+	if (id == CXL_CACHE_ID_NO_ID)
+		return ida_alloc(&hb->cache_ida, GFP_KERNEL);
+	else
+		return ida_alloc_range(&hb->cache_ida, id, id, GFP_KERNEL);
 }
 EXPORT_SYMBOL_NS_GPL(cxl_endpoint_allocate_cache_id, "CXL");
 
@@ -2602,6 +2605,211 @@ void cxl_endpoint_free_cache_id(struct cxl_port *endpoint, int id)
 }
 EXPORT_SYMBOL_NS_GPL(cxl_endpoint_free_cache_id, "CXL");
 
+static unsigned long cxl_cache_id_compute_timeout(u8 scale, u8 base)
+{
+	unsigned long timeout = base;
+
+	/* Give the hardware 1 millisecond just in case */
+	if (!timeout)
+		timeout = 1;
+
+	/*
+	 * The timeout scale in the cache id decoder status register is encoded
+	 * as 10 ^ (scale) microseconds. So, to convert to millis we multiply by
+	 * 10 until the scale == 1 ms.
+	 */
+	while (scale > 3) {
+		timeout *= 10;
+		scale--;
+	}
+
+	return msecs_to_jiffies(timeout);
+}
+
+static int cxl_commit_cache_decoder(struct cxl_dport *dport)
+{
+	unsigned long timeout, start;
+	u32 cap, ctrl, stat;
+	u8 scale, base;
+
+	cap = readl(dport->regs.cidd + CXL_CACHE_IDD_CAP_OFFSET);
+	if (!(cap & CXL_CACHE_IDD_CAP_COMMIT_REQUIRED))
+		return 0;
+
+	ctrl = readl(dport->regs.cidd + CXL_CACHE_IDD_CTRL_OFFSET);
+	if (ctrl & CXL_CACHE_IDD_CTRL_COMMIT) {
+		ctrl &= ~CXL_CACHE_IDD_CTRL_COMMIT;
+		writel(ctrl, dport->regs.cidd + CXL_CACHE_IDD_CTRL_OFFSET);
+	}
+
+	stat = readl(dport->regs.cidd + CXL_CACHE_IDD_CTRL_OFFSET);
+	scale = FIELD_PREP(CXL_CACHE_IDD_STAT_TIME_SCALE_MASK, stat);
+	base = FIELD_PREP(CXL_CACHE_IDD_STAT_TIME_BASE_MASK, stat);
+	timeout = cxl_cache_id_compute_timeout(scale, base);
+
+	ctrl &= CXL_CACHE_IDD_CTRL_COMMIT;
+	writel(ctrl, dport->regs.cidd + CXL_CACHE_IDD_CTRL_OFFSET);
+
+	start = jiffies;
+	do {
+		stat = readl(dport->regs.cidd + CXL_CACHE_IDD_STAT_OFFSET);
+		if (stat & CXL_CACHE_IDD_STAT_COMMITTED)
+			return 0;
+
+		if (stat & CXL_CACHE_IDD_STAT_ERR_COMMIT)
+			return -EBUSY;
+	} while (time_before(start, start + timeout));
+
+	return -ETIMEDOUT;
+}
+
+static int cxl_program_cache_decoder(struct cxl_dport *dport, int id,
+				     bool hdmd, bool endpoint)
+{
+	u32 ctrl, orig;
+	int rc;
+
+	ctrl = readl(dport->regs.cidd + CXL_CACHE_IDD_CTRL_OFFSET);
+	orig = ctrl;
+
+	if (endpoint) {
+		ctrl &= CXL_CACHE_IDD_CTRL_ASGN_ID;
+		ctrl &= FIELD_PREP(CXL_CACHE_IDD_CTRL_LOCAL_ID_MASK, id);
+	} else {
+		ctrl &= CXL_CACHE_IDD_CTRL_FWD_ID;
+	}
+
+	if (hdmd) {
+		ctrl &= CXL_CACHE_IDD_CTRL_TYPE2;
+		ctrl &= FIELD_PREP(CXL_CACHE_IDD_CTRL_TYPE2_ID_MASK, id);
+	}
+
+	if (ctrl == orig)
+		return 0;
+
+	writel(ctrl, dport->regs.cidd + CXL_CACHE_IDD_CTRL_OFFSET);
+
+	rc = cxl_commit_cache_decoder(dport);
+	if (rc)
+		writel(orig, dport->regs.cidd + CXL_CACHE_IDD_CTRL_OFFSET);
+
+	return rc;
+}
+
+static int cxl_commit_cache_idrt(struct cxl_port *port)
+{
+	unsigned long timeout, start;
+	u32 cap, ctrl, stat;
+	u8 scale, base;
+
+	cap = readl(port->regs.cidrt + CXL_CACHE_IDRT_CAP_OFFSET);
+	if (!(cap & CXL_CACHE_IDRT_CAP_COMMIT_REQUIRED))
+		return 0;
+
+	ctrl = readl(port->regs.cidrt + CXL_CACHE_IDRT_CTRL_OFFSET);
+	if (ctrl & CXL_CACHE_IDRT_CTRL_COMMIT) {
+		ctrl &= ~CXL_CACHE_IDRT_CTRL_COMMIT;
+		writel(ctrl, port->regs.cidd + CXL_CACHE_IDRT_CTRL_OFFSET);
+	}
+
+	stat = readl(port->regs.cidrt + CXL_CACHE_IDRT_CTRL_OFFSET);
+	scale = FIELD_PREP(CXL_CACHE_IDRT_STAT_TIME_SCALE_MASK, stat);
+	base = FIELD_PREP(CXL_CACHE_IDRT_STAT_TIME_BASE_MASK, stat);
+	timeout = cxl_cache_id_compute_timeout(scale, base);
+
+	ctrl &= CXL_CACHE_IDRT_CTRL_COMMIT;
+	writel(ctrl, port->regs.cidrt + CXL_CACHE_IDRT_CTRL_OFFSET);
+
+	start = jiffies;
+	do {
+		stat = readl(port->regs.cidrt + CXL_CACHE_IDRT_STAT_OFFSET);
+		if (stat & CXL_CACHE_IDRT_STAT_COMMITTED)
+			return 0;
+
+		if (stat & CXL_CACHE_IDRT_STAT_ERR_COMMIT)
+			return -EBUSY;
+	} while (time_before(jiffies, start + timeout));
+
+	return -ETIMEDOUT;
+}
+
+static int cxl_program_cache_idrt_entry(struct cxl_port *port, int id,
+					struct cxl_dport *dport, bool valid)
+{
+	u16 target, orig;
+	int rc;
+
+	target = readw(port->regs.cidrt + CXL_CACHE_IDRT_TARGETN_OFFSET(id));
+	orig = target;
+
+	/*
+	 * Touching the port number field while the entry is valid is
+	 * undefined behavior.
+	 */
+	if (target & CXL_CACHE_IDRT_TARGETN_VALID && valid) {
+		if (FIELD_GET(CXL_CACHE_IDRT_TARGETN_PORTN, target) !=
+		    dport->port_id)
+			return -EINVAL;
+
+		return 0;
+	}
+
+	target = FIELD_PREP(CXL_CACHE_IDRT_TARGETN_PORTN, dport->port_id);
+	if (valid)
+		target &= CXL_CACHE_IDRT_TARGETN_VALID;
+	else
+		target &= ~CXL_CACHE_IDRT_TARGETN_VALID;
+
+	if (orig == target)
+		return 0;
+
+	writew(target, port->regs.cidrt + CXL_CACHE_IDRT_TARGETN_OFFSET(id));
+	rc = cxl_commit_cache_idrt(port);
+	if (rc)
+		writew(orig,
+		       port->regs.cidrt + CXL_CACHE_IDRT_TARGETN_OFFSET(id));
+
+	return rc;
+}
+
+static DECLARE_RWSEM(cache_id_rwsem);
+
+static void __cxl_endpoint_deprogram_cache_id(struct cxl_port *ep,
+					      struct cxl_port *stop, int id)
+{
+	struct cxl_dport *dport = ep->parent_dport;
+	struct cxl_port *port = parent_port_of(ep);
+	int rc;
+
+	while (port != stop) {
+		dport->nr_cachedevs--;
+		if (dport->nr_cachedevs == 0) {
+			rc = cxl_program_cache_idrt_entry(port, id, dport, false);
+			if (rc)
+				dev_warn(&port->dev,
+					 "failed to decommit cache id target%d\n",
+					 id);
+		}
+
+		dport = port->parent_dport;
+		port = parent_port_of(port);
+	}
+}
+
+struct cxl_cache_id_ctx {
+	struct cxl_port *endpoint;
+	struct cxl_port *stop;
+	int id;
+};
+
+static void cxl_endpoint_deprogram_cache_id(void *data)
+{
+	struct cxl_cache_id_ctx *ctx = data;
+
+	guard(rwsem_write)(&cache_id_rwsem);
+	__cxl_endpoint_deprogram_cache_id(ctx->endpoint, ctx->stop, ctx->id);
+}
+
 /**
  * cxl_endpoint_get_cache_id - Get the cache id of a CXL.cache endpoint device
  * @endpoint: Endpoint port representing cache device
@@ -2614,11 +2822,19 @@ int cxl_endpoint_get_cache_id(struct cxl_port *endpoint, int *cid)
 {
 	struct cxl_dport *dport = endpoint->parent_dport;
 	struct cxl_port *port = parent_port_of(endpoint);
+	struct cxl_cachedev *cxlcd;
 	bool ep = true;
 
-	if (!cid)
+	if (!cid || !is_cxl_cachedev(endpoint->uport_dev))
 		return -EINVAL;
+	cxlcd = to_cxl_cachedev(endpoint->uport_dev);
 
+	struct cxl_cache_id_ctx *ctx __free(kfree) =
+		kzalloc(sizeof(*ctx), GFP_KERNEL);
+	if (!ctx)
+		return -ENOMEM;
+
+	guard(rwsem_read)(&cache_id_rwsem);
 	*cid = cxl_dport_get_cache_id(dport, port);
 
 	while (!is_cxl_root(port)) {
@@ -2639,9 +2855,67 @@ int cxl_endpoint_get_cache_id(struct cxl_port *endpoint, int *cid)
 		ep = false;
 	}
 
-	return 0;
+	*ctx = (struct cxl_cache_id_ctx) {
+		.endpoint = endpoint,
+		.stop = port,
+		.id = *cid,
+	};
+
+	return devm_add_action(&cxlcd->dev, cxl_endpoint_deprogram_cache_id,
+			       no_free_ptr(ctx));
 }
 EXPORT_SYMBOL_NS_GPL(cxl_endpoint_get_cache_id, "CXL");
+
+int devm_cxl_endpoint_program_cache_id(struct cxl_port *endpoint, int id)
+{
+	struct cxl_dport *dport = endpoint->parent_dport;
+	struct cxl_port *port = parent_port_of(endpoint);
+	struct cxl_cachedev *cxlcd;
+	bool hdmd, ep = true;
+	int rc;
+
+	if (!is_cxl_cachedev(endpoint->uport_dev))
+		return -EINVAL;
+
+	struct cxl_cache_id_ctx *ctx __free(kfree) =
+		kzalloc(sizeof(*ctx), GFP_KERNEL);
+	if (!ctx)
+		return -ENOMEM;
+
+	cxlcd = to_cxl_cachedev(endpoint->uport_dev);
+	hdmd = cxl_cachedev_is_type2(cxlcd) && cxlcd->cxlds->hdmd;
+
+	guard(rwsem_write)(&cache_id_rwsem);
+	while (!is_cxl_root(port)) {
+		rc = cxl_program_cache_idrt_entry(port, id, dport, true);
+		if (rc)
+			goto err;
+
+		rc = cxl_program_cache_decoder(dport, id, hdmd, ep);
+		if (rc)
+			goto err;
+
+		ep = false;
+		dport->nr_cachedevs++;
+		dport = port->parent_dport;
+		port = parent_port_of(port);
+	}
+
+	*ctx = (struct cxl_cache_id_ctx) {
+		.endpoint = endpoint,
+		.stop = port,
+		.id = id,
+	};
+
+	return devm_add_action_or_reset(&cxlcd->dev,
+					cxl_endpoint_deprogram_cache_id,
+					no_free_ptr(ctx));
+
+err:
+	__cxl_endpoint_deprogram_cache_id(endpoint, parent_port_of(port), id);
+	return rc;
+}
+EXPORT_SYMBOL_NS_GPL(devm_cxl_endpoint_program_cache_id, "CXL");
 
 /**
  * __cxl_driver_register - register a driver for the cxl bus

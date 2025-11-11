@@ -27,6 +27,8 @@
  * PCIe topology.
  */
 
+static DEFINE_MUTEX(cache_id_lock);
+
 static void schedule_detach(void *cxlmd)
 {
 	schedule_cxl_memdev_detach(cxlmd);
@@ -99,30 +101,39 @@ static int cxl_mem_endpoint_port_probe(struct cxl_port *port)
 static void free_cache_id(void *data)
 {
 	struct cxl_cachedev *cxlcd = data;
-	int id = cxlcd->cxlds->cstate.cache_id;
+	struct cxl_cache_state *cstate = &cxlcd->cxlds->cstate;
 
-	cxl_endpoint_free_cache_id(cxlcd->endpoint, id);
+	cxl_endpoint_free_cache_id(cxlcd->endpoint, cstate->cache_id);
+	cstate->cache_id = CXL_CACHE_ID_NO_ID;
 }
 
 static int cxl_cache_endpoint_port_probe(struct cxl_port *port)
 {
 	struct cxl_cachedev *cxlcd = to_cxl_cachedev(port->uport_dev);
-	int rc, id;
+	int rc, orig, id;
 
 	rc = cxl_endpoint_map_cache_id_regs(port);
 	if (rc)
 		return rc;
 
-	rc = cxl_endpoint_get_cache_id(port, &id);
+	guard(mutex)(&cache_id_lock);
+	rc = cxl_endpoint_get_cache_id(port, &orig);
 	if (rc)
 		return rc;
 
-	rc = cxl_endpoint_allocate_cache_id(port, id);
-	if (rc < 0)
-		return rc;
+	id = cxl_endpoint_allocate_cache_id(port, orig);
+	if (id < 0)
+		return id;
 
 	cxlcd->cxlds->cstate.cache_id = id;
-	return devm_add_action_or_reset(&cxlcd->dev, free_cache_id, cxlcd);
+	rc = devm_add_action_or_reset(&cxlcd->dev, free_cache_id, cxlcd);
+	if (rc)
+		return rc;
+
+	if (orig == CXL_CACHE_ID_NO_ID)
+		return devm_cxl_endpoint_program_cache_id(port, id);
+
+	return 0;
 }
 
 static int cxl_endpoint_port_probe(struct cxl_port *port)
