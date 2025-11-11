@@ -1057,7 +1057,7 @@ static inline void iommu_iotlb_gather_add_page(struct iommu_domain *domain,
 
 static inline bool iommu_iotlb_gather_queued(struct iommu_iotlb_gather *gather)
 {
-	return gather && gather->queued;
+	return gather->queued;
 }
 
 static inline void iommu_dirty_bitmap_init(struct iommu_dirty_bitmap *dirty,
