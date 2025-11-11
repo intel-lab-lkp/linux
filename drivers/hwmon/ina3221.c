@@ -348,19 +348,16 @@ static const u8 ina3221_in_reg[] = {
 	INA3221_SHUNT3,
 	INA3221_SHUNT_SUM,
 };
-
 static const u8 alert_limit_reg[] = {
 	SQ52210_ALERT_LIMIT1,
 	SQ52210_ALERT_LIMIT2,
 	SQ52210_ALERT_LIMIT3,
 };
-
 static const u8 alert_flag[] = {
 	F_AFF1,
 	F_AFF2,
 	F_AFF3,
 };
-
 /*
  * Turns alert limit values into register values.
  * Opposite of the formula in ina3221_read_value().
@@ -552,6 +549,61 @@ static int ina3221_read_curr(struct device *dev, u32 attr,
 			return ret;
 		*val = regval;
 		return 0;
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
+static const u8 ina3221_power_reg[][INA3221_NUM_CHANNELS] = {
+	[hwmon_power_input] = { SQ52210_POWER1, SQ52210_POWER2, SQ52210_POWER3 },
+	[hwmon_power_crit] = { SQ52210_ALERT_LIMIT1, SQ52210_ALERT_LIMIT2,
+						SQ52210_ALERT_LIMIT3 },
+	[hwmon_power_crit_alarm] = { F_AFF1, F_AFF2, F_AFF3 },
+};
+
+static int ina3221_read_power(struct device *dev, u32 attr, int channel, long *val)
+{
+	struct ina3221_data *ina = dev_get_drvdata(dev);
+	u8 reg = ina3221_power_reg[attr][channel];
+	int regval, ret;
+
+	switch (attr) {
+	case hwmon_power_input:
+		if (!ina3221_is_enabled(ina, channel))
+			return -ENODATA;
+
+		/* Write CONFIG register to trigger a single-shot measurement */
+		if (ina->single_shot) {
+			regmap_write(ina->regmap, INA3221_CONFIG,
+				     ina->reg_config);
+
+			ret = ina3221_wait_for_data(ina);
+			if (ret)
+				return ret;
+		}
+
+		ret = ina3221_read_value(ina, reg, &regval);
+		if (ret)
+			return ret;
+		/* Return power in mW */
+		*val = DIV_ROUND_CLOSEST(regval * ina->power_lsb_uW, 1000);
+		return 0;
+	case hwmon_power_crit:
+		reg = ina3221_power_reg[attr][channel];
+		ret = ina3221_read_value(ina, reg, &regval);
+		if (ret)
+			return ret;
+		/* Return power in mW */
+		*val = DIV_ROUND_CLOSEST(regval * ina->power_lsb_uW, 1000);
+		return 0;
+	case hwmon_power_crit_alarm:
+		reg = ina3221_power_reg[attr][channel];
+		ret = regmap_field_read(ina->fields[reg], &regval);
+		if (ret)
+			return ret;
+		*val = regval;
+		return 0;
+
 	default:
 		return -EOPNOTSUPP;
 	}
@@ -760,6 +812,19 @@ static int ina3221_write_in(struct device *dev, u32 attr, int channel, long val)
 		return 0;
 	}
 }
+
+static int ina3221_write_power(struct device *dev, u32 attr, int channel, long val)
+{
+	struct ina3221_data *ina = dev_get_drvdata(dev);
+
+	switch (attr) {
+	case hwmon_power_crit:
+		return sq52210_alert_limit_write(ina, attr, channel, val);
+	default:
+		return 0;
+	}
+}
+
 static int ina3221_read(struct device *dev, enum hwmon_sensor_types type,
 			u32 attr, int channel, long *val)
 {
@@ -775,6 +840,9 @@ static int ina3221_read(struct device *dev, enum hwmon_sensor_types type,
 		break;
 	case hwmon_curr:
 		ret = ina3221_read_curr(dev, attr, channel, val);
+		break;
+	case hwmon_power:
+		ret = ina3221_read_power(dev, attr, channel, val);
 		break;
 	default:
 		ret = -EOPNOTSUPP;
@@ -798,6 +866,9 @@ static int ina3221_write(struct device *dev, enum hwmon_sensor_types type,
 		break;
 	case hwmon_curr:
 		ret = ina3221_write_curr(dev, attr, channel, val);
+		break;
+	case hwmon_power:
+		ret = ina3221_write_power(dev, attr, channel, val);
 		break;
 	default:
 		ret = -EOPNOTSUPP;
@@ -977,7 +1048,7 @@ static int ina3221_set_shunt(struct ina3221_data *ina, unsigned long val)
 
 	ina->current_lsb_uA = DIV_ROUND_CLOSEST(SQ52210_SHUNT_LSB, val);
 	ina->power_lsb_uW = ina->config->power_lsb_factor *
-			    ina->current_lsb_uA;
+			     ina->current_lsb_uA;
 
 	return 0;
 }
