@@ -39,14 +39,15 @@
 		led-0 {
 			function = LED_FUNCTION_POWER;
 			color = <LED_COLOR_ID_GREEN>;
+			default-state = "on";
 			gpios = <&gpio3 RK_PD4 GPIO_ACTIVE_LOW>;
-			linux,default-trigger = "default-on";
 		};
 
 		/* USER_LED2 */
 		led-1 {
 			function = LED_FUNCTION_STATUS;
 			color = <LED_COLOR_ID_BLUE>;
+			default-state = "on";
 			gpios = <&gpio3 RK_PD5 GPIO_ACTIVE_HIGH>;
 			linux,default-trigger = "heartbeat";
 		};

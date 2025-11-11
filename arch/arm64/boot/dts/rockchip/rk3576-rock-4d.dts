@@ -52,13 +52,14 @@
 
 		power-led {
 			color = <LED_COLOR_ID_GREEN>;
+			default-state = "on";
 			function = LED_FUNCTION_STATUS;
 			gpios = <&gpio0 RK_PB4 GPIO_ACTIVE_HIGH>;
-			linux,default-trigger = "default-on";
 		};
 
 		user-led {
 			color = <LED_COLOR_ID_BLUE>;
+			default-state = "on";
 			function = LED_FUNCTION_HEARTBEAT;
 			gpios = <&gpio0 RK_PC4 GPIO_ACTIVE_LOW>;
 			linux,default-trigger = "heartbeat";
