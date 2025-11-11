@@ -560,7 +560,7 @@ static ssize_t connector_status_store(struct config_item *item,
 		vkms_config_connector_set_status(connector->config, status);
 
 		if (connector->dev->enabled && old_status != status)
-			vkms_trigger_connector_hotplug(connector->dev->config->dev);
+			vkms_trigger_connector_hotplug(vkms_connector);
 	}
 
 	return (ssize_t)count;
