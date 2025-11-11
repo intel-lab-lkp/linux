@@ -759,6 +759,17 @@ struct cxl_dpa_info {
 	int nr_partitions;
 };
 
+
+/**
+ * struct cxl_cache_state - State of a device's CXL cache
+ * @size: Size of cache in bytes
+ * @unit: Unit size of cache in bytes
+ */
+struct cxl_cache_state {
+	u64 size;
+	u32 unit;
+};
+
 /**
  * struct cxl_dev_state - The driver device state
  *
@@ -779,6 +790,7 @@ struct cxl_dpa_info {
  * @serial: PCIe Device Serial Number
  * @type: Generic Memory Class device or Vendor Specific Memory device
  * @cxl_mbox: CXL mailbox context
+ * @cstate: CXL cache state and capabilities
  * @cxlfs: CXL features context
  */
 struct cxl_dev_state {
@@ -795,6 +807,7 @@ struct cxl_dev_state {
 	u64 serial;
 	enum cxl_devtype type;
 	struct cxl_mailbox cxl_mbox;
+	struct cxl_cache_state cstate;
 #ifdef CONFIG_CXL_FEATURES
 	struct cxl_features_state *cxlfs;
 #endif

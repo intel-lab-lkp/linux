@@ -7,6 +7,7 @@
 #include <linux/pci.h>
 #include <linux/pci-doe.h>
 #include <linux/aer.h>
+#include <cxlcache.h>
 #include <cxlpci.h>
 #include <cxlmem.h>
 #include <cxl.h>
@@ -1187,3 +1188,55 @@ int cxl_port_get_possible_dports(struct cxl_port *port)
 
 	return ctx.count;
 }
+EXPORT_SYMBOL_NS_GPL(cxl_port_get_possible_dports, "CXL");
+
+/**
+ * cxl_accel_read_cache_info - Get the CXL cache information of a CXL cache device
+ * @cxlds: CXL device state associated with cache device
+ *
+ * Returns 0 and populates the struct cxl_cache_state member of @cxlds on
+ * success, error otherwise.
+ */
+int cxl_accel_read_cache_info(struct cxl_dev_state *cxlds)
+{
+	struct cxl_cache_state *cstate = &cxlds->cstate;
+	struct pci_dev *pdev;
+	int dvsec, rc;
+	u16 cap, cap2;
+
+	if (!dev_is_pci(cxlds->dev))
+		return -EINVAL;
+	pdev = to_pci_dev(cxlds->dev);
+
+	dvsec = cxlds->cxl_dvsec;
+
+	rc = pci_read_config_word(pdev, dvsec + CXL_DVSEC_CAP_OFFSET, &cap);
+	if (rc)
+		return rc;
+
+	if (!(cap & CXL_DVSEC_CACHE_CAPABLE))
+		return -ENXIO;
+
+	rc = pci_read_config_word(pdev, dvsec + CXL_DVSEC_CAP2_OFFSET, &cap2);
+	if (rc)
+		return rc;
+
+	/* CXL 3.2 8.1.3.7 DVSEC CXL Capability2 for encoding */
+	switch (FIELD_GET(CXL_DVSEC_CACHE_UNIT_MASK, cap2)) {
+	case 1:
+		cstate->unit = 64 * SZ_1K;
+		break;
+	case 2:
+		cstate->unit = SZ_1M;
+		break;
+	default:
+		return -ENXIO;
+	}
+
+	cstate->size = FIELD_GET(CXL_DVSEC_CACHE_SIZE_MASK, cap2) * cstate->unit;
+	if (!cstate->size)
+		return -ENXIO;
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_accel_read_cache_info, "CXL");
