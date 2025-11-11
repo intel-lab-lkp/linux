@@ -2844,10 +2844,8 @@ static __init int kvm_arm_init(void)
 	}
 
 	err = kvm_sys_reg_table_init();
-	if (err) {
-		kvm_info("Error initializing system register tables");
+	if (err)
 		return err;
-	}
 
 	in_hyp_mode = is_kernel_in_hyp_mode();
 
