@@ -98,6 +98,28 @@ static int cxl_mem_endpoint_port_probe(struct cxl_port *port)
 	return 0;
 }
 
+static bool cxl_endpoint_is_only_cachedev(struct cxl_port *endpoint)
+{
+	unsigned long index;
+	struct cxl_ep *ep;
+	int cnt;
+
+	for (struct cxl_port *port = endpoint;
+	     !is_cxl_root(parent_port_of(port)); port = parent_port_of(port)) {
+		cnt = 0;
+
+		xa_for_each(&port->endpoints, index, ep) {
+			if (is_cxl_cachedev(ep->ep))
+				cnt++;
+
+			if (cnt > 1)
+				return false;
+		}
+	}
+
+	return true;
+}
+
 static void free_cache_id(void *data)
 {
 	struct cxl_cachedev *cxlcd = data;
@@ -113,8 +135,16 @@ static int cxl_cache_endpoint_port_probe(struct cxl_port *port)
 	int rc, orig, id;
 
 	rc = cxl_endpoint_map_cache_id_regs(port);
-	if (rc)
-		return rc;
+	if (rc) {
+		/*
+		 * It's fine to not have cache id capabilities if this cachedev
+		 * is the only one in its VH
+		 */
+		if (cxl_endpoint_is_only_cachedev(port))
+			return 0;
+
+		return -EBUSY;
+	}
 
 	guard(mutex)(&cache_id_lock);
 	rc = cxl_endpoint_get_cache_id(port, &orig);

@@ -617,6 +617,7 @@ struct cxl_port *parent_port_of(struct cxl_port *port)
 		return NULL;
 	return port->parent_dport->port;
 }
+EXPORT_SYMBOL_NS_GPL(parent_port_of, "CXL");
 
 static void unregister_port(void *_port)
 {
