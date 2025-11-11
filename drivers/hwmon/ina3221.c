@@ -652,6 +652,8 @@ static umode_t ina3221_is_visible(const void *drvdata,
 {
 	const struct ina3221_data *ina = drvdata;
 	const struct ina3221_input *input = NULL;
+	bool has_alerts = ina->config->has_alerts;
+	bool has_power = ina->config->has_power;
 
 	switch (type) {
 	case hwmon_chip:
@@ -679,6 +681,16 @@ static umode_t ina3221_is_visible(const void *drvdata,
 			return 0444;
 		case hwmon_in_enable:
 			return 0644;
+		case hwmon_in_crit:
+		case hwmon_in_lcrit:
+			if (has_alerts)
+				return 0644;
+			return 0;
+		case hwmon_in_crit_alarm:
+		case hwmon_in_lcrit_alarm:
+			if (has_alerts)
+				return 0444;
+			return 0;
 		default:
 			return 0;
 		}
@@ -691,6 +703,28 @@ static umode_t ina3221_is_visible(const void *drvdata,
 		case hwmon_curr_crit:
 		case hwmon_curr_max:
 			return 0644;
+		case hwmon_curr_lcrit:
+			if (has_alerts)
+				return 0644;
+			return 0;
+		case hwmon_curr_lcrit_alarm:
+			if (has_alerts)
+				return 0444;
+			return 0;
+		default:
+			return 0;
+		}
+		case hwmon_power:
+		switch (attr) {
+		case hwmon_power_input:
+		case hwmon_power_crit_alarm:
+			if (has_power)
+				return 0444;
+			return 0;
+		case hwmon_power_crit:
+			if (has_alerts)
+				return 0644;
+			return 0;
 		default:
 			return 0;
 		}
@@ -701,7 +735,14 @@ static umode_t ina3221_is_visible(const void *drvdata,
 
 #define INA3221_HWMON_CURR_CONFIG (HWMON_C_INPUT | \
 				   HWMON_C_CRIT | HWMON_C_CRIT_ALARM | \
-				   HWMON_C_MAX | HWMON_C_MAX_ALARM)
+				   HWMON_C_MAX | HWMON_C_MAX_ALARM | \
+				   HWMON_C_LCRIT | HWMON_C_LCRIT_ALARM)
+#define SQ52210_HWMON_POWER_CONFIG (HWMON_P_INPUT | \
+				   HWMON_P_CRIT | HWMON_P_CRIT_ALARM)
+#define SQ52210_HWMON_BUS_CONFIG (HWMON_I_INPUT | \
+				   HWMON_I_ENABLE | HWMON_I_LABEL | \
+				   HWMON_I_LCRIT_ALARM | HWMON_I_LCRIT |\
+				   HWMON_I_CRIT_ALARM | HWMON_I_CRIT)
 
 static const struct hwmon_channel_info * const ina3221_info[] = {
 	HWMON_CHANNEL_INFO(chip,
@@ -711,9 +752,9 @@ static const struct hwmon_channel_info * const ina3221_info[] = {
 			   /* 0: dummy, skipped in is_visible */
 			   HWMON_I_INPUT,
 			   /* 1-3: input voltage Channels */
-			   HWMON_I_INPUT | HWMON_I_ENABLE | HWMON_I_LABEL,
-			   HWMON_I_INPUT | HWMON_I_ENABLE | HWMON_I_LABEL,
-			   HWMON_I_INPUT | HWMON_I_ENABLE | HWMON_I_LABEL,
+			   SQ52210_HWMON_BUS_CONFIG,
+			   SQ52210_HWMON_BUS_CONFIG,
+			   SQ52210_HWMON_BUS_CONFIG,
 			   /* 4-6: shunt voltage Channels */
 			   HWMON_I_INPUT,
 			   HWMON_I_INPUT,
@@ -727,6 +768,11 @@ static const struct hwmon_channel_info * const ina3221_info[] = {
 			   INA3221_HWMON_CURR_CONFIG,
 			   /* 4: summation of current channels */
 			   HWMON_C_INPUT | HWMON_C_CRIT | HWMON_C_CRIT_ALARM),
+	HWMON_CHANNEL_INFO(power,
+			   /* 1-3: power channels*/
+			   SQ52210_HWMON_POWER_CONFIG,
+			   SQ52210_HWMON_POWER_CONFIG,
+			   SQ52210_HWMON_POWER_CONFIG),
 	NULL
 };
 
@@ -748,7 +794,7 @@ static const struct hwmon_chip_info ina3221_chip_info = {
  * Calculate the value corresponding to one LSB of the current and
  * power registers.
  * formula : Current_LSB = Shunt_LSB / Rshunt
- *			 Power_LSB = power_lsb_factor * Current_LSB
+ *           Power_LSB = power_lsb_factor * Current_LSB
  */
 static int ina3221_set_shunt(struct ina3221_data *ina, unsigned long val)
 {
@@ -1023,8 +1069,8 @@ static int ina3221_probe(struct i2c_client *client)
 	}
 
 	hwmon_dev = devm_hwmon_device_register_with_info(dev, client->name, ina,
-							&ina3221_chip_info,
-							ina3221_groups);
+							 &ina3221_chip_info,
+							 ina3221_groups);
 	if (IS_ERR(hwmon_dev)) {
 		dev_err(dev, "Unable to register hwmon device\n");
 		ret = PTR_ERR(hwmon_dev);
