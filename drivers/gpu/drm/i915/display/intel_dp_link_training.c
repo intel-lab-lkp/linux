@@ -1624,6 +1624,16 @@ out:
 	return passed;
 }
 
+static void intel_dp_update_lttpr_count(struct intel_dp *intel_dp,
+					int lttpr_count)
+{
+	if (!intel_dp_is_edp(intel_dp) ||
+	    intel_dp->lttpr_common_caps[0] <= 0x20)
+		return;
+
+	drm_dp_dpcd_writeb(&intel_dp->aux, DP_TOTAL_LTTPR_CNT, lttpr_count);
+}
+
 /**
  * intel_dp_start_link_train - start link training
  * @state: Atomic state
@@ -1659,6 +1669,8 @@ void intel_dp_start_link_train(struct intel_atomic_state *state,
 		lttpr_count = 0;
 
 	intel_dp_prepare_link_train(intel_dp, crtc_state);
+
+	intel_dp_update_lttpr_count(intel_dp, lttpr_count);
 
 	if (intel_dp_is_uhbr(crtc_state))
 		passed = intel_dp_128b132b_link_train(intel_dp, crtc_state, lttpr_count);
