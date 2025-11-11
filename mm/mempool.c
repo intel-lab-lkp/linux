@@ -388,6 +388,7 @@ static void *mempool_alloc_from_pool(struct mempool *pool, gfp_t gfp_mask)
 	spin_lock_irqsave(&pool->lock, flags);
 	if (unlikely(!pool->curr_nr))
 		goto fail;
+alloc:
 	element = remove_element(pool);
 	spin_unlock_irqrestore(&pool->lock, flags);
 
@@ -406,13 +407,17 @@ fail:
 		DEFINE_WAIT(wait);
 
 		prepare_to_wait(&pool->wait, &wait, TASK_UNINTERRUPTIBLE);
+		if (pool->curr_nr) {
+			finish_wait(&pool->wait, &wait);
+			goto alloc;
+		}
 		spin_unlock_irqrestore(&pool->lock, flags);
 
 		/*
-		 * Wait for someone else to return an element to @pool.
-		 *
-		 * FIXME: this should be io_schedule().  The timeout is there as
-		 * a workaround for some DM problems in 2.6.18.
+		 * Wait for someone else to return an element to @pool, but wake
+		 * up occasionally as memory pressure might have reduced even
+		 * and the normal allocation in alloc_fn could succeed even if
+		 * no element was returned.
 		 */
 		io_schedule_timeout(5 * HZ);
 		finish_wait(&pool->wait, &wait);
