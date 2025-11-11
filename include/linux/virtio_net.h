@@ -232,12 +232,23 @@ static inline int virtio_net_hdr_from_skb(const struct sk_buff *skb,
 			return -EINVAL;
 
 		if (hdrlen_negotiated) {
-			hdr_len = skb_transport_offset(skb);
+			if (sinfo->gso_type & (SKB_GSO_UDP_TUNNEL |
+					       SKB_GSO_UDP_TUNNEL_CSUM)) {
+				hdr_len = skb_inner_transport_offset(skb);
 
-			if (hdr->gso_type == VIRTIO_NET_HDR_GSO_UDP_L4)
-				hdr_len += sizeof(struct udphdr);
-			else
-				hdr_len += tcp_hdrlen(skb);
+				if (hdr->gso_type == VIRTIO_NET_HDR_GSO_UDP_L4)
+					hdr_len += sizeof(struct udphdr);
+				else
+					hdr_len += inner_tcp_hdrlen(skb);
+			} else {
+				hdr_len = skb_transport_offset(skb);
+
+				if (hdr->gso_type == VIRTIO_NET_HDR_GSO_UDP_L4)
+					hdr_len += sizeof(struct udphdr);
+				else
+					hdr_len += tcp_hdrlen(skb);
+			}
+
 		} else {
 			/* This is a hint as to how much should be linear. */
 			hdr_len = skb_headlen(skb);
@@ -421,11 +432,8 @@ virtio_net_hdr_tnl_from_skb(const struct sk_buff *skb,
         vhdr->hash_hdr.hash_report = 0;
         vhdr->hash_hdr.padding = 0;
 
-	/* Let the basic parsing deal with plain GSO features. */
-	skb_shinfo(skb)->gso_type &= ~tnl_gso_type;
 	ret = virtio_net_hdr_from_skb(skb, hdr, true, false, hdrlen_negotiated,
 				      vlan_hlen);
-	skb_shinfo(skb)->gso_type |= tnl_gso_type;
 	if (ret)
 		return ret;
 
