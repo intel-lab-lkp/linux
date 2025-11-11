@@ -844,6 +844,45 @@ static void cxl_debugfs_create_dport_dir(struct cxl_dport *dport)
 			    &cxl_einj_inject_fops);
 }
 
+static bool is_cxl_ep_device(struct device *dev)
+{
+	return is_cxl_memdev(dev) || is_cxl_cachedev(dev);
+}
+
+static int cxl_port_setup_endpoint(struct cxl_port *port)
+{
+	struct device *uport_dev = port->uport_dev;
+	struct cxl_dev_state *cxlds;
+	struct cxl_cachedev *cxlcd;
+	struct cxl_memdev *cxlmd;
+	int rc;
+
+	rc = dev_set_name(&port->dev, "endpoint%d", port->id);
+	if (rc)
+		return rc;
+
+	/*
+	 * The endpoint driver already enumerated the component and RAS
+	 * registers. Reuse that enumeration while prepping them to be
+	 * mapped by the cxl_port driver.
+	 */
+	if (is_cxl_memdev(uport_dev)) {
+		cxlmd = to_cxl_memdev(uport_dev);
+		cxlds = cxlmd->cxlds;
+
+		cxlmd->endpoint = port;
+	} else {
+		cxlcd = to_cxl_cachedev(uport_dev);
+		cxlds = cxlcd->cxlds;
+
+		cxlcd->endpoint = port;
+	}
+
+	port->reg_map = cxlds->reg_map;
+	port->reg_map.host = &port->dev;
+	return 0;
+}
+
 static int cxl_port_add(struct cxl_port *port,
 			resource_size_t component_reg_phys,
 			struct cxl_dport *parent_dport)
@@ -851,22 +890,10 @@ static int cxl_port_add(struct cxl_port *port,
 	struct device *dev __free(put_device) = &port->dev;
 	int rc;
 
-	if (is_cxl_memdev(port->uport_dev)) {
-		struct cxl_memdev *cxlmd = to_cxl_memdev(port->uport_dev);
-		struct cxl_dev_state *cxlds = cxlmd->cxlds;
-
-		rc = dev_set_name(dev, "endpoint%d", port->id);
+	if (is_cxl_ep_device(port->uport_dev)) {
+		rc = cxl_port_setup_endpoint(port);
 		if (rc)
 			return rc;
-
-		/*
-		 * The endpoint driver already enumerated the component and RAS
-		 * registers. Reuse that enumeration while prepping them to be
-		 * mapped by the cxl_port driver.
-		 */
-		port->reg_map = cxlds->reg_map;
-		port->reg_map.host = &port->dev;
-		cxlmd->endpoint = port;
 	} else if (parent_dport) {
 		rc = dev_set_name(dev, "port%d", port->id);
 		if (rc)
@@ -1603,7 +1630,8 @@ static int update_decoder_targets(struct device *dev, void *data)
 
 DEFINE_FREE(del_cxl_dport, struct cxl_dport *, if (!IS_ERR_OR_NULL(_T)) del_dport(_T))
 static struct cxl_dport *cxl_port_add_dport(struct cxl_port *port,
-					    struct device *dport_dev)
+					    struct device *dport_dev,
+					    struct device *ep_dev)
 {
 	struct cxl_dport *dport;
 	int rc;
@@ -1623,6 +1651,10 @@ static struct cxl_dport *cxl_port_add_dport(struct cxl_port *port,
 		devm_cxl_add_dport_by_dev(port, dport_dev);
 	if (IS_ERR(new_dport))
 		return new_dport;
+
+	/* CXL.cache devices aren't expected to have HDM decoders */
+	if (ep_dev && is_cxl_cachedev(ep_dev))
+		return no_free_ptr(new_dport);
 
 	cxl_switch_parse_cdat(new_dport);
 
@@ -1655,9 +1687,10 @@ static struct cxl_dport *devm_cxl_create_port(struct device *ep_dev,
 	device_lock_assert(&parent_port->dev);
 	if (!parent_port->dev.driver) {
 		dev_warn(ep_dev,
-			 "port %s:%s:%s disabled, failed to enumerate CXL.mem\n",
+			 "port %s:%s:%s disabled, failed to enumerate CXL.%s\n",
 			 dev_name(&parent_port->dev), dev_name(uport_dev),
-			 dev_name(dport_dev));
+			 dev_name(dport_dev),
+			 is_cxl_memdev(ep_dev) ? "mem" : "cache");
 	}
 
 	struct cxl_port *port __free(put_cxl_port) =
@@ -1688,10 +1721,10 @@ static struct cxl_dport *devm_cxl_create_port(struct device *ep_dev,
 	}
 
 	guard(device)(&port->dev);
-	return cxl_port_add_dport(port, dport_dev);
+	return cxl_port_add_dport(port, dport_dev, ep_dev);
 }
 
-static int add_port_attach_ep(struct cxl_memdev *cxlmd,
+static int add_port_attach_ep(struct device *ep_dev,
 			      struct device *uport_dev,
 			      struct device *dport_dev)
 {
@@ -1705,8 +1738,7 @@ static int add_port_attach_ep(struct cxl_memdev *cxlmd,
 		 * CXL-root 'cxl_port' on a previous iteration, fail for now to
 		 * be re-probed after platform driver attaches.
 		 */
-		dev_dbg(&cxlmd->dev, "%s is a root dport\n",
-			dev_name(dport_dev));
+		dev_dbg(ep_dev, "%s is a root dport\n", dev_name(dport_dev));
 		return -ENXIO;
 	}
 
@@ -1720,12 +1752,13 @@ static int add_port_attach_ep(struct cxl_memdev *cxlmd,
 	scoped_guard(device, &parent_port->dev) {
 		parent_dport = cxl_find_dport_by_dev(parent_port, dparent);
 		if (!parent_dport) {
-			parent_dport = cxl_port_add_dport(parent_port, dparent);
+			parent_dport = cxl_port_add_dport(parent_port, dparent,
+							  ep_dev);
 			if (IS_ERR(parent_dport))
 				return PTR_ERR(parent_dport);
 		}
 
-		dport = devm_cxl_create_port(&cxlmd->dev, parent_port,
+		dport = devm_cxl_create_port(ep_dev, parent_port,
 					     parent_dport, uport_dev,
 					     dport_dev);
 		if (IS_ERR(dport)) {
@@ -1736,7 +1769,7 @@ static int add_port_attach_ep(struct cxl_memdev *cxlmd,
 		}
 	}
 
-	rc = cxl_add_ep(dport, &cxlmd->dev);
+	rc = cxl_add_ep(dport, ep_dev);
 	if (rc == -EBUSY) {
 		/*
 		 * "can't" happen, but this error code means
@@ -1756,7 +1789,7 @@ static struct cxl_dport *find_or_add_dport(struct cxl_port *port,
 	device_lock_assert(&port->dev);
 	dport = cxl_find_dport_by_dev(port, dport_dev);
 	if (!dport) {
-		dport = cxl_port_add_dport(port, dport_dev);
+		dport = cxl_port_add_dport(port, dport_dev, NULL);
 		if (IS_ERR(dport))
 			return dport;
 
@@ -1767,9 +1800,8 @@ static struct cxl_dport *find_or_add_dport(struct cxl_port *port,
 	return dport;
 }
 
-int devm_cxl_enumerate_ports(struct cxl_memdev *cxlmd)
+int devm_cxl_enumerate_ports(struct device *ep_dev, struct cxl_dev_state *cxlds)
 {
-	struct device *dev = &cxlmd->dev;
 	struct device *iter;
 	int rc;
 
@@ -1777,12 +1809,15 @@ int devm_cxl_enumerate_ports(struct cxl_memdev *cxlmd)
 	 * Skip intermediate port enumeration in the RCH case, there
 	 * are no ports in between a host bridge and an endpoint.
 	 */
-	if (cxlmd->cxlds->rcd)
+	if (cxlds->rcd)
 		return 0;
 
-	rc = devm_add_action_or_reset(&cxlmd->dev, cxl_detach_ep, cxlmd);
-	if (rc)
-		return rc;
+	if (is_cxl_memdev(ep_dev)) {
+		rc = devm_add_action_or_reset(ep_dev, cxl_detach_ep,
+					      to_cxl_memdev(ep_dev));
+		if (rc)
+			return rc;
+	}
 
 	/*
 	 * Scan for and add all cxl_ports in this device's ancestry.
@@ -1790,7 +1825,7 @@ int devm_cxl_enumerate_ports(struct cxl_memdev *cxlmd)
 	 * attempt fails.
 	 */
 retry:
-	for (iter = dev; iter; iter = grandparent(iter)) {
+	for (iter = ep_dev; iter; iter = grandparent(iter)) {
 		struct device *dport_dev = grandparent(iter);
 		struct device *uport_dev;
 		struct cxl_dport *dport;
@@ -1800,18 +1835,18 @@ retry:
 
 		uport_dev = dport_dev->parent;
 		if (!uport_dev) {
-			dev_warn(dev, "at %s no parent for dport: %s\n",
+			dev_warn(ep_dev, "at %s no parent for dport: %s\n",
 				 dev_name(iter), dev_name(dport_dev));
 			return -ENXIO;
 		}
 
-		dev_dbg(dev, "scan: iter: %s dport_dev: %s parent: %s\n",
+		dev_dbg(ep_dev, "scan: iter: %s dport_dev: %s parent: %s\n",
 			dev_name(iter), dev_name(dport_dev),
 			dev_name(uport_dev));
 		struct cxl_port *port __free(put_cxl_port) =
 			find_cxl_port_by_uport(uport_dev);
 		if (port) {
-			dev_dbg(&cxlmd->dev,
+			dev_dbg(ep_dev,
 				"found already registered port %s:%s\n",
 				dev_name(&port->dev),
 				dev_name(port->uport_dev));
@@ -1829,7 +1864,7 @@ retry:
 				}
 			}
 
-			rc = cxl_add_ep(dport, &cxlmd->dev);
+			rc = cxl_add_ep(dport, ep_dev);
 
 			/*
 			 * If the endpoint already exists in the port's list,
@@ -1850,7 +1885,7 @@ retry:
 			return 0;
 		}
 
-		rc = add_port_attach_ep(cxlmd, uport_dev, dport_dev);
+		rc = add_port_attach_ep(ep_dev, uport_dev, dport_dev);
 		/* port missing, try to add parent */
 		if (rc == -EAGAIN)
 			continue;

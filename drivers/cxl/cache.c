@@ -56,6 +56,22 @@ EXPORT_SYMBOL_NS_GPL(devm_cxl_add_cachedev, "CXL");
 
 static int cxl_cache_probe(struct device *dev)
 {
+	struct cxl_cachedev *cxlcd = to_cxl_cachedev(dev);
+	struct cxl_dev_state *cxlds = cxlcd->cxlds;
+	struct cxl_dport *dport;
+	int rc;
+
+	rc = devm_cxl_enumerate_ports(dev, cxlds);
+	if (rc)
+		return rc;
+
+	struct cxl_port *parent_port __free(put_cxl_port) =
+		cxl_dev_find_port(dev, &dport);
+	if (!parent_port) {
+		dev_err(dev, "CXL port topology not found\n");
+		return -ENXIO;
+	}
+
 	return 0;
 }
 

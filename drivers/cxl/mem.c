@@ -104,7 +104,7 @@ static int cxl_mem_probe(struct device *dev)
 	if (rc)
 		return rc;
 
-	rc = devm_cxl_enumerate_ports(cxlmd);
+	rc = devm_cxl_enumerate_ports(dev, cxlds);
 	if (rc)
 		return rc;
 

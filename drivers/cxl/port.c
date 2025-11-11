@@ -74,6 +74,9 @@ static int cxl_endpoint_port_probe(struct cxl_port *port)
 	struct cxl_memdev *cxlmd = to_cxl_memdev(port->uport_dev);
 	int rc;
 
+	if (!is_cxl_memdev(port->uport_dev))
+		return -EOPNOTSUPP;
+
 	/* Cache the data early to ensure is_visible() works */
 	read_cdat_data(port);
 	cxl_endpoint_parse_cdat(port);
