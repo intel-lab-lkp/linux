@@ -210,6 +210,7 @@ static void drm_pagemap_get_devmem_page(struct page *page,
 /**
  * drm_pagemap_migrate_map_pages() - Map migration pages for GPU SVM migration
  * @dev: The device for which the pages are being mapped
+ * @local_dpagemap: The drm_pagemap pointer of the local drm_pagemap.
  * @pagemap_addr: Array to store DMA information corresponding to mapped pages
  * @migrate_pfn: Array of migrate page frame numbers to map
  * @npages: Number of pages to map
@@ -223,12 +224,14 @@ static void drm_pagemap_get_devmem_page(struct page *page,
  * Returns: 0 on success, -EFAULT if an error occurs during mapping.
  */
 static int drm_pagemap_migrate_map_pages(struct device *dev,
+					 struct drm_pagemap *local_dpagemap,
 					 struct drm_pagemap_addr *pagemap_addr,
 					 unsigned long *migrate_pfn,
 					 unsigned long npages,
 					 enum dma_data_direction dir)
 {
 	unsigned long i;
+	unsigned long num_peer_pages = 0;
 
 	for (i = 0; i < npages;) {
 		struct page *page = migrate_pfn_to_page(migrate_pfn[i]);
@@ -239,24 +242,39 @@ static int drm_pagemap_migrate_map_pages(struct device *dev,
 		if (!page)
 			goto next;
 
-		if (WARN_ON_ONCE(is_zone_device_page(page)))
-			return -EFAULT;
-
 		folio = page_folio(page);
 		order = folio_order(folio);
 
-		dma_addr = dma_map_page(dev, page, 0, page_size(page), dir);
-		if (dma_mapping_error(dev, dma_addr))
-			return -EFAULT;
+		if (is_zone_device_page(page)) {
+			struct drm_pagemap_zdd *zdd = page->zone_device_data;
+			struct drm_pagemap *dpagemap = zdd->dpagemap;
+			struct drm_pagemap_addr addr;
 
-		pagemap_addr[i] =
-			drm_pagemap_addr_encode(dma_addr,
-						DRM_INTERCONNECT_SYSTEM,
-						order, dir);
+			if (dpagemap == local_dpagemap)
+				goto next;
+
+			num_peer_pages += NR_PAGES(order);
+			addr = dpagemap->ops->device_map(dpagemap, dev, page, order, dir);
+			if (dma_mapping_error(dev, addr.addr))
+				return -EFAULT;
+		} else {
+			dma_addr = dma_map_page(dev, page, 0, page_size(page), dir);
+			if (dma_mapping_error(dev, dma_addr))
+				return -EFAULT;
+
+			pagemap_addr[i] =
+				drm_pagemap_addr_encode(dma_addr,
+							DRM_INTERCONNECT_SYSTEM,
+							order, dir);
+		}
 
 next:
 		i += NR_PAGES(order);
 	}
+
+	if (num_peer_pages)
+		drm_dbg(local_dpagemap->drm, "Migrating %lu peer pages over interconnect.\n",
+			num_peer_pages);
 
 	return 0;
 }
@@ -264,6 +282,8 @@ next:
 /**
  * drm_pagemap_migrate_unmap_pages() - Unmap pages previously mapped for GPU SVM migration
  * @dev: The device for which the pages were mapped
+ * @migrate_pfn: Array of migrate pfns set up for the mapped pages. Used to
+ * determine the drm_pagemap of a peer device private page.
  * @pagemap_addr: Array of DMA information corresponding to mapped pages
  * @npages: Number of pages to unmap
  * @dir: Direction of data transfer (e.g., DMA_BIDIRECTIONAL)
@@ -274,16 +294,27 @@ next:
  */
 static void drm_pagemap_migrate_unmap_pages(struct device *dev,
 					    struct drm_pagemap_addr *pagemap_addr,
+					    unsigned long *migrate_pfn,
 					    unsigned long npages,
 					    enum dma_data_direction dir)
 {
 	unsigned long i;
 
 	for (i = 0; i < npages;) {
-		if (!pagemap_addr[i].addr || dma_mapping_error(dev, pagemap_addr[i].addr))
+		struct page *page = migrate_pfn_to_page(migrate_pfn[i]);
+
+		if (!page || !pagemap_addr[i].addr || dma_mapping_error(dev, pagemap_addr[i].addr))
 			goto next;
 
-		dma_unmap_page(dev, pagemap_addr[i].addr, PAGE_SIZE << pagemap_addr[i].order, dir);
+		if (is_zone_device_page(page)) {
+			struct drm_pagemap_zdd *zdd = page->zone_device_data;
+			struct drm_pagemap *dpagemap = zdd->dpagemap;
+
+			dpagemap->ops->device_unmap(dpagemap, dev, pagemap_addr[i]);
+		} else {
+			dma_unmap_page(dev, pagemap_addr[i].addr,
+				       PAGE_SIZE << pagemap_addr[i].order, dir);
+		}
 
 next:
 		i += NR_PAGES(pagemap_addr[i].order);
@@ -308,6 +339,7 @@ npages_in_range(unsigned long start, unsigned long end)
  * @timeslice_ms: The time requested for the migrated pagemap pages to
  * be present in @mm before being allowed to be migrated back.
  * @pgmap_owner: Not used currently, since only system memory is considered.
+ * @mflags: Flags governing the migration.
  *
  * This function migrates the specified virtual address range to device memory.
  * It performs the necessary setup and invokes the driver-specific operations for
@@ -333,13 +365,18 @@ int drm_pagemap_migrate_to_devmem(struct drm_pagemap_devmem *devmem_allocation,
 		.start		= start,
 		.end		= end,
 		.pgmap_owner	= pgmap_owner,
-		.flags		= MIGRATE_VMA_SELECT_SYSTEM,
+		.flags		= MIGRATE_VMA_SELECT_SYSTEM |
+		MIGRATE_VMA_SELECT_DEVICE_PRIVATE |
+		MIGRATE_VMA_SELECT_DEVICE_COHERENT,
 	};
 	unsigned long i, npages = npages_in_range(start, end);
+	unsigned long own_pages = 0, migrated_pages = 0;
 	struct vm_area_struct *vas;
 	struct drm_pagemap_zdd *zdd = NULL;
 	struct page **pages;
 	struct drm_pagemap_addr *pagemap_addr;
+	struct drm_pagemap *dpagemap = devmem_allocation->dpagemap;
+	struct dev_pagemap *pagemap = dpagemap->pagemap;
 	void *buf;
 	int err;
 
@@ -374,11 +411,13 @@ int drm_pagemap_migrate_to_devmem(struct drm_pagemap_devmem *devmem_allocation,
 	pagemap_addr = buf + (2 * sizeof(*migrate.src) * npages);
 	pages = buf + (2 * sizeof(*migrate.src) + sizeof(*pagemap_addr)) * npages;
 
-	zdd = drm_pagemap_zdd_alloc(devmem_allocation->dpagemap, pgmap_owner);
+	zdd = drm_pagemap_zdd_alloc(dpagemap, pgmap_owner);
 	if (!zdd) {
 		err = -ENOMEM;
-		goto err_free;
+		kvfree(buf);
+		goto err_out;
 	}
+	zdd->devmem_allocation = devmem_allocation;	/* Owns ref */
 
 	migrate.vma = vas;
 	migrate.src = buf;
@@ -389,54 +428,108 @@ int drm_pagemap_migrate_to_devmem(struct drm_pagemap_devmem *devmem_allocation,
 		goto err_free;
 
 	if (!migrate.cpages) {
-		err = -EFAULT;
+		/* No pages to migrate. Raced or unknown device pages. */
+		err = -EBUSY;
 		goto err_free;
 	}
 
 	if (migrate.cpages != npages) {
+		/*
+		 * Some pages to migrate. But we want to migrate all or
+		 * nothing. Raced or unknown device pages.
+		 */
 		err = -EBUSY;
-		goto err_finalize;
+		goto err_aborted_migration;
+	}
+
+	/* Count device-private pages to migrate */
+	for (i = 0; i < npages; ++i) {
+		struct page *src_page = migrate_pfn_to_page(migrate.src[i]);
+
+		if (src_page && is_zone_device_page(src_page)) {
+			if (page_pgmap(src_page) == pagemap)
+				own_pages++;
+		}
+	}
+
+	drm_dbg(dpagemap->drm, "Total pages %lu; Own pages: %lu.\n",
+		npages, own_pages);
+	if (own_pages == npages) {
+		err = 0;
+		drm_dbg(dpagemap->drm, "Migration wasn't necessary.\n");
+		goto err_aborted_migration;
+	} else if (own_pages) {
+		err = -EBUSY;
+		drm_dbg(dpagemap->drm, "Migration aborted due to fragmentation.\n");
+		goto err_aborted_migration;
 	}
 
 	err = ops->populate_devmem_pfn(devmem_allocation, npages, migrate.dst);
 	if (err)
 		goto err_finalize;
 
-	err = drm_pagemap_migrate_map_pages(devmem_allocation->dev, pagemap_addr,
+	err = drm_pagemap_migrate_map_pages(devmem_allocation->dev,
+					    devmem_allocation->dpagemap, pagemap_addr,
 					    migrate.src, npages, DMA_TO_DEVICE);
 
-	if (err)
-		goto err_finalize;
+	if (err) {
+		drm_pagemap_migrate_unmap_pages(devmem_allocation->dev, pagemap_addr,
+						migrate.src, npages, DMA_TO_DEVICE);
 
+		goto err_finalize;
+	}
+
+	own_pages = 0;
 	for (i = 0; i < npages; ++i) {
 		struct page *page = pfn_to_page(migrate.dst[i]);
+		struct page *src_page = migrate_pfn_to_page(migrate.src[i]);
 
+		if (unlikely(src_page && is_zone_device_page(src_page) &&
+			     page_pgmap(src_page) == pagemap)) {
+			migrate.dst[i] = 0;
+			pages[i] = NULL;
+			own_pages++;
+			continue;
+		}
 		pages[i] = page;
 		migrate.dst[i] = migrate_pfn(migrate.dst[i]);
 		drm_pagemap_get_devmem_page(page, zdd);
 	}
+	drm_WARN_ON(dpagemap->drm, !!own_pages);
 
 	err = ops->copy_to_devmem(pages, pagemap_addr, npages);
+	drm_pagemap_migrate_unmap_pages(devmem_allocation->dev, pagemap_addr,
+					migrate.src, npages, DMA_TO_DEVICE);
 	if (err)
 		goto err_finalize;
 
 	/* Upon success bind devmem allocation to range and zdd */
 	devmem_allocation->timeslice_expiration = get_jiffies_64() +
 		msecs_to_jiffies(timeslice_ms);
-	zdd->devmem_allocation = devmem_allocation;	/* Owns ref */
 
 err_finalize:
 	if (err)
 		drm_pagemap_migration_unlock_put_pages(npages, migrate.dst);
+err_aborted_migration:
 	migrate_vma_pages(&migrate);
+
+	for (i = 0; i < npages; ++i)
+		if (migrate.src[i] & MIGRATE_PFN_MIGRATE)
+			migrated_pages++;
+
+	if (!err && migrated_pages < npages - own_pages) {
+		drm_dbg(dpagemap->drm, "Raced while finalizing migration.\n");
+		err = -EBUSY;
+	}
+
 	migrate_vma_finalize(&migrate);
-	drm_pagemap_migrate_unmap_pages(devmem_allocation->dev, pagemap_addr, npages,
-					DMA_TO_DEVICE);
 err_free:
-	if (zdd)
-		drm_pagemap_zdd_put(zdd);
+	drm_pagemap_zdd_put(zdd);
 	kvfree(buf);
+	return err;
+
 err_out:
+	devmem_allocation->ops->devmem_release(devmem_allocation);
 	return err;
 }
 EXPORT_SYMBOL_GPL(drm_pagemap_migrate_to_devmem);
@@ -747,7 +840,8 @@ retry:
 	if (err || !mpages)
 		goto err_finalize;
 
-	err = drm_pagemap_migrate_map_pages(devmem_allocation->dev, pagemap_addr,
+	err = drm_pagemap_migrate_map_pages(devmem_allocation->dev,
+					    devmem_allocation->dpagemap, pagemap_addr,
 					    dst, npages, DMA_FROM_DEVICE);
 	if (err)
 		goto err_finalize;
@@ -764,7 +858,7 @@ err_finalize:
 		drm_pagemap_migration_unlock_put_pages(npages, dst);
 	migrate_device_pages(src, dst, npages);
 	migrate_device_finalize(src, dst, npages);
-	drm_pagemap_migrate_unmap_pages(devmem_allocation->dev, pagemap_addr, npages,
+	drm_pagemap_migrate_unmap_pages(devmem_allocation->dev, pagemap_addr, dst, npages,
 					DMA_FROM_DEVICE);
 err_free:
 	kvfree(buf);
@@ -820,12 +914,10 @@ static int __drm_pagemap_migrate_to_ram(struct vm_area_struct *vas,
 	void *buf;
 	int i, err = 0;
 
-	if (page) {
-		zdd = page->zone_device_data;
-		if (time_before64(get_jiffies_64(),
-				  zdd->devmem_allocation->timeslice_expiration))
-			return 0;
-	}
+	zdd = page->zone_device_data;
+	if (time_before64(get_jiffies_64(),
+			  zdd->devmem_allocation->timeslice_expiration))
+		return 0;
 
 	start = ALIGN_DOWN(fault_addr, size);
 	end = ALIGN(fault_addr + 1, size);
@@ -861,19 +953,6 @@ static int __drm_pagemap_migrate_to_ram(struct vm_area_struct *vas,
 	if (!migrate.cpages)
 		goto err_free;
 
-	if (!page) {
-		for (i = 0; i < npages; ++i) {
-			if (!(migrate.src[i] & MIGRATE_PFN_MIGRATE))
-				continue;
-
-			page = migrate_pfn_to_page(migrate.src[i]);
-			break;
-		}
-
-		if (!page)
-			goto err_finalize;
-	}
-	zdd = page->zone_device_data;
 	ops = zdd->devmem_allocation->ops;
 	dev = zdd->devmem_allocation->dev;
 
@@ -883,7 +962,7 @@ static int __drm_pagemap_migrate_to_ram(struct vm_area_struct *vas,
 	if (err)
 		goto err_finalize;
 
-	err = drm_pagemap_migrate_map_pages(dev, pagemap_addr, migrate.dst, npages,
+	err = drm_pagemap_migrate_map_pages(dev, zdd->dpagemap, pagemap_addr, migrate.dst, npages,
 					    DMA_FROM_DEVICE);
 	if (err)
 		goto err_finalize;
@@ -901,8 +980,8 @@ err_finalize:
 	migrate_vma_pages(&migrate);
 	migrate_vma_finalize(&migrate);
 	if (dev)
-		drm_pagemap_migrate_unmap_pages(dev, pagemap_addr, npages,
-						DMA_FROM_DEVICE);
+		drm_pagemap_migrate_unmap_pages(dev, pagemap_addr, migrate.dst,
+						npages, DMA_FROM_DEVICE);
 err_free:
 	kvfree(buf);
 err_out:
@@ -938,10 +1017,12 @@ static vm_fault_t drm_pagemap_migrate_to_ram(struct vm_fault *vmf)
 	struct drm_pagemap_zdd *zdd = vmf->page->zone_device_data;
 	int err;
 
+	drm_pagemap_zdd_get(zdd);
 	err = __drm_pagemap_migrate_to_ram(vmf->vma,
 					   zdd->device_private_page_owner,
 					   vmf->page, vmf->address,
 					   zdd->devmem_allocation->size);
+	drm_pagemap_zdd_put(zdd);
 
 	return err ? VM_FAULT_SIGBUS : 0;
 }
