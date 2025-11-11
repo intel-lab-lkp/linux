@@ -1064,6 +1064,8 @@ static int process_v2_sparse_read(struct ceph_connection *con,
 	struct ceph_msg_data_cursor *cursor = &con->v2.in_cursor;
 	int ret;
 
+	ceph_msg_data_cursor_init(cursor, con->in_msg, con->in_msg->data_length);
+
 	for (;;) {
 		char *buf = NULL;
 
