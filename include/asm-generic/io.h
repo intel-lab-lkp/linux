@@ -146,6 +146,16 @@ static inline u64 __raw_readq(const volatile void __iomem *addr)
 #endif
 #endif /* CONFIG_64BIT */
 
+#ifdef CONFIG_ARCH_SUPPORTS_INT128
+#ifndef __raw_read128
+#define __raw_read128 __raw_read128
+static inline u128 __raw_read128(volatile void __iomem *addr)
+{
+	return *(const volatile u128 __force *)addr;
+}
+#endif
+#endif /* CONFIG_ARCH_SUPPORTS_INT128 */
+
 #ifndef __raw_writeb
 #define __raw_writeb __raw_writeb
 static inline void __raw_writeb(u8 value, volatile void __iomem *addr)
@@ -179,6 +189,16 @@ static inline void __raw_writeq(u64 value, volatile void __iomem *addr)
 }
 #endif
 #endif /* CONFIG_64BIT */
+
+#ifdef CONFIG_ARCH_SUPPORTS_INT128
+#ifndef __raw_write128
+#define __raw_write128 __raw_write128
+static inline void __raw_write128(u128 value, volatile void __iomem *addr)
+{
+	*(volatile u128 __force *)addr = value;
+}
+#endif
+#endif /* CONFIG_ARCH_SUPPORTS_INT128 */
 
 /*
  * {read,write}{b,w,l,q}() access little endian memory and return result in
@@ -917,6 +937,22 @@ static inline u64 ioread64(const volatile void __iomem *addr)
 #endif
 #endif /* CONFIG_64BIT */
 
+#ifdef CONFIG_ARCH_SUPPORTS_INT128
+#ifndef ioread128
+#define ioread128 ioread128
+static inline u128 ioread128(const volatile void __iomem *addr)
+{
+	u128 val;
+
+	__io_br();
+	val = __le128_to_cpu((__le128 __force)__raw_read128(addr));
+	__io_ar(val);
+
+	return val;
+}
+#endif
+#endif /* CONFIG_ARCH_SUPPORTS_INT128 */
+
 #ifndef iowrite8
 #define iowrite8 iowrite8
 static inline void iowrite8(u8 value, volatile void __iomem *addr)
@@ -950,6 +986,18 @@ static inline void iowrite64(u64 value, volatile void __iomem *addr)
 }
 #endif
 #endif /* CONFIG_64BIT */
+
+#ifdef CONFIG_ARCH_SUPPORTS_INT128
+#ifndef iowrite128
+#define iowrite128 iowrite128
+static inline void iowrite128(u128 value, volatile void __iomem *addr)
+{
+	__io_bw();
+	__raw_write128((u128 __force)__cpu_to_le128(value), addr);
+	__io_aw();
+}
+#endif
+#endif /* CONFIG_ARCH_SUPPORTS_INT128 */
 
 #ifndef ioread16be
 #define ioread16be ioread16be
