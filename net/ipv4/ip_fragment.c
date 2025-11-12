@@ -368,7 +368,7 @@ static int ip_frag_queue(struct ipq *qp, struct sk_buff *skb, int *refs)
 		dstref_t dstref = skb_dstref_steal(skb);
 
 		err = ip_frag_reasm(qp, skb, prev_tail, dev, refs);
-		skb_dstref_restore(skb, dstref);
+		skb_dstref_set(skb, dstref);
 		if (err)
 			inet_frag_kill(&qp->q, refs);
 		return err;

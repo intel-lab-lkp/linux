@@ -553,7 +553,7 @@ static struct rtable *icmp_route_lookup(struct net *net, struct flowi4 *fl4,
 		rt2 = skb_rtable(skb_in);
 		/* steal dst entry from skb_in, don't drop refcnt */
 		skb_dstref_steal(skb_in);
-		skb_dstref_restore(skb_in, dstref);
+		skb_dstref_set(skb_in, dstref);
 	}
 
 	if (err)

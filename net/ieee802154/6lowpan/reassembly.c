@@ -146,7 +146,7 @@ static int lowpan_frag_queue(struct lowpan_frag_queue *fq,
 		int res;
 
 		res = lowpan_frag_reasm(fq, skb, prev_tail, ldev, refs);
-		skb_dstref_restore(skb, dstref);
+		skb_dstref_set(skb, dstref);
 		return res;
 	}
 	skb_dst_drop(skb);

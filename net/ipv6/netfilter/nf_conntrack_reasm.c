@@ -289,7 +289,7 @@ static int nf_ct_frag6_queue(struct frag_queue *fq, struct sk_buff *skb,
 		dstref_t dstref = skb_dstref_steal(skb);
 
 		err = nf_ct_frag6_reasm(fq, skb, prev, dev, refs);
-		skb_dstref_restore(skb, dstref);
+		skb_dstref_set(skb, dstref);
 
 		/* After queue has assumed skb ownership, only 0 or
 		 * -EINPROGRESS must be returned.

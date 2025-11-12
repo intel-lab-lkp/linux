@@ -1176,11 +1176,11 @@ static inline dstref_t skb_dstref_steal(struct sk_buff *skb)
 }
 
 /**
- * skb_dstref_restore() - restore skb dstref removed via skb_dstref_steal()
+ * skb_dstref_set() - sets skb dstref
  * @skb: buffer
- * @dstref: dstref object from a call to skb_dstref_steal()
+ * @dstref: dstref object
  */
-static inline void skb_dstref_restore(struct sk_buff *skb, dstref_t dstref)
+static inline void skb_dstref_set(struct sk_buff *skb, dstref_t dstref)
 {
 	skb_dst_check_unset(skb);
 	skb->_dstref = dstref;

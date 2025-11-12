@@ -2111,7 +2111,7 @@ static inline void tcp_skb_tsorted_anchor_cleanup(struct sk_buff *skb)
 	dstref_t _dstref_save = skb_dstref_steal(skb);
 
 #define tcp_skb_tsorted_restore(skb)		\
-	skb_dstref_restore(skb, _dstref_save);	\
+	skb_dstref_set(skb, _dstref_save);	\
 }
 
 void tcp_write_queue_purge(struct sock *sk);

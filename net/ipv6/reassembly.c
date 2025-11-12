@@ -221,7 +221,7 @@ static int ip6_frag_queue(struct net *net,
 		dstref_t dstref = skb_dstref_steal(skb);
 
 		err = ip6_frag_reasm(fq, skb, prev_tail, dev, refs);
-		skb_dstref_restore(skb, dstref);
+		skb_dstref_set(skb, dstref);
 		return err;
 	}
 
