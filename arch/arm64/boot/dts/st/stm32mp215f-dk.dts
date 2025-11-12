@@ -45,5 +45,6 @@
 };
 
 &usart2 {
+	bootph-all;
 	status = "okay";
 };
