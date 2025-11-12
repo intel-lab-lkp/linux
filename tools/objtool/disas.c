@@ -3,6 +3,8 @@
  * Copyright (C) 2015-2017 Josh Poimboeuf <jpoimboe@redhat.com>
  */
 
+#include <fnmatch.h>
+
 #include <objtool/arch.h>
 #include <objtool/check.h>
 #include <objtool/disas.h>
@@ -459,5 +461,31 @@ void disas_warned_funcs(struct disas_context *dctx)
 	for_each_sym(dctx->file, sym) {
 		if (sym->warned)
 			disas_func(dctx, sym);
+	}
+}
+
+void disas_funcs(struct disas_context *dctx)
+{
+	bool disas_all = !strcmp(opts.disas, "*");
+	struct section *sec;
+	struct symbol *sym;
+
+	for_each_sec(dctx->file, sec) {
+
+		if (!(sec->sh.sh_flags & SHF_EXECINSTR))
+			continue;
+
+		sec_for_each_sym(sec, sym) {
+			/*
+			 * If the function had a warning and the verbose
+			 * option is used then the function was already
+			 * disassemble.
+			 */
+			if (opts.verbose && sym->warned)
+				continue;
+
+			if (disas_all || fnmatch(opts.disas, sym->name, 0) == 0)
+				disas_func(dctx, sym);
+		}
 	}
 }

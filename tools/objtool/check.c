@@ -2570,7 +2570,7 @@ static int decode_sections(struct objtool_file *file)
 	 * Must be before add_jump_destinations(), which depends on 'func'
 	 * being set for alternatives, to enable proper sibling call detection.
 	 */
-	if (opts.stackval || opts.orc || opts.uaccess || opts.noinstr) {
+	if (opts.stackval || opts.orc || opts.uaccess || opts.noinstr || opts.disas) {
 		ret = add_special_section_alts(file);
 		if (ret)
 			return ret;
@@ -4815,14 +4815,15 @@ int check(struct objtool_file *file)
 	int ret = 0, warnings = 0;
 
 	/*
-	 * If the verbose or backtrace option is used then we need a
-	 * disassembly context to disassemble instruction or function
-	 * on warning or backtrace.
+	 * Create a disassembly context if we might disassemble any
+	 * instruction or function.
 	 */
-	if (opts.verbose || opts.backtrace || opts.trace) {
+	if (opts.verbose || opts.backtrace || opts.trace || opts.disas) {
 		disas_ctx = disas_context_create(file);
-		if (!disas_ctx)
+		if (!disas_ctx) {
+			opts.disas = false;
 			opts.trace = false;
+		}
 		objtool_disas_ctx = disas_ctx;
 	}
 
@@ -4944,18 +4945,20 @@ int check(struct objtool_file *file)
 	}
 
 out:
-	if (!ret && !warnings)
-		return 0;
-
-	if (opts.werror && warnings)
-		ret = 1;
-
-	if (opts.verbose) {
+	if (ret || warnings) {
 		if (opts.werror && warnings)
-			WARN("%d warning(s) upgraded to errors", warnings);
-		print_args();
-		disas_warned_funcs(disas_ctx);
+			ret = 1;
+
+		if (opts.verbose) {
+			if (opts.werror && warnings)
+				WARN("%d warning(s) upgraded to errors", warnings);
+			print_args();
+			disas_warned_funcs(disas_ctx);
+		}
 	}
+
+	if (opts.disas)
+		disas_funcs(disas_ctx);
 
 	if (disas_ctx) {
 		disas_context_destroy(disas_ctx);

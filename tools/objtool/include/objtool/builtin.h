@@ -27,6 +27,7 @@ struct opts {
 	int prefix;
 	bool cfi;
 	bool noabs;
+	const char *disas;
 
 	/* options: */
 	bool backtrace;
