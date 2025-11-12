@@ -19,6 +19,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/io.h>
 
 #define DRIVER_NAME "gpdfan"
 #define GPD_PWM_CTR_OFFSET 0x1841
