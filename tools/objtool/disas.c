@@ -9,6 +9,7 @@
 #include <objtool/arch.h>
 #include <objtool/check.h>
 #include <objtool/disas.h>
+#include <objtool/special.h>
 #include <objtool/warn.h>
 
 #include <bfd.h>
@@ -59,6 +60,21 @@ struct disas_alt {
 #define DALT_INSN(dalt)		(DALT_DEFAULT(dalt) ? (dalt)->orig_insn : (dalt)->alt->insn)
 #define DALT_GROUP(dalt)	(DALT_INSN(dalt)->alt_group)
 #define DALT_ALTID(dalt)	((dalt)->orig_insn->offset)
+
+#define ALT_FLAGS_SHIFT		16
+#define ALT_FLAG_NOT		(1 << 0)
+#define ALT_FLAG_DIRECT_CALL	(1 << 1)
+#define ALT_FEATURE_MASK	((1 << ALT_FLAGS_SHIFT) - 1)
+
+static int alt_feature(unsigned ft_flags)
+{
+	return (ft_flags & ALT_FEATURE_MASK);
+}
+
+static int alt_flags(unsigned ft_flags)
+{
+	return (ft_flags >> ALT_FLAGS_SHIFT);
+}
 
 /*
  * Wrapper around asprintf() to allocate and format a string.
@@ -589,37 +605,81 @@ static struct instruction *next_insn_same_alt(struct objtool_file *file,
 	     insn = next_insn_same_alt(file, alt_grp, insn))
 
 /*
+ * Provide a name for an alternative.
+ */
+char *disas_alt_name(struct alternative *alt)
+{
+	char pfx[4] = { 0 };
+	char *str = NULL;
+	const char *name;
+	int feature;
+	int flags;
+	int num;
+
+	switch (alt->type) {
+
+	case ALT_TYPE_EX_TABLE:
+		str = strdup("EXCEPTION");
+		break;
+
+	case ALT_TYPE_JUMP_TABLE:
+		str = strdup("JUMP");
+		break;
+
+	case ALT_TYPE_INSTRUCTIONS:
+		/*
+		 * This is a non-default group alternative. Create a name
+		 * based on the feature and flags associated with this
+		 * alternative. Use either the feature name (it is available)
+		 * or the feature number. And add a prefix to show the flags
+		 * used.
+		 *
+		 * Prefix flags characters:
+		 *
+		 *   '!'  alternative used when feature not enabled
+		 *   '+'  direct call alternative
+		 *   '?'  unknown flag
+		 */
+
+		feature = alt->insn->alt_group->feature;
+		num = alt_feature(feature);
+		flags = alt_flags(feature);
+		str = pfx;
+
+		if (flags & ~(ALT_FLAG_NOT | ALT_FLAG_DIRECT_CALL))
+			*str++ = '?';
+		if (flags & ALT_FLAG_DIRECT_CALL)
+			*str++ = '+';
+		if (flags & ALT_FLAG_NOT)
+			*str++ = '!';
+
+		name = arch_cpu_feature_name(num);
+		if (!name)
+			str = strfmt("%sFEATURE 0x%X", pfx, num);
+		else
+			str = strfmt("%s%s", pfx, name);
+
+		break;
+	}
+
+	return str;
+}
+
+/*
  * Initialize an alternative. The default alternative should be initialized
  * with alt=NULL.
  */
 static int disas_alt_init(struct disas_alt *dalt,
 			  struct instruction *orig_insn,
-			  struct alternative *alt,
-			  int alt_num)
+			  struct alternative *alt)
 {
-	char *str;
-
 	dalt->orig_insn = orig_insn;
 	dalt->alt = alt;
 	dalt->insn_idx = 0;
-	if (!alt) {
-		str = strfmt("<alternative.%lx>", orig_insn->offset);
-	} else {
-		switch (alt->type) {
-		case ALT_TYPE_EX_TABLE:
-			str = strdup("EXCEPTION");
-			break;
-		case ALT_TYPE_JUMP_TABLE:
-			str = strdup("JUMP");
-			break;
-		default:
-			str = strfmt("ALTERNATIVE %d", alt_num);
-			break;
-		}
-	}
-	if (!str)
+	dalt->name = alt ? disas_alt_name(alt) :
+		strfmt("<alternative.%lx>", orig_insn->offset);
+	if (!dalt->name)
 		return -1;
-	dalt->name = str;
 	dalt->width = strlen(dalt->name);
 
 	return 0;
@@ -832,7 +892,7 @@ static void *disas_alt(struct disas_context *dctx,
 	/*
 	 * Initialize and disassemble the default alternative.
 	 */
-	err = disas_alt_init(&alts[0], orig_insn, NULL, 0);
+	err = disas_alt_init(&alts[0], orig_insn, NULL);
 	if (err)
 		goto error;
 
@@ -851,7 +911,7 @@ static void *disas_alt(struct disas_context *dctx,
 			break;
 		}
 		dalt = &alts[i];
-		err = disas_alt_init(dalt, orig_insn, alt, i);
+		err = disas_alt_init(dalt, orig_insn, alt);
 		if (err)
 			goto error;
 

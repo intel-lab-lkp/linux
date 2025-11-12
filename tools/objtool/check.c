@@ -3566,6 +3566,7 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 	/* prev_state is not used if there is no disassembly support */
 	struct insn_state prev_state __maybe_unused;
 	struct alternative *alt;
+	char *alt_name = NULL;
 	u8 visited;
 	int ret;
 
@@ -3651,43 +3652,21 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 		return 1;
 
 	if (insn->alts) {
-		char alt_name[35];
-		int i, num_alts;
-
-		num_alts = 0;
-		for (alt = insn->alts; alt; alt = alt->next) {
-			if (alt->type == ALT_TYPE_INSTRUCTIONS)
-				num_alts++;
-		}
-
-		i = 1;
 		for (alt = insn->alts; alt; alt = alt->next) {
 			if (trace) {
-				switch (alt->type) {
-				case ALT_TYPE_EX_TABLE:
-					strcpy(alt_name, "EXCEPTION");
-					break;
-				case ALT_TYPE_JUMP_TABLE:
-					strcpy(alt_name, "JUMP");
-					break;
-				case ALT_TYPE_INSTRUCTIONS:
-					snprintf(alt_name, sizeof(alt_name),
-						"ALTERNATIVE %d/%d", i, num_alts);
-					break;
-				}
+				alt_name = disas_alt_name(alt);
 				trace_alt_begin(insn, alt, alt_name);
 			}
 			ret = validate_branch(file, func, alt->insn, *statep);
-			if (trace)
+			if (trace) {
 				trace_alt_end(insn, alt, alt_name);
+				free(alt_name);
+			}
 			if (ret) {
 				BT_INSN(insn, "(alt)");
 				return ret;
 			}
-			if (alt->insn->alt_group)
-				i++;
 		}
-
 		TRACE_ALT_INFO_NOADDR(insn, "/ ", "DEFAULT");
 	}
 
