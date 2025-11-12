@@ -345,6 +345,7 @@ static void cpufreq_notify_transition(struct cpufreq_policy *policy,
 		pr_debug("FREQ: %u - CPUs: %*pbl\n", freqs->new,
 			 cpumask_pr_args(policy->cpus));
 
+		trace_policy_frequency(freqs->new, policy->cpu);
 		for_each_cpu(cpu, policy->cpus)
 			trace_cpu_frequency(freqs->new, cpu);
 
@@ -2214,6 +2215,7 @@ unsigned int cpufreq_driver_fast_switch(struct cpufreq_policy *policy,
 			    arch_scale_freq_ref(policy->cpu));
 	cpufreq_stats_record_transition(policy, freq);
 
+	trace_policy_frequency(freq, policy->cpu);
 	if (trace_cpu_frequency_enabled()) {
 		for_each_cpu(cpu, policy->cpus)
 			trace_cpu_frequency(freq, cpu);

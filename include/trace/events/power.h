@@ -188,6 +188,27 @@ DEFINE_EVENT(cpu, cpu_frequency,
 	TP_ARGS(frequency, cpu_id)
 );
 
+TRACE_EVENT(policy_frequency,
+
+	TP_PROTO(unsigned int frequency, unsigned int policy_cpu),
+
+	TP_ARGS(frequency, policy_cpu),
+
+	TP_STRUCT__entry(
+		__field(u32, frequency)
+		__field(u32, policy_cpu)
+	),
+
+	TP_fast_assign(
+		__entry->frequency = frequency;
+		__entry->policy_cpu = policy_cpu;
+	),
+
+	TP_printk("frequency=%lu policy_cpu=%lu",
+		  (unsigned long)__entry->frequency,
+		  (unsigned long)__entry->policy_cpu)
+);
+
 TRACE_EVENT(cpu_frequency_limits,
 
 	TP_PROTO(struct cpufreq_policy *policy),
