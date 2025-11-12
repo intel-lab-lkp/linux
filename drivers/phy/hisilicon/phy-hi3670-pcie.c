@@ -558,11 +558,10 @@ static int hi3670_pcie_noc_power(struct hi3670_pcie_phy *phy, bool enable)
 
 static int hi3670_pcie_get_resources_from_pcie(struct hi3670_pcie_phy *phy)
 {
-	struct device_node *pcie_port;
 	struct device *dev = phy->dev;
 	struct device *pcie_dev;
-
-	pcie_port = of_get_child_by_name(dev->parent->of_node, "pcie");
+	struct device_node *pcie_port __free(device_node) =
+		of_get_child_by_name(dev->parent->of_node, "pcie");
 	if (!pcie_port) {
 		dev_err(dev, "no pcie node found in %s\n",
 			dev->parent->of_node->full_name);
