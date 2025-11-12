@@ -98,13 +98,17 @@ int iomap_ioend_writeback_submit(struct iomap_writepage_ctx *wpc, int error)
 EXPORT_SYMBOL_GPL(iomap_ioend_writeback_submit);
 
 static struct iomap_ioend *iomap_alloc_ioend(struct iomap_writepage_ctx *wpc,
-		loff_t pos, u16 ioend_flags)
+					     loff_t pos, u16 ioend_flags,
+					     bool atomic)
 {
 	struct bio *bio;
+	blk_opf_t opf = REQ_OP_WRITE | wbc_to_write_flags(wpc->wbc);
+
+	if (atomic)
+		opf |= REQ_ATOMIC;
 
 	bio = bio_alloc_bioset(wpc->iomap.bdev, BIO_MAX_VECS,
-			       REQ_OP_WRITE | wbc_to_write_flags(wpc->wbc),
-			       GFP_NOFS, &iomap_ioend_bioset);
+			       opf, GFP_NOFS, &iomap_ioend_bioset);
 	bio->bi_iter.bi_sector = iomap_sector(&wpc->iomap, pos);
 	bio->bi_write_hint = wpc->inode->i_write_hint;
 	wbc_init_bio(wpc->wbc, bio);
@@ -121,6 +125,9 @@ static bool iomap_can_add_to_ioend(struct iomap_writepage_ctx *wpc, loff_t pos,
 		return false;
 	if ((ioend_flags & IOMAP_IOEND_NOMERGE_FLAGS) !=
 	    (ioend->io_flags & IOMAP_IOEND_NOMERGE_FLAGS))
+		return false;
+	if ((ioend_flags & IOMAP_IOEND_ATOMIC) ||
+	    (ioend->io_flags & IOMAP_IOEND_ATOMIC))
 		return false;
 	if (pos != ioend->io_offset + ioend->io_size)
 		return false;
@@ -156,6 +163,7 @@ ssize_t iomap_add_to_ioend(struct iomap_writepage_ctx *wpc, struct folio *folio,
 	unsigned int ioend_flags = 0;
 	unsigned int map_len = min_t(u64, dirty_len,
 		wpc->iomap.offset + wpc->iomap.length - pos);
+	bool is_atomic = folio_test_atomic(folio);
 	int error;
 
 	trace_iomap_add_to_ioend(wpc->inode, pos, dirty_len, &wpc->iomap);
@@ -180,6 +188,8 @@ ssize_t iomap_add_to_ioend(struct iomap_writepage_ctx *wpc, struct folio *folio,
 		ioend_flags |= IOMAP_IOEND_DONTCACHE;
 	if (pos == wpc->iomap.offset && (wpc->iomap.flags & IOMAP_F_BOUNDARY))
 		ioend_flags |= IOMAP_IOEND_BOUNDARY;
+	if (is_atomic)
+		ioend_flags |= IOMAP_IOEND_ATOMIC;
 
 	if (!ioend || !iomap_can_add_to_ioend(wpc, pos, ioend_flags)) {
 new_ioend:
@@ -188,7 +198,7 @@ new_ioend:
 			if (error)
 				return error;
 		}
-		wpc->wb_ctx = ioend = iomap_alloc_ioend(wpc, pos, ioend_flags);
+		wpc->wb_ctx = ioend = iomap_alloc_ioend(wpc, pos, ioend_flags, is_atomic);
 	}
 
 	if (!bio_add_folio(&ioend->io_bio, folio, map_len, poff))

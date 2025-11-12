@@ -849,11 +849,13 @@ static int iomap_write_begin(struct iomap_iter *iter,
 {
 	const struct iomap *srcmap = iomap_iter_srcmap(iter);
 	loff_t pos;
-	u64 len = min_t(u64, SIZE_MAX, iomap_length(iter));
+	u64 orig_len = min_t(u64, SIZE_MAX, iomap_length(iter));
+	u64 len;
 	struct folio *folio;
 	int status = 0;
+	bool is_atomic = iter->flags & IOMAP_ATOMIC;
 
-	len = min_not_zero(len, *plen);
+	len = min_not_zero(orig_len, *plen);
 	*foliop = NULL;
 	*plen = 0;
 
@@ -921,6 +923,11 @@ static int iomap_write_begin(struct iomap_iter *iter,
 	if (unlikely(status))
 		goto out_unlock;
 
+	if (is_atomic && (len != orig_len)) {
+		status = -EINVAL;
+		goto out_unlock;
+	}
+
 	*foliop = folio;
 	*plen = len;
 	return 0;
@@ -930,7 +937,7 @@ out_unlock:
 	return status;
 }
 
-static bool __iomap_write_end(struct inode *inode, loff_t pos, size_t len,
+static bool __iomap_write_end(struct iomap_iter *iter, loff_t pos, size_t len,
 		size_t copied, struct folio *folio)
 {
 	flush_dcache_folio(folio);
@@ -950,7 +957,27 @@ static bool __iomap_write_end(struct inode *inode, loff_t pos, size_t len,
 		return false;
 	iomap_set_range_uptodate(folio, offset_in_folio(folio, pos), len);
 	iomap_set_range_dirty(folio, offset_in_folio(folio, pos), copied);
-	filemap_dirty_folio(inode->i_mapping, folio);
+	filemap_dirty_folio(iter->inode->i_mapping, folio);
+
+	/*
+	 * Policy: non atomic write over a previously atomic range makes the
+	 * range non-atomic. Handle this here.
+	 */
+	if (iter->flags & IOMAP_ATOMIC) {
+		if (copied < len) {
+			/*
+			 * A short atomic write is only okay as long as nothing
+			 * is written at all. If we have a partial write, there
+			 * is a bug in our code.
+			 */
+			WARN_ON_ONCE(copied != 0);
+
+			return false;
+		}
+		folio_set_atomic(folio);
+	} else
+		folio_clear_atomic(folio);
+
 	return true;
 }
 
@@ -996,7 +1023,7 @@ static bool iomap_write_end(struct iomap_iter *iter, size_t len, size_t copied,
 		return bh_written == copied;
 	}
 
-	return __iomap_write_end(iter->inode, pos, len, copied, folio);
+	return __iomap_write_end(iter, pos, len, copied, folio);
 }
 
 static int iomap_write_iter(struct iomap_iter *iter, struct iov_iter *i,
@@ -1123,6 +1150,8 @@ iomap_file_buffered_write(struct kiocb *iocb, struct iov_iter *i,
 		iter.flags |= IOMAP_NOWAIT;
 	if (iocb->ki_flags & IOCB_DONTCACHE)
 		iter.flags |= IOMAP_DONTCACHE;
+	if (iocb->ki_flags & IOCB_ATOMIC)
+		iter.flags |= IOMAP_ATOMIC;
 
 	while ((ret = iomap_iter(&iter, ops)) > 0)
 		iter.status = iomap_write_iter(&iter, i, write_ops);
@@ -1585,6 +1614,7 @@ static int iomap_folio_mkwrite_iter(struct iomap_iter *iter,
 	} else {
 		WARN_ON_ONCE(!folio_test_uptodate(folio));
 		folio_mark_dirty(folio);
+		folio_clear_atomic(folio);
 	}
 
 	return iomap_iter_advance(iter, length);
@@ -1639,8 +1669,10 @@ void iomap_finish_folio_write(struct inode *inode, struct folio *folio,
 	WARN_ON_ONCE(i_blocks_per_folio(inode, folio) > 1 && !ifs);
 	WARN_ON_ONCE(ifs && atomic_read(&ifs->write_bytes_pending) <= 0);
 
-	if (!ifs || atomic_sub_and_test(len, &ifs->write_bytes_pending))
+	if (!ifs || atomic_sub_and_test(len, &ifs->write_bytes_pending)) {
+		folio_clear_atomic(folio);
 		folio_end_writeback(folio);
+	}
 }
 EXPORT_SYMBOL_GPL(iomap_finish_folio_write);
 
@@ -1804,8 +1836,10 @@ int iomap_writeback_folio(struct iomap_writepage_ctx *wpc, struct folio *folio)
 		if (atomic_dec_and_test(&ifs->write_bytes_pending))
 			folio_end_writeback(folio);
 	} else {
-		if (!wb_pending)
+		if (!wb_pending) {
+			folio_clear_atomic(folio);
 			folio_end_writeback(folio);
+		}
 	}
 	mapping_set_error(inode->i_mapping, error);
 	return error;

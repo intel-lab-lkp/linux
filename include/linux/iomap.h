@@ -390,6 +390,8 @@ sector_t iomap_bmap(struct address_space *mapping, sector_t bno,
 #define IOMAP_IOEND_DIRECT		(1U << 3)
 /* is DONTCACHE I/O */
 #define IOMAP_IOEND_DONTCACHE		(1U << 4)
+/* is atomic I/O. These are never merged */
+#define IOMAP_IOEND_ATOMIC		(1U << 5)
 
 /*
  * Flags that if set on either ioend prevent the merge of two ioends.
