@@ -206,6 +206,12 @@ static const struct flash_info micron_nor_parts[] = {
 		.fixup_flags = SPI_NOR_IO_MODE_EN_VOLATILE,
 		.fixups = &mt35xu01gbba_fixups,
 	}, {
+		/*
+		 * MT35XU02GCBA contain SFDP, so no need the size
+		 * and no_sfdp_flags here, should similar with
+		 * MT35XU01GBBA, but with 4 dies. If someone can
+		 * test on this chip, can change accordingly.
+		 */
 		.id = SNOR_ID(0x2c, 0x5b, 0x1c),
 		.name = "mt35xu02g",
 		.sector_size = SZ_128K,
