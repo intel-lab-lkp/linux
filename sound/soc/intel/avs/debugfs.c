@@ -119,7 +119,7 @@ static ssize_t probe_points_read(struct file *file, char __user *to, size_t coun
 	}
 
 	for (i = 0; i < num_desc; i++) {
-		ret = snprintf(buf + len, PAGE_SIZE - len,
+		ret = scnprintf(buf + len, PAGE_SIZE - len,
 			       "Id: %#010x  Purpose: %d  Node id: %#x\n",
 			       desc[i].id.value, desc[i].purpose, desc[i].node_id.val);
 		if (ret < 0)
