@@ -97,8 +97,8 @@ struct stratix10_rsu_priv {
 	unsigned int retry_counter;
 	unsigned int max_retry;
 
-	unsigned long spt0_address;
-	unsigned long spt1_address;
+	u64	     spt0_address;
+	u64	     spt1_address;
 
 	unsigned int *get_spt_response_buf;
 };
@@ -120,14 +120,14 @@ static void rsu_status_callback(struct stratix10_svc_client *client,
 
 	if (data->status == BIT(SVC_STATUS_OK)) {
 		priv->status.version = FIELD_GET(RSU_VERSION_MASK,
-						 res->a2);
+						 (u64) res->a2);
 		priv->status.state = FIELD_GET(RSU_STATE_MASK, res->a2);
 		priv->status.fail_image = res->a1;
 		priv->status.current_image = res->a0;
 		priv->status.error_location =
 			FIELD_GET(RSU_ERROR_LOCATION_MASK, res->a3);
 		priv->status.error_details =
-			FIELD_GET(RSU_ERROR_DETAIL_MASK, res->a3);
+			FIELD_GET(RSU_ERROR_DETAIL_MASK, (u64) res->a3);
 	} else {
 		dev_err(client->dev, "COMMAND_RSU_STATUS returned 0x%lX\n",
 			res->a0);
@@ -632,7 +632,7 @@ static ssize_t spt0_address_show(struct device *dev,
 	if (priv->spt0_address == INVALID_SPT_ADDRESS)
 		return -EIO;
 
-	return scnprintf(buf, PAGE_SIZE, "0x%08lx\n", priv->spt0_address);
+	return scnprintf(buf, PAGE_SIZE, "0x%08llx\n", priv->spt0_address);
 }
 
 static ssize_t spt1_address_show(struct device *dev,
@@ -646,7 +646,7 @@ static ssize_t spt1_address_show(struct device *dev,
 	if (priv->spt1_address == INVALID_SPT_ADDRESS)
 		return -EIO;
 
-	return scnprintf(buf, PAGE_SIZE, "0x%08lx\n", priv->spt1_address);
+	return scnprintf(buf, PAGE_SIZE, "0x%08llx\n", priv->spt1_address);
 }
 
 static DEVICE_ATTR_RO(current_image);
