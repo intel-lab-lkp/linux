@@ -13,7 +13,8 @@
 
 #ifdef CONFIG_SCSI_UFS_CRYPTO
 
-static inline void ufshcd_prepare_lrbp_crypto(struct request *rq,
+static inline void ufshcd_prepare_lrbp_crypto(struct ufs_hba *hba,
+					      struct request *rq,
 					      struct ufshcd_lrb *lrbp)
 {
 	if (!rq || !rq->crypt_keyslot) {
@@ -22,6 +23,10 @@ static inline void ufshcd_prepare_lrbp_crypto(struct request *rq,
 	}
 
 	lrbp->crypto_key_slot = blk_crypto_keyslot_index(rq->crypt_keyslot);
+
+	if (hba && hba->vops && hba->vops->crypto_keyslot_remap)
+		return hba->vops->crypto_keyslot_remap(hba, lrbp);
+
 	lrbp->data_unit_num = rq->crypt_ctx->bc_dun[0];
 }
 
@@ -74,7 +79,8 @@ void ufshcd_crypto_register(struct ufs_hba *hba, struct request_queue *q);
 
 #else /* CONFIG_SCSI_UFS_CRYPTO */
 
-static inline void ufshcd_prepare_lrbp_crypto(struct request *rq,
+static inline void ufshcd_prepare_lrbp_crypto(struct ufs_hba *hba,
+					      struct request *rq,
 					      struct ufshcd_lrb *lrbp) { }
 
 static inline void

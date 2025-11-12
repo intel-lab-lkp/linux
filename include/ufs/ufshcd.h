@@ -336,6 +336,10 @@ struct ufs_pwr_mode_info {
  * @config_esi: called to config Event Specific Interrupt
  * @config_scsi_dev: called to configure SCSI device parameters
  * @freq_to_gear_speed: called to map clock frequency to the max supported gear speed
+ * @crypto_keyslot_remap: called to adjust the keyslot index before sending
+ *	a request to the UFS controller. This allows the platform to apply a
+ *	hardware-specific keyslot offset or other mapping logic to determine
+ *	the correct keyslot for inline encryption.
  */
 struct ufs_hba_variant_ops {
 	const char *name;
@@ -385,6 +389,8 @@ struct ufs_hba_variant_ops {
 	int	(*config_esi)(struct ufs_hba *hba);
 	void	(*config_scsi_dev)(struct scsi_device *sdev);
 	u32	(*freq_to_gear_speed)(struct ufs_hba *hba, unsigned long freq);
+	void	(*crypto_keyslot_remap)(struct ufs_hba *hba,
+						struct ufshcd_lrb *lrbp);
 };
 
 /* clock gating state  */
