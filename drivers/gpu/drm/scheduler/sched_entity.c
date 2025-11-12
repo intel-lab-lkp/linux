@@ -562,6 +562,9 @@ void drm_sched_entity_select_rq(struct drm_sched_entity *entity)
  * drm_sched_entity_push_job - Submit a job to the entity's job queue
  * @sched_job: job to submit
  *
+ * It is illegal to call this function in parallel, at least for jobs belonging
+ * to the same entity. Doing so leads to undefined behavior.
+ *
  * Note: To guarantee that the order of insertion to queue matches the job's
  * fence sequence number this function should be called with drm_sched_job_arm()
  * under common lock for the struct drm_sched_entity that was set up for
