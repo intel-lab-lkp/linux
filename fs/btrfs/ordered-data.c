@@ -970,22 +970,19 @@ struct btrfs_ordered_extent *btrfs_lookup_ordered_extent(struct btrfs_inode *ino
 {
 	struct rb_node *node;
 	struct btrfs_ordered_extent *entry = NULL;
-	unsigned long flags;
 
-	spin_lock_irqsave(&inode->ordered_tree_lock, flags);
+	guard(spinlock_irqsave)(&inode->ordered_tree_lock);
 	node = ordered_tree_search(inode, file_offset);
 	if (!node)
-		goto out;
+		return NULL;
 
 	entry = rb_entry(node, struct btrfs_ordered_extent, rb_node);
 	if (!in_range(file_offset, entry->file_offset, entry->num_bytes))
-		entry = NULL;
+		return NULL;
 	if (entry) {
 		refcount_inc(&entry->refs);
 		trace_btrfs_ordered_extent_lookup(inode, entry);
 	}
-out:
-	spin_unlock_irqrestore(&inode->ordered_tree_lock, flags);
 	return entry;
 }
 
@@ -1066,16 +1063,14 @@ btrfs_lookup_first_ordered_extent(struct btrfs_inode *inode, u64 file_offset)
 	struct rb_node *node;
 	struct btrfs_ordered_extent *entry = NULL;
 
-	spin_lock_irq(&inode->ordered_tree_lock);
+	guard(spinlock_irq)(&inode->ordered_tree_lock);
 	node = ordered_tree_search(inode, file_offset);
 	if (!node)
-		goto out;
+		return NULL;
 
 	entry = rb_entry(node, struct btrfs_ordered_extent, rb_node);
 	refcount_inc(&entry->refs);
 	trace_btrfs_ordered_extent_lookup_first(inode, entry);
-out:
-	spin_unlock_irq(&inode->ordered_tree_lock);
 	return entry;
 }
 

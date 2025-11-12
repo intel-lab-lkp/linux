@@ -108,16 +108,13 @@ bool __attribute_const__ btrfs_supported_blocksize(u32 blocksize)
 bool btrfs_exclop_start(struct btrfs_fs_info *fs_info,
 			enum btrfs_exclusive_operation type)
 {
-	bool ret = false;
-
-	spin_lock(&fs_info->super_lock);
+	guard(spinlock)(&fs_info->super_lock);
 	if (fs_info->exclusive_operation == BTRFS_EXCLOP_NONE) {
 		fs_info->exclusive_operation = type;
-		ret = true;
+		return true;
 	}
-	spin_unlock(&fs_info->super_lock);
 
-	return ret;
+	return false;
 }
 
 /*

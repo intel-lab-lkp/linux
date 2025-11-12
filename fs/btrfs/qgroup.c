@@ -1662,38 +1662,31 @@ int btrfs_create_qgroup(struct btrfs_trans_handle *trans, u64 qgroupid)
 	struct btrfs_qgroup *prealloc;
 	int ret = 0;
 
-	mutex_lock(&fs_info->qgroup_ioctl_lock);
-	if (!fs_info->quota_root) {
-		ret = -ENOTCONN;
-		goto out;
-	}
+	guard(mutex)(&fs_info->qgroup_ioctl_lock);
+
+	if (!fs_info->quota_root)
+		return -ENOTCONN;
+
 	quota_root = fs_info->quota_root;
 	qgroup = find_qgroup_rb(fs_info, qgroupid);
-	if (qgroup) {
-		ret = -EEXIST;
-		goto out;
-	}
+	if (qgroup)
+		return -EEXIST;
 
 	prealloc = kzalloc(sizeof(*prealloc), GFP_NOFS);
-	if (!prealloc) {
-		ret = -ENOMEM;
-		goto out;
-	}
+	if (!prealloc)
+		return -ENOMEM;
 
 	ret = add_qgroup_item(trans, quota_root, qgroupid);
 	if (ret) {
 		kfree(prealloc);
-		goto out;
+		return ret;
 	}
 
 	spin_lock(&fs_info->qgroup_lock);
 	qgroup = add_qgroup_rb(fs_info, prealloc, qgroupid);
 	spin_unlock(&fs_info->qgroup_lock);
 
-	ret = btrfs_sysfs_add_one_qgroup(fs_info, qgroup);
-out:
-	mutex_unlock(&fs_info->qgroup_ioctl_lock);
-	return ret;
+	return btrfs_sysfs_add_one_qgroup(fs_info, qgroup);
 }
 
 /*
@@ -3175,13 +3168,10 @@ int btrfs_qgroup_check_inherit(struct btrfs_fs_info *fs_info,
 		if (btrfs_qgroup_level(qgroupid) == 0)
 			return -EINVAL;
 
-		spin_lock(&fs_info->qgroup_lock);
+		guard(spinlock)(&fs_info->qgroup_lock);
 		qgroup = find_qgroup_rb(fs_info, qgroupid);
-		if (!qgroup) {
-			spin_unlock(&fs_info->qgroup_lock);
+		if (!qgroup)
 			return -ENOENT;
-		}
-		spin_unlock(&fs_info->qgroup_lock);
 	}
 	return 0;
 }
@@ -4640,9 +4630,9 @@ void btrfs_qgroup_clean_swapped_blocks(struct btrfs_root *root)
 
 	swapped_blocks = &root->swapped_blocks;
 
-	spin_lock(&swapped_blocks->lock);
+	guard(spinlock)(&swapped_blocks->lock);
 	if (!swapped_blocks->swapped)
-		goto out;
+		return;
 	for (i = 0; i < BTRFS_MAX_LEVEL; i++) {
 		struct rb_root *cur_root = &swapped_blocks->blocks[i];
 		struct btrfs_qgroup_swapped_block *entry;
@@ -4654,8 +4644,6 @@ void btrfs_qgroup_clean_swapped_blocks(struct btrfs_root *root)
 		swapped_blocks->blocks[i] = RB_ROOT;
 	}
 	swapped_blocks->swapped = false;
-out:
-	spin_unlock(&swapped_blocks->lock);
 }
 
 static int qgroup_swapped_block_bytenr_key_cmp(const void *key, const struct rb_node *node)
@@ -4873,7 +4861,6 @@ void btrfs_qgroup_destroy_extent_records(struct btrfs_transaction *trans)
 int btrfs_record_squota_delta(struct btrfs_fs_info *fs_info,
 			      const struct btrfs_squota_delta *delta)
 {
-	int ret;
 	struct btrfs_qgroup *qgroup;
 	struct btrfs_qgroup *qg;
 	LIST_HEAD(qgroup_list);
@@ -4891,14 +4878,11 @@ int btrfs_record_squota_delta(struct btrfs_fs_info *fs_info,
 	if (delta->generation < fs_info->qgroup_enable_gen)
 		return 0;
 
-	spin_lock(&fs_info->qgroup_lock);
+	guard(spinlock)(&fs_info->qgroup_lock);
 	qgroup = find_qgroup_rb(fs_info, root);
-	if (!qgroup) {
-		ret = -ENOENT;
-		goto out;
-	}
+	if (!qgroup)
+		return -ENOENT;
 
-	ret = 0;
 	qgroup_iterator_add(&qgroup_list, qgroup);
 	list_for_each_entry(qg, &qgroup_list, iterator) {
 		struct btrfs_qgroup_list *glist;
@@ -4911,8 +4895,5 @@ int btrfs_record_squota_delta(struct btrfs_fs_info *fs_info,
 			qgroup_iterator_add(&qgroup_list, glist->group);
 	}
 	qgroup_iterator_clean(&qgroup_list);
-
-out:
-	spin_unlock(&fs_info->qgroup_lock);
-	return ret;
+	return 0;
 }

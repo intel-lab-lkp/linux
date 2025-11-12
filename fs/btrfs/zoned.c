@@ -2690,9 +2690,9 @@ void btrfs_zoned_release_data_reloc_bg(struct btrfs_fs_info *fs_info, u64 logica
 	/* It should be called on a previous data relocation block group. */
 	ASSERT(block_group && (block_group->flags & BTRFS_BLOCK_GROUP_DATA));
 
-	spin_lock(&block_group->lock);
+	guard(spinlock)(&block_group->lock);
 	if (!test_bit(BLOCK_GROUP_FLAG_ZONED_DATA_RELOC, &block_group->runtime_flags))
-		goto out;
+		return;
 
 	/* All relocation extents are written. */
 	if (block_group->start + block_group->alloc_offset == logical + length) {
@@ -2704,8 +2704,6 @@ void btrfs_zoned_release_data_reloc_bg(struct btrfs_fs_info *fs_info, u64 logica
 			  &block_group->runtime_flags);
 	}
 
-out:
-	spin_unlock(&block_group->lock);
 	btrfs_put_block_group(block_group);
 }
 
@@ -2720,14 +2718,12 @@ int btrfs_zone_finish_one_bg(struct btrfs_fs_info *fs_info)
 	list_for_each_entry(block_group, &fs_info->zone_active_bgs,
 			    active_bg_list) {
 		u64 avail;
+		guard(spinlock)(&block_group->lock);
 
-		spin_lock(&block_group->lock);
 		if (block_group->reserved || block_group->alloc_offset == 0 ||
 		    !(block_group->flags & BTRFS_BLOCK_GROUP_DATA) ||
-		    test_bit(BLOCK_GROUP_FLAG_ZONED_DATA_RELOC, &block_group->runtime_flags)) {
-			spin_unlock(&block_group->lock);
+		    test_bit(BLOCK_GROUP_FLAG_ZONED_DATA_RELOC, &block_group->runtime_flags))
 			continue;
-		}
 
 		avail = block_group->zone_capacity - block_group->alloc_offset;
 		if (min_avail > avail) {
@@ -2737,7 +2733,6 @@ int btrfs_zone_finish_one_bg(struct btrfs_fs_info *fs_info)
 			min_avail = avail;
 			btrfs_get_block_group(min_bg);
 		}
-		spin_unlock(&block_group->lock);
 	}
 	spin_unlock(&fs_info->zone_active_bgs_lock);
 

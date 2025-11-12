@@ -416,16 +416,14 @@ struct btrfs_caching_control *btrfs_get_caching_control(
 		struct btrfs_block_group *cache)
 {
 	struct btrfs_caching_control *ctl;
+	guard(spinlock)(&cache->lock);
 
-	spin_lock(&cache->lock);
 	if (!cache->caching_ctl) {
-		spin_unlock(&cache->lock);
 		return NULL;
 	}
 
 	ctl = cache->caching_ctl;
 	refcount_inc(&ctl->count);
-	spin_unlock(&cache->lock);
 	return ctl;
 }
 

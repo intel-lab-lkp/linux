@@ -3061,24 +3061,21 @@ bool btrfs_is_free_space_trimmed(struct btrfs_block_group *block_group)
 	struct btrfs_free_space_ctl *ctl = block_group->free_space_ctl;
 	struct btrfs_free_space *info;
 	struct rb_node *node;
-	bool ret = true;
 
-	spin_lock(&ctl->tree_lock);
+	guard(spinlock)(&ctl->tree_lock);
 	node = rb_first(&ctl->free_space_offset);
 
 	while (node) {
 		info = rb_entry(node, struct btrfs_free_space, offset_index);
 
 		if (!btrfs_free_space_trimmed(info)) {
-			ret = false;
-			break;
+			return false;
 		}
 
 		node = rb_next(node);
 	}
 
-	spin_unlock(&ctl->tree_lock);
-	return ret;
+	return true;
 }
 
 u64 btrfs_find_space_for_alloc(struct btrfs_block_group *block_group,
@@ -3583,23 +3580,21 @@ int btrfs_find_space_cluster(struct btrfs_block_group *block_group,
 		min_bytes = fs_info->sectorsize;
 	}
 
-	spin_lock(&ctl->tree_lock);
+	guard(spinlock)(&ctl->tree_lock);
 
 	/*
 	 * If we know we don't have enough space to make a cluster don't even
 	 * bother doing all the work to try and find one.
 	 */
 	if (ctl->free_space < bytes) {
-		spin_unlock(&ctl->tree_lock);
 		return -ENOSPC;
 	}
 
-	spin_lock(&cluster->lock);
+	guard(spinlock)(&cluster->lock);
 
 	/* someone already found a cluster, hooray */
 	if (cluster->block_group) {
-		ret = 0;
-		goto out;
+		return 0;
 	}
 
 	trace_btrfs_find_cluster(block_group, offset, bytes, empty_size,
@@ -3625,9 +3620,6 @@ int btrfs_find_space_cluster(struct btrfs_block_group *block_group,
 	} else {
 		trace_btrfs_failed_cluster_setup(block_group);
 	}
-out:
-	spin_unlock(&cluster->lock);
-	spin_unlock(&ctl->tree_lock);
 
 	return ret;
 }

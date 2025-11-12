@@ -114,12 +114,10 @@ static void zstd_reclaim_timer_fn(struct timer_list *timer)
 	unsigned long reclaim_threshold = jiffies - ZSTD_BTRFS_RECLAIM_JIFFIES;
 	struct list_head *pos, *next;
 
-	spin_lock(&zwsm->lock);
+	guard(spinlock)(&zwsm->lock);
 
-	if (list_empty(&zwsm->lru_list)) {
-		spin_unlock(&zwsm->lock);
+	if (list_empty(&zwsm->lru_list))
 		return;
-	}
 
 	list_for_each_prev_safe(pos, next, &zwsm->lru_list) {
 		struct workspace *victim = container_of(pos, struct workspace,
@@ -145,8 +143,6 @@ static void zstd_reclaim_timer_fn(struct timer_list *timer)
 
 	if (!list_empty(&zwsm->lru_list))
 		mod_timer(&zwsm->timer, jiffies + ZSTD_BTRFS_RECLAIM_JIFFIES);
-
-	spin_unlock(&zwsm->lock);
 }
 
 /*
@@ -251,7 +247,8 @@ static struct list_head *zstd_find_workspace(struct btrfs_fs_info *fs_info, int 
 	int i = clip_level(level);
 
 	ASSERT(zwsm);
-	spin_lock_bh(&zwsm->lock);
+	guard(spinlock_bh)(&zwsm->lock);
+
 	for_each_set_bit_from(i, &zwsm->active_map, ZSTD_BTRFS_MAX_LEVEL) {
 		if (!list_empty(&zwsm->idle_ws[i])) {
 			ws = zwsm->idle_ws[i].next;
@@ -263,11 +260,9 @@ static struct list_head *zstd_find_workspace(struct btrfs_fs_info *fs_info, int 
 				list_del(&workspace->lru_list);
 			if (list_empty(&zwsm->idle_ws[i]))
 				clear_bit(i, &zwsm->active_map);
-			spin_unlock_bh(&zwsm->lock);
 			return ws;
 		}
 	}
-	spin_unlock_bh(&zwsm->lock);
 
 	return NULL;
 }

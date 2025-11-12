@@ -226,14 +226,13 @@ static bool btrfs_subpage_end_and_test_lock(const struct btrfs_fs_info *fs_info,
 	struct btrfs_folio_state *bfs = folio_get_private(folio);
 	const int start_bit = subpage_calc_start_bit(fs_info, folio, locked, start, len);
 	const int nbits = (len >> fs_info->sectorsize_bits);
-	unsigned long flags;
 	unsigned int cleared = 0;
 	int bit = start_bit;
 	bool last;
 
 	btrfs_subpage_assert(fs_info, folio, start, len);
 
-	spin_lock_irqsave(&bfs->lock, flags);
+	guard(spinlock_irqsave)(&bfs->lock);
 	/*
 	 * We have call sites passing @lock_page into
 	 * extent_clear_unlock_delalloc() for compression path.
@@ -242,7 +241,6 @@ static bool btrfs_subpage_end_and_test_lock(const struct btrfs_fs_info *fs_info,
 	 * subpage::locked is 0.  Handle them in a special way.
 	 */
 	if (atomic_read(&bfs->nr_locked) == 0) {
-		spin_unlock_irqrestore(&bfs->lock, flags);
 		return true;
 	}
 
@@ -252,7 +250,6 @@ static bool btrfs_subpage_end_and_test_lock(const struct btrfs_fs_info *fs_info,
 	}
 	ASSERT(atomic_read(&bfs->nr_locked) >= cleared);
 	last = atomic_sub_and_test(cleared, &bfs->nr_locked);
-	spin_unlock_irqrestore(&bfs->lock, flags);
 	return last;
 }
 

@@ -1050,10 +1050,9 @@ static bool steal_from_global_rsv(struct btrfs_fs_info *fs_info,
 	if (global_rsv->space_info != space_info)
 		return false;
 
-	spin_lock(&global_rsv->lock);
+	guard(spinlock)(&global_rsv->lock);
 	min_bytes = mult_perc(global_rsv->size, 10);
 	if (global_rsv->reserved < min_bytes + ticket->bytes) {
-		spin_unlock(&global_rsv->lock);
 		return false;
 	}
 	global_rsv->reserved -= ticket->bytes;
@@ -1063,7 +1062,6 @@ static bool steal_from_global_rsv(struct btrfs_fs_info *fs_info,
 	space_info->tickets_id++;
 	if (global_rsv->reserved < global_rsv->size)
 		global_rsv->full = 0;
-	spin_unlock(&global_rsv->lock);
 
 	return true;
 }

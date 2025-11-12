@@ -3695,8 +3695,6 @@ int btrfs_free_log_root_tree(struct btrfs_trans_handle *trans,
 static bool mark_inode_as_not_logged(const struct btrfs_trans_handle *trans,
 				     struct btrfs_inode *inode)
 {
-	bool ret = false;
-
 	/*
 	 * Do this only if ->logged_trans is still 0 to prevent races with
 	 * concurrent logging as we may see the inode not logged when
@@ -3707,14 +3705,15 @@ static bool mark_inode_as_not_logged(const struct btrfs_trans_handle *trans,
 	 * and link operations may end up not logging new names and removing old
 	 * names from the log.
 	 */
-	spin_lock(&inode->lock);
-	if (inode->logged_trans == 0)
+	guard(spinlock)(&inode->lock);
+	if (inode->logged_trans == 0) {
 		inode->logged_trans = trans->transid - 1;
-	else if (inode->logged_trans == trans->transid)
-		ret = true;
-	spin_unlock(&inode->lock);
+		return false;
+	} else if (inode->logged_trans == trans->transid) {
+		return true;
+	}
 
-	return ret;
+	return false;
 }
 
 /*

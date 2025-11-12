@@ -614,15 +614,10 @@ static void run_xor(void **pages, int src_cnt, ssize_t len)
 static int rbio_is_full(struct btrfs_raid_bio *rbio)
 {
 	unsigned long size = rbio->bio_list_bytes;
-	int ret = 1;
 
-	spin_lock(&rbio->bio_list_lock);
-	if (size != rbio->nr_data * BTRFS_STRIPE_LEN)
-		ret = 0;
+	guard(spinlock)(&rbio->bio_list_lock);
 	BUG_ON(size > rbio->nr_data * BTRFS_STRIPE_LEN);
-	spin_unlock(&rbio->bio_list_lock);
-
-	return ret;
+	return size == rbio->nr_data * BTRFS_STRIPE_LEN;
 }
 
 /*
@@ -969,16 +964,14 @@ static struct sector_ptr *sector_in_rbio(struct btrfs_raid_bio *rbio,
 	index = stripe_nr * rbio->stripe_nsectors + sector_nr;
 	ASSERT(index >= 0 && index < rbio->nr_sectors);
 
-	spin_lock(&rbio->bio_list_lock);
+	guard(spinlock)(&rbio->bio_list_lock);
 	sector = &rbio->bio_sectors[index];
 	if (sector->has_paddr || bio_list_only) {
 		/* Don't return sector without a valid page pointer */
 		if (!sector->has_paddr)
 			sector = NULL;
-		spin_unlock(&rbio->bio_list_lock);
 		return sector;
 	}
-	spin_unlock(&rbio->bio_list_lock);
 
 	return &rbio->stripe_sectors[index];
 }

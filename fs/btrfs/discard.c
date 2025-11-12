@@ -129,12 +129,11 @@ static void add_to_discard_unused_list(struct btrfs_discard_ctl *discard_ctl,
 {
 	bool queued;
 
-	spin_lock(&discard_ctl->lock);
+	guard(spinlock)(&discard_ctl->lock);
 
 	queued = !list_empty(&block_group->discard_list);
 
 	if (!btrfs_run_discard_work(discard_ctl)) {
-		spin_unlock(&discard_ctl->lock);
 		return;
 	}
 
@@ -148,8 +147,6 @@ static void add_to_discard_unused_list(struct btrfs_discard_ctl *discard_ctl,
 		btrfs_get_block_group(block_group);
 	list_add_tail(&block_group->discard_list,
 		      &discard_ctl->discard_list[BTRFS_DISCARD_INDEX_UNUSED]);
-
-	spin_unlock(&discard_ctl->lock);
 }
 
 static bool remove_from_discard_list(struct btrfs_discard_ctl *discard_ctl,
@@ -592,7 +589,7 @@ void btrfs_discard_calc_delay(struct btrfs_discard_ctl *discard_ctl)
 	if (!discardable_extents)
 		return;
 
-	spin_lock(&discard_ctl->lock);
+	guard(spinlock)(&discard_ctl->lock);
 
 	/*
 	 * The following is to fix a potential -1 discrepancy that we're not
@@ -611,7 +608,6 @@ void btrfs_discard_calc_delay(struct btrfs_discard_ctl *discard_ctl)
 			     &discard_ctl->discardable_bytes);
 
 	if (discardable_extents <= 0) {
-		spin_unlock(&discard_ctl->lock);
 		return;
 	}
 
@@ -630,8 +626,6 @@ void btrfs_discard_calc_delay(struct btrfs_discard_ctl *discard_ctl)
 
 	delay = clamp(delay, min_delay, BTRFS_DISCARD_MAX_DELAY_MSEC);
 	discard_ctl->delay_ms = delay;
-
-	spin_unlock(&discard_ctl->lock);
 }
 
 /*

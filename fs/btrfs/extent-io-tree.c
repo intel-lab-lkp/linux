@@ -987,7 +987,7 @@ bool btrfs_find_delalloc_range(struct extent_io_tree *tree, u64 *start,
 	bool found = false;
 	u64 total_bytes = 0;
 
-	spin_lock(&tree->lock);
+	guard(spinlock)(&tree->lock);
 
 	/*
 	 * This search will find all the extents that end after our range
@@ -996,18 +996,18 @@ bool btrfs_find_delalloc_range(struct extent_io_tree *tree, u64 *start,
 	state = tree_search(tree, cur_start);
 	if (!state) {
 		*end = (u64)-1;
-		goto out;
+		return false;
 	}
 
 	while (state) {
 		if (found && (state->start != cur_start ||
 			      (state->state & EXTENT_BOUNDARY))) {
-			goto out;
+			return true;
 		}
 		if (!(state->state & EXTENT_DELALLOC)) {
 			if (!found)
 				*end = state->end;
-			goto out;
+			return found;
 		}
 		if (!found) {
 			*start = state->start;
@@ -1019,11 +1019,9 @@ bool btrfs_find_delalloc_range(struct extent_io_tree *tree, u64 *start,
 		cur_start = state->end + 1;
 		total_bytes += state->end - state->start + 1;
 		if (total_bytes >= max_bytes)
-			break;
+			return true;
 		state = next_state(state);
 	}
-out:
-	spin_unlock(&tree->lock);
 	return found;
 }
 
@@ -1548,7 +1546,7 @@ void btrfs_find_first_clear_extent_bit(struct extent_io_tree *tree, u64 start,
 	struct extent_state *state;
 	struct extent_state *prev = NULL, *next = NULL;
 
-	spin_lock(&tree->lock);
+	guard(spinlock)(&tree->lock);
 
 	/* Find first extent with bits cleared */
 	while (1) {
@@ -1560,7 +1558,7 @@ void btrfs_find_first_clear_extent_bit(struct extent_io_tree *tree, u64 start,
 			 */
 			*start_ret = 0;
 			*end_ret = -1;
-			goto out;
+			return;
 		} else if (!state && !next) {
 			/*
 			 * We are past the last allocated chunk, set start at
@@ -1568,7 +1566,7 @@ void btrfs_find_first_clear_extent_bit(struct extent_io_tree *tree, u64 start,
 			 */
 			*start_ret = prev->end + 1;
 			*end_ret = -1;
-			goto out;
+			return;
 		} else if (!state) {
 			state = next;
 		}
@@ -1631,8 +1629,6 @@ void btrfs_find_first_clear_extent_bit(struct extent_io_tree *tree, u64 start,
 		}
 		state = next_state(state);
 	}
-out:
-	spin_unlock(&tree->lock);
 }
 
 /*
@@ -1813,12 +1809,11 @@ bool btrfs_test_range_bit(struct extent_io_tree *tree, u64 start, u64 end, u32 b
 			  struct extent_state *cached)
 {
 	struct extent_state *state;
-	bool bitset = true;
 
 	ASSERT(is_power_of_2(bit));
 	ASSERT(start < end);
 
-	spin_lock(&tree->lock);
+	guard(spinlock)(&tree->lock);
 	if (cached && extent_state_in_tree(cached) && cached->start <= start &&
 	    cached->end > start)
 		state = cached;
@@ -1826,17 +1821,15 @@ bool btrfs_test_range_bit(struct extent_io_tree *tree, u64 start, u64 end, u32 b
 		state = tree_search(tree, start);
 	while (state) {
 		if (state->start > start) {
-			bitset = false;
-			break;
+			return false;
 		}
 
 		if ((state->state & bit) == 0) {
-			bitset = false;
-			break;
+			return false;
 		}
 
 		if (state->end >= end)
-			break;
+			return true;
 
 		/* Next state must start where this one ends. */
 		start = state->end + 1;
@@ -1844,10 +1837,7 @@ bool btrfs_test_range_bit(struct extent_io_tree *tree, u64 start, u64 end, u32 b
 	}
 
 	/* We ran out of states and were still inside of our range. */
-	if (!state)
-		bitset = false;
-	spin_unlock(&tree->lock);
-	return bitset;
+	return false;
 }
 
 /* Wrappers around set/clear extent bit */
