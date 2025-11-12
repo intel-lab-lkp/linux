@@ -111,6 +111,7 @@ enum pageflags {
 	PG_swapbacked,		/* Page is backed by RAM/swap */
 	PG_unevictable,		/* Page is "unevictable"  */
 	PG_dropbehind,		/* drop pages on IO completion */
+	PG_atomic,		/* Page is marked atomic for buffered atomic writes */
 #ifdef CONFIG_MMU
 	PG_mlocked,		/* Page is vma mlocked */
 #endif
@@ -643,6 +644,10 @@ FOLIO_FLAG_FALSE(swapcache)
 FOLIO_FLAG(unevictable, FOLIO_HEAD_PAGE)
 	__FOLIO_CLEAR_FLAG(unevictable, FOLIO_HEAD_PAGE)
 	FOLIO_TEST_CLEAR_FLAG(unevictable, FOLIO_HEAD_PAGE)
+
+FOLIO_FLAG(atomic, FOLIO_HEAD_PAGE)
+	__FOLIO_CLEAR_FLAG(atomic, FOLIO_HEAD_PAGE)
+	FOLIO_TEST_CLEAR_FLAG(atomic, FOLIO_HEAD_PAGE)
 
 #ifdef CONFIG_MMU
 FOLIO_FLAG(mlocked, FOLIO_HEAD_PAGE)
