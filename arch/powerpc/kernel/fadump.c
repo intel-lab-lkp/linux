@@ -1604,43 +1604,7 @@ static void __init fadump_init_files(void)
 		pr_err("sysfs group creation failed (%d), unregistering FADump",
 		       rc);
 		unregister_fadump();
-		return;
 	}
-
-	/*
-	 * The FADump sysfs are moved from kernel_kobj to fadump_kobj need to
-	 * create symlink at old location to maintain backward compatibility.
-	 *
-	 *      - fadump_enabled -> fadump/enabled
-	 *      - fadump_registered -> fadump/registered
-	 *      - fadump_release_mem -> fadump/release_mem
-	 */
-	rc = compat_only_sysfs_link_entry_to_kobj(kernel_kobj, fadump_kobj,
-						  "enabled", "fadump_enabled");
-	if (rc) {
-		pr_err("unable to create fadump_enabled symlink (%d)", rc);
-		return;
-	}
-
-	rc = compat_only_sysfs_link_entry_to_kobj(kernel_kobj, fadump_kobj,
-						  "registered",
-						  "fadump_registered");
-	if (rc) {
-		pr_err("unable to create fadump_registered symlink (%d)", rc);
-		sysfs_remove_link(kernel_kobj, "fadump_enabled");
-		return;
-	}
-
-	if (fw_dump.dump_active) {
-		rc = compat_only_sysfs_link_entry_to_kobj(kernel_kobj,
-							  fadump_kobj,
-							  "release_mem",
-							  "fadump_release_mem");
-		if (rc)
-			pr_err("unable to create fadump_release_mem symlink (%d)",
-			       rc);
-	}
-	return;
 }
 
 static int __init fadump_setup_elfcorehdr_buf(void)
