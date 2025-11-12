@@ -17,6 +17,7 @@ pub mod completion;
 mod condvar;
 pub mod lock;
 mod locked_by;
+pub mod once_lite;
 pub mod poll;
 pub mod rcu;
 mod refcount;
