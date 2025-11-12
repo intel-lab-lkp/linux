@@ -96,6 +96,12 @@ struct folio *memfd_alloc_folio(struct file *memfd, pgoff_t idx)
 						    NULL,
 						    gfp_mask);
 		if (folio) {
+			/*
+			 * Zero the folio to prevent information leaks to userspace.
+			 * The folio may have been allocated during hugetlb_reserve_pages()
+			 * without __GFP_ZERO, so explicitly clear it here.
+			 */
+			folio_zero_range(folio, 0, folio_size(folio));
 			err = hugetlb_add_to_page_cache(folio,
 							memfd->f_mapping,
 							idx);
