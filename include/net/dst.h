@@ -18,6 +18,7 @@
 #include <linux/refcount.h>
 #include <linux/rcuref.h>
 #include <net/neighbour.h>
+#include <net/dstref.h>
 #include <asm/processor.h>
 #include <linux/indirect_call_wrapper.h>
 
@@ -259,6 +260,33 @@ static inline struct dst_entry *dst_clone(struct dst_entry *dst)
 void dst_release(struct dst_entry *dst);
 
 void dst_release_immediate(struct dst_entry *dst);
+
+/**
+ * dstref_drop - drop the given dstref object.
+ * @dstref: the dstref object to drop.
+ *
+ * This drops the refcount on the dst iff the dstref object holds a reference to it.
+ */
+static inline void dstref_drop(dstref_t dstref)
+{
+	if (!dstref_is_noref(dstref))
+		dst_release(__dstref_dst(dstref));
+}
+
+/**
+ * dstref_clone - clones the given dstref object.
+ * @dstref: the dstref object to clone.
+ *
+ * Clones the dstref while preserving the ownership semantics of the input dstref.
+ *
+ * Return: a clone of the provided dstref object.
+ */
+static inline dstref_t dstref_clone(dstref_t dstref)
+{
+	if (!dstref_is_noref(dstref))
+		dst_clone(__dstref_dst(dstref));
+	return dstref;
+}
 
 static inline void refdst_drop(unsigned long refdst)
 {
