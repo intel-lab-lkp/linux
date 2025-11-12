@@ -131,12 +131,12 @@ void udp_tunnel_notify_add_rx_port(struct socket *sock, unsigned short type);
 void udp_tunnel_notify_del_rx_port(struct socket *sock, unsigned short type);
 
 /* Transmit the skb using UDP encapsulation. */
-void udp_tunnel_xmit_skb(struct rtable *rt, struct sock *sk, struct sk_buff *skb,
+void udp_tunnel_xmit_skb(dstref_t dstref, struct sock *sk, struct sk_buff *skb,
 			 __be32 src, __be32 dst, __u8 tos, __u8 ttl,
 			 __be16 df, __be16 src_port, __be16 dst_port,
 			 bool xnet, bool nocheck, u16 ipcb_flags);
 
-void udp_tunnel6_xmit_skb(struct dst_entry *dst, struct sock *sk,
+void udp_tunnel6_xmit_skb(dstref_t dstref, struct sock *sk,
 			  struct sk_buff *skb,
 			  struct net_device *dev,
 			  const struct in6_addr *saddr,

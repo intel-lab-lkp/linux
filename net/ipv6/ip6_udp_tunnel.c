@@ -74,7 +74,7 @@ error:
 }
 EXPORT_SYMBOL_GPL(udp_sock_create6);
 
-void udp_tunnel6_xmit_skb(struct dst_entry *dst, struct sock *sk,
+void udp_tunnel6_xmit_skb(dstref_t dstref, struct sock *sk,
 			  struct sk_buff *skb,
 			  struct net_device *dev,
 			  const struct in6_addr *saddr,
@@ -95,7 +95,7 @@ void udp_tunnel6_xmit_skb(struct dst_entry *dst, struct sock *sk,
 
 	uh->len = htons(skb->len);
 
-	skb_dst_set(skb, dst);
+	skb_dstref_set(skb, dstref);
 
 	udp6_set_csum(nocheck, skb, saddr, daddr, skb->len);
 

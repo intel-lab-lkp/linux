@@ -439,7 +439,7 @@ static int gtp0_send_echo_resp_ip(struct gtp_dev *gtp, struct sk_buff *skb)
 		return -1;
 	}
 
-	udp_tunnel_xmit_skb(rt, gtp->sk0, skb,
+	udp_tunnel_xmit_skb(dst_to_dstref(&rt->dst), gtp->sk0, skb,
 			    fl4.saddr, fl4.daddr,
 			    iph->tos,
 			    ip4_dst_hoplimit(&rt->dst),
@@ -698,7 +698,7 @@ static int gtp1u_send_echo_resp(struct gtp_dev *gtp, struct sk_buff *skb)
 		return -1;
 	}
 
-	udp_tunnel_xmit_skb(rt, gtp->sk1u, skb,
+	udp_tunnel_xmit_skb(dst_to_dstref(&rt->dst), gtp->sk1u, skb,
 			    fl4.saddr, fl4.daddr,
 			    iph->tos,
 			    ip4_dst_hoplimit(&rt->dst),
@@ -1299,7 +1299,7 @@ static netdev_tx_t gtp_dev_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	switch (pktinfo.pctx->sk->sk_family) {
 	case AF_INET:
-		udp_tunnel_xmit_skb(pktinfo.rt, pktinfo.sk, skb,
+		udp_tunnel_xmit_skb(dst_to_dstref(&pktinfo.rt->dst), pktinfo.sk, skb,
 				    pktinfo.fl4.saddr, pktinfo.fl4.daddr,
 				    pktinfo.tos,
 				    ip4_dst_hoplimit(&pktinfo.rt->dst),
@@ -1311,7 +1311,7 @@ static netdev_tx_t gtp_dev_xmit(struct sk_buff *skb, struct net_device *dev)
 		break;
 	case AF_INET6:
 #if IS_ENABLED(CONFIG_IPV6)
-		udp_tunnel6_xmit_skb(&pktinfo.rt6->dst, pktinfo.sk, skb, dev,
+		udp_tunnel6_xmit_skb(dst_to_dstref(&pktinfo.rt6->dst), pktinfo.sk, skb, dev,
 				     &pktinfo.fl6.saddr, &pktinfo.fl6.daddr,
 				     pktinfo.tos,
 				     ip6_dst_hoplimit(&pktinfo.rt->dst),
@@ -2400,7 +2400,7 @@ static int gtp_genl_send_echo_req(struct sk_buff *skb, struct genl_info *info)
 		return -ENODEV;
 	}
 
-	udp_tunnel_xmit_skb(rt, sk, skb_to_send,
+	udp_tunnel_xmit_skb(dst_to_dstref(&rt->dst), sk, skb_to_send,
 			    fl4.saddr, fl4.daddr,
 			    inet_dscp_to_dsfield(fl4.flowi4_dscp),
 			    ip4_dst_hoplimit(&rt->dst),

@@ -603,7 +603,7 @@ static inline int iptunnel_pull_header(struct sk_buff *skb, int hdr_len,
 	return __iptunnel_pull_header(skb, hdr_len, inner_proto, false, xnet);
 }
 
-void iptunnel_xmit(struct sock *sk, struct rtable *rt, struct sk_buff *skb,
+void iptunnel_xmit(struct sock *sk, dstref_t dstref, struct sk_buff *skb,
 		   __be32 src, __be32 dst, u8 proto,
 		   u8 tos, u8 ttl, __be16 df, bool xnet, u16 ipcb_flags);
 struct metadata_dst *iptunnel_metadata_reply(struct metadata_dst *md,

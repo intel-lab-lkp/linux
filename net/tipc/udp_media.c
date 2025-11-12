@@ -195,7 +195,7 @@ static int tipc_udp_xmit(struct net *net, struct sk_buff *skb,
 		}
 
 		ttl = ip4_dst_hoplimit(&rt->dst);
-		udp_tunnel_xmit_skb(rt, ub->ubsock->sk, skb, src->ipv4.s_addr,
+		udp_tunnel_xmit_skb(dst_to_dstref(&rt->dst), ub->ubsock->sk, skb, src->ipv4.s_addr,
 				    dst->ipv4.s_addr, 0, ttl, 0, src->port,
 				    dst->port, false, true, 0);
 #if IS_ENABLED(CONFIG_IPV6)
@@ -217,7 +217,7 @@ static int tipc_udp_xmit(struct net *net, struct sk_buff *skb,
 			dst_cache_set_ip6(cache, ndst, &fl6.saddr);
 		}
 		ttl = ip6_dst_hoplimit(ndst);
-		udp_tunnel6_xmit_skb(ndst, ub->ubsock->sk, skb, NULL,
+		udp_tunnel6_xmit_skb(dst_to_dstref(ndst), ub->ubsock->sk, skb, NULL,
 				     &src->ipv6, &dst->ipv6, 0, ttl, 0,
 				     src->port, dst->port, false, 0);
 #endif

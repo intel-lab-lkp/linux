@@ -1039,7 +1039,7 @@ static bool amt_send_membership_update(struct amt_dev *amt,
 		skb_set_inner_protocol(skb, htons(ETH_P_IP));
 	else
 		skb_set_inner_protocol(skb, htons(ETH_P_IPV6));
-	udp_tunnel_xmit_skb(rt, sock->sk, skb,
+	udp_tunnel_xmit_skb(dst_to_dstref(&rt->dst), sock->sk, skb,
 			    fl4.saddr,
 			    fl4.daddr,
 			    AMT_TOS,
@@ -1097,7 +1097,7 @@ static void amt_send_multicast_data(struct amt_dev *amt,
 		skb_set_inner_protocol(skb, htons(ETH_P_IP));
 	else
 		skb_set_inner_protocol(skb, htons(ETH_P_IPV6));
-	udp_tunnel_xmit_skb(rt, sock->sk, skb,
+	udp_tunnel_xmit_skb(dst_to_dstref(&rt->dst), sock->sk, skb,
 			    fl4.saddr,
 			    fl4.daddr,
 			    AMT_TOS,
@@ -1156,7 +1156,7 @@ static bool amt_send_membership_query(struct amt_dev *amt,
 		skb_set_inner_protocol(skb, htons(ETH_P_IP));
 	else
 		skb_set_inner_protocol(skb, htons(ETH_P_IPV6));
-	udp_tunnel_xmit_skb(rt, sock->sk, skb,
+	udp_tunnel_xmit_skb(dst_to_dstref(&rt->dst), sock->sk, skb,
 			    fl4.saddr,
 			    fl4.daddr,
 			    AMT_TOS,
