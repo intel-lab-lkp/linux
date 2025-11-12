@@ -60,6 +60,12 @@ properties:
 
   mboxes:
     minItems: 2
+    description: |
+      List of phandles to mailbox channels used for receiving and transmitting
+      data from and to the TI-SCI Controller.
+    items:
+      - description: RX thread
+      - description: TX thread
 
   ti,host-id:
     $ref: /schemas/types.yaml#/definitions/uint32
