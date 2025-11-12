@@ -230,7 +230,7 @@ static void __init __rmem_check_for_overlap(void);
  */
 void __init fdt_scan_reserved_mem_reg_nodes(void)
 {
-	int t_len = (dt_root_addr_cells + dt_root_size_cells) * sizeof(__be32);
+	int t_len = dt_root_addr_size_bytes();
 	const void *fdt = initial_boot_params;
 	phys_addr_t base, size;
 	const __be32 *prop;
