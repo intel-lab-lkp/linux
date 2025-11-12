@@ -77,7 +77,7 @@ extern void cpuset_unlock(void);
 extern void cpuset_cpus_allowed(struct task_struct *p, struct cpumask *mask);
 extern bool cpuset_cpus_allowed_fallback(struct task_struct *p);
 extern bool cpuset_cpu_is_isolated(int cpu);
-extern nodemask_t cpuset_mems_allowed(struct task_struct *p);
+extern nodemask_t cpuset_sysram_nodes_allowed(struct task_struct *p);
 #define cpuset_current_sysram_nodes (current->sysram_nodes)
 #define cpuset_current_mems_allowed (cpuset_current_sysram_nodes)
 void cpuset_init_current_sysram_nodes(void);
@@ -174,7 +174,7 @@ static inline void set_mems_allowed(nodemask_t nodemask)
 	task_unlock(current);
 }
 
-extern bool cpuset_node_allowed(struct cgroup *cgroup, int nid);
+extern bool cpuset_sysram_node_allowed(struct cgroup *cgroup, int nid);
 #else /* !CONFIG_CPUSETS */
 
 static inline bool cpusets_enabled(void) { return false; }
@@ -212,7 +212,7 @@ static inline bool cpuset_cpu_is_isolated(int cpu)
 	return false;
 }
 
-static inline nodemask_t cpuset_mems_allowed(struct task_struct *p)
+static inline nodemask_t cpuset_sysram_nodes_allowed(struct task_struct *p)
 {
 	return node_possible_map;
 }
@@ -296,7 +296,7 @@ static inline bool read_mems_allowed_retry(unsigned int seq)
 	return false;
 }
 
-static inline bool cpuset_node_allowed(struct cgroup *cgroup, int nid)
+static inline bool cpuset_sysram_node_allowed(struct cgroup *cgroup, int nid)
 {
 	return true;
 }

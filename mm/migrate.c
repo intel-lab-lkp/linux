@@ -2526,7 +2526,7 @@ static struct mm_struct *find_mm_struct(pid_t pid, nodemask_t *mem_nodes)
 	 */
 	if (!pid) {
 		mmget(current->mm);
-		*mem_nodes = cpuset_mems_allowed(current);
+		*mem_nodes = cpuset_sysram_nodes_allowed(current);
 		return current->mm;
 	}
 
@@ -2547,7 +2547,7 @@ static struct mm_struct *find_mm_struct(pid_t pid, nodemask_t *mem_nodes)
 	mm = ERR_PTR(security_task_movememory(task));
 	if (IS_ERR(mm))
 		goto out;
-	*mem_nodes = cpuset_mems_allowed(task);
+	*mem_nodes = cpuset_sysram_nodes_allowed(task);
 	mm = get_task_mm(task);
 out:
 	put_task_struct(task);

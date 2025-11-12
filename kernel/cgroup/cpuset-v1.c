@@ -293,6 +293,7 @@ void cpuset1_hotplug_update_tasks(struct cpuset *cs,
 	cpumask_copy(cs->effective_cpus, new_cpus);
 	cs->mems_allowed = *new_mems;
 	cs->effective_mems = *new_mems;
+	cpuset_update_tasks_nodemask(cs);
 	cpuset_callback_unlock_irq();
 
 	/*
@@ -530,6 +531,12 @@ struct cftype cpuset1_files[] = {
 		.name = "effective_mems",
 		.seq_show = cpuset_common_seq_show,
 		.private = FILE_EFFECTIVE_MEMLIST,
+	},
+
+	{
+		.name = "mems_sysram",
+		.seq_show = cpuset_common_seq_show,
+		.private = FILE_MEMS_SYSRAM,
 	},
 
 	{

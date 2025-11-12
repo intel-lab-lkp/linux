@@ -53,6 +53,7 @@ typedef enum {
 	FILE_MEMORY_MIGRATE,
 	FILE_CPULIST,
 	FILE_MEMLIST,
+	FILE_MEMS_SYSRAM,
 	FILE_EFFECTIVE_CPULIST,
 	FILE_EFFECTIVE_MEMLIST,
 	FILE_SUBPARTS_CPULIST,
@@ -103,6 +104,13 @@ struct cpuset {
 	/* effective CPUs and Memory Nodes allow to tasks */
 	cpumask_var_t effective_cpus;
 	nodemask_t effective_mems;
+
+	/*
+	 * SystemRAM Memory Nodes for tasks.
+	 * This is the intersection of effective_mems and mt_sysram_nodelist.
+	 * Tasks will have their sysram_nodes set to this value.
+	 */
+	nodemask_t mems_sysram;
 
 	/*
 	 * Exclusive CPUs dedicated to current cgroup (default hierarchy only)

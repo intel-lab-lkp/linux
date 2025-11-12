@@ -29,6 +29,7 @@
 #include <linux/mempolicy.h>
 #include <linux/mm.h>
 #include <linux/memory.h>
+#include <linux/memory-tiers.h>
 #include <linux/export.h>
 #include <linux/rcupdate.h>
 #include <linux/sched.h>
@@ -428,11 +429,11 @@ static void guarantee_active_cpus(struct task_struct *tsk,
  *
  * Call with callback_lock or cpuset_mutex held.
  */
-static void guarantee_online_mems(struct cpuset *cs, nodemask_t *pmask)
+static void guarantee_online_sysram_nodes(struct cpuset *cs, nodemask_t *pmask)
 {
-	while (!nodes_intersects(cs->effective_mems, node_states[N_MEMORY]))
+	while (!nodes_intersects(cs->mems_sysram, node_states[N_MEMORY]))
 		cs = parent_cs(cs);
-	nodes_and(*pmask, cs->effective_mems, node_states[N_MEMORY]);
+	nodes_and(*pmask, cs->mems_sysram, node_states[N_MEMORY]);
 }
 
 /**
@@ -2723,7 +2724,7 @@ void cpuset_update_tasks_nodemask(struct cpuset *cs)
 
 	cpuset_being_rebound = cs;		/* causes mpol_dup() rebind */
 
-	guarantee_online_mems(cs, &newmems);
+	guarantee_online_sysram_nodes(cs, &newmems);
 
 	/*
 	 * The mpol_rebind_mm() call takes mmap_lock, which we couldn't
@@ -2748,7 +2749,7 @@ void cpuset_update_tasks_nodemask(struct cpuset *cs)
 
 		migrate = is_memory_migrate(cs);
 
-		mpol_rebind_mm(mm, &cs->mems_allowed);
+		mpol_rebind_mm(mm, &cs->mems_sysram);
 		if (migrate)
 			cpuset_migrate_mm(mm, &cs->old_mems_allowed, &newmems);
 		else
@@ -2808,6 +2809,7 @@ static void update_nodemasks_hier(struct cpuset *cs, nodemask_t *new_mems)
 
 		spin_lock_irq(&callback_lock);
 		cp->effective_mems = *new_mems;
+		mt_nodemask_sysram_mask(&cp->mems_sysram, &cp->effective_mems);
 		spin_unlock_irq(&callback_lock);
 
 		WARN_ON(!is_in_v2_mode() &&
@@ -3234,11 +3236,11 @@ static void cpuset_attach(struct cgroup_taskset *tset)
 	 * by skipping the task iteration and update.
 	 */
 	if (cpuset_v2() && !cpus_updated && !mems_updated) {
-		cpuset_attach_nodemask_to = cs->effective_mems;
+		cpuset_attach_nodemask_to = cs->mems_sysram;
 		goto out;
 	}
 
-	guarantee_online_mems(cs, &cpuset_attach_nodemask_to);
+	guarantee_online_sysram_nodes(cs, &cpuset_attach_nodemask_to);
 
 	cgroup_taskset_for_each(task, css, tset)
 		cpuset_attach_task(cs, task);
@@ -3249,7 +3251,7 @@ static void cpuset_attach(struct cgroup_taskset *tset)
 	 * if there is no change in effective_mems and CS_MEMORY_MIGRATE is
 	 * not set.
 	 */
-	cpuset_attach_nodemask_to = cs->effective_mems;
+	cpuset_attach_nodemask_to = cs->mems_sysram;
 	if (!is_memory_migrate(cs) && !mems_updated)
 		goto out;
 
@@ -3371,6 +3373,9 @@ int cpuset_common_seq_show(struct seq_file *sf, void *v)
 	case FILE_EFFECTIVE_MEMLIST:
 		seq_printf(sf, "%*pbl\n", nodemask_pr_args(&cs->effective_mems));
 		break;
+	case FILE_MEMS_SYSRAM:
+		seq_printf(sf, "%*pbl\n", nodemask_pr_args(&cs->mems_sysram));
+		break;
 	case FILE_EXCLUSIVE_CPULIST:
 		seq_printf(sf, "%*pbl\n", cpumask_pr_args(cs->exclusive_cpus));
 		break;
@@ -3483,6 +3488,12 @@ static struct cftype dfl_files[] = {
 	},
 
 	{
+		.name = "mems.sysram",
+		.seq_show = cpuset_common_seq_show,
+		.private = FILE_MEMS_SYSRAM,
+	},
+
+	{
 		.name = "cpus.partition",
 		.seq_show = cpuset_partition_show,
 		.write = cpuset_partition_write,
@@ -3585,6 +3596,7 @@ static int cpuset_css_online(struct cgroup_subsys_state *css)
 	if (is_in_v2_mode()) {
 		cpumask_copy(cs->effective_cpus, parent->effective_cpus);
 		cs->effective_mems = parent->effective_mems;
+		mt_nodemask_sysram_mask(&cs->mems_sysram, &cs->effective_mems);
 	}
 	spin_unlock_irq(&callback_lock);
 
@@ -3616,6 +3628,7 @@ static int cpuset_css_online(struct cgroup_subsys_state *css)
 	spin_lock_irq(&callback_lock);
 	cs->mems_allowed = parent->mems_allowed;
 	cs->effective_mems = parent->mems_allowed;
+	mt_nodemask_sysram_mask(&cs->mems_sysram, &cs->effective_mems);
 	cpumask_copy(cs->cpus_allowed, parent->cpus_allowed);
 	cpumask_copy(cs->effective_cpus, parent->cpus_allowed);
 	spin_unlock_irq(&callback_lock);
@@ -3769,7 +3782,7 @@ static void cpuset_fork(struct task_struct *task)
 
 	/* CLONE_INTO_CGROUP */
 	mutex_lock(&cpuset_mutex);
-	guarantee_online_mems(cs, &cpuset_attach_nodemask_to);
+	guarantee_online_sysram_nodes(cs, &cpuset_attach_nodemask_to);
 	cpuset_attach_task(cs, task);
 
 	dec_attach_in_progress_locked(cs);
@@ -3818,7 +3831,8 @@ int __init cpuset_init(void)
 	cpumask_setall(top_cpuset.effective_xcpus);
 	cpumask_setall(top_cpuset.exclusive_cpus);
 	nodes_setall(top_cpuset.effective_mems);
-
+	mt_nodemask_sysram_mask(&top_cpuset.mems_sysram,
+				&top_cpuset.effective_mems);
 	fmeter_init(&top_cpuset.fmeter);
 	INIT_LIST_HEAD(&remote_children);
 
@@ -3848,6 +3862,7 @@ hotplug_update_tasks(struct cpuset *cs,
 	spin_lock_irq(&callback_lock);
 	cpumask_copy(cs->effective_cpus, new_cpus);
 	cs->effective_mems = *new_mems;
+	mt_nodemask_sysram_mask(&cs->mems_sysram, &cs->effective_mems);
 	spin_unlock_irq(&callback_lock);
 
 	if (cpus_updated)
@@ -4039,6 +4054,8 @@ static void cpuset_handle_hotplug(void)
 		if (!on_dfl)
 			top_cpuset.mems_allowed = new_mems;
 		top_cpuset.effective_mems = new_mems;
+		mt_nodemask_sysram_mask(&top_cpuset.mems_sysram,
+					&top_cpuset.effective_mems);
 		spin_unlock_irq(&callback_lock);
 		cpuset_update_tasks_nodemask(&top_cpuset);
 	}
@@ -4109,6 +4126,8 @@ void __init cpuset_init_smp(void)
 
 	cpumask_copy(top_cpuset.effective_cpus, cpu_active_mask);
 	top_cpuset.effective_mems = node_states[N_MEMORY];
+	mt_nodemask_sysram_mask(&top_cpuset.mems_sysram,
+				&top_cpuset.effective_mems);
 
 	hotplug_node_notifier(cpuset_track_online_nodes, CPUSET_CALLBACK_PRI);
 
@@ -4205,14 +4224,18 @@ bool cpuset_cpus_allowed_fallback(struct task_struct *tsk)
 	return changed;
 }
 
+/*
+ * At this point in time, no hotplug nodes can have been added, so just set
+ * the sysram_nodes of the init task to the set of N_MEMORY nodes.
+ */
 void __init cpuset_init_current_sysram_nodes(void)
 {
-	nodes_setall(current->sysram_nodes);
+	current->sysram_nodes = node_states[N_MEMORY];
 }
 
 /**
- * cpuset_mems_allowed - return mems_allowed mask from a tasks cpuset.
- * @tsk: pointer to task_struct from which to obtain cpuset->mems_allowed.
+ * cpuset_sysram_nodes_allowed - return mems_sysram mask from a tasks cpuset.
+ * @tsk: pointer to task_struct from which to obtain cpuset->mems_sysram.
  *
  * Description: Returns the nodemask_t mems_allowed of the cpuset
  * attached to the specified @tsk.  Guaranteed to return some non-empty
@@ -4220,13 +4243,13 @@ void __init cpuset_init_current_sysram_nodes(void)
  * tasks cpuset.
  **/
 
-nodemask_t cpuset_mems_allowed(struct task_struct *tsk)
+nodemask_t cpuset_sysram_nodes_allowed(struct task_struct *tsk)
 {
 	nodemask_t mask;
 	unsigned long flags;
 
 	spin_lock_irqsave(&callback_lock, flags);
-	guarantee_online_mems(task_cs(tsk), &mask);
+	guarantee_online_sysram_nodes(task_cs(tsk), &mask);
 	spin_unlock_irqrestore(&callback_lock, flags);
 
 	return mask;
@@ -4295,17 +4318,30 @@ static struct cpuset *nearest_hardwall_ancestor(struct cpuset *cs)
  *	tsk_is_oom_victim   - any node ok
  *	GFP_KERNEL   - any node in enclosing hardwalled cpuset ok
  *	GFP_USER     - only nodes in current tasks mems allowed ok.
+ *	GFP_SPM_NODE - allow specific purpose memory nodes in mems_allowed
  */
 bool cpuset_current_node_allowed(int node, gfp_t gfp_mask)
 {
 	struct cpuset *cs;		/* current cpuset ancestors */
 	bool allowed;			/* is allocation in zone z allowed? */
 	unsigned long flags;
+	bool sp_node = gfp_mask & __GFP_SPM_NODE;
 
+	/* Only SysRAM nodes are valid in interrupt context */
 	if (in_interrupt())
-		return true;
-	if (node_isset(node, current->sysram_nodes))
-		return true;
+		return (!sp_node || node_isset(node, mt_sysram_nodelist));
+
+	if (sp_node) {
+		rcu_read_lock();
+		cs = task_cs(current);
+		allowed = node_isset(node, cs->mems_allowed);
+		rcu_read_unlock();
+	} else
+		allowed = node_isset(node, current->sysram_nodes);
+
+	if (allowed)
+		return allowed;
+
 	/*
 	 * Allow tasks that have access to memory reserves because they have
 	 * been OOM killed to get memory anywhere.
@@ -4324,11 +4360,15 @@ bool cpuset_current_node_allowed(int node, gfp_t gfp_mask)
 	cs = nearest_hardwall_ancestor(task_cs(current));
 	allowed = node_isset(node, cs->mems_allowed);
 
+	/* If not a SP Node allocation, restrict to sysram nodes */
+	if (!sp_node && !nodes_empty(mt_sysram_nodelist))
+		allowed &= node_isset(node, mt_sysram_nodelist);
+
 	spin_unlock_irqrestore(&callback_lock, flags);
 	return allowed;
 }
 
-bool cpuset_node_allowed(struct cgroup *cgroup, int nid)
+bool cpuset_sysram_node_allowed(struct cgroup *cgroup, int nid)
 {
 	struct cgroup_subsys_state *css;
 	struct cpuset *cs;
@@ -4347,7 +4387,7 @@ bool cpuset_node_allowed(struct cgroup *cgroup, int nid)
 		return true;
 
 	/*
-	 * Normally, accessing effective_mems would require the cpuset_mutex
+	 * Normally, accessing mems_sysram would require the cpuset_mutex
 	 * or callback_lock - but node_isset is atomic and the reference
 	 * taken via cgroup_get_e_css is sufficient to protect css.
 	 *
@@ -4359,7 +4399,7 @@ bool cpuset_node_allowed(struct cgroup *cgroup, int nid)
 	 * cannot make strong isolation guarantees, so this is acceptable.
 	 */
 	cs = container_of(css, struct cpuset, css);
-	allowed = node_isset(nid, cs->effective_mems);
+	allowed = node_isset(nid, cs->mems_sysram);
 	css_put(css);
 	return allowed;
 }
@@ -4380,7 +4420,7 @@ bool cpuset_node_allowed(struct cgroup *cgroup, int nid)
  * We don't have to worry about the returned node being offline
  * because "it can't happen", and even if it did, it would be ok.
  *
- * The routines calling guarantee_online_mems() are careful to
+ * The routines calling guarantee_online_sysram_nodes() are careful to
  * only set nodes in task->sysram_nodes that are online.  So it
  * should not be possible for the following code to return an
  * offline node.  But if it did, that would be ok, as this routine

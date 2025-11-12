@@ -5599,5 +5599,6 @@ subsys_initcall(mem_cgroup_swap_init);
 
 bool mem_cgroup_node_allowed(struct mem_cgroup *memcg, int nid)
 {
-	return memcg ? cpuset_node_allowed(memcg->css.cgroup, nid) : true;
+	return memcg ? cpuset_sysram_node_allowed(memcg->css.cgroup, nid) :
+		       true;
 }
