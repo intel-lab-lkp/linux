@@ -1802,8 +1802,6 @@ int generic_file_rw_checks(struct file *file_in, struct file *file_out)
 
 int generic_atomic_write_valid(struct kiocb *iocb, struct iov_iter *iter)
 {
-	struct super_block *sb = iocb->ki_filp->f_mapping->host->i_sb;
-
 	size_t len = iov_iter_count(iter);
 
 	if (!iter_is_ubuf(iter))
@@ -1814,26 +1812,6 @@ int generic_atomic_write_valid(struct kiocb *iocb, struct iov_iter *iter)
 
 	if (!IS_ALIGNED(iocb->ki_pos, len))
 		return -EINVAL;
-
-	if (!(iocb->ki_flags & IOCB_DIRECT)) {
-		/* Some restrictions to buferred IO */
-
-		/*
-		 * We only support block size == page size
-		 * right now. This is to avoid the following:
-		 * 1. 4kb block atomic write marks the complete 64kb folio as
-		 *    atomic.
-		 * 2. Other writes, dirty the whole 64kb folio.
-		 * 3. Writeback sees the whole folio dirty and atomic and tries
-		 *    to send a 64kb atomic write, which might exceed the
-		 *    allowed size and fail.
-		 *
-		 * Once we support sub-page atomic write tracking, we can remove
-		 * this restriction.
-		 */
-		if (sb->s_blocksize != PAGE_SIZE)
-			return -EOPNOTSUPP;
-	}
 
 	return 0;
 }

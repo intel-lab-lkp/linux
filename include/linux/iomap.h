@@ -460,6 +460,7 @@ struct iomap_writepage_ctx {
 	const struct iomap_writeback_ops *ops;
 	u32			nr_folios;	/* folios added to the ioend */
 	void			*wb_ctx;	/* pending writeback context */
+	bool			is_atomic_range;
 };
 
 struct iomap_ioend *iomap_init_ioend(struct inode *inode, struct bio *bio,

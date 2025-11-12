@@ -163,10 +163,10 @@ ssize_t iomap_add_to_ioend(struct iomap_writepage_ctx *wpc, struct folio *folio,
 	unsigned int ioend_flags = 0;
 	unsigned int map_len = min_t(u64, dirty_len,
 		wpc->iomap.offset + wpc->iomap.length - pos);
-	bool is_atomic = folio_test_atomic(folio);
 	int error;
 
-	trace_iomap_add_to_ioend(wpc->inode, pos, dirty_len, &wpc->iomap);
+	trace_iomap_add_to_ioend(wpc->inode, pos, dirty_len, &wpc->iomap,
+				 wpc->is_atomic_range);
 
 	WARN_ON_ONCE(!folio->private && map_len < dirty_len);
 
@@ -188,7 +188,7 @@ ssize_t iomap_add_to_ioend(struct iomap_writepage_ctx *wpc, struct folio *folio,
 		ioend_flags |= IOMAP_IOEND_DONTCACHE;
 	if (pos == wpc->iomap.offset && (wpc->iomap.flags & IOMAP_F_BOUNDARY))
 		ioend_flags |= IOMAP_IOEND_BOUNDARY;
-	if (is_atomic)
+	if (wpc->is_atomic_range)
 		ioend_flags |= IOMAP_IOEND_ATOMIC;
 
 	if (!ioend || !iomap_can_add_to_ioend(wpc, pos, ioend_flags)) {
@@ -198,7 +198,8 @@ new_ioend:
 			if (error)
 				return error;
 		}
-		wpc->wb_ctx = ioend = iomap_alloc_ioend(wpc, pos, ioend_flags, is_atomic);
+		wpc->wb_ctx = ioend = iomap_alloc_ioend(wpc, pos, ioend_flags,
+							wpc->is_atomic_range);
 	}
 
 	if (!bio_add_folio(&ioend->io_bio, folio, map_len, poff))

@@ -173,8 +173,8 @@ DEFINE_IOMAP_EVENT(iomap_iter_srcmap);
 
 TRACE_EVENT(iomap_add_to_ioend,
 	TP_PROTO(struct inode *inode, u64 pos, unsigned int dirty_len,
-		 struct iomap *iomap),
-	TP_ARGS(inode, pos, dirty_len, iomap),
+		 struct iomap *iomap, bool is_atomic),
+	TP_ARGS(inode, pos, dirty_len, iomap, is_atomic),
 	TP_STRUCT__entry(
 		__field(dev_t, dev)
 		__field(u64, ino)
@@ -186,6 +186,7 @@ TRACE_EVENT(iomap_add_to_ioend,
 		__field(u16, type)
 		__field(u16, flags)
 		__field(dev_t, bdev)
+		__field(bool, is_atomic)
 	),
 	TP_fast_assign(
 		__entry->dev = inode->i_sb->s_dev;
@@ -198,9 +199,11 @@ TRACE_EVENT(iomap_add_to_ioend,
 		__entry->type = iomap->type;
 		__entry->flags = iomap->flags;
 		__entry->bdev = iomap->bdev ? iomap->bdev->bd_dev : 0;
+		__entry->is_atomic = is_atomic;
 	),
 	TP_printk("dev %d:%d ino 0x%llx bdev %d:%d pos 0x%llx dirty len 0x%llx "
-		  "addr 0x%llx offset 0x%llx length 0x%llx type %s (0x%x) flags %s (0x%x)",
+		  "addr 0x%llx offset 0x%llx length 0x%llx type %s (0x%x) flags %s (0x%x) "
+		  "is_atomic=%d",
 		  MAJOR(__entry->dev), MINOR(__entry->dev),
 		  __entry->ino,
 		  MAJOR(__entry->bdev), MINOR(__entry->bdev),
@@ -212,7 +215,8 @@ TRACE_EVENT(iomap_add_to_ioend,
 		  __print_symbolic(__entry->type, IOMAP_TYPE_STRINGS),
 		  __entry->type,
 		  __print_flags(__entry->flags, "|", IOMAP_F_FLAGS_STRINGS),
-		  __entry->flags)
+		  __entry->flags,
+		  __entry->is_atomic)
 );
 
 TRACE_EVENT(iomap_iter,

@@ -26,6 +26,10 @@ struct iomap_folio_state {
 	 * Each block has two bits in this bitmap:
 	 * Bits [0..blocks_per_folio) has the uptodate status.
 	 * Bits [b_p_f...(2*b_p_f))   has the dirty status.
+	 * Bits [2*b_p_f..3*b_p_f)    has whether block marks the
+	 *			      start of an RWF_ATOMIC write
+	 * Bits [3*b_p_f..4*b_p_f)    has whether block marks the
+	 *			      end of an RWF_ATOMIC write
 	 */
 	unsigned long		state[];
 };
@@ -76,6 +80,25 @@ static void iomap_set_range_uptodate(struct folio *folio, size_t off,
 		folio_mark_uptodate(folio);
 }
 
+static inline bool ifs_block_is_atomic_start(struct folio *folio,
+				      struct iomap_folio_state *ifs, int block)
+{
+	struct inode *inode = folio->mapping->host;
+	unsigned int blks_per_folio = i_blocks_per_folio(inode, folio);
+
+	return test_bit(block + (blks_per_folio * 2), ifs->state);
+}
+
+static inline bool ifs_block_is_atomic_end(struct folio *folio,
+					     struct iomap_folio_state *ifs,
+					     int block)
+{
+	struct inode *inode = folio->mapping->host;
+	unsigned int blks_per_folio = i_blocks_per_folio(inode, folio);
+
+	return test_bit(block + (blks_per_folio * 3), ifs->state);
+}
+
 static inline bool ifs_block_is_dirty(struct folio *folio,
 		struct iomap_folio_state *ifs, int block)
 {
@@ -85,17 +108,42 @@ static inline bool ifs_block_is_dirty(struct folio *folio,
 	return test_bit(block + blks_per_folio, ifs->state);
 }
 
-static unsigned ifs_find_dirty_range(struct folio *folio,
-		struct iomap_folio_state *ifs, u64 *range_start, u64 range_end)
+/*
+ * Returns false if the folio has atleast 1 atomic block, else true
+ */
+static inline bool ifs_is_fully_non_atomic(struct folio *folio,
+					   struct iomap_folio_state *ifs)
 {
 	struct inode *inode = folio->mapping->host;
+	unsigned int blks_per_folio = i_blocks_per_folio(inode, folio);
+
+	for (int i = 0; i < blks_per_folio; i++) {
+		if (ifs_block_is_atomic_start(folio, ifs, i))
+			return false;
+	}
+
+	return true;
+}
+
+static unsigned ifs_find_dirty_range(struct folio *folio,
+				     struct iomap_folio_state *ifs,
+				     u64 *range_start, u64 range_end,
+				     bool *is_atomic_range)
+{
+	struct inode *inode = folio->mapping->host;
+	unsigned folio_nblks = i_blocks_per_folio(inode, folio);
 	unsigned start_blk =
 		offset_in_folio(folio, *range_start) >> inode->i_blkbits;
 	unsigned end_blk = min_not_zero(
 		offset_in_folio(folio, range_end) >> inode->i_blkbits,
-		i_blocks_per_folio(inode, folio));
+		folio_nblks);
 	unsigned nblks = 1;
+	bool is_atomic_folio = folio_test_atomic(folio);
 
+	/*
+	 * We need to be careful in not clubbing together atomic write ranges
+	 * with other dirty blocks
+	 */
 	while (!ifs_block_is_dirty(folio, ifs, start_blk))
 		if (++start_blk == end_blk)
 			return 0;
@@ -106,12 +154,62 @@ static unsigned ifs_find_dirty_range(struct folio *folio,
 		nblks++;
 	}
 
+	*is_atomic_range = false;
+
+	if (is_atomic_folio) {
+		unsigned int first_atomic;
+		unsigned int last = start_blk + nblks;
+		/*
+		 * We now have the dirty range, however if the range has any
+		 * RWF_ATOMIC blocks, we need to make sure to not club them with
+		 * other dirty blocks.
+		 */
+		first_atomic = start_blk;
+		while (!ifs_block_is_atomic_start(folio, ifs, first_atomic)) {
+			if (++first_atomic == start_blk + nblks)
+				break;
+		}
+
+		if (first_atomic != start_blk + nblks) {
+			/* RWF_ATOMIC blocks found in dirty range */
+			if (first_atomic == start_blk) {
+				/*
+				 * range start is RWF_ATOMIC. Return only the
+				 * atomic range.
+				 */
+				nblks = 0;
+				while (first_atomic + nblks < last) {
+					if (ifs_block_is_atomic_end(
+						    folio, ifs,
+						    first_atomic + nblks++))
+						break;
+				}
+
+				if (first_atomic + nblks > last)
+					/*
+					 * RWF_ATOMIC range should
+					 * always be contained in the
+					 * dirty range
+					 */
+					WARN_ON(true);
+
+				*is_atomic_range = true;
+			} else {
+				/*
+				 * RWF_ATOMIC range is in middle of dirty range. Return only
+				 * the starting non-RWF_ATOMIC range
+				 */
+				nblks = first_atomic - start_blk;
+			}
+		}
+	}
+
 	*range_start = folio_pos(folio) + (start_blk << inode->i_blkbits);
 	return nblks << inode->i_blkbits;
 }
 
 static unsigned iomap_find_dirty_range(struct folio *folio, u64 *range_start,
-		u64 range_end)
+		u64 range_end, bool *is_atomic_range)
 {
 	struct iomap_folio_state *ifs = folio->private;
 
@@ -119,8 +217,31 @@ static unsigned iomap_find_dirty_range(struct folio *folio, u64 *range_start,
 		return 0;
 
 	if (ifs)
-		return ifs_find_dirty_range(folio, ifs, range_start, range_end);
+		return ifs_find_dirty_range(folio, ifs, range_start, range_end,
+					    is_atomic_range);
+
+	if (folio_test_atomic(folio))
+		*is_atomic_range = true;
+
 	return range_end - *range_start;
+}
+
+static bool ifs_clear_range_atomic(struct folio *folio,
+		struct iomap_folio_state *ifs, size_t off, size_t len)
+{
+	struct inode *inode = folio->mapping->host;
+	unsigned int blks_per_folio = i_blocks_per_folio(inode, folio);
+	unsigned int first_blk = (off >> inode->i_blkbits);
+	unsigned int last_blk = (off + len - 1) >> inode->i_blkbits;
+	unsigned int nr_blks = last_blk - first_blk + 1;
+	unsigned long flags;
+
+	spin_lock_irqsave(&ifs->state_lock, flags);
+	bitmap_clear(ifs->state, first_blk + (blks_per_folio * 2), nr_blks);
+	bitmap_clear(ifs->state, last_blk + (blks_per_folio * 3), nr_blks);
+	spin_unlock_irqrestore(&ifs->state_lock, flags);
+
+	return ifs_is_fully_non_atomic(folio, ifs);
 }
 
 static void ifs_clear_range_dirty(struct folio *folio,
@@ -138,6 +259,18 @@ static void ifs_clear_range_dirty(struct folio *folio,
 	spin_unlock_irqrestore(&ifs->state_lock, flags);
 }
 
+static void iomap_clear_range_atomic(struct folio *folio, size_t off, size_t len)
+{
+	struct iomap_folio_state *ifs = folio->private;
+	bool fully_non_atomic = true;
+
+	if (ifs)
+		fully_non_atomic = ifs_clear_range_atomic(folio, ifs, off, len);
+
+	if (fully_non_atomic)
+		folio_clear_atomic(folio);
+}
+
 static void iomap_clear_range_dirty(struct folio *folio, size_t off, size_t len)
 {
 	struct iomap_folio_state *ifs = folio->private;
@@ -146,8 +279,34 @@ static void iomap_clear_range_dirty(struct folio *folio, size_t off, size_t len)
 		ifs_clear_range_dirty(folio, ifs, off, len);
 }
 
-static void ifs_set_range_dirty(struct folio *folio,
+static void ifs_set_range_atomic(struct folio *folio,
 		struct iomap_folio_state *ifs, size_t off, size_t len)
+{
+	struct inode *inode = folio->mapping->host;
+	unsigned int blks_per_folio = i_blocks_per_folio(inode, folio);
+	unsigned int first_blk = (off >> inode->i_blkbits);
+	unsigned int last_blk = (off + len - 1) >> inode->i_blkbits;
+	unsigned long flags;
+
+	spin_lock_irqsave(&ifs->state_lock, flags);
+	bitmap_set(ifs->state, first_blk + (blks_per_folio * 2), 1);
+	bitmap_set(ifs->state, last_blk + (blks_per_folio * 3), 1);
+	spin_unlock_irqrestore(&ifs->state_lock, flags);
+}
+
+static void iomap_set_range_atomic(struct folio *folio, size_t off, size_t len)
+{
+	struct iomap_folio_state *ifs = folio->private;
+
+	if (ifs)
+		ifs_set_range_atomic(folio, ifs, off, len);
+
+	folio_set_atomic(folio);
+}
+
+static void ifs_set_range_dirty(struct folio *folio,
+				struct iomap_folio_state *ifs, size_t off,
+				size_t len)
 {
 	struct inode *inode = folio->mapping->host;
 	unsigned int blks_per_folio = i_blocks_per_folio(inode, folio);
@@ -190,8 +349,12 @@ static struct iomap_folio_state *ifs_alloc(struct inode *inode,
 	 * The first state tracks per-block uptodate and the
 	 * second tracks per-block dirty state.
 	 */
+
+	/*
+	 * TODO: How can we only selectively allocate atomic bitmaps for ifs?
+	 */
 	ifs = kzalloc(struct_size(ifs, state,
-		      BITS_TO_LONGS(2 * nr_blocks)), gfp);
+		      BITS_TO_LONGS(4 * nr_blocks)), gfp);
 	if (!ifs)
 		return ifs;
 
@@ -940,6 +1103,8 @@ out_unlock:
 static bool __iomap_write_end(struct iomap_iter *iter, loff_t pos, size_t len,
 		size_t copied, struct folio *folio)
 {
+	struct inode *inode = iter->inode;
+
 	flush_dcache_folio(folio);
 
 	/*
@@ -974,9 +1139,12 @@ static bool __iomap_write_end(struct iomap_iter *iter, loff_t pos, size_t len,
 
 			return false;
 		}
-		folio_set_atomic(folio);
-	} else
-		folio_clear_atomic(folio);
+		iomap_set_range_atomic(folio, offset_in_folio(folio, pos), len);
+	} else {
+		if (folio_test_atomic(folio))
+			iomap_clear_range_atomic(
+				folio, offset_in_folio(folio, pos), len);
+	}
 
 	return true;
 }
@@ -1207,7 +1375,11 @@ retry:
 					written);
 				iov_iter_revert(i,
 						iov_iter_count(&atomic_iter));
-			}
+			} else
+				iomap_set_range_atomic(
+					folio, offset_in_folio(folio, pos),
+					written);
+
 			iomap_atomic_write_cleanup(&pages, &pinned_pgs,
 						   &atomic_bvecs);
 		}
@@ -1740,7 +1912,7 @@ static int iomap_folio_mkwrite_iter(struct iomap_iter *iter,
 	} else {
 		WARN_ON_ONCE(!folio_test_uptodate(folio));
 		folio_mark_dirty(folio);
-		folio_clear_atomic(folio);
+		iomap_clear_range_atomic(folio, 0, folio_size(folio));
 	}
 
 	return iomap_iter_advance(iter, length);
@@ -1796,7 +1968,7 @@ void iomap_finish_folio_write(struct inode *inode, struct folio *folio,
 	WARN_ON_ONCE(ifs && atomic_read(&ifs->write_bytes_pending) <= 0);
 
 	if (!ifs || atomic_sub_and_test(len, &ifs->write_bytes_pending)) {
-		folio_clear_atomic(folio);
+		iomap_clear_range_atomic(folio, 0, folio_size(folio));
 		folio_end_writeback(folio);
 	}
 }
@@ -1911,6 +2083,8 @@ int iomap_writeback_folio(struct iomap_writepage_ctx *wpc, struct folio *folio)
 		if (!ifs) {
 			ifs = ifs_alloc(inode, folio, 0);
 			iomap_set_range_dirty(folio, 0, end_pos - pos);
+			if (folio_test_atomic(folio))
+				iomap_set_range_atomic(folio, 0, end_pos - pos);
 		}
 
 		/*
@@ -1933,7 +2107,8 @@ int iomap_writeback_folio(struct iomap_writepage_ctx *wpc, struct folio *folio)
 	 * Walk through the folio to find dirty areas to write back.
 	 */
 	end_aligned = round_up(end_pos, i_blocksize(inode));
-	while ((rlen = iomap_find_dirty_range(folio, &pos, end_aligned))) {
+	while ((rlen = iomap_find_dirty_range(folio, &pos, end_aligned,
+					      &wpc->is_atomic_range))) {
 		error = iomap_writeback_range(wpc, folio, pos, rlen, end_pos,
 				&wb_pending);
 		if (error)
@@ -1959,11 +2134,13 @@ int iomap_writeback_folio(struct iomap_writepage_ctx *wpc, struct folio *folio)
 	 * bit ourselves right after unlocking the page.
 	 */
 	if (ifs) {
-		if (atomic_dec_and_test(&ifs->write_bytes_pending))
+		if (atomic_dec_and_test(&ifs->write_bytes_pending)) {
+			iomap_clear_range_atomic(folio, 0, folio_size(folio));
 			folio_end_writeback(folio);
+		}
 	} else {
 		if (!wb_pending) {
-			folio_clear_atomic(folio);
+			iomap_clear_range_atomic(folio, 0, folio_size(folio));
 			folio_end_writeback(folio);
 		}
 	}
