@@ -38,6 +38,31 @@ void blk_mq_free_sched_res(struct elevator_resources *res,
 		struct blk_mq_tag_set *set);
 void blk_mq_free_sched_res_batch(struct xarray *et_table,
 		struct blk_mq_tag_set *set);
+/*
+ * blk_mq_alloc_sched_data() - Allocates scheduler specific data
+ * Returns:
+ *         - Pointer to allocated data on success
+ *         - &blk_mq_sched_data sentinel if no allocation needed
+ *         - ERR_PTR(-ENOMEM) in case of failure
+ */
+static inline void *blk_mq_alloc_sched_data(struct request_queue *q,
+		struct elevator_type *e)
+{
+	void *sched_data;
+	static char blk_mq_sched_data;	/* act as a success sentinel */
+
+	if (!e || !e->ops.alloc_sched_data)
+		return &blk_mq_sched_data;
+
+	sched_data = e->ops.alloc_sched_data(q);
+	return (sched_data) ?: ERR_PTR(-ENOMEM);
+}
+
+static inline void blk_mq_free_sched_data(struct elevator_type *e, void *data)
+{
+	if (e && e->ops.free_sched_data)
+		e->ops.free_sched_data(data);
+}
 
 static inline void blk_mq_sched_restart(struct blk_mq_hw_ctx *hctx)
 {
