@@ -1662,7 +1662,9 @@ int btrfs_delete_delayed_dir_index(struct btrfs_trans_handle *trans,
 		btrfs_err(trans->fs_info,
 "metadata reservation failed for delayed dir item deletion, index: %llu, root: %llu, inode: %llu, error: %d",
 			  index, btrfs_root_id(node->root), node->inode_id, ret);
+		mutex_lock(&node->mutex);
 		btrfs_release_delayed_item(item);
+		mutex_unlock(&node->mutex);
 		goto end;
 	}
 
