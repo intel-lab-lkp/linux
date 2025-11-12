@@ -3527,7 +3527,7 @@ static bool skip_alt_group(struct instruction *insn)
 
 	/* ANNOTATE_IGNORE_ALTERNATIVE */
 	if (insn->alt_group->ignore) {
-		TRACE_INSN(insn, "alt group ignored");
+		TRACE_ALT(insn, "alt group ignored");
 		return true;
 	}
 
@@ -3649,24 +3649,44 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 		return 1;
 
 	if (insn->alts) {
+		char alt_name[35];
 		int i, num_alts;
 
 		num_alts = 0;
-		for (alt = insn->alts; alt; alt = alt->next)
-			num_alts++;
+		for (alt = insn->alts; alt; alt = alt->next) {
+			if (alt->type == ALT_TYPE_INSTRUCTIONS)
+				num_alts++;
+		}
 
 		i = 1;
 		for (alt = insn->alts; alt; alt = alt->next) {
-			TRACE_INSN(insn, "alternative %d/%d", i, num_alts);
+			if (trace) {
+				switch (alt->type) {
+				case ALT_TYPE_EX_TABLE:
+					strcpy(alt_name, "EXCEPTION");
+					break;
+				case ALT_TYPE_JUMP_TABLE:
+					strcpy(alt_name, "JUMP");
+					break;
+				case ALT_TYPE_INSTRUCTIONS:
+					snprintf(alt_name, sizeof(alt_name),
+						"ALTERNATIVE %d/%d", i, num_alts);
+					break;
+				}
+				trace_alt_begin(insn, alt, alt_name);
+			}
 			ret = validate_branch(file, func, alt->insn, *statep);
+			if (trace)
+				trace_alt_end(insn, alt, alt_name);
 			if (ret) {
 				BT_INSN(insn, "(alt)");
 				return ret;
 			}
-			i++;
+			if (alt->insn->alt_group)
+				i++;
 		}
 
-		TRACE_INSN(insn, "alternative orig");
+		TRACE_ALT_INFO_NOADDR(insn, "/ ", "DEFAULT");
 	}
 
 	if (skip_alt_group(insn))
