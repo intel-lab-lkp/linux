@@ -25,6 +25,8 @@
 #include <linux/reset.h>
 #include <linux/slab.h>
 
+#include "i2c-aspeed-core.h"
+
 /* I2C Register */
 #define ASPEED_I2C_FUN_CTRL_REG				0x00
 #define ASPEED_I2C_AC_TIMING_REG1			0x04
@@ -978,26 +980,9 @@ static int aspeed_i2c_reset(struct aspeed_i2c_bus *bus)
 	return ret;
 }
 
-static const struct of_device_id aspeed_i2c_bus_of_table[] = {
-	{
-		.compatible = "aspeed,ast2400-i2c-bus",
-		.data = aspeed_i2c_24xx_get_clk_reg_val,
-	},
-	{
-		.compatible = "aspeed,ast2500-i2c-bus",
-		.data = aspeed_i2c_25xx_get_clk_reg_val,
-	},
-	{
-		.compatible = "aspeed,ast2600-i2c-bus",
-		.data = aspeed_i2c_25xx_get_clk_reg_val,
-	},
-	{ }
-};
-MODULE_DEVICE_TABLE(of, aspeed_i2c_bus_of_table);
-
-static int aspeed_i2c_probe_bus(struct platform_device *pdev)
+int aspeed_i2c_probe_bus(const struct of_device_id *match,
+			 struct platform_device *pdev)
 {
-	const struct of_device_id *match;
 	struct aspeed_i2c_bus *bus;
 	struct clk *parent_clk;
 	int irq, ret;
@@ -1033,12 +1018,10 @@ static int aspeed_i2c_probe_bus(struct platform_device *pdev)
 		bus->bus_frequency = I2C_MAX_STANDARD_MODE_FREQ;
 	}
 
-	match = of_match_node(aspeed_i2c_bus_of_table, pdev->dev.of_node);
-	if (!match)
+	if ((enum i2c_version)(uintptr_t)match->data == AST2400_I2C)
 		bus->get_clk_reg_val = aspeed_i2c_24xx_get_clk_reg_val;
 	else
-		bus->get_clk_reg_val = (u32 (*)(struct device *, u32))
-				match->data;
+		bus->get_clk_reg_val = aspeed_i2c_25xx_get_clk_reg_val;
 
 	/* Initialize the I2C adapter */
 	spin_lock_init(&bus->lock);
@@ -1081,8 +1064,9 @@ static int aspeed_i2c_probe_bus(struct platform_device *pdev)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(aspeed_i2c_probe_bus);
 
-static void aspeed_i2c_remove_bus(struct platform_device *pdev)
+void aspeed_i2c_remove_bus(struct platform_device *pdev)
 {
 	struct aspeed_i2c_bus *bus = platform_get_drvdata(pdev);
 	unsigned long flags;
@@ -1099,16 +1083,7 @@ static void aspeed_i2c_remove_bus(struct platform_device *pdev)
 
 	i2c_del_adapter(&bus->adap);
 }
-
-static struct platform_driver aspeed_i2c_bus_driver = {
-	.probe		= aspeed_i2c_probe_bus,
-	.remove		= aspeed_i2c_remove_bus,
-	.driver		= {
-		.name		= "aspeed-i2c-bus",
-		.of_match_table	= aspeed_i2c_bus_of_table,
-	},
-};
-module_platform_driver(aspeed_i2c_bus_driver);
+EXPORT_SYMBOL_GPL(aspeed_i2c_remove_bus);
 
 MODULE_AUTHOR("Brendan Higgins <brendanhiggins@google.com>");
 MODULE_DESCRIPTION("Aspeed I2C Bus Driver");
