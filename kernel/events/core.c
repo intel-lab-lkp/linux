@@ -11964,7 +11964,7 @@ static int cpu_clock_event_add(struct perf_event *event, int flags)
 
 static void cpu_clock_event_del(struct perf_event *event, int flags)
 {
-	cpu_clock_event_stop(event, flags);
+	cpu_clock_event_stop(event, flags | PERF_EF_UPDATE);
 }
 
 static void cpu_clock_event_read(struct perf_event *event)
@@ -12043,7 +12043,7 @@ static int task_clock_event_add(struct perf_event *event, int flags)
 
 static void task_clock_event_del(struct perf_event *event, int flags)
 {
-	task_clock_event_stop(event, PERF_EF_UPDATE);
+	task_clock_event_stop(event, flags | PERF_EF_UPDATE);
 }
 
 static void task_clock_event_read(struct perf_event *event)
