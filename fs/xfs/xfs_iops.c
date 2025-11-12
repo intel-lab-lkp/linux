@@ -622,10 +622,9 @@ xfs_get_atomic_write_min(
 			return bs;
 	}
 	/*
-	 * Buffered IO only supports hw single block atomic writes and bs == ps
-	 * configurations.
+	 * Buffered IO only supports hw single block atomic writes
 	 */
-	if (xfs_inode_can_hw_atomic_write(ip) && bs == PAGE_SIZE)
+	if (xfs_inode_can_hw_atomic_write(ip))
 		return bs;
 
 	return 0;
@@ -661,10 +660,9 @@ xfs_get_atomic_write_max(
 		return XFS_FSB_TO_B(mp, mp->m_groups[XG_TYPE_AG].awu_max);
 	}
 	/*
-	 * Buffered IO only supports hw single block atomic writes and bs == ps
-	 * configurations.
+	 * Buffered IO only supports hw single block atomic writes
 	 */
-	if (xfs_inode_can_hw_atomic_write(ip) && bs == PAGE_SIZE)
+	if (xfs_inode_can_hw_atomic_write(ip))
 		return bs;
 
 	return 0;
