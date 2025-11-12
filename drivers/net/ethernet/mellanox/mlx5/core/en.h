@@ -388,6 +388,7 @@ enum {
 	MLX5E_SQ_STATE_DIM,
 	MLX5E_SQ_STATE_PENDING_XSK_TX,
 	MLX5E_SQ_STATE_PENDING_TLS_RX_RESYNC,
+	MLX5E_SQ_STATE_LOCK_NEEDED,
 	MLX5E_NUM_SQ_STATES, /* Must be kept last */
 };
 
@@ -751,7 +752,7 @@ struct mlx5e_rq {
 
 enum mlx5e_channel_state {
 	MLX5E_CHANNEL_STATE_XSK,
-	MLX5E_CHANNEL_NUM_STATES
+	MLX5E_CHANNEL_NUM_STATES, /* Must be kept last */
 };
 
 struct mlx5e_channel {
@@ -800,6 +801,43 @@ struct mlx5e_channel {
 	struct dim_cq_moder        rx_cq_moder;
 	struct dim_cq_moder        tx_cq_moder;
 };
+
+enum mlx5e_lock_type {
+	MLX5E_LOCK_TYPE_NONE,
+	MLX5E_LOCK_TYPE_SOFTIRQ,
+	MLX5E_LOCK_TYPE_BH,
+};
+
+static inline enum mlx5e_lock_type
+mlx5e_icosq_sync_lock(struct mlx5e_icosq *sq)
+{
+	if (!test_bit(MLX5E_SQ_STATE_LOCK_NEEDED, &sq->state))
+		return MLX5E_LOCK_TYPE_NONE;
+
+	if (in_softirq()) {
+		spin_lock(&sq->lock);
+		return MLX5E_LOCK_TYPE_SOFTIRQ;
+	}
+
+	spin_lock_bh(&sq->lock);
+	return MLX5E_LOCK_TYPE_BH;
+}
+
+static inline void mlx5e_icosq_sync_unlock(struct mlx5e_icosq *sq,
+					   enum mlx5e_lock_type lock_type)
+{
+	switch (lock_type) {
+	case MLX5E_LOCK_TYPE_SOFTIRQ:
+		spin_unlock(&sq->lock);
+		break;
+	case MLX5E_LOCK_TYPE_BH:
+		spin_unlock_bh(&sq->lock);
+		break;
+	case MLX5E_LOCK_TYPE_NONE:
+	default:
+		break;
+	}
+}
 
 struct mlx5e_ptp;
 

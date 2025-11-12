@@ -21,6 +21,7 @@ int mlx5e_xsk_alloc_rx_mpwqe(struct mlx5e_rq *rq, u16 ix)
 	struct mlx5e_mpw_info *wi = mlx5e_get_mpw_info(rq, ix);
 	struct mlx5e_icosq *icosq = rq->icosq;
 	struct mlx5_wq_cyc *wq = &icosq->wq;
+	enum mlx5e_lock_type sync_locked;
 	struct mlx5e_umr_wqe *umr_wqe;
 	struct xdp_buff **xsk_buffs;
 	int batch, i;
@@ -47,6 +48,7 @@ int mlx5e_xsk_alloc_rx_mpwqe(struct mlx5e_rq *rq, u16 ix)
 			goto err_reuse_batch;
 	}
 
+	sync_locked = mlx5e_icosq_sync_lock(icosq);
 	pi = mlx5e_icosq_get_next_pi(icosq, rq->mpwqe.umr_wqebbs);
 	umr_wqe = mlx5_wq_cyc_get_wqe(wq, pi);
 	memcpy(umr_wqe, &rq->mpwqe.umr_wqe, sizeof(struct mlx5e_umr_wqe));
@@ -143,6 +145,7 @@ int mlx5e_xsk_alloc_rx_mpwqe(struct mlx5e_rq *rq, u16 ix)
 	};
 
 	icosq->pc += rq->mpwqe.umr_wqebbs;
+	mlx5e_icosq_sync_unlock(icosq, sync_locked);
 
 	icosq->doorbell_cseg = &umr_wqe->hdr.ctrl;
 

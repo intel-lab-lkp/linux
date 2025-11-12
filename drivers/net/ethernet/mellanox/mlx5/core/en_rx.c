@@ -776,6 +776,7 @@ static int mlx5e_alloc_rx_mpwqe(struct mlx5e_rq *rq, u16 ix)
 	struct mlx5e_icosq *sq = rq->icosq;
 	struct mlx5e_frag_page *frag_page;
 	struct mlx5_wq_cyc *wq = &sq->wq;
+	enum mlx5e_lock_type sync_locked;
 	struct mlx5e_umr_wqe *umr_wqe;
 	u32 offset; /* 17-bit value with MTT. */
 	u16 pi;
@@ -788,6 +789,7 @@ static int mlx5e_alloc_rx_mpwqe(struct mlx5e_rq *rq, u16 ix)
 			goto err;
 	}
 
+	sync_locked = mlx5e_icosq_sync_lock(sq);
 	pi = mlx5e_icosq_get_next_pi(sq, rq->mpwqe.umr_wqebbs);
 	umr_wqe = mlx5_wq_cyc_get_wqe(wq, pi);
 	memcpy(umr_wqe, &rq->mpwqe.umr_wqe, sizeof(struct mlx5e_umr_wqe));
@@ -835,6 +837,7 @@ static int mlx5e_alloc_rx_mpwqe(struct mlx5e_rq *rq, u16 ix)
 	};
 
 	sq->pc += rq->mpwqe.umr_wqebbs;
+	mlx5e_icosq_sync_unlock(sq, sync_locked);
 
 	sq->doorbell_cseg = &umr_wqe->hdr.ctrl;
 
