@@ -7,6 +7,15 @@ srctree := $(patsubst %/,%,$(dir $(CURDIR)))
 srctree := $(patsubst %/,%,$(dir $(srctree)))
 endif
 
+#
+# To support disassembly, objtool needs libopcodes which is provided
+# with libbdf (binutils-dev or binutils-devel package).
+#
+FEATURE_USER = .objtool
+FEATURE_TESTS = libbfd disassembler-init-styled
+FEATURE_DISPLAY =
+include $(srctree)/tools/build/Makefile.feature
+
 LIBSUBCMD_DIR = $(srctree)/tools/lib/subcmd/
 ifneq ($(OUTPUT),)
   LIBSUBCMD_OUTPUT = $(abspath $(OUTPUT))/libsubcmd
@@ -40,6 +49,18 @@ OBJTOOL_LDFLAGS := $(LIBELF_LIBS) $(LIBSUBCMD) $(KBUILD_HOSTLDFLAGS)
 elfshdr := $(shell echo '$(pound)include <libelf.h>' | $(HOSTCC) $(OBJTOOL_CFLAGS) -x c -E - 2>/dev/null | grep elf_getshdr)
 OBJTOOL_CFLAGS += $(if $(elfshdr),,-DLIBELF_USE_DEPRECATED)
 
+ifeq ($(feature-disassembler-init-styled), 1)
+	OBJTOOL_CFLAGS += -DDISASM_INIT_STYLED
+endif
+
+BUILD_DISAS := n
+
+ifeq ($(feature-libbfd),1)
+	BUILD_DISAS := y
+	OBJTOOL_CFLAGS += -DDISAS
+	OBJTOOL_LDFLAGS += -lopcodes
+endif
+
 # Always want host compilation.
 HOST_OVERRIDES := CC="$(HOSTCC)" LD="$(HOSTLD)" AR="$(HOSTAR)"
 
@@ -56,6 +77,7 @@ ifeq ($(SRCARCH),loongarch)
 	BUILD_ORC := y
 endif
 
+export BUILD_DISAS
 export BUILD_ORC
 export srctree OUTPUT CFLAGS SRCARCH AWK
 include $(srctree)/tools/build/Makefile.include
