@@ -1325,7 +1325,7 @@ void sync_bdevs(bool wait)
 }
 
 /*
- * Handle STATX_{DIOALIGN, WRITE_ATOMIC} for block devices.
+ * Handle STATX_{DIOALIGN, WRITE_ATOMIC_DIO} for block devices.
  */
 void bdev_statx(const struct path *path, struct kstat *stat, u32 request_mask)
 {
@@ -1347,7 +1347,7 @@ void bdev_statx(const struct path *path, struct kstat *stat, u32 request_mask)
 		stat->result_mask |= STATX_DIOALIGN;
 	}
 
-	if (request_mask & STATX_WRITE_ATOMIC && bdev_can_atomic_write(bdev)) {
+	if (request_mask & STATX_WRITE_ATOMIC_DIO && bdev_can_atomic_write(bdev)) {
 		struct request_queue *bd_queue = bdev->bd_queue;
 
 		generic_fill_statx_atomic_writes(stat,

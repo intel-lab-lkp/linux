@@ -217,7 +217,9 @@ struct statx {
 #define STATX_DIOALIGN		0x00002000U	/* Want/got direct I/O alignment info */
 #define STATX_MNT_ID_UNIQUE	0x00004000U	/* Want/got extended stx_mount_id */
 #define STATX_SUBVOL		0x00008000U	/* Want/got stx_subvol */
-#define STATX_WRITE_ATOMIC	0x00010000U	/* Want/got atomic_write_* fields */
+#define STATX_WRITE_ATOMIC_DIO	0x00010000U	/* Want/got dio atomic_write_* fields */
+/* Old name kept for backward compatibility */
+#define STATX_WRITE_ATOMIC	STATX_WRITE_ATOMIC_DIO
 #define STATX_DIO_READ_ALIGN	0x00020000U	/* Want/got dio read alignment info */
 
 #define STATX__RESERVED		0x80000000U	/* Reserved for future struct statx expansion */
@@ -254,7 +256,9 @@ struct statx {
 #define STATX_ATTR_MOUNT_ROOT		0x00002000 /* Root of a mount */
 #define STATX_ATTR_VERITY		0x00100000 /* [I] Verity protected file */
 #define STATX_ATTR_DAX			0x00200000 /* File is currently in DAX state */
-#define STATX_ATTR_WRITE_ATOMIC		0x00400000 /* File supports atomic write operations */
+#define STATX_ATTR_WRITE_ATOMIC_DIO	0x00400000 /* File supports dio atomic write operations */
+/* Old name kept for backward compatibility */
+#define STATX_ATTR_WRITE_ATOMIC	STATX_ATTR_WRITE_ATOMIC_DIO
 
 
 #endif /* _UAPI_LINUX_STAT_H */

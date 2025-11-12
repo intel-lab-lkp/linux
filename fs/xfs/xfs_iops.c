@@ -741,7 +741,7 @@ xfs_vn_getattr(
 	case S_IFREG:
 		if (request_mask & (STATX_DIOALIGN | STATX_DIO_READ_ALIGN))
 			xfs_report_dioalign(ip, stat);
-		if (request_mask & STATX_WRITE_ATOMIC)
+		if (request_mask & STATX_WRITE_ATOMIC_DIO)
 			xfs_report_atomic_write(ip, stat);
 		fallthrough;
 	default:

@@ -189,7 +189,7 @@ The write must be aligned to the filesystem's block size and not exceed the
 filesystem's maximum atomic write unit size.
 See ``generic_atomic_write_valid()`` for more details.
 
-``statx()`` system call with ``STATX_WRITE_ATOMIC`` flag can provide following
+``statx()`` system call with ``STATX_WRITE_ATOMIC_DIO`` flag can provide following
 details:
 
  * ``stx_atomic_write_unit_min``: Minimum size of an atomic write request.
@@ -198,7 +198,7 @@ details:
    separate memory buffers that can be gathered into a write operation
    (e.g., the iovcnt parameter for IOV_ITER). Currently, this is always set to one.
 
-The STATX_ATTR_WRITE_ATOMIC flag in ``statx->attributes`` is set if atomic
+The STATX_ATTR_WRITE_ATOMIC_DIO flag in ``statx->attributes`` is set if atomic
 writes are supported.
 
 .. _atomic_write_bdev_support:

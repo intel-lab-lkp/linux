@@ -6101,7 +6101,7 @@ int ext4_getattr(struct mnt_idmap *idmap, const struct path *path,
 		}
 	}
 
-	if ((request_mask & STATX_WRITE_ATOMIC) && S_ISREG(inode->i_mode)) {
+	if ((request_mask & STATX_WRITE_ATOMIC_DIO) && S_ISREG(inode->i_mode)) {
 		struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
 		unsigned int awu_min = 0, awu_max = 0;
 
