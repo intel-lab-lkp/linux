@@ -31,9 +31,10 @@ static int icc_clk_set(struct icc_node *src, struct icc_node *dst)
 		return 0;
 
 	if (!src->peak_bw) {
-		if (qn->enabled)
+		if (qn->enabled) {
 			clk_disable_unprepare(qn->clk);
-		qn->enabled = false;
+			qn->enabled = false;
+		}
 
 		return 0;
 	}
