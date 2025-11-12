@@ -535,13 +535,26 @@ static int disas_alt_init(struct disas_alt *dalt,
 			  struct alternative *alt,
 			  int alt_num)
 {
+	char *str;
+
 	dalt->orig_insn = orig_insn;
 	dalt->alt = alt;
 	dalt->insn_idx = 0;
-	dalt->name = alt ? strfmt("ALTERNATIVE %d", alt_num) :
-		strfmt("<alternative.%lx>", orig_insn->offset);
-	if (!dalt->name)
+	if (!alt) {
+		str = strfmt("<alternative.%lx>", orig_insn->offset);
+	} else {
+		switch (alt->type) {
+		case ALT_TYPE_EX_TABLE:
+			str = strdup("EXCEPTION");
+			break;
+		default:
+			str = strfmt("ALTERNATIVE %d", alt_num);
+			break;
+		}
+	}
+	if (!str)
 		return -1;
+	dalt->name = str;
 	dalt->width = strlen(dalt->name);
 
 	return 0;
@@ -565,6 +578,26 @@ static int disas_alt_add_insn(struct disas_alt *dalt, int index, char *insn_str,
 		dalt->width = len;
 
 	return 0;
+}
+
+/*
+ * Disassemble an exception table alternative.
+ */
+static int disas_alt_extable(struct disas_alt *dalt)
+{
+	struct instruction *alt_insn;
+	char *str;
+
+	alt_insn = dalt->alt->insn;
+	str = strfmt("resume at 0x%lx <%s+0x%lx>",
+		     alt_insn->offset, alt_insn->sym->name,
+		     alt_insn->offset - alt_insn->sym->offset);
+	if (!str)
+		return -1;
+
+	disas_alt_add_insn(dalt, 0, str, 0);
+
+	return 1;
 }
 
 /*
@@ -730,11 +763,15 @@ static void *disas_alt(struct disas_context *dctx,
 			goto error;
 
 		/*
-		 * Only group alternatives are supported at the moment.
+		 * Only group alternatives and exception tables are
+		 * supported at the moment.
 		 */
 		switch (dalt->alt->type) {
 		case ALT_TYPE_INSTRUCTIONS:
 			count = disas_alt_group(dctx, dalt);
+			break;
+		case ALT_TYPE_EX_TABLE:
+			count = disas_alt_extable(dalt);
 			break;
 		default:
 			count = 0;
