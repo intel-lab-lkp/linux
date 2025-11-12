@@ -1627,25 +1627,20 @@ try_split:
 	 * good idea to continue anyway, once we're pushing into swap.  So
 	 * reactivate the folio, and let shmem_fallocate() quit when too many.
 	 */
-	if (!folio_test_uptodate(folio)) {
-		if (inode->i_private) {
-			struct shmem_falloc *shmem_falloc;
-			spin_lock(&inode->i_lock);
-			shmem_falloc = inode->i_private;
-			if (shmem_falloc &&
-			    !shmem_falloc->waitq &&
-			    index >= shmem_falloc->start &&
-			    index < shmem_falloc->next)
-				shmem_falloc->nr_unswapped += nr_pages;
-			else
-				shmem_falloc = NULL;
-			spin_unlock(&inode->i_lock);
-			if (shmem_falloc)
-				goto redirty;
-		}
-		folio_zero_range(folio, 0, folio_size(folio));
-		flush_dcache_folio(folio);
-		folio_mark_uptodate(folio);
+	if (!folio_test_uptodate(folio) && inode->i_private) {
+		struct shmem_falloc *shmem_falloc;
+		spin_lock(&inode->i_lock);
+		shmem_falloc = inode->i_private;
+		if (shmem_falloc &&
+		    !shmem_falloc->waitq &&
+		    index >= shmem_falloc->start &&
+		    index < shmem_falloc->next)
+			shmem_falloc->nr_unswapped += nr_pages;
+		else
+			shmem_falloc = NULL;
+		spin_unlock(&inode->i_lock);
+		if (shmem_falloc)
+			goto redirty;
 	}
 
 	/*
@@ -1653,11 +1648,14 @@ try_split:
 	 * traditional writeback behavior and facilitates zeroing on file size
 	 * changes without having to swap back in.
 	 */
-	if (folio_next_index(folio) >= end_index) {
+	if (!folio_test_uptodate(folio) ||
+	    folio_next_index(folio) >= end_index) {
 		size_t from = offset_in_folio(folio, i_size);
 
-		if (index >= end_index) {
+		if (!folio_test_uptodate(folio) || index >= end_index) {
 			folio_zero_segment(folio, 0, folio_size(folio));
+			flush_dcache_folio(folio);
+			folio_mark_uptodate(folio);
 		} else if (from)
 			folio_zero_segment(folio, from, folio_size(folio));
 	}
