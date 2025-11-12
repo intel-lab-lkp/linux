@@ -496,6 +496,8 @@ void fuse_request_end(struct fuse_req *req)
 
 		fc->num_background--;
 		fc->active_background--;
+		if (fc->num_background < fc->congestion_threshold)
+			wake_up_all(&fc->bg_congestion_wait);
 		flush_bg_queue(fc);
 		spin_unlock(&fc->bg_lock);
 	} else {
