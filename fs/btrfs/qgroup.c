@@ -1528,65 +1528,55 @@ out:
  * callers and transferred here (either used or freed on error).
  */
 int btrfs_add_qgroup_relation(struct btrfs_trans_handle *trans, u64 src, u64 dst,
-			      struct btrfs_qgroup_list *prealloc)
+			      struct btrfs_qgroup_list *_prealloc)
 {
 	struct btrfs_fs_info *fs_info = trans->fs_info;
 	struct btrfs_qgroup *parent;
 	struct btrfs_qgroup *member;
 	struct btrfs_qgroup_list *list;
+	struct btrfs_qgroup_list *prealloc __free(kfree) = _prealloc;
 	int ret = 0;
 
 	ASSERT(prealloc);
 
 	/* Check the level of src and dst first */
 	if (btrfs_qgroup_level(src) >= btrfs_qgroup_level(dst)) {
-		kfree(prealloc);
 		return -EINVAL;
 	}
 
-	mutex_lock(&fs_info->qgroup_ioctl_lock);
-	if (!fs_info->quota_root) {
-		ret = -ENOTCONN;
-		goto out;
-	}
+	guard(mutex)(&fs_info->qgroup_ioctl_lock);
+
+	if (!fs_info->quota_root)
+		return -ENOTCONN;
+
 	member = find_qgroup_rb(fs_info, src);
 	parent = find_qgroup_rb(fs_info, dst);
-	if (!member || !parent) {
-		ret = -EINVAL;
-		goto out;
-	}
+	if (!member || !parent)
+		return -EINVAL;
 
 	/* check if such qgroup relation exist firstly */
 	list_for_each_entry(list, &member->groups, next_group) {
-		if (list->group == parent) {
-			ret = -EEXIST;
-			goto out;
-		}
+		if (list->group == parent)
+			return -EEXIST;
 	}
 
 	ret = add_qgroup_relation_item(trans, src, dst);
 	if (ret)
-		goto out;
+		return ret;
 
 	ret = add_qgroup_relation_item(trans, dst, src);
 	if (ret) {
 		del_qgroup_relation_item(trans, src, dst);
-		goto out;
+		return ret;
 	}
 
-	spin_lock(&fs_info->qgroup_lock);
+	guard(spinlock)(&fs_info->qgroup_lock);
 	ret = __add_relation_rb(prealloc, member, parent);
 	prealloc = NULL;
 	if (ret < 0) {
-		spin_unlock(&fs_info->qgroup_lock);
-		goto out;
+		return ret;
 	}
-	ret = quick_update_accounting(fs_info, src, dst, 1);
-	spin_unlock(&fs_info->qgroup_lock);
-out:
-	kfree(prealloc);
-	mutex_unlock(&fs_info->qgroup_ioctl_lock);
-	return ret;
+	return quick_update_accounting(fs_info, src, dst, 1);
 }
 
 static int __del_qgroup_relation(struct btrfs_trans_handle *trans, u64 src,
