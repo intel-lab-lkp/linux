@@ -288,12 +288,6 @@ static inline dstref_t dstref_clone(dstref_t dstref)
 	return dstref;
 }
 
-static inline void refdst_drop(unsigned long refdst)
-{
-	if (!(refdst & SKB_DST_NOREF))
-		dst_release((struct dst_entry *)(refdst & SKB_DST_PTRMASK));
-}
-
 /**
  * skb_dst_drop - drops skb dst
  * @skb: buffer
@@ -302,23 +296,19 @@ static inline void refdst_drop(unsigned long refdst)
  */
 static inline void skb_dst_drop(struct sk_buff *skb)
 {
-	if (skb->_skb_refdst) {
-		refdst_drop(skb->_skb_refdst);
-		skb->_skb_refdst = 0UL;
-	}
+	dstref_drop(skb->_dstref);
+	skb->_dstref = DSTREF_EMPTY;
 }
 
-static inline void __skb_dst_copy(struct sk_buff *nskb, unsigned long refdst)
+static inline void __skb_dst_copy(struct sk_buff *nskb, dstref_t dstref)
 {
-	nskb->slow_gro |= !!refdst;
-	nskb->_skb_refdst = refdst;
-	if (!(nskb->_skb_refdst & SKB_DST_NOREF))
-		dst_clone(skb_dst(nskb));
+	nskb->slow_gro |= !!__dstref_dst(dstref);
+	nskb->_dstref = dstref_clone(dstref);
 }
 
 static inline void skb_dst_copy(struct sk_buff *nskb, const struct sk_buff *oskb)
 {
-	__skb_dst_copy(nskb, oskb->_skb_refdst);
+	__skb_dst_copy(nskb, oskb->_dstref);
 }
 
 /**
@@ -349,11 +339,11 @@ static inline bool skb_dst_force(struct sk_buff *skb)
 		if (!dst_hold_safe(dst))
 			dst = NULL;
 
-		skb->_skb_refdst = (unsigned long)dst;
+		skb->_dstref = dst_to_dstref(dst);
 		skb->slow_gro |= !!dst;
 	}
 
-	return skb->_skb_refdst != 0UL;
+	return __dstref_dst(skb->_dstref) != NULL;
 }
 
 

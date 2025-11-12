@@ -591,7 +591,7 @@ int ip_options_rcv_srr(struct sk_buff *skb, struct net_device *dev)
 	unsigned char *optptr = skb_network_header(skb) + opt->srr;
 	struct rtable *rt = skb_rtable(skb);
 	struct rtable *rt2;
-	unsigned long orefdst;
+	dstref_t dstref;
 	int err;
 
 	if (!rt)
@@ -615,16 +615,16 @@ int ip_options_rcv_srr(struct sk_buff *skb, struct net_device *dev)
 		}
 		memcpy(&nexthop, &optptr[srrptr-1], 4);
 
-		orefdst = skb_dstref_steal(skb);
+		dstref = skb_dstref_steal(skb);
 		err = ip_route_input(skb, nexthop, iph->saddr, ip4h_dscp(iph),
 				     dev) ? -EINVAL : 0;
 		rt2 = skb_rtable(skb);
 		if (err || (rt2->rt_type != RTN_UNICAST && rt2->rt_type != RTN_LOCAL)) {
 			skb_dst_drop(skb);
-			skb_dstref_restore(skb, orefdst);
+			skb_dstref_restore(skb, dstref);
 			return -EINVAL;
 		}
-		refdst_drop(orefdst);
+		dstref_drop(dstref);
 		if (rt2->rt_type != RTN_LOCAL)
 			break;
 		/* Superfast 8) loopback forward */

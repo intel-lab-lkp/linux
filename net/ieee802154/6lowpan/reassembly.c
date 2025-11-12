@@ -142,12 +142,11 @@ static int lowpan_frag_queue(struct lowpan_frag_queue *fq,
 
 	if (fq->q.flags == (INET_FRAG_FIRST_IN | INET_FRAG_LAST_IN) &&
 	    fq->q.meat == fq->q.len) {
+		dstref_t dstref = skb_dstref_steal(skb);
 		int res;
-		unsigned long orefdst = skb->_skb_refdst;
 
-		skb->_skb_refdst = 0UL;
 		res = lowpan_frag_reasm(fq, skb, prev_tail, ldev, refs);
-		skb->_skb_refdst = orefdst;
+		skb_dstref_restore(skb, dstref);
 		return res;
 	}
 	skb_dst_drop(skb);

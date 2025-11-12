@@ -365,11 +365,10 @@ static int ip_frag_queue(struct ipq *qp, struct sk_buff *skb, int *refs)
 
 	if (qp->q.flags == (INET_FRAG_FIRST_IN | INET_FRAG_LAST_IN) &&
 	    qp->q.meat == qp->q.len) {
-		unsigned long orefdst = skb->_skb_refdst;
+		dstref_t dstref = skb_dstref_steal(skb);
 
-		skb->_skb_refdst = 0UL;
 		err = ip_frag_reasm(qp, skb, prev_tail, dev, refs);
-		skb->_skb_refdst = orefdst;
+		skb_dstref_restore(skb, dstref);
 		if (err)
 			inet_frag_kill(&qp->q, refs);
 		return err;

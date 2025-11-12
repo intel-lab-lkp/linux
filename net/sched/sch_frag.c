@@ -8,7 +8,7 @@
 #include <net/ip6_fib.h>
 
 struct sch_frag_data {
-	unsigned long dst;
+	dstref_t dstref;
 	struct qdisc_skb_cb cb;
 	__be16 inner_protocol;
 	u16 vlan_tci;
@@ -33,7 +33,7 @@ static int sch_frag_xmit(struct net *net, struct sock *sk, struct sk_buff *skb)
 		return -ENOMEM;
 	}
 
-	__skb_dst_copy(skb, data->dst);
+	__skb_dst_copy(skb, data->dstref);
 	*qdisc_skb_cb(skb) = data->cb;
 	skb->inner_protocol = data->inner_protocol;
 	if (data->vlan_tci & VLAN_CFI_MASK)
@@ -58,7 +58,7 @@ static void sch_frag_prepare_frag(struct sk_buff *skb,
 	struct sch_frag_data *data;
 
 	data = this_cpu_ptr(&sch_frag_data_storage);
-	data->dst = skb->_skb_refdst;
+	data->dstref = skb->_dstref;
 	data->cb = *qdisc_skb_cb(skb);
 	data->xmit = xmit;
 	data->inner_protocol = skb->inner_protocol;
@@ -97,7 +97,7 @@ static int sch_fragment(struct net *net, struct sk_buff *skb,
 
 	if (skb_protocol(skb, true) == htons(ETH_P_IP)) {
 		struct rtable sch_frag_rt = { 0 };
-		unsigned long orig_dst;
+		dstref_t orig_dstref;
 
 		local_lock_nested_bh(&sch_frag_data_storage.bh_lock);
 		sch_frag_prepare_frag(skb, xmit);
@@ -105,15 +105,15 @@ static int sch_fragment(struct net *net, struct sk_buff *skb,
 			 DST_OBSOLETE_NONE, DST_NOCOUNT);
 		sch_frag_rt.dst.dev = skb->dev;
 
-		orig_dst = skb->_skb_refdst;
+		orig_dstref = skb->_dstref;
 		skb_dst_set_noref(skb, &sch_frag_rt.dst);
 		IPCB(skb)->frag_max_size = mru;
 
 		ret = ip_do_fragment(net, skb->sk, skb, sch_frag_xmit);
 		local_unlock_nested_bh(&sch_frag_data_storage.bh_lock);
-		refdst_drop(orig_dst);
+		dstref_drop(orig_dstref);
 	} else if (skb_protocol(skb, true) == htons(ETH_P_IPV6)) {
-		unsigned long orig_dst;
+		dstref_t orig_dstref;
 		struct rt6_info sch_frag_rt;
 
 		local_lock_nested_bh(&sch_frag_data_storage.bh_lock);
@@ -123,14 +123,14 @@ static int sch_fragment(struct net *net, struct sk_buff *skb,
 			 DST_OBSOLETE_NONE, DST_NOCOUNT);
 		sch_frag_rt.dst.dev = skb->dev;
 
-		orig_dst = skb->_skb_refdst;
+		orig_dstref = skb->_dstref;
 		skb_dst_set_noref(skb, &sch_frag_rt.dst);
 		IP6CB(skb)->frag_max_size = mru;
 
 		ret = ipv6_stub->ipv6_fragment(net, skb->sk, skb,
 					       sch_frag_xmit);
 		local_unlock_nested_bh(&sch_frag_data_storage.bh_lock);
-		refdst_drop(orig_dst);
+		dstref_drop(orig_dstref);
 	} else {
 		net_warn_ratelimited("Fail frag %s: eth=%x, MRU=%d, MTU=%d\n",
 				     netdev_name(skb->dev),

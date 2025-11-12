@@ -536,7 +536,7 @@ static struct rtable *icmp_route_lookup(struct net *net, struct flowi4 *fl4,
 			err = PTR_ERR(rt2);
 	} else {
 		struct flowi4 fl4_2 = {};
-		unsigned long orefdst;
+		dstref_t dstref;
 
 		fl4_2.daddr = fl4_dec.saddr;
 		rt2 = ip_route_output_key(net, &fl4_2);
@@ -545,7 +545,7 @@ static struct rtable *icmp_route_lookup(struct net *net, struct flowi4 *fl4,
 			goto relookup_failed;
 		}
 		/* Ugh! */
-		orefdst = skb_dstref_steal(skb_in);
+		dstref = skb_dstref_steal(skb_in);
 		err = ip_route_input(skb_in, fl4_dec.daddr, fl4_dec.saddr,
 				     dscp, rt2->dst.dev) ? -EINVAL : 0;
 
@@ -553,7 +553,7 @@ static struct rtable *icmp_route_lookup(struct net *net, struct flowi4 *fl4,
 		rt2 = skb_rtable(skb_in);
 		/* steal dst entry from skb_in, don't drop refcnt */
 		skb_dstref_steal(skb_in);
-		skb_dstref_restore(skb_in, orefdst);
+		skb_dstref_restore(skb_in, dstref);
 	}
 
 	if (err)

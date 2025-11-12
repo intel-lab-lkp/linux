@@ -2099,20 +2099,19 @@ void tcp_chrono_start(struct sock *sk, const enum tcp_chrono type);
 void tcp_chrono_stop(struct sock *sk, const enum tcp_chrono type);
 
 /* This helper is needed, because skb->tcp_tsorted_anchor uses
- * the same memory storage than skb->destructor/_skb_refdst
+ * the same memory storage than skb->destructor/_dstref
  */
 static inline void tcp_skb_tsorted_anchor_cleanup(struct sk_buff *skb)
 {
 	skb->destructor = NULL;
-	skb->_skb_refdst = 0UL;
+	skb->_dstref = DSTREF_EMPTY;
 }
 
 #define tcp_skb_tsorted_save(skb) {		\
-	unsigned long _save = skb->_skb_refdst;	\
-	skb->_skb_refdst = 0UL;
+	dstref_t _dstref_save = skb_dstref_steal(skb);
 
 #define tcp_skb_tsorted_restore(skb)		\
-	skb->_skb_refdst = _save;		\
+	skb_dstref_restore(skb, _dstref_save);	\
 }
 
 void tcp_write_queue_purge(struct sock *sk);

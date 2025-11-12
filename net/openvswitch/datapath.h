@@ -179,7 +179,7 @@ struct ovs_net {
 
 #define MAX_L2_LEN	(VLAN_ETH_HLEN + 3 * MPLS_HLEN)
 struct ovs_frag_data {
-	unsigned long dst;
+	dstref_t dstref;
 	struct vport *vport;
 	struct ovs_skb_cb cb;
 	__be16 inner_protocol;

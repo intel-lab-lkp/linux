@@ -218,11 +218,10 @@ static int ip6_frag_queue(struct net *net,
 
 	if (fq->q.flags == (INET_FRAG_FIRST_IN | INET_FRAG_LAST_IN) &&
 	    fq->q.meat == fq->q.len) {
-		unsigned long orefdst = skb->_skb_refdst;
+		dstref_t dstref = skb_dstref_steal(skb);
 
-		skb->_skb_refdst = 0UL;
 		err = ip6_frag_reasm(fq, skb, prev_tail, dev, refs);
-		skb->_skb_refdst = orefdst;
+		skb_dstref_restore(skb, dstref);
 		return err;
 	}
 

@@ -102,11 +102,11 @@ static inline int skb_metadata_dst_cmp(const struct sk_buff *skb_a,
 {
 	const struct metadata_dst *a, *b;
 
-	if (!(skb_a->_skb_refdst | skb_b->_skb_refdst))
-		return 0;
-
 	a = (const struct metadata_dst *) skb_dst(skb_a);
 	b = (const struct metadata_dst *) skb_dst(skb_b);
+
+	if (!a && !b)
+		return 0;
 
 	if (!a != !b || a->type != b->type)
 		return 1;

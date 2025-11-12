@@ -39,6 +39,7 @@
 #include <net/net_debug.h>
 #include <net/dropreason-core.h>
 #include <net/netmem.h>
+#include <net/dstref.h>
 
 /**
  * DOC: skb checksums
@@ -786,7 +787,7 @@ enum skb_tstamp_type {
  *	@dev: Device we arrived on/are leaving by
  *	@dev_scratch: (aka @dev) alternate use of @dev when @dev would be %NULL
  *	@cb: Control buffer. Free for use by every layer. Put private vars here
- *	@_skb_refdst: destination entry (with norefcount bit)
+ *	@_dstref: dstref object pointing to a destination entry
  *	@len: Length of actual data
  *	@data_len: Data length
  *	@mac_len: Length of link layer header
@@ -919,7 +920,7 @@ struct sk_buff {
 
 	union {
 		struct {
-			unsigned long	_skb_refdst;
+			dstref_t	_dstref;
 			void		(*destructor)(struct sk_buff *skb);
 		};
 		struct list_head	tcp_tsorted_anchor;
@@ -1141,13 +1142,6 @@ static inline bool skb_pfmemalloc(const struct sk_buff *skb)
 	return unlikely(skb->pfmemalloc);
 }
 
-/*
- * skb might have a dst pointer attached, refcounted or not.
- * _skb_refdst low order bit is set if refcount was _not_ taken
- */
-#define SKB_DST_NOREF	1UL
-#define SKB_DST_PTRMASK	~(SKB_DST_NOREF)
-
 /**
  * skb_dst - returns skb dst_entry
  * @skb: buffer
@@ -1156,52 +1150,40 @@ static inline bool skb_pfmemalloc(const struct sk_buff *skb)
  */
 static inline struct dst_entry *skb_dst(const struct sk_buff *skb)
 {
-	/* If refdst was not refcounted, check we still are in a
-	 * rcu_read_lock section
-	 */
-	WARN_ON((skb->_skb_refdst & SKB_DST_NOREF) &&
-		!rcu_read_lock_held() &&
-		!rcu_read_lock_bh_held());
-	return (struct dst_entry *)(skb->_skb_refdst & SKB_DST_PTRMASK);
+	return dstref_dst(skb->_dstref);
 }
 
 static inline void skb_dst_check_unset(struct sk_buff *skb)
 {
-	DEBUG_NET_WARN_ON_ONCE((skb->_skb_refdst & SKB_DST_PTRMASK) &&
-			       !(skb->_skb_refdst & SKB_DST_NOREF));
+	DEBUG_NET_WARN_ON_ONCE(__dstref_dst(skb->_dstref) &&
+			       !dstref_is_noref(skb->_dstref));
 }
 
 /**
- * skb_dstref_steal() - return current dst_entry value and clear it
+ * skb_dstref_steal() - return current dstref object and clear it
  * @skb: buffer
  *
- * Resets skb dst_entry without adjusting its reference count. Useful in
- * cases where dst_entry needs to be temporarily reset and restored.
- * Note that the returned value cannot be used directly because it
- * might contain SKB_DST_NOREF bit.
+ * Steals the dstref from the skb, returns it, and leaves an empty dstref instead.
  *
- * When in doubt, prefer skb_dst_drop() over skb_dstref_steal() to correctly
- * handle dst_entry reference counting.
- *
- * Returns: original skb dst_entry.
+ * Returns: original dstref object.
  */
-static inline unsigned long skb_dstref_steal(struct sk_buff *skb)
+static inline dstref_t skb_dstref_steal(struct sk_buff *skb)
 {
-	unsigned long refdst = skb->_skb_refdst;
+	dstref_t dstref = skb->_dstref;
 
-	skb->_skb_refdst = 0;
-	return refdst;
+	skb->_dstref = DSTREF_EMPTY;
+	return dstref;
 }
 
 /**
- * skb_dstref_restore() - restore skb dst_entry removed via skb_dstref_steal()
+ * skb_dstref_restore() - restore skb dstref removed via skb_dstref_steal()
  * @skb: buffer
- * @refdst: dst entry from a call to skb_dstref_steal()
+ * @dstref: dstref object from a call to skb_dstref_steal()
  */
-static inline void skb_dstref_restore(struct sk_buff *skb, unsigned long refdst)
+static inline void skb_dstref_restore(struct sk_buff *skb, dstref_t dstref)
 {
 	skb_dst_check_unset(skb);
-	skb->_skb_refdst = refdst;
+	skb->_dstref = dstref;
 }
 
 /**
@@ -1216,7 +1198,7 @@ static inline void skb_dst_set(struct sk_buff *skb, struct dst_entry *dst)
 {
 	skb_dst_check_unset(skb);
 	skb->slow_gro |= !!dst;
-	skb->_skb_refdst = (unsigned long)dst;
+	skb->_dstref = dst_to_dstref(dst);
 }
 
 /**
@@ -1226,15 +1208,14 @@ static inline void skb_dst_set(struct sk_buff *skb, struct dst_entry *dst)
  *
  * Sets skb dst, assuming a reference was not taken on dst.
  * If dst entry is cached, we do not take reference and dst_release
- * will be avoided by refdst_drop. If dst entry is not cached, we take
+ * will be avoided by dstref_drop. If dst entry is not cached, we take
  * reference, so that last dst_release can destroy the dst immediately.
  */
 static inline void skb_dst_set_noref(struct sk_buff *skb, struct dst_entry *dst)
 {
 	skb_dst_check_unset(skb);
-	WARN_ON(!rcu_read_lock_held() && !rcu_read_lock_bh_held());
 	skb->slow_gro |= !!dst;
-	skb->_skb_refdst = (unsigned long)dst | SKB_DST_NOREF;
+	skb->_dstref = dst_to_dstref_noref(dst);
 }
 
 /**
@@ -1243,7 +1224,7 @@ static inline void skb_dst_set_noref(struct sk_buff *skb, struct dst_entry *dst)
  */
 static inline bool skb_dst_is_noref(const struct sk_buff *skb)
 {
-	return (skb->_skb_refdst & SKB_DST_NOREF) && skb_dst(skb);
+	return dstref_is_noref(skb->_dstref) && skb_dst(skb);
 }
 
 /* For mangling skb->pkt_type from user space side from applications
@@ -5166,7 +5147,7 @@ static inline bool skb_irq_freeable(const struct sk_buff *skb)
 	return !skb->destructor &&
 		!secpath_exists(skb) &&
 		!skb_nfct(skb) &&
-		!skb->_skb_refdst &&
+		!__dstref_dst(skb->_dstref) &&
 		!skb_has_frag_list(skb);
 }
 

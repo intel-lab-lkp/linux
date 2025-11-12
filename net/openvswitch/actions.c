@@ -761,7 +761,7 @@ static int ovs_vport_output(struct net *net, struct sock *sk,
 		return -ENOMEM;
 	}
 
-	__skb_dst_copy(skb, data->dst);
+	__skb_dst_copy(skb, data->dstref);
 	*OVS_CB(skb) = data->cb;
 	skb->inner_protocol = data->inner_protocol;
 	if (data->vlan_tci & VLAN_CFI_MASK)
@@ -806,7 +806,7 @@ static void prepare_frag(struct vport *vport, struct sk_buff *skb,
 	struct ovs_frag_data *data;
 
 	data = this_cpu_ptr(&ovs_pcpu_storage->frag_data);
-	data->dst = skb->_skb_refdst;
+	data->dstref = skb->_dstref;
 	data->vport = vport;
 	data->cb = *OVS_CB(skb);
 	data->inner_protocol = skb->inner_protocol;
@@ -844,7 +844,7 @@ static void ovs_fragment(struct net *net, struct vport *vport,
 
 	if (key->eth.type == htons(ETH_P_IP)) {
 		struct rtable ovs_rt = { 0 };
-		unsigned long orig_dst;
+		dstref_t orig_dstref;
 
 		prepare_frag(vport, skb, orig_network_offset,
 			     ovs_key_mac_proto(key));
@@ -852,14 +852,14 @@ static void ovs_fragment(struct net *net, struct vport *vport,
 			 DST_OBSOLETE_NONE, DST_NOCOUNT);
 		ovs_rt.dst.dev = vport->dev;
 
-		orig_dst = skb->_skb_refdst;
+		orig_dstref = skb->_dstref;
 		skb_dst_set_noref(skb, &ovs_rt.dst);
 		IPCB(skb)->frag_max_size = mru;
 
 		ip_do_fragment(net, skb->sk, skb, ovs_vport_output);
-		refdst_drop(orig_dst);
+		dstref_drop(orig_dstref);
 	} else if (key->eth.type == htons(ETH_P_IPV6)) {
-		unsigned long orig_dst;
+		dstref_t orig_dstref;
 		struct rt6_info ovs_rt;
 
 		prepare_frag(vport, skb, orig_network_offset,
@@ -869,12 +869,12 @@ static void ovs_fragment(struct net *net, struct vport *vport,
 			 DST_OBSOLETE_NONE, DST_NOCOUNT);
 		ovs_rt.dst.dev = vport->dev;
 
-		orig_dst = skb->_skb_refdst;
+		orig_dstref = skb->_dstref;
 		skb_dst_set_noref(skb, &ovs_rt.dst);
 		IP6CB(skb)->frag_max_size = mru;
 
 		ipv6_stub->ipv6_fragment(net, skb->sk, skb, ovs_vport_output);
-		refdst_drop(orig_dst);
+		dstref_drop(orig_dstref);
 	} else {
 		WARN_ONCE(1, "Failed fragment ->%s: eth=%04x, MRU=%d, MTU=%d.",
 			  ovs_vport_name(vport), ntohs(key->eth.type), mru,
