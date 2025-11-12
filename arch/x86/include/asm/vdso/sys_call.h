@@ -27,7 +27,9 @@
 #define __sys_reg5	"r8"
 #define __sys_reg6	"r9"
 #else
-#define __sys_instr	"call __kernel_vsyscall"
+#define __sys_instr	ALTERNATIVE("ds;ds;ds;int $0x80",	\
+				    "call __kernel_vsyscall",	\
+				    X86_FEATURE_SYSFAST32)
 #define __sys_clobber	"memory"
 #define __sys_nr(x,y)	__NR_ ## x ## y
 #define __sys_reg1	"ebx"
