@@ -36,8 +36,13 @@ int fbnic_phylink_set_pauseparam(struct net_device *netdev,
 				 struct ethtool_pauseparam *pause)
 {
 	struct fbnic_net *fbn = netdev_priv(netdev);
+	int err;
 
-	return phylink_ethtool_set_pauseparam(fbn->phylink, pause);
+	err = phylink_ethtool_set_pauseparam(fbn->phylink, pause);
+	if (!err)
+		fbn->tx_pause = pause->tx_pause ? true : false;
+
+	return err;
 }
 
 static void
@@ -208,6 +213,7 @@ fbnic_phylink_mac_link_up(struct phylink_config *config,
 	struct fbnic_net *fbn = netdev_priv(netdev);
 	struct fbnic_dev *fbd = fbn->fbd;
 
+	fbnic_config_drop_mode(fbn, tx_pause);
 	fbd->mac->link_up(fbd, tx_pause, rx_pause);
 }
 
