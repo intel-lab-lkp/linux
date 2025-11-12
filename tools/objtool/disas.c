@@ -1013,6 +1013,24 @@ static void *disas_alt(struct disas_context *dctx,
 	alt_count = i;
 
 	/*
+	 * Print default and non-default alternatives.
+	 *
+	 * If all alternatives have a single instruction then print all
+	 * alternatives on a single line. Otherwise, print alternatives
+	 * side-by-side with an header and a line for each instruction
+	 * of the different alternatives.
+	 */
+
+	if (insn_count == 1) {
+		disas_print(stdout, orig_insn->sec, orig_insn->offset, 0, NULL);
+		printf("%s", alts[0].insn[0].str);
+		for (i = 1; i < alt_count; i++)
+			printf(" | %s  (%s)", alts[i].insn[0].str, alts[i].name);
+		printf("   # <alternative.%x>\n", alt_id);
+		return orig_insn;
+	}
+
+	/*
 	 * Print an header with the name of each alternative.
 	 */
 	disas_print_info(stdout, orig_insn, -2, NULL);
