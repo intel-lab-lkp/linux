@@ -408,7 +408,7 @@ restart:
 			int ret;
 
 			ret = nf_conncount_add_skb(net, skb, l3num, &rbconn->list);
-			if (ret)
+			if (ret && ret != -EINVAL)
 				count = 0; /* hotdrop */
 			else
 				count = rbconn->list.count;
@@ -511,10 +511,14 @@ count_tree(struct net *net,
 			/* same source network -> be counted! */
 			ret = __nf_conncount_add(net, skb, l3num, &rbconn->list);
 			spin_unlock_bh(&rbconn->list.list_lock);
-			if (ret)
+			if (ret && ret != -EINVAL) {
 				return 0; /* hotdrop */
-			else
+			} else {
+				/* -EINVAL means add was skipped, update the list */
+				if (ret == -EINVAL)
+					nf_conncount_gc_list(net, &rbconn->list);
 				return rbconn->list.count;
+			}
 		}
 	}
 
