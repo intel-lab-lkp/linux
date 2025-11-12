@@ -13,6 +13,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <linux/rtc.h>
+#include <sys/ioctl.h>
 #include <sys/ptrace.h>
 #include <sys/stat.h>
 #include <sys/timerfd.h>
@@ -159,9 +161,29 @@ void suspend(void)
 	int count_before;
 	int count_after;
 	struct itimerspec spec = {};
+	char *rtc_file = "/dev/rtc0";
+	int rtc_fd;
+	struct rtc_wkalrm alarm = { 0 };
+	time_t secs;
 
 	if (getuid() != 0)
 		ksft_exit_skip("Please run the test as root - Exiting.\n");
+
+	rtc_fd = open(rtc_file, O_RDONLY);
+	if (rtc_fd < 0)
+		ksft_exit_fail_msg("open rtc0 failed\n");
+
+	err = ioctl(rtc_fd, RTC_RD_TIME, &alarm.time);
+	if (err < 0)
+		ksft_exit_fail_msg("get rtc time failed\n");
+
+	secs = timegm((struct tm *)&alarm.time) + 3;
+	gmtime_r(&secs, (struct tm *)&alarm.time);
+	alarm.enabled = 1;
+
+	err = ioctl(rtc_fd, RTC_WKALM_SET, &alarm);
+	if (err < 0)
+		ksft_exit_fail_msg("set wake alarm test failed, errno %d\n", errno);
 
 	timerfd = timerfd_create(CLOCK_BOOTTIME_ALARM, 0);
 	if (timerfd < 0)
@@ -180,6 +202,7 @@ void suspend(void)
 	if (count_after <= count_before)
 		ksft_exit_fail_msg("Failed to enter Suspend state\n");
 
+	close(rtc_fd);
 	close(timerfd);
 }
 
