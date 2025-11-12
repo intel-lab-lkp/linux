@@ -685,6 +685,7 @@ void ip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev,
 	bool use_cache = false;
 	struct flowi4 fl4;
 	bool md = false;
+	dstref_t dstref;
 	bool connected;
 	u8 tos, ttl;
 	__be32 dst;
@@ -777,30 +778,37 @@ void ip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev,
 	if (connected && md) {
 		use_cache = ip_tunnel_dst_cache_usable(skb, tun_info);
 		if (use_cache)
-			rt = dst_cache_get_ip4(&tun_info->dst_cache,
-					       &fl4.saddr);
+			rt = dst_cache_get_ip4_rcu(&tun_info->dst_cache,
+						   &fl4.saddr);
 	} else {
-		rt = connected ? dst_cache_get_ip4(&tunnel->dst_cache,
-						&fl4.saddr) : NULL;
+		rt = connected ? dst_cache_get_ip4_rcu(&tunnel->dst_cache,
+						       &fl4.saddr) : NULL;
 	}
 
-	if (!rt) {
+	if (rt) {
+		dstref = dst_to_dstref_noref(&rt->dst);
+	} else {
 		rt = ip_route_output_key(tunnel->net, &fl4);
 
 		if (IS_ERR(rt)) {
 			DEV_STATS_INC(dev, tx_carrier_errors);
 			goto tx_error;
 		}
-		if (use_cache)
-			dst_cache_set_ip4(&tun_info->dst_cache, &rt->dst,
-					  fl4.saddr);
-		else if (!md && connected)
-			dst_cache_set_ip4(&tunnel->dst_cache, &rt->dst,
-					  fl4.saddr);
+		if (use_cache) {
+			dst_cache_steal_ip4(&tun_info->dst_cache, &rt->dst,
+					    fl4.saddr);
+			dstref = dst_to_dstref_noref(&rt->dst);
+		} else if (!md && connected) {
+			dst_cache_steal_ip4(&tunnel->dst_cache, &rt->dst,
+					    fl4.saddr);
+			dstref = dst_to_dstref_noref(&rt->dst);
+		} else {
+			dstref = dst_to_dstref(&rt->dst);
+		}
 	}
 
 	if (rt->dst.dev == dev) {
-		ip_rt_put(rt);
+		dstref_drop(dstref);
 		DEV_STATS_INC(dev, collisions);
 		goto tx_error;
 	}
@@ -810,7 +818,7 @@ void ip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev,
 		df |= (inner_iph->frag_off & htons(IP_DF));
 
 	if (tnl_update_pmtu(dev, skb, rt, df, inner_iph, 0, 0, false)) {
-		ip_rt_put(rt);
+		dstref_drop(dstref);
 		goto tx_error;
 	}
 
@@ -841,7 +849,7 @@ void ip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev,
 			+ rt->dst.header_len + ip_encap_hlen(&tunnel->encap);
 
 	if (skb_cow_head(skb, max_headroom)) {
-		ip_rt_put(rt);
+		dstref_drop(dstref);
 		DEV_STATS_INC(dev, tx_dropped);
 		kfree_skb(skb);
 		return;
@@ -849,7 +857,7 @@ void ip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev,
 
 	ip_tunnel_adj_headroom(dev, max_headroom);
 
-	iptunnel_xmit(NULL, dst_to_dstref(&rt->dst), skb, fl4.saddr, fl4.daddr, protocol, tos, ttl,
+	iptunnel_xmit(NULL, dstref, skb, fl4.saddr, fl4.daddr, protocol, tos, ttl,
 		      df, !net_eq(tunnel->net, dev_net(dev)), 0);
 	return;
 
