@@ -511,20 +511,6 @@ next:
 }
 
 /* Count and return number of conntrack entries in 'net' with particular 'key'.
- * If 'tuple' is not null, insert it into the accounting data structure.
- * Call with RCU read lock.
- */
-unsigned int nf_conncount_count(struct net *net,
-				struct nf_conncount_data *data,
-				const u32 *key,
-				const struct nf_conntrack_tuple *tuple,
-				const struct nf_conntrack_zone *zone)
-{
-	return count_tree(net, data, key, tuple, zone);
-}
-EXPORT_SYMBOL_GPL(nf_conncount_count);
-
-/* Count and return number of conntrack entries in 'net' with particular 'key'.
  * If 'skb' is not null, insert the corresponding tuple into the accounting
  * data structure. Call with RCU read lock.
  */
