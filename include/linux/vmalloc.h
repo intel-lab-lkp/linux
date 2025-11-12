@@ -88,6 +88,13 @@ struct vmap_area {
 	unsigned long flags; /* mark type of vm_map_ram area */
 };
 
+#ifndef arch_wants_vmalloc_huge_always
+static inline bool arch_wants_vmalloc_huge_always(void)
+{
+	return false;
+}
+#endif
+
 /* archs that select HAVE_ARCH_HUGE_VMAP should override one or more of these */
 #ifndef arch_vmap_p4d_supported
 static inline bool arch_vmap_p4d_supported(pgprot_t prot)

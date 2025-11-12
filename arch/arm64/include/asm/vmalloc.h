@@ -6,6 +6,12 @@
 
 #ifdef CONFIG_HAVE_ARCH_HUGE_VMAP
 
+#define arch_wants_vmalloc_huge_always arch_wants_vmalloc_huge_always
+static inline bool arch_wants_vmalloc_huge_always(void)
+{
+	return system_supports_bbml2_noabort();
+}
+
 #define arch_vmap_pud_supported arch_vmap_pud_supported
 static inline bool arch_vmap_pud_supported(pgprot_t prot)
 {
