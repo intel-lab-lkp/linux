@@ -1600,10 +1600,8 @@ static int __del_qgroup_relation(struct btrfs_trans_handle *trans, u64 src,
 	int ret = 0;
 	int ret2;
 
-	if (!fs_info->quota_root) {
-		ret = -ENOTCONN;
-		goto out;
-	}
+	if (!fs_info->quota_root)
+		return -ENOTCONN;
 
 	member = find_qgroup_rb(fs_info, src);
 	parent = find_qgroup_rb(fs_info, dst);
@@ -1625,10 +1623,10 @@ static int __del_qgroup_relation(struct btrfs_trans_handle *trans, u64 src,
 delete_item:
 	ret = del_qgroup_relation_item(trans, src, dst);
 	if (ret < 0 && ret != -ENOENT)
-		goto out;
+		return ret;
 	ret2 = del_qgroup_relation_item(trans, dst, src);
 	if (ret2 < 0 && ret2 != -ENOENT)
-		goto out;
+		return ret;
 
 	/* At least one deletion succeeded, return 0 */
 	if (!ret || !ret2)
@@ -1640,7 +1638,6 @@ delete_item:
 		ret = quick_update_accounting(fs_info, src, dst, -1);
 		spin_unlock(&fs_info->qgroup_lock);
 	}
-out:
 	return ret;
 }
 
