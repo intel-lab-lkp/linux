@@ -1026,6 +1026,73 @@ static bool iomap_write_end(struct iomap_iter *iter, size_t len, size_t copied,
 	return __iomap_write_end(iter, pos, len, copied, folio);
 }
 
+/*
+ * Prepare an atomic write by pinning its pages and creating a ITER_BVEC out of
+ * them. This function also advances the original iter. Incase we encounter any
+ * error later, we revert the progress.
+ */
+static int iomap_atomic_write_prep(struct iov_iter *i,
+				   struct iov_iter *atomic_iter,
+				   struct bio_vec **atomic_bvecs,
+				   struct page ***pages)
+{
+	size_t pg_off;
+	int bytes_pinned = 0;
+	int k = 0;
+	int len, total_len = 0, off;
+	int pinned_pgs = 0;
+	struct bio_vec *tmp_bvecs;
+
+	bytes_pinned = iov_iter_extract_pages(i, pages, iov_iter_count(i),
+					      UINT_MAX, 0, &pg_off);
+	/*
+	 * iov_iter_extract_pages advances the iter but we didn't
+	 * do any work yet, so revert.
+	 */
+	iov_iter_revert(i, bytes_pinned);
+
+	pinned_pgs = DIV_ROUND_UP(pg_off + bytes_pinned, PAGE_SIZE);
+
+	tmp_bvecs = kcalloc(pinned_pgs, sizeof(struct bio_vec), GFP_KERNEL);
+
+	if (unlikely(!tmp_bvecs))
+		return -ENOMEM;
+
+	for (struct page *p; k < pinned_pgs && iov_iter_count(i); k++) {
+		p = (*pages)[k];
+		off = (unsigned long)((char *)i->ubuf + i->iov_offset) %
+		      PAGE_SIZE;
+		len = min(PAGE_SIZE - off, iov_iter_count(i));
+		bvec_set_page(&tmp_bvecs[k], p, len, off);
+		iov_iter_advance(i, len);
+		total_len += len;
+	}
+
+	iov_iter_bvec(atomic_iter, ITER_SOURCE, tmp_bvecs, k, total_len);
+
+	*atomic_bvecs = tmp_bvecs;
+	return pinned_pgs;
+}
+
+static void iomap_atomic_write_cleanup(struct page ***pages, int *pinned_pgs,
+				       struct bio_vec **atomic_bvecs)
+{
+	if (*pinned_pgs) {
+		unpin_user_pages(*pages, *pinned_pgs);
+		*pinned_pgs = 0;
+	}
+
+	if (*pages) {
+		kfree(*pages);
+		*pages = NULL;
+	}
+
+	if (*atomic_bvecs) {
+		kfree(*atomic_bvecs);
+		*atomic_bvecs = NULL;
+	}
+}
+
 static int iomap_write_iter(struct iomap_iter *iter, struct iov_iter *i,
 		const struct iomap_write_ops *write_ops)
 {
@@ -1034,6 +1101,11 @@ static int iomap_write_iter(struct iomap_iter *iter, struct iov_iter *i,
 	struct address_space *mapping = iter->inode->i_mapping;
 	size_t chunk = mapping_max_folio_size(mapping);
 	unsigned int bdp_flags = (iter->flags & IOMAP_NOWAIT) ? BDP_ASYNC : 0;
+	bool is_atomic = iter->flags & IOMAP_ATOMIC;
+	struct page **pages = NULL;
+	int pinned_pgs;
+	struct iov_iter atomic_iter = {0};
+	struct bio_vec *atomic_bvecs = NULL;
 
 	do {
 		struct folio *folio;
@@ -1056,19 +1128,52 @@ retry:
 		if (bytes > iomap_length(iter))
 			bytes = iomap_length(iter);
 
-		/*
-		 * Bring in the user page that we'll copy from _first_.
-		 * Otherwise there's a nasty deadlock on copying from the
-		 * same page as we're writing to, without it being marked
-		 * up-to-date.
-		 *
-		 * For async buffered writes the assumption is that the user
-		 * page has already been faulted in. This can be optimized by
-		 * faulting the user page.
-		 */
-		if (unlikely(fault_in_iov_iter_readable(i, bytes) == bytes)) {
-			status = -EFAULT;
-			break;
+		if (is_atomic) {
+			/*
+			 * If the user pages get reclaimed or unmapped, we could
+			 * end up faulting and doing a short copy in
+			 * copy_folio_from_iter_atomic(), which is undesirable
+			 * for RWF_ATOMIC. Hence:
+			 *
+			 * 1. Pin the pages to protect against reclaim
+			 *
+			 * 2. Iter's user page can still get unmapped from user
+			 *    page table leading to short copy. Protect against
+			 *    this by instead using an ITER_BVEC created out of
+			 *    the pinned pages.
+			 */
+
+			pinned_pgs = iomap_atomic_write_prep(i, &atomic_iter, &atomic_bvecs,
+							     &pages);
+			if (unlikely(pinned_pgs <= 0)) {
+				status = pinned_pgs;
+				break;
+			}
+
+			if (pinned_pgs << PAGE_SHIFT < bytes) {
+				WARN_RATELIMIT(
+					true,
+					"Couldn't pin bytes for atomic write: pinned: %d, needed: %lld",
+					pinned_pgs << PAGE_SHIFT, bytes);
+				status = -EFAULT;
+				break;
+			}
+
+		} else {
+			/*
+			 * Bring in the user page that we'll copy from _first_.
+			 * Otherwise there's a nasty deadlock on copying from the
+			 * same page as we're writing to, without it being marked
+			 * up-to-date.
+			 *
+			 * For async buffered writes the assumption is that the user
+			 * page has already been faulted in. This can be optimized by
+			 * faulting the user page.
+			 */
+			if (unlikely(fault_in_iov_iter_readable(i, bytes) == bytes)) {
+				status = -EFAULT;
+				break;
+			}
 		}
 
 		status = iomap_write_begin(iter, write_ops, &folio, &offset,
@@ -1085,9 +1190,27 @@ retry:
 		if (mapping_writably_mapped(mapping))
 			flush_dcache_folio(folio);
 
-		copied = copy_folio_from_iter_atomic(folio, offset, bytes, i);
+		copied = copy_folio_from_iter_atomic(
+			folio, offset, bytes, is_atomic ? &atomic_iter : i);
 		written = iomap_write_end(iter, bytes, copied, folio) ?
 			  copied : 0;
+		if (is_atomic) {
+			if (written != bytes) {
+				/*
+				 * short copy so revert the iter accordingly.
+				 * This should never happen ideally
+				 */
+				WARN_RATELIMIT(
+					1,
+					"Short atomic write: bytes_pinned:%d bytes:%lld written:%lld\n",
+					pinned_pgs << PAGE_SHIFT, bytes,
+					written);
+				iov_iter_revert(i,
+						iov_iter_count(&atomic_iter));
+			}
+			iomap_atomic_write_cleanup(&pages, &pinned_pgs,
+						   &atomic_bvecs);
+		}
 
 		/*
 		 * Update the in-memory inode size after copying the data into
@@ -1128,6 +1251,9 @@ retry:
 			iomap_iter_advance(iter, written);
 		}
 	} while (iov_iter_count(i) && iomap_length(iter));
+
+	if (is_atomic)
+		iomap_atomic_write_cleanup(&pages, &pinned_pgs, &atomic_bvecs);
 
 	return total_written ? 0 : status;
 }
