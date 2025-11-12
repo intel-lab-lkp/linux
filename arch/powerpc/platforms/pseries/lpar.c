@@ -175,7 +175,6 @@ static DEFINE_PER_CPU(struct vcpu_dispatch_data, vcpu_disp_data);
 static DEFINE_PER_CPU(u64, dtl_entry_ridx);
 static DEFINE_PER_CPU(struct dtl_worker, dtl_workers);
 static enum cpuhp_state dtl_worker_state;
-static DEFINE_MUTEX(dtl_enable_mutex);
 static int vcpudispatch_stats_on __read_mostly;
 static int vcpudispatch_stats_freq = 50;
 static __be32 *vcpu_associativity, *pcpu_associativity;
@@ -464,7 +463,8 @@ static int dtl_worker_enable(unsigned long *time_limit)
 {
 	int rc = 0, state;
 
-	if (!down_write_trylock(&dtl_access_lock)) {
+	/* Return if dtl is already active */
+	if (atomic_read(&dtl_count) != 0) {
 		rc = -EBUSY;
 		goto out;
 	}
@@ -480,11 +480,11 @@ static int dtl_worker_enable(unsigned long *time_limit)
 		pr_err("vcpudispatch_stats: unable to setup workqueue for DTL processing\n");
 		free_dtl_buffers(time_limit);
 		reset_global_dtl_mask();
-		up_write(&dtl_access_lock);
 		rc = -EINVAL;
 		goto out;
 	}
 	dtl_worker_state = state;
+	atomic_set(&dtl_count, -1);
 
 out:
 	return rc;
@@ -495,7 +495,7 @@ static void dtl_worker_disable(unsigned long *time_limit)
 	cpuhp_remove_state(dtl_worker_state);
 	free_dtl_buffers(time_limit);
 	reset_global_dtl_mask();
-	up_write(&dtl_access_lock);
+	atomic_set(&dtl_count, 0);
 }
 
 static ssize_t vcpudispatch_stats_write(struct file *file, const char __user *p,
@@ -519,7 +519,8 @@ static ssize_t vcpudispatch_stats_write(struct file *file, const char __user *p,
 		return rc ? rc : -EINVAL;
 	}
 
-	mutex_lock(&dtl_enable_mutex);
+	if (!down_write_trylock(&dtl_access_lock))
+		return -EBUSY;
 
 	if ((cmd == 0 && !vcpudispatch_stats_on) ||
 			(cmd == 1 && vcpudispatch_stats_on))
@@ -551,7 +552,7 @@ static ssize_t vcpudispatch_stats_write(struct file *file, const char __user *p,
 	vcpudispatch_stats_on = cmd;
 
 out:
-	mutex_unlock(&dtl_enable_mutex);
+	up_write(&dtl_access_lock);
 	if (rc)
 		return rc;
 	return count;

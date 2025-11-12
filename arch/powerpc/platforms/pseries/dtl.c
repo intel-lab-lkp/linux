@@ -36,8 +36,14 @@ static u8 dtl_event_mask = DTL_LOG_ALL;
  * not cross a 4k boundary.
  */
 static int dtl_buf_entries = N_DISPATCH_LOG;
-static atomic_t dtl_count;
 
+/*
+ * dtl_count indicates the number and type of dtl users.
+ *  0 indicates no active users of dtl / vcpu_dispatchstats.
+ * -1 indicates vcpudispatch_stats user is active.
+ * 1 and above indicates active dtl users.
+ */
+atomic_t dtl_count;
 
 #ifdef CONFIG_VIRT_CPU_ACCOUNTING_NATIVE
 
@@ -194,6 +200,11 @@ static int dtl_enable(struct dtl *dtl)
 	/* ensure there are no other conflicting dtl users */
 	if (!down_read_trylock(&dtl_access_lock))
 		return -EBUSY;
+
+	if (atomic_read(&dtl_count) == -1) {
+		up_read(&dtl_access_lock);
+		return -EBUSY;
+	}
 
 	n_entries = dtl_buf_entries;
 	buf = kmem_cache_alloc_node(dtl_cache, GFP_KERNEL, cpu_to_node(dtl->cpu));

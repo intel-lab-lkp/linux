@@ -40,4 +40,5 @@ extern struct rw_semaphore dtl_access_lock;
 extern void register_dtl_buffer(int cpu);
 extern void alloc_dtl_buffers(unsigned long *time_limit);
 
+extern atomic_t dtl_count;
 #endif /* _ASM_POWERPC_DTL_H */
