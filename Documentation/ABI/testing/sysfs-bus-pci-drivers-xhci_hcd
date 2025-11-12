@@ -109,3 +109,15 @@ Description:
                connected to a USB host.
                The default value is "Linux USB Debug Target".
                The field length can be from 1 to 63 characters.
+
+What:          /sys/bus/pci/drivers/xhci_hcd/.../dbc_Manufacturer
+Date:          October 2025
+Contact:       Łukasz Bartosik <ukaszb@chromium.org>
+Description:
+               The dbc_iManufacturer attribute allows to change the iManufacturer
+               field presented in the USB device descriptor by xhci debug device.
+               Value can only be changed while debug capability (DbC) is in
+               disabled state to prevent USB device descriptor change while
+               connected to a USB host.
+               The default value is "Linux Foundation".
+               The field length can be from 1 to 63 characters.
