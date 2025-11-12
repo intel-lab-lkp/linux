@@ -2253,7 +2253,7 @@ static int scrub_simple_mirror(struct scrub_ctx *sctx,
 	struct btrfs_fs_info *fs_info = sctx->fs_info;
 	const u64 logical_end = logical_start + logical_length;
 	u64 cur_logical = logical_start;
-	int ret = 0;
+	int ret;
 
 	/* The range must be inside the bg */
 	ASSERT(logical_start >= bg->start && logical_end <= bg->start + bg->length);
@@ -2265,10 +2265,9 @@ static int scrub_simple_mirror(struct scrub_ctx *sctx,
 
 		/* Canceled? */
 		if (atomic_read(&fs_info->scrub_cancel_req) ||
-		    atomic_read(&sctx->cancel_req)) {
-			ret = -ECANCELED;
-			break;
-		}
+		    atomic_read(&sctx->cancel_req))
+			return -ECANCELED;
+
 		/* Paused? */
 		if (atomic_read(&fs_info->scrub_pause_req)) {
 			/* Push queued extents */
@@ -2278,8 +2277,7 @@ static int scrub_simple_mirror(struct scrub_ctx *sctx,
 		spin_lock(&bg->lock);
 		if (test_bit(BLOCK_GROUP_FLAG_REMOVED, &bg->runtime_flags)) {
 			spin_unlock(&bg->lock);
-			ret = 0;
-			break;
+			return 0;
 		}
 		spin_unlock(&bg->lock);
 
@@ -2291,11 +2289,10 @@ static int scrub_simple_mirror(struct scrub_ctx *sctx,
 			spin_lock(&sctx->stat_lock);
 			sctx->stat.last_physical = physical + logical_length;
 			spin_unlock(&sctx->stat_lock);
-			ret = 0;
-			break;
+			return 0;
 		}
 		if (ret < 0)
-			break;
+			return ret;
 
 		/* queue_scrub_stripe() returned 0, @found_logical must be updated. */
 		ASSERT(found_logical != U64_MAX);
@@ -2304,7 +2301,7 @@ static int scrub_simple_mirror(struct scrub_ctx *sctx,
 		/* Don't hold CPU for too long time */
 		cond_resched();
 	}
-	return ret;
+	return 0;
 }
 
 /* Calculate the full stripe length for simple stripe based profiles */
