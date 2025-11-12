@@ -24,6 +24,7 @@
  */
 #define PIXCIR_REG_POWER_MODE	51
 #define PIXCIR_REG_INT_MODE	52
+#define PIXCIR_REG_SPECOP	58
 
 /*
  * Power modes:
@@ -82,6 +83,7 @@ struct pixcir_i2c_ts_data {
 	const struct pixcir_i2c_chip_data *chip;
 	struct touchscreen_properties prop;
 	bool running;
+	struct mutex sysfs_mutex;
 };
 
 struct pixcir_report_data {
@@ -462,6 +464,35 @@ unlock:
 static DEFINE_SIMPLE_DEV_PM_OPS(pixcir_dev_pm_ops,
 				pixcir_i2c_ts_suspend, pixcir_i2c_ts_resume);
 
+static ssize_t calibrate_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct pixcir_i2c_ts_data *ts = i2c_get_clientdata(client);
+	static const u8 cmd = 0x03;
+	int error;
+
+	error = mutex_lock_interruptible(&ts->sysfs_mutex);
+	if (error)
+		return error;
+
+	error = i2c_smbus_write_byte_data(ts->client, PIXCIR_REG_SPECOP, cmd);
+	if (error)
+		dev_err(dev, "calibrate command failed: %d\n", error);
+
+	mutex_unlock(&ts->sysfs_mutex);
+	return error ?: count;
+}
+
+static DEVICE_ATTR_WO(calibrate);
+
+static struct attribute *pixcir_i2c_ts_attrs[] = {
+	&dev_attr_calibrate.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(pixcir_i2c_ts);
+
 static int pixcir_i2c_ts_probe(struct i2c_client *client)
 {
 	const struct i2c_device_id *id = i2c_client_get_device_id(client);
@@ -487,6 +518,8 @@ static int pixcir_i2c_ts_probe(struct i2c_client *client)
 		dev_err(dev, "Failed to allocate input device\n");
 		return -ENOMEM;
 	}
+
+	mutex_init(&tsdata->sysfs_mutex);
 
 	tsdata->client = client;
 	tsdata->input = input;
@@ -600,6 +633,7 @@ MODULE_DEVICE_TABLE(of, pixcir_of_match);
 static struct i2c_driver pixcir_i2c_ts_driver = {
 	.driver = {
 		.name	= "pixcir_ts",
+		.dev_groups = pixcir_i2c_ts_groups,
 		.pm	= pm_sleep_ptr(&pixcir_dev_pm_ops),
 		.of_match_table = of_match_ptr(pixcir_of_match),
 	},
