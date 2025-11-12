@@ -859,7 +859,7 @@ void __init early_init_dt_check_for_usable_mem_range(void)
 	pr_debug("Looking for usable-memory-range property... ");
 
 	prop = of_get_flat_dt_prop(node, "linux,usable-memory-range", &len);
-	if (!prop || (len % (dt_root_addr_cells + dt_root_size_cells)))
+	if (!prop || len % dt_root_addr_size_bytes())
 		return;
 
 	endp = prop + (len / sizeof(__be32));
