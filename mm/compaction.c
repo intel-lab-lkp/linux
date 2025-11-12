@@ -13,6 +13,7 @@
 #include <linux/migrate.h>
 #include <linux/compaction.h>
 #include <linux/mm_inline.h>
+#include <linux/memory-tiers.h>
 #include <linux/sched/signal.h>
 #include <linux/backing-dev.h>
 #include <linux/sysctl.h>
@@ -2831,6 +2832,8 @@ enum compact_result try_to_compact_pages(gfp_t gfp_mask, unsigned int order,
 
 		if ((alloc_flags & ALLOC_CPUSET) &&
 		    !cpuset_zone_allowed(zone, gfp_mask))
+			continue;
+		else if (!mt_node_allowed(zone_to_nid(zone), gfp_mask))
 			continue;
 
 		if (prio > MIN_COMPACT_PRIORITY
