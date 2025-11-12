@@ -547,6 +547,9 @@ static int disas_alt_init(struct disas_alt *dalt,
 		case ALT_TYPE_EX_TABLE:
 			str = strdup("EXCEPTION");
 			break;
+		case ALT_TYPE_JUMP_TABLE:
+			str = strdup("JUMP");
+			break;
 		default:
 			str = strfmt("ALTERNATIVE %d", alt_num);
 			break;
@@ -578,6 +581,34 @@ static int disas_alt_add_insn(struct disas_alt *dalt, int index, char *insn_str,
 		dalt->width = len;
 
 	return 0;
+}
+
+static int disas_alt_jump(struct disas_alt *dalt)
+{
+	struct instruction *orig_insn;
+	struct instruction *dest_insn;
+	char suffix[2] = { 0 };
+	char *str;
+
+	orig_insn = dalt->orig_insn;
+	dest_insn = dalt->alt->insn;
+
+	if (orig_insn->type == INSN_NOP) {
+		if (orig_insn->len == 5)
+			suffix[0] = 'q';
+		str = strfmt("jmp%-3s %lx <%s+0x%lx>", suffix,
+			     dest_insn->offset, dest_insn->sym->name,
+			     dest_insn->offset - dest_insn->sym->offset);
+	} else {
+		str = strfmt("NOP%d", orig_insn->len);
+	}
+
+	if (!str)
+		return -1;
+
+	disas_alt_add_insn(dalt, 0, str, 0);
+
+	return 1;
 }
 
 /*
@@ -762,10 +793,7 @@ static void *disas_alt(struct disas_context *dctx,
 		if (err)
 			goto error;
 
-		/*
-		 * Only group alternatives and exception tables are
-		 * supported at the moment.
-		 */
+		count = -1;
 		switch (dalt->alt->type) {
 		case ALT_TYPE_INSTRUCTIONS:
 			count = disas_alt_group(dctx, dalt);
@@ -773,8 +801,9 @@ static void *disas_alt(struct disas_context *dctx,
 		case ALT_TYPE_EX_TABLE:
 			count = disas_alt_extable(dalt);
 			break;
-		default:
-			count = 0;
+		case ALT_TYPE_JUMP_TABLE:
+			count = disas_alt_jump(dalt);
+			break;
 		}
 		if (count < 0)
 			goto error;
