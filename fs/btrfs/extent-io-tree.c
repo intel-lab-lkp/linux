@@ -118,7 +118,7 @@ void btrfs_extent_io_tree_release(struct extent_io_tree *tree)
 	struct extent_state *state;
 	struct extent_state *tmp;
 
-	spin_lock(&tree->lock);
+	guard(spinlock)(&tree->lock);
 	root = tree->state;
 	tree->state = RB_ROOT;
 	rbtree_postorder_for_each_entry_safe(state, tmp, &root, rb_node) {
@@ -139,7 +139,6 @@ void btrfs_extent_io_tree_release(struct extent_io_tree *tree)
 	 * be accessing the tree anymore.
 	 */
 	ASSERT(RB_EMPTY_ROOT(&tree->state));
-	spin_unlock(&tree->lock);
 }
 
 static struct extent_state *alloc_extent_state(gfp_t mask)
@@ -958,7 +957,7 @@ bool btrfs_find_contiguous_extent_bit(struct extent_io_tree *tree, u64 start,
 
 	ASSERT(!btrfs_fs_incompat(btrfs_extent_io_tree_to_fs_info(tree), NO_HOLES));
 
-	spin_lock(&tree->lock);
+	guard(spinlock)(&tree->lock);
 	state = find_first_extent_bit_state(tree, start, bits);
 	if (state) {
 		*start_ret = state->start;
@@ -970,7 +969,6 @@ bool btrfs_find_contiguous_extent_bit(struct extent_io_tree *tree, u64 start,
 		}
 		ret = true;
 	}
-	spin_unlock(&tree->lock);
 	return ret;
 }
 
@@ -1757,7 +1755,7 @@ bool btrfs_test_range_bit_exists(struct extent_io_tree *tree, u64 start, u64 end
 
 	ASSERT(is_power_of_2(bit));
 
-	spin_lock(&tree->lock);
+	guard(spinlock)(&tree->lock);
 	state = tree_search(tree, start);
 	while (state) {
 		if (state->start > end)
@@ -1772,7 +1770,6 @@ bool btrfs_test_range_bit_exists(struct extent_io_tree *tree, u64 start, u64 end
 			break;
 		state = next_state(state);
 	}
-	spin_unlock(&tree->lock);
 	return bitset;
 }
 
@@ -1790,7 +1787,7 @@ void btrfs_get_range_bits(struct extent_io_tree *tree, u64 start, u64 end, u32 *
 
 	*bits = 0;
 
-	spin_lock(&tree->lock);
+	guard(spinlock)(&tree->lock);
 	state = tree_search(tree, start);
 	if (state && state->start < end) {
 		*cached_state = state;
@@ -1807,7 +1804,6 @@ void btrfs_get_range_bits(struct extent_io_tree *tree, u64 start, u64 end, u32 *
 
 		state = next_state(state);
 	}
-	spin_unlock(&tree->lock);
 }
 
 /*
@@ -1931,12 +1927,11 @@ struct extent_state *btrfs_next_extent_state(struct extent_io_tree *tree,
 {
 	struct extent_state *next;
 
-	spin_lock(&tree->lock);
+	guard(spinlock)(&tree->lock);
 	ASSERT(extent_state_in_tree(state));
 	next = next_state(state);
 	if (next)
 		refcount_inc(&next->refs);
-	spin_unlock(&tree->lock);
 
 	return next;
 }

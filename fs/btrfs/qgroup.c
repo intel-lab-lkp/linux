@@ -3973,7 +3973,7 @@ qgroup_rescan_zero_tracking(struct btrfs_fs_info *fs_info)
 	struct rb_node *n;
 	struct btrfs_qgroup *qgroup;
 
-	spin_lock(&fs_info->qgroup_lock);
+	guard(spinlock)(&fs_info->qgroup_lock);
 	/* clear all current qgroup tracking information */
 	for (n = rb_first(&fs_info->qgroup_tree); n; n = rb_next(n)) {
 		qgroup = rb_entry(n, struct btrfs_qgroup, node);
@@ -3983,7 +3983,6 @@ qgroup_rescan_zero_tracking(struct btrfs_fs_info *fs_info)
 		qgroup->excl_cmpr = 0;
 		qgroup_dirty(fs_info, qgroup);
 	}
-	spin_unlock(&fs_info->qgroup_lock);
 }
 
 int
@@ -4419,12 +4418,11 @@ static void add_root_meta_rsv(struct btrfs_root *root, int num_bytes,
 	if (num_bytes == 0)
 		return;
 
-	spin_lock(&root->qgroup_meta_rsv_lock);
+	guard(spinlock)(&root->qgroup_meta_rsv_lock);
 	if (type == BTRFS_QGROUP_RSV_META_PREALLOC)
 		root->qgroup_meta_rsv_prealloc += num_bytes;
 	else
 		root->qgroup_meta_rsv_pertrans += num_bytes;
-	spin_unlock(&root->qgroup_meta_rsv_lock);
 }
 
 static int sub_root_meta_rsv(struct btrfs_root *root, int num_bytes,
@@ -4436,7 +4434,7 @@ static int sub_root_meta_rsv(struct btrfs_root *root, int num_bytes,
 	if (num_bytes == 0)
 		return 0;
 
-	spin_lock(&root->qgroup_meta_rsv_lock);
+	guard(spinlock)(&root->qgroup_meta_rsv_lock);
 	if (type == BTRFS_QGROUP_RSV_META_PREALLOC) {
 		num_bytes = min_t(u64, root->qgroup_meta_rsv_prealloc,
 				  num_bytes);
@@ -4446,7 +4444,6 @@ static int sub_root_meta_rsv(struct btrfs_root *root, int num_bytes,
 				  num_bytes);
 		root->qgroup_meta_rsv_pertrans -= num_bytes;
 	}
-	spin_unlock(&root->qgroup_meta_rsv_lock);
 	return num_bytes;
 }
 

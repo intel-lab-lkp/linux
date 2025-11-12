@@ -158,7 +158,7 @@ static bool remove_from_discard_list(struct btrfs_discard_ctl *discard_ctl,
 	bool running = false;
 	bool queued = false;
 
-	spin_lock(&discard_ctl->lock);
+	guard(spinlock)(&discard_ctl->lock);
 
 	if (block_group == discard_ctl->block_group) {
 		running = true;
@@ -170,8 +170,6 @@ static bool remove_from_discard_list(struct btrfs_discard_ctl *discard_ctl,
 	list_del_init(&block_group->discard_list);
 	if (queued)
 		btrfs_put_block_group(block_group);
-
-	spin_unlock(&discard_ctl->lock);
 
 	return running;
 }
@@ -236,7 +234,7 @@ static struct btrfs_block_group *peek_discard_list(
 {
 	struct btrfs_block_group *block_group;
 
-	spin_lock(&discard_ctl->lock);
+	guard(spinlock)(&discard_ctl->lock);
 again:
 	block_group = find_next_block_group(discard_ctl, now);
 
@@ -276,7 +274,6 @@ again:
 		*discard_state = block_group->discard_state;
 		*discard_index = block_group->discard_index;
 	}
-	spin_unlock(&discard_ctl->lock);
 
 	return block_group;
 }
@@ -694,7 +691,7 @@ void btrfs_discard_punt_unused_bgs_list(struct btrfs_fs_info *fs_info)
 {
 	struct btrfs_block_group *block_group, *next;
 
-	spin_lock(&fs_info->unused_bgs_lock);
+	guard(spinlock)(&fs_info->unused_bgs_lock);
 	/* We enabled async discard, so punt all to the queue */
 	list_for_each_entry_safe(block_group, next, &fs_info->unused_bgs,
 				 bg_list) {
@@ -706,7 +703,6 @@ void btrfs_discard_punt_unused_bgs_list(struct btrfs_fs_info *fs_info)
 		 */
 		btrfs_put_block_group(block_group);
 	}
-	spin_unlock(&fs_info->unused_bgs_lock);
 }
 
 /*

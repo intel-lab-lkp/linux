@@ -7980,7 +7980,7 @@ static int flush_delalloc_roots(struct send_ctx *sctx)
 
 static void btrfs_root_dec_send_in_progress(struct btrfs_root* root)
 {
-	spin_lock(&root->root_item_lock);
+	guard(spinlock)(&root->root_item_lock);
 	root->send_in_progress--;
 	/*
 	 * Not much left to do, we don't know why it's unbalanced and
@@ -7990,7 +7990,6 @@ static void btrfs_root_dec_send_in_progress(struct btrfs_root* root)
 		btrfs_err(root->fs_info,
 			  "send_in_progress unbalanced %d root %llu",
 			  root->send_in_progress, btrfs_root_id(root));
-	spin_unlock(&root->root_item_lock);
 }
 
 static void dedupe_in_progress_warn(const struct btrfs_root *root)

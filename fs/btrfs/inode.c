@@ -10424,12 +10424,11 @@ void btrfs_update_inode_bytes(struct btrfs_inode *inode,
 	if (add_bytes == del_bytes)
 		return;
 
-	spin_lock(&inode->lock);
+	guard(spinlock)(&inode->lock);
 	if (del_bytes > 0)
 		inode_sub_bytes(&inode->vfs_inode, del_bytes);
 	if (add_bytes > 0)
 		inode_add_bytes(&inode->vfs_inode, add_bytes);
-	spin_unlock(&inode->lock);
 }
 
 /*

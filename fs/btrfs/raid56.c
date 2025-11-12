@@ -516,13 +516,12 @@ static void btrfs_clear_rbio_cache(struct btrfs_fs_info *info)
 
 	table = info->stripe_hash_table;
 
-	spin_lock(&table->cache_lock);
+	guard(spinlock)(&table->cache_lock);
 	while (!list_empty(&table->stripe_cache)) {
 		rbio = list_first_entry(&table->stripe_cache,
 					struct btrfs_raid_bio, stripe_cache);
 		__remove_rbio_from_cache(rbio);
 	}
-	spin_unlock(&table->cache_lock);
 }
 
 /*
@@ -1234,11 +1233,9 @@ static void index_rbio_pages(struct btrfs_raid_bio *rbio)
 {
 	struct bio *bio;
 
-	spin_lock(&rbio->bio_list_lock);
+	guard(spinlock)(&rbio->bio_list_lock);
 	bio_list_for_each(bio, &rbio->bio_list)
 		index_one_bio(rbio, bio);
-
-	spin_unlock(&rbio->bio_list_lock);
 }
 
 static void bio_get_trace_info(struct btrfs_raid_bio *rbio, struct bio *bio,

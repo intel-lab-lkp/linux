@@ -3845,7 +3845,7 @@ static void reset_trimming_bitmap(struct btrfs_free_space_ctl *ctl, u64 offset)
 {
 	struct btrfs_free_space *entry;
 
-	spin_lock(&ctl->tree_lock);
+	guard(spinlock)(&ctl->tree_lock);
 	entry = tree_search_offset(ctl, offset, 1, 0);
 	if (entry) {
 		if (btrfs_free_space_trimmed(entry)) {
@@ -3855,8 +3855,6 @@ static void reset_trimming_bitmap(struct btrfs_free_space_ctl *ctl, u64 offset)
 		}
 		entry->trim_state = BTRFS_TRIM_STATE_UNTRIMMED;
 	}
-
-	spin_unlock(&ctl->tree_lock);
 }
 
 static void end_trimming_bitmap(struct btrfs_free_space_ctl *ctl,

@@ -364,13 +364,11 @@ void btrfs_subpage_set_uptodate(const struct btrfs_fs_info *fs_info,
 	struct btrfs_folio_state *bfs = folio_get_private(folio);
 	unsigned int start_bit = subpage_calc_start_bit(fs_info, folio,
 							uptodate, start, len);
-	unsigned long flags;
 
-	spin_lock_irqsave(&bfs->lock, flags);
+	guard(spinlock_irqsave)(&bfs->lock);
 	bitmap_set(bfs->bitmaps, start_bit, len >> fs_info->sectorsize_bits);
 	if (subpage_test_bitmap_all_set(fs_info, folio, uptodate))
 		folio_mark_uptodate(folio);
-	spin_unlock_irqrestore(&bfs->lock, flags);
 }
 
 void btrfs_subpage_clear_uptodate(const struct btrfs_fs_info *fs_info,
@@ -379,12 +377,10 @@ void btrfs_subpage_clear_uptodate(const struct btrfs_fs_info *fs_info,
 	struct btrfs_folio_state *bfs = folio_get_private(folio);
 	unsigned int start_bit = subpage_calc_start_bit(fs_info, folio,
 							uptodate, start, len);
-	unsigned long flags;
 
-	spin_lock_irqsave(&bfs->lock, flags);
+	guard(spinlock_irqsave)(&bfs->lock);
 	bitmap_clear(bfs->bitmaps, start_bit, len >> fs_info->sectorsize_bits);
 	folio_clear_uptodate(folio);
-	spin_unlock_irqrestore(&bfs->lock, flags);
 }
 
 void btrfs_subpage_set_dirty(const struct btrfs_fs_info *fs_info,
@@ -417,14 +413,12 @@ bool btrfs_subpage_clear_and_test_dirty(const struct btrfs_fs_info *fs_info,
 	struct btrfs_folio_state *bfs = folio_get_private(folio);
 	unsigned int start_bit = subpage_calc_start_bit(fs_info, folio,
 							dirty, start, len);
-	unsigned long flags;
 	bool last = false;
 
-	spin_lock_irqsave(&bfs->lock, flags);
+	guard(spinlock_irqsave)(&bfs->lock);
 	bitmap_clear(bfs->bitmaps, start_bit, len >> fs_info->sectorsize_bits);
 	if (subpage_test_bitmap_all_zero(fs_info, folio, dirty))
 		last = true;
-	spin_unlock_irqrestore(&bfs->lock, flags);
 	return last;
 }
 
@@ -444,9 +438,8 @@ void btrfs_subpage_set_writeback(const struct btrfs_fs_info *fs_info,
 	struct btrfs_folio_state *bfs = folio_get_private(folio);
 	unsigned int start_bit = subpage_calc_start_bit(fs_info, folio,
 							writeback, start, len);
-	unsigned long flags;
 
-	spin_lock_irqsave(&bfs->lock, flags);
+	guard(spinlock_irqsave)(&bfs->lock);
 	bitmap_set(bfs->bitmaps, start_bit, len >> fs_info->sectorsize_bits);
 
 	/*
@@ -467,7 +460,6 @@ void btrfs_subpage_set_writeback(const struct btrfs_fs_info *fs_info,
 		xas_clear_mark(&xas, PAGECACHE_TAG_TOWRITE);
 		xas_unlock_irqrestore(&xas, flags);
 	}
-	spin_unlock_irqrestore(&bfs->lock, flags);
 }
 
 void btrfs_subpage_clear_writeback(const struct btrfs_fs_info *fs_info,
@@ -476,15 +468,13 @@ void btrfs_subpage_clear_writeback(const struct btrfs_fs_info *fs_info,
 	struct btrfs_folio_state *bfs = folio_get_private(folio);
 	unsigned int start_bit = subpage_calc_start_bit(fs_info, folio,
 							writeback, start, len);
-	unsigned long flags;
 
-	spin_lock_irqsave(&bfs->lock, flags);
+	guard(spinlock_irqsave)(&bfs->lock);
 	bitmap_clear(bfs->bitmaps, start_bit, len >> fs_info->sectorsize_bits);
 	if (subpage_test_bitmap_all_zero(fs_info, folio, writeback)) {
 		ASSERT(folio_test_writeback(folio));
 		folio_end_writeback(folio);
 	}
-	spin_unlock_irqrestore(&bfs->lock, flags);
 }
 
 void btrfs_subpage_set_ordered(const struct btrfs_fs_info *fs_info,
@@ -493,12 +483,10 @@ void btrfs_subpage_set_ordered(const struct btrfs_fs_info *fs_info,
 	struct btrfs_folio_state *bfs = folio_get_private(folio);
 	unsigned int start_bit = subpage_calc_start_bit(fs_info, folio,
 							ordered, start, len);
-	unsigned long flags;
 
-	spin_lock_irqsave(&bfs->lock, flags);
+	guard(spinlock_irqsave)(&bfs->lock);
 	bitmap_set(bfs->bitmaps, start_bit, len >> fs_info->sectorsize_bits);
 	folio_set_ordered(folio);
-	spin_unlock_irqrestore(&bfs->lock, flags);
 }
 
 void btrfs_subpage_clear_ordered(const struct btrfs_fs_info *fs_info,
@@ -507,13 +495,11 @@ void btrfs_subpage_clear_ordered(const struct btrfs_fs_info *fs_info,
 	struct btrfs_folio_state *bfs = folio_get_private(folio);
 	unsigned int start_bit = subpage_calc_start_bit(fs_info, folio,
 							ordered, start, len);
-	unsigned long flags;
 
-	spin_lock_irqsave(&bfs->lock, flags);
+	guard(spinlock_irqsave)(&bfs->lock);
 	bitmap_clear(bfs->bitmaps, start_bit, len >> fs_info->sectorsize_bits);
 	if (subpage_test_bitmap_all_zero(fs_info, folio, ordered))
 		folio_clear_ordered(folio);
-	spin_unlock_irqrestore(&bfs->lock, flags);
 }
 
 void btrfs_subpage_set_checked(const struct btrfs_fs_info *fs_info,
@@ -522,13 +508,11 @@ void btrfs_subpage_set_checked(const struct btrfs_fs_info *fs_info,
 	struct btrfs_folio_state *bfs = folio_get_private(folio);
 	unsigned int start_bit = subpage_calc_start_bit(fs_info, folio,
 							checked, start, len);
-	unsigned long flags;
 
-	spin_lock_irqsave(&bfs->lock, flags);
+	guard(spinlock_irqsave)(&bfs->lock);
 	bitmap_set(bfs->bitmaps, start_bit, len >> fs_info->sectorsize_bits);
 	if (subpage_test_bitmap_all_set(fs_info, folio, checked))
 		folio_set_checked(folio);
-	spin_unlock_irqrestore(&bfs->lock, flags);
 }
 
 void btrfs_subpage_clear_checked(const struct btrfs_fs_info *fs_info,
@@ -537,12 +521,10 @@ void btrfs_subpage_clear_checked(const struct btrfs_fs_info *fs_info,
 	struct btrfs_folio_state *bfs = folio_get_private(folio);
 	unsigned int start_bit = subpage_calc_start_bit(fs_info, folio,
 							checked, start, len);
-	unsigned long flags;
 
-	spin_lock_irqsave(&bfs->lock, flags);
+	guard(spinlock_irqsave)(&bfs->lock);
 	bitmap_clear(bfs->bitmaps, start_bit, len >> fs_info->sectorsize_bits);
 	folio_clear_checked(folio);
-	spin_unlock_irqrestore(&bfs->lock, flags);
 }
 
 /*

@@ -4759,7 +4759,7 @@ static void btrfs_free_all_qgroup_pertrans(struct btrfs_fs_info *fs_info)
 	int i;
 	int ret;
 
-	spin_lock(&fs_info->fs_roots_radix_lock);
+	guard(spinlock)(&fs_info->fs_roots_radix_lock);
 	while (1) {
 		ret = radix_tree_gang_lookup_tag(&fs_info->fs_roots_radix,
 						 (void **)gang, 0,
@@ -4776,7 +4776,6 @@ static void btrfs_free_all_qgroup_pertrans(struct btrfs_fs_info *fs_info)
 					BTRFS_ROOT_TRANS_TAG);
 		}
 	}
-	spin_unlock(&fs_info->fs_roots_radix_lock);
 }
 
 void btrfs_cleanup_one_transaction(struct btrfs_transaction *cur_trans)
