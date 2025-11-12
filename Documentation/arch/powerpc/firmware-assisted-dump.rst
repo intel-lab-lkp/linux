@@ -19,9 +19,9 @@ in production use.
 - Unlike phyp dump, userspace tool does not need to refer any sysfs
   interface while reading /proc/vmcore.
 - Unlike phyp dump, FADump allows user to release all the memory reserved
-  for dump, with a single operation of echo 1 > /sys/kernel/fadump_release_mem.
+  for dump, with a single operation of echo 1 > /sys/kernel/fadump/release_mem.
 - Once enabled through kernel boot parameter, FADump can be
-  started/stopped through /sys/kernel/fadump_registered interface (see
+  started/stopped through /sys/kernel/fadump/registered interface (see
   sysfs files section below) and can be easily integrated with kdump
   service start/stop init scripts.
 
@@ -86,13 +86,13 @@ as follows:
    network, nas, san, iscsi, etc. as desired.
 
 -  Once the userspace tool is done saving dump, it will echo
-   '1' to /sys/kernel/fadump_release_mem to release the reserved
+   '1' to /sys/kernel/fadump/release_mem to release the reserved
    memory back to general use, except the memory required for
    next firmware-assisted dump registration.
 
    e.g.::
 
-     # echo 1 > /sys/kernel/fadump_release_mem
+     # echo 1 > /sys/kernel/fadump/release_mem
 
 Please note that the firmware-assisted dump feature
 is only available on POWER6 and above systems on pSeries
@@ -152,7 +152,7 @@ then everything but boot memory size of RAM is reserved during
 early boot (See Fig. 2). This area is released once we finish
 collecting the dump from user land scripts (e.g. kdump scripts)
 that are run. If there is dump data, then the
-/sys/kernel/fadump_release_mem file is created, and the reserved
+/sys/kernel/fadump/release_mem file is created, and the reserved
 memory is held.
 
 If there is no waiting dump data, then only the memory required to
@@ -281,7 +281,7 @@ the control files and debugfs file to display memory reserved region.
 
 Here is the list of files under kernel sysfs:
 
- /sys/kernel/fadump_enabled
+ /sys/kernel/fadump/enabled
     This is used to display the FADump status.
 
     - 0 = FADump is disabled
@@ -290,15 +290,15 @@ Here is the list of files under kernel sysfs:
     This interface can be used by kdump init scripts to identify if
     FADump is enabled in the kernel and act accordingly.
 
- /sys/kernel/fadump_registered
+ /sys/kernel/fadump/registered
     This is used to display the FADump registration status as well
     as to control (start/stop) the FADump registration.
 
     - 0 = FADump is not registered.
     - 1 = FADump is registered and ready to handle system crash.
 
-    To register FADump echo 1 > /sys/kernel/fadump_registered and
-    echo 0 > /sys/kernel/fadump_registered for un-register and stop the
+    To register FADump echo 1 > /sys/kernel/fadump/registered and
+    echo 0 > /sys/kernel/fadump/registered for un-register and stop the
     FADump. Once the FADump is un-registered, the system crash will not
     be handled and vmcore will not be captured. This interface can be
     easily integrated with kdump service start/stop.
@@ -308,13 +308,13 @@ Here is the list of files under kernel sysfs:
    This is used to display the memory reserved by FADump for saving the
    crash dump.
 
- /sys/kernel/fadump_release_mem
+ /sys/kernel/fadump/release_mem
     This file is available only when FADump is active during
     second kernel. This is used to release the reserved memory
     region that are held for saving crash dump. To release the
     reserved memory echo 1 to it::
 
-	echo 1  > /sys/kernel/fadump_release_mem
+	echo 1  > /sys/kernel/fadump/release_mem
 
     After echo 1, the content of the /sys/kernel/debug/powerpc/fadump_region
     file will change to reflect the new memory reservations.
@@ -335,17 +335,6 @@ Note: /sys/kernel/fadump_release_opalcore sysfs has moved to
 
     echo 1  > /sys/firmware/opal/mpipl/release_core
 
-Note: The following FADump sysfs files are deprecated.
-
-+----------------------------------+--------------------------------+
-| Deprecated                       | Alternative                    |
-+----------------------------------+--------------------------------+
-| /sys/kernel/fadump_enabled       | /sys/kernel/fadump/enabled     |
-+----------------------------------+--------------------------------+
-| /sys/kernel/fadump_registered    | /sys/kernel/fadump/registered  |
-+----------------------------------+--------------------------------+
-| /sys/kernel/fadump_release_mem   | /sys/kernel/fadump/release_mem |
-+----------------------------------+--------------------------------+
 
 Here is the list of files under powerpc debugfs:
 (Assuming debugfs is mounted on /sys/kernel/debug directory.)
