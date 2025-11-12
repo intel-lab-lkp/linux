@@ -50,6 +50,17 @@ static __always_inline void __raw_writeq(u64 val, volatile void __iomem *addr)
 	asm volatile("str %x0, %1" : : "rZ" (val), "Qo" (*ptr));
 }
 
+#define __raw_write128 __raw_write128
+static __always_inline void __raw_write128(u128 val, volatile void __iomem *addr)
+{
+	u64 low, high;
+
+	low = val;
+	high = (u64)(val >> 64);
+
+	asm volatile ("stp %x0, %x1, [%2]\n" :: "rZ"(low), "rZ"(high), "r"(addr));
+}
+
 #define __raw_readb __raw_readb
 static __always_inline u8 __raw_readb(const volatile void __iomem *addr)
 {
@@ -93,6 +104,16 @@ static __always_inline u64 __raw_readq(const volatile void __iomem *addr)
 				 ARM64_WORKAROUND_DEVICE_LOAD_ACQUIRE)
 		     : "=r" (val) : "r" (addr));
 	return val;
+}
+
+#define __raw_read128 __raw_read128
+static __always_inline u128 __raw_read128(const volatile void __iomem *addr)
+{
+	u64 high, low;
+
+	asm volatile("ldp %0, %1, [%2]" : "=r" (low), "=r" (high) : "r" (addr));
+
+	return (((u128)high << 64) | (u128)low);
 }
 
 /* IO barriers */
