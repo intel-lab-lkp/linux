@@ -51,15 +51,27 @@ properties:
     minItems: 1
 
   mbox-names:
+    minItems: 2
     description: |
       Specifies the mailboxes used to communicate with TI-SCI Controller
       made available from TI-SCI controller.
     items:
       - const: rx
       - const: tx
+      - const: notify
+      - const: boot_rx
+      - const: boot_tx
+      - const: boot_notify
 
   mboxes:
     minItems: 2
+    items:
+      - description: RX thread
+      - description: TX thread
+      - description: Notify thread
+      - description: boot stage RX thread
+      - description: boot stage TX thread
+      - description: boot stage Notify thread
 
   ti,host-id:
     $ref: /schemas/types.yaml#/definitions/uint32
@@ -90,9 +102,10 @@ examples:
   - |
     pmmc: system-controller@2921800 {
       compatible = "ti,k2g-sci";
-      mbox-names = "rx", "tx";
-      mboxes = <&msgmgr 5 2>,
-               <&msgmgr 0 0>;
+      mbox-names = "rx", "tx", "notify", "boot_rx", "boot_tx", "boot_notify";
+      mboxes = <&secure_proxy_mcu 8>, <&secure_proxy_mcu 6>,
+        <&secure_proxy_mcu 5>, <&secure_proxy_mcu 4>,
+        <&secure_proxy_mcu 5>, <&secure_proxy_sa3 5>;
       reg-names = "debug_messages";
       reg = <0x02921800 0x800>;
     };
