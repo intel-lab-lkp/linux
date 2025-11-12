@@ -12,6 +12,7 @@
 #include <objtool/special.h>
 #include <objtool/warn.h>
 
+#include <asm/cpufeatures.h>
 #include <bfd.h>
 #include <linux/string.h>
 #include <tools/dis-asm-compat.h>
@@ -54,6 +55,7 @@ struct disas_alt {
 		int offset;			/* instruction offset */
 	} insn[DISAS_ALT_INSN_MAX];		/* alternative instructions */
 	int insn_idx;				/* index of the next instruction to print */
+	int pv_mode;				/* PV mode */
 };
 
 #define DALT_DEFAULT(dalt)	(!(dalt)->alt)
@@ -666,12 +668,64 @@ char *disas_alt_name(struct alternative *alt)
 }
 
 /*
+ * Set the PV mode for the current alternative and return the PV mode
+ * to use for next alternatives.
+ */
+static enum pv_mode disas_alt_set_pvmode(struct disas_alt *dalt,
+					 enum pv_mode pv_mode)
+{
+	struct alt_group *alt_group;
+	int feature;
+	int flags;
+
+	dalt->pv_mode = pv_mode;
+
+	alt_group = DALT_GROUP(dalt);
+	if (!alt_group)
+		return pv_mode;
+
+	feature = alt_feature(alt_group->feature);
+	flags = alt_flags(alt_group->feature);
+
+	/*
+	 * The only PV mode we identify is the XENPV mode which is
+	 * enabled with the X86_FEATURE_XENPV feature. When we are
+	 * sure that XENPV mode is not used then assume that the
+	 * default PV mode is used.
+	 */
+	if (feature != X86_FEATURE_XENPV)
+		return pv_mode;
+
+	if (flags & ALT_FLAG_NOT) {
+		/*
+		 * This alternative is not used with XENPV mode, so
+		 * it is used in default mode. Then next alternatives
+		 * will be used in XENPV mode.
+		 */
+		dalt->pv_mode = PV_MODE_DEFAULT;
+		pv_mode = PV_MODE_XENPV;
+	} else {
+		/*
+		 * This alternative is used with XENPV mode so next
+		 * alternatives will apply in default mode.
+		 */
+		dalt->pv_mode = PV_MODE_XENPV;
+		pv_mode = PV_MODE_DEFAULT;
+	}
+
+	return pv_mode;
+}
+
+/*
  * Initialize an alternative. The default alternative should be initialized
  * with alt=NULL.
+ *
+ * Return the PV mode to use for the next alternative or -1 on error.
  */
-static int disas_alt_init(struct disas_alt *dalt,
-			  struct instruction *orig_insn,
-			  struct alternative *alt)
+static enum pv_mode disas_alt_init(struct disas_alt *dalt,
+				   struct instruction *orig_insn,
+				   struct alternative *alt,
+				   enum pv_mode pv_mode)
 {
 	dalt->orig_insn = orig_insn;
 	dalt->alt = alt;
@@ -682,7 +736,7 @@ static int disas_alt_init(struct disas_alt *dalt,
 		return -1;
 	dalt->width = strlen(dalt->name);
 
-	return 0;
+	return disas_alt_set_pvmode(dalt, pv_mode);
 }
 
 static int disas_alt_add_insn(struct disas_alt *dalt, int index, char *insn_str,
@@ -753,27 +807,50 @@ static int disas_alt_extable(struct disas_alt *dalt)
 	return 1;
 }
 
+static bool disas_alt_is_direct_call(struct instruction *insn)
+{
+	return (insn->alt_group &&
+		(alt_flags(insn->alt_group->feature) & ALT_FLAG_DIRECT_CALL));
+}
+
 /*
  * Disassemble an alternative and store instructions in the disas_alt
  * structure. Return the number of instructions in the alternative.
  */
 static int disas_alt_group(struct disas_context *dctx, struct disas_alt *dalt)
 {
+	struct instruction *orig_insn;
 	struct objtool_file *file;
 	struct instruction *insn;
+	const char *name;
 	int offset;
 	char *str;
 	int count;
 	int err;
 
 	file = dctx->file;
+	orig_insn = dalt->orig_insn;
 	count = 0;
 	offset = 0;
 
 	alt_for_each_insn(file, DALT_GROUP(dalt), insn) {
-
-		disas_insn_alt(dctx, insn);
-		str = strdup(disas_result(dctx));
+		/*
+		 * An alternative direct call initially has the
+		 * "call BUG_func" instruction but it will be
+		 * replaced with a direct call to the target of
+		 * the pv_ops call in the original instruction.
+		 */
+		if (disas_alt_is_direct_call(insn)) {
+			name = pv_call_dest_name(file, orig_insn,
+						 dalt->pv_mode);
+			if (name)
+				str = strfmt("callq  %s", name);
+			else
+				str = strdup("NOP");
+		} else {
+			disas_insn_alt(dctx, insn);
+			str = strdup(disas_result(dctx));
+		}
 		if (!str)
 			return -1;
 
@@ -876,6 +953,7 @@ static void *disas_alt(struct disas_context *dctx,
 		       struct instruction *orig_insn)
 {
 	struct disas_alt alts[DISAS_ALT_MAX] = { 0 };
+	enum pv_mode pv_mode = PV_MODE_UNKNOWN;
 	struct alternative *alt;
 	struct disas_alt *dalt;
 	int offset_next;
@@ -884,7 +962,6 @@ static void *disas_alt(struct disas_context *dctx,
 	int alt_id;
 	int offset;
 	int count;
-	int err;
 	int i;
 
 	alt_id = orig_insn->offset;
@@ -892,8 +969,8 @@ static void *disas_alt(struct disas_context *dctx,
 	/*
 	 * Initialize and disassemble the default alternative.
 	 */
-	err = disas_alt_init(&alts[0], orig_insn, NULL);
-	if (err)
+	pv_mode = disas_alt_init(&alts[0], orig_insn, NULL, pv_mode);
+	if (pv_mode < 0)
 		goto error;
 
 	insn_count = disas_alt_default(dctx, &alts[0]);
@@ -911,8 +988,8 @@ static void *disas_alt(struct disas_context *dctx,
 			break;
 		}
 		dalt = &alts[i];
-		err = disas_alt_init(dalt, orig_insn, alt);
-		if (err)
+		pv_mode = disas_alt_init(dalt, orig_insn, alt, pv_mode);
+		if (pv_mode < 0)
 			goto error;
 
 		count = -1;
