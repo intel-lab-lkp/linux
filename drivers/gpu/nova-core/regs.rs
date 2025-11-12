@@ -24,7 +24,8 @@ use crate::{
     },
     gpu::{
         Architecture,
-        Chipset, //
+        Chipset,
+        Revision, //
     },
     num::FromSafeCast,
 };
@@ -55,6 +56,14 @@ impl NV_PMC_BOOT_0 {
                     | u32::from(self.implementation())
             })
             .and_then(Chipset::try_from)
+    }
+
+    /// Returns the revision information of the chip.
+    pub(crate) fn revision(self) -> Revision {
+        Revision {
+            major: self.major_revision(),
+            minor: self.minor_revision(),
+        }
     }
 }
 
