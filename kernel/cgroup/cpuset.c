@@ -593,14 +593,14 @@ static inline bool cpusets_are_exclusive(struct cpuset *cs1, struct cpuset *cs2)
  * Returns: true if CPU exclusivity conflict exists, false otherwise
  *
  * Conflict detection rules:
- * 1. If either cpuset is CPU exclusive, they must be mutually exclusive
+ * 1. If both cpusets are exclusive, they must be mutually exclusive
  * 2. exclusive_cpus masks cannot intersect between cpusets
  * 3. The allowed CPUs of one cpuset cannot be a subset of another's exclusive CPUs
  */
 static inline bool cpus_excl_conflict(struct cpuset *cs1, struct cpuset *cs2)
 {
-	/* If either cpuset is exclusive, check if they are mutually exclusive */
-	if (is_cpu_exclusive(cs1) || is_cpu_exclusive(cs2))
+	/* If both cpusets are exclusive, check if they are mutually exclusive */
+	if (is_cpu_exclusive(cs1) && is_cpu_exclusive(cs2))
 		return !cpusets_are_exclusive(cs1, cs2);
 
 	/* Exclusive_cpus cannot intersect */
@@ -702,7 +702,7 @@ static int validate_change(struct cpuset *cur, struct cpuset *trial)
 		goto out;
 
 	/*
-	 * If either I or some sibling (!= me) is exclusive, we can't
+	 * If both I and some sibling (!= me) are exclusive, we can't
 	 * overlap. exclusive_cpus cannot overlap with each other if set.
 	 */
 	ret = -EINVAL;
