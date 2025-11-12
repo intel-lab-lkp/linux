@@ -177,9 +177,9 @@ static inline unsigned long get_utf16(unsigned c, enum utf16_endian endian)
 	default:
 		return c;
 	case UTF16_LITTLE_ENDIAN:
-		return __le16_to_cpu(c);
+		return __le16_to_cpu((__force __le16)c);
 	case UTF16_BIG_ENDIAN:
-		return __be16_to_cpu(c);
+		return __be16_to_cpu((__force __be16)c);
 	}
 }
 
