@@ -604,9 +604,10 @@ xfs_get_atomic_write_min(
 	struct xfs_inode	*ip,
 	bool			is_dio)
 {
-	if (is_dio) {
-		struct xfs_mount *mp = ip->i_mount;
+	struct xfs_mount *mp = ip->i_mount;
+	uint32_t bs = mp->m_sb.sb_blocksize;
 
+	if (is_dio) {
 		/*
 		 * If we can complete an atomic write via atomic out of place writes,
 		 * then advertise a minimum size of one fsblock.  Without this
@@ -618,10 +619,15 @@ xfs_get_atomic_write_min(
 		 */
 		if (xfs_inode_can_hw_atomic_write(ip) ||
 		    xfs_inode_can_sw_atomic_write(ip))
-			return mp->m_sb.sb_blocksize;
+			return bs;
 	}
+	/*
+	 * Buffered IO only supports hw single block atomic writes and bs == ps
+	 * configurations.
+	 */
+	if (xfs_inode_can_hw_atomic_write(ip) && bs == PAGE_SIZE)
+		return bs;
 
-	/* buffered IO not supported yet so return 0 right away */
 	return 0;
 }
 
@@ -630,7 +636,8 @@ xfs_get_atomic_write_max(
 	struct xfs_inode	*ip,
 	bool			is_dio)
 {
-	struct xfs_mount	*mp = ip->i_mount;
+	struct xfs_mount *mp = ip->i_mount;
+	uint32_t bs = mp->m_sb.sb_blocksize;
 
 	if (is_dio) {
 		/*
@@ -640,7 +647,7 @@ xfs_get_atomic_write_max(
 		 */
 		if (!xfs_inode_can_sw_atomic_write(ip)) {
 			if (xfs_inode_can_hw_atomic_write(ip))
-				return mp->m_sb.sb_blocksize;
+				return bs;
 			return 0;
 		}
 
@@ -653,8 +660,13 @@ xfs_get_atomic_write_max(
 			return XFS_FSB_TO_B(mp, mp->m_groups[XG_TYPE_RTG].awu_max);
 		return XFS_FSB_TO_B(mp, mp->m_groups[XG_TYPE_AG].awu_max);
 	}
+	/*
+	 * Buffered IO only supports hw single block atomic writes and bs == ps
+	 * configurations.
+	 */
+	if (xfs_inode_can_hw_atomic_write(ip) && bs == PAGE_SIZE)
+		return bs;
 
-	/* buffered IO not supported yet so return 0 right away */
 	return 0;
 }
 
@@ -679,7 +691,7 @@ xfs_get_atomic_write_max_opt(
 		return min(awu_max, xfs_inode_buftarg(ip)->bt_awu_max);
 	}
 
-	/* buffered IO not supported yet so return 0 right away */
+	/* buffered IO for now only supports 1 filesyste block so max_opt is 0 */
 	return 0;
 }
 
