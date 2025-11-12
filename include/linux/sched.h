@@ -1223,7 +1223,7 @@ struct task_struct {
 	u64				parent_exec_id;
 	u64				self_exec_id;
 
-	/* Protection against (de-)allocation: mm, files, fs, tty, keyrings, mems_allowed, mempolicy: */
+	/* Protection against (de-)allocation: mm, files, fs, tty, keyrings, sysram_nodes, mempolicy: */
 	spinlock_t			alloc_lock;
 
 	/* Protection of the PI data structures: */
@@ -1314,9 +1314,9 @@ struct task_struct {
 #endif
 #ifdef CONFIG_CPUSETS
 	/* Protected by ->alloc_lock: */
-	nodemask_t			mems_allowed;
+	nodemask_t			sysram_nodes;
 	/* Sequence number to catch updates: */
-	seqcount_spinlock_t		mems_allowed_seq;
+	seqcount_spinlock_t		sysram_nodes_seq;
 	int				cpuset_mem_spread_rotor;
 #endif
 #ifdef CONFIG_CGROUPS

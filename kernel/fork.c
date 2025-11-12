@@ -2120,7 +2120,7 @@ __latent_entropy struct task_struct *copy_process(
 #endif
 #ifdef CONFIG_CPUSETS
 	p->cpuset_mem_spread_rotor = NUMA_NO_NODE;
-	seqcount_spinlock_init(&p->mems_allowed_seq, &p->alloc_lock);
+	seqcount_spinlock_init(&p->sysram_nodes_seq, &p->alloc_lock);
 #endif
 #ifdef CONFIG_TRACE_IRQFLAGS
 	memset(&p->irqtrace, 0, sizeof(p->irqtrace));

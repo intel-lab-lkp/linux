@@ -2366,7 +2366,7 @@ static nodemask_t *policy_mbind_nodemask(gfp_t gfp)
 	 */
 	if (mpol->mode == MPOL_BIND &&
 		(apply_policy_zone(mpol, gfp_zone(gfp)) &&
-		 cpuset_nodemask_valid_mems_allowed(&mpol->nodes)))
+		 cpuset_nodemask_valid_sysram_nodes(&mpol->nodes)))
 		return &mpol->nodes;
 #endif
 	return NULL;
@@ -2389,9 +2389,9 @@ static int gather_surplus_pages(struct hstate *h, long delta)
 
 	mbind_nodemask = policy_mbind_nodemask(htlb_alloc_mask(h));
 	if (mbind_nodemask)
-		nodes_and(alloc_nodemask, *mbind_nodemask, cpuset_current_mems_allowed);
+		nodes_and(alloc_nodemask, *mbind_nodemask, cpuset_current_sysram_nodes);
 	else
-		alloc_nodemask = cpuset_current_mems_allowed;
+		alloc_nodemask = cpuset_current_sysram_nodes;
 
 	lockdep_assert_held(&hugetlb_lock);
 	needed = (h->resv_huge_pages + delta) - h->free_huge_pages;
@@ -5084,7 +5084,7 @@ static unsigned int allowed_mems_nr(struct hstate *h)
 	gfp_t gfp_mask = htlb_alloc_mask(h);
 
 	mbind_nodemask = policy_mbind_nodemask(gfp_mask);
-	for_each_node_mask(node, cpuset_current_mems_allowed) {
+	for_each_node_mask(node, cpuset_current_sysram_nodes) {
 		if (!mbind_nodemask || node_isset(node, *mbind_nodemask))
 			nr += array[node];
 	}

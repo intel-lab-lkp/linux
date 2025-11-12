@@ -128,7 +128,7 @@ static bool show_mem_node_skip(unsigned int flags, int nid,
 	 * have to be precise here.
 	 */
 	if (!nodemask)
-		nodemask = &cpuset_current_mems_allowed;
+		nodemask = &cpuset_current_sysram_nodes;
 
 	return !node_isset(nid, *nodemask);
 }

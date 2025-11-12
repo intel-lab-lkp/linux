@@ -23,14 +23,14 @@
 /*
  * Static branch rewrites can happen in an arbitrary order for a given
  * key. In code paths where we need to loop with read_mems_allowed_begin() and
- * read_mems_allowed_retry() to get a consistent view of mems_allowed, we need
- * to ensure that begin() always gets rewritten before retry() in the
+ * read_mems_allowed_retry() to get a consistent view of task->sysram_nodes, we
+ * need to ensure that begin() always gets rewritten before retry() in the
  * disabled -> enabled transition. If not, then if local irqs are disabled
  * around the loop, we can deadlock since retry() would always be
- * comparing the latest value of the mems_allowed seqcount against 0 as
+ * comparing the latest value of the sysram_nodes seqcount against 0 as
  * begin() still would see cpusets_enabled() as false. The enabled -> disabled
  * transition should happen in reverse order for the same reasons (want to stop
- * looking at real value of mems_allowed.sequence in retry() first).
+ * looking at real value of sysram_nodes.sequence in retry() first).
  */
 extern struct static_key_false cpusets_pre_enable_key;
 extern struct static_key_false cpusets_enabled_key;
@@ -78,9 +78,10 @@ extern void cpuset_cpus_allowed(struct task_struct *p, struct cpumask *mask);
 extern bool cpuset_cpus_allowed_fallback(struct task_struct *p);
 extern bool cpuset_cpu_is_isolated(int cpu);
 extern nodemask_t cpuset_mems_allowed(struct task_struct *p);
-#define cpuset_current_mems_allowed (current->mems_allowed)
-void cpuset_init_current_mems_allowed(void);
-int cpuset_nodemask_valid_mems_allowed(const nodemask_t *nodemask);
+#define cpuset_current_sysram_nodes (current->sysram_nodes)
+#define cpuset_current_mems_allowed (cpuset_current_sysram_nodes)
+void cpuset_init_current_sysram_nodes(void);
+int cpuset_nodemask_valid_sysram_nodes(const nodemask_t *nodemask);
 
 extern bool cpuset_current_node_allowed(int node, gfp_t gfp_mask);
 
@@ -96,7 +97,7 @@ static inline bool cpuset_zone_allowed(struct zone *z, gfp_t gfp_mask)
 	return true;
 }
 
-extern int cpuset_mems_allowed_intersects(const struct task_struct *tsk1,
+extern int cpuset_sysram_nodes_intersects(const struct task_struct *tsk1,
 					  const struct task_struct *tsk2);
 
 #ifdef CONFIG_CPUSETS_V1
@@ -111,8 +112,8 @@ extern void __cpuset_memory_pressure_bump(void);
 static inline void cpuset_memory_pressure_bump(void) { }
 #endif
 
-extern void cpuset_task_status_allowed(struct seq_file *m,
-					struct task_struct *task);
+extern void cpuset_task_status_sysram(struct seq_file *m,
+				      struct task_struct *task);
 extern int proc_cpuset_show(struct seq_file *m, struct pid_namespace *ns,
 			    struct pid *pid, struct task_struct *tsk);
 
@@ -128,12 +129,12 @@ extern bool current_cpuset_is_being_rebound(void);
 extern void dl_rebuild_rd_accounting(void);
 extern void rebuild_sched_domains(void);
 
-extern void cpuset_print_current_mems_allowed(void);
+extern void cpuset_print_current_sysram_nodes(void);
 extern void cpuset_reset_sched_domains(void);
 
 /*
- * read_mems_allowed_begin is required when making decisions involving
- * mems_allowed such as during page allocation. mems_allowed can be updated in
+ * read_mems_allowed_begin is required when making decisions involving a task's
+ * sysram_nodes such as during page allocation. sysram_nodes can be updated in
  * parallel and depending on the new value an operation can fail potentially
  * causing process failure. A retry loop with read_mems_allowed_begin and
  * read_mems_allowed_retry prevents these artificial failures.
@@ -143,13 +144,13 @@ static inline unsigned int read_mems_allowed_begin(void)
 	if (!static_branch_unlikely(&cpusets_pre_enable_key))
 		return 0;
 
-	return read_seqcount_begin(&current->mems_allowed_seq);
+	return read_seqcount_begin(&current->sysram_nodes_seq);
 }
 
 /*
  * If this returns true, the operation that took place after
  * read_mems_allowed_begin may have failed artificially due to a concurrent
- * update of mems_allowed. It is up to the caller to retry the operation if
+ * update of sysram_nodes. It is up to the caller to retry the operation if
  * appropriate.
  */
 static inline bool read_mems_allowed_retry(unsigned int seq)
@@ -157,7 +158,7 @@ static inline bool read_mems_allowed_retry(unsigned int seq)
 	if (!static_branch_unlikely(&cpusets_enabled_key))
 		return false;
 
-	return read_seqcount_retry(&current->mems_allowed_seq, seq);
+	return read_seqcount_retry(&current->sysram_nodes_seq, seq);
 }
 
 static inline void set_mems_allowed(nodemask_t nodemask)
@@ -166,9 +167,9 @@ static inline void set_mems_allowed(nodemask_t nodemask)
 
 	task_lock(current);
 	local_irq_save(flags);
-	write_seqcount_begin(&current->mems_allowed_seq);
-	current->mems_allowed = nodemask;
-	write_seqcount_end(&current->mems_allowed_seq);
+	write_seqcount_begin(&current->sysram_nodes_seq);
+	current->sysram_nodes = nodemask;
+	write_seqcount_end(&current->sysram_nodes_seq);
 	local_irq_restore(flags);
 	task_unlock(current);
 }
@@ -216,10 +217,11 @@ static inline nodemask_t cpuset_mems_allowed(struct task_struct *p)
 	return node_possible_map;
 }
 
-#define cpuset_current_mems_allowed (node_states[N_MEMORY])
-static inline void cpuset_init_current_mems_allowed(void) {}
+#define cpuset_current_sysram_nodes (node_states[N_MEMORY])
+#define cpuset_current_mems_allowed (cpuset_current_sysram_nodes)
+static inline void cpuset_init_current_sysram_nodes(void) {}
 
-static inline int cpuset_nodemask_valid_mems_allowed(const nodemask_t *nodemask)
+static inline int cpuset_nodemask_valid_sysram_nodes(const nodemask_t *nodemask)
 {
 	return 1;
 }
@@ -234,7 +236,7 @@ static inline bool cpuset_zone_allowed(struct zone *z, gfp_t gfp_mask)
 	return true;
 }
 
-static inline int cpuset_mems_allowed_intersects(const struct task_struct *tsk1,
+static inline int cpuset_sysram_nodes_intersects(const struct task_struct *tsk1,
 						 const struct task_struct *tsk2)
 {
 	return 1;
@@ -242,8 +244,8 @@ static inline int cpuset_mems_allowed_intersects(const struct task_struct *tsk1,
 
 static inline void cpuset_memory_pressure_bump(void) {}
 
-static inline void cpuset_task_status_allowed(struct seq_file *m,
-						struct task_struct *task)
+static inline void cpuset_task_status_sysram(struct seq_file *m,
+					     struct task_struct *task)
 {
 }
 
@@ -276,7 +278,7 @@ static inline void cpuset_reset_sched_domains(void)
 	partition_sched_domains(1, NULL, NULL);
 }
 
-static inline void cpuset_print_current_mems_allowed(void)
+static inline void cpuset_print_current_sysram_nodes(void)
 {
 }
 

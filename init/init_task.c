@@ -173,7 +173,7 @@ struct task_struct init_task __aligned(L1_CACHE_BYTES) = {
 	.trc_blkd_node = LIST_HEAD_INIT(init_task.trc_blkd_node),
 #endif
 #ifdef CONFIG_CPUSETS
-	.mems_allowed_seq = SEQCNT_SPINLOCK_ZERO(init_task.mems_allowed_seq,
+	.sysram_nodes_seq = SEQCNT_SPINLOCK_ZERO(init_task.sysram_nodes_seq,
 						 &init_task.alloc_lock),
 #endif
 #ifdef CONFIG_RT_MUTEXES

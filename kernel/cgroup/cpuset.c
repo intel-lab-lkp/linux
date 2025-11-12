@@ -240,7 +240,7 @@ static struct cpuset top_cpuset = {
  * If a task is only holding callback_lock, then it has read-only
  * access to cpusets.
  *
- * Now, the task_struct fields mems_allowed and mempolicy may be changed
+ * Now, the task_struct fields sysram_nodes and mempolicy may be changed
  * by other task, we use alloc_lock in the task_struct fields to protect
  * them.
  *
@@ -2678,11 +2678,11 @@ static void schedule_flush_migrate_mm(void)
 }
 
 /*
- * cpuset_change_task_nodemask - change task's mems_allowed and mempolicy
+ * cpuset_change_task_nodemask - change task's sysram_nodes and mempolicy
  * @tsk: the task to change
  * @newmems: new nodes that the task will be set
  *
- * We use the mems_allowed_seq seqlock to safely update both tsk->mems_allowed
+ * We use the sysram_nodes_seq seqlock to safely update both tsk->sysram_nodes
  * and rebind an eventual tasks' mempolicy. If the task is allocating in
  * parallel, it might temporarily see an empty intersection, which results in
  * a seqlock check and retry before OOM or allocation failure.
@@ -2693,13 +2693,13 @@ static void cpuset_change_task_nodemask(struct task_struct *tsk,
 	task_lock(tsk);
 
 	local_irq_disable();
-	write_seqcount_begin(&tsk->mems_allowed_seq);
+	write_seqcount_begin(&tsk->sysram_nodes_seq);
 
-	nodes_or(tsk->mems_allowed, tsk->mems_allowed, *newmems);
+	nodes_or(tsk->sysram_nodes, tsk->sysram_nodes, *newmems);
 	mpol_rebind_task(tsk, newmems);
-	tsk->mems_allowed = *newmems;
+	tsk->sysram_nodes = *newmems;
 
-	write_seqcount_end(&tsk->mems_allowed_seq);
+	write_seqcount_end(&tsk->sysram_nodes_seq);
 	local_irq_enable();
 
 	task_unlock(tsk);
@@ -2709,9 +2709,9 @@ static void *cpuset_being_rebound;
 
 /**
  * cpuset_update_tasks_nodemask - Update the nodemasks of tasks in the cpuset.
- * @cs: the cpuset in which each task's mems_allowed mask needs to be changed
+ * @cs: the cpuset in which each task's sysram_nodes mask needs to be changed
  *
- * Iterate through each task of @cs updating its mems_allowed to the
+ * Iterate through each task of @cs updating its sysram_nodes to the
  * effective cpuset's.  As this function is called with cpuset_mutex held,
  * cpuset membership stays stable.
  */
@@ -3763,7 +3763,7 @@ static void cpuset_fork(struct task_struct *task)
 			return;
 
 		set_cpus_allowed_ptr(task, current->cpus_ptr);
-		task->mems_allowed = current->mems_allowed;
+		task->sysram_nodes = current->sysram_nodes;
 		return;
 	}
 
@@ -4205,9 +4205,9 @@ bool cpuset_cpus_allowed_fallback(struct task_struct *tsk)
 	return changed;
 }
 
-void __init cpuset_init_current_mems_allowed(void)
+void __init cpuset_init_current_sysram_nodes(void)
 {
-	nodes_setall(current->mems_allowed);
+	nodes_setall(current->sysram_nodes);
 }
 
 /**
@@ -4233,14 +4233,14 @@ nodemask_t cpuset_mems_allowed(struct task_struct *tsk)
 }
 
 /**
- * cpuset_nodemask_valid_mems_allowed - check nodemask vs. current mems_allowed
+ * cpuset_nodemask_valid_sysram_nodes - check nodemask vs. current sysram_nodes
  * @nodemask: the nodemask to be checked
  *
- * Are any of the nodes in the nodemask allowed in current->mems_allowed?
+ * Are any of the nodes in the nodemask allowed in current->sysram_nodes?
  */
-int cpuset_nodemask_valid_mems_allowed(const nodemask_t *nodemask)
+int cpuset_nodemask_valid_sysram_nodes(const nodemask_t *nodemask)
 {
-	return nodes_intersects(*nodemask, current->mems_allowed);
+	return nodes_intersects(*nodemask, current->sysram_nodes);
 }
 
 /*
@@ -4262,7 +4262,7 @@ static struct cpuset *nearest_hardwall_ancestor(struct cpuset *cs)
  * @gfp_mask: memory allocation flags
  *
  * If we're in interrupt, yes, we can always allocate.  If @node is set in
- * current's mems_allowed, yes.  If it's not a __GFP_HARDWALL request and this
+ * current's sysram_nodes, yes.  If it's not a __GFP_HARDWALL request and this
  * node is set in the nearest hardwalled cpuset ancestor to current's cpuset,
  * yes.  If current has access to memory reserves as an oom victim, yes.
  * Otherwise, no.
@@ -4276,7 +4276,7 @@ static struct cpuset *nearest_hardwall_ancestor(struct cpuset *cs)
  * Scanning up parent cpusets requires callback_lock.  The
  * __alloc_pages() routine only calls here with __GFP_HARDWALL bit
  * _not_ set if it's a GFP_KERNEL allocation, and all nodes in the
- * current tasks mems_allowed came up empty on the first pass over
+ * current tasks sysram_nodes came up empty on the first pass over
  * the zonelist.  So only GFP_KERNEL allocations, if all nodes in the
  * cpuset are short of memory, might require taking the callback_lock.
  *
@@ -4304,7 +4304,7 @@ bool cpuset_current_node_allowed(int node, gfp_t gfp_mask)
 
 	if (in_interrupt())
 		return true;
-	if (node_isset(node, current->mems_allowed))
+	if (node_isset(node, current->sysram_nodes))
 		return true;
 	/*
 	 * Allow tasks that have access to memory reserves because they have
@@ -4375,13 +4375,13 @@ bool cpuset_node_allowed(struct cgroup *cgroup, int nid)
  * certain page cache or slab cache pages such as used for file
  * system buffers and inode caches, then instead of starting on the
  * local node to look for a free page, rather spread the starting
- * node around the tasks mems_allowed nodes.
+ * node around the tasks sysram_nodes nodes.
  *
  * We don't have to worry about the returned node being offline
  * because "it can't happen", and even if it did, it would be ok.
  *
  * The routines calling guarantee_online_mems() are careful to
- * only set nodes in task->mems_allowed that are online.  So it
+ * only set nodes in task->sysram_nodes that are online.  So it
  * should not be possible for the following code to return an
  * offline node.  But if it did, that would be ok, as this routine
  * is not returning the node where the allocation must be, only
@@ -4392,7 +4392,7 @@ bool cpuset_node_allowed(struct cgroup *cgroup, int nid)
  */
 static int cpuset_spread_node(int *rotor)
 {
-	return *rotor = next_node_in(*rotor, current->mems_allowed);
+	return *rotor = next_node_in(*rotor, current->sysram_nodes);
 }
 
 /**
@@ -4402,35 +4402,35 @@ int cpuset_mem_spread_node(void)
 {
 	if (current->cpuset_mem_spread_rotor == NUMA_NO_NODE)
 		current->cpuset_mem_spread_rotor =
-			node_random(&current->mems_allowed);
+			node_random(&current->sysram_nodes);
 
 	return cpuset_spread_node(&current->cpuset_mem_spread_rotor);
 }
 
 /**
- * cpuset_mems_allowed_intersects - Does @tsk1's mems_allowed intersect @tsk2's?
+ * cpuset_sysram_nodes_intersects - Does @tsk1's sysram_nodes intersect @tsk2's?
  * @tsk1: pointer to task_struct of some task.
  * @tsk2: pointer to task_struct of some other task.
  *
- * Description: Return true if @tsk1's mems_allowed intersects the
- * mems_allowed of @tsk2.  Used by the OOM killer to determine if
+ * Description: Return true if @tsk1's sysram_nodes intersects the
+ * sysram_nodes of @tsk2.  Used by the OOM killer to determine if
  * one of the task's memory usage might impact the memory available
  * to the other.
  **/
 
-int cpuset_mems_allowed_intersects(const struct task_struct *tsk1,
+int cpuset_sysram_nodes_intersects(const struct task_struct *tsk1,
 				   const struct task_struct *tsk2)
 {
-	return nodes_intersects(tsk1->mems_allowed, tsk2->mems_allowed);
+	return nodes_intersects(tsk1->sysram_nodes, tsk2->sysram_nodes);
 }
 
 /**
- * cpuset_print_current_mems_allowed - prints current's cpuset and mems_allowed
+ * cpuset_print_current_sysram_nodes - prints current's cpuset and sysram_nodes
  *
  * Description: Prints current's name, cpuset name, and cached copy of its
- * mems_allowed to the kernel log.
+ * sysram_nodes to the kernel log.
  */
-void cpuset_print_current_mems_allowed(void)
+void cpuset_print_current_sysram_nodes(void)
 {
 	struct cgroup *cgrp;
 
@@ -4439,17 +4439,17 @@ void cpuset_print_current_mems_allowed(void)
 	cgrp = task_cs(current)->css.cgroup;
 	pr_cont(",cpuset=");
 	pr_cont_cgroup_name(cgrp);
-	pr_cont(",mems_allowed=%*pbl",
-		nodemask_pr_args(&current->mems_allowed));
+	pr_cont(",sysram_nodes=%*pbl",
+		nodemask_pr_args(&current->sysram_nodes));
 
 	rcu_read_unlock();
 }
 
-/* Display task mems_allowed in /proc/<pid>/status file. */
-void cpuset_task_status_allowed(struct seq_file *m, struct task_struct *task)
+/* Display task sysram_nodes in /proc/<pid>/status file. */
+void cpuset_task_status_sysram(struct seq_file *m, struct task_struct *task)
 {
-	seq_printf(m, "Mems_allowed:\t%*pb\n",
-		   nodemask_pr_args(&task->mems_allowed));
-	seq_printf(m, "Mems_allowed_list:\t%*pbl\n",
-		   nodemask_pr_args(&task->mems_allowed));
+	seq_printf(m, "Sysram_nodes:\t%*pb\n",
+		   nodemask_pr_args(&task->sysram_nodes));
+	seq_printf(m, "Sysram_nodes_list:\t%*pbl\n",
+		   nodemask_pr_args(&task->sysram_nodes));
 }

@@ -110,7 +110,7 @@ static bool oom_cpuset_eligible(struct task_struct *start,
 			 * This is not a mempolicy constrained oom, so only
 			 * check the mems of tsk's cpuset.
 			 */
-			ret = cpuset_mems_allowed_intersects(current, tsk);
+			ret = cpuset_sysram_nodes_intersects(current, tsk);
 		}
 		if (ret)
 			break;
@@ -300,7 +300,7 @@ static enum oom_constraint constrained_alloc(struct oom_control *oc)
 
 	if (cpuset_limited) {
 		oc->totalpages = total_swap_pages;
-		for_each_node_mask(nid, cpuset_current_mems_allowed)
+		for_each_node_mask(nid, cpuset_current_sysram_nodes)
 			oc->totalpages += node_present_pages(nid);
 		return CONSTRAINT_CPUSET;
 	}
@@ -451,7 +451,7 @@ static void dump_oom_victim(struct oom_control *oc, struct task_struct *victim)
 	pr_info("oom-kill:constraint=%s,nodemask=%*pbl",
 			oom_constraint_text[oc->constraint],
 			nodemask_pr_args(oc->nodemask));
-	cpuset_print_current_mems_allowed();
+	cpuset_print_current_sysram_nodes();
 	mem_cgroup_print_oom_context(oc->memcg, victim);
 	pr_cont(",task=%s,pid=%d,uid=%d\n", victim->comm, victim->pid,
 		from_kuid(&init_user_ns, task_uid(victim)));

@@ -52,7 +52,7 @@ struct mempolicy {
 	int home_node;		/* Home node to use for MPOL_BIND and MPOL_PREFERRED_MANY */
 
 	union {
-		nodemask_t cpuset_mems_allowed;	/* relative to these nodes */
+		nodemask_t cpuset_sysram_nodes;	/* relative to these nodes */
 		nodemask_t user_nodemask;	/* nodemask passed by user */
 	} w;
 };

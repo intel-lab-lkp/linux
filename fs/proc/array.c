@@ -456,7 +456,7 @@ int proc_pid_status(struct seq_file *m, struct pid_namespace *ns,
 	task_cap(m, task);
 	task_seccomp(m, task);
 	task_cpus_allowed(m, task);
-	cpuset_task_status_allowed(m, task);
+	cpuset_task_status_sysram(m, task);
 	task_context_switch_counts(m, task);
 	arch_proc_pid_thread_features(m, task);
 	return 0;

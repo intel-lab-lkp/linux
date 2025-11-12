@@ -396,7 +396,7 @@ static int mpol_new_preferred(struct mempolicy *pol, const nodemask_t *nodes)
  * any, for the new policy.  mpol_new() has already validated the nodes
  * parameter with respect to the policy mode and flags.
  *
- * Must be called holding task's alloc_lock to protect task's mems_allowed
+ * Must be called holding task's alloc_lock to protect task's sysram_nodes
  * and mempolicy.  May also be called holding the mmap_lock for write.
  */
 static int mpol_set_nodemask(struct mempolicy *pol,
@@ -414,7 +414,7 @@ static int mpol_set_nodemask(struct mempolicy *pol,
 
 	/* Check N_MEMORY */
 	nodes_and(nsc->mask1,
-		  cpuset_current_mems_allowed, node_states[N_MEMORY]);
+		  cpuset_current_sysram_nodes, node_states[N_MEMORY]);
 
 	VM_BUG_ON(!nodes);
 
@@ -426,7 +426,7 @@ static int mpol_set_nodemask(struct mempolicy *pol,
 	if (mpol_store_user_nodemask(pol))
 		pol->w.user_nodemask = *nodes;
 	else
-		pol->w.cpuset_mems_allowed = cpuset_current_mems_allowed;
+		pol->w.cpuset_sysram_nodes = cpuset_current_sysram_nodes;
 
 	ret = mpol_ops[pol->mode].create(pol, &nsc->mask2);
 	return ret;
@@ -501,9 +501,9 @@ static void mpol_rebind_nodemask(struct mempolicy *pol, const nodemask_t *nodes)
 	else if (pol->flags & MPOL_F_RELATIVE_NODES)
 		mpol_relative_nodemask(&tmp, &pol->w.user_nodemask, nodes);
 	else {
-		nodes_remap(tmp, pol->nodes, pol->w.cpuset_mems_allowed,
+		nodes_remap(tmp, pol->nodes, pol->w.cpuset_sysram_nodes,
 								*nodes);
-		pol->w.cpuset_mems_allowed = *nodes;
+		pol->w.cpuset_sysram_nodes = *nodes;
 	}
 
 	if (nodes_empty(tmp))
@@ -515,14 +515,14 @@ static void mpol_rebind_nodemask(struct mempolicy *pol, const nodemask_t *nodes)
 static void mpol_rebind_preferred(struct mempolicy *pol,
 						const nodemask_t *nodes)
 {
-	pol->w.cpuset_mems_allowed = *nodes;
+	pol->w.cpuset_sysram_nodes = *nodes;
 }
 
 /*
  * mpol_rebind_policy - Migrate a policy to a different set of nodes
  *
  * Per-vma policies are protected by mmap_lock. Allocations using per-task
- * policies are protected by task->mems_allowed_seq to prevent a premature
+ * policies are protected by task->sysram_nodes_seq to prevent a premature
  * OOM/allocation failure due to parallel nodemask modification.
  */
 static void mpol_rebind_policy(struct mempolicy *pol, const nodemask_t *newmask)
@@ -530,7 +530,7 @@ static void mpol_rebind_policy(struct mempolicy *pol, const nodemask_t *newmask)
 	if (!pol || pol->mode == MPOL_LOCAL)
 		return;
 	if (!mpol_store_user_nodemask(pol) &&
-	    nodes_equal(pol->w.cpuset_mems_allowed, *newmask))
+	    nodes_equal(pol->w.cpuset_sysram_nodes, *newmask))
 		return;
 
 	mpol_ops[pol->mode].rebind(pol, newmask);
@@ -1086,7 +1086,7 @@ static long do_get_mempolicy(int *policy, nodemask_t *nmask,
 			return -EINVAL;
 		*policy = 0;	/* just so it's initialized */
 		task_lock(current);
-		*nmask  = cpuset_current_mems_allowed;
+		*nmask  = cpuset_current_sysram_nodes;
 		task_unlock(current);
 		return 0;
 	}
@@ -2029,7 +2029,7 @@ static unsigned int weighted_interleave_nodes(struct mempolicy *policy)
 	unsigned int cpuset_mems_cookie;
 
 retry:
-	/* to prevent miscount use tsk->mems_allowed_seq to detect rebind */
+	/* to prevent miscount use tsk->sysram_nodes_seq to detect rebind */
 	cpuset_mems_cookie = read_mems_allowed_begin();
 	node = current->il_prev;
 	if (!current->il_weight || !node_isset(node, policy->nodes)) {
@@ -2051,7 +2051,7 @@ static unsigned int interleave_nodes(struct mempolicy *policy)
 	unsigned int nid;
 	unsigned int cpuset_mems_cookie;
 
-	/* to prevent miscount, use tsk->mems_allowed_seq to detect rebind */
+	/* to prevent miscount, use tsk->sysram_nodes_seq to detect rebind */
 	do {
 		cpuset_mems_cookie = read_mems_allowed_begin();
 		nid = next_node_in(current->il_prev, policy->nodes);
@@ -2118,7 +2118,7 @@ static unsigned int read_once_policy_nodemask(struct mempolicy *pol,
 	/*
 	 * barrier stabilizes the nodemask locally so that it can be iterated
 	 * over safely without concern for changes. Allocators validate node
-	 * selection does not violate mems_allowed, so this is safe.
+	 * selection does not violate sysram_nodes, so this is safe.
 	 */
 	barrier();
 	memcpy(mask, &pol->nodes, sizeof(nodemask_t));
@@ -2210,7 +2210,7 @@ static nodemask_t *policy_nodemask(gfp_t gfp, struct mempolicy *pol,
 	case MPOL_BIND:
 		/* Restrict to nodemask (but not on lower zones) */
 		if (apply_policy_zone(pol, gfp_zone(gfp)) &&
-		    cpuset_nodemask_valid_mems_allowed(&pol->nodes))
+		    cpuset_nodemask_valid_sysram_nodes(&pol->nodes))
 			nodemask = &pol->nodes;
 		if (pol->home_node != NUMA_NO_NODE)
 			*nid = pol->home_node;
@@ -2738,7 +2738,7 @@ int vma_dup_policy(struct vm_area_struct *src, struct vm_area_struct *dst)
 /*
  * If mpol_dup() sees current->cpuset == cpuset_being_rebound, then it
  * rebinds the mempolicy its copying by calling mpol_rebind_policy()
- * with the mems_allowed returned by cpuset_mems_allowed().  This
+ * with the sysram_nodes returned by cpuset_mems_allowed().  This
  * keeps mempolicies cpuset relative after its cpuset moves.  See
  * further kernel/cpuset.c update_nodemask().
  *
