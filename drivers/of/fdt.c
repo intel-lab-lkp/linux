@@ -52,7 +52,7 @@ void __init of_fdt_limit_memory(int limit)
 	int memory;
 	int len;
 	const void *val;
-	int cell_size = sizeof(uint32_t)*(dt_root_addr_cells + dt_root_size_cells);
+	int cell_size = dt_root_addr_size_bytes();
 
 	memory = fdt_path_offset(initial_boot_params, "/memory");
 	if (memory > 0) {
