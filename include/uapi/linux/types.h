@@ -40,6 +40,9 @@ typedef __u32 __bitwise __be32;
 typedef __u64 __bitwise __le64;
 typedef __u64 __bitwise __be64;
 
+#ifdef __SIZEOF_INT128__
+typedef __u128 __bitwise __le128;
+#endif
 typedef __u16 __bitwise __sum16;
 typedef __u32 __bitwise __wsum;
 

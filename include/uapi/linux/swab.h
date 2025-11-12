@@ -133,6 +133,16 @@ static inline __attribute_const__ __u32 __fswahb32(__u32 val)
 	__fswab64(x))
 #endif
 
+#ifdef __SIZEOF_INT128__
+static inline __attribute_const__ __u128 __swab128(__u128 val)
+{
+	__u64 h = val >> 64;
+	__u64 l = val;
+
+	return (((__u128)__swab64(l)) << 64) | ((__u128)(__swab64(h)));
+}
+#endif
+
 static __always_inline unsigned long __swab(const unsigned long y)
 {
 #if __BITS_PER_LONG == 64

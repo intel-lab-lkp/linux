@@ -29,6 +29,12 @@
 #define __constant_be32_to_cpu(x) ___constant_swab32((__force __u32)(__be32)(x))
 #define __constant_cpu_to_be16(x) ((__force __be16)___constant_swab16((x)))
 #define __constant_be16_to_cpu(x) ___constant_swab16((__force __u16)(__be16)(x))
+
+#ifdef __SIZEOF_INT128__
+#define __cpu_to_le128(x) ((__force __le128)(__u128)(x))
+#define __le128_to_cpu(x) ((__force __u128)(__le128)(x))
+#endif
+
 #define __cpu_to_le64(x) ((__force __le64)(__u64)(x))
 #define __le64_to_cpu(x) ((__force __u64)(__le64)(x))
 #define __cpu_to_le32(x) ((__force __le32)(__u32)(x))
