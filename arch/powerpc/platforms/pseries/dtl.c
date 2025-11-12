@@ -36,6 +36,8 @@ static u8 dtl_event_mask = DTL_LOG_ALL;
  * not cross a 4k boundary.
  */
 static int dtl_buf_entries = N_DISPATCH_LOG;
+static atomic_t dtl_count;
+
 
 #ifdef CONFIG_VIRT_CPU_ACCOUNTING_NATIVE
 
@@ -55,8 +57,6 @@ struct dtl_ring {
 };
 
 static DEFINE_PER_CPU(struct dtl_ring, dtl_rings);
-
-static atomic_t dtl_count;
 
 /*
  * The cpu accounting code controls the DTL ring buffer, and we get
@@ -158,7 +158,7 @@ static int dtl_start(struct dtl *dtl)
 
 	/* enable event logging */
 	lppaca_of(dtl->cpu).dtl_enable_mask = dtl_event_mask;
-
+	atomic_inc(&dtl_count);
 	return 0;
 }
 
@@ -169,6 +169,7 @@ static void dtl_stop(struct dtl *dtl)
 	lppaca_of(dtl->cpu).dtl_enable_mask = 0x0;
 
 	unregister_dtl(hwcpu);
+	atomic_dec(&dtl_count);
 }
 
 static u64 dtl_current_index(struct dtl *dtl)
