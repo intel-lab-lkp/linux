@@ -10,6 +10,7 @@
 #include <linux/fs.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
+#include <linux/string.h>
 #include <asm/errno.h>
 #include "internal.h"
 
@@ -199,9 +200,9 @@ static int proc_keys_show(struct seq_file *m, void *v)
 	/* come up with a suitable timeout value */
 	expiry = READ_ONCE(key->expiry);
 	if (expiry == TIME64_MAX) {
-		memcpy(xbuf, "perm", 5);
+		strscpy(xbuf, "perm");
 	} else if (now >= expiry) {
-		memcpy(xbuf, "expd", 5);
+		strscpy(xbuf, "expd");
 	} else {
 		timo = expiry - now;
 
