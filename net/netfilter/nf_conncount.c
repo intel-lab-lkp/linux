@@ -524,6 +524,54 @@ unsigned int nf_conncount_count(struct net *net,
 }
 EXPORT_SYMBOL_GPL(nf_conncount_count);
 
+/* Count and return number of conntrack entries in 'net' with particular 'key'.
+ * If 'skb' is not null, insert the corresponding tuple into the accounting
+ * data structure. Call with RCU read lock.
+ */
+unsigned int nf_conncount_count_skb(struct net *net,
+				    const struct sk_buff *skb,
+				    u16 l3num,
+				    struct nf_conncount_data *data,
+				    const u32 *key)
+{
+	const struct nf_conntrack_tuple_hash *h;
+	const struct nf_conntrack_zone *zone;
+	struct nf_conntrack_tuple tuple;
+	enum ip_conntrack_info ctinfo;
+	unsigned int connections;
+	struct nf_conn *ct;
+
+	if (!skb)
+		return count_tree(net, data, key, NULL, NULL);
+
+	ct = nf_ct_get(skb, &ctinfo);
+	if (ct && !nf_ct_is_template(ct))
+		return count_tree(net, data, key,
+				  &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple,
+				  nf_ct_zone(ct));
+
+	if (!nf_ct_get_tuplepr(skb, skb_network_offset(skb), l3num, net, &tuple))
+		return 0;
+
+	if (ct)
+		zone = nf_ct_zone(ct);
+	else
+		zone = &nf_ct_zone_dflt;
+
+	h = nf_conntrack_find_get(net, zone, &tuple);
+	if (!h)
+		return count_tree(net, data, key, &tuple, zone);
+
+	ct = nf_ct_tuplehash_to_ctrack(h);
+	connections = count_tree(net, data, key,
+				 &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple,
+				 zone);
+	nf_ct_put(ct);
+
+	return connections;
+}
+EXPORT_SYMBOL_GPL(nf_conncount_count_skb);
+
 struct nf_conncount_data *nf_conncount_init(struct net *net, unsigned int keylen)
 {
 	struct nf_conncount_data *data;
