@@ -260,6 +260,8 @@ struct bonding {
 #endif /* CONFIG_DEBUG_FS */
 	struct rtnl_link_stats64 bond_stats;
 #ifdef CONFIG_XFRM_OFFLOAD
+	/* The device where new xfrm states will be offloaded */
+	struct slave __rcu *xfrm_active_slave;
 	struct list_head ipsec_list;
 	/* protecting ipsec_list */
 	struct mutex ipsec_lock;

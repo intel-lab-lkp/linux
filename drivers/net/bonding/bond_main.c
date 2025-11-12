@@ -438,7 +438,7 @@ static struct net_device *bond_ipsec_dev(struct xfrm_state *xs)
 	if (BOND_MODE(bond) != BOND_MODE_ACTIVEBACKUP)
 		return NULL;
 
-	slave = rcu_dereference(bond->curr_active_slave);
+	slave = rcu_dereference(bond->xfrm_active_slave);
 	if (!slave)
 		return NULL;
 
@@ -474,7 +474,7 @@ static int bond_ipsec_add_sa(struct net_device *bond_dev,
 
 	rcu_read_lock();
 	bond = netdev_priv(bond_dev);
-	slave = rcu_dereference(bond->curr_active_slave);
+	slave = rcu_dereference(bond->xfrm_active_slave);
 	real_dev = slave ? slave->dev : NULL;
 	netdev_hold(real_dev, &tracker, GFP_ATOMIC);
 	rcu_read_unlock();
@@ -515,7 +515,7 @@ out:
 
 static void bond_ipsec_migrate_sa_all(struct bonding *bond)
 {
-	struct slave *new_active = rtnl_dereference(bond->curr_active_slave);
+	struct slave *new_active = rtnl_dereference(bond->xfrm_active_slave);
 	struct net_device *bond_dev = bond->dev;
 	struct net *net = dev_net(bond_dev);
 	struct bond_ipsec *ipsec, *tmp;
@@ -1216,6 +1216,11 @@ void bond_change_active_slave(struct bonding *bond, struct slave *new_active)
 	if (bond_uses_primary(bond))
 		bond_hw_addr_swap(bond, new_active, old_active);
 
+#ifdef CONFIG_XFRM_OFFLOAD
+	rcu_assign_pointer(bond->xfrm_active_slave, new_active);
+	bond_ipsec_migrate_sa_all(bond);
+#endif
+
 	if (bond_is_lb(bond)) {
 		bond_alb_handle_active_change(bond, new_active);
 		if (old_active)
@@ -1227,10 +1232,6 @@ void bond_change_active_slave(struct bonding *bond, struct slave *new_active)
 	} else {
 		rcu_assign_pointer(bond->curr_active_slave, new_active);
 	}
-
-#ifdef CONFIG_XFRM_OFFLOAD
-	bond_ipsec_migrate_sa_all(bond);
-#endif
 
 	if (BOND_MODE(bond) == BOND_MODE_ACTIVEBACKUP) {
 		if (old_active)
