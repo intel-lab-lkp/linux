@@ -912,6 +912,10 @@
 				#gpio-cells = <2>;
 			};
 
+			smc_hwmon: hwmon {
+				compatible = "apple,smc-hwmon";
+			};
+
 			smc_reboot: reboot {
 				compatible = "apple,smc-reboot";
 				nvmem-cells = <&shutdown_flag>, <&boot_stage>,
@@ -1180,3 +1184,4 @@
 };
 
 #include "t8112-pmgr.dtsi"
+#include "hwmon-common.dtsi"
