@@ -130,17 +130,15 @@ vc4_v3d_pm_get(struct vc4_dev *vc4)
 	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
 		return -ENODEV;
 
-	mutex_lock(&vc4->power_lock);
+	guard(mutex)(&vc4->power_lock);
 	if (vc4->power_refcount++ == 0) {
 		int ret = pm_runtime_get_sync(&vc4->v3d->pdev->dev);
 
 		if (ret < 0) {
 			vc4->power_refcount--;
-			mutex_unlock(&vc4->power_lock);
 			return ret;
 		}
 	}
-	mutex_unlock(&vc4->power_lock);
 
 	return 0;
 }
@@ -151,12 +149,11 @@ vc4_v3d_pm_put(struct vc4_dev *vc4)
 	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
 		return;
 
-	mutex_lock(&vc4->power_lock);
+	guard(mutex)(&vc4->power_lock);
 	if (--vc4->power_refcount == 0) {
 		pm_runtime_mark_last_busy(&vc4->v3d->pdev->dev);
 		pm_runtime_put_autosuspend(&vc4->v3d->pdev->dev);
 	}
-	mutex_unlock(&vc4->power_lock);
 }
 
 static void vc4_v3d_init_hw(struct drm_device *dev)
@@ -173,7 +170,6 @@ static void vc4_v3d_init_hw(struct drm_device *dev)
 int vc4_v3d_get_bin_slot(struct vc4_dev *vc4)
 {
 	struct drm_device *dev = &vc4->base;
-	unsigned long irqflags;
 	int slot;
 	uint64_t seqno = 0;
 	struct vc4_exec_info *exec;
@@ -182,23 +178,22 @@ int vc4_v3d_get_bin_slot(struct vc4_dev *vc4)
 		return -ENODEV;
 
 try_again:
-	spin_lock_irqsave(&vc4->job_lock, irqflags);
-	slot = ffs(~vc4->bin_alloc_used);
-	if (slot != 0) {
-		/* Switch from ffs() bit index to a 0-based index. */
-		slot--;
-		vc4->bin_alloc_used |= BIT(slot);
-		spin_unlock_irqrestore(&vc4->job_lock, irqflags);
-		return slot;
-	}
+	scoped_guard (spinlock_irqsave, &vc4->job_lock) {
+		slot = ffs(~vc4->bin_alloc_used);
+		if (slot != 0) {
+			/* Switch from ffs() bit index to a 0-based index. */
+			slot--;
+			vc4->bin_alloc_used |= BIT(slot);
+			return slot;
+		}
 
-	/* Couldn't find an open slot.  Wait for render to complete
-	 * and try again.
-	 */
-	exec = vc4_last_render_job(vc4);
-	if (exec)
-		seqno = exec->seqno;
-	spin_unlock_irqrestore(&vc4->job_lock, irqflags);
+		/* Couldn't find an open slot.  Wait for render to complete
+		 * and try again.
+		 */
+		exec = vc4_last_render_job(vc4);
+		if (exec)
+			seqno = exec->seqno;
+	}
 
 	if (seqno) {
 		int ret = vc4_wait_for_seqno(dev, seqno, ~0ull, true);
@@ -328,10 +323,10 @@ int vc4_v3d_bin_bo_get(struct vc4_dev *vc4, bool *used)
 	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
 		return -ENODEV;
 
-	mutex_lock(&vc4->bin_bo_lock);
+	guard(mutex)(&vc4->bin_bo_lock);
 
 	if (used && *used)
-		goto complete;
+		return ret;
 
 	if (vc4->bin_bo)
 		kref_get(&vc4->bin_bo_kref);
@@ -340,9 +335,6 @@ int vc4_v3d_bin_bo_get(struct vc4_dev *vc4, bool *used)
 
 	if (ret == 0 && used)
 		*used = true;
-
-complete:
-	mutex_unlock(&vc4->bin_bo_lock);
 
 	return ret;
 }
@@ -363,9 +355,8 @@ void vc4_v3d_bin_bo_put(struct vc4_dev *vc4)
 	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
 		return;
 
-	mutex_lock(&vc4->bin_bo_lock);
+	guard(mutex)(&vc4->bin_bo_lock);
 	kref_put(&vc4->bin_bo_kref, bin_bo_release);
-	mutex_unlock(&vc4->bin_bo_lock);
 }
 
 #ifdef CONFIG_PM
