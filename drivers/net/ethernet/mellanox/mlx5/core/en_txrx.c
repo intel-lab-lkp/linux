@@ -180,7 +180,7 @@ int mlx5e_napi_poll(struct napi_struct *napi, int budget)
 	busy |= work_done == budget;
 
 	mlx5e_poll_ico_cq(&c->icosq.cq);
-	if (mlx5e_poll_ico_cq(&c->async_icosq->cq))
+	if (c->async_icosq && mlx5e_poll_ico_cq(&c->async_icosq->cq))
 		/* Don't clear the flag if nothing was polled to prevent
 		 * queueing more WQEs and overflowing the async ICOSQ.
 		 */
@@ -237,7 +237,8 @@ int mlx5e_napi_poll(struct napi_struct *napi, int budget)
 
 	mlx5e_cq_arm(&rq->cq);
 	mlx5e_cq_arm(&c->icosq.cq);
-	mlx5e_cq_arm(&c->async_icosq->cq);
+	if (c->async_icosq)
+		mlx5e_cq_arm(&c->async_icosq->cq);
 	if (c->xdpsq)
 		mlx5e_cq_arm(&c->xdpsq->cq);
 
