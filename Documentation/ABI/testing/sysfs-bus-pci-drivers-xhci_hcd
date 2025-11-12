@@ -85,3 +85,16 @@ Description:
 		up to 5000. The default value is 64 ms.
 		This polling interval is used while DbC is enabled but has no
 		active data transfers.
+
+What:          /sys/bus/pci/drivers/xhci_hcd/.../dbc_iSerial
+Date:          October 2025
+Contact:       Łukasz Bartosik <ukaszb@chromium.org>
+Description:
+               The dbc_iSerial attribute allows to change the iSerial field
+               presented in the USB device descriptor by xhci debug device.
+               Value can only be changed while debug capability (DbC) is in
+               disabled state to prevent USB device descriptor change while
+               connected to a USB host.
+               The default value is "0001".
+               The field length can be from 1 to 63 characters.
+
