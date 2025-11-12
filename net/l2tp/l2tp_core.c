@@ -1210,9 +1210,17 @@ static int l2tp_xmit_queue(struct l2tp_tunnel *tunnel, struct sk_buff *skb, stru
 	skb->ignore_df = 1;
 	skb_dst_drop(skb);
 #if IS_ENABLED(CONFIG_IPV6)
-	if (l2tp_sk_is_v6(tunnel->sock))
+	if (l2tp_sk_is_v6(tunnel->sock)) {
+		struct dst_entry *pre_dst, *hold_dst;
+
+		pre_dst = sk_dst_check(tunnel->sock, 0);
+		if (pre_dst)
+			dst_release(pre_dst);
+		hold_dst = sk_dst_get(tunnel->sock);
 		err = inet6_csk_xmit(tunnel->sock, skb, NULL);
-	else
+		if (hold_dst)
+			dst_release(hold_dst);
+	} else
 #endif
 		err = ip_queue_xmit(tunnel->sock, skb, fl);
 
