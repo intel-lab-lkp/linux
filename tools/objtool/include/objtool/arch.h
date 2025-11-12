@@ -98,7 +98,8 @@ int arch_rewrite_retpolines(struct objtool_file *file);
 
 bool arch_pc_relative_reloc(struct reloc *reloc);
 bool arch_absolute_reloc(struct elf *elf, struct reloc *reloc);
-
+unsigned long arch_pc_relative_offset(struct instruction *insn,
+				      struct reloc *reloc);
 unsigned int arch_reloc_size(struct reloc *reloc);
 unsigned long arch_jump_table_sym_offset(struct reloc *reloc, struct reloc *table);
 
