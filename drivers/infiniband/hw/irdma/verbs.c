@@ -5239,7 +5239,8 @@ static int irdma_create_user_ah(struct ib_ah *ibah,
 	mutex_unlock(&iwdev->rf->ah_tbl_lock);
 
 	uresp.ah_id = ah->sc_ah.ah_info.ah_idx;
-	err = ib_copy_to_udata(udata, &uresp, min(sizeof(uresp), udata->outlen));
+	if (udata)
+		err = ib_copy_to_udata(udata, &uresp, min(sizeof(uresp), udata->outlen));
 	if (err)
 		irdma_destroy_ah(ibah, attr->flags);
 
