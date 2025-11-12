@@ -471,7 +471,7 @@ int __init luo_session_setup_incoming(void *fdt_in)
 	err = fdt_node_check_compatible(fdt_in, offset,
 					LUO_FDT_SESSION_COMPATIBLE);
 	if (err) {
-		pr_err("Session node incompatibale [%s]\n",
+		pr_err("Session node incompatible [%s]\n",
 		       LUO_FDT_SESSION_COMPATIBLE);
 		return -EINVAL;
 	}
