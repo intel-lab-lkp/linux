@@ -6110,8 +6110,11 @@ int ext4_getattr(struct mnt_idmap *idmap, const struct path *path,
 			awu_max = sbi->s_awu_max;
 		}
 
-		generic_fill_statx_atomic_writes(stat, awu_min, awu_max, 0);
-	}
+		generic_fill_statx_atomic_writes(stat, awu_min, awu_max, 0,
+						 true);
+	} else if (request_mask & STATX_WRITE_ATOMIC_BUF)
+		/* Atomic writes for buferred IO not supported yet */
+		generic_fill_statx_atomic_writes(stat, 0, 0, 0, false);
 
 	flags = ei->i_flags & EXT4_FL_USER_VISIBLE;
 	if (flags & EXT4_APPEND_FL)

@@ -221,6 +221,7 @@ struct statx {
 /* Old name kept for backward compatibility */
 #define STATX_WRITE_ATOMIC	STATX_WRITE_ATOMIC_DIO
 #define STATX_DIO_READ_ALIGN	0x00020000U	/* Want/got dio read alignment info */
+#define STATX_WRITE_ATOMIC_BUF	0x00040000U	/* Want/got buf-io atomic_write_* fields */
 
 #define STATX__RESERVED		0x80000000U	/* Reserved for future struct statx expansion */
 
@@ -259,6 +260,7 @@ struct statx {
 #define STATX_ATTR_WRITE_ATOMIC_DIO	0x00400000 /* File supports dio atomic write operations */
 /* Old name kept for backward compatibility */
 #define STATX_ATTR_WRITE_ATOMIC	STATX_ATTR_WRITE_ATOMIC_DIO
+#define STATX_ATTR_WRITE_ATOMIC_BUF	0x00800000 /* File supports buf-io atomic write operations */
 
 
 #endif /* _UAPI_LINUX_STAT_H */

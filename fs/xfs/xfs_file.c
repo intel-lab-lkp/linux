@@ -1088,6 +1088,7 @@ xfs_file_write_iter(
 	struct xfs_inode	*ip = XFS_I(inode);
 	ssize_t			ret;
 	size_t			ocount = iov_iter_count(from);
+	bool is_dio = iocb->ki_flags & IOCB_DIRECT;
 
 	XFS_STATS_INC(ip->i_mount, xs_write_calls);
 
@@ -1098,10 +1099,10 @@ xfs_file_write_iter(
 		return -EIO;
 
 	if (iocb->ki_flags & IOCB_ATOMIC) {
-		if (ocount < xfs_get_atomic_write_min(ip))
+		if (ocount < xfs_get_atomic_write_min(ip, is_dio))
 			return -EINVAL;
 
-		if (ocount > xfs_get_atomic_write_max(ip))
+		if (ocount > xfs_get_atomic_write_max(ip, is_dio))
 			return -EINVAL;
 
 		ret = generic_atomic_write_valid(iocb, from);
@@ -1112,7 +1113,7 @@ xfs_file_write_iter(
 	if (IS_DAX(inode))
 		return xfs_file_dax_write(iocb, from);
 
-	if (iocb->ki_flags & IOCB_DIRECT) {
+	if (is_dio) {
 		/*
 		 * Allow a directio write to fall back to a buffered
 		 * write *only* in the case that we're doing a reflink
@@ -1569,7 +1570,7 @@ xfs_file_open(
 	if (xfs_is_shutdown(XFS_M(inode->i_sb)))
 		return -EIO;
 	file->f_mode |= FMODE_NOWAIT | FMODE_CAN_ODIRECT;
-	if (xfs_get_atomic_write_min(XFS_I(inode)) > 0)
+	if (xfs_get_atomic_write_min(XFS_I(inode), file->f_flags & O_DIRECT) > 0)
 		file->f_mode |= FMODE_CAN_ATOMIC_WRITE;
 	return generic_file_open(inode, file);
 }
