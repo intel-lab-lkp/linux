@@ -1058,7 +1058,7 @@ int __jbd2_update_log_tail(journal_t *journal, tid_t tid, unsigned long block)
 	unsigned long freed;
 	int ret;
 
-	BUG_ON(!mutex_is_locked(&journal->j_checkpoint_mutex));
+	J_ASSERT(mutex_is_locked(&journal->j_checkpoint_mutex));
 
 	/*
 	 * We cannot afford for write to remain in drive's caches since as
@@ -1863,7 +1863,7 @@ int jbd2_journal_update_sb_log_tail(journal_t *journal, tid_t tail_tid,
 		return -EIO;
 	}
 
-	BUG_ON(!mutex_is_locked(&journal->j_checkpoint_mutex));
+	J_ASSERT(mutex_is_locked(&journal->j_checkpoint_mutex));
 	jbd2_debug(1, "JBD2: updating superblock (start %lu, seq %u)\n",
 		  tail_block, tail_tid);
 
@@ -1897,7 +1897,7 @@ static void jbd2_mark_journal_empty(journal_t *journal, blk_opf_t write_flags)
 	journal_superblock_t *sb = journal->j_superblock;
 	bool had_fast_commit = false;
 
-	BUG_ON(!mutex_is_locked(&journal->j_checkpoint_mutex));
+	J_ASSERT(mutex_is_locked(&journal->j_checkpoint_mutex));
 	lock_buffer(journal->j_sb_buffer);
 	if (sb->s_start == 0) {		/* Is it already empty? */
 		unlock_buffer(journal->j_sb_buffer);
