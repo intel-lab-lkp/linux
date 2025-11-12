@@ -147,21 +147,21 @@ void udp_tunnel6_xmit_skb(dstref_t dstref, struct sock *sk,
 
 void udp_tunnel_sock_release(struct socket *sock);
 
-struct rtable *udp_tunnel_dst_lookup(struct sk_buff *skb,
+int udp_tunnel_dst_lookup(struct sk_buff *skb,
 				     struct net_device *dev,
 				     struct net *net, int oif,
 				     __be32 *saddr,
 				     const struct ip_tunnel_key *key,
 				     __be16 sport, __be16 dport, u8 tos,
-				     struct dst_cache *dst_cache);
-struct dst_entry *udp_tunnel6_dst_lookup(struct sk_buff *skb,
+				     struct dst_cache *dst_cache, dstref_t *dstref);
+int udp_tunnel6_dst_lookup(struct sk_buff *skb,
 					 struct net_device *dev,
 					 struct net *net,
 					 struct socket *sock, int oif,
 					 struct in6_addr *saddr,
 					 const struct ip_tunnel_key *key,
 					 __be16 sport, __be16 dport, u8 dsfield,
-					 struct dst_cache *dst_cache);
+					 struct dst_cache *dst_cache, dstref_t *dstref);
 
 struct metadata_dst *udp_tun_rx_dst(struct sk_buff *skb, unsigned short family,
 				    const unsigned long *flags,

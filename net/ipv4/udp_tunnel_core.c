@@ -227,13 +227,13 @@ struct metadata_dst *udp_tun_rx_dst(struct sk_buff *skb,  unsigned short family,
 }
 EXPORT_SYMBOL_GPL(udp_tun_rx_dst);
 
-struct rtable *udp_tunnel_dst_lookup(struct sk_buff *skb,
-				     struct net_device *dev,
-				     struct net *net, int oif,
-				     __be32 *saddr,
-				     const struct ip_tunnel_key *key,
-				     __be16 sport, __be16 dport, u8 tos,
-				     struct dst_cache *dst_cache)
+int udp_tunnel_dst_lookup(struct sk_buff *skb,
+			  struct net_device *dev,
+			  struct net *net, int oif,
+			  __be32 *saddr,
+			  const struct ip_tunnel_key *key,
+			  __be16 sport, __be16 dport, u8 tos,
+			  struct dst_cache *dst_cache, dstref_t *dstref)
 {
 	struct rtable *rt = NULL;
 	struct flowi4 fl4;
@@ -241,8 +241,10 @@ struct rtable *udp_tunnel_dst_lookup(struct sk_buff *skb,
 #ifdef CONFIG_DST_CACHE
 	if (dst_cache) {
 		rt = dst_cache_get_ip4(dst_cache, saddr);
-		if (rt)
-			return rt;
+		if (rt) {
+			*dstref = dst_to_dstref(&rt->dst);
+			return 0;
+		}
 	}
 #endif
 
@@ -260,19 +262,20 @@ struct rtable *udp_tunnel_dst_lookup(struct sk_buff *skb,
 	rt = ip_route_output_key(net, &fl4);
 	if (IS_ERR(rt)) {
 		netdev_dbg(dev, "no route to %pI4\n", &fl4.daddr);
-		return ERR_PTR(-ENETUNREACH);
+		return -ENETUNREACH;
 	}
 	if (rt->dst.dev == dev) { /* is this necessary? */
 		netdev_dbg(dev, "circular route to %pI4\n", &fl4.daddr);
 		ip_rt_put(rt);
-		return ERR_PTR(-ELOOP);
+		return -ELOOP;
 	}
 #ifdef CONFIG_DST_CACHE
 	if (dst_cache)
 		dst_cache_set_ip4(dst_cache, &rt->dst, fl4.saddr);
 #endif
 	*saddr = fl4.saddr;
-	return rt;
+	*dstref = dst_to_dstref(&rt->dst);
+	return 0;
 }
 EXPORT_SYMBOL_GPL(udp_tunnel_dst_lookup);
 

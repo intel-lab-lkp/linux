@@ -126,21 +126,23 @@ EXPORT_SYMBOL_GPL(udp_tunnel6_xmit_skb);
  *      @dport: UDP destination port
  *      @dsfield: The traffic class field
  *      @dst_cache: The dst cache to use for lookup
+ *      @dstref: Memory to store the dstref object returned from the lookup
  *      This function performs a route lookup on a UDP tunnel
  *
- *      It returns a valid dst pointer and stores src address to be used in
- *      tunnel in param saddr on success, else a pointer encoded error code.
+ *      On success, it stores the dstref object that represents the result of the lookup
+ *      in the dstref param, and the src address to be used for the tunnel in the saddr param.
+ *
+ *      Returns: 0 on success, negative error code on failure
  */
 
-struct dst_entry *udp_tunnel6_dst_lookup(struct sk_buff *skb,
-					 struct net_device *dev,
-					 struct net *net,
-					 struct socket *sock,
-					 int oif,
-					 struct in6_addr *saddr,
-					 const struct ip_tunnel_key *key,
-					 __be16 sport, __be16 dport, u8 dsfield,
-					 struct dst_cache *dst_cache)
+int udp_tunnel6_dst_lookup(struct sk_buff *skb,
+			   struct net_device *dev,
+			   struct net *net,
+			   struct socket *sock, int oif,
+			   struct in6_addr *saddr,
+			   const struct ip_tunnel_key *key,
+			   __be16 sport, __be16 dport, u8 dsfield,
+			   struct dst_cache *dst_cache, dstref_t *dstref)
 {
 	struct dst_entry *dst = NULL;
 	struct flowi6 fl6;
@@ -148,8 +150,10 @@ struct dst_entry *udp_tunnel6_dst_lookup(struct sk_buff *skb,
 #ifdef CONFIG_DST_CACHE
 	if (dst_cache) {
 		dst = dst_cache_get_ip6(dst_cache, saddr);
-		if (dst)
-			return dst;
+		if (dst) {
+			*dstref = dst_to_dstref(dst);
+			return 0;
+		}
 	}
 #endif
 	memset(&fl6, 0, sizeof(fl6));
@@ -166,19 +170,20 @@ struct dst_entry *udp_tunnel6_dst_lookup(struct sk_buff *skb,
 					      NULL);
 	if (IS_ERR(dst)) {
 		netdev_dbg(dev, "no route to %pI6\n", &fl6.daddr);
-		return ERR_PTR(-ENETUNREACH);
+		return -ENETUNREACH;
 	}
 	if (dst_dev(dst) == dev) { /* is this necessary? */
 		netdev_dbg(dev, "circular route to %pI6\n", &fl6.daddr);
 		dst_release(dst);
-		return ERR_PTR(-ELOOP);
+		return -ELOOP;
 	}
 #ifdef CONFIG_DST_CACHE
 	if (dst_cache)
 		dst_cache_set_ip6(dst_cache, dst, &fl6.saddr);
 #endif
 	*saddr = fl6.saddr;
-	return dst;
+	*dstref = dst_to_dstref(dst);
+	return 0;
 }
 EXPORT_SYMBOL_GPL(udp_tunnel6_dst_lookup);
 

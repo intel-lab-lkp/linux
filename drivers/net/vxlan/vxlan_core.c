@@ -2297,7 +2297,7 @@ static int encap_bypass_if_local(struct sk_buff *skb, struct net_device *dev,
 				 struct vxlan_dev *vxlan,
 				 int addr_family,
 				 __be16 dst_port, int dst_ifindex, __be32 vni,
-				 struct dst_entry *dst,
+				 dstref_t dstref,
 				 u32 rt_flags)
 {
 #if IS_ENABLED(CONFIG_IPV6)
@@ -2313,7 +2313,7 @@ static int encap_bypass_if_local(struct sk_buff *skb, struct net_device *dev,
 	    vxlan->cfg.flags & VXLAN_F_LOCALBYPASS) {
 		struct vxlan_dev *dst_vxlan;
 
-		dst_release(dst);
+		dstref_drop(dstref);
 		dst_vxlan = vxlan_find_vni(vxlan->net, dst_ifindex, vni,
 					   addr_family, dst_port,
 					   vxlan->cfg.flags);
@@ -2344,6 +2344,7 @@ void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 	struct vxlan_metadata _md;
 	struct vxlan_metadata *md = &_md;
 	unsigned int pkt_len = skb->len;
+	dstref_t dstref = DSTREF_EMPTY;
 	__be16 src_port = 0, dst_port;
 	struct dst_entry *ndst = NULL;
 	int addr_family;
@@ -2463,14 +2464,15 @@ void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 		if (!ifindex)
 			ifindex = sock4->sock->sk->sk_bound_dev_if;
 
-		rt = udp_tunnel_dst_lookup(skb, dev, vxlan->net, ifindex,
-					   &saddr, pkey, src_port, dst_port,
-					   tos, use_cache ? dst_cache : NULL);
-		if (IS_ERR(rt)) {
-			err = PTR_ERR(rt);
+		err = udp_tunnel_dst_lookup(skb, dev, vxlan->net, ifindex,
+					    &saddr, pkey, src_port, dst_port,
+					    tos, use_cache ? dst_cache : NULL, &dstref);
+		if (err) {
 			reason = SKB_DROP_REASON_IP_OUTNOROUTES;
 			goto tx_error;
 		}
+
+		rt = dst_rtable(dstref_dst(dstref));
 
 		if (flags & VXLAN_F_MC_ROUTE)
 			ipcb_flags |= IPSKB_MCROUTE;
@@ -2479,7 +2481,7 @@ void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 			/* Bypass encapsulation if the destination is local */
 			err = encap_bypass_if_local(skb, dev, vxlan, AF_INET,
 						    dst_port, ifindex, vni,
-						    &rt->dst, rt->rt_flags);
+						    dstref, rt->rt_flags);
 			if (err)
 				goto out_unlock;
 
@@ -2515,7 +2517,7 @@ void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 				unclone->key.u.ipv4.dst = saddr;
 			}
 			vxlan_encap_bypass(skb, vxlan, vxlan, vni, false);
-			dst_release(ndst);
+			dstref_drop(dstref);
 			goto out_unlock;
 		}
 
@@ -2528,7 +2530,7 @@ void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 			goto tx_error;
 		}
 
-		udp_tunnel_xmit_skb(dst_to_dstref(&rt->dst), sock4->sock->sk, skb, saddr,
+		udp_tunnel_xmit_skb(dstref, sock4->sock->sk, skb, saddr,
 				    pkey->u.ipv4.dst, tos, ttl, df,
 				    src_port, dst_port, xnet, !udp_sum,
 				    ipcb_flags);
@@ -2541,16 +2543,16 @@ void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 		if (!ifindex)
 			ifindex = sock6->sock->sk->sk_bound_dev_if;
 
-		ndst = udp_tunnel6_dst_lookup(skb, dev, vxlan->net, sock6->sock,
-					      ifindex, &saddr, pkey,
-					      src_port, dst_port, tos,
-					      use_cache ? dst_cache : NULL);
-		if (IS_ERR(ndst)) {
-			err = PTR_ERR(ndst);
-			ndst = NULL;
+		err = udp_tunnel6_dst_lookup(skb, dev, vxlan->net, sock6->sock,
+					     ifindex, &saddr, pkey,
+					     src_port, dst_port, tos,
+					     use_cache ? dst_cache : NULL, &dstref);
+		if (err) {
 			reason = SKB_DROP_REASON_IP_OUTNOROUTES;
 			goto tx_error;
 		}
+
+		ndst = dstref_dst(dstref);
 
 		if (flags & VXLAN_F_MC_ROUTE)
 			ip6cb_flags |= IP6SKB_MCROUTE;
@@ -2560,7 +2562,7 @@ void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 
 			err = encap_bypass_if_local(skb, dev, vxlan, AF_INET6,
 						    dst_port, ifindex, vni,
-						    ndst, rt6i_flags);
+						    dstref, rt6i_flags);
 			if (err)
 				goto out_unlock;
 		}
@@ -2583,7 +2585,7 @@ void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 			}
 
 			vxlan_encap_bypass(skb, vxlan, vxlan, vni, false);
-			dst_release(ndst);
+			dstref_drop(dstref);
 			goto out_unlock;
 		}
 
@@ -2597,7 +2599,7 @@ void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 			goto tx_error;
 		}
 
-		udp_tunnel6_xmit_skb(dst_to_dstref(ndst), sock6->sock->sk, skb, dev,
+		udp_tunnel6_xmit_skb(dstref, sock6->sock->sk, skb, dev,
 				     &saddr, &pkey->u.ipv6.dst, tos, ttl,
 				     pkey->label, src_port, dst_port, !udp_sum,
 				     ip6cb_flags);
@@ -2615,12 +2617,12 @@ drop:
 	return;
 
 tx_error:
+	dstref_drop(dstref);
 	rcu_read_unlock();
 	if (err == -ELOOP)
 		DEV_STATS_INC(dev, collisions);
 	else if (err == -ENETUNREACH)
 		DEV_STATS_INC(dev, tx_carrier_errors);
-	dst_release(ndst);
 	DEV_STATS_INC(dev, tx_errors);
 	vxlan_vnifilter_count(vxlan, vni, NULL, VXLAN_VNI_STATS_TX_ERRORS, 0);
 	kfree_skb_reason(skb, reason);
@@ -3208,6 +3210,8 @@ static int vxlan_fill_metadata_dst(struct net_device *dev, struct sk_buff *skb)
 	struct vxlan_dev *vxlan = netdev_priv(dev);
 	struct ip_tunnel_info *info = skb_tunnel_info(skb);
 	__be16 sport, dport;
+	dstref_t dstref;
+	int err;
 
 	sport = udp_flow_src_port(dev_net(dev), skb, vxlan->cfg.port_min,
 				  vxlan->cfg.port_max, true);
@@ -3215,35 +3219,33 @@ static int vxlan_fill_metadata_dst(struct net_device *dev, struct sk_buff *skb)
 
 	if (ip_tunnel_info_af(info) == AF_INET) {
 		struct vxlan_sock *sock4 = rcu_dereference(vxlan->vn4_sock);
-		struct rtable *rt;
 
 		if (!sock4)
 			return -EIO;
 
-		rt = udp_tunnel_dst_lookup(skb, dev, vxlan->net, 0,
-					   &info->key.u.ipv4.src,
-					   &info->key,
-					   sport, dport, info->key.tos,
-					   &info->dst_cache);
-		if (IS_ERR(rt))
-			return PTR_ERR(rt);
-		ip_rt_put(rt);
+		err = udp_tunnel_dst_lookup(skb, dev, vxlan->net, 0,
+					    &info->key.u.ipv4.src,
+					    &info->key,
+					    sport, dport, info->key.tos,
+					    &info->dst_cache, &dstref);
+		if (err)
+			return err;
+		dstref_drop(dstref);
 	} else {
 #if IS_ENABLED(CONFIG_IPV6)
 		struct vxlan_sock *sock6 = rcu_dereference(vxlan->vn6_sock);
-		struct dst_entry *ndst;
 
 		if (!sock6)
 			return -EIO;
 
-		ndst = udp_tunnel6_dst_lookup(skb, dev, vxlan->net, sock6->sock,
-					      0, &info->key.u.ipv6.src,
-					      &info->key,
-					      sport, dport, info->key.tos,
-					      &info->dst_cache);
-		if (IS_ERR(ndst))
-			return PTR_ERR(ndst);
-		dst_release(ndst);
+		err = udp_tunnel6_dst_lookup(skb, dev, vxlan->net, sock6->sock,
+					     0, &info->key.u.ipv6.src,
+					     &info->key,
+					     sport, dport, info->key.tos,
+					     &info->dst_cache, &dstref);
+		if (err)
+			return err;
+		dstref_drop(dstref);
 #else /* !CONFIG_IPV6 */
 		return -EPFNOSUPPORT;
 #endif
