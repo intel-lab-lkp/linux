@@ -46,7 +46,10 @@
 #include <net/netfilter/nf_conntrack.h>
 #endif
 
-#define NFQNL_QMAX_DEFAULT 1024
+#define NFQNL_QMAX_DEFAULT      1024
+#define NFQNL_MIN_HASH_SIZE     16
+#define NFQNL_DEFAULT_HASH_SIZE 1024
+#define NFQNL_MAX_HASH_SIZE     131072
 
 /* We're using struct nlattr which has 16bit nla_len. Note that nla_len
  * includes the header length. Thus, the maximum packet length that we
@@ -65,6 +68,7 @@ struct nfqnl_instance {
 	unsigned int copy_range;
 	unsigned int queue_dropped;
 	unsigned int queue_user_dropped;
+	unsigned int queue_hash_size;
 
 
 	u_int16_t queue_num;			/* number of this queue */
@@ -77,6 +81,8 @@ struct nfqnl_instance {
 	spinlock_t	lock	____cacheline_aligned_in_smp;
 	unsigned int	queue_total;
 	unsigned int	id_sequence;		/* 'sequence' of pkt ids */
+	unsigned int	queue_hash_mask;
+	struct hlist_head *queue_hash;
 	struct list_head queue_list;		/* packets in queue */
 };
 
@@ -93,6 +99,39 @@ struct nfnl_queue_net {
 static struct nfnl_queue_net *nfnl_queue_pernet(struct net *net)
 {
 	return net_generic(net, nfnl_queue_net_id);
+}
+
+static inline unsigned int
+nfqnl_packet_hash(u32 id, unsigned int mask)
+{
+	return hash_32(id, 32) & mask;
+}
+
+static inline u32
+nfqnl_normalize_hash_size(u32 hash_size)
+{
+	/* Must be power of two for queue_hash_mask to work correctly.
+	 * Avoid overflow of is_power_of_2 by bounding NFQNL_MAX_HASH_SIZE.
+	 */
+	BUILD_BUG_ON(!is_power_of_2(NFQNL_MIN_HASH_SIZE) ||
+		     !is_power_of_2(NFQNL_DEFAULT_HASH_SIZE) ||
+		     !is_power_of_2(NFQNL_MAX_HASH_SIZE) ||
+		     NFQNL_MAX_HASH_SIZE > 1U << 31);
+
+	if (!hash_size)
+		return NFQNL_DEFAULT_HASH_SIZE;
+
+	/* Clamp to valid range before power of two to avoid overflow */
+	if (hash_size <= NFQNL_MIN_HASH_SIZE)
+		return NFQNL_MIN_HASH_SIZE;
+
+	if (hash_size >= NFQNL_MAX_HASH_SIZE)
+		return NFQNL_MAX_HASH_SIZE;
+
+	if (!is_power_of_2(hash_size))
+		hash_size = roundup_pow_of_two(hash_size);
+
+	return hash_size;
 }
 
 static inline u_int8_t instance_hashfn(u_int16_t queue_num)
@@ -114,12 +153,62 @@ instance_lookup(struct nfnl_queue_net *q, u_int16_t queue_num)
 	return NULL;
 }
 
+static int
+nfqnl_hash_resize(struct nfqnl_instance *inst, u32 hash_size)
+{
+	struct hlist_head *new_hash, *old_hash;
+	struct nf_queue_entry *entry;
+	unsigned int h, hash_mask;
+
+	/* lock scope includes kcalloc/kfree to bound memory if concurrent resizes.
+	 * lock scope could be reduced to exclude the  kcalloc/kfree at the cost
+	 * of increased code complexity (re-check of hash_size) and relaxed memory
+	 * bounds (concurrent resize may each do allocations). since resize is
+	 * expected to be rare, the broader lock scope is simpler and preferred.
+	 */
+	spin_lock_bh(&inst->lock);
+
+	hash_size = nfqnl_normalize_hash_size(hash_size);
+	if (hash_size == inst->queue_hash_size)
+		return 0;
+
+	new_hash = kcalloc(hash_size, sizeof(*new_hash), GFP_ATOMIC);
+	if (!new_hash)
+		return -ENOMEM;
+
+	hash_mask = hash_size - 1;
+
+	for (h = 0; h < hash_size; h++)
+		INIT_HLIST_HEAD(&new_hash[h]);
+
+	list_for_each_entry(entry, &inst->queue_list, list) {
+		/* No hlist_del() since old_hash will be freed and we hold lock */
+		h = nfqnl_packet_hash(entry->id, hash_mask);
+		hlist_add_head(&entry->hash_node, &new_hash[h]);
+	}
+
+	old_hash = inst->queue_hash;
+	inst->queue_hash_size = hash_size;
+	inst->queue_hash_mask = hash_mask;
+	inst->queue_hash = new_hash;
+
+	/* free before unlock. make memory available to concurrent resizes. */
+	kfree(old_hash);
+
+	spin_unlock_bh(&inst->lock);
+
+	return 0;
+}
+
 static struct nfqnl_instance *
-instance_create(struct nfnl_queue_net *q, u_int16_t queue_num, u32 portid)
+instance_create(struct nfnl_queue_net *q, u_int16_t queue_num, u32 portid,
+		u32 hash_size)
 {
 	struct nfqnl_instance *inst;
 	unsigned int h;
 	int err;
+
+	hash_size = nfqnl_normalize_hash_size(hash_size);
 
 	spin_lock(&q->instances_lock);
 	if (instance_lookup(q, queue_num)) {
@@ -133,11 +222,24 @@ instance_create(struct nfnl_queue_net *q, u_int16_t queue_num, u32 portid)
 		goto out_unlock;
 	}
 
+	inst->queue_hash = kcalloc(hash_size, sizeof(*inst->queue_hash),
+				   GFP_ATOMIC);
+	if (!inst->queue_hash) {
+		kfree(inst);
+		err = -ENOMEM;
+		goto out_unlock;
+	}
+
+	for (h = 0; h < hash_size; h++)
+		INIT_HLIST_HEAD(&inst->queue_hash[h]);
+
 	inst->queue_num = queue_num;
 	inst->peer_portid = portid;
 	inst->queue_maxlen = NFQNL_QMAX_DEFAULT;
 	inst->copy_range = NFQNL_MAX_COPY_RANGE;
 	inst->copy_mode = NFQNL_COPY_NONE;
+	inst->queue_hash_size = hash_size;
+	inst->queue_hash_mask = hash_size - 1;
 	spin_lock_init(&inst->lock);
 	INIT_LIST_HEAD(&inst->queue_list);
 
@@ -154,6 +256,7 @@ instance_create(struct nfnl_queue_net *q, u_int16_t queue_num, u32 portid)
 	return inst;
 
 out_free:
+	kfree(inst->queue_hash);
 	kfree(inst);
 out_unlock:
 	spin_unlock(&q->instances_lock);
@@ -172,6 +275,7 @@ instance_destroy_rcu(struct rcu_head *head)
 	rcu_read_lock();
 	nfqnl_flush(inst, NULL, 0);
 	rcu_read_unlock();
+	kfree(inst->queue_hash);
 	kfree(inst);
 	module_put(THIS_MODULE);
 }
@@ -194,13 +298,17 @@ instance_destroy(struct nfnl_queue_net *q, struct nfqnl_instance *inst)
 static inline void
 __enqueue_entry(struct nfqnl_instance *queue, struct nf_queue_entry *entry)
 {
-       list_add_tail(&entry->list, &queue->queue_list);
-       queue->queue_total++;
+	unsigned int hash = nfqnl_packet_hash(entry->id, queue->queue_hash_mask);
+
+	hlist_add_head(&entry->hash_node, &queue->queue_hash[hash]);
+	list_add_tail(&entry->list, &queue->queue_list);
+	queue->queue_total++;
 }
 
 static void
 __dequeue_entry(struct nfqnl_instance *queue, struct nf_queue_entry *entry)
 {
+	hlist_del(&entry->hash_node);
 	list_del(&entry->list);
 	queue->queue_total--;
 }
@@ -209,10 +317,11 @@ static struct nf_queue_entry *
 find_dequeue_entry(struct nfqnl_instance *queue, unsigned int id)
 {
 	struct nf_queue_entry *entry = NULL, *i;
+	unsigned int hash = nfqnl_packet_hash(id, queue->queue_hash_mask);
 
 	spin_lock_bh(&queue->lock);
 
-	list_for_each_entry(i, &queue->queue_list, list) {
+	hlist_for_each_entry(i, &queue->queue_hash[hash], hash_node) {
 		if (i->id == id) {
 			entry = i;
 			break;
@@ -407,8 +516,7 @@ nfqnl_flush(struct nfqnl_instance *queue, nfqnl_cmpfn cmpfn, unsigned long data)
 	spin_lock_bh(&queue->lock);
 	list_for_each_entry_safe(entry, next, &queue->queue_list, list) {
 		if (!cmpfn || cmpfn(entry, data)) {
-			list_del(&entry->list);
-			queue->queue_total--;
+			__dequeue_entry(queue, entry);
 			nfqnl_reinject(entry, NF_DROP);
 		}
 	}
@@ -1483,6 +1591,7 @@ static const struct nla_policy nfqa_cfg_policy[NFQA_CFG_MAX+1] = {
 	[NFQA_CFG_QUEUE_MAXLEN]	= { .type = NLA_U32 },
 	[NFQA_CFG_MASK]		= { .type = NLA_U32 },
 	[NFQA_CFG_FLAGS]	= { .type = NLA_U32 },
+	[NFQA_CFG_HASH_SIZE]    = { .type = NLA_U32 },
 };
 
 static const struct nf_queue_handler nfqh = {
@@ -1495,10 +1604,15 @@ static int nfqnl_recv_config(struct sk_buff *skb, const struct nfnl_info *info,
 {
 	struct nfnl_queue_net *q = nfnl_queue_pernet(info->net);
 	u_int16_t queue_num = ntohs(info->nfmsg->res_id);
+	u32 hash_size = 0;
 	struct nfqnl_msg_config_cmd *cmd = NULL;
 	struct nfqnl_instance *queue;
 	__u32 flags = 0, mask = 0;
 	int ret = 0;
+
+	if (nfqa[NFQA_CFG_HASH_SIZE]) {
+		hash_size = ntohl(nla_get_be32(nfqa[NFQA_CFG_HASH_SIZE]));
+	}
 
 	if (nfqa[NFQA_CFG_CMD]) {
 		cmd = nla_data(nfqa[NFQA_CFG_CMD]);
@@ -1559,11 +1673,12 @@ static int nfqnl_recv_config(struct sk_buff *skb, const struct nfnl_info *info,
 				goto err_out_unlock;
 			}
 			queue = instance_create(q, queue_num,
-						NETLINK_CB(skb).portid);
+						NETLINK_CB(skb).portid, hash_size);
 			if (IS_ERR(queue)) {
 				ret = PTR_ERR(queue);
 				goto err_out_unlock;
 			}
+			hash_size = 0; /* avoid resize later in this function */
 			break;
 		case NFQNL_CFG_CMD_UNBIND:
 			if (!queue) {
@@ -1584,6 +1699,12 @@ static int nfqnl_recv_config(struct sk_buff *skb, const struct nfnl_info *info,
 	if (!queue) {
 		ret = -ENODEV;
 		goto err_out_unlock;
+	}
+
+	if (hash_size > 0) {
+		ret = nfqnl_hash_resize(queue, hash_size);
+		if (ret)
+			goto err_out_unlock;
 	}
 
 	if (nfqa[NFQA_CFG_PARAMS]) {
