@@ -649,6 +649,7 @@ static void maple_dma_handler(struct work_struct *work)
 			list_del_init(&mq->list);
 			switch (code) {
 			case MAPLE_RESPONSE_NONE:
+			case MAPLE_RESPONSE_TIMEOUT:
 				maple_response_none(mdev);
 				break;
 
