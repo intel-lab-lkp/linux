@@ -894,14 +894,14 @@ static void __init early_init_dt_check_kho(void)
 		return;
 
 	fdt_start = dt_mem_next_cell(dt_root_addr_cells, &p);
-	fdt_size = dt_mem_next_cell(dt_root_addr_cells, &p);
+	fdt_size = dt_mem_next_cell(dt_root_size_cells, &p);
 
 	p = of_get_flat_dt_prop(node, "linux,kho-scratch", &l);
 	if (l != dt_root_addr_size_bytes())
 		return;
 
 	scratch_start = dt_mem_next_cell(dt_root_addr_cells, &p);
-	scratch_size = dt_mem_next_cell(dt_root_addr_cells, &p);
+	scratch_size = dt_mem_next_cell(dt_root_size_cells, &p);
 
 	kho_populate(fdt_start, fdt_size, scratch_start, scratch_size);
 }
