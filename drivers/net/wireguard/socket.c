@@ -29,6 +29,7 @@ static int send4(struct wg_device *wg, struct sk_buff *skb,
 	};
 	struct rtable *rt = NULL;
 	struct sock *sock;
+	dstref_t dstref;
 	int ret = 0;
 
 	skb_mark_not_on_list(skb);
@@ -45,8 +46,10 @@ static int send4(struct wg_device *wg, struct sk_buff *skb,
 
 	fl.fl4_sport = inet_sk(sock)->inet_sport;
 
-	if (cache)
-		rt = dst_cache_get_ip4(cache, &fl.saddr);
+	if (cache) {
+		rt = dst_cache_get_ip4_rcu(cache, &fl.saddr);
+		dstref = dst_to_dstref_noref(&rt->dst);
+	}
 
 	if (!rt) {
 		security_sk_classify_flow(sock, flowi4_to_flowi_common(&fl));
@@ -77,12 +80,16 @@ static int send4(struct wg_device *wg, struct sk_buff *skb,
 					    wg->dev->name, &endpoint->addr, ret);
 			goto err;
 		}
-		if (cache)
-			dst_cache_set_ip4(cache, &rt->dst, fl.saddr);
+		if (cache) {
+			dst_cache_steal_ip4(cache, &rt->dst, fl.saddr);
+			dstref = dst_to_dstref_noref(&rt->dst);
+		} else {
+			dstref = dst_to_dstref(&rt->dst);
+		}
 	}
 
 	skb->ignore_df = 1;
-	udp_tunnel_xmit_skb(dst_to_dstref(&rt->dst), sock, skb, fl.saddr, fl.daddr, ds,
+	udp_tunnel_xmit_skb(dstref, sock, skb, fl.saddr, fl.daddr, ds,
 			    ip4_dst_hoplimit(&rt->dst), 0, fl.fl4_sport,
 			    fl.fl4_dport, false, false, 0);
 	goto out;
@@ -109,6 +116,7 @@ static int send6(struct wg_device *wg, struct sk_buff *skb,
 	};
 	struct dst_entry *dst = NULL;
 	struct sock *sock;
+	dstref_t dstref;
 	int ret = 0;
 
 	skb_mark_not_on_list(skb);
@@ -125,8 +133,10 @@ static int send6(struct wg_device *wg, struct sk_buff *skb,
 
 	fl.fl6_sport = inet_sk(sock)->inet_sport;
 
-	if (cache)
-		dst = dst_cache_get_ip6(cache, &fl.saddr);
+	if (cache) {
+		dst = dst_cache_get_ip6_rcu(cache, &fl.saddr);
+		dstref = dst_to_dstref_noref(dst);
+	}
 
 	if (!dst) {
 		security_sk_classify_flow(sock, flowi6_to_flowi_common(&fl));
@@ -144,12 +154,16 @@ static int send6(struct wg_device *wg, struct sk_buff *skb,
 					    wg->dev->name, &endpoint->addr, ret);
 			goto err;
 		}
-		if (cache)
-			dst_cache_set_ip6(cache, dst, &fl.saddr);
+		if (cache) {
+			dst_cache_steal_ip6(cache, dst, &fl.saddr);
+			dstref = dst_to_dstref_noref(dst);
+		} else {
+			dstref = dst_to_dstref(dst);
+		}
 	}
 
 	skb->ignore_df = 1;
-	udp_tunnel6_xmit_skb(dst_to_dstref(dst), sock, skb, skb->dev, &fl.saddr, &fl.daddr, ds,
+	udp_tunnel6_xmit_skb(dstref, sock, skb, skb->dev, &fl.saddr, &fl.daddr, ds,
 			     ip6_dst_hoplimit(dst), 0, fl.fl6_sport,
 			     fl.fl6_dport, false, 0);
 	goto out;
