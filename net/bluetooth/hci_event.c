@@ -3737,6 +3737,26 @@ unlock:
 	hci_dev_unlock(hdev);
 }
 
+static void hci_remote_version_evt(struct hci_dev *hdev, void *data,
+				   struct sk_buff *skb)
+{
+	struct hci_ev_remote_version *ev = (void *)skb->data;
+	struct hci_conn *conn;
+
+	BT_DBG("%s", hdev->name);
+
+	hci_dev_lock(hdev);
+
+	conn = hci_conn_hash_lookup_handle(hdev, __le16_to_cpu(ev->handle));
+	if (!conn)
+		goto unlock;
+
+	conn->remote_ver = ev->lmp_ver;
+
+unlock:
+	hci_dev_unlock(hdev);
+}
+
 static inline void handle_cmd_cnt_and_timer(struct hci_dev *hdev, u8 ncmd)
 {
 	cancel_delayed_work(&hdev->cmd_timer);
@@ -7464,6 +7484,9 @@ static const struct hci_ev {
 	/* [0x0b = HCI_EV_REMOTE_FEATURES] */
 	HCI_EV(HCI_EV_REMOTE_FEATURES, hci_remote_features_evt,
 	       sizeof(struct hci_ev_remote_features)),
+	/* [0x0c = HCI_EV_REMOTE_VERSION] */
+	HCI_EV(HCI_EV_REMOTE_VERSION, hci_remote_version_evt,
+	       sizeof(struct hci_ev_remote_version)),
 	/* [0x0e = HCI_EV_CMD_COMPLETE] */
 	HCI_EV_REQ_VL(HCI_EV_CMD_COMPLETE, hci_cmd_complete_evt,
 		      sizeof(struct hci_ev_cmd_complete), HCI_MAX_EVENT_SIZE),
