@@ -2454,6 +2454,7 @@ int drm_connector_attach_hdr_output_metadata_property(struct drm_connector *conn
 bool drm_connector_atomic_hdr_metadata_equal(struct drm_connector_state *old_state,
 					     struct drm_connector_state *new_state);
 int drm_mode_create_aspect_ratio_property(struct drm_device *dev);
+struct drm_property *drm_create_abm_property(struct drm_device *dev);
 int drm_mode_create_hdmi_colorspace_property(struct drm_connector *connector,
 					     u32 supported_colorspaces);
 int drm_mode_create_dp_colorspace_property(struct drm_connector *connector,
@@ -2562,5 +2563,12 @@ const char *drm_get_colorspace_name(enum drm_colorspace colorspace);
 #define drm_connector_for_each_possible_encoder(connector, encoder) \
 	drm_for_each_encoder_mask(encoder, (connector)->dev, \
 				  (connector)->possible_encoders)
+
+#define ABM_SYSFS_CONTROL	-1
+#define ABM_LEVEL_OFF		0
+#define ABM_LEVEL_MIN		1
+#define ABM_LEVEL_BIAS_MIN	2
+#define ABM_LEVEL_BIAS_MAX	3
+#define ABM_LEVEL_MAX		4
 
 #endif

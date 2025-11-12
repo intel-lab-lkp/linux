@@ -2604,6 +2604,69 @@ static int drm_mode_create_colorspace_property(struct drm_connector *connector,
 }
 
 /**
+ * DOC: integrated panel properties
+ *
+ * adaptive backlight modulation:
+ *	Adaptive backlight modulation (ABM) is a power savings feature that
+ *	dynamically adjusts the backlight brightness based on the content
+ *	displayed on the screen. By reducing the backlight brightness for
+ *	darker images and increasing it for brighter images, ABM helps to
+ *	conserve energy and extend battery life on devices with integrated
+ *	displays.  This feature is part of AMD DCN hardware.
+ *
+ *	sysfs
+ *		The ABM property is exposed to userspace via sysfs interface
+ *		located at 'amdgpu/panel_power_savings' under the DRM device.
+ *	off
+ *		Adaptive backlight modulation is disabled.
+ *	min
+ *		Adaptive backlight modulation is enabled at minimum intensity.
+ *	bias min
+ *		Adaptive backlight modulation is enabled at a more intense
+ *		level than 'min'.
+ *	bias max
+ *		Adaptive backlight modulation is enabled at a more intense
+ *		level than 'bias min'.
+ *	max
+ *		Adaptive backlight modulation is enabled at maximum intensity.
+ */
+struct drm_property *drm_create_abm_property(struct drm_device *dev)
+{
+	const struct drm_prop_enum_list props[] = {
+		{ ABM_SYSFS_CONTROL, "sysfs" },
+		{ ABM_LEVEL_OFF, "off" },
+		{ ABM_LEVEL_MIN, "min" },
+		{ ABM_LEVEL_BIAS_MIN, "bias min" },
+		{ ABM_LEVEL_BIAS_MAX, "bias max" },
+		{ ABM_LEVEL_MAX, "max" },
+	};
+	struct drm_property *prop;
+	int i;
+
+	prop = drm_property_create(dev, DRM_MODE_PROP_ENUM,
+				"adaptive backlight modulation",
+				6);
+	if (!prop)
+		return ERR_PTR(-ENOMEM);
+
+	for (i = 0; i < ARRAY_SIZE(props); i++) {
+		int ret;
+
+		ret = drm_property_add_enum(prop, props[i].type,
+						props[i].name);
+
+		if (ret) {
+			drm_property_destroy(dev, prop);
+
+			return ERR_PTR(ret);
+		}
+	}
+
+	return prop;
+}
+EXPORT_SYMBOL(drm_create_abm_property);
+
+/**
  * drm_mode_create_hdmi_colorspace_property - create hdmi colorspace property
  * @connector: connector to create the Colorspace property on.
  * @supported_colorspaces: bitmap of supported color spaces
