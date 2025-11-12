@@ -513,19 +513,21 @@ out:
 	return err;
 }
 
-static void bond_ipsec_add_sa_all(struct bonding *bond)
+static void bond_ipsec_migrate_sa_all(struct bonding *bond)
 {
+	struct slave *new_active = rtnl_dereference(bond->curr_active_slave);
 	struct net_device *bond_dev = bond->dev;
+	struct net *net = dev_net(bond_dev);
+	struct bond_ipsec *ipsec, *tmp;
+	struct xfrm_user_offload xuo;
 	struct net_device *real_dev;
-	struct bond_ipsec *ipsec;
-	struct slave *slave;
+	struct xfrm_migrate m = {};
+	LIST_HEAD(ipsec_list);
 
-	slave = rtnl_dereference(bond->curr_active_slave);
-	real_dev = slave ? slave->dev : NULL;
-	if (!real_dev)
+	if (!new_active)
 		return;
 
-	mutex_lock(&bond->ipsec_lock);
+	real_dev = new_active->dev;
 	if (!real_dev->xfrmdev_ops ||
 	    !real_dev->xfrmdev_ops->xdo_dev_state_add ||
 	    netif_is_bond_master(real_dev)) {
@@ -533,36 +535,42 @@ static void bond_ipsec_add_sa_all(struct bonding *bond)
 			slave_warn(bond_dev, real_dev,
 				   "%s: no slave xdo_dev_state_add\n",
 				   __func__);
-		goto out;
+		return;
 	}
 
-	list_for_each_entry(ipsec, &bond->ipsec_list, list) {
-		/* If new state is added before ipsec_lock acquired */
-		if (ipsec->xs->xso.real_dev == real_dev)
-			continue;
-
-		if (real_dev->xfrmdev_ops->xdo_dev_state_add(real_dev,
-							     ipsec->xs, NULL)) {
-			slave_warn(bond_dev, real_dev, "%s: failed to add SA\n", __func__);
-			continue;
-		}
-
-		spin_lock_bh(&ipsec->xs->lock);
-		/* xs might have been killed by the user during the migration
-		 * to the new dev, but bond_ipsec_del_sa() should have done
-		 * nothing, as xso.real_dev is NULL.
-		 * Delete it from the device we just added it to. The pending
-		 * bond_ipsec_free_sa() call will do the rest of the cleanup.
-		 */
-		if (ipsec->xs->km.state == XFRM_STATE_DEAD &&
-		    real_dev->xfrmdev_ops->xdo_dev_state_delete)
-			real_dev->xfrmdev_ops->xdo_dev_state_delete(real_dev,
-								    ipsec->xs);
-		ipsec->xs->xso.real_dev = real_dev;
-		spin_unlock_bh(&ipsec->xs->lock);
+	/* Prepare the list of xfrm_states to be migrated. */
+	mutex_lock(&bond->ipsec_lock);
+	list_splice_init(&bond->ipsec_list, &ipsec_list);
+	/* Add back states already offloaded on the new device before the
+	 * lock was acquired and hold all remaining states to avoid them
+	 * getting deleted during the migration.
+	 */
+	list_for_each_entry_safe(ipsec, tmp, &ipsec_list, list) {
+		if (unlikely(ipsec->xs->xso.real_dev == real_dev))
+			list_move_tail(&ipsec->list, &bond->ipsec_list);
+		else
+			xfrm_state_hold(ipsec->xs);
 	}
-out:
 	mutex_unlock(&bond->ipsec_lock);
+
+	xuo.ifindex = bond_dev->ifindex;
+	list_for_each_entry_safe(ipsec, tmp, &ipsec_list, list) {
+		struct xfrm_state *x = ipsec->xs;
+
+		m.new_family = x->props.family;
+		memcpy(&m.new_daddr, &x->id.daddr, sizeof(x->id.daddr));
+		memcpy(&m.new_saddr, &x->props.saddr, sizeof(x->props.saddr));
+
+		xuo.flags = x->xso.dir == XFRM_DEV_OFFLOAD_IN ?
+			XFRM_OFFLOAD_INBOUND : 0;
+
+		if (!xfrm_state_migrate(x, &m, NULL, net, &xuo, NULL))
+			slave_warn(bond_dev, real_dev,
+				   "%s: xfrm_state_migrate failed\n", __func__);
+		xfrm_state_delete(x);
+		xfrm_state_put(x);
+		kfree(ipsec);
+	}
 }
 
 /**
@@ -588,47 +596,6 @@ static void bond_ipsec_del_sa(struct net_device *bond_dev,
 	}
 
 	real_dev->xfrmdev_ops->xdo_dev_state_delete(real_dev, xs);
-}
-
-static void bond_ipsec_del_sa_all(struct bonding *bond)
-{
-	struct net_device *bond_dev = bond->dev;
-	struct net_device *real_dev;
-	struct bond_ipsec *ipsec;
-	struct slave *slave;
-
-	slave = rtnl_dereference(bond->curr_active_slave);
-	real_dev = slave ? slave->dev : NULL;
-	if (!real_dev)
-		return;
-
-	mutex_lock(&bond->ipsec_lock);
-	list_for_each_entry(ipsec, &bond->ipsec_list, list) {
-		if (!ipsec->xs->xso.real_dev)
-			continue;
-
-		if (!real_dev->xfrmdev_ops ||
-		    !real_dev->xfrmdev_ops->xdo_dev_state_delete ||
-		    netif_is_bond_master(real_dev)) {
-			slave_warn(bond_dev, real_dev,
-				   "%s: no slave xdo_dev_state_delete\n",
-				   __func__);
-			continue;
-		}
-
-		spin_lock_bh(&ipsec->xs->lock);
-		ipsec->xs->xso.real_dev = NULL;
-		/* Don't double delete states killed by the user. */
-		if (ipsec->xs->km.state != XFRM_STATE_DEAD)
-			real_dev->xfrmdev_ops->xdo_dev_state_delete(real_dev,
-								    ipsec->xs);
-		spin_unlock_bh(&ipsec->xs->lock);
-
-		if (real_dev->xfrmdev_ops->xdo_dev_state_free)
-			real_dev->xfrmdev_ops->xdo_dev_state_free(real_dev,
-								  ipsec->xs);
-	}
-	mutex_unlock(&bond->ipsec_lock);
 }
 
 static void bond_ipsec_free_sa(struct net_device *bond_dev,
@@ -1221,10 +1188,6 @@ void bond_change_active_slave(struct bonding *bond, struct slave *new_active)
 	if (old_active == new_active)
 		return;
 
-#ifdef CONFIG_XFRM_OFFLOAD
-	bond_ipsec_del_sa_all(bond);
-#endif /* CONFIG_XFRM_OFFLOAD */
-
 	if (new_active) {
 		new_active->last_link_up = jiffies;
 
@@ -1247,6 +1210,7 @@ void bond_change_active_slave(struct bonding *bond, struct slave *new_active)
 			if (bond_uses_primary(bond))
 				slave_info(bond->dev, new_active->dev, "making interface the new active one\n");
 		}
+
 	}
 
 	if (bond_uses_primary(bond))
@@ -1263,6 +1227,10 @@ void bond_change_active_slave(struct bonding *bond, struct slave *new_active)
 	} else {
 		rcu_assign_pointer(bond->curr_active_slave, new_active);
 	}
+
+#ifdef CONFIG_XFRM_OFFLOAD
+	bond_ipsec_migrate_sa_all(bond);
+#endif
 
 	if (BOND_MODE(bond) == BOND_MODE_ACTIVEBACKUP) {
 		if (old_active)
@@ -1295,10 +1263,6 @@ void bond_change_active_slave(struct bonding *bond, struct slave *new_active)
 			}
 		}
 	}
-
-#ifdef CONFIG_XFRM_OFFLOAD
-	bond_ipsec_add_sa_all(bond);
-#endif /* CONFIG_XFRM_OFFLOAD */
 
 	/* resend IGMP joins since active slave has changed or
 	 * all were sent on curr_active_slave.
