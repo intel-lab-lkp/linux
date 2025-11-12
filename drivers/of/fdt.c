@@ -890,14 +890,14 @@ static void __init early_init_dt_check_kho(void)
 		return;
 
 	p = of_get_flat_dt_prop(node, "linux,kho-fdt", &l);
-	if (l != (dt_root_addr_cells + dt_root_size_cells) * sizeof(__be32))
+	if (l != dt_root_addr_size_bytes())
 		return;
 
 	fdt_start = dt_mem_next_cell(dt_root_addr_cells, &p);
 	fdt_size = dt_mem_next_cell(dt_root_addr_cells, &p);
 
 	p = of_get_flat_dt_prop(node, "linux,kho-scratch", &l);
-	if (l != (dt_root_addr_cells + dt_root_size_cells) * sizeof(__be32))
+	if (l != dt_root_addr_size_bytes())
 		return;
 
 	scratch_start = dt_mem_next_cell(dt_root_addr_cells, &p);
