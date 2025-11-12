@@ -157,74 +157,6 @@ static void __init node_mem_init(unsigned int node)
 }
 
 #ifdef CONFIG_ACPI_NUMA
-
-/*
- * add_numamem_region
- *
- * Add a uasable memory region described by BIOS. The
- * routine gets each intersection between BIOS's region
- * and node's region, and adds them into node's memblock
- * pool.
- *
- */
-static void __init add_numamem_region(u64 start, u64 end, u32 type)
-{
-	u32 node = pa_to_nid(start);
-	u64 size = end - start;
-	static unsigned long num_physpages;
-
-	if (start >= end) {
-		pr_debug("Invalid region: %016llx-%016llx\n", start, end);
-		return;
-	}
-
-	num_physpages += (size >> PAGE_SHIFT);
-	pr_info("Node%d: mem_type:%d, mem_start:0x%llx, mem_size:0x%llx Bytes\n",
-		node, type, start, size);
-	pr_info("       start_pfn:0x%llx, end_pfn:0x%llx, num_physpages:0x%lx\n",
-		start >> PAGE_SHIFT, end >> PAGE_SHIFT, num_physpages);
-	memblock_set_node(start, size, &memblock.memory, node);
-}
-
-static void __init init_node_memblock(void)
-{
-	u32 mem_type;
-	u64 mem_end, mem_start, mem_size;
-	efi_memory_desc_t *md;
-
-	/* Parse memory information and activate */
-	for_each_efi_memory_desc(md) {
-		mem_type = md->type;
-		mem_start = md->phys_addr;
-		mem_size = md->num_pages << EFI_PAGE_SHIFT;
-		mem_end = mem_start + mem_size;
-
-		switch (mem_type) {
-		case EFI_LOADER_CODE:
-		case EFI_LOADER_DATA:
-		case EFI_BOOT_SERVICES_CODE:
-		case EFI_BOOT_SERVICES_DATA:
-		case EFI_PERSISTENT_MEMORY:
-		case EFI_CONVENTIONAL_MEMORY:
-			add_numamem_region(mem_start, mem_end, mem_type);
-			break;
-		case EFI_PAL_CODE:
-		case EFI_UNUSABLE_MEMORY:
-		case EFI_ACPI_RECLAIM_MEMORY:
-			add_numamem_region(mem_start, mem_end, mem_type);
-			fallthrough;
-		case EFI_RESERVED_TYPE:
-		case EFI_RUNTIME_SERVICES_CODE:
-		case EFI_RUNTIME_SERVICES_DATA:
-		case EFI_MEMORY_MAPPED_IO:
-		case EFI_MEMORY_MAPPED_IO_PORT_SPACE:
-			pr_info("Resvd: mem_type:%d, mem_start:0x%llx, mem_size:0x%llx Bytes\n",
-					mem_type, mem_start, mem_size);
-			break;
-		}
-	}
-}
-
 /*
  * fake_numa_init() - For Non-ACPI systems
  * Return: 0 on success, -errno on failure.
@@ -249,22 +181,12 @@ int __init init_numa_memory(void)
 	for (i = 0; i < NR_CPUS; i++)
 		set_cpuid_to_node(i, NUMA_NO_NODE);
 
-	numa_reset_distance();
-	nodes_clear(numa_nodes_parsed);
-	nodes_clear(node_possible_map);
-	nodes_clear(node_online_map);
-	WARN_ON(memblock_clear_hotplug(0, PHYS_ADDR_MAX));
-
 	/* Parse SRAT and SLIT if provided by firmware. */
-	ret = acpi_disabled ? fake_numa_init() : acpi_numa_init();
+	ret = acpi_disabled ? numa_memblks_init(fake_numa_init, false) :
+			numa_memblks_init(acpi_numa_init, false);
 	if (ret < 0)
 		return ret;
 
-	node_possible_map = numa_nodes_parsed;
-	if (WARN_ON(nodes_empty(node_possible_map)))
-		return -EINVAL;
-
-	init_node_memblock();
 	if (!memblock_validate_numa_coverage(SZ_1M))
 		return -EINVAL;
 
