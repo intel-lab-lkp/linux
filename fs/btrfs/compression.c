@@ -962,14 +962,13 @@ void btrfs_put_workspace(struct btrfs_fs_info *fs_info, int type, struct list_he
 	ws_wait	 = &gwsm->ws_wait;
 	free_ws	 = &gwsm->free_ws;
 
-	spin_lock(ws_lock);
-	if (*free_ws <= num_online_cpus()) {
-		list_add(ws, idle_ws);
-		(*free_ws)++;
-		spin_unlock(ws_lock);
-		goto wake;
+	scoped_guard(spinlock, ws_lock) {
+		if (*free_ws <= num_online_cpus()) {
+			list_add(ws, idle_ws);
+			(*free_ws)++;
+			goto wake;
+		}
 	}
-	spin_unlock(ws_lock);
 
 	free_workspace(type, ws);
 	atomic_dec(total_ws);

@@ -4791,29 +4791,27 @@ int btrfs_qgroup_trace_subtree_after_cow(struct btrfs_trans_handle *trans,
 	if (!btrfs_is_fstree(btrfs_root_id(root)) || !root->reloc_root)
 		return 0;
 
-	spin_lock(&blocks->lock);
-	if (!blocks->swapped) {
-		spin_unlock(&blocks->lock);
-		return 0;
-	}
-	node = rb_find(&subvol_eb->start, &blocks->blocks[level],
-			qgroup_swapped_block_bytenr_key_cmp);
-	if (!node) {
-		spin_unlock(&blocks->lock);
-		goto out;
-	}
-	block = rb_entry(node, struct btrfs_qgroup_swapped_block, node);
+	scoped_guard(spinlock, &blocks->lock) {
+		if (!blocks->swapped)
+			return 0;
 
-	/* Found one, remove it from @blocks first and update blocks->swapped */
-	rb_erase(&block->node, &blocks->blocks[level]);
-	for (i = 0; i < BTRFS_MAX_LEVEL; i++) {
-		if (RB_EMPTY_ROOT(&blocks->blocks[i])) {
-			swapped = true;
-			break;
+		node = rb_find(&subvol_eb->start, &blocks->blocks[level],
+			       qgroup_swapped_block_bytenr_key_cmp);
+		if (!node)
+			goto out;
+
+		block = rb_entry(node, struct btrfs_qgroup_swapped_block, node);
+
+		/* Found one, remove it from @blocks first and update blocks->swapped */
+		rb_erase(&block->node, &blocks->blocks[level]);
+		for (i = 0; i < BTRFS_MAX_LEVEL; i++) {
+			if (RB_EMPTY_ROOT(&blocks->blocks[i])) {
+				swapped = true;
+				break;
+			}
 		}
+		blocks->swapped = swapped;
 	}
-	blocks->swapped = swapped;
-	spin_unlock(&blocks->lock);
 
 	check.level = block->level;
 	check.transid = block->reloc_generation;

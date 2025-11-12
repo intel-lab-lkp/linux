@@ -4503,27 +4503,24 @@ int try_release_extent_buffer(struct folio *folio)
 	 * We need to make sure nobody is changing folio private, as we rely on
 	 * folio private as the pointer to extent buffer.
 	 */
-	spin_lock(&folio->mapping->i_private_lock);
-	if (!folio_test_private(folio)) {
-		spin_unlock(&folio->mapping->i_private_lock);
-		return 1;
-	}
+	scoped_guard(spinlock, &folio->mapping->i_private_lock) {
+		if (!folio_test_private(folio))
+			return 1;
 
-	eb = folio_get_private(folio);
-	BUG_ON(!eb);
+		eb = folio_get_private(folio);
+		BUG_ON(!eb);
 
-	/*
-	 * This is a little awful but should be ok, we need to make sure that
-	 * the eb doesn't disappear out from under us while we're looking at
-	 * this page.
-	 */
-	spin_lock(&eb->refs_lock);
-	if (refcount_read(&eb->refs) != 1 || extent_buffer_under_io(eb)) {
-		spin_unlock(&eb->refs_lock);
-		spin_unlock(&folio->mapping->i_private_lock);
-		return 0;
+		/*
+		 * This is a little awful but should be ok, we need to make sure that
+		 * the eb doesn't disappear out from under us while we're looking at
+		 * this page.
+		 */
+		spin_lock(&eb->refs_lock);
+		if (refcount_read(&eb->refs) != 1 || extent_buffer_under_io(eb)) {
+			spin_unlock(&eb->refs_lock);
+			return 0;
+		}
 	}
-	spin_unlock(&folio->mapping->i_private_lock);
 
 	/*
 	 * If tree ref isn't set then we know the ref on this eb is a real ref,

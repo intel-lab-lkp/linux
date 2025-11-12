@@ -8020,27 +8020,24 @@ long btrfs_ioctl_send(struct btrfs_root *send_root, const struct btrfs_ioctl_sen
 	 * The subvolume must remain read-only during send, protect against
 	 * making it RW. This also protects against deletion.
 	 */
-	spin_lock(&send_root->root_item_lock);
-	/*
-	 * Unlikely but possible, if the subvolume is marked for deletion but
-	 * is slow to remove the directory entry, send can still be started.
-	 */
-	if (btrfs_root_dead(send_root)) {
-		spin_unlock(&send_root->root_item_lock);
-		return -EPERM;
+	scoped_guard(spinlock, &send_root->root_item_lock) {
+		/*
+		 * Unlikely but possible, if the subvolume is marked for deletion but
+		 * is slow to remove the directory entry, send can still be started.
+		 */
+		if (btrfs_root_dead(send_root))
+			return -EPERM;
+
+		/* Userspace tools do the checks and warn the user if it's not RO. */
+		if (!btrfs_root_readonly(send_root))
+			return -EPERM;
+
+		if (send_root->dedupe_in_progress) {
+			dedupe_in_progress_warn(send_root);
+			return -EAGAIN;
+		}
+		send_root->send_in_progress++;
 	}
-	/* Userspace tools do the checks and warn the user if it's not RO. */
-	if (!btrfs_root_readonly(send_root)) {
-		spin_unlock(&send_root->root_item_lock);
-		return -EPERM;
-	}
-	if (send_root->dedupe_in_progress) {
-		dedupe_in_progress_warn(send_root);
-		spin_unlock(&send_root->root_item_lock);
-		return -EAGAIN;
-	}
-	send_root->send_in_progress++;
-	spin_unlock(&send_root->root_item_lock);
 
 	/*
 	 * Check that we don't overflow at later allocations, we request

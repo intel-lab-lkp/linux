@@ -3750,15 +3750,12 @@ static int inode_logged(const struct btrfs_trans_handle *trans,
 	 * see a positive value that is not trans->transid and assume the inode
 	 * was not logged when it was.
 	 */
-	spin_lock(&inode->lock);
-	if (inode->logged_trans == trans->transid) {
-		spin_unlock(&inode->lock);
-		return 1;
-	} else if (inode->logged_trans > 0) {
-		spin_unlock(&inode->lock);
-		return 0;
+	scoped_guard(spinlock, &inode->lock) {
+		if (inode->logged_trans == trans->transid)
+			return 1;
+		else if (inode->logged_trans > 0)
+			return 0;
 	}
-	spin_unlock(&inode->lock);
 
 	/*
 	 * If no log tree was created for this root in this transaction, then

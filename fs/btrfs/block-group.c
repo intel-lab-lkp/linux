@@ -93,13 +93,11 @@ static u64 btrfs_reduce_alloc_profile(struct btrfs_fs_info *fs_info, u64 flags)
 	 * See if restripe for this chunk_type is in progress, if so try to
 	 * reduce to the target profile
 	 */
-	spin_lock(&fs_info->balance_lock);
-	target = get_restripe_target(fs_info, flags);
-	if (target) {
-		spin_unlock(&fs_info->balance_lock);
-		return extended_to_chunk(target);
+	scoped_guard(spinlock, &fs_info->balance_lock) {
+		target = get_restripe_target(fs_info, flags);
+		if (target)
+			return extended_to_chunk(target);
 	}
-	spin_unlock(&fs_info->balance_lock);
 
 	/* First, mask out the RAID levels which aren't possible */
 	for (raid_type = 0; raid_type < BTRFS_NR_RAID_TYPES; raid_type++) {
@@ -3402,13 +3400,11 @@ int btrfs_start_dirty_block_groups(struct btrfs_trans_handle *trans)
 	struct list_head *io = &cur_trans->io_bgs;
 	int loops = 0;
 
-	spin_lock(&cur_trans->dirty_bgs_lock);
-	if (list_empty(&cur_trans->dirty_bgs)) {
-		spin_unlock(&cur_trans->dirty_bgs_lock);
-		return 0;
+	scoped_guard(spinlock, &cur_trans->dirty_bgs_lock) {
+		if (list_empty(&cur_trans->dirty_bgs))
+			return 0;
+		list_splice_init(&cur_trans->dirty_bgs, &dirty);
 	}
-	list_splice_init(&cur_trans->dirty_bgs, &dirty);
-	spin_unlock(&cur_trans->dirty_bgs_lock);
 
 again:
 	/* Make sure all the block groups on our dirty list actually exist */

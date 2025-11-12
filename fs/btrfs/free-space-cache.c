@@ -958,12 +958,10 @@ int load_free_space_cache(struct btrfs_block_group *block_group)
 	 * If this block group has been marked to be cleared for one reason or
 	 * another then we can't trust the on disk cache, so just return.
 	 */
-	spin_lock(&block_group->lock);
-	if (block_group->disk_cache_state != BTRFS_DC_WRITTEN) {
-		spin_unlock(&block_group->lock);
-		return 0;
+	scoped_guard(spinlock, &block_group->lock) {
+		if (block_group->disk_cache_state != BTRFS_DC_WRITTEN)
+			return 0;
 	}
-	spin_unlock(&block_group->lock);
 
 	path = btrfs_alloc_path();
 	if (!path)
@@ -1525,12 +1523,10 @@ int btrfs_write_out_cache(struct btrfs_trans_handle *trans,
 	struct inode *inode;
 	int ret = 0;
 
-	spin_lock(&block_group->lock);
-	if (block_group->disk_cache_state < BTRFS_DC_SETUP) {
-		spin_unlock(&block_group->lock);
-		return 0;
+	scoped_guard(spinlock, &block_group->lock) {
+		if (block_group->disk_cache_state < BTRFS_DC_SETUP)
+			return 0;
 	}
-	spin_unlock(&block_group->lock);
 
 	inode = lookup_free_space_inode(block_group, path);
 	if (IS_ERR(inode))
@@ -3154,20 +3150,17 @@ void btrfs_return_cluster_to_free_space(
 	struct btrfs_free_space_ctl *ctl;
 
 	/* first, get a safe pointer to the block group */
-	spin_lock(&cluster->lock);
-	if (!block_group) {
-		block_group = cluster->block_group;
+	scoped_guard(spinlock, &cluster->lock) {
 		if (!block_group) {
-			spin_unlock(&cluster->lock);
+			block_group = cluster->block_group;
+			if (!block_group)
+				return;
+		} else if (cluster->block_group != block_group) {
+			/* someone else has already freed it don't redo their work */
 			return;
 		}
-	} else if (cluster->block_group != block_group) {
-		/* someone else has already freed it don't redo their work */
-		spin_unlock(&cluster->lock);
-		return;
+		btrfs_get_block_group(block_group);
 	}
-	btrfs_get_block_group(block_group);
-	spin_unlock(&cluster->lock);
 
 	ctl = block_group->free_space_ctl;
 
@@ -4018,13 +4011,11 @@ int btrfs_trim_block_group(struct btrfs_block_group *block_group,
 
 	*trimmed = 0;
 
-	spin_lock(&block_group->lock);
-	if (test_bit(BLOCK_GROUP_FLAG_REMOVED, &block_group->runtime_flags)) {
-		spin_unlock(&block_group->lock);
-		return 0;
+	scoped_guard(spinlock, &block_group->lock) {
+		if (test_bit(BLOCK_GROUP_FLAG_REMOVED, &block_group->runtime_flags))
+			return 0;
+		btrfs_freeze_block_group(block_group);
 	}
-	btrfs_freeze_block_group(block_group);
-	spin_unlock(&block_group->lock);
 
 	ret = trim_no_bitmap(block_group, trimmed, start, end, minlen, false);
 	if (ret)
@@ -4048,13 +4039,11 @@ int btrfs_trim_block_group_extents(struct btrfs_block_group *block_group,
 
 	*trimmed = 0;
 
-	spin_lock(&block_group->lock);
-	if (test_bit(BLOCK_GROUP_FLAG_REMOVED, &block_group->runtime_flags)) {
-		spin_unlock(&block_group->lock);
-		return 0;
+	scoped_guard(spinlock, &block_group->lock) {
+		if (test_bit(BLOCK_GROUP_FLAG_REMOVED, &block_group->runtime_flags))
+			return 0;
+		btrfs_freeze_block_group(block_group);
 	}
-	btrfs_freeze_block_group(block_group);
-	spin_unlock(&block_group->lock);
 
 	ret = trim_no_bitmap(block_group, trimmed, start, end, minlen, async);
 	btrfs_unfreeze_block_group(block_group);
@@ -4070,13 +4059,11 @@ int btrfs_trim_block_group_bitmaps(struct btrfs_block_group *block_group,
 
 	*trimmed = 0;
 
-	spin_lock(&block_group->lock);
-	if (test_bit(BLOCK_GROUP_FLAG_REMOVED, &block_group->runtime_flags)) {
-		spin_unlock(&block_group->lock);
-		return 0;
+	scoped_guard(spinlock, &block_group->lock) {
+		if (test_bit(BLOCK_GROUP_FLAG_REMOVED, &block_group->runtime_flags))
+			return 0;
+		btrfs_freeze_block_group(block_group);
 	}
-	btrfs_freeze_block_group(block_group);
-	spin_unlock(&block_group->lock);
 
 	ret = trim_bitmaps(block_group, trimmed, start, end, minlen, maxlen,
 			   async);

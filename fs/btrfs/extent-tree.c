@@ -2165,12 +2165,10 @@ again:
 	if (min_bytes == U64_MAX) {
 		btrfs_create_pending_block_groups(trans);
 
-		spin_lock(&delayed_refs->lock);
-		if (xa_empty(&delayed_refs->head_refs)) {
-			spin_unlock(&delayed_refs->lock);
-			return 0;
+		scoped_guard(spinlock, &delayed_refs->lock) {
+			if (xa_empty(&delayed_refs->head_refs))
+				return 0;
 		}
-		spin_unlock(&delayed_refs->lock);
 
 		cond_resched();
 		goto again;
