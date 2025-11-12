@@ -35,10 +35,44 @@ struct memory_dev_type {
 
 struct access_coordinate;
 
+enum {
+	MT_NODE_TYPE_SYSRAM,
+	MT_NODE_TYPE_SPM
+};
+
 #ifdef CONFIG_NUMA
 extern bool numa_demotion_enabled;
 extern struct memory_dev_type *default_dram_type;
 extern nodemask_t default_dram_nodes;
+extern nodemask_t mt_sysram_nodelist;
+extern nodemask_t mt_spm_nodelist;
+static inline nodemask_t *mt_sysram_nodemask(void)
+{
+	if (nodes_empty(mt_sysram_nodelist))
+		return NULL;
+	return &mt_sysram_nodelist;
+}
+static inline void mt_nodemask_sysram_mask(nodemask_t *dst, nodemask_t *mask)
+{
+	/* If the sysram filter isn't available, this allows all */
+	if (nodes_empty(mt_sysram_nodelist)) {
+		nodes_or(*dst, *mask, NODE_MASK_NONE);
+		return;
+	}
+	nodes_and(*dst, *mask, mt_sysram_nodelist);
+}
+static inline bool mt_node_is_sysram(int nid)
+{
+	/* if sysram filter isn't setup, this allows all */
+	return nodes_empty(mt_sysram_nodelist) ||
+	       node_isset(nid, mt_sysram_nodelist);
+}
+static inline bool mt_node_allowed(int nid, gfp_t gfp_mask)
+{
+	if (gfp_mask & __GFP_SPM_NODE)
+		return true;
+	return mt_node_is_sysram(nid);
+}
 struct memory_dev_type *alloc_memory_type(int adistance);
 void put_memory_type(struct memory_dev_type *memtype);
 void init_node_memory_type(int node, struct memory_dev_type *default_type);
@@ -73,11 +107,19 @@ static inline bool node_is_toptier(int node)
 }
 #endif
 
+int mt_set_node_type(int node, int type);
+
 #else
 
 #define numa_demotion_enabled	false
 #define default_dram_type	NULL
 #define default_dram_nodes	NODE_MASK_NONE
+#define mt_sysram_nodelist	NODE_MASK_NONE
+#define mt_spm_nodelist		NODE_MASK_NONE
+static inline nodemask_t *mt_sysram_nodemask(void) { return NULL; }
+static inline void mt_nodemask_sysram_mask(nodemask_t *dst, nodemask_t *mask) {}
+static inline bool mt_node_is_sysram(int nid) { return true; }
+static inline bool mt_node_allowed(int nid, gfp_t gfp_mask) { return true; }
 /*
  * CONFIG_NUMA implementation returns non NULL error.
  */
@@ -150,6 +192,11 @@ static inline struct memory_dev_type *mt_find_alloc_memory_type(int adist,
 
 static inline void mt_put_memory_types(struct list_head *memory_types)
 {
+}
+
+int mt_set_node_type(int node, int type)
+{
+	return 0;
 }
 #endif	/* CONFIG_NUMA */
 #endif  /* _LINUX_MEMORY_TIERS_H */

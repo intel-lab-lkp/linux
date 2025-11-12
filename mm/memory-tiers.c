@@ -44,7 +44,15 @@ static LIST_HEAD(memory_tiers);
 static LIST_HEAD(default_memory_types);
 static struct node_memory_type_map node_memory_types[MAX_NUMNODES];
 struct memory_dev_type *default_dram_type;
-nodemask_t default_dram_nodes __initdata = NODE_MASK_NONE;
+
+/* default_dram_nodes is the list of nodes with both CPUs and RAM */
+nodemask_t default_dram_nodes = NODE_MASK_NONE;
+
+/* mt_sysram_nodelist is the list of nodes with SysramRAM */
+nodemask_t mt_sysram_nodelist = NODE_MASK_NONE;
+
+/* mt_spm_nodelist is the list of nodes with Specific Purpose Memory */
+nodemask_t mt_spm_nodelist = NODE_MASK_NONE;
 
 static const struct bus_type memory_tier_subsys = {
 	.name = "memory_tiering",
@@ -427,6 +435,14 @@ static void establish_demotion_targets(void)
 	disable_all_demotion_targets();
 
 	for_each_node_state(node, N_MEMORY) {
+		/*
+		 * If this is not a sysram node, direct-demotion is not allowed
+		 * and must be managed by special logic that understands the
+		 * memory features of that particular node.
+		 */
+		if (!node_isset(node, mt_sysram_nodelist))
+			continue;
+
 		best_distance = -1;
 		nd = &node_demotion[node];
 
@@ -457,7 +473,8 @@ static void establish_demotion_targets(void)
 				break;
 
 			distance = node_distance(node, target);
-			if (distance == best_distance || best_distance == -1) {
+			if ((distance == best_distance || best_distance == -1) &&
+			    node_isset(target, mt_sysram_nodelist)) {
 				best_distance = distance;
 				node_set(target, nd->preferred);
 			} else {
@@ -688,6 +705,48 @@ void mt_put_memory_types(struct list_head *memory_types)
 	}
 }
 EXPORT_SYMBOL_GPL(mt_put_memory_types);
+
+/**
+ * mt_set_node_type() - Set a NUMA Node's Memory type.
+ * @node: The node type to set
+ * @type: The type to set
+ *
+ * This is a one-way setting, once a type is assigned it cannot be cleared
+ * without resetting the system.  This is to avoid race conditions associated
+ * with moving nodes from one type to another during memory hotplug.
+ *
+ * Once a node is added as a SysRAM node, it will be used by default in
+ * the page allocator as a valid target when the calling does not provide
+ * a node or nodemask.  This is safe as the page allocator iterates through
+ * zones and uses this nodemask to filter zones - if a node is present but
+ * has no zones the node is ignored.
+ *
+ * Return: 0 if the node type is set successfully (or it's already set)
+ *         -EBUSY if the node has a different type already
+ *         -ENODEV if the type is invalid
+ */
+int mt_set_node_type(int node, int type)
+{
+	int err;
+
+	mutex_lock(&memory_tier_lock);
+	if (type == MT_NODE_TYPE_SYSRAM)
+		err = node_isset(node, mt_spm_nodelist) ? -EBUSY : 0;
+	else if (type == MT_NODE_TYPE_SPM)
+		err = node_isset(node, mt_sysram_nodelist) ? -EBUSY : 0;
+	if (err)
+		goto out;
+
+	if (type == MT_NODE_TYPE_SYSRAM)
+		node_set(node, mt_sysram_nodelist);
+	else if (type == MT_NODE_TYPE_SPM)
+		node_set(node, mt_spm_nodelist);
+	else
+		err = -ENODEV;
+out:
+	mutex_unlock(&memory_tier_lock);
+	return err;
+}
 
 /*
  * This is invoked via `late_initcall()` to initialize memory tiers for
@@ -921,6 +980,9 @@ static int __init memory_tier_init(void)
 	/* Record nodes with memory and CPU to set default DRAM performance. */
 	nodes_and(default_dram_nodes, node_states[N_MEMORY],
 		  node_states[N_CPU]);
+
+	/* Record all nodes with non-hotplugged memory as default SYSRAM nodes */
+	mt_sysram_nodelist = node_states[N_MEMORY];
 
 	hotplug_node_notifier(memtier_hotplug_callback, MEMTIER_HOTPLUG_PRI);
 	return 0;
