@@ -838,6 +838,7 @@ static struct page *follow_page_pte(struct vm_area_struct *vma,
 
 		if (is_zero_pfn(pte_pfn(pte))) {
 			page = pte_page(pte);
+			goto out;
 		} else {
 			ret = follow_pfn_pte(vma, address, ptep, flags);
 			page = ERR_PTR(ret);
