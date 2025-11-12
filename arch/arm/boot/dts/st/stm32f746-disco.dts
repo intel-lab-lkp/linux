@@ -169,6 +169,7 @@
 &ltdc {
 	pinctrl-0 = <&ltdc_pins_a>;
 	pinctrl-names = "default";
+	bootph-all;
 	status = "okay";
 
 	port {
@@ -205,6 +206,17 @@
 	pinctrl-0 = <&usart1_pins_b>;
 	pinctrl-names = "default";
 	status = "okay";
+};
+
+
+&usart1_pins_b {
+	bootph-all;
+	pins1 {
+		bootph-all;
+	};
+	pins2 {
+		bootph-all;
+	};
 };
 
 &usbotg_fs {
