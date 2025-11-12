@@ -313,6 +313,12 @@ int esas2r_init_adapter(struct Scsi_Host *host, struct pci_dev *pcid,
 	esas2r_fw_event_off(a);
 	a->fw_event_q =
 		alloc_ordered_workqueue("esas2r/%d", WQ_MEM_RECLAIM, a->index);
+	if (!a->fw_event_q) {
+		esas2r_log(ESAS2R_LOG_CRIT,
+				"failed to allocate fw_event workqueue!");
+		esas2r_kill_adapter(index);
+		return 0;
+	}
 
 	init_waitqueue_head(&a->buffered_ioctl_waiter);
 	init_waitqueue_head(&a->nvram_waiter);
