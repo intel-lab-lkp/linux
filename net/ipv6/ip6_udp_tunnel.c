@@ -149,9 +149,9 @@ int udp_tunnel6_dst_lookup(struct sk_buff *skb,
 
 #ifdef CONFIG_DST_CACHE
 	if (dst_cache) {
-		dst = dst_cache_get_ip6(dst_cache, saddr);
+		dst = dst_cache_get_ip6_rcu(dst_cache, saddr);
 		if (dst) {
-			*dstref = dst_to_dstref(dst);
+			*dstref = dst_to_dstref_noref(dst);
 			return 0;
 		}
 	}
@@ -177,11 +177,14 @@ int udp_tunnel6_dst_lookup(struct sk_buff *skb,
 		dst_release(dst);
 		return -ELOOP;
 	}
-#ifdef CONFIG_DST_CACHE
-	if (dst_cache)
-		dst_cache_set_ip6(dst_cache, dst, &fl6.saddr);
-#endif
 	*saddr = fl6.saddr;
+#ifdef CONFIG_DST_CACHE
+	if (dst_cache) {
+		dst_cache_steal_ip6(dst_cache, dst, &fl6.saddr);
+		*dstref = dst_to_dstref_noref(dst);
+		return 0;
+	}
+#endif
 	*dstref = dst_to_dstref(dst);
 	return 0;
 }

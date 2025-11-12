@@ -240,9 +240,9 @@ int udp_tunnel_dst_lookup(struct sk_buff *skb,
 
 #ifdef CONFIG_DST_CACHE
 	if (dst_cache) {
-		rt = dst_cache_get_ip4(dst_cache, saddr);
+		rt = dst_cache_get_ip4_rcu(dst_cache, saddr);
 		if (rt) {
-			*dstref = dst_to_dstref(&rt->dst);
+			*dstref = dst_to_dstref_noref(&rt->dst);
 			return 0;
 		}
 	}
@@ -269,11 +269,14 @@ int udp_tunnel_dst_lookup(struct sk_buff *skb,
 		ip_rt_put(rt);
 		return -ELOOP;
 	}
-#ifdef CONFIG_DST_CACHE
-	if (dst_cache)
-		dst_cache_set_ip4(dst_cache, &rt->dst, fl4.saddr);
-#endif
 	*saddr = fl4.saddr;
+#ifdef CONFIG_DST_CACHE
+	if (dst_cache) {
+		dst_cache_steal_ip4(dst_cache, &rt->dst, fl4.saddr);
+		*dstref = dst_to_dstref_noref(&rt->dst);
+		return 0;
+	}
+#endif
 	*dstref = dst_to_dstref(&rt->dst);
 	return 0;
 }
