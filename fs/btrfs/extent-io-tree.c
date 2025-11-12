@@ -890,9 +890,8 @@ bool btrfs_find_first_extent_bit(struct extent_io_tree *tree, u64 start,
 				 struct extent_state **cached_state)
 {
 	struct extent_state *state;
-	bool ret = false;
 
-	spin_lock(&tree->lock);
+	guard(spinlock)(&tree->lock);
 	if (cached_state && *cached_state) {
 		state = *cached_state;
 		if (state->end == start - 1 && extent_state_in_tree(state)) {
@@ -911,23 +910,21 @@ bool btrfs_find_first_extent_bit(struct extent_io_tree *tree, u64 start,
 			*cached_state = NULL;
 			if (state)
 				goto got_it;
-			goto out;
+			return false;
 		}
 		btrfs_free_extent_state(*cached_state);
 		*cached_state = NULL;
 	}
 
 	state = find_first_extent_bit_state(tree, start, bits);
+	if (!state)
+		return false;
+
 got_it:
-	if (state) {
-		cache_state_if_flags(state, cached_state, 0);
-		*start_ret = state->start;
-		*end_ret = state->end;
-		ret = true;
-	}
-out:
-	spin_unlock(&tree->lock);
-	return ret;
+	cache_state_if_flags(state, cached_state, 0);
+	*start_ret = state->start;
+	*end_ret = state->end;
+	return true;
 }
 
 /*

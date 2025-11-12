@@ -995,35 +995,29 @@ struct btrfs_ordered_extent *btrfs_lookup_ordered_range(
 	struct rb_node *node;
 	struct btrfs_ordered_extent *entry = NULL;
 
-	spin_lock_irq(&inode->ordered_tree_lock);
+	guard(spinlock_irq)(&inode->ordered_tree_lock);
 	node = ordered_tree_search(inode, file_offset);
 	if (!node) {
 		node = ordered_tree_search(inode, file_offset + len);
 		if (!node)
-			goto out;
+			return NULL;
 	}
 
 	while (1) {
 		entry = rb_entry(node, struct btrfs_ordered_extent, rb_node);
-		if (btrfs_range_overlaps(entry, file_offset, len))
-			break;
+		if (btrfs_range_overlaps(entry, file_offset, len)) {
+			refcount_inc(&entry->refs);
+			trace_btrfs_ordered_extent_lookup_range(inode, entry);
+			return entry;
+		}
 
 		if (entry->file_offset >= file_offset + len) {
-			entry = NULL;
-			break;
+			return NULL;
 		}
-		entry = NULL;
 		node = rb_next(node);
 		if (!node)
-			break;
+			return NULL;
 	}
-out:
-	if (entry) {
-		refcount_inc(&entry->refs);
-		trace_btrfs_ordered_extent_lookup_range(inode, entry);
-	}
-	spin_unlock_irq(&inode->ordered_tree_lock);
-	return entry;
 }
 
 /*
@@ -1092,7 +1086,7 @@ struct btrfs_ordered_extent *btrfs_lookup_first_ordered_range(
 	struct rb_node *next;
 	struct btrfs_ordered_extent *entry = NULL;
 
-	spin_lock_irq(&inode->ordered_tree_lock);
+	guard(spinlock_irq)(&inode->ordered_tree_lock);
 	node = inode->ordered_tree.rb_node;
 	/*
 	 * Here we don't want to use tree_search() which will use tree->last
@@ -1112,12 +1106,12 @@ struct btrfs_ordered_extent *btrfs_lookup_first_ordered_range(
 			 * Direct hit, got an ordered extent that starts at
 			 * @file_offset
 			 */
-			goto out;
+			goto ret_entry;
 		}
 	}
 	if (!entry) {
 		/* Empty tree */
-		goto out;
+		return NULL;
 	}
 
 	cur = &entry->rb_node;
@@ -1132,22 +1126,20 @@ struct btrfs_ordered_extent *btrfs_lookup_first_ordered_range(
 	if (prev) {
 		entry = rb_entry(prev, struct btrfs_ordered_extent, rb_node);
 		if (btrfs_range_overlaps(entry, file_offset, len))
-			goto out;
+			goto ret_entry;
 	}
 	if (next) {
 		entry = rb_entry(next, struct btrfs_ordered_extent, rb_node);
 		if (btrfs_range_overlaps(entry, file_offset, len))
-			goto out;
+			goto ret_entry;
 	}
 	/* No ordered extent in the range */
-	entry = NULL;
-out:
-	if (entry) {
-		refcount_inc(&entry->refs);
-		trace_btrfs_ordered_extent_lookup_first_range(inode, entry);
-	}
+	return NULL;
 
-	spin_unlock_irq(&inode->ordered_tree_lock);
+ret_entry:
+	refcount_inc(&entry->refs);
+	trace_btrfs_ordered_extent_lookup_first_range(inode, entry);
+
 	return entry;
 }
 

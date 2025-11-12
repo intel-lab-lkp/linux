@@ -1878,16 +1878,14 @@ static int cleanup_ref_head(struct btrfs_trans_handle *trans,
 	 * and then re-check to make sure nobody got added.
 	 */
 	spin_unlock(&head->lock);
-	spin_lock(&delayed_refs->lock);
-	spin_lock(&head->lock);
-	if (!RB_EMPTY_ROOT(&head->ref_tree.rb_root) || head->extent_op) {
-		spin_unlock(&head->lock);
-		spin_unlock(&delayed_refs->lock);
-		return 1;
+	{
+		guard(spinlock)(&delayed_refs->lock);
+		guard(spinlock)(&head->lock);
+
+		if (!RB_EMPTY_ROOT(&head->ref_tree.rb_root) || head->extent_op)
+			return 1;
+		btrfs_delete_ref_head(fs_info, delayed_refs, head);
 	}
-	btrfs_delete_ref_head(fs_info, delayed_refs, head);
-	spin_unlock(&head->lock);
-	spin_unlock(&delayed_refs->lock);
 
 	if (head->must_insert_reserved) {
 		btrfs_pin_extent(trans, head->bytenr, head->num_bytes, 1);
@@ -3391,30 +3389,29 @@ static noinline int check_ref_cleanup(struct btrfs_trans_handle *trans,
 	int ret = 0;
 
 	delayed_refs = &trans->transaction->delayed_refs;
-	spin_lock(&delayed_refs->lock);
-	head = btrfs_find_delayed_ref_head(fs_info, delayed_refs, bytenr);
-	if (!head)
-		goto out_delayed_unlock;
+	{
+		guard(spinlock)(&delayed_refs->lock);
+		head = btrfs_find_delayed_ref_head(fs_info, delayed_refs, bytenr);
+		if (!head)
+			return 0;
 
-	spin_lock(&head->lock);
-	if (!RB_EMPTY_ROOT(&head->ref_tree.rb_root))
-		goto out;
+		guard(spinlock)(&head->lock);
+		if (!RB_EMPTY_ROOT(&head->ref_tree.rb_root))
+			return 0;
 
-	if (cleanup_extent_op(head) != NULL)
-		goto out;
+		if (cleanup_extent_op(head) != NULL)
+			return 0;
 
-	/*
-	 * waiting for the lock here would deadlock.  If someone else has it
-	 * locked they are already in the process of dropping it anyway
-	 */
-	if (!mutex_trylock(&head->mutex))
-		goto out;
+		/*
+		 * waiting for the lock here would deadlock.  If someone else has it
+		 * locked they are already in the process of dropping it anyway
+		 */
+		if (!mutex_trylock(&head->mutex))
+			return 0;
 
-	btrfs_delete_ref_head(fs_info, delayed_refs, head);
-	head->processing = false;
-
-	spin_unlock(&head->lock);
-	spin_unlock(&delayed_refs->lock);
+		btrfs_delete_ref_head(fs_info, delayed_refs, head);
+		head->processing = false;
+	}
 
 	BUG_ON(head->extent_op);
 	if (head->must_insert_reserved)
@@ -3424,12 +3421,6 @@ static noinline int check_ref_cleanup(struct btrfs_trans_handle *trans,
 	mutex_unlock(&head->mutex);
 	btrfs_put_delayed_ref_head(head);
 	return ret;
-out:
-	spin_unlock(&head->lock);
-
-out_delayed_unlock:
-	spin_unlock(&delayed_refs->lock);
-	return 0;
 }
 
 int btrfs_free_tree_block(struct btrfs_trans_handle *trans,
@@ -3910,13 +3901,13 @@ static int do_allocation_zoned(struct btrfs_block_group *block_group,
 		 */
 	}
 
-	spin_lock(&space_info->lock);
-	spin_lock(&block_group->lock);
-	spin_lock(&fs_info->treelog_bg_lock);
-	spin_lock(&fs_info->relocation_bg_lock);
+	guard(spinlock)(&space_info->lock);
+	guard(spinlock)(&block_group->lock);
+	guard(spinlock)(&fs_info->treelog_bg_lock);
+	guard(spinlock)(&fs_info->relocation_bg_lock);
 
 	if (ret)
-		goto out;
+		goto err;
 
 	ASSERT(!ffe_ctl->for_treelog ||
 	       block_group->start == fs_info->treelog_bg ||
@@ -3928,8 +3919,7 @@ static int do_allocation_zoned(struct btrfs_block_group *block_group,
 	if (block_group->ro ||
 	    (!ffe_ctl->for_data_reloc &&
 	     test_bit(BLOCK_GROUP_FLAG_ZONED_DATA_RELOC, &block_group->runtime_flags))) {
-		ret = 1;
-		goto out;
+		goto err;
 	}
 
 	/*
@@ -3938,8 +3928,7 @@ static int do_allocation_zoned(struct btrfs_block_group *block_group,
 	 */
 	if (ffe_ctl->for_treelog && !fs_info->treelog_bg &&
 	    (block_group->used || block_group->reserved)) {
-		ret = 1;
-		goto out;
+		goto err;
 	}
 
 	/*
@@ -3948,8 +3937,7 @@ static int do_allocation_zoned(struct btrfs_block_group *block_group,
 	 */
 	if (ffe_ctl->for_data_reloc && !fs_info->data_reloc_bg &&
 	    (block_group->used || block_group->reserved)) {
-		ret = 1;
-		goto out;
+		goto err;
 	}
 
 	WARN_ON_ONCE(block_group->alloc_offset > block_group->zone_capacity);
@@ -3963,8 +3951,7 @@ static int do_allocation_zoned(struct btrfs_block_group *block_group,
 			ffe_ctl->max_extent_size = avail;
 			ffe_ctl->total_free_space = avail;
 		}
-		ret = 1;
-		goto out;
+		goto err;
 	}
 
 	if (ffe_ctl->for_treelog && !fs_info->treelog_bg)
@@ -4003,17 +3990,14 @@ static int do_allocation_zoned(struct btrfs_block_group *block_group,
 	 */
 
 	ffe_ctl->search_start = ffe_ctl->found_offset;
+	return 0;
 
-out:
-	if (ret && ffe_ctl->for_treelog)
+err:
+	if (ffe_ctl->for_treelog)
 		fs_info->treelog_bg = 0;
-	if (ret && ffe_ctl->for_data_reloc)
+	if (ffe_ctl->for_data_reloc)
 		fs_info->data_reloc_bg = 0;
-	spin_unlock(&fs_info->relocation_bg_lock);
-	spin_unlock(&fs_info->treelog_bg_lock);
-	spin_unlock(&block_group->lock);
-	spin_unlock(&space_info->lock);
-	return ret;
+	return 1;
 }
 
 static int do_allocation(struct btrfs_block_group *block_group,
