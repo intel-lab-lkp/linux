@@ -685,7 +685,7 @@ int arch_decode_instruction(struct objtool_file *file, const struct section *sec
 				return -1;
 			}
 
-			objtool_pv_add(file, idx, func);
+			objtool_pv_add(file, idx, func, PV_MODE_DEFAULT);
 		}
 
 		break;

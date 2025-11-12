@@ -46,6 +46,12 @@ struct section {
 	struct reloc *relocs;
 };
 
+enum pv_mode {
+	PV_MODE_UNKNOWN,
+	PV_MODE_DEFAULT,
+	PV_MODE_XENPV,
+};
+
 struct symbol {
 	struct list_head list;
 	struct rb_node node;
@@ -72,6 +78,7 @@ struct symbol {
 	u8 ignore	     : 1;
 	u8 nocfi             : 1;
 	struct list_head pv_target;
+	enum pv_mode pv_mode;
 	struct reloc *relocs;
 	struct section *group_sec;
 };

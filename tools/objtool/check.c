@@ -538,7 +538,8 @@ static int decode_instructions(struct objtool_file *file)
 /*
  * Read the pv_ops[] .data table to find the static initialized values.
  */
-static int add_pv_ops(struct objtool_file *file, const char *symname)
+static int add_pv_ops(struct objtool_file *file, const char *symname,
+		      enum pv_mode pv_mode)
 {
 	struct symbol *sym, *func;
 	unsigned long off, end;
@@ -568,7 +569,7 @@ static int add_pv_ops(struct objtool_file *file, const char *symname)
 			return -1;
 		}
 
-		if (objtool_pv_add(file, idx, func))
+		if (objtool_pv_add(file, idx, func, pv_mode))
 			return -1;
 
 		off = reloc_offset(reloc) + 1;
@@ -584,24 +585,27 @@ static int add_pv_ops(struct objtool_file *file, const char *symname)
  */
 static int init_pv_ops(struct objtool_file *file)
 {
-	static const char *pv_ops_tables[] = {
-		"pv_ops",
-		"xen_cpu_ops",
-		"xen_irq_ops",
-		"xen_mmu_ops",
-		NULL,
+	static struct {
+		const char *name;
+		enum pv_mode mode;
+	} pv_ops_tables[] = {
+		{ "pv_ops",		PV_MODE_DEFAULT },
+		{ "xen_cpu_ops",	PV_MODE_XENPV },
+		{ "xen_irq_ops",	PV_MODE_XENPV },
+		{ "xen_mmu_ops",	PV_MODE_XENPV },
+		{ NULL },
 	};
 	const char *pv_ops;
 	struct symbol *sym;
 	int idx, nr, ret;
 
-	if (!opts.noinstr)
+	if (!opts.noinstr && !opts.disas)
 		return 0;
 
 	file->pv_ops = NULL;
 
 	sym = find_symbol_by_name(file->elf, "pv_ops");
-	if (!sym)
+	if (!sym || !sym->len)
 		return 0;
 
 	nr = sym->len / sizeof(unsigned long);
@@ -614,8 +618,8 @@ static int init_pv_ops(struct objtool_file *file)
 	for (idx = 0; idx < nr; idx++)
 		INIT_LIST_HEAD(&file->pv_ops[idx].targets);
 
-	for (idx = 0; (pv_ops = pv_ops_tables[idx]); idx++) {
-		ret = add_pv_ops(file, pv_ops);
+	for (idx = 0; (pv_ops = pv_ops_tables[idx].name); idx++) {
+		ret = add_pv_ops(file, pv_ops, pv_ops_tables[idx].mode);
 		if (ret)
 			return ret;
 	}
@@ -3378,6 +3382,77 @@ static bool pv_call_dest(struct objtool_file *file, struct instruction *insn)
 
 	return file->pv_ops[idx].clean;
 }
+
+/*
+ * Return the name of the destination of a PV call.
+ *
+ * The destination depends on the specified pv_mode. If an exact
+ * destination cannot be found then the name shows the position of
+ * the destination in the pv_ops[] array, and it is followed by
+ * the operation name for the default PV mode. For example:
+ * "pv_ops[61] ~ native_set_pte"
+ *
+ * The destination name can be followed by a '*' character if there
+ * is code that can override the pv_ops[] entry.
+ *
+ * The function returns NULL if there is no call and the operation
+ * is a NOP.
+ */
+const char *pv_call_dest_name(struct objtool_file *file,
+			      struct instruction *insn,
+			      enum pv_mode pv_mode)
+{
+	struct symbol *target_default = NULL;
+	struct symbol *target = NULL;
+	static char pvname[64];
+	const char *note = "";
+	struct reloc *reloc;
+	int idx;
+
+	reloc = insn_reloc(file, insn);
+	if (!reloc || strcmp(reloc->sym->name, "pv_ops"))
+		return NULL;
+
+	idx = (arch_dest_reloc_offset(reloc_addend(reloc)) / sizeof(void *));
+
+	if (file->pv_ops) {
+
+		target_default = file->pv_ops[idx].target_default;
+
+		switch (pv_mode) {
+
+		case PV_MODE_DEFAULT:
+			target = target_default;
+			break;
+
+		case PV_MODE_XENPV:
+			target = file->pv_ops[idx].target_xen;
+			break;
+
+		case PV_MODE_UNKNOWN:
+			break;
+		}
+
+		if (file->pv_ops[idx].target_override > 0)
+			note = " *";
+	}
+
+	if (target) {
+		if (!strcmp(target->name, "nop_func"))
+			return NULL;
+
+		snprintf(pvname, sizeof(pvname), "%s%s", target->name, note);
+
+	} else if (target_default) {
+		snprintf(pvname, sizeof(pvname), "pv_ops[%d] ~ %s%s",
+			 idx, target_default->name, note);
+	} else {
+		snprintf(pvname, sizeof(pvname), "pv_ops[%d]", idx);
+	}
+
+	return pvname;
+}
+
 
 static inline bool noinstr_call_dest(struct objtool_file *file,
 				     struct instruction *insn,
