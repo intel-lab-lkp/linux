@@ -384,14 +384,17 @@ where
             // SAFETY: By the type invariant of `Self`, all non-null `rb_node` pointers stored in `self`
             // point to the links field of `Node<K, V>` objects.
             let this = unsafe { container_of!(node, Node<K, V>, links) };
+
             // SAFETY: `this` is a non-null node so it is valid by the type invariants.
-            node = match key.cmp(unsafe { &(*this).key }) {
-                // SAFETY: `node` is a non-null node so it is valid by the type invariants.
-                Ordering::Less => unsafe { (*node).rb_left },
-                // SAFETY: `node` is a non-null node so it is valid by the type invariants.
-                Ordering::Greater => unsafe { (*node).rb_right },
-                // SAFETY: `node` is a non-null node so it is valid by the type invariants.
-                Ordering::Equal => return Some(unsafe { &(*this).value }),
+            let this_ref = unsafe { &*this };
+
+            // SAFETY: `node` is a non-null node so it is valid by the type invariants.
+            let node_ref = unsafe { &*node };
+
+            node = match key.cmp(&this_ref.key) {
+                Ordering::Less => node_ref.rb_left,
+                Ordering::Greater => node_ref.rb_right,
+                Ordering::Equal => return Some(&this_ref.value),
             }
         }
         None
@@ -433,17 +436,17 @@ where
             let this = unsafe { container_of!(node, Node<K, V>, links) };
             // SAFETY: `this` is a non-null node so it is valid by the type invariants.
             let this_key = unsafe { &(*this).key };
+
             // SAFETY: `node` is a non-null node so it is valid by the type invariants.
-            let left_child = unsafe { (*node).rb_left };
-            // SAFETY: `node` is a non-null node so it is valid by the type invariants.
-            let right_child = unsafe { (*node).rb_right };
+            let node_ref = unsafe { &*node };
+
             match key.cmp(this_key) {
                 Ordering::Equal => {
                     best_match = NonNull::new(this);
                     break;
                 }
                 Ordering::Greater => {
-                    node = right_child;
+                    node = node_ref.rb_right;
                 }
                 Ordering::Less => {
                     let is_better_match = match best_match {
@@ -457,7 +460,7 @@ where
                     if is_better_match {
                         best_match = NonNull::new(this);
                     }
-                    node = left_child;
+                    node = node_ref.rb_left;
                 }
             };
         }
