@@ -121,6 +121,106 @@ def AmdBr():
                        description="breakdown of retired branch instructions")
 
 
+def AmdSwpf() -> Optional[MetricGroup]:
+    """Returns a MetricGroup representing AMD software prefetch metrics."""
+    global _zen_model
+    if _zen_model <= 1:
+        return None
+
+    swp_ld = Event("ls_dispatch.ld_dispatch")
+    swp_t0 = Event("ls_pref_instr_disp.prefetch")
+    swp_w = Event("ls_pref_instr_disp.prefetch_w")  # Missing on Zen1
+    swp_nt = Event("ls_pref_instr_disp.prefetch_nta")
+    swp_mab = Event("ls_inef_sw_pref.mab_mch_cnt")
+    swp_l2 = Event("ls_sw_pf_dc_fills.local_l2",
+                   "ls_sw_pf_dc_fills.lcl_l2",
+                   "ls_sw_pf_dc_fill.ls_mabresp_lcl_l2")
+    swp_lc = Event("ls_sw_pf_dc_fills.local_ccx",
+                   "ls_sw_pf_dc_fills.int_cache",
+                   "ls_sw_pf_dc_fill.ls_mabresp_lcl_cache")
+    swp_lm = Event("ls_sw_pf_dc_fills.dram_io_near",
+                   "ls_sw_pf_dc_fills.mem_io_local",
+                   "ls_sw_pf_dc_fill.ls_mabresp_lcl_dram")
+    swp_rc = Event("ls_sw_pf_dc_fills.far_cache",
+                   "ls_sw_pf_dc_fills.ext_cache_remote",
+                   "ls_sw_pf_dc_fill.ls_mabresp_rmt_cache")
+    swp_rm = Event("ls_sw_pf_dc_fills.dram_io_far",
+                   "ls_sw_pf_dc_fills.mem_io_remote",
+                   "ls_sw_pf_dc_fill.ls_mabresp_rmt_dram")
+
+    # All the swpf that were satisfied beyond L1D are good.
+    all_pf = swp_t0 + swp_w + swp_nt
+    good_pf = swp_l2 + swp_lc + swp_lm + swp_rc + swp_rm
+    bad_pf = max(all_pf - good_pf, 0)
+
+    loc_pf = swp_l2 + swp_lc + swp_lm
+    rem_pf = swp_rc + swp_rm
+
+    req_pend = max(0, bad_pf - swp_mab)
+
+    r1 = d_ratio(ins, all_pf)
+    r2 = d_ratio(swp_ld, all_pf)
+    r3 = d_ratio(swp_t0, interval_sec)
+    r4 = d_ratio(swp_w, interval_sec)
+    r5 = d_ratio(swp_nt, interval_sec)
+    overview = MetricGroup("lpm_swpf_overview", [
+        Metric("lpm_swpf_ov_insn_bt_swpf", "Insn between SWPF", r1, "insns"),
+        Metric("lpm_swpf_ov_loads_bt_swpf", "Loads between SWPF", r2, "loads"),
+        Metric("lpm_swpf_ov_rate_prefetch_t0_t1_t2", "Rate prefetch TO_T1_T2", r3,
+               "insns/sec"),
+        Metric("lpm_swpf_ov_rate_prefetch_w",
+               "Rate prefetch W", r4, "insns/sec"),
+        Metric("lpm_swpf_ov_rate_preftech_nta",
+               "Rate prefetch NTA", r5, "insns/sec"),
+    ])
+
+    r1 = d_ratio(swp_mab, all_pf)
+    r2 = d_ratio(req_pend, all_pf)
+    usefulness_bad = MetricGroup("lpm_swpf_usefulness_bad", [
+        Metric("lpm_swpf_use_bad_hit_l1", "Usefulness bad hit L1", r1, "100%"),
+        Metric("lpm_swpf_use_bad_req_pend",
+               "Usefulness bad req pending", r2, "100%"),
+    ])
+
+    r1 = d_ratio(good_pf, all_pf)
+    usefulness_good = MetricGroup("lpm_swpf_usefulness_good", [
+        Metric("lpm_swpf_use_good_other_src", "Usefulness good other src", r1,
+               "100%"),
+    ])
+
+    usefulness = MetricGroup("lpm_swpf_usefulness", [
+        usefulness_bad,
+        usefulness_good,
+    ])
+
+    r1 = d_ratio(swp_l2, good_pf)
+    r2 = d_ratio(swp_lc, good_pf)
+    r3 = d_ratio(swp_lm, good_pf)
+    data_src_local = MetricGroup("lpm_swpf_data_src_local", [
+        Metric("lpm_swpf_data_src_local_l2",
+               "Data source local l2", r1, "100%"),
+        Metric("lpm_swpf_data_src_local_ccx_l3_loc_ccx",
+               "Data source local ccx l3 loc ccx", r2, "100%"),
+        Metric("lpm_swpf_data_src_local_memory_or_io",
+               "Data source local memory or IO", r3, "100%"),
+    ])
+
+    r1 = d_ratio(swp_rc, good_pf)
+    r2 = d_ratio(swp_rm, good_pf)
+    data_src_remote = MetricGroup("lpm_swpf_data_src_remote", [
+        Metric("lpm_swpf_data_src_remote_cache", "Data source remote cache", r1,
+               "100%"),
+        Metric("lpm_swpf_data_src_remote_memory_or_io",
+               "Data source remote memory or IO", r2, "100%"),
+    ])
+
+    data_src = MetricGroup("lpm_swpf_data_src", [
+                           data_src_local, data_src_remote])
+
+    return MetricGroup("lpm_swpf", [overview, usefulness, data_src],
+                       description="Software prefetch breakdown (CCX L3 = L3 of current thread, Loc CCX = CCX cache on some socket)")
+
+
 def AmdUpc() -> Metric:
     ops = Event("ex_ret_ops", "ex_ret_cops")
     upc = d_ratio(ops, smt_cycles)
@@ -187,6 +287,7 @@ def main() -> None:
 
     all_metrics = MetricGroup("", [
         AmdBr(),
+        AmdSwpf(),
         AmdUpc(),
         Idle(),
         Rapl(),
