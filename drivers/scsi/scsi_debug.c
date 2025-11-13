@@ -9121,13 +9121,8 @@ static bool sdebug_blk_mq_poll_iter(struct request *rq, void *opaque)
 	}
 	spin_unlock_irqrestore(&sdsc->lock, flags);
 
-	if (sdebug_statistics) {
-		atomic_inc(&sdebug_completions);
-		if (raw_smp_processor_id() != sd_dp->issuing_cpu)
-			atomic_inc(&sdebug_miss_cpus);
-	}
+	sdebug_q_cmd_complete(sd_dp);
 
-	scsi_done(cmd); /* callback to mid level */
 	(*data->num_entries)++;
 	return true;
 }
