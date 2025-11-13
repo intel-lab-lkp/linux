@@ -107,6 +107,7 @@ enum nfqnl_attr_config {
 	NFQA_CFG_QUEUE_MAXLEN,		/* __u32 */
 	NFQA_CFG_MASK,			/* identify which flags to change */
 	NFQA_CFG_FLAGS,			/* value of these flags (__u32) */
+	NFQA_CFG_HASH_SIZE,		/* __u32 hash table size (rounded to power of 2) */
 	__NFQA_CFG_MAX
 };
 #define NFQA_CFG_MAX (__NFQA_CFG_MAX-1)
