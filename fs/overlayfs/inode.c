@@ -151,13 +151,22 @@ static void ovl_map_dev_ino(struct dentry *dentry, struct kstat *stat, int fsid)
 	}
 }
 
+static inline int ovl_real_getattr_nosec(struct super_block *sb,
+					 const struct path *path,
+					 struct kstat *stat, u32 request_mask,
+					 unsigned int flags)
+{
+	with_ovl_creds(sb)
+		return vfs_getattr_nosec(path, stat, request_mask, flags);
+}
+
 int ovl_getattr(struct mnt_idmap *idmap, const struct path *path,
 		struct kstat *stat, u32 request_mask, unsigned int flags)
 {
 	struct dentry *dentry = path->dentry;
+	struct super_block *sb = dentry->d_sb;
 	enum ovl_path_type type;
 	struct path realpath;
-	const struct cred *old_cred;
 	struct inode *inode = d_inode(dentry);
 	bool is_dir = S_ISDIR(inode->i_mode);
 	int fsid = 0;
@@ -167,8 +176,7 @@ int ovl_getattr(struct mnt_idmap *idmap, const struct path *path,
 	metacopy_blocks = ovl_is_metacopy_dentry(dentry);
 
 	type = ovl_path_real(dentry, &realpath);
-	old_cred = ovl_override_creds(dentry->d_sb);
-	err = vfs_getattr_nosec(&realpath, stat, request_mask, flags);
+	err = ovl_real_getattr_nosec(sb, &realpath, stat, request_mask, flags);
 	if (err)
 		goto out;
 
@@ -193,8 +201,8 @@ int ovl_getattr(struct mnt_idmap *idmap, const struct path *path,
 					(!is_dir ? STATX_NLINK : 0);
 
 			ovl_path_lower(dentry, &realpath);
-			err = vfs_getattr_nosec(&realpath, &lowerstat, lowermask,
-						flags);
+			err = ovl_real_getattr_nosec(sb, &realpath, &lowerstat,
+						     lowermask, flags);
 			if (err)
 				goto out;
 
@@ -246,8 +254,9 @@ int ovl_getattr(struct mnt_idmap *idmap, const struct path *path,
 
 			ovl_path_lowerdata(dentry, &realpath);
 			if (realpath.dentry) {
-				err = vfs_getattr_nosec(&realpath, &lowerdatastat,
-							lowermask, flags);
+				err = ovl_real_getattr_nosec(sb, &realpath,
+							     &lowerdatastat,
+							     lowermask, flags);
 				if (err)
 					goto out;
 			} else {
@@ -278,8 +287,6 @@ int ovl_getattr(struct mnt_idmap *idmap, const struct path *path,
 		stat->nlink = dentry->d_inode->i_nlink;
 
 out:
-	ovl_revert_creds(old_cred);
-
 	return err;
 }
 
