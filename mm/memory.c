@@ -7341,7 +7341,13 @@ long copy_folio_from_user(struct folio *dst_folio,
 struct ptdesc *pagetable_alloc_noprof(gfp_t gfp, unsigned int order)
 {
 	struct page *page = alloc_frozen_pages_noprof(gfp | __GFP_COMP, order);
+	pg_data_t *pgdat;
 
+	if (!page)
+		return NULL;
+
+	pgdat = NODE_DATA(page_to_nid(page));
+	mod_node_page_state(pgdat, NR_PAGETABLE, 1 << order);
 	return page_ptdesc(page);
 }
 
@@ -7354,12 +7360,16 @@ struct ptdesc *pagetable_alloc_noprof(gfp_t gfp, unsigned int order)
  */
 void pagetable_free(struct ptdesc *pt)
 {
+	pg_data_t *pgdat = NODE_DATA(memdesc_nid(pt->pt_flags));
 	struct page *page = ptdesc_page(pt);
+	unsigned int order = compound_order(page);
 
-	if (ptdesc_test_kernel(pt))
+	if (ptdesc_test_kernel(pt)) {
 		pagetable_free_kernel(pt);
-	else
-		free_frozen_pages(page, compound_order(page));
+		return;
+	}
+	mod_node_page_state(pgdat, NR_PAGETABLE, -(1L << order));
+	free_frozen_pages(page, order);
 }
 
 #if defined(CONFIG_SPLIT_PTE_PTLOCKS) && ALLOC_SPLIT_PTLOCKS
