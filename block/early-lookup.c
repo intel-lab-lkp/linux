@@ -155,10 +155,11 @@ static int __init devt_from_devname(const char *name, dev_t *devt)
 	int part;
 	char s[32];
 	char *p;
+	size_t name_len = strnlen(name, sizeof(s));
 
-	if (strlen(name) > 31)
+	if (name_len == sizeof(s))
 		return -EINVAL;
-	strcpy(s, name);
+	memcpy(s, name, name_len + 1);
 	for (p = s; *p; p++) {
 		if (*p == '/')
 			*p = '!';
