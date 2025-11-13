@@ -148,7 +148,7 @@ void komeda_print_events(struct komeda_events *evts, struct drm_device *dev)
 		komeda_sprintf(&str, ", pipes[1]: ");
 		evt_str(&str, evts->pipes[1]);
 
-		DRM_ERROR("err detect: %s\n", msg);
+		drm_err(dev, "err detect: %s\n", msg);
 		if ((err_verbosity & KOMEDA_DEV_PRINT_DUMP_STATE_ON_EVENT) &&
 		    (evts_mask & (KOMEDA_ERR_EVENTS | KOMEDA_WARN_EVENTS)))
 			drm_state_dump(dev, &p);
