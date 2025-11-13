@@ -61,6 +61,13 @@ static int zynqmp_dpsub_plane_atomic_check(struct drm_plane *plane,
 	if (!new_plane_state->crtc)
 		return 0;
 
+	if (new_plane_state->pixel_blend_mode != DRM_MODE_BLEND_PIXEL_NONE &&
+	    new_plane_state->alpha >> 8 != 0xff) {
+		drm_dbg_kms(plane->dev,
+			    "Plane alpha must be 1.0 when using pixel alpha\n");
+		return -EINVAL;
+	}
+
 	crtc_state = drm_atomic_get_crtc_state(state, new_plane_state->crtc);
 	if (IS_ERR(crtc_state))
 		return PTR_ERR(crtc_state);
@@ -117,9 +124,13 @@ static void zynqmp_dpsub_plane_atomic_update(struct drm_plane *plane,
 
 	zynqmp_disp_layer_update(layer, new_state);
 
-	if (plane->index == ZYNQMP_DPSUB_LAYER_GFX)
-		zynqmp_disp_blend_set_global_alpha(dpsub->disp, true,
+	if (plane->index == ZYNQMP_DPSUB_LAYER_GFX) {
+		bool blend = plane->state->pixel_blend_mode ==
+			     DRM_MODE_BLEND_PIXEL_NONE;
+
+		zynqmp_disp_blend_set_global_alpha(dpsub->disp, blend,
 						   plane->state->alpha >> 8);
+	}
 
 	/*
 	 * Unconditionally enable the layer, as it may have been disabled
@@ -179,7 +190,16 @@ static int zynqmp_dpsub_create_planes(struct zynqmp_dpsub *dpsub)
 			return ret;
 
 		if (i == ZYNQMP_DPSUB_LAYER_GFX) {
+			unsigned int blend_modes =
+				BIT(DRM_MODE_BLEND_PIXEL_NONE) |
+				BIT(DRM_MODE_BLEND_PREMULTI);
+
 			ret = drm_plane_create_alpha_property(plane);
+			if (ret)
+				return ret;
+
+			ret = drm_plane_create_blend_mode_property(plane,
+								   blend_modes);
 			if (ret)
 				return ret;
 		}
