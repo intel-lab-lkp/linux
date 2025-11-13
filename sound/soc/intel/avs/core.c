@@ -473,8 +473,13 @@ static int avs_pci_probe(struct pci_dev *pci, const struct pci_device_id *id)
 	}
 
 	snd_hdac_bus_parse_capabilities(bus);
-	if (bus->mlcap)
-		snd_hdac_ext_bus_get_ml_capabilities(bus);
+	if (bus->mlcap) {
+		ret = snd_hdac_ext_bus_get_ml_capabilities(bus);
+		if (ret) {
+			dev_err(dev, "failed to get multilink capabilities: %d\n", ret);
+			goto err_ml_capabilities;
+		}
+	}
 
 	if (dma_set_mask_and_coherent(dev, DMA_BIT_MASK(64)))
 		dma_set_mask_and_coherent(dev, DMA_BIT_MASK(32));
@@ -483,7 +488,7 @@ static int avs_pci_probe(struct pci_dev *pci, const struct pci_device_id *id)
 	ret = avs_hdac_bus_init_streams(bus);
 	if (ret < 0) {
 		dev_err(dev, "failed to init streams: %d\n", ret);
-		goto err_init_streams;
+		goto err_ml_capabilities;
 	}
 
 	ret = avs_hdac_acquire_irq(adev);
@@ -515,7 +520,8 @@ err_i915_init:
 err_acquire_irq:
 	snd_hdac_bus_free_stream_pages(bus);
 	snd_hdac_ext_stream_free_all(bus);
-err_init_streams:
+err_ml_capabilities:
+	snd_hdac_ext_link_free_all(bus);
 	iounmap(adev->dsp_ba);
 err_remap_bar4:
 	iounmap(bus->remap_addr);
