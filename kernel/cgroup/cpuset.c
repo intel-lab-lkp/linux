@@ -599,8 +599,13 @@ static inline bool cpusets_are_exclusive(struct cpuset *cs1, struct cpuset *cs2)
  */
 static inline bool cpus_excl_conflict(struct cpuset *cs1, struct cpuset *cs2)
 {
-	/* If either cpuset is exclusive, check if they are mutually exclusive */
-	if (is_cpu_exclusive(cs1) || is_cpu_exclusive(cs2))
+	/* If both cpusets are exclusive, check if they are mutually exclusive */
+	if (is_cpu_exclusive(cs1) && is_cpu_exclusive(cs2))
+		return !cpusets_are_exclusive(cs1, cs2);
+
+	/* In cgroup-v1, if either cpuset is exclusive, check if they are mutually exclusive */
+	if (!is_in_v2_mode() &&
+	    (is_cpu_exclusive(cs1) != is_cpu_exclusive(cs2)))
 		return !cpusets_are_exclusive(cs1, cs2);
 
 	/* Exclusive_cpus cannot intersect */
