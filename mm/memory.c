@@ -7348,6 +7348,7 @@ struct ptdesc *pagetable_alloc_noprof(gfp_t gfp, unsigned int order)
 
 	pgdat = NODE_DATA(page_to_nid(page));
 	mod_node_page_state(pgdat, NR_PAGETABLE, 1 << order);
+	__SetPageTable(page);
 	return page_ptdesc(page);
 }
 
@@ -7369,6 +7370,7 @@ void pagetable_free(struct ptdesc *pt)
 		return;
 	}
 	mod_node_page_state(pgdat, NR_PAGETABLE, -(1L << order));
+	__ClearPageTable(page);
 	free_frozen_pages(page, order);
 }
 
