@@ -1023,11 +1023,8 @@ static int rtl8180_init_rx_ring(struct ieee80211_hw *dev)
 		dma_addr_t *mapping;
 		entry = priv->rx_ring + priv->rx_ring_sz*i;
 		if (!skb) {
-			dma_free_coherent(&priv->pdev->dev,
-					  priv->rx_ring_sz * 32,
-					  priv->rx_ring, priv->rx_ring_dma);
 			wiphy_err(dev->wiphy, "Cannot allocate RX skb\n");
-			return -ENOMEM;
+			goto error;
 		}
 		priv->rx_buf[i] = skb;
 		mapping = (dma_addr_t *)skb->cb;
@@ -1037,11 +1034,9 @@ static int rtl8180_init_rx_ring(struct ieee80211_hw *dev)
 
 		if (dma_mapping_error(&priv->pdev->dev, *mapping)) {
 			kfree_skb(skb);
-			dma_free_coherent(&priv->pdev->dev,
-					  priv->rx_ring_sz * 32,
-					  priv->rx_ring, priv->rx_ring_dma);
+			priv->rx_buf[i] = NULL;
 			wiphy_err(dev->wiphy, "Cannot map DMA for RX skb\n");
-			return -ENOMEM;
+			goto error;
 		}
 
 		entry->rx_buf = cpu_to_le32(*mapping);
@@ -1050,6 +1045,19 @@ static int rtl8180_init_rx_ring(struct ieee80211_hw *dev)
 	}
 	entry->flags |= cpu_to_le32(RTL818X_RX_DESC_FLAG_EOR);
 	return 0;
+error:
+	while (i--) {
+		struct sk_buff *skb = priv->rx_buf[i];
+		priv->rx_buf[i] = NULL;
+		dma_unmap_single(&priv->pdev->dev, *((dma_addr_t *)skb->cb),
+				 MAX_RX_SIZE, DMA_FROM_DEVICE);
+		kfree_skb(skb);
+	}
+	dma_free_coherent(&priv->pdev->dev,
+			  priv->rx_ring_sz * 32,
+			  priv->rx_ring, priv->rx_ring_dma);
+	priv->rx_ring = NULL;
+	return -ENOMEM;
 }
 
 static void rtl8180_free_rx_ring(struct ieee80211_hw *dev)
