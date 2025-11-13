@@ -14,10 +14,12 @@
  * depending on the memory type: Volatile Memory or Persistent Memory. When a
  * caller query about a target's Steering Tag, it must provide the target's
  * tph_mem_type. ECN link: https://members.pcisig.com/wg/PCI-SIG/document/15470.
+ * Add a new tph type for PCI peer-to-peer access use case.
  */
 enum tph_mem_type {
 	TPH_MEM_TYPE_VM,	/* volatile memory */
-	TPH_MEM_TYPE_PM		/* persistent memory */
+	TPH_MEM_TYPE_PM,	/* persistent memory */
+	TPH_MEM_TYPE_P2P	/* peer-to-peer accessable memory */
 };
 
 #ifdef CONFIG_PCIE_TPH

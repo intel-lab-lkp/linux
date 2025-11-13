@@ -67,6 +67,8 @@ static u16 tph_extract_tag(enum tph_mem_type mem_type, u8 req_type,
 			if (info->pm_st_valid)
 				return info->pm_st;
 			break;
+		default:
+			return 0;
 		}
 		break;
 	case PCI_TPH_REQ_EXT_TPH: /* 16-bit tag */
@@ -79,6 +81,8 @@ static u16 tph_extract_tag(enum tph_mem_type mem_type, u8 req_type,
 			if (info->pm_xst_valid)
 				return info->pm_xst;
 			break;
+		default:
+			return 0;
 		}
 		break;
 	default:
