@@ -584,6 +584,23 @@ def AmdSwpf() -> Optional[MetricGroup]:
                        description="Software prefetch breakdown (CCX L3 = L3 of current thread, Loc CCX = CCX cache on some socket)")
 
 
+def AmdUopCache() -> Optional[MetricGroup]:
+    try:
+        op_cache_hit = Event("op_cache_hit_miss.op_cache_hit")
+        op_cache_miss = Event("op_cache_hit_miss.op_cache_miss")
+    except:
+        return None
+    op_cache_total = op_cache_hit + op_cache_miss
+    return MetricGroup("lpm_uop_cache", [
+        Metric("lpm_uop_cache_hit_ratio", "Uop cache full or partial hits rate",
+               d_ratio(op_cache_hit, op_cache_total),
+               "100%"),
+        Metric("lpm_uop_cache_miss_ratio", "Uop cache misses rate",
+               d_ratio(op_cache_miss, op_cache_total),
+               "100%"),
+    ], description="Micro-op (uop) hit and miss rates.")
+
+
 def AmdUpc() -> Metric:
     ops = Event("ex_ret_ops", "ex_ret_cops")
     upc = d_ratio(ops, smt_cycles)
@@ -675,6 +692,7 @@ def main() -> None:
         AmdLdSt(),
         AmdHwpf(),
         AmdSwpf(),
+        AmdUopCache(),
         AmdUpc(),
         Idle(),
         Rapl(),
