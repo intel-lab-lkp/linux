@@ -3,6 +3,8 @@
  * Copyright (C) 2015-2017 Josh Poimboeuf <jpoimboe@redhat.com>
  */
 
+#define _GNU_SOURCE
+
 #include <objtool/arch.h>
 #include <objtool/check.h>
 #include <objtool/disas.h>
@@ -425,6 +427,38 @@ size_t disas_insn(struct disas_context *dctx, struct instruction *insn)
 	dinfo->buffer_length = insn->sec->sh.sh_size;
 
 	return disasm(insn->offset, &dctx->info);
+}
+
+/*
+ * Provide a name for an alternative.
+ */
+char *disas_alt_name(struct alternative *alt)
+{
+	char *str = NULL;
+
+	switch (alt->type) {
+
+	case ALT_TYPE_EX_TABLE:
+		str = strdup("EXCEPTION");
+		break;
+
+	case ALT_TYPE_JUMP_TABLE:
+		str = strdup("JUMP");
+		break;
+
+	case ALT_TYPE_INSTRUCTIONS:
+		/*
+		 * This is a non-default group alternative. Create a unique
+		 * name using the offset of the first original and alternative
+		 * instructions.
+		 */
+		asprintf(&str, "ALTERNATIVE %lx.%lx",
+			 alt->insn->alt_group->orig_group->first_insn->offset,
+			 alt->insn->alt_group->first_insn->offset);
+		break;
+	}
+
+	return str;
 }
 
 /*
