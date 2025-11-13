@@ -634,6 +634,36 @@ enum hid_battery_status {
 	HID_BATTERY_REPORTED,		/* Device sent unsolicited battery strength report */
 };
 
+/**
+ * struct hid_battery - represents a single battery power supply
+ * @list: list node for linking into hid_device's battery list
+ * @dev: pointer to the parent hid_device
+ * @ps: the power supply device
+ * @capacity: current battery capacity
+ * @min: minimum battery value
+ * @max: maximum battery value
+ * @report_type: type of report (HID_INPUT_REPORT, HID_FEATURE_REPORT)
+ * @report_id: report ID for this battery
+ * @charge_status: current charge status
+ * @status: battery status (unknown, queried, reported)
+ * @avoid_query: if true, don't query battery (wait for device reports)
+ * @ratelimit_time: time for rate limiting battery updates
+ */
+struct hid_battery {
+	struct list_head list;
+	struct hid_device *dev;
+	struct power_supply *ps;
+	__s32 capacity;
+	__s32 min;
+	__s32 max;
+	__s32 report_type;
+	__s32 report_id;
+	__s32 charge_status;
+	enum hid_battery_status status;
+	bool avoid_query;
+	ktime_t ratelimit_time;
+};
+
 struct hid_driver;
 struct hid_ll_driver;
 
