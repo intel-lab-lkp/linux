@@ -494,7 +494,6 @@ free_minor_ida:
 	if (cdev)
 		ida_free(&rpmsg_minor_ida, MINOR(dev->devt));
 free_eptdev:
-	put_device(dev);
 	kfree(eptdev);
 
 	return ret;
