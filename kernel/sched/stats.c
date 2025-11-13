@@ -12,7 +12,8 @@ void __update_stats_wait_start(struct rq *rq, struct task_struct *p,
 	wait_start = rq_clock(rq);
 	prev_wait_start = schedstat_val(stats->wait_start);
 
-	if (p && likely(wait_start > prev_wait_start))
+	if (p && task_on_rq_migrating(p) &&
+	    likely(wait_start > prev_wait_start))
 		wait_start -= prev_wait_start;
 
 	__schedstat_set(stats->wait_start, wait_start);
