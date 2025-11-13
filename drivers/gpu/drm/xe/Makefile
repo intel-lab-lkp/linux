@@ -214,7 +214,6 @@ xe-$(CONFIG_DRM_XE_DISPLAY) += \
 	display/intel_fb_bo.o \
 	display/intel_fbdev_fb.o \
 	display/xe_display.o \
-	display/xe_display_misc.o \
 	display/xe_display_rpm.o \
 	display/xe_display_wa.o \
 	display/xe_dsb_buffer.o \
@@ -287,6 +286,7 @@ xe-$(CONFIG_DRM_XE_DISPLAY) += \
 	i915-display/intel_frontbuffer.o \
 	i915-display/intel_global_state.o \
 	i915-display/intel_gmbus.o \
+	i915-display/intel_gmch.o \
 	i915-display/intel_hdcp.o \
 	i915-display/intel_hdcp_gsc_message.o \
 	i915-display/intel_hdmi.o \
