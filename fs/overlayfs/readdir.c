@@ -841,62 +841,55 @@ static int ovl_iterate(struct file *file, struct dir_context *ctx)
 	struct dentry *dentry = file->f_path.dentry;
 	struct ovl_fs *ofs = OVL_FS(dentry->d_sb);
 	struct ovl_cache_entry *p;
-	const struct cred *old_cred;
 	int err;
 
-	old_cred = ovl_override_creds(dentry->d_sb);
-	if (!ctx->pos)
-		ovl_dir_reset(file);
+	with_ovl_creds(dentry->d_sb) {
+		if (!ctx->pos)
+			ovl_dir_reset(file);
 
-	if (od->is_real) {
-		/*
-		 * If parent is merge, then need to adjust d_ino for '..', if
-		 * dir is impure then need to adjust d_ino for copied up
-		 * entries.
-		 */
-		if (ovl_xino_bits(ofs) ||
-		    (ovl_same_fs(ofs) &&
-		     (ovl_is_impure_dir(file) ||
-		      OVL_TYPE_MERGE(ovl_path_type(dentry->d_parent))))) {
-			err = ovl_iterate_real(file, ctx);
-		} else {
-			err = iterate_dir(od->realfile, ctx);
+		if (od->is_real) {
+			/*
+			 * If parent is merge, then need to adjust d_ino for '..', if
+			 * dir is impure then need to adjust d_ino for copied up
+			 * entries.
+			 */
+			if (ovl_xino_bits(ofs) || (ovl_same_fs(ofs) &&
+			    (ovl_is_impure_dir(file) || OVL_TYPE_MERGE(ovl_path_type(dentry->d_parent)))))
+				return ovl_iterate_real(file, ctx);
+
+			return iterate_dir(od->realfile, ctx);
 		}
-		goto out;
-	}
 
-	if (!od->cache) {
-		struct ovl_dir_cache *cache;
+		if (!od->cache) {
+			struct ovl_dir_cache *cache;
 
-		cache = ovl_cache_get(dentry);
-		err = PTR_ERR(cache);
-		if (IS_ERR(cache))
-			goto out;
+			cache = ovl_cache_get(dentry);
+			if (IS_ERR(cache))
+				return PTR_ERR(cache);
 
-		od->cache = cache;
-		ovl_seek_cursor(od, ctx->pos);
-	}
+			od->cache = cache;
+			ovl_seek_cursor(od, ctx->pos);
+		}
 
-	while (od->cursor != &od->cache->entries) {
-		p = list_entry(od->cursor, struct ovl_cache_entry, l_node);
-		if (!p->is_whiteout) {
-			if (!p->ino || p->check_xwhiteout) {
-				err = ovl_cache_update(&file->f_path, p, !p->ino);
-				if (err)
-					goto out;
+		while (od->cursor != &od->cache->entries) {
+			p = list_entry(od->cursor, struct ovl_cache_entry, l_node);
+			if (!p->is_whiteout) {
+				if (!p->ino || p->check_xwhiteout) {
+					err = ovl_cache_update(&file->f_path, p, !p->ino);
+					if (err)
+						return err;
+				}
 			}
+			/* ovl_cache_update() sets is_whiteout on stale entry */
+			if (!p->is_whiteout) {
+				if (!dir_emit(ctx, p->name, p->len, p->ino, p->type))
+					break;
+			}
+			od->cursor = p->l_node.next;
+			ctx->pos++;
 		}
-		/* ovl_cache_update() sets is_whiteout on stale entry */
-		if (!p->is_whiteout) {
-			if (!dir_emit(ctx, p->name, p->len, p->ino, p->type))
-				break;
-		}
-		od->cursor = p->l_node.next;
-		ctx->pos++;
+		err = 0;
 	}
-	err = 0;
-out:
-	ovl_revert_creds(old_cred);
 	return err;
 }
 
