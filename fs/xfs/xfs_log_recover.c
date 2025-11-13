@@ -2966,6 +2966,14 @@ xlog_valid_rec_header(
 			__func__, be32_to_cpu(rhead->h_version));
 		return -EFSCORRUPTED;
 	}
+	if (XFS_IS_CORRUPT(log->l_mp, xfs_has_logv2(log->l_mp) !=
+			   !!(be32_to_cpu(rhead->h_version) & XLOG_VERSION_2))) {
+		xfs_warn(log->l_mp,
+"%s: xlog_rec_header h_version (%d) does not match sb log version (%d)",
+			__func__, be32_to_cpu(rhead->h_version),
+			xfs_has_logv2(log->l_mp) ? 2 : 1);
+		return -EFSCORRUPTED;
+	}
 
 	/*
 	 * LR body must have data (or it wouldn't have been written)
