@@ -41,7 +41,7 @@ static inline void dump_hmac(const char *str, const u8 *digest,
 			     unsigned int hmac_size)
 {
 	if (str)
-		pr_info("encrypted_key: %s", str);
+		pr_info("%s", str);
 	print_hex_dump(KERN_ERR, "hmac: ", DUMP_PREFIX_NONE, 32, 1, digest,
 		       hmac_size, 0);
 }
