@@ -758,6 +758,7 @@ int chown_common(const struct path *path, uid_t user, gid_t group)
 	struct iattr newattrs;
 	kuid_t uid;
 	kgid_t gid;
+	bool needs_update = false;
 
 	uid = make_kuid(current_user_ns(), user);
 	gid = make_kgid(current_user_ns(), group);
@@ -776,6 +777,17 @@ retry_deleg:
 	error = inode_lock_killable(inode);
 	if (error)
 		return error;
+
+	/* Check if ownership actually needs to change */
+	if ((newattrs.ia_valid & ATTR_UID) && !uid_eq(inode->i_uid, uid))
+		needs_update = true;
+	if ((newattrs.ia_valid & ATTR_GID) && !gid_eq(inode->i_gid, gid))
+		needs_update = true;
+
+	if (!needs_update) {
+		inode_unlock(inode);
+		return 0;
+	}
 	if (!S_ISDIR(inode->i_mode))
 		newattrs.ia_valid |= ATTR_KILL_SUID | ATTR_KILL_PRIV |
 				     setattr_should_drop_sgid(idmap, inode);
