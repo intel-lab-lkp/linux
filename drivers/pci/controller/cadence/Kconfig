@@ -4,16 +4,16 @@ menu "Cadence-based PCIe controllers"
 	depends on PCI
 
 config PCIE_CADENCE
-	tristate
+	bool
 
 config PCIE_CADENCE_HOST
-	tristate
+	bool
 	depends on OF
 	select IRQ_DOMAIN
 	select PCIE_CADENCE
 
 config PCIE_CADENCE_EP
-	tristate
+	bool
 	depends on OF
 	depends on PCI_ENDPOINT
 	select PCIE_CADENCE
