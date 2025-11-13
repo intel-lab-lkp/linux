@@ -121,6 +121,69 @@ def AmdBr():
                        description="breakdown of retired branch instructions")
 
 
+def AmdHwpf():
+    """Returns a MetricGroup representing AMD hardware prefetch metrics."""
+    global _zen_model
+    if _zen_model <= 1:
+        return None
+
+    hwp_ld = Event("ls_dispatch.ld_dispatch")
+    hwp_l2 = Event("ls_hw_pf_dc_fills.local_l2",
+                   "ls_hw_pf_dc_fills.lcl_l2",
+                   "ls_hw_pf_dc_fill.ls_mabresp_lcl_l2")
+    hwp_lc = Event("ls_hw_pf_dc_fills.local_ccx",
+                   "ls_hw_pf_dc_fills.int_cache",
+                   "ls_hw_pf_dc_fill.ls_mabresp_lcl_cache")
+    hwp_lm = Event("ls_hw_pf_dc_fills.dram_io_near",
+                   "ls_hw_pf_dc_fills.mem_io_local",
+                   "ls_hw_pf_dc_fill.ls_mabresp_lcl_dram")
+    hwp_rc = Event("ls_hw_pf_dc_fills.far_cache",
+                   "ls_hw_pf_dc_fills.ext_cache_remote",
+                   "ls_hw_pf_dc_fill.ls_mabresp_rmt_cache")
+    hwp_rm = Event("ls_hw_pf_dc_fills.dram_io_far",
+                   "ls_hw_pf_dc_fills.mem_io_remote",
+                   "ls_hw_pf_dc_fill.ls_mabresp_rmt_dram")
+
+    loc_pf = hwp_l2 + hwp_lc + hwp_lm
+    rem_pf = hwp_rc + hwp_rm
+    all_pf = loc_pf + rem_pf
+
+    r1 = d_ratio(ins, all_pf)
+    r2 = d_ratio(hwp_ld, all_pf)
+    r3 = d_ratio(all_pf, interval_sec)
+
+    overview = MetricGroup("lpm_hwpf_overview", [
+        Metric("lpm_hwpf_ov_insn_bt_hwpf", "Insn between HWPF", r1, "insns"),
+        Metric("lpm_hwpf_ov_loads_bt_hwpf", "Loads between HWPF", r2, "loads"),
+        Metric("lpm_hwpf_ov_rate", "HWPF per second", r3, "hwpf/s"),
+    ])
+    r1 = d_ratio(hwp_l2, all_pf)
+    r2 = d_ratio(hwp_lc, all_pf)
+    r3 = d_ratio(hwp_lm, all_pf)
+    data_src_local = MetricGroup("lpm_hwpf_data_src_local", [
+        Metric("lpm_hwpf_data_src_local_l2",
+               "Data source local l2", r1, "100%"),
+        Metric("lpm_hwpf_data_src_local_ccx_l3_loc_ccx",
+               "Data source local ccx l3 loc ccx", r2, "100%"),
+        Metric("lpm_hwpf_data_src_local_memory_or_io",
+               "Data source local memory or IO", r3, "100%"),
+    ])
+
+    r1 = d_ratio(hwp_rc, all_pf)
+    r2 = d_ratio(hwp_rm, all_pf)
+    data_src_remote = MetricGroup("lpm_hwpf_data_src_remote", [
+        Metric("lpm_hwpf_data_src_remote_cache", "Data source remote cache", r1,
+               "100%"),
+        Metric("lpm_hwpf_data_src_remote_memory_or_io",
+               "Data source remote memory or IO", r2, "100%"),
+    ])
+
+    data_src = MetricGroup("lpm_hwpf_data_src", [
+                           data_src_local, data_src_remote])
+    return MetricGroup("lpm_hwpf", [overview, data_src],
+                       description="Hardware prefetch breakdown (CCX L3 = L3 of current thread, Loc CCX = CCX cache on some socket)")
+
+
 def AmdSwpf() -> Optional[MetricGroup]:
     """Returns a MetricGroup representing AMD software prefetch metrics."""
     global _zen_model
@@ -287,6 +350,7 @@ def main() -> None:
 
     all_metrics = MetricGroup("", [
         AmdBr(),
+        AmdHwpf(),
         AmdSwpf(),
         AmdUpc(),
         Idle(),
