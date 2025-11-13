@@ -338,17 +338,25 @@ static int kvm_gmem_release(struct inode *inode, struct file *file)
 	 * dereferencing the slot for existing bindings needs to be protected
 	 * against memslot updates, specifically so that unbind doesn't race
 	 * and free the memslot (kvm_gmem_get_file() will return NULL).
-	 *
-	 * Since .release is called only when the reference count is zero,
-	 * after which file_ref_get() and get_file_active() fail,
-	 * kvm_gmem_get_pfn() cannot be using the file concurrently.
-	 * file_ref_put() provides a full barrier, and get_file_active() the
-	 * matching acquire barrier.
 	 */
 	mutex_lock(&kvm->slots_lock);
 
 	filemap_invalidate_lock(inode->i_mapping);
 
+	/*
+	 * Note!  synchronize_srcu() is _not_ needed after nullifying memslot
+	 * bindings as slot->gmem.file cannot be set back to a non-null value
+	 * without the memslot first being deleted.  I.e. this relies on the
+	 * synchronize_srcu_expedited() in kvm_swap_active_memslots() to ensure
+	 * kvm_gmem_get_pfn() (which runs with kvm->srcu held for read) can't
+	 * grab a reference to slot->gmem.file even if the struct file object
+	 * is reallocated.
+	 *
+	 * file_ref_put() provides a full barrier, and __get_file_rcu() the
+	 * matching acquire barrier, to ensure that kvm_gmem_get_file() (via
+	 * __get_file_rcu()) sees refcount==0 or fails the "file reloaded"
+	 * check (file != NULL due to nullifying the file pointer here).
+	 */
 	xa_for_each(&f->bindings, index, slot)
 		WRITE_ONCE(slot->gmem.file, NULL);
 
