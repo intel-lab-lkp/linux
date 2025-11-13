@@ -6390,6 +6390,7 @@ static void sdebug_q_cmd_complete(struct sdebug_defer *sd_dp)
 	aborted = sd_dp->aborted;
 	if (unlikely(aborted))
 		sd_dp->aborted = false;
+	sd_dp->defer_t = SDEB_DEFER_NONE;
 
 	spin_unlock_irqrestore(&sdsc->lock, flags);
 
