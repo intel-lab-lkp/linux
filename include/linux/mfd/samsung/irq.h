@@ -34,6 +34,8 @@ enum s2mpa01_irq {
 	S2MPA01_IRQ_NR,
 };
 
+#define S2MPA01_IRQ_CHIP		0
+
 #define S2MPA01_IRQ_PWRONF_MASK		(1 << 0)
 #define S2MPA01_IRQ_PWRONR_MASK		(1 << 1)
 #define S2MPA01_IRQ_JIGONBF_MASK	(1 << 2)
@@ -58,6 +60,8 @@ enum s2mpa01_irq {
 #define S2MPA01_IRQ_B35_TSD_MASK	(1 << 5)
 
 enum s2mpg10_irq {
+#define S2MPG10_IRQ_CHIP		0
+
 	/* PMIC */
 	S2MPG10_IRQ_PWRONF,
 	S2MPG10_IRQ_PWRONR,
@@ -183,6 +187,8 @@ enum s2mps11_irq {
 	S2MPS11_IRQ_NR,
 };
 
+#define S2MPS11_IRQ_CHIP		0
+
 #define S2MPS11_IRQ_PWRONF_MASK		(1 << 0)
 #define S2MPS11_IRQ_PWRONR_MASK		(1 << 1)
 #define S2MPS11_IRQ_JIGONBF_MASK	(1 << 2)
@@ -226,6 +232,8 @@ enum s2mps14_irq {
 	S2MPS14_IRQ_NR,
 };
 
+#define S2MPS14_IRQ_CHIP		0
+
 enum s2mpu02_irq {
 	S2MPU02_IRQ_PWRONF,
 	S2MPU02_IRQ_PWRONR,
@@ -249,6 +257,8 @@ enum s2mpu02_irq {
 
 	S2MPU02_IRQ_NR,
 };
+
+#define S2MPU02_IRQ_CHIP		0
 
 /* Masks for interrupts are the same as in s2mps11 */
 #define S2MPS14_IRQ_TSD_MASK		(1 << 2)
@@ -276,6 +286,8 @@ enum s2mpu05_irq {
 
 	S2MPU05_IRQ_NR,
 };
+
+#define S2MPU05_IRQ_CHIP		0
 
 #define S2MPU05_IRQ_PWRONF_MASK		BIT(0)
 #define S2MPU05_IRQ_PWRONR_MASK		BIT(1)
@@ -320,6 +332,8 @@ enum s5m8767_irq {
 
 	S5M8767_IRQ_NR,
 };
+
+#define S5M8767_IRQ_CHIP		0
 
 #define S5M8767_IRQ_PWRR_MASK		(1 << 0)
 #define S5M8767_IRQ_PWRF_MASK		(1 << 1)

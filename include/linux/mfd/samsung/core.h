@@ -33,6 +33,9 @@
 #define STEP_12_5_MV		12500
 #define STEP_6_25_MV		6250
 
+/* Maximum number of IRQ chips in a PMIC */
+#define MAX_IRQ_CHIPS		1
+
 struct gpio_desc;
 
 enum sec_device_type {
@@ -69,7 +72,7 @@ struct sec_pmic_dev {
 
 	int device_type;
 	int irq;
-	struct regmap_irq_chip_data *irq_data;
+	struct regmap_irq_chip_data *irq_data[MAX_IRQ_CHIPS];
 };
 
 struct sec_platform_data {

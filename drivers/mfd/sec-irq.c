@@ -181,24 +181,30 @@ static const struct regmap_irq s5m8767_irqs[] = {
 };
 
 /* All S2MPG10 interrupt sources are read-only and don't require clearing */
-static const struct regmap_irq_chip s2mpg10_irq_chip = {
-	.name = "s2mpg10",
-	.irqs = s2mpg10_irqs,
-	.num_irqs = ARRAY_SIZE(s2mpg10_irqs),
-	.num_regs = 6,
-	.status_base = S2MPG10_PMIC_INT1,
-	.mask_base = S2MPG10_PMIC_INT1M,
+static const struct regmap_irq_chip s2mpg10_irq_chip[] = {
+	[S2MPG10_IRQ_CHIP] = {
+		.name = "s2mpg10",
+		.irqs = s2mpg10_irqs,
+		.num_irqs = ARRAY_SIZE(s2mpg10_irqs),
+		.num_regs = 6,
+		.status_base = S2MPG10_PMIC_INT1,
+		.mask_base = S2MPG10_PMIC_INT1M,
+	},
 };
 
-static const struct regmap_irq_chip s2mps11_irq_chip = {
-	.name = "s2mps11",
-	.irqs = s2mps11_irqs,
-	.num_irqs = ARRAY_SIZE(s2mps11_irqs),
-	.num_regs = 3,
-	.status_base = S2MPS11_REG_INT1,
-	.mask_base = S2MPS11_REG_INT1M,
-	.ack_base = S2MPS11_REG_INT1,
+static const struct regmap_irq_chip s2mps11_irq_chip[] = {
+	[S2MPS11_IRQ_CHIP] = {
+		.name = "s2mps11",
+		.irqs = s2mps11_irqs,
+		.num_irqs = ARRAY_SIZE(s2mps11_irqs),
+		.num_regs = 3,
+		.status_base = S2MPS11_REG_INT1,
+		.mask_base = S2MPS11_REG_INT1M,
+		.ack_base = S2MPS11_REG_INT1,
+	},
 };
+
+#define S2MPS1X_IRQ_CHIP		S2MPS14_IRQ_CHIP
 
 #define S2MPS1X_IRQ_CHIP_COMMON_DATA		\
 	.irqs = s2mps14_irqs,			\
@@ -208,85 +214,106 @@ static const struct regmap_irq_chip s2mps11_irq_chip = {
 	.mask_base = S2MPS14_REG_INT1M,		\
 	.ack_base = S2MPS14_REG_INT1		\
 
-static const struct regmap_irq_chip s2mps13_irq_chip = {
-	.name = "s2mps13",
-	S2MPS1X_IRQ_CHIP_COMMON_DATA,
+static const struct regmap_irq_chip s2mps13_irq_chip[] = {
+	[S2MPS1X_IRQ_CHIP] = {
+		.name = "s2mps13",
+		S2MPS1X_IRQ_CHIP_COMMON_DATA,
+	},
 };
 
-static const struct regmap_irq_chip s2mps14_irq_chip = {
-	.name = "s2mps14",
-	S2MPS1X_IRQ_CHIP_COMMON_DATA,
+static const struct regmap_irq_chip s2mps14_irq_chip[] = {
+	[S2MPS1X_IRQ_CHIP] = {
+		.name = "s2mps14",
+		S2MPS1X_IRQ_CHIP_COMMON_DATA,
+	},
 };
 
-static const struct regmap_irq_chip s2mps15_irq_chip = {
-	.name = "s2mps15",
-	S2MPS1X_IRQ_CHIP_COMMON_DATA,
+static const struct regmap_irq_chip s2mps15_irq_chip[] = {
+	[S2MPS1X_IRQ_CHIP] = {
+		.name = "s2mps15",
+		S2MPS1X_IRQ_CHIP_COMMON_DATA,
+	},
 };
 
-static const struct regmap_irq_chip s2mpu02_irq_chip = {
-	.name = "s2mpu02",
-	.irqs = s2mpu02_irqs,
-	.num_irqs = ARRAY_SIZE(s2mpu02_irqs),
-	.num_regs = 3,
-	.status_base = S2MPU02_REG_INT1,
-	.mask_base = S2MPU02_REG_INT1M,
-	.ack_base = S2MPU02_REG_INT1,
+static const struct regmap_irq_chip s2mpu02_irq_chip[] = {
+	[S2MPU02_IRQ_CHIP] = {
+		.name = "s2mpu02",
+		.irqs = s2mpu02_irqs,
+		.num_irqs = ARRAY_SIZE(s2mpu02_irqs),
+		.num_regs = 3,
+		.status_base = S2MPU02_REG_INT1,
+		.mask_base = S2MPU02_REG_INT1M,
+		.ack_base = S2MPU02_REG_INT1,
+	},
 };
 
-static const struct regmap_irq_chip s2mpu05_irq_chip = {
-	.name = "s2mpu05",
-	.irqs = s2mpu05_irqs,
-	.num_irqs = ARRAY_SIZE(s2mpu05_irqs),
-	.num_regs = 3,
-	.status_base = S2MPU05_REG_INT1,
-	.mask_base = S2MPU05_REG_INT1M,
-	.ack_base = S2MPU05_REG_INT1,
+static const struct regmap_irq_chip s2mpu05_irq_chip[] = {
+	[S2MPU05_IRQ_CHIP] = {
+		.name = "s2mpu05",
+		.irqs = s2mpu05_irqs,
+		.num_irqs = ARRAY_SIZE(s2mpu05_irqs),
+		.num_regs = 3,
+		.status_base = S2MPU05_REG_INT1,
+		.mask_base = S2MPU05_REG_INT1M,
+		.ack_base = S2MPU05_REG_INT1,
+	},
 };
 
-static const struct regmap_irq_chip s5m8767_irq_chip = {
-	.name = "s5m8767",
-	.irqs = s5m8767_irqs,
-	.num_irqs = ARRAY_SIZE(s5m8767_irqs),
-	.num_regs = 3,
-	.status_base = S5M8767_REG_INT1,
-	.mask_base = S5M8767_REG_INT1M,
-	.ack_base = S5M8767_REG_INT1,
+static const struct regmap_irq_chip s5m8767_irq_chip[] = {
+	[S5M8767_IRQ_CHIP] = {
+		.name = "s5m8767",
+		.irqs = s5m8767_irqs,
+		.num_irqs = ARRAY_SIZE(s5m8767_irqs),
+		.num_regs = 3,
+		.status_base = S5M8767_REG_INT1,
+		.mask_base = S5M8767_REG_INT1M,
+		.ack_base = S5M8767_REG_INT1,
+	},
 };
 
 int sec_irq_init(struct sec_pmic_dev *sec_pmic)
 {
 	const struct regmap_irq_chip *sec_irq_chip;
-	int ret;
+	int sec_irq_chip_num, i, ret;
 
 	switch (sec_pmic->device_type) {
 	case S5M8767X:
-		sec_irq_chip = &s5m8767_irq_chip;
+		sec_irq_chip = s5m8767_irq_chip;
+		sec_irq_chip_num = ARRAY_SIZE(s5m8767_irq_chip);
 		break;
 	case S2DOS05:
 		return 0;
 	case S2MPA01:
-		sec_irq_chip = &s2mps14_irq_chip;
+		sec_irq_chip = s2mps14_irq_chip;
+		sec_irq_chip_num = ARRAY_SIZE(s2mps14_irq_chip);
 		break;
 	case S2MPG10:
-		sec_irq_chip = &s2mpg10_irq_chip;
+		sec_irq_chip = s2mpg10_irq_chip;
+		sec_irq_chip_num = ARRAY_SIZE(s2mpg10_irq_chip);
 		break;
 	case S2MPS11X:
-		sec_irq_chip = &s2mps11_irq_chip;
+		sec_irq_chip = s2mps11_irq_chip;
+		sec_irq_chip_num = ARRAY_SIZE(s2mps11_irq_chip);
 		break;
 	case S2MPS13X:
-		sec_irq_chip = &s2mps13_irq_chip;
+		sec_irq_chip = s2mps13_irq_chip;
+		sec_irq_chip_num = ARRAY_SIZE(s2mps13_irq_chip);
 		break;
 	case S2MPS14X:
-		sec_irq_chip = &s2mps14_irq_chip;
+		sec_irq_chip = s2mps14_irq_chip;
+		sec_irq_chip_num = ARRAY_SIZE(s2mps14_irq_chip);
 		break;
 	case S2MPS15X:
-		sec_irq_chip = &s2mps15_irq_chip;
+		sec_irq_chip = s2mps15_irq_chip;
+		sec_irq_chip_num = ARRAY_SIZE(s2mps15_irq_chip);
 		break;
 	case S2MPU02:
-		sec_irq_chip = &s2mpu02_irq_chip;
+		sec_irq_chip = s2mpu02_irq_chip;
+		sec_irq_chip_num = ARRAY_SIZE(s2mpu02_irq_chip);
 		break;
 	case S2MPU05:
-		sec_irq_chip = &s2mpu05_irq_chip;
+		sec_irq_chip = s2mpu05_irq_chip;
+		sec_irq_chip_num = ARRAY_SIZE(s2mpu05_irq_chip);
 		break;
 	default:
 		return dev_err_probe(sec_pmic->dev, -EINVAL,
@@ -300,13 +327,19 @@ int sec_irq_init(struct sec_pmic_dev *sec_pmic)
 		return 0;
 	}
 
-	ret = devm_regmap_add_irq_chip(sec_pmic->dev, sec_pmic->regmap_pmic,
-				       sec_pmic->irq, IRQF_ONESHOT,
-				       0, sec_irq_chip, &sec_pmic->irq_data);
-	if (ret)
-		return dev_err_probe(sec_pmic->dev, ret,
-				     "Failed to add %s IRQ chip\n",
-				     sec_irq_chip->name);
+	for (i = 0; i < sec_irq_chip_num; i++) {
+		ret = devm_regmap_add_irq_chip(sec_pmic->dev,
+					       sec_pmic->regmap_pmic,
+					       sec_pmic->irq,
+					       IRQF_ONESHOT | IRQF_SHARED, 0,
+					       sec_irq_chip + i,
+					       sec_pmic->irq_data + i);
+		if (ret) {
+			return dev_err_probe(sec_pmic->dev, ret,
+					     "Failed to add %s IRQ chip\n",
+					     sec_irq_chip->name);
+		}
+	}
 
 	/*
 	 * The rtc-s5m driver requests S2MPS14_IRQ_RTCA0 also for S2MPS11
