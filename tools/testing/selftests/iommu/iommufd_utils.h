@@ -770,7 +770,6 @@ static int _test_cmd_get_hw_info(int fd, __u32 device_id, __u32 data_type,
 				 void *data, size_t data_len,
 				 uint32_t *capabilities, uint8_t *max_pasid)
 {
-	struct iommu_test_hw_info *info = (struct iommu_test_hw_info *)data;
 	struct iommu_hw_info cmd = {
 		.size = sizeof(cmd),
 		.dev_id = device_id,
@@ -810,11 +809,19 @@ static int _test_cmd_get_hw_info(int fd, __u32 device_id, __u32 data_type,
 		}
 	}
 
-	if (info) {
-		if (data_len >= offsetofend(struct iommu_test_hw_info, test_reg))
-			assert(info->test_reg == IOMMU_HW_INFO_SELFTEST_REGVAL);
-		if (data_len >= offsetofend(struct iommu_test_hw_info, flags))
-			assert(!info->flags);
+	if (data) {
+		if (data_len >= offsetofend(struct iommu_test_hw_info,
+					    test_reg)) {
+			__u32 *test_reg = (__u32 *)data + 1;
+
+			assert(*test_reg == IOMMU_HW_INFO_SELFTEST_REGVAL);
+		}
+		if (data_len >= offsetofend(struct iommu_test_hw_info,
+					    flags)) {
+			__u32 *flags = data;
+
+			assert(!*flags);
+		}
 	}
 
 	if (max_pasid)
