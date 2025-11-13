@@ -216,9 +216,7 @@ struct rpcrdma_rep {
  *
  * Setting this to zero disables Receive post batching.
  */
-enum {
-	RPCRDMA_MAX_RECV_BATCH = 7,
-};
+extern unsigned int rpcrdma_max_recv_batch;
 
 /* struct rpcrdma_sendctx - DMA mapped SGEs to unmap after Send completes
  */

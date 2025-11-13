@@ -27,6 +27,12 @@ MODULE_ALIAS("svcrdma");
 MODULE_ALIAS("xprtrdma");
 MODULE_ALIAS("rpcrdma6");
 
+unsigned int rpcrdma_max_recv_batch = 64;
+module_param_named(max_recv_batch, rpcrdma_max_recv_batch, uint, 0644);
+MODULE_PARM_DESC(max_recv_batch,
+		 "Maximum number of Receive WRs to post in a batch "
+		 "(default: 64, set to 0 to disable batching)");
+
 static void __exit rpc_rdma_cleanup(void)
 {
 	xprt_rdma_cleanup();
