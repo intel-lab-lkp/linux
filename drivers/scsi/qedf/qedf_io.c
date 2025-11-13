@@ -1649,8 +1649,6 @@ void qedf_flush_active_ios(struct qedf_rport *fcport, u64 lun)
 	for (i = 0; i < FCOE_PARAMS_NUM_TASKS; i++) {
 		io_req = &cmd_mgr->cmds[i];
 
-		if (!io_req)
-			continue;
 		if (!io_req->fcport)
 			continue;
 
