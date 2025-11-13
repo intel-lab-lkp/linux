@@ -2254,6 +2254,8 @@ int genphy_c45_an_config_eee_aneg(struct phy_device *phydev);
 int genphy_c45_oatc14_cable_test_start(struct phy_device *phydev);
 int genphy_c45_oatc14_cable_test_get_status(struct phy_device *phydev,
 					    bool *finished);
+int genphy_c45_oatc14_get_sqi_max(struct phy_device *phydev);
+int genphy_c45_oatc14_get_sqi(struct phy_device *phydev);
 
 /* The gen10g_* functions are the old Clause 45 stub */
 int gen10g_config_aneg(struct phy_device *phydev);
