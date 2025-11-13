@@ -116,6 +116,7 @@ struct lm75_data {
 	const struct lm75_params	*params;
 	u8				reg_buf[1];
 	u8				val_buf[3];
+	bool				alarm_state;
 };
 
 /*-----------------------------------------------------------------------*/
@@ -229,6 +230,7 @@ static const struct lm75_params device_params[] = {
 		.default_sample_time = 55,
 		.num_sample_times = 4,
 		.sample_times = (unsigned int []){ 28, 55, 110, 220 },
+		.alarm = true,
 	},
 	[p3t1755] = {
 		.clr_mask = 1 << 1 | 1 << 7,	/* disable SMBAlert and one-shot */
@@ -236,6 +238,7 @@ static const struct lm75_params device_params[] = {
 		.default_sample_time = 55,
 		.num_sample_times = 4,
 		.sample_times = (unsigned int []){ 28, 55, 110, 220 },
+		.alarm = true,
 	},
 	[pct2075] = {
 		.default_resolution = 11,
@@ -407,6 +410,49 @@ static int lm75_read(struct device *dev, enum hwmon_sensor_types type,
 			case tmp112:
 				*val = (regval >> 13) & 0x1;
 				break;
+
+			case p3t1750:
+			case p3t1755: {
+				unsigned int temp_raw, thigh_raw, tlow_raw;
+				s16 temp, thigh, tlow;
+
+				err = regmap_read(data->regmap, LM75_REG_TEMP, &temp_raw);
+				if (err)
+					return err;
+
+				err = regmap_read(data->regmap, LM75_REG_MAX, &thigh_raw);
+				if (err)
+					return err;
+
+				err = regmap_read(data->regmap, LM75_REG_HYST, &tlow_raw);
+				if (err)
+					return err;
+
+				temp = (s16)temp_raw;
+				thigh = (s16)thigh_raw;
+				tlow = (s16)tlow_raw;
+
+				/*
+				 * Implement software-based alarm logic for P3T1750/P3T1755.
+				 *
+				 * These devices do not provide readable alarm bits in hardware.
+				 * To comply with hwmon ABI and to support standard 'tempX_alarm'
+				 * attribute, check the current temperature against THIGH and TLOW
+				 * thresholds:
+				 *
+				 * - If temp >= thigh, set alarm = 1 (over-temperature condition).
+				 * - If temp < tlow, clear alarm = 0 (clear alarm).
+				 * - If temp is between tlow and thigh, keep previous alarm state
+				 *   to provide hysteresis behavior similar to hardware.
+				 */
+				if (!data->alarm_state && temp >= thigh)
+					data->alarm_state = true;
+				else if (data->alarm_state && temp < tlow)
+					data->alarm_state = false;
+
+				*val = data->alarm_state;
+				break;
+			}
 			default:
 				return -EINVAL;
 			}
