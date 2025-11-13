@@ -3661,7 +3661,6 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 				return ret;
 			}
 		}
-
 		TRACE_ALT_INFO_NOADDR(insn, "/ ", "DEFAULT");
 	}
 
