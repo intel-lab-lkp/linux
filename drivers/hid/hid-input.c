@@ -521,14 +521,20 @@ static int hidinput_setup_battery(struct hid_device *dev, unsigned report_type,
 	unsigned quirks;
 	s32 min, max;
 	int error;
+	int battery_num = 0;
 
-	if (dev->battery)
-		return 0;	/* already initialized? */
+	/* Check if battery with this report_id already exists */
+	list_for_each_entry(bat, &dev->batteries, list) {
+		if (bat->report_id == field->report->id)
+			return 0;	/* already initialized */
+		battery_num++;
+	}
 
 	quirks = find_battery_quirk(dev);
 
-	hid_dbg(dev, "device %x:%x:%x %d quirks %d\n",
-		dev->bus, dev->vendor, dev->product, dev->version, quirks);
+	hid_dbg(dev, "device %x:%x:%x %d quirks %d report_id %d\n",
+		dev->bus, dev->vendor, dev->product, dev->version, quirks,
+		field->report->id);
 
 	if (quirks & HID_BATTERY_QUIRK_IGNORE)
 		return 0;
@@ -543,9 +549,17 @@ static int hidinput_setup_battery(struct hid_device *dev, unsigned report_type,
 		goto err_free_bat;
 	}
 
-	psy_desc->name = kasprintf(GFP_KERNEL, "hid-%s-battery",
-				   strlen(dev->uniq) ?
-					dev->uniq : dev_name(&dev->dev));
+	/* Create unique name for each battery based on report ID */
+	if (battery_num == 0) {
+		psy_desc->name = kasprintf(GFP_KERNEL, "hid-%s-battery",
+					   strlen(dev->uniq) ?
+						dev->uniq : dev_name(&dev->dev));
+	} else {
+		psy_desc->name = kasprintf(GFP_KERNEL, "hid-%s-battery-%d",
+					   strlen(dev->uniq) ?
+						dev->uniq : dev_name(&dev->dev),
+					   battery_num);
+	}
 	if (!psy_desc->name) {
 		error = -ENOMEM;
 		goto err_free_desc;
@@ -598,15 +612,23 @@ static int hidinput_setup_battery(struct hid_device *dev, unsigned report_type,
 
 	power_supply_powers(bat->ps, &dev->dev);
 
-	/* Maintain legacy single battery fields for backward compatibility */
-	dev->battery = bat->ps;
-	dev->battery_min = bat->min;
-	dev->battery_max = bat->max;
-	dev->battery_report_type = bat->report_type;
-	dev->battery_report_id = bat->report_id;
-	dev->battery_charge_status = bat->charge_status;
-	dev->battery_status = bat->status;
-	dev->battery_avoid_query = bat->avoid_query;
+	list_add_tail(&bat->list, &dev->batteries);
+
+	/*
+	 * The legacy single battery API is preserved by exposing the first
+	 * discovered battery. Systems relying on a single battery view maintain
+	 * unchanged behavior.
+	 */
+	if (battery_num == 0) {
+		dev->battery = bat->ps;
+		dev->battery_min = bat->min;
+		dev->battery_max = bat->max;
+		dev->battery_report_type = bat->report_type;
+		dev->battery_report_id = bat->report_id;
+		dev->battery_charge_status = bat->charge_status;
+		dev->battery_status = bat->status;
+		dev->battery_avoid_query = bat->avoid_query;
+	}
 
 	return 0;
 
@@ -621,19 +643,31 @@ err_free_bat:
 
 static void hidinput_cleanup_battery(struct hid_device *dev)
 {
-	struct hid_battery *bat;
+	struct hid_battery *bat, *next;
 	const struct power_supply_desc *psy_desc;
 
-	if (!dev->battery)
-		return;
+	list_for_each_entry_safe(bat, next, &dev->batteries, list) {
+		psy_desc = bat->ps->desc;
+		power_supply_unregister(bat->ps);
+		kfree(psy_desc->name);
+		kfree(psy_desc);
+		list_del(&bat->list);
+		kfree(bat);
+	}
 
-	bat = power_supply_get_drvdata(dev->battery);
-	psy_desc = dev->battery->desc;
-	power_supply_unregister(dev->battery);
-	kfree(psy_desc->name);
-	kfree(psy_desc);
-	kfree(bat);
 	dev->battery = NULL;
+}
+
+static struct hid_battery *hidinput_find_battery(struct hid_device *dev,
+						 int report_id)
+{
+	struct hid_battery *bat;
+
+	list_for_each_entry(bat, &dev->batteries, list) {
+		if (bat->report_id == report_id)
+			return bat;
+	}
+	return NULL;
 }
 
 static bool hidinput_update_battery_charge_status(struct hid_battery *bat,
@@ -653,16 +687,15 @@ static bool hidinput_update_battery_charge_status(struct hid_battery *bat,
 	return false;
 }
 
-static void hidinput_update_battery(struct hid_device *dev, unsigned int usage,
-				    int value)
+static void hidinput_update_battery(struct hid_device *dev, int report_id,
+				    unsigned int usage, int value)
 {
 	struct hid_battery *bat;
 	int capacity;
 
-	if (!dev->battery)
+	bat = hidinput_find_battery(dev, report_id);
+	if (!bat)
 		return;
-
-	bat = power_supply_get_drvdata(dev->battery);
 
 	if (hidinput_update_battery_charge_status(bat, usage, value)) {
 		power_supply_changed(bat->ps);
@@ -706,8 +739,8 @@ static void hidinput_cleanup_battery(struct hid_device *dev)
 {
 }
 
-static void hidinput_update_battery(struct hid_device *dev, unsigned int usage,
-				    int value)
+static void hidinput_update_battery(struct hid_device *dev, int report_id,
+				    unsigned int usage, int value)
 {
 }
 #endif	/* CONFIG_HID_BATTERY_STRENGTH */
@@ -1575,7 +1608,7 @@ void hidinput_hid_event(struct hid_device *hid, struct hid_field *field, struct 
 		return;
 
 	if (usage->type == EV_PWR) {
-		hidinput_update_battery(hid, usage->hid, value);
+		hidinput_update_battery(hid, report->id, usage->hid, value);
 		return;
 	}
 

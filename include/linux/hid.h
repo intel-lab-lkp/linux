@@ -700,8 +700,16 @@ struct hid_device {
 #ifdef CONFIG_HID_BATTERY_STRENGTH
 	/*
 	 * Power supply information for HID devices which report
-	 * battery strength. power_supply was successfully registered if
-	 * battery is non-NULL.
+	 * battery strength. Each battery is tracked separately in the
+	 * batteries list.
+	 */
+	struct list_head batteries;		/* List of hid_battery structures */
+
+	/*
+	 * Legacy single battery support - kept for backwards compatibility.
+	 * Points to the first battery in the list if any exists.
+	 * power_supply was successfully registered if battery is non-NULL.
+	 * DEPRECATED: New code should iterate through batteries list instead.
 	 */
 	struct power_supply *battery;
 	__s32 battery_capacity;
