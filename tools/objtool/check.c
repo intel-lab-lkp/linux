@@ -25,11 +25,6 @@
 #include <linux/static_call_types.h>
 #include <linux/string.h>
 
-struct alternative {
-	struct alternative *next;
-	struct instruction *insn;
-};
-
 static unsigned long nr_cfi, nr_cfi_reused, nr_cfi_cache;
 
 static struct cfi_init_state initial_func_cfi;
@@ -1910,6 +1905,7 @@ static int add_special_section_alts(struct objtool_file *file)
 	struct list_head special_alts;
 	struct instruction *orig_insn, *new_insn;
 	struct special_alt *special_alt, *tmp;
+	enum alternative_type alt_type;
 	struct alternative *alt;
 	int ret;
 
@@ -1948,11 +1944,17 @@ static int add_special_section_alts(struct objtool_file *file)
 			if (ret)
 				return ret;
 
+			alt_type = ALT_TYPE_INSTRUCTIONS;
+
 		} else if (special_alt->jump_or_nop) {
 			ret = handle_jump_alt(file, special_alt, orig_insn,
 					      &new_insn);
 			if (ret)
 				return ret;
+
+			alt_type = ALT_TYPE_JUMP_TABLE;
+		} else {
+			alt_type = ALT_TYPE_EX_TABLE;
 		}
 
 		alt = calloc(1, sizeof(*alt));
@@ -1963,6 +1965,7 @@ static int add_special_section_alts(struct objtool_file *file)
 
 		alt->insn = new_insn;
 		alt->next = orig_insn->alts;
+		alt->type = alt_type;
 		orig_insn->alts = alt;
 
 		list_del(&special_alt->list);
