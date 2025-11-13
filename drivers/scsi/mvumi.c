@@ -1589,10 +1589,12 @@ static int mvumi_probe_devices(struct mvumi_hba *mhba)
 				dev_dbg(&mhba->pdev->dev,
 					"probe a new device(0:%d:0)"
 					" wwid(%llx)\n", id, mv_dev->wwid);
-			} else if (found == -1)
+			} else if (found == -1) {
+				mvumi_delete_internal_cmd(mhba, cmd);
 				return -1;
-			else
+			} else {
 				continue;
+			}
 		}
 	}
 
