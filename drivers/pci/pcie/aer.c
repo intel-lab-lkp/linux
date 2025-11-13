@@ -371,6 +371,9 @@ void pci_restore_aer_state(struct pci_dev *dev)
 	if (!aer)
 		return;
 
+	if (!dev->state_saved)
+		return;
+
 	save_state = pci_find_saved_ext_cap(dev, PCI_EXT_CAP_ID_ERR);
 	if (!save_state)
 		return;

@@ -112,6 +112,9 @@ void pci_restore_ptm_state(struct pci_dev *dev)
 	if (!ptm)
 		return;
 
+	if (!dev->state_saved)
+		return;
+
 	save_state = pci_find_saved_ext_cap(dev, PCI_EXT_CAP_ID_PTM);
 	if (!save_state)
 		return;

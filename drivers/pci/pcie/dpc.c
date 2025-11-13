@@ -67,6 +67,9 @@ void pci_restore_dpc_state(struct pci_dev *dev)
 	if (!pci_is_pcie(dev))
 		return;
 
+	if (!dev->state_saved)
+		return;
+
 	save_state = pci_find_saved_ext_cap(dev, PCI_EXT_CAP_ID_DPC);
 	if (!save_state)
 		return;
