@@ -427,10 +427,10 @@ static int krb5_test_one_mic(const struct krb5_mic_test *test, void *buf)
 	memcpy(buf + offset, plain.data, plain.len);
 
 	/* Generate a MIC generation request. */
-	sg_init_one(sg, buf, 1024);
+	sg_init_one(sg, buf, message_len);
 
-	ret = crypto_krb5_get_mic(krb5, ci, NULL, sg, 1, 1024,
-				  krb5->cksum_len, plain.len);
+	ret = crypto_krb5_get_mic(krb5, ci, NULL, sg, 1, message_len,
+                   krb5->cksum_len, plain.len);
 	if (ret < 0) {
 		CHECK(1);
 		pr_warn("Get MIC failed %d\n", ret);
