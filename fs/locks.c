@@ -1609,6 +1609,10 @@ int __break_lease(struct inode *inode, unsigned int mode, unsigned int type)
 		error = -EWOULDBLOCK;
 		goto out;
 	}
+	if (type == FL_LAYOUT && !ctx->flc_conflict) {
+		ctx->flc_conflict = true;
+		ctx->flc_wait_for_dispose = false;
+	}
 
 restart:
 	fl = list_first_entry(&ctx->flc_lease, struct file_lease, c.flc_list);
@@ -1638,14 +1642,23 @@ restart:
 		 */
 		if (error == 0)
 			time_out_leases(inode, &dispose);
-		if (any_leases_conflict(inode, new_fl))
+		if (any_leases_conflict(inode, new_fl) ||
+				(type == FL_LAYOUT && ctx->flc_wait_for_dispose))
 			goto restart;
 		error = 0;
+		if (type == FL_LAYOUT)
+			ctx->flc_wait_for_dispose = true;
 	}
 out:
 	spin_unlock(&ctx->flc_lock);
 	percpu_up_read(&file_rwsem);
 	locks_dispose_list(&dispose);
+	if (type == FL_LAYOUT) {
+		spin_lock(&ctx->flc_lock);
+		ctx->flc_wait_for_dispose = false;
+		ctx->flc_conflict = false;
+		spin_unlock(&ctx->flc_lock);
+	}
 free_lock:
 	locks_free_lease(new_fl);
 	return error;
