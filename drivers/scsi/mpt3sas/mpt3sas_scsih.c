@@ -159,6 +159,15 @@ module_param(enable_sdev_max_qd, bool, 0444);
 MODULE_PARM_DESC(enable_sdev_max_qd,
 	"Enable sdev max qd as can_queue, def=disabled(0)");
 
+/*
+ * permit overriding the SCSI command issuing capability of
+ * the driver to bring the drive to READY state
+ */
+static int issue_scsi_cmd_to_bringup_drive = 1;
+module_param(issue_scsi_cmd_to_bringup_drive, int, 0444);
+MODULE_PARM_DESC(issue_scsi_cmd_to_bringup_drive, "allow host driver to\n"
+	"issue SCSI commands to bring the drive to READY state, default=1 ");
+
 static int multipath_on_hba = -1;
 module_param(multipath_on_hba, int, 0);
 MODULE_PARM_DESC(multipath_on_hba,
