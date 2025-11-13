@@ -625,6 +625,47 @@ const void *__init of_get_flat_dt_prop(unsigned long node, const char *name,
 	return fdt_getprop(initial_boot_params, node, name, size);
 }
 
+const __be32 *__init of_fdt_get_addr_size_prop(unsigned long node,
+                                               const char *name, int *entries)
+{
+	const __be32 *prop;
+	int len, elen = (dt_root_addr_cells + dt_root_size_cells) * sizeof(__be32);
+
+	prop = of_get_flat_dt_prop(node, name, &len);
+	if (!prop) {
+		*entries = 0;
+		return NULL;
+	}
+
+	if (len % elen) {
+		*entries = -1;
+		return NULL;
+	}
+
+	*entries = len / elen;
+	return prop;
+}
+
+bool __init of_fdt_get_addr_size(unsigned long node, const char *name,
+                                 u64 *addr, u64 *size)
+{
+	const __be32 *prop;
+	int len, elen = (dt_root_addr_cells + dt_root_size_cells) * sizeof(__be32);
+
+	prop = of_get_flat_dt_prop(node, name, &len);
+	if (!prop || len < elen)
+		return false;
+
+	of_fdt_read_addr_size(prop, addr, size);
+	return true;
+}
+
+void __init of_fdt_read_addr_size(const __be32 *prop, u64 *addr, u64 *size)
+{
+	*addr = dt_mem_next_cell(dt_root_addr_cells, &prop);
+	*size = dt_mem_next_cell(dt_root_size_cells, &prop);
+}
+
 /**
  * of_fdt_is_compatible - Return true if given node from the given blob has
  * compat in its compatible list

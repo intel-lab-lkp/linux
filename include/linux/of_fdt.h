@@ -55,6 +55,11 @@ extern int of_get_flat_dt_subnode_by_name(unsigned long node,
 					  const char *uname);
 extern const void *of_get_flat_dt_prop(unsigned long node, const char *name,
 				       int *size);
+extern const __be32 *of_fdt_get_addr_size_prop(unsigned long node,
+                                               const char *name, int *entries);
+extern bool of_fdt_get_addr_size(unsigned long node, const char *name,
+                                 u64 *addr, u64 *size);
+extern void of_fdt_read_addr_size(const __be32 *prop, u64 *addr, u64 *size);
 extern int of_flat_dt_is_compatible(unsigned long node, const char *name);
 extern unsigned long of_get_flat_dt_root(void);
 extern uint32_t of_get_flat_dt_phandle(unsigned long node);
