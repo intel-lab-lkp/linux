@@ -178,7 +178,7 @@ int ovl_getattr(struct mnt_idmap *idmap, const struct path *path,
 	type = ovl_path_real(dentry, &realpath);
 	err = ovl_real_getattr_nosec(sb, &realpath, stat, request_mask, flags);
 	if (err)
-		goto out;
+		return err;
 
 	/* Report the effective immutable/append-only STATX flags */
 	generic_fill_statx_attr(inode, stat);
@@ -204,7 +204,7 @@ int ovl_getattr(struct mnt_idmap *idmap, const struct path *path,
 			err = ovl_real_getattr_nosec(sb, &realpath, &lowerstat,
 						     lowermask, flags);
 			if (err)
-				goto out;
+				return err;
 
 			/*
 			 * Lower hardlinks may be broken on copy up to different
@@ -258,7 +258,7 @@ int ovl_getattr(struct mnt_idmap *idmap, const struct path *path,
 							     &lowerdatastat,
 							     lowermask, flags);
 				if (err)
-					goto out;
+					return err;
 			} else {
 				lowerdatastat.blocks =
 					round_up(stat->size, stat->blksize) >> 9;
@@ -286,7 +286,6 @@ int ovl_getattr(struct mnt_idmap *idmap, const struct path *path,
 	if (!is_dir && ovl_test_flag(OVL_INDEX, d_inode(dentry)))
 		stat->nlink = dentry->d_inode->i_nlink;
 
-out:
 	return err;
 }
 
