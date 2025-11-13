@@ -494,6 +494,7 @@ free_minor_ida:
 	if (cdev)
 		ida_free(&rpmsg_minor_ida, MINOR(dev->devt));
 free_eptdev:
+	dev_err(&eptdev->dev, "failed to add %s\n", eptdev->chinfo.name);
 	kfree(eptdev);
 
 	return ret;
@@ -544,7 +545,6 @@ int rpmsg_anonymous_eptdev_create(struct rpmsg_device *rpdev, struct device *par
 
 	ret =  rpmsg_eptdev_add(eptdev, chinfo, false);
 	if (ret) {
-		dev_err(&eptdev->dev, "failed to add %s\n", eptdev->chinfo.name);
 		return ret;
 	}
 
@@ -560,6 +560,8 @@ int rpmsg_anonymous_eptdev_create(struct rpmsg_device *rpdev, struct device *par
 
 	if (!ret)
 		*pfd = fd;
+	else
+		put_device(&eptdev->dev);
 
 	return ret;
 }
