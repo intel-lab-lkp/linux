@@ -64,8 +64,9 @@ struct instruction {
 	    noendbr		: 1,
 	    unret		: 1,
 	    visited		: 4,
-	    no_reloc		: 1;
-		/* 10 bit hole */
+	    no_reloc		: 1,
+	    trace		: 1;
+		/* 9 bit hole */
 
 	struct alt_group *alt_group;
 	struct instruction *jump_dest;
@@ -140,5 +141,8 @@ struct instruction *next_insn_same_sec(struct objtool_file *file, struct instruc
 	     insn = next_insn_same_sec(file, insn))
 
 const char *objtool_disas_insn(struct instruction *insn);
+
+extern size_t sym_name_max_len;
+extern struct disas_context *objtool_disas_ctx;
 
 #endif /* _CHECK_H */

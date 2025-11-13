@@ -311,6 +311,95 @@ char *disas_result(struct disas_context *dctx)
 	return dctx->result;
 }
 
+#define DISAS_INSN_OFFSET_SPACE		10
+#define DISAS_INSN_SPACE		60
+
+/*
+ * Print a message in the instruction flow. If insn is not NULL then
+ * the instruction address is printed in addition of the message,
+ * otherwise only the message is printed. In all cases, the instruction
+ * itself is not printed.
+ */
+void disas_print_info(FILE *stream, struct instruction *insn, int depth,
+		      const char *format, ...)
+{
+	const char *addr_str;
+	va_list args;
+	int len;
+	int i;
+
+	len = sym_name_max_len + DISAS_INSN_OFFSET_SPACE;
+	if (depth < 0) {
+		len += depth;
+		depth = 0;
+	}
+
+	if (insn && insn->sec) {
+		addr_str = offstr(insn->sec, insn->offset);
+		fprintf(stream, "%6lx:  %-*s  ", insn->offset, len, addr_str);
+		free((char *)addr_str);
+	} else {
+		len += DISAS_INSN_OFFSET_SPACE + 1;
+		fprintf(stream, "%-*s", len, "");
+	}
+
+	/* print vertical bars to show the code flow */
+	for (i = 0; i < depth; i++)
+		fprintf(stream, "| ");
+
+	if (format) {
+		va_start(args, format);
+		vfprintf(stream, format, args);
+		va_end(args);
+	}
+}
+
+/*
+ * Print an instruction address (offset and function), the instruction itself
+ * and an optional message.
+ */
+void disas_print_insn(FILE *stream, struct disas_context *dctx,
+		      struct instruction *insn, int depth,
+		      const char *format, ...)
+{
+	char fake_nop_insn[32];
+	const char *insn_str;
+	bool fake_nop;
+	va_list args;
+	int len;
+
+	/*
+	 * Alternative can insert a fake nop, sometimes with no
+	 * associated section so nothing to disassemble.
+	 */
+	fake_nop = (!insn->sec && insn->type == INSN_NOP);
+	if (fake_nop) {
+		snprintf(fake_nop_insn, 32, "<fake nop> (%d bytes)", insn->len);
+		insn_str = fake_nop_insn;
+	} else {
+		disas_insn(dctx, insn);
+		insn_str = disas_result(dctx);
+	}
+
+	/* print the instruction */
+	len = (depth + 1) * 2 < DISAS_INSN_SPACE ? DISAS_INSN_SPACE - (depth+1) * 2 : 1;
+	disas_print_info(stream, insn, depth, "%-*s", len, insn_str);
+
+	/* print message if any */
+	if (!format)
+		return;
+
+	if (strcmp(format, "\n") == 0) {
+		fprintf(stream, "\n");
+		return;
+	}
+
+	fprintf(stream, " - ");
+	va_start(args, format);
+	vfprintf(stream, format, args);
+	va_end(args);
+}
+
 /*
  * Disassemble a single instruction. Return the size of the instruction.
  */

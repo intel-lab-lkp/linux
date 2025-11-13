@@ -3,6 +3,7 @@
  * Copyright (C) 2015-2017 Josh Poimboeuf <jpoimboe@redhat.com>
  */
 
+#include <fnmatch.h>
 #include <string.h>
 #include <stdlib.h>
 #include <inttypes.h>
@@ -14,6 +15,7 @@
 #include <objtool/disas.h>
 #include <objtool/check.h>
 #include <objtool/special.h>
+#include <objtool/trace.h>
 #include <objtool/warn.h>
 #include <objtool/endianness.h>
 
@@ -35,7 +37,9 @@ static struct cfi_state init_cfi;
 static struct cfi_state func_cfi;
 static struct cfi_state force_undefined_cfi;
 
-static size_t sym_name_max_len;
+struct disas_context *objtool_disas_ctx;
+
+size_t sym_name_max_len;
 
 struct instruction *find_insn(struct objtool_file *file,
 			      struct section *sec, unsigned long offset)
@@ -3519,8 +3523,10 @@ static bool skip_alt_group(struct instruction *insn)
 		return false;
 
 	/* ANNOTATE_IGNORE_ALTERNATIVE */
-	if (insn->alt_group->ignore)
+	if (insn->alt_group->ignore) {
+		TRACE_INSN(insn, "alt group ignored");
 		return true;
+	}
 
 	/*
 	 * For NOP patched with CLAC/STAC, only follow the latter to avoid
@@ -3544,6 +3550,8 @@ static bool skip_alt_group(struct instruction *insn)
 
 static int validate_branch(struct objtool_file *file, struct symbol *func,
 			   struct instruction *insn, struct insn_state state);
+static int do_validate_branch(struct objtool_file *file, struct symbol *func,
+			      struct instruction *insn, struct insn_state state);
 
 static int validate_insn(struct objtool_file *file, struct symbol *func,
 			 struct instruction *insn, struct insn_state *statep,
@@ -3565,8 +3573,10 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 		if (!insn->hint && !insn_cfi_match(insn, &statep->cfi))
 			return 1;
 
-		if (insn->visited & visited)
+		if (insn->visited & visited) {
+			TRACE_INSN(insn, "already visited");
 			return 0;
+		}
 	} else {
 		nr_insns_visited++;
 	}
@@ -3603,8 +3613,10 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 				 * It will be seen later via the
 				 * straight-line path.
 				 */
-				if (!prev_insn)
+				if (!prev_insn) {
+					TRACE_INSN(insn, "defer restore");
 					return 0;
+				}
 
 				WARN_INSN(insn, "objtool isn't smart enough to handle this CFI save/restore combo");
 				return 1;
@@ -3632,13 +3644,24 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 		return 1;
 
 	if (insn->alts) {
+		int i, num_alts;
+
+		num_alts = 0;
+		for (alt = insn->alts; alt; alt = alt->next)
+			num_alts++;
+
+		i = 1;
 		for (alt = insn->alts; alt; alt = alt->next) {
+			TRACE_INSN(insn, "alternative %d/%d", i, num_alts);
 			ret = validate_branch(file, func, alt->insn, *statep);
 			if (ret) {
 				BT_INSN(insn, "(alt)");
 				return ret;
 			}
+			i++;
 		}
+
+		TRACE_INSN(insn, "alternative orig");
 	}
 
 	if (skip_alt_group(insn))
@@ -3650,10 +3673,16 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 	switch (insn->type) {
 
 	case INSN_RETURN:
+		TRACE_INSN(insn, "return");
 		return validate_return(func, insn, statep);
 
 	case INSN_CALL:
 	case INSN_CALL_DYNAMIC:
+		if (insn->type == INSN_CALL)
+			TRACE_INSN(insn, "call");
+		else
+			TRACE_INSN(insn, "indirect call");
+
 		ret = validate_call(file, insn, statep);
 		if (ret)
 			return ret;
@@ -3669,13 +3698,18 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 	case INSN_JUMP_CONDITIONAL:
 	case INSN_JUMP_UNCONDITIONAL:
 		if (is_sibling_call(insn)) {
+			TRACE_INSN(insn, "sibling call");
 			ret = validate_sibling_call(file, insn, statep);
 			if (ret)
 				return ret;
 
 		} else if (insn->jump_dest) {
-			ret = validate_branch(file, func,
-					      insn->jump_dest, *statep);
+			if (insn->type == INSN_JUMP_UNCONDITIONAL)
+				TRACE_INSN(insn, "unconditional jump");
+			else
+				TRACE_INSN(insn, "jump taken");
+
+			ret = validate_branch(file, func, insn->jump_dest, *statep);
 			if (ret) {
 				BT_INSN(insn, "(branch)");
 				return ret;
@@ -3685,10 +3719,12 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 		if (insn->type == INSN_JUMP_UNCONDITIONAL)
 			return 0;
 
+		TRACE_INSN(insn, "jump not taken");
 		break;
 
 	case INSN_JUMP_DYNAMIC:
 	case INSN_JUMP_DYNAMIC_CONDITIONAL:
+		TRACE_INSN(insn, "indirect jump");
 		if (is_sibling_call(insn)) {
 			ret = validate_sibling_call(file, insn, statep);
 			if (ret)
@@ -3701,6 +3737,7 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 		break;
 
 	case INSN_SYSCALL:
+		TRACE_INSN(insn, "syscall");
 		if (func && (!next_insn || !next_insn->hint)) {
 			WARN_INSN(insn, "unsupported instruction in callable function");
 			return 1;
@@ -3709,6 +3746,7 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 		break;
 
 	case INSN_SYSRET:
+		TRACE_INSN(insn, "sysret");
 		if (func && (!next_insn || !next_insn->hint)) {
 			WARN_INSN(insn, "unsupported instruction in callable function");
 			return 1;
@@ -3717,6 +3755,7 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 		return 0;
 
 	case INSN_STAC:
+		TRACE_INSN(insn, "stac");
 		if (!opts.uaccess)
 			break;
 
@@ -3729,6 +3768,7 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 		break;
 
 	case INSN_CLAC:
+		TRACE_INSN(insn, "clac");
 		if (!opts.uaccess)
 			break;
 
@@ -3746,6 +3786,7 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 		break;
 
 	case INSN_STD:
+		TRACE_INSN(insn, "std");
 		if (statep->df) {
 			WARN_INSN(insn, "recursive STD");
 			return 1;
@@ -3755,6 +3796,7 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 		break;
 
 	case INSN_CLD:
+		TRACE_INSN(insn, "cld");
 		if (!statep->df && func) {
 			WARN_INSN(insn, "redundant CLD");
 			return 1;
@@ -3767,8 +3809,10 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
 		break;
 	}
 
-	*dead_end = insn->dead_end;
+	if (insn->dead_end)
+		TRACE_INSN(insn, "dead end");
 
+	*dead_end = insn->dead_end;
 	return 0;
 }
 
@@ -3778,8 +3822,8 @@ static int validate_insn(struct objtool_file *file, struct symbol *func,
  * each instruction and validate all the rules described in
  * tools/objtool/Documentation/objtool.txt.
  */
-static int validate_branch(struct objtool_file *file, struct symbol *func,
-			   struct instruction *insn, struct insn_state state)
+static int do_validate_branch(struct objtool_file *file, struct symbol *func,
+			      struct instruction *insn, struct insn_state state)
 {
 	struct instruction *next_insn, *prev_insn = NULL;
 	struct section *sec;
@@ -3791,7 +3835,10 @@ static int validate_branch(struct objtool_file *file, struct symbol *func,
 
 	sec = insn->sec;
 
-	while (1) {
+	do {
+
+		insn->trace = 0;
+
 		next_insn = next_insn_to_validate(file, insn);
 
 		if (func && insn_func(insn) && func != insn_func(insn)->pfunc) {
@@ -3814,10 +3861,15 @@ static int validate_branch(struct objtool_file *file, struct symbol *func,
 
 		ret = validate_insn(file, func, insn, &state, prev_insn, next_insn,
 				    &dead_end);
-		if (dead_end)
-			break;
 
-		if (!next_insn) {
+		if (!insn->trace) {
+			if (ret)
+				TRACE_INSN(insn, "warning (%d)", ret);
+			else
+				TRACE_INSN(insn, NULL);
+		}
+
+		if (!dead_end && !next_insn) {
 			if (state.cfi.cfa.base == CFI_UNDEFINED)
 				return 0;
 			if (file->ignore_unreachables)
@@ -3831,7 +3883,20 @@ static int validate_branch(struct objtool_file *file, struct symbol *func,
 
 		prev_insn = insn;
 		insn = next_insn;
-	}
+
+	} while (!dead_end);
+
+	return ret;
+}
+
+static int validate_branch(struct objtool_file *file, struct symbol *func,
+			   struct instruction *insn, struct insn_state state)
+{
+	int ret;
+
+	trace_depth_inc();
+	ret = do_validate_branch(file, func, insn, state);
+	trace_depth_dec();
 
 	return ret;
 }
@@ -4277,9 +4342,18 @@ static int validate_symbol(struct objtool_file *file, struct section *sec,
 	if (opts.uaccess)
 		state->uaccess = sym->uaccess_safe;
 
+	if (opts.trace && !fnmatch(opts.trace, sym->name, 0)) {
+		trace_enable();
+		TRACE("%s: validation begin\n", sym->name);
+	}
+
 	ret = validate_branch(file, insn_func(insn), insn, *state);
 	if (ret)
 		BT_INSN(insn, "<=== (sym)");
+
+	TRACE("%s: validation %s\n\n", sym->name, ret ? "failed" : "end");
+	trace_disable();
+
 	return ret;
 }
 
@@ -4693,8 +4767,6 @@ static void free_insns(struct objtool_file *file)
 		free(chunk->addr);
 }
 
-static struct disas_context *objtool_disas_ctx;
-
 const char *objtool_disas_insn(struct instruction *insn)
 {
 	struct disas_context *dctx = objtool_disas_ctx;
@@ -4716,8 +4788,10 @@ int check(struct objtool_file *file)
 	 * disassembly context to disassemble instruction or function
 	 * on warning or backtrace.
 	 */
-	if (opts.verbose || opts.backtrace) {
+	if (opts.verbose || opts.backtrace || opts.trace) {
 		disas_ctx = disas_context_create(file);
+		if (!disas_ctx)
+			opts.trace = false;
 		objtool_disas_ctx = disas_ctx;
 	}
 
