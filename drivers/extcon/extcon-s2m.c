@@ -289,7 +289,7 @@ static int s2m_muic_probe(struct platform_device *pdev)
 						s2m_muic_irq_func, IRQF_ONESHOT,
 						priv->irq_data[i].name, priv);
 		if (ret)
-			dev_err_probe(dev, ret, "failed to request IRQ\n");
+			return dev_err_probe(dev, ret, "failed to request IRQ\n");
 	}
 
 	return 0;
