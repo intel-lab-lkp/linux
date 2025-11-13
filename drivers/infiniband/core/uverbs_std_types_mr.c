@@ -346,6 +346,9 @@ static int UVERBS_HANDLER(UVERBS_METHOD_REG_MR)(
 					   UVERBS_ATTR_REG_MR_DMA_HANDLE);
 		if (IS_ERR(dmah))
 			return PTR_ERR(dmah);
+		if (dmah->mem_type == TPH_MEM_TYPE_P2P && has_fd == false) {
+			return -EINVAL;
+		}
 	}
 
 	ret = uverbs_get_flags32(&access_flags, attrs,

@@ -1852,6 +1852,7 @@ enum {
 	IB_DMAH_CPU_ID_EXISTS,
 	IB_DMAH_MEM_TYPE_EXISTS,
 	IB_DMAH_PH_EXISTS,
+	IB_DMAH_DIRECT_ST_VAL_EXISTS,
 };
 
 struct ib_dmah {
@@ -1866,6 +1867,7 @@ struct ib_dmah {
 	atomic_t usecnt;
 	u8 ph;
 	u8 valid_fields; /* use IB_DMAH_XXX_EXISTS */
+	u16 direct_st_val;
 };
 
 struct ib_mr {

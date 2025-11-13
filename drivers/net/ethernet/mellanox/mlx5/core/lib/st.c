@@ -80,7 +80,7 @@ void mlx5_st_destroy(struct mlx5_core_dev *dev)
 }
 
 int mlx5_st_alloc_index(struct mlx5_core_dev *dev, enum tph_mem_type mem_type,
-			unsigned int cpu_uid, u16 *st_index)
+			unsigned int cpu_uid, u16 *st_index, u16 direct_st_val)
 {
 	struct mlx5_st_idx_data *idx_data;
 	struct mlx5_st *st = dev->st;
@@ -92,9 +92,13 @@ int mlx5_st_alloc_index(struct mlx5_core_dev *dev, enum tph_mem_type mem_type,
 	if (!st)
 		return -EOPNOTSUPP;
 
-	ret = pcie_tph_get_cpu_st(dev->pdev, mem_type, cpu_uid, &tag);
-	if (ret)
-		return ret;
+	if (mem_type == TPH_MEM_TYPE_P2P)
+		tag = direct_st_val;
+	else {
+		ret = pcie_tph_get_cpu_st(dev->pdev, mem_type, cpu_uid, &tag);
+		if (ret)
+			return ret;
+	}
 
 	mutex_lock(&st->lock);
 

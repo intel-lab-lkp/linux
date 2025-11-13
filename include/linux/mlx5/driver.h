@@ -1170,12 +1170,12 @@ int mlx5_dm_sw_icm_dealloc(struct mlx5_core_dev *dev, enum mlx5_sw_icm_type type
 
 #ifdef CONFIG_PCIE_TPH
 int mlx5_st_alloc_index(struct mlx5_core_dev *dev, enum tph_mem_type mem_type,
-			unsigned int cpu_uid, u16 *st_index);
+			unsigned int cpu_uid, u16 *st_index, u16 direct_st_val);
 int mlx5_st_dealloc_index(struct mlx5_core_dev *dev, u16 st_index);
 #else
 static inline int mlx5_st_alloc_index(struct mlx5_core_dev *dev,
 				      enum tph_mem_type mem_type,
-				      unsigned int cpu_uid, u16 *st_index)
+				      unsigned int cpu_uid, u16 *st_index, u16 direct_st_val)
 {
 	return -EOPNOTSUPP;
 }

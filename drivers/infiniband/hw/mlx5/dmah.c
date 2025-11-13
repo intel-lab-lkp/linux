@@ -15,8 +15,7 @@ static int mlx5_ib_alloc_dmah(struct ib_dmah *ibdmah,
 {
 	struct mlx5_core_dev *mdev = to_mdev(ibdmah->device)->mdev;
 	struct mlx5_ib_dmah *dmah = to_mdmah(ibdmah);
-	u16 st_bits = BIT(IB_DMAH_CPU_ID_EXISTS) |
-		      BIT(IB_DMAH_MEM_TYPE_EXISTS);
+	u16 st_bits = BIT(IB_DMAH_MEM_TYPE_EXISTS);
 	int err;
 
 	/* PH is a must for TPH following PCIe spec 6.2-1.0 */
@@ -28,7 +27,7 @@ static int mlx5_ib_alloc_dmah(struct ib_dmah *ibdmah,
 		if ((ibdmah->valid_fields & st_bits) != st_bits)
 			return -EINVAL;
 		err = mlx5_st_alloc_index(mdev, ibdmah->mem_type,
-					  ibdmah->cpu_id, &dmah->st_index);
+					  ibdmah->cpu_id, &dmah->st_index, ibdmah->direct_st_val);
 		if (err)
 			return err;
 	}

@@ -246,6 +246,7 @@ enum uverbs_attrs_alloc_dmah_cmd_attr_ids {
 	UVERBS_ATTR_ALLOC_DMAH_CPU_ID,
 	UVERBS_ATTR_ALLOC_DMAH_TPH_MEM_TYPE,
 	UVERBS_ATTR_ALLOC_DMAH_PH,
+	UVERBS_ATTR_ALLOC_DMAH_DIRECT_ST_VAL,
 };
 
 enum uverbs_attrs_free_dmah_cmd_attr_ids {
