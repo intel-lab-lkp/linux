@@ -1369,53 +1369,35 @@ static void ovl_set_d_op(struct super_block *sb)
 	set_default_d_op(sb, &ovl_dentry_operations);
 }
 
-int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
+static int do_ovl_fill_super(struct super_block *sb, struct ovl_fs *ofs,
+			      struct fs_context *fc)
 {
-	struct ovl_fs *ofs = sb->s_fs_info;
-	struct ovl_fs_context *ctx = fc->fs_private;
-	const struct cred *old_cred = NULL;
-	struct dentry *root_dentry;
-	struct ovl_entry *oe;
+	struct ovl_fs_context *fsctx = fc->fs_private;
 	struct ovl_layer *layers;
-	struct cred *cred;
+	struct ovl_entry *oe = NULL;
+	struct cred *cred = (struct cred *)ofs->creator_cred;
 	int err;
 
-	err = -EIO;
-	if (WARN_ON(fc->user_ns != current_user_ns()))
-		goto out_err;
-
-	ovl_set_d_op(sb);
-
-	err = -ENOMEM;
-	if (!ofs->creator_cred)
-		ofs->creator_cred = cred = prepare_creds();
-	else
-		cred = (struct cred *)ofs->creator_cred;
-	if (!cred)
-		goto out_err;
-
-	old_cred = ovl_override_creds(sb);
-
-	err = ovl_fs_params_verify(ctx, &ofs->config);
+	err = ovl_fs_params_verify(fsctx, &ofs->config);
 	if (err)
-		goto out_err;
+		return err;
 
 	err = -EINVAL;
-	if (ctx->nr == 0) {
+	if (fsctx->nr == 0) {
 		if (!(fc->sb_flags & SB_SILENT))
 			pr_err("missing 'lowerdir'\n");
-		goto out_err;
+		return err;
 	}
 
 	err = -ENOMEM;
-	layers = kcalloc(ctx->nr + 1, sizeof(struct ovl_layer), GFP_KERNEL);
+	layers = kcalloc(fsctx->nr + 1, sizeof(struct ovl_layer), GFP_KERNEL);
 	if (!layers)
-		goto out_err;
+		return err;
 
-	ofs->config.lowerdirs = kcalloc(ctx->nr + 1, sizeof(char *), GFP_KERNEL);
+	ofs->config.lowerdirs = kcalloc(fsctx->nr + 1, sizeof(char *), GFP_KERNEL);
 	if (!ofs->config.lowerdirs) {
 		kfree(layers);
-		goto out_err;
+		return err;
 	}
 	ofs->layers = layers;
 	/*
@@ -1423,8 +1405,8 @@ int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 	 * config.lowerdirs[0] is used for storing the user provided colon
 	 * separated lowerdir string.
 	 */
-	ofs->config.lowerdirs[0] = ctx->lowerdir_all;
-	ctx->lowerdir_all = NULL;
+	ofs->config.lowerdirs[0] = fsctx->lowerdir_all;
+	fsctx->lowerdir_all = NULL;
 	ofs->numlayer = 1;
 
 	sb->s_stack_depth = 0;
@@ -1448,12 +1430,12 @@ int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 		err = -EINVAL;
 		if (!ofs->config.workdir) {
 			pr_err("missing 'workdir'\n");
-			goto out_err;
+			return err;
 		}
 
-		err = ovl_get_upper(sb, ofs, &layers[0], &ctx->upper);
+		err = ovl_get_upper(sb, ofs, &layers[0], &fsctx->upper);
 		if (err)
-			goto out_err;
+			return err;
 
 		upper_sb = ovl_upper_mnt(ofs)->mnt_sb;
 		if (!ovl_should_sync(ofs)) {
@@ -1461,13 +1443,13 @@ int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 			if (errseq_check(&upper_sb->s_wb_err, ofs->errseq)) {
 				err = -EIO;
 				pr_err("Cannot mount volatile when upperdir has an unseen error. Sync upperdir fs to clear state.\n");
-				goto out_err;
+				return err;
 			}
 		}
 
-		err = ovl_get_workdir(sb, ofs, &ctx->upper, &ctx->work);
+		err = ovl_get_workdir(sb, ofs, &fsctx->upper, &fsctx->work);
 		if (err)
-			goto out_err;
+			return err;
 
 		if (!ofs->workdir)
 			sb->s_flags |= SB_RDONLY;
@@ -1475,10 +1457,10 @@ int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 		sb->s_stack_depth = upper_sb->s_stack_depth;
 		sb->s_time_gran = upper_sb->s_time_gran;
 	}
-	oe = ovl_get_lowerstack(sb, ctx, ofs, layers);
+	oe = ovl_get_lowerstack(sb, fsctx, ofs, layers);
 	err = PTR_ERR(oe);
 	if (IS_ERR(oe))
-		goto out_err;
+		return err;
 
 	/* If the upper fs is nonexistent, we mark overlayfs r/o too */
 	if (!ovl_upper_mnt(ofs))
@@ -1489,11 +1471,11 @@ int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 		ofs->config.uuid = OVL_UUID_NULL;
 	} else if (ovl_has_fsid(ofs) && ovl_upper_mnt(ofs)) {
 		/* Use per instance persistent uuid/fsid */
-		ovl_init_uuid_xattr(sb, ofs, &ctx->upper);
+		ovl_init_uuid_xattr(sb, ofs, &fsctx->upper);
 	}
 
 	if (!ovl_force_readonly(ofs) && ofs->config.index) {
-		err = ovl_get_indexdir(sb, ofs, oe, &ctx->upper);
+		err = ovl_get_indexdir(sb, ofs, oe, &fsctx->upper);
 		if (err)
 			goto out_free_oe;
 
@@ -1549,27 +1531,50 @@ int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 	sb->s_iflags |= SB_I_EVM_HMAC_UNSUPPORTED;
 
 	err = -ENOMEM;
-	root_dentry = ovl_get_root(sb, ctx->upper.dentry, oe);
-	if (!root_dentry)
+	sb->s_root = ovl_get_root(sb, fsctx->upper.dentry, oe);
+	if (!sb->s_root)
 		goto out_free_oe;
 
-	sb->s_root = root_dentry;
-
-	ovl_revert_creds(old_cred);
 	return 0;
 
 out_free_oe:
 	ovl_free_entry(oe);
+	return err;
+}
+
+int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
+{
+	struct ovl_fs *ofs = sb->s_fs_info;
+	const struct cred *old_cred = NULL;
+	struct cred *cred;
+	int err;
+
+	err = -EIO;
+	if (WARN_ON(fc->user_ns != current_user_ns()))
+		goto out_err;
+
+	ovl_set_d_op(sb);
+
+	err = -ENOMEM;
+	if (!ofs->creator_cred)
+		ofs->creator_cred = cred = prepare_creds();
+	else
+		cred = (struct cred *)ofs->creator_cred;
+	if (!cred)
+		goto out_err;
+
+	old_cred = ovl_override_creds(sb);
+
+	err = do_ovl_fill_super(sb, ofs, fc);
+
+	ovl_revert_creds(old_cred);
+
 out_err:
-	/*
-	 * Revert creds before calling ovl_free_fs() which will call
-	 * put_cred() and put_cred() requires that the cred's that are
-	 * put are not the caller's creds, i.e., current->cred.
-	 */
-	if (old_cred)
-		ovl_revert_creds(old_cred);
-	ovl_free_fs(ofs);
-	sb->s_fs_info = NULL;
+	if (err) {
+		ovl_free_fs(ofs);
+		sb->s_fs_info = NULL;
+	}
+
 	return err;
 }
 
