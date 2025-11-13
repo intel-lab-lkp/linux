@@ -146,6 +146,8 @@ struct file_lock_context {
 	struct list_head	flc_flock;
 	struct list_head	flc_posix;
 	struct list_head	flc_lease;
+	bool			flc_conflict;
+	bool			flc_wait_for_dispose;
 };
 
 #ifdef CONFIG_FILE_LOCKING
