@@ -70,39 +70,87 @@ static void ovpn_tcp_to_userspace(struct ovpn_peer *peer, struct sock *sk,
 	peer->tcp.sk_cb.sk_data_ready(sk);
 }
 
-static void ovpn_tcp_rcv(struct strparser *strp, struct sk_buff *skb)
+/* takes ownership of orig_skb */
+static struct sk_buff *ovpn_tcp_skb_packet(const struct ovpn_peer *peer,
+					   struct sk_buff *orig_skb,
+					   const int full_len, const int offset)
 {
-	struct ovpn_peer *peer = container_of(strp, struct ovpn_peer, tcp.strp);
-	struct strp_msg *msg = strp_msg(skb);
-	size_t pkt_len = msg->full_len - 2;
-	size_t off = msg->offset + 2;
-	u8 opcode;
+	struct sk_buff *ovpn_skb = orig_skb;
+	const int pkt_len = full_len - 2;
+	int pkt_offset = offset + 2;
+	int err;
+
+	/* If the final headroom will overflow a u16 we will not be able to
+	 * reset the network header to it so we need to create a new smaller
+	 * skb with the content of this packet.
+	 */
+	if (unlikely(skb_headroom(orig_skb) + pkt_offset + OVPN_HEADER_SIZE >
+		     U16_MAX)) {
+		ovpn_skb = netdev_alloc_skb(peer->ovpn->dev, full_len);
+		if (!ovpn_skb) {
+			ovpn_skb = orig_skb;
+			goto err;
+		}
+
+		skb_copy_header(ovpn_skb, orig_skb);
+		pkt_offset = 2;
+
+		/* copy the entire openvpn packet + 2 bytes length */
+		err = skb_copy_bits(orig_skb, offset,
+				    skb_put(ovpn_skb, full_len), full_len);
+		kfree(orig_skb);
+		if (err) {
+			net_warn_ratelimited("%s: skb_copy_bits failed for peer %u\n",
+					     netdev_name(peer->ovpn->dev),
+					     peer->id);
+			goto err;
+		}
+	}
 
 	/* ensure skb->data points to the beginning of the openvpn packet */
-	if (!pskb_pull(skb, off)) {
+	if (!pskb_pull(ovpn_skb, pkt_offset)) {
 		net_warn_ratelimited("%s: packet too small for peer %u\n",
-				     netdev_name(peer->ovpn->dev), peer->id);
+				     netdev_name(peer->ovpn->dev),
+				     peer->id);
 		goto err;
 	}
 
 	/* strparser does not trim the skb for us, therefore we do it now */
-	if (pskb_trim(skb, pkt_len) != 0) {
+	if (pskb_trim(ovpn_skb, pkt_len) != 0) {
 		net_warn_ratelimited("%s: trimming skb failed for peer %u\n",
-				     netdev_name(peer->ovpn->dev), peer->id);
+				     netdev_name(peer->ovpn->dev),
+				     peer->id);
 		goto err;
 	}
+
+	return ovpn_skb;
+err:
+	kfree(ovpn_skb);
+	return NULL;
+}
+
+static void ovpn_tcp_rcv(struct strparser *strp, struct sk_buff *skb)
+{
+	struct ovpn_peer *peer = container_of(strp, struct ovpn_peer, tcp.strp);
+	struct strp_msg *msg = strp_msg(skb);
+	struct sk_buff *ovpn_skb = NULL;
+	u8 opcode;
+
+	ovpn_skb = ovpn_tcp_skb_packet(peer, skb, msg->full_len, msg->offset);
+	if (!ovpn_skb)
+		goto err;
 
 	/* we need the first 4 bytes of data to be accessible
 	 * to extract the opcode and the key ID later on
 	 */
-	if (!pskb_may_pull(skb, OVPN_OPCODE_SIZE)) {
+	if (!pskb_may_pull(ovpn_skb, OVPN_OPCODE_SIZE)) {
 		net_warn_ratelimited("%s: packet too small to fetch opcode for peer %u\n",
 				     netdev_name(peer->ovpn->dev), peer->id);
 		goto err;
 	}
 
 	/* DATA_V2 packets are handled in kernel, the rest goes to user space */
-	opcode = ovpn_opcode_from_skb(skb, 0);
+	opcode = ovpn_opcode_from_skb(ovpn_skb, 0);
 	if (unlikely(opcode != OVPN_DATA_V2)) {
 		if (opcode == OVPN_DATA_V1) {
 			net_warn_ratelimited("%s: DATA_V1 detected on the TCP stream\n",
@@ -113,8 +161,8 @@ static void ovpn_tcp_rcv(struct strparser *strp, struct sk_buff *skb)
 		/* The packet size header must be there when sending the packet
 		 * to userspace, therefore we put it back
 		 */
-		skb_push(skb, 2);
-		ovpn_tcp_to_userspace(peer, strp->sk, skb);
+		skb_push(ovpn_skb, 2);
+		ovpn_tcp_to_userspace(peer, strp->sk, ovpn_skb);
 		return;
 	}
 
@@ -126,7 +174,7 @@ static void ovpn_tcp_rcv(struct strparser *strp, struct sk_buff *skb)
 	if (WARN_ON(!ovpn_peer_hold(peer)))
 		goto err_nopeer;
 
-	ovpn_recv(peer, skb);
+	ovpn_recv(peer, ovpn_skb);
 	return;
 err:
 	/* take reference for deferred peer deletion. should never fail */
@@ -135,7 +183,7 @@ err:
 	schedule_work(&peer->tcp.defer_del_work);
 	dev_dstats_rx_dropped(peer->ovpn->dev);
 err_nopeer:
-	kfree_skb(skb);
+	kfree_skb(ovpn_skb);
 }
 
 static int ovpn_tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,

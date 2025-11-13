@@ -49,6 +49,10 @@
 
 #define OVPN_PEER_ID_UNDEF		0x00FFFFFF
 
+#define OVPN_AUTH_TAG_SIZE	16
+#define OVPN_AAD_SIZE		(OVPN_OPCODE_SIZE + OVPN_NONCE_WIRE_SIZE)
+#define OVPN_HEADER_SIZE	(OVPN_AUTH_TAG_SIZE + OVPN_AAD_SIZE)
+
 /**
  * ovpn_opcode_from_skb - extract OP code from skb at specified offset
  * @skb: the packet to extract the OP code from
