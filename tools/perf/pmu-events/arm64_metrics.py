@@ -3,6 +3,7 @@
 import argparse
 import os
 from typing import Optional
+from common_metrics import Cycles
 from metric import (d_ratio, Event, JsonEncodeMetric, JsonEncodeMetricGroupDescriptions,
                     LoadEvents, Metric, MetricGroup)
 
@@ -173,6 +174,7 @@ def main() -> None:
 
     all_metrics = MetricGroup("", [
         Arm64Topdown(),
+        Cycles(),
     ])
 
     if _args.metricgroups:
