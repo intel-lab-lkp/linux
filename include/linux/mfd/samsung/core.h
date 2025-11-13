@@ -34,7 +34,7 @@
 #define STEP_6_25_MV		6250
 
 /* Maximum number of IRQ chips in a PMIC */
-#define MAX_IRQ_CHIPS		1
+#define MAX_IRQ_CHIPS		3
 
 struct gpio_desc;
 
@@ -49,6 +49,7 @@ enum sec_device_type {
 	S2MPS15X,
 	S2MPU02,
 	S2MPU05,
+	S2MU005,
 };
 
 /**

@@ -15,6 +15,7 @@
 #include <linux/mfd/samsung/s2mps14.h>
 #include <linux/mfd/samsung/s2mpu02.h>
 #include <linux/mfd/samsung/s2mpu05.h>
+#include <linux/mfd/samsung/s2mu005.h>
 #include <linux/mfd/samsung/s5m8767.h>
 #include <linux/regmap.h>
 #include "sec-core.h"
@@ -158,6 +159,42 @@ static const struct regmap_irq s2mpu05_irqs[] = {
 	REGMAP_IRQ_REG(S2MPU05_IRQ_TSD, 2, S2MPU05_IRQ_TSD_MASK),
 };
 
+static const struct regmap_irq s2mu005_chgr_irqs[] = {
+	REGMAP_IRQ_REG(S2MU005_CHGR_IRQ_DETBAT, 0, S2MU005_CHGR_IRQ_DETBAT_MASK),
+	REGMAP_IRQ_REG(S2MU005_CHGR_IRQ_BAT, 0, S2MU005_CHGR_IRQ_BAT_MASK),
+	REGMAP_IRQ_REG(S2MU005_CHGR_IRQ_IVR, 0, S2MU005_CHGR_IRQ_IVR_MASK),
+	REGMAP_IRQ_REG(S2MU005_CHGR_IRQ_EVENT, 0, S2MU005_CHGR_IRQ_EVENT_MASK),
+	REGMAP_IRQ_REG(S2MU005_CHGR_IRQ_CHG, 0, S2MU005_CHGR_IRQ_CHG_MASK),
+	REGMAP_IRQ_REG(S2MU005_CHGR_IRQ_VMID, 0, S2MU005_CHGR_IRQ_VMID_MASK),
+	REGMAP_IRQ_REG(S2MU005_CHGR_IRQ_WCIN, 0, S2MU005_CHGR_IRQ_WCIN_MASK),
+	REGMAP_IRQ_REG(S2MU005_CHGR_IRQ_VBUS, 0, S2MU005_CHGR_IRQ_VBUS_MASK),
+};
+
+static const struct regmap_irq s2mu005_fled_irqs[] = {
+	REGMAP_IRQ_REG(S2MU005_FLED_IRQ_LBPROT, 0, S2MU005_FLED_IRQ_LBPROT_MASK),
+	REGMAP_IRQ_REG(S2MU005_FLED_IRQ_OPENCH2, 0, S2MU005_FLED_IRQ_OPENCH2_MASK),
+	REGMAP_IRQ_REG(S2MU005_FLED_IRQ_OPENCH1, 0, S2MU005_FLED_IRQ_OPENCH1_MASK),
+	REGMAP_IRQ_REG(S2MU005_FLED_IRQ_SHORTCH2, 0, S2MU005_FLED_IRQ_SHORTCH2_MASK),
+	REGMAP_IRQ_REG(S2MU005_FLED_IRQ_SHORTCH1, 0, S2MU005_FLED_IRQ_SHORTCH1_MASK),
+};
+
+static const struct regmap_irq s2mu005_muic_irqs[] = {
+	REGMAP_IRQ_REG(S2MU005_MUIC_IRQ_ATTACH, 0, S2MU005_MUIC_IRQ_ATTACH_MASK),
+	REGMAP_IRQ_REG(S2MU005_MUIC_IRQ_DETACH, 0, S2MU005_MUIC_IRQ_DETACH_MASK),
+	REGMAP_IRQ_REG(S2MU005_MUIC_IRQ_KP, 0, S2MU005_MUIC_IRQ_KP_MASK),
+	REGMAP_IRQ_REG(S2MU005_MUIC_IRQ_LKP, 0, S2MU005_MUIC_IRQ_LKP_MASK),
+	REGMAP_IRQ_REG(S2MU005_MUIC_IRQ_LKR, 0, S2MU005_MUIC_IRQ_LKR_MASK),
+	REGMAP_IRQ_REG(S2MU005_MUIC_IRQ_RIDCHG, 0, S2MU005_MUIC_IRQ_RIDCHG_MASK),
+	REGMAP_IRQ_REG(S2MU005_MUIC_IRQ_VBUSON, 1, S2MU005_MUIC_IRQ_VBUSON_MASK),
+	REGMAP_IRQ_REG(S2MU005_MUIC_IRQ_RSVD, 1, S2MU005_MUIC_IRQ_RSVD_MASK),
+	REGMAP_IRQ_REG(S2MU005_MUIC_IRQ_ADC, 1, S2MU005_MUIC_IRQ_ADC_MASK),
+	REGMAP_IRQ_REG(S2MU005_MUIC_IRQ_STUCK, 1, S2MU005_MUIC_IRQ_STUCK_MASK),
+	REGMAP_IRQ_REG(S2MU005_MUIC_IRQ_STUCKRCV, 1, S2MU005_MUIC_IRQ_STUCKRCV_MASK),
+	REGMAP_IRQ_REG(S2MU005_MUIC_IRQ_MHDL, 1, S2MU005_MUIC_IRQ_MHDL_MASK),
+	REGMAP_IRQ_REG(S2MU005_MUIC_IRQ_AVCHG, 1, S2MU005_MUIC_IRQ_AVCHG_MASK),
+	REGMAP_IRQ_REG(S2MU005_MUIC_IRQ_VBUSOFF, 1, S2MU005_MUIC_IRQ_VBUSOFF_MASK),
+};
+
 static const struct regmap_irq s5m8767_irqs[] = {
 	REGMAP_IRQ_REG(S5M8767_IRQ_PWRR, 0, S5M8767_IRQ_PWRR_MASK),
 	REGMAP_IRQ_REG(S5M8767_IRQ_PWRF, 0, S5M8767_IRQ_PWRF_MASK),
@@ -259,6 +296,36 @@ static const struct regmap_irq_chip s2mpu05_irq_chip[] = {
 	},
 };
 
+static const struct regmap_irq_chip s2mu005_irq_chip[] = {
+	[S2MU005_CHGR_IRQ_CHIP] = {
+		.name = "s2mu005-chgr",
+		.irqs = s2mu005_chgr_irqs,
+		.num_irqs = ARRAY_SIZE(s2mu005_chgr_irqs),
+		.num_regs = 1,
+		.status_base = S2MU005_REG_CHGR_INT1,
+		.mask_base = S2MU005_REG_CHGR_INT1M,
+		.ack_base = S2MU005_REG_CHGR_INT1,
+	},
+	[S2MU005_FLED_IRQ_CHIP] = {
+		.name = "s2mu005-fled",
+		.irqs = s2mu005_fled_irqs,
+		.num_irqs = ARRAY_SIZE(s2mu005_fled_irqs),
+		.num_regs = 1,
+		.status_base = S2MU005_REG_FLED_INT1,
+		.mask_base = S2MU005_REG_FLED_INT1M,
+		.ack_base = S2MU005_REG_FLED_INT1,
+	},
+	[S2MU005_MUIC_IRQ_CHIP] = {
+		.name = "s2mu005-muic",
+		.irqs = s2mu005_muic_irqs,
+		.num_irqs = ARRAY_SIZE(s2mu005_muic_irqs),
+		.num_regs = 2,
+		.status_base = S2MU005_REG_MUIC_INT1,
+		.mask_base = S2MU005_REG_MUIC_INT1M,
+		.ack_base = S2MU005_REG_MUIC_INT1,
+	},
+};
+
 static const struct regmap_irq_chip s5m8767_irq_chip[] = {
 	[S5M8767_IRQ_CHIP] = {
 		.name = "s5m8767",
@@ -314,6 +381,10 @@ int sec_irq_init(struct sec_pmic_dev *sec_pmic)
 	case S2MPU05:
 		sec_irq_chip = s2mpu05_irq_chip;
 		sec_irq_chip_num = ARRAY_SIZE(s2mpu05_irq_chip);
+		break;
+	case S2MU005:
+		sec_irq_chip = s2mu005_irq_chip;
+		sec_irq_chip_num = ARRAY_SIZE(s2mu005_irq_chip);
 		break;
 	default:
 		return dev_err_probe(sec_pmic->dev, -EINVAL,
