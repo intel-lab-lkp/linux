@@ -2359,15 +2359,24 @@ void i40e_finalize_xdp_rx(struct i40e_ring *rx_ring, unsigned int xdp_res)
 }
 
 /**
- * i40e_inc_ntp: Advance the next_to_process index
+ * i40e_inc_ntp_ntc: Advance the next_to_process and next_to_clean indexes
  * @rx_ring: Rx ring
+ * @next_to_process: Pointer to next_to_process
+ * @next_to_clean: Pointer to next_to_clean or NULL
+ *
+ * This function advances the next_to_process index. If next_to_clean is not
+ * NULL, it is advanced as well.
  **/
-static void i40e_inc_ntp(struct i40e_ring *rx_ring)
+void i40e_inc_ntp_ntc(struct i40e_ring *rx_ring, u16 *next_to_process,
+		      u16 *next_to_clean)
 {
-	u32 ntp = rx_ring->next_to_process + 1;
+	u16 ntp = *next_to_process + 1;
 
 	ntp = (ntp < rx_ring->count) ? ntp : 0;
-	rx_ring->next_to_process = ntp;
+	*next_to_process = ntp;
+	if (next_to_clean)
+		*next_to_clean = ntp;
+
 	prefetch(I40E_RX_DESC(rx_ring, ntp));
 }
 
@@ -2484,17 +2493,19 @@ static int i40e_clean_rx_irq(struct i40e_ring *rx_ring, int budget,
 			i40e_clean_programming_status(rx_ring,
 						      rx_desc->raw.qword[0],
 						      qword);
+			bool eop;
+
 			rx_buffer = i40e_rx_bi(rx_ring, ntp);
-			i40e_inc_ntp(rx_ring);
-			i40e_reuse_rx_page(rx_ring, rx_buffer);
 			/* Update ntc and bump cleaned count if not in the
 			 * middle of mb packet.
 			 */
-			if (rx_ring->next_to_clean == ntp) {
-				rx_ring->next_to_clean =
-					rx_ring->next_to_process;
+			eop = rx_ring->next_to_process ==
+			      rx_ring->next_to_clean;
+			i40e_inc_ntp_ntc(rx_ring, &rx_ring->next_to_process,
+					 eop ? &rx_ring->next_to_clean : NULL);
+			if (eop)
 				cleaned_count++;
-			}
+			i40e_reuse_rx_page(rx_ring, rx_buffer);
 			continue;
 		}
 
@@ -2507,7 +2518,7 @@ static int i40e_clean_rx_irq(struct i40e_ring *rx_ring, int budget,
 		rx_buffer = i40e_get_rx_buffer(rx_ring, size);
 
 		neop = i40e_is_non_eop(rx_ring, rx_desc);
-		i40e_inc_ntp(rx_ring);
+		i40e_inc_ntp_ntc(rx_ring, &rx_ring->next_to_process, NULL);
 
 		if (!xdp->data) {
 			unsigned char *hard_start;

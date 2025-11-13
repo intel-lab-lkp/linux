@@ -410,7 +410,6 @@ int i40e_clean_rx_irq_zc(struct i40e_ring *rx_ring, int budget)
 	u16 next_to_clean = rx_ring->next_to_clean;
 	unsigned int xdp_res, xdp_xmit = 0;
 	struct xdp_buff *first = NULL;
-	u32 count = rx_ring->count;
 	struct bpf_prog *xdp_prog;
 	u32 entries_to_alloc;
 	bool failure = false;
@@ -430,6 +429,7 @@ int i40e_clean_rx_irq_zc(struct i40e_ring *rx_ring, int budget)
 		struct xdp_buff *bi;
 		unsigned int size;
 		u64 qword;
+		bool neop;
 
 		rx_desc = I40E_RX_DESC(rx_ring, next_to_process);
 		qword = le64_to_cpu(rx_desc->wb.qword1.status_error_len);
@@ -446,8 +446,10 @@ int i40e_clean_rx_irq_zc(struct i40e_ring *rx_ring, int budget)
 						      qword);
 			bi = *i40e_rx_bi(rx_ring, next_to_process);
 			xsk_buff_free(bi);
-			if (++next_to_process == count)
-				next_to_process = 0;
+			i40e_inc_ntp_ntc(rx_ring, &next_to_process,
+					 next_to_process == next_to_clean ?
+						 &next_to_clean :
+						 NULL);
 			continue;
 		}
 
@@ -466,16 +468,17 @@ int i40e_clean_rx_irq_zc(struct i40e_ring *rx_ring, int budget)
 			break;
 		}
 
-		if (++next_to_process == count)
-			next_to_process = 0;
+		neop = i40e_is_non_eop(rx_ring, rx_desc);
+		// advance next_to_process. on EOP, advance next_to_clean as well.
+		i40e_inc_ntp_ntc(rx_ring, &next_to_process,
+				 !neop ? &next_to_clean : NULL);
 
-		if (i40e_is_non_eop(rx_ring, rx_desc))
+		if (neop)
 			continue;
 
 		xdp_res = i40e_run_xdp_zc(rx_ring, first, xdp_prog);
 		i40e_handle_xdp_result_zc(rx_ring, first, rx_desc, &rx_packets,
 					  &rx_bytes, xdp_res, &failure);
-		next_to_clean = next_to_process;
 		if (failure)
 			break;
 		total_rx_packets += rx_packets;

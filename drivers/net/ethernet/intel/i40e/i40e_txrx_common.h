@@ -17,6 +17,8 @@ void i40e_update_rx_stats(struct i40e_ring *rx_ring,
 			  unsigned int total_rx_packets);
 void i40e_finalize_xdp_rx(struct i40e_ring *rx_ring, unsigned int xdp_res);
 void i40e_release_rx_desc(struct i40e_ring *rx_ring, u32 val);
+void i40e_inc_ntp_ntc(struct i40e_ring *rx_ring, u16 *next_to_process,
+		      u16 *next_to_clean);
 
 #define I40E_XDP_PASS		0
 #define I40E_XDP_CONSUMED	BIT(0)
