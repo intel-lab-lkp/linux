@@ -1246,7 +1246,6 @@ static int ovl_rename(struct mnt_idmap *idmap, struct inode *olddir,
 	bool overwrite = !(flags & RENAME_EXCHANGE);
 	bool is_dir = d_is_dir(old);
 	bool new_is_dir = d_is_dir(new);
-	const struct cred *old_cred = NULL;
 	struct ovl_renamedata ovlrd = {
 		.old_parent		= old->d_parent,
 		.old_dentry		= old,
@@ -1317,11 +1316,9 @@ static int ovl_rename(struct mnt_idmap *idmap, struct inode *olddir,
 			goto out;
 	}
 
-	old_cred = ovl_override_creds(old->d_sb);
+	with_ovl_creds(old->d_sb)
+		err = do_ovl_rename(&ovlrd, &list);
 
-	err = do_ovl_rename(&ovlrd, &list);
-
-	ovl_revert_creds(old_cred);
 	if (update_nlink)
 		ovl_nlink_end(new);
 	else
