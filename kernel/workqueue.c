@@ -286,6 +286,7 @@ struct pool_workqueue {
 	struct list_head	pending_node;	/* LN: node on wq_node_nr_active->pending_pwqs */
 	struct list_head	pwqs_node;	/* WR: node on wq->pwqs */
 	struct list_head	mayday_node;	/* MD: node on wq->maydays */
+	struct work_struct	mayday_pos_work;/* L: position on pool->worklist */
 
 	u64			stats[PWQ_NR_STATS];
 
@@ -2976,6 +2977,50 @@ static void idle_cull_fn(struct work_struct *work)
 	reap_dying_workers(&cull_list);
 }
 
+static void mayday_pos_func(struct work_struct *work)
+{
+}
+
+/**
+ * insert_mayday_pos - Insert the positional work for mayday
+ * @pwq: The pwq that needs to be rescued
+ * @next: The next work where positional work will be inserted before
+ *
+ * CONTEXT:
+ * raw_spin_lock_irq(pool->lock).
+ */
+static void insert_mayday_pos(struct pool_workqueue *pwq, struct work_struct *next)
+{
+	unsigned int work_flags;
+	unsigned int work_color;
+
+	__set_bit(WORK_STRUCT_PENDING_BIT, work_data_bits(&pwq->mayday_pos_work));
+
+	/* The mayday positional work item does not participate in nr_active. */
+	work_flags = WORK_STRUCT_INACTIVE;
+	work_color = pwq->work_color;
+	work_flags |= work_color_to_flags(work_color);
+	pwq->nr_in_flight[work_color]++;
+	insert_work(pwq, &pwq->mayday_pos_work, &next->entry, work_flags);
+}
+
+/**
+ * remove_mayday_pos - Remove the inserted positional work
+ * @pwq: The pwq that needs to be rescued
+ *
+ * WORK_STRUCT_INACTIVE ensures that the pool lock is not dropped in
+ * pwq_dec_nr_in_flight()
+ *
+ * CONTEXT:
+ * raw_spin_lock_irq(pool->lock).
+ */
+static void remove_mayday_pos(struct pool_workqueue *pwq)
+{
+	list_del_init(&pwq->mayday_pos_work.entry);
+	pwq_dec_nr_in_flight(pwq, *work_data_bits(&pwq->mayday_pos_work));
+	INIT_WORK(&pwq->mayday_pos_work, mayday_pos_func);
+}
+
 static void send_mayday(struct work_struct *work)
 {
 	struct pool_workqueue *pwq = get_work_pwq(work);
@@ -2985,6 +3030,9 @@ static void send_mayday(struct work_struct *work)
 
 	if (!wq->rescuer)
 		return;
+
+	if (!work_pending(&pwq->mayday_pos_work))
+		insert_mayday_pos(pwq, work);
 
 	/* mayday mayday mayday */
 	if (list_empty(&pwq->mayday_node)) {
@@ -3502,41 +3550,27 @@ repeat:
 
 		raw_spin_lock_irq(&pool->lock);
 
-		/*
-		 * Slurp in all works issued via this workqueue and
-		 * process'em.
-		 */
-		WARN_ON_ONCE(!list_empty(&rescuer->scheduled));
-		list_for_each_entry_safe(work, n, &pool->worklist, entry) {
-			if (get_work_pwq(work) == pwq &&
-			    assign_work(work, rescuer, &n))
+rescan:
+		/* If the positional work is processed by a normal worker,
+		 * the pwq doesn't need to be rescued. */
+		if (work_pending(&pwq->mayday_pos_work)) {
+			/* scan from the positional work to avoid potentially O(N^2) scanning */
+			work = &pwq->mayday_pos_work;
+			list_for_each_entry_safe_continue(work, n, &pool->worklist, entry) {
+				if (get_work_pwq(work) != pwq)
+					continue;
+				if (!assign_work(work, rescuer, &n))
+					continue;
 				pwq->stats[PWQ_STAT_RESCUED]++;
-		}
-
-		if (!list_empty(&rescuer->scheduled)) {
-			process_scheduled_works(rescuer);
-
-			/*
-			 * The above execution of rescued work items could
-			 * have created more to rescue through
-			 * pwq_activate_first_inactive() or chained
-			 * queueing.  Let's put @pwq back on mayday list so
-			 * that such back-to-back work items, which may be
-			 * being used to relieve memory pressure, don't
-			 * incur MAYDAY_INTERVAL delay inbetween.
-			 */
-			if (pwq->nr_active && need_to_create_worker(pool)) {
-				raw_spin_lock(&wq_mayday_lock);
-				/*
-				 * Queue iff we aren't racing destruction
-				 * and somebody else hasn't queued it already.
-				 */
-				if (wq->rescuer && list_empty(&pwq->mayday_node)) {
-					get_pwq(pwq);
-					list_add_tail(&pwq->mayday_node, &wq->maydays);
+				/* reset the position and handle the assigned work */
+				if (list_next_entry(&pwq->mayday_pos_work, entry) != n) {
+					remove_mayday_pos(pwq);
+					insert_mayday_pos(pwq, n);
 				}
-				raw_spin_unlock(&wq_mayday_lock);
+				process_scheduled_works(rescuer);
+				goto rescan;
 			}
+			remove_mayday_pos(pwq);
 		}
 
 		/*
@@ -5156,6 +5190,7 @@ static void init_pwq(struct pool_workqueue *pwq, struct workqueue_struct *wq,
 	INIT_LIST_HEAD(&pwq->pending_node);
 	INIT_LIST_HEAD(&pwq->pwqs_node);
 	INIT_LIST_HEAD(&pwq->mayday_node);
+	INIT_WORK(&pwq->mayday_pos_work, mayday_pos_func);
 	kthread_init_work(&pwq->release_work, pwq_release_workfn);
 }
 
