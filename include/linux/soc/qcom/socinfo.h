@@ -82,6 +82,15 @@ struct socinfo {
 	__le32 num_func_clusters;
 	__le32 boot_cluster;
 	__le32 boot_core;
+	/* Version 20 */
+	__le32 raw_package_type;
+	/* Version 21 */
+	__le32 partial_features_array_offset;
+	/* Version 22 */
+	__le32 cpu_cores_array_offset;
+	/* Version 23 */
+	__le32 part_instances_offset;
+	__le32 num_part_instances;
 };
 
 /* Internal feature codes */
