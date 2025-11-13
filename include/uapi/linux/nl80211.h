@@ -1360,7 +1360,11 @@
  * @NL80211_CMD_NAN_CLUSTER_JOINED: This command is used to notify
  *	user space that the NAN new cluster has been joined. The cluster ID is
  *	indicated by %NL80211_ATTR_MAC.
- *
+ * @NL80211_CMD_SET_LOCAL_NAN_SCHED: Set the local NAN schedule. NAN must be
+ *	operational (%NL80211_CMD_START_NAN was executed). Must contain both of
+ *	%NL80211_ATTR_NAN_TIME_SLOTS, but %NL80211_ATTR_NAN_CHANNEL is optional.
+ *	(for example in case of a channel removal, that channel won't be
+ *	provided).
  * @NL80211_CMD_MAX: highest used command number
  * @__NL80211_CMD_AFTER_LAST: internal use
  */
@@ -1623,6 +1627,8 @@ enum nl80211_commands {
 
 	NL80211_CMD_NAN_NEXT_DW_NOTIFICATION,
 	NL80211_CMD_NAN_CLUSTER_JOINED,
+
+	NL80211_CMD_SET_LOCAL_NAN_SCHED,
 
 	/* add new commands above here */
 
@@ -2973,6 +2979,27 @@ enum nl80211_commands {
  *	primary channel is 2 MHz wide, and the control channel designates
  *	the 1 MHz primary subchannel within that 2 MHz primary.
  *
+ * @NL80211_ATTR_NAN_CHANNEL: This is a nested attribute. There can be multiple
+ *	attributes of this type, each one represents a channel definition and
+ *	consists of top-level attributes like %NL80211_ATTR_WIPHY_FREQ. Must
+ *	contain %NL80211_ATTR_NAN_CHANNEL_ENTRY.
+ *	This attribute is used with %NL80211_CMD_SET_LOCAL_NAN_SCHED to specify
+ *	the channel definitions on which the radio needs to operate during
+ *	specific time slots. All of the channel definitions should be mutually
+ *	incompatible. The number of channels should fit the current
+ *	configuration of channels and the possible interface combinations.
+ * @NL80211_ATTR_NAN_CHANNEL_ENTRY: a byte array of 6 bytes. contains the
+ *	Channel Entry as defined in Wi-Fi Aware (TM) 4.0 specification Table
+ *	100 (Channel Entry format for the NAN Availability attribute).
+ * @NL80211_ATTR_NAN_TIME_SLOTS: an array of u8 values and 32 cells. each value
+ *	maps a time slot to the chandef on which the radio should operate on in
+ *	that time. %NL80211_NAN_SCHED_NOT_AVAIL_SLOT indicates unscheduled.
+ *	The chandef is represented using its index, where the index is the
+ *	sequential number of the %NL80211_ATTR_NAN_CHANNEL attribute within all
+ *	the attributes of this type.
+ *	Each slots spans over 16TUs, hence the entire schedule spans over
+ *	512TUs. Other slot durations and periods are currently not supported.
+ *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
  * @__NL80211_ATTR_AFTER_LAST: internal use
@@ -3540,6 +3567,10 @@ enum nl80211_attrs {
 	NL80211_ATTR_NAN_CAPABILITIES,
 
 	NL80211_ATTR_S1G_PRIMARY_2MHZ,
+
+	NL80211_ATTR_NAN_CHANNEL,
+	NL80211_ATTR_NAN_CHANNEL_ENTRY,
+	NL80211_ATTR_NAN_TIME_SLOTS,
 
 	/* add attributes here, update the policy in nl80211.c */
 
@@ -8431,5 +8462,7 @@ enum nl80211_nan_capabilities {
 	__NL80211_NAN_CAPABILITIES_LAST,
 	NL80211_NAN_CAPABILITIES_MAX = __NL80211_NAN_CAPABILITIES_LAST - 1,
 };
+
+#define NL80211_NAN_SCHED_NOT_AVAIL_SLOT 0xff
 
 #endif /* __LINUX_NL80211_H */
