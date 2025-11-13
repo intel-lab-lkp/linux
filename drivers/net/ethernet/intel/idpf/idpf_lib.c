@@ -1078,8 +1078,8 @@ static void idpf_vport_rel(struct idpf_vport *vport)
 	u16 idx = vport->idx;
 
 	vport_config = adapter->vport_config[vport->idx];
-	idpf_deinit_rss_lut(vport);
 	rss_data = &vport_config->user_config.rss_data;
+	idpf_deinit_rss_lut(rss_data);
 	kfree(rss_data->rss_key);
 	rss_data->rss_key = NULL;
 
@@ -1300,7 +1300,7 @@ static struct idpf_vport *idpf_vport_alloc(struct idpf_adapter *adapter,
 	netdev_rss_key_fill((void *)rss_data->rss_key, rss_data->rss_key_size);
 
 	/* Initialize default rss LUT */
-	err = idpf_init_rss_lut(vport);
+	err = idpf_init_rss_lut(vport, rss_data);
 	if (err)
 		goto free_rss_key;
 
@@ -1496,6 +1496,7 @@ static int idpf_vport_open(struct idpf_vport *vport, bool rtnl)
 	struct idpf_adapter *adapter = vport->adapter;
 	struct idpf_vport_config *vport_config;
 	struct idpf_queue_id_reg_info *chunks;
+	struct idpf_rss_data *rss_data;
 	int err;
 
 	if (test_bit(IDPF_VPORT_UP, np->state))
@@ -1592,7 +1593,8 @@ static int idpf_vport_open(struct idpf_vport *vport, bool rtnl)
 
 	idpf_restore_features(vport);
 
-	err = idpf_config_rss(vport);
+	rss_data = &vport_config->user_config.rss_data;
+	err = idpf_config_rss(vport, rss_data);
 	if (err) {
 		dev_err(&adapter->pdev->dev, "Failed to configure RSS for vport %u: %d\n",
 			vport->vport_id, err);
@@ -2101,8 +2103,12 @@ int idpf_initiate_soft_reset(struct idpf_vport *vport,
 		goto err_open;
 
 	if (reset_cause == IDPF_SR_Q_CHANGE &&
-	    !netif_is_rxfh_configured(vport->netdev))
-		idpf_fill_dflt_rss_lut(vport);
+	    !netif_is_rxfh_configured(vport->netdev)) {
+		struct idpf_rss_data *rss_data;
+
+		rss_data = &vport_config->user_config.rss_data;
+		idpf_fill_dflt_rss_lut(vport, rss_data);
+	}
 
 	if (vport_is_up)
 		err = idpf_vport_open(vport, false);
@@ -2279,10 +2285,16 @@ static int idpf_set_features(struct net_device *netdev,
 		 * skipped. The updated LUT will be committed to the HW when the interface
 		 * is brought up.
 		 */
-		if (test_bit(IDPF_VPORT_UP, np->state))
-			err = idpf_config_rss(vport);
-		if (err)
-			goto unlock_mutex;
+		if (test_bit(IDPF_VPORT_UP, np->state)) {
+			struct idpf_vport_config *vport_config;
+			struct idpf_rss_data *rss_data;
+
+			vport_config = adapter->vport_config[vport->idx];
+			rss_data = &vport_config->user_config.rss_data;
+			err = idpf_config_rss(vport, rss_data);
+			if (err)
+				goto unlock_mutex;
+		}
 	}
 
 	if (changed & NETIF_F_GRO_HW) {
