@@ -350,26 +350,22 @@ static int ovl_check_whiteouts(const struct path *path, struct ovl_readdir_data 
 {
 	int err = 0;
 	struct dentry *dentry, *dir = path->dentry;
-	const struct cred *old_cred;
 
-	old_cred = ovl_override_creds(rdd->dentry->d_sb);
-
-	while (rdd->first_maybe_whiteout) {
-		struct ovl_cache_entry *p =
-			rdd->first_maybe_whiteout;
-		rdd->first_maybe_whiteout = p->next_maybe_whiteout;
-		dentry = lookup_one_positive_killable(mnt_idmap(path->mnt),
-						      &QSTR_LEN(p->name, p->len),
-						      dir);
-		if (!IS_ERR(dentry)) {
-			p->is_whiteout = ovl_is_whiteout(dentry);
-			dput(dentry);
-		} else if (PTR_ERR(dentry) == -EINTR) {
-			err = -EINTR;
-			break;
+	with_ovl_creds(rdd->dentry->d_sb) {
+		while (rdd->first_maybe_whiteout) {
+			struct ovl_cache_entry *p = rdd->first_maybe_whiteout;
+			rdd->first_maybe_whiteout = p->next_maybe_whiteout;
+			dentry = lookup_one_positive_killable(mnt_idmap(path->mnt),
+							      &QSTR_LEN(p->name, p->len), dir);
+			if (!IS_ERR(dentry)) {
+				p->is_whiteout = ovl_is_whiteout(dentry);
+				dput(dentry);
+			} else if (PTR_ERR(dentry) == -EINTR) {
+				err = -EINTR;
+				break;
+			}
 		}
 	}
-	ovl_revert_creds(old_cred);
 
 	return err;
 }
