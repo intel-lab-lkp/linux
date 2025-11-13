@@ -44,15 +44,38 @@ struct objtool_file *objtool_open_read(const char *filename)
 	return &file;
 }
 
-int objtool_pv_add(struct objtool_file *f, int idx, struct symbol *func)
+int objtool_pv_add(struct objtool_file *f, int idx, struct symbol *func,
+		   enum pv_mode pv_mode)
 {
-	if (!opts.noinstr)
+	if (!opts.noinstr && !opts.disas)
 		return 0;
 
 	if (!f->pv_ops) {
 		ERROR("paravirt confusion");
 		return -1;
 	}
+
+	if (opts.disas) {
+		switch (pv_mode) {
+
+		case PV_MODE_DEFAULT:
+			if (f->pv_ops[idx].target_default)
+				f->pv_ops[idx].target_override++;
+			else
+				f->pv_ops[idx].target_default = func;
+			break;
+
+		case PV_MODE_XENPV:
+			f->pv_ops[idx].target_xen = func;
+			break;
+
+		default:
+			BUG();
+		}
+	}
+
+	if (!opts.noinstr)
+		return 0;
 
 	/*
 	 * These functions will be patched into native code,

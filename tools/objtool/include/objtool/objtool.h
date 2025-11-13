@@ -17,6 +17,9 @@
 struct pv_state {
 	bool clean;
 	struct list_head targets;
+	struct symbol *target_default;
+	struct symbol *target_xen;
+	int target_override;
 };
 
 struct objtool_file {
@@ -41,7 +44,8 @@ struct objtool_file {
 
 struct objtool_file *objtool_open_read(const char *_objname);
 
-int objtool_pv_add(struct objtool_file *file, int idx, struct symbol *func);
+int objtool_pv_add(struct objtool_file *file, int idx, struct symbol *func,
+		   enum pv_mode pv_mode);
 
 int check(struct objtool_file *file);
 int orc_dump(const char *objname);

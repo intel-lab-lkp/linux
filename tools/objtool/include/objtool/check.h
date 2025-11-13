@@ -138,6 +138,10 @@ static inline struct symbol *insn_call_dest(struct instruction *insn)
 	return insn->_call_dest;
 }
 
+const char *pv_call_dest_name(struct objtool_file *file,
+			      struct instruction *insn,
+			      enum pv_mode pv_mode);
+
 struct instruction *find_insn(struct objtool_file *file,
 			      struct section *sec, unsigned long offset);
 
