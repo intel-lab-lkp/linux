@@ -103,6 +103,20 @@ bool arch_pc_relative_reloc(struct reloc *reloc)
 	return false;
 }
 
+unsigned long arch_pc_relative_offset(struct instruction *insn,
+				      struct reloc *reloc)
+{
+	/*
+	 * Relocation information for a RIP-relative instruction is
+	 * based on the RIP value at the end of the instruction. So
+	 * to get the effective relocated address, the reference has
+	 * to be adjusted with the number of bytes between the
+	 * relocation offset and the end of the instruction.
+	 */
+	return reloc_addend(reloc) +
+		insn->offset + insn->len - reloc_offset(reloc);
+}
+
 #define ADD_OP(op) \
 	if (!(op = calloc(1, sizeof(*op)))) \
 		return -1; \
