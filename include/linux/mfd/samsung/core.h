@@ -63,6 +63,7 @@ enum sec_device_type {
  * @irq_base:		Base IRQ number for device, required for IRQs
  * @irq:		Generic IRQ number for device
  * @irq_data:		Runtime data structure for IRQ controller
+ * @revision:		Revision number of the device
  * @wakeup:		Whether or not this is a wakeup device
  */
 struct sec_pmic_dev {
@@ -74,6 +75,8 @@ struct sec_pmic_dev {
 	int device_type;
 	int irq;
 	struct regmap_irq_chip_data *irq_data[MAX_IRQ_CHIPS];
+
+	unsigned int revision;
 };
 
 struct sec_platform_data {

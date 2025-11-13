@@ -16,6 +16,7 @@
 #include <linux/mfd/samsung/irq.h>
 #include <linux/mfd/samsung/s2mps11.h>
 #include <linux/mfd/samsung/s2mps13.h>
+#include <linux/mfd/samsung/s2mu005.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/pm.h>
@@ -86,17 +87,34 @@ static const struct mfd_cell s2mu005_devs[] = {
 	MFD_CELL_OF("s2mu005-rgb", NULL, NULL, 0, 0, "samsung,s2mu005-rgb"),
 };
 
-static void sec_pmic_dump_rev(struct sec_pmic_dev *sec_pmic)
+static void sec_pmic_store_rev(struct sec_pmic_dev *sec_pmic)
 {
-	unsigned int val;
+	unsigned int reg, mask, shift;
 
 	/* For s2mpg1x, the revision is in a different regmap */
 	if (sec_pmic->device_type == S2MPG10)
 		return;
 
-	/* For each device type, the REG_ID is always the first register */
-	if (!regmap_read(sec_pmic->regmap_pmic, S2MPS11_REG_ID, &val))
-		dev_dbg(sec_pmic->dev, "Revision: 0x%x\n", val);
+	switch (sec_pmic->device_type) {
+	case S2MU005:
+		reg = S2MU005_REG_ID;
+		mask = S2MU005_ID_MASK;
+		shift = S2MU005_ID_SHIFT;
+		break;
+	default:
+		/* For other device types, the REG_ID is always the first register. */
+		reg = S2MPS11_REG_ID;
+		mask = ~0;
+		shift = 0;
+	}
+
+	if (!regmap_read(sec_pmic->regmap_pmic, reg, &sec_pmic->revision))
+		return;
+
+	sec_pmic->revision &= mask;
+	sec_pmic->revision >>= shift;
+
+	dev_dbg(sec_pmic->dev, "Revision: 0x%x\n", sec_pmic->revision);
 }
 
 static void sec_pmic_configure(struct sec_pmic_dev *sec_pmic)
@@ -236,7 +254,7 @@ int sec_pmic_probe(struct device *dev, int device_type, unsigned int irq,
 		return ret;
 
 	sec_pmic_configure(sec_pmic);
-	sec_pmic_dump_rev(sec_pmic);
+	sec_pmic_store_rev(sec_pmic);
 
 	return ret;
 }
