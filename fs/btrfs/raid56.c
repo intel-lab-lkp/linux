@@ -331,8 +331,8 @@ static void index_stripe_sectors(struct btrfs_raid_bio *rbio)
 		if (!rbio->stripe_pages[page_index])
 			continue;
 
-		rbio->stripe_paddrs[i] = page_to_phys(rbio->stripe_pages[page_index] +
-						      offset_in_page(offset));
+		rbio->stripe_paddrs[i] = page_to_phys(rbio->stripe_pages[page_index]) +
+						      offset_in_page(offset);
 	}
 }
 
