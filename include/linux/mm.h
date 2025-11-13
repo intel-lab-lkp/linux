@@ -3128,58 +3128,17 @@ static inline void ptdesc_clear_kernel(struct ptdesc *ptdesc)
  */
 static inline bool ptdesc_test_kernel(const struct ptdesc *ptdesc)
 {
-	return test_bit(PT_kernel, &ptdesc->pt_flags.f);
-}
-
-/**
- * pagetable_alloc - Allocate pagetables
- * @gfp:    GFP flags
- * @order:  desired pagetable order
- *
- * pagetable_alloc allocates memory for page tables as well as a page table
- * descriptor to describe that memory.
- *
- * Return: The ptdesc describing the allocated page tables.
- */
-static inline struct ptdesc *pagetable_alloc_noprof(gfp_t gfp, unsigned int order)
-{
-	struct page *page = alloc_pages_noprof(gfp | __GFP_COMP, order);
-
-	return page_ptdesc(page);
-}
-#define pagetable_alloc(...)	alloc_hooks(pagetable_alloc_noprof(__VA_ARGS__))
-
-static inline void __pagetable_free(struct ptdesc *pt)
-{
-	struct page *page = ptdesc_page(pt);
-
-	__free_pages(page, compound_order(page));
-}
-
 #ifdef CONFIG_ASYNC_KERNEL_PGTABLE_FREE
-void pagetable_free_kernel(struct ptdesc *pt);
+	return test_bit(PT_kernel, &ptdesc->pt_flags.f);
 #else
-static inline void pagetable_free_kernel(struct ptdesc *pt)
-{
-	__pagetable_free(pt);
-}
+	return false;
 #endif
-/**
- * pagetable_free - Free pagetables
- * @pt:	The page table descriptor
- *
- * pagetable_free frees the memory of all page tables described by a page
- * table descriptor and the memory for the descriptor itself.
- */
-static inline void pagetable_free(struct ptdesc *pt)
-{
-	if (ptdesc_test_kernel(pt)) {
-		ptdesc_clear_kernel(pt);
-		pagetable_free_kernel(pt);
-	} else {
-		__pagetable_free(pt);
-	}
 }
+
+struct ptdesc *pagetable_alloc_noprof(gfp_t gfp, unsigned int order);
+#define pagetable_alloc(...)	alloc_hooks(pagetable_alloc_noprof(__VA_ARGS__))
+void pagetable_free(struct ptdesc *pt);
+void pagetable_free_kernel(struct ptdesc *pt);
 
 #if defined(CONFIG_SPLIT_PTE_PTLOCKS)
 #if ALLOC_SPLIT_PTLOCKS

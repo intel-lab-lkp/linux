@@ -434,11 +434,12 @@ static void kernel_pgtable_work_func(struct work_struct *work)
 
 	iommu_sva_invalidate_kva_range(PAGE_OFFSET, TLB_FLUSH_ALL);
 	list_for_each_entry_safe(pt, next, &page_list, pt_list)
-		__pagetable_free(pt);
+		pagetable_free(pt);
 }
 
 void pagetable_free_kernel(struct ptdesc *pt)
 {
+	ptdesc_clear_kernel(pt);
 	spin_lock(&kernel_pgtable_work.lock);
 	list_add(&pt->pt_list, &kernel_pgtable_work.list);
 	spin_unlock(&kernel_pgtable_work.lock);
