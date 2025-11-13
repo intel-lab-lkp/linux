@@ -531,6 +531,7 @@ static struct timeval procsysfs_tv_begin;
 int ignore_stdin;
 bool no_msr;
 bool no_perf;
+bool no_rapl;
 
 enum gfx_sysfs_idx {
 	GFX_rc6,
@@ -3119,6 +3120,10 @@ int dump_counters(PER_THREAD_PARAMS)
 
 double rapl_counter_get_value(const struct rapl_counter *c, enum rapl_unit desired_unit, double interval)
 {
+	if (no_rapl) {
+		return NAN;
+	}
+
 	assert(desired_unit != RAPL_UNIT_INVALID);
 
 	/*
@@ -4696,6 +4701,8 @@ static size_t cstate_counter_info_count_perf(const struct cstate_counter_info_t 
 
 void write_rapl_counter(struct rapl_counter *rc, struct rapl_counter_info_t *rci, unsigned int idx)
 {
+	assert(!no_rapl);
+
 	if (rci->source[idx] == COUNTER_SOURCE_NONE)
 		return;
 
@@ -4706,6 +4713,8 @@ void write_rapl_counter(struct rapl_counter *rc, struct rapl_counter_info_t *rci
 
 int get_rapl_counters(int cpu, unsigned int domain, struct core_data *c, struct pkg_data *p)
 {
+	assert(!no_rapl);
+
 	struct platform_counters *pplat_cnt = p == package_odd ? &platform_counters_odd : &platform_counters_even;
 	unsigned long long perf_data[NUM_RAPL_COUNTERS + 1];
 	struct rapl_counter_info_t *rci;
@@ -5147,7 +5156,7 @@ int get_counters(PER_THREAD_PARAMS)
 	if (!is_cpu_first_thread_in_core(t, c, p))
 		goto done;
 
-	if (platform->has_per_core_rapl) {
+	if (platform->has_per_core_rapl && !no_rapl) {
 		status = get_rapl_counters(cpu, get_rapl_domain_id(cpu), c, p);
 		if (status != 0)
 			return status;
@@ -5213,7 +5222,7 @@ int get_counters(PER_THREAD_PARAMS)
 	if (DO_BIC(BIC_SYS_LPI))
 		p->sys_lpi = cpuidle_cur_sys_lpi_us;
 
-	if (!platform->has_per_core_rapl) {
+	if (!platform->has_per_core_rapl && !no_rapl) {
 		status = get_rapl_counters(cpu, get_rapl_domain_id(cpu), c, p);
 		if (status != 0)
 			return status;
@@ -7650,6 +7659,12 @@ void rapl_probe_intel(void)
 
 	tdp = get_tdp_intel();
 
+	if (tdp == 0.0) {
+		no_rapl = true;
+		fprintf(outf, "RAPL: Could not calculate TDP (TDP: %.0f, MSR_RAPL_POWER_UNIT: %llx)\n", tdp, msr);
+		return;
+	}
+
 	rapl_joule_counter_range = 0xFFFFFFFF * rapl_energy_units / tdp;
 	if (!quiet)
 		fprintf(outf, "RAPL: %.0f sec. Joule Counter Range, at %.0f Watts\n", rapl_joule_counter_range, tdp);
@@ -7679,6 +7694,12 @@ void rapl_probe_amd(void)
 	rapl_power_units = ldexp(1.0, -(msr & 0xf));
 
 	tdp = get_tdp_amd();
+
+	if (tdp == 0.0) {
+		no_rapl = true;
+		fprintf(outf, "RAPL: Could not calculate TDP (TDP: %.0f, MSR_RAPL_POWER_UNIT: %llx)\n", tdp, msr);
+		return;
+	}
 
 	rapl_joule_counter_range = 0xFFFFFFFF * rapl_energy_units / tdp;
 	if (!quiet)
@@ -11215,7 +11236,7 @@ skip_cgroup_setting:
 
 	turbostat_init();
 
-	if (!no_msr)
+	if (!no_msr && !no_rapl)
 		msr_sum_record();
 
 	/* dump counters and exit */
