@@ -798,39 +798,26 @@ static void psi_group_change(struct psi_group *group, int cpu,
 			     u64 now, bool wake_clock)
 {
 	struct psi_group_cpu *groupc;
-	unsigned int t, m;
+	unsigned long t, m;
 	u32 state_mask;
 
 	lockdep_assert_rq_held(cpu_rq(cpu));
 	groupc = per_cpu_ptr(group->pcpu, cpu);
 
 	/*
-	 * Start with TSK_ONCPU, which doesn't have a corresponding
-	 * task count - it's just a boolean flag directly encoded in
-	 * the state mask. Clear, set, or carry the current state if
-	 * no changes are requested.
+	 * TSK_ONCPU does not have a corresponding task count - it's just a
+	 * boolean flag directly encoded in the state mask. Clear, set, or carry
+	 * the current state if no changes are requested.
+	 *
+	 * The rest of the state mask is calculated based on the task counts.
+	 * Update those first, then construct the mask.
 	 */
-	if (unlikely(clear & TSK_ONCPU)) {
-		state_mask = 0;
-		clear &= ~TSK_ONCPU;
-	} else if (unlikely(set & TSK_ONCPU)) {
-		state_mask = PSI_ONCPU;
-		set &= ~TSK_ONCPU;
-	} else {
-		state_mask = groupc->state_mask & PSI_ONCPU;
-	}
-
-	/*
-	 * The rest of the state mask is calculated based on the task
-	 * counts. Update those first, then construct the mask.
-	 */
-	for (t = 0, m = clear; m; m &= ~(1 << t), t++) {
-		if (!(m & (1 << t)))
-			continue;
-		if (groupc->tasks[t]) {
+	m = clear;
+	for_each_set_bit(t, &m, ARRAY_SIZE(groupc->tasks)) {
+		if (likely(groupc->tasks[t])) {
 			groupc->tasks[t]--;
 		} else if (!psi_bug) {
-			printk_deferred(KERN_ERR "psi: task underflow! cpu=%d t=%d tasks=[%u %u %u %u] clear=%x set=%x\n",
+			printk_deferred(KERN_ERR "psi: task underflow! cpu=%d t=%lu tasks=[%u %u %u %u] clear=%x set=%x\n",
 					cpu, t, groupc->tasks[0],
 					groupc->tasks[1], groupc->tasks[2],
 					groupc->tasks[3], clear, set);
@@ -838,9 +825,9 @@ static void psi_group_change(struct psi_group *group, int cpu,
 		}
 	}
 
-	for (t = 0; set; set &= ~(1 << t), t++)
-		if (set & (1 << t))
-			groupc->tasks[t]++;
+	m = set;
+	for_each_set_bit(t, &m, ARRAY_SIZE(groupc->tasks))
+		groupc->tasks[t]++;
 
 	if (!group->enabled) {
 		/*
@@ -852,6 +839,13 @@ static void psi_group_change(struct psi_group *group, int cpu,
 		 */
 		if (unlikely(groupc->state_mask & (1 << PSI_NONIDLE)))
 			record_times(groupc, now);
+
+		if (unlikely(clear & TSK_ONCPU))
+			state_mask = 0;
+		else if (unlikely(set & TSK_ONCPU))
+			state_mask = PSI_ONCPU;
+		else
+			state_mask = groupc->state_mask & PSI_ONCPU;
 
 		groupc->state_mask = state_mask;
 
