@@ -122,6 +122,7 @@ static irqreturn_t fbnic_mac_msix_intr(int __always_unused irq, void *data)
 {
 	struct fbnic_dev *fbd = data;
 	struct fbnic_net *fbn;
+	u64 link_down_event;
 
 	if (fbd->mac->get_link_event(fbd) == FBNIC_LINK_EVENT_NONE) {
 		fbnic_wr32(fbd, FBNIC_INTR_MASK_CLEAR(0),
@@ -129,11 +130,21 @@ static irqreturn_t fbnic_mac_msix_intr(int __always_unused irq, void *data)
 		return IRQ_HANDLED;
 	}
 
+	/* If the link is up this would be a loss event */
+	link_down_event = (fbd->pmd_state == FBNIC_PMD_SEND_DATA) ? 1 : 0;
+
 	fbn = netdev_priv(fbd->netdev);
 
 	/* Record link down events */
-	if (!fbd->mac->get_link(fbd, fbn->aui, fbn->fec))
+	if (!fbd->mac->get_link(fbd, fbn->aui, fbn->fec)) {
+		/* Do not count link down events if the PCS has yet to
+		 * acknowledge the link. This allows for the flushing out
+		 * PCS errors generated during link training.
+		 */
+		if (netif_carrier_ok(fbd->netdev))
+			fbn->link_down_events += link_down_event;
 		phylink_pcs_change(&fbn->phylink_pcs, false);
+	}
 
 	return IRQ_HANDLED;
 }
