@@ -159,14 +159,14 @@ static void send_add_uevent(struct gb_audio_manager_module *module)
 	char ip_devices_string[64];
 	char op_devices_string[64];
 
-	char *envp[] = {
-		name_string,
-		vid_string,
-		pid_string,
-		intf_id_string,
-		ip_devices_string,
-		op_devices_string,
-		NULL
+	static const char * const envp[] = {
+						name_string,
+						vid_string,
+						pid_string,
+						intf_id_string,
+						ip_devices_string,
+						op_devices_string,
+						NULL
 	};
 
 	snprintf(name_string, 128, "NAME=%s", module->desc.name);
