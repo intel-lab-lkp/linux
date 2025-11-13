@@ -452,7 +452,8 @@ struct sdeb_store_info {
 	dev_to_sdebug_host(shost->dma_dev)
 
 enum sdeb_defer_type {SDEB_DEFER_NONE = 0, SDEB_DEFER_HRT = 1,
-		      SDEB_DEFER_WQ = 2, SDEB_DEFER_POLL = 3};
+		      SDEB_DEFER_WQ = 2, SDEB_DEFER_POLL = 3,
+		      SDEB_DEFER_FAKE_TIMEOUT = 4};
 
 struct sdebug_defer {
 	struct hrtimer hrt;
@@ -6708,13 +6709,9 @@ static void scsi_debug_sdev_destroy(struct scsi_device *sdp)
 }
 
 /* Returns true if cancelled or not running callback. */
-static bool scsi_debug_stop_cmnd(struct scsi_cmnd *cmnd)
+static bool _scsi_debug_stop_cmnd(struct sdebug_defer *sd_dp)
 {
-	struct sdebug_scsi_cmd *sdsc = scsi_cmd_priv(cmnd);
-	struct sdebug_defer *sd_dp = &sdsc->sd_dp;
 	enum sdeb_defer_type defer_t = sd_dp->defer_t;
-
-	lockdep_assert_held(&sdsc->lock);
 
 	if (defer_t == SDEB_DEFER_HRT) {
 		int res = hrtimer_try_to_cancel(&sd_dp->hrt);
@@ -6735,8 +6732,24 @@ static bool scsi_debug_stop_cmnd(struct scsi_cmnd *cmnd)
 		return false;
 	} else if (defer_t == SDEB_DEFER_POLL) {
 		return true;
+	} else if (defer_t == SDEB_DEFER_FAKE_TIMEOUT) {
+		return true;
 	}
 
+	return false;
+}
+
+static bool scsi_debug_stop_cmnd(struct scsi_cmnd *cmnd)
+{
+	struct sdebug_scsi_cmd *sdsc = scsi_cmd_priv(cmnd);
+	struct sdebug_defer *sd_dp = &sdsc->sd_dp;
+
+	lockdep_assert_held(&sdsc->lock);
+
+	if (_scsi_debug_stop_cmnd(sd_dp)) {
+		sd_dp->defer_t = SDEB_DEFER_NONE;
+		return true;
+	}
 	return false;
 }
 
@@ -9293,10 +9306,13 @@ static int scsi_debug_queuecommand(struct Scsi_Host *shost,
 				   struct scsi_cmnd *scp)
 {
 	u8 sdeb_i;
+	struct sdebug_scsi_cmd *sdsc = scsi_cmd_priv(scp);
+	struct sdebug_defer *sd_dp = &sdsc->sd_dp;
 	struct scsi_device *sdp = scp->device;
 	const struct opcode_info_t *oip;
 	const struct opcode_info_t *r_oip;
 	struct sdebug_dev_info *devip;
+	unsigned long spinlock_flags;
 	u8 *cmd = scp->cmnd;
 	int (*r_pfp)(struct scsi_cmnd *, struct sdebug_dev_info *);
 	int (*pfp)(struct scsi_cmnd *, struct sdebug_dev_info *) = NULL;
@@ -9353,6 +9369,9 @@ static int scsi_debug_queuecommand(struct Scsi_Host *shost,
 
 	if (sdebug_timeout_cmd(scp)) {
 		scmd_printk(KERN_INFO, scp, "timeout command 0x%x\n", opcode);
+		spin_lock_irqsave(&sdsc->lock, spinlock_flags);
+		sd_dp->defer_t = SDEB_DEFER_FAKE_TIMEOUT;
+		spin_unlock_irqrestore(&sdsc->lock, spinlock_flags);
 		return 0;
 	}
 
@@ -9451,8 +9470,12 @@ static int scsi_debug_queuecommand(struct Scsi_Host *shost,
 	if (sdebug_fake_rw && (F_FAKE_RW & flags))
 		goto fini;
 	if (unlikely(sdebug_every_nth)) {
-		if (fake_timeout(scp))
+		if (fake_timeout(scp)) {
+			spin_lock_irqsave(&sdsc->lock, spinlock_flags);
+			sd_dp->defer_t = SDEB_DEFER_FAKE_TIMEOUT;
+			spin_unlock_irqrestore(&sdsc->lock, spinlock_flags);
 			return 0;	/* ignore command: make trouble */
+		}
 	}
 	if (likely(oip->pfp))
 		pfp = oip->pfp;	/* calls a resp_* function */
