@@ -9729,6 +9729,9 @@ void mgmt_device_connected(struct hci_dev *hdev, struct hci_conn *conn,
 {
 	struct sk_buff *skb;
 	struct mgmt_ev_device_connected *ev;
+	struct hci_cp_read_remote_version cp;
+
+	memset(&cp, 0, sizeof(cp));
 	u16 eir_len = 0;
 	u32 flags = 0;
 
@@ -9775,6 +9778,8 @@ void mgmt_device_connected(struct hci_dev *hdev, struct hci_conn *conn,
 	ev->eir_len = cpu_to_le16(eir_len);
 
 	mgmt_event_skb(skb, NULL);
+
+	hci_send_cmd(hdev, HCI_OP_READ_REMOTE_VERSION, sizeof(cp), &cp);
 }
 
 static void unpair_device_rsp(struct mgmt_pending_cmd *cmd, void *data)
