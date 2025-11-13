@@ -298,10 +298,6 @@ struct drm_sched_fence {
          */
 	struct drm_gpu_scheduler	*sched;
         /**
-         * @lock: the lock used by the scheduled and the finished fences.
-         */
-	spinlock_t			lock;
-        /**
          * @owner: job owner for debugging
          */
 	void				*owner;
