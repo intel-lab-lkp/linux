@@ -344,6 +344,10 @@ static void rtl8187_rx_cb(struct urb *urb)
 	}
 
 	if (!priv->is_rtl8187b) {
+		if (skb->len < sizeof(struct rtl8187_rx_hdr)) {
+			dev_kfree_skb_irq(skb);
+			return;
+		}
 		struct rtl8187_rx_hdr *hdr =
 			(typeof(hdr))(skb_tail_pointer(skb) - sizeof(*hdr));
 		flags = le32_to_cpu(hdr->flags);
@@ -355,6 +359,10 @@ static void rtl8187_rx_cb(struct urb *urb)
 		rx_status.antenna = (hdr->signal >> 7) & 1;
 		rx_status.mactime = le64_to_cpu(hdr->mac_time);
 	} else {
+		if (skb->len < sizeof(struct rtl8187b_rx_hdr)) {
+			dev_kfree_skb_irq(skb);
+			return;
+		}
 		struct rtl8187b_rx_hdr *hdr =
 			(typeof(hdr))(skb_tail_pointer(skb) - sizeof(*hdr));
 		/* The Realtek datasheet for the RTL8187B shows that the RX
