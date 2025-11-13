@@ -3747,6 +3747,17 @@ static void quirk_no_bus_reset(struct pci_dev *dev)
 }
 
 /*
+ * Nvidia GB10 PCIe hosts will encounter problem occasionally
+ * after SBR (secondary bus reset) is applied.
+ * SBR needs to be prevented for these PCIe hosts.
+ */
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_NVIDIA, PCI_DEVICE_ID_NVIDIA_GB10_GEN5_X4,
+			 quirk_no_bus_reset);
+
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_NVIDIA, PCI_DEVICE_ID_NVIDIA_GB10_GEN4_X1,
+			 quirk_no_bus_reset);
+
+/*
  * Some NVIDIA GPU devices do not work with bus reset, SBR needs to be
  * prevented for those affected devices.
  */
