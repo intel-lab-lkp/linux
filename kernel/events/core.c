@@ -10362,6 +10362,16 @@ static int __perf_event_overflow(struct perf_event *event,
 
 		notify_mode = in_nmi() ? TWA_NMI_CURRENT : TWA_RESUME;
 
+		/*
+		 * Task context queues the work via task_work_add() but has not yet
+		 * set event->pending_work when the same event overflows in
+		 * IRQ context. The IRQ path, seeing !event->pending_work,
+		 * queues the work again.
+		 * The double queuing causes corruption in task->task_works.
+		 * Prevent this by disabling interrupts around the critical section.
+		 */
+		guard(irqsave)();
+
 		if (!event->pending_work &&
 		    !task_work_add(current, &event->pending_task, notify_mode)) {
 			event->pending_work = pending_id;
