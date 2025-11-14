@@ -3379,6 +3379,8 @@ static __be32 nfsd4_encode_fattr4_suppattr_exclcreat(struct xdr_stream *xdr,
 		supp[0] &= ~FATTR4_WORD0_ACL;
 	if (!args->contextsupport)
 		supp[2] &= ~FATTR4_WORD2_SECURITY_LABEL;
+	supp[2] &= ~FATTR4_WORD2_TIME_DELEG_ACCESS;
+	supp[2] &= ~FATTR4_WORD2_TIME_DELEG_MODIFY;
 
 	supp[0] &= NFSD_SUPPATTR_EXCLCREAT_WORD0;
 	supp[1] &= NFSD_SUPPATTR_EXCLCREAT_WORD1;
