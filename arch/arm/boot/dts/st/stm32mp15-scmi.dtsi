@@ -13,6 +13,7 @@
 			method = "smc";
 			interrupt-parent = <&intc>;
 			interrupts = <GIC_PPI 15 (GIC_CPU_MASK_SIMPLE(1) | IRQ_TYPE_LEVEL_LOW)>;
+			bootph-some-ram;
 		};
 
 		scmi: scmi {
@@ -20,6 +21,7 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 			linaro,optee-channel-id = <0>;
+			bootph-some-ram;
 
 			scmi_clk: protocol@14 {
 				reg = <0x14>;
@@ -64,12 +66,36 @@
 	};
 };
 
+&iwdg2 {
+	bootph-all;
+};
+
+&ltdc {
+	bootph-some-ram;
+};
+
+&pinctrl {
+	bootph-all;
+};
+
+&pinctrl_z {
+	bootph-all;
+};
+
+&rcc {
+	bootph-all;
+};
+
 &reg11 {
 	status = "disabled";
 };
 
 &reg18 {
 	status = "disabled";
+};
+
+&scmi {
+	bootph-some-ram;
 };
 
 &usb33 {
