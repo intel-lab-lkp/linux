@@ -19,17 +19,12 @@ properties:
       - nvidia,tegra264-pmc
 
   reg:
-    minItems: 4
+    minItems: 3
     maxItems: 5
 
   reg-names:
-    minItems: 4
-    items:
-      - const: pmc
-      - const: wake
-      - const: aotag
-      - enum: [ scratch, misc ]
-      - const: misc
+    minItems: 3
+    maxItems: 5
 
   interrupt-controller: true
 
@@ -50,12 +45,12 @@ allOf:
             const: nvidia,tegra186-pmc
     then:
       properties:
-        reg:
-          maxItems: 4
         reg-names:
-          maxItems: 4
-          contains:
-            const: scratch
+          items:
+            - const: pmc
+            - const: wake
+            - const: aotag
+            - const: scratch
 
   - if:
       properties:
@@ -64,21 +59,45 @@ allOf:
             const: nvidia,tegra194-pmc
     then:
       properties:
-        reg:
-          minItems: 5
         reg-names:
-          minItems: 5
+          items:
+            - const: pmc
+            - const: wake
+            - const: aotag
+            - const: scratch
+            - const: misc
 
   - if:
       properties:
         compatible:
           contains:
-            const: nvidia,tegra234-pmc
+            enum:
+              - nvidia,tegra234-pmc
+              - nvidia,tegra264-pmc
     then:
       properties:
         reg-names:
-          contains:
-            const: misc
+          oneOf:
+            - items:
+                - const: pmc
+                - const: wake
+                - const: aotag
+                - const: scratch
+                - const: misc
+            - items:
+                - const: pmc
+                - const: wake
+                - const: aotag
+                - const: misc
+            - items:
+                - const: pmc
+                - const: wake
+                - const: scratch
+                - const: misc
+            - items:
+                - const: pmc
+                - const: wake
+                - const: misc
 
 patternProperties:
   "^[a-z0-9]+-[a-z0-9]+$":
