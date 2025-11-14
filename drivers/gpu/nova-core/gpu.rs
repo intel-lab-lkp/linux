@@ -62,7 +62,7 @@ macro_rules! define_chipset {
             fn try_from(value: u32) -> Result<Self, Self::Error> {
                 match value {
                     $( $value => Ok(Chipset::$variant), )*
-                    _ => Err(ENODEV),
+                    _ => Err(ENOTSUPP),
                 }
             }
         }
@@ -143,7 +143,7 @@ impl TryFrom<u8> for Architecture {
             0x16 => Ok(Self::Turing),
             0x17 => Ok(Self::Ampere),
             0x19 => Ok(Self::Ada),
-            _ => Err(ENODEV),
+            _ => Err(ENOTSUPP),
         }
     }
 }
