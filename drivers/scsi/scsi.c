@@ -61,6 +61,7 @@
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_dbg.h>
 #include <scsi/scsi_device.h>
+#include <scsi/scsi_devinfo.h>
 #include <scsi/scsi_driver.h>
 #include <scsi/scsi_eh.h>
 #include <scsi/scsi_host.h>
@@ -543,6 +544,126 @@ void scsi_attach_vpd(struct scsi_device *sdev)
 	}
 	kfree(vpd_buf);
 }
+
+/**
+ * scsi_update_inquiry_data - Update standard INQUIRY data for a SCSI device
+ * @sdev: The device to update
+ * @inq_result: Buffer containing new INQUIRY data
+ * @inq_len: Length of inquiry data
+ *
+ * Updates the standard INQUIRY data (vendor, model, rev, peripheral qualifier,
+ * device type, removable media flag) and capability flags derived from INQUIRY
+ * data for an existing SCSI device. This is used when reprobing a device to get
+ * fresh INQUIRY information. The old inquiry buffer is freed and replaced with
+ * the new data under the protection of inquiry_mutex.
+ *
+ * Blacklist flags (BLIST_ISROM, BLIST_NOT_LOCKABLE, BLIST_NOTQ) are respected
+ * when updating device properties.
+ *
+ * Returns:
+ *   0 on success
+ *   1 if device type or peripheral qualifier changed (caller should call device_reprobe())
+ *  -ENOMEM on allocation failure
+ */
+int scsi_update_inquiry_data(struct scsi_device *sdev,
+			      unsigned char *inq_result, size_t inq_len)
+{
+	unsigned char *new_inquiry;
+	unsigned char old_type;
+	unsigned char old_periph_qual;
+
+	/* Allocate new inquiry buffer */
+	new_inquiry = kmemdup(inq_result, max_t(size_t, inq_len, 36),
+			      GFP_KERNEL);
+	if (!new_inquiry)
+		return -ENOMEM;
+
+	/* Update inquiry data under mutex protection */
+	mutex_lock(&sdev->inquiry_mutex);
+
+	/* Save old values to detect changes that require reprobe */
+	old_type = sdev->type;
+	old_periph_qual = sdev->inq_periph_qual;
+
+	kfree(sdev->inquiry);
+	sdev->inquiry = new_inquiry;
+	sdev->vendor = (char *)(sdev->inquiry + 8);
+	sdev->model = (char *)(sdev->inquiry + 16);
+	sdev->rev = (char *)(sdev->inquiry + 32);
+	sdev->inq_periph_qual = (inq_result[0] >> 5) & 7;
+
+	/*
+	 * Update device type and removable media flag from INQUIRY bytes 0-1.
+	 * This is the single source of truth for setting these fields from
+	 * INQUIRY data, used by both initial probe (scsi_add_lun) and reprobe
+	 * (scsi_rescan_device, scsi_probe_and_add_lun).
+	 */
+	if (!(sdev->sdev_bflags & BLIST_ISROM)) {
+		sdev->type = inq_result[0] & 0x1f;
+		sdev->removable = (inq_result[1] & 0x80) >> 7;
+
+		/*
+		 * some devices may respond with wrong type for
+		 * well-known logical units. Force well-known type
+		 * to enumerate them correctly.
+		 */
+		if (scsi_is_wlun(sdev->lun) && sdev->type != TYPE_WLUN) {
+			sdev_printk(KERN_WARNING, sdev,
+				    "%s: correcting incorrect peripheral device type 0x%x for W-LUN 0x%16xhN\n",
+				    __func__, sdev->type, (unsigned int)sdev->lun);
+			sdev->type = TYPE_WLUN;
+		}
+
+		/* lockable defaults to removable, unless blacklist overrides */
+		sdev->lockable = sdev->removable;
+		if (sdev->sdev_bflags & BLIST_NOT_LOCKABLE)
+			sdev->lockable = 0;
+	}
+
+	/* Update capability flags from INQUIRY byte 7 */
+	sdev->soft_reset = ((inq_result[7] & 1) && ((inq_result[3] & 7) == 2)) ? 1 : 0;
+
+	/* Update protocol support flags */
+	sdev->ppr = (sdev->scsi_level >= SCSI_3 ||
+		     (inq_len > 56 && inq_result[56] & 0x04)) ? 1 : 0;
+	sdev->wdtr = (inq_result[7] & 0x60) ? 1 : 0;
+	sdev->sdtr = (inq_result[7] & 0x10) ? 1 : 0;
+
+	/* Update tagged queuing support */
+	sdev->tagged_supported = ((sdev->scsi_level >= SCSI_2) &&
+				  (inq_result[7] & 2) &&
+				  !(sdev->sdev_bflags & BLIST_NOTQ)) ? 1 : 0;
+	sdev->simple_tags = sdev->tagged_supported;
+
+	mutex_unlock(&sdev->inquiry_mutex);
+
+	/*
+	 * If device type or peripheral qualifier changed, return a special
+	 * code to indicate that caller should trigger device_reprobe() to
+	 * re-match with appropriate upper-layer driver.
+	 *
+	 * - Type changes require different drivers (sd vs sr vs st, etc.)
+	 * - PQ changes affect scsi_bus_match() which only matches PQ == 0
+	 *
+	 * Note: We check this AFTER updating all fields and releasing the
+	 * mutex, so all INQUIRY-derived data is current regardless of whether
+	 * reprobe is needed.
+	 */
+	if (old_type != sdev->type || old_periph_qual != sdev->inq_periph_qual) {
+		if (old_type != sdev->type)
+			sdev_printk(KERN_NOTICE, sdev,
+				    "device type changed from %d to %d\n",
+				    old_type, sdev->type);
+		if (old_periph_qual != sdev->inq_periph_qual)
+			sdev_printk(KERN_NOTICE, sdev,
+				    "peripheral qualifier changed from %d to %d\n",
+				    old_periph_qual, sdev->inq_periph_qual);
+		return 1; /* Type or PQ changed - caller should reprobe */
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(scsi_update_inquiry_data);
 
 /**
  * scsi_report_opcode - Find out if a given command is supported
