@@ -632,7 +632,9 @@ stmmac_probe_config_dt(struct platform_device *pdev, u8 *mac)
 			dev_warn(&pdev->dev, "Cannot get CSR clock\n");
 			plat->stmmac_clk = NULL;
 		}
-		clk_prepare_enable(plat->stmmac_clk);
+		rc = clk_prepare_enable(plat->stmmac_clk);
+		if (rc < 0)
+			dev_warn(&pdev->dev, "Cannot enable CSR clock: %d\n", rc);
 	}
 
 	plat->pclk = devm_clk_get_optional(&pdev->dev, "pclk");
@@ -640,7 +642,12 @@ stmmac_probe_config_dt(struct platform_device *pdev, u8 *mac)
 		ret = plat->pclk;
 		goto error_pclk_get;
 	}
-	clk_prepare_enable(plat->pclk);
+	rc = clk_prepare_enable(plat->pclk);
+	if (rc < 0) {
+		ret = ERR_PTR(rc);
+		dev_err(&pdev->dev, "Cannot enable pclk: %d\n", rc);
+		goto error_pclk_get;
+	}
 
 	/* Fall-back to main clock in case of no PTP ref is passed */
 	plat->clk_ptp_ref = devm_clk_get(&pdev->dev, "ptp_ref");
