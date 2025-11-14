@@ -416,6 +416,8 @@ xfs_refcount_update_finish_item(
 		       ri->ri_type == XFS_REFCOUNT_DECREASE);
 		return -EAGAIN;
 	}
+	if (error == -EAGAIN)
+		return error;
 
 	xfs_refcount_update_cancel_item(item);
 	return error;

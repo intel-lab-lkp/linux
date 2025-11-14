@@ -429,6 +429,7 @@ xfs_refcount_split_extent(
 	struct xfs_refcount_irec	rcext, tmp;
 	int				found_rec;
 	int				error;
+	struct xfs_refcount_irec	saved_rcext;
 
 	*shape_changed = false;
 	error = xfs_refcount_lookup_le(cur, domain, agbno, &found_rec);
@@ -453,6 +454,9 @@ xfs_refcount_split_extent(
 	*shape_changed = true;
 	trace_xfs_refcount_split_extent(cur, &rcext, agbno);
 
+	/* Save the original extent for potential rollback */
+	saved_rcext = rcext;
+
 	/* Establish the right extent. */
 	tmp = rcext;
 	tmp.rc_startblock = agbno;
@@ -465,8 +469,17 @@ xfs_refcount_split_extent(
 	tmp = rcext;
 	tmp.rc_blockcount = agbno - rcext.rc_startblock;
 	error = xfs_refcount_insert(cur, &tmp, &found_rec);
-	if (error)
+	if (error) {
+		/*
+		 * If failed to insert the left extent, we need to restore the
+		 * right extent to its original state to maintain consistency.
+		 */
+		int ret = xfs_refcount_update(cur, &saved_rcext);
+
+		if (ret)
+			error = ret;
 		goto out_error;
+	}
 	if (XFS_IS_CORRUPT(cur->bc_mp, found_rec != 1)) {
 		xfs_btree_mark_sick(cur);
 		error = -EFSCORRUPTED;

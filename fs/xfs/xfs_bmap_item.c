@@ -403,6 +403,9 @@ xfs_bmap_update_finish_item(
 		ASSERT(bi->bi_type == XFS_BMAP_UNMAP);
 		return -EAGAIN;
 	}
+	/* trigger a trans roll. */
+	if (error == -EAGAIN)
+		return error;
 
 	xfs_bmap_update_cancel_item(item);
 	return error;

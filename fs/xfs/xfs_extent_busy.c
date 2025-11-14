@@ -631,6 +631,13 @@ xfs_extent_busy_flush(
 
 		if (alloc_flags & XFS_ALLOC_FLAG_FREEING)
 			return -EAGAIN;
+
+		/*
+		 * To avoid deadlocks if alloc_flags without any FLAG set
+		 * and t_busy is not empty.
+		 */
+		if (!alloc_flags && busy_gen == READ_ONCE(pag->pagb_gen))
+			return -EAGAIN;
 	}
 
 	/* Wait for committed busy extents to resolve. */
