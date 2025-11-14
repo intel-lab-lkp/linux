@@ -37,10 +37,6 @@ static inline bool try_assign_cnt(struct unwind_task_info *info, u32 cnt)
 }
 #endif
 
-/* Make the cache fit in a 4K page */
-#define UNWIND_MAX_ENTRIES					\
-	((SZ_4K - sizeof(struct unwind_cache)) / sizeof(long))
-
 /* Guards adding to or removing from the list of callbacks */
 static DEFINE_MUTEX(callback_mutex);
 static LIST_HEAD(callbacks);
