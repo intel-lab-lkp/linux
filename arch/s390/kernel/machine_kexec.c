@@ -248,7 +248,7 @@ static void __noreturn __do_machine_kexec(void *data)
 /*
  * Reset system and call either kdump or normal kexec
  */
-static void __machine_kexec(void *data)
+static void __noreturn __machine_kexec(void *data)
 {
 	pfault_fini();
 	tracing_off();
