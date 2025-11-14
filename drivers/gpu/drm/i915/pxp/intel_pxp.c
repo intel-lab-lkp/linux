@@ -3,6 +3,7 @@
  * Copyright(c) 2020 Intel Corporation.
  */
 
+#include <linux/mei_me.h>
 #include <linux/workqueue.h>
 
 #include <drm/drm_print.h>
@@ -196,6 +197,15 @@ static struct intel_gt *find_gt_for_required_protected_content(struct drm_i915_p
 	return NULL;
 }
 
+static bool mei_device_available(void)
+{
+#if IS_ENABLED(CONFIG_INTEL_MEI_ME)
+	return pci_dev_present(mei_me_pci_tbl);
+#else
+	return false;
+#endif
+}
+
 int intel_pxp_init(struct drm_i915_private *i915)
 {
 	struct intel_gt *gt;
@@ -203,6 +213,21 @@ int intel_pxp_init(struct drm_i915_private *i915)
 
 	if (intel_gt_is_wedged(to_gt(i915)))
 		return -ENOTCONN;
+
+	/*
+	 * iGPUs require CSME to be available to use PXP. Note that the
+	 * availability of CSME might change after we check, but we only support
+	 * PXP in the case where the CSME device is available from boot and
+	 * stays that way. If CSME was not initially available and appears later
+	 * we'll just continue without PXP, while if it was available and is
+	 * then removed we'll catch it via the component unbind callback and
+	 * handle it gracefully. Therefore, we don't require any locking around
+	 * the state checking.
+	 */
+	if (!IS_DGFX(i915) && !mei_device_available()) {
+		drm_dbg(&i915->drm, "skipping PXP init due to missing ME device\n");
+		return -ENODEV;
+	}
 
 	/*
 	 * NOTE: Get the ctrl_gt before checking intel_pxp_is_supported since
