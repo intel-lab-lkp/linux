@@ -3830,7 +3830,7 @@ host_trace_buffer_enable_store(struct device *cdev,
 }
 static DEVICE_ATTR_RW(host_trace_buffer_enable);
 
-/*********** diagnostic trigger suppport *********************************/
+/*********** diagnostic trigger support *********************************/
 
 /**
  * diag_trigger_master_show - show the diag_trigger_master attribute
@@ -4133,7 +4133,7 @@ diag_trigger_mpi_store(struct device *cdev,
 
 static DEVICE_ATTR_RW(diag_trigger_mpi);
 
-/*********** diagnostic trigger suppport *** END ****************************/
+/*********** diagnostic trigger support *** END ****************************/
 
 /*****************************************/
 
