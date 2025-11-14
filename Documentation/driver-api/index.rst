@@ -128,8 +128,10 @@ Subsystem-specific APIs
    pwm
    pwrseq
    regulator
+   remoteproc
    reset
    rfkill
+   rpmsg
    s390-drivers
    scsi
    serial/index
