@@ -38,6 +38,7 @@
 #include "amdgpu_display.h"
 #include "amd_acpi.h"
 #include "atom.h"
+#include "amdgpu_atomfirmware.h"
 
 /* Declare GUID for AMD _DSM method for XCCs */
 static const guid_t amd_xcc_dsm_guid = GUID_INIT(0x8267f5d5, 0xa556, 0x44f2,
@@ -125,6 +126,7 @@ struct amdgpu_atcs {
 	acpi_handle handle;
 
 	struct amdgpu_atcs_functions functions;
+	struct amdgpu_uma_carveout_info uma_info;
 };
 
 static struct amdgpu_acpi_priv {
