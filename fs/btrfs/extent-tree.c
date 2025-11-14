@@ -2876,6 +2876,9 @@ void btrfs_handle_fully_remapped_bgs(struct btrfs_fs_info *fs_info)
 			return;
 		}
 
+		btrfs_discard_extent(fs_info, block_group->start,
+				     block_group->length, NULL, false);
+
 		/*
 		 * Set num_stripes to 0, so that btrfs_remove_dev_extents()
 		 * won't run a second time.
