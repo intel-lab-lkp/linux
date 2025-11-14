@@ -13,4 +13,6 @@ void intel_parent_irq_synchronize(struct intel_display *display);
 
 bool intel_parent_vgpu_active(struct intel_display *display);
 
+bool intel_parent_fence_support_legacy(struct intel_display *display);
+
 #endif /* __INTEL_PARENT_H__ */

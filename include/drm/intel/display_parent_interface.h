@@ -51,6 +51,9 @@ struct intel_display_parent_interface {
 
 	/** @vgpu_active: Is vGPU active? Optional. */
 	bool (*vgpu_active)(struct drm_device *drm);
+
+	/** @fence_support_legacy: Support legacy fencing? Optional. */
+	bool (*fence_support_legacy)(struct drm_device *drm);
 };
 
 #endif

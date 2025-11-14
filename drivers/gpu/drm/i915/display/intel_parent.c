@@ -36,3 +36,8 @@ bool intel_parent_vgpu_active(struct intel_display *display)
 {
 	return display->parent->vgpu_active && display->parent->vgpu_active(display->drm);
 }
+
+bool intel_parent_fence_support_legacy(struct intel_display *display)
+{
+	return display->parent->fence_support_legacy && display->parent->fence_support_legacy(display->drm);
+}
