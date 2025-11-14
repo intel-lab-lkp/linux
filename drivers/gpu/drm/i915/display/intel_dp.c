@@ -591,7 +591,10 @@ intel_dp_set_source_rates(struct intel_dp *intel_dp)
 			source_rates = mtl_rates;
 			size = ARRAY_SIZE(mtl_rates);
 		}
-		max_rate = mtl_max_source_rate(intel_dp);
+		if (display->platform.pantherlake_wildcatlake)
+			max_rate = 810000;
+		else
+			max_rate = mtl_max_source_rate(intel_dp);
 	} else if (DISPLAY_VER(display) >= 11) {
 		source_rates = icl_rates;
 		size = ARRAY_SIZE(icl_rates);
