@@ -206,7 +206,7 @@ struct landlock_net_port_attr {
  *
  * The following access rights apply only to files:
  *
- * - %LANDLOCK_ACCESS_FS_EXECUTE: Execute a file.
+ * - %LANDLOCK_ACCESS_FS_EXECUTE: Execute a file. Note fexecve(2) reopens it.
  * - %LANDLOCK_ACCESS_FS_WRITE_FILE: Open a file with write access.  When
  *   opening files for writing, you will often additionally need the
  *   %LANDLOCK_ACCESS_FS_TRUNCATE right.  In many cases, these system calls
