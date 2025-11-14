@@ -355,7 +355,7 @@ impl LibosMemoryRegionInitArgument {
         Self(bindings::LibosMemoryRegionInitArgument {
             id8: id8(name),
             pa: obj.dma_handle(),
-            size: num::usize_as_u64(obj.size()),
+            size: num::usize_as_u64(obj.size().next_multiple_of(GSP_PAGE_SIZE)),
             kind: num::u32_into_u8::<
                 { bindings::LibosMemoryRegionKind_LIBOS_MEMORY_REGION_CONTIGUOUS },
             >(),
