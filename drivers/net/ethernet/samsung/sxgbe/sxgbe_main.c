@@ -1063,7 +1063,12 @@ static int sxgbe_open(struct net_device *dev)
 	struct sxgbe_priv_data *priv = netdev_priv(dev);
 	int ret, queue_num;
 
-	clk_prepare_enable(priv->sxgbe_clk);
+	ret = clk_prepare_enable(priv->sxgbe_clk);
+	if (ret < 0) {
+		netdev_err(dev, "%s: Cannot enable clock (error: %d)\n",
+			   __func__, ret);
+		goto clk_error;
+	}
 
 	sxgbe_check_ether_addr(priv);
 
@@ -1195,6 +1200,7 @@ init_error:
 phy_error:
 	clk_disable_unprepare(priv->sxgbe_clk);
 
+clk_error:
 	return ret;
 }
 
