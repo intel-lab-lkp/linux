@@ -256,6 +256,7 @@ typedef union efi_boot_services efi_boot_services_t;
 #define EFI_RESET_COLD 0
 #define EFI_RESET_WARM 1
 #define EFI_RESET_SHUTDOWN 2
+#define EFI_RESET_PLATFORM_SPECIFIC 3
 
 /*
  * EFI Runtime Services table
@@ -874,7 +875,7 @@ static inline bool efi_enabled(int feature)
 {
 	return test_bit(feature, &efi.flags) != 0;
 }
-extern void efi_reboot(enum reboot_mode reboot_mode, const char *__unused);
+extern void efi_reboot(enum reboot_mode reboot_mode, const char *data);
 
 bool __pure __efi_soft_reserve_enabled(void);
 
@@ -895,7 +896,7 @@ static inline bool efi_enabled(int feature)
 	return false;
 }
 static inline void
-efi_reboot(enum reboot_mode reboot_mode, const char *__unused) {}
+efi_reboot(enum reboot_mode reboot_mode, const char *data) {}
 
 static inline bool efi_soft_reserve_enabled(void)
 {

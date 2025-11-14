@@ -10,7 +10,7 @@ static struct sys_off_handler *efi_sys_off_handler;
 
 int efi_reboot_quirk_mode = -1;
 
-void efi_reboot(enum reboot_mode reboot_mode, const char *__unused)
+void efi_reboot(enum reboot_mode reboot_mode, const char *data)
 {
 	const char *str[] = { "cold", "warm", "shutdown", "platform" };
 	int efi_mode, cap_reset_mode;
@@ -18,14 +18,18 @@ void efi_reboot(enum reboot_mode reboot_mode, const char *__unused)
 	if (!efi_rt_services_supported(EFI_RT_SUPPORTED_RESET_SYSTEM))
 		return;
 
-	switch (reboot_mode) {
-	case REBOOT_WARM:
-	case REBOOT_SOFT:
-		efi_mode = EFI_RESET_WARM;
-		break;
-	default:
-		efi_mode = EFI_RESET_COLD;
-		break;
+	if (data) {
+		efi_mode = EFI_RESET_PLATFORM_SPECIFIC;
+	} else {
+		switch (reboot_mode) {
+		case REBOOT_WARM:
+		case REBOOT_SOFT:
+			efi_mode = EFI_RESET_WARM;
+			break;
+		default:
+			efi_mode = EFI_RESET_COLD;
+			break;
+		}
 	}
 
 	/*
@@ -43,7 +47,8 @@ void efi_reboot(enum reboot_mode reboot_mode, const char *__unused)
 		efi_mode = cap_reset_mode;
 	}
 
-	efi.reset_system(efi_mode, EFI_SUCCESS, 0, NULL);
+	efi.reset_system(efi_mode, EFI_SUCCESS, sizeof(data),
+			 (efi_char16_t *)data);
 }
 
 bool __weak efi_poweroff_required(void)
