@@ -1420,7 +1420,20 @@ static int radeon_pm_init_dpm(struct radeon_device *rdev)
 	/* default to balanced state */
 	rdev->pm.dpm.state = POWER_STATE_TYPE_BALANCED;
 	rdev->pm.dpm.user_state = POWER_STATE_TYPE_BALANCED;
-	rdev->pm.dpm.forced_level = RADEON_DPM_FORCED_LEVEL_AUTO;
+
+	switch (rdev->pdev->device) {
+	case 0x67B0:
+	case 0x67B1:
+		/* The "auto" DPM level is known to hang these
+		 * high-performance grenada variants.
+		 */
+		rdev->pm.dpm.forced_level = RADEON_DPM_FORCED_LEVEL_HIGH;
+		break;
+	default:
+		rdev->pm.dpm.forced_level = RADEON_DPM_FORCED_LEVEL_AUTO;
+		break;
+	}
+
 	rdev->pm.default_sclk = rdev->clock.default_sclk;
 	rdev->pm.default_mclk = rdev->clock.default_mclk;
 	rdev->pm.current_sclk = rdev->clock.default_sclk;
