@@ -216,6 +216,10 @@
 		at25,byte-len = <0x8000>;
 		at25,addr-mode = <2>;
 		at25,page-size = <64>;
+
+		size = <0x8000>;
+		address-width = <16>;
+		pagesize = <64>;
 	};
 };
 
