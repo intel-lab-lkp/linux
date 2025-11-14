@@ -77,8 +77,21 @@ union hdmi_scdc_update_read_data {
 		uint8_t STATUS_UPDATE:1;
 		uint8_t CED_UPDATE:1;
 		uint8_t RR_TEST:1;
-		uint8_t RESERVED:5;
+		uint8_t RESERVED0:1;
+		uint8_t FRL_START:1;
+		uint8_t FLT_UPDATE:1;
+		uint8_t RESERVED:2;
 		uint8_t RESERVED2:8;
+	} fields;
+};
+
+union hdmi_scdc_config_data {
+	uint8_t byte[2];
+	struct {
+		uint8_t RR_ENABLE:1;
+		uint8_t RESERVED:7;
+		uint8_t FRL_RATE:4;
+		uint8_t FFE_LEVELS:4;
 	} fields;
 };
 
@@ -89,7 +102,20 @@ union hdmi_scdc_status_flags_data {
 		uint8_t CH0_LOCKED:1;
 		uint8_t CH1_LOCKED:1;
 		uint8_t CH2_LOCKED:1;
-		uint8_t RESERVED:4;
+		uint8_t LANE3_LOCKED:1;
+		uint8_t RESERVED:1;
+		uint8_t FLT_READY:1;
+		uint8_t RESERVED2:1;
+	} fields;
+};
+
+union hdmi_scdc_lane_status_data {
+	uint8_t byte[2];
+	struct {
+		uint8_t ltp_0:4;
+		uint8_t ltp_1:4;
+		uint8_t ltp_2:4;
+		uint8_t ltp_3:4;
 	} fields;
 };
 
