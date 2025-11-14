@@ -24,18 +24,57 @@
 
 static size_t page_size;
 
-static void test_file_read_write(int fd, size_t total_size)
+static void test_file_read(int fd, size_t total_size)
 {
 	char buf[64];
 
 	TEST_ASSERT(read(fd, buf, sizeof(buf)) < 0,
 		    "read on a guest_mem fd should fail");
-	TEST_ASSERT(write(fd, buf, sizeof(buf)) < 0,
-		    "write on a guest_mem fd should fail");
 	TEST_ASSERT(pread(fd, buf, sizeof(buf), 0) < 0,
 		    "pread on a guest_mem fd should fail");
-	TEST_ASSERT(pwrite(fd, buf, sizeof(buf), 0) < 0,
-		    "pwrite on a guest_mem fd should fail");
+}
+
+static void test_write_supported(int fd, size_t total_size)
+{
+	size_t page_size = getpagesize();
+	void *buf = NULL;
+	int ret;
+
+	ret = posix_memalign(&buf, page_size, total_size);
+	TEST_ASSERT_EQ(ret, 0);
+
+	ret = pwrite(fd, buf, page_size, total_size);
+	TEST_ASSERT(ret == -1, "writing past the file size on a guest_mem fd should fail");
+	TEST_ASSERT_EQ(errno, EINVAL);
+
+	ret = pwrite(fd, buf, 1, 0);
+	TEST_ASSERT(ret == -1, "writing an unaligned count a guest_mem fd should fail");
+	TEST_ASSERT_EQ(errno, EINVAL);
+
+	ret = pwrite(fd, buf, page_size, 1);
+	TEST_ASSERT(ret == -1, "writing to an unaligned offset a guest_mem fd should fail");
+	TEST_ASSERT_EQ(errno, EINVAL);
+
+	ret = pwrite(fd, buf, page_size, 0);
+	TEST_ASSERT(ret == page_size, "write on a guest_mem fd should succeed");
+
+	free(buf);
+}
+
+static void test_write_not_supported(int fd, size_t total_size)
+{
+	size_t page_size = getpagesize();
+	void *buf = NULL;
+	int ret;
+
+	ret = posix_memalign(&buf, page_size, total_size);
+	TEST_ASSERT_EQ(ret, 0);
+
+	ret = pwrite(fd, buf, page_size, 0);
+	TEST_ASSERT(ret == -1, "write on guest_mem fd should fail");
+	TEST_ASSERT_EQ(errno, ENODEV);
+
+	free(buf);
 }
 
 static void test_mmap_cow(int fd, size_t size)
@@ -267,7 +306,7 @@ static void __test_guest_memfd(struct kvm_vm *vm, uint64_t flags)
 	test_create_guest_memfd_multiple(vm);
 	test_create_guest_memfd_invalid_sizes(vm, flags);
 
-	gmem_test(file_read_write, vm, flags);
+	gmem_test(file_read, vm, flags);
 
 	if (flags & GUEST_MEMFD_FLAG_MMAP) {
 		if (flags & GUEST_MEMFD_FLAG_INIT_SHARED) {
@@ -281,6 +320,11 @@ static void __test_guest_memfd(struct kvm_vm *vm, uint64_t flags)
 	} else {
 		gmem_test(mmap_not_supported, vm, flags);
 	}
+
+	if (flags & GUEST_MEMFD_FLAG_WRITE)
+		gmem_test(write_supported, vm, flags);
+	else
+		gmem_test(write_not_supported, vm, flags);
 
 	gmem_test(file_size, vm, flags);
 	gmem_test(fallocate, vm, flags);
@@ -299,6 +343,8 @@ static void test_guest_memfd(unsigned long vm_type)
 	flags = vm_check_cap(vm, KVM_CAP_GUEST_MEMFD_FLAGS);
 	if (flags & GUEST_MEMFD_FLAG_MMAP)
 		__test_guest_memfd(vm, GUEST_MEMFD_FLAG_MMAP);
+	if (flags & GUEST_MEMFD_FLAG_WRITE)
+		__test_guest_memfd(vm, GUEST_MEMFD_FLAG_WRITE);
 
 	/* MMAP should always be supported if INIT_SHARED is supported. */
 	if (flags & GUEST_MEMFD_FLAG_INIT_SHARED)
