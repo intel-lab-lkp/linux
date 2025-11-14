@@ -81,6 +81,7 @@
 #include "gt/intel_gt_pm.h"
 #include "gt/intel_gt_print.h"
 #include "gt/intel_rc6.h"
+#include "gt/intel_rps.h"
 
 #include "pxp/intel_pxp.h"
 #include "pxp/intel_pxp_debugfs.h"
@@ -752,6 +753,7 @@ static bool fence_support_legacy(struct drm_device *drm)
 static const struct intel_display_parent_interface parent = {
 	.rpm = &i915_display_rpm_interface,
 	.irq = &i915_display_irq_interface,
+	.rps = &i915_display_rps_interface,
 	.vgpu_active = vgpu_active,
 	.fence_support_legacy = fence_support_legacy,
 };
