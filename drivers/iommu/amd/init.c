@@ -1136,9 +1136,13 @@ static void set_dte_bit(struct dev_table_entry *dte, u8 bit)
 static bool __reuse_device_table(struct amd_iommu *iommu)
 {
 	struct amd_iommu_pci_seg *pci_seg = iommu->pci_seg;
-	u32 lo, hi, old_devtb_size;
+	struct dev_table_entry *old_dev_tbl_entry;
+	u32 lo, hi, old_devtb_size, devid;
 	phys_addr_t old_devtb_phys;
+	u16 dom_id;
+	bool dte_v;
 	u64 entry;
+	int ret;
 
 	/* Each IOMMU use separate device table with the same size */
 	lo = readl(iommu->mmio_base + MMIO_DEV_TABLE_OFFSET);
@@ -1171,6 +1175,25 @@ static bool __reuse_device_table(struct amd_iommu *iommu)
 	if (pci_seg->old_dev_tbl_cpy == NULL) {
 		pr_err("Failed to remap memory for reusing old device table!\n");
 		return false;
+	}
+
+	for (devid = 0; devid <= pci_seg->last_bdf; devid++) {
+		old_dev_tbl_entry = &pci_seg->old_dev_tbl_cpy[devid];
+		dte_v = old_dev_tbl_entry->data[0] & DTE_FLAG_V;
+		dom_id = old_dev_tbl_entry->data[1] & DEV_DOMID_MASK;
+
+		if (!dte_v || !dom_id)
+			continue;
+		/*
+		 * ID reseveration can fail with -ENOSPC when there
+		 * are multiple devices present in the same domain,
+		 * hence check only for -ENOMEM.
+		 */
+		ret = ida_alloc_range(&pdom_ids, dom_id, dom_id, GFP_ATOMIC);
+		if (ret == -ENOMEM) {
+			pr_err("Failed to reserve domain ID 0x%x\n", dom_id);
+			return false;
+		}
 	}
 
 	return true;
