@@ -422,8 +422,11 @@ xfs_qm_dquot_isolate(
 	struct xfs_qm_isolate	*isol = arg;
 	enum lru_status		ret = LRU_SKIP;
 
-	if (!spin_trylock(&dqp->q_lockref.lock))
-		goto out_miss_busy;
+	if (!spin_trylock(&dqp->q_lockref.lock)) {
+		trace_xfs_dqreclaim_busy(dqp);
+		XFS_STATS_INC(dqp->q_mount, xs_qm_dqreclaim_misses);
+		return LRU_SKIP;
+	}
 
 	/*
 	 * If something else is freeing this dquot and hasn't yet removed it
@@ -482,7 +485,6 @@ xfs_qm_dquot_isolate(
 
 out_miss_unlock:
 	spin_unlock(&dqp->q_lockref.lock);
-out_miss_busy:
 	trace_xfs_dqreclaim_busy(dqp);
 	XFS_STATS_INC(dqp->q_mount, xs_qm_dqreclaim_misses);
 	return ret;
