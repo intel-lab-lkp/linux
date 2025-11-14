@@ -72,6 +72,7 @@ static int erofs_ishare_iget5_set(struct inode *inode, void *data)
 
 	vi->fingerprint = data;
 	INIT_LIST_HEAD(&vi->backing_head);
+	INIT_LIST_HEAD(&vi->processing_head);
 	spin_lock_init(&vi->lock);
 	return 0;
 }
@@ -124,7 +125,9 @@ bool erofs_ishare_fill_inode(struct inode *inode)
 	}
 
 	INIT_LIST_HEAD(&vi->backing_link);
+	INIT_LIST_HEAD(&vi->processing_link);
 	vi->ishare = idedup;
+
 	spin_lock(&EROFS_I(idedup)->lock);
 	list_add(&vi->backing_link, &EROFS_I(idedup)->backing_head);
 	spin_unlock(&EROFS_I(idedup)->lock);
@@ -163,17 +166,28 @@ static int erofs_ishare_file_open(struct inode *inode, struct file *file)
 {
 	struct file *realfile;
 	struct inode *dedup;
+	char *buf, *filepath;
 
 	dedup = EROFS_I(inode)->ishare;
 	if (!dedup)
 		return -EINVAL;
 
-	realfile = alloc_file_pseudo(dedup, erofs_ishare_mnt, "erofs_ishare_file",
+	buf = kmalloc(PATH_MAX, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+	filepath = file_path(file, buf, PATH_MAX);
+	if (IS_ERR(filepath)) {
+		kfree(buf);
+		return -PTR_ERR(filepath);
+	}
+	realfile = alloc_file_pseudo(dedup, erofs_ishare_mnt, filepath + 1,
 				     O_RDONLY, &erofs_file_fops);
+	kfree(buf);
 	if (IS_ERR(realfile))
 		return PTR_ERR(realfile);
 
 	file_ra_state_init(&realfile->f_ra, file->f_mapping);
+	ihold(dedup);
 	realfile->private_data = EROFS_I(inode);
 	file->private_data = realfile;
 	return 0;
@@ -185,8 +199,8 @@ static int erofs_ishare_file_release(struct inode *inode, struct file *file)
 
 	if (!realfile)
 		return -EINVAL;
+	file->private_data = NULL;
 	fput(realfile);
-	realfile->private_data = NULL;
 	return 0;
 }
 
@@ -234,3 +248,83 @@ const struct file_operations erofs_ishare_fops = {
 	.get_unmapped_area = thp_get_unmapped_area,
 	.splice_read	= filemap_splice_read,
 };
+
+void erofs_read_begin(struct erofs_read_ctx *rdctx)
+{
+	struct erofs_inode *vi, *vi_dedup;
+
+	if (!rdctx->file || !erofs_is_ishare_inode(rdctx->inode))
+		return;
+
+	vi = rdctx->file->private_data;
+	vi_dedup = EROFS_I(file_inode(rdctx->file));
+
+	spin_lock(&vi_dedup->lock);
+	if (!list_empty(&vi->processing_link)) {
+		atomic_inc(&vi->processing_count);
+	} else {
+		list_add(&vi->processing_link,
+			 &vi_dedup->processing_head);
+		atomic_set(&vi->processing_count, 1);
+	}
+	spin_unlock(&vi_dedup->lock);
+}
+
+void erofs_read_end(struct erofs_read_ctx *rdctx)
+{
+	struct erofs_inode *vi, *vi_dedup;
+
+	if (!rdctx->file || !erofs_is_ishare_inode(rdctx->inode))
+		return;
+
+	vi = rdctx->file->private_data;
+	vi_dedup = EROFS_I(file_inode(rdctx->file));
+
+	spin_lock(&vi_dedup->lock);
+	if (atomic_dec_and_test(&vi->processing_count))
+		list_del_init(&vi->processing_link);
+	spin_unlock(&vi_dedup->lock);
+}
+
+/*
+ * erofs_ishare_iget - find the backing inode.
+ */
+struct inode *erofs_ishare_iget(struct inode *inode)
+{
+	struct erofs_inode *vi, *vi_dedup;
+	struct inode *realinode;
+
+	if (!erofs_is_ishare_inode(inode))
+		return igrab(inode);
+
+	vi_dedup = EROFS_I(inode);
+	spin_lock(&vi_dedup->lock);
+	/* try processing inodes first */
+	if (!list_empty(&vi_dedup->processing_head)) {
+		list_for_each_entry(vi, &vi_dedup->processing_head,
+				    processing_link) {
+			realinode = igrab(&vi->vfs_inode);
+			if (realinode) {
+				spin_unlock(&vi_dedup->lock);
+				return realinode;
+			}
+		}
+	}
+
+	/* fall back to all backing inodes */
+	DBG_BUGON(list_empty(&vi_dedup->backing_head));
+	list_for_each_entry(vi, &vi_dedup->backing_head, backing_link) {
+		realinode = igrab(&vi->vfs_inode);
+		if (realinode)
+			break;
+	}
+	spin_unlock(&vi_dedup->lock);
+
+	DBG_BUGON(!realinode);
+	return realinode;
+}
+
+void erofs_ishare_iput(struct inode *realinode)
+{
+	iput(realinode);
+}

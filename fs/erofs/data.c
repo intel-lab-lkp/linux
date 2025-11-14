@@ -5,6 +5,7 @@
  * Copyright (C) 2021, Alibaba Cloud
  */
 #include "internal.h"
+#include "ishare.h"
 #include <linux/sched/mm.h>
 #include <trace/events/erofs.h>
 
@@ -269,23 +270,27 @@ void erofs_onlinefolio_end(struct folio *folio, int err, bool dirty)
 struct erofs_iomap_iter_ctx {
 	struct page *page;
 	void *base;
+	struct inode *realinode;
 };
 
 static int erofs_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 		unsigned int flags, struct iomap *iomap, struct iomap *srcmap)
 {
-	int ret;
 	struct erofs_iomap_iter_ctx *ctx;
-	struct super_block *sb = inode->i_sb;
 	struct erofs_map_blocks map;
 	struct erofs_map_dev mdev;
 	struct iomap_iter *iter;
+	struct inode *realinode;
+	struct super_block *sb;
+	int ret;
 
 	iter = container_of(iomap, struct iomap_iter, iomap);
 	ctx = iter->private;
+	realinode = ctx ? ctx->realinode : inode;
+	sb = realinode->i_sb;
 	map.m_la = offset;
 	map.m_llen = length;
-	ret = erofs_map_blocks(inode, &map);
+	ret = erofs_map_blocks(realinode, &map);
 	if (ret < 0)
 		return ret;
 
@@ -300,7 +305,7 @@ static int erofs_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 		return 0;
 	}
 
-	if (!(map.m_flags & EROFS_MAP_META) || !erofs_inode_in_metabox(inode)) {
+	if (!(map.m_flags & EROFS_MAP_META) || !erofs_inode_in_metabox(realinode)) {
 		mdev = (struct erofs_map_dev) {
 			.m_deviceid = map.m_deviceid,
 			.m_pa = map.m_pa,
@@ -326,7 +331,7 @@ static int erofs_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 			struct erofs_buf buf = __EROFS_BUF_INITIALIZER;
 
 			ptr = erofs_read_metabuf(&buf, sb, map.m_pa,
-						 erofs_inode_in_metabox(inode));
+						 erofs_inode_in_metabox(realinode));
 			if (IS_ERR(ptr))
 				return PTR_ERR(ptr);
 			iomap->inline_data = ptr;
@@ -384,6 +389,7 @@ int erofs_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
  */
 static int erofs_read_folio(struct file *file, struct folio *folio)
 {
+	struct inode *inode = folio_inode(folio);
 	struct iomap_read_folio_ctx read_ctx = {
 		.ops		= &iomap_bio_read_ops,
 		.cur_folio	= folio,
@@ -391,16 +397,27 @@ static int erofs_read_folio(struct file *file, struct folio *folio)
 	struct erofs_iomap_iter_ctx iter_ctx = {
 		.page		= NULL,
 		.base		= NULL,
+		.realinode	= erofs_ishare_iget(inode),
+	};
+	struct erofs_read_ctx rdctx = {
+		.file		= file,
+		.inode		= inode,
 	};
 
+	if (!iter_ctx.realinode)
+		return -EIO;
 	trace_erofs_read_folio(folio, true);
 
+	erofs_read_begin(&rdctx);
 	iomap_read_folio(&erofs_iomap_ops, &read_ctx, &iter_ctx);
+	erofs_read_end(&rdctx);
+	erofs_ishare_iput(iter_ctx.realinode);
 	return 0;
 }
 
 static void erofs_readahead(struct readahead_control *rac)
 {
+	struct inode *inode = rac->mapping->host;
 	struct iomap_read_folio_ctx read_ctx = {
 		.ops		= &iomap_bio_read_ops,
 		.rac		= rac,
@@ -408,12 +425,22 @@ static void erofs_readahead(struct readahead_control *rac)
 	struct erofs_iomap_iter_ctx iter_ctx = {
 		.page		= NULL,
 		.base		= NULL,
+		.realinode	= erofs_ishare_iget(inode),
+	};
+	struct erofs_read_ctx rdctx = {
+		.file		= rac->file,
+		.inode		= inode,
 	};
 
+	if (!iter_ctx.realinode)
+		return;
 	trace_erofs_readahead(rac->mapping->host, readahead_index(rac),
 					readahead_count(rac), true);
 
+	erofs_read_begin(&rdctx);
 	iomap_readahead(&erofs_iomap_ops, &read_ctx, &iter_ctx);
+	erofs_read_end(&rdctx);
+	erofs_ishare_iput(iter_ctx.realinode);
 }
 
 static sector_t erofs_bmap(struct address_space *mapping, sector_t block)
@@ -437,6 +464,7 @@ static ssize_t erofs_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 		struct erofs_iomap_iter_ctx iter_ctx = {
 			.page = NULL,
 			.base = NULL,
+			.realinode = inode,
 		};
 
 		return iomap_dio_rw(iocb, to, &erofs_iomap_ops,
