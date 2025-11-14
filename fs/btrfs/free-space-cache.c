@@ -3068,6 +3068,7 @@ bool btrfs_is_free_space_trimmed(struct btrfs_block_group *block_group)
 	bool ret = true;
 
 	if (block_group->flags & BTRFS_BLOCK_GROUP_REMAPPED &&
+	    !test_bit(BLOCK_GROUP_FLAG_STRIPE_REMOVAL_PENDING, &block_group->runtime_flags) &&
 	    block_group->identity_remap_count == 0) {
 		return true;
 	}
@@ -3850,6 +3851,11 @@ void btrfs_trim_fully_remapped_block_group(struct btrfs_block_group *bg)
 	u64 end = btrfs_block_group_end(bg);
 	struct btrfs_chunk_map *map;
 
+	if (!test_bit(BLOCK_GROUP_FLAG_STRIPE_REMOVAL_PENDING, &bg->runtime_flags)) {
+		bg->discard_cursor = end;
+		goto skip_discard;
+	}
+
 	bytes = end - bg->discard_cursor;
 
 	if (max_discard_size &&
@@ -3888,6 +3894,7 @@ void btrfs_trim_fully_remapped_block_group(struct btrfs_block_group *bg)
 
 	btrfs_free_chunk_map(map);
 
+skip_discard:
 	if (bg->used == 0) {
 		spin_lock(&fs_info->unused_bgs_lock);
 		if (!list_empty(&bg->bg_list)) {
