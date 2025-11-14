@@ -363,7 +363,6 @@ static void ttusbir_disconnect(struct usb_interface *intf)
 
 	tt->udev = NULL;
 
-	rc_unregister_device(tt->rc);
 	led_classdev_unregister(&tt->led);
 	for (i = 0; i < NUM_URBS; i++) {
 		usb_kill_urb(tt->urb[i]);
@@ -372,6 +371,7 @@ static void ttusbir_disconnect(struct usb_interface *intf)
 		usb_free_urb(tt->urb[i]);
 	}
 	usb_kill_urb(tt->bulk_urb);
+	rc_unregister_device(tt->rc);
 	usb_free_urb(tt->bulk_urb);
 	usb_set_intfdata(intf, NULL);
 	kfree(tt);
