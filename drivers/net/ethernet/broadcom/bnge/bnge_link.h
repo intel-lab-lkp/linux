@@ -182,4 +182,10 @@ void bnge_init_ethtool_link_settings(struct bnge_net *bn);
 u32 bnge_fw_to_ethtool_speed(u16 fw_link_speed);
 int bnge_probe_phy(struct bnge_net *bd, bool fw_dflt);
 bool bnge_phy_qcaps_no_speed(struct hwrm_port_phy_qcaps_output *resp);
+int bnge_set_link_ksettings(struct net_device *dev,
+			    const struct ethtool_link_ksettings *lk_ksettings);
+int bnge_get_link_ksettings(struct net_device *dev,
+			    struct ethtool_link_ksettings *lk_ksettings);
+u32 bnge_get_link(struct net_device *dev);
+u16 bnge_get_force_speed(struct bnge_link_info *link_info);
 #endif /* _BNGE_LINK_H_ */
