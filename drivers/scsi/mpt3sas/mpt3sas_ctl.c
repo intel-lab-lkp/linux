@@ -3324,7 +3324,7 @@ static DEVICE_ATTR_RO(board_tracer);
  * @attr: ?
  * @buf: the buffer returned
  *
- * This is for firmware implemention for deboucing device
+ * This is for firmware implementation for debouncing device
  * removal events.
  *
  * A sysfs 'read-only' shost attribute.
@@ -3346,7 +3346,7 @@ static DEVICE_ATTR_RO(io_delay);
  * @attr: ?
  * @buf: the buffer returned
  *
- * This is for firmware implemention for deboucing device
+ * This is for firmware implementation for debouncing device
  * removal events.
  *
  * A sysfs 'read-only' shost attribute.
