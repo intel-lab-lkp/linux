@@ -6,7 +6,7 @@
  * Copyright (C) 2007 Atmel Corporation.
  * Copyright (C) 2019 Microchip Technology Inc. and its subsidiaries
  *
- * Watchdog Timer (WDT) - System peripherals regsters.
+ * Watchdog Timer (WDT) - System peripherals registers.
  * Based on AT91SAM9261 datasheet revision D.
  * Based on SAM9X60 datasheet.
  *
