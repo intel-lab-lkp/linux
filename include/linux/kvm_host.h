@@ -736,7 +736,7 @@ static inline u64 kvm_gmem_get_supported_flags(struct kvm *kvm)
 	u64 flags = GUEST_MEMFD_FLAG_MMAP;
 
 	if (!kvm || kvm_arch_supports_gmem_init_shared(kvm))
-		flags |= GUEST_MEMFD_FLAG_INIT_SHARED;
+		flags |= GUEST_MEMFD_FLAG_INIT_SHARED | GUEST_MEMFD_FLAG_WRITE;
 
 	return flags;
 }

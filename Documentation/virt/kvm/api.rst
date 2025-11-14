@@ -6448,6 +6448,8 @@ specified via KVM_CREATE_GUEST_MEMFD.  Currently defined flags:
                                without INIT_SHARED will be marked private).
                                Shared memory can be faulted into host userspace
                                page tables. Private memory cannot.
+  GUEST_MEMFD_FLAG_WRITE       Enable using write() on the guest_memfd file
+                               descriptor.
   ============================ ================================================
 
 When the KVM MMU performs a PFN lookup to service a guest fault and the backing
