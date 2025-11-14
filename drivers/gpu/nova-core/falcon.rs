@@ -448,7 +448,6 @@ impl<E: FalconEngine + 'static> Falcon<E> {
         fw: &F,
         target_mem: FalconMem,
         load_offsets: FalconLoadTarget,
-        sec: bool,
     ) -> Result {
         const DMA_LEN: u32 = 256;
 
@@ -508,8 +507,7 @@ impl<E: FalconEngine + 'static> Falcon<E> {
 
         let cmd = regs::NV_PFALCON_FALCON_DMATRFCMD::default()
             .set_size(DmaTrfCmdSize::Size256B)
-            .set_imem(target_mem != FalconMem::Dmem)
-            .set_sec(if sec { 1 } else { 0 });
+            .with_falcon_mem(target_mem);
 
         for pos in (0..num_transfers).map(|i| i * DMA_LEN) {
             // Perform a transfer of size `DMA_LEN`.
@@ -544,15 +542,15 @@ impl<E: FalconEngine + 'static> Falcon<E> {
                 .set_mem_type(FalconFbifMemType::Physical)
         });
 
-        self.dma_wr(bar, fw, FalconMem::ImemSec, fw.imem_sec_load_params(), true)?;
-        self.dma_wr(bar, fw, FalconMem::Dmem, fw.dmem_load_params(), true)?;
+        self.dma_wr(bar, fw, FalconMem::ImemSec, fw.imem_sec_load_params())?;
+        self.dma_wr(bar, fw, FalconMem::Dmem, fw.dmem_load_params())?;
 
         if let Some(nmem) = fw.imem_ns_load_params() {
             // This code should never actual get executed, because the ImemNs
             // section only exists on firmware used by Turing and GA100, and
             // those platforms do not use DMA.  But we include this code for
             // consistency.
-            self.dma_wr(bar, fw, FalconMem::ImemNs, nmem, false)?;
+            self.dma_wr(bar, fw, FalconMem::ImemNs, nmem)?;
         }
 
         self.hal.program_brom(self, bar, &fw.brom_params())?;
