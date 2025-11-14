@@ -41,6 +41,7 @@
 #include "tree-checker.h"
 #include "raid-stripe-tree.h"
 #include "delayed-inode.h"
+#include "relocation.h"
 
 #undef SCRAMBLE_DELAYED_REFS
 
@@ -2846,6 +2847,51 @@ static int unpin_extent_range(struct btrfs_fs_info *fs_info,
 	return 0;
 }
 
+void btrfs_handle_fully_remapped_bgs(struct btrfs_fs_info *fs_info)
+{
+	struct btrfs_block_group *block_group;
+	int ret;
+
+	spin_lock(&fs_info->unused_bgs_lock);
+	while (!list_empty(&fs_info->fully_remapped_bgs)) {
+		struct btrfs_chunk_map *map;
+
+		block_group = list_first_entry(&fs_info->fully_remapped_bgs,
+					       struct btrfs_block_group,
+					       bg_list);
+		list_del_init(&block_group->bg_list);
+		spin_unlock(&fs_info->unused_bgs_lock);
+
+		map = btrfs_get_chunk_map(fs_info, block_group->start, 1);
+		if (IS_ERR(map)) {
+			btrfs_put_block_group(block_group);
+			return;
+		}
+
+		ret = btrfs_last_identity_remap_gone(map, block_group);
+		if (ret) {
+			btrfs_free_chunk_map(map);
+			btrfs_put_block_group(block_group);
+			return;
+		}
+
+		/*
+		 * Set num_stripes to 0, so that btrfs_remove_dev_extents()
+		 * won't run a second time.
+		 */
+		map->num_stripes = 0;
+
+		btrfs_free_chunk_map(map);
+
+		if (block_group->used == 0)
+			btrfs_mark_bg_unused(block_group);
+
+		btrfs_put_block_group(block_group);
+		spin_lock(&fs_info->unused_bgs_lock);
+	}
+	spin_unlock(&fs_info->unused_bgs_lock);
+}
+
 int btrfs_finish_extent_commit(struct btrfs_trans_handle *trans)
 {
 	struct btrfs_fs_info *fs_info = trans->fs_info;
@@ -2998,10 +3044,22 @@ u64 btrfs_get_extent_owner_root(struct btrfs_fs_info *fs_info,
 }
 
 static int do_free_extent_accounting(struct btrfs_trans_handle *trans,
-				     u64 bytenr, struct btrfs_squota_delta *delta)
+				     u64 bytenr, struct btrfs_squota_delta *delta,
+				     struct btrfs_path *path)
 {
 	int ret;
+	bool remapped = false;
 	u64 num_bytes = delta->num_bytes;
+
+	/* returns 1 on success and 0 on no-op */
+	ret = btrfs_remove_extent_from_remap_tree(trans, path, bytenr,
+						  num_bytes);
+	if (ret < 0) {
+		btrfs_abort_transaction(trans, ret);
+		return ret;
+	} else if (ret == 1) {
+		remapped = true;
+	}
 
 	if (delta->is_data) {
 		struct btrfs_root *csum_root;
@@ -3026,10 +3084,16 @@ static int do_free_extent_accounting(struct btrfs_trans_handle *trans,
 		return ret;
 	}
 
-	ret = btrfs_add_to_free_space_tree(trans, bytenr, num_bytes);
-	if (unlikely(ret)) {
-		btrfs_abort_transaction(trans, ret);
-		return ret;
+	/*
+	 * If remapped, FST has already been taken care of in
+	 * remove_range_from_remap_tree().
+	 */
+	if (!remapped) {
+		ret = btrfs_add_to_free_space_tree(trans, bytenr, num_bytes);
+		if (unlikely(ret)) {
+			btrfs_abort_transaction(trans, ret);
+			return ret;
+		}
 	}
 
 	ret = btrfs_update_block_group(trans, bytenr, num_bytes, false);
@@ -3395,7 +3459,7 @@ static int __btrfs_free_extent(struct btrfs_trans_handle *trans,
 		}
 		btrfs_release_path(path);
 
-		ret = do_free_extent_accounting(trans, bytenr, &delta);
+		ret = do_free_extent_accounting(trans, bytenr, &delta, path);
 	}
 	btrfs_release_path(path);
 
