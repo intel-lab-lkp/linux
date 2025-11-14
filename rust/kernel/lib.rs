@@ -261,8 +261,11 @@ macro_rules! container_of {
     ($field_ptr:expr, $Container:ty, $($fields:tt)*) => {{
         let offset: usize = ::core::mem::offset_of!($Container, $($fields)*);
         let field_ptr = $field_ptr;
-        let container_ptr = field_ptr.byte_sub(offset).cast::<$Container>();
-        $crate::assert_same_type(field_ptr, (&raw const (*container_ptr).$($fields)*).cast_mut());
+        // SAFETY: Offsetting the pointer to the container is correct because the offset was
+        // calculated validly above.
+        let container_ptr = unsafe { field_ptr.byte_sub(offset).cast::<$Container>() };
+        // SAFETY: Safe because the container_ptr was validly created above.
+        $crate::assert_same_type(field_ptr, unsafe { (&raw const (*container_ptr).$($fields)*) }.cast_mut());
         container_ptr
     }}
 }
