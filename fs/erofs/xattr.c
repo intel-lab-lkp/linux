@@ -564,3 +564,29 @@ struct posix_acl *erofs_get_acl(struct inode *inode, int type, bool rcu)
 	return acl;
 }
 #endif
+
+#ifdef CONFIG_EROFS_FS_INODE_SHARE
+int erofs_xattr_set_ishare_key(struct super_block *sb)
+{
+	struct erofs_sb_info *sbi = EROFS_SB(sb);
+	struct erofs_xattr_prefix_item *pf;
+	char *ishare_key;
+
+	if (!sbi->xattr_prefixes ||
+	    !(sbi->ishare_key_start & EROFS_XATTR_LONG_PREFIX))
+		return 0;
+
+	pf = sbi->xattr_prefixes +
+		(sbi->ishare_key_start & EROFS_XATTR_LONG_PREFIX_MASK);
+	if (!pf || pf >= sbi->xattr_prefixes + sbi->xattr_prefix_count)
+		return 0;
+	ishare_key = kmalloc(pf->infix_len + 1, GFP_KERNEL);
+	if (!ishare_key)
+		return -ENOMEM;
+	memcpy(ishare_key, pf->prefix->infix, pf->infix_len);
+	ishare_key[pf->infix_len] = '\0';
+	sbi->ishare_key = ishare_key;
+	sbi->ishare_key_idx = pf->prefix->base_index;
+	return 0;
+}
+#endif
