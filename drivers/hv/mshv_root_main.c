@@ -122,6 +122,7 @@ static struct miscdevice mshv_dev = {
  */
 static u16 mshv_passthru_hvcalls[] = {
 	HVCALL_GET_PARTITION_PROPERTY,
+	HVCALL_GET_PARTITION_PROPERTY_EX,
 	HVCALL_SET_PARTITION_PROPERTY,
 	HVCALL_INSTALL_INTERCEPT,
 	HVCALL_GET_VP_REGISTERS,
@@ -159,6 +160,7 @@ static int mshv_ioctl_passthru_hvcall(struct mshv_partition *partition,
 	unsigned int pages_order;
 	void *input_pg = NULL;
 	void *output_pg = NULL;
+	u64 pt_id = partition ? partition->pt_id : HV_PARTITION_ID_SELF;
 
 	if (copy_from_user(&args, user_args, sizeof(args)))
 		return -EFAULT;
@@ -180,7 +182,7 @@ static int mshv_ioctl_passthru_hvcall(struct mshv_partition *partition,
 	is_async = mshv_hvcall_is_async(args.code);
 	if (is_async) {
 		/* async hypercalls can only be called from partition fd */
-		if (!partition_locked)
+		if (!partition || !partition_locked)
 			return -EINVAL;
 		ret = mshv_init_async_handler(partition);
 		if (ret)
@@ -208,7 +210,7 @@ static int mshv_ioctl_passthru_hvcall(struct mshv_partition *partition,
 	 * NOTE: This only works because all the allowed hypercalls' input
 	 * structs begin with a u64 partition_id field.
 	 */
-	*(u64 *)input_pg = partition->pt_id;
+	*(u64 *)input_pg = pt_id;
 
 	if (args.reps)
 		status = hv_do_rep_hypercall(args.code, args.reps, 0,
@@ -226,7 +228,7 @@ static int mshv_ioctl_passthru_hvcall(struct mshv_partition *partition,
 	}
 
 	if (hv_result(status) == HV_STATUS_INSUFFICIENT_MEMORY) {
-		ret = hv_call_deposit_pages(NUMA_NO_NODE, partition->pt_id, 1);
+		ret = hv_call_deposit_pages(NUMA_NO_NODE, pt_id, 1);
 		if (!ret)
 			ret = -EAGAIN;
 	} else if (!hv_result_success(status)) {
@@ -1981,6 +1983,9 @@ static long mshv_dev_ioctl(struct file *filp, unsigned int ioctl,
 	case MSHV_CREATE_PARTITION:
 		return mshv_ioctl_create_partition((void __user *)arg,
 						misc->this_device);
+	case MSHV_ROOT_HVCALL:
+		return mshv_ioctl_passthru_hvcall(NULL, false,
+					(void __user *)arg);
 	}
 
 	return -ENOTTY;
