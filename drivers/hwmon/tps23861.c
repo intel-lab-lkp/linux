@@ -457,13 +457,16 @@ static char *port_poe_plus_status_string(uint8_t poe_plus, unsigned int port)
 static int tps23861_port_resistance(struct tps23861_data *data, int port)
 {
 	unsigned int raw_val;
+	int rc = 0;
 	__le16 regval;
 
-	regmap_bulk_read(data->regmap,
-			 PORT_1_RESISTANCE_LSB + PORT_N_RESISTANCE_LSB_OFFSET * port,
-			 &regval,
-			 2);
+	rc = regmap_bulk_read(data->regmap,
+			      PORT_1_RESISTANCE_LSB + PORT_N_RESISTANCE_LSB_OFFSET * port,
+			      &regval,
+			      2);
 
+	if (rc < 0)
+		return 0;
 	raw_val = le16_to_cpu(regval);
 	switch (FIELD_GET(PORT_RESISTANCE_RSN_MASK, raw_val)) {
 	case PORT_RESISTANCE_RSN_OTHER:
