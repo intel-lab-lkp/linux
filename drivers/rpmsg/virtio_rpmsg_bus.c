@@ -25,6 +25,7 @@
 #include <linux/sched.h>
 #include <linux/virtio.h>
 #include <linux/virtio_ids.h>
+#include <linux/virtio_rpmsg.h>
 #include <linux/virtio_config.h>
 #include <linux/wait.h>
 
@@ -39,7 +40,8 @@
  * @sbufs:	kernel address of tx buffers
  * @num_rbufs:	total number of buffers for rx
  * @num_sbufs:	total number of buffers for tx
- * @buf_size:	size of one rx or tx buffer
+ * @rbuf_size:	size of one rx buffer
+ * @sbuf_size:	size of one tx buffer
  * @last_sbuf:	index of last tx buffer used
  * @bufs_dma:	dma base addr of the buffers
  * @tx_lock:	protects svq, sbufs and sleepers, to allow concurrent senders.
@@ -60,7 +62,8 @@ struct virtproc_info {
 	void *rbufs, *sbufs;
 	unsigned int num_rbufs;
 	unsigned int num_sbufs;
-	unsigned int buf_size;
+	unsigned int rbuf_size;
+	unsigned int sbuf_size;
 	int last_sbuf;
 	dma_addr_t bufs_dma;
 	struct mutex tx_lock;
@@ -69,9 +72,6 @@ struct virtproc_info {
 	wait_queue_head_t sendq;
 	atomic_t sleepers;
 };
-
-/* The feature bitmap for virtio rpmsg */
-#define VIRTIO_RPMSG_F_NS	0 /* RP supports name service notifications */
 
 /**
  * struct rpmsg_hdr - common header for all rpmsg messages
@@ -130,7 +130,7 @@ struct virtio_rpmsg_channel {
  * processor.
  */
 #define MAX_RPMSG_NUM_BUFS	(256)
-#define MAX_RPMSG_BUF_SIZE	(512)
+#define DEFAULT_RPMSG_BUF_SIZE	(512)
 
 /*
  * Local addresses are dynamically allocated on-demand.
@@ -443,7 +443,7 @@ static void *get_a_tx_buf(struct virtproc_info *vrp)
 
 	/* either pick the next unused tx buffer */
 	if (vrp->last_sbuf < vrp->num_sbufs)
-		ret = vrp->sbufs + vrp->buf_size * vrp->last_sbuf++;
+		ret = vrp->sbufs + vrp->sbuf_size * vrp->last_sbuf++;
 	/* or recycle a used one */
 	else
 		ret = virtqueue_get_buf(vrp->svq, &len);
@@ -569,7 +569,7 @@ static int rpmsg_send_offchannel_raw(struct rpmsg_device *rpdev,
 	 * messaging), or to improve the buffer allocator, to support
 	 * variable-length buffer sizes.
 	 */
-	if (len > vrp->buf_size - sizeof(struct rpmsg_hdr)) {
+	if (len > vrp->sbuf_size - sizeof(struct rpmsg_hdr)) {
 		dev_err(dev, "message is too big (%d)\n", len);
 		return -EMSGSIZE;
 	}
@@ -680,7 +680,7 @@ static ssize_t virtio_rpmsg_get_mtu(struct rpmsg_endpoint *ept)
 	struct rpmsg_device *rpdev = ept->rpdev;
 	struct virtio_rpmsg_channel *vch = to_virtio_rpmsg_channel(rpdev);
 
-	return vch->vrp->buf_size - sizeof(struct rpmsg_hdr);
+	return vch->vrp->sbuf_size - sizeof(struct rpmsg_hdr);
 }
 
 static int rpmsg_recv_single(struct virtproc_info *vrp, struct device *dev,
@@ -706,7 +706,7 @@ static int rpmsg_recv_single(struct virtproc_info *vrp, struct device *dev,
 	 * We currently use fixed-sized buffers, so trivially sanitize
 	 * the reported payload length.
 	 */
-	if (len > vrp->buf_size ||
+	if (len > vrp->rbuf_size ||
 	    msg_len > (len - sizeof(struct rpmsg_hdr))) {
 		dev_warn(dev, "inbound msg too big: (%d, %d)\n", len, msg_len);
 		return -EINVAL;
@@ -739,7 +739,7 @@ static int rpmsg_recv_single(struct virtproc_info *vrp, struct device *dev,
 		dev_warn_ratelimited(dev, "msg received with no recipient\n");
 
 	/* publish the real size of the buffer */
-	rpmsg_sg_init(&sg, msg, vrp->buf_size);
+	rpmsg_sg_init(&sg, msg, vrp->rbuf_size);
 
 	/* add the buffer back to the remote processor's virtqueue */
 	err = virtqueue_add_inbuf(vrp->rvq, &sg, 1, msg, GFP_KERNEL);
@@ -888,9 +888,39 @@ static int rpmsg_probe(struct virtio_device *vdev)
 	else
 		vrp->num_sbufs = MAX_RPMSG_NUM_BUFS;
 
-	vrp->buf_size = MAX_RPMSG_BUF_SIZE;
+	/*
+	 * If VIRTIO_RPMSG_F_BUFSZ feature is supported, then configure buf
+	 * size from virtio device config space from the resource table.
+	 * If the feature is not supported, then assign default buf size.
+	 */
+	if (virtio_has_feature(vdev, VIRTIO_RPMSG_F_BUFSZ)) {
+		/* note: virtio_rpmsg_config is defined from remote view */
+		virtio_cread(vdev, struct virtio_rpmsg_config,
+			     txbuf_size, &vrp->rbuf_size);
+		virtio_cread(vdev, struct virtio_rpmsg_config,
+			     rxbuf_size, &vrp->sbuf_size);
 
-	total_buf_space = (vrp->num_rbufs + vrp->num_sbufs) * vrp->buf_size;
+		/* The buffers must hold rpmsg header atleast */
+		if (vrp->rbuf_size < sizeof(struct rpmsg_hdr) ||
+		    vrp->sbuf_size < sizeof(struct rpmsg_hdr)) {
+			dev_err(&vdev->dev,
+				"vdev config: rx buf sz = %d, tx buf sz = %d\n",
+				vrp->rbuf_size, vrp->sbuf_size);
+			err = -EINVAL;
+			goto vqs_del;
+		}
+
+		dev_dbg(&vdev->dev,
+			"vdev config: rx buf sz = 0x%x, tx buf sz = 0x%x\n",
+			vrp->rbuf_size, vrp->sbuf_size);
+	} else {
+		vrp->rbuf_size = DEFAULT_RPMSG_BUF_SIZE;
+		vrp->sbuf_size = DEFAULT_RPMSG_BUF_SIZE;
+	}
+
+	total_buf_space = (vrp->num_rbufs * vrp->rbuf_size) +
+			  (vrp->num_sbufs * vrp->sbuf_size);
+	total_buf_space = ALIGN(total_buf_space, PAGE_SIZE);
 
 	/* allocate coherent memory for the buffers */
 	bufs_va = dma_alloc_coherent(vdev->dev.parent,
@@ -908,14 +938,14 @@ static int rpmsg_probe(struct virtio_device *vdev)
 	vrp->rbufs = bufs_va;
 
 	/* and second part is dedicated for TX */
-	vrp->sbufs = bufs_va + vrp->num_rbufs * vrp->buf_size;
+	vrp->sbufs = bufs_va + (vrp->num_rbufs * vrp->rbuf_size);
 
 	/* set up the receive buffers */
 	for (i = 0; i < vrp->num_rbufs; i++) {
 		struct scatterlist sg;
-		void *cpu_addr = vrp->rbufs + i * vrp->buf_size;
+		void *cpu_addr = vrp->rbufs + i * vrp->rbuf_size;
 
-		rpmsg_sg_init(&sg, cpu_addr, vrp->buf_size);
+		rpmsg_sg_init(&sg, cpu_addr, vrp->rbuf_size);
 
 		err = virtqueue_add_inbuf(vrp->rvq, &sg, 1, cpu_addr,
 					  GFP_KERNEL);
@@ -1001,8 +1031,8 @@ static int rpmsg_remove_device(struct device *dev, void *data)
 static void rpmsg_remove(struct virtio_device *vdev)
 {
 	struct virtproc_info *vrp = vdev->priv;
-	unsigned int num_bufs = vrp->num_rbufs + vrp->num_sbufs;
-	size_t total_buf_space = num_bufs * vrp->buf_size;
+	size_t total_buf_space = (vrp->num_rbufs * vrp->rbuf_size) +
+				 (vrp->num_sbufs * vrp->sbuf_size);
 	int ret;
 
 	virtio_reset_device(vdev);
@@ -1015,6 +1045,7 @@ static void rpmsg_remove(struct virtio_device *vdev)
 
 	vdev->config->del_vqs(vrp->vdev);
 
+	total_buf_space = ALIGN(total_buf_space, PAGE_SIZE);
 	dma_free_coherent(vdev->dev.parent, total_buf_space,
 			  vrp->rbufs, vrp->bufs_dma);
 
@@ -1028,6 +1059,7 @@ static struct virtio_device_id id_table[] = {
 
 static unsigned int features[] = {
 	VIRTIO_RPMSG_F_NS,
+	VIRTIO_RPMSG_F_BUFSZ,
 };
 
 static struct virtio_driver virtio_ipc_driver = {
