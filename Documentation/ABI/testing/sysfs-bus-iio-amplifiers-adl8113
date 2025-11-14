@@ -1,0 +1,30 @@
+What:		/sys/bus/iio/devices/iio:deviceX/signal_path
+Date:		January 2025
+KernelVersion:	6.14
+Contact:	linux-iio@vger.kernel.org
+Description:
+		This attribute controls the signal routing path for the ADL8113
+		Low Noise Amplifier. The supported signal paths are:
+
+		* internal - Signal passes through internal path. Can be used with
+		  either amplifier mode (14dB gain) or bypass mode (0dB gain).
+
+		* external_a - Signal routes from RFIN to OUT_A and from IN_A to RFOUT
+		  (VA=0, VB=1). External components can be connected for filtering or
+		  additional amplification. Automatically switches to bypass mode (0dB).
+
+		* external_b - Signal routes from RFIN to OUT_B and from IN_B to RFOUT
+		  (VA=1, VB=0). External components can be connected for filtering or
+		  additional amplification. Automatically switches to bypass mode (0dB).
+
+		Note: Selecting an external path automatically sets the hardware gain
+		to 0dB (bypass mode) since external paths require bypass operation.
+
+What:		/sys/bus/iio/devices/iio:deviceX/signal_path_available
+Date:		January 2025
+KernelVersion:	6.14
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Reading this attribute returns a space-separated list of all
+		available signal paths for the ADL8113 device. The available paths
+		may depend on the current gain mode (hardwaregain setting).
