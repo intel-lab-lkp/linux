@@ -20,6 +20,10 @@ use kernel::{
 use crate::{
     dma::DmaObject,
     driver::Bar0,
+    firmware::fwsec::{
+        BootloaderDmemDescV2,
+        GenericBootloader, //
+    },
     gpu::Chipset,
     num::{
         FromSafeCast,
@@ -395,6 +399,183 @@ impl<E: FalconEngine + 'static> Falcon<E> {
 
         regs::NV_PFALCON_FALCON_RM::default()
             .set_value(regs::NV_PMC_BOOT_0::read(bar).into())
+            .write(bar, &E::ID);
+
+        Ok(())
+    }
+
+
+    /// See nvkm_falcon_pio_wr - takes a byte array instead of a FalconFirmware
+    fn pio_wr_bytes(
+        &self,
+        bar: &Bar0,
+        source: *const u8,
+        mem_base: u16,
+        length: usize,
+        target_mem: FalconMem,
+        port: u8,
+        tag: u16
+    ) -> Result {
+        // To avoid unnecessary complication in the write loop, make sure the buffer
+        // length is aligned.  It always is, which is why an assertion is okay.
+        assert!((length % 4) == 0);
+
+        // From now on, we treat the data as an array of u32
+
+        let length = length / 4;
+        let mut remaining_len: usize = length;
+        let mut img_offset: usize = 0;
+        let mut tag = tag;
+
+        // Get data as a slice of u32s
+        let img = unsafe {
+            core::slice::from_raw_parts(source as *const u32, length)
+        };
+
+        match target_mem {
+            FalconMem::ImemSec | FalconMem::ImemNs => {
+                regs::NV_PFALCON_FALCON_IMEMC::default()
+                    .set_secure(target_mem == FalconMem::ImemSec)
+                    .set_aincw(true)
+                    .set_offs(mem_base)
+                    .write(bar, &E::ID, port as usize);
+            },
+            FalconMem::Dmem => {
+                // gm200_flcn_pio_dmem_wr_init
+                regs::NV_PFALCON_FALCON_DMEMC::default()
+                    .set_aincw(true)
+                    .set_offs(mem_base)
+                    .write(bar, &E::ID, port as usize);
+            },
+        }
+
+        while remaining_len > 0 {
+            let xfer_len = core::cmp::min(remaining_len, 256 / 4); // pio->max = 256
+
+            // Perform the PIO write for the next 256 bytes.  Each tag represents
+            // a 256-byte block in IMEM/DMEM.
+            let mut len = xfer_len;
+
+            match target_mem {
+                FalconMem::ImemSec | FalconMem::ImemNs => {
+                    regs::NV_PFALCON_FALCON_IMEMT::default()
+                        .set_tag(tag)
+                        .write(bar, &E::ID, port as usize);
+
+                    while len > 0 {
+                        regs::NV_PFALCON_FALCON_IMEMD::default()
+                            .set_data(img[img_offset])
+                            .write(bar, &E::ID, port as usize);
+                        img_offset += 1;
+                        len -= 1;
+                    };
+
+                    tag += 1;
+                },
+                FalconMem::Dmem => {
+                    // tag is ignored for DMEM
+                    while len > 0 {
+                        regs::NV_PFALCON_FALCON_DMEMD::default()
+                            .set_data(img[img_offset])
+                            .write(bar, &E::ID, port as usize);
+                        img_offset += 1;
+                        len -= 1;
+                    };
+                },
+            }
+
+            remaining_len -= xfer_len;
+        }
+
+        Ok(())
+    }
+
+    /// See nvkm_falcon_pio_wr
+    fn pio_wr<F: FalconFirmware<Target = E>>(
+        &self,
+        bar: &Bar0,
+        fw: &F,
+        target_mem: FalconMem,
+        load_offsets: &FalconLoadTarget,
+        port: u8,
+        tag: u16,
+    ) -> Result {
+        // FIXME: There's probably a better way to create a pointer to inside the firmware
+        // Maybe CoherentAllocation needs to implement a method for that.
+        let start = unsafe { fw.start_ptr().add(load_offsets.src_start as usize) };
+        self.pio_wr_bytes(bar, start,
+            load_offsets.dst_start as u16,
+            load_offsets.len as usize, target_mem, port, tag)
+    }
+
+    /// Perform a PIO copy into `IMEM` and `DMEM` of `fw`, and prepare the falcon to run it.
+    pub(crate) fn pio_load<F: FalconFirmware<Target = E>>(
+        &self,
+        bar: &Bar0,
+        fw: &F,
+        gbl: Option<&GenericBootloader>
+    ) -> Result {
+        let imem_sec = fw.imem_sec_load_params();
+        let imem_ns = fw.imem_ns_load_params().unwrap();
+        let dmem = fw.dmem_load_params();
+
+        regs::NV_PFALCON_FBIF_CTL::read(bar, &E::ID)
+            .set_allow_phys_no_ctx(true)
+            .write(bar, &E::ID);
+
+        regs::NV_PFALCON_FALCON_DMACTL::default()
+            .write(bar, &E::ID);
+
+        // If the Generic Bootloader was passed, then use it to boot FRTS
+        if let Some(gbl) =  gbl {
+            let load_params = FalconLoadTarget {
+                src_start: 0,
+                dst_start: 0x10000 - gbl.desc.code_size,
+                len: gbl.desc.code_size,
+            };
+            self.pio_wr_bytes(bar, gbl.ucode.as_ptr(),
+                load_params.dst_start as u16, load_params.len as usize,
+                FalconMem::ImemNs, 0, gbl.desc.start_tag as u16)?;
+
+            // This structure tells the generic bootloader where to find the FWSEC
+            // image.
+            let dmem_desc = BootloaderDmemDescV2 {
+                reserved: [0; 4],
+                signature: [0; 4],
+                ctx_dma: 4, // FALCON_DMAIDX_PHYS_SYS_NCOH
+                code_dma_base: fw.dma_handle(),
+                non_sec_code_off: imem_ns.dst_start,
+                non_sec_code_size: imem_ns.len,
+                sec_code_off: imem_sec.dst_start,
+                sec_code_size: imem_sec.len,
+                code_entry_point: 0,
+                data_dma_base: fw.dma_handle() + dmem.src_start as u64,
+                data_size: dmem.len,
+                argc: 0,
+                argv: 0,
+            };
+
+            regs::NV_PFALCON_FBIF_TRANSCFG::update(bar, &E::ID, 4, |v| {
+                v.set_target(FalconFbifTarget::CoherentSysmem)
+                    .set_mem_type(FalconFbifMemType::Physical)
+            });
+
+            self.pio_wr_bytes(bar, &dmem_desc as *const _ as *const u8, 0,
+                core::mem::size_of::<BootloaderDmemDescV2>(),
+                FalconMem::Dmem, 0, 0)?;
+        } else {
+            self.pio_wr(bar, fw, FalconMem::ImemNs, &imem_ns, 0,
+                u16::try_from(imem_ns.dst_start >> 8)?)?;
+            self.pio_wr(bar, fw, FalconMem::ImemSec, &imem_sec, 0,
+                u16::try_from(imem_sec.dst_start >> 8)?)?;
+            self.pio_wr(bar, fw, FalconMem::Dmem, &dmem, 0, 0)?;
+        }
+
+        self.hal.program_brom(self, bar, &fw.brom_params())?;
+
+        // Set `BootVec` to start of non-secure code.
+        regs::NV_PFALCON_FALCON_BOOTVEC::default()
+            .set_value(fw.boot_addr())
             .write(bar, &E::ID);
 
         Ok(())

@@ -31,7 +31,7 @@ pub(crate) mod riscv;
 pub(crate) const FIRMWARE_VERSION: &str = "570.144";
 
 /// Requests the GPU firmware `name` suitable for `chipset`, with version `ver`.
-fn request_firmware(
+pub(crate) fn request_firmware(
     dev: &device::Device,
     chipset: gpu::Chipset,
     name: &str,
@@ -252,7 +252,7 @@ impl<F: FalconFirmware> FirmwareDmaObject<F, Unsigned> {
 /// Header common to most firmware files.
 #[repr(C)]
 #[derive(Debug, Clone)]
-struct BinHdr {
+pub(crate) struct BinHdr {
     /// Magic number, must be `0x10de`.
     bin_magic: u32,
     /// Version of the header.

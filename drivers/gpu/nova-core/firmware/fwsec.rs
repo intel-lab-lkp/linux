@@ -40,12 +40,15 @@ use crate::{
         FalconLoadTarget, //
     },
     firmware::{
+        FIRMWARE_VERSION,
+        BinHdr,
         FalconUCodeDesc,
         FirmwareDmaObject,
         FirmwareSignature,
         Signed,
         Unsigned, //
     },
+    gpu::Chipset,
     num::{
         FromSafeCast,
         IntoSafeCast, //
@@ -213,6 +216,44 @@ unsafe fn transmute_mut<T: Sized + FromBytes + AsBytes>(
     T::from_bytes_mut(unsafe { fw.as_slice_mut(offset, size_of::<T>())? }).ok_or(EINVAL)
 }
 
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub(crate) struct BootloaderDesc {
+	pub start_tag: u32,
+	pub dmem_load_off: u32,
+	pub code_off: u32,
+	pub code_size: u32,
+	pub data_off: u32,
+	pub data_size: u32,
+}
+// SAFETY: any byte sequence is valid for this struct.
+unsafe impl FromBytes for BootloaderDesc {}
+
+#[repr(C, packed)]
+#[derive(Debug, Clone)]
+pub(crate) struct BootloaderDmemDescV2 {
+	pub reserved: [u32; 4],
+	pub signature: [u32; 4],
+	pub ctx_dma: u32,
+	pub code_dma_base: u64,
+	pub non_sec_code_off: u32,
+	pub non_sec_code_size: u32,
+	pub sec_code_off: u32,
+	pub sec_code_size: u32,
+	pub code_entry_point: u32,
+	pub data_dma_base: u64,
+	pub data_size: u32,
+	pub argc: u32,
+	pub argv: u32,
+}
+// SAFETY: any byte sequence is valid for this struct.
+unsafe impl kernel::transmute::FromBytes for BootloaderDmemDescV2 {}
+
+pub(crate) struct GenericBootloader {
+    pub desc: BootloaderDesc,
+    pub ucode: Vec<u8, kernel::alloc::allocator::Kmalloc>,
+}
+
 /// The FWSEC microcode, extracted from the BIOS and to be run on the GSP falcon.
 ///
 /// It is responsible for e.g. carving out the WPR2 region as the first step of the GSP bootflow.
@@ -221,6 +262,8 @@ pub(crate) struct FwsecFirmware {
     desc: FalconUCodeDesc,
     /// GPU-accessible DMA object containing the firmware.
     ucode: FirmwareDmaObject<Self, Signed>,
+    /// Generic bootloader
+    gen_bootloader: Option<GenericBootloader>,
 }
 
 impl FalconLoadParams for FwsecFirmware {
@@ -275,7 +318,19 @@ impl FalconLoadParams for FwsecFirmware {
     }
 
     fn boot_addr(&self) -> u32 {
-        0
+        match &self.desc {
+            FalconUCodeDesc::V2(_v2) => {
+                // On V2 platforms, the boot address is extracted from the
+                // generic bootloader, because the gbl is what actually copies
+                // FWSEC into memory, so that is what needs to be booted.
+                if let Some(ref gbl) = self.gen_bootloader {
+                    gbl.desc.start_tag << 8
+                } else {
+                    0
+                }
+            },
+            FalconUCodeDesc::V3(_v3) => 0,
+        }
     }
 }
 
@@ -376,6 +431,7 @@ impl FwsecFirmware {
     /// command.
     pub(crate) fn new(
         dev: &Device<device::Bound>,
+        chipset: Chipset,
         falcon: &Falcon<Gsp>,
         bar: &Bar0,
         bios: &Vbios,
@@ -432,9 +488,49 @@ impl FwsecFirmware {
             ucode_dma.no_patch_signature()
         };
 
+        // The Generic Bootloader exists only on Turing and GA100.  To avoid a bogus
+        // console error message on other platforms, only try to load it if it's
+        // supposed to be there.
+        let gbl_fw = if chipset < Chipset::GA102 {
+            super::request_firmware(dev, chipset, "gen_bootloader", FIRMWARE_VERSION)
+        } else {
+            Err(ENOENT)
+        };
+
+        let gbl = match gbl_fw {
+            Ok(fw) => {
+                let hdr = fw.data()
+                    .get(0..size_of::<BinHdr>())
+                    .and_then(BinHdr::from_bytes_copy)
+                    .ok_or(EINVAL)?;
+
+                let desc_offset = hdr.header_offset as usize;
+                let desc = fw.data()
+                    .get(desc_offset..desc_offset + size_of::<BootloaderDesc>())
+                    .and_then(BootloaderDesc::from_bytes_copy)
+                    .ok_or(EINVAL)?;
+
+                let ucode_start = hdr.data_offset as usize;
+                let ucode_size = hdr.data_size as usize;
+                let ucode_data = fw.data()
+                    .get(ucode_start..ucode_start + ucode_size)
+                    .ok_or(EINVAL)?;
+
+                let mut ucode = KVec::new();
+                ucode.extend_from_slice(ucode_data, GFP_KERNEL)?;
+
+                Some(GenericBootloader {
+                    desc: desc,
+                    ucode: ucode,
+                })
+            },
+            Err(_) => None,
+        };
+
         Ok(FwsecFirmware {
             desc: desc,
             ucode: ucode_signed,
+            gen_bootloader: gbl,
         })
     }
 
@@ -449,9 +545,17 @@ impl FwsecFirmware {
         falcon
             .reset(bar)
             .inspect_err(|e| dev_err!(dev, "Failed to reset GSP falcon: {:?}\n", e))?;
-        falcon
-            .dma_load(bar, self)
-            .inspect_err(|e| dev_err!(dev, "Failed to load FWSEC firmware: {:?}\n", e))?;
+
+        // If the Generic Bootloader was found, then upload it via PIO , otherwise
+        if let Some(ref gbl) = self.gen_bootloader {
+            falcon
+                .pio_load(bar, self, Some(gbl))
+                .inspect_err(|e| dev_err!(dev, "Failed to load FWSEC firmware: {:?}\n", e))?;
+        } else {
+            falcon
+                .dma_load(bar, self)
+                .inspect_err(|e| dev_err!(dev, "Failed to load FWSEC firmware: {:?}\n", e))?;
+        }
         let (mbox0, _) = falcon
             .boot(bar, Some(0), None)
             .inspect_err(|e| dev_err!(dev, "Failed to boot FWSEC firmware: {:?}\n", e))?;
