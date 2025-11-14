@@ -367,7 +367,7 @@ static int __cxl_dpa_reserve(struct cxl_endpoint_decoder *cxled,
 			port->id, cxled->cxld.id, cxled->dpa_res);
 		return -EBUSY;
 	}
-
+#if 0
 	if (port->hdm_end + 1 != cxled->cxld.id) {
 		/*
 		 * Assumes alloc and commit order is always in hardware instance
@@ -379,7 +379,7 @@ static int __cxl_dpa_reserve(struct cxl_endpoint_decoder *cxled,
 			cxled->cxld.id, port->id, port->hdm_end + 1);
 		return -EBUSY;
 	}
-
+#endif
 	if (skipped) {
 		rc = request_skip(cxlds, cxled, base - skipped, skipped);
 		if (rc)
@@ -571,6 +571,25 @@ int cxl_dpa_free(struct cxl_endpoint_decoder *cxled)
 
 	devm_cxl_dpa_release(cxled);
 	return 0;
+}
+
+int __cxl_dpa_resize(struct cxl_endpoint_decoder *cxled, u64 len)
+{
+	struct cxl_port *port = cxled_to_port(cxled);
+	resource_size_t base, skipped;
+	int rc;
+
+	guard(rwsem_write)(&cxl_rwsem.dpa);
+
+	base = cxled->dpa_res->start;
+	skipped = cxled->skip;
+
+	__cxl_dpa_release(cxled);
+	rc = __cxl_dpa_reserve(cxled, base, len, skipped);
+	if (rc)
+		dev_dbg(&port->dev, "devm_cxl_dpa_reserve() failed: %d\n", rc);
+
+	return rc;
 }
 
 int cxl_dpa_set_part(struct cxl_endpoint_decoder *cxled,
@@ -1216,6 +1235,53 @@ static int devm_cxl_enumerate_decoders(struct cxl_hdm *cxlhdm,
 	}
 
 	return 0;
+}
+
+struct cxl_endpoint_decoder *cxl_endpoint_decoder_create(struct cxl_port *port,
+							 u64 base, u64 size)
+{
+	struct cxl_endpoint_decoder *cxled;
+	struct cxl_decoder *cxld;
+	struct cxl_endpoint_dvsec_info info;
+	int rc;
+
+	cxled = cxl_endpoint_decoder_alloc(port);
+	if (IS_ERR(cxled)) {
+		dev_warn(&port->dev, "Failed to alloc decoder: %d\n",
+			(int)PTR_ERR(cxled));
+		return cxled;
+	}
+
+	cxld = &cxled->cxld;
+	info = (struct cxl_endpoint_dvsec_info){
+		.port		= port,
+		.mem_enabled	= true,
+		.ranges		= 1,
+		.dvsec_range	= {
+			(struct range) {
+				.start = base,
+				.end = base + size - 1,
+			},
+		},
+	};
+
+	rc = cxl_setup_hdm_decoder_from_dvsec(port, cxld, &base, 0, &info);
+	if (rc) {
+		dev_warn(&port->dev,
+			"Failed to initialize decoder%d.%d\n",
+			port->id, cxld->id);
+		put_device(&cxled->cxld.dev);
+		return ERR_PTR(rc);
+	}
+
+	rc = add_hdm_decoder(port, cxld);
+	if (rc) {
+		dev_warn(&port->dev,
+			"Failed to add decoder%d.%d\n", port->id, cxld->id);
+		return ERR_PTR(rc);
+	}
+
+	return cxled;
 }
 
 /**

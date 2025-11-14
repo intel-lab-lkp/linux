@@ -19,6 +19,14 @@ enum cxl_detach_mode {
 };
 
 #ifdef CONFIG_CXL_REGION
+
+struct cxl_region_context {
+	struct cxl_endpoint_decoder *cxled;
+	struct range hpa_range;
+	int interleave_ways;
+	int interleave_granularity;
+};
+
 extern struct device_attribute dev_attr_create_pmem_region;
 extern struct device_attribute dev_attr_create_ram_region;
 extern struct device_attribute dev_attr_delete_region;
@@ -91,9 +99,12 @@ int cxl_dpa_set_part(struct cxl_endpoint_decoder *cxled,
 		     enum cxl_partition_mode mode);
 int cxl_dpa_alloc(struct cxl_endpoint_decoder *cxled, u64 size);
 int cxl_dpa_free(struct cxl_endpoint_decoder *cxled);
+int __cxl_dpa_resize(struct cxl_endpoint_decoder *cxled, u64 len);
 resource_size_t cxl_dpa_size(struct cxl_endpoint_decoder *cxled);
 resource_size_t cxl_dpa_resource_start(struct cxl_endpoint_decoder *cxled);
 bool cxl_resource_contains_addr(const struct resource *res, const resource_size_t addr);
+struct cxl_endpoint_decoder *cxl_endpoint_decoder_create(struct cxl_port *port,
+							 u64 base, u64 size);
 
 enum cxl_rcrb {
 	CXL_RCRB_DOWNSTREAM,
