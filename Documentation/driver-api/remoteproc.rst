@@ -357,4 +357,4 @@ rpmsg virtio devices this way, if desired).
 Of course, RSC_VDEV resource entries are only good enough for static
 allocation of virtio devices. Dynamic allocations will also be made possible
 using the rpmsg bus (similar to how we already do dynamic allocations of
-rpmsg channels; read more about it in rpmsg.txt).
+rpmsg channels; read more about it in rpmsg.rst).

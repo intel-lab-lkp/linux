@@ -5,8 +5,8 @@ Remote Processor Messaging (rpmsg) Framework
 .. note::
 
   This document describes the rpmsg bus and how to write rpmsg drivers.
-  To learn how to add rpmsg support for new platforms, check out remoteproc.txt
-  (also a resident of Documentation/).
+  To learn how to add rpmsg support for new platforms, check out remoteproc.rst
+  (also a resident of Documentation/driver-api).
 
 Introduction
 ============
