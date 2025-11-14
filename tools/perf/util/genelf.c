@@ -395,6 +395,15 @@ jit_write_elf(int fd, uint64_t load_addr __maybe_unused, const char *sym,
 	 * build-id generation
 	 */
 	sha1(code, csize, bnote.build_id);
+	/* FIXME: update the SHA-1 hash using additional contents */
+	bnote.build_id[0] += (load_addr >> 0) & 0xff;
+	bnote.build_id[1] += (load_addr >> 8) & 0xff;
+	bnote.build_id[2] += (load_addr >> 16) & 0xff;
+	bnote.build_id[3] += (load_addr >> 24) & 0xff;
+	bnote.build_id[4] += (load_addr >> 32) & 0xff;
+	bnote.build_id[5] += (load_addr >> 40) & 0xff;
+	bnote.build_id[6] += (load_addr >> 48) & 0xff;
+	bnote.build_id[7] += (load_addr >> 56) & 0xff;
 	bnote.desc.namesz = sizeof(bnote.name); /* must include 0 termination */
 	bnote.desc.descsz = sizeof(bnote.build_id);
 	bnote.desc.type   = NT_GNU_BUILD_ID;
