@@ -201,7 +201,7 @@ fail:
 	else
 		vaf.fmt = "null-device";
 	vaf.va = &ap_copy;
-	pr_err("%pV:%s: %s ID is greater than %zu\n",
+	pr_err("%pV: %s: %s ID is longer than %zu bytes\n",
 	       &vaf, con_id, failure, max_size);
 	va_end(ap_copy);
 
