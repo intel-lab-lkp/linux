@@ -145,9 +145,13 @@ static int poly_hash(struct aead_request *req)
 	} tail;
 	unsigned int padlen;
 	unsigned int total;
+	int err;
 
-	if (sg != req->dst)
-		memcpy_sglist(req->dst, sg, req->assoclen);
+	if (sg != req->dst) {
+		err = memcpy_sglist(req->dst, sg, req->assoclen);
+		if (err)
+			return err;
+	}
 
 	if (rctx->cryptlen == req->cryptlen) /* encrypting */
 		sg = req->dst;

@@ -174,7 +174,9 @@ static int crypto_authenc_esn_encrypt(struct aead_request *req)
 	dst = src;
 
 	if (req->src != req->dst) {
-		memcpy_sglist(req->dst, req->src, assoclen);
+		err = memcpy_sglist(req->dst, req->src, assoclen);
+		if (err)
+			return err;
 		sg_init_table(areq_ctx->dst, 2);
 		dst = scatterwalk_ffwd(areq_ctx->dst, req->dst, assoclen);
 	}
@@ -258,8 +260,11 @@ static int crypto_authenc_esn_decrypt(struct aead_request *req)
 
 	cryptlen -= authsize;
 
-	if (req->src != dst)
-		memcpy_sglist(dst, req->src, assoclen + cryptlen);
+	if (req->src != dst) {
+		err = memcpy_sglist(dst, req->src, assoclen + cryptlen);
+		if (err)
+			return err;
+	}
 
 	scatterwalk_map_and_copy(ihash, req->src, assoclen + cryptlen,
 				 authsize, 0);

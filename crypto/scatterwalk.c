@@ -101,26 +101,31 @@ void memcpy_to_sglist(struct scatterlist *sg, unsigned int start,
 }
 EXPORT_SYMBOL_GPL(memcpy_to_sglist);
 
-void memcpy_sglist(struct scatterlist *dst, struct scatterlist *src,
+int memcpy_sglist(struct scatterlist *dst, struct scatterlist *src,
 		   unsigned int nbytes)
 {
 	struct skcipher_walk walk = {};
+	int err;
 
 	if (unlikely(nbytes == 0)) /* in case sg == NULL */
-		return;
+		return 0;
 
 	walk.total = nbytes;
 
 	scatterwalk_start(&walk.in, src);
 	scatterwalk_start(&walk.out, dst);
 
-	skcipher_walk_first(&walk, true);
+	err = skcipher_walk_first(&walk, true);
+	if (err)
+		return err;
 	do {
 		if (walk.src.virt.addr != walk.dst.virt.addr)
 			memcpy(walk.dst.virt.addr, walk.src.virt.addr,
 			       walk.nbytes);
 		skcipher_walk_done(&walk, 0);
 	} while (walk.nbytes);
+
+	return 0;
 }
 EXPORT_SYMBOL_GPL(memcpy_sglist);
 

@@ -199,8 +199,10 @@ static int _aead_recvmsg(struct socket *sock, struct msghdr *msg,
 		 *	    v	   v
 		 * RX SGL: AAD || PT || Tag
 		 */
-		memcpy_sglist(areq->first_rsgl.sgl.sgt.sgl, tsgl_src,
+		err = memcpy_sglist(areq->first_rsgl.sgl.sgt.sgl, tsgl_src,
 			      processed);
+		if (err)
+			goto free;
 		af_alg_pull_tsgl(sk, processed, NULL, 0);
 	} else {
 		/*
@@ -215,7 +217,9 @@ static int _aead_recvmsg(struct socket *sock, struct msghdr *msg,
 		 */
 
 		/* Copy AAD || CT to RX SGL buffer for in-place operation. */
-		memcpy_sglist(areq->first_rsgl.sgl.sgt.sgl, tsgl_src, outlen);
+		err = memcpy_sglist(areq->first_rsgl.sgl.sgt.sgl, tsgl_src, outlen);
+		if (err)
+			goto free;
 
 		/* Create TX SGL for tag and chain it to RX SGL. */
 		areq->tsgl_entries = af_alg_count_tsgl(sk, processed,

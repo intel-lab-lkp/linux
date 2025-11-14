@@ -928,10 +928,13 @@ static int crypto_rfc4543_crypt(struct aead_request *req, bool enc)
 			   crypto_aead_alignmask(ctx->child) + 1);
 
 	if (req->src != req->dst) {
+		int err;
 		unsigned int nbytes = req->assoclen + req->cryptlen -
 				      (enc ? 0 : authsize);
 
-		memcpy_sglist(req->dst, req->src, nbytes);
+		err = memcpy_sglist(req->dst, req->src, nbytes);
+		if (err)
+			return err;
 	}
 
 	memcpy(iv, ctx->nonce, 4);

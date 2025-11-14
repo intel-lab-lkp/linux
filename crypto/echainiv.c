@@ -40,9 +40,14 @@ static int echainiv_encrypt(struct aead_request *req)
 
 	info = req->iv;
 
-	if (req->src != req->dst)
-		memcpy_sglist(req->dst, req->src,
+	if (req->src != req->dst) {
+		int err;
+
+		err = memcpy_sglist(req->dst, req->src,
 			      req->assoclen + req->cryptlen);
+		if (err)
+			return err;
+	}
 
 	aead_request_set_callback(subreq, req->base.flags,
 				  req->base.complete, req->base.data);

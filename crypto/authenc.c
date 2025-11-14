@@ -202,7 +202,9 @@ static int crypto_authenc_encrypt(struct aead_request *req)
 	dst = src;
 
 	if (req->src != req->dst) {
-		memcpy_sglist(req->dst, req->src, req->assoclen);
+		err = memcpy_sglist(req->dst, req->src, req->assoclen);
+		if (err)
+			return err;
 		dst = scatterwalk_ffwd(areq_ctx->dst, req->dst, req->assoclen);
 	}
 

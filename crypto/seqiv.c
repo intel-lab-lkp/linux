@@ -64,9 +64,12 @@ static int seqiv_aead_encrypt(struct aead_request *req)
 	data = req->base.data;
 	info = req->iv;
 
-	if (req->src != req->dst)
-		memcpy_sglist(req->dst, req->src,
+	if (req->src != req->dst) {
+		err = memcpy_sglist(req->dst, req->src,
 			      req->assoclen + req->cryptlen);
+		if (err)
+			return err;
+	}
 
 	if (unlikely(!IS_ALIGNED((unsigned long)info,
 				 crypto_aead_alignmask(geniv) + 1))) {
