@@ -462,7 +462,9 @@ void intel_alpm_pre_plane_update(struct intel_atomic_state *state,
 		return;
 
 	if (!old_crtc_state->has_lobf ||
-	    crtc_state->has_lobf == old_crtc_state->has_lobf)
+	    (crtc_state->has_lobf == old_crtc_state->has_lobf &&
+	     !crtc_state->update_lrr &&
+	     !crtc_state->update_m_n))
 		return;
 
 	for_each_intel_encoder_mask(display->drm, encoder,
@@ -517,7 +519,9 @@ void intel_alpm_post_plane_update(struct intel_atomic_state *state,
 		return;
 
 	if (!crtc_state->has_lobf ||
-	    crtc_state->has_lobf == old_crtc_state->has_lobf)
+	    (crtc_state->has_lobf == old_crtc_state->has_lobf &&
+	     !crtc_state->update_lrr &&
+	     !crtc_state->update_m_n))
 		return;
 
 	for_each_intel_encoder_mask(display->drm, encoder,
