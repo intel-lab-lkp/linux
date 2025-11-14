@@ -239,6 +239,8 @@ impl From<PeregrineCoreSelect> for bool {
 pub(crate) enum FalconMem {
     /// Secure Instruction Memory.
     ImemSec,
+    /// Non-Secure Instruction Memory.
+    ImemNs,
     /// Data Memory.
     Dmem,
 }
@@ -348,6 +350,10 @@ pub(crate) trait FalconLoadParams {
     /// Returns the load parameters for Secure `IMEM`.
     fn imem_sec_load_params(&self) -> FalconLoadTarget;
 
+    /// Returns the load parameters for Non-Secure `IMEM`,
+    /// used only on Turing and GA100.
+    fn imem_ns_load_params(&self) -> Option<FalconLoadTarget>;
+
     /// Returns the load parameters for `DMEM`.
     fn dmem_load_params(&self) -> FalconLoadTarget;
 
@@ -451,7 +457,7 @@ impl<E: FalconEngine + 'static> Falcon<E> {
         //
         // For DMEM we can fold the start offset into the DMA handle.
         let (src_start, dma_start) = match target_mem {
-            FalconMem::ImemSec => (load_offsets.src_start, fw.dma_handle()),
+            FalconMem::ImemSec | FalconMem::ImemNs => (load_offsets.src_start, fw.dma_handle()),
             FalconMem::Dmem => (
                 0,
                 fw.dma_handle_with_offset(load_offsets.src_start.into_safe_cast())?,
@@ -502,7 +508,7 @@ impl<E: FalconEngine + 'static> Falcon<E> {
 
         let cmd = regs::NV_PFALCON_FALCON_DMATRFCMD::default()
             .set_size(DmaTrfCmdSize::Size256B)
-            .set_imem(target_mem == FalconMem::ImemSec)
+            .set_imem(target_mem != FalconMem::Dmem)
             .set_sec(if sec { 1 } else { 0 });
 
         for pos in (0..num_transfers).map(|i| i * DMA_LEN) {
@@ -540,6 +546,14 @@ impl<E: FalconEngine + 'static> Falcon<E> {
 
         self.dma_wr(bar, fw, FalconMem::ImemSec, fw.imem_sec_load_params(), true)?;
         self.dma_wr(bar, fw, FalconMem::Dmem, fw.dmem_load_params(), true)?;
+
+        if let Some(nmem) = fw.imem_ns_load_params() {
+            // This code should never actual get executed, because the ImemNs
+            // section only exists on firmware used by Turing and GA100, and
+            // those platforms do not use DMA.  But we include this code for
+            // consistency.
+            self.dma_wr(bar, fw, FalconMem::ImemNs, nmem, false)?;
+        }
 
         self.hal.program_brom(self, bar, &fw.brom_params())?;
 
