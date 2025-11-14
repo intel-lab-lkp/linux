@@ -2192,7 +2192,25 @@ static int bnge_open_core(struct bnge_net *bn)
 		netdev_err(bn->netdev, "bnge_init_nic err: %d\n", rc);
 		goto err_free_irq;
 	}
+
+	mutex_lock(&bd->link_lock);
+	rc = bnge_update_phy_setting(bn);
+	mutex_unlock(&bd->link_lock);
+	if (rc) {
+		netdev_warn(bn->netdev, "failed to update phy settings\n");
+		if (BNGE_SINGLE_PF(bd)) {
+			bd->link_info.phy_retry = true;
+			bd->link_info.phy_retry_expires =
+				jiffies + 5 * HZ;
+		}
+	}
+
 	set_bit(BNGE_STATE_OPEN, &bd->state);
+
+	/* Poll link status and check for SFP+ module status */
+	mutex_lock(&bd->link_lock);
+	bnge_get_port_module_status(bn);
+	mutex_unlock(&bd->link_lock);
 	return 0;
 
 err_free_irq:
@@ -2460,6 +2478,10 @@ int bnge_netdev_alloc(struct bnge_dev *bd, int max_irqs)
 
 	bnge_init_l2_fltr_tbl(bn);
 	bnge_init_mac_addr(bd);
+
+	rc = bnge_probe_phy(bn, true);
+	if (rc)
+		goto err_netdev;
 
 	netdev->request_ops_lock = true;
 	rc = register_netdev(netdev);
