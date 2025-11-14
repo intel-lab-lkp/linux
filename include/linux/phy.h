@@ -296,9 +296,9 @@ static inline const char *phy_modes(phy_interface_t interface)
  * @speed: link speed value
  *
  * Description: maps RGMII supported link speeds into the clock rates.
- * This can also be used for MII, GMII, and RMII interface modes as the
- * clock rates are identical, but the caller must be aware that errors
- * for unsupported clock rates will not be signalled.
+ * This can also be used for MII and GMII interface modes as the clock rates
+ * are identical, but the caller must be aware that errors for unsupported
+ * clock rates will not be signalled.
  *
  * Returns: clock rate or negative errno
  */
