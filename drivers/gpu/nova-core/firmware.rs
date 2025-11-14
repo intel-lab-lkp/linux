@@ -46,6 +46,43 @@ fn request_firmware(
 /// Structure used to describe some firmwares, notably FWSEC-FRTS.
 #[repr(C)]
 #[derive(Debug, Clone)]
+pub(crate) struct FalconUCodeDescV2 {
+    /// Header defined by 'NV_BIT_FALCON_UCODE_DESC_HEADER_VDESC*' in OpenRM.
+    hdr: u32,
+    /// Stored size of the ucode after the header, compressed or uncompressed
+    stored_size: u32,
+    /// Uncompressed size of the ucode.  If store_size == uncompressed_size, then the ucode
+    /// is not compressed.
+    pub(crate) uncompressed_size: u32,
+    /// Code entry point
+    pub(crate) virtual_entry: u32,
+    /// Offset after the code segment at which the Application Interface Table headers are located.
+    pub(crate) interface_offset: u32,
+    /// Base address at which to load the code segment into 'IMEM'.
+    pub(crate) imem_phys_base: u32,
+    /// Size in bytes of the code to copy into 'IMEM'.
+    pub(crate) imem_load_size: u32,
+    /// Virtual 'IMEM' address (i.e. 'tag') at which the code should start.
+    pub(crate) imem_virt_base: u32,
+    /// Virtual address of secure IMEM segment.
+    pub(crate) imem_sec_base: u32,
+    /// Size of secure IMEM segment.
+    pub(crate) imem_sec_size: u32,
+    /// Offset into stored (uncompressed) image at which DMEM begins.
+    pub(crate) dmem_offset: u32,
+    /// Base address at which to load the data segment into 'DMEM'.
+    pub(crate) dmem_phys_base: u32,
+    /// Size in bytes of the data to copy into 'DMEM'.
+    pub(crate) dmem_load_size: u32,
+    /// "Alternate" Size of data to load into IMEM.
+    pub(crate) alt_imem_load_size: u32,
+    /// "Alternate" Size of data to load into DMEM.
+    pub(crate) alt_dmem_load_size: u32,
+}
+
+/// Structure used to describe some firmwares, notably FWSEC-FRTS.
+#[repr(C)]
+#[derive(Debug, Clone)]
 pub(crate) struct FalconUCodeDescV3 {
     /// Header defined by `NV_BIT_FALCON_UCODE_DESC_HEADER_VDESC*` in OpenRM.
     hdr: u32,
@@ -76,13 +113,80 @@ pub(crate) struct FalconUCodeDescV3 {
     _reserved: u16,
 }
 
-impl FalconUCodeDescV3 {
+#[derive(Debug, Clone)]
+pub(crate) enum FalconUCodeDesc {
+    V2(FalconUCodeDescV2),
+    V3(FalconUCodeDescV3),
+}
+
+impl FalconUCodeDesc {
     /// Returns the size in bytes of the header.
     pub(crate) fn size(&self) -> usize {
+        let hdr = match self {
+            FalconUCodeDesc::V2(v2) => v2.hdr,
+            FalconUCodeDesc::V3(v3) => v3.hdr,
+        };
+
         const HDR_SIZE_SHIFT: u32 = 16;
         const HDR_SIZE_MASK: u32 = 0xffff0000;
+        ((hdr & HDR_SIZE_MASK) >> HDR_SIZE_SHIFT).into_safe_cast()
+    }
 
-        ((self.hdr & HDR_SIZE_MASK) >> HDR_SIZE_SHIFT).into_safe_cast()
+    pub(crate) fn imem_load_size(&self) -> u32 {
+        match self {
+            FalconUCodeDesc::V2(v2) => v2.imem_load_size,
+            FalconUCodeDesc::V3(v3) => v3.imem_load_size,
+        }
+    }
+
+    pub(crate) fn interface_offset(&self) -> u32 {
+        match self {
+            FalconUCodeDesc::V2(v2) => v2.interface_offset,
+            FalconUCodeDesc::V3(v3) => v3.interface_offset,
+        }
+    }
+
+
+    pub(crate) fn dmem_load_size(&self) -> u32 {
+        match self {
+            FalconUCodeDesc::V2(v2) => v2.dmem_load_size,
+            FalconUCodeDesc::V3(v3) => v3.dmem_load_size,
+        }
+    }
+
+    pub(crate) fn pkc_data_offset(&self) -> u32 {
+        match self {
+            FalconUCodeDesc::V2(_v2) => 0,
+            FalconUCodeDesc::V3(v3) => v3.pkc_data_offset,
+        }
+    }
+
+    pub(crate) fn engine_id_mask(&self) -> u16 {
+        match self {
+            FalconUCodeDesc::V2(_v2) => 0,
+            FalconUCodeDesc::V3(v3) => v3.engine_id_mask,
+        }
+    }
+
+    pub(crate) fn ucode_id(&self) -> u8 {
+        match self {
+            FalconUCodeDesc::V2(_v2) => 0,
+            FalconUCodeDesc::V3(v3) => v3.ucode_id,
+        }
+    }
+
+    pub(crate) fn signature_count(&self) -> u8 {
+        match self {
+            FalconUCodeDesc::V2(_v2) => 0,
+            FalconUCodeDesc::V3(v3) => v3.signature_count,
+        }
+    }
+
+    pub(crate) fn signature_versions(&self) -> u16 {
+        match self {
+            FalconUCodeDesc::V2(_v2) => 0,
+            FalconUCodeDesc::V3(v3) => v3.signature_versions,
+        }
     }
 }
 
