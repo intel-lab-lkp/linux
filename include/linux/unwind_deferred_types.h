@@ -5,7 +5,7 @@
 struct unwind_cache {
 	unsigned long		unwind_completed;
 	unsigned int		nr_entries;
-	unsigned long		entries[];
+	unsigned long		entries[] __counted_by(nr_entries);
 };
 
 /*
