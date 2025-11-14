@@ -1004,7 +1004,7 @@ static int __device_attach(struct device *dev, bool allow_async)
 	bool async = false;
 
 	device_lock(dev);
-	if (dev->p->dead) {
+	if (dev->p && dev->p->dead) {
 		goto out_unlock;
 	} else if (dev->driver) {
 		if (device_is_bound(dev)) {
