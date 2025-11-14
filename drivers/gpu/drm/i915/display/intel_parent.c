@@ -64,3 +64,9 @@ bool intel_parent_fence_support_legacy(struct intel_display *display)
 {
 	return display->parent->fence_support_legacy && display->parent->fence_support_legacy(display->drm);
 }
+
+void intel_parent_fence_priority_display(struct intel_display *display, struct dma_fence *fence)
+{
+	if (display->parent->fence_priority_display)
+		display->parent->fence_priority_display(fence);
+}
