@@ -18,6 +18,7 @@
 #include <linux/pm_runtime.h>
 
 #include <linux/mei.h>
+#include <linux/mei_me.h>
 
 #include "mei_dev.h"
 #include "client.h"
@@ -25,7 +26,7 @@
 #include "hw-me.h"
 
 /* mei_pci_tbl - PCI Device ID Table */
-static const struct pci_device_id mei_me_pci_tbl[] = {
+const struct pci_device_id mei_me_pci_tbl[] = {
 	{MEI_PCI_DEVICE(MEI_DEV_ID_82946GZ, MEI_ME_ICH_CFG)},
 	{MEI_PCI_DEVICE(MEI_DEV_ID_82G35, MEI_ME_ICH_CFG)},
 	{MEI_PCI_DEVICE(MEI_DEV_ID_82Q965, MEI_ME_ICH_CFG)},
@@ -134,6 +135,15 @@ static const struct pci_device_id mei_me_pci_tbl[] = {
 };
 
 MODULE_DEVICE_TABLE(pci, mei_me_pci_tbl);
+
+/*
+ * Other drivers (e.g., i915, xe) interface with the ME device for some of their
+ * features (e.g., PXP, HDCP). However, the ME device can be unplugged via the
+ * pci subsystem or hidden by BIOS/coreboot, so those drivers might want to
+ * check if the device is available before initializing those features. To
+ * allow them to perform such a check, we export the list of ME device IDs.
+ */
+EXPORT_SYMBOL_GPL(mei_me_pci_tbl);
 
 #ifdef CONFIG_PM
 static inline void mei_me_set_pm_domain(struct mei_device *dev);
