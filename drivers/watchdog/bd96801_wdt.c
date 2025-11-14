@@ -370,7 +370,7 @@ static int bd96801_wdt_probe(struct platform_device *pdev)
 
 		set_bit(WDOG_HW_RUNNING, &w->wdt.status);
 	} else {
-		/* If WDG is not running so we will initializate it */
+		/* If WDG is not running so we will initialize it */
 		ret = init_wdg_hw(w);
 		if (ret)
 			return ret;
