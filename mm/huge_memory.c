@@ -3690,34 +3690,58 @@ static int __split_unmapped_folio(struct folio *folio, int new_order,
 bool folio_split_supported(struct folio *folio, unsigned int new_order,
 		enum split_type split_type, bool warns)
 {
+	const int old_order = folio_order(folio);
+
+	if (new_order >= old_order)
+		return -EINVAL;
+
 	if (folio_test_anon(folio)) {
 		/* order-1 is not supported for anonymous THP. */
 		VM_WARN_ONCE(warns && new_order == 1,
 				"Cannot split to order-1 folio");
 		if (new_order == 1)
 			return false;
-	} else if (split_type == SPLIT_TYPE_NON_UNIFORM || new_order) {
-		if (IS_ENABLED(CONFIG_READ_ONLY_THP_FOR_FS) &&
-		    !mapping_large_folio_support(folio->mapping)) {
-			/*
-			 * We can always split a folio down to a single page
-			 * (new_order == 0) uniformly.
-			 *
-			 * For any other scenario
-			 *   a) uniform split targeting a large folio
-			 *      (new_order > 0)
-			 *   b) any non-uniform split
-			 * we must confirm that the file system supports large
-			 * folios.
-			 *
-			 * Note that we might still have THPs in such
-			 * mappings, which is created from khugepaged when
-			 * CONFIG_READ_ONLY_THP_FOR_FS is enabled. But in that
-			 * case, the mapping does not actually support large
-			 * folios properly.
-			 */
+	} else {
+		const struct address_space *mapping = NULL;
+
+		mapping = folio->mapping;
+
+		/* Truncated ? */
+		/*
+		 * TODO: add support for large shmem folio in swap cache.
+		 * When shmem is in swap cache, mapping is NULL and
+		 * folio_test_swapcache() is true.
+		 */
+		if (!mapping)
+			return false;
+
+		/*
+		 * We have two types of split:
+		 *
+		 *   a) uniform split: split folio directly to new_order.
+		 *   b) non-uniform split: create after-split folios with
+		 *      orders from (old_order - 1) to new_order.
+		 *
+		 * For file system, we encodes it supported folio order in
+		 * mapping->flags, which could be checked by
+		 * mapping_folio_order_supported().
+		 *
+		 * With these knowledge, we can know whether folio support
+		 * split to new_order by:
+		 *
+		 *   1. check new_order is supported first
+		 *   2. check (old_order - 1) is supported if
+		 *      SPLIT_TYPE_NON_UNIFORM
+		 */
+		if (!mapping_folio_order_supported(mapping, new_order)) {
 			VM_WARN_ONCE(warns,
-				"Cannot split file folio to non-0 order");
+				"Cannot split file folio to unsupported order: %d", new_order);
+			return false;
+		}
+		if (split_type == SPLIT_TYPE_NON_UNIFORM
+		    && !mapping_folio_order_supported(mapping, old_order - 1)) {
+			VM_WARN_ONCE(warns,
+				"Cannot split file folio to unsupported order: %d", old_order - 1);
 			return false;
 		}
 	}
@@ -3785,9 +3809,6 @@ static int __folio_split(struct folio *folio, unsigned int new_order,
 	if (folio != page_folio(split_at) || folio != page_folio(lock_at))
 		return -EINVAL;
 
-	if (new_order >= old_order)
-		return -EINVAL;
-
 	if (!folio_split_supported(folio, new_order, split_type, /* warn = */ true))
 		return -EINVAL;
 
@@ -3819,28 +3840,9 @@ static int __folio_split(struct folio *folio, unsigned int new_order,
 		}
 		mapping = NULL;
 	} else {
-		unsigned int min_order;
 		gfp_t gfp;
 
 		mapping = folio->mapping;
-
-		/* Truncated ? */
-		/*
-		 * TODO: add support for large shmem folio in swap cache.
-		 * When shmem is in swap cache, mapping is NULL and
-		 * folio_test_swapcache() is true.
-		 */
-		if (!mapping) {
-			ret = -EBUSY;
-			goto out;
-		}
-
-		min_order = mapping_min_folio_order(folio->mapping);
-		if (new_order < min_order) {
-			ret = -EINVAL;
-			goto out;
-		}
-
 		gfp = current_gfp_context(mapping_gfp_mask(mapping) &
 							GFP_RECLAIM_MASK);
 

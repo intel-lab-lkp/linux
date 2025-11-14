@@ -516,6 +516,12 @@ static inline bool mapping_large_folio_support(const struct address_space *mappi
 	return mapping_max_folio_order(mapping) > 0;
 }
 
+static inline bool
+mapping_folio_order_supported(const struct address_space *mapping, unsigned int order)
+{
+	return (order >= mapping_min_folio_order(mapping) && order <= mapping_max_folio_order(mapping));
+}
+
 /* Return the maximum folio size for this pagecache mapping, in bytes. */
 static inline size_t mapping_max_folio_size(const struct address_space *mapping)
 {
