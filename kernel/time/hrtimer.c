@@ -1743,6 +1743,7 @@ static void __run_hrtimer(struct hrtimer_cpu_base *cpu_base,
 	lockdep_assert_held(&cpu_base->lock);
 
 	debug_deactivate(timer);
+	WARN_ON_ONCE(base->running);
 	base->running = timer;
 
 	/*
