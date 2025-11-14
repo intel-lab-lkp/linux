@@ -136,6 +136,7 @@ struct bnge_dev {
 	unsigned long           state;
 #define BNGE_STATE_DRV_REGISTERED      0
 #define BNGE_STATE_OPEN			1
+#define BNGE_STATE_IN_SP_TASK		2
 
 	u64			fw_cap;
 
@@ -208,8 +209,17 @@ struct bnge_dev {
 	u8			max_q;
 	u8			port_count;
 
+	unsigned int		current_interval;
+#define BNGE_TIMER_INTERVAL	HZ
+
+	struct timer_list	timer;
 	struct bnge_irq		*irq_tbl;
 	u16			irqs_acquired;
+
+	struct workqueue_struct *bnge_pf_wq;
+	struct work_struct	sp_task;
+	unsigned long		sp_event;
+#define BNGE_PERIODIC_STATS_SP_EVENT	0
 
 	/* To protect link related settings during link changes and
 	 * ethtool settings changes.

@@ -253,6 +253,33 @@ err_free_ring_stats:
 	return rc;
 }
 
+void bnge_timer(struct timer_list *t)
+{
+	struct bnge_dev *bd = timer_container_of(bd, t, timer);
+	struct bnge_net *bn = netdev_priv(bd->netdev);
+	struct net_device *dev = bd->netdev;
+
+	if (!netif_running(dev) || !test_bit(BNGE_STATE_OPEN, &bd->state))
+		return;
+
+	if (atomic_read(&bn->intr_sem) != 0)
+		goto bnge_restart_timer;
+
+bnge_restart_timer:
+	mod_timer(&bd->timer, jiffies + bd->current_interval);
+}
+
+void bnge_sp_task(struct work_struct *work)
+{
+	struct bnge_dev *bd = container_of(work, struct bnge_dev, sp_task);
+
+	set_bit(BNGE_STATE_IN_SP_TASK, &bd->state);
+	smp_mb__after_atomic();
+
+	smp_mb__before_atomic();
+	clear_bit(BNGE_STATE_IN_SP_TASK, &bd->state);
+}
+
 static void bnge_free_nq_desc_arr(struct bnge_nq_ring_info *nqr)
 {
 	struct bnge_ring_struct *ring = &nqr->ring_struct;
@@ -2111,6 +2138,7 @@ static void bnge_disable_int_sync(struct bnge_net *bn)
 	struct bnge_dev *bd = bn->bd;
 	int i;
 
+	atomic_inc(&bn->intr_sem);
 	bnge_disable_int(bn);
 	for (i = 0; i < bd->nq_nr_rings; i++) {
 		int map_idx = bnge_cp_num_to_irq_num(bn, i);
@@ -2124,6 +2152,7 @@ static void bnge_enable_int(struct bnge_net *bn)
 	struct bnge_dev *bd = bn->bd;
 	int i;
 
+	atomic_set(&bn->intr_sem, 0);
 	for (i = 0; i < bd->nq_nr_rings; i++) {
 		struct bnge_napi *bnapi = bn->bnapi[i];
 		struct bnge_nq_ring_info *nqr = &bnapi->nq_ring;
@@ -2677,6 +2706,7 @@ static int bnge_open_core(struct bnge_net *bn)
 
 	bnge_enable_int(bn);
 	bnge_tx_enable(bn);
+	mod_timer(&bd->timer, jiffies + bd->current_interval);
 	/* Poll link status and check for SFP+ module status */
 	mutex_lock(&bd->link_lock);
 	bnge_get_port_module_status(bn);
@@ -2718,6 +2748,7 @@ static void bnge_close_core(struct bnge_net *bn)
 	clear_bit(BNGE_STATE_OPEN, &bd->state);
 	bnge_shutdown_nic(bn);
 	bnge_disable_napi(bn);
+	timer_delete_sync(&bd->timer);
 	bnge_free_all_rings_bufs(bn);
 	bnge_free_irq(bn);
 	bnge_del_napi(bn);
