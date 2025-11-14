@@ -662,8 +662,13 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 	if (unlikely(node != NUMA_NO_NODE && node != numa_mem_id()))
 		goto fallback;
 
-	if (flags & SKB_ALLOC_NAPI)
+	if (flags & SKB_ALLOC_NAPI) {
 		skb = napi_skb_cache_get(true);
+	} else if (!in_hardirq() && !irqs_disabled()) {
+		local_bh_disable();
+		skb = napi_skb_cache_get(false);
+		local_bh_enable();
+	}
 
 	if (!skb) {
 fallback:
