@@ -19,24 +19,24 @@
 
 struct imx8mp_reset_map {
 	unsigned int offset;
-	unsigned int mask;
+	unsigned int bit;
 	bool active_low;
 };
 
 static const struct imx8mp_reset_map reset_map[] = {
 	[IMX8MP_AUDIOMIX_EARC_RESET] = {
 		.offset	= IMX8MP_AUDIOMIX_EARC_RESET_OFFSET,
-		.mask = BIT(0),
+		.bit = 0,
 		.active_low = true,
 	},
 	[IMX8MP_AUDIOMIX_EARC_PHY_RESET] = {
 		.offset	= IMX8MP_AUDIOMIX_EARC_RESET_OFFSET,
-		.mask = BIT(1),
+		.bit = 1,
 		.active_low = true,
 	},
 	[IMX8MP_AUDIOMIX_DSP_RUNSTALL] = {
 		.offset	= IMX8MP_AUDIOMIX_DSP_RUNSTALL_OFFSET,
-		.mask = BIT(5),
+		.bit = 5,
 		.active_low = false,
 	},
 };
@@ -60,7 +60,7 @@ static int imx8mp_audiomix_update(struct reset_controller_dev *rcdev,
 	unsigned int mask, offset, active_low;
 	unsigned long reg, flags;
 
-	mask = reset_map[id].mask;
+	mask = BIT(reset_map[id].bit);
 	offset = reset_map[id].offset;
 	active_low = reset_map[id].active_low;
 
