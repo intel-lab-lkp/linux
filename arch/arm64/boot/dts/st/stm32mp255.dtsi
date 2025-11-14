@@ -21,6 +21,7 @@
 		resets = <&rcc LVDS_R>;
 		access-controllers = <&rifsc 84>;
 		power-domains = <&CLUSTER_PD>;
+		bootph-all;
 		status = "disabled";
 	};
 
