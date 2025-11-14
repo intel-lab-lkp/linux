@@ -223,12 +223,23 @@ register!(NV_PFALCON_FALCON_IRQSCLR @ PFalconBase[0x00000004] {
     6:6     swgen0 as bool;
 });
 
+register!(NV_PFALCON_FALCON_IRQMCLR @ PFalconBase[0x00000014] {
+    31:0    value as u32;
+});
+
 register!(NV_PFALCON_FALCON_MAILBOX0 @ PFalconBase[0x00000040] {
     31:0    value as u32;
 });
 
 register!(NV_PFALCON_FALCON_MAILBOX1 @ PFalconBase[0x00000044] {
     31:0    value as u32;
+});
+
+register!(NV_PFALCON_FALCON_ITFEN @ PFalconBase[0x00000048] {
+    0:0     ctxen as bool;
+    1:1     mthden as bool;
+    2:2     postwr as bool;
+    4:4     secwl_cpuctl_alias as bool;
 });
 
 // Used to store version information about the firmware running
@@ -271,6 +282,13 @@ register!(NV_PFALCON_FALCON_DMACTL @ PFalconBase[0x0000010c] {
     6:3     dmaq_num as u8;
     7:7     secure_stat as bool;
 });
+
+impl NV_PFALCON_FALCON_DMACTL {
+    /// Returns `true` if memory scrubbing is completed.
+    pub(crate) fn mem_scrubbing_done(self) -> bool {
+        !self.dmem_scrubbing() && !self.imem_scrubbing()
+    }
+}
 
 register!(NV_PFALCON_FALCON_DMATRFBASE @ PFalconBase[0x00000110] {
     31:0    base as u32;
@@ -318,6 +336,33 @@ register!(NV_PFALCON_FALCON_CPUCTL_ALIAS @ PFalconBase[0x00000130] {
     1:1     startcpu as bool;
 });
 
+register!(NV_PFALCON2_FALCON_CMEMBASE @ PFalcon2Base[0x00000160] {
+    31:18     value as u16;
+});
+
+register!(NV_PFALCON_FALCON_IMEMC @ PFalconBase[0x00000180[4; 16]] {
+    15:0      offs as u16;
+    24:24     aincw as bool;
+    28:28     secure as bool;
+});
+
+register!(NV_PFALCON_FALCON_IMEMD @ PFalconBase[0x00000184[4; 16]] {
+    31:0      data as u32;
+});
+
+register!(NV_PFALCON_FALCON_IMEMT @ PFalconBase[0x00000188[4; 16]] {
+    15:0      tag as u16;
+});
+
+register!(NV_PFALCON_FALCON_DMEMC @ PFalconBase[0x000001c0[8; 8]] {
+    15:0      offs as u16;
+    24:24     aincw as bool;
+});
+
+register!(NV_PFALCON_FALCON_DMEMD @ PFalconBase[0x000001c4[8; 8]] {
+    31:0      data as u32;
+});
+
 // Actually known as `NV_PSEC_FALCON_ENGINE` and `NV_PGSP_FALCON_ENGINE` depending on the falcon
 // instance.
 register!(NV_PFALCON_FALCON_ENGINE @ PFalconBase[0x000003c0] {
@@ -355,6 +400,12 @@ register!(NV_PFALCON2_FALCON_BROM_PARAADDR @ PFalcon2Base[0x00000210[1]] {
 
 // PRISCV
 
+// Turing and GA100 only
+register!(NV_PRISCV_RISCV_CORE_SWITCH_RISCV_STATUS @ PFalcon2Base[0x00000240] {
+    0:0     active_stat as bool;
+});
+
+// GA102 and later
 register!(NV_PRISCV_RISCV_CPUCTL @ PFalcon2Base[0x00000388] {
     0:0     halted as bool;
     7:7     active_stat as bool;
