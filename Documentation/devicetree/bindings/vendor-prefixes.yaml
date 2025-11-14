@@ -843,6 +843,8 @@ patternProperties:
     description: Keith & Koep GmbH
   "^keymile,.*":
     description: Keymile GmbH
+  "^kfr,.*":
+    description: Kontron France
   "^khadas,.*":
     description: Khadas
   "^kiebackpeter,.*":
