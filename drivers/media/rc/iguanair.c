@@ -496,10 +496,10 @@ static void iguanair_disconnect(struct usb_interface *intf)
 {
 	struct iguanair *ir = usb_get_intfdata(intf);
 
-	rc_unregister_device(ir->rc);
 	usb_set_intfdata(intf, NULL);
 	usb_kill_urb(ir->urb_in);
 	usb_kill_urb(ir->urb_out);
+	rc_unregister_device(ir->rc);
 	usb_free_urb(ir->urb_in);
 	usb_free_urb(ir->urb_out);
 	usb_free_coherent(ir->udev, MAX_IN_PACKET, ir->buf_in, ir->dma_in);
