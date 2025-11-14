@@ -215,7 +215,7 @@ static bool encrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair)
 		return false;
 	return chacha20poly1305_encrypt_sg_inplace(sg, plaintext_len, NULL, 0,
 						   PACKET_CB(skb)->nonce,
-						   keypair->sending.key);
+						   &keypair->sending.key);
 }
 
 void wg_packet_send_keepalive(struct wg_peer *peer)

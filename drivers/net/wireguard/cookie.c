@@ -191,8 +191,8 @@ void wg_cookie_message_create(struct message_handshake_cookie *dst,
 
 	make_cookie(cookie, skb, checker);
 	xchacha20poly1305_encrypt(dst->encrypted_cookie, cookie, COOKIE_LEN,
-				  macs->mac1, COOKIE_LEN, dst->nonce,
-				  checker->cookie_encryption_key);
+				  macs->mac1, COOKIE_LEN, &dst->nonce,
+				  &checker->cookie_encryption_key);
 }
 
 void wg_cookie_message_consume(struct message_handshake_cookie *src,
@@ -215,8 +215,8 @@ void wg_cookie_message_consume(struct message_handshake_cookie *src,
 	}
 	ret = xchacha20poly1305_decrypt(
 		cookie, src->encrypted_cookie, sizeof(src->encrypted_cookie),
-		peer->latest_cookie.last_mac1_sent, COOKIE_LEN, src->nonce,
-		peer->latest_cookie.cookie_decryption_key);
+		peer->latest_cookie.last_mac1_sent, COOKIE_LEN, &src->nonce,
+		&peer->latest_cookie.cookie_decryption_key);
 	up_read(&peer->latest_cookie.lock);
 
 	if (ret) {

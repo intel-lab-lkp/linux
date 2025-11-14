@@ -461,7 +461,7 @@ static void handshake_init(u8 chaining_key[NOISE_HASH_LEN],
 }
 
 static void message_encrypt(u8 *dst_ciphertext, const u8 *src_plaintext,
-			    size_t src_len, u8 key[NOISE_SYMMETRIC_KEY_LEN],
+			    size_t src_len, u8 (*key)[NOISE_SYMMETRIC_KEY_LEN],
 			    u8 hash[NOISE_HASH_LEN])
 {
 	chacha20poly1305_encrypt(dst_ciphertext, src_plaintext, src_len, hash,
@@ -471,7 +471,7 @@ static void message_encrypt(u8 *dst_ciphertext, const u8 *src_plaintext,
 }
 
 static bool message_decrypt(u8 *dst_plaintext, const u8 *src_ciphertext,
-			    size_t src_len, u8 key[NOISE_SYMMETRIC_KEY_LEN],
+			    size_t src_len, u8 (*key)[NOISE_SYMMETRIC_KEY_LEN],
 			    u8 hash[NOISE_HASH_LEN])
 {
 	if (!chacha20poly1305_decrypt(dst_plaintext, src_ciphertext, src_len,
@@ -554,7 +554,7 @@ wg_noise_handshake_create_initiation(struct message_handshake_initiation *dst,
 	/* s */
 	message_encrypt(dst->encrypted_static,
 			handshake->static_identity->static_public,
-			NOISE_PUBLIC_KEY_LEN, key, handshake->hash);
+			NOISE_PUBLIC_KEY_LEN, &key, handshake->hash);
 
 	/* ss */
 	if (!mix_precomputed_dh(handshake->chaining_key, key,
@@ -564,7 +564,7 @@ wg_noise_handshake_create_initiation(struct message_handshake_initiation *dst,
 	/* {t} */
 	tai64n_now(timestamp);
 	message_encrypt(dst->encrypted_timestamp, timestamp,
-			NOISE_TIMESTAMP_LEN, key, handshake->hash);
+			NOISE_TIMESTAMP_LEN, &key, handshake->hash);
 
 	dst->sender_index = wg_index_hashtable_insert(
 		handshake->entry.peer->device->index_hashtable,
@@ -610,7 +610,7 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 
 	/* s */
 	if (!message_decrypt(s, src->encrypted_static,
-			     sizeof(src->encrypted_static), key, hash))
+			     sizeof(src->encrypted_static), &key, hash))
 		goto out;
 
 	/* Lookup which peer we're actually talking to */
@@ -626,7 +626,7 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 
 	/* {t} */
 	if (!message_decrypt(t, src->encrypted_timestamp,
-			     sizeof(src->encrypted_timestamp), key, hash))
+			     sizeof(src->encrypted_timestamp), &key, hash))
 		goto out;
 
 	down_read(&handshake->lock);
@@ -708,7 +708,7 @@ bool wg_noise_handshake_create_response(struct message_handshake_response *dst,
 		handshake->preshared_key);
 
 	/* {} */
-	message_encrypt(dst->encrypted_nothing, NULL, 0, key, handshake->hash);
+	message_encrypt(dst->encrypted_nothing, NULL, 0, &key, handshake->hash);
 
 	dst->sender_index = wg_index_hashtable_insert(
 		handshake->entry.peer->device->index_hashtable,
@@ -779,7 +779,7 @@ wg_noise_handshake_consume_response(struct message_handshake_response *src,
 
 	/* {} */
 	if (!message_decrypt(NULL, src->encrypted_nothing,
-			     sizeof(src->encrypted_nothing), key, hash))
+			     sizeof(src->encrypted_nothing), &key, hash))
 		goto fail;
 
 	/* Success! Copy everything to peer */

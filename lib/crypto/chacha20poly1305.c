@@ -18,20 +18,21 @@
 #include <linux/module.h>
 #include <linux/unaligned.h>
 
-static void chacha_load_key(u32 *k, const u8 *in)
+static void chacha_load_key(u32 *k, const u8 (*in)[CHACHA20POLY1305_KEY_SIZE])
 {
-	k[0] = get_unaligned_le32(in);
-	k[1] = get_unaligned_le32(in + 4);
-	k[2] = get_unaligned_le32(in + 8);
-	k[3] = get_unaligned_le32(in + 12);
-	k[4] = get_unaligned_le32(in + 16);
-	k[5] = get_unaligned_le32(in + 20);
-	k[6] = get_unaligned_le32(in + 24);
-	k[7] = get_unaligned_le32(in + 28);
+	k[0] = get_unaligned_le32((u8 *)in);
+	k[1] = get_unaligned_le32((u8 *)in + 4);
+	k[2] = get_unaligned_le32((u8 *)in + 8);
+	k[3] = get_unaligned_le32((u8 *)in + 12);
+	k[4] = get_unaligned_le32((u8 *)in + 16);
+	k[5] = get_unaligned_le32((u8 *)in + 20);
+	k[6] = get_unaligned_le32((u8 *)in + 24);
+	k[7] = get_unaligned_le32((u8 *)in + 28);
 }
 
 static void xchacha_init(struct chacha_state *chacha_state,
-			 const u8 *key, const u8 *nonce)
+			 const u8 (*key)[CHACHA20POLY1305_KEY_SIZE],
+			 const u8 (*nonce)[XCHACHA20POLY1305_NONCE_SIZE])
 {
 	u32 k[CHACHA_KEY_WORDS];
 	u8 iv[CHACHA_IV_SIZE];
@@ -42,7 +43,7 @@ static void xchacha_init(struct chacha_state *chacha_state,
 	chacha_load_key(k, key);
 
 	/* Compute the subkey given the original key and first 128 nonce bits */
-	chacha_init(chacha_state, k, nonce);
+	chacha_init(chacha_state, k, (u8 *)nonce);
 	hchacha_block(chacha_state, k, 20);
 
 	chacha_init(chacha_state, k, iv);
@@ -89,7 +90,7 @@ __chacha20poly1305_encrypt(u8 *dst, const u8 *src, const size_t src_len,
 void chacha20poly1305_encrypt(u8 *dst, const u8 *src, const size_t src_len,
 			      const u8 *ad, const size_t ad_len,
 			      const u64 nonce,
-			      const u8 key[CHACHA20POLY1305_KEY_SIZE])
+			      const u8 (*key)[CHACHA20POLY1305_KEY_SIZE])
 {
 	struct chacha_state chacha_state;
 	u32 k[CHACHA_KEY_WORDS];
@@ -111,8 +112,8 @@ EXPORT_SYMBOL(chacha20poly1305_encrypt);
 
 void xchacha20poly1305_encrypt(u8 *dst, const u8 *src, const size_t src_len,
 			       const u8 *ad, const size_t ad_len,
-			       const u8 nonce[XCHACHA20POLY1305_NONCE_SIZE],
-			       const u8 key[CHACHA20POLY1305_KEY_SIZE])
+			       const u8 (*nonce)[XCHACHA20POLY1305_NONCE_SIZE],
+			       const u8 (*key)[CHACHA20POLY1305_KEY_SIZE])
 {
 	struct chacha_state chacha_state;
 
@@ -170,7 +171,7 @@ __chacha20poly1305_decrypt(u8 *dst, const u8 *src, const size_t src_len,
 bool chacha20poly1305_decrypt(u8 *dst, const u8 *src, const size_t src_len,
 			      const u8 *ad, const size_t ad_len,
 			      const u64 nonce,
-			      const u8 key[CHACHA20POLY1305_KEY_SIZE])
+			      const u8 (*key)[CHACHA20POLY1305_KEY_SIZE])
 {
 	struct chacha_state chacha_state;
 	u32 k[CHACHA_KEY_WORDS];
@@ -195,8 +196,8 @@ EXPORT_SYMBOL(chacha20poly1305_decrypt);
 
 bool xchacha20poly1305_decrypt(u8 *dst, const u8 *src, const size_t src_len,
 			       const u8 *ad, const size_t ad_len,
-			       const u8 nonce[XCHACHA20POLY1305_NONCE_SIZE],
-			       const u8 key[CHACHA20POLY1305_KEY_SIZE])
+			       const u8 (*nonce)[XCHACHA20POLY1305_NONCE_SIZE],
+			       const u8 (*key)[CHACHA20POLY1305_KEY_SIZE])
 {
 	struct chacha_state chacha_state;
 
@@ -211,7 +212,7 @@ bool chacha20poly1305_crypt_sg_inplace(struct scatterlist *src,
 				       const size_t src_len,
 				       const u8 *ad, const size_t ad_len,
 				       const u64 nonce,
-				       const u8 key[CHACHA20POLY1305_KEY_SIZE],
+				       const u8 (*key)[CHACHA20POLY1305_KEY_SIZE],
 				       int encrypt)
 {
 	const u8 *pad0 = page_address(ZERO_PAGE(0));
@@ -335,7 +336,7 @@ bool chacha20poly1305_crypt_sg_inplace(struct scatterlist *src,
 bool chacha20poly1305_encrypt_sg_inplace(struct scatterlist *src, size_t src_len,
 					 const u8 *ad, const size_t ad_len,
 					 const u64 nonce,
-					 const u8 key[CHACHA20POLY1305_KEY_SIZE])
+					 const u8 (*key)[CHACHA20POLY1305_KEY_SIZE])
 {
 	return chacha20poly1305_crypt_sg_inplace(src, src_len, ad, ad_len,
 						 nonce, key, 1);
@@ -345,7 +346,7 @@ EXPORT_SYMBOL(chacha20poly1305_encrypt_sg_inplace);
 bool chacha20poly1305_decrypt_sg_inplace(struct scatterlist *src, size_t src_len,
 					 const u8 *ad, const size_t ad_len,
 					 const u64 nonce,
-					 const u8 key[CHACHA20POLY1305_KEY_SIZE])
+					 const u8 (*key)[CHACHA20POLY1305_KEY_SIZE])
 {
 	if (unlikely(src_len < POLY1305_DIGEST_SIZE))
 		return false;

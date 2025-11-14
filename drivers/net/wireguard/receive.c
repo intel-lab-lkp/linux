@@ -277,7 +277,7 @@ static bool decrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair)
 
 	if (!chacha20poly1305_decrypt_sg_inplace(sg, skb->len, NULL, 0,
 					         PACKET_CB(skb)->nonce,
-						 keypair->receiving.key))
+						 &keypair->receiving.key))
 		return false;
 
 	/* Another ugly situation of pushing and pulling the header so as to
