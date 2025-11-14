@@ -1690,6 +1690,11 @@ int get_tree_bdev_flags(struct fs_context *fc,
 		if (!error)
 			error = fill_super(s, fc);
 		if (error) {
+			/*
+			 * return s_fs_info ownership to fc to be cleaned up by put_fs_context()
+			 */
+			fc->s_fs_info = s->s_fs_info;
+			s->s_fs_info = NULL;
 			deactivate_locked_super(s);
 			return error;
 		}
