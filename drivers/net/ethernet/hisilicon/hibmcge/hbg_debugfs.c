@@ -122,6 +122,8 @@ static int hbg_dbg_nic_state(struct seq_file *s, void *unused)
 	np_link_fail = !hbg_reg_read_field(priv, HBG_REG_AN_NEG_STATE_ADDR,
 					   HBG_REG_AN_NEG_STATE_NP_LINK_OK_B);
 	seq_printf(s, "np_link fail state: %s\n", str_true_false(np_link_fail));
+	seq_printf(s, "page_pool enabled: %s\n",
+		   str_true_false(priv->dev_specs.page_pool_enabled));
 
 	return 0;
 }

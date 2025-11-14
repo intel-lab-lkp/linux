@@ -19,6 +19,10 @@
 #define HBG_SUPPORT_FEATURES (NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM | \
 			     NETIF_F_RXCSUM)
 
+static bool page_pool_enabled = true;
+module_param(page_pool_enabled, bool, 0400);
+MODULE_PARM_DESC(page_pool_enabled, "set page_pool enabled, default is true");
+
 static void hbg_all_irq_enable(struct hbg_priv *priv, bool enabled)
 {
 	const struct hbg_irq_info *info;
@@ -366,6 +370,9 @@ static void hbg_init_user_def(struct hbg_priv *priv)
 static int hbg_init(struct hbg_priv *priv)
 {
 	int ret;
+
+	if (IS_ENABLED(CONFIG_PAGE_POOL))
+		priv->dev_specs.page_pool_enabled = page_pool_enabled;
 
 	ret = hbg_hw_event_notify(priv, HBG_HW_EVENT_INIT);
 	if (ret)

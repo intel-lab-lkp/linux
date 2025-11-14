@@ -7,6 +7,7 @@
 #include <linux/ethtool.h>
 #include <linux/netdevice.h>
 #include <linux/pci.h>
+#include <net/page_pool/helpers.h>
 #include "hbg_reg.h"
 
 #define HBG_STATUS_DISABLE		0x0
@@ -52,8 +53,24 @@ struct hbg_buffer {
 	dma_addr_t state_dma;
 
 	struct sk_buff *skb;
-	dma_addr_t skb_dma;
-	u32 skb_len;
+	struct page *page;
+	u32 page_offset;
+
+	union {
+		void *skb_data_addr;
+		void *page_addr;
+		void *pkt_addr;
+	};
+	union {
+		dma_addr_t skb_dma;
+		dma_addr_t page_dma;
+		dma_addr_t pkt_dma;
+	};
+	union {
+		u32 skb_len;
+		u32 page_size;
+		u32 pkt_len;
+	};
 
 	enum hbg_dir dir;
 	struct hbg_ring *ring;
@@ -78,6 +95,7 @@ struct hbg_ring {
 	struct hbg_priv *priv;
 	struct napi_struct napi;
 	char *tout_log_buf; /* tx timeout log buffer */
+	struct page_pool *page_pool;
 };
 
 enum hbg_hw_event_type {
@@ -101,6 +119,7 @@ struct hbg_dev_specs {
 
 	u32 max_frame_len;
 	u32 rx_buf_size;
+	bool page_pool_enabled;
 };
 
 struct hbg_irq_info {
