@@ -253,7 +253,7 @@ static const struct regmap_irq_chip s5m8767_irq_chip = {
 	.ack_base = S5M8767_REG_INT1,
 };
 
-int sec_irq_init(struct sec_pmic_dev *sec_pmic)
+int sec_irq_init(struct sec_pmic_dev *sec_pmic, struct regmap_irq_chip_data **irq_data)
 {
 	const struct regmap_irq_chip *sec_irq_chip;
 	int ret;
@@ -302,17 +302,11 @@ int sec_irq_init(struct sec_pmic_dev *sec_pmic)
 
 	ret = devm_regmap_add_irq_chip(sec_pmic->dev, sec_pmic->regmap_pmic,
 				       sec_pmic->irq, IRQF_ONESHOT,
-				       0, sec_irq_chip, &sec_pmic->irq_data);
+				       0, sec_irq_chip, irq_data);
 	if (ret)
 		return dev_err_probe(sec_pmic->dev, ret,
 				     "Failed to add %s IRQ chip\n",
 				     sec_irq_chip->name);
-
-	/*
-	 * The rtc-s5m driver requests S2MPS14_IRQ_RTCA0 also for S2MPS11
-	 * so the interrupt number must be consistent.
-	 */
-	BUILD_BUG_ON(((enum s2mps14_irq)S2MPS11_IRQ_RTCA0) != S2MPS14_IRQ_RTCA0);
 
 	return 0;
 }
