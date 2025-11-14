@@ -818,10 +818,23 @@ static struct cpu_cores *init_cpu_cores_ctrl(void)
 	cores_p->min_power_cores = CPU_POWR_CORE_COUNT_MIN;
 	cores_p->min_perf_cores = CPU_PERF_CORE_COUNT_MIN;
 
+	if (cores_p->min_perf_cores > cores_p->max_perf_cores) {
+		pr_err("Invalid CPU performance cores count detected: min: %u, max: %u, current: %u\n",
+		       cores_p->min_perf_cores,
+		       cores_p->max_perf_cores,
+		       cores_p->cur_perf_cores
+		);
+		return ERR_PTR(-EINVAL);
+	}
+
 	if ((cores_p->min_perf_cores > cores_p->max_perf_cores) ||
 	    (cores_p->min_power_cores > cores_p->max_power_cores)
 	) {
-		pr_err("Invalid CPU cores count detected: interface is not safe to be used.\n");
+		pr_err("Invalid CPU efficiency cores count detected: min: %u, max: %u, current: %u\n",
+		       cores_p->min_power_cores,
+		       cores_p->max_power_cores,
+		       cores_p->cur_power_cores
+		);
 		return ERR_PTR(-EINVAL);
 	}
 
@@ -840,6 +853,11 @@ static ssize_t cores_value_show(struct kobject *kobj, struct kobj_attribute *att
 				enum cpu_core_type core_type, enum cpu_core_value core_value)
 {
 	u32 cpu_core_value;
+
+	if (asus_armoury.cpu_cores == NULL) {
+		pr_err("CPU core control interface was not initialized.\n");
+		return -ENODEV;
+	}
 
 	switch (core_value) {
 	case CPU_CORE_DEFAULT:
@@ -874,6 +892,11 @@ static ssize_t cores_current_value_store(struct kobject *kobj, struct kobj_attri
 	result = kstrtou32(buf, 10, &new_cores);
 	if (result)
 		return result;
+
+	if (asus_armoury.cpu_cores == NULL) {
+		pr_err("CPU core control interface was not initialized.\n");
+		return -ENODEV;
+	}
 
 	scoped_guard(mutex, &asus_armoury.cpu_core_mutex) {
 		if (!asus_armoury.cpu_cores_changeable) {
@@ -1389,16 +1412,17 @@ static int __init asus_fw_init(void)
 		return -ENODEV;
 
 	asus_armoury.cpu_cores_changeable = false;
+	asus_armoury.cpu_cores = NULL;
 	if (armoury_has_devstate(ASUS_WMI_DEVID_CORES_MAX)) {
 		cpu_cores_ctrl = init_cpu_cores_ctrl();
 		if (IS_ERR(cpu_cores_ctrl)) {
 			err = PTR_ERR(cpu_cores_ctrl);
 			pr_err("Could not initialise CPU core control: %d\n", err);
-			return err;
+		} else {
+			pr_debug("CPU cores control available.\n");
+			asus_armoury.cpu_cores = cpu_cores_ctrl;
+			asus_armoury.cpu_cores_changeable = true;
 		}
-
-		asus_armoury.cpu_cores = cpu_cores_ctrl;
-		asus_armoury.cpu_cores_changeable = true;
 	}
 
 	init_rog_tunables();
