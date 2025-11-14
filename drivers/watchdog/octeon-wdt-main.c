@@ -203,7 +203,7 @@ static const char reg_name[][3] = {
  * and create a stack for C code. It then calls the third level
  * handler with one argument, a pointer to the register values.
  * 3) The third, and final, level handler is the following C
- * function that prints out some useful infomration.
+ * function that prints out some useful information.
  *
  * @reg:    Pointer to register state before the NMI
  */
