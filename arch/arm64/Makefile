@@ -174,6 +174,7 @@ endif
 all:	$(notdir $(KBUILD_IMAGE))
 
 image.fit: dtbs
+image.fit: $(if $(FIT_MODULES),modules)
 
 vmlinuz.efi image.fit: Image
 $(BOOT_TARGETS): vmlinux
