@@ -18,16 +18,18 @@ struct komeda_pipeline *
 komeda_pipeline_add(struct komeda_dev *mdev, size_t size,
 		    const struct komeda_pipeline_funcs *funcs)
 {
+	struct komeda_kms_dev *kms = dev_get_drvdata(mdev->dev);
+	struct drm_device *drm = &kms->base;
 	struct komeda_pipeline *pipe;
 
 	if (mdev->n_pipelines + 1 > KOMEDA_MAX_PIPELINES) {
-		DRM_ERROR("Exceed max support %d pipelines.\n",
-			  KOMEDA_MAX_PIPELINES);
+		drm_err(drm, "Exceed max support %d pipelines.\n",
+			KOMEDA_MAX_PIPELINES);
 		return ERR_PTR(-ENOSPC);
 	}
 
 	if (size < sizeof(*pipe)) {
-		DRM_ERROR("Request pipeline size too small.\n");
+		drm_err(drm, "Request pipeline size too small.\n");
 		return ERR_PTR(-EINVAL);
 	}
 
@@ -71,6 +73,8 @@ static struct komeda_component **
 komeda_pipeline_get_component_pos(struct komeda_pipeline *pipe, int id)
 {
 	struct komeda_dev *mdev = pipe->mdev;
+	struct komeda_kms_dev *kms = dev_get_drvdata(mdev->dev);
+	struct drm_device *drm = &kms->base;
 	struct komeda_pipeline *temp = NULL;
 	struct komeda_component **pos = NULL;
 
@@ -88,7 +92,7 @@ komeda_pipeline_get_component_pos(struct komeda_pipeline *pipe, int id)
 	case KOMEDA_COMPONENT_COMPIZ1:
 		temp = mdev->pipelines[id - KOMEDA_COMPONENT_COMPIZ0];
 		if (!temp) {
-			DRM_ERROR("compiz-%d doesn't exist.\n", id);
+			drm_err(drm, "compiz-%d doesn't exist.\n", id);
 			return NULL;
 		}
 		pos = to_cpos(temp->compiz);
@@ -107,7 +111,7 @@ komeda_pipeline_get_component_pos(struct komeda_pipeline *pipe, int id)
 	case KOMEDA_COMPONENT_IPS1:
 		temp = mdev->pipelines[id - KOMEDA_COMPONENT_IPS0];
 		if (!temp) {
-			DRM_ERROR("ips-%d doesn't exist.\n", id);
+			drm_err(drm, "ips-%d doesn't exist.\n", id);
 			return NULL;
 		}
 		pos = to_cpos(temp->improc);
@@ -117,7 +121,7 @@ komeda_pipeline_get_component_pos(struct komeda_pipeline *pipe, int id)
 		break;
 	default:
 		pos = NULL;
-		DRM_ERROR("Unknown pipeline resource ID: %d.\n", id);
+		drm_err(drm, "Unknown pipeline resource ID: %d.\n", id);
 		break;
 	}
 
@@ -169,6 +173,8 @@ komeda_component_add(struct komeda_pipeline *pipe,
 		     u8 max_active_outputs, u32 __iomem *reg,
 		     const char *name_fmt, ...)
 {
+	struct komeda_kms_dev *kms = dev_get_drvdata(pipe->mdev->dev);
+	struct drm_device *drm = &kms->base;
 	struct komeda_component **pos;
 	struct komeda_component *c;
 	int idx, *num = NULL;
@@ -187,14 +193,14 @@ komeda_component_add(struct komeda_pipeline *pipe,
 		idx = id - KOMEDA_COMPONENT_LAYER0;
 		num = &pipe->n_layers;
 		if (idx != pipe->n_layers) {
-			DRM_ERROR("please add Layer by id sequence.\n");
+			drm_err(drm, "please add Layer by id sequence.\n");
 			return ERR_PTR(-EINVAL);
 		}
 	} else if (has_bit(id,  KOMEDA_PIPELINE_SCALERS)) {
 		idx = id - KOMEDA_COMPONENT_SCALER0;
 		num = &pipe->n_scalers;
 		if (idx != pipe->n_scalers) {
-			DRM_ERROR("please add Scaler by id sequence.\n");
+			drm_err(drm, "please add Scaler by id sequence.\n");
 			return ERR_PTR(-EINVAL);
 		}
 	}
@@ -240,27 +246,32 @@ static void komeda_component_dump(struct komeda_component *c)
 	if (!c)
 		return;
 
-	DRM_DEBUG("	%s: ID %d-0x%08lx.\n",
-		  c->name, c->id, BIT(c->id));
-	DRM_DEBUG("		max_active_inputs:%d, supported_inputs: 0x%08x.\n",
-		  c->max_active_inputs, c->supported_inputs);
-	DRM_DEBUG("		max_active_outputs:%d, supported_outputs: 0x%08x.\n",
-		  c->max_active_outputs, c->supported_outputs);
+	struct komeda_kms_dev *kms = dev_get_drvdata(c->pipeline->mdev->dev);
+	struct drm_device *drm = &kms->base;
+
+	drm_dbg(drm, "	%s: ID %d-0x%08lx.\n",
+		c->name, c->id, BIT(c->id));
+	drm_dbg(drm, "		max_active_inputs:%d, supported_inputs: 0x%08x.\n",
+		c->max_active_inputs, c->supported_inputs);
+	drm_dbg(drm, "		max_active_outputs:%d, supported_outputs: 0x%08x.\n",
+		c->max_active_outputs, c->supported_outputs);
 }
 
 void komeda_pipeline_dump(struct komeda_pipeline *pipe)
 {
+	struct komeda_kms_dev *kms = dev_get_drvdata(pipe->mdev->dev);
+	struct drm_device *drm = &kms->base;
 	struct komeda_component *c;
 	int id;
 	unsigned long avail_comps = pipe->avail_comps;
 
-	DRM_INFO("Pipeline-%d: n_layers: %d, n_scalers: %d, output: %s.\n",
+	drm_info(drm, "Pipeline-%d: n_layers: %d, n_scalers: %d, output: %s.\n",
 		 pipe->id, pipe->n_layers, pipe->n_scalers,
 		 pipe->dual_link ? "dual-link" : "single-link");
-	DRM_INFO("	output_link[0]: %s.\n",
+	drm_info(drm, "	output_link[0]: %s.\n",
 		 pipe->of_output_links[0] ?
 		 pipe->of_output_links[0]->full_name : "none");
-	DRM_INFO("	output_link[1]: %s.\n",
+	drm_info(drm, "	output_link[1]: %s.\n",
 		 pipe->of_output_links[1] ?
 		 pipe->of_output_links[1]->full_name : "none");
 
@@ -274,6 +285,8 @@ void komeda_pipeline_dump(struct komeda_pipeline *pipe)
 static void komeda_component_verify_inputs(struct komeda_component *c)
 {
 	struct komeda_pipeline *pipe = c->pipeline;
+	struct komeda_kms_dev *kms = dev_get_drvdata(pipe->mdev->dev);
+	struct drm_device *drm = &kms->base;
 	struct komeda_component *input;
 	int id;
 	unsigned long supported_inputs = c->supported_inputs;
@@ -282,7 +295,7 @@ static void komeda_component_verify_inputs(struct komeda_component *c)
 		input = komeda_pipeline_get_component(pipe, id);
 		if (!input) {
 			c->supported_inputs &= ~(BIT(id));
-			DRM_WARN("Can not find input(ID-%d) for component: %s.\n",
+			drm_warn(drm, "Can not find input(ID-%d) for component: %s.\n",
 				 id, c->name);
 			continue;
 		}
@@ -306,6 +319,8 @@ komeda_get_layer_split_right_layer(struct komeda_pipeline *pipe,
 
 static void komeda_pipeline_assemble(struct komeda_pipeline *pipe)
 {
+	struct komeda_kms_dev *kms = dev_get_drvdata(pipe->mdev->dev);
+	struct drm_device *drm = &kms->base;
 	struct komeda_component *c;
 	struct komeda_layer *layer;
 	int i, id;
@@ -324,7 +339,7 @@ static void komeda_pipeline_assemble(struct komeda_pipeline *pipe)
 
 	if (pipe->dual_link && !pipe->ctrlr->supports_dual_link) {
 		pipe->dual_link = false;
-		DRM_WARN("PIPE-%d doesn't support dual-link, ignore DT dual-link configuration.\n",
+		drm_warn(drm, "PIPE-%d doesn't support dual-link, ignore DT dual-link configuration.\n",
 			 pipe->id);
 	}
 }
