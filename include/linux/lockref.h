@@ -49,7 +49,9 @@ static inline void lockref_init(struct lockref *lockref)
 void lockref_get(struct lockref *lockref);
 int lockref_put_return(struct lockref *lockref);
 bool lockref_get_not_zero(struct lockref *lockref);
-bool lockref_put_or_lock(struct lockref *lockref);
+bool _lockref_put_or_lock(struct lockref *lockref);
+#define lockref_put_or_lock(_lockref) \
+	(!__cond_lock((_lockref)->lock, !_lockref_put_or_lock(_lockref)))
 
 void lockref_mark_dead(struct lockref *lockref);
 bool lockref_get_not_dead(struct lockref *lockref);
