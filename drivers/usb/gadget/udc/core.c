@@ -1146,8 +1146,17 @@ static int usb_udc_connect_control_locked(struct usb_udc *udc) __must_hold(&udc-
 static void vbus_event_work(struct work_struct *work)
 {
 	struct usb_udc *udc = container_of(work, struct usb_udc, vbus_work);
+	struct usb_gadget *gadget = udc->gadget;
 
 	mutex_lock(&udc->connect_lock);
+
+	/*
+	 * Clear the 'deactivated' flag on a VBUS event
+	 * to break the blocked state.
+	 */
+	if (gadget->deactivated)
+		gadget->deactivated = false;
+
 	usb_udc_connect_control_locked(udc);
 	mutex_unlock(&udc->connect_lock);
 }
