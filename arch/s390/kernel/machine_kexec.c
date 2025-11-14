@@ -45,7 +45,7 @@ extern const unsigned long long relocate_kernel_len;
  * Reset the system, copy boot CPU registers to absolute zero,
  * and jump to the kdump image
  */
-static void __do_machine_kdump(void *data)
+static void __noreturn __do_machine_kdump(void *data)
 {
 	struct kimage *image = data;
 	purgatory_t purgatory;
