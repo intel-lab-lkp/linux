@@ -4089,7 +4089,7 @@ int vmw_execbuf_process(struct drm_file *file_priv,
 	int ret;
 	int32_t out_fence_fd = -1;
 	struct sync_file *sync_file = NULL;
-	DECLARE_VAL_CONTEXT(val_ctx, sw_context, 1);
+	DECLARE_VAL_CONTEXT(val_ctx, 1);
 
 	if (flags & DRM_VMW_EXECBUF_FLAG_EXPORT_FENCE_FD) {
 		out_fence_fd = get_unused_fd_flags(O_CLOEXEC);
@@ -4178,8 +4178,6 @@ int vmw_execbuf_process(struct drm_file *file_priv,
 	ret = vmw_validation_res_validate(&val_ctx, true);
 	if (unlikely(ret != 0))
 		goto out_err;
-
-	vmw_validation_drop_ht(&val_ctx);
 
 	ret = mutex_lock_interruptible(&dev_priv->binding_mutex);
 	if (unlikely(ret != 0)) {
@@ -4289,7 +4287,6 @@ out_err_nores:
 		__vmw_execbuf_release_pinned_bo(dev_priv, NULL);
 out_unlock:
 	vmw_cmdbuf_res_revert(&sw_context->staged_cmd_res);
-	vmw_validation_drop_ht(&val_ctx);
 	WARN_ON(!list_empty(&sw_context->ctx_list));
 	mutex_unlock(&dev_priv->cmdbuf_mutex);
 
@@ -4358,7 +4355,7 @@ void __vmw_execbuf_release_pinned_bo(struct vmw_private *dev_priv,
 {
 	int ret = 0;
 	struct vmw_fence_obj *lfence = NULL;
-	DECLARE_VAL_CONTEXT(val_ctx, NULL, 0);
+	DECLARE_VAL_CONTEXT(val_ctx, 0);
 
 	if (dev_priv->pinned_bo == NULL)
 		goto out_unlock;

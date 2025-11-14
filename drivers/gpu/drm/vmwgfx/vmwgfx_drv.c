@@ -814,13 +814,6 @@ static void vmw_write_driver_id(struct vmw_private *dev)
 	}
 }
 
-static void vmw_sw_context_init(struct vmw_private *dev_priv)
-{
-	struct vmw_sw_context *sw_context = &dev_priv->ctx;
-
-	hash_init(sw_context->res_ht);
-}
-
 static void vmw_sw_context_fini(struct vmw_private *dev_priv)
 {
 	struct vmw_sw_context *sw_context = &dev_priv->ctx;
@@ -835,8 +828,6 @@ static int vmw_driver_load(struct vmw_private *dev_priv, u32 pci_id)
 	int ret;
 	enum vmw_res_type i;
 	bool refuse_dma = false;
-
-	vmw_sw_context_init(dev_priv);
 
 	mutex_init(&dev_priv->cmdbuf_mutex);
 	mutex_init(&dev_priv->binding_mutex);

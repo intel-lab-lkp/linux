@@ -566,7 +566,7 @@ int vmw_kms_stdu_readback(struct vmw_private *dev_priv,
 		container_of(vfb, struct vmw_framebuffer_bo, base)->buffer;
 	struct vmw_stdu_dirty ddirty;
 	int ret;
-	DECLARE_VAL_CONTEXT(val_ctx, NULL, 0);
+	DECLARE_VAL_CONTEXT(val_ctx, 0);
 
 	/*
 	 * The GMR domain might seem confusing because it might seem like it should
@@ -733,7 +733,7 @@ int vmw_kms_stdu_surface_dirty(struct vmw_private *dev_priv,
 	struct vmw_framebuffer_surface *vfbs =
 		container_of(framebuffer, typeof(*vfbs), base);
 	struct vmw_stdu_dirty sdirty;
-	DECLARE_VAL_CONTEXT(val_ctx, NULL, 0);
+	DECLARE_VAL_CONTEXT(val_ctx, 0);
 	int ret;
 
 	if (!srf)

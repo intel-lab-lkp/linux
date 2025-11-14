@@ -37,10 +37,11 @@
 #define VMW_RES_DIRTY_NONE 0
 #define VMW_RES_DIRTY_SET BIT(0)
 #define VMW_RES_DIRTY_CLEAR BIT(1)
+#define VMW_RES_HT_ORDER 7
 
 /**
  * struct vmw_validation_context - Per command submission validation context
- * @ht: Hash table used to find resource- or buffer object duplicates
+ * @res_ht: Hash table used to find resource- or buffer object duplicates
  * @resource_list: List head for resource validation metadata
  * @resource_ctx_list: List head for resource validation metadata for
  * resources that need to be validated before those in @resource_list
@@ -54,7 +55,7 @@
  * @page_address: Kernel virtual address of the last page in @page_list
  */
 struct vmw_validation_context {
-	struct vmw_sw_context *sw_context;
+	DECLARE_HASHTABLE(res_ht, VMW_RES_HT_ORDER);
 	struct list_head resource_list;
 	struct list_head resource_ctx_list;
 	struct list_head bo_list;
@@ -70,20 +71,15 @@ struct vmw_bo;
 struct vmw_resource;
 struct vmw_fence_obj;
 
-#if 0
 /**
  * DECLARE_VAL_CONTEXT - Declare a validation context with initialization
  * @_name: The name of the variable
- * @_sw_context: Contains the hash table used to find dups or NULL if none
- * @_merge_dups: Whether to merge duplicate buffer object- or resource
- * entries. If set to true, ideally a hash table pointer should be supplied
- * as well unless the number of resources and buffer objects per validation
- * is known to be very small
+ * @_merge_dups: Whether to merge duplicate buffer objects or resource entries.
  */
-#endif
-#define DECLARE_VAL_CONTEXT(_name, _sw_context, _merge_dups)		\
+
+#define DECLARE_VAL_CONTEXT(_name, _merge_dups)				\
 	struct vmw_validation_context _name =				\
-	{ .sw_context = _sw_context,					\
+	{ .res_ht = {},							\
 	  .resource_list = LIST_HEAD_INIT((_name).resource_list),	\
 	  .resource_ctx_list = LIST_HEAD_INIT((_name).resource_ctx_list), \
 	  .bo_list = LIST_HEAD_INIT((_name).bo_list),			\

@@ -1104,7 +1104,7 @@ int vmw_kms_sou_do_surface_dirty(struct vmw_private *dev_priv,
 	struct vmw_framebuffer_surface *vfbs =
 		container_of(framebuffer, typeof(*vfbs), base);
 	struct vmw_kms_sou_surface_dirty sdirty;
-	DECLARE_VAL_CONTEXT(val_ctx, NULL, 0);
+	DECLARE_VAL_CONTEXT(val_ctx, 0);
 	int ret;
 
 	if (!srf)
@@ -1219,7 +1219,7 @@ int vmw_kms_sou_do_bo_dirty(struct vmw_private *dev_priv,
 		container_of(framebuffer, struct vmw_framebuffer_bo,
 			     base)->buffer;
 	struct vmw_kms_dirty dirty;
-	DECLARE_VAL_CONTEXT(val_ctx, NULL, 0);
+	DECLARE_VAL_CONTEXT(val_ctx, 0);
 	int ret;
 
 	vmw_bo_placement_set(buf, VMW_BO_DOMAIN_GMR | VMW_BO_DOMAIN_VRAM,
@@ -1327,7 +1327,7 @@ int vmw_kms_sou_readback(struct vmw_private *dev_priv,
 	struct vmw_bo *buf =
 		container_of(vfb, struct vmw_framebuffer_bo, base)->buffer;
 	struct vmw_kms_dirty dirty;
-	DECLARE_VAL_CONTEXT(val_ctx, NULL, 0);
+	DECLARE_VAL_CONTEXT(val_ctx, 0);
 	int ret;
 
 	vmw_bo_placement_set(buf, VMW_BO_DOMAIN_GMR | VMW_BO_DOMAIN_VRAM,

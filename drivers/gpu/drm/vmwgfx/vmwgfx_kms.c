@@ -1733,7 +1733,7 @@ int vmw_du_helper_plane_update(struct vmw_du_update_plane *update)
 	struct drm_atomic_helper_damage_iter iter;
 	struct drm_rect clip;
 	struct drm_rect bb;
-	DECLARE_VAL_CONTEXT(val_ctx, NULL, 0);
+	DECLARE_VAL_CONTEXT(val_ctx, 0);
 	uint32_t reserved_size = 0;
 	uint32_t submit_size = 0;
 	uint32_t curr_size = 0;
