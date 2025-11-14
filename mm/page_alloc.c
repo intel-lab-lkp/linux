@@ -6311,10 +6311,22 @@ static void calculate_totalreserve_pages(void)
 			long max = 0;
 			unsigned long managed_pages = zone_managed_pages(zone);
 
-			/* Find valid and maximum lowmem_reserve in the zone */
-			for (j = i; j < MAX_NR_ZONES; j++)
-				max = max(max, zone->lowmem_reserve[j]);
+			/*
+			 * Find valid and maximum lowmem_reserve in the zone.
+			 *
+			 * setup_per_zone_lowmem_reserve() builds
+			 * lowmem_reserve[j] monotonically increasing in j
+			 * for a fixed zone, so the maximum lives at the
+			 * highest index that has a non-zero value.  Walk
+			 * backwards and stop at the first hit.
+			 */
+			for (j = MAX_NR_ZONES - 1; j > i; j--) {
+				if (!zone->lowmem_reserve[j])
+					continue;
 
+				max = zone->lowmem_reserve[j];
+				break;
+			}
 			/* we treat the high watermark as reserved pages. */
 			max += high_wmark_pages(zone);
 
