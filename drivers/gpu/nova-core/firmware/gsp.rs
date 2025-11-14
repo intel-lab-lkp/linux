@@ -163,9 +163,14 @@ impl GspFirmware {
         let fw_section = elf::elf64_section(fw.data(), ".fwimage").ok_or(EINVAL)?;
 
         let sigs_section = match chipset.arch() {
-            Architecture::Ampere => ".fwsignature_ga10x",
+            Architecture::Turing | Architecture::Ampere =>
+                if chipset > Chipset::GA100 {
+                    ".fwsignature_ga10x"
+                } else {
+                    // GA100 uses the same firmware as Turing
+                    ".fwsignature_tu10x"
+                },
             Architecture::Ada => ".fwsignature_ad10x",
-            _ => return Err(ENOTSUPP),
         };
         let signatures = elf::elf64_section(fw.data(), sigs_section)
             .ok_or(EINVAL)
