@@ -1074,6 +1074,7 @@
 			interconnect-names = "usb-ddr",
 					     "apps-usb";
 
+			usb-role-switch;
 			status = "disabled";
 
 			ports {
