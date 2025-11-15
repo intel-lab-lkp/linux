@@ -97,6 +97,11 @@ modules.order
 /tar-install/
 
 #
+# modules directory (make cpio-modules-pkg)
+#
+/modules-install/
+
+#
 # pacman files (make pacman-pkg)
 #
 /PKGBUILD

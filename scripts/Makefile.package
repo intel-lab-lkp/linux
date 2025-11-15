@@ -189,6 +189,22 @@ tar-pkg: linux-$(KERNELRELEASE)-$(ARCH).tar
 tar%-pkg: linux-$(KERNELRELEASE)-$(ARCH).tar.% FORCE
 	@:
 
+modules-install: FORCE
+	$(Q)$(MAKE) -f $(srctree)/Makefile
+	$(Q)rm -rf $@
+	$(Q)$(MAKE) -f $(srctree)/Makefile INSTALL_MOD_PATH=$@ modules_install
+
+quiet_cmd_cpio = CPIO    $@
+      cmd_cpio = $(srctree)/usr/gen_initramfs.sh $< > $@
+
+modules-$(KERNELRELEASE)-$(ARCH).cpio: modules-install
+	$(Q)$(MAKE) -f $(srctree)/Makefile $(build)=usr cpio-data= usr/gen_init_cpio
+	$(call cmd,cpio)
+
+PHONY += cpio-modules-pkg
+cpio-modules-pkg: modules-$(KERNELRELEASE)-$(ARCH).cpio
+	@:
+
 # perf-tar*-src-pkg - generate a source tarball with perf source
 # ---------------------------------------------------------------------------
 
@@ -245,6 +261,7 @@ help:
 	@echo '  tarbz2-pkg          - Build the kernel as a bzip2 compressed tarball'
 	@echo '  tarxz-pkg           - Build the kernel as a xz compressed tarball'
 	@echo '  tarzst-pkg          - Build the kernel as a zstd compressed tarball'
+	@echo '  cpio-modules-pkg    - Build the kernel modules as cpio archive'
 	@echo '  perf-tar-src-pkg    - Build the perf source tarball with no compression'
 	@echo '  perf-targz-src-pkg  - Build the perf source tarball with gzip compression'
 	@echo '  perf-tarbz2-src-pkg - Build the perf source tarball with bz2 compression'
