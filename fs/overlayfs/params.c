@@ -448,7 +448,7 @@ static int ovl_parse_layer(struct fs_context *fc, struct fs_parameter *param,
 		err = ovl_do_parse_layer(fc, param->string, &layer_path, layer);
 		break;
 	case fs_value_is_file: {
-		char *buf __free(kfree);
+		char *buf __free(kfree) = NULL;
 		char *layer_name;
 
 		buf = kmalloc(PATH_MAX, GFP_KERNEL_ACCOUNT);
