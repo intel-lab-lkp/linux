@@ -2526,6 +2526,18 @@ static void partition_cpus_change(struct cpuset *cs, struct cpuset *trialcs,
 	}
 }
 
+static int init_trialcs(struct cpuset *cs, struct cpuset *trialcs)
+{
+	trialcs->prs_err = PERR_NONE;
+	/*
+	 * If partition_root_state != 0, it may automatically change to a partition,
+	 * Therefore, we should treat trialcs as exclusive during validation
+	 */
+	if (trialcs->partition_root_state)
+		set_bit(CS_CPU_EXCLUSIVE, &trialcs->flags);
+	return compute_trialcs_excpus(trialcs, cs);
+}
+
 /**
  * update_cpumask - update the cpus_allowed mask of a cpuset and all tasks in it
  * @cs: the cpuset to consider
@@ -2551,9 +2563,7 @@ static int update_cpumask(struct cpuset *cs, struct cpuset *trialcs,
 	if (alloc_tmpmasks(&tmp))
 		return -ENOMEM;
 
-	compute_trialcs_excpus(trialcs, cs);
-	trialcs->prs_err = PERR_NONE;
-
+	init_trialcs(cs, trialcs);
 	retval = cpus_allowed_validate_change(cs, trialcs, &tmp);
 	if (retval < 0)
 		goto out_free;
@@ -2612,7 +2622,7 @@ static int update_exclusive_cpumask(struct cpuset *cs, struct cpuset *trialcs,
 	 * Reject the change if there is exclusive CPUs conflict with
 	 * the siblings.
 	 */
-	if (compute_trialcs_excpus(trialcs, cs))
+	if (init_trialcs(cs, trialcs))
 		return -EINVAL;
 
 	/*
@@ -2628,7 +2638,6 @@ static int update_exclusive_cpumask(struct cpuset *cs, struct cpuset *trialcs,
 	if (alloc_tmpmasks(&tmp))
 		return -ENOMEM;
 
-	trialcs->prs_err = PERR_NONE;
 	partition_cpus_change(cs, trialcs, &tmp);
 
 	spin_lock_irq(&callback_lock);
