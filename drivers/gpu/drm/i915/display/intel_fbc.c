@@ -73,6 +73,9 @@
 	for_each_fbc_id((__display), (__fbc_id)) \
 		for_each_if((__fbc) = (__display)->fbc[(__fbc_id)])
 
+#define SYS_CACHE_FBC_UNASSIGNED		-1
+#define IS_SYS_CACHE_FBC_UNASSIGNED(__display)	((__display)->sys_cache_fbc == SYS_CACHE_FBC_UNASSIGNED)
+
 struct intel_fbc_funcs {
 	void (*activate)(struct intel_fbc *fbc);
 	void (*deactivate)(struct intel_fbc *fbc);
@@ -939,6 +942,66 @@ static void intel_fbc_program_workarounds(struct intel_fbc *fbc)
 		fbc_compressor_clkgate_disable_wa(fbc, true);
 }
 
+static int xe3p_lpd_fbc_get_cache_limit(void)
+{
+	/* Default 2MB for xe3p_lpd */
+	return 2 * 1024 * 1024;
+}
+
+static void xe3p_lpd_fbc_clear_sys_cache_usage(struct intel_display *display)
+{
+	/* Clear all the fields except the default fields */
+	intel_de_rmw(display, XE3P_LPD_FBC_SYS_CACHE_USAGE_CFG,
+		     FBC_SYS_CACHE_TAG_MASK | FBC_SYS_CACHEABLE_RANGE_MASK |
+		     FBC_SYS_CACHE_START_BASE_MASK, 0);
+
+	/* Mark that no FBC instance utilize the system cache */
+	display->sys_cache_fbc = SYS_CACHE_FBC_UNASSIGNED;
+}
+
+static void xe3p_lpd_fbc_set_sys_cache_usage(const struct intel_fbc *fbc)
+{
+	struct intel_display *display = fbc->display;
+	/* limit to be configured to the register in 64k byte chunks */
+	int range = xe3p_lpd_fbc_get_cache_limit() / (64 * 1024);
+	/* offset to be configured to the register in 4K byte chunks */
+	int offset = i915_gem_stolen_node_offset(fbc->compressed_fb) / (4 * 1024);
+	u32 usage = FBC_SYS_CACHE_TAG_USE_RES_SPACE |
+		    FBC_SYS_CACHEABLE_RANGE(range) |
+		    FBC_SYS_CACHE_START_BASE(offset);
+
+	lockdep_assert_held(&fbc->lock);
+
+	intel_de_rmw(display, XE3P_LPD_FBC_SYS_CACHE_USAGE_CFG,
+		     FBC_SYS_CACHE_TAG_MASK | FBC_SYS_CACHEABLE_RANGE_MASK |
+		     FBC_SYS_CACHE_START_BASE_MASK, usage);
+
+	display->sys_cache_fbc = fbc->id;
+}
+
+static void xe3p_lpd_fbc_update_sys_cache_usage(const struct intel_fbc *fbc, bool set)
+{
+	struct intel_display *display = fbc->display;
+
+	lockdep_assert_held(&fbc->lock);
+
+	/* system cache for fbc already reserved */
+	if (set && !IS_SYS_CACHE_FBC_UNASSIGNED(display))
+		return;
+
+	/* cannot clear if "fbc" did not reserve the cache */
+	if (!set && display->sys_cache_fbc != fbc->id)
+		return;
+
+	if (set)
+		xe3p_lpd_fbc_set_sys_cache_usage(fbc);
+	else
+		xe3p_lpd_fbc_clear_sys_cache_usage(display);
+
+	drm_dbg_kms(display->drm, "System cacheability usage for FBC[%d] %s\n",
+		    fbc->id, set ? "configured" : "cleared");
+}
+
 static void __intel_fbc_cleanup_cfb(struct intel_fbc *fbc)
 {
 	if (WARN_ON(intel_fbc_hw_is_active(fbc)))
@@ -965,6 +1028,9 @@ void intel_fbc_cleanup(struct intel_display *display)
 
 		kfree(fbc);
 	}
+
+	if (HAS_FBC_SYS_CACHE(display))
+		xe3p_lpd_fbc_clear_sys_cache_usage(display);
 }
 
 static bool i8xx_fbc_stride_is_valid(const struct intel_plane_state *plane_state)
@@ -1698,6 +1764,9 @@ static void __intel_fbc_disable(struct intel_fbc *fbc)
 
 	__intel_fbc_cleanup_cfb(fbc);
 
+	if (HAS_FBC_SYS_CACHE(display))
+		xe3p_lpd_fbc_update_sys_cache_usage(fbc, false);
+
 	/* wa_18038517565 Enable DPFC clock gating after FBC disable */
 	if (display->platform.dg2 || DISPLAY_VER(display) >= 14)
 		fbc_compressor_clkgate_disable_wa(fbc, false);
@@ -1890,6 +1959,9 @@ static void __intel_fbc_enable(struct intel_atomic_state *state,
 
 	intel_fbc_program_workarounds(fbc);
 	intel_fbc_program_cfb(fbc);
+
+	if (HAS_FBC_SYS_CACHE(display))
+		xe3p_lpd_fbc_update_sys_cache_usage(fbc, true);
 }
 
 /**
@@ -2149,6 +2221,10 @@ void intel_fbc_sanitize(struct intel_display *display)
 		if (intel_fbc_hw_is_active(fbc))
 			intel_fbc_hw_deactivate(fbc);
 	}
+
+	/* Ensure the sys cache usage register gets cleared */
+	if (HAS_FBC_SYS_CACHE(display))
+		xe3p_lpd_fbc_clear_sys_cache_usage(display);
 }
 
 static int intel_fbc_debugfs_status_show(struct seq_file *m, void *unused)

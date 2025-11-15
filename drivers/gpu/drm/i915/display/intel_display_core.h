@@ -581,6 +581,9 @@ struct intel_display {
 		u32 bxt_phy_grc;
 	} state;
 
+	/* FBC instance utlizing the system cache */
+	int sys_cache_fbc;
+
 	struct {
 		unsigned int hpll_freq;
 		unsigned int czclk_freq;
