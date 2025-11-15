@@ -191,6 +191,7 @@ locks_get_lock_context(struct inode *inode, int type)
 	INIT_LIST_HEAD(&ctx->flc_flock);
 	INIT_LIST_HEAD(&ctx->flc_posix);
 	INIT_LIST_HEAD(&ctx->flc_lease);
+	init_waitqueue_head(&ctx->flc_dispose_wait);
 
 	/*
 	 * Assign the pointer if it's not already assigned. If it is, then
@@ -1609,6 +1610,10 @@ int __break_lease(struct inode *inode, unsigned int mode, unsigned int type)
 		error = -EWOULDBLOCK;
 		goto out;
 	}
+	if (type == FL_LAYOUT && !ctx->flc_conflict) {
+		ctx->flc_conflict = true;
+		ctx->flc_wait_for_dispose = false;
+	}
 
 restart:
 	fl = list_first_entry(&ctx->flc_lease, struct file_lease, c.flc_list);
@@ -1640,12 +1645,31 @@ restart:
 			time_out_leases(inode, &dispose);
 		if (any_leases_conflict(inode, new_fl))
 			goto restart;
+		if (type == FL_LAYOUT && ctx->flc_wait_for_dispose) {
+			/*
+			 * wait for flc_wait_for_dispose to ensure
+			 * the offending client has been fenced.
+			 */
+			spin_unlock(&ctx->flc_lock);
+			wait_event_interruptible(ctx->flc_dispose_wait,
+				ctx->flc_wait_for_dispose == false);
+			spin_lock(&ctx->flc_lock);
+		}
 		error = 0;
+		if (type == FL_LAYOUT)
+			ctx->flc_wait_for_dispose = true;
 	}
 out:
 	spin_unlock(&ctx->flc_lock);
 	percpu_up_read(&file_rwsem);
 	locks_dispose_list(&dispose);
+	if (type == FL_LAYOUT) {
+		spin_lock(&ctx->flc_lock);
+		ctx->flc_wait_for_dispose = false;
+		ctx->flc_conflict = false;
+		wake_up(&ctx->flc_dispose_wait);
+		spin_unlock(&ctx->flc_lock);
+	}
 free_lock:
 	locks_free_lease(new_fl);
 	return error;
