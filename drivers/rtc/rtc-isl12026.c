@@ -34,6 +34,11 @@
 #define ISL12026_PAGESIZE 16
 #define ISL12026_NVMEM_WRITE_TIME 20
 
+#define ISL12026_AL0_REG_SC	0x0
+#define ISL12026_REG_INT	0x11
+#define ISL12026_AL0E		BIT(5)
+#define ISL12026_SR_AL0         BIT(5)
+
 struct isl12026 {
 	struct rtc_device *rtc;
 	struct i2c_client *nvm_client;
@@ -269,9 +274,131 @@ out:
 	return ret;
 }
 
+static int isl12026_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alrm)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	int ret;
+	u8 buf_alrm_vals[7];
+	struct i2c_msg msg;
+	int ir;
+
+	msg.addr = client->addr;
+	msg.flags = 0x0; /* Write operation */
+	msg.buf = buf_alrm_vals;
+	msg.len = sizeof(buf_alrm_vals);
+
+	if (!alrm->enabled) {
+		/* Disable alarm and return */
+		ir = isl12026_read_reg(client, ISL12026_REG_INT);
+		if (ir < 0)
+			return ir;
+		ir &= ~ISL12026_AL0E;
+		ret = isl12026_write_reg(client, ISL12026_REG_INT, ir);
+
+		return ret;
+	}
+
+	/* Prepare 5 bytes alarm data SC, MN, HR, DT, MO */
+	buf_alrm_vals[0] = 0x0;
+	buf_alrm_vals[1] = ISL12026_AL0_REG_SC;
+	buf_alrm_vals[2] = (bin2bcd(alrm->time.tm_sec) & 0x7f) | 0x80;
+	buf_alrm_vals[3] = (bin2bcd(alrm->time.tm_min) & 0x7f) | 0x80;
+	buf_alrm_vals[4] = (bin2bcd(alrm->time.tm_hour) & 0x3f) | 0x80;
+	buf_alrm_vals[5] = (bin2bcd(alrm->time.tm_mday) & 0x3f) | 0x80;
+	buf_alrm_vals[6] = (bin2bcd(alrm->time.tm_mon + 1) & 0x1f) | 0x80;
+
+	/* Non-volatile Page write to AL0 registers and enable INT */
+	ret = isl12026_arm_write(client);
+	if (ret < 0)
+		return ret;
+	ret = i2c_transfer(client->adapter, &msg, 1);
+	msleep(ISL12026_NVMEM_WRITE_TIME);
+	if (ret != 1) {
+		dev_err(&client->dev, "Error writing to alarm registers\n");
+		return ret < 0 ? ret : -EIO;
+	}
+
+	/* Enable AL0 interrupt */
+	ret = isl12026_write_reg(client, ISL12026_REG_INT, ISL12026_AL0E);
+
+	return ret;
+}
+
+static int isl12026_rtc_read_alarm(struct device *dev, struct rtc_wkalrm *alrm)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	int ret;
+	int sr, ir;
+	u8 buf_alrm_vals[5];
+	u8 addr[2] = {0x0, ISL12026_AL0_REG_SC};
+	struct i2c_msg msgs[2] = { };
+
+	msgs[0].addr = client->addr;
+	msgs[0].flags = 0x0; /* Write register address */
+	msgs[0].buf = addr;
+	msgs[0].len = sizeof(addr);
+
+	msgs[1].addr = client->addr;
+	msgs[1].flags = I2C_M_RD; /* Alarm read operation */
+	msgs[1].buf = buf_alrm_vals;
+	msgs[1].len = sizeof(buf_alrm_vals);
+
+	/* Read alarm enable status */
+	ir = isl12026_read_reg(client, ISL12026_REG_INT);
+	if (ir < 0)
+		return ir;
+	alrm->enabled =  !!(ir & ISL12026_AL0E);
+
+	/* Read alarm pending status */
+	sr = isl12026_read_reg(client, ISL12026_REG_SR);
+	if (sr < 0)
+		return sr;
+	alrm->pending =  !!(sr & ISL12026_SR_AL0) && alrm->enabled;
+
+	/* Page read for alarm registers */
+	ret = i2c_transfer(client->adapter, msgs, ARRAY_SIZE(msgs));
+	if (ret != ARRAY_SIZE(msgs)) {
+		dev_err(&client->dev, "Error reading alarm registers\n");
+		return ret < 0 ? ret : -EIO;
+	}
+
+	/* Populate values read */
+	alrm->time.tm_sec =  bcd2bin(buf_alrm_vals[0] & 0x7f);
+	alrm->time.tm_min =  bcd2bin(buf_alrm_vals[1] & 0x7f);
+	alrm->time.tm_hour = bcd2bin(buf_alrm_vals[2] & 0x3f);
+	alrm->time.tm_mday = bcd2bin(buf_alrm_vals[3] & 0x3f);
+	alrm->time.tm_mon =  bcd2bin(buf_alrm_vals[4] & 0x1f) - 1;
+
+	return 0;
+}
+
+static int isl12026_rtc_alarm_irq_en(struct device *dev, unsigned int enabled)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	int ret;
+	int ir;
+
+	if (enabled) {
+		ret = isl12026_write_reg(client, ISL12026_REG_INT, ISL12026_AL0E);
+		return ret;
+	}
+
+	/* Disable alarm */
+	ir = isl12026_read_reg(client, ISL12026_REG_INT);
+	if (ir < 0)
+		return ir;
+	ir &= ~ISL12026_AL0E;
+	ret = isl12026_write_reg(client, ISL12026_REG_INT, ir);
+
+	return ret;
+}
+
 static const struct rtc_class_ops isl12026_rtc_ops = {
 	.read_time	= isl12026_rtc_read_time,
 	.set_time	= isl12026_rtc_set_time,
+	.set_alarm	= isl12026_rtc_set_alarm,
+	.read_alarm	= isl12026_rtc_read_alarm,
+	.alarm_irq_enable = isl12026_rtc_alarm_irq_en,
 };
 
 static int isl12026_nvm_read(void *p, unsigned int offset,
