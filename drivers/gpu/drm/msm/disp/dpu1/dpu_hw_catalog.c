@@ -389,6 +389,15 @@ static const struct dpu_dspp_sub_blks sdm845_dspp_sblk = {
 		.len = 0x90, .version = 0x40000},
 };
 
+/*
+ * Some of Gamma-related IGT tests fail on SC7180. Disable GC until we triage
+ * those failures.
+ */
+static const struct dpu_dspp_sub_blks sc7180_dspp_sblk = {
+	.pcc = {.name = "pcc", .base = 0x1700,
+		.len = 0x90, .version = 0x40000},
+};
+
 static const struct dpu_dspp_sub_blks sm8750_dspp_sblk = {
 	.pcc = {.name = "pcc", .base = 0x1700,
 		.len = 0x90, .version = 0x60000},
