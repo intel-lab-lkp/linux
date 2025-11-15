@@ -263,3 +263,88 @@ declare_and_impl_atomic_methods!(
         }
     }
 );
+
+impl private::Sealed for i8 {}
+impl private::Sealed for i16 {}
+
+impl AtomicImpl for i8 {
+    type Delta = Self;
+}
+
+impl AtomicImpl for i16 {
+    type Delta = Self;
+}
+
+trait VolatileOps: AtomicImpl {
+    /// Volatile read.
+    fn volatile_read(a: &AtomicRepr<Self>) -> Self;
+
+    /// Volatile write.
+    fn volatile_set(a: &AtomicRepr<Self>, v: Self);
+}
+
+macro_rules! impl_volatile_methods {
+    ($ty:ty) => {
+        impl VolatileOps for $ty {
+            #[inline(always)]
+            fn volatile_read(a: &AtomicRepr<Self>) -> Self {
+                // SAFETY: `a.as_ptr()` is valid and properly aligned.
+                unsafe { core::ptr::read_volatile(a.as_ptr()) }
+            }
+
+            #[inline(always)]
+            fn volatile_set(a: &AtomicRepr<Self>, v: Self) {
+                // SAFETY: `a.as_ptr()` is valid and properly aligned.
+                unsafe { core::ptr::write_volatile(a.as_ptr(), v) }
+            }
+        }
+    };
+}
+
+impl_volatile_methods!(i8);
+impl_volatile_methods!(i16);
+
+macro_rules! impl_atomic_basic_ops_by_volatile {
+    ($ty:ty) => {
+        impl AtomicBasicOps for $ty {
+            #[inline(always)]
+            fn atomic_set(a: &AtomicRepr<Self>, v: Self) {
+                <Self as VolatileOps>::volatile_set(a, v)
+            }
+
+            #[inline(always)]
+            fn atomic_set_release(a: &AtomicRepr<Self>, v: Self) {
+                // SAFETY: `a.as_ptr()` is valid and properly aligned.
+                unsafe {
+                    bindings::smp_store_release(
+                        a.as_ptr().cast(),
+                        v as u64,
+                        core::mem::size_of::<Self>(),
+                    )
+                }
+            }
+
+            #[inline(always)]
+            fn atomic_read(a: &AtomicRepr<Self>) -> Self {
+                <Self as VolatileOps>::volatile_read(a)
+            }
+
+            #[inline(always)]
+            fn atomic_read_acquire(a: &AtomicRepr<Self>) -> Self {
+                let mut ret: Self = 0;
+                // SAFETY: `a.as_ptr()` is valid and properly aligned.
+                unsafe {
+                    bindings::smp_load_acquire(
+                        a.as_ptr().cast(),
+                        core::ptr::from_mut(&mut ret).cast(),
+                        core::mem::size_of::<Self>(),
+                    )
+                }
+                ret
+            }
+        }
+    };
+}
+
+impl_atomic_basic_ops_by_volatile!(i8);
+impl_atomic_basic_ops_by_volatile!(i16);
