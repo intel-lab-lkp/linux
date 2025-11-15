@@ -4,6 +4,7 @@
  */
 
 #include "linux/bitmap.h"
+#include "uapi/asm/kvm.h"
 #include "test_util.h"
 #include "kvm_util.h"
 #include "pmu.h"
