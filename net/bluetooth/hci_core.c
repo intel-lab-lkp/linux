@@ -4162,16 +4162,20 @@ static void hci_cmd_work(struct work_struct *work)
 
 	/* Send queued commands */
 	if (atomic_read(&hdev->cmd_cnt)) {
+		bool is_nop;
+
 		skb = skb_dequeue(&hdev->cmd_q);
 		if (!skb)
 			return;
+
+		is_nop = (hci_skb_opcode(skb) == HCI_OP_NOP);
 
 		hci_send_cmd_sync(hdev, skb);
 
 		/* Don't trigger cmd_timer in case of HCI_OP_NOP since there is
 		 * no command pending.
 		 */
-		if (hci_skb_opcode(skb) == HCI_OP_NOP)
+		if (is_nop)
 			return;
 
 		rcu_read_lock();
