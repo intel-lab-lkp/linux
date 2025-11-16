@@ -29,6 +29,23 @@ struct irqstat {
 #endif
 };
 
+#ifdef CONFIG_IRQ_SOFT_MODERATION
+/**
+ * struct irq_desc_mod - interrupt moderation information
+ * @ms_node:		per-CPU list of moderated irq_desc
+ * @enable:		enable moderation on this descriptor
+ */
+struct irq_desc_mod {
+	struct list_head	ms_node;
+	bool			enable;
+};
+
+void irq_moderation_init_fields(struct irq_desc_mod *mod);
+#else
+struct irq_desc_mod {};
+static inline void irq_moderation_init_fields(struct irq_desc_mod *mod) {}
+#endif
+
 /**
  * struct irq_desc - interrupt descriptor
  * @irq_common_data:	per irq and chip data passed down to chip functions
@@ -111,6 +128,7 @@ struct irq_desc {
 #endif
 	struct mutex		request_mutex;
 	int			parent_irq;
+	struct irq_desc_mod	mod;
 	struct module		*owner;
 	const char		*name;
 #ifdef CONFIG_HARDIRQS_SW_RESEND
