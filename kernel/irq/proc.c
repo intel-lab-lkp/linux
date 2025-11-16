@@ -14,6 +14,7 @@
 #include <linux/mutex.h>
 
 #include "internals.h"
+#include "irq_moderation.h"
 
 /*
  * Access rules:
@@ -376,6 +377,7 @@ void register_irq_proc(unsigned int irq, struct irq_desc *desc)
 	proc_create_single_data("effective_affinity_list", 0444, desc->dir,
 				irq_effective_aff_list_proc_show, irqp);
 # endif
+	irq_moderation_procfs_add(desc, 0644);
 #endif
 	proc_create_single_data("spurious", 0444, desc->dir,
 				irq_spurious_proc_show, (void *)(long)irq);
@@ -397,6 +399,7 @@ void unregister_irq_proc(unsigned int irq, struct irq_desc *desc)
 	remove_proc_entry("effective_affinity", desc->dir);
 	remove_proc_entry("effective_affinity_list", desc->dir);
 # endif
+	irq_moderation_procfs_remove(desc);
 #endif
 	remove_proc_entry("spurious", desc->dir);
 
