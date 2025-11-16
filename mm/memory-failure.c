@@ -2002,6 +2002,49 @@ out:
 	return ret;
 }
 
+void hugetlb_free_hwpoison_folio(struct folio *folio)
+{
+	struct folio *curr, *next;
+	struct folio *end_folio = folio_next(folio);
+	int ret;
+
+	VM_WARN_ON_FOLIO(folio_ref_count(folio) != 1, folio);
+
+	ret = uniform_split_unmapped_folio_to_zero_order(folio);
+	if (ret) {
+		/*
+		 * In case of split failure, none of the pages in folio
+		 * will be freed to buddy allocator.
+		 */
+		pr_err("%#lx: failed to split free %d-order folio with HWPoison page(s): %d\n",
+		       folio_pfn(folio), folio_order(folio), ret);
+		return;
+	}
+
+	/* Expect 1st folio's refcount==1, and other's refcount==0. */
+	for (curr = folio; curr != end_folio; curr = next) {
+		next = folio_next(curr);
+
+		VM_WARN_ON_FOLIO(folio_order(curr), curr);
+
+		if (PageHWPoison(&curr->page)) {
+			if (curr != folio)
+				folio_ref_inc(curr);
+
+			VM_WARN_ON_FOLIO(folio_ref_count(curr) != 1, curr);
+			pr_warn("%#lx: prevented freeing HWPoison page\n",
+				folio_pfn(curr));
+			continue;
+		}
+
+		if (curr == folio)
+			folio_ref_dec(curr);
+
+		VM_WARN_ON_FOLIO(folio_ref_count(curr), curr);
+		free_frozen_pages(&curr->page, folio_order(curr));
+	}
+}
+
 /*
  * Taking refcount of hugetlb pages needs extra care about race conditions
  * with basic operations like hugepage allocation/free/demotion.

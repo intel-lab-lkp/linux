@@ -1596,6 +1596,7 @@ static void __update_and_free_hugetlb_folio(struct hstate *h,
 						struct folio *folio)
 {
 	bool clear_flag = folio_test_hugetlb_vmemmap_optimized(folio);
+	bool has_hwpoison = folio_test_hwpoison(folio);
 
 	if (hstate_is_gigantic(h) && !gigantic_page_runtime_supported())
 		return;
@@ -1638,12 +1639,15 @@ static void __update_and_free_hugetlb_folio(struct hstate *h,
 	 * Move PageHWPoison flag from head page to the raw error pages,
 	 * which makes any healthy subpages reusable.
 	 */
-	if (unlikely(folio_test_hwpoison(folio)))
+	if (unlikely(has_hwpoison))
 		folio_clear_hugetlb_hwpoison(folio);
 
 	folio_ref_unfreeze(folio, 1);
 
-	hugetlb_free_folio(folio);
+	if (unlikely(has_hwpoison))
+		hugetlb_free_hwpoison_folio(folio);
+	else
+		hugetlb_free_folio(folio);
 }
 
 /*

@@ -870,8 +870,12 @@ int dissolve_free_hugetlb_folios(unsigned long start_pfn,
 				    unsigned long end_pfn);
 
 #ifdef CONFIG_MEMORY_FAILURE
+extern void hugetlb_free_hwpoison_folio(struct folio *folio);
 extern void folio_clear_hugetlb_hwpoison(struct folio *folio);
 #else
+static inline void hugetlb_free_hwpoison_folio(struct folio *folio)
+{
+}
 static inline void folio_clear_hugetlb_hwpoison(struct folio *folio)
 {
 }
