@@ -7,17 +7,76 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/reboot.h>
 #include <linux/reboot-mode.h>
 
 #define PREFIX "mode-"
 
+static DEFINE_MUTEX(reboot_mode_mutex);
+
 struct mode_info {
 	const char *mode;
 	u32 magic;
 	struct list_head list;
 };
+
+static ssize_t reboot_modes_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct reboot_mode_driver *reboot;
+	struct mode_info *info;
+	ssize_t size = 0;
+
+	reboot = container_of(dev, struct reboot_mode_driver, reboot_mode_device);
+	if (!reboot)
+		return -ENODATA;
+
+	list_for_each_entry(info, &reboot->head, list)
+		size += sysfs_emit_at(buf, size, "%s ", info->mode);
+
+	if (!size)
+		return -ENODATA;
+
+	return size + sysfs_emit_at(buf, size - 1, "\n");
+}
+static DEVICE_ATTR_RO(reboot_modes);
+
+static struct attribute *reboot_mode_attrs[] = {
+	&dev_attr_reboot_modes.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(reboot_mode);
+
+static const struct class reboot_mode_class = {
+	.name = "reboot-mode",
+	.dev_groups = reboot_mode_groups,
+};
+
+static void reboot_mode_device_release(struct device *dev)
+{
+    /* place holder to avoid warning on device_unregister. nothing to free */
+}
+
+static void reboot_mode_create_device(struct reboot_mode_driver *reboot)
+{
+	static bool is_class_registered;
+
+	reboot->reboot_mode_device_registered = false;
+
+	scoped_guard(mutex, &reboot_mode_mutex) {
+		if (!is_class_registered) {
+			if (!class_register(&reboot_mode_class))
+				is_class_registered = true;
+		}
+	}
+
+	reboot->reboot_mode_device.class = &reboot_mode_class;
+	reboot->reboot_mode_device.release = reboot_mode_device_release;
+	dev_set_name(&reboot->reboot_mode_device, reboot->driver_name);
+	if (!device_register(&reboot->reboot_mode_device))
+		reboot->reboot_mode_device_registered = true;
+}
 
 static unsigned int get_reboot_mode_magic(struct reboot_mode_driver *reboot,
 					  const char *cmd)
@@ -78,6 +137,8 @@ int reboot_mode_register(struct reboot_mode_driver *reboot)
 
 	INIT_LIST_HEAD(&reboot->head);
 
+	reboot_mode_create_device(reboot);
+
 	for_each_property_of_node(np, prop) {
 		if (strncmp(prop->name, PREFIX, len))
 			continue;
@@ -119,6 +180,11 @@ error:
 	list_for_each_entry(info, &reboot->head, list)
 		kfree_const(info->mode);
 
+	if (reboot->reboot_mode_device_registered) {
+		device_unregister(&reboot->reboot_mode_device);
+		reboot->reboot_mode_device_registered = false;
+	}
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(reboot_mode_register);
@@ -135,6 +201,11 @@ int reboot_mode_unregister(struct reboot_mode_driver *reboot)
 
 	list_for_each_entry(info, &reboot->head, list)
 		kfree_const(info->mode);
+
+	if (reboot->reboot_mode_device_registered) {
+		device_unregister(&reboot->reboot_mode_device);
+		reboot->reboot_mode_device_registered = false;
+	}
 
 	return 0;
 }
@@ -162,6 +233,7 @@ int devm_reboot_mode_register(struct device *dev,
 	if (!dr)
 		return -ENOMEM;
 
+	reboot->driver_name = reboot->dev->driver->name;
 	rc = reboot_mode_register(reboot);
 	if (rc) {
 		devres_free(dr);
