@@ -22,6 +22,8 @@
 
 #include "vfio_pci_priv.h"
 
+DEFINE_IRQ_MODERATION_MODE_PARAMETER;
+
 struct vfio_pci_irq_ctx {
 	struct vfio_pci_core_device	*vdev;
 	struct eventfd_ctx		*trigger;
@@ -317,6 +319,7 @@ static int vfio_intx_enable(struct vfio_pci_core_device *vdev,
 		vfio_irq_ctx_free(vdev, ctx, 0);
 		return ret;
 	}
+	IRQ_MODERATION_SET_DEFAULT_MODE(pdev->irq);
 
 	return 0;
 }
