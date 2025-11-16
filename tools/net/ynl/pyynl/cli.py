@@ -131,20 +131,37 @@ def main():
     if args.ntf:
         ynl.ntf_subscribe(args.ntf)
 
-    def print_attr_list(attr_names, attr_set):
+    def print_attr_list(attr_names, attr_set, indent=2):
         """Print a list of attributes with their types and documentation."""
+        prefix = ' ' * indent
         for attr_name in attr_names:
             if attr_name in attr_set.attrs:
                 attr = attr_set.attrs[attr_name]
-                attr_info = f'  - {attr_name}: {attr.type}'
+                attr_info = f'{prefix}- {attr_name}: {attr.type}'
                 if 'enum' in attr.yaml:
                     attr_info += f" (enum: {attr.yaml['enum']})"
+
+                # Show nested attributes reference and recursively display them
+                nested_set_name = None
+                if attr.type == 'nest' and 'nested-attributes' in attr.yaml:
+                    nested_set_name = attr.yaml['nested-attributes']
+                    attr_info += f" -> {nested_set_name}"
+
                 if attr.yaml.get('doc'):
-                    doc_text = textwrap.indent(attr.yaml['doc'], '    ')
+                    doc_text = textwrap.indent(attr.yaml['doc'], prefix + '  ')
                     attr_info += f"\n{doc_text}"
                 print(attr_info)
+
+                # Recursively show nested attributes
+                if nested_set_name in ynl.attr_sets:
+                    nested_set = ynl.attr_sets[nested_set_name]
+                    # Filter out 'unspec' and other unused attrs
+                    nested_names = [n for n in nested_set.attrs.keys()
+                                    if nested_set.attrs[n].type != 'unused']
+                    if nested_names:
+                        print_attr_list(nested_names, nested_set, indent + 4)
             else:
-                print(f'  - {attr_name}')
+                print(f'{prefix}- {attr_name}')
 
     def print_mode_attrs(mode, mode_spec, attr_set, print_request=True):
         """Print a given mode (do/dump/event/notify)."""
