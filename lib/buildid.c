@@ -298,6 +298,9 @@ static int __build_id_parse(struct vm_area_struct *vma, unsigned char *build_id,
 	/* only works for page backed storage  */
 	if (!vma->vm_file)
 		return -EINVAL;
+	/* check if filesystem supports page cache operations */
+	if (!vma->vm_file->f_mapping->a_ops->read_folio)
+		return -EINVAL;
 
 	freader_init_from_file(&r, buf, sizeof(buf), vma->vm_file, may_fault);
 
