@@ -5138,12 +5138,6 @@ static int rtm_to_fib6_multipath_config(struct fib6_config *cfg,
 			}
 		}
 
-		if (newroute && (cfg->fc_nh_id || !has_gateway)) {
-			NL_SET_ERR_MSG(extack,
-				       "Device only routes can not be added for IPv6 using the multipath API.");
-			return -EINVAL;
-		}
-
 		rtnh = rtnh_next(rtnh, &remaining);
 	} while (rtnh_ok(rtnh, remaining));
 
