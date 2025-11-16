@@ -72,6 +72,8 @@
 static_assert(MAX_PRP_RANGE / NVME_CTRL_PAGE_SIZE <=
 	(1 /* prp1 */ + NVME_MAX_NR_DESCRIPTORS * PRPS_PER_PAGE));
 
+DEFINE_IRQ_MODERATION_MODE_PARAMETER;
+
 static int use_threaded_interrupts;
 module_param(use_threaded_interrupts, int, 0444);
 
@@ -1982,6 +1984,7 @@ static int nvme_create_queue(struct nvme_queue *nvmeq, int qid, bool polled)
 		result = queue_request_irq(nvmeq);
 		if (result < 0)
 			goto release_sq;
+		IRQ_MODERATION_SET_DEFAULT_MODE(pci_irq_vector(to_pci_dev(dev->dev), vector));
 	}
 
 	set_bit(NVMEQ_ENABLED, &nvmeq->flags);
