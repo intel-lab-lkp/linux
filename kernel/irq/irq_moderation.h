@@ -145,7 +145,8 @@ static inline void irq_moderation_adjust_delay(struct irq_mod_state *ms)
 {
 	u64 now, delta_time;
 
-	ms->irq_count++;
+	/* dont_count can only be set in timer calls from posted_msi */
+	ms->irq_count += !ms->dont_count;
 	/* ktime_get_ns() is expensive, don't do too often */
 	if (ms->irq_count & 0xf)
 		return;
@@ -196,6 +197,15 @@ static inline void irq_moderation_hook(struct irq_desc *desc)
 	if (!static_branch_unlikely(&irq_moderation_enabled_key))
 		return;
 
+#ifdef CONFIG_X86_POSTED_MSI
+	if (ms->in_posted_msi) {
+		/* these calls are not moderated */
+		ms->from_posted_msi++;
+		ms->irq_count += irq_mod_info.count_msi_calls;
+		return;
+	}
+#endif
+
 	if (!READ_ONCE(desc->mod.enable))
 		return;
 
@@ -243,6 +253,61 @@ static inline void irq_moderation_epilogue(const struct irq_desc *desc)
 		irq_moderation_start_timer(ms);
 }
 
+#ifdef CONFIG_X86_POSTED_MSI
+/*
+ * Helpers for to sysvec_posted_msi_notification(), use as follows
+ *
+ *	if (posted_msi_moderation_enabled()) {
+ *		if (posted_msi_should_rearm(handle_pending_pir(pid->pir, regs)))
+ *			goto rearm;
+ *		else
+ *			goto common_end;
+ *	}
+ *	...
+ *  common_end:
+ *	posted_msi_moderation_epilogue();
+ */
+static inline bool posted_msi_moderation_enabled(void)
+{
+	struct irq_mod_state *ms = this_cpu_ptr(&irq_mod_state);
+
+	if (!static_branch_unlikely(&irq_moderation_enabled_key))
+		return false;
+	irq_moderation_adjust_delay(ms);
+	/* Tell handlers to not throttle next calls. */
+	ms->in_posted_msi = true;
+	return true;
+}
+
+/* Decide whether or not to rearm posted_msi. */
+static inline bool posted_msi_should_rearm(bool work_done)
+{
+	struct irq_mod_state *ms = this_cpu_ptr(&irq_mod_state);
+
+	/* No rearm if there is a timer pending. */
+	if (ms->rounds_left > 0)
+		return false;
+	/* No work done, can rearm. */
+	if (!work_done)
+		return true;
+	if (!irq_moderation_needed(ms))
+		return true;
+	/* Start the timer, inform the handler, and do not rearm. */
+	ms->kick_posted_msi = true;
+	irq_moderation_start_timer(ms);
+	return false;
+}
+
+/* Cleanup state set in posted_msi_moderation_enabled() */
+static inline void posted_msi_moderation_epilogue(void)
+{
+	struct irq_mod_state *ms = this_cpu_ptr(&irq_mod_state);
+
+	ms->in_posted_msi = false;
+	ms->dont_count = false;
+}
+#endif
+
 void irq_moderation_procfs_add(struct irq_desc *desc, umode_t umode);
 void irq_moderation_procfs_remove(struct irq_desc *desc);
 
@@ -250,6 +315,12 @@ void irq_moderation_procfs_remove(struct irq_desc *desc);
 
 static inline void irq_moderation_hook(struct irq_desc *desc) {}
 static inline void irq_moderation_epilogue(const struct irq_desc *desc) {}
+
+#ifdef CONFIG_X86_POSTED_MSI
+static inline bool posted_msi_moderation_enabled(void) { return false; }
+static inline bool posted_msi_should_rearm(bool work_done) { return false; }
+static inline void posted_msi_moderation_epilogue(void) {}
+#endif
 
 static inline void irq_moderation_procfs_add(struct irq_desc *desc, umode_t umode) {}
 static inline void irq_moderation_procfs_remove(struct irq_desc *desc) {}

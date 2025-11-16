@@ -13,6 +13,8 @@
 #include <linux/export.h>
 #include <linux/irq.h>
 
+#include <irq_moderation.h>
+
 #include <asm/irq_stack.h>
 #include <asm/apic.h>
 #include <asm/io_apic.h>
@@ -448,6 +450,13 @@ DEFINE_IDTENTRY_SYSVEC(sysvec_posted_msi_notification)
 	inc_irq_stat(posted_msi_notification_count);
 	irq_enter();
 
+	if (posted_msi_moderation_enabled()) {
+		if (posted_msi_should_rearm(handle_pending_pir(pid->pir, regs)))
+			goto rearm;
+		else
+			goto common_end;
+	}
+
 	/*
 	 * Max coalescing count includes the extra round of handle_pending_pir
 	 * after clearing the outstanding notification bit. Hence, at most
@@ -458,6 +467,7 @@ DEFINE_IDTENTRY_SYSVEC(sysvec_posted_msi_notification)
 			break;
 	}
 
+rearm:
 	/*
 	 * Clear outstanding notification bit to allow new IRQ notifications,
 	 * do this last to maximize the window of interrupt coalescing.
@@ -470,6 +480,9 @@ DEFINE_IDTENTRY_SYSVEC(sysvec_posted_msi_notification)
 	 * are not delayed until the next IRQ.
 	 */
 	handle_pending_pir(pid->pir, regs);
+
+common_end:
+	posted_msi_moderation_epilogue();
 
 	apic_eoi();
 	irq_exit();

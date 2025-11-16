@@ -11,6 +11,13 @@
 #include "internals.h"
 #include "irq_moderation.h"
 
+#ifdef CONFIG_X86
+#include <asm/apic.h>
+#include <asm/irq_remapping.h>
+#else
+static inline bool posted_msi_supported(void) { return false; }
+#endif
+
 /*
  * Platform-wide software interrupt moderation.
  *
@@ -31,6 +38,10 @@
  *   to use moderation, updates statistics and check whether we need
  *   moderation on that CPU/irq. If so, calls disable_irq_nosync() and starts
  *   an hrtimer with appropriate delay.
+ *
+ * - Intel only: using "intremap=posted_msi", all the above is done in
+ *   sysvec_posted_msi_notification(). In this case all host device interrupts
+ *   are subject to moderation.
  *
  * - the timer callback calls enable_irq() for all disabled interrupts on that
  *   CPU. That in turn will generate interrupts if there are pending events.
@@ -230,6 +241,17 @@ static enum hrtimer_restart timer_cb(struct hrtimer *timer)
 
 	ms->rounds_left--;
 
+#ifdef CONFIG_X86_POSTED_MSI
+	if (ms->kick_posted_msi) {
+		if (ms->rounds_left == 0)
+			ms->kick_posted_msi = false;
+		/* Next call will be from timer, count it conditionally. */
+		ms->dont_count = !irq_mod_info.count_timer_calls;
+		ms->timer_calls++;
+		apic->send_IPI_self(POSTED_MSI_NOTIFICATION_VECTOR);
+	}
+#endif
+
 	if (ms->rounds_left > 0) {
 		/* Timer still alive, just call the handlers. */
 		list_for_each_entry_safe(desc, next, &ms->descs, mod.ms_node) {
@@ -332,7 +354,7 @@ static int moderation_show(struct seq_file *p, void *v)
 	}
 
 	seq_printf(p, "\n"
-		   "enabled              %s\n"
+		   "enabled              %s%s\n"
 		   "delay_us             %u\n"
 		   "timer_rounds         %u\n"
 		   "target_irq_rate      %u\n"
@@ -344,6 +366,7 @@ static int moderation_show(struct seq_file *p, void *v)
 		   "decay_factor         %u\n"
 		   "grow_factor          %u\n",
 		   str_yes_no(delay_us > 0),
+		   posted_msi_supported() ? " (also on posted_msi)" : "",
 		   delay_us, irq_mod_info.timer_rounds,
 		   irq_mod_info.target_irq_rate, irq_mod_info.hardirq_percent,
 		   irq_mod_info.update_ms, irq_mod_info.scale_cpus,
@@ -389,6 +412,7 @@ static struct param_names param_names[] = {
 	{},
 	{ "scale_cpus", &irq_mod_info.scale_cpus, 50, 1000 },
 	{ "count_timer_calls", &irq_mod_info.count_timer_calls, 0, 1 },
+	{ "count_msi_calls", &irq_mod_info.count_msi_calls, 0, 1 },
 	{ "decay_factor", &irq_mod_info.decay_factor, 8, 64 },
 	{ "grow_factor", &irq_mod_info.grow_factor, 8, 64 },
 };
@@ -476,6 +500,18 @@ static ssize_t mode_write(struct file *f, const char __user *buf, size_t count, 
 	ret = kstrtobool(cmd, &enable);
 	if (!ret)
 		ret = set_moderation_mode(desc, enable);
+	if (ret) {
+		/* extra helpers for prodkernel */
+		if (cmd[count - 1] == '\n')
+			cmd[count - 1] = '\0';
+		ret = 0;
+		if (!strcmp(cmd, "managed"))
+			irqd_set(&desc->irq_data, IRQD_AFFINITY_MANAGED);
+		else if (!strcmp(cmd, "unmanaged"))
+			irqd_clear(&desc->irq_data, IRQD_AFFINITY_MANAGED);
+		else
+			ret = -EINVAL;
+	}
 	return ret ? : count;
 }
 

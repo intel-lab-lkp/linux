@@ -46,7 +46,7 @@ KCOV_INSTRUMENT_unwind_guess.o				:= n
 
 CFLAGS_head32.o := -fno-stack-protector
 CFLAGS_head64.o := -fno-stack-protector
-CFLAGS_irq.o := -I $(src)/../include/asm/trace
+CFLAGS_irq.o := -I $(src)/../include/asm/trace -I $(srctree)/kernel/irq
 
 obj-y			+= head_$(BITS).o
 obj-y			+= head$(BITS).o
