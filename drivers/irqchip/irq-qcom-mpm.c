@@ -333,14 +333,19 @@ static int qcom_mpm_init(struct device_node *np, struct device_node *parent)
 	int i, irq;
 	int ret;
 
+	if (!pdev)
+		return -ENODEV;
+
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
-	if (!priv)
-		return -ENOMEM;
+	if (!priv) {
+		ret = -ENOMEM;
+		goto err_put_device;
+	}
 
 	ret = of_property_read_u32(np, "qcom,mpm-pin-count", &pin_cnt);
 	if (ret) {
 		dev_err(dev, "failed to read qcom,mpm-pin-count: %d\n", ret);
-		return ret;
+		goto err_put_device;
 	}
 
 	priv->reg_stride = DIV_ROUND_UP(pin_cnt, 32);
@@ -348,19 +353,22 @@ static int qcom_mpm_init(struct device_node *np, struct device_node *parent)
 	ret = of_property_count_u32_elems(np, "qcom,mpm-pin-map");
 	if (ret < 0) {
 		dev_err(dev, "failed to read qcom,mpm-pin-map: %d\n", ret);
-		return ret;
+		goto err_put_device;
 	}
 
 	if (ret % 2) {
 		dev_err(dev, "invalid qcom,mpm-pin-map\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err_put_device;
 	}
 
 	priv->map_cnt = ret / 2;
 	priv->maps = devm_kcalloc(dev, priv->map_cnt, sizeof(*priv->maps),
 				  GFP_KERNEL);
-	if (!priv->maps)
-		return -ENOMEM;
+	if (!priv->maps) {
+		ret = -ENOMEM;
+		goto err_put_device;
+	}
 
 	for (i = 0; i < priv->map_cnt; i++) {
 		u32 pin, hwirq;
@@ -386,19 +394,23 @@ static int qcom_mpm_init(struct device_node *np, struct device_node *parent)
 		ret = of_address_to_resource(msgram_np, 0, &res);
 		if (ret) {
 			of_node_put(msgram_np);
-			return ret;
+			goto err_put_device;
 		}
 
 		/* Don't use devm_ioremap_resource, as we're accessing a shared region. */
 		priv->base = devm_ioremap(dev, res.start, resource_size(&res));
 		of_node_put(msgram_np);
-		if (!priv->base)
-			return -ENOMEM;
+		if (!priv->base) {
+			ret = -ENOMEM;
+			goto err_put_device;
+		}
 	} else {
 		/* Otherwise, fall back to simple MMIO. */
 		priv->base = devm_platform_ioremap_resource(pdev, 0);
-		if (IS_ERR(priv->base))
-			return PTR_ERR(priv->base);
+		if (IS_ERR(priv->base)) {
+			ret = PTR_ERR(priv->base);
+			goto err_put_device;
+		}
 	}
 
 	for (i = 0; i < priv->reg_stride; i++) {
@@ -410,21 +422,25 @@ static int qcom_mpm_init(struct device_node *np, struct device_node *parent)
 	}
 
 	irq = platform_get_irq(pdev, 0);
-	if (irq < 0)
-		return irq;
+	if (irq < 0) {
+		ret = irq;
+		goto err_put_device;
+	}
 
 	genpd = &priv->genpd;
 	genpd->flags = GENPD_FLAG_IRQ_SAFE;
 	genpd->power_off = mpm_pd_power_off;
 
 	genpd->name = devm_kasprintf(dev, GFP_KERNEL, "%s", dev_name(dev));
-	if (!genpd->name)
-		return -ENOMEM;
+	if (!genpd->name) {
+		ret = -ENOMEM;
+		goto err_put_device;
+	}
 
 	ret = pm_genpd_init(genpd, NULL, false);
 	if (ret) {
 		dev_err(dev, "failed to init genpd: %d\n", ret);
-		return ret;
+		goto err_put_device;
 	}
 
 	ret = of_genpd_add_provider_simple(np, genpd);
@@ -438,7 +454,7 @@ static int qcom_mpm_init(struct device_node *np, struct device_node *parent)
 	if (IS_ERR(priv->mbox_chan)) {
 		ret = PTR_ERR(priv->mbox_chan);
 		dev_err(dev, "failed to acquire IPC channel: %d\n", ret);
-		return ret;
+		goto remove_genpd;
 	}
 
 	parent_domain = irq_find_host(parent);
@@ -466,6 +482,7 @@ static int qcom_mpm_init(struct device_node *np, struct device_node *parent)
 		goto remove_domain;
 	}
 
+	put_device(dev);
 	return 0;
 
 remove_domain:
@@ -474,6 +491,9 @@ free_mbox:
 	mbox_free_channel(priv->mbox_chan);
 remove_genpd:
 	pm_genpd_remove(genpd);
+err_put_device:
+	if (pdev)
+		put_device(dev);
 	return ret;
 }
 
