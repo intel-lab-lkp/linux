@@ -3515,6 +3515,14 @@ static int __split_unmapped_folio(struct folio *folio, int new_order,
 	return ret;
 }
 
+int uniform_split_unmapped_folio_to_zero_order(struct folio *folio)
+{
+	return __split_unmapped_folio(folio, /*new_order=*/0,
+				      /*split_at=*/&folio->page,
+				      /*xas=*/NULL, /*mapping=*/NULL,
+				      /*uniform_split=*/true);
+}
+
 bool non_uniform_split_supported(struct folio *folio, unsigned int new_order,
 		bool warns)
 {

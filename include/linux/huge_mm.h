@@ -365,6 +365,7 @@ unsigned long thp_get_unmapped_area_vmflags(struct file *filp, unsigned long add
 		vm_flags_t vm_flags);
 
 bool can_split_folio(struct folio *folio, int caller_pins, int *pextra_pins);
+int uniform_split_unmapped_folio_to_zero_order(struct folio *folio);
 int split_huge_page_to_list_to_order(struct page *page, struct list_head *list,
 		unsigned int new_order);
 int min_order_for_split(struct folio *folio);
@@ -568,6 +569,11 @@ static inline bool
 can_split_folio(struct folio *folio, int caller_pins, int *pextra_pins)
 {
 	return false;
+}
+static inline int uniform_split_unmapped_folio_to_zero_order(struct folio *folio)
+{
+	VM_WARN_ON_ONCE_PAGE(1, page);
+	return -EINVAL;
 }
 static inline int
 split_huge_page_to_list_to_order(struct page *page, struct list_head *list,
