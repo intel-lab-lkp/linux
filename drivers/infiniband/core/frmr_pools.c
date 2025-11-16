@@ -452,6 +452,7 @@ end:
 	kfree(handles);
 
 schedule_aging:
+	/* Ensure aging is scheduled to adjust to new pinned handles count */
 	mod_delayed_work(pools->aging_wq, &pool->aging_work, 0);
 
 	return ret;
