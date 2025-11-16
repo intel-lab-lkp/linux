@@ -372,6 +372,8 @@ static void zloop_rw(struct zloop_cmd *cmd)
 	sector_t zone_end;
 	int nr_bvec = 0;
 	int ret;
+	bool nowait = rq->cmd_flags & REQ_NOWAIT;
+	gfp_t alloc_flags = nowait ? GFP_NOWAIT : GFP_NOIO;
 
 	atomic_set(&cmd->ref, 2);
 	cmd->sector = sector;
@@ -443,9 +445,9 @@ static void zloop_rw(struct zloop_cmd *cmd)
 	if (rq->bio != rq->biotail) {
 		struct bio_vec *bvec;
 
-		cmd->bvec = kmalloc_array(nr_bvec, sizeof(*cmd->bvec), GFP_NOIO);
+		cmd->bvec = kmalloc_array(nr_bvec, sizeof(*cmd->bvec), alloc_flags);
 		if (!cmd->bvec) {
-			ret = -EIO;
+			ret = nowait ? -EAGAIN : -ENOMEM;
 			goto unlock;
 		}
 
