@@ -350,6 +350,8 @@ static int lo_rw_aio(struct loop_device *lo, struct loop_cmd *cmd,
 	unsigned int offset;
 	int nr_bvec = 0;
 	int ret;
+	bool nowait = rq->cmd_flags & REQ_NOWAIT;
+	gfp_t alloc_flags = nowait ? GFP_NOWAIT : GFP_NOIO;
 
 	rq_for_each_bvec(tmp, rq, rq_iter)
 		nr_bvec++;
@@ -357,9 +359,9 @@ static int lo_rw_aio(struct loop_device *lo, struct loop_cmd *cmd,
 	if (rq->bio != rq->biotail) {
 
 		bvec = kmalloc_array(nr_bvec, sizeof(struct bio_vec),
-				     GFP_NOIO);
+				     alloc_flags);
 		if (!bvec)
-			return -EIO;
+			return nowait ? -EAGAIN : -ENOMEM;
 		cmd->bvec = bvec;
 
 		/*
