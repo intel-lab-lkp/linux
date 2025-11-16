@@ -587,33 +587,53 @@ static inline bool cpusets_are_exclusive(struct cpuset *cs1, struct cpuset *cs2)
 
 /**
  * cpus_excl_conflict - Check if two cpusets have exclusive CPU conflicts
- * @cs1: first cpuset to check
- * @cs2: second cpuset to check
+ * @cs1: current cpuset to check
+ * @cs2: cpuset involved in the check
  *
  * Returns: true if CPU exclusivity conflict exists, false otherwise
  *
  * Conflict detection rules:
- * 1. If either cpuset is CPU exclusive, they must be mutually exclusive
+ * For cgroup-v1:
+ *     see cpuset1_cpus_excl_conflict()
+ * For cgroup-v2:
+ * 1. If cs1 is exclusive, cs1 and cs2 must be mutually exclusive
  * 2. exclusive_cpus masks cannot intersect between cpusets
- * 3. The allowed CPUs of one cpuset cannot be a subset of another's exclusive CPUs
+ * 3. If cs2 is exclusive, cs2's allowed CPUs cannot be a subset of cs1's exclusive CPUs
+ * 4. if cs1 and cs2 are not exclusive, the allowed CPUs of one cpuset cannot be a subset
+ *    of another's exclusive CPUs
  */
 static inline bool cpus_excl_conflict(struct cpuset *cs1, struct cpuset *cs2)
 {
-	/* If either cpuset is exclusive, check if they are mutually exclusive */
-	if (is_cpu_exclusive(cs1) || is_cpu_exclusive(cs2))
+	/* For cgroup-v1 */
+	if (!cpuset_v2())
+		return cpuset1_cpus_excl_conflict(cs1, cs2);
+
+	/* If cs1 are exclusive, check if they are mutually exclusive */
+	if (is_cpu_exclusive(cs1))
 		return !cpusets_are_exclusive(cs1, cs2);
+	
+	/* The following check applies when either
+	 * both cs1 and cs2 are non-exclusive，or
+	 * only cs2 is exclusive. */
 
 	/* Exclusive_cpus cannot intersect */
 	if (cpumask_intersects(cs1->exclusive_cpus, cs2->exclusive_cpus))
 		return true;
 
-	/* The cpus_allowed of one cpuset cannot be a subset of another cpuset's exclusive_cpus */
-	if (!cpumask_empty(cs1->cpus_allowed) &&
-	    cpumask_subset(cs1->cpus_allowed, cs2->exclusive_cpus))
-		return true;
-
+	/* cs2's allowed CPUs cannot be a subset of cs1's exclusive CPUs */
 	if (!cpumask_empty(cs2->cpus_allowed) &&
 	    cpumask_subset(cs2->cpus_allowed, cs1->exclusive_cpus))
+		return true;
+	
+	/* If cs2 is exclusive, check finished here */
+	if (is_cpu_exclusive(cs2))
+		return false;
+
+	/* The following check applies only if both cs1 and cs2 are non-exclusive. */
+
+	/* cs1's allowed CPUs cannot be a subset of cs1's exclusive CPUs */
+	if (!cpumask_empty(cs1->cpus_allowed) &&
+	    cpumask_subset(cs1->cpus_allowed, cs2->exclusive_cpus))
 		return true;
 
 	return false;
