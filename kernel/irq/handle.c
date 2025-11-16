@@ -19,6 +19,7 @@
 #include <trace/events/irq.h>
 
 #include "internals.h"
+#include "irq_moderation.h"
 
 #ifdef CONFIG_GENERIC_IRQ_MULTI_HANDLER
 void (*handle_arch_irq)(struct pt_regs *) __ro_after_init;
@@ -254,9 +255,11 @@ irqreturn_t handle_irq_event(struct irq_desc *desc)
 	irqd_set(&desc->irq_data, IRQD_IRQ_INPROGRESS);
 	raw_spin_unlock(&desc->lock);
 
+	irq_moderation_hook(desc);
 	ret = handle_irq_event_percpu(desc);
 
 	raw_spin_lock(&desc->lock);
+	irq_moderation_epilogue(desc);
 	irqd_clear(&desc->irq_data, IRQD_IRQ_INPROGRESS);
 	return ret;
 }

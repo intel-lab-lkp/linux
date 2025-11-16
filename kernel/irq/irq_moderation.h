@@ -136,10 +136,112 @@ struct irq_mod_state {
 
 DECLARE_PER_CPU_ALIGNED(struct irq_mod_state, irq_mod_state);
 
+extern struct static_key_false irq_moderation_enabled_key;
+
+/* Called on each interrupt for adaptive moderation delay adjustment. */
+static inline void irq_moderation_adjust_delay(struct irq_mod_state *ms)
+{
+	u64 now, delta_time;
+
+	ms->irq_count++;
+	/* ktime_get_ns() is expensive, don't do too often */
+	if (ms->irq_count & 0xf)
+		return;
+	now = ktime_get_ns();
+	delta_time = now - ms->last_ns;
+
+	/* Run approximately every update_ns, a little bit early is ok. */
+	if (delta_time < ms->update_ns - 5000)
+		return;
+
+	ms->update_ns = READ_ONCE(irq_mod_info.update_ms) * NSEC_PER_MSEC;
+	ms->delay_ns = READ_ONCE(irq_mod_info.delay_us) * NSEC_PER_USEC;
+
+	ms->mod_ns = ms->delay_ns;
+}
+
+/* Return true if timer is active or delay is large enough to require moderation */
+static inline bool irq_moderation_needed(struct irq_mod_state *ms)
+{
+	const u32 min_delay_ns = 10000;
+
+	if (!hrtimer_is_queued(&ms->timer)) {
+		/* accumulate sleep time, no moderation if too small */
+		ms->sleep_ns += ms->mod_ns;
+		if (ms->sleep_ns < min_delay_ns)
+			return false;
+	}
+	return true;
+}
+
+void disable_irq_nosync(unsigned int irq);
+
+/*
+ * Use in handle_irq_event() before calling the handler. Decide whether this
+ * desc should be moderated, and in case disable the irq and add the desc to
+ * the list for this CPU.
+ */
+static inline void irq_moderation_hook(struct irq_desc *desc)
+{
+	struct irq_mod_state *ms = this_cpu_ptr(&irq_mod_state);
+
+	if (!static_branch_unlikely(&irq_moderation_enabled_key))
+		return;
+
+	if (!READ_ONCE(desc->mod.enable))
+		return;
+
+	irq_moderation_adjust_delay(ms);
+
+	if (!list_empty(&desc->mod.ms_node)) {
+		/*
+		 * Very unlikely, stray interrupt while the desc is moderated.
+		 * We cannot ignore it or we may miss events, but do count it.
+		 */
+		ms->stray_irq++;
+		return;
+	}
+
+	if (!irq_moderation_needed(ms))
+		return;
+
+	/* Add to list of moderated desc on this CPU */
+	list_add(&desc->mod.ms_node, &ms->descs);
+	/*
+	 * Disable the irq. This will also cause irq_can_handle() return false
+	 * (through irq_can_handle_actions()), and that will prevent a handler
+	 * instance to be run again while the descriptor is being moderated.
+	 *
+	 * irq_moderation_epilogue() will then start the timer if needed.
+	 */
+	ms->disable_irq++;
+	disable_irq_nosync(desc->irq_data.irq);
+}
+
+static inline void irq_moderation_start_timer(struct irq_mod_state *ms)
+{
+	ms->timer_set++;
+	ms->rounds_left = READ_ONCE(irq_mod_info.timer_rounds) + 1;
+	hrtimer_start_range_ns(&ms->timer, ns_to_ktime(ms->sleep_ns),
+			       /*range*/2000, HRTIMER_MODE_REL_PINNED_HARD);
+}
+
+/* After the handler, if desc is moderated, make sure the timer is active. */
+static inline void irq_moderation_epilogue(const struct irq_desc *desc)
+{
+	struct irq_mod_state *ms = this_cpu_ptr(&irq_mod_state);
+
+	if (!list_empty(&desc->mod.ms_node) && !hrtimer_is_queued(&ms->timer))
+		irq_moderation_start_timer(ms);
+}
+
 void irq_moderation_procfs_add(struct irq_desc *desc, umode_t umode);
 void irq_moderation_procfs_remove(struct irq_desc *desc);
 
 #else /* CONFIG_IRQ_SOFT_MODERATION */
+
+static inline void irq_moderation_hook(struct irq_desc *desc) {}
+static inline void irq_moderation_epilogue(const struct irq_desc *desc) {}
 
 static inline void irq_moderation_procfs_add(struct irq_desc *desc, umode_t umode) {}
 static inline void irq_moderation_procfs_remove(struct irq_desc *desc) {}
