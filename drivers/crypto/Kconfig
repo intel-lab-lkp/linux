@@ -40,7 +40,7 @@ config CRYPTO_DEV_PADLOCK_AES
 
 config CRYPTO_DEV_PADLOCK_SHA
 	tristate "PadLock driver for SHA1 and SHA256 algorithms"
-	depends on CRYPTO_DEV_PADLOCK
+	depends on CRYPTO_DEV_PADLOCK && BROKEN
 	select CRYPTO_HASH
 	select CRYPTO_SHA1
 	select CRYPTO_SHA256
