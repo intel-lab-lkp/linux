@@ -56,9 +56,18 @@
  *     napi_defer_hard_irqs on NICs.
  *     A small value may help control load in interrupt-challenged platforms.
  *
+ *     FIXED MODERATION mode requires target_irq_rate=0, hardirq_percent=0
+ *
+ *   target_irq_rate (default 0, suggested 1000000, 0 off, range 0..50M)
+ *     The total irq rate above which moderation kicks in.
+ *     Not particularly critical, a value in the 500K-1M range is usually ok.
+ *
+ *   hardirq_percent (default 0, suggested 70, 0 off, range 10..100)
+ *     The hardirq percentage above which moderation kicks in.
+ *     50-90 is a reasonable range.
  *
  *   update_ms (default 5, range 1...100)
- *     How often moderation delay is updated.
+ *     How often the load is measured and moderation delay updated.
  *
  * Moderation can be enabled/disabled for individual interrupts with
  *
@@ -73,6 +82,9 @@
 /* Recommended values for the control loop. */
 struct irq_mod_info irq_mod_info ____cacheline_aligned = {
 	.update_ms		= 5,
+	.scale_cpus		= 200,
+	.decay_factor		= 16,
+	.grow_factor		= 8,
 };
 
 /* Boot time value, copled to irq_mod_info.delay_us after init. */
@@ -82,6 +94,12 @@ MODULE_PARM_DESC(delay_us, "Max moderation delay us, 0 = moderation off, range 0
 
 module_param_named(timer_rounds, irq_mod_info.timer_rounds, uint, 0444);
 MODULE_PARM_DESC(timer_rounds, "How many timer polls once moderation triggers, range 0-20.");
+
+module_param_named(hardirq_percent, irq_mod_info.hardirq_percent, uint, 0444);
+MODULE_PARM_DESC(hardirq_percent, "Target max hardirq percentage, 0 off, range 0-100.");
+
+module_param_named(target_irq_rate, irq_mod_info.target_irq_rate, uint, 0444);
+MODULE_PARM_DESC(target_irq_rate, "Target max interrupt rate, 0 off, range 0-50000000.");
 
 module_param_named(update_ms, irq_mod_info.update_ms, uint, 0444);
 MODULE_PARM_DESC(update_ms, "Update interval in milliseconds, range 1-100");
@@ -94,6 +112,108 @@ EXPORT_SYMBOL(irq_moderation_enabled_key);
 static inline void smooth_avg(u32 *dst, u32 val, u32 steps)
 {
 	*dst = ((64 - steps) * *dst + steps * val) / 64;
+}
+
+/* Measure and assess time spent in hardirq. */
+static inline bool hardirq_high(struct irq_mod_state *ms, u64 delta_time, u32 hardirq_percent)
+{
+	bool above_threshold = false;
+
+	if (IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)) {
+		u64 irqtime, cur = kcpustat_this_cpu->cpustat[CPUTIME_IRQ];
+
+		irqtime = cur - ms->last_irqtime;
+		ms->last_irqtime = cur;
+
+		above_threshold = irqtime * 100 > delta_time * hardirq_percent;
+		ms->hardirq_high += above_threshold;
+	}
+	return above_threshold;
+}
+
+/* Measure and assess total and per-CPU interrupt rates. */
+static inline bool irqrate_high(struct irq_mod_state *ms, u64 delta_time,
+				u32 target_rate, u32 steps)
+{
+	u64 irq_rate, my_irq_rate, tmp, delta_irqs, active_cpus;
+	bool my_rate_high, global_rate_high;
+
+	my_irq_rate = (ms->irq_count * NSEC_PER_SEC) / delta_time;
+	/* Accumulate global counter and compute global irq rate. */
+	tmp = atomic_long_add_return(ms->irq_count, &irq_mod_info.total_intrs);
+	ms->irq_count = 1;
+	delta_irqs = tmp - ms->last_total_irqs;
+	ms->last_total_irqs = tmp;
+	irq_rate = (delta_irqs * NSEC_PER_SEC) / delta_time;
+
+	/*
+	 * Count how many CPUs handled interrupts in the last interval, needed
+	 * to determine the per-CPU target (target_rate / active_cpus).
+	 * Each active CPU increments the global counter approximately every
+	 * update_ns. Scale the value by (update_ns / delta_time) to get the
+	 * correct value. Also apply rounding and make sure active_cpus > 0.
+	 */
+	tmp = atomic_long_add_return(1, &irq_mod_info.total_cpus);
+	active_cpus = tmp - ms->last_total_cpus;
+	ms->last_total_cpus = tmp;
+	active_cpus = (active_cpus * ms->update_ns + delta_time / 2) / delta_time;
+	if (active_cpus < 1)
+		active_cpus = 1;
+
+	/* Compare with global and per-CPU targets. */
+	global_rate_high = irq_rate > target_rate;
+	my_rate_high = my_irq_rate * active_cpus * irq_mod_info.scale_cpus > target_rate * 100;
+
+	/* Statistics. */
+	smooth_avg(&ms->irq_rate, irq_rate, steps);
+	smooth_avg(&ms->my_irq_rate, my_irq_rate, steps);
+	smooth_avg(&ms->scaled_cpu_count, active_cpus * 256, steps);
+	ms->my_irq_high += my_rate_high;
+	ms->irq_high += global_rate_high;
+
+	/* Moderate on this CPU only if both global and local rates are high. */
+	return global_rate_high && my_rate_high;
+}
+
+/* Adjust the moderation delay, called at most every update_ns. */
+void __irq_moderation_adjust_delay(struct irq_mod_state *ms, u64 delta_time)
+{
+	u32 hardirq_percent = READ_ONCE(irq_mod_info.hardirq_percent);
+	u32 target_rate = READ_ONCE(irq_mod_info.target_irq_rate);
+	bool below_target = true;
+	u32 steps;
+
+	if (target_rate == 0 && hardirq_percent == 0) {
+		/* Use fixed moderation delay. */
+		ms->mod_ns = ms->delay_ns;
+		ms->irq_rate = 0;
+		ms->my_irq_rate = 0;
+		ms->scaled_cpu_count = 0;
+		return;
+	}
+
+	/* Compute decay steps based on elapsed time, bound to a reasonable value. */
+	steps = delta_time > 10 * ms->update_ns ? 10 : 1 + (delta_time / ms->update_ns);
+
+	if (target_rate > 0 && irqrate_high(ms, delta_time, target_rate, steps))
+		below_target = false;
+
+	if (hardirq_percent > 0 && hardirq_high(ms, delta_time, hardirq_percent))
+		below_target = false;
+
+	/* Controller: adjust delay with exponential decay/grow. */
+	if (below_target) {
+		ms->mod_ns -= ms->mod_ns * steps / (steps + irq_mod_info.decay_factor);
+		if (ms->mod_ns < 100)
+			ms->mod_ns = 0;
+	} else {
+		/* Exponential grow does not restart if value is too small. */
+		if (ms->mod_ns < 500)
+			ms->mod_ns = 500;
+		ms->mod_ns += ms->mod_ns * steps / (steps + irq_mod_info.grow_factor);
+		if (ms->mod_ns > ms->delay_ns)
+			ms->mod_ns = ms->delay_ns;
+	}
 }
 
 /* Moderation timer handler. */
@@ -169,8 +289,10 @@ static inline int set_moderation_mode(struct irq_desc *desc, bool enable)
 /* Print statistics */
 static int moderation_show(struct seq_file *p, void *v)
 {
+	ulong irq_rate = 0, irq_high = 0, my_irq_high = 0, hardirq_high = 0;
 	uint delay_us = irq_mod_info.delay_us;
-	int j;
+	u64 now = ktime_get_ns();
+	int j, active_cpus = 0;
 
 #define HEAD_FMT "%5s  %8s  %8s  %4s  %4s  %8s  %11s  %11s  %11s  %11s  %11s  %11s  %11s  %9s\n"
 #define BODY_FMT "%5u  %8u  %8u  %4u  %4u  %8u  %11u  %11u  %11u  %11u  %11u  %11u  %11u  %9u\n"
@@ -182,6 +304,23 @@ static int moderation_show(struct seq_file *p, void *v)
 
 	for_each_possible_cpu(j) {
 		struct irq_mod_state *ms = per_cpu_ptr(&irq_mod_state, j);
+		u64 age_ms = min((now - ms->last_ns) / NSEC_PER_MSEC, (u64)999999);
+
+		if (age_ms < 10000) {
+			/* Average irq_rate over recently active CPUs. */
+			active_cpus++;
+			irq_rate += ms->irq_rate;
+		} else {
+			ms->irq_rate = 0;
+			ms->my_irq_rate = 0;
+			ms->scaled_cpu_count = 64;
+			ms->scaled_src_count = 64;
+			ms->mod_ns = 0;
+		}
+
+		irq_high += ms->irq_high;
+		my_irq_high += ms->my_irq_high;
+		hardirq_high += ms->hardirq_high;
 
 		seq_printf(p, BODY_FMT,
 			   j, ms->irq_rate, ms->my_irq_rate,
@@ -195,9 +334,34 @@ static int moderation_show(struct seq_file *p, void *v)
 	seq_printf(p, "\n"
 		   "enabled              %s\n"
 		   "delay_us             %u\n"
-		   "timer_rounds         %u\n",
+		   "timer_rounds         %u\n"
+		   "target_irq_rate      %u\n"
+		   "hardirq_percent      %u\n"
+		   "update_ms            %u\n"
+		   "scale_cpus           %u\n"
+		   "count_timer_calls    %s\n"
+		   "count_msi_calls      %s\n"
+		   "decay_factor         %u\n"
+		   "grow_factor          %u\n",
 		   str_yes_no(delay_us > 0),
-		   delay_us, irq_mod_info.timer_rounds);
+		   delay_us, irq_mod_info.timer_rounds,
+		   irq_mod_info.target_irq_rate, irq_mod_info.hardirq_percent,
+		   irq_mod_info.update_ms, irq_mod_info.scale_cpus,
+		   str_yes_no(irq_mod_info.count_timer_calls),
+		   str_yes_no(irq_mod_info.count_msi_calls),
+		   irq_mod_info.decay_factor, irq_mod_info.grow_factor);
+
+	seq_printf(p,
+		   "irq_rate             %lu\n"
+		   "irq_high             %lu\n"
+		   "my_irq_high          %lu\n"
+		   "hardirq_percent_high %lu\n"
+		   "total_interrupts     %lu\n"
+		   "total_cpus           %lu\n",
+		   active_cpus ? irq_rate / active_cpus : 0,
+		   irq_high, my_irq_high, hardirq_high,
+		   READ_ONCE(*((ulong *)&irq_mod_info.total_intrs)),
+		   READ_ONCE(*((ulong *)&irq_mod_info.total_cpus)));
 
 	return 0;
 }
@@ -218,10 +382,15 @@ struct param_names {
 static struct param_names param_names[] = {
 	{ "delay_us", &irq_mod_info.delay_us, 0, 500 },
 	{ "timer_rounds", &irq_mod_info.timer_rounds, 0, 20 },
+	{ "target_irq_rate", &irq_mod_info.target_irq_rate, 0, 50000000 },
+	{ "hardirq_percent", &irq_mod_info.hardirq_percent, 0, 100 },
 	{ "update_ms", &irq_mod_info.update_ms, 1, 100 },
 	/* Empty entry indicates the following are not settable from procfs. */
 	{},
+	{ "scale_cpus", &irq_mod_info.scale_cpus, 50, 1000 },
 	{ "count_timer_calls", &irq_mod_info.count_timer_calls, 0, 1 },
+	{ "decay_factor", &irq_mod_info.decay_factor, 8, 64 },
+	{ "grow_factor", &irq_mod_info.grow_factor, 8, 64 },
 };
 
 static void update_enable_key(void)

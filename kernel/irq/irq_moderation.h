@@ -138,6 +138,8 @@ DECLARE_PER_CPU_ALIGNED(struct irq_mod_state, irq_mod_state);
 
 extern struct static_key_false irq_moderation_enabled_key;
 
+void __irq_moderation_adjust_delay(struct irq_mod_state *ms, u64 delta_time);
+
 /* Called on each interrupt for adaptive moderation delay adjustment. */
 static inline void irq_moderation_adjust_delay(struct irq_mod_state *ms)
 {
@@ -157,7 +159,13 @@ static inline void irq_moderation_adjust_delay(struct irq_mod_state *ms)
 	ms->update_ns = READ_ONCE(irq_mod_info.update_ms) * NSEC_PER_MSEC;
 	ms->delay_ns = READ_ONCE(irq_mod_info.delay_us) * NSEC_PER_USEC;
 
-	ms->mod_ns = ms->delay_ns;
+	/* If config changed, restart from the highest delay. */
+	if (ktime_compare(irq_mod_info.procfs_write_ns, ms->last_ns) > 0)
+		ms->mod_ns = ms->delay_ns;
+
+	ms->last_ns = now;
+	/* Do the expensive processing */
+	__irq_moderation_adjust_delay(ms, delta_time);
 }
 
 /* Return true if timer is active or delay is large enough to require moderation */
