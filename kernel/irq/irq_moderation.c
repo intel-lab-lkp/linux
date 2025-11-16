@@ -84,6 +84,10 @@ static inline bool posted_msi_supported(void) { return false; }
  *
  *    echo "on" > /proc/irq/NN/soft_moderation # use "off" to disable
  *
+ * For selected drivers, the default can also be supplied via module parameters
+ *
+ *	${DRIVER}.soft_moderation=1
+ *
  * === MONITORING ===
  *
  * cat /proc/irq/soft_moderation shows per-CPU and global statistics.
@@ -306,6 +310,16 @@ static inline int set_moderation_mode(struct irq_desc *desc, bool enable)
 	desc->mod.enable = enable;
 	return 0;
 }
+
+/* irq_to_desc() is not exported. Wrap it for use in drivers. */
+void irq_moderation_set_mode(int irq, bool enable)
+{
+	struct irq_desc *desc = irq_to_desc(irq);
+
+	if (desc)
+		set_moderation_mode(desc, enable);
+}
+EXPORT_SYMBOL(irq_moderation_set_mode);
 
 #pragma clang diagnostic error "-Wformat"
 /* Print statistics */

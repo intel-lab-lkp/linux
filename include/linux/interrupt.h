@@ -885,6 +885,25 @@ extern int early_irq_init(void);
 extern int arch_probe_nr_irqs(void);
 extern int arch_early_irq_init(void);
 
+#ifdef CONFIG_IRQ_SOFT_MODERATION
+
+/* helpers for per-driver moderation mode settings */
+#define DEFINE_IRQ_MODERATION_MODE_PARAMETER		\
+	static bool soft_moderation;			\
+	module_param(soft_moderation, bool, 0644);	\
+	MODULE_PARM_DESC(soft_moderation, "0: off, 1: on")
+
+void irq_moderation_set_mode(int irq, bool enable);
+#define IRQ_MODERATION_SET_DEFAULT_MODE(_irq)		\
+	irq_moderation_set_mode(_irq, READ_ONCE(soft_moderation))
+
+#else   /* empty stubs to avoid conditional compilation */
+
+#define DEFINE_IRQ_MODERATION_MODE_PARAMETER
+#define IRQ_MODERATION_SET_DEFAULT_MODE(_irq)
+
+#endif
+
 /*
  * We want to know which function is an entrypoint of a hardirq or a softirq.
  */
