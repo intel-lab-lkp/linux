@@ -54,6 +54,7 @@ struct smsc_phy_priv {
 	unsigned int edpd_mode_set_by_user:1;
 	unsigned int edpd_max_wait_ms;
 	bool wol_arp;
+	bool reset_gpio;
 };
 
 static int smsc_phy_ack_interrupt(struct phy_device *phydev)
@@ -136,6 +137,7 @@ EXPORT_SYMBOL_GPL(smsc_phy_config_init);
 
 static int smsc_phy_reset(struct phy_device *phydev)
 {
+	struct smsc_phy_priv *priv = phydev->priv;
 	int rc = phy_read(phydev, MII_LAN83C185_SPECIAL_MODES);
 	if (rc < 0)
 		return rc;
@@ -147,9 +149,17 @@ static int smsc_phy_reset(struct phy_device *phydev)
 		/* set "all capable" mode */
 		rc |= MII_LAN83C185_MODE_ALL;
 		phy_write(phydev, MII_LAN83C185_SPECIAL_MODES, rc);
+		/* reset the phy */
+		return genphy_soft_reset(phydev);
 	}
 
-	/* reset the phy */
+	/* If the reset-gpios property exists, hardware reset will be
+	 * performed by the MDIO core, so do NOT issue a soft reset here.
+	 */
+	if (priv->reset_gpio)
+		return 0;
+
+	/* No reset GPIO found: fall back to soft reset */
 	return genphy_soft_reset(phydev);
 }
 
@@ -670,6 +680,9 @@ int smsc_phy_probe(struct phy_device *phydev)
 
 	if (device_property_present(dev, "smsc,disable-energy-detect"))
 		priv->edpd_enable = false;
+
+	if (device_property_present(dev, "reset-gpios"))
+		priv->reset_gpio = true;
 
 	phydev->priv = priv;
 
