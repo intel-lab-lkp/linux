@@ -57,10 +57,10 @@ drm_clflush_page(struct page *page)
 	if (unlikely(page == NULL))
 		return;
 
-	page_virtual = kmap_atomic(page);
+	page_virtual = kmap_local_page(page);
 	for (i = 0; i < PAGE_SIZE; i += size)
 		clflushopt(page_virtual + i);
-	kunmap_atomic(page_virtual);
+	kunmap_local(page_virtual);
 }
 
 static void drm_cache_flush_clflush(struct page *pages[],
