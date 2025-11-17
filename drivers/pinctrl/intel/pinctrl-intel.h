@@ -273,6 +273,8 @@ int intel_pinctrl_probe_by_uid(struct platform_device *pdev);
 
 extern const struct dev_pm_ops intel_pinctrl_pm_ops;
 
+int intel_gpio_add_pin_ranges(struct gpio_chip *gc);
+
 const struct intel_community *intel_get_community(const struct intel_pinctrl *pctrl,
 						  unsigned int pin);
 

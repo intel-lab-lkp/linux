@@ -1345,7 +1345,7 @@ static int intel_gpio_irq_init_hw(struct gpio_chip *gc)
 	return 0;
 }
 
-static int intel_gpio_add_pin_ranges(struct gpio_chip *gc)
+int intel_gpio_add_pin_ranges(struct gpio_chip *gc)
 {
 	struct intel_pinctrl *pctrl = gpiochip_get_data(gc);
 	struct device *dev = pctrl->dev;
@@ -1361,6 +1361,7 @@ static int intel_gpio_add_pin_ranges(struct gpio_chip *gc)
 
 	return 0;
 }
+EXPORT_SYMBOL_NS_GPL(intel_gpio_add_pin_ranges, "PINCTRL_INTEL");
 
 static unsigned int intel_gpio_ngpio(const struct intel_pinctrl *pctrl)
 {
