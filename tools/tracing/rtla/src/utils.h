@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <time.h>
 #include <sched.h>
+#include <stdbool.h>
 
 /*
  * '18446744073709551615\0'
@@ -80,6 +81,7 @@ static inline int set_deepest_cpu_idle_state(unsigned int cpu, unsigned int stat
 static inline int have_libcpupower_support(void) { return 0; }
 #endif /* HAVE_LIBCPUPOWER_SUPPORT */
 int auto_house_keeping(cpu_set_t *monitored_cpus);
+bool strtoi(const char *s, int *res);
 
 #define ns_to_usf(x) (((double)x/1000))
 #define ns_to_per(total, part) ((part * 100) / (double)total)
