@@ -1018,7 +1018,11 @@ static int arm_smmu_drain_queues(struct arm_smmu_device *smmu)
 	if (ret)
 		return ret;
 
-	return 0;
+	/* Drain all implementation-specific queues */
+	if (smmu->impl_ops && smmu->impl_ops->drain_queues)
+		ret = smmu->impl_ops->drain_queues(smmu);
+
+	return ret;
 }
 
 static void arm_smmu_page_response(struct device *dev, struct iopf_fault *unused,
