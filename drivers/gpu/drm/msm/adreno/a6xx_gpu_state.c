@@ -1976,13 +1976,13 @@ static void a6xx_show_debugbus(struct a6xx_gpu_state *a6xx_state,
 void a6xx_show(struct msm_gpu *gpu, struct msm_gpu_state *state,
 		struct drm_printer *p)
 {
+	if (IS_ERR_OR_NULL(state))
+		return;
+
 	struct adreno_gpu *adreno_gpu = to_adreno_gpu(gpu);
 	struct a6xx_gpu_state *a6xx_state = container_of(state,
 			struct a6xx_gpu_state, base);
 	int i;
-
-	if (IS_ERR_OR_NULL(state))
-		return;
 
 	drm_printf(p, "gpu-initialized: %d\n", a6xx_state->gpu_initialized);
 
