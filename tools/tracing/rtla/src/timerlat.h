@@ -31,6 +31,15 @@ struct timerlat_params {
 
 #define to_timerlat_params(ptr) container_of(ptr, struct timerlat_params, common)
 
+enum restart_result {
+	RESTART_OK,
+	RESTART_STOP,
+	RESTART_ERROR = -1,
+};
+
+enum restart_result
+timerlat_restart(const struct osnoise_tool *tool, struct timerlat_params *params);
+
 int timerlat_apply_config(struct osnoise_tool *tool, struct timerlat_params *params);
 int timerlat_main(int argc, char *argv[]);
 int timerlat_enable(struct osnoise_tool *tool);

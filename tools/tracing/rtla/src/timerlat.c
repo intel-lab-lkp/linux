@@ -22,6 +22,37 @@
 
 static int dma_latency_fd = -1;
 
+/**
+ * timerlat_restart - handle threshold actions and optionally restart tracing
+ * @tool: pointer to the osnoise_tool instance containing trace contexts
+ * @params: timerlat parameters with threshold action configuration
+ *
+ * Return:
+ *   RESTART_OK - Actions executed successfully and tracing restarted
+ *   RESTART_STOP - Actions executed but 'continue' flag not set, stop tracing
+ *   RESTART_ERROR - Failed to restart tracing after executing actions
+ */
+enum restart_result
+timerlat_restart(const struct osnoise_tool *tool, struct timerlat_params *params)
+{
+	actions_perform(&params->common.threshold_actions);
+
+	if (!params->common.threshold_actions.continue_flag)
+		/* continue flag not set, break */
+		return RESTART_STOP;
+
+	/* continue action reached, re-enable tracing */
+	if (tool->record && trace_instance_start(&tool->record->trace))
+		goto err;
+	if (tool->aa && trace_instance_start(&tool->aa->trace))
+		goto err;
+	return RESTART_OK;
+
+err:
+	err_msg("Error restarting trace\n");
+	return RESTART_ERROR;
+}
+
 /*
  * timerlat_apply_config - apply common configs to the initialized tool
  */
