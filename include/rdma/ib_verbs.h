@@ -3117,7 +3117,7 @@ static inline bool ib_is_udata_cleared(struct ib_udata *udata,
  */
 bool ib_modify_qp_is_ok(enum ib_qp_state cur_state, enum ib_qp_state next_state,
 			enum ib_qp_type type, enum ib_qp_attr_mask mask);
-
+int ib_resolve_eth_dmac(struct ib_device *device, struct rdma_ah_attr *ah_attr);
 void ib_register_event_handler(struct ib_event_handler *event_handler);
 void ib_unregister_event_handler(struct ib_event_handler *event_handler);
 void ib_dispatch_event(const struct ib_event *event);

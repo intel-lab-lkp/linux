@@ -22,4 +22,8 @@ void ib_copy_ah_attr_to_user(struct ib_device *device,
 void ib_copy_path_rec_to_user(struct ib_user_path_rec *dst,
 			      struct sa_path_rec *src);
 
+void ib_copy_qp_attr_from_user(struct ib_device *device,
+			       struct ib_qp_attr *dst,
+			       struct ib_uverbs_qp_attr *src);
+
 #endif /* IB_USER_MARSHALL_H */

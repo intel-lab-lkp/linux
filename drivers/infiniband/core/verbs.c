@@ -55,9 +55,6 @@
 #include "core_priv.h"
 #include <trace/events/rdma_core.h>
 
-static int ib_resolve_eth_dmac(struct ib_device *device,
-			       struct rdma_ah_attr *ah_attr);
-
 static const char * const ib_events[] = {
 	[IB_EVENT_CQ_ERR]		= "CQ error",
 	[IB_EVENT_QP_FATAL]		= "QP fatal error",
@@ -1732,8 +1729,8 @@ EXPORT_SYMBOL(ib_modify_qp_is_ok);
  * returns 0 on success or appropriate error code. It initializes the
  * necessary ah_attr fields when call is successful.
  */
-static int ib_resolve_eth_dmac(struct ib_device *device,
-			       struct rdma_ah_attr *ah_attr)
+int ib_resolve_eth_dmac(struct ib_device *device,
+			struct rdma_ah_attr *ah_attr)
 {
 	int ret = 0;
 
@@ -1752,6 +1749,7 @@ static int ib_resolve_eth_dmac(struct ib_device *device,
 	}
 	return ret;
 }
+EXPORT_SYMBOL(ib_resolve_eth_dmac);
 
 static bool is_qp_type_connected(const struct ib_qp *qp)
 {

@@ -32,6 +32,7 @@
 
 #include <linux/export.h>
 #include <rdma/ib_marshall.h>
+#include <rdma/ib_cache.h>
 
 #define OPA_DEFAULT_GID_PREFIX cpu_to_be64(0xfe80000000000000ULL)
 static int rdma_ah_conv_opa_to_ib(struct ib_device *dev,
@@ -171,3 +172,75 @@ void ib_copy_path_rec_to_user(struct ib_user_path_rec *dst,
 	__ib_copy_path_rec_to_user(dst, src);
 }
 EXPORT_SYMBOL(ib_copy_path_rec_to_user);
+
+static void ib_copy_ah_attr_from_user(struct ib_device *device,
+				      struct rdma_ah_attr *dst,
+				      struct ib_uverbs_ah_attr *src)
+{
+	int ah_flag;
+
+	ah_flag = src->is_global ? IB_AH_GRH : 0;
+	rdma_ah_set_ah_flags(dst, ah_flag);
+	rdma_ah_set_dlid(dst, src->dlid);
+	rdma_ah_set_sl(dst, src->sl);
+	rdma_ah_set_path_bits(dst, src->src_path_bits);
+	rdma_ah_set_static_rate(dst, src->static_rate);
+	rdma_ah_set_port_num(dst, src->port_num);
+
+	if (src->is_global) {
+		struct ib_global_route *grh = &dst->grh;
+		const struct ib_gid_attr *sgid_attr;
+
+		memset(grh, 0, sizeof(*grh));
+		sgid_attr = rdma_get_gid_attr(device, src->port_num,
+					      src->grh.sgid_index);
+		if (!IS_ERR(sgid_attr))
+			grh->sgid_attr = sgid_attr;
+		memcpy(&grh->dgid, src->grh.dgid, sizeof(grh->dgid));
+		grh->flow_label = src->grh.flow_label;
+		grh->sgid_index = src->grh.sgid_index;
+		grh->hop_limit = src->grh.hop_limit;
+		grh->traffic_class = src->grh.traffic_class;
+	}
+}
+
+void ib_copy_qp_attr_from_user(struct ib_device *device,
+			       struct ib_qp_attr *dst,
+			       struct ib_uverbs_qp_attr *src)
+{
+	dst->qp_state = src->qp_state;
+	dst->cur_qp_state = src->cur_qp_state;
+	dst->path_mtu = src->path_mtu;
+	dst->path_mig_state = src->path_mig_state;
+	dst->qkey = src->qkey;
+	dst->rq_psn = src->rq_psn;
+	dst->sq_psn = src->sq_psn;
+	dst->dest_qp_num = src->dest_qp_num;
+	dst->qp_access_flags = src->qp_access_flags;
+
+	dst->cap.max_send_wr = src->max_send_wr;
+	dst->cap.max_recv_wr = src->max_recv_wr;
+	dst->cap.max_send_sge = src->max_send_sge;
+	dst->cap.max_recv_sge = src->max_recv_sge;
+	dst->cap.max_inline_data = src->max_inline_data;
+
+	if (src->qp_attr_mask & IB_QP_AV)
+		ib_copy_ah_attr_from_user(device, &dst->ah_attr, &src->ah_attr);
+	if (src->qp_attr_mask & IB_QP_ALT_PATH)
+		ib_copy_ah_attr_from_user(device, &dst->alt_ah_attr, &src->alt_ah_attr);
+
+	dst->pkey_index = src->pkey_index;
+	dst->alt_pkey_index = src->alt_pkey_index;
+	dst->en_sqd_async_notify = src->en_sqd_async_notify;
+	dst->sq_draining = src->sq_draining;
+	dst->max_rd_atomic = src->max_rd_atomic;
+	dst->max_dest_rd_atomic = src->max_dest_rd_atomic;
+	dst->min_rnr_timer = src->min_rnr_timer;
+	dst->port_num = src->port_num;
+	dst->timeout = src->timeout;
+	dst->retry_cnt = src->retry_cnt;
+	dst->rnr_retry = src->rnr_retry;
+	dst->alt_port_num = src->alt_port_num;
+	dst->alt_timeout = src->alt_timeout;
+}
+EXPORT_SYMBOL(ib_copy_qp_attr_from_user);
