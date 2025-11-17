@@ -1344,7 +1344,7 @@ errout:
 static void mshv_partition_destroy_region(struct mshv_mem_region *region)
 {
 	struct mshv_partition *partition = region->partition;
-	u32 unmap_flags = 0;
+	u64 gfn, gfn_count, start_gfn, end_gfn;
 	int ret;
 
 	hlist_del(&region->hnode);
@@ -1359,12 +1359,36 @@ static void mshv_partition_destroy_region(struct mshv_mem_region *region)
 		}
 	}
 
-	if (region->flags.large_pages)
-		unmap_flags |= HV_UNMAP_GPA_LARGE_PAGE;
+	start_gfn = region->start_gfn;
+	end_gfn = region->start_gfn + region->nr_pages;
 
-	/* ignore unmap failures and continue as process may be exiting */
-	hv_call_unmap_gpa_pages(partition->pt_id, region->start_gfn,
-				region->nr_pages, unmap_flags);
+	for (gfn = start_gfn; gfn < end_gfn; gfn += gfn_count) {
+		u32 unmap_flags = 0;
+
+		if (gfn % MSHV_MAX_UNMAP_GPA_PAGES)
+			gfn_count = ALIGN(gfn, MSHV_MAX_UNMAP_GPA_PAGES) - gfn;
+		else
+			gfn_count = MSHV_MAX_UNMAP_GPA_PAGES;
+
+		if (gfn + gfn_count > end_gfn)
+			gfn_count = end_gfn - gfn;
+
+		/* Skip all pages in this range if none are mapped */
+		if (!memchr_inv(region->pages + (gfn - start_gfn), 0,
+				gfn_count * sizeof(struct page *)))
+			continue;
+
+		if (region->flags.large_pages &&
+		    VALUE_PMD_ALIGNED(gfn) && VALUE_PMD_ALIGNED(gfn_count))
+			unmap_flags |= HV_UNMAP_GPA_LARGE_PAGE;
+
+		ret = hv_call_unmap_gpa_pages(partition->pt_id, gfn,
+					      gfn_count, unmap_flags);
+		if (ret)
+			pt_err(partition,
+			       "Failed to unmap GPA pages %#llx-%#llx: %d\n",
+			       gfn, gfn + gfn_count - 1, ret);
+	}
 
 	mshv_region_invalidate(region);
 
