@@ -17,6 +17,7 @@
 #include "intel_display_power.h"
 #include "intel_display_regs.h"
 #include "intel_display_types.h"
+#include "intel_vrr_regs.h"
 
 /**
  * DOC: Common Primary Timing Generator (CMTG)
@@ -213,6 +214,7 @@ static void intel_cmtg_set_timings(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
+	u32 vctl;
 
 	intel_de_write(display, TRANS_HTOTAL_CMTG(cpu_transcoder),
 		       intel_de_read(display, TRANS_HTOTAL(display, cpu_transcoder)));
@@ -226,6 +228,23 @@ static void intel_cmtg_set_timings(const struct intel_crtc_state *crtc_state)
 		       intel_de_read(display, TRANS_VBLANK(display, cpu_transcoder)));
 	intel_de_write(display, TRANS_VSYNC_CMTG(cpu_transcoder),
 		       intel_de_read(display, TRANS_VSYNC(display, cpu_transcoder)));
+
+	vctl = intel_de_read(display, TRANS_VRR_CTL(display, cpu_transcoder));
+	if (vctl & VRR_CTL_VRR_ENABLE) {
+		u32 vmax, flipline, vmin;
+
+		vmax = intel_de_read(display, TRANS_VRR_VMAX(display, cpu_transcoder));
+		flipline = intel_de_read(display, TRANS_VRR_FLIPLINE(display, cpu_transcoder));
+		if (vmax != flipline)
+			return;
+
+		vmin = intel_de_read(display, TRANS_VRR_VMIN(display, cpu_transcoder));
+
+		intel_de_write(display, TRANS_VRR_VMAX_CMTG(cpu_transcoder), vmax);
+		intel_de_write(display, TRANS_VRR_VMIN_CMTG(cpu_transcoder), vmin);
+		intel_de_write(display, TRANS_VRR_FLIPLINE_CMTG(cpu_transcoder), flipline);
+		intel_de_write(display, TRANS_VRR_CTL_CMTG(cpu_transcoder), vctl);
+	}
 }
 
 void intel_cmtg_enable(const struct intel_crtc_state *crtc_state)
