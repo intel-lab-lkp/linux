@@ -15,6 +15,18 @@
 #include <asm/kvm_nacl.h>
 #include <asm/sbi.h>
 
+DEFINE_STATIC_KEY_FALSE(kvm_riscv_tlb_split_mode);
+
+static void kvm_riscv_setup_vendor_features(void)
+{
+	/* Andes AX66: split two-stage TLBs */
+	if (riscv_cached_mvendorid(0) == ANDES_VENDOR_ID &&
+	    (riscv_cached_marchid(0) & 0xFFFF) == 0x8A66) {
+		static_branch_enable(&kvm_riscv_tlb_split_mode);
+		kvm_info("using split two-stage TLBs requiring extra HFENCE.VVMA\n");
+	}
+}
+
 long kvm_arch_dev_ioctl(struct file *filp,
 			unsigned int ioctl, unsigned long arg)
 {
@@ -159,6 +171,8 @@ static int __init riscv_kvm_init(void)
 	if (kvm_riscv_aia_available())
 		kvm_info("AIA available with %d guest external interrupts\n",
 			 kvm_riscv_aia_nr_hgei);
+
+	kvm_riscv_setup_vendor_features();
 
 	kvm_register_perf_callbacks(NULL);
 

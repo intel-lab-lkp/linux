@@ -327,4 +327,6 @@ bool kvm_riscv_vcpu_stopped(struct kvm_vcpu *vcpu);
 
 void kvm_riscv_vcpu_record_steal_time(struct kvm_vcpu *vcpu);
 
+DECLARE_STATIC_KEY_FALSE(kvm_riscv_tlb_split_mode);
+
 #endif /* __RISCV_KVM_HOST_H__ */

@@ -123,7 +123,7 @@ void kvm_riscv_gstage_vmid_update(struct kvm_vcpu *vcpu)
 		kvm_make_request(KVM_REQ_UPDATE_HGATP, v);
 }
 
-void kvm_riscv_gstage_vmid_sanitize(struct kvm_vcpu *vcpu)
+void kvm_riscv_local_tlb_sanitize(struct kvm_vcpu *vcpu)
 {
 	unsigned long vmid;
 
@@ -144,4 +144,8 @@ void kvm_riscv_gstage_vmid_sanitize(struct kvm_vcpu *vcpu)
 
 	vmid = READ_ONCE(vcpu->kvm->arch.vmid.vmid);
 	kvm_riscv_local_hfence_gvma_vmid_all(vmid);
+
+	/* For split TLB designs, flush VS-stage entries also */
+	if (static_branch_unlikely(&kvm_riscv_tlb_split_mode))
+		kvm_riscv_local_hfence_vvma_all(vmid);
 }
