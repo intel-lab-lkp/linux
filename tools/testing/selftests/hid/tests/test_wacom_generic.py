@@ -600,15 +600,17 @@ class BaseTest:
 
         def test_prop_direct(self):
             """
-            Todo: Verify that INPUT_PROP_DIRECT is set on display devices.
+            Verify that INPUT_PROP_DIRECT is set on display devices.
             """
-            pass
+            evdev = self.uhdev.get_evdev()
+            assert libevdev.INPUT_PROP_DIRECT in evdev.properties
 
         def test_prop_pointer(self):
             """
-            Todo: Verify that INPUT_PROP_POINTER is set on opaque devices.
+            Verify that INPUT_PROP_POINTER is set on opaque devices.
             """
-            pass
+            evdev = self.uhdev.get_evdev()
+            assert libevdev.INPUT_PROP_POINTER in evdev.properties
 
 
 class PenTabletTest(BaseTest.TestTablet):
@@ -622,6 +624,8 @@ class TouchTabletTest(BaseTest.TestTablet):
 
 
 class TestOpaqueTablet(PenTabletTest):
+    test_prop_direct = None
+
     def create_device(self):
         return OpaqueTablet()
 
@@ -864,6 +868,7 @@ class TestPTHX60_Pen(TestOpaqueCTLTablet):
 
 class TestDTH2452Tablet(test_multitouch.BaseTest.TestMultitouch, TouchTabletTest):
     ContactIds = namedtuple("ContactIds", "contact_id, tracking_id, slot_num")
+    test_prop_pointer = None
 
     def create_device(self):
         return test_multitouch.Digitizer(
