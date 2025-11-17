@@ -124,8 +124,8 @@ static const struct of_device_id tcsr_dt_match[] __maybe_unused = {
 
 static int gsbi_probe(struct platform_device *pdev)
 {
+	struct device_node *tcsr_node __free(device_node) = NULL;
 	struct device_node *node = pdev->dev.of_node;
-	struct device_node *tcsr_node;
 	const struct of_device_id *match;
 	void __iomem *base;
 	struct gsbi_info *gsbi;
@@ -154,7 +154,6 @@ static int gsbi_probe(struct platform_device *pdev)
 			else
 				dev_warn(&pdev->dev, "no matching TCSR\n");
 
-			of_node_put(tcsr_node);
 		}
 	}
 
