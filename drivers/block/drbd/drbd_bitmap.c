@@ -1213,6 +1213,7 @@ static int bm_rw(struct drbd_device *device, const unsigned int flags, unsigned 
 /**
  * drbd_bm_read() - Read the whole bitmap from its on disk location.
  * @device:	DRBD device.
+ * @peer_device: Peer device for which the bitmap read is performed.
  */
 int drbd_bm_read(struct drbd_device *device,
 		 struct drbd_peer_device *peer_device) __must_hold(local)
@@ -1224,6 +1225,7 @@ int drbd_bm_read(struct drbd_device *device,
 /**
  * drbd_bm_write() - Write the whole bitmap to its on disk location.
  * @device:	DRBD device.
+ * @peer_device: Peer device for which the bitmap write is performed.
  *
  * Will only write pages that have changed since last IO.
  */
@@ -1236,7 +1238,7 @@ int drbd_bm_write(struct drbd_device *device,
 /**
  * drbd_bm_write_all() - Write the whole bitmap to its on disk location.
  * @device:	DRBD device.
- *
+ * @peer_device: Peer device for which the bitmap write is performed.
  * Will write all pages.
  */
 int drbd_bm_write_all(struct drbd_device *device,
@@ -1258,6 +1260,7 @@ int drbd_bm_write_lazy(struct drbd_device *device, unsigned upper_idx) __must_ho
 /**
  * drbd_bm_write_copy_pages() - Write the whole bitmap to its on disk location.
  * @device:	DRBD device.
+ * @peer_device: Peer device for which the bitmap write is performed.
  *
  * Will only write pages that have changed since last IO.
  * In contrast to drbd_bm_write(), this will copy the bitmap pages
@@ -1275,6 +1278,7 @@ int drbd_bm_write_copy_pages(struct drbd_device *device,
 /**
  * drbd_bm_write_hinted() - Write bitmap pages with "hint" marks, if they have changed.
  * @device:	DRBD device.
+ * @peer_device: Peer device for which the bitmap write is performed.
  */
 int drbd_bm_write_hinted(struct drbd_device *device) __must_hold(local)
 {
