@@ -2,7 +2,7 @@
 /* Copyright (c) 2023 - 2024 Intel Corporation */
 
 #include "main.h"
-#include <linux/net/intel/iidc_rdma_idpf.h>
+#include <linux/intel/iidc_rdma_idpf.h>
 #include "ig3rdma_hw.h"
 
 static void ig3rdma_idc_core_event_handler(struct iidc_rdma_core_dev_info *cdev_info,
