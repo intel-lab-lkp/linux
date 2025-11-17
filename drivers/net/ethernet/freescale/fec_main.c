@@ -1009,7 +1009,7 @@ static void fec_enet_bd_init(struct net_device *dev)
 
 		/* Set the last buffer to wrap */
 		bdp = fec_enet_get_prevdesc(bdp, &rxq->bd);
-		bdp->cbd_sc |= cpu_to_fec16(BD_SC_WRAP);
+		bdp->cbd_sc |= cpu_to_fec16(BD_ENET_RX_WRAP);
 
 		rxq->bd.cur = rxq->bd.base;
 	}
@@ -1059,7 +1059,7 @@ static void fec_enet_bd_init(struct net_device *dev)
 
 		/* Set the last buffer to wrap */
 		bdp = fec_enet_get_prevdesc(bdp, &txq->bd);
-		bdp->cbd_sc |= cpu_to_fec16(BD_SC_WRAP);
+		bdp->cbd_sc |= cpu_to_fec16(BD_ENET_TX_WRAP);
 		txq->dirty_tx = bdp;
 	}
 }
@@ -3482,7 +3482,7 @@ fec_enet_alloc_rxq_buffers(struct net_device *ndev, unsigned int queue)
 
 	/* Set the last buffer to wrap. */
 	bdp = fec_enet_get_prevdesc(bdp, &rxq->bd);
-	bdp->cbd_sc |= cpu_to_fec16(BD_SC_WRAP);
+	bdp->cbd_sc |= cpu_to_fec16(BD_ENET_RX_WRAP);
 	return 0;
 
  err_alloc:
@@ -3518,7 +3518,7 @@ fec_enet_alloc_txq_buffers(struct net_device *ndev, unsigned int queue)
 
 	/* Set the last buffer to wrap. */
 	bdp = fec_enet_get_prevdesc(bdp, &txq->bd);
-	bdp->cbd_sc |= cpu_to_fec16(BD_SC_WRAP);
+	bdp->cbd_sc |= cpu_to_fec16(BD_ENET_TX_WRAP);
 
 	return 0;
 
