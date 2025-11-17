@@ -1405,178 +1405,7 @@ static int uniwill_ec_init(struct uniwill_data *data)
 	return devm_add_action_or_reset(data->dev, uniwill_disable_manual_control, data);
 }
 
-static int uniwill_probe(struct platform_device *pdev)
-{
-	struct uniwill_data *data;
-	struct regmap *regmap;
-	acpi_handle handle;
-	int ret;
-
-	handle = ACPI_HANDLE(&pdev->dev);
-	if (!handle)
-		return -ENODEV;
-
-	data = devm_kzalloc(&pdev->dev, sizeof(*data), GFP_KERNEL);
-	if (!data)
-		return -ENOMEM;
-
-	data->dev = &pdev->dev;
-	data->handle = handle;
-	platform_set_drvdata(pdev, data);
-
-	regmap = devm_regmap_init(&pdev->dev, &uniwill_ec_bus, data, &uniwill_ec_config);
-	if (IS_ERR(regmap))
-		return PTR_ERR(regmap);
-
-	data->regmap = regmap;
-	ret = devm_mutex_init(&pdev->dev, &data->super_key_lock);
-	if (ret < 0)
-		return ret;
-
-	ret = uniwill_ec_init(data);
-	if (ret < 0)
-		return ret;
-
-	ret = uniwill_battery_init(data);
-	if (ret < 0)
-		return ret;
-
-	ret = uniwill_led_init(data);
-	if (ret < 0)
-		return ret;
-
-	ret = uniwill_hwmon_init(data);
-	if (ret < 0)
-		return ret;
-
-	ret = uniwill_nvidia_ctgp_init(data);
-	if (ret < 0)
-		return ret;
-
-	return uniwill_input_init(data);
-}
-
-static void uniwill_shutdown(struct platform_device *pdev)
-{
-	struct uniwill_data *data = platform_get_drvdata(pdev);
-
-	regmap_clear_bits(data->regmap, EC_ADDR_AP_OEM, ENABLE_MANUAL_CTRL);
-}
-
-static int uniwill_suspend_keyboard(struct uniwill_data *data)
-{
-	if (!(supported_features & UNIWILL_FEATURE_SUPER_KEY_TOGGLE))
-		return 0;
-
-	/*
-	 * The EC_ADDR_SWITCH_STATUS is marked as volatile, so we have to restore it
-	 * ourselves.
-	 */
-	return regmap_read(data->regmap, EC_ADDR_SWITCH_STATUS, &data->last_switch_status);
-}
-
-static int uniwill_suspend_battery(struct uniwill_data *data)
-{
-	if (!(supported_features & UNIWILL_FEATURE_BATTERY))
-		return 0;
-
-	/*
-	 * Save the current charge limit in order to restore it during resume.
-	 * We cannot use the regmap code for that since this register needs to
-	 * be declared as volatile due to CHARGE_CTRL_REACHED.
-	 */
-	return regmap_read(data->regmap, EC_ADDR_CHARGE_CTRL, &data->last_charge_ctrl);
-}
-
-static int uniwill_suspend(struct device *dev)
-{
-	struct uniwill_data *data = dev_get_drvdata(dev);
-	int ret;
-
-	ret = uniwill_suspend_keyboard(data);
-	if (ret < 0)
-		return ret;
-
-	ret = uniwill_suspend_battery(data);
-	if (ret < 0)
-		return ret;
-
-	regcache_cache_only(data->regmap, true);
-	regcache_mark_dirty(data->regmap);
-
-	return 0;
-}
-
-static int uniwill_resume_keyboard(struct uniwill_data *data)
-{
-	unsigned int value;
-	int ret;
-
-	if (!(supported_features & UNIWILL_FEATURE_SUPER_KEY_TOGGLE))
-		return 0;
-
-	ret = regmap_read(data->regmap, EC_ADDR_SWITCH_STATUS, &value);
-	if (ret < 0)
-		return ret;
-
-	if ((data->last_switch_status & SUPER_KEY_LOCK_STATUS) == (value & SUPER_KEY_LOCK_STATUS))
-		return 0;
-
-	return regmap_write_bits(data->regmap, EC_ADDR_TRIGGER, TRIGGER_SUPER_KEY_LOCK,
-				 TRIGGER_SUPER_KEY_LOCK);
-}
-
-static int uniwill_resume_battery(struct uniwill_data *data)
-{
-	if (!(supported_features & UNIWILL_FEATURE_BATTERY))
-		return 0;
-
-	return regmap_update_bits(data->regmap, EC_ADDR_CHARGE_CTRL, CHARGE_CTRL_MASK,
-				  data->last_charge_ctrl);
-}
-
-static int uniwill_resume(struct device *dev)
-{
-	struct uniwill_data *data = dev_get_drvdata(dev);
-	int ret;
-
-	regcache_cache_only(data->regmap, false);
-
-	ret = regcache_sync(data->regmap);
-	if (ret < 0)
-		return ret;
-
-	ret = uniwill_resume_keyboard(data);
-	if (ret < 0)
-		return ret;
-
-	return uniwill_resume_battery(data);
-}
-
-static DEFINE_SIMPLE_DEV_PM_OPS(uniwill_pm_ops, uniwill_suspend, uniwill_resume);
-
-/*
- * We only use the DMI table for auoloading because the ACPI device itself
- * does not guarantee that the underlying EC implementation is supported.
- */
-static const struct acpi_device_id uniwill_id_table[] = {
-	{ "INOU0000" },
-	{ },
-};
-
-static struct platform_driver uniwill_driver = {
-	.driver = {
-		.name = DRIVER_NAME,
-		.dev_groups = uniwill_groups,
-		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
-		.acpi_match_table = uniwill_id_table,
-		.pm = pm_sleep_ptr(&uniwill_pm_ops),
-	},
-	.probe = uniwill_probe,
-	.shutdown = uniwill_shutdown,
-};
-
-static const struct dmi_system_id uniwill_dmi_table[] __initconst = {
+static const struct dmi_system_id uniwill_dmi_table[] = {
 	{
 		.ident = "XMG FUSION 15",
 		.matches = {
@@ -1935,6 +1764,177 @@ static const struct dmi_system_id uniwill_dmi_table[] __initconst = {
 	{ }
 };
 MODULE_DEVICE_TABLE(dmi, uniwill_dmi_table);
+
+static int uniwill_probe(struct platform_device *pdev)
+{
+	struct uniwill_data *data;
+	struct regmap *regmap;
+	acpi_handle handle;
+	int ret;
+
+	handle = ACPI_HANDLE(&pdev->dev);
+	if (!handle)
+		return -ENODEV;
+
+	data = devm_kzalloc(&pdev->dev, sizeof(*data), GFP_KERNEL);
+	if (!data)
+		return -ENOMEM;
+
+	data->dev = &pdev->dev;
+	data->handle = handle;
+	platform_set_drvdata(pdev, data);
+
+	regmap = devm_regmap_init(&pdev->dev, &uniwill_ec_bus, data, &uniwill_ec_config);
+	if (IS_ERR(regmap))
+		return PTR_ERR(regmap);
+
+	data->regmap = regmap;
+	ret = devm_mutex_init(&pdev->dev, &data->super_key_lock);
+	if (ret < 0)
+		return ret;
+
+	ret = uniwill_ec_init(data);
+	if (ret < 0)
+		return ret;
+
+	ret = uniwill_battery_init(data);
+	if (ret < 0)
+		return ret;
+
+	ret = uniwill_led_init(data);
+	if (ret < 0)
+		return ret;
+
+	ret = uniwill_hwmon_init(data);
+	if (ret < 0)
+		return ret;
+
+	ret = uniwill_nvidia_ctgp_init(data);
+	if (ret < 0)
+		return ret;
+
+	return uniwill_input_init(data);
+}
+
+static void uniwill_shutdown(struct platform_device *pdev)
+{
+	struct uniwill_data *data = platform_get_drvdata(pdev);
+
+	regmap_clear_bits(data->regmap, EC_ADDR_AP_OEM, ENABLE_MANUAL_CTRL);
+}
+
+static int uniwill_suspend_keyboard(struct uniwill_data *data)
+{
+	if (!(supported_features & UNIWILL_FEATURE_SUPER_KEY_TOGGLE))
+		return 0;
+
+	/*
+	 * The EC_ADDR_SWITCH_STATUS is marked as volatile, so we have to restore it
+	 * ourselves.
+	 */
+	return regmap_read(data->regmap, EC_ADDR_SWITCH_STATUS, &data->last_switch_status);
+}
+
+static int uniwill_suspend_battery(struct uniwill_data *data)
+{
+	if (!(supported_features & UNIWILL_FEATURE_BATTERY))
+		return 0;
+
+	/*
+	 * Save the current charge limit in order to restore it during resume.
+	 * We cannot use the regmap code for that since this register needs to
+	 * be declared as volatile due to CHARGE_CTRL_REACHED.
+	 */
+	return regmap_read(data->regmap, EC_ADDR_CHARGE_CTRL, &data->last_charge_ctrl);
+}
+
+static int uniwill_suspend(struct device *dev)
+{
+	struct uniwill_data *data = dev_get_drvdata(dev);
+	int ret;
+
+	ret = uniwill_suspend_keyboard(data);
+	if (ret < 0)
+		return ret;
+
+	ret = uniwill_suspend_battery(data);
+	if (ret < 0)
+		return ret;
+
+	regcache_cache_only(data->regmap, true);
+	regcache_mark_dirty(data->regmap);
+
+	return 0;
+}
+
+static int uniwill_resume_keyboard(struct uniwill_data *data)
+{
+	unsigned int value;
+	int ret;
+
+	if (!(supported_features & UNIWILL_FEATURE_SUPER_KEY_TOGGLE))
+		return 0;
+
+	ret = regmap_read(data->regmap, EC_ADDR_SWITCH_STATUS, &value);
+	if (ret < 0)
+		return ret;
+
+	if ((data->last_switch_status & SUPER_KEY_LOCK_STATUS) == (value & SUPER_KEY_LOCK_STATUS))
+		return 0;
+
+	return regmap_write_bits(data->regmap, EC_ADDR_TRIGGER, TRIGGER_SUPER_KEY_LOCK,
+				 TRIGGER_SUPER_KEY_LOCK);
+}
+
+static int uniwill_resume_battery(struct uniwill_data *data)
+{
+	if (!(supported_features & UNIWILL_FEATURE_BATTERY))
+		return 0;
+
+	return regmap_update_bits(data->regmap, EC_ADDR_CHARGE_CTRL, CHARGE_CTRL_MASK,
+				  data->last_charge_ctrl);
+}
+
+static int uniwill_resume(struct device *dev)
+{
+	struct uniwill_data *data = dev_get_drvdata(dev);
+	int ret;
+
+	regcache_cache_only(data->regmap, false);
+
+	ret = regcache_sync(data->regmap);
+	if (ret < 0)
+		return ret;
+
+	ret = uniwill_resume_keyboard(data);
+	if (ret < 0)
+		return ret;
+
+	return uniwill_resume_battery(data);
+}
+
+static DEFINE_SIMPLE_DEV_PM_OPS(uniwill_pm_ops, uniwill_suspend, uniwill_resume);
+
+/*
+ * We only use the DMI table for auoloading because the ACPI device itself
+ * does not guarantee that the underlying EC implementation is supported.
+ */
+static const struct acpi_device_id uniwill_id_table[] = {
+	{ "INOU0000" },
+	{ },
+};
+
+static struct platform_driver uniwill_driver = {
+	.driver = {
+		.name = DRIVER_NAME,
+		.dev_groups = uniwill_groups,
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
+		.acpi_match_table = uniwill_id_table,
+		.pm = pm_sleep_ptr(&uniwill_pm_ops),
+	},
+	.probe = uniwill_probe,
+	.shutdown = uniwill_shutdown,
+};
 
 static int __init uniwill_init(void)
 {
