@@ -67,9 +67,9 @@ DEFINE_SHOW_ATTRIBUTE(master_stats);
 
 static int master_stats_probe(struct platform_device *pdev)
 {
+	struct device_node *msgram_np __free(device_node) = NULL;
 	struct device *dev = &pdev->dev;
 	struct master_stats_data *data;
-	struct device_node *msgram_np;
 	struct dentry *dent, *root;
 	struct resource res;
 	int count, i, ret;
@@ -98,7 +98,6 @@ static int master_stats_probe(struct platform_device *pdev)
 		 * shared resource.
 		 */
 		ret = of_address_to_resource(msgram_np, 0, &res);
-		of_node_put(msgram_np);
 		if (ret < 0) {
 			debugfs_remove_recursive(root);
 			return ret;
