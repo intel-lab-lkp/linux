@@ -9,15 +9,14 @@
 
 static int rpm_proc_probe(struct platform_device *pdev)
 {
+	struct device_node *edge_node __free(device_node) = NULL;
 	struct qcom_smd_edge *edge = NULL;
 	struct device *dev = &pdev->dev;
-	struct device_node *edge_node;
 	int ret;
 
 	edge_node = of_get_child_by_name(dev->of_node, "smd-edge");
 	if (edge_node) {
 		edge = qcom_smd_register_edge(dev, edge_node);
-		of_node_put(edge_node);
 		if (IS_ERR(edge))
 			return dev_err_probe(dev, PTR_ERR(edge),
 					     "Failed to register smd-edge\n");
