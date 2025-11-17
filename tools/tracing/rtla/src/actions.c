@@ -11,11 +11,13 @@
 /*
  * actions_init - initialize struct actions
  */
-void
+int
 actions_init(struct actions *self)
 {
 	self->size = action_default_size;
 	self->list = calloc(self->size, sizeof(struct action));
+	if (!self->list)
+		return -1;
 	self->len = 0;
 	self->continue_flag = false;
 
@@ -23,6 +25,7 @@ actions_init(struct actions *self)
 
 	/* This has to be set by the user */
 	self->trace_output_inst = NULL;
+	return 0;
 }
 
 /*
@@ -50,8 +53,13 @@ static struct action *
 actions_new(struct actions *self)
 {
 	if (self->len >= self->size) {
-		self->size *= 2;
-		self->list = realloc(self->list, self->size * sizeof(struct action));
+		const size_t new_size = self->size * 2;
+		void *p = reallocarray(self->list, new_size, sizeof(struct action));
+
+		if (!p)
+			return NULL;
+		self->list = p;
+		self->size = new_size;
 	}
 
 	return &self->list[self->len++];
@@ -64,6 +72,9 @@ int
 actions_add_trace_output(struct actions *self, const char *trace_output)
 {
 	struct action *action = actions_new(self);
+
+	if (!action)
+		return -1;
 
 	self->present[ACTION_TRACE_OUTPUT] = true;
 	action->type = ACTION_TRACE_OUTPUT;
@@ -83,6 +94,9 @@ actions_add_signal(struct actions *self, int signal, int pid)
 {
 	struct action *action = actions_new(self);
 
+	if (!action)
+		return -1;
+
 	self->present[ACTION_SIGNAL] = true;
 	action->type = ACTION_SIGNAL;
 	action->signal = signal;
@@ -98,6 +112,9 @@ int
 actions_add_shell(struct actions *self, const char *command)
 {
 	struct action *action = actions_new(self);
+
+	if (!action)
+		return -1;
 
 	self->present[ACTION_SHELL] = true;
 	action->type = ACTION_SHELL;
@@ -116,6 +133,9 @@ int
 actions_add_continue(struct actions *self)
 {
 	struct action *action = actions_new(self);
+
+	if (!action)
+		return -1;
 
 	self->present[ACTION_CONTINUE] = true;
 	action->type = ACTION_CONTINUE;

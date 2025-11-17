@@ -556,8 +556,11 @@ static struct common_params
 	if (!params)
 		exit(1);
 
-	actions_init(&params->common.threshold_actions);
-	actions_init(&params->common.end_actions);
+	if (actions_init(&params->common.threshold_actions) ||
+	    actions_init(&params->common.end_actions)) {
+		err_msg("Error initializing actions");
+		exit(EXIT_FAILURE);
+	}
 
 	/* disabled by default */
 	params->dma_latency = -1;

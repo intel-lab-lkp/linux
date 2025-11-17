@@ -42,7 +42,7 @@ struct actions {
 	struct tracefs_instance *trace_output_inst;
 };
 
-void actions_init(struct actions *self);
+int actions_init(struct actions *self);
 void actions_destroy(struct actions *self);
 int actions_add_trace_output(struct actions *self, const char *trace_output);
 int actions_add_signal(struct actions *self, int signal, int pid);
