@@ -501,7 +501,7 @@ static int qcom_smp2p_alloc_outbound_item(struct qcom_smp2p *smp2p)
 
 static int smp2p_parse_ipc(struct qcom_smp2p *smp2p)
 {
-	struct device_node *syscon;
+	struct device_node *syscon __free(device_node) = NULL;
 	struct device *dev = smp2p->dev;
 	const char *key;
 	int ret;
@@ -513,7 +513,6 @@ static int smp2p_parse_ipc(struct qcom_smp2p *smp2p)
 	}
 
 	smp2p->ipc_regmap = syscon_node_to_regmap(syscon);
-	of_node_put(syscon);
 	if (IS_ERR(smp2p->ipc_regmap))
 		return PTR_ERR(smp2p->ipc_regmap);
 
