@@ -24,7 +24,9 @@ enum cmtg {
 
 #define TRANS_CMTG_CTL_A		_MMIO(0x6fa88)
 #define TRANS_CMTG_CTL_B		_MMIO(0x6fb88)
+#define TRANS_CMTG_CTL(id)		_MMIO(0x6fa88 + (id) * 0x100)
 #define  CMTG_ENABLE			REG_BIT(31)
+#define  CMTG_SYNC_TO_PORT		REG_BIT(29)
 
 #define TRANS_HTOTAL_CMTG(id)		_MMIO(0x6F000 + (id) * 0x100)
 #define TRANS_HBLANK_CMTG(id)		_MMIO(0x6F004 + (id) * 0x100)
