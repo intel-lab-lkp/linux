@@ -257,6 +257,7 @@ extern struct dentry *d_find_any_alias(struct inode *inode);
 extern struct dentry * d_obtain_alias(struct inode *);
 extern struct dentry * d_obtain_root(struct inode *);
 extern void shrink_dcache_sb(struct super_block *);
+extern void reclaim_dcache_sb(struct super_block *sb);
 extern void shrink_dcache_parent(struct dentry *);
 extern void d_invalidate(struct dentry *);
 

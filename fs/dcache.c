@@ -1264,6 +1264,28 @@ void shrink_dcache_sb(struct super_block *sb)
 EXPORT_SYMBOL(shrink_dcache_sb);
 
 /**
+ * reclaim_dcache_sb - reclaim dcache for a superblock
+ * @sb: superblock
+ *
+ * Reclaim the dcache for the specified super block. This is used to free
+ * the dcache via sysctl 'drop_fs_caches'.
+ */
+void reclaim_dcache_sb(struct super_block *sb)
+{
+	unsigned long count = list_lru_count(&sb->s_dentry_lru);
+
+	while (count > 0) {
+		LIST_HEAD(dispose);
+		unsigned long nr_to_walk = count >= 1024 ? 1024 : count;
+
+		count -= nr_to_walk;
+		list_lru_walk(&sb->s_dentry_lru, dentry_lru_isolate, &dispose,
+			      nr_to_walk);
+		shrink_dentry_list(&dispose);
+	}
+}
+
+/**
  * enum d_walk_ret - action to talke during tree walk
  * @D_WALK_CONTINUE:	contrinue walk
  * @D_WALK_QUIT:	quit walk

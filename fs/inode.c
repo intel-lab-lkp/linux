@@ -1001,6 +1001,27 @@ long prune_icache_sb(struct super_block *sb, struct shrink_control *sc)
 	return freed;
 }
 
+/*
+ * Walk the superblock inode LRU for freeable inodes and attempt to free them.
+ * Inodes to be freed are moved to a temporary list and then are freed outside
+ * inode_lock by dispose_list(). This is used to free the icache via sysctl
+ * 'drop_fs_caches'.
+ */
+void reclaim_icache_sb(struct super_block *sb)
+{
+	unsigned long count = list_lru_count(&sb->s_inode_lru);
+
+	while (count > 0) {
+		LIST_HEAD(dispose);
+		unsigned long nr_to_walk = count >= 1024 ? 1024 : count;
+
+		count -= nr_to_walk;
+		list_lru_walk(&sb->s_inode_lru, inode_lru_isolate, &dispose,
+			      nr_to_walk);
+		dispose_list(&dispose);
+	}
+}
+
 static void __wait_on_freeing_inode(struct inode *inode, bool is_inode_hash_locked);
 /*
  * Called with the inode lock held.
