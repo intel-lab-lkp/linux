@@ -473,6 +473,8 @@ static void kmb_remove(struct platform_device *pdev)
 
 	/* Unregister DSI host */
 	kmb_dsi_host_unregister(kmb->kmb_dsi);
+	if (kmb->kmb_dsi && kmb->kmb_dsi->pdev)
+		put_device(&kmb->kmb_dsi->pdev->dev);
 	drm_atomic_helper_shutdown(drm);
 }
 
@@ -517,17 +519,20 @@ static int kmb_probe(struct platform_device *pdev)
 	ret = kmb_dsi_host_bridge_init(get_device(&dsi_pdev->dev));
 
 	if (ret == -EPROBE_DEFER) {
-		return -EPROBE_DEFER;
+		ret = -EPROBE_DEFER;
+		goto err_free2;
 	} else if (ret) {
 		DRM_ERROR("probe failed to initialize DSI host bridge\n");
-		return ret;
+		goto err_free2;
 	}
 
 	/* Create DRM device */
 	kmb = devm_drm_dev_alloc(dev, &kmb_driver,
 				 struct kmb_drm_private, drm);
-	if (IS_ERR(kmb))
-		return PTR_ERR(kmb);
+	if (IS_ERR(kmb)) {
+		ret = PTR_ERR(kmb);
+		goto err_free2;
+	}
 
 	dev_set_drvdata(dev, &kmb->drm);
 
@@ -576,7 +581,8 @@ static int kmb_probe(struct platform_device *pdev)
  err_free1:
 	dev_set_drvdata(dev, NULL);
 	kmb_dsi_host_unregister(kmb->kmb_dsi);
-
+ err_free2:
+	put_device(&dsi_pdev->dev);
 	return ret;
 }
 
