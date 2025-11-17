@@ -723,6 +723,47 @@ static void __meminit resize_pgdat_range(struct pglist_data *pgdat, unsigned lon
 
 }
 
+static void __meminit update_zone_contiguous(struct zone *zone,
+			bool old_contiguous, unsigned long old_start_pfn,
+			unsigned long old_nr_pages, unsigned long old_absent_pages,
+			unsigned long new_start_pfn, unsigned long new_nr_pages)
+{
+	unsigned long old_end_pfn = old_start_pfn + old_nr_pages;
+	unsigned long new_end_pfn = new_start_pfn + new_nr_pages;
+	unsigned long new_filled_pages = 0;
+
+	/*
+	 * If the moved pfn range does not intersect with the old zone span,
+	 * the contiguous property is surely false.
+	 */
+	if (new_end_pfn < old_start_pfn || new_start_pfn > old_end_pfn)
+		return;
+
+	/*
+	 * If the moved pfn range is adjacent to the old zone span,
+	 * check the range to the left or to the right
+	 */
+	if (new_end_pfn == old_start_pfn || new_start_pfn == old_end_pfn) {
+		zone->contiguous = old_contiguous &&
+			check_zone_contiguous(zone, new_start_pfn, new_nr_pages);
+		return;
+	}
+
+	/*
+	 * If old zone's hole larger than the new filled pages, the contiguous
+	 * property is surely false.
+	 */
+	new_filled_pages = new_end_pfn - old_start_pfn;
+	if (new_start_pfn > old_start_pfn)
+		new_filled_pages -= new_start_pfn - old_start_pfn;
+	if (new_end_pfn > old_end_pfn)
+		new_filled_pages -= new_end_pfn - old_end_pfn;
+	if (new_filled_pages < old_absent_pages)
+		return;
+
+	set_zone_contiguous(zone);
+}
+
 #ifdef CONFIG_ZONE_DEVICE
 static void section_taint_zone_device(unsigned long pfn)
 {
@@ -752,6 +793,10 @@ void move_pfn_range_to_zone(struct zone *zone, unsigned long start_pfn,
 {
 	struct pglist_data *pgdat = zone->zone_pgdat;
 	int nid = pgdat->node_id;
+	bool old_contiguous = zone->contiguous;
+	unsigned long old_start_pfn = zone->zone_start_pfn;
+	unsigned long old_nr_pages = zone->spanned_pages;
+	unsigned long old_absent_pages = zone->spanned_pages - zone->present_pages;
 
 	clear_zone_contiguous(zone);
 
@@ -783,7 +828,8 @@ void move_pfn_range_to_zone(struct zone *zone, unsigned long start_pfn,
 			 MEMINIT_HOTPLUG, altmap, migratetype,
 			 isolate_pageblock);
 
-	set_zone_contiguous(zone);
+	update_zone_contiguous(zone, old_contiguous, old_start_pfn, old_nr_pages,
+				old_absent_pages, start_pfn, nr_pages);
 }
 
 struct auto_movable_stats {

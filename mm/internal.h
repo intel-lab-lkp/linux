@@ -734,6 +734,9 @@ void set_zone_contiguous(struct zone *zone);
 bool pfn_range_intersects_zones(int nid, unsigned long start_pfn,
 			   unsigned long nr_pages);
 
+bool check_zone_contiguous(struct zone *zone, unsigned long start_pfn,
+			   unsigned long nr_pages);
+
 static inline void clear_zone_contiguous(struct zone *zone)
 {
 	zone->contiguous = false;
