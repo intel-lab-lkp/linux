@@ -9,6 +9,8 @@
 #include <linux/compat.h>
 #include <linux/err.h>
 
+#include <asm/vdso.h>
+
 typedef long (*syscall_fn_t)(const struct pt_regs *regs);
 
 extern const syscall_fn_t sys_call_table[];
@@ -114,12 +116,30 @@ static inline int syscall_get_arch(struct task_struct *task)
 	return AUDIT_ARCH_AARCH64;
 }
 
-static inline bool has_syscall_work(unsigned long flags)
+static inline bool arch_syscall_is_vdso_sigreturn(struct pt_regs *regs)
 {
-	return unlikely(flags & _TIF_SYSCALL_WORK);
-}
+	unsigned long vdso = (unsigned long)current->mm->context.vdso;
+	unsigned long vdso_pages, vdso_text_len;
+	unsigned long pc = regs->pc - 4;
 
-int syscall_trace_enter(struct pt_regs *regs, long syscall, unsigned long flags);
-void syscall_exit_to_user_mode_prepare(struct pt_regs *regs);
+#ifdef CONFIG_COMPAT
+	if (is_compat_task()) {
+		vdso = (unsigned long)current->mm->context.sigpage;
+		if (pc >= vdso && pc < vdso + PAGE_SIZE)
+			return true;
+
+		return false;
+	}
+#endif
+	if (regs->syscallno != __NR_rt_sigreturn)
+		return false;
+
+	vdso_pages = (vdso_end - vdso_start) >> PAGE_SHIFT;
+	vdso_text_len = vdso_pages << PAGE_SHIFT;
+	if (pc < vdso || pc >= vdso + vdso_text_len)
+		return false;
+
+	return true;
+}
 
 #endif	/* __ASM_SYSCALL_H */
