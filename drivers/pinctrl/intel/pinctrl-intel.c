@@ -1348,16 +1348,15 @@ static int intel_gpio_irq_init_hw(struct gpio_chip *gc)
 static int intel_gpio_add_pin_ranges(struct gpio_chip *gc)
 {
 	struct intel_pinctrl *pctrl = gpiochip_get_data(gc);
+	struct device *dev = pctrl->dev;
 	const struct intel_community *community;
 	const struct intel_padgroup *grp;
 	int ret;
 
 	for_each_intel_gpio_group(pctrl, community, grp) {
-		ret = gpiochip_add_pin_range(&pctrl->chip, dev_name(pctrl->dev),
-					     grp->gpio_base, grp->base,
-					     grp->size);
+		ret = gpiochip_add_pin_range(gc, dev_name(dev), grp->gpio_base, grp->base, grp->size);
 		if (ret)
-			return dev_err_probe(pctrl->dev, ret, "failed to add GPIO pin range\n");
+			return dev_err_probe(dev, ret, "failed to add GPIO pin range\n");
 	}
 
 	return 0;
