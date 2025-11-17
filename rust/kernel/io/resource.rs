@@ -22,6 +22,15 @@ use crate::{
 /// `CONFIG_PHYS_ADDR_T_64BIT`, and it can be a u64 even on 32-bit architectures.
 pub type ResourceSize = bindings::phys_addr_t;
 
+#[cfg(CONFIG_HAS_IOPORT)]
+/// Returns a reference to the global `ioport_resource` variable.
+///
+/// This function is available only if `CONFIG_HAS_IOPORT` is enabled.
+pub fn ioport_resource() -> &'static Resource {
+    // SAFETY: `bindings::ioport_resoure` has global lifetime and is of type `Resource`.
+    unsafe { Resource::from_raw(&raw mut bindings::ioport_resource) }
+}
+
 /// A region allocated from a parent [`Resource`].
 ///
 /// # Invariants
