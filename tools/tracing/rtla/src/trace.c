@@ -372,7 +372,7 @@ static void trace_event_save_hist(struct trace_instance *instance,
 		return;
 
 	/* is this a hist: trigger? */
-	retval = strncmp(tevent->trigger, "hist:", strlen("hist:"));
+	retval = strncmp_static(tevent->trigger, "hist:");
 	if (retval)
 		return;
 
