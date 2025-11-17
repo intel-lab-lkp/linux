@@ -1680,6 +1680,34 @@ void lease_get_mtime(struct inode *inode, struct timespec64 *time)
 }
 EXPORT_SYMBOL(lease_get_mtime);
 
+static int __fcntl_getlease(struct file *filp, unsigned int flavor)
+{
+	struct file_lease *fl;
+	struct inode *inode = file_inode(filp);
+	struct file_lock_context *ctx;
+	int type = F_UNLCK;
+	LIST_HEAD(dispose);
+
+	ctx = locks_inode_context(inode);
+	if (ctx && !list_empty_careful(&ctx->flc_lease)) {
+		percpu_down_read(&file_rwsem);
+		spin_lock(&ctx->flc_lock);
+		time_out_leases(inode, &dispose);
+		list_for_each_entry(fl, &ctx->flc_lease, c.flc_list) {
+			if (fl->c.flc_file != filp)
+				continue;
+			if (fl->c.flc_flags & flavor)
+				type = target_leasetype(fl);
+			break;
+		}
+		spin_unlock(&ctx->flc_lock);
+		percpu_up_read(&file_rwsem);
+
+		locks_dispose_list(&dispose);
+	}
+	return type;
+}
+
 /**
  *	fcntl_getlease - Enquire what lease is currently active
  *	@filp: the file
@@ -1705,29 +1733,24 @@ EXPORT_SYMBOL(lease_get_mtime);
  */
 int fcntl_getlease(struct file *filp)
 {
-	struct file_lease *fl;
-	struct inode *inode = file_inode(filp);
-	struct file_lock_context *ctx;
-	int type = F_UNLCK;
-	LIST_HEAD(dispose);
+	return __fcntl_getlease(filp, FL_LEASE);
+}
 
-	ctx = locks_inode_context(inode);
-	if (ctx && !list_empty_careful(&ctx->flc_lease)) {
-		percpu_down_read(&file_rwsem);
-		spin_lock(&ctx->flc_lock);
-		time_out_leases(inode, &dispose);
-		list_for_each_entry(fl, &ctx->flc_lease, c.flc_list) {
-			if (fl->c.flc_file != filp)
-				continue;
-			type = target_leasetype(fl);
-			break;
-		}
-		spin_unlock(&ctx->flc_lock);
-		percpu_up_read(&file_rwsem);
-
-		locks_dispose_list(&dispose);
-	}
-	return type;
+/**
+ * fcntl_getdeleg - enquire what sort of delegation is active
+ * @filp: file to be tested
+ * @deleg: structure where the result is stored
+ *
+ * Returns 0 on success or errno on failure. On success,
+ * deleg->d_type will contain the type of currently set lease
+ * (F_RDLCK, F_WRLCK or F_UNLCK).
+ */
+int fcntl_getdeleg(struct file *filp, struct delegation *deleg)
+{
+	if (deleg->d_flags != 0 || deleg->__pad != 0)
+		return -EINVAL;
+	deleg->d_type = __fcntl_getlease(filp, FL_DELEG);
+	return 0;
 }
 
 /**
@@ -2039,13 +2062,13 @@ vfs_setlease(struct file *filp, int arg, struct file_lease **lease, void **priv)
 }
 EXPORT_SYMBOL_GPL(vfs_setlease);
 
-static int do_fcntl_add_lease(unsigned int fd, struct file *filp, int arg)
+static int do_fcntl_add_lease(unsigned int fd, struct file *filp, unsigned int flavor, int arg)
 {
 	struct file_lease *fl;
 	struct fasync_struct *new;
 	int error;
 
-	fl = lease_alloc(filp, FL_LEASE, arg);
+	fl = lease_alloc(filp, flavor, arg);
 	if (IS_ERR(fl))
 		return PTR_ERR(fl);
 
@@ -2081,7 +2104,28 @@ int fcntl_setlease(unsigned int fd, struct file *filp, int arg)
 
 	if (arg == F_UNLCK)
 		return vfs_setlease(filp, F_UNLCK, NULL, (void **)&filp);
-	return do_fcntl_add_lease(fd, filp, arg);
+	return do_fcntl_add_lease(fd, filp, FL_LEASE, arg);
+}
+
+/**
+ *	fcntl_setdeleg	-	sets a delegation on an open file
+ *	@fd: open file descriptor
+ *	@filp: file pointer
+ *	@deleg: delegation request from userland
+ *
+ *	Call this fcntl to establish a delegation on the file.
+ *	Note that you also need to call %F_SETSIG to
+ *	receive a signal when the lease is broken.
+ */
+int fcntl_setdeleg(unsigned int fd, struct file *filp, struct delegation *deleg)
+{
+	/* For now, no flags are supported */
+	if (deleg->d_flags != 0 || deleg->__pad != 0)
+		return -EINVAL;
+
+	if (deleg->d_type == F_UNLCK)
+		return vfs_setlease(filp, F_UNLCK, NULL, (void **)&filp);
+	return do_fcntl_add_lease(fd, filp, FL_DELEG, deleg->d_type);
 }
 
 /**
