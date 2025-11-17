@@ -14,7 +14,11 @@ allOf:
 
 properties:
   compatible:
-    const: arm,dma-350
+    oneOf:
+      - items:
+          - enum:
+              - cix,sky1-dma-350
+          - const: arm,dma-350
 
   reg:
     items:
