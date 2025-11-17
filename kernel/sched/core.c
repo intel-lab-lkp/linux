@@ -6679,6 +6679,7 @@ find_proxy_task(struct rq *rq, struct task_struct *donor, struct rq_flags *rf)
 bool is_proxy_task(struct task_struct *p) { return false; }
 static inline void set_task_proxy(struct task_struct *p) { }
 static inline void clear_task_proxy(p) { }
+static bool __proxy_deactivate(struct rq *rq, struct task_struct *donor) { return false; }
 static struct task_struct *
 find_proxy_task(struct rq *rq, struct task_struct *donor, struct rq_flags *rf)
 {
@@ -6838,6 +6839,25 @@ pick_again:
 			goto pick_again;
 		if (next == rq->idle)
 			goto keep_resched;
+	}
+	if (unlikely(is_proxy_task(next))) {
+		/*
+		 * It is possible for a remote CPU to clear task
+		 * "blocked_on" without acquiring the task rq lock.
+		 *
+		 * This can lead to a blocked task retained for proxy to
+		 * be forced on CPU without the task being woken up
+		 * since task_is_blocked(next) above returns false.
+		 *
+		 * Since "sched_proxy" is only cleared on wakeup,
+		 * is_proxy_task() returning true indicates that the
+		 * task hasn't woken up yet.
+		 *
+		 * Block the task and wait for wakeup to queue it back
+		 * when it is runnable again.
+		 */
+		if (__proxy_deactivate(rq, next))
+			goto pick_again;
 	}
 picked:
 	clear_tsk_need_resched(prev);
