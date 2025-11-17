@@ -247,6 +247,16 @@ static void intel_cmtg_set_timings(const struct intel_crtc_state *crtc_state)
 	}
 }
 
+static void intel_cpu_cmtg_transcoder_set_m_n(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
+	const struct intel_link_m_n *m_n = &crtc_state->dp_m_n;
+
+	intel_de_write(display, TRANS_LINKM1_CMTG(cpu_transcoder), m_n->link_m);
+	intel_de_write(display, TRANS_LINKN1_CMTG(cpu_transcoder), m_n->link_n);
+}
+
 void intel_cmtg_enable(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
@@ -261,4 +271,7 @@ void intel_cmtg_enable(const struct intel_crtc_state *crtc_state)
 	/* Program context latency */
 	intel_de_write(display, TRANS_SET_CTX_LATENCY_CMTG(cpu_transcoder),
 		       intel_de_read(display, TRANS_SET_CONTEXT_LATENCY(display, cpu_transcoder)));
+
+	/* Program CMTG MN */
+	intel_cpu_cmtg_transcoder_set_m_n(crtc_state);
 }

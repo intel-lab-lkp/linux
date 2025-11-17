@@ -33,6 +33,9 @@ enum cmtg {
 #define TRANS_VBLANK_CMTG(id)		_MMIO(0x6F010 + (id) * 0x100)
 #define TRANS_VSYNC_CMTG(id)		_MMIO(0x6F014 + (id) * 0x100)
 
+#define TRANS_LINKM1_CMTG(id)		_MMIO(0x6F040 + (id) * 0x100)
+#define TRANS_LINKN1_CMTG(id)		_MMIO(0x6F044 + (id) * 0x100)
+
 #define TRANS_SET_CTX_LATENCY_CMTG(id)	_MMIO(0x6F07C + (id) * 0x100)
 
 #define TRANS_VRR_CTL_CMTG(id)		_MMIO(0x6F420 + (id) * 0x100)
