@@ -249,6 +249,7 @@ static void intel_cmtg_set_timings(const struct intel_crtc_state *crtc_state)
 
 void intel_cmtg_enable(const struct intel_crtc_state *crtc_state)
 {
+	struct intel_display *display = to_intel_display(crtc_state);
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 
 	if (cpu_transcoder != TRANSCODER_A && cpu_transcoder != TRANSCODER_B)
@@ -257,4 +258,7 @@ void intel_cmtg_enable(const struct intel_crtc_state *crtc_state)
 	/* Program CMTG Transcoder Timings */
 	intel_cmtg_set_timings(crtc_state);
 
+	/* Program context latency */
+	intel_de_write(display, TRANS_SET_CTX_LATENCY_CMTG(cpu_transcoder),
+		       intel_de_read(display, TRANS_SET_CONTEXT_LATENCY(display, cpu_transcoder)));
 }
