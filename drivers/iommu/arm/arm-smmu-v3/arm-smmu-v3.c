@@ -794,7 +794,7 @@ int arm_smmu_cmdq_issue_cmdlist(struct arm_smmu_device *smmu,
 	u64 cmd_sync[CMDQ_ENT_DWORDS];
 	u32 prod;
 	unsigned long flags;
-	bool owner;
+	bool owner, has_ref = false;
 	struct arm_smmu_ll_queue llq, head;
 	int ret = 0;
 
@@ -808,8 +808,15 @@ int arm_smmu_cmdq_issue_cmdlist(struct arm_smmu_device *smmu,
 
 		while (!queue_has_space(&llq, n + sync)) {
 			local_irq_restore(flags);
+
+			if (!atomic_inc_not_zero(&smmu->nr_cmdq_users))
+				/* Device is suspended, don't wait for space */
+				return 0;
+
 			if (arm_smmu_cmdq_poll_until_not_full(smmu, cmdq, &llq))
 				dev_err_ratelimited(smmu->dev, "CMDQ timeout\n");
+
+			atomic_dec_return_release(&smmu->nr_cmdq_users);
 			local_irq_save(flags);
 		}
 
@@ -868,10 +875,35 @@ int arm_smmu_cmdq_issue_cmdlist(struct arm_smmu_device *smmu,
 		arm_smmu_cmdq_poll_valid_map(cmdq, llq.prod, prod);
 
 		/*
-		 * d. Advance the hardware prod pointer
+		 * d. Advance the hardware prod pointer (if smmu is still active)
 		 * Control dependency ordering from the entries becoming valid.
 		 */
-		writel_relaxed(prod, cmdq->q.prod_reg);
+		if (atomic_inc_not_zero(&smmu->nr_cmdq_users)) {
+			writel_relaxed(prod, cmdq->q.prod_reg);
+
+			if (sync) {
+				has_ref = true;
+			} else {
+				/*
+				 * Use release semantics to enforce ordering without a full barrier.
+				 * This ensures the prior writel_relaxed() is ordered/visible
+				 * before the refcount decrement, avoiding the heavy pipeline
+				 * stall of a full wmb().
+				 *
+				 * We need the atomic_dec_return_release() below and the
+				 * atomic_set_release() in step (e) below doesn't suffice.
+				 *
+				 * Specifically, without release semantics on the decrement,
+				 * the CPU is free to reorder the independent atomic_dec_relaxed()
+				 * before the writel_relaxed().
+				 *
+				 * If this happens, the refcount could drop to zero, allowing the PM
+				 * suspend path (running on another CPU) to disable the SMMU before
+				 * the register write completes, resulting in a bus fault.
+				 */
+				atomic_dec_return_release(&smmu->nr_cmdq_users);
+			}
+		}
 
 		/*
 		 * e. Tell the next owner we're done
@@ -883,14 +915,23 @@ int arm_smmu_cmdq_issue_cmdlist(struct arm_smmu_device *smmu,
 
 	/* 5. If we are inserting a CMD_SYNC, we must wait for it to complete */
 	if (sync) {
-		llq.prod = queue_inc_prod_n(&llq, n);
-		ret = arm_smmu_cmdq_poll_until_sync(smmu, cmdq, &llq);
-		if (ret) {
-			dev_err_ratelimited(smmu->dev,
-					    "CMD_SYNC timeout at 0x%08x [hwprod 0x%08x, hwcons 0x%08x]\n",
-					    llq.prod,
-					    readl_relaxed(cmdq->q.prod_reg),
-					    readl_relaxed(cmdq->q.cons_reg));
+
+		/* If we are not the owner, check if we're suspended */
+		if (!has_ref) {
+			if (atomic_inc_not_zero(&smmu->nr_cmdq_users))
+				has_ref = true;
+		}
+
+		if (has_ref) {
+			llq.prod = queue_inc_prod_n(&llq, n);
+			ret = arm_smmu_cmdq_poll_until_sync(smmu, cmdq, &llq);
+			if (ret) {
+				dev_err_ratelimited(smmu->dev,
+						    "CMD_SYNC timeout at 0x%08x [hwprod 0x%08x, hwcons 0x%08x]\n",
+						    llq.prod,
+						    readl_relaxed(cmdq->q.prod_reg),
+						    readl_relaxed(cmdq->q.cons_reg));
+			}
 		}
 
 		/*
@@ -902,6 +943,9 @@ int arm_smmu_cmdq_issue_cmdlist(struct arm_smmu_device *smmu,
 			arm_smmu_cmdq_shared_unlock(cmdq);
 		}
 	}
+
+	if (has_ref)
+		atomic_dec_return_release(&smmu->nr_cmdq_users);
 
 	local_irq_restore(flags);
 	return ret;
@@ -4250,6 +4294,9 @@ static int arm_smmu_device_reset(struct arm_smmu_device *smmu)
 		dev_err(smmu->dev, "failed to enable command queue\n");
 		return ret;
 	}
+
+	/* Set the cmdq to be active before issuing any commands */
+	atomic_set(&smmu->nr_cmdq_users, 1);
 
 	/* Invalidate any cached configuration */
 	cmd.opcode = CMDQ_OP_CFGI_ALL;
