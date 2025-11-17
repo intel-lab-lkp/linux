@@ -257,6 +257,20 @@ static void intel_cpu_cmtg_transcoder_set_m_n(const struct intel_crtc_state *crt
 	intel_de_write(display, TRANS_LINKN1_CMTG(cpu_transcoder), m_n->link_n);
 }
 
+static void intel_cmtg_ctl_enable(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
+	u32 val = 0;
+
+	val = intel_de_read(display, TRANS_CMTG_CTL(cpu_transcoder));
+
+	val |= CMTG_ENABLE;
+
+	intel_de_write(display, TRANS_CMTG_CTL(cpu_transcoder), val);
+	drm_dbg_kms(display->drm, "CMTG enabled\n");
+}
+
 void intel_cmtg_enable(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
@@ -277,4 +291,7 @@ void intel_cmtg_enable(const struct intel_crtc_state *crtc_state)
 
 	/* Program Cmtg Sync to Port Sync, TRANS_CMTG_CTL */
 	intel_de_rmw(display, TRANS_CMTG_CTL(cpu_transcoder), CMTG_SYNC_TO_PORT, CMTG_SYNC_TO_PORT);
+
+	/* Program Enable Cmtg */
+	intel_cmtg_ctl_enable(crtc_state);
 }
