@@ -15,19 +15,18 @@
  */
 
 /dts-v1/;
+/plugin/;
 
-#include "bcm2712-rpi-5-b-ovl-rp1.dts"
-
-&pcie2 {
-	#include "rp1-nexus.dtsi"
-};
+#include <dt-bindings/gpio/gpio.h>
 
 &rp1_eth {
 	status = "okay";
 	phy-mode = "rgmii-id";
 	phy-handle = <&phy1>;
+        #address-cells = <1>;
+        #size-cells = <0>;
 
-	mdio {
+	mdio@1 {
 		reg = <0x1>;
 		reset-gpios = <&rp1_gpio 32 GPIO_ACTIVE_LOW>;
 		reset-delay-us = <5000>;

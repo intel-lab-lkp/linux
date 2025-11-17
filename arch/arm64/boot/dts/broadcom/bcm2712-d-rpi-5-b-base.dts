@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: (GPL-2.0 OR MIT)
 /dts-v1/;
 
-#include "bcm2712-rpi-5-b.dts"
+#include "bcm2712-rpi-5-b-ovl-rp1.dts"
 
 &gio_aon {
 	brcm,gpio-bank-widths = <15 6>;
