@@ -568,10 +568,16 @@ static void port100_tx_update_payload_len(void *_frame, int len)
 	le16_add_cpu(&frame->datalen, len);
 }
 
-static bool port100_rx_frame_is_valid(const void *_frame)
+static bool port100_rx_frame_is_valid(const void *_frame, size_t len)
 {
 	u8 checksum;
 	const struct port100_frame *frame = _frame;
+
+	if (len < sizeof(*frame))
+		return false;
+
+	if (len < (size_t)(le16_to_cpu(frame->datalen)) + sizeof(*frame))
+		return false;
 
 	if (frame->start_frame != cpu_to_be16(PORT100_FRAME_SOF) ||
 	    frame->extended_frame != cpu_to_be16(PORT100_FRAME_EXT))
@@ -636,7 +642,7 @@ static void port100_recv_response(struct urb *urb)
 
 	in_frame = dev->in_urb->transfer_buffer;
 
-	if (!port100_rx_frame_is_valid(in_frame)) {
+	if (!port100_rx_frame_is_valid(in_frame, urb->actual_length)) {
 		nfc_err(&dev->interface->dev, "Received an invalid frame\n");
 		cmd->status = -EIO;
 		goto sched_wq;
