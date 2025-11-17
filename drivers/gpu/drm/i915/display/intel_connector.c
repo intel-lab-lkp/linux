@@ -40,6 +40,11 @@
 #include "intel_hdcp.h"
 #include "intel_panel.h"
 
+static const u32 supported_colorformats = DRM_COLOR_FORMAT_AUTO |
+					  DRM_COLOR_FORMAT_RGB444 |
+					  DRM_COLOR_FORMAT_YCBCR444 |
+					  DRM_COLOR_FORMAT_YCBCR420;
+
 static void intel_connector_modeset_retry_work_fn(struct work_struct *work)
 {
 	struct intel_connector *connector = container_of(work, typeof(*connector),
@@ -327,10 +332,24 @@ intel_attach_hdmi_colorspace_property(struct drm_connector *connector)
 }
 
 void
+intel_attach_hdmi_colorformat_property(struct drm_connector *connector)
+{
+	if (!drm_mode_create_hdmi_color_format_property(connector, supported_colorformats))
+		drm_connector_attach_color_format_property(connector);
+}
+
+void
 intel_attach_dp_colorspace_property(struct drm_connector *connector)
 {
 	if (!drm_mode_create_dp_colorspace_property(connector, 0))
 		drm_connector_attach_colorspace_property(connector);
+}
+
+void
+intel_attach_dp_colorformat_property(struct drm_connector *connector)
+{
+	if (!drm_mode_create_dp_color_format_property(connector, supported_colorformats))
+		drm_connector_attach_color_format_property(connector);
 }
 
 void

@@ -653,9 +653,11 @@ static int mst_stream_compute_config(struct intel_encoder *encoder,
 		to_intel_connector(conn_state->connector);
 	const struct drm_display_mode *adjusted_mode =
 		&pipe_config->hw.adjusted_mode;
+	const struct drm_display_info *info = &connector->base.display_info;
 	struct link_config_limits limits;
 	bool dsc_needed, joiner_needs_dsc;
 	int num_joined_pipes;
+	u32 sink_format_drm;
 	int ret = 0;
 
 	if (pipe_config->fec_enable &&
@@ -671,9 +673,35 @@ static int mst_stream_compute_config(struct intel_encoder *encoder,
 	if (num_joined_pipes > 1)
 		pipe_config->joiner_pipes = GENMASK(crtc->pipe + num_joined_pipes - 1, crtc->pipe);
 
-	pipe_config->sink_format = INTEL_OUTPUT_FORMAT_RGB;
-	pipe_config->output_format = INTEL_OUTPUT_FORMAT_RGB;
+	if ((conn_state->color_format == DRM_COLOR_FORMAT_YCBCR420 &&
+	     drm_mode_is_420_also(info, adjusted_mode)) ||
+	    drm_mode_is_420_only(info, adjusted_mode))
+		pipe_config->sink_format = INTEL_OUTPUT_FORMAT_YCBCR420;
+	else if (conn_state->color_format == DRM_COLOR_FORMAT_YCBCR444)
+		pipe_config->sink_format = INTEL_OUTPUT_FORMAT_YCBCR444;
+	else
+		pipe_config->sink_format = INTEL_OUTPUT_FORMAT_RGB;
+
+	if (pipe_config->sink_format == INTEL_OUTPUT_FORMAT_YCBCR420 &&
+	    !connector->base.ycbcr_420_allowed) {
+		drm_dbg_kms(display->drm,
+			"YCbCr 4:2:0 mode requested but it's unsupported by connector. Trying RGB.\n");
+		pipe_config->sink_format = INTEL_OUTPUT_FORMAT_RGB;
+	}
+
+	pipe_config->output_format = intel_dp_output_format(connector, pipe_config->sink_format);
 	pipe_config->has_pch_encoder = false;
+
+	sink_format_drm = intel_output_format_to_drm_color_format(pipe_config->sink_format);
+	if (conn_state->color_format &&
+	    conn_state->color_format != sink_format_drm &&
+	    conn_state->color_format != DRM_COLOR_FORMAT_AUTO) {
+		drm_dbg_kms(display->drm,
+			    "Unsupported color format %s (0x%x), sink has 0x%x\n",
+			    drm_get_color_format_name(conn_state->color_format),
+			    conn_state->color_format, sink_format_drm);
+		return -EINVAL;
+	}
 
 	joiner_needs_dsc = intel_dp_joiner_needs_dsc(display, num_joined_pipes);
 
@@ -1659,6 +1687,11 @@ static int mst_topology_add_connector_properties(struct intel_dp *intel_dp,
 		intel_dp->attached_connector->base.max_bpc_property;
 	if (connector->base.max_bpc_property)
 		drm_connector_attach_max_bpc_property(&connector->base, 6, 12);
+
+	connector->base.color_format_property =
+		intel_dp->attached_connector->base.color_format_property;
+	if (connector->base.color_format_property)
+		intel_attach_dp_colorformat_property(&connector->base);
 
 	return drm_connector_set_path_property(&connector->base, pathprop);
 }
