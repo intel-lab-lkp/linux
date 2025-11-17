@@ -1147,6 +1147,10 @@ int xhci_resume(struct xhci_hcd *xhci, bool power_lost, bool is_auto_resume)
 	}
 
 	if (power_lost) {
+		/*
+		 * Compliance Mode Recovery Timer is removed during xhci_suspend().
+		 * However, hibernate saves CMRT prior to its deletion.
+		 */
 		if ((xhci->quirks & XHCI_COMP_MODE_QUIRK) &&
 				!(xhci_all_ports_seen_u0(xhci))) {
 			timer_delete_sync(&xhci->comp_mode_recovery_timer);
