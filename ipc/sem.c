@@ -627,7 +627,7 @@ SYSCALL_DEFINE3(semget, key_t, key, int, nsems, int, semflg)
 }
 
 /**
- * perform_atomic_semop[_slow] - Attempt to perform semaphore
+ * perform_atomic_semop_slow - Attempt to perform semaphore
  *                               operations on a given array.
  * @sma: semaphore array
  * @q: struct sem_queue that describes the operation
