@@ -78,10 +78,9 @@ actions_add_trace_output(struct actions *self, const char *trace_output)
 
 	self->present[ACTION_TRACE_OUTPUT] = true;
 	action->type = ACTION_TRACE_OUTPUT;
-	action->trace_output = calloc(strlen(trace_output) + 1, sizeof(char));
+	action->trace_output = strdup(trace_output);
 	if (!action->trace_output)
 		return -1;
-	strcpy(action->trace_output, trace_output);
 
 	return 0;
 }
@@ -118,10 +117,9 @@ actions_add_shell(struct actions *self, const char *command)
 
 	self->present[ACTION_SHELL] = true;
 	action->type = ACTION_SHELL;
-	action->command = calloc(strlen(command) + 1, sizeof(char));
+	action->command = strdup(command);
 	if (!action->command)
 		return -1;
-	strcpy(action->command, command);
 
 	return 0;
 }
