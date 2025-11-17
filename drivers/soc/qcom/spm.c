@@ -391,7 +391,8 @@ static int spm_get_cpu(struct device *dev)
 	bool found;
 
 	for_each_possible_cpu(cpu) {
-		struct device_node *cpu_node, *saw_node;
+		struct device_node *cpu_node __free(device_node) = NULL;
+		struct device_node *saw_node __free(device_node) = NULL;
 
 		cpu_node = of_cpu_device_node_get(cpu);
 		if (!cpu_node)
@@ -399,8 +400,6 @@ static int spm_get_cpu(struct device *dev)
 
 		saw_node = of_parse_phandle(cpu_node, "qcom,saw", 0);
 		found = (saw_node == dev->of_node);
-		of_node_put(saw_node);
-		of_node_put(cpu_node);
 
 		if (found)
 			return cpu;
