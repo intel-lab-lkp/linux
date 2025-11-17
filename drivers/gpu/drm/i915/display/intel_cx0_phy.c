@@ -9,6 +9,7 @@
 #include <drm/drm_print.h>
 
 #include "intel_alpm.h"
+#include "intel_cmtg.h"
 #include "intel_cx0_phy.h"
 #include "intel_cx0_phy_regs.h"
 #include "intel_ddi.h"
@@ -3209,10 +3210,13 @@ void intel_mtl_pll_enable(struct intel_encoder *encoder,
 {
 	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
 
-	if (intel_tc_port_in_tbt_alt_mode(dig_port))
+	if (intel_tc_port_in_tbt_alt_mode(dig_port)) {
 		intel_mtl_tbt_pll_enable(encoder, crtc_state);
-	else
+	} else {
 		intel_cx0pll_enable(encoder, crtc_state);
+		if (crtc_state->enable_cmtg)
+			intel_cmtg_set_clk_select(crtc_state);
+	}
 }
 
 /*
