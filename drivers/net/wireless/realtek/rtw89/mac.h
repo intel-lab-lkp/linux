@@ -1436,6 +1436,26 @@ static inline int rtw89_mac_txpwr_write32_mask(struct rtw89_dev *rtwdev,
 	return 0;
 }
 
+static inline
+void rtw89_mac_write_txpwr_ctrl(struct rtw89_dev *rtwdev, u32 reg, u32 mask, u32 val,
+				u32 mask_en, bool cond)
+{
+	u32 wrt = u32_encode_bits(val, mask);
+	u32 val32;
+	int ret;
+
+	if (cond)
+		wrt |= mask_en;
+
+	ret = rtw89_mac_txpwr_read32(rtwdev, RTW89_PHY_0, reg, &val32);
+	if (ret)
+		return;
+
+	val32 &= ~(mask | mask_en);
+	val32 |= wrt;
+	rtw89_mac_txpwr_write32(rtwdev, RTW89_PHY_0, reg, val32);
+}
+
 static inline void rtw89_mac_ctrl_hci_dma_tx(struct rtw89_dev *rtwdev,
 					     bool enable)
 {

@@ -761,18 +761,6 @@ rtw8852b_btc_set_wl_txpwr_ctrl(struct rtw89_dev *rtwdev, u32 txpwr_val)
 	union rtw8852b_btc_wl_txpwr_ctrl arg = { .txpwr_val = txpwr_val };
 	s32 val;
 
-#define __write_ctrl(_reg, _msk, _val, _en, _cond)		\
-do {								\
-	u32 _wrt = FIELD_PREP(_msk, _val);			\
-	BUILD_BUG_ON(!!(_msk & _en));				\
-	if (_cond)						\
-		_wrt |= _en;					\
-	else							\
-		_wrt &= ~_en;					\
-	rtw89_mac_txpwr_write32_mask(rtwdev, RTW89_PHY_0, _reg,	\
-				     _msk | _en, _wrt);		\
-} while (0)
-
 	switch (arg.ctrl_all_time) {
 	case 0xffff:
 		val = 0;
@@ -782,9 +770,10 @@ do {								\
 		break;
 	}
 
-	__write_ctrl(R_AX_PWR_RATE_CTRL, B_AX_FORCE_PWR_BY_RATE_VALUE_MASK,
-		     val, B_AX_FORCE_PWR_BY_RATE_EN,
-		     arg.ctrl_all_time != 0xffff);
+	rtw89_mac_write_txpwr_ctrl(rtwdev, R_AX_PWR_RATE_CTRL,
+				   B_AX_FORCE_PWR_BY_RATE_VALUE_MASK,
+				   val, B_AX_FORCE_PWR_BY_RATE_EN,
+				   arg.ctrl_all_time != 0xffff);
 
 	switch (arg.ctrl_gnt_bt) {
 	case 0xffff:
@@ -795,10 +784,9 @@ do {								\
 		break;
 	}
 
-	__write_ctrl(R_AX_PWR_COEXT_CTRL, B_AX_TXAGC_BT_MASK, val,
-		     B_AX_TXAGC_BT_EN, arg.ctrl_gnt_bt != 0xffff);
-
-#undef __write_ctrl
+	rtw89_mac_write_txpwr_ctrl(rtwdev, R_AX_PWR_COEXT_CTRL,
+				   B_AX_TXAGC_BT_MASK, val,
+				   B_AX_TXAGC_BT_EN, arg.ctrl_gnt_bt != 0xffff);
 }
 
 static const struct rtw89_chip_ops rtw8852b_chip_ops = {
