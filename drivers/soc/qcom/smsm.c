@@ -397,7 +397,7 @@ static int smsm_parse_mbox(struct qcom_smsm *smsm, unsigned int host_id)
  */
 static int smsm_parse_ipc(struct qcom_smsm *smsm, unsigned host_id)
 {
-	struct device_node *syscon;
+	struct device_node *syscon __free(device_node) = NULL;
 	struct device_node *node = smsm->dev->of_node;
 	struct smsm_host *host = &smsm->hosts[host_id];
 	char key[16];
@@ -409,7 +409,6 @@ static int smsm_parse_ipc(struct qcom_smsm *smsm, unsigned host_id)
 		return 0;
 
 	host->ipc_regmap = syscon_node_to_regmap(syscon);
-	of_node_put(syscon);
 	if (IS_ERR(host->ipc_regmap))
 		return PTR_ERR(host->ipc_regmap);
 
@@ -509,8 +508,8 @@ static int smsm_get_size_info(struct qcom_smsm *smsm)
 
 static int qcom_smsm_probe(struct platform_device *pdev)
 {
-	struct device_node *local_node;
-	struct device_node *node;
+	struct device_node *local_node __free(device_node) = NULL;
+	struct device_node *node __free(device_node) = NULL;
 	struct smsm_entry *entry;
 	struct qcom_smsm *smsm;
 	u32 *intr_mask;
@@ -640,12 +639,10 @@ static int qcom_smsm_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, smsm);
-	of_node_put(local_node);
 
 	return 0;
 
 unwind_interfaces:
-	of_node_put(node);
 	for (id = 0; id < smsm->num_entries; id++)
 		if (smsm->entries[id].domain)
 			irq_domain_remove(smsm->entries[id].domain);
@@ -655,7 +652,6 @@ out_put:
 	for (id = 0; id < smsm->num_hosts; id++)
 		mbox_free_channel(smsm->hosts[id].mbox_chan);
 
-	of_node_put(local_node);
 	return ret;
 }
 
