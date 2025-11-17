@@ -1565,7 +1565,7 @@ static int ucsi_register_port(struct ucsi *ucsi, struct ucsi_connector *con)
 	struct typec_capability *cap = &con->typec_cap;
 	enum typec_accessory *accessory = cap->accessory;
 	enum usb_role u_role = USB_ROLE_NONE;
-	u64 command;
+	u64 command, ntfy;
 	char *name;
 	int ret;
 
@@ -1657,6 +1657,15 @@ static int ucsi_register_port(struct ucsi *ucsi, struct ucsi_connector *con)
 		dev_err(ucsi->dev, "con%d: failed to register alt modes\n",
 			con->num);
 		goto out;
+	}
+
+	/* Enable the notification for connector change before getting the connector status */
+	ntfy = UCSI_ENABLE_NTFY_CMD_COMPLETE | UCSI_ENABLE_NTFY_ERROR | UCSI_ENABLE_NTFY_CONNECTOR_CHANGE;
+	command = UCSI_SET_NOTIFICATION_ENABLE | ntfy;
+	ret = ucsi_send_command(ucsi, command, NULL, 0);
+	if (ret < 0) {
+		dev_warn(ucsi->dev, "con%d: failed to enable the notification for connector change\n",
+			 con->num);
 	}
 
 	/* Get the status */
