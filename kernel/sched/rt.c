@@ -2937,7 +2937,10 @@ void print_rt_stats(struct seq_file *m, int cpu)
 	struct rt_rq *rt_rq;
 
 	rcu_read_lock();
-	for_each_rt_rq(rt_rq, iter, cpu_rq(cpu))
+	for_each_rt_rq(rt_rq, iter, cpu_rq(cpu)) {
+		touch_nmi_watchdog();
+		touch_all_softlockup_watchdogs();
 		print_rt_rq(m, cpu, rt_rq);
+	}
 	rcu_read_unlock();
 }

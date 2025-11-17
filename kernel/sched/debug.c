@@ -789,6 +789,8 @@ static void print_rq(struct seq_file *m, struct rq *rq, int rq_cpu)
 		if (task_cpu(p) != rq_cpu)
 			continue;
 
+		touch_nmi_watchdog();
+		touch_all_softlockup_watchdogs();
 		print_task(m, rq, p);
 	}
 	rcu_read_unlock();
