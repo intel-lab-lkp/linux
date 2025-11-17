@@ -4,7 +4,7 @@
 #define DEFAULT_SYMBOL_NAMESPACE	"LIBIE"
 
 #include <linux/export.h>
-#include <linux/net/intel/libie/rx.h>
+#include <linux/intel/libie/rx.h>
 
 /* O(1) converting i40e/ice/iavf's 8/10-bit hardware packet type to a parsed
  * bitfield struct.
