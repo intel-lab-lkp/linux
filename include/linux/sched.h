@@ -978,6 +978,10 @@ struct task_struct {
 	unsigned			sched_contributes_to_load:1;
 	unsigned			sched_migrated:1;
 	unsigned			sched_task_hot:1;
+#ifdef CONFIG_SCHED_PROXY_EXEC
+	/* To indicate blocked task was retained on the rq for proxy. */
+	unsigned			sched_proxy:1;
+#endif
 
 	/* Force alignment to the next boundary: */
 	unsigned			:0;

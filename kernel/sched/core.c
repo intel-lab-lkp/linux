@@ -3659,6 +3659,9 @@ ttwu_do_activate(struct rq *rq, struct task_struct *p, int wake_flags,
 	}
 }
 
+static inline void set_task_proxy(struct task_struct *p);
+static inline void clear_task_proxy(struct task_struct *p);
+
 /*
  * Consider @p being inside a wait loop:
  *
@@ -3693,6 +3696,8 @@ static int ttwu_runnable(struct task_struct *p, int wake_flags)
 	rq = __task_rq_lock(p, &rf);
 	if (task_on_rq_queued(p)) {
 		update_rq_clock(rq);
+		if (is_proxy_task(p))
+			clear_task_proxy(p);
 		if (p->se.sched_delayed)
 			enqueue_task(rq, p, ENQUEUE_NOCLOCK | ENQUEUE_DELAYED);
 		if (!task_on_cpu(rq, p)) {
@@ -6460,8 +6465,10 @@ static bool try_to_block_task(struct rq *rq, struct task_struct *p,
 	 * blocked on a mutex, and we want to keep it on the runqueue
 	 * to be selectable for proxy-execution.
 	 */
-	if (!should_block)
+	if (!should_block) {
+		set_task_proxy(p);
 		return false;
+	}
 
 	p->sched_contributes_to_load =
 		(task_state & TASK_UNINTERRUPTIBLE) &&
@@ -6487,6 +6494,23 @@ static bool try_to_block_task(struct rq *rq, struct task_struct *p,
 }
 
 #ifdef CONFIG_SCHED_PROXY_EXEC
+bool is_proxy_task(struct task_struct *p)
+{
+	return !!p->sched_proxy;
+}
+
+static inline void set_task_proxy(struct task_struct *p)
+{
+	WARN_ON_ONCE(p->sched_proxy);
+	p->sched_proxy = 1;
+}
+
+static inline void clear_task_proxy(struct task_struct *p)
+{
+	WARN_ON_ONCE(!p->sched_proxy);
+	p->sched_proxy = 0;
+}
+
 static inline struct task_struct *proxy_resched_idle(struct rq *rq)
 {
 	put_prev_set_next_task(rq, rq->donor, rq->idle);
@@ -6502,6 +6526,9 @@ static bool __proxy_deactivate(struct rq *rq, struct task_struct *donor)
 	/* Don't deactivate if the state has been changed to TASK_RUNNING */
 	if (state == TASK_RUNNING)
 		return false;
+
+	clear_task_proxy(donor);
+
 	/*
 	 * Because we got donor from pick_next_task(), it is *crucial*
 	 * that we call proxy_resched_idle() before we deactivate it.
@@ -6649,6 +6676,9 @@ find_proxy_task(struct rq *rq, struct task_struct *donor, struct rq_flags *rf)
 	return owner;
 }
 #else /* SCHED_PROXY_EXEC */
+bool is_proxy_task(struct task_struct *p) { return false; }
+static inline void set_task_proxy(struct task_struct *p) { }
+static inline void clear_task_proxy(p) { }
 static struct task_struct *
 find_proxy_task(struct rq *rq, struct task_struct *donor, struct rq_flags *rf)
 {
