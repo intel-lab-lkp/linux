@@ -502,7 +502,7 @@ enum hctx_type {
  * @shared_tags:
  *		   Shared set of tags. Has @nr_hw_queues elements. If set,
  *		   shared by all @tags.
- * @tag_list_lock: Serializes tag_list accesses.
+ * @tag_list_rwsem: Serializes tag_list accesses.
  * @tag_list:	   List of the request queues that use this tag set. See also
  *		   request_queue.tag_set_list.
  * @srcu:	   Use as lock when type of the request queue is blocking
@@ -530,7 +530,7 @@ struct blk_mq_tag_set {
 
 	struct blk_mq_tags	*shared_tags;
 
-	struct mutex		tag_list_lock;
+	struct rw_semaphore	tag_list_rwsem;
 	struct list_head	tag_list;
 	struct srcu_struct	*srcu;
 	struct srcu_struct	tags_srcu;

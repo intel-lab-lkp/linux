@@ -335,12 +335,12 @@ void blk_mq_quiesce_tagset(struct blk_mq_tag_set *set)
 {
 	struct request_queue *q;
 
-	mutex_lock(&set->tag_list_lock);
+	down_read(&set->tag_list_rwsem);
 	list_for_each_entry(q, &set->tag_list, tag_set_list) {
 		if (!blk_queue_skip_tagset_quiesce(q))
 			blk_mq_quiesce_queue_nowait(q);
 	}
-	mutex_unlock(&set->tag_list_lock);
+	up_read(&set->tag_list_rwsem);
 
 	blk_mq_wait_quiesce_done(set);
 }
@@ -350,12 +350,12 @@ void blk_mq_unquiesce_tagset(struct blk_mq_tag_set *set)
 {
 	struct request_queue *q;
 
-	mutex_lock(&set->tag_list_lock);
+	down_read(&set->tag_list_rwsem);
 	list_for_each_entry(q, &set->tag_list, tag_set_list) {
 		if (!blk_queue_skip_tagset_quiesce(q))
 			blk_mq_unquiesce_queue(q);
 	}
-	mutex_unlock(&set->tag_list_lock);
+	up_read(&set->tag_list_rwsem);
 }
 EXPORT_SYMBOL_GPL(blk_mq_unquiesce_tagset);
 
@@ -4274,56 +4274,63 @@ static void queue_set_hctx_shared(struct request_queue *q, bool shared)
 	}
 }
 
-static void blk_mq_update_tag_set_shared(struct blk_mq_tag_set *set,
-					 bool shared)
-{
-	struct request_queue *q;
-	unsigned int memflags;
-
-	lockdep_assert_held(&set->tag_list_lock);
-
-	list_for_each_entry(q, &set->tag_list, tag_set_list) {
-		memflags = blk_mq_freeze_queue(q);
-		queue_set_hctx_shared(q, shared);
-		blk_mq_unfreeze_queue(q, memflags);
-	}
-}
-
 static void blk_mq_del_queue_tag_set(struct request_queue *q)
 {
 	struct blk_mq_tag_set *set = q->tag_set;
+	struct request_queue *firstq;
+	unsigned int memflags;
 
-	mutex_lock(&set->tag_list_lock);
+	down_write(&set->tag_list_rwsem);
 	list_del(&q->tag_set_list);
-	if (list_is_singular(&set->tag_list)) {
-		/* just transitioned to unshared */
-		set->flags &= ~BLK_MQ_F_TAG_QUEUE_SHARED;
-		/* update existing queue */
-		blk_mq_update_tag_set_shared(set, false);
+	if (!list_is_singular(&set->tag_list)) {
+		up_write(&set->tag_list_rwsem);
+		goto out;
 	}
-	mutex_unlock(&set->tag_list_lock);
+
+	/*
+	 * Transitioning the remaining firstq to unshared.
+	 * Also, downgrade the semaphore to avoid deadlock
+	 * with blk_mq_quiesce_tagset() while waiting for
+	 * firstq to be frozen.
+	 */
+	set->flags &= ~BLK_MQ_F_TAG_QUEUE_SHARED;
+	downgrade_write(&set->tag_list_rwsem);
+	firstq = list_first_entry(&set->tag_list, struct request_queue,
+				  tag_set_list);
+	memflags = blk_mq_freeze_queue(firstq);
+	queue_set_hctx_shared(firstq, false);
+	blk_mq_unfreeze_queue(firstq, memflags);
+	up_read(&set->tag_list_rwsem);
+out:
 	INIT_LIST_HEAD(&q->tag_set_list);
 }
 
 static void blk_mq_add_queue_tag_set(struct blk_mq_tag_set *set,
 				     struct request_queue *q)
 {
-	mutex_lock(&set->tag_list_lock);
+	struct request_queue *firstq;
+	unsigned int memflags;
 
-	/*
-	 * Check to see if we're transitioning to shared (from 1 to 2 queues).
-	 */
-	if (!list_empty(&set->tag_list) &&
-	    !(set->flags & BLK_MQ_F_TAG_QUEUE_SHARED)) {
-		set->flags |= BLK_MQ_F_TAG_QUEUE_SHARED;
-		/* update existing queue */
-		blk_mq_update_tag_set_shared(set, true);
+	down_write(&set->tag_list_rwsem);
+	if (!list_is_singular(&set->tag_list)) {
+		if (set->flags & BLK_MQ_F_TAG_QUEUE_SHARED)
+			queue_set_hctx_shared(q, true);
+		list_add_tail(&q->tag_set_list, &set->tag_list);
+		up_write(&set->tag_list_rwsem);
+		return;
 	}
-	if (set->flags & BLK_MQ_F_TAG_QUEUE_SHARED)
-		queue_set_hctx_shared(q, true);
-	list_add_tail(&q->tag_set_list, &set->tag_list);
 
-	mutex_unlock(&set->tag_list_lock);
+	/* Transitioning firstq and q to shared. */
+	set->flags |= BLK_MQ_F_TAG_QUEUE_SHARED;
+	list_add_tail(&q->tag_set_list, &set->tag_list);
+	downgrade_write(&set->tag_list_rwsem);
+	queue_set_hctx_shared(q, true);
+	firstq = list_first_entry(&set->tag_list, struct request_queue,
+				  tag_set_list);
+	memflags = blk_mq_freeze_queue(firstq);
+	queue_set_hctx_shared(firstq, true);
+	blk_mq_unfreeze_queue(firstq, memflags);
+	up_read(&set->tag_list_rwsem);
 }
 
 /* All allocations will be freed in release handler of q->mq_kobj */
@@ -4855,7 +4862,7 @@ int blk_mq_alloc_tag_set(struct blk_mq_tag_set *set)
 	if (ret)
 		goto out_free_mq_map;
 
-	mutex_init(&set->tag_list_lock);
+	init_rwsem(&set->tag_list_rwsem);
 	INIT_LIST_HEAD(&set->tag_list);
 
 	return 0;
@@ -5044,7 +5051,7 @@ static void __blk_mq_update_nr_hw_queues(struct blk_mq_tag_set *set,
 	struct xarray elv_tbl, et_tbl;
 	bool queues_frozen = false;
 
-	lockdep_assert_held(&set->tag_list_lock);
+	lockdep_assert_held_write(&set->tag_list_rwsem);
 
 	if (set->nr_maps == 1 && nr_hw_queues > nr_cpu_ids)
 		nr_hw_queues = nr_cpu_ids;
@@ -5129,9 +5136,9 @@ out_memalloc_restore:
 void blk_mq_update_nr_hw_queues(struct blk_mq_tag_set *set, int nr_hw_queues)
 {
 	down_write(&set->update_nr_hwq_lock);
-	mutex_lock(&set->tag_list_lock);
+	down_write(&set->tag_list_rwsem);
 	__blk_mq_update_nr_hw_queues(set, nr_hw_queues);
-	mutex_unlock(&set->tag_list_lock);
+	up_write(&set->tag_list_rwsem);
 	up_write(&set->update_nr_hwq_lock);
 }
 EXPORT_SYMBOL_GPL(blk_mq_update_nr_hw_queues);
