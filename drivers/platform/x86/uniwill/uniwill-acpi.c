@@ -88,6 +88,9 @@
 
 #define EC_ADDR_GPU_TEMP		0x044F
 
+#define EC_ADDR_SYSTEM_ID		0x0456
+#define HAS_GPU				BIT(7)
+
 #define EC_ADDR_MAIN_FAN_RPM_1		0x0464
 
 #define EC_ADDR_MAIN_FAN_RPM_2		0x0465
@@ -1406,6 +1409,23 @@ static int uniwill_ec_init(struct uniwill_data *data)
 	return devm_add_action_or_reset(data->dev, uniwill_disable_manual_control, data);
 }
 
+static int quirk_ibp_gen7_ctgp_supported(const struct dmi_system_id *d)
+{
+	struct uniwill_data *data = container_of(d, struct uniwill_data, id);
+	unsigned int value;
+	int ret;
+
+	ret = regmap_read(data->regmap, EC_ADDR_SYSTEM_ID, &value);
+	if (ret < 0)
+		return ret;
+	if (value & HAS_GPU) {
+		data->id.driver_data =
+			(void *)((unsigned long)data->id.driver_data |
+				 UNIWILL_FEATURE_NVIDIA_CTGP_CONTROL);
+	}
+	return 0;
+}
+
 static const struct dmi_system_id uniwill_dmi_table[] = {
 	{
 		.ident = "XMG FUSION 15",
@@ -1462,12 +1482,12 @@ static const struct dmi_system_id uniwill_dmi_table[] = {
 		.driver_data = (void *)(UNIWILL_FEATURE_NVIDIA_CTGP_CONTROL),
 	},
 	{
+		.callback = quirk_ibp_gen7_ctgp_supported,
 		.ident = "TUXEDO InfinityBook Pro 14/16 Gen7 Intel",
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "TUXEDO"),
 			DMI_EXACT_MATCH(DMI_BOARD_NAME, "PHxARX1_PHxAQF1"),
 		},
-		.driver_data = (void *)(UNIWILL_FEATURE_NVIDIA_CTGP_CONTROL),
 	},
 	{
 		.ident = "TUXEDO InfinityBook Pro 16 Gen7 Intel/Commodore Omnia-Book Pro Gen 7",
