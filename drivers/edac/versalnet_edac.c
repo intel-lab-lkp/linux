@@ -15,6 +15,7 @@
 #include <ras/ras_event.h>
 
 #include "edac_module.h"
+#include "../../include/linux/device.h"
 
 /* Granularity of reported error in bytes */
 #define MC5_ERR_GRAIN			1
@@ -757,6 +758,7 @@ static struct rpmsg_driver amd_rpmsg_driver = {
 
 static void versal_edac_release(struct device *dev)
 {
+	kfree(dev->init_name);
 	kfree(dev);
 }
 
@@ -814,12 +816,19 @@ static int init_versalnet(struct mc_priv *priv, struct platform_device *pdev)
 
 		dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 		dev->release = versal_edac_release;
-		name = kmalloc(32, GFP_KERNEL);
-		sprintf(name, "versal-net-ddrmc5-edac-%d", i);
+		name = kasprintf(GFP_KERNEL, "versal-net-ddrmc5-edac-%d", i);
+		if (!name) {
+			kfree(dev);
+			return -ENOMEM;
+		}
+
 		dev->init_name = name;
 		rc = device_register(dev);
-		if (rc)
+		if (rc) {
+			kfree(dev->init_name);
+			kfree(dev);
 			goto err_alloc;
+		}
 
 		mci->pdev = dev;
 
