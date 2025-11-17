@@ -50,6 +50,7 @@ static const char hcd_name[] = "ohci-nxp";
 static struct hc_driver __read_mostly ohci_nxp_hc_driver;
 
 static struct i2c_client *isp1301_i2c_client;
+static bool isp1301_using_dt;
 
 static void isp1301_configure_lpc32xx(void)
 {
@@ -161,6 +162,7 @@ static int ohci_hcd_nxp_probe(struct platform_device *pdev)
 	} else {
 		isp1301_node = NULL;
 	}
+	isp1301_using_dt = (isp1301_node != NULL);
 
 	isp1301_i2c_client = isp1301_get_client(isp1301_node);
 	of_node_put(isp1301_node);
@@ -223,6 +225,8 @@ static int ohci_hcd_nxp_probe(struct platform_device *pdev)
 fail_resource:
 	usb_put_hcd(hcd);
 fail_disable:
+	if (isp1301_using_dt)
+		put_device(&isp1301_i2c_client->dev);
 	isp1301_i2c_client = NULL;
 	return ret;
 }
@@ -234,6 +238,8 @@ static void ohci_hcd_nxp_remove(struct platform_device *pdev)
 	usb_remove_hcd(hcd);
 	ohci_nxp_stop_hc();
 	usb_put_hcd(hcd);
+	if (isp1301_using_dt)
+		put_device(&isp1301_i2c_client->dev);
 	isp1301_i2c_client = NULL;
 }
 
