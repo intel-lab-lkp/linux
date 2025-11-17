@@ -981,6 +981,46 @@ static int arm_smmu_cmdq_batch_submit(struct arm_smmu_device *smmu,
 					   cmds->num, true);
 }
 
+int arm_smmu_queue_poll_until_empty(struct arm_smmu_device *smmu,
+				    struct arm_smmu_queue *q)
+{
+	struct arm_smmu_queue_poll qp;
+	struct arm_smmu_ll_queue *llq = &q->llq;
+	int ret = 0;
+
+	queue_poll_init(smmu, &qp);
+	do {
+		if (queue_empty(llq))
+			break;
+
+		ret = queue_poll(&qp);
+		WRITE_ONCE(llq->cons, readl_relaxed(q->cons_reg));
+
+	} while (!ret);
+
+	return ret;
+}
+
+static int arm_smmu_drain_queues(struct arm_smmu_device *smmu)
+{
+	struct arm_smmu_cmdq *cmdq = &smmu->cmdq;
+	unsigned long flags;
+	int ret;
+
+	/*
+	 * Since this is only called from the suspend callback, we
+	 * should be able to acquire the exclusive lock without failing.
+	 */
+	arm_smmu_cmdq_exclusive_trylock_irqsave(cmdq, flags);
+	ret = arm_smmu_queue_poll_until_empty(smmu, &smmu->cmdq.q);
+	arm_smmu_cmdq_exclusive_unlock_irqrestore(cmdq, flags);
+
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
 static void arm_smmu_page_response(struct device *dev, struct iopf_fault *unused,
 				   struct iommu_page_response *resp)
 {
