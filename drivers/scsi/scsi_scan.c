@@ -215,15 +215,30 @@ static void scsi_unlock_floptical(struct scsi_device *sdev,
 			 SCSI_TIMEOUT, 3, NULL);
 }
 
+static bool scsi_needs_budget_map(struct Scsi_Host *shost, unsigned int depth)
+{
+	if (shost->host_tagset || shost->tag_set.nr_hw_queues == 1)
+		return depth < shost->can_queue;
+	return true;
+}
+
 static int scsi_realloc_sdev_budget_map(struct scsi_device *sdev,
 					unsigned int depth)
 {
+	struct Scsi_Host *shost = sdev->host;
 	int new_shift = sbitmap_calculate_shift(depth);
 	bool need_alloc = !sdev->budget_map.map;
 	bool need_free = false;
 	unsigned int memflags;
 	int ret;
 	struct sbitmap sb_backup;
+
+	if (!scsi_needs_budget_map(shost, depth)) {
+		memflags = blk_mq_freeze_queue(sdev->request_queue);
+		sbitmap_free(&sdev->budget_map);
+		blk_mq_unfreeze_queue(sdev->request_queue, memflags);
+		return 0;
+	}
 
 	depth = min_t(unsigned int, depth, scsi_device_max_queue_depth(sdev));
 
@@ -1120,7 +1135,8 @@ static int scsi_add_lun(struct scsi_device *sdev, unsigned char *inq_result,
 	scsi_cdl_check(sdev);
 
 	sdev->max_queue_depth = sdev->queue_depth;
-	WARN_ON_ONCE(sdev->max_queue_depth > sdev->budget_map.depth);
+	WARN_ON_ONCE(sdev->budget_map.map &&
+		     sdev->max_queue_depth > sdev->budget_map.depth);
 
 	/*
 	 * Ok, the device is now all set up, we can
