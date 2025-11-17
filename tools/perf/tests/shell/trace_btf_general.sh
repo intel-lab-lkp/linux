@@ -39,7 +39,7 @@ trace_test_buffer() {
   echo "Testing perf trace's buffer augmentation"
   # echo will insert a newline (\10) at the end of the buffer
   output="$(perf trace --sort-events -e write --max-events=1 -- echo "${buffer}" 2>&1)"
-  if ! echo "$output" | grep -q -E "^echo/[0-9]+ write\([0-9]+, ${buffer}.*, [0-9]+\) += +[0-9]+$"
+  if ! echo "$output" | grep -qE "^echo/[0-9]+ write\([0-9]+, ${buffer}\\\\10, [0-9]+(, ..)?\) += +[0-9]+$"
   then
     printf "Buffer augmentation test failed, output:\n$output\n"
     err=1
