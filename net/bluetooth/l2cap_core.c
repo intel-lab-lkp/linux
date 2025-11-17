@@ -5703,12 +5703,19 @@ static int l2cap_reassemble_sdu(struct l2cap_chan *chan, struct sk_buff *skb,
 		if (!chan->sdu)
 			break;
 
-		append_skb_frag(chan->sdu, skb,
-				&chan->sdu_last_frag);
+		if (chan->sdu->len + skb->len != chan->sdu_len) {
+			BT_DBG("Incomplete SDU, expected: %u received: %u", chan->sdu_len,
+			       chan->sdu->len + skb->len);
+			/* Discard previous data and keep only L2CAP_SAR_END data */
+			kfree_skb(chan->sdu);
+			chan->sdu = skb;
+			chan->sdu_last_frag = skb;
+			chan->sdu_len = skb->len;
+		} else {
+			append_skb_frag(chan->sdu, skb,
+					&chan->sdu_last_frag);
+		}
 		skb = NULL;
-
-		if (chan->sdu->len != chan->sdu_len)
-			break;
 
 		err = chan->ops->recv(chan, chan->sdu);
 
