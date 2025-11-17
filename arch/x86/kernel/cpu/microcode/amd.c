@@ -327,7 +327,7 @@ static u32 get_patch_level(void)
 
 		if (!microcode_rev[cpu]) {
 			if (!base_rev)
-				base_rev = cpuid_to_ucode_rev(bsp_cpuid_1_eax);
+				native_rdmsr(MSR_AMD64_PATCH_LEVEL, base_rev, dummy);
 
 			microcode_rev[cpu] = base_rev;
 
