@@ -3696,8 +3696,12 @@ static int ttwu_runnable(struct task_struct *p, int wake_flags)
 	rq = __task_rq_lock(p, &rf);
 	if (task_on_rq_queued(p)) {
 		update_rq_clock(rq);
-		if (is_proxy_task(p))
+		if (is_proxy_task(p)) {
 			clear_task_proxy(p);
+			/* Task was never fully blocked to be delayed. */
+			WARN_ON_ONCE(p->se.sched_delayed);
+			psi_enqueue(p, ENQUEUE_WAKEUP);
+		}
 		if (p->se.sched_delayed)
 			enqueue_task(rq, p, ENQUEUE_NOCLOCK | ENQUEUE_DELAYED);
 		if (!task_on_cpu(rq, p)) {
@@ -6903,7 +6907,8 @@ keep_resched:
 
 		psi_account_irqtime(rq, prev, next);
 		psi_sched_switch(prev, next, !task_on_rq_queued(prev) ||
-					     prev->se.sched_delayed);
+					     prev->se.sched_delayed ||
+					     is_proxy_task(prev));
 
 		trace_sched_switch(preempt, prev, next, prev_state);
 

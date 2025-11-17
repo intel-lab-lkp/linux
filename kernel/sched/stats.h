@@ -142,7 +142,7 @@ static inline void psi_enqueue(struct task_struct *p, int flags)
 	if (task_on_cpu(task_rq(p), p))
 		return;
 
-	if (p->se.sched_delayed) {
+	if (p->se.sched_delayed || is_proxy_task(p)) {
 		/* CPU migration of "sleeping" task */
 		WARN_ON_ONCE(!(flags & ENQUEUE_MIGRATED));
 		if (p->in_memstall)
