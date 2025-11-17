@@ -1773,6 +1773,15 @@ void i2c_del_adapter(struct i2c_adapter *adap)
 			       __process_removed_adapter);
 	mutex_unlock(&core_lock);
 
+	/*
+	 * Stop publishing the adapter before tearing down its device/kobject.
+	 * Otherwise i2c_get_adapter() may still find it in the IDR and then
+	 * get_device() will WARN because the kobject is already at 0.
+	 */
+	mutex_lock(&core_lock);
+	idr_remove(&i2c_adapter_idr, adap->nr);
+	mutex_unlock(&core_lock);
+
 	/* Remove devices instantiated from sysfs */
 	mutex_lock_nested(&adap->userspace_clients_lock,
 			  i2c_adapter_depth(adap));
@@ -1813,10 +1822,7 @@ void i2c_del_adapter(struct i2c_adapter *adap)
 	device_unregister(&adap->dev);
 	wait_for_completion(&adap->dev_released);
 
-	/* free bus id */
-	mutex_lock(&core_lock);
-	idr_remove(&i2c_adapter_idr, adap->nr);
-	mutex_unlock(&core_lock);
+	/* IDR entry already removed above; no new lookups are possible now. */
 
 	/* Clear the device structure in case this adapter is ever going to be
 	   added again */
