@@ -1746,7 +1746,7 @@ EXPORT_SYMBOL_GPL(qcom_scm_gpu_init_regs);
 
 static int qcom_scm_find_dload_address(struct device *dev, u64 *addr)
 {
-	struct device_node *tcsr;
+	struct device_node *tcsr __free(device_node) = NULL;
 	struct device_node *np = dev->of_node;
 	struct resource res;
 	u32 offset;
@@ -1757,7 +1757,6 @@ static int qcom_scm_find_dload_address(struct device *dev, u64 *addr)
 		return 0;
 
 	ret = of_address_to_resource(tcsr, 0, &res);
-	of_node_put(tcsr);
 	if (ret)
 		return ret;
 
@@ -2020,17 +2019,12 @@ static const struct of_device_id qcom_scm_qseecom_allowlist[] __maybe_unused = {
 
 static bool qcom_scm_qseecom_machine_is_allowed(void)
 {
-	struct device_node *np;
-	bool match;
+	struct device_node *np __free(device_node) = of_find_node_by_path("/");
 
-	np = of_find_node_by_path("/");
 	if (!np)
 		return false;
 
-	match = of_match_node(qcom_scm_qseecom_allowlist, np);
-	of_node_put(np);
-
-	return match;
+	return of_match_node(qcom_scm_qseecom_allowlist, np);
 }
 
 static void qcom_scm_qseecom_free(void *data)
