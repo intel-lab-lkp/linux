@@ -3421,6 +3421,11 @@ intel_dp_compute_config(struct intel_encoder *encoder,
 	intel_dp_compute_vsc_sdp(intel_dp, pipe_config, conn_state);
 	intel_dp_compute_hdr_metadata_infoframe_sdp(intel_dp, pipe_config, conn_state);
 
+	if(DISPLAY_VER(display) >= 15 && intel_dp_is_edp(intel_dp)) {
+		pipe_config->enable_cmtg = true;
+		drm_dbg_kms(display->drm,"ANI-DBG: intel_dp_compute_config\n");
+	}
+
 	return intel_dp_tunnel_atomic_compute_stream_bw(state, intel_dp, connector,
 							pipe_config);
 }

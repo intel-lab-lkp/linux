@@ -1351,6 +1351,9 @@ struct intel_crtc_state {
 
 	struct drm_rect psr2_su_area;
 
+	/* CMTG Enable */
+	bool enable_cmtg;
+
 	/* Variable Refresh Rate state */
 	struct {
 		bool enable, in_range;
