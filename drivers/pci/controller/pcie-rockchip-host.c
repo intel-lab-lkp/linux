@@ -271,10 +271,10 @@ static void rockchip_pcie_set_power_limit(struct rockchip_pcie *rockchip)
 		power = power / 10;
 	}
 
-	status = rockchip_pcie_read(rockchip, PCIE_RC_CONFIG_CR + PCI_EXP_DEVCAP);
+	status = rockchip_pcie_read(rockchip, PCIE_RC_CONFIG_SR + PCI_EXP_DEVCAP);
 	status |= FIELD_PREP(PCI_EXP_DEVCAP_PWR_VAL, power);
 	status |= FIELD_PREP(PCI_EXP_DEVCAP_PWR_SCL, scale);
-	rockchip_pcie_write(rockchip, status, PCIE_RC_CONFIG_CR + PCI_EXP_DEVCAP);
+	rockchip_pcie_write(rockchip, status, PCIE_RC_CONFIG_SR + PCI_EXP_DEVCAP);
 }
 
 /**
