@@ -698,7 +698,6 @@ EXPORT_SYMBOL_GPL(xhci_run);
  */
 void xhci_stop(struct usb_hcd *hcd)
 {
-	u32 temp;
 	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
 	struct xhci_interrupter *ir = xhci->interrupters[0];
 
@@ -733,8 +732,7 @@ void xhci_stop(struct usb_hcd *hcd)
 
 	xhci_dbg_trace(xhci, trace_xhci_dbg_init,
 			"// Disabling event ring interrupts");
-	temp = readl(&xhci->op_regs->status);
-	writel((temp & ~0x1fff) | STS_EINT, &xhci->op_regs->status);
+	writel(STS_EINT, &xhci->op_regs->status);
 	xhci_disable_interrupter(xhci, ir);
 
 	xhci_dbg_trace(xhci, trace_xhci_dbg_init, "cleaning up memory");
@@ -1171,8 +1169,7 @@ int xhci_resume(struct xhci_hcd *xhci, bool power_lost, bool is_auto_resume)
 			return retval;
 
 		xhci_dbg(xhci, "// Disabling event ring interrupts\n");
-		temp = readl(&xhci->op_regs->status);
-		writel((temp & ~0x1fff) | STS_EINT, &xhci->op_regs->status);
+		writel(STS_EINT, &xhci->op_regs->status);
 		xhci_disable_interrupter(xhci, xhci->interrupters[0]);
 
 		xhci_dbg(xhci, "cleaning up memory\n");
