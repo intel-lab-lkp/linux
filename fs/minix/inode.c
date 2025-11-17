@@ -272,6 +272,15 @@ static int minix_fill_super(struct super_block *s, struct fs_context *fc)
 	} else
 		goto out_no_fs;
 
+	/* We can potentially ignore the on-disk s_firstdatazone and instead
+	 * calculate the value on the fly. Since this field is only a u16,
+	 * this allows more inodes to be handled.
+	 */
+	if (sbi->s_firstdatazone == 0) {
+		sbi->s_firstdatazone = 2 + sbi->s_imap_blocks + sbi->s_zmap_blocks +
+			minix_blocks_needed(sbi->s_ninodes, s->s_blocksize);
+	}
+
 	if (!minix_check_superblock(s))
 		goto out_illegal_sb;
 
