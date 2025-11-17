@@ -263,3 +263,51 @@ declare_and_impl_atomic_methods!(
         }
     }
 );
+
+impl private::Sealed for i8 {}
+impl private::Sealed for i16 {}
+
+impl AtomicImpl for i8 {
+    type Delta = Self;
+}
+
+impl AtomicImpl for i16 {
+    type Delta = Self;
+}
+
+macro_rules! impl_atomic_only_load_and_store_ops {
+    ($($ty:ty),* $(,)?) => {
+        $(
+            impl AtomicBasicOps for $ty {
+                paste! {
+                    #[inline(always)]
+                    fn atomic_read(a: &AtomicRepr<Self>) -> Self {
+                        // SAFETY: `a.as_ptr()` is valid and properly aligned.
+                        unsafe { bindings::[< atomic_ $ty _load >](a.as_ptr().cast()) }
+                    }
+
+                    #[inline(always)]
+                    fn atomic_read_acquire(a: &AtomicRepr<Self>) -> Self {
+                        // SAFETY: `a.as_ptr()` is valid and properly aligned.
+                        unsafe { bindings::[< atomic_ $ty _load_acquire >](a.as_ptr().cast()) }
+                    }
+
+                    // Generate atomic_set and atomic_set_release
+                    #[inline(always)]
+                    fn atomic_set(a: &AtomicRepr<Self>, v: Self) {
+                        // SAFETY: `a.as_ptr()` is valid and properly aligned.
+                        unsafe { bindings::[< atomic_ $ty _store >](a.as_ptr().cast(), v) }
+                    }
+
+                    #[inline(always)]
+                    fn atomic_set_release(a: &AtomicRepr<Self>, v: Self) {
+                        // SAFETY: `a.as_ptr()` is valid and properly aligned.
+                        unsafe { bindings::[< atomic_ $ty _store_release >](a.as_ptr().cast(), v) }
+                    }
+                }
+            }
+        )*
+    };
+}
+
+impl_atomic_only_load_and_store_ops!(i8, i16);
