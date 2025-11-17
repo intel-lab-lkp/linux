@@ -3260,6 +3260,20 @@ out_unacct_blocks:
 	shmem_inode_unacct_blocks(inode, 1);
 	return ret;
 }
+
+static struct folio *shmem_get_pagecache_folio(struct vm_area_struct *vma,
+					       pgoff_t pgoff)
+{
+	struct inode *inode = file_inode(vma->vm_file);
+	struct folio *folio;
+	int err;
+
+	err = shmem_get_folio(inode, pgoff, 0, &folio, SGP_NOALLOC);
+	if (err)
+		return ERR_PTR(err);
+
+	return folio;
+}
 #endif /* CONFIG_USERFAULTFD */
 
 #ifdef CONFIG_TMPFS
@@ -5292,6 +5306,9 @@ static const struct vm_operations_struct shmem_vm_ops = {
 	.set_policy     = shmem_set_policy,
 	.get_policy     = shmem_get_policy,
 #endif
+#ifdef CONFIG_USERFAULTFD
+	.get_pagecache_folio	= shmem_get_pagecache_folio,
+#endif
 };
 
 static const struct vm_operations_struct shmem_anon_vm_ops = {
@@ -5300,6 +5317,9 @@ static const struct vm_operations_struct shmem_anon_vm_ops = {
 #ifdef CONFIG_NUMA
 	.set_policy     = shmem_set_policy,
 	.get_policy     = shmem_get_policy,
+#endif
+#ifdef CONFIG_USERFAULTFD
+	.get_pagecache_folio	= shmem_get_pagecache_folio,
 #endif
 };
 
