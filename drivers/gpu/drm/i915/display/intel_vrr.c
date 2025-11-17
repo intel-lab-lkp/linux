@@ -160,14 +160,40 @@ int intel_vrr_vmax_vtotal(const struct intel_crtc_state *crtc_state)
 	return crtc_state->vrr.vmax;
 }
 
+static int
+intel_vrr_dcb_vmin_vblank_start(const struct intel_crtc_state *crtc_state)
+{
+	return (intel_vrr_dcb_vmin_vblank_start_next(crtc_state) < 0) ?
+		intel_vrr_dcb_vmin_vblank_start_final(crtc_state) :
+		intel_vrr_dcb_vmin_vblank_start_next(crtc_state);
+}
+
 int intel_vrr_vmin_vblank_start(const struct intel_crtc_state *crtc_state)
 {
-	return intel_vrr_vmin_vtotal(crtc_state) - crtc_state->vrr.guardband;
+	if (crtc_state->vrr.dc_balance.enable) {
+		return (intel_vrr_dcb_vmin_vblank_start(crtc_state) -
+			crtc_state->vrr.guardband);
+	} else {
+		return intel_vrr_vmin_vtotal(crtc_state) - crtc_state->vrr.guardband;
+	}
+}
+
+static int
+intel_vrr_dcb_vmax_vblank_start(const struct intel_crtc_state *crtc_state)
+{
+	return (intel_vrr_dcb_vmax_vblank_start_next(crtc_state) < 0) ?
+		intel_vrr_dcb_vmax_vblank_start_final(crtc_state) :
+		intel_vrr_dcb_vmax_vblank_start_next(crtc_state);
 }
 
 int intel_vrr_vmax_vblank_start(const struct intel_crtc_state *crtc_state)
 {
-	return intel_vrr_vmax_vtotal(crtc_state) - crtc_state->vrr.guardband;
+	if (crtc_state->vrr.dc_balance.enable) {
+		return (intel_vrr_dcb_vmax_vblank_start(crtc_state) -
+			crtc_state->vrr.guardband);
+	} else {
+		return intel_vrr_vmax_vtotal(crtc_state) - crtc_state->vrr.guardband;
+	}
 }
 
 static bool
