@@ -76,11 +76,13 @@ actions_add_trace_output(struct actions *self, const char *trace_output)
 	if (!action)
 		return -1;
 
-	self->present[ACTION_TRACE_OUTPUT] = true;
 	action->type = ACTION_TRACE_OUTPUT;
 	action->trace_output = strdup(trace_output);
-	if (!action->trace_output)
+	if (!action->trace_output) {
+		self->len--; // return the action object to the pool
 		return -1;
+	}
+	self->present[ACTION_TRACE_OUTPUT] = true;
 
 	return 0;
 }
@@ -115,11 +117,13 @@ actions_add_shell(struct actions *self, const char *command)
 	if (!action)
 		return -1;
 
-	self->present[ACTION_SHELL] = true;
 	action->type = ACTION_SHELL;
 	action->command = strdup(command);
-	if (!action->command)
+	if (!action->command) {
+		self->len--;
 		return -1;
+	}
+	self->present[ACTION_SHELL] = true;
 
 	return 0;
 }
