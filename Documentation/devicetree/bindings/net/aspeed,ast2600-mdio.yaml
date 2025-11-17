@@ -13,13 +13,19 @@ description: |+
   The ASPEED AST2600 MDIO controller is the third iteration of ASPEED's MDIO
   bus register interface, this time also separating out the controller from the
   MAC.
+  The ASPEED AST2700 MDIO controller is similar to the AST2600's.
 
 allOf:
   - $ref: mdio.yaml#
 
 properties:
   compatible:
-    const: aspeed,ast2600-mdio
+    oneOf:
+      - const: aspeed,ast2600-mdio
+      - items:
+          - enum:
+              - aspeed,ast2700-mdio
+          - const: aspeed,ast2600-mdio
 
   reg:
     maxItems: 1
