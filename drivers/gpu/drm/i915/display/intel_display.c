@@ -63,6 +63,7 @@
 #include "intel_casf.h"
 #include "intel_cdclk.h"
 #include "intel_clock_gating.h"
+#include "intel_cmtg.h"
 #include "intel_color.h"
 #include "intel_crt.h"
 #include "intel_crtc.h"
@@ -1668,6 +1669,9 @@ static void hsw_crtc_enable(struct intel_atomic_state *state,
 
 	if (!transcoder_is_dsi(cpu_transcoder))
 		hsw_configure_cpu_transcoder(new_crtc_state);
+
+	if (new_crtc_state->enable_cmtg)
+		intel_cmtg_enable(new_crtc_state);
 
 	for_each_pipe_crtc_modeset_enable(display, pipe_crtc, new_crtc_state, i) {
 		const struct intel_crtc_state *pipe_crtc_state =

@@ -208,3 +208,34 @@ void intel_cmtg_set_clk_select(const struct intel_crtc_state *crtc_state)
 	if (clk_sel_set)
 		intel_de_rmw(display, CMTG_CLK_SEL, clk_sel_clr, clk_sel_set);
 }
+
+static void intel_cmtg_set_timings(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
+
+	intel_de_write(display, TRANS_HTOTAL_CMTG(cpu_transcoder),
+		       intel_de_read(display, TRANS_HTOTAL(display, cpu_transcoder)));
+	intel_de_write(display, TRANS_HBLANK_CMTG(cpu_transcoder),
+		       intel_de_read(display, TRANS_HBLANK(display, cpu_transcoder)));
+	intel_de_write(display, TRANS_HSYNC_CMTG(cpu_transcoder),
+		       intel_de_read(display, TRANS_HSYNC(display, cpu_transcoder)));
+	intel_de_write(display, TRANS_VTOTAL_CMTG(cpu_transcoder),
+		       intel_de_read(display, TRANS_VTOTAL(display, cpu_transcoder)));
+	intel_de_write(display, TRANS_VBLANK_CMTG(cpu_transcoder),
+		       intel_de_read(display, TRANS_VBLANK(display, cpu_transcoder)));
+	intel_de_write(display, TRANS_VSYNC_CMTG(cpu_transcoder),
+		       intel_de_read(display, TRANS_VSYNC(display, cpu_transcoder)));
+}
+
+void intel_cmtg_enable(const struct intel_crtc_state *crtc_state)
+{
+	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
+
+	if (cpu_transcoder != TRANSCODER_A && cpu_transcoder != TRANSCODER_B)
+		return;
+
+	/* Program CMTG Transcoder Timings */
+	intel_cmtg_set_timings(crtc_state);
+
+}
