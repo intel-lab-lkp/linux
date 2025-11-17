@@ -549,7 +549,7 @@ struct blk_mq_queue_data {
 	bool last;
 };
 
-typedef bool (busy_tag_iter_fn)(struct request *, void *);
+typedef bool (blk_mq_rq_iter_fn)(struct request *, void *);
 
 /**
  * struct blk_mq_ops - Callback functions that implements block driver
@@ -926,7 +926,7 @@ void blk_mq_run_hw_queue(struct blk_mq_hw_ctx *hctx, bool async);
 void blk_mq_run_hw_queues(struct request_queue *q, bool async);
 void blk_mq_delay_run_hw_queues(struct request_queue *q, unsigned long msecs);
 void blk_mq_tagset_busy_iter(struct blk_mq_tag_set *tagset,
-		busy_tag_iter_fn *fn, void *priv);
+		blk_mq_rq_iter_fn *fn, void *priv);
 void blk_mq_tagset_wait_completed_request(struct blk_mq_tag_set *tagset);
 void blk_mq_freeze_queue_nomemsave(struct request_queue *q);
 void blk_mq_unfreeze_queue_nomemrestore(struct request_queue *q);

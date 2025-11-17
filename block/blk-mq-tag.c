@@ -247,7 +247,7 @@ void blk_mq_put_tags(struct blk_mq_tags *tags, int *tag_array, int nr_tags)
 struct bt_iter_data {
 	struct blk_mq_hw_ctx *hctx;
 	struct request_queue *q;
-	busy_tag_iter_fn *fn;
+	blk_mq_rq_iter_fn *fn;
 	void *data;
 	bool reserved;
 };
@@ -310,7 +310,7 @@ static bool bt_iter(struct sbitmap *bitmap, unsigned int bitnr, void *data)
  *		bitmap_tags member of struct blk_mq_tags.
  */
 static void bt_for_each(struct blk_mq_hw_ctx *hctx, struct request_queue *q,
-			struct sbitmap_queue *bt, busy_tag_iter_fn *fn,
+			struct sbitmap_queue *bt, blk_mq_rq_iter_fn *fn,
 			void *data, bool reserved)
 {
 	struct bt_iter_data iter_data = {
@@ -326,7 +326,7 @@ static void bt_for_each(struct blk_mq_hw_ctx *hctx, struct request_queue *q,
 
 struct bt_tags_iter_data {
 	struct blk_mq_tags *tags;
-	busy_tag_iter_fn *fn;
+	blk_mq_rq_iter_fn *fn;
 	void *data;
 	unsigned int flags;
 };
@@ -378,7 +378,7 @@ static bool bt_tags_iter(struct sbitmap *bitmap, unsigned int bitnr, void *data)
  * @flags:	BT_TAG_ITER_*
  */
 static void bt_tags_for_each(struct blk_mq_tags *tags, struct sbitmap_queue *bt,
-			     busy_tag_iter_fn *fn, void *data, unsigned int flags)
+			blk_mq_rq_iter_fn *fn, void *data, unsigned int flags)
 {
 	struct bt_tags_iter_data iter_data = {
 		.tags = tags,
@@ -392,7 +392,7 @@ static void bt_tags_for_each(struct blk_mq_tags *tags, struct sbitmap_queue *bt,
 }
 
 static void __blk_mq_all_tag_iter(struct blk_mq_tags *tags,
-		busy_tag_iter_fn *fn, void *priv, unsigned int flags)
+		blk_mq_rq_iter_fn *fn, void *priv, unsigned int flags)
 {
 	WARN_ON_ONCE(flags & BT_TAG_ITER_RESERVED);
 
@@ -413,7 +413,7 @@ static void __blk_mq_all_tag_iter(struct blk_mq_tags *tags,
  *
  * Caller has to pass the tag map from which requests are allocated.
  */
-void blk_mq_all_tag_iter(struct blk_mq_tags *tags, busy_tag_iter_fn *fn,
+void blk_mq_all_tag_iter(struct blk_mq_tags *tags, blk_mq_rq_iter_fn *fn,
 		void *priv)
 {
 	__blk_mq_all_tag_iter(tags, fn, priv, BT_TAG_ITER_STATIC_RQS);
@@ -432,7 +432,7 @@ void blk_mq_all_tag_iter(struct blk_mq_tags *tags, busy_tag_iter_fn *fn,
  * @fn returns.
  */
 void blk_mq_tagset_busy_iter(struct blk_mq_tag_set *tagset,
-		busy_tag_iter_fn *fn, void *priv)
+		blk_mq_rq_iter_fn *fn, void *priv)
 {
 	unsigned int flags = tagset->flags;
 	int i, nr_tags, srcu_idx;
@@ -493,7 +493,7 @@ EXPORT_SYMBOL(blk_mq_tagset_wait_completed_request);
  * called for all requests on all queues that share that tag set and not only
  * for requests associated with @q.
  */
-void blk_mq_queue_tag_busy_iter(struct request_queue *q, busy_tag_iter_fn *fn,
+void blk_mq_queue_tag_busy_iter(struct request_queue *q, blk_mq_rq_iter_fn *fn,
 		void *priv)
 {
 	int srcu_idx;
