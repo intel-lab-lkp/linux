@@ -18,6 +18,7 @@
 #include <linux/mm.h>
 #include <linux/wait.h>
 #include <linux/atomic.h>
+#include <linux/usb/uvc.h>
 
 #include <media/v4l2-common.h>
 #include <media/v4l2-ctrls.h>
@@ -121,6 +122,32 @@ done:
 /* ------------------------------------------------------------------------
  * UVC ioctls
  */
+
+static bool uvc_is_privacy_mapping(struct uvc_xu_control_mapping *xmap)
+{
+	struct mapping {
+		u8 entity[16];
+		u8 selector;
+	} privacy_mappings[] = {
+		{
+			.entity = UVC_GUID_LOGITECH_USER_HW_CONTROL_V1,
+			.selector = 1,
+		},
+		{
+			.entity = UVC_GUID_LOGITECH_PERIPHERAL,
+			.selector = 9,
+		},
+	};
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(privacy_mappings); i++)
+		if (!memcmp(xmap->entity, privacy_mappings[i].entity, 16) &&
+		    xmap->selector == privacy_mappings[i].selector)
+			return true;
+
+	return false;
+}
+
 static int uvc_ioctl_xu_ctrl_map(struct uvc_video_chain *chain,
 				 struct uvc_xu_control_mapping *xmap)
 {
@@ -130,6 +157,11 @@ static int uvc_ioctl_xu_ctrl_map(struct uvc_video_chain *chain,
 	if (xmap->data_type > UVC_CTRL_DATA_TYPE_BITMASK) {
 		uvc_dbg(chain->dev, CONTROL,
 			"Unsupported UVC data type %u\n", xmap->data_type);
+		return -EINVAL;
+	}
+
+	if (uvc_is_privacy_mapping(xmap) && !uvc_allow_privacy_override_param) {
+		pr_warn_once("uvcvideo: Privacy related controls can only be mapped if param allow_privacy_override is true\n");
 		return -EINVAL;
 	}
 
