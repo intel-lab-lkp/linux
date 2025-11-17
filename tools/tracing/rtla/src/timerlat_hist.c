@@ -1070,8 +1070,10 @@ static struct common_params
 		}
 	}
 
-	if (trace_output)
-		actions_add_trace_output(&params->common.threshold_actions, trace_output);
+	if (trace_output && actions_add_trace_output(&params->common.threshold_actions, trace_output)) {
+		err_msg("Could not add a new trace output");
+		exit(EXIT_FAILURE);
+	}
 
 	if (geteuid()) {
 		err_msg("rtla needs root permission\n");
