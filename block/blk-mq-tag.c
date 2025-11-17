@@ -456,6 +456,25 @@ void blk_mq_tagset_busy_iter(struct blk_mq_tag_set *tagset,
 }
 EXPORT_SYMBOL(blk_mq_tagset_busy_iter);
 
+/**
+ * blk_mq_tagset_iter - iterate over all requests in a tag set
+ * @tagset:	Tag set to iterate over.
+ * @fn:		Pointer to the function that will be called for each request.
+ *		@fn will be called as follows: @fn(rq, @priv) where rq is a
+ *		pointer to a request. Return true to continue iterating tags,
+ *		false to stop.
+ * @priv:	Will be passed as second argument to @fn.
+ *
+ * We grab one request reference before calling @fn and release it after
+ * @fn returns.
+ */
+void blk_mq_tagset_iter(struct blk_mq_tag_set *tagset, blk_mq_rq_iter_fn *fn,
+			void *priv)
+{
+	__blk_mq_tagset_iter(tagset, fn, priv, 0);
+}
+EXPORT_SYMBOL(blk_mq_tagset_iter);
+
 static bool blk_mq_tagset_count_completed_rqs(struct request *rq, void *data)
 {
 	unsigned *count = data;
