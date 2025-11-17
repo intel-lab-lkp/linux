@@ -1874,6 +1874,7 @@ static bool nvme_init_integrity(struct nvme_ns_head *head,
 		break;
 	}
 
+	bi->split_interval_capable = true;
 	bi->metadata_size = head->ms;
 	if (bi->csum_type) {
 		bi->pi_tuple_size = head->pi_size;

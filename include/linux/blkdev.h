@@ -122,6 +122,7 @@ struct blk_integrity {
 	unsigned char				interval_exp;
 	unsigned char				tag_size;
 	unsigned char				pi_tuple_size;
+	bool					split_interval_capable;
 };
 
 typedef unsigned int __bitwise blk_mode_t;
