@@ -693,6 +693,7 @@ unsigned long mips_stack_top(void)
 	if (current->thread.abi) {
 		top -= PAGE_ALIGN(current->thread.abi->vdso->size);
 		top -= PAGE_SIZE;
+		top -= VDSO_NR_PAGES * PAGE_SIZE;
 		top -= mips_gic_present() ? PAGE_SIZE : 0;
 
 		/* Space to randomize the VDSO base */
