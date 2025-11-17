@@ -1100,8 +1100,8 @@ static int qcom_smem_map_global(struct qcom_smem *smem, u32 size)
 static int qcom_smem_resolve_mem(struct qcom_smem *smem, const char *name,
 				 struct smem_region *region)
 {
+	struct device_node *np __free(device_node) = NULL;
 	struct device *dev = smem->dev;
-	struct device_node *np;
 	struct resource r;
 	int ret;
 
@@ -1112,7 +1112,6 @@ static int qcom_smem_resolve_mem(struct qcom_smem *smem, const char *name,
 	}
 
 	ret = of_address_to_resource(np, 0, &r);
-	of_node_put(np);
 	if (ret)
 		return ret;
 
