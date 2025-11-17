@@ -410,9 +410,12 @@ idpf_idc_init_msix_data(struct idpf_adapter *adapter)
 int idpf_idc_init_aux_core_dev(struct idpf_adapter *adapter,
 			       enum iidc_function_type ftype)
 {
+	struct libie_mmio_info *mmio = &adapter->ctlq_ctx.mmio_info;
 	struct iidc_rdma_core_dev_info *cdev_info;
 	struct iidc_rdma_priv_dev_info *privd;
-	int err, i;
+	struct libie_pci_mmio_region *mr;
+	size_t num_mem_regions;
+	int err, i = 0;
 
 	adapter->cdev_info = kzalloc(sizeof(*cdev_info), GFP_KERNEL);
 	if (!adapter->cdev_info)
@@ -430,8 +433,15 @@ int idpf_idc_init_aux_core_dev(struct idpf_adapter *adapter,
 	cdev_info->rdma_protocol = IIDC_RDMA_PROTOCOL_ROCEV2;
 	privd->ftype = ftype;
 
+	num_mem_regions = list_count_nodes(&mmio->mmio_list);
+	if (num_mem_regions <= IDPF_MMIO_REG_NUM_STATIC) {
+		err = -EINVAL;
+		goto err_plug_aux_dev;
+	}
+
+	num_mem_regions -= IDPF_MMIO_REG_NUM_STATIC;
 	privd->mapped_mem_regions =
-		kcalloc(adapter->hw.num_lan_regs,
+		kcalloc(num_mem_regions,
 			sizeof(struct iidc_rdma_lan_mapped_mem_region),
 			GFP_KERNEL);
 	if (!privd->mapped_mem_regions) {
@@ -439,14 +449,22 @@ int idpf_idc_init_aux_core_dev(struct idpf_adapter *adapter,
 		goto err_plug_aux_dev;
 	}
 
-	privd->num_memory_regions = cpu_to_le16(adapter->hw.num_lan_regs);
-	for (i = 0; i < adapter->hw.num_lan_regs; i++) {
-		privd->mapped_mem_regions[i].region_addr =
-			adapter->hw.lan_regs[i].vaddr;
-		privd->mapped_mem_regions[i].size =
-			cpu_to_le64(adapter->hw.lan_regs[i].addr_len);
-		privd->mapped_mem_regions[i].start_offset =
-			cpu_to_le64(adapter->hw.lan_regs[i].addr_start);
+	privd->num_memory_regions = cpu_to_le16(num_mem_regions);
+	list_for_each_entry(mr, &mmio->mmio_list, list) {
+		struct resource *static_regs = adapter->dev_ops.static_reg_info;
+		bool is_static = false;
+
+		for (uint j = 0; j < IDPF_MMIO_REG_NUM_STATIC; j++)
+			if (mr->offset == static_regs[j].start)
+				is_static = true;
+
+		if (is_static)
+			continue;
+
+		privd->mapped_mem_regions[i].region_addr = mr->addr;
+		privd->mapped_mem_regions[i].size = cpu_to_le64(mr->size);
+		privd->mapped_mem_regions[i++].start_offset =
+						cpu_to_le64(mr->offset);
 	}
 
 	idpf_idc_init_msix_data(adapter);
