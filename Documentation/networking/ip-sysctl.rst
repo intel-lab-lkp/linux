@@ -673,6 +673,16 @@ tcp_moderate_rcvbuf - BOOLEAN
 
 	Default: 1 (enabled)
 
+tcp_rtt_threshold - INTEGER
+	rcvbuf autotuning can over estimate final socket rcvbuf, which
+	can lead to cache trashing for high throughput flows.
+
+	For small RTT flows (below tcp_rtt_threshold usecs), we can relax
+	rcvbuf growth: Few additional ms to reach the final (and smaller)
+	rcvbuf is a good tradeoff.
+
+	Default : 1000 (1 ms)
+
 tcp_mtu_probing - INTEGER
 	Controls TCP Packetization-Layer Path MTU Discovery.  Takes three
 	values:
