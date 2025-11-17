@@ -52,7 +52,7 @@ char *osnoise_get_cpus(struct osnoise_context *context)
 int osnoise_set_cpus(struct osnoise_context *context, char *cpus)
 {
 	char *orig_cpus = osnoise_get_cpus(context);
-	char buffer[1024];
+	char buffer[MAX_PATH];
 	int retval;
 
 	if (!orig_cpus)
@@ -62,7 +62,7 @@ int osnoise_set_cpus(struct osnoise_context *context, char *cpus)
 	if (!context->curr_cpus)
 		return -1;
 
-	snprintf(buffer, 1024, "%s\n", cpus);
+	snprintf(buffer, ARRAY_SIZE(buffer), "%s\n", cpus);
 
 	debug_msg("setting cpus to %s from %s", cpus, context->orig_cpus);
 
