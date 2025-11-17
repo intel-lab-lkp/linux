@@ -335,6 +335,7 @@ struct uniwill_data {
 	struct mutex input_lock;	/* Protects input sequence during notify */
 	struct input_dev *input_device;
 	struct notifier_block nb;
+	struct dmi_system_id id;
 };
 
 struct uniwill_battery_entry {
@@ -1767,6 +1768,7 @@ MODULE_DEVICE_TABLE(dmi, uniwill_dmi_table);
 
 static int uniwill_probe(struct platform_device *pdev)
 {
+	const struct dmi_system_id *id;
 	struct uniwill_data *data;
 	struct regmap *regmap;
 	acpi_handle handle;
@@ -1787,6 +1789,19 @@ static int uniwill_probe(struct platform_device *pdev)
 	regmap = devm_regmap_init(&pdev->dev, &uniwill_ec_bus, data, &uniwill_ec_config);
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
+
+	if (force) {
+		/* Assume that the device supports all features */
+		supported_features = UINT_MAX;
+		pr_warn("Loading on a potentially unsupported device\n");
+	} else {
+		/* Match is guaranteed, otherwise init would have aborted */
+		id = dmi_first_match(uniwill_dmi_table);
+		memcpy(&data->id, id, sizeof(data->id));
+		if (data->id.callback)
+			data->id.callback(&data->id);
+		supported_features = (uintptr_t)data->id.driver_data;
+	}
 
 	data->regmap = regmap;
 	ret = devm_mutex_init(&pdev->dev, &data->super_key_lock);
@@ -1938,20 +1953,10 @@ static struct platform_driver uniwill_driver = {
 
 static int __init uniwill_init(void)
 {
-	const struct dmi_system_id *id;
 	int ret;
 
-	id = dmi_first_match(uniwill_dmi_table);
-	if (!id) {
-		if (!force)
-			return -ENODEV;
-
-		/* Assume that the device supports all features */
-		supported_features = UINT_MAX;
-		pr_warn("Loading on a potentially unsupported device\n");
-	} else {
-		supported_features = (uintptr_t)id->driver_data;
-	}
+	if (!dmi_first_match(uniwill_dmi_table) && !force)
+		return -ENODEV;
 
 	ret = platform_driver_register(&uniwill_driver);
 	if (ret < 0)
