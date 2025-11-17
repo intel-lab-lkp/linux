@@ -447,8 +447,8 @@ static void qmp_cooling_devices_remove(struct qmp *qmp)
  */
 struct qmp *qmp_get(struct device *dev)
 {
+	struct device_node *np __free(device_node) = NULL;
 	struct platform_device *pdev;
-	struct device_node *np;
 	struct qmp *qmp;
 
 	if (!dev || !dev->of_node)
@@ -459,7 +459,6 @@ struct qmp *qmp_get(struct device *dev)
 		return ERR_PTR(-ENODEV);
 
 	pdev = of_find_device_by_node(np);
-	of_node_put(np);
 	if (!pdev)
 		return ERR_PTR(-EINVAL);
 
