@@ -47,6 +47,7 @@ int snd_device_new(struct snd_card *card, enum snd_device_type type,
 	/* insert the entry in an incrementally sorted list */
 	list_for_each_prev(p, &card->devices) {
 		struct snd_device *pdev = list_entry(p, struct snd_device, list);
+
 		if ((unsigned int)pdev->type <= (unsigned int)type)
 			break;
 	}
@@ -130,7 +131,7 @@ EXPORT_SYMBOL_GPL(snd_device_disconnect);
 void snd_device_free(struct snd_card *card, void *device_data)
 {
 	struct snd_device *dev;
-	
+
 	if (snd_BUG_ON(!card || !device_data))
 		return;
 	dev = look_for_dev(card, device_data);
@@ -147,6 +148,7 @@ static int __snd_device_register(struct snd_device *dev)
 	if (dev->state == SNDRV_DEV_BUILD) {
 		if (dev->ops->dev_register) {
 			int err = dev->ops->dev_register(dev);
+
 			if (err < 0)
 				return err;
 		}
@@ -190,7 +192,7 @@ int snd_device_register_all(struct snd_card *card)
 {
 	struct snd_device *dev;
 	int err;
-	
+
 	if (snd_BUG_ON(!card))
 		return -ENXIO;
 	list_for_each_entry(dev, &card->devices, list) {
