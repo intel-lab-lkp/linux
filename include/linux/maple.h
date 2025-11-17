@@ -2,9 +2,8 @@
 #ifndef __LINUX_MAPLE_H
 #define __LINUX_MAPLE_H
 
+#include <linux/device.h>
 #include <mach/maple.h>
-
-struct device;
 
 /* Maple Bus command and response codes */
 enum maple_code {
