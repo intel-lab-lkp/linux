@@ -98,6 +98,7 @@ obj-$(CONFIG_LEDS_UPBOARD)		+= leds-upboard.o
 obj-$(CONFIG_LEDS_WM831X_STATUS)	+= leds-wm831x-status.o
 obj-$(CONFIG_LEDS_WM8350)		+= leds-wm8350.o
 obj-$(CONFIG_LEDS_WRAP)			+= leds-wrap.o
+obj-$(CONFIG_LEDS_AW91XX)		+= leds-aw91xxx.o
 
 # Kinetic ExpressWire Protocol
 obj-$(CONFIG_LEDS_EXPRESSWIRE)		+= leds-expresswire.o
