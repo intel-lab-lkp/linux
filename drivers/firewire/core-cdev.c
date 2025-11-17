@@ -935,7 +935,7 @@ static int ioctl_add_descriptor(struct client *client, union ioctl_arg *arg)
 
 	/* Access policy: Allow this ioctl only on local nodes' device files. */
 	if (!client->device->is_local)
-		return -ENOSYS;
+		return -EACCES;
 
 	if (a->length > 256)
 		return -EINVAL;
@@ -1628,7 +1628,7 @@ static int ioctl_send_phy_packet(struct client *client, union ioctl_arg *arg)
 
 	/* Access policy: Allow this ioctl only on local nodes' device files. */
 	if (!client->device->is_local)
-		return -ENOSYS;
+		return -EACCES;
 
 	e = kzalloc(sizeof(*e) + sizeof(a->data), GFP_KERNEL);
 	if (e == NULL)
@@ -1676,7 +1676,7 @@ static int ioctl_receive_phy_packets(struct client *client, union ioctl_arg *arg
 
 	/* Access policy: Allow this ioctl only on local nodes' device files. */
 	if (!client->device->is_local)
-		return -ENOSYS;
+		return -EACCES;
 
 	// NOTE: This can be without irq when we can guarantee that __fw_send_request() for local
 	// destination never runs in any type of IRQ context.

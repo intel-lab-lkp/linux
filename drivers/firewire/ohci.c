@@ -2982,7 +2982,7 @@ static struct fw_iso_context *ohci_allocate_iso_context(struct fw_card *card,
 
 		default:
 			index = -1;
-			ret = -ENOSYS;
+			ret = -EINVAL;
 		}
 
 		if (index < 0)
@@ -3434,7 +3434,7 @@ static int ohci_queue_iso(struct fw_iso_context *base,
 	case FW_ISO_CONTEXT_RECEIVE_MULTICHANNEL:
 		return queue_iso_buffer_fill(ctx, packet, buffer, payload);
 	default:
-		return -ENOSYS;
+		return -EINVAL;
 	}
 }
 
@@ -3465,7 +3465,7 @@ static int ohci_flush_iso_completions(struct fw_iso_context *base)
 				flush_ir_buffer_fill(ctx);
 			break;
 		default:
-			ret = -ENOSYS;
+			ret = -EINVAL;
 		}
 
 		clear_bit_unlock(0, &ctx->flushing_completions);
@@ -3550,7 +3550,7 @@ static int pci_probe(struct pci_dev *dev,
 
 	if (dev->vendor == PCI_VENDOR_ID_PINNACLE_SYSTEMS) {
 		dev_err(&dev->dev, "Pinnacle MovieBoard is not yet supported\n");
-		return -ENOSYS;
+		return -EOPNOTSUPP;
 	}
 
 	ohci = devres_alloc(release_ohci, sizeof(*ohci), GFP_KERNEL);

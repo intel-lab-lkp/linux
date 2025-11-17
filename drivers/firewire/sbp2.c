@@ -1496,7 +1496,7 @@ static int sbp2_scsi_sdev_init(struct scsi_device *sdev)
 
 	/* (Re-)Adding logical units via the SCSI stack is not supported. */
 	if (!lu)
-		return -ENOSYS;
+		return -EOPNOTSUPP;
 
 	sdev->allow_restart = 1;
 
