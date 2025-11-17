@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 OR Linux-OpenIB
 /* Copyright (c) 2015 - 2021 Intel Corporation */
 #include "main.h"
-#include <linux/net/intel/iidc_rdma_idpf.h>
+#include <linux/intel/iidc_rdma_idpf.h>
 
 MODULE_ALIAS("i40iw");
 MODULE_DESCRIPTION("Intel(R) Ethernet Protocol Driver for RDMA");
