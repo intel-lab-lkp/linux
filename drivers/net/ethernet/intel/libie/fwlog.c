@@ -4,7 +4,7 @@
 #include <linux/debugfs.h>
 #include <linux/export.h>
 #include <linux/fs.h>
-#include <linux/net/intel/libie/fwlog.h>
+#include <linux/intel/libie/fwlog.h>
 #include <linux/pci.h>
 #include <linux/random.h>
 #include <linux/vmalloc.h>
