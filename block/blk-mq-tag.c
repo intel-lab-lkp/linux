@@ -419,6 +419,24 @@ void blk_mq_all_tag_iter(struct blk_mq_tags *tags, blk_mq_rq_iter_fn *fn,
 	__blk_mq_all_tag_iter(tags, fn, priv, BT_TAG_ITER_STATIC_RQS);
 }
 
+static void __blk_mq_tagset_iter(struct blk_mq_tag_set *tagset,
+			blk_mq_rq_iter_fn *fn, void *priv, unsigned long flags)
+{
+	int i, nr_tags, srcu_idx;
+
+	srcu_idx = srcu_read_lock(&tagset->tags_srcu);
+
+	nr_tags = blk_mq_is_shared_tags(tagset->flags) ? 1 :
+		tagset->nr_hw_queues;
+
+	for (i = 0; i < nr_tags; i++) {
+		if (tagset->tags && tagset->tags[i])
+			__blk_mq_all_tag_iter(tagset->tags[i], fn, priv,
+					      flags);
+	}
+	srcu_read_unlock(&tagset->tags_srcu, srcu_idx);
+}
+
 /**
  * blk_mq_tagset_busy_iter - iterate over all started requests in a tag set
  * @tagset:	Tag set to iterate over.
@@ -434,19 +452,7 @@ void blk_mq_all_tag_iter(struct blk_mq_tags *tags, blk_mq_rq_iter_fn *fn,
 void blk_mq_tagset_busy_iter(struct blk_mq_tag_set *tagset,
 		blk_mq_rq_iter_fn *fn, void *priv)
 {
-	unsigned int flags = tagset->flags;
-	int i, nr_tags, srcu_idx;
-
-	srcu_idx = srcu_read_lock(&tagset->tags_srcu);
-
-	nr_tags = blk_mq_is_shared_tags(flags) ? 1 : tagset->nr_hw_queues;
-
-	for (i = 0; i < nr_tags; i++) {
-		if (tagset->tags && tagset->tags[i])
-			__blk_mq_all_tag_iter(tagset->tags[i], fn, priv,
-					      BT_TAG_ITER_STARTED);
-	}
-	srcu_read_unlock(&tagset->tags_srcu, srcu_idx);
+	__blk_mq_tagset_iter(tagset, fn, priv, BT_TAG_ITER_STARTED);
 }
 EXPORT_SYMBOL(blk_mq_tagset_busy_iter);
 
