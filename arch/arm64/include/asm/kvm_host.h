@@ -1654,7 +1654,8 @@ static __always_inline enum fgt_group_id __fgt_reg_to_group_id(enum vcpu_sysreg 
 
 #ifndef __KVM_NVHE_HYPERVISOR__
 struct kvm_iommu_ops;
-int kvm_iommu_register_driver(struct kvm_iommu_ops *hyp_ops);
+int kvm_iommu_register_driver(struct kvm_iommu_ops *hyp_ops, size_t pool_pages);
+size_t kvm_iommu_pages(void);
 #endif
 
 #endif /* __ARM64_KVM_HOST_H__ */

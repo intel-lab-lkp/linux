@@ -83,4 +83,11 @@ config PTDUMP_STAGE2_DEBUGFS
 
 	  If in doubt, say N.
 
+config IOMMU_POOL_PAGES
+	hex "Number of pages reserved for IOMMU pool"
+	depends on KVM && IOMMU_SUPPORT
+	default 0x0
+	help
+	  IOMMU pool is used with protected mode to allocated IOMMU drivers page tables.
+
 endif # VIRTUALIZATION
