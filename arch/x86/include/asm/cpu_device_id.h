@@ -52,6 +52,7 @@
 #define X86_CENTAUR_FAM6_C7_A		0xa
 #define X86_CENTAUR_FAM6_C7_D		0xd
 #define X86_CENTAUR_FAM6_NANO		0xf
+#define X86_CENTAUR_FAM6_CHA		0x47
 
 /* x86_cpu_id::flags */
 #define X86_CPU_ID_FLAG_ENTRY_VALID	BIT(0)

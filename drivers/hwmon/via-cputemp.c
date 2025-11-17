@@ -126,15 +126,13 @@ static int via_cputemp_probe(struct platform_device *pdev)
 		data->msr_temp = 0x1423;
 	} else {
 		switch (c->x86_model) {
-		case 0xA:
-			/* C7 A */
-		case 0xD:
-			/* C7 D */
+		case X86_CENTAUR_FAM6_C7_A:
+		case X86_CENTAUR_FAM6_C7_D:
 			data->msr_temp = 0x1169;
 			data->msr_vid = 0x198;
 			break;
-		case 0xF:
-			/* Nano */
+		case X86_CENTAUR_FAM6_NANO:
+		case X86_CENTAUR_FAM6_CHA:
 			data->msr_temp = 0x1423;
 			break;
 		default:
@@ -272,6 +270,7 @@ static const struct x86_cpu_id __initconst cputemp_ids[] = {
 	X86_MATCH_VENDOR_FAM_MODEL(CENTAUR, 6, X86_CENTAUR_FAM6_C7_A,	NULL),
 	X86_MATCH_VENDOR_FAM_MODEL(CENTAUR, 6, X86_CENTAUR_FAM6_C7_D,	NULL),
 	X86_MATCH_VENDOR_FAM_MODEL(CENTAUR, 6, X86_CENTAUR_FAM6_NANO,	NULL),
+	X86_MATCH_VENDOR_FAM_MODEL(CENTAUR, 6, X86_CENTAUR_FAM6_CHA,	NULL),
 	X86_MATCH_VENDOR_FAM_MODEL(CENTAUR, 7, X86_MODEL_ANY,		NULL),
 	{}
 };
