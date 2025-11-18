@@ -21,6 +21,17 @@
 
 #define NFSDBG_FACILITY		NFSDBG_PNFS
 
+/* Module parameters */
+unsigned int nfs4_pnfs_ds_grace_period = 300;
+module_param_named(nfs4_pnfs_ds_grace_period, nfs4_pnfs_ds_grace_period, uint, 0644);
+MODULE_PARM_DESC(nfs4_pnfs_ds_grace_period, "Grace period in seconds before destroying idle data servers (default 300)");
+EXPORT_SYMBOL_GPL(nfs4_pnfs_ds_grace_period);
+
+unsigned int nfs4_pnfs_ds_cleanup_interval = 300;
+module_param_named(nfs4_pnfs_ds_cleanup_interval, nfs4_pnfs_ds_cleanup_interval, uint, 0644);
+MODULE_PARM_DESC(nfs4_pnfs_ds_cleanup_interval, "Interval in seconds for data server cleanup work (default 300)");
+EXPORT_SYMBOL_GPL(nfs4_pnfs_ds_cleanup_interval);
+
 void pnfs_generic_rw_release(void *data)
 {
 	struct nfs_pgio_header *hdr = data;
@@ -604,15 +615,33 @@ _same_data_server_addrs_locked(const struct list_head *dsaddrs1,
 
 /*
  * Lookup DS by addresses.  nfs4_ds_cache_lock is held
+ * Check both active cache and hold cache
  */
 static struct nfs4_pnfs_ds *
-_data_server_lookup_locked(const struct nfs_net *nn, const struct list_head *dsaddrs)
+_data_server_lookup_locked(struct nfs_net *nn, const struct list_head *dsaddrs)
 {
 	struct nfs4_pnfs_ds *ds;
 
-	list_for_each_entry(ds, &nn->nfs4_data_server_cache, ds_node)
-		if (_same_data_server_addrs_locked(&ds->ds_addrs, dsaddrs))
+	/* First check active cache */
+	list_for_each_entry(ds, &nn->nfs4_data_server_cache, ds_node) {
+		if (_same_data_server_addrs_locked(&ds->ds_addrs, dsaddrs)) {
+			refcount_inc(&ds->ds_count);
+			ds->ds_last_access = jiffies;
 			return ds;
+		}
+	}
+
+	/* Check hold cache - if found, move back to active cache */
+	list_for_each_entry(ds, &nn->nfs4_data_server_hold_cache, ds_node) {
+		if (_same_data_server_addrs_locked(&ds->ds_addrs, dsaddrs)) {
+			dprintk("NFS: DS %s found in hold cache, moving back to active cache\n",
+				ds->ds_remotestr);
+			list_move(&ds->ds_node, &nn->nfs4_data_server_cache);
+			ds->ds_last_access = jiffies;
+			return ds;
+		}
+	}
+
 	return NULL;
 }
 
@@ -631,7 +660,7 @@ static void nfs4_pnfs_ds_addr_free(struct nfs4_pnfs_ds_addr *da)
 	kfree(da);
 }
 
-static void destroy_ds(struct nfs4_pnfs_ds *ds)
+void destroy_ds(struct nfs4_pnfs_ds *ds)
 {
 	struct nfs4_pnfs_ds_addr *da;
 
@@ -652,15 +681,143 @@ static void destroy_ds(struct nfs4_pnfs_ds *ds)
 	kfree(ds->ds_remotestr);
 	kfree(ds);
 }
+EXPORT_SYMBOL_GPL(destroy_ds);
+
+/* Forward declaration */
+static void nfs4_cleanup_ds_for_namespace(struct net *net);
+
+/*
+ * Initialize DS cleanup work for a namespace (called on first DS add)
+ */
+static void nfs4_init_ds_cleanup_work(struct nfs_net *nn)
+{
+	if (!nn->nfs4_data_server_cleanup_initialized) {
+		INIT_DELAYED_WORK(&nn->nfs4_data_server_cleanup_work,
+				  nfs4_pnfs_ds_cleanup_work);
+		schedule_delayed_work(&nn->nfs4_data_server_cleanup_work,
+				      nfs4_pnfs_ds_cleanup_interval * HZ);
+		/* Register callback so nfs.ko can call us during namespace cleanup */
+		nn->nfs4_data_server_cleanup_callback = nfs4_cleanup_ds_for_namespace;
+		nn->nfs4_data_server_cleanup_initialized = true;
+		dprintk("NFS: Initialized DS cleanup work for namespace (interval=%u seconds)\n",
+			nfs4_pnfs_ds_cleanup_interval);
+	}
+}
+
+/*
+ * Cleanup DS work and destroy all DS entries for a namespace
+ */
+static void nfs4_cleanup_ds_for_namespace(struct net *net)
+{
+	struct nfs_net *nn = net_generic(net, nfs_net_id);
+	struct nfs4_pnfs_ds *ds, *tmp;
+
+	if (!nn->nfs4_data_server_cleanup_initialized)
+		return;
+
+	dprintk("NFS: Cleaning up DS for namespace\n");
+	cancel_delayed_work_sync(&nn->nfs4_data_server_cleanup_work);
+
+	/* Clean up data servers in both caches */
+	spin_lock(&nn->nfs4_data_server_lock);
+	list_for_each_entry_safe(ds, tmp, &nn->nfs4_data_server_cache, ds_node) {
+		list_del_init(&ds->ds_node);
+		spin_unlock(&nn->nfs4_data_server_lock);
+		destroy_ds(ds);
+		spin_lock(&nn->nfs4_data_server_lock);
+	}
+	list_for_each_entry_safe(ds, tmp, &nn->nfs4_data_server_hold_cache, ds_node) {
+		list_del_init(&ds->ds_node);
+		spin_unlock(&nn->nfs4_data_server_lock);
+		destroy_ds(ds);
+		spin_lock(&nn->nfs4_data_server_lock);
+	}
+	spin_unlock(&nn->nfs4_data_server_lock);
+
+	/* Unregister callback */
+	nn->nfs4_data_server_cleanup_callback = NULL;
+	nn->nfs4_data_server_cleanup_initialized = false;
+}
+
+/*
+ * Periodic cleanup task to check hold cache and destroy expired DS entries
+ */
+void nfs4_pnfs_ds_cleanup_work(struct work_struct *work)
+{
+	struct nfs_net *nn = container_of(work, struct nfs_net,
+					  nfs4_data_server_cleanup_work.work);
+	struct nfs4_pnfs_ds *ds, *tmp;
+	LIST_HEAD(destroy_list);
+	unsigned long grace_period = nfs4_pnfs_ds_grace_period * HZ;
+	unsigned long now = jiffies;
+	int active_count = 0, hold_count = 0, expired_count = 0;
+
+	dprintk("NFS: DS cleanup work started for namespace (jiffies=%lu)\n", now);
+
+	spin_lock(&nn->nfs4_data_server_lock);
+
+	/* Count entries in active cache */
+	list_for_each_entry(ds, &nn->nfs4_data_server_cache, ds_node)
+		active_count++;
+
+	/* Process hold cache */
+	list_for_each_entry_safe(ds, tmp, &nn->nfs4_data_server_hold_cache, ds_node) {
+		unsigned long time_since_last_access = now - ds->ds_last_access;
+
+		hold_count++;
+		if (time_since_last_access >= grace_period) {
+			/* Grace period expired, move to destroy list */
+			dprintk("NFS: DS cleanup task destroying expired DS: %s (idle for %lu seconds)\n",
+				ds->ds_remotestr, time_since_last_access / HZ);
+			list_move(&ds->ds_node, &destroy_list);
+			expired_count++;
+		} else {
+			dprintk("NFS: DS %s in hold cache (idle for %lu seconds, %lu seconds remaining)\n",
+				ds->ds_remotestr, time_since_last_access / HZ,
+				(grace_period - time_since_last_access) / HZ);
+		}
+	}
+
+	spin_unlock(&nn->nfs4_data_server_lock);
+
+	dprintk("NFS: DS cleanup work: active_cache=%d, hold_cache=%d, expired=%d\n",
+		active_count, hold_count, expired_count);
+
+	/* Destroy DS entries outside of lock */
+	list_for_each_entry_safe(ds, tmp, &destroy_list, ds_node) {
+		list_del_init(&ds->ds_node);
+		destroy_ds(ds);
+	}
+
+	/* Reschedule cleanup task */
+	dprintk("NFS: DS cleanup work completed, rescheduling in %u seconds\n",
+		nfs4_pnfs_ds_cleanup_interval);
+	schedule_delayed_work(&nn->nfs4_data_server_cleanup_work,
+			      nfs4_pnfs_ds_cleanup_interval * HZ);
+}
+EXPORT_SYMBOL_GPL(nfs4_pnfs_ds_cleanup_work);
 
 void nfs4_pnfs_ds_put(struct nfs4_pnfs_ds *ds)
 {
 	struct nfs_net *nn = net_generic(ds->ds_net, nfs_net_id);
 
 	if (refcount_dec_and_lock(&ds->ds_count, &nn->nfs4_data_server_lock)) {
-		list_del_init(&ds->ds_node);
+		/* Update last access time */
+		ds->ds_last_access = jiffies;
+
+		dprintk("NFS: DS refcount reached 0 for %s, moving to hold cache\n",
+			ds->ds_remotestr);
+
+		/* Move to hold cache - cleanup work will check grace period */
+		refcount_set(&ds->ds_count, 1);
+		list_move(&ds->ds_node, &nn->nfs4_data_server_hold_cache);
 		spin_unlock(&nn->nfs4_data_server_lock);
-		destroy_ds(ds);
+		dprintk("NFS: DS %s moved to hold cache\n", ds->ds_remotestr);
+	} else {
+		/* Update last access time even when not moving to hold cache */
+		spin_lock(&nn->nfs4_data_server_lock);
+		ds->ds_last_access = jiffies;
+		spin_unlock(&nn->nfs4_data_server_lock);
 	}
 }
 EXPORT_SYMBOL_GPL(nfs4_pnfs_ds_put);
@@ -753,13 +910,16 @@ nfs4_pnfs_ds_add(const struct net *net, struct list_head *dsaddrs, gfp_t gfp_fla
 	} else {
 		kfree(remotestr);
 		kfree(ds);
-		refcount_inc(&tmp_ds->ds_count);
 		dprintk("%s data server %s found, inc'ed ds_count to %d\n",
 			__func__, tmp_ds->ds_remotestr,
 			refcount_read(&tmp_ds->ds_count));
 		ds = tmp_ds;
 	}
 	spin_unlock(&nn->nfs4_data_server_lock);
+
+	/* Initialize cleanup work on first DS add */
+	if (ds)
+		nfs4_init_ds_cleanup_work(nn);
 out:
 	return ds;
 }

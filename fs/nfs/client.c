@@ -1253,7 +1253,9 @@ void nfs_clients_init(struct net *net)
 #endif
 #if IS_ENABLED(CONFIG_NFS_V4_1)
 	INIT_LIST_HEAD(&nn->nfs4_data_server_cache);
+	INIT_LIST_HEAD(&nn->nfs4_data_server_hold_cache);
 	spin_lock_init(&nn->nfs4_data_server_lock);
+	/* Cleanup work will be initialized when pNFS is first used */
 #endif
 	spin_lock_init(&nn->nfs_client_lock);
 	nn->boot_time = ktime_get_real();
@@ -1267,12 +1269,19 @@ void nfs_clients_exit(struct net *net)
 {
 	struct nfs_net *nn = net_generic(net, nfs_net_id);
 
+#if IS_ENABLED(CONFIG_NFS_V4_1)
+	/* Clean up DS caches if pnfs was used - call via callback to avoid module dependency */
+	if (nn->nfs4_data_server_cleanup_callback)
+		nn->nfs4_data_server_cleanup_callback(net);
+#endif
+
 	nfs_netns_sysfs_destroy(nn);
 	nfs_cleanup_cb_ident_idr(net);
 	WARN_ON_ONCE(!list_empty(&nn->nfs_client_list));
 	WARN_ON_ONCE(!list_empty(&nn->nfs_volume_list));
 #if IS_ENABLED(CONFIG_NFS_V4_1)
 	WARN_ON_ONCE(!list_empty(&nn->nfs4_data_server_cache));
+	WARN_ON_ONCE(!list_empty(&nn->nfs4_data_server_hold_cache));
 #endif
 }
 

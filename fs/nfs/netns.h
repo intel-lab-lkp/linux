@@ -34,7 +34,11 @@ struct nfs_net {
 #endif /* CONFIG_NFS_V4 */
 #if IS_ENABLED(CONFIG_NFS_V4_1)
 	struct list_head nfs4_data_server_cache;
+	struct list_head nfs4_data_server_hold_cache;
 	spinlock_t nfs4_data_server_lock;
+	struct delayed_work nfs4_data_server_cleanup_work;
+	bool nfs4_data_server_cleanup_initialized;
+	void (*nfs4_data_server_cleanup_callback)(struct net *);
 #endif /* CONFIG_NFS_V4_1 */
 	struct nfs_netns_client *nfs_client;
 	spinlock_t nfs_client_lock;

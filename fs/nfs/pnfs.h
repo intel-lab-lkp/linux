@@ -65,6 +65,7 @@ struct nfs4_pnfs_ds {
 	refcount_t		ds_count;
 	unsigned long		ds_state;
 #define NFS4DS_CONNECTING	0	/* ds is establishing connection */
+	unsigned long		ds_last_access;	/* timestamp of last reference */
 };
 
 struct pnfs_layout_segment {
@@ -416,6 +417,13 @@ int pnfs_generic_commit_pagelist(struct inode *inode,
 int pnfs_generic_scan_commit_lists(struct nfs_commit_info *cinfo, int max);
 void pnfs_generic_write_commit_done(struct rpc_task *task, void *data);
 void nfs4_pnfs_ds_put(struct nfs4_pnfs_ds *ds);
+void nfs4_pnfs_ds_cleanup_work(struct work_struct *work);
+void destroy_ds(struct nfs4_pnfs_ds *ds);
+
+/* Module parameters for DS cache management */
+extern unsigned int nfs4_pnfs_ds_grace_period;
+extern unsigned int nfs4_pnfs_ds_cleanup_interval;
+
 struct nfs4_pnfs_ds *nfs4_pnfs_ds_add(const struct net *net,
 				      struct list_head *dsaddrs,
 				      gfp_t gfp_flags);
