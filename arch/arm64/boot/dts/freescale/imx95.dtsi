@@ -1774,9 +1774,9 @@
 			};
 		};
 
-		hsio_blk_ctl: syscon@4c0100c0 {
+		hsio_blk_ctl: syscon@4c010000 {
 			compatible = "nxp,imx95-hsio-blk-ctl", "syscon";
-			reg = <0x0 0x4c0100c0 0x0 0x1>;
+			reg = <0x0 0x4c010000 0x0 0x100>;
 			#clock-cells = <1>;
 			clocks = <&clk_sys100m>;
 			power-domains = <&scmi_devpd IMX95_PD_HSIO_TOP>;
@@ -1844,7 +1844,7 @@
 				 <&scmi_clk IMX95_CLK_HSIOPLL>,
 				 <&scmi_clk IMX95_CLK_HSIOPLL_VCO>,
 				 <&scmi_clk IMX95_CLK_HSIOPCIEAUX>,
-				 <&hsio_blk_ctl 0>;
+				 <&hsio_blk_ctl IMX95_CLK_HSIOMIX_PCIE_CLK_GATE>;
 			clock-names = "pcie", "pcie_bus", "pcie_phy", "pcie_aux", "ref";
 			assigned-clocks = <&scmi_clk IMX95_CLK_HSIOPLL_VCO>,
 					  <&scmi_clk IMX95_CLK_HSIOPLL>,
@@ -1919,7 +1919,7 @@
 				 <&scmi_clk IMX95_CLK_HSIOPLL>,
 				 <&scmi_clk IMX95_CLK_HSIOPLL_VCO>,
 				 <&scmi_clk IMX95_CLK_HSIOPCIEAUX>,
-				 <&hsio_blk_ctl 0>;
+				 <&hsio_blk_ctl IMX95_CLK_HSIOMIX_PCIE_CLK_GATE>;
 			clock-names = "pcie", "pcie_bus", "pcie_phy", "pcie_aux", "ref";
 			assigned-clocks = <&scmi_clk IMX95_CLK_HSIOPLL_VCO>,
 					  <&scmi_clk IMX95_CLK_HSIOPLL>,
