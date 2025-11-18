@@ -8,6 +8,8 @@
 
 #include "stm32mp215.dtsi"
 #include "stm32mp21xf.dtsi"
+#include "stm32mp21-pinctrl.dtsi"
+#include "stm32mp21xxan-pinctrl.dtsi"
 
 / {
 	model = "STMicroelectronics STM32MP215F-DK Discovery Board";
@@ -45,5 +47,20 @@
 };
 
 &usart2 {
+	bootph-all;
+	pinctrl-names = "default", "idle", "sleep";
+	pinctrl-0 = <&usart2_pins_a>;
+	pinctrl-1 = <&usart2_idle_pins_a>;
+	pinctrl-2 = <&usart2_sleep_pins_a>;
 	status = "okay";
+};
+
+&usart2_pins_a {
+	bootph-all;
+	pins1 {
+		bootph-all;
+	};
+	pins2 {
+		bootph-all;
+	};
 };
