@@ -20,6 +20,7 @@
 #include <linux/pagemap.h>
 #include <linux/ptrace.h>
 #include <linux/security.h>
+#include <linux/binfmts.h>
 #include <linux/signal.h>
 #include <linux/uio.h>
 #include <linux/audit.h>
@@ -285,6 +286,11 @@ static int __ptrace_may_access(struct task_struct *task, unsigned int mode)
 		return -EPERM;
 	}
 
+	if ((mode & PTRACE_MODE_BPRMCREDS) && !task->signal->exec_bprm) {
+		WARN(1, "denying ptrace access check with PTRACE_MODE_BPRMCREDS\n");
+		return -EPERM;
+	}
+
 	/* May we inspect the given task?
 	 * This check is used both for attaching with ptrace
 	 * and for allowing access to sensitive information in /proc.
@@ -313,7 +319,10 @@ static int __ptrace_may_access(struct task_struct *task, unsigned int mode)
 		caller_uid = cred->uid;
 		caller_gid = cred->gid;
 	}
-	tcred = __task_cred(task);
+	if (mode & PTRACE_MODE_BPRMCREDS)
+		tcred = task->signal->exec_bprm->cred;
+	else
+		tcred = __task_cred(task);
 	if (uid_eq(caller_uid, tcred->euid) &&
 	    uid_eq(caller_uid, tcred->suid) &&
 	    uid_eq(caller_uid, tcred->uid)  &&
@@ -337,7 +346,10 @@ ok:
 	 * Pairs with a write barrier in commit_creds().
 	 */
 	smp_rmb();
-	mm = task->mm;
+	if (mode & PTRACE_MODE_BPRMCREDS)
+		mm = task->signal->exec_bprm->mm;
+	else
+		mm = task->mm;
 	if (mm &&
 	    ((get_dumpable(mm) != SUID_DUMP_USER) &&
 	     !ptrace_has_cap(mm->user_ns, mode)))
@@ -451,6 +463,14 @@ static int ptrace_attach(struct task_struct *task, long request,
 			retval = __ptrace_may_access(task, PTRACE_MODE_ATTACH_REALCREDS);
 			if (retval)
 				return retval;
+
+			if (unlikely(task == task->signal->group_exec_task)) {
+				retval = __ptrace_may_access(task,
+							     PTRACE_MODE_ATTACH_REALCREDS |
+							     PTRACE_MODE_BPRMCREDS);
+				if (retval)
+					return retval;
+			}
 		}
 
 		scoped_guard (write_lock_irq, &tasklist_lock) {
@@ -488,6 +508,10 @@ static int ptrace_traceme(void)
 {
 	int ret = -EPERM;
 
+	if (mutex_lock_interruptible(&current->signal->cred_guard_mutex))
+		return -ERESTARTNOINTR;
+
+	/* It is not necessary to check current->signal->exec_bprm here. */
 	write_lock_irq(&tasklist_lock);
 	/* Are we already being traced? */
 	if (!current->ptrace) {
@@ -503,6 +527,7 @@ static int ptrace_traceme(void)
 		}
 	}
 	write_unlock_irq(&tasklist_lock);
+	mutex_unlock(&current->signal->cred_guard_mutex);
 
 	return ret;
 }
