@@ -203,6 +203,9 @@ YNL_GEN_PROGS := netlink-dumps
 TEST_GEN_FILES += $(YNL_GEN_FILES)
 TEST_GEN_PROGS += $(YNL_GEN_PROGS)
 
+TEST_PROGS += ipvtap_macnat_test.sh
+TEST_FILES += ipvtap_macnat_bridge.py
+
 TEST_GEN_FILES += $(patsubst %.c,%.o,$(wildcard *.bpf.c))
 
 TEST_INCLUDES := forwarding/lib.sh
