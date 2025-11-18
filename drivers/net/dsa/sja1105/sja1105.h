@@ -9,6 +9,7 @@
 #include <linux/timecounter.h>
 #include <linux/dsa/sja1105.h>
 #include <linux/dsa/8021q.h>
+#include <linux/spi/spi.h>
 #include <net/dsa.h>
 #include <linux/mutex.h>
 #include <linux/regmap.h>
