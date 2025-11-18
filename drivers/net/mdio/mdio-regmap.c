@@ -19,6 +19,7 @@
 
 struct mdio_regmap_priv {
 	struct regmap *regmap;
+	unsigned int base;
 	u8 valid_addr;
 };
 
@@ -31,7 +32,7 @@ static int mdio_regmap_read_c22(struct mii_bus *bus, int addr, int regnum)
 	if (ctx->valid_addr != addr)
 		return -ENODEV;
 
-	ret = regmap_read(ctx->regmap, regnum, &val);
+	ret = regmap_read(ctx->regmap, ctx->base + regnum, &val);
 	if (ret < 0)
 		return ret;
 
@@ -46,7 +47,7 @@ static int mdio_regmap_write_c22(struct mii_bus *bus, int addr, int regnum,
 	if (ctx->valid_addr != addr)
 		return -ENODEV;
 
-	return regmap_write(ctx->regmap, regnum, val);
+	return regmap_write(ctx->regmap, ctx->base + regnum, val);
 }
 
 struct mii_bus *devm_mdio_regmap_register(struct device *dev,
@@ -66,6 +67,8 @@ struct mii_bus *devm_mdio_regmap_register(struct device *dev,
 	mr = mii->priv;
 	mr->regmap = config->regmap;
 	mr->valid_addr = config->valid_addr;
+	if (config->resource)
+		mr->base = config->resource->start;
 
 	mii->name = DRV_NAME;
 	strscpy(mii->id, config->name, MII_BUS_ID_SIZE);
