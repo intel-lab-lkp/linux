@@ -60,6 +60,8 @@ struct print_state {
 	bool metricgroups;
 	/** @exclude_abi: Exclude PMUs with types less than PERF_TYPE_MAX except PERF_TYPE_RAW. */
 	bool exclude_abi;
+	/** @need_sep: Should a separator be printed prior to the next item? (for JSON) */
+	bool need_sep;
 	/** @last_topic: The last printed event topic. */
 	char *last_topic;
 	/** @last_metricgroups: The last printed metric group. */
@@ -368,7 +370,7 @@ static void json_print_event(void *ps, const char *topic,
 			     const char *desc, const char *long_desc,
 			     const char *encoding_desc)
 {
-	struct json_print_state *print_state = ps;
+	struct print_state *print_state = ps;
 	bool need_sep = false;
 	FILE *fp = print_state->fp;
 	struct strbuf buf;
@@ -444,7 +446,7 @@ static void json_print_metric(void *ps __maybe_unused, const char *group,
 			      const char *threshold, const char *unit,
 			      const char *pmu_name)
 {
-	struct json_print_state *print_state = ps;
+	struct print_state *print_state = ps;
 	bool need_sep = false;
 	FILE *fp = print_state->fp;
 	struct strbuf buf;
@@ -521,9 +523,6 @@ int cmd_list(int argc, const char **argv)
 		.fp = stdout,
 		.desc = true,
 	};
-	struct print_state json_ps = {
-		.fp = stdout,
-	};
 	void *ps = &default_ps;
 	struct print_callbacks print_cb = {
 		.print_start = default_print_start,
@@ -574,7 +573,6 @@ int cmd_list(int argc, const char **argv)
 
 	if (output_path) {
 		default_ps.fp = fopen(output_path, "w");
-		json_ps.fp = default_ps.fp;
 	}
 
 	setup_pager();
@@ -590,7 +588,7 @@ int cmd_list(int argc, const char **argv)
 			.print_metric = json_print_metric,
 			.skip_duplicate_pmus = json_skip_duplicate_pmus,
 		};
-		ps = &json_ps;
+		ps = &default_ps;
 	} else {
 		default_ps.last_topic = strdup("");
 		assert(default_ps.last_topic);
