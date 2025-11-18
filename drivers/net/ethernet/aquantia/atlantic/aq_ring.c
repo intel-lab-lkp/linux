@@ -538,6 +538,7 @@ static int __aq_ring_rx_clean(struct aq_ring_s *self, struct napi_struct *napi,
 		bool is_ptp_ring = aq_ptp_ring(self->aq_nic, self);
 		struct aq_ring_buff_s *buff_ = NULL;
 		struct sk_buff *skb = NULL;
+		unsigned int frag_cnt = 0U;
 		unsigned int next_ = 0U;
 		unsigned int i = 0U;
 		u16 hdr_len;
@@ -546,7 +547,6 @@ static int __aq_ring_rx_clean(struct aq_ring_s *self, struct napi_struct *napi,
 			continue;
 
 		if (!buff->is_eop) {
-			unsigned int frag_cnt = 0U;
 			buff_ = buff;
 			do {
 				bool is_rsc_completed = true;
@@ -627,6 +627,30 @@ static int __aq_ring_rx_clean(struct aq_ring_s *self, struct napi_struct *napi,
 			hdr_len = eth_get_headlen(skb->dev,
 						  aq_buf_vaddr(&buff->rxdata),
 						  AQ_CFG_RX_HDR_SIZE);
+
+		/* Check if total fragments exceed MAX_SKB_FRAGS limit.
+		 * The total fragment count consists of:
+		 * - One fragment from the first buffer if (buff->len > hdr_len)
+		 * - frag_cnt fragments from subsequent descriptors
+		 * If the total exceeds MAX_SKB_FRAGS (17), we must drop the
+		 * packet to prevent an out-of-bounds write in skb_add_rx_frag().
+		 */
+		if (unlikely(((buff->len - hdr_len) > 0 ? 1 : 0) + frag_cnt > MAX_SKB_FRAGS)) {
+			/* Drop packet: fragment count exceeds kernel limit */
+			if (!buff->is_eop) {
+				buff_ = buff;
+				do {
+					next_ = buff_->next;
+					buff_ = &self->buff_ring[next_];
+					buff_->is_cleaned = 1;
+				} while (!buff_->is_eop);
+			}
+			u64_stats_update_begin(&self->stats.rx.syncp);
+			++self->stats.rx.errors;
+			u64_stats_update_end(&self->stats.rx.syncp);
+			dev_kfree_skb_any(skb);
+			continue;
+		}
 
 		memcpy(__skb_put(skb, hdr_len), aq_buf_vaddr(&buff->rxdata),
 		       ALIGN(hdr_len, sizeof(long)));
