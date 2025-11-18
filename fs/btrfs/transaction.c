@@ -347,7 +347,7 @@ loop:
 	extwriter_counter_init(cur_trans, type);
 	init_waitqueue_head(&cur_trans->writer_wait);
 	init_waitqueue_head(&cur_trans->commit_wait);
-	cur_trans->state = TRANS_STATE_RUNNING;
+	WRITE_ONCE(cur_trans->state, TRANS_STATE_RUNNING);
 	/*
 	 * One for this trans handle, one so it will live on until we
 	 * commit the transaction.
@@ -511,6 +511,8 @@ int btrfs_record_root_in_trans(struct btrfs_trans_handle *trans,
 
 static inline int is_transaction_blocked(struct btrfs_transaction *trans)
 {
+	lockdep_assert_held(&trans->fs_info->trans_lock);
+
 	return (trans->state >= TRANS_STATE_COMMIT_START &&
 		trans->state < TRANS_STATE_UNBLOCKED &&
 		!TRANS_ABORTED(trans));
@@ -532,7 +534,7 @@ static void wait_current_trans(struct btrfs_fs_info *fs_info)
 
 		btrfs_might_wait_for_state(fs_info, BTRFS_LOCKDEP_TRANS_UNBLOCKED);
 		wait_event(fs_info->transaction_wait,
-			   cur_trans->state >= TRANS_STATE_UNBLOCKED ||
+			   READ_ONCE(cur_trans->state) >= TRANS_STATE_UNBLOCKED ||
 			   TRANS_ABORTED(cur_trans));
 		btrfs_put_transaction(cur_trans);
 	} else {
@@ -728,7 +730,7 @@ again:
 	btrfs_init_metadata_block_rsv(fs_info, &h->delayed_rsv, BTRFS_BLOCK_RSV_DELOPS);
 
 	smp_mb();
-	if (cur_trans->state >= TRANS_STATE_COMMIT_START &&
+	if (READ_ONCE(cur_trans->state) >= TRANS_STATE_COMMIT_START &&
 	    may_wait_transaction(fs_info, type)) {
 		current->journal_info = h;
 		btrfs_commit_transaction(h);
@@ -914,7 +916,7 @@ static noinline void wait_for_commit(struct btrfs_transaction *commit,
 		btrfs_might_wait_for_state(fs_info, BTRFS_LOCKDEP_TRANS_SUPER_COMMITTED);
 
 	while (1) {
-		wait_event(commit->commit_wait, commit->state >= min_state);
+		wait_event(commit->commit_wait, READ_ONCE(commit->state) >= min_state);
 		if (put)
 			btrfs_put_transaction(commit);
 
@@ -1010,7 +1012,7 @@ bool btrfs_should_end_transaction(struct btrfs_trans_handle *trans)
 {
 	struct btrfs_transaction *cur_trans = trans->transaction;
 
-	if (cur_trans->state >= TRANS_STATE_COMMIT_START ||
+	if (READ_ONCE(cur_trans->state) >= TRANS_STATE_COMMIT_START ||
 	    test_bit(BTRFS_DELAYED_REFS_FLUSHING, &cur_trans->delayed_refs.flags))
 		return true;
 
@@ -2002,7 +2004,7 @@ void btrfs_commit_transaction_async(struct btrfs_trans_handle *trans)
 	 */
 	btrfs_might_wait_for_state(fs_info, BTRFS_LOCKDEP_TRANS_COMMIT_PREP);
 	wait_event(fs_info->transaction_blocked_wait,
-		   cur_trans->state >= TRANS_STATE_COMMIT_START ||
+		   READ_ONCE(cur_trans->state) >= TRANS_STATE_COMMIT_START ||
 		   TRANS_ABORTED(cur_trans));
 	btrfs_put_transaction(cur_trans);
 }
@@ -2045,7 +2047,7 @@ static void cleanup_transaction(struct btrfs_trans_handle *trans, int err)
 	BUG_ON(list_empty(&cur_trans->list));
 
 	if (cur_trans == fs_info->running_transaction) {
-		cur_trans->state = TRANS_STATE_COMMIT_DOING;
+		WRITE_ONCE(cur_trans->state, TRANS_STATE_COMMIT_DOING);
 		spin_unlock(&fs_info->trans_lock);
 
 		/*
@@ -2287,7 +2289,7 @@ int btrfs_commit_transaction(struct btrfs_trans_handle *trans)
 		return ret;
 	}
 
-	cur_trans->state = TRANS_STATE_COMMIT_PREP;
+	WRITE_ONCE(cur_trans->state, TRANS_STATE_COMMIT_PREP);
 	wake_up(&fs_info->transaction_blocked_wait);
 	btrfs_trans_state_lockdep_release(fs_info, BTRFS_LOCKDEP_TRANS_COMMIT_PREP);
 
@@ -2325,7 +2327,7 @@ int btrfs_commit_transaction(struct btrfs_trans_handle *trans)
 		}
 	}
 
-	cur_trans->state = TRANS_STATE_COMMIT_START;
+	WRITE_ONCE(cur_trans->state, TRANS_STATE_COMMIT_START);
 	wake_up(&fs_info->transaction_blocked_wait);
 	spin_unlock(&fs_info->trans_lock);
 
@@ -2380,7 +2382,7 @@ int btrfs_commit_transaction(struct btrfs_trans_handle *trans)
 	 */
 	spin_lock(&fs_info->trans_lock);
 	add_pending_snapshot(trans);
-	cur_trans->state = TRANS_STATE_COMMIT_DOING;
+	WRITE_ONCE(cur_trans->state, TRANS_STATE_COMMIT_DOING);
 	spin_unlock(&fs_info->trans_lock);
 
 	/*
@@ -2535,7 +2537,7 @@ int btrfs_commit_transaction(struct btrfs_trans_handle *trans)
 	mutex_lock(&fs_info->tree_log_mutex);
 
 	spin_lock(&fs_info->trans_lock);
-	cur_trans->state = TRANS_STATE_UNBLOCKED;
+	WRITE_ONCE(cur_trans->state, TRANS_STATE_UNBLOCKED);
 	fs_info->running_transaction = NULL;
 	spin_unlock(&fs_info->trans_lock);
 	mutex_unlock(&fs_info->reloc_mutex);
@@ -2570,7 +2572,7 @@ int btrfs_commit_transaction(struct btrfs_trans_handle *trans)
 	 * We needn't acquire the lock here because there is no other task
 	 * which can change it.
 	 */
-	cur_trans->state = TRANS_STATE_SUPER_COMMITTED;
+	WRITE_ONCE(cur_trans->state, TRANS_STATE_SUPER_COMMITTED);
 	wake_up(&cur_trans->commit_wait);
 	btrfs_trans_state_lockdep_release(fs_info, BTRFS_LOCKDEP_TRANS_SUPER_COMMITTED);
 
@@ -2586,7 +2588,7 @@ int btrfs_commit_transaction(struct btrfs_trans_handle *trans)
 	 * We needn't acquire the lock here because there is no other task
 	 * which can change it.
 	 */
-	cur_trans->state = TRANS_STATE_COMPLETED;
+	WRITE_ONCE(cur_trans->state, TRANS_STATE_COMPLETED);
 	wake_up(&cur_trans->commit_wait);
 	btrfs_trans_state_lockdep_release(fs_info, BTRFS_LOCKDEP_TRANS_COMPLETED);
 

@@ -4792,17 +4792,17 @@ void btrfs_cleanup_one_transaction(struct btrfs_transaction *cur_trans)
 
 	btrfs_destroy_delayed_refs(cur_trans);
 
-	cur_trans->state = TRANS_STATE_COMMIT_START;
+	WRITE_ONCE(cur_trans->state, TRANS_STATE_COMMIT_START);
 	wake_up(&fs_info->transaction_blocked_wait);
 
-	cur_trans->state = TRANS_STATE_UNBLOCKED;
+	WRITE_ONCE(cur_trans->state, TRANS_STATE_UNBLOCKED);
 	wake_up(&fs_info->transaction_wait);
 
 	btrfs_destroy_marked_extents(fs_info, &cur_trans->dirty_pages,
 				     EXTENT_DIRTY);
 	btrfs_destroy_pinned_extent(fs_info, &cur_trans->pinned_extents);
 
-	cur_trans->state =TRANS_STATE_COMPLETED;
+	WRITE_ONCE(cur_trans->state, TRANS_STATE_COMPLETED);
 	wake_up(&cur_trans->commit_wait);
 }
 
@@ -4825,7 +4825,7 @@ static int btrfs_cleanup_transaction(struct btrfs_fs_info *fs_info)
 			continue;
 		}
 		if (t == fs_info->running_transaction) {
-			t->state = TRANS_STATE_COMMIT_DOING;
+			WRITE_ONCE(t->state, TRANS_STATE_COMMIT_DOING);
 			spin_unlock(&fs_info->trans_lock);
 			/*
 			 * We wait for 0 num_writers since we don't hold a trans

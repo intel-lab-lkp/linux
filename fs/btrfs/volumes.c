@@ -7837,7 +7837,8 @@ void btrfs_commit_device_sizes(struct btrfs_transaction *trans)
 {
 	struct btrfs_device *curr, *next;
 
-	ASSERT(trans->state == TRANS_STATE_COMMIT_DOING, "state=%d" , trans->state);
+	ASSERT(READ_ONCE(trans->state) == TRANS_STATE_COMMIT_DOING, "state=%d",
+	       READ_ONCE(trans->state));
 
 	if (list_empty(&trans->dev_update_list))
 		return;

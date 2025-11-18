@@ -3108,7 +3108,7 @@ int btrfs_run_qgroups(struct btrfs_trans_handle *trans)
 	 * are holding the qgroup_ioctl_lock, otherwise we can race with a quota
 	 * disable operation (ioctl) and access a freed quota root.
 	 */
-	if (trans->transaction->state != TRANS_STATE_COMMIT_DOING)
+	if (READ_ONCE(trans->transaction->state) != TRANS_STATE_COMMIT_DOING)
 		lockdep_assert_held(&fs_info->qgroup_ioctl_lock);
 
 	if (!fs_info->quota_root)
