@@ -11688,6 +11688,9 @@ static int nft_validate_register_store(const struct nft_ctx *ctx,
 		if (data != NULL &&
 		    (data->verdict.code == NFT_GOTO ||
 		     data->verdict.code == NFT_JUMP)) {
+			if (!nft_is_base_chain(ctx->chain))
+				break;
+
 			err = nft_chain_validate(ctx, data->verdict.chain);
 			if (err < 0)
 				return err;
