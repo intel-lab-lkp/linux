@@ -27,6 +27,7 @@
 #include <linux/syscalls.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
+#include <linux/net.h>
 #include <uapi/linux/landlock.h>
 
 #include "cred.h"
@@ -34,6 +35,7 @@
 #include "fs.h"
 #include "limits.h"
 #include "net.h"
+#include "socket.h"
 #include "ruleset.h"
 #include "setup.h"
 
@@ -92,7 +94,8 @@ static void build_check_abi(void)
 	struct landlock_ruleset_attr ruleset_attr;
 	struct landlock_path_beneath_attr path_beneath_attr;
 	struct landlock_net_port_attr net_port_attr;
-	size_t ruleset_size, path_beneath_size, net_port_size;
+	struct landlock_socket_attr socket_attr;
+	size_t ruleset_size, path_beneath_size, net_port_size, socket_size;
 
 	/*
 	 * For each user space ABI structures, first checks that there is no
@@ -101,9 +104,10 @@ static void build_check_abi(void)
 	 */
 	ruleset_size = sizeof(ruleset_attr.handled_access_fs);
 	ruleset_size += sizeof(ruleset_attr.handled_access_net);
+	ruleset_size += sizeof(ruleset_attr.handled_access_socket);
 	ruleset_size += sizeof(ruleset_attr.scoped);
 	BUILD_BUG_ON(sizeof(ruleset_attr) != ruleset_size);
-	BUILD_BUG_ON(sizeof(ruleset_attr) != 24);
+	BUILD_BUG_ON(sizeof(ruleset_attr) != 32);
 
 	path_beneath_size = sizeof(path_beneath_attr.allowed_access);
 	path_beneath_size += sizeof(path_beneath_attr.parent_fd);
@@ -114,6 +118,13 @@ static void build_check_abi(void)
 	net_port_size += sizeof(net_port_attr.port);
 	BUILD_BUG_ON(sizeof(net_port_attr) != net_port_size);
 	BUILD_BUG_ON(sizeof(net_port_attr) != 16);
+
+	socket_size = sizeof(socket_attr.allowed_access);
+	socket_size += sizeof(socket_attr.family);
+	socket_size += sizeof(socket_attr.type);
+	socket_size += sizeof(socket_attr.protocol);
+	BUILD_BUG_ON(sizeof(socket_attr) != socket_size);
+	BUILD_BUG_ON(sizeof(socket_attr) != 20);
 }
 
 /* Ruleset handling */
@@ -161,7 +172,7 @@ static const struct file_operations ruleset_fops = {
  * Documentation/userspace-api/landlock.rst should be updated to reflect the
  * UAPI change.
  */
-const int landlock_abi_version = 7;
+const int landlock_abi_version = 8;
 
 /**
  * sys_landlock_create_ruleset - Create a new ruleset
@@ -237,6 +248,11 @@ SYSCALL_DEFINE3(landlock_create_ruleset,
 	    LANDLOCK_MASK_ACCESS_NET)
 		return -EINVAL;
 
+	/* Checks socket content (and 32-bits cast). */
+	if ((ruleset_attr.handled_access_socket |
+	     LANDLOCK_MASK_ACCESS_SOCKET) != LANDLOCK_MASK_ACCESS_SOCKET)
+		return -EINVAL;
+
 	/* Checks IPC scoping content (and 32-bits cast). */
 	if ((ruleset_attr.scoped | LANDLOCK_MASK_SCOPE) != LANDLOCK_MASK_SCOPE)
 		return -EINVAL;
@@ -244,6 +260,7 @@ SYSCALL_DEFINE3(landlock_create_ruleset,
 	/* Checks arguments and transforms to kernel struct. */
 	ruleset = landlock_create_ruleset(ruleset_attr.handled_access_fs,
 					  ruleset_attr.handled_access_net,
+					  ruleset_attr.handled_access_socket,
 					  ruleset_attr.scoped);
 	if (IS_ERR(ruleset))
 		return PTR_ERR(ruleset);
@@ -383,6 +400,40 @@ static int add_rule_net_port(struct landlock_ruleset *ruleset,
 					net_port_attr.allowed_access);
 }
 
+static int add_rule_socket(struct landlock_ruleset *ruleset,
+			   const void __user *const rule_attr)
+{
+	struct landlock_socket_attr socket_attr;
+	int res;
+	access_mask_t mask;
+	s32 family, type, protocol;
+
+	/* Copies raw user space buffer. */
+	res = copy_from_user(&socket_attr, rule_attr, sizeof(socket_attr));
+	if (res)
+		return -EFAULT;
+
+	/*
+	 * Informs about useless rule: empty allowed_access (i.e. deny rules)
+	 * are ignored by socket actions.
+	 */
+	if (!socket_attr.allowed_access)
+		return -ENOMSG;
+
+	/* Checks that allowed_access matches the @ruleset constraints. */
+	mask = landlock_get_socket_access_mask(ruleset, 0);
+	if ((socket_attr.allowed_access | mask) != mask)
+		return -EINVAL;
+
+	family = socket_attr.family;
+	type = socket_attr.type;
+	protocol = socket_attr.protocol;
+
+	/* Imports the new rule. */
+	return landlock_append_socket_rule(ruleset, family, type, protocol,
+					   socket_attr.allowed_access);
+}
+
 /**
  * sys_landlock_add_rule - Add a new rule to a ruleset
  *
@@ -407,6 +458,8 @@ static int add_rule_net_port(struct landlock_ruleset *ruleset,
  *   &landlock_net_port_attr.allowed_access is not a subset of the ruleset
  *   handled accesses)
  * - %EINVAL: &landlock_net_port_attr.port is greater than 65535;
+ * - %EINVAL: &landlock_socket_attr.{family, type} are greater than 254 or
+ *   &landlock_socket_attr.protocol is greater than 65534;
  * - %ENOMSG: Empty accesses (e.g. &landlock_path_beneath_attr.allowed_access is
  *   0);
  * - %EBADF: @ruleset_fd is not a file descriptor for the current thread, or a
@@ -439,6 +492,8 @@ SYSCALL_DEFINE4(landlock_add_rule, const int, ruleset_fd,
 		return add_rule_path_beneath(ruleset, rule_attr);
 	case LANDLOCK_RULE_NET_PORT:
 		return add_rule_net_port(ruleset, rule_attr);
+	case LANDLOCK_RULE_SOCKET:
+		return add_rule_socket(ruleset, rule_attr);
 	default:
 		return -EINVAL;
 	}

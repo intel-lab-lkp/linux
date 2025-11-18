@@ -45,6 +45,7 @@ static struct landlock_ruleset *create_ruleset(const u32 num_layers)
 #if IS_ENABLED(CONFIG_INET)
 	new_ruleset->root_net_port = RB_ROOT;
 #endif /* IS_ENABLED(CONFIG_INET) */
+	new_ruleset->root_socket = RB_ROOT;
 
 	new_ruleset->num_layers = num_layers;
 	/*
@@ -55,15 +56,15 @@ static struct landlock_ruleset *create_ruleset(const u32 num_layers)
 	return new_ruleset;
 }
 
-struct landlock_ruleset *
-landlock_create_ruleset(const access_mask_t fs_access_mask,
-			const access_mask_t net_access_mask,
-			const access_mask_t scope_mask)
+struct landlock_ruleset *landlock_create_ruleset(
+	const access_mask_t fs_access_mask, const access_mask_t net_access_mask,
+	const access_mask_t socket_access_mask, const access_mask_t scope_mask)
 {
 	struct landlock_ruleset *new_ruleset;
 
 	/* Informs about useless ruleset. */
-	if (!fs_access_mask && !net_access_mask && !scope_mask)
+	if (!fs_access_mask && !net_access_mask && !socket_access_mask &&
+	    !scope_mask)
 		return ERR_PTR(-ENOMSG);
 	new_ruleset = create_ruleset(1);
 	if (IS_ERR(new_ruleset))
@@ -72,6 +73,9 @@ landlock_create_ruleset(const access_mask_t fs_access_mask,
 		landlock_add_fs_access_mask(new_ruleset, fs_access_mask, 0);
 	if (net_access_mask)
 		landlock_add_net_access_mask(new_ruleset, net_access_mask, 0);
+	if (socket_access_mask)
+		landlock_add_socket_access_mask(new_ruleset, socket_access_mask,
+						0);
 	if (scope_mask)
 		landlock_add_scope_mask(new_ruleset, scope_mask, 0);
 	return new_ruleset;
@@ -101,6 +105,8 @@ static bool is_object_pointer(const enum landlock_key_type key_type)
 		return false;
 #endif /* IS_ENABLED(CONFIG_INET) */
 
+	case LANDLOCK_KEY_SOCKET:
+		return false;
 	default:
 		WARN_ON_ONCE(1);
 		return false;
@@ -158,6 +164,8 @@ static struct rb_root *get_root(struct landlock_ruleset *const ruleset,
 		return &ruleset->root_net_port;
 #endif /* IS_ENABLED(CONFIG_INET) */
 
+	case LANDLOCK_KEY_SOCKET:
+		return &ruleset->root_socket;
 	default:
 		WARN_ON_ONCE(1);
 		return ERR_PTR(-EINVAL);
@@ -396,6 +404,9 @@ static int merge_ruleset(struct landlock_ruleset *const dst,
 		goto out_unlock;
 #endif /* IS_ENABLED(CONFIG_INET) */
 
+	err = merge_tree(dst, src, LANDLOCK_KEY_SOCKET);
+	if (err)
+		goto out_unlock;
 out_unlock:
 	mutex_unlock(&src->lock);
 	mutex_unlock(&dst->lock);
@@ -459,6 +470,11 @@ static int inherit_ruleset(struct landlock_ruleset *const parent,
 		goto out_unlock;
 #endif /* IS_ENABLED(CONFIG_INET) */
 
+	/* Copies the @parent socket tree. */
+	err = inherit_tree(parent, child, LANDLOCK_KEY_SOCKET);
+	if (err)
+		goto out_unlock;
+
 	if (WARN_ON_ONCE(child->num_layers <= parent->num_layers)) {
 		err = -EINVAL;
 		goto out_unlock;
@@ -495,6 +511,9 @@ static void free_ruleset(struct landlock_ruleset *const ruleset)
 		free_rule(freeme, LANDLOCK_KEY_NET_PORT);
 #endif /* IS_ENABLED(CONFIG_INET) */
 
+	rbtree_postorder_for_each_entry_safe(freeme, next,
+					     &ruleset->root_socket, node)
+		free_rule(freeme, LANDLOCK_KEY_SOCKET);
 	landlock_put_hierarchy(ruleset->hierarchy);
 	kfree(ruleset);
 }
@@ -679,8 +698,8 @@ get_access_mask_t(const struct landlock_ruleset *const ruleset,
  *
  * @domain: The domain that defines the current restrictions.
  * @access_request: The requested access rights to check.
- * @layer_masks: It must contain %LANDLOCK_NUM_ACCESS_FS or
- * %LANDLOCK_NUM_ACCESS_NET elements according to @key_type.
+ * @layer_masks: It must contain %LANDLOCK_NUM_ACCESS_{FS,NET,SOCKET}
+ * elements according to @key_type.
  * @key_type: The key type to switch between access masks of different types.
  *
  * Returns: An access mask where each access right bit is set which is handled
@@ -709,6 +728,10 @@ landlock_init_layer_masks(const struct landlock_ruleset *const domain,
 		break;
 #endif /* IS_ENABLED(CONFIG_INET) */
 
+	case LANDLOCK_KEY_SOCKET:
+		get_access_mask = landlock_get_socket_access_mask;
+		num_access = LANDLOCK_NUM_ACCESS_SOCKET;
+		break;
 	default:
 		WARN_ON_ONCE(1);
 		return 0;

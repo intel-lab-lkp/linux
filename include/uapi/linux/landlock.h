@@ -46,6 +46,11 @@ struct landlock_ruleset_attr {
 	 */
 	__u64 handled_access_net;
 	/**
+	 * @handled_access_socket: Bitmask of handled actions performed on sockets
+	 * (cf. `Socket flags`).
+	 */
+	__u64 handled_access_socket;
+	/**
 	 * @scoped: Bitmask of scopes (cf. `Scope flags`_)
 	 * restricting a Landlock domain from accessing outside
 	 * resources (e.g. IPCs).
@@ -140,6 +145,11 @@ enum landlock_rule_type {
 	 * landlock_net_port_attr .
 	 */
 	LANDLOCK_RULE_NET_PORT,
+	/**
+	 * @LANDLOCK_RULE_SOCKET: Type of a &struct
+	 * landlock_socket_attr.
+	 */
+	LANDLOCK_RULE_SOCKET,
 };
 
 /**
@@ -190,6 +200,33 @@ struct landlock_net_port_attr {
 	 */
 	__u64 port;
 };
+
+/**
+ * struct landlock_socket_attr - Socket protocol definition
+ *
+ * Argument of sys_landlock_add_rule().
+ */
+struct landlock_socket_attr {
+	/**
+	 * @allowed_access: Bitmask of allowed access for a socket protocol
+	 * (cf. `Socket flags`_).
+	 */
+	__u64 allowed_access;
+	/**
+	 * @family: Protocol family used for communication
+	 * (cf. include/linux/socket.h).
+	 */
+	__s32 family;
+	/**
+	 * @type: Socket type (cf. include/linux/net.h)
+	 */
+	__s32 type;
+	/**
+	 * @protocol: Communication protocol specific to protocol family set in
+	 * @family field.
+	 */
+	__s32 protocol;
+} __attribute__((packed));
 
 /**
  * DOC: fs_access
@@ -327,7 +364,7 @@ struct landlock_net_port_attr {
  * DOC: net_access
  *
  * Network flags
- * ~~~~~~~~~~~~~~~~
+ * ~~~~~~~~~~~~~
  *
  * These flags enable to restrict a sandboxed process to a set of network
  * actions.
@@ -343,6 +380,27 @@ struct landlock_net_port_attr {
 /* clang-format off */
 #define LANDLOCK_ACCESS_NET_BIND_TCP			(1ULL << 0)
 #define LANDLOCK_ACCESS_NET_CONNECT_TCP			(1ULL << 1)
+/* clang-format on */
+
+/**
+ * DOC: socket_access
+ *
+ * Socket flags
+ * ~~~~~~~~~~~~
+ *
+ * These flags restrict actions on sockets for a sandboxed process (e.g. creation
+ * of a socket via socket(2)). Sockets opened before sandboxing are not subject
+ * to these restrictions. This is supported since the Landlock ABI version 8.
+ *
+ * The following access right applies only to sockets:
+ *
+ * - %LANDLOCK_ACCESS_SOCKET_CREATE: Create a user space socket. This access
+ *   right restricts the following operations: :manpage:`socket(2)`,
+ *   :manpage:`socketpair(2)`, ``IORING_OP_SOCKET`` (cf.
+ *   :manpage:`io_uring_enter(2)`).
+ */
+/* clang-format off */
+#define LANDLOCK_ACCESS_SOCKET_CREATE			(1ULL << 0)
 /* clang-format on */
 
 /**
