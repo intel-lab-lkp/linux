@@ -264,13 +264,14 @@ static int exfat_map_cluster(struct inode *inode, unsigned int clu_offset,
 static int exfat_get_block(struct inode *inode, sector_t iblock,
 		struct buffer_head *bh_result, int create)
 {
+	struct exfat_chain chain;
 	struct exfat_inode_info *ei = EXFAT_I(inode);
 	struct super_block *sb = inode->i_sb;
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
 	unsigned long max_blocks = bh_result->b_size >> inode->i_blkbits;
 	int err = 0;
 	unsigned long mapped_blocks = 0;
-	unsigned int cluster, sec_offset;
+	unsigned int cluster, sec_offset, count;
 	sector_t last_block;
 	sector_t phys = 0;
 	sector_t valid_blks;
@@ -301,6 +302,17 @@ static int exfat_get_block(struct inode *inode, sector_t iblock,
 
 	phys = exfat_cluster_to_sector(sbi, cluster) + sec_offset;
 	mapped_blocks = sbi->sect_per_clus - sec_offset;
+
+	if (max_blocks > mapped_blocks && !create) {
+		chain.dir = cluster;
+		chain.size = (max_blocks >> sbi->sect_per_clus_bits) + 1;
+		chain.flags = ei->flags;
+
+		err = exfat_count_contig_clusters(sb, &chain, &count);
+		if (err)
+			return err;
+		max_blocks = (count << sbi->sect_per_clus_bits) - sec_offset;
+	}
 	max_blocks = min(mapped_blocks, max_blocks);
 
 	map_bh(bh_result, sb, phys);
