@@ -742,13 +742,9 @@ unregister_netdev:
 }
 EXPORT_SYMBOL_GPL(ipvlan_link_new);
 
-void ipvlan_link_delete(struct net_device *dev, struct list_head *head)
+static void ipvlan_addrs_forget_all(struct ipvl_dev *ipvlan)
 {
-	struct ipvl_dev *ipvlan = netdev_priv(dev);
 	struct ipvl_addr *addr, *next;
-
-	if (ipvlan_is_macnat(ipvlan->port))
-		dev_set_allmulti(dev, -1);
 
 	spin_lock_bh(&ipvlan->addrs_lock);
 	list_for_each_entry_safe(addr, next, &ipvlan->addrs, anode) {
@@ -757,6 +753,16 @@ void ipvlan_link_delete(struct net_device *dev, struct list_head *head)
 		kfree_rcu(addr, rcu);
 	}
 	spin_unlock_bh(&ipvlan->addrs_lock);
+}
+
+void ipvlan_link_delete(struct net_device *dev, struct list_head *head)
+{
+	struct ipvl_dev *ipvlan = netdev_priv(dev);
+
+	if (ipvlan_is_macnat(ipvlan->port))
+		dev_set_allmulti(dev, -1);
+
+	ipvlan_addrs_forget_all(ipvlan);
 
 	ida_free(&ipvlan->port->ida, dev->dev_id);
 	list_del_rcu(&ipvlan->pnode);
@@ -814,6 +820,19 @@ int ipvlan_link_register(struct rtnl_link_ops *ops)
 }
 EXPORT_SYMBOL_GPL(ipvlan_link_register);
 
+static bool ipvlan_is_valid_dev(const struct net_device *dev)
+{
+	struct ipvl_dev *ipvlan = netdev_priv(dev);
+
+	if (!netif_is_ipvlan(dev))
+		return false;
+
+	if (!ipvlan || !ipvlan->port)
+		return false;
+
+	return true;
+}
+
 static int ipvlan_device_event(struct notifier_block *unused,
 			       unsigned long event, void *ptr)
 {
@@ -824,6 +843,13 @@ static int ipvlan_device_event(struct notifier_block *unused,
 	struct ipvl_port *port;
 	LIST_HEAD(lst_kill);
 	int err;
+
+	if (event == NETDEV_DOWN && ipvlan_is_valid_dev(dev)) {
+		struct ipvl_dev *ipvlan = netdev_priv(dev);
+
+		ipvlan_addrs_forget_all(ipvlan);
+		return NOTIFY_DONE;
+	}
 
 	if (!netif_is_ipvlan_port(dev))
 		return NOTIFY_DONE;
@@ -958,19 +984,6 @@ void ipvlan_del_addr(struct ipvl_dev *ipvlan, void *iaddr, bool is_v6)
 	list_del_rcu(&addr->anode);
 	spin_unlock_bh(&ipvlan->addrs_lock);
 	kfree_rcu(addr, rcu);
-}
-
-static bool ipvlan_is_valid_dev(const struct net_device *dev)
-{
-	struct ipvl_dev *ipvlan = netdev_priv(dev);
-
-	if (!netif_is_ipvlan(dev))
-		return false;
-
-	if (!ipvlan || !ipvlan->port)
-		return false;
-
-	return true;
 }
 
 #if IS_ENABLED(CONFIG_IPV6)
