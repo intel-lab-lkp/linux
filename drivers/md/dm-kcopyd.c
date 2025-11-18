@@ -383,7 +383,6 @@ struct kcopyd_job {
 	struct mutex lock;
 	atomic_t sub_jobs;
 	sector_t progress;
-	sector_t write_offset;
 
 	struct kcopyd_job *master_job;
 };
@@ -411,50 +410,17 @@ void dm_kcopyd_exit(void)
 }
 
 /*
- * Functions to push and pop a job onto the head of a given job
- * list.
+ * Functions to push and pop a job onto the head of a given job list.
  */
-static struct kcopyd_job *pop_io_job(struct list_head *jobs,
-				     struct dm_kcopyd_client *kc)
-{
-	struct kcopyd_job *job;
-
-	/*
-	 * For I/O jobs, pop any read, any write without sequential write
-	 * constraint and sequential writes that are at the right position.
-	 */
-	list_for_each_entry(job, jobs, list) {
-		if (job->op == REQ_OP_READ ||
-		    !(job->flags & BIT(DM_KCOPYD_WRITE_SEQ))) {
-			list_del(&job->list);
-			return job;
-		}
-
-		if (job->write_offset == job->master_job->write_offset) {
-			job->master_job->write_offset += job->source.count;
-			list_del(&job->list);
-			return job;
-		}
-	}
-
-	return NULL;
-}
-
 static struct kcopyd_job *pop(struct list_head *jobs,
 			      struct dm_kcopyd_client *kc)
 {
 	struct kcopyd_job *job = NULL;
 
 	spin_lock_irq(&kc->job_lock);
-
-	if (!list_empty(jobs)) {
-		if (jobs == &kc->io_jobs)
-			job = pop_io_job(jobs, kc);
-		else {
-			job = list_entry(jobs->next, struct kcopyd_job, list);
-			list_del(&job->list);
-		}
-	}
+	job = list_first_entry_or_null(jobs, struct kcopyd_job, list);
+	if (job)
+		list_del(&job->list);
 	spin_unlock_irq(&kc->job_lock);
 
 	return job;
@@ -541,7 +507,7 @@ static void complete_io(unsigned long error, void *context)
 		push(&kc->complete_jobs, job);
 
 	else {
-		job->op = REQ_OP_WRITE;
+		job->op = REQ_OP_WRITE | REQ_ZWPLUG_UNORDERED;
 		push(&kc->io_jobs, job);
 	}
 
@@ -730,7 +696,6 @@ static void segment_complete(int read_err, unsigned long write_err,
 		int i;
 
 		*sub_job = *job;
-		sub_job->write_offset = progress;
 		sub_job->source.sector += progress;
 		sub_job->source.count = count;
 
@@ -833,7 +798,7 @@ void dm_kcopyd_copy(struct dm_kcopyd_client *kc, struct dm_io_region *from,
 		/*
 		 * Use WRITE ZEROES to optimize zeroing if all dests support it.
 		 */
-		job->op = REQ_OP_WRITE_ZEROES;
+		job->op = REQ_OP_WRITE_ZEROES | REQ_ZWPLUG_UNORDERED;
 		for (i = 0; i < job->num_dests; i++)
 			if (!bdev_write_zeroes_sectors(job->dests[i].bdev)) {
 				job->op = REQ_OP_WRITE;
@@ -844,7 +809,6 @@ void dm_kcopyd_copy(struct dm_kcopyd_client *kc, struct dm_io_region *from,
 	job->fn = fn;
 	job->context = context;
 	job->master_job = job;
-	job->write_offset = 0;
 
 	if (job->source.count <= kc->sub_job_size)
 		dispatch_job(job);
