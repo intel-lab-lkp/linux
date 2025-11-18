@@ -94,10 +94,6 @@ struct sja1105_regs {
 	u64 pcs_base[SJA1105_MAX_NUM_PORTS];
 };
 
-struct sja1105_mdio_private {
-	struct sja1105_private *priv;
-};
-
 enum {
 	SJA1105_SPEED_AUTO,
 	SJA1105_SPEED_10MBPS,
