@@ -48,6 +48,12 @@ static const char *const net_access_strings[] = {
 
 static_assert(ARRAY_SIZE(net_access_strings) == LANDLOCK_NUM_ACCESS_NET);
 
+static const char *const socket_access_strings[] = {
+	[BIT_INDEX(LANDLOCK_ACCESS_SOCKET_CREATE)] = "socket.create",
+};
+
+static_assert(ARRAY_SIZE(socket_access_strings) == LANDLOCK_NUM_ACCESS_SOCKET);
+
 static __attribute_const__ const char *
 get_blocker(const enum landlock_request_type type,
 	    const unsigned long access_bit)
@@ -70,6 +76,12 @@ get_blocker(const enum landlock_request_type type,
 		if (WARN_ON_ONCE(access_bit >= ARRAY_SIZE(net_access_strings)))
 			return "unknown";
 		return net_access_strings[access_bit];
+
+	case LANDLOCK_REQUEST_SOCKET_ACCESS:
+		if (WARN_ON_ONCE(access_bit >=
+				 ARRAY_SIZE(socket_access_strings)))
+			return "unknown";
+		return socket_access_strings[access_bit];
 
 	case LANDLOCK_REQUEST_SCOPE_ABSTRACT_UNIX_SOCKET:
 		WARN_ON_ONCE(access_bit != -1);

@@ -10,6 +10,7 @@
 #include <linux/stddef.h>
 #include <net/ipv6.h>
 
+#include "audit.h"
 #include "limits.h"
 #include "ruleset.h"
 #include "socket.h"
@@ -132,6 +133,11 @@ static int hook_socket_create(int family, int type, int protocol, int kern)
 	const struct landlock_cred_security *const subject =
 		landlock_get_applicable_subject(current_cred(), masks, NULL);
 	uintptr_t key;
+	struct lsm_socket_audit audit_socket = {
+		.family = family,
+		.type = type,
+		.protocol = protocol,
+	};
 
 	if (!subject)
 		return 0;
@@ -169,6 +175,15 @@ static int hook_socket_create(int family, int type, int protocol, int kern)
 				handled_access) == 0)
 		return 0;
 
+	landlock_log_denial(subject,
+			    &(struct landlock_request){
+				    .type = LANDLOCK_REQUEST_SOCKET_ACCESS,
+				    .audit.type = LSM_AUDIT_DATA_SOCKET,
+				    .audit.u.socket = &audit_socket,
+				    .access = LANDLOCK_ACCESS_SOCKET_CREATE,
+				    .layer_masks = &layer_masks,
+				    .layer_masks_size = ARRAY_SIZE(layer_masks),
+			    });
 	return -EACCES;
 }
 
