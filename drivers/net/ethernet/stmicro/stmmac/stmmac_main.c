@@ -7813,6 +7813,12 @@ int stmmac_dvr_probe(struct device *device,
 	/* MTU range: 46 - hw-specific max */
 	ndev->min_mtu = ETH_ZLEN - ETH_HLEN;
 
+	/* Set the maximum MTU.
+	 *  For XGMAC cores, 16KiB.
+	 *  For cores using enhanced descriptors or GMAC cores >= v4.00, 9kB.
+	 *  For everything else, PAGE_SIZE - NET_SKB_PAD - NET_IP_ALIGN -
+	 *   aligned skb_shared_info.
+	 */
 	if (priv->plat->core_type == DWMAC_CORE_XGMAC)
 		ndev->max_mtu = XGMAC_JUMBO_LEN;
 	else if (priv->plat->enh_desc || priv->synopsys_id >= DWMAC_CORE_4_00)
