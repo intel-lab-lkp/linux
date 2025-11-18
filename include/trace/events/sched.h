@@ -896,6 +896,11 @@ DECLARE_TRACE(sched_set_need_resched,
 	TP_PROTO(struct task_struct *tsk, int cpu, int tif),
 	TP_ARGS(tsk, cpu, tif));
 
+DECLARE_TRACE(sched_rt_throttled,
+	TP_PROTO(struct rt_rq *rt_rq),
+	TP_ARGS(rt_rq));
+
+
 #endif /* _TRACE_SCHED_H */
 
 /* This part must be outside protection */

@@ -78,6 +78,7 @@ struct reclaim_state;
 struct robust_list_head;
 struct root_domain;
 struct rq;
+struct rt_rq;
 struct sched_attr;
 struct sched_dl_entity;
 struct seq_file;
