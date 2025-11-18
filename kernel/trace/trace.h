@@ -365,6 +365,8 @@ struct trace_array {
 	int			buffer_disabled;
 
 	int			perf_events;
+	int			ftrace_perf_events;
+	u64			ftrace_perf_mask;
 
 	struct trace_pid_list	__rcu *filtered_pids;
 	struct trace_pid_list	__rcu *filtered_no_pids;
@@ -1402,6 +1404,10 @@ extern int trace_get_user(struct trace_parser *parser, const char __user *ubuf,
 u64 do_trace_perf_event(int type);
 int trace_perf_event_enable(int type);
 void trace_perf_event_disable(int type);
+#ifdef CONFIG_FUNCTION_TRACER
+void ftrace_perf_events(struct trace_array *tr, int perf_events,
+			u64 perf_mask, unsigned int trace_ctx);
+#endif
 #else
 # define PERF_FLAGS
 static inline u64 do_trace_perf_event(int type) { return 0; }

@@ -132,9 +132,12 @@ static __always_inline int trace_test_and_set_recursion(unsigned long ip, unsign
 		 * will think a recursion occurred, and the event will be dropped.
 		 * Let a single instance happen via the TRANSITION_BIT to
 		 * not drop those events.
+		 *
+		 * When ip is zero, the caller is purposely trying causing
+		 * recursion. Don't record it.
 		 */
 		bit = TRACE_CTX_TRANSITION + start;
-		if (val & (1 << bit)) {
+		if ((val & (1 << bit)) && ip) {
 			do_ftrace_record_recursion(ip, pip);
 			return -1;
 		}

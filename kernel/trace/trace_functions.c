@@ -47,8 +47,12 @@ enum {
 	TRACE_FUNC_OPT_NO_REPEATS	= 0x2,
 	TRACE_FUNC_OPT_ARGS		= 0x4,
 
-	/* Update this to next highest bit. */
-	TRACE_FUNC_OPT_HIGHEST_BIT	= 0x8
+	/* Update this to next highest function bit. */
+	TRACE_FUNC_OPT_HIGHEST_BIT	= 0x8,
+
+	/* These are just other options */
+	TRACE_FUNC_OPT_PERF_CYCLES	= 0x10,
+	TRACE_FUNC_OPT_PERF_CACHE	= 0x20,
 };
 
 #define TRACE_FUNC_OPT_MASK	(TRACE_FUNC_OPT_HIGHEST_BIT - 1)
@@ -143,6 +147,105 @@ static bool handle_func_repeats(struct trace_array *tr, u32 flags_val)
 	return true;
 }
 
+#ifdef CONFIG_PERF_EVENTS
+static inline void
+do_trace_function(struct trace_array *tr, unsigned long ip,
+		  unsigned long parent_ip, unsigned int trace_ctx,
+		  struct ftrace_regs *fregs)
+{
+	trace_function(tr, ip, parent_ip, trace_ctx, fregs);
+
+	if (likely(!tr->ftrace_perf_events))
+		return;
+
+	ftrace_perf_events(tr, tr->ftrace_perf_events, tr->ftrace_perf_mask, trace_ctx);
+}
+
+static bool handle_perf_event_flag(struct trace_array *tr, int bit, int set, int *err)
+{
+	u64 mask;
+	int type;
+
+	*err = 0;
+
+	switch (bit) {
+	case TRACE_FUNC_OPT_PERF_CYCLES:
+		mask = TRACE_ITER(PERF_CYCLES);
+		type = PERF_TRACE_CYCLES;
+		break;
+
+	case TRACE_FUNC_OPT_PERF_CACHE:
+		mask = TRACE_ITER(PERF_CACHE);
+		type = PERF_TRACE_CACHE;
+		break;
+
+	default:
+		return 0;
+	}
+
+	if (set)
+		*err = trace_perf_event_enable(type);
+	else
+		trace_perf_event_disable(type);
+
+	if (*err < 0)
+		return 1;
+
+	if (set) {
+		tr->ftrace_perf_events++;
+		tr->ftrace_perf_mask |= mask;
+	} else {
+		tr->ftrace_perf_mask &= ~mask;
+		tr->ftrace_perf_events--;
+	}
+	return 1;
+}
+
+static void ftrace_perf_enable(struct trace_array *tr, int bit)
+{
+	int err;
+
+	if (!(tr->current_trace_flags->val & bit))
+		return;
+
+	handle_perf_event_flag(tr, bit, 1, &err);
+	if (err < 0)
+		tr->current_trace_flags->val &= ~bit;
+}
+
+static void ftrace_perf_disable(struct trace_array *tr, int bit)
+{
+	int err;
+
+	/* Only disable if it was enabled */
+	if (!(tr->current_trace_flags->val & bit))
+		return;
+
+	handle_perf_event_flag(tr, bit, 0, &err);
+}
+
+static void ftrace_perf_init(struct trace_array *tr)
+{
+	ftrace_perf_enable(tr, TRACE_FUNC_OPT_PERF_CYCLES);
+	ftrace_perf_enable(tr, TRACE_FUNC_OPT_PERF_CACHE);
+}
+
+static void ftrace_perf_reset(struct trace_array *tr)
+{
+	ftrace_perf_disable(tr, TRACE_FUNC_OPT_PERF_CYCLES);
+	ftrace_perf_disable(tr, TRACE_FUNC_OPT_PERF_CACHE);
+}
+#else
+#define do_trace_function trace_function
+static inline bool handle_perf_event_flag(struct trace_array *tr, int bit,
+					  int set, int *err)
+{
+	return 0;
+}
+static inline void ftrace_perf_init(struct trace_array *tr) { }
+static inline void ftrace_perf_reset(struct trace_array *tr) { }
+#endif /* CONFIG_PERF_EVENTS */
+
 static int function_trace_init(struct trace_array *tr)
 {
 	ftrace_func_t func;
@@ -165,6 +268,8 @@ static int function_trace_init(struct trace_array *tr)
 
 	tr->array_buffer.cpu = raw_smp_processor_id();
 
+	ftrace_perf_init(tr);
+
 	tracing_start_cmdline_record();
 	tracing_start_function_trace(tr);
 	return 0;
@@ -172,6 +277,7 @@ static int function_trace_init(struct trace_array *tr)
 
 static void function_trace_reset(struct trace_array *tr)
 {
+	ftrace_perf_reset(tr);
 	tracing_stop_function_trace(tr);
 	tracing_stop_cmdline_record();
 	ftrace_reset_array_ops(tr);
@@ -223,7 +329,7 @@ function_trace_call(unsigned long ip, unsigned long parent_ip,
 
 	trace_ctx = tracing_gen_ctx_dec();
 
-	trace_function(tr, ip, parent_ip, trace_ctx, NULL);
+	do_trace_function(tr, ip, parent_ip, trace_ctx, NULL);
 
 	ftrace_test_recursion_unlock(bit);
 }
@@ -245,7 +351,7 @@ function_args_trace_call(unsigned long ip, unsigned long parent_ip,
 
 	trace_ctx = tracing_gen_ctx();
 
-	trace_function(tr, ip, parent_ip, trace_ctx, fregs);
+	do_trace_function(tr, ip, parent_ip, trace_ctx, fregs);
 
 	ftrace_test_recursion_unlock(bit);
 }
@@ -372,7 +478,7 @@ function_no_repeats_trace_call(unsigned long ip, unsigned long parent_ip,
 	trace_ctx = tracing_gen_ctx_dec();
 	process_repeats(tr, ip, parent_ip, last_info, trace_ctx);
 
-	trace_function(tr, ip, parent_ip, trace_ctx, NULL);
+	do_trace_function(tr, ip, parent_ip, trace_ctx, NULL);
 
 out:
 	ftrace_test_recursion_unlock(bit);
@@ -429,6 +535,10 @@ static struct tracer_opt func_opts[] = {
 #ifdef CONFIG_FUNCTION_TRACE_ARGS
 	{ TRACER_OPT(func-args, TRACE_FUNC_OPT_ARGS) },
 #endif
+#if CONFIG_PERF_EVENTS
+	{ TRACER_OPT(func-cpu-cycles, TRACE_FUNC_OPT_PERF_CYCLES) },
+	{ TRACER_OPT(func-cache-misses, TRACE_FUNC_OPT_PERF_CACHE) },
+#endif
 	{ } /* Always set a last empty entry */
 };
 
@@ -457,6 +567,7 @@ func_set_flag(struct trace_array *tr, u32 old_flags, u32 bit, int set)
 {
 	ftrace_func_t func;
 	u32 new_flags;
+	int err;
 
 	/* Do nothing if already set. */
 	if (!!set == !!(tr->current_trace_flags->val & bit))
@@ -465,6 +576,9 @@ func_set_flag(struct trace_array *tr, u32 old_flags, u32 bit, int set)
 	/* We can change this flag only when not running. */
 	if (tr->current_trace != &function_trace)
 		return 0;
+
+	if (handle_perf_event_flag(tr, bit, set, &err))
+		return err;
 
 	new_flags = (tr->current_trace_flags->val & ~bit) | (set ? bit : 0);
 	func = select_trace_function(new_flags);
