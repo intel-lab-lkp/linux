@@ -2177,6 +2177,13 @@
 			could change it dynamically, usually by
 			/sys/module/printk/parameters/ignore_loglevel.
 
+	ignore_per_console_loglevel [KNL,EARLY]
+			Ignore all per-console loglevel settings
+			and use only the global console_loglevel for all
+			consoles. This can also be set at runtime via
+			/sys/module/printk/parameters/ignore_per_console_loglevel.
+			See Documentation/admin-guide/per-console-loglevel.rst.
+
 	ignore_rlimit_data
 			Ignore RLIMIT_DATA setting for data mappings,
 			print warning at first misuse.  Can be changed via

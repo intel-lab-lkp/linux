@@ -73,6 +73,8 @@ extern int console_printk[];
 #define minimum_console_loglevel (console_printk[2])
 #define default_console_loglevel (console_printk[3])
 
+extern bool ignore_per_console_loglevel;
+
 extern void console_verbose(void);
 
 /* strlen("ratelimit") + 1 */
