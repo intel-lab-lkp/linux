@@ -89,10 +89,21 @@ struct ipvl_addr {
 	struct rcu_head		rcu;
 };
 
+struct ipvl_port_addr {
+	union {
+		struct in6_addr	ip6;
+		struct in_addr	ip4;
+	} ipu;
+	ipvl_hdr_type		atype;
+	struct list_head	anode;
+	struct rcu_head		rcu;
+};
+
 struct ipvl_port {
 	struct net_device	*dev;
 	possible_net_t		pnet;
 	struct hlist_head	hlhead[IPVLAN_HASH_SIZE];
+	struct list_head	port_addrs; /* addresses of main iface.*/
 	spinlock_t		addrs_lock; /* guards hash-table and addrs */
 	struct list_head	ipvlans;
 	struct packet_type	ipvl_ptype;
@@ -199,6 +210,8 @@ int ipvlan_link_new(struct net_device *dev, struct rtnl_newlink_params *params,
 void ipvlan_link_delete(struct net_device *dev, struct list_head *head);
 void ipvlan_link_setup(struct net_device *dev);
 int ipvlan_link_register(struct rtnl_link_ops *ops);
+struct ipvl_port_addr *ipvlan_port_find_addr(struct ipvl_port *port,
+					     const void *iaddr, bool is_v6);
 #ifdef CONFIG_IPVLAN_L3S
 int ipvlan_l3s_register(struct ipvl_port *port);
 void ipvlan_l3s_unregister(struct ipvl_port *port);
