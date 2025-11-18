@@ -103,3 +103,81 @@ int landlock_append_socket_rule(struct landlock_ruleset *const ruleset,
 
 	return err;
 }
+
+static int check_socket_access(const struct landlock_ruleset *dom,
+			       uintptr_t key,
+			       layer_mask_t (*const layer_masks)[],
+			       access_mask_t handled_access)
+{
+	const struct landlock_rule *rule;
+	struct landlock_id id = {
+		.type = LANDLOCK_KEY_SOCKET,
+	};
+
+	id.key.data = key;
+	rule = landlock_find_rule(dom, id);
+	if (landlock_unmask_layers(rule, handled_access, layer_masks,
+				   LANDLOCK_NUM_ACCESS_SOCKET))
+		return 0;
+	return -EACCES;
+}
+
+static int hook_socket_create(int family, int type, int protocol, int kern)
+{
+	layer_mask_t layer_masks[LANDLOCK_NUM_ACCESS_SOCKET] = {};
+	access_mask_t handled_access;
+	const struct access_masks masks = {
+		.socket = LANDLOCK_ACCESS_SOCKET_CREATE,
+	};
+	const struct landlock_cred_security *const subject =
+		landlock_get_applicable_subject(current_cred(), masks, NULL);
+	uintptr_t key;
+
+	if (!subject)
+		return 0;
+	/* Checks only user space sockets. */
+	if (kern)
+		return 0;
+
+	handled_access = landlock_init_layer_masks(
+		subject->domain, LANDLOCK_ACCESS_SOCKET_CREATE, &layer_masks,
+		LANDLOCK_KEY_SOCKET);
+	/*
+	 * Error could happen due to parameters are outside of the allowed range,
+	 * so this combination couldn't be added in ruleset previously.
+	 * Therefore, it's not permitted.
+	 */
+	if (pack_socket_key(family, type, protocol, &key) == -EACCES)
+		return -EACCES;
+	if (check_socket_access(subject->domain, key, &layer_masks,
+				handled_access) == 0)
+		return 0;
+
+	/* Ranges were already checked. */
+	(void)pack_socket_key(family, TYPE_ALL, protocol, &key);
+	if (check_socket_access(subject->domain, key, &layer_masks,
+				handled_access) == 0)
+		return 0;
+
+	(void)pack_socket_key(family, type, PROTOCOL_ALL, &key);
+	if (check_socket_access(subject->domain, key, &layer_masks,
+				handled_access) == 0)
+		return 0;
+
+	(void)pack_socket_key(family, TYPE_ALL, PROTOCOL_ALL, &key);
+	if (check_socket_access(subject->domain, key, &layer_masks,
+				handled_access) == 0)
+		return 0;
+
+	return -EACCES;
+}
+
+static struct security_hook_list landlock_hooks[] __ro_after_init = {
+	LSM_HOOK_INIT(socket_create, hook_socket_create),
+};
+
+__init void landlock_add_socket_hooks(void)
+{
+	security_add_hooks(landlock_hooks, ARRAY_SIZE(landlock_hooks),
+			   &landlock_lsmid);
+}

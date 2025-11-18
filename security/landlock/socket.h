@@ -15,4 +15,6 @@ int landlock_append_socket_rule(struct landlock_ruleset *const ruleset,
 				const s32 protocol,
 				access_mask_t access_rights);
 
+__init void landlock_add_socket_hooks(void);
+
 #endif /* _SECURITY_LANDLOCK_SOCKET_H */
