@@ -15473,6 +15473,7 @@ M:	Maxime Chevallier <maxime.chevallier@bootlin.com>
 L:	netdev@vger.kernel.org
 S:	Maintained
 F:	drivers/net/mdio/mdio-regmap.c
+F:	drivers/net/mdio/mdio-regmap-simple.c
 F:	include/linux/mdio/mdio-regmap.h
 
 MEASUREMENT COMPUTING CIO-DAC IIO DRIVER
