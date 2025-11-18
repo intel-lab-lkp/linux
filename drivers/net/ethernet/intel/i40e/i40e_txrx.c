@@ -1386,22 +1386,36 @@ static void i40e_reuse_rx_page(struct i40e_ring *rx_ring,
  * @rx_ring: the rx ring that has this descriptor
  * @qword0_raw: qword0
  * @qword1: qword1 representing status_error_len in CPU ordering
+ * @next_to_process: pointer to next_to_process index
+ * @next_to_clean: pointer to next_to_clean index
  *
  * Flow director should handle FD_FILTER_STATUS to check its filter programming
  * status being successful or not and take actions accordingly. FCoE should
  * handle its context/filter programming/invalidation status and take actions.
  *
- * Returns an i40e_rx_buffer to reuse if the cleanup occurred, otherwise NULL.
+ * Returns false if what is passed is not a status descriptor.
  **/
-void i40e_clean_programming_status(struct i40e_ring *rx_ring, u64 qword0_raw,
-				   u64 qword1)
+bool i40e_clean_programming_status(struct i40e_ring *rx_ring, u64 qword0_raw,
+				   u64 qword1, u16 *next_to_process,
+				   u16 *next_to_clean)
 {
+	u16 ntp = *next_to_process;
 	u8 id;
+
+	if (!i40e_rx_is_programming_status(qword1))
+		return false;
 
 	id = FIELD_GET(I40E_RX_PROG_STATUS_DESC_QW1_PROGID_MASK, qword1);
 
 	if (id == I40E_RX_PROG_STATUS_DESC_FD_FILTER_STATUS)
 		i40e_fd_handle_status(rx_ring, qword0_raw, qword1, id);
+
+	if (++*next_to_process == rx_ring->count)
+		*next_to_process = 0;
+	if (ntp == *next_to_clean)
+		*next_to_clean = *next_to_process;
+
+	return true;
 }
 
 /**
@@ -1971,19 +1985,18 @@ static void i40e_rx_buffer_flip(struct i40e_rx_buffer *rx_buffer,
 }
 
 /**
- * i40e_get_rx_buffer - Fetch Rx buffer and synchronize data for use
+ * i40e_prepare_rx_buffer - Synchronize the buffer for use by the CPU
  * @rx_ring: rx descriptor ring to transact packets on
+ * @rx_buffer: the rx buffer
  * @size: size of buffer to add to skb
  *
- * This function will pull an Rx buffer from the ring and synchronize it
- * for use by the CPU.
+ * This function will synchronize the given buffer for use by the CPU.
  */
-static struct i40e_rx_buffer *i40e_get_rx_buffer(struct i40e_ring *rx_ring,
-						 const unsigned int size)
+static struct i40e_rx_buffer *
+i40e_prepare_rx_buffer(struct i40e_ring *rx_ring,
+		       struct i40e_rx_buffer *rx_buffer,
+		       const unsigned int size)
 {
-	struct i40e_rx_buffer *rx_buffer;
-
-	rx_buffer = i40e_rx_bi(rx_ring, rx_ring->next_to_process);
 	rx_buffer->page_count =
 #if (PAGE_SIZE < 8192)
 		page_count(rx_buffer->page);
@@ -2450,6 +2463,7 @@ static int i40e_clean_rx_irq(struct i40e_ring *rx_ring, int budget,
 
 	while (likely(total_rx_packets < (unsigned int)budget)) {
 		u16 ntp = rx_ring->next_to_process;
+		u16 ntc = rx_ring->next_to_clean;
 		struct i40e_rx_buffer *rx_buffer;
 		union i40e_rx_desc *rx_desc;
 		struct sk_buff *skb;
@@ -2480,21 +2494,15 @@ static int i40e_clean_rx_irq(struct i40e_ring *rx_ring, int budget,
 		 */
 		dma_rmb();
 
-		if (i40e_rx_is_programming_status(qword)) {
-			i40e_clean_programming_status(rx_ring,
-						      rx_desc->raw.qword[0],
-						      qword);
-			rx_buffer = i40e_rx_bi(rx_ring, ntp);
-			i40e_inc_ntp(rx_ring);
+		rx_buffer = i40e_rx_bi(rx_ring, ntp);
+
+		if (i40e_clean_programming_status(rx_ring,
+						  rx_desc->raw.qword[0], qword,
+						  &rx_ring->next_to_process,
+						  &rx_ring->next_to_clean)) {
 			i40e_reuse_rx_page(rx_ring, rx_buffer);
-			/* Update ntc and bump cleaned count if not in the
-			 * middle of mb packet.
-			 */
-			if (rx_ring->next_to_clean == ntp) {
-				rx_ring->next_to_clean =
-					rx_ring->next_to_process;
+			if (ntc != rx_ring->next_to_clean)
 				cleaned_count++;
-			}
 			continue;
 		}
 
@@ -2503,8 +2511,7 @@ static int i40e_clean_rx_irq(struct i40e_ring *rx_ring, int budget,
 			break;
 
 		i40e_trace(clean_rx_irq, rx_ring, rx_desc, xdp);
-		/* retrieve a buffer from the ring */
-		rx_buffer = i40e_get_rx_buffer(rx_ring, size);
+		i40e_prepare_rx_buffer(rx_ring, rx_buffer, size);
 
 		neop = i40e_is_non_eop(rx_ring, rx_desc);
 		i40e_inc_ntp(rx_ring);

@@ -440,14 +440,13 @@ int i40e_clean_rx_irq_zc(struct i40e_ring *rx_ring, int budget)
 		 */
 		dma_rmb();
 
-		if (i40e_rx_is_programming_status(qword)) {
-			i40e_clean_programming_status(rx_ring,
-						      rx_desc->raw.qword[0],
-						      qword);
-			bi = *i40e_rx_bi(rx_ring, next_to_process);
+		bi = *i40e_rx_bi(rx_ring, next_to_process);
+
+		if (i40e_clean_programming_status(rx_ring,
+						  rx_desc->raw.qword[0],
+						  qword, &next_to_process,
+						  &next_to_clean)) {
 			xsk_buff_free(bi);
-			if (++next_to_process == count)
-				next_to_process = 0;
 			continue;
 		}
 
@@ -455,7 +454,6 @@ int i40e_clean_rx_irq_zc(struct i40e_ring *rx_ring, int budget)
 		if (!size)
 			break;
 
-		bi = *i40e_rx_bi(rx_ring, next_to_process);
 		xsk_buff_set_size(bi, size);
 		xsk_buff_dma_sync_for_cpu(bi);
 
