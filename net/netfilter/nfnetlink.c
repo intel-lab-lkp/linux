@@ -558,6 +558,10 @@ ack:
 			 */
 			if (err)
 				status |= NFNL_BATCH_FAILURE;
+
+			/* EMLINK is fatal, stop processing batch. */
+			if (err == -EMLINK)
+				goto done;
 		}
 
 		msglen = NLMSG_ALIGN(nlh->nlmsg_len);
