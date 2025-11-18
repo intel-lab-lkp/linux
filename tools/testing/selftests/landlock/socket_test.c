@@ -190,4 +190,193 @@ TEST_F(mini, rule_with_wildcard)
 	ASSERT_EQ(0, close(ruleset_fd));
 }
 
+/* clang-format off */
+FIXTURE(prot_inside_range) {};
+/* clang-format on */
+
+FIXTURE_VARIANT(prot_inside_range)
+{
+	int family, type, protocol;
+};
+
+FIXTURE_SETUP(prot_inside_range)
+{
+	disable_caps(_metadata);
+};
+
+FIXTURE_TEARDOWN(prot_inside_range)
+{
+}
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(prot_inside_range, family_upper) {
+	/* clang-format on */
+	.family = UINT8_MAX - 1,
+	.type = SOCK_STREAM,
+	.protocol = 0,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(prot_inside_range, type_upper) {
+	/* clang-format on */
+	.family = AF_INET,
+	.type = UINT8_MAX - 1,
+	.protocol = 0,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(prot_inside_range, protocol_upper) {
+	/* clang-format on */
+	.family = AF_INET,
+	.type = SOCK_STREAM,
+	.protocol = UINT16_MAX - 1,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(prot_inside_range, family_lower) {
+	/* clang-format on */
+	.family = 0,
+	.type = SOCK_STREAM,
+	.protocol = 0,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(prot_inside_range, type_lower) {
+	/* clang-format on */
+	.family = AF_INET,
+	.type = 0,
+	.protocol = 0,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(prot_inside_range, protocol_lower) {
+	/* clang-format on */
+	.family = AF_INET,
+	.type = SOCK_STREAM,
+	.protocol = 0,
+};
+
+/*
+ * Verifies acceptable range of family, type and protocol values. Specific
+ * case of adding rule with masked fields checked in "rule_with_wildcard"
+ * test.
+ *
+ * Acceptable ranges are [0, UINT8_MAX) for family and type,
+ * [0, UINT16_MAX) for protocol field.
+ */
+TEST_F(prot_inside_range, add_rule)
+{
+	const struct landlock_ruleset_attr ruleset_attr = {
+		.handled_access_socket = LANDLOCK_ACCESS_SOCKET_CREATE,
+	};
+	const struct landlock_socket_attr create_socket_attr = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = variant->family,
+		.type = variant->type,
+		.protocol = variant->protocol,
+	};
+	int ruleset_fd;
+
+	ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+
+	EXPECT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+				       &create_socket_attr, 0));
+	ASSERT_EQ(0, close(ruleset_fd));
+}
+
+/* clang-format off */
+FIXTURE(prot_outside_range) {};
+/* clang-format on */
+
+FIXTURE_VARIANT(prot_outside_range)
+{
+	int family, type, protocol;
+};
+
+FIXTURE_SETUP(prot_outside_range)
+{
+	disable_caps(_metadata);
+};
+
+FIXTURE_TEARDOWN(prot_outside_range)
+{
+}
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(prot_outside_range, family_upper) {
+	/* clang-format on */
+	.family = UINT8_MAX,
+	.type = SOCK_STREAM,
+	.protocol = 0,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(prot_outside_range, type_upper) {
+	/* clang-format on */
+	.family = AF_INET,
+	.type = UINT8_MAX,
+	.protocol = 0,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(prot_outside_range, protocol_upper) {
+	/* clang-format on */
+	.family = AF_INET,
+	.type = SOCK_STREAM,
+	.protocol = UINT16_MAX,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(prot_outside_range, family_lower) {
+	/* clang-format on */
+	.family = -1,
+	.type = SOCK_STREAM,
+	.protocol = 0,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(prot_outside_range, type_lower) {
+	/* clang-format on */
+	.family = AF_INET,
+	.type = -2,
+	.protocol = 0,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(prot_outside_range, protocol_lower) {
+	/* clang-format on */
+	.family = AF_INET,
+	.type = SOCK_STREAM,
+	.protocol = -2,
+};
+
+/*
+ * Acceptable ranges are [0, UINT8_MAX) for family and type,
+ * [0, UINT16_MAX) for protocol field. Also type and protocol
+ * can be set with specific -1 wildcard value.
+ */
+TEST_F(prot_outside_range, add_rule)
+{
+	const struct landlock_ruleset_attr ruleset_attr = {
+		.handled_access_socket = LANDLOCK_ACCESS_SOCKET_CREATE,
+	};
+	const struct landlock_socket_attr create_socket_attr = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = variant->family,
+		.type = variant->type,
+		.protocol = variant->protocol,
+	};
+	int ruleset_fd;
+
+	ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+
+	EXPECT_EQ(-1, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+					&create_socket_attr, 0));
+	ASSERT_EQ(0, close(ruleset_fd));
+}
+
 TEST_HARNESS_MAIN
