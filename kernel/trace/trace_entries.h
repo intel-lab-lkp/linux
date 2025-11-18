@@ -456,3 +456,16 @@ FTRACE_ENTRY(timerlat, timerlat_entry,
 		 __entry->context,
 		 __entry->timer_latency)
 );
+
+#ifdef CONFIG_PERF_EVENTS
+FTRACE_ENTRY(perf_event, perf_event_entry,
+
+	TRACE_PERF_EVENT,
+
+	F_STRUCT(
+		__dynamic_array(u64,		values		)
+	),
+
+	F_printk("values: %lld\n", __entry->values[0])
+);
+#endif

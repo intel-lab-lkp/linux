@@ -1110,7 +1110,6 @@ void tracing_on(void)
 }
 EXPORT_SYMBOL_GPL(tracing_on);
 
-
 static __always_inline void
 __buffer_unlock_commit(struct trace_buffer *buffer, struct ring_buffer_event *event)
 {
@@ -2915,6 +2914,103 @@ discard:
 }
 EXPORT_SYMBOL_GPL(trace_event_buffer_commit);
 
+#ifdef CONFIG_PERF_EVENTS
+static inline void record_perf_event(struct trace_array *tr,
+				     struct trace_buffer *buffer,
+				     unsigned int trace_ctx)
+{
+	struct ring_buffer_event *event;
+	struct perf_event_entry *entry;
+	int entries = READ_ONCE(tr->perf_events);
+	struct trace_array_cpu *data;
+	u64 *value;
+	int size;
+	int cpu;
+
+	if (!entries)
+		return;
+
+	guard(preempt_notrace)();
+	cpu = smp_processor_id();
+
+	/* Prevent this from recursing */
+	data = per_cpu_ptr(tr->array_buffer.data, cpu);
+	if (unlikely(!data) || local_read(&data->disabled))
+		return;
+
+	if (local_inc_return(&data->disabled) != 1)
+		goto out;
+
+	size = struct_size(entry, values, entries);
+	event = trace_buffer_lock_reserve(buffer, TRACE_PERF_EVENT, size,
+					  trace_ctx);
+	if (!event)
+		goto out;
+	entry			= ring_buffer_event_data(event);
+	value			= entry->values;
+
+	if (tr->trace_flags & TRACE_ITER(PERF_CYCLES)) {
+		*value++ = TRACE_PERF_VALUE(PERF_TRACE_CYCLES);
+		entries--;
+	}
+
+	if (entries && tr->trace_flags & TRACE_ITER(PERF_CACHE)) {
+		*value++ = TRACE_PERF_VALUE(PERF_TRACE_CACHE);
+		entries--;
+	}
+
+	/* If something changed, zero the rest */
+	if (unlikely(entries))
+		memset(value, 0, sizeof(u64) * entries);
+
+	trace_buffer_unlock_commit_nostack(buffer, event);
+ out:
+	local_dec(&data->disabled);
+}
+
+static int handle_perf_event(struct trace_array *tr, u64 mask, int enabled)
+{
+	int ret = 0;
+	int type;
+
+	switch (mask) {
+
+	case TRACE_ITER(PERF_CYCLES):
+		type = PERF_TRACE_CYCLES;
+		break;
+	case TRACE_ITER(PERF_CACHE):
+		type = PERF_TRACE_CACHE;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (enabled)
+		ret = trace_perf_event_enable(type);
+	else
+		trace_perf_event_disable(type);
+
+	if (ret < 0)
+		return ret;
+
+	if (enabled)
+		tr->perf_events++;
+	else
+		tr->perf_events--;
+
+	if (WARN_ON_ONCE(tr->perf_events < 0))
+		tr->perf_events = 0;
+
+	return 0;
+}
+#else
+static inline void record_perf_event(struct trace_array *tr,
+				     struct trace_buffer *buffer,
+				     unsigned int trace_ctx)
+{
+}
+#endif
+
 /*
  * Skip 3:
  *
@@ -2931,6 +3027,8 @@ void trace_buffer_unlock_commit_regs(struct trace_array *tr,
 				     struct pt_regs *regs)
 {
 	__buffer_unlock_commit(buffer, event);
+
+	record_perf_event(tr, buffer, trace_ctx);
 
 	/*
 	 * If regs is not set, then skip the necessary functions.
@@ -5290,7 +5388,20 @@ int set_tracer_flag(struct trace_array *tr, u64 mask, int enabled)
 		update_marker_trace(tr, enabled);
 		/* update_marker_trace updates the tr->trace_flags */
 		return 0;
+
+#ifdef CONFIG_PERF_EVENTS
+	case TRACE_ITER(PERF_CACHE):
+	case TRACE_ITER(PERF_CYCLES):
+	{
+		int ret = 0;
+
+		ret = handle_perf_event(tr, mask, enabled);
+		if (ret < 0)
+			return ret;
+		break;
 	}
+#endif
+	} /* switch (mask) */
 
 	if (enabled)
 		tr->trace_flags |= mask;

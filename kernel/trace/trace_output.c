@@ -1661,6 +1661,75 @@ static struct trace_event trace_timerlat_event = {
 	.funcs		= &trace_timerlat_funcs,
 };
 
+/* TRACE_PERF_EVENT */
+
+static enum print_line_t
+trace_perf_event_print(struct trace_iterator *iter, int flags,
+		       struct trace_event *event)
+{
+	struct trace_entry *entry = iter->ent;
+	struct trace_seq *s = &iter->seq;
+	struct perf_event_entry *field;
+	u64 value;
+	u64 *val;
+	u64 *end;
+
+	end = (u64 *)((long)iter->ent + iter->ent_size);
+
+	trace_assign_type(field, entry);
+
+	for (val = field->values; val < end; val++) {
+		if (val != field->values)
+			trace_seq_putc(s, ' ');
+		value = PERF_TRACE_VALUE(*val);
+		switch (PERF_TRACE_TYPE(*val)) {
+		case PERF_TRACE_CYCLES:
+			trace_seq_printf(s, "cpu_cycles: %lld", value);
+			break;
+		case PERF_TRACE_CACHE:
+			trace_seq_printf(s, "cache_misses: %lld", value);
+			break;
+		default:
+			trace_seq_printf(s, "unkown(%d): %lld",
+					 (int)PERF_TRACE_TYPE(*val), value);
+		}
+	}
+	trace_seq_putc(s, '\n');
+	return trace_handle_return(s);
+}
+
+static enum print_line_t
+trace_perf_event_raw(struct trace_iterator *iter, int flags,
+		   struct trace_event *event)
+{
+	struct perf_event_entry *field;
+	struct trace_seq *s = &iter->seq;
+	u64 *val;
+	u64 *end;
+
+	end = (u64 *)((long)iter->ent + iter->ent_size);
+
+	trace_assign_type(field, iter->ent);
+
+	for (val = field->values; val < end; val++) {
+		if (val != field->values)
+			trace_seq_putc(s, ' ');
+		trace_seq_printf(s, "%lld\n", *val);
+	}
+	trace_seq_putc(s, '\n');
+	return trace_handle_return(s);
+}
+
+static struct trace_event_functions trace_perf_event_funcs = {
+	.trace		= trace_perf_event_print,
+	.raw		= trace_perf_event_raw,
+};
+
+static struct trace_event trace_perf_event_event = {
+	.type		= TRACE_PERF_EVENT,
+	.funcs		= &trace_perf_event_funcs,
+};
+
 /* TRACE_BPUTS */
 static enum print_line_t
 trace_bputs_print(struct trace_iterator *iter, int flags,
@@ -1878,6 +1947,7 @@ static struct trace_event *events[] __initdata = {
 	&trace_timerlat_event,
 	&trace_raw_data_event,
 	&trace_func_repeats_event,
+	&trace_perf_event_event,
 	NULL
 };
 

@@ -430,6 +430,168 @@ void perf_trace_buf_update(void *record, u16 type)
 }
 NOKPROBE_SYMBOL(perf_trace_buf_update);
 
+static void perf_callback(struct perf_event *event,
+			  struct perf_sample_data *data,
+			  struct pt_regs *regs)
+{
+	/* nop */
+}
+
+struct trace_perf_event {
+	struct perf_event		*event;
+};
+
+static struct trace_perf_event __percpu *perf_cache_events;
+static struct trace_perf_event __percpu *perf_cycles_events;
+static DEFINE_MUTEX(perf_event_mutex);
+static int perf_cache_cnt;
+static int perf_cycles_cnt;
+
+static inline int set_perf_type(int type, int *ptype, int *pconfig, int **pcount,
+				struct trace_perf_event __percpu ***pevents)
+{
+	switch (type) {
+	case PERF_TRACE_CYCLES:
+		if (ptype)
+			*ptype = PERF_TYPE_HARDWARE;
+		if (pconfig)
+			*pconfig = PERF_COUNT_HW_CPU_CYCLES;
+		*pcount = &perf_cycles_cnt;
+		*pevents = &perf_cycles_events;
+		return 0;
+
+	case PERF_TRACE_CACHE:
+		if (ptype)
+			*ptype = PERF_TYPE_HW_CACHE;
+		if (pconfig)
+			*pconfig = PERF_COUNT_HW_CACHE_MISSES;
+		*pcount = &perf_cache_cnt;
+		*pevents = &perf_cache_events;
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
+u64 do_trace_perf_event(int type)
+{
+	struct trace_perf_event __percpu **pevents;
+	struct trace_perf_event __percpu *events;
+	struct perf_event *e;
+	int *count;
+	int cpu;
+
+	if (set_perf_type(type, NULL, NULL, &count, &pevents) < 0)
+		return 0;
+
+	if (!*count)
+		return 0;
+
+	guard(preempt)();
+
+	events = READ_ONCE(*pevents);
+	if (!events)
+		return 0;
+
+	cpu = smp_processor_id();
+
+	e = per_cpu_ptr(events, cpu)->event;
+	if (!e)
+		return 0;
+
+	e->pmu->read(e);
+	return local64_read(&e->count);
+}
+
+static void __free_trace_perf_events(struct trace_perf_event __percpu *events)
+{
+	struct perf_event *e;
+	int cpu;
+
+	for_each_online_cpu(cpu) {
+		e = per_cpu_ptr(events, cpu)->event;
+		per_cpu_ptr(events, cpu)->event = NULL;
+		perf_event_release_kernel(e);
+	}
+}
+
+int trace_perf_event_enable(int type)
+{
+	struct perf_event_attr __free(kfree) *attr = NULL;
+	struct trace_perf_event __percpu **pevents;
+	struct trace_perf_event __percpu *events;
+	struct perf_event *e;
+	int *count;
+	int config;
+	int cpu;
+
+	if (set_perf_type(type, &config, &type, &count, &pevents) < 0)
+		return -EINVAL;
+
+	guard(mutex)(&perf_event_mutex);
+
+	if (*count) {
+		(*count)++;
+		return 0;
+	}
+
+	attr = kzalloc(sizeof(*attr), GFP_KERNEL);
+	if (!attr)
+		return -ENOMEM;
+
+	events = alloc_percpu(struct trace_perf_event);
+	if (!events)
+		return -ENOMEM;
+
+	attr->type = type;
+	attr->config = config;
+	attr->size = sizeof(struct perf_event_attr);
+	attr->pinned = 1;
+
+	/* initialize in case of failure */
+	for_each_possible_cpu(cpu) {
+		per_cpu_ptr(events, cpu)->event = NULL;
+	}
+
+	for_each_online_cpu(cpu) {
+		e = perf_event_create_kernel_counter(attr, cpu, NULL,
+						     perf_callback, NULL);
+		if (IS_ERR_OR_NULL(e)) {
+			__free_trace_perf_events(events);
+			return PTR_ERR(e);;
+		}
+		per_cpu_ptr(events, cpu)->event = e;
+	}
+
+	WRITE_ONCE(*pevents, events);
+	(*count)++;
+
+	return 0;
+}
+
+void trace_perf_event_disable(int type)
+{
+	struct trace_perf_event __percpu **pevents;
+	struct trace_perf_event __percpu *events;
+	int *count;
+
+	if (set_perf_type(type, NULL, NULL, &count, &pevents) < 0)
+		return;
+
+	guard(mutex)(&perf_event_mutex);
+
+	if (WARN_ON_ONCE(!*count))
+		return;
+
+	if (--(*count))
+		return;
+
+	events = READ_ONCE(*pevents);
+	WRITE_ONCE(*pevents, NULL);
+
+	__free_trace_perf_events(events);
+}
+
 #ifdef CONFIG_FUNCTION_TRACER
 static void
 perf_ftrace_function_call(unsigned long ip, unsigned long parent_ip,
