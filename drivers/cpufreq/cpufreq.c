@@ -1213,7 +1213,8 @@ static int cpufreq_notifier_min(struct notifier_block *nb, unsigned long freq,
 {
 	struct cpufreq_policy *policy = container_of(nb, struct cpufreq_policy, nb_min);
 
-	schedule_work(&policy->update);
+	if (!work_pending(&policy->update))
+		schedule_work(&policy->update);
 	return 0;
 }
 
@@ -1222,7 +1223,8 @@ static int cpufreq_notifier_max(struct notifier_block *nb, unsigned long freq,
 {
 	struct cpufreq_policy *policy = container_of(nb, struct cpufreq_policy, nb_max);
 
-	schedule_work(&policy->update);
+	if (!work_pending(&policy->update))
+		schedule_work(&policy->update);
 	return 0;
 }
 
@@ -1832,7 +1834,7 @@ static unsigned int cpufreq_verify_current_freq(struct cpufreq_policy *policy, b
 			return policy->cur;
 
 		cpufreq_out_of_sync(policy, new_freq);
-		if (update)
+		if (update && !work_pending(&policy->update))
 			schedule_work(&policy->update);
 	}
 
