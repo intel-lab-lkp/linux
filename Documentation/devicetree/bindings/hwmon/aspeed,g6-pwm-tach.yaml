@@ -18,9 +18,13 @@ description: |
 
 properties:
   compatible:
-    enum:
-      - aspeed,ast2600-pwm-tach
-
+    oneOf:
+      # AST2700 with fallback to AST2600
+      - items:
+          - const: aspeed,ast2700-pwm-tach
+          - const: aspeed,ast2600-pwm-tach
+      # Only AST2600
+      - const: aspeed,ast2600-pwm-tach
   reg:
     maxItems: 1
 
