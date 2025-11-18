@@ -617,9 +617,28 @@ static const struct sja1105_regs sja1110_regs = {
 	.ptpclkrate = SJA1110_SPI_ADDR(0x74),
 	.ptpclkcorp = SJA1110_SPI_ADDR(0x80),
 	.ptpsyncts = SJA1110_SPI_ADDR(0x84),
-	.pcs_base = {SJA1105_RSV_ADDR, 0x1c1400, 0x1c1800, 0x1c1c00, 0x1c2000,
-		     SJA1105_RSV_ADDR, SJA1105_RSV_ADDR, SJA1105_RSV_ADDR,
-		     SJA1105_RSV_ADDR, SJA1105_RSV_ADDR, SJA1105_RSV_ADDR},
+};
+
+/* See port compatibility matrix in Documentation/networking/dsa/sja1105.rst */
+static const struct sja1105_pcs_resource sja1105rs_pcs_resources[] = {
+	{ DEFINE_RES_REG_NAMED(0x0, 0x800000, "direct"),
+	  SJA1105_SGMII_PORT, "sja1105-pcs", "nxp,sja1105-pcs"
+	},
+};
+
+static const struct sja1105_pcs_resource sja1110_pcs_resources[] = {
+	{ DEFINE_RES_REG_NAMED(0x705000, 0x1000, "indirect"),
+	  1, "sja1110-pcs", "nxp,sja1110-pcs"
+	},
+	{ DEFINE_RES_REG_NAMED(0x706000, 0x1000, "indirect"),
+	  2, "sja1110-pcs", "nxp,sja1110-pcs"
+	},
+	{ DEFINE_RES_REG_NAMED(0x707000, 0x1000, "indirect"),
+	  3, "sja1110-pcs", "nxp,sja1110-pcs"
+	},
+	{ DEFINE_RES_REG_NAMED(0x708000, 0x1000, "indirect"),
+	  4, "sja1110-pcs", "nxp,sja1110-pcs"
+	},
 };
 
 const struct sja1105_info sja1105e_info = {
@@ -771,8 +790,6 @@ const struct sja1105_info sja1105r_info = {
 	.ptp_cmd_packing	= sja1105pqrs_ptp_cmd_packing,
 	.rxtstamp		= sja1105_rxtstamp,
 	.clocking_setup		= sja1105_clocking_setup,
-	.pcs_mdio_read_c45	= sja1105_pcs_mdio_read_c45,
-	.pcs_mdio_write_c45	= sja1105_pcs_mdio_write_c45,
 	.regs			= &sja1105pqrs_regs,
 	.port_speed		= {
 		[SJA1105_SPEED_AUTO] = 0,
@@ -785,6 +802,8 @@ const struct sja1105_info sja1105r_info = {
 	.supports_rmii		= {true, true, true, true, true},
 	.supports_rgmii		= {true, true, true, true, true},
 	.supports_sgmii		= {false, false, false, false, true},
+	.pcs_resources		= sja1105rs_pcs_resources,
+	.num_pcs_resources	= ARRAY_SIZE(sja1105rs_pcs_resources),
 	.name			= "SJA1105R",
 };
 
@@ -808,8 +827,6 @@ const struct sja1105_info sja1105s_info = {
 	.ptp_cmd_packing	= sja1105pqrs_ptp_cmd_packing,
 	.rxtstamp		= sja1105_rxtstamp,
 	.clocking_setup		= sja1105_clocking_setup,
-	.pcs_mdio_read_c45	= sja1105_pcs_mdio_read_c45,
-	.pcs_mdio_write_c45	= sja1105_pcs_mdio_write_c45,
 	.port_speed		= {
 		[SJA1105_SPEED_AUTO] = 0,
 		[SJA1105_SPEED_10MBPS] = 3,
@@ -821,6 +838,8 @@ const struct sja1105_info sja1105s_info = {
 	.supports_rmii		= {true, true, true, true, true},
 	.supports_rgmii		= {true, true, true, true, true},
 	.supports_sgmii		= {false, false, false, false, true},
+	.pcs_resources		= sja1105rs_pcs_resources,
+	.num_pcs_resources	= ARRAY_SIZE(sja1105rs_pcs_resources),
 	.name			= "SJA1105S",
 };
 
@@ -847,8 +866,6 @@ const struct sja1105_info sja1110a_info = {
 	.rxtstamp		= sja1110_rxtstamp,
 	.txtstamp		= sja1110_txtstamp,
 	.disable_microcontroller = sja1110_disable_microcontroller,
-	.pcs_mdio_read_c45	= sja1110_pcs_mdio_read_c45,
-	.pcs_mdio_write_c45	= sja1110_pcs_mdio_write_c45,
 	.port_speed		= {
 		[SJA1105_SPEED_AUTO] = 0,
 		[SJA1105_SPEED_10MBPS] = 4,
@@ -872,6 +889,8 @@ const struct sja1105_info sja1110a_info = {
 				   SJA1105_PHY_BASE_T1, SJA1105_PHY_BASE_T1,
 				   SJA1105_PHY_BASE_T1, SJA1105_PHY_BASE_T1,
 				   SJA1105_PHY_BASE_T1},
+	.pcs_resources		= sja1110_pcs_resources,
+	.num_pcs_resources	= ARRAY_SIZE(sja1110_pcs_resources),
 	.name			= "SJA1110A",
 };
 
@@ -898,8 +917,6 @@ const struct sja1105_info sja1110b_info = {
 	.rxtstamp		= sja1110_rxtstamp,
 	.txtstamp		= sja1110_txtstamp,
 	.disable_microcontroller = sja1110_disable_microcontroller,
-	.pcs_mdio_read_c45	= sja1110_pcs_mdio_read_c45,
-	.pcs_mdio_write_c45	= sja1110_pcs_mdio_write_c45,
 	.port_speed		= {
 		[SJA1105_SPEED_AUTO] = 0,
 		[SJA1105_SPEED_10MBPS] = 4,
@@ -923,6 +940,8 @@ const struct sja1105_info sja1110b_info = {
 				   SJA1105_PHY_BASE_T1, SJA1105_PHY_BASE_T1,
 				   SJA1105_PHY_BASE_T1, SJA1105_PHY_BASE_T1,
 				   SJA1105_NO_PHY},
+	.pcs_resources		= &sja1110_pcs_resources[2], /* ports 3 and 4 */
+	.num_pcs_resources	= ARRAY_SIZE(sja1110_pcs_resources) - 2,
 	.name			= "SJA1110B",
 };
 
@@ -949,8 +968,6 @@ const struct sja1105_info sja1110c_info = {
 	.rxtstamp		= sja1110_rxtstamp,
 	.txtstamp		= sja1110_txtstamp,
 	.disable_microcontroller = sja1110_disable_microcontroller,
-	.pcs_mdio_read_c45	= sja1110_pcs_mdio_read_c45,
-	.pcs_mdio_write_c45	= sja1110_pcs_mdio_write_c45,
 	.port_speed		= {
 		[SJA1105_SPEED_AUTO] = 0,
 		[SJA1105_SPEED_10MBPS] = 4,
@@ -974,6 +991,8 @@ const struct sja1105_info sja1110c_info = {
 				   SJA1105_PHY_BASE_T1, SJA1105_PHY_BASE_T1,
 				   SJA1105_NO_PHY, SJA1105_NO_PHY,
 				   SJA1105_NO_PHY},
+	.pcs_resources		= &sja1110_pcs_resources[3], /* port 4 */
+	.num_pcs_resources	= ARRAY_SIZE(sja1110_pcs_resources) - 3,
 	.name			= "SJA1110C",
 };
 
@@ -1000,8 +1019,6 @@ const struct sja1105_info sja1110d_info = {
 	.rxtstamp		= sja1110_rxtstamp,
 	.txtstamp		= sja1110_txtstamp,
 	.disable_microcontroller = sja1110_disable_microcontroller,
-	.pcs_mdio_read_c45	= sja1110_pcs_mdio_read_c45,
-	.pcs_mdio_write_c45	= sja1110_pcs_mdio_write_c45,
 	.port_speed		= {
 		[SJA1105_SPEED_AUTO] = 0,
 		[SJA1105_SPEED_10MBPS] = 4,
@@ -1025,5 +1042,7 @@ const struct sja1105_info sja1110d_info = {
 				   SJA1105_PHY_BASE_T1, SJA1105_PHY_BASE_T1,
 				   SJA1105_NO_PHY, SJA1105_NO_PHY,
 				   SJA1105_NO_PHY},
+	.pcs_resources		= sja1110_pcs_resources,
+	.num_pcs_resources	= ARRAY_SIZE(sja1110_pcs_resources),
 	.name			= "SJA1110D",
 };

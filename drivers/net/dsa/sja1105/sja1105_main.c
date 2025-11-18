@@ -15,6 +15,7 @@
 #include <linux/of.h>
 #include <linux/of_net.h>
 #include <linux/of_mdio.h>
+#include <linux/pcs/pcs-xpcs.h>
 #include <linux/netdev_features.h>
 #include <linux/netdevice.h>
 #include <linux/if_bridge.h>
@@ -3032,6 +3033,44 @@ static int sja1105_port_bridge_flags(struct dsa_switch *ds, int port,
 	return 0;
 }
 
+static int sja1105_create_pcs(struct dsa_switch *ds, int port)
+{
+	struct sja1105_private *priv = ds->priv;
+	struct phylink_pcs *pcs;
+
+	if (priv->phy_mode[port] != PHY_INTERFACE_MODE_SGMII &&
+	    priv->phy_mode[port] != PHY_INTERFACE_MODE_2500BASEX)
+		return 0;
+
+	pcs = xpcs_create_pcs_fwnode(priv->pcs_fwnode[port]);
+	if (IS_ERR(pcs))
+		return PTR_ERR(pcs);
+
+	priv->pcs[port] = pcs;
+
+	return 0;
+}
+
+static void sja1105_destroy_pcs(struct dsa_switch *ds, int port)
+{
+	struct sja1105_private *priv = ds->priv;
+
+	if (priv->pcs[port]) {
+		xpcs_destroy_pcs(priv->pcs[port]);
+		priv->pcs[port] = NULL;
+	}
+}
+
+static int sja1105_port_setup(struct dsa_switch *ds, int port)
+{
+	return sja1105_create_pcs(ds, port);
+}
+
+static void sja1105_port_teardown(struct dsa_switch *ds, int port)
+{
+	sja1105_destroy_pcs(ds, port);
+}
+
 /* The programming model for the SJA1105 switch is "all-at-once" via static
  * configuration tables. Some of these can be dynamically modified at runtime,
  * but not the xMII mode parameters table.
@@ -3086,16 +3125,9 @@ static int sja1105_setup(struct dsa_switch *ds)
 		goto out_flower_teardown;
 	}
 
-	rc = sja1105_mdiobus_register(ds);
-	if (rc < 0) {
-		dev_err(ds->dev, "Failed to register MDIO bus: %pe\n",
-			ERR_PTR(rc));
-		goto out_ptp_clock_unregister;
-	}
-
 	rc = sja1105_devlink_setup(ds);
 	if (rc < 0)
-		goto out_mdiobus_unregister;
+		goto out_ptp_clock_unregister;
 
 	rtnl_lock();
 	rc = dsa_tag_8021q_register(ds, htons(ETH_P_8021Q));
@@ -3125,8 +3157,6 @@ static int sja1105_setup(struct dsa_switch *ds)
 
 out_devlink_teardown:
 	sja1105_devlink_teardown(ds);
-out_mdiobus_unregister:
-	sja1105_mdiobus_unregister(ds);
 out_ptp_clock_unregister:
 	sja1105_ptp_clock_unregister(ds);
 out_flower_teardown:
@@ -3147,7 +3177,6 @@ static void sja1105_teardown(struct dsa_switch *ds)
 	rtnl_unlock();
 
 	sja1105_devlink_teardown(ds);
-	sja1105_mdiobus_unregister(ds);
 	sja1105_ptp_clock_unregister(ds);
 	sja1105_flower_teardown(ds);
 	sja1105_tas_teardown(ds);
@@ -3166,6 +3195,8 @@ static const struct dsa_switch_ops sja1105_switch_ops = {
 	.connect_tag_protocol	= sja1105_connect_tag_protocol,
 	.setup			= sja1105_setup,
 	.teardown		= sja1105_teardown,
+	.port_setup		= sja1105_port_setup,
+	.port_teardown		= sja1105_port_teardown,
 	.set_ageing_time	= sja1105_set_ageing_time,
 	.port_change_mtu	= sja1105_change_mtu,
 	.port_max_mtu		= sja1105_get_max_mtu,
@@ -3362,32 +3393,51 @@ static int sja1105_probe(struct spi_device *spi)
 		return rc;
 	}
 
+	rc = sja1105_fill_device_tree(ds);
+	if (rc) {
+		dev_err(ds->dev, "Failed to fill device tree: %pe\n",
+			ERR_PTR(rc));
+		return rc;
+	}
+
 	rc = sja1105_mfd_add_devices(ds);
 	if (rc) {
 		dev_err(ds->dev, "Failed to create child devices: %pe\n",
 			ERR_PTR(rc));
-		return rc;
+		goto restore_device_tree;
 	}
 
 	if (IS_ENABLED(CONFIG_NET_SCH_CBS)) {
 		priv->cbs = devm_kcalloc(dev, priv->info->num_cbs_shapers,
 					 sizeof(struct sja1105_cbs_entry),
 					 GFP_KERNEL);
-		if (!priv->cbs)
-			return -ENOMEM;
+		if (!priv->cbs) {
+			rc = -ENOMEM;
+			goto restore_device_tree;
+		}
 	}
 
-	return dsa_register_switch(priv->ds);
+	rc = dsa_register_switch(priv->ds);
+	if (rc)
+		goto restore_device_tree;
+
+	return 0;
+
+restore_device_tree:
+	sja1105_restore_device_tree(ds);
+	return rc;
 }
 
 static void sja1105_remove(struct spi_device *spi)
 {
 	struct sja1105_private *priv = spi_get_drvdata(spi);
+	struct dsa_switch *ds = priv->ds;
 
 	if (!priv)
 		return;
 
-	dsa_unregister_switch(priv->ds);
+	dsa_unregister_switch(ds);
+	sja1105_restore_device_tree(ds);
 }
 
 static void sja1105_shutdown(struct spi_device *spi)

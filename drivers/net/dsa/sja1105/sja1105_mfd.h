@@ -5,5 +5,7 @@
 #define _SJA1105_MFD_H
 
 int sja1105_mfd_add_devices(struct dsa_switch *ds);
+int sja1105_fill_device_tree(struct dsa_switch *ds);
+void sja1105_restore_device_tree(struct dsa_switch *ds);
 
 #endif
