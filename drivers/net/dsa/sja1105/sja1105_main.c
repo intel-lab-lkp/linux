@@ -23,6 +23,7 @@
 #include <linux/units.h>
 
 #include "sja1105.h"
+#include "sja1105_mfd.h"
 #include "sja1105_tas.h"
 
 #define SJA1105_UNKNOWN_MULTICAST	0x010000000000ull
@@ -3316,6 +3317,11 @@ static int sja1105_probe(struct spi_device *spi)
 	if (priv->max_xfer_len > max_msg - SJA1105_SIZE_SPI_MSG_HEADER)
 		priv->max_xfer_len = max_msg - SJA1105_SIZE_SPI_MSG_HEADER;
 
+	/* Explicitly advertise "no DMA" support, to suppress
+	 * "DMA mask not set" warning in MFD children
+	 */
+	dev->dma_mask = &dev->coherent_dma_mask;
+
 	priv->info = of_device_get_match_data(dev);
 
 	rc = sja1105_create_regmap(priv);
@@ -3353,6 +3359,13 @@ static int sja1105_probe(struct spi_device *spi)
 	rc = sja1105_parse_dt(priv);
 	if (rc < 0) {
 		dev_err(ds->dev, "Failed to parse DT: %d\n", rc);
+		return rc;
+	}
+
+	rc = sja1105_mfd_add_devices(ds);
+	if (rc) {
+		dev_err(ds->dev, "Failed to create child devices: %pe\n",
+			ERR_PTR(rc));
 		return rc;
 	}
 
