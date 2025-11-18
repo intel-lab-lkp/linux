@@ -9,6 +9,9 @@
 
 #include <linux/landlock.h>
 #include <sys/prctl.h>
+#include <linux/pfkeyv2.h>
+#include <linux/kcm.h>
+#include <linux/can.h>
 
 #include "common.h"
 
@@ -377,6 +380,135 @@ TEST_F(prot_outside_range, add_rule)
 	EXPECT_EQ(-1, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
 					&create_socket_attr, 0));
 	ASSERT_EQ(0, close(ruleset_fd));
+}
+
+FIXTURE(protocol)
+{
+	struct protocol_variant prot;
+	bool requires_caps;
+};
+
+FIXTURE_VARIANT(protocol)
+{
+	struct protocol_variant prot;
+	bool requires_caps;
+};
+
+FIXTURE_SETUP(protocol)
+{
+	disable_caps(_metadata);
+
+	self->prot = variant->prot;
+	self->requires_caps = variant->requires_caps;
+};
+
+FIXTURE_TEARDOWN(protocol)
+{
+}
+
+#define _PROTOCOL_VARIANT_ADD(family_, type_, protocol_, caps_)          \
+	FIXTURE_VARIANT_ADD(protocol, family_##_##type_##_##protocol_)   \
+	{                                                                \
+		.prot = {                                              \
+			.domain = AF_##family_,                             \
+			.type = SOCK_##type_,                                 \
+			.protocol = protocol_,                         \
+		},                                                     \
+		.requires_caps = caps_, \
+	}
+
+#define PROTOCOL_VARIANT_ADD(family, type, protocol) \
+	_PROTOCOL_VARIANT_ADD(family, type, protocol, false)
+
+#define PROTOCOL_VARIANT_ADD_CAPS(family, type, protocol) \
+	_PROTOCOL_VARIANT_ADD(family, type, protocol, true)
+
+#include "protocols_define.h"
+
+#undef _PROTOCOL_VARIANT_ADD
+#undef PROTOCOL_VARIANT_ADD
+#undef PROTOCOL_VARIANT_ADD_CAPS
+
+static int test_socket(int family, int type, int protocol)
+{
+	int fd;
+
+	fd = socket(family, type | SOCK_CLOEXEC, protocol);
+	if (fd < 0)
+		return errno;
+	/*
+	 * Mixing error codes from close(2) and socket(2) should not lead to
+	 * any (access type) confusion for this tests.
+	 */
+	if (close(fd) != 0)
+		return errno;
+	return 0;
+}
+
+static int test_socket_variant(struct __test_metadata *const _metadata,
+			       const struct protocol_variant *const prot,
+			       bool requires_caps)
+{
+	int err;
+
+	if (requires_caps) {
+		set_cap(_metadata, CAP_NET_RAW);
+		set_cap(_metadata, CAP_SYS_ADMIN);
+		set_cap(_metadata, CAP_NET_ADMIN);
+	}
+
+	err = test_socket(prot->domain, prot->type, prot->protocol);
+
+	if (requires_caps) {
+		clear_cap(_metadata, CAP_NET_RAW);
+		clear_cap(_metadata, CAP_SYS_ADMIN);
+		clear_cap(_metadata, CAP_NET_ADMIN);
+	}
+
+	return err;
+}
+
+TEST_F(protocol, restrict_socket)
+{
+	const struct landlock_ruleset_attr ruleset_attr = {
+		.handled_access_socket = LANDLOCK_ACCESS_SOCKET_CREATE,
+	};
+	int ruleset_fd;
+	const struct landlock_socket_attr create_socket_attr = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = self->prot.domain,
+		.type = self->prot.type,
+		.protocol = self->prot.protocol,
+	};
+
+	/* Verifies default socket creation. */
+	ASSERT_EQ(0, test_socket_variant(_metadata, &self->prot,
+					 self->requires_caps));
+
+	ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+
+	ASSERT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+				       &create_socket_attr, 0));
+	enforce_ruleset(_metadata, ruleset_fd);
+	ASSERT_EQ(0, close(ruleset_fd));
+
+	/* Tries to create socket when protocol is allowed. */
+	EXPECT_EQ(0, test_socket_variant(_metadata, &self->prot,
+					 self->requires_caps));
+
+	/* Denies creation. */
+	ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+
+	enforce_ruleset(_metadata, ruleset_fd);
+	ASSERT_EQ(0, close(ruleset_fd));
+
+	/* Tries to create a socket when protocol is restricted. */
+	EXPECT_EQ(EACCES, test_socket_variant(_metadata, &self->prot,
+					      self->requires_caps));
 }
 
 TEST_HARNESS_MAIN
