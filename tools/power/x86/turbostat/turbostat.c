@@ -2476,6 +2476,9 @@ static long open_perf_counter(int cpu, unsigned int type, unsigned int config, i
 
 int get_instr_count_fd(int cpu)
 {
+	if (!fd_instr_count_percpu)
+		return -1;
+
 	if (fd_instr_count_percpu[cpu])
 		return fd_instr_count_percpu[cpu];
 
@@ -10037,7 +10040,7 @@ void turbostat_init()
 	for_all_cpus(get_cpu_type, ODD_COUNTERS);
 	for_all_cpus(get_cpu_type, EVEN_COUNTERS);
 
-	if (BIC_IS_ENABLED(BIC_IPC) && has_aperf_access && get_instr_count_fd(base_cpu) != -1)
+	if (BIC_IS_ENABLED(BIC_IPC) && get_instr_count_fd(base_cpu) != -1)
 		BIC_PRESENT(BIC_IPC);
 
 	/*
