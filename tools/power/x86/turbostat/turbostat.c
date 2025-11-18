@@ -8573,6 +8573,10 @@ void msr_perf_init_(void)
 				continue;
 
 			if (cai->needed) {
+				/* check to see if APERF is available */
+				if (cidx == MSR_ARCH_INFO_APERF_INDEX && !has_aperf)
+					continue;
+
 				/* Use perf API for this counter */
 				if (add_msr_perf_counter(cpu, cci, cai) != -1) {
 					cci->source[cai->rci_index] = COUNTER_SOURCE_PERF;
