@@ -14,11 +14,7 @@
 #include <drm/drm_of.h>
 #include "komeda_dev.h"
 #include "komeda_kms.h"
-
-struct komeda_drv {
-	struct komeda_dev *mdev;
-	struct komeda_kms_dev *kms;
-};
+#include "komeda_drv.h"
 
 struct komeda_dev *dev_to_mdev(struct device *dev)
 {
