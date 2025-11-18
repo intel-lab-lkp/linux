@@ -307,10 +307,16 @@ static void loongson_init_ipi(void)
 		panic("IPI IRQ request failed\n");
 }
 
+static bool loongson_vcpu_is_preempted(int cpu)
+{
+	return false;
+}
+
 struct smp_ops mp_ops = {
 	.init_ipi		= loongson_init_ipi,
 	.send_ipi_single	= loongson_send_ipi_single,
 	.send_ipi_mask		= loongson_send_ipi_mask,
+	.vcpu_is_preempted	= loongson_vcpu_is_preempted,
 };
 
 static void __init fdt_smp_setup(void)

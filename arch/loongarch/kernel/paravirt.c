@@ -52,6 +52,13 @@ static u64 paravt_steal_clock(int cpu)
 #ifdef CONFIG_SMP
 static struct smp_ops native_ops;
 
+static bool pv_vcpu_is_preempted(int cpu)
+{
+	struct kvm_steal_time *src = &per_cpu(steal_time, cpu);
+
+	return !!(src->preempted & KVM_VCPU_PREEMPTED);
+}
+
 static void pv_send_ipi_single(int cpu, unsigned int action)
 {
 	int min, old;
@@ -308,6 +315,9 @@ int __init pv_time_init(void)
 		pr_err("Failed to install cpu hotplug callbacks\n");
 		return r;
 	}
+
+	if (kvm_para_has_feature(KVM_FEATURE_PREEMPT_HINT))
+		mp_ops.vcpu_is_preempted = pv_vcpu_is_preempted;
 #endif
 
 	static_call_update(pv_steal_clock, paravt_steal_clock);
@@ -332,3 +342,9 @@ int __init pv_spinlock_init(void)
 
 	return 0;
 }
+
+bool notrace vcpu_is_preempted(int cpu)
+{
+	return mp_ops.vcpu_is_preempted(cpu);
+}
+EXPORT_SYMBOL(vcpu_is_preempted);

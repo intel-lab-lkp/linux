@@ -18,6 +18,7 @@ struct smp_ops {
 	void (*init_ipi)(void);
 	void (*send_ipi_single)(int cpu, unsigned int action);
 	void (*send_ipi_mask)(const struct cpumask *mask, unsigned int action);
+	bool (*vcpu_is_preempted)(int cpu);
 };
 extern struct smp_ops mp_ops;
 
