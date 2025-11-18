@@ -136,6 +136,13 @@ config MDIO_MOXART
 	  This driver supports the MDIO interface found in the network
 	  interface units of the MOXA ART SoC
 
+config MDIO_SJA1110_CBT1
+	tristate "NXP SJA1110 100BASE-T1 MDIO bus"
+	help
+	  This driver supports the MDIO controller embedded in the NXP SJA1110
+	  automotive Ethernet switches, which is used to access the internal
+	  100BASE-T1 PHYs over SPI.
+
 config MDIO_OCTEON
 	tristate "Octeon and some ThunderX SOCs MDIO buses"
 	depends on (64BIT && OF_MDIO) || COMPILE_TEST
