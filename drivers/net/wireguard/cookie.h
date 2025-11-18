@@ -13,7 +13,7 @@ struct wg_peer;
 
 struct cookie_checker {
 	u8 secret[NOISE_HASH_LEN];
-	u8 cookie_encryption_key[NOISE_SYMMETRIC_KEY_LEN];
+	u8 cookie_encryption_key[NOISE_SYMMETRIC_KEY_LEN - 1];
 	u8 message_mac1_key[NOISE_SYMMETRIC_KEY_LEN];
 	u64 secret_birthdate;
 	struct rw_semaphore secret_lock;
