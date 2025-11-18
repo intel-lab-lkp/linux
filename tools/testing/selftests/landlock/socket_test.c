@@ -12,6 +12,10 @@
 #include <linux/pfkeyv2.h>
 #include <linux/kcm.h>
 #include <linux/can.h>
+#include <sys/socket.h>
+#include <stdint.h>
+#include <linux/sctp.h>
+#include <arpa/inet.h>
 
 #include "common.h"
 
@@ -919,6 +923,130 @@ TEST_F(mini, socketpair)
 
 	/* Tries to create socket when protocol is restricted. */
 	EXPECT_EQ(EACCES, test_socketpair(AF_UNIX, SOCK_STREAM, 0));
+}
+
+/* clang-format off */
+FIXTURE(connection_restriction) {};
+/* clang-format on */
+
+FIXTURE_VARIANT(connection_restriction)
+{
+	bool sandboxed;
+};
+
+FIXTURE_SETUP(connection_restriction)
+{
+	disable_caps(_metadata);
+	setup_loopback(_metadata);
+};
+
+FIXTURE_TEARDOWN(connection_restriction)
+{
+}
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(connection_restriction, allowed) {
+	/* clang-format on */
+	.sandboxed = false,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(connection_restriction, sandboxed) {
+	/* clang-format on */
+	.sandboxed = true,
+};
+
+static const char loopback_ipv4[] = "127.0.0.1";
+static const int backlog = 10;
+static const int loopback_port = 1024;
+
+TEST_F(connection_restriction, sctp_peeloff)
+{
+	int status, ret;
+	pid_t child;
+	struct sockaddr_in addr;
+	int server_fd;
+
+	server_fd =
+		socket(AF_INET, SOCK_SEQPACKET | SOCK_CLOEXEC, IPPROTO_SCTP);
+	ASSERT_LE(0, server_fd);
+
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(loopback_port);
+	addr.sin_addr.s_addr = inet_addr(loopback_ipv4);
+
+	ASSERT_EQ(0, bind(server_fd, &addr, sizeof(addr)));
+	ASSERT_EQ(0, listen(server_fd, backlog));
+
+	child = fork();
+	ASSERT_LE(0, child);
+	if (child == 0) {
+		int client_fd;
+		sctp_peeloff_flags_arg_t peeloff;
+		socklen_t peeloff_size = sizeof(peeloff);
+
+		/* Closes listening socket for the child. */
+		ASSERT_EQ(0, close(server_fd));
+
+		client_fd = socket(AF_INET, SOCK_SEQPACKET | SOCK_CLOEXEC,
+				   IPPROTO_SCTP);
+		ASSERT_LE(0, client_fd);
+
+		/*
+		 * Establishes connection between sockets and
+		 * gets SCTP association id.
+		 */
+		ret = setsockopt(client_fd, IPPROTO_SCTP, SCTP_SOCKOPT_CONNECTX,
+				 &addr, sizeof(addr));
+		ASSERT_LE(0, ret);
+
+		if (variant->sandboxed) {
+			const struct landlock_ruleset_attr ruleset_attr = {
+				.handled_access_socket =
+					LANDLOCK_ACCESS_SOCKET_CREATE,
+			};
+			/* Denies creation of SCTP sockets. */
+			int ruleset_fd = landlock_create_ruleset(
+				&ruleset_attr, sizeof(ruleset_attr), 0);
+			ASSERT_LE(0, ruleset_fd);
+
+			enforce_ruleset(_metadata, ruleset_fd);
+			ASSERT_EQ(0, close(ruleset_fd));
+		}
+		/*
+		 * Branches off current SCTP association into a separate socket
+		 * and returns it to user space.
+		 */
+		peeloff.p_arg.associd = ret;
+		ret = getsockopt(client_fd, IPPROTO_SCTP, SCTP_SOCKOPT_PEELOFF,
+				 &peeloff, &peeloff_size);
+
+		/*
+		 * Branching off existing SCTP association leads to creation of user space
+		 * SCTP UDP socket and should be restricted by Landlock.
+		 */
+		if (variant->sandboxed) {
+			EXPECT_EQ(-1, ret);
+			EXPECT_EQ(EACCES, errno);
+		} else {
+			ASSERT_LE(0, ret);
+		}
+
+		/* getsockopt(2) returns 0 on success. */
+		if (ret == 0) {
+			/* Closes peeloff socket if such was created. */
+			ASSERT_EQ(0, close(peeloff.p_arg.sd));
+		}
+		ASSERT_EQ(0, close(client_fd));
+		_exit(_metadata->exit_code);
+		return;
+	}
+
+	ASSERT_EQ(child, waitpid(child, &status, 0));
+	ASSERT_EQ(1, WIFEXITED(status));
+	ASSERT_EQ(EXIT_SUCCESS, WEXITSTATUS(status));
+
+	ASSERT_EQ(0, close(server_fd));
 }
 
 TEST_HARNESS_MAIN
