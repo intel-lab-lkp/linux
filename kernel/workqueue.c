@@ -286,6 +286,7 @@ struct pool_workqueue {
 	struct list_head	pending_node;	/* LN: node on wq_node_nr_active->pending_pwqs */
 	struct list_head	pwqs_node;	/* WR: node on wq->pwqs */
 	struct list_head	mayday_node;	/* MD: node on wq->maydays */
+	struct work_struct	mayday_pos_work;/* L: position on pool->worklist */
 
 	u64			stats[PWQ_NR_STATS];
 
@@ -1120,6 +1121,12 @@ static struct worker *find_worker_executing_work(struct worker_pool *pool,
 	return NULL;
 }
 
+static void mayday_pos_func(struct work_struct *work)
+{
+	/* should not be processed, only for marking position */
+	BUG();
+}
+
 /**
  * move_linked_works - move linked works to a list
  * @work: start of series of works to be scheduled
@@ -1181,6 +1188,15 @@ static bool assign_work(struct work_struct *work, struct worker *worker,
 	struct worker *collision;
 
 	lockdep_assert_held(&pool->lock);
+
+	/* The positional work should not be processed */
+	if (unlikely(work->func == mayday_pos_func)) {
+		/* only worker_thread() can possibly take this branch */
+		if (WARN_ON_ONCE(nextp))
+			*nextp = list_next_entry(work, entry);
+		list_del_init(&work->entry);
+		return false;
+	}
 
 	/*
 	 * A single work shouldn't be executed concurrently by multiple workers.
@@ -2987,7 +3003,7 @@ static void send_mayday(struct work_struct *work)
 		return;
 
 	/* mayday mayday mayday */
-	if (list_empty(&pwq->mayday_node)) {
+	if (list_empty(&pwq->mayday_node) && list_empty(&pwq->mayday_pos_work.entry)) {
 		/*
 		 * If @pwq is for an unbound wq, its base ref may be put at
 		 * any time due to an attribute change.  Pin @pwq until the
@@ -2997,6 +3013,8 @@ static void send_mayday(struct work_struct *work)
 		list_add_tail(&pwq->mayday_node, &wq->maydays);
 		wake_up_process(wq->rescuer->task);
 		pwq->stats[PWQ_STAT_MAYDAY]++;
+
+		list_add_tail(&pwq->mayday_pos_work.entry, &work->entry);
 	}
 }
 
@@ -3437,6 +3455,37 @@ sleep:
 	goto woke_up;
 }
 
+static bool assign_rescue_work(struct pool_workqueue *pwq, struct worker *rescuer)
+{
+	struct worker_pool *pool = pwq->pool;
+	struct work_struct *work, *n;
+
+	/* from where to search */
+	if (list_empty(&pwq->mayday_pos_work.entry))
+		work = list_first_entry(&pool->worklist, struct work_struct, entry);
+	else {
+		work = list_next_entry(&pwq->mayday_pos_work, entry);
+		/* It might be at a new position or not need position anymore */
+		list_del_init(&pwq->mayday_pos_work.entry);
+	}
+
+	/* need rescue? */
+	if (!need_to_create_worker(pool))
+		return false;
+
+	/* try to assign a work to rescue */
+	list_for_each_entry_safe_from(work, n, &pool->worklist, entry) {
+		if (get_work_pwq(work) == pwq && assign_work(work, rescuer, &n)) {
+			pwq->stats[PWQ_STAT_RESCUED]++;
+			/* mark the position for next search */
+			list_add_tail(&pwq->mayday_pos_work.entry, &n->entry);
+			return true;
+		}
+	}
+
+	return false;
+}
+
 /**
  * rescuer_thread - the rescuer thread function
  * @__rescuer: self
@@ -3491,7 +3540,6 @@ repeat:
 		struct pool_workqueue *pwq = list_first_entry(&wq->maydays,
 					struct pool_workqueue, mayday_node);
 		struct worker_pool *pool = pwq->pool;
-		struct work_struct *work, *n;
 
 		__set_current_state(TASK_RUNNING);
 		list_del_init(&pwq->mayday_node);
@@ -3502,42 +3550,8 @@ repeat:
 
 		raw_spin_lock_irq(&pool->lock);
 
-		/*
-		 * Slurp in all works issued via this workqueue and
-		 * process'em.
-		 */
-		WARN_ON_ONCE(!list_empty(&rescuer->scheduled));
-		list_for_each_entry_safe(work, n, &pool->worklist, entry) {
-			if (get_work_pwq(work) == pwq &&
-			    assign_work(work, rescuer, &n))
-				pwq->stats[PWQ_STAT_RESCUED]++;
-		}
-
-		if (!list_empty(&rescuer->scheduled)) {
+		while (assign_rescue_work(pwq, rescuer))
 			process_scheduled_works(rescuer);
-
-			/*
-			 * The above execution of rescued work items could
-			 * have created more to rescue through
-			 * pwq_activate_first_inactive() or chained
-			 * queueing.  Let's put @pwq back on mayday list so
-			 * that such back-to-back work items, which may be
-			 * being used to relieve memory pressure, don't
-			 * incur MAYDAY_INTERVAL delay inbetween.
-			 */
-			if (pwq->nr_active && need_to_create_worker(pool)) {
-				raw_spin_lock(&wq_mayday_lock);
-				/*
-				 * Queue iff we aren't racing destruction
-				 * and somebody else hasn't queued it already.
-				 */
-				if (wq->rescuer && list_empty(&pwq->mayday_node)) {
-					get_pwq(pwq);
-					list_add_tail(&pwq->mayday_node, &wq->maydays);
-				}
-				raw_spin_unlock(&wq_mayday_lock);
-			}
-		}
 
 		/*
 		 * Leave this pool. Notify regular workers; otherwise, we end up
@@ -5157,6 +5171,20 @@ static void init_pwq(struct pool_workqueue *pwq, struct workqueue_struct *wq,
 	INIT_LIST_HEAD(&pwq->pwqs_node);
 	INIT_LIST_HEAD(&pwq->mayday_node);
 	kthread_init_work(&pwq->release_work, pwq_release_workfn);
+
+	/*
+	 * Set the dumpy positional work with valid function and get_work_pwq().
+	 *
+	 * The positional work should only be in the pwq->pool->worklist, and
+	 * should never be queued, processed, flushed, cancelled or even examed
+	 * as a work item.
+	 *
+	 * WORK_STRUCT_PENDING and WORK_STRUCT_INACTIVE just make it less
+	 * surprise for kernel debuging tools and reviewers.
+	 */
+	INIT_WORK(&pwq->mayday_pos_work, mayday_pos_func);
+	atomic_long_set(&pwq->mayday_pos_work.data, (unsigned long)pwq |
+			WORK_STRUCT_PENDING | WORK_STRUCT_PWQ | WORK_STRUCT_INACTIVE);
 }
 
 /* sync @pwq with the current state of its associated wq and link it */
@@ -6304,6 +6332,8 @@ static void show_pwq(struct pool_workqueue *pwq)
 
 	list_for_each_entry(work, &pool->worklist, entry) {
 		if (get_work_pwq(work) == pwq) {
+			if (work->func == mayday_pos_func)
+				continue;
 			has_pending = true;
 			break;
 		}
@@ -6314,6 +6344,8 @@ static void show_pwq(struct pool_workqueue *pwq)
 		pr_info("    pending:");
 		list_for_each_entry(work, &pool->worklist, entry) {
 			if (get_work_pwq(work) != pwq)
+				continue;
+			if (work->func == mayday_pos_func)
 				continue;
 
 			pr_cont_work(comma, work, &pcws);
