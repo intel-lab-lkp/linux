@@ -52,25 +52,24 @@ struct pci_config_window *pci_host_common_ecam_create(struct device *dev,
 }
 EXPORT_SYMBOL_GPL(pci_host_common_ecam_create);
 
-int pci_host_common_init(struct platform_device *pdev,
-			 const struct pci_ecam_ops *ops)
+struct pci_host_bridge *pci_host_common_init(struct platform_device *pdev,
+					     const struct pci_ecam_ops *ops)
 {
 	struct device *dev = &pdev->dev;
 	struct pci_host_bridge *bridge;
 	struct pci_config_window *cfg;
+	int rc;
 
 	bridge = devm_pci_alloc_host_bridge(dev, 0);
 	if (!bridge)
-		return -ENOMEM;
+		return ERR_PTR(-ENOMEM);
 
 	of_pci_check_probe_only();
-
-	platform_set_drvdata(pdev, bridge);
 
 	/* Parse and map our Configuration Space windows */
 	cfg = pci_host_common_ecam_create(dev, bridge, ops);
 	if (IS_ERR(cfg))
-		return PTR_ERR(cfg);
+		return (struct pci_host_bridge *)cfg;
 
 	bridge->sysdata = cfg;
 	bridge->ops = (struct pci_ops *)&ops->pci_ops;
@@ -78,30 +77,45 @@ int pci_host_common_init(struct platform_device *pdev,
 	bridge->disable_device = ops->disable_device;
 	bridge->msi_domain = true;
 
-	return pci_host_probe(bridge);
+	rc = pci_host_probe(bridge);
+	if (rc)
+		return ERR_PTR(rc);
+
+	return bridge;
 }
 EXPORT_SYMBOL_GPL(pci_host_common_init);
 
 int pci_host_common_probe(struct platform_device *pdev)
 {
 	const struct pci_ecam_ops *ops;
+	struct pci_host_bridge *bridge;
 
 	ops = of_device_get_match_data(&pdev->dev);
 	if (!ops)
 		return -ENODEV;
 
-	return pci_host_common_init(pdev, ops);
+	bridge = pci_host_common_init(pdev, ops);
+	if (IS_ERR(bridge))
+		return PTR_ERR(bridge);
+
+	platform_set_drvdata(pdev, bridge);
+
+	return 0;
 }
 EXPORT_SYMBOL_GPL(pci_host_common_probe);
 
-void pci_host_common_remove(struct platform_device *pdev)
+void pci_host_common_release(struct pci_host_bridge *bridge)
 {
-	struct pci_host_bridge *bridge = platform_get_drvdata(pdev);
-
 	pci_lock_rescan_remove();
 	pci_stop_root_bus(bridge->bus);
 	pci_remove_root_bus(bridge->bus);
 	pci_unlock_rescan_remove();
+}
+EXPORT_SYMBOL_GPL(pci_host_common_release);
+
+void pci_host_common_remove(struct platform_device *pdev)
+{
+	pci_host_common_release(platform_get_drvdata(pdev));
 }
 EXPORT_SYMBOL_GPL(pci_host_common_remove);
 
