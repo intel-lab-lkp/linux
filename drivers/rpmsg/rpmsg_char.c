@@ -408,8 +408,13 @@ static void rpmsg_eptdev_release_device(struct device *dev)
 {
 	struct rpmsg_eptdev *eptdev = dev_to_eptdev(dev);
 
-	ida_free(&rpmsg_ept_ida, dev->id);
-	if (eptdev->dev.devt)
+	/*
+	 * release() can be invoked from error path of rpmsg_eptdev_add(),
+	 * WARN() will be fired if ida_free() is feed with invalid ID.
+	 */
+	if (likely(ida_exists(&rpmsg_ept_ida, dev->id)))
+		ida_free(&rpmsg_ept_ida, dev->id);
+	if (eptdev->dev.devt && likely(ida_exists(&rpmsg_minor_ida, MINOR(eptdev->dev.devt))))
 		ida_free(&rpmsg_minor_ida, MINOR(eptdev->dev.devt));
 	kfree(eptdev);
 }
@@ -458,6 +463,8 @@ static int rpmsg_eptdev_add(struct rpmsg_eptdev *eptdev,
 	struct device *dev = &eptdev->dev;
 	int ret;
 
+	dev->release = rpmsg_eptdev_release_device;
+
 	eptdev->chinfo = chinfo;
 
 	if (cdev) {
@@ -471,7 +478,7 @@ static int rpmsg_eptdev_add(struct rpmsg_eptdev *eptdev,
 	/* Anonymous inode device still need device name for dev_err() and friends */
 	ret = ida_alloc(&rpmsg_ept_ida, GFP_KERNEL);
 	if (ret < 0)
-		goto free_minor_ida;
+		goto free_eptdev;
 	dev->id = ret;
 	dev_set_name(dev, "rpmsg%d", ret);
 
@@ -480,22 +487,13 @@ static int rpmsg_eptdev_add(struct rpmsg_eptdev *eptdev,
 	if (cdev) {
 		ret = cdev_device_add(&eptdev->cdev, &eptdev->dev);
 		if (ret)
-			goto free_ept_ida;
+			goto free_eptdev;
 	}
-
-	/* We can now rely on the release function for cleanup */
-	dev->release = rpmsg_eptdev_release_device;
 
 	return ret;
 
-free_ept_ida:
-	ida_free(&rpmsg_ept_ida, dev->id);
-free_minor_ida:
-	if (cdev)
-		ida_free(&rpmsg_minor_ida, MINOR(dev->devt));
 free_eptdev:
 	put_device(dev);
-	kfree(eptdev);
 
 	return ret;
 }
@@ -561,6 +559,8 @@ int rpmsg_anonymous_eptdev_create(struct rpmsg_device *rpdev, struct device *par
 
 	if (!ret)
 		*pfd = fd;
+	else
+		put_device(&eptdev->dev);
 
 	return ret;
 }
