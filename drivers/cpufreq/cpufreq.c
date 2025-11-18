@@ -527,6 +527,15 @@ unsigned int cpufreq_driver_resolve_freq(struct cpufreq_policy *policy,
 	unsigned int min = READ_ONCE(policy->min);
 	unsigned int max = READ_ONCE(policy->max);
 
+	/* If we recently resolved this target, return cached value.
+	 * This avoids repeated frequency table searches.
+	 */
+	if (likely(policy->cached_target_freq == target_freq &&
+		   policy->cached_resolved_idx != UINT_MAX &&
+		   policy->freq_table)) {
+		return policy->freq_table[policy->cached_resolved_idx].frequency;
+	}
+
 	/*
 	 * If this function runs in parallel with cpufreq_set_policy(), it may
 	 * read policy->min before the update and policy->max after the update
