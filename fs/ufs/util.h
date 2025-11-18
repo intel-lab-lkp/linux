@@ -149,37 +149,29 @@ ufs_set_de_namlen(struct super_block *sb, struct ufs_dir_entry *de, u16 value)
 static inline void
 ufs_set_de_type(struct super_block *sb, struct ufs_dir_entry *de, int mode)
 {
+	static const unsigned char ifmt_to_dt[16] = {
+		[0]	= DT_UNKNOWN,
+		[1]	= DT_FIFO,
+		[2]	= DT_CHR,
+		[3]	= DT_UNKNOWN,
+		[4]	= DT_DIR,
+		[5]	= DT_UNKNOWN,
+		[6]	= DT_BLK,
+		[7]	= DT_UNKNOWN,
+		[8]	= DT_REG,
+		[9]	= DT_UNKNOWN,
+		[10]	= DT_LNK,
+		[11]	= DT_UNKNOWN,
+		[12]	= DT_SOCK,
+		[13]	= DT_UNKNOWN,
+		[14]	= DT_UNKNOWN,
+		[15]	= DT_UNKNOWN,
+	};
+
 	if ((UFS_SB(sb)->s_flags & UFS_DE_MASK) != UFS_DE_44BSD)
 		return;
 
-	/*
-	 * TODO turn this into a table lookup
-	 */
-	switch (mode & S_IFMT) {
-	case S_IFSOCK:
-		de->d_u.d_44.d_type = DT_SOCK;
-		break;
-	case S_IFLNK:
-		de->d_u.d_44.d_type = DT_LNK;
-		break;
-	case S_IFREG:
-		de->d_u.d_44.d_type = DT_REG;
-		break;
-	case S_IFBLK:
-		de->d_u.d_44.d_type = DT_BLK;
-		break;
-	case S_IFDIR:
-		de->d_u.d_44.d_type = DT_DIR;
-		break;
-	case S_IFCHR:
-		de->d_u.d_44.d_type = DT_CHR;
-		break;
-	case S_IFIFO:
-		de->d_u.d_44.d_type = DT_FIFO;
-		break;
-	default:
-		de->d_u.d_44.d_type = DT_UNKNOWN;
-	}
+	de->d_u.d_44.d_type = ifmt_to_dt[(mode & S_IFMT) >> 12];
 }
 
 static inline u32
