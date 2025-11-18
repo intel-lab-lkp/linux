@@ -578,4 +578,96 @@ TEST_F(mini, unsupported_af_and_prot)
 	EXPECT_EQ(EACCES, test_socket(AF_UNIX, SOCK_STREAM, PF_UNIX + 1));
 }
 
+static void add_ruleset_layer(struct __test_metadata *const _metadata,
+			      const struct landlock_socket_attr *socket_attr)
+{
+	const struct landlock_ruleset_attr ruleset_attr = {
+		.handled_access_socket = LANDLOCK_ACCESS_SOCKET_CREATE,
+	};
+	int ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+
+	if (socket_attr) {
+		ASSERT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+					       socket_attr, 0));
+	}
+
+	enforce_ruleset(_metadata, ruleset_fd);
+	ASSERT_EQ(0, close(ruleset_fd));
+}
+
+TEST_F(mini, ruleset_overlap)
+{
+	const struct landlock_socket_attr create_socket_attr = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = AF_INET,
+		.type = SOCK_STREAM,
+		.protocol = 0,
+	};
+
+	/* socket(2) is allowed if there are no restrictions. */
+	ASSERT_EQ(0, test_socket(AF_INET, SOCK_STREAM, 0));
+
+	/* Creates ruleset with socket(2) allowed. */
+	add_ruleset_layer(_metadata, &create_socket_attr);
+	EXPECT_EQ(0, test_socket(AF_INET, SOCK_STREAM, 0));
+
+	/* Adds ruleset layer with socket(2) restricted. */
+	add_ruleset_layer(_metadata, NULL);
+	EXPECT_EQ(EACCES, test_socket(AF_INET, SOCK_STREAM, 0));
+
+	/*
+	 * Adds ruleset layer with socket(2) allowed. socket(2) is restricted
+	 * by second layer of the ruleset.
+	 */
+	add_ruleset_layer(_metadata, &create_socket_attr);
+	EXPECT_EQ(EACCES, test_socket(AF_INET, SOCK_STREAM, 0));
+}
+
+TEST_F(mini, ruleset_with_wildcards_overlap)
+{
+	const struct landlock_socket_attr create_socket_attr = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = AF_INET,
+		.type = (-1),
+		.protocol = (-1),
+	};
+
+	/* socket(2) is allowed if there are no restrictions. */
+	ASSERT_EQ(0, test_socket(AF_INET, SOCK_STREAM, 0));
+	ASSERT_EQ(0, test_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP));
+	ASSERT_EQ(0, test_socket(AF_INET, SOCK_DGRAM, 0));
+
+	/* Creates ruleset with AF_INET allowed. */
+	add_ruleset_layer(_metadata, &create_socket_attr);
+	EXPECT_EQ(0, test_socket(AF_INET, SOCK_STREAM, 0));
+	EXPECT_EQ(0, test_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP));
+	EXPECT_EQ(0, test_socket(AF_INET, SOCK_DGRAM, 0));
+
+	const struct landlock_socket_attr create_socket_attr2 = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = AF_INET,
+		.type = SOCK_STREAM,
+		.protocol = (-1),
+	};
+	/* Creates layer with AF_INET + SOCK_STREAM allowed. */
+	add_ruleset_layer(_metadata, &create_socket_attr2);
+	EXPECT_EQ(0, test_socket(AF_INET, SOCK_STREAM, 0));
+	EXPECT_EQ(0, test_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP));
+	EXPECT_EQ(EACCES, test_socket(AF_INET, SOCK_DGRAM, 0));
+
+	const struct landlock_socket_attr create_socket_attr3 = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = AF_INET,
+		.type = SOCK_STREAM,
+		.protocol = 0,
+	};
+	/* Creates layer with AF_INET + SOCK_STREAM + 0 allowed. */
+	add_ruleset_layer(_metadata, &create_socket_attr3);
+	EXPECT_EQ(0, test_socket(AF_INET, SOCK_STREAM, 0));
+	EXPECT_EQ(EACCES, test_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP));
+	EXPECT_EQ(EACCES, test_socket(AF_INET, SOCK_DGRAM, 0));
+}
+
 TEST_HARNESS_MAIN
