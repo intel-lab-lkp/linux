@@ -511,4 +511,71 @@ TEST_F(protocol, restrict_socket)
 					      self->requires_caps));
 }
 
+/*
+ * Errors related to AF internal validation of supported protocol attributes
+ * are not consistent in sandboxed mode.
+ */
+TEST_F(mini, unsupported_af_and_prot)
+{
+	const struct landlock_ruleset_attr ruleset_attr = {
+		.handled_access_socket = LANDLOCK_ACCESS_SOCKET_CREATE,
+	};
+	const struct landlock_socket_attr socket_af_unsupported = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = AF_UNSPEC, /* cf __sock_create */
+		.type = SOCK_STREAM,
+		.protocol = 0,
+	};
+	const struct landlock_socket_attr socket_type_unsupported = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = AF_UNIX,
+		.type = SOCK_PACKET, /* cf. unix_create */
+		.protocol = 0,
+	};
+	const struct landlock_socket_attr socket_proto_unsupported = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = AF_UNIX,
+		.type = SOCK_STREAM,
+		.protocol = PF_UNIX + 1, /* cf. unix_create */
+	};
+	int ruleset_fd;
+
+	/* Tries to create a socket when ruleset is not established. */
+	ASSERT_EQ(EAFNOSUPPORT, test_socket(AF_UNSPEC, SOCK_STREAM, 0));
+	ASSERT_EQ(ESOCKTNOSUPPORT, test_socket(AF_UNIX, SOCK_PACKET, 0));
+	ASSERT_EQ(EPROTONOSUPPORT,
+		  test_socket(AF_UNIX, SOCK_STREAM, PF_UNIX + 1));
+
+	ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+
+	/* Landlock allows creating rules for meaningless protocols. */
+	EXPECT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+				       &socket_af_unsupported, 0));
+	EXPECT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+				       &socket_type_unsupported, 0));
+	EXPECT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+				       &socket_proto_unsupported, 0));
+	enforce_ruleset(_metadata, ruleset_fd);
+	ASSERT_EQ(0, close(ruleset_fd));
+
+	/* Tries to create a socket when protocols are allowed. */
+	EXPECT_EQ(EAFNOSUPPORT, test_socket(AF_UNSPEC, SOCK_STREAM, 0));
+	EXPECT_EQ(ESOCKTNOSUPPORT, test_socket(AF_UNIX, SOCK_PACKET, 0));
+	EXPECT_EQ(EPROTONOSUPPORT,
+		  test_socket(AF_UNIX, SOCK_STREAM, PF_UNIX + 1));
+
+	ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+	enforce_ruleset(_metadata, ruleset_fd);
+	ASSERT_EQ(0, close(ruleset_fd));
+
+	/* Tries to create a socket when protocols are restricted. */
+	EXPECT_EQ(EACCES, test_socket(AF_UNSPEC, SOCK_STREAM, 0));
+	EXPECT_EQ(EACCES, test_socket(AF_UNIX, SOCK_PACKET, 0));
+	EXPECT_EQ(EACCES, test_socket(AF_UNIX, SOCK_STREAM, PF_UNIX + 1));
+}
+
 TEST_HARNESS_MAIN
