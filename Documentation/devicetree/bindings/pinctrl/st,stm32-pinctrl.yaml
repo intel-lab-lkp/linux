@@ -58,11 +58,19 @@ properties:
           - description: The field mask of IRQ mux, needed if different of 0xf
 
   st,package:
-    description:
-      Indicates the SOC package used.
-      More details in include/dt-bindings/pinctrl/stm32-pinfunc.h
-    $ref: /schemas/types.yaml#/definitions/uint32
-    enum: [0x1, 0x2, 0x4, 0x8, 0x100, 0x400, 0x800]
+    description: Indicates the SOC package used.
+    oneOf:
+      - enum:
+          [0x1, 0x2, 0x4, 0x8, 0x100, 0x400, 0x800]
+        deprecated: true
+      - enum:
+          - AA
+          - AB
+          - AC
+          - AD
+          - AI
+          - AK
+          - AL
 
 patternProperties:
   '^gpio@[0-9a-f]*$':
