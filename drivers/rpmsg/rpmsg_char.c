@@ -470,7 +470,7 @@ static int rpmsg_eptdev_add(struct rpmsg_eptdev *eptdev,
 	if (cdev) {
 		ret = ida_alloc_max(&rpmsg_minor_ida, RPMSG_DEV_MAX - 1, GFP_KERNEL);
 		if (ret < 0)
-			goto free_eptdev;
+			return ret;
 
 		dev->devt = MKDEV(MAJOR(rpmsg_major), ret);
 	}
@@ -478,7 +478,7 @@ static int rpmsg_eptdev_add(struct rpmsg_eptdev *eptdev,
 	/* Anonymous inode device still need device name for dev_err() and friends */
 	ret = ida_alloc(&rpmsg_ept_ida, GFP_KERNEL);
 	if (ret < 0)
-		goto free_eptdev;
+		return ret;
 	dev->id = ret;
 	dev_set_name(dev, "rpmsg%d", ret);
 
@@ -486,14 +486,7 @@ static int rpmsg_eptdev_add(struct rpmsg_eptdev *eptdev,
 
 	if (cdev) {
 		ret = cdev_device_add(&eptdev->cdev, &eptdev->dev);
-		if (ret)
-			goto free_eptdev;
 	}
-
-	return ret;
-
-free_eptdev:
-	put_device(dev);
 
 	return ret;
 }
@@ -507,12 +500,17 @@ int rpmsg_chrdev_eptdev_create(struct rpmsg_device *rpdev, struct device *parent
 			       struct rpmsg_channel_info chinfo)
 {
 	struct rpmsg_eptdev *eptdev;
+	int ret;
 
 	eptdev = rpmsg_chrdev_eptdev_alloc(rpdev, parent);
 	if (IS_ERR(eptdev))
 		return PTR_ERR(eptdev);
 
-	return rpmsg_chrdev_eptdev_add(eptdev, chinfo);
+	ret = rpmsg_chrdev_eptdev_add(eptdev, chinfo);
+	if (ret)
+		put_device(&eptdev->dev);
+
+	return ret;
 }
 EXPORT_SYMBOL(rpmsg_chrdev_eptdev_create);
 
@@ -544,6 +542,7 @@ int rpmsg_anonymous_eptdev_create(struct rpmsg_device *rpdev, struct device *par
 	ret =  rpmsg_eptdev_add(eptdev, chinfo, false);
 	if (ret) {
 		dev_err(&eptdev->dev, "failed to add %s\n", eptdev->chinfo.name);
+		put_device(&eptdev->dev);
 		return ret;
 	}
 
@@ -571,6 +570,7 @@ static int rpmsg_chrdev_probe(struct rpmsg_device *rpdev)
 	struct rpmsg_channel_info chinfo;
 	struct rpmsg_eptdev *eptdev;
 	struct device *dev = &rpdev->dev;
+	int ret;
 
 	memcpy(chinfo.name, rpdev->id.name, RPMSG_NAME_SIZE);
 	chinfo.src = rpdev->src;
@@ -589,7 +589,11 @@ static int rpmsg_chrdev_probe(struct rpmsg_device *rpdev)
 	 */
 	eptdev->default_ept->priv = eptdev;
 
-	return rpmsg_chrdev_eptdev_add(eptdev, chinfo);
+	ret = rpmsg_chrdev_eptdev_add(eptdev, chinfo);
+	if (ret)
+		put_device(&eptdev->dev);
+
+	return ret;
 }
 
 static void rpmsg_chrdev_remove(struct rpmsg_device *rpdev)
