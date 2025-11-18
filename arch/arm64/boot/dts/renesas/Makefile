@@ -185,6 +185,9 @@ dtb-$(CONFIG_ARCH_R9A09G047) += r9a09g047e57-smarc.dtb
 dtb-$(CONFIG_ARCH_R9A09G047) += r9a09g047e57-smarc-cru-csi-ov5645.dtbo
 r9a09g047e57-smarc-cru-csi-ov5645-dtbs := r9a09g047e57-smarc.dtb r9a09g047e57-smarc-cru-csi-ov5645.dtbo
 dtb-$(CONFIG_ARCH_R9A09G047) += r9a09g047e57-smarc-cru-csi-ov5645.dtb
+dtb-$(CONFIG_ARCH_R9A09G047) += r9a09g047e57-smarc-p3t1085uk-ard.dtbo
+r9a09g047e57-smarc-p3t1085uk-ard-dtbs := r9a09g047e57-smarc.dtb r9a09g047e57-smarc-p3t1085uk-ard.dtbo
+dtb-$(CONFIG_ARCH_R9A09G047) += r9a09g047e57-smarc-p3t1085uk-ard.dtb
 
 dtb-$(CONFIG_ARCH_R9A09G056) += r9a09g056n48-rzv2n-evk.dtb
 dtb-$(CONFIG_ARCH_R9A09G056) += rzv2-evk-cn15-emmc.dtbo

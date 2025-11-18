@@ -1,0 +1,83 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Device Tree overlay for the NXP P3T1085UK-ARD board connected
+ * to the R9A09G047E57 SMARC SoM board via the RZ SMARC BREAKOUT board.
+ *
+ * Copyright (C) 2025 Renesas Electronics Corp.
+ *
+ *
+ * [Connections]
+ *
+ * RZ SMARC Carrier II (CN1)  →  RZ SMARC BREAKOUT board
+ *
+ * RZ SMARC Carrier II (PMOD1_6)  →  P3T1085UK-ARD (J9)
+ * +--------------------------------------------------------+
+ * |    PWR_PMOD1  (pin 6)    →    (pin 9)   +3V3           |
+ * |    GND        (pin 5)    →    (pin 7)   GND            |
+ * +--------------------------------------------------------+
+ *
+ * RZ SMARC BREAKOUT board (CN1)  →  P3T1085UK-ARD (J13)
+ * +--------------------------------------------------------+
+ * |    GND      (pin 2)    →    (pin 4)   GND              |
+ * |    I3C_SCL  (pin 3)    →    (pin 1)   SCL_I3C          |
+ * |    I3C_SDA  (pin 4)    →    (pin 2)   SDA_I3C          |
+ * +--------------------------------------------------------+
+ *
+ * The following jumpers setup is required on the P3T1085UK-ARD board:
+ * - JP1: 1-2
+ * - JP2: 1-2
+ * - JP3: 1-2
+ *
+ * The following SW1(1,2) switch setup is required on the RZ SMARC BREAKOUT
+ * board:
+ * - SW1(1): 1
+ * - SW1(2): 1
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/i3c/i3c.h>
+#include <dt-bindings/pinctrl/renesas,r9a09g047-pinctrl.h>
+
+/*
+ * #define I3C_BUS_MODE_PURE 1 (for I3C bus mode pure - default)
+ * #define I3C_BUS_MODE_PURE 0 (for I3C bus mode mixed-fast)
+ */
+#define I3C_BUS_MODE_PURE	1
+
+#if I3C_BUS_MODE_PURE
+&i3c {
+	i2c-scl-hz = <400000>;
+	i3c-scl-hz = <12500000>;
+	status = "okay";
+};
+#else /* I3C_BUS_MODE_MIXED_FAST */
+&i3c {
+	status = "okay";
+
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	i2c-scl-hz = <400000>;
+	i3c-scl-hz = <12500000>;
+
+	eeprom@1a {
+		compatible = "atmel,24c02";
+		reg = <0x1a 0 (I2C_FM | I2C_FILTER)>;
+	};
+
+	/* U2 */
+	temperature-sensor@48 {
+		compatible = "nxp,p3t1085";
+		reg = <0x48 0 (I2C_FM | I2C_FILTER)>;
+	};
+
+	/* U1 NOT MOUNTED as default */
+	temp-sense@4c {
+		status = "disabled";
+		compatible = "national,lm75";
+		reg = <0x4c 0 (I2C_FM | I2C_FILTER)>;
+	};
+};
+#endif
