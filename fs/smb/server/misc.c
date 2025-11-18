@@ -164,6 +164,7 @@ char *convert_to_nt_pathname(struct ksmbd_share_config *share,
 {
 	char *pathname, *ab_pathname, *nt_pathname;
 	int share_path_len = share->path_sz;
+	size_t nt_pathname_len;
 
 	pathname = kmalloc(PATH_MAX, KSMBD_DEFAULT_GFP);
 	if (!pathname)
@@ -180,15 +181,15 @@ char *convert_to_nt_pathname(struct ksmbd_share_config *share,
 		goto free_pathname;
 	}
 
-	nt_pathname = kzalloc(strlen(&ab_pathname[share_path_len]) + 2,
-			      KSMBD_DEFAULT_GFP);
+	nt_pathname_len = strlen(&ab_pathname[share_path_len]) + 2;
+	nt_pathname = kzalloc(nt_pathname_len, KSMBD_DEFAULT_GFP);
 	if (!nt_pathname) {
 		nt_pathname = ERR_PTR(-ENOMEM);
 		goto free_pathname;
 	}
-	if (ab_pathname[share_path_len] == '\0')
-		strcpy(nt_pathname, "/");
-	strcat(nt_pathname, &ab_pathname[share_path_len]);
+	scnprintf(nt_pathname, nt_pathname_len,
+		  ab_pathname[share_path_len] == '\0' ? "/%s" : "%s",
+		  &ab_pathname[share_path_len]);
 
 	ksmbd_conv_path_to_windows(nt_pathname);
 
