@@ -670,4 +670,43 @@ TEST_F(mini, ruleset_with_wildcards_overlap)
 	EXPECT_EQ(EACCES, test_socket(AF_INET, SOCK_DGRAM, 0));
 }
 
+/* mini.kernel_socket will fail with EAFNOSUPPORT if SMC is not supported. */
+TEST_F(mini, kernel_socket)
+{
+	const struct landlock_ruleset_attr ruleset_attr = {
+		.handled_access_socket = LANDLOCK_ACCESS_SOCKET_CREATE,
+	};
+	const struct landlock_socket_attr smc_socket_create = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = AF_SMC,
+		.type = SOCK_STREAM,
+		.protocol = 0,
+	};
+	int ruleset_fd;
+
+	/*
+	 * Checks that SMC socket is created successfully without
+	 * landlock restrictions.
+	 */
+	ASSERT_EQ(0, test_socket(AF_SMC, SOCK_STREAM, 0));
+
+	ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+
+	ASSERT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+				       &smc_socket_create, 0));
+	enforce_ruleset(_metadata, ruleset_fd);
+	ASSERT_EQ(0, close(ruleset_fd));
+
+	/*
+	 * During the creation of an SMC socket, an internal service TCP socket
+	 * is also created (Cf. smc_create_clcsk).
+	 *
+	 * Checks that Landlock does not restrict creation of the kernel space
+	 * socket.
+	 */
+	EXPECT_EQ(0, test_socket(AF_SMC, SOCK_STREAM, 0));
+}
+
 TEST_HARNESS_MAIN
