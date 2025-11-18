@@ -52,6 +52,16 @@ static inline bool guest_cpu_cap_has_evmcs(struct kvm_vcpu *vcpu)
 	       to_vmx(vcpu)->nested.enlightened_vmcs_enabled;
 }
 
+static inline u32 nested_evmcs_clean_fields(struct vcpu_vmx *vmx)
+{
+	return vmx->nested.hv_clean_fields;
+}
+
+static inline bool nested_evmcs_msr_bitmap(struct vcpu_vmx *vmx)
+{
+	return vmx->nested.hv_msr_bitmap;
+}
+
 u64 nested_get_evmptr(struct kvm_vcpu *vcpu);
 uint16_t nested_get_evmcs_version(struct kvm_vcpu *vcpu);
 int nested_enable_evmcs(struct kvm_vcpu *vcpu,
@@ -84,6 +94,16 @@ static inline bool nested_vmx_is_evmptr12_set(struct vcpu_vmx *vmx)
 static inline struct hv_enlightened_vmcs *nested_vmx_evmcs(struct vcpu_vmx *vmx)
 {
 	return NULL;
+}
+
+static inline u32 nested_evmcs_clean_fields(struct vcpu_vmx *vmx)
+{
+	return 0;
+}
+
+static inline bool nested_evmcs_msr_bitmap(struct vcpu_vmx *vmx)
+{
+	return false;
 }
 #endif
 

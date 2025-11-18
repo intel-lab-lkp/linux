@@ -205,8 +205,11 @@ struct nested_vmx {
 
 #ifdef CONFIG_KVM_HYPERV
 	gpa_t hv_evmcs_vmptr;
-	struct kvm_host_map hv_evmcs_map;
+	u32 hv_clean_fields;
+	bool hv_msr_bitmap;
+	bool hv_flush_hypercall;
 	struct hv_enlightened_vmcs *hv_evmcs;
+	struct kvm_host_map hv_evmcs_map;
 #endif
 };
 
