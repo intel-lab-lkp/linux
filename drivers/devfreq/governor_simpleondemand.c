@@ -36,10 +36,15 @@ static int devfreq_simple_ondemand_func(struct devfreq *df,
 			dfso_upthreshold = data->upthreshold;
 		if (data->downdifferential)
 			dfso_downdifferential = data->downdifferential;
+
+		if (dfso_upthreshold > 100 ||
+		    dfso_upthreshold < dfso_downdifferential) {
+			dfso_upthreshold = DFSO_UPTHRESHOLD;
+			dfso_downdifferential = DFSO_DOWNDIFFERENTIAL;
+			pr_debug("Invalid thresholds, using defaults: up = %u, down = %u\n",
+				dfso_upthreshold, dfso_downdifferential);
+		}
 	}
-	if (dfso_upthreshold > 100 ||
-	    dfso_upthreshold < dfso_downdifferential)
-		return -EINVAL;
 
 	/* Assume MAX if it is going to be divided by zero */
 	if (stat->total_time == 0) {
