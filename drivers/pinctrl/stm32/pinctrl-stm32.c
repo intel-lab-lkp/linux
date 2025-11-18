@@ -144,6 +144,9 @@ static const char * const stm32_pkgs[] = {
 	[STM32_PKG_AI] = "AJ",
 	[STM32_PKG_AK] = "AK",
 	[STM32_PKG_AL] = "AL",
+	[STM32_PKG_AM] = "AM",
+	[STM32_PKG_AN] = "AN",
+	[STM32_PKG_AO] = "AO",
 };
 
 __diag_pop();

@@ -34,6 +34,9 @@ enum stm32_pkg {
 	STM32_PKG_AJ,
 	STM32_PKG_AK = 10, /* do not change */
 	STM32_PKG_AL = 11, /* do not change */
+	STM32_PKG_AM,
+	STM32_PKG_AN,
+	STM32_PKG_AO,
 
 	/* keep this as last item */
 	STM32_PKG_MAX,
