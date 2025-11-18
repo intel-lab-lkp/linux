@@ -151,4 +151,43 @@ TEST_F(mini, rule_with_empty_access)
 	ASSERT_EQ(0, close(ruleset_fd));
 }
 
+/* Validates landlock behaviour when using wildcard (-1) values in socket rules. */
+TEST_F(mini, rule_with_wildcard)
+{
+	const struct landlock_ruleset_attr ruleset_attr = {
+		.handled_access_socket = LANDLOCK_ACCESS_SOCKET_CREATE,
+	};
+	const struct landlock_socket_attr create_family_attr = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = AF_INET,
+		.type = -1,
+		.protocol = -1,
+	};
+	const struct landlock_socket_attr create_family_type_attr = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = AF_INET,
+		.type = SOCK_STREAM,
+		.protocol = -1,
+	};
+	const struct landlock_socket_attr create_family_protocol_attr = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = AF_INET,
+		.type = -1,
+		.protocol = 0,
+	};
+	int ruleset_fd;
+
+	ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+
+	EXPECT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+				       &create_family_attr, 0));
+	EXPECT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+				       &create_family_type_attr, 0));
+	EXPECT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+				       &create_family_protocol_attr, 0));
+	ASSERT_EQ(0, close(ruleset_fd));
+}
+
 TEST_HARNESS_MAIN
