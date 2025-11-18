@@ -31,6 +31,7 @@ enum stm32_pkg {
 	STM32_PKG_AC = 2,  /* do not change */
 	STM32_PKG_AD = 3,  /* do not change */
 	STM32_PKG_AI = 8,  /* do not change */
+	STM32_PKG_AJ,
 	STM32_PKG_AK = 10, /* do not change */
 	STM32_PKG_AL = 11, /* do not change */
 
