@@ -2660,12 +2660,108 @@ static void set_user_specified(struct console_cmdline *c, bool user_specified)
 	console_set_on_cmdline = 1;
 }
 
+/**
+ * find_and_remove_console_option - Find and remove a named option from console options string
+ * @options: The console options string (will be modified in-place)
+ * @key: The option name to find (e.g., "loglevel")
+ * @val_buf: Buffer to store the option value (if present)
+ * @val_buf_size: Size of @val_buf
+ *
+ * This function searches for a named option in a comma-separated options string
+ * (e.g., "9600n8,loglevel:3,other:value"). If found, it extracts the value
+ * (the part after ':') and removes the entire option from the string.
+ *
+ * The function modifies @options in-place by:
+ * 1. Temporarily null-terminating option names and values during parsing
+ * 2. Restoring separators if the option isn't found
+ * 3. Removing the found option by shifting the remaining string
+ *
+ * Return: true if the option was found and removed, false otherwise
+ */
+static bool find_and_remove_console_option(char *options, const char *key,
+					   char *val_buf, size_t val_buf_size)
+{
+	bool found = false, first = true;
+	char *option, *next = options;
+
+	while ((option = strsep(&next, ","))) {
+		char *value;
+
+		value = strchr(option, ':');
+		if (value)
+			*(value++) = '\0';
+
+		if (strcmp(option, key) == 0) {
+			found = true;
+			if (value) {
+				if (strlen(value) >= val_buf_size) {
+					pr_warn("Can't copy console option value for %s:%s: not enough space (%zu)\n",
+						option, value, val_buf_size);
+					found = false;
+				} else {
+					strscpy(val_buf, value, val_buf_size);
+				}
+			} else
+				*val_buf = '\0';
+		}
+
+		if (found)
+			break;
+
+		if (next)
+			*(next - 1) = ',';
+		if (value)
+			*(value - 1) = ':';
+
+		first = false;
+	}
+
+	if (found) {
+		if (next)
+			memmove(option, next, strlen(next) + 1);
+		else if (first)
+			*option = '\0';
+		else
+			*--option = '\0';
+	}
+
+	return found;
+}
+
+static int find_and_remove_loglevel_option(char *options)
+{
+	char val[16];
+	int loglevel;
+
+	if (!find_and_remove_console_option(options, "loglevel", val,
+					    sizeof(val)))
+		return -ENOENT;
+
+	if (kstrtoint(val, 10, &loglevel)) {
+		pr_warn("Invalid console loglevel, ignoring: %s\n", val);
+		return -EINVAL;
+	}
+
+	/* Reject level 0 (KERN_EMERG) - per-console loglevel must be > 0 */
+	if (loglevel == 0) {
+		pr_warn("Per-console loglevel 0 (KERN_EMERG) is not allowed, ignoring\n");
+		return -ERANGE;
+	}
+
+	if (console_clamp_loglevel(loglevel) != loglevel) {
+		pr_warn("Per-console loglevel out of range, ignoring: %d\n", loglevel);
+		return -ERANGE;
+	}
+
+	return loglevel;
+}
+
 static int __add_preferred_console(const char *name, const short idx,
 				   const char *devname, char *options,
 				   char *brl_options, bool user_specified)
 {
 	struct console_cmdline *c;
-	int i;
+	int i, ret;
 
 	if (!name && !devname)
 		return -EINVAL;
@@ -2702,6 +2798,13 @@ static int __add_preferred_console(const char *name, const short idx,
 		strscpy(c->name, name);
 	if (devname)
 		strscpy(c->devname, devname);
+
+	ret = find_and_remove_loglevel_option(options);
+	if (ret >= 0)
+		c->level = ret;
+	else
+		c->level = -1;
+
 	c->options = options;
 	set_user_specified(c, user_specified);
 	braille_set_options(c, brl_options);
@@ -3979,8 +4082,7 @@ static int try_enable_preferred_console(struct console *newcon,
 			if (newcon->index < 0)
 				newcon->index = c->index;
 
-			/* TODO: will be configurable in a later patch */
-			newcon->level = LOGLEVEL_DEFAULT;
+			newcon->level = c->level;
 
 			if (_braille_register_console(newcon, c))
 				return 0;
