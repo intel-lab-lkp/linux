@@ -5494,7 +5494,8 @@ sub process {
 		}
 		if ($line =~ /(\s+)\)/ && $line !~ /^.\s*\)/ &&
 		    $line !~ /for\s*\(.*;\s+\)/ &&
-		    $line !~ /:\s+\)/) {
+		    $line !~ /:\s+\)/ &&
+		    $line !~ /,\s+\)/) {
 			if (ERROR("SPACING",
 				  "space prohibited before that close parenthesis ')'\n" . $herecurr) &&
 			    $fix) {
