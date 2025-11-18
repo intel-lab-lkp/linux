@@ -25,6 +25,14 @@ description:
 properties:
   compatible:
     oneOf:
+      - description:
+          Synopsys DesignWare XPCS in NXP SJA1105 switch (direct APB3 access
+          via SPI) with custom PMA
+        const: nxp,sja1105-pcs
+      - description:
+          Synopsys DesignWare XPCS in NXP SJA1110 switch (indirect APB3 access
+          via SPI) with custom PMA
+        const: nxp,sja1110-pcs
       - description: Synopsys DesignWare XPCS with none or unknown PMA
         const: snps,dw-xpcs
       - description: Synopsys DesignWare XPCS with Consumer Gen1 3G PMA
