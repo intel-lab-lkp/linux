@@ -316,7 +316,6 @@ int ioctl_getflags(struct file *file, unsigned int __user *argp)
 		err = put_user(fa.flags, argp);
 	return err;
 }
-EXPORT_SYMBOL(ioctl_getflags);
 
 int ioctl_setflags(struct file *file, unsigned int __user *argp)
 {
