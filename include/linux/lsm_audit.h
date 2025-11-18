@@ -57,6 +57,12 @@ struct lsm_ibendport_audit {
 	u8 port;
 };
 
+struct lsm_socket_audit {
+	s32 family;
+	s32 type;
+	s32 protocol;
+};
+
 /* Auxiliary data to use in generating the audit record. */
 struct common_audit_data {
 	char type;
@@ -78,6 +84,7 @@ struct common_audit_data {
 #define LSM_AUDIT_DATA_NOTIFICATION 16
 #define LSM_AUDIT_DATA_ANONINODE	17
 #define LSM_AUDIT_DATA_NLMSGTYPE	18
+#define LSM_AUDIT_DATA_SOCKET	19
 	union 	{
 		struct path path;
 		struct dentry *dentry;
@@ -97,6 +104,7 @@ struct common_audit_data {
 		struct file *file;
 		struct lsm_ibpkey_audit *ibpkey;
 		struct lsm_ibendport_audit *ibendport;
+		struct lsm_socket_audit *socket;
 		int reason;
 		const char *anonclass;
 		u16 nlmsg_type;

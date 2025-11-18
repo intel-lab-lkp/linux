@@ -403,6 +403,10 @@ void audit_log_lsm_data(struct audit_buffer *ab,
 	case LSM_AUDIT_DATA_NLMSGTYPE:
 		audit_log_format(ab, " nl-msgtype=%hu", a->u.nlmsg_type);
 		break;
+	case LSM_AUDIT_DATA_SOCKET:
+		audit_log_format(ab, " family=%d sock_type=%d protocol=%d",
+			a->u.socket->family, a->u.socket->type, a->u.socket->protocol);
+		break;
 	} /* switch (a->type) */
 }
 
