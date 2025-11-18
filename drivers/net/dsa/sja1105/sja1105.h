@@ -11,6 +11,8 @@
 #include <linux/dsa/8021q.h>
 #include <net/dsa.h>
 #include <linux/mutex.h>
+#include <linux/regmap.h>
+
 #include "sja1105_static_config.h"
 
 #define SJA1105ET_FDB_BIN_SIZE		4
@@ -273,6 +275,7 @@ struct sja1105_private {
 	u8 ts_id;
 	/* Serializes access to the dynamic config interface */
 	struct mutex dynamic_config_lock;
+	struct regmap *regmap;
 	struct devlink_region **regions;
 	struct sja1105_cbs_entry *cbs;
 	struct mii_bus *mdio_base_t1;
@@ -338,6 +341,7 @@ int static_config_buf_prepare_for_upload(struct sja1105_private *priv,
 int sja1105_static_config_upload(struct sja1105_private *priv);
 int sja1105_inhibit_tx(const struct sja1105_private *priv,
 		       unsigned long port_bitmap, bool tx_inhibited);
+int sja1105_create_regmap(struct sja1105_private *priv);
 
 extern const struct sja1105_info sja1105e_info;
 extern const struct sja1105_info sja1105t_info;
