@@ -17,6 +17,7 @@
 #include <linux/sctp.h>
 #include <arpa/inet.h>
 
+#include "audit.h"
 #include "common.h"
 
 #define ACCESS_LAST LANDLOCK_ACCESS_SOCKET_CREATE
@@ -1109,6 +1110,60 @@ TEST_F(connection_restriction, accept)
 
 	ASSERT_EQ(0, close(server_fd));
 	ASSERT_EQ(0, close(client_fd));
+}
+
+FIXTURE(audit)
+{
+	struct audit_filter audit_filter;
+	int audit_fd;
+};
+
+FIXTURE_SETUP(audit)
+{
+	set_cap(_metadata, CAP_AUDIT_CONTROL);
+	self->audit_fd = audit_init_with_exe_filter(&self->audit_filter);
+	EXPECT_LE(0, self->audit_fd);
+	disable_caps(_metadata);
+};
+
+FIXTURE_TEARDOWN(audit)
+{
+	set_cap(_metadata, CAP_AUDIT_CONTROL);
+	EXPECT_EQ(0, audit_cleanup(self->audit_fd, &self->audit_filter));
+	clear_cap(_metadata, CAP_AUDIT_CONTROL);
+}
+
+TEST_F(audit, socket_create)
+{
+	const struct landlock_ruleset_attr ruleset_attr = {
+		.handled_access_socket = LANDLOCK_ACCESS_SOCKET_CREATE,
+	};
+	struct audit_records records;
+	int ruleset_fd;
+	const char log_template[] = REGEX_LANDLOCK_PREFIX
+		" blockers=socket.create family=%d sock_type=%d protocol=0$";
+	/* Family and type should not exceed 2-digit number. */
+	char log_match[sizeof(log_template) + 4];
+	int log_match_len;
+
+	log_match_len = snprintf(log_match, sizeof(log_match), log_template,
+				 AF_INET, SOCK_STREAM);
+	ASSERT_LT(log_match_len, sizeof(log_match));
+
+	ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+	enforce_ruleset(_metadata, ruleset_fd);
+	ASSERT_EQ(0, close(ruleset_fd));
+
+	ASSERT_EQ(EACCES, test_socket(AF_INET, SOCK_STREAM, 0));
+
+	EXPECT_EQ(0, audit_match_record(self->audit_fd, AUDIT_LANDLOCK_ACCESS,
+					log_match, NULL));
+
+	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	EXPECT_EQ(0, records.access);
+	EXPECT_EQ(1, records.domain);
 }
 
 TEST_HARNESS_MAIN
