@@ -963,9 +963,23 @@ unsigned int cfg80211_classify8021d(struct sk_buff *skb,
 
 	switch (skb->protocol) {
 	case htons(ETH_P_IP):
+		struct iphdr iph, *ip;
+
+		ip = skb_header_pointer(skb, sizeof(struct ethhdr),
+					sizeof(*ip), &iph);
+		if (!ip)
+			return 0;
+
 		dscp = ipv4_get_dsfield(ip_hdr(skb)) & 0xfc;
 		break;
 	case htons(ETH_P_IPV6):
+		struct ipv6hdr ip6h, *ip6;
+
+		ip6 = skb_header_pointer(skb, sizeof(struct ethhdr),
+					 sizeof(*ip6), &ip6h);
+		if (!ip6)
+			return 0;
+
 		dscp = ipv6_get_dsfield(ipv6_hdr(skb)) & 0xfc;
 		break;
 	case htons(ETH_P_MPLS_UC):
