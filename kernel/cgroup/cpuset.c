@@ -1084,11 +1084,10 @@ void dl_rebuild_rd_accounting(void)
  */
 void rebuild_sched_domains_locked(void)
 {
-	struct cgroup_subsys_state *pos_css;
 	struct sched_domain_attr *attr;
 	cpumask_var_t *doms;
-	struct cpuset *cs;
 	int ndoms;
+	int i;
 
 	lockdep_assert_cpus_held();
 	lockdep_assert_held(&cpuset_mutex);
@@ -1107,29 +1106,13 @@ void rebuild_sched_domains_locked(void)
 	    !cpumask_equal(top_cpuset.effective_cpus, cpu_active_mask))
 		return;
 
-	/*
-	 * With subpartition CPUs, however, the effective CPUs of a partition
-	 * root should be only a subset of the active CPUs.  Since a CPU in any
-	 * partition root could be offlined, all must be checked.
-	 */
-	if (!cpumask_empty(subpartitions_cpus)) {
-		rcu_read_lock();
-		cpuset_for_each_descendant_pre(cs, pos_css, &top_cpuset) {
-			if (!is_partition_valid(cs)) {
-				pos_css = css_rightmost_descendant(pos_css);
-				continue;
-			}
-			if (!cpumask_subset(cs->effective_cpus,
-					    cpu_active_mask)) {
-				rcu_read_unlock();
-				return;
-			}
-		}
-		rcu_read_unlock();
-	}
-
 	/* Generate domain masks and attrs */
 	ndoms = generate_sched_domains(&doms, &attr);
+
+	for (i = 0; i < ndoms; ++i) {
+		if (WARN_ON_ONCE(!cpumask_subset(doms[i], cpu_active_mask)))
+			return;
+	}
 
 	/* Have scheduler rebuild the domains */
 	partition_sched_domains(ndoms, doms, attr);
