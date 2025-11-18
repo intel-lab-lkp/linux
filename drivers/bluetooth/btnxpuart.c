@@ -206,6 +206,16 @@ enum bootloader_param_change {
 	changed
 };
 
+struct nxp_tls_traffic_keys {
+	u8 h2d_secret[SHA256_DIGEST_SIZE];
+	u8 d2h_secret[SHA256_DIGEST_SIZE];
+	/* These keys below should be used for message encryption/decryption */
+	u8 h2d_iv[GCM_AES_IV_SIZE];
+	u8 h2d_key[AES_KEYSIZE_128];
+	u8 d2h_iv[GCM_AES_IV_SIZE];
+	u8 d2h_key[AES_KEYSIZE_128];
+};
+
 struct btnxpuart_crypto {
 	struct crypto_shash *tls_handshake_hash_tfm;
 	struct shash_desc *tls_handshake_hash_desc;
@@ -215,8 +225,10 @@ struct btnxpuart_crypto {
 	u8 fw_uuid[NXP_FW_UUID_SIZE];
 	u8 handshake_h2_hash[SHA256_DIGEST_SIZE];
 	u8 handshake_secret[SHA256_DIGEST_SIZE];
+	u8 master_secret[SHA256_DIGEST_SIZE];
 	struct completion completion;
 	int decrypt_result;
+	struct nxp_tls_traffic_keys keys;
 };
 
 struct btnxpuart_dev {
@@ -416,7 +428,10 @@ union nxp_set_bd_addr_payload {
 #define NXP_TLS_KEYING_IV_LABEL		NXP_TLS_LABEL("iv")
 #define NXP_TLS_KEYING_KEY_LABEL	NXP_TLS_LABEL("key")
 #define NXP_TLS_FINISHED_LABEL		NXP_TLS_LABEL("finished")
+#define NXP_TLS_DERIVED_LABEL		NXP_TLS_LABEL("derived")
 #define NXP_TLS_HOST_HS_TS_LABEL	NXP_TLS_LABEL("H HS TS")
+#define NXP_TLS_D_AP_TS_LABEL		NXP_TLS_LABEL("D AP TS")
+#define NXP_TLS_H_AP_TS_LABEL		NXP_TLS_LABEL("H AP TS")
 
 enum nxp_tls_signature_algorithm {
 	NXP_TLS_ECDSA_SECP256R1_SHA256 = 0x0403,
@@ -2525,6 +2540,71 @@ fail:
 	return ret;
 }
 
+static void nxp_handshake_derive_master_secret(u8 master_secret[SHA256_DIGEST_SIZE],
+					       u8 handshake_secret[SHA256_DIGEST_SIZE])
+{
+	u8 zeros[SHA256_DIGEST_SIZE] = {0};
+	u8 dhs[SHA256_DIGEST_SIZE];
+
+	/* Derive intermediate secret */
+	nxp_hkdf_expand_label(handshake_secret, NXP_TLS_DERIVED_LABEL,
+			      NULL, 0, dhs, sizeof(dhs));
+	/* Extract master secret from derived handshake secret */
+	nxp_hkdf_sha256_extract(dhs, SHA256_DIGEST_SIZE, zeros,
+				sizeof(zeros), master_secret);
+
+	memset(dhs, 0, sizeof(dhs));
+}
+
+static int nxp_handshake_derive_traffic_keys(struct hci_dev *hdev)
+{
+	struct btnxpuart_dev *nxpdev = hci_get_drvdata(hdev);
+	struct nxp_tls_traffic_keys *keys = &nxpdev->crypto.keys;
+	u8 hash[SHA256_DIGEST_SIZE];
+	int ret = 0;
+
+	ret = crypto_shash_final(nxpdev->crypto.tls_handshake_hash_desc, hash);
+	if (ret)
+		return ret;
+
+	ret = nxp_hkdf_derive_secret(nxpdev->crypto.master_secret,
+				     NXP_TLS_D_AP_TS_LABEL, hash, keys->d2h_secret);
+	if (ret)
+		return ret;
+
+	ret = nxp_hkdf_expand_label(keys->d2h_secret,
+				    NXP_TLS_KEYING_KEY_LABEL, NULL, 0,
+				    keys->d2h_key, AES_KEYSIZE_128);
+	if (ret)
+		return ret;
+
+	ret = nxp_hkdf_expand_label(keys->d2h_secret,
+				    NXP_TLS_KEYING_IV_LABEL, NULL, 0,
+				    keys->d2h_iv, GCM_AES_IV_SIZE);
+	if (ret)
+		return ret;
+
+	ret = nxp_hkdf_derive_secret(nxpdev->crypto.master_secret,
+				     NXP_TLS_H_AP_TS_LABEL, hash, keys->h2d_secret);
+	if (ret)
+		return ret;
+
+	ret = nxp_hkdf_expand_label(keys->h2d_secret,
+				    NXP_TLS_KEYING_KEY_LABEL, NULL, 0,
+				    keys->h2d_key, AES_KEYSIZE_128);
+	if (ret)
+		return ret;
+
+	ret = nxp_hkdf_expand_label(keys->h2d_secret,
+				    NXP_TLS_KEYING_IV_LABEL, NULL, 0,
+				    keys->h2d_iv, GCM_AES_IV_SIZE);
+	if (ret)
+		return ret;
+
+	memset(hash, 0, sizeof(hash));
+	return ret;
+}
+
 static int nxp_authenticate_device(struct hci_dev *hdev)
 {
 	struct btnxpuart_dev *nxpdev = hci_get_drvdata(hdev);
@@ -2579,10 +2659,10 @@ static int nxp_authenticate_device(struct hci_dev *hdev)
 	if (ret)
 		goto free_skb;
 
-	/* TODO: Implement actual TLS handshake protocol
-	 * This will include:
-	 * 1. Master secret and traffic key derivation
-	 */
+	nxp_handshake_derive_master_secret(nxpdev->crypto.master_secret,
+					   nxpdev->crypto.handshake_secret);
+
+	nxp_handshake_derive_traffic_keys(hdev);
 
 free_skb:
 	kfree_skb(skb);
