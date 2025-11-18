@@ -607,8 +607,12 @@ static inline bool disk_should_remove_zone_wplug(struct gendisk *disk,
 	if (zwplug->flags & BLK_ZONE_WPLUG_UNHASHED)
 		return false;
 
-	/* If the zone write plug is still plugged, it cannot be removed. */
-	if (zwplug->flags & BLK_ZONE_WPLUG_PLUGGED)
+	/*
+	 * The zone write plug can't be removed if it is still plugged or there
+	 * are bios queued up behind the write pointer.
+	 */
+	if ((zwplug->flags & BLK_ZONE_WPLUG_PLUGGED) ||
+	    !bio_list_empty(&zwplug->bio_list))
 		return false;
 
 	/*
@@ -1188,6 +1192,15 @@ void blk_zone_mgmt_bio_endio(struct bio *bio)
 	}
 }
 
+static bool blk_zwplug_has_bio_at_write_pointer(struct blk_zone_wplug *zwplug)
+{
+	struct bio *bio = bio_list_peek(&zwplug->bio_list);
+
+	return bio &&
+		(bio_op(bio) == REQ_OP_ZONE_APPEND ||
+		 bio_offset_from_zone_start(bio) == zwplug->wp_offset);
+}
+
 static void disk_zone_wplug_schedule_bio_work(struct gendisk *disk,
 					      struct blk_zone_wplug *zwplug)
 {
@@ -1231,10 +1244,15 @@ static inline void disk_zone_wplug_add_bio(struct gendisk *disk,
 	/*
 	 * We always receive BIOs after they are split and ready to be issued.
 	 * The block layer passes the parts of a split BIO in order, and the
-	 * user must also issue write sequentially. So simply add the new BIO
-	 * at the tail of the list to preserve the sequential write order.
+	 * user must also issue write sequentially unless REQ_ZWPLUG_UNORDERED
+	 * is set. So simply add the new BIO at the tail of the list to preserve
+	 * the sequential write order.
 	 */
-	bio_list_add(&zwplug->bio_list, bio);
+	if (bio->bi_opf & REQ_ZWPLUG_UNORDERED)
+		bio_list_add_sorted(&zwplug->bio_list, bio);
+	else
+		bio_list_add(&zwplug->bio_list, bio);
+
 	trace_disk_zone_wplug_add_bio(zwplug->disk->queue, zwplug->zone_no,
 				      bio->bi_iter.bi_sector, bio_sectors(bio));
 }
@@ -1403,7 +1421,8 @@ static bool blk_zone_wplug_prepare_bio(struct blk_zone_wplug *zwplug,
 static bool blk_zone_wplug_handle_write(struct bio *bio, unsigned int nr_segs)
 {
 	struct gendisk *disk = bio->bi_bdev->bd_disk;
-	sector_t sector = bio->bi_iter.bi_sector;
+	sector_t zone_offset = bio_offset_from_zone_start(bio);
+	sector_t zone_start = bio->bi_iter.bi_sector - zone_offset;
 	struct blk_zone_wplug *zwplug;
 	gfp_t gfp_mask = GFP_NOIO;
 	unsigned long flags;
@@ -1422,7 +1441,7 @@ static bool blk_zone_wplug_handle_write(struct bio *bio, unsigned int nr_segs)
 	}
 
 	/* Conventional zones do not need write plugging. */
-	if (!bdev_zone_is_seq(bio->bi_bdev, sector)) {
+	if (!bdev_zone_is_seq(bio->bi_bdev, zone_start)) {
 		/* Zone append to conventional zones is not allowed. */
 		if (bio_op(bio) == REQ_OP_ZONE_APPEND) {
 			bio_io_error(bio);
@@ -1434,7 +1453,8 @@ static bool blk_zone_wplug_handle_write(struct bio *bio, unsigned int nr_segs)
 	if (bio->bi_opf & REQ_NOWAIT)
 		gfp_mask = GFP_NOWAIT;
 
-	zwplug = disk_get_and_lock_zone_wplug(disk, sector, gfp_mask, &flags);
+	zwplug = disk_get_and_lock_zone_wplug(disk, zone_start, gfp_mask,
+			&flags);
 	if (!zwplug) {
 		if (bio->bi_opf & REQ_NOWAIT)
 			bio_wouldblock_error(bio);
@@ -1459,6 +1479,15 @@ static bool blk_zone_wplug_handle_write(struct bio *bio, unsigned int nr_segs)
 	if (zwplug->flags & BLK_ZONE_WPLUG_PLUGGED)
 		goto queue_bio;
 
+	/*
+	 * For REQ_ZWPLUG_UNORDERED, the caller guarantees it will submit all
+	 * bios that fill unordered gaps, so just queue up the bio if it is
+	 * past the write pointer.
+	 */
+	if ((bio->bi_opf & REQ_ZWPLUG_UNORDERED) &&
+	    zone_offset > zwplug->wp_offset)
+		goto queue_bio;
+
 	if (!blk_zone_wplug_prepare_bio(zwplug, bio)) {
 		spin_unlock_irqrestore(&zwplug->lock, flags);
 		bio_io_error(bio);
@@ -1475,7 +1504,15 @@ static bool blk_zone_wplug_handle_write(struct bio *bio, unsigned int nr_segs)
 queue_bio:
 	disk_zone_wplug_add_bio(disk, zwplug, bio, nr_segs);
 
-	if (!(zwplug->flags & BLK_ZONE_WPLUG_PLUGGED)) {
+	/*
+	 * If this bio is at the write pointer, schedule the work now.  Normally
+	 * bios at the write pointer are immediately submitted unless there is
+	 * another write to the zone in-flight, but for NOWAIT I/O we can end up
+	 * here even for bios at the write pointer, and for REQ_ZWPLUG_UNORDERED
+	 * we might have to queue up bios even when no I/O is in-flight.
+	 */
+	if (!(zwplug->flags & BLK_ZONE_WPLUG_PLUGGED) &&
+	    blk_zwplug_has_bio_at_write_pointer(zwplug)) {
 		zwplug->flags |= BLK_ZONE_WPLUG_PLUGGED;
 		disk_zone_wplug_schedule_bio_work(disk, zwplug);
 	}
@@ -1619,7 +1656,7 @@ static void disk_zone_wplug_unplug_bio(struct gendisk *disk,
 	spin_lock_irqsave(&zwplug->lock, flags);
 
 	/* Schedule submission of the next plugged BIO if we have one. */
-	if (!bio_list_empty(&zwplug->bio_list)) {
+	if (blk_zwplug_has_bio_at_write_pointer(zwplug)) {
 		disk_zone_wplug_schedule_bio_work(disk, zwplug);
 		spin_unlock_irqrestore(&zwplug->lock, flags);
 		return;
@@ -1738,13 +1775,13 @@ static void blk_zone_wplug_bio_work(struct work_struct *work)
 	 */
 again:
 	spin_lock_irqsave(&zwplug->lock, flags);
-	bio = bio_list_pop(&zwplug->bio_list);
-	if (!bio) {
+	if (!blk_zwplug_has_bio_at_write_pointer(zwplug)) {
 		zwplug->flags &= ~BLK_ZONE_WPLUG_PLUGGED;
 		spin_unlock_irqrestore(&zwplug->lock, flags);
 		goto put_zwplug;
 	}
 
+	bio = bio_list_pop(&zwplug->bio_list);
 	trace_blk_zone_wplug_bio(zwplug->disk->queue, zwplug->zone_no,
 				 bio->bi_iter.bi_sector, bio_sectors(bio));
 
