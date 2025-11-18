@@ -104,9 +104,11 @@ static const struct drm_mode_config_helper_funcs mcde_mode_config_helpers = {
 	/*
 	 * Using this function is necessary to commit atomic updates
 	 * that need the CRTC to be enabled before a commit, as is
-	 * the case with e.g. DSI displays.
+	 * the case with e.g. DSI displays, and also make sure that the
+	 * CRTC is enabled before any bridges are prepared and disabled
+	 * after any bridges are disabled.
 	 */
-	.atomic_commit_tail = drm_atomic_helper_commit_tail_rpm,
+	.atomic_commit_tail = drm_atomic_helper_commit_tail_crtc_early_late,
 };
 
 static irqreturn_t mcde_irq(int irq, void *data)
