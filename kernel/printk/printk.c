@@ -197,6 +197,24 @@ static int __init control_devkmsg(char *str)
 }
 __setup("printk.devkmsg=", control_devkmsg);
 
+/**
+ * console_clamp_loglevel - Clamp a loglevel to valid console loglevel range
+ *
+ * @level: The loglevel to clamp
+ *
+ * Console loglevels must be within the range [LOGLEVEL_ALERT, LOGLEVEL_DEBUG + 1].
+ * This function clamps a given level to this valid range.
+ *
+ * Note: This does not allow LOGLEVEL_EMERG (0) for per-console loglevels, as
+ * level 0 is reserved for emergency messages that should always go to all consoles.
+ *
+ * Return: The clamped loglevel value
+ */
+int console_clamp_loglevel(int level)
+{
+	return clamp(level, LOGLEVEL_ALERT, LOGLEVEL_DEBUG + 1);
+}
+
 char devkmsg_log_str[DEVKMSG_STR_MAX_SIZE] = "ratelimit";
 #if defined(CONFIG_PRINTK) && defined(CONFIG_SYSCTL)
 int devkmsg_sysctl_set_loglvl(const struct ctl_table *table, int write,
@@ -1280,9 +1298,118 @@ module_param(ignore_loglevel, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(ignore_loglevel,
 		 "ignore loglevel setting (prints all kernel messages to the console)");
 
+bool has_per_console_loglevel(const struct console *con)
+{
+	return con && (console_srcu_read_loglevel(con) > 0);
+}
+
+/**
+ * is_valid_per_console_loglevel - Check if a loglevel is valid for per-console
+ *
+ * @con_level: The loglevel to check
+ *
+ * Per-console loglevels must be strictly positive (> 0). Level 0 (KERN_EMERG)
+ * is reserved for emergency messages that should go to all consoles (and so is
+ * disallowed), and -1 (LOGLEVEL_DEFAULT) means use the global console_loglevel.
+ *
+ * Return: true if con_level is a valid per-console loglevel (> 0), false
+ * otherwise
+ */
+static bool is_valid_per_console_loglevel(int con_level)
+{
+	return (con_level > 0);
+}
+
+/**
+ * console_effective_loglevel_source - Determine the source of effective loglevel
+ *
+ * @con_level: The console's per-console loglevel value
+ *
+ * This function determines which loglevel authority is in effect for a console,
+ * based on the hierarchy of controls:
+ *
+ * 1. ignore_loglevel (overrides everything - prints all messages)
+ * 2. per-console loglevel (if set and not ignored)
+ * 3. global console_loglevel (fallback)
+ *
+ * Return: The loglevel source (LLS_IGNORE_LOGLEVEL, LLS_LOCAL, or LLS_GLOBAL)
+ */
+enum loglevel_source
+console_effective_loglevel_source(int con_level)
+{
+	if (ignore_loglevel)
+		return LLS_IGNORE_LOGLEVEL;
+
+	if (is_valid_per_console_loglevel(con_level))
+		return LLS_LOCAL;
+
+	return LLS_GLOBAL;
+}
+
+/**
+ * console_effective_loglevel - Get the effective loglevel for a console
+ *
+ * @con_level: The console's per-console loglevel value
+ *
+ * This function returns the actual loglevel value that should be used for
+ * message filtering for a console, taking into account all loglevel controls
+ * (global, per-console, and ignore_loglevel).
+ *
+ * The effective loglevel is used to determine which messages get printed to
+ * the console. Messages with priority less than the effective level are printed.
+ *
+ * Return: The effective loglevel value to use for filtering
+ */
+int console_effective_loglevel(int con_level)
+{
+	enum loglevel_source source;
+	int level;
+
+	source = console_effective_loglevel_source(con_level);
+
+	switch (source) {
+	case LLS_IGNORE_LOGLEVEL:
+		level = CONSOLE_LOGLEVEL_MOTORMOUTH;
+		break;
+	case LLS_LOCAL:
+		level = con_level;
+		break;
+	case LLS_GLOBAL:
+		level = console_loglevel;
+		break;
+	default:
+		pr_warn("Unhandled console loglevel source: %d", source);
+		level = console_loglevel;
+		break;
+	}
+
+	return level;
+}
+
 static bool suppress_message_printing(int level, int con_eff_level)
 {
 	return (level >= con_eff_level && !ignore_loglevel);
+}
+
+static bool suppress_message_printing_everywhere(int level)
+{
+	bool suppress_everywhere = true;
+	struct console *con;
+	int cookie;
+
+	cookie = console_srcu_read_lock();
+
+	for_each_console_srcu(con) {
+		int con_level = console_srcu_read_loglevel(con);
+
+		if (!suppress_message_printing(level, console_effective_loglevel(con_level))) {
+			suppress_everywhere = false;
+			break;
+		}
+	}
+	console_srcu_read_unlock(cookie);
+
+	return suppress_everywhere;
 }
 
 #ifdef CONFIG_BOOT_PRINTK_DELAY
@@ -2116,7 +2243,8 @@ int printk_delay_msec __read_mostly;
 static inline void printk_delay(int level)
 {
 	/* If the message is forced (e.g. panic), we must delay */
-	if (!is_printk_force_console() && suppress_message_printing(level, console_loglevel))
+	if (!is_printk_force_console() &&
+	    suppress_message_printing_everywhere(level))
 		return;
 
 	boot_delay_msec();
@@ -3059,6 +3187,7 @@ struct printk_buffers printk_shared_pbufs;
 static bool console_emit_next_record(struct console *con, bool *handover, int cookie)
 {
 	bool is_extended = console_srcu_read_flags(con) & CON_EXTENDED;
+	int con_level = console_srcu_read_loglevel(con);
 	char *outbuf = &printk_shared_pbufs.outbuf[0];
 	struct printk_message pmsg = {
 		.pbufs = &printk_shared_pbufs,
@@ -3068,7 +3197,7 @@ static bool console_emit_next_record(struct console *con, bool *handover, int co
 	*handover = false;
 
 	if (!printk_get_next_message(&pmsg, con->seq, is_extended,
-				     console_loglevel))
+				     console_effective_loglevel(con_level)))
 		return false;
 
 	con->dropped += pmsg.dropped;
@@ -3817,6 +3946,9 @@ static int try_enable_preferred_console(struct console *newcon,
 			if (newcon->index < 0)
 				newcon->index = c->index;
 
+			/* TODO: will be configurable in a later patch */
+			newcon->level = LOGLEVEL_DEFAULT;
+
 			if (_braille_register_console(newcon, c))
 				return 0;
 
@@ -3835,8 +3967,12 @@ static int try_enable_preferred_console(struct console *newcon,
 	 * without matching. Accept the pre-enabled consoles only when match()
 	 * and setup() had a chance to be called.
 	 */
-	if (newcon->flags & CON_ENABLED && c->user_specified ==	user_specified)
+	if (newcon->flags & CON_ENABLED && c->user_specified ==	user_specified) {
+		/* Ensure level is initialized for pre-enabled consoles */
+		if (newcon->level == 0)
+			newcon->level = LOGLEVEL_DEFAULT;
 		return 0;
+	}
 
 	return -ENOENT;
 }
@@ -4039,6 +4175,14 @@ void register_console(struct console *newcon)
 	}
 
 	newcon->dropped = 0;
+
+	/*
+	 * Don't unconditionally overwrite, it may have been set on the command
+	 * line already.
+	 */
+	if (newcon->level == 0)
+		newcon->level = LOGLEVEL_DEFAULT;
+
 	init_seq = get_init_console_seq(newcon, bootcon_registered);
 
 	if (newcon->flags & CON_NBCON) {

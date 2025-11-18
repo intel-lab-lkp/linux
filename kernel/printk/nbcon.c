@@ -961,6 +961,7 @@ static bool nbcon_emit_next_record(struct nbcon_write_context *wctxt, bool use_a
 	struct nbcon_context *ctxt = &ACCESS_PRIVATE(wctxt, ctxt);
 	struct console *con = ctxt->console;
 	bool is_extended = console_srcu_read_flags(con) & CON_EXTENDED;
+	int con_level = console_srcu_read_loglevel(con);
 	struct printk_message pmsg = {
 		.pbufs = ctxt->pbufs,
 	};
@@ -993,7 +994,8 @@ static bool nbcon_emit_next_record(struct nbcon_write_context *wctxt, bool use_a
 	if (!nbcon_context_enter_unsafe(ctxt))
 		return false;
 
-	ctxt->backlog = printk_get_next_message(&pmsg, ctxt->seq, is_extended, console_loglevel);
+	ctxt->backlog = printk_get_next_message(&pmsg, ctxt->seq, is_extended,
+						console_effective_loglevel(con_level));
 	if (!ctxt->backlog)
 		return nbcon_context_exit_unsafe(ctxt);
 
