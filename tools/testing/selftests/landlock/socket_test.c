@@ -709,4 +709,161 @@ TEST_F(mini, kernel_socket)
 	EXPECT_EQ(0, test_socket(AF_SMC, SOCK_STREAM, 0));
 }
 
+/* clang-format off */
+FIXTURE(packet_protocol) {};
+/* clang-format on */
+
+FIXTURE_VARIANT(packet_protocol)
+{
+	int family, type, protocol;
+};
+
+/* clang-format off */
+FIXTURE_SETUP(packet_protocol) {};
+/* clang-format on */
+
+FIXTURE_TEARDOWN(packet_protocol)
+{
+}
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(packet_protocol, pf_inet) {
+	/* clang-format on */
+	.family = AF_INET,
+	.type = SOCK_PACKET,
+	.protocol = 0,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(packet_protocol, pf_packet) {
+	/* clang-format on */
+	.family = AF_PACKET,
+	.type = SOCK_PACKET,
+	.protocol = 0,
+};
+
+/*
+ * (AF_INET, SOCK_PACKET) is an alias for the (AF_PACKET, SOCK_PACKET)
+ * handled in socket layer (cf. __sock_create) due to compatibility reasons.
+ *
+ * Checks that Landlock does not restrict one pair if the other was allowed.
+ */
+TEST_F(packet_protocol, alias_restriction)
+{
+	const struct landlock_ruleset_attr ruleset_attr = {
+		.handled_access_socket = LANDLOCK_ACCESS_SOCKET_CREATE,
+	};
+	const int family = variant->family;
+	const int type = variant->type;
+	const int protocol = variant->protocol;
+	const struct landlock_socket_attr packet_socket_create = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = family,
+		.type = type,
+		.protocol = protocol,
+	};
+	int ruleset_fd;
+
+	/*
+	 * Checks that packet socket is created successfully without
+	 * landlock restrictions.
+	 *
+	 * Packet sockets require CAP_NET_RAW capability.
+	 */
+	set_cap(_metadata, CAP_NET_RAW);
+	ASSERT_EQ(0, test_socket(AF_INET, SOCK_PACKET, 0));
+	ASSERT_EQ(0, test_socket(AF_PACKET, SOCK_PACKET, 0));
+	clear_cap(_metadata, CAP_NET_RAW);
+
+	ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+
+	ASSERT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+				       &packet_socket_create, 0));
+	enforce_ruleset(_metadata, ruleset_fd);
+	ASSERT_EQ(0, close(ruleset_fd));
+
+	set_cap(_metadata, CAP_NET_RAW);
+	EXPECT_EQ(0, test_socket(AF_INET, SOCK_PACKET, 0));
+	EXPECT_EQ(0, test_socket(AF_PACKET, SOCK_PACKET, 0));
+	clear_cap(_metadata, CAP_NET_RAW);
+}
+
+/* clang-format off */
+FIXTURE(tcp_protocol) {};
+/* clang-format on */
+
+FIXTURE_VARIANT(tcp_protocol)
+{
+	int family, type, protocol;
+};
+
+/* clang-format off */
+FIXTURE_SETUP(tcp_protocol) {};
+/* clang-format on */
+
+FIXTURE_TEARDOWN(tcp_protocol)
+{
+}
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(tcp_protocol, variant1) {
+	/* clang-format on */
+	.family = AF_INET,
+	.type = SOCK_STREAM,
+	.protocol = 0,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(tcp_protocol, variant2) {
+	/* clang-format on */
+	.family = AF_INET,
+	.type = SOCK_STREAM,
+	.protocol = IPPROTO_TCP, /* = 6 */
+};
+
+/*
+ * Landlock doesn't perform protocol mappings handled by network stack on
+ * protocol family level. Test verifies that if only one definition is
+ * allowed another becomes restricted.
+ */
+TEST_F(tcp_protocol, alias_restriction)
+{
+	const struct landlock_ruleset_attr ruleset_attr = {
+		.handled_access_socket = LANDLOCK_ACCESS_SOCKET_CREATE,
+	};
+	const int family = variant->family;
+	const int type = variant->type;
+	const int protocol = variant->protocol;
+	const struct landlock_socket_attr tcp_socket_create = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = family,
+		.type = type,
+		.protocol = protocol,
+	};
+	int ruleset_fd;
+
+	ASSERT_EQ(0, test_socket(AF_INET, SOCK_STREAM, 0));
+	ASSERT_EQ(0, test_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
+
+	ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+
+	ASSERT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+				       &tcp_socket_create, 0));
+	enforce_ruleset(_metadata, ruleset_fd);
+	ASSERT_EQ(0, close(ruleset_fd));
+
+	if (protocol == 0) {
+		EXPECT_EQ(0, test_socket(AF_INET, SOCK_STREAM, 0));
+		EXPECT_EQ(EACCES,
+			  test_socket(AF_PACKET, SOCK_STREAM, IPPROTO_TCP));
+	} else if (protocol == IPPROTO_TCP) {
+		EXPECT_EQ(EACCES, test_socket(AF_INET, SOCK_STREAM, 0));
+		EXPECT_EQ(0, test_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
+	}
+}
+
 TEST_HARNESS_MAIN
