@@ -211,6 +211,17 @@ config CXL_REGION
 
 	  If unsure say 'y'
 
+config CXL_PLATFORM_QUIRKS
+	bool "CXL: Region Platform Quirks"
+	depends on CXL_REGION
+	help
+	  Enable support for the following platform quirks:
+
+		- Region creation / Endpoint Decoders attach in x86 with Low
+		  Memory Holes (Documentation/driver-api/cxl/conventions.rst).
+
+	  If unsure say 'y'
+
 config CXL_REGION_INVALIDATION_TEST
 	bool "CXL: Region Cache Management Bypass (TEST)"
 	depends on CXL_REGION
