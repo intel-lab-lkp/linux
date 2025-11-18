@@ -1074,6 +1074,12 @@ static int grcan_allocate_dma_buffers(struct net_device *dev,
 
 	/* Extra GRCAN_BUFFER_ALIGNMENT to allow for alignment */
 	dma->base_size = lsize + ssize + GRCAN_BUFFER_ALIGNMENT;
+
+	/* On 64-bit systems.. GRCAN and GRCANFD can only address 32-bit */
+	if (dma_set_mask_and_coherent(priv->ofdev_dev, DMA_BIT_MASK(32))) {
+		netdev_warn(dev, "No suitable DMA available\n");
+		return -ENOMEM;
+	}
 	dma->base_buf = dma_alloc_coherent(priv->ofdev_dev,
 					   dma->base_size,
 					   &dma->base_handle,
