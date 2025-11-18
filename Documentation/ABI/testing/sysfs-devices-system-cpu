@@ -217,6 +217,13 @@ Description:
 		time (in microseconds) this cpu should spend in this idle state
 		to make the transition worth the effort.
 
+What:		/sys/devices/system/cpu/cpuX/cpuidle/state<N>/enter_function
+Date:		November 2025
+KernelVersion:	v6.18
+Contact:	Linux power management list <linux-pm@vger.kernel.org>
+Description:
+		(RO) Display the symbolic name of the idle state's enter callback.
+
 What:		/sys/devices/system/cpu/cpuX/cpuidle/state<N>/s2idle/
 Date:		March 2018
 KernelVersion:	v4.17

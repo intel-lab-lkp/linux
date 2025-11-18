@@ -314,6 +314,13 @@ static ssize_t show_state_default_status(struct cpuidle_state *state,
 		       state->flags & CPUIDLE_FLAG_OFF ? "disabled" : "enabled");
 }
 
+static ssize_t show_state_enter_function(struct cpuidle_state *state,
+					 struct cpuidle_state_usage *state_usage,
+					 char *buf)
+{
+	return sysfs_emit(buf, "%ps\n", state->enter);
+}
+
 define_one_state_ro(name, show_state_name);
 define_one_state_ro(desc, show_state_desc);
 define_one_state_ro(latency, show_state_exit_latency);
@@ -326,6 +333,7 @@ define_one_state_rw(disable, show_state_disable, store_state_disable);
 define_one_state_ro(above, show_state_above);
 define_one_state_ro(below, show_state_below);
 define_one_state_ro(default_status, show_state_default_status);
+define_one_state_ro(enter_function, show_state_enter_function);
 
 static struct attribute *cpuidle_state_default_attrs[] = {
 	&attr_name.attr,
@@ -340,6 +348,7 @@ static struct attribute *cpuidle_state_default_attrs[] = {
 	&attr_above.attr,
 	&attr_below.attr,
 	&attr_default_status.attr,
+	&attr_enter_function.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(cpuidle_state_default);
