@@ -228,6 +228,7 @@ struct btnxpuart_crypto {
 	u8 handshake_secret[SHA256_DIGEST_SIZE];
 	u8 master_secret[SHA256_DIGEST_SIZE];
 	u64 enc_seq_no;
+	u64 dec_seq_no;
 	struct completion completion;
 	int decrypt_result;
 	struct nxp_tls_traffic_keys keys;
@@ -2749,6 +2750,102 @@ static struct sk_buff *nxp_crypto_encrypt_cmd(struct hci_dev *hdev,
 	return skb;
 }
 
+static int nxp_crypto_event(struct hci_dev *hdev, struct sk_buff *skb)
+{
+	struct btnxpuart_dev *nxpdev = hci_get_drvdata(hdev);
+	int ciphertext_size;
+	u8 *ciphertext;
+	u8 aes_gcm_tag[NXP_ENC_AUTH_TAG_SIZE];
+	u8 nonce[GCM_AES_IV_SIZE];
+	int ret;
+	struct sk_buff *event_skb;
+	struct nxp_tls_traffic_keys *keys = &nxpdev->crypto.keys;
+
+	if (skb->len < NXP_ENC_AUTH_TAG_SIZE) {
+		bt_dev_err(hdev, "Encrypted event too short: %d", skb->len);
+		return -EINVAL;
+	}
+	ciphertext_size = skb->len - NXP_ENC_AUTH_TAG_SIZE;
+	ciphertext = kzalloc(ciphertext_size, GFP_KERNEL);
+	if (!ciphertext)
+		return -ENOMEM;
+
+	memcpy(ciphertext, skb->data, ciphertext_size);
+	memcpy(aes_gcm_tag, skb->data + ciphertext_size, NXP_ENC_AUTH_TAG_SIZE);
+
+	nxp_data_calc_nonce(keys->d2h_iv, nxpdev->crypto.dec_seq_no, nonce);
+
+	ret = nxp_aes_gcm_decrypt(hdev, ciphertext, ciphertext_size,
+				  aes_gcm_tag, keys->d2h_key, nonce);
+	if (ret) {
+		kfree(ciphertext);
+		return ret;
+	}
+
+	event_skb = bt_skb_alloc(ciphertext_size, GFP_ATOMIC);
+	if (!event_skb) {
+		kfree(ciphertext);
+		return -ENOMEM;
+	}
+
+	hci_skb_pkt_type(event_skb) = HCI_EVENT_PKT;
+	skb_put_data(event_skb, ciphertext, ciphertext_size);
+
+	nxpdev->crypto.dec_seq_no++;
+
+	kfree(ciphertext);
+
+	/* Inject Decrypted Event to upper stack */
+	return hci_recv_frame(hdev, event_skb);
+}
+
+static int nxp_process_vendor_event(struct hci_dev *hdev, struct sk_buff *skb)
+{
+	struct btnxpuart_dev *nxpdev = hci_get_drvdata(hdev);
+	struct hci_event_hdr *vendor_event_hdr;
+	u8 *vendor_sub_event;
+
+	vendor_event_hdr = (struct hci_event_hdr *)skb_pull_data(skb,
+								 sizeof(*vendor_event_hdr));
+	if (!vendor_event_hdr)
+		goto free_skb;
+
+	if (!vendor_event_hdr->plen)
+		goto free_skb;
+
+	vendor_sub_event = skb_pull_data(skb, 1);
+	if (!vendor_sub_event)
+		goto free_skb;
+
+	switch (*vendor_sub_event) {
+	case 0x23:
+		break;	// Power Save Enable/Disable vendor response. Can be ignored.
+	case 0xe3:
+		if (nxpdev->secure_interface)
+			nxp_crypto_event(hdev, skb);
+		else
+			bt_dev_warn(hdev, "Unexpected encrypted event");
+		break;
+	default:
+		bt_dev_err(hdev, "Unknown vendor event subtype: %d", *vendor_sub_event);
+		break;
+	}
+
+free_skb:
+	kfree_skb(skb);
+	return 0;
+}
+
+static int nxp_recv_event_frame(struct hci_dev *hdev, struct sk_buff *skb)
+{
+	u8 event = hci_event_hdr(skb)->evt;
+
+	if (event == 0xff)
+		return nxp_process_vendor_event(hdev, skb);
+	else
+		return hci_recv_frame(hdev, skb);
+}
+
 /* NXP protocol */
 static int nxp_setup(struct hci_dev *hdev)
 {
@@ -3076,7 +3173,7 @@ static int btnxpuart_flush(struct hci_dev *hdev)
 static const struct h4_recv_pkt nxp_recv_pkts[] = {
 	{ H4_RECV_ACL,          .recv = nxp_recv_acl_pkt },
 	{ H4_RECV_SCO,          .recv = hci_recv_frame },
-	{ H4_RECV_EVENT,        .recv = hci_recv_frame },
+	{ H4_RECV_EVENT,        .recv = nxp_recv_event_frame },
 	{ H4_RECV_ISO,		.recv = hci_recv_frame },
 	{ NXP_RECV_CHIP_VER_V1, .recv = nxp_recv_chip_ver_v1 },
 	{ NXP_RECV_FW_REQ_V1,   .recv = nxp_recv_fw_req_v1 },
