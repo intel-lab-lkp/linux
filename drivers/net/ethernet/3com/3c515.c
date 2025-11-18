@@ -1549,7 +1549,7 @@ static const struct ethtool_ops netdev_ethtool_ops = {
 
 
 #ifdef MODULE
-void cleanup_module(void)
+static void corkscrew_cleanup_module(void)
 {
 	while (!list_empty(&root_corkscrew_dev)) {
 		struct net_device *dev;
@@ -1563,4 +1563,5 @@ void cleanup_module(void)
 		free_netdev(dev);
 	}
 }
+module_exit(corkscrew_cleanup_module);
 #endif				/* MODULE */
