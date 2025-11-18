@@ -467,14 +467,6 @@ static int rpmsg_eptdev_add(struct rpmsg_eptdev *eptdev,
 
 	eptdev->chinfo = chinfo;
 
-	if (cdev) {
-		ret = ida_alloc_max(&rpmsg_minor_ida, RPMSG_DEV_MAX - 1, GFP_KERNEL);
-		if (ret < 0)
-			return ret;
-
-		dev->devt = MKDEV(MAJOR(rpmsg_major), ret);
-	}
-
 	/* Anonymous inode device still need device name for dev_err() and friends */
 	ret = ida_alloc(&rpmsg_ept_ida, GFP_KERNEL);
 	if (ret < 0)
@@ -485,6 +477,12 @@ static int rpmsg_eptdev_add(struct rpmsg_eptdev *eptdev,
 	ret = 0;
 
 	if (cdev) {
+		ret = ida_alloc_max(&rpmsg_minor_ida, RPMSG_DEV_MAX - 1, GFP_KERNEL);
+		if (ret < 0)
+			return ret;
+
+		dev->devt = MKDEV(MAJOR(rpmsg_major), ret);
+
 		ret = cdev_device_add(&eptdev->cdev, &eptdev->dev);
 	}
 
