@@ -565,6 +565,27 @@ static inline void bio_list_add_head(struct bio_list *bl, struct bio *bio)
 		bl->tail = bio;
 }
 
+static inline void bio_list_add_sorted(struct bio_list *bl, struct bio *bio)
+{
+	if (bio_list_empty(bl) ||
+	    bio->bi_iter.bi_sector > bl->tail->bi_iter.bi_sector) {
+		bio_list_add(bl, bio);
+	} else if (bio->bi_iter.bi_sector < bl->head->bi_iter.bi_sector) {
+		bio_list_add_head(bl, bio);
+	} else {
+		struct bio *n = bl->head, *next;
+
+		while ((next = n->bi_next) != NULL) {
+			if (bio->bi_iter.bi_sector < next->bi_iter.bi_sector) {
+				bio->bi_next = next;
+				n->bi_next = bio;
+				break;
+			}
+			n = next;
+		}
+	}
+}
+
 static inline void bio_list_merge(struct bio_list *bl, struct bio_list *bl2)
 {
 	if (!bl2->head)
