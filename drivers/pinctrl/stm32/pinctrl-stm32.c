@@ -125,6 +125,28 @@ static const struct pinconf_generic_params stm32_gpio_bindings[] = {
 	 stm32_gpio_io_sync, ARRAY_SIZE(stm32_gpio_io_sync)},
 };
 
+__diag_push();
+__diag_ignore_all("-Woverride-init", "Allow field overrides in table");
+
+static const char * const stm32_pkgs[] = {
+	/*
+	 * Default dummy value, as match_string() doesn't accepts NULL.
+	 * Also not an empty string because it will match the old numeric
+	 * values <= 0x00ffffff.
+	 */
+	[0 ... (STM32_PKG_MAX - 1)] = "x",
+
+	[STM32_PKG_AA] = "AA",
+	[STM32_PKG_AB] = "AB",
+	[STM32_PKG_AC] = "AC",
+	[STM32_PKG_AD] = "AD",
+	[STM32_PKG_AI] = "AI",
+	[STM32_PKG_AK] = "AK",
+	[STM32_PKG_AL] = "AL",
+};
+
+__diag_pop();
+
 struct stm32_pinctrl_group {
 	const char *name;
 	unsigned long config;
@@ -1894,9 +1916,17 @@ int stm32_pctl_probe(struct platform_device *pdev)
 	pctl->dev = dev;
 	pctl->match_data = match_data;
 
-	/*  get optional package information */
+	/* get optional package information, legacy binding */
 	if (!device_property_read_u32(dev, "st,package", &pctl->pkg))
 		dev_dbg(pctl->dev, "package detected: %x\n", pctl->pkg);
+
+	/* get optional package information, modern binding */
+	ret = device_property_match_property_string(pctl->dev, "st,package",
+						    stm32_pkgs, STM32_PKG_MAX);
+	if (ret >= 0) {
+		dev_dbg(pctl->dev, "package detected: \"%s\"\n", stm32_pkgs[ret]);
+		pctl->pkg = BIT(ret);
+	}
 
 	pctl->pins = devm_kcalloc(pctl->dev, pctl->match_data->npins,
 				  sizeof(*pctl->pins), GFP_KERNEL);

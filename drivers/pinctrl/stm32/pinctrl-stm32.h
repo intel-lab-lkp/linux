@@ -20,14 +20,23 @@
 #define STM32_PIN_RSVD		(STM32_PIN_ANALOG + 1)
 #define STM32_CONFIG_NUM	(STM32_PIN_RSVD + 1)
 
-/*  package information */
-#define STM32MP_PKG_AA		BIT(0)
-#define STM32MP_PKG_AB		BIT(1)
-#define STM32MP_PKG_AC		BIT(2)
-#define STM32MP_PKG_AD		BIT(3)
-#define STM32MP_PKG_AI		BIT(8)
-#define STM32MP_PKG_AK		BIT(10)
-#define STM32MP_PKG_AL		BIT(11)
+/*
+ * package information
+ * For DT backward compatibility, some value below is tagged as not to be changed
+ * New packages can assume any other value
+ */
+enum stm32_pkg {
+	STM32_PKG_AA = 0,  /* do not change */
+	STM32_PKG_AB = 1,  /* do not change */
+	STM32_PKG_AC = 2,  /* do not change */
+	STM32_PKG_AD = 3,  /* do not change */
+	STM32_PKG_AI = 8,  /* do not change */
+	STM32_PKG_AK = 10, /* do not change */
+	STM32_PKG_AL = 11, /* do not change */
+
+	/* keep this as last item */
+	STM32_PKG_MAX,
+};
 
 struct stm32_desc_function {
 	const char *name;
