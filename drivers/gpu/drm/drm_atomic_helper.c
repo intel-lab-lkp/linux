@@ -1692,6 +1692,30 @@ void drm_atomic_helper_commit_modeset_enables(struct drm_device *dev,
 }
 EXPORT_SYMBOL(drm_atomic_helper_commit_modeset_enables);
 
+/**
+ * drm_atomic_helper_commit_modeset_enables_crtc_early - modeset commit to enable outputs, start CRTC early
+ * @dev: DRM device
+ * @state: atomic state object being committed
+ *
+ * This function is a variant of drm_atomic_helper_commit_modeset_enables()
+ * which enables CRTC before encoder/bridge. This is needed on R-Car DU,
+ * where the CRTC provides clock to LVDS and DSI, and has to be started
+ * before a bridge may call .prepare , which may trigger e.g. DSI transfer.
+ */
+void
+drm_atomic_helper_commit_modeset_enables_crtc_early(struct drm_device *dev,
+						    struct drm_atomic_state *state)
+{
+	crtc_enable(dev, state);
+
+	encoder_bridge_pre_enable(dev, state);
+
+	encoder_bridge_enable(dev, state);
+
+	drm_atomic_helper_commit_writebacks(dev, state);
+}
+EXPORT_SYMBOL(drm_atomic_helper_commit_modeset_enables_crtc_early);
+
 /*
  * For atomic updates which touch just a single CRTC, calculate the time of the
  * next vblank, and inform all the fences of the deadline.
