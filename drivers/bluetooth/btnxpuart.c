@@ -15,6 +15,7 @@
 #include <linux/string.h>
 #include <linux/crc8.h>
 #include <linux/crc32.h>
+#include <linux/math.h>
 #include <linux/string_helpers.h>
 #include <linux/gpio/consumer.h>
 #include <linux/of_irq.h>
@@ -134,6 +135,14 @@
 #define BT_CTRL_WAKEUP_METHOD_EXT_BREAK 0x04
 #define BT_CTRL_WAKEUP_METHOD_RTS       0x05
 
+/* FW Metadata */
+#define FW_METADATA_TLV_UUID		0x40
+#define FW_METADATA_TLV_ECDSA_KEY	0x50
+#define FW_METADATA_FLAG_BT		0x02
+
+#define NXP_FW_UUID_SIZE           16
+#define NXP_FW_ECDSA_PUBKEY_SIZE   65
+
 struct ps_data {
 	u8    target_ps_mode;	/* ps mode to be set */
 	u8    cur_psmode;	/* current ps_mode */
@@ -180,6 +189,11 @@ enum bootloader_param_change {
 	changed
 };
 
+struct btnxpuart_crypto {
+	u8 ecdsa_public[NXP_FW_ECDSA_PUBKEY_SIZE];	/* ECDSA public key, Authentication*/
+	u8 fw_uuid[NXP_FW_UUID_SIZE];
+};
+
 struct btnxpuart_dev {
 	struct hci_dev *hdev;
 	struct serdev_device *serdev;
@@ -213,6 +227,7 @@ struct btnxpuart_dev {
 	struct btnxpuart_data *nxp_data;
 	struct reset_control *pdn;
 	struct hci_uart hu;
+	struct btnxpuart_crypto crypto;
 };
 
 #define NXP_V1_FW_REQ_PKT	0xa5
@@ -360,6 +375,26 @@ union nxp_set_bd_addr_payload {
 		u8 param[6];
 	} __packed data;
 	u8 buf[8];
+};
+
+/* FW Meta Data */
+struct fw_metadata_hdr {
+	__le32 cmd;
+	__le32 addr;
+	__le32 len;
+	__le32 crc;
+};
+
+struct fw_metadata_tail {
+	__le32 len;
+	u8 magic[8];
+	__le32 crc;
+};
+
+struct fw_metadata_tlv {
+	__le16 id;
+	__le16 flag;
+	__le32 len;
 };
 
 static u8 crc8_table[CRC8_TABLE_SIZE];
@@ -1190,6 +1225,85 @@ static void nxp_handle_fw_download_error(struct hci_dev *hdev, struct v3_data_re
 	}
 }
 
+static u32 nxp_process_fw_metadata_tlv(struct hci_dev *hdev, char **payload)
+{
+	struct btnxpuart_dev *nxpdev = hci_get_drvdata(hdev);
+	struct fw_metadata_tlv *tlv = (struct fw_metadata_tlv *)(*payload);
+	u32 ret = sizeof(*tlv) + le32_to_cpu(tlv->len);
+
+	/* Process only BT specific metadata TLVs */
+	if (!(le16_to_cpu(tlv->flag) & FW_METADATA_FLAG_BT))
+		goto align_and_return;
+
+	switch (le16_to_cpu(tlv->id)) {
+	case FW_METADATA_TLV_UUID:
+		if (le32_to_cpu(tlv->len) == NXP_FW_UUID_SIZE)
+			memcpy(nxpdev->crypto.fw_uuid,
+				*payload + sizeof(*tlv), NXP_FW_UUID_SIZE);
+		break;
+	case FW_METADATA_TLV_ECDSA_KEY:
+		if (le32_to_cpu(tlv->len) == NXP_FW_ECDSA_PUBKEY_SIZE)
+			memcpy(nxpdev->crypto.ecdsa_public,
+				*payload + sizeof(*tlv), NXP_FW_ECDSA_PUBKEY_SIZE);
+		break;
+	default:
+		bt_dev_err(hdev, "Unknown metadata TLV ID: 0x%x", le16_to_cpu(tlv->id));
+		break;
+	}
+
+align_and_return:
+	/* Align the pointer to 4 byte structure alignment */
+	ret = round_up(ret, 4);
+	*payload += ret;
+
+	return ret;
+}
+
+static void nxp_process_fw_meta_data(struct hci_dev *hdev, const struct firmware *fw)
+{
+	const char *metamagc = "metamagc";
+	struct fw_metadata_hdr *hdr = NULL;
+	struct fw_metadata_tail *tail;
+	u32 hdr_crc = 0;
+	u32 payload_crc = 0;
+	char *payload;
+	u32 payload_len = 0;
+
+	/* FW metadata should contain at least header and tail */
+	if (fw->size < (sizeof(*hdr) + sizeof(*tail)))
+		return;
+
+	tail = (struct fw_metadata_tail *)&fw->data[fw->size - sizeof(*tail)];
+
+	/* If tail doesn't contain the string "metamagc", this is invalid FW metadata */
+	if (memcmp(metamagc, tail->magic, strlen(metamagc)))
+		return;
+
+	hdr = (struct fw_metadata_hdr *)&fw->data[fw->size -
+						  sizeof(*tail) -
+						  tail->len];
+
+	/* If metadata header isn't cmd24, this is invalid FW metadata */
+	if (le32_to_cpu(hdr->cmd) != 24)
+		return;
+
+	/* If header CRC doesn't match, this is invalid FW metadata */
+	hdr_crc = crc32_be(0, (u8 *)hdr, offsetof(struct fw_metadata_hdr, crc));
+	if (hdr_crc != hdr->crc)
+		return;
+
+	/* If payload CRC doesn't match, this is invalid FW metadata */
+	payload = (u8 *)hdr  + sizeof(*hdr);
+	payload_crc = crc32_be(0, payload, hdr->len - 4);
+	if (payload_crc != tail->crc)
+		return;
+
+	payload_len = hdr->len - sizeof(*tail);
+
+	while (payload_len > sizeof(struct fw_metadata_tlv))
+		payload_len -= nxp_process_fw_metadata_tlv(hdev, &payload);
+}
+
 static int nxp_recv_fw_req_v3(struct hci_dev *hdev, struct sk_buff *skb)
 {
 	struct btnxpuart_dev *nxpdev = hci_get_drvdata(hdev);
@@ -1248,14 +1362,6 @@ static int nxp_recv_fw_req_v3(struct hci_dev *hdev, struct sk_buff *skb)
 		goto free_skb;
 	}
 
-	if (req->len == 0) {
-		bt_dev_info(hdev, "FW Download Complete: %zu bytes",
-			   nxpdev->fw->size);
-		clear_bit(BTNXPUART_FW_DOWNLOADING, &nxpdev->tx_state);
-		wake_up_interruptible(&nxpdev->fw_dnld_done_wait_q);
-		goto free_skb;
-	}
-
 	offset = __le32_to_cpu(req->offset);
 	if (offset < nxpdev->fw_v3_offset_correction) {
 		/* This scenario should ideally never occur. But if it ever does,
@@ -1267,6 +1373,17 @@ static int nxp_recv_fw_req_v3(struct hci_dev *hdev, struct sk_buff *skb)
 	}
 
 	nxpdev->fw_dnld_v3_offset = offset - nxpdev->fw_v3_offset_correction;
+
+	if (req->len == 0) {
+		if (nxpdev->fw_dnld_v3_offset < nxpdev->fw->size)
+			nxp_process_fw_meta_data(hdev, nxpdev->fw);
+		bt_dev_info(hdev, "FW Download Complete: %u bytes.",
+			   req->offset - nxpdev->fw_v3_offset_correction);
+		clear_bit(BTNXPUART_FW_DOWNLOADING, &nxpdev->tx_state);
+		wake_up_interruptible(&nxpdev->fw_dnld_done_wait_q);
+		goto free_skb;
+	}
+
 	serdev_device_write_buf(nxpdev->serdev, nxpdev->fw->data +
 				nxpdev->fw_dnld_v3_offset, len);
 
