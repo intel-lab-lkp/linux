@@ -91,6 +91,8 @@ drm_atomic_helper_calc_timestamping_constants(struct drm_atomic_state *state);
 
 void drm_atomic_helper_commit_modeset_disables(struct drm_device *dev,
 					       struct drm_atomic_state *state);
+void drm_atomic_helper_commit_modeset_disables_crtc_late(struct drm_device *dev,
+							 struct drm_atomic_state *state);
 void drm_atomic_helper_commit_modeset_enables(struct drm_device *dev,
 					  struct drm_atomic_state *old_state);
 void drm_atomic_helper_commit_modeset_enables_crtc_early(struct drm_device *dev,

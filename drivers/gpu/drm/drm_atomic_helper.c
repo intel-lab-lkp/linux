@@ -1337,13 +1337,17 @@ encoder_bridge_post_disable(struct drm_device *dev, struct drm_atomic_state *sta
 }
 
 static void
-disable_outputs(struct drm_device *dev, struct drm_atomic_state *state)
+disable_outputs(struct drm_device *dev, struct drm_atomic_state *state, bool late_crtc)
 {
 	encoder_bridge_disable(dev, state);
 
-	crtc_disable(dev, state);
-
-	encoder_bridge_post_disable(dev, state);
+	if (!late_crtc) {
+		crtc_disable(dev, state);
+		encoder_bridge_post_disable(dev, state);
+	} else {
+		encoder_bridge_post_disable(dev, state);
+		crtc_disable(dev, state);
+	}
 }
 
 /**
@@ -1526,7 +1530,7 @@ crtc_set_mode(struct drm_device *dev, struct drm_atomic_state *state)
 void drm_atomic_helper_commit_modeset_disables(struct drm_device *dev,
 					       struct drm_atomic_state *state)
 {
-	disable_outputs(dev, state);
+	disable_outputs(dev, state, false);
 
 	drm_atomic_helper_update_legacy_modeset_state(dev, state);
 	drm_atomic_helper_calc_timestamping_constants(state);
@@ -1534,6 +1538,31 @@ void drm_atomic_helper_commit_modeset_disables(struct drm_device *dev,
 	crtc_set_mode(dev, state);
 }
 EXPORT_SYMBOL(drm_atomic_helper_commit_modeset_disables);
+
+/**
+ * drm_atomic_helper_commit_modeset_disables_crtc_late - modeset disable outputs
+ * @dev: DRM device
+ * @state: atomic state object being committed
+ *
+ * This function shuts down all the outputs that need to be shut down with
+ * CRTC last in the disablement chain and prepares them (if required) with the
+ * new mode.
+ *
+ * This is a version of @drm_atomic_helper_commit_modeset_disables() that disables
+ * the CRTC last in the chain of disablement calls instead of the intuitive
+ * order to disable the bridges before the CRTC.
+ */
+void drm_atomic_helper_commit_modeset_disables_crtc_late(struct drm_device *dev,
+							 struct drm_atomic_state *state)
+{
+	disable_outputs(dev, state, true);
+
+	drm_atomic_helper_update_legacy_modeset_state(dev, state);
+	drm_atomic_helper_calc_timestamping_constants(state);
+
+	crtc_set_mode(dev, state);
+}
+EXPORT_SYMBOL(drm_atomic_helper_commit_modeset_disables_crtc_late);
 
 static void drm_atomic_helper_commit_writebacks(struct drm_device *dev,
 						struct drm_atomic_state *state)
