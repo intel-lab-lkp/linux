@@ -354,9 +354,9 @@ static void proc_put_char(void **buf, size_t *size, char c)
 	}
 }
 
-static int do_proc_dointvec_conv(bool *negp, unsigned long *lvalp,
-				 int *valp,
-				 int write, void *data)
+int do_proc_dointvec_conv(bool *negp, unsigned long *lvalp,
+			  int *valp,
+			  int write, void *data)
 {
 	if (write) {
 		if (*negp) {
@@ -380,6 +380,7 @@ static int do_proc_dointvec_conv(bool *negp, unsigned long *lvalp,
 	}
 	return 0;
 }
+EXPORT_SYMBOL(do_proc_dointvec_conv);
 
 static int do_proc_douintvec_conv(unsigned long *lvalp,
 				  unsigned int *valp,
@@ -471,15 +472,16 @@ out:
 	return err;
 }
 
-static int do_proc_dointvec(const struct ctl_table *table, int write,
-		  void *buffer, size_t *lenp, loff_t *ppos,
-		  int (*conv)(bool *negp, unsigned long *lvalp, int *valp,
-			      int write, void *data),
-		  void *data)
+int do_proc_dointvec(const struct ctl_table *table, int write,
+		     void *buffer, size_t *lenp, loff_t *ppos,
+		     int (*conv)(bool *negp, unsigned long *lvalp, int *valp,
+				 int write, void *data),
+		     void *data)
 {
 	return __do_proc_dointvec(table->data, table, write,
 			buffer, lenp, ppos, conv, data);
 }
+EXPORT_SYMBOL(do_proc_dointvec);
 
 static int do_proc_douintvec_w(unsigned int *tbl_data,
 			       const struct ctl_table *table,
