@@ -82,6 +82,13 @@ struct mfd_cell {
 	const struct software_node *swnode;
 
 	/*
+	 * Parent OF node of the device, if different from the OF node
+	 * of the MFD parent (e.g. there is at least one more hierarchical
+	 * level between them)
+	 */
+	const struct device_node *parent_of_node;
+
+	/*
 	 * Device Tree compatible string
 	 * See: Documentation/devicetree/usage-model.rst Chapter 2.2 for details
 	 */
