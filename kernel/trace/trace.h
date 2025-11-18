@@ -366,7 +366,9 @@ struct trace_array {
 
 	int			perf_events;
 	int			ftrace_perf_events;
+	int			fgraph_perf_events;
 	u64			ftrace_perf_mask;
+	u64			fgraph_perf_mask;
 
 	struct trace_pid_list	__rcu *filtered_pids;
 	struct trace_pid_list	__rcu *filtered_no_pids;
@@ -946,6 +948,8 @@ static __always_inline bool ftrace_hash_empty(struct ftrace_hash *hash)
 #define TRACE_GRAPH_PRINT_RETVAL_HEX    0x1000
 #define TRACE_GRAPH_PRINT_RETADDR       0x2000
 #define TRACE_GRAPH_ARGS		0x4000
+#define TRACE_GRAPH_PERF_CACHE		0x8000
+#define TRACE_GRAPH_PERF_CYCLES		0x10000
 #define TRACE_GRAPH_PRINT_FILL_SHIFT	28
 #define TRACE_GRAPH_PRINT_FILL_MASK	(0x3 << TRACE_GRAPH_PRINT_FILL_SHIFT)
 
