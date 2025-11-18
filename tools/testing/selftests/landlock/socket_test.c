@@ -866,4 +866,59 @@ TEST_F(tcp_protocol, alias_restriction)
 	}
 }
 
+static int test_socketpair(int family, int type, int protocol)
+{
+	int fds[2];
+	int err;
+
+	err = socketpair(family, type | SOCK_CLOEXEC, protocol, fds);
+	if (err)
+		return errno;
+	/*
+	 * Mixing error codes from close(2) and socketpair(2) should not lead to
+	 * any (access type) confusion for this test.
+	 */
+	if (close(fds[0]) != 0)
+		return errno;
+	if (close(fds[1]) != 0)
+		return errno;
+	return 0;
+}
+
+TEST_F(mini, socketpair)
+{
+	const struct landlock_ruleset_attr ruleset_attr = {
+		.handled_access_socket = LANDLOCK_ACCESS_SOCKET_CREATE,
+	};
+	const struct landlock_socket_attr unix_socket_create = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = AF_UNIX,
+		.type = SOCK_STREAM,
+		.protocol = 0,
+	};
+	int ruleset_fd;
+
+	/* Tries to create socket when ruleset is not established. */
+	ASSERT_EQ(0, test_socketpair(AF_UNIX, SOCK_STREAM, 0));
+	ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+
+	ASSERT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+				       &unix_socket_create, 0));
+	enforce_ruleset(_metadata, ruleset_fd);
+	ASSERT_EQ(0, close(ruleset_fd));
+
+	/* Tries to create socket when protocol is allowed */
+	EXPECT_EQ(0, test_socketpair(AF_UNIX, SOCK_STREAM, 0));
+
+	ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	enforce_ruleset(_metadata, ruleset_fd);
+	ASSERT_EQ(0, close(ruleset_fd));
+
+	/* Tries to create socket when protocol is restricted. */
+	EXPECT_EQ(EACCES, test_socketpair(AF_UNIX, SOCK_STREAM, 0));
+}
+
 TEST_HARNESS_MAIN
