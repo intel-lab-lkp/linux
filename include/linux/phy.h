@@ -626,6 +626,14 @@ struct macsec_ops;
  * @link_down_events: Number of times link was lost
  * @shared: Pointer to private data shared by phys in one package
  * @priv: Pointer to driver private data
+ * @oatc14_sqiplus_bits: Number of bits for sqi+ level supported
+ *        0 - SQI+ is not supported
+ *        3 - SQI+ is supported, using 3 bits (8 levels)
+ *        4 - SQI+ is supported, using 4 bits (16 levels)
+ *        5 - SQI+ is supported, using 5 bits (32 levels)
+ *        6 - SQI+ is supported, using 6 bits (64 levels)
+ *        7 - SQI+ is supported, using 7 bits (128 levels)
+ *        8 - SQI+ is supported, using 8 bits (256 levels)
  *
  * interrupts currently only supports enabled or disabled,
  * but could be changed in the future to support enabling
@@ -772,6 +780,8 @@ struct phy_device {
 	/* MACsec management functions */
 	const struct macsec_ops *macsec_ops;
 #endif
+
+	u8 oatc14_sqiplus_bits;
 };
 
 /* Generic phy_device::dev_flags */
@@ -2257,6 +2267,8 @@ int genphy_c45_an_config_eee_aneg(struct phy_device *phydev);
 int genphy_c45_oatc14_cable_test_start(struct phy_device *phydev);
 int genphy_c45_oatc14_cable_test_get_status(struct phy_device *phydev,
 					    bool *finished);
+int genphy_c45_oatc14_get_sqi_max(struct phy_device *phydev);
+int genphy_c45_oatc14_get_sqi(struct phy_device *phydev);
 
 /* The gen10g_* functions are the old Clause 45 stub */
 int gen10g_config_aneg(struct phy_device *phydev);
