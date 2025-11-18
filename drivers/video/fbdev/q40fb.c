@@ -101,6 +101,12 @@ static int q40fb_probe(struct platform_device *dev)
 	info->par = NULL;
 	info->screen_base = (char *) q40fb_fix.smem_start;
 
+	if (!request_mem_region(q40fb_fix.smem_start, q40fb_fix.smem_len,
+				"q40fb")) {
+		dev_err(&dev->dev, "cannot reserve video memory at 0x%lx\n",
+			q40fb_fix.smem_start);
+	}
+
 	if (fb_alloc_cmap(&info->cmap, 256, 0) < 0) {
 		framebuffer_release(info);
 		return -ENOMEM;
@@ -144,6 +150,7 @@ static int __init q40fb_init(void)
 		if (ret)
 			platform_driver_unregister(&q40fb_driver);
 	}
+
 	return ret;
 }
 
