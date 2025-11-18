@@ -903,8 +903,9 @@ static int ocfs2_move_extents(struct ocfs2_move_extents_context *context)
 	struct buffer_head *di_bh = NULL;
 	struct ocfs2_super *osb = OCFS2_SB(inode->i_sb);
 
-	if (ocfs2_is_hard_readonly(osb) || ocfs2_is_soft_readonly(osb))
-		return -EROFS;
+	status = ocfs2_emergency_state(osb);
+	if (status < 0)
+		return status;
 
 	inode_lock(inode);
 
