@@ -198,12 +198,20 @@ ssize_t armoury_attr_uint_show(struct kobject *kobj, struct kobj_attribute *attr
 		.name = _fsname, .attrs = _attrname##_attrs			\
 	}
 
+#if IS_REACHABLE(CONFIG_ASUS_ARMOURY_CPU_CORES_RW)
+	#define __ASUS_ATTR_CPU_CORES(_attrname, __attrval) \
+		__ASUS_ATTR_RW(_attrname, __attrval)
+#else
+	#define __ASUS_ATTR_CPU_CORES(_attrname, __attrval) \
+		__ASUS_ATTR_RO(_attrname, __attrval)
+#endif /* CONFIG_ASUS_ARMOURY_CPU_CORES_RW */
+
 /* CPU core attributes need a little different in setup */
-#define ASUS_ATTR_GROUP_CORES_RW(_attrname, _fsname, _dispname)		\
+#define ASUS_ATTR_GROUP_CORES(_attrname, _fsname, _dispname)		\
 	__ATTR_SHOW_FMT(scalar_increment, _attrname, "%d\n", 1);	\
 	__ATTR_SHOW_FMT(display_name, _attrname, "%s\n", _dispname);	\
 	static struct kobj_attribute attr_##_attrname##_current_value =	\
-		__ASUS_ATTR_RW(_attrname, current_value);		\
+		__ASUS_ATTR_CPU_CORES(_attrname, current_value);	\
 	static struct kobj_attribute attr_##_attrname##_default_value = \
 		__ASUS_ATTR_RO(_attrname, default_value);		\
 	static struct kobj_attribute attr_##_attrname##_min_value =	\
