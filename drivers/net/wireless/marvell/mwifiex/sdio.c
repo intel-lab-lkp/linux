@@ -947,6 +947,10 @@ static void mwifiex_sdio_coredump(struct device *dev)
 	struct sdio_mmc_card *card;
 
 	card = sdio_get_drvdata(func);
+	if (!card->adapter) {
+		dev_err(dev, "adapter is not valid, cannot coredump\n");
+		return;
+	}
 	if (!test_and_set_bit(MWIFIEX_IFACE_WORK_DEVICE_DUMP,
 			      &card->work_flags))
 		schedule_work(&card->work);
@@ -3019,9 +3023,19 @@ static void mwifiex_sdio_work(struct work_struct *work)
 	struct sdio_mmc_card *card =
 		container_of(work, struct sdio_mmc_card, work);
 
+	if (!card->adapter) {
+		pr_err("sdio_work: no adapter\n");
+		return;
+	}
+
 	if (test_and_clear_bit(MWIFIEX_IFACE_WORK_DEVICE_DUMP,
 			       &card->work_flags))
 		mwifiex_sdio_device_dump_work(card->adapter);
+
+	if (!card->adapter) {
+		pr_err("sdio_work: no adapter to reset\n");
+		return;
+	}
 	if (test_and_clear_bit(MWIFIEX_IFACE_WORK_CARD_RESET,
 			       &card->work_flags))
 		mwifiex_sdio_card_reset_work(card->adapter);
