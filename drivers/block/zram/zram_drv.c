@@ -1015,6 +1015,7 @@ static int zram_writeback_slots(struct zram *zram,
 			}
 		}
 
+		index = pps->index;
 		zram_slot_lock(zram, index);
 		/*
 		 * scan_slots() sets ZRAM_PP_SLOT and relases slot lock, so
