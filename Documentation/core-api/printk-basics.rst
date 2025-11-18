@@ -54,32 +54,33 @@ string, the log level is not a separate argument). The available log levels are:
 
 The log level specifies the importance of a message. The kernel decides whether
 to show the message immediately (printing it to the current console) depending
-on its log level and the current *console_loglevel* (a kernel variable). If the
-message priority is higher (lower log level value) than the *console_loglevel*
-the message will be printed to the console.
+on its log level and the current global *console_loglevel* or local per-console
+loglevel (kernel variables). If the message priority is higher (lower log level
+value) than the effective loglevel the message will be printed to the console.
 
 If the log level is omitted, the message is printed with ``KERN_DEFAULT``
 level.
 
-You can check the current *console_loglevel* with::
+You can check the current console's loglevel -- for example if you want to
+check the loglevel for serial consoles:
 
-  $ cat /proc/sys/kernel/printk
-  4        4        1        7
+  $ cat /sys/class/console/ttyS0/effective_loglevel
+  6
+  $ cat /sys/class/console/ttyS0/effective_loglevel_source
+  local
 
-The result shows the *current*, *default*, *minimum* and *boot-time-default* log
-levels.
+To change the default loglevel for all consoles, simply write the desired level
+to ``/proc/sys/kernel/console_loglevel``. For example::
 
-To change the current console_loglevel simply write the desired level to
-``/proc/sys/kernel/printk``. For example, to print all messages to the console::
+  # echo 5 > /proc/sys/kernel/console_loglevel
 
-  # echo 8 > /proc/sys/kernel/printk
+This sets the console_loglevel to print KERN_WARNING (4) or more severe
+messages to console. Consoles with a per-console loglevel set will ignore it
+unless ``ignore_per_console_loglevel`` is set on the kernel command line or at
+``/sys/module/printk/parameters/ignore_per_console_loglevel``.
 
-Another way, using ``dmesg``::
-
-  # dmesg -n 5
-
-sets the console_loglevel to print KERN_WARNING (4) or more severe messages to
-console. See ``dmesg(1)`` for more information.
+For more information on per-console loglevels, see
+Documentation/admin-guide/per-console-loglevel.rst.
 
 As an alternative to printk() you can use the ``pr_*()`` aliases for
 logging. This family of macros embed the log level in the macro names. For

@@ -1,0 +1,58 @@
+What:		/sys/class/console/
+Date:		November 2025
+Contact:	Chris Down <chris@chrisdown.name>
+Description:	Interface for viewing and setting per-console attributes, like
+		the per-console loglevel. For a high-level document describing
+		the motivations for this interface and related non-sysfs
+		controls, see
+		Documentation/admin-guide/per-console-loglevel.rst.
+
+What:		/sys/class/console/<C>/effective_loglevel
+Date:		November 2025
+Contact:	Chris Down <chris@chrisdown.name>
+Permissions:	0444 (world readable)
+Description:	Read only. The currently effective loglevel for this console.
+		All messages emitted with a loglevel below the effective value
+		will be emitted to the console.
+
+What:		/sys/class/console/<C>/effective_loglevel_source
+Date:		November 2025
+Contact:	Chris Down <chris@chrisdown.name>
+Permissions:	0444 (world readable)
+Description:	Read only. The currently effective loglevel source for this
+		console -- for example, whether it was set globally, or whether
+		it was set locally for this console.
+
+		Possible values are:
+			=============== ============================================
+			local           The loglevel comes from the console's
+			                per-console loglevel setting.
+			global          The loglevel comes from the global
+			                console_loglevel.
+			ignore_loglevel Both the per-console loglevel and global
+			                loglevel are ignored as ignore_loglevel is
+			                present on the kernel command line.
+			=============== ============================================
+
+What:		/sys/class/console/<C>/loglevel
+Date:		November 2025
+Contact:	Chris Down <chris@chrisdown.name>
+Permissions:	0644 (root read/write, user read)
+Description:	Read write. The current per-console loglevel, which will take
+		effect if not overridden by other non-sysfs controls (see
+		Documentation/admin-guide/per-console-loglevel.rst).
+
+		Valid values:
+			1-8:  LOGLEVEL_ALERT (1) to LOGLEVEL_DEBUG + 1 (8)
+			-1:   Use global console_loglevel (default)
+			0:    Explicitly rejected (KERN_EMERG not allowed)
+
+		Error codes:
+			EINVAL: Non-numeric input
+			ERANGE: Value out of valid range (< 1 or > 8, excluding -1)
+			ERANGE: Value is 0 (KERN_EMERG not allowed for per-console)
+			ERANGE: Value below system minimum_console_loglevel
+
+		The special value -1 disables the per-console loglevel, making
+		the console use the global loglevel instead.
+
