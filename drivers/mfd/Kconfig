@@ -1260,6 +1260,7 @@ config MFD_SPACEMIT_P1
 	depends on I2C
 	select I2C_K1
 	select MFD_SIMPLE_MFD_I2C
+	default ARCH_SPACEMIT
 	help
 	  This option supports the I2C-based SpacemiT P1 PMIC, which
 	  contains regulators, a power switch, GPIOs, an RTC, and more.
