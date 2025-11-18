@@ -1153,6 +1153,33 @@ static int ipvlan_port_del_addr_event(struct ipvl_port *port,
 	return NOTIFY_OK;
 }
 
+static int ipvlan_addr_validator_event(struct net_device *dev,
+				       unsigned long event,
+				       struct netlink_ext_ack *extack,
+				       const void *iaddr,
+				       bool is_v6)
+{
+	struct ipvl_dev *ipvlan = netdev_priv(dev);
+
+	if (!ipvlan_is_valid_dev(dev))
+		return NOTIFY_DONE;
+
+	if (ipvlan_is_macnat(ipvlan->port))
+		return notifier_from_errno(-EADDRNOTAVAIL);
+
+	switch (event) {
+	case NETDEV_UP:
+		if (ipvlan_addr_busy(ipvlan->port, iaddr, is_v6)) {
+			NL_SET_ERR_MSG(extack,
+				       "Address already assigned to an ipvlan device");
+			return notifier_from_errno(-EADDRINUSE);
+		}
+		break;
+	}
+
+	return NOTIFY_OK;
+}
+
 #if IS_ENABLED(CONFIG_IPV6)
 static int ipvlan_add_addr6(struct ipvl_dev *ipvlan, struct in6_addr *ip6_addr)
 {
@@ -1221,25 +1248,9 @@ static int ipvlan_addr6_validator_event(struct notifier_block *unused,
 {
 	struct in6_validator_info *i6vi = (struct in6_validator_info *)ptr;
 	struct net_device *dev = (struct net_device *)i6vi->i6vi_dev->dev;
-	struct ipvl_dev *ipvlan = netdev_priv(dev);
 
-	if (!ipvlan_is_valid_dev(dev))
-		return NOTIFY_DONE;
-
-	if (ipvlan_is_macnat(ipvlan->port))
-		return notifier_from_errno(-EADDRNOTAVAIL);
-
-	switch (event) {
-	case NETDEV_UP:
-		if (ipvlan_addr_busy(ipvlan->port, &i6vi->i6vi_addr, true)) {
-			NL_SET_ERR_MSG(i6vi->extack,
-				       "Address already assigned to an ipvlan device");
-			return notifier_from_errno(-EADDRINUSE);
-		}
-		break;
-	}
-
-	return NOTIFY_OK;
+	return ipvlan_addr_validator_event(dev, event, i6vi->extack,
+					   &i6vi->i6vi_addr, true);
 }
 #endif
 
@@ -1315,25 +1326,9 @@ static int ipvlan_addr4_validator_event(struct notifier_block *unused,
 {
 	struct in_validator_info *ivi = (struct in_validator_info *)ptr;
 	struct net_device *dev = (struct net_device *)ivi->ivi_dev->dev;
-	struct ipvl_dev *ipvlan = netdev_priv(dev);
 
-	if (!ipvlan_is_valid_dev(dev))
-		return NOTIFY_DONE;
-
-	if (ipvlan_is_macnat(ipvlan->port))
-		return notifier_from_errno(-EADDRNOTAVAIL);
-
-	switch (event) {
-	case NETDEV_UP:
-		if (ipvlan_addr_busy(ipvlan->port, &ivi->ivi_addr, false)) {
-			NL_SET_ERR_MSG(ivi->extack,
-				       "Address already assigned to an ipvlan device");
-			return notifier_from_errno(-EADDRINUSE);
-		}
-		break;
-	}
-
-	return NOTIFY_OK;
+	return ipvlan_addr_validator_event(dev, event, ivi->extack,
+					   &ivi->ivi_addr, false);
 }
 
 static struct notifier_block ipvlan_addr4_notifier_block __read_mostly = {
