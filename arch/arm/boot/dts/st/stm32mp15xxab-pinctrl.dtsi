@@ -5,7 +5,7 @@
  */
 
 &pinctrl {
-	st,package = <STM32MP_PKG_AB>;
+	st,package = "AB";
 
 	gpioa: gpio@50002000 {
 		status = "okay";
