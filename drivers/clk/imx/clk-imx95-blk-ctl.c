@@ -284,7 +284,7 @@ static const struct imx95_blk_ctl_dev_data netcmix_dev_data = {
 };
 
 static const struct imx95_blk_ctl_clk_dev_data hsio_blk_ctl_clk_dev_data[] = {
-	[0] = {
+	[IMX95_CLK_HSIOMIX_PCIE_CLK_GATE] = {
 		.name = "hsio_pcie_clk_gate",
 		.parent_names = (const char *[]){ "hsio_pll", },
 		.num_parents = 1,
@@ -293,11 +293,21 @@ static const struct imx95_blk_ctl_clk_dev_data hsio_blk_ctl_clk_dev_data[] = {
 		.bit_width = 1,
 		.type = CLK_GATE,
 		.flags = CLK_SET_RATE_PARENT,
-	}
+	},
+	[IMX95_CLK_HSIOMIX_USB_PHY_CLK_SEL] = {
+		.name = "usb_phy_ref_clk_sel",
+		.parent_names = (const char *[]){"osc24m", "hsiopll"},
+		.num_parents = 2,
+		.reg = 0,
+		.bit_idx = 6,
+		.bit_width = 1,
+		.type = CLK_MUX,
+		.flags = CLK_SET_RATE_NO_REPARENT | CLK_SET_RATE_PARENT,
+	},
 };
 
 static const struct imx95_blk_ctl_dev_data hsio_blk_ctl_dev_data = {
-	.num_clks = 1,
+	.num_clks = ARRAY_SIZE(hsio_blk_ctl_clk_dev_data),
 	.clk_dev_data = hsio_blk_ctl_clk_dev_data,
 	.clk_reg_offset = 0,
 };
