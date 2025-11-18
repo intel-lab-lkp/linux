@@ -10903,6 +10903,7 @@ static struct notifier_block trace_module_nb = {
 
 static __init void tracer_init_tracefs_work_func(struct work_struct *work)
 {
+	struct trace_array *tr;
 
 	event_trace_init();
 
@@ -10937,7 +10938,8 @@ static __init void tracer_init_tracefs_work_func(struct work_struct *work)
 
 	create_trace_instances(NULL);
 
-	update_tracer_options(&global_trace);
+	list_for_each_entry(tr, &ftrace_trace_arrays, list)
+		update_tracer_options(tr);
 }
 
 static __init int tracer_init_tracefs(void)
