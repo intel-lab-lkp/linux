@@ -375,6 +375,21 @@ static void json_print_event(void *ps, const char *topic,
 	FILE *fp = print_state->fp;
 	struct strbuf buf;
 
+	if (deprecated && !print_state->deprecated)
+		return;
+
+	if (print_state->pmu_glob && (!pmu_name || !strglobmatch(pmu_name, print_state->pmu_glob)))
+		return;
+
+	if (print_state->exclude_abi && pmu_type < PERF_TYPE_MAX && pmu_type != PERF_TYPE_RAW)
+		return;
+
+	if (print_state->event_glob &&
+	    (!event_name || !strglobmatch(event_name, print_state->event_glob)) &&
+	    (!event_alias || !strglobmatch(event_alias, print_state->event_glob)) &&
+	    (!topic || !strglobmatch_nocase(topic, print_state->event_glob)))
+		return;
+
 	strbuf_init(&buf, 0);
 	fprintf(fp, "%s{\n", print_state->need_sep ? ",\n" : "");
 	print_state->need_sep = true;
@@ -450,6 +465,11 @@ static void json_print_metric(void *ps __maybe_unused, const char *group,
 	bool need_sep = false;
 	FILE *fp = print_state->fp;
 	struct strbuf buf;
+
+	if (print_state->event_glob &&
+	    (!print_state->metrics || !name || !strglobmatch(name, print_state->event_glob)) &&
+	    (!print_state->metricgroups || !group || !strglobmatch(group, print_state->event_glob)))
+		return;
 
 	strbuf_init(&buf, 0);
 	fprintf(fp, "%s{\n", print_state->need_sep ? ",\n" : "");
