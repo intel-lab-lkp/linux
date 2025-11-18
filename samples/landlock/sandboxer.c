@@ -60,9 +60,11 @@ static inline int landlock_restrict_self(const int ruleset_fd,
 #define ENV_FS_RW_NAME "LL_FS_RW"
 #define ENV_TCP_BIND_NAME "LL_TCP_BIND"
 #define ENV_TCP_CONNECT_NAME "LL_TCP_CONNECT"
+#define ENV_SOCKET_CREATE_NAME "LL_SOCKET_CREATE"
 #define ENV_SCOPED_NAME "LL_SCOPED"
 #define ENV_FORCE_LOG_NAME "LL_FORCE_LOG"
 #define ENV_DELIMITER ":"
+#define ENV_TOKEN_INTERNAL_DELIMITER "."
 
 static int str2num(const char *numstr, __u64 *num_dst)
 {
@@ -226,6 +228,83 @@ out_free_name:
 	return ret;
 }
 
+static int populate_ruleset_socket(const char *const env_var,
+				   const int ruleset_fd,
+				   const __u64 allowed_access)
+{
+	int ret = 1;
+	char *env_protocol_name, *strprotocol, *strfamily, *strtype, *strproto;
+	unsigned long long family_ull, type_ull, proto_ull;
+	struct landlock_socket_attr protocol = {
+		.allowed_access = allowed_access,
+	};
+
+	env_protocol_name = getenv(env_var);
+	if (!env_protocol_name)
+		return 0;
+	env_protocol_name = strdup(env_protocol_name);
+	unsetenv(env_var);
+
+	while ((strprotocol = strsep(&env_protocol_name, ENV_DELIMITER))) {
+		strfamily = strsep(&strprotocol, ENV_TOKEN_INTERNAL_DELIMITER);
+		strtype = strsep(&strprotocol, ENV_TOKEN_INTERNAL_DELIMITER);
+		strproto = strsep(&strprotocol, ENV_TOKEN_INTERNAL_DELIMITER);
+
+		/* strsep should make this NULL if it had less than two delimiters. */
+		if (strprotocol) {
+			fprintf(stderr, "Invalid format of socket protocol\n");
+			goto out_free_name;
+		}
+		if (!strtype) {
+			fprintf(stderr,
+				"Failed to extract socket protocol with "
+				"unspecified type value\n");
+			goto out_free_name;
+		} else if (!strproto) {
+			fprintf(stderr,
+				"Failed to extract socket protocol with "
+				"unspecified protocol value\n");
+			goto out_free_name;
+		}
+
+		if (str2num(strfamily, &family_ull)) {
+			fprintf(stderr,
+				"Failed to convert \"%s\" into a number\n",
+				strfamily);
+			goto out_free_name;
+		}
+		if (str2num(strtype, &type_ull)) {
+			fprintf(stderr,
+				"Failed to convert \"%s\" into a number\n",
+				strtype);
+			goto out_free_name;
+		}
+		if (str2num(strproto, &proto_ull)) {
+			fprintf(stderr,
+				"Failed to convert \"%s\" into a number\n",
+				strproto);
+			goto out_free_name;
+		}
+		protocol.family = (int)family_ull;
+		protocol.type = (int)type_ull;
+		protocol.protocol = (int)proto_ull;
+
+		if (landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+				      &protocol, 0)) {
+			fprintf(stderr,
+				"Failed to update the ruleset with "
+				"family \"%s\" and type \"%s\": %s\n",
+				strfamily, strtype, strerror(errno));
+			goto out_free_name;
+		}
+	}
+	ret = 0;
+
+out_free_name:
+	free(env_protocol_name);
+	return ret;
+}
+
 /* Returns true on error, false otherwise. */
 static bool check_ruleset_scope(const char *const env_var,
 				struct landlock_ruleset_attr *ruleset_attr)
@@ -299,7 +378,7 @@ out_unset:
 
 /* clang-format on */
 
-#define LANDLOCK_ABI_LAST 7
+#define LANDLOCK_ABI_LAST 8
 
 #define XSTR(s) #s
 #define STR(s) XSTR(s)
@@ -311,7 +390,7 @@ static const char help[] =
 	"[other environment variables] %1$s <cmd> [args]...\n"
 	"\n"
 	"Execute the given command in a restricted environment.\n"
-	"Multi-valued settings (lists of ports, paths, scopes) are colon-delimited.\n"
+	"Multi-valued settings (lists of ports, paths, protocols, scopes) are colon-delimited.\n"
 	"\n"
 	"Mandatory settings:\n"
 	"* " ENV_FS_RO_NAME ": paths allowed to be used in a read-only way\n"
@@ -322,6 +401,9 @@ static const char help[] =
 	"means an empty list):\n"
 	"* " ENV_TCP_BIND_NAME ": ports allowed to bind (server)\n"
 	"* " ENV_TCP_CONNECT_NAME ": ports allowed to connect (client)\n"
+	"* " ENV_SOCKET_CREATE_NAME ": list of socket protocols allowed to be created\n"
+	"  To define protocol format \"{family}.{type}.{protocol}\" is used\n"
+	"  with numerical values of family, type and protocol (eg. 2.1.0 for TCP/IP)\n"
 	"* " ENV_SCOPED_NAME ": actions denied on the outside of the landlock domain\n"
 	"  - \"a\" to restrict opening abstract unix sockets\n"
 	"  - \"s\" to restrict sending signals\n"
@@ -334,6 +416,7 @@ static const char help[] =
 	ENV_FS_RW_NAME "=\"/dev/null:/dev/full:/dev/zero:/dev/pts:/tmp\" "
 	ENV_TCP_BIND_NAME "=\"9418\" "
 	ENV_TCP_CONNECT_NAME "=\"80:443\" "
+	ENV_SOCKET_CREATE_NAME "=\"2.1.0\" "
 	ENV_SCOPED_NAME "=\"a:s\" "
 	"%1$s bash -i\n"
 	"\n"
@@ -347,7 +430,7 @@ int main(const int argc, char *const argv[], char *const *const envp)
 	const char *cmd_path;
 	char *const *cmd_argv;
 	int ruleset_fd, abi;
-	char *env_port_name, *env_force_log;
+	char *env_opt_name, *env_force_log;
 	__u64 access_fs_ro = ACCESS_FS_ROUGHLY_READ,
 	      access_fs_rw = ACCESS_FS_ROUGHLY_READ | ACCESS_FS_ROUGHLY_WRITE;
 
@@ -355,6 +438,7 @@ int main(const int argc, char *const argv[], char *const *const envp)
 		.handled_access_fs = access_fs_rw,
 		.handled_access_net = LANDLOCK_ACCESS_NET_BIND_TCP |
 				      LANDLOCK_ACCESS_NET_CONNECT_TCP,
+		.handled_access_socket = LANDLOCK_ACCESS_SOCKET_CREATE,
 		.scoped = LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET |
 			  LANDLOCK_SCOPE_SIGNAL,
 	};
@@ -437,6 +521,12 @@ int main(const int argc, char *const argv[], char *const *const envp)
 		supported_restrict_flags &=
 			~LANDLOCK_RESTRICT_SELF_LOG_NEW_EXEC_ON;
 
+		__attribute__((fallthrough));
+	case 7:
+		/* Removes LANDLOCK_ACCESS_SOCKET_CREATE for ABI < 8 */
+		ruleset_attr.handled_access_socket &=
+			~LANDLOCK_ACCESS_SOCKET_CREATE;
+
 		/* Must be printed for any ABI < LANDLOCK_ABI_LAST. */
 		fprintf(stderr,
 			"Hint: You should update the running kernel "
@@ -456,17 +546,23 @@ int main(const int argc, char *const argv[], char *const *const envp)
 	access_fs_ro &= ruleset_attr.handled_access_fs;
 	access_fs_rw &= ruleset_attr.handled_access_fs;
 
-	/* Removes bind access attribute if not supported by a user. */
-	env_port_name = getenv(ENV_TCP_BIND_NAME);
-	if (!env_port_name) {
+	/* Removes bind access attribute if not requested by a user. */
+	env_opt_name = getenv(ENV_TCP_BIND_NAME);
+	if (!env_opt_name) {
 		ruleset_attr.handled_access_net &=
 			~LANDLOCK_ACCESS_NET_BIND_TCP;
 	}
-	/* Removes connect access attribute if not supported by a user. */
-	env_port_name = getenv(ENV_TCP_CONNECT_NAME);
-	if (!env_port_name) {
+	/* Removes connect access attribute if not requested by a user. */
+	env_opt_name = getenv(ENV_TCP_CONNECT_NAME);
+	if (!env_opt_name) {
 		ruleset_attr.handled_access_net &=
 			~LANDLOCK_ACCESS_NET_CONNECT_TCP;
+	}
+	/* Removes socket creation access attribute if not requested by a user. */
+	env_opt_name = getenv(ENV_SOCKET_CREATE_NAME);
+	if (!env_opt_name) {
+		ruleset_attr.handled_access_socket &=
+			~LANDLOCK_ACCESS_SOCKET_CREATE;
 	}
 
 	if (check_ruleset_scope(ENV_SCOPED_NAME, &ruleset_attr))
@@ -510,6 +606,10 @@ int main(const int argc, char *const argv[], char *const *const envp)
 	}
 	if (populate_ruleset_net(ENV_TCP_CONNECT_NAME, ruleset_fd,
 				 LANDLOCK_ACCESS_NET_CONNECT_TCP)) {
+		goto err_close_ruleset;
+	}
+	if (populate_ruleset_socket(ENV_SOCKET_CREATE_NAME, ruleset_fd,
+				    LANDLOCK_ACCESS_SOCKET_CREATE)) {
 		goto err_close_ruleset;
 	}
 
