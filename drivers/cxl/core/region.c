@@ -1808,27 +1808,29 @@ static int cmp_interleave_pos(const void *a, const void *b)
 	return cxled_a->pos - cxled_b->pos;
 }
 
-static int match_switch_decoder_by_range(struct device *dev,
-					 const void *data)
+static int match_cxlsd_to_cxled_by_range(struct device *dev, const void *data)
 {
+	const struct cxl_endpoint_decoder *cxled = data;
 	struct cxl_switch_decoder *cxlsd;
-	const struct range *r1, *r2 = data;
-
+	const struct range *r1, *r2;
 
 	if (!is_switch_decoder(dev))
 		return 0;
 
 	cxlsd = to_cxl_switch_decoder(dev);
 	r1 = &cxlsd->cxld.hpa_range;
+	r2 = &cxled->cxld.hpa_range;
 
 	if (is_root_decoder(dev))
 		return range_contains(r1, r2);
 	return (r1->start == r2->start && r1->end == r2->end);
 }
 
-static int find_pos_and_ways(struct cxl_port *port, struct range *range,
-			     int *pos, int *ways)
+static int find_pos_and_ways(struct cxl_port *port,
+			     struct cxl_endpoint_decoder *cxled, int *pos,
+			     int *ways)
 {
+	struct range *range = &cxled->cxld.hpa_range;
 	struct cxl_switch_decoder *cxlsd;
 	struct cxl_port *parent;
 	struct device *dev;
@@ -1838,8 +1840,8 @@ static int find_pos_and_ways(struct cxl_port *port, struct range *range,
 	if (!parent)
 		return rc;
 
-	dev = device_find_child(&parent->dev, range,
-				match_switch_decoder_by_range);
+	dev = device_find_child(&parent->dev, cxled,
+				match_cxlsd_to_cxled_by_range);
 	if (!dev) {
 		dev_err(port->uport_dev,
 			"failed to find decoder mapping %#llx-%#llx\n",
@@ -1925,7 +1927,7 @@ static int cxl_calc_interleave_pos(struct cxl_endpoint_decoder *cxled)
 		if (is_cxl_root(iter))
 			break;
 
-		rc = find_pos_and_ways(iter, range, &parent_pos, &parent_ways);
+		rc = find_pos_and_ways(iter, cxled, &parent_pos, &parent_ways);
 		if (rc)
 			return rc;
 
@@ -3457,24 +3459,30 @@ err:
 	return rc;
 }
 
-static int match_decoder_by_range(struct device *dev, const void *data)
+static int match_cxlrd_to_cxled_by_range(struct device *dev, const void *data)
 {
-	const struct range *r1, *r2 = data;
-	struct cxl_decoder *cxld;
+	const struct cxl_endpoint_decoder *cxled = data;
+	struct cxl_root_decoder *cxlrd;
+	const struct range *r1, *r2;
 
-	if (!is_switch_decoder(dev))
+	if (!is_root_decoder(dev))
 		return 0;
 
-	cxld = to_cxl_decoder(dev);
-	r1 = &cxld->hpa_range;
+	cxlrd = to_cxl_root_decoder(dev);
+	r1 = &cxlrd->cxlsd.cxld.hpa_range;
+	r2 = &cxled->cxld.hpa_range;
+
 	return range_contains(r1, r2);
 }
 
 static struct cxl_decoder *
-cxl_port_find_switch_decoder(struct cxl_port *port, struct range *hpa)
+cxl_port_find_root_decoder(struct cxl_port *port,
+			   struct cxl_endpoint_decoder *cxled)
 {
-	struct device *cxld_dev = device_find_child(&port->dev, hpa,
-						    match_decoder_by_range);
+	struct device *cxld_dev;
+
+	cxld_dev = device_find_child(&port->dev, cxled,
+				     match_cxlrd_to_cxled_by_range);
 
 	return cxld_dev ? to_cxl_decoder(cxld_dev) : NULL;
 }
@@ -3486,9 +3494,8 @@ cxl_find_root_decoder(struct cxl_endpoint_decoder *cxled)
 	struct cxl_port *port = cxled_to_port(cxled);
 	struct cxl_root *cxl_root __free(put_cxl_root) = find_cxl_root(port);
 	struct cxl_decoder *root, *cxld = &cxled->cxld;
-	struct range *hpa = &cxld->hpa_range;
 
-	root = cxl_port_find_switch_decoder(&cxl_root->port, hpa);
+	root = cxl_port_find_root_decoder(&cxl_root->port, cxled);
 	if (!root) {
 		dev_err(cxlmd->dev.parent,
 			"%s:%s no CXL window for range %#llx:%#llx\n",
@@ -3500,11 +3507,12 @@ cxl_find_root_decoder(struct cxl_endpoint_decoder *cxled)
 	return to_cxl_root_decoder(&root->dev);
 }
 
-static int match_region_by_range(struct device *dev, const void *data)
+static int match_region_to_cxled_by_range(struct device *dev, const void *data)
 {
+	const struct cxl_endpoint_decoder *cxled = data;
+	const struct range *r = &cxled->cxld.hpa_range;
 	struct cxl_region_params *p;
 	struct cxl_region *cxlr;
-	const struct range *r = data;
 
 	if (!is_cxl_region(dev))
 		return 0;
@@ -3663,12 +3671,13 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 }
 
 static struct cxl_region *
-cxl_find_region_by_range(struct cxl_root_decoder *cxlrd, struct range *hpa)
+cxl_find_region_by_range(struct cxl_root_decoder *cxlrd,
+			 struct cxl_endpoint_decoder *cxled)
 {
 	struct device *region_dev;
 
-	region_dev = device_find_child(&cxlrd->cxlsd.cxld.dev, hpa,
-				       match_region_by_range);
+	region_dev = device_find_child(&cxlrd->cxlsd.cxld.dev, cxled,
+				       match_region_to_cxled_by_range);
 	if (!region_dev)
 		return NULL;
 
@@ -3677,7 +3686,6 @@ cxl_find_region_by_range(struct cxl_root_decoder *cxlrd, struct range *hpa)
 
 int cxl_add_to_region(struct cxl_endpoint_decoder *cxled)
 {
-	struct range *hpa = &cxled->cxld.hpa_range;
 	struct cxl_region_params *p;
 	bool attach = false;
 	int rc;
@@ -3693,7 +3701,7 @@ int cxl_add_to_region(struct cxl_endpoint_decoder *cxled)
 	 */
 	mutex_lock(&cxlrd->range_lock);
 	struct cxl_region *cxlr __free(put_cxl_region) =
-		cxl_find_region_by_range(cxlrd, hpa);
+		cxl_find_region_by_range(cxlrd, cxled);
 	if (!cxlr)
 		cxlr = construct_region(cxlrd, cxled);
 	mutex_unlock(&cxlrd->range_lock);
