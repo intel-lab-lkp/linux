@@ -71,7 +71,6 @@ extern int console_printk[];
 #define console_loglevel (console_printk[0])
 #define default_message_loglevel (console_printk[1])
 #define minimum_console_loglevel (console_printk[2])
-#define default_console_loglevel (console_printk[3])
 
 extern bool ignore_per_console_loglevel;
 
