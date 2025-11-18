@@ -51,6 +51,7 @@
 #include <linux/syscalls.h>
 #include <linux/of.h>
 #include <linux/rcupdate.h>
+#include <linux/console.h>
 
 #include <asm/ptrace.h>
 #include <asm/irq_regs.h>
@@ -101,10 +102,25 @@ __setup("sysrq_always_enabled", sysrq_always_enabled_setup);
 static void sysrq_handle_loglevel(u8 key)
 {
 	u8 loglevel = key - '0';
+	int cookie;
+	struct console *con;
 
 	console_loglevel = CONSOLE_LOGLEVEL_DEFAULT;
 	pr_info("Loglevel set to %u\n", loglevel);
 	console_loglevel = loglevel;
+
+	/*
+	 * When changing loglevel via sysrq, override all per-console loglevels
+	 * to ensure the new global loglevel takes effect immediately and all
+	 * consoles see the messages.
+	 */
+	cookie = console_srcu_read_lock();
+	for_each_console_srcu(con) {
+		if (has_per_console_loglevel(con))
+			pr_warn_once("Overriding per-console loglevel from sysrq\n");
+		WRITE_ONCE(con->level, LOGLEVEL_DEFAULT);
+	}
+	console_srcu_read_unlock(cookie);
 }
 static const struct sysrq_key_op sysrq_loglevel_op = {
 	.handler	= sysrq_handle_loglevel,
