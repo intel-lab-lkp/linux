@@ -12,7 +12,9 @@ maintainers:
 
 properties:
   compatible:
-    const: ti,ina3221
+    enum:
+      - silergy,sq52210
+      - ti,ina3221
 
   reg:
     maxItems: 1
