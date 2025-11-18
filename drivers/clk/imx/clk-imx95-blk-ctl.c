@@ -285,10 +285,10 @@ static const struct imx95_blk_ctl_dev_data netcmix_dev_data = {
 
 static const struct imx95_blk_ctl_clk_dev_data hsio_blk_ctl_clk_dev_data[] = {
 	[0] = {
-		.name = "hsio_blk_ctl_clk",
+		.name = "hsio_pcie_clk_gate",
 		.parent_names = (const char *[]){ "hsio_pll", },
 		.num_parents = 1,
-		.reg = 0,
+		.reg = 0xc0,
 		.bit_idx = 6,
 		.bit_width = 1,
 		.type = CLK_GATE,
