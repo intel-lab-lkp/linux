@@ -159,6 +159,7 @@
 #define NXP_FW_UUID_SIZE		16
 #define NXP_FW_ECDH_PUBKEY_SIZE		64
 #define NXP_FW_ECDSA_PUBKEY_SIZE	65
+#define NXP_MAX_ENCRYPT_CMD_LEN		256
 
 struct ps_data {
 	u8    target_ps_mode;	/* ps mode to be set */
@@ -226,6 +227,7 @@ struct btnxpuart_crypto {
 	u8 handshake_h2_hash[SHA256_DIGEST_SIZE];
 	u8 handshake_secret[SHA256_DIGEST_SIZE];
 	u8 master_secret[SHA256_DIGEST_SIZE];
+	u64 enc_seq_no;
 	struct completion completion;
 	int decrypt_result;
 	struct nxp_tls_traffic_keys keys;
@@ -2681,6 +2683,72 @@ free_tfm:
 	return ret;
 }
 
+static void nxp_data_calc_nonce(u8 iv[GCM_AES_IV_SIZE], u64 seq_no,
+				u8 nonce[GCM_AES_IV_SIZE])
+{
+	u64 tmp;
+
+	/* XOR sequence number with IV to create unique nonce */
+	memcpy(&tmp, iv, sizeof(tmp));
+	tmp ^= seq_no;
+	memcpy(nonce, &tmp, sizeof(tmp));
+	memcpy(nonce + sizeof(tmp), iv + sizeof(tmp),
+	       GCM_AES_IV_SIZE - sizeof(tmp));
+}
+
+static struct sk_buff *nxp_crypto_encrypt_cmd(struct hci_dev *hdev,
+					      struct sk_buff *skb)
+{
+	struct btnxpuart_dev *nxpdev = hci_get_drvdata(hdev);
+	__le16 vendor_opcode = __cpu_to_le16(HCI_NXP_SHI_ENCRYPT);
+	u8 nonce[GCM_AES_IV_SIZE];
+	u8 tag[NXP_ENC_AUTH_TAG_SIZE];
+	u8 *enc_data;
+	u8 sub_opcode = 0x10;
+	int ret;
+	u32 plen, enc_data_len;
+	struct nxp_tls_traffic_keys *keys = &nxpdev->crypto.keys;
+
+	if (skb->len > NXP_MAX_ENCRYPT_CMD_LEN) {
+		bt_dev_err(hdev, "Invalid skb->len: %d", skb->len);
+		return skb;
+	}
+
+	nxp_data_calc_nonce(keys->h2d_iv, nxpdev->crypto.enc_seq_no, nonce);
+
+	enc_data_len = skb->len;
+	enc_data = kzalloc(skb->len, GFP_KERNEL);
+	if (!enc_data)
+		return skb;
+	memcpy(enc_data, skb->data, skb->len);
+
+	ret = nxp_aes_gcm_encrypt(hdev, enc_data, enc_data_len, tag,
+				  keys->h2d_key, nonce);
+	if (ret) {
+		kfree(enc_data);
+		return skb;
+	}
+
+	kfree_skb(skb);
+
+	plen = enc_data_len + NXP_ENC_AUTH_TAG_SIZE + 1;
+	skb = bt_skb_alloc(plen, GFP_ATOMIC);
+	if (!skb) {
+		kfree(enc_data);
+		return ERR_PTR(-ENOMEM);
+	}
+	hci_skb_pkt_type(skb) = HCI_COMMAND_PKT;
+	skb_put_data(skb, &vendor_opcode, 2);
+	skb_put_data(skb, &plen, 1);
+	skb_put_data(skb, &sub_opcode, 1);
+	skb_put_data(skb, enc_data, enc_data_len);
+	skb_put_data(skb, tag, NXP_ENC_AUTH_TAG_SIZE);
+
+	nxpdev->crypto.enc_seq_no++;
+	kfree(enc_data);
+	return skb;
+}
+
 /* NXP protocol */
 static int nxp_setup(struct hci_dev *hdev)
 {
@@ -2882,6 +2950,20 @@ static int nxp_enqueue(struct hci_dev *hdev, struct sk_buff *skb)
 			if (hdr->plen == 1) {
 				hci_cmd_sync_queue(hdev, nxp_set_ind_reset, NULL, NULL);
 				goto free_skb;
+			}
+			break;
+		case HCI_OP_LINK_KEY_REPLY:
+		case HCI_OP_LE_START_ENC:
+		case HCI_OP_LE_LTK_REPLY:
+		case HCI_OP_LE_ADD_TO_RESOLV_LIST:
+			if (nxpdev->secure_interface) {
+				/* Re-alloc skb and encrypt sensitive command
+				 * and payload. Command complete event
+				 * won't be encrypted.
+				 */
+				skb = nxp_crypto_encrypt_cmd(hdev, skb);
+				if (IS_ERR(skb))
+					return PTR_ERR(skb);
 			}
 			break;
 		default:
