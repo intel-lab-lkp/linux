@@ -9,6 +9,7 @@
 #include <drm/drm_print.h>
 #include "d71_dev.h"
 #include "malidp_io.h"
+#include "komeda_drv.h"
 
 static u64 get_lpu_event(struct d71_pipeline *d71_pipeline)
 {
@@ -348,6 +349,9 @@ static void d71_cleanup(struct komeda_dev *mdev)
 
 static int d71_enum_resources(struct komeda_dev *mdev)
 {
+	struct komeda_drv *drv = dev_get_drvdata(mdev->dev);
+	struct komeda_kms_dev *kms = drv->kms;
+	struct drm_device *drm = &kms->base;
 	struct d71_dev *d71;
 	struct komeda_pipeline *pipe;
 	struct block_header blk;
@@ -366,7 +370,7 @@ static int d71_enum_resources(struct komeda_dev *mdev)
 
 	err = d71_reset(d71);
 	if (err) {
-		DRM_ERROR("Fail to reset d71 device.\n");
+		drm_err(drm, "Fail to reset d71 device.\n");
 		goto err_cleanup;
 	}
 
@@ -376,8 +380,8 @@ static int d71_enum_resources(struct komeda_dev *mdev)
 	d71->num_pipelines = (value >> 8) & 0x7;
 
 	if (d71->num_pipelines > D71_MAX_PIPELINE) {
-		DRM_ERROR("d71 supports %d pipelines, but got: %d.\n",
-			  D71_MAX_PIPELINE, d71->num_pipelines);
+		drm_err(drm, "d71 supports %d pipelines, but got: %d.\n",
+			D71_MAX_PIPELINE, d71->num_pipelines);
 		err = -EINVAL;
 		goto err_cleanup;
 	}
@@ -455,8 +459,8 @@ static int d71_enum_resources(struct komeda_dev *mdev)
 		offset += D71_BLOCK_SIZE;
 	}
 
-	DRM_DEBUG("total %d (out of %d) blocks are found.\n",
-		  i, d71->num_blocks);
+	drm_dbg(drm, "total %d (out of %d) blocks are found.\n",
+		i, d71->num_blocks);
 
 	return 0;
 
@@ -555,6 +559,9 @@ static void d71_init_fmt_tbl(struct komeda_dev *mdev)
 
 static int d71_connect_iommu(struct komeda_dev *mdev)
 {
+	struct komeda_drv *drv = dev_get_drvdata(mdev->dev);
+	struct komeda_kms_dev *kms = drv->kms;
+	struct drm_device *drm = &kms->base;
 	struct d71_dev *d71 = mdev->chip_data;
 	u32 __iomem *reg = d71->gcu_addr;
 	u32 check_bits = (d71->num_pipelines == 2) ?
@@ -569,7 +576,7 @@ static int d71_connect_iommu(struct komeda_dev *mdev)
 	ret = dp_wait_cond(has_bits(check_bits, malidp_read32(reg, BLK_STATUS)),
 			100, 1000, 1000);
 	if (ret < 0) {
-		DRM_ERROR("timed out connecting to TCU!\n");
+		drm_err(drm, "timed out connecting to TCU!\n");
 		malidp_write32_mask(reg, BLK_CONTROL, 0x7, INACTIVE_MODE);
 		return ret;
 	}
@@ -582,6 +589,9 @@ static int d71_connect_iommu(struct komeda_dev *mdev)
 
 static int d71_disconnect_iommu(struct komeda_dev *mdev)
 {
+	struct komeda_drv *drv = dev_get_drvdata(mdev->dev);
+	struct komeda_kms_dev *kms = drv->kms;
+	struct drm_device *drm = &kms->base;
 	struct d71_dev *d71 = mdev->chip_data;
 	u32 __iomem *reg = d71->gcu_addr;
 	u32 check_bits = (d71->num_pipelines == 2) ?
@@ -593,7 +603,7 @@ static int d71_disconnect_iommu(struct komeda_dev *mdev)
 	ret = dp_wait_cond(((malidp_read32(reg, BLK_STATUS) & check_bits) == 0),
 			100, 1000, 1000);
 	if (ret < 0) {
-		DRM_ERROR("timed out disconnecting from TCU!\n");
+		drm_err(drm, "timed out disconnecting from TCU!\n");
 		malidp_write32_mask(reg, BLK_CONTROL, 0x7, INACTIVE_MODE);
 	}
 
