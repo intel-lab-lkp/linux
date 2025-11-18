@@ -6698,7 +6698,11 @@ void turbostat_loop()
 	set_my_sched_priority(-20);
 
 restart:
-	restarted++;
+	if (restarted++ > 10) {
+		if (!retval)
+			retval = -1;
+		exit(retval);
+	}
 
 	snapshot_proc_sysfs_files();
 	retval = for_all_cpus(get_counters, EVEN_COUNTERS);
@@ -6706,13 +6710,9 @@ restart:
 	if (retval < -1) {
 		exit(retval);
 	} else if (retval == -1) {
-		if (restarted > 10) {
-			exit(retval);
-		}
 		re_initialize();
 		goto restart;
 	}
-	restarted = 0;
 	done_iters = 0;
 	gettimeofday(&tv_even, (struct timezone *)NULL);
 
