@@ -524,3 +524,36 @@ int exfat_count_num_clusters(struct super_block *sb,
 
 	return 0;
 }
+
+int exfat_count_contig_clusters(struct super_block *sb,
+		struct exfat_chain *p_chain, unsigned int *ret_count)
+{
+	struct buffer_head *bh = NULL;
+	unsigned int clu, next_clu;
+	unsigned int count;
+
+	if (!p_chain->dir || p_chain->dir == EXFAT_EOF_CLUSTER) {
+		*ret_count = 0;
+		return 0;
+	}
+
+	if (p_chain->flags == ALLOC_NO_FAT_CHAIN) {
+		*ret_count = p_chain->size;
+		return 0;
+	}
+
+	clu = p_chain->dir;
+	for (count = 1; count < p_chain->size; count++) {
+		if (exfat_ent_get(sb, clu, &next_clu, &bh))
+			return -EIO;
+		if (++clu != next_clu)
+			break;
+	}
+
+	/* TODO: Update p_claim to help caller read ahead the next block */
+
+	brelse(bh);
+	*ret_count = count;
+
+	return 0;
+}
