@@ -28,6 +28,11 @@ struct nft_rbtree_elem {
 	struct nft_set_ext	ext;
 };
 
+static inline u8 nft_rbtree_genbit_copy(const struct nft_rbtree *priv)
+{
+	return 0;
+}
+
 static bool nft_rbtree_interval_end(const struct nft_rbtree_elem *rbe)
 {
 	return nft_set_ext_exists(&rbe->ext, NFT_SET_EXT_FLAGS) &&
@@ -309,6 +314,38 @@ static bool nft_rbtree_update_first(const struct nft_set *set,
 	return false;
 }
 
+/* insert into tree without any timeout or overlap checks. */
+static void __nft_rbtree_insert_do(const struct nft_set *set,
+				   struct nft_rbtree_elem *new)
+{
+	struct nft_rbtree *priv = nft_set_priv(set);
+	u8 genbit = nft_rbtree_genbit_copy(priv);
+	struct rb_node *parent, **p;
+	int d;
+
+	parent = NULL;
+	p = &priv->root[genbit].rb_node;
+	while (*p) {
+		struct nft_rbtree_elem *rbe;
+
+		parent = *p;
+		rbe = rb_entry(parent, struct nft_rbtree_elem, node[genbit]);
+		d = nft_rbtree_cmp(set, rbe, new);
+
+		if (d < 0)
+			p = &parent->rb_left;
+		else if (d > 0)
+			p = &parent->rb_right;
+		else if (nft_rbtree_interval_end(rbe))
+			p = &parent->rb_left;
+		else
+			p = &parent->rb_right;
+	}
+
+	rb_link_node_rcu(&new->node[genbit], parent, p);
+	rb_insert_color(&new->node[genbit], &priv->root[genbit]);
+}
+
 static int __nft_rbtree_insert(const struct net *net, const struct nft_set *set,
 			       struct nft_rbtree_elem *new,
 			       struct nft_elem_priv **elem_priv)
@@ -467,25 +504,7 @@ static int __nft_rbtree_insert(const struct net *net, const struct nft_set *set,
 		return -ENOTEMPTY;
 
 	/* Accepted element: pick insertion point depending on key value */
-	parent = NULL;
-	p = &priv->root[genbit].rb_node;
-	while (*p != NULL) {
-		parent = *p;
-		rbe = rb_entry(parent, struct nft_rbtree_elem, node[genbit]);
-		d = nft_rbtree_cmp(set, rbe, new);
-
-		if (d < 0)
-			p = &parent->rb_left;
-		else if (d > 0)
-			p = &parent->rb_right;
-		else if (nft_rbtree_interval_end(rbe))
-			p = &parent->rb_left;
-		else
-			p = &parent->rb_right;
-	}
-
-	rb_link_node_rcu(&new->node[genbit], parent, p);
-	rb_insert_color(&new->node[genbit], &priv->root[genbit]);
+	__nft_rbtree_insert_do(set, new);
 	return 0;
 }
 
