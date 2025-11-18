@@ -27,6 +27,8 @@ properties:
       - st,stm32mp135-pinctrl
       - st,stm32mp157-pinctrl
       - st,stm32mp157-z-pinctrl
+      - st,stm32mp215-pinctrl
+      - st,stm32mp215-z-pinctrl
       - st,stm32mp257-pinctrl
       - st,stm32mp257-z-pinctrl
 
@@ -72,6 +74,9 @@ properties:
           - AJ
           - AK
           - AL
+          - AM
+          - AN
+          - AO
 
 patternProperties:
   '^gpio@[0-9a-f]*$':
@@ -276,6 +281,8 @@ allOf:
           compatible:
             contains:
               enum:
+                - st,stm32mp215-pinctrl
+                - st,stm32mp215-z-pinctrl
                 - st,stm32mp257-pinctrl
                 - st,stm32mp257-z-pinctrl
     then:
