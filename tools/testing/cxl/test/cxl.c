@@ -9,6 +9,8 @@
 #include <linux/acpi.h>
 #include <linux/pci.h>
 #include <linux/mm.h>
+
+#include <platform_quirks.h>
 #include <cxlmem.h>
 
 #include "../watermark.h"
@@ -16,6 +18,7 @@
 
 static int interleave_arithmetic;
 static bool extended_linear_cache;
+static int low_memory_hole;
 
 #define FAKE_QTG_ID	42
 
@@ -446,6 +449,35 @@ static void cfmws_elc_update(struct acpi_cedt_cfmws *window, int index)
 	window->window_size = mock_auto_region_size * 2;
 }
 
+/*
+ * Set the CFMWS[0] size to 768M and the endpoint decoders HPA range size to 1G
+ * to simulate a low memory hole that trims the window and results in SPA < HPA
+ */
+static void lmh_range_size_update(struct acpi_cedt_cfmws *window, int index)
+{
+	if (!low_memory_hole)
+		return;
+
+	if (index != 0)
+		return;
+
+	window->window_size = mock_auto_region_size * 2 - SZ_256M;
+	mock_auto_region_size = mock_auto_region_size * 2;
+}
+
+static u64 mock_cfmws0_range_start;
+
+static void set_mock_cfmws0_range_start(u64 start, int index)
+{
+	if (!low_memory_hole)
+		return;
+
+	if (index != 0)
+		return;
+
+	mock_cfmws0_range_start = start;
+}
+
 static int populate_cedt(void)
 {
 	struct cxl_mock_res *res;
@@ -471,10 +503,12 @@ static int populate_cedt(void)
 		struct acpi_cedt_cfmws *window = mock_cfmws[i];
 
 		cfmws_elc_update(window, i);
+		lmh_range_size_update(window, i);
 		res = alloc_mock_res(window->window_size, SZ_256M);
 		if (!res)
 			return -ENOMEM;
 		window->base_hpa = res->range.start;
+		set_mock_cfmws0_range_start(res->range.start, i);
 	}
 
 	return 0;
@@ -1114,6 +1148,39 @@ static void mock_cxl_endpoint_parse_cdat(struct cxl_port *port)
 	cxl_endpoint_get_perf_coordinates(port, ep_c);
 }
 
+static bool
+mock_platform_cxlrd_matches_cxled(const struct cxl_root_decoder *cxlrd,
+				  const struct cxl_endpoint_decoder *cxled)
+{
+	const struct range *rd_r, *ed_r;
+	int align;
+
+	rd_r = &cxlrd->cxlsd.cxld.hpa_range;
+	ed_r = &cxled->cxld.hpa_range;
+	align = cxled->cxld.interleave_ways * SZ_256M;
+
+	return rd_r->start == mock_cfmws0_range_start &&
+	       rd_r->start == ed_r->start &&
+	       rd_r->end < (mock_cfmws0_range_start + SZ_4G) &&
+	       rd_r->end < ed_r->end &&
+	       IS_ALIGNED(range_len(ed_r), align);
+}
+
+static bool
+mock_platform_region_matches_cxld(const struct cxl_region_params *p,
+				  const struct cxl_decoder *cxld)
+{
+	const struct range *r = &cxld->hpa_range;
+	const struct resource *res = p->res;
+	int align = cxld->interleave_ways * SZ_256M;
+
+	return res->start == mock_cfmws0_range_start &&
+	       res->start == r->start &&
+	       res->end < (mock_cfmws0_range_start + SZ_4G) &&
+	       res->end < r->end &&
+	       IS_ALIGNED(range_len(r), align);
+}
+
 static struct cxl_mock_ops cxl_mock_ops = {
 	.is_mock_adev = is_mock_adev,
 	.is_mock_bridge = is_mock_bridge,
@@ -1129,6 +1196,8 @@ static struct cxl_mock_ops cxl_mock_ops = {
 	.devm_cxl_add_dport_by_dev = mock_cxl_add_dport_by_dev,
 	.hmat_get_extended_linear_cache_size =
 		mock_hmat_get_extended_linear_cache_size,
+	.platform_cxlrd_matches_cxled = mock_platform_cxlrd_matches_cxled,
+	.platform_region_matches_cxld = mock_platform_region_matches_cxld,
 	.list = LIST_HEAD_INIT(cxl_mock_ops.list),
 };
 
@@ -1426,6 +1495,10 @@ static __init int cxl_test_init(void)
 	cxl_pmem_test();
 	cxl_port_test();
 
+	/* LMH and ELC tests are nutually exclusive */
+	if (low_memory_hole && extended_linear_cache)
+		return -EINVAL;
+
 	register_cxl_mock_ops(&cxl_mock_ops);
 
 	cxl_mock_pool = gen_pool_create(ilog2(SZ_2M), NUMA_NO_NODE);
@@ -1620,6 +1693,8 @@ module_param(interleave_arithmetic, int, 0444);
 MODULE_PARM_DESC(interleave_arithmetic, "Modulo:0, XOR:1");
 module_param(extended_linear_cache, bool, 0444);
 MODULE_PARM_DESC(extended_linear_cache, "Enable extended linear cache support");
+module_param(low_memory_hole, int, 0444);
+MODULE_PARM_DESC(low_memory_hole, "Enable Low Memory Hole simulation");
 module_init(cxl_test_init);
 module_exit(cxl_test_exit);
 MODULE_LICENSE("GPL v2");

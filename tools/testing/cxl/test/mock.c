@@ -7,6 +7,8 @@
 #include <linux/export.h>
 #include <linux/acpi.h>
 #include <linux/pci.h>
+
+#include <platform_quirks.h>
 #include <cxlmem.h>
 #include <cxlpci.h>
 #include "mock.h"
@@ -18,6 +20,12 @@ static struct cxl_dport *
 redirect_devm_cxl_add_dport_by_dev(struct cxl_port *port,
 				   struct device *dport_dev);
 static int redirect_devm_cxl_switch_port_decoders_setup(struct cxl_port *port);
+static bool
+redirect_platform_cxlrd_matches_cxled(const struct cxl_root_decoder *cxlrd,
+				      const struct cxl_endpoint_decoder *cxled);
+static bool
+redirect_platform_region_matches_cxld(const struct cxl_region_params *p,
+				      const struct cxl_decoder *cxld);
 
 void register_cxl_mock_ops(struct cxl_mock_ops *ops)
 {
@@ -25,6 +33,8 @@ void register_cxl_mock_ops(struct cxl_mock_ops *ops)
 	_devm_cxl_add_dport_by_dev = redirect_devm_cxl_add_dport_by_dev;
 	_devm_cxl_switch_port_decoders_setup =
 		redirect_devm_cxl_switch_port_decoders_setup;
+	_platform_cxlrd_matches_cxled = redirect_platform_cxlrd_matches_cxled;
+	_platform_region_matches_cxld = redirect_platform_region_matches_cxld;
 }
 EXPORT_SYMBOL_GPL(register_cxl_mock_ops);
 
@@ -35,6 +45,8 @@ void unregister_cxl_mock_ops(struct cxl_mock_ops *ops)
 	_devm_cxl_switch_port_decoders_setup =
 		__devm_cxl_switch_port_decoders_setup;
 	_devm_cxl_add_dport_by_dev = __devm_cxl_add_dport_by_dev;
+	_platform_cxlrd_matches_cxled = __platform_cxlrd_matches_cxled;
+	_platform_region_matches_cxld = __platform_region_matches_cxld;
 	list_del_rcu(&ops->list);
 	synchronize_srcu(&cxl_mock_srcu);
 }
@@ -288,6 +300,42 @@ struct cxl_dport *redirect_devm_cxl_add_dport_by_dev(struct cxl_port *port,
 	put_cxl_mock_ops(index);
 
 	return dport;
+}
+
+static bool
+redirect_platform_cxlrd_matches_cxled(const struct cxl_root_decoder *cxlrd,
+				      const struct cxl_endpoint_decoder *cxled)
+{
+	int index;
+	bool match;
+	struct cxl_mock_ops *ops = get_cxl_mock_ops(&index);
+	struct cxl_port *port = to_cxl_port(cxled->cxld.dev.parent);
+
+	if (ops && ops->is_mock_port(port->uport_dev))
+		match = ops->platform_cxlrd_matches_cxled(cxlrd, cxled);
+	else
+		match = __platform_cxlrd_matches_cxled(cxlrd, cxled);
+	put_cxl_mock_ops(index);
+
+	return match;
+}
+
+static bool
+redirect_platform_region_matches_cxld(const struct cxl_region_params *p,
+				      const struct cxl_decoder *cxld)
+{
+	int index;
+	bool match;
+	struct cxl_mock_ops *ops = get_cxl_mock_ops(&index);
+	struct cxl_port *port = to_cxl_port(cxld->dev.parent);
+
+	if (ops && ops->is_mock_port(port->uport_dev))
+		match = ops->platform_region_matches_cxld(p, cxld);
+	else
+		match = __platform_region_matches_cxld(p, cxld);
+	put_cxl_mock_ops(index);
+
+	return match;
 }
 
 MODULE_LICENSE("GPL v2");

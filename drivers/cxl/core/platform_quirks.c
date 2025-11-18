@@ -2,20 +2,22 @@
 // Copyright(c) 2025 Intel Corporation
 
 #include <linux/range.h>
+#include <cxlmem.h>
+#include <cxl.h>
+
 #include "platform_quirks.h"
-#include "cxlmem.h"
 #include "core.h"
 
 /* Start of CFMWS range that end before x86 Low Memory Holes */
 #define LMH_CFMWS_RANGE_START 0x0ULL
 
 /**
- * platform_cxlrd_matches_cxled() - Platform quirk to match CXL Root and
+ * __platform_cxlrd_matches_cxled() - Platform quirk to match CXL Root and
  * Endpoint Decoders. It allows matching on platforms with LMH's.
  * @cxlrd: The Root Decoder against which @cxled is tested for matching.
  * @cxled: The Endpoint Decoder to be tested for matching @cxlrd.
  *
- * platform_cxlrd_matches_cxled() is typically called from the
+ * __platform_cxlrd_matches_cxled() is typically called from the
  * match_*_by_range() functions in region.c. It checks if an endpoint decoder
  * matches a given root decoder and returns true to allow the driver to succeed
  * in the construction of regions where it would otherwise fail for the presence
@@ -30,8 +32,8 @@
  *
  * Return: true if an endpoint matches a root decoder, else false.
  */
-bool platform_cxlrd_matches_cxled(const struct cxl_root_decoder *cxlrd,
-				  const struct cxl_endpoint_decoder *cxled)
+bool __platform_cxlrd_matches_cxled(const struct cxl_root_decoder *cxlrd,
+				    const struct cxl_endpoint_decoder *cxled)
 {
 	const struct range *rd_r, *sd_r;
 	int align;
@@ -46,9 +48,10 @@ bool platform_cxlrd_matches_cxled(const struct cxl_root_decoder *cxlrd,
 	       rd_r->end < (LMH_CFMWS_RANGE_START + SZ_4G) &&
 	       IS_ALIGNED(range_len(sd_r), align);
 }
+EXPORT_SYMBOL_NS_GPL(__platform_cxlrd_matches_cxled, "CXL");
 
 /**
- * platform_region_matches_cxld() - Platform quirk to match a CXL Region and a
+ * __platform_region_matches_cxld() - Platform quirk to match a CXL Region and a
  * Switch or Endpoint Decoder. It allows matching on platforms with LMH's.
  * @p: Region Params against which @cxled is matched.
  * @cxld: Switch or Endpoint Decoder to be tested for matching @p.
@@ -58,8 +61,8 @@ bool platform_cxlrd_matches_cxled(const struct cxl_root_decoder *cxlrd,
  *
  * Return: true if a Decoder matches a Region, else false.
  */
-bool platform_region_matches_cxld(const struct cxl_region_params *p,
-				  const struct cxl_decoder *cxld)
+bool __platform_region_matches_cxld(const struct cxl_region_params *p,
+				    const struct cxl_decoder *cxld)
 {
 	const struct range *r = &cxld->hpa_range;
 	const struct resource *res = p->res;
@@ -71,7 +74,19 @@ bool platform_region_matches_cxld(const struct cxl_region_params *p,
 	       res->end < (LMH_CFMWS_RANGE_START + SZ_4G) &&
 	       IS_ALIGNED(range_len(r), align);
 }
+EXPORT_SYMBOL_NS_GPL(__platform_region_matches_cxld, "CXL");
 
+/**
+ * platform_adjust_resources() - Platform quirk that adjusts Region and Endpoint
+ * Decoder DPA resources to be equal to the Root Decoder's resource end.
+ * @res: Resource parameters for Region construction
+ * @cxled: Endpoint Decoder whose DPA needs adjustment
+ * @cxlrd: Root Decoder whose HPA range is needed to adjust @res->end
+ * @region_dev: Region device for printing Region name
+ *
+ * Adjusts the Region and Endpoint Decoder DPA resource end to be equal to the
+ * Root Decoder's resource end. It's needed when SPA < HPA
+ */
 void platform_adjust_resources(struct resource *res,
 			       struct cxl_endpoint_decoder *cxled,
 			       const struct cxl_root_decoder *cxlrd,

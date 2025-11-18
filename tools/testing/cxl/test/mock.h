@@ -27,6 +27,10 @@ struct cxl_mock_ops {
 	int (*hmat_get_extended_linear_cache_size)(struct resource *backing_res,
 						   int nid,
 						   resource_size_t *cache_size);
+	bool (*platform_cxlrd_matches_cxled)(const struct cxl_root_decoder *cxlrd,
+					     const struct cxl_endpoint_decoder *cxled);
+	bool (*platform_region_matches_cxld)(const struct cxl_region_params *p,
+					     const struct cxl_decoder *cxld);
 };
 
 void register_cxl_mock_ops(struct cxl_mock_ops *ops);
