@@ -97,25 +97,29 @@ static void split_page_count(int level)
 		return;
 
 	direct_pages_count[level]--;
-	if (system_state == SYSTEM_RUNNING) {
-		if (level == PG_LEVEL_2M)
+	if (level == PG_LEVEL_2M) {
+		if (system_state == SYSTEM_RUNNING)
 			count_vm_event(DIRECT_MAP_LEVEL2_SPLIT);
-		else if (level == PG_LEVEL_1G)
+		direct_pages_count[PG_LEVEL_4K] += PTRS_PER_PTE;
+	} else if (level == PG_LEVEL_1G) {
+		if (system_state == SYSTEM_RUNNING)
 			count_vm_event(DIRECT_MAP_LEVEL3_SPLIT);
+		direct_pages_count[PG_LEVEL_2M] += PTRS_PER_PMD;
 	}
-	direct_pages_count[level - 1] += PTRS_PER_PTE;
 }
 
 static void collapse_page_count(int level)
 {
 	direct_pages_count[level]++;
-	if (system_state == SYSTEM_RUNNING) {
-		if (level == PG_LEVEL_2M)
+	if (level == PG_LEVEL_2M) {
+		if (system_state == SYSTEM_RUNNING)
 			count_vm_event(DIRECT_MAP_LEVEL2_COLLAPSE);
-		else if (level == PG_LEVEL_1G)
+		direct_pages_count[PG_LEVEL_4K] -= PTRS_PER_PTE;
+	} else if (level == PG_LEVEL_1G) {
+		if (system_state == SYSTEM_RUNNING)
 			count_vm_event(DIRECT_MAP_LEVEL3_COLLAPSE);
+		direct_pages_count[PG_LEVEL_2M] -= PTRS_PER_PMD;
 	}
-	direct_pages_count[level - 1] -= PTRS_PER_PTE;
 }
 
 void arch_report_meminfo(struct seq_file *m)
