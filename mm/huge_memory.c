@@ -3390,7 +3390,7 @@ static void __split_folio_to_order(struct folio *folio, int old_order,
 }
 
 /*
- * It splits an unmapped @folio to lower order smaller folios in two ways.
+ * It splits an frozen @folio to lower order smaller folios in two ways.
  * @folio: the to-be-split folio
  * @new_order: the smallest order of the after split folios (since buddy
  *             allocator like split generates folios with orders from @folio's
@@ -3428,9 +3428,9 @@ static void __split_folio_to_order(struct folio *folio, int old_order,
  * For !uniform_split, when -ENOMEM is returned, the original folio might be
  * split. The caller needs to check the input folio.
  */
-static int __split_unmapped_folio(struct folio *folio, int new_order,
-		struct page *split_at, struct xa_state *xas,
-		struct address_space *mapping, bool uniform_split)
+static int __split_frozen_folio(struct folio *folio, int new_order,
+				struct page *split_at, struct xa_state *xas,
+				struct address_space *mapping, bool uniform_split)
 {
 	int order = folio_order(folio);
 	int start_order = uniform_split ? new_order : order - 1;
@@ -3438,6 +3438,8 @@ static int __split_unmapped_folio(struct folio *folio, int new_order,
 	struct folio *next;
 	int split_order;
 	int ret = 0;
+
+	VM_WARN_ON_ONCE_FOLIO(folio_ref_count(folio) != 0, folio);
 
 	if (folio_test_anon(folio))
 		mod_mthp_stat(order, MTHP_STAT_NR_ANON, -1);
@@ -3583,9 +3585,9 @@ bool uniform_split_supported(struct folio *folio, unsigned int new_order,
  * @list: after-split folios will be put on it if non NULL
  * @uniform_split: perform uniform split or not (non-uniform split)
  *
- * It calls __split_unmapped_folio() to perform uniform and non-uniform split.
+ * It calls __split_frozen_folio() to perform uniform and non-uniform split.
  * It is in charge of checking whether the split is supported or not and
- * preparing @folio for __split_unmapped_folio().
+ * preparing @folio for __split_frozen_folio().
  *
  * After splitting, the after-split folio containing @lock_at remains locked
  * and others are unlocked:
@@ -3698,7 +3700,7 @@ static int __folio_split(struct folio *folio, unsigned int new_order,
 		i_mmap_lock_read(mapping);
 
 		/*
-		 *__split_unmapped_folio() may need to trim off pages beyond
+		 *__split_frozen_folio() may need to trim off pages beyond
 		 * EOF: but on 32-bit, i_size_read() takes an irq-unsafe
 		 * seqlock, which cannot be nested inside the page tree lock.
 		 * So note end now: i_size itself may be changed at any moment,
@@ -3788,8 +3790,8 @@ static int __folio_split(struct folio *folio, unsigned int new_order,
 		/* lock lru list/PageCompound, ref frozen by page_ref_freeze */
 		lruvec = folio_lruvec_lock(folio);
 
-		ret = __split_unmapped_folio(folio, new_order, split_at, &xas,
-					     mapping, uniform_split);
+		ret = __split_frozen_folio(folio, new_order, split_at, &xas,
+					   mapping, uniform_split);
 
 		/*
 		 * Unfreeze after-split folios and put them back to the right
