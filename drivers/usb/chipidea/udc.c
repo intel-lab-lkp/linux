@@ -2125,6 +2125,9 @@ static int ci_udc_start(struct usb_gadget *gadget,
 
 	ci->driver = driver;
 
+	if (!IS_ERR_OR_NULL(ci->usb_phy))
+		otg_set_peripheral(ci->usb_phy->otg, &ci->gadget);
+
 	/* Start otg fsm for B-device */
 	if (ci_otg_is_fsm_mode(ci) && ci->fsm.id) {
 		ci_hdrc_otg_fsm_start(ci);
@@ -2165,6 +2168,9 @@ static int ci_udc_stop(struct usb_gadget *gadget)
 
 	spin_lock_irqsave(&ci->lock, flags);
 	ci->driver = NULL;
+
+	if (!IS_ERR_OR_NULL(ci->usb_phy))
+		otg_set_peripheral(ci->usb_phy->otg, NULL);
 
 	if (ci->vbus_active) {
 		hw_device_state(ci, 0);
