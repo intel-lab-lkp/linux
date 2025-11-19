@@ -1344,10 +1344,51 @@ static void discard_partial_frame(struct macb_queue *queue, unsigned int begin,
 	 */
 }
 
+static u32 gem_xdp_run(struct macb_queue *queue, struct xdp_buff *xdp,
+		       struct net_device *dev)
+{
+	struct bpf_prog *prog;
+	u32 act = XDP_PASS;
+
+	rcu_read_lock();
+
+	prog = rcu_dereference(queue->bp->prog);
+	if (!prog)
+		goto out;
+
+	act = bpf_prog_run_xdp(prog, xdp);
+	switch (act) {
+	case XDP_PASS:
+		goto out;
+	case XDP_REDIRECT:
+		if (unlikely(xdp_do_redirect(dev, xdp, prog))) {
+			act = XDP_DROP;
+			break;
+		}
+		goto out;
+	default:
+		bpf_warn_invalid_xdp_action(dev, prog, act);
+		fallthrough;
+	case XDP_ABORTED:
+		trace_xdp_exception(dev, prog, act);
+		fallthrough;
+	case XDP_DROP:
+		break;
+	}
+
+	page_pool_put_full_page(queue->page_pool,
+				virt_to_head_page(xdp->data), true);
+out:
+	rcu_read_unlock();
+
+	return act;
+}
+
 static int gem_rx(struct macb_queue *queue, struct napi_struct *napi,
 		  int budget)
 {
 	struct macb *bp = queue->bp;
+	bool			xdp_flush = false;
 	unsigned int		len;
 	unsigned int		entry;
 	void			*data;
@@ -1356,9 +1397,11 @@ static int gem_rx(struct macb_queue *queue, struct napi_struct *napi,
 	int			count = 0;
 
 	while (count < budget) {
-		u32 ctrl;
-		dma_addr_t addr;
 		bool rxused, first_frame;
+		struct xdp_buff xdp;
+		dma_addr_t addr;
+		u32 ctrl;
+		u32 ret;
 
 		entry = macb_rx_ring_wrap(bp, queue->rx_tail);
 		desc = macb_rx_desc(queue, entry);
@@ -1403,6 +1446,22 @@ static int gem_rx(struct macb_queue *queue, struct napi_struct *napi,
 			data_len = SKB_WITH_OVERHEAD(bp->rx_buffer_size) - bp->rx_offset;
 		}
 
+		if (!(ctrl & MACB_BIT(RX_SOF) && ctrl & MACB_BIT(RX_EOF)))
+			goto skip_xdp;
+
+		xdp_init_buff(&xdp, bp->rx_buffer_size, &queue->xdp_q);
+		xdp_prepare_buff(&xdp, data, bp->rx_offset, len,
+				 false);
+		xdp_buff_clear_frags_flag(&xdp);
+
+		ret = gem_xdp_run(queue, &xdp, bp->dev);
+		if (ret == XDP_REDIRECT)
+			xdp_flush = true;
+
+		if (ret != XDP_PASS)
+			goto next_frame;
+
+skip_xdp:
 		if (first_frame) {
 			queue->skb = napi_build_skb(data, bp->rx_buffer_size);
 			if (unlikely(!queue->skb)) {
@@ -1452,10 +1511,6 @@ static int gem_rx(struct macb_queue *queue, struct napi_struct *napi,
 		}
 
 		/* now everything is ready for receiving packet */
-		queue->rx_buff[entry] = NULL;
-
-		netdev_vdbg(bp->dev, "%s %u (len %u)\n", __func__, entry, data_len);
-
 		if (ctrl & MACB_BIT(RX_EOF)) {
 			bp->dev->stats.rx_packets++;
 			queue->stats.rx_packets++;
@@ -1477,6 +1532,8 @@ static int gem_rx(struct macb_queue *queue, struct napi_struct *napi,
 			queue->skb = NULL;
 		}
 
+next_frame:
+		queue->rx_buff[entry] = NULL;
 		continue;
 
 free_frags:
@@ -1489,6 +1546,9 @@ free_frags:
 						false);
 		}
 	}
+
+	if (xdp_flush)
+		xdp_do_flush();
 
 	gem_rx_refill(queue, true);
 
@@ -2471,6 +2531,8 @@ static void gem_free_rx_buffers(struct macb *bp)
 
 		kfree(queue->rx_buff);
 		queue->rx_buff = NULL;
+		if (xdp_rxq_info_is_reg(&queue->xdp_q))
+			xdp_rxq_info_unreg(&queue->xdp_q);
 		page_pool_destroy(queue->page_pool);
 		queue->page_pool = NULL;
 	}
@@ -2625,19 +2687,22 @@ out_err:
 	return -ENOMEM;
 }
 
-static void gem_create_page_pool(struct macb_queue *queue)
+static void gem_create_page_pool(struct macb_queue *queue, int qid)
 {
 	struct page_pool_params pp_params = {
 		.order = 0,
 		.flags = PP_FLAG_DMA_MAP | PP_FLAG_DMA_SYNC_DEV,
 		.pool_size = queue->bp->rx_ring_size,
 		.nid = NUMA_NO_NODE,
-		.dma_dir = DMA_FROM_DEVICE,
+		.dma_dir = rcu_access_pointer(queue->bp->prog)
+				? DMA_BIDIRECTIONAL
+				: DMA_FROM_DEVICE,
 		.dev = &queue->bp->pdev->dev,
 		.napi = &queue->napi_rx,
 		.max_len = PAGE_SIZE,
 	};
 	struct page_pool *pool;
+	int err;
 
 	pool = page_pool_create(&pp_params);
 	if (IS_ERR(pool)) {
@@ -2646,6 +2711,28 @@ static void gem_create_page_pool(struct macb_queue *queue)
 	}
 
 	queue->page_pool = pool;
+
+	err = xdp_rxq_info_reg(&queue->xdp_q, queue->bp->dev, qid,
+			       queue->napi_rx.napi_id);
+	if (err < 0) {
+		netdev_err(queue->bp->dev, "xdp: failed to register rxq info\n");
+		goto destroy_pool;
+	}
+
+	err = xdp_rxq_info_reg_mem_model(&queue->xdp_q, MEM_TYPE_PAGE_POOL,
+					 queue->page_pool);
+	if (err) {
+		netdev_err(queue->bp->dev, "xdp: failed to register rxq memory model\n");
+		goto unreg_info;
+	}
+
+	return;
+
+unreg_info:
+	xdp_rxq_info_unreg(&queue->xdp_q);
+destroy_pool:
+	page_pool_destroy(pool);
+	queue->page_pool = NULL;
 }
 
 static void macb_init_tieoff(struct macb *bp)
@@ -2681,7 +2768,7 @@ static void gem_init_rings(struct macb *bp)
 		queue->rx_tail = 0;
 		queue->rx_prepared_head = 0;
 
-		gem_create_page_pool(queue);
+		gem_create_page_pool(queue, q);
 		gem_rx_refill(queue, false);
 	}
 
@@ -3117,8 +3204,17 @@ static int macb_close(struct net_device *dev)
 
 static int macb_change_mtu(struct net_device *dev, int new_mtu)
 {
+	int frame_size = new_mtu + ETH_HLEN + ETH_FCS_LEN + MACB_MAX_PAD;
+	struct macb *bp = netdev_priv(dev);
+	struct bpf_prog *prog = bp->prog;
+
 	if (netif_running(dev))
 		return -EBUSY;
+
+	if (prog && frame_size > PAGE_SIZE) {
+		netdev_err(dev, "MTU %d too large for XDP", new_mtu);
+		return -EINVAL;
+	}
 
 	WRITE_ONCE(dev->mtu, new_mtu);
 
@@ -3135,6 +3231,49 @@ static int macb_set_mac_addr(struct net_device *dev, void *addr)
 
 	macb_set_hwaddr(netdev_priv(dev));
 	return 0;
+}
+
+static int gem_xdp_setup(struct net_device *dev, struct bpf_prog *prog,
+			 struct netlink_ext_ack *extack)
+{
+	int frame = ETH_HLEN + ETH_FCS_LEN + MACB_MAX_PAD;
+	struct macb *bp = netdev_priv(dev);
+	struct bpf_prog *old_prog;
+	bool need_update, running;
+
+	if (prog && dev->mtu + frame > bp->rx_buffer_size) {
+		NL_SET_ERR_MSG_MOD(extack, "MTU too large for XDP");
+		return -EOPNOTSUPP;
+	}
+
+	running = netif_running(dev);
+	need_update = !!bp->prog != !!prog;
+	if (running && need_update)
+		macb_close(dev);
+
+	old_prog = rcu_replace_pointer(bp->prog, prog, lockdep_rtnl_is_held());
+	if (old_prog)
+		bpf_prog_put(old_prog);
+
+	if (running && need_update)
+		return macb_open(dev);
+
+	return 0;
+}
+
+static int macb_xdp(struct net_device *dev, struct netdev_bpf *xdp)
+{
+	struct macb *bp = netdev_priv(dev);
+
+	if (!macb_is_gem(bp))
+		return 0;
+
+	switch (xdp->command) {
+	case XDP_SETUP_PROG:
+		return gem_xdp_setup(dev, xdp->prog, xdp->extack);
+	default:
+		return -EINVAL;
+	}
 }
 
 static void gem_update_stats(struct macb *bp)
@@ -4390,6 +4529,7 @@ static const struct net_device_ops macb_netdev_ops = {
 	.ndo_hwtstamp_set	= macb_hwtstamp_set,
 	.ndo_hwtstamp_get	= macb_hwtstamp_get,
 	.ndo_setup_tc		= macb_setup_tc,
+	.ndo_bpf		= macb_xdp,
 };
 
 /* Configure peripheral capabilities according to device tree
@@ -5693,6 +5833,9 @@ static int macb_probe(struct platform_device *pdev)
 		bp->rx_offset = MACB_PP_HEADROOM;
 		if (!(bp->caps & MACB_CAPS_RSC))
 			bp->rx_offset += NET_IP_ALIGN;
+
+		dev->xdp_features = NETDEV_XDP_ACT_BASIC |
+				    NETDEV_XDP_ACT_REDIRECT;
 	}
 
 	netif_carrier_off(dev);
