@@ -10852,3 +10852,8 @@ void sched_change_end(struct sched_change_ctx *ctx)
 		p->sched_class->prio_changed(rq, p, ctx->prio);
 	}
 }
+
+#ifdef CONFIG_PARAVIRT
+struct cpumask __cpu_paravirt_mask __read_mostly;
+EXPORT_SYMBOL(__cpu_paravirt_mask);
+#endif

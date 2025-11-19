@@ -1270,6 +1270,26 @@ static __always_inline bool cpu_dying(unsigned int cpu)
 
 #endif /* NR_CPUS > 1 */
 
+/*
+ * All related wrappers kept together to avoid too many ifdefs
+ * See Documentation/scheduler/sched-arch.rst for details
+ */
+#ifdef CONFIG_PARAVIRT
+extern struct cpumask __cpu_paravirt_mask;
+#define cpu_paravirt_mask    ((const struct cpumask *)&__cpu_paravirt_mask)
+#define set_cpu_paravirt(cpu, paravirt) assign_cpu((cpu), &__cpu_paravirt_mask, (paravirt))
+
+static __always_inline bool cpu_paravirt(unsigned int cpu)
+{
+	return cpumask_test_cpu(cpu, cpu_paravirt_mask);
+}
+#else
+static __always_inline bool cpu_paravirt(unsigned int cpu)
+{
+	return false;
+}
+#endif
+
 #define cpu_is_offline(cpu)	unlikely(!cpu_online(cpu))
 
 #if NR_CPUS <= BITS_PER_LONG
