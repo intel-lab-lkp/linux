@@ -2664,10 +2664,12 @@ struct il3945_beacon_notif {
 } __packed;
 
 struct il4965_beacon_notif {
-	struct il4965_tx_resp beacon_notify_hdr;
 	__le32 low_tsf;
 	__le32 high_tsf;
 	__le32 ibss_mgr_status;
+
+	/* Must be last as it ends in a flexible-array member. */
+	struct il4965_tx_resp beacon_notify_hdr;
 } __packed;
 
 /*
