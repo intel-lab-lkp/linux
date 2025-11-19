@@ -35,6 +35,7 @@ unsigned int uvc_hw_timestamps_param;
 static unsigned int uvc_quirks_param = -1;
 unsigned int uvc_dbg_param;
 unsigned int uvc_timeout_param = UVC_CTRL_STREAMING_TIMEOUT;
+bool uvc_allow_privacy_override_param;
 
 static struct usb_driver uvc_driver;
 
@@ -2473,6 +2474,25 @@ module_param_named(trace, uvc_dbg_param, uint, 0644);
 MODULE_PARM_DESC(trace, "Trace level bitmask");
 module_param_named(timeout, uvc_timeout_param, uint, 0644);
 MODULE_PARM_DESC(timeout, "Streaming control requests timeout");
+
+static int param_set_privacy(const char *val, const struct kernel_param *kp)
+{
+	pr_warn_once("uvcvideo: " DEPRECATED
+		     "allow_privacy_override parameter will be eventually removed.\n");
+	return param_set_bool(val, kp);
+}
+
+static const struct kernel_param_ops param_ops_privacy = {
+	.set = param_set_privacy,
+	.get = param_get_bool,
+};
+
+param_check_bool(allow_privacy_override, &uvc_allow_privacy_override_param);
+module_param_cb(allow_privacy_override, &param_ops_privacy,
+		&uvc_allow_privacy_override_param, 0644);
+__MODULE_PARM_TYPE(allow_privacy_override, "bool");
+MODULE_PARM_DESC(allow_privacy_override,
+		 "Allow access to privacy related controls");
 
 /* ------------------------------------------------------------------------
  * Driver initialization and cleanup
