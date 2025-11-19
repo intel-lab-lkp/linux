@@ -133,8 +133,8 @@ u8 *rtw_set_ie(u8 *pbuf,
 }
 
 /*----------------------------------------------------------------------------
-index: the information element id index, limit is the limit for search
------------------------------------------------------------------------------*/
+ * index: the information element id index, limit is the limit for search
+ *--------------------------------------------------------------------------*/
 u8 *rtw_get_ie(u8 *pbuf, signed int index, signed int *len, signed int limit)
 {
 	signed int tmp, i;

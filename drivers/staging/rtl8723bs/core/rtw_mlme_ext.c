@@ -19,8 +19,8 @@ static struct mlme_handler mlme_sta_tbl[] = {
 	{WIFI_PROBERSP,		"OnProbeRsp",		&OnProbeRsp},
 
 	/*----------------------------------------------------------
-					below 2 are reserved
-	-----------------------------------------------------------*/
+	 *				below 2 are reserved
+	 *--------------------------------------------------------*/
 	{0,					"DoReserved",		&DoReserved},
 	{0,					"DoReserved",		&DoReserved},
 	{WIFI_BEACON,		"OnBeacon",		&OnBeacon},
@@ -51,8 +51,8 @@ static struct action_handler OnAction_tbl[] = {
 static u8 null_addr[ETH_ALEN] = {0, 0, 0, 0, 0, 0};
 
 /**************************************************
-OUI definitions for the vendor specific IE
-***************************************************/
+ * OUI definitions for the vendor specific IE
+ *************************************************/
 unsigned char RTW_WPA_OUI[] = {0x00, 0x50, 0xf2, 0x01};
 unsigned char WMM_OUI[] = {0x00, 0x50, 0xf2, 0x02};
 unsigned char WPS_OUI[] = {0x00, 0x50, 0xf2, 0x04};
@@ -65,8 +65,8 @@ unsigned char WMM_PARA_OUI[] = {0x00, 0x50, 0xf2, 0x02, 0x01, 0x01};
 static unsigned char REALTEK_96B_IE[] = {0x00, 0xe0, 0x4c, 0x02, 0x01, 0x20};
 
 /********************************************************
-ChannelPlan definitions
-*********************************************************/
+ * ChannelPlan definitions
+ *******************************************************/
 static struct rt_channel_plan_2g	RTW_ChannelPlan2G[RT_CHANNEL_DOMAIN_2G_MAX] = {
 	{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}, 13},		/*  0x00, RT_CHANNEL_DOMAIN_2G_WORLD , Passive scan CH 12, 13 */
 	{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}, 13},		/*  0x01, RT_CHANNEL_DOMAIN_2G_ETSI1 */
@@ -188,10 +188,10 @@ int rtw_ch_set_search_ch(struct rt_channel_info *ch_set, const u32 ch)
 }
 
 /****************************************************************************
-
-Following are the initialization functions for WiFi MLME
-
-*****************************************************************************/
+ *
+ * Following are the initialization functions for WiFi MLME
+ *
+ ***************************************************************************/
 
 int init_hw_mlme_ext(struct adapter *padapter)
 {
@@ -508,10 +508,10 @@ void mgt_dispatcher(struct adapter *padapter, union recv_frame *precv_frame)
 }
 
 /****************************************************************************
-
-Following are the callback functions for each subtype of the management frames
-
-*****************************************************************************/
+ *
+ * Following are the callback functions for each subtype of the management frames
+ *
+ ***************************************************************************/
 
 unsigned int OnProbeReq(struct adapter *padapter, union recv_frame *precv_frame)
 {
@@ -1951,10 +1951,10 @@ inline struct xmit_frame *alloc_mgtxmitframe(struct xmit_priv *pxmitpriv)
 }
 
 /****************************************************************************
-
-Following are some TX functions for WiFi MLME
-
-*****************************************************************************/
+ *
+ * Following are some TX functions for WiFi MLME
+ *
+ ***************************************************************************/
 
 void update_mgnt_tx_rate(struct adapter *padapter, u8 rate)
 {
@@ -3798,10 +3798,10 @@ unsigned int send_beacon(struct adapter *padapter)
 }
 
 /****************************************************************************
-
-Following are some utility functions for WiFi MLME
-
-*****************************************************************************/
+ *
+ * Following are some utility functions for WiFi MLME
+ *
+ ***************************************************************************/
 
 void site_survey(struct adapter *padapter)
 {
@@ -4393,10 +4393,10 @@ static void process_80211d(struct adapter *padapter, struct wlan_bssid_ex *bssid
 }
 
 /****************************************************************************
-
-Following are the functions to report events
-
-*****************************************************************************/
+ *
+ * Following are the functions to report events
+ *
+ ***************************************************************************/
 
 void report_survey_event(struct adapter *padapter, union recv_frame *precv_frame)
 {
@@ -4693,10 +4693,10 @@ void report_add_sta_event(struct adapter *padapter, unsigned char *MacAddr, int 
 }
 
 /****************************************************************************
-
-Following are the event callback functions
-
-*****************************************************************************/
+ *
+ * Following are the event callback functions
+ *
+ ***************************************************************************/
 
 /* for sta/adhoc mode */
 void update_sta_info(struct adapter *padapter, struct sta_info *psta)
@@ -4864,7 +4864,7 @@ void mlmeext_joinbss_event_callback(struct adapter *padapter, int join_res)
 		rtw_sta_media_status_rpt(padapter, psta, 1);
 
 		/* wakeup macid after join bss successfully to ensure
-			the subsequent data frames can be sent out normally */
+		 * the subsequent data frames can be sent out normally */
 		rtw_hal_macid_wakeup(padapter, psta->mac_id);
 	}
 
@@ -4941,10 +4941,10 @@ void mlmeext_sta_del_event_callback(struct adapter *padapter)
 }
 
 /****************************************************************************
-
-Following are the functions for the timer handlers
-
-*****************************************************************************/
+ *
+ * Following are the functions for the timer handlers
+ *
+ ***************************************************************************/
 void _linked_info_dump(struct adapter *padapter)
 {
 	int i;
