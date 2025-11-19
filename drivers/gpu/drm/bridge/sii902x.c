@@ -1208,7 +1208,7 @@ static int sii902x_probe(struct i2c_client *client)
 			return -ENODEV;
 		}
 
-		sii902x->next_bridge = of_drm_find_bridge(remote);
+		sii902x->next_bridge = devm_drm_of_find_bridge(dev, remote);
 		of_node_put(remote);
 		if (!sii902x->next_bridge)
 			return dev_err_probe(dev, -EPROBE_DEFER,
