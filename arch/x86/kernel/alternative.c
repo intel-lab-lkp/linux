@@ -604,6 +604,86 @@ static inline u8 * instr_va(struct alt_instr *i)
 	return (u8 *)&i->instr_offset + i->instr_offset;
 }
 
+struct patch_site {
+	u8 *instr;
+	struct alt_instr *alt;
+	u8 buff[MAX_PATCH_LEN];
+	u8 len;
+};
+
+static void __init_or_module analyze_patch_site(struct patch_site *ps,
+						struct alt_instr *p, struct alt_instr *end)
+{
+	struct alt_instr *r;
+
+	/*
+	 * In case of nested ALTERNATIVE()s the outer alternative might add
+	 * more padding. To ensure consistent patching find the max padding for
+	 * all alt_instr entries for this site (nested alternatives result in
+	 * consecutive entries).
+	 */
+	ps->instr = instr_va(p);
+	ps->len = p->instrlen;
+	for (r = p+1; r < end && instr_va(r) == ps->instr; r++) {
+		ps->len = max(ps->len, r->instrlen);
+		p->instrlen = r->instrlen = ps->len;
+	}
+
+	BUG_ON(ps->len > sizeof(ps->buff));
+	BUG_ON(p->cpuid >= (NCAPINTS + NBUGINTS) * 32);
+
+	/*
+	 * Patch if either:
+	 * - feature is present
+	 * - feature not present but ALT_FLAG_NOT is set to mean,
+	 *   patch if feature is *NOT* present.
+	 */
+	if (!boot_cpu_has(p->cpuid) == !(p->flags & ALT_FLAG_NOT))
+		ps->alt = NULL;
+	else
+		ps->alt = p;
+}
+
+static void __init_or_module prep_patch_site(struct patch_site *ps)
+{
+	struct alt_instr *p = ps->alt;
+	u8 buff_sz;
+	u8 *repl;
+
+	if (!p) {
+		/* Nothing to patch, use original instruction. */
+		memcpy(ps->buff, ps->instr, ps->len);
+		return;
+	}
+
+	repl = (u8 *)&p->repl_offset + p->repl_offset;
+	DPRINTK(ALT, "feat: %d*32+%d, old: (%pS (%px) len: %d), repl: (%px, len: %d) flags: 0x%x",
+		p->cpuid >> 5, p->cpuid & 0x1f,
+		ps->instr, ps->instr, ps->len,
+		repl, p->replacementlen, p->flags);
+
+	memcpy(ps->buff, repl, p->replacementlen);
+	buff_sz = p->replacementlen;
+
+	if (p->flags & ALT_FLAG_DIRECT_CALL)
+		buff_sz = alt_replace_call(ps->instr, ps->buff, p);
+
+	for (; buff_sz < ps->len; buff_sz++)
+		ps->buff[buff_sz] = 0x90;
+
+	__apply_relocation(ps->buff, ps->instr, ps->len, repl, p->replacementlen);
+
+	DUMP_BYTES(ALT, ps->instr, ps->len, "%px:   old_insn: ", ps->instr);
+	DUMP_BYTES(ALT, repl, p->replacementlen, "%px:   rpl_insn: ", repl);
+	DUMP_BYTES(ALT, ps->buff, ps->len, "%px: final_insn: ", ps->instr);
+}
+
+static void __init_or_module patch_site(struct patch_site *ps)
+{
+	optimize_nops(ps->instr, ps->buff, ps->len);
+	text_poke_early(ps->instr, ps->buff, ps->len);
+}
+
 /*
  * Replace instructions with better alternatives for this CPU type. This runs
  * before SMP is initialized to avoid SMP problems with self modifying code.
@@ -617,9 +697,7 @@ static inline u8 * instr_va(struct alt_instr *i)
 void __init_or_module noinline apply_alternatives(struct alt_instr *start,
 						  struct alt_instr *end)
 {
-	u8 insn_buff[MAX_PATCH_LEN];
-	u8 *instr, *replacement;
-	struct alt_instr *a, *b;
+	struct alt_instr *a;
 
 	DPRINTK(ALT, "alt table %px, -> %px", start, end);
 
@@ -643,59 +721,11 @@ void __init_or_module noinline apply_alternatives(struct alt_instr *start,
 	 * order.
 	 */
 	for (a = start; a < end; a++) {
-		unsigned int insn_buff_sz = 0;
+		struct patch_site ps;
 
-		/*
-		 * In case of nested ALTERNATIVE()s the outer alternative might
-		 * add more padding. To ensure consistent patching find the max
-		 * padding for all alt_instr entries for this site (nested
-		 * alternatives result in consecutive entries).
-		 */
-		for (b = a+1; b < end && instr_va(b) == instr_va(a); b++) {
-			u8 len = max(a->instrlen, b->instrlen);
-			a->instrlen = b->instrlen = len;
-		}
-
-		instr = instr_va(a);
-		replacement = (u8 *)&a->repl_offset + a->repl_offset;
-		BUG_ON(a->instrlen > sizeof(insn_buff));
-		BUG_ON(a->cpuid >= (NCAPINTS + NBUGINTS) * 32);
-
-		/*
-		 * Patch if either:
-		 * - feature is present
-		 * - feature not present but ALT_FLAG_NOT is set to mean,
-		 *   patch if feature is *NOT* present.
-		 */
-		if (!boot_cpu_has(a->cpuid) == !(a->flags & ALT_FLAG_NOT)) {
-			memcpy(insn_buff, instr, a->instrlen);
-			optimize_nops(instr, insn_buff, a->instrlen);
-			text_poke_early(instr, insn_buff, a->instrlen);
-			continue;
-		}
-
-		DPRINTK(ALT, "feat: %d*32+%d, old: (%pS (%px) len: %d), repl: (%px, len: %d) flags: 0x%x",
-			a->cpuid >> 5,
-			a->cpuid & 0x1f,
-			instr, instr, a->instrlen,
-			replacement, a->replacementlen, a->flags);
-
-		memcpy(insn_buff, replacement, a->replacementlen);
-		insn_buff_sz = a->replacementlen;
-
-		if (a->flags & ALT_FLAG_DIRECT_CALL)
-			insn_buff_sz = alt_replace_call(instr, insn_buff, a);
-
-		for (; insn_buff_sz < a->instrlen; insn_buff_sz++)
-			insn_buff[insn_buff_sz] = 0x90;
-
-		text_poke_apply_relocation(insn_buff, instr, a->instrlen, replacement, a->replacementlen);
-
-		DUMP_BYTES(ALT, instr, a->instrlen, "%px:   old_insn: ", instr);
-		DUMP_BYTES(ALT, replacement, a->replacementlen, "%px:   rpl_insn: ", replacement);
-		DUMP_BYTES(ALT, insn_buff, insn_buff_sz, "%px: final_insn: ", instr);
-
-		text_poke_early(instr, insn_buff, insn_buff_sz);
+		analyze_patch_site(&ps, a, end);
+		prep_patch_site(&ps);
+		patch_site(&ps);
 	}
 
 	kasan_enable_current();
