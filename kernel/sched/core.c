@@ -2397,8 +2397,13 @@ static inline bool is_cpu_allowed(struct task_struct *p, int cpu)
 		return cpu_online(cpu);
 
 	/* Non kernel threads are not allowed during either online or offline. */
-	if (!(p->flags & PF_KTHREAD))
-		return cpu_active(cpu);
+	if (!(p->flags & PF_KTHREAD)) {
+		/* A user thread shouldn't be allowed on a paravirt cpu */
+		if (cpu_paravirt(cpu))
+			return false;
+		else
+			return cpu_active(cpu);
+	}
 
 	/* KTHREAD_IS_PER_CPU is always allowed. */
 	if (kthread_is_per_cpu(p))
@@ -2406,6 +2411,10 @@ static inline bool is_cpu_allowed(struct task_struct *p, int cpu)
 
 	/* Regular kernel threads don't get to stay during offline. */
 	if (cpu_dying(cpu))
+		return false;
+
+	/* Non percpu kthreads should stay away from paravirt cpu*/
+	if (cpu_paravirt(cpu))
 		return false;
 
 	/* But are allowed during online. */
