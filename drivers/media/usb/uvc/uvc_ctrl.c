@@ -3025,9 +3025,9 @@ int uvc_xu_ctrl_query(struct uvc_video_chain *chain,
 	}
 
 	if (uvc_ctrl_is_privacy_control(entity->guid, xqry->selector) &&
-	    !uvc_allow_privacy_override_param) {
+	    !IS_ENABLED(CONFIG_USB_VIDEO_CLASS_ALLOW_PRIVACY_OVERRIDE)) {
 		dev_warn_once(&chain->dev->intf->dev,
-			      "Privacy related controls can only be accessed if param allow_privacy_override is true\n");
+			      "Privacy related controls can only be accessed if CONFIG_USB_VIDEO_CLASS_ALLOW_PRIVACY_OVERRIDE is true\n");
 		uvc_dbg(chain->dev, CONTROL, "Blocking access to privacy related Control %pUl/%u\n",
 			entity->guid, xqry->selector);
 		return -EACCES;
