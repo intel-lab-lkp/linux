@@ -1254,7 +1254,7 @@ static int dummy_validate_stream(struct dummy_hcd *dum_hcd, struct urb *urb)
 	if (urb->stream_id > max_streams) {
 		dev_err(dummy_dev(dum_hcd), "Stream id %d is out of range.\n",
 				urb->stream_id);
-		BUG();
+		WARN_ON_ONCE(1);
 		return -EINVAL;
 	}
 	return 0;
