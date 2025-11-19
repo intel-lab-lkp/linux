@@ -506,7 +506,7 @@ static int dummy_enable(struct usb_ep *_ep,
 	struct dummy		*dum;
 	struct dummy_hcd	*dum_hcd;
 	struct dummy_ep		*ep;
-	unsigned		max;
+	unsigned int		max;
 	int			retval;
 
 	ep = usb_ep_to_dummy_ep(_ep);
@@ -1414,7 +1414,7 @@ static int transfer(struct dummy_hcd *dum_hcd, struct urb *urb,
 top:
 	/* if there's no request queued, the device is NAKing; return */
 	list_for_each_entry(req, &ep->queue, queue) {
-		unsigned	host_len, dev_len, len;
+		unsigned int	host_len, dev_len, len;
 		int		is_short, to_host;
 		int		rescan = 0;
 
@@ -1443,7 +1443,7 @@ top:
 			/* not enough bandwidth left? */
 			if (limit < ep->ep.maxpacket && limit < len)
 				break;
-			len = min_t(unsigned, len, limit);
+			len = min_t(unsigned int, len, limit);
 			if (len == 0)
 				break;
 
@@ -1624,8 +1624,8 @@ static int handle_control_request(struct dummy_hcd *dum_hcd, struct urb *urb,
 	struct dummy_ep		*ep2;
 	struct dummy		*dum = dum_hcd->dum;
 	int			ret_val = 1;
-	unsigned	w_index;
-	unsigned	w_value;
+	unsigned int	w_index;
+	unsigned int	w_value;
 
 	w_index = le16_to_cpu(setup->wIndex);
 	w_value = le16_to_cpu(setup->wValue);
