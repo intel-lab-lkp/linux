@@ -326,7 +326,7 @@ static int imx8qxp_pc_bridge_probe(struct platform_device *pdev)
 			goto free_child;
 		}
 
-		ch->next_bridge = of_drm_find_bridge(remote);
+		ch->next_bridge = devm_drm_of_find_bridge(dev, remote);
 		if (!ch->next_bridge) {
 			of_node_put(remote);
 			ret = -EPROBE_DEFER;
