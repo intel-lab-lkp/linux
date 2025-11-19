@@ -1805,6 +1805,10 @@ static int pxp_probe(struct platform_device *pdev)
 
 	spin_lock_init(&dev->irqlock);
 
+	ret = devm_mutex_init(&pdev->dev, &dev->dev_mutex);
+	if (ret)
+		return ret;
+
 	ret = devm_request_irq(&pdev->dev, irq, pxp_irq_handler, 0,
 			       dev_name(&pdev->dev), dev);
 	if (ret < 0) {
@@ -1831,7 +1835,6 @@ static int pxp_probe(struct platform_device *pdev)
 		goto err_clk;
 
 	atomic_set(&dev->num_inst, 0);
-	mutex_init(&dev->dev_mutex);
 
 	dev->vfd = pxp_videodev;
 	vfd = &dev->vfd;

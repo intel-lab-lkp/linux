@@ -824,7 +824,9 @@ static int emmaprp_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	mutex_init(&pcdev->dev_mutex);
+	ret = devm_mutex_init(&pdev->dev, &pcdev->dev_mutex);
+	if (ret)
+		return ret;
 
 	vfd = video_device_alloc();
 	if (!vfd) {
@@ -878,8 +880,6 @@ rel_vdev:
 unreg_dev:
 	v4l2_device_unregister(&pcdev->v4l2_dev);
 
-	mutex_destroy(&pcdev->dev_mutex);
-
 	return ret;
 }
 
@@ -892,7 +892,6 @@ static void emmaprp_remove(struct platform_device *pdev)
 	video_unregister_device(pcdev->vfd);
 	v4l2_m2m_release(pcdev->m2m_dev);
 	v4l2_device_unregister(&pcdev->v4l2_dev);
-	mutex_destroy(&pcdev->dev_mutex);
 }
 
 static struct platform_driver emmaprp_pdrv = {
