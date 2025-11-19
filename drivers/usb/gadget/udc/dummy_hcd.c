@@ -1423,7 +1423,7 @@ top:
 		int		rescan = 0;
 
 		if (dummy_ep_stream_en(dum_hcd, urb)) {
-			if ((urb->stream_id != req->req.stream_id))
+			if (urb->stream_id != req->req.stream_id)
 				continue;
 		}
 
@@ -2222,8 +2222,7 @@ static int dummy_hub_control(
 						      USB_PORT_STAT_HIGH_SPEED;
 						break;
 					case USB_SPEED_LOW:
-						dum_hcd->dum->gadget.ep0->
-							maxpacket = 8;
+						dum_hcd->dum->gadget.ep0->maxpacket = 8;
 						dum_hcd->port_status |=
 							USB_PORT_STAT_LOW_SPEED;
 						break;
@@ -2434,20 +2433,20 @@ static inline ssize_t show_urb(char *buf, size_t size, struct urb *urb)
 			break;
 		 } s; }),
 		ep, ep ? (usb_urb_dir_in(urb) ? "in" : "out") : "",
-		({ char *s; \
-		switch (usb_pipetype(urb->pipe)) { \
-		case PIPE_CONTROL: \
-			s = ""; \
-			break; \
-		case PIPE_BULK: \
-			s = "-bulk"; \
-			break; \
-		case PIPE_INTERRUPT: \
-			s = "-int"; \
-			break; \
-		default: \
-			s = "-iso"; \
-			break; \
+		({ char *s;
+		switch (usb_pipetype(urb->pipe)) {
+		case PIPE_CONTROL:
+			s = "";
+			break;
+		case PIPE_BULK:
+			s = "-bulk";
+			break;
+		case PIPE_INTERRUPT:
+			s = "-int";
+			break;
+		default:
+			s = "-iso";
+			break;
 		} s; }),
 		urb->actual_length, urb->transfer_buffer_length);
 }
