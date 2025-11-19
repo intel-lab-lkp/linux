@@ -3318,7 +3318,7 @@ static int dw_hdmi_parse_dt(struct dw_hdmi *hdmi)
 	if (!remote)
 		return -ENODEV;
 
-	hdmi->next_bridge = of_drm_find_bridge(remote);
+	hdmi->next_bridge = devm_drm_of_find_bridge(hdmi->dev, remote);
 	of_node_put(remote);
 	if (!hdmi->next_bridge)
 		return -EPROBE_DEFER;
