@@ -960,8 +960,7 @@ struct macb_dma_desc_ptp {
 #define PPM_FRACTION	16
 
 /* The buf includes headroom compatible with both skb and xdpf */
-#define MACB_PP_HEADROOM		XDP_PACKET_HEADROOM
-#define MACB_PP_MAX_BUF_SIZE(num)	(((num) * PAGE_SIZE) - MACB_PP_HEADROOM)
+#define MACB_PP_HEADROOM	XDP_PACKET_HEADROOM
 
 /* struct macb_tx_skb - data about an skb which is being transmitted
  * @skb: skb currently being transmitted, only set for the last buffer
@@ -1273,6 +1272,7 @@ struct macb_queue {
 	struct napi_struct	napi_rx;
 	struct queue_stats stats;
 	struct page_pool	*page_pool;
+	struct sk_buff		*skb;
 };
 
 struct ethtool_rx_fs_item {

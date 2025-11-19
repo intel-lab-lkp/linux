@@ -1250,21 +1250,25 @@ static int macb_tx_complete(struct macb_queue *queue, int budget)
 	return packets;
 }
 
-static void *gem_page_pool_get_buff(struct page_pool *pool,
+static void *gem_page_pool_get_buff(struct  macb_queue *queue,
 				    dma_addr_t *dma_addr, gfp_t gfp_mask)
 {
+	struct macb *bp = queue->bp;
 	struct page *page;
+	int offset;
 
-	if (!pool)
+	if (!queue->page_pool)
 		return NULL;
 
-	page = page_pool_alloc_pages(pool, gfp_mask | __GFP_NOWARN);
+	page = page_pool_alloc_frag(queue->page_pool, &offset,
+				    bp->rx_buffer_size,
+				    gfp_mask | __GFP_NOWARN);
 	if (!page)
 		return NULL;
 
-	*dma_addr = page_pool_get_dma_addr(page) + MACB_PP_HEADROOM;
+	*dma_addr = page_pool_get_dma_addr(page) + MACB_PP_HEADROOM + offset;
 
-	return page_address(page);
+	return page_address(page) + offset;
 }
 
 static void gem_rx_refill(struct macb_queue *queue, bool napi)
@@ -1286,7 +1290,7 @@ static void gem_rx_refill(struct macb_queue *queue, bool napi)
 
 		if (!queue->rx_buff[entry]) {
 			/* allocate sk_buff for this free entry in ring */
-			data = gem_page_pool_get_buff(queue->page_pool, &paddr,
+			data = gem_page_pool_get_buff(queue, &paddr,
 						      napi ? GFP_ATOMIC : GFP_KERNEL);
 			if (unlikely(!data)) {
 				netdev_err(bp->dev,
@@ -1344,20 +1348,17 @@ static int gem_rx(struct macb_queue *queue, struct napi_struct *napi,
 		  int budget)
 {
 	struct macb *bp = queue->bp;
-	int			buffer_size;
 	unsigned int		len;
 	unsigned int		entry;
 	void			*data;
-	struct sk_buff		*skb;
 	struct macb_dma_desc	*desc;
+	int			data_len;
 	int			count = 0;
-
-	buffer_size = DIV_ROUND_UP(bp->rx_buffer_size, PAGE_SIZE) * PAGE_SIZE;
 
 	while (count < budget) {
 		u32 ctrl;
 		dma_addr_t addr;
-		bool rxused;
+		bool rxused, first_frame;
 
 		entry = macb_rx_ring_wrap(bp, queue->rx_tail);
 		desc = macb_rx_desc(queue, entry);
@@ -1368,6 +1369,9 @@ static int gem_rx(struct macb_queue *queue, struct napi_struct *napi,
 		rxused = (desc->addr & MACB_BIT(RX_USED)) ? true : false;
 		addr = macb_get_addr(bp, desc);
 
+		dma_sync_single_for_cpu(&bp->pdev->dev,
+					addr, bp->rx_buffer_size - bp->rx_offset,
+					page_pool_get_dma_dir(queue->page_pool));
 		if (!rxused)
 			break;
 
@@ -1379,13 +1383,6 @@ static int gem_rx(struct macb_queue *queue, struct napi_struct *napi,
 		queue->rx_tail++;
 		count++;
 
-		if (!(ctrl & MACB_BIT(RX_SOF) && ctrl & MACB_BIT(RX_EOF))) {
-			netdev_err(bp->dev,
-				   "not whole frame pointed by descriptor\n");
-			bp->dev->stats.rx_dropped++;
-			queue->stats.rx_dropped++;
-			break;
-		}
 		data = queue->rx_buff[entry];
 		if (unlikely(!data)) {
 			netdev_err(bp->dev,
@@ -1395,64 +1392,102 @@ static int gem_rx(struct macb_queue *queue, struct napi_struct *napi,
 			break;
 		}
 
-		skb = napi_build_skb(data, buffer_size);
-		if (unlikely(!skb)) {
-			netdev_err(bp->dev,
-				   "Unable to allocate sk_buff\n");
-			page_pool_put_full_page(queue->page_pool,
-						virt_to_head_page(data),
-						false);
-			break;
+		first_frame = ctrl & MACB_BIT(RX_SOF);
+		len = ctrl & bp->rx_frm_len_mask;
+
+		if (len) {
+			data_len = len;
+			if (!first_frame)
+				data_len -= queue->skb->len;
+		} else {
+			data_len = SKB_WITH_OVERHEAD(bp->rx_buffer_size) - bp->rx_offset;
 		}
 
-		/* Properly align Ethernet header.
-		 *
-		 * Hardware can add dummy bytes if asked using the RBOF
-		 * field inside the NCFGR register. That feature isn't
-		 * available if hardware is RSC capable.
-		 *
-		 * We cannot fallback to doing the 2-byte shift before
-		 * DMA mapping because the address field does not allow
-		 * setting the low 2/3 bits.
-		 * It is 3 bits if HW_DMA_CAP_PTP, else 2 bits.
-		 */
-		skb_reserve(skb, bp->rx_offset);
-		skb_mark_for_recycle(skb);
+		if (first_frame) {
+			queue->skb = napi_build_skb(data, bp->rx_buffer_size);
+			if (unlikely(!queue->skb)) {
+				netdev_err(bp->dev,
+					   "Unable to allocate sk_buff\n");
+				goto free_frags;
+			}
+
+			/* Properly align Ethernet header.
+			 *
+			 * Hardware can add dummy bytes if asked using the RBOF
+			 * field inside the NCFGR register. That feature isn't
+			 * available if hardware is RSC capable.
+			 *
+			 * We cannot fallback to doing the 2-byte shift before
+			 * DMA mapping because the address field does not allow
+			 * setting the low 2/3 bits.
+			 * It is 3 bits if HW_DMA_CAP_PTP, else 2 bits.
+			 */
+			skb_reserve(queue->skb, bp->rx_offset);
+			skb_mark_for_recycle(queue->skb);
+			skb_put(queue->skb, data_len);
+			queue->skb->protocol = eth_type_trans(queue->skb, bp->dev);
+
+			skb_checksum_none_assert(queue->skb);
+			if (bp->dev->features & NETIF_F_RXCSUM &&
+			    !(bp->dev->flags & IFF_PROMISC) &&
+			    GEM_BFEXT(RX_CSUM, ctrl) & GEM_RX_CSUM_CHECKED_MASK)
+				queue->skb->ip_summed = CHECKSUM_UNNECESSARY;
+		} else {
+			if (!queue->skb) {
+				netdev_err(bp->dev,
+					   "Received non-starting frame while expecting it\n");
+				goto free_frags;
+			}
+
+			struct skb_shared_info *shinfo = skb_shinfo(queue->skb);
+			struct page *page = virt_to_head_page(data);
+			int nr_frags = shinfo->nr_frags;
+
+			if (nr_frags >= ARRAY_SIZE(shinfo->frags))
+				goto free_frags;
+
+			skb_add_rx_frag(queue->skb, nr_frags, page,
+					data - page_address(page) + bp->rx_offset,
+					data_len, bp->rx_buffer_size);
+		}
 
 		/* now everything is ready for receiving packet */
 		queue->rx_buff[entry] = NULL;
-		len = ctrl & bp->rx_frm_len_mask;
 
-		netdev_vdbg(bp->dev, "gem_rx %u (len %u)\n", entry, len);
+		netdev_vdbg(bp->dev, "%s %u (len %u)\n", __func__, entry, data_len);
 
-		dma_sync_single_for_cpu(&bp->pdev->dev,
-					addr, len,
-					page_pool_get_dma_dir(queue->page_pool));
-		skb_put(skb, len);
-		skb->protocol = eth_type_trans(skb, bp->dev);
-		skb_checksum_none_assert(skb);
-		if (bp->dev->features & NETIF_F_RXCSUM &&
-		    !(bp->dev->flags & IFF_PROMISC) &&
-		    GEM_BFEXT(RX_CSUM, ctrl) & GEM_RX_CSUM_CHECKED_MASK)
-			skb->ip_summed = CHECKSUM_UNNECESSARY;
+		if (ctrl & MACB_BIT(RX_EOF)) {
+			bp->dev->stats.rx_packets++;
+			queue->stats.rx_packets++;
+			bp->dev->stats.rx_bytes += queue->skb->len;
+			queue->stats.rx_bytes += queue->skb->len;
 
-		bp->dev->stats.rx_packets++;
-		queue->stats.rx_packets++;
-		bp->dev->stats.rx_bytes += skb->len;
-		queue->stats.rx_bytes += skb->len;
-
-		gem_ptp_do_rxstamp(bp, skb, desc);
+			gem_ptp_do_rxstamp(bp, queue->skb, desc);
 
 #if defined(DEBUG) && defined(VERBOSE_DEBUG)
-		netdev_vdbg(bp->dev, "received skb of length %u, csum: %08x\n",
-			    skb->len, skb->csum);
-		print_hex_dump(KERN_DEBUG, " mac: ", DUMP_PREFIX_ADDRESS, 16, 1,
-			       skb_mac_header(skb), 16, true);
-		print_hex_dump(KERN_DEBUG, "data: ", DUMP_PREFIX_ADDRESS, 16, 1,
-			       skb->data, 32, true);
+			netdev_vdbg(bp->dev, "received skb of length %u, csum: %08x\n",
+				    queue->skb->len, queue->skb->csum);
+			print_hex_dump(KERN_DEBUG, " mac: ", DUMP_PREFIX_ADDRESS, 16, 1,
+				       skb_mac_header(queue->skb), 16, true);
+			print_hex_dump(KERN_DEBUG, "data: ", DUMP_PREFIX_ADDRESS, 16, 1,
+				       queue->skb->data, 32, true);
 #endif
 
-		napi_gro_receive(napi, skb);
+			napi_gro_receive(napi, queue->skb);
+			queue->skb = NULL;
+		}
+
+		continue;
+
+free_frags:
+		if (queue->skb) {
+			dev_kfree_skb(queue->skb);
+			queue->skb = NULL;
+		} else {
+			page_pool_put_full_page(queue->page_pool,
+						virt_to_head_page(data),
+						false);
+		}
 	}
 
 	gem_rx_refill(queue, true);
@@ -2394,7 +2429,10 @@ static void macb_init_rx_buffer_size(struct macb *bp, size_t size)
 	if (!macb_is_gem(bp)) {
 		bp->rx_buffer_size = MACB_RX_BUFFER_SIZE;
 	} else {
-		bp->rx_buffer_size = size;
+		bp->rx_buffer_size = size + SKB_DATA_ALIGN(sizeof(struct skb_shared_info))
+			+ MACB_PP_HEADROOM;
+		if (bp->rx_buffer_size > PAGE_SIZE)
+			bp->rx_buffer_size = PAGE_SIZE;
 
 		if (bp->rx_buffer_size % RX_BUFFER_MULTIPLE) {
 			netdev_dbg(bp->dev,
@@ -2589,18 +2627,15 @@ out_err:
 
 static void gem_create_page_pool(struct macb_queue *queue)
 {
-	unsigned int num_pages = DIV_ROUND_UP(queue->bp->rx_buffer_size, PAGE_SIZE);
-	struct macb *bp = queue->bp;
 	struct page_pool_params pp_params = {
-		.order = order_base_2(num_pages),
+		.order = 0,
 		.flags = PP_FLAG_DMA_MAP | PP_FLAG_DMA_SYNC_DEV,
 		.pool_size = queue->bp->rx_ring_size,
 		.nid = NUMA_NO_NODE,
 		.dma_dir = DMA_FROM_DEVICE,
 		.dev = &queue->bp->pdev->dev,
 		.napi = &queue->napi_rx,
-		.offset = bp->rx_offset,
-		.max_len = MACB_PP_MAX_BUF_SIZE(num_pages),
+		.max_len = PAGE_SIZE,
 	};
 	struct page_pool *pool;
 
@@ -2784,8 +2819,9 @@ static void macb_configure_dma(struct macb *bp)
 	unsigned int q;
 	u32 dmacfg;
 
-	buffer_size = bp->rx_buffer_size / RX_BUFFER_MULTIPLE;
 	if (macb_is_gem(bp)) {
+		buffer_size = SKB_WITH_OVERHEAD(bp->rx_buffer_size) - bp->rx_offset;
+		buffer_size /= RX_BUFFER_MULTIPLE;
 		dmacfg = gem_readl(bp, DMACFG) & ~GEM_BF(RXBS, -1L);
 		for (q = 0, queue = bp->queues; q < bp->num_queues; ++q, ++queue) {
 			if (q)
@@ -2816,6 +2852,8 @@ static void macb_configure_dma(struct macb *bp)
 		netdev_dbg(bp->dev, "Cadence configure DMA with 0x%08x\n",
 			   dmacfg);
 		gem_writel(bp, DMACFG, dmacfg);
+	} else {
+		buffer_size = bp->rx_buffer_size / RX_BUFFER_MULTIPLE;
 	}
 }
 
