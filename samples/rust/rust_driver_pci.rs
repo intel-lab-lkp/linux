@@ -60,6 +60,7 @@ impl SampleDriver {
     }
 }
 
+#[vtable]
 impl pci::Driver for SampleDriver {
     type IdInfo = TestIndex;
 
