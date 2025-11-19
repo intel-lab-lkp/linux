@@ -452,6 +452,7 @@ bool intel_display_driver_check_access(struct intel_display *display)
 /* part #2: call after irq install, but before gem init */
 int intel_display_driver_probe_nogem(struct intel_display *display)
 {
+	u8 pipe_mask = U8_MAX;
 	enum pipe pipe;
 	int ret;
 
@@ -470,7 +471,30 @@ int intel_display_driver_probe_nogem(struct intel_display *display)
 		    INTEL_NUM_PIPES(display),
 		    INTEL_NUM_PIPES(display) > 1 ? "s" : "");
 
-	for_each_pipe(display, pipe) {
+	/*
+	 * Expose the pipes in order A, C, B, D on discrete platforms to trick
+	 * user space into using pipes that are more likely to be available for
+	 * both a) user space if pipe B has been reserved for the joiner, and b)
+	 * the joiner if pipe A doesn't need the joiner.
+	 *
+	 * Fall back to normal initialization for the remaining pipes, if any.
+	 */
+	if (HAS_BIGJOINER(display) && display->platform.dgfx) {
+		enum pipe pipe_order[] = { PIPE_A, PIPE_C, PIPE_B, PIPE_D };
+		int i;
+
+		for (i = 0; i < ARRAY_SIZE(pipe_order); i++) {
+			pipe = pipe_order[i];
+
+			ret = intel_crtc_init(display, pipe);
+			if (ret)
+				goto err_mode_config;
+
+			pipe_mask &= ~BIT(pipe);
+		}
+	}
+
+	for_each_pipe_masked(display, pipe, pipe_mask) {
 		ret = intel_crtc_init(display, pipe);
 		if (ret)
 			goto err_mode_config;
