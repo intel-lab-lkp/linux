@@ -14,6 +14,8 @@
  *    http://www.glyn.com/Products/Displays
  */
 
+#define DEBUG
+
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
@@ -964,6 +966,9 @@ static int edt_ft5x06_ts_identify(struct i2c_client *client,
 			snprintf(model_name, EDT_NAME_LEN,
 				 "EVERVISION-FT5726NEi");
 			break;
+		case 0x02:   /* FT 8506 */
+			snprintf(model_name, EDT_NAME_LEN, "Focaltec FT8006P");
+			break;
 		default:
 			snprintf(model_name, EDT_NAME_LEN,
 				 "generic ft5x06 (%02x)",
@@ -1136,6 +1141,8 @@ static void edt_ft5x06_disable_regulators(void *arg)
 	regulator_disable(data->iovcc);
 }
 
+bool mantix_panel_prepared(void);
+
 static int edt_ft5x06_ts_probe(struct i2c_client *client)
 {
 	const struct i2c_device_id *id = i2c_client_get_device_id(client);
@@ -1146,6 +1153,18 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client)
 	unsigned long irq_flags;
 	int error;
 	u32 report_rate;
+
+	if (device_property_read_bool(&client->dev,
+				      "purism,panel-librem5-workaround")) {
+		/*
+		 * Since the Librem 5's panel handles the reset via gpio we
+		 * need to wait until the panel is up.
+		 */
+		if (!mantix_panel_prepared()) {
+			dev_dbg(&client->dev, "Panel not yet ready\n");
+			return -EPROBE_DEFER;
+		}
+	}
 
 	dev_dbg(&client->dev, "probing for EDT FT5x06 I2C\n");
 
