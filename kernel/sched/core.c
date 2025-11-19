@@ -1336,6 +1336,10 @@ bool sched_can_stop_tick(struct rq *rq)
 {
 	int fifo_nr_running;
 
+	/* Keep the tick running until both RT and CFS are pushed out*/
+	if (cpu_paravirt(rq->cpu) && (rq->rt.rt_nr_running || rq->cfs.h_nr_queued))
+		return false;
+
 	/* Deadline tasks, even if single, need the tick */
 	if (rq->dl.dl_nr_running)
 		return false;
