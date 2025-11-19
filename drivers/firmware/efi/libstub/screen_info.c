@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
 #include <linux/efi.h>
-#include <linux/screen_info.h>
 
 #include <asm/efi.h>
 
@@ -21,9 +20,9 @@
 
 static efi_guid_t screen_info_guid = LINUX_EFI_SCREEN_INFO_TABLE_GUID;
 
-struct screen_info *__alloc_screen_info(void)
+struct efi_screen_info *__alloc_screen_info(void)
 {
-	struct screen_info *si;
+	struct efi_screen_info *si;
 	efi_status_t status;
 
 	status = efi_bs_call(allocate_pool, EFI_ACPI_RECLAIM_MEMORY,
@@ -43,7 +42,7 @@ struct screen_info *__alloc_screen_info(void)
 	return NULL;
 }
 
-void free_screen_info(struct screen_info *si)
+void free_screen_info(struct efi_screen_info *si)
 {
 	if (!si)
 		return;

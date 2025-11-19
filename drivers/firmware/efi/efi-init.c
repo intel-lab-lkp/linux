@@ -19,7 +19,6 @@
 #include <linux/of_address.h>
 #include <linux/of_fdt.h>
 #include <linux/platform_device.h>
-#include <linux/screen_info.h>
 
 #include <asm/efi.h>
 
@@ -61,13 +60,15 @@ extern __weak const efi_config_table_type_t efi_arch_tables[];
  * everything else can get it from here.
  */
 #if !defined(CONFIG_X86) && (defined(CONFIG_SYSFB) || defined(CONFIG_EFI_EARLYCON))
-struct screen_info screen_info __section(".data");
+struct efi_screen_info efi_screen_info __section(".data");
+
+extern struct screen_info screen_info __alias(efi_screen_info);
 EXPORT_SYMBOL_GPL(screen_info);
 #endif
 
 static void __init init_screen_info(void)
 {
-	struct screen_info *si;
+	struct efi_screen_info *si;
 
 	if (screen_info_table != EFI_INVALID_TABLE_ADDR) {
 		si = early_memremap(screen_info_table, sizeof(*si));
@@ -75,8 +76,8 @@ static void __init init_screen_info(void)
 			pr_err("Could not map screen_info config table\n");
 			return;
 		}
-		screen_info = *si;
-		memset(si, 0, sizeof(*si));
+		efi_screen_info = *si;
+		si->screen_info = (struct screen_info){};
 		early_memunmap(si, sizeof(*si));
 
 		if (memblock_is_map_memory(screen_info.lfb_base))

@@ -27,7 +27,7 @@
 
 #include <asm/page.h>
 
-struct screen_info;
+#include <linux/screen_info.h>
 
 #define EFI_SUCCESS		0
 #define EFI_LOAD_ERROR		( 1 | (1UL << (BITS_PER_LONG-1)))
@@ -1360,5 +1360,9 @@ extern struct blocking_notifier_head efivar_ops_nh;
 
 void efivars_generic_ops_register(void);
 void efivars_generic_ops_unregister(void);
+
+struct efi_screen_info {
+	struct screen_info	screen_info;
+};
 
 #endif /* _LINUX_EFI_H */

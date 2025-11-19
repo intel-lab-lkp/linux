@@ -26,7 +26,7 @@ void __weak efi_cache_sync_image(unsigned long image_base,
 	// executable code loaded into memory to be safe for execution.
 }
 
-struct screen_info *alloc_screen_info(void)
+struct efi_screen_info *alloc_screen_info(void)
 {
 	return __alloc_screen_info();
 }

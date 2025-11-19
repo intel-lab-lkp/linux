@@ -9,7 +9,6 @@
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/serial_core.h>
-#include <linux/screen_info.h>
 #include <linux/string.h>
 
 #include <asm/early_ioremap.h>

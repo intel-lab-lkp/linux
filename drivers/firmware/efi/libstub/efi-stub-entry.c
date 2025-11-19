@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
 #include <linux/efi.h>
-#include <linux/screen_info.h>
 
 #include <asm/efi.h>
 
@@ -9,7 +8,7 @@
 
 static unsigned long screen_info_offset;
 
-struct screen_info *alloc_screen_info(void)
+struct efi_screen_info *alloc_screen_info(void)
 {
 	if (IS_ENABLED(CONFIG_ARM))
 		return __alloc_screen_info();

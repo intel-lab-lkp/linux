@@ -1175,9 +1175,9 @@ efi_enable_reset_attack_mitigation(void) { }
 
 void efi_retrieve_eventlog(void);
 
-struct screen_info *alloc_screen_info(void);
-struct screen_info *__alloc_screen_info(void);
-void free_screen_info(struct screen_info *si);
+struct efi_screen_info *alloc_screen_info(void);
+struct efi_screen_info *__alloc_screen_info(void);
+void free_screen_info(struct efi_screen_info *si);
 
 void efi_cache_sync_image(unsigned long image_base,
 			  unsigned long alloc_size);

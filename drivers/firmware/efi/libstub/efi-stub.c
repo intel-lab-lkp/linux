@@ -10,7 +10,6 @@
  */
 
 #include <linux/efi.h>
-#include <linux/screen_info.h>
 #include <asm/efi.h>
 
 #include "efistub.h"
@@ -48,13 +47,13 @@
 static u64 virtmap_base = EFI_RT_VIRTUAL_BASE;
 static bool flat_va_mapping = (EFI_RT_VIRTUAL_OFFSET != 0);
 
-void __weak free_screen_info(struct screen_info *si)
+void __weak free_screen_info(struct efi_screen_info *si)
 {
 }
 
-static struct screen_info *setup_graphics(void)
+static struct efi_screen_info *setup_graphics(void)
 {
-	struct screen_info *si, tmp = {};
+	struct efi_screen_info *si, tmp = {};
 
 	if (efi_setup_graphics(&tmp, NULL) != EFI_SUCCESS)
 		return NULL;
@@ -145,7 +144,7 @@ efi_status_t efi_stub_common(efi_handle_t handle,
 			     unsigned long image_addr,
 			     char *cmdline_ptr)
 {
-	struct screen_info *si;
+	struct efi_screen_info *si;
 	efi_status_t status;
 
 	status = check_platform_features();

@@ -22,7 +22,6 @@
 #include <linux/of_address.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
-#include <linux/screen_info.h>
 #include <linux/sysfb.h>
 #include <video/vga.h>
 
