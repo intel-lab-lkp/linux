@@ -1384,6 +1384,8 @@ static int test_memcg_sock(const char *root)
 	int bind_retries = 5, ret = KSFT_FAIL, pid, err;
 	unsigned short port;
 	char *memcg;
+	long sock_post = -1;
+	int i, retries = 30;
 
 	memcg = cg_name(root, "memcg_test");
 	if (!memcg)
@@ -1432,7 +1434,27 @@ static int test_memcg_sock(const char *root)
 	if (cg_read_long(memcg, "memory.current") < 0)
 		goto cleanup;
 
-	if (cg_read_key_long(memcg, "memory.stat", "sock "))
+	/*
+	 * memory.stat is updated asynchronously via the memcg rstat
+	 * flushing worker, so the "sock " counter may stay non-zero
+	 * for a short period of time after the TCP connection is
+	 * closed and all socket memory has been uncharged.
+	 *
+	 * Poll memory.stat for up to 3 seconds and require that the
+	 * "sock " counter eventually drops to zero.
+	 */
+	for (i = 0; i < retries; i++) {
+		sock_post = cg_read_key_long(memcg, "memory.stat", "sock ");
+		if (sock_post < 0)
+			goto cleanup;
+
+		if (!sock_post)
+			break;
+
+		usleep(100 * 1000); /* 100ms */
+	}
+
+	if (sock_post)
 		goto cleanup;
 
 	ret = KSFT_PASS;
