@@ -232,8 +232,7 @@ int unwind_deferred_request(struct unwind_work *work, u64 *cookie)
 	struct unwind_task_info *info = &current->unwind_info;
 	int twa_mode = TWA_RESUME;
 	unsigned long old, bits;
-	unsigned long bit;
-	int ret;
+	int bit, ret;
 
 	*cookie = 0;
 
