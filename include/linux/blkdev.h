@@ -449,6 +449,8 @@ int blkdev_zone_mgmt(struct block_device *bdev, enum req_op op,
 		sector_t sectors, sector_t nr_sectors);
 int blk_revalidate_disk_zones(struct gendisk *disk);
 
+void wbt_disable_default(struct gendisk *disk);
+
 /*
  * Independent access ranges: struct blk_independent_access_range describes
  * a range of contiguous sectors that can be accessed using device command
