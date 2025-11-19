@@ -1188,8 +1188,11 @@ const struct venus_pm_ops *venus_pm_get(enum hfi_version version)
 	case HFI_VERSION_3XX:
 		return &pm_ops_v3;
 	case HFI_VERSION_4XX:
+		return &pm_ops_v4;
+#if (!IS_ENABLED(CONFIG_VIDEO_QCOM_IRIS))
 	case HFI_VERSION_6XX:
 		return &pm_ops_v4;
+#endif
 	}
 
 	return NULL;

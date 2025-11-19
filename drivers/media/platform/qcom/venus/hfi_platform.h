@@ -62,7 +62,9 @@ struct hfi_platform {
 };
 
 extern const struct hfi_platform hfi_plat_v4;
+#if (!IS_ENABLED(CONFIG_VIDEO_QCOM_IRIS))
 extern const struct hfi_platform hfi_plat_v6;
+#endif
 
 const struct hfi_platform *hfi_platform_get(enum hfi_version version);
 unsigned long hfi_platform_get_codec_vpp_freq(struct venus_core *core,

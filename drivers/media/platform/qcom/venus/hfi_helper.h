@@ -395,6 +395,7 @@
 #define HFI_BUFFER_OUTPUT2			0x3
 #define HFI_BUFFER_INTERNAL_PERSIST		0x4
 #define HFI_BUFFER_INTERNAL_PERSIST_1		0x5
+#if (!IS_ENABLED(CONFIG_VIDEO_QCOM_IRIS))
 #define HFI_BUFFER_INTERNAL_SCRATCH(ver)	\
 	(((ver) == HFI_VERSION_4XX ||		\
 	(ver) == HFI_VERSION_6XX) ? 0x6 : 0x1000001)
@@ -404,6 +405,14 @@
 #define HFI_BUFFER_INTERNAL_SCRATCH_2(ver)	\
 	(((ver) == HFI_VERSION_4XX ||		\
 	(ver) == HFI_VERSION_6XX) ? 0x8 : 0x1000006)
+#else
+#define HFI_BUFFER_INTERNAL_SCRATCH(ver)	\
+	((ver) == HFI_VERSION_4XX ? 0x6 : 0x1000001)
+#define HFI_BUFFER_INTERNAL_SCRATCH_1(ver)	\
+	((ver) == HFI_VERSION_4XX ? 0x7 : 0x1000005)
+#define HFI_BUFFER_INTERNAL_SCRATCH_2(ver)	\
+	((ver) == HFI_VERSION_4XX ? 0x8 : 0x1000006)
+#endif
 #define HFI_BUFFER_EXTRADATA_INPUT(ver)		\
 	(((ver) == HFI_VERSION_4XX) ? 0xc : 0x1000002)
 #define HFI_BUFFER_EXTRADATA_OUTPUT(ver)	\
@@ -560,7 +569,9 @@ enum hfi_version {
 	HFI_VERSION_1XX,
 	HFI_VERSION_3XX,
 	HFI_VERSION_4XX,
+#if (!IS_ENABLED(CONFIG_VIDEO_QCOM_IRIS))
 	HFI_VERSION_6XX,
+#endif
 };
 
 struct hfi_buffer_info {

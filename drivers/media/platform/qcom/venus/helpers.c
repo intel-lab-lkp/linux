@@ -329,6 +329,7 @@ static const unsigned int intbuf_types_4xx[] = {
 	HFI_BUFFER_INTERNAL_PERSIST_1,
 };
 
+#if (!IS_ENABLED(CONFIG_VIDEO_QCOM_IRIS))
 static const unsigned int intbuf_types_6xx[] = {
 	HFI_BUFFER_INTERNAL_SCRATCH(HFI_VERSION_6XX),
 	HFI_BUFFER_INTERNAL_SCRATCH_1(HFI_VERSION_6XX),
@@ -336,6 +337,7 @@ static const unsigned int intbuf_types_6xx[] = {
 	HFI_BUFFER_INTERNAL_PERSIST,
 	HFI_BUFFER_INTERNAL_PERSIST_1,
 };
+#endif
 
 int venus_helper_intbufs_alloc(struct venus_inst *inst)
 {
@@ -343,10 +345,13 @@ int venus_helper_intbufs_alloc(struct venus_inst *inst)
 	size_t arr_sz, i;
 	int ret;
 
+#if (!IS_ENABLED(CONFIG_VIDEO_QCOM_IRIS))
 	if (IS_V6(inst->core)) {
 		arr_sz = ARRAY_SIZE(intbuf_types_6xx);
 		intbuf = intbuf_types_6xx;
-	} else if (IS_V4(inst->core)) {
+	} else
+#endif
+	if (IS_V4(inst->core)) {
 		arr_sz = ARRAY_SIZE(intbuf_types_4xx);
 		intbuf = intbuf_types_4xx;
 	} else {
