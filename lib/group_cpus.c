@@ -142,15 +142,11 @@ static void alloc_nodes_groups(unsigned int numgrps,
 	}
 
 	for_each_node_mask(n, nodemsk) {
-		unsigned ncpus;
-
-		cpumask_and(nmsk, cpu_mask, node_to_cpumask[n]);
-		ncpus = cpumask_weight(nmsk);
-
-		if (!ncpus)
+		if (!cpumask_and(nmsk, cpu_mask, node_to_cpumask[n]))
 			continue;
-		remaining_ncpus += ncpus;
-		node_groups[n].ncpus = ncpus;
+
+		node_groups[n].ncpus = cpumask_weight(nmsk);
+		remaining_ncpus += node_groups[n].ncpus;
 	}
 
 	numgrps = min_t(unsigned, remaining_ncpus, numgrps);
@@ -294,11 +290,10 @@ static int __group_cpus_evenly(unsigned int startgrp, unsigned int numgrps,
 			continue;
 
 		/* Get the cpus on this node which are in the mask */
-		cpumask_and(nmsk, cpu_mask, node_to_cpumask[nv->id]);
-		ncpus = cpumask_weight(nmsk);
-		if (!ncpus)
+		if (!cpumask_and(nmsk, cpu_mask, node_to_cpumask[nv->id]))
 			continue;
 
+		ncpus = cpumask_weight(nmsk);
 		WARN_ON_ONCE(nv->ngroups > ncpus);
 
 		/* Account for rounding errors */
