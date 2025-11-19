@@ -1721,6 +1721,14 @@ gss_validate(struct rpc_task *task, struct xdr_stream *xdr)
 	if (maj_stat)
 		goto bad_mic;
 
+	/*
+	 * Normally we only recalculate the slack variables once after
+	 * creating a new gss_auth, but we should also do it if the incoming
+	 * verifier has a larger size than what was previously recorded.
+	 */
+	if (cred->cr_auth->au_verfsize < (XDR_QUADLEN(len) + 2))
+		__set_bit(RPCAUTH_AUTH_UPDATE_SLACK, &cred->cr_auth->au_flags);
+
 	/* We leave it to unwrap to calculate au_rslack. For now we just
 	 * calculate the length of the verifier: */
 	if (test_bit(RPCAUTH_AUTH_UPDATE_SLACK, &cred->cr_auth->au_flags))
