@@ -6,6 +6,7 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/cleanup.h>
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
 #include <linux/delay.h>
@@ -716,8 +717,8 @@ static int imx8mq_mipi_csi_async_register(struct csi_state *state)
 	struct v4l2_fwnode_endpoint vep = {
 		.bus_type = V4L2_MBUS_CSI2_DPHY,
 	};
+	struct fwnode_handle *ep __free(fwnode_handle) = NULL;
 	struct v4l2_async_connection *asd;
-	struct fwnode_handle *ep;
 	unsigned int i;
 	int ret;
 
@@ -730,14 +731,13 @@ static int imx8mq_mipi_csi_async_register(struct csi_state *state)
 
 	ret = v4l2_fwnode_endpoint_parse(ep, &vep);
 	if (ret)
-		goto err_parse;
+		return ret;
 
 	for (i = 0; i < vep.bus.mipi_csi2.num_data_lanes; ++i) {
 		if (vep.bus.mipi_csi2.data_lanes[i] != i + 1) {
 			dev_err(state->dev,
 				"data lanes reordering is not supported");
-			ret = -EINVAL;
-			goto err_parse;
+			return -EINVAL;
 		}
 	}
 
@@ -749,12 +749,8 @@ static int imx8mq_mipi_csi_async_register(struct csi_state *state)
 
 	asd = v4l2_async_nf_add_fwnode_remote(&state->notifier, ep,
 					      struct v4l2_async_connection);
-	if (IS_ERR(asd)) {
-		ret = PTR_ERR(asd);
-		goto err_parse;
-	}
-
-	fwnode_handle_put(ep);
+	if (IS_ERR(asd))
+		return PTR_ERR(asd);
 
 	state->notifier.ops = &imx8mq_mipi_csi_notify_ops;
 
@@ -763,11 +759,6 @@ static int imx8mq_mipi_csi_async_register(struct csi_state *state)
 		return ret;
 
 	return v4l2_async_register_subdev(&state->sd);
-
-err_parse:
-	fwnode_handle_put(ep);
-
-	return ret;
 }
 
 /* -----------------------------------------------------------------------------

@@ -12,6 +12,7 @@
  *
  */
 
+#include <linux/cleanup.h>
 #include <linux/clk.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
@@ -1349,7 +1350,7 @@ static int mipi_csis_async_register(struct mipi_csis_device *csis)
 		.bus_type = V4L2_MBUS_CSI2_DPHY,
 	};
 	struct v4l2_async_connection *asd;
-	struct fwnode_handle *ep;
+	struct fwnode_handle *ep __free(fwnode_handle) = NULL;
 	unsigned int i;
 	int ret;
 
@@ -1362,14 +1363,13 @@ static int mipi_csis_async_register(struct mipi_csis_device *csis)
 
 	ret = v4l2_fwnode_endpoint_parse(ep, &vep);
 	if (ret)
-		goto err_parse;
+		return ret;
 
 	for (i = 0; i < vep.bus.mipi_csi2.num_data_lanes; ++i) {
 		if (vep.bus.mipi_csi2.data_lanes[i] != i + 1) {
 			dev_err(csis->dev,
 				"data lanes reordering is not supported");
-			ret = -EINVAL;
-			goto err_parse;
+			return -EINVAL;
 		}
 	}
 
@@ -1381,12 +1381,8 @@ static int mipi_csis_async_register(struct mipi_csis_device *csis)
 
 	asd = v4l2_async_nf_add_fwnode_remote(&csis->notifier, ep,
 					      struct v4l2_async_connection);
-	if (IS_ERR(asd)) {
-		ret = PTR_ERR(asd);
-		goto err_parse;
-	}
-
-	fwnode_handle_put(ep);
+	if (IS_ERR(asd))
+		return PTR_ERR(asd);
 
 	csis->notifier.ops = &mipi_csis_notify_ops;
 
@@ -1395,11 +1391,6 @@ static int mipi_csis_async_register(struct mipi_csis_device *csis)
 		return ret;
 
 	return v4l2_async_register_subdev(&csis->sd);
-
-err_parse:
-	fwnode_handle_put(ep);
-
-	return ret;
 }
 
 /* -----------------------------------------------------------------------------
