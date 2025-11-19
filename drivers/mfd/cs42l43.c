@@ -14,6 +14,8 @@
 #include <linux/err.h>
 #include <linux/firmware.h>
 #include <linux/gpio/consumer.h>
+#include <linux/gpio/machine.h>
+#include <linux/gpio/property.h>
 #include <linux/jiffies.h>
 #include <linux/mfd/core.h>
 #include <linux/mfd/cs42l43.h>
@@ -512,9 +514,28 @@ static const char * const cs42l43_core_supplies[] = {
 
 static const char * const cs42l43_parent_supplies[] = { "vdd-amp" };
 
+static const struct software_node cs42l43_gpiochip_swnode = {
+	.name = "cs42l43-pinctrl",
+};
+
+static const struct property_entry cs42l43_cs_props[] = {
+	PROPERTY_ENTRY_GPIO("cs-gpios", &cs42l43_gpiochip_swnode, 0, GPIO_ACTIVE_LOW),
+	{ }
+};
+
+static const struct software_node cs42l43_spi_swnode = {
+	.properties = cs42l43_cs_props,
+};
+
 static const struct mfd_cell cs42l43_devs[] = {
-	{ .name = "cs42l43-pinctrl", },
-	{ .name = "cs42l43-spi", },
+	{
+		.name = "cs42l43-pinctrl",
+		.swnode = &cs42l43_gpiochip_swnode,
+	},
+	{
+		.name = "cs42l43-spi",
+		.swnode = &cs42l43_spi_swnode,
+	},
 	{
 		.name = "cs42l43-codec",
 		.parent_supplies = cs42l43_parent_supplies,
