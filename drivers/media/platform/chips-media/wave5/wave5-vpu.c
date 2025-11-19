@@ -339,6 +339,11 @@ err_v4l2_unregister:
 	v4l2_device_unregister(&dev->v4l2_dev);
 err_vdi_release:
 	wave5_vdi_release(&pdev->dev);
+
+	if (dev->irq < 0) {
+		kthread_destroy_worker(dev->worker);
+		hrtimer_cancel(&dev->hrtimer);
+	}
 err_clk_dis:
 	clk_bulk_disable_unprepare(dev->num_clks, dev->clks);
 err_reset_assert:
