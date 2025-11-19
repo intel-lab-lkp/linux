@@ -483,11 +483,11 @@ static int io_bundle_nbufs(struct io_async_msghdr *kmsg, int ret)
 	/* short transfer, count segments */
 	nbufs = 0;
 	do {
-		int this_len = min_t(int, iov[nbufs].iov_len, ret);
+		int this_len = min(iov[nbufs].iov_len, ret);
 
 		nbufs++;
 		ret -= this_len;
-	} while (ret);
+	} while (ret > 0);
 
 	return nbufs;
 }
@@ -853,7 +853,7 @@ static inline bool io_recv_finish(struct io_kiocb *req,
 		 * mshot as finished, and flag MSHOT_DONE as well to prevent
 		 * a potential bundle from being retried.
 		 */
-		sr->mshot_total_len -= min_t(int, sel->val, sr->mshot_total_len);
+		sr->mshot_total_len -= min(sel->val, sr->mshot_total_len);
 		if (!sr->mshot_total_len) {
 			sr->flags |= IORING_RECV_MSHOT_DONE;
 			mshot_finished = true;
