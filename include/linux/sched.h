@@ -549,6 +549,7 @@ struct sched_statistics {
 	u64				nr_failed_migrations_running;
 	u64				nr_failed_migrations_hot;
 	u64				nr_forced_migrations;
+	u64				nr_migrations_paravirt;
 
 	u64				nr_wakeups;
 	u64				nr_wakeups_sync;
@@ -557,6 +558,7 @@ struct sched_statistics {
 	u64				nr_wakeups_remote;
 	u64				nr_wakeups_affine;
 	u64				nr_wakeups_affine_attempts;
+	u64				nr_wakeups_paravirt;
 
 #ifdef CONFIG_SCHED_CORE
 	u64				core_forceidle_sum;
