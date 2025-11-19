@@ -1266,6 +1266,9 @@ static int xgbe_start(struct xgbe_prv_data *pdata)
 
 	clear_bit(XGBE_STOPPED, &pdata->dev_state);
 
+	/* Reset the phy settings */
+	xgbe_phy_reset(pdata);
+
 	return 0;
 
 err_irqs:
