@@ -138,6 +138,12 @@ struct nfs4_stid {
 #define SC_STATUS_ADMIN_REVOKED	BIT(2)
 #define SC_STATUS_FREEABLE	BIT(3)
 #define SC_STATUS_FREED		BIT(4)
+/*
+ * Ops other than CLOSE and OPEN_DOWNGRADE which use the "current stateid"
+ * must clear the seqid (aka si_generation). Following flag is never stored
+ * in states but is passed through to request the seq not be cleared.
+ */
+#define SC_STATUS_KEEP_SEQID	BIT(5)
 	unsigned short		sc_status;
 
 	struct list_head	sc_cp_list;
