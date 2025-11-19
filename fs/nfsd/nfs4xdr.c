@@ -1250,7 +1250,6 @@ nfsd4_decode_putfh(struct nfsd4_compoundargs *argp, union nfsd4_op_u *u)
 	if (!putfh->pf_fhval)
 		return nfserr_jukebox;
 
-	putfh->no_verify = false;
 	return nfs_ok;
 }
 
@@ -2047,6 +2046,7 @@ nfsd4_decode_copy(struct nfsd4_compoundargs *argp, union nfsd4_op_u *u)
 	if (status)
 		return status;
 
+	argp->is_inter_server_copy = true;
 	ns_dummy = kmalloc(sizeof(struct nl4_server), GFP_KERNEL);
 	if (ns_dummy == NULL)
 		return nfserr_jukebox;
