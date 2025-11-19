@@ -23,8 +23,8 @@ struct kernfs_open_node {
 	atomic_t		event;
 	wait_queue_head_t	poll;
 	struct list_head	files; /* goes through kernfs_open_file.list */
-	unsigned int		nr_mmapped;
-	unsigned int		nr_to_release;
+	atomic_t		nr_mmapped;
+	atomic_t		nr_to_release;
 };
 
 /*
@@ -503,7 +503,7 @@ static int kernfs_fop_mmap(struct file *file, struct vm_area_struct *vma)
 	rc = 0;
 	if (!of->mmapped) {
 		of->mmapped = true;
-		of_on(of)->nr_mmapped++;
+		atomic_inc(&of_on(of)->nr_mmapped);
 		of->vm_ops = vma->vm_ops;
 	}
 	vma->vm_ops = &kernfs_vm_ops;
@@ -553,7 +553,7 @@ static int kernfs_get_open_node(struct kernfs_node *kn,
 
 	list_add_tail(&of->list, &on->files);
 	if (kn->flags & KERNFS_HAS_RELEASE)
-		on->nr_to_release++;
+		atomic_inc(&on->nr_to_release);
 
 	mutex_unlock(mutex);
 	return 0;
@@ -592,10 +592,10 @@ static void kernfs_unlink_open_file(struct kernfs_node *kn,
 		if (kn->flags & KERNFS_HAS_RELEASE) {
 			WARN_ON_ONCE(of->released == open_failed);
 			if (open_failed)
-				on->nr_to_release--;
+				atomic_dec(&on->nr_to_release);
 		}
 		if (of->mmapped)
-			on->nr_mmapped--;
+			atomic_dec(&on->nr_mmapped);
 		list_del(&of->list);
 	}
 
@@ -763,7 +763,7 @@ static void kernfs_release_file(struct kernfs_node *kn,
 		 */
 		kn->attr.ops->release(of);
 		of->released = true;
-		of_on(of)->nr_to_release--;
+		atomic_dec(&of_on(of)->nr_to_release);
 	}
 }
 
@@ -802,7 +802,8 @@ bool kernfs_should_drain_open_files(struct kernfs_node *kn)
 
 	rcu_read_lock();
 	on = rcu_dereference(kn->attr.open);
-	ret = on && (on->nr_mmapped || on->nr_to_release);
+	ret = on && (atomic_read(&on->nr_mmapped) ||
+		     atomic_read(&on->nr_to_release));
 	rcu_read_unlock();
 
 	return ret;
@@ -827,14 +828,15 @@ void kernfs_drain_open_files(struct kernfs_node *kn)
 		if (of->mmapped) {
 			unmap_mapping_range(inode->i_mapping, 0, 0, 1);
 			of->mmapped = false;
-			on->nr_mmapped--;
+			atomic_dec(&on->nr_mmapped);
 		}
 
 		if (kn->flags & KERNFS_HAS_RELEASE)
 			kernfs_release_file(kn, of);
 	}
 
-	WARN_ON_ONCE(on->nr_mmapped || on->nr_to_release);
+	WARN_ON_ONCE(atomic_read(&on->nr_mmapped) ||
+		     atomic_read(&on->nr_to_release));
 	mutex_unlock(mutex);
 }
 
