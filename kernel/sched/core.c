@@ -5521,6 +5521,10 @@ void sched_tick(void)
 	unsigned long hw_pressure;
 	u64 resched_latency;
 
+	/* push the current task out if a paravirt CPU */
+	if (cpu_paravirt(cpu))
+		push_current_from_paravirt_cpu(rq);
+
 	if (housekeeping_cpu(cpu, HK_TYPE_KERNEL_NOISE))
 		arch_scale_freq_tick();
 
@@ -10869,4 +10873,83 @@ void sched_change_end(struct sched_change_ctx *ctx)
 #ifdef CONFIG_PARAVIRT
 struct cpumask __cpu_paravirt_mask __read_mostly;
 EXPORT_SYMBOL(__cpu_paravirt_mask);
+
+static DEFINE_PER_CPU(struct cpu_stop_work, pv_push_task_work);
+
+static int paravirt_push_cpu_stop(void *arg)
+{
+	struct task_struct *p = arg;
+	struct rq *rq = this_rq();
+	struct rq_flags rf;
+	int cpu;
+
+	raw_spin_lock_irq(&p->pi_lock);
+	rq_lock(rq, &rf);
+	rq->push_task_work_done = 0;
+
+	update_rq_clock(rq);
+
+	if (task_rq(p) == rq && task_on_rq_queued(p)) {
+		cpu = select_fallback_rq(rq->cpu, p);
+		rq = __migrate_task(rq, &rf, p, cpu);
+	}
+
+	rq_unlock(rq, &rf);
+	raw_spin_unlock_irq(&p->pi_lock);
+	put_task_struct(p);
+
+	return 0;
+}
+
+/* A CPU is marked as Paravirt when there is contention for underlying
+ * physical CPU and using this CPU will lead to hypervisor preemptions.
+ * It is better not to use this CPU.
+ *
+ * In case any task is scheduled on such CPU, move it out. In
+ * select_fallback_rq a non paravirt CPU will be chosen and henceforth
+ * task shouldn't come back to this CPU
+ */
+void push_current_from_paravirt_cpu(struct rq *rq)
+{
+	struct task_struct *push_task = rq->curr;
+	unsigned long flags;
+	struct rq_flags rf;
+
+	if (!cpu_paravirt(rq->cpu))
+		return;
+
+	/* Idle task can't be pused out */
+	if (rq->curr == rq->idle)
+		return;
+
+	/* Do for only SCHED_NORMAL AND RT for now */
+	if (push_task->sched_class != &fair_sched_class &&
+	    push_task->sched_class != &rt_sched_class)
+		return;
+
+	if (kthread_is_per_cpu(push_task) ||
+	    is_migration_disabled(push_task))
+		return;
+
+	/* Is it affine to only paravirt cpus? */
+	if (cpumask_subset(push_task->cpus_ptr, cpu_paravirt_mask))
+		return;
+
+	/* There is already a stopper thread for this. Dont race with it */
+	if (rq->push_task_work_done == 1)
+		return;
+
+	local_irq_save(flags);
+
+	get_task_struct(push_task);
+	schedstat_inc(push_task->stats.nr_migrations_paravirt);
+
+	rq_lock(rq, &rf);
+	rq->push_task_work_done = 1;
+	rq_unlock(rq, &rf);
+
+	stop_one_cpu_nowait(rq->cpu, paravirt_push_cpu_stop, push_task,
+			    this_cpu_ptr(&pv_push_task_work));
+	local_irq_restore(flags);
+}
 #endif

@@ -1214,6 +1214,9 @@ struct rq {
 	unsigned char		nohz_idle_balance;
 	unsigned char		idle_balance;
 
+#ifdef CONFIG_PARAVIRT
+	bool			push_task_work_done;
+#endif
 	unsigned long		misfit_task_load;
 
 	/* For active balancing */
@@ -4016,6 +4019,12 @@ extern bool dequeue_task(struct rq *rq, struct task_struct *p, int flags);
 
 extern struct balance_callback *splice_balance_callbacks(struct rq *rq);
 extern void balance_callbacks(struct rq *rq, struct balance_callback *head);
+
+#ifdef CONFIG_PARAVIRT
+void push_current_from_paravirt_cpu(struct rq *rq);
+#else
+static inline void push_current_from_paravirt_cpu(struct rq *rq) { }
+#endif
 
 /*
  * The 'sched_change' pattern is the safe, easy and slow way of changing a
