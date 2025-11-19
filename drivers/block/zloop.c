@@ -620,6 +620,8 @@ static blk_status_t zloop_queue_rq(struct blk_mq_hw_ctx *hctx,
 
 	blk_mq_start_request(rq);
 
+	rq->cmd_flags &= ~REQ_NOWAIT;
+
 	INIT_WORK(&cmd->work, zloop_cmd_workfn);
 	queue_work(zlo->workqueue, &cmd->work);
 
