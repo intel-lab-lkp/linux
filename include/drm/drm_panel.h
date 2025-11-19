@@ -378,4 +378,6 @@ static inline int drm_panel_of_backlight(struct drm_panel *panel)
 }
 #endif
 
+bool mantix_panel_prepared(void);
+
 #endif

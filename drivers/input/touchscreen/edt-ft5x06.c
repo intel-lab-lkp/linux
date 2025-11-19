@@ -34,6 +34,9 @@
 
 #include <linux/unaligned.h>
 
+/* bool mantix_panel_prepared(void); */
+#include <drm/drm_panel.h>
+
 #define WORK_REGISTER_THRESHOLD		0x00
 #define WORK_REGISTER_REPORT_RATE	0x08
 #define WORK_REGISTER_GAIN		0x30
