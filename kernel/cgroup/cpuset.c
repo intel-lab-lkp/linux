@@ -2456,34 +2456,17 @@ static int cpus_allowed_validate_change(struct cpuset *cs, struct cpuset *trialc
 					struct tmpmasks *tmp)
 {
 	int retval;
-	struct cpuset *parent = parent_cs(cs);
 
 	retval = validate_change(cs, trialcs);
 
 	if ((retval == -EINVAL) && cpuset_v2()) {
-		struct cgroup_subsys_state *css;
-		struct cpuset *cp;
-
 		/*
 		 * The -EINVAL error code indicates that partition sibling
 		 * CPU exclusivity rule has been violated. We still allow
 		 * the cpumask change to proceed while invalidating the
-		 * partition. However, any conflicting sibling partitions
-		 * have to be marked as invalid too.
+		 * partition.
 		 */
 		trialcs->prs_err = PERR_NOTEXCL;
-		rcu_read_lock();
-		cpuset_for_each_child(cp, css, parent) {
-			struct cpumask *xcpus = user_xcpus(trialcs);
-
-			if (is_partition_valid(cp) &&
-			    cpumask_intersects(xcpus, cp->effective_xcpus)) {
-				rcu_read_unlock();
-				update_parent_effective_cpumask(cp, partcmd_invalidate, NULL, tmp);
-				rcu_read_lock();
-			}
-		}
-		rcu_read_unlock();
 		retval = 0;
 	}
 	return retval;
