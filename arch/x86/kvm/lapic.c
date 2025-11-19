@@ -1894,7 +1894,7 @@ static inline void __wait_lapic_expire(struct kvm_vcpu *vcpu, u64 guest_cycles)
 	} else {
 		u64 delay_ns = guest_cycles * 1000000ULL;
 		do_div(delay_ns, vcpu->arch.virtual_tsc_khz);
-		ndelay(min_t(u32, delay_ns, timer_advance_ns));
+		ndelay(min(delay_ns, timer_advance_ns));
 	}
 }
 

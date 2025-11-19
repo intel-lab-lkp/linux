@@ -5768,7 +5768,7 @@ static void kvm_init_shadow_mmu(struct kvm_vcpu *vcpu,
 	root_role = cpu_role.base;
 
 	/* KVM uses PAE paging whenever the guest isn't using 64-bit paging. */
-	root_role.level = max_t(u32, root_role.level, PT32E_ROOT_LEVEL);
+	root_role.level = max(root_role.level + 0, PT32E_ROOT_LEVEL);
 
 	/*
 	 * KVM forces EFER.NX=1 when TDP is disabled, reflect it in the MMU role.

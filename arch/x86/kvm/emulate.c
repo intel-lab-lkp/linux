@@ -861,8 +861,7 @@ static int __do_insn_fetch_bytes(struct x86_emulate_ctxt *ctxt, int op_size)
 	if (unlikely(rc != X86EMUL_CONTINUE))
 		return rc;
 
-	size = min_t(unsigned, 15UL ^ cur_size, max_size);
-	size = min_t(unsigned, size, PAGE_SIZE - offset_in_page(linear));
+	size = min3(15U ^ cur_size, max_size, PAGE_SIZE - offset_in_page(linear));
 
 	/*
 	 * One instruction can only straddle two pages,
