@@ -6249,7 +6249,7 @@ convert_color_depth_from_display_info(const struct drm_connector *connector,
 		 * or if this was called outside of atomic check, so it
 		 * can't be used directly.
 		 */
-		bpc = min_t(u8, bpc, requested_bpc);
+		bpc = umin(bpc, requested_bpc);
 
 		/* Round down to the nearest even number. */
 		bpc = bpc - (bpc & 1);

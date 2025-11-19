@@ -211,8 +211,8 @@ int amdgpu_doorbell_init(struct amdgpu_device *adev)
 	adev->doorbell.size = pci_resource_len(adev->pdev, 2);
 
 	adev->doorbell.num_kernel_doorbells =
-		min_t(u32, adev->doorbell.size / sizeof(u32),
-		      adev->doorbell_index.max_assignment + 1);
+		min(adev->doorbell.size / sizeof(u32),
+		    adev->doorbell_index.max_assignment + 1);
 	if (adev->doorbell.num_kernel_doorbells == 0)
 		return -EINVAL;
 
