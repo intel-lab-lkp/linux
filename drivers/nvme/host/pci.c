@@ -1208,9 +1208,6 @@ static void nvme_submit_cmds(struct nvme_queue *nvmeq, struct rq_list *rqlist)
 {
 	struct request *req;
 
-	if (rq_list_empty(rqlist))
-		return;
-
 	spin_lock(&nvmeq->sq_lock);
 	while ((req = rq_list_pop(rqlist))) {
 		struct nvme_iod *iod = blk_mq_rq_to_pdu(req);
@@ -1239,11 +1236,12 @@ static void nvme_queue_rqs(struct rq_list *rqlist)
 {
 	struct rq_list submit_list = { };
 	struct rq_list requeue_list = { };
-	struct nvme_queue *nvmeq = NULL;
+	struct nvme_queue *nvmeq;
 	struct request *req;
 
 	while ((req = rq_list_pop(rqlist))) {
-		if (nvmeq && nvmeq != req->mq_hctx->driver_data)
+		if (!rq_list_empty(&submit_list) &&
+		    nvmeq != req->mq_hctx->driver_data)
 			nvme_submit_cmds(nvmeq, &submit_list);
 		nvmeq = req->mq_hctx->driver_data;
 
@@ -1253,7 +1251,7 @@ static void nvme_queue_rqs(struct rq_list *rqlist)
 			rq_list_add_tail(&requeue_list, req);
 	}
 
-	if (nvmeq)
+	if (!rq_list_empty(&submit_list))
 		nvme_submit_cmds(nvmeq, &submit_list);
 	*rqlist = requeue_list;
 }
