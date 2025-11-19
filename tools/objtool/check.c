@@ -4980,8 +4980,6 @@ int check(struct objtool_file *file)
 			goto out;
 	}
 
-	free_insns(file);
-
 	if (opts.stats) {
 		printf("nr_insns_visited: %ld\n", nr_insns_visited);
 		printf("nr_cfi: %ld\n", nr_cfi);
@@ -4990,8 +4988,10 @@ int check(struct objtool_file *file)
 	}
 
 out:
-	if (!ret && !warnings)
+	if (!ret && !warnings) {
+		free_insns(file);
 		return 0;
+	}
 
 	if (opts.werror && warnings)
 		ret = 1;
@@ -5000,9 +5000,13 @@ out:
 		if (opts.werror && warnings)
 			WARN("%d warning(s) upgraded to errors", warnings);
 		disas_ctx = disas_context_create(file);
-		disas_warned_funcs(disas_ctx);
-		disas_context_destroy(disas_ctx);
+		if (disas_ctx) {
+			disas_warned_funcs(disas_ctx);
+			disas_context_destroy(disas_ctx);
+		}
 	}
+
+	free_insns(file);
 
 	if (opts.backup && make_backup())
 		return 1;
