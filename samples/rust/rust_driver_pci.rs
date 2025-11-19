@@ -4,7 +4,14 @@
 //!
 //! To make this driver probe, QEMU must be run with `-device pci-testdev`.
 
-use kernel::{c_str, device::Core, devres::Devres, pci, prelude::*, sync::aref::ARef};
+use kernel::{
+    c_str,
+    device::Core,
+    devres::Devres,
+    pci,
+    prelude::*,
+    sync::aref::ARef, //
+};
 
 struct Regs;
 
