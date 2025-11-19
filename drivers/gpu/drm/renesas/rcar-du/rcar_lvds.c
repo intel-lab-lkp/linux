@@ -740,7 +740,7 @@ static int rcar_lvds_parse_dt_companion(struct rcar_lvds *lvds)
 		goto done;
 	}
 
-	lvds->companion = of_drm_find_bridge(companion);
+	lvds->companion = devm_drm_of_find_bridge(dev, companion);
 	if (!lvds->companion) {
 		ret = -EPROBE_DEFER;
 		goto done;
