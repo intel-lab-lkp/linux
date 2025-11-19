@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: GPL-2.0
+
+config MEMINSPECT
+	bool "Allow the kernel to register memory regions for inspection purpose"
+	help
+	  Inspection mechanism allows registration of a specific memory
+	  area(or object) for later inspection purpose.
+	  Ranges are being added into an inspection table, which can be
+	  requested and analyzed by specific drivers.
+	  Drivers would interface any hardware mechanism that will allow
+	  inspection of the data, including but not limited to: dumping
+	  for debugging, creating a coredump, analysis, or statistical
+	  information.
+	  Inspection table is created ahead of time such that it can be later
+	  used regardless of the state of the kernel (running, frozen, crashed,
+	  or any particular state).
+
+	  Note that modules using this feature must be rebuilt if option
+	  changes.
+
