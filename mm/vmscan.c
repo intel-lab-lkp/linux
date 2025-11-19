@@ -4299,6 +4299,66 @@ enum {
 	MEMCG_LRU_YOUNG,
 };
 
+static void memcg_lru_add_head_locked(struct pglist_data *pgdat,
+				      struct lruvec *lruvec, int gen, int bin)
+{
+	struct lru_gen_memcg *memcg_lru = &pgdat->memcg_lru;
+	struct hlist_nulls_head *head = &memcg_lru->fifo[gen][bin];
+	struct hlist_nulls_node *node = &lruvec->lrugen.list;
+	bool empty = !memcg_lru->tails[gen][bin];
+
+	hlist_nulls_add_head_rcu(node, head);
+	lruvec->lrugen.bin = bin;
+
+	if (empty)
+		memcg_lru->tails[gen][bin] = node;
+}
+
+static void memcg_lru_add_tail_locked(struct pglist_data *pgdat,
+				      struct lruvec *lruvec, int gen, int bin)
+{
+	struct lru_gen_memcg *memcg_lru = &pgdat->memcg_lru;
+	struct hlist_nulls_head *head = &memcg_lru->fifo[gen][bin];
+	struct hlist_nulls_node *node = &lruvec->lrugen.list;
+	struct hlist_nulls_node *tail = memcg_lru->tails[gen][bin];
+
+	if (tail) {
+		WRITE_ONCE(node->next, tail->next);
+		WRITE_ONCE(node->pprev, &tail->next);
+		rcu_assign_pointer(hlist_nulls_next_rcu(tail), node);
+	} else {
+		hlist_nulls_add_head_rcu(node, head);
+	}
+
+	memcg_lru->tails[gen][bin] = node;
+	lruvec->lrugen.bin = bin;
+}
+
+static void memcg_lru_del_locked(struct pglist_data *pgdat, struct lruvec *lruvec,
+				 bool reinit)
+{
+	int gen = lruvec->lrugen.gen;
+	int bin = lruvec->lrugen.bin;
+	struct lru_gen_memcg *memcg_lru = &pgdat->memcg_lru;
+	struct hlist_nulls_head *head = &memcg_lru->fifo[gen][bin];
+	struct hlist_nulls_node *node = &lruvec->lrugen.list;
+	struct hlist_nulls_node *prev = NULL;
+
+	if (hlist_nulls_unhashed(node))
+		return;
+
+	if (memcg_lru->tails[gen][bin] == node) {
+		if (node->pprev != &head->first)
+			prev = container_of(node->pprev, struct hlist_nulls_node, next);
+		memcg_lru->tails[gen][bin] = prev;
+	}
+
+	if (reinit)
+		hlist_nulls_del_init_rcu(node);
+	else
+		hlist_nulls_del_rcu(node);
+}
+
 static void lru_gen_rotate_memcg(struct lruvec *lruvec, int op)
 {
 	int seg;
@@ -4326,15 +4386,15 @@ static void lru_gen_rotate_memcg(struct lruvec *lruvec, int op)
 	else
 		VM_WARN_ON_ONCE(true);
 
+	memcg_lru_del_locked(pgdat, lruvec, false);
+
 	WRITE_ONCE(lruvec->lrugen.seg, seg);
 	WRITE_ONCE(lruvec->lrugen.gen, new);
 
-	hlist_nulls_del_rcu(&lruvec->lrugen.list);
-
 	if (op == MEMCG_LRU_HEAD || op == MEMCG_LRU_OLD)
-		hlist_nulls_add_head_rcu(&lruvec->lrugen.list, &pgdat->memcg_lru.fifo[new][bin]);
+		memcg_lru_add_head_locked(pgdat, lruvec, new, bin);
 	else
-		hlist_nulls_add_tail_rcu(&lruvec->lrugen.list, &pgdat->memcg_lru.fifo[new][bin]);
+		memcg_lru_add_tail_locked(pgdat, lruvec, new, bin);
 
 	pgdat->memcg_lru.nr_memcgs[old]--;
 	pgdat->memcg_lru.nr_memcgs[new]++;
@@ -4365,7 +4425,7 @@ void lru_gen_online_memcg(struct mem_cgroup *memcg)
 
 		lruvec->lrugen.gen = gen;
 
-		hlist_nulls_add_tail_rcu(&lruvec->lrugen.list, &pgdat->memcg_lru.fifo[gen][bin]);
+		memcg_lru_add_tail_locked(pgdat, lruvec, gen, bin);
 		pgdat->memcg_lru.nr_memcgs[gen]++;
 
 		spin_unlock_irq(&pgdat->memcg_lru.lock);
@@ -4399,7 +4459,7 @@ void lru_gen_release_memcg(struct mem_cgroup *memcg)
 
 		gen = lruvec->lrugen.gen;
 
-		hlist_nulls_del_init_rcu(&lruvec->lrugen.list);
+		memcg_lru_del_locked(pgdat, lruvec, true);
 		pgdat->memcg_lru.nr_memcgs[gen]--;
 
 		if (!pgdat->memcg_lru.nr_memcgs[gen] && gen == get_memcg_gen(pgdat->memcg_lru.seq))
@@ -5664,8 +5724,10 @@ void lru_gen_init_pgdat(struct pglist_data *pgdat)
 	spin_lock_init(&pgdat->memcg_lru.lock);
 
 	for (i = 0; i < MEMCG_NR_GENS; i++) {
-		for (j = 0; j < MEMCG_NR_BINS; j++)
+		for (j = 0; j < MEMCG_NR_BINS; j++) {
 			INIT_HLIST_NULLS_HEAD(&pgdat->memcg_lru.fifo[i][j], i);
+			pgdat->memcg_lru.tails[i][j] = NULL;
+		}
 	}
 }
 
@@ -5687,6 +5749,8 @@ void lru_gen_init_lruvec(struct lruvec *lruvec)
 
 	if (mm_state)
 		mm_state->seq = MIN_NR_GENS;
+
+	lrugen->bin = 0;
 }
 
 #ifdef CONFIG_MEMCG
