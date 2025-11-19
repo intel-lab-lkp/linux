@@ -264,6 +264,13 @@ static int cx_suspend(struct hda_codec *codec)
 	return 0;
 }
 
+static int cx_resume(struct hda_codec *codec)
+{
+	cx_init(codec);
+	snd_hda_jack_report_sync(codec);
+	return 0;
+}
+
 /*
  * pin fix-up
  */
@@ -1277,6 +1284,7 @@ static const struct hda_codec_ops cx_codec_ops = {
 	.init = cx_init,
 	.unsol_event = snd_hda_jack_unsol_event,
 	.suspend = cx_suspend,
+	.resume = cx_resume,
 	.check_power_status = snd_hda_gen_check_power_status,
 	.stream_pm = snd_hda_gen_stream_pm,
 };
