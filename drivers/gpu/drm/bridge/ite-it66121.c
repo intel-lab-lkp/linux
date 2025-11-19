@@ -1542,7 +1542,7 @@ static int it66121_probe(struct i2c_client *client)
 		return -EINVAL;
 	}
 
-	ctx->next_bridge = of_drm_find_bridge(ep);
+	ctx->next_bridge = devm_drm_of_find_bridge(dev, ep);
 	of_node_put(ep);
 	if (!ctx->next_bridge) {
 		dev_dbg(ctx->dev, "Next bridge not found, deferring probe\n");
