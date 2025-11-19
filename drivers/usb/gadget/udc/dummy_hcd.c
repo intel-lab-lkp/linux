@@ -803,10 +803,10 @@ dummy_set_halt_and_wedge(struct usb_ep *_ep, int value, int wedged)
 		return -ESHUTDOWN;
 	if (!value)
 		ep->halted = ep->wedged = 0;
-	else if (ep->desc && (ep->desc->bEndpointAddress & USB_DIR_IN) &&
-			!list_empty(&ep->queue))
-		return -EAGAIN;
 	else {
+		if (ep->desc && (ep->desc->bEndpointAddress & USB_DIR_IN) &&
+			!list_empty(&ep->queue))
+			return -EAGAIN;
 		ep->halted = 1;
 		if (wedged)
 			ep->wedged = 1;
