@@ -89,24 +89,34 @@ EXPORT_SYMBOL(percpu_counter_set);
  * Safety against interrupts is achieved in 2 ways:
  * 1. the fast path uses local cmpxchg (note: no lock prefix)
  * 2. the slow path operates with interrupts disabled
+ *
+ * Slowpath is implemented as a separate routine to reduce register spillage by gcc.
  */
-void percpu_counter_add_batch(struct percpu_counter *fbc, s64 amount, s32 batch)
+static void noinline percpu_counter_add_batch_slowpath(struct percpu_counter *fbc,
+						       s64 amount, s32 batch)
 {
 	s64 count;
 	unsigned long flags;
 
+	raw_spin_lock_irqsave(&fbc->lock, flags);
+	/*
+	 * Note: by now we might have migrated to another CPU or the value
+	 * might have changed.
+	 */
+	count = __this_cpu_read(*fbc->counters);
+	fbc->count += count + amount;
+	__this_cpu_sub(*fbc->counters, count);
+	raw_spin_unlock_irqrestore(&fbc->lock, flags);
+}
+
+void percpu_counter_add_batch(struct percpu_counter *fbc, s64 amount, s32 batch)
+{
+	s64 count;
+
 	count = this_cpu_read(*fbc->counters);
 	do {
 		if (unlikely(abs(count + amount) >= batch)) {
-			raw_spin_lock_irqsave(&fbc->lock, flags);
-			/*
-			 * Note: by now we might have migrated to another CPU
-			 * or the value might have changed.
-			 */
-			count = __this_cpu_read(*fbc->counters);
-			fbc->count += count + amount;
-			__this_cpu_sub(*fbc->counters, count);
-			raw_spin_unlock_irqrestore(&fbc->lock, flags);
+			percpu_counter_add_batch_slowpath(fbc, amount, batch);
 			return;
 		}
 	} while (!this_cpu_try_cmpxchg(*fbc->counters, &count, count + amount));
