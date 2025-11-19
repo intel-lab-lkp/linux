@@ -1649,6 +1649,9 @@ struct low_rssi_scan_params {
 } __packed;
 
 struct roam_ctrl_cmd {
+	u8 roam_ctrl;
+
+	/* Must be last as it ends in a flexible-array member. */
 	union {
 		u8 bssid[ETH_ALEN]; /* WMI_FORCE_ROAM */
 		u8 roam_mode; /* WMI_SET_ROAM_MODE */
@@ -1656,7 +1659,6 @@ struct roam_ctrl_cmd {
 		struct low_rssi_scan_params params; /* WMI_SET_LRSSI_SCAN_PARAMS
 						     */
 	} __packed info;
-	u8 roam_ctrl;
 } __packed;
 
 struct set_beacon_int_cmd {
