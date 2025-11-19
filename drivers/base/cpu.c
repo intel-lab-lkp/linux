@@ -375,12 +375,57 @@ static int cpu_uevent(const struct device *dev, struct kobj_uevent_env *env)
 #endif
 
 #ifdef CONFIG_PARAVIRT
+static ssize_t paravirt_store(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf, size_t count)
+{
+	cpumask_var_t temp_mask;
+	int retval = 0;
+	int cpu;
+
+	if (!alloc_cpumask_var(&temp_mask, GFP_KERNEL))
+		return -ENOMEM;
+
+	retval = cpulist_parse(buf, temp_mask);
+	if (retval)
+		goto free_mask;
+
+	/* ALL cpus can't be marked as paravirt */
+	if (cpumask_equal(temp_mask, cpu_online_mask)) {
+		retval = -EINVAL;
+		goto free_mask;
+	}
+	if (cpumask_weight(temp_mask) > num_online_cpus()) {
+		retval = -EINVAL;
+		goto free_mask;
+	}
+
+	/* No more paravirt cpus */
+	if (cpumask_empty(temp_mask)) {
+		cpumask_copy((struct cpumask *)&__cpu_paravirt_mask, temp_mask);
+	} else {
+		cpumask_copy((struct cpumask *)&__cpu_paravirt_mask, temp_mask);
+
+		/* Enable tick on nohz_full cpu */
+		for_each_cpu(cpu, temp_mask) {
+			if (tick_nohz_full_cpu(cpu))
+				tick_nohz_dep_set_cpu(cpu, TICK_DEP_BIT_SCHED);
+		}
+	}
+
+	retval = count;
+
+free_mask:
+	free_cpumask_var(temp_mask);
+	return retval;
+}
+
 static ssize_t paravirt_show(struct device *dev,
 				   struct device_attribute *attr, char *buf)
 {
 	return sysfs_emit(buf, "%*pbl\n", cpumask_pr_args(cpu_paravirt_mask));
 }
-static DEVICE_ATTR_RO(paravirt);
+static DEVICE_ATTR_RW(paravirt);
 #endif
 
 const struct bus_type cpu_subsys = {
