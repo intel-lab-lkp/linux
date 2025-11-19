@@ -1297,7 +1297,7 @@ chaintoolong:
 	/* Timeout is relative to confirmation time, not original
 	   setting time, otherwise we'd get timer wrap in
 	   weird delay cases. */
-	ct->timeout += nfct_time_stamp;
+	WRITE_ONCE(ct->timeout, READ_ONCE(ct->timeout) + nfct_time_stamp);
 
 	__nf_conntrack_insert_prepare(ct);
 
