@@ -488,6 +488,8 @@ properties:
           - ti,tsc2003
             # Winbond/Nuvoton H/W Monitor
           - winbond,w83793
+            # Würth temperature sensor with i2c interface
+          - wsen,tids
 
 required:
   - compatible

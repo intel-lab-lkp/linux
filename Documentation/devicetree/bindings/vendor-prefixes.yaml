@@ -1787,6 +1787,8 @@ patternProperties:
     description: Würth Elektronik GmbH.
   "^welltech,.*":
     description: Welltech Computer Co., Limited.
+  "^wsen,.*":
+    description: Würth Elektronik eiSos GmbH & Co. KG
   "^wetek,.*":
     description: WeTek Electronics, limited.
   "^wexler,.*":
