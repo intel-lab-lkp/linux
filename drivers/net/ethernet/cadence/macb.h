@@ -16,6 +16,7 @@
 #include <linux/workqueue.h>
 #include <net/page_pool/helpers.h>
 #include <net/xdp.h>
+#include <linux/bpf_trace.h>
 
 #define MACB_GREGS_NBR 16
 #define MACB_GREGS_VERSION 2
@@ -961,6 +962,7 @@ struct macb_dma_desc_ptp {
 
 /* The buf includes headroom compatible with both skb and xdpf */
 #define MACB_PP_HEADROOM	XDP_PACKET_HEADROOM
+#define MACB_MAX_PAD		(MACB_PP_HEADROOM + SKB_DATA_ALIGN(sizeof(struct skb_shared_info)))
 
 /* struct macb_tx_skb - data about an skb which is being transmitted
  * @skb: skb currently being transmitted, only set for the last buffer
@@ -1273,6 +1275,7 @@ struct macb_queue {
 	struct queue_stats stats;
 	struct page_pool	*page_pool;
 	struct sk_buff		*skb;
+	struct xdp_rxq_info	xdp_q;
 };
 
 struct ethtool_rx_fs_item {
@@ -1372,6 +1375,7 @@ struct macb {
 
 	struct macb_pm_data pm_data;
 	const struct macb_usrio_config *usrio;
+	struct bpf_prog	__rcu *prog;
 };
 
 #ifdef CONFIG_MACB_USE_HWSTAMP
