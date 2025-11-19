@@ -773,6 +773,7 @@ endif
 # Just "make" or "make all" shall build modules as well
 
 modules-targets := all
+modules-targets += $(if $(FIT_MODULES),image.fit)
 modules-targets += modules
 modules-targets += nsdeps
 modules-targets += compile_commands.json
