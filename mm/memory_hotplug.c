@@ -723,6 +723,51 @@ static void __meminit resize_pgdat_range(struct pglist_data *pgdat, unsigned lon
 
 }
 
+static bool __meminit check_zone_contiguous_fast(struct zone *zone,
+			unsigned long start_pfn, unsigned long nr_pages)
+{
+	const unsigned long end_pfn = start_pfn + nr_pages;
+
+	/*
+	 * Given the moved pfn range's contiguous property is always true,
+	 * under the conditional of empty zone, the contiguous property should
+	 * be true.
+	 */
+	if (zone_is_empty(zone)) {
+		zone->contiguous = true;
+		return true;
+	}
+
+	/*
+	 * If the moved pfn range does not intersect with the original zone span,
+	 * the contiguous property is surely false.
+	 */
+	if (end_pfn < zone->zone_start_pfn || start_pfn > zone_end_pfn(zone)) {
+		zone->contiguous = false;
+		return true;
+	}
+
+	/*
+	 * If the moved pfn range is adjacent to the original zone span, given
+	 * the moved pfn range's contiguous property is always true, the zone's
+	 * contiguous property inherited from the original value.
+	 */
+	if (end_pfn == zone->zone_start_pfn || start_pfn == zone_end_pfn(zone))
+		return true;
+
+	/*
+	 * If the original zone's hole larger than the moved pages in the range,
+	 * the contiguous property is surely false.
+	 */
+	if (nr_pages < (zone->spanned_pages - zone->present_pages)) {
+		zone->contiguous = false;
+		return true;
+	}
+
+	clear_zone_contiguous(zone);
+	return false;
+}
+
 #ifdef CONFIG_ZONE_DEVICE
 static void section_taint_zone_device(unsigned long pfn)
 {
@@ -752,8 +797,7 @@ void move_pfn_range_to_zone(struct zone *zone, unsigned long start_pfn,
 {
 	struct pglist_data *pgdat = zone->zone_pgdat;
 	int nid = pgdat->node_id;
-
-	clear_zone_contiguous(zone);
+	const bool fast_path = check_zone_contiguous_fast(zone, start_pfn, nr_pages);
 
 	if (zone_is_empty(zone))
 		init_currently_empty_zone(zone, start_pfn, nr_pages);
@@ -783,7 +827,8 @@ void move_pfn_range_to_zone(struct zone *zone, unsigned long start_pfn,
 			 MEMINIT_HOTPLUG, altmap, migratetype,
 			 isolate_pageblock);
 
-	set_zone_contiguous(zone);
+	if (!fast_path)
+		set_zone_contiguous(zone);
 }
 
 struct auto_movable_stats {
