@@ -485,11 +485,69 @@ static inline void fb_imageblit(struct fb_info *p, const struct fb_image *image)
 	struct fb_address dst = fb_address_init(p);
 	struct fb_reverse reverse = fb_reverse_init(p);
 	const u32 *palette = fb_palette(p);
+	struct fb_image clipped_image;
+	u32 max_x, max_y;
+	unsigned long max_offset_bytes;
 
-	fb_address_forward(&dst, image->dy * bits_per_line + image->dx * bpp);
+	/* Validate basic parameters */
+	if (!image || !p->screen_buffer || !p->screen_size ||
+	    !image->width || !image->height)
+		return;
 
-	if (image->depth == 1)
-		fb_bitmap_imageblit(image, &dst, bits_per_line, palette, bpp, reverse);
+	/* Calculate maximum addressable coordinates based on virtual resolution and buffer size */
+	max_x = p->var.xres_virtual;
+	max_y = p->var.yres_virtual;
+
+	/* Check against actual buffer size to prevent vmalloc overflow */
+	{
+		unsigned long effective_width_bytes;
+		u32 right_edge = image->dx + image->width;
+
+		if (right_edge < image->dx)
+			right_edge = max_x;
+		else
+			right_edge = min(right_edge, max_x);
+
+		effective_width_bytes = (unsigned long)right_edge * bpp;
+		effective_width_bytes = (effective_width_bytes + 7) / 8;
+
+		if (effective_width_bytes > p->screen_size) {
+			max_y = 0;
+		} else if (p->fix.line_length) {
+			u32 max_lines = (p->screen_size - effective_width_bytes) /
+					p->fix.line_length + 1;
+			if (max_lines < max_y)
+				max_y = max_lines;
+		}
+	}
+
+	/* If image is completely outside bounds, skip it */
+	if (image->dx >= max_x || image->dy >= max_y)
+		return;
+
+	/* Create clipped image - clip to virtual resolution bounds */
+	clipped_image = *image;
+
+	/* Clip width if it extends beyond right edge */
+	if (clipped_image.dx + clipped_image.width > max_x) {
+		if (clipped_image.dx < max_x)
+			clipped_image.width = max_x - clipped_image.dx;
+		else
+			return; /* completely outside */
+	}
+
+	/* Clip height if it extends beyond bottom edge */
+	if (clipped_image.dy + clipped_image.height > max_y) {
+		if (clipped_image.dy < max_y)
+			clipped_image.height = max_y - clipped_image.dy;
+		else
+			return; /* completely outside */
+	}
+
+	fb_address_forward(&dst, clipped_image.dy * bits_per_line + clipped_image.dx * bpp);
+
+	if (clipped_image.depth == 1)
+		fb_bitmap_imageblit(&clipped_image, &dst, bits_per_line, palette, bpp, reverse);
 	else
-		fb_color_imageblit(image, &dst, bits_per_line, palette, bpp, reverse);
+		fb_color_imageblit(&clipped_image, &dst, bits_per_line, palette, bpp, reverse);
 }
