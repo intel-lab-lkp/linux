@@ -5711,6 +5711,22 @@ void send_flush_mdlog(struct ceph_mds_session *s)
 	mutex_unlock(&s->s_mutex);
 }
 
+static inline
+bool is_fsname_mismatch(struct ceph_client *cl,
+			const char *fs_name1, const char *fs_name2)
+{
+	if (!fs_name1 || !fs_name2)
+		return false;
+
+	doutc(cl, "fsname check fs_name1=%s fs_name2=%s\n",
+	      fs_name1, fs_name2);
+
+	if (strcmp(fs_name1, fs_name2))
+		return true;
+
+	return false;
+}
+
 static int ceph_mds_auth_match(struct ceph_mds_client *mdsc,
 			       struct ceph_mds_cap_auth *auth,
 			       const struct cred *cred,
@@ -5725,9 +5741,7 @@ static int ceph_mds_auth_match(struct ceph_mds_client *mdsc,
 	u32 gid, tlen, len;
 	int i, j;
 
-	doutc(cl, "fsname check fs_name=%s  match.fs_name=%s\n",
-	      fs_name, auth->match.fs_name ? auth->match.fs_name : "");
-	if (auth->match.fs_name && strcmp(auth->match.fs_name, fs_name)) {
+	if (is_fsname_mismatch(cl, auth->match.fs_name, fs_name)) {
 		/* fsname mismatch, try next one */
 		return 0;
 	}
