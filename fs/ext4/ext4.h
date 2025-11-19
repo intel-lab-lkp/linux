@@ -909,7 +909,7 @@ do {										\
 		(raw_inode)->xtime = cpu_to_le32((ts).tv_sec);			\
 		(raw_inode)->xtime ## _extra = ext4_encode_extra_time(ts);	\
 	} else									\
-		(raw_inode)->xtime = cpu_to_le32(clamp_t(int32_t, (ts).tv_sec, S32_MIN, S32_MAX));	\
+		(raw_inode)->xtime = cpu_to_le32(clamp((ts).tv_sec, S32_MIN, S32_MAX));	\
 } while (0)
 
 #define EXT4_INODE_SET_ATIME(inode, raw_inode)						\
