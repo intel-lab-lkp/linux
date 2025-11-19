@@ -52,12 +52,8 @@ static struct spi_board_info amp_info_template = {
 	.mode			= SPI_MODE_0,
 };
 
-static const struct software_node cs42l43_gpiochip_swnode = {
-	.name			= "cs42l43-pinctrl",
-};
-
 static const struct software_node_ref_args cs42l43_cs_refs[] = {
-	SOFTWARE_NODE_REFERENCE(&cs42l43_gpiochip_swnode, 0, GPIO_ACTIVE_LOW),
+	SOFTWARE_NODE_REFERENCE(NULL, 0, GPIO_ACTIVE_LOW),
 	SOFTWARE_NODE_REFERENCE(&swnode_gpio_undefined),
 };
 
@@ -324,11 +320,6 @@ static void cs42l43_release_of_node(void *data)
 	fwnode_handle_put(data);
 }
 
-static void cs42l43_release_sw_node(void *data)
-{
-	software_node_unregister(&cs42l43_gpiochip_swnode);
-}
-
 static int cs42l43_spi_probe(struct platform_device *pdev)
 {
 	struct cs42l43 *cs42l43 = dev_get_drvdata(pdev->dev.parent);
@@ -391,6 +382,9 @@ static int cs42l43_spi_probe(struct platform_device *pdev)
 	fwnode_property_read_u32(xu_fwnode, "01fa-sidecar-instances", &nsidecars);
 
 	if (nsidecars) {
+		struct software_node_ref_args *args;
+		struct property_entry *props;
+
 		ret = fwnode_property_read_u32(xu_fwnode, "01fa-spk-id-val", &spkid);
 		if (!ret) {
 			dev_dbg(priv->dev, "01fa-spk-id-val = %d\n", spkid);
@@ -403,17 +397,20 @@ static int cs42l43_spi_probe(struct platform_device *pdev)
 						     "Failed to get spk-id-gpios\n");
 		}
 
-		ret = software_node_register(&cs42l43_gpiochip_swnode);
-		if (ret)
-			return dev_err_probe(priv->dev, ret,
-					     "Failed to register gpio swnode\n");
+		props = devm_kmemdup(priv->dev, cs42l43_cs_props, sizeof(cs42l43_cs_props),
+				     GFP_KERNEL);
+		if (!props)
+			return -ENOMEM;
 
-		ret = devm_add_action_or_reset(priv->dev, cs42l43_release_sw_node, NULL);
-		if (ret)
-			return ret;
+		args = devm_kmemdup(priv->dev, cs42l43_cs_refs, sizeof(cs42l43_cs_refs),
+				    GFP_KERNEL);
+		if (!args)
+			return -ENOMEM;
 
-		ret = device_create_managed_software_node(&priv->ctlr->dev,
-							  cs42l43_cs_props, NULL);
+		args[0].fwnode = fwnode;
+		props->pointer = args;
+
+		ret = device_create_managed_software_node(&priv->ctlr->dev, props, NULL);
 		if (ret)
 			return dev_err_probe(priv->dev, ret, "Failed to add swnode\n");
 	} else {
