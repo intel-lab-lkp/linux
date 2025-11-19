@@ -14,6 +14,7 @@
 #include <linux/err.h>
 #include <linux/firmware.h>
 #include <linux/gpio/consumer.h>
+#include <linux/gpio/machine.h>
 #include <linux/jiffies.h>
 #include <linux/mfd/core.h>
 #include <linux/mfd/cs42l43.h>
@@ -522,6 +523,15 @@ static const struct mfd_cell cs42l43_devs[] = {
 	},
 };
 
+static struct gpiod_lookup_table cs42l43_gpio_lookup = {
+	.dev_id = "cs42l43-spi",
+	.table = {
+		GPIO_LOOKUP("cs42l43-pinctrl", 0, "cs", GPIO_ACTIVE_LOW),
+		GPIO_LOOKUP(INIT_ERR_PTR(-ENOENT), 0, "cs", 0),
+		{ }
+	},
+};
+
 /*
  * If the device is connected over Soundwire, as well as soft resetting the
  * device, this function will also way for the device to detach from the bus
@@ -900,6 +910,11 @@ static int cs42l43_irq_config(struct cs42l43 *cs42l43)
 	return 0;
 }
 
+static void cs42l43_remove_gpio_lookup(void *data)
+{
+	gpiod_remove_lookup_table(&cs42l43_gpio_lookup);
+}
+
 static void cs42l43_boot_work(struct work_struct *work)
 {
 	struct cs42l43 *cs42l43 = container_of(work, struct cs42l43, boot_work);
@@ -953,6 +968,14 @@ static void cs42l43_boot_work(struct work_struct *work)
 	ret = cs42l43_irq_config(cs42l43);
 	if (ret)
 		goto err;
+
+	gpiod_add_lookup_table(&cs42l43_gpio_lookup);
+
+	ret = devm_add_action_or_reset(cs42l43->dev, cs42l43_remove_gpio_lookup, NULL);
+	if (ret) {
+		dev_err(cs42l43->dev, "Failed to schedule a devres action: %d\n", ret);
+		goto err;
+	}
 
 	ret = devm_mfd_add_devices(cs42l43->dev, PLATFORM_DEVID_NONE,
 				   cs42l43_devs, ARRAY_SIZE(cs42l43_devs),

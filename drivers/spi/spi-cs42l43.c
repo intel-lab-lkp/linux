@@ -13,8 +13,6 @@
 #include <linux/device.h>
 #include <linux/errno.h>
 #include <linux/gpio/consumer.h>
-#include <linux/gpio/machine.h>
-#include <linux/gpio/property.h>
 #include <linux/mfd/cs42l43.h>
 #include <linux/mfd/cs42l43-regs.h>
 #include <linux/mod_devicetable.h>
@@ -50,20 +48,6 @@ static struct spi_board_info amp_info_template = {
 	.modalias		= "cs35l56",
 	.max_speed_hz		= 11 * HZ_PER_MHZ,
 	.mode			= SPI_MODE_0,
-};
-
-static const struct software_node cs42l43_gpiochip_swnode = {
-	.name			= "cs42l43-pinctrl",
-};
-
-static const struct software_node_ref_args cs42l43_cs_refs[] = {
-	SOFTWARE_NODE_REFERENCE(&cs42l43_gpiochip_swnode, 0, GPIO_ACTIVE_LOW),
-	SOFTWARE_NODE_REFERENCE(&swnode_gpio_undefined),
-};
-
-static const struct property_entry cs42l43_cs_props[] = {
-	PROPERTY_ENTRY_REF_ARRAY("cs-gpios", cs42l43_cs_refs),
-	{}
 };
 
 static int cs42l43_spi_tx(struct regmap *regmap, const u8 *buf, unsigned int len)
@@ -324,11 +308,6 @@ static void cs42l43_release_of_node(void *data)
 	fwnode_handle_put(data);
 }
 
-static void cs42l43_release_sw_node(void *data)
-{
-	software_node_unregister(&cs42l43_gpiochip_swnode);
-}
-
 static int cs42l43_spi_probe(struct platform_device *pdev)
 {
 	struct cs42l43 *cs42l43 = dev_get_drvdata(pdev->dev.parent);
@@ -402,20 +381,6 @@ static int cs42l43_spi_probe(struct platform_device *pdev)
 				return dev_err_probe(priv->dev, ret,
 						     "Failed to get spk-id-gpios\n");
 		}
-
-		ret = software_node_register(&cs42l43_gpiochip_swnode);
-		if (ret)
-			return dev_err_probe(priv->dev, ret,
-					     "Failed to register gpio swnode\n");
-
-		ret = devm_add_action_or_reset(priv->dev, cs42l43_release_sw_node, NULL);
-		if (ret)
-			return ret;
-
-		ret = device_create_managed_software_node(&priv->ctlr->dev,
-							  cs42l43_cs_props, NULL);
-		if (ret)
-			return dev_err_probe(priv->dev, ret, "Failed to add swnode\n");
 	} else {
 		device_set_node(&priv->ctlr->dev, fwnode);
 	}
