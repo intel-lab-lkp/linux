@@ -359,7 +359,7 @@ static ssize_t nvmem_cell_attr_read(struct file *filp, struct kobject *kobj,
 		goto destroy_cell;
 	}
 
-	read_len = min_t(unsigned int, cell_sz - pos, count);
+	read_len = min(cell_sz - pos, count);
 	memcpy(buf, content + pos, read_len);
 	kfree(content);
 
