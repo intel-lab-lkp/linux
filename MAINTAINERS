@@ -14118,6 +14118,7 @@ L:	linux-leds@vger.kernel.org
 L:	rust-for-linux@vger.kernel.org
 S:	Maintained
 F:	rust/kernel/led.rs
+F:	rust/kernel/led/
 
 LEGO MINDSTORMS EV3
 R:	David Lechner <david@lechnology.com>

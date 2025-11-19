@@ -44,14 +44,18 @@ use crate::{
     }, //
 };
 
+mod normal;
+
+pub use normal::Normal;
+
 /// The led class device representation.
 ///
-/// This structure represents the Rust abstraction for a C `struct led_classdev`.
+/// This structure represents the Rust abstraction for a led class device.
 #[pin_data(PinnedDrop)]
 pub struct Device<T: LedOps> {
     ops: T,
     #[pin]
-    classdev: Opaque<bindings::led_classdev>,
+    classdev: Opaque<<T::Mode as private::Mode>::Type>,
 }
 
 /// The led init data representation.
@@ -153,6 +157,7 @@ impl<'a> InitData<'a> {
 /// #[vtable]
 /// impl led::LedOps for MyLedOps {
 ///     type Bus = platform::Device<device::Bound>;
+///     type Mode = led::Normal;
 ///     const BLOCKING: bool = false;
 ///     const MAX_BRIGHTNESS: u32 = 255;
 ///
@@ -184,6 +189,12 @@ pub trait LedOps: Send + 'static + Sized {
     /// The bus device required by the implementation.
     #[allow(private_bounds)]
     type Bus: AsBusDevice<Bound>;
+
+    /// The led mode to use.
+    ///
+    /// See [`Mode`].
+    type Mode: Mode;
+
     /// If set true, [`LedOps::brightness_set`] and [`LedOps::blink_set`] must perform the
     /// operation immediately. If set false, they must not sleep.
     const BLOCKING: bool;
@@ -270,6 +281,42 @@ impl TryFrom<u32> for Color {
     }
 }
 
+/// The led mode.
+///
+/// Each led mode has its own led class device type with different capabilities.
+///
+/// See [`Normal`].
+pub trait Mode: private::Mode {}
+
+impl<T: private::Mode> Mode for T {}
+
+type RegisterFunc<T> =
+    unsafe extern "C" fn(*mut bindings::device, *mut T, *mut bindings::led_init_data) -> i32;
+
+type UnregisterFunc<T> = unsafe extern "C" fn(*mut T);
+
+mod private {
+    pub trait Mode {
+        type Type;
+        const REGISTER: super::RegisterFunc<Self::Type>;
+        const UNREGISTER: super::UnregisterFunc<Self::Type>;
+
+        /// # Safety
+        /// `raw` must be a valid pointer to [`Self::Type`].
+        unsafe fn device<'a>(raw: *mut Self::Type) -> &'a crate::device::Device;
+
+        /// # Safety
+        /// `led_cdev` must be a valid pointer to `led_classdev` embedded within [`Self::Type`].
+        unsafe fn from_classdev(led_cdev: *mut bindings::led_classdev) -> *mut Self::Type;
+
+        /// # Safety
+        /// `raw` must be a valid pointer to [`Self::Type`].
+        unsafe fn pre_brightness_set(_raw: *mut Self::Type, _brightness: u32) {}
+
+        fn release(_led_cdev: &mut Self::Type) {}
+    }
+}
+
 // SAFETY: A `led::Device` can be unregistered from any thread.
 unsafe impl<T: LedOps + Send> Send for Device<T> {}
 
@@ -278,24 +325,22 @@ unsafe impl<T: LedOps + Send> Send for Device<T> {}
 unsafe impl<T: LedOps + Sync> Sync for Device<T> {}
 
 impl<T: LedOps> Device<T> {
-    /// Registers a new led classdev.
-    ///
-    /// The [`Device`] will be unregistered on drop.
-    pub fn new<'a>(
+    fn __new<'a>(
         parent: &'a T::Bus,
         init_data: InitData<'a>,
         ops: T,
+        func: impl FnOnce(bindings::led_classdev) -> Result<<T::Mode as private::Mode>::Type> + 'a,
     ) -> impl PinInit<Devres<Self>, Error> + 'a {
         Devres::new(
             parent.as_ref(),
             try_pin_init!(Self {
                 ops,
-                classdev <- Opaque::try_ffi_init(|ptr: *mut bindings::led_classdev| {
+                classdev <- Opaque::try_ffi_init(|ptr: *mut <T::Mode as private::Mode>::Type| {
                     // SAFETY: `try_ffi_init` guarantees that `ptr` is valid for write.
-                    // `led_classdev` gets fully initialized in-place by
-                    // `led_classdev_register_ext` including `mutex` and `list_head`.
+                    // `T::Mode::Type` (and the embedded led_classdev) gets fully initialized
+                    // in-place by `T::Mode::REGISTER` including `mutex` and `list_head`.
                     unsafe {
-                        ptr.write(bindings::led_classdev {
+                        ptr.write((func)(bindings::led_classdev {
                             brightness_set: (!T::BLOCKING)
                                 .then_some(Adapter::<T>::brightness_set_callback),
                             brightness_set_blocking: T::BLOCKING
@@ -309,7 +354,7 @@ impl<T: LedOps> Device<T> {
                                 .map_or(core::ptr::null(), CStr::as_char_ptr),
                             color: init_data.color as u32,
                             ..bindings::led_classdev::default()
-                        })
+                        })?)
                     };
 
                     let mut init_data_raw = bindings::led_init_data {
@@ -326,11 +371,11 @@ impl<T: LedOps> Device<T> {
                     };
 
                     // SAFETY:
-                    // - `parent.as_raw()` is guaranteed to be a pointer to a valid `device`
-                    //    or a null pointer.
-                    // - `ptr` is guaranteed to be a pointer to an initialized `led_classdev`.
+                    // - `parent.as_ref().as_raw()` is guaranteed to be a pointer to a valid
+                    //    `device`.
+                    // - `ptr` is guaranteed to be a pointer to an initialized `T::Mode::Type`.
                     to_result(unsafe {
-                        bindings::led_classdev_register_ext(
+                        (<T::Mode as private::Mode>::REGISTER)(
                             parent.as_ref().as_raw(),
                             ptr,
                             &mut init_data_raw,
@@ -350,15 +395,22 @@ impl<T: LedOps> Device<T> {
     /// `led::Device`.
     unsafe fn from_raw<'a>(led_cdev: *mut bindings::led_classdev) -> &'a Self {
         // SAFETY: The function's contract guarantees that `led_cdev` points to a `led_classdev`
-        // field embedded within a valid `led::Device`. `container_of!` can therefore
-        // safely calculate the address of the containing struct.
-        unsafe { &*container_of!(Opaque::cast_from(led_cdev), Self, classdev) }
+        // embedded within a `led::Device` and thus is embedded within `T::Mode::Type`.
+        let raw = unsafe { <T::Mode as private::Mode>::from_classdev(led_cdev) };
+
+        // SAFETY: The function's contract guarantees that `raw` points to a `led_classdev` field
+        // embedded within a valid `led::Device`. `container_of!` can therefore safely calculate
+        // the address of the containing struct.
+        unsafe { &*container_of!(Opaque::cast_from(raw), Self, classdev) }
     }
 
     fn parent(&self) -> &device::Device<Bound> {
-        // SAFETY:
-        // - `self.classdev.get()` is guaranteed to be a valid pointer to `led_classdev`.
-        unsafe { device::Device::from_raw((*(*self.classdev.get()).dev).parent) }
+        // SAFETY: `self.classdev.get()` is guaranteed to be a valid pointer to `T::Mode::Type`.
+        let device = unsafe { <T::Mode as private::Mode>::device(self.classdev.get()) };
+        // SAFETY: `led::Device::__new` doesn't allow to register a class device without an parent.
+        let parent = unsafe { device.parent().unwrap_unchecked() };
+        // SAFETY: the existence of `self` guarantees that `parent` is bound to a driver.
+        unsafe { parent.as_bound() }
     }
 }
 
@@ -376,10 +428,16 @@ impl<T: LedOps> Adapter<T> {
         brightness: u32,
     ) {
         // SAFETY: The function's contract guarantees that `led_cdev` is a valid pointer to a
-        // `led_classdev` embedded within a `led::Device`.
+        // `T::Mode::Type` embedded within a `led::Device`.
         let classdev = unsafe { Device::<T>::from_raw(led_cdev) };
         // SAFETY: `classdev.parent()` is guaranteed to be contained in `T::Bus`.
         let parent = unsafe { T::Bus::from_device(classdev.parent()) };
+
+        // SAFETY: `classdev.classdev.get()` is guaranteed to be a valid pointer to a
+        // `T::Mode::Type`.
+        unsafe {
+            <T::Mode as private::Mode>::pre_brightness_set(classdev.classdev.get(), brightness);
+        }
 
         let _ = classdev.ops.brightness_set(parent, classdev, brightness);
     }
@@ -394,10 +452,16 @@ impl<T: LedOps> Adapter<T> {
     ) -> i32 {
         from_result(|| {
             // SAFETY: The function's contract guarantees that `led_cdev` is a valid pointer to a
-            // `led_classdev` embedded within a `led::Device`.
+            // `T::Mode::Type` embedded within a `led::Device`.
             let classdev = unsafe { Device::<T>::from_raw(led_cdev) };
             // SAFETY: `classdev.parent()` is guaranteed to be contained in `T::Bus`.
             let parent = unsafe { T::Bus::from_device(classdev.parent()) };
+
+            // SAFETY: `classdev.classdev.get()` is guaranteed to be a valid pointer to a
+            // `T::Mode::Type`.
+            unsafe {
+                <T::Mode as private::Mode>::pre_brightness_set(classdev.classdev.get(), brightness);
+            }
 
             classdev.ops.brightness_set(parent, classdev, brightness)?;
             Ok(0)
@@ -410,7 +474,7 @@ impl<T: LedOps> Adapter<T> {
     /// This function is called on getting the brightness of a led.
     unsafe extern "C" fn brightness_get_callback(led_cdev: *mut bindings::led_classdev) -> u32 {
         // SAFETY: The function's contract guarantees that `led_cdev` is a valid pointer to a
-        // `led_classdev` embedded within a `led::Device`.
+        // `T::Mode::Type` embedded within a `led::Device`.
         let classdev = unsafe { Device::<T>::from_raw(led_cdev) };
         // SAFETY: `classdev.parent()` is guaranteed to be contained in `T::Bus`.
         let parent = unsafe { T::Bus::from_device(classdev.parent()) };
@@ -431,7 +495,7 @@ impl<T: LedOps> Adapter<T> {
     ) -> i32 {
         from_result(|| {
             // SAFETY: The function's contract guarantees that `led_cdev` is a valid pointer to a
-            // `led_classdev` embedded within a `led::Device`.
+            // `T::Mode::Type` embedded within a `led::Device`.
             let classdev = unsafe { Device::<T>::from_raw(led_cdev) };
             // SAFETY: `classdev.parent()` is guaranteed to be contained in `T::Bus`.
             let parent = unsafe { T::Bus::from_device(classdev.parent()) };
@@ -456,17 +520,21 @@ impl<T: LedOps> PinnedDrop for Device<T> {
     fn drop(self: Pin<&mut Self>) {
         let raw = self.classdev.get();
         // SAFETY: The existence of `self` guarantees that `self.classdev.get()` is a pointer to a
-        // valid `struct led_classdev`.
-        let dev: &device::Device = unsafe { device::Device::from_raw((*raw).dev) };
+        // valid `T::Mode::Type`.
+        let dev: &device::Device = unsafe { <T::Mode as private::Mode>::device(raw) };
 
         let _fwnode = dev
             .fwnode()
             // SAFETY: the reference count of `fwnode` has previously been
-            // incremented in `led::Device::new`.
+            // incremented in `led::Device::__new`.
             .map(|fwnode| unsafe { ARef::from_raw(NonNull::from(fwnode)) });
 
         // SAFETY: The existence of `self` guarantees that `self.classdev` has previously been
-        // successfully registered with `led_classdev_register_ext`.
-        unsafe { bindings::led_classdev_unregister(self.classdev.get()) };
+        // successfully registered with `T::Mode::REGISTER`.
+        unsafe { (<T::Mode as private::Mode>::UNREGISTER)(raw) };
+
+        // SAFETY: The existence of `self` guarantees that `self.classdev.get()` is a pointer to a
+        // valid `T::Mode::Type`.
+        <T::Mode as private::Mode>::release(unsafe { &mut *raw });
     }
 }

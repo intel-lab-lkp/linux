@@ -333,7 +333,7 @@ impl<Ctx: DeviceContext> Device<Ctx> {
     }
 
     /// Returns a reference to the parent device, if any.
-    #[cfg_attr(not(CONFIG_AUXILIARY_BUS), expect(dead_code))]
+    #[cfg_attr(not(any(CONFIG_AUXILIARY_BUS, CONFIG_LEDS_CLASS)), expect(dead_code))]
     pub(crate) fn parent(&self) -> Option<&Device> {
         // SAFETY:
         // - By the type invariant `self.as_raw()` is always valid.
