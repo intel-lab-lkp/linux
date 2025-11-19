@@ -662,7 +662,8 @@ machine_device_initcall(pseries, vcpudispatch_stats_procfs_init);
 #ifdef CONFIG_PARAVIRT_TIME_ACCOUNTING
 
 #define STEAL_MULTIPLE 10000
-#define PURR_UPDATE_TB NSEC_PER_SEC
+static int steal_check_freq = 1;
+#define PURR_UPDATE_TB (steal_check_freq * NSEC_PER_SEC)
 
 static bool should_cpu_process_steal(int cpu)
 {
@@ -2106,9 +2107,6 @@ void pseries_init_ec_vp_cores(void)
 	available_cores = max(entitled_cores, virtual_procs);
 }
 
-#define STEAL_RATIO_HIGH 400
-#define STEAL_RATIO_LOW  150
-
 /*
  * [0]<----------->[EC]---->{AC}-->[VP]
  * EC == Entitled Cores. Guaranteed number of cores by hypervsior.
@@ -2120,6 +2118,9 @@ void pseries_init_ec_vp_cores(void)
  * If steal time is low, increase Available Cores
  */
 
+static unsigned int steal_ratio_high = 400;
+static unsigned int steal_ratio_low = 150;
+
 void update_soft_entitlement(unsigned long steal_ratio)
 {
 	static int prev_direction;
@@ -2128,7 +2129,7 @@ void update_soft_entitlement(unsigned long steal_ratio)
 	if  (!entitled_cores)
 		return;
 
-	if (steal_ratio >= STEAL_RATIO_HIGH && prev_direction > 0) {
+	if (steal_ratio >= steal_ratio_high && prev_direction > 0) {
 		/*
 		 * System entitlement was reduced earlier but we continue to
 		 * see steal time. Reduce entitlement further.
@@ -2145,7 +2146,7 @@ void update_soft_entitlement(unsigned long steal_ratio)
 		}
 		available_cores--;
 
-	} else if (steal_ratio <= STEAL_RATIO_LOW && prev_direction < 0) {
+	} else if (steal_ratio <= steal_ratio_low && prev_direction < 0) {
 		/*
 		 * System entitlement was increased but we continue to see
 		 * less steal time. Increase entitlement further.
@@ -2160,13 +2161,90 @@ void update_soft_entitlement(unsigned long steal_ratio)
 
 		available_cores++;
 	}
-	if (steal_ratio >= STEAL_RATIO_HIGH)
+	if (steal_ratio >= steal_ratio_high)
 		prev_direction = 1;
-	else if (steal_ratio <= STEAL_RATIO_LOW)
+	else if (steal_ratio <= steal_ratio_low)
 		prev_direction = -1;
 	else
 		prev_direction = 0;
 }
+
+/*
+ * Any value above this set threshold will reduce the available cores
+ * Value can't be more than 100% and can't be less than low threshould value
+ * Specifying 500 means 5% steal time
+ */
+
+static int pv_steal_ratio_high_set(void *data, u64 val)
+{
+	if (val > 10000 || val < steal_ratio_low)
+		return -EINVAL;
+
+	steal_ratio_high = val;
+	return 0;
+}
+
+static int pv_steal_ratio_high_get(void *data, u64 *val)
+{
+	*val = steal_ratio_high;
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(fops_pv_steal_ratio_high, pv_steal_ratio_high_get,
+			pv_steal_ratio_high_set, "%llu\n");
+
+static int pv_steal_ratio_low_set(void *data, u64 val)
+{
+	if (val < 1 || val > steal_ratio_high)
+		return -EINVAL;
+
+	steal_ratio_low = val;
+	return 0;
+}
+
+static int pv_steal_ratio_low_get(void *data, u64 *val)
+{
+	*val = steal_ratio_low;
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(fops_pv_steal_ratio_low, pv_steal_ratio_low_get,
+			pv_steal_ratio_low_set, "%llu\n");
+
+static int pv_steal_check_freq_set(void *data, u64 val)
+{
+	if (val < 1 || val > 10)
+		return -EINVAL;
+
+	steal_check_freq = val;
+	return 0;
+}
+
+static int pv_steal_check_freq_get(void *data, u64 *val)
+{
+	*val = steal_check_freq;
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(fops_pv_steal_check_freq, pv_steal_check_freq_get,
+			pv_steal_check_freq_set, "%llu\n");
+
+static int __init steal_debugfs_init(void)
+{
+	if (!is_shared_processor() || is_kvm_guest())
+		return 0;
+
+	debugfs_create_file("steal_ratio_high", 0600, arch_debugfs_dir,
+			    NULL, &fops_pv_steal_ratio_high);
+	debugfs_create_file("steal_ratio_low", 0600, arch_debugfs_dir,
+			    NULL, &fops_pv_steal_ratio_low);
+	debugfs_create_file("steal_check_frequency", 0600, arch_debugfs_dir,
+			    NULL, &fops_pv_steal_check_freq);
+
+	return 0;
+}
+
+machine_arch_initcall(pseries, steal_debugfs_init);
 #else
 void pseries_init_ec_vp_cores(void) { return; }
 void update_soft_entitlement(unsigned long steal_ratio) { return; }
