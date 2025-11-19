@@ -25,7 +25,7 @@ int __alloc_bucket_spinlocks(spinlock_t **locks, unsigned int *locks_mask,
 
 	if (cpu_mult) {
 		nr_pcpus = min_t(unsigned int, nr_pcpus, 64UL);
-		size = min_t(unsigned int, nr_pcpus * cpu_mult, max_size);
+		size = min(nr_pcpus * cpu_mult, max_size);
 	} else {
 		size = max_size;
 	}
