@@ -777,3 +777,12 @@ Date:		Nov 2022
 Contact:	Linux kernel mailing list <linux-kernel@vger.kernel.org>
 Description:
 		(RO) the list of CPUs that can be brought online.
+
+What:		/sys/devices/system/cpu/paravirt
+Date:		Sep 2025
+Contact:	Linux kernel mailing list <linux-kernel@vger.kernel.org>
+Description:
+		(RO) the list of CPUs that are current marked as paravirt CPUs.
+		These CPUs are not meant to be used at the moment due to
+		contention of underlying physical CPU resource. Dynamically
+		changes to reflect the current situation.
