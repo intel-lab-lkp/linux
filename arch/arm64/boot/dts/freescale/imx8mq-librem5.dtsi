@@ -1116,6 +1116,7 @@
 		touchscreen-size-x = <720>;
 		touchscreen-size-y = <1440>;
 		vcc-supply = <&reg_lcd_1v8>;
+		purism,panel-librem5-workaround;
 	};
 };
 
