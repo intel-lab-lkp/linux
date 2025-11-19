@@ -4557,6 +4557,9 @@ static struct gpio_desc *gpiod_find(struct device *dev, const char *con_id,
 		if (p->con_id && (!con_id || strcmp(p->con_id, con_id)))
 			continue;
 
+		if (p->key == PTR_ERR(-ENOENT))
+			return ERR_PTR(-ENOENT);
+
 		if (p->chip_hwnum == U16_MAX) {
 			desc = gpio_name_to_desc(p->key);
 			if (desc) {
