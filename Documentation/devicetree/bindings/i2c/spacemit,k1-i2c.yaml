@@ -27,6 +27,9 @@ properties:
       - description: I2C Functional Clock
       - description: APB Bus Clock
 
+  resets:
+    maxItems: 1
+
   clock-names:
     items:
       - const: func
