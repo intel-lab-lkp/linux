@@ -3489,7 +3489,7 @@ static struct folio *get_pfn_folio(unsigned long pfn, struct mem_cgroup *memcg,
 
 static bool suitable_to_scan(int total, int young)
 {
-	int n = clamp_t(int, cache_line_size() / sizeof(pte_t), 2, 8);
+	int n = clamp(cache_line_size() / sizeof(pte_t), 2, 8);
 
 	/* suitable if the average number of young PTEs per cacheline is >=1 */
 	return young * n >= total;

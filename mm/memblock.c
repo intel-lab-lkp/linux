@@ -2208,7 +2208,7 @@ static void __init __free_pages_memory(unsigned long start, unsigned long end)
 		 * the case.
 		 */
 		if (start)
-			order = min_t(int, MAX_PAGE_ORDER, __ffs(start));
+			order = min(MAX_PAGE_ORDER, __ffs(start));
 		else
 			order = MAX_PAGE_ORDER;
 

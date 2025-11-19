@@ -237,8 +237,8 @@ static inline struct folio *gup_folio_range_next(struct page *start,
 	unsigned int nr = 1;
 
 	if (folio_test_large(folio))
-		nr = min_t(unsigned int, npages - i,
-			   folio_nr_pages(folio) - folio_page_idx(folio, next));
+		nr = min(npages - i,
+			 folio_nr_pages(folio) - folio_page_idx(folio, next));
 
 	*ntails = nr;
 	return folio;

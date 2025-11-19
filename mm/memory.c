@@ -2375,7 +2375,7 @@ more:
 
 	while (pages_to_write_in_pmd) {
 		int pte_idx = 0;
-		const int batch_size = min_t(int, pages_to_write_in_pmd, 8);
+		const int batch_size = min(pages_to_write_in_pmd, 8);
 
 		start_pte = pte_offset_map_lock(mm, pmd, addr, &pte_lock);
 		if (!start_pte) {
