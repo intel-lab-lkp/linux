@@ -279,7 +279,7 @@ imx8qxp_pxl2dpi_find_next_bridge(struct imx8qxp_pxl2dpi *p2d)
 		goto out;
 	}
 
-	next_bridge = of_drm_find_bridge(remote);
+	next_bridge = devm_drm_of_find_bridge(p2d->dev, remote);
 	if (!next_bridge) {
 		next_bridge = ERR_PTR(-EPROBE_DEFER);
 		goto out;
@@ -347,7 +347,7 @@ static int imx8qxp_pxl2dpi_parse_dt_companion(struct imx8qxp_pxl2dpi *p2d)
 		goto out;
 	}
 
-	p2d->companion = of_drm_find_bridge(companion);
+	p2d->companion = devm_drm_of_find_bridge(dev, companion);
 	if (!p2d->companion) {
 		ret = -EPROBE_DEFER;
 		DRM_DEV_DEBUG_DRIVER(p2d->dev,
