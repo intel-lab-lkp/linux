@@ -43,6 +43,7 @@
 #include <asm/fadump.h>
 #include <asm/dtl.h>
 #include <asm/vphn.h>
+#include <linux/sched/isolation.h>
 
 #include "pseries.h"
 
@@ -2056,6 +2057,58 @@ void pseries_init_ec_vp_cores(void)
 	/* Initialize the available cores to all VP initially */
 	available_cores = max(entitled_cores, virtual_procs);
 }
+
+#define STEAL_RATIO_HIGH 400
+#define STEAL_RATIO_LOW  150
+
+void update_soft_entitlement(unsigned long steal_ratio)
+{
+	static int prev_direction;
+	int cpu;
+
+	if  (!entitled_cores)
+		return;
+
+	if (steal_ratio >= STEAL_RATIO_HIGH && prev_direction > 0) {
+		/*
+		 * System entitlement was reduced earlier but we continue to
+		 * see steal time. Reduce entitlement further.
+		 */
+		if (available_cores == entitled_cores)
+			return;
+
+		/* Mark them paravirt, enable tick if it is nohz_full */
+		for (cpu = (available_cores - 1) * threads_per_core;
+		     cpu < available_cores * threads_per_core; cpu++) {
+			set_cpu_paravirt(cpu, true);
+			if (tick_nohz_full_cpu(cpu))
+				tick_nohz_dep_set_cpu(cpu, TICK_DEP_BIT_SCHED);
+		}
+		available_cores--;
+
+	} else if (steal_ratio <= STEAL_RATIO_LOW && prev_direction < 0) {
+		/*
+		 * System entitlement was increased but we continue to see
+		 * less steal time. Increase entitlement further.
+		 */
+		if (available_cores == virtual_procs)
+			return;
+
+		/* mark them avaialble */
+		for (cpu = available_cores * threads_per_core;
+		     cpu < (available_cores + 1) * threads_per_core; cpu++)
+			set_cpu_paravirt(cpu, false);
+
+		available_cores++;
+	}
+	if (steal_ratio >= STEAL_RATIO_HIGH)
+		prev_direction = 1;
+	else if (steal_ratio <= STEAL_RATIO_LOW)
+		prev_direction = -1;
+	else
+		prev_direction = 0;
+}
 #else
 void pseries_init_ec_vp_cores(void) { return; }
+void update_soft_entitlement(unsigned long steal_ratio) { return; }
 #endif
