@@ -240,7 +240,7 @@ arch_test_bit_acquire(unsigned long nr, const volatile unsigned long *addr)
 					  variable_test_bit(nr, addr);
 }
 
-static __always_inline __attribute_const__ unsigned long variable__ffs(unsigned long word)
+static __always_inline __attribute_const__ unsigned int variable__ffs(unsigned long word)
 {
 	asm("tzcnt %1,%0"
 		: "=r" (word)
@@ -254,12 +254,10 @@ static __always_inline __attribute_const__ unsigned long variable__ffs(unsigned 
  *
  * Undefined if no bit exists, so code should check against 0 first.
  */
-#define __ffs(word)				\
-	(__builtin_constant_p(word) ?		\
-	 (unsigned long)__builtin_ctzl(word) :	\
-	 variable__ffs(word))
+#define __ffs(word)	\
+	(__builtin_constant_p(word) ? __builtin_ctzl(word) : variable__ffs(word))
 
-static __always_inline __attribute_const__ unsigned long variable_ffz(unsigned long word)
+static __always_inline __attribute_const__ unsigned int variable_ffz(unsigned long word)
 {
 	return variable__ffs(~word);
 }
@@ -270,10 +268,8 @@ static __always_inline __attribute_const__ unsigned long variable_ffz(unsigned l
  *
  * Undefined if no zero exists, so code should check against ~0UL first.
  */
-#define ffz(word)				\
-	(__builtin_constant_p(word) ?		\
-	 (unsigned long)__builtin_ctzl(~word) :	\
-	 variable_ffz(word))
+#define ffz(word)	\
+	(__builtin_constant_p(word) ? __builtin_ctzl(~word) : variable_ffz(word))
 
 /*
  * __fls: find last set bit in word
@@ -281,7 +277,7 @@ static __always_inline __attribute_const__ unsigned long variable_ffz(unsigned l
  *
  * Undefined if no set bit exists, so code should check against 0 first.
  */
-static __always_inline __attribute_const__ unsigned long __fls(unsigned long word)
+static __always_inline __attribute_const__ unsigned int __fls(unsigned long word)
 {
 	if (__builtin_constant_p(word))
 		return BITS_PER_LONG - 1 - __builtin_clzl(word);
