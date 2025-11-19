@@ -52,6 +52,7 @@ struct thread_arg {
 
 FIXTURE(args)
 {
+	char dummy;
 };
 
 FIXTURE_SETUP(args)
