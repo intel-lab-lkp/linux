@@ -458,12 +458,11 @@ static int lo_rw_aio(struct loop_device *lo, struct loop_cmd *cmd,
 	if (!cmd->use_aio || !lo_backfile_support_nowait(lo)) {
 		ret = lo_rw_aio_prep(lo, cmd, nr_bvec, pos);
 		if (unlikely(ret))
-			goto fail;
+			return ret;
 	}
 
 	cmd->iocb.ki_flags &= ~IOCB_NOWAIT;
 	ret = lo_submit_rw_aio(lo, cmd, nr_bvec, rw);
-fail:
 	if (ret != -EIOCBQUEUED)
 		lo_rw_aio_complete(&cmd->iocb, ret);
 	return -EIOCBQUEUED;
@@ -505,14 +504,13 @@ static int lo_rw_aio_nowait(struct loop_device *lo, struct loop_cmd *cmd,
 	int ret = lo_rw_aio_prep(lo, cmd, nr_bvec, pos);
 
 	if (unlikely(ret))
-		goto fail;
+		return ret;
 
 	if (!lo_aio_try_nowait(lo, cmd))
 		return -EAGAIN;
 
 	cmd->iocb.ki_flags |= IOCB_NOWAIT;
 	ret = lo_submit_rw_aio(lo, cmd, nr_bvec, rw);
-fail:
 	if (ret != -EIOCBQUEUED && ret != -EAGAIN)
 		lo_rw_aio_complete(&cmd->iocb, ret);
 	return ret;
