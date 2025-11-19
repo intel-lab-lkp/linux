@@ -47,7 +47,15 @@ keytype-$(CONFIG_MODULE_SIG_KEY_TYPE_ECDSA) := -newkey ec -pkeyopt ec_paramgen_c
 quiet_cmd_gen_key = GENKEY  $@
       cmd_gen_key = openssl req -new -nodes -utf8 -$(CONFIG_MODULE_SIG_HASH) -days 36500 \
 		-batch -x509 -config $< \
-		-outform PEM -out $@ -keyout $@ $(keytype-y) 2>&1
+		-outform PEM -out $@ -keyout $@ $(keytype-y) 2>&1 |
+		( \
+			openssl_log=$$(mktemp); \
+			cat > $$openssl_log; \
+			printf "    [openssl output]: "; \
+			tr -d '\n' < $$openssl_log; \
+			echo ""; \
+			rm -f $$openssl_log; \
+		)
 
 $(obj)/signing_key.pem: $(obj)/x509.genkey FORCE
 	$(call if_changed,gen_key)
