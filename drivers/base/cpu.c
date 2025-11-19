@@ -403,7 +403,9 @@ static ssize_t paravirt_store(struct device *dev,
 	/* No more paravirt cpus */
 	if (cpumask_empty(temp_mask)) {
 		cpumask_copy((struct cpumask *)&__cpu_paravirt_mask, temp_mask);
+		static_branch_disable(&disable_arch_paravirt_handling);
 	} else {
+		static_branch_enable(&disable_arch_paravirt_handling);
 		cpumask_copy((struct cpumask *)&__cpu_paravirt_mask, temp_mask);
 
 		/* Enable tick on nohz_full cpu */

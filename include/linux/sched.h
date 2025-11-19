@@ -2427,4 +2427,8 @@ extern void migrate_enable(void);
 
 DEFINE_LOCK_GUARD_0(migrate, migrate_disable(), migrate_enable())
 
+#ifdef CONFIG_PARAVIRT
+DECLARE_STATIC_KEY_FALSE(disable_arch_paravirt_handling);
+#endif
+
 #endif

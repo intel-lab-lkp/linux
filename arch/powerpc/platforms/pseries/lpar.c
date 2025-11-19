@@ -681,6 +681,9 @@ static void process_steal(int cpu)
 	unsigned long steal = 0;
 	unsigned int i;
 
+	if (static_branch_unlikely(&disable_arch_paravirt_handling))
+		return;
+
 	if (!should_cpu_process_steal(cpu))
 		return;
 
