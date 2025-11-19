@@ -2133,8 +2133,7 @@ static int dummy_hub_control(
 		case USB_PORT_FEAT_SUSPEND:
 			if (hcd->speed == HCD_USB3) {
 				dev_dbg(dummy_dev(dum_hcd),
-					 "USB_PORT_FEAT_SUSPEND req not "
-					 "supported for USB 3.0 roothub\n");
+					 "USB_PORT_FEAT_SUSPEND req not supported for USB 3.0 roothub\n");
 				goto error;
 			}
 			if (dum_hcd->port_status & USB_PORT_STAT_SUSPEND) {
@@ -2174,8 +2173,7 @@ static int dummy_hub_control(
 				(wLength < USB_DT_SS_HUB_SIZE ||
 				 wValue != (USB_DT_SS_HUB << 8))) {
 			dev_dbg(dummy_dev(dum_hcd),
-				"Wrong hub descriptor type for "
-				"USB 3.0 roothub.\n");
+				"Wrong hub descriptor type for USB 3.0 roothub.\n");
 			goto error;
 		}
 		if (hcd->speed == HCD_USB3)
@@ -2247,8 +2245,7 @@ static int dummy_hub_control(
 		case USB_PORT_FEAT_LINK_STATE:
 			if (hcd->speed != HCD_USB3) {
 				dev_dbg(dummy_dev(dum_hcd),
-					 "USB_PORT_FEAT_LINK_STATE req not "
-					 "supported for USB 2.0 roothub\n");
+					 "USB_PORT_FEAT_LINK_STATE req not supported for USB 2.0 roothub\n");
 				goto error;
 			}
 			/*
@@ -2261,8 +2258,7 @@ static int dummy_hub_control(
 			/* TODO: add suspend/resume support! */
 			if (hcd->speed != HCD_USB3) {
 				dev_dbg(dummy_dev(dum_hcd),
-					 "USB_PORT_FEAT_U1/2_TIMEOUT req not "
-					 "supported for USB 2.0 roothub\n");
+					 "USB_PORT_FEAT_U1/2_TIMEOUT req not supported for USB 2.0 roothub\n");
 				goto error;
 			}
 			break;
@@ -2270,8 +2266,7 @@ static int dummy_hub_control(
 			/* Applicable only for USB2.0 hub */
 			if (hcd->speed == HCD_USB3) {
 				dev_dbg(dummy_dev(dum_hcd),
-					 "USB_PORT_FEAT_SUSPEND req not "
-					 "supported for USB 3.0 roothub\n");
+					 "USB_PORT_FEAT_SUSPEND req not supported for USB 3.0 roothub\n");
 				goto error;
 			}
 			if (dum_hcd->active) {
@@ -2298,8 +2293,7 @@ static int dummy_hub_control(
 			/* Applicable only for USB3.0 hub */
 			if (hcd->speed != HCD_USB3) {
 				dev_dbg(dummy_dev(dum_hcd),
-					 "USB_PORT_FEAT_BH_PORT_RESET req not "
-					 "supported for USB 2.0 roothub\n");
+					 "USB_PORT_FEAT_BH_PORT_RESET req not supported for USB 2.0 roothub\n");
 				goto error;
 			}
 			fallthrough;
@@ -2347,8 +2341,7 @@ static int dummy_hub_control(
 	case GetPortErrorCount:
 		if (hcd->speed != HCD_USB3) {
 			dev_dbg(dummy_dev(dum_hcd),
-				 "GetPortErrorCount req not "
-				 "supported for USB 2.0 roothub\n");
+				 "GetPortErrorCount req not supported for USB 2.0 roothub\n");
 			goto error;
 		}
 		/* We'll always return 0 since this is a dummy hub */
@@ -2357,8 +2350,7 @@ static int dummy_hub_control(
 	case SetHubDepth:
 		if (hcd->speed != HCD_USB3) {
 			dev_dbg(dummy_dev(dum_hcd),
-				 "SetHubDepth req not supported for "
-				 "USB 2.0 roothub\n");
+				 "SetHubDepth req not supported for USB 2.0 roothub\n");
 			goto error;
 		}
 		break;
@@ -2601,8 +2593,7 @@ static int dummy_alloc_streams(struct usb_hcd *hcd, struct usb_device *udev,
 			goto out;
 		}
 		if (max_stream < ret_streams) {
-			dev_dbg(dummy_dev(dum_hcd), "Ep 0x%x only supports %u "
-					"stream IDs.\n",
+			dev_dbg(dummy_dev(dum_hcd), "Ep 0x%x only supports %u stream IDs.\n",
 					eps[i]->desc.bEndpointAddress,
 					max_stream);
 			ret_streams = max_stream;
