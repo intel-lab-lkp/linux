@@ -1459,7 +1459,7 @@ static void unmap_pmd_range(pud_t *pud, unsigned long start, unsigned long end)
 	 */
 	if (start & (PMD_SIZE - 1)) {
 		unsigned long next_page = (start + PMD_SIZE) & PMD_MASK;
-		unsigned long pre_end = min_t(unsigned long, end, next_page);
+		unsigned long pre_end = min(end, next_page);
 
 		__unmap_pmd_range(pud, pmd, start, pre_end);
 
@@ -1503,7 +1503,7 @@ static void unmap_pud_range(p4d_t *p4d, unsigned long start, unsigned long end)
 	 */
 	if (start & (PUD_SIZE - 1)) {
 		unsigned long next_page = (start + PUD_SIZE) & PUD_MASK;
-		unsigned long pre_end	= min_t(unsigned long, end, next_page);
+		unsigned long pre_end	= min(end, next_page);
 
 		unmap_pmd_range(pud, start, pre_end);
 
@@ -1591,9 +1591,9 @@ static long populate_pmd(struct cpa_data *cpa,
 		unsigned long pre_end = start + (num_pages << PAGE_SHIFT);
 		unsigned long next_page = (start + PMD_SIZE) & PMD_MASK;
 
-		pre_end   = min_t(unsigned long, pre_end, next_page);
+		pre_end   = min(pre_end, next_page);
 		cur_pages = (pre_end - start) >> PAGE_SHIFT;
-		cur_pages = min_t(unsigned int, num_pages, cur_pages);
+		cur_pages = min(num_pages, cur_pages);
 
 		/*
 		 * Need a PTE page?
@@ -1668,9 +1668,9 @@ static int populate_pud(struct cpa_data *cpa, unsigned long start, p4d_t *p4d,
 		unsigned long pre_end;
 		unsigned long next_page = (start + PUD_SIZE) & PUD_MASK;
 
-		pre_end   = min_t(unsigned long, end, next_page);
+		pre_end   = min(end, next_page);
 		cur_pages = (pre_end - start) >> PAGE_SHIFT;
-		cur_pages = min_t(int, (int)cpa->numpages, cur_pages);
+		cur_pages = min(cpa->numpages, cur_pages);
 
 		pud = pud_offset(p4d, start);
 
