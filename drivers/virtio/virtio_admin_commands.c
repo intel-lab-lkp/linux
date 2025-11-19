@@ -161,6 +161,8 @@ int virtio_admin_obj_destroy(struct virtio_device *vdev,
 	err = vdev->config->admin_cmd_exec(vdev, &cmd);
 	kfree(data);
 
+	WARN_ON_ONCE(err);
+
 	return err;
 }
 EXPORT_SYMBOL_GPL(virtio_admin_obj_destroy);
