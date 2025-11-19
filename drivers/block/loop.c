@@ -443,9 +443,18 @@ static int lo_submit_rw_aio(struct loop_device *lo, struct loop_cmd *cmd,
 	return ret;
 }
 
+/*
+ * Allow NOWAIT only if the backing file supports it, and loop disk's
+ * RQOS feature isn't enabled.
+ *
+ * RQOS takes online wait in submit_bio() code path, and IOs to backing
+ * file may be blocked, then deadlock is caused, see
+ * submit_bio_noacct_nocheck().
+ */
 static bool lo_backfile_support_nowait(const struct loop_device *lo)
 {
-	return lo->lo_backing_file->f_mode & FMODE_NOWAIT;
+	return (lo->lo_backing_file->f_mode & FMODE_NOWAIT) &&
+		!test_bit(QUEUE_FLAG_QOS_ENABLED, &lo->lo_queue->queue_flags);
 }
 
 static int lo_rw_aio(struct loop_device *lo, struct loop_cmd *cmd,
@@ -2204,6 +2213,8 @@ static int loop_add(int i)
 		goto out_cleanup_tags;
 	}
 	lo->lo_queue = lo->lo_disk->queue;
+
+	blk_queue_flag_set(QUEUE_FLAG_DISABLE_WBT_DEF, lo->lo_queue);
 
 	/*
 	 * Disable partition scanning by default. The in-kernel partition
