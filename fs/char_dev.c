@@ -549,8 +549,11 @@ int cdev_device_add(struct cdev *cdev, struct device *dev)
 		cdev_set_parent(cdev, &dev->kobj);
 
 		rc = cdev_add(cdev, dev->devt, 1);
-		if (rc)
+		if (rc) {
+			cdev->kobj.parent = NULL;
+			cdev_del(cdev);
 			return rc;
+		}
 	}
 
 	rc = device_add(dev);
