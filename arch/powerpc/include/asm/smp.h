@@ -266,6 +266,7 @@ extern char __secondary_hold;
 extern unsigned int booting_thread_hwid;
 
 extern void __early_start(void);
+void pseries_init_ec_vp_cores(void);
 #endif /* __ASSEMBLER__ */
 
 #endif /* __KERNEL__ */

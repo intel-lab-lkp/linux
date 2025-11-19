@@ -2029,3 +2029,33 @@ static int __init vpa_debugfs_init(void)
 }
 machine_arch_initcall(pseries, vpa_debugfs_init);
 #endif /* CONFIG_DEBUG_FS */
+
+#ifdef CONFIG_PARAVIRT
+
+static unsigned int virtual_procs __read_mostly;
+static unsigned int entitled_cores __read_mostly;
+static unsigned int available_cores;
+
+void pseries_init_ec_vp_cores(void)
+{
+	unsigned long retbuf[PLPAR_HCALL9_BUFSIZE];
+	int ret;
+
+	if (available_cores && virtual_procs == num_present_cpus() / threads_per_core)
+		return;
+
+	/* Get EC values from hcall */
+	ret = plpar_hcall9(H_GET_PPP, retbuf);
+	WARN_ON_ONCE(ret != 0);
+	if (ret)
+		return;
+
+	entitled_cores = retbuf[0] / 100;
+	virtual_procs = num_present_cpus() / threads_per_core;
+
+	/* Initialize the available cores to all VP initially */
+	available_cores = max(entitled_cores, virtual_procs);
+}
+#else
+void pseries_init_ec_vp_cores(void) { return; }
+#endif

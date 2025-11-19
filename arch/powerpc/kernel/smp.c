@@ -1732,6 +1732,7 @@ void __init smp_cpus_done(unsigned int max_cpus)
 
 	dump_numa_cpu_topology();
 	build_sched_topology();
+	pseries_init_ec_vp_cores();
 }
 
 /*
