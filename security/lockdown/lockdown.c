@@ -62,9 +62,11 @@ static int lockdown_is_locked_down(enum lockdown_reason what)
 		 "Invalid lockdown reason"))
 		return -EPERM;
 
+	static volatile unsigned long lockdown_reasons_seen;
+	static_assert(ARRAY_SIZE(lockdown_reasons) < sizeof(lockdown_reasons_seen) * 8);
 	if (kernel_locked_down >= what) {
-		if (lockdown_reasons[what])
-			pr_notice_ratelimited("Lockdown: %s: %s is restricted; see man kernel_lockdown.7\n",
+		if (lockdown_reasons[what] && !test_and_set_bit(what, &lockdown_reasons_seen))
+			pr_notice("Lockdown: %s: %s is restricted; see man kernel_lockdown.7\n",
 				  current->comm, lockdown_reasons[what]);
 		return -EPERM;
 	}
