@@ -81,8 +81,6 @@ __bpf_kfunc void css_rstat_updated(struct cgroup_subsys_state *css, int cpu)
 	if (!css_uses_rstat(css))
 		return;
 
-	lockdep_assert_preemption_disabled();
-
 	/*
 	 * For archs withnot nmi safe cmpxchg or percpu ops support, ignore
 	 * the requests from nmi context.
