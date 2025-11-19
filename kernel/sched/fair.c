@@ -7358,6 +7358,9 @@ static int wake_affine(struct sched_domain *sd, struct task_struct *p,
 {
 	int target = nr_cpumask_bits;
 
+	if (cpu_paravirt(prev_cpu))
+		return this_cpu;
+
 	if (sched_feat(WA_IDLE))
 		target = wake_affine_idle(this_cpu, prev_cpu, sync);
 
@@ -7440,6 +7443,11 @@ static inline int sched_balance_find_dst_cpu(struct sched_domain *sd, struct tas
 				  int cpu, int prev_cpu, int sd_flag)
 {
 	int new_cpu = cpu;
+
+	if (cpu_paravirt(prev_cpu)) {
+		schedstat_inc(p->stats.nr_wakeups_paravirt);
+		return cpu;
+	}
 
 	if (!cpumask_intersects(sched_domain_span(sd), p->cpus_ptr))
 		return prev_cpu;
@@ -7777,10 +7785,25 @@ static int select_idle_sibling(struct task_struct *p, int this_cpu, int prev, in
 	unsigned long task_util, util_min, util_max;
 	int i, recent_used_cpu, prev_aff = -1;
 
+	/* Likely prev,target belong to same LLC, it is better at wakeup
+	 * to move away from them. at best return recent_used_cpu if it
+	 * is usable
+	 */
+	if (cpu_paravirt(prev) || cpu_paravirt(target)) {
+		schedstat_inc(p->stats.nr_wakeups_paravirt);
+
+		recent_used_cpu = p->recent_used_cpu;
+		if (!cpu_paravirt(recent_used_cpu))
+			return recent_used_cpu;
+		else
+			return this_cpu;
+	}
+
 	/*
 	 * On asymmetric system, update task utilization because we will check
 	 * that the task fits with CPU's capacity.
 	 */
+
 	if (sched_asym_cpucap_active()) {
 		sync_entity_load_avg(&p->se);
 		task_util = task_util_est(p);
@@ -8539,8 +8562,14 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 
 		if (!is_rd_overutilized(this_rq()->rd)) {
 			new_cpu = find_energy_efficient_cpu(p, prev_cpu);
-			if (new_cpu >= 0)
+
+			/* System supporting Energy model isn't expected
+			 * have a CPU marked as paravirt
+			 */
+			if (new_cpu >= 0) {
+				WARN_ON_ONCE(cpu_paravirt(new_cpu));
 				return new_cpu;
+			}
 			new_cpu = prev_cpu;
 		}
 
@@ -11831,6 +11860,11 @@ static int sched_balance_rq(int this_cpu, struct rq *this_rq,
 	bool need_unlock = false;
 
 	cpumask_and(cpus, sched_domain_span(sd), cpu_active_mask);
+
+#ifdef CONFIG_PARAVIRT
+	/* Don't spread load to paravirt CPUs */
+	cpumask_andnot(cpus, cpus, cpu_paravirt_mask);
+#endif
 
 	schedstat_inc(sd->lb_count[idle]);
 
