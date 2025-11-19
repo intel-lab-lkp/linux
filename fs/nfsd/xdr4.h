@@ -187,10 +187,11 @@ struct nfsd4_compound_state {
 	struct nfsd4_session	*session;
 	struct nfsd4_slot	*slot;
 	int			data_offset;
-	bool                    spo_must_allowed;
+	bool			spo_must_allowed;
 	size_t			iovlen;
 	u32			minorversion;
 	__be32			status;
+	__be32			saved_status;
 	stateid_t	current_stateid;
 	stateid_t	save_stateid;
 	/* to indicate current and saved state id presents */

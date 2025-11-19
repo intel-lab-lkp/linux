@@ -708,6 +708,7 @@ nfsd4_putfh(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 			 * in the COMPOUND, and extend it to
 			 * NFS4ERR_BADHANDLE.
 			 */
+			cstate->saved_status = ret;
 			ret = 0;
 		}
 	}
@@ -2854,6 +2855,7 @@ nfsd4_proc_compound(struct svc_rqst *rqstp)
 	resp->tag = args->tag;
 	resp->rqstp = rqstp;
 	cstate->minorversion = args->minorversion;
+	cstate->saved_status = nfserr_nofilehandle;
 	fh_init(current_fh, NFS4_FHSIZE);
 	fh_init(save_fh, NFS4_FHSIZE);
 	/*
@@ -2905,7 +2907,7 @@ nfsd4_proc_compound(struct svc_rqst *rqstp)
 		}
 		if (!current_fh->fh_dentry) {
 			if (!(op->opdesc->op_flags & ALLOWED_WITHOUT_LOCAL_FH)) {
-				op->status = nfserr_nofilehandle;
+				op->status = cstate->saved_status;
 				goto encode_op;
 			}
 		} else if (current_fh->fh_export->ex_fslocs.migrated &&
