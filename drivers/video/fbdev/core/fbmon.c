@@ -1495,7 +1495,7 @@ const unsigned char *fb_firmware_edid(struct device *device)
 {
 	struct pci_dev *dev = NULL;
 	struct resource *res = NULL;
-	unsigned char *edid = NULL;
+	const unsigned char *edid = NULL;
 
 	if (device)
 		dev = to_pci_dev(device);
@@ -1504,7 +1504,7 @@ const unsigned char *fb_firmware_edid(struct device *device)
 		res = &dev->resource[PCI_ROM_RESOURCE];
 
 	if (res && res->flags & IORESOURCE_ROM_SHADOW)
-		edid = edid_info.dummy;
+		edid = get_edid_info();
 
 	return edid;
 }

@@ -214,8 +214,12 @@ arch_initcall(init_x86_sysctl);
 struct screen_info screen_info;
 EXPORT_SYMBOL(screen_info);
 #if defined(CONFIG_FIRMWARE_EDID)
-struct edid_info edid_info;
-EXPORT_SYMBOL_GPL(edid_info);
+static struct edid_info edid_info __ro_after_init;
+const u8 *get_edid_info(void)
+{
+	return edid_info.dummy;
+}
+EXPORT_SYMBOL_GPL(get_edid_info);
 #endif
 
 extern int root_mountflags;

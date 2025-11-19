@@ -5,7 +5,7 @@
 #include <uapi/video/edid.h>
 
 #if defined(CONFIG_FIRMWARE_EDID)
-extern struct edid_info edid_info;
+const u8 *get_edid_info(void) __attribute_const__;
 #endif
 
 #endif /* __linux_video_edid_h__ */
