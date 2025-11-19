@@ -8,6 +8,7 @@ use crate::firmware::FalconUCodeDescV3;
 use core::convert::TryFrom;
 use kernel::device;
 use kernel::error::Result;
+use kernel::io::IoFallible;
 use kernel::prelude::*;
 use kernel::ptr::{Alignable, Alignment};
 use kernel::types::ARef;

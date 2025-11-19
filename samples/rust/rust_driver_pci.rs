@@ -8,6 +8,8 @@ use kernel::{
     c_str,
     device::Core,
     devres::Devres,
+    io::IoFallible,
+    io::IoInfallible,
     pci,
     prelude::*,
     sync::aref::ARef, //
