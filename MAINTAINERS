@@ -28042,6 +28042,13 @@ F:	include/linux/workqueue.h
 F:	kernel/workqueue.c
 F:	kernel/workqueue_internal.h
 
+WSEN TIDS DRIVER
+M:	Thomas Marangoni <Thomas.Marangoni@becom-group.com>
+L:	linux-hwmon@vger.kernel.org
+S:	Maintained
+F:	Documentation/hwmon/tids.rst
+F:	drivers/hwmon/tids.c
+
 WWAN DRIVERS
 M:	Loic Poulain <loic.poulain@oss.qualcomm.com>
 M:	Sergey Ryazanov <ryazanov.s.a@gmail.com>
