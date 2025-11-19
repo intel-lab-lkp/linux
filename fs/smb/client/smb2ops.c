@@ -4087,7 +4087,7 @@ static void
 smb21_set_oplock_level(struct cifsInodeInfo *cinode, __u32 oplock,
 		       __u16 epoch, bool *purge_cache)
 {
-	char message[5] = {0};
+	char message[5] = {0}, *p = message;
 	unsigned int new_oplock = 0;
 
 	oplock &= 0xFF;
@@ -4102,18 +4102,20 @@ smb21_set_oplock_level(struct cifsInodeInfo *cinode, __u32 oplock,
 
 	if (oplock & SMB2_LEASE_READ_CACHING_HE) {
 		new_oplock |= CIFS_CACHE_READ_FLG;
-		strcat(message, "R");
+		*p++ = 'R';
 	}
 	if (oplock & SMB2_LEASE_HANDLE_CACHING_HE) {
 		new_oplock |= CIFS_CACHE_HANDLE_FLG;
-		strcat(message, "H");
+		*p++ = 'H';
 	}
 	if (oplock & SMB2_LEASE_WRITE_CACHING_HE) {
 		new_oplock |= CIFS_CACHE_WRITE_FLG;
-		strcat(message, "W");
+		*p++ = 'W';
 	}
 	if (!new_oplock)
 		strscpy(message, "None");
+	else
+		*p = 0;
 
 	cinode->oplock = new_oplock;
 	cifs_dbg(FYI, "%s Lease granted on inode %p\n", message,
