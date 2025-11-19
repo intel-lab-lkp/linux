@@ -7,6 +7,10 @@ ParanoidAndNotRoot()
   [ "$(id -u)" != 0 ] && [ "$(cat /proc/sys/kernel/perf_event_paranoid)" -gt $1 ]
 }
 
+# Ignore metric which are not supported on s390x
+[ "$(uname -m)" = "s390x" ] && ignore="|branch_miss_rate|l1d_miss_rate|llc_miss_rate|\
+		dtlb_miss_rate|itlb_miss_rate|l1i_miss_rate|l1_prefetch_miss_rate"
+
 test_prog="sleep 0.01"
 system_wide_flag="-a"
 if ParanoidAndNotRoot 0
@@ -27,9 +31,10 @@ for m in $(perf list --raw-dump metrics); do
   fi
   if [[ "$result" =~ "Cannot resolve IDs for" || "$result" =~ "No supported events found" ]]
   then
-    if [[ "$m" == @(l1_prefetch_miss_rate|stalled_cycles_per_instruction) ]]
+    if [[ "$m" == @(l1_prefetch_miss_rate|stalled_cycles_per_instruction$ignore) ]]
     then
       # Default metrics that may use unsupported events.
+      echo "Skipped metric $m"
       continue
     fi
     echo "Metric contains missing events"
@@ -106,4 +111,5 @@ for m in $(perf list --raw-dump metrics); do
   err=1
 done
 
+[ "$err" -eq 2 ] && err=0
 exit "$err"
