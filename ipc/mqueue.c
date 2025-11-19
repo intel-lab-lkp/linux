@@ -363,7 +363,7 @@ static struct inode *mqueue_get_inode(struct super_block *sb,
 		if (info->attr.mq_msgsize > ULONG_MAX/info->attr.mq_maxmsg)
 			goto out_inode;
 		mq_treesize = info->attr.mq_maxmsg * sizeof(struct msg_msg) +
-			min_t(unsigned int, info->attr.mq_maxmsg, MQ_PRIO_MAX) *
+			min(info->attr.mq_maxmsg, MQ_PRIO_MAX) *
 			sizeof(struct posix_msg_tree_node);
 		mq_bytes = info->attr.mq_maxmsg * info->attr.mq_msgsize;
 		if (mq_bytes + mq_treesize < mq_bytes)
@@ -540,7 +540,7 @@ static void mqueue_evict_inode(struct inode *inode)
 
 		/* Total amount of bytes accounted for the mqueue */
 		mq_treesize = info->attr.mq_maxmsg * sizeof(struct msg_msg) +
-			min_t(unsigned int, info->attr.mq_maxmsg, MQ_PRIO_MAX) *
+			min(info->attr.mq_maxmsg, MQ_PRIO_MAX) *
 			sizeof(struct posix_msg_tree_node);
 
 		mq_bytes = mq_treesize + (info->attr.mq_maxmsg *
