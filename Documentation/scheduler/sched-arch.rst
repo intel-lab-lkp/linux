@@ -62,6 +62,43 @@ Your cpu_idle routines need to obey the following rules:
 arch/x86/kernel/process.c has examples of both polling and
 sleeping idle functions.
 
+Paravirt CPUs
+=============
+
+Under virtualised environments it is possible to overcommit CPU resources.
+i.e sum of virtual CPU(vCPU) of all VM's is greater than number of physical
+CPUs(pCPU). Under such conditions when all or many VM's have high utilization,
+hypervisor won't be able to satisfy the CPU requirement and has to context
+switch within or across VM. i.e hypervisor need to preempt one vCPU to run
+another. This is called vCPU preemption. This is more expensive compared to
+task context switch within a vCPU.
+
+In such cases it is better that VM's co-ordinate among themselves and ask for
+less CPU by not using some of the vCPUs. Such vCPUs where workload can be
+avoided at the moment for less vCPU preemption are called as "Paravirt CPUs".
+Note that when the pCPU contention goes away, these vCPUs can be used again
+by the workload.
+
+Arch need to set/unset the specific vCPU in cpu_paravirt_mask. When set, avoid
+that vCPU and when unset, use it as usual.
+
+Scheduler will try to avoid paravirt vCPUs as much as it can.
+This is achieved by
+1. Not selecting paravirt CPU at wakeup.
+2. Push the task away from paravirt CPU at tick.
+3. Not selecting paravirt CPU at load balance.
+
+This works only for SCHED_RT and SCHED_NORMAL. SCHED_EXT and userspace can make
+choices accordingly using cpu_paravirt_mask.
+
+/sys/devices/system/cpu/paravirt prints the current cpu_paravirt_mask in
+cpulist format.
+
+Notes:
+1. A task pinned only on paravirt CPUs will continue to run there.
+2. This feature is available under CONFIG_PARAVIRT
+3. Refer to PowerPC for architecure implementation side.
+4. Doesn't push out any task running on isolated CPUs.
 
 Possible arch/ problems
 =======================
