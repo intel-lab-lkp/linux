@@ -54,8 +54,13 @@ void __weak free_screen_info(struct efi_screen_info *si)
 static struct efi_screen_info *setup_graphics(void)
 {
 	struct efi_screen_info *si, tmp = {};
+	struct edid_info *edid_info = NULL;
 
-	if (efi_setup_graphics(&tmp, NULL) != EFI_SUCCESS)
+#ifdef CONFIG_FIRMWARE_EDID
+	edid_info = &tmp.edid_info;
+#endif
+
+	if (efi_setup_graphics(&tmp.screen_info, edid_info) != EFI_SUCCESS)
 		return NULL;
 
 	si = alloc_screen_info();

@@ -28,6 +28,7 @@
 #include <asm/page.h>
 
 #include <linux/screen_info.h>
+#include <video/edid.h>
 
 #define EFI_SUCCESS		0
 #define EFI_LOAD_ERROR		( 1 | (1UL << (BITS_PER_LONG-1)))
@@ -1363,6 +1364,9 @@ void efivars_generic_ops_unregister(void);
 
 struct efi_screen_info {
 	struct screen_info	screen_info;
+#ifdef CONFIG_FIRMWARE_EDID
+	struct edid_info	edid_info;
+#endif
 };
 
 #endif /* _LINUX_EFI_H */

@@ -34,9 +34,6 @@
 #define EFI_ALLOC_LIMIT		ULONG_MAX
 #endif
 
-struct edid_info;
-struct screen_info;
-
 extern bool efi_no5lvl;
 extern bool efi_nochunk;
 extern bool efi_nokaslr;

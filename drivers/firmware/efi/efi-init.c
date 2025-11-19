@@ -64,6 +64,14 @@ struct efi_screen_info efi_screen_info __section(".data");
 
 extern struct screen_info screen_info __alias(efi_screen_info);
 EXPORT_SYMBOL_GPL(screen_info);
+
+#ifdef CONFIG_FIRMWARE_EDID
+const u8 *get_edid_info(void)
+{
+       return efi_screen_info.edid_info.dummy;
+}
+EXPORT_SYMBOL_GPL(get_edid_info);
+#endif
 #endif
 
 static void __init init_screen_info(void)

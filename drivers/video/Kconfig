@@ -63,7 +63,7 @@ endif # HAS_IOMEM
 
 config FIRMWARE_EDID
 	bool "Enable firmware EDID"
-	depends on X86
+	depends on X86 || EFI_GENERIC_STUB
 	help
 	  This enables access to the EDID transferred from the firmware.
 	  On x86, this is from the VESA BIOS. DRM display drivers will
