@@ -151,11 +151,11 @@ static const struct {
 	EP_INFO("ep2out-bulk",
 		USB_EP_CAPS(USB_EP_CAPS_TYPE_BULK, USB_EP_CAPS_DIR_OUT)),
 /*
-	EP_INFO("ep3in-iso",
-		USB_EP_CAPS(USB_EP_CAPS_TYPE_ISO, USB_EP_CAPS_DIR_IN)),
-	EP_INFO("ep4out-iso",
-		USB_EP_CAPS(USB_EP_CAPS_TYPE_ISO, USB_EP_CAPS_DIR_OUT)),
-*/
+ *	EP_INFO("ep3in-iso",
+ *		USB_EP_CAPS(USB_EP_CAPS_TYPE_ISO, USB_EP_CAPS_DIR_IN)),
+ *	EP_INFO("ep4out-iso",
+ *		USB_EP_CAPS(USB_EP_CAPS_TYPE_ISO, USB_EP_CAPS_DIR_OUT)),
+ */
 	EP_INFO("ep5in-int",
 		USB_EP_CAPS(USB_EP_CAPS_TYPE_INT, USB_EP_CAPS_DIR_IN)),
 	EP_INFO("ep6in-bulk",
@@ -163,11 +163,11 @@ static const struct {
 	EP_INFO("ep7out-bulk",
 		USB_EP_CAPS(USB_EP_CAPS_TYPE_BULK, USB_EP_CAPS_DIR_OUT)),
 /*
-	EP_INFO("ep8in-iso",
-		USB_EP_CAPS(USB_EP_CAPS_TYPE_ISO, USB_EP_CAPS_DIR_IN)),
-	EP_INFO("ep9out-iso",
-		USB_EP_CAPS(USB_EP_CAPS_TYPE_ISO, USB_EP_CAPS_DIR_OUT)),
-*/
+ *	EP_INFO("ep8in-iso",
+ *		USB_EP_CAPS(USB_EP_CAPS_TYPE_ISO, USB_EP_CAPS_DIR_IN)),
+ *	EP_INFO("ep9out-iso",
+ *		USB_EP_CAPS(USB_EP_CAPS_TYPE_ISO, USB_EP_CAPS_DIR_OUT)),
+ */
 	EP_INFO("ep10in-int",
 		USB_EP_CAPS(USB_EP_CAPS_TYPE_INT, USB_EP_CAPS_DIR_IN)),
 	EP_INFO("ep11in-bulk",
@@ -175,11 +175,11 @@ static const struct {
 	EP_INFO("ep12out-bulk",
 		USB_EP_CAPS(USB_EP_CAPS_TYPE_BULK, USB_EP_CAPS_DIR_OUT)),
 /*
-	EP_INFO("ep13in-iso",
-		USB_EP_CAPS(USB_EP_CAPS_TYPE_ISO, USB_EP_CAPS_DIR_IN)),
-	EP_INFO("ep14out-iso",
-		USB_EP_CAPS(USB_EP_CAPS_TYPE_ISO, USB_EP_CAPS_DIR_OUT)),
-*/
+ *	EP_INFO("ep13in-iso",
+ *		USB_EP_CAPS(USB_EP_CAPS_TYPE_ISO, USB_EP_CAPS_DIR_IN)),
+ *	EP_INFO("ep14out-iso",
+ *		USB_EP_CAPS(USB_EP_CAPS_TYPE_ISO, USB_EP_CAPS_DIR_OUT)),
+ */
 	EP_INFO("ep15in-int",
 		USB_EP_CAPS(USB_EP_CAPS_TYPE_INT, USB_EP_CAPS_DIR_IN)),
 
@@ -314,6 +314,7 @@ static inline struct dummy *ep_to_dummy(struct dummy_ep *ep)
 static inline struct dummy_hcd *gadget_to_dummy_hcd(struct usb_gadget *gadget)
 {
 	struct dummy *dum = container_of(gadget, struct dummy, gadget);
+
 	if (dum->gadget.speed == USB_SPEED_SUPER)
 		return dum->ss_hcd;
 	else
@@ -388,7 +389,7 @@ static void set_link_state_by_speed(struct dummy_hcd *dum_hcd)
 		} else {
 			/* device is connected and not suspended */
 			dum_hcd->port_status |= (USB_PORT_STAT_CONNECTION |
-						 USB_PORT_STAT_SPEED_5GBPS) ;
+						 USB_PORT_STAT_SPEED_5GBPS);
 			if ((dum_hcd->old_status &
 			     USB_PORT_STAT_CONNECTION) == 0)
 				dum_hcd->port_status |=
@@ -613,8 +614,8 @@ static int dummy_enable(struct usb_ep *_ep,
 	_ep->maxpacket = max;
 	if (usb_ss_max_streams(_ep->comp_desc)) {
 		if (!usb_endpoint_xfer_bulk(desc)) {
-			dev_err(udc_dev(dum), "Can't enable stream support on "
-					"non-bulk ep %s\n", _ep->name);
+			dev_err(udc_dev(dum), "Can't enable stream support on non-bulk ep %s\n",
+					_ep->name);
 			return -EINVAL;
 		}
 		ep->stream_en = 1;
@@ -1042,7 +1043,8 @@ static int dummy_udc_stop(struct usb_gadget *g)
 #undef is_enabled
 
 /* The gadget structure is stored inside the hcd structure and will be
- * released along with it. */
+ * released along with it.
+ */
 static void init_dummy_udc_hw(struct dummy *dum)
 {
 	int i;
@@ -1264,7 +1266,8 @@ static int dummy_urb_enqueue(
 	struct usb_hcd			*hcd,
 	struct urb			*urb,
 	gfp_t				mem_flags
-) {
+)
+{
 	struct dummy_hcd *dum_hcd;
 	struct urbp	*urbp;
 	unsigned long	flags;
@@ -1323,7 +1326,8 @@ static int dummy_urb_dequeue(struct usb_hcd *hcd, struct urb *urb, int status)
 	int		rc;
 
 	/* giveback happens automatically in timer callback,
-	 * so make sure the callback happens */
+	 * so make sure the callback happens
+	 */
 	dum_hcd = hcd_to_dummy_hcd(hcd);
 	spin_lock_irqsave(&dum_hcd->dum->lock, flags);
 
@@ -2109,7 +2113,8 @@ static int dummy_hub_control(
 	u16		wIndex,
 	char		*buf,
 	u16		wLength
-) {
+)
+{
 	struct dummy_hcd *dum_hcd;
 	int		retval = 0;
 	unsigned long	flags;
