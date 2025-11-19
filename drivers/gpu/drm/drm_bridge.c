@@ -1418,6 +1418,35 @@ EXPORT_SYMBOL_GPL(drm_bridge_hpd_notify);
 
 #ifdef CONFIG_OF
 /**
+ * drm_of_find_bridge - find the bridge corresponding to the device node in
+ *			the global bridge list
+ * @np: device node
+ *
+ * The refcount of the returned bridge is incremented. Use drm_bridge_put()
+ * when done with it.
+ *
+ * RETURNS:
+ * drm_bridge control struct on success, NULL on failure
+ */
+struct drm_bridge *drm_of_find_bridge(struct device_node *np)
+{
+	struct drm_bridge *bridge;
+
+	mutex_lock(&bridge_lock);
+
+	list_for_each_entry(bridge, &bridge_list, list) {
+		if (bridge->of_node == np) {
+			mutex_unlock(&bridge_lock);
+			return drm_bridge_get(bridge);
+		}
+	}
+
+	mutex_unlock(&bridge_lock);
+	return NULL;
+}
+EXPORT_SYMBOL(drm_of_find_bridge);
+
+/**
  * of_drm_find_bridge - find the bridge corresponding to the device node in
  *			the global bridge list
  *
