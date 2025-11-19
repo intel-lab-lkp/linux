@@ -120,6 +120,19 @@ impl<T: Driver + 'static> Adapter<T> {
         // and stored a `Pin<KBox<T>>`.
         let data = unsafe { pdev.as_ref().drvdata_obtain::<T>() };
 
+        // Always disable SR-IOV before `unbind()` to guarantee that when a VF device is bound
+        // to a driver, the underlying PF device is bound to a driver, too.
+        #[cfg(CONFIG_PCI_IOV)]
+        {
+            // First, allow the driver to gracefully disable SR-IOV by itself.
+            if T::HAS_SRIOV_CONFIGURE && pdev.num_vf() != 0 {
+                let _ = T::sriov_configure(pdev, 0);
+            }
+            // Then, forcibly disable SR-IOV if the driver has not done so already,
+            // to uphold the guarantee with regard to driver binding described above.
+            pdev.disable_sriov();
+        }
+
         T::unbind(pdev, data.as_ref());
     }
 
@@ -332,6 +345,11 @@ pub trait Driver: Send {
     /// [`Device`] by writing the number of Virtual Functions (VF), `nr_virtfn` or zero to the
     /// sysfs file `sriov_numvfs` for this device. Implementing this callback is optional.
     ///
+    /// Further, and unlike for a PCI driver written in C, when a PF device with enabled VFs is
+    /// unbound from its bound [`Driver`], the `sriov_configure()` callback is invoked to disable
+    /// SR-IOV before the `unbind()` callback. This guarantees that when a VF device is bound to a
+    /// driver, the underlying PF device is bound to a driver, too.
+    ///
     /// Upon success, this callback must return the number of VFs that were enabled, or zero if
     /// SR-IOV was disabled.
     ///
@@ -497,6 +515,35 @@ impl Device {
     pub fn pci_class(&self) -> Class {
         // SAFETY: `self.as_raw` is a valid pointer to a `struct pci_dev`.
         Class::from_raw(unsafe { (*self.as_raw()).class })
+    }
+}
+
+impl Device<device::Bound> {
+    /// Returns the Physical Function (PF) device for a Virtual Function (VF) device.
+    ///
+    /// # Examples
+    ///
+    /// The following example illustrates how to obtain the private driver data of the PF device,
+    /// where `vf_pdev` is the VF device of reference type `&Device<Core>` or `&Device<Bound>`.
+    ///
+    /// ```
+    /// let pf_pdev = vf_pdev.physfn()?;
+    /// let pf_drvdata = pf_pdev.as_ref().drvdata::<MyDriver>()?;
+    /// ```
+    #[cfg(CONFIG_PCI_IOV)]
+    pub fn physfn(&self) -> Result<&Device<device::Bound>> {
+        if !self.is_virtfn() {
+            return Err(EINVAL);
+        }
+        // SAFETY:
+        // `self.as_raw` returns a valid pointer to a `struct pci_dev`.
+        //
+        // `physfn` is a valid pointer to a `struct pci_dev` since self.is_virtfn() is `true`.
+        //
+        // `physfn` may be cast to a `Device<device::Bound>` since `pci::Driver::remove()` calls
+        // `disable_sriov()` to remove all VF devices, which guarantees that the underlying
+        // PF device is always bound to a driver when the VF device is bound to a driver.
+        Ok(unsafe { &*(*self.as_raw()).__bindgen_anon_1.physfn.cast() })
     }
 }
 
