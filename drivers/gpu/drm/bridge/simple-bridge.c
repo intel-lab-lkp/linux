@@ -180,7 +180,7 @@ static int simple_bridge_probe(struct platform_device *pdev)
 	if (!remote)
 		return -EINVAL;
 
-	sbridge->next_bridge = of_drm_find_bridge(remote);
+	sbridge->next_bridge = devm_drm_of_find_bridge(&pdev->dev, remote);
 	of_node_put(remote);
 
 	if (!sbridge->next_bridge) {
