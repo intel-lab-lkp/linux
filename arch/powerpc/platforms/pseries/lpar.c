@@ -660,10 +660,58 @@ static int __init vcpudispatch_stats_procfs_init(void)
 machine_device_initcall(pseries, vcpudispatch_stats_procfs_init);
 
 #ifdef CONFIG_PARAVIRT_TIME_ACCOUNTING
+
+#define STEAL_MULTIPLE 10000
+#define PURR_UPDATE_TB NSEC_PER_SEC
+
+static bool should_cpu_process_steal(int cpu)
+{
+	if (cpu == cpumask_first(cpu_online_mask))
+		return true;
+
+	return false;
+}
+
+static void process_steal(int cpu)
+{
+	static unsigned long next_tb_ns, prev_steal;
+	unsigned long steal_ratio, delta_tb;
+	unsigned long tb_ns = tb_to_ns(mftb());
+	unsigned long steal = 0;
+	unsigned int i;
+
+	if (!should_cpu_process_steal(cpu))
+		return;
+
+	if (tb_ns < next_tb_ns)
+		return;
+
+	for_each_online_cpu(i) {
+		struct lppaca *lppaca = &lppaca_of(i);
+
+		steal += be64_to_cpu(READ_ONCE(lppaca->ready_enqueue_tb));
+		steal += be64_to_cpu(READ_ONCE(lppaca->enqueue_dispatch_tb));
+	}
+
+	steal = tb_to_ns(steal);
+
+	if (next_tb_ns && prev_steal) {
+		delta_tb = max(tb_ns - (next_tb_ns - PURR_UPDATE_TB), 1);
+		steal_ratio = (steal - prev_steal) * STEAL_MULTIPLE;
+		steal_ratio /= (delta_tb * num_online_cpus());
+		update_soft_entitlement(steal_ratio);
+	}
+
+	next_tb_ns = tb_ns + PURR_UPDATE_TB;
+	prev_steal = steal;
+}
+
 u64 pseries_paravirt_steal_clock(int cpu)
 {
 	struct lppaca *lppaca = &lppaca_of(cpu);
 
+	if (is_shared_processor() && !is_kvm_guest())
+		process_steal(cpu);
 	/*
 	 * VPA steal time counters are reported at TB frequency. Hence do a
 	 * conversion to ns before returning
@@ -2060,6 +2108,17 @@ void pseries_init_ec_vp_cores(void)
 
 #define STEAL_RATIO_HIGH 400
 #define STEAL_RATIO_LOW  150
+
+/*
+ * [0]<----------->[EC]---->{AC}-->[VP]
+ * EC == Entitled Cores. Guaranteed number of cores by hypervsior.
+ * VP == Virtual Processors. Total number of cores. When there is overcommit
+ * this will be higher than EC.
+ * AC == Available Cores Varies between EC <-> VP.
+ *
+ * If Steal time is high, then reduce Available Cores.
+ * If steal time is low, increase Available Cores
+ */
 
 void update_soft_entitlement(unsigned long steal_ratio)
 {
