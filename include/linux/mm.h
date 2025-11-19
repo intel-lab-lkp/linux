@@ -548,10 +548,9 @@ extern unsigned int kobjsize(const void *objp);
  * VMA flags we ignore for the purposes of merge, i.e. one VMA possessing one
  * of these flags and the other not does not preclude a merge.
  *
- * VM_STICKY - If one VMA has flags which must be 'sticky', that is ones
- *             which should propagate to all VMAs, but the other does not,
- *             the merge should still proceed with the merge logic applying
- *             sticky flags to the final VMA.
+ *    VM_STICKY - When merging VMAs, VMA flags must match, unless they are
+ *                'sticky'. If any sticky flags exist in either VMA, we simply
+ *                set all of them on the merged VMA.
  */
 #define VM_IGNORE_MERGE VM_STICKY
 
