@@ -69,7 +69,7 @@ dqs_again:
 			goto dqs_again;
 
 		dql->stall_cnt++;
-		dql->stall_max = max_t(unsigned short, dql->stall_max, now - t);
+		dql->stall_max = max(dql->stall_max, now - t);
 
 		trace_dql_stall_detected(dql->stall_thrs, now - t,
 					 dql->last_reap, dql->history_head,
