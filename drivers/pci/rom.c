@@ -69,6 +69,9 @@ void pci_disable_rom(struct pci_dev *pdev)
 }
 EXPORT_SYMBOL_GPL(pci_disable_rom);
 
+#define PCI_ROM_HEADER_SIZE 0x1A
+#define PCI_ROM_DATA_STRUCT_SIZE 0x1B
+
 /**
  * pci_get_rom_size - obtain the actual size of the ROM image
  * @pdev: target PCI device
@@ -83,6 +86,7 @@ EXPORT_SYMBOL_GPL(pci_disable_rom);
 static size_t pci_get_rom_size(struct pci_dev *pdev, void __iomem *rom,
 			       size_t size)
 {
+	void __iomem *end = rom + size;
 	void __iomem *image;
 	int last_image;
 	unsigned int length;
@@ -90,14 +94,21 @@ static size_t pci_get_rom_size(struct pci_dev *pdev, void __iomem *rom,
 	image = rom;
 	do {
 		void __iomem *pds;
+
+		if (image + PCI_ROM_HEADER_SIZE >= end)
+			break;
+
 		/* Standard PCI ROMs start out with these bytes 55 AA */
 		if (readw(image) != 0xAA55) {
 			pci_info(pdev, "Invalid PCI ROM header signature: expecting 0xaa55, got %#06x\n",
 				 readw(image));
 			break;
 		}
+
 		/* get the PCI data structure and check its "PCIR" signature */
 		pds = image + readw(image + 24);
+		if (pds + PCI_ROM_DATA_STRUCT_SIZE >= end)
+			break;
 		if (readl(pds) != 0x52494350) {
 			pci_info(pdev, "Invalid PCI ROM data signature: expecting 0x52494350, got %#010x\n",
 				 readl(pds));
@@ -106,8 +117,9 @@ static size_t pci_get_rom_size(struct pci_dev *pdev, void __iomem *rom,
 		last_image = readb(pds + 21) & 0x80;
 		length = readw(pds + 16);
 		image += length * 512;
+
 		/* Avoid iterating through memory outside the resource window */
-		if (image >= rom + size)
+		if (image + PCI_ROM_HEADER_SIZE >= end)
 			break;
 		if (!last_image) {
 			if (readw(image) != 0xAA55) {
