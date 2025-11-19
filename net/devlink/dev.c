@@ -701,6 +701,30 @@ int devlink_nl_eswitch_get_doit(struct sk_buff *skb, struct genl_info *info)
 	return genlmsg_reply(msg, info);
 }
 
+static void devlink_eswitch_notify(struct devlink *devlink)
+{
+	struct sk_buff *msg;
+	int err;
+
+	WARN_ON(!devl_is_registered(devlink));
+
+	if (!devlink_nl_notify_need(devlink))
+		return;
+
+	msg = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
+	if (!msg)
+		return;
+
+	err = devlink_nl_eswitch_fill(msg, devlink, DEVLINK_CMD_ESWITCH_GET,
+				      0, 0, 0);
+	if (err) {
+		nlmsg_free(msg);
+		return;
+	}
+
+	devlink_nl_notify_send(devlink, msg);
+}
+
 int devlink_nl_eswitch_set_doit(struct sk_buff *skb, struct genl_info *info)
 {
 	struct devlink *devlink = info->user_ptr[0];
@@ -742,6 +766,7 @@ int devlink_nl_eswitch_set_doit(struct sk_buff *skb, struct genl_info *info)
 			return err;
 	}
 
+	devlink_eswitch_notify(devlink);
 	return 0;
 }
 
