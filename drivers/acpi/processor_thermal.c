@@ -323,6 +323,7 @@ int acpi_processor_thermal_init(struct acpi_processor *pr,
 	dev_dbg(&device->dev, "registered as cooling_device%d\n",
 		pr->cdev->id);
 
+	/* For backwards compatibility */
 	result = sysfs_create_link(&device->dev.kobj,
 				   &pr->cdev->device.kobj,
 				   "thermal_cooling");
@@ -332,19 +333,8 @@ int acpi_processor_thermal_init(struct acpi_processor *pr,
 		goto err_thermal_unregister;
 	}
 
-	result = sysfs_create_link(&pr->cdev->device.kobj,
-				   &device->dev.kobj,
-				   "device");
-	if (result) {
-		dev_err(&pr->cdev->device,
-			"Failed to create sysfs link 'device'\n");
-		goto err_remove_sysfs_thermal;
-	}
-
 	return 0;
 
-err_remove_sysfs_thermal:
-	sysfs_remove_link(&device->dev.kobj, "thermal_cooling");
 err_thermal_unregister:
 	thermal_cooling_device_unregister(pr->cdev);
 
@@ -356,7 +346,6 @@ void acpi_processor_thermal_exit(struct acpi_processor *pr,
 {
 	if (pr->cdev) {
 		sysfs_remove_link(&device->dev.kobj, "thermal_cooling");
-		sysfs_remove_link(&pr->cdev->device.kobj, "device");
 		thermal_cooling_device_unregister(pr->cdev);
 		pr->cdev = NULL;
 	}
