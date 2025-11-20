@@ -840,29 +840,6 @@ static void amd_iommu_report_page_fault(struct amd_iommu *iommu,
 		dev_data = dev_iommu_priv_get(&pdev->dev);
 
 	if (dev_data) {
-		/*
-		 * If this is a DMA fault (for which the I(nterrupt)
-		 * bit will be unset), allow report_iommu_fault() to
-		 * prevent logging it.
-		 */
-		if (IS_IOMMU_MEM_TRANSACTION(flags)) {
-			/* Device not attached to domain properly */
-			if (dev_data->domain == NULL) {
-				pr_err_ratelimited("Event logged [Device not attached to domain properly]\n");
-				pr_err_ratelimited("  device=%04x:%02x:%02x.%x domain=0x%04x\n",
-						   iommu->pci_seg->id, PCI_BUS_NUM(devid), PCI_SLOT(devid),
-						   PCI_FUNC(devid), domain_id);
-				goto out;
-			}
-
-			if (!report_iommu_fault(&dev_data->domain->domain,
-						&pdev->dev, address,
-						IS_WRITE_REQUEST(flags) ?
-							IOMMU_FAULT_WRITE :
-							IOMMU_FAULT_READ))
-				goto out;
-		}
-
 		if (__ratelimit(&dev_data->rs)) {
 			pci_err(pdev, "Event logged [IO_PAGE_FAULT domain=0x%04x address=0x%llx flags=0x%04x]\n",
 				domain_id, address, flags);
@@ -873,7 +850,6 @@ static void amd_iommu_report_page_fault(struct amd_iommu *iommu,
 			domain_id, address, flags);
 	}
 
-out:
 	if (pdev)
 		pci_dev_put(pdev);
 }
