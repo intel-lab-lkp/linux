@@ -816,6 +816,27 @@ static __always_unused void *tap_ring_consume(struct tap_queue *q)
 	return ptr;
 }
 
+int tap_ring_consume_batched(struct file *file, void **array, int n)
+{
+	struct tap_queue *q = file->private_data;
+	void *ptr;
+	int i;
+
+	spin_lock(&q->ring.consumer_lock);
+
+	for (i = 0; i < n; i++) {
+		ptr = __tap_ring_consume(q);
+		if (!ptr)
+			break;
+		array[i] = ptr;
+	}
+
+	spin_unlock(&q->ring.consumer_lock);
+
+	return i;
+}
+EXPORT_SYMBOL_GPL(tap_ring_consume_batched);
+
 static ssize_t tap_do_read(struct tap_queue *q,
 			   struct iov_iter *to,
 			   int noblock, struct sk_buff *skb)
