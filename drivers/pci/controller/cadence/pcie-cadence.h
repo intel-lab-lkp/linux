@@ -214,7 +214,7 @@ static inline u32 cdns_reg_bank_to_off(struct cdns_pcie *pcie, enum cdns_pcie_re
 		break;
 	default:
 		break;
-	};
+	}
 	return offset;
 }
 
