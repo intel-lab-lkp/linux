@@ -264,21 +264,28 @@ int trigger_process_regex(struct trace_event_file *file, char *buff)
 	return -EINVAL;
 }
 
+static char *get_user_buf(const char __user *ubuf, size_t cnt)
+{
+	if (!cnt)
+		return NULL;
+
+	if (cnt >= PAGE_SIZE)
+		return ERR_PTR(-EINVAL);
+
+	return memdup_user_nul(ubuf, cnt);
+}
+
 static ssize_t event_trigger_regex_write(struct file *file,
 					 const char __user *ubuf,
 					 size_t cnt, loff_t *ppos)
 {
 	struct trace_event_file *event_file;
 	ssize_t ret;
-	char *buf __free(kfree) = NULL;
+	char *buf __free(kfree) = get_user_buf(ubuf, cnt);
 
-	if (!cnt)
+	if (!buf)
 		return 0;
 
-	if (cnt >= PAGE_SIZE)
-		return -EINVAL;
-
-	buf = memdup_user_nul(ubuf, cnt);
 	if (IS_ERR(buf))
 		return PTR_ERR(buf);
 
@@ -336,6 +343,190 @@ const struct file_operations event_trigger_fops = {
 	.write = event_trigger_write,
 	.llseek = tracing_lseek,
 	.release = event_trigger_release,
+};
+
+static ssize_t
+event_system_trigger_read(struct file *filp, char __user *ubuf,
+			  size_t count, loff_t *ppos)
+{
+	char *buf __free(kfree) = kmalloc(SZ_4K, GFP_KERNEL);
+	struct event_command *p;
+	struct seq_buf s;
+	int len;
+
+	if (!buf)
+		return -ENOMEM;
+
+	seq_buf_init(&s, buf, SZ_4K);
+
+	seq_buf_puts(&s, "# Available system triggers:\n");
+	seq_buf_putc(&s, '#');
+
+	guard(mutex)(&trigger_cmd_mutex);
+	list_for_each_entry_reverse(p, &trigger_commands, list) {
+		if (p->flags & EVENT_CMD_FL_SYSTEM)
+			seq_buf_printf(&s, " %s", p->name);
+	}
+	seq_buf_putc(&s, '\n');
+
+	len = seq_buf_used(&s);
+
+	if (*ppos >= len)
+		return 0;
+
+	len -= *ppos;
+
+	if (count > len)
+		count = len;
+
+	if (copy_to_user(ubuf, buf + *ppos, count))
+		return -EFAULT;
+
+	*ppos += count;
+
+	return count;
+}
+
+static int process_system_events(struct trace_subsystem_dir *dir,
+				 struct event_command *p, char *buff,
+				 char *command, char *next)
+{
+	struct event_subsystem *system = dir->subsystem;
+	struct trace_event_file *file;
+	struct trace_array *tr = dir->tr;
+	bool remove = false;
+	int ret = 0;
+
+	if (buff[0] == '!')
+		remove = true;
+
+	lockdep_assert_held(&event_mutex);
+
+	list_for_each_entry(file, &tr->events, list) {
+
+		if (strcmp(system->name, file->event_call->class->system) != 0)
+			continue;
+
+		ret = p->parse(p, file, buff, command, next);
+
+		/* Removals and existing events do not error */
+		if (ret < 0 && ret != -EEXIST && !remove) {
+			pr_warn("Failed adding trigger %s on %s\n",
+				command, trace_event_name(file->event_call));
+		}
+	}
+	return 0;
+}
+
+static ssize_t
+event_system_trigger_write(struct file *filp, const char __user *ubuf,
+		    size_t cnt, loff_t *ppos)
+{
+	struct trace_subsystem_dir *dir = filp->private_data;
+	struct event_command *p;
+	char *command, *next;
+	char *buf __free(kfree) = get_user_buf(ubuf, cnt);
+	bool remove = false;
+	bool found = false;
+	ssize_t ret;
+	int len;
+
+	if (!buf)
+		return 0;
+
+	if (IS_ERR(buf))
+		return PTR_ERR(buf);
+
+	/* system triggers are not allowed to have counters */
+	if (strchr(buf, ':'))
+		return -EINVAL;
+
+	/* If opened for read too, dir is in the seq_file descriptor */
+	if (filp->f_mode & FMODE_READ) {
+		struct seq_file *m = filp->private_data;
+		dir = m->private;
+	}
+
+	/* Skip added space at beginning of buf */
+	next = buf;
+	strim(next);
+
+	command = strsep(&next, " \t");
+	if (next) {
+		next = skip_spaces(next);
+		if (!*next)
+			next = NULL;
+	}
+	if (command[0] == '!') {
+		remove = true;
+		command++;
+	}
+
+	len = strlen(command);
+	if (next)
+		len += strlen(next) + 1;
+
+	guard(mutex)(&event_mutex);
+	guard(mutex)(&trigger_cmd_mutex);
+
+	list_for_each_entry(p, &trigger_commands, list) {
+		/* Allow to remove any trigger */
+		if (!remove && !(p->flags & EVENT_CMD_FL_SYSTEM))
+			continue;
+		if (strcmp(p->name, command) == 0) {
+			found = true;
+			ret = process_system_events(dir, p, buf, command, next);
+			break;
+		}
+	}
+
+	if (!found)
+		ret = -ENODEV;
+
+	if (!ret)
+		*ppos += cnt;
+
+	if (remove || ret < 0)
+		return ret ? : cnt;
+
+	return cnt;
+}
+
+static int
+event_system_trigger_open(struct inode *inode, struct file *file)
+{
+	struct trace_subsystem_dir *dir;
+	int ret;
+
+	ret = security_locked_down(LOCKDOWN_TRACEFS);
+	if (ret)
+		return ret;
+
+	dir = trace_get_system_dir(inode);
+	if (!dir)
+		return -ENODEV;
+
+	file->private_data = dir;
+
+	return ret;
+}
+
+static int
+event_system_trigger_release(struct inode *inode, struct file *file)
+{
+	struct trace_subsystem_dir *dir = inode->i_private;
+
+	trace_put_system_dir(dir);
+
+	return 0;
+}
+
+const struct file_operations event_system_trigger_fops = {
+	.open = event_system_trigger_open,
+	.read = event_system_trigger_read,
+	.write = event_system_trigger_write,
+	.llseek = tracing_lseek,
+	.release = event_system_trigger_release,
 };
 
 /*
@@ -1602,7 +1793,7 @@ stacktrace_get_trigger_ops(char *cmd, char *param)
 static struct event_command trigger_stacktrace_cmd = {
 	.name			= "stacktrace",
 	.trigger_type		= ETT_STACKTRACE,
-	.flags			= EVENT_CMD_FL_POST_TRIGGER,
+	.flags			= EVENT_CMD_FL_POST_TRIGGER | EVENT_CMD_FL_SYSTEM,
 	.parse			= event_trigger_parse,
 	.reg			= register_trigger,
 	.unreg			= unregister_trigger,

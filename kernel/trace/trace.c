@@ -592,11 +592,12 @@ void trace_set_ring_buffer_expanded(struct trace_array *tr)
 
 LIST_HEAD(ftrace_trace_arrays);
 
-int trace_array_get(struct trace_array *this_tr)
+int __trace_array_get(struct trace_array *this_tr)
 {
 	struct trace_array *tr;
 
-	guard(mutex)(&trace_types_lock);
+	lockdep_assert_held(&trace_types_lock);
+
 	list_for_each_entry(tr, &ftrace_trace_arrays, list) {
 		if (tr == this_tr) {
 			tr->ref++;
@@ -605,6 +606,12 @@ int trace_array_get(struct trace_array *this_tr)
 	}
 
 	return -ENODEV;
+}
+
+int trace_array_get(struct trace_array *tr)
+{
+	guard(mutex)(&trace_types_lock);
+	return __trace_array_get(tr);
 }
 
 static void __trace_array_put(struct trace_array *this_tr)
