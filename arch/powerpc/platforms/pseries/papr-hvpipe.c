@@ -479,10 +479,8 @@ static const struct file_operations papr_hvpipe_handle_ops = {
 
 static int papr_hvpipe_dev_create_handle(u32 srcID)
 {
-	struct hvpipe_source_info *src_info;
-	struct file *file;
+	struct hvpipe_source_info *src_info __free(kfree) = NULL;
 	long err;
-	int fd;
 
 	spin_lock(&hvpipe_src_list_lock);
 	/*
@@ -506,43 +504,31 @@ static int papr_hvpipe_dev_create_handle(u32 srcID)
 	src_info->tsk = current;
 	init_waitqueue_head(&src_info->recv_wqh);
 
-	fd = get_unused_fd_flags(O_RDONLY | O_CLOEXEC);
-	if (fd < 0) {
-		err = fd;
-		goto free_buf;
-	}
+	FD_PREPARE(fdf, O_RDONLY | O_CLOEXEC,
+		   anon_inode_getfile("[papr-hvpipe]", &papr_hvpipe_handle_ops,
+				      (void *)src_info, O_RDWR)) {
+		if (fd_prepare_failed(fdf)) {
+			err = fd_prepare_error(fdf);
+			goto free_buf;
+		}
 
-	file = anon_inode_getfile("[papr-hvpipe]",
-			&papr_hvpipe_handle_ops, (void *)src_info,
-			O_RDWR);
-	if (IS_ERR(file)) {
-		err = PTR_ERR(file);
-		goto free_fd;
-	}
-
-	spin_lock(&hvpipe_src_list_lock);
-	/*
-	 * If two processes are executing ioctl() for the same
-	 * source ID concurrently, prevent the second process to
-	 * acquire FD.
-	 */
-	if (hvpipe_find_source(srcID)) {
+		retain_and_null_ptr(src_info);
+		spin_lock(&hvpipe_src_list_lock);
+		/*
+		 * If two processes are executing ioctl() for the same
+		 * source ID concurrently, prevent the second process to
+		 * acquire FD.
+		 */
+		if (hvpipe_find_source(srcID)) {
+			spin_unlock(&hvpipe_src_list_lock);
+			return -EALREADY;
+		}
+		list_add(&src_info->list, &hvpipe_src_list);
 		spin_unlock(&hvpipe_src_list_lock);
-		err = -EALREADY;
-		goto free_file;
+
+		return fd_publish(fdf);
 	}
-	list_add(&src_info->list, &hvpipe_src_list);
-	spin_unlock(&hvpipe_src_list_lock);
 
-	fd_install(fd, file);
-	return fd;
-
-free_file:
-	fput(file);
-free_fd:
-	put_unused_fd(fd);
-free_buf:
-	kfree(src_info);
 	return err;
 }
 
