@@ -641,6 +641,10 @@ int its_init(struct fwnode_handle *handle, struct rdists *rdists,
 	     struct irq_domain *domain, u8 irq_prio);
 int mbi_init(struct fwnode_handle *fwnode, struct irq_domain *parent);
 
+/* Enable prop table alloc/free on vGIC init/destroy when per-vCPU vLPI is enabled */
+struct page *its_allocate_prop_table(gfp_t gfp_flags);
+void its_free_prop_table(struct page *prop_page);
+
 static inline bool gic_enable_sre(void)
 {
 	u32 val;

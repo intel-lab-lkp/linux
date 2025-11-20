@@ -7,6 +7,7 @@
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/irqdomain.h>
+#include <linux/kvm_host.h>
 #include <linux/msi.h>
 #include <linux/pid.h>
 #include <linux/sched.h>
@@ -128,14 +129,14 @@ static int its_alloc_vcpu_sgis(struct its_vpe *vpe, int idx)
 	if (!name)
 		goto err;
 
-	vpe->fwnode = irq_domain_alloc_named_id_fwnode(name, idx);
-	if (!vpe->fwnode)
+	vpe->sgi_fwnode = irq_domain_alloc_named_id_fwnode(name, idx);
+	if (!vpe->sgi_fwnode)
 		goto err;
 
 	kfree(name);
 	name = NULL;
 
-	vpe->sgi_domain = irq_domain_create_linear(vpe->fwnode, 16,
+	vpe->sgi_domain = irq_domain_create_linear(vpe->sgi_fwnode, 16,
 						   sgi_domain_ops, vpe);
 	if (!vpe->sgi_domain)
 		goto err;
@@ -149,8 +150,8 @@ static int its_alloc_vcpu_sgis(struct its_vpe *vpe, int idx)
 err:
 	if (vpe->sgi_domain)
 		irq_domain_remove(vpe->sgi_domain);
-	if (vpe->fwnode)
-		irq_domain_free_fwnode(vpe->fwnode);
+	if (vpe->sgi_fwnode)
+		irq_domain_free_fwnode(vpe->sgi_fwnode);
 	kfree(name);
 	return -ENOMEM;
 }
@@ -199,6 +200,49 @@ err:
 	return -ENOMEM;
 }
 
+int its_alloc_vcpu_irq(struct kvm_vcpu *vcpu)
+{
+	struct its_vpe *vpe = &vcpu->arch.vgic_cpu.vgic_v3.its_vpe;
+	struct its_vm *vm = &vcpu->kvm->arch.vgic.its_vm;
+	int ret;
+
+	vpe->its_vm = vm; /* point all vPEs on a VM to the same shared dist its_vm*/
+	if (!has_v4_1_sgi()) /* idai bool shares memory with sgi_domain pointer */
+		vpe->idai = true;
+
+	/* create a per-vPE, rather than per-VM, fwnode */
+	if (!vpe->lpi_fwnode) {
+		/* add vcpu_id to fwnode naming to differentiate vcpus in same VM */
+		vpe->lpi_fwnode = irq_domain_alloc_named_id_fwnode("GICv4-vpe-lpi",
+			task_pid_nr(current) * 1000 + vcpu->vcpu_id);
+		if (!vpe->lpi_fwnode)
+			goto err;
+	}
+
+	/* create domain hierarchy for vPE */
+	vpe->lpi_domain = irq_domain_create_hierarchy(gic_domain, 0, 1,
+						  vpe->lpi_fwnode, vpe_domain_ops, vpe);
+	if (!vpe->lpi_domain)
+		goto err;
+
+	/* allocate IRQs from vPE domain */
+	vpe->irq = irq_domain_alloc_irqs(vpe->lpi_domain, 1, NUMA_NO_NODE, vpe);
+	if (vpe->irq <= 0)
+		goto err;
+
+	ret = its_alloc_vcpu_sgis(vpe, vcpu->vcpu_id);
+	if (ret)
+		goto err;
+
+	return 0;
+err:
+	if (vpe->lpi_domain)
+		irq_domain_remove(vpe->lpi_domain);
+	if (vpe->lpi_fwnode)
+		irq_domain_free_fwnode(vpe->lpi_fwnode);
+	return -ENOMEM;
+}
+
 static void its_free_sgi_irqs(struct its_vm *vm)
 {
 	int i;
@@ -214,7 +258,7 @@ static void its_free_sgi_irqs(struct its_vm *vm)
 
 		irq_domain_free_irqs(irq, 16);
 		irq_domain_remove(vm->vpes[i]->sgi_domain);
-		irq_domain_free_fwnode(vm->vpes[i]->fwnode);
+		irq_domain_free_fwnode(vm->vpes[i]->sgi_fwnode);
 	}
 }
 

@@ -316,10 +316,61 @@ int vgic_v4_init(struct kvm *kvm)
 	}
 #else
 	/*
-	 * TODO: Initialize the shared VM properties that remain necessary
-	 * in per-vCPU mode
+	 * Initialize the shared VM properties that remain necessary in per-vCPU mode
 	 */
+
+	 /* vPE properties table */
+	if (!dist->its_vm.vprop_page) {
+		dist->its_vm.vprop_page = its_allocate_prop_table(GFP_KERNEL);
+		if (!dist->its_vm.vprop_page)
+			ret = -ENOMEM;
+	}
 #endif
+	if (ret)
+		vgic_v4_teardown(kvm);
+
+	return ret;
+}
+
+/**
+ * vgic_v4_vcpu_init - When per-vCPU vLPI injection is enabled,
+ * initialize the GICv4 data structures for a specific vCPU
+ * @vcpu:	Pointer to the vcpu being initialized
+ *
+ * Called every time the KVM_ENABLE_VCPU_VLPI ioctl is called.
+ */
+int vgic_v4_vcpu_init(struct kvm_vcpu *vcpu)
+{
+	struct kvm *kvm = vcpu->kvm;
+	struct vgic_dist *dist = &kvm->arch.vgic;
+	int i, ret, irq;
+	unsigned long irq_flags = DB_IRQ_FLAGS;
+
+	/* Validate vgic_v4_init() has been called to allocate the vpe array */
+	if (!dist->its_vm.vpes)
+		return -ENODEV;
+
+	/* Link KVM distributor to the newly-allocated vPE */
+	i = kvm_idx_from_vcpu(kvm, vcpu);
+	if (i == UINT_MAX)
+		return -EINVAL;
+	dist->its_vm.vpes[i] = &vcpu->arch.vgic_cpu.vgic_v3.its_vpe;
+
+	ret = its_alloc_vcpu_irq(vcpu);
+	if (ret)
+		return ret;
+
+	/* Same routine as the kvm_for_each_vcpu of vgic_v4_init */
+	irq = dist->its_vm.vpes[i]->irq;
+
+	if (kvm_vgic_global_state.has_gicv4_1)
+		irq_flags &= ~IRQ_NOAUTOEN;
+	irq_set_status_flags(irq, irq_flags);
+
+	ret = vgic_v4_request_vpe_irq(vcpu, irq);
+	if (ret)
+		kvm_err("failed to allocate vcpu IRQ%d\n", irq);
+
 	if (ret)
 		vgic_v4_teardown(kvm);
 
@@ -357,6 +408,9 @@ void vgic_v4_teardown(struct kvm *kvm)
 	 * in per-vCPU mode. Create separate teardown function
 	 * that operates on a per-vCPU basis.
 	 */
+
+	/* vPE properties table */
+	its_free_prop_table(its_vm->vprop_page);
 #else
 	its_free_vcpu_irqs(its_vm);
 #endif
@@ -616,6 +670,105 @@ void kvm_vgic_v4_unset_forwarding(struct kvm *kvm, int host_irq)
 
 	raw_spin_unlock_irqrestore(&irq->irq_lock, flags);
 	vgic_put_irq(kvm, irq);
+}
+
+static int upgrade_existing_lpis_to_vlpis(struct kvm_vcpu *vcpu)
+{
+	struct kvm *kvm = vcpu->kvm;
+	struct kvm_device *dev;
+	struct vgic_its *its, *its_from_entry;
+	struct its_device *device;
+	struct its_ite *ite;
+	struct kvm_kernel_irq_routing_entry entry;
+	int ret = 0;
+	int host_irq;
+
+	list_for_each_entry(dev, &kvm->devices, vm_node) {
+		/* Ensure we only look at ITS devices */
+		if (dev->ops != &kvm_arm_vgic_its_ops)
+			continue;
+
+		its = dev->private;
+		mutex_lock(&its->its_lock);
+
+		list_for_each_entry(device, &its->device_list, dev_list) {
+			list_for_each_entry(ite, &device->itt_head, ite_list) {
+				/* ite->irq->hw means entry already upgraded to vLPI */
+				if (ite->collection &&
+					ite->collection->target_addr == vcpu->vcpu_id &&
+					ite->irq && !ite->irq->hw) {
+
+					/*
+					 * An existing IRQ would only have a null host_irq if it is
+					 * completely defined in software, in which case it cannot
+					 * be direct injected anyways. Thus, we skip interrupt
+					 * upgrade for IRQs with null host_irqs.
+					 */
+					if (ite->irq->host_irq > 0)
+						host_irq = ite->irq->host_irq;
+					else
+						continue;
+
+					/* Create routing entry */
+					memset(&entry, 0, sizeof(entry));
+					entry.gsi = host_irq;
+					entry.type = KVM_IRQ_ROUTING_MSI;
+					/* MSI address is system defined for ARM GICv3 */
+					entry.msi.address_lo =
+						(u32)(its->vgic_its_base + GITS_TRANSLATER);
+					entry.msi.address_hi =
+						(u32)((its->vgic_its_base + GITS_TRANSLATER) >> 32);
+					entry.msi.data = ite->event_id;
+					entry.msi.devid = device->device_id;
+					entry.msi.flags = KVM_MSI_VALID_DEVID;
+
+					/* Verify ITS consistency */
+					its_from_entry = vgic_get_its(kvm, &entry);
+					if (IS_ERR(its_from_entry) || its_from_entry != its)
+						continue;
+
+					/* Upgrade to vLPI */
+					ret = kvm_vgic_v4_set_forwarding_locked(kvm, host_irq,
+						&entry, its);
+					if (ret)
+						kvm_info("Failed to upgrade LPI %d: %d\n",
+							host_irq, ret);
+				}
+			}
+		}
+
+		mutex_unlock(&its->its_lock);
+	}
+
+	return 0;
+}
+
+/* Enable vLPI direct injection on a specific vCPU */
+int kvm_vgic_enable_vcpu_vlpi(struct kvm_vcpu *vcpu)
+{
+	int ret;
+	int vcpu_vlpi_status = kvm_vgic_query_vcpu_vlpi(vcpu);
+
+	/* vGIC not initialized for vCPU */
+	if (vcpu_vlpi_status < 0)
+		return vcpu_vlpi_status;
+	/* vLPI already enabled */
+	if (vcpu_vlpi_status > 0)
+		return 0;
+
+	/* Allocate the vPE struct and vPE table for the vCPU */
+	ret = vgic_v4_vcpu_init(vcpu);
+	if (ret)
+		return ret;
+
+	/*
+	 * Upgrade existing LPIs to vLPIs. We
+	 * do not need to error check since
+	 * a failure in upgrading an LPI is non-breaking;
+	 * those LPIs may continue to be processed by
+	 * software.
+	 */
+	return upgrade_existing_lpis_to_vlpis(vcpu);
 }
 
 /* query whether vLPI direct injection is enabled on a specific vCPU.

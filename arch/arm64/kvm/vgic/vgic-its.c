@@ -23,7 +23,7 @@
 #include "vgic.h"
 #include "vgic-mmio.h"
 
-static struct kvm_device_ops kvm_arm_vgic_its_ops;
+struct kvm_device_ops kvm_arm_vgic_its_ops;
 
 static int vgic_its_save_tables_v0(struct vgic_its *its);
 static int vgic_its_restore_tables_v0(struct vgic_its *its);
@@ -2801,7 +2801,7 @@ static int vgic_its_get_attr(struct kvm_device *dev,
 	return 0;
 }
 
-static struct kvm_device_ops kvm_arm_vgic_its_ops = {
+struct kvm_device_ops kvm_arm_vgic_its_ops = {
 	.name = "kvm-arm-vgic-its",
 	.create = vgic_its_create,
 	.destroy = vgic_its_destroy,

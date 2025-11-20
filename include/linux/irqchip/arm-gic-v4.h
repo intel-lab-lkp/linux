@@ -8,6 +8,7 @@
 #define __LINUX_IRQCHIP_ARM_GIC_V4_H
 
 struct its_vpe;
+struct kvm_vcpu;
 
 /*
  * Maximum number of ITTs when GITS_TYPER.VMOVP == 0, using the
@@ -42,6 +43,10 @@ struct its_vpe {
 	struct its_vm		*its_vm;
 	/* per-vPE VLPI tracking */
 	atomic_t		vlpi_count;
+	/* per-vPE domain for per-vCPU VLPI enablement */
+	struct irq_domain	*lpi_domain;
+	/* enables per-vPE vLPI IRQ Domains during per-vCPU VLPI enablement */
+	struct fwnode_handle	*lpi_fwnode;
 	/* Doorbell interrupt */
 	int			irq;
 	irq_hw_number_t		vpe_db_lpi;
@@ -59,7 +64,7 @@ struct its_vpe {
 		};
 		/* GICv4.1 implementations */
 		struct {
-			struct fwnode_handle	*fwnode;
+			struct fwnode_handle	*sgi_fwnode;
 			struct irq_domain	*sgi_domain;
 			struct {
 				u8	priority;
@@ -139,6 +144,7 @@ struct its_cmd_info {
 };
 
 int its_alloc_vcpu_irqs(struct its_vm *vm);
+int its_alloc_vcpu_irq(struct kvm_vcpu *vcpu);
 void its_free_vcpu_irqs(struct its_vm *vm);
 int its_make_vpe_resident(struct its_vpe *vpe, bool g0en, bool g1en);
 int its_make_vpe_non_resident(struct its_vpe *vpe, bool db);

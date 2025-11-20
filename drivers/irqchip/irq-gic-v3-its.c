@@ -2261,7 +2261,7 @@ static void gic_reset_prop_table(void *va)
 	gic_flush_dcache_to_poc(va, LPI_PROPBASE_SZ);
 }
 
-static struct page *its_allocate_prop_table(gfp_t gfp_flags)
+struct page *its_allocate_prop_table(gfp_t gfp_flags)
 {
 	struct page *prop_page;
 
@@ -2275,7 +2275,7 @@ static struct page *its_allocate_prop_table(gfp_t gfp_flags)
 	return prop_page;
 }
 
-static void its_free_prop_table(struct page *prop_page)
+void its_free_prop_table(struct page *prop_page)
 {
 	its_free_pages(page_address(prop_page), get_order(LPI_PROPBASE_SZ));
 }
@@ -4612,25 +4612,65 @@ static void its_vpe_irq_domain_free(struct irq_domain *domain,
 
 		BUG_ON(vm != vpe->its_vm);
 
+#ifdef CONFIG_ARM_GIC_V3_PER_VCPU_VLPI
+		free_lpi_range(vpe->vpe_db_lpi, 1);
+#else
 		clear_bit(data->hwirq, vm->db_bitmap);
+#endif
 		its_vpe_teardown(vpe);
 		irq_domain_reset_irq_data(data);
 	}
 
+#ifndef CONFIG_ARM_GIC_V3_PER_VCPU_VLPI
 	if (bitmap_empty(vm->db_bitmap, vm->nr_db_lpis)) {
 		its_lpi_free(vm->db_bitmap, vm->db_lpi_base, vm->nr_db_lpis);
 		its_free_prop_table(vm->vprop_page);
 	}
+#endif
 }
 
 static int its_vpe_irq_domain_alloc(struct irq_domain *domain, unsigned int virq,
 				    unsigned int nr_irqs, void *args)
 {
 	struct irq_chip *irqchip = &its_vpe_irq_chip;
+	int base, err;
+#ifdef CONFIG_ARM_GIC_V3_PER_VCPU_VLPI
+	struct its_vpe *vpe = args;
+
+	/* Per-vCPU mode: allocate domain on vPE––rather than VM––level */
+	WARN_ON(nr_irqs != 1);
+
+	/* Use VM's shared properties table */
+	if (!vpe->its_vm || !vpe->its_vm->vprop_page)
+		return -EINVAL;
+
+	if (gic_rdists->has_rvpeid)
+		irqchip = &its_vpe_4_1_irq_chip;
+
+	err = alloc_lpi_range(1, &base);
+	if (err)
+		return err;
+	vpe->vpe_db_lpi = base;
+	err = its_vpe_init(vpe);
+	if (err)
+		return err;
+
+	err = its_irq_gic_domain_alloc(domain, virq, vpe->vpe_db_lpi);
+	if (err)
+		goto err_teardown_vpe;
+
+	irq_domain_set_hwirq_and_chip(domain, virq, 0, irqchip, vpe);
+	irqd_set_resend_when_in_progress(irq_get_irq_data(virq));
+
+	return 0;
+
+err_teardown_vpe:
+	its_vpe_teardown(vpe);
+#else
 	struct its_vm *vm = args;
 	unsigned long *bitmap;
 	struct page *vprop_page;
-	int base, nr_ids, i, err = 0;
+	int nr_ids, i;
 
 	bitmap = its_lpi_alloc(roundup_pow_of_two(nr_irqs), &base, &nr_ids);
 	if (!bitmap)
@@ -4673,7 +4713,7 @@ static int its_vpe_irq_domain_alloc(struct irq_domain *domain, unsigned int virq
 
 	if (err)
 		its_vpe_irq_domain_free(domain, virq, i);
-
+#endif
 	return err;
 }
 
