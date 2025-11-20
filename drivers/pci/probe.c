@@ -2731,6 +2731,7 @@ static void pci_set_msi_domain(struct pci_dev *dev)
 
 void pci_device_add(struct pci_dev *dev, struct pci_bus *bus)
 {
+	struct pci_dev *sibling __free(pci_dev_put) = NULL;
 	int ret;
 
 	pci_configure_device(dev);
@@ -2760,8 +2761,21 @@ void pci_device_add(struct pci_dev *dev, struct pci_bus *bus)
 	 * and the bus list for fixup functions, etc.
 	 */
 	down_write(&pci_bus_sem);
+	if (list_is_singular(&bus->devices))
+		sibling = pci_dev_get(list_first_entry(&bus->devices,
+					     struct pci_dev, bus_list));
 	list_add_tail(&dev->bus_list, &bus->devices);
 	up_write(&pci_bus_sem);
+
+	/*
+	 * The kernel doesn't allow the "bus" reset method for a device on a
+	 * bus with multiple functions, but the first device on the bus may
+	 * initialize with that since we haven't discovered other functions
+	 * yet. Re-initialize the methods if it was previously the only bus
+	 * device.
+	 */
+	if (sibling)
+		pci_init_reset_methods(sibling);
 
 	ret = pcibios_device_add(dev);
 	WARN_ON(ret < 0);
