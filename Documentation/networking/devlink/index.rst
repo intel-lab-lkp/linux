@@ -68,6 +68,9 @@ general.
    devlink-resource
    devlink-selftests
    devlink-trap
+   devlink-linecard
+   devlink-eswitch-attr
+   devlink-shared
 
 Driver-specific documentation
 -----------------------------
