@@ -18,9 +18,17 @@
 #include "ucall.h"
 #include "vgic.h"
 
+#define KVM_DEBUG_GIC_MSI_SETUP    _IOW(KVMIO, 0xf3, struct kvm_debug_gic_msi_setup)
+
 #define TEST_MEMSLOT_INDEX	1
 
 #define GIC_LPI_OFFSET	8192
+#define SPI_IRQ_RANGE_OFFSET 32
+
+static bool vlpi_enabled;
+static bool string_mode;
+static char **vcpu_strings;
+static bool *vcpu_enabled;
 
 static size_t nr_iterations = 1000;
 static vm_paddr_t gpa_base;
@@ -222,6 +230,79 @@ static void setup_gic(void)
 	its_fd = vgic_its_setup(vm);
 }
 
+static int enable_msi_vlpi_injection(u32 device_id, u32 event_id,
+		u32 vcpu_id, u32 vintid, u32 host_irq)
+{
+	struct kvm_debug_gic_msi_setup params = {
+		.device_id	= device_id,
+		.event_id	= event_id,
+		.vcpu_id	= vcpu_id,
+		.vintid		= vintid,
+		.host_irq	= host_irq,
+		.itt_addr	= test_data.itt_tables + (device_id * SZ_64K)
+	};
+
+	return __vm_ioctl(vm, KVM_DEBUG_GIC_MSI_SETUP, &params);
+}
+
+static void upgrade_vcpu_lpis(struct kvm_vcpu *vcpu)
+{
+	u32 intid = GIC_LPI_OFFSET;
+	u32 target_vcpu = 0; /* Start round-robin from vCPU 0 */
+	u32 device_id, event_id;
+
+	for (device_id = 0; device_id < test_data.nr_devices; device_id++) {
+		for (event_id = 0; event_id < test_data.nr_event_ids;
+		     event_id++) {
+			/*
+			 * Only setup vLPI mapping if this is the target vCPU
+			 * for this interrupt
+			 */
+			if (target_vcpu == vcpu->id) {
+				/*
+				 * we mock host_irqs in the SPI interrupt range
+				 * of 100-1020 since selftest guests have no
+				 * hardware devices
+				 */
+				int ret = enable_msi_vlpi_injection(device_id,
+					event_id, vcpu->id, intid,
+					intid - GIC_LPI_OFFSET + SPI_IRQ_RANGE_OFFSET);
+
+				if (ret == -ENXIO || ret == -1) {
+					pr_info("Direct vLPI injection is disabled for vCPU %d, defaulting to software LPI handling\n",
+						vcpu->id);
+					return;
+				}
+				TEST_ASSERT(ret == 0,
+					    "KVM_DEBUG_GIC_MSI_SETUP failed: %d\n",
+					    ret);
+			}
+
+			intid++;
+			target_vcpu = (target_vcpu + 1) % test_data.nr_cpus;
+		}
+	}
+}
+
+
+
+static void enable_vcpu_vlpi_injection(int vcpu_id)
+{
+	int ret = ioctl(vm->fd, KVM_ENABLE_VCPU_VLPI, &vcpu_id);
+
+	TEST_ASSERT(ret == 0, "KVM_ENABLE_VCPU_VLPI failed: %d", ret);
+	pr_info("Enabled vLPI injection on vCPU %d\n", vcpu_id);
+	upgrade_vcpu_lpis(vcpus[vcpu_id]);
+}
+
+static void disable_vcpu_vlpi_injection(int vcpu_id)
+{
+	int ret = ioctl(vm->fd, KVM_DISABLE_VCPU_VLPI, &vcpu_id);
+
+	TEST_ASSERT(ret == 0, "KVM_DISABLE_VCPU_VLPI failed: %d", ret);
+	pr_info("Disabled vLPI injection on vCPU %d\n", vcpu_id);
+}
+
 static void signal_lpi(u32 device_id, u32 event_id)
 {
 	vm_paddr_t db_addr = GITS_BASE_GPA + GITS_TRANSLATER;
@@ -243,18 +324,36 @@ static void signal_lpi(u32 device_id, u32 event_id)
 }
 
 static pthread_barrier_t test_setup_barrier;
+static pthread_barrier_t vlpi_upgrade_barrier;
 
 static void *lpi_worker_thread(void *data)
 {
 	u32 device_id = (size_t)data;
 	u32 event_id;
 	size_t i;
+	int vcpu_id;
 
 	pthread_barrier_wait(&test_setup_barrier);
+	pthread_barrier_wait(&vlpi_upgrade_barrier);
 
-	for (i = 0; i < nr_iterations; i++)
+	for (i = 0; i < nr_iterations; i++) {
+		/* conduct per-vCPU vLPI enablement/disablement */
+		if (string_mode) {
+			for (vcpu_id = 0; vcpu_id < test_data.nr_cpus; vcpu_id++) {
+				char action = vcpu_strings[vcpu_id][i];
+
+				if (action == 'e' && !vcpu_enabled[vcpu_id]) {
+					enable_vcpu_vlpi_injection(vcpu_id);
+					vcpu_enabled[vcpu_id] = true;
+				} else if (action == 'd' && vcpu_enabled[vcpu_id]) {
+					disable_vcpu_vlpi_injection(vcpu_id);
+					vcpu_enabled[vcpu_id] = false;
+				}
+			}
+		}
 		for (event_id = 0; event_id < test_data.nr_event_ids; event_id++)
 			signal_lpi(device_id, event_id);
+	}
 
 	return NULL;
 }
@@ -270,6 +369,10 @@ static void *vcpu_worker_thread(void *data)
 		switch (get_ucall(vcpu, &uc)) {
 		case UCALL_SYNC:
 			pthread_barrier_wait(&test_setup_barrier);
+			/* if flag is set, set direct injection mappings for MSIs */
+			if (vlpi_enabled)
+				upgrade_vcpu_lpis(vcpu);
+			pthread_barrier_wait(&vlpi_upgrade_barrier);
 			continue;
 		case UCALL_DONE:
 			return NULL;
@@ -309,6 +412,7 @@ static void run_test(void)
 	TEST_ASSERT(lpi_threads && vcpu_threads, "Failed to allocate pthread arrays");
 
 	pthread_barrier_init(&test_setup_barrier, NULL, nr_vcpus + nr_devices + 1);
+	pthread_barrier_init(&vlpi_upgrade_barrier, NULL, nr_vcpus + nr_devices + 1);
 
 	for (i = 0; i < nr_vcpus; i++)
 		pthread_create(&vcpu_threads[i], NULL, vcpu_worker_thread, vcpus[i]);
@@ -317,6 +421,7 @@ static void run_test(void)
 		pthread_create(&lpi_threads[i], NULL, lpi_worker_thread, (void *)i);
 
 	pthread_barrier_wait(&test_setup_barrier);
+	pthread_barrier_wait(&vlpi_upgrade_barrier);  /* Wait for all vLPI upgrades */
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
 
@@ -361,13 +466,71 @@ static void destroy_vm(void)
 	free(vcpus);
 }
 
+static int parse_vcpu_strings(const char *str)
+{
+	char *token, *saveptr, *str_copy;
+	int count = 0, len = -1, i;
+
+	str_copy = strdup(str);
+	TEST_ASSERT(str_copy, "Failed to allocate string copy");
+
+	token = strtok_r(str_copy, ",", &saveptr);
+	while (token) {
+		count++;
+		token = strtok_r(NULL, ",", &saveptr);
+	}
+	free(str_copy);
+
+	vcpu_strings = malloc(count * sizeof(char *));
+	vcpu_enabled = calloc(count, sizeof(bool));
+	TEST_ASSERT(vcpu_strings && vcpu_enabled, "Failed to allocate arrays");
+
+	str_copy = strdup(str);
+	token = strtok_r(str_copy, ",", &saveptr);
+	for (i = 0; i < count; i++) {
+		int token_len = strlen(token);
+
+		if (len == -1)
+			len = token_len;
+		else if (len != token_len)
+			TEST_FAIL("All strings must have same length");
+
+		TEST_ASSERT(len > 0, "Strings cannot be empty");
+
+		for (int j = 0; j < token_len; j++)
+			if (token[j] != 'd' && token[j] != 'e')
+				TEST_FAIL("Strings can only contain 'd' and 'e'");
+
+		vcpu_strings[i] = strdup(token);
+		TEST_ASSERT(vcpu_strings[i], "Failed to allocate string");
+		token = strtok_r(NULL, ",", &saveptr);
+	}
+	free(str_copy);
+
+	test_data.nr_cpus = count;
+	test_data.nr_devices = 1;
+	test_data.nr_event_ids = count;
+	nr_iterations = len;
+
+	return 0;
+}
+
 static void pr_usage(const char *name)
 {
-	pr_info("%s [-v NR_VCPUS] [-d NR_DEVICES] [-e NR_EVENTS] [-i ITERS] -h\n", name);
+	pr_info("%s -D [-v NR_VCPUS] [-d NR_DEVICES] [-e NR_EVENTS] [-i ITERS] | -s STRINGS -h\n",
+		name);
+	pr_info("  -D:\tenable direct vLPI injection (default: %s)\n",
+			vlpi_enabled ? "true" : "false");
 	pr_info("  -v:\tnumber of vCPUs (default: %u)\n", test_data.nr_cpus);
 	pr_info("  -d:\tnumber of devices (default: %u)\n", test_data.nr_devices);
 	pr_info("  -e:\tnumber of event IDs per device (default: %u)\n", test_data.nr_event_ids);
 	pr_info("  -i:\tnumber of iterations (default: %lu)\n", nr_iterations);
+	pr_info("  -s:\tvCPU control strings (comma-separated, e.g., \"dede,eede\"),\n");
+	pr_info("     \twhere each string corresponds to the per-iteration vLPI status\n");
+	pr_info("     \tof a single vCPU. \"ddeed\" means a vCPU will be vLPI-disabled for two\n");
+	pr_info("     \titerations, enabled for two iterations, then disabled for one iteration.\n");
+	pr_info("     \tNumber of strings corresponds to the number of vCPUs, and all strings must\n");
+	pr_info("     \tbe of the same size. Cannot be used in conjunction with other flags.\n");
 }
 
 int main(int argc, char **argv)
@@ -377,8 +540,11 @@ int main(int argc, char **argv)
 
 	TEST_REQUIRE(kvm_supports_vgic_v3());
 
-	while ((c = getopt(argc, argv, "hv:d:e:i:")) != -1) {
+	while ((c = getopt(argc, argv, "hDv:d:e:i:s:")) != -1) {
 		switch (c) {
+		case 'D':
+			vlpi_enabled = true;
+			break;
 		case 'v':
 			test_data.nr_cpus = atoi(optarg);
 			break;
@@ -391,12 +557,19 @@ int main(int argc, char **argv)
 		case 'i':
 			nr_iterations = strtoul(optarg, NULL, 0);
 			break;
+		case 's':
+			string_mode = true;
+			parse_vcpu_strings(optarg);
+			break;
 		case 'h':
 		default:
 			pr_usage(argv[0]);
 			return 1;
 		}
 	}
+
+	if (string_mode && argc > 3)
+		TEST_FAIL("-s cannot be used with other flags");
 
 	nr_threads = test_data.nr_cpus + test_data.nr_devices;
 	if (nr_threads > get_nprocs())
