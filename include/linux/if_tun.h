@@ -23,6 +23,8 @@ struct tun_msg_ctl {
 struct socket *tun_get_socket(struct file *);
 struct ptr_ring *tun_get_tx_ring(struct file *file);
 int tun_ring_consume_batched(struct file *file, void **array, int n);
+void tun_ring_unconsume(struct file *file, void **batch, int n,
+			void (*destroy)(void *));
 
 static inline bool tun_is_xdp_frame(void *ptr)
 {
@@ -61,6 +63,9 @@ static inline int tun_ring_consume_batched(struct file *file,
 {
 	return 0;
 }
+
+static inline void tun_ring_unconsume(struct file *file, void **batch,
+				      int n, void (*destroy)(void *)) {}
 
 static inline bool tun_is_xdp_frame(void *ptr)
 {

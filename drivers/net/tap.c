@@ -837,6 +837,16 @@ int tap_ring_consume_batched(struct file *file, void **array, int n)
 }
 EXPORT_SYMBOL_GPL(tap_ring_consume_batched);
 
+void tap_ring_unconsume(struct file *file, void **batch, int n,
+			void (*destroy)(void *))
+{
+	struct tap_queue *q = file->private_data;
+	struct ptr_ring *ring = &q->ring;
+
+	ptr_ring_unconsume(ring, batch, n, destroy);
+}
+EXPORT_SYMBOL_GPL(tap_ring_unconsume);
+
 static ssize_t tap_do_read(struct tap_queue *q,
 			   struct iov_iter *to,
 			   int noblock, struct sk_buff *skb)
