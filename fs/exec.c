@@ -1280,12 +1280,14 @@ int begin_new_exec(struct linux_binprm * bprm)
 
 	/* Pass the opened binary to the interpreter. */
 	if (bprm->have_execfd) {
-		retval = get_unused_fd_flags(0);
-		if (retval < 0)
-			goto out_unlock;
-		fd_install(retval, bprm->executable);
-		bprm->executable = NULL;
-		bprm->execfd = retval;
+		FD_PREPARE(fdf, 0, bprm->executable) {
+			if (fd_prepare_failed(fdf)) {
+				retval = fd_prepare_error(fdf);
+				goto out_unlock;
+			}
+			bprm->executable = NULL;
+			bprm->execfd = fd_publish(fdf);
+		}
 	}
 	return 0;
 
