@@ -729,6 +729,7 @@ struct rtl8169_private {
 	unsigned supports_gmii:1;
 	unsigned aspm_manageable:1;
 	unsigned dash_enabled:1;
+	unsigned sfp_mode:1;
 	dma_addr_t counters_phys_addr;
 	struct rtl8169_counters *counters;
 	struct rtl8169_tc_offsets tc_offset;
@@ -842,7 +843,8 @@ static bool rtl_supports_eee(struct rtl8169_private *tp)
 {
 	return tp->mac_version >= RTL_GIGA_MAC_VER_34 &&
 	       tp->mac_version != RTL_GIGA_MAC_VER_37 &&
-	       tp->mac_version != RTL_GIGA_MAC_VER_39;
+	       tp->mac_version != RTL_GIGA_MAC_VER_39 &&
+	       !tp->sfp_mode;
 }
 
 static void rtl_read_mac_from_reg(struct rtl8169_private *tp, u8 *mac, int reg)
@@ -1399,6 +1401,95 @@ DECLARE_RTL_COND(rtl_ocp_tx_cond)
 	return RTL_R8(tp, IBISR0) & 0x20;
 }
 
+#define R8127_SDS_CMD 0x2348
+#define R8127_SDS_ADDR 0x234a
+#define R8127_SDS_DATA_IN 0x234c
+#define R8127_SDS_DATA_OUT 0x234e
+
+#define R8127_MAKE_SDS_ADDR(_index, _page, _reg) \
+	(((_index) << 11) | ((_page) << 5) | (_reg))
+
+#define R8127_SDS_CMD_IN BIT(0)
+#define R8127_SDS_WE_IN BIT(1)
+
+DECLARE_RTL_COND(rtl_sds_cmd_done)
+{
+	return RTL_R16(tp, R8127_SDS_CMD) & R8127_SDS_CMD_IN;
+}
+
+static u16 rtl8127_sds_phy_read(struct rtl8169_private *tp,
+				u16 index, u16 page, u16 reg)
+{
+	RTL_W16(tp, R8127_SDS_ADDR, R8127_MAKE_SDS_ADDR(index, page, reg));
+	RTL_W16(tp, R8127_SDS_CMD, R8127_SDS_CMD_IN);
+
+	if (rtl_loop_wait_low(tp, &rtl_sds_cmd_done, 1, 100))
+		return RTL_R16(tp, R8127_SDS_DATA_OUT);
+	else
+		return 0xffff;
+}
+
+static void rtl8127_sds_phy_write(struct rtl8169_private *tp,
+				  u16 index, u16 page, u16 reg, u16 val)
+{
+	RTL_W16(tp, R8127_SDS_DATA_IN, val);
+	RTL_W16(tp, R8127_SDS_ADDR, R8127_MAKE_SDS_ADDR(index, page, reg));
+	RTL_W16(tp, R8127_SDS_CMD, R8127_SDS_CMD_IN | R8127_SDS_WE_IN);
+
+	rtl_loop_wait_low(tp, &rtl_sds_cmd_done, 1, 100);
+}
+
+static void rtl8127_sds_phy_modify(struct rtl8169_private *tp,
+				   u16 index, u16 page, u16 addr,
+				   u16 mask, u16 set)
+{
+	u16 val;
+
+	val = rtl8127_sds_phy_read(tp, index, page, addr);
+	val = (val & ~mask) | set;
+	rtl8127_sds_phy_write(tp, index, page, addr, val);
+}
+
+static void rtl8127_sds_phy_reset(struct rtl8169_private *tp)
+{
+	RTL_W8(tp, 0x2350, RTL_R8(tp, 0x2350) & ~BIT(0));
+	udelay(1);
+
+	RTL_W16(tp, 0x233a, 0x801f);
+	RTL_W8(tp, 0x2350, RTL_R8(tp, 0x2350) | BIT(0));
+	udelay(10);
+}
+
+static void rtl8127_sds_phy_exit_1g(struct rtl8169_private *tp)
+{
+	rtl8127_sds_phy_modify(tp, 0, 1, 31, BIT(3), 0);
+	rtl8127_sds_phy_modify(tp, 0, 2, 0,
+			       BIT(13) | BIT(12) | BIT(6),
+			       BIT(6));
+
+	rtl8127_sds_phy_reset(tp);
+}
+
+static void rtl8127_set_sds_phy_caps_10g(struct rtl8169_private *tp)
+{
+	u16 val;
+
+	RTL_W16(tp, 0x233a, 0x801a);
+
+	val = RTL_R16(tp, 0x233e);
+	val &= BIT(13) | BIT(12) | BIT(1) | BIT(0);
+	val |= BIT(12);
+	RTL_W16(tp, 0x233e, val);
+
+	r8169_mdio_write(tp, 0xc40a, 0x0);
+	r8169_mdio_write(tp, 0xc466, 0x3);
+	r8169_mdio_write(tp, 0xc808, 0x0);
+	r8169_mdio_write(tp, 0xc80a, 0x0);
+
+	val = r8168_phy_ocp_read(tp, 0xc804);
+	r8168_phy_ocp_write(tp, 0xc804, (val & ~0x000f) | 0x000c);
+}
+
 static void rtl8168ep_stop_cmac(struct rtl8169_private *tp)
 {
 	RTL_W8(tp, IBCR2, RTL_R8(tp, IBCR2) & ~0x01);
@@ -1510,6 +1601,15 @@ static enum rtl_dash_type rtl_get_dash_type(struct rtl8169_private *tp)
 	default:
 		return RTL_DASH_NONE;
 	}
+}
+
+static bool rtl_sfp_mode(struct rtl8169_private *tp)
+{
+	if (tp->mac_version == RTL_GIGA_MAC_VER_80 &&
+	    (r8168_mac_ocp_read(tp, 0xd006) & 0xff) == 0x07)
+		return true;
+
+	return false;
 }
 
 static void rtl_set_d3_pll_down(struct rtl8169_private *tp, bool enable)
@@ -2390,7 +2490,10 @@ static void rtl8125a_config_eee_mac(struct rtl8169_private *tp)
 
 static void rtl8125b_config_eee_mac(struct rtl8169_private *tp)
 {
-	r8168_mac_ocp_modify(tp, 0xe040, 0, BIT(1) | BIT(0));
+	if (tp->sfp_mode)
+		r8168_mac_ocp_modify(tp, 0xe040, BIT(1) | BIT(0), 0);
+	else
+		r8168_mac_ocp_modify(tp, 0xe040, 0, BIT(1) | BIT(0));
 }
 
 static void rtl_rar_exgmac_set(struct rtl8169_private *tp, const u8 *addr)
@@ -2439,6 +2542,25 @@ static void rtl8169_init_phy(struct rtl8169_private *tp)
 	    tp->pci_dev->subsystem_vendor == PCI_VENDOR_ID_GIGABYTE &&
 	    tp->pci_dev->subsystem_device == 0xe000)
 		phy_write_paged(tp->phydev, 0x0001, 0x10, 0xf01b);
+
+	if (tp->sfp_mode) {
+		rtl8127_sds_phy_exit_1g(tp);
+		rtl8127_set_sds_phy_caps_10g(tp);
+
+		phy_remove_link_mode(tp->phydev, ETHTOOL_LINK_MODE_10baseT_Half_BIT);
+		phy_remove_link_mode(tp->phydev, ETHTOOL_LINK_MODE_10baseT_Full_BIT);
+		phy_remove_link_mode(tp->phydev, ETHTOOL_LINK_MODE_100baseT_Half_BIT);
+		phy_remove_link_mode(tp->phydev, ETHTOOL_LINK_MODE_100baseT_Full_BIT);
+		phy_remove_link_mode(tp->phydev, ETHTOOL_LINK_MODE_1000baseT_Full_BIT);
+		phy_remove_link_mode(tp->phydev, ETHTOOL_LINK_MODE_2500baseT_Full_BIT);
+		phy_remove_link_mode(tp->phydev, ETHTOOL_LINK_MODE_5000baseT_Full_BIT);
+
+		phy_remove_link_mode(tp->phydev, ETHTOOL_LINK_MODE_Autoneg_BIT);
+		phy_remove_link_mode(tp->phydev, ETHTOOL_LINK_MODE_Pause_BIT);
+		phy_remove_link_mode(tp->phydev, ETHTOOL_LINK_MODE_Asym_Pause_BIT);
+
+		tp->phydev->autoneg = 0;
+	}
 
 	/* We may have called phy_speed_down before */
 	phy_speed_up(tp->phydev);
@@ -5452,6 +5574,8 @@ static int rtl_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	tp->dash_type = rtl_get_dash_type(tp);
 	tp->dash_enabled = rtl_dash_is_enabled(tp);
+
+	tp->sfp_mode = rtl_sfp_mode(tp);
 
 	tp->cp_cmd = RTL_R16(tp, CPlusCmd) & CPCMD_MASK;
 
