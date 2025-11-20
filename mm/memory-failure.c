@@ -2437,8 +2437,11 @@ try_again:
 		 * or unhandlable page.  The refcount is bumped iff the
 		 * page is a valid handlable page.
 		 */
-		folio_set_has_hwpoisoned(folio);
-		err = try_to_split_thp_page(p, new_order, /* release= */ false);
+		if (new_order >= 0) {
+			folio_set_has_hwpoisoned(folio);
+			err = try_to_split_thp_page(p, new_order, /* release= */ false);
+		} else
+			err = new_order;
 		/*
 		 * If splitting a folio to order-0 fails, kill the process.
 		 * Split the folio regardless to minimize unusable pages.
@@ -2779,6 +2782,7 @@ static int soft_offline_in_use_page(struct page *page)
 		/*
 		 * If new_order (target split order) is not 0, do not split the
 		 * folio at all to retain the still accessible large folio.
+		 * new_order can be -EBUSY, meaning the folio cannot be split.
 		 * NOTE: if minimizing the number of soft offline pages is
 		 * preferred, split it to non-zero new_order like it is done in
 		 * memory_failure().
