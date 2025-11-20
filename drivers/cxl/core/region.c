@@ -3749,6 +3749,86 @@ static int cxl_region_debugfs_poison_clear(void *data, u64 offset)
 DEFINE_DEBUGFS_ATTRIBUTE(cxl_poison_clear_fops, NULL,
 			 cxl_region_debugfs_poison_clear, "%llx\n");
 
+static struct cxl_region *
+cxlr_overlapping_range(struct device *dev, resource_size_t s, resource_size_t e)
+{
+	struct cxl_region *cxlr;
+	struct resource *r;
+
+	if (!is_cxl_region(dev))
+		return NULL;
+
+	cxlr = to_cxl_region(dev);
+	r = cxlr->params.res;
+	if (!r)
+		return NULL;
+
+	if (r->start > e || r->end < s)
+		return NULL;
+
+	return cxlr;
+}
+
+struct cxl_range_ctx {
+	resource_size_t start;
+	resource_size_t end;
+	resource_size_t pos;
+	resource_size_t map_end;
+	bool found;
+};
+
+static int cxl_region_map_cb(struct device *dev, void *data)
+{
+	struct cxl_range_ctx *ctx = data;
+	struct cxl_region *cxlr;
+	struct resource *r;
+
+	cxlr = cxlr_overlapping_range(dev, ctx->pos, ctx->end);
+	if (!cxlr)
+		return 0;
+
+	r = cxlr->params.res;
+	if (r->start != ctx->pos)
+		return 0;
+
+	if (!ctx->found) {
+		ctx->found = true;
+		ctx->map_end = r->end;
+		return 0;
+	}
+
+	return 1;
+}
+
+bool cxl_regions_fully_map(resource_size_t start, resource_size_t end)
+{
+	resource_size_t pos = start;
+	int rc;
+
+	while (pos <= end) {
+		struct cxl_range_ctx ctx = {
+			.start   = start,
+			.end     = end,
+			.pos = pos,
+			.found = false,
+		};
+
+		rc = bus_for_each_dev(&cxl_bus_type, NULL, &ctx,
+				      cxl_region_map_cb);
+
+		if (rc || !ctx.found || ctx.map_end > end)
+			return false;
+
+		if (ctx.map_end == end)
+			break;
+
+		pos = ctx.map_end + 1;
+	}
+
+	return true;
+}
+EXPORT_SYMBOL_GPL(cxl_regions_fully_map);
+
 static int cxl_region_can_probe(struct cxl_region *cxlr)
 {
 	struct cxl_region_params *p = &cxlr->params;

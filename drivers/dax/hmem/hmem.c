@@ -3,6 +3,8 @@
 #include <linux/memregion.h>
 #include <linux/module.h>
 #include <linux/dax.h>
+
+#include "../../cxl/cxl.h"
 #include "../bus.h"
 
 static bool region_idle;
@@ -150,7 +152,17 @@ out_put:
 static int handle_deferred_cxl(struct device *host, int target_nid,
 			       const struct resource *res)
 {
-	/* TODO: Handle region assembly failures */
+	if (region_intersects(res->start, resource_size(res), IORESOURCE_MEM,
+			      IORES_DESC_CXL) != REGION_DISJOINT) {
+
+		if (cxl_regions_fully_map(res->start, res->end))
+			dax_cxl_mode = DAX_CXL_MODE_DROP;
+		else
+			dax_cxl_mode = DAX_CXL_MODE_REGISTER;
+
+		hmem_register_device(host, target_nid, res);
+	}
+
 	return 0;
 }
 
