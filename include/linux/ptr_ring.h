@@ -453,6 +453,23 @@ static inline int ptr_ring_consume_batched_bh(struct ptr_ring *r,
 	return ret;
 }
 
+/*
+ * Check if the previous consume operation created space
+ *
+ * Returns true if the last call to __ptr_ring_consume() has created
+ * space in the ring buffer (i.e., an element was consumed).
+ *
+ * Note: This function is only valid immediately after a single call to
+ * __ptr_ring_consume(). If multiple calls to ptr_ring_consume*() have
+ * been made, this check must be performed after each call individually.
+ * Likewise, do not use this function after calling
+ * __ptr_ring_consume_batched().
+ */
+static inline bool __ptr_ring_consume_created_space(struct ptr_ring *r)
+{
+	return r->consumer_tail >= r->consumer_head;
+}
+
 /* Cast to structure type and call a function without discarding from FIFO.
  * Function must return a value.
  * Callers must take consumer_lock.
