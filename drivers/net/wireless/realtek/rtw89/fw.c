@@ -6895,6 +6895,8 @@ void rtw89_fw_c2h_work(struct wiphy *wiphy, struct wiphy_work *work)
 	lockdep_assert_wiphy(rtwdev->hw->wiphy);
 
 	skb_queue_walk_safe(&rtwdev->c2h_queue, skb, tmp) {
+		if (unlikely(!skb->next || !skb->prev))
+			return;
 		skb_unlink(skb, &rtwdev->c2h_queue);
 		rtw89_fw_c2h_cmd_handle(rtwdev, skb);
 		dev_kfree_skb_any(skb);
