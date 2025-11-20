@@ -1440,6 +1440,9 @@ static int dtSplitPage(tid_t tid, struct inode *ip, struct dtsplit * split,
 	 * but it's not. Be my guest.)
 	 */
 	if (nextbn == 0 && split->index == sp->header.nextindex) {
+		/* open new linelock */
+		if (unlikely(rdtlck->index >= rdtlck->maxcnt))
+			rdtlck = txLinelock(rdtlck);
 		/* linelock header + stbl (first slot) of new page */
 		rlv = & rdtlck->lv[rdtlck->index];
 		rlv->offset = 0;
@@ -1482,6 +1485,10 @@ static int dtSplitPage(tid_t tid, struct inode *ip, struct dtsplit * split,
 		jfs_info("dtSplitPage: tlck = 0x%p, ip = 0x%p, mp=0x%p",
 			tlck, ip, mp);
 		dtlck = (struct dt_lock *) & tlck->lock;
+
+		/* open new linelock */
+		if (unlikely(dtlck->index >= dtlck->maxcnt))
+			dtlck = txLinelock(dtlck);
 
 		/* linelock header of previous right sibling page */
 		lv = & dtlck->lv[dtlck->index];
@@ -1552,6 +1559,9 @@ static int dtSplitPage(tid_t tid, struct inode *ip, struct dtsplit * split,
 	 * split page moved out entries are linelocked;
 	 * new/right page moved in entries are linelocked;
 	 */
+	/* open new linelock */
+	if (unlikely(rdtlck->index >= rdtlck->maxcnt))
+		rdtlck = txLinelock(rdtlck);
 	/* linelock header + stbl of new right page */
 	rlv = & rdtlck->lv[rdtlck->index];
 	rlv->offset = 0;
@@ -1834,6 +1844,9 @@ static int dtExtendPage(tid_t tid,
 	 */
 	tlck = txLock(tid, ip, pmp, tlckDTREE | tlckENTRY);
 	dtlck = (struct dt_lock *) & tlck->lock;
+	/* open new linelock */
+	if (unlikely(dtlck->index >= dtlck->maxcnt))
+		dtlck = txLinelock(dtlck);
 	lv = & dtlck->lv[dtlck->index];
 
 	/* linelock parent entry - 1st slot */
@@ -3809,10 +3822,16 @@ static void dtMoveEntry(dtpage_t * sp, int si, dtpage_t * dp,
 	sfsi = sp->header.freelist;
 
 	/* linelock destination entry slot */
+	/* open new linelock */
+	if (unlikely(ddtlck->index >= ddtlck->maxcnt))
+		ddtlck = txLinelock(ddtlck);
 	dlv = & ddtlck->lv[ddtlck->index];
 	dlv->offset = dsi;
 
 	/* linelock source entry slot */
+	/* open new linelock */
+	if (unlikely(sdtlck->index >= sdtlck->maxcnt))
+		sdtlck = txLinelock(sdtlck);
 	slv = & sdtlck->lv[sdtlck->index];
 	slv->offset = sstbl[si];
 	xssi = slv->offset - 1;

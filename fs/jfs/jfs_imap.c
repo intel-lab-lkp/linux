@@ -762,6 +762,9 @@ int diWrite(tid_t tid, struct inode *ip)
 	 * copy inline symlink from in-memory inode to on-disk inode
 	 */
 	if (S_ISLNK(ip->i_mode) && ip->i_size < IDATASIZE) {
+		/* open new linelock */
+		if (unlikely(dilinelock->index >= dilinelock->maxcnt))
+			dilinelock = txLinelock(dilinelock);
 		lv = & dilinelock->lv[dilinelock->index];
 		lv->offset = (dioffset + 2 * 128) >> L2INODESLOTSIZE;
 		lv->length = 2;
@@ -773,6 +776,9 @@ int diWrite(tid_t tid, struct inode *ip)
 	 * 128 byte slot granularity
 	 */
 	if (test_cflag(COMMIT_Inlineea, ip)) {
+		/* open new linelock */
+		if (unlikely(dilinelock->index >= dilinelock->maxcnt))
+			dilinelock = txLinelock(dilinelock);
 		lv = & dilinelock->lv[dilinelock->index];
 		lv->offset = (dioffset + 3 * 128) >> L2INODESLOTSIZE;
 		lv->length = 1;
@@ -785,6 +791,9 @@ int diWrite(tid_t tid, struct inode *ip)
 	/*
 	 *	lock/copy inode base: 128 byte slot granularity
 	 */
+	/* open new linelock */
+	if (unlikely(dilinelock->index >= dilinelock->maxcnt))
+		dilinelock = txLinelock(dilinelock);
 	lv = & dilinelock->lv[dilinelock->index];
 	lv->offset = dioffset >> L2INODESLOTSIZE;
 	copy_to_dinode(dp, ip);
