@@ -302,6 +302,7 @@
 
 		mt6359rtc: rtc {
 			compatible = "mediatek,mt6358-rtc";
+			mediatek,alarm-sta-supported;
 		};
 	};
 };
