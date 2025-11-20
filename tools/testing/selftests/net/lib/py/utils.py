@@ -2,9 +2,11 @@
 
 import json as _json
 import os
+import random
 import re
 import select
 import socket
+import string
 import subprocess
 import time
 
@@ -236,6 +238,11 @@ def rand_port(stype=socket.SOCK_STREAM):
     with socket.socket(socket.AF_INET6, stype) as s:
         s.bind(("", 0))
         return s.getsockname()[1]
+
+
+def rand_ifname():
+    dev = ''.join(random.choice(string.ascii_lowercase) for _ in range(6))
+    return dev + ''.join(random.choice(string.digits) for _ in range(2))
 
 
 def wait_port_listen(port, proto="tcp", ns=None, host=None, sleep=0.005, deadline=5):
