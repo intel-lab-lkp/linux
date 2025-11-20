@@ -255,11 +255,19 @@ const volatile void * __must_check_fn(const volatile void *val)
  *	@exit is an expression using '_T' -- similar to FREE above.
  *	@init is an expression in @init_args resulting in @type
  *
+ * DEFINE_CLASS_TYPE(name, type, exit):
+ *	Like DEFINE_CLASS but without a constructor. Use with CLASS_INIT()
+ *	for classes that need custom initialization expressions per usage.
+ *
  * EXTEND_CLASS(name, ext, init, init_args...):
  *	extends class @name to @name@ext with the new constructor
  *
  * CLASS(name, var)(args...):
  *	declare the variable @var as an instance of the named class
+ *
+ * CLASS_INIT(name, var, init_expr):
+ *	declare the variable @var as an instance of the named class with
+ *	custom initialization expression. Use with DEFINE_CLASS_TYPE().
  *
  * Ex.
  *
@@ -270,6 +278,12 @@ const volatile void * __must_check_fn(const volatile void *val)
  *		return -EBADF;
  *
  *	// use 'f' without concern
+ *
+ * DEFINE_CLASS_TYPE(fd_file, struct { int fd; struct file *file; }, ...)
+ *
+ *	CLASS_INIT(fd_file, ff, custom_init_expression);
+ *	if (ff.fd < 0)
+ *		return ff.fd;
  */
 
 #define DEFINE_CLASS(_name, _type, _exit, _init, _init_args...)		\
@@ -278,6 +292,11 @@ static inline void class_##_name##_destructor(_type *p)			\
 { _type _T = *p; _exit; }						\
 static inline _type class_##_name##_constructor(_init_args)		\
 { _type t = _init; return t; }
+
+#define DEFINE_CLASS_TYPE(_name, _type, _exit)				\
+typedef _type class_##_name##_t;					\
+static inline void class_##_name##_destructor(_type *p)		\
+{ _type _T = *p; _exit; }
 
 #define EXTEND_CLASS(_name, ext, _init, _init_args...)			\
 typedef class_##_name##_t class_##_name##ext##_t;			\
@@ -290,6 +309,9 @@ static inline class_##_name##_t class_##_name##ext##_constructor(_init_args) \
 	class_##_name##_t var __cleanup(class_##_name##_destructor) =	\
 		class_##_name##_constructor
 
+#define CLASS_INIT(_name, _var, _init_expr)                             \
+        class_##_name##_t _var __cleanup(class_##_name##_destructor) = (_init_expr)
+
 #define __scoped_class(_name, var, _label, args...)        \
 	for (CLASS(_name, var)(args); ; ({ goto _label; })) \
 		if (0) {                                   \
@@ -297,8 +319,18 @@ _label:                                                    \
 			break;                             \
 		} else
 
+#define __scoped_class_init(_name, var, _init_expr, _label)                \
+	for (CLASS_INIT(_name, var, _init_expr); ; ({ goto _label; })) \
+		if (0) {                                                    \
+_label:                                                                     \
+			break;                                              \
+		} else
+
 #define scoped_class(_name, var, args...) \
 	__scoped_class(_name, var, __UNIQUE_ID(label), args)
+
+#define scoped_class_init(_name, var, _init_expr) \
+	__scoped_class_init(_name, var, _init_expr, __UNIQUE_ID(label))
 
 /*
  * DEFINE_GUARD(name, type, lock, unlock):
