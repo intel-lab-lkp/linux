@@ -4313,27 +4313,20 @@ static const struct file_operations kvm_vcpu_stats_fops = {
 
 static int kvm_vcpu_ioctl_get_stats_fd(struct kvm_vcpu *vcpu)
 {
-	int fd;
-	struct file *file;
 	char name[15 + ITOA_MAX_LEN + 1];
 
 	snprintf(name, sizeof(name), "kvm-vcpu-stats:%d", vcpu->vcpu_id);
 
-	fd = get_unused_fd_flags(O_CLOEXEC);
-	if (fd < 0)
-		return fd;
+	FD_PREPARE(fdf, O_CLOEXEC, anon_inode_getfile_fmode(name,
+							     &kvm_vcpu_stats_fops,
+							     vcpu, O_RDONLY,
+							     FMODE_PREAD)) {
+		if (fd_prepare_failed(fdf))
+			return fd_prepare_error(fdf);
 
-	file = anon_inode_getfile_fmode(name, &kvm_vcpu_stats_fops, vcpu,
-					O_RDONLY, FMODE_PREAD);
-	if (IS_ERR(file)) {
-		put_unused_fd(fd);
-		return PTR_ERR(file);
+		kvm_get_kvm(vcpu->kvm);
+		return fd_publish(fdf);
 	}
-
-	kvm_get_kvm(vcpu->kvm);
-	fd_install(fd, file);
-
-	return fd;
 }
 
 #ifdef CONFIG_KVM_GENERIC_PRE_FAULT_MEMORY
