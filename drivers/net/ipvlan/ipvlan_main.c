@@ -132,6 +132,124 @@ no_mem:
 	return NET_RX_DROP;
 }
 
+static int ipvlan_port_add_addr(struct ipvl_port *port, const void *iaddr,
+				bool is_v6, bool can_block)
+{
+	gfp_t gfp_flags = can_block ? GFP_KERNEL : GFP_ATOMIC;
+	struct ipvl_port_addr *addr;
+
+	addr = kzalloc(sizeof(*addr), gfp_flags);
+	if (!addr)
+		return -ENOMEM;
+	if (!is_v6) {
+		memcpy(&addr->ip4addr, iaddr, sizeof(struct in_addr));
+		addr->atype = IPVL_IPV4;
+	} else {
+		memcpy(&addr->ip6addr, iaddr, sizeof(struct in6_addr));
+		addr->atype = IPVL_IPV6;
+	}
+
+	spin_lock_bh(&port->addrs_lock);
+	list_add_tail_rcu(&addr->anode, &port->port_addrs);
+	spin_unlock_bh(&port->addrs_lock);
+
+	return 0;
+}
+
+static bool portaddr_equal(bool is_v6, const struct ipvl_port_addr *addr,
+			   const void *iaddr)
+{
+	if (!is_v6 && addr->atype == IPVL_IPV4) {
+		struct in_addr *i4addr = (struct in_addr *)iaddr;
+
+		return addr->ip4addr.s_addr == i4addr->s_addr;
+#if IS_ENABLED(CONFIG_IPV6)
+	} else if (is_v6 && addr->atype == IPVL_IPV6) {
+		struct in6_addr *i6addr = (struct in6_addr *)iaddr;
+
+		return ipv6_addr_equal(&addr->ip6addr, i6addr);
+#endif
+	}
+
+	return false;
+}
+
+struct ipvl_port_addr *ipvlan_port_find_addr(struct ipvl_port *port,
+					     const void *iaddr, bool is_v6)
+{
+	struct ipvl_port_addr *addr;
+
+	list_for_each_entry_rcu(addr, &port->port_addrs, anode)
+		if (portaddr_equal(is_v6, addr, iaddr))
+			return addr;
+	return NULL;
+}
+
+static void ipvlan_port_del_addr(struct ipvl_port *port, const void *iaddr,
+				 bool is_v6)
+{
+	struct ipvl_port_addr *addr;
+
+	spin_lock_bh(&port->addrs_lock);
+	addr = ipvlan_port_find_addr(port, iaddr, is_v6);
+	if (addr)
+		list_del_rcu(&addr->anode);
+	spin_unlock_bh(&port->addrs_lock);
+
+	if (addr)
+		kfree_rcu(addr, rcu);
+}
+
+static int ipvlan_port_enum_addrs(struct ipvl_port *port)
+{
+	struct inet6_dev *in6_dev __maybe_unused;
+	const struct in_device *in_dev;
+	int r = 0;
+
+	ASSERT_RTNL();
+
+	in_dev = __in_dev_get_rtnl(port->dev);
+	if (in_dev) {
+		const struct in_ifaddr *ifa;
+
+		in_dev_for_each_ifa_rtnl(ifa, in_dev) {
+			r = ipvlan_port_add_addr(port, &ifa->ifa_local, false,
+						 true);
+			if (r < 0)
+				return r;
+		}
+	}
+
+#if IS_ENABLED(CONFIG_IPV6)
+	in6_dev = __in6_dev_get(port->dev);
+	if (in6_dev) {
+		const struct inet6_ifaddr *ifa6;
+
+		read_lock_bh(&in6_dev->lock);
+		list_for_each_entry(ifa6, &in6_dev->addr_list, if_list) {
+			r = ipvlan_port_add_addr(port, &ifa6->addr, true,
+						 false);
+			if (r < 0)
+				break;
+		}
+		read_unlock_bh(&in6_dev->lock);
+	}
+#endif
+	return r;
+}
+
+static void ipvlan_port_free_port_addrs(struct ipvl_port *port)
+{
+	struct ipvl_port_addr *addr, *next;
+
+	ASSERT_RTNL();
+
+	list_for_each_entry_safe(addr, next, &port->port_addrs, anode) {
+		list_del_rcu(&addr->anode);
+		kfree_rcu(addr, rcu);
+	}
+}
+
 static int ipvlan_port_create(struct net_device *dev)
 {
 	struct ipvl_port *port;
@@ -148,11 +266,14 @@ static int ipvlan_port_create(struct net_device *dev)
 	for (idx = 0; idx < IPVLAN_HASH_SIZE; idx++)
 		INIT_HLIST_HEAD(&port->hlhead[idx]);
 
+	INIT_LIST_HEAD(&port->port_addrs);
 	spin_lock_init(&port->addrs_lock);
 	skb_queue_head_init(&port->backlog);
 	INIT_WORK(&port->wq, ipvlan_process_multicast);
 	ida_init(&port->ida);
 	port->dev_id_start = 1;
+
+	ipvlan_port_enum_addrs(port);
 
 	err = netdev_rx_handler_register(dev, ipvlan_handle_frame, port);
 	if (err)
@@ -167,6 +288,7 @@ static int ipvlan_port_create(struct net_device *dev)
 	return 0;
 
 err:
+	ipvlan_port_free_port_addrs(port);
 	kfree(port);
 	return err;
 }
@@ -188,6 +310,7 @@ static void ipvlan_port_destroy(struct net_device *dev)
 		kfree_skb(skb);
 	}
 	ida_destroy(&port->ida);
+	ipvlan_port_free_port_addrs(port);
 	kfree(port);
 }
 
@@ -986,6 +1109,50 @@ void ipvlan_del_addr(struct ipvl_dev *ipvlan, void *iaddr, bool is_v6)
 	kfree_rcu(addr, rcu);
 }
 
+static void ipvlan_port_del_addr_ipvlans(struct ipvl_port *port,
+					 const void *iaddr, bool is_v6)
+{
+	struct ipvl_addr *addr = NULL;
+	struct ipvl_dev *ipvlan;
+
+	list_for_each_entry_rcu(ipvlan, &port->ipvlans, pnode) {
+		spin_lock_bh(&port->addrs_lock);
+		addr = ipvlan_find_addr(ipvlan, iaddr, is_v6);
+		if (addr) {
+			ipvlan_ht_addr_del(addr);
+			list_del_rcu(&addr->anode);
+			spin_unlock_bh(&port->addrs_lock);
+			break;
+		}
+		spin_unlock_bh(&port->addrs_lock);
+	}
+
+	if (addr)
+		kfree_rcu(addr, rcu);
+}
+
+static int ipvlan_port_add_addr_event(struct ipvl_port *port,
+				      const void *iaddr, bool is_v6)
+{
+	int r;
+
+	r = ipvlan_port_add_addr(port, iaddr, is_v6, true);
+	if (r < 0)
+		return r;
+
+	ipvlan_port_del_addr_ipvlans(port, iaddr, is_v6);
+
+	return NOTIFY_OK;
+}
+
+static int ipvlan_port_del_addr_event(struct ipvl_port *port,
+				      const void *iaddr, bool is_v6)
+{
+	ipvlan_port_del_addr(port, iaddr, is_v6);
+
+	return NOTIFY_OK;
+}
+
 #if IS_ENABLED(CONFIG_IPV6)
 static int ipvlan_add_addr6(struct ipvl_dev *ipvlan, struct in6_addr *ip6_addr)
 {
@@ -1013,6 +1180,24 @@ static int ipvlan_addr6_event(struct notifier_block *unused,
 	struct inet6_ifaddr *if6 = (struct inet6_ifaddr *)ptr;
 	struct net_device *dev = (struct net_device *)if6->idev->dev;
 	struct ipvl_dev *ipvlan = netdev_priv(dev);
+
+	if (netif_is_ipvlan_port(dev)) {
+		struct ipvl_port *port = ipvlan_port_get_rcu_rtnl(dev);
+
+		if (!ipvlan_is_macnat(port))
+			return NOTIFY_DONE;
+
+		switch (event) {
+		case NETDEV_UP:
+			return ipvlan_port_add_addr_event(port, &if6->addr,
+							  true);
+		case NETDEV_DOWN:
+			return ipvlan_port_del_addr_event(port, &if6->addr,
+							  true);
+		default:
+			return NOTIFY_OK;
+		}
+	}
 
 	if (!ipvlan_is_valid_dev(dev))
 		return NOTIFY_DONE;
@@ -1085,6 +1270,26 @@ static int ipvlan_addr4_event(struct notifier_block *unused,
 	struct net_device *dev = (struct net_device *)if4->ifa_dev->dev;
 	struct ipvl_dev *ipvlan = netdev_priv(dev);
 	struct in_addr ip4_addr;
+
+	if (netif_is_ipvlan_port(dev)) {
+		struct ipvl_port *port = ipvlan_port_get_rcu_rtnl(dev);
+
+		if (!ipvlan_is_macnat(port))
+			return NOTIFY_DONE;
+
+		switch (event) {
+		case NETDEV_UP:
+			return ipvlan_port_add_addr_event(port,
+							  &if4->ifa_address,
+							  false);
+		case NETDEV_DOWN:
+			return ipvlan_port_del_addr_event(port,
+							  &if4->ifa_address,
+							  false);
+		default:
+			return NOTIFY_OK;
+		}
+	}
 
 	if (!ipvlan_is_valid_dev(dev))
 		return NOTIFY_DONE;
