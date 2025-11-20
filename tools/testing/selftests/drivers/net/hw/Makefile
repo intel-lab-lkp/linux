@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0+ OR MIT
 
-TEST_GEN_FILES = iou-zcrx
+TEST_GEN_FILES = iou-zcrx nk_forward
 
 TEST_PROGS = \
 	csum.py \
@@ -55,3 +55,10 @@ include ../../../net/ynl.mk
 include ../../../net/bpf.mk
 
 $(OUTPUT)/iou-zcrx: LDLIBS += -luring
+
+$(OUTPUT)/nk_forward: $(OUTPUT)/nk_forward.skel.h $(BPFOBJ)
+$(OUTPUT)/nk_forward: CFLAGS += $(CCINCLUDE) -I$(OUTPUT)
+$(OUTPUT)/nk_forward: LDLIBS += $(BPFOBJ) -lelf -lz
+
+$(OUTPUT)/nk_forward.skel.h: $(OUTPUT)/nk_forward.bpf.o
+	bpftool gen skeleton $< name nk_forward > $@
