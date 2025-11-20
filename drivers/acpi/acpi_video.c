@@ -1774,16 +1774,12 @@ static void acpi_video_dev_register_backlight(struct acpi_video_device *device)
 
 	dev_info(&device->dev->dev, "registered as cooling_device%d\n",
 		 device->cooling_dev->id);
+	/* For backwards compatibility */
 	result = sysfs_create_link(&device->dev->dev.kobj,
 			&device->cooling_dev->device.kobj,
 			"thermal_cooling");
 	if (result)
 		pr_info("sysfs link creation failed\n");
-
-	result = sysfs_create_link(&device->cooling_dev->device.kobj,
-			&device->dev->dev.kobj, "device");
-	if (result)
-		pr_info("Reverse sysfs link creation failed\n");
 }
 
 static void acpi_video_run_bcl_for_osi(struct acpi_video_bus *video)
@@ -1852,7 +1848,6 @@ static void acpi_video_dev_unregister_backlight(struct acpi_video_device *device
 	}
 	if (device->cooling_dev) {
 		sysfs_remove_link(&device->dev->dev.kobj, "thermal_cooling");
-		sysfs_remove_link(&device->cooling_dev->device.kobj, "device");
 		thermal_cooling_device_unregister(device->cooling_dev);
 		device->cooling_dev = NULL;
 	}
