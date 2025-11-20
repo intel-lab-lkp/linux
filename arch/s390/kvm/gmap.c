@@ -730,13 +730,13 @@ static int _gmap_enable_skeys(struct gmap *gmap)
 	gfn_t start = 0;
 	int rc;
 
-	if (mm_uses_skeys(gmap->kvm->mm))
+	if (gmap->uses_skeys)
 		return 0;
 
-	gmap->kvm->mm->context.uses_skeys = 1;
+	WRITE_ONCE(gmap->uses_skeys, 1);
 	rc = gmap_helper_disable_cow_sharing();
 	if (rc) {
-		gmap->kvm->mm->context.uses_skeys = 0;
+		WRITE_ONCE(gmap->uses_skeys, 0);
 		return rc;
 	}
 
