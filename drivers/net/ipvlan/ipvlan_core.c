@@ -985,18 +985,69 @@ out:
 	return ret;
 }
 
+static bool ipvlan_is_mcast(struct ipvl_port *port, void *lyr3h, int addr_type)
+{
+	switch (addr_type) {
+#if IS_ENABLED(CONFIG_IPV6)
+	/* No need to handle ICMPv6. This type is used for DAD only. */
+	case IPVL_IPV6:
+		return !is_ipv6_usable(&((struct ipv6hdr *)lyr3h)->daddr);
+#endif
+	case IPVL_IPV4: {
+		/* Treat mcast, bcast and zero as multicast. */
+		__be32 i4addr = ((struct iphdr *)lyr3h)->daddr;
+
+		return !is_ipv4_usable(i4addr);
+	}
+	case IPVL_ARP: {
+		struct arphdr *arph;
+		unsigned char *arp_ptr;
+		__be32 i4addr;
+
+		arph = (struct arphdr *)lyr3h;
+		arp_ptr = (unsigned char *)(arph + 1);
+		arp_ptr += (2 * port->dev->addr_len) + 4;
+		i4addr = *(__be32 *)arp_ptr;
+		return !is_ipv4_usable(i4addr);
+	}
+	}
+	return false;
+}
+
+static bool ipvlan_is_l2_mcast(struct ipvl_port *port, struct sk_buff *skb,
+			       bool *need_eth_fix)
+{
+	int addr_type;
+	void *lyr3h;
+
+	/* In some wifi environments unicast dest address means nothing.
+	 * IP still can be a mcast and frame should be treated as mcast.
+	 */
+	*need_eth_fix = false;
+	if (is_multicast_ether_addr(eth_hdr(skb)->h_dest))
+		return true;
+
+	if (!ipvlan_is_macnat(port))
+		return false;
+
+	lyr3h = ipvlan_get_L3_hdr(port, skb, &addr_type);
+	*need_eth_fix = lyr3h && ipvlan_is_mcast(port, lyr3h, addr_type);
+
+	return *need_eth_fix;
+}
+
 static rx_handler_result_t ipvlan_handle_mode_l2(struct sk_buff **pskb,
 						 struct ipvl_port *port)
 {
-	struct sk_buff *skb = *pskb;
-	struct ethhdr *eth = eth_hdr(skb);
 	rx_handler_result_t ret = RX_HANDLER_PASS;
+	struct sk_buff *skb = *pskb;
+	bool need_eth_fix;
 
 	/* Ignore already seen packets. */
 	if (ipvlan_is_skb_marked(skb, port->dev))
 		return RX_HANDLER_PASS;
 
-	if (is_multicast_ether_addr(eth->h_dest)) {
+	if (ipvlan_is_l2_mcast(port, skb, &need_eth_fix)) {
 		if (ipvlan_external_frame(skb, port) ||
 		    ipvlan_is_macnat(port)) {
 			/* External frames are queued for device local
@@ -1008,6 +1059,11 @@ static rx_handler_result_t ipvlan_handle_mode_l2(struct sk_buff **pskb,
 			struct sk_buff *nskb = skb_clone(skb, GFP_ATOMIC);
 
 			if (nskb) {
+				if (need_eth_fix) {
+					struct ethhdr *eth = eth_hdr(nskb);
+
+					eth_broadcast_addr(eth->h_dest);
+				}
 				ipvlan_mark_skb(skb, port->dev);
 				ipvlan_skb_crossing_ns(nskb, NULL);
 				ipvlan_multicast_enqueue(port, nskb, false);
