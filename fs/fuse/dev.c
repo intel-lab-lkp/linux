@@ -632,6 +632,7 @@ static void fuse_adjust_compat(struct fuse_conn *fc, struct fuse_args *args)
 			break;
 		}
 	}
+	/* XXX handle FUSE_COMPAT_45_ENTRY_OUT_SIZE */
 }
 
 static void fuse_force_creds(struct fuse_req *req)

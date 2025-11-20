@@ -690,6 +690,13 @@ enum fuse_notify_code {
 #define FUSE_MIN_READ_BUFFER 8192
 
 #define FUSE_COMPAT_ENTRY_OUT_SIZE 120
+#define FUSE_COMPAT_45_ENTRY_OUT_SIZE 128
+
+struct fuse_file_handle {
+	uint32_t	size;
+	uint32_t	type;
+	char		handle[0];
+};
 
 struct fuse_entry_out {
 	uint64_t	nodeid;		/* Inode ID */
@@ -700,6 +707,7 @@ struct fuse_entry_out {
 	uint32_t	entry_valid_nsec;
 	uint32_t	attr_valid_nsec;
 	struct fuse_attr attr;
+	struct fuse_file_handle fh;
 };
 
 struct fuse_forget_in {

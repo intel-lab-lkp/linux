@@ -223,6 +223,8 @@ struct fuse_inode {
 	 * so preserve the blocksize specified by the server.
 	 */
 	u8 cached_i_blkbits;
+
+	struct fuse_file_handle *fh;
 };
 
 /** FUSE inode state bits */
@@ -1074,6 +1076,26 @@ static inline int invalid_nodeid(u64 nodeid)
 	return !nodeid || nodeid == FUSE_ROOT_ID;
 }
 
+static inline bool fuse_invalid_file_handle(struct fuse_conn *fc,
+					    struct fuse_file_handle *handle)
+{
+	if (!fc->lookup_handle)
+		return false;
+
+	return !handle->size || (handle->size >= FUSE_MAX_HANDLE_SZ);
+}
+
+static inline bool fuse_file_handle_is_equal(struct fuse_conn *fc,
+					     struct fuse_file_handle *fh1,
+					     struct fuse_file_handle *fh2)
+{
+	if (!fc->lookup_handle || !fh2->size || // XXX more OPs without handle
+	    ((fh1->size == fh2->size) &&
+	     (!memcmp(fh1->handle, fh2->handle, fh1->size))))
+		return true;
+	return false;
+}
+
 static inline u64 fuse_get_attr_version(struct fuse_conn *fc)
 {
 	return atomic64_read(&fc->attr_version);
@@ -1105,7 +1127,10 @@ static inline struct fuse_entry_out *fuse_entry_out_alloc(struct fuse_conn *fc)
 {
 	struct fuse_entry_out *entryout;
 
-	entryout = kzalloc(sizeof(*entryout), GFP_KERNEL_ACCOUNT);
+	entryout = kzalloc(sizeof(*entryout) + fc->max_handle_sz,
+			   GFP_KERNEL_ACCOUNT);
+	if (entryout)
+		entryout->fh.size = fc->max_handle_sz;
 
 	return entryout;
 }
@@ -1152,10 +1177,11 @@ extern const struct dentry_operations fuse_dentry_operations;
 struct inode *fuse_iget(struct super_block *sb, u64 nodeid,
 			int generation, struct fuse_attr *attr,
 			u64 attr_valid, u64 attr_version,
-			u64 evict_ctr);
+			u64 evict_ctr, struct fuse_file_handle *fh);
 
-int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name,
-		     struct fuse_entry_out *outarg, struct inode **inode);
+int fuse_lookup_name(struct super_block *sb, u64 nodeid, struct inode *dir,
+		     const struct qstr *name, struct fuse_entry_out *outarg,
+		     struct inode **inode);
 
 /**
  * Send FORGET command

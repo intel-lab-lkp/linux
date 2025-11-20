@@ -95,6 +95,25 @@ out_free:
 	return NULL;
 }
 
+/*
+ * XXX postpone this allocation and later use the real size instead of max
+ */
+static bool fuse_inode_handle_alloc(struct super_block *sb,
+				    struct fuse_inode *fi)
+{
+	struct fuse_conn *fc = get_fuse_conn_super(sb);
+
+	fi->fh = NULL;
+	if (fc->lookup_handle) {
+		fi->fh = kzalloc(sizeof(*fi->fh) + fc->max_handle_sz,
+				 GFP_KERNEL_ACCOUNT);
+		if (!fi->fh)
+			return false;
+	}
+
+	return true;
+}
+
 static struct inode *fuse_alloc_inode(struct super_block *sb)
 {
 	struct fuse_inode *fi;
@@ -120,8 +139,15 @@ static struct inode *fuse_alloc_inode(struct super_block *sb)
 	if (IS_ENABLED(CONFIG_FUSE_PASSTHROUGH))
 		fuse_inode_backing_set(fi, NULL);
 
+	if (!fuse_inode_handle_alloc(sb, fi))
+		goto out_free_dax;
+
 	return &fi->inode;
 
+out_free_dax:
+#ifdef CONFIG_FUSE_DAX
+	kfree(fi->dax);
+#endif
 out_free_forget:
 	kfree(fi->forget);
 out_free:
@@ -132,6 +158,7 @@ out_free:
 static void fuse_free_inode(struct inode *inode)
 {
 	struct fuse_inode *fi = get_fuse_inode(inode);
+	struct fuse_conn *fc = get_fuse_conn(inode);
 
 	mutex_destroy(&fi->mutex);
 	kfree(fi->forget);
@@ -140,6 +167,9 @@ static void fuse_free_inode(struct inode *inode)
 #endif
 	if (IS_ENABLED(CONFIG_FUSE_PASSTHROUGH))
 		fuse_backing_put(fuse_inode_backing(fi));
+
+	if (fc->lookup_handle)
+		kfree(fi->fh);
 
 	kmem_cache_free(fuse_inode_cachep, fi);
 }
@@ -465,7 +495,7 @@ static int fuse_inode_set(struct inode *inode, void *_nodeidp)
 struct inode *fuse_iget(struct super_block *sb, u64 nodeid,
 			int generation, struct fuse_attr *attr,
 			u64 attr_valid, u64 attr_version,
-			u64 evict_ctr)
+			u64 evict_ctr, struct fuse_file_handle *fh)
 {
 	struct inode *inode;
 	struct fuse_inode *fi;
@@ -505,14 +535,29 @@ retry:
 	if (!inode)
 		return NULL;
 
+	fi = get_fuse_inode(inode);
+	if (fc->lookup_handle && fh->size) {
+		if (fi->fh->size == 0) {
+			if (fh->size >= fc->max_handle_sz)
+				pr_warn("Truncating file handle size (%u)\n",
+					fh->size);
+			fi->fh->size = fh->size < fc->max_handle_sz ?
+				fh->size : fc->max_handle_sz - 1;
+			memcpy(fi->fh->handle, fh->handle, fi->fh->size);
+		} else
+			pr_warn("handle was already set (size: %u)\n",
+				fi->fh->size);
+	}
 	if ((inode->i_state & I_NEW)) {
 		inode->i_flags |= S_NOATIME;
 		if (!fc->writeback_cache || !S_ISREG(attr->mode))
 			inode->i_flags |= S_NOCMTIME;
 		inode->i_generation = generation;
+
 		fuse_init_inode(inode, attr, fc);
 		unlock_new_inode(inode);
-	} else if (fuse_stale_inode(inode, generation, attr)) {
+	} else if (fuse_stale_inode(inode, generation, attr) ||
+		   !fuse_file_handle_is_equal(fc, fi->fh, fh)) {
 		/* nodeid was reused, any I/O on the old inode should fail */
 		fuse_make_bad(inode);
 		if (inode != d_inode(sb->s_root)) {
@@ -521,7 +566,6 @@ retry:
 			goto retry;
 		}
 	}
-	fi = get_fuse_inode(inode);
 	spin_lock(&fi->lock);
 	fi->nlookup++;
 	spin_unlock(&fi->lock);
@@ -1062,12 +1106,23 @@ static struct inode *fuse_get_root_inode(struct super_block *sb, unsigned int mo
 	attr.mode = mode;
 	attr.ino = FUSE_ROOT_ID;
 	attr.nlink = 1;
-	return fuse_iget(sb, FUSE_ROOT_ID, 0, &attr, 0, 0, 0);
+	return fuse_iget(sb, FUSE_ROOT_ID, 0, &attr, 0, 0, 0, NULL); // XXX
 }
 
+enum {
+	HANDLE_TYPE_NODEID      = 0,
+	HANDLE_TYPE_HANDLE      = 1,
+};
+
 struct fuse_inode_handle {
-	u64 nodeid;
-	u32 generation;
+	u32 type;
+	union {
+		struct {
+			u64 nodeid;
+			u32 generation;
+		};
+		struct fuse_file_handle fh;
+	};
 };
 
 static struct dentry *fuse_get_dentry(struct super_block *sb,
@@ -1095,7 +1150,7 @@ static struct dentry *fuse_get_dentry(struct super_block *sb,
 			goto out_err;
 		}
 
-		err = fuse_lookup_name(sb, handle->nodeid, &name, outarg,
+		err = fuse_lookup_name(sb, handle->nodeid, NULL, &name, outarg,
 				       &inode);
 		kfree(outarg);
 		if (err && err != -ENOENT)
@@ -1124,12 +1179,41 @@ static struct dentry *fuse_get_dentry(struct super_block *sb,
 	return ERR_PTR(err);
 }
 
+static int fuse_encode_lookup_fh(struct inode *inode, u32 *fh, int *max_len,
+				 struct inode *parent)
+{
+	struct fuse_inode *fi = get_fuse_inode(inode);
+	int total_len, len;
+
+	total_len = len = sizeof(struct fuse_file_handle);
+	if (parent)
+		total_len *= 2;
+
+	if (*max_len < total_len)
+		return FILEID_INVALID;
+
+	memcpy(fh, &fi->fh, len);
+	if (parent) {
+		fi = get_fuse_inode(parent);
+		memcpy((fh + len), &fi->fh, len);
+	}
+
+	*max_len = total_len;
+
+	/* XXX define new fid_type */
+	return parent ? FILEID_INO64_GEN_PARENT : FILEID_INO64_GEN;
+}
+
 static int fuse_encode_fh(struct inode *inode, u32 *fh, int *max_len,
 			   struct inode *parent)
 {
+	struct fuse_conn *fc = get_fuse_conn(inode);
 	int len = parent ? 6 : 3;
 	u64 nodeid;
 	u32 generation;
+
+	if (fc->lookup_handle)
+		return fuse_encode_lookup_fh(inode, fh, max_len, parent);
 
 	if (*max_len < len) {
 		*max_len = len;
@@ -1159,30 +1243,51 @@ static int fuse_encode_fh(struct inode *inode, u32 *fh, int *max_len,
 static struct dentry *fuse_fh_to_dentry(struct super_block *sb,
 		struct fid *fid, int fh_len, int fh_type)
 {
+	struct fuse_conn *fc = get_fuse_conn_super(sb);
 	struct fuse_inode_handle handle;
 
 	if ((fh_type != FILEID_INO64_GEN &&
 	     fh_type != FILEID_INO64_GEN_PARENT) || fh_len < 3)
 		return NULL;
 
-	handle.nodeid = (u64) fid->raw[0] << 32;
-	handle.nodeid |= (u64) fid->raw[1];
-	handle.generation = fid->raw[2];
+	if (fc->lookup_handle) {
+		if (fh_len < sizeof(struct fuse_file_handle))
+			return NULL;
+		handle.type = HANDLE_TYPE_HANDLE;
+		memcpy(&handle.fh, &fid->raw[0],
+		       sizeof(struct fuse_file_handle));
+	} else {
+		handle.nodeid = (u64) fid->raw[0] << 32;
+		handle.nodeid |= (u64) fid->raw[1];
+		handle.generation = fid->raw[2];
+	}
 	return fuse_get_dentry(sb, &handle);
 }
 
 static struct dentry *fuse_fh_to_parent(struct super_block *sb,
 		struct fid *fid, int fh_len, int fh_type)
 {
-	struct fuse_inode_handle parent;
+	struct fuse_conn *fc = get_fuse_conn_super(sb);
+	struct fuse_inode_handle handle;
 
 	if (fh_type != FILEID_INO64_GEN_PARENT || fh_len < 6)
 		return NULL;
 
-	parent.nodeid = (u64) fid->raw[3] << 32;
-	parent.nodeid |= (u64) fid->raw[4];
-	parent.generation = fid->raw[5];
-	return fuse_get_dentry(sb, &parent);
+	if (fc->lookup_handle) {
+		struct fuse_file_handle *fh = (struct fuse_file_handle *)fid->raw;
+
+		if (fh_len < sizeof(struct fuse_file_handle) * 2)
+			return NULL;
+		handle.type = HANDLE_TYPE_HANDLE;
+		memcpy(&handle.fh, &fh[1],
+		       sizeof(struct fuse_file_handle));
+	} else {
+		handle.type = HANDLE_TYPE_NODEID;
+		handle.nodeid = (u64) fid->raw[3] << 32;
+		handle.nodeid |= (u64) fid->raw[4];
+		handle.generation = fid->raw[5];
+	}
+	return fuse_get_dentry(sb, &handle);
 }
 
 static struct dentry *fuse_get_parent(struct dentry *child)
@@ -1202,7 +1307,7 @@ static struct dentry *fuse_get_parent(struct dentry *child)
 		return ERR_PTR(-ENOMEM);
 
 	err = fuse_lookup_name(child_inode->i_sb, get_node_id(child_inode),
-			       &dotdot_name, outarg, &inode);
+			       child_inode, &dotdot_name, outarg, &inode);
 	kfree(outarg);
 	if (err) {
 		if (err == -ENOENT)
@@ -1760,7 +1865,7 @@ static int fuse_fill_super_submount(struct super_block *sb,
 
 	fuse_fill_attr_from_inode(&root_attr, parent_fi);
 	root = fuse_iget(sb, parent_fi->nodeid, 0, &root_attr, 0, 0,
-			 fuse_get_evict_ctr(fm->fc));
+			 fuse_get_evict_ctr(fm->fc), NULL); // XXX
 	/*
 	 * This inode is just a duplicate, so it is not looked up and
 	 * its nlookup should not be incremented.  fuse_iget() does

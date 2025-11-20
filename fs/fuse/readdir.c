@@ -185,12 +185,12 @@ static int fuse_direntplus_link(struct file *file,
 			return 0;
 	}
 
-	if (invalid_nodeid(o->nodeid))
-		return -EIO;
-	if (fuse_invalid_attr(&o->attr))
+	fc = get_fuse_conn(dir);
+
+	if (invalid_nodeid(o->nodeid) || fuse_invalid_attr(&o->attr) ||
+	    fuse_invalid_file_handle(fc, &o->fh))
 		return -EIO;
 
-	fc = get_fuse_conn(dir);
 	epoch = atomic_read(&fc->epoch);
 
 	name.hash = full_name_hash(parent, name.name, name.len);
@@ -235,7 +235,7 @@ retry:
 	} else {
 		inode = fuse_iget(dir->i_sb, o->nodeid, o->generation,
 				  &o->attr, ATTR_TIMEOUT(o),
-				  attr_version, evict_ctr);
+				  attr_version, evict_ctr, &o->fh);
 		if (!inode)
 			inode = ERR_PTR(-ENOMEM);
 
