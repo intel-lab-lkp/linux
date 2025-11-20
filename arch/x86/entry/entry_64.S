@@ -1499,11 +1499,6 @@ SYM_CODE_END(rewind_stack_and_make_dead)
  * from the branch history tracker in the Branch Predictor, therefore removing
  * user influence on subsequent BTB lookups.
  *
- * It should be used on parts prior to Alder Lake. Newer parts should use the
- * BHI_DIS_S hardware control instead. If a pre-Alder Lake part is being
- * virtualized on newer hardware the VMM should protect against BHI attacks by
- * setting BHI_DIS_S for the guests.
- *
  * CALLs/RETs are necessary to prevent Loop Stream Detector(LSD) from engaging
  * and not clearing the branch history. The call tree looks like:
  *
@@ -1532,10 +1527,7 @@ SYM_CODE_END(rewind_stack_and_make_dead)
  * Note, callers should use a speculation barrier like LFENCE immediately after
  * a call to this function to ensure BHB is cleared before indirect branches.
  */
-SYM_FUNC_START(clear_bhb_loop)
-	ANNOTATE_NOENDBR
-	push	%rbp
-	mov	%rsp, %rbp
+.macro	CLEAR_BHB_LOOP_SEQ
 	movl	$5, %ecx
 	ANNOTATE_INTRA_FUNCTION_CALL
 	call	1f
@@ -1545,15 +1537,16 @@ SYM_FUNC_START(clear_bhb_loop)
 	 * Shift instructions so that the RET is in the upper half of the
 	 * cacheline and don't take the slowpath to its_return_thunk.
 	 */
-	.skip 32 - (.Lret1 - 1f), 0xcc
+	.skip 32 - (.Lret1_\@ - 1f), 0xcc
 	ANNOTATE_INTRA_FUNCTION_CALL
 1:	call	2f
-.Lret1:	RET
+.Lret1_\@:
+	RET
 	.align 64, 0xcc
 	/*
-	 * As above shift instructions for RET at .Lret2 as well.
+	 * As above shift instructions for RET at .Lret2_\@ as well.
 	 *
-	 * This should be ideally be: .skip 32 - (.Lret2 - 2f), 0xcc
+	 * This should ideally be: .skip 32 - (.Lret2_\@ - 2f), 0xcc
 	 * but some Clang versions (e.g. 18) don't like this.
 	 */
 	.skip 32 - 18, 0xcc
@@ -1564,8 +1557,24 @@ SYM_FUNC_START(clear_bhb_loop)
 	jnz	3b
 	sub	$1, %ecx
 	jnz	1b
-.Lret2:	RET
+.Lret2_\@:
+	RET
 5:
+.endm
+
+/*
+ * This should be used on parts prior to Alder Lake. Newer parts should use the
+ * BHI_DIS_S hardware control instead. If a pre-Alder Lake part is being
+ * virtualized on newer hardware the VMM should protect against BHI attacks by
+ * setting BHI_DIS_S for the guests.
+ */
+SYM_FUNC_START(clear_bhb_loop)
+	ANNOTATE_NOENDBR
+	push	%rbp
+	mov	%rsp, %rbp
+
+	CLEAR_BHB_LOOP_SEQ
+
 	pop	%rbp
 	RET
 SYM_FUNC_END(clear_bhb_loop)
