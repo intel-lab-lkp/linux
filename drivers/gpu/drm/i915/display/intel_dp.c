@@ -121,6 +121,20 @@ static const u8 valid_dsc_bpp[] = {6, 8, 10, 12, 15};
  */
 static const u8 valid_dsc_slicecount[] = {1, 2, 3, 4};
 
+enum joiner_type {
+	FORCED_JOINER = -1,
+	NO_JOINER = 0,		/* 1 pipe */
+	BIG_JOINER = 1,		/* 2 pipes */
+	ULTRA_JOINER = 2,	/* 4 pipes */
+};
+
+static const int joiner_candidates[] = {
+	FORCED_JOINER,
+	NO_JOINER,
+	BIG_JOINER,
+	ULTRA_JOINER,
+};
+
 /**
  * intel_dp_is_edp - is the given port attached to an eDP panel (either CPU or PCH)
  * @intel_dp: DP struct
@@ -1519,7 +1533,6 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 	const struct drm_display_mode *fixed_mode;
 	int target_clock = mode->clock;
 	int max_rate, mode_rate, max_lanes, max_link_clock;
-	int max_dotclk = display->cdclk.max_dotclk_freq;
 	u16 dsc_max_compressed_bpp = 0;
 	u8 dsc_slice_count = 0;
 	enum drm_mode_status status;
@@ -1559,39 +1572,66 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 	mode_rate = intel_dp_link_required(target_clock,
 					   intel_dp_mode_min_output_bpp(connector, mode));
 
-	num_joined_pipes = intel_dp_num_joined_pipes(intel_dp, connector,
-						     mode->hdisplay, target_clock);
-	max_dotclk *= num_joined_pipes;
+	for (int i = 0; i < ARRAY_SIZE(joiner_candidates); i++) {
+		int max_dotclk = display->cdclk.max_dotclk_freq;
+		enum joiner_type joiner = joiner_candidates[i];
 
-	status = intel_pfit_mode_valid(display, mode, output_format, num_joined_pipes);
-	if (status != MODE_OK)
-		return status;
+		status = MODE_CLOCK_HIGH;
 
-	if (target_clock > max_dotclk)
-		return MODE_CLOCK_HIGH;
+		if (joiner == FORCED_JOINER) {
+			if (!connector->force_joined_pipes)
+				continue;
+			num_joined_pipes = connector->force_joined_pipes;
+		} else {
+			num_joined_pipes = 1 << joiner;
+		}
 
-	if (intel_dp_has_dsc(connector)) {
-		get_dsc_slice_and_bpp(connector, mode, target_clock,
-				      num_joined_pipes,
-				      output_format,
-				      max_link_clock,
-				      max_lanes,
-				      &dsc_max_compressed_bpp,
-				      &dsc_slice_count);
+		if ((joiner >= NO_JOINER && !intel_dp_has_joiner(intel_dp)) ||
+		    (joiner == BIG_JOINER && !HAS_BIGJOINER(display)) ||
+		    (joiner == ULTRA_JOINER && !HAS_ULTRAJOINER(display)))
+			break;
 
-		dsc = dsc_max_compressed_bpp && dsc_slice_count;
+		if (mode->hdisplay > num_joined_pipes * intel_dp_hdisplay_limit(display))
+			continue;
+
+		status = intel_pfit_mode_valid(display, mode, output_format, num_joined_pipes);
+		if (status != MODE_OK)
+			continue;
+
+		if (intel_dp_has_dsc(connector)) {
+			get_dsc_slice_and_bpp(connector, mode, target_clock,
+					      num_joined_pipes,
+					      output_format,
+					      max_link_clock,
+					      max_lanes,
+					      &dsc_max_compressed_bpp,
+					      &dsc_slice_count);
+
+			dsc = dsc_max_compressed_bpp && dsc_slice_count;
+		}
+
+		if (mode_rate > max_rate && !dsc)
+			continue;
+
+		if (intel_dp_joiner_needs_dsc(display, num_joined_pipes) && !dsc)
+			continue;
+
+		if (dsc && !is_bw_sufficient_for_dsc_config(dsc_max_compressed_bpp,
+							    max_link_clock, max_lanes,
+							    target_clock, 64))
+			continue;
+
+		max_dotclk *= num_joined_pipes;
+
+		if (target_clock > max_dotclk)
+			continue;
+
+		status = MODE_OK;
+		break;
 	}
 
-	if (intel_dp_joiner_needs_dsc(display, num_joined_pipes) && !dsc)
-		return MODE_CLOCK_HIGH;
-
-	if (mode_rate > max_rate && !dsc)
-		return MODE_CLOCK_HIGH;
-
-	if (dsc && !is_bw_sufficient_for_dsc_config(dsc_max_compressed_bpp,
-						    max_link_clock, max_lanes,
-						    target_clock, 64))
-		return MODE_CLOCK_HIGH;
+	if (status != MODE_OK)
+		return status;
 
 	status = intel_dp_mode_valid_downstream(connector, mode, target_clock);
 	if (status != MODE_OK)
