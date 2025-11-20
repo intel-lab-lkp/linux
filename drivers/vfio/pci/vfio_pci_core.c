@@ -553,6 +553,16 @@ out_power:
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_enable);
 
+static void vfio_pci_dev_migration_reset_state(struct vfio_pci_core_device *vdev)
+{
+	lockdep_assert_not_held(&vdev->memory_lock);
+
+	if (!vdev->vdev.mig_ops->migration_reset_state)
+		return;
+
+	vdev->vdev.mig_ops->migration_reset_state(&vdev->vdev);
+}
+
 void vfio_pci_core_disable(struct vfio_pci_core_device *vdev)
 {
 	struct pci_dev *pdev = vdev->pdev;
@@ -662,8 +672,10 @@ void vfio_pci_core_disable(struct vfio_pci_core_device *vdev)
 	 * overwrite the previously restored configuration information.
 	 */
 	if (vdev->reset_works && pci_dev_trylock(pdev)) {
-		if (!__pci_reset_function_locked(pdev))
+		if (!__pci_reset_function_locked(pdev)) {
 			vdev->needs_reset = false;
+			vfio_pci_dev_migration_reset_state(vdev);
+		}
 		pci_dev_unlock(pdev);
 	}
 
@@ -1229,6 +1241,8 @@ static int vfio_pci_ioctl_reset(struct vfio_pci_core_device *vdev,
 
 	ret = pci_try_reset_function(vdev->pdev);
 	up_write(&vdev->memory_lock);
+
+	vfio_pci_dev_migration_reset_state(vdev);
 
 	return ret;
 }
@@ -2129,6 +2143,7 @@ int vfio_pci_core_register_device(struct vfio_pci_core_device *vdev)
 	if (vdev->vdev.mig_ops) {
 		if (!(vdev->vdev.mig_ops->migration_get_state &&
 		      vdev->vdev.mig_ops->migration_set_state &&
+		      vdev->vdev.mig_ops->migration_reset_state &&
 		      vdev->vdev.mig_ops->migration_get_data_size) ||
 		    !(vdev->vdev.migration_flags & VFIO_MIGRATION_STOP_COPY))
 			return -EINVAL;
@@ -2486,8 +2501,10 @@ static int vfio_pci_dev_set_hot_reset(struct vfio_device_set *dev_set,
 
 err_undo:
 	list_for_each_entry_from_reverse(vdev, &dev_set->device_list,
-					 vdev.dev_set_list)
+					 vdev.dev_set_list) {
 		up_write(&vdev->memory_lock);
+		vfio_pci_dev_migration_reset_state(vdev);
+	}
 
 	list_for_each_entry(vdev, &dev_set->device_list, vdev.dev_set_list)
 		pm_runtime_put(&vdev->pdev->dev);
@@ -2543,8 +2560,10 @@ static void vfio_pci_dev_set_try_reset(struct vfio_device_set *dev_set)
 		reset_done = true;
 
 	list_for_each_entry(cur, &dev_set->device_list, vdev.dev_set_list) {
-		if (reset_done)
+		if (reset_done) {
 			cur->needs_reset = false;
+			vfio_pci_dev_migration_reset_state(cur);
+		}
 
 		if (!disable_idle_d3)
 			pm_runtime_put(&cur->pdev->dev);

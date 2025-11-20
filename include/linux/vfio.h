@@ -213,6 +213,9 @@ static inline bool vfio_device_cdev_opened(struct vfio_device *device)
  * @migration_get_state: Optional callback to get the migration state for
  *         devices that support migration. It's mandatory for
  *         VFIO_DEVICE_FEATURE_MIGRATION migration support.
+ * @migration_reset_state: Optional callback to reset the migration state for
+ *         devices that support migration. It's mandatory for
+ *         VFIO_DEVICE_FEATURE_MIGRATION migration support.
  * @migration_get_data_size: Optional callback to get the estimated data
  *          length that will be required to complete stop copy. It's mandatory for
  *          VFIO_DEVICE_FEATURE_MIGRATION migration support.
@@ -223,6 +226,7 @@ struct vfio_migration_ops {
 		enum vfio_device_mig_state new_state);
 	int (*migration_get_state)(struct vfio_device *device,
 				   enum vfio_device_mig_state *curr_state);
+	void (*migration_reset_state)(struct vfio_device *device);
 	int (*migration_get_data_size)(struct vfio_device *device,
 				       unsigned long *stop_copy_length);
 };
