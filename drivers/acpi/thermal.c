@@ -592,27 +592,14 @@ static const struct thermal_zone_device_ops acpi_thermal_zone_ops = {
 static int acpi_thermal_zone_sysfs_add(struct acpi_thermal *tz)
 {
 	struct device *tzdev = thermal_zone_device(tz->thermal_zone);
-	int ret;
 
-	ret = sysfs_create_link(&tz->device->dev.kobj,
-				&tzdev->kobj, "thermal_zone");
-	if (ret)
-		return ret;
-
-	ret = sysfs_create_link(&tzdev->kobj,
-				   &tz->device->dev.kobj, "device");
-	if (ret)
-		sysfs_remove_link(&tz->device->dev.kobj, "thermal_zone");
-
-	return ret;
+	/* For backwards compatibility */
+	return sysfs_create_link(&tz->device->dev.kobj, &tzdev->kobj, "thermal_zone");
 }
 
 static void acpi_thermal_zone_sysfs_remove(struct acpi_thermal *tz)
 {
-	struct device *tzdev = thermal_zone_device(tz->thermal_zone);
-
 	sysfs_remove_link(&tz->device->dev.kobj, "thermal_zone");
-	sysfs_remove_link(&tzdev->kobj, "device");
 }
 
 static int acpi_thermal_register_thermal_zone(struct acpi_thermal *tz,
