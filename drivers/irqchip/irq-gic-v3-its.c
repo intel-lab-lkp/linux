@@ -4546,6 +4546,12 @@ static const struct irq_domain_ops its_sgi_domain_ops = {
 	.deactivate	= its_sgi_irq_domain_deactivate,
 };
 
+int its_get_max_vpeid(void)
+{
+	return ITS_MAX_VPEID;
+}
+EXPORT_SYMBOL_GPL(its_get_max_vpeid);
+
 static int its_vpe_id_alloc(void)
 {
 	return ida_alloc_max(&its_vpeid_ida, ITS_MAX_VPEID - 1, GFP_KERNEL);

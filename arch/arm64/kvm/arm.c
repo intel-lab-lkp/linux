@@ -21,6 +21,7 @@
 #include <linux/sched/stat.h>
 #include <linux/psci.h>
 #include <trace/events/kvm.h>
+#include <linux/irqchip/arm-gic-v4.h>
 
 #define CREATE_TRACE_POINTS
 #include "trace_arm.h"
@@ -428,6 +429,9 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 		break;
 	case KVM_CAP_ARM_PER_VCPU_VLPI:
 		r = kvm_per_vcpu_vlpi_supported();
+		break;
+	case KVM_CAP_ARM_MAX_VPEID:
+		r = its_get_max_vpeid();
 		break;
 
 	default:

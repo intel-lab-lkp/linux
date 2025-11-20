@@ -147,6 +147,7 @@ int its_alloc_vcpu_irqs(struct its_vm *vm);
 int its_alloc_vcpu_irq(struct kvm_vcpu *vcpu);
 void its_free_vcpu_irqs(struct its_vm *vm);
 void its_free_vcpu_irq(struct kvm_vcpu *vcpu);
+int its_get_max_vpeid(void);
 int its_make_vpe_resident(struct its_vpe *vpe, bool g0en, bool g1en);
 int its_make_vpe_non_resident(struct its_vpe *vpe, bool db);
 int its_commit_vpe(struct its_vpe *vpe);
