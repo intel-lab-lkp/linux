@@ -1575,6 +1575,7 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 	for (int i = 0; i < ARRAY_SIZE(joiner_candidates); i++) {
 		int max_dotclk = display->cdclk.max_dotclk_freq;
 		enum joiner_type joiner = joiner_candidates[i];
+		int adjusted_clock = target_clock;
 
 		status = MODE_CLOCK_HIGH;
 
@@ -1621,9 +1622,14 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 							    target_clock, 64))
 			continue;
 
+		if (dsc)
+			adjusted_clock = intel_dsc_get_pixel_rate_with_dsc_bubbles(target_clock,
+										   mode->htotal,
+										   dsc_slice_count);
+
 		max_dotclk *= num_joined_pipes;
 
-		if (target_clock > max_dotclk)
+		if (adjusted_clock > max_dotclk)
 			continue;
 
 		status = MODE_OK;

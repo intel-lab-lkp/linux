@@ -1050,7 +1050,6 @@ void intel_vdsc_state_dump(struct drm_printer *p, int indent,
 	drm_dsc_dump_config(p, indent, &crtc_state->dsc.config);
 }
 
-static
 int intel_dsc_get_pixel_rate_with_dsc_bubbles(int pixel_rate, int htotal,
 					      int dsc_horizontal_slices)
 {
