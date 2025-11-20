@@ -101,9 +101,21 @@ static int pds_vfio_get_device_state_size(struct vfio_device *vdev,
 	return 0;
 }
 
+static void pds_vfio_reset_device_state(struct vfio_device *vdev)
+{
+	struct pds_vfio_pci_device *pds_vfio =
+		container_of(vdev, struct pds_vfio_pci_device,
+			     vfio_coredev.vdev);
+
+	mutex_lock(&pds_vfio->state_mutex);
+	pds_vfio_reset(pds_vfio, VFIO_DEVICE_STATE_RUNNING);
+	mutex_unlock(&pds_vfio->state_mutex);
+}
+
 static const struct vfio_migration_ops pds_vfio_lm_ops = {
 	.migration_set_state = pds_vfio_set_device_state,
 	.migration_get_state = pds_vfio_get_device_state,
+	.migration_reset_state = pds_vfio_reset_device_state,
 	.migration_get_data_size = pds_vfio_get_device_state_size
 };
 
