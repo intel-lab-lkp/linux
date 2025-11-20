@@ -198,7 +198,7 @@ void vgic_v4_configure_vsgis(struct kvm *kvm)
 	kvm_arm_halt_guest(kvm);
 
 	kvm_for_each_vcpu(i, vcpu, kvm) {
-		if (dist->nassgireq)
+		if (dist->nassgireq && kvm_vgic_query_vcpu_vlpi(vcpu) > 0)
 			vgic_v4_enable_vsgis(vcpu);
 		else
 			vgic_v4_disable_vsgis(vcpu);
@@ -838,6 +838,13 @@ int kvm_vgic_enable_vcpu_vlpi(struct kvm_vcpu *vcpu)
 	if (ret)
 		return ret;
 
+	/* Enable direct vSGIs */
+	if (kvm_vgic_global_state.has_gicv4_1 && vcpu->kvm->arch.vgic.nassgireq) {
+		mutex_lock(&vcpu->kvm->arch.config_lock);
+		vgic_v4_enable_vsgis(vcpu);
+		mutex_unlock(&vcpu->kvm->arch.config_lock);
+	}
+
 	/*
 	 * Upgrade existing LPIs to vLPIs. We
 	 * do not need to error check since
@@ -858,6 +865,8 @@ int kvm_vgic_disable_vcpu_vlpi(struct kvm_vcpu *vcpu)
 		return vcpu_vlpi_status;
 
 	downgrade_existing_vlpis_to_lpis(vcpu);
+
+	vgic_v4_disable_vsgis(vcpu);
 
 	return vgic_v4_vcpu_teardown(vcpu);
 }
