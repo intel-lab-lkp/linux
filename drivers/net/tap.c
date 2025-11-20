@@ -805,7 +805,7 @@ static void *__tap_ring_consume(struct tap_queue *q)
 	return ptr;
 }
 
-static __always_unused void *tap_ring_consume(struct tap_queue *q)
+static void *tap_ring_consume(struct tap_queue *q)
 {
 	void *ptr;
 
@@ -868,7 +868,7 @@ static ssize_t tap_do_read(struct tap_queue *q,
 					TASK_INTERRUPTIBLE);
 
 		/* Read frames from the queue */
-		skb = ptr_ring_consume(&q->ring);
+		skb = tap_ring_consume(q);
 		if (skb)
 			break;
 		if (noblock) {
