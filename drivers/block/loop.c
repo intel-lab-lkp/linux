@@ -402,6 +402,9 @@ static int lo_rw_aio_prep(struct loop_device *lo, struct loop_cmd *cmd,
 		cmd->iocb.ki_complete = NULL;
 		cmd->iocb.ki_flags = 0;
 	}
+
+	if (req_op(rq) == REQ_OP_WRITE)
+		kiocb_start_write(&cmd->iocb);
 	return 0;
 }
 
@@ -431,11 +434,9 @@ static int lo_submit_rw_aio(struct loop_device *lo, struct loop_cmd *cmd,
 	}
 	atomic_set(&cmd->ref, 2);
 
-
-	if (rw == ITER_SOURCE) {
-		kiocb_start_write(&cmd->iocb);
+	if (rw == ITER_SOURCE)
 		ret = file->f_op->write_iter(&cmd->iocb, &iter);
-	} else
+	else
 		ret = file->f_op->read_iter(&cmd->iocb, &iter);
 
 	lo_rw_aio_do_completion(cmd);
