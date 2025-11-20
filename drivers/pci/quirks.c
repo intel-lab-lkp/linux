@@ -2527,6 +2527,17 @@ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_FREESCALE, 0x0451, quirk_disable_aspm_l0s
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_PASEMI, 0xa002, quirk_disable_aspm_l0s_l1);
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_HUAWEI, 0x1105, quirk_disable_aspm_l0s_l1);
 
+static void quirk_disable_aspm_l1(struct pci_dev *dev)
+{
+	pcie_aspm_remove_cap(dev, PCI_EXP_LNKCAP_ASPM_L1);
+}
+
+/*
+ * Sandisk SN740 NVMe SSDs cause AER timeout errors on the upstream PCIe Root
+ * Port when ASPM L1 is enabled.
+ */
+DECLARE_PCI_FIXUP_HEADER(0x15b7, 0x5015, quirk_disable_aspm_l1);
+
 /*
  * Some Pericom PCIe-to-PCI bridges in reverse mode need the PCIe Retrain
  * Link bit cleared after starting the link retrain process to allow this
