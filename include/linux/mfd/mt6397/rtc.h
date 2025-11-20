@@ -15,6 +15,8 @@
 #include <linux/rtc.h>
 
 #define RTC_BBPU               0x0000
+#define RTC_BBPU_PWREN         BIT(0)
+#define RTC_BBPU_RESET_AL      BIT(3)
 #define RTC_BBPU_CBUSY         BIT(6)
 #define RTC_BBPU_KEY           (0x43 << 8)
 
@@ -76,6 +78,7 @@ struct mt6397_rtc {
 	int                     irq;
 	u32                     addr_base;
 	const struct mtk_rtc_data *data;
+	bool                    alarm_sta_supported;
 };
 
 #endif /* _LINUX_MFD_MT6397_RTC_H_ */
