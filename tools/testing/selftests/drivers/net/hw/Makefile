@@ -23,6 +23,7 @@ TEST_PROGS = \
 	rss_input_xfrm.py \
 	tso.py \
 	xsk_reconfig.py \
+	devlink_rate_tc_bw.py \
 	#
 
 TEST_FILES := \
