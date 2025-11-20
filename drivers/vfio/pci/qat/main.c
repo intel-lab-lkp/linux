@@ -474,13 +474,6 @@ static struct file *qat_vf_pci_step_device_state(struct qat_vf_core_device *qat_
 	return ERR_PTR(-EINVAL);
 }
 
-static void qat_vf_reset_done(struct qat_vf_core_device *qat_vdev)
-{
-	qat_vdev->mig_state = VFIO_DEVICE_STATE_RUNNING;
-	qat_vfmig_reset(qat_vdev->mdev);
-	qat_vf_disable_fds(qat_vdev);
-}
-
 static struct file *qat_vf_pci_set_device_state(struct vfio_device *vdev,
 						enum vfio_device_mig_state new_state)
 {
@@ -526,6 +519,21 @@ static int qat_vf_pci_get_device_state(struct vfio_device *vdev,
 	return 0;
 }
 
+static void qat_vf_pci_reset_device_state(struct vfio_device *vdev)
+{
+	struct qat_vf_core_device *qat_vdev = container_of(vdev,
+			struct qat_vf_core_device, core_device.vdev);
+
+	if (!qat_vdev->mdev)
+		return;
+
+	mutex_lock(&qat_vdev->state_mutex);
+	qat_vdev->mig_state = VFIO_DEVICE_STATE_RUNNING;
+	qat_vfmig_reset(qat_vdev->mdev);
+	qat_vf_disable_fds(qat_vdev);
+	mutex_unlock(&qat_vdev->state_mutex);
+}
+
 static int qat_vf_pci_get_data_size(struct vfio_device *vdev,
 				    unsigned long *stop_copy_length)
 {
@@ -542,6 +550,7 @@ static int qat_vf_pci_get_data_size(struct vfio_device *vdev,
 static const struct vfio_migration_ops qat_vf_pci_mig_ops = {
 	.migration_set_state = qat_vf_pci_set_device_state,
 	.migration_get_state = qat_vf_pci_get_device_state,
+	.migration_reset_state = qat_vf_pci_reset_device_state,
 	.migration_get_data_size = qat_vf_pci_get_data_size,
 };
 
@@ -628,18 +637,6 @@ static struct qat_vf_core_device *qat_vf_drvdata(struct pci_dev *pdev)
 	return container_of(core_device, struct qat_vf_core_device, core_device);
 }
 
-static void qat_vf_pci_aer_reset_done(struct pci_dev *pdev)
-{
-	struct qat_vf_core_device *qat_vdev = qat_vf_drvdata(pdev);
-
-	if (!qat_vdev->mdev)
-		return;
-
-	mutex_lock(&qat_vdev->state_mutex);
-	qat_vf_reset_done(qat_vdev);
-	mutex_unlock(&qat_vdev->state_mutex);
-}
-
 static int
 qat_vf_vfio_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
@@ -683,7 +680,6 @@ static const struct pci_device_id qat_vf_vfio_pci_table[] = {
 MODULE_DEVICE_TABLE(pci, qat_vf_vfio_pci_table);
 
 static const struct pci_error_handlers qat_vf_err_handlers = {
-	.reset_done = qat_vf_pci_aer_reset_done,
 	.error_detected = vfio_pci_core_aer_err_detected,
 };
 
