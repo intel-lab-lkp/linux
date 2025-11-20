@@ -210,7 +210,7 @@ enum mapping_flags {
 	AS_STABLE_WRITES = 7,	/* must wait for writeback before modifying
 				   folio contents */
 	AS_INACCESSIBLE = 8,	/* Do not attempt direct R/W access to the mapping */
-	AS_WRITEBACK_MAY_DEADLOCK_ON_RECLAIM = 9,
+	AS_WRITEBACK_MAY_HANG = 9,
 	AS_KERNEL_FILE = 10,	/* mapping for a fake kernel file that shouldn't
 				   account usage to user cgroups */
 	/* Bits 16-25 are used for FOLIO_ORDER */
@@ -338,14 +338,14 @@ static inline bool mapping_inaccessible(const struct address_space *mapping)
 	return test_bit(AS_INACCESSIBLE, &mapping->flags);
 }
 
-static inline void mapping_set_writeback_may_deadlock_on_reclaim(struct address_space *mapping)
+static inline void mapping_set_writeback_may_hang(struct address_space *mapping)
 {
-	set_bit(AS_WRITEBACK_MAY_DEADLOCK_ON_RECLAIM, &mapping->flags);
+	set_bit(AS_WRITEBACK_MAY_HANG, &mapping->flags);
 }
 
-static inline bool mapping_writeback_may_deadlock_on_reclaim(const struct address_space *mapping)
+static inline bool mapping_writeback_may_hang(const struct address_space *mapping)
 {
-	return test_bit(AS_WRITEBACK_MAY_DEADLOCK_ON_RECLAIM, &mapping->flags);
+	return test_bit(AS_WRITEBACK_MAY_HANG, &mapping->flags);
 }
 
 static inline gfp_t mapping_gfp_mask(const struct address_space *mapping)

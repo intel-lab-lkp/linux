@@ -1216,8 +1216,7 @@ retry:
 			} else if (writeback_throttling_sane(sc) ||
 			    !folio_test_reclaim(folio) ||
 			    !may_enter_fs(folio, sc->gfp_mask) ||
-			    (mapping &&
-			     mapping_writeback_may_deadlock_on_reclaim(mapping))) {
+			    (mapping && mapping_writeback_may_hang(mapping))) {
 				/*
 				 * This is slightly racy -
 				 * folio_end_writeback() might have
