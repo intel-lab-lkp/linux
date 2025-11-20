@@ -25,6 +25,7 @@ struct ptr_ring *tun_get_tx_ring(struct file *file);
 int tun_ring_consume_batched(struct file *file, void **array, int n);
 void tun_ring_unconsume(struct file *file, void **batch, int n,
 			void (*destroy)(void *));
+bool tun_is_tun_file(struct file *file);
 
 static inline bool tun_is_xdp_frame(void *ptr)
 {
@@ -66,6 +67,11 @@ static inline int tun_ring_consume_batched(struct file *file,
 
 static inline void tun_ring_unconsume(struct file *file, void **batch,
 				      int n, void (*destroy)(void *)) {}
+
+static inline bool tun_is_tun_file(struct file *f)
+{
+	return false;
+}
 
 static inline bool tun_is_xdp_frame(void *ptr)
 {

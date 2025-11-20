@@ -14,6 +14,7 @@ struct ptr_ring *tap_get_ptr_ring(struct file *file);
 int tap_ring_consume_batched(struct file *file, void **array, int n);
 void tap_ring_unconsume(struct file *file, void **batch, int n,
 			void (*destroy)(void *));
+bool tap_is_tap_file(struct file *file);
 #else
 #include <linux/err.h>
 #include <linux/errno.h>
@@ -32,6 +33,10 @@ static inline int tap_ring_consume_batched(struct file *f,
 }
 static inline void tap_ring_unconsume(struct file *file, void **batch,
 				      int n, void (*destroy)(void *)) {}
+static inline bool tap_is_tap_file(struct file *f)
+{
+	return false;
+}
 #endif /* CONFIG_TAP */
 
 /*

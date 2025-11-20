@@ -3860,6 +3860,19 @@ struct ptr_ring *tun_get_tx_ring(struct file *file)
 }
 EXPORT_SYMBOL_GPL(tun_get_tx_ring);
 
+bool tun_is_tun_file(struct file *file)
+{
+	struct tun_file *tfile;
+
+	if (file->f_op != &tun_fops)
+		return false;
+	tfile = file->private_data;
+	if (!tfile)
+		return false;
+	return true;
+}
+EXPORT_SYMBOL_GPL(tun_is_tun_file);
+
 module_init(tun_init);
 module_exit(tun_cleanup);
 MODULE_DESCRIPTION(DRV_DESCRIPTION);
