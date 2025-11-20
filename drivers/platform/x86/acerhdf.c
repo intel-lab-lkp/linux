@@ -650,7 +650,7 @@ static int __init acerhdf_register_thermal(void)
 {
 	int ret;
 
-	cl_dev = thermal_cooling_device_register("acerhdf-fan", NULL,
+	cl_dev = thermal_cooling_device_register(NULL, "acerhdf-fan", NULL,
 						 &acerhdf_cooling_ops);
 
 	if (IS_ERR(cl_dev))

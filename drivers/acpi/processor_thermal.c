@@ -313,7 +313,7 @@ int acpi_processor_thermal_init(struct acpi_processor *pr,
 {
 	int result = 0;
 
-	pr->cdev = thermal_cooling_device_register("Processor", device,
+	pr->cdev = thermal_cooling_device_register(&device->dev, "Processor", device,
 						   &processor_cooling_ops);
 	if (IS_ERR(pr->cdev)) {
 		result = PTR_ERR(pr->cdev);

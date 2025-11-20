@@ -172,7 +172,7 @@ int ath11k_thermal_register(struct ath11k_base *ab)
 		if (!ar)
 			continue;
 
-		cdev = thermal_cooling_device_register("ath11k_thermal", ar,
+		cdev = thermal_cooling_device_register(&ar->hw->wiphy->dev, "ath11k_thermal", ar,
 						       &ath11k_thermal_ops);
 
 		if (IS_ERR(cdev)) {

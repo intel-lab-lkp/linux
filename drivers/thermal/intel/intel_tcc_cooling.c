@@ -101,7 +101,7 @@ static int __init tcc_cooling_init(void)
 	pr_info("Programmable TCC Offset detected\n");
 
 	tcc_cdev =
-	    thermal_cooling_device_register("TCC Offset", NULL,
+	    thermal_cooling_device_register(NULL, "TCC Offset", NULL,
 					    &tcc_cooling_ops);
 	if (IS_ERR(tcc_cdev)) {
 		ret = PTR_ERR(tcc_cdev);

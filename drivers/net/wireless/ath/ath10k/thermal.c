@@ -161,7 +161,7 @@ int ath10k_thermal_register(struct ath10k *ar)
 	if (!test_bit(WMI_SERVICE_THERM_THROT, ar->wmi.svc_map))
 		return 0;
 
-	cdev = thermal_cooling_device_register("ath10k_thermal", ar,
+	cdev = thermal_cooling_device_register(ar->dev, "ath10k_thermal", ar,
 					       &ath10k_thermal_ops);
 
 	if (IS_ERR(cdev)) {

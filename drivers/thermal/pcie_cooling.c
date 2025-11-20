@@ -61,7 +61,7 @@ struct thermal_cooling_device *pcie_cooling_device_register(struct pci_dev *port
 	if (!name)
 		return ERR_PTR(-ENOMEM);
 
-	return thermal_cooling_device_register(name, port, &pcie_cooling_ops);
+	return thermal_cooling_device_register(&port->dev, name, port, &pcie_cooling_ops);
 }
 
 void pcie_cooling_device_unregister(struct thermal_cooling_device *cdev)

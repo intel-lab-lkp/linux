@@ -200,7 +200,7 @@ static int mt7915_thermal_init(struct mt7915_phy *phy)
 	if (!name)
 		return -ENOMEM;
 
-	cdev = thermal_cooling_device_register(name, phy, &mt7915_thermal_ops);
+	cdev = thermal_cooling_device_register(&wiphy->dev, name, phy, &mt7915_thermal_ops);
 	if (!IS_ERR(cdev)) {
 		if (sysfs_create_link(&wiphy->dev.kobj, &cdev->device.kobj,
 				      "cooling_device") < 0)

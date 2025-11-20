@@ -250,8 +250,9 @@ struct device *thermal_zone_device(struct thermal_zone_device *tzd);
 void thermal_zone_device_update(struct thermal_zone_device *,
 				enum thermal_notify_event);
 
-struct thermal_cooling_device *thermal_cooling_device_register(const char *,
-		void *, const struct thermal_cooling_device_ops *);
+struct thermal_cooling_device *
+thermal_cooling_device_register(struct device *parent, const char *type, void *drvdata,
+				const struct thermal_cooling_device_ops *ops);
 struct thermal_cooling_device *
 thermal_of_cooling_device_register(struct device *parent, struct device_node *np, const char *type,
 				   void *devdata, const struct thermal_cooling_device_ops *);
@@ -298,8 +299,8 @@ static inline void thermal_zone_device_update(struct thermal_zone_device *tz,
 { }
 
 static inline struct thermal_cooling_device *
-thermal_cooling_device_register(const char *type, void *devdata,
-	const struct thermal_cooling_device_ops *ops)
+thermal_cooling_device_register(struct device *parent, const char *type, void *devdata,
+				const struct thermal_cooling_device_ops *ops)
 { return ERR_PTR(-ENODEV); }
 static inline struct thermal_cooling_device *
 thermal_of_cooling_device_register(struct device *parent, struct device_node *np, const char *type,

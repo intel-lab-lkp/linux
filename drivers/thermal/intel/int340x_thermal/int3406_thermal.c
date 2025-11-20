@@ -157,7 +157,7 @@ static int int3406_thermal_probe(struct platform_device *pdev)
 
 	int3406_thermal_get_limit(d);
 
-	d->cooling_dev = thermal_cooling_device_register(acpi_device_bid(adev),
+	d->cooling_dev = thermal_cooling_device_register(&pdev->dev, acpi_device_bid(adev),
 							 d, &video_cooling_ops);
 	if (IS_ERR(d->cooling_dev))
 		goto err;

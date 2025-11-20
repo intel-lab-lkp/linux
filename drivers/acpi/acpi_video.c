@@ -1759,7 +1759,7 @@ static void acpi_video_dev_register_backlight(struct acpi_video_device *device)
 	device->backlight->props.brightness =
 			acpi_video_get_brightness(device->backlight);
 
-	device->cooling_dev = thermal_cooling_device_register("LCD", device,
+	device->cooling_dev = thermal_cooling_device_register(parent, "LCD", device,
 							      &video_cooling_ops);
 	if (IS_ERR(device->cooling_dev)) {
 		/*

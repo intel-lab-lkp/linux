@@ -584,8 +584,8 @@ static int acpi_fan_probe(struct platform_device *pdev)
 	else
 		name = acpi_device_bid(device);
 
-	cdev = thermal_cooling_device_register(name, device,
-						&fan_cooling_ops);
+	cdev = thermal_cooling_device_register(&pdev->dev, name, device,
+					       &fan_cooling_ops);
 	if (IS_ERR(cdev)) {
 		result = PTR_ERR(cdev);
 		goto err_end;

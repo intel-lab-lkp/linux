@@ -215,12 +215,15 @@ temperature) and throttle appropriate devices.
     ::
 
 	struct thermal_cooling_device
-	*thermal_cooling_device_register(char *name,
+	*thermal_cooling_device_register(struct device *parent, char *name,
 			void *devdata, struct thermal_cooling_device_ops *)
 
     This interface function adds a new thermal cooling device (fan/processor/...)
     to /sys/class/thermal/ folder as `cooling_device[0-*]`. It tries to bind itself
     to all the thermal zone devices registered at the same time.
+
+    parent:
+        parent device pointer.
 
     name:
 	the cooling device name.

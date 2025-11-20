@@ -693,7 +693,7 @@ int mlxsw_thermal_init(struct mlxsw_core *core,
 			mlxsw_cdev = &thermal->cdevs[i];
 			mlxsw_cdev->thermal = thermal;
 			mlxsw_cdev->idx = i;
-			cdev = thermal_cooling_device_register("mlxsw_fan",
+			cdev = thermal_cooling_device_register(dev, "mlxsw_fan",
 							       mlxsw_cdev,
 							       &mlxsw_cooling_ops);
 			if (IS_ERR(cdev)) {

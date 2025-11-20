@@ -249,7 +249,7 @@ static int mt7996_thermal_init(struct mt7996_phy *phy)
 
 	snprintf(cname, sizeof(cname), "cooling_device%d", phy->mt76->band_idx);
 
-	cdev = thermal_cooling_device_register(name, phy, &mt7996_thermal_ops);
+	cdev = thermal_cooling_device_register(&wiphy->dev, name, phy, &mt7996_thermal_ops);
 	if (!IS_ERR(cdev)) {
 		if (sysfs_create_link(&wiphy->dev.kobj, &cdev->device.kobj,
 				      cname) < 0)

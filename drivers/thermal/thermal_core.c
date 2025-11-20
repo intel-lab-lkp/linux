@@ -1145,6 +1145,7 @@ out_kfree_cdev:
 
 /**
  * thermal_cooling_device_register() - register a new thermal cooling device
+ * @parent:	parent device pointer.
  * @type:	the thermal cooling device type.
  * @devdata:	device private data.
  * @ops:		standard thermal cooling devices callbacks.
@@ -1157,10 +1158,10 @@ out_kfree_cdev:
  * ERR_PTR. Caller must check return value with IS_ERR*() helpers.
  */
 struct thermal_cooling_device *
-thermal_cooling_device_register(const char *type, void *devdata,
+thermal_cooling_device_register(struct device *parent, const char *type, void *devdata,
 				const struct thermal_cooling_device_ops *ops)
 {
-	return __thermal_cooling_device_register(NULL, NULL, type, devdata, ops);
+	return __thermal_cooling_device_register(parent, NULL, type, devdata, ops);
 }
 EXPORT_SYMBOL_GPL(thermal_cooling_device_register);
 

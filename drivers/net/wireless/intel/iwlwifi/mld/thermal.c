@@ -366,9 +366,7 @@ static void iwl_mld_cooling_device_register(struct iwl_mld *mld)
 	BUILD_BUG_ON(ARRAY_SIZE(name) >= THERMAL_NAME_LENGTH);
 
 	mld->cooling_dev.cdev =
-		thermal_cooling_device_register(name,
-						mld,
-						&tcooling_ops);
+		thermal_cooling_device_register(mld->dev, name, mld, &tcooling_ops);
 
 	if (IS_ERR(mld->cooling_dev.cdev)) {
 		IWL_DEBUG_TEMP(mld,

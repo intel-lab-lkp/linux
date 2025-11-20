@@ -744,7 +744,7 @@ static void iwl_mvm_cooling_device_register(struct iwl_mvm *mvm)
 	BUILD_BUG_ON(ARRAY_SIZE(name) >= THERMAL_NAME_LENGTH);
 
 	mvm->cooling_dev.cdev =
-		thermal_cooling_device_register(name,
+		thermal_cooling_device_register(mvm->dev, name,
 						mvm,
 						&tcooling_ops);
 

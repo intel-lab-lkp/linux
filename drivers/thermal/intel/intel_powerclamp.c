@@ -779,7 +779,7 @@ static int __init powerclamp_init(void)
 	/* set default limit, maybe adjusted during runtime based on feedback */
 	window_size = 2;
 
-	cooling_dev = thermal_cooling_device_register("intel_powerclamp", NULL,
+	cooling_dev = thermal_cooling_device_register(NULL, "intel_powerclamp", NULL,
 						      &powerclamp_cooling_ops);
 	if (IS_ERR(cooling_dev))
 		return -ENODEV;
