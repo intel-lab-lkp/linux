@@ -1684,6 +1684,40 @@ static int submit_one_sector(struct btrfs_inode *inode,
 	return 0;
 }
 
+static void finish_io_beyond_eof(struct btrfs_inode *inode, struct folio *folio,
+				 u64 start, u32 len, loff_t i_size)
+{
+	struct btrfs_fs_info *fs_info = inode->root->fs_info;
+	struct btrfs_ordered_extent *ordered;
+
+	ASSERT(start >= i_size);
+
+	ordered = btrfs_lookup_first_ordered_range(inode, start, len);
+
+	/*
+	 * We have just run delalloc before getting here, so
+	 * there must be an ordered extent.
+	 */
+	ASSERT(ordered != NULL);
+	spin_lock(&inode->ordered_tree_lock);
+	set_bit(BTRFS_ORDERED_TRUNCATED, &ordered->flags);
+	ordered->truncated_len = min(ordered->truncated_len,
+				     start - ordered->file_offset);
+	spin_unlock(&inode->ordered_tree_lock);
+	btrfs_put_ordered_extent(ordered);
+
+	btrfs_mark_ordered_io_finished(inode, folio, start, len, true);
+	/*
+	 * This range is beyond i_size, thus we don't need to
+	 * bother writing back.
+	 * But we still need to clear the dirty subpage bit, or
+	 * the next time the folio gets dirtied, we will try to
+	 * writeback the sectors with subpage dirty bits,
+	 * causing writeback without ordered extent.
+	 */
+	btrfs_folio_clear_dirty(fs_info, folio, start, len);
+}
+
 /*
  * Helper for extent_writepage().  This calls the writepage start hooks,
  * and does the loop to map the page into extents and bios.
@@ -1739,33 +1773,7 @@ static noinline_for_stack int extent_writepage_io(struct btrfs_inode *inode,
 		cur = folio_pos(folio) + (bit << fs_info->sectorsize_bits);
 
 		if (cur >= i_size) {
-			struct btrfs_ordered_extent *ordered;
-
-			ordered = btrfs_lookup_first_ordered_range(inode, cur,
-								   folio_end - cur);
-			/*
-			 * We have just run delalloc before getting here, so
-			 * there must be an ordered extent.
-			 */
-			ASSERT(ordered != NULL);
-			spin_lock(&inode->ordered_tree_lock);
-			set_bit(BTRFS_ORDERED_TRUNCATED, &ordered->flags);
-			ordered->truncated_len = min(ordered->truncated_len,
-						     cur - ordered->file_offset);
-			spin_unlock(&inode->ordered_tree_lock);
-			btrfs_put_ordered_extent(ordered);
-
-			btrfs_mark_ordered_io_finished(inode, folio, cur,
-						       end - cur, true);
-			/*
-			 * This range is beyond i_size, thus we don't need to
-			 * bother writing back.
-			 * But we still need to clear the dirty subpage bit, or
-			 * the next time the folio gets dirtied, we will try to
-			 * writeback the sectors with subpage dirty bits,
-			 * causing writeback without ordered extent.
-			 */
-			btrfs_folio_clear_dirty(fs_info, folio, cur, end - cur);
+			finish_io_beyond_eof(inode, folio, cur, start + len - cur, i_size);
 			break;
 		}
 		ret = submit_one_sector(inode, folio, cur, bio_ctrl, i_size);
