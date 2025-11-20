@@ -1441,6 +1441,7 @@ struct intel_flipq {
 
 struct intel_crtc {
 	struct drm_crtc base;
+	struct list_head pipe_head;
 	enum pipe pipe;
 	/*
 	 * Whether the crtc and the connected output pipeline is active. Implies
