@@ -85,6 +85,7 @@ static int vimc_capture_try_fmt_vid_cap(struct file *file, void *priv,
 {
 	struct v4l2_pix_format *format = &f->fmt.pix;
 	const struct vimc_pix_map *vpix;
+	u32 min_bpl, max_bpl;
 
 	format->width = clamp_t(u32, format->width, VIMC_FRAME_MIN_WIDTH,
 				VIMC_FRAME_MAX_WIDTH) & ~1;
@@ -97,8 +98,18 @@ static int vimc_capture_try_fmt_vid_cap(struct file *file, void *priv,
 		format->pixelformat = fmt_default.pixelformat;
 		vpix = vimc_pix_map_by_pixelformat(format->pixelformat);
 	}
-	/* TODO: Add support for custom bytesperline values */
-	format->bytesperline = format->width * vpix->bpp;
+
+	/* Calculate the minimum supported bytesperline value */
+	min_bpl = format->width * vpix->bpp;
+	/* Calculate the maximum supported bytesperline value */
+	max_bpl = VIMC_FRAME_MAX_WIDTH * vpix->bpp;
+
+	/* Clamp bytesperline to the valid range */
+	if (format->bytesperline > max_bpl)
+		format->bytesperline = max_bpl;
+	if (format->bytesperline < min_bpl)
+		format->bytesperline = min_bpl;
+
 	format->sizeimage = format->bytesperline * format->height;
 
 	if (format->field == V4L2_FIELD_ANY)
