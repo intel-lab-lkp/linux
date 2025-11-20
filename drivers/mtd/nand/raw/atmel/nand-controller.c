@@ -2306,7 +2306,7 @@ atmel_hsmc_nand_controller_init(struct atmel_hsmc_nand_controller *nc)
 					 "atmel,nfc-sram", 0);
 	if (!nc->sram.pool) {
 		dev_err(nc->base.dev, "Missing SRAM\n");
-		return -ENOMEM;
+		return -EPROBE_DEFER;
 	}
 
 	nc->sram.virt = (void __iomem *)gen_pool_dma_alloc(nc->sram.pool,
