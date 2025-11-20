@@ -3692,6 +3692,26 @@ static void btree_clear_folio_dirty_tag(struct folio *folio)
 	xa_unlock_irq(&folio->mapping->i_pages);
 }
 
+/*
+ * btrfs_clear_buffer_dirty - Clear the dirty state of an extent buffer
+ * @trans:	Transaction handle, may be NULL.
+ *		If provided, the buffer must belong to the transaction
+ *		(checked via btrfs_header_generation). If the check failed,
+ *		the function returns immediately.
+ * @eb:		The extent buffer to clean.
+ *
+ * This function clears the dirty flag from @eb and updates all accounting
+ * that depends on it (per-CPU counter of dirty metadata bytes, folio dirty
+ * state, address-space tags).
+ *
+ * Special behaviour in zoned mode:
+ *   When the filesystem is zoned (btrfs_is_zoned) the buffer is *not*
+ *   immediately cleaned. Instead the EXTENT_BUFFER_ZONED_ZEROOUT flag is
+ *   set and the buffer remains conceptually dirty.  The physical zero-out
+ *   required by zoned devices is deferred until btree_csum_one_bio(), which
+ *   preserves write-ordering constraints without forcing callers to re-dirty
+ *   the buffer later.
+ */
 void btrfs_clear_buffer_dirty(struct btrfs_trans_handle *trans,
 			      struct extent_buffer *eb)
 {
