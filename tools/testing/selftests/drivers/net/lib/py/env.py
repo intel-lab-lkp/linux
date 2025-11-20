@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: GPL-2.0
 
 import os
+import re
 import time
 from pathlib import Path
 from lib.py import KsftSkipEx, KsftXfailEx
 from lib.py import ksft_setup, wait_file
-from lib.py import cmd, ethtool, ip, CmdExitFailure
+from lib.py import cmd, ethtool, ip, rand_port, CmdExitFailure
 from lib.py import NetNS, NetdevSimDev
+from lib.py import EthtoolFamily
 from .remote import Remote
 
 
@@ -283,3 +285,70 @@ class NetDrvEpEnv(NetDrvEnvBase):
                 data.get('stats-block-usecs', 0) / 1000 / 1000
 
         time.sleep(self._stats_settle_time)
+
+
+class MemPrvEnv(NetDrvEpEnv):
+    def __init__(self, src_path, rss=False, rss_num=1, **kwargs):
+        super().__init__(src_path, False, **kwargs)
+
+        self.ethnl = EthtoolFamily()
+        self.cleaned_up = False
+
+        channels = self.ethnl.channels_get({'header': {'dev-index': self.ifindex}})
+        self.channels = channels['combined-count']
+        if self.channels < 2:
+            raise KsftSkipEx('Test requires NETIF with at least 2 combined channels')
+
+        if rss and rss_num > self.channels - 1:
+            raise KsftSkipEx(f"Test with {rss_num} queues in RSS context requires NETIF with at least {rss_num + 1} combined channels")
+
+        self.port = rand_port()
+        rings = self.ethnl.rings_get({'header': {'dev-index': self.ifindex}})
+        self.rx_rings = rings['rx']
+        self.hds_thresh = rings.get('hds-thresh', 0)
+        self.ethnl.rings_set({'header': {'dev-index': self.ifindex},
+                              'tcp-data-split': 'enabled',
+                              'hds-thresh': 0,
+                              'rx': 64})
+
+        if rss:
+            self.target_queue = self.channels - rss_num
+            ethtool(f"-X {self.ifname} equal {self.target_queue}")
+            self.rss_ctx_id = self._create_rss_ctx(rss_num)
+            self.rule_id = self._set_rss_flow_rule()
+        else:
+            self.target_queue = self.channels - 1
+            ethtool(f"-X {self.ifname} equal {self.target_queue}")
+            self.rss_ctx_id = None
+            self.rule_id = self._set_flow_rule()
+
+    def __del__(self):
+        if self.cleaned_up:
+            return
+
+        ethtool(f"-N {self.ifname} delete {self.rule_id}")
+        if self.rss_ctx_id:
+            self.ethnl.rss_delete_act({'header': {'dev-index': self.ifindex},
+                                       'context': self.rss_ctx_id})
+
+        ethtool(f"-X {self.ifname} default")
+        self.ethnl.rings_set({'header': {'dev-index': self.ifindex},
+                              'tcp-data-split': 'unknown',
+                              'hds-thresh': self.hds_thresh,
+                              'rx': self.rx_rings})
+        self.cleaned_up = True
+
+    def _set_flow_rule(self):
+        output = ethtool(f"-N {self.ifname} flow-type tcp6 dst-port {self.port} action {self.target_queue}").stdout
+        values = re.search(r'ID (\d+)', output).group(1)
+        return int(values)
+
+    def _set_rss_flow_rule(self):
+        output = ethtool(f"-N {self.ifname} flow-type tcp6 dst-port {self.port} context {self.rss_ctx_id}").stdout
+        values = re.search(r'ID (\d+)', output).group(1)
+        return int(values)
+
+    def _create_rss_ctx(self, num):
+        output = ethtool(f"-X {self.ifname} context new start {self.target_queue} equal {num}").stdout
+        values = re.search(r'New RSS context is (\d+)', output).group(1)
+        return int(values)
