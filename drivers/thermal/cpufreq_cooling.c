@@ -593,7 +593,7 @@ __cpufreq_cooling_register(struct device_node *np,
 	if (!name)
 		goto remove_qos_req;
 
-	cdev = thermal_of_cooling_device_register(np, name, cpufreq_cdev,
+	cdev = thermal_of_cooling_device_register(dev, np, name, cpufreq_cdev,
 						  cooling_ops);
 	kfree(name);
 
