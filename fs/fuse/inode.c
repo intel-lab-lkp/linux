@@ -1083,14 +1083,21 @@ static struct dentry *fuse_get_dentry(struct super_block *sb,
 
 	inode = ilookup5(sb, handle->nodeid, fuse_inode_eq, &handle->nodeid);
 	if (!inode) {
-		struct fuse_entry_out outarg;
+		struct fuse_entry_out *outarg;
 		const struct qstr name = QSTR_INIT(".", 1);
 
 		if (!fc->export_support)
 			goto out_err;
 
-		err = fuse_lookup_name(sb, handle->nodeid, &name, &outarg,
+		outarg = fuse_entry_out_alloc(fc);
+		if (!outarg) {
+			err = -ENOMEM;
+			goto out_err;
+		}
+
+		err = fuse_lookup_name(sb, handle->nodeid, &name, outarg,
 				       &inode);
+		kfree(outarg);
 		if (err && err != -ENOENT)
 			goto out_err;
 		if (err || !inode) {
@@ -1184,14 +1191,19 @@ static struct dentry *fuse_get_parent(struct dentry *child)
 	struct fuse_conn *fc = get_fuse_conn(child_inode);
 	struct inode *inode;
 	struct dentry *parent;
-	struct fuse_entry_out outarg;
+	struct fuse_entry_out *outarg;
 	int err;
 
 	if (!fc->export_support)
 		return ERR_PTR(-ESTALE);
 
+	outarg = fuse_entry_out_alloc(fc);
+	if (!outarg)
+		return ERR_PTR(-ENOMEM);
+
 	err = fuse_lookup_name(child_inode->i_sb, get_node_id(child_inode),
-			       &dotdot_name, &outarg, &inode);
+			       &dotdot_name, outarg, &inode);
+	kfree(outarg);
 	if (err) {
 		if (err == -ENOENT)
 			return ERR_PTR(-ESTALE);

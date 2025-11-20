@@ -1101,6 +1101,15 @@ static inline bool fuse_is_bad(struct inode *inode)
 	return unlikely(test_bit(FUSE_I_BAD, &get_fuse_inode(inode)->state));
 }
 
+static inline struct fuse_entry_out *fuse_entry_out_alloc(struct fuse_conn *fc)
+{
+	struct fuse_entry_out *entryout;
+
+	entryout = kzalloc(sizeof(*entryout), GFP_KERNEL_ACCOUNT);
+
+	return entryout;
+}
+
 static inline struct folio **fuse_folios_alloc(unsigned int nfolios, gfp_t flags,
 					       struct fuse_folio_desc **desc)
 {
