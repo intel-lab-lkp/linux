@@ -5078,9 +5078,6 @@ btrfs_init_new_buffer(struct btrfs_trans_handle *trans, struct btrfs_root *root,
 	    !test_bit(BTRFS_ROOT_RESET_LOCKDEP_CLASS, &root->state))
 		lockdep_owner = BTRFS_FS_TREE_OBJECTID;
 
-	/* btrfs_clear_buffer_dirty() accesses generation field. */
-	btrfs_set_header_generation(buf, trans->transid);
-
 	/*
 	 * This needs to stay, because we could allocate a freed block from an
 	 * old tree into a new tree, so we need to make sure this new block is
@@ -5089,7 +5086,8 @@ btrfs_init_new_buffer(struct btrfs_trans_handle *trans, struct btrfs_root *root,
 	btrfs_set_buffer_lockdep_class(lockdep_owner, buf, level);
 
 	btrfs_tree_lock_nested(buf, nest);
-	btrfs_clear_buffer_dirty(trans, buf);
+	/* We don't care buf's generation here. */
+	btrfs_clear_buffer_dirty(NULL, buf);
 	clear_bit(EXTENT_BUFFER_STALE, &buf->bflags);
 	clear_bit(EXTENT_BUFFER_ZONED_ZEROOUT, &buf->bflags);
 
