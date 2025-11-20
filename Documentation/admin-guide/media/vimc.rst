@@ -4,7 +4,7 @@ The Virtual Media Controller Driver (vimc)
 ==========================================
 
 The vimc driver emulates complex video hardware using the V4L2 API and the Media
-API. It has a capture device and three subdevices: sensor, debayer and scaler.
+API. It has a capture device and three subdevices: sensor, debayer, scaler and RGB/YUV input entity.
 
 Topology
 --------
@@ -29,17 +29,28 @@ configuration on each linked subdevice to stream frames through the pipeline.
 If the configuration doesn't match, the stream will fail. The ``v4l-utils``
 package is a bundle of user-space applications, that comes with ``media-ctl`` and
 ``v4l2-ctl`` that can be used to configure the vimc configuration. This sequence
-of commands fits for the default topology:
+-of commands fits for the default topology:
 
 .. code-block:: bash
 
-        media-ctl -d platform:vimc -V '"Sensor A":0[fmt:SBGGR8_1X8/640x480]'
-        media-ctl -d platform:vimc -V '"Debayer A":0[fmt:SBGGR8_1X8/640x480]'
-        media-ctl -d platform:vimc -V '"Scaler":0[fmt:RGB888_1X24/640x480]'
-        media-ctl -d platform:vimc -V '"Scaler":0[crop:(100,50)/400x150]'
-        media-ctl -d platform:vimc -V '"Scaler":1[fmt:RGB888_1X24/300x700]'
-        v4l2-ctl -z platform:vimc -d "RGB/YUV Capture" -v width=300,height=700
-        v4l2-ctl -z platform:vimc -d "Raw Capture 0" -v pixelformat=BA81
+        media-ctl -d platform:vimc.0 -V '"Sensor A":0[fmt:SBGGR8_1X8/640x480]'
+        media-ctl -d platform:vimc.0 -V '"Debayer A":0[fmt:SBGGR8_1X8/640x480]'
+        media-ctl -d platform:vimc.0 -V '"Scaler":0[fmt:RGB888_1X24/640x480]'
+        media-ctl -d platform:vimc.0 -V '"Scaler":0[crop:(100,50)/400x150]'
+        media-ctl -d platform:vimc.0 -V '"Scaler":1[fmt:RGB888_1X24/300x700]'
+        v4l2-ctl -z platform:vimc.0 -d "RGB/YUV Capture" -v width=300,height=700
+        v4l2-ctl -z platform:vimc.0 -d "Raw Capture 0" -v pixelformat=BA81
+
+The following commands switch the scaler input to the RGB/YUV entity and request
+ARGB output with a padded capture stride.
+
+.. code-block:: bash
+
+        media-ctl -d platform:vimc.0 -V '"RGB/YUV Input":0[fmt:RGB888_1X24/640x480]'
+        media-ctl -d platform:vimc.0 -V '"Scaler":0[fmt:RGB888_1X24/640x480]'
+        media-ctl -d platform:vimc.0 -V '"Scaler":1[fmt:ARGB8888_1X32/640x480]'
+        v4l2-ctl -z platform:vimc.0 -d "RGB/YUV Capture" \
+                -v pixelformat=RGB3,width=640,height=480,bytesperline=4096
 
 Subdevices
 ----------
@@ -52,6 +63,16 @@ vimc-sensor:
 	Exposes:
 
 	* 1 Pad source
+
+vimc-input:
+    Simulates an RGB/YUV frame source for pipelines that start after a real
+    debayer stage. It exposes a single source pad that initially advertises
+    ``MEDIA_BUS_FMT_RGB888_1X24`` and accepts the usual width/height updates via
+    ``media-ctl``, which is useful for software-driven frame injection
+    experiments.
+    Exposes:
+
+    * 1 Pad source
 
 vimc-lens:
 	Ancillary lens for a sensor. Supports auto focus control. Linked to
