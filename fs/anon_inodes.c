@@ -280,27 +280,13 @@ static int __anon_inode_getfd(const char *name,
 			      const struct inode *context_inode,
 			      bool make_inode)
 {
-	int error, fd;
-	struct file *file;
+	FD_PREPARE(fdf, flags, __anon_inode_getfile(name, fops, priv, flags,
+						    context_inode, make_inode)) {
+		if (fd_prepare_failed(fdf))
+			return fd_prepare_error(fdf);
 
-	error = get_unused_fd_flags(flags);
-	if (error < 0)
-		return error;
-	fd = error;
-
-	file = __anon_inode_getfile(name, fops, priv, flags, context_inode,
-				    make_inode);
-	if (IS_ERR(file)) {
-		error = PTR_ERR(file);
-		goto err_put_unused_fd;
+		return fd_publish(fdf);
 	}
-	fd_install(fd, file);
-
-	return fd;
-
-err_put_unused_fd:
-	put_unused_fd(fd);
-	return error;
 }
 
 /**
