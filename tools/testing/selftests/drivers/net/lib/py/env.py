@@ -196,6 +196,7 @@ class NetDrvEpEnv(NetDrvEnvBase):
     def _check_env(self):
         vars_needed = [
             ["LOCAL_V4", "LOCAL_V6"],
+            ["LOCAL_PREFIX_V4", "LOCAL_PREFIX_V6"],
             ["REMOTE_V4", "REMOTE_V6"],
             ["REMOTE_TYPE"],
             ["REMOTE_ARGS"]

@@ -62,6 +62,12 @@ LOCAL_V4, LOCAL_V6, REMOTE_V4, REMOTE_V6
 
 Local and remote endpoint IP addresses.
 
+LOCAL_PREFIX_V6, LOCAL_PREFIX_V6
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Local IP prefix that is publicly routable. Devices assigned with an address
+using this prefix can directly receive packets from a remote.
+
 REMOTE_TYPE
 ~~~~~~~~~~~
 
