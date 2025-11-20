@@ -10,6 +10,7 @@
 #define MODE_DISCOVERY_MAX	6
 
 struct typec_altmode_ops;
+struct notifier_block;
 
 /**
  * struct typec_altmode - USB Type-C alternate mode device
@@ -76,6 +77,14 @@ int typec_altmode_notify(struct typec_altmode *altmode, unsigned long conf,
 			 void *data);
 const struct typec_altmode *
 typec_altmode_get_partner(struct typec_altmode *altmode);
+
+enum usb_typec_event {
+	TYPEC_ALTMODE_REGISTERED,
+	TYPEC_ALTMODE_UNREGISTERED,
+};
+
+int typec_altmode_register_notify(struct notifier_block *nb);
+int typec_altmode_unregister_notify(struct notifier_block *nb);
 
 /**
  * struct typec_cable_ops - Cable alternate mode operations vector
