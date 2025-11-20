@@ -27,8 +27,6 @@
 
 #include "vgem_drv.h"
 
-#define VGEM_FENCE_TIMEOUT (10*HZ)
-
 struct vgem_fence {
 	struct dma_fence base;
 	struct spinlock lock;
@@ -81,8 +79,11 @@ static struct dma_fence *vgem_fence_create(struct vgem_file *vfile,
 
 	timer_setup(&fence->timer, vgem_fence_timeout, TIMER_IRQSAFE);
 
-	/* We force the fence to expire within 10s to prevent driver hangs */
-	mod_timer(&fence->timer, jiffies + VGEM_FENCE_TIMEOUT);
+	/*
+	 * Force the fence to expire within a reasonable timeout to prevent
+	 * hangs inside the memory management.
+	 */
+	mod_timer(&fence->timer, jiffies + DMA_FENCE_MAX_REASONABLE_TIMEOUT);
 
 	return &fence->base;
 }
