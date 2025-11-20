@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <linux/compiler.h>
 
+#include <asm/kvm.h>
 #include "kvm_util.h"
 #include "processor.h"
 #include "ucall_common.h"
@@ -256,6 +257,11 @@ static void loongarch_set_csr(struct kvm_vcpu *vcpu, uint64_t id, uint64_t val)
 	__vcpu_set_reg(vcpu, csrid, val);
 }
 
+static void loongarch_set_reg(struct kvm_vcpu *vcpu, uint64_t id, uint64_t val)
+{
+	__vcpu_set_reg(vcpu, id, val);
+}
+
 static void loongarch_vcpu_setup(struct kvm_vcpu *vcpu)
 {
 	int width;
@@ -279,6 +285,9 @@ static void loongarch_vcpu_setup(struct kvm_vcpu *vcpu)
 	loongarch_set_csr(vcpu, LOONGARCH_CSR_ECFG, 0);
 	loongarch_set_csr(vcpu, LOONGARCH_CSR_TCFG, 0);
 	loongarch_set_csr(vcpu, LOONGARCH_CSR_ASID, 1);
+	/* time count start from 0 */
+	val = 0;
+	loongarch_set_reg(vcpu, KVM_REG_LOONGARCH_COUNTER, val);
 
 	val = 0;
 	width = vm->page_shift - 3;
