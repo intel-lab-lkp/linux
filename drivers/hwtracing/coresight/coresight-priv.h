@@ -235,7 +235,7 @@ static inline void *coresight_get_uci_data_from_amba(const struct amba_id *table
 		if ((pid & table->mask) == table->id)
 			return coresight_get_uci_data(table);
 		table++;
-	};
+	}
 	return NULL;
 }
 
