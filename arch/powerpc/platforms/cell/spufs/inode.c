@@ -267,22 +267,13 @@ spufs_mkdir(struct inode *dir, struct dentry *dentry, unsigned int flags,
 
 static int spufs_context_open(const struct path *path)
 {
-	int ret;
-	struct file *filp;
+	FD_PREPARE(fdf, 0, dentry_open(path, O_RDONLY, current_cred())) {
+		if (fd_prepare_failed(fdf))
+			return fd_prepare_error(fdf);
 
-	ret = get_unused_fd_flags(0);
-	if (ret < 0)
-		return ret;
-
-	filp = dentry_open(path, O_RDONLY, current_cred());
-	if (IS_ERR(filp)) {
-		put_unused_fd(ret);
-		return PTR_ERR(filp);
+		fd_prepare_file(fdf)->f_op = &spufs_context_fops;
+		return fd_publish(fdf);
 	}
-
-	filp->f_op = &spufs_context_fops;
-	fd_install(ret, filp);
-	return ret;
 }
 
 static struct spu_context *
