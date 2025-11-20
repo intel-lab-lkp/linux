@@ -454,6 +454,7 @@ int vgic_v4_load(struct kvm_vcpu *vcpu)
 
 	if (!vgic_supports_direct_irqs(vcpu->kvm) ||
 				!vpe->its_vm ||
+				!vpe->irq || /* check if irq has been allocated yet */
 				vpe->resident)
 		return 0;
 

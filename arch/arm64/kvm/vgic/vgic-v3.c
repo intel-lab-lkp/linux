@@ -995,7 +995,7 @@ void vgic_v3_load(struct kvm_vcpu *vcpu)
 	if (has_vhe())
 		__vgic_v3_activate_traps(cpu_if);
 
-	WARN_ON(vgic_v4_load(vcpu));
+	vgic_v4_load(vcpu);
 }
 
 void vgic_v3_put(struct kvm_vcpu *vcpu)
