@@ -566,8 +566,12 @@ static void unmap_all_vpes(struct kvm *kvm)
 	struct vgic_dist *dist = &kvm->arch.vgic;
 	int i;
 
-	for (i = 0; i < dist->its_vm.nr_vpes; i++)
+	for (i = 0; i < dist->its_vm.nr_vpes; i++) {
+		if (!dist->its_vm.vpes[i])  /* Skip uninitialized vPEs */
+			continue;
+
 		free_irq(dist->its_vm.vpes[i]->irq, kvm_get_vcpu(kvm, i));
+	}
 }
 
 static void map_all_vpes(struct kvm *kvm)
@@ -575,9 +579,13 @@ static void map_all_vpes(struct kvm *kvm)
 	struct vgic_dist *dist = &kvm->arch.vgic;
 	int i;
 
-	for (i = 0; i < dist->its_vm.nr_vpes; i++)
+	for (i = 0; i < dist->its_vm.nr_vpes; i++) {
+		if (!dist->its_vm.vpes[i])
+			continue;
+
 		WARN_ON(vgic_v4_request_vpe_irq(kvm_get_vcpu(kvm, i),
 						dist->its_vm.vpes[i]->irq));
+	}
 }
 
 /*

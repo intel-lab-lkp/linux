@@ -450,6 +450,8 @@ int kvm_vgic_set_owner(struct kvm_vcpu *vcpu, unsigned int intid, void *owner);
 
 struct kvm_kernel_irq_routing_entry;
 
+int kvm_vgic_v4_map_irq_to_host(struct kvm *kvm, int virq,
+					struct kvm_kernel_irq_routing_entry *irq_entry);
 int kvm_vgic_v4_set_forwarding(struct kvm *kvm, int irq,
 			       struct kvm_kernel_irq_routing_entry *irq_entry);
 

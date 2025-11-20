@@ -2798,8 +2798,14 @@ int kvm_arch_irq_bypass_add_producer(struct irq_bypass_consumer *cons,
 	if (irq_entry->type != KVM_IRQ_ROUTING_MSI)
 		return 0;
 
+#ifndef CONFIG_ARM_GIC_V3_PER_VCPU_VLPI
 	return kvm_vgic_v4_set_forwarding(irqfd->kvm, prod->irq,
 					  &irqfd->irq_entry);
+#else
+	/* Set forwarding later, ad-hoc upon per-vCPU vLPI enable request */
+	return kvm_vgic_v4_map_irq_to_host(irqfd->kvm, prod->irq,
+					  &irqfd->irq_entry);
+#endif
 }
 
 void kvm_arch_irq_bypass_del_producer(struct irq_bypass_consumer *cons,

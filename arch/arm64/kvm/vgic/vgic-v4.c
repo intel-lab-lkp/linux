@@ -252,7 +252,7 @@ int vgic_v4_init(struct kvm *kvm)
 {
 	struct vgic_dist *dist = &kvm->arch.vgic;
 	struct kvm_vcpu *vcpu;
-	int nr_vcpus, ret;
+	int nr_vcpus, ret = 0;
 	unsigned long i;
 
 	lockdep_assert_held(&kvm->arch.config_lock);
@@ -272,6 +272,7 @@ int vgic_v4_init(struct kvm *kvm)
 
 	dist->its_vm.nr_vpes = nr_vcpus;
 
+#ifndef CONFIG_ARM_GIC_V3_PER_VCPU_VLPI
 	kvm_for_each_vcpu(i, vcpu, kvm)
 		dist->its_vm.vpes[i] = &vcpu->arch.vgic_cpu.vgic_v3.its_vpe;
 
@@ -313,7 +314,12 @@ int vgic_v4_init(struct kvm *kvm)
 			break;
 		}
 	}
-
+#else
+	/*
+	 * TODO: Initialize the shared VM properties that remain necessary
+	 * in per-vCPU mode
+	 */
+#endif
 	if (ret)
 		vgic_v4_teardown(kvm);
 
@@ -335,6 +341,9 @@ void vgic_v4_teardown(struct kvm *kvm)
 		return;
 
 	for (i = 0; i < its_vm->nr_vpes; i++) {
+		if (!its_vm->vpes[i])  /* Skip NULL vPEs */
+			continue;
+
 		struct kvm_vcpu *vcpu = kvm_get_vcpu(kvm, i);
 		int irq = its_vm->vpes[i]->irq;
 
@@ -342,7 +351,15 @@ void vgic_v4_teardown(struct kvm *kvm)
 		free_irq(irq, vcpu);
 	}
 
+#ifdef CONFIG_ARM_GIC_V3_PER_VCPU_VLPI
+	/*
+	 * TODO: Free the shared VM properties that remain necessary
+	 * in per-vCPU mode. Create separate teardown function
+	 * that operates on a per-vCPU basis.
+	 */
+#else
 	its_free_vcpu_irqs(its_vm);
+#endif
 	kfree(its_vm->vpes);
 	its_vm->nr_vpes = 0;
 	its_vm->vpes = NULL;
@@ -368,7 +385,9 @@ int vgic_v4_put(struct kvm_vcpu *vcpu)
 {
 	struct its_vpe *vpe = &vcpu->arch.vgic_cpu.vgic_v3.its_vpe;
 
-	if (!vgic_supports_direct_irqs(vcpu->kvm) || !vpe->resident)
+	if (!vgic_supports_direct_irqs(vcpu->kvm) ||
+				!vpe->its_vm || /* check if vPE is initialized for vCPU */
+				!vpe->resident)
 		return 0;
 
 	return its_make_vpe_non_resident(vpe, vgic_v4_want_doorbell(vcpu));
@@ -379,7 +398,9 @@ int vgic_v4_load(struct kvm_vcpu *vcpu)
 	struct its_vpe *vpe = &vcpu->arch.vgic_cpu.vgic_v3.its_vpe;
 	int err;
 
-	if (!vgic_supports_direct_irqs(vcpu->kvm) || vpe->resident)
+	if (!vgic_supports_direct_irqs(vcpu->kvm) ||
+				!vpe->its_vm ||
+				vpe->resident)
 		return 0;
 
 	if (vcpu_get_flag(vcpu, IN_WFI))
@@ -414,6 +435,9 @@ void vgic_v4_commit(struct kvm_vcpu *vcpu)
 {
 	struct its_vpe *vpe = &vcpu->arch.vgic_cpu.vgic_v3.its_vpe;
 
+	if (!vpe->its_vm)
+		return;
+
 	/*
 	 * No need to wait for the vPE to be ready across a shallow guest
 	 * exit, as only a vcpu_put will invalidate it.
@@ -434,6 +458,29 @@ static struct vgic_its *vgic_get_its(struct kvm *kvm,
 	};
 
 	return vgic_msi_to_its(kvm, &msi);
+}
+
+/**
+ * Map an interrupt to a host IRQ without setting up hardware forwarding.
+ * Useful for defered vLPI enablement.
+ */
+int kvm_vgic_v4_map_irq_to_host(struct kvm *kvm, int virq,
+					struct kvm_kernel_irq_routing_entry *irq_entry)
+{
+	struct vgic_its *its;
+	struct vgic_irq *irq;
+
+	its = vgic_get_its(kvm, irq_entry);
+	if (IS_ERR(its))
+		return 0;
+
+	if (vgic_its_resolve_lpi(kvm, its, irq_entry->msi.devid,
+				 irq_entry->msi.data, &irq))
+		return 0;
+
+	irq->host_irq = virq;
+
+	return 0;
 }
 
 int kvm_vgic_v4_set_forwarding(struct kvm *kvm, int virq,
