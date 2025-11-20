@@ -1737,7 +1737,8 @@ static int check_prep_vma(struct vma_remap_struct *vrm)
 	if (pgoff + (new_len >> PAGE_SHIFT) < pgoff)
 		return -EINVAL;
 
-	if (vma->vm_flags & (VM_DONTEXPAND | VM_PFNMAP))
+	if (vma->vm_flags & (VM_DONTEXPAND | VM_PFNMAP) &&
+	    !vrm_implies_new_addr(vrm))
 		return -EFAULT;
 
 	if (!mlock_future_ok(mm, vma->vm_flags, vrm->delta))
