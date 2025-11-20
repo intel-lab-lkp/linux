@@ -1288,8 +1288,13 @@ static int evlist__deliver_sample(struct evlist *evlist, const struct perf_tool 
 struct deferred_event {
 	struct list_head list;
 	union perf_event *event;
+	bool allocated;
 };
 
+/*
+ * This is called when a deferred callchain record comes up.  Find all matching
+ * samples, merge the callchains and process them.
+ */
 static int evlist__deliver_deferred_samples(struct evlist *evlist,
 					    const struct perf_tool *tool,
 					    union  perf_event *event,
@@ -1331,6 +1336,86 @@ static int evlist__deliver_deferred_samples(struct evlist *evlist,
 			free(orig_sample.callchain);
 
 		list_del(&de->list);
+		if (de->allocated)
+			free(de->event);
+		free(de);
+
+		if (ret)
+			break;
+	}
+	return ret;
+}
+
+/*
+ * This is called when the backing mmap is about to go away.  It needs to save
+ * the original sample data until it finds the matching deferred callchains.
+ */
+static void evlist__copy_deferred_samples(struct evlist *evlist,
+					  const struct perf_tool *tool,
+					  struct machine *machine)
+{
+	struct deferred_event *de, *tmp;
+	struct evsel *evsel;
+	int ret = 0;
+
+	list_for_each_entry_safe(de, tmp, &evlist->deferred_samples, list) {
+		struct perf_sample sample;
+		size_t sz = de->event->header.size;
+		void *buf;
+
+		if (de->allocated)
+			continue;
+
+		buf = malloc(sz);
+		if (buf) {
+			memcpy(buf, de->event, sz);
+			de->event = buf;
+			de->allocated = true;
+			continue;
+		}
+
+		/* The allocation failed, flush the sample now */
+		ret = evlist__parse_sample(evlist, de->event, &sample);
+		if (ret == 0) {
+			evsel = evlist__id2evsel(evlist, sample.id);
+			evlist__deliver_sample(evlist, tool, de->event,
+					       &sample, evsel, machine);
+		}
+
+		list_del(&de->list);
+		BUG_ON(de->allocated);
+		free(de);
+	}
+}
+
+/*
+ * This is called at the end of the data processing for the session.  Flush the
+ * remaining samples as there's no hope for matching deferred callchains.
+ */
+static int evlist__flush_deferred_samples(struct evlist *evlist,
+					  const struct perf_tool *tool,
+					  struct machine *machine)
+{
+	struct deferred_event *de, *tmp;
+	struct evsel *evsel;
+	int ret = 0;
+
+	list_for_each_entry_safe(de, tmp, &evlist->deferred_samples, list) {
+		struct perf_sample sample;
+
+		ret = evlist__parse_sample(evlist, de->event, &sample);
+		if (ret < 0) {
+			pr_err("failed to parse original sample\n");
+			break;
+		}
+
+		evsel = evlist__id2evsel(evlist, sample.id);
+		ret = evlist__deliver_sample(evlist, tool, de->event,
+					     &sample, evsel, machine);
+
+		list_del(&de->list);
+		if (de->allocated)
+			free(de->event);
 		free(de);
 
 		if (ret)
@@ -1374,6 +1459,7 @@ static int machines__deliver_event(struct machines *machines,
 				return -ENOMEM;
 
 			de->event = event;
+			de->allocated = false;
 			list_add_tail(&de->list, &evlist->deferred_samples);
 			return 0;
 		}
@@ -2218,6 +2304,8 @@ reader__mmap(struct reader *rd, struct perf_session *session)
 	}
 
 	if (mmaps[rd->mmap_idx]) {
+		evlist__copy_deferred_samples(session->evlist, session->tool,
+					      &session->machines.host);
 		munmap(mmaps[rd->mmap_idx], rd->mmap_size);
 		mmaps[rd->mmap_idx] = NULL;
 	}
@@ -2374,6 +2462,11 @@ static int __perf_session__process_events(struct perf_session *session)
 	err = auxtrace__flush_events(session, tool);
 	if (err)
 		goto out_err;
+	err = evlist__flush_deferred_samples(session->evlist,
+					     session->tool,
+					     &session->machines.host);
+	if (err)
+		goto out_err;
 	err = perf_session__flush_thread_stacks(session);
 out_err:
 	ui_progress__finish();
@@ -2491,6 +2584,11 @@ static int __perf_session__process_dir_events(struct perf_session *session)
 	}
 
 	ret = ordered_events__flush(&session->ordered_events, OE_FLUSH__FINAL);
+	if (ret)
+		goto out_err;
+
+	ret = evlist__flush_deferred_samples(session->evlist, tool,
+					     &session->machines.host);
 	if (ret)
 		goto out_err;
 
