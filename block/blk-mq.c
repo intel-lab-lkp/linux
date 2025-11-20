@@ -2955,10 +2955,30 @@ static void blk_mq_dispatch_multiple_queue_requests(struct rq_list *rqs)
 	} while (!rq_list_empty(rqs));
 }
 
+static void __blk_mq_flush_plug_list(struct rq_list *list,
+				     unsigned int depth,
+				     bool has_elevator,
+				     bool multiple_queues,
+				     bool from_schedule)
+{
+	if (!has_elevator && !from_schedule) {
+		if (multiple_queues) {
+			blk_mq_dispatch_multiple_queue_requests(list);
+			return;
+		}
+
+		blk_mq_dispatch_queue_requests(list, depth);
+		if (rq_list_empty(list))
+			return;
+	}
+
+	do {
+		blk_mq_dispatch_list(list, from_schedule);
+	} while (!rq_list_empty(list));
+}
+
 void blk_mq_flush_plug_list(struct blk_plug *plug, bool from_schedule)
 {
-	unsigned int depth;
-
 	/*
 	 * We may have been called recursively midway through handling
 	 * plug->mq_list via a schedule() in the driver's queue_rq() callback.
@@ -2968,23 +2988,35 @@ void blk_mq_flush_plug_list(struct blk_plug *plug, bool from_schedule)
 	 */
 	if (plug->rq_count == 0)
 		return;
-	depth = plug->rq_count;
-	plug->rq_count = 0;
 
-	if (!plug->has_elevator && !from_schedule) {
-		if (plug->multiple_queues) {
-			blk_mq_dispatch_multiple_queue_requests(&plug->mq_list);
-			return;
-		}
-
-		blk_mq_dispatch_queue_requests(&plug->mq_list, depth);
-		if (rq_list_empty(&plug->mq_list))
-			return;
-	}
-
+	/*
+	 * Flush requests in a loop to handle cases where queue_rq() callback
+	 * adds new requests back to the plug (e.g., stacking drivers like loop
+	 * submitting bios to backing devices). Keep flushing until no new
+	 * requests are added.
+	 */
 	do {
-		blk_mq_dispatch_list(&plug->mq_list, from_schedule);
-	} while (!rq_list_empty(&plug->mq_list));
+		struct rq_list reqs;
+		unsigned int depth;
+		bool has_elevator, multiple_queues;
+
+		depth = plug->rq_count;
+		plug->rq_count = 0;
+		has_elevator = plug->has_elevator;
+		plug->has_elevator = false;
+		multiple_queues = plug->multiple_queues;
+		plug->multiple_queues = false;
+
+		/*
+		 * Swap plug->mq_list to a local list to allow new requests
+		 * being added to plug->mq_list during dispatching.
+		 */
+		reqs = plug->mq_list;
+		rq_list_init(&plug->mq_list);
+
+		__blk_mq_flush_plug_list(&reqs, depth, has_elevator,
+					 multiple_queues, from_schedule);
+	} while (plug->rq_count > 0);
 }
 
 static void blk_mq_try_issue_list_directly(struct blk_mq_hw_ctx *hctx,
