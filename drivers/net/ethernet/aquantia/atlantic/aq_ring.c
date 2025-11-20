@@ -538,6 +538,7 @@ static int __aq_ring_rx_clean(struct aq_ring_s *self, struct napi_struct *napi,
 		bool is_ptp_ring = aq_ptp_ring(self->aq_nic, self);
 		struct aq_ring_buff_s *buff_ = NULL;
 		struct sk_buff *skb = NULL;
+		unsigned int frag_cnt = 0U;
 		unsigned int next_ = 0U;
 		unsigned int i = 0U;
 		u16 hdr_len;
@@ -546,7 +547,6 @@ static int __aq_ring_rx_clean(struct aq_ring_s *self, struct napi_struct *napi,
 			continue;
 
 		if (!buff->is_eop) {
-			unsigned int frag_cnt = 0U;
 			buff_ = buff;
 			do {
 				bool is_rsc_completed = true;
@@ -631,7 +631,7 @@ static int __aq_ring_rx_clean(struct aq_ring_s *self, struct napi_struct *napi,
 		memcpy(__skb_put(skb, hdr_len), aq_buf_vaddr(&buff->rxdata),
 		       ALIGN(hdr_len, sizeof(long)));
 
-		if (buff->len - hdr_len > 0) {
+		if (buff->len - hdr_len > 0 && frag_cnt < MAX_SKB_FRAGS) {
 			skb_add_rx_frag(skb, i++, buff->rxdata.page,
 					buff->rxdata.pg_off + hdr_len,
 					buff->len - hdr_len,
