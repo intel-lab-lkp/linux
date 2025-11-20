@@ -47,7 +47,7 @@ int __init ras_add_daemon_trace(void)
 {
 	struct dentry *fentry;
 
-	if (!ras_debugfs_dir)
+	if (IS_ERR(ras_debugfs_dir))
 		return -ENOENT;
 
 	fentry = debugfs_create_file("daemon_active", S_IRUSR, ras_debugfs_dir,
