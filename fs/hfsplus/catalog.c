@@ -111,7 +111,8 @@ static int hfsplus_cat_build_record(hfsplus_cat_entry *entry,
 		struct hfsplus_cat_folder *folder;
 
 		folder = &entry->folder;
-		memset(folder, 0, sizeof(*folder));
+		/* Zero the entire union to avoid leaking uninitialized data */
+		memset(entry, 0, sizeof(*entry));
 		folder->type = cpu_to_be16(HFSPLUS_FOLDER);
 		if (test_bit(HFSPLUS_SB_HFSX, &sbi->flags))
 			folder->flags |= cpu_to_be16(HFSPLUS_HAS_FOLDER_COUNT);
@@ -130,7 +131,8 @@ static int hfsplus_cat_build_record(hfsplus_cat_entry *entry,
 		struct hfsplus_cat_file *file;
 
 		file = &entry->file;
-		memset(file, 0, sizeof(*file));
+		/* Zero the entire union to avoid leaking uninitialized data */
+		memset(entry, 0, sizeof(*entry));
 		file->type = cpu_to_be16(HFSPLUS_FILE);
 		file->flags = cpu_to_be16(HFSPLUS_FILE_THREAD_EXISTS);
 		file->id = cpu_to_be32(cnid);
