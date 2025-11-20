@@ -659,6 +659,8 @@ __iommu_copy_struct_to_user(const struct iommu_user_data *dst_data,
  *                    no user domain for each PASID and the I/O page faults are
  *                    forwarded through the user domain attached to the device
  *                    RID.
+ * @report_iommu_fault_supported: True if the domain supports
+ *                                iommu_set_fault_handler()
  */
 struct iommu_ops {
 	bool (*capable)(struct device *dev, enum iommu_cap);
@@ -710,6 +712,7 @@ struct iommu_ops {
 	struct iommu_domain *release_domain;
 	struct iommu_domain *default_domain;
 	u8 user_pasid_table:1;
+	u8 report_iommu_fault_supported:1;
 };
 
 /**
