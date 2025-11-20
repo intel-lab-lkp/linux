@@ -291,15 +291,9 @@ int btrfs_copy_root(struct btrfs_trans_handle *trans,
 		return ret;
 	}
 
-	if (new_root_objectid == BTRFS_TREE_RELOC_OBJECTID) {
-		ret = btrfs_inc_ref(trans, root, cow, true);
-		if (unlikely(ret))
-			btrfs_abort_transaction(trans, ret);
-	} else {
-		ret = btrfs_inc_ref(trans, root, cow, false);
-		if (unlikely(ret))
-			btrfs_abort_transaction(trans, ret);
-	}
+	ret = btrfs_inc_ref(trans, root, cow, new_root_objectid == BTRFS_TREE_RELOC_OBJECTID);
+	if (unlikely(ret))
+		btrfs_abort_transaction(trans, ret);
 	if (ret) {
 		btrfs_tree_unlock(cow);
 		free_extent_buffer(cow);
@@ -437,20 +431,15 @@ static noinline int update_ref_for_cow(struct btrfs_trans_handle *trans,
 			if (ret)
 				return ret;
 		} else {
-
-			if (btrfs_root_id(root) == BTRFS_TREE_RELOC_OBJECTID)
-				ret = btrfs_inc_ref(trans, root, cow, true);
-			else
-				ret = btrfs_inc_ref(trans, root, cow, false);
+			ret = btrfs_inc_ref(trans, root, cow,
+					    btrfs_root_id(root) == BTRFS_TREE_RELOC_OBJECTID);
 			if (ret)
 				return ret;
 		}
 	} else {
 		if (flags & BTRFS_BLOCK_FLAG_FULL_BACKREF) {
-			if (btrfs_root_id(root) == BTRFS_TREE_RELOC_OBJECTID)
-				ret = btrfs_inc_ref(trans, root, cow, true);
-			else
-				ret = btrfs_inc_ref(trans, root, cow, false);
+			ret = btrfs_inc_ref(trans, root, cow,
+					    btrfs_root_id(root) == BTRFS_TREE_RELOC_OBJECTID);
 			if (ret)
 				return ret;
 			ret = btrfs_dec_ref(trans, root, buf, true);
