@@ -218,6 +218,9 @@ properties:
       - qcom,kryo685
       - qcom,kryo780
       - qcom,oryon
+      - qcom,oryon-gen1
+      - qcom,oryon-gen2
+      - qcom,oryon-gen3
       - qcom,scorpion
       - samsung,mongoose-m2
       - samsung,mongoose-m3
