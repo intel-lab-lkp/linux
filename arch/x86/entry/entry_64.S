@@ -1563,17 +1563,20 @@ SYM_CODE_END(rewind_stack_and_make_dead)
 .endm
 
 /*
- * This should be used on parts prior to Alder Lake. Newer parts should use the
- * BHI_DIS_S hardware control instead. If a pre-Alder Lake part is being
- * virtualized on newer hardware the VMM should protect against BHI attacks by
- * setting BHI_DIS_S for the guests.
+ * For protecting the kernel against BHI, this should be used on parts prior to
+ * Alder Lake. Although the sequence works on newer parts, BHI_DIS_S hardware
+ * control has lower overhead, and should be used instead. If a pre-Alder Lake
+ * part is being virtualized on newer hardware the VMM should protect against
+ * BHI attacks by setting BHI_DIS_S for the guests.
  */
 SYM_FUNC_START(clear_bhb_loop)
 	ANNOTATE_NOENDBR
 	push	%rbp
 	mov	%rsp, %rbp
 
-	CLEAR_BHB_LOOP_SEQ 5, 5
+	/* loop count differs based on CPU-gen, see Intel's BHI guidance */
+	ALTERNATIVE __stringify(CLEAR_BHB_LOOP_SEQ 5, 5),  \
+		    __stringify(CLEAR_BHB_LOOP_SEQ 12, 7), X86_FEATURE_BHI_CTRL
 
 	pop	%rbp
 	RET
