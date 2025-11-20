@@ -22,6 +22,7 @@
 #include <linux/dax.h>
 #include <linux/ksm.h>
 #include <linux/pgalloc.h>
+#include <linux/backing-dev.h>
 
 #include <asm/tlb.h>
 #include "internal.h"
@@ -2783,6 +2784,31 @@ int madvise_collapse(struct vm_area_struct *vma, unsigned long start,
 
 	hstart = (start + ~HPAGE_PMD_MASK) & HPAGE_PMD_MASK;
 	hend = end & HPAGE_PMD_MASK;
+
+	/*
+	 * For file-backed VMAs, perform synchronous writeback to ensure
+	 * dirty folios are flushed before attempting collapse. This avoids
+	 * failing on the first attempt when freshly-written executable text
+	 * is still dirty in the page cache.
+	 */
+	if (!vma_is_anonymous(vma) && vma->vm_file) {
+		struct address_space *mapping = vma->vm_file->f_mapping;
+
+		if (mapping_can_writeback(mapping)) {
+			pgoff_t pgoff_start = linear_page_index(vma, hstart);
+			pgoff_t pgoff_end = linear_page_index(vma, hend);
+			loff_t lstart = (loff_t)pgoff_start << PAGE_SHIFT;
+			loff_t lend = ((loff_t)pgoff_end << PAGE_SHIFT) - 1;
+
+			mmap_read_unlock(mm);
+			mmap_locked = false;
+
+			if (filemap_write_and_wait_range(mapping, lstart, lend)) {
+				last_fail = SCAN_FAIL;
+				goto out_maybelock;
+			}
+		}
+	}
 
 	for (addr = hstart; addr < hend; addr += HPAGE_PMD_SIZE) {
 		int result = SCAN_FAIL;
