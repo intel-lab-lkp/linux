@@ -1283,6 +1283,19 @@ struct ptr_ring *tap_get_ptr_ring(struct file *file)
 }
 EXPORT_SYMBOL_GPL(tap_get_ptr_ring);
 
+bool tap_is_tap_file(struct file *file)
+{
+	struct tap_queue *q;
+
+	if (file->f_op != &tap_fops)
+		return false;
+	q = file->private_data;
+	if (!q)
+		return false;
+	return true;
+}
+EXPORT_SYMBOL_GPL(tap_is_tap_file);
+
 int tap_queue_resize(struct tap_dev *tap)
 {
 	struct net_device *dev = tap->dev;
