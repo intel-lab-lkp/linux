@@ -1486,6 +1486,28 @@ static void get_dsc_slice_and_bpp(struct intel_connector *connector,
 	*dsc_slice_count = 0;
 }
 
+static bool is_bw_sufficient_for_dsc_config(int dsc_bpp_x16, u32 link_clock,
+					    u32 lane_count, u32 mode_clock,
+					    int timeslots)
+{
+	u32 fec_pixel_clk_khz = intel_dp_mode_to_fec_clock(mode_clock);
+	u64 available_bw_kbps;
+	u64 required_bw_kbps;
+
+	/*
+	 * Available Link Bandwidth(Kbits/sec):
+	 *  = NumberOfLanes * LinkSymbolClock * 8 * (TimeSlots / 64)
+	 *  = (NumberOfLanes * LinkSymbolClock * TimeSlots) / 8
+	 *
+	 * Required Bandwidth(Kbits/sec):
+	 * = Clock(Khz) * FEC Overhead * bpp
+	 */
+	available_bw_kbps = ((u64)link_clock * lane_count * timeslots) / 8;
+	required_bw_kbps = DIV_ROUND_UP_ULL((u64)fec_pixel_clk_khz * dsc_bpp_x16, 16);
+
+	return available_bw_kbps >= required_bw_kbps;
+}
+
 static enum drm_mode_status
 intel_dp_mode_valid(struct drm_connector *_connector,
 		    const struct drm_display_mode *mode)
@@ -1564,6 +1586,11 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 		return MODE_CLOCK_HIGH;
 
 	if (mode_rate > max_rate && !dsc)
+		return MODE_CLOCK_HIGH;
+
+	if (dsc && !is_bw_sufficient_for_dsc_config(dsc_max_compressed_bpp,
+						    max_link_clock, max_lanes,
+						    target_clock, 64))
 		return MODE_CLOCK_HIGH;
 
 	status = intel_dp_mode_valid_downstream(connector, mode, target_clock);
@@ -2004,28 +2031,6 @@ static bool intel_dp_dsc_supports_format(const struct intel_connector *connector
 	}
 
 	return drm_dp_dsc_sink_supports_format(connector->dp.dsc_dpcd, sink_dsc_format);
-}
-
-static bool is_bw_sufficient_for_dsc_config(int dsc_bpp_x16, u32 link_clock,
-					    u32 lane_count, u32 mode_clock,
-					    int timeslots)
-{
-	u32 fec_pixel_clk_khz = intel_dp_mode_to_fec_clock(mode_clock);
-	u64 available_bw_kbps;
-	u64 required_bw_kbps;
-
-	/*
-	 * Available Link Bandwidth(Kbits/sec):
-	 *  = NumberOfLanes * LinkSymbolClock * 8 * (TimeSlots / 64)
-	 *  = (NumberOfLanes * LinkSymbolClock * TimeSlots) / 8
-	 *
-	 * Required Bandwidth(Kbits/sec):
-	 * = Clock(Khz) * FEC Overhead * bpp
-	 */
-	available_bw_kbps = ((u64)link_clock * lane_count * timeslots) / 8;
-	required_bw_kbps = DIV_ROUND_UP_ULL((u64)fec_pixel_clk_khz * dsc_bpp_x16, 16);
-
-	return available_bw_kbps >= required_bw_kbps;
 }
 
 static int dsc_compute_link_config(struct intel_dp *intel_dp,
