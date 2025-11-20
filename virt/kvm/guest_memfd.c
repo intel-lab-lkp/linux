@@ -493,56 +493,45 @@ bool __weak kvm_arch_supports_gmem_init_shared(struct kvm *kvm)
 static int __kvm_gmem_create(struct kvm *kvm, loff_t size, u64 flags)
 {
 	const char *anon_name = "[kvm-gmem]";
-	struct kvm_gmem *gmem;
+	struct kvm_gmem *gmem __free(kfree) = NULL;
 	struct inode *inode;
-	struct file *file;
-	int fd, err;
-
-	fd = get_unused_fd_flags(0);
-	if (fd < 0)
-		return fd;
 
 	gmem = kzalloc(sizeof(*gmem), GFP_KERNEL);
-	if (!gmem) {
-		err = -ENOMEM;
-		goto err_fd;
+	if (!gmem)
+		return -ENOMEM;
+
+	FD_PREPARE(fdf, 0, anon_inode_create_getfile(anon_name, &kvm_gmem_fops,
+						     gmem, O_RDWR, NULL)) {
+		struct file *file;
+
+		if (fd_prepare_failed(fdf))
+			return fd_prepare_error(fdf);
+
+		file = fd_prepare_file(fdf);
+		file->f_flags |= O_LARGEFILE;
+
+		inode = file->f_inode;
+		WARN_ON(file->f_mapping != inode->i_mapping);
+
+		inode->i_private = (void *)(unsigned long)flags;
+		inode->i_op = &kvm_gmem_iops;
+		inode->i_mapping->a_ops = &kvm_gmem_aops;
+		inode->i_mode |= S_IFREG;
+		inode->i_size = size;
+		mapping_set_gfp_mask(inode->i_mapping, GFP_HIGHUSER);
+		mapping_set_inaccessible(inode->i_mapping);
+		/* Unmovable mappings are supposed to be marked unevictable as well. */
+		WARN_ON_ONCE(!mapping_unevictable(inode->i_mapping));
+
+		kvm_get_kvm(kvm);
+		gmem->kvm = kvm;
+		xa_init(&gmem->bindings);
+		list_add(&gmem->entry, &inode->i_mapping->i_private_list);
+
+		/* Ownership of gmem transferred to file */
+		retain_and_null_ptr(gmem);
+		return fd_publish(fdf);
 	}
-
-	file = anon_inode_create_getfile(anon_name, &kvm_gmem_fops, gmem,
-					 O_RDWR, NULL);
-	if (IS_ERR(file)) {
-		err = PTR_ERR(file);
-		goto err_gmem;
-	}
-
-	file->f_flags |= O_LARGEFILE;
-
-	inode = file->f_inode;
-	WARN_ON(file->f_mapping != inode->i_mapping);
-
-	inode->i_private = (void *)(unsigned long)flags;
-	inode->i_op = &kvm_gmem_iops;
-	inode->i_mapping->a_ops = &kvm_gmem_aops;
-	inode->i_mode |= S_IFREG;
-	inode->i_size = size;
-	mapping_set_gfp_mask(inode->i_mapping, GFP_HIGHUSER);
-	mapping_set_inaccessible(inode->i_mapping);
-	/* Unmovable mappings are supposed to be marked unevictable as well. */
-	WARN_ON_ONCE(!mapping_unevictable(inode->i_mapping));
-
-	kvm_get_kvm(kvm);
-	gmem->kvm = kvm;
-	xa_init(&gmem->bindings);
-	list_add(&gmem->entry, &inode->i_mapping->i_private_list);
-
-	fd_install(fd, file);
-	return fd;
-
-err_gmem:
-	kfree(gmem);
-err_fd:
-	put_unused_fd(fd);
-	return err;
 }
 
 int kvm_gmem_create(struct kvm *kvm, struct kvm_create_guest_memfd *args)
