@@ -1435,6 +1435,54 @@ bool intel_dp_has_dsc(const struct intel_connector *connector)
 	return true;
 }
 
+static void get_dsc_slice_and_bpp(struct intel_connector *connector,
+				  const struct drm_display_mode *mode,
+				  int target_clock,
+				  int num_joined_pipes,
+				  enum intel_output_format output_format,
+				  int max_link_clock,
+				  int max_lanes,
+				  u16 *dsc_max_compressed_bpp,
+				  u8 *dsc_slice_count)
+{
+	struct intel_display *display = to_intel_display(connector);
+	struct intel_dp *intel_dp = intel_attached_dp(connector);
+	int pipe_bpp;
+
+	/*
+	 * TBD pass the connector BPC,
+	 * for now U8_MAX so that max BPC on that platform would be picked
+	 */
+	pipe_bpp = intel_dp_dsc_compute_max_bpp(connector, U8_MAX);
+
+	/*
+	 * Output bpp is stored in 6.4 format so right shift by 4 to get the
+	 * integer value since we support only integer values of bpp.
+	 */
+	if (intel_dp_is_edp(intel_dp)) {
+		*dsc_max_compressed_bpp = drm_edp_dsc_sink_output_bpp(connector->dp.dsc_dpcd) >> 4;
+		*dsc_slice_count = drm_dp_dsc_sink_max_slice_count(connector->dp.dsc_dpcd, true);
+
+		return;
+	}
+
+	if (drm_dp_sink_supports_fec(connector->dp.fec_capability)) {
+		*dsc_max_compressed_bpp =
+			intel_dp_dsc_get_max_compressed_bpp(display, max_link_clock,
+							    max_lanes, target_clock,
+							    mode->hdisplay, num_joined_pipes,
+							    output_format, pipe_bpp, 64);
+		*dsc_slice_count = intel_dp_dsc_get_slice_count(connector,
+								target_clock,
+								mode->hdisplay,
+								num_joined_pipes);
+		return;
+	}
+
+	*dsc_max_compressed_bpp = 0;
+	*dsc_slice_count = 0;
+}
+
 static enum drm_mode_status
 intel_dp_mode_valid(struct drm_connector *_connector,
 		    const struct drm_display_mode *mode)
@@ -1498,40 +1546,13 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 					   intel_dp_mode_min_output_bpp(connector, mode));
 
 	if (intel_dp_has_dsc(connector)) {
-		int pipe_bpp;
-
-		/*
-		 * TBD pass the connector BPC,
-		 * for now U8_MAX so that max BPC on that platform would be picked
-		 */
-		pipe_bpp = intel_dp_dsc_compute_max_bpp(connector, U8_MAX);
-
-		/*
-		 * Output bpp is stored in 6.4 format so right shift by 4 to get the
-		 * integer value since we support only integer values of bpp.
-		 */
-		if (intel_dp_is_edp(intel_dp)) {
-			dsc_max_compressed_bpp =
-				drm_edp_dsc_sink_output_bpp(connector->dp.dsc_dpcd) >> 4;
-			dsc_slice_count =
-				drm_dp_dsc_sink_max_slice_count(connector->dp.dsc_dpcd,
-								true);
-		} else if (drm_dp_sink_supports_fec(connector->dp.fec_capability)) {
-			dsc_max_compressed_bpp =
-				intel_dp_dsc_get_max_compressed_bpp(display,
-								    max_link_clock,
-								    max_lanes,
-								    target_clock,
-								    mode->hdisplay,
-								    num_joined_pipes,
-								    output_format,
-								    pipe_bpp, 64);
-			dsc_slice_count =
-				intel_dp_dsc_get_slice_count(connector,
-							     target_clock,
-							     mode->hdisplay,
-							     num_joined_pipes);
-		}
+		get_dsc_slice_and_bpp(connector, mode, target_clock,
+				      num_joined_pipes,
+				      output_format,
+				      max_link_clock,
+				      max_lanes,
+				      &dsc_max_compressed_bpp,
+				      &dsc_slice_count);
 
 		dsc = dsc_max_compressed_bpp && dsc_slice_count;
 	}
