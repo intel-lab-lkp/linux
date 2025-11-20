@@ -105,8 +105,10 @@ static void vimc_sensor_tpg_s_format(struct vimc_sensor_device *vsensor,
 	tpg_s_bytesperline(&vsensor->tpg, 0, format->width * vpix->bpp);
 	tpg_s_buf_height(&vsensor->tpg, format->height);
 	tpg_s_fourcc(&vsensor->tpg, vpix->pixelformat);
-	/* TODO: add support for V4L2_FIELD_ALTERNATE */
-	tpg_s_field(&vsensor->tpg, format->field, false);
+	if (format->field == V4L2_FIELD_ALTERNATE)
+		tpg_s_field(&vsensor->tpg, V4L2_FIELD_TOP, true);
+	else
+		tpg_s_field(&vsensor->tpg, format->field, false);
 	tpg_s_colorspace(&vsensor->tpg, format->colorspace);
 	tpg_s_ycbcr_enc(&vsensor->tpg, format->ycbcr_enc);
 	tpg_s_quantization(&vsensor->tpg, format->quantization);
@@ -127,8 +129,7 @@ static void vimc_sensor_adjust_fmt(struct v4l2_mbus_framefmt *fmt)
 	fmt->height = clamp_t(u32, fmt->height, VIMC_FRAME_MIN_HEIGHT,
 			      VIMC_FRAME_MAX_HEIGHT) & ~1;
 
-	/* TODO: add support for V4L2_FIELD_ALTERNATE */
-	if (fmt->field == V4L2_FIELD_ANY || fmt->field == V4L2_FIELD_ALTERNATE)
+	if (fmt->field == V4L2_FIELD_ANY)
 		fmt->field = fmt_default.field;
 
 	vimc_colorimetry_clamp(fmt);
