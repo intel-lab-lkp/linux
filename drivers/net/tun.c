@@ -931,7 +931,6 @@ static int tun_net_init(struct net_device *dev)
 	dev->vlan_features = dev->features &
 			     ~(NETIF_F_HW_VLAN_CTAG_TX |
 			       NETIF_F_HW_VLAN_STAG_TX);
-	dev->lltx = true;
 
 	tun->flags = (tun->flags & ~TUN_FEATURES) |
 		      (ifr->ifr_flags & TUN_FEATURES);
@@ -1002,9 +1001,9 @@ static unsigned int run_ebpf_filter(struct tun_struct *tun,
 /* Produce a packet into the transmit ring. If the ring becomes full, the
  * netdev queue is stopped until the consumer wakes it again.
  */
-static __always_unused int tun_ring_produce(struct ptr_ring *ring,
-					    struct netdev_queue *queue,
-					    struct sk_buff *skb)
+static int tun_ring_produce(struct ptr_ring *ring,
+			    struct netdev_queue *queue,
+			    struct sk_buff *skb)
 {
 	int ret;
 
@@ -1089,7 +1088,7 @@ static void *__tun_ring_consume(struct tun_file *tfile)
 	return ptr;
 }
 
-static void __always_unused *tun_ring_consume(struct tun_file *tfile)
+static void *tun_ring_consume(struct tun_file *tfile)
 {
 	void *ptr;
 
@@ -1161,14 +1160,11 @@ static netdev_tx_t tun_net_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	nf_reset_ct(skb);
 
-	if (ptr_ring_produce(&tfile->tx_ring, skb)) {
+	queue = netdev_get_tx_queue(dev, txq);
+	if (unlikely(tun_ring_produce(&tfile->tx_ring, queue, skb))) {
 		drop_reason = SKB_DROP_REASON_FULL_RING;
 		goto drop;
 	}
-
-	/* dev->lltx requires to do our own update of trans_start */
-	queue = netdev_get_tx_queue(dev, txq);
-	txq_trans_cond_update(queue);
 
 	/* Notify and wake up reader process */
 	if (tfile->flags & TUN_FASYNC)
@@ -2220,7 +2216,7 @@ static void *tun_ring_recv(struct tun_file *tfile, int noblock, int *err)
 	void *ptr = NULL;
 	int error = 0;
 
-	ptr = ptr_ring_consume(&tfile->tx_ring);
+	ptr = tun_ring_consume(tfile);
 	if (ptr)
 		goto out;
 	if (noblock) {
@@ -2232,7 +2228,7 @@ static void *tun_ring_recv(struct tun_file *tfile, int noblock, int *err)
 
 	while (1) {
 		set_current_state(TASK_INTERRUPTIBLE);
-		ptr = ptr_ring_consume(&tfile->tx_ring);
+		ptr = tun_ring_consume(tfile);
 		if (ptr)
 			break;
 		if (signal_pending(current)) {
