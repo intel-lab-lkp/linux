@@ -753,6 +753,69 @@ done:
 	return ret ? ret : total;
 }
 
+/*
+ * Consume a packet from the transmit ring. Callers must hold
+ * the consumer_lock of the ptr_ring. If the ring was full and the
+ * queue was stopped, this may wake up the queue if space is created.
+ */
+static void *__tap_ring_consume(struct tap_queue *q)
+{
+	struct ptr_ring *ring = &q->ring;
+	struct netdev_queue *txq;
+	struct net_device *dev;
+	bool stopped;
+	void *ptr;
+
+	ptr = __ptr_ring_peek(ring);
+	if (!ptr)
+		return ptr;
+
+	/* Paired with smp_wmb() in the ring producer path. Ensures we
+	 * see any updated netdev queue state caused by a full ring.
+	 * Needed for proper synchronization between the ring and the
+	 * netdev queue.
+	 */
+	smp_rmb();
+	rcu_read_lock();
+	dev = rcu_dereference(q->tap)->dev;
+	txq = netdev_get_tx_queue(dev, q->queue_index);
+	stopped = netif_tx_queue_stopped(txq);
+
+	/* Ensures the read for a stopped queue completes before the
+	 * discard, so that we don't miss the window to wake the queue if
+	 * needed.
+	 */
+	smp_rmb();
+	__ptr_ring_discard_one(ring);
+
+	/* If the queue was stopped (meaning the producer couldn't have
+	 * inserted new entries just now), and we have actually created
+	 * space in the ring, or the ring is now empty (due to a race
+	 * with the producer), then it is now safe to wake the queue.
+	 */
+	if (unlikely(stopped &&
+		     (__ptr_ring_consume_created_space(ring) ||
+		      __ptr_ring_empty(ring)))) {
+		/* Paired with smp_rmb() in tun_ring_produce. */
+		smp_wmb();
+		netif_tx_wake_queue(txq);
+	}
+	rcu_read_unlock();
+
+	return ptr;
+}
+
+static __always_unused void *tap_ring_consume(struct tap_queue *q)
+{
+	void *ptr;
+
+	spin_lock(&q->ring.consumer_lock);
+	ptr = __tap_ring_consume(q);
+	spin_unlock(&q->ring.consumer_lock);
+
+	return ptr;
+}
+
 static ssize_t tap_do_read(struct tap_queue *q,
 			   struct iov_iter *to,
 			   int noblock, struct sk_buff *skb)
