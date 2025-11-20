@@ -302,8 +302,7 @@ static int linehandle_create(struct gpio_device *gdev, void __user *ip)
 {
 	struct gpiohandle_request handlereq;
 	struct linehandle_state *lh;
-	struct file *file;
-	int fd, i, ret;
+	int i, ret;
 	u32 lflags;
 
 	if (copy_from_user(&handlereq, ip, sizeof(handlereq)))
@@ -377,41 +376,24 @@ static int linehandle_create(struct gpio_device *gdev, void __user *ip)
 			offset);
 	}
 
-	fd = get_unused_fd_flags(O_RDONLY | O_CLOEXEC);
-	if (fd < 0) {
-		ret = fd;
-		goto out_free_lh;
+	FD_PREPARE(fdf, O_RDONLY | O_CLOEXEC,
+		   anon_inode_getfile("gpio-linehandle", &linehandle_fileops,
+				      lh, O_RDONLY | O_CLOEXEC)) {
+		if (fd_prepare_failed(fdf)) {
+			ret = fd_prepare_error(fdf);
+			goto out_free_lh;
+		}
+
+		handlereq.fd = fd_prepare_fd(fdf);
+		if (copy_to_user(ip, &handlereq, sizeof(handlereq)))
+			return -EFAULT;
+
+		dev_dbg(&gdev->dev, "registered chardev handle for %d lines\n",
+			lh->num_descs);
+
+		return fd_publish(fdf);
 	}
 
-	file = anon_inode_getfile("gpio-linehandle",
-				  &linehandle_fileops,
-				  lh,
-				  O_RDONLY | O_CLOEXEC);
-	if (IS_ERR(file)) {
-		ret = PTR_ERR(file);
-		goto out_put_unused_fd;
-	}
-
-	handlereq.fd = fd;
-	if (copy_to_user(ip, &handlereq, sizeof(handlereq))) {
-		/*
-		 * fput() will trigger the release() callback, so do not go onto
-		 * the regular error cleanup path here.
-		 */
-		fput(file);
-		put_unused_fd(fd);
-		return -EFAULT;
-	}
-
-	fd_install(fd, file);
-
-	dev_dbg(&gdev->dev, "registered chardev handle for %d lines\n",
-		lh->num_descs);
-
-	return 0;
-
-out_put_unused_fd:
-	put_unused_fd(fd);
 out_free_lh:
 	linehandle_free(lh);
 	return ret;
