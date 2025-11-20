@@ -11,7 +11,7 @@ application changes protection domains.
 Pkeys Userspace (PKU) is a feature which can be found on:
         * Intel server CPUs, Skylake and later
         * Intel client CPUs, Tiger Lake (11th Gen Core) and later
-        * Future AMD CPUs
+        * AMD Zen 3 and later
         * arm64 CPUs implementing the Permission Overlay Extension (FEAT_S1POE)
 
 x86_64
