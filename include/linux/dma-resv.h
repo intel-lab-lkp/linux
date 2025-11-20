@@ -308,8 +308,11 @@ static inline bool dma_resv_iter_is_restarted(struct dma_resv_iter *cursor)
 	     fence = dma_resv_iter_first(cursor); fence;	\
 	     fence = dma_resv_iter_next(cursor))
 
-#define dma_resv_held(obj) lockdep_is_held(&(obj)->lock.base)
-#define dma_resv_assert_held(obj) lockdep_assert_held(&(obj)->lock.base)
+#define dma_resv_held(obj) (lockdep_is_held(&(obj)->lock.base) && ww_mutex_held(&(obj)->lock))
+#define dma_resv_assert_held(obj) do {			\
+		lockdep_assert_held(&(obj)->lock.base); \
+		ww_mutex_assert_held(&(obj)->lock);	\
+	} while (0)
 
 #ifdef CONFIG_DEBUG_MUTEXES
 void dma_resv_reset_max_fences(struct dma_resv *obj);
