@@ -40,16 +40,10 @@
 #define SEED_SHIFT_24		24
 #define SEED_SHIFT_16		16
 #define SEED_SHIFT_8		8
-
-struct hisi_trng_list {
-	struct mutex lock;
-	struct list_head list;
-	bool is_init;
-};
+#define WAIT_PERIOD		20
 
 struct hisi_trng {
 	void __iomem *base;
-	struct hisi_trng_list *trng_list;
 	struct list_head list;
 	struct hwrng rng;
 	u32 ver;
@@ -61,8 +55,8 @@ struct hisi_trng_ctx {
 	struct hisi_trng *trng;
 };
 
-static atomic_t trng_active_devs;
-static struct hisi_trng_list trng_devices;
+static LIST_HEAD(trng_devices_list);
+static DEFINE_MUTEX(trng_device_lock);
 
 static void hisi_trng_set_seed(struct hisi_trng *trng, const u8 *seed)
 {
@@ -157,8 +151,8 @@ static int hisi_trng_init(struct crypto_tfm *tfm)
 	struct hisi_trng *trng;
 	int ret = -EBUSY;
 
-	mutex_lock(&trng_devices.lock);
-	list_for_each_entry(trng, &trng_devices.list, list) {
+	mutex_lock(&trng_device_lock);
+	list_for_each_entry(trng, &trng_devices_list, list) {
 		if (!trng->is_used) {
 			trng->is_used = true;
 			ctx->trng = trng;
@@ -166,7 +160,7 @@ static int hisi_trng_init(struct crypto_tfm *tfm)
 			break;
 		}
 	}
-	mutex_unlock(&trng_devices.lock);
+	mutex_unlock(&trng_device_lock);
 
 	return ret;
 }
@@ -175,9 +169,9 @@ static void hisi_trng_exit(struct crypto_tfm *tfm)
 {
 	struct hisi_trng_ctx *ctx = crypto_tfm_ctx(tfm);
 
-	mutex_lock(&trng_devices.lock);
+	mutex_lock(&trng_device_lock);
 	ctx->trng->is_used = false;
-	mutex_unlock(&trng_devices.lock);
+	mutex_unlock(&trng_device_lock);
 }
 
 static int hisi_trng_read(struct hwrng *rng, void *buf, size_t max, bool wait)
@@ -226,24 +220,43 @@ static struct rng_alg hisi_trng_alg = {
 	},
 };
 
-static void hisi_trng_add_to_list(struct hisi_trng *trng)
+static int hisi_trng_crypto_register(struct hisi_trng *trng)
 {
-	mutex_lock(&trng_devices.lock);
-	list_add_tail(&trng->list, &trng_devices.list);
-	mutex_unlock(&trng_devices.lock);
+	int ret = 0;
+
+	mutex_lock(&trng_device_lock);
+	if (trng->ver != HISI_TRNG_VER_V1 &&
+	    list_empty(&trng_devices_list)) {
+		ret = crypto_register_rng(&hisi_trng_alg);
+		if (ret) {
+			pr_err("failed to register crypto(%d)\n", ret);
+			goto unlock;
+		}
+	}
+
+	list_add_tail(&trng->list, &trng_devices_list);
+unlock:
+	mutex_unlock(&trng_device_lock);
+	return ret;
 }
 
-static int hisi_trng_del_from_list(struct hisi_trng *trng)
+static int hisi_trng_crypto_unregister(struct hisi_trng *trng)
 {
 	int ret = -EBUSY;
 
-	mutex_lock(&trng_devices.lock);
-	if (!trng->is_used) {
-		list_del(&trng->list);
-		ret = 0;
-	}
-	mutex_unlock(&trng_devices.lock);
+	mutex_lock(&trng_device_lock);
+	if (trng->is_used)
+		goto unlock;
 
+	list_del(&trng->list);
+	if (trng->ver != HISI_TRNG_VER_V1 &&
+	    list_empty(&trng_devices_list))
+		crypto_unregister_rng(&hisi_trng_alg);
+
+	ret = 0;
+
+unlock:
+	mutex_unlock(&trng_device_lock);
 	return ret;
 }
 
@@ -264,23 +277,9 @@ static int hisi_trng_probe(struct platform_device *pdev)
 
 	trng->is_used = false;
 	trng->ver = readl(trng->base + HISI_TRNG_VERSION);
-	if (!trng_devices.is_init) {
-		INIT_LIST_HEAD(&trng_devices.list);
-		mutex_init(&trng_devices.lock);
-		trng_devices.is_init = true;
-	}
-
-	hisi_trng_add_to_list(trng);
-	if (trng->ver != HISI_TRNG_VER_V1 &&
-	    atomic_inc_return(&trng_active_devs) == 1) {
-		ret = crypto_register_rng(&hisi_trng_alg);
-		if (ret) {
-			dev_err(&pdev->dev,
-				"failed to register crypto(%d)\n", ret);
-			atomic_dec_return(&trng_active_devs);
-			goto err_remove_from_list;
-		}
-	}
+	ret = hisi_trng_crypto_register(trng);
+	if (ret)
+		return ret;
 
 	trng->rng.name = pdev->name;
 	trng->rng.read = hisi_trng_read;
@@ -288,18 +287,13 @@ static int hisi_trng_probe(struct platform_device *pdev)
 	ret = devm_hwrng_register(&pdev->dev, &trng->rng);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to register hwrng: %d!\n", ret);
-		goto err_crypto_unregister;
+		goto unregister_crypto;
 	}
 
 	return ret;
 
-err_crypto_unregister:
-	if (trng->ver != HISI_TRNG_VER_V1 &&
-	    atomic_dec_return(&trng_active_devs) == 0)
-		crypto_unregister_rng(&hisi_trng_alg);
-
-err_remove_from_list:
-	hisi_trng_del_from_list(trng);
+unregister_crypto:
+	hisi_trng_crypto_unregister(trng);
 	return ret;
 }
 
@@ -308,12 +302,10 @@ static void hisi_trng_remove(struct platform_device *pdev)
 	struct hisi_trng *trng = platform_get_drvdata(pdev);
 
 	/* Wait until the task is finished */
-	while (hisi_trng_del_from_list(trng))
-		;
-
-	if (trng->ver != HISI_TRNG_VER_V1 &&
-	    atomic_dec_return(&trng_active_devs) == 0)
-		crypto_unregister_rng(&hisi_trng_alg);
+	while (hisi_trng_crypto_unregister(trng)) {
+		dev_info(&pdev->dev, "trng is in using!\n");
+		msleep(WAIT_PERIOD);
+	}
 }
 
 static const struct acpi_device_id hisi_trng_acpi_match[] = {
