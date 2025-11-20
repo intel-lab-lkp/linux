@@ -270,6 +270,25 @@ void its_free_vcpu_irqs(struct its_vm *vm)
 	irq_domain_free_fwnode(vm->fwnode);
 }
 
+void its_free_vcpu_irq(struct kvm_vcpu *vcpu)
+{
+	struct its_vpe *vpe = &vcpu->arch.vgic_cpu.vgic_v3.its_vpe;
+	unsigned int irq = irq_find_mapping(vpe->lpi_domain, 0);
+
+	if (WARN_ON(!irq))
+		return;
+
+	irq_domain_free_irqs(irq, 1);
+	irq_domain_remove(vpe->lpi_domain);
+	irq_domain_free_fwnode(vpe->lpi_fwnode);
+
+	/* Reset vPE fields to prevent stale references during re-enablement */
+	vpe->its_vm = NULL;
+	vpe->irq = 0;
+	vpe->lpi_domain = NULL;
+	vpe->lpi_fwnode = NULL;
+}
+
 static int its_send_vpe_cmd(struct its_vpe *vpe, struct its_cmd_info *info)
 {
 	return irq_set_vcpu_affinity(vpe->irq, info);

@@ -438,6 +438,7 @@ static inline bool vgic_supports_direct_irqs(struct kvm *kvm)
 int vgic_v4_init(struct kvm *kvm);
 int vgic_v4_vcpu_init(struct kvm_vcpu *vcpu);
 void vgic_v4_teardown(struct kvm *kvm);
+int vgic_v4_vcpu_teardown(struct kvm_vcpu *vcpu);
 void vgic_v4_configure_vsgis(struct kvm *kvm);
 void vgic_v4_get_vlpi_state(struct vgic_irq *irq, bool *val);
 int vgic_v4_request_vpe_irq(struct kvm_vcpu *vcpu, int irq);
@@ -472,6 +473,7 @@ void vgic_its_debug_destroy(struct kvm_device *dev);
 
 bool kvm_per_vcpu_vlpi_supported(void);
 int kvm_vgic_enable_vcpu_vlpi(struct kvm_vcpu *vcpu);
+int kvm_vgic_disable_vcpu_vlpi(struct kvm_vcpu *vcpu);
 int kvm_vgic_query_vcpu_vlpi(struct kvm_vcpu *vcpu);
 
 #endif

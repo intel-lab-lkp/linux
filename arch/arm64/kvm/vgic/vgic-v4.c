@@ -372,7 +372,7 @@ int vgic_v4_vcpu_init(struct kvm_vcpu *vcpu)
 		kvm_err("failed to allocate vcpu IRQ%d\n", irq);
 
 	if (ret)
-		vgic_v4_teardown(kvm);
+		vgic_v4_vcpu_teardown(vcpu);
 
 	return ret;
 }
@@ -384,7 +384,8 @@ int vgic_v4_vcpu_init(struct kvm_vcpu *vcpu)
 void vgic_v4_teardown(struct kvm *kvm)
 {
 	struct its_vm *its_vm = &kvm->arch.vgic.its_vm;
-	int i;
+	struct kvm_vcpu *vcpu;
+	unsigned long i;
 
 	lockdep_assert_held(&kvm->arch.config_lock);
 
@@ -395,7 +396,7 @@ void vgic_v4_teardown(struct kvm *kvm)
 		if (!its_vm->vpes[i])  /* Skip NULL vPEs */
 			continue;
 
-		struct kvm_vcpu *vcpu = kvm_get_vcpu(kvm, i);
+		vcpu = kvm_get_vcpu(kvm, i);
 		int irq = its_vm->vpes[i]->irq;
 
 		irq_clear_status_flags(irq, DB_IRQ_FLAGS);
@@ -403,20 +404,55 @@ void vgic_v4_teardown(struct kvm *kvm)
 	}
 
 #ifdef CONFIG_ARM_GIC_V3_PER_VCPU_VLPI
-	/*
-	 * TODO: Free the shared VM properties that remain necessary
-	 * in per-vCPU mode. Create separate teardown function
-	 * that operates on a per-vCPU basis.
-	 */
-
-	/* vPE properties table */
+	/* Free shared VM vPE properties table */
 	its_free_prop_table(its_vm->vprop_page);
+
+	/* Free remaining doorbell IRQs */
+	kvm_for_each_vcpu(i, vcpu, kvm) {
+		if (its_vm->vpes[i])
+			its_free_vcpu_irq(vcpu);
+	}
 #else
 	its_free_vcpu_irqs(its_vm);
 #endif
 	kfree(its_vm->vpes);
 	its_vm->nr_vpes = 0;
 	its_vm->vpes = NULL;
+}
+
+/**
+ * vgic_v4_vcpu_teardown - teardown the GICv4 data structures for a
+ * specific vCPU
+ * @vcpu:	Pointer to the vcpu being torn down
+ *
+ * Called every time the KVM_DISABLE_VCPU_VLPI ioctl is called.
+ */
+int vgic_v4_vcpu_teardown(struct kvm_vcpu *vcpu)
+{
+	struct kvm *kvm = vcpu->kvm;
+	struct vgic_dist *dist = &kvm->arch.vgic;
+	int i, irq;
+
+	/* Get vCPU index */
+	i = kvm_idx_from_vcpu(kvm, vcpu);
+	/* On userspace to validate that vcpu has vLPIs enabled before calling ioctl */
+	if (i == UINT_MAX || !dist->its_vm.vpes || !dist->its_vm.vpes[i])
+		return -EINVAL;
+
+	irq = dist->its_vm.vpes[i]->irq;
+
+	/* Free the vPE IRQ */
+	irq_clear_status_flags(irq, DB_IRQ_FLAGS);
+	free_irq(irq, vcpu);
+
+
+	/* Free vCPU IRQ resources */
+	its_free_vcpu_irq(vcpu);
+
+	/* Unlink distributor from vPE - this officially "disables" vLPIs on the vCPU */
+	dist->its_vm.vpes[i] = NULL;
+
+	return 0;
 }
 
 static inline bool vgic_v4_want_doorbell(struct kvm_vcpu *vcpu)
@@ -744,6 +780,41 @@ static int upgrade_existing_lpis_to_vlpis(struct kvm_vcpu *vcpu)
 	return 0;
 }
 
+static int downgrade_existing_vlpis_to_lpis(struct kvm_vcpu *vcpu)
+{
+	struct kvm *kvm = vcpu->kvm;
+	struct kvm_device *dev;
+	struct vgic_its *its;
+	struct its_device *device;
+	struct its_ite *ite;
+
+	list_for_each_entry(dev, &kvm->devices, vm_node) {
+		/* Ensure we only look at ITS devices */
+		if (dev->ops != &kvm_arm_vgic_its_ops)
+			continue;
+
+		its = dev->private;
+		mutex_lock(&its->its_lock);
+
+		list_for_each_entry(device, &its->device_list, dev_list) {
+			list_for_each_entry(ite, &device->itt_head, ite_list) {
+				/* Only downgrade vLPIs targeting this vCPU */
+				if (ite->collection &&
+					ite->collection->target_addr == vcpu->vcpu_id &&
+					ite->irq && ite->irq->hw) {
+
+					/* Unmap direct injection */
+					kvm_vgic_v4_unset_forwarding(kvm, ite->irq->host_irq);
+				}
+			}
+		}
+
+		mutex_unlock(&its->its_lock);
+	}
+
+	return 0;
+}
+
 /* Enable vLPI direct injection on a specific vCPU */
 int kvm_vgic_enable_vcpu_vlpi(struct kvm_vcpu *vcpu)
 {
@@ -770,6 +841,20 @@ int kvm_vgic_enable_vcpu_vlpi(struct kvm_vcpu *vcpu)
 	 * software.
 	 */
 	return upgrade_existing_lpis_to_vlpis(vcpu);
+}
+
+/* Disable vLPI direct injection on a specific vCPU */
+int kvm_vgic_disable_vcpu_vlpi(struct kvm_vcpu *vcpu)
+{
+	int vcpu_vlpi_status = kvm_vgic_query_vcpu_vlpi(vcpu);
+
+	/* vGIC not initialized for vCPU or vLPI already disabled */
+	if (vcpu_vlpi_status <= 0)
+		return vcpu_vlpi_status;
+
+	downgrade_existing_vlpis_to_lpis(vcpu);
+
+	return vgic_v4_vcpu_teardown(vcpu);
 }
 
 /* query whether vLPI direct injection is enabled on a specific vCPU.

@@ -4600,7 +4600,9 @@ static void its_vpe_irq_domain_free(struct irq_domain *domain,
 				    unsigned int virq,
 				    unsigned int nr_irqs)
 {
+#ifndef CONFIG_ARM_GIC_V3_PER_VCPU_VLPI
 	struct its_vm *vm = domain->host_data;
+#endif
 	int i;
 
 	irq_domain_free_irqs_parent(domain, virq, nr_irqs);
@@ -4610,11 +4612,11 @@ static void its_vpe_irq_domain_free(struct irq_domain *domain,
 								virq + i);
 		struct its_vpe *vpe = irq_data_get_irq_chip_data(data);
 
-		BUG_ON(vm != vpe->its_vm);
 
 #ifdef CONFIG_ARM_GIC_V3_PER_VCPU_VLPI
 		free_lpi_range(vpe->vpe_db_lpi, 1);
 #else
+		BUG_ON(vm != vpe->its_vm);
 		clear_bit(data->hwirq, vm->db_bitmap);
 #endif
 		its_vpe_teardown(vpe);

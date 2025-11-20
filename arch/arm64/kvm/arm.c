@@ -1964,8 +1964,17 @@ int kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 		return kvm_vgic_enable_vcpu_vlpi(vcpu);
 	}
 	case KVM_DISABLE_VCPU_VLPI: {
-		/* TODO: create ioctl handler function */
-		return -ENOSYS;
+		int vcpu_id;
+		struct kvm_vcpu *vcpu;
+
+		if (copy_from_user(&vcpu_id, argp, sizeof(vcpu_id)))
+			return -EFAULT;
+
+		vcpu = kvm_get_vcpu_by_id(kvm, vcpu_id);
+		if (!vcpu)
+			return -EINVAL;
+
+		return kvm_vgic_disable_vcpu_vlpi(vcpu);
 	}
 	case KVM_QUERY_VCPU_VLPI: {
 		int vcpu_id;
