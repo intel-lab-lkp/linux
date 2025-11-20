@@ -22,6 +22,7 @@ struct tun_msg_ctl {
 #if defined(CONFIG_TUN) || defined(CONFIG_TUN_MODULE)
 struct socket *tun_get_socket(struct file *);
 struct ptr_ring *tun_get_tx_ring(struct file *file);
+int tun_ring_consume_batched(struct file *file, void **array, int n);
 
 static inline bool tun_is_xdp_frame(void *ptr)
 {
@@ -53,6 +54,12 @@ static inline struct socket *tun_get_socket(struct file *f)
 static inline struct ptr_ring *tun_get_tx_ring(struct file *f)
 {
 	return ERR_PTR(-EINVAL);
+}
+
+static inline int tun_ring_consume_batched(struct file *file,
+					   void **array, int n)
+{
+	return 0;
 }
 
 static inline bool tun_is_xdp_frame(void *ptr)

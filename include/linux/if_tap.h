@@ -11,6 +11,7 @@ struct socket;
 #if IS_ENABLED(CONFIG_TAP)
 struct socket *tap_get_socket(struct file *);
 struct ptr_ring *tap_get_ptr_ring(struct file *file);
+int tap_ring_consume_batched(struct file *file, void **array, int n);
 #else
 #include <linux/err.h>
 #include <linux/errno.h>
@@ -21,6 +22,11 @@ static inline struct socket *tap_get_socket(struct file *f)
 static inline struct ptr_ring *tap_get_ptr_ring(struct file *f)
 {
 	return ERR_PTR(-EINVAL);
+}
+static inline int tap_ring_consume_batched(struct file *f,
+					   void **array, int n)
+{
+	return 0;
 }
 #endif /* CONFIG_TAP */
 
