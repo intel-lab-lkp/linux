@@ -424,6 +424,9 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 		else
 			r = kvm_supports_cacheable_pfnmap();
 		break;
+	case KVM_CAP_ARM_PER_VCPU_VLPI:
+		r = kvm_per_vcpu_vlpi_supported();
+		break;
 
 	default:
 		r = 0;
@@ -1946,6 +1949,18 @@ int kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 		if (copy_from_user(&range, argp, sizeof(range)))
 			return -EFAULT;
 		return kvm_vm_ioctl_get_reg_writable_masks(kvm, &range);
+	}
+	case KVM_ENABLE_VCPU_VLPI: {
+		/* TODO: create ioctl handler function */
+		return -ENOSYS;
+	}
+	case KVM_DISABLE_VCPU_VLPI: {
+		/* TODO: create ioctl handler function */
+		return -ENOSYS;
+	}
+	case KVM_QUERY_VCPU_VLPI: {
+		/* TODO: create ioctl handler function */
+		return -ENOSYS;
 	}
 	default:
 		return -EINVAL;

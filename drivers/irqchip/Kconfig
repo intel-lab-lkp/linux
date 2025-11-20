@@ -52,6 +52,19 @@ config ARM_GIC_V3_ITS
 	default ARM_GIC_V3
 	select IRQ_MSI_IOMMU
 
+config ARM_GIC_V3_PER_VCPU_VLPI
+	bool "ARM GICv4 per-vCPU vLPI direct injection support"
+	depends on ARM_GIC_V3_ITS
+	default n
+	help
+	  Enable GICv4 direct injection of MSIs as vLPIs on a per vCPU
+	  basis. Enables partial vLPI enablement on systems with more
+	  vCPU capacity than vPE capacity. When enabled, all vCPUs
+	  will boot without GICv4 vPE structures and handle interrupts
+	  as software LPIs. KVM_ENABLE_VCPU_VLPI ioctl must then be called on
+	  individual vCPUs to initialize their GICv4 structs and upgrade
+	  targeting LPIs to vLPIs.
+
 config ARM_GIC_V3_ITS_FSL_MC
 	bool
 	depends on ARM_GIC_V3_ITS

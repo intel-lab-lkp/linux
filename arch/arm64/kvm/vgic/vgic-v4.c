@@ -226,6 +226,15 @@ void vgic_v4_get_vlpi_state(struct vgic_irq *irq, bool *val)
 	*val = !!(*ptr & mask);
 }
 
+bool kvm_per_vcpu_vlpi_supported(void)
+{
+#ifdef CONFIG_ARM_GIC_V3_PER_VCPU_VLPI
+	return kvm_vgic_global_state.has_gicv4;
+#else
+	return false;
+#endif
+}
+
 int vgic_v4_request_vpe_irq(struct kvm_vcpu *vcpu, int irq)
 {
 	return request_irq(irq, vgic_v4_doorbell_handler, 0, "vcpu", vcpu);

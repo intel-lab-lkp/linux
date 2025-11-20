@@ -973,6 +973,7 @@ struct kvm_enable_cap {
 #define KVM_CAP_ARM_CACHEABLE_PFNMAP_SUPPORTED 243
 #define KVM_CAP_GUEST_MEMFD_FLAGS 244
 #define KVM_CAP_ARM_SEA_TO_USER 245
+#define KVM_CAP_ARM_PER_VCPU_VLPI 246
 
 struct kvm_irq_routing_irqchip {
 	__u32 irqchip;
@@ -1450,6 +1451,11 @@ struct kvm_enc_region {
 
 #define KVM_GET_SREGS2             _IOR(KVMIO,  0xcc, struct kvm_sregs2)
 #define KVM_SET_SREGS2             _IOW(KVMIO,  0xcd, struct kvm_sregs2)
+
+/* Per-vCPU vLPI enablement/disablement */
+#define KVM_ENABLE_VCPU_VLPI    _IOW(KVMIO, 0xf0, int)
+#define KVM_DISABLE_VCPU_VLPI    _IOW(KVMIO, 0xf1, int)
+#define KVM_QUERY_VCPU_VLPI    _IOR(KVMIO, 0xf2, int)
 
 #define KVM_DIRTY_LOG_MANUAL_PROTECT_ENABLE    (1 << 0)
 #define KVM_DIRTY_LOG_INITIALLY_SET            (1 << 1)

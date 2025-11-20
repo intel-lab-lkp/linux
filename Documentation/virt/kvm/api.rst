@@ -6517,6 +6517,62 @@ the capability to be present.
 
 `flags` must currently be zero.
 
+4.XXX KVM_ENABLE_VCPU_VLPI
+--------------------------
+
+:Capability: KVM_CAP_ARM_PER_VCPU_VLPI
+:Architectures: arm64
+:Type: vm ioctl
+:Parameters: int vcpu_id (in)
+:Returns: 0 on success, negative value on error
+
+This ioctl enables GICv4 direct vLPI injection for the specified vCPU.
+Allocates vPE structures (doorbell IRQ, vPE table entry, virtual pending
+table, vPEID) and upgrades existing software-forwarded LPIs targeting
+this vCPU to hardware-forwarded vLPIs.
+
+If GICv4.1 is supported and vSGIs are disabled on the specified vCPU,
+this ioctl enables vCPU vSGI support.
+
+Requires CONFIG_ARM_GIC_V3_PER_VCPU_VLPI and GICv4 hardware support.
+
+Returns -EINVAL if vGICv4 is not initialized or if the passed vcpu_id
+does not map to a vCPU.
+
+4.XXX KVM_DISABLE_VCPU_VLPI
+---------------------------
+
+:Capability: KVM_CAP_ARM_PER_VCPU_VLPI
+:Architectures: arm64
+:Type: vm ioctl
+:Parameters: int vcpu_id (in)
+:Returns: 0 on success, negative value on error
+
+This ioctl disables GICv4 direct vLPI injection for the specified vCPU.
+Downgrades hardware-forwarded vLPIs to software-forwarded LPIs and frees
+vPE structures. Pending interrupts in the virtual pending table may be
+lost.
+
+If vSGIs are enabled on the specified vCPU, this ioctl disables them.
+
+Returns -EINVAL if vGICv4 is not initialized or if the passed vcpu_id
+does not map to a vCPU.
+
+4.XXX KVM_QUERY_VCPU_VLPI
+-------------------------
+
+:Capability: KVM_CAP_ARM_PER_VCPU_VLPI
+:Architectures: arm64
+:Type: vm ioctl
+:Parameters: int vcpu_id (in)
+:Returns: 1 if enabled, 0 if disabled, negative value on error
+
+This ioctl queries whether GICv4 direct vLPI injection is enabled for
+the specified vCPU.
+
+Returns -EINVAL if vGICv4 is not initialized or if the passed vcpu_id
+does not map to a vCPU.
+
 
 .. _kvm_run:
 
