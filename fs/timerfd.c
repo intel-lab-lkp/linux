@@ -393,9 +393,7 @@ static const struct file_operations timerfd_fops = {
 
 SYSCALL_DEFINE2(timerfd_create, int, clockid, int, flags)
 {
-	int ufd;
-	struct timerfd_ctx *ctx;
-	struct file *file;
+	struct timerfd_ctx *ctx __free(kfree) = NULL;
 
 	/* Check the TFD_* constants for consistency.  */
 	BUILD_BUG_ON(TFD_CLOEXEC != O_CLOEXEC);
@@ -432,23 +430,16 @@ SYSCALL_DEFINE2(timerfd_create, int, clockid, int, flags)
 
 	ctx->moffs = ktime_mono_to_real(0);
 
-	ufd = get_unused_fd_flags(flags & TFD_SHARED_FCNTL_FLAGS);
-	if (ufd < 0) {
-		kfree(ctx);
-		return ufd;
-	}
+	FD_PREPARE(fdf, flags & TFD_SHARED_FCNTL_FLAGS,
+		   anon_inode_getfile_fmode("[timerfd]", &timerfd_fops, ctx,
+					    O_RDWR | (flags & TFD_SHARED_FCNTL_FLAGS),
+					    FMODE_NOWAIT)) {
+		if (fd_prepare_failed(fdf))
+			return fd_prepare_error(fdf);
 
-	file = anon_inode_getfile_fmode("[timerfd]", &timerfd_fops, ctx,
-			    O_RDWR | (flags & TFD_SHARED_FCNTL_FLAGS),
-			    FMODE_NOWAIT);
-	if (IS_ERR(file)) {
-		put_unused_fd(ufd);
-		kfree(ctx);
-		return PTR_ERR(file);
+		retain_and_null_ptr(ctx);
+		return fd_publish(fdf);
 	}
-
-	fd_install(ufd, file);
-	return ufd;
 }
 
 static int do_timerfd_settime(int ufd, int flags, 
