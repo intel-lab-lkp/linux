@@ -1049,6 +1049,40 @@ struct netdev_net_notifier {
 	struct notifier_block *nb;
 };
 
+enum netif_rx_mode_flags {
+	/* enable flags */
+	NETIF_RX_MODE_ALLMULTI_EN,
+	NETIF_RX_MODE_PROM_EN,
+	NETIF_RX_MODE_VLAN_EN,
+
+	/* control flags */
+	/* pending config state */
+	NETIF_RX_MODE_CFG_READY,
+
+	/* if set, rx_mode config work will not be executed */
+	NETIF_RX_MODE_SET_DIS,
+
+	/* if set, uc/mc lists will not be part of rx_mode config */
+	NETIF_RX_MODE_UC_SKIP,
+	NETIF_RX_MODE_MC_SKIP
+};
+
+struct netif_rx_mode_config {
+	char	*uc_addrs;
+	char	*mc_addrs;
+	int	uc_count;
+	int	mc_count;
+	int	ctrl_flags;
+	void	*priv_ptr;
+};
+
+struct netif_rx_mode_ctx {
+	struct work_struct		rx_mode_work;
+	struct net_device		*dev;
+	struct netif_rx_mode_config	*ready;
+	struct netif_rx_mode_config	*pending;
+};
+
 /*
  * This structure defines the management hooks for network devices.
  * The following hooks can be defined; unless noted otherwise, they are
@@ -1101,9 +1135,14 @@ struct netdev_net_notifier {
  *	changes to configuration when multicast or promiscuous is enabled.
  *
  * void (*ndo_set_rx_mode)(struct net_device *dev);
- *	This function is called device changes address list filtering.
+ *	This function is called when device changes address list filtering.
  *	If driver handles unicast address filtering, it should set
- *	IFF_UNICAST_FLT in its priv_flags.
+ *	IFF_UNICAST_FLT in its priv_flags. This is used to configure
+ *	the rx_mode snapshot that will be written to the hardware.
+ *
+ * void (*ndo_write_rx_mode)(struct net_device *dev);
+ *	This function is scheduled after set_rx_mode and is responsible for
+ *	writing the rx_mode snapshot to the hardware.
  *
  * int (*ndo_set_mac_address)(struct net_device *dev, void *addr);
  *	This function  is called when the Media Access Control address
@@ -1424,6 +1463,7 @@ struct net_device_ops {
 	void			(*ndo_change_rx_flags)(struct net_device *dev,
 						       int flags);
 	void			(*ndo_set_rx_mode)(struct net_device *dev);
+	void			(*ndo_write_rx_mode)(struct net_device *dev);
 	int			(*ndo_set_mac_address)(struct net_device *dev,
 						       void *addr);
 	int			(*ndo_validate_addr)(struct net_device *dev);
@@ -1926,7 +1966,7 @@ enum netdev_reg_state {
  *	@ingress_queue:		XXX: need comments on this one
  *	@nf_hooks_ingress:	netfilter hooks executed for ingress packets
  *	@broadcast:		hw bcast address
- *
+ *	@rx_mode_ctx:		context required for rx_mode config work
  *	@rx_cpu_rmap:	CPU reverse-mapping for RX completion interrupts,
  *			indexed by RX queue number. Assigned by driver.
  *			This must only be set if the ndo_rx_flow_steer
@@ -2337,6 +2377,7 @@ struct net_device {
 #endif
 
 	unsigned char		broadcast[MAX_ADDR_LEN];
+	struct netif_rx_mode_ctx *rx_mode_ctx;
 #ifdef CONFIG_RFS_ACCEL
 	struct cpu_rmap		*rx_cpu_rmap;
 #endif
@@ -3359,6 +3400,63 @@ void dev_disable_lro(struct net_device *dev);
 int dev_loopback_xmit(struct net *net, struct sock *sk, struct sk_buff *newskb);
 u16 dev_pick_tx_zero(struct net_device *dev, struct sk_buff *skb,
 		     struct net_device *sb_dev);
+
+void netif_rx_mode_schedule_work(struct net_device *dev, bool flush);
+
+/* Drivers that implement rx mode as work flush the work item when closing
+ * or suspending. This is the substitute for those calls.
+ */
+static inline void netif_rx_mode_flush_work(struct net_device *dev)
+{
+	flush_work(&dev->rx_mode_ctx->rx_mode_work);
+}
+
+/* Helpers to be used in the set_rx_mode implementation */
+static inline void netif_rx_mode_set_bit(struct net_device *dev, int b,
+					 bool val)
+{
+	if (val)
+		dev->rx_mode_ctx->pending->ctrl_flags |= BIT(b);
+	else
+		dev->rx_mode_ctx->pending->ctrl_flags &= ~BIT(b);
+}
+
+static inline void netif_rx_mode_set_priv_ptr(struct net_device *dev,
+					      void *priv)
+{
+	dev->rx_mode_ctx->pending->priv_ptr = priv;
+}
+
+/* Helpers to be used in the write_rx_mode implementation */
+static inline bool netif_rx_mode_get_bit(struct net_device *dev, int b)
+{
+	return !!(dev->rx_mode_ctx->ready->ctrl_flags & BIT(b));
+}
+
+static inline void *netif_rx_mode_get_priv_ptr(struct net_device *dev)
+{
+	return dev->rx_mode_ctx->ready->priv_ptr;
+}
+
+static inline int netif_rx_mode_get_mc_count(struct net_device *dev)
+{
+	return dev->rx_mode_ctx->ready->mc_count;
+}
+
+static inline int netif_rx_mode_get_uc_count(struct net_device *dev)
+{
+	return dev->rx_mode_ctx->ready->uc_count;
+}
+
+#define netif_rx_mode_for_each_uc_addr(dev, ha_addr, idx) \
+	for (ha_addr = (dev)->rx_mode_ctx->ready->uc_addrs, idx = 0; \
+		idx < (dev)->rx_mode_ctx->ready->uc_count; \
+		ha_addr += (dev)->addr_len, idx++)
+
+#define netif_rx_mode_for_each_mc_addr(dev, ha_addr, idx) \
+	for (ha_addr = (dev)->rx_mode_ctx->ready->mc_addrs, idx = 0; \
+		idx < (dev)->rx_mode_ctx->ready->mc_count; \
+		ha_addr += (dev)->addr_len, idx++)
 
 int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev);
 int __dev_direct_xmit(struct sk_buff *skb, u16 queue_id);
