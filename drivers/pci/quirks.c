@@ -2525,6 +2525,18 @@ static void quirk_disable_aspm_l0s_l1(struct pci_dev *dev)
  */
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_ASMEDIA, 0x1080, quirk_disable_aspm_l0s_l1);
 
+static void quirk_disable_aspm_l1(struct pci_dev *dev)
+{
+       pci_info(dev, "Disabling ASPM L1\n");
+       pci_disable_link_state(dev, PCIE_LINK_STATE_L1);
+}
+
+/*
+ * Sandisk SN740 NVMe SSDs cause AER timeout errors on the upstream PCIe Root
+ * Port when ASPM L1 is enabled.
+ */
+DECLARE_PCI_FIXUP_FINAL(0x15b7, 0x5015, quirk_disable_aspm_l1);
+
 /*
  * Some Pericom PCIe-to-PCI bridges in reverse mode need the PCIe Retrain
  * Link bit cleared after starting the link retrain process to allow this
