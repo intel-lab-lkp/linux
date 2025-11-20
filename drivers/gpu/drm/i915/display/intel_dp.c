@@ -2596,6 +2596,7 @@ int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 
 	for (i = 0; i < ARRAY_SIZE(joiner_candidates); i++) {
 		enum joiner_type joiner = joiner_candidates[i];
+		int adjusted_clock = target_clock;
 
 		if (joiner == FORCED_JOINER) {
 			if (!connector->force_joined_pipes)
@@ -2626,7 +2627,12 @@ int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 
 		max_dotclk *= num_joined_pipes;
 
-		if (target_clock <= max_dotclk)
+		adjusted_clock =
+			intel_dsc_get_pixel_rate_with_dsc_bubbles(target_clock,
+								  adjusted_mode->htotal,
+								  crtc_state->dsc.slice_count);
+
+		if (adjusted_clock <= max_dotclk)
 			return ret;
 
 		ret = -EINVAL;
