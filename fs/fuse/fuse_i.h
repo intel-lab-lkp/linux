@@ -916,6 +916,10 @@ struct fuse_conn {
 	/* Is synchronous FUSE_INIT allowed? */
 	unsigned int sync_init:1;
 
+	/** Is LOOKUP_HANDLE implemented by fs? */
+	unsigned int lookup_handle:1;
+	unsigned int max_handle_sz;
+
 	/* Use io_uring for communication */
 	unsigned int io_uring;
 

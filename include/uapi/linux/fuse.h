@@ -495,6 +495,7 @@ struct fuse_file_lock {
 #define FUSE_ALLOW_IDMAP	(1ULL << 40)
 #define FUSE_OVER_IO_URING	(1ULL << 41)
 #define FUSE_REQUEST_TIMEOUT	(1ULL << 42)
+#define FUSE_HAS_LOOKUP_HANDLE	(1ULL << 43)
 
 /**
  * CUSE INIT request/reply flags
@@ -663,6 +664,7 @@ enum fuse_opcode {
 	FUSE_TMPFILE		= 51,
 	FUSE_STATX		= 52,
 	FUSE_COPY_FILE_RANGE_64	= 53,
+	FUSE_LOOKUP_HANDLE	= 54,
 
 	/* CUSE specific operations */
 	CUSE_INIT		= 4096,
@@ -908,6 +910,9 @@ struct fuse_init_in {
 	uint32_t	unused[11];
 };
 
+/* Same value as MAX_HANDLE_SZ */
+#define FUSE_MAX_HANDLE_SZ 128
+
 #define FUSE_COMPAT_INIT_OUT_SIZE 8
 #define FUSE_COMPAT_22_INIT_OUT_SIZE 24
 
@@ -925,7 +930,8 @@ struct fuse_init_out {
 	uint32_t	flags2;
 	uint32_t	max_stack_depth;
 	uint16_t	request_timeout;
-	uint16_t	unused[11];
+	uint16_t	max_handle_sz;
+	uint16_t	unused[10];
 };
 
 #define CUSE_INIT_INFO_MAX 4096
