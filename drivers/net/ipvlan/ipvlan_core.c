@@ -622,7 +622,7 @@ static void __ipvlan_macnat_addr_learn(struct ipvl_dev *ipvlan,
 	struct ipvl_addr *ipvladdr, *oldest = NULL;
 	unsigned int naddrs = 0;
 
-	spin_lock_bh(&ipvlan->addrs_lock);
+	spin_lock_bh(&ipvlan->port->addrs_lock);
 
 	if (ipvlan_addr_busy(ipvlan->port, addr, is_v6))
 		goto out_unlock;
@@ -645,7 +645,7 @@ static void __ipvlan_macnat_addr_learn(struct ipvl_dev *ipvlan,
 	ipvlan_add_addr(ipvlan, addr, is_v6, hwaddr);
 
 out_unlock:
-	spin_unlock_bh(&ipvlan->addrs_lock);
+	spin_unlock_bh(&ipvlan->port->addrs_lock);
 	if (oldest)
 		kfree_rcu(oldest, rcu);
 }
