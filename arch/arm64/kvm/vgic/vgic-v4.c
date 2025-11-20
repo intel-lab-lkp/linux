@@ -617,3 +617,18 @@ void kvm_vgic_v4_unset_forwarding(struct kvm *kvm, int host_irq)
 	raw_spin_unlock_irqrestore(&irq->irq_lock, flags);
 	vgic_put_irq(kvm, irq);
 }
+
+/* query whether vLPI direct injection is enabled on a specific vCPU.
+ * return 0 if disabled, 1 if enabled, -EINVAL if vCPU non-existant or GIC
+ * uninitialized
+ */
+int kvm_vgic_query_vcpu_vlpi(struct kvm_vcpu *vcpu)
+{
+	struct kvm *kvm = vcpu->kvm;
+	struct vgic_dist *dist = &kvm->arch.vgic;
+	int i = kvm_idx_from_vcpu(kvm, vcpu);
+
+	if (i == UINT_MAX || !dist->its_vm.vpes)
+		return -EINVAL; /* vCPU non-existant or uninitialized */
+	return dist->its_vm.vpes[i] != NULL;
+}

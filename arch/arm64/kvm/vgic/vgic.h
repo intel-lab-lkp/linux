@@ -468,5 +468,6 @@ int vgic_its_debug_init(struct kvm_device *dev);
 void vgic_its_debug_destroy(struct kvm_device *dev);
 
 bool kvm_per_vcpu_vlpi_supported(void);
+int kvm_vgic_query_vcpu_vlpi(struct kvm_vcpu *vcpu);
 
 #endif

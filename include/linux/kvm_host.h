@@ -1030,6 +1030,17 @@ static inline struct kvm_vcpu *kvm_get_vcpu_by_id(struct kvm *kvm, int id)
 	return NULL;
 }
 
+static inline unsigned int kvm_idx_from_vcpu(struct kvm *kvm, struct kvm_vcpu *target_vcpu)
+{
+	struct kvm_vcpu *vcpu;
+	unsigned long i;
+
+	kvm_for_each_vcpu(i, vcpu, kvm)
+		if (vcpu == target_vcpu)
+			return i;
+	return UINT_MAX;
+}
+
 void kvm_destroy_vcpus(struct kvm *kvm);
 
 int kvm_trylock_all_vcpus(struct kvm *kvm);
