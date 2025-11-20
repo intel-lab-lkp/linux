@@ -404,32 +404,33 @@ out_path:
 	return retval;
 }
 
+static struct file *file_open_handle(struct path *path, int open_flag)
+{
+	const struct export_operations *eops;
+
+	eops = path->mnt->mnt_sb->s_export_op;
+	if (eops->open)
+		return eops->open(path, open_flag);
+
+	return file_open_root(path, "", open_flag, 0);
+}
+
 static long do_handle_open(int mountdirfd, struct file_handle __user *ufh,
 			   int open_flag)
 {
 	long retval = 0;
 	struct path path __free(path_put) = {};
-	struct file *file;
-	const struct export_operations *eops;
 
 	retval = handle_to_path(mountdirfd, ufh, &path, open_flag);
 	if (retval)
 		return retval;
 
-	CLASS(get_unused_fd, fd)(open_flag);
-	if (fd < 0)
-		return fd;
+	FD_PREPARE(fdf, open_flag, file_open_handle(&path, open_flag)) {
+		if (fd_prepare_failed(fdf))
+			return fd_prepare_error(fdf);
 
-	eops = path.mnt->mnt_sb->s_export_op;
-	if (eops->open)
-		file = eops->open(&path, open_flag);
-	else
-		file = file_open_root(&path, "", open_flag, 0);
-	if (IS_ERR(file))
-		return PTR_ERR(file);
-
-	fd_install(fd, file);
-	return take_fd(fd);
+		return fd_publish(fdf);
+	}
 }
 
 /**
