@@ -301,11 +301,8 @@ static const struct file_operations papr_platform_dump_handle_ops = {
  */
 static long papr_platform_dump_create_handle(u64 dump_tag)
 {
-	struct ibm_platform_dump_params *params;
+	struct ibm_platform_dump_params *params, *tmp;
 	u64 param_dump_tag;
-	struct file *file;
-	long err;
-	int fd;
 
 	/*
 	 * Return failure if the user space is already opened FD for
@@ -334,34 +331,23 @@ static long papr_platform_dump_create_handle(u64 dump_tag)
 	params->dump_tag_lo = (u32)(dump_tag & 0x00000000ffffffffULL);
 	params->status = RTAS_IBM_PLATFORM_DUMP_START;
 
-	fd = get_unused_fd_flags(O_RDONLY | O_CLOEXEC);
-	if (fd < 0) {
-		err = fd;
-		goto free_area;
+	FD_PREPARE(fdf, O_RDONLY | O_CLOEXEC,
+		   anon_inode_getfile_fmode("[papr-platform-dump]",
+					    &papr_platform_dump_handle_ops,
+					    (void *)params, O_RDONLY,
+					    FMODE_LSEEK | FMODE_PREAD)) {
+		if (fd_prepare_failed(fdf)) {
+			rtas_work_area_free(params->work_area);
+			kfree(params);
+			return fd_prepare_error(fdf);
+		}
+
+		list_add(&params->list, &platform_dump_list);
+
+		pr_info("%s (%d) initiated platform dump for dump tag %llu\n",
+			current->comm, current->pid, dump_tag);
+		return fd_publish(fdf);
 	}
-
-	file = anon_inode_getfile_fmode("[papr-platform-dump]",
-				&papr_platform_dump_handle_ops,
-				(void *)params, O_RDONLY,
-				FMODE_LSEEK | FMODE_PREAD);
-	if (IS_ERR(file)) {
-		err = PTR_ERR(file);
-		goto put_fd;
-	}
-
-	fd_install(fd, file);
-
-	list_add(&params->list, &platform_dump_list);
-
-	pr_info("%s (%d) initiated platform dump for dump tag %llu\n",
-		current->comm, current->pid, dump_tag);
-	return fd;
-put_fd:
-	put_unused_fd(fd);
-free_area:
-	rtas_work_area_free(params->work_area);
-	kfree(params);
-	return err;
 }
 
 /*
