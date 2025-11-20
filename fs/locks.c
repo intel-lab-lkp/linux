@@ -1615,6 +1615,18 @@ restart:
 	percpu_up_read(&file_rwsem);
 
 	locks_dispose_list(&dispose);
+
+	/* Check if lease manager predicts a deadlock situation */
+	if (fl->fl_lmops && fl->fl_lmops->lm_would_deadlock &&
+	    fl->fl_lmops->lm_would_deadlock(fl)) {
+		trace_break_lease_noblock(inode, new_fl);
+		error = -EWOULDBLOCK;
+		percpu_down_read(&file_rwsem);
+		spin_lock(&ctx->flc_lock);
+		__locks_delete_block(&new_fl->c);
+		goto out;
+	}
+
 	error = wait_event_interruptible_timeout(new_fl->c.flc_wait,
 						 list_empty(&new_fl->c.flc_blocked_member),
 						 break_time);

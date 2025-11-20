@@ -764,9 +764,42 @@ nfsd4_layout_lm_change(struct file_lease *onlist, int arg,
 	return lease_modify(onlist, arg, dispose);
 }
 
+static bool
+nfsd4_layout_lm_would_deadlock(struct file_lease *fl)
+{
+	struct svc_rqst *rqstp;
+	struct svc_pool *pool;
+	struct llist_node *idle;
+
+	/*
+	 * Check if we're running in an NFSD thread context.
+	 * If not, we can't cause an NFSD deadlock.
+	 */
+	rqstp = nfsd_current_rqst();
+	if (!rqstp)
+		return false;
+
+	pool = rqstp->rq_pool;
+
+	/*
+	 * Check the number of idle threads in the pool. We use
+	 * READ_ONCE as sp_idle_threads is a lockless list.
+	 * If we have 0 or 1 idle threads remaining and the current
+	 * thread is about to block, we risk deadlock as there may
+	 * not be enough threads available to process the LAYOUTRETURN
+	 * RPCs needed to unblock.
+	 */
+	idle = READ_ONCE(pool->sp_idle_threads.first);
+	if (!idle || !READ_ONCE(idle->next))
+		return true;
+
+	return false;
+}
+
 static const struct lease_manager_operations nfsd4_layouts_lm_ops = {
 	.lm_break	= nfsd4_layout_lm_break,
 	.lm_change	= nfsd4_layout_lm_change,
+	.lm_would_deadlock = nfsd4_layout_lm_would_deadlock,
 };
 
 int

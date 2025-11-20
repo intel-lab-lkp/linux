@@ -49,6 +49,7 @@ struct lease_manager_operations {
 	int (*lm_change)(struct file_lease *, int, struct list_head *);
 	void (*lm_setup)(struct file_lease *, void **);
 	bool (*lm_breaker_owns_lease)(struct file_lease *);
+	bool (*lm_would_deadlock)(struct file_lease *);
 };
 
 struct lock_manager {
