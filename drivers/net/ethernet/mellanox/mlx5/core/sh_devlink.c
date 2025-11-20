@@ -22,6 +22,8 @@ struct mlx5_shd {
 	struct list_head dev_list;
 	/* Related faux device */
 	struct faux_device *faux_dev;
+	/* List of esw qos nodes. */
+	struct list_head qos_nodes;
 };
 
 static const struct devlink_ops mlx5_shd_ops = {
@@ -76,6 +78,7 @@ static struct mlx5_shd *mlx5_shd_create(const char *sn)
 	shd->sn = sn;
 	INIT_LIST_HEAD(&shd->dev_list);
 	shd->faux_dev = faux_dev;
+	INIT_LIST_HEAD(&shd->qos_nodes);
 	return shd;
 }
 
@@ -163,4 +166,18 @@ void mlx5_shd_unlock(struct mlx5_core_dev *dev)
 	if (!dev->shd)
 		return;
 	devl_unlock(priv_to_devlink(dev->shd));
+}
+
+void mlx5_shd_assert_locked(struct mlx5_core_dev *dev)
+{
+	if (dev->shd)
+		devl_assert_locked(priv_to_devlink(dev->shd));
+}
+
+struct list_head *mlx5_shd_get_qos_nodes(struct mlx5_core_dev *dev)
+{
+	if (!dev->shd)
+		return NULL;
+	mlx5_shd_assert_locked(dev);
+	return &dev->shd->qos_nodes;
 }
