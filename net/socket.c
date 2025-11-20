@@ -503,21 +503,14 @@ EXPORT_SYMBOL(sock_alloc_file);
 
 static int sock_map_fd(struct socket *sock, int flags)
 {
-	struct file *newfile;
-	int fd = get_unused_fd_flags(flags);
-	if (unlikely(fd < 0)) {
-		sock_release(sock);
-		return fd;
-	}
+	FD_PREPARE(fdf, flags, sock_alloc_file(sock, flags, NULL)) {
+		if (fd_prepare_failed(fdf)) {
+			sock_release(sock);
+			return fd_prepare_error(fdf);
+		}
 
-	newfile = sock_alloc_file(sock, flags, NULL);
-	if (!IS_ERR(newfile)) {
-		fd_install(fd, newfile);
-		return fd;
+		return fd_publish(fdf);
 	}
-
-	put_unused_fd(fd);
-	return PTR_ERR(newfile);
 }
 
 /**
