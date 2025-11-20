@@ -1318,11 +1318,21 @@ int drm_sched_init(struct drm_gpu_scheduler *sched, const struct drm_sched_init_
 	sched->ops = args->ops;
 	sched->credit_limit = args->credit_limit;
 	sched->name = args->name;
-	sched->timeout = args->timeout;
 	sched->hang_limit = args->hang_limit;
 	sched->timeout_wq = args->timeout_wq ? args->timeout_wq : system_percpu_wq;
 	sched->score = args->score ? args->score : &sched->_score;
 	sched->dev = args->dev;
+
+	sched->timeout = args->timeout;
+	if (sched->timeout > DMA_FENCE_MAX_REASONABLE_TIMEOUT) {
+		dev_warn(sched->dev, "Timeout %ld exceeds the maximum recommended one!\n",
+			 sched->timeout);
+		/*
+		 * Make sure that exceeding the recommendation is noted in
+		 * logs and crash dumps.
+		 */
+		add_taint(TAINT_SOFTLOCKUP, LOCKDEP_STILL_OK);
+	}
 
 	if (args->num_rqs > DRM_SCHED_PRIORITY_COUNT) {
 		/* This is a gross violation--tell drivers what the  problem is.
