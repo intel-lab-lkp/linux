@@ -200,11 +200,11 @@ void ipvlan_multicast_enqueue(struct ipvl_port *port,
 int ipvlan_queue_xmit(struct sk_buff *skb, struct net_device *dev);
 void ipvlan_ht_addr_add(struct ipvl_dev *ipvlan, struct ipvl_addr *addr);
 int ipvlan_add_addr(struct ipvl_dev *ipvlan,
-		    void *iaddr, bool is_v6, const u8 *hwaddr);
-void ipvlan_del_addr(struct ipvl_dev *ipvlan, void *iaddr, bool is_v6);
+		    const void *iaddr, bool is_v6, const u8 *hwaddr);
+void ipvlan_del_addr(struct ipvl_dev *ipvlan, const void *iaddr, bool is_v6);
 struct ipvl_addr *ipvlan_find_addr(const struct ipvl_dev *ipvlan,
 				   const void *iaddr, bool is_v6);
-bool ipvlan_addr_busy(struct ipvl_port *port, void *iaddr, bool is_v6);
+bool ipvlan_addr_busy(struct ipvl_port *port, const void *iaddr, bool is_v6);
 void ipvlan_ht_addr_del(struct ipvl_addr *addr);
 struct ipvl_addr *ipvlan_addr_lookup(struct ipvl_port *port, void *lyr3h,
 				     int addr_type, bool use_dest);
