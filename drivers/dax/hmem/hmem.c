@@ -158,8 +158,10 @@ static int handle_deferred_cxl(struct device *host, int target_nid,
 		if (cxl_regions_fully_map(res->start, res->end)) {
 			dax_cxl_mode = DAX_CXL_MODE_DROP;
 			cxl_register_dax(res->start, res->end);
-		} else
+		} else {
 			dax_cxl_mode = DAX_CXL_MODE_REGISTER;
+			cxl_region_teardown(res->start, res->end);
+		}
 
 		hmem_register_device(host, target_nid, res);
 	}

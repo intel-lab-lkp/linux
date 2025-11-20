@@ -3784,6 +3784,44 @@ struct cxl_range_ctx {
 	bool found;
 };
 
+static int cxl_region_teardown_cb(struct device *dev, void *data)
+{
+	struct cxl_range_ctx *ctx = data;
+	struct cxl_root_decoder *cxlrd;
+	struct cxl_region_params *p;
+	struct cxl_region *cxlr;
+	struct cxl_port *port;
+
+	cxlr = cxlr_overlapping_range(dev, ctx->start, ctx->end);
+	if (!cxlr)
+		return 0;
+
+	cxlrd = to_cxl_root_decoder(cxlr->dev.parent);
+	port = cxlrd_to_port(cxlrd);
+	p = &cxlr->params;
+
+	/* Force the region state back to CXL_CONFIG_ACTIVE so that
+	 * unregister_region() does not run the full decoder reset path
+	 * which would invalidate the decoder programming that HMEM
+	 * relies on to create its DAX device and online the underlying
+	 * memory.
+	 */
+	scoped_guard(rwsem_write, &cxl_rwsem.region)
+		p->state = min(p->state, CXL_CONFIG_ACTIVE);
+
+	devm_release_action(port->uport_dev, unregister_region, cxlr);
+
+	return 0;
+}
+
+void cxl_region_teardown(resource_size_t start, resource_size_t end)
+{
+	struct cxl_range_ctx ctx = { .start = start, .end = end };
+
+	bus_for_each_dev(&cxl_bus_type, NULL, &ctx, cxl_region_teardown_cb);
+}
+EXPORT_SYMBOL_GPL(cxl_region_teardown);
+
 static void cxl_region_enable_dax(struct cxl_region *cxlr)
 {
 	struct cxl_region_params *p = &cxlr->params;

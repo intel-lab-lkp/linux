@@ -880,6 +880,7 @@ struct cxl_dax_region *to_cxl_dax_region(struct device *dev);
 u64 cxl_port_get_spa_cache_alias(struct cxl_port *endpoint, u64 spa);
 bool cxl_regions_fully_map(resource_size_t start, resource_size_t end);
 void cxl_register_dax(resource_size_t start, resource_size_t end);
+void cxl_region_teardown(resource_size_t start, resource_size_t end);
 #else
 static inline bool is_cxl_pmem_region(struct device *dev)
 {
@@ -909,6 +910,10 @@ static inline bool cxl_regions_fully_map(resource_size_t start,
 }
 static inline void cxl_register_dax(resource_size_t start,
 				    resource_size_t end)
+{
+}
+static inline void cxl_region_teardown(resource_size_t start,
+				       resource_size_t end)
 {
 }
 #endif
