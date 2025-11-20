@@ -120,6 +120,7 @@ properties:
               - google,snow-rev5                # Google Snow Rev 5+
               - google,spring                   # Google Spring
               - insignal,arndale                # Insignal Arndale
+              - samsung,nexus10-manta           # Samsung Manta (Google Nexus 10)
               - samsung,smdk5250                # Samsung SMDK5250 eval
           - const: samsung,exynos5250
           - const: samsung,exynos5
