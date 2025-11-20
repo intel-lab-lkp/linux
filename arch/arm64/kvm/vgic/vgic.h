@@ -475,5 +475,6 @@ bool kvm_per_vcpu_vlpi_supported(void);
 int kvm_vgic_enable_vcpu_vlpi(struct kvm_vcpu *vcpu);
 int kvm_vgic_disable_vcpu_vlpi(struct kvm_vcpu *vcpu);
 int kvm_vgic_query_vcpu_vlpi(struct kvm_vcpu *vcpu);
+int debug_gic_msi_setup_mock_msi(struct kvm *kvm, struct kvm_debug_gic_msi_setup *params);
 
 #endif

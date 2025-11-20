@@ -2815,3 +2815,141 @@ int kvm_vgic_register_its_device(void)
 	return kvm_register_device_ops(&kvm_arm_vgic_its_ops,
 				       KVM_DEV_TYPE_ARM_VGIC_ITS);
 }
+
+static struct vgic_its *vgic_get_its(struct kvm *kvm,
+					struct kvm_kernel_irq_routing_entry *irq_entry)
+{
+	struct kvm_msi msi  = (struct kvm_msi) {
+		.address_lo	= irq_entry->msi.address_lo,
+		.address_hi	= irq_entry->msi.address_hi,
+		.data		= irq_entry->msi.data,
+		.flags		= irq_entry->msi.flags,
+		.devid		= irq_entry->msi.devid,
+	};
+
+	return vgic_msi_to_its(kvm, &msi);
+}
+
+/*
+ * debug_gic_msi_setup_mock_msi - manually set up vLPI direct injection infrastructure
+ * for an MSI upon userspace request. Used for testing vLPIs from selftests.
+ *
+ * Creates an IRQ routing entry mapping the specified MSI signature to a mock
+ * host IRQ, then populates ITS structures (device, collection, ITE) to establish
+ * the DevID/EventID to LPI translation. Finally enables GICv4 vLPI forwarding
+ * to bypass software emulation and inject interrupts directly to the vCPU.
+ *
+ * This function is intended solely for KVM selftests via KVM_DEBUG_GIC_MSI_SETUP.
+ * It uses mock host IRQs in the SPI range assuming no real hardware devices are
+ * present on a selftest guest. Using this interface in production will corrupt the
+ * IRQ routing table.
+ */
+int debug_gic_msi_setup_mock_msi(struct kvm *kvm, struct kvm_debug_gic_msi_setup *params)
+{
+	struct kvm_irq_routing_entry user_entry;
+	struct kvm_kernel_irq_routing_entry entry;
+	struct vgic_its *its;
+	struct its_device *device;
+	struct its_collection *collection;
+	struct its_ite *ite;
+	struct vgic_irq *irq;
+	struct kvm_vcpu *vcpu;
+	u64 doorbell_addr = GITS_BASE_GPA + GITS_TRANSLATER;
+	u32 device_id = params->device_id;
+	u32 event_id = params->event_id;
+	u32 coll_id = params->vcpu_id;
+	u32 lpi_nr = params->vintid;
+	gpa_t itt_addr = params->itt_addr;
+	int ret;
+	int host_irq = params->host_irq;
+
+	/* Get target vCPU, validate it has a vPE for direct injection */
+	vcpu = kvm_get_vcpu(kvm, params->vcpu_id);
+	if (!vcpu)
+		return -EINVAL;
+	else if (!vcpu->arch.vgic_cpu.vgic_v3.its_vpe.its_vm)
+		return -ENXIO; /* vPE not currently enabled for this vCPU */
+
+	/*
+	 * Enable this vLPIs for this vCPU manually for testing, normally
+	 * done by guest writing GICR_CTLR
+	 */
+	atomic_set(&vcpu->arch.vgic_cpu.ctlr, GICR_CTLR_ENABLE_LPIS);
+
+	// Unmap any existing vLPI on the mock host IRQ (remnants from prior mocks)
+	kvm_vgic_v4_unset_forwarding(kvm, host_irq);
+
+	/* Create mock user IRQ routing entry using kvm_set_routing_entry function */
+	memset(&user_entry, 0, sizeof(user_entry));
+	user_entry.gsi = host_irq;
+	user_entry.type = KVM_IRQ_ROUTING_MSI;
+	user_entry.u.msi.address_lo = doorbell_addr & 0xFFFFFFFF;
+	user_entry.u.msi.address_hi = doorbell_addr >> 32;
+	user_entry.u.msi.data = event_id;
+	user_entry.u.msi.devid = device_id;
+	user_entry.flags = KVM_MSI_VALID_DEVID;
+
+	/* Initialize kernel routing entry */
+	memset(&entry, 0, sizeof(entry));
+
+	/* Use vgic-irqfd.c function to create entry */
+	ret = kvm_set_routing_entry(kvm, &entry, &user_entry);
+	if (ret)
+		return ret;
+
+	/* Now that we created an MSI -> ITS mapping, we can populate the ITS for this MSI */
+
+	/* Get ITS instance */
+	its = vgic_get_its(kvm, &entry);
+	if (IS_ERR(its))
+		return PTR_ERR(its);
+
+	/* Enable ITS manually for testing, normally done by guest writing to GITS_CTLR register */
+	its->enabled = true;
+
+	mutex_lock(&its->its_lock);
+
+	/* Create ITS device */
+	device = vgic_its_alloc_device(its, device_id, itt_addr, 8);
+	if (IS_ERR(device)) {
+		ret = PTR_ERR(device);
+		goto unlock;
+	}
+
+	/* Create collection mapped to inputted vcpu */
+	ret = vgic_its_alloc_collection(its, &collection, coll_id);
+	if (ret)
+		goto unlock;
+
+	collection->target_addr = params->vcpu_id;  // Map to specified vcpu
+
+	/* Create ITE */
+	ite = vgic_its_alloc_ite(device, collection, event_id);
+	if (IS_ERR(ite)) {
+		ret = PTR_ERR(ite);
+		vgic_its_free_collection(its, coll_id);
+		goto unlock;
+	}
+
+	/* Create LPI */
+	irq = vgic_add_lpi(kvm, lpi_nr, vcpu);
+	if (IS_ERR(irq)) {
+		ret = PTR_ERR(irq);
+		its_free_ite(kvm, ite);
+		vgic_its_free_collection(its, coll_id);
+		goto unlock;
+	}
+
+	ite->irq = irq;
+	update_affinity_ite(kvm, ite);
+
+	/* Now that routing entry is initialized, call v4 forwarding setup */
+	ret = kvm_vgic_v4_set_forwarding_locked(kvm, host_irq, &entry, its);
+
+	mutex_unlock(&its->its_lock);
+	return ret;
+
+unlock:
+	mutex_unlock(&its->its_lock);
+	return ret;
+}

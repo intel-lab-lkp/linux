@@ -1457,6 +1457,21 @@ struct kvm_enc_region {
 #define KVM_DISABLE_VCPU_VLPI    _IOW(KVMIO, 0xf1, int)
 #define KVM_QUERY_VCPU_VLPI    _IOR(KVMIO, 0xf2, int)
 
+/*
+ * Generate an IRQ routing entry and vLPI tables for userspace-sourced
+ * MSI, enabling direct vLPI injection testing from selftests
+ */
+#define KVM_DEBUG_GIC_MSI_SETUP    _IOW(KVMIO, 0xf3, struct kvm_debug_gic_msi_setup)
+
+struct kvm_debug_gic_msi_setup {
+	__u32 device_id;
+	__u32 event_id;
+	__u32 vcpu_id;
+	__u32 vintid;
+	__u32 host_irq;
+	__u64 itt_addr;
+};
+
 #define KVM_DIRTY_LOG_MANUAL_PROTECT_ENABLE    (1 << 0)
 #define KVM_DIRTY_LOG_INITIALLY_SET            (1 << 1)
 

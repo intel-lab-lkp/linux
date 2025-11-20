@@ -378,6 +378,7 @@
 #define GITS_CIDR3			0xfffc
 
 #define GITS_TRANSLATER			0x10040
+#define GITS_BASE_GPA           0x8000000ULL
 
 #define GITS_SGIR			0x20020
 
