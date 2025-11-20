@@ -594,6 +594,7 @@ static int acpi_fan_probe(struct platform_device *pdev)
 	dev_dbg(&pdev->dev, "registered as cooling_device%d\n", cdev->id);
 
 	fan->cdev = cdev;
+	/* For backwards compatibility */
 	result = sysfs_create_link(&pdev->dev.kobj,
 				   &cdev->device.kobj,
 				   "thermal_cooling");
@@ -602,18 +603,8 @@ static int acpi_fan_probe(struct platform_device *pdev)
 		goto err_unregister;
 	}
 
-	result = sysfs_create_link(&cdev->device.kobj,
-				   &pdev->dev.kobj,
-				   "device");
-	if (result) {
-		dev_err(&pdev->dev, "Failed to create sysfs link 'device'\n");
-		goto err_remove_link;
-	}
-
 	return 0;
 
-err_remove_link:
-	sysfs_remove_link(&pdev->dev.kobj, "thermal_cooling");
 err_unregister:
 	thermal_cooling_device_unregister(cdev);
 err_end:
@@ -633,7 +624,6 @@ static void acpi_fan_remove(struct platform_device *pdev)
 		acpi_fan_delete_attributes(device);
 	}
 	sysfs_remove_link(&pdev->dev.kobj, "thermal_cooling");
-	sysfs_remove_link(&fan->cdev->device.kobj, "device");
 	thermal_cooling_device_unregister(fan->cdev);
 }
 
