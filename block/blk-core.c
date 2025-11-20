@@ -751,7 +751,8 @@ void submit_bio_noacct_nocheck(struct bio *bio, bool split)
 			bio_list_add_head(&current->bio_list[0], bio);
 		else
 			bio_list_add(&current->bio_list[0], bio);
-	} else if (!bdev_test_flag(bio->bi_bdev, BD_HAS_SUBMIT_BIO)) {
+	} else if (!bdev_test_flag(bio->bi_bdev, BD_HAS_SUBMIT_BIO |
+				BD_LOWLEVEL_BIO_FIRST)) {
 		__submit_bio_noacct_mq(bio);
 	} else {
 		__submit_bio_noacct(bio);

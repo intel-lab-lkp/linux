@@ -208,6 +208,18 @@ static inline void loop_update_dio(struct loop_device *lo)
 
 	if ((lo->lo_flags & LO_FLAGS_DIRECT_IO) && !lo_can_use_dio(lo))
 		lo->lo_flags &= ~LO_FLAGS_DIRECT_IO;
+
+	/*
+	 * NOWAIT is applied for direct IO mode, so backing file IOs are
+	 * submitted in loop IO context. BD_LOWLEVEL_BIO_FIRST has to be
+	 * set for avoiding IO deadlock which is triggered when loop IO
+	 * and backing file IO are reordered, meanwhile loop IO is throttled
+	 * by block layer RQOS.
+	 */
+	if (lo->lo_flags & LO_FLAGS_DIRECT_IO)
+		bdev_set_flag(lo->lo_disk->part0, BD_LOWLEVEL_BIO_FIRST);
+	else
+		bdev_clear_flag(lo->lo_disk->part0, BD_LOWLEVEL_BIO_FIRST);
 }
 
 /**

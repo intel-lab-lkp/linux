@@ -54,6 +54,7 @@ struct block_device {
 #ifdef CONFIG_FAIL_MAKE_REQUEST
 #define BD_MAKE_IT_FAIL		(1u<<12)
 #endif
+#define BD_LOWLEVEL_BIO_FIRST	(1u<<13)
 	dev_t			bd_dev;
 	struct address_space	*bd_mapping;	/* page cache */
 
