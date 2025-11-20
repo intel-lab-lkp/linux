@@ -2008,15 +2008,24 @@ static bool intel_dp_dsc_supports_format(const struct intel_connector *connector
 
 static bool is_bw_sufficient_for_dsc_config(int dsc_bpp_x16, u32 link_clock,
 					    u32 lane_count, u32 mode_clock,
-					    enum intel_output_format output_format,
 					    int timeslots)
 {
-	u32 available_bw, required_bw;
+	u32 fec_pixel_clk_khz = intel_dp_mode_to_fec_clock(mode_clock);
+	u64 available_bw_kbps;
+	u64 required_bw_kbps;
 
-	available_bw = (link_clock * lane_count * timeslots * 16)  / 8;
-	required_bw = dsc_bpp_x16 * (intel_dp_mode_to_fec_clock(mode_clock));
+	/*
+	 * Available Link Bandwidth(Kbits/sec):
+	 *  = NumberOfLanes * LinkSymbolClock * 8 * (TimeSlots / 64)
+	 *  = (NumberOfLanes * LinkSymbolClock * TimeSlots) / 8
+	 *
+	 * Required Bandwidth(Kbits/sec):
+	 * = Clock(Khz) * FEC Overhead * bpp
+	 */
+	available_bw_kbps = ((u64)link_clock * lane_count * timeslots) / 8;
+	required_bw_kbps = DIV_ROUND_UP_ULL((u64)fec_pixel_clk_khz * dsc_bpp_x16, 16);
 
-	return available_bw > required_bw;
+	return available_bw_kbps >= required_bw_kbps;
 }
 
 static int dsc_compute_link_config(struct intel_dp *intel_dp,
@@ -2064,7 +2073,6 @@ static int dsc_compute_link_config(struct intel_dp *intel_dp,
 			} else {
 				if (!is_bw_sufficient_for_dsc_config(dsc_bpp_x16, link_rate,
 								     lane_count, adjusted_mode->clock,
-								     pipe_config->output_format,
 								     timeslots))
 					continue;
 			}
