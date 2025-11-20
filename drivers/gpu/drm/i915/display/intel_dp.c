@@ -2466,11 +2466,12 @@ bool intel_dp_needs_8b10b_fec(const struct intel_crtc_state *crtc_state,
 	return dsc_enabled_on_crtc || intel_dsc_enabled_on_link(crtc_state);
 }
 
-int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
-				struct intel_crtc_state *pipe_config,
-				struct drm_connector_state *conn_state,
-				const struct link_config_limits *limits,
-				int timeslots)
+static
+int _intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
+				 struct intel_crtc_state *pipe_config,
+				 struct drm_connector_state *conn_state,
+				 const struct link_config_limits *limits,
+				 int timeslots)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 	const struct intel_connector *connector =
@@ -2569,6 +2570,65 @@ int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 		    pipe_config->dsc.slice_count);
 
 	return 0;
+}
+
+int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
+				struct intel_crtc_state *crtc_state,
+				struct drm_connector_state *conn_state,
+				const struct link_config_limits *limits,
+				int timeslots)
+{
+	struct intel_display *display = to_intel_display(intel_dp);
+	const struct intel_connector *connector = to_intel_connector(conn_state->connector);
+	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	int max_dotclk = display->cdclk.max_dotclk_freq;
+	int target_clock = adjusted_mode->clock;
+	int num_joined_pipes;
+	int ret = -EINVAL;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(joiner_candidates); i++) {
+		enum joiner_type joiner = joiner_candidates[i];
+
+		if (joiner == FORCED_JOINER) {
+			if (!connector->force_joined_pipes)
+				continue;
+			num_joined_pipes = connector->force_joined_pipes;
+		} else {
+			num_joined_pipes = 1 << joiner;
+		}
+
+		if ((joiner >= NO_JOINER && !intel_dp_has_joiner(intel_dp)) ||
+		    (joiner == BIG_JOINER && !HAS_BIGJOINER(display)) ||
+		    (joiner == ULTRA_JOINER && !HAS_ULTRAJOINER(display))) {
+			ret = -EINVAL;
+			break;
+		}
+
+		if (adjusted_mode->hdisplay > num_joined_pipes * intel_dp_hdisplay_limit(display))
+			continue;
+
+		if (num_joined_pipes > 1)
+			crtc_state->joiner_pipes = GENMASK(crtc->pipe + num_joined_pipes - 1,
+							   crtc->pipe);
+
+		ret = _intel_dp_dsc_compute_config(intel_dp, crtc_state,
+						   conn_state, limits, timeslots);
+		if (ret < 0)
+			continue;
+
+		max_dotclk *= num_joined_pipes;
+
+		if (target_clock <= max_dotclk)
+			return ret;
+
+		ret = -EINVAL;
+	}
+
+	crtc_state->joiner_pipes = 0;
+
+	return ret;
 }
 
 static int
