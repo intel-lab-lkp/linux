@@ -136,7 +136,7 @@ def ksft_busy_wait(cond, sleep=0.005, deadline=1, comment=""):
         time.sleep(sleep)
 
 
-def ktap_result(ok, cnt=1, case="", comment=""):
+def ktap_result(ok, cnt=1, case="", comment="", case_sfx=""):
     global KSFT_RESULT_ALL
     KSFT_RESULT_ALL = KSFT_RESULT_ALL and ok
 
@@ -147,7 +147,7 @@ def ktap_result(ok, cnt=1, case="", comment=""):
     res += str(cnt) + " "
     res += KSFT_MAIN_NAME
     if case:
-        res += "." + str(case.__name__)
+        res += "." + str(case.__name__) + case_sfx
     if comment:
         res += " # " + comment
     print(res, flush=True)
@@ -220,7 +220,7 @@ def _ksft_intr(signum, frame):
         ksft_pr(f"Ignoring SIGTERM (cnt: {term_cnt}), already exiting...")
 
 
-def ksft_run(cases=None, globs=None, case_pfx=None, args=()):
+def ksft_run(cases=None, globs=None, case_pfx=None, args=(), case_sfx=""):
     cases = cases or []
 
     if globs and case_pfx:
@@ -273,7 +273,7 @@ def ksft_run(cases=None, globs=None, case_pfx=None, args=()):
         if not cnt_key:
             cnt_key = 'pass' if KSFT_RESULT else 'fail'
 
-        ktap_result(KSFT_RESULT, cnt, case, comment=comment)
+        ktap_result(KSFT_RESULT, cnt, case, comment=comment, case_sfx=case_sfx)
         totals[cnt_key] += 1
 
         if stop:
