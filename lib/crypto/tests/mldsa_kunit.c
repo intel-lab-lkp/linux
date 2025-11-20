@@ -28,6 +28,9 @@ static const struct mldsa_testvector mldsa_44_testvectors[] = {
 static const struct mldsa_testvector mldsa_65_testvectors[] = {
 #include "mldsa_pure_rejection_vectors_65.h"
 };
+static const struct mldsa_testvector mldsa_87_testvectors[] = {
+#include "mldsa_pure_rejection_vectors_87.h"
+};
 
 static void do_mldsa_and_assert_success(struct kunit *test, enum mldsa_alg alg,
 					const struct mldsa_testvector *tv)
@@ -54,6 +57,12 @@ static void test_mldsa65(struct kunit *test)
 {
 	test_mldsa(test, MLDSA65, mldsa_65_testvectors,
 		   ARRAY_SIZE(mldsa_65_testvectors));
+}
+
+static void test_mldsa87(struct kunit *test)
+{
+	test_mldsa(test, MLDSA87, mldsa_87_testvectors,
+		   ARRAY_SIZE(mldsa_87_testvectors));
 }
 
 static void benchmark_mldsa(struct kunit *test, enum mldsa_alg alg,
@@ -89,11 +98,18 @@ static void benchmark_mldsa65(struct kunit *test)
 	benchmark_mldsa(test, MLDSA65, &mldsa_65_testvectors[0]);
 }
 
+static void benchmark_mldsa87(struct kunit *test)
+{
+	benchmark_mldsa(test, MLDSA87, &mldsa_87_testvectors[0]);
+}
+
 static struct kunit_case mldsa_kunit_cases[] = {
 	KUNIT_CASE(test_mldsa44),
 	KUNIT_CASE(test_mldsa65),
+	KUNIT_CASE(test_mldsa87),
 	KUNIT_CASE(benchmark_mldsa44),
 	KUNIT_CASE(benchmark_mldsa65),
+	KUNIT_CASE(benchmark_mldsa87),
 	{},
 };
 
