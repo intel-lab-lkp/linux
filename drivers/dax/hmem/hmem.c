@@ -155,9 +155,10 @@ static int handle_deferred_cxl(struct device *host, int target_nid,
 	if (region_intersects(res->start, resource_size(res), IORESOURCE_MEM,
 			      IORES_DESC_CXL) != REGION_DISJOINT) {
 
-		if (cxl_regions_fully_map(res->start, res->end))
+		if (cxl_regions_fully_map(res->start, res->end)) {
 			dax_cxl_mode = DAX_CXL_MODE_DROP;
-		else
+			cxl_register_dax(res->start, res->end);
+		} else
 			dax_cxl_mode = DAX_CXL_MODE_REGISTER;
 
 		hmem_register_device(host, target_nid, res);

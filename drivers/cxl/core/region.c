@@ -3784,6 +3784,48 @@ struct cxl_range_ctx {
 	bool found;
 };
 
+static void cxl_region_enable_dax(struct cxl_region *cxlr)
+{
+	struct cxl_region_params *p = &cxlr->params;
+	int rc;
+
+	if (walk_iomem_res_desc(IORES_DESC_NONE,
+				IORESOURCE_SYSTEM_RAM | IORESOURCE_BUSY,
+				p->res->start, p->res->end, cxlr,
+				is_system_ram) > 0)
+		return;
+
+	rc = devm_cxl_add_dax_region(cxlr);
+	if (rc)
+		dev_warn(&cxlr->dev, "failed to add DAX for %s: %d\n",
+			 dev_name(&cxlr->dev), rc);
+}
+
+static int cxl_register_dax_cb(struct device *dev, void *data)
+{
+	struct cxl_range_ctx *ctx = data;
+	struct cxl_region *cxlr;
+
+	cxlr = cxlr_overlapping_range(dev, ctx->start, ctx->end);
+	if (!cxlr)
+		return 0;
+
+	if (cxlr->mode != CXL_PARTMODE_RAM)
+		return 0;
+
+	cxl_region_enable_dax(cxlr);
+
+	return 0;
+}
+
+void cxl_register_dax(resource_size_t start, resource_size_t end)
+{
+	struct cxl_range_ctx ctx = { .start = start, .end = end };
+
+	bus_for_each_dev(&cxl_bus_type, NULL, &ctx, cxl_register_dax_cb);
+}
+EXPORT_SYMBOL_GPL(cxl_register_dax);
+
 static int cxl_region_map_cb(struct device *dev, void *data)
 {
 	struct cxl_range_ctx *ctx = data;
