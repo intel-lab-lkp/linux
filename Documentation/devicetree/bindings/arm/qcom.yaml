@@ -300,9 +300,29 @@ properties:
           - const: qcom,ipq5424
 
       - items:
+          - const: qcom,ipq8062
+          - const: qcom,ipq8064
+
+      - items:
           - enum:
               - mikrotik,rb3011
               - qcom,ipq8064-ap148
+          - const: qcom,ipq8064
+
+      - items:
+          - const: qcom,ipq8065
+          - const: qcom,ipq8064
+
+      - items:
+          - const: qcom,ipq8066
+          - const: qcom,ipq8064
+
+      - items:
+          - const: qcom,ipq8068
+          - const: qcom,ipq8064
+
+      - items:
+          - const: qcom,ipq8069
           - const: qcom,ipq8064
 
       - items:
