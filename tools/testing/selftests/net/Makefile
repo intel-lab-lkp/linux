@@ -49,6 +49,7 @@ TEST_PROGS := \
 	ipv6_flowlabel.sh \
 	ipv6_force_forwarding.sh \
 	ipv6_route_update_soft_lockup.sh \
+	ipvtap_macnat_test.sh \
 	l2_tos_ttl_inherit.sh \
 	l2tp.sh \
 	link_netns.py \
@@ -191,6 +192,7 @@ TEST_GEN_PROGS := \
 TEST_FILES := \
 	fcnal-test.sh \
 	in_netns.sh \
+	ipvtap_macnat_bridge.py \
 	lib.sh \
 	settings \
 	setup_loopback.sh \
