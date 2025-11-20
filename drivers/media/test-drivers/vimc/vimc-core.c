@@ -107,9 +107,8 @@ static const struct vimc_ent_config ent_config[] = {
 		.type = &vimc_capture_type
 	},
 	[RGB_YUV_INPUT] = {
-		/* TODO: change this to vimc-input when it is implemented */
 		.name = "RGB/YUV Input",
-		.type = &vimc_sensor_type
+		.type = &vimc_input_type
 	},
 	[SCALER] = {
 		.name = "Scaler",
