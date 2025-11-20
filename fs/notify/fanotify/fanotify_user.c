@@ -1606,7 +1606,6 @@ SYSCALL_DEFINE2(fanotify_init, unsigned int, flags, unsigned int, event_f_flags)
 	unsigned int fid_mode = flags & FANOTIFY_FID_BITS;
 	unsigned int class = flags & FANOTIFY_CLASS_BITS;
 	unsigned int internal_flags = 0;
-	struct file *file;
 
 	pr_debug("%s: flags=%x event_f_flags=%x\n",
 		 __func__, flags, event_f_flags);
@@ -1755,19 +1754,14 @@ SYSCALL_DEFINE2(fanotify_init, unsigned int, flags, unsigned int, event_f_flags)
 			goto out_destroy_group;
 	}
 
-	fd = get_unused_fd_flags(f_flags);
-	if (fd < 0)
-		goto out_destroy_group;
+	FD_PREPARE(fdf, f_flags,
+		   anon_inode_getfile_fmode("[fanotify]", &fanotify_fops, group,
+					    f_flags, FMODE_NONOTIFY)) {
+		if (!fd_prepare_failed(fdf))
+			return fd_publish(fdf);
 
-	file = anon_inode_getfile_fmode("[fanotify]", &fanotify_fops, group,
-					f_flags, FMODE_NONOTIFY);
-	if (IS_ERR(file)) {
-		put_unused_fd(fd);
-		fd = PTR_ERR(file);
-		goto out_destroy_group;
+		fd = fd_prepare_error(fdf);
 	}
-	fd_install(fd, file);
-	return fd;
 
 out_destroy_group:
 	fsnotify_destroy_group(group);
