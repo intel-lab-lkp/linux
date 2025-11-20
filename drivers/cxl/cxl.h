@@ -495,6 +495,7 @@ struct cxl_region_params {
 	struct cxl_endpoint_decoder *targets[CXL_DECODER_MAX_INTERLEAVE];
 	int nr_targets;
 	resource_size_t cache_size;
+	bool register_dax;
 };
 
 enum cxl_partition_mode {
