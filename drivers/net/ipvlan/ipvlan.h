@@ -39,6 +39,8 @@
 
 #define IPVLAN_QBACKLOG_LIMIT	1000
 
+#define IPVLAN_MAX_MACNAT_ADDRS	4
+
 typedef enum {
 	IPVL_IPV6 = 0,
 	IPVL_ICMPV6,
@@ -78,11 +80,13 @@ struct ipvl_addr {
 		struct in6_addr	ip6;	 /* IPv6 address on logical interface */
 		struct in_addr	ip4;	 /* IPv4 address on logical interface */
 	} ipu;
+	u8			hwaddr[ETH_ALEN];
 #define ip6addr	ipu.ip6
 #define ip4addr ipu.ip4
 	struct hlist_node	hlnode;  /* Hash-table linkage */
 	struct list_head	anode;   /* logical-interface linkage */
 	ipvl_hdr_type		atype;
+	u64			tstamp;
 	struct rcu_head		rcu;
 };
 
@@ -91,6 +95,7 @@ struct ipvl_port {
 	possible_net_t		pnet;
 	struct hlist_head	hlhead[IPVLAN_HASH_SIZE];
 	struct list_head	ipvlans;
+	struct packet_type	ipvl_ptype;
 	u16			mode;
 	u16			flags;
 	u16			dev_id_start;
@@ -103,6 +108,7 @@ struct ipvl_port {
 
 struct ipvl_skb_cb {
 	bool tx_pkt;
+	void *mark;
 };
 #define IPVL_SKB_CB(_skb) ((struct ipvl_skb_cb *)&((_skb)->cb[0]))
 
@@ -151,12 +157,34 @@ static inline void ipvlan_clear_vepa(struct ipvl_port *port)
 	port->flags &= ~IPVLAN_F_VEPA;
 }
 
+static inline bool ipvlan_is_macnat(struct ipvl_port *port)
+{
+	return port->mode == IPVLAN_MODE_L2_MACNAT;
+}
+
+static inline void ipvlan_mark_skb(struct sk_buff *skb, struct net_device *dev)
+{
+	IPVL_SKB_CB(skb)->mark = dev;
+}
+
+static inline bool ipvlan_is_skb_marked(struct sk_buff *skb,
+					struct net_device *dev)
+{
+	return (IPVL_SKB_CB(skb)->mark == dev);
+}
+
 void ipvlan_init_secret(void);
 unsigned int ipvlan_mac_hash(const unsigned char *addr);
 rx_handler_result_t ipvlan_handle_frame(struct sk_buff **pskb);
+void ipvlan_skb_crossing_ns(struct sk_buff *skb, struct net_device *dev);
 void ipvlan_process_multicast(struct work_struct *work);
+void ipvlan_multicast_enqueue(struct ipvl_port *port,
+			      struct sk_buff *skb, bool tx_pkt);
 int ipvlan_queue_xmit(struct sk_buff *skb, struct net_device *dev);
 void ipvlan_ht_addr_add(struct ipvl_dev *ipvlan, struct ipvl_addr *addr);
+int ipvlan_add_addr(struct ipvl_dev *ipvlan,
+		    void *iaddr, bool is_v6, const u8 *hwaddr);
+void ipvlan_del_addr(struct ipvl_dev *ipvlan, void *iaddr, bool is_v6);
 struct ipvl_addr *ipvlan_find_addr(const struct ipvl_dev *ipvlan,
 				   const void *iaddr, bool is_v6);
 bool ipvlan_addr_busy(struct ipvl_port *port, void *iaddr, bool is_v6);

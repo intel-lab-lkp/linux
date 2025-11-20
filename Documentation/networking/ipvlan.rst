@@ -33,7 +33,7 @@ using IProute2/ip utility.
 
     ip link add link <master> name <slave> type ipvlan [ mode MODE ] [ FLAGS ]
        where
-	 MODE: l3 (default) | l3s | l2
+	 MODE: l3 (default) | l3s | l2 | l2macnat
 	 FLAGS: bridge (default) | private | vepa
 
 e.g.
@@ -89,6 +89,26 @@ This is very similar to the L3 mode except that iptables (conn-tracking)
 works in this mode and hence it is L3-symmetric (L3s). This will have slightly less
 performance but that shouldn't matter since you are choosing this mode over plain-L3
 mode to make conn-tracking work.
+
+4.4 L2_MACNAT mode:
+-------------------
+
+This mode extends the L2 mode and is primarily designed for desktop virtual
+machines that need to bridge to wireless interfaces. In standard L2 mode,
+you must configure IP addresses on slave interfaces to enable frame
+multiplexing between slaves and the master.
+
+In L2_MACNAT mode, IPVLAN automatically learns IPv4/IPv6 and MAC addresses
+from outgoing packets. For transmitted packets, the source MAC address
+is replaced with the MAC address of the main interface. Received packets
+are routed to the interface that previously used the destination address,
+and the destination MAC is replaced with the learned MAC address.
+
+This enables slave interfaces to automatically obtain IP addresses
+via DHCP and IPv6 autoconfiguration.
+
+Additionally, dev_add_pack() is configured on the master interface to capture
+outgoing frames and multiplex them to slave interfaces when necessary.
 
 5. Mode flags:
 ==============
