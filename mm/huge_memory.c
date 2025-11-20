@@ -3688,6 +3688,23 @@ static int __split_unmapped_folio(struct folio *folio, int new_order,
 	return 0;
 }
 
+/**
+ * folio_split_supported() - check if a folio can be split to a given order
+ * @folio: folio to be split
+ * @new_order: the smallest order of the after split folios (since buddy
+ *             allocator like split generates folios with orders from @folio's
+ *             order - 1 to new_order).
+ * @split_type: uniform or non-uniform split
+ * @warns: whether gives warnings or not for the checks in the function
+ *
+ * folio_split_supported() checks if @folio can be split to @new_order using
+ * @split_type method.
+ *
+ * Context: Caller must make sure folio->mapping is not NULL, since the
+ *          function does not check it and can dereference folio->mapping
+ * Return: true - @folio can be split to @new_order, false - @folio cannot be
+ * split
+ */
 bool folio_split_supported(struct folio *folio, unsigned int new_order,
 		enum split_type split_type, bool warns)
 {
