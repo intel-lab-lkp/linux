@@ -170,7 +170,6 @@ struct mlx5vf_pci_core_device {
 	int vf_id;
 	u16 vhca_id;
 	u8 migrate_cap:1;
-	u8 deferred_reset:1;
 	u8 mdev_detach:1;
 	u8 log_active:1;
 	u8 chunk_mode:1;
@@ -178,8 +177,6 @@ struct mlx5vf_pci_core_device {
 	/* protect migration state */
 	struct mutex state_mutex;
 	enum vfio_device_mig_state mig_state;
-	/* protect the reset_done flow */
-	spinlock_t reset_lock;
 	struct mlx5_vf_migration_file *resuming_migf;
 	struct mlx5_vf_migration_file *saving_migf;
 	struct mlx5_vhca_page_tracker tracker;

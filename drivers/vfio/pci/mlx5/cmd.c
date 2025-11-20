@@ -178,13 +178,13 @@ static int mlx5fv_vf_event(struct notifier_block *nb,
 	case MLX5_PF_NOTIFY_ENABLE_VF:
 		mutex_lock(&mvdev->state_mutex);
 		mvdev->mdev_detach = false;
-		mlx5vf_state_mutex_unlock(mvdev);
+		mutex_unlock(&mvdev->state_mutex);
 		break;
 	case MLX5_PF_NOTIFY_DISABLE_VF:
 		mlx5vf_cmd_close_migratable(mvdev);
 		mutex_lock(&mvdev->state_mutex);
 		mvdev->mdev_detach = true;
-		mlx5vf_state_mutex_unlock(mvdev);
+		mutex_unlock(&mvdev->state_mutex);
 		break;
 	default:
 		break;
@@ -203,7 +203,7 @@ void mlx5vf_cmd_close_migratable(struct mlx5vf_pci_core_device *mvdev)
 	mutex_lock(&mvdev->state_mutex);
 	mlx5vf_disable_fds(mvdev, NULL);
 	_mlx5vf_free_page_tracker_resources(mvdev);
-	mlx5vf_state_mutex_unlock(mvdev);
+	mutex_unlock(&mvdev->state_mutex);
 }
 
 void mlx5vf_cmd_remove_migratable(struct mlx5vf_pci_core_device *mvdev)
@@ -254,7 +254,6 @@ void mlx5vf_cmd_set_migratable(struct mlx5vf_pci_core_device *mvdev,
 		goto end;
 
 	mutex_init(&mvdev->state_mutex);
-	spin_lock_init(&mvdev->reset_lock);
 	mvdev->nb.notifier_call = mlx5fv_vf_event;
 	ret = mlx5_sriov_blocking_notifier_register(mvdev->mdev, mvdev->vf_id,
 						    &mvdev->nb);
@@ -1487,7 +1486,7 @@ int mlx5vf_stop_page_tracker(struct vfio_device *vdev)
 	_mlx5vf_free_page_tracker_resources(mvdev);
 	mvdev->log_active = false;
 end:
-	mlx5vf_state_mutex_unlock(mvdev);
+	mutex_unlock(&mvdev->state_mutex);
 	return 0;
 }
 
@@ -1589,7 +1588,7 @@ int mlx5vf_start_page_tracker(struct vfio_device *vdev,
 	mlx5_eq_notifier_register(mdev, &tracker->nb);
 	*page_size = host_qp->tracked_page_size;
 	mvdev->log_active = true;
-	mlx5vf_state_mutex_unlock(mvdev);
+	mutex_unlock(&mvdev->state_mutex);
 	return 0;
 
 err_activate:
@@ -1605,7 +1604,7 @@ err_dealloc_pd:
 err_uar:
 	mlx5_put_uars_page(mdev, tracker->uar);
 end:
-	mlx5vf_state_mutex_unlock(mvdev);
+	mutex_unlock(&mvdev->state_mutex);
 	return err;
 }
 
@@ -1787,6 +1786,6 @@ int mlx5vf_tracker_read_and_clear(struct vfio_device *vdev, unsigned long iova,
 	if (tracker->is_err)
 		err = -EIO;
 end:
-	mlx5vf_state_mutex_unlock(mvdev);
+	mutex_unlock(&mvdev->state_mutex);
 	return err;
 }

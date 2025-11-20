@@ -325,7 +325,7 @@ err_save:
 err:
 	mlx5vf_mark_err(migf);
 end:
-	mlx5vf_state_mutex_unlock(mvdev);
+	mutex_unlock(&mvdev->state_mutex);
 	fput(migf->filp);
 }
 
@@ -544,7 +544,7 @@ static long mlx5vf_precopy_ioctl(struct file *filp, unsigned int cmd,
 	}
 
 done:
-	mlx5vf_state_mutex_unlock(mvdev);
+	mutex_unlock(&mvdev->state_mutex);
 	if (copy_to_user((void __user *)arg, &info, minsz))
 		return -EFAULT;
 	return 0;
@@ -552,7 +552,7 @@ done:
 err_migf_unlock:
 	mutex_unlock(&migf->lock);
 err_state_unlock:
-	mlx5vf_state_mutex_unlock(mvdev);
+	mutex_unlock(&mvdev->state_mutex);
 	return ret;
 }
 
@@ -972,7 +972,7 @@ out_unlock:
 	if (ret)
 		migf->state = MLX5_MIGF_STATE_ERROR;
 	mutex_unlock(&migf->lock);
-	mlx5vf_state_mutex_unlock(migf->mvdev);
+	mutex_unlock(&migf->mvdev->state_mutex);
 	return ret ? ret : done;
 }
 
@@ -1191,25 +1191,6 @@ mlx5vf_pci_step_device_state_locked(struct mlx5vf_pci_core_device *mvdev,
 	return ERR_PTR(-EINVAL);
 }
 
-/*
- * This function is called in all state_mutex unlock cases to
- * handle a 'deferred_reset' if exists.
- */
-void mlx5vf_state_mutex_unlock(struct mlx5vf_pci_core_device *mvdev)
-{
-again:
-	spin_lock(&mvdev->reset_lock);
-	if (mvdev->deferred_reset) {
-		mvdev->deferred_reset = false;
-		spin_unlock(&mvdev->reset_lock);
-		mvdev->mig_state = VFIO_DEVICE_STATE_RUNNING;
-		mlx5vf_disable_fds(mvdev, NULL);
-		goto again;
-	}
-	mutex_unlock(&mvdev->state_mutex);
-	spin_unlock(&mvdev->reset_lock);
-}
-
 static struct file *
 mlx5vf_pci_set_device_state(struct vfio_device *vdev,
 			    enum vfio_device_mig_state new_state)
@@ -1238,7 +1219,7 @@ mlx5vf_pci_set_device_state(struct vfio_device *vdev,
 			break;
 		}
 	}
-	mlx5vf_state_mutex_unlock(mvdev);
+	mutex_unlock(&mvdev->state_mutex);
 	return res;
 }
 
@@ -1256,7 +1237,7 @@ static int mlx5vf_pci_get_data_size(struct vfio_device *vdev,
 						    &total_size, 0);
 	if (!ret)
 		*stop_copy_length = total_size;
-	mlx5vf_state_mutex_unlock(mvdev);
+	mutex_unlock(&mvdev->state_mutex);
 	return ret;
 }
 
@@ -1268,32 +1249,22 @@ static int mlx5vf_pci_get_device_state(struct vfio_device *vdev,
 
 	mutex_lock(&mvdev->state_mutex);
 	*curr_state = mvdev->mig_state;
-	mlx5vf_state_mutex_unlock(mvdev);
+	mutex_unlock(&mvdev->state_mutex);
 	return 0;
 }
 
-static void mlx5vf_pci_aer_reset_done(struct pci_dev *pdev)
+static void mlx5vf_pci_reset_device_state(struct vfio_device *vdev)
 {
-	struct mlx5vf_pci_core_device *mvdev = mlx5vf_drvdata(pdev);
+	struct mlx5vf_pci_core_device *mvdev = container_of(
+		vdev, struct mlx5vf_pci_core_device, core_device.vdev);
 
 	if (!mvdev->migrate_cap)
 		return;
 
-	/*
-	 * As the higher VFIO layers are holding locks across reset and using
-	 * those same locks with the mm_lock we need to prevent ABBA deadlock
-	 * with the state_mutex and mm_lock.
-	 * In case the state_mutex was taken already we defer the cleanup work
-	 * to the unlock flow of the other running context.
-	 */
-	spin_lock(&mvdev->reset_lock);
-	mvdev->deferred_reset = true;
-	if (!mutex_trylock(&mvdev->state_mutex)) {
-		spin_unlock(&mvdev->reset_lock);
-		return;
-	}
-	spin_unlock(&mvdev->reset_lock);
-	mlx5vf_state_mutex_unlock(mvdev);
+	mutex_lock(&mvdev->state_mutex);
+	mvdev->mig_state = VFIO_DEVICE_STATE_RUNNING;
+	mlx5vf_disable_fds(mvdev, NULL);
+	mutex_unlock(&mvdev->state_mutex);
 }
 
 static int mlx5vf_pci_open_device(struct vfio_device *core_vdev)
@@ -1325,6 +1296,7 @@ static void mlx5vf_pci_close_device(struct vfio_device *core_vdev)
 static const struct vfio_migration_ops mlx5vf_pci_mig_ops = {
 	.migration_set_state = mlx5vf_pci_set_device_state,
 	.migration_get_state = mlx5vf_pci_get_device_state,
+	.migration_reset_state = mlx5vf_pci_reset_device_state,
 	.migration_get_data_size = mlx5vf_pci_get_data_size,
 };
 
@@ -1417,7 +1389,6 @@ static const struct pci_device_id mlx5vf_pci_table[] = {
 MODULE_DEVICE_TABLE(pci, mlx5vf_pci_table);
 
 static const struct pci_error_handlers mlx5vf_err_handlers = {
-	.reset_done = mlx5vf_pci_aer_reset_done,
 	.error_detected = vfio_pci_core_aer_err_detected,
 };
 
