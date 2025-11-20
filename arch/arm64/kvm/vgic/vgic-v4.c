@@ -483,27 +483,15 @@ int kvm_vgic_v4_map_irq_to_host(struct kvm *kvm, int virq,
 	return 0;
 }
 
-int kvm_vgic_v4_set_forwarding(struct kvm *kvm, int virq,
-			       struct kvm_kernel_irq_routing_entry *irq_entry)
+int kvm_vgic_v4_set_forwarding_locked(struct kvm *kvm, int virq,
+			       struct kvm_kernel_irq_routing_entry *irq_entry, struct vgic_its *its)
 {
-	struct vgic_its *its;
 	struct vgic_irq *irq;
 	struct its_vlpi_map map;
 	unsigned long flags;
 	int ret = 0;
 
-	if (!vgic_supports_direct_msis(kvm))
-		return 0;
-
-	/*
-	 * Get the ITS, and escape early on error (not a valid
-	 * doorbell for any of our vITSs).
-	 */
-	its = vgic_get_its(kvm, irq_entry);
-	if (IS_ERR(its))
-		return 0;
-
-	guard(mutex)(&its->its_lock);
+	lockdep_assert_held(&its->its_lock);
 
 	/*
 	 * Perform the actual DevID/EventID -> LPI translation.
@@ -565,6 +553,26 @@ int kvm_vgic_v4_set_forwarding(struct kvm *kvm, int virq,
 out_unlock_irq:
 	raw_spin_unlock_irqrestore(&irq->irq_lock, flags);
 	return ret;
+}
+
+int kvm_vgic_v4_set_forwarding(struct kvm *kvm, int virq,
+			       struct kvm_kernel_irq_routing_entry *irq_entry)
+{
+	struct vgic_its *its;
+
+	if (!vgic_supports_direct_msis(kvm))
+		return 0;
+
+	/*
+	 * Get the ITS, and escape early on error (not a valid
+	 * doorbell for any of our vITSs).
+	 */
+	its = vgic_get_its(kvm, irq_entry);
+	if (IS_ERR(its))
+		return 0;
+
+	guard(mutex)(&its->its_lock);
+	return kvm_vgic_v4_set_forwarding_locked(kvm, virq, irq_entry, its);
 }
 
 static struct vgic_irq *__vgic_host_irq_get_vlpi(struct kvm *kvm, int host_irq)

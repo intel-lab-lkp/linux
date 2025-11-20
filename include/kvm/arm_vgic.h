@@ -454,6 +454,9 @@ int kvm_vgic_v4_map_irq_to_host(struct kvm *kvm, int virq,
 					struct kvm_kernel_irq_routing_entry *irq_entry);
 int kvm_vgic_v4_set_forwarding(struct kvm *kvm, int irq,
 			       struct kvm_kernel_irq_routing_entry *irq_entry);
+int kvm_vgic_v4_set_forwarding_locked(struct kvm *kvm, int virq,
+					struct kvm_kernel_irq_routing_entry *irq_entry,
+					struct vgic_its *its);
 
 void kvm_vgic_v4_unset_forwarding(struct kvm *kvm, int host_irq);
 
