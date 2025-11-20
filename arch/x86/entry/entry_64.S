@@ -1527,8 +1527,8 @@ SYM_CODE_END(rewind_stack_and_make_dead)
  * Note, callers should use a speculation barrier like LFENCE immediately after
  * a call to this function to ensure BHB is cleared before indirect branches.
  */
-.macro	CLEAR_BHB_LOOP_SEQ
-	movl	$5, %ecx
+.macro	CLEAR_BHB_LOOP_SEQ outer_loop_count:req, inner_loop_count:req
+	movl	$\outer_loop_count, %ecx
 	ANNOTATE_INTRA_FUNCTION_CALL
 	call	1f
 	jmp	5f
@@ -1550,7 +1550,7 @@ SYM_CODE_END(rewind_stack_and_make_dead)
 	 * but some Clang versions (e.g. 18) don't like this.
 	 */
 	.skip 32 - 18, 0xcc
-2:	movl	$5, %eax
+2:	movl	$\inner_loop_count, %eax
 3:	jmp	4f
 	nop
 4:	sub	$1, %eax
@@ -1573,7 +1573,7 @@ SYM_FUNC_START(clear_bhb_loop)
 	push	%rbp
 	mov	%rsp, %rbp
 
-	CLEAR_BHB_LOOP_SEQ
+	CLEAR_BHB_LOOP_SEQ 5, 5
 
 	pop	%rbp
 	RET
