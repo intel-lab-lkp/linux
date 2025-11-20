@@ -230,7 +230,7 @@ static int add_dts_thermal_zone(int id, struct intel_soc_dts_sensor_entry *dts,
 		}
 	}
 	snprintf(name, sizeof(name), "soc_dts%d", id);
-	dts->tzone = thermal_zone_device_register_with_trips(name, trips,
+	dts->tzone = thermal_zone_device_register_with_trips(NULL, name, trips,
 							     SOC_MAX_DTS_TRIPS,
 							     dts, &tzone_ops,
 							     NULL, 0, 0);

@@ -226,6 +226,7 @@ int thermal_zone_get_crit_temp(struct thermal_zone_device *tz, int *temp);
 
 #ifdef CONFIG_THERMAL
 struct thermal_zone_device *thermal_zone_device_register_with_trips(
+					struct device *parent,
 					const char *type,
 					const struct thermal_trip *trips,
 					int num_trips, void *devdata,
@@ -235,6 +236,7 @@ struct thermal_zone_device *thermal_zone_device_register_with_trips(
 					unsigned int polling_delay);
 
 struct thermal_zone_device *thermal_tripless_zone_device_register(
+					struct device *parent,
 					const char *type,
 					void *devdata,
 					const struct thermal_zone_device_ops *ops,
@@ -276,6 +278,7 @@ int thermal_zone_device_disable(struct thermal_zone_device *tz);
 void thermal_zone_device_critical(struct thermal_zone_device *tz);
 #else
 static inline struct thermal_zone_device *thermal_zone_device_register_with_trips(
+					struct device *parent,
 					const char *type,
 					const struct thermal_trip *trips,
 					int num_trips, void *devdata,
@@ -285,6 +288,7 @@ static inline struct thermal_zone_device *thermal_zone_device_register_with_trip
 { return ERR_PTR(-ENODEV); }
 
 static inline struct thermal_zone_device *thermal_tripless_zone_device_register(
+					struct device *parent,
 					const char *type,
 					void *devdata,
 					struct thermal_zone_device_ops *ops,

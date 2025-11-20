@@ -594,7 +594,7 @@ static int int3400_thermal_probe(struct platform_device *pdev)
 
 	evaluate_odvp(priv);
 
-	priv->thermal = thermal_tripless_zone_device_register("INT3400 Thermal", priv,
+	priv->thermal = thermal_tripless_zone_device_register(&pdev->dev, "INT3400 Thermal", priv,
 							      &int3400_thermal_ops,
 							      &int3400_thermal_params);
 	if (IS_ERR(priv->thermal)) {

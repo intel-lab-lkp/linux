@@ -196,7 +196,7 @@ static int da9062_thermal_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&thermal->work, da9062_thermal_poll_on);
 	mutex_init(&thermal->lock);
 
-	thermal->zone = thermal_zone_device_register_with_trips(thermal->config->name,
+	thermal->zone = thermal_zone_device_register_with_trips(&pdev->dev, thermal->config->name,
 								trips, ARRAY_SIZE(trips), thermal,
 								&da9062_thermal_ops, NULL, pp_tmp,
 								0);

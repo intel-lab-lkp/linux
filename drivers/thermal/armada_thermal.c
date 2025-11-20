@@ -871,7 +871,7 @@ static int armada_thermal_probe(struct platform_device *pdev)
 		/* Wait the sensors to be valid */
 		armada_wait_sensor_validity(priv);
 
-		tz = thermal_tripless_zone_device_register(priv->zone_name,
+		tz = thermal_tripless_zone_device_register(&pdev->dev, priv->zone_name,
 							   priv, &legacy_ops,
 							   NULL);
 		if (IS_ERR(tz)) {

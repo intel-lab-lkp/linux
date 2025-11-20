@@ -1475,6 +1475,7 @@ static void thermal_zone_init_complete(struct thermal_zone_device *tz)
 
 /**
  * thermal_zone_device_register_with_trips() - register a new thermal zone device
+ * @parent:	parent device pointer
  * @type:	the thermal zone device type
  * @trips:	a pointer to an array of thermal trips
  * @num_trips:	the number of trip points the thermal zone support
@@ -1498,7 +1499,7 @@ static void thermal_zone_init_complete(struct thermal_zone_device *tz)
  * IS_ERR*() helpers.
  */
 struct thermal_zone_device *
-thermal_zone_device_register_with_trips(const char *type,
+thermal_zone_device_register_with_trips(struct device *parent, const char *type,
 					const struct thermal_trip *trips,
 					int num_trips, void *devdata,
 					const struct thermal_zone_device_ops *ops,
@@ -1576,6 +1577,7 @@ thermal_zone_device_register_with_trips(const char *type,
 		tz->ops.critical = thermal_zone_device_critical;
 
 	tz->device.class = thermal_class;
+	tz->device.parent = parent;
 	tz->devdata = devdata;
 	tz->num_trips = num_trips;
 	for_each_trip_desc(tz, td) {
@@ -1651,12 +1653,13 @@ free_tz:
 EXPORT_SYMBOL_GPL(thermal_zone_device_register_with_trips);
 
 struct thermal_zone_device *thermal_tripless_zone_device_register(
+					struct device *parent,
 					const char *type,
 					void *devdata,
 					const struct thermal_zone_device_ops *ops,
 					const struct thermal_zone_params *tzp)
 {
-	return thermal_zone_device_register_with_trips(type, NULL, 0, devdata,
+	return thermal_zone_device_register_with_trips(parent, type, NULL, 0, devdata,
 						       ops, tzp, 0, 0);
 }
 EXPORT_SYMBOL_GPL(thermal_tripless_zone_device_register);

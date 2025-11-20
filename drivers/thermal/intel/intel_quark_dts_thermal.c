@@ -376,7 +376,7 @@ static struct soc_sensor_entry *alloc_soc_dts(void)
 	trips[QRK_DTS_ID_TP_HOT].temperature = get_trip_temp(QRK_DTS_ID_TP_HOT);
 	trips[QRK_DTS_ID_TP_HOT].type = THERMAL_TRIP_HOT;
 
-	aux_entry->tzone = thermal_zone_device_register_with_trips("quark_dts",
+	aux_entry->tzone = thermal_zone_device_register_with_trips(NULL, "quark_dts",
 								   trips,
 								   QRK_MAX_DTS_TRIPS,
 								   aux_entry,

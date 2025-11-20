@@ -160,13 +160,12 @@ struct int34x_thermal_zone *int340x_thermal_zone_add(struct acpi_device *adev,
 
 	int34x_zone->lpat_table = acpi_lpat_get_conversion_table(adev->handle);
 
-	int34x_zone->zone = thermal_zone_device_register_with_trips(
-							acpi_device_bid(adev),
-							zone_trips, trip_cnt,
-							int34x_zone,
-							&zone_ops,
-							&int340x_thermal_params,
-							0, 0);
+	int34x_zone->zone = thermal_zone_device_register_with_trips(&adev->dev,
+								    acpi_device_bid(adev),
+								    zone_trips, trip_cnt,
+								    int34x_zone, &zone_ops,
+								    &int340x_thermal_params,
+								    0, 0);
 	kfree(zone_trips);
 
 	if (IS_ERR(int34x_zone->zone)) {

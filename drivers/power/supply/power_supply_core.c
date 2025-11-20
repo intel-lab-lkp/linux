@@ -1531,8 +1531,8 @@ static int psy_register_thermal(struct power_supply *psy)
 		struct thermal_zone_params tzp = {
 			.no_hwmon = IS_ENABLED(CONFIG_POWER_SUPPLY_HWMON)
 		};
-		psy->tzd = thermal_tripless_zone_device_register(psy->desc->name,
-				psy, &psy_tzd_ops, &tzp);
+		psy->tzd = thermal_tripless_zone_device_register(&psy->dev, psy->desc->name, psy,
+								 &psy_tzd_ops, &tzp);
 		if (IS_ERR(psy->tzd))
 			return PTR_ERR(psy->tzd);
 		ret = thermal_zone_device_enable(psy->tzd);

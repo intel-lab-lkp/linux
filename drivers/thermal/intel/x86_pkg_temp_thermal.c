@@ -342,9 +342,9 @@ static int pkg_temp_thermal_device_add(unsigned int cpu)
 
 	INIT_DELAYED_WORK(&zonedev->work, pkg_temp_thermal_threshold_work_fn);
 	zonedev->cpu = cpu;
-	zonedev->tzone = thermal_zone_device_register_with_trips("x86_pkg_temp",
-			trips, thres_count,
-			zonedev, &tzone_ops, &pkg_temp_tz_params, 0, 0);
+	zonedev->tzone = thermal_zone_device_register_with_trips(NULL, "x86_pkg_temp", trips,
+								 thres_count, zonedev, &tzone_ops,
+								 &pkg_temp_tz_params, 0, 0);
 	if (IS_ERR(zonedev->tzone)) {
 		err = PTR_ERR(zonedev->tzone);
 		goto out_kfree_zonedev;

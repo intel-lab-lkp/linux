@@ -402,7 +402,7 @@ static int tt_zone_register_tz(struct tt_thermal_zone *tt_zone)
 
 	tt_zone->tz_temp = tt_zone->temp;
 
-	tz = thermal_zone_device_register_with_trips("test_tz", trips, i, tt_zone,
+	tz = thermal_zone_device_register_with_trips(NULL, "test_tz", trips, i, tt_zone,
 						     &tt_zone_ops, NULL, 0, 0);
 	if (IS_ERR(tz))
 		return PTR_ERR(tz);

@@ -256,7 +256,7 @@ static void iwl_mld_thermal_zone_register(struct iwl_mld *mld)
 
 	sprintf(name, "iwlwifi_%u", atomic_inc_return(&counter) & 0xFF);
 	mld->tzone =
-		thermal_zone_device_register_with_trips(name, trips,
+		thermal_zone_device_register_with_trips(mld->dev, name, trips,
 							IWL_MAX_DTS_TRIPS,
 							mld, &tzone_ops,
 							NULL, 0, 0);

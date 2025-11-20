@@ -656,7 +656,7 @@ static int __init acerhdf_register_thermal(void)
 	if (IS_ERR(cl_dev))
 		return -EINVAL;
 
-	thz_dev = thermal_zone_device_register_with_trips("acerhdf", trips, ARRAY_SIZE(trips),
+	thz_dev = thermal_zone_device_register_with_trips(NULL, "acerhdf", trips, ARRAY_SIZE(trips),
 							  NULL, &acerhdf_dev_ops,
 							  &acerhdf_zone_params, 0,
 							  (kernelmode) ? interval*1000 : 0);

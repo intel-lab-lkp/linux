@@ -672,11 +672,11 @@ static void iwl_mvm_thermal_zone_register(struct iwl_mvm *mvm)
 		mvm->tz_device.trips[i].type = THERMAL_TRIP_PASSIVE;
 		mvm->tz_device.trips[i].flags = THERMAL_TRIP_FLAG_RW_TEMP;
 	}
-	mvm->tz_device.tzone = thermal_zone_device_register_with_trips(name,
-							mvm->tz_device.trips,
-							IWL_MAX_DTS_TRIPS,
-							mvm, &tzone_ops,
-							NULL, 0, 0);
+	mvm->tz_device.tzone = thermal_zone_device_register_with_trips(mvm->dev, name,
+								       mvm->tz_device.trips,
+								       IWL_MAX_DTS_TRIPS,
+								       mvm, &tzone_ops,
+								       NULL, 0, 0);
 	if (IS_ERR(mvm->tz_device.tzone)) {
 		IWL_DEBUG_TEMP(mvm,
 			       "Failed to register to thermal zone (err = %ld)\n",

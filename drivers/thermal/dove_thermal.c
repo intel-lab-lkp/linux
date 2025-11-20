@@ -139,7 +139,7 @@ static int dove_thermal_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	thermal = thermal_tripless_zone_device_register("dove_thermal", priv,
+	thermal = thermal_tripless_zone_device_register(&pdev->dev, "dove_thermal", priv,
 							&ops, NULL);
 	if (IS_ERR(thermal)) {
 		dev_err(&pdev->dev,

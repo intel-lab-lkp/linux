@@ -679,7 +679,7 @@ static int imx_thermal_probe(struct platform_device *pdev)
 		goto legacy_cleanup;
 	}
 
-	data->tz = thermal_zone_device_register_with_trips("imx_thermal_zone",
+	data->tz = thermal_zone_device_register_with_trips(dev, "imx_thermal_zone",
 							   trips,
 							   ARRAY_SIZE(trips),
 							   data,

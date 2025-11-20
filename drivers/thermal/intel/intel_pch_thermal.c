@@ -235,7 +235,7 @@ read_trips:
 
 	nr_trips += pch_wpt_add_acpi_psv_trip(ptd, &ptd_trips[nr_trips]);
 
-	ptd->tzd = thermal_zone_device_register_with_trips(board_names[board_id],
+	ptd->tzd = thermal_zone_device_register_with_trips(&pdev->dev, board_names[board_id],
 							   ptd_trips, nr_trips,
 							   ptd, &tzd_ops,
 							   NULL, 0, 0);

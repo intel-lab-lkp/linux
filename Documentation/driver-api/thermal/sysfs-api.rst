@@ -37,7 +37,8 @@ temperature) and throttle appropriate devices.
     ::
 
 	struct thermal_zone_device *
-	thermal_zone_device_register_with_trips(const char *type,
+	thermal_zone_device_register_with_trips(struct device *parent,
+                                        const char *type,
 					const struct thermal_trip *trips,
 					int num_trips, void *devdata,
 					const struct thermal_zone_device_ops *ops,
@@ -49,6 +50,8 @@ temperature) and throttle appropriate devices.
     /sys/class/thermal folder as `thermal_zone[0-*]`. It tries to bind all the
     thermal cooling devices registered to it at the same time.
 
+    parent:
+        parent device pointer.
     type:
 	the thermal zone type.
     trips:

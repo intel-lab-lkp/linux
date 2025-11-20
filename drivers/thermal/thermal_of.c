@@ -354,6 +354,7 @@ static void thermal_of_zone_unregister(struct thermal_zone_device *tz)
  * zone properties and registers new thermal zone with those
  * properties.
  *
+ * @parent: parent device pointer
  * @sensor: A device node pointer corresponding to the sensor in the device tree
  * @id: An integer as sensor identifier
  * @data: A private data to be stored in the thermal zone dedicated private area
@@ -364,7 +365,9 @@ static void thermal_of_zone_unregister(struct thermal_zone_device *tz)
  *	- ENOMEM: if one structure can not be allocated
  *	- Other negative errors are returned by the underlying called functions
  */
-static struct thermal_zone_device *thermal_of_zone_register(struct device_node *sensor, int id, void *data,
+static struct thermal_zone_device *thermal_of_zone_register(struct device *parent,
+							    struct device_node *sensor,
+							    int id, void *data,
 							    const struct thermal_zone_device_ops *ops)
 {
 	struct thermal_zone_device_ops of_ops = *ops;
@@ -412,7 +415,7 @@ static struct thermal_zone_device *thermal_of_zone_register(struct device_node *
 			of_ops.critical = thermal_zone_device_critical_shutdown;
 	}
 
-	tz = thermal_zone_device_register_with_trips(np->name, trips, ntrips,
+	tz = thermal_zone_device_register_with_trips(parent, np->name, trips, ntrips,
 						     data, &of_ops, &tzp,
 						     pdelay, delay);
 	if (IS_ERR(tz)) {
@@ -478,7 +481,7 @@ struct thermal_zone_device *devm_thermal_of_zone_register(struct device *dev, in
 	if (!ptr)
 		return ERR_PTR(-ENOMEM);
 
-	tzd = thermal_of_zone_register(dev->of_node, sensor_id, data, ops);
+	tzd = thermal_of_zone_register(dev, dev->of_node, sensor_id, data, ops);
 	if (IS_ERR(tzd)) {
 		devres_free(ptr);
 		return tzd;
