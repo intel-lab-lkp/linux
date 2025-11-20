@@ -5028,40 +5028,34 @@ SYSCALL_DEFINE5(open_tree_attr, int, dfd, const char __user *, filename,
 		unsigned, flags, struct mount_attr __user *, uattr,
 		size_t, usize)
 {
-	struct file __free(fput) *file = NULL;
-	int fd;
-
 	if (!uattr && usize)
 		return -EINVAL;
 
-	file = vfs_open_tree(dfd, filename, flags);
-	if (IS_ERR(file))
-		return PTR_ERR(file);
+	FD_PREPARE(fdf, flags, vfs_open_tree(dfd, filename, flags)) {
+		if (fd_prepare_failed(fdf))
+			return fd_prepare_error(fdf);
 
-	if (uattr) {
-		int ret;
-		struct mount_kattr kattr = {};
+		if (uattr) {
+			int ret;
+			struct mount_kattr kattr = {};
+			struct file *file = fd_prepare_file(fdf);
 
-		if (flags & OPEN_TREE_CLONE)
-			kattr.kflags = MOUNT_KATTR_IDMAP_REPLACE;
-		if (flags & AT_RECURSIVE)
-			kattr.kflags |= MOUNT_KATTR_RECURSE;
+			if (flags & OPEN_TREE_CLONE)
+				kattr.kflags = MOUNT_KATTR_IDMAP_REPLACE;
+			if (flags & AT_RECURSIVE)
+				kattr.kflags |= MOUNT_KATTR_RECURSE;
 
-		ret = wants_mount_setattr(uattr, usize, &kattr);
-		if (ret > 0) {
-			ret = do_mount_setattr(&file->f_path, &kattr);
-			finish_mount_kattr(&kattr);
+			ret = wants_mount_setattr(uattr, usize, &kattr);
+			if (ret > 0) {
+				ret = do_mount_setattr(&file->f_path, &kattr);
+				finish_mount_kattr(&kattr);
+			}
+			if (ret)
+				return ret;
 		}
-		if (ret)
-			return ret;
+
+		return fd_publish(fdf);
 	}
-
-	fd = get_unused_fd_flags(flags & O_CLOEXEC);
-	if (fd < 0)
-		return fd;
-
-	fd_install(fd, no_free_ptr(file));
-	return fd;
 }
 
 int show_path(struct seq_file *m, struct dentry *root)
