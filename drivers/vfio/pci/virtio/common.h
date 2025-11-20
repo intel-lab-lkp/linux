@@ -92,12 +92,9 @@ struct virtiovf_pci_core_device {
 
 	/* LM related */
 	u8 migrate_cap:1;
-	u8 deferred_reset:1;
 	/* protect migration state */
 	struct mutex state_mutex;
 	enum vfio_device_mig_state mig_state;
-	/* protect the reset_done flow */
-	spinlock_t reset_lock;
 	struct virtiovf_migration_file *resuming_migf;
 	struct virtiovf_migration_file *saving_migf;
 };

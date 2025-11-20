@@ -247,49 +247,6 @@ static void virtiovf_disable_fds(struct virtiovf_pci_core_device *virtvdev)
 	}
 }
 
-/*
- * This function is called in all state_mutex unlock cases to
- * handle a 'deferred_reset' if exists.
- */
-static void virtiovf_state_mutex_unlock(struct virtiovf_pci_core_device *virtvdev)
-{
-again:
-	spin_lock(&virtvdev->reset_lock);
-	if (virtvdev->deferred_reset) {
-		virtvdev->deferred_reset = false;
-		spin_unlock(&virtvdev->reset_lock);
-		virtvdev->mig_state = VFIO_DEVICE_STATE_RUNNING;
-		virtiovf_disable_fds(virtvdev);
-		goto again;
-	}
-	mutex_unlock(&virtvdev->state_mutex);
-	spin_unlock(&virtvdev->reset_lock);
-}
-
-void virtiovf_migration_reset_done(struct pci_dev *pdev)
-{
-	struct virtiovf_pci_core_device *virtvdev = dev_get_drvdata(&pdev->dev);
-
-	if (!virtvdev->migrate_cap)
-		return;
-
-	/*
-	 * As the higher VFIO layers are holding locks across reset and using
-	 * those same locks with the mm_lock we need to prevent ABBA deadlock
-	 * with the state_mutex and mm_lock.
-	 * In case the state_mutex was taken already we defer the cleanup work
-	 * to the unlock flow of the other running context.
-	 */
-	spin_lock(&virtvdev->reset_lock);
-	virtvdev->deferred_reset = true;
-	if (!mutex_trylock(&virtvdev->state_mutex)) {
-		spin_unlock(&virtvdev->reset_lock);
-		return;
-	}
-	spin_unlock(&virtvdev->reset_lock);
-	virtiovf_state_mutex_unlock(virtvdev);
-}
-
 static int virtiovf_release_file(struct inode *inode, struct file *filp)
 {
 	struct virtiovf_migration_file *migf = filp->private_data;
@@ -513,7 +470,7 @@ static long virtiovf_precopy_ioctl(struct file *filp, unsigned int cmd,
 		goto err_state_unlock;
 
 done:
-	virtiovf_state_mutex_unlock(virtvdev);
+	mutex_unlock(&virtvdev->state_mutex);
 	if (copy_to_user((void __user *)arg, &info, minsz))
 		return -EFAULT;
 	return 0;
@@ -521,7 +478,7 @@ done:
 err_migf_unlock:
 	mutex_unlock(&migf->lock);
 err_state_unlock:
-	virtiovf_state_mutex_unlock(virtvdev);
+	mutex_unlock(&virtvdev->state_mutex);
 	return ret;
 }
 
@@ -1048,7 +1005,7 @@ out_unlock:
 	if (ret)
 		migf->state = VIRTIOVF_MIGF_STATE_ERROR;
 	mutex_unlock(&migf->lock);
-	virtiovf_state_mutex_unlock(migf->virtvdev);
+	mutex_unlock(&migf->virtvdev->state_mutex);
 	return ret ? ret : done;
 }
 
@@ -1245,7 +1202,7 @@ virtiovf_pci_set_device_state(struct vfio_device *vdev,
 			break;
 		}
 	}
-	virtiovf_state_mutex_unlock(virtvdev);
+	mutex_unlock(&virtvdev->state_mutex);
 	return res;
 }
 
@@ -1257,8 +1214,22 @@ static int virtiovf_pci_get_device_state(struct vfio_device *vdev,
 
 	mutex_lock(&virtvdev->state_mutex);
 	*curr_state = virtvdev->mig_state;
-	virtiovf_state_mutex_unlock(virtvdev);
+	mutex_unlock(&virtvdev->state_mutex);
 	return 0;
+}
+
+static void virtiovf_pci_reset_device_state(struct vfio_device *vdev)
+{
+	struct virtiovf_pci_core_device *virtvdev = container_of(
+		vdev, struct virtiovf_pci_core_device, core_device.vdev);
+
+	if (!virtvdev->migrate_cap)
+		return;
+
+	mutex_lock(&virtvdev->state_mutex);
+	virtvdev->mig_state = VFIO_DEVICE_STATE_RUNNING;
+	virtiovf_disable_fds(virtvdev);
+	mutex_unlock(&virtvdev->state_mutex);
 }
 
 static int virtiovf_pci_get_data_size(struct vfio_device *vdev,
@@ -1297,13 +1268,14 @@ static int virtiovf_pci_get_data_size(struct vfio_device *vdev,
 	if (!obj_id_exists)
 		virtiovf_pci_free_obj_id(virtvdev, obj_id);
 end:
-	virtiovf_state_mutex_unlock(virtvdev);
+	mutex_unlock(&virtvdev->state_mutex);
 	return ret;
 }
 
 static const struct vfio_migration_ops virtvdev_pci_mig_ops = {
 	.migration_set_state = virtiovf_pci_set_device_state,
 	.migration_get_state = virtiovf_pci_get_device_state,
+	.migration_reset_state = virtiovf_pci_reset_device_state,
 	.migration_get_data_size = virtiovf_pci_get_data_size,
 };
 
@@ -1311,7 +1283,6 @@ void virtiovf_set_migratable(struct virtiovf_pci_core_device *virtvdev)
 {
 	virtvdev->migrate_cap = 1;
 	mutex_init(&virtvdev->state_mutex);
-	spin_lock_init(&virtvdev->reset_lock);
 	virtvdev->core_device.vdev.migration_flags =
 		VFIO_MIGRATION_STOP_COPY |
 		VFIO_MIGRATION_P2P |

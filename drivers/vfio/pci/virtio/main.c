@@ -203,7 +203,6 @@ static void virtiovf_pci_aer_reset_done(struct pci_dev *pdev)
 #ifdef CONFIG_VIRTIO_VFIO_PCI_ADMIN_LEGACY
 	virtiovf_legacy_io_reset_done(pdev);
 #endif
-	virtiovf_migration_reset_done(pdev);
 }
 
 static const struct pci_error_handlers virtiovf_err_handlers = {
