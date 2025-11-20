@@ -372,6 +372,9 @@ struct vgic_cpu {
 	u32 rdreg_index;
 	atomic_t syncr_busy;
 
+	/* Ensure atomicity of per-vCPU vLPI enable/disable/query operations */
+	struct mutex vlpi_toggle_mutex;
+
 	/* Contains the attributes and gpa of the LPI pending tables. */
 	u64 pendbaser;
 	/* GICR_CTLR.{ENABLE_LPIS,RWP} */

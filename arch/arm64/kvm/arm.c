@@ -1961,6 +1961,7 @@ int kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 		if (!vcpu)
 			return -EINVAL;
 
+		guard(mutex)(&vcpu->arch.vgic_cpu.vlpi_toggle_mutex);
 		return kvm_vgic_enable_vcpu_vlpi(vcpu);
 	}
 	case KVM_DISABLE_VCPU_VLPI: {
@@ -1974,6 +1975,7 @@ int kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 		if (!vcpu)
 			return -EINVAL;
 
+		guard(mutex)(&vcpu->arch.vgic_cpu.vlpi_toggle_mutex);
 		return kvm_vgic_disable_vcpu_vlpi(vcpu);
 	}
 	case KVM_QUERY_VCPU_VLPI: {
@@ -1987,6 +1989,7 @@ int kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 		if (!vcpu)
 			return -EINVAL;
 
+		guard(mutex)(&vcpu->arch.vgic_cpu.vlpi_toggle_mutex);
 		return kvm_vgic_query_vcpu_vlpi(vcpu);
 	}
 	default:

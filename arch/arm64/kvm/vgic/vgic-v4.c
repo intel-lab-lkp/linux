@@ -325,6 +325,11 @@ int vgic_v4_init(struct kvm *kvm)
 		if (!dist->its_vm.vprop_page)
 			ret = -ENOMEM;
 	}
+
+	/* vLPI toggle mutex */
+	kvm_for_each_vcpu(i, vcpu, kvm)
+		mutex_init(&vcpu->arch.vgic_cpu.vlpi_toggle_mutex);
+
 #endif
 	if (ret)
 		vgic_v4_teardown(kvm);
