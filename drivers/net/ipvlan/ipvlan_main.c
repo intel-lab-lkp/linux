@@ -262,20 +262,20 @@ static void ipvlan_uninit(struct net_device *dev)
 static int ipvlan_open(struct net_device *dev)
 {
 	struct ipvl_dev *ipvlan = netdev_priv(dev);
+	struct ipvl_port *port = ipvlan->port;
 	struct ipvl_addr *addr;
 
-	if (ipvlan->port->mode == IPVLAN_MODE_L3 ||
-	    ipvlan->port->mode == IPVLAN_MODE_L3S)
+	if (port->mode == IPVLAN_MODE_L3 || port->mode == IPVLAN_MODE_L3S)
 		dev->flags |= IFF_NOARP;
 	else
 		dev->flags &= ~IFF_NOARP;
 
 	/* for learnable, addresses will be obtained from tx-packets. */
-	if (!ipvlan_is_macnat(ipvlan->port)) {
-		rcu_read_lock();
+	if (!ipvlan_is_macnat(port)) {
+		spin_lock_bh(&port->addrs_lock);
 		list_for_each_entry_rcu(addr, &ipvlan->addrs, anode)
 			ipvlan_ht_addr_add(ipvlan, addr);
-		rcu_read_unlock();
+		spin_unlock_bh(&port->addrs_lock);
 	}
 
 	return 0;
