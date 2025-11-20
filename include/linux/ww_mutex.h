@@ -380,4 +380,22 @@ static inline bool ww_mutex_is_locked(struct ww_mutex *lock)
 	return ww_mutex_base_is_locked(&lock->base);
 }
 
+#ifdef CONFIG_PROVE_LOCKING
+
+bool ww_mutex_held(struct ww_mutex *lock);
+
+#else /* CONFIG_PROVE_LOCKING */
+
+static inline bool ww_mutex_held(struct ww_mutex *lock)
+{
+	return true;
+}
+
+#endif /* CONFIG_PROVE_LOCKING */
+
+static inline void ww_mutex_assert_held(struct ww_mutex *lock)
+{
+	lockdep_assert(ww_mutex_held(lock));
+}
+
 #endif

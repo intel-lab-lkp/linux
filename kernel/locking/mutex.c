@@ -1184,3 +1184,13 @@ int atomic_dec_and_mutex_lock(atomic_t *cnt, struct mutex *lock)
 	return 1;
 }
 EXPORT_SYMBOL(atomic_dec_and_mutex_lock);
+
+#ifdef CONFIG_PROVE_LOCKING
+
+bool ww_mutex_held(struct ww_mutex *lock)
+{
+	return __ww_mutex_owner(&lock->base) == current;
+}
+EXPORT_SYMBOL(ww_mutex_held);
+
+#endif /* CONFIG_PROVE_LOCKING */
