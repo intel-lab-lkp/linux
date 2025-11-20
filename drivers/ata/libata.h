@@ -12,6 +12,8 @@
 #ifndef __LIBATA_H__
 #define __LIBATA_H__
 
+#include <linux/pci.h>
+
 #define DRV_NAME	"libata"
 #define DRV_VERSION	"3.00"	/* must be exactly four chars */
 
@@ -54,6 +56,20 @@ static inline bool ata_dev_is_zac(struct ata_device *dev)
 static inline bool ata_port_eh_scheduled(struct ata_port *ap)
 {
 	return ap->pflags & (ATA_PFLAG_EH_PENDING | ATA_PFLAG_EH_IN_PROGRESS);
+}
+
+static inline bool ata_port_pci_channel_offline(struct ata_port *ap)
+{
+	struct device *dev;
+
+	if (!ap || !ap->host)
+		return false;
+
+	dev = ap->host->dev;
+	if (!dev || !dev_is_pci(dev))
+		return false;
+
+	return pci_channel_offline(to_pci_dev(dev));
 }
 
 #ifdef CONFIG_ATA_FORCE

@@ -4388,7 +4388,8 @@ int ata_scsi_queuecmd(struct Scsi_Host *shost, struct scsi_cmnd *cmd)
 	spin_lock_irqsave(ap->lock, irq_flags);
 
 	dev = ata_scsi_find_dev(ap, scsidev);
-	if (likely(dev))
+
+	if (likely(dev) && !ata_port_pci_channel_offline(ap))
 		rc = __ata_scsi_queuecmd(cmd, dev);
 	else {
 		cmd->result = (DID_BAD_TARGET << 16);
