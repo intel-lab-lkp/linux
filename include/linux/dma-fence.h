@@ -29,6 +29,20 @@ struct dma_fence_cb;
 struct seq_file;
 
 /**
+ * define DMA_FENCE_MAX_REASONABLE_TIMEOUT - max reasonable signaling timeout
+ *
+ * The dma_fence object has a deep inter dependency with core memory
+ * management, for a detailed explanation see section DMA Fences under
+ * Documentation/driver-api/dma-buf.rst.
+ *
+ * Because of this all dma_fence implementations must guarantee that each fence
+ * completes in a finite time. This define here now gives a reasonable value for
+ * the timeout to use. It is possible to use a longer timeout in an
+ * implementation but that should taint the kernel.
+ */
+#define DMA_FENCE_MAX_REASONABLE_TIMEOUT (2*HZ)
+
+/**
  * struct dma_fence - software synchronization primitive
  * @refcount: refcount for this fence
  * @ops: dma_fence_ops associated with this fence
