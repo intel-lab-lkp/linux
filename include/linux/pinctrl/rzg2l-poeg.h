@@ -9,6 +9,7 @@
 #define RZG2L_POEG_GPT_CFG_IRQ_CMD			2
 #define RZG2L_POEG_GPT_FAULT_CLR_CMD			3
 
+#define RZG2L_GPT_DTEF	0
 #define RZG2L_GPT_OABHF	1
 #define RZG2L_GPT_OABLF	2
 
