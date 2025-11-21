@@ -724,8 +724,12 @@ void wbt_enable_default(struct gendisk *disk)
 	if (!blk_queue_registered(q))
 		return;
 
-	if (queue_is_mq(q) && enable)
+	if (queue_is_mq(q) && enable) {
 		wbt_init(disk);
+		mutex_lock(&q->debugfs_mutex);
+		blk_mq_debugfs_register_rq_qos(q);
+		mutex_unlock(&q->debugfs_mutex);
+	}
 }
 EXPORT_SYMBOL_GPL(wbt_enable_default);
 

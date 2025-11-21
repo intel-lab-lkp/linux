@@ -681,6 +681,10 @@ static ssize_t queue_wb_lat_store(struct gendisk *disk, const char *page,
 out:
 	blk_mq_unfreeze_queue(q, memflags);
 
+	mutex_lock(&q->debugfs_mutex);
+	blk_mq_debugfs_register_rq_qos(q);
+	mutex_unlock(&q->debugfs_mutex);
+
 	return ret;
 }
 

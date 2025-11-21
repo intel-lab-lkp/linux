@@ -33,6 +33,7 @@
 #include "blk-cgroup.h"
 #include "blk-ioprio.h"
 #include "blk-throttle.h"
+#include "blk-mq-debugfs.h"
 
 static void __blkcg_rstat_flush(struct blkcg *blkcg, int cpu);
 
@@ -966,14 +967,7 @@ fail_exit:
 }
 EXPORT_SYMBOL_GPL(blkg_conf_prep);
 
-/**
- * blkg_conf_exit - clean up per-blkg config update
- * @ctx: blkg_conf_ctx initialized with blkg_conf_init()
- *
- * Clean up after per-blkg config update. This function must be called on all
- * blkg_conf_ctx's initialized with blkg_conf_init().
- */
-void blkg_conf_exit(struct blkg_conf_ctx *ctx)
+static void __blkg_conf_exit(struct blkg_conf_ctx *ctx)
 	__releases(&ctx->bdev->bd_queue->queue_lock)
 	__releases(&ctx->bdev->bd_queue->rq_qos_mutex)
 {
@@ -986,6 +980,26 @@ void blkg_conf_exit(struct blkg_conf_ctx *ctx)
 		mutex_unlock(&ctx->bdev->bd_queue->rq_qos_mutex);
 		blkdev_put_no_open(ctx->bdev);
 		ctx->body = NULL;
+	}
+}
+
+/**
+ * blkg_conf_exit - clean up per-blkg config update
+ * @ctx: blkg_conf_ctx initialized with blkg_conf_init()
+ *
+ * Clean up after per-blkg config update. This function must be called on all
+ * blkg_conf_ctx's initialized with blkg_conf_init().
+ */
+void blkg_conf_exit(struct blkg_conf_ctx *ctx)
+{
+	__blkg_conf_exit(ctx);
+	if (ctx->bdev) {
+		struct request_queue *q = ctx->bdev->bd_queue;
+
+		mutex_lock(&q->debugfs_mutex);
+		blk_mq_debugfs_register_rq_qos(q);
+		mutex_unlock(&q->debugfs_mutex);
+
 		ctx->bdev = NULL;
 	}
 }
@@ -1000,8 +1014,14 @@ void blkg_conf_exit_frozen(struct blkg_conf_ctx *ctx, unsigned long memflags)
 	if (ctx->bdev) {
 		struct request_queue *q = ctx->bdev->bd_queue;
 
-		blkg_conf_exit(ctx);
+		__blkg_conf_exit(ctx);
 		blk_mq_unfreeze_queue(q, memflags);
+
+		mutex_lock(&q->debugfs_mutex);
+		blk_mq_debugfs_register_rq_qos(q);
+		mutex_unlock(&q->debugfs_mutex);
+
+		ctx->bdev = NULL;
 	}
 }
 
