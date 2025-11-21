@@ -9,7 +9,7 @@
 #ifndef _LINUX_IOPORT_H
 #define _LINUX_IOPORT_H
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 #include <linux/bits.h>
 #include <linux/compiler.h>
 #include <linux/minmax.h>
@@ -435,5 +435,5 @@ static inline void irqresource_disabled(struct resource *res, u32 irq)
 
 extern struct address_space *iomem_get_mapping(void);
 
-#endif /* __ASSEMBLY__ */
+#endif /* __ASSEMBLER__ */
 #endif	/* _LINUX_IOPORT_H */

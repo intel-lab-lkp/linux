@@ -6,7 +6,7 @@
 
 #ifdef CONFIG_OBJTOOL
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 
 #define __ASM_ANNOTATE(section, label, type)				\
 	".pushsection " section ",\"M\", @progbits, 8\n\t"		\
@@ -25,7 +25,7 @@
 	"912:\n\t"							\
 	__ASM_ANNOTATE(".discard.annotate_data", 912b, type)
 
-#else /* __ASSEMBLY__ */
+#else /* __ASSEMBLER__ */
 
 .macro __ANNOTATE section, type
 .Lhere_\@:
@@ -43,22 +43,22 @@
 	__ANNOTATE ".discard.annotate_data", \type
 .endm
 
-#endif /* __ASSEMBLY__ */
+#endif /* __ASSEMBLER__ */
 
 #else /* !CONFIG_OBJTOOL */
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 #define ASM_ANNOTATE_LABEL(label, type) ""
 #define ASM_ANNOTATE(type)
 #define ASM_ANNOTATE_DATA(type)
-#else /* __ASSEMBLY__ */
+#else /* __ASSEMBLER__ */
 .macro ANNOTATE type
 .endm
 .macro ANNOTATE_DATA type
 .endm
-#endif /* __ASSEMBLY__ */
+#endif /* __ASSEMBLER__ */
 #endif /* !CONFIG_OBJTOOL */
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 
 /*
  * Annotate away the various 'relocation to !ENDBR` complaints; knowing that
@@ -118,7 +118,7 @@
  */
 #define ANNOTATE_DATA_SPECIAL		ASM_ANNOTATE_DATA(ANNOTYPE_DATA_SPECIAL)
 
-#else /* __ASSEMBLY__ */
+#else /* __ASSEMBLER__ */
 #define ANNOTATE_NOENDBR		ANNOTATE type=ANNOTYPE_NOENDBR
 #define ANNOTATE_RETPOLINE_SAFE		ANNOTATE type=ANNOTYPE_RETPOLINE_SAFE
 /*	ANNOTATE_INSTR_BEGIN		ANNOTATE type=ANNOTYPE_INSTR_BEGIN */
@@ -129,6 +129,6 @@
 #define ANNOTATE_REACHABLE		ANNOTATE type=ANNOTYPE_REACHABLE
 #define ANNOTATE_NOCFI_SYM		ANNOTATE type=ANNOTYPE_NOCFI
 #define ANNOTATE_DATA_SPECIAL		ANNOTATE_DATA type=ANNOTYPE_DATA_SPECIAL
-#endif /* __ASSEMBLY__ */
+#endif /* __ASSEMBLER__ */
 
 #endif /* _LINUX_ANNOTATE_H */
