@@ -20,9 +20,11 @@
 
 int main(int argc, char *argv[])
 {
+	struct poeg_event event_data;
 	struct poeg_cmd cmd;
 	unsigned int val;
 	long cmd_val;
+	int ret, fd;
 	char *p;
 	int i;
 
@@ -36,17 +38,52 @@ int main(int argc, char *argv[])
 	else
 		printf("[POEG]open\n");
 
-	cmd.val = cmd_val;
-	cmd.channel = 4;
-	if (cmd.val == RZG2L_POEG_OUTPUT_DISABLE_USR_ENABLE_CMD)
-		printf("[POEG] user control pin output disable enabled\n");
-	else
-		printf("[POEG] user control pin output disable disabled\n");
+	if (cmd_val == RZG2L_POEG_OUTPUT_DISABLE_USR_ENABLE_CMD ||
+	    cmd_val == RZG2L_POEG_OUTPUT_DISABLE_USR_DISABLE_CMD) {
+		if (cmd_val == RZG2L_POEG_OUTPUT_DISABLE_USR_ENABLE_CMD)
+			printf("[POEG] user control pin output disable enabled\n");
+		else
+			printf("[POEG] user control pin output disable disabled\n");
 
-	ret = write(fd, &cmd, sizeof(cmd));
-	if (ret == -1) {
-		perror("Failed to write cmd data");
-		return 1;
+		cmd.val = cmd_val;
+		cmd.channel = 4;
+		ret = write(fd, &cmd, sizeof(cmd));
+		if (ret == -1) {
+			perror("Failed to write cmd data");
+			return 1;
+		}
+	} else {
+		printf("[POEG] GPT control configure IRQ\n");
+		cmd.val = RZG2L_POEG_GPT_CFG_IRQ_CMD;
+		cmd.channel = 4;
+		ret = write(fd, &cmd, sizeof(cmd));
+		if (ret == -1) {
+			perror("Failed to write cmd data");
+			return 1;
+		}
+
+		for (;;) {
+			ret = read(fd, &event_data, sizeof(event_data));
+			if (ret == -1) {
+				perror("Failed to read event data");
+				return 1;
+			}
+
+			val = event_data.gpt_disable_irq_status;
+			if (val) {
+				/* emulate fault clearing condition by adding delay */
+				sleep(2);
+				for (i = 0; i < 8; i++) {
+					if (val & 7) {
+						printf("gpt ch:%u, irq=%x\n", i, val & 7);
+						cmd.val = RZG2L_POEG_GPT_FAULT_CLR_CMD;
+						cmd.channel = 4;
+						ret = write(fd, &cmd, sizeof(cmd));
+					}
+					val >>= 3;
+				}
+			}
+		}
 	}
 
 	if (close(fd) != 0)
