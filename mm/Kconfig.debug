@@ -45,6 +45,18 @@ config DEBUG_PAGEALLOC_ENABLE_DEFAULT
 	  Enable debug page memory allocations by default? This value
 	  can be overridden by debug_pagealloc=off|on.
 
+config DEBUG_CHECK_PAGES
+	bool "Debug VM page allocation/free sanity checks"
+	depends on DEBUG_KERNEL
+	default y if DEBUG_VM
+	help
+	  Enable sanity checking of pages after allocations / before freeing.
+	  This adds checks to catch double-frees, use-after-frees, and other
+	  sources of page corruption by inspecting page internals (flags,
+	  mapcount/refcount, memcg_data, etc.).
+
+	  This is automatically enabled if CONFIG_DEBUG_VM is set.
+
 config SLUB_DEBUG
 	default y
 	bool "Enable SLUB debugging support" if EXPERT

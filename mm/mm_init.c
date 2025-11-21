@@ -2523,7 +2523,7 @@ static int __init early_init_on_free(char *buf)
 }
 early_param("init_on_free", early_init_on_free);
 
-DEFINE_STATIC_KEY_MAYBE(CONFIG_DEBUG_VM, check_pages_enabled);
+DEFINE_STATIC_KEY_MAYBE(CONFIG_DEBUG_CHECK_PAGES, check_pages_enabled);
 
 /*
  * Enable static keys related to various memory debugging and hardening options.
@@ -2588,10 +2588,10 @@ static void __init mem_debugging_and_hardening_init(void)
 
 	/*
 	 * Any page debugging or hardening option also enables sanity checking
-	 * of struct pages being allocated or freed. With CONFIG_DEBUG_VM it's
-	 * enabled already.
+	 * of struct pages being allocated or freed. With CONFIG_DEBUG_VM or
+	 * CONFIG_DEBUG_CHECK_PAGES it's enabled already.
 	 */
-	if (!IS_ENABLED(CONFIG_DEBUG_VM) && want_check_pages)
+	if (!IS_ENABLED(CONFIG_DEBUG_CHECK_PAGES) && want_check_pages)
 		static_branch_enable(&check_pages_enabled);
 }
 
