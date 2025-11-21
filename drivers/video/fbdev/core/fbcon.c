@@ -401,8 +401,11 @@ static void fb_flashcursor(struct work_struct *work)
 	/* instead we just fail to flash the cursor if we can't get
 	 * the lock instead of blocking fbcon deinit */
 	ret = console_trylock();
-	if (ret == 0)
+	if (ret == 0) {
+		queue_delayed_work(system_power_efficient_wq, &ops->cursor_work,
+				   ops->cur_blink_jiffies);
 		return;
+	}
 
 	/* protected by console_lock */
 	info = par->info;
