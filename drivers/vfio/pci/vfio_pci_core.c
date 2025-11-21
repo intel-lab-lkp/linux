@@ -1717,6 +1717,29 @@ static const struct vm_operations_struct vfio_pci_mmap_ops = {
 #endif
 };
 
+int vfio_pci_core_barmap(struct vfio_pci_core_device *vdev, unsigned int index)
+{
+	struct pci_dev *pdev = vdev->pdev;
+	int ret;
+
+	if (vdev->barmap[index])
+		return 0;
+
+	ret = pci_request_selected_regions(pdev,
+					   1 << index, "vfio-pci");
+	if (ret)
+		return ret;
+
+	vdev->barmap[index] = pci_iomap(pdev, index, 0);
+	if (!vdev->barmap[index]) {
+		pci_release_selected_regions(pdev, 1 << index);
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(vfio_pci_core_barmap);
+
 int vfio_pci_core_mmap(struct vfio_device *core_vdev, struct vm_area_struct *vma)
 {
 	struct vfio_pci_core_device *vdev =
@@ -1761,18 +1784,9 @@ int vfio_pci_core_mmap(struct vfio_device *core_vdev, struct vm_area_struct *vma
 	 * Even though we don't make use of the barmap for the mmap,
 	 * we need to request the region and the barmap tracks that.
 	 */
-	if (!vdev->barmap[index]) {
-		ret = pci_request_selected_regions(pdev,
-						   1 << index, "vfio-pci");
-		if (ret)
-			return ret;
-
-		vdev->barmap[index] = pci_iomap(pdev, index, 0);
-		if (!vdev->barmap[index]) {
-			pci_release_selected_regions(pdev, 1 << index);
-			return -ENOMEM;
-		}
-	}
+	ret = vfio_pci_core_barmap(vdev, index);
+	if (ret)
+		return ret;
 
 	vma->vm_private_data = vdev;
 	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
