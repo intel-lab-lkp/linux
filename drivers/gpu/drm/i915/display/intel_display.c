@@ -3454,12 +3454,11 @@ static bool transcoder_ddi_func_is_enabled(struct intel_display *display,
 					   enum transcoder cpu_transcoder)
 {
 	enum intel_display_power_domain power_domain;
-	intel_wakeref_t wakeref;
 	u32 tmp = 0;
 
 	power_domain = POWER_DOMAIN_TRANSCODER(cpu_transcoder);
 
-	with_intel_display_power_if_enabled(display, power_domain, wakeref)
+	with_intel_display_power_if_enabled(display, power_domain)
 		tmp = intel_de_read(display,
 				    TRANS_DDI_FUNC_CTL(display, cpu_transcoder));
 
@@ -3481,10 +3480,9 @@ static void enabled_uncompressed_joiner_pipes(struct intel_display *display,
 					 joiner_pipes(display)) {
 		enum intel_display_power_domain power_domain;
 		enum pipe pipe = crtc->pipe;
-		intel_wakeref_t wakeref;
 
 		power_domain = POWER_DOMAIN_PIPE(pipe);
-		with_intel_display_power_if_enabled(display, power_domain, wakeref) {
+		with_intel_display_power_if_enabled(display, power_domain) {
 			u32 tmp = intel_de_read(display, ICL_PIPE_DSS_CTL1(pipe));
 
 			if (tmp & UNCOMPRESSED_JOINER_PRIMARY)
@@ -3510,10 +3508,9 @@ static void enabled_bigjoiner_pipes(struct intel_display *display,
 					 joiner_pipes(display)) {
 		enum intel_display_power_domain power_domain;
 		enum pipe pipe = crtc->pipe;
-		intel_wakeref_t wakeref;
 
 		power_domain = intel_dsc_power_domain(crtc, (enum transcoder)pipe);
-		with_intel_display_power_if_enabled(display, power_domain, wakeref) {
+		with_intel_display_power_if_enabled(display, power_domain) {
 			u32 tmp = intel_de_read(display, ICL_PIPE_DSS_CTL1(pipe));
 
 			if (!(tmp & BIG_JOINER_ENABLE))
@@ -3580,10 +3577,9 @@ static void enabled_ultrajoiner_pipes(struct intel_display *display,
 					 joiner_pipes(display)) {
 		enum intel_display_power_domain power_domain;
 		enum pipe pipe = crtc->pipe;
-		intel_wakeref_t wakeref;
 
 		power_domain = intel_dsc_power_domain(crtc, (enum transcoder)pipe);
-		with_intel_display_power_if_enabled(display, power_domain, wakeref) {
+		with_intel_display_power_if_enabled(display, power_domain) {
 			u32 tmp = intel_de_read(display, ICL_PIPE_DSS_CTL1(pipe));
 
 			if (!(tmp & ULTRA_JOINER_ENABLE))
@@ -3741,12 +3737,11 @@ static u8 hsw_enabled_transcoders(struct intel_crtc *crtc)
 	for_each_cpu_transcoder_masked(display, cpu_transcoder,
 				       panel_transcoder_mask) {
 		enum intel_display_power_domain power_domain;
-		intel_wakeref_t wakeref;
 		enum pipe trans_pipe;
 		u32 tmp = 0;
 
 		power_domain = POWER_DOMAIN_TRANSCODER(cpu_transcoder);
-		with_intel_display_power_if_enabled(display, power_domain, wakeref)
+		with_intel_display_power_if_enabled(display, power_domain)
 			tmp = intel_de_read(display,
 					    TRANS_DDI_FUNC_CTL(display, cpu_transcoder));
 
