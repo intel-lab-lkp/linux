@@ -1114,7 +1114,7 @@ int __init vfio_pci_init_perm_bits(void)
 	return ret;
 }
 
-static int vfio_find_cap_start(struct vfio_pci_core_device *vdev, int pos)
+int vfio_find_cap_start(struct vfio_pci_core_device *vdev, int pos)
 {
 	u8 cap;
 	int base = (pos >= PCI_CFG_SPACE_SIZE) ? PCI_CFG_SPACE_SIZE :
@@ -1130,6 +1130,7 @@ static int vfio_find_cap_start(struct vfio_pci_core_device *vdev, int pos)
 
 	return pos;
 }
+EXPORT_SYMBOL_GPL(vfio_find_cap_start);
 
 static int vfio_msi_config_read(struct vfio_pci_core_device *vdev, int pos,
 				int count, struct perm_bits *perm,
