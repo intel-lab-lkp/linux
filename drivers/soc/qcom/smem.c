@@ -381,6 +381,9 @@ static struct qcom_smem *__smem = INIT_ERR_PTR(-EPROBE_DEFER);
  */
 int qcom_smem_bust_hwspin_lock_by_host(unsigned int host)
 {
+	if (IS_ERR(__smem))
+		return PTR_ERR(__smem);
+
 	/* This function is for remote procs, so ignore SMEM_HOST_APPS */
 	if (host == SMEM_HOST_APPS || host >= SMEM_HOST_COUNT)
 		return -EINVAL;
@@ -396,7 +399,7 @@ EXPORT_SYMBOL_GPL(qcom_smem_bust_hwspin_lock_by_host);
  */
 bool qcom_smem_is_available(void)
 {
-	return !!__smem;
+	return !IS_ERR(__smem);
 }
 EXPORT_SYMBOL_GPL(qcom_smem_is_available);
 
@@ -776,6 +779,9 @@ phys_addr_t qcom_smem_virt_to_phys(void *p)
 	struct smem_region *area;
 	u64 offset;
 	u32 i;
+
+	if (IS_ERR(__smem))
+		return 0;
 
 	for (i = 0; i < SMEM_HOST_COUNT; i++) {
 		part = &__smem->partitions[i];
@@ -1247,7 +1253,8 @@ static void qcom_smem_remove(struct platform_device *pdev)
 {
 	platform_device_unregister(__smem->socinfo);
 
-	__smem = NULL;
+	/* Set to -EPROBE_DEFER to signal unprobed state */
+	__smem = ERR_PTR(-EPROBE_DEFER);
 }
 
 static const struct of_device_id qcom_smem_of_match[] = {
