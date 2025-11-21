@@ -1055,8 +1055,9 @@ int smc_llc_cli_add_link(struct smc_link *link, struct smc_llc_qentry *qentry)
 	if (lgr->smc_version == SMC_V2) {
 		ini->check_smcrv2 = true;
 		ini->smcrv2.saddr = lgr->saddr;
-		ini->smcrv2.daddr = smc_ib_gid_to_ipv4(llc->sender_gid);
+		smc_ipaddr_from_gid(&ini->smcrv2.daddr, llc->sender_gid);
 	}
+
 	smc_pnet_find_alt_roce(lgr, ini, link->smcibdev);
 	if (!memcmp(llc->sender_gid, link->peer_gid, SMC_GID_SIZE) &&
 	    (lgr->smc_version == SMC_V2 ||
@@ -1438,8 +1439,7 @@ int smc_llc_srv_add_link(struct smc_link *link,
 		if (send_req_add_link_resp) {
 			struct smc_llc_msg_req_add_link_v2 *req_add =
 				&req_qentry->msg.req_add_link;
-
-			ini->smcrv2.daddr = smc_ib_gid_to_ipv4(req_add->gid[0]);
+			smc_ipaddr_from_gid(&ini->smcrv2.daddr, req_add->gid[0]);
 		}
 	}
 	smc_pnet_find_alt_roce(lgr, ini, link->smcibdev);
