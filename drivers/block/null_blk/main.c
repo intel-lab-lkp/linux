@@ -81,20 +81,20 @@ static bool g_virt_boundary;
 module_param_named(virt_boundary, g_virt_boundary, bool, 0444);
 MODULE_PARM_DESC(virt_boundary, "Require a virtual boundary for the device. Default: False");
 
-static int g_no_sched;
-module_param_named(no_sched, g_no_sched, int, 0444);
+static bool g_no_sched;
+module_param_named(no_sched, g_no_sched, bool, 0444);
 MODULE_PARM_DESC(no_sched, "No io scheduler");
 
-static int g_submit_queues = 1;
-module_param_named(submit_queues, g_submit_queues, int, 0444);
+static unsigned int g_submit_queues = 1;
+module_param_named(submit_queues, g_submit_queues, uint, 0444);
 MODULE_PARM_DESC(submit_queues, "Number of submission queues");
 
-static int g_poll_queues = 1;
-module_param_named(poll_queues, g_poll_queues, int, 0444);
+static unsigned int g_poll_queues = 1;
+module_param_named(poll_queues, g_poll_queues, uint, 0444);
 MODULE_PARM_DESC(poll_queues, "Number of IOPOLL submission queues");
 
-static int g_home_node = NUMA_NO_NODE;
-module_param_named(home_node, g_home_node, int, 0444);
+static unsigned int g_home_node = NUMA_NO_NODE;
+module_param_named(home_node, g_home_node, uint, 0444);
 MODULE_PARM_DESC(home_node, "Home node for the device");
 
 #ifdef CONFIG_BLK_DEV_NULL_BLK_FAULT_INJECTION
@@ -157,16 +157,16 @@ static const struct kernel_param_ops null_queue_mode_param_ops = {
 device_param_cb(queue_mode, &null_queue_mode_param_ops, &g_queue_mode, 0444);
 MODULE_PARM_DESC(queue_mode, "Block interface to use (0=bio,1=rq,2=multiqueue)");
 
-static int g_gb = 250;
-module_param_named(gb, g_gb, int, 0444);
+static unsigned long g_gb = 250;
+module_param_named(gb, g_gb, ulong, 0444);
 MODULE_PARM_DESC(gb, "Size in GB");
 
-static int g_bs = 512;
-module_param_named(bs, g_bs, int, 0444);
+static unsigned int g_bs = 512;
+module_param_named(bs, g_bs, uint, 0444);
 MODULE_PARM_DESC(bs, "Block size (in bytes)");
 
-static int g_max_sectors;
-module_param_named(max_sectors, g_max_sectors, int, 0444);
+static unsigned int g_max_sectors;
+module_param_named(max_sectors, g_max_sectors, uint, 0444);
 MODULE_PARM_DESC(max_sectors, "Maximum size of a command (in 512B sectors)");
 
 static unsigned int nr_devices = 1;
@@ -205,8 +205,8 @@ static unsigned long g_completion_nsec = 10000;
 module_param_named(completion_nsec, g_completion_nsec, ulong, 0444);
 MODULE_PARM_DESC(completion_nsec, "Time in ns to complete a request in hardware. Default: 10,000ns");
 
-static int g_hw_queue_depth = 64;
-module_param_named(hw_queue_depth, g_hw_queue_depth, int, 0444);
+static unsigned int g_hw_queue_depth = 64;
+module_param_named(hw_queue_depth, g_hw_queue_depth, uint, 0444);
 MODULE_PARM_DESC(hw_queue_depth, "Queue depth for each hardware queue. Default: 64");
 
 static bool g_use_per_node_hctx;
@@ -257,8 +257,8 @@ static unsigned int g_zone_max_active;
 module_param_named(zone_max_active, g_zone_max_active, uint, 0444);
 MODULE_PARM_DESC(zone_max_active, "Maximum number of active zones when block device is zoned. Default: 0 (no limit)");
 
-static int g_zone_append_max_sectors = INT_MAX;
-module_param_named(zone_append_max_sectors, g_zone_append_max_sectors, int, 0444);
+static unsigned int g_zone_append_max_sectors = INT_MAX;
+module_param_named(zone_append_max_sectors, g_zone_append_max_sectors, uint, 0444);
 MODULE_PARM_DESC(zone_append_max_sectors,
 		 "Maximum size of a zone append command (in 512B sectors). Specify 0 for zone append emulation");
 
