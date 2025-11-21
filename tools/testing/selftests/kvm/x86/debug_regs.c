@@ -104,20 +104,19 @@ int main(void)
 	run = vcpu->run;
 
 	/* Test software BPs - int3 */
+	pr_info("Testing INT3\n");
 	memset(&debug, 0, sizeof(debug));
 	debug.control = KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_USE_SW_BP;
 	vcpu_guest_debug_set(vcpu, &debug);
 	vcpu_run(vcpu);
-	TEST_ASSERT(run->exit_reason == KVM_EXIT_DEBUG &&
-		    run->debug.arch.exception == BP_VECTOR &&
-		    run->debug.arch.pc == CAST_TO_RIP(sw_bp),
-		    "INT3: exit %d exception %d rip 0x%llx (should be 0x%llx)",
-		    run->exit_reason, run->debug.arch.exception,
-		    run->debug.arch.pc, CAST_TO_RIP(sw_bp));
+	TEST_ASSERT_EQ(run->exit_reason, KVM_EXIT_DEBUG);
+	TEST_ASSERT_EQ(run->debug.arch.exception, BP_VECTOR);
+	TEST_ASSERT_EQ(run->debug.arch.pc, CAST_TO_RIP(sw_bp));
 	vcpu_skip_insn(vcpu, 1);
 
 	/* Test instruction HW BP over DR[0-3] */
 	for (i = 0; i < 4; i++) {
+		pr_info("Testing INS_HW_BP DR[%d]\n", i);
 		memset(&debug, 0, sizeof(debug));
 		debug.control = KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_USE_HW_BP;
 		debug.arch.debugreg[i] = CAST_TO_RIP(hw_bp);
@@ -125,21 +124,17 @@ int main(void)
 		vcpu_guest_debug_set(vcpu, &debug);
 		vcpu_run(vcpu);
 		target_dr6 = 0xffff0ff0 | (1UL << i);
-		TEST_ASSERT(run->exit_reason == KVM_EXIT_DEBUG &&
-			    run->debug.arch.exception == DB_VECTOR &&
-			    run->debug.arch.pc == CAST_TO_RIP(hw_bp) &&
-			    run->debug.arch.dr6 == target_dr6,
-			    "INS_HW_BP (DR%d): exit %d exception %d rip 0x%llx "
-			    "(should be 0x%llx) dr6 0x%llx (should be 0x%llx)",
-			    i, run->exit_reason, run->debug.arch.exception,
-			    run->debug.arch.pc, CAST_TO_RIP(hw_bp),
-			    run->debug.arch.dr6, target_dr6);
+		TEST_ASSERT_EQ(run->exit_reason, KVM_EXIT_DEBUG);
+		TEST_ASSERT_EQ(run->debug.arch.exception, DB_VECTOR);
+		TEST_ASSERT_EQ(run->debug.arch.pc, CAST_TO_RIP(hw_bp));
+		TEST_ASSERT_EQ(run->debug.arch.dr6, target_dr6);
 	}
 	/* Skip "nop" */
 	vcpu_skip_insn(vcpu, 1);
 
 	/* Test data access HW BP over DR[0-3] */
 	for (i = 0; i < 4; i++) {
+		pr_info("Testing DATA_HW_BP DR[%d]\n", i);
 		memset(&debug, 0, sizeof(debug));
 		debug.control = KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_USE_HW_BP;
 		debug.arch.debugreg[i] = CAST_TO_RIP(guest_value);
@@ -148,15 +143,10 @@ int main(void)
 		vcpu_guest_debug_set(vcpu, &debug);
 		vcpu_run(vcpu);
 		target_dr6 = 0xffff0ff0 | (1UL << i);
-		TEST_ASSERT(run->exit_reason == KVM_EXIT_DEBUG &&
-			    run->debug.arch.exception == DB_VECTOR &&
-			    run->debug.arch.pc == CAST_TO_RIP(write_data) &&
-			    run->debug.arch.dr6 == target_dr6,
-			    "DATA_HW_BP (DR%d): exit %d exception %d rip 0x%llx "
-			    "(should be 0x%llx) dr6 0x%llx (should be 0x%llx)",
-			    i, run->exit_reason, run->debug.arch.exception,
-			    run->debug.arch.pc, CAST_TO_RIP(write_data),
-			    run->debug.arch.dr6, target_dr6);
+		TEST_ASSERT_EQ(run->exit_reason, KVM_EXIT_DEBUG);
+		TEST_ASSERT_EQ(run->debug.arch.exception, DB_VECTOR);
+		TEST_ASSERT_EQ(run->debug.arch.pc, CAST_TO_RIP(write_data));
+		TEST_ASSERT_EQ(run->debug.arch.dr6, target_dr6);
 		/* Rollback the 4-bytes "mov" */
 		vcpu_skip_insn(vcpu, -7);
 	}
@@ -167,6 +157,7 @@ int main(void)
 	target_rip = CAST_TO_RIP(ss_start);
 	target_dr6 = 0xffff4ff0ULL;
 	for (i = 0; i < ARRAY_SIZE(ss_size); i++) {
+		pr_info("Testing SINGLE_STEP (%d)\n", i);
 		target_rip += ss_size[i];
 		memset(&debug, 0, sizeof(debug));
 		debug.control = KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_SINGLESTEP |
@@ -174,33 +165,24 @@ int main(void)
 		debug.arch.debugreg[7] = 0x00000400;
 		vcpu_guest_debug_set(vcpu, &debug);
 		vcpu_run(vcpu);
-		TEST_ASSERT(run->exit_reason == KVM_EXIT_DEBUG &&
-			    run->debug.arch.exception == DB_VECTOR &&
-			    run->debug.arch.pc == target_rip &&
-			    run->debug.arch.dr6 == target_dr6,
-			    "SINGLE_STEP[%d]: exit %d exception %d rip 0x%llx "
-			    "(should be 0x%llx) dr6 0x%llx (should be 0x%llx)",
-			    i, run->exit_reason, run->debug.arch.exception,
-			    run->debug.arch.pc, target_rip, run->debug.arch.dr6,
-			    target_dr6);
+		TEST_ASSERT_EQ(run->exit_reason, KVM_EXIT_DEBUG);
+		TEST_ASSERT_EQ(run->debug.arch.exception, DB_VECTOR);
+		TEST_ASSERT_EQ(run->debug.arch.pc, target_rip);
+		TEST_ASSERT_EQ(run->debug.arch.dr6, target_dr6);
 	}
 
 	/* Finally test global disable */
+	pr_info("Testing DR7.GD\n");
 	memset(&debug, 0, sizeof(debug));
 	debug.control = KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_USE_HW_BP;
 	debug.arch.debugreg[7] = 0x400 | DR7_GD;
 	vcpu_guest_debug_set(vcpu, &debug);
 	vcpu_run(vcpu);
 	target_dr6 = 0xffff0ff0 | DR6_BD;
-	TEST_ASSERT(run->exit_reason == KVM_EXIT_DEBUG &&
-		    run->debug.arch.exception == DB_VECTOR &&
-		    run->debug.arch.pc == CAST_TO_RIP(bd_start) &&
-		    run->debug.arch.dr6 == target_dr6,
-			    "DR7.GD: exit %d exception %d rip 0x%llx "
-			    "(should be 0x%llx) dr6 0x%llx (should be 0x%llx)",
-			    run->exit_reason, run->debug.arch.exception,
-			    run->debug.arch.pc, target_rip, run->debug.arch.dr6,
-			    target_dr6);
+	TEST_ASSERT_EQ(run->exit_reason, KVM_EXIT_DEBUG);
+	TEST_ASSERT_EQ(run->debug.arch.exception, DB_VECTOR);
+	TEST_ASSERT_EQ(run->debug.arch.pc, CAST_TO_RIP(bd_start));
+	TEST_ASSERT_EQ(run->debug.arch.dr6, target_dr6);
 
 	/* Disable all debug controls, run to the end */
 	memset(&debug, 0, sizeof(debug));
