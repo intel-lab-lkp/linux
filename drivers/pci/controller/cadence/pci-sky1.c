@@ -65,7 +65,7 @@ static int sky1_pcie_resource_get(struct platform_device *pdev,
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "cfg");
 	if (!res)
-		return dev_err_probe(dev, ENODEV, "unable to get \"cfg\" resource\n");
+		return dev_err_probe(dev, -ENODEV, "unable to get \"cfg\" resource\n");
 	pcie->cfg_res = res;
 
 	base = devm_platform_ioremap_resource_byname(pdev, "rcsu_strap");
@@ -82,7 +82,7 @@ static int sky1_pcie_resource_get(struct platform_device *pdev,
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "msg");
 	if (!res)
-		return dev_err_probe(dev, ENODEV, "unable to get \"msg\" resource\n");
+		return dev_err_probe(dev, -ENODEV, "unable to get \"msg\" resource\n");
 	pcie->msg_res = res;
 	pcie->msg_base = devm_ioremap_resource(dev, res);
 	if (IS_ERR(pcie->msg_base)) {
