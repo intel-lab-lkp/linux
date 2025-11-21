@@ -511,9 +511,23 @@ int btrfs_record_root_in_trans(struct btrfs_trans_handle *trans,
 
 static inline int is_transaction_blocked(struct btrfs_transaction *trans)
 {
+	lockdep_assert_held(&trans->fs_info->trans_lock);
+
 	return (trans->state >= TRANS_STATE_COMMIT_START &&
 		trans->state < TRANS_STATE_UNBLOCKED &&
 		!TRANS_ABORTED(trans));
+}
+
+/* Helper to check transaction state under lock for wait_event */
+static bool trans_unblocked(struct btrfs_transaction *trans)
+{
+	struct btrfs_fs_info *fs_info = trans->fs_info;
+	bool ret;
+
+	spin_lock(&fs_info->trans_lock);
+	ret = trans->state >= TRANS_STATE_UNBLOCKED || TRANS_ABORTED(trans);
+	spin_unlock(&fs_info->trans_lock);
+	return ret;
 }
 
 /* wait for commit against the current transaction to become unblocked
@@ -531,9 +545,7 @@ static void wait_current_trans(struct btrfs_fs_info *fs_info)
 		spin_unlock(&fs_info->trans_lock);
 
 		btrfs_might_wait_for_state(fs_info, BTRFS_LOCKDEP_TRANS_UNBLOCKED);
-		wait_event(fs_info->transaction_wait,
-			   cur_trans->state >= TRANS_STATE_UNBLOCKED ||
-			   TRANS_ABORTED(cur_trans));
+		wait_event(fs_info->transaction_wait, trans_unblocked(cur_trans));
 		btrfs_put_transaction(cur_trans);
 	} else {
 		spin_unlock(&fs_info->trans_lock);
