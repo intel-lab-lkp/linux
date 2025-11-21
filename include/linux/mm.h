@@ -3879,6 +3879,26 @@ static inline void clear_page_guard(struct zone *zone, struct page *page,
 				unsigned int order) {}
 #endif	/* CONFIG_DEBUG_PAGEALLOC */
 
+#ifndef clear_pages
+/**
+ * clear_pages() - clear a page range for kernel-internal use.
+ * @addr: start address
+ * @npages: number of pages
+ *
+ * Use clear_user_pages() instead when clearing a page range to be
+ * mapped to user space.
+ *
+ * Does absolutely no exception handling.
+ */
+static inline void clear_pages(void *addr, unsigned int npages)
+{
+	do {
+		clear_page(addr);
+		addr += PAGE_SIZE;
+	} while (--npages);
+}
+#endif
+
 #ifndef clear_user_page
 /**
  * clear_user_page() - clear a page to be mapped to user space
@@ -3898,6 +3918,27 @@ static inline void clear_user_page(void *addr, unsigned long vaddr, struct page 
 #else
 	clear_page(addr);
 #endif
+}
+#endif
+
+/**
+ * clear_user_pages() - clear a page range to be mapped to user space
+ * @addr: start address
+ * @vaddr: start address of the user mapping
+ * @page: start page
+ * @npages: number of pages
+ *
+ * Assumes that the region (@addr, +@npages) has been validated
+ * already so this does no exception handling.
+ */
+#ifdef clear_user_pages
+void clear_user_pages(void *addr, unsigned long vaddr,
+		struct page *page, unsigned int npages);
+#else
+static inline void clear_user_pages(void *addr, unsigned long vaddr,
+		struct page *page, unsigned int npages)
+{
+	clear_pages(addr, npages);
 }
 #endif
 
