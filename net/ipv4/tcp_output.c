@@ -4328,7 +4328,7 @@ int tcp_connect(struct sock *sk)
 	/* Send off SYN; include data in Fast Open. */
 	err = tp->fastopen_req ? tcp_send_syn_data(sk, buff) :
 	      tcp_transmit_skb(sk, buff, 1, sk->sk_allocation);
-	if (err == -ECONNREFUSED)
+	if (err == -ECONNREFUSED || err == -EPERM)
 		return err;
 
 	/* We change tp->snd_nxt after the tcp_transmit_skb() call
