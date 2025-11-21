@@ -21,6 +21,18 @@
 struct tee_device;
 
 /**
+ * struct optee_version_info - OP-TEE version information
+ * @os_major:		OS major version
+ * @os_minor:		OS minor version
+ * @os_build_id:	OS build identifier (0 if unspecified)
+ */
+struct optee_version_info {
+	u32 os_major;
+	u32 os_minor;
+	u32 os_build_id;
+};
+
+/**
  * struct tee_context - driver specific context on file pointer data
  * @teedev:	pointer to this drivers struct tee_device
  * @data:	driver specific context data, managed by the driver

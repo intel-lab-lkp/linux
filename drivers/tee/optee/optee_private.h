@@ -249,6 +249,7 @@ struct optee {
 	bool in_kernel_rpmb_routing;
 	struct work_struct scan_bus_work;
 	struct work_struct rpmb_scan_bus_work;
+	struct optee_version_info version_info;
 };
 
 struct optee_session {
