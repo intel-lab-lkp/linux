@@ -56,6 +56,7 @@ int generic_fadvise(struct file *file, loff_t offset, loff_t len, int advice)
 		case POSIX_FADV_WILLNEED:
 		case POSIX_FADV_NOREUSE:
 		case POSIX_FADV_DONTNEED:
+		case POSIX_FADV_MLOCK:
 			/* no bad return value, but ignore advice */
 			break;
 		default:
@@ -93,6 +94,19 @@ int generic_fadvise(struct file *file, loff_t offset, loff_t len, int advice)
 		file->f_mode &= ~FMODE_RANDOM;
 		spin_unlock(&file->f_lock);
 		break;
+	case POSIX_FADV_MLOCK:
+		/* Remove the cached pages. */
+		if (!mapping_unevictable(mapping)) {
+			invalidate_inode_pages2_range(mapping,
+					offset >> PAGE_SHIFT,
+					(offset + len - 1) >> PAGE_SHIFT);
+
+			/* set the mapping is unevictable */
+			filemap_invalidate_lock(mapping);
+			mapping_set_inaccessible(mapping);
+			filemap_invalidate_unlock(mapping);
+		}
+		fallthrough;
 	case POSIX_FADV_WILLNEED:
 		/* First and last PARTIAL page! */
 		start_index = offset >> PAGE_SHIFT;

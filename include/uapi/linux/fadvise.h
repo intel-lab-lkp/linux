@@ -19,4 +19,6 @@
 #define POSIX_FADV_NOREUSE	5 /* Data will be accessed once.  */
 #endif
 
+#define POSIX_FADV_MLOCK	8 /* Load pages into inaccessible map.  */
+
 #endif	/* FADVISE_H_INCLUDED */
