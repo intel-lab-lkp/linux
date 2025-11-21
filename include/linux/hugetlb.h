@@ -881,12 +881,9 @@ static inline void folio_clear_hugetlb_hwpoison(struct folio *folio)
 #ifndef arch_hugetlb_migration_supported
 static inline bool arch_hugetlb_migration_supported(struct hstate *h)
 {
-	if ((huge_page_shift(h) == PMD_SHIFT) ||
+	return ((huge_page_shift(h) == PMD_SHIFT) ||
 		(huge_page_shift(h) == PUD_SHIFT) ||
-			(huge_page_shift(h) == PGDIR_SHIFT))
-		return true;
-	else
-		return false;
+		(huge_page_shift(h) == PGDIR_SHIFT));
 }
 #endif
 #else
