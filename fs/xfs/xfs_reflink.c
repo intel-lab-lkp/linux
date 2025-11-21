@@ -1003,7 +1003,7 @@ xfs_reflink_end_atomic_cow(
 	struct xfs_trans		*tp;
 	unsigned int			resblks;
 
-	trace_xfs_reflink_end_cow(ip, offset, count);
+	trace_xfs_reflink_end_atomic_cow(ip, offset, count);
 
 	offset_fsb = XFS_B_TO_FSBT(mp, offset);
 	end_fsb = XFS_B_TO_FSB(mp, offset + count);
@@ -1028,7 +1028,7 @@ xfs_reflink_end_atomic_cow(
 				end_fsb);
 	}
 	if (error) {
-		trace_xfs_reflink_end_cow_error(ip, error, _RET_IP_);
+		trace_xfs_reflink_end_atomic_cow_error(ip, error, _RET_IP_);
 		goto out_cancel;
 	}
 	error = xfs_trans_commit(tp);
