@@ -204,8 +204,10 @@
 #define EXTENDED_CAPABILITY		0xe8
 #define SLAVE_CONFIG			0xec
 
+#define DW_I3C_DEV_NACK_RETRY_CNT_MAX	0x3
 #define DEV_ADDR_TABLE_IBI_MDB		BIT(12)
 #define DEV_ADDR_TABLE_SIR_REJECT	BIT(13)
+#define DEV_ADDR_TABLE_DEV_NACK_RETRY_CNT(x)	(((x) << 29) & GENMASK(30, 29))
 #define DEV_ADDR_TABLE_LEGACY_I2C_DEV	BIT(31)
 #define DEV_ADDR_TABLE_DYNAMIC_ADDR(x)	(((x) << 16) & GENMASK(23, 16))
 #define DEV_ADDR_TABLE_STATIC_ADDR(x)	((x) & GENMASK(6, 0))
@@ -294,6 +296,64 @@ to_dw_i3c_master(struct i3c_master_controller *master)
 {
 	return container_of(master, struct dw_i3c_master, base);
 }
+
+static ssize_t dw_dev_nack_retry_count_show(struct device *dev,
+					    struct device_attribute *attr,
+					    char *buf)
+{
+	struct dw_i3c_master *master = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%u\n", master->dev_nack_retry_cnt);
+}
+
+static ssize_t dw_dev_nack_retry_count_store(struct device *dev,
+					     struct device_attribute *attr,
+					     const char *buf, size_t count)
+{
+	struct dw_i3c_master *master = dev_get_drvdata(dev);
+	unsigned long val, flags;
+	int ret, i;
+	u32 reg;
+
+	ret = kstrtoul(buf, 0, &val);
+	if (ret)
+		return ret;
+
+	if (val > DW_I3C_DEV_NACK_RETRY_CNT_MAX) {
+		dev_err(dev,
+			"Value %lu exceeds maximum %d\n",
+			val, DW_I3C_DEV_NACK_RETRY_CNT_MAX);
+		return -ERANGE;
+	}
+
+	master->dev_nack_retry_cnt = val;
+
+	spin_lock_irqsave(&master->devs_lock, flags);
+	/*
+	 * Update DAT entries for all currently attached devices.
+	 * We directly iterate through the master's device array.
+	 */
+	for (i = 0; i < master->maxdevs; i++) {
+		/* Skip free/empty slots */
+		if (master->free_pos & BIT(i))
+			continue;
+
+		reg = readl(master->regs +
+				DEV_ADDR_TABLE_LOC(master->datstartaddr, i));
+		reg &= ~GENMASK(30, 29);
+		reg |= DEV_ADDR_TABLE_DEV_NACK_RETRY_CNT(val);
+		writel(reg, master->regs +
+			DEV_ADDR_TABLE_LOC(master->datstartaddr, i));
+	}
+	spin_unlock_irqrestore(&master->devs_lock, flags);
+
+	return count;
+}
+
+static struct device_attribute dev_attr_dev_nack_retry_count =
+	__ATTR(dev_nack_retry_count, 0644,
+	       dw_dev_nack_retry_count_show,
+	       dw_dev_nack_retry_count_store);
 
 static void dw_i3c_master_disable(struct dw_i3c_master *master)
 {
@@ -1598,6 +1658,12 @@ int dw_i3c_common_probe(struct dw_i3c_master *master,
 	if (ret)
 		goto err_disable_pm;
 
+	dev_set_drvdata(&master->base.dev, master);
+	ret = device_create_file(&master->base.dev, &dev_attr_dev_nack_retry_count);
+	if (ret)
+		dev_warn(&master->base.dev,
+			 "Failed to create dev_nack_retry_count sysfs: %d\n", ret);
+
 	return 0;
 
 err_disable_pm:
@@ -1616,6 +1682,9 @@ void dw_i3c_common_remove(struct dw_i3c_master *master)
 {
 	cancel_work_sync(&master->hj_work);
 	i3c_master_unregister(&master->base);
+
+	device_remove_file(&master->base.dev, &dev_attr_dev_nack_retry_count);
+	dev_set_drvdata(&master->base.dev, NULL);
 
 	pm_runtime_disable(master->dev);
 	pm_runtime_set_suspended(master->dev);
