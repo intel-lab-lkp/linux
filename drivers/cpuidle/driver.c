@@ -199,8 +199,11 @@ static int __cpuidle_driver_init(struct cpuidle_driver *drv)
 		 * exceed its target residency which is assumed in cpuidle in
 		 * multiple places.
 		 */
-		if (s->exit_latency_ns > s->target_residency_ns)
-			return -EINVAL;
+		if (s->exit_latency_ns > s->target_residency_ns) {
+			pr_warn("cpuidle: state %d: exit latency %lld > residency %lld (fixing)\n",
+				i, s->exit_latency_ns, s->target_residency_ns);
+			s->target_residency_ns = s->exit_latency_ns;
+		}
 	}
 
 	return 0;
