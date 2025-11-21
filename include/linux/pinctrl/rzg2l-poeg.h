@@ -10,6 +10,7 @@
 #define RZG2L_POEG_GPT_FAULT_CLR_CMD			3
 
 #define RZG2L_GPT_OABHF	1
+#define RZG2L_GPT_OABLF	2
 
 struct poeg_event {
 	__u32 gpt_disable_irq_status;

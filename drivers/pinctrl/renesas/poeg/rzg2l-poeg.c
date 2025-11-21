@@ -89,6 +89,9 @@ static void rzg2l_poeg_config_irq(struct rzg2l_poeg_chip *chip)
 {
 	if (test_bit(RZG2L_GPT_OABHF, chip->gpt_irq))
 		rzg2l_gpt_poeg_disable_req_both_high(chip->gpt_dev, chip->index, true);
+
+	if (test_bit(RZG2L_GPT_OABLF, chip->gpt_irq))
+		rzg2l_gpt_poeg_disable_req_both_low(chip->gpt_dev, chip->index, true);
 }
 
 static irqreturn_t rzg2l_poeg_irq(int irq, void *ptr)
@@ -347,8 +350,15 @@ static int rzg2l_poeg_probe(struct platform_device *pdev)
 	case POEG_GPT_BOTH_HIGH:
 		assign_bit(RZG2L_GPT_OABHF, chip->gpt_irq, true);
 		break;
+	case POEG_GPT_BOTH_LOW:
+		assign_bit(RZG2L_GPT_OABLF, chip->gpt_irq, true);
+		break;
 	case POEG_EXT_PIN_CTRL:
 		rzg2l_poeg_write(chip, POEGG_PIDE);
+		break;
+	case POEG_GPT_BOTH_HIGH_LOW:
+		assign_bit(RZG2L_GPT_OABHF, chip->gpt_irq, true);
+		assign_bit(RZG2L_GPT_OABLF, chip->gpt_irq, true);
 		break;
 	default:
 		ret = -EINVAL;
