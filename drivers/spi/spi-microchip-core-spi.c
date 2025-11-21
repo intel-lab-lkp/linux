@@ -320,6 +320,8 @@ static int mchp_corespi_probe(struct platform_device *pdev)
 	 */
 	ret = of_property_read_string(pdev->dev.of_node, "microchip,protocol-configuration",
 				      &protocol);
+	if (ret)
+		return ret;
 	if (strcmp(protocol, "motorola") != 0)
 		return dev_err_probe(&pdev->dev, -EINVAL,
 				     "CoreSPI: protocol '%s' not supported by this driver\n",
