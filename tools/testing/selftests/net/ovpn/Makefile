@@ -26,6 +26,7 @@ LDLIBS += $(NL_LDLIBS)
 TEST_FILES = common.sh
 
 TEST_PROGS := \
+	test-bind-addr.sh \
 	test-bind.sh \
 	test-chachapoly.sh \
 	test-close-socket-tcp.sh \

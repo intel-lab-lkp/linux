@@ -26,7 +26,7 @@ for p in $(seq 0 3); do
 done
 
 # add peer0 with mark
-ip netns exec peer0 ${OVPN_CLI} new_multi_peer tun0 any 1 ${UDP_PEERS_FILE} ${MARK}
+ip netns exec peer0 ${OVPN_CLI} new_multi_peer tun0 any any 1 ${UDP_PEERS_FILE} ${MARK}
 for p in $(seq 1 3); do
 	ip netns exec peer0 ${OVPN_CLI} new_key tun0 ${p} 1 0 ${ALG} 0 data64.key
 done
