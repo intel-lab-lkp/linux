@@ -374,15 +374,15 @@ static int chrdev_open(struct inode *inode, struct file *filp)
 {
 	const struct file_operations *fops;
 	struct cdev *p;
-	struct cdev *new = NULL;
 	int ret = 0;
 
-	spin_lock(&cdev_lock);
-	p = inode->i_cdev;
+	VFS_BUG_ON_INODE(icount_read(inode) < 1, inode);
+
+	p = READ_ONCE(inode->i_cdev);
 	if (!p) {
 		struct kobject *kobj;
+		struct cdev *new;
 		int idx;
-		spin_unlock(&cdev_lock);
 		kobj = kobj_lookup(cdev_map, inode->i_rdev, &idx);
 		if (!kobj)
 			return -ENXIO;
@@ -392,19 +392,19 @@ static int chrdev_open(struct inode *inode, struct file *filp)
 		   we dropped the lock. */
 		p = inode->i_cdev;
 		if (!p) {
-			inode->i_cdev = p = new;
+			p = new;
+			WRITE_ONCE(inode->i_cdev, p);
 			list_add(&inode->i_devices, &p->list);
 			new = NULL;
 		} else if (!cdev_get(p))
 			ret = -ENXIO;
+		spin_unlock(&cdev_lock);
+		cdev_put(new);
 	} else if (!cdev_get(p))
 		ret = -ENXIO;
-	spin_unlock(&cdev_lock);
-	cdev_put(new);
 	if (ret)
 		return ret;
 
-	ret = -ENXIO;
 	fops = fops_get(p->ops);
 	if (!fops)
 		goto out_cdev_put;
@@ -423,8 +423,10 @@ static int chrdev_open(struct inode *inode, struct file *filp)
 	return ret;
 }
 
-void cd_forget(struct inode *inode)
+void inode_cdev_forget(struct inode *inode)
 {
+	VFS_BUG_ON_INODE(!(inode_state_read_once(inode) & I_FREEING), inode);
+
 	spin_lock(&cdev_lock);
 	list_del_init(&inode->i_devices);
 	inode->i_cdev = NULL;

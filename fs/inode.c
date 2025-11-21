@@ -813,7 +813,7 @@ static void evict(struct inode *inode)
 		clear_inode(inode);
 	}
 	if (S_ISCHR(inode->i_mode) && inode->i_cdev)
-		cd_forget(inode);
+		inode_cdev_forget(inode);
 
 	remove_inode_hash(inode);
 
