@@ -379,3 +379,6 @@ The following keys are defined:
 
 * :c:macro:`RISCV_HWPROBE_KEY_ZICBOP_BLOCK_SIZE`: An unsigned int which
   represents the size of the Zicbop block in bytes.
+
+* :c:macro:`RISCV_HWPROBE_KEY_VECTOR_REG_LENGTH`: An unsigned int which
+  represents the vector registers length in bytes.

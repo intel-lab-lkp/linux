@@ -328,6 +328,12 @@ static void hwprobe_one_pair(struct riscv_hwprobe *pair,
 		hwprobe_isa_vendor_ext_mips_0(pair, cpus);
 		break;
 
+	case RISCV_HWPROBE_KEY_VECTOR_REG_LENGTH:
+		pair->value = 0;
+		if (has_vector() || has_xtheadvector())
+			pair->value = riscv_v_vsize / 32;
+		break;
+
 	/*
 	 * For forward compatibility, unknown keys don't fail the whole
 	 * call, but get their element key set to -1 and value set to 0
