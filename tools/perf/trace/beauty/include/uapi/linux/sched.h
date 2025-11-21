@@ -43,7 +43,7 @@
  */
 #define CLONE_NEWTIME	0x00000080	/* New time namespace */
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 /**
  * struct clone_args - arguments for the clone3 syscall
  * @flags:        Flags for the new process as listed above.
