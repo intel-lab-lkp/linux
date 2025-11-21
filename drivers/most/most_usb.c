@@ -58,7 +58,7 @@
 
 /**
  * struct most_dci_obj - Direct Communication Interface
- * @kobj:position in sysfs
+ * @dev: device structure representing the DCI device in sysfs
  * @usb_device: pointer to the usb device
  * @reg_addr: register address for arbitrary DCI access
  */
@@ -83,6 +83,7 @@ struct clear_hold_work {
 
 /**
  * struct most_dev - holds all usb interface specific stuff
+ * @dev: device structure representing the 'most' device
  * @usb_device: pointer to usb device
  * @iface: hardware interface
  * @cap: channel capabilities
@@ -94,10 +95,12 @@ struct clear_hold_work {
  * @channel_lock: synchronize channel access
  * @padding_active: indicates channel uses padding
  * @is_channel_healthy: health status table of each channel
+ * @clear_work: per-channel work items used to clear halts on endpoints
  * @busy_urbs: list of anchored items
  * @io_mutex: synchronize I/O with disconnect
  * @link_stat_timer: timer for link status reports
  * @poll_work_obj: work for polling link status
+ * @on_netinfo: callback invoked when network information is retrieved
  */
 struct most_dev {
 	struct device dev;
@@ -135,6 +138,8 @@ static void wq_netinfo(struct work_struct *wq_obj);
  * @buf: buffer to store data
  *
  * This is reads data from INIC's direct register communication interface
+ *
+ * Return: 0 on success, negative error code on failure
  */
 static inline int drci_rd_reg(struct usb_device *dev, u16 reg, u16 *buf)
 {
@@ -166,6 +171,8 @@ static inline int drci_rd_reg(struct usb_device *dev, u16 reg, u16 *buf)
  * @data: data to write
  *
  * This is writes data to INIC's direct register communication interface
+ *
+ * Return: number of bytes transferred on success or a negative error code
  */
 static inline int drci_wr_reg(struct usb_device *dev, u16 reg, u16 data)
 {
@@ -189,6 +196,8 @@ static inline int start_sync_ep(struct usb_device *usb_dev, u16 ep)
  * get_stream_frame_size - calculate frame size of current configuration
  * @dev: device structure
  * @cfg: channel configuration
+ *
+ * Return: calculated frame size, or 0 on misconfiguration
  */
 static unsigned int get_stream_frame_size(struct device *dev,
 					  struct most_channel_config *cfg)
@@ -231,7 +240,7 @@ static unsigned int get_stream_frame_size(struct device *dev,
  * calls the associated completion function of the core and removes
  * them from the list.
  *
- * Returns 0 on success or error code otherwise.
+ * Returns: 0 on success or error code otherwise.
  */
 static int hdm_poison_channel(struct most_interface *iface, int channel)
 {
@@ -272,6 +281,8 @@ static int hdm_poison_channel(struct most_interface *iface, int channel)
  *
  * This inserts the INIC hardware specific padding bytes into a streaming
  * channel's buffer
+ *
+ * Return: 0 on success, negative errno on failure
  */
 static int hdm_add_padding(struct most_dev *mdev, int channel, struct mbo *mbo)
 {
@@ -305,6 +316,8 @@ static int hdm_add_padding(struct most_dev *mdev, int channel, struct mbo *mbo)
  *
  * This takes the INIC hardware specific padding bytes off a streaming
  * channel's buffer.
+ *
+ * Return: 0 on success, negative errno on failure.
  */
 static int hdm_remove_padding(struct most_dev *mdev, int channel,
 			      struct mbo *mbo)
@@ -449,7 +462,7 @@ static void hdm_read_completion(struct urb *urb)
  * that is being used for transmission of data. Before the URB is
  * submitted it is stored in the private anchor list.
  *
- * Returns 0 on success. On any error the URB is freed and a error code
+ * Returns: 0 on success. On any error the URB is freed and a error code
  * is returned.
  *
  * Context: Could in _some_ cases be interrupt!
@@ -562,6 +575,7 @@ static void hdm_dma_free(struct mbo *mbo, u32 size)
  * the number of bytes it needs to pad when transmitting or to cut off when
  * receiving data.
  *
+ * Return: 0 on success, negative errno on failure.
  */
 static int hdm_configure_channel(struct most_interface *iface, int channel,
 				 struct most_channel_config *conf)
@@ -638,6 +652,7 @@ exit:
  * hdm_request_netinfo - request network information
  * @iface: pointer to interface
  * @channel: channel ID
+ * @on_netinfo: callback function to invoke when network information is available
  *
  * This is used as trigger to set up the link status timer that
  * polls for the NI state of the INIC every 2 seconds.
@@ -945,7 +960,7 @@ static void release_mdev(struct device *dev)
  * the interface with the core.
  * Additionally, the DCI objects are created and the hardware is sync'd.
  *
- * Return 0 on success. In case of an error a negative number is returned.
+ * Return: 0 on success. In case of an error a negative number is returned.
  */
 static int
 hdm_probe(struct usb_interface *interface, const struct usb_device_id *id)
