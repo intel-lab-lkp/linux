@@ -1,0 +1,132 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/adc/ti,ads1118.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: TI ADS1018/ADS1118 SPI analog to digital converter
+
+maintainers:
+  - Kurt Borja <kuurtb@gmail.com>
+
+description: |
+  The ADS1018/ADS1118 is a precision, low-power, 12-bit or 16-bit, noise-free,
+  analog-to-digital converter (ADC). It integrates a programmable gain amplifier
+  (PGA), voltage reference, oscillator and high-accuracy temperature sensor.
+
+  Datasheets:
+    - ADS1018: https://www.ti.com/lit/ds/symlink/ads1018.pdf
+    - ADS1118: https://www.ti.com/lit/ds/symlink/ads1118.pdf
+
+properties:
+  compatible:
+    enum:
+      - ti,ads1018
+      - ti,ads1118
+
+  reg:
+    maxitems: 1
+
+  interrupts:
+    description: DOUT/DRDY (Data Out/Data Ready) line.
+    maxitems: 1
+
+  drdy-gpios:
+    description:
+      Extra GPIO line connected to DOUT/DRDY (Data Out/Data Ready). This allows
+      distinguishing between latched and real DRDY IRQs.
+    maxitems: 1
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 0
+
+  '#io-channel-cells':
+    const: 1
+
+required:
+  - compatible
+  - reg
+  - drdy-gpios
+  - '#address-cells'
+  - '#size-cells'
+
+patternProperties:
+  "^channel@[0-7]$":
+    type: object
+    $ref: /schemas/iio/adc/adc.yaml#
+    description: Properties for a single ADC channel.
+
+    properties:
+      reg:
+        minimum: 0
+        maximum: 7
+        description: The channel index (0-7).
+
+      ti,gain:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 5
+        description:
+          Programmable gain amplifier configuration, as described in the PGA
+          Config Register Field description. If not present, the default is
+          used.
+
+      ti,datarate:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 7
+        description:
+          Data rate configuration, as described in the DR Config Register Field
+          description. If not present, the default is used.
+
+    required:
+      - reg
+
+    additionalProperties: false
+
+allOf:
+  - $ref: /schemas/spi/spi-peripheral-props.yaml#
+
+  - if:
+    properties:
+      compatible:
+        contains:
+          const: ti,ads1018
+    then:
+      patternProperties:
+        "^channel@[0-7]$":
+          properties:
+            ti,datarate:
+              maximum: 6
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    spi0 {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        ads1118@0 {
+            compatible = "ti,ads1118";
+            reg = <0>;
+
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            spi-max-frequency = <4000000>;
+            spi-cpha;
+
+            interrupts-extended = <&gpio 14 IRQ_TYPE_EDGE_FALLING>;
+            drdy-gpios = <&gpio 14 GPIO_ACTIVE_LOW>;
+
+            channel@4 {
+                reg = <4>;
+                ti,gain = <0>;
+                ti,datarate = <7>;
+            };
+        };
+    };
