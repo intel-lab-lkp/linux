@@ -127,4 +127,79 @@ extern void __fput_sync(struct file *);
 
 extern unsigned int sysctl_nr_open_min, sysctl_nr_open_max;
 
+/*
+ * class_fd_prepare_t: Combined fd + file allocation cleanup class.
+ *
+ * Allocates an fd and a file together. On error paths, automatically cleans
+ * up whichever resource was successfully allocated. Allows flexible file
+ * allocation with different functions per usage.
+ */
+typedef struct {
+	int fd;
+	struct file *file;
+} class_fd_prepare_t;
+
+#define fd_prepare_fd(_T) ((_T).fd)
+#define fd_prepare_file(_T) ((_T).file)
+
+static inline void class_fd_prepare_destructor(class_fd_prepare_t *_T)
+{
+	if (unlikely(_T->fd >= 0)) {
+		put_unused_fd(_T->fd);
+		if (unlikely(!IS_ERR_OR_NULL(_T->file)))
+			fput(_T->file);
+	}
+}
+
+static inline int class_fd_prepare_lock_err(class_fd_prepare_t *_T)
+{
+	if (IS_ERR(_T->file))
+		return PTR_ERR(_T->file);
+	if (unlikely(!_T->file))
+		return -ENOMEM;
+	return 0;
+}
+
+/*
+ * __FD_PREPARE_INIT(fd_flags, file_init_expr):
+ *     Helper to initialize fd_prepare class.
+ * @fd_flags: flags for get_unused_fd_flags()
+ * @file_init_expr: expression that returns struct file *
+ *
+ * Returns a struct fd_prepare with fd and file set.
+ * If fd allocation fails, file will be set to ERR_PTR with the error code.
+ * If fd succeeds but file_init_expr fails, file will contain the ERR_PTR.
+ * The file pointer is the single source of truth for error checking.
+ */
+#define __FD_PREPARE_INIT(_fd_flags, _file_init_owned)              \
+	({                                                          \
+		class_fd_prepare_t _fd_prepare = {                  \
+			.fd = get_unused_fd_flags((_fd_flags)),     \
+		};                                                  \
+		if (likely(_fd_prepare.fd >= 0))                    \
+			_fd_prepare.file = (_file_init_owned);      \
+		else                                                \
+			_fd_prepare.file = ERR_PTR(_fd_prepare.fd); \
+		_fd_prepare;                                        \
+	})
+
+/*
+ * FD_PREPARE(var, fd_flags, file_init_owned):
+ *     Declares and initializes an fd_prepare variable with automatic cleanup.
+ *     No separate scope required - cleanup happens when variable goes out of scope.
+ *
+ * @_var: name of struct fd_prepare variable to define
+ * @_fd_flags: flags for get_unused_fd_flags()
+ * @_file_init_owned: struct file to take ownership of (can be expression)
+ */
+#define FD_PREPARE(_var, _fd_flags, _file_init_owned) \
+	CLASS_INIT(fd_prepare, _var, __FD_PREPARE_INIT(_fd_flags, _file_init_owned))
+
+#define fd_publish(_fd_prepare)                           \
+	({                                                \
+		class_fd_prepare_t *__p = &(_fd_prepare); \
+		fd_install(__p->fd, __p->file);           \
+		take_fd(__p->fd);                         \
+	})
+
 #endif /* __LINUX_FILE_H */
