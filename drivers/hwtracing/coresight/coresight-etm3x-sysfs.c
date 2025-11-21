@@ -725,7 +725,7 @@ static ssize_t cntr_val_show(struct device *dev,
 	if (!coresight_get_mode(drvdata->csdev)) {
 		spin_lock(&drvdata->spinlock);
 		for (i = 0; i < drvdata->nr_cntr; i++)
-			ret += sprintf(buf, "counter %d: %x\n",
+			ret += sprintf(buf + ret, "counter %d: %x\n",
 				       i, config->cntr_val[i]);
 		spin_unlock(&drvdata->spinlock);
 		return ret;
@@ -733,7 +733,7 @@ static ssize_t cntr_val_show(struct device *dev,
 
 	for (i = 0; i < drvdata->nr_cntr; i++) {
 		val = etm_readl(drvdata, ETMCNTVRn(i));
-		ret += sprintf(buf, "counter %d: %x\n", i, val);
+		ret += sprintf(buf + ret, "counter %d: %x\n", i, val);
 	}
 
 	return ret;
