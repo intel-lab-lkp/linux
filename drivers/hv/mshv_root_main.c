@@ -1938,30 +1938,16 @@ mshv_ioctl_create_partition(void __user *user_arg, struct device *module_dev)
 		goto delete_partition;
 
 	ret = mshv_init_async_handler(partition);
-	if (ret)
-		goto remove_partition;
-
-	fd = get_unused_fd_flags(O_CLOEXEC);
-	if (fd < 0) {
-		ret = fd;
-		goto remove_partition;
+	if (!ret) {
+		FD_PREPARE(fdf, O_CLOEXEC,
+			   anon_inode_getfile("mshv_partition",
+					      &mshv_partition_fops, partition, O_RDWR));
+		ret = ACQUIRE_ERR(fd_prepare, &fdf);
+		if (!ret)
+			return fd_publish(fdf);
 	}
-
-	file = anon_inode_getfile("mshv_partition", &mshv_partition_fops,
-				  partition, O_RDWR);
-	if (IS_ERR(file)) {
-		ret = PTR_ERR(file);
-		goto put_fd;
-	}
-
-	fd_install(fd, file);
-
-	return fd;
-
-put_fd:
-	put_unused_fd(fd);
-remove_partition:
 	remove_partition(partition);
+
 delete_partition:
 	hv_call_delete_partition(partition->pt_id);
 cleanup_irq_srcu:
