@@ -31,6 +31,9 @@ struct device_node *usb_of_get_device_node(struct usb_device *hub, int port1)
 		if (of_property_read_u32(node, "reg", &reg))
 			continue;
 
+		if (!of_device_is_available(node))
+			continue;
+
 		if (reg == port1)
 			return node;
 	}
