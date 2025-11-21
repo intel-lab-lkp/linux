@@ -326,4 +326,6 @@ config PINCTRL_RZV2M
 	  This selects GPIO and pinctrl driver for Renesas RZ/V2M
 	  platforms.
 
+source "drivers/pinctrl/renesas/poeg/Kconfig"
+
 endmenu
