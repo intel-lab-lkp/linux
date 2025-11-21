@@ -2123,8 +2123,20 @@ static int rto_next_cpu(struct root_domain *rd)
 
 		rd->rto_cpu = cpu;
 
-		if (cpu < nr_cpu_ids)
+		if (cpu < nr_cpu_ids) {
+			struct task_struct *t;
+			struct rq *rq = cpu_rq(cpu);
+
+			rcu_read_lock();
+			t = rcu_dereference(rq->curr);
+			if (test_tsk_need_resched(t)) {
+				rcu_read_unlock();
+				continue;
+			}
+			rcu_read_unlock();
+
 			return cpu;
+		}
 
 		rd->rto_cpu = -1;
 
