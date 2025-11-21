@@ -66,9 +66,11 @@ setup_listener() {
 }
 
 add_peer() {
+	dev=${2:-"any"}
+
 	if [ "${PROTO}" == "UDP" ]; then
 		if [ ${1} -eq 0 ]; then
-			ip netns exec peer0 ${OVPN_CLI} new_multi_peer tun0 1 ${UDP_PEERS_FILE}
+			ip netns exec peer0 ${OVPN_CLI} new_multi_peer tun0 ${dev} 1 ${UDP_PEERS_FILE}
 
 			for p in $(seq 1 ${NUM_PEERS}); do
 				ip netns exec peer0 ${OVPN_CLI} new_key tun0 ${p} 1 0 ${ALG} 0 \
@@ -79,7 +81,7 @@ add_peer() {
 			RADDR=$(awk "NR == ${1} {print \$3}" ${UDP_PEERS_FILE})
 			RPORT=$(awk "NR == ${1} {print \$4}" ${UDP_PEERS_FILE})
 			LPORT=$(awk "NR == ${1} {print \$6}" ${UDP_PEERS_FILE})
-			ip netns exec peer${1} ${OVPN_CLI} new_peer tun${1} ${TX_ID} ${1} \
+			ip netns exec peer${1} ${OVPN_CLI} new_peer tun${1} ${dev} ${TX_ID} ${1} \
 				${LPORT} ${RADDR} ${RPORT}
 			ip netns exec peer${1} ${OVPN_CLI} new_key tun${1} ${TX_ID} 1 0 \
 				${ALG} 1 data64.key
