@@ -617,6 +617,9 @@ static bool amdgpu_atpx_detect(void)
 		amdgpu_atpx_get_quirks(pdev);
 	}
 
+	pci_dev_put(pdev);
+	pdev = NULL;
+
 	while ((pdev = pci_get_class(PCI_CLASS_DISPLAY_OTHER << 8, pdev)) != NULL) {
 		vga_count++;
 
@@ -626,6 +629,8 @@ static bool amdgpu_atpx_detect(void)
 		d3_supported |= parent_pdev && parent_pdev->bridge_d3;
 		amdgpu_atpx_get_quirks(pdev);
 	}
+
+	pci_dev_put(pdev);
 
 	if (has_atpx && vga_count == 2) {
 		acpi_get_name(amdgpu_atpx_priv.atpx.handle, ACPI_FULL_PATHNAME, &buffer);
