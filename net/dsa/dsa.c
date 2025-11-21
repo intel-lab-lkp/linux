@@ -1246,6 +1246,7 @@ static int dsa_port_parse_of(struct dsa_port *dp, struct device_node *dn)
 	struct device_node *ethernet = of_parse_phandle(dn, "ethernet", 0);
 	const char *name = of_get_property(dn, "label", NULL);
 	bool link = of_property_read_bool(dn, "link");
+	int err;
 
 	dp->dn = dn;
 
@@ -1259,7 +1260,13 @@ static int dsa_port_parse_of(struct dsa_port *dp, struct device_node *dn)
 			return -EPROBE_DEFER;
 
 		user_protocol = of_get_property(dn, "dsa-tag-protocol", NULL);
-		return dsa_port_parse_cpu(dp, conduit, user_protocol);
+		err = dsa_port_parse_cpu(dp, conduit, user_protocol);
+		if (err) {
+			put_device(conduit);
+			return err;
+		}
+
+		return 0;
 	}
 
 	if (link)
