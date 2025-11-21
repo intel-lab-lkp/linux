@@ -3277,8 +3277,7 @@ EXPORT_SYMBOL_GPL(unix_outq_len);
 
 static int unix_open_file(struct sock *sk)
 {
-	struct file *f;
-	int fd;
+	int ret;
 
 	if (!ns_capable(sock_net(sk)->user_ns, CAP_NET_ADMIN))
 		return -EPERM;
@@ -3289,18 +3288,11 @@ static int unix_open_file(struct sock *sk)
 	if (!unix_sk(sk)->path.dentry)
 		return -ENOENT;
 
-	fd = get_unused_fd_flags(O_CLOEXEC);
-	if (fd < 0)
-		return fd;
-
-	f = dentry_open(&unix_sk(sk)->path, O_PATH, current_cred());
-	if (IS_ERR(f)) {
-		put_unused_fd(fd);
-		return PTR_ERR(f);
-	}
-
-	fd_install(fd, f);
-	return fd;
+	FD_PREPARE(fdf, O_CLOEXEC, dentry_open(&unix_sk(sk)->path, O_PATH, current_cred()));
+	ret = ACQUIRE_ERR(fd_prepare, &fdf);
+	if (ret)
+		return ret;
+	return fd_publish(fdf);
 }
 
 static int unix_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
