@@ -52,22 +52,7 @@ static inline struct llist_head *ss_lhead_cpu(struct cgroup_subsys *ss, int cpu)
 	return per_cpu_ptr(&rstat_backlog_list, cpu);
 }
 
-/**
- * css_rstat_updated - keep track of updated rstat_cpu
- * @css: target cgroup subsystem state
- * @cpu: cpu on which rstat_cpu was updated
- *
- * Atomically inserts the css in the ss's llist for the given cpu. This is
- * reentrant safe i.e. safe against softirq, hardirq and nmi. The ss's llist
- * will be processed at the flush time to create the update tree.
- *
- * NOTE: if the user needs the guarantee that the updater either add itself in
- * the lockless list or the concurrent flusher flushes its updated stats, a
- * memory barrier is needed before the call to css_rstat_updated() i.e. a
- * barrier after updating the per-cpu stats and before calling
- * css_rstat_updated().
- */
-__bpf_kfunc void css_rstat_updated(struct cgroup_subsys_state *css, int cpu)
+static void __css_rstat_updated(struct cgroup_subsys_state *css, int cpu)
 {
 	struct llist_head *lhead;
 	struct css_rstat_cpu *rstatc;
@@ -120,6 +105,28 @@ __bpf_kfunc void css_rstat_updated(struct cgroup_subsys_state *css, int cpu)
 
 	lhead = ss_lhead_cpu(css->ss, cpu);
 	llist_add(&rstatc->lnode, lhead);
+}
+
+/**
+ * css_rstat_updated - keep track of updated rstat_cpu
+ * @css: target cgroup subsystem state
+ * @cpu: cpu on which rstat_cpu was updated
+ *
+ * Atomically inserts the css in the ss's llist for the given cpu. This is
+ * reentrant safe i.e. safe against softirq, hardirq and nmi. The ss's llist
+ * will be processed at the flush time to create the update tree.
+ *
+ * NOTE: if the user needs the guarantee that the updater either add itself in
+ * the lockless list or the concurrent flusher flushes its updated stats, a
+ * memory barrier is needed before the call to css_rstat_updated() i.e. a
+ * barrier after updating the per-cpu stats and before calling
+ * css_rstat_updated().
+ */
+__bpf_kfunc void css_rstat_updated(struct cgroup_subsys_state *css, int cpu)
+{
+	preempt_disable();
+	__css_rstat_updated(css, cpu);
+	preempt_enable();
 }
 
 static void __css_process_update_tree(struct cgroup_subsys_state *css, int cpu)
