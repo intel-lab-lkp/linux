@@ -6050,6 +6050,7 @@ intel_dp_detect(struct drm_connector *_connector,
 	if (status == connector_status_disconnected) {
 		intel_dp_test_reset(intel_dp);
 		memset(connector->dp.dsc_dpcd, 0, sizeof(connector->dp.dsc_dpcd));
+		memset(connector->dp.pr_dpcd, 0, sizeof(connector->dp.pr_dpcd));
 		intel_dp->psr.sink_panel_replay_support = false;
 		intel_dp->psr.sink_panel_replay_su_support = false;
 		intel_dp->psr.sink_panel_replay_dsc_support =
