@@ -3471,9 +3471,29 @@ static bool assign_rescuer_work(struct pool_workqueue *pwq, struct worker *rescu
 		list_del_init(&cursor->entry);
 	}
 
-	/* need rescue? */
-	if (!pwq->nr_active || !need_to_create_worker(pool))
+	/* have work items to rescue? */
+	if (!pwq->nr_active)
 		return false;
+
+	/* need rescue? */
+	if (!need_to_create_worker(pool)) {
+		/*
+		 * The pool has idle workers and doesn't need the rescuer, so it
+		 * could simply return false here. However, the memory pressure
+		 * might not be fully relieved, and if the regular workers later
+		 * go to sleep and the pool runs out of idle workers, mayday
+		 * would be triggered again.
+		 *
+		 * Do more work even if it doesn't need rescue, to help the
+		 * regular workers in case it is a temporary relief and to
+		 * reduce relapse.
+		 *
+		 * Unless the limit is reached or there are other PWQs needing
+		 * help.
+		 */
+		if (limited || !list_empty(&pwq->wq->maydays))
+			return false;
+	}
 
 	/* try to assign a work to rescue */
 	list_for_each_entry_safe_from(work, n, &pool->worklist, entry) {
