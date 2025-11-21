@@ -34,6 +34,6 @@ void cdev_device_del(struct cdev *cdev, struct device *dev);
 
 void cdev_del(struct cdev *);
 
-void cd_forget(struct inode *);
+void inode_cdev_forget(struct inode *);
 
 #endif
