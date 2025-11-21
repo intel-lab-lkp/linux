@@ -101,6 +101,7 @@ struct hantro_variant {
 	unsigned int double_buffer : 1;
 	unsigned int legacy_regs : 1;
 	unsigned int late_postproc : 1;
+	atomic_t *shared_resource;
 };
 
 /**

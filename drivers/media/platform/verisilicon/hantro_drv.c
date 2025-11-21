@@ -19,6 +19,7 @@
 #include <linux/slab.h>
 #include <linux/videodev2.h>
 #include <linux/workqueue.h>
+#include <linux/iopoll.h>
 #include <media/v4l2-event.h>
 #include <media/v4l2-mem2mem.h>
 #include <media/videobuf2-core.h>
@@ -93,6 +94,9 @@ static void hantro_job_finish(struct hantro_dev *vpu,
 
 	clk_bulk_disable(vpu->variant->num_clocks, vpu->clocks);
 
+	if (vpu->variant->shared_resource)
+		atomic_cmpxchg(vpu->variant->shared_resource, 0, 1);
+
 	hantro_job_finish_no_pm(vpu, ctx, result);
 }
 
@@ -166,11 +170,33 @@ void hantro_end_prepare_run(struct hantro_ctx *ctx)
 			      msecs_to_jiffies(2000));
 }
 
+static int hantro_wait_shared_resource(struct hantro_dev *vpu)
+{
+	u32 data;
+	int ret;
+
+	if (!vpu->variant->shared_resource)
+		return 0;
+
+	ret = read_poll_timeout(atomic_cmpxchg, data, data, 10, 300 * NSEC_PER_MSEC, false,
+				vpu->variant->shared_resource, 1, 0);
+	if (ret) {
+		dev_err(vpu->dev, "Failed to wait shared resource\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static void device_run(void *priv)
 {
 	struct hantro_ctx *ctx = priv;
 	struct vb2_v4l2_buffer *src, *dst;
 	int ret;
+
+	ret = hantro_wait_shared_resource(ctx->dev);
+	if (ret < 0)
+		goto err_cancel_job;
 
 	src = hantro_get_src_buf(ctx);
 	dst = hantro_get_dst_buf(ctx);
