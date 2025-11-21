@@ -365,6 +365,17 @@ struct ftrace_likely_data {
 #endif
 
 /*
+ * Optional: only supported since clang >= 21
+ *
+ * clang: https://github.com/llvm/llvm-project/pull/137250
+ */
+#ifdef CONFIG_CC_HAS_COUNTED_BY_FOR_POINTER
+#define __counted_by_ptr(member)	__attribute__((__counted_by__(member)))
+#else
+#define __counted_by_ptr(member)
+#endif
+
+/*
  * Optional: only supported since gcc >= 15
  * Optional: only supported since clang >= 18
  *
