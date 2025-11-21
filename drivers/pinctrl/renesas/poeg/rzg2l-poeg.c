@@ -14,6 +14,7 @@
 #include <linux/pinctrl/rzg2l-poeg.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/pwm/rzg2l-gpt.h>
 #include <linux/pinctrl/rzg2l-poeg.h>
 #include <linux/poll.h>
 #include <linux/reset.h>
@@ -49,7 +50,10 @@ struct rzg2l_poeg_chip {
 	struct device *gpt_dev;
 	struct reset_control *rstc;
 	void __iomem *mmio;
+	DECLARE_BITMAP(gpt_irq, 3);
 	struct cdev poeg_cdev;
+	wait_queue_head_t events_wait;
+	DECLARE_KFIFO_PTR(events, struct poeg_event);
 	u32 cfg;
 	int minor_n;
 	u8 gpt_channels[RZG2L_GPT_MAX_HW_CHANNELS];
@@ -81,12 +85,29 @@ static int rzg2l_poeg_output_disable_user(struct rzg2l_poeg_chip *chip, bool ena
 	return 0;
 }
 
+static void rzg2l_poeg_config_irq(struct rzg2l_poeg_chip *chip)
+{
+	if (test_bit(RZG2L_GPT_OABHF, chip->gpt_irq))
+		rzg2l_gpt_poeg_disable_req_both_high(chip->gpt_dev, chip->index, true);
+}
+
 static irqreturn_t rzg2l_poeg_irq(int irq, void *ptr)
 {
 	struct rzg2l_poeg_chip *chip = ptr;
+	struct poeg_event ev;
 	u32 val;
 
+	val = rzg2l_gpt_poeg_disable_req_irq_status(chip->gpt_dev, chip->index);
+	ev.channel = chip->index;
+	ev.gpt_disable_irq_status = val;
+	kfifo_in(&chip->events, &ev, 1);
+	wake_up_poll(&chip->events_wait, EPOLLIN);
+
+	rzg2l_gpt_poeg_disable_req_clr(chip->gpt_dev, chip->index);
 	val = rzg2l_poeg_read(chip);
+	if (val & POEGG_IOCF)
+		val &= ~POEGG_IOCF;
+
 	if (val & POEGG_PIDF)
 		val &= ~POEGG_PIDF;
 
@@ -95,7 +116,50 @@ static irqreturn_t rzg2l_poeg_irq(int irq, void *ptr)
 	return IRQ_HANDLED;
 }
 
-static ssize_t rzg2l_poeg_chrdev_write(struct file *filp, const char __user *buf,
+static __poll_t rzg2l_poeg_chrdev_poll(struct file *filp,
+				       struct poll_table_struct *pollt)
+{
+	struct rzg2l_poeg_chip *const chip = filp->private_data;
+	__poll_t events = 0;
+
+	poll_wait(filp, &chip->events_wait, pollt);
+	if (!kfifo_is_empty(&chip->events))
+		events = EPOLLIN | EPOLLRDNORM;
+
+	return events;
+}
+
+static ssize_t rzg2l_poeg_chrdev_read(struct file *filp, char __user *buf,
+				      size_t len, loff_t *f_ps)
+{
+	struct rzg2l_poeg_chip *const chip = filp->private_data;
+	unsigned int copied;
+	int err;
+
+	if (len < sizeof(struct poeg_event))
+		return -EINVAL;
+
+	do {
+		if (kfifo_is_empty(&chip->events)) {
+			if (filp->f_flags & O_NONBLOCK)
+				return -EAGAIN;
+
+			err = wait_event_interruptible(chip->events_wait,
+						       !kfifo_is_empty(&chip->events));
+			if (err < 0)
+				return err;
+		}
+
+		err = kfifo_to_user(&chip->events, buf, len, &copied);
+		if (err < 0)
+			return err;
+	} while (!copied);
+
+	return copied;
+}
+
+static ssize_t rzg2l_poeg_chrdev_write(struct file *filp,
+				       const char __user *buf,
 				       size_t len, loff_t *f_ps)
 {
 	struct rzg2l_poeg_chip *const chip = filp->private_data;
@@ -110,6 +174,12 @@ static ssize_t rzg2l_poeg_chrdev_write(struct file *filp, const char __user *buf
 		break;
 	case RZG2L_POEG_OUTPUT_DISABLE_USR_DISABLE_CMD:
 		rzg2l_poeg_output_disable_user(chip, false);
+		break;
+	case RZG2L_POEG_GPT_CFG_IRQ_CMD:
+		rzg2l_poeg_config_irq(chip);
+		break;
+	case RZG2L_POEG_GPT_FAULT_CLR_CMD:
+		rzg2l_gpt_pin_reenable(chip->gpt_dev, chip->index);
 		break;
 	default:
 		return -EINVAL;
@@ -137,7 +207,9 @@ static int rzg2l_poeg_chrdev_release(struct inode *inode, struct file *filp)
 
 static const struct file_operations poeg_fops = {
 	.owner = THIS_MODULE,
+	.read = rzg2l_poeg_chrdev_read,
 	.write = rzg2l_poeg_chrdev_write,
+	.poll = rzg2l_poeg_chrdev_poll,
 	.open = rzg2l_poeg_chrdev_open,
 	.release = rzg2l_poeg_chrdev_release,
 };
@@ -272,6 +344,9 @@ static int rzg2l_poeg_probe(struct platform_device *pdev)
 	case POEG_USER_CTRL:
 		rzg2l_poeg_write(chip, 0);
 		break;
+	case POEG_GPT_BOTH_HIGH:
+		assign_bit(RZG2L_GPT_OABHF, chip->gpt_irq, true);
+		break;
 	case POEG_EXT_PIN_CTRL:
 		rzg2l_poeg_write(chip, POEGG_PIDE);
 		break;
@@ -280,8 +355,12 @@ static int rzg2l_poeg_probe(struct platform_device *pdev)
 		goto err_pm;
 	}
 
+	if (cfg & POEG_GPT_ALL)
+		rzg2l_poeg_write(chip, POEGG_IOCE);
+
 	chip->cfg = cfg;
 
+	init_waitqueue_head(&chip->events_wait);
 	cdev_init(&chip->poeg_cdev, &poeg_fops);
 	chip->poeg_cdev.owner = THIS_MODULE;
 	ret = cdev_add(&chip->poeg_cdev, MKDEV(MAJOR(g_poeg_dev), chip->index), 1);
@@ -295,6 +374,10 @@ static int rzg2l_poeg_probe(struct platform_device *pdev)
 		dev_err_probe(dev, ret, "Error %d creating device for port\n", chip->index);
 		goto free_cdev;
 	}
+
+	ret = kfifo_alloc(&chip->events, 64, GFP_KERNEL);
+	if (ret)
+		goto free_cdev;
 
 	chip->minor_n = chip->index;
 
@@ -311,6 +394,7 @@ static void rzg2l_poeg_remove(struct platform_device *pdev)
 {
 	struct rzg2l_poeg_chip *chip = platform_get_drvdata(pdev);
 
+	kfifo_free(&chip->events);
 	device_destroy(poeg_class, MKDEV(MAJOR(g_poeg_dev), chip->minor_n));
 	cdev_del(&chip->poeg_cdev);
 	pm_runtime_put(&pdev->dev);
