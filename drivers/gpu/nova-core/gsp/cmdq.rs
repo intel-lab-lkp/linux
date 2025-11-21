@@ -588,21 +588,24 @@ impl Cmdq {
             header.length(),
         );
 
+        // The length of the message that follows the header.
+        let msg_length = header.length() - size_of::<GspMsgElement>();
+
         // Check that the driver read area is large enough for the message.
-        if slice_1.len() + slice_2.len() < header.length() {
+        if slice_1.len() + slice_2.len() < msg_length {
             return Err(EIO);
         }
 
         // Cut the message slices down to the actual length of the message.
-        let (slice_1, slice_2) = if slice_1.len() > header.length() {
+        let (slice_1, slice_2) = if slice_1.len() > msg_length {
             // PANIC: we checked above that `slice_1` is at least as long as `msg_header.length()`.
-            (slice_1.split_at(header.length()).0, &slice_2[0..0])
+            (slice_1.split_at(msg_length).0, &slice_2[0..0])
         } else {
             (
                 slice_1,
                 // PANIC: we checked above that `slice_1.len() + slice_2.len()` is at least as
                 // large as `msg_header.length()`.
-                slice_2.split_at(header.length() - slice_1.len()).0,
+                slice_2.split_at(msg_length - slice_1.len()).0,
             )
         };
 

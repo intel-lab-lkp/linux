@@ -853,7 +853,7 @@ impl GspMsgElement {
         self.inner.checkSum = checksum;
     }
 
-    /// Returns the total length of the message.
+    /// Returns the total length of the message, message and RPC headers included.
     pub(crate) fn length(&self) -> usize {
         // `rpc.length` includes the length of the GspRpcHeader but not the message header.
         size_of::<Self>() - size_of::<bindings::rpc_message_header_v>()
