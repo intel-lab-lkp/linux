@@ -446,13 +446,13 @@ static int audio_notify(struct g_audio *audio, int unit_id, int cs)
 	}
 
 	req = usb_ep_alloc_request(uac1->int_ep, GFP_ATOMIC);
-	if (req == NULL) {
+	if (!req) {
 		ret = -ENOMEM;
 		goto err_dec_int_count;
 	}
 
 	msg = kmalloc(sizeof(*msg), GFP_ATOMIC);
-	if (msg == NULL) {
+	if (!msg) {
 		ret = -ENOMEM;
 		goto err_free_request;
 	}
@@ -496,8 +496,8 @@ in_rq_cur(struct usb_function *fn, const struct usb_ctrlrequest *cr)
 	u8 control_selector = w_value >> 8;
 	int value = -EOPNOTSUPP;
 
-	if ((FUIN_EN(opts) && (entity_id == USB_IN_FU_ID)) ||
-			(FUOUT_EN(opts) && (entity_id == USB_OUT_FU_ID))) {
+	if ((FUIN_EN(opts) && entity_id == USB_IN_FU_ID) ||
+			(FUOUT_EN(opts) && entity_id == USB_OUT_FU_ID)) {
 		unsigned int is_playback = 0;
 
 		if (FUIN_EN(opts) && (entity_id == USB_IN_FU_ID))
@@ -547,8 +547,8 @@ in_rq_min(struct usb_function *fn, const struct usb_ctrlrequest *cr)
 	u8 control_selector = w_value >> 8;
 	int value = -EOPNOTSUPP;
 
-	if ((FUIN_EN(opts) && (entity_id == USB_IN_FU_ID)) ||
-			(FUOUT_EN(opts) && (entity_id == USB_OUT_FU_ID))) {
+	if ((FUIN_EN(opts) && entity_id == USB_IN_FU_ID) ||
+			(FUOUT_EN(opts) && entity_id == USB_OUT_FU_ID)) {
 		unsigned int is_playback = 0;
 
 		if (FUIN_EN(opts) && (entity_id == USB_IN_FU_ID))
@@ -714,11 +714,6 @@ out_rq_cur_complete(struct usb_ep *ep, struct usb_request *req)
 			u_audio_set_volume(audio, is_playback, volume);
 
 			return;
-		} else {
-			dev_err(&audio->gadget->dev,
-				"%s:%d control_selector=%d TODO!\n",
-				__func__, __LINE__, control_selector);
-			usb_ep_set_halt(ep);
 		}
 	} else {
 		dev_err(&audio->gadget->dev,
@@ -930,7 +925,7 @@ f_audio_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 	return value;
 }
 
-static int f_audio_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
+static int f_audio_set_alt(struct usb_function *f, unsigned int intf, unsigned int alt)
 {
 	struct usb_composite_dev *cdev = f->config->cdev;
 	struct usb_gadget *gadget = cdev->gadget;
@@ -984,7 +979,7 @@ static int f_audio_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 	return ret;
 }
 
-static int f_audio_get_alt(struct usb_function *f, unsigned intf)
+static int f_audio_get_alt(struct usb_function *f, unsigned int intf)
 {
 	struct usb_composite_dev *cdev = f->config->cdev;
 	struct usb_gadget *gadget = cdev->gadget;
@@ -1003,7 +998,6 @@ static int f_audio_get_alt(struct usb_function *f, unsigned intf)
 
 	return -EINVAL;
 }
-
 
 static void f_audio_disable(struct usb_function *f)
 {
@@ -1079,7 +1073,7 @@ uac1_ac_header_descriptor *build_ac_header_desc(struct f_uac1_opts *opts)
 }
 
 /* Use macro to overcome line length limitation */
-#define USBDHDR(p) (struct usb_descriptor_header *)(p)
+#define USBDHDR(p) ((struct usb_descriptor_header *)(p))
 
 static void setup_descriptor(struct f_uac1_opts *opts)
 {
