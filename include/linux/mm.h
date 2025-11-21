@@ -3879,6 +3879,28 @@ static inline void clear_page_guard(struct zone *zone, struct page *page,
 				unsigned int order) {}
 #endif	/* CONFIG_DEBUG_PAGEALLOC */
 
+#ifndef clear_user_page
+/**
+ * clear_user_page() - clear a page to be mapped to user space
+ * @addr: the address of the page
+ * @vaddr: the address of the user mapping
+ * @page: the page
+ */
+static inline void clear_user_page(void *addr, unsigned long vaddr, struct page *page)
+{
+#ifdef clear_user_highpage
+	/*
+	 * If an architecture defines its own clear_user_highpage() variant,
+	 * then we have to be a bit more careful here and cannot simply
+	 * rely on clear_page().
+	 */
+	clear_user_highpage(page, vaddr);
+#else
+	clear_page(addr);
+#endif
+}
+#endif
+
 #ifdef __HAVE_ARCH_GATE_AREA
 extern struct vm_area_struct *get_gate_vma(struct mm_struct *mm);
 extern int in_gate_area_no_mm(unsigned long addr);
