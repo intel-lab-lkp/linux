@@ -1843,6 +1843,9 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	if (writable)
 		prot |= KVM_PGTABLE_PROT_W;
 
+	if (writable && kvm->enable_hdbss && logging_active)
+		prot |= KVM_PGTABLE_PROT_DBM;
+
 	if (exec_fault)
 		prot |= KVM_PGTABLE_PROT_X;
 
@@ -1949,6 +1952,13 @@ int kvm_handle_guest_abort(struct kvm_vcpu *vcpu)
 		return -EFAULT;
 
 	is_iabt = kvm_vcpu_trap_is_iabt(vcpu);
+
+	/*
+	 * HDBSS buffer already flushed when enter handle_trap_exceptions().
+	 * Nothing to do here.
+	 */
+	if (ESR_ELx_ISS2(esr) & ESR_ELx_HDBSSF)
+		return 1;
 
 	if (esr_fsc_is_translation_fault(esr)) {
 		/* Beyond sanitised PARange (which is the IPA limit) */

@@ -412,6 +412,49 @@ static exit_handle_fn kvm_get_exit_handler(struct kvm_vcpu *vcpu)
 	return arm_exit_handlers[esr_ec];
 }
 
+static void kvm_flush_hdbss_buffer(struct kvm_vcpu *vcpu)
+{
+	int idx, curr_idx;
+	u64 *hdbss_buf;
+	struct kvm *kvm = vcpu->kvm;
+	u64 br_el2;
+
+	if (!kvm->enable_hdbss)
+		return;
+
+	dsb(sy);
+	isb();
+	curr_idx = HDBSSPROD_IDX(read_sysreg_s(SYS_HDBSSPROD_EL2));
+	br_el2 = HDBSSBR_EL2(vcpu->arch.hdbss.base_phys, vcpu->arch.hdbss.size);
+
+	/* Do nothing if HDBSS buffer is empty or br_el2 is NULL */
+	if (curr_idx == 0 || br_el2 == 0)
+		return;
+
+	hdbss_buf = page_address(phys_to_page(vcpu->arch.hdbss.base_phys));
+	if (!hdbss_buf) {
+		kvm_err("Enter flush hdbss buffer with buffer == NULL!");
+		return;
+	}
+
+	guard(write_lock_irqsave)(&vcpu->kvm->mmu_lock);
+	for (idx = 0; idx < curr_idx; idx++) {
+		u64 gpa;
+
+		gpa = hdbss_buf[idx];
+		if (!(gpa & HDBSS_ENTRY_VALID))
+			continue;
+
+		gpa &= HDBSS_ENTRY_IPA;
+		kvm_vcpu_mark_page_dirty(vcpu, gpa >> PAGE_SHIFT);
+	}
+
+	/* reset HDBSS index */
+	write_sysreg_s(0, SYS_HDBSSPROD_EL2);
+	vcpu->arch.hdbss.next_index = 0;
+	isb();
+}
+
 /*
  * We may be single-stepping an emulated instruction. If the emulation
  * has been completed in the kernel, we can return to userspace with a
@@ -446,6 +489,8 @@ static int handle_trap_exceptions(struct kvm_vcpu *vcpu)
 int handle_exit(struct kvm_vcpu *vcpu, int exception_index)
 {
 	struct kvm_run *run = vcpu->run;
+
+	kvm_flush_hdbss_buffer(vcpu);
 
 	if (ARM_SERROR_PENDING(exception_index)) {
 		/*

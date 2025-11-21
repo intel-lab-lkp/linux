@@ -87,6 +87,7 @@ int __init kvm_arm_init_sve(void);
 u32 __attribute_const__ kvm_target_cpu(void);
 void kvm_reset_vcpu(struct kvm_vcpu *vcpu);
 void kvm_arm_vcpu_destroy(struct kvm_vcpu *vcpu);
+void kvm_arm_vcpu_free_hdbss(struct kvm_vcpu *vcpu);
 
 struct kvm_hyp_memcache {
 	phys_addr_t head;
@@ -793,6 +794,12 @@ struct vcpu_reset_state {
 	bool		reset;
 };
 
+struct vcpu_hdbss_state {
+	phys_addr_t base_phys;
+	u32 size;
+	u32 next_index;
+};
+
 struct vncr_tlb;
 
 struct kvm_vcpu_arch {
@@ -897,6 +904,9 @@ struct kvm_vcpu_arch {
 
 	/* Per-vcpu TLB for VNCR_EL2 -- NULL when !NV */
 	struct vncr_tlb	*vncr_tlb;
+
+	/* HDBSS registers info */
+	struct vcpu_hdbss_state hdbss;
 };
 
 /*

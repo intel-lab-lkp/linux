@@ -331,6 +331,23 @@ static __always_inline void __load_stage2(struct kvm_s2_mmu *mmu,
 	asm(ALTERNATIVE("nop", "isb", ARM64_WORKAROUND_SPECULATIVE_AT));
 }
 
+static __always_inline void __load_hdbss(struct kvm_vcpu *vcpu)
+{
+	struct kvm *kvm = vcpu->kvm;
+	u64 br_el2, prod_el2;
+
+	if (!kvm->enable_hdbss)
+		return;
+
+	br_el2 = HDBSSBR_EL2(vcpu->arch.hdbss.base_phys, vcpu->arch.hdbss.size);
+	prod_el2 = vcpu->arch.hdbss.next_index;
+
+	write_sysreg_s(br_el2, SYS_HDBSSBR_EL2);
+	write_sysreg_s(prod_el2, SYS_HDBSSPROD_EL2);
+
+	isb();
+}
+
 static inline struct kvm *kvm_s2_mmu_to_kvm(struct kvm_s2_mmu *mmu)
 {
 	return container_of(mmu->arch, struct kvm, arch);

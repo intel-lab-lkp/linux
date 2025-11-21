@@ -79,6 +79,92 @@ int kvm_arch_vcpu_should_kick(struct kvm_vcpu *vcpu)
 	return kvm_vcpu_exiting_guest_mode(vcpu) == IN_GUEST_MODE;
 }
 
+void kvm_arm_vcpu_free_hdbss(struct kvm_vcpu *vcpu)
+{
+	struct page *hdbss_pg = NULL;
+
+	hdbss_pg = phys_to_page(vcpu->arch.hdbss.base_phys);
+	if (hdbss_pg)
+		__free_pages(hdbss_pg, vcpu->arch.hdbss.size);
+
+	vcpu->arch.hdbss = (struct vcpu_hdbss_state) {
+		.base_phys = 0,
+		.size = 0,
+		.next_index = 0,
+	};
+}
+
+static int kvm_cap_arm_enable_hdbss(struct kvm *kvm,
+				    struct kvm_enable_cap *cap)
+{
+	unsigned long i;
+	struct kvm_vcpu *vcpu;
+	struct page *hdbss_pg = NULL;
+	int size = cap->args[0];
+	int ret = 0;
+
+	if (!system_supports_hdbss()) {
+		kvm_err("This system does not support HDBSS!\n");
+		return -EINVAL;
+	}
+
+	if (size < 0 || size > HDBSS_MAX_SIZE) {
+		kvm_err("Invalid HDBSS buffer size: %d!\n", size);
+		return -EINVAL;
+	}
+
+	/* Enable the HDBSS feature if size > 0, otherwise disable it. */
+	if (size) {
+		kvm_for_each_vcpu(i, vcpu, kvm) {
+			hdbss_pg = alloc_pages(GFP_KERNEL_ACCOUNT, size);
+			if (!hdbss_pg) {
+				kvm_err("Alloc HDBSS buffer failed!\n");
+				ret = -ENOMEM;
+				goto error_alloc;
+			}
+
+			vcpu->arch.hdbss = (struct vcpu_hdbss_state) {
+				.base_phys = page_to_phys(hdbss_pg),
+				.size = size,
+				.next_index = 0,
+			};
+		}
+
+		kvm->enable_hdbss = true;
+		kvm->arch.mmu.vtcr |= VTCR_EL2_HD | VTCR_EL2_HDBSS;
+
+		/*
+		 * We should kick vcpus out of guest mode here to load new
+		 * vtcr value to vtcr_el2 register when re-enter guest mode.
+		 */
+		kvm_for_each_vcpu(i, vcpu, kvm)
+			kvm_vcpu_kick(vcpu);
+	} else if (kvm->enable_hdbss) {
+		kvm->arch.mmu.vtcr &= ~(VTCR_EL2_HD | VTCR_EL2_HDBSS);
+
+		kvm_for_each_vcpu(i, vcpu, kvm) {
+			/* Kick vcpus to flush hdbss buffer. */
+			kvm_vcpu_kick(vcpu);
+
+			kvm_arm_vcpu_free_hdbss(vcpu);
+		}
+
+		kvm->enable_hdbss = false;
+	}
+
+	return ret;
+
+error_alloc:
+	kvm_for_each_vcpu(i, vcpu, kvm) {
+		if (!vcpu->arch.hdbss.base_phys && !vcpu->arch.hdbss.size)
+			continue;
+
+		kvm_arm_vcpu_free_hdbss(vcpu);
+	}
+
+	return ret;
+}
+
 int kvm_vm_ioctl_enable_cap(struct kvm *kvm,
 			    struct kvm_enable_cap *cap)
 {
@@ -130,6 +216,11 @@ int kvm_vm_ioctl_enable_cap(struct kvm *kvm,
 			r = 0;
 			set_bit(KVM_ARCH_FLAG_WRITABLE_IMP_ID_REGS, &kvm->arch.flags);
 		}
+		mutex_unlock(&kvm->lock);
+		break;
+	case KVM_CAP_ARM_HW_DIRTY_STATE_TRACK:
+		mutex_lock(&kvm->lock);
+		r = kvm_cap_arm_enable_hdbss(kvm, cap);
 		mutex_unlock(&kvm->lock);
 		break;
 	default:
@@ -420,6 +511,9 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 			r = kvm_supports_cacheable_pfnmap();
 		break;
 
+	case KVM_CAP_ARM_HW_DIRTY_STATE_TRACK:
+		r = system_supports_hdbss();
+		break;
 	default:
 		r = 0;
 	}
@@ -1837,7 +1931,20 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 
 void kvm_arch_sync_dirty_log(struct kvm *kvm, struct kvm_memory_slot *memslot)
 {
+	/*
+	 * Flush all CPUs' dirty log buffers to the dirty_bitmap.  Called
+	 * before reporting dirty_bitmap to userspace.  KVM flushes the buffers
+	 * on all VM-Exits, thus we only need to kick running vCPUs to force a
+	 * VM-Exit.
+	 */
+	struct kvm_vcpu *vcpu;
+	unsigned long i;
 
+	if (!kvm->enable_hdbss)
+		return;
+
+	kvm_for_each_vcpu(i, vcpu, kvm)
+		kvm_vcpu_kick(vcpu);
 }
 
 static int kvm_vm_ioctl_set_device_addr(struct kvm *kvm,
