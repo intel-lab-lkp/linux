@@ -4855,6 +4855,7 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 	case KVM_CAP_MEMORY_FAULT_INFO:
 	case KVM_CAP_X86_GUEST_MODE:
 	case KVM_CAP_ONE_REG:
+	case KVM_CAP_X86_GUEST_DEBUG_CR3:
 		r = 1;
 		break;
 	case KVM_CAP_PRE_FAULT_MEMORY:
@@ -9195,6 +9196,7 @@ static int kvm_vcpu_do_singlestep(struct kvm_vcpu *vcpu)
 	if (vcpu->guest_debug & KVM_GUESTDBG_SINGLESTEP) {
 		kvm_run->debug.arch.dr6 = DR6_BS | DR6_ACTIVE_LOW;
 		kvm_run->debug.arch.pc = kvm_get_linear_rip(vcpu);
+		kvm_run->debug.arch.cr3 = kvm_read_cr3(vcpu);
 		kvm_run->debug.arch.exception = DB_VECTOR;
 		kvm_run->exit_reason = KVM_EXIT_DEBUG;
 		return 0;
@@ -9277,6 +9279,7 @@ static bool kvm_vcpu_check_code_breakpoint(struct kvm_vcpu *vcpu,
 		if (dr6 != 0) {
 			kvm_run->debug.arch.dr6 = dr6 | DR6_ACTIVE_LOW;
 			kvm_run->debug.arch.pc = eip;
+			kvm_run->debug.arch.cr3 = kvm_read_cr3(vcpu);
 			kvm_run->debug.arch.exception = DB_VECTOR;
 			kvm_run->exit_reason = KVM_EXIT_DEBUG;
 			*r = 0;

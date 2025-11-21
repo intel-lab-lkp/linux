@@ -5454,6 +5454,7 @@ static int handle_exception_nmi(struct kvm_vcpu *vcpu)
 		kvm_run->exit_reason = KVM_EXIT_DEBUG;
 		kvm_run->debug.arch.pc = kvm_get_linear_rip(vcpu);
 		kvm_run->debug.arch.exception = ex_no;
+		kvm_run->debug.arch.cr3 = kvm_read_cr3(vcpu);
 		break;
 	case AC_VECTOR:
 		if (vmx_guest_inject_ac(vcpu)) {
@@ -5685,6 +5686,7 @@ static int handle_dr(struct kvm_vcpu *vcpu)
 			vcpu->run->debug.arch.dr6 = DR6_BD | DR6_ACTIVE_LOW;
 			vcpu->run->debug.arch.dr7 = dr7;
 			vcpu->run->debug.arch.pc = kvm_get_linear_rip(vcpu);
+			vcpu->run->debug.arch.cr3 = kvm_read_cr3(vcpu);
 			vcpu->run->debug.arch.exception = DB_VECTOR;
 			vcpu->run->exit_reason = KVM_EXIT_DEBUG;
 			return 0;

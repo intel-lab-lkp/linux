@@ -293,6 +293,7 @@ struct kvm_debug_exit_arch {
 	__u64 pc;
 	__u64 dr6;
 	__u64 dr7;
+	__u64 cr3;
 };
 
 #define KVM_GUESTDBG_USE_SW_BP		0x00010000

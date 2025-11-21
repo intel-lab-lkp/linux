@@ -1920,6 +1920,7 @@ static int db_interception(struct kvm_vcpu *vcpu)
 		kvm_run->debug.arch.dr7 = svm->vmcb->save.dr7;
 		kvm_run->debug.arch.pc =
 			svm->vmcb->save.cs.base + svm->vmcb->save.rip;
+		kvm_run->debug.arch.cr3 = svm->vmcb->save.cr3;
 		kvm_run->debug.arch.exception = DB_VECTOR;
 		return 0;
 	}
@@ -1934,6 +1935,7 @@ static int bp_interception(struct kvm_vcpu *vcpu)
 
 	kvm_run->exit_reason = KVM_EXIT_DEBUG;
 	kvm_run->debug.arch.pc = svm->vmcb->save.cs.base + svm->vmcb->save.rip;
+	kvm_run->debug.arch.cr3 = svm->vmcb->save.cr3;
 	kvm_run->debug.arch.exception = BP_VECTOR;
 	return 0;
 }
