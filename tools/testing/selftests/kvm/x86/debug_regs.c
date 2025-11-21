@@ -80,8 +80,9 @@ static void vcpu_skip_insn(struct kvm_vcpu *vcpu, int insn_len)
 
 int main(void)
 {
+	unsigned long long target_dr6, target_rip, target_cr3;
 	struct kvm_guest_debug debug;
-	unsigned long long target_dr6, target_rip;
+	struct kvm_sregs sregs;
 	struct kvm_vcpu *vcpu;
 	struct kvm_run *run;
 	struct kvm_vm *vm;
@@ -103,6 +104,14 @@ int main(void)
 	vm = vm_create_with_one_vcpu(&vcpu, guest_code);
 	run = vcpu->run;
 
+	if (kvm_has_cap(KVM_CAP_X86_GUEST_DEBUG_CR3)) {
+		pr_info("Debug info includes guest CR3\n");
+		vcpu_sregs_get(vcpu, &sregs);
+		target_cr3 = sregs.cr3;
+	} else {
+		target_cr3 = 0;
+	}
+
 	/* Test software BPs - int3 */
 	pr_info("Testing INT3\n");
 	memset(&debug, 0, sizeof(debug));
@@ -112,6 +121,7 @@ int main(void)
 	TEST_ASSERT_EQ(run->exit_reason, KVM_EXIT_DEBUG);
 	TEST_ASSERT_EQ(run->debug.arch.exception, BP_VECTOR);
 	TEST_ASSERT_EQ(run->debug.arch.pc, CAST_TO_RIP(sw_bp));
+	TEST_ASSERT_EQ(run->debug.arch.cr3, target_cr3);
 	vcpu_skip_insn(vcpu, 1);
 
 	/* Test instruction HW BP over DR[0-3] */
@@ -128,6 +138,7 @@ int main(void)
 		TEST_ASSERT_EQ(run->debug.arch.exception, DB_VECTOR);
 		TEST_ASSERT_EQ(run->debug.arch.pc, CAST_TO_RIP(hw_bp));
 		TEST_ASSERT_EQ(run->debug.arch.dr6, target_dr6);
+		TEST_ASSERT_EQ(run->debug.arch.cr3, target_cr3);
 	}
 	/* Skip "nop" */
 	vcpu_skip_insn(vcpu, 1);
@@ -147,6 +158,7 @@ int main(void)
 		TEST_ASSERT_EQ(run->debug.arch.exception, DB_VECTOR);
 		TEST_ASSERT_EQ(run->debug.arch.pc, CAST_TO_RIP(write_data));
 		TEST_ASSERT_EQ(run->debug.arch.dr6, target_dr6);
+		TEST_ASSERT_EQ(run->debug.arch.cr3, target_cr3);
 		/* Rollback the 4-bytes "mov" */
 		vcpu_skip_insn(vcpu, -7);
 	}
@@ -169,6 +181,7 @@ int main(void)
 		TEST_ASSERT_EQ(run->debug.arch.exception, DB_VECTOR);
 		TEST_ASSERT_EQ(run->debug.arch.pc, target_rip);
 		TEST_ASSERT_EQ(run->debug.arch.dr6, target_dr6);
+		TEST_ASSERT_EQ(run->debug.arch.cr3, target_cr3);
 	}
 
 	/* Finally test global disable */
@@ -183,6 +196,7 @@ int main(void)
 	TEST_ASSERT_EQ(run->debug.arch.exception, DB_VECTOR);
 	TEST_ASSERT_EQ(run->debug.arch.pc, CAST_TO_RIP(bd_start));
 	TEST_ASSERT_EQ(run->debug.arch.dr6, target_dr6);
+	TEST_ASSERT_EQ(run->debug.arch.cr3, target_cr3);
 
 	/* Disable all debug controls, run to the end */
 	memset(&debug, 0, sizeof(debug));
