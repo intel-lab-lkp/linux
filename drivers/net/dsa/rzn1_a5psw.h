@@ -234,10 +234,12 @@ union lk_data {
  * struct a5psw_of_data - OF data structure
  * @nports: Number of ports in the switch
  * @cpu_port: CPU port number
+ * @tag_proto: DSA tag protocol used by the switch
  */
 struct a5psw_of_data {
 	unsigned int nports;
 	unsigned int cpu_port;
+	enum dsa_tag_protocol tag_proto;
 };
 
 /**
