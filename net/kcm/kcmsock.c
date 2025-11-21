@@ -1560,25 +1560,17 @@ static int kcm_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	}
 	case SIOCKCMCLONE: {
 		struct kcm_clone info;
-		struct file *file;
 
-		info.fd = get_unused_fd_flags(0);
-		if (unlikely(info.fd < 0))
-			return info.fd;
+		FD_PREPARE(fdf, 0, kcm_clone(sock));
+		err = ACQUIRE_ERR(fd_prepare, &fdf);
+		if (err)
+			return err;
 
-		file = kcm_clone(sock);
-		if (IS_ERR(file)) {
-			put_unused_fd(info.fd);
-			return PTR_ERR(file);
-		}
-		if (copy_to_user((void __user *)arg, &info,
-				 sizeof(info))) {
-			put_unused_fd(info.fd);
-			fput(file);
+		info.fd = fd_prepare_fd(fdf);
+		if (copy_to_user((void __user *)arg, &info, sizeof(info)))
 			return -EFAULT;
-		}
-		fd_install(info.fd, file);
-		err = 0;
+
+		err = fd_publish(fdf);
 		break;
 	}
 	default:
