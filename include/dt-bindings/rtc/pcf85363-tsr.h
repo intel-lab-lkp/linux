@@ -1,0 +1,28 @@
+/* SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause */
+/*
+ * Copyright 2025 NXP
+ */
+
+#ifndef _DT_BINDINGS_RTC_PCF85363_TSR_H
+#define _DT_BINDINGS_RTC_PCF85363_TSR_H
+
+/* TSR1 modes */
+#define PCF85363_TSR1_NONE 0x00
+#define PCF85363_TSR1_FE 0x01
+#define PCF85363_TSR1_LE 0x02
+
+/* TSR2 modes */
+#define PCF85363_TSR2_NONE 0x00
+#define PCF85363_TSR2_FB 0x01
+#define PCF85363_TSR2_LB 0x02
+#define PCF85363_TSR2_LV 0x03
+#define PCF85363_TSR2_FE 0x04
+#define PCF85363_TSR2_LE 0x05
+
+/* TSR3 modes */
+#define PCF85363_TSR3_NONE 0x00
+#define PCF85363_TSR3_FB 0x01
+#define PCF85363_TSR3_LB 0x02
+#define PCF85363_TSR3_LV 0x03
+
+#endif /* _DT_BINDINGS_RTC_PCF85363_TSR_H */
