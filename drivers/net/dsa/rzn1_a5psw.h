@@ -235,11 +235,15 @@ union lk_data {
  * @nports: Number of ports in the switch
  * @cpu_port: CPU port number
  * @tag_proto: DSA tag protocol used by the switch
+ * @management_port_frame_len_adj: Adjustment to apply to management
+ *   port frame length to account for accepting a frame with special
+ *   management tag.
  */
 struct a5psw_of_data {
 	unsigned int nports;
 	unsigned int cpu_port;
 	enum dsa_tag_protocol tag_proto;
+	unsigned int management_port_frame_len_adj;
 };
 
 /**
