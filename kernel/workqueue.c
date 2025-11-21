@@ -3524,30 +3524,8 @@ repeat:
 
 		WARN_ON_ONCE(!list_empty(&rescuer->scheduled));
 
-		if (assign_rescuer_work(pwq, rescuer)) {
+		while (assign_rescuer_work(pwq, rescuer))
 			process_scheduled_works(rescuer);
-
-			/*
-			 * The above execution of rescued work items could
-			 * have created more to rescue through
-			 * pwq_activate_first_inactive() or chained
-			 * queueing.  Let's put @pwq back on mayday list so
-			 * that such back-to-back work items, which may be
-			 * being used to relieve memory pressure, don't
-			 * incur MAYDAY_INTERVAL delay inbetween.
-			 */
-			if (pwq->nr_active && need_to_create_worker(pool)) {
-				raw_spin_lock(&wq_mayday_lock);
-				/*
-				 * Queue iff somebody else hasn't queued it already.
-				 */
-				if (list_empty(&pwq->mayday_node)) {
-					get_pwq(pwq);
-					list_add_tail(&pwq->mayday_node, &wq->maydays);
-				}
-				raw_spin_unlock(&wq_mayday_lock);
-			}
-		}
 
 		/*
 		 * Leave this pool. Notify regular workers; otherwise, we end up
