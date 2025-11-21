@@ -1559,6 +1559,20 @@ static void append_release(char *buf)
 	scnprintf(buf, MAX_PRINT_CHUNK, "%s,", release);
 }
 
+static void write_msg_target(struct netconsole_target *nt, const char *msg,
+			     unsigned int len)
+{
+	const char *tmp = msg;
+	int frag, left = len;
+
+	while (left > 0) {
+		frag = min(left, MAX_PRINT_CHUNK);
+		send_udp(nt, tmp, frag);
+		tmp += frag;
+		left -= frag;
+	}
+}
+
 static void send_fragmented_body(struct netconsole_target *nt,
 				 const char *msgbody, int header_len,
 				 int msgbody_len, int extradata_len)
@@ -1728,10 +1742,8 @@ static void write_ext_msg(struct console *con, const char *msg,
 
 static void write_msg(struct console *con, const char *msg, unsigned int len)
 {
-	int frag, left;
-	unsigned long flags;
 	struct netconsole_target *nt;
-	const char *tmp;
+	unsigned long flags;
 
 	if (oops_only && !oops_in_progress)
 		return;
@@ -1748,13 +1760,7 @@ static void write_msg(struct console *con, const char *msg, unsigned int len)
 			 * at least one target if we die inside here, instead
 			 * of unnecessarily keeping all targets in lock-step.
 			 */
-			tmp = msg;
-			for (left = len; left;) {
-				frag = min(left, MAX_PRINT_CHUNK);
-				send_udp(nt, tmp, frag);
-				tmp += frag;
-				left -= frag;
-			}
+			write_msg_target(nt, msg, len);
 		}
 	}
 	spin_unlock_irqrestore(&target_list_lock, flags);
