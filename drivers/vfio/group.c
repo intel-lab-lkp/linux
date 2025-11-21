@@ -299,9 +299,7 @@ static int vfio_group_ioctl_get_device_fd(struct vfio_group *group,
 					  char __user *arg)
 {
 	struct vfio_device *device;
-	struct file *filep;
 	char *buf;
-	int fdno;
 	int ret;
 
 	buf = strndup_user(arg, PAGE_SIZE);
@@ -313,26 +311,13 @@ static int vfio_group_ioctl_get_device_fd(struct vfio_group *group,
 	if (IS_ERR(device))
 		return PTR_ERR(device);
 
-	fdno = get_unused_fd_flags(O_CLOEXEC);
-	if (fdno < 0) {
-		ret = fdno;
-		goto err_put_device;
+	FD_PREPARE(fdf, O_CLOEXEC, vfio_device_open_file(device));
+	ret = ACQUIRE_ERR(fd_prepare, &fdf);
+	if (ret) {
+		vfio_device_put_registration(device);
+		return ret;
 	}
-
-	filep = vfio_device_open_file(device);
-	if (IS_ERR(filep)) {
-		ret = PTR_ERR(filep);
-		goto err_put_fdno;
-	}
-
-	fd_install(fdno, filep);
-	return fdno;
-
-err_put_fdno:
-	put_unused_fd(fdno);
-err_put_device:
-	vfio_device_put_registration(device);
-	return ret;
+	return fd_publish(fdf);
 }
 
 static int vfio_group_ioctl_get_status(struct vfio_group *group,
