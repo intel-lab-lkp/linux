@@ -494,43 +494,8 @@ static u8 intel_dp_get_sink_sync_latency(struct intel_dp *intel_dp)
 	return val;
 }
 
-static u8 intel_dp_get_su_capability(struct intel_dp *intel_dp)
-{
-	u8 su_capability = 0;
-
-	if (intel_dp->psr.sink_panel_replay_su_support) {
-		if (drm_dp_dpcd_read_byte(&intel_dp->aux,
-					  DP_PANEL_REPLAY_CAP_CAPABILITY,
-					  &su_capability) < 0)
-			return 0;
-	} else {
-		su_capability = intel_dp->psr_dpcd[1];
-	}
-
-	return su_capability;
-}
-
-static unsigned int
-intel_dp_get_su_x_granularity_offset(struct intel_dp *intel_dp)
-{
-	return intel_dp->psr.sink_panel_replay_su_support ?
-		DP_PANEL_REPLAY_CAP_X_GRANULARITY :
-		DP_PSR2_SU_X_GRANULARITY;
-}
-
-static unsigned int
-intel_dp_get_su_y_granularity_offset(struct intel_dp *intel_dp)
-{
-	return intel_dp->psr.sink_panel_replay_su_support ?
-		DP_PANEL_REPLAY_CAP_Y_GRANULARITY :
-		DP_PSR2_SU_Y_GRANULARITY;
-}
-
-/*
- * Note: Bits related to granularity are same in panel replay and psr
- * registers. Rely on PSR definitions on these "common" bits.
- */
-static void intel_dp_get_su_granularity(struct intel_dp *intel_dp)
+static void _psr_compute_su_granularity(struct intel_dp *intel_dp,
+					struct intel_connector *connector)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 	ssize_t r;
@@ -538,25 +503,17 @@ static void intel_dp_get_su_granularity(struct intel_dp *intel_dp)
 	u8 y;
 
 	/*
-	 * TODO: Do we need to take into account panel supporting both PSR and
-	 * Panel replay?
-	 */
-
-	/*
 	 * If sink don't have specific granularity requirements set legacy
 	 * ones.
 	 */
-	if (!(intel_dp_get_su_capability(intel_dp) &
-	      DP_PSR2_SU_GRANULARITY_REQUIRED)) {
+	if (!(intel_dp->psr_dpcd[1] & DP_PSR2_SU_GRANULARITY_REQUIRED)) {
 		/* As PSR2 HW sends full lines, we do not care about x granularity */
 		w = 4;
 		y = 4;
 		goto exit;
 	}
 
-	r = drm_dp_dpcd_read(&intel_dp->aux,
-			     intel_dp_get_su_x_granularity_offset(intel_dp),
-			     &w, 2);
+	r = drm_dp_dpcd_read(&intel_dp->aux, DP_PSR2_SU_X_GRANULARITY, &w, 2);
 	if (r != 2)
 		drm_dbg_kms(display->drm,
 			    "Unable to read selective update x granularity\n");
@@ -567,9 +524,7 @@ static void intel_dp_get_su_granularity(struct intel_dp *intel_dp)
 	if (r != 2 || w == 0)
 		w = 4;
 
-	r = drm_dp_dpcd_read(&intel_dp->aux,
-			     intel_dp_get_su_y_granularity_offset(intel_dp),
-			     &y, 1);
+	r = drm_dp_dpcd_read(&intel_dp->aux, DP_PSR2_SU_Y_GRANULARITY, &y, 1);
 	if (r != 1) {
 		drm_dbg_kms(display->drm,
 			    "Unable to read selective update y granularity\n");
@@ -579,8 +534,8 @@ static void intel_dp_get_su_granularity(struct intel_dp *intel_dp)
 		y = 1;
 
 exit:
-	intel_dp->psr.su_w_granularity = w;
-	intel_dp->psr.su_y_granularity = y;
+	connector->dp.psr_caps.su_w_granularity = w;
+	connector->dp.psr_caps.su_y_granularity = y;
 }
 
 static enum intel_panel_replay_dsc_support
@@ -621,7 +576,33 @@ static const char *panel_replay_dsc_support_str(enum intel_panel_replay_dsc_supp
 	};
 }
 
-static void _panel_replay_init_dpcd(struct intel_dp *intel_dp)
+static void _panel_replay_compute_su_granularity(struct intel_dp *intel_dp,
+						 struct intel_connector *connector)
+{
+	u16 w;
+	u8 y;
+
+	if (!(intel_dp->pr_dpcd[INTEL_PR_DPCD_INDEX(DP_PANEL_REPLAY_CAP_CAPABILITY)] &
+	       DP_PANEL_REPLAY_SU_GRANULARITY_REQUIRED)) {
+		w = 4;
+		y = 4;
+		goto exit;
+	}
+
+	/*
+	 * Spec says that if the value read is 0 the default granularity should
+	 * be used instead.
+	 */
+	w = intel_dp->pr_dpcd[INTEL_PR_DPCD_INDEX(DP_PANEL_REPLAY_CAP_X_GRANULARITY)] ? : 4;
+
+	y = intel_dp->pr_dpcd[INTEL_PR_DPCD_INDEX(DP_PANEL_REPLAY_CAP_Y_GRANULARITY)] ? : 1;
+
+exit:
+	connector->dp.panel_replay_caps.su_w_granularity = w;
+	connector->dp.panel_replay_caps.su_y_granularity = y;
+}
+
+static void _panel_replay_init_dpcd(struct intel_dp *intel_dp, struct intel_connector *connector)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 	int ret;
@@ -657,8 +638,11 @@ static void _panel_replay_init_dpcd(struct intel_dp *intel_dp)
 	intel_dp->psr.sink_panel_replay_support = true;
 
 	if (intel_dp->pr_dpcd[INTEL_PR_DPCD_INDEX(DP_PANEL_REPLAY_CAP_SUPPORT)] &
-	    DP_PANEL_REPLAY_SU_SUPPORT)
+	    DP_PANEL_REPLAY_SU_SUPPORT) {
 		intel_dp->psr.sink_panel_replay_su_support = true;
+
+		_panel_replay_compute_su_granularity(intel_dp, connector);
+	}
 
 	intel_dp->psr.sink_panel_replay_dsc_support = compute_pr_dsc_support(intel_dp);
 
@@ -669,7 +653,7 @@ static void _panel_replay_init_dpcd(struct intel_dp *intel_dp)
 		    panel_replay_dsc_support_str(intel_dp->psr.sink_panel_replay_dsc_support));
 }
 
-static void _psr_init_dpcd(struct intel_dp *intel_dp)
+static void _psr_init_dpcd(struct intel_dp *intel_dp, struct intel_connector *connector)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 	int ret;
@@ -722,17 +706,16 @@ static void _psr_init_dpcd(struct intel_dp *intel_dp)
 		drm_dbg_kms(display->drm, "PSR2 %ssupported\n",
 			    intel_dp->psr.sink_psr2_support ? "" : "not ");
 	}
+
+	if (intel_dp->psr.sink_psr2_support)
+		_psr_compute_su_granularity(intel_dp, connector);
 }
 
-void intel_psr_init_dpcd(struct intel_dp *intel_dp)
+void intel_psr_init_dpcd(struct intel_dp *intel_dp, struct intel_connector *connector)
 {
-	_psr_init_dpcd(intel_dp);
+	_psr_init_dpcd(intel_dp, connector);
 
-	_panel_replay_init_dpcd(intel_dp);
-
-	if (intel_dp->psr.sink_psr2_support ||
-	    intel_dp->psr.sink_panel_replay_su_support)
-		intel_dp_get_su_granularity(intel_dp);
+	_panel_replay_init_dpcd(intel_dp, connector);
 }
 
 static void hsw_psr_setup_aux(struct intel_dp *intel_dp)
@@ -1311,24 +1294,32 @@ static bool intel_psr2_sel_fetch_config_valid(struct intel_dp *intel_dp,
 }
 
 static bool psr2_granularity_check(struct intel_dp *intel_dp,
-				   struct intel_crtc_state *crtc_state)
+				   struct intel_crtc_state *crtc_state,
+				   struct drm_connector_state *conn_state)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
+	struct intel_connector *connector = to_intel_connector(conn_state->connector);
 	const struct drm_dsc_config *vdsc_cfg = &crtc_state->dsc.config;
 	const int crtc_hdisplay = crtc_state->hw.adjusted_mode.crtc_hdisplay;
 	const int crtc_vdisplay = crtc_state->hw.adjusted_mode.crtc_vdisplay;
 	u16 y_granularity = 0;
+	u16 sink_y_granularity = crtc_state->has_panel_replay ?
+		connector->dp.panel_replay_caps.su_y_granularity :
+		connector->dp.psr_caps.su_y_granularity;
+	u16 sink_w_granularity =  crtc_state->has_panel_replay ?
+		connector->dp.panel_replay_caps.su_w_granularity :
+		connector->dp.psr_caps.su_w_granularity;
 
 	/* PSR2 HW only send full lines so we only need to validate the width */
-	if (crtc_hdisplay % intel_dp->psr.su_w_granularity)
+	if (crtc_hdisplay % sink_w_granularity)
 		return false;
 
-	if (crtc_vdisplay % intel_dp->psr.su_y_granularity)
+	if (crtc_vdisplay % sink_y_granularity)
 		return false;
 
 	/* HW tracking is only aligned to 4 lines */
 	if (!crtc_state->enable_psr2_sel_fetch)
-		return intel_dp->psr.su_y_granularity == 4;
+		return sink_y_granularity == 4;
 
 	/*
 	 * adl_p and mtl platforms have 1 line granularity.
@@ -1336,11 +1327,11 @@ static bool psr2_granularity_check(struct intel_dp *intel_dp,
 	 * to match sink requirement if multiple of 4.
 	 */
 	if (display->platform.alderlake_p || DISPLAY_VER(display) >= 14)
-		y_granularity = intel_dp->psr.su_y_granularity;
-	else if (intel_dp->psr.su_y_granularity <= 2)
+		y_granularity = sink_y_granularity;
+	else if (sink_y_granularity <= 2)
 		y_granularity = 4;
-	else if ((intel_dp->psr.su_y_granularity % 4) == 0)
-		y_granularity = intel_dp->psr.su_y_granularity;
+	else if ((sink_y_granularity % 4) == 0)
+		y_granularity = sink_y_granularity;
 
 	if (y_granularity == 0 || crtc_vdisplay % y_granularity)
 		return false;
@@ -1628,7 +1619,8 @@ static bool intel_psr2_config_valid(struct intel_dp *intel_dp,
 }
 
 static bool intel_sel_update_config_valid(struct intel_dp *intel_dp,
-					  struct intel_crtc_state *crtc_state)
+					  struct intel_crtc_state *crtc_state,
+					  struct drm_connector_state *conn_state)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 
@@ -1677,7 +1669,7 @@ static bool intel_sel_update_config_valid(struct intel_dp *intel_dp,
 		goto unsupported;
 	}
 
-	if (!psr2_granularity_check(intel_dp, crtc_state)) {
+	if (!psr2_granularity_check(intel_dp, crtc_state, conn_state)) {
 		drm_dbg_kms(display->drm,
 			    "Selective update not enabled, SU granularity not compatible\n");
 		goto unsupported;
@@ -1872,7 +1864,8 @@ void intel_psr_compute_config(struct intel_dp *intel_dp,
 	if (!crtc_state->has_psr)
 		return;
 
-	crtc_state->has_sel_update = intel_sel_update_config_valid(intel_dp, crtc_state);
+	crtc_state->has_sel_update = intel_sel_update_config_valid(intel_dp, crtc_state,
+								   conn_state);
 }
 
 void intel_psr_get_config(struct intel_encoder *encoder,
