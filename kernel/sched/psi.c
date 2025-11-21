@@ -141,6 +141,8 @@
 #include <linux/psi.h>
 #include "sched.h"
 
+EXPORT_TRACEPOINT_SYMBOL_GPL(psi_event);
+
 static int psi_bug __read_mostly;
 
 DEFINE_STATIC_KEY_FALSE(psi_disabled);
@@ -515,6 +517,9 @@ static void update_triggers(struct psi_group *group, u64 now,
 				kernfs_notify(t->of->kn);
 			else
 				wake_up_interruptible(&t->event_wait);
+
+			trace_psi_event(aggregator, t->state, t->threshold,
+					t->win.size);
 		}
 		t->last_event_time = now;
 		/* Reset threshold breach flag once event got generated */
