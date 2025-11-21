@@ -618,6 +618,49 @@ TRACE_EVENT(f2fs_fadvise,
 		__entry->advice)
 );
 
+DECLARE_EVENT_CLASS(f2fs__readahead_pages,
+
+	TP_PROTO(struct inode *inode, pgoff_t start, pgoff_t end),
+
+	TP_ARGS(inode, start, end),
+
+	TP_STRUCT__entry(
+		__field(dev_t,	dev)
+		__field(ino_t,	ino)
+		__field(loff_t, size)
+		__field(pgoff_t, start)
+		__field(pgoff_t, end)
+	),
+
+	TP_fast_assign(
+		__entry->dev	= inode->i_sb->s_dev;
+		__entry->ino	= inode->i_ino;
+		__entry->size	= inode->i_size;
+		__entry->start = start;
+		__entry->end	= end;
+	),
+
+	TP_printk("dev = (%d,%d), ino = %lu, i_size = %lld start: %lu, end: %lu",
+		show_dev_ino(__entry),
+		(unsigned long long)__entry->size,
+		__entry->start,
+		__entry->end)
+);
+
+DEFINE_EVENT(f2fs__readahead_pages, f2fs_readahead_pages_start,
+
+	TP_PROTO(struct inode *inode, pgoff_t start, pgoff_t end),
+
+	TP_ARGS(inode, start, end)
+);
+
+DEFINE_EVENT(f2fs__readahead_pages, f2fs_readahead_pages_end,
+
+	TP_PROTO(struct inode *inode, pgoff_t start, pgoff_t end),
+
+	TP_ARGS(inode, start, end)
+);
+
 TRACE_EVENT(f2fs_map_blocks,
 	TP_PROTO(struct inode *inode, struct f2fs_map_blocks *map, int flag,
 		 int ret),

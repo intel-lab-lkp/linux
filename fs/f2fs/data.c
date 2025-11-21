@@ -2757,6 +2757,8 @@ int f2fs_readahead_pages(struct file *file, loff_t offset, loff_t len)
 	if (start_index > end_index)
 		return 0;
 
+	trace_f2fs_readahead_pages_start(inode, start_index, end_index);
+
 	nrpages = end_index - start_index + 1;
 
 	while (nrpages) {
@@ -2768,6 +2770,7 @@ int f2fs_readahead_pages(struct file *file, loff_t offset, loff_t len)
 
 		nrpages -= this_chunk;
 	}
+	trace_f2fs_readahead_pages_end(inode, start_index, end_index);
 	return 0;
 }
 
