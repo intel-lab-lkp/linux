@@ -3341,7 +3341,7 @@ static struct file *do_sync_mmap_readahead(struct vm_fault *vmf)
 		ra->start = max_t(long, 0, vmf->pgoff - ra->ra_pages / 2);
 		ra->size = ra->ra_pages;
 		ra->async_size = ra->ra_pages / 4;
-		ra->order = 0;
+		ra->order = ra->desired_order;
 	}
 
 	fpin = maybe_unlock_mmap_for_io(vmf, fpin);

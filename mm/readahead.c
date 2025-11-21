@@ -621,7 +621,7 @@ void page_cache_sync_ra(struct readahead_control *ractl,
 	ra->size = min(contig_count + req_count, max_pages);
 	ra->async_size = 1;
 readit:
-	ra->order = 0;
+	ra->order = ra->desired_order;
 	ractl->_index = ra->start;
 	page_cache_ra_order(ractl, ra);
 }

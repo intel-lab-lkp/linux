@@ -1167,6 +1167,7 @@ struct file_ra_state {
 	unsigned int async_size;
 	unsigned int ra_pages;
 	unsigned short order;
+	unsigned short desired_order;
 	unsigned short mmap_miss;
 	loff_t prev_pos;
 };
