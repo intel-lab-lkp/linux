@@ -58,6 +58,8 @@ struct nvgrace_gpu_pci_core_device {
 	/* Lock to control device memory kernel mapping */
 	struct mutex remap_lock;
 	bool has_mig_hw_bug;
+	/* Any GPU memory mapped to the VMA */
+	bool gpu_mem_mapped;
 };
 
 static void nvgrace_gpu_init_fake_bar_emu_regs(struct vfio_device *core_vdev)
@@ -102,9 +104,15 @@ static int nvgrace_gpu_open_device(struct vfio_device *core_vdev)
 		mutex_init(&nvdev->remap_lock);
 	}
 
+	nvdev->gpu_mem_mapped = false;
+
 	vfio_pci_core_finish_enable(vdev);
 
-	return 0;
+	/*
+	 * The GPU readiness is determined through BAR0 register reads.
+	 * Make sure the BAR0 is mapped before any such check occur.
+	 */
+	return vfio_pci_core_barmap(vdev, 0);
 }
 
 static void nvgrace_gpu_close_device(struct vfio_device *core_vdev)
@@ -157,6 +165,21 @@ static vm_fault_t nvgrace_gpu_vfio_pci_huge_fault(struct vm_fault *vmf,
 	vm_fault_t ret = VM_FAULT_SIGBUS;
 	struct mem_region *memregion;
 	unsigned long pgoff, pfn, addr;
+
+	/*
+	 * If the GPU memory is accessed by the CPU while the GPU is
+	 * not ready after reset, it can cause harmless corrected RAS
+	 * events to be logged. Make sure the GPU is ready before
+	 * establishing the mappings.
+	 */
+	if (!nvdev->gpu_mem_mapped) {
+		struct vfio_pci_core_device *vdev = &nvdev->core_device;
+
+		if (nvgrace_gpu_wait_device_ready(vdev->barmap[0]))
+			return VM_FAULT_SIGBUS;
+
+		nvdev->gpu_mem_mapped = true;
+	}
 
 	memregion = nvgrace_gpu_memregion(index, nvdev);
 	if (!memregion)
@@ -354,7 +377,17 @@ static long nvgrace_gpu_ioctl(struct vfio_device *core_vdev,
 	case VFIO_DEVICE_IOEVENTFD:
 		return -ENOTTY;
 	case VFIO_DEVICE_RESET:
+		struct nvgrace_gpu_pci_core_device *nvdev =
+			container_of(core_vdev, struct nvgrace_gpu_pci_core_device,
+				     core_device.vdev);
 		nvgrace_gpu_init_fake_bar_emu_regs(core_vdev);
+
+		/*
+		 * GPU memory is exposed as device BAR2 (region 4,5).
+		 * This would be zapped during GPU reset. Unset
+		 * nvdev->gpu_mem_mapped to reflect just that.
+		 */
+		nvdev->gpu_mem_mapped = false;
 		fallthrough;
 	default:
 		return vfio_pci_core_ioctl(core_vdev, cmd, arg);
@@ -439,11 +472,14 @@ nvgrace_gpu_write_config_emu(struct vfio_device *core_vdev,
 	struct nvgrace_gpu_pci_core_device *nvdev =
 		container_of(core_vdev, struct nvgrace_gpu_pci_core_device,
 			     core_device.vdev);
+	struct vfio_pci_core_device *vdev =
+		container_of(core_vdev, struct vfio_pci_core_device, vdev);
 	u64 pos = *ppos & VFIO_PCI_OFFSET_MASK;
 	struct mem_region *memregion = NULL;
 	size_t register_offset;
 	loff_t copy_offset;
 	size_t copy_count;
+	int cap_start = vfio_find_cap_start(vdev, pos);
 
 	if (vfio_pci_core_range_intersect_range(pos, count, PCI_BASE_ADDRESS_2,
 						sizeof(u64), &copy_offset,
@@ -462,6 +498,23 @@ nvgrace_gpu_write_config_emu(struct vfio_device *core_vdev,
 		return copy_count;
 	}
 
+	if (vfio_pci_core_range_intersect_range(pos, count, cap_start + PCI_EXP_DEVCTL,
+						sizeof(u16), &copy_offset,
+						&copy_count, &register_offset)) {
+		__le16 val16;
+
+		if (copy_from_user((void *)&val16, buf, copy_count))
+			return -EFAULT;
+
+		/*
+		 * GPU memory is exposed as device BAR2 (region 4,5).
+		 * This would be zapped during GPU reset. Unset
+		 * nvdev->gpu_mem_mapped to reflect just that.
+		 */
+		if (val16 & cpu_to_le16(PCI_EXP_DEVCTL_BCR_FLR))
+			nvdev->gpu_mem_mapped = false;
+	}
+
 	return vfio_pci_core_write(core_vdev, buf, count, ppos);
 }
 
@@ -478,8 +531,17 @@ static int
 nvgrace_gpu_map_device_mem(int index,
 			   struct nvgrace_gpu_pci_core_device *nvdev)
 {
+	struct vfio_pci_core_device *vdev = &nvdev->core_device;
 	struct mem_region *memregion;
 	int ret = 0;
+
+	if (!nvdev->gpu_mem_mapped) {
+		ret = nvgrace_gpu_wait_device_ready(vdev->barmap[0]);
+		if (ret)
+			return ret;
+
+		nvdev->gpu_mem_mapped = true;
+	}
 
 	memregion = nvgrace_gpu_memregion(index, nvdev);
 	if (!memregion)
