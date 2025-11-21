@@ -480,55 +480,23 @@ DEFINE_SHOW_ATTRIBUTE(array);
 
 static int __init create_debugfs_nodes(void)
 {
-	struct dentry *d, *pfn, *decay, *count, *array, *dfs;
+	struct dentry *d, *dfs;
 
 	dfs = ras_get_debugfs_root();
-	if (!dfs) {
-		pr_warn("Error getting RAS debugfs root!\n");
-		return -1;
-	}
-
 	d = debugfs_create_dir("cec", dfs);
-	if (!d) {
-		pr_warn("Error creating cec debugfs node!\n");
-		return -1;
-	}
 
-	decay = debugfs_create_file("decay_interval", S_IRUSR | S_IWUSR, d,
+	debugfs_create_file("decay_interval", S_IRUSR | S_IWUSR, d,
 				    &decay_interval, &decay_interval_ops);
-	if (!decay) {
-		pr_warn("Error creating decay_interval debugfs node!\n");
-		goto err;
-	}
-
-	count = debugfs_create_file("action_threshold", S_IRUSR | S_IWUSR, d,
+	debugfs_create_file("action_threshold", S_IRUSR | S_IWUSR, d,
 				    &action_threshold, &action_threshold_ops);
-	if (!count) {
-		pr_warn("Error creating action_threshold debugfs node!\n");
-		goto err;
-	}
 
 	if (!IS_ENABLED(CONFIG_RAS_CEC_DEBUG))
 		return 0;
 
-	pfn = debugfs_create_file("pfn", S_IRUSR | S_IWUSR, d, &dfs_pfn, &pfn_ops);
-	if (!pfn) {
-		pr_warn("Error creating pfn debugfs node!\n");
-		goto err;
-	}
-
-	array = debugfs_create_file("array", S_IRUSR, d, NULL, &array_fops);
-	if (!array) {
-		pr_warn("Error creating array debugfs node!\n");
-		goto err;
-	}
+	debugfs_create_file("pfn", S_IRUSR | S_IWUSR, d, &dfs_pfn, &pfn_ops);
+	debugfs_create_file("array", S_IRUSR, d, NULL, &array_fops);
 
 	return 0;
-
-err:
-	debugfs_remove_recursive(d);
-
-	return 1;
 }
 
 static int cec_notifier(struct notifier_block *nb, unsigned long val,

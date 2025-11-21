@@ -45,18 +45,9 @@ static const struct file_operations trace_fops = {
 
 int __init ras_add_daemon_trace(void)
 {
-	struct dentry *fentry;
-
-	if (!ras_debugfs_dir)
-		return -ENOENT;
-
-	fentry = debugfs_create_file("daemon_active", S_IRUSR, ras_debugfs_dir,
+	debugfs_create_file("daemon_active", S_IRUSR, ras_debugfs_dir,
 				     NULL, &trace_fops);
-	if (IS_ERR(fentry))
-		return -ENODEV;
-
 	return 0;
-
 }
 
 void __init ras_debugfs_init(void)
