@@ -5305,9 +5305,12 @@ static int f2fs_file_fadvise(struct file *filp, loff_t offset, loff_t len,
 		filp->f_mode &= ~FMODE_RANDOM;
 		spin_unlock(&filp->f_lock);
 		return 0;
-	} else if (advice == POSIX_FADV_WILLNEED && offset == 0) {
-		/* Load extent cache at the first readahead. */
-		f2fs_precache_extents(inode);
+	} else if (advice == POSIX_FADV_WILLNEED) {
+		if (offset == 0 && len == -1) {
+			f2fs_precache_extents(inode);
+			return 0;
+		}
+		return f2fs_readahead_pages(filp, offset, len);
 	}
 
 	err = generic_fadvise(filp, offset, len, advice);

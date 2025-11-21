@@ -2710,6 +2710,67 @@ static void f2fs_readahead(struct readahead_control *rac)
 	f2fs_mpage_readpages(inode, rac, NULL);
 }
 
+int f2fs_readahead_pages(struct file *file, loff_t offset, loff_t len)
+{
+	struct inode *inode = file_inode(file);
+	struct address_space *mapping = file->f_mapping;
+	pgoff_t start_index = offset >> PAGE_SHIFT;
+	loff_t endbyte = offset + len;
+	pgoff_t end_index;
+	unsigned long nrpages;
+	unsigned long ra_pages = (16 * 1024 * 1024) / PAGE_SIZE;
+	DEFINE_READAHEAD(ractl, NULL, &file->f_ra, mapping, start_index);
+
+	if (!S_ISREG(inode->i_mode))
+		return -EOPNOTSUPP;
+
+	/* Should be read only. */
+	if (!(file->f_mode & FMODE_READ))
+		return -EBADF;
+
+	/* Do not support compressed file for large folio. */
+	if (f2fs_compressed_file(inode))
+		return -EINVAL;
+
+	if (!mapping || len < 0)
+		return -EINVAL;
+
+	if (unlikely(!mapping->a_ops->read_folio && !mapping->a_ops->readahead))
+		return -EINVAL;
+
+	/* Load extent cache at the first readahead. */
+	f2fs_precache_extents(inode);
+
+	/*
+	 * Careful about overflows. Len == 0 means "as much as possible".  Use
+	 * unsigned math because signed overflows are undefined and UBSan
+	 * complains.
+	 */
+	if (!len || endbyte > i_size_read(inode) || endbyte < len)
+		endbyte = i_size_read(inode) - 1;
+	else
+		endbyte--;		/* inclusive */
+
+	/* First and last PARTIAL page! */
+	end_index = endbyte >> PAGE_SHIFT;
+
+	if (start_index > end_index)
+		return 0;
+
+	nrpages = end_index - start_index + 1;
+
+	while (nrpages) {
+		unsigned long this_chunk = min(nrpages, ra_pages);
+
+		ractl.ra->ra_pages = this_chunk;
+
+		page_cache_sync_ra(&ractl, this_chunk << 1);
+
+		nrpages -= this_chunk;
+	}
+	return 0;
+}
+
 int f2fs_encrypt_one_page(struct f2fs_io_info *fio)
 {
 	struct inode *inode = fio_inode(fio);
