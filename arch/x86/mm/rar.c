@@ -11,6 +11,7 @@
 #include <asm/tlbflush.h>
 
 static DEFINE_PER_CPU(struct cpumask, rar_cpu_mask);
+static DEFINE_PER_CPU(struct cpumask, apic_cpu_mask);
 
 #define RAR_SUCCESS	0x00
 #define RAR_PENDING	0x01
@@ -46,6 +47,32 @@ static struct rar_lock rar_locks[RAR_MAX_PAYLOADS] __cacheline_aligned;
  * have work for that CPU.
  */
 static DEFINE_PER_CPU_ALIGNED(u8[RAR_MAX_PAYLOADS], rar_action);
+
+/*
+ * Tracks whether a RAR is in flight to this CPU. This is used
+ * to avoid sending another RAR (waiting on the APIC) when the
+ * target CPU is already handling RARs.
+ */
+static DEFINE_PER_CPU(int, rar_pending) = -1;
+
+static bool get_rar_pending(int target_cpu, int this_cpu)
+{
+	int *this_rar_pending = &per_cpu(rar_pending, target_cpu);
+
+	/* Another CPU is flushing this CPU already. */
+	if (*this_rar_pending != -1)
+		return false;
+
+	/* Is this_cpu the one that needs to send a RAR to target_cpu? */
+	return cmpxchg(this_rar_pending, -1, this_cpu) == -1;
+}
+
+static void release_rar_pending(int target_cpu, int this_cpu)
+{
+	/* If this_cpu sent the RAR to target_cpu, clear rar_pending */
+	if (READ_ONCE(per_cpu(rar_pending, target_cpu)) == this_cpu)
+		WRITE_ONCE(per_cpu(rar_pending, target_cpu), -1);
+}
 
 /*
  * TODO: group CPUs together based on locality in the system instead
@@ -113,7 +140,7 @@ static void set_action_entry(unsigned long payload_nr, int target_cpu)
 	WRITE_ONCE(bitmap[payload_nr], RAR_PENDING);
 }
 
-static void wait_for_action_done(unsigned long payload_nr, int target_cpu)
+static u8 wait_for_action_done(unsigned long payload_nr, int target_cpu)
 {
 	u8 status;
 	u8 *rar_actions = per_cpu(rar_action, target_cpu);
@@ -123,9 +150,14 @@ static void wait_for_action_done(unsigned long payload_nr, int target_cpu)
 	while (status == RAR_PENDING) {
 		cpu_relax();
 		status = READ_ONCE(rar_actions[payload_nr]);
+		/* Target CPU is not processing RARs right now. */
+		if (READ_ONCE(per_cpu(rar_pending, target_cpu)) == -1)
+			return status;
 	}
 
 	WARN_ON_ONCE(rar_actions[payload_nr] != RAR_SUCCESS);
+
+	return status;
 }
 
 void rar_cpu_init(void)
@@ -183,7 +215,7 @@ void smp_call_rar_many(const struct cpumask *mask, u16 pcid,
 {
 	unsigned long pages = (end - start + PAGE_SIZE) / PAGE_SIZE;
 	int cpu, this_cpu = smp_processor_id();
-	cpumask_t *dest_mask;
+	cpumask_t *dest_mask, *apic_mask;
 	unsigned long payload_nr;
 
 	/* Catch the "end - start + PAGE_SIZE" overflow above. */
@@ -213,7 +245,9 @@ void smp_call_rar_many(const struct cpumask *mask, u16 pcid,
 	 * flushes at context switch time.
 	 */
 	dest_mask = this_cpu_ptr(&rar_cpu_mask);
+	apic_mask = this_cpu_ptr(&apic_cpu_mask);
 	cpumask_and(dest_mask, mask, cpu_online_mask);
+	cpumask_clear(apic_mask);
 
 	/* Some callers race with other CPUs changing the passed mask */
 	if (unlikely(!cpumask_weight(dest_mask)))
@@ -225,11 +259,25 @@ void smp_call_rar_many(const struct cpumask *mask, u16 pcid,
 	for_each_cpu(cpu, dest_mask)
 		set_action_entry(payload_nr, cpu);
 
-	/* Send a message to all CPUs in the map */
-	native_send_rar_ipi(dest_mask);
+	do {
+		for_each_cpu(cpu, dest_mask) {
+			/* Track the CPUs that have no RAR pending (yet). */
+			if (get_rar_pending(cpu, this_cpu))
+				__cpumask_set_cpu(cpu, apic_mask);
+		}
 
-	for_each_cpu(cpu, dest_mask)
-		wait_for_action_done(payload_nr, cpu);
+		/* Send a message to the CPUs not processing RARs yet */
+		native_send_rar_ipi(apic_mask);
+
+		for_each_cpu(cpu, dest_mask) {
+			u8 status = wait_for_action_done(payload_nr, cpu);
+			if (status == RAR_SUCCESS) {
+				release_rar_pending(cpu, this_cpu);
+				__cpumask_clear_cpu(cpu, dest_mask);
+				__cpumask_clear_cpu(cpu, apic_mask);
+			}
+		}
+	} while (unlikely(cpumask_weight(dest_mask)));
 
 	free_payload_slot(payload_nr);
 }
