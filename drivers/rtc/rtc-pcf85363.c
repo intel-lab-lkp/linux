@@ -5,6 +5,10 @@
  * Driver for NXP PCF85363 real-time clock.
  *
  * Copyright (C) 2017 Eric Nelson
+ *
+ * Copyright 2025 NXP
+ * Added support for timestamps, battery switch-over,
+ * watchdog, offset calibration.
  */
 #include <linux/module.h>
 #include <linux/i2c.h>
@@ -18,6 +22,7 @@
 #include <linux/of.h>
 #include <linux/rtc.h>
 #include <linux/regmap.h>
+#include <linux/watchdog.h>
 
 /*
  * Date/Time registers
@@ -128,6 +133,17 @@
 #define OFFSET_MAXIMUM  127
 #define OFFSET_MASK     0xFF
 
+#define WD_TIMEOUT_SHIFT        2
+#define WD_CLKSEL_MASK  GENMASK(1, 0)
+#define WD_CLKSEL_0_25HZ        0x00
+#define WD_CLKSEL_1HZ   0x01
+#define WD_CLKSEL_4HZ   0x02
+#define WD_CLKSEL_16HZ  0x03
+
+#define WD_DEFAULT_TIMEOUT  10
+#define WD_TIMEOUT_MIN	1
+#define WD_TIMEOUT_MAX	0x1F
+
 struct pcf85363 {
 	struct rtc_device	*rtc;
 	struct regmap		*regmap;
@@ -137,6 +153,14 @@ struct pcf85363 {
 struct pcf85x63_config {
 	struct regmap_config regmap;
 	unsigned int num_nvram;
+};
+
+struct pcf85363_watchdog {
+	struct watchdog_device wdd;
+	struct regmap *regmap;
+	struct device *dev;
+	u8 timeout_val;
+	u8 clock_sel;
 };
 
 static int pcf85363_load_capacitance(struct pcf85363 *pcf85363, struct device_node *node)
@@ -324,12 +348,13 @@ static irqreturn_t pcf85363_rtc_handle_irq(int irq, void *dev_id)
 		return IRQ_NONE;
 
 	if (flags) {
-		dev_dbg(&pcf85363->rtc->dev, "IRQ flags: 0x%02x%s%s%s%s%s\n",
+		dev_dbg(&pcf85363->rtc->dev, "IRQ flags: 0x%02x%s%s%s%s%s%s\n",
 			flags, (flags & FLAGS_A1F) ? " [A1F]" : "",
 			(flags & FLAGS_TSR1F) ? " [TSR1F]" : "",
 			(flags & FLAGS_TSR2F) ? " [TSR2F]" : "",
 			(flags & FLAGS_TSR3F) ? " [TSR3F]" : "",
-			(flags & FLAGS_BSF) ? " [BSF]" : "");
+			(flags & FLAGS_BSF) ? " [BSF]" : "",
+			(flags & FLAGS_WDF) ? " [WDF]" : "");
 	}
 
 	if (flags & FLAGS_A1F) {
@@ -358,6 +383,11 @@ static irqreturn_t pcf85363_rtc_handle_irq(int irq, void *dev_id)
 
 	if (flags & FLAGS_BSF) {
 		regmap_update_bits(pcf85363->regmap, CTRL_FLAGS, FLAGS_BSF, 0);
+		handled = true;
+	}
+
+	if (flags & FLAGS_WDF) {
+		regmap_update_bits(pcf85363->regmap, CTRL_FLAGS, FLAGS_WDF, 0);
 		handled = true;
 	}
 
@@ -503,6 +533,124 @@ static const struct pcf85x63_config pcf_85363_config = {
 	},
 	.num_nvram = 2
 };
+
+static void pcf85363_wdt_select_clock(struct pcf85363_watchdog *wd)
+{
+	unsigned int t = wd->wdd.timeout;
+
+	if (t <= 2)
+		wd->clock_sel = WD_CLKSEL_16HZ;
+	else if (t <= 8)
+		wd->clock_sel = WD_CLKSEL_4HZ;
+	else if (t <= 16)
+		wd->clock_sel = WD_CLKSEL_1HZ;
+	else
+		wd->clock_sel = WD_CLKSEL_0_25HZ;
+}
+
+/*
+ * This function sets the watchdog control register based on the timeout,
+ * clock selection and repeat mode settings. It prepares the value to
+ * write into the watchdog control register (CTRL_WDOG).
+ */
+static int pcf85363_wdt_reload(struct pcf85363_watchdog *wd)
+{
+	u8 val;
+
+	val = ((wd->timeout_val & WD_TIMEOUT_MAX) << WD_TIMEOUT_SHIFT) |
+	       (wd->clock_sel & WD_CLKSEL_MASK);
+
+	return regmap_write(wd->regmap, CTRL_WDOG, val);
+}
+
+static int pcf85363_wdt_start(struct watchdog_device *wdd)
+{
+	struct pcf85363_watchdog *wd = watchdog_get_drvdata(wdd);
+
+	return pcf85363_wdt_reload(wd);
+}
+
+static int pcf85363_wdt_stop(struct watchdog_device *wdd)
+{
+	struct pcf85363_watchdog *wd = watchdog_get_drvdata(wdd);
+
+	return regmap_write(wd->regmap, CTRL_WDOG, 0);
+}
+
+static int pcf85363_wdt_ping(struct watchdog_device *wdd)
+{
+	struct pcf85363_watchdog *wd = watchdog_get_drvdata(wdd);
+
+	regmap_update_bits(wd->regmap, CTRL_FLAGS, FLAGS_WDF, 0);
+
+	return pcf85363_wdt_reload(wd);
+}
+
+static int pcf85363_wdt_set_timeout(struct watchdog_device *wdd,
+				    unsigned int timeout)
+{
+	struct pcf85363_watchdog *wd = watchdog_get_drvdata(wdd);
+
+	wd->timeout_val = clamp(timeout, WD_TIMEOUT_MIN, WD_TIMEOUT_MAX);
+	wdd->timeout = wd->timeout_val;
+
+	pcf85363_wdt_select_clock(wd);
+
+	return pcf85363_wdt_reload(wd);
+}
+
+static const struct watchdog_info pcf85363_wdt_info = {
+	.identity = "PCF85363 Watchdog",
+	.options = WDIOF_KEEPALIVEPING | WDIOF_SETTIMEOUT,
+};
+
+static const struct watchdog_ops pcf85363_wdt_ops = {
+	.owner = THIS_MODULE,
+	.start = pcf85363_wdt_start,
+	.stop = pcf85363_wdt_stop,
+	.ping = pcf85363_wdt_ping,
+	.set_timeout = pcf85363_wdt_set_timeout,
+};
+
+static int pcf85363_watchdog_init(struct device *dev, struct regmap *regmap)
+{
+	struct pcf85363_watchdog *wd;
+	int ret;
+
+	if (!IS_ENABLED(CONFIG_WATCHDOG))
+		return 0;
+
+	wd = devm_kzalloc(dev, sizeof(*wd), GFP_KERNEL);
+	if (!wd)
+		return -ENOMEM;
+
+	wd->regmap = regmap;
+	wd->dev = dev;
+
+	wd->wdd.info = &pcf85363_wdt_info;
+	wd->wdd.ops = &pcf85363_wdt_ops;
+	wd->wdd.min_timeout = WD_TIMEOUT_MIN;
+	wd->wdd.max_timeout = WD_TIMEOUT_MAX;
+	wd->wdd.parent = dev;
+	wd->wdd.status = WATCHDOG_NOWAYOUT_INIT_STATUS;
+
+	ret = watchdog_init_timeout(&wd->wdd, 0, dev);
+	if (ret)
+		wd->wdd.timeout = WD_DEFAULT_TIMEOUT;
+
+	wd->timeout_val = wd->wdd.timeout;
+	pcf85363_wdt_select_clock(wd);
+
+	ret = regmap_update_bits(regmap, CTRL_FLAGS, FLAGS_WDF, 0);
+	if (ret) {
+		dev_err(dev, "failed to clear WDF:%d\n", ret);
+		return ret;
+	}
+
+	watchdog_set_drvdata(&wd->wdd, wd);
+
+	return devm_watchdog_register_device(dev, &wd->wdd);
+}
 
 /*
  * Reads 6 bytes of timestamp data starting at the given base register,
@@ -684,6 +832,10 @@ static int pcf85363_probe(struct i2c_client *client)
 	regmap_update_bits(pcf85363->regmap, CTRL_PIN_IO,
 			   PIN_IO_TSPM | PIN_IO_TSIM,
 			   PIN_IO_TSPM | PIN_IO_TSIM);
+
+	ret = pcf85363_watchdog_init(dev, pcf85363->regmap);
+	if (ret)
+		dev_err_probe(dev, ret, "Watchdog init failed\n");
 
 	if (irq_a > 0 || wakeup_source)
 		device_init_wakeup(dev, true);
