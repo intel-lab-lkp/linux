@@ -54,7 +54,83 @@ struct iomap_dio {
 			struct work_struct	work;
 		} aio;
 	};
+	struct iomap_dio		*dio_next;	/* request queue link */
 };
+
+#define DIO_ALLOC_CACHE_THRESHOLD	16
+#define DIO_ALLOC_CACHE_MAX		256
+struct dio_alloc_cache {
+	struct iomap_dio		*free_list;
+	struct iomap_dio		*free_list_irq;
+	int		nr;
+	int		nr_irq;
+};
+
+static struct dio_alloc_cache __percpu *dio_cache;
+
+static void dio_alloc_irq_cache_splice(struct dio_alloc_cache *cache)
+{
+	unsigned long flags;
+
+	/* cache->free_list must be empty */
+	if (WARN_ON_ONCE(cache->free_list))
+		return;
+
+	local_irq_save(flags);
+	cache->free_list = cache->free_list_irq;
+	cache->free_list_irq = NULL;
+	cache->nr += cache->nr_irq;
+	cache->nr_irq = 0;
+	local_irq_restore(flags);
+}
+
+static struct iomap_dio *dio_alloc_percpu_cache(void)
+{
+	struct dio_alloc_cache *cache;
+	struct iomap_dio *dio;
+
+	cache = per_cpu_ptr(dio_cache, get_cpu());
+	if (!cache->free_list) {
+		if (READ_ONCE(cache->nr_irq) >= DIO_ALLOC_CACHE_THRESHOLD)
+			dio_alloc_irq_cache_splice(cache);
+		if (!cache->free_list) {
+			put_cpu();
+			return NULL;
+		}
+	}
+	dio = cache->free_list;
+	cache->free_list = dio->dio_next;
+	cache->nr--;
+	put_cpu();
+	return dio;
+}
+
+static void dio_put_percpu_cache(struct iomap_dio *dio)
+{
+	struct dio_alloc_cache *cache;
+
+	cache = per_cpu_ptr(dio_cache, get_cpu());
+	if (READ_ONCE(cache->nr_irq) + cache->nr > DIO_ALLOC_CACHE_MAX)
+		goto out_free;
+
+	if (in_task()) {
+		dio->dio_next = cache->free_list;
+		cache->free_list = dio;
+		cache->nr++;
+	} else if (in_hardirq()) {
+		lockdep_assert_irqs_disabled();
+		dio->dio_next = cache->free_list_irq;
+		cache->free_list_irq = dio;
+		cache->nr_irq++;
+	} else {
+		goto out_free;
+	}
+	put_cpu();
+	return;
+out_free:
+	put_cpu();
+	kfree(dio);
+}
 
 static struct bio *iomap_dio_alloc_bio(const struct iomap_iter *iter,
 		struct iomap_dio *dio, unsigned short nr_vecs, blk_opf_t opf)
@@ -135,7 +211,7 @@ ssize_t iomap_dio_complete(struct iomap_dio *dio)
 			ret += dio->done_before;
 	}
 	trace_iomap_dio_complete(iocb, dio->error, ret);
-	kfree(dio);
+	dio_put_percpu_cache(dio);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(iomap_dio_complete);
@@ -620,9 +696,12 @@ __iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 	if (!iomi.len)
 		return NULL;
 
-	dio = kmalloc(sizeof(*dio), GFP_KERNEL);
-	if (!dio)
-		return ERR_PTR(-ENOMEM);
+	dio = dio_alloc_percpu_cache();
+	if (!dio) {
+		dio = kmalloc(sizeof(*dio), GFP_KERNEL);
+		if (!dio)
+			return ERR_PTR(-ENOMEM);
+	}
 
 	dio->iocb = iocb;
 	atomic_set(&dio->ref, 1);
@@ -804,7 +883,7 @@ __iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 	return dio;
 
 out_free_dio:
-	kfree(dio);
+	dio_put_percpu_cache(dio);
 	if (ret)
 		return ERR_PTR(ret);
 	return NULL;
@@ -832,6 +911,9 @@ static int __init iomap_dio_init(void)
 				IOMAP_ZERO_PAGE_ORDER);
 
 	if (!zero_page)
+		return -ENOMEM;
+	dio_cache = alloc_percpu(struct dio_alloc_cache);
+	if (!dio_cache)
 		return -ENOMEM;
 
 	return 0;
