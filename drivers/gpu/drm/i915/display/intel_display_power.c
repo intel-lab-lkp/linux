@@ -32,7 +32,6 @@
 #include "intel_pmdemand.h"
 #include "intel_pps_regs.h"
 #include "intel_snps_phy.h"
-#include "intel_wakeref.h"
 #include "skl_watermark.h"
 #include "skl_watermark_regs.h"
 #include "vlv_sideband.h"
@@ -918,6 +917,9 @@ intel_display_power_get_in_set_if_enabled(struct intel_display *display,
 
 	return true;
 }
+
+/* -ENOENT means we got the ref, but there's no tracking */
+#define INTEL_WAKEREF_DEF ERR_PTR(-ENOENT)
 
 void
 intel_display_power_put_mask_in_set(struct intel_display *display,
