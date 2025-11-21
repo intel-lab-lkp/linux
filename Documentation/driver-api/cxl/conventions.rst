@@ -8,4 +8,5 @@ Compute Express Link: Linux Conventions
    :caption: Contents
 
    conventions/cxl-lmh.rst
+   conventions/cxl-atl.rst
    conventions/template.rst
