@@ -1566,6 +1566,8 @@ int shmem_writeout(struct folio *folio, struct swap_iocb **plug,
 	struct inode *inode = mapping->host;
 	struct shmem_inode_info *info = SHMEM_I(inode);
 	struct shmem_sb_info *sbinfo = SHMEM_SB(inode->i_sb);
+	loff_t i_size = i_size_read(inode);
+	pgoff_t end_index = DIV_ROUND_UP(i_size, PAGE_SIZE);
 	pgoff_t index;
 	int nr_pages;
 	bool split = false;
@@ -1585,9 +1587,9 @@ int shmem_writeout(struct folio *folio, struct swap_iocb **plug,
 	 * (unless fallocate has been used to preallocate beyond EOF).
 	 */
 	if (folio_test_large(folio)) {
-		index = shmem_fallocend(inode,
-			DIV_ROUND_UP(i_size_read(inode), PAGE_SIZE));
-		if ((index > folio->index && index < folio_next_index(folio)) ||
+		pgoff_t fallocend = shmem_fallocend(inode, end_index);
+		if ((fallocend > folio->index &&
+		     fallocend < folio_next_index(folio)) ||
 		    !IS_ENABLED(CONFIG_THP_SWAP))
 			split = true;
 	}
@@ -1631,8 +1633,20 @@ try_split:
 			goto redirty;
 	}
 
-	if (!folio_test_uptodate(folio)) {
-		folio_zero_range(folio, 0, folio_size(folio));
+	/*
+	 * Ranges beyond EOF must be zeroed at writeout time. This mirrors
+	 * traditional writeback behavior and facilitates zeroing on file size
+	 * changes without having to swap back in.
+	 */
+	if (!folio_test_uptodate(folio) ||
+	    folio_next_index(folio) >= end_index) {
+		size_t from = offset_in_folio(folio, i_size);
+
+		if (!folio_test_uptodate(folio) || index >= end_index)
+			folio_zero_segment(folio, 0, folio_size(folio));
+		else if (from)
+			folio_zero_segment(folio, from, folio_size(folio));
+
 		flush_dcache_folio(folio);
 		folio_mark_uptodate(folio);
 	}
