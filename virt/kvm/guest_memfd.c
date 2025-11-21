@@ -493,28 +493,22 @@ bool __weak kvm_arch_supports_gmem_init_shared(struct kvm *kvm)
 static int __kvm_gmem_create(struct kvm *kvm, loff_t size, u64 flags)
 {
 	const char *anon_name = "[kvm-gmem]";
-	struct kvm_gmem *gmem;
+	struct kvm_gmem *gmem __free(kfree) = NULL;
 	struct inode *inode;
 	struct file *file;
-	int fd, err;
-
-	fd = get_unused_fd_flags(0);
-	if (fd < 0)
-		return fd;
+	int ret;
 
 	gmem = kzalloc(sizeof(*gmem), GFP_KERNEL);
-	if (!gmem) {
-		err = -ENOMEM;
-		goto err_fd;
-	}
+	if (!gmem)
+		return -ENOMEM;
 
-	file = anon_inode_create_getfile(anon_name, &kvm_gmem_fops, gmem,
-					 O_RDWR, NULL);
-	if (IS_ERR(file)) {
-		err = PTR_ERR(file);
-		goto err_gmem;
-	}
+	FD_PREPARE(fdf, 0, anon_inode_create_getfile(anon_name, &kvm_gmem_fops,
+						     gmem, O_RDWR, NULL));
+	ret = ACQUIRE_ERR(fd_prepare, &fdf);
+	if (ret)
+		return ret;
 
+	file = fd_prepare_file(fdf);
 	file->f_flags |= O_LARGEFILE;
 
 	inode = file->f_inode;
@@ -535,14 +529,9 @@ static int __kvm_gmem_create(struct kvm *kvm, loff_t size, u64 flags)
 	xa_init(&gmem->bindings);
 	list_add(&gmem->entry, &inode->i_mapping->i_private_list);
 
-	fd_install(fd, file);
-	return fd;
-
-err_gmem:
-	kfree(gmem);
-err_fd:
-	put_unused_fd(fd);
-	return err;
+	/* Ownership of gmem transferred to file */
+	retain_and_null_ptr(gmem);
+	return fd_publish(fdf);
 }
 
 int kvm_gmem_create(struct kvm *kvm, struct kvm_create_guest_memfd *args)
