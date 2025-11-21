@@ -234,13 +234,11 @@ xfs_open_by_handle(
 {
 	const struct cred	*cred = current_cred();
 	int			error;
-	int			fd;
 	int			permflag;
-	struct file		*filp;
 	struct inode		*inode;
 	struct dentry		*dentry;
 	fmode_t			fmode;
-	struct path		path;
+	struct path		path __free(path_put) = {};
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
@@ -252,8 +250,7 @@ xfs_open_by_handle(
 
 	/* Restrict xfs_open_by_handle to directories & regular files. */
 	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode))) {
-		error = -EPERM;
-		goto out_dput;
+		return -EPERM;
 	}
 
 #if BITS_PER_LONG != 32
@@ -263,48 +260,32 @@ xfs_open_by_handle(
 	permflag = hreq->oflags;
 	fmode = OPEN_FMODE(permflag);
 	if ((!(permflag & O_APPEND) || (permflag & O_TRUNC)) &&
-	    (fmode & FMODE_WRITE) && IS_APPEND(inode)) {
-		error = -EPERM;
-		goto out_dput;
-	}
+	    (fmode & FMODE_WRITE) && IS_APPEND(inode))
+		return -EPERM;
 
-	if ((fmode & FMODE_WRITE) && IS_IMMUTABLE(inode)) {
-		error = -EPERM;
-		goto out_dput;
-	}
+	if ((fmode & FMODE_WRITE) && IS_IMMUTABLE(inode))
+		return -EPERM;
 
 	/* Can't write directories. */
-	if (S_ISDIR(inode->i_mode) && (fmode & FMODE_WRITE)) {
-		error = -EISDIR;
-		goto out_dput;
-	}
+	if (S_ISDIR(inode->i_mode) && (fmode & FMODE_WRITE))
+		return -EISDIR;
 
-	fd = get_unused_fd_flags(0);
-	if (fd < 0) {
-		error = fd;
-		goto out_dput;
-	}
-
-	path.mnt = parfilp->f_path.mnt;
+	path.mnt = mntget(parfilp->f_path.mnt);
 	path.dentry = dentry;
-	filp = dentry_open(&path, hreq->oflags, cred);
-	dput(dentry);
-	if (IS_ERR(filp)) {
-		put_unused_fd(fd);
-		return PTR_ERR(filp);
-	}
+
+	FD_PREPARE(fdf, 0, dentry_open(&path, hreq->oflags, cred));
+	error = ACQUIRE_ERR(fd_prepare, &fdf);
+	if (error)
+		return error;
 
 	if (S_ISREG(inode->i_mode)) {
+		struct file *filp = fd_prepare_file(fdf);
+
 		filp->f_flags |= O_NOATIME;
 		filp->f_mode |= FMODE_NOCMTIME;
 	}
 
-	fd_install(fd, filp);
-	return fd;
-
- out_dput:
-	dput(dentry);
-	return error;
+	return fd_publish(fdf);
 }
 
 int
