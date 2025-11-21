@@ -1091,6 +1091,78 @@ static struct folio *shmem_get_partial_folio(struct inode *inode, pgoff_t index)
 }
 
 /*
+ * Zero a post-EOF range about to be exposed by size extension. Zero from the
+ * current i_size through lend, the latter of which typically refers to the
+ * start offset of an extending operation. Skip swap entries because associated
+ * folios were zeroed at swapout time.
+ */
+static void shmem_zero_eof(struct inode *inode, loff_t lend)
+{
+	struct address_space *mapping = inode->i_mapping;
+	loff_t lstart = i_size_read(inode);
+	pgoff_t index = (lstart + PAGE_SIZE - 1) >> PAGE_SHIFT;
+	pgoff_t end = lend >> PAGE_SHIFT;
+	struct folio_batch fbatch;
+	struct folio *folio;
+	int i;
+	bool same_folio = (lstart >> PAGE_SHIFT) == (lend >> PAGE_SHIFT);
+
+	folio = filemap_lock_folio(mapping, lstart >> PAGE_SHIFT);
+	if (!IS_ERR(folio)) {
+		same_folio = lend < folio_next_pos(folio);
+		index = folio_next_index(folio);
+
+		if (folio_test_uptodate(folio)) {
+			size_t from = offset_in_folio(folio, lstart);
+			size_t len = min_t(loff_t, folio_size(folio) - from,
+					   lend - lstart);
+
+			folio_zero_range(folio, from, len);
+		}
+
+		folio_unlock(folio);
+		folio_put(folio);
+	}
+
+	if (!same_folio) {
+		folio = filemap_lock_folio(mapping, lend >> PAGE_SHIFT);
+		if (!IS_ERR(folio)) {
+			end = folio->index;
+
+			if (folio_test_uptodate(folio)) {
+				size_t len = lend - folio_pos(folio);
+				folio_zero_range(folio, 0, len);
+			}
+
+			folio_unlock(folio);
+			folio_put(folio);
+		}
+	}
+
+	/*
+	 * Zero uptodate folios fully within the target range. Uptodate folios
+	 * beyond EOF are generally unexpected, but can exist if a larger
+	 * falloc'd and uptodate EOF folio is split.
+	 */
+	folio_batch_init(&fbatch);
+	while (index < end) {
+		if (!filemap_get_folios(mapping, &index, end - 1, &fbatch))
+			break;
+		for (i = 0; i < folio_batch_count(&fbatch); i++) {
+			folio = fbatch.folios[i];
+
+			folio_lock(folio);
+			if (folio_test_uptodate(folio) &&
+			    folio->mapping == mapping) {
+				folio_zero_segment(folio, 0, folio_size(folio));
+			}
+			folio_unlock(folio);
+		}
+		folio_batch_release(&fbatch);
+	}
+}
+
+/*
  * Remove range of pages and swap entries from page cache, and free them.
  * If !unfalloc, truncate or punch hole; if unfalloc, undo failed fallocate.
  */
@@ -1320,6 +1392,8 @@ static int shmem_setattr(struct mnt_idmap *idmap,
 					oldsize, newsize);
 			if (error)
 				return error;
+			if (newsize > oldsize)
+				shmem_zero_eof(inode, newsize);
 			i_size_write(inode, newsize);
 			update_mtime = true;
 		} else {
@@ -3502,6 +3576,8 @@ static ssize_t shmem_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	ret = file_update_time(file);
 	if (ret)
 		goto unlock;
+	if (iocb->ki_pos > i_size_read(inode))
+		shmem_zero_eof(inode, iocb->ki_pos);
 	ret = generic_perform_write(iocb, from);
 unlock:
 	inode_unlock(inode);
@@ -3834,8 +3910,10 @@ static long shmem_fallocate(struct file *file, int mode, loff_t offset,
 		cond_resched();
 	}
 
-	if (!(mode & FALLOC_FL_KEEP_SIZE) && offset + len > inode->i_size)
+	if (!(mode & FALLOC_FL_KEEP_SIZE) && offset + len > inode->i_size) {
+		shmem_zero_eof(inode, offset + len);
 		i_size_write(inode, offset + len);
+	}
 undone:
 	spin_lock(&inode->i_lock);
 	inode->i_private = NULL;
