@@ -616,6 +616,11 @@ static struct qcom_ice *qcom_ice_create(struct device *dev,
 		if (clk_index < 0)
 			return ERR_PTR(clk_index);
 
+		/* Vote for maximum clock rate for maximum performance */
+		err = clk_set_rate(engine->core_clk, INT_MAX);
+		if (err)
+			dev_warn(dev, "Failed boosting the ICE clk to TURBO\n");
+
 		break;
 	}
 
@@ -635,6 +640,11 @@ static struct qcom_ice *qcom_ice_create(struct device *dev,
 			return ERR_PTR(err);
 		}
 		engine->has_opp = (err == 0);
+
+		/* Vote for maximum clock rate for maximum performance */
+		err = dev_pm_opp_set_rate(dev, INT_MAX);
+		if (err)
+			dev_warn(dev, "Failed boosting the ICE clk to TURBO\n");
 
 		/* Since, there is only one clock
 		 * index can be set as 0
