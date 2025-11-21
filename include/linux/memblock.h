@@ -91,7 +91,7 @@ struct memblock_type {
 	unsigned long cnt;
 	unsigned long max;
 	phys_addr_t total_size;
-	struct memblock_region *regions;
+	struct memblock_region *regions __counted_by_ptr(max);
 	char *name;
 };
 
