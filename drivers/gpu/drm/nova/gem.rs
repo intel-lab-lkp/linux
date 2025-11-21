@@ -3,6 +3,10 @@
 use kernel::{
     drm,
     drm::{gem, gem::BaseObject},
+    page::{
+        page_align,
+        PAGE_SIZE, //
+    },
     prelude::*,
     sync::aref::ARef,
 };
@@ -27,11 +31,12 @@ impl gem::DriverObject for NovaObject {
 impl NovaObject {
     /// Create a new DRM GEM object.
     pub(crate) fn new(dev: &NovaDevice, size: usize) -> Result<ARef<gem::Object<Self>>> {
-        let aligned_size = size.next_multiple_of(1 << 12);
-
-        if size == 0 || size > aligned_size {
+        // Check for 0 size or potential usize overflow before calling page_align
+        if size == 0 || size > usize::MAX - PAGE_SIZE + 1 {
             return Err(EINVAL);
         }
+
+        let aligned_size = page_align(size);
 
         gem::Object::new(dev, aligned_size)
     }
