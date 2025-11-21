@@ -2629,7 +2629,7 @@ static int tcp_mtu_probe(struct sock *sk)
 	interval = icsk->icsk_mtup.search_high - icsk->icsk_mtup.search_low;
 	/* When misfortune happens, we are reprobing actively,
 	 * and then reprobe timer has expired. We stick with current
-	 * probing process by not resetting search range to its orignal.
+	 * probing process by not resetting search range to its original.
 	 */
 	if (probe_size > tcp_mtu_to_mss(sk, icsk->icsk_mtup.search_high) ||
 	    interval < READ_ONCE(net->ipv4.sysctl_tcp_probe_threshold)) {

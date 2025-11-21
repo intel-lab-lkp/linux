@@ -1129,7 +1129,7 @@ static void tcp_update_pacing_rate(struct sock *sk)
 		do_div(rate, tp->srtt_us);
 
 	/* WRITE_ONCE() is needed because sch_fq fetches sk_pacing_rate
-	 * without any lock. We want to make sure compiler wont store
+	 * without any lock. We want to make sure compiler won't store
 	 * intermediate values in this location.
 	 */
 	WRITE_ONCE(sk->sk_pacing_rate,
@@ -4868,7 +4868,7 @@ void tcp_sack_compress_send_ack(struct sock *sk)
 		__sock_put(sk);
 
 	/* Since we have to send one ack finally,
-	 * substract one from tp->compressed_ack to keep
+	 * subtract one from tp->compressed_ack to keep
 	 * LINUX_MIB_TCPACKCOMPRESSED accurate.
 	 */
 	NET_ADD_STATS(sock_net(sk), LINUX_MIB_TCPACKCOMPRESSED,

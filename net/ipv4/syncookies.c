@@ -131,7 +131,7 @@ static __u32 check_tcp_syn_cookie(__u32 cookie, __be32 saddr, __be32 daddr,
 
 /*
  * MSS Values are chosen based on the 2011 paper
- * 'An Analysis of TCP Maximum Segement Sizes' by S. Alcock and R. Nelson.
+ * 'An Analysis of TCP Maximum Segment Sizes' by S. Alcock and R. Nelson.
  * Values ..
  *  .. lower than 536 are rare (< 0.2%)
  *  .. between 537 and 1299 account for less than < 1.5% of observed values
