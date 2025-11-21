@@ -236,6 +236,7 @@ union lk_data {
  * @base: Base address of the switch
  * @hclk: hclk_switch clock
  * @clk: clk_switch clock
+ * @ts: Timestamp clock
  * @dev: Device associated to the switch
  * @mii_bus: MDIO bus struct
  * @mdio_freq: MDIO bus frequency requested
@@ -251,6 +252,7 @@ struct a5psw {
 	void __iomem *base;
 	struct clk *hclk;
 	struct clk *clk;
+	struct clk *ts;
 	struct device *dev;
 	struct mii_bus	*mii_bus;
 	struct phylink_pcs *pcs[A5PSW_PORTS_NUM - 1];

@@ -1243,6 +1243,13 @@ static int a5psw_probe(struct platform_device *pdev)
 		goto free_pcs;
 	}
 
+	a5psw->ts = devm_clk_get_optional_enabled(dev, "ts");
+	if (IS_ERR(a5psw->ts)) {
+		dev_err(dev, "failed get ts clock\n");
+		ret = PTR_ERR(a5psw->ts);
+		goto free_pcs;
+	}
+
 	reset = devm_reset_control_get_optional_exclusive_deasserted(dev, NULL);
 	if (IS_ERR(reset)) {
 		ret = PTR_ERR(reset);
