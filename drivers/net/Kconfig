@@ -369,6 +369,20 @@ config NETCONSOLE_PREPEND_RELEASE
 	  message.  See <file:Documentation/networking/netconsole.rst> for
 	  details.
 
+config NETCONSOLE_NBCON
+	bool "Use nbcon infrastructure (EXPERIMENTAL)"
+	depends on NETCONSOLE
+	default n
+	help
+	  Enable nbcon support for netconsole. This uses the new lock-free
+	  console infrastructure which supports threaded and atomic printing.
+	  Given that netconsole does not support atomic operations, the current
+	  implementation focuses on threaded callbacks, unless the host is
+	  crashing, then it uses an unsafe atomic callbacks. This feature is
+	  available for both extended and non-extended consoles.
+
+	  If unsure, say N to use the legacy console infrastructure.
+
 config NETPOLL
 	def_bool NETCONSOLE
 

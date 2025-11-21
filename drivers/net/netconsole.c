@@ -1724,6 +1724,57 @@ static void send_ext_msg_udp(struct netconsole_target *nt, const char *msg,
 				   extradata_len);
 }
 
+#ifdef CONFIG_NETCONSOLE_NBCON
+static void netcon_write_nbcon(struct console *con,
+			       struct nbcon_write_context *wctxt,
+			       bool extended)
+{
+	struct netconsole_target *nt;
+
+	lockdep_assert_held(&target_list_lock);
+
+	list_for_each_entry(nt, &target_list, list) {
+		if (nt->extended != extended || !nt->enabled ||
+		    !netif_running(nt->np.dev))
+			continue;
+
+		if (!nbcon_enter_unsafe(wctxt))
+			continue;
+
+		if (extended)
+			send_ext_msg_udp(nt, wctxt->outbuf, wctxt->len);
+		else
+			write_msg_target(nt, wctxt->outbuf, wctxt->len);
+
+		nbcon_exit_unsafe(wctxt);
+	}
+}
+
+static void netcon_write_nbcon_ext(struct console *con,
+				   struct nbcon_write_context *wctxt)
+{
+	netcon_write_nbcon(con, wctxt, true);
+}
+
+static void netcon_write_nbcon_basic(struct console *con,
+				     struct nbcon_write_context *wctxt)
+{
+	netcon_write_nbcon(con, wctxt, false);
+}
+
+static void netconsole_device_lock(struct console *con, unsigned long *flags)
+{
+	/* protects all the targets at the same time */
+	spin_lock_irqsave(&target_list_lock, *flags);
+}
+
+static void netconsole_device_unlock(struct console *con, unsigned long flags)
+{
+	spin_unlock_irqrestore(&target_list_lock, flags);
+}
+
+#else
+
 static void write_ext_msg(struct console *con, const char *msg,
 			  unsigned int len)
 {
@@ -1765,6 +1816,7 @@ static void write_msg(struct console *con, const char *msg, unsigned int len)
 	}
 	spin_unlock_irqrestore(&target_list_lock, flags);
 }
+#endif
 
 static int netconsole_parser_cmdline(struct netpoll *np, char *opt)
 {
@@ -1923,14 +1975,30 @@ static void free_param_target(struct netconsole_target *nt)
 
 static struct console netconsole_ext = {
 	.name	= "netcon_ext",
+#ifdef CONFIG_NETCONSOLE_NBCON
+	.flags = CON_ENABLED | CON_EXTENDED | CON_NBCON | CON_NBCON_ATOMIC_UNSAFE,
+	.write_thread = netcon_write_nbcon_ext,
+	.write_atomic = netcon_write_nbcon_ext,
+	.device_lock = netconsole_device_lock,
+	.device_unlock = netconsole_device_unlock,
+#else
 	.flags	= CON_ENABLED | CON_EXTENDED,
 	.write	= write_ext_msg,
+#endif
 };
 
 static struct console netconsole = {
 	.name	= "netcon",
+#ifdef CONFIG_NETCONSOLE_NBCON
+	.flags = CON_ENABLED | CON_NBCON | CON_NBCON_ATOMIC_UNSAFE,
+	.write_thread = netcon_write_nbcon_basic,
+	.write_atomic = netcon_write_nbcon_basic,
+	.device_lock = netconsole_device_lock,
+	.device_unlock = netconsole_device_unlock,
+#else
 	.flags	= CON_ENABLED,
 	.write	= write_msg,
+#endif
 };
 
 static int __init init_netconsole(void)
