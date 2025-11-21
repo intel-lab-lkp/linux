@@ -1784,8 +1784,8 @@ static int svm_set_nested_state(struct kvm_vcpu *vcpu,
 	 * EFER.SVME, but EFER.SVME still has to be 1 for VMRUN to succeed.
 	 */
 	if (!(vcpu->arch.efer & EFER_SVME)) {
-		/* GIF=1 and no guest mode are required if SVME=0.  */
-		if (kvm_state->flags != KVM_STATE_NESTED_GIF_SET)
+		/* GUEST_MODE must be clear when SVME==0 */
+		if (kvm_state->flags & KVM_STATE_NESTED_GUEST_MODE)
 			return -EINVAL;
 	}
 
