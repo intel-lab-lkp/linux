@@ -6053,7 +6053,7 @@ intel_dp_detect(struct drm_connector *_connector,
 		memset(connector->dp.pr_dpcd, 0, sizeof(connector->dp.pr_dpcd));
 		intel_dp->psr.sink_panel_replay_support = false;
 		intel_dp->psr.sink_panel_replay_su_support = false;
-		intel_dp->psr.sink_panel_replay_dsc_support =
+		connector->dp.panel_replay_caps.dsc_support =
 			INTEL_DP_PANEL_REPLAY_DSC_NOT_SUPPORTED;
 
 		intel_dp_mst_disconnect(intel_dp);
