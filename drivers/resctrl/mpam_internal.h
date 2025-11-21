@@ -14,7 +14,6 @@
 #include <linux/mutex.h>
 #include <linux/srcu.h>
 #include <linux/spinlock.h>
-#include <linux/srcu.h>
 #include <linux/types.h>
 
 #define MPAM_MSC_MAX_NUM_RIS	16
