@@ -1141,12 +1141,83 @@ static ssize_t implementation_id_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(implementation_id);
 
+static int tee_get_optee_revision(struct tee_device *teedev,
+				  struct optee_version_info *ver_info)
+{
+	if (!teedev->desc->ops->get_optee_revision)
+		return -ENODEV;
+
+	return teedev->desc->ops->get_optee_revision(teedev, ver_info);
+}
+
+static bool tee_is_optee(struct tee_device *teedev)
+{
+	struct tee_ioctl_version_data vers;
+
+	teedev->desc->ops->get_version(teedev, &vers);
+
+	return vers.impl_id == TEE_IMPL_ID_OPTEE;
+}
+
+static ssize_t optee_os_revision_show(struct device *dev,
+				      struct device_attribute *attr, char *buf)
+{
+	struct tee_device *teedev = container_of(dev, struct tee_device, dev);
+	struct optee_version_info ver_info;
+	int ret;
+
+	if (!tee_is_optee(teedev))
+		return -ENODEV;
+
+	ret = tee_get_optee_revision(teedev, &ver_info);
+	if (ret)
+		return ret;
+
+	if (ver_info.os_build_id)
+		return sysfs_emit(buf, "%u.%u (%08x)\n", ver_info.os_major,
+				  ver_info.os_minor, ver_info.os_build_id);
+
+	return sysfs_emit(buf, "%u.%u\n", ver_info.os_major,
+			  ver_info.os_minor);
+}
+static DEVICE_ATTR_RO(optee_os_revision);
+
 static struct attribute *tee_dev_attrs[] = {
 	&dev_attr_implementation_id.attr,
 	NULL
 };
 
-ATTRIBUTE_GROUPS(tee_dev);
+static struct attribute *tee_optee_attrs[] = {
+	&dev_attr_optee_os_revision.attr,
+	NULL
+};
+
+static umode_t tee_optee_attr_is_visible(struct kobject *kobj,
+					 struct attribute *attr, int n)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct tee_device *teedev = container_of(dev, struct tee_device, dev);
+
+	if (tee_is_optee(teedev) && teedev->desc->ops->get_optee_revision)
+		return attr->mode;
+
+	return 0;
+}
+
+static const struct attribute_group tee_dev_group = {
+	.attrs = tee_dev_attrs,
+};
+
+static const struct attribute_group tee_optee_group = {
+	.attrs = tee_optee_attrs,
+	.is_visible = tee_optee_attr_is_visible,
+};
+
+static const struct attribute_group *tee_dev_groups[] = {
+	&tee_dev_group,
+	&tee_optee_group,
+	NULL
+};
 
 static const struct class tee_class = {
 	.name = "tee",

@@ -98,6 +98,8 @@ struct tee_device {
 struct tee_driver_ops {
 	void (*get_version)(struct tee_device *teedev,
 			    struct tee_ioctl_version_data *vers);
+	int (*get_optee_revision)(struct tee_device *teedev,
+				  struct optee_version_info *vers);
 	int (*open)(struct tee_context *ctx);
 	void (*close_context)(struct tee_context *ctx);
 	void (*release)(struct tee_context *ctx);
