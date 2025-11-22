@@ -24,13 +24,20 @@ static char root_opts[1024] __initdata = DEFAULT_MNT_OPTS;
 
 static __be32 __init parse_srvaddr(char *start, char *end)
 {
-	/* TODO: ipv6 support */
-	char addr[sizeof("aaa.bbb.ccc.ddd")];
+	char addr[sizeof("aaaa.bbbb.cccc.dddd.eeee.ffff.gggg.hhhh")];
 	int i = 0;
+	int ipv6 = -1;
 
 	while (start < end && i < sizeof(addr) - 1) {
-		if (isdigit(*start) || *start == '.')
+		if (isdigit(*start))
 			addr[i++] = *start;
+		else if (*start == '.' && ipv6 != 1) {
+			addr[i++] = *start;
+			ipv6 = 0;
+		} else if ((isalpha(*start) || *start == ':') && ipv6 != 0) {
+			addr[i++] = *start;
+			ipv6 = 1;
+		}
 		start++;
 	}
 	addr[i] = '\0';
