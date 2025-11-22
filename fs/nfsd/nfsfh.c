@@ -807,6 +807,7 @@ fh_put(struct svc_fh *fhp)
 	}
 	fhp->fh_no_wcc = false;
 	fhp->fh_handle.fh_size = 0;
+	fhp->fh_have_stateid = false;
 	return;
 }
 
