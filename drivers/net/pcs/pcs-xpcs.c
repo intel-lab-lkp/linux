@@ -11,6 +11,7 @@
 #include <linux/pcs/pcs-xpcs.h>
 #include <linux/mdio.h>
 #include <linux/phy.h>
+#include <linux/phy/phy-common-props.h>
 #include <linux/phylink.h>
 #include <linux/property.h>
 
@@ -810,14 +811,34 @@ static int xpcs_config_2500basex(struct dw_xpcs *xpcs)
 
 static int xpcs_pma_config(struct dw_xpcs *xpcs, const struct dw_xpcs_compat *compat)
 {
+	struct fwnode_handle *fwnode = dev_fwnode(&xpcs->mdiodev->dev);
+	u32 val = 0, mask;
+	int pol;
 	int ret;
 
-	if (xpcs->need_opposite_tx_polarity) {
-		ret = xpcs_write(xpcs, MDIO_MMD_VEND2, DW_VR_MII_DIG_CTRL2,
-				 DW_VR_MII_DIG_CTRL2_TX_POL_INV);
-		if (ret)
-			return ret;
-	}
+	mask = DW_VR_MII_DIG_CTRL2_TX_POL_INV | DW_VR_MII_DIG_CTRL2_RX_POL_INV;
+
+	pol = phy_get_rx_polarity(fwnode, phy_modes(compat->interface),
+				  PHY_POL_NORMAL | PHY_POL_INVERT,
+				  PHY_POL_NORMAL);
+	if (pol < 0)
+		return pol;
+	if (pol == PHY_POL_INVERT)
+		val |= DW_VR_MII_DIG_CTRL2_RX_POL_INV;
+
+	pol = phy_get_tx_polarity(fwnode, phy_modes(compat->interface),
+				  PHY_POL_NORMAL | PHY_POL_INVERT,
+				  PHY_POL_NORMAL);
+	if (pol < 0)
+		return pol;
+	if (xpcs->need_opposite_tx_polarity)
+		pol = !pol;
+	if (pol == PHY_POL_INVERT)
+		val |= DW_VR_MII_DIG_CTRL2_TX_POL_INV;
+
+	ret = xpcs_modify(xpcs, MDIO_MMD_VEND2, DW_VR_MII_DIG_CTRL2, mask, val);
+	if (ret < 0)
+		return ret;
 
 	if (compat->pma_config) {
 		ret = compat->pma_config(xpcs);
