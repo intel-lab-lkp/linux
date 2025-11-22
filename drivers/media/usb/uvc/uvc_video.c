@@ -2317,10 +2317,25 @@ error_commit:
 
 void uvc_video_stop_streaming(struct uvc_streaming *stream)
 {
+	struct usb_host_config *config;
+	int i;
+
+	if (!stream || !stream->dev || !stream->dev->udev || !stream->intf)
+		goto cleanup_clock;
+
 	uvc_video_stop_transfer(stream, 1);
 
-	if (stream->intf->num_altsetting > 1) {
-		usb_set_interface(stream->dev->udev, stream->intfnum, 0);
+	config = stream->dev->udev->actconfig;
+	if (stream->intf->num_altsetting > 1 && config) {
+		/* Security Check: Check if the interface exists and is valid */
+		for (i = 0; i < config->desc.bNumInterfaces; i++) {
+			if (config->interface[i] &&
+			    config->interface[i]->altsetting[0]
+				.desc.bInterfaceNumber == stream->intfnum) {
+				usb_set_interface(stream->dev->udev, stream->intfnum, 0);
+				break;
+			}
+		}
 	} else {
 		/*
 		 * UVC doesn't specify how to inform a bulk-based device
@@ -2338,5 +2353,6 @@ void uvc_video_stop_streaming(struct uvc_streaming *stream)
 		usb_clear_halt(stream->dev->udev, pipe);
 	}
 
+cleanup_clock:
 	uvc_video_clock_cleanup(&stream->clock);
 }
