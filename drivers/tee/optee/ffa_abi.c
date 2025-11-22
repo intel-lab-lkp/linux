@@ -776,7 +776,8 @@ static int optee_ffa_reclaim_protmem(struct optee *optee,
  */
 
 static bool optee_ffa_api_is_compatible(struct ffa_device *ffa_dev,
-					const struct ffa_ops *ops)
+					const struct ffa_ops *ops,
+					struct optee_version_info *version_info)
 {
 	const struct ffa_msg_ops *msg_ops = ops->msg_ops;
 	struct ffa_send_direct_data data = {
@@ -806,6 +807,12 @@ static bool optee_ffa_api_is_compatible(struct ffa_device *ffa_dev,
 		pr_err("Unexpected error %d\n", rc);
 		return false;
 	}
+	if (version_info) {
+		version_info->os_major = data.data0;
+		version_info->os_minor = data.data1;
+		version_info->os_build_id = data.data2;
+	}
+
 	if (data.data2)
 		pr_info("revision %lu.%lu (%08lx)",
 			data.data0, data.data1, data.data2);
@@ -1034,6 +1041,7 @@ static int optee_ffa_probe(struct ffa_device *ffa_dev)
 {
 	const struct ffa_notifier_ops *notif_ops;
 	const struct ffa_ops *ffa_ops;
+	struct optee_version_info version_info = { };
 	unsigned int max_notif_value;
 	unsigned int rpc_param_count;
 	struct tee_shm_pool *pool;
@@ -1047,7 +1055,7 @@ static int optee_ffa_probe(struct ffa_device *ffa_dev)
 	ffa_ops = ffa_dev->ops;
 	notif_ops = ffa_ops->notifier_ops;
 
-	if (!optee_ffa_api_is_compatible(ffa_dev, ffa_ops))
+	if (!optee_ffa_api_is_compatible(ffa_dev, ffa_ops, &version_info))
 		return -EINVAL;
 
 	if (!optee_ffa_exchange_caps(ffa_dev, ffa_ops, &sec_caps,
@@ -1059,6 +1067,7 @@ static int optee_ffa_probe(struct ffa_device *ffa_dev)
 	optee = kzalloc(sizeof(*optee), GFP_KERNEL);
 	if (!optee)
 		return -ENOMEM;
+	optee->version_info = version_info;
 
 	pool = optee_ffa_shm_pool_alloc_pages();
 	if (IS_ERR(pool)) {
