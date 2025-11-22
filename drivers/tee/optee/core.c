@@ -83,8 +83,27 @@ static ssize_t rpmb_routing_model_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(rpmb_routing_model);
 
+static ssize_t optee_os_revision_show(struct device *dev,
+				      struct device_attribute *attr, char *buf)
+{
+	struct optee *optee = dev_get_drvdata(dev);
+	struct optee_version_info *v;
+
+	if (!optee)
+		return -ENODEV;
+
+	v = &optee->version_info;
+	if (v->os_build_id)
+		return sysfs_emit(buf, "%u.%u (%016llx)\n", v->os_major,
+				  v->os_minor, (unsigned long long)v->os_build_id);
+
+	return sysfs_emit(buf, "%u.%u\n", v->os_major, v->os_minor);
+}
+static DEVICE_ATTR_RO(optee_os_revision);
+
 static struct attribute *optee_dev_attrs[] = {
 	&dev_attr_rpmb_routing_model.attr,
+	&dev_attr_optee_os_revision.attr,
 	NULL
 };
 
