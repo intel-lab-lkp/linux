@@ -6,6 +6,7 @@
 #include "libbfd.h"
 #include "llvm.h"
 #include "symbol.h"
+#include "libdw.h"
 
 #include <inttypes.h>
 #include <string.h>
@@ -119,6 +120,10 @@ static int addr2line(const char *dso_name, u64 addr, char **file, unsigned int *
 		     struct symbol *sym)
 {
 	int ret;
+
+	ret = libdw__addr2line(dso_name, addr, file, line_nr, dso, unwind_inlines, node, sym);
+	if (ret > 0)
+		return ret;
 
 	ret = llvm__addr2line(dso_name, addr, file, line_nr, dso, unwind_inlines, node, sym);
 	if (ret > 0)
