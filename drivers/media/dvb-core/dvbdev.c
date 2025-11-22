@@ -103,7 +103,8 @@ static int dvb_device_open(struct inode *inode, struct file *file)
 		new_fops = fops_get(dvbdev->fops);
 		if (!new_fops)
 			goto fail;
-		file->private_data = dvb_device_get(dvbdev);
+		dvb_device_get(dvbdev);
+		file->private_data = dvbdev;
 		replace_fops(file, new_fops);
 		if (file->f_op->open)
 			err = file->f_op->open(inode, file);
