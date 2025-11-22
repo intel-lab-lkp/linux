@@ -44,6 +44,7 @@
 
 #ifndef SYS_set_robust_list2
 # define SYS_set_robust_list2 470
+# define SYS_get_robust_list2 471
 
 enum robust_list_cmd {
 	FUTEX_ROBUST_LIST_CMD_SET_64,
@@ -79,6 +80,12 @@ static int set_robust_list2(struct robust_list_head *head, int index,
 			    enum robust_list_cmd cmd, unsigned int flags)
 {
 	return syscall(SYS_set_robust_list2, head, index, cmd, flags);
+}
+
+static int get_robust_list2(int pid, struct robust_list_head **head,
+			    unsigned int index, unsigned int flags)
+{
+	return syscall(SYS_get_robust_list2, pid, head, index, flags);
 }
 
 static bool robust_list2_support(void)
@@ -179,6 +186,23 @@ static int set_list(struct robust_list_head *head, bool robust2, int index)
 		return set_robust_list(head, sizeof(*head));
 
 	return set_robust_list2(head, index, get_cmd_set(), 0);
+}
+
+static int get_list(pid_t pid, struct robust_list_head **head, bool robust2, int index)
+{
+	int ret;
+
+	if (!robust2) {
+		size_t len_ptr;
+
+		ret = get_robust_list(pid, head, &len_ptr);
+		if (sizeof(**head) != len_ptr)
+			return -EINVAL;
+
+		return ret;
+	}
+
+	return get_robust_list2(pid, head, index, 0);
 }
 
 /*
@@ -391,37 +415,44 @@ TEST(test_set_robust_list2_inval)
 /*
  * Test get_robust_list with pid = 0, getting the list of the running thread
  */
-TEST(test_get_robust_list_self)
+TEST_F(robust_api, test_get_robust_list_self)
 {
 	struct robust_list_head head, head2, *get_head;
-	size_t head_size = sizeof(head), len_ptr;
+	bool robust2 = variant->robust2;
 	int ret;
 
-	ret = set_robust_list(&head, head_size);
+	ret = set_list(&head, robust2, 0);
 	ASSERT_EQ(ret, 0);
 
-	ret = get_robust_list(0, &get_head, &len_ptr);
+	ret = get_list(0, &get_head, robust2, 0);
 	ASSERT_EQ(ret, 0);
 	ASSERT_EQ(get_head, &head);
-	ASSERT_EQ(head_size, len_ptr);
 
-	ret = set_robust_list(&head2, head_size);
+	ret = set_list(&head2, robust2, 0);
 	ASSERT_EQ(ret, 0);
 
-	ret = get_robust_list(0, &get_head, &len_ptr);
+	ret = get_list(0, &get_head, robust2, 0);
 	ASSERT_EQ(ret, 0);
 	ASSERT_EQ(get_head, &head2);
-	ASSERT_EQ(head_size, len_ptr);
 
 	ksft_test_result_pass("%s\n", __func__);
 }
 
+struct child_arg_struct {
+	struct robust_list_head *head;
+	bool robust2;
+};
+
 static int child_list(void *arg)
 {
-	struct robust_list_head *head = arg;
+	struct child_arg_struct *child = arg;
+	struct robust_list_head *head;
+	bool robust2 = child->robust2;
 	int ret;
 
-	ret = set_robust_list(head, sizeof(*head));
+	head = child->head;
+
+	ret = set_list(head, robust2, 0);
 	if (ret) {
 		ksft_test_result_fail("set_robust_list error\n");
 		return -1;
@@ -444,23 +475,26 @@ static int child_list(void *arg)
  * parent
  *   2) the child thread still alive when we try to get the list from it
  */
-TEST(test_get_robust_list_child)
+TEST_F(robust_api, test_get_robust_list_child)
 {
 	struct robust_list_head head, *get_head;
+	bool robust2 = variant->robust2;
+	struct child_arg_struct child =
+		{.robust2 = robust2, .head = &head};
 	int ret, wstatus;
-	size_t len_ptr;
 	pid_t tid;
+
 
 	ret = pthread_barrier_init(&barrier, NULL, 2);
 	ret = pthread_barrier_init(&barrier2, NULL, 2);
 	ASSERT_EQ(ret, 0);
 
-	tid = create_child(&child_list, &head);
+	tid = create_child(&child_list, &child);
 	ASSERT_NE(tid, -1);
 
 	pthread_barrier_wait(&barrier);
 
-	ret = get_robust_list(tid, &get_head, &len_ptr);
+	ret = get_list(tid, &get_head, robust2, 0);
 	ASSERT_EQ(ret, 0);
 	ASSERT_EQ(&head, get_head);
 
@@ -912,6 +946,39 @@ TEST(test_32bit_lists)
 		ksft_test_result_pass("%s\n", __func__);
 
 	munmap(locks, sizeof(*locks) * CHILD_NR);
+}
+
+/*
+ * Test setting and getting mutiples head lists
+ */
+TEST(set_and_get_robust2)
+{
+	struct robust_list_head *head = NULL, *heads;
+	int i, list_limit, ret;
+
+	if (!robust_list2_support()) {
+		ksft_test_result_skip("robust_list2 not supported\n");
+		return;
+	}
+
+	list_limit = set_robust_list2(NULL, 0, FUTEX_ROBUST_LIST_CMD_LIST_LIMIT, 0);
+
+	heads = malloc(list_limit * sizeof(*heads));
+	ASSERT_NE(heads, NULL);
+
+	for (i = 0; i < list_limit; i++) {
+		ret = set_list(&heads[i], true, i);
+		ASSERT_EQ(ret, 0);
+	}
+
+	for (i = 0; i < list_limit; i++) {
+		ret = get_list(0, &head, true, i);
+		ASSERT_EQ(ret, 0);
+		ASSERT_EQ(head, &heads[i]);
+	}
+
+	free(heads);
+	ksft_test_result_pass("%s\n", __func__);
 }
 
 TEST_HARNESS_MAIN
