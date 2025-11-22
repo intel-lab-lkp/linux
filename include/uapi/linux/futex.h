@@ -153,6 +153,16 @@ struct robust_list_head {
 	struct robust_list __user *list_op_pending;
 };
 
+struct robust_list32 {
+	__u32 next;
+};
+
+struct robust_list_head32 {
+	struct robust_list32	list;
+	__s32			futex_offset;
+	__u32			list_op_pending;
+};
+
 /*
  * Are there any waiters for this robust futex:
  */
