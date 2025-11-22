@@ -860,9 +860,11 @@ __SYSCALL(__NR_file_setattr, sys_file_setattr)
 
 #define __NR_set_robust_list2 470
 __SYSCALL(__NR_set_robust_list2, sys_set_robust_list2)
+#define __NR_get_robust_list2 471
+__SYSCALL(__NR_get_robust_list2, sys_get_robust_list2)
 
 #undef __NR_syscalls
-#define __NR_syscalls 471
+#define __NR_syscalls 472
 
 /*
  * 32 bit systems traditionally used different

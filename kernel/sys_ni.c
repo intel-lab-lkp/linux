@@ -173,6 +173,7 @@ COND_SYSCALL(lsm_get_self_attr);
 COND_SYSCALL(lsm_set_self_attr);
 COND_SYSCALL(lsm_list_modules);
 COND_SYSCALL(set_robust_list2);
+COND_SYSCALL(get_robust_list2);
 
 /* CONFIG_MMU only */
 COND_SYSCALL(swapon);

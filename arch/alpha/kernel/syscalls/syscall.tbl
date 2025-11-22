@@ -510,3 +510,4 @@
 578	common	file_getattr			sys_file_getattr
 579	common	file_setattr			sys_file_setattr
 580	common	set_robust_list2		sys_set_robust_list2
+581	common	get_robust_list2		sys_get_robust_list2

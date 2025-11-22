@@ -409,3 +409,4 @@
 468	n32	file_getattr			sys_file_getattr
 469	n32	file_setattr			sys_file_setattr
 470	n32	set_robust_list2		sys_set_robust_list2
+471	n32	get_robust_list2		sys_get_robust_list2
