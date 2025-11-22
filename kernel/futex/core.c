@@ -31,7 +31,6 @@
  *  "The futexes are also cursed."
  *  "But they come in a choice of three flavours!"
  */
-#include <linux/compat.h>
 #include <linux/jhash.h>
 #include <linux/pagemap.h>
 #include <linux/debugfs.h>
@@ -1213,12 +1212,12 @@ static void exit_robust_list(struct task_struct *curr)
 	}
 }
 
-#ifdef CONFIG_COMPAT
+#ifdef CONFIG_64BIT
 static void __user *futex_uaddr(struct robust_list __user *entry,
 				compat_long_t futex_offset)
 {
-	compat_uptr_t base = ptr_to_compat(entry);
-	void __user *uaddr = compat_ptr(base + futex_offset);
+	u32 base = (u32)(unsigned long)(entry);
+	void __user *uaddr = (void __user *)(unsigned long)(base + futex_offset);
 
 	return uaddr;
 }
@@ -1227,13 +1226,13 @@ static void __user *futex_uaddr(struct robust_list __user *entry,
  * Fetch a robust-list pointer. Bit 0 signals PI futexes:
  */
 static inline int
-fetch_robust_entry32(compat_uptr_t *uentry, struct robust_list __user **entry,
-		   compat_uptr_t __user *head, unsigned int *pi)
+fetch_robust_entry32(u32 *uentry, struct robust_list __user **entry,
+		     u32 __user *head, unsigned int *pi)
 {
 	if (get_user(*uentry, head))
 		return -EFAULT;
 
-	*entry = compat_ptr((*uentry) & ~1);
+	*entry = (void __user *)(unsigned long)((*uentry) & ~1);
 	*pi = (unsigned int)(*uentry) & 1;
 
 	return 0;
@@ -1251,8 +1250,8 @@ static void exit_robust_list32(struct task_struct *curr)
 	struct robust_list __user *entry, *next_entry, *pending;
 	unsigned int limit = ROBUST_LIST_LIMIT, pi, pip;
 	unsigned int next_pi;
-	compat_uptr_t uentry, next_uentry, upending;
-	compat_long_t futex_offset;
+	u32 uentry, next_uentry, upending;
+	s32 futex_offset;
 	int rc;
 
 	/*
@@ -1412,7 +1411,7 @@ static void futex_cleanup(struct task_struct *tsk)
 		tsk->robust_list = NULL;
 	}
 
-#ifdef CONFIG_COMPAT
+#ifdef CONFIG_64BIT
 	if (unlikely(tsk->robust_list32)) {
 		exit_robust_list32(tsk);
 		tsk->robust_list32 = NULL;
