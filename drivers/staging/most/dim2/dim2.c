@@ -889,7 +889,11 @@ static int dim2_probe(struct platform_device *pdev)
 	dev->dev.parent = &pdev->dev;
 	dev->dev.release = dim2_release;
 
-	return most_register_interface(&dev->most_iface);
+	ret = most_register_interface(&dev->most_iface);
+	if (ret)
+		goto err_shutdown_dim;
+
+	return 0;
 
 err_shutdown_dim:
 	dim_shutdown();
