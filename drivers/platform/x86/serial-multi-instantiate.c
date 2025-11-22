@@ -214,8 +214,6 @@ static int smi_i2c_probe(struct platform_device *pdev, struct smi *smi,
 		board_info.dev_name = name;
 
 		ret = smi_get_irq(pdev, adev, &inst_array[i]);
-		if (ret < 0)
-			goto error;
 		board_info.irq = ret;
 
 		smi->i2c_devs[i] = i2c_acpi_new_device(dev, i, &board_info);
