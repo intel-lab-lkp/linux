@@ -3123,4 +3123,6 @@ static inline bool sk_is_readable(struct sock *sk)
 
 	return false;
 }
+
+int update_socket_protocol(int family, int type, int protocol);
 #endif	/* _SOCK_H */
