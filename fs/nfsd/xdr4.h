@@ -1027,7 +1027,7 @@ extern __be32 nfsd4_free_stateid(struct svc_rqst *rqstp,
 extern void nfsd4_bump_seqid(struct nfsd4_compound_state *, __be32 nfserr);
 
 enum nfsd4_op_flags {
-	ALLOWED_WITHOUT_FH = 1 << 0,    /* No current filehandle required */
+	ALLOWED_WITHOUT_LOCAL_FH = 1 << 0,    /* No fh_dentry needed in current filehandle */
 	ALLOWED_ON_ABSENT_FS = 1 << 1,  /* ops processed on absent fs */
 	ALLOWED_AS_FIRST_OP = 1 << 2,   /* ops reqired first in compound */
 	/* For rfc 5661 section 2.6.3.1.1: */
