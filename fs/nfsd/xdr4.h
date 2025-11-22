@@ -335,7 +335,6 @@ struct nfsd4_lookup {
 struct nfsd4_putfh {
 	u32		pf_fhlen;           /* request */
 	char		*pf_fhval;          /* request */
-	bool		no_verify;	    /* represents foreigh fh */
 };
 
 struct nfsd4_getxattr {
@@ -907,6 +906,7 @@ struct nfsd4_compoundargs {
 	u32				client_opcnt;
 	u32				opcnt;
 	bool				splice_ok;
+	bool				is_inter_server_copy;
 	struct nfsd4_op			*ops;
 	struct nfsd4_op			iops[8];
 };

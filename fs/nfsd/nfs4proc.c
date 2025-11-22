@@ -689,8 +689,31 @@ nfsd4_putfh(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	       putfh->pf_fhlen);
 	ret = fh_verify(rqstp, &cstate->current_fh, 0, NFSD_MAY_BYPASS_GSS);
 #ifdef CONFIG_NFSD_V4_2_INTER_SSC
-	if (ret == nfserr_stale && putfh->no_verify)
-		ret = 0;
+	if (ret == nfserr_stale && inter_copy_offload_enable) {
+		struct nfsd4_compoundargs *args = rqstp->rq_argp;
+		struct nfsd4_compoundres *resp = rqstp->rq_resp;
+
+		/*
+		 * args->opcnt is the number of ops in the request.
+		 * resp->opcnt is the number of ops, including this
+		 * one, that have been processed, so it points
+		 * to the next op.
+		 */
+		if (resp->opcnt < args->opcnt &&
+		    args->ops[resp->opcnt].opnum == OP_SAVEFH &&
+		    args->is_inter_server_copy) {
+			/*
+			 * RFC 7862 section 15.2.3 says:
+			 *  If a server supports the inter-server copy
+			 *  feature, a PUTFH followed by a SAVEFH MUST
+			 *  NOT return NFS4ERR_STALE for either
+			 *  operation.
+			 * We limit this to when there is a COPY
+			 * in the COMPOUND.
+			 */
+			ret = 0;
+		}
+	}
 #endif
 	return ret;
 }
@@ -2808,45 +2831,6 @@ static bool need_wrongsec_check(struct svc_rqst *rqstp)
 	return !(nextd->op_flags & OP_HANDLES_WRONGSEC);
 }
 
-#ifdef CONFIG_NFSD_V4_2_INTER_SSC
-static void
-check_if_stalefh_allowed(struct nfsd4_compoundargs *args)
-{
-	struct nfsd4_op	*op, *current_op = NULL, *saved_op = NULL;
-	struct nfsd4_copy *copy;
-	struct nfsd4_putfh *putfh;
-	int i;
-
-	/* traverse all operation and if it's a COPY compound, mark the
-	 * source filehandle to skip verification
-	 */
-	for (i = 0; i < args->opcnt; i++) {
-		op = &args->ops[i];
-		if (op->opnum == OP_PUTFH)
-			current_op = op;
-		else if (op->opnum == OP_SAVEFH)
-			saved_op = current_op;
-		else if (op->opnum == OP_RESTOREFH)
-			current_op = saved_op;
-		else if (op->opnum == OP_COPY) {
-			copy = (struct nfsd4_copy *)&op->u;
-			if (!saved_op) {
-				op->status = nfserr_nofilehandle;
-				return;
-			}
-			putfh = (struct nfsd4_putfh *)&saved_op->u;
-			if (nfsd4_ssc_is_inter(copy))
-				putfh->no_verify = true;
-		}
-	}
-}
-#else
-static void
-check_if_stalefh_allowed(struct nfsd4_compoundargs *args)
-{
-}
-#endif
-
 /*
  * COMPOUND call.
  */
@@ -2896,7 +2880,6 @@ nfsd4_proc_compound(struct svc_rqst *rqstp)
 		resp->opcnt = 1;
 		goto encode_op;
 	}
-	check_if_stalefh_allowed(args);
 
 	rqstp->rq_lease_breaker = (void **)&cstate->clp;
 
