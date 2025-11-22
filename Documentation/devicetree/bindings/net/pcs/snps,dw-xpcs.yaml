@@ -22,6 +22,9 @@ description:
   by means of the APB3/MCI interfaces. In the later case the XPCS can be mapped
   right to the system IO memory space.
 
+allOf:
+  - $ref: /schemas/phy/phy-common-props.yaml#
+
 properties:
   compatible:
     oneOf:
@@ -102,7 +105,7 @@ required:
   - compatible
   - reg
 
-additionalProperties: false
+unevaluatedProperties: false
 
 examples:
   - |
