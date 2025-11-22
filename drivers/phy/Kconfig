@@ -16,6 +16,15 @@ config GENERIC_PHY
 	  phy users can obtain reference to the PHY. All the users of this
 	  framework should select this config.
 
+config GENERIC_PHY_COMMON_PROPS
+	bool
+	help
+	  Generic PHY common property parsing.
+
+	  Select this from consumer drivers to gain access to helpers for
+	  parsing properties from the
+	  Documentation/devicetree/bindings/phy/phy-common-props.yaml schema.
+
 config GENERIC_PHY_MIPI_DPHY
 	bool
 	select GENERIC_PHY

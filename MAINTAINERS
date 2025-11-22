@@ -10445,6 +10445,27 @@ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/arnd/asm-generic.git
 F:	include/asm-generic/
 F:	include/uapi/asm-generic/
 
+GENERIC PHY COMMON PROPERTIES
+M:	Andrew Lunn <andrew@lunn.ch>
+M:	"David S. Miller" <davem@davemloft.net>
+M:	Eric Dumazet <edumazet@google.com>
+M:	Heiner Kallweit <hkallweit1@gmail.com>
+M:	Jakub Kicinski <kuba@kernel.org>
+M:	Kishon Vijay Abraham I <kishon@kernel.org>
+M:	Paolo Abeni <pabeni@redhat.com>
+R:	Russell King <linux@armlinux.org.uk>
+M:	Vinod Koul <vkoul@kernel.org>
+L:	linux-phy@lists.infradead.org
+L:	netdev@vger.kernel.org
+S:	Maintained
+Q:	https://patchwork.kernel.org/project/linux-phy/list/
+Q:	https://patchwork.kernel.org/project/netdevbpf/list/
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/netdev/net.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/netdev/net-next.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/phy/linux-phy.git
+F:	Documentation/devicetree/bindings/phy/phy-common-props.yaml
+F:	drivers/phy/phy-common-props.c
+
 GENERIC PHY FRAMEWORK
 M:	Vinod Koul <vkoul@kernel.org>
 M:	Kishon Vijay Abraham I <kishon@kernel.org>
