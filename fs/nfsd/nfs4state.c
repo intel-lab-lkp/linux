@@ -7218,6 +7218,11 @@ nfsd4_lookup_stateid(struct nfsd4_compound_state *cstate,
 	struct nfs4_stid *stid;
 	bool return_revoked = false;
 
+	if (nfsd4_has_session(cstate) && is_current_stateid(stateid)) {
+		if (!cstate->current_fh.fh_have_stateid)
+			return nfserr_bad_stateid;
+		memcpy(stateid, &cstate->current_stateid, sizeof(stateid_t));
+	}
 	/*
 	 *  only return revoked delegations if explicitly asked.
 	 *  otherwise we report revoked or bad_stateid status.
@@ -7533,6 +7538,12 @@ nfsd4_free_stateid(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	struct nfs4_delegation *dp;
 	struct nfs4_client *cl = cstate->clp;
 	__be32 ret = nfserr_bad_stateid;
+
+	if (is_current_stateid(stateid)) {
+		if (!cstate->current_fh.fh_have_stateid)
+			return nfserr_bad_stateid;
+		memcpy(stateid, &cstate->current_stateid, sizeof(stateid_t));
+	}
 
 	spin_lock(&cl->cl_lock);
 	s = find_stateid_locked(cl, stateid);
@@ -9114,20 +9125,10 @@ nfs4_state_shutdown(void)
 }
 
 static void
-get_stateid(struct nfsd4_compound_state *cstate, stateid_t *stateid)
-{
-	if (cstate->current_fh.fh_have_stateid &&
-	    is_current_stateid(stateid))
-		memcpy(stateid, &cstate->current_stateid, sizeof(stateid_t));
-}
-
-static void
 put_stateid(struct nfsd4_compound_state *cstate, stateid_t *stateid)
 {
-	if (cstate->minorversion) {
-		memcpy(&cstate->current_stateid, stateid, sizeof(stateid_t));
-		cstate->current_fh.fh_have_stateid = true;
-	}
+	memcpy(&cstate->current_stateid, stateid, sizeof(stateid_t));
+	cstate->current_fh.fh_have_stateid = true;
 }
 
 /*
@@ -9159,66 +9160,6 @@ nfsd4_set_lockstateid(struct nfsd4_compound_state *cstate,
 		union nfsd4_op_u *u)
 {
 	put_stateid(cstate, &u->lock.lk_resp_stateid);
-}
-
-/*
- * functions to consume current state id
- */
-
-void
-nfsd4_get_opendowngradestateid(struct nfsd4_compound_state *cstate,
-		union nfsd4_op_u *u)
-{
-	get_stateid(cstate, &u->open_downgrade.od_stateid);
-}
-
-void
-nfsd4_get_delegreturnstateid(struct nfsd4_compound_state *cstate,
-		union nfsd4_op_u *u)
-{
-	get_stateid(cstate, &u->delegreturn.dr_stateid);
-}
-
-void
-nfsd4_get_freestateid(struct nfsd4_compound_state *cstate,
-		union nfsd4_op_u *u)
-{
-	get_stateid(cstate, &u->free_stateid.fr_stateid);
-}
-
-void
-nfsd4_get_setattrstateid(struct nfsd4_compound_state *cstate,
-		union nfsd4_op_u *u)
-{
-	get_stateid(cstate, &u->setattr.sa_stateid);
-}
-
-void
-nfsd4_get_closestateid(struct nfsd4_compound_state *cstate,
-		union nfsd4_op_u *u)
-{
-	get_stateid(cstate, &u->close.cl_stateid);
-}
-
-void
-nfsd4_get_lockustateid(struct nfsd4_compound_state *cstate,
-		union nfsd4_op_u *u)
-{
-	get_stateid(cstate, &u->locku.lu_stateid);
-}
-
-void
-nfsd4_get_readstateid(struct nfsd4_compound_state *cstate,
-		union nfsd4_op_u *u)
-{
-	get_stateid(cstate, &u->read.rd_stateid);
-}
-
-void
-nfsd4_get_writestateid(struct nfsd4_compound_state *cstate,
-		union nfsd4_op_u *u)
-{
-	get_stateid(cstate, &u->write.wr_stateid);
 }
 
 /**
