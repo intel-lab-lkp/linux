@@ -808,6 +808,26 @@ static int xpcs_config_2500basex(struct dw_xpcs *xpcs)
 			   BMCR_SPEED1000);
 }
 
+static int xpcs_pma_config(struct dw_xpcs *xpcs, const struct dw_xpcs_compat *compat)
+{
+	int ret;
+
+	if (xpcs->need_opposite_tx_polarity) {
+		ret = xpcs_write(xpcs, MDIO_MMD_VEND2, DW_VR_MII_DIG_CTRL2,
+				 DW_VR_MII_DIG_CTRL2_TX_POL_INV);
+		if (ret)
+			return ret;
+	}
+
+	if (compat->pma_config) {
+		ret = compat->pma_config(xpcs);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 static int xpcs_do_config(struct dw_xpcs *xpcs, phy_interface_t interface,
 			  const unsigned long *advertising,
 			  unsigned int neg_mode)
@@ -859,13 +879,7 @@ static int xpcs_do_config(struct dw_xpcs *xpcs, phy_interface_t interface,
 		return -EINVAL;
 	}
 
-	if (compat->pma_config) {
-		ret = compat->pma_config(xpcs);
-		if (ret)
-			return ret;
-	}
-
-	return 0;
+	return xpcs_pma_config(xpcs, compat);
 }
 
 static int xpcs_config(struct phylink_pcs *pcs, unsigned int neg_mode,
@@ -1341,7 +1355,6 @@ static const struct dw_xpcs_compat nxp_sja1105_xpcs_compat[] = {
 		.interface = PHY_INTERFACE_MODE_SGMII,
 		.supported = xpcs_sgmii_features,
 		.an_mode = DW_AN_C37_SGMII,
-		.pma_config = nxp_sja1105_sgmii_pma_config,
 	}, {
 	}
 };
@@ -1499,6 +1512,14 @@ static struct dw_xpcs *xpcs_create(struct mdio_device *mdiodev)
 		xpcs->pcs.poll = false;
 	else
 		xpcs->need_reset = true;
+
+	/* In NXP SJA1105, the PCS is integrated with a PMA that has the TX
+	 * lane polarity inverted by default (PLUS is MINUS, MINUS is PLUS).
+	 * To obtain normal non-inverted behavior, the TX lane polarity must be
+	 * inverted in the PCS, via the DIGITAL_CONTROL_2 register.
+	 */
+	if (xpcs->desc->compat == nxp_sja1105_xpcs_compat)
+		xpcs->need_opposite_tx_polarity = true;
 
 	return xpcs;
 

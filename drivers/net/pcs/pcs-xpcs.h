@@ -113,6 +113,7 @@ struct dw_xpcs {
 	struct phylink_pcs pcs;
 	phy_interface_t interface;
 	bool need_reset;
+	bool need_opposite_tx_polarity;
 	u8 eee_mult_fact;
 };
 
@@ -121,7 +122,6 @@ int xpcs_write(struct dw_xpcs *xpcs, int dev, u32 reg, u16 val);
 int xpcs_modify(struct dw_xpcs *xpcs, int dev, u32 reg, u16 mask, u16 set);
 int xpcs_read_vpcs(struct dw_xpcs *xpcs, int reg);
 int xpcs_write_vpcs(struct dw_xpcs *xpcs, int reg, u16 val);
-int nxp_sja1105_sgmii_pma_config(struct dw_xpcs *xpcs);
 int nxp_sja1110_sgmii_pma_config(struct dw_xpcs *xpcs);
 int nxp_sja1110_2500basex_pma_config(struct dw_xpcs *xpcs);
 int txgbe_xpcs_switch_mode(struct dw_xpcs *xpcs, phy_interface_t interface);
