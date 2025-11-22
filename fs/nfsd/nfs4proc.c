@@ -689,7 +689,8 @@ nfsd4_putfh(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	       putfh->pf_fhlen);
 	ret = fh_verify(rqstp, &cstate->current_fh, 0, NFSD_MAY_BYPASS_GSS);
 #ifdef CONFIG_NFSD_V4_2_INTER_SSC
-	if (ret == nfserr_stale && inter_copy_offload_enable) {
+	if ((ret == nfserr_badhandle || ret == nfserr_stale) &&
+	    inter_copy_offload_enable) {
 		struct nfsd4_compoundargs *args = rqstp->rq_argp;
 		struct nfsd4_compoundres *resp = rqstp->rq_resp;
 
@@ -709,7 +710,11 @@ nfsd4_putfh(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 			 *  NOT return NFS4ERR_STALE for either
 			 *  operation.
 			 * We limit this to when there is a COPY
-			 * in the COMPOUND.
+			 * in the COMPOUND, and extend it to
+			 * also ignore NFS4ERR_BADHANDLE despite the
+			 * RFC not requiring this.  If the remote
+			 * server is running a different NFS implementation,
+			 * NFS4ERR_BADHANDLE is a likely error.
 			 */
 			ret = 0;
 		}
