@@ -534,6 +534,7 @@ nfsd4_open(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	struct nfsd4_open *open = &u->open;
 	__be32 status;
 	struct svc_fh *resfh = NULL;
+	struct svc_fh parent_fh = {};
 	struct net *net = SVC_NET(rqstp);
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
 	bool reclaim = false;
@@ -597,8 +598,10 @@ nfsd4_open(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		goto out;
 
 	switch (open->op_claim_type) {
-	case NFS4_OPEN_CLAIM_DELEGATE_CUR:
 	case NFS4_OPEN_CLAIM_NULL:
+		fh_dup2(&parent_fh, &cstate->current_fh);
+		fallthrough;
+	case NFS4_OPEN_CLAIM_DELEGATE_CUR:
 		status = do_open_lookup(rqstp, cstate, open, &resfh);
 		if (status)
 			goto out;
@@ -626,7 +629,8 @@ nfsd4_open(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		goto out;
 	}
 
-	status = nfsd4_process_open2(rqstp, resfh, open);
+	status = nfsd4_process_open2(rqstp, resfh, &parent_fh, open);
+	fh_put(&parent_fh);
 	if (status && open->op_created)
 		pr_warn("nfsd4_process_open2 failed to open newly-created file: status=%u\n",
 			be32_to_cpu(status));

@@ -6068,7 +6068,7 @@ static bool nfsd4_want_deleg_timestamps(const struct nfsd4_open *open)
 
 static struct nfs4_delegation *
 nfs4_set_delegation(struct nfsd4_open *open, struct nfs4_ol_stateid *stp,
-		    struct svc_fh *parent)
+		    struct svc_fh *parent_fh)
 {
 	bool deleg_ts = nfsd4_want_deleg_timestamps(open);
 	struct nfs4_client *clp = stp->st_stid.sc_client;
@@ -6168,8 +6168,8 @@ nfs4_set_delegation(struct nfsd4_open *open, struct nfs4_ol_stateid *stp,
 	if (status)
 		goto out_clnt_odstate;
 
-	if (parent) {
-		status = nfsd4_verify_deleg_dentry(open, fp, parent);
+	if (parent_fh && parent_fh->fh_dentry) {
+		status = nfsd4_verify_deleg_dentry(open, fp, parent_fh);
 		if (status)
 			goto out_unlock;
 	}
@@ -6310,13 +6310,12 @@ nfsd4_add_rdaccess_to_wrdeleg(struct svc_rqst *rqstp, struct nfsd4_open *open,
  */
 static void
 nfs4_open_delegation(struct svc_rqst *rqstp, struct nfsd4_open *open,
-		     struct nfs4_ol_stateid *stp, struct svc_fh *currentfh,
+		     struct nfs4_ol_stateid *stp, struct svc_fh *parent_fh,
 		     struct svc_fh *fh)
 {
 	struct nfs4_openowner *oo = openowner(stp->st_stateowner);
 	bool deleg_ts = nfsd4_want_deleg_timestamps(open);
 	struct nfs4_client *clp = stp->st_stid.sc_client;
-	struct svc_fh *parent = NULL;
 	struct nfs4_delegation *dp;
 	struct kstat stat;
 	int status = 0;
@@ -6330,8 +6329,6 @@ nfs4_open_delegation(struct svc_rqst *rqstp, struct nfsd4_open *open,
 				open->op_recall = true;
 			break;
 		case NFS4_OPEN_CLAIM_NULL:
-			parent = currentfh;
-			fallthrough;
 		case NFS4_OPEN_CLAIM_FH:
 			/*
 			 * Let's not give out any delegations till everyone's
@@ -6349,7 +6346,7 @@ nfs4_open_delegation(struct svc_rqst *rqstp, struct nfsd4_open *open,
 		default:
 			goto out_no_deleg;
 	}
-	dp = nfs4_set_delegation(open, stp, parent);
+	dp = nfs4_set_delegation(open, stp, parent_fh);
 	if (IS_ERR(dp))
 		goto out_no_deleg;
 
@@ -6359,7 +6356,7 @@ nfs4_open_delegation(struct svc_rqst *rqstp, struct nfsd4_open *open,
 		struct file *f = dp->dl_stid.sc_file->fi_deleg_file->nf_file;
 
 		if (!nfsd4_add_rdaccess_to_wrdeleg(rqstp, open, fh, stp) ||
-				!nfs4_delegation_stat(dp, currentfh, &stat)) {
+				!nfs4_delegation_stat(dp, fh, &stat)) {
 			nfs4_put_stid(&dp->dl_stid);
 			destroy_delegation(dp);
 			goto out_no_deleg;
@@ -6376,7 +6373,7 @@ nfs4_open_delegation(struct svc_rqst *rqstp, struct nfsd4_open *open,
 		spin_unlock(&f->f_lock);
 		trace_nfsd_deleg_write(&dp->dl_stid.sc_stateid);
 	} else {
-		open->op_delegate_type = deleg_ts && nfs4_delegation_stat(dp, currentfh, &stat) ?
+		open->op_delegate_type = deleg_ts && nfs4_delegation_stat(dp, fh, &stat) ?
 					 OPEN_DELEGATE_READ_ATTRS_DELEG : OPEN_DELEGATE_READ;
 		dp->dl_atime = stat.atime;
 		trace_nfsd_deleg_read(&dp->dl_stid.sc_stateid);
@@ -6430,6 +6427,7 @@ static bool open_xor_delegation(struct nfsd4_open *open)
  * nfsd4_process_open2 - finish open processing
  * @rqstp: the RPC transaction being executed
  * @current_fh: NFSv4 COMPOUND's current filehandle
+ * @parent_fh: filehandle of parent when CLAIM_NULL
  * @open: OPEN arguments
  *
  * If successful, (1) truncate the file if open->op_truncate was
@@ -6439,7 +6437,9 @@ static bool open_xor_delegation(struct nfsd4_open *open)
  * network byte order is returned.
  */
 __be32
-nfsd4_process_open2(struct svc_rqst *rqstp, struct svc_fh *current_fh, struct nfsd4_open *open)
+nfsd4_process_open2(struct svc_rqst *rqstp, struct svc_fh *current_fh,
+		    struct svc_fh *parent_fh,
+		    struct nfsd4_open *open)
 {
 	struct nfsd4_compoundres *resp = rqstp->rq_resp;
 	struct nfs4_client *cl = open->op_openowner->oo_owner.so_client;
@@ -6536,8 +6536,7 @@ nfsd4_process_open2(struct svc_rqst *rqstp, struct svc_fh *current_fh, struct nf
 	* Attempt to hand out a delegation. No error return, because the
 	* OPEN succeeds even if we fail.
 	*/
-	nfs4_open_delegation(rqstp, open, stp,
-		&resp->cstate.current_fh, current_fh);
+	nfs4_open_delegation(rqstp, open, stp, parent_fh, current_fh);
 
 	/*
 	 * If there is an existing open stateid, it must be updated and
