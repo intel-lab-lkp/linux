@@ -5291,6 +5291,22 @@ ext4_mb_new_inode_pa(struct ext4_allocation_context *ac)
 
 		ex.fe_logical = ac->ac_o_ex.fe_logical;
 adjust_bex:
+		if (sbi->s_cluster_ratio > 1) {
+			loff_t mask = ~(sbi->s_cluster_ratio - 1);
+			loff_t aligned_start = ex.fe_logical & mask;
+
+			if (aligned_start < ac->ac_g_ex.fe_logical) {
+				ac->ac_status = AC_STATUS_BREAK;
+				return;
+			}
+
+			ex.fe_logical = aligned_start;
+
+			if (extent_logical_end(sbi, &ex) > orig_goal_end) {
+				ac->ac_status = AC_STATUS_BREAK;
+				return;
+			}
+		}
 		ac->ac_b_ex.fe_logical = ex.fe_logical;
 
 		BUG_ON(ac->ac_o_ex.fe_logical < ac->ac_b_ex.fe_logical);
@@ -5336,6 +5352,7 @@ static noinline_for_stack void
 ext4_mb_new_group_pa(struct ext4_allocation_context *ac)
 {
 	struct super_block *sb = ac->ac_sb;
+	struct ext4_sb_info *sbi = EXT4_SB(sb);
 	struct ext4_locality_group *lg;
 	struct ext4_prealloc_space *pa;
 	struct ext4_group_info *grp;
@@ -5347,7 +5364,15 @@ ext4_mb_new_group_pa(struct ext4_allocation_context *ac)
 	BUG_ON(ac->ac_pa == NULL);
 
 	pa = ac->ac_pa;
+	if (sbi->s_cluster_ratio > 1) {
+		loff_t mask = ~(sbi->s_cluster_ratio - 1);
+		loff_t pstart = ext4_grp_offs_to_block(sb, &ac->ac_b_ex);
 
+		if ((pstart & mask) < pstart) {
+			ac->ac_status = AC_STATUS_BREAK;
+			return;
+		}
+	}
 	pa->pa_pstart = ext4_grp_offs_to_block(sb, &ac->ac_b_ex);
 	pa->pa_lstart = pa->pa_pstart;
 	pa->pa_len = ac->ac_b_ex.fe_len;
