@@ -55,10 +55,13 @@ static int dtv5100_i2c_msg(struct dvb_usb_device *d, u8 addr,
 	}
 	index = (addr << 8) + wbuf[0];
 
-	memcpy(st->data, rbuf, rlen);
+	/* Prevent buffer overflow: st->data is 80 bytes */
+	size_t copy_len = min_t(size_t, rlen, sizeof(st->data));
+
+	memcpy(st->data, rbuf, copy_len);
 	msleep(1); /* avoid I2C errors */
 	return usb_control_msg(d->udev, pipe, request,
-			       type, value, index, st->data, rlen,
+			       type, value, index, st->data, copy_len,
 			       DTV5100_USB_TIMEOUT);
 }
 
