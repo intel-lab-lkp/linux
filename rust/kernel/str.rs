@@ -385,7 +385,7 @@ impl CStr {
     /// ```
     #[inline]
     pub unsafe fn as_str_unchecked(&self) -> &str {
-        // SAFETY: TODO.
+        // SAFETY: The caller guarantees that the contents are valid UTF-8.
         unsafe { core::str::from_utf8_unchecked(self.as_bytes()) }
     }
 
