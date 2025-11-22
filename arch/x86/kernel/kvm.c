@@ -88,6 +88,7 @@ struct kvm_task_sleep_node {
 	struct swait_queue_head wq;
 	u32 token;
 	int cpu;
+	bool dummy;
 };
 
 static struct kvm_task_sleep_head {
@@ -119,10 +120,17 @@ static bool kvm_async_pf_queue_task(u32 token, struct kvm_task_sleep_node *n)
 	raw_spin_lock(&b->lock);
 	e = _find_apf_task(b, token);
 	if (e) {
+		struct kvm_task_sleep_node *dummy = NULL;
+
 		/* dummy entry exist -> wake up was delivered ahead of PF */
-		hlist_del(&e->link);
+		/* Otherwise it should not be freed here. */
+		if (e->dummy) {
+			hlist_del(&e->link);
+			dummy = e;
+		}
+
 		raw_spin_unlock(&b->lock);
-		kfree(e);
+		kfree(dummy);
 		return false;
 	}
 
@@ -230,6 +238,7 @@ again:
 		}
 		dummy->token = token;
 		dummy->cpu = smp_processor_id();
+		dummy->dummy = true;
 		init_swait_queue_head(&dummy->wq);
 		hlist_add_head(&dummy->link, &b->list);
 		dummy = NULL;
