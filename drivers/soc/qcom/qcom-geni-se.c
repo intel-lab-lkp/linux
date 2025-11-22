@@ -1013,6 +1013,67 @@ int geni_icc_disable(struct geni_se *se)
 }
 EXPORT_SYMBOL_GPL(geni_icc_disable);
 
+static int geni_se_resources_deactivate(struct geni_se *se)
+{
+	int ret;
+
+	if (se->has_opp)
+		dev_pm_opp_set_rate(se->dev, 0);
+
+	ret = geni_se_resources_off(se);
+	if (ret)
+		return ret;
+
+	if (se->core_clk)
+		clk_disable_unprepare(se->core_clk);
+
+	return geni_icc_disable(se);
+}
+
+static int geni_se_resources_activate(struct geni_se *se)
+{
+	int ret;
+
+	ret = geni_icc_enable(se);
+	if (ret)
+		return ret;
+
+	if (se->core_clk) {
+		ret = clk_prepare_enable(se->core_clk);
+		if (ret)
+			goto out_icc_disable;
+	}
+
+	ret = geni_se_resources_on(se);
+	if (ret)
+		goto out_clk_disable;
+
+	return 0;
+
+out_clk_disable:
+	if (se->core_clk)
+		clk_disable_unprepare(se->core_clk);
+out_icc_disable:
+	geni_icc_disable(se);
+	return ret;
+}
+
+/**
+ * geni_se_resources_state() - Control power state of GENI SE resources
+ * @se: Pointer to the geni_se structure
+ * @power_on: Boolean flag for desired power state (true = on, false = off)
+ *
+ * Controls GENI SE resource power state by calling activate or deactivate
+ * functions based on the power_on parameter.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+int geni_se_resources_state(struct geni_se *se, bool power_on)
+{
+	return power_on ? geni_se_resources_activate(se) : geni_se_resources_deactivate(se);
+}
+EXPORT_SYMBOL_GPL(geni_se_resources_state);
+
 /**
  * geni_se_resources_init() - Initialize resources for a GENI SE device.
  * @se: Pointer to the geni_se structure representing the GENI SE device.
