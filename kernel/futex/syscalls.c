@@ -48,7 +48,7 @@ static inline void __user *futex_task_robust_list(struct task_struct *p, bool co
 	return p->robust_list;
 }
 
-static void __user *futex_get_robust_list_common(int pid, bool compat)
+static void __user *futex_get_robust_list_common(int pid, bool compat, int index)
 {
 	struct task_struct *p = current;
 	void __user *head;
@@ -75,7 +75,15 @@ static void __user *futex_get_robust_list_common(int pid, bool compat)
 	if (!ptrace_may_access(p, PTRACE_MODE_READ_REALCREDS))
 		goto err_unlock;
 
-	head = futex_task_robust_list(p, compat);
+	if (index >= 0) {
+		scoped_guard(mutex, &p->futex_exit_mutex) {
+			uintptr_t *rl = p->futex_robust_lists;
+
+			head = rl ? (void __user *) rl[index] : NULL;
+		}
+	} else {
+		head = futex_task_robust_list(p, compat);
+	}
 
 	up_read(&p->signal->exec_update_lock);
 	put_task_struct(p);
@@ -99,7 +107,7 @@ SYSCALL_DEFINE3(get_robust_list, int, pid,
 		struct robust_list_head __user * __user *, head_ptr,
 		size_t __user *, len_ptr)
 {
-	struct robust_list_head __user *head = futex_get_robust_list_common(pid, false);
+	struct robust_list_head __user *head = futex_get_robust_list_common(pid, false, -1);
 
 	if (IS_ERR(head))
 		return PTR_ERR(head);
@@ -148,6 +156,51 @@ SYSCALL_DEFINE4(set_robust_list2, struct robust_list_head *, head, unsigned int,
 	}
 
 	return -EINVAL;
+}
+
+SYSCALL_DEFINE4(get_robust_list2, int, pid,
+		void __user * __user *, head_ptr,
+		unsigned int, index, unsigned int, flags)
+{
+	void __user *entry_ptr;
+	uintptr_t entry;
+
+	if (index >= FUTEX_ROBUST_LISTS_PER_USER)
+		return -EINVAL;
+
+	if (flags)
+		return -EINVAL;
+
+	/*
+	 * The first two indexes are reserved for the kernel to be used with the
+	 * legacy syscall, so we hide them from userspace.
+	 *
+	 * We map [0, FUTEX_ROBUST_LISTS_PER_USER) to
+	 *  [FUTEX_ROBUST_LIST2_IDX, FUTEX_ROBUST_LIST2_MAX_IDX)
+	 */
+	index += FUTEX_ROBUST_LIST2_IDX;
+
+	entry_ptr = futex_get_robust_list_common(pid, false, index);
+	if (IS_ERR(entry_ptr))
+		return PTR_ERR(entry_ptr);
+
+	entry = (uintptr_t) entry_ptr;
+
+	if (entry & FUTEX_ROBUST_LIST_ENTRY_32BIT) {
+		entry &= FUTEX_ROBUST_LIST_ENTRY_MASK;
+
+		if (copy_to_user(head_ptr, &entry, sizeof(u32)))
+			return -EFAULT;
+
+		return 0;
+	} else {
+		struct robust_list_head *head;
+
+		entry &= FUTEX_ROBUST_LIST_ENTRY_MASK;
+		head = (__force struct robust_list_head __user *)entry;
+
+		return put_user(head, head_ptr);
+	}
 }
 
 long do_futex(u32 __user *uaddr, int op, u32 val, ktime_t *timeout,
@@ -524,7 +577,7 @@ COMPAT_SYSCALL_DEFINE3(get_robust_list, int, pid,
 			compat_uptr_t __user *, head_ptr,
 			compat_size_t __user *, len_ptr)
 {
-	struct robust_list_head32 __user *head = futex_get_robust_list_common(pid, true);
+	struct robust_list_head32 __user *head = futex_get_robust_list_common(pid, true, -1);
 
 	if (IS_ERR(head))
 		return PTR_ERR(head);
