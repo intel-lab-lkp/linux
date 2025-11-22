@@ -71,6 +71,57 @@ struct futex_private_hash {
 	struct futex_hash_bucket queues[];
 };
 
+int futex_robust_list_set(uintptr_t head, enum robust_list2_cmd cmd,
+			  unsigned int index)
+{
+	uintptr_t entry = FUTEX_ROBUST_LIST_ENTRY_INUSE;
+	uintptr_t *rl = current->futex_robust_lists;
+
+	if (!rl) {
+		rl = kcalloc(FUTEX_ROBUST_LIST2_MAX_IDX, sizeof(*rl), GFP_KERNEL);
+		if (!rl)
+			return -ENOMEM;
+
+		scoped_guard(mutex, &current->futex_exit_mutex) {
+			/* check if another thread set the list before us */
+			if (current->futex_robust_lists) {
+				kfree(rl);
+				rl = current->futex_robust_lists;
+			} else {
+				current->futex_robust_lists = rl;
+			}
+		}
+
+	}
+
+	switch (cmd) {
+	case FUTEX_ROBUST_LIST_CMD_SET_64:
+		if (futex_in_32bit_syscall())
+			return -EINVAL;
+		break;
+	case FUTEX_ROBUST_LIST_CMD_SET_32:
+		entry |= FUTEX_ROBUST_LIST_ENTRY_32BIT;
+		break;
+	case FUTEX_ROBUST_LIST_SET_NATIVE:
+		index = FUTEX_ROBUST_LIST_NATIVE_IDX;
+		break;
+	case FUTEX_ROBUST_LIST_SET_COMPAT:
+		if (!IS_ENABLED(CONFIG_64BIT))
+			return -EINVAL;
+		index = FUTEX_ROBUST_LIST_COMPAT_IDX;
+		entry |= FUTEX_ROBUST_LIST_ENTRY_32BIT;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	entry |= head;
+	scoped_guard(mutex, &current->futex_exit_mutex)
+	rl[index] = entry;
+
+	return 0;
+}
+
 /*
  * Fault injections for futexes.
  */
@@ -1150,9 +1201,8 @@ static inline int fetch_robust_entry(struct robust_list __user **entry,
  *
  * We silently return on any sign of list-walking problem.
  */
-static void exit_robust_list(struct task_struct *curr)
+static void exit_robust_list(struct task_struct *curr, struct robust_list_head __user *head)
 {
-	struct robust_list_head __user *head = curr->robust_list;
 	struct robust_list __user *entry, *next_entry, *pending;
 	unsigned int limit = ROBUST_LIST_LIMIT, pi, pip;
 	unsigned int next_pi;
@@ -1244,9 +1294,8 @@ fetch_robust_entry32(u32 *uentry, struct robust_list __user **entry,
  *
  * We silently return on any sign of list-walking problem.
  */
-static void exit_robust_list32(struct task_struct *curr)
+static void exit_robust_list32(struct task_struct *curr, struct robust_list_head32 __user *head)
 {
-	struct robust_list_head32 __user *head = curr->robust_list32;
 	struct robust_list __user *entry, *next_entry, *pending;
 	unsigned int limit = ROBUST_LIST_LIMIT, pi, pip;
 	unsigned int next_pi;
@@ -1311,7 +1360,15 @@ static void exit_robust_list32(struct task_struct *curr)
 		handle_futex_death(uaddr, curr, pip, HANDLE_DEATH_PENDING);
 	}
 }
-#endif
+
+#else
+
+static void exit_robust_list32(struct task_struct *curr, struct robust_list_head32 __user *head)
+{
+	pr_crit("32-bit kernel should never call %s", __func__);
+}
+
+#endif /* CONFIG_64BIT */
 
 #ifdef CONFIG_FUTEX_PI
 
@@ -1404,19 +1461,59 @@ static void exit_pi_state_list(struct task_struct *curr)
 static inline void exit_pi_state_list(struct task_struct *curr) { }
 #endif
 
+static void exit_robust_lists(struct task_struct *tsk)
+{
+	uintptr_t *rl = tsk->futex_robust_lists;
+
+	tsk->futex_robust_lists = NULL;
+
+	for (unsigned int idx = 0; idx < FUTEX_ROBUST_LIST2_MAX_IDX; idx++) {
+		uintptr_t entry = rl[idx];
+
+		if (!(entry & FUTEX_ROBUST_LIST_ENTRY_MASK))
+			continue;
+
+		/*
+		 * If the list type is the same as the kernel bitness, always
+		 * calls exit_robust_list(). exit_robust_list32() is only for
+		 * 32-bit lists in a 64-bit kernel.
+		 */
+		if (IS_ENABLED(CONFIG_64BIT) && (entry & FUTEX_ROBUST_LIST_ENTRY_32BIT)) {
+			struct robust_list_head32 __user *head;
+
+			entry &= FUTEX_ROBUST_LIST_ENTRY_MASK;
+
+			head = (__force struct robust_list_head32 __user *)entry;
+			exit_robust_list32(tsk, head);
+		} else {
+			struct robust_list_head __user *head;
+
+			entry &= FUTEX_ROBUST_LIST_ENTRY_MASK;
+
+			head = (__force struct robust_list_head __user *)entry;
+			exit_robust_list(tsk, head);
+		}
+	}
+
+	kfree(rl);
+}
+
 static void futex_cleanup(struct task_struct *tsk)
 {
 	if (unlikely(tsk->robust_list)) {
-		exit_robust_list(tsk);
+		exit_robust_list(tsk, tsk->robust_list);
 		tsk->robust_list = NULL;
 	}
 
 #ifdef CONFIG_64BIT
 	if (unlikely(tsk->robust_list32)) {
-		exit_robust_list32(tsk);
+		exit_robust_list32(tsk, tsk->robust_list32);
 		tsk->robust_list32 = NULL;
 	}
 #endif
+
+	if (unlikely(tsk->futex_robust_lists))
+		exit_robust_lists(tsk);
 
 	if (unlikely(!list_empty(&tsk->pi_state_list)))
 		exit_pi_state_list(tsk);

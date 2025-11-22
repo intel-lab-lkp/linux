@@ -109,6 +109,47 @@ SYSCALL_DEFINE3(get_robust_list, int, pid,
 	return put_user(head, head_ptr);
 }
 
+SYSCALL_DEFINE4(set_robust_list2, struct robust_list_head *, head, unsigned int,
+		index, unsigned int, cmd, unsigned int, flags)
+{
+	uintptr_t entry = (__force uintptr_t)head;
+	size_t align = sizeof(u32);
+
+	if (flags)
+		return -EINVAL;
+
+	if (cmd >= FUTEX_ROBUST_LIST_CMD_USER_MAX)
+		return -EINVAL;
+
+	if (index >= FUTEX_ROBUST_LISTS_PER_USER)
+		return -EINVAL;
+
+	/*
+	 * The first two indexes are reserved for the kernel to be used with the
+	 * legacy syscall, so we hide them from userspace.
+	 *
+	 * We map [0, FUTEX_ROBUST_LISTS_PER_USER) to
+	 *  [FUTEX_ROBUST_LIST2_IDX, FUTEX_ROBUST_LIST2_MAX_IDX)
+	 */
+	index += FUTEX_ROBUST_LIST2_IDX;
+
+	switch (cmd) {
+	case FUTEX_ROBUST_LIST_CMD_SET_64:
+		if (futex_in_32bit_syscall())
+			return -EOPNOTSUPP;
+		align = sizeof(u64);
+		fallthrough;
+	case FUTEX_ROBUST_LIST_CMD_SET_32:
+		if (entry % align)
+			return -EINVAL;
+		return futex_robust_list_set(entry, cmd, index);
+	case FUTEX_ROBUST_LIST_CMD_LIST_LIMIT:
+		return FUTEX_ROBUST_LISTS_PER_USER;
+	}
+
+	return -EINVAL;
+}
+
 long do_futex(u32 __user *uaddr, int op, u32 val, ktime_t *timeout,
 		u32 __user *uaddr2, u32 val2, u32 val3)
 {

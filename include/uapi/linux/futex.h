@@ -164,6 +164,22 @@ struct robust_list_head32 {
 };
 
 /*
+ * Commands for set_robust_list2 syscall
+ */
+enum robust_list2_cmd {
+	FUTEX_ROBUST_LIST_CMD_SET_64,
+	FUTEX_ROBUST_LIST_CMD_SET_32,
+	FUTEX_ROBUST_LIST_CMD_LIST_LIMIT,
+	FUTEX_ROBUST_LIST_CMD_USER_MAX,
+
+	/*
+	 * Kernel internal, rejected for user space
+	 */
+	FUTEX_ROBUST_LIST_SET_NATIVE = 128,
+	FUTEX_ROBUST_LIST_SET_COMPAT,
+};
+
+/*
  * Are there any waiters for this robust futex:
  */
 #define FUTEX_WAITERS		0x80000000

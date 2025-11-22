@@ -1331,6 +1331,7 @@ struct task_struct {
 #endif
 #ifdef CONFIG_FUTEX
 	struct robust_list_head __user	*robust_list;
+	uintptr_t			*futex_robust_lists;
 #ifdef CONFIG_COMPAT
 	struct robust_list_head32 __user *robust_list32;
 #endif
