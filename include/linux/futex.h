@@ -87,10 +87,6 @@ static inline bool futex_in_32bit_syscall(void)
 
 static inline void futex_init_task(struct task_struct *tsk)
 {
-	tsk->robust_list = NULL;
-#ifdef CONFIG_COMPAT
-	tsk->robust_list32 = NULL;
-#endif
 	tsk->futex_robust_lists = NULL;
 	INIT_LIST_HEAD(&tsk->pi_state_list);
 	tsk->pi_state_cache = NULL;

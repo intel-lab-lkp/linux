@@ -75,7 +75,6 @@ struct pid_namespace;
 struct pipe_inode_info;
 struct rcu_node;
 struct reclaim_state;
-struct robust_list_head;
 struct root_domain;
 struct rq;
 struct sched_attr;
@@ -1330,11 +1329,7 @@ struct task_struct {
 	u32				rmid;
 #endif
 #ifdef CONFIG_FUTEX
-	struct robust_list_head __user	*robust_list;
 	uintptr_t			*futex_robust_lists;
-#ifdef CONFIG_COMPAT
-	struct robust_list_head32 __user *robust_list32;
-#endif
 	struct list_head		pi_state_list;
 	struct futex_pi_state		*pi_state_cache;
 	struct mutex			futex_exit_mutex;

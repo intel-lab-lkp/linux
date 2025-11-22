@@ -1500,18 +1500,6 @@ static void exit_robust_lists(struct task_struct *tsk)
 
 static void futex_cleanup(struct task_struct *tsk)
 {
-	if (unlikely(tsk->robust_list)) {
-		exit_robust_list(tsk, tsk->robust_list);
-		tsk->robust_list = NULL;
-	}
-
-#ifdef CONFIG_64BIT
-	if (unlikely(tsk->robust_list32)) {
-		exit_robust_list32(tsk, tsk->robust_list32);
-		tsk->robust_list32 = NULL;
-	}
-#endif
-
 	if (unlikely(tsk->futex_robust_lists))
 		exit_robust_lists(tsk);
 
