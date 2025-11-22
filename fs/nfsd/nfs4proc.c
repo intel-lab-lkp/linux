@@ -420,16 +420,17 @@ set_change_info(struct nfsd4_change_info *cinfo, struct svc_fh *fhp)
 }
 
 static __be32
-do_open_lookup(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate, struct nfsd4_open *open, struct svc_fh **resfh)
+do_open_lookup(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate, struct nfsd4_open *open)
 {
 	struct svc_fh *current_fh = &cstate->current_fh;
+	struct svc_fh *resfh;
 	int accmode;
 	__be32 status;
 
-	*resfh = kmalloc(sizeof(struct svc_fh), GFP_KERNEL);
-	if (!*resfh)
+	resfh = kmalloc(sizeof(struct svc_fh), GFP_KERNEL);
+	if (!resfh)
 		return nfserr_jukebox;
-	fh_init(*resfh, NFS4_FHSIZE);
+	fh_init(resfh, NFS4_FHSIZE);
 	open->op_truncate = false;
 
 	if (open->op_create) {
@@ -449,7 +450,7 @@ do_open_lookup(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate, stru
 		 */
 
 		current->fs->umask = open->op_umask;
-		status = nfsd4_create_file(rqstp, current_fh, *resfh, open);
+		status = nfsd4_create_file(rqstp, current_fh, resfh, open);
 		current->fs->umask = 0;
 
 		/*
@@ -462,7 +463,7 @@ do_open_lookup(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate, stru
 						FATTR4_WORD1_TIME_MODIFY);
 	} else {
 		status = nfsd_lookup(rqstp, current_fh,
-				     open->op_fname, open->op_fnamelen, *resfh);
+				     open->op_fname, open->op_fnamelen, resfh);
 		if (status == nfs_ok)
 			/* NFSv4 protocol requires change attributes even though
 			 * no change happened.
@@ -471,18 +472,21 @@ do_open_lookup(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate, stru
 	}
 	if (status)
 		goto out;
-	status = nfsd_check_obj_isreg(*resfh, cstate->minorversion);
+	status = nfsd_check_obj_isreg(resfh, cstate->minorversion);
 	if (status)
 		goto out;
 
-	nfsd4_set_open_owner_reply_cache(cstate, open, *resfh);
+	nfsd4_set_open_owner_reply_cache(cstate, open, resfh);
 	accmode = NFSD_MAY_NOP;
 	if (open->op_created ||
 			open->op_claim_type == NFS4_OPEN_CLAIM_DELEGATE_CUR)
 		accmode |= NFSD_MAY_OWNER_OVERRIDE;
-	status = do_open_permission(rqstp, *resfh, open, accmode);
+	status = do_open_permission(rqstp, resfh, open, accmode);
 	set_change_info(&open->op_cinfo, current_fh);
+	fh_dup2(current_fh, resfh);
 out:
+	fh_put(resfh);
+	kfree(resfh);
 	return status;
 }
 
@@ -533,7 +537,6 @@ nfsd4_open(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 {
 	struct nfsd4_open *open = &u->open;
 	__be32 status;
-	struct svc_fh *resfh = NULL;
 	struct svc_fh parent_fh = {};
 	struct net *net = SVC_NET(rqstp);
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
@@ -602,7 +605,7 @@ nfsd4_open(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		fh_dup2(&parent_fh, &cstate->current_fh);
 		fallthrough;
 	case NFS4_OPEN_CLAIM_DELEGATE_CUR:
-		status = do_open_lookup(rqstp, cstate, open, &resfh);
+		status = do_open_lookup(rqstp, cstate, open);
 		if (status)
 			goto out;
 		break;
@@ -618,7 +621,6 @@ nfsd4_open(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		status = do_open_fhandle(rqstp, cstate, open);
 		if (status)
 			goto out;
-		resfh = &cstate->current_fh;
 		break;
 	case NFS4_OPEN_CLAIM_DELEG_PREV_FH:
 	case NFS4_OPEN_CLAIM_DELEGATE_PREV:
@@ -629,7 +631,7 @@ nfsd4_open(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		goto out;
 	}
 
-	status = nfsd4_process_open2(rqstp, resfh, &parent_fh, open);
+	status = nfsd4_process_open2(rqstp, &cstate->current_fh, &parent_fh, open);
 	fh_put(&parent_fh);
 	if (status && open->op_created)
 		pr_warn("nfsd4_process_open2 failed to open newly-created file: status=%u\n",
@@ -640,11 +642,6 @@ out:
 	if (open->op_filp) {
 		fput(open->op_filp);
 		open->op_filp = NULL;
-	}
-	if (resfh && resfh != &cstate->current_fh) {
-		fh_dup2(&cstate->current_fh, resfh);
-		fh_put(resfh);
-		kfree(resfh);
 	}
 	nfsd4_cleanup_open_state(cstate, open);
 	nfsd4_bump_seqid(cstate, status);
