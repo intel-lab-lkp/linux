@@ -320,7 +320,6 @@ void __init kvm_riscv_gstage_mode_detect(void)
 	csr_write(CSR_HGATP, HGATP_MODE_SV57X4 << HGATP_MODE_SHIFT);
 	if ((csr_read(CSR_HGATP) >> HGATP_MODE_SHIFT) == HGATP_MODE_SV57X4) {
 		kvm_riscv_gstage_mode = HGATP_MODE_SV57X4;
-		kvm_riscv_gstage_pgd_levels = 5;
 		goto done;
 	}
 
@@ -328,7 +327,6 @@ void __init kvm_riscv_gstage_mode_detect(void)
 	csr_write(CSR_HGATP, HGATP_MODE_SV48X4 << HGATP_MODE_SHIFT);
 	if ((csr_read(CSR_HGATP) >> HGATP_MODE_SHIFT) == HGATP_MODE_SV48X4) {
 		kvm_riscv_gstage_mode = HGATP_MODE_SV48X4;
-		kvm_riscv_gstage_pgd_levels = 4;
 		goto done;
 	}
 
@@ -336,7 +334,6 @@ void __init kvm_riscv_gstage_mode_detect(void)
 	csr_write(CSR_HGATP, HGATP_MODE_SV39X4 << HGATP_MODE_SHIFT);
 	if ((csr_read(CSR_HGATP) >> HGATP_MODE_SHIFT) == HGATP_MODE_SV39X4) {
 		kvm_riscv_gstage_mode = HGATP_MODE_SV39X4;
-		kvm_riscv_gstage_pgd_levels = 3;
 		goto done;
 	}
 #else /* CONFIG_32BIT */
@@ -354,6 +351,10 @@ void __init kvm_riscv_gstage_mode_detect(void)
 	kvm_riscv_gstage_pgd_levels = 0;
 
 done:
+#ifdef CONFIG_64BIT
+	kvm_riscv_gstage_mode = min(satp_mode >> SATP_MODE_SHIFT, kvm_riscv_gstage_mode);
+	kvm_riscv_gstage_pgd_levels = kvm_riscv_gstage_mode - HGATP_MODE_SV39X4 + 3;
+#endif
 	csr_write(CSR_HGATP, 0);
 	kvm_riscv_local_hfence_gvma_all();
 }
