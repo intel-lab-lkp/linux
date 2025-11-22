@@ -806,6 +806,7 @@ fh_put(struct svc_fh *fhp)
 		fhp->fh_export = NULL;
 	}
 	fhp->fh_no_wcc = false;
+	fhp->fh_handle.fh_size = 0;
 	return;
 }
 

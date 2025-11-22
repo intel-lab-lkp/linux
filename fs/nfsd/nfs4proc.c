@@ -689,10 +689,8 @@ nfsd4_putfh(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	       putfh->pf_fhlen);
 	ret = fh_verify(rqstp, &cstate->current_fh, 0, NFSD_MAY_BYPASS_GSS);
 #ifdef CONFIG_NFSD_V4_2_INTER_SSC
-	if (ret == nfserr_stale && putfh->no_verify) {
-		SET_FH_FLAG(&cstate->current_fh, NFSD4_FH_FOREIGN);
+	if (ret == nfserr_stale && putfh->no_verify)
 		ret = 0;
-	}
 #endif
 	return ret;
 }
@@ -731,8 +729,7 @@ nfsd4_savefh(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	 * *is* required so that a foreign fh can be saved as needed for
 	 * inter-server COPY.
 	 */
-	if (!cstate->current_fh.fh_dentry &&
-	    !HAS_FH_FLAG(&cstate->current_fh, NFSD4_FH_FOREIGN))
+	if (cstate->current_fh.fh_handle.fh_size == 0)
 		return nfserr_nofilehandle;
 
 	fh_dup2(&cstate->save_fh, &cstate->current_fh);
