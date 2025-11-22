@@ -986,6 +986,7 @@ __be32 nfsd4_reclaim_complete(struct svc_rqst *, struct nfsd4_compound_state *,
 extern __be32 nfsd4_process_open1(struct nfsd4_compound_state *,
 		struct nfsd4_open *open, struct nfsd_net *nn);
 extern __be32 nfsd4_process_open2(struct svc_rqst *rqstp,
+				  struct nfsd4_compound_state *cstate,
 				  struct svc_fh *current_fh,
 				  struct svc_fh *parent_fh,
 				  struct nfsd4_open *open);

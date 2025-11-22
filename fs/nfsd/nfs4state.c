@@ -1216,7 +1216,8 @@ nfs4_put_stid(struct nfs4_stid *s)
 }
 
 void
-nfs4_inc_and_copy_stateid(stateid_t *dst, struct nfs4_stid *stid)
+nfs4_inc_and_copy_stateid(struct nfsd4_compound_state *cstate,
+			  stateid_t *dst, struct nfs4_stid *stid)
 {
 	stateid_t *src = &stid->sc_stateid;
 
@@ -1225,6 +1226,10 @@ nfs4_inc_and_copy_stateid(stateid_t *dst, struct nfs4_stid *stid)
 		src->si_generation = 1;
 	memcpy(dst, src, sizeof(*dst));
 	spin_unlock(&stid->sc_lock);
+	if (cstate) {
+		memcpy(&cstate->current_stateid, dst, sizeof(stateid_t));
+		cstate->current_fh.fh_have_stateid = true;
+	}
 }
 
 static void put_deleg_file(struct nfs4_file *fp)
@@ -6426,6 +6431,7 @@ static bool open_xor_delegation(struct nfsd4_open *open)
 /**
  * nfsd4_process_open2 - finish open processing
  * @rqstp: the RPC transaction being executed
+ * @cstate: the nfsd4_compound_state for the current COMPOUND.
  * @current_fh: NFSv4 COMPOUND's current filehandle
  * @parent_fh: filehandle of parent when CLAIM_NULL
  * @open: OPEN arguments
@@ -6437,7 +6443,8 @@ static bool open_xor_delegation(struct nfsd4_open *open)
  * network byte order is returned.
  */
 __be32
-nfsd4_process_open2(struct svc_rqst *rqstp, struct svc_fh *current_fh,
+nfsd4_process_open2(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
+		    struct svc_fh *current_fh,
 		    struct svc_fh *parent_fh,
 		    struct nfsd4_open *open)
 {
@@ -6521,7 +6528,7 @@ nfsd4_process_open2(struct svc_rqst *rqstp, struct svc_fh *current_fh,
 			open->op_odstate = NULL;
 	}
 
-	nfs4_inc_and_copy_stateid(&open->op_stateid, &stp->st_stid);
+	nfs4_inc_and_copy_stateid(cstate, &open->op_stateid, &stp->st_stid);
 	mutex_unlock(&stp->st_mutex);
 
 	if (nfsd4_has_session(&resp->cstate)) {
@@ -7715,7 +7722,7 @@ nfsd4_open_confirm(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		goto put_stateid;
 	}
 	oo->oo_flags |= NFS4_OO_CONFIRMED;
-	nfs4_inc_and_copy_stateid(&oc->oc_resp_stateid, &stp->st_stid);
+	nfs4_inc_and_copy_stateid(cstate, &oc->oc_resp_stateid, &stp->st_stid);
 	mutex_unlock(&stp->st_mutex);
 	trace_nfsd_open_confirm(oc->oc_seqid, &stp->st_stid.sc_stateid);
 	nfsd4_client_record_create(oo->oo_owner.so_client);
@@ -7787,7 +7794,7 @@ nfsd4_open_downgrade(struct svc_rqst *rqstp,
 	}
 	nfs4_stateid_downgrade(stp, od->od_share_access);
 	reset_union_bmap_deny(od->od_share_deny, stp);
-	nfs4_inc_and_copy_stateid(&od->od_stateid, &stp->st_stid);
+	nfs4_inc_and_copy_stateid(cstate, &od->od_stateid, &stp->st_stid);
 	status = nfs_ok;
 put_stateid:
 	mutex_unlock(&stp->st_mutex);
@@ -7857,7 +7864,7 @@ nfsd4_close(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	 * copied value below, but we continue to do so here just to ensure
 	 * that racing ops see that there was a state change.
 	 */
-	nfs4_inc_and_copy_stateid(&close->cl_stateid, &stp->st_stid);
+	nfs4_inc_and_copy_stateid(cstate, &close->cl_stateid, &stp->st_stid);
 
 	need_move_to_close_list = nfsd4_close_open_stateid(stp);
 	mutex_unlock(&stp->st_mutex);
@@ -7872,6 +7879,7 @@ nfsd4_close(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	 * See RFC5661 section 18.2.4, and RFC7530 section 16.2.5
 	 */
 	memcpy(&close->cl_stateid, &invalid_stateid, sizeof(close->cl_stateid));
+	cstate->current_fh.fh_have_stateid = false;
 
 	/* put reference from nfs4_preprocess_seqid_op */
 	nfs4_put_stid(&stp->st_stid);
@@ -8446,7 +8454,7 @@ nfsd4_lock(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	err = vfs_lock_file(nf->nf_file, F_SETLK, file_lock, conflock);
 	switch (err) {
 	case 0: /* success! */
-		nfs4_inc_and_copy_stateid(&lock->lk_resp_stateid, &lock_stp->st_stid);
+		nfs4_inc_and_copy_stateid(cstate, &lock->lk_resp_stateid, &lock_stp->st_stid);
 		status = 0;
 		if (lock->lk_reclaim)
 			nn->somebody_reclaimed = true;
@@ -8691,7 +8699,7 @@ nfsd4_locku(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		dprintk("NFSD: nfs4_locku: vfs_lock_file failed!\n");
 		goto out_nfserr;
 	}
-	nfs4_inc_and_copy_stateid(&locku->lu_stateid, &stp->st_stid);
+	nfs4_inc_and_copy_stateid(cstate, &locku->lu_stateid, &stp->st_stid);
 put_file:
 	nfsd_file_put(nf);
 put_stateid:
@@ -9122,44 +9130,6 @@ nfs4_state_shutdown(void)
 {
 	rhltable_destroy(&nfs4_file_rhltable);
 	shrinker_free(nfsd_slot_shrinker);
-}
-
-static void
-put_stateid(struct nfsd4_compound_state *cstate, stateid_t *stateid)
-{
-	memcpy(&cstate->current_stateid, stateid, sizeof(stateid_t));
-	cstate->current_fh.fh_have_stateid = true;
-}
-
-/*
- * functions to set current state id
- */
-void
-nfsd4_set_opendowngradestateid(struct nfsd4_compound_state *cstate,
-		union nfsd4_op_u *u)
-{
-	put_stateid(cstate, &u->open_downgrade.od_stateid);
-}
-
-void
-nfsd4_set_openstateid(struct nfsd4_compound_state *cstate,
-		union nfsd4_op_u *u)
-{
-	put_stateid(cstate, &u->open.op_stateid);
-}
-
-void
-nfsd4_set_closestateid(struct nfsd4_compound_state *cstate,
-		union nfsd4_op_u *u)
-{
-	put_stateid(cstate, &u->close.cl_stateid);
-}
-
-void
-nfsd4_set_lockstateid(struct nfsd4_compound_state *cstate,
-		union nfsd4_op_u *u)
-{
-	put_stateid(cstate, &u->lock.lk_resp_stateid);
 }
 
 /**
