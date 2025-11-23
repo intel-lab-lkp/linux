@@ -37,6 +37,9 @@ properties:
   nvmem-0:
     $ref: /schemas/nvmem/maxim,max77759-nvmem.yaml
 
+  charger:
+    $ref: /schemas/power/supply/maxim,max77759-charger.yaml
+
 required:
   - compatible
   - interrupts
@@ -93,6 +96,15 @@ examples:
                     rsoc@10 {
                         reg = <0xa 0x2>;
                     };
+                };
+            };
+
+            charger {
+                compatible = "maxim,max77759-charger";
+                power-supplies = <&maxtcpc>;
+
+                usb-otg-vbus-regulator {
+                    regulator-name = "usb-otg-vbus";
                 };
             };
         };
