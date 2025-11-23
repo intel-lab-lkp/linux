@@ -23,6 +23,7 @@
 #include "build-id.h"
 #include "event.h"
 #include "namespaces.h"
+#include "perf-libelf.h"
 #include "strlist.h"
 #include "strfilter.h"
 #include "debug.h"

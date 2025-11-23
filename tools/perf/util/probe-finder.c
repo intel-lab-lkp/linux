@@ -25,6 +25,7 @@
 #include "debug.h"
 #include "debuginfo.h"
 #include "intlist.h"
+#include "perf-libelf.h"
 #include "strbuf.h"
 #include "strlist.h"
 #include "symbol.h"
