@@ -29,6 +29,7 @@
 #include <linux/blk-crypto.h>
 #include <linux/part_stat.h>
 #include <linux/sched/isolation.h>
+#include <linux/blk-mq-dma-token.h>
 
 #include <trace/events/block.h>
 
@@ -439,6 +440,7 @@ static struct request *blk_mq_rq_ctx_init(struct blk_mq_alloc_data *data,
 	rq->nr_integrity_segments = 0;
 	rq->end_io = NULL;
 	rq->end_io_data = NULL;
+	rq->dma_map = NULL;
 
 	blk_crypto_rq_set_defaults(rq);
 	INIT_LIST_HEAD(&rq->queuelist);
@@ -794,6 +796,7 @@ static void __blk_mq_free_request(struct request *rq)
 	blk_pm_mark_last_busy(rq);
 	rq->mq_hctx = NULL;
 
+	blk_rq_drop_dma_map(rq);
 	if (rq->tag != BLK_MQ_NO_TAG) {
 		blk_mq_dec_active_requests(hctx);
 		blk_mq_put_tag(hctx->tags, ctx, rq->tag);
@@ -3213,6 +3216,23 @@ new_request:
 	rq_qos_track(q, rq, bio);
 
 	blk_mq_bio_to_request(rq, bio, nr_segs);
+
+	if (bio_flagged(bio, BIO_DMA_TOKEN)) {
+		struct blk_mq_dma_token *token;
+		blk_status_t ret;
+
+		token = dma_token_to_blk_mq(bio->dma_token);
+		ret = blk_rq_assign_dma_map(rq, token);
+		if (ret) {
+			if (ret == BLK_STS_AGAIN) {
+				bio_wouldblock_error(bio);
+			} else {
+				bio->bi_status = BLK_STS_RESOURCE;
+				bio_endio(bio);
+			}
+			goto queue_exit;
+		}
+	}
 
 	ret = blk_crypto_rq_get_keyslot(rq);
 	if (ret != BLK_STS_OK) {

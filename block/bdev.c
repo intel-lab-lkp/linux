@@ -28,6 +28,7 @@
 #include <linux/part_stat.h>
 #include <linux/uaccess.h>
 #include <linux/stat.h>
+#include <linux/blk-mq-dma-token.h>
 #include "../fs/internal.h"
 #include "blk.h"
 
@@ -60,6 +61,19 @@ struct block_device *file_bdev(struct file *bdev_file)
 	return I_BDEV(bdev_file->f_mapping->host);
 }
 EXPORT_SYMBOL(file_bdev);
+
+struct dma_token *blkdev_dma_map(struct file *file,
+				 struct dma_token_params *params)
+{
+	struct request_queue *q = bdev_get_queue(file_bdev(file));
+
+	if (!(file->f_flags & O_DIRECT))
+		return ERR_PTR(-EINVAL);
+	if (!q->mq_ops)
+		return ERR_PTR(-EINVAL);
+
+	return blk_mq_dma_map(q, params);
+}
 
 static void bdev_write_inode(struct block_device *bdev)
 {

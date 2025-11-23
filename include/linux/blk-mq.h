@@ -94,6 +94,9 @@ enum mq_rq_state {
 	MQ_RQ_COMPLETE		= 2,
 };
 
+struct blk_mq_dma_map;
+struct blk_mq_dma_token;
+
 /*
  * Try to put the fields that are referenced together in the same cacheline.
  *
@@ -169,6 +172,8 @@ struct request {
 	atomic_t ref;
 
 	unsigned long deadline;
+
+	struct blk_mq_dma_map	*dma_map;
 
 	/*
 	 * The hash is used inside the scheduler, and killed once the
@@ -675,6 +680,21 @@ struct blk_mq_ops {
 	 */
 	void (*map_queues)(struct blk_mq_tag_set *set);
 
+	/**
+	 * @map_dmabuf: Allows drivers to pre-map a dmabuf. The resulting driver
+	 * specific mapping will be wrapped into dma_token and passed to the
+	 * read / write path in an iterator.
+	 */
+	int (*dma_map)(struct request_queue *q, struct blk_mq_dma_map *);
+	void (*dma_unmap)(struct request_queue *q, struct blk_mq_dma_map *);
+	int (*init_dma_token)(struct request_queue *q,
+			      struct blk_mq_dma_token *token);
+	void (*clean_dma_token)(struct request_queue *q,
+				struct blk_mq_dma_token *token);
+
+	struct dma_buf_attachment *(*dma_attach)(struct request_queue *q,
+					struct dma_token_params *params);
+
 #ifdef CONFIG_BLK_DEBUG_FS
 	/**
 	 * @show_rq: Used by the debugfs implementation to show driver-specific
@@ -946,6 +966,7 @@ void blk_mq_tagset_busy_iter(struct blk_mq_tag_set *tagset,
 void blk_mq_tagset_wait_completed_request(struct blk_mq_tag_set *tagset);
 void blk_mq_freeze_queue_nomemsave(struct request_queue *q);
 void blk_mq_unfreeze_queue_nomemrestore(struct request_queue *q);
+
 static inline unsigned int __must_check
 blk_mq_freeze_queue(struct request_queue *q)
 {

@@ -973,6 +973,7 @@ const struct file_operations def_blk_fops = {
 	.fallocate	= blkdev_fallocate,
 	.uring_cmd	= blkdev_uring_cmd,
 	.fop_flags	= FOP_BUFFER_RASYNC,
+	.dma_map	= blkdev_dma_map,
 };
 
 static __init int blkdev_init(void)
