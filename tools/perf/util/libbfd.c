@@ -383,13 +383,13 @@ out_close:
 	return err;
 }
 
-int libbfd__read_build_id(const char *filename, struct build_id *bid, bool block)
+int libbfd__read_build_id(int _fd, const char *filename, struct build_id *bid)
 {
 	size_t size = sizeof(bid->data);
 	int err = -1, fd;
 	bfd *abfd;
 
-	fd = open(filename, block ? O_RDONLY : (O_RDONLY | O_NONBLOCK));
+	fd = dup(_fd);
 	if (fd < 0)
 		return -1;
 

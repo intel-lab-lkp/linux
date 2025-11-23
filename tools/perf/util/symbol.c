@@ -35,6 +35,7 @@
 #include "path.h"
 #include "perf-libelf.h"
 #include "strlist.h"
+#include "symbol-minimal.h"
 #include "symbol.h"
 #include "symsrc.h"
 #include "util.h" // lsdir()
@@ -1997,6 +1998,55 @@ static bool filename__readable(const char *file)
 		return false;
 	close(fd);
 	return true;
+}
+
+int filename__read_build_id(const char *filename, struct build_id *bid, bool block)
+{
+	struct kmod_path m = { .name = NULL, };
+	char path[PATH_MAX];
+	int err, fd;
+
+	if (!filename)
+		return -EFAULT;
+
+	err = kmod_path__parse(&m, filename);
+	if (err)
+		return -1;
+
+	if (m.comp) {
+		int error = 0;
+
+		fd = filename__decompress(filename, path, sizeof(path), m.comp, &error);
+		if (fd < 0) {
+			pr_debug("Failed to decompress (error %d) %s\n",
+				 error, filename);
+			return -1;
+		}
+		lseek(fd, 0, SEEK_SET);
+		filename = path;
+		block = true;
+	} else {
+		fd = open(filename, block ? O_RDONLY : (O_RDONLY | O_NONBLOCK));
+		if (fd < 0) {
+			pr_debug("Failed to open %s\n", filename);
+			return -1;
+		}
+	}
+
+	err = libbfd__read_build_id(fd, filename, bid);
+	if (err == 0)
+		goto out;
+
+	err = libelf__read_build_id(fd, filename, bid);
+	if (err == 0)
+		goto out;
+
+	err = sym_min__read_build_id(fd, filename, bid);
+out:
+	close(fd);
+	if (m.comp)
+		unlink(filename);
+	return err;
 }
 
 static char *dso__find_kallsyms(struct dso *dso, struct map *map)

@@ -1,5 +1,7 @@
+#include "debug.h"
 #include "dso.h"
 #include "symbol.h"
+#include "symbol-minimal.h"
 #include "symsrc.h"
 
 #include <errno.h>
@@ -75,17 +77,19 @@ static int read_build_id(void *note_data, size_t note_len, struct build_id *bid,
 	return -1;
 }
 
+#ifndef HAVE_LIBELF_SUPPORT
 int filename__read_debuglink(const char *filename __maybe_unused,
 			     char *debuglink __maybe_unused,
 			     size_t size __maybe_unused)
 {
 	return -1;
 }
+#endif
 
 /*
  * Just try PT_NOTE header otherwise fails
  */
-int filename__read_build_id(const char *filename, struct build_id *bid, bool block)
+int sym_min__read_build_id(int _fd, const char *filename, struct build_id *bid)
 {
 	int fd, ret = -1;
 	bool need_swap = false, elf32;
@@ -102,7 +106,7 @@ int filename__read_build_id(const char *filename, struct build_id *bid, bool blo
 	void *phdr, *buf = NULL;
 	ssize_t phdr_size, ehdr_size, buf_size = 0;
 
-	fd = open(filename, block ? O_RDONLY : (O_RDONLY | O_NONBLOCK));
+	fd = dup(_fd);
 	if (fd < 0)
 		return -1;
 
@@ -194,9 +198,12 @@ out_free:
 	free(phdr);
 out:
 	close(fd);
+	if (ret)
+		pr_debug("Error reading build-id from %s\n", filename);
 	return ret;
 }
 
+#ifndef HAVE_LIBELF_SUPPORT
 int sysfs__read_build_id(const char *filename, struct build_id *bid)
 {
 	int fd;
@@ -358,3 +365,4 @@ bool filename__has_section(const char *filename __maybe_unused, const char *sec 
 {
 	return false;
 }
+#endif // HAVE_LIBELF_SUPPORT
