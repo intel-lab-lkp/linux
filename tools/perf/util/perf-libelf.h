@@ -21,17 +21,13 @@ struct build_id;
 # define PERF_ELF_C_READ_MMAP ELF_C_READ
 #endif
 
-/*
- * Align offset to 4 bytes as needed for note name and descriptor data.
- */
-#define NOTE_ALIGN(n) (((n) + 3) & -4U)
-
 Elf_Scn *elf_section_by_name(Elf *elf, GElf_Ehdr *ep, GElf_Shdr *shp, const char *name,
 			     size_t *idx);
 
 int __libelf__read_build_id(Elf *elf, void *bf, size_t size);
 
 int libelf__read_build_id(int _fd, const char *filename, struct build_id *bid);
+int libelf_sysfs__read_build_id(const char *filename, struct build_id *bid);
 int libelf_filename__read_debuglink(const char *filename, char *debuglink, size_t size);
 
 #else // !defined(HAVE_LIBELF_SUPPORT)
@@ -39,6 +35,12 @@ int libelf_filename__read_debuglink(const char *filename, char *debuglink, size_
 static inline int libelf__read_build_id(int fd __always_unused,
 					const char *filename __always_unused,
 					struct build_id *bid __always_unused)
+{
+	return -1;
+}
+
+static inline int libelf_sysfs__read_build_id(const char *filename __always_unused,
+					      struct build_id *bid __always_unused)
 {
 	return -1;
 }

@@ -5,5 +5,6 @@
 struct build_id;
 
 int sym_min__read_build_id(int _fd, const char *filename, struct build_id *bid);
+int sym_min_sysfs__read_build_id(const char *filename, struct build_id *bid);
 
 #endif /* __PERF_SYMBOL_MINIMAL_H */

@@ -2049,6 +2049,16 @@ out:
 	return err;
 }
 
+int sysfs__read_build_id(const char *filename, struct build_id *bid)
+{
+	int err = libelf_sysfs__read_build_id(filename, bid);
+
+	if (err == 0)
+		return 0;
+
+	return sym_min_sysfs__read_build_id(filename, bid);
+}
+
 int filename__read_debuglink(const char *filename, char *debuglink, size_t size)
 {
 	int err = libbfd_filename__read_debuglink(filename, debuglink, size);

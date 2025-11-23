@@ -194,8 +194,7 @@ out:
 	return ret;
 }
 
-#ifndef HAVE_LIBELF_SUPPORT
-int sysfs__read_build_id(const char *filename, struct build_id *bid)
+int sym_min_sysfs__read_build_id(const char *filename, struct build_id *bid)
 {
 	int fd;
 	int ret = -1;
@@ -226,6 +225,7 @@ out:
 	return ret;
 }
 
+#ifndef HAVE_LIBELF_SUPPORT
 int symsrc__init(struct symsrc *ss, struct dso *dso, const char *name,
 	         enum dso_binary_type type)
 {
