@@ -5,6 +5,7 @@ TEST_GEN_FILES = iou-zcrx
 TEST_PROGS = \
 	csum.py \
 	devlink_port_split.py \
+	devlink_rate_tc_bw.py \
 	devmem.py \
 	ethtool.sh \
 	ethtool_extended_state.sh \
