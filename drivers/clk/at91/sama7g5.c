@@ -1004,9 +1004,9 @@ static void __init sama7g5_pmc_setup(struct device_node *np)
 	if (!sama7g5_pmc)
 		return;
 
-	alloc_mem = kmalloc(sizeof(void *) *
-			    (ARRAY_SIZE(sama7g5_mckx) + ARRAY_SIZE(sama7g5_gck)),
-			    GFP_KERNEL);
+	alloc_mem = kmalloc_array(ARRAY_SIZE(sama7g5_mckx) + ARRAY_SIZE(sama7g5_gck),
+				  sizeof(*alloc_mem),
+				  GFP_KERNEL);
 	if (!alloc_mem)
 		goto err_free;
 
