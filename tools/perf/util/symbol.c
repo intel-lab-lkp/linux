@@ -1,47 +1,51 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <dirent.h>
 #include <errno.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <linux/capability.h>
-#include <linux/kernel.h>
-#include <linux/mman.h>
-#include <linux/string.h>
-#include <linux/time64.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/param.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <inttypes.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/param.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+
 #include "annotate.h"
 #include "build-id.h"
 #include "cap.h"
 #include "cpumap.h"
+#include "debug.h"
 #include "debug.h"
 #include "demangle-cxx.h"
 #include "demangle-java.h"
 #include "demangle-ocaml.h"
 #include "demangle-rust-v0.h"
 #include "dso.h"
-#include "util.h" // lsdir()
-#include "debug.h"
 #include "event.h"
+#include "header.h"
+#include "intlist.h"
+#include "libbfd.h"
 #include "machine.h"
 #include "map.h"
-#include "symbol.h"
 #include "map_symbol.h"
 #include "mem-events.h"
 #include "mem-info.h"
-#include "symsrc.h"
-#include "strlist.h"
-#include "intlist.h"
 #include "namespaces.h"
-#include "header.h"
 #include "path.h"
+#include "perf-libelf.h"
+#include "strlist.h"
+#include "symbol.h"
+#include "symsrc.h"
+#include "util.h" // lsdir()
+
+#include <linux/capability.h>
 #include <linux/ctype.h>
+#include <linux/kernel.h>
 #include <linux/log2.h>
+#include <linux/mman.h>
+#include <linux/string.h>
+#include <linux/time64.h>
 #include <linux/zalloc.h>
 
 #include <elf.h>

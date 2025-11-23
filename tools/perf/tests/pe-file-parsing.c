@@ -11,10 +11,11 @@
 #include <unistd.h>
 #include <subcmd/exec-cmd.h>
 
-#include "debug.h"
 #include "util/build-id.h"
-#include "util/symbol.h"
+#include "util/debug.h"
 #include "util/dso.h"
+#include "util/libbfd.h"
+#include "util/symbol.h"
 
 #include "tests.h"
 

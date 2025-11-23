@@ -21,6 +21,7 @@ int libbfd__addr2line(const char *dso_name, u64 addr,
 
 
 void dso__free_a2l_libbfd(struct dso *dso);
+int dso__load_bfd_symbols(struct dso *dso, const char *debugfile);
 
 int symbol__disassemble_libbfd(const char *filename, struct symbol *sym,
 			     struct annotate_args *args);
@@ -49,6 +50,12 @@ static inline int libbfd__addr2line(const char *dso_name __always_unused,
 
 static inline void dso__free_a2l_libbfd(struct dso *dso __always_unused)
 {
+}
+
+static inline int dso__load_bfd_symbols(struct dso *dso __always_unused,
+					const char *debugfile __always_unused)
+{
+	return -1;
 }
 
 static inline int symbol__disassemble_libbfd(const char *filename __always_unused,
