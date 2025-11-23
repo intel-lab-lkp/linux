@@ -39,7 +39,7 @@ use kernel::prelude::*;
 use kernel::sizes::*;
 use kernel::sync::atomic::{Atomic, Relaxed};
 use kernel::sync::Mutex;
-use kernel::{acpi, device::Core, of, platform, str::CString, types::ARef};
+use kernel::{acpi, device::Core, of, platform, str::CString, sync::aref::ARef};
 
 kernel::module_platform_driver! {
     type: RustDebugFs,
