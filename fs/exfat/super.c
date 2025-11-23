@@ -722,10 +722,15 @@ put_inode:
 	sb->s_root = NULL;
 
 free_table:
+	exfat_free_upcase_table(sbi);
 	exfat_free_bitmap(sbi);
 	brelse(sbi->boot_bh);
 
 check_nls_io:
+	unload_nls(sbi->nls_io);
+	exfat_free_iocharset(sbi);
+	sb->s_fs_info = NULL;
+	kfree(sbi);
 	return err;
 }
 
