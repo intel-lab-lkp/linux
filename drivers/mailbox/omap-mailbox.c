@@ -579,7 +579,9 @@ static int omap_mbox_probe(struct platform_device *pdev)
 		return ret;
 
 	platform_set_drvdata(pdev, mdev);
-	devm_pm_runtime_enable(mdev->dev);
+	ret = devm_pm_runtime_enable(mdev->dev);
+	if (ret)
+		return ret;
 
 	ret = pm_runtime_resume_and_get(mdev->dev);
 	if (ret < 0)
