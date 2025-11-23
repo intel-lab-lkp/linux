@@ -4436,7 +4436,7 @@ cifs_construct_tcon(struct cifs_sb_info *cifs_sb, kuid_t fsuid)
 #ifdef CONFIG_CIFS_DFS_UPCALL
 	if (origin_fullpath) {
 		spin_lock(&tcon->tc_lock);
-		tcon->origin_fullpath = origin_fullpath;
+		WRITE_ONCE(tcon->origin_fullpath, origin_fullpath);
 		spin_unlock(&tcon->tc_lock);
 		origin_fullpath = NULL;
 		queue_delayed_work(dfscache_wq, &tcon->dfs_cache_work,

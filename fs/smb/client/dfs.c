@@ -229,7 +229,7 @@ static int __dfs_mount_share(struct cifs_mount_ctx *mnt_ctx)
 
 	tcon = mnt_ctx->tcon;
 	spin_lock(&tcon->tc_lock);
-	tcon->origin_fullpath = origin_fullpath;
+	WRITE_ONCE(tcon->origin_fullpath, origin_fullpath);
 	origin_fullpath = NULL;
 	ref_walk_set_tcon(rw, tcon);
 	spin_unlock(&tcon->tc_lock);
@@ -333,9 +333,89 @@ static int target_share_matches_server(struct TCP_Server_Info *server, char *sha
 	return rc;
 }
 
+static int update_tcon_super_prepaths(struct cifs_tcon *tcon, const char *prefix)
+{
+	struct TCP_Server_Info *server = tcon->ses->server;
+	struct cifs_ses *ses;
+	struct cifs_tcon *scan_tcon;
+	struct cifs_sb_info *cifs_sb;
+	const char *origin;
+	int rc = 0;
+	bool updated = false;
+
+	/* Fast path: master tcon */
+	spin_lock(&tcon->sb_list_lock);
+	list_for_each_entry(cifs_sb, &tcon->cifs_sb_list, tcon_sb_link) {
+		updated = true;
+		rc = cifs_update_super_prepath(cifs_sb, (char *)prefix);
+		if (rc) {
+			cifs_dbg(VFS,
+				 "Failed to update prepath for superblock: %d\n",
+				 rc);
+			break;
+		}
+	}
+	spin_unlock(&tcon->sb_list_lock);
+
+	if (updated || rc)
+		return rc;
+
+	/* Slow path: non-master tcon */
+	origin = READ_ONCE(tcon->origin_fullpath);
+	if (!origin)
+		return 0;
+
+	spin_lock(&cifs_tcp_ses_lock);
+	spin_lock(&server->srv_lock);
+	list_for_each_entry(ses, &server->smb_ses_list, smb_ses_list) {
+		spin_lock(&ses->ses_lock);
+
+		if (ses->dfs_root_ses != tcon->ses->dfs_root_ses) {
+			spin_unlock(&ses->ses_lock);
+			continue;
+		}
+
+		list_for_each_entry(scan_tcon, &ses->tcon_list, tcon_list) {
+			const char *scan_origin;
+
+			scan_origin = READ_ONCE(scan_tcon->origin_fullpath);
+			if (!scan_origin)
+				continue;
+
+			if (!dfs_src_pathname_equal(scan_origin, origin))
+				continue;
+
+			spin_lock(&scan_tcon->sb_list_lock);
+			list_for_each_entry(cifs_sb, &scan_tcon->cifs_sb_list,
+					    tcon_sb_link) {
+				rc = cifs_update_super_prepath(cifs_sb,
+							       (char *)prefix);
+				if (rc) {
+					cifs_dbg(VFS,
+						 "Failed to update prepath for superblock: %d\n",
+						 rc);
+					break;
+				}
+			}
+			spin_unlock(&scan_tcon->sb_list_lock);
+
+			if (rc) {
+				spin_unlock(&ses->ses_lock);
+				goto out_srv_unlock;
+			}
+		}
+
+		spin_unlock(&ses->ses_lock);
+	}
+out_srv_unlock:
+	spin_unlock(&server->srv_lock);
+	spin_unlock(&cifs_tcp_ses_lock);
+
+	return rc;
+}
+
 static int tree_connect_dfs_target(const unsigned int xid,
 				   struct cifs_tcon *tcon,
-				   struct cifs_sb_info *cifs_sb,
 				   char *tree, bool islink,
 				   struct dfs_cache_tgt_list *tl)
 {
@@ -372,8 +452,8 @@ static int tree_connect_dfs_target(const unsigned int xid,
 		scnprintf(tree, MAX_TREE_SIZE, "\\%s", share);
 		rc = ops->tree_connect(xid, tcon->ses, tree,
 				       tcon, tcon->ses->local_nls);
-		if (islink && !rc && cifs_sb)
-			rc = cifs_update_super_prepath(cifs_sb, prefix);
+		if (islink && !rc && READ_ONCE(tcon->origin_fullpath))
+			rc = update_tcon_super_prepaths(tcon, prefix);
 		break;
 	}
 
@@ -389,8 +469,6 @@ int cifs_tree_connect(const unsigned int xid, struct cifs_tcon *tcon)
 	struct TCP_Server_Info *server = tcon->ses->server;
 	const struct smb_version_operations *ops = server->ops;
 	DFS_CACHE_TGT_LIST(tl);
-	struct cifs_sb_info *cifs_sb = NULL;
-	struct super_block *sb = NULL;
 	struct dfs_info3_param ref = {0};
 	char *tree;
 
@@ -430,10 +508,6 @@ int cifs_tree_connect(const unsigned int xid, struct cifs_tcon *tcon)
 		goto out;
 	}
 
-	sb = cifs_get_dfs_tcon_super(tcon);
-	if (!IS_ERR(sb))
-		cifs_sb = CIFS_SB(sb);
-
 	/* Tree connect to last share in @tcon->tree_name if no DFS referral */
 	if (!server->leaf_fullpath ||
 	    dfs_cache_noreq_find(server->leaf_fullpath + 1, &ref, &tl)) {
@@ -442,13 +516,12 @@ int cifs_tree_connect(const unsigned int xid, struct cifs_tcon *tcon)
 		goto out;
 	}
 
-	rc = tree_connect_dfs_target(xid, tcon, cifs_sb, tree, ref.server_type == DFS_TYPE_LINK,
+	rc = tree_connect_dfs_target(xid, tcon, tree, ref.server_type == DFS_TYPE_LINK,
 				     &tl);
 	free_dfs_info_param(&ref);
 
 out:
 	kfree(tree);
-	cifs_put_tcp_super(sb);
 
 	if (rc) {
 		spin_lock(&tcon->tc_lock);
