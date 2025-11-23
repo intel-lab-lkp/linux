@@ -111,15 +111,32 @@ static inline void rwsem_assert_held_write_nolockdep(const struct rw_semaphore *
 #define DECLARE_RWSEM(name) \
 	struct rw_semaphore name = __RWSEM_INITIALIZER(name)
 
-extern void __init_rwsem(struct rw_semaphore *sem, const char *name,
-			 struct lock_class_key *key);
+#ifndef CONFIG_DEBUG_LOCK_ALLOC
+extern void rwsem_init_generic(struct rw_semaphore *sem);
+
+static inline void __init_rwsem(struct rw_semaphore *sem, const char *name,
+				struct lock_class_key *key)
+{
+	rwsem_init_generic(sem);
+}
+
+#define init_rwsem(sem)	rwsem_init_generic(sem)
+#else
+extern void rwsem_init_lockdep(struct rw_semaphore *sem, const char *name,
+			       struct lock_class_key *key);
+static inline void __init_rwsem(struct rw_semaphore *sem, const char *name,
+				struct lock_class_key *key)
+{
+	rwsem_init_lockdep(sem, name, key);
+}
 
 #define init_rwsem(sem)						\
 do {								\
 	static struct lock_class_key __key;			\
 								\
-	__init_rwsem((sem), #sem, &__key);			\
+	rwsem_init_lockdep((sem), #sem, &__key);		\
 } while (0)
+#endif /* CONFIG_DEBUG_LOCK_ALLOC */
 
 /*
  * This is the same regardless of which rwsem implementation that is being used.
@@ -164,15 +181,31 @@ struct rw_semaphore {
 #define DECLARE_RWSEM(lockname) \
 	struct rw_semaphore lockname = __RWSEM_INITIALIZER(lockname)
 
-extern void  __init_rwsem(struct rw_semaphore *rwsem, const char *name,
-			  struct lock_class_key *key);
+#ifndef CONFIG_DEBUG_LOCK_ALLOC
+extern void  rwsem_rt_init_generic(struct rw_semaphore *rwsem);
+static inline void  __init_rwsem(struct rw_semaphore *rwsem, const char *name,
+				 struct lock_class_key *key)
+{
+	rwsem_rt_init_generic(rwsem);
+}
+
+#define init_rwsem(sem)	rwsem_rt_init_generic(sem)
+#else
+extern void rwsem_rt_init_lockdep(struct rw_semaphore *rwsem, const char *name,
+				  struct lock_class_key *key);
+static inline void  __init_rwsem(struct rw_semaphore *rwsem, const char *name,
+				 struct lock_class_key *key)
+{
+	rwsem_rt_init_lockdep(rwsem, name, key);
+}
 
 #define init_rwsem(sem)						\
 do {								\
 	static struct lock_class_key __key;			\
 								\
-	__init_rwsem((sem), #sem, &__key);			\
+	rwsem_rt_init_lockdep((sem), #sem, &__key);		\
 } while (0)
+#endif /* CONFIG_DEBUG_LOCK_ALLOC */
 
 static __always_inline int rwsem_is_locked(const struct rw_semaphore *sem)
 {

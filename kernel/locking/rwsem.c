@@ -306,16 +306,8 @@ rwsem_owner_flags(struct rw_semaphore *sem, unsigned long *pflags)
 /*
  * Initialize an rwsem:
  */
-void __init_rwsem(struct rw_semaphore *sem, const char *name,
-		  struct lock_class_key *key)
+static inline void __rwsem_init_generic(struct rw_semaphore *sem)
 {
-#ifdef CONFIG_DEBUG_LOCK_ALLOC
-	/*
-	 * Make sure we are not reinitializing a held semaphore:
-	 */
-	debug_check_no_locks_freed((void *)sem, sizeof(*sem));
-	lockdep_init_map_wait(&sem->dep_map, name, key, 0, LD_WAIT_SLEEP);
-#endif
 #ifdef CONFIG_DEBUG_RWSEMS
 	sem->magic = sem;
 #endif
@@ -327,7 +319,26 @@ void __init_rwsem(struct rw_semaphore *sem, const char *name,
 	osq_lock_init(&sem->osq);
 #endif
 }
-EXPORT_SYMBOL(__init_rwsem);
+
+#ifndef CONFIG_DEBUG_LOCK_ALLOC
+void rwsem_init_generic(struct rw_semaphore *sem)
+{
+	__rwsem_init_generic(sem);
+}
+EXPORT_SYMBOL(rwsem_init_generic);
+#else
+void rwsem_init_lockdep(struct rw_semaphore *sem, const char *name,
+			struct lock_class_key *key)
+{
+	/*
+	 * Make sure we are not reinitializing a held semaphore:
+	 */
+	debug_check_no_locks_freed((void *)sem, sizeof(*sem));
+	lockdep_init_map_wait(&sem->dep_map, name, key, 0, LD_WAIT_SLEEP);
+	__rwsem_init_generic(sem);
+}
+EXPORT_SYMBOL(rwsem_init_lockdep);
+#endif /* CONFIG_DEBUG_LOCK_ALLOC */
 
 enum rwsem_waiter_type {
 	RWSEM_WAITING_FOR_WRITE,
@@ -1449,17 +1460,22 @@ static inline void __downgrade_write(struct rw_semaphore *sem)
 
 #include "rwbase_rt.c"
 
-void __init_rwsem(struct rw_semaphore *sem, const char *name,
-		  struct lock_class_key *key)
+#ifndef CONFIG_DEBUG_LOCK_ALLOC
+void rwsem_rt_init_generic(struct rw_semaphore *sem)
 {
 	init_rwbase_rt(&(sem)->rwbase);
-
-#ifdef CONFIG_DEBUG_LOCK_ALLOC
+}
+EXPORT_SYMBOL(rwsem_rt_init_generic);
+#else
+void rwsem_rt_init_lockdep(struct rw_semaphore *sem, const char *name,
+			   struct lock_class_key *key)
+{
+	init_rwbase_rt(&(sem)->rwbase);
 	debug_check_no_locks_freed((void *)sem, sizeof(*sem));
 	lockdep_init_map_wait(&sem->dep_map, name, key, 0, LD_WAIT_SLEEP);
-#endif
 }
-EXPORT_SYMBOL(__init_rwsem);
+EXPORT_SYMBOL(rwsem_rt_init_lockdep);
+#endif /* CONFIG_DEBUG_LOCK_ALLOC */
 
 static inline void __down_read(struct rw_semaphore *sem)
 {
