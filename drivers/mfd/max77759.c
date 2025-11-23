@@ -256,8 +256,17 @@ static const struct regmap_irq max77759_topsys_irqs[] = {
 };
 
 static const struct regmap_irq max77759_chgr_irqs[] = {
-	REGMAP_IRQ_REG(MAX77759_CHARGER_INT_1, 0, GENMASK(7, 0)),
-	REGMAP_IRQ_REG(MAX77759_CHARGER_INT_2, 1, GENMASK(7, 0)),
+	REGMAP_IRQ_REG(MAX77759_CHARGER_INT_1, 0,
+		       MAX77759_CHGR_REG_CHG_INT_AICL |
+		       MAX77759_CHGR_REG_CHG_INT_CHGIN |
+		       MAX77759_CHGR_REG_CHG_INT_CHG |
+		       MAX77759_CHGR_REG_CHG_INT_INLIM),
+	REGMAP_IRQ_REG(MAX77759_CHARGER_INT_2, 1,
+		       MAX77759_CHGR_REG_CHG_INT2_BAT_OILO |
+		       MAX77759_CHGR_REG_CHG_INT2_CHG_STA_CC |
+		       MAX77759_CHGR_REG_CHG_INT2_CHG_STA_CV |
+		       MAX77759_CHGR_REG_CHG_INT2_CHG_STA_TO |
+		       MAX77759_CHGR_REG_CHG_INT2_CHG_STA_DONE),
 };
 
 static const struct regmap_irq_chip max77759_pmic_irq_chip = {
@@ -486,8 +495,8 @@ static int max77759_add_chained_irq_chip(struct device *dev,
 				     "failed to get parent vIRQ(%d) for chip %s\n",
 				     pirq, chip->name);
 
-	ret = devm_regmap_add_irq_chip(dev, regmap, irq,
-				       IRQF_ONESHOT | IRQF_SHARED, 0, chip,
+	ret = devm_regmap_add_irq_chip(dev, regmap, irq, IRQF_ONESHOT |
+				       IRQF_SHARED | IRQF_TRIGGER_LOW, 0, chip,
 				       data);
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to add %s IRQ chip\n",
@@ -519,8 +528,9 @@ static int max77759_add_chained_maxq(struct i2c_client *client,
 
 	ret = devm_request_threaded_irq(&client->dev, apcmdres_irq,
 					NULL, apcmdres_irq_handler,
-					IRQF_ONESHOT | IRQF_SHARED,
-					dev_name(&client->dev), max77759);
+					IRQF_ONESHOT | IRQF_SHARED |
+					IRQF_TRIGGER_LOW, dev_name(&client->dev),
+					max77759);
 	if (ret)
 		return dev_err_probe(&client->dev, ret,
 				     "MAX77759_MAXQ_INT_APCMDRESI failed\n");
@@ -633,7 +643,7 @@ static int max77759_probe(struct i2c_client *client)
 		return dev_err_probe(&client->dev, -EINVAL,
 				     "invalid IRQ: %d\n", client->irq);
 
-	irq_flags = IRQF_ONESHOT | IRQF_SHARED;
+	irq_flags = IRQF_ONESHOT | IRQF_SHARED | IRQF_TRIGGER_LOW;
 	irq_flags |= irqd_get_trigger_type(irq_data);
 
 	ret = devm_regmap_add_irq_chip(&client->dev, max77759->regmap_top,
