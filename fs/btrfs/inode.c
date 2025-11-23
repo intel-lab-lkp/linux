@@ -7044,6 +7044,13 @@ static int read_inline_extent(struct btrfs_path *path, struct folio *folio)
 	return 0;
 }
 
+static void set_hole_em(struct extent_map *em, u64 start, u64 len)
+{
+	em->start = start;
+	em->len = len;
+	em->disk_bytenr = EXTENT_MAP_HOLE;
+}
+
 /*
  * Lookup the first extent overlapping a range in a file.
  *
@@ -7122,8 +7129,16 @@ struct extent_map *btrfs_get_extent(struct btrfs_inode *inode,
 	if (ret < 0) {
 		goto out;
 	} else if (ret > 0) {
-		if (path->slots[0] == 0)
-			goto not_found;
+		if (path->slots[0] == 0) {
+			/*
+			 * The rare case where we're already the first key
+			 * of the whole tree.
+			 * This means even no inode item for the inode.
+			 * Thus the whole range should be a hole.
+			 */
+			set_hole_em(em, start, len);
+			goto insert;
+		}
 		path->slots[0]--;
 		ret = 0;
 	}
@@ -7171,31 +7186,32 @@ next:
 			ret = btrfs_next_leaf(root, path);
 			if (ret < 0)
 				goto out;
-			else if (ret > 0)
-				goto not_found;
+			if (ret > 0) {
+				/* EOF, thus a hole. */
+				set_hole_em(em, start, len);
+				goto insert;
+			}
 
 			leaf = path->nodes[0];
 		}
 		btrfs_item_key_to_cpu(leaf, &found_key, path->slots[0]);
 		if (found_key.objectid != objectid ||
-		    found_key.type != BTRFS_EXTENT_DATA_KEY)
-			goto not_found;
+		    found_key.type != BTRFS_EXTENT_DATA_KEY) {
+			/* EOF, thus a hole. */
+			set_hole_em(em, start, len);
+			goto insert;
+		}
 		if (start > found_key.offset)
 			goto next;
 
-		/* New extent overlaps with existing one */
-		em->start = start;
-		em->len = found_key.offset - start;
-		em->disk_bytenr = EXTENT_MAP_HOLE;
+		/* The range [start, found_key.offset) is a hole. */
+		set_hole_em(em, start, found_key.offset - start);
 		goto insert;
 	}
 
 	btrfs_extent_item_to_extent_map(inode, path, item, em);
 
-	if (extent_type == BTRFS_FILE_EXTENT_REG ||
-	    extent_type == BTRFS_FILE_EXTENT_PREALLOC) {
-		goto insert;
-	} else if (extent_type == BTRFS_FILE_EXTENT_INLINE) {
+	if (extent_type == BTRFS_FILE_EXTENT_INLINE) {
 		/*
 		 * Inline extent can only exist at file offset 0. This is
 		 * ensured by tree-checker and inline extent creation path.
@@ -7216,12 +7232,7 @@ next:
 		ret = read_inline_extent(path, folio);
 		if (ret < 0)
 			goto out;
-		goto insert;
 	}
-not_found:
-	em->start = start;
-	em->len = len;
-	em->disk_bytenr = EXTENT_MAP_HOLE;
 insert:
 	ret = 0;
 	btrfs_release_path(path);
