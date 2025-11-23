@@ -193,7 +193,13 @@ def main():
     )
 
     # Making sure that the `sysroot` and `sysroot_src` belong to the same toolchain.
-    assert args.sysroot in args.sysroot_src.parents
+    assert args.sysroot in args.sysroot_src.parents, \
+        f"""
+        It seems like your sysroot and sysroot_src do not belong to the same toolchain.
+        The sysroot folder must be inside sysroot_src.
+        sysroot={args.sysroot}
+        sysroot_src={args.sysroot_src}
+        """
 
     rust_project = {
         "crates": generate_crates(args.srctree, args.objtree, args.sysroot_src, args.exttree, args.cfgs, args.core_edition),
