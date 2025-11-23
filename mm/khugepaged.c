@@ -2247,6 +2247,7 @@ immap_locked:
 	goto out;
 
 rollback:
+	xas_destroy(&xas);
 	/* Something went wrong: roll back page cache changes */
 	if (nr_none) {
 		xas_lock_irq(&xas);
