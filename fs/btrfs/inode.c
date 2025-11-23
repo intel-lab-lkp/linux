@@ -7051,6 +7051,20 @@ static void set_hole_em(struct extent_map *em, u64 start, u64 len)
 	em->disk_bytenr = EXTENT_MAP_HOLE;
 }
 
+static u64 btrfs_max_file_end(struct btrfs_fs_info *fs_info)
+{
+	/*
+	 * MAX_LFS_FILESIZE is either LLONG_MAX or LONG_MAX << PAGE_SHIFT.
+	 * LLONG_MAX is not blocksize aligned, so here we have to round it
+	 * up to the fs block size.
+	 */
+	u64 result = round_up(MAX_LFS_FILESIZE, fs_info->sectorsize);
+
+	/* Make sure rounding up MAX_LFS_FILESIZE won't overflow. */
+	ASSERT(result > 0);
+	return result;
+}
+
 /*
  * Lookup the first extent overlapping a range in a file.
  *
@@ -7076,6 +7090,7 @@ struct extent_map *btrfs_get_extent(struct btrfs_inode *inode,
 	u64 extent_start = 0;
 	u64 extent_end = 0;
 	u64 objectid = btrfs_ino(inode);
+	const u64 max_file_end = btrfs_max_file_end(fs_info);
 	int extent_type = -1;
 	struct btrfs_path *path = NULL;
 	struct btrfs_root *root = inode->root;
@@ -7136,7 +7151,7 @@ struct extent_map *btrfs_get_extent(struct btrfs_inode *inode,
 			 * This means even no inode item for the inode.
 			 * Thus the whole range should be a hole.
 			 */
-			set_hole_em(em, start, len);
+			set_hole_em(em, start, max_file_end - start);
 			goto insert;
 		}
 		path->slots[0]--;
@@ -7188,7 +7203,7 @@ next:
 				goto out;
 			if (ret > 0) {
 				/* EOF, thus a hole. */
-				set_hole_em(em, start, len);
+				set_hole_em(em, start, max_file_end - start);
 				goto insert;
 			}
 
@@ -7198,7 +7213,7 @@ next:
 		if (found_key.objectid != objectid ||
 		    found_key.type != BTRFS_EXTENT_DATA_KEY) {
 			/* EOF, thus a hole. */
-			set_hole_em(em, start, len);
+			set_hole_em(em, start, max_file_end - start);
 			goto insert;
 		}
 		if (start > found_key.offset)
