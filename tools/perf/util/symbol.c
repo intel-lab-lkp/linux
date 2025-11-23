@@ -2049,6 +2049,16 @@ out:
 	return err;
 }
 
+int filename__read_debuglink(const char *filename, char *debuglink, size_t size)
+{
+	int err = libbfd_filename__read_debuglink(filename, debuglink, size);
+
+	if (err == 0)
+		return 0;
+
+	return libelf_filename__read_debuglink(filename, debuglink, size);
+}
+
 static char *dso__find_kallsyms(struct dso *dso, struct map *map)
 {
 	struct build_id bid = { .size = 0, };

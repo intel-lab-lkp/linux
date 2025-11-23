@@ -2,6 +2,8 @@
 #ifndef __PERF_LIBELF_H
 #define __PERF_LIBELF_H
 
+#include <stddef.h>
+
 struct build_id;
 
 #ifdef HAVE_LIBELF_SUPPORT
@@ -30,12 +32,20 @@ Elf_Scn *elf_section_by_name(Elf *elf, GElf_Ehdr *ep, GElf_Shdr *shp, const char
 int __libelf__read_build_id(Elf *elf, void *bf, size_t size);
 
 int libelf__read_build_id(int _fd, const char *filename, struct build_id *bid);
+int libelf_filename__read_debuglink(const char *filename, char *debuglink, size_t size);
 
 #else // !defined(HAVE_LIBELF_SUPPORT)
 
 static inline int libelf__read_build_id(int fd __always_unused,
 					const char *filename __always_unused,
 					struct build_id *bid __always_unused)
+{
+	return -1;
+}
+
+static inline int libelf_filename__read_debuglink(const char *filename __always_unused,
+						  char *debuglink __always_unused,
+						  size_t size __always_unused)
 {
 	return -1;
 }
