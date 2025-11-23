@@ -10,14 +10,15 @@
 #include <inttypes.h>
 #include <linux/zalloc.h>
 
-#include "annotate.h"
+#include "addr_location.h"
 #include "annotate-data.h"
-#include "debuginfo.h"
+#include "annotate.h"
 #include "debug.h"
+#include "debuginfo.h"
 #include "dso.h"
 #include "dwarf-regs.h"
-#include "evsel.h"
 #include "evlist.h"
+#include "evsel.h"
 #include "map.h"
 #include "map_symbol.h"
 #include "sort.h"

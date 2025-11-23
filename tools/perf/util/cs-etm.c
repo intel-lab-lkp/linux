@@ -17,6 +17,7 @@
 
 #include <stdlib.h>
 
+#include "addr_location.h"
 #include "auxtrace.h"
 #include "color.h"
 #include "cs-etm.h"

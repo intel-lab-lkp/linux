@@ -1,51 +1,49 @@
 // SPDX-License-Identifier: GPL-2.0
-#include "builtin.h"
-#include "perf.h"
-#include "perf-sys.h"
-
-#include "util/cpumap.h"
-#include "util/evlist.h"
-#include "util/evsel.h"
-#include "util/evsel_fprintf.h"
-#include "util/mutex.h"
-#include "util/symbol.h"
-#include "util/thread.h"
-#include "util/header.h"
-#include "util/session.h"
-#include "util/tool.h"
-#include "util/cloexec.h"
-#include "util/thread_map.h"
-#include "util/color.h"
-#include "util/stat.h"
-#include "util/string2.h"
-#include "util/callchain.h"
-#include "util/time-utils.h"
-
-#include <subcmd/pager.h>
-#include <subcmd/parse-options.h>
-#include "util/trace-event.h"
-
-#include "util/debug.h"
-#include "util/event.h"
-#include "util/util.h"
-
-#include <linux/kernel.h>
-#include <linux/log2.h>
-#include <linux/zalloc.h>
-#include <sys/prctl.h>
-#include <sys/resource.h>
 #include <inttypes.h>
-
 #include <errno.h>
 #include <semaphore.h>
 #include <pthread.h>
 #include <math.h>
-#include <api/fs/fs.h>
-#include <perf/cpumap.h>
-#include <linux/time64.h>
-#include <linux/err.h>
 
+#include "builtin.h"
+#include "perf.h"
+#include "perf-sys.h"
+
+#include "util/addr_location.h"
+#include "util/callchain.h"
+#include "util/cloexec.h"
+#include "util/color.h"
+#include "util/cpumap.h"
+#include "util/debug.h"
+#include "util/event.h"
+#include "util/evlist.h"
+#include "util/evsel.h"
+#include "util/evsel_fprintf.h"
+#include "util/header.h"
+#include "util/mutex.h"
+#include "util/session.h"
+#include "util/stat.h"
+#include "util/string2.h"
+#include "util/symbol.h"
+#include "util/thread.h"
+#include "util/thread_map.h"
+#include "util/time-utils.h"
+#include "util/tool.h"
+#include "util/trace-event.h"
+#include "util/util.h"
+
+#include <api/fs/fs.h>
 #include <linux/ctype.h>
+#include <linux/err.h>
+#include <linux/kernel.h>
+#include <linux/log2.h>
+#include <linux/time64.h>
+#include <linux/zalloc.h>
+#include <perf/cpumap.h>
+#include <subcmd/pager.h>
+#include <subcmd/parse-options.h>
+#include <sys/prctl.h>
+#include <sys/resource.h>
 
 #define PR_SET_NAME		15               /* Set process name */
 #define MAX_CPUS		4096

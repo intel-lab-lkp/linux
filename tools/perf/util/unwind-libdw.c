@@ -4,20 +4,23 @@
 #include <elfutils/libdwfl.h>
 #include <inttypes.h>
 #include <errno.h>
+
+#include "addr_location.h"
+#include "callchain.h"
 #include "debug.h"
 #include "dso.h"
-#include "unwind.h"
-#include "unwind-libdw.h"
+#include "env.h"
+#include "event.h"
 #include "machine.h"
 #include "map.h"
+#include "perf_regs.h"
 #include "symbol.h"
 #include "thread.h"
+#include "unwind-libdw.h"
+#include "unwind.h"
+
 #include <linux/types.h>
 #include <linux/zalloc.h>
-#include "event.h"
-#include "perf_regs.h"
-#include "callchain.h"
-#include "util/env.h"
 
 static char *debuginfo_path;
 

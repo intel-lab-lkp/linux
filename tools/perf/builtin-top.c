@@ -16,77 +16,72 @@
  *   Mike Galbraith <efault@gmx.de>
  *   Paul Mackerras <paulus@samba.org>
  */
-#include "builtin.h"
+#include <assert.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <inttypes.h>
+#include <poll.h>
+#include <sched.h>
+#include <signal.h>
+#include <stdio.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+#include <sys/prctl.h>
+#include <sys/syscall.h>
+#include <sys/uio.h>
+#include <sys/utsname.h>
+#include <sys/wait.h>
+#include <termios.h>
+#include <time.h>
+#include <unistd.h>
 
+#include "builtin.h"
 #include "perf.h"
 
+#include "arch/common.h"
+#include "ui/ui.h"
+#include "util/addr_location.h"
 #include "util/annotate.h"
 #include "util/bpf-event.h"
+#include "util/callchain.h"
 #include "util/cgroup.h"
-#include "util/config.h"
 #include "util/color.h"
+#include "util/config.h"
+#include "util/cpumap.h"
+#include "util/debug.h"
 #include "util/dso.h"
+#include "util/event.h"
 #include "util/evlist.h"
 #include "util/evsel.h"
 #include "util/evsel_config.h"
-#include "util/event.h"
+#include "util/intlist.h"
 #include "util/machine.h"
 #include "util/map.h"
 #include "util/mmap.h"
+#include "util/ordered-events.h"
+#include "util/parse-branch-options.h"
+#include "util/parse-events.h"
+#include "util/pfm.h"
 #include "util/session.h"
-#include "util/thread.h"
+#include "util/sort.h"
 #include "util/stat.h"
+#include "util/string2.h"
 #include "util/symbol.h"
 #include "util/synthetic-events.h"
+#include "util/term.h"
+#include "util/thread.h"
 #include "util/top.h"
 #include "util/util.h"
-#include <linux/rbtree.h>
-#include <subcmd/parse-options.h>
-#include "util/parse-events.h"
-#include "util/callchain.h"
-#include "util/cpumap.h"
-#include "util/sort.h"
-#include "util/string2.h"
-#include "util/term.h"
-#include "util/intlist.h"
-#include "util/parse-branch-options.h"
-#include "arch/common.h"
-#include "ui/ui.h"
 
-#include "util/debug.h"
-#include "util/ordered-events.h"
-#include "util/pfm.h"
-
-#include <assert.h>
 #include <elf.h>
-#include <fcntl.h>
-
-#include <stdio.h>
-#include <termios.h>
-#include <unistd.h>
-#include <inttypes.h>
-
-#include <errno.h>
-#include <time.h>
-#include <sched.h>
-#include <signal.h>
-
-#include <sys/syscall.h>
-#include <sys/ioctl.h>
-#include <poll.h>
-#include <sys/prctl.h>
-#include <sys/wait.h>
-#include <sys/uio.h>
-#include <sys/utsname.h>
-#include <sys/mman.h>
-
+#include <linux/ctype.h>
+#include <linux/err.h>
+#include <linux/rbtree.h>
 #include <linux/stringify.h>
 #include <linux/time64.h>
 #include <linux/types.h>
-#include <linux/err.h>
-
-#include <linux/ctype.h>
 #include <perf/mmap.h>
+#include <subcmd/parse-options.h>
 
 static volatile sig_atomic_t done;
 static volatile sig_atomic_t resize;

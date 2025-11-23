@@ -4,11 +4,12 @@
 
 #ifdef HAVE_KVM_STAT_SUPPORT
 
-#include "tool.h"
+#include "addr_location.h"
+#include "record.h"
 #include "sort.h"
 #include "stat.h"
 #include "symbol.h"
-#include "record.h"
+#include "tool.h"
 
 #include <errno.h>
 #include <stdlib.h>

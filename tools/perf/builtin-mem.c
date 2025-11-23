@@ -7,24 +7,26 @@
 #include "builtin.h"
 #include "perf.h"
 
-#include <subcmd/parse-options.h>
+#include "util/addr_location.h"
 #include "util/auxtrace.h"
-#include "util/trace-event.h"
-#include "util/tool.h"
-#include "util/session.h"
 #include "util/data.h"
-#include "util/map_symbol.h"
-#include "util/mem-events.h"
 #include "util/debug.h"
 #include "util/dso.h"
 #include "util/map.h"
-#include "util/symbol.h"
+#include "util/map_symbol.h"
+#include "util/mem-events.h"
 #include "util/pmus.h"
 #include "util/sample.h"
+#include "util/session.h"
 #include "util/sort.h"
 #include "util/string2.h"
+#include "util/symbol.h"
+#include "util/tool.h"
+#include "util/trace-event.h"
 #include "util/util.h"
+
 #include <linux/err.h>
+#include <subcmd/parse-options.h>
 
 #define MEM_OPERATION_LOAD	0x1
 #define MEM_OPERATION_STORE	0x2

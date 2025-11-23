@@ -7,18 +7,20 @@
 #include <string.h>
 #include <linux/kernel.h>
 #include <linux/zalloc.h>
-#include "dso.h"
-#include "session.h"
-#include "thread.h"
-#include "thread-stack.h"
-#include "debug.h"
-#include "namespaces.h"
-#include "comm.h"
-#include "map.h"
-#include "symbol.h"
-#include "unwind.h"
+
+#include "addr_location.h"
 #include "callchain.h"
+#include "comm.h"
+#include "debug.h"
+#include "dso.h"
 #include "dwarf-regs.h"
+#include "map.h"
+#include "namespaces.h"
+#include "session.h"
+#include "symbol.h"
+#include "thread-stack.h"
+#include "thread.h"
+#include "unwind.h"
 
 #include <api/fs/fs.h>
 

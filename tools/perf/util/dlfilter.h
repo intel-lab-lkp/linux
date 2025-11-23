@@ -13,6 +13,7 @@ struct perf_sample;
 struct evsel;
 struct machine;
 struct addr_location;
+struct option;
 struct perf_dlfilter_fns;
 struct perf_dlfilter_sample;
 struct perf_dlfilter_al;

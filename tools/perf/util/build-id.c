@@ -7,38 +7,40 @@
  * Copyright (C) 2009, 2010 Red Hat Inc.
  * Copyright (C) 2009, 2010 Arnaldo Carvalho de Melo <acme@redhat.com>
  */
-#include "util.h" // lsdir(), mkdir_p(), rm_rf()
 #include <dirent.h>
 #include <errno.h>
 #include <stdio.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include "util/copyfile.h"
-#include "dso.h"
+
+#include "addr_location.h"
 #include "build-id.h"
-#include "event.h"
-#include "namespaces.h"
-#include "map.h"
-#include "symbol.h"
-#include "thread.h"
-#include <linux/kernel.h>
+#include "copyfile.h"
 #include "debug.h"
-#include "session.h"
-#include "tool.h"
+#include "dso.h"
+#include "event.h"
 #include "header.h"
-#include "vdso.h"
+#include "map.h"
+#include "namespaces.h"
 #include "path.h"
 #include "probe-file.h"
+#include "session.h"
 #include "strlist.h"
+#include "symbol.h"
+#include "thread.h"
+#include "tool.h"
+#include "util.h" // lsdir(), mkdir_p(), rm_rf()
+#include "vdso.h"
 
 #ifdef HAVE_DEBUGINFOD_SUPPORT
 #include <elfutils/debuginfod.h>
 #endif
 
-#include <linux/ctype.h>
-#include <linux/zalloc.h>
-#include <linux/string.h>
 #include <asm/bug.h>
+#include <linux/ctype.h>
+#include <linux/kernel.h>
+#include <linux/string.h>
+#include <linux/zalloc.h>
 
 static bool no_buildid_cache;
 

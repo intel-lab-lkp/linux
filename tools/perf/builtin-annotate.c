@@ -6,45 +6,46 @@
  * look up and read DSOs and symbol information and display
  * a histogram of results, along various sorting keys.
  */
-#include "builtin.h"
-#include "perf.h"
-
-#include "util/color.h"
-#include <linux/list.h>
-#include "util/cache.h"
-#include <linux/rbtree.h>
-#include <linux/zalloc.h>
-#include "util/symbol.h"
-
-#include "util/debug.h"
-
-#include "util/evlist.h"
-#include "util/evsel.h"
-#include "util/annotate.h"
-#include "util/annotate-data.h"
-#include "util/event.h"
-#include <subcmd/parse-options.h>
-#include "util/parse-events.h"
-#include "util/sort.h"
-#include "util/hist.h"
-#include "util/dso.h"
-#include "util/machine.h"
-#include "util/map.h"
-#include "util/session.h"
-#include "util/tool.h"
-#include "util/data.h"
-#include "arch/common.h"
-#include "util/block-range.h"
-#include "util/map_symbol.h"
-#include "util/branch.h"
-#include "util/util.h"
-#include "ui/progress.h"
 
 #include <dlfcn.h>
 #include <errno.h>
+#include <inttypes.h>
+
+#include "builtin.h"
+#include "perf.h"
+
+#include "arch/common.h"
+#include "ui/progress.h"
+#include "util/addr_location.h"
+#include "util/annotate-data.h"
+#include "util/annotate.h"
+#include "util/block-range.h"
+#include "util/branch.h"
+#include "util/cache.h"
+#include "util/color.h"
+#include "util/data.h"
+#include "util/debug.h"
+#include "util/dso.h"
+#include "util/event.h"
+#include "util/evlist.h"
+#include "util/evsel.h"
+#include "util/hist.h"
+#include "util/machine.h"
+#include "util/map.h"
+#include "util/map_symbol.h"
+#include "util/parse-events.h"
+#include "util/session.h"
+#include "util/sort.h"
+#include "util/symbol.h"
+#include "util/tool.h"
+#include "util/util.h"
+
 #include <linux/bitmap.h>
 #include <linux/err.h>
-#include <inttypes.h>
+#include <linux/list.h>
+#include <linux/rbtree.h>
+#include <linux/zalloc.h>
+#include <subcmd/parse-options.h>
 
 struct perf_annotate {
 	struct perf_tool tool;

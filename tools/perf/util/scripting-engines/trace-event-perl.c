@@ -35,6 +35,7 @@
 #include <EXTERN.h>
 #include <perl.h>
 
+#include "../addr_location.h"
 #include "../callchain.h"
 #include "../dso.h"
 #include "../machine.h"

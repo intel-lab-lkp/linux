@@ -13,17 +13,18 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 
+#include "../include/perf/perf_dlfilter.h"
+#include "addr_location.h"
 #include "debug.h"
+#include "dlfilter.h"
+#include "dso.h"
 #include "event.h"
 #include "evsel.h"
-#include "dso.h"
 #include "map.h"
+#include "srcline.h"
+#include "symbol.h"
 #include "thread.h"
 #include "trace-event.h"
-#include "symbol.h"
-#include "srcline.h"
-#include "dlfilter.h"
-#include "../include/perf/perf_dlfilter.h"
 
 static void al_to_d_al(struct addr_location *al, struct perf_dlfilter_al *d_al)
 {

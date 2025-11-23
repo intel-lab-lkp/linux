@@ -3,8 +3,19 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <regex.h>
+#include <stdbool.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#include "addr_location.h"
+#include "arm64-frame-pointer-unwind-support.h"
+#include "asm/bug.h"
+#include "bpf-event.h"
+#include "branch.h"
 #include "callchain.h"
+#include "cgroup.h"
 #include "debug.h"
 #include "dso.h"
 #include "env.h"
@@ -14,37 +25,28 @@
 #include "machine.h"
 #include "map.h"
 #include "map_symbol.h"
-#include "branch.h"
 #include "mem-events.h"
 #include "mem-info.h"
 #include "path.h"
+#include "sort.h"
 #include "srcline.h"
+#include "strlist.h"
 #include "symbol.h"
 #include "synthetic-events.h"
-#include "sort.h"
-#include "strlist.h"
 #include "target.h"
 #include "thread.h"
+#include "unwind.h"
 #include "util.h"
 #include "vdso.h"
-#include <stdbool.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include "unwind.h"
-#include "linux/hash.h"
-#include "asm/bug.h"
-#include "bpf-event.h"
-#include <internal/lib.h> // page_size
-#include "cgroup.h"
-#include "arm64-frame-pointer-unwind-support.h"
-#include <api/io_dir.h>
 
+#include <api/io_dir.h>
+#include <internal/lib.h> // page_size
 #include <linux/ctype.h>
-#include <symbol/kallsyms.h>
+#include <linux/hash.h>
 #include <linux/mman.h>
 #include <linux/string.h>
 #include <linux/zalloc.h>
+#include <symbol/kallsyms.h>
 
 static struct dso *machine__kernel_dso(struct machine *machine)
 {

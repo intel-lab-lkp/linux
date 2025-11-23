@@ -8,18 +8,19 @@
 #include "builtin.h"
 #include "perf.h"
 
+#include "util/addr_location.h"
+#include "util/callchain.h"
 #include "util/data.h"
+#include "util/debug.h"
 #include "util/evlist.h"
 #include "util/evsel.h"
+#include "util/evsel_fprintf.h"
 #include "util/header.h"
 #include "util/kwork.h"
-#include "util/debug.h"
 #include "util/session.h"
+#include "util/string2.h"
 #include "util/symbol.h"
 #include "util/thread.h"
-#include "util/string2.h"
-#include "util/callchain.h"
-#include "util/evsel_fprintf.h"
 #include "util/util.h"
 
 #include <subcmd/pager.h>

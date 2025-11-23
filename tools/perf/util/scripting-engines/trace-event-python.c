@@ -34,6 +34,7 @@
 #include <event-parse.h>
 #endif
 
+#include "../addr_location.h"
 #include "../build-id.h"
 #include "../counts.h"
 #include "../debug.h"

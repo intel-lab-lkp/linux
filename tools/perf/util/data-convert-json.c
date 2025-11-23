@@ -12,20 +12,22 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "linux/compiler.h"
-#include "linux/err.h"
-#include "util/auxtrace.h"
-#include "util/debug.h"
-#include "util/dso.h"
-#include "util/event.h"
-#include "util/evsel.h"
-#include "util/evlist.h"
-#include "util/header.h"
-#include "util/map.h"
-#include "util/session.h"
-#include "util/symbol.h"
-#include "util/thread.h"
-#include "util/tool.h"
+#include "addr_location.h"
+#include "auxtrace.h"
+#include "debug.h"
+#include "dso.h"
+#include "event.h"
+#include "evlist.h"
+#include "evsel.h"
+#include "header.h"
+#include "map.h"
+#include "session.h"
+#include "symbol.h"
+#include "thread.h"
+#include "tool.h"
+
+#include <linux/compiler.h>
+#include <linux/err.h>
 
 #ifdef HAVE_LIBTRACEEVENT
 #include <event-parse.h>

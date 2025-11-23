@@ -2,15 +2,16 @@
 #include <stdlib.h>
 #include <string.h>
 #include <linux/zalloc.h>
-#include "block-info.h"
-#include "sort.h"
+#include "addr_location.h"
 #include "annotate.h"
-#include "symbol.h"
+#include "block-info.h"
 #include "dso.h"
-#include "map.h"
-#include "srcline.h"
 #include "evlist.h"
 #include "hist.h"
+#include "map.h"
+#include "sort.h"
+#include "srcline.h"
+#include "symbol.h"
 #include "ui/browsers/hists.h"
 
 static struct block_header_column {
