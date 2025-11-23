@@ -7180,8 +7180,6 @@ next:
 		if (found_key.objectid != objectid ||
 		    found_key.type != BTRFS_EXTENT_DATA_KEY)
 			goto not_found;
-		if (start + len <= found_key.offset)
-			goto not_found;
 		if (start > found_key.offset)
 			goto next;
 
