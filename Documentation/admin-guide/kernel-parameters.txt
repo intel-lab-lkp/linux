@@ -2403,8 +2403,9 @@ Kernel parameters
 
 	init=		[KNL]
 			Format: <full_path>
-			Run specified binary instead of /sbin/init as init
-			process.
+			Run specified binary instead of /sbin/init as init process
+			from root partition, used in case init was not found
+			in the initramfs.
 
 	initcall_debug	[KNL] Trace initcalls as they are executed.  Useful
 			for working out where the kernel is dying during
@@ -6292,7 +6293,7 @@ Kernel parameters
 
 	rdinit=		[KNL]
 			Format: <full_path>
-			Run specified binary instead of /init from the ramdisk,
+			Run specified binary instead of /init from the initramfs,
 			used for early userspace startup. See initrd.
 
 	rdrand=		[X86,EARLY]
