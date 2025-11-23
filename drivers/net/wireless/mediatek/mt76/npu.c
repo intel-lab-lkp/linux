@@ -304,15 +304,22 @@ static int mt76_npu_setup_tc_block_cb(enum tc_setup_type type,
 				      void *type_data, void *cb_priv)
 {
 	struct mt76_phy *phy = cb_priv;
+	struct mt76_dev *dev = phy->dev;
+	struct airoha_ppe_dev *ppe_dev;
+	int err = -EOPNOTSUPP;
 
 	if (type != TC_SETUP_CLSFLOWER)
 		return -EOPNOTSUPP;
 
-	if (!mt76_ppe_device_active(phy->dev))
-		return -EOPNOTSUPP;
+	mutex_lock(&dev->mutex);
 
-	return airoha_ppe_dev_setup_tc_block_cb(phy->dev->mmio.ppe_dev,
-						type_data);
+	ppe_dev = rcu_dereference_protected(dev->mmio.ppe_dev, &dev->mutex);
+	if (ppe_dev)
+		err = airoha_ppe_dev_setup_tc_block_cb(ppe_dev, type_data);
+
+	mutex_unlock(&dev->mutex);
+
+	return err;
 }
 
 static int mt76_npu_setup_tc_block(struct mt76_phy *phy,
