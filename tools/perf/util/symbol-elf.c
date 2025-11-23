@@ -1337,8 +1337,11 @@ static u64 ref_reloc(struct kmap *kmap)
 	return 0;
 }
 
-void __weak arch__sym_update(struct symbol *s __maybe_unused,
-		GElf_Sym *sym __maybe_unused) { }
+static void arch__sym_update(int e_machine, const GElf_Sym *sym, struct symbol *s)
+{
+	if (e_machine == EM_PPC64 || e_machine == EM_PPC)
+		s->arch_sym = sym->st_other;
+}
 
 static int dso__process_kernel_symbol(struct dso *dso, struct map *map,
 				      GElf_Sym *sym, GElf_Shdr *shdr,
@@ -1717,7 +1720,7 @@ dso__load_sym_internal(struct dso *dso, struct map *map, struct symsrc *syms_ss,
 		if (!f)
 			goto out_elf_end;
 
-		arch__sym_update(f, &sym);
+		arch__sym_update(ehdr.e_machine, &sym, f);
 
 		__symbols__insert(dso__symbols(curr_dso), f, dso__kernel(dso));
 		nr++;
