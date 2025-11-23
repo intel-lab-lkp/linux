@@ -225,6 +225,44 @@ out:
 	return ret;
 }
 
+static int fd__is_64_bit(int fd)
+{
+	u8 e_ident[EI_NIDENT];
+
+	if (lseek(fd, 0, SEEK_SET))
+		return -1;
+
+	if (readn(fd, e_ident, sizeof(e_ident)) != sizeof(e_ident))
+		return -1;
+
+	if (memcmp(e_ident, ELFMAG, SELFMAG) ||
+	    e_ident[EI_VERSION] != EV_CURRENT)
+		return -1;
+
+	return e_ident[EI_CLASS] == ELFCLASS64;
+}
+
+enum dso_type sym_min_dso__type_fd(int fd)
+{
+	Elf64_Ehdr ehdr;
+	int ret;
+
+	ret = fd__is_64_bit(fd);
+	if (ret < 0)
+		return DSO__TYPE_UNKNOWN;
+
+	if (ret)
+		return DSO__TYPE_64BIT;
+
+	if (readn(fd, &ehdr, sizeof(ehdr)) != sizeof(ehdr))
+		return DSO__TYPE_UNKNOWN;
+
+	if (ehdr.e_machine == EM_X86_64)
+		return DSO__TYPE_X32BIT;
+
+	return DSO__TYPE_32BIT;
+}
+
 #ifndef HAVE_LIBELF_SUPPORT
 int symsrc__init(struct symsrc *ss, struct dso *dso, const char *name,
 	         enum dso_binary_type type)
@@ -269,44 +307,6 @@ int dso__synthesize_plt_symbols(struct dso *dso __maybe_unused,
 				struct symsrc *ss __maybe_unused)
 {
 	return 0;
-}
-
-static int fd__is_64_bit(int fd)
-{
-	u8 e_ident[EI_NIDENT];
-
-	if (lseek(fd, 0, SEEK_SET))
-		return -1;
-
-	if (readn(fd, e_ident, sizeof(e_ident)) != sizeof(e_ident))
-		return -1;
-
-	if (memcmp(e_ident, ELFMAG, SELFMAG) ||
-	    e_ident[EI_VERSION] != EV_CURRENT)
-		return -1;
-
-	return e_ident[EI_CLASS] == ELFCLASS64;
-}
-
-enum dso_type dso__type_fd(int fd)
-{
-	Elf64_Ehdr ehdr;
-	int ret;
-
-	ret = fd__is_64_bit(fd);
-	if (ret < 0)
-		return DSO__TYPE_UNKNOWN;
-
-	if (ret)
-		return DSO__TYPE_64BIT;
-
-	if (readn(fd, &ehdr, sizeof(ehdr)) != sizeof(ehdr))
-		return DSO__TYPE_UNKNOWN;
-
-	if (ehdr.e_machine == EM_X86_64)
-		return DSO__TYPE_X32BIT;
-
-	return DSO__TYPE_32BIT;
 }
 
 int dso__load_sym(struct dso *dso, struct map *map __maybe_unused,

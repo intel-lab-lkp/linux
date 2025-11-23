@@ -1,37 +1,42 @@
 // SPDX-License-Identifier: GPL-2.0
+#include <errno.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <sys/resource.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#include "annotate-data.h"
+#include "auxtrace.h"
+#include "compress.h"
+#include "debug.h"
+#include "dso.h"
+#include "dsos.h"
+#include "env.h"
+#include "machine.h"
+#include "map.h"
+#include "namespaces.h"
+#include "path.h"
+#include "perf-libelf.h"
+#include "srcline.h"
+#include "string2.h"
+#include "symbol-minimal.h"
+#include "symbol.h"
+#include "util.h" /* O_CLOEXEC for older systems */
+#include "vdso.h"
+
 #include <asm/bug.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/zalloc.h>
-#include <sys/time.h>
-#include <sys/resource.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <stdlib.h>
+
 #ifdef HAVE_LIBBPF_SUPPORT
 #include <bpf/libbpf.h>
 #include "bpf-event.h"
 #include "bpf-utils.h"
 #endif
-#include "compress.h"
-#include "env.h"
-#include "namespaces.h"
-#include "path.h"
-#include "map.h"
-#include "symbol.h"
-#include "srcline.h"
-#include "dso.h"
-#include "dsos.h"
-#include "machine.h"
-#include "auxtrace.h"
-#include "util.h" /* O_CLOEXEC for older systems */
-#include "debug.h"
-#include "string2.h"
-#include "vdso.h"
-#include "annotate-data.h"
 
 static const char * const debuglink_paths[] = {
 	"%.0s%s",
@@ -1747,7 +1752,11 @@ enum dso_type dso__type(struct dso *dso, struct machine *machine)
 	enum dso_type type = DSO__TYPE_UNKNOWN;
 
 	if (dso__data_get_fd(dso, machine, &fd)) {
-		type = dso__type_fd(fd);
+		type = libelf_dso__type_fd(fd);
+
+		if (type == DSO__TYPE_UNKNOWN)
+			type = sym_min_dso__type_fd(fd);
+
 		dso__data_put_fd(dso);
 	}
 

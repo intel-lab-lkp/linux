@@ -4,6 +4,8 @@
 
 #include <stddef.h>
 
+#include "dso.h"
+
 struct build_id;
 
 #ifdef HAVE_LIBELF_SUPPORT
@@ -29,6 +31,7 @@ int __libelf__read_build_id(Elf *elf, void *bf, size_t size);
 int libelf__read_build_id(int _fd, const char *filename, struct build_id *bid);
 int libelf_sysfs__read_build_id(const char *filename, struct build_id *bid);
 int libelf_filename__read_debuglink(const char *filename, char *debuglink, size_t size);
+enum dso_type libelf_dso__type_fd(int fd);
 
 #else // !defined(HAVE_LIBELF_SUPPORT)
 
@@ -50,6 +53,11 @@ static inline int libelf_filename__read_debuglink(const char *filename __always_
 						  size_t size __always_unused)
 {
 	return -1;
+}
+
+enum dso_type libelf_dso__type_fd(int fd __always_unused)
+{
+	return DSO__TYPE_UNKNOWN;
 }
 
 #endif // defined(HAVE_LIBELF_SUPPORT)
