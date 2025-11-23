@@ -110,6 +110,7 @@ static inline void idr_set_cursor(struct idr *idr, unsigned int val)
 #define idr_unlock_irqrestore(idr, flags) \
 				xa_unlock_irqrestore(&(idr)->idr_rt, flags)
 
+void idr_preload_many(int nr, gfp_t gfp_mask);
 void idr_preload(gfp_t gfp_mask);
 
 int idr_alloc(struct idr *, void *ptr, int start, int end, gfp_t);

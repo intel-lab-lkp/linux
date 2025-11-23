@@ -1460,6 +1460,22 @@ int radix_tree_tagged(const struct radix_tree_root *root, unsigned int tag)
 EXPORT_SYMBOL(radix_tree_tagged);
 
 /**
+ * idr_preload_many - preload for idr_alloc()
+ * @gfp_mask: allocation mask to use for preloading
+ * @nr: how many calls to preload for
+ *
+ * Preallocate memory to use for n calls to idr_alloc().  This function
+ * returns with preemption disabled.  It will be enabled by idr_preload_end().
+ */
+void idr_preload_many(int nr, gfp_t gfp_mask)
+{
+	WARN_ON_ONCE(!nr);
+	if (__radix_tree_preload(gfp_mask, nr * IDR_PRELOAD_SIZE))
+		local_lock(&radix_tree_preloads.lock);
+}
+EXPORT_SYMBOL(idr_preload_many);
+
+/**
  * idr_preload - preload for idr_alloc()
  * @gfp_mask: allocation mask to use for preloading
  *
@@ -1468,8 +1484,7 @@ EXPORT_SYMBOL(radix_tree_tagged);
  */
 void idr_preload(gfp_t gfp_mask)
 {
-	if (__radix_tree_preload(gfp_mask, IDR_PRELOAD_SIZE))
-		local_lock(&radix_tree_preloads.lock);
+	idr_preload_many(1, gfp_mask);
 }
 EXPORT_SYMBOL(idr_preload);
 
