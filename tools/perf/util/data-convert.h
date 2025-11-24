@@ -3,11 +3,14 @@
 #define __DATA_CONVERT_H
 
 #include <stdbool.h>
+#include <linux/types.h>
 
 struct perf_data_convert_opts {
 	bool force;
 	bool all;
 	bool tod;
+	u64 range_start;
+	u64 range_end;
 };
 
 #ifdef HAVE_LIBBABELTRACE_SUPPORT

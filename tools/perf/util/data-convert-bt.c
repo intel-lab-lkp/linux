@@ -91,9 +91,13 @@ struct convert {
 	struct perf_tool	tool;
 	struct ctf_writer	writer;
 
+	u64			start;
+	u64			end;
+
 	u64			events_size;
 	u64			events_count;
 	u64			non_sample_count;
+	u64			skipped;
 
 	/* Ordered events configured queue size. */
 	u64			queue_size;
@@ -810,6 +814,12 @@ static int process_sample_event(const struct perf_tool *tool,
 
 	if (WARN_ONCE(!priv, "Failed to setup all events.\n"))
 		return 0;
+
+	if (sample->time < c->start ||
+	    (c->end && sample->time > c->end)) {
+		++c->skipped;
+		return 0;
+	}
 
 	event_class = priv->event_class;
 
@@ -1626,6 +1636,9 @@ int bt_convert__perf2ctf(const char *input, const char *path,
 	c.tool.namespaces      = perf_event__process_namespaces;
 	c.tool.ordering_requires_timestamps = true;
 
+	c.start = opts->range_start;
+	c.end = opts->range_end;
+
 	if (opts->all) {
 		c.tool.comm = process_comm_event;
 		c.tool.exit = process_exit_event;
@@ -1676,6 +1689,11 @@ int bt_convert__perf2ctf(const char *input, const char *path,
 	fprintf(stderr,
 		"[ perf data convert: Converted '%s' into CTF data '%s' ]\n",
 		data.path, path);
+
+	if (c.skipped)
+		fprintf(stderr,
+			"[ perf data convert: Skipped %" PRIu64 " samples",
+			c.skipped);
 
 	fprintf(stderr,
 		"[ perf data convert: Converted and wrote %.3f MB (%" PRIu64 " samples",

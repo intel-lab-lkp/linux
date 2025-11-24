@@ -40,6 +40,12 @@ OPTIONS for 'convert'
 --force::
 	Don't complain, do it.
 
+-s::
+	Start time, in nanoseconds. Samples before this time will not be converted.
+
+-e::
+	End time, in nanoseconds. Samples after this time will not be converted.
+
 -v::
 --verbose::
         Be more verbose (show counter open errors, etc).

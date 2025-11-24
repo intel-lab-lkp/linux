@@ -33,6 +33,8 @@ const char *to_ctf;
 struct perf_data_convert_opts opts = {
 	.force = false,
 	.all = false,
+	.range_start = 0,
+	.range_end = 0,
 };
 
 const struct option data_options[] = {
@@ -45,6 +47,8 @@ const struct option data_options[] = {
 #endif
 		OPT_BOOLEAN('f', "force", &opts.force, "don't complain, do it"),
 		OPT_BOOLEAN(0, "all", &opts.all, "Convert all events"),
+		OPT_U64('s', "start", &opts.range_start, "Earliest timestamp to convert"),
+		OPT_U64('e', "end", &opts.range_end, "Latest timestamp to convert"),
 		OPT_END()
 	};
 

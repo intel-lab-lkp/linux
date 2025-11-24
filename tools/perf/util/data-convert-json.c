@@ -35,7 +35,11 @@ struct convert_json {
 	struct perf_tool tool;
 	FILE *out;
 	bool first;
+	u64 start;
+	u64 end;
+
 	u64 events_count;
+	u64 skipped;
 };
 
 // Outputs a JSON-encoded string surrounded by quotes with characters escaped.
@@ -163,6 +167,12 @@ static int process_sample_event(const struct perf_tool *tool,
 		pr_err("Sample resolution failed!\n");
 		addr_location__exit(&al);
 		return -1;
+	}
+
+	if (sample->time < c->start ||
+	    (c->end && sample->time > c->end)) {
+		++c->skipped;
+		return 0;
 	}
 
 	++c->events_count;
@@ -320,6 +330,9 @@ int bt_convert__perf2json(const char *input_name, const char *output_name,
 	struct convert_json c = {
 		.first = true,
 		.events_count = 0,
+		.start = opts->range_start,
+		.end = opts->range_end,
+		.skipped = 0,
 	};
 	struct perf_data data = {
 		.mode = PERF_DATA_MODE_READ,
@@ -406,6 +419,11 @@ int bt_convert__perf2json(const char *input_name, const char *output_name,
 	fprintf(stderr,
 			"[ perf data convert: Converted '%s' into JSON data '%s' ]\n",
 			data.path, output_name);
+
+	if (c.skipped)
+		fprintf(stderr,
+				"[ perf data convert: Skipped %" PRIu64 " samples.\n",
+				c.skipped);
 
 	fprintf(stderr,
 			"[ perf data convert: Converted and wrote %.3f MB (%" PRIu64 " samples) ]\n",
