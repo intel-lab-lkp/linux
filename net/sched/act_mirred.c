@@ -453,7 +453,7 @@ TC_INDIRECT_SCOPE int tcf_mirred_act(struct sk_buff *skb,
 		return retval;
 	}
 
-	xmit->sched_mirred_dev[xmit->sched_mirred_nest++] = dev;
+	xmit->sched_mirred_dev[xmit->sched_mirred_nest++] = skb->dev;
 
 	m_mac_header_xmit = READ_ONCE(m->tcfm_mac_header_xmit);
 	m_eaction = READ_ONCE(m->tcfm_eaction);
