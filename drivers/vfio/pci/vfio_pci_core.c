@@ -1624,6 +1624,34 @@ static unsigned long vma_to_pfn(struct vm_area_struct *vma)
 	return (pci_resource_start(vdev->pdev, index) >> PAGE_SHIFT) + pgoff;
 }
 
+vm_fault_t vfio_pci_vmf_insert_pfn(struct vm_fault *vmf,
+				   unsigned long pfn,
+				   unsigned int order)
+{
+	vm_fault_t ret;
+
+	switch (order) {
+	case 0:
+		ret = vmf_insert_pfn(vmf->vma, vmf->address, pfn);
+		break;
+#ifdef CONFIG_ARCH_SUPPORTS_PMD_PFNMAP
+	case PMD_ORDER:
+		ret = vmf_insert_pfn_pmd(vmf, pfn, false);
+		break;
+#endif
+#ifdef CONFIG_ARCH_SUPPORTS_PUD_PFNMAP
+	case PUD_ORDER:
+		ret = vmf_insert_pfn_pud(vmf, pfn, false);
+		break;
+#endif
+	default:
+		ret = VM_FAULT_FALLBACK;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(vfio_pci_vmf_insert_pfn);
+
 static vm_fault_t vfio_pci_mmap_huge_fault(struct vm_fault *vmf,
 					   unsigned int order)
 {
@@ -1646,23 +1674,7 @@ static vm_fault_t vfio_pci_mmap_huge_fault(struct vm_fault *vmf,
 	if (vdev->pm_runtime_engaged || !__vfio_pci_memory_enabled(vdev))
 		goto out_unlock;
 
-	switch (order) {
-	case 0:
-		ret = vmf_insert_pfn(vma, vmf->address, pfn);
-		break;
-#ifdef CONFIG_ARCH_SUPPORTS_PMD_PFNMAP
-	case PMD_ORDER:
-		ret = vmf_insert_pfn_pmd(vmf, pfn, false);
-		break;
-#endif
-#ifdef CONFIG_ARCH_SUPPORTS_PUD_PFNMAP
-	case PUD_ORDER:
-		ret = vmf_insert_pfn_pud(vmf, pfn, false);
-		break;
-#endif
-	default:
-		ret = VM_FAULT_FALLBACK;
-	}
+	ret = vfio_pci_vmf_insert_pfn(vmf, pfn, order);
 
 out_unlock:
 	up_read(&vdev->memory_lock);
