@@ -13,14 +13,14 @@
 
 struct ttm_device;
 struct ttm_resource_manager;
-struct drm_buddy;
+struct gpu_buddy;
 
 /**
  * struct i915_ttm_buddy_resource
  *
  * @base: struct ttm_resource base class we extend
  * @blocks: the list of struct i915_buddy_block for this resource/allocation
- * @flags: DRM_BUDDY_*_ALLOCATION flags
+ * @flags: GPU_BUDDY_*_ALLOCATION flags
  * @used_visible_size: How much of this resource, if any, uses the CPU visible
  * portion, in pages.
  * @mm: the struct i915_buddy_mm for this resource
@@ -33,7 +33,7 @@ struct i915_ttm_buddy_resource {
 	struct list_head blocks;
 	unsigned long flags;
 	unsigned long used_visible_size;
-	struct drm_buddy *mm;
+	struct gpu_buddy *mm;
 };
 
 /**
