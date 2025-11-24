@@ -4640,9 +4640,74 @@ static int pci_bus_max_d3cold_delay(const struct pci_bus *bus)
 	return max(min_delay, max_delay);
 }
 
+int __pci_bridge_wait_for_secondary_bus(struct pci_dev *, unsigned long, char *);
+
+static int pci_dev_wait_child(struct pci_dev *pdev, unsigned long start_t, int timeout,
+				char *reset_type)
+{
+	struct pci_dev *child, **dev = NULL;
+	int ct = 0, i = 0, ret = 0, left = 1;
+	unsigned long dev_start_t;
+
+	down_read(&pci_bus_sem);
+
+	list_for_each_entry(child, &pdev->subordinate->devices, bus_list)
+		ct++;
+
+	if (ct) {
+		dev = kzalloc(sizeof(struct pci_dev *) * ct, GFP_KERNEL);
+
+		if(!dev) {
+			pci_err(pdev, "dev mem alloc err\n");
+			up_read(&pci_bus_sem);
+			return -ENOMEM;
+		}
+
+		list_for_each_entry(child, &pdev->subordinate->devices, bus_list)
+			dev[i++] = pci_dev_get(child);
+	}
+
+	up_read(&pci_bus_sem);
+
+	for (i = 0; i < ct; ++i) {
+		left = 1;
+
+dev_wait:
+		dev_start_t = jiffies;
+		ret = pci_dev_wait(dev[i], reset_type, left);
+		timeout -= jiffies_to_msecs(jiffies - dev_start_t);
+
+		if (ret) {
+			if (pci_dev_is_disconnected(dev[i]))
+				continue;
+
+			if (timeout <= 0)
+				goto end;
+
+			left <<= 1;
+			left = timeout > left ? left : timeout;
+			goto dev_wait;
+		}
+	}
+
+	for (i = 0; i < ct; ++i) {
+		ret = __pci_bridge_wait_for_secondary_bus(dev[i], start_t, reset_type);
+		if (ret)
+			break;
+	}
+
+end:
+	for (i = 0; i < ct; ++i)
+		pci_dev_put(dev[i]);
+
+	kfree(dev);
+	return ret;
+}
+
 /**
- * pci_bridge_wait_for_secondary_bus - Wait for secondary bus to be accessible
+ * __pci_bridge_wait_for_secondary_bus - Wait for secondary bus to be accessible
  * @dev: PCI bridge
+ * @start_t: wait start jiffies time
  * @reset_type: reset type in human-readable form
  *
  * Handle necessary delays before access to the devices on the secondary
@@ -4656,10 +4721,9 @@ static int pci_bus_max_d3cold_delay(const struct pci_bus *bus)
  * Return 0 on success or -ENOTTY if the first device on the secondary bus
  * failed to become accessible.
  */
-int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
+int __pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, unsigned long start_t, char *reset_type)
 {
-	struct pci_dev *child __free(pci_dev_put) = NULL;
-	int delay;
+	int delay, left;
 
 	if (pci_dev_is_disconnected(dev))
 		return 0;
@@ -4687,8 +4751,6 @@ int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
 		return 0;
 	}
 
-	child = pci_dev_get(list_first_entry(&dev->subordinate->devices,
-					     struct pci_dev, bus_list));
 	up_read(&pci_bus_sem);
 
 	/*
@@ -4696,8 +4758,12 @@ int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
 	 * accessing the device after reset (that is 1000 ms + 100 ms).
 	 */
 	if (!pci_is_pcie(dev)) {
-		pci_dbg(dev, "waiting %d ms for secondary bus\n", 1000 + delay);
-		msleep(1000 + delay);
+		left = 1000 + delay - jiffies_to_msecs(jiffies - start_t);
+		pci_dbg(dev, "waiting %d ms for secondary bus\n", left > 0 ? left : 0);
+
+		if (left > 0)
+			msleep(left);
+
 		return 0;
 	}
 
@@ -4722,10 +4788,14 @@ int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
 	if (pcie_get_speed_cap(dev) <= PCIE_SPEED_5_0GT) {
 		u16 status;
 
-		pci_dbg(dev, "waiting %d ms for downstream link\n", delay);
-		msleep(delay);
+		left = delay - jiffies_to_msecs(jiffies - start_t);
+		pci_dbg(dev, "waiting %d ms for downstream link\n", left > 0 ? left : 0);
 
-		if (!pci_dev_wait(child, reset_type, PCI_RESET_WAIT - delay))
+		if (left > 0)
+			msleep(left);
+
+		left = PCI_RESET_WAIT - jiffies_to_msecs(jiffies - start_t);
+		if(!pci_dev_wait_child(dev, start_t, left > 0 ? left : 0, reset_type))
 			return 0;
 
 		/*
@@ -4740,20 +4810,26 @@ int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
 		if (!(status & PCI_EXP_LNKSTA_DLLLA))
 			return -ENOTTY;
 
-		return pci_dev_wait(child, reset_type,
-				    PCIE_RESET_READY_POLL_MS - PCI_RESET_WAIT);
+		left = PCIE_RESET_READY_POLL_MS - jiffies_to_msecs(jiffies - start_t);
+		return pci_dev_wait_child(dev, start_t, left > 0 ? left : 0, reset_type);
 	}
 
-	pci_dbg(dev, "waiting %d ms for downstream link, after activation\n",
-		delay);
-	if (!pcie_wait_for_link_delay(dev, true, delay)) {
+	left = delay - jiffies_to_msecs(jiffies - start_t);
+	pci_dbg(dev, "waiting %d ms for downstream link, after activation\n", left > 0 ? left : 0);
+
+	if (!pcie_wait_for_link_delay(dev, true, left > 0 ? left : 0)) {
 		/* Did not train, no need to wait any further */
 		pci_info(dev, "Data Link Layer Link Active not set in %d msec\n", delay);
 		return -ENOTTY;
 	}
 
-	return pci_dev_wait(child, reset_type,
-			    PCIE_RESET_READY_POLL_MS - delay);
+	left = PCIE_RESET_READY_POLL_MS - jiffies_to_msecs(jiffies - start_t);
+	return pci_dev_wait_child(dev, start_t, left > 0 ? left : 0, reset_type);
+}
+
+int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
+{
+	return __pci_bridge_wait_for_secondary_bus(dev, jiffies, reset_type);
 }
 
 void pci_reset_secondary_bus(struct pci_dev *dev)
