@@ -300,6 +300,7 @@ static struct notifier_block pv_reboot_nb = {
 int __init pv_time_init(void)
 {
 	int r;
+	bool pv_preempted = false;
 
 	if (!kvm_para_has_feature(KVM_FEATURE_STEAL_TIME))
 		return 0;
@@ -322,8 +323,10 @@ int __init pv_time_init(void)
 		return r;
 	}
 
-	if (kvm_para_has_feature(KVM_FEATURE_PREEMPT))
+	if (kvm_para_has_feature(KVM_FEATURE_PREEMPT)) {
 		static_branch_enable(&virt_preempt_key);
+		pv_preempted = true;
+	}
 #endif
 
 	static_call_update(pv_steal_clock, paravt_steal_clock);
@@ -334,7 +337,10 @@ int __init pv_time_init(void)
 		static_key_slow_inc(&paravirt_steal_rq_enabled);
 #endif
 
-	pr_info("Using paravirt steal-time\n");
+	if (pv_preempted)
+		pr_info("Using paravirt steal-time with preempt hint enabled\n");
+	else
+		pr_info("Using paravirt steal-time with preempt hint disabled\n");
 
 	return 0;
 }
