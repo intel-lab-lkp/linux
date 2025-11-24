@@ -119,11 +119,54 @@
 
 	shrl  $6, LEN64B
 	jz	.Lhandle_tail\@     /* < 64 */
+.if USE_APX
+	cmpl  $3, LEN64B
+	jb	.Lloop_64\@         /* < 192 */
+	clc
+	.p2align 4
+.Lloop_192\@:
+	.set  TMP9, %r16
+	.set  TMP10, %r17
+	.set  TMP11, %r18
+	.set  TMP12, %r19
+	.set  TMP13, %r20
+	.set  TMP14, %r21
+	.set  TMP15, %r22
+	.set  TMP16, %r23
+	.set  TMP17, %r24
+	.set  TMP18, %r25
+	.set  TMP19, %r26
+	.set  TMP20, %r27
+	.set  TMP21, %r28
+	.set  TMP22, %r29
+	.set  TMP23, %r30
+	.set  TMP24, %r31
 
+	.p2align 4
+	loadregs 0, INP, TMP1, TMP2, TMP3, TMP4, TMP5, TMP6, TMP7, TMP8
+	loadregs 8, INP, TMP9, TMP10, TMP11, TMP12, TMP13, TMP14, TMP15, TMP16
+	loadregs 16, INP, TMP17, TMP18, TMP19, TMP20, TMP21, TMP22, TMP23, TMP24
+
+	sumregs SUM, TMP1, TMP2, TMP3, TMP4, TMP5, TMP6, TMP7, TMP8
+	sumregs SUM, TMP9, TMP10, TMP11, TMP12, TMP13, TMP14, TMP15, TMP16
+	sumregs SUM, TMP17, TMP18, TMP19, TMP20, TMP21, TMP22, TMP23, TMP24
+
+	storeregs 0, OUTP, TMP1, TMP2, TMP3, TMP4, TMP5, TMP6, TMP7, TMP8
+	storeregs 8, OUTP, TMP9, TMP10, TMP11, TMP12, TMP13, TMP14, TMP15, TMP16
+	storeregs 16, OUTP, TMP17, TMP18, TMP19, TMP20, TMP21, TMP22, TMP23, TMP24
+
+	incr INP, 24
+	incr OUTP, 24
+
+	sub  $3, LEN64B
+	cmp  $3, LEN64B
+	jnb	.Lloop_192\@
+.else
 	clc
 
 	.p2align 4
-.Lloop\@:
+.endif
+.Lloop_64\@:
 	loadregs 0, INP, TMP1, TMP2, TMP3, TMP4, TMP5, TMP6, TMP7, TMP8
 
 	prefetch
@@ -137,7 +180,7 @@
 	incr INP, 8
 	incr OUTP, 8
 
-	jnz	.Lloop\@
+	jnz	.Lloop_64\@
 
 	adcq  ZERO, SUM
 
@@ -260,6 +303,14 @@
 	xorl %eax, %eax
 	restore_regs_and_ret
 
-SYM_FUNC_START(csum_partial_copy_generic)
+.set	USE_APX, 0
+SYM_FUNC_START(csum_partial_copy)
 	_csum_partial_copy
-SYM_FUNC_END(csum_partial_copy_generic)
+SYM_FUNC_END(csum_partial_copy)
+
+#ifdef CONFIG_X86_APX
+.set	USE_APX, 1
+SYM_FUNC_START(csum_partial_copy_apx)
+	_csum_partial_copy
+SYM_FUNC_END(csum_partial_copy_apx)
+#endif

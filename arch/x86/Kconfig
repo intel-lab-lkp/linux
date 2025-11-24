@@ -1890,6 +1890,12 @@ config X86_USER_SHADOW_STACK
 
 	  If unsure, say N.
 
+config X86_APX
+	bool "In-kernel APX use"
+	depends on AS_APX
+	help
+	  Experimental: enable in-kernel use of APX
+
 config INTEL_TDX_HOST
 	bool "Intel Trust Domain Extensions (TDX) host support"
 	depends on CPU_SUP_INTEL

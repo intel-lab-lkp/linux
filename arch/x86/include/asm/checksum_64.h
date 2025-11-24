@@ -10,6 +10,7 @@
 
 #include <linux/compiler.h>
 #include <asm/byteorder.h>
+#include <asm/fpu/api.h>
 
 /**
  * csum_fold - Fold and invert a 32bit checksum.
@@ -129,7 +130,28 @@ static inline __sum16 csum_tcpudp_magic(__be32 saddr, __be32 daddr,
 extern __wsum csum_partial(const void *buff, int len, __wsum sum);
 
 /* Do not call this directly. Use the wrappers below */
-extern __visible __wsum csum_partial_copy_generic(const void *src, void *dst, int len);
+extern __visible __wsum csum_partial_copy(const void *src, void *dst, int len);
+#ifndef CONFIG_X86_APX
+static inline __wsum csum_partial_copy_generic(const void *src, void *dst, int len)
+{
+	return csum_partial_copy(src, dst, len);
+}
+#else
+extern __visible __wsum csum_partial_copy_apx(const void *src, void *dst, int len);
+static inline __wsum csum_partial_copy_generic(const void *src, void *dst, int len)
+{
+	__wsum sum;
+
+	if (!cpu_has_xfeatures(XFEATURE_MASK_APX, NULL) || !irq_fpu_usable())
+		return csum_partial_copy(src, dst, len);
+
+	kernel_fpu_begin();
+	sum = csum_partial_copy_apx(src, dst, len);
+	kernel_fpu_end();
+
+	return sum;
+}
+#endif
 
 extern __wsum csum_and_copy_from_user(const void __user *src, void *dst, int len);
 extern __wsum csum_and_copy_to_user(const void *src, void __user *dst, int len);
