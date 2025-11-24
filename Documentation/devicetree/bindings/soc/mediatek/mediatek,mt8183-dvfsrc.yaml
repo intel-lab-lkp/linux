@@ -26,6 +26,7 @@ properties:
           - mediatek,mt6893-dvfsrc
           - mediatek,mt8183-dvfsrc
           - mediatek,mt8195-dvfsrc
+          - mediatek,mt8196-dvfsrc
       - items:
           - const: mediatek,mt8192-dvfsrc
           - const: mediatek,mt8195-dvfsrc
