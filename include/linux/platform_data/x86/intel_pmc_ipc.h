@@ -89,6 +89,7 @@ static inline int intel_pmc_ipc(struct pmc_ipc_cmd *ipc_cmd, struct pmc_ipc_rbuf
 		return -EINVAL;
 	}
 
+	kfree (obj);
 	return 0;
 #else
 	return -ENODEV;
