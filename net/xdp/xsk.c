@@ -276,7 +276,7 @@ static int __xsk_rcv(struct xdp_sock *xs, struct xdp_buff *xdp, u32 len)
 		xs->rx_dropped++;
 		return -ENOMEM;
 	}
-	if (xskq_prod_nb_free(xs->rx, num_desc) < num_desc) {
+	if (xskq_prod_nb_free(xs->rx, num_desc, false) < num_desc) {
 		xs->rx_queue_full++;
 		return -ENOBUFS;
 	}
@@ -519,7 +519,7 @@ u32 xsk_tx_peek_release_desc_batch(struct xsk_buff_pool *pool, u32 nb_pkts)
 	 * packets. This avoids having to implement any buffering in
 	 * the Tx path.
 	 */
-	nb_pkts = xskq_prod_nb_free(pool->cq, nb_pkts);
+	nb_pkts = xskq_prod_nb_free(pool->cq, nb_pkts, false);
 	if (!nb_pkts)
 		goto out;
 
@@ -551,7 +551,7 @@ static int xsk_cq_reserve_locked(struct xsk_buff_pool *pool)
 	int ret;
 
 	spin_lock(&pool->cq_cached_prod_lock);
-	ret = xskq_prod_reserve(pool->cq);
+	ret = xskq_prod_reserve(pool->cq, false);
 	spin_unlock(&pool->cq_cached_prod_lock);
 
 	return ret;
@@ -588,7 +588,7 @@ static void xsk_cq_submit_addr_locked(struct xsk_buff_pool *pool,
 static void xsk_cq_cancel_locked(struct xsk_buff_pool *pool, u32 n)
 {
 	spin_lock(&pool->cq_cached_prod_lock);
-	xskq_prod_cancel_n(pool->cq, n);
+	xskq_prod_cancel_n(pool->cq, n, false);
 	spin_unlock(&pool->cq_cached_prod_lock);
 }
 

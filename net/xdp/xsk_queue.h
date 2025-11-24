@@ -378,37 +378,44 @@ static inline u32 xskq_get_prod(struct xsk_queue *q)
 	return READ_ONCE(q->ring->producer);
 }
 
-static inline u32 xskq_prod_nb_free(struct xsk_queue *q, u32 max)
+static inline u32 xskq_prod_nb_free(struct xsk_queue *q, u32 max, bool atomic)
 {
-	u32 free_entries = q->nentries - (q->cached_prod - q->cached_cons);
+	u32 cached_prod = atomic ? atomic_read(&q->cached_prod_atomic) : q->cached_prod;
+	u32 free_entries = q->nentries - (cached_prod - q->cached_cons);
 
 	if (free_entries >= max)
 		return max;
 
 	/* Refresh the local tail pointer */
 	q->cached_cons = READ_ONCE(q->ring->consumer);
-	free_entries = q->nentries - (q->cached_prod - q->cached_cons);
+	free_entries = q->nentries - (cached_prod - q->cached_cons);
 
 	return free_entries >= max ? max : free_entries;
 }
 
-static inline bool xskq_prod_is_full(struct xsk_queue *q)
+static inline bool xskq_prod_is_full(struct xsk_queue *q, bool atomic)
 {
-	return xskq_prod_nb_free(q, 1) ? false : true;
+	return xskq_prod_nb_free(q, 1, atomic) ? false : true;
 }
 
-static inline void xskq_prod_cancel_n(struct xsk_queue *q, u32 cnt)
+static inline void xskq_prod_cancel_n(struct xsk_queue *q, u32 cnt, bool atomic)
 {
-	q->cached_prod -= cnt;
+	if (atomic)
+		atomic_sub(cnt, &q->cached_prod_atomic);
+	else
+		q->cached_prod -= cnt;
 }
 
-static inline int xskq_prod_reserve(struct xsk_queue *q)
+static inline int xskq_prod_reserve(struct xsk_queue *q, bool atomic)
 {
-	if (xskq_prod_is_full(q))
+	if (xskq_prod_is_full(q, atomic))
 		return -ENOSPC;
 
 	/* A, matches D */
-	q->cached_prod++;
+	if (atomic)
+		atomic_inc(&q->cached_prod_atomic);
+	else
+		q->cached_prod++;
 	return 0;
 }
 
@@ -416,7 +423,7 @@ static inline int xskq_prod_reserve_addr(struct xsk_queue *q, u64 addr)
 {
 	struct xdp_umem_ring *ring = (struct xdp_umem_ring *)q->ring;
 
-	if (xskq_prod_is_full(q))
+	if (xskq_prod_is_full(q, false))
 		return -ENOSPC;
 
 	/* A, matches D */
@@ -450,7 +457,7 @@ static inline int xskq_prod_reserve_desc(struct xsk_queue *q,
 	struct xdp_rxtx_ring *ring = (struct xdp_rxtx_ring *)q->ring;
 	u32 idx;
 
-	if (xskq_prod_is_full(q))
+	if (xskq_prod_is_full(q, false))
 		return -ENOBUFS;
 
 	/* A, matches D */
