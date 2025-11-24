@@ -98,6 +98,8 @@ struct dm_crypt_request {
 	struct convert_context *ctx;
 	struct scatterlist sg_in[4];
 	struct scatterlist sg_out[4];
+	struct scatterlist *__sg_in;
+	struct scatterlist *__sg_out;
 	u64 iv_sector;
 };
 
@@ -1305,6 +1307,8 @@ static int crypt_convert_block_aead(struct crypt_config *cc,
 	if (test_bit(CRYPT_IV_LARGE_SECTORS, &cc->cipher_flags))
 		dmreq->iv_sector >>= cc->sector_shift;
 	dmreq->ctx = ctx;
+	dmreq->__sg_in = NULL;
+	dmreq->__sg_out = NULL;
 
 	*org_tag_of_dmreq(cc, dmreq) = tag_offset;
 
@@ -1384,18 +1388,22 @@ static int crypt_convert_block_aead(struct crypt_config *cc,
 	return r;
 }
 
-static int crypt_build_sgl(struct crypt_config *cc, struct scatterlist *sg,
+static int crypt_build_sgl(struct crypt_config *cc, struct scatterlist **psg,
 			   struct bvec_iter *iter, struct bio *bio,
 			   int max_segs)
 {
 	unsigned int bytes = cc->sector_size;
+	struct scatterlist *sg = *psg;
 	struct bvec_iter tmp = *iter;
 	int segs, i = 0;
 
 	bio_advance_iter(bio, &tmp, bytes);
 	segs = tmp.bi_idx - iter->bi_idx + !!tmp.bi_bvec_done;
-	if (segs > max_segs)
-		return -EIO;
+	if (segs > max_segs) {
+		sg = kmalloc_array(segs, sizeof(struct scatterlist), GFP_NOIO);
+		if (!sg)
+			return -ENOMEM;
+	}
 
 	sg_init_table(sg, segs);
 	do {
@@ -1405,7 +1413,7 @@ static int crypt_build_sgl(struct crypt_config *cc, struct scatterlist *sg,
 		/* Reject unexpected unaligned bio. */
 		if (unlikely((len | bv.bv_offset) &
 				bdev_dma_alignment(cc->dev->bdev)))
-			return -EIO;
+			goto error;
 
 		sg_set_page(&sg[i++], bv.bv_page, len, bv.bv_offset);
 		bio_advance_iter_single(bio, iter, len);
@@ -1413,8 +1421,13 @@ static int crypt_build_sgl(struct crypt_config *cc, struct scatterlist *sg,
 	} while (bytes);
 
 	if (WARN_ON_ONCE(i != segs))
-		return -EINVAL;
+		goto error;
+	*psg = sg;
 	return 0;
+error:
+	if (sg != *psg)
+		kfree(sg);
+	return -EIO;
 }
 
 static int crypt_convert_block_skcipher(struct crypt_config *cc,
@@ -1443,18 +1456,26 @@ static int crypt_convert_block_skcipher(struct crypt_config *cc,
 	sector = org_sector_of_dmreq(cc, dmreq);
 	*sector = cpu_to_le64(ctx->cc_sector - cc->iv_offset);
 
+	dmreq->__sg_in = NULL;
+	dmreq->__sg_out = NULL;
 	sg_in  = &dmreq->sg_in[0];
 	sg_out = &dmreq->sg_out[0];
 
-	r = crypt_build_sgl(cc, sg_in, &ctx->iter_in, ctx->bio_in,
+	r = crypt_build_sgl(cc, &sg_in, &ctx->iter_in, ctx->bio_in,
 			    ARRAY_SIZE(dmreq->sg_in));
 	if (r < 0)
 		return r;
+	else if (sg_in != dmreq->sg_in)
+		dmreq->__sg_in = sg_in;
 
-	r = crypt_build_sgl(cc, sg_out, &ctx->iter_out, ctx->bio_out,
+	r = crypt_build_sgl(cc, &sg_out, &ctx->iter_out, ctx->bio_out,
 			    ARRAY_SIZE(dmreq->sg_out));
-	if (r < 0)
+	if (r < 0) {
+		kfree(dmreq->__sg_in);
 		return r;
+	} else if (sg_out != dmreq->sg_out) {
+		dmreq->__sg_in = sg_out;
+	}
 
 	if (cc->iv_gen_ops) {
 		/* For READs use IV stored in integrity metadata */
@@ -1463,7 +1484,7 @@ static int crypt_convert_block_skcipher(struct crypt_config *cc,
 		} else {
 			r = cc->iv_gen_ops->generator(cc, org_iv, dmreq);
 			if (r < 0)
-				return r;
+				goto out;
 			/* Data can be already preprocessed in generator */
 			if (test_bit(CRYPT_ENCRYPT_PREPROCESS, &cc->cipher_flags))
 				sg_in = sg_out;
@@ -1485,6 +1506,13 @@ static int crypt_convert_block_skcipher(struct crypt_config *cc,
 	if (!r && cc->iv_gen_ops && cc->iv_gen_ops->post)
 		r = cc->iv_gen_ops->post(cc, org_iv, dmreq);
 
+out:
+	if (r == -EINPROGRESS && r == -EBUSY) {
+		kfree(dmreq->__sg_in);
+		kfree(dmreq->__sg_out);
+		dmreq->__sg_in = NULL;
+		dmreq->__sg_out = NULL;
+	}
 	return r;
 }
 
@@ -2260,6 +2288,8 @@ static void kcryptd_async_done(void *data, int error)
 	} else if (error < 0)
 		io->error = BLK_STS_IOERR;
 
+	kfree(dmreq->__sg_in);
+	kfree(dmreq->__sg_out);
 	crypt_free_req(cc, req_of_dmreq(cc, dmreq), io->base_bio);
 
 	if (!atomic_dec_and_test(&ctx->cc_pending))
