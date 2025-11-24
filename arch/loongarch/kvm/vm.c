@@ -45,8 +45,10 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 
 	/* Enable all PV features by default */
 	kvm->arch.pv_features = BIT(KVM_FEATURE_IPI);
-	if (kvm_pvtime_supported())
+	if (kvm_pvtime_supported()) {
 		kvm->arch.pv_features |= BIT(KVM_FEATURE_STEAL_TIME);
+		kvm->arch.pv_features |= BIT(KVM_FEATURE_PREEMPT);
+	}
 
 	/*
 	 * cpu_vabits means user address space only (a half of total).
@@ -143,6 +145,7 @@ static int kvm_vm_feature_has_attr(struct kvm *kvm, struct kvm_device_attr *attr
 	case KVM_LOONGARCH_VM_FEAT_PV_IPI:
 		return 0;
 	case KVM_LOONGARCH_VM_FEAT_PV_STEALTIME:
+	case KVM_LOONGARCH_VM_FEAT_PV_PREEMPT:
 		if (kvm_pvtime_supported())
 			return 0;
 		return -ENXIO;
