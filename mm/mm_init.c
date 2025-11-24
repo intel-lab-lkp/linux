@@ -2566,19 +2566,15 @@ static void __init mem_debugging_and_hardening_init(void)
 		_init_on_free_enabled_early = false;
 	}
 
-	if (_init_on_alloc_enabled_early) {
-		want_check_pages = true;
+	if (_init_on_alloc_enabled_early)
 		static_branch_enable(&init_on_alloc);
-	} else {
+	else
 		static_branch_disable(&init_on_alloc);
-	}
 
-	if (_init_on_free_enabled_early) {
-		want_check_pages = true;
+	if (_init_on_free_enabled_early)
 		static_branch_enable(&init_on_free);
-	} else {
+	else
 		static_branch_disable(&init_on_free);
-	}
 
 	if (IS_ENABLED(CONFIG_KMSAN) &&
 	    (_init_on_alloc_enabled_early || _init_on_free_enabled_early))
