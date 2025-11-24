@@ -1069,6 +1069,15 @@
 					opp-avg-kBps = <390000 0>;
 				};
 			};
+
+			qcom,ice = <&sdhc_ice>;
+		};
+
+		sdhc_ice: crypto@7C8000 {
+			compatible = "qcom,sc7280-inline-crypto-engine",
+				     "qcom,inline-crypto-engine";
+			reg = <0x0 0x007C8000 0x0 0x18000>;
+			clocks = <&gcc GCC_SDCC1_ICE_CORE_CLK>;
 		};
 
 		gpi_dma0: dma-controller@900000 {
