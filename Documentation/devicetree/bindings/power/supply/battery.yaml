@@ -44,6 +44,7 @@ properties:
       - const: lithium-ion-polymer
       - const: lithium-ion-iron-phosphate
       - const: lithium-ion-manganese-oxide
+      - const: lithium-ion-silicon-anode
 
   over-voltage-threshold-microvolt:
     description: battery over-voltage limit
