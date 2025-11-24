@@ -4637,6 +4637,10 @@ static struct gpio_desc *gpiod_find_by_fwnode(struct fwnode_handle *fwnode,
 	const char *name = function_name_or_default(con_id);
 	struct gpio_desc *desc = ERR_PTR(-ENOENT);
 
+	if (gpiod_count(consumer, con_id) > 1)
+		dev_warn(consumer, "gpio property \"%s\" in %pfw has more than one elements, expected only one!\n",
+			 con_id, fwnode);
+
 	if (is_of_node(fwnode)) {
 		dev_dbg(consumer, "using DT '%pfw' for '%s' GPIO lookup\n", fwnode, name);
 		desc = of_find_gpio(to_of_node(fwnode), con_id, idx, lookupflags);
