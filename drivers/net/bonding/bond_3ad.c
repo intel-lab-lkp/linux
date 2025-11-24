@@ -205,6 +205,7 @@ static void __enable_collecting_port(struct port *port)
  */
 static inline void __disable_port(struct port *port)
 {
+	port->sm_rx_state = AD_RX_PORT_DISABLED;
 	bond_set_slave_inactive_flags(port->slave, BOND_SLAVE_NOTIFY_LATER);
 }
 
