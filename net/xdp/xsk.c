@@ -548,13 +548,7 @@ static int xsk_wakeup(struct xdp_sock *xs, u8 flags)
 
 static int xsk_cq_reserve_locked(struct xsk_buff_pool *pool)
 {
-	int ret;
-
-	spin_lock(&pool->cq_cached_prod_lock);
-	ret = xskq_prod_reserve(pool->cq, false);
-	spin_unlock(&pool->cq_cached_prod_lock);
-
-	return ret;
+	return xskq_prod_reserve(pool->cq, true);
 }
 
 static void xsk_cq_submit_addr_locked(struct xsk_buff_pool *pool,
@@ -587,9 +581,7 @@ static void xsk_cq_submit_addr_locked(struct xsk_buff_pool *pool,
 
 static void xsk_cq_cancel_locked(struct xsk_buff_pool *pool, u32 n)
 {
-	spin_lock(&pool->cq_cached_prod_lock);
-	xskq_prod_cancel_n(pool->cq, n, false);
-	spin_unlock(&pool->cq_cached_prod_lock);
+	xskq_prod_cancel_n(pool->cq, n, true);
 }
 
 static void xsk_inc_num_desc(struct sk_buff *skb)
