@@ -3016,7 +3016,8 @@ static int do_free_extent_accounting(struct btrfs_trans_handle *trans,
 #define abort_and_dump(trans, path, fmt, args...)	\
 ({							\
 	btrfs_abort_transaction(trans, -EUCLEAN);	\
-	btrfs_print_leaf(path->nodes[0]);		\
+	if (path->nodes[0])				\
+		btrfs_print_leaf(path->nodes[0]);	\
 	btrfs_crit(trans->fs_info, fmt, ##args);	\
 })
 
@@ -3130,112 +3131,109 @@ static int __btrfs_free_extent(struct btrfs_trans_handle *trans,
 	ret = lookup_extent_backref(trans, path, &iref, bytenr, num_bytes,
 				    node->parent, node->ref_root, owner_objectid,
 				    owner_offset);
-	if (ret == 0) {
-		/*
-		 * Either the inline backref or the SHARED_DATA_REF/
-		 * SHARED_BLOCK_REF is found
-		 *
-		 * Here is a quick path to locate EXTENT/METADATA_ITEM.
-		 * It's possible the EXTENT/METADATA_ITEM is near current slot.
-		 */
-		extent_slot = path->slots[0];
-		while (extent_slot >= 0) {
-			btrfs_item_key_to_cpu(path->nodes[0], &key,
-					      extent_slot);
-			if (key.objectid != bytenr)
-				break;
-			if (key.type == BTRFS_EXTENT_ITEM_KEY &&
-			    key.offset == num_bytes) {
-				found_extent = 1;
-				break;
-			}
-			if (key.type == BTRFS_METADATA_ITEM_KEY &&
-			    key.offset == owner_objectid) {
-				found_extent = 1;
-				break;
-			}
+	if (ret) {
+		abort_and_dump(trans, path,
+"unable to find ref byte nr %llu parent %llu root %llu owner %llu offset %llu slot %d ret %d",
+			       bytenr, node->parent, node->ref_root, owner_objectid,
+			       owner_offset, path->slots[0], ret);
+		goto out;
+	}
 
-			/* Quick path didn't find the EXTENT/METADATA_ITEM */
-			if (path->slots[0] - extent_slot > 5)
-				break;
-			extent_slot--;
+	/*
+	 * Either the inline backref or the SHARED_DATA_REF/SHARED_BLOCK_REF
+	 * is found
+	 *
+	 * Here is a quick path to locate EXTENT/METADATA_ITEM.
+	 * It's possible the EXTENT/METADATA_ITEM is near current slot.
+	 */
+	extent_slot = path->slots[0];
+	while (extent_slot >= 0) {
+		btrfs_item_key_to_cpu(path->nodes[0], &key,
+				      extent_slot);
+		if (key.objectid != bytenr)
+			break;
+		if (key.type == BTRFS_EXTENT_ITEM_KEY &&
+		    key.offset == num_bytes) {
+			found_extent = 1;
+			break;
+		}
+		if (key.type == BTRFS_METADATA_ITEM_KEY &&
+		    key.offset == owner_objectid) {
+			found_extent = 1;
+			break;
 		}
 
-		if (!found_extent) {
-			if (unlikely(iref)) {
-				abort_and_dump(trans, path,
-"invalid iref slot %u, no EXTENT/METADATA_ITEM found but has inline extent ref",
-					   path->slots[0]);
-				ret = -EUCLEAN;
-				goto out;
-			}
-			/* Must be SHARED_* item, remove the backref first */
-			ret = remove_extent_backref(trans, extent_root, path,
-						    NULL, refs_to_drop, is_data);
-			if (unlikely(ret)) {
-				btrfs_abort_transaction(trans, ret);
-				goto out;
-			}
-			btrfs_release_path(path);
+		/* Quick path didn't find the EXTENT/METADATA_ITEM */
+		if (path->slots[0] - extent_slot > 5)
+			break;
+		extent_slot--;
+	}
 
-			/* Slow path to locate EXTENT/METADATA_ITEM */
+	if (!found_extent) {
+		if (unlikely(iref)) {
+			abort_and_dump(trans, path,
+"invalid iref slot %u, no EXTENT/METADATA_ITEM found but has inline extent ref",
+				   path->slots[0]);
+			ret = -EUCLEAN;
+			goto out;
+		}
+		/* Must be SHARED_* item, remove the backref first */
+		ret = remove_extent_backref(trans, extent_root, path,
+					    NULL, refs_to_drop, is_data);
+		if (unlikely(ret)) {
+			btrfs_abort_transaction(trans, ret);
+			goto out;
+		}
+		btrfs_release_path(path);
+
+		/* Slow path to locate EXTENT/METADATA_ITEM */
+		key.objectid = bytenr;
+		key.type = BTRFS_EXTENT_ITEM_KEY;
+		key.offset = num_bytes;
+
+		if (!is_data && skinny_metadata) {
+			key.type = BTRFS_METADATA_ITEM_KEY;
+			key.offset = owner_objectid;
+		}
+
+		ret = btrfs_search_slot(trans, extent_root,
+					&key, path, -1, 1);
+		if (ret > 0 && skinny_metadata && path->slots[0]) {
+			/*
+			 * Couldn't find our skinny metadata item,
+			 * see if we have ye olde extent item.
+			 */
+			path->slots[0]--;
+			btrfs_item_key_to_cpu(path->nodes[0], &key,
+					      path->slots[0]);
+			if (key.objectid == bytenr &&
+			    key.type == BTRFS_EXTENT_ITEM_KEY &&
+			    key.offset == num_bytes)
+				ret = 0;
+		}
+
+		if (ret > 0 && skinny_metadata) {
+			skinny_metadata = false;
 			key.objectid = bytenr;
 			key.type = BTRFS_EXTENT_ITEM_KEY;
 			key.offset = num_bytes;
-
-			if (!is_data && skinny_metadata) {
-				key.type = BTRFS_METADATA_ITEM_KEY;
-				key.offset = owner_objectid;
-			}
-
+			btrfs_release_path(path);
 			ret = btrfs_search_slot(trans, extent_root,
 						&key, path, -1, 1);
-			if (ret > 0 && skinny_metadata && path->slots[0]) {
-				/*
-				 * Couldn't find our skinny metadata item,
-				 * see if we have ye olde extent item.
-				 */
-				path->slots[0]--;
-				btrfs_item_key_to_cpu(path->nodes[0], &key,
-						      path->slots[0]);
-				if (key.objectid == bytenr &&
-				    key.type == BTRFS_EXTENT_ITEM_KEY &&
-				    key.offset == num_bytes)
-					ret = 0;
-			}
-
-			if (ret > 0 && skinny_metadata) {
-				skinny_metadata = false;
-				key.objectid = bytenr;
-				key.type = BTRFS_EXTENT_ITEM_KEY;
-				key.offset = num_bytes;
-				btrfs_release_path(path);
-				ret = btrfs_search_slot(trans, extent_root,
-							&key, path, -1, 1);
-			}
-
-			if (ret) {
-				if (ret > 0)
-					btrfs_print_leaf(path->nodes[0]);
-				btrfs_err(info,
-			"umm, got %d back from search, was looking for %llu, slot %d",
-					  ret, bytenr, path->slots[0]);
-			}
-			if (unlikely(ret < 0)) {
-				btrfs_abort_transaction(trans, ret);
-				goto out;
-			}
-			extent_slot = path->slots[0];
 		}
-	} else if (WARN_ON(ret == -ENOENT)) {
-		abort_and_dump(trans, path,
-"unable to find ref byte nr %llu parent %llu root %llu owner %llu offset %llu slot %d",
-			       bytenr, node->parent, node->ref_root, owner_objectid,
-			       owner_offset, path->slots[0]);
-		goto out;
-	} else {
-		btrfs_abort_transaction(trans, ret);
-		goto out;
+
+		if (ret) {
+			if (ret > 0)
+				btrfs_print_leaf(path->nodes[0]);
+			btrfs_err(info,
+		"umm, got %d back from search, was looking for %llu, slot %d",
+				  ret, bytenr, path->slots[0]);
+		}
+		if (unlikely(ret < 0)) {
+			btrfs_abort_transaction(trans, ret);
+			goto out;
+		}
+		extent_slot = path->slots[0];
 	}
 
 	leaf = path->nodes[0];
