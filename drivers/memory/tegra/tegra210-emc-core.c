@@ -1960,13 +1960,13 @@ static int tegra210_emc_opp_table_init(struct tegra210_emc *emc)
 	u32 hw_version = BIT(tegra_sku_info.soc_speedo_id);
 	struct dev_pm_opp *opp;
 	unsigned long rate;
-	int opp_token, err, max_opps, i;
+	int err, max_opps, i;
 
 	err = dev_pm_opp_set_supported_hw(emc->dev, &hw_version, 1);
 	if (err < 0)
 		return dev_err_probe(emc->dev, err, "failed to set OPP supported HW\n");
 
-	opp_token = err;
+	emc->hw_opp_token = err;
 
 	err = dev_pm_opp_of_add_table(emc->dev);
 	if (err) {
@@ -2009,9 +2009,19 @@ static int tegra210_emc_opp_table_init(struct tegra210_emc *emc)
 remove_table:
 	dev_pm_opp_of_remove_table(emc->dev);
 put_hw_table:
-	dev_pm_opp_put_supported_hw(opp_token);
+	dev_pm_opp_put_supported_hw(emc->hw_opp_token);
+	emc->hw_opp_token = 0;
 
 	return err;
+}
+
+static void tegra210_emc_opp_table_cleanup(struct tegra210_emc *emc)
+{
+	if (emc->hw_opp_token) {
+		dev_pm_opp_of_remove_table(emc->dev);
+		dev_pm_opp_put_supported_hw(emc->hw_opp_token);
+		emc->hw_opp_token = 0;
+	}
 }
 
 static void tegra210_emc_detect(struct tegra210_emc *emc)
@@ -2227,7 +2237,7 @@ static int tegra210_emc_probe(struct platform_device *pdev)
 		tegra210_emc_rate_requests_init(emc);
 		tegra210_emc_interconnect_init(emc);
 	} else if (err != -ENODEV) {
-		return err;
+		goto detach;
 	}
 
 	cd = devm_thermal_of_cooling_device_register(emc->dev, np, "emc", emc,
@@ -2236,11 +2246,13 @@ static int tegra210_emc_probe(struct platform_device *pdev)
 		err = PTR_ERR(cd);
 		dev_err(emc->dev, "failed to register cooling device: %d\n",
 			err);
-		goto detach;
+		goto cleanup_table;
 	}
 
 	return 0;
 
+cleanup_table:
+	tegra210_emc_opp_table_cleanup(emc);
 detach:
 	debugfs_remove_recursive(emc->debugfs.root);
 	tegra210_clk_emc_detach(emc->clk);
@@ -2254,6 +2266,7 @@ static void tegra210_emc_remove(struct platform_device *pdev)
 {
 	struct tegra210_emc *emc = platform_get_drvdata(pdev);
 
+	tegra210_emc_opp_table_cleanup(emc);
 	debugfs_remove_recursive(emc->debugfs.root);
 	tegra210_clk_emc_detach(emc->clk);
 	of_reserved_mem_device_release(emc->dev);

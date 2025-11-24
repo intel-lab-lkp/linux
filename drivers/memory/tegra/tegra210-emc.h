@@ -946,6 +946,7 @@ struct tegra210_emc {
 	struct tegra210_clk_emc_provider provider;
 
 	struct icc_provider icc_provider;
+	int hw_opp_token;
 
 	/*
 	 * There are multiple sources in the EMC driver which could request
