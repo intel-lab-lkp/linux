@@ -4266,6 +4266,31 @@ static const struct panel_desc sharp_lq070y3dg3b = {
 		     DRM_BUS_FLAG_SYNC_DRIVE_POSEDGE,
 };
 
+static const struct display_timing sharp_lq070y3lg05_timing = {
+	.pixelclock = { 28000000, 33000000, 40000000 },
+	.hactive = { 800, 800, 800 },
+	.hfront_porch = { 40, 40, 40 },
+	.hback_porch = { 40, 40, 40 },
+	.hsync_len = { 48, 48, 48 },
+	.vactive = { 480, 480, 480 },
+	.vfront_porch = { 13, 13, 13 },
+	.vback_porch = { 29, 29, 29 },
+	.vsync_len = { 3, 3, 3 },
+	.flags = DISPLAY_FLAGS_PIXDATA_POSEDGE,
+};
+
+static const struct panel_desc sharp_lq070y3lg05 = {
+	.timings = &sharp_lq070y3lg05_timing,
+	.num_timings = 1,
+	.bpc = 8,
+	.size = {
+		.width = 154,	/* 153.6mm */
+		.height = 87,	/* 86.6mm */
+	},
+	.bus_format = MEDIA_BUS_FMT_RGB888_1X7X4_SPWG,
+	.connector_type = DRM_MODE_CONNECTOR_LVDS,
+};
+
 static const struct drm_display_mode sharp_lq035q7db03_mode = {
 	.clock = 5500,
 	.hdisplay = 240,
@@ -5367,6 +5392,9 @@ static const struct of_device_id platform_of_match[] = {
 	}, {
 		.compatible = "sharp,lq070y3dg3b",
 		.data = &sharp_lq070y3dg3b,
+	}, {
+		.compatible = "sharp,lq070y3lg05",
+		.data = &sharp_lq070y3lg05,
 	}, {
 		.compatible = "sharp,lq101k1ly04",
 		.data = &sharp_lq101k1ly04,
