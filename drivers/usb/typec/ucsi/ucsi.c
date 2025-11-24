@@ -1726,14 +1726,14 @@ static int ucsi_register_port(struct ucsi *ucsi, struct ucsi_connector *con)
 	if (ret) {
 		dev_err(ucsi->dev, "con%d: failed to register alt modes\n",
 			con->num);
-		goto out;
+		goto out_unregister;
 	}
 
 	/* Get the status */
 	ret = ucsi_get_connector_status(con, false);
 	if (ret) {
 		dev_err(ucsi->dev, "con%d: failed to get status\n", con->num);
-		goto out;
+		goto out_unregister;
 	}
 
 	if (ucsi->ops->connector_status)
@@ -1788,6 +1788,10 @@ static int ucsi_register_port(struct ucsi *ucsi, struct ucsi_connector *con)
 
 	trace_ucsi_register_port(con->num, con);
 
+	goto out;
+
+out_unregister:
+	typec_unregister_port(con->port);
 out:
 	fwnode_handle_put(cap->fwnode);
 out_unlock:
