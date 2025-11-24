@@ -202,10 +202,14 @@ static void iomap_dio_done(struct iomap_dio *dio)
 		 * filesystem metadata changes or guarantee data integrity.
 		 */
 		INIT_WORK(&dio->aio.work, iomap_dio_complete_work);
+		if (!inode->i_sb->s_dio_done_wq)
+			goto done;
+
 		queue_work(inode->i_sb->s_dio_done_wq, &dio->aio.work);
 		return;
 	}
 
+done:
 	WRITE_ONCE(iocb->private, NULL);
 	iomap_dio_complete_work(&dio->aio.work);
 }
