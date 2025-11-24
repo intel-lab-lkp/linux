@@ -225,7 +225,7 @@ static void smpboot_unpark_thread(struct smp_hotplug_thread *ht, unsigned int cp
 {
 	struct task_struct *tsk = *per_cpu_ptr(ht->store, cpu);
 
-	if (!ht->selfparking)
+	if (tsk && !ht->selfparking)
 		kthread_unpark(tsk);
 }
 
