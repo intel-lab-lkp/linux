@@ -6185,7 +6185,7 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 			}
 
 			wait_woken(&wait, TASK_UNINTERRUPTIBLE,
-				   MAX_SCHEDULE_TIMEOUT);
+				   msecs_to_jiffies(10000));
 			continue;
 		}
 
