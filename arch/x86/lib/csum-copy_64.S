@@ -46,6 +46,43 @@
 	RET
 .endm
 
+.macro prefetch
+30:
+	/*
+	 * No _ASM_EXTABLE_UA; this is used for intentional prefetch on a
+	 * potentially unmapped kernel address.
+	 */
+	_ASM_EXTABLE(30b, 2f)
+	prefetcht0 5*64(%rdi)
+2:
+.endm
+
+.macro loadregs offset, src, regs:vararg
+	source
+	i = 0
+.irp  r, \regs
+	movq  8*(\offset + i)(\src), \r
+.endr
+.endm
+
+.macro storeregs offset, dst, regs:vararg
+	dest
+	i = 0
+.irp  r, \regs
+	movq  \r, 8*(\offset + i)(\dst)
+.endr
+.endm
+
+.macro sumregs sum, regs:vararg
+.irp  r, \regs
+	adcq  \r, \sum
+.endr
+.endm
+
+.macro incr ptr, count
+	leaq  8*(\count)(\ptr), \ptr
+.endm
+
 .macro	_csum_partial_copy
 	subq  $5*8, %rsp
 	movq  %rbx, 0*8(%rsp)
@@ -87,63 +124,18 @@
 
 	.p2align 4
 .Lloop\@:
-	source
-	movq  (INP), TMP1
-	source
-	movq  8(INP), TMP2
-	source
-	movq  16(INP), TMP3
-	source
-	movq  24(INP), TMP4
+	loadregs 0, INP, TMP1, TMP2, TMP3, TMP4, TMP5, TMP6, TMP7, TMP8
 
-	source
-	movq  32(INP), TMP5
-	source
-	movq  40(INP), TMP6
-	source
-	movq  48(INP), TMP7
-	source
-	movq  56(INP), TMP8
+	prefetch
 
-30:
-	/*
-	 * No _ASM_EXTABLE_UA; this is used for intentional prefetch on a
-	 * potentially unmapped kernel address.
-	 */
-	_ASM_EXTABLE(30b, 2f)
-	prefetcht0 5*64(%rdi)
-2:
-	adcq  TMP1, SUM
-	adcq  TMP2, SUM
-	adcq  TMP3, SUM
-	adcq  TMP4, SUM
-	adcq  TMP5, SUM
-	adcq  TMP6, SUM
-	adcq  TMP7, SUM
-	adcq  TMP8, SUM
+	sumregs SUM, TMP1, TMP2, TMP3, TMP4, TMP5, TMP6, TMP7, TMP8
 
 	decl LEN64B
 
-	dest
-	movq TMP1, (OUTP)
-	dest
-	movq TMP2, 8(OUTP)
-	dest
-	movq TMP3, 16(OUTP)
-	dest
-	movq TMP4, 24(OUTP)
+	storeregs 0, OUTP, TMP1, TMP2, TMP3, TMP4, TMP5, TMP6, TMP7, TMP8
 
-	dest
-	movq TMP5, 32(OUTP)
-	dest
-	movq TMP6, 40(OUTP)
-	dest
-	movq TMP7, 48(OUTP)
-	dest
-	movq TMP8, 56(OUTP)
-
-	leaq 64(INP), INP
-	leaq 64(OUTP), OUTP
+	incr INP, 8
+	incr OUTP, 8
 
 	jnz	.Lloop\@
 
@@ -159,14 +151,12 @@
 	clc
 	.p2align 4
 .Lloop_8\@:
-	source
-	movq (INP), TMP1
-	adcq TMP1, SUM
+	loadregs 0, INP, TMP1
+	sumregs SUM, TMP1
 	decl LEN
-	dest
-	movq TMP1, (OUTP)
-	leaq 8(INP), INP /* preserve carry */
-	leaq 8(OUTP), OUTP
+	storeregs 0, OUTP, TMP1
+	incr INP, 1 /* preserve carry */
+	incr OUTP, 1
 	jnz	.Lloop_8\@
 	adcq ZERO, SUM	/* add in carry */
 
