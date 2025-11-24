@@ -105,6 +105,17 @@ static int nvgrace_gpu_open_device(struct vfio_device *core_vdev)
 		mutex_init(&nvdev->remap_lock);
 	}
 
+	/*
+	 * GPU readiness is checked by reading the BAR0 registers.
+	 *
+	 * ioremap BAR0 to ensure that the BAR0 mapping is present before
+	 * register reads on first fault before establishing any GPU
+	 * memory mapping.
+	 */
+	ret = vfio_pci_core_setup_barmap(vdev, 0);
+	if (ret)
+		return ret;
+
 	vfio_pci_core_finish_enable(vdev);
 
 	return 0;
@@ -151,6 +162,26 @@ ready_check_exit:
 	return ret;
 }
 
+static int
+nvgrace_gpu_check_device_ready(struct nvgrace_gpu_pci_core_device *nvdev)
+{
+	struct vfio_pci_core_device *vdev = &nvdev->core_device;
+	int ret;
+
+	lockdep_assert_held_read(&vdev->memory_lock);
+
+	if (!nvdev->reset_done)
+		return 0;
+
+	ret = nvgrace_gpu_wait_device_ready(vdev->barmap[0]);
+	if (ret)
+		return ret;
+
+	nvdev->reset_done = false;
+
+	return 0;
+}
+
 static vm_fault_t nvgrace_gpu_vfio_pci_huge_fault(struct vm_fault *vmf,
 						  unsigned int order)
 {
@@ -174,8 +205,18 @@ static vm_fault_t nvgrace_gpu_vfio_pci_huge_fault(struct vm_fault *vmf,
 		      pfn & ((1 << order) - 1)))
 		return VM_FAULT_FALLBACK;
 
-	scoped_guard(rwsem_read, &nvdev->core_device.memory_lock)
+	scoped_guard(rwsem_read, &nvdev->core_device.memory_lock) {
+		/*
+		 * If the GPU memory is accessed by the CPU while the GPU is
+		 * not ready after reset, it can cause harmless corrected RAS
+		 * events to be logged. Make sure the GPU is ready before
+		 * establishing the mappings.
+		 */
+		if (nvgrace_gpu_check_device_ready(nvdev))
+			return ret;
+
 		ret = vfio_pci_vmf_insert_pfn(vmf, pfn, order);
+	}
 
 	return ret;
 }
@@ -563,9 +604,21 @@ nvgrace_gpu_read_mem(struct nvgrace_gpu_pci_core_device *nvdev,
 	else
 		mem_count = min(count, memregion->memlength - (size_t)offset);
 
-	ret = nvgrace_gpu_map_and_read(nvdev, buf, mem_count, ppos);
-	if (ret)
-		return ret;
+	scoped_guard(rwsem_read, &nvdev->core_device.memory_lock) {
+		/*
+		 * If the GPU memory is accessed by the CPU while the GPU is
+		 * not ready after reset, it can cause harmless corrected RAS
+		 * events to be logged. Make sure the GPU is ready before
+		 * establishing the mappings.
+		 */
+		ret = nvgrace_gpu_check_device_ready(nvdev);
+		if (ret)
+			return ret;
+
+		ret = nvgrace_gpu_map_and_read(nvdev, buf, mem_count, ppos);
+		if (ret)
+			return ret;
+	}
 
 	/*
 	 * Only the device memory present on the hardware is mapped, which may
@@ -683,9 +736,21 @@ nvgrace_gpu_write_mem(struct nvgrace_gpu_pci_core_device *nvdev,
 	 */
 	mem_count = min(count, memregion->memlength - (size_t)offset);
 
-	ret = nvgrace_gpu_map_and_write(nvdev, buf, mem_count, ppos);
-	if (ret)
-		return ret;
+	scoped_guard(rwsem_read, &nvdev->core_device.memory_lock) {
+		/*
+		 * If the GPU memory is accessed by the CPU while the GPU is
+		 * not ready after reset, it can cause harmless corrected RAS
+		 * events to be logged. Make sure the GPU is ready before
+		 * establishing the mappings.
+		 */
+		ret = nvgrace_gpu_check_device_ready(nvdev);
+		if (ret)
+			return ret;
+
+		ret = nvgrace_gpu_map_and_write(nvdev, buf, mem_count, ppos);
+		if (ret)
+			return ret;
+	}
 
 exitfn:
 	*ppos += count;
