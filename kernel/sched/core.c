@@ -2412,6 +2412,21 @@ static inline bool is_cpu_allowed(struct task_struct *p, int cpu)
 	return cpu_online(cpu);
 }
 
+static void update_rq_avg_idle(struct rq *rq)
+{
+	if (rq->idle_stamp) {
+		u64 delta = rq_clock(rq) - rq->idle_stamp;
+		u64 max = 2*rq->max_idle_balance_cost;
+
+		update_avg(&rq->avg_idle, delta);
+
+		if (rq->avg_idle > max)
+			rq->avg_idle = max;
+
+		rq->idle_stamp = 0;
+	}
+}
+
 /*
  * This is how migration works:
  *
@@ -2446,6 +2461,7 @@ static struct rq *move_queued_task(struct rq *rq, struct rq_flags *rf,
 	WARN_ON_ONCE(task_cpu(p) != new_cpu);
 	activate_task(rq, p, 0);
 	wakeup_preempt(rq, p, 0);
+	update_rq_avg_idle(rq);
 
 	return rq;
 }
@@ -3646,17 +3662,7 @@ ttwu_do_activate(struct rq *rq, struct task_struct *p, int wake_flags,
 		rq_repin_lock(rq, rf);
 	}
 
-	if (rq->idle_stamp) {
-		u64 delta = rq_clock(rq) - rq->idle_stamp;
-		u64 max = 2*rq->max_idle_balance_cost;
-
-		update_avg(&rq->avg_idle, delta);
-
-		if (rq->avg_idle > max)
-			rq->avg_idle = max;
-
-		rq->idle_stamp = 0;
-	}
+	update_rq_avg_idle(rq);
 }
 
 /*
@@ -4773,6 +4779,7 @@ void wake_up_new_task(struct task_struct *p)
 		p->sched_class->task_woken(rq, p);
 		rq_repin_lock(rq, &rf);
 	}
+	update_rq_avg_idle(rq);
 	task_rq_unlock(rq, p, &rf);
 }
 
