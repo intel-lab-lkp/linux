@@ -404,7 +404,10 @@ static int iop_get_config_itl(struct hptiop_hba *hba,
 	struct hpt_iop_request_get_config __iomem *req;
 
 	req32 = readl(&hba->u.itl.iop->inbound_queue);
-	if (req32 == IOPMU_QUEUE_EMPTY)
+
+	struct pci_dev *pcidev = hba->pcidev;
+	u32 length = pci_resource_len(pcidev, 0);
+	if (req32 == IOPMU_QUEUE_EMPTY || req32 + sizeof(*config) > length)
 		return -1;
 
 	req = (struct hpt_iop_request_get_config __iomem *)
