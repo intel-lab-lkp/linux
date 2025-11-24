@@ -734,19 +734,19 @@
 
 	pinctrl_usb1_oc: usb1ocgrp {
 		fsl,pins = <
-			MX8MP_IOMUXC_GPIO1_IO13__USB1_OTG_OC		0x1c0 /* USB_A_OC# */
+			MX8MP_IOMUXC_GPIO1_IO13__USB1_OC		0x1c0 /* USB_A_OC# */
 		>;
 	};
 
 	pinctrl_usb2_id: usb2idgrp {
 		fsl,pins = <
-			MX8MP_IOMUXC_GPIO1_IO11__USB2_OTG_ID		0x1c4 /* USB_B_ID */
+			MX8MP_IOMUXC_GPIO1_IO11__USB2_ID		0x1c4 /* USB_B_ID */
 		>;
 	};
 
 	pinctrl_usb2_oc: usb2ocgrp {
 		fsl,pins = <
-			MX8MP_IOMUXC_GPIO1_IO15__USB2_OTG_OC		0x1c0 /* USB_B_OC# */
+			MX8MP_IOMUXC_GPIO1_IO15__USB2_OC		0x1c0 /* USB_B_OC# */
 		>;
 	};
 

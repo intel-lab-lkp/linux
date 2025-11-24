@@ -976,8 +976,8 @@
 	};
 
 	pinctrl_usb0: usb0grp {
-		fsl,pins = <MX8MP_IOMUXC_GPIO1_IO13__USB1_OTG_OC	0x1c0>,
-			   <MX8MP_IOMUXC_GPIO1_IO12__USB1_OTG_PWR	0x1c0>;
+		fsl,pins = <MX8MP_IOMUXC_GPIO1_IO13__USB1_OC		0x1c0>,
+			   <MX8MP_IOMUXC_GPIO1_IO12__USB1_PWR		0x1c0>;
 	};
 
 	pinctrl_usbcon0: usb0congrp {
