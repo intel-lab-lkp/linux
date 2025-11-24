@@ -131,31 +131,57 @@ static void nvgrace_gpu_close_device(struct vfio_device *core_vdev)
 	vfio_pci_core_close_device(core_vdev);
 }
 
-static vm_fault_t nvgrace_gpu_vfio_pci_fault(struct vm_fault *vmf)
+static vm_fault_t nvgrace_gpu_vfio_pci_huge_fault(struct vm_fault *vmf,
+						  unsigned int order)
 {
 	struct vm_area_struct *vma = vmf->vma;
 	struct nvgrace_gpu_pci_core_device *nvdev = vma->vm_private_data;
 	int index = vma->vm_pgoff >> (VFIO_PCI_OFFSET_SHIFT - PAGE_SHIFT);
 	vm_fault_t ret = VM_FAULT_SIGBUS;
 	struct mem_region *memregion;
-	unsigned long pgoff, pfn;
+	unsigned long pgoff, pfn, addr;
 
 	memregion = nvgrace_gpu_memregion(index, nvdev);
 	if (!memregion)
 		return ret;
 
-	pgoff = (vmf->address - vma->vm_start) >> PAGE_SHIFT;
+	addr = vmf->address & ~((PAGE_SIZE << order) - 1);
+	pgoff = (addr - vma->vm_start) >> PAGE_SHIFT;
 	pfn = PHYS_PFN(memregion->memphys) + pgoff;
 
+	if (order && (addr < vma->vm_start ||
+		      addr + (PAGE_SIZE << order) > vma->vm_end ||
+		      pfn & ((1 << order) - 1)))
+		return VM_FAULT_FALLBACK;
+
 	scoped_guard(rwsem_read, &nvdev->core_device.memory_lock)
-		ret = vmf_insert_pfn(vmf->vma, vmf->address, pfn);
+		ret = vfio_pci_vmf_insert_pfn(vmf, pfn, order);
 
 	return ret;
 }
 
+static vm_fault_t nvgrace_gpu_vfio_pci_fault(struct vm_fault *vmf)
+{
+	return nvgrace_gpu_vfio_pci_huge_fault(vmf, 0);
+}
+
 static const struct vm_operations_struct nvgrace_gpu_vfio_pci_mmap_ops = {
 	.fault = nvgrace_gpu_vfio_pci_fault,
+#ifdef CONFIG_ARCH_SUPPORTS_HUGE_PFNMAP
+	.huge_fault = nvgrace_gpu_vfio_pci_huge_fault,
+#endif
 };
+
+static size_t nvgrace_gpu_aligned_devmem_size(size_t memlength)
+{
+#ifdef CONFIG_ARCH_SUPPORTS_PMD_PFNMAP
+	return ALIGN(memlength, PMD_SIZE);
+#endif
+#ifdef CONFIG_ARCH_SUPPORTS_PUD_PFNMAP
+	return ALIGN(memlength, PUD_SIZE);
+#endif
+	return memlength;
+}
 
 static int nvgrace_gpu_mmap(struct vfio_device *core_vdev,
 			    struct vm_area_struct *vma)
@@ -186,10 +212,10 @@ static int nvgrace_gpu_mmap(struct vfio_device *core_vdev,
 		return -EOVERFLOW;
 
 	/*
-	 * Check that the mapping request does not go beyond available device
-	 * memory size
+	 * Check that the mapping request does not go beyond the exposed
+	 * device memory size.
 	 */
-	if (end > memregion->memlength)
+	if (end > nvgrace_gpu_aligned_devmem_size(memregion->memlength))
 		return -EINVAL;
 
 	vm_flags_set(vma, VM_IO | VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP);
@@ -249,7 +275,8 @@ static int nvgrace_gpu_ioctl_get_region_info(struct vfio_device *core_vdev,
 
 	sparse->nr_areas = 1;
 	sparse->areas[0].offset = 0;
-	sparse->areas[0].size = memregion->memlength;
+	sparse->areas[0].size =
+		nvgrace_gpu_aligned_devmem_size(memregion->memlength);
 	sparse->header.id = VFIO_REGION_INFO_CAP_SPARSE_MMAP;
 	sparse->header.version = 1;
 
