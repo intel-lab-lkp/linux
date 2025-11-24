@@ -284,6 +284,8 @@ properties:
       - sharp,lq035q7db03
         # Sharp LQ070Y3DG3B 7.0" WVGA landscape TFT LCD panel
       - sharp,lq070y3dg3b
+        # Sharp LQ070Y3LG05 7.0" WVGA langscape LVDS TFT LCD panel
+      - sharp,lq070y3lg05
         # Sharp Display Corp. LQ101K1LY04 10.07" WXGA TFT LCD panel
       - sharp,lq101k1ly04
         # Sharp LS020B1DD01D 2.0" HQVGA TFT LCD panel
