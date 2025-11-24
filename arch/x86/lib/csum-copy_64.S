@@ -26,17 +26,27 @@
  * They also should align source or destination to 8 bytes.
  */
 
-	.macro source
+.macro source
 10:
 	_ASM_EXTABLE_UA(10b, .Lfault)
-	.endm
+.endm
 
-	.macro dest
+.macro dest
 20:
 	_ASM_EXTABLE_UA(20b, .Lfault)
-	.endm
+.endm
 
-SYM_FUNC_START(csum_partial_copy_generic)
+.macro restore_regs_and_ret
+	movq 0*8(%rsp), %rbx
+	movq 1*8(%rsp), %r12
+	movq 2*8(%rsp), %r14
+	movq 3*8(%rsp), %r13
+	movq 4*8(%rsp), %r15
+	addq $5*8, %rsp
+	RET
+.endm
+
+.macro	_csum_partial_copy
 	subq  $5*8, %rsp
 	movq  %rbx, 0*8(%rsp)
 	movq  %r12, 1*8(%rsp)
@@ -48,41 +58,52 @@ SYM_FUNC_START(csum_partial_copy_generic)
 	xorl  %r9d, %r9d
 	movl  %edx, %ecx
 	cmpl  $8, %ecx
-	jb    .Lshort
+	jb    .Lshort\@
 
 	testb  $7, %sil
-	jne   .Lunaligned
-.Laligned:
-	movl  %ecx, %r12d
+	jne   .Lunaligned\@
+.Laligned\@:
+	.set  INP, %rdi		/* input pointer */
+	.set  OUTP, %rsi	/* output pointer */
+	.set  SUM, %rax		/* checksum accumulator */
+	.set  ZERO, %r9		/* zero register */
+	.set  LEN, %ecx		/* byte count */
+	.set  LEN64B, %r12d	/* 64-byte block count */
+	.set  TMP1, %rbx
+	.set  TMP2, %r8
+	.set  TMP3, %r11
+	.set  TMP4, %rdx
+	.set  TMP5, %r10
+	.set  TMP6, %r15
+	.set  TMP7, %r14
+	.set  TMP8, %r13
 
-	shrq  $6, %r12
-	jz	.Lhandle_tail       /* < 64 */
+	movl  LEN, LEN64B
+
+	shrl  $6, LEN64B
+	jz	.Lhandle_tail\@     /* < 64 */
 
 	clc
 
-	/* main loop. clear in 64 byte blocks */
-	/* r9: zero, r8: temp2, rbx: temp1, rax: sum, rcx: saved length */
-	/* r11:	temp3, rdx: temp4, r12 loopcnt */
-	/* r10:	temp5, r15: temp6, r14 temp7, r13 temp8 */
 	.p2align 4
-.Lloop:
+.Lloop\@:
 	source
-	movq  (%rdi), %rbx
+	movq  (INP), TMP1
 	source
-	movq  8(%rdi), %r8
+	movq  8(INP), TMP2
 	source
-	movq  16(%rdi), %r11
+	movq  16(INP), TMP3
 	source
-	movq  24(%rdi), %rdx
+	movq  24(INP), TMP4
 
 	source
-	movq  32(%rdi), %r10
+	movq  32(INP), TMP5
 	source
-	movq  40(%rdi), %r15
+	movq  40(INP), TMP6
 	source
-	movq  48(%rdi), %r14
+	movq  48(INP), TMP7
 	source
-	movq  56(%rdi), %r13
+	movq  56(INP), TMP8
 
 30:
 	/*
@@ -92,64 +113,64 @@ SYM_FUNC_START(csum_partial_copy_generic)
 	_ASM_EXTABLE(30b, 2f)
 	prefetcht0 5*64(%rdi)
 2:
-	adcq  %rbx, %rax
-	adcq  %r8, %rax
-	adcq  %r11, %rax
-	adcq  %rdx, %rax
-	adcq  %r10, %rax
-	adcq  %r15, %rax
-	adcq  %r14, %rax
-	adcq  %r13, %rax
+	adcq  TMP1, SUM
+	adcq  TMP2, SUM
+	adcq  TMP3, SUM
+	adcq  TMP4, SUM
+	adcq  TMP5, SUM
+	adcq  TMP6, SUM
+	adcq  TMP7, SUM
+	adcq  TMP8, SUM
 
-	decl %r12d
-
-	dest
-	movq %rbx, (%rsi)
-	dest
-	movq %r8, 8(%rsi)
-	dest
-	movq %r11, 16(%rsi)
-	dest
-	movq %rdx, 24(%rsi)
+	decl LEN64B
 
 	dest
-	movq %r10, 32(%rsi)
+	movq TMP1, (OUTP)
 	dest
-	movq %r15, 40(%rsi)
+	movq TMP2, 8(OUTP)
 	dest
-	movq %r14, 48(%rsi)
+	movq TMP3, 16(OUTP)
 	dest
-	movq %r13, 56(%rsi)
+	movq TMP4, 24(OUTP)
 
-	leaq 64(%rdi), %rdi
-	leaq 64(%rsi), %rsi
+	dest
+	movq TMP5, 32(OUTP)
+	dest
+	movq TMP6, 40(OUTP)
+	dest
+	movq TMP7, 48(OUTP)
+	dest
+	movq TMP8, 56(OUTP)
 
-	jnz	.Lloop
+	leaq 64(INP), INP
+	leaq 64(OUTP), OUTP
 
-	adcq  %r9, %rax
+	jnz	.Lloop\@
+
+	adcq  ZERO, SUM
 
 	/* do last up to 56 bytes */
-.Lhandle_tail:
+.Lhandle_tail\@:
 	/* ecx:	count, rcx.63: the end result needs to be rol8 */
 	movq %rcx, %r10
 	andl $63, %ecx
 	shrl $3, %ecx
-	jz	.Lfold
+	jz	.Lfold\@
 	clc
 	.p2align 4
-.Lloop_8:
+.Lloop_8\@:
 	source
-	movq (%rdi), %rbx
-	adcq %rbx, %rax
-	decl %ecx
+	movq (INP), TMP1
+	adcq TMP1, SUM
+	decl LEN
 	dest
-	movq %rbx, (%rsi)
-	leaq 8(%rsi), %rsi /* preserve carry */
-	leaq 8(%rdi), %rdi
-	jnz	.Lloop_8
-	adcq %r9, %rax	/* add in carry */
+	movq TMP1, (OUTP)
+	leaq 8(INP), INP /* preserve carry */
+	leaq 8(OUTP), OUTP
+	jnz	.Lloop_8\@
+	adcq ZERO, SUM	/* add in carry */
 
-.Lfold:
+.Lfold\@:
 	/* reduce checksum to 32bits */
 	movl %eax, %ebx
 	shrq $32, %rax
@@ -157,17 +178,17 @@ SYM_FUNC_START(csum_partial_copy_generic)
 	adcl %r9d, %eax
 
 	/* do last up to 6 bytes */
-.Lhandle_7:
+.Lhandle_7\@:
 	movl %r10d, %ecx
 	andl $7, %ecx
-.L1:				/* .Lshort rejoins the common path here */
+.L1\@:				/* .Lshort\@ rejoins the common path here */
 	shrl $1, %ecx
-	jz   .Lhandle_1
+	jz   .Lhandle_1\@
 	movl $2, %edx
 	xorl %ebx, %ebx
 	clc
 	.p2align 4
-.Lloop_1:
+.Lloop_1\@:
 	source
 	movw (%rdi), %bx
 	adcl %ebx, %eax
@@ -176,13 +197,13 @@ SYM_FUNC_START(csum_partial_copy_generic)
 	movw %bx, (%rsi)
 	leaq 2(%rdi), %rdi
 	leaq 2(%rsi), %rsi
-	jnz .Lloop_1
+	jnz .Lloop_1\@
 	adcl %r9d, %eax	/* add in carry */
 
 	/* handle last odd byte */
-.Lhandle_1:
+.Lhandle_1\@:
 	testb $1, %r10b
-	jz    .Lende
+	jz    .Lende\@
 	xorl  %ebx, %ebx
 	source
 	movb (%rdi), %bl
@@ -191,24 +212,18 @@ SYM_FUNC_START(csum_partial_copy_generic)
 	addl %ebx, %eax
 	adcl %r9d, %eax		/* carry */
 
-.Lende:
+.Lende\@:
 	testq %r10, %r10
-	js  .Lwas_odd
-.Lout:
-	movq 0*8(%rsp), %rbx
-	movq 1*8(%rsp), %r12
-	movq 2*8(%rsp), %r14
-	movq 3*8(%rsp), %r13
-	movq 4*8(%rsp), %r15
-	addq $5*8, %rsp
-	RET
-.Lshort:
+	js  .Lwas_odd\@
+.Lout\@:
+	restore_regs_and_ret
+.Lshort\@:
 	movl %ecx, %r10d
-	jmp  .L1
-.Lunaligned:
+	jmp  .L1\@
+.Lunaligned\@:
 	xorl %ebx, %ebx
 	testb $1, %sil
-	jne  .Lodd
+	jne  .Lodd\@
 1:	testb $2, %sil
 	je   2f
 	source
@@ -220,7 +235,7 @@ SYM_FUNC_START(csum_partial_copy_generic)
 	leaq 2(%rsi), %rsi
 	addq %rbx, %rax
 2:	testb $4, %sil
-	je .Laligned
+	je .Laligned\@
 	source
 	movl (%rdi), %ebx
 	dest
@@ -229,9 +244,9 @@ SYM_FUNC_START(csum_partial_copy_generic)
 	subq $4, %rcx
 	leaq 4(%rsi), %rsi
 	addq %rbx, %rax
-	jmp .Laligned
+	jmp .Laligned\@
 
-.Lodd:
+.Lodd\@:
 	source
 	movb (%rdi), %bl
 	dest
@@ -245,12 +260,16 @@ SYM_FUNC_START(csum_partial_copy_generic)
 	addq %rbx, %rax
 	jmp 1b
 
-.Lwas_odd:
+.Lwas_odd\@:
 	roll $8, %eax
-	jmp .Lout
+	jmp .Lout\@
+.endm
 
 	/* Exception: just return 0 */
 .Lfault:
 	xorl %eax, %eax
-	jmp  .Lout
+	restore_regs_and_ret
+
+SYM_FUNC_START(csum_partial_copy_generic)
+	_csum_partial_copy
 SYM_FUNC_END(csum_partial_copy_generic)
