@@ -1889,11 +1889,14 @@ static int collapse_file(struct mm_struct *mm, unsigned long addr,
 	do {
 		xas_lock_irq(&xas);
 		xas_create_range(&xas);
-		if (!xas_error(&xas))
+		if (!xas_error(&xas)) {
+			xas_destroy(&xas);
 			break;
+		}
 		xas_unlock_irq(&xas);
 		if (!xas_nomem(&xas, GFP_KERNEL)) {
 			result = SCAN_FAIL;
+			xas_destroy(&xas);
 			goto rollback;
 		}
 	} while (1);
