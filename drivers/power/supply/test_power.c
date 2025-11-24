@@ -437,6 +437,7 @@ static struct battery_property_map map_technology[] = {
 	{ POWER_SUPPLY_TECHNOLOGY_LiFe, "LiFe" },
 	{ POWER_SUPPLY_TECHNOLOGY_NiCd, "NiCd" },
 	{ POWER_SUPPLY_TECHNOLOGY_LiMn, "LiMn" },
+	{ POWER_SUPPLY_TECHNOLOGY_SiLION, "SiLION" },
 	{ -1,				NULL   },
 };
 
@@ -733,7 +734,7 @@ MODULE_PARM_DESC(battery_present,
 
 module_param(battery_technology, battery_technology, 0644);
 MODULE_PARM_DESC(battery_technology,
-	"battery technology <NiMH|LION|LIPO|LiFe|NiCd|LiMn>");
+	"battery technology <NiMH|LION|LIPO|LiFe|NiCd|LiMn|SiLION>");
 
 module_param(battery_health, battery_health, 0644);
 MODULE_PARM_DESC(battery_health,

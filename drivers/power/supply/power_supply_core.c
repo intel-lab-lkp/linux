@@ -677,6 +677,8 @@ int power_supply_get_battery_info(struct power_supply *psy,
 			info->technology = POWER_SUPPLY_TECHNOLOGY_LiFe;
 		else if (!strcmp("lithium-ion-manganese-oxide", value))
 			info->technology = POWER_SUPPLY_TECHNOLOGY_LiMn;
+		else if (!strcmp("lithium-ion-silicon-anode", value))
+			info->technology = POWER_SUPPLY_TECHNOLOGY_SiLION;
 		else
 			dev_warn(&psy->dev, "%s unknown battery type\n", value);
 	}
