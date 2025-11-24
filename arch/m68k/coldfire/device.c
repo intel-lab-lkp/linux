@@ -111,7 +111,7 @@ static struct fec_platform_data fec_pdata = {
  *	block. It is Freescale's own hardware block. Some ColdFires
  *	have 2 of these.
  */
-static struct resource mcf_fec0_resources[] = {
+static const struct resource mcf_fec0_resources[] = {
 	{
 		.start		= MCFFEC_BASE0,
 		.end		= MCFFEC_BASE0 + MCFFEC_SIZE0 - 1,
@@ -148,7 +148,7 @@ static struct platform_device mcf_fec0 = {
 #endif /* MCFFEC_BASE0 */
 
 #ifdef MCFFEC_BASE1
-static struct resource mcf_fec1_resources[] = {
+static const struct resource mcf_fec1_resources[] = {
 	{
 		.start		= MCFFEC_BASE1,
 		.end		= MCFFEC_BASE1 + MCFFEC_SIZE1 - 1,
@@ -189,7 +189,7 @@ static struct platform_device mcf_fec1 = {
  *	The ColdFire QSPI module is an SPI protocol hardware block used
  *	on a number of different ColdFire CPUs.
  */
-static struct resource mcf_qspi_resources[] = {
+static const struct resource mcf_qspi_resources[] = {
 	{
 		.start		= MCFQSPI_BASE,
 		.end		= MCFQSPI_BASE + MCFQSPI_SIZE - 1,
@@ -340,7 +340,7 @@ static struct platform_device mcf_qspi = {
 #endif /* IS_ENABLED(CONFIG_SPI_COLDFIRE_QSPI) */
 
 #if IS_ENABLED(CONFIG_I2C_IMX)
-static struct resource mcf_i2c0_resources[] = {
+static const struct resource mcf_i2c0_resources[] = {
 	{
 		.start          = MCFI2C_BASE0,
 		.end            = MCFI2C_BASE0 + MCFI2C_SIZE0 - 1,
@@ -361,7 +361,7 @@ static struct platform_device mcf_i2c0 = {
 };
 #ifdef MCFI2C_BASE1
 
-static struct resource mcf_i2c1_resources[] = {
+static const struct resource mcf_i2c1_resources[] = {
 	{
 		.start          = MCFI2C_BASE1,
 		.end            = MCFI2C_BASE1 + MCFI2C_SIZE1 - 1,
@@ -385,7 +385,7 @@ static struct platform_device mcf_i2c1 = {
 
 #ifdef MCFI2C_BASE2
 
-static struct resource mcf_i2c2_resources[] = {
+static const struct resource mcf_i2c2_resources[] = {
 	{
 		.start          = MCFI2C_BASE2,
 		.end            = MCFI2C_BASE2 + MCFI2C_SIZE2 - 1,
@@ -409,7 +409,7 @@ static struct platform_device mcf_i2c2 = {
 
 #ifdef MCFI2C_BASE3
 
-static struct resource mcf_i2c3_resources[] = {
+static const struct resource mcf_i2c3_resources[] = {
 	{
 		.start          = MCFI2C_BASE3,
 		.end            = MCFI2C_BASE3 + MCFI2C_SIZE3 - 1,
@@ -433,7 +433,7 @@ static struct platform_device mcf_i2c3 = {
 
 #ifdef MCFI2C_BASE4
 
-static struct resource mcf_i2c4_resources[] = {
+static const struct resource mcf_i2c4_resources[] = {
 	{
 		.start          = MCFI2C_BASE4,
 		.end            = MCFI2C_BASE4 + MCFI2C_SIZE4 - 1,
@@ -457,7 +457,7 @@ static struct platform_device mcf_i2c4 = {
 
 #ifdef MCFI2C_BASE5
 
-static struct resource mcf_i2c5_resources[] = {
+static const struct resource mcf_i2c5_resources[] = {
 	{
 		.start          = MCFI2C_BASE5,
 		.end            = MCFI2C_BASE5 + MCFI2C_SIZE5 - 1,
@@ -507,7 +507,7 @@ static struct mcf_edma_platform_data mcf_edma_data = {
 	.slavecnt		= ARRAY_SIZE(mcf_edma_map),
 };
 
-static struct resource mcf_edma_resources[] = {
+static const struct resource mcf_edma_resources[] = {
 	{
 		.start		= MCFEDMA_BASE,
 		.end		= MCFEDMA_BASE + MCFEDMA_SIZE - 1,
@@ -560,7 +560,7 @@ static struct mcf_esdhc_platform_data mcf_esdhc_data = {
 	.cd_type = ESDHC_CD_NONE,
 };
 
-static struct resource mcf_esdhc_resources[] = {
+static const struct resource mcf_esdhc_resources[] = {
 	{
 		.start = MCFSDHC_BASE,
 		.end = MCFSDHC_BASE + MCFSDHC_SIZE - 1,
@@ -590,7 +590,7 @@ static struct flexcan_platform_data mcf5441x_flexcan_info = {
 	.clock_frequency = 120000000,
 };
 
-static struct resource mcf5441x_flexcan0_resource[] = {
+static const struct resource mcf5441x_flexcan0_resource[] = {
 	{
 		.start = MCFFLEXCAN_BASE0,
 		.end = MCFFLEXCAN_BASE0 + MCFFLEXCAN_SIZE,
