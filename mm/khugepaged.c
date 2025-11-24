@@ -2579,12 +2579,12 @@ static void khugepaged_do_scan(struct collapse_control *cc)
 		if (result == SCAN_ALLOC_HUGE_PAGE_FAIL) {
 			/*
 			 * If fail to allocate the first time, try to sleep for
-			 * a while.  When hit again, cancel the scan.
+			 * a while.  When hit again, sleep and cancel the scan.
 			 */
+			khugepaged_alloc_sleep();
 			if (!wait)
 				break;
 			wait = false;
-			khugepaged_alloc_sleep();
 		}
 	}
 }
