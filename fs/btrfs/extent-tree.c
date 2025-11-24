@@ -2904,6 +2904,9 @@ void btrfs_handle_fully_remapped_bgs(struct btrfs_fs_info *fs_info)
 		list_del_init(&block_group->bg_list);
 		spin_unlock(&fs_info->unused_bgs_lock);
 
+		btrfs_discard_extent(fs_info, block_group->start,
+				     block_group->length, NULL, false);
+
 		ret = btrfs_complete_bg_remapping(block_group);
 		if (ret) {
 			btrfs_put_block_group(block_group);
