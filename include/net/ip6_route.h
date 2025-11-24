@@ -73,8 +73,9 @@ static inline bool rt6_need_strict(const struct in6_addr *daddr)
 static inline bool rt6_qualify_for_ecmp(const struct fib6_info *f6i)
 {
 	/* the RTF_ADDRCONF flag filters out RA's */
-	return !(f6i->fib6_flags & RTF_ADDRCONF) && !f6i->nh &&
-		f6i->fib6_nh->fib_nh_gw_family;
+	return f6i->fib6_explicit_ecmp ||
+		(!(f6i->fib6_flags & RTF_ADDRCONF) && !f6i->nh &&
+		f6i->fib6_nh->fib_nh_gw_family);
 }
 
 void ip6_route_input(struct sk_buff *skb);

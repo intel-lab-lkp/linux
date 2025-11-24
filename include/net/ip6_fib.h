@@ -196,7 +196,8 @@ struct fib6_info {
 					dst_nocount:1,
 					dst_nopolicy:1,
 					fib6_destroying:1,
-					unused:4;
+					fib6_explicit_ecmp:1,
+					unused:3;
 
 	struct list_head		purge_link;
 	struct rcu_head			rcu;

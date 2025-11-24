@@ -5119,7 +5119,6 @@ static int rtm_to_fib6_multipath_config(struct fib6_config *cfg,
 	}
 
 	do {
-		bool has_gateway = cfg->fc_flags & RTF_GATEWAY;
 		int attrlen = rtnh_attrlen(rtnh);
 
 		if (attrlen > 0) {
@@ -5133,15 +5132,7 @@ static int rtm_to_fib6_multipath_config(struct fib6_config *cfg,
 						       "Invalid IPv6 address in RTA_GATEWAY");
 					return -EINVAL;
 				}
-
-				has_gateway = true;
 			}
-		}
-
-		if (newroute && (cfg->fc_nh_id || !has_gateway)) {
-			NL_SET_ERR_MSG(extack,
-				       "Device only routes can not be added for IPv6 using the multipath API.");
-			return -EINVAL;
 		}
 
 		rtnh = rtnh_next(rtnh, &remaining);
@@ -5447,6 +5438,8 @@ static int ip6_route_multipath_add(struct fib6_config *cfg,
 			rt = NULL;
 			goto cleanup;
 		}
+
+		rt->fib6_explicit_ecmp = true;
 
 		err = ip6_route_info_create_nh(rt, &r_cfg, GFP_KERNEL, extack);
 		if (err) {
