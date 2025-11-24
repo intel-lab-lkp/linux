@@ -41,6 +41,15 @@ static bool has_vga_pipe_sel(struct intel_display *display)
 	return DISPLAY_VER(display) < 7;
 }
 
+static bool intel_arch_support_vga_pm(struct intel_display *display)
+{
+#if defined(CONFIG_X86) || defined(CONFIG_X86_64)
+	return true;
+#else
+	return false;
+#endif
+}
+
 /* Disable the VGA plane that we never use */
 void intel_vga_disable(struct intel_display *display)
 {
@@ -66,11 +75,13 @@ void intel_vga_disable(struct intel_display *display)
 
 	/* WaEnableVGAAccessThroughIOPort:ctg,elk,ilk,snb,ivb,vlv,hsw */
 	vga_get_uninterruptible(pdev, VGA_RSRC_LEGACY_IO);
-	outb(0x01, VGA_SEQ_I);
-	sr1 = inb(VGA_SEQ_D);
-	outb(sr1 | VGA_SR01_SCREEN_OFF, VGA_SEQ_D);
-	vga_put(pdev, VGA_RSRC_LEGACY_IO);
-	udelay(300);
+	if (likely(intel_arch_support_vga_pm(display))) {
+		outb(0x01, VGA_SEQ_I);
+		sr1 = inb(VGA_SEQ_D);
+		outb(sr1 | VGA_SR01_SCREEN_OFF, VGA_SEQ_D);
+		vga_put(pdev, VGA_RSRC_LEGACY_IO);
+		udelay(300);
+	}
 
 	intel_de_write(display, vga_reg, VGA_DISP_DISABLE);
 	intel_de_posting_read(display, vga_reg);
@@ -91,8 +102,10 @@ void intel_vga_reset_io_mem(struct intel_display *display)
 	 * and error messages.
 	 */
 	vga_get_uninterruptible(pdev, VGA_RSRC_LEGACY_IO);
-	outb(inb(VGA_MIS_R), VGA_MIS_W);
-	vga_put(pdev, VGA_RSRC_LEGACY_IO);
+	if (likely(intel_arch_support_vga_pm(display))) {
+		outb(inb(VGA_MIS_R), VGA_MIS_W);
+		vga_put(pdev, VGA_RSRC_LEGACY_IO);
+	}
 }
 
 int intel_vga_register(struct intel_display *display)
