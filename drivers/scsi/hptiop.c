@@ -166,6 +166,14 @@ static void mv_inbound_write(u64 p, struct hptiop_hba *hba)
 	if (head == MVIOP_QUEUE_LEN)
 		head = 0;
 
+	if (inbound_head >= MVIOP_QUEUE_LEN) {
+		dev_err(&hba->pdev->dev,
+			"hptiop: inbound_head out of range (%u)\n",
+			inbound_head);
+		inbound_head = 0;
+		head = 1;
+	}
+
 	memcpy_toio(&hba->u.mv.mu->inbound_q[inbound_head], &p, 8);
 	writel(head, &hba->u.mv.mu->inbound_head);
 	writel(MVIOP_MU_INBOUND_INT_POSTQUEUE,
