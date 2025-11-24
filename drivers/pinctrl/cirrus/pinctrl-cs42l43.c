@@ -573,7 +573,9 @@ static int cs42l43_pin_probe(struct platform_device *pdev)
 
 	device_set_node(priv->dev, fwnode);
 
-	devm_pm_runtime_enable(priv->dev);
+	ret = devm_pm_runtime_enable(priv->dev);
+	if (ret)
+		return ret;
 	pm_runtime_idle(priv->dev);
 
 	pctldev = devm_pinctrl_register(priv->dev, &cs42l43_pin_desc, priv);
