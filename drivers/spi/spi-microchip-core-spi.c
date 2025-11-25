@@ -293,7 +293,7 @@ static int mchp_corespi_probe(struct platform_device *pdev)
 	bool assert_ssel;
 	int ret = 0;
 
-	host = devm_spi_alloc_host(&pdev->dev, sizeof(*spi));
+	host = devm_spi_alloc_host(dev, sizeof(*spi));
 	if (!host)
 		return -ENOMEM;
 
@@ -322,7 +322,7 @@ static int mchp_corespi_probe(struct platform_device *pdev)
 	if (ret)
 		mode = MCHP_CORESPI_DEFAULT_MOTOROLA_MODE;
 	else if (mode > 3)
-		return dev_err_probe(&pdev->dev, -EINVAL,
+		return dev_err_probe(dev, -EINVAL,
 				     "invalid 'microchip,motorola-mode' value %u\n", mode);
 
 	/*
@@ -332,7 +332,7 @@ static int mchp_corespi_probe(struct platform_device *pdev)
 	 */
 	ret = device_property_read_u32(dev, "microchip,frame-size", &frame_size);
 	if (!ret && frame_size != 8)
-		return dev_err_probe(&pdev->dev, -EINVAL,
+		return dev_err_probe(dev, -EINVAL,
 				     "CoreSPI: frame size %u not supported by this driver\n",
 				     frame_size);
 
@@ -344,7 +344,7 @@ static int mchp_corespi_probe(struct platform_device *pdev)
 	 */
 	assert_ssel = device_property_read_bool(dev, "microchip,ssel-active");
 	if (!assert_ssel)
-		return dev_err_probe(&pdev->dev, -EINVAL,
+		return dev_err_probe(dev, -EINVAL,
 				     "hardware must enable 'microchip,ssel-active' to keep CS asserted for the SPI transfer\n");
 
 	spi = spi_controller_get_devdata(host);
@@ -371,24 +371,21 @@ static int mchp_corespi_probe(struct platform_device *pdev)
 	if (spi->irq < 0)
 		return spi->irq;
 
-	ret = devm_request_irq(&pdev->dev, spi->irq, mchp_corespi_interrupt,
-			       IRQF_SHARED, dev_name(&pdev->dev), host);
+	ret = devm_request_irq(dev, spi->irq, mchp_corespi_interrupt, IRQF_SHARED,
+			       dev_name(dev), host);
 	if (ret)
-		return dev_err_probe(&pdev->dev, ret,
-				     "could not request irq\n");
+		return dev_err_probe(dev, ret, "could not request irq\n");
 
-	spi->clk = devm_clk_get_enabled(&pdev->dev, NULL);
+	spi->clk = devm_clk_get_enabled(dev, NULL);
 	if (IS_ERR(spi->clk))
-		return dev_err_probe(&pdev->dev, PTR_ERR(spi->clk),
-				     "could not get clk\n");
+		return dev_err_probe(dev, PTR_ERR(spi->clk), "could not get clk\n");
 
 	mchp_corespi_init(host, spi);
 
-	ret = devm_spi_register_controller(&pdev->dev, host);
+	ret = devm_spi_register_controller(dev, host);
 	if (ret) {
 		mchp_corespi_disable(spi);
-		return dev_err_probe(&pdev->dev, ret,
-				     "unable to register host for CoreSPI controller\n");
+		return dev_err_probe(dev, ret, "unable to register host for CoreSPI controller\n");
 	}
 
 	return 0;
