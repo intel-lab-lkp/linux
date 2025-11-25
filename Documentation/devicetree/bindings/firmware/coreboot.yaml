@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/firmware/coreboot.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: COREBOOT firmware information
+
+maintainers:
+  - Julius Werner <jwerner@chromium.org>
+
+description:
+  The device tree node to communicate the location of coreboot's
+  memory-resident bookkeeping structures to the kernel. Coreboot's
+  FIT image payload can insert the node into the device tree. If a
+  second-stage bootloader (a coreboot "payload") is used, then it
+  is responsible for inserting the node.
+
+properties:
+  compatible:
+    const: coreboot
+  reg:
+    description: Address and length of the following two memory regions
+    items:
+      - description:
+          The coreboot table. This is a list of variable-sized descriptors
+          that contain various compile- and run-time generated firmware
+          parameters. It is identified by the magic string "LBIO" in its first
+          four bytes.
+
+          See coreboot's src/commonlib/include/commonlib/coreboot_tables.h for
+          details.
+      - description:
+          The CBMEM area. This is a downward-growing memory region used by
+          coreboot to dynamically allocate data structures that remain resident.
+          It may or may not include the coreboot table as one of its members. It
+          is identified by a root node descriptor with the magic number
+          0xc0389481 that resides in the topmost 8 bytes of the area.
+
+          See coreboot's src/include/imd.h for details.
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    firmware {
+        #address-cells = <1>;
+        #size-cells = <1>;
+        ranges;
+
+        /* Firmware actually emits "coreboot" node without unit name */
+        coreboot@fdfea000 {
+            compatible = "coreboot";
+            reg = <0xfdfea000 0x264>, <0xfdfea000 0x16000>;
+        };
+    };
