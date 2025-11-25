@@ -323,6 +323,43 @@ implid_name_show(struct kobject *kobj, struct kobj_attribute *attr,
 
 static struct kobj_attribute nfs_sysfs_attr_implid_name = __ATTR_RO(implid_name);
 
+#define DEFINE_NFS_SYSFS_DELEG_KNOB(name, capname)			\
+	static ssize_t							\
+	name##_show(struct kobject *kobj, struct kobj_attribute *attr,	\
+					char *buf)			\
+	{								\
+		struct nfs_server *server = container_of(kobj, struct nfs_server, kobj); \
+		bool val = server->caps & NFS_CAP_##capname;		\
+									\
+		return sysfs_emit(buf, "%d\n", val);			\
+	}								\
+									\
+	static ssize_t							\
+	name##_store(struct kobject *kobj, struct kobj_attribute *attr,	\
+					const char *buf, size_t count)	\
+	{								\
+		struct nfs_server *server = container_of(kobj, struct nfs_server, kobj); \
+		bool val;						\
+		int ret;						\
+									\
+		ret = kstrtobool(buf, &val);				\
+		if (ret < 0)						\
+			return ret;					\
+									\
+		if (val == true)					\
+			server->caps |= NFS_CAP_##capname;		\
+		else							\
+			server->caps &= ~NFS_CAP_##capname;		\
+									\
+		return count;						\
+	}								\
+									\
+	static struct kobj_attribute nfs_sysfs_attr_##name = __ATTR_RW(name); \
+
+DEFINE_NFS_SYSFS_DELEG_KNOB(open_deleg, DELEGATION)
+DEFINE_NFS_SYSFS_DELEG_KNOB(open_xor_deleg, OPEN_XOR)
+DEFINE_NFS_SYSFS_DELEG_KNOB(timestamp_deleg, DELEGTIME)
+
 #endif /* IS_ENABLED(CONFIG_NFS_V4_1) */
 
 #define RPC_CLIENT_NAME_SIZE 64
@@ -377,6 +414,24 @@ static void nfs_sysfs_add_nfsv41_server(struct nfs_server *server)
 			server->s_sysfs_id, ret);
 
 	ret = sysfs_create_file_ns(&server->kobj, &nfs_sysfs_attr_implid_name.attr,
+				   nfs_netns_server_namespace(&server->kobj));
+	if (ret < 0)
+		pr_warn("NFS: sysfs_create_file_ns for server-%d failed (%d)\n",
+			server->s_sysfs_id, ret);
+
+	ret = sysfs_create_file_ns(&server->kobj, &nfs_sysfs_attr_open_deleg.attr,
+				   nfs_netns_server_namespace(&server->kobj));
+	if (ret < 0)
+		pr_warn("NFS: sysfs_create_file_ns for server-%d failed (%d)\n",
+			server->s_sysfs_id, ret);
+
+	ret = sysfs_create_file_ns(&server->kobj, &nfs_sysfs_attr_open_xor_deleg.attr,
+				   nfs_netns_server_namespace(&server->kobj));
+	if (ret < 0)
+		pr_warn("NFS: sysfs_create_file_ns for server-%d failed (%d)\n",
+			server->s_sysfs_id, ret);
+
+	ret = sysfs_create_file_ns(&server->kobj, &nfs_sysfs_attr_timestamp_deleg.attr,
 				   nfs_netns_server_namespace(&server->kobj));
 	if (ret < 0)
 		pr_warn("NFS: sysfs_create_file_ns for server-%d failed (%d)\n",
