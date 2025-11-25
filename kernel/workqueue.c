@@ -117,6 +117,8 @@ enum wq_internal_consts {
 	MAYDAY_INTERVAL		= HZ / 10,	/* and then every 100ms */
 	CREATE_COOLDOWN		= HZ,		/* time to breath after fail */
 
+	RESCUER_BATCH		= 16,		/* process items per turn */
+
 	/*
 	 * Rescue workers are used only on emergencies and shared by
 	 * all cpus.  Give MIN_NICE.
@@ -3454,7 +3456,15 @@ sleep:
 	goto woke_up;
 }
 
-static bool assign_rescuer_work(struct pool_workqueue *pwq, struct worker *rescuer)
+/*
+ * Try to assign one work item from @pwq to @rescuer.
+ *
+ * Returns true if a work item was successfully assigned, false otherwise.
+ * If @throttled and other PWQs are in mayday, requeue mayday for this PWQ
+ * and let the rescuer handle other PWQs first.
+ * If this is the only PWQ in mayday, process it regardless of @throttled.
+ */
+static bool assign_rescuer_work(struct pool_workqueue *pwq, struct worker *rescuer, bool throttled)
 {
 	struct worker_pool *pool = pwq->pool;
 	struct work_struct *cursor = &pwq->mayday_cursor;
@@ -3475,7 +3485,21 @@ static bool assign_rescuer_work(struct pool_workqueue *pwq, struct worker *rescu
 
 	/* find the next work item to rescue */
 	list_for_each_entry_safe_from(work, n, &pool->worklist, entry) {
-		if (get_work_pwq(work) == pwq && assign_work(work, rescuer, &n)) {
+		if (get_work_pwq(work) != pwq)
+		       continue;
+		/*
+		 * If throttled, update the cursor, requeue a mayday for this
+		 * PWQ, and move on to other PWQs. If there are no other PWQs
+		 * in mayday, continue processing this one.
+		 */
+		if (throttled && !list_empty(&pwq->wq->maydays)) {
+			list_add_tail(&cursor->entry, &work->entry);
+			raw_spin_lock(&wq_mayday_lock);		/* for wq->maydays */
+			send_mayday(work);
+			raw_spin_unlock(&wq_mayday_lock);
+			return false;
+		}
+		if (assign_work(work, rescuer, &n)) {
 			pwq->stats[PWQ_STAT_RESCUED]++;
 			/* put the cursor for next search */
 			list_add_tail(&cursor->entry, &n->entry);
@@ -3540,6 +3564,7 @@ repeat:
 		struct pool_workqueue *pwq = list_first_entry(&wq->maydays,
 					struct pool_workqueue, mayday_node);
 		struct worker_pool *pool = pwq->pool;
+		unsigned int count = 0;
 
 		__set_current_state(TASK_RUNNING);
 		list_del_init(&pwq->mayday_node);
@@ -3552,7 +3577,7 @@ repeat:
 
 		WARN_ON_ONCE(!list_empty(&rescuer->scheduled));
 
-		while (assign_rescuer_work(pwq, rescuer))
+		while (assign_rescuer_work(pwq, rescuer, ++count > RESCUER_BATCH))
 			process_scheduled_works(rescuer);
 
 		/*
