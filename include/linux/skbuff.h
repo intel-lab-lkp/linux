@@ -1568,9 +1568,9 @@ __skb_set_sw_hash(struct sk_buff *skb, __u32 hash, bool is_l4)
 	__skb_set_hash(skb, hash, true, is_l4);
 }
 
-u32 __skb_get_hash_symmetric_net(const struct net *net, const struct sk_buff *skb);
+u32 __skb_get_hash_symmetric_net(const struct net *net, struct sk_buff *skb);
 
-static inline u32 __skb_get_hash_symmetric(const struct sk_buff *skb)
+static inline u32 __skb_get_hash_symmetric(struct sk_buff *skb)
 {
 	return __skb_get_hash_symmetric_net(NULL, skb);
 }

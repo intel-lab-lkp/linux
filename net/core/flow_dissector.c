@@ -1864,9 +1864,10 @@ EXPORT_SYMBOL(make_flow_keys_digest);
 
 static struct flow_dissector flow_keys_dissector_symmetric __read_mostly;
 
-u32 __skb_get_hash_symmetric_net(const struct net *net, const struct sk_buff *skb)
+u32 __skb_get_hash_symmetric_net(const struct net *net, struct sk_buff *skb)
 {
 	struct flow_keys keys;
+	u32 flow_hash;
 
 	__flow_hash_secret_init();
 
@@ -1874,7 +1875,9 @@ u32 __skb_get_hash_symmetric_net(const struct net *net, const struct sk_buff *sk
 	__skb_flow_dissect(net, skb, &flow_keys_dissector_symmetric,
 			   &keys, NULL, 0, 0, 0, 0);
 
-	return __flow_hash_from_keys(&keys, &hashrnd);
+	flow_hash = __flow_hash_from_keys(&keys, &hashrnd);
+	__skb_set_sw_hash(skb, flow_hash, flow_keys_have_l4(&keys));
+	return flow_hash;
 }
 EXPORT_SYMBOL_GPL(__skb_get_hash_symmetric_net);
 
