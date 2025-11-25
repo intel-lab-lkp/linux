@@ -402,13 +402,28 @@ static inline void xskq_prod_cancel_n(struct xsk_queue *q, u32 cnt)
 	q->cached_prod -= cnt;
 }
 
-static inline int xskq_prod_reserve(struct xsk_queue *q)
+static inline bool xsk_cq_cached_prod_nb_free(struct xsk_queue *q)
 {
-	if (xskq_prod_is_full(q))
+	u32 cached_prod = atomic_read(&q->cached_prod_atomic);
+	u32 free_entries = q->nentries - (cached_prod - q->cached_cons);
+
+	if (free_entries)
+		return true;
+
+	/* Refresh the local tail pointer */
+	q->cached_cons = READ_ONCE(q->ring->consumer);
+	free_entries = q->nentries - (cached_prod - q->cached_cons);
+
+	return free_entries ? true : false;
+}
+
+static inline int xsk_cq_cached_prod_reserve(struct xsk_queue *q)
+{
+	if (!xsk_cq_cached_prod_nb_free(q))
 		return -ENOSPC;
 
 	/* A, matches D */
-	q->cached_prod++;
+	atomic_inc(&q->cached_prod_atomic);
 	return 0;
 }
 
