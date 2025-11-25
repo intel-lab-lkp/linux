@@ -398,8 +398,6 @@ static void mchp_corespi_remove(struct platform_device *pdev)
 	mchp_corespi_disable(spi);
 }
 
-#define MICROCHIP_SPI_PM_OPS (NULL)
-
 /*
  * Platform driver data structure
  */
@@ -414,7 +412,6 @@ static struct platform_driver mchp_corespi_driver = {
 	.probe = mchp_corespi_probe,
 	.driver = {
 		.name = "microchip-corespi",
-		.pm = MICROCHIP_SPI_PM_OPS,
 		.of_match_table = mchp_corespi_dt_ids,
 	},
 	.remove = mchp_corespi_remove,
