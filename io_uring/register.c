@@ -207,9 +207,9 @@ static __cold int __io_register_iowq_aff(struct io_ring_ctx *ctx,
 	if (!(ctx->flags & IORING_SETUP_SQPOLL)) {
 		ret = io_wq_cpu_affinity(current->io_uring, new_mask);
 	} else {
-		mutex_unlock(&ctx->uring_lock);
+		io_ring_register_ctx_unlock(ctx);
 		ret = io_sqpoll_wq_cpu_affinity(ctx, new_mask);
-		mutex_lock(&ctx->uring_lock);
+		io_ring_register_ctx_lock(ctx);
 	}
 
 	return ret;
@@ -254,7 +254,7 @@ static __cold int io_unregister_iowq_aff(struct io_ring_ctx *ctx)
 
 static __cold int io_register_iowq_max_workers(struct io_ring_ctx *ctx,
 					       void __user *arg)
-	__must_hold(&ctx->uring_lock)
+	must_hold_io_ring_register_ctx_lock(ctx)
 {
 	struct io_tctx_node *node;
 	struct io_uring_task *tctx = NULL;
@@ -274,14 +274,14 @@ static __cold int io_register_iowq_max_workers(struct io_ring_ctx *ctx,
 			struct task_struct *tsk;
 
 			/*
-			 * Observe the correct sqd->lock -> ctx->uring_lock
-			 * ordering. Fine to drop uring_lock here, we hold
+			 * Observe the correct sqd->lock -> ctx uring lock
+			 * ordering. Fine to drop ctx uring lock here, we hold
 			 * a ref to the ctx.
 			 */
 			refcount_inc(&sqd->refs);
-			mutex_unlock(&ctx->uring_lock);
+			io_ring_register_ctx_unlock(ctx);
 			mutex_lock(&sqd->lock);
-			mutex_lock(&ctx->uring_lock);
+			io_ring_register_ctx_lock(ctx);
 			tsk = sqpoll_task_locked(sqd);
 			if (tsk)
 				tctx = tsk->io_uring;
@@ -306,10 +306,10 @@ static __cold int io_register_iowq_max_workers(struct io_ring_ctx *ctx,
 	}
 
 	if (sqd) {
-		mutex_unlock(&ctx->uring_lock);
+		io_ring_register_ctx_unlock(ctx);
 		mutex_unlock(&sqd->lock);
 		io_put_sq_data(sqd);
-		mutex_lock(&ctx->uring_lock);
+		io_ring_register_ctx_lock(ctx);
 	}
 
 	if (copy_to_user(arg, new_count, sizeof(new_count)))
@@ -333,10 +333,10 @@ static __cold int io_register_iowq_max_workers(struct io_ring_ctx *ctx,
 	return 0;
 err:
 	if (sqd) {
-		mutex_unlock(&ctx->uring_lock);
+		io_ring_register_ctx_unlock(ctx);
 		mutex_unlock(&sqd->lock);
 		io_put_sq_data(sqd);
-		mutex_lock(&ctx->uring_lock);
+		io_ring_register_ctx_lock(ctx);
 	}
 	return ret;
 }
@@ -470,9 +470,9 @@ static int io_register_resize_rings(struct io_ring_ctx *ctx, void __user *arg)
 	 * If using SQPOLL, park the thread
 	 */
 	if (ctx->sq_data) {
-		mutex_unlock(&ctx->uring_lock);
+		io_ring_register_ctx_unlock(ctx);
 		io_sq_thread_park(ctx->sq_data);
-		mutex_lock(&ctx->uring_lock);
+		io_ring_register_ctx_lock(ctx);
 	}
 
 	/*
@@ -608,8 +608,8 @@ static int io_register_mem_region(struct io_ring_ctx *ctx, void __user *uarg)
 
 static int __io_uring_register(struct io_ring_ctx *ctx, unsigned opcode,
 			       void __user *arg, unsigned nr_args)
-	__releases(ctx->uring_lock)
-	__acquires(ctx->uring_lock)
+	releases_io_ring_register_ctx_lock(ctx)
+	acquires_io_ring_register_ctx_lock(ctx)
 {
 	int ret;
 
@@ -915,12 +915,12 @@ SYSCALL_DEFINE4(io_uring_register, unsigned int, fd, unsigned int, opcode,
 		return PTR_ERR(file);
 	ctx = file->private_data;
 
-	mutex_lock(&ctx->uring_lock);
+	io_ring_register_ctx_lock(ctx);
 	ret = __io_uring_register(ctx, opcode, arg, nr_args);
 
 	trace_io_uring_register(ctx, opcode, ctx->file_table.data.nr,
 				ctx->buf_table.nr, ret);
-	mutex_unlock(&ctx->uring_lock);
+	io_ring_register_ctx_unlock(ctx);
 
 	fput(file);
 	return ret;

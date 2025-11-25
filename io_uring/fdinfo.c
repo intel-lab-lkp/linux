@@ -77,7 +77,7 @@ static void __io_uring_show_fdinfo(struct io_ring_ctx *ctx, struct seq_file *m)
 
 	/*
 	 * we may get imprecise sqe and cqe info if uring is actively running
-	 * since we get cached_sq_head and cached_cq_tail without uring_lock
+	 * since we get cached_sq_head and cached_cq_tail without ctx uring lock
 	 * and sq_tail and cq_head are changed by userspace. But it's ok since
 	 * we usually use these info when it is stuck.
 	 */
@@ -257,8 +257,8 @@ __cold void io_uring_show_fdinfo(struct seq_file *m, struct file *file)
 	 * since fdinfo case grabs it in the opposite direction of normal use
 	 * cases.
 	 */
-	if (mutex_trylock(&ctx->uring_lock)) {
+	if (io_ring_ctx_trylock(ctx)) {
 		__io_uring_show_fdinfo(ctx, m);
-		mutex_unlock(&ctx->uring_lock);
+		io_ring_ctx_unlock(ctx, NULL);
 	}
 }
