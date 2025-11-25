@@ -86,3 +86,11 @@ extern void titan_machine_check(unsigned long, unsigned long);
 extern void titan_register_error_handlers(void);
 extern int privateer_process_logout_frame(struct el_common *, int);
 extern void privateer_machine_check(unsigned long, unsigned long);
+
+/*
+ * err_tsunami.c
+ */
+extern void tsunami_register_error_handlers(void);
+extern int tsunami_process_logout_frame(struct el_common *mchk_header, int print);
+extern void tsunami_machine_check(unsigned long vector, unsigned long la_ptr);
+extern int clipper_process_logout_frame(struct el_common *mchk_header, int print);
