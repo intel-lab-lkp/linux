@@ -287,3 +287,6 @@ struct hfs_readdir_data {
 };
 
 #endif
+
+
+#define EFSCORRUPTED	EUCLEAN		/* Filesystem is corrupted */
