@@ -1250,7 +1250,7 @@ static int acpi_processor_setup_cpuidle_dev(struct acpi_processor *pr,
 
 	dev->cpu = pr->id;
 	if (pr->flags.has_lpi)
-		return acpi_processor_ffh_lpi_probe(pr->id);
+		return 0;
 
 	acpi_processor_setup_cpuidle_cx(pr, dev);
 	return 0;
@@ -1262,7 +1262,13 @@ static int acpi_processor_get_power_info(struct acpi_processor *pr)
 
 	ret = acpi_processor_get_lpi_info(pr);
 	if (ret)
-		ret = acpi_processor_get_cstate_info(pr);
+		return acpi_processor_get_cstate_info(pr);
+
+	if (pr->flags.has_lpi) {
+		ret = acpi_processor_ffh_lpi_probe(pr->id);
+		if (ret)
+			pr_err("Processor FFH LPI state is invalid.\n");
+	}
 
 	return ret;
 }
