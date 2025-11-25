@@ -800,6 +800,7 @@ out:
 	return 0;
 
 fail:
+	list_del(&sg_policy->tunables_hook);
 	kobject_put(&tunables->attr_set.kobj);
 	policy->governor_data = NULL;
 	sugov_clear_global_tunables();
