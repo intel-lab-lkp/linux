@@ -1330,19 +1330,26 @@ int acpi_processor_power_state_has_changed(struct acpi_processor *pr)
 		 *
 		 * The same idle state is used for all CPUs.
 		 * The old idle state may not be usable anymore if fail to get
-		 * ACPI power information of CPU0.
+		 * available ACPI power information from any online CPU.
 		 * The cpuidle of all CPUs should be disabled.
 		 */
-		ret = acpi_processor_get_power_info(pr);
+		ret = -ENODEV;
+		for_each_online_cpu(cpu) {
+			_pr = per_cpu(processors, cpu);
+			if (!_pr && !_pr->flags.power_setup_done)
+				continue;
+			ret = acpi_processor_get_power_info(_pr);
+			if (!ret) {
+				acpi_processor_setup_cpuidle_states(_pr);
+				break;
+			}
+		}
 		if (ret) {
 			/* Ensure cpuidle of offline CPUs are inavaliable. */
 			disable_cpuidle();
-			pr_err("Get processor-%u power information failed, disable cpuidle of all CPUs\n",
-			       pr->id);
+			pr_err("No available ACPI power information, disable cpuidle of all CPUs.\n");
 			goto release_lock;
 		}
-
-		acpi_processor_setup_cpuidle_states(pr);
 		enable_cpuidle();
 
 		/* Enable all cpuidle devices */
