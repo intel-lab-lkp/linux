@@ -2749,7 +2749,8 @@ static bool psr2_sel_fetch_plane_state_supported(const struct intel_plane_state 
  */
 static bool psr2_sel_fetch_pipe_state_supported(const struct intel_crtc_state *crtc_state)
 {
-	if (crtc_state->scaler_state.scaler_id >= 0)
+	if (crtc_state->scaler_state.scaler_id >= 0 ||
+	    crtc_state->uapi.async_flip)
 		return false;
 
 	return true;
