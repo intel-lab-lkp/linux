@@ -475,6 +475,9 @@ xfs_exchmaps_dir_to_sf(
 	if (error)
 		return error;
 
+	if (!bp)
+		return -EFSCORRUPTED;
+
 	size = xfs_dir2_block_sfsize(xmi->xmi_ip2, bp->b_addr, &sfh);
 	if (size > xfs_inode_data_fork_size(xmi->xmi_ip2))
 		return 0;
