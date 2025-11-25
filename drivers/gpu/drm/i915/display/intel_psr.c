@@ -4540,3 +4540,18 @@ int intel_psr_min_guardband(struct intel_crtc_state *crtc_state)
 
 	return psr_min_guardband;
 }
+
+bool intel_psr_needs_evasion(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	struct intel_encoder *encoder;
+	struct intel_dp *intel_dp;
+
+	for_each_intel_encoder_mask_with_psr(display->drm, encoder,
+					     crtc_state->uapi.encoder_mask) {
+		intel_dp = enc_to_intel_dp(encoder);
+
+		break;
+	}
+	return intel_dp->psr.psr2_sel_fetch_enabled;
+}
