@@ -492,15 +492,15 @@ static unsigned int sugov_next_freq_shared(struct sugov_cpu *sg_cpu, u64 time)
 {
 	struct sugov_policy *sg_policy = sg_cpu->sg_policy;
 	struct cpufreq_policy *policy = sg_policy->policy;
-	unsigned long util = 0, max_cap;
+	unsigned long util = 0, max_cap = 0;
 	unsigned int j;
-
-	max_cap = arch_scale_cpu_capacity(sg_cpu->cpu);
 
 	for_each_cpu(j, policy->cpus) {
 		struct sugov_cpu *j_sg_cpu = &per_cpu(sugov_cpu, j);
-		unsigned long boost;
+		unsigned long boost, j_max_cap;
 
+		j_max_cap = arch_scale_cpu_capacity(j);
+		max_cap = max(max_cap, j_max_cap);
 		boost = sugov_iowait_apply(j_sg_cpu, time, max_cap);
 		sugov_get_util(j_sg_cpu, boost);
 
