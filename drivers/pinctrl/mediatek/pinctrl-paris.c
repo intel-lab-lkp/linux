@@ -1008,6 +1008,7 @@ int mtk_paris_pinctrl_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct pinctrl_pin_desc *pins;
 	struct mtk_pinctrl *hw;
+	struct fwnode_handle *fwnode = dev_fwnode(&pdev->dev);
 	int err, i;
 
 	hw = devm_kzalloc(&pdev->dev, sizeof(*hw), GFP_KERNEL);
@@ -1032,8 +1033,9 @@ int mtk_paris_pinctrl_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	for (i = 0; i < hw->soc->nbase_names; i++) {
-		hw->base[i] = devm_platform_ioremap_resource_byname(pdev,
-					hw->soc->base_names[i]);
+		hw->base[i] = is_of_node(fwnode)
+			? devm_platform_ioremap_resource_byname(pdev, hw->soc->base_names[i])
+			: devm_platform_get_and_ioremap_resource(pdev, i, NULL);
 		if (IS_ERR(hw->base[i]))
 			return PTR_ERR(hw->base[i]);
 	}
