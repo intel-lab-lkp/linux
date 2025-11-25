@@ -913,8 +913,10 @@ struct kvm_sev_snp_launch_finish {
 	__u64 pad1[4];
 };
 
-#define KVM_X2APIC_API_USE_32BIT_IDS            (1ULL << 0)
-#define KVM_X2APIC_API_DISABLE_BROADCAST_QUIRK  (1ULL << 1)
+#define KVM_X2APIC_API_USE_32BIT_IDS (1ULL << 0)
+#define KVM_X2APIC_API_DISABLE_BROADCAST_QUIRK (1ULL << 1)
+#define KVM_X2APIC_API_DISABLE_IGNORE_SUPPRESS_EOI_BROADCAST_QUIRK (1ULL << 2)
+#define KVM_X2APIC_API_DISABLE_SUPPRESS_EOI_BROADCAST (1ULL << 3)
 
 struct kvm_hyperv_eventfd {
 	__u32 conn_id;
