@@ -20,9 +20,14 @@ description:
 
 properties:
   compatible:
-    enum:
-      - renesas,r9a09g047-icu # RZ/G3E
-      - renesas,r9a09g057-icu # RZ/V2H(P)
+    oneOf:
+      - items:
+          - enum:
+              - renesas,r9a09g047-icu # RZ/G3E
+              - renesas,r9a09g057-icu # RZ/V2H(P)
+      - items:
+          - const: renesas,r9a09g056-icu # RZ/V2N
+          - const: renesas,r9a09g057-icu
 
   '#interrupt-cells':
     description: The first cell is the SPI number of the NMI or the
