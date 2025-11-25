@@ -13,6 +13,7 @@
 #include "xe_gt_sysfs.h"
 #include "xe_mmio.h"
 #include "xe_sriov.h"
+#include "xe_sriov_pf_helpers.h"
 
 static void __xe_gt_apply_ccs_mode(struct xe_gt *gt, u32 num_engines)
 {
@@ -108,6 +109,30 @@ ccs_mode_show(struct device *kdev,
 	return sysfs_emit(buf, "%u\n", gt->ccs_mode);
 }
 
+static int xe_gt_prepare_ccs_mode_enabling(struct xe_device *xe,
+					   struct xe_gt *gt)
+{
+	/*
+	 * The arm guard is only activated during CCS mode enabling,
+	 * and this shuould happen when CCS mode is in default mode.
+	 * lockdown arm guard ensures there is no VFS enabling
+	 * as CCS mode enabling in progress/enabled.
+	 */
+	if (!(gt->ccs_mode > 1))
+		return xe_sriov_pf_arm_guard(xe, &xe->sriov.pf.guard_vfs_enabling,
+					     true, NULL);
+	return 0;
+}
+
+static void xe_gt_finish_ccs_mode_enabling(struct xe_device *xe,
+					   struct xe_gt *gt)
+{
+	/* disarm the guard, if CCS mode is reverted to default */
+	if (!(gt->ccs_mode > 1))
+		xe_sriov_pf_disarm_guard(xe, &xe->sriov.pf.guard_vfs_enabling,
+					 true, NULL);
+}
+
 static ssize_t
 ccs_mode_store(struct device *kdev, struct device_attribute *attr,
 	       const char *buff, size_t count)
@@ -117,15 +142,13 @@ ccs_mode_store(struct device *kdev, struct device_attribute *attr,
 	u32 num_engines, num_slices;
 	int ret;
 
-	if (IS_SRIOV(xe)) {
-		xe_gt_dbg(gt, "Can't change compute mode when running as %s\n",
-			  xe_sriov_mode_to_string(xe_device_sriov_mode(xe)));
-		return -EOPNOTSUPP;
-	}
+	ret = xe_gt_prepare_ccs_mode_enabling(xe, gt);
+	if (ret)
+		return ret;
 
 	ret = kstrtou32(buff, 0, &num_engines);
 	if (ret)
-		return ret;
+		goto err;
 
 	/*
 	 * Ensure number of engines specified is valid and there is an
@@ -135,7 +158,8 @@ ccs_mode_store(struct device *kdev, struct device_attribute *attr,
 	if (!num_engines || num_engines > num_slices || num_slices % num_engines) {
 		xe_gt_dbg(gt, "Invalid compute config, %d engines %d slices\n",
 			  num_engines, num_slices);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err;
 	}
 
 	/* CCS mode can only be updated when there are no drm clients */
@@ -143,7 +167,8 @@ ccs_mode_store(struct device *kdev, struct device_attribute *attr,
 	if (!list_empty(&xe->drm.filelist)) {
 		mutex_unlock(&xe->drm.filelist_mutex);
 		xe_gt_dbg(gt, "Rejecting compute mode change as there are active drm clients\n");
-		return -EBUSY;
+		ret = -EBUSY;
+		goto err;
 	}
 
 	if (gt->ccs_mode != num_engines) {
@@ -155,7 +180,13 @@ ccs_mode_store(struct device *kdev, struct device_attribute *attr,
 
 	mutex_unlock(&xe->drm.filelist_mutex);
 
+	xe_gt_finish_ccs_mode_enabling(xe, gt);
+
 	return count;
+err:
+	xe_gt_finish_ccs_mode_enabling(xe, gt);
+
+	return ret;
 }
 
 static DEVICE_ATTR_RW(ccs_mode);
