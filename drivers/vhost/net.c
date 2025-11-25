@@ -1015,6 +1015,27 @@ static int vhost_net_rx_peek_head_len(struct vhost_net *net, struct sock *sk,
 	struct vhost_virtqueue *tvq = &tnvq->vq;
 	int len = peek_head_len(rnvq, sk);
 
+	if (!len && rnvq->done_idx) {
+		/* When idle, flush signal first, which can take some
+		 * time for ring management and guest notification.
+		 * Afterwards, check one last time for work, as the ring
+		 * may have received new work during the notification
+		 * window.
+		 */
+		vhost_net_signal_used(rnvq, *count);
+		*count = 0;
+		if (peek_head_len(rnvq, sk)) {
+			/* More work came in during the notification
+			 * window. To be fair to the TX handler and other
+			 * potentially pending work items, pretend like
+			 * this was a busy poll interruption so that
+			 * the RX handler will be rescheduled and try
+			 * again.
+			 */
+			*busyloop_intr = true;
+		}
+	}
+
 	if (!len && rvq->busyloop_timeout) {
 		/* Flush batched heads first */
 		vhost_net_signal_used(rnvq, *count);
