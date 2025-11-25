@@ -7550,6 +7550,7 @@ Kernel parameters
 			mono_raw - Use ktime_get_raw_fast_ns() for time
 				stamps.
 			boot - Use ktime_get_boot_fast_ns() for time stamps.
+			tai - Use ktime_get_tai_fast_ns() for time stamps.
 			Architectures may add more clocks. See
 			Documentation/trace/ftrace.rst for more details.
 
