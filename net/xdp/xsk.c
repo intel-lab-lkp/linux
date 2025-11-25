@@ -546,17 +546,6 @@ static int xsk_wakeup(struct xdp_sock *xs, u8 flags)
 	return dev->netdev_ops->ndo_xsk_wakeup(dev, xs->queue_id, flags);
 }
 
-static int xsk_cq_reserve_locked(struct xsk_buff_pool *pool)
-{
-	int ret;
-
-	spin_lock(&pool->cq_cached_prod_lock);
-	ret = xsk_cq_cached_prod_reserve(pool->cq);
-	spin_unlock(&pool->cq_cached_prod_lock);
-
-	return ret;
-}
-
 static void xsk_cq_submit_addr_locked(struct xsk_buff_pool *pool,
 				      struct sk_buff *skb)
 {
@@ -585,11 +574,9 @@ static void xsk_cq_submit_addr_locked(struct xsk_buff_pool *pool,
 	spin_unlock_irqrestore(&pool->cq_prod_lock, flags);
 }
 
-static void xsk_cq_cancel_locked(struct xsk_buff_pool *pool, u32 n)
+static void xsk_cq_cached_prod_cancel(struct xsk_buff_pool *pool, u32 n)
 {
-	spin_lock(&pool->cq_cached_prod_lock);
 	atomic_sub(n, &pool->cq->cached_prod_atomic);
-	spin_unlock(&pool->cq_cached_prod_lock);
 }
 
 static void xsk_inc_num_desc(struct sk_buff *skb)
@@ -643,7 +630,7 @@ static void xsk_consume_skb(struct sk_buff *skb)
 	}
 
 	skb->destructor = sock_wfree;
-	xsk_cq_cancel_locked(xs->pool, num_descs);
+	xsk_cq_cached_prod_cancel(xs->pool, num_descs);
 	/* Free skb without triggering the perf drop trace */
 	consume_skb(skb);
 	xs->skb = NULL;
@@ -860,7 +847,7 @@ free_err:
 		xskq_cons_release(xs->tx);
 	} else {
 		/* Let application retry */
-		xsk_cq_cancel_locked(xs->pool, 1);
+		xsk_cq_cached_prod_cancel(xs->pool, 1);
 	}
 
 	return ERR_PTR(err);
@@ -898,7 +885,7 @@ static int __xsk_generic_xmit(struct sock *sk)
 		 * if there is space in it. This avoids having to implement
 		 * any buffering in the Tx path.
 		 */
-		err = xsk_cq_reserve_locked(xs->pool);
+		err = xsk_cq_cached_prod_reserve(xs->pool->cq);
 		if (err) {
 			err = -EAGAIN;
 			goto out;
