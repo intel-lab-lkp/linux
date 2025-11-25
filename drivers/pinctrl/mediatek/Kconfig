@@ -321,6 +321,18 @@ config PINCTRL_MT8516
 	default ARM64 && ARCH_MEDIATEK
 	select PINCTRL_MTK
 
+config PINCTRL_MT8901
+	bool "MediaTek MT8901 pin control"
+	depends on ACPI
+	depends on ARM64 || COMPILE_TEST
+	default ARM64 && ARCH_MEDIATEK
+	select PINCTRL_MTK_PARIS
+	help
+	  Say yes here to support pin controller and gpio driver
+	  on MediaTek MT8901 SoC.
+	  In MTK platform, we support virtual gpio and use it to
+	  map specific eint which doesn't have real gpio pin.
+
 # For PMIC
 config PINCTRL_MT6397
 	bool "MediaTek MT6397 pin control"
