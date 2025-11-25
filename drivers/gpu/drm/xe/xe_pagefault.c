@@ -70,7 +70,7 @@ static int xe_pagefault_handle_vma(struct xe_gt *gt, struct xe_vma *vma,
 	struct xe_tile *tile = gt_to_tile(gt);
 	struct xe_validation_ctx ctx;
 	struct drm_exec exec;
-	struct dma_fence *fence;
+	struct dma_fence *fence = NULL;
 	int err, needs_vram;
 
 	lockdep_assert_held_write(&vm->lock);
@@ -122,8 +122,10 @@ retry_userptr:
 		}
 	}
 
-	dma_fence_wait(fence, false);
-	dma_fence_put(fence);
+	if (fence) {
+		dma_fence_wait(fence, false);
+		dma_fence_put(fence);
+	}
 
 unlock_dma_resv:
 	xe_validation_ctx_fini(&ctx);
