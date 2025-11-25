@@ -394,7 +394,7 @@ virtio_net_hdr_tnl_from_skb(const struct sk_buff *skb,
 	tnl_gso_type = skb_shinfo(skb)->gso_type & (SKB_GSO_UDP_TUNNEL |
 						    SKB_GSO_UDP_TUNNEL_CSUM);
 	if (!tnl_gso_type)
-		return virtio_net_hdr_from_skb(skb, hdr, little_endian, false,
+		return virtio_net_hdr_from_skb(skb, hdr, little_endian, true,
 					       vlan_hlen);
 
 	/* Tunnel support not negotiated but skb ask for it. */
