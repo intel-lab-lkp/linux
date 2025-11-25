@@ -198,9 +198,6 @@ static int smi_i2c_probe(struct platform_device *pdev, struct smi *smi,
 	ret = i2c_acpi_client_count(adev);
 	if (ret < 0)
 		return ret;
-	if (!ret)
-		return -ENOENT;
-
 	count = ret;
 
 	smi->i2c_devs = devm_kcalloc(dev, count, sizeof(*smi->i2c_devs), GFP_KERNEL);
