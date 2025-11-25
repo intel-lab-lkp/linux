@@ -32,7 +32,6 @@ struct worker {
 	work_func_t		current_func;	/* K: function */
 	struct pool_workqueue	*current_pwq;	/* K: pwq */
 	u64			current_at;	/* K: runtime at start or last wakeup */
-	unsigned int		current_color;	/* K: color */
 
 	int			sleeping;	/* S: is worker sleeping? */
 

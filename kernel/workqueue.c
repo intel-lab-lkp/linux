@@ -3187,7 +3187,6 @@ __acquires(&pool->lock)
 	if (worker->task)
 		worker->current_at = worker->task->se.sum_exec_runtime;
 	work_data = *work_data_bits(work);
-	worker->current_color = get_work_color(work_data);
 
 	/*
 	 * Record wq name for cmdline and debug reporting, may get
@@ -3308,7 +3307,6 @@ __acquires(&pool->lock)
 	worker->current_work = NULL;
 	worker->current_func = NULL;
 	worker->current_pwq = NULL;
-	worker->current_color = INT_MAX;
 
 	/* must be the last step, see the function comment */
 	pwq_dec_nr_in_flight(pwq, work_data);
@@ -3796,7 +3794,6 @@ static void insert_wq_barrier(struct pool_workqueue *pwq,
 {
 	static __maybe_unused struct lock_class_key bh_key, thr_key;
 	unsigned int work_flags = 0;
-	unsigned int work_color;
 	struct list_head *head;
 
 	/*
@@ -3826,19 +3823,17 @@ static void insert_wq_barrier(struct pool_workqueue *pwq,
 	 */
 	if (worker) {
 		head = worker->scheduled.next;
-		work_color = worker->current_color;
 	} else {
 		unsigned long *bits = work_data_bits(target);
 
 		head = target->entry.next;
 		/* there can already be other linked works, inherit and set */
 		work_flags |= *bits & WORK_STRUCT_LINKED;
-		work_color = get_work_color(*bits);
 		__set_bit(WORK_STRUCT_LINKED_BIT, bits);
 	}
 
-	pwq->nr_in_flight[work_color]++;
-	work_flags |= work_color_to_flags(work_color);
+	pwq->nr_in_flight[pwq->work_color]++;
+	work_flags |= work_color_to_flags(pwq->work_color);
 
 	insert_work(pwq, &barr->work, head, work_flags);
 }
