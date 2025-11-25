@@ -2179,6 +2179,9 @@ static void insert_work(struct pool_workqueue *pwq, struct work_struct *work,
 	/* record the work call stack in order to print it in KASAN reports */
 	kasan_record_aux_stack(work);
 
+	pwq->nr_in_flight[pwq->work_color]++;
+	extra_flags |= work_color_to_flags(pwq->work_color);
+
 	/* we own @work, set data and link */
 	set_work_pwq(work, pwq, extra_flags);
 	list_add_tail(&work->entry, head);
@@ -2231,7 +2234,6 @@ static void __queue_work(int cpu, struct workqueue_struct *wq,
 {
 	struct pool_workqueue *pwq;
 	struct worker_pool *last_pool, *pool;
-	unsigned int work_flags;
 	unsigned int req_cpu = cpu;
 
 	/*
@@ -2319,9 +2321,6 @@ retry:
 	if (WARN_ON(!list_empty(&work->entry)))
 		goto out;
 
-	pwq->nr_in_flight[pwq->work_color]++;
-	work_flags = work_color_to_flags(pwq->work_color);
-
 	/*
 	 * Limit the number of concurrently active work items to max_active.
 	 * @work must also queue behind existing inactive work items to maintain
@@ -2332,11 +2331,10 @@ retry:
 			pool->watchdog_ts = jiffies;
 
 		trace_workqueue_activate_work(work);
-		insert_work(pwq, work, &pool->worklist, work_flags);
+		insert_work(pwq, work, &pool->worklist, 0);
 		kick_pool(pool);
 	} else {
-		work_flags |= WORK_STRUCT_INACTIVE;
-		insert_work(pwq, work, &pwq->inactive_works, work_flags);
+		insert_work(pwq, work, &pwq->inactive_works, WORK_STRUCT_INACTIVE);
 	}
 
 out:
@@ -3831,9 +3829,6 @@ static void insert_wq_barrier(struct pool_workqueue *pwq,
 		work_flags |= *bits & WORK_STRUCT_LINKED;
 		__set_bit(WORK_STRUCT_LINKED_BIT, bits);
 	}
-
-	pwq->nr_in_flight[pwq->work_color]++;
-	work_flags |= work_color_to_flags(pwq->work_color);
 
 	insert_work(pwq, &barr->work, head, work_flags);
 }
