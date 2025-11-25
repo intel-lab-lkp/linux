@@ -94,6 +94,7 @@ Subsystem-specific APIs
    aperture
    generic-counter
    gpio/index
+   hisi-soc-cache
    hsi
    hte/index
    i2c
