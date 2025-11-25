@@ -537,7 +537,7 @@ asmlinkage void noinstr do_ade(struct pt_regs *regs)
 	irqentry_state_t state = irqentry_enter(regs);
 
 	die_if_kernel("Kernel ade access", regs);
-	force_sig_fault(SIGBUS, BUS_ADRERR, (void __user *)regs->csr_badvaddr);
+	force_sig_fault(SIGSEGV, SEGV_MAPERR, (void __user *)regs->csr_badvaddr);
 
 	irqentry_exit(regs, state);
 }
