@@ -49,7 +49,7 @@ static inline int intel_pmc_ipc(struct pmc_ipc_cmd *ipc_cmd, struct pmc_ipc_rbuf
 	};
 	struct acpi_object_list arg_list = { PMC_IPCS_PARAM_COUNT, params };
 	union acpi_object *obj;
-	int status;
+	int status, ret = 0;
 
 	if (!ipc_cmd || !rbuf)
 		return -EINVAL;
@@ -78,18 +78,22 @@ static inline int intel_pmc_ipc(struct pmc_ipc_cmd *ipc_cmd, struct pmc_ipc_rbuf
 	    obj->package.count == VALID_IPC_RESPONSE) {
 		const union acpi_object *objs = obj->package.elements;
 
-		if ((u8)objs[0].integer.value != 0)
-			return -EINVAL;
+		if ((u8)objs[0].integer.value != 0) {
+			ret = -EINVAL;
+			goto out;
+		}
 
 		rbuf->buf[0] = objs[1].integer.value;
 		rbuf->buf[1] = objs[2].integer.value;
 		rbuf->buf[2] = objs[3].integer.value;
 		rbuf->buf[3] = objs[4].integer.value;
 	} else {
-		return -EINVAL;
+		ret = -EINVAL;
 	}
 
-	return 0;
+out:
+	kfree(buffer.pointer);
+	return ret;
 #else
 	return -ENODEV;
 #endif /* CONFIG_ACPI */
