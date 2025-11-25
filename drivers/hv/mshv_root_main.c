@@ -17,7 +17,9 @@
 #include <linux/file.h>
 #include <linux/anon_inodes.h>
 #include <linux/mm.h>
+#include <linux/interrupt.h>
 #include <linux/io.h>
+#include <linux/irq.h>
 #include <linux/cpuhotplug.h>
 #include <linux/random.h>
 #include <asm/mshyperv.h>
@@ -75,6 +77,11 @@ static int mshv_vp_mmap(struct file *file, struct vm_area_struct *vma);
 static vm_fault_t mshv_vp_fault(struct vm_fault *vmf);
 static int mshv_init_async_handler(struct mshv_partition *partition);
 static void mshv_async_hvcall_handler(void *data, u64 *status);
+
+
+int mshv_interrupt = -1;
+int mshv_irq = -1;
+static long __percpu *mshv_evt;
 
 static const union hv_input_vtl input_vtl_zero;
 static const union hv_input_vtl input_vtl_normal = {
@@ -2296,6 +2303,47 @@ static void mshv_init_vmm_caps(struct device *dev)
 	dev_dbg(dev, "vmm_caps = %#llx\n", mshv_root.vmm_caps.as_uint64[0]);
 }
 
+#if IS_ENABLED(CONFIG_ARM64)
+static irqreturn_t mshv_percpu_isr(int irq, void *dev_id)
+{
+	mshv_isr();
+	add_interrupt_randomness(irq);
+	return IRQ_HANDLED;
+}
+
+static int mshv_arch_parent_partition_init(struct device *dev)
+{
+	int ret;
+
+	mshv_irq = mshv_get_intercept_irq();
+	mshv_interrupt = irq_get_irq_data(mshv_irq)->hwirq;
+
+	mshv_evt = alloc_percpu(long);
+	if (!mshv_evt) {
+		dev_err(dev, "Failed to allocate percpu event\n");
+		return -ENOMEM;
+	}
+
+	ret = request_percpu_irq(mshv_irq, mshv_percpu_isr, "MSHV", mshv_evt);
+	if (ret) {
+		dev_err(dev, "Failed to request percpu irq\n");
+		goto free_percpu_buf;
+	}
+
+	return ret;
+
+free_percpu_buf:
+	free_percpu(mshv_evt);
+	return ret;
+}
+#elif IS_ENABLED(CONFIG_X86_64)
+static int mshv_arch_parent_partition_init(struct device *dev)
+{
+	mshv_interrupt = HYPERVISOR_CALLBACK_VECTOR;
+	return 0;
+}
+#endif
+
 static int __init mshv_parent_partition_init(void)
 {
 	int ret;
@@ -2313,6 +2361,10 @@ static int __init mshv_parent_partition_init(void)
 		return ret;
 
 	dev = mshv_dev.this_device;
+
+	ret = mshv_arch_parent_partition_init(dev);
+	if (ret)
+		return ret;
 
 	if (version_info.build_number < MSHV_HV_MIN_VERSION ||
 	    version_info.build_number > MSHV_HV_MAX_VERSION) {
@@ -2381,6 +2433,13 @@ static void __exit mshv_parent_partition_exit(void)
 	mshv_irqfd_wq_cleanup();
 	if (hv_root_partition())
 		mshv_root_partition_exit();
+	if (mshv_irq >= 0) {
+		if (mshv_evt) {
+			free_percpu_irq(mshv_irq, mshv_evt);
+			free_percpu(mshv_evt);
+			mshv_evt = NULL;
+		}
+	}
 	cpuhp_remove_state(mshv_cpuhp_online);
 	free_percpu(mshv_root.synic_pages);
 }
