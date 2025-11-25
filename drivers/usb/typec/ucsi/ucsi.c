@@ -1726,6 +1726,7 @@ static int ucsi_register_port(struct ucsi *ucsi, struct ucsi_connector *con)
 	if (ret) {
 		dev_err(ucsi->dev, "con%d: failed to register alt modes\n",
 			con->num);
+		ret = 0;
 		goto out;
 	}
 
@@ -1733,6 +1734,7 @@ static int ucsi_register_port(struct ucsi *ucsi, struct ucsi_connector *con)
 	ret = ucsi_get_connector_status(con, false);
 	if (ret) {
 		dev_err(ucsi->dev, "con%d: failed to get status\n", con->num);
+		ret = 0;
 		goto out;
 	}
 
