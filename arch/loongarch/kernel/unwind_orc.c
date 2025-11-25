@@ -506,6 +506,9 @@ bool unwind_next_frame(struct unwind_state *state)
 		goto err;
 	}
 
+	if (pc >= (unsigned long)_end && pc < (unsigned long)XKVRANGE)
+		goto end;
+
 	state->pc = bt_address(pc);
 	if (!state->pc) {
 		pr_err("cannot find unwind pc at %p\n", (void *)pc);
