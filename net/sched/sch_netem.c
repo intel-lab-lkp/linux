@@ -976,13 +976,27 @@ static int parse_attr(struct nlattr *tb[], int maxtype, struct nlattr *nla,
 
 static const struct Qdisc_class_ops netem_class_ops;
 
-static int check_netem_in_tree(struct Qdisc *sch, bool duplicates,
-			       struct netlink_ext_ack *extack)
+static int netem_quirk_chk(struct Qdisc *sch, struct nlattr *opt,
+			   struct netlink_ext_ack *extack)
 {
+	struct nlattr *tb[TCA_NETEM_MAX + 1];
+	struct tc_netem_qopt *qopt;
 	struct Qdisc *root, *q;
+	struct net_device *dev;
+	bool root_is_mq;
+	bool duplicates;
 	unsigned int i;
+	int ret;
 
-	root = qdisc_root_sleeping(sch);
+	ret = parse_attr(tb, TCA_NETEM_MAX, opt, netem_policy, sizeof(*qopt));
+	if (ret < 0)
+		return ret;
+
+	qopt = nla_data(opt);
+	duplicates = qopt->duplicate;
+
+	dev = sch->dev_queue->dev;
+	root = rtnl_dereference(dev->qdisc);
 
 	if (sch != root && root->ops->cl_ops == &netem_class_ops) {
 		if (duplicates ||
@@ -993,19 +1007,25 @@ static int check_netem_in_tree(struct Qdisc *sch, bool duplicates,
 	if (!qdisc_dev(root))
 		return 0;
 
+	root_is_mq = root->flags & TCQ_F_MQROOT;
+
 	hash_for_each(qdisc_dev(root)->qdisc_hash, i, q, hash) {
 		if (sch != q && q->ops->cl_ops == &netem_class_ops) {
 			if (duplicates ||
-			    ((struct netem_sched_data *)qdisc_priv(q))->duplicate)
-				goto err;
+			    ((struct netem_sched_data *)qdisc_priv(q))->duplicate) {
+				if (!root_is_mq ||
+				    TC_H_MAJ(q->parent) != root->handle ||
+				    TC_H_MAJ(q->parent) != TC_H_MAJ(sch->parent))
+					goto err;
+			}
 		}
 	}
 
 	return 0;
 
 err:
-	NL_SET_ERR_MSG(extack,
-		       "netem: cannot mix duplicating netems with other netems in tree");
+	NL_SET_ERR_MSG_MOD(extack,
+			   "cannot mix duplicating netems with other netems in tree unless root is multiqueue");
 	return -EINVAL;
 }
 
@@ -1067,11 +1087,6 @@ static int netem_change(struct Qdisc *sch, struct nlattr *opt,
 	q->gap = qopt->gap;
 	q->counter = 0;
 	q->loss = qopt->loss;
-
-	ret = check_netem_in_tree(sch, qopt->duplicate, extack);
-	if (ret)
-		goto unlock;
-
 	q->duplicate = qopt->duplicate;
 
 	/* for compatibility with earlier versions.
@@ -1353,6 +1368,7 @@ static struct Qdisc_ops netem_qdisc_ops __read_mostly = {
 	.destroy	=	netem_destroy,
 	.change		=	netem_change,
 	.dump		=	netem_dump,
+	.quirk_chk	=	netem_quirk_chk,
 	.owner		=	THIS_MODULE,
 };
 MODULE_ALIAS_NET_SCH("netem");

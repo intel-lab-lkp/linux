@@ -1315,6 +1315,12 @@ static struct Qdisc *qdisc_create(struct net_device *dev,
 		rcu_assign_pointer(sch->stab, stab);
 	}
 
+	if (ops->quirk_chk) {
+		err = ops->quirk_chk(sch, tca[TCA_OPTIONS], extack);
+		if (err != 0)
+			goto err_out3;
+	}
+
 	if (ops->init) {
 		err = ops->init(sch, tca[TCA_OPTIONS], extack);
 		if (err != 0)
@@ -1377,6 +1383,12 @@ static int qdisc_change(struct Qdisc *sch, struct nlattr **tca,
 		if (tca[TCA_INGRESS_BLOCK] || tca[TCA_EGRESS_BLOCK]) {
 			NL_SET_ERR_MSG(extack, "Change of blocks is not supported");
 			return -EOPNOTSUPP;
+		}
+		if (sch->ops->quirk_chk) {
+			err = sch->ops->quirk_chk(sch, tca[TCA_OPTIONS],
+						  extack);
+			if (err != 0)
+				return err;
 		}
 		err = sch->ops->change(sch, tca[TCA_OPTIONS], extack);
 		if (err)
