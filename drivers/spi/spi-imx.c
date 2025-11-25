@@ -264,9 +264,6 @@ static bool spi_imx_can_dma(struct spi_controller *controller, struct spi_device
 	if (!controller->dma_rx)
 		return false;
 
-	if (spi_imx->target_mode)
-		return false;
-
 	if (transfer->len < spi_imx->devtype_data->fifo_size)
 		return false;
 
@@ -1756,23 +1753,51 @@ static int spi_imx_dma_submit(struct spi_imx_data *spi_imx,
 
 	transfer_timeout = spi_imx_calculate_timeout(spi_imx, transfer->len);
 
-	/* Wait SDMA to finish the data transfer.*/
-	time_left = wait_for_completion_timeout(&spi_imx->dma_tx_completion,
-						transfer_timeout);
-	if (!time_left) {
-		dev_err(spi_imx->dev, "I/O Error in DMA TX\n");
-		dmaengine_terminate_all(controller->dma_tx);
-		dmaengine_terminate_all(controller->dma_rx);
-		return -ETIMEDOUT;
-	}
+	if (!spi_imx->target_mode) {
+		/* Wait SDMA to finish the data transfer.*/
+		time_left = wait_for_completion_timeout(&spi_imx->dma_tx_completion,
+							transfer_timeout);
+		if (!time_left) {
+			dev_err(spi_imx->dev, "I/O Error in DMA TX\n");
+			dmaengine_terminate_all(controller->dma_tx);
+			dmaengine_terminate_all(controller->dma_rx);
+			return -ETIMEDOUT;
+		}
 
-	time_left = wait_for_completion_timeout(&spi_imx->dma_rx_completion,
-						transfer_timeout);
-	if (!time_left) {
-		dev_err(&controller->dev, "I/O Error in DMA RX\n");
-		spi_imx->devtype_data->reset(spi_imx);
-		dmaengine_terminate_all(controller->dma_rx);
-		return -ETIMEDOUT;
+		time_left = wait_for_completion_timeout(&spi_imx->dma_rx_completion,
+							transfer_timeout);
+		if (!time_left) {
+			dev_err(&controller->dev, "I/O Error in DMA RX\n");
+			spi_imx->devtype_data->reset(spi_imx);
+			dmaengine_terminate_all(controller->dma_rx);
+			return -ETIMEDOUT;
+		}
+	} else {
+		spi_imx->target_aborted = false;
+
+		if (wait_for_completion_interruptible(&spi_imx->dma_tx_completion) ||
+		    spi_imx->target_aborted) {
+			dev_dbg(spi_imx->dev, "I/O Error in DMA TX interrupted\n");
+			dmaengine_terminate_all(controller->dma_tx);
+			dmaengine_terminate_all(controller->dma_rx);
+			return -EINTR;
+		}
+
+		if (wait_for_completion_interruptible(&spi_imx->dma_rx_completion) ||
+		    spi_imx->target_aborted) {
+			dev_dbg(spi_imx->dev, "I/O Error in DMA RX interrupted\n");
+			dmaengine_terminate_all(controller->dma_rx);
+			return -EINTR;
+		}
+
+		/*
+		 * ECSPI has a HW issue when works in Target mode, after 64 words
+		 * writtern to TXFIFO, even TXFIFO becomes empty, ECSPI_TXDATA keeps
+		 * shift out the last word data, so we have to disable ECSPI when in
+		 * target mode after the transfer completes.
+		 */
+		if (spi_imx->devtype_data->disable)
+			spi_imx->devtype_data->disable(spi_imx);
 	}
 
 	return 0;
@@ -1895,9 +1920,15 @@ dma_failure_no_start:
 static int spi_imx_dma_transfer(struct spi_imx_data *spi_imx,
 				struct spi_transfer *transfer)
 {
-	bool word_delay = transfer->word_delay.value != 0;
+	bool word_delay = transfer->word_delay.value != 0 && !spi_imx->target_mode;
 	int ret;
 	int i;
+
+	if (transfer->len > MX53_MAX_TRANSFER_BYTES && spi_imx->target_mode) {
+		dev_err(spi_imx->dev, "Transaction too big, max size is %d bytes\n",
+			MX53_MAX_TRANSFER_BYTES);
+		return -EMSGSIZE;
+	}
 
 	ret = spi_imx_dma_data_prepare(spi_imx, transfer, word_delay);
 	if (ret < 0) {
@@ -2104,7 +2135,7 @@ static int spi_imx_transfer_one(struct spi_controller *controller,
 	while (spi_imx->devtype_data->rx_available(spi_imx))
 		readl(spi_imx->base + MXC_CSPIRXDATA);
 
-	if (spi_imx->target_mode)
+	if (spi_imx->target_mode && !spi_imx->usedma)
 		return spi_imx_pio_transfer_target(spi, transfer);
 
 	/*
@@ -2116,7 +2147,10 @@ static int spi_imx_transfer_one(struct spi_controller *controller,
 		ret = spi_imx_dma_transfer(spi_imx, transfer);
 		if (transfer->error & SPI_TRANS_FAIL_NO_START) {
 			spi_imx->usedma = false;
-			return spi_imx_pio_transfer(spi, transfer);
+			if (spi_imx->target_mode)
+				return spi_imx_pio_transfer_target(spi, transfer);
+			else
+				return spi_imx_pio_transfer(spi, transfer);
 		}
 		return ret;
 	}
