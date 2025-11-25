@@ -34,6 +34,7 @@
 #include <asm/exception.h>
 #include <asm/smp_plat.h>
 #include <asm/virt.h>
+#include <asm/mshyperv.h>
 
 #include "irq-gic-common.h"
 
@@ -1407,7 +1408,23 @@ static void __init gic_smp_init(void)
 		.fwnode		= gic_data.fwnode,
 		.param_count	= 1,
 	};
+	/* Register all 8 non-secure SGIs */
+	const int NR_SMP_SGIS = 8;
+	int nr_sgis = NR_SMP_SGIS;
 	int base_sgi;
+
+	/*
+	 * Allocate one more SGI for use by Hyper-V. This is only needed when
+	 * Linux is running in a parent partition. Hyper-V will use this interrupt
+	 * to notify the parent partition of intercepts.
+	 *
+	 * When running on Hyper-V, it is okay to use SGIs 8-15. They're not reserved
+	 * for secure firmware.
+	 */
+#if IS_ENABLED(CONFIG_HYPERV)
+	if (hv_parent_partition())
+		nr_sgis += 1;
+#endif
 
 	cpuhp_setup_state_nocalls(CPUHP_BP_PREPARE_DYN,
 				  "irqchip/arm/gicv3:checkrdist",
@@ -1417,12 +1434,18 @@ static void __init gic_smp_init(void)
 				  "irqchip/arm/gicv3:starting",
 				  gic_starting_cpu, NULL);
 
-	/* Register all 8 non-secure SGIs */
-	base_sgi = irq_domain_alloc_irqs(gic_data.domain, 8, NUMA_NO_NODE, &sgi_fwspec);
+	base_sgi = irq_domain_alloc_irqs(gic_data.domain, nr_sgis, NUMA_NO_NODE, &sgi_fwspec);
 	if (WARN_ON(base_sgi <= 0))
 		return;
 
-	set_smp_ipi_range(base_sgi, 8);
+	set_smp_ipi_range(base_sgi, NR_SMP_SGIS);
+
+#if IS_ENABLED(CONFIG_HYPERV)
+	if (hv_parent_partition()) {
+		base_sgi += NR_SMP_SGIS;
+		mshv_set_intercept_irq(base_sgi);
+	}
+#endif
 }
 
 static int gic_set_affinity(struct irq_data *d, const struct cpumask *mask_val,

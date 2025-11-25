@@ -20,6 +20,8 @@
 static bool hyperv_detected;
 static bool hyperv_initialized;
 
+static int mshv_intercept_irq;
+
 int hv_get_hypervisor_version(union hv_hypervisor_version_info *info)
 {
 	hv_get_vpreg_128(HV_REGISTER_HYPERVISOR_VERSION,
@@ -136,6 +138,17 @@ static int __init hyperv_init(void)
 	hyperv_initialized = true;
 	return 0;
 }
+
+void __init mshv_set_intercept_irq(int irq)
+{
+	mshv_intercept_irq = irq;
+}
+
+int mshv_get_intercept_irq(void)
+{
+	return mshv_intercept_irq;
+}
+EXPORT_SYMBOL_GPL(mshv_get_intercept_irq);
 
 early_initcall(hyperv_init);
 

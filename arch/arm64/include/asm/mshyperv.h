@@ -55,6 +55,14 @@ static inline u64 hv_get_non_nested_msr(unsigned int reg)
 
 void hyperv_early_init(void);
 
+#if IS_ENABLED(CONFIG_MSHV_ROOT)
+void mshv_set_intercept_irq(int irq);
+#else
+static inline void mshv_set_intercept_irq(int irq) {}
+#endif
+
+int mshv_get_intercept_irq(void);
+
 /* SMCCC hypercall parameters */
 #define HV_SMCCC_FUNC_NUMBER	1
 #define HV_FUNC_ID	ARM_SMCCC_CALL_VAL(			\
