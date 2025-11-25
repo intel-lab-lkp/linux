@@ -27139,29 +27139,23 @@ S:	Maintained
 F:	drivers/char/virtio_console.c
 F:	include/uapi/linux/virtio_console.h
 
-VIRTIO CORE AND NET DRIVERS
+VIRTIO CORE
 M:	"Michael S. Tsirkin" <mst@redhat.com>
 M:	Jason Wang <jasowang@redhat.com>
 R:	Xuan Zhuo <xuanzhuo@linux.alibaba.com>
 R:	Eugenio Pérez <eperezma@redhat.com>
 L:	virtualization@lists.linux.dev
 S:	Maintained
-F:	Documentation/ABI/testing/sysfs-bus-vdpa
-F:	Documentation/ABI/testing/sysfs-class-vduse
 F:	Documentation/devicetree/bindings/virtio/
 F:	Documentation/driver-api/virtio/
 F:	drivers/block/virtio_blk.c
 F:	drivers/crypto/virtio/
-F:	drivers/net/virtio_net.c
-F:	drivers/vdpa/
 F:	drivers/virtio/
-F:	include/linux/vdpa.h
 F:	include/linux/virtio*.h
 F:	include/linux/vringh.h
 F:	include/uapi/linux/virtio_*.h
 F:	net/vmw_vsock/virtio*
 F:	tools/virtio/
-F:	tools/testing/selftests/drivers/net/virtio_net/
 
 VIRTIO CRYPTO DRIVER
 M:	Gonglei <arei.gonglei@huawei.com>
@@ -27272,6 +27266,25 @@ S:	Maintained
 W:	https://virtio-mem.gitlab.io/
 F:	drivers/virtio/virtio_mem.c
 F:	include/uapi/linux/virtio_mem.h
+
+VIRTIO NET DRIVERS
+M:	"Michael S. Tsirkin" <mst@redhat.com>
+M:	Jason Wang <jasowang@redhat.com>
+R:	Xuan Zhuo <xuanzhuo@linux.alibaba.com>
+R:	Eugenio Pérez <eperezma@redhat.com>
+L:	netdev@vger.kernel.org
+L:	virtualization@lists.linux.dev
+S:	Maintained
+F:	Documentation/ABI/testing/sysfs-bus-vdpa
+F:	Documentation/ABI/testing/sysfs-class-vduse
+F:	drivers/net/virtio_net.c
+F:	drivers/vdpa/
+F:	include/linux/vdpa.h
+F:	include/linux/virtio_net.h
+F:	include/uapi/linux/vdpa.h
+F:	include/uapi/linux/vduse.h
+F:	include/uapi/linux/virtio_net.h
+F:	tools/testing/selftests/drivers/net/virtio_net/
 
 VIRTIO PMEM DRIVER
 M:	Pankaj Gupta <pankaj.gupta.linux@gmail.com>
