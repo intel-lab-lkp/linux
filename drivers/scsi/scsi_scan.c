@@ -362,6 +362,7 @@ static struct scsi_device *scsi_alloc_sdev(struct scsi_target *starget,
 	}
 
 	scsi_change_queue_depth(sdev, depth);
+	scsi_device_init_eh(sdev);
 
 	scsi_sysfs_device_initialize(sdev);
 
