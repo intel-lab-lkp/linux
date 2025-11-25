@@ -17,6 +17,7 @@
 #include <linux/cpuhotplug.h>
 #include <asm/mshyperv.h>
 
+static bool hyperv_detected;
 static bool hyperv_initialized;
 
 int hv_get_hypervisor_version(union hv_hypervisor_version_info *info)
@@ -70,20 +71,21 @@ static bool __init hyperv_detect_via_smccc(void)
 	return arm_smccc_hypervisor_has_uuid(&hyperv_uuid);
 }
 
-static int __init hyperv_init(void)
+void __init hyperv_early_init(void)
 {
 	struct hv_get_vp_registers_output	result;
 	u64	guest_id;
-	int	ret;
 
 	/*
 	 * Allow for a kernel built with CONFIG_HYPERV to be running in
 	 * a non-Hyper-V environment.
 	 *
-	 * In such cases, do nothing and return success.
+	 * In such cases, do nothing and return.
 	 */
 	if (!hyperv_detect_via_acpi() && !hyperv_detect_via_smccc())
-		return 0;
+		return;
+
+	hyperv_detected = true;
 
 	/* Setup the guest ID */
 	guest_id = hv_generate_guest_id(LINUX_VERSION_CODE);
@@ -103,6 +105,14 @@ static int __init hyperv_init(void)
 		ms_hyperv.misc_features);
 
 	hv_identify_partition_type();
+}
+
+static int __init hyperv_init(void)
+{
+	int	ret;
+
+	if (!hyperv_detected)
+		return 0;
 
 	ret = hv_common_init();
 	if (ret)

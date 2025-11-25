@@ -54,6 +54,7 @@
 #include <asm/efi.h>
 #include <asm/xen/hypervisor.h>
 #include <asm/mmu_context.h>
+#include <asm/mshyperv.h>
 
 static int num_standard_resources;
 static struct resource *standard_resources;
@@ -353,6 +354,11 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 		psci_dt_init();
 	else
 		psci_acpi_init();
+
+	/*
+	 * This must come after psci init since Hyper-V detection uses SMCCC
+	 */
+	hyperv_early_init();
 
 	arm64_rsi_init();
 
