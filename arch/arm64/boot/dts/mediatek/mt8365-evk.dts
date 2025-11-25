@@ -352,7 +352,7 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&touch_pins>;
 		irq-gpios = <&pio 78 GPIO_ACTIVE_HIGH>;
-		reset-gpios = <&pio 79 GPIO_ACTIVE_LOW>;
+		reset-gpios = <&pio 79 GPIO_ACTIVE_HIGH>;
 		AVDD28-supply = <&touch0_fixed_3v3>;
 		VDDIO-supply = <&mt6357_vrf12_reg>;
 	};
@@ -695,7 +695,7 @@
 
 		rst-pins {
 			pinmux = <MT8365_PIN_79_CMVSYNC__FUNC_GPIO79>;
-			output-low;
+			output-high;
 		};
 	};
 
