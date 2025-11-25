@@ -122,11 +122,16 @@
 
 /* iSMT Miscellaneous Registers */
 #define ISMT_SPGT	0x300	/* SMBus PHY Global Timing */
+#define ISMT_DBCTRL	0x388	/* Discrete Data Bus Control */
+#define ISMT_DBSTS	0x38C	/* Discrete Data Bus Status */
 
 /* General Control Register (GCTRL) bit definitions */
 #define ISMT_GCTRL_TRST	0x04	/* Target Reset */
 #define ISMT_GCTRL_KILL	0x08	/* Kill */
 #define ISMT_GCTRL_SRST	0x40	/* Soft Reset */
+
+/* Error Status Register (ERRSTS) bit definitions */
+#define ISMT_ERRSTS_CKLTO	(0x1 << 24)	/* Clock low timeout */
 
 /* Master Control Register (MCTRL) bit definitions */
 #define ISMT_MCTRL_SS	0x01		/* Start/Stop */
@@ -152,6 +157,20 @@
 
 /* MSI Control Register (MSICTL) bit definitions */
 #define ISMT_MSICTL_MSIE	0x01	/* MSI Enable */
+
+/* Bit Bang Databus Control (DBCTRL) bit definitions */
+#define ISMT_DBCTRL_EN		0x80000000	/* Enable bit banging */
+#define ISMT_DBCTRL_SMBDT	0x00000001	/* SMB Data signal, 0 mean data low */
+#define ISMT_DBCTRL_SMBCK	0x00000002	/* SMB Clock signal, 0 means clock low */
+
+/* Bit Bang Databus Status (DBSTS) bit definitions */
+#define ISMT_DBSTS_LSMBS_MASK	0x00000007	/* Last SMBus state, use with care */
+#define ISMT_DBSTS_SMBDC	0x00000040	/* SMBus Data Change */
+#define ISMT_DBSTS_SMBCKC	0x00000080	/* SMBus Clock Change */
+#define ISMT_DBSTS_SMBDT	0x00000100	/* Live state of SMBus data signal */
+#define ISMT_DBSTS_SMBDT_SHIFT	8
+#define ISMT_DBSTS_SMBCK	0x00000200	/* Live state of SMBus clock signal */
+#define ISMT_DBSTS_SMBCK_SHIFT	9
 
 /* iSMT Hardware Descriptor */
 struct ismt_desc {
@@ -633,6 +652,7 @@ static int ismt_access(struct i2c_adapter *adap, u16 addr,
 
 	if (unlikely(!time_left)) {
 		ismt_kill_transaction(priv);
+		i2c_recover_bus(&priv->adapter);
 		ret = -ETIMEDOUT;
 		goto out;
 	}
@@ -668,6 +688,113 @@ static u32 ismt_func(struct i2c_adapter *adap)
 static const struct i2c_algorithm smbus_algorithm = {
 	.smbus_xfer	= ismt_access,
 	.functionality	= ismt_func,
+};
+
+/**
+ * ismt_i2c_get_scl() - get the scl state
+ * @adap: the i2c host adapter
+ */
+static int ismt_i2c_get_scl(struct i2c_adapter *adap)
+{
+	struct ismt_priv *priv = i2c_get_adapdata(adap);
+	unsigned int reg;
+
+	reg = readl(priv->smba + ISMT_DBSTS) & ISMT_DBSTS_SMBCK;
+	reg >>= ISMT_DBSTS_SMBCK_SHIFT;
+	return reg;
+}
+
+/**
+ * ismt_i2c_set_scl() - set the scl state
+ * @adap: the i2c host adapter
+ * @val: the pin state
+ */
+static void ismt_i2c_set_scl(struct i2c_adapter *adap, int val)
+{
+	struct ismt_priv *priv = i2c_get_adapdata(adap);
+	unsigned int reg;
+
+	reg = readl(priv->smba + ISMT_DBCTRL);
+	if (val == 0)
+		reg &= ~ISMT_DBCTRL_SMBCK;
+	else
+		reg |= ISMT_DBCTRL_SMBCK;
+	writel(reg, priv->smba + ISMT_DBCTRL);
+}
+
+/**
+ * ismt_i2c_get_sda() - get the sda state
+ * @adap: the i2c host adapter
+ */
+static int ismt_i2c_get_sda(struct i2c_adapter *adap)
+{
+	struct ismt_priv *priv = i2c_get_adapdata(adap);
+	unsigned int reg;
+
+	reg = readl(priv->smba + ISMT_DBSTS) & ISMT_DBSTS_SMBDT;
+	reg >>= ISMT_DBSTS_SMBDT_SHIFT;
+	return reg;
+}
+
+/**
+ * ismt_i2c_set_sda() - set the sda state
+ * @adap: the i2c host adapter
+ * @val: the pin state
+ */
+static void ismt_i2c_set_sda(struct i2c_adapter *adap, int val)
+{
+	struct ismt_priv *priv = i2c_get_adapdata(adap);
+	unsigned int reg;
+
+	reg = readl(priv->smba + ISMT_DBCTRL);
+	if (val == 0)
+		reg &= ~ISMT_DBCTRL_SMBDT;
+	else
+		reg |= ISMT_DBCTRL_SMBDT;
+	writel(reg, priv->smba + ISMT_DBCTRL);
+}
+
+/**
+ * ismt_i2c_prepare_recovery() - configure bit banging mode
+ * @adap: the i2c host adapter
+ */
+static void ismt_i2c_prepare_recovery(struct i2c_adapter *adap)
+{
+	struct ismt_priv *priv = i2c_get_adapdata(adap);
+	unsigned int reg;
+
+	/* Enable bit banging, datasheet recommends setting EN without
+	 * changing the values of SMBDT and SMBCK.
+	 */
+	reg = readl(priv->smba + ISMT_DBCTRL);
+	writel(reg | ISMT_DBCTRL_EN, priv->smba + ISMT_DBCTRL);
+}
+
+/**
+ * ismt_i2c_prepare_recovery() - clear bit banging mode
+ * @adap: the i2c host adapter
+ */
+static void ismt_i2c_unprepare_recovery(struct i2c_adapter *adap)
+{
+	struct ismt_priv *priv = i2c_get_adapdata(adap);
+	unsigned int reg;
+
+	// Disable bit banging
+	reg = readl(priv->smba + ISMT_DBCTRL);
+	writel(reg & ~ISMT_DBCTRL_EN, priv->smba + ISMT_DBCTRL);
+
+	// Clear the expected clock low timeout
+	writel(ISMT_ERRSTS_CKLTO, priv->smba + ISMT_GR_ERRSTS);
+}
+
+static struct i2c_bus_recovery_info ismt_i2c_recovery_info = {
+	.recover_bus = i2c_generic_scl_recovery,
+	.get_scl = ismt_i2c_get_scl,
+	.set_scl = ismt_i2c_set_scl,
+	.get_sda = ismt_i2c_get_sda,
+	.set_sda = ismt_i2c_set_sda,
+	.prepare_recovery = ismt_i2c_prepare_recovery,
+	.unprepare_recovery = ismt_i2c_unprepare_recovery,
 };
 
 /**
@@ -899,6 +1026,7 @@ ismt_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	priv->adapter.dev.parent = &pdev->dev;
 	ACPI_COMPANION_SET(&priv->adapter.dev, ACPI_COMPANION(&pdev->dev));
 	priv->adapter.retries = ISMT_MAX_RETRIES;
+	priv->adapter.bus_recovery_info = &ismt_i2c_recovery_info;
 
 	priv->pci_dev = pdev;
 
