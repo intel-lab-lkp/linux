@@ -373,7 +373,7 @@ int dma_fence_signal_timestamp_locked(struct dma_fence *fence,
 	lockdep_assert_held(fence->lock);
 
 	if (unlikely(__dma_fence_is_signaled(fence)))
-		return -EINVAL;
+		return -ENOENT;
 
 	/* Stash the cb_list before replacing it with the timestamp */
 	list_replace(&fence->cb_list, &cb_list);
