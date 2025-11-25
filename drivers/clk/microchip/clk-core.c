@@ -9,8 +9,16 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
-#include <asm/mach-pic32/pic32.h>
 #include <asm/traps.h>
+
+#if !defined(CONFIG_MACH_PIC32) && defined(CONFIG_COMPILE_TEST)
+#define PIC32_CLR(_reg)		((_reg) + 0x04)
+#define PIC32_SET(_reg)		((_reg) + 0x08)
+#define PIC32_INV(_reg)		((_reg) + 0x0C)
+#define pic32_syskey_unlock()
+#else
+#include <asm/mach-pic32/pic32.h>
+#endif
 
 #include "clk-core.h"
 
