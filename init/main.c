@@ -105,6 +105,8 @@
 #include <linux/ptdump.h>
 #include <linux/time_namespace.h>
 #include <net/net_namespace.h>
+#include <linux/timex.h>
+#include <linux/sched/clock.h>
 
 #include <asm/io.h>
 #include <asm/setup.h>
@@ -906,6 +908,8 @@ static void __init early_numa_node_init(void)
 #endif
 }
 
+static u64 start_cycles, start_ns;
+
 asmlinkage __visible __init __no_sanitize_address __noreturn __no_stack_protector
 void start_kernel(void)
 {
@@ -1022,6 +1026,10 @@ void start_kernel(void)
 	softirq_init();
 	timekeeping_init();
 	time_init();
+
+	/* used to calibrate early_counter_ns */
+	start_cycles = get_cycles();
+	start_ns = local_clock();
 
 	/* This must be after timekeeping is initialized */
 	random_init();
@@ -1474,6 +1482,8 @@ void __weak free_initmem(void)
 static int __ref kernel_init(void *unused)
 {
 	int ret;
+	u64 end_cycles, end_ns;
+	u32 early_mult, early_shift;
 
 	/*
 	 * Wait until kthreadd is all set-up.
@@ -1504,6 +1514,21 @@ static int __ref kernel_init(void *unused)
 	rcu_end_inkernel_boot();
 
 	do_sysctl_args();
+
+	/* show calibration data for early_counter_ns */
+	end_cycles = get_cycles();
+	end_ns = local_clock();
+	clocks_calc_mult_shift(&early_mult, &early_shift,
+		((end_cycles - start_cycles) * NSEC_PER_SEC)/(end_ns - start_ns),
+		NSEC_PER_SEC, 50);
+
+#ifdef CONFIG_EARLY_COUNTER_NS
+	pr_info("Early Counter: start_cycles=%llu, end_cycles=%llu, cycles=%llu\n",
+		start_cycles, end_cycles, (end_cycles - start_cycles));
+	pr_info("Early Counter: start_ns=%llu, end_ns=%llu, ns=%llu\n",
+		start_ns, end_ns, (end_ns - start_ns));
+	pr_info("Early Counter: MULT=%u, SHIFT=%u\n", early_mult, early_shift);
+#endif
 
 	if (ramdisk_execute_command) {
 		ret = run_init_process(ramdisk_execute_command);

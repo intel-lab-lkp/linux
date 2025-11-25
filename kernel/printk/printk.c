@@ -2210,6 +2210,19 @@ static u16 printk_sprint(char *text, u16 size, int facility,
 	return text_len;
 }
 
+#ifdef CONFIG_EARLY_COUNTER_NS
+static inline u64 early_counter_ns(void)
+{
+	return ((u64)get_cycles() * CONFIG_EARLY_COUNTER_MULT)
+		>> CONFIG_EARLY_COUNTER_SHIFT;
+}
+#else
+static inline u64 early_counter_ns(void)
+{
+	return 0;
+}
+#endif
+
 __printf(4, 0)
 int vprintk_store(int facility, int level,
 		  const struct dev_printk_info *dev_info,
@@ -2239,6 +2252,8 @@ int vprintk_store(int facility, int level,
 	 * timestamp with respect to the caller.
 	 */
 	ts_nsec = local_clock();
+	if (!ts_nsec)
+		ts_nsec = early_counter_ns();
 
 	caller_id = printk_caller_id();
 

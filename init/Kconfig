@@ -770,6 +770,53 @@ config IKHEADERS
 	  or similar programs.  If you build the headers as a module, a module called
 	  kheaders.ko is built which can be loaded on-demand to get access to headers.
 
+config EARLY_COUNTER_NS
+	bool "Use counter for early printk timestamps"
+	default y
+	depends on PRINTK
+	help
+	  Use a cycle-counter to provide printk timestamps during early
+	  boot.  This allows seeing timing information that would
+	  otherwise be displayed with 0-valued timestamps.
+
+	  In order for this to work, you need to specify values for
+	  EARLY_COUNTER_MULT and EARLY_COUNTER_SHIFT, used to convert
+	  from the cycle count to nanoseconds.
+
+config EARLY_COUNTER_MULT
+	int "Multiplier for early cycle counter"
+	depends on PRINTK && EARLY_COUNTER_NS
+	default 1
+	help
+	  This value specifies a multiplier to be used when converting
+	  cycle counts to nanoseconds.  The formula used is:
+		  ns = (cycles * mult) >> shift
+
+	  Use a multiplier that will bring the value of (cycles * mult)
+	  to near a power of two, that is greater than 1000.  The
+	  nanoseconds returned by this conversion are divided by 1000
+	  to be used as the printk timestamp counter (with resolution
+	  of microseconds).
+
+	  As an example, for a cycle-counter with a frequency of 200 Mhz,
+	  the multiplier would be: 10485760, and the shift would be 21.
+
+config EARLY_COUNTER_SHIFT
+	int "Shift value for early cycle counter"
+	range 0 63
+	depends on PRINTK && EARLY_COUNTER_NS
+	default 0
+	help
+	  This value specifies a shift value to be used when converting
+	  cycle counts to nanoseconds.  The formula used is:
+		  ns = (cycles * mult) >> shift
+
+	  Use a shift that will bring the result to a value
+	  in nanoseconds.
+
+	  As an example, for a cycle-counter with a frequency of 200 Mhz,
+	  the multiplier would be: 10485760, and the shift would be 21.
+
 config LOG_BUF_SHIFT
 	int "Kernel log buffer size (16 => 64KB, 17 => 128KB)"
 	range 12 25
