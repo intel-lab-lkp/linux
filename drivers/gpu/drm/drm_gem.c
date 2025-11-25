@@ -982,6 +982,10 @@ int drm_gem_change_handle_ioctl(struct drm_device *dev, void *data,
 	if (args->handle == args->new_handle)
 		return 0;
 
+	/* As the idr base is 1, trying to set handle 0 will create id mismatch */
+	if (args->new_handle == 0)
+		return 0;
+
 	mutex_lock(&file_priv->prime.lock);
 
 	spin_lock(&file_priv->table_lock);
