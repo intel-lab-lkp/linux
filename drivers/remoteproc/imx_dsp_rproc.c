@@ -1272,10 +1272,11 @@ static int imx_dsp_suspend(struct device *dev)
 	}
 
 	/*
-	 * DSP need to save the context at suspend.
-	 * Here waiting the response for DSP, then power can be disabled.
+	 * The DSP must save its context during suspend.
+	 * Wait for a response from the DSP if required before disabling power.
 	 */
-	if (!wait_for_completion_timeout(&priv->pm_comp, msecs_to_jiffies(100)))
+	if (priv->flags & WAIT_FW_READY &&
+	    !wait_for_completion_timeout(&priv->pm_comp, msecs_to_jiffies(100)))
 		return -EBUSY;
 
 out:
