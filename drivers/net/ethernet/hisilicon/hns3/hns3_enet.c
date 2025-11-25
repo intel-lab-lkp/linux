@@ -2811,10 +2811,7 @@ static int hns3_get_timeout_queue(struct net_device *ndev)
 		unsigned long trans_start;
 
 		q = netdev_get_tx_queue(ndev, i);
-		trans_start = READ_ONCE(q->trans_start);
-		if (netif_xmit_stopped(q) &&
-		    time_after(jiffies,
-			       (trans_start + ndev->watchdog_timeo))) {
+		if (netif_xmit_timeout_ms(q, &trans_start)) {
 #ifdef CONFIG_BQL
 			struct dql *dql = &q->dql;
 
