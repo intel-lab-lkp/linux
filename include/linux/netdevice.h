@@ -3680,6 +3680,21 @@ static inline bool netif_xmit_stopped(const struct netdev_queue *dev_queue)
 	return dev_queue->state & QUEUE_STATE_ANY_XOFF;
 }
 
+static inline unsigned int
+netif_xmit_timeout_ms(struct netdev_queue *txq, unsigned long *trans_start)
+{
+	unsigned long txq_trans_start = READ_ONCE(txq->trans_start);
+
+	if (trans_start)
+		*trans_start = txq_trans_start;
+
+	if (netif_xmit_stopped(txq) &&
+	    time_after(jiffies, txq_trans_start + txq->dev->watchdog_timeo))
+		return jiffies_to_msecs(jiffies - txq_trans_start);
+
+	return 0;
+}
+
 static inline bool
 netif_xmit_frozen_or_stopped(const struct netdev_queue *dev_queue)
 {

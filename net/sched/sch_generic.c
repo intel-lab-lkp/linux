@@ -523,10 +523,9 @@ static void dev_watchdog(struct timer_list *t)
 				 * netdev_tx_sent_queue() and netif_tx_stop_queue().
 				 */
 				smp_mb();
-				trans_start = READ_ONCE(txq->trans_start);
-
-				if (time_after(jiffies, trans_start + dev->watchdog_timeo)) {
-					timedout_ms = jiffies_to_msecs(jiffies - trans_start);
+				timedout_ms = netif_xmit_timeout_ms(txq,
+								    &trans_start);
+				if (timedout_ms) {
 					atomic_long_inc(&txq->trans_timeout);
 					break;
 				}
