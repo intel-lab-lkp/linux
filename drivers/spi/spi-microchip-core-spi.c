@@ -12,9 +12,10 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
-#include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/property.h>
 #include <linux/spi/spi.h>
 
 #define MCHP_CORESPI_MAX_CS				(8)
@@ -296,6 +297,7 @@ static int mchp_corespi_transfer_one(struct spi_controller *host,
 static int mchp_corespi_probe(struct platform_device *pdev)
 {
 	const char *protocol = "motorola";
+	struct device *dev = &pdev->dev;
 	struct spi_controller *host;
 	struct mchp_corespi *spi;
 	struct resource *res;
@@ -310,7 +312,7 @@ static int mchp_corespi_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, host);
 
-	if (of_property_read_u32(pdev->dev.of_node, "num-cs", &num_cs))
+	if (device_property_read_u32(dev, "num-cs", &num_cs))
 		num_cs = MCHP_CORESPI_MAX_CS;
 
 	/*
@@ -318,20 +320,18 @@ static int mchp_corespi_probe(struct platform_device *pdev)
 	 * CoreSPI can be configured for Motorola, TI or NSC.
 	 * The current driver supports only Motorola mode.
 	 */
-	ret = of_property_read_string(pdev->dev.of_node, "microchip,protocol-configuration",
-				      &protocol);
-	if (ret && ret != -EINVAL)
-		return dev_err_probe(&pdev->dev, ret, "Error reading protocol-configuration\n");
-	if (strcmp(protocol, "motorola") != 0)
-		return dev_err_probe(&pdev->dev, -EINVAL,
-				     "CoreSPI: protocol '%s' not supported by this driver\n",
-				      protocol);
+	ret = device_property_match_property_string(dev, "microchip,protocol-configuration",
+						    &protocol, 1);
+	if (ret == -ENOENT)
+		return dev_err_probe(dev, ret, "CoreSPI: protocol is not supported by this driver\n");
+	if (ret < 0)
+		return dev_err_probe(dev, ret, "Error reading protocol-configuration\n");
 
 	/*
 	 * Motorola mode (0-3): CFG_MOT_MODE
 	 * Mode is fixed in the IP configurator.
 	 */
-	ret = of_property_read_u32(pdev->dev.of_node, "microchip,motorola-mode", &mode);
+	ret = device_property_read_u32(dev, "microchip,motorola-mode", &mode);
 	if (ret)
 		mode = MCHP_CORESPI_DEFAULT_MOTOROLA_MODE;
 	else if (mode > 3)
@@ -343,7 +343,7 @@ static int mchp_corespi_probe(struct platform_device *pdev)
 	 * The hardware allows frame sizes <= APB data width.
 	 * However, this driver currently only supports 8-bit frames.
 	 */
-	ret = of_property_read_u32(pdev->dev.of_node, "microchip,frame-size", &frame_size);
+	ret = device_property_read_u32(dev, "microchip,frame-size", &frame_size);
 	if (!ret && frame_size != 8)
 		return dev_err_probe(&pdev->dev, -EINVAL,
 				     "CoreSPI: frame size %u not supported by this driver\n",
@@ -355,7 +355,7 @@ static int mchp_corespi_probe(struct platform_device *pdev)
 	 * To prevent CS deassertion when TX FIFO drains, the ssel-active property
 	 * keeps CS asserted for the full SPI transfer.
 	 */
-	assert_ssel = of_property_read_bool(pdev->dev.of_node, "microchip,ssel-active");
+	assert_ssel = device_property_read_bool(dev, "microchip,ssel-active");
 	if (!assert_ssel)
 		return dev_err_probe(&pdev->dev, -EINVAL,
 				     "hardware must enable 'microchip,ssel-active' to keep CS asserted for the SPI transfer\n");
@@ -369,9 +369,10 @@ static int mchp_corespi_probe(struct platform_device *pdev)
 	host->bits_per_word_mask = SPI_BPW_RANGE_MASK(4, 32);
 	host->transfer_one = mchp_corespi_transfer_one;
 	host->set_cs = mchp_corespi_set_cs;
-	host->dev.of_node = pdev->dev.of_node;
 
-	ret = of_property_read_u32(pdev->dev.of_node, "fifo-depth", &spi->fifo_depth);
+	device_set_node(&host->dev, dev_fwnode(dev));
+
+	ret = device_property_read_u32(dev, "fifo-depth", &spi->fifo_depth);
 	if (ret)
 		spi->fifo_depth = MCHP_CORESPI_DEFAULT_FIFO_DEPTH;
 
@@ -421,24 +422,23 @@ static void mchp_corespi_remove(struct platform_device *pdev)
  * Platform driver data structure
  */
 
-#if defined(CONFIG_OF)
 static const struct of_device_id mchp_corespi_dt_ids[] = {
 	{ .compatible = "microchip,corespi-rtl-v5" },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, mchp_corespi_dt_ids);
-#endif
 
 static struct platform_driver mchp_corespi_driver = {
 	.probe = mchp_corespi_probe,
 	.driver = {
 		.name = "microchip-corespi",
 		.pm = MICROCHIP_SPI_PM_OPS,
-		.of_match_table = of_match_ptr(mchp_corespi_dt_ids),
+		.of_match_table = mchp_corespi_dt_ids,
 	},
 	.remove = mchp_corespi_remove,
 };
 module_platform_driver(mchp_corespi_driver);
+
 MODULE_DESCRIPTION("Microchip CoreSPI controller driver");
 MODULE_AUTHOR("Prajna Rajendra Kumar <prajna.rajendrakumar@microchip.com>");
 MODULE_LICENSE("GPL");
