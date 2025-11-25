@@ -3463,6 +3463,9 @@ sleep:
  * If @throttled and other PWQs are in mayday, requeue mayday for this PWQ
  * and let the rescuer handle other PWQs first.
  * If this is the only PWQ in mayday, process it regardless of @throttled.
+ * If this is the last PWQ leaving mayday, but the pool is in semi-mayday
+ * (idle workers exist while memory pressure is still on), process it unless
+ * @throttled.
  */
 static bool assign_rescuer_work(struct pool_workqueue *pwq, struct worker *rescuer, bool throttled)
 {
@@ -3479,9 +3482,37 @@ static bool assign_rescuer_work(struct pool_workqueue *pwq, struct worker *rescu
 		list_del_init(&cursor->entry);
 	}
 
-	/* need rescue? */
-	if (!pwq->nr_active || !need_to_create_worker(pool))
+	/* have work items to rescue? */
+	if (!pwq->nr_active)
 		return false;
+
+	/* need rescue? */
+	if (!need_to_create_worker(pool)) {
+		/*
+		 * The pool has idle workers and doesn't need the rescuer, so it
+		 * could simply return false here.
+		 *
+		 * However, the memory pressure might not be fully relieved.
+		 * In PERCPU pool with concurrency enabled, having idle workers
+		 * does not necessarily mean memory pressure is gone; it may
+		 * simply mean regular workers have woken up, completed their
+		 * work, and gone idle again due to concurrency limits.
+		 *
+		 * In this case, those working workers may later sleep again,
+		 * the pool may run out of idle workers, and it will have to
+		 * allocate new ones and wait for the timer to send mayday,
+		 * causing unnecessary delay - especially if memory pressure
+		 * was never resolved throughout.
+		 *
+		 * Do more work if memory pressure is still on to reduce
+		 * relapse, using (pool->flags & POOL_MANAGER_ACTIVE), though
+		 * not precisely, unless there are other PWQs needing help or
+		 * this PWQ is throttled.
+		 */
+		if (!(pool->flags & POOL_MANAGER_ACTIVE) ||
+		    !list_empty(&pwq->wq->maydays) || throttled)
+			return false;
+	}
 
 	/* find the next work item to rescue */
 	list_for_each_entry_safe_from(work, n, &pool->worklist, entry) {
