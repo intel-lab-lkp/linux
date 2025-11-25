@@ -54,6 +54,7 @@ config PCIE_SG2042_HOST
 config PCI_SKY1_HOST
 	tristate "CIX SKY1 PCIe controller (host mode)"
 	depends on OF
+	depends on ARCH_CIX || COMPILE_TEST
 	select PCIE_CADENCE_HOST
 	select PCI_ECAM
 	help
