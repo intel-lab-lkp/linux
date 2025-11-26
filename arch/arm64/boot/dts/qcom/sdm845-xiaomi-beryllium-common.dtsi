@@ -227,6 +227,10 @@
 	};
 };
 
+&cci_i2c0 {
+	/* IMX363 @ 10 */
+};
+
 &cdsp_pas {
 	status = "okay";
 	firmware-name = "qcom/sdm845/beryllium/cdsp.mbn";
@@ -259,6 +263,18 @@
 	regulator-pull-down;
 	regulator-soft-start;
 	qcom,discharge-resistor-kohms = <300>;
+};
+
+&ipa {
+	qcom,gsi-loader = "self";
+	memory-region = <&ipa_fw_mem>;
+	firmware-name = "qcom/sdm845/beryllium/ipa_fws.mbn";
+
+	status = "okay";
+};
+
+&i2c5 {
+	/* TAS2559 @ 4C */
 };
 
 &lab {
@@ -309,13 +325,6 @@
 &mss_pil {
 	status = "okay";
 	firmware-name = "qcom/sdm845/beryllium/mba.mbn", "qcom/sdm845/beryllium/modem.mbn";
-};
-
-&ipa {
-	qcom,gsi-loader = "self";
-	memory-region = <&ipa_fw_mem>;
-	firmware-name = "qcom/sdm845/beryllium/ipa_fws.mbn";
-	status = "okay";
 };
 
 &pm8998_gpios {
