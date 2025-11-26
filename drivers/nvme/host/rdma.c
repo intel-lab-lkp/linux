@@ -106,7 +106,7 @@ struct nvme_rdma_ctrl {
 
 	/* other member variables */
 	struct blk_mq_tag_set	tag_set;
-	struct work_struct	err_work;
+	struct delayed_work	err_work;
 
 	struct nvme_rdma_qe	async_event_sqe;
 
@@ -961,7 +961,7 @@ static void nvme_rdma_stop_ctrl(struct nvme_ctrl *nctrl)
 {
 	struct nvme_rdma_ctrl *ctrl = to_rdma_ctrl(nctrl);
 
-	flush_work(&ctrl->err_work);
+	flush_delayed_work(&ctrl->err_work);
 	cancel_delayed_work_sync(&ctrl->reconnect_work);
 }
 
@@ -1120,10 +1120,45 @@ requeue:
 	nvme_rdma_reconnect_or_remove(ctrl, ret);
 }
 
+static int nvme_rdma_recover_ctrl(struct nvme_ctrl *ctrl)
+{
+	unsigned long rem;
+
+	if (test_and_clear_bit(NVME_CTRL_RECOVERED, &ctrl->flags)) {
+		dev_info(ctrl->device, "completed time-based recovery\n");
+		goto done;
+	}
+
+	rem = nvme_recover_ctrl(ctrl);
+	if (!rem)
+		goto done;
+
+	if (!ctrl->cqt) {
+		dev_info(ctrl->device,
+			 "CCR failed, CQT not supported, skip time-based recovery\n");
+		goto done;
+	}
+
+	dev_info(ctrl->device,
+		 "CCR failed, switch to time-based recovery, timeout = %ums\n",
+		 jiffies_to_msecs(rem));
+	set_bit(NVME_CTRL_RECOVERED, &ctrl->flags);
+	queue_delayed_work(nvme_reset_wq, &to_rdma_ctrl(ctrl)->err_work, rem);
+	return -EAGAIN;
+
+done:
+	nvme_end_ctrl_recovery(ctrl);
+	return 0;
+}
 static void nvme_rdma_error_recovery_work(struct work_struct *work)
 {
-	struct nvme_rdma_ctrl *ctrl = container_of(work,
+	struct nvme_rdma_ctrl *ctrl = container_of(to_delayed_work(work),
 			struct nvme_rdma_ctrl, err_work);
+
+	if (nvme_ctrl_state(&ctrl->ctrl) == NVME_CTRL_RECOVERING) {
+		if (nvme_rdma_recover_ctrl(&ctrl->ctrl))
+			return;
+	}
 
 	nvme_stop_keep_alive(&ctrl->ctrl);
 	flush_work(&ctrl->ctrl.async_event_work);
@@ -1147,11 +1182,12 @@ static void nvme_rdma_error_recovery_work(struct work_struct *work)
 
 static void nvme_rdma_error_recovery(struct nvme_rdma_ctrl *ctrl)
 {
-	if (!nvme_change_ctrl_state(&ctrl->ctrl, NVME_CTRL_RESETTING))
+	if (!nvme_change_ctrl_state(&ctrl->ctrl, NVME_CTRL_RECOVERING) &&
+	    !nvme_change_ctrl_state(&ctrl->ctrl, NVME_CTRL_RESETTING))
 		return;
 
 	dev_warn(ctrl->ctrl.device, "starting error recovery\n");
-	queue_work(nvme_reset_wq, &ctrl->err_work);
+	queue_delayed_work(nvme_reset_wq, &ctrl->err_work, 0);
 }
 
 static void nvme_rdma_end_request(struct nvme_rdma_request *req)
@@ -1955,6 +1991,7 @@ static enum blk_eh_timer_return nvme_rdma_timeout(struct request *rq)
 	struct nvme_rdma_request *req = blk_mq_rq_to_pdu(rq);
 	struct nvme_rdma_queue *queue = req->queue;
 	struct nvme_rdma_ctrl *ctrl = queue->ctrl;
+	enum nvme_ctrl_state state = nvme_ctrl_state(&ctrl->ctrl);
 	struct nvme_command *cmd = req->req.cmd;
 	int qid = nvme_rdma_queue_idx(queue);
 
@@ -1963,7 +2000,7 @@ static enum blk_eh_timer_return nvme_rdma_timeout(struct request *rq)
 		 rq->tag, nvme_cid(rq), cmd->common.opcode,
 		 nvme_fabrics_opcode_str(qid, cmd), qid);
 
-	if (nvme_ctrl_state(&ctrl->ctrl) != NVME_CTRL_LIVE) {
+	if (state != NVME_CTRL_LIVE && state != NVME_CTRL_RECOVERING) {
 		/*
 		 * If we are resetting, connecting or deleting we should
 		 * complete immediately because we may block controller
@@ -2280,7 +2317,7 @@ static struct nvme_rdma_ctrl *nvme_rdma_alloc_ctrl(struct device *dev,
 
 	INIT_DELAYED_WORK(&ctrl->reconnect_work,
 			nvme_rdma_reconnect_ctrl_work);
-	INIT_WORK(&ctrl->err_work, nvme_rdma_error_recovery_work);
+	INIT_DELAYED_WORK(&ctrl->err_work, nvme_rdma_error_recovery_work);
 	INIT_WORK(&ctrl->ctrl.reset_work, nvme_rdma_reset_ctrl_work);
 
 	ctrl->ctrl.queue_count = opts->nr_io_queues + opts->nr_write_queues +
