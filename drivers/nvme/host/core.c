@@ -1481,52 +1481,45 @@ static int nvme_identify_ctrl(struct nvme_ctrl *dev, struct nvme_id_ctrl **id)
 	return error;
 }
 
+struct ns_id_info {
+	__u8 nidl;
+	char *name;
+};
+
+#define NS_ID_INFO(nidt) \
+	[nidt] = {nidt##_LEN, #nidt}
+
+static const struct ns_id_info niis[] = {
+	NS_ID_INFO(NVME_NIDT_EUI64),
+	NS_ID_INFO(NVME_NIDT_NGUID),
+	NS_ID_INFO(NVME_NIDT_UUID),
+	NS_ID_INFO(NVME_NIDT_CSI),
+};
+
 static int nvme_process_ns_desc(struct nvme_ctrl *ctrl, struct nvme_ns_ids *ids,
-		struct nvme_ns_id_desc *cur, bool *csi_seen)
+				struct nvme_ns_id_desc *cur, int remain,
+				bool *csi_seen)
 {
-	const char *warn_str = "ctrl returned bogus length:";
-	void *data = cur;
+	const char *warn_fmt = "ctrl returned bogus ns id: %u %u %d %s";
+	const struct ns_id_info *nii;
 
 	switch (cur->nidt) {
-	case NVME_NIDT_EUI64:
-		if (cur->nidl != NVME_NIDT_EUI64_LEN) {
-			dev_warn(ctrl->device, "%s %d for NVME_NIDT_EUI64\n",
-				 warn_str, cur->nidl);
-			return -1;
-		}
-		if (ctrl->quirks & NVME_QUIRK_BOGUS_NID)
-			return NVME_NIDT_EUI64_LEN;
-		memcpy(ids->eui64, data + sizeof(*cur), NVME_NIDT_EUI64_LEN);
-		return NVME_NIDT_EUI64_LEN;
-	case NVME_NIDT_NGUID:
-		if (cur->nidl != NVME_NIDT_NGUID_LEN) {
-			dev_warn(ctrl->device, "%s %d for NVME_NIDT_NGUID\n",
-				 warn_str, cur->nidl);
-			return -1;
-		}
-		if (ctrl->quirks & NVME_QUIRK_BOGUS_NID)
-			return NVME_NIDT_NGUID_LEN;
-		memcpy(ids->nguid, data + sizeof(*cur), NVME_NIDT_NGUID_LEN);
-		return NVME_NIDT_NGUID_LEN;
-	case NVME_NIDT_UUID:
-		if (cur->nidl != NVME_NIDT_UUID_LEN) {
-			dev_warn(ctrl->device, "%s %d for NVME_NIDT_UUID\n",
-				 warn_str, cur->nidl);
-			return -1;
-		}
-		if (ctrl->quirks & NVME_QUIRK_BOGUS_NID)
-			return NVME_NIDT_UUID_LEN;
-		uuid_copy(&ids->uuid, data + sizeof(*cur));
-		return NVME_NIDT_UUID_LEN;
 	case NVME_NIDT_CSI:
-		if (cur->nidl != NVME_NIDT_CSI_LEN) {
-			dev_warn(ctrl->device, "%s %d for NVME_NIDT_CSI\n",
-				 warn_str, cur->nidl);
+		*csi_seen = true;
+		fallthrough;
+	case NVME_NIDT_EUI64:
+	case NVME_NIDT_NGUID:
+	case NVME_NIDT_UUID:
+		nii = &niis[cur->nidt];
+		if (cur->nidl != nii->nidl || remain < nii->nidl) {
+			dev_warn(ctrl->device, warn_fmt,
+				 cur->nidl, nii->nidl, remain, nii->name);
 			return -1;
 		}
-		memcpy(&ids->csi, data + sizeof(*cur), NVME_NIDT_CSI_LEN);
-		*csi_seen = true;
-		return NVME_NIDT_CSI_LEN;
+		if (ctrl->quirks & NVME_QUIRK_BOGUS_NID)
+			return nii->nidl;
+		memcpy(&ids->csi, cur + 1, nii->nidl);
+		return nii->nidl;
 	default:
 		/* Skip unknown types */
 		return cur->nidl;
@@ -1538,7 +1531,8 @@ static int nvme_identify_ns_descs(struct nvme_ctrl *ctrl,
 {
 	struct nvme_command c = { };
 	bool csi_seen = false;
-	int status, pos, len;
+	int status, len, remain;
+	struct nvme_ns_id_desc *cur;
 	void *data;
 
 	if (ctrl->vs < NVME_VS(1, 3, 0) && !nvme_multi_css(ctrl))
@@ -1563,17 +1557,21 @@ static int nvme_identify_ns_descs(struct nvme_ctrl *ctrl,
 		goto free_data;
 	}
 
-	for (pos = 0; pos < NVME_IDENTIFY_DATA_SIZE; pos += len) {
-		struct nvme_ns_id_desc *cur = data + pos;
-
+	remain = NVME_IDENTIFY_DATA_SIZE;
+	cur = data;
+	while (remain >= sizeof(*cur)) {
 		if (cur->nidl == 0)
 			break;
 
-		len = nvme_process_ns_desc(ctrl, &info->ids, cur, &csi_seen);
+		len = nvme_process_ns_desc(ctrl, &info->ids,
+					   cur, remain - sizeof(*cur),
+					   &csi_seen);
 		if (len < 0)
 			break;
 
 		len += sizeof(*cur);
+		remain -= len;
+		cur += len;
 	}
 
 	if (nvme_multi_css(ctrl) && !csi_seen) {
