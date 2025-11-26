@@ -276,7 +276,7 @@ static void rdt_get_cdp_config(int level)
 
 static void rdt_set_io_alloc_capable(struct rdt_resource *r)
 {
-	r->cache.io_alloc_capable = true;
+	r->cache.io_alloc.io_alloc_capable = true;
 }
 
 static void rdt_get_cdp_l3_config(void)

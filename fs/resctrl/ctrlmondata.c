@@ -688,7 +688,7 @@ int resctrl_io_alloc_show(struct kernfs_open_file *of, struct seq_file *seq, voi
 
 	mutex_lock(&rdtgroup_mutex);
 
-	if (r->cache.io_alloc_capable) {
+	if (r->cache.io_alloc.io_alloc_capable) {
 		if (resctrl_arch_get_io_alloc_enabled(r))
 			seq_puts(seq, "enabled\n");
 		else
@@ -712,13 +712,31 @@ static bool resctrl_io_alloc_closid_supported(u32 io_alloc_closid)
 	return io_alloc_closid < closids_supported();
 }
 
+/**
+ * resctrl_sync_cdp_peer - Mirror staged configuration to the CDP peer type
+ *
+ * @s: resctrl schema
+ * @d: resctrl control domain
+ *
+ * The caller must ensure CDP is enabled for the resource and must be
+ * called under the cpu hotplug lock and rdtgroup mutex
+ */
+static void resctrl_sync_cdp_peer(struct resctrl_schema *s, struct rdt_ctrl_domain *d)
+{
+	enum resctrl_conf_type peer_type;
+
+	peer_type = resctrl_peer_type(s->conf_type);
+	memcpy(&d->staged_config[peer_type],
+	       &d->staged_config[s->conf_type],
+	       sizeof(d->staged_config[0]));
+}
+
 /*
  * Initialize io_alloc CLOSID cache resource CBM with all usable (shared
  * and unused) cache portions.
  */
 static int resctrl_io_alloc_init_cbm(struct resctrl_schema *s, u32 closid)
 {
-	enum resctrl_conf_type peer_type;
 	struct rdt_resource *r = s->res;
 	struct rdt_ctrl_domain *d;
 	int ret;
@@ -731,11 +749,8 @@ static int resctrl_io_alloc_init_cbm(struct resctrl_schema *s, u32 closid)
 
 	/* Keep CDP_CODE and CDP_DATA of io_alloc CLOSID's CBM in sync. */
 	if (resctrl_arch_get_cdp_enabled(r->rid)) {
-		peer_type = resctrl_peer_type(s->conf_type);
 		list_for_each_entry(d, &s->res->ctrl_domains, hdr.list)
-			memcpy(&d->staged_config[peer_type],
-			       &d->staged_config[s->conf_type],
-			       sizeof(d->staged_config[0]));
+			resctrl_sync_cdp_peer(s, d);
 	}
 
 	ret = resctrl_arch_update_domains(r, closid);
@@ -903,29 +918,82 @@ out_unlock:
 	return ret;
 }
 
+/**
+ * parse_domain_cbm - Parse "domain=cbm" and return either side
+ *
+ * @line_ptr: Pointer to the input string
+ * @out_val: Output from parsed value (either domain ID or CDM)
+ * @which: Selector for which side to parse
+ *
+ * It is assumed that *line_ptr and *out_val are valid.
+ *
+ * Return: 0 on success and advance *line_ptr to point past the
+ * delimiter, EINVAL on parsing error
+ */
+static int parse_domain_cbm(char **line_ptr, unsigned long *out_val,
+			    enum resctrl_kv_sel which)
+{
+	char *rhs, *lhs, *tok;
+	unsigned int base;
+
+	rhs = *line_ptr;
+
+	lhs = strsep(&rhs, "=");
+	if (!lhs || !rhs)
+		goto err;
+
+	if (which == RDT_PARSE_DOMAIN) {
+		tok = lhs;
+		base = 10;
+	} else {
+		tok = rhs;
+		base = 16;
+	}
+	tok = strim(tok);
+
+	if (kstrtoul(tok, base, out_val))
+		goto err;
+
+	*line_ptr = rhs;
+	return 0;
+err:
+	rdt_last_cmd_puts("Invalid domain=cbm: missing '=' or non-numeric value\n");
+	return -EINVAL;
+}
+
 static int resctrl_io_alloc_parse_line(char *line,  struct rdt_resource *r,
 				       struct resctrl_schema *s, u32 closid)
 {
-	enum resctrl_conf_type peer_type;
 	struct rdt_parse_data data;
 	struct rdt_ctrl_domain *d;
-	char *dom = NULL, *id;
-	unsigned long dom_id;
+	char *dom = NULL;
+	unsigned long out_val;
+	int ret;
 
+	if (line[0] == '*') {
+		ret = parse_domain_cbm(&line, &out_val, RDT_PARSE_CBM);
+		if (ret)
+			return ret;
+
+		if (out_val == r->cache.min_cbm_bits) {
+			r->cache.io_alloc.io_alloc_min_cbm = true;
+			return 0;
+		}
+		rdt_last_cmd_puts("Invalid io_alloc min CBM\n");
+		return -EINVAL;
+	}
 next:
 	if (!line || line[0] == '\0')
 		return 0;
 
 	dom = strsep(&line, ";");
-	id = strsep(&dom, "=");
-	if (!dom || kstrtoul(id, 10, &dom_id)) {
-		rdt_last_cmd_puts("Missing '=' or non-numeric domain\n");
-		return -EINVAL;
-	}
+	ret = parse_domain_cbm(&line, &out_val, RDT_PARSE_DOMAIN);
+	if (ret)
+		return ret;
 
 	dom = strim(dom);
 	list_for_each_entry(d, &r->ctrl_domains, hdr.list) {
-		if (d->hdr.id == dom_id) {
+		if (d->hdr.id == out_val) {
 			data.buf = dom;
 			data.mode = RDT_MODE_SHAREABLE;
 			data.closid = closid;
@@ -935,12 +1003,8 @@ next:
 			 * Keep io_alloc CLOSID's CBM of CDP_CODE and CDP_DATA
 			 * in sync.
 			 */
-			if (resctrl_arch_get_cdp_enabled(r->rid)) {
-				peer_type = resctrl_peer_type(s->conf_type);
-				memcpy(&d->staged_config[peer_type],
-				       &d->staged_config[s->conf_type],
-				       sizeof(d->staged_config[0]));
-			}
+			if (resctrl_arch_get_cdp_enabled(r->rid))
+				resctrl_sync_cdp_peer(s, d);
 			goto next;
 		}
 	}
@@ -982,6 +1046,8 @@ ssize_t resctrl_io_alloc_cbm_write(struct kernfs_open_file *of, char *buf,
 		goto out_clear_configs;
 
 	ret = resctrl_arch_update_domains(r, io_alloc_closid);
+	if (resctrl_should_io_alloc_min_cbm(r))
+		r->cache.io_alloc.io_alloc_min_cbm = false;
 
 out_clear_configs:
 	rdt_staged_configs_clear();

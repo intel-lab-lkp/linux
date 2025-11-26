@@ -215,7 +215,10 @@ struct resctrl_cache {
 	unsigned int	shareable_bits;
 	bool		arch_has_sparse_bitmasks;
 	bool		arch_has_per_cpu_cfg;
-	bool		io_alloc_capable;
+	struct {
+		bool io_alloc_capable;
+		bool io_alloc_min_cbm;
+	} io_alloc;
 };
 
 /**
@@ -413,6 +416,31 @@ static inline bool resctrl_is_mbm_event(enum resctrl_event_id eventid)
 {
 	return (eventid >= QOS_L3_MBM_TOTAL_EVENT_ID &&
 		eventid <= QOS_L3_MBM_LOCAL_EVENT_ID);
+}
+
+/**
+ * apply_io_alloc_min_cbm() - Apply minimum io_alloc CBM
+ *
+ * @r: resctrl resource
+ *
+ * Return: Minimum number of consecutive io_alloc CBM bits to be set.
+ */
+static inline u32 apply_io_alloc_min_cbm(struct rdt_resource *r)
+{
+	return r->cache.min_cbm_bits;
+}
+
+/**
+ * resctrl_should_io_alloc_min_cbm() - Should the minimum io_alloc
+ *				       CBM be applied
+ * @r: resctrl resource
+ *
+ * Return: True if the minimum number of consecutive
+ * bits to be set in the io_alloc CBM should be applied.
+ */
+static inline bool resctrl_should_io_alloc_min_cbm(struct rdt_resource *r)
+{
+	return r->cache.io_alloc.io_alloc_min_cbm;
 }
 
 u32 resctrl_get_mon_evt_cfg(enum resctrl_event_id eventid);

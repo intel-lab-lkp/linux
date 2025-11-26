@@ -215,6 +215,16 @@ related to allocation:
 			# cat /sys/fs/resctrl/info/L3/io_alloc_cbm
 			0=00ff;1=000f
 
+		Set each CBM to their minimum number of consecutive bits.
+
+		A special value "*" is required to represent all cache IDs.
+		The user should specify the correct minimum stored in
+		/sys/fs/resctrl/info/L3/min_cbm_bits.
+
+		Example::
+
+			# echo "*=0" > /sys/fs/resctrl/info/L3/io_alloc_cbm
+
 		When CDP is enabled "io_alloc_cbm" associated with the CDP_DATA and CDP_CODE
 		resources may reflect the same values. For example, values read from and
 		written to /sys/fs/resctrl/info/L3DATA/io_alloc_cbm may be reflected by

@@ -144,6 +144,19 @@ enum rdt_group_type {
 };
 
 /**
+ * enum resctrl_kv_sel - Selector for "domain=cbm" key/value parsing
+ * @RDT_PARSE_DOMAIN: Parse the left-hand side (domain ID)
+ * @RDT_PARSE_CBM: Parse the right-hand side (CBM value)
+ *
+ * Used by parsers of key/value pairs formatted as "domain=cbm" to indicate
+ * which token should be extracted and converted.
+ */
+enum resctrl_kv_sel {
+	RDT_PARSE_DOMAIN,
+	RDT_PARSE_CBM,
+};
+
+/**
  * enum rdtgrp_mode - Mode of a RDT resource group
  * @RDT_MODE_SHAREABLE: This resource group allows sharing of its allocations
  * @RDT_MODE_EXCLUSIVE: No sharing of this resource group's allocations allowed
