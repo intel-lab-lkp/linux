@@ -3916,18 +3916,16 @@ static int ufshcd_memory_alloc(struct ufs_hba *hba)
 {
 	size_t utmrdl_size, utrdl_size, ucdl_size;
 
-	/* Allocate memory for UTP command descriptors */
+	/*
+	 * Allocate memory for UTP command descriptors
+	 * UFSHCI requires 128 byte alignment of UCDL
+	 */
 	ucdl_size = ufshcd_get_ucd_size(hba) * hba->nutrs;
 	hba->ucdl_base_addr = dmam_alloc_coherent(hba->dev,
 						  ucdl_size,
 						  &hba->ucdl_dma_addr,
 						  GFP_KERNEL);
-
-	/*
-	 * UFSHCI requires UTP command descriptor to be 128 byte aligned.
-	 */
-	if (!hba->ucdl_base_addr ||
-	    WARN_ON(hba->ucdl_dma_addr & (128 - 1))) {
+	if (!hba->ucdl_base_addr) {
 		dev_err(hba->dev,
 			"Command Descriptor Memory allocation failed\n");
 		goto out;
@@ -3942,8 +3940,7 @@ static int ufshcd_memory_alloc(struct ufs_hba *hba)
 						   utrdl_size,
 						   &hba->utrdl_dma_addr,
 						   GFP_KERNEL);
-	if (!hba->utrdl_base_addr ||
-	    WARN_ON(hba->utrdl_dma_addr & (SZ_1K - 1))) {
+	if (!hba->utrdl_base_addr) {
 		dev_err(hba->dev,
 			"Transfer Descriptor Memory allocation failed\n");
 		goto out;
@@ -3966,8 +3963,7 @@ static int ufshcd_memory_alloc(struct ufs_hba *hba)
 						    utmrdl_size,
 						    &hba->utmrdl_dma_addr,
 						    GFP_KERNEL);
-	if (!hba->utmrdl_base_addr ||
-	    WARN_ON(hba->utmrdl_dma_addr & (SZ_1K - 1))) {
+	if (!hba->utmrdl_base_addr) {
 		dev_err(hba->dev,
 		"Task Management Descriptor Memory allocation failed\n");
 		goto out;
