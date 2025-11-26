@@ -3757,7 +3757,7 @@ check_state:
 
 static void bond_activebackup_arp_mon(struct bonding *bond)
 {
-	bool should_notify_rtnl;
+	bool should_notify_rtnl, commit;
 	int delta_in_ticks;
 
 	delta_in_ticks = msecs_to_jiffies(bond->params.arp_interval);
@@ -3767,29 +3767,20 @@ static void bond_activebackup_arp_mon(struct bonding *bond)
 
 	rcu_read_lock();
 
-	if (bond_ab_arp_inspect(bond)) {
-		rcu_read_unlock();
+	commit = !!bond_ab_arp_inspect(bond);
+	should_notify_rtnl = bond_ab_arp_probe(bond);
 
+	rcu_read_unlock();
+
+	if (commit || READ_ONCE(bond->send_peer_notif) || should_notify_rtnl) {
 		/* Race avoidance with bond_close flush of workqueue */
 		if (!rtnl_trylock()) {
 			delta_in_ticks = 1;
 			goto re_arm;
 		}
 
-		bond_ab_arp_commit(bond);
-
-		rtnl_unlock();
-		rcu_read_lock();
-	}
-
-	should_notify_rtnl = bond_ab_arp_probe(bond);
-	rcu_read_unlock();
-
-	if (READ_ONCE(bond->send_peer_notif) || should_notify_rtnl) {
-		if (!rtnl_trylock()) {
-			delta_in_ticks = 1;
-			goto re_arm;
-		}
+		if (commit)
+			bond_ab_arp_commit(bond);
 
 		if (bond->send_peer_notif) {
 			if (bond_should_notify_peers(bond))
@@ -3797,6 +3788,7 @@ static void bond_activebackup_arp_mon(struct bonding *bond)
 							 bond->dev);
 			bond->send_peer_notif--;
 		}
+
 		if (should_notify_rtnl) {
 			bond_slave_state_notify(bond);
 			bond_slave_link_notify(bond);
