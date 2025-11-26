@@ -286,5 +286,13 @@ config LSM
 
 source "security/Kconfig.hardening"
 
+config SEC_KPROBES
+	bool "Secure kprobe blacklist"
+	depends on KPROBES
+	help
+	  Adds functions x64_syscall_table() and kallsyms_lookup_name()
+	  to the kprobe blacklist to prevent syscall hooking attacks.
+	  If in doubt, say "N".
+
 endmenu
 
