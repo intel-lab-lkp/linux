@@ -176,7 +176,7 @@ static int __init efifb_set_system(struct screen_info *si, const struct dmi_syst
 
 static int __init efifb_set_system_callback(const struct dmi_system_id *id)
 {
-	return efifb_set_system(&screen_info, id);
+	return efifb_set_system(&sysfb_primary_display.screen, id);
 }
 
 #define EFIFB_DMI_SYSTEM_ID(vendor, name, enumid)		\
@@ -316,7 +316,7 @@ static struct device_node *find_pci_overlap_node(void)
 		}
 
 		for_each_of_pci_range(&parser, &range)
-			if (efifb_overlaps_pci_range(&screen_info, &range))
+			if (efifb_overlaps_pci_range(&sysfb_primary_display.screen, &range))
 				return np;
 	}
 	return NULL;
