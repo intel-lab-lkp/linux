@@ -18,6 +18,21 @@
 #include "rxe_net.h"
 #include "rxe_loc.h"
 
+static struct lock_class_key rxe_recv_sk_key;
+static struct lock_class_key rxe_recv_slock_key;
+
+static inline void rxe_reclassify_recv_socket(struct socket *sock)
+{
+	struct sock *sk = sock->sk;
+
+	if (WARN_ON_ONCE(!sock_allow_reclassification(sk)))
+		return;
+
+	sock_lock_init_class_and_name(sk,
+				      "slock-RDMA-RXE-RECV", &rxe_recv_slock_key,
+				      "sk_lock-RDMA-RXE-RECV", &rxe_recv_sk_key);
+}
+
 static struct rxe_recv_sockets recv_sockets;
 
 static struct dst_entry *rxe_find_route4(struct rxe_qp *qp,
@@ -192,6 +207,7 @@ static struct socket *rxe_setup_udp_tunnel(struct net *net, __be16 port,
 	err = udp_sock_create(net, &udp_cfg, &sock);
 	if (err < 0)
 		return ERR_PTR(err);
+	rxe_reclassify_recv_socket(sock);
 
 	tnl_cfg.encap_type = 1;
 	tnl_cfg.encap_rcv = rxe_udp_encap_recv;

@@ -15,6 +15,21 @@
 #include "rxe_queue.h"
 #include "rxe_task.h"
 
+static struct lock_class_key rxe_send_sk_key;
+static struct lock_class_key rxe_send_slock_key;
+
+static inline void rxe_reclassify_send_socket(struct socket *sock)
+{
+	struct sock *sk = sock->sk;
+
+	if (WARN_ON_ONCE(!sock_allow_reclassification(sk)))
+		return;
+
+	sock_lock_init_class_and_name(sk,
+				      "slock-RDMA-RXE-SEND", &rxe_send_slock_key,
+				      "sk_lock-RDMA-RXE-SEND", &rxe_send_sk_key);
+}
+
 static int rxe_qp_chk_cap(struct rxe_dev *rxe, struct ib_qp_cap *cap,
 			  int has_srq)
 {
@@ -244,6 +259,7 @@ static int rxe_qp_init_req(struct rxe_dev *rxe, struct rxe_qp *qp,
 	err = sock_create_kern(&init_net, AF_INET, SOCK_DGRAM, 0, &qp->sk);
 	if (err < 0)
 		return err;
+	rxe_reclassify_send_socket(qp->sk);
 	qp->sk->sk->sk_user_data = qp;
 
 	/* pick a source UDP port number for this QP based on
