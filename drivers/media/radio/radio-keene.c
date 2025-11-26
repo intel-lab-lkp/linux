@@ -337,14 +337,12 @@ static int usb_keene_probe(struct usb_interface *intf,
 	radio->stereo = true;
 	if (hdl->error) {
 		retval = hdl->error;
-
-		v4l2_ctrl_handler_free(hdl);
-		goto err_v4l2;
+		goto err_hdl;
 	}
 	retval = v4l2_device_register(&intf->dev, &radio->v4l2_dev);
 	if (retval < 0) {
 		dev_err(&intf->dev, "couldn't register v4l2_device\n");
-		goto err_v4l2;
+		goto err_hdl;
 	}
 
 	mutex_init(&radio->lock);
@@ -383,6 +381,8 @@ static int usb_keene_probe(struct usb_interface *intf,
 
 err_vdev:
 	v4l2_device_unregister(&radio->v4l2_dev);
+err_hdl:
+	v4l2_ctrl_handler_free(&radio->hdl);
 err_v4l2:
 	kfree(radio->buffer);
 	kfree(radio);
