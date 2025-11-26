@@ -183,9 +183,11 @@ void hv_apic_init(void);
 void __init hv_init_spinlocks(void);
 bool hv_vcpu_is_preempted(int vcpu);
 void hv_sleep_notifiers_register(void);
+void hv_machine_power_off(void);
 #else
 static inline void hv_apic_init(void) {}
 static inline void hv_sleep_notifiers_register(void) {};
+static inline void hv_machine_power_off(void) {};
 #endif
 
 struct irq_domain *hv_create_pci_msi_domain(void);
