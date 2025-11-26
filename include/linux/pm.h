@@ -708,6 +708,7 @@ struct dev_pm_info {
 	bool			use_autosuspend:1;
 	bool			timer_autosuspends:1;
 	bool			memalloc_noio:1;
+	bool			force_check_resume:1;
 	unsigned int		links_count;
 	enum rpm_request	request;
 	enum rpm_status		runtime_status;

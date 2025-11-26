@@ -1533,7 +1533,8 @@ void __pm_runtime_disable(struct device *dev, bool check_resume)
 	 * means there probably is some I/O to process and disabling runtime PM
 	 * shouldn't prevent the device from processing the I/O.
 	 */
-	if (check_resume && dev->power.request_pending &&
+	if ((check_resume || dev->power.force_check_resume) &&
+	    dev->power.request_pending &&
 	    dev->power.request == RPM_REQ_RESUME) {
 		/*
 		 * Prevent suspends and idle notifications from being carried
