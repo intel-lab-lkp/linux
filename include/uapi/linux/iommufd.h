@@ -453,6 +453,7 @@ struct iommu_hwpt_vtd_s1 {
  *
  * It's suggested to allocate a vDEVICE object carrying vSID and then re-attach
  * the nested domain, as soon as the vSID is available in the VMM level:
+ *
  * - when Cfg=translate, a vDEVICE must be allocated prior to attaching to the
  *   allocated nested domain, as CD/ATS invalidations and vevents need a vSID.
  * - when Cfg=bypass/abort, a vDEVICE is not enforced during the nested domain
