@@ -5370,7 +5370,11 @@ void sched_exec(void)
 	int dest_cpu;
 
 	scoped_guard (raw_spinlock_irqsave, &p->pi_lock) {
-		dest_cpu = p->sched_class->select_task_rq(p, task_cpu(p), WF_EXEC);
+		if (p->nr_cpus_allowed > 1 && !is_migration_disabled(p))
+			dest_cpu = p->sched_class->select_task_rq(p, task_cpu(p), WF_EXEC);
+		else
+			dest_cpu = cpumask_any(p->cpus_ptr);
+
 		if (dest_cpu == smp_processor_id())
 			return;
 
