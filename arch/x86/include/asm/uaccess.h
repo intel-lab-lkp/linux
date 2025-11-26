@@ -260,30 +260,27 @@ do {									\
 	unsigned int __gu_low, __gu_high;				\
 	const unsigned int __user *__gu_ptr;				\
 	__gu_ptr = (const void __user *)(ptr);				\
-	__get_user_asm(__gu_low, __gu_ptr, "l", "=r", label);		\
-	__get_user_asm(__gu_high, __gu_ptr+1, "l", "=r", label);	\
+	__get_user_asm(__gu_low, __gu_ptr, "movl", "", label);		\
+	__get_user_asm(__gu_high, __gu_ptr+1, "movl", "", label);	\
 	(x) = ((unsigned long long)__gu_high << 32) | __gu_low;		\
 } while (0)
 #else
 #define __get_user_asm_u64(x, ptr, label)				\
-	__get_user_asm(x, ptr, "q", "=r", label)
+	__get_user_asm(x, ptr, "movq", "", label)
 #endif
 
 #define __get_user_size(x, ptr, size, label)				\
 do {									\
 	__chk_user_ptr(ptr);						\
 	switch (size) {							\
-	case 1:	{							\
-		unsigned char x_u8__;					\
-		__get_user_asm(x_u8__, ptr, "b", "=q", label);		\
-		(x) = x_u8__;						\
+	case 1:								\
+		__get_user_asm(x, ptr, "movzbl", "k", label);		\
 		break;							\
-	}								\
 	case 2:								\
-		__get_user_asm(x, ptr, "w", "=r", label);		\
+		__get_user_asm(x, ptr, "movzwl", "k", label);		\
 		break;							\
 	case 4:								\
-		__get_user_asm(x, ptr, "l", "=r", label);		\
+		__get_user_asm(x, ptr, "movl", "", label);		\
 		break;							\
 	case 8:								\
 		__get_user_asm_u64(x, ptr, label);			\
@@ -294,11 +291,11 @@ do {									\
 	instrument_get_user(x);						\
 } while (0)
 
-#define __get_user_asm(x, addr, itype, ltype, label)			\
+#define __get_user_asm(x, addr, insn, opmod, label)			\
 	asm_goto_output("\n"						\
-		     "1:	mov"itype" %[umem],%[output]\n"		\
+		     "1:	" insn " %[umem],%" opmod "[output]\n"	\
 		     _ASM_EXTABLE_UA(1b, %l2)				\
-		     : [output] ltype(x)				\
+		     : [output] "=r" (x)				\
 		     : [umem] "m" (__m(addr))				\
 		     : : label)
 
@@ -326,26 +323,23 @@ do {									\
 })
 
 #else
-#define __get_user_asm_u64(x, ptr, retval) \
-	 __get_user_asm(x, ptr, retval, "q")
+#define __get_user_asm_u64(x, ptr, retval)				\
+	__get_user_asm(x, ptr, "movq", "", retval)
 #endif
 
 #define __get_user_size(x, ptr, size, retval)				\
 do {									\
-	unsigned char x_u8__;						\
-									\
 	retval = 0;							\
 	__chk_user_ptr(ptr);						\
 	switch (size) {							\
 	case 1:								\
-		__get_user_asm(x_u8__, ptr, retval, "b");		\
-		(x) = x_u8__;						\
+		 __get_user_asm(x, ptr, "movzbl", "k", retval);		\
 		break;							\
 	case 2:								\
-		__get_user_asm(x, ptr, retval, "w");			\
+		__get_user_asm(x, ptr, "movzwl", "k", retval);		\
 		break;							\
 	case 4:								\
-		__get_user_asm(x, ptr, retval, "l");			\
+		__get_user_asm(x, ptr, "movl", "", retval);		\
 		break;							\
 	case 8:								\
 		__get_user_asm_u64(x, ptr, retval);			\
@@ -355,9 +349,9 @@ do {									\
 	}								\
 } while (0)
 
-#define __get_user_asm(x, addr, err, itype)				\
+#define __get_user_asm(x, addr, insn, opmod, err)			\
 	asm volatile("\n"						\
-		     "1:	mov"itype" %[umem],%[output]\n"		\
+		     "1:	" insn " %[umem],%" opmod "[output]\n"	\
 		     "2:\n"						\
 		     _ASM_EXTABLE_TYPE_REG(1b, 2b, EX_TYPE_EFAULT_REG | \
 					   EX_FLAG_CLEAR_AX,		\
