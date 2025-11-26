@@ -532,6 +532,7 @@ static int ipc_validate_msg(struct ipc_msg_table_entry *entry)
 static void *ipc_msg_send_request(struct ksmbd_ipc_msg *msg, unsigned int handle)
 {
 	struct ipc_msg_table_entry entry;
+	void *response = NULL;
 	int ret;
 
 	if ((int)handle < 0)
@@ -553,6 +554,8 @@ static void *ipc_msg_send_request(struct ksmbd_ipc_msg *msg, unsigned int handle
 	ret = wait_event_interruptible_timeout(entry.wait,
 					       entry.response != NULL,
 					       IPC_WAIT_TIMEOUT);
+
+	down_write(&ipc_msg_table_lock);
 	if (entry.response) {
 		ret = ipc_validate_msg(&entry);
 		if (ret) {
@@ -560,11 +563,19 @@ static void *ipc_msg_send_request(struct ksmbd_ipc_msg *msg, unsigned int handle
 			entry.response = NULL;
 		}
 	}
+
+	response = entry.response;
+	hash_del(&entry.ipc_table_hlist);
+	up_write(&ipc_msg_table_lock);
+
+	return response;
+
 out:
 	down_write(&ipc_msg_table_lock);
 	hash_del(&entry.ipc_table_hlist);
 	up_write(&ipc_msg_table_lock);
-	return entry.response;
+
+	return NULL;
 }
 
 static int ksmbd_ipc_heartbeat_request(void)
