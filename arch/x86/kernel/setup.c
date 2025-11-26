@@ -300,7 +300,8 @@ static u64 __init get_ramdisk_image(void)
 
 	ramdisk_image |= (u64)boot_params.ext_ramdisk_image << 32;
 
-	if (ramdisk_image == 0)
+	/* Don't fall back for kexec as phys_initrd_start will be stale */
+	if (ramdisk_image == 0 && (boot_params.hdr.type_of_loader >> 4) != 0xD)
 		ramdisk_image = phys_initrd_start;
 
 	return ramdisk_image;
@@ -311,7 +312,8 @@ static u64 __init get_ramdisk_size(void)
 
 	ramdisk_size |= (u64)boot_params.ext_ramdisk_size << 32;
 
-	if (ramdisk_size == 0)
+	/* Don't fall back for kexec as phys_initrd_start will be stale */
+	if (ramdisk_size == 0 && (boot_params.hdr.type_of_loader >> 4) != 0xD)
 		ramdisk_size = phys_initrd_size;
 
 	return ramdisk_size;
