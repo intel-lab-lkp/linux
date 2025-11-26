@@ -234,17 +234,9 @@ exposure of uninitialized data through mmap.
 
 These filesystems may be used for inspiration:
 
-.. seealso::
-
-  ext2: see Documentation/filesystems/ext2.rst
-
-.. seealso::
-
-  xfs:  see Documentation/admin-guide/xfs.rst
-
-.. seealso::
-
-  ext4: see Documentation/filesystems/ext4/
+  * :doc:`ext2 <ext2>`
+  * :doc:`ext4 <ext4/index>`
+  * :doc:`xfs <xfs/index>`
 
 
 Handling Media Errors
