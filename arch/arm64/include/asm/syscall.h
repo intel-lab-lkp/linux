@@ -9,6 +9,9 @@
 #include <linux/compat.h>
 #include <linux/err.h>
 
+#include <asm/compat.h>
+#include <asm/vdso.h>
+
 typedef long (*syscall_fn_t)(const struct pt_regs *regs);
 
 extern const syscall_fn_t sys_call_table[];
@@ -114,12 +117,21 @@ static inline int syscall_get_arch(struct task_struct *task)
 	return AUDIT_ARCH_AARCH64;
 }
 
-static inline bool has_syscall_work(unsigned long flags)
+static inline bool arch_syscall_is_vdso_sigreturn(struct pt_regs *regs)
 {
-	return unlikely(flags & _TIF_SYSCALL_WORK);
+	unsigned long sigtramp;
+
+#ifdef CONFIG_COMPAT
+	if (is_compat_task()) {
+		unsigned long vdso = (unsigned long)current->mm->context.sigpage;
+
+		return (regs->pc >= vdso && regs->pc < (vdso + PAGE_SIZE));
+	}
+#endif
+	sigtramp = (unsigned long)VDSO_SYMBOL(current->mm->context.vdso, sigtramp);
+	return regs->pc == (sigtramp + 8);
 }
 
-int syscall_trace_enter(struct pt_regs *regs, long syscall, unsigned long flags);
-void syscall_exit_to_user_mode_prepare(struct pt_regs *regs);
+#define ARCH_SYSCALL_WORK_EXIT	(_TIF_SECCOMP | _TIF_SYSCALL_EMU)
 
 #endif	/* __ASM_SYSCALL_H */
