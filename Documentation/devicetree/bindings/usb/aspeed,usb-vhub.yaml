@@ -26,11 +26,15 @@ properties:
       - aspeed,ast2400-usb-vhub
       - aspeed,ast2500-usb-vhub
       - aspeed,ast2600-usb-vhub
+      - aspeed,ast2700-usb-vhub
 
   reg:
     maxItems: 1
 
   clocks:
+    maxItems: 1
+
+  resets:
     maxItems: 1
 
   interrupts:
@@ -106,6 +110,16 @@ required:
   - interrupts
   - aspeed,vhub-downstream-ports
   - aspeed,vhub-generic-endpoints
+
+if:
+  properties:
+    compatible:
+      contains:
+        const: aspeed,ast2700-usb-vhub
+
+then:
+  required:
+    - resets
 
 additionalProperties: false
 
