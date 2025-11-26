@@ -1,0 +1,107 @@
+.. SPDX-License-Identifier: GPL-2.0+
+
+============================
+DRM RAS over Generic Netlink
+============================
+
+The DRM RAS (Reliability, Availability, Serviceability) interface provides a
+standardized way for GPU/accelerator drivers to expose error counters and
+other reliability nodes to user space via Generic Netlink. This allows
+diagnostic tools, monitoring daemons, or test infrastructure to query hardware
+health in a uniform way across different DRM drivers.
+
+Key Goals:
+
+* Provide a standardized RAS solution for GPU and accelerator drivers, enabling
+  data center monitoring and reliability operations.
+* Implement a single drm-ras Generic Netlink family to meet modern Netlink YAML
+  specifications and centralize all RAS-related communication in one namespace.
+* Support a basic error counter interface, addressing the immediate, essential
+  monitoring needs.
+* Offer a flexible, future-proof interface that can be extended to support
+  additional types of RAS data in the future.
+* Allow multiple nodes per driver, enabling drivers to register separate
+  nodes for different IP blocks, sub-blocks, or other logical subdivisions
+  as applicable.
+
+Nodes
+=====
+
+Nodes are logical abstractions representing an error source or block within
+the device. Currently, only error counter nodes is supported.
+
+Drivers are responsible for registering and unregistering nodes via the
+`drm_ras_node_register()` and `drm_ras_node_unregister()` APIs.
+
+Node Management
+-------------------
+
+.. kernel-doc:: drivers/gpu/drm/drm_ras.c
+   :doc: DRM RAS Node Management
+.. kernel-doc:: drivers/gpu/drm/drm_ras.c
+   :internal:
+
+Generic Netlink Usage
+=====================
+
+The interface is implemented as a Generic Netlink family named ``drm-ras``.
+User space tools can:
+
+* List registered nodes with the ``get-nodes`` command.
+* List all error counters in an node with the ``get-error-counters`` command.
+* Query error counters using the ``query-error-counter`` command.
+
+YAML-based Interface
+--------------------
+
+The interface is described in a YAML specification:
+
+:ref:`Documentation/netlink/specs/drm_ras.yaml`
+
+This YAML is used to auto-generate user space bindings via
+``tools/net/ynl/pyynl/ynl_gen_c.py``, and drives the structure of netlink
+attributes and operations.
+
+Usage Notes
+-----------
+
+* User space must first enumerate nodes to obtain their IDs.
+* Node IDs are then used for all further queries, such as error counters.
+* The interface supports future extension by adding new node types and
+  additional attributes.
+
+Example: List nodes using ynl
+
+.. code-block:: bash
+
+    sudo ynl --family drm_ras  --dump list-nodes
+    [{'device-name': '0000:03:00.0',
+    'node-id': 0,
+    'node-name': 'correctable-errors',
+    'node-type': 'error-counter'},
+    {'device-name': '0000:03:00.0',
+     'node-id': 1,
+    'node-name': 'nonfatal-errors',
+    'node-type': 'error-counter'},
+    {'device-name': '0000:03:00.0',
+    'node-id': 2,
+    'node-name': 'fatal-errors',
+    'node-type': 'error-counter'}]
+
+Example: List all error counters using ynl
+
+.. code-block:: bash
+
+
+   sudo ynl --family drm_ras  --dump get-error-counters --json '{"node-id":1}'
+   [{'error-id': 1, 'error-name': 'error_name_1', 'error-value': 0},
+   {'error-id': 2, 'error-name': 'error_name_2', 'error-value': 0}]
+
+
+Example: Query an error counter for a given node
+
+.. code-block:: bash
+
+   sudo ynl --family drm_ras --do query-error-counter  --json '{"node-id":2, "error-id":1}'
+   {'error-id': 1, 'error-name': 'error_name_1', 'error-value': 0}
+
