@@ -255,30 +255,41 @@ permissions.
 Further action taken by zonefs I/O error recovery can be controlled by the user
 with the "errors=xxx" mount option. The table below summarizes the result of
 zonefs I/O error processing depending on the mount option and on the zone
-conditions::
+conditions:
 
     +--------------+-----------+-----------------------------------------+
     |              |           |            Post error state             |
-    | "errors=xxx" |  device   |                 access permissions      |
-    |    mount     |   zone    | file         file          device zone  |
-    |    option    | condition | size     read    write    read    write |
-    +--------------+-----------+-----------------------------------------+
-    |              | good      | fixed    yes     no       yes     yes   |
-    | remount-ro   | read-only | as is    yes     no       yes     no    |
-    | (default)    | offline   |   0      no      no       no      no    |
-    +--------------+-----------+-----------------------------------------+
-    |              | good      | fixed    yes     no       yes     yes   |
-    | zone-ro      | read-only | as is    yes     no       yes     no    |
-    |              | offline   |   0      no      no       no      no    |
-    +--------------+-----------+-----------------------------------------+
-    |              | good      |   0      no      no       yes     yes   |
-    | zone-offline | read-only |   0      no      no       yes     no    |
-    |              | offline   |   0      no      no       no      no    |
-    +--------------+-----------+-----------------------------------------+
-    |              | good      | fixed    yes     yes      yes     yes   |
-    | repair       | read-only | as is    yes     no       yes     no    |
-    |              | offline   |   0      no      no       no      no    |
-    +--------------+-----------+-----------------------------------------+
+    |              |           +--------+---------------+----------------+
+    |              |           |        |        access permissions      |
+    | "errors=xxx" | device    | file   +---------------+----------------+
+    | mount        | zone      | size   |     file      |   device zone  |
+    | option       | condition |        +-------+-------+--------+-------+
+    |              |           |        | read  | write |  read  | write |
+    +==============+===========+========+=======+=======+========+=======+
+    |              | good      | fixed  | yes   | no    |  yes   | yes   |
+    |              +-----------+--------+-------+-------+--------+-------+
+    | remount-ro   | read-only | as is  | yes   | no    |  yes   | no    |
+    | (default)    +-----------+--------+-------+-------+--------+-------+
+    |              | offline   |   0    | no    | no    |  no    | no    |
+    +--------------+-----------+--------+-------+-------+--------+-------+
+    |              | good      | fixed  | yes   | no    |  yes   | yes   |
+    |              +-----------+--------+-------+-------+--------+-------+
+    | zone-ro      | read-only | as is  | yes   | no    |  yes   | no    |
+    |              +-----------+--------+-------+-------+--------+-------+
+    |              | offline   |   0    | no    | no    |  no    | no    |
+    +--------------+-----------+--------+-------+-------+--------+-------+
+    |              | good      |   0    | no    | no    |  yes   | yes   |
+    |              +-----------+--------+-------+-------+--------+-------+
+    | zone-offline | read-only |   0    | no    | no    |  yes   | no    |
+    |              +-----------+--------+-------+-------+--------+-------+
+    |              | offline   |   0    | no    | no    |  no    | no    |
+    +--------------+-----------+--------+-------+-------+--------+-------+
+    |              | good      | fixed  | yes   | yes   |  yes   | yes   |
+    |              +-----------+--------+-------+-------+--------+-------+
+    | repair       | read-only | as is  | yes   | no    |  yes   | no    |
+    |              +-----------+--------+-------+-------+--------+-------+
+    |              | offline   |   0    | no    | no    |  no    | no    |
+    +--------------+-----------+--------+-------+-------+--------+-------+
 
 Further notes:
 
