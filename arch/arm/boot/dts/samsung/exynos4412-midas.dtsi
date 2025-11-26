@@ -1441,6 +1441,7 @@
 	#size-cells = <0>;
 	non-removable;
 	bus-width = <4>;
+	cap-power-off-card;
 
 	mmc-pwrseq = <&wlan_pwrseq>;
 	pinctrl-names = "default";
