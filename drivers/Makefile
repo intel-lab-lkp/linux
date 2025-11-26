@@ -7,14 +7,30 @@
 #
 
 obj-y				+= cache/
+obj-$(CONFIG_MAILBOX)		+= mailbox/
+obj-y				+= firmware/
 obj-y				+= irqchip/
 obj-y				+= bus/
 
 obj-$(CONFIG_GENERIC_PHY)	+= phy/
 
+# SOC specific infrastructure drivers.
+obj-y				+= soc/
+obj-$(CONFIG_PM_GENERIC_DOMAINS)	+= pmdomain/
+
+obj-y				+= clk/
+# Many drivers will want to use DMA so this has to be made available
+# really early.
+obj-$(CONFIG_DMADEVICES)	+= dma/
+
+
 # GPIO must come after pinctrl as gpios may need to mux pins etc
 obj-$(CONFIG_PINCTRL)		+= pinctrl/
 obj-$(CONFIG_GPIOLIB)		+= gpio/
+
+# regulators early, since some subsystems rely on them to initialize
+obj-$(CONFIG_REGULATOR)		+= regulator/
+
 obj-y				+= pwm/
 
 # LEDs must come before PCI, it is needed by NPEM driver
@@ -37,21 +53,9 @@ obj-$(CONFIG_ACPI)		+= acpi/
 obj-$(CONFIG_PNP)		+= pnp/
 obj-y				+= amba/
 
-obj-y				+= clk/
-# Many drivers will want to use DMA so this has to be made available
-# really early.
-obj-$(CONFIG_DMADEVICES)	+= dma/
-
-# SOC specific infrastructure drivers.
-obj-y				+= soc/
-obj-$(CONFIG_PM_GENERIC_DOMAINS)	+= pmdomain/
-
 obj-y				+= virtio/
 obj-$(CONFIG_VDPA)		+= vdpa/
 obj-$(CONFIG_XEN)		+= xen/
-
-# regulators early, since some subsystems rely on them to initialize
-obj-$(CONFIG_REGULATOR)		+= regulator/
 
 # reset controllers early, since gpu drivers might rely on them to initialize
 obj-$(CONFIG_RESET_CONTROLLER)	+= reset/
@@ -134,7 +138,6 @@ obj-y				+= mmc/
 obj-y				+= ufs/
 obj-$(CONFIG_MEMSTICK)		+= memstick/
 obj-$(CONFIG_INFINIBAND)	+= infiniband/
-obj-y				+= firmware/
 obj-$(CONFIG_FWCTL)		+= fwctl/
 obj-$(CONFIG_CRYPTO)		+= crypto/
 obj-$(CONFIG_SUPERH)		+= sh/
@@ -153,7 +156,6 @@ obj-$(CONFIG_COMEDI)		+= comedi/
 obj-$(CONFIG_STAGING)		+= staging/
 obj-y				+= platform/
 
-obj-$(CONFIG_MAILBOX)		+= mailbox/
 obj-$(CONFIG_HWSPINLOCK)	+= hwspinlock/
 obj-$(CONFIG_REMOTEPROC)	+= remoteproc/
 obj-$(CONFIG_RPMSG)		+= rpmsg/
