@@ -23,7 +23,7 @@
 
 #include <asm/efi.h>
 
-unsigned long __initdata screen_info_table = EFI_INVALID_TABLE_ADDR;
+unsigned long __initdata primary_display_table = EFI_INVALID_TABLE_ADDR;
 
 static int __init is_memory(efi_memory_desc_t *md)
 {
@@ -67,16 +67,17 @@ EXPORT_SYMBOL_GPL(sysfb_primary_display);
 
 static void __init init_primary_display(void)
 {
-	if (screen_info_table != EFI_INVALID_TABLE_ADDR) {
-		struct screen_info *si = early_memremap(screen_info_table, sizeof(*si));
+	if (primary_display_table != EFI_INVALID_TABLE_ADDR) {
+		struct sysfb_display_info *dpy =
+			early_memremap(primary_display_table, sizeof(*dpy));
 
-		if (!si) {
-			pr_err("Could not map screen_info config table\n");
+		if (!dpy) {
+			pr_err("Could not map primary_display config table\n");
 			return;
 		}
-		sysfb_primary_display.screen = *si;
-		memset(si, 0, sizeof(*si));
-		early_memunmap(si, sizeof(*si));
+		sysfb_primary_display = *dpy;
+		memset(dpy, 0, sizeof(*dpy));
+		early_memunmap(dpy, sizeof(*dpy));
 	} else {
 		return;
 	}
