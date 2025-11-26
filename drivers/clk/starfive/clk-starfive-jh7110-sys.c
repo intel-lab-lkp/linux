@@ -430,7 +430,7 @@ static int __init jh7110_syscrg_probe(struct platform_device *pdev)
 			return PTR_ERR(priv->pll[0]);
 	} else {
 		priv->pll_clk_nb.notifier_call = jh7110_pll0_clk_notifier_cb;
-		ret = clk_notifier_register(pllclk, &priv->pll_clk_nb);
+		ret = devm_clk_notifier_register(priv->dev, pllclk, &priv->pll_clk_nb);
 		if (ret)
 			return ret;
 		priv->pll[0] = NULL;
