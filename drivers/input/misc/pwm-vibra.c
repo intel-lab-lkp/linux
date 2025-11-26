@@ -40,6 +40,7 @@ static int pwm_vibrator_start(struct pwm_vibrator *vibrator)
 	struct device *pdev = vibrator->input->dev.parent;
 	struct pwm_state state;
 	int err;
+	bool new_vcc_on = false;
 
 	if (!vibrator->vcc_on) {
 		err = regulator_enable(vibrator->vcc);
@@ -48,6 +49,7 @@ static int pwm_vibrator_start(struct pwm_vibrator *vibrator)
 			return err;
 		}
 		vibrator->vcc_on = true;
+		new_vcc_on = true;
 	}
 
 	gpiod_set_value_cansleep(vibrator->enable_gpio, 1);
@@ -59,7 +61,7 @@ static int pwm_vibrator_start(struct pwm_vibrator *vibrator)
 	err = pwm_apply_might_sleep(vibrator->pwm, &state);
 	if (err) {
 		dev_err(pdev, "failed to apply pwm state: %d\n", err);
-		return err;
+		goto err_gpio;
 	}
 
 	if (vibrator->pwm_dir) {
@@ -71,11 +73,19 @@ static int pwm_vibrator_start(struct pwm_vibrator *vibrator)
 		if (err) {
 			dev_err(pdev, "failed to apply dir-pwm state: %d\n", err);
 			pwm_disable(vibrator->pwm);
-			return err;
+			goto err_gpio;
 		}
 	}
 
 	return 0;
+
+err_gpio:
+	gpiod_set_value_cansleep(vibrator->enable_gpio, 0);
+	if (new_vcc_on) {
+		regulator_disable(vibrator->vcc);
+		vibrator->vcc_on = false;
+	}
+	return err;
 }
 
 static void pwm_vibrator_stop(struct pwm_vibrator *vibrator)
