@@ -2261,6 +2261,63 @@ e_free_context:
 	return rc;
 }
 
+static int sev_snp_report_request(struct kvm *kvm, struct kvm_sev_cmd *argp)
+{
+	struct kvm_sev_info *sev = to_kvm_sev_info(kvm);
+	struct sev_data_snp_hv_report_req data;
+	struct kvm_sev_snp_hv_report_req params;
+	void __user *u_report;
+	void __user *u_params = u64_to_user_ptr(argp->data);
+	struct sev_data_snp_msg_report_rsp *report_rsp = NULL;
+	int ret;
+
+	if (!sev_snp_guest(kvm))
+		return -ENOTTY;
+
+	if (copy_from_user(&params, u_params, sizeof(params)))
+		return -EFAULT;
+
+	/* A report uses 1184 bytes */
+	if (params.report_len < 1184)
+		return -ENOSPC;
+
+	memset(&data, 0, sizeof(data));
+
+	u_report = u64_to_user_ptr(params.report_uaddr);
+	if (!u_report)
+		return -EINVAL;
+
+	report_rsp = snp_alloc_firmware_page(GFP_KERNEL_ACCOUNT | __GFP_ZERO);
+	if (!report_rsp)
+		return -ENOMEM;
+
+	data.len = sizeof(data);
+	data.hv_report_paddr = __psp_pa(report_rsp);
+	data.key_sel = params.key_sel;
+
+	data.gctx_addr = __psp_pa(sev->snp_context);
+	ret = sev_issue_cmd(kvm, SEV_CMD_SNP_HV_REPORT_REQ, &data,
+			    &argp->error);
+
+	if (ret)
+		goto e_free_rsp;
+
+	params.report_len = report_rsp->report_size;
+	if (copy_to_user(u_params, &params, sizeof(params)))
+		ret = -EFAULT;
+
+	if (params.report_len < report_rsp->report_size) {
+		ret = -ENOSPC;
+		/* report is located right after rsp */
+	} else if (copy_to_user(u_report, report_rsp + 1, report_rsp->report_size)) {
+		ret = -EFAULT;
+	}
+
+e_free_rsp:
+	snp_free_firmware_page(report_rsp);
+	return ret;
+}
+
 struct sev_gmem_populate_args {
 	__u8 type;
 	int sev_fd;
@@ -2671,6 +2728,9 @@ int sev_mem_enc_ioctl(struct kvm *kvm, void __user *argp)
 		break;
 	case KVM_SEV_SNP_LAUNCH_FINISH:
 		r = snp_launch_finish(kvm, &sev_cmd);
+		break;
+	case KVM_SEV_SNP_HV_REPORT_REQ:
+		r = sev_snp_report_request(kvm, &sev_cmd);
 		break;
 	default:
 		r = -EINVAL;

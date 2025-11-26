@@ -572,6 +572,24 @@ Returns: 0 on success, -negative on error
 See SNP_LAUNCH_FINISH in the SEV-SNP specification [snp-fw-abi]_ for further
 details on the input parameters in ``struct kvm_sev_snp_launch_finish``.
 
+21. KVM_SEV_SNP_GET_HV_REPORT
+-----------------------------
+
+The KVM_SEV_SNP_GET_HV_REPORT command requests the hypervisor-generated
+SNP attestation report. This report is produced by the PSP using the
+HV-SIGNED key selected by the caller.
+
+Parameters (in): struct kvm_sev_snp_hv_report_req
+
+Returns:  0 on success, -negative on error
+
+::
+        struct kvm_sev_snp_hv_report_req {
+                __u8 key_sel;
+                __u64 report_uaddr;
+                __u64 report_len;
+        };
+
 Device attribute API
 ====================
 
