@@ -2267,6 +2267,7 @@ unsigned int full_name_hash(const void *salt, const char *name, unsigned int len
 {
 	unsigned long a, x = 0, y = (unsigned long)salt;
 
+	pagefault_disable();
 	for (;;) {
 		if (!len)
 			goto done;
@@ -2279,6 +2280,7 @@ unsigned int full_name_hash(const void *salt, const char *name, unsigned int len
 	}
 	x ^= a & bytemask_from_count(len);
 done:
+	pagefault_enable();
 	return fold_hash(x, y);
 }
 EXPORT_SYMBOL(full_name_hash);
@@ -2291,6 +2293,7 @@ u64 hashlen_string(const void *salt, const char *name)
 	const struct word_at_a_time constants = WORD_AT_A_TIME_CONSTANTS;
 
 	len = 0;
+	pagefault_disable();
 	goto inside;
 
 	do {
@@ -2299,6 +2302,7 @@ u64 hashlen_string(const void *salt, const char *name)
 inside:
 		a = load_unaligned_zeropad(name+len);
 	} while (!has_zero(a, &adata, &constants));
+	pagefault_enable();
 
 	adata = prep_zero_mask(a, adata, &constants);
 	mask = create_zero_mask(adata);
@@ -2320,6 +2324,7 @@ static inline const char *hash_name(struct nameidata *nd,
 	unsigned long adata, bdata, mask, len;
 	const struct word_at_a_time constants = WORD_AT_A_TIME_CONSTANTS;
 
+	pagefault_disable();
 	/*
 	 * The first iteration is special, because it can result in
 	 * '.' and '..' and has no mixing other than the final fold.
@@ -2327,6 +2332,7 @@ static inline const char *hash_name(struct nameidata *nd,
 	a = load_unaligned_zeropad(name);
 	b = a ^ REPEAT_BYTE('/');
 	if (has_zero(a, &adata, &constants) | has_zero(b, &bdata, &constants)) {
+		pagefault_enable();
 		adata = prep_zero_mask(a, adata, &constants);
 		bdata = prep_zero_mask(b, bdata, &constants);
 		mask = create_zero_mask(adata | bdata);
@@ -2346,6 +2352,7 @@ static inline const char *hash_name(struct nameidata *nd,
 		a = load_unaligned_zeropad(name+len);
 		b = a ^ REPEAT_BYTE('/');
 	} while (!(has_zero(a, &adata, &constants) | has_zero(b, &bdata, &constants)));
+	pagefault_enable();
 
 	adata = prep_zero_mask(a, adata, &constants);
 	bdata = prep_zero_mask(b, bdata, &constants);
