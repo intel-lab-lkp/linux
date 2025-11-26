@@ -16,6 +16,72 @@
 
 #define GPU_PAS_ID 13
 
+static void a7xx_aperture_slice_set(struct msm_gpu *gpu, enum adreno_pipe pipe)
+{
+	struct adreno_gpu *adreno_gpu = to_adreno_gpu(gpu);
+	struct a6xx_gpu *a6xx_gpu = to_a6xx_gpu(adreno_gpu);
+	u32 val;
+
+	val = A7XX_CP_APERTURE_CNTL_HOST_PIPE(pipe);
+
+	if (a6xx_gpu->cached_aperture == val)
+		return;
+
+	gpu_write(gpu, REG_A7XX_CP_APERTURE_CNTL_HOST, val);
+
+	a6xx_gpu->cached_aperture = val;
+}
+
+static void a7xx_aperture_acquire(struct msm_gpu *gpu, enum adreno_pipe pipe, unsigned long *flags)
+{
+	struct adreno_gpu *adreno_gpu = to_adreno_gpu(gpu);
+	struct a6xx_gpu *a6xx_gpu = to_a6xx_gpu(adreno_gpu);
+
+	spin_lock_irqsave(&a6xx_gpu->aperture_lock, *flags);
+
+	a7xx_aperture_slice_set(gpu, pipe);
+}
+
+static void a7xx_aperture_release(struct msm_gpu *gpu, unsigned long flags)
+{
+	struct adreno_gpu *adreno_gpu = to_adreno_gpu(gpu);
+	struct a6xx_gpu *a6xx_gpu = to_a6xx_gpu(adreno_gpu);
+
+	spin_unlock_irqrestore(&a6xx_gpu->aperture_lock, flags);
+}
+
+static void a7xx_aperture_clear(struct msm_gpu *gpu)
+{
+	unsigned long flags;
+
+	a7xx_aperture_acquire(gpu, PIPE_NONE, &flags);
+	a7xx_aperture_release(gpu, flags);
+}
+
+static void a7xx_write_pipe(struct msm_gpu *gpu, enum adreno_pipe pipe, u32 offset, u32 data)
+{
+	unsigned long flags;
+
+	a7xx_aperture_acquire(gpu, pipe, &flags);
+	gpu_write(gpu, offset, data);
+	a7xx_aperture_release(gpu, flags);
+}
+
+static u32 a7xx_read_pipe(struct msm_gpu *gpu, enum adreno_pipe pipe, u32 offset)
+{
+	struct adreno_gpu *adreno_gpu = to_adreno_gpu(gpu);
+	struct a6xx_gpu *a6xx_gpu = to_a6xx_gpu(adreno_gpu);
+	unsigned long flags;
+	u32 val;
+
+	spin_lock_irqsave(&a6xx_gpu->aperture_lock, flags);
+	a7xx_aperture_slice_set(gpu, pipe);
+	val = gpu_read(gpu, offset);
+	spin_unlock_irqrestore(&a6xx_gpu->aperture_lock, flags);
+
+	return val;
+}
+
 static u64 read_gmu_ao_counter(struct a6xx_gpu *a6xx_gpu)
 {
 	u64 count_hi, count_lo, temp;
@@ -849,9 +915,12 @@ static void a6xx_set_ubwc_config(struct msm_gpu *gpu)
 		  min_acc_len_64b << 3 |
 		  hbb_lo << 1 | ubwc_mode);
 
-	if (adreno_is_a7xx(adreno_gpu))
-		gpu_write(gpu, REG_A7XX_GRAS_NC_MODE_CNTL,
-			  FIELD_PREP(GENMASK(8, 5), hbb_lo));
+	if (adreno_is_a7xx(adreno_gpu)) {
+		for (u32 pipe_id = PIPE_BR; pipe_id <= PIPE_BV; pipe_id++)
+			a7xx_write_pipe(gpu, pipe_id, REG_A7XX_GRAS_NC_MODE_CNTL,
+					FIELD_PREP(GENMASK(8, 5), hbb_lo));
+		a7xx_aperture_clear(gpu);
+	}
 
 	gpu_write(gpu, REG_A6XX_UCHE_MODE_CNTL,
 		  min_acc_len_64b << 23 | hbb_lo << 21);
@@ -865,9 +934,11 @@ static void a7xx_patch_pwrup_reglist(struct msm_gpu *gpu)
 	struct adreno_gpu *adreno_gpu = to_adreno_gpu(gpu);
 	struct a6xx_gpu *a6xx_gpu = to_a6xx_gpu(adreno_gpu);
 	const struct adreno_reglist_list *reglist;
+	const struct adreno_reglist_pipe_list *pipe_reglist;
 	void *ptr = a6xx_gpu->pwrup_reglist_ptr;
 	struct cpu_gpu_lock *lock = ptr;
 	u32 *dest = (u32 *)&lock->regs[0];
+	u32 pipe_reglist_count = 0;
 	int i;
 
 	lock->gpu_req = lock->cpu_req = lock->turn = 0;
@@ -907,7 +978,19 @@ static void a7xx_patch_pwrup_reglist(struct msm_gpu *gpu)
 	 * (<aperture, shifted 12 bits> <address> <data>), and the length is
 	 * stored as number for triplets in dynamic_list_len.
 	 */
-	lock->dynamic_list_len = 0;
+	pipe_reglist = adreno_gpu->info->a6xx->pipe_reglist;
+	for (u32 pipe_id = PIPE_BR; pipe_id <= PIPE_BV; pipe_id++) {
+		for (i = 0; i < pipe_reglist->count; i++) {
+			if (pipe_reglist->regs[i].pipe & BIT(pipe_id) == 0)
+				continue;
+			*dest++ = A7XX_CP_APERTURE_CNTL_HOST_PIPE(pipe_id);
+			*dest++ = pipe_reglist->regs[i].offset;
+			*dest++ = a7xx_read_pipe(gpu, pipe_id,
+						 pipe_reglist->regs[i].offset);
+			pipe_reglist_count++;
+		}
+	}
+	lock->dynamic_list_len = pipe_reglist_count;
 }
 
 static int a7xx_preempt_start(struct msm_gpu *gpu)
