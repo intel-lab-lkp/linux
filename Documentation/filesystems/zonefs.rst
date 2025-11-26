@@ -307,6 +307,7 @@ Mount options
 -------------
 
 zonefs defines several mount options:
+
 * errors=<behavior>
 * explicit-open
 
