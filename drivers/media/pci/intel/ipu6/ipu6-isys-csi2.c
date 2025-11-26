@@ -171,6 +171,10 @@ ipu6_isys_csi2_calc_timing(struct ipu6_isys_csi2 *csi2,
 	if (link_freq < 0)
 		return link_freq;
 
+	/* Avoid division by zero in calc_timing() if link frequency is zero */
+	if (!link_freq)
+		return -EINVAL;
+
 	timing->ctermen = calc_timing(CSI2_CSI_RX_DLY_CNT_TERMEN_CLANE_A,
 				      CSI2_CSI_RX_DLY_CNT_TERMEN_CLANE_B,
 				      link_freq, accinv);
@@ -352,7 +356,12 @@ static int ipu6_isys_csi2_enable_streams(struct v4l2_subdev *sd,
 	int ret;
 
 	remote_pad = media_pad_remote_pad_first(&sd->entity.pads[CSI2_PAD_SINK]);
+	if (!remote_pad)
+		return -ENOLINK;
+
 	remote_sd = media_entity_to_v4l2_subdev(remote_pad->entity);
+	if (!remote_sd)
+		return -ENODEV;
 
 	sink_streams =
 		v4l2_subdev_state_xlate_streams(state, pad, CSI2_PAD_SINK,
@@ -389,7 +398,16 @@ static int ipu6_isys_csi2_disable_streams(struct v4l2_subdev *sd,
 						&streams_mask);
 
 	remote_pad = media_pad_remote_pad_first(&sd->entity.pads[CSI2_PAD_SINK]);
+	if (!remote_pad) {
+		ipu6_isys_csi2_set_stream(sd, NULL, 0, false);
+		return 0;
+	}
+
 	remote_sd = media_entity_to_v4l2_subdev(remote_pad->entity);
+	if (!remote_sd) {
+		ipu6_isys_csi2_set_stream(sd, NULL, 0, false);
+		return 0;
+	}
 
 	ipu6_isys_csi2_set_stream(sd, NULL, 0, false);
 
