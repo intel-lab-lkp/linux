@@ -135,8 +135,10 @@ static int __set_task_frozen(struct task_struct *p, void *arg)
 	/*
 	 * It's dangerous to freeze with locks held; there be dragons there.
 	 */
-	if (!(state & __TASK_FREEZABLE_UNSAFE))
-		WARN_ON_ONCE(debug_locks && p->lockdep_depth);
+	if (!(state & __TASK_FREEZABLE_UNSAFE)) {
+		if (WARN_ON_ONCE(debug_locks && p->lockdep_depth))
+			debug_show_held_locks(p);
+	}
 #endif
 
 	p->saved_state = p->__state;
