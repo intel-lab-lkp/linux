@@ -88,6 +88,7 @@ static int sy7636a_sensor_probe(struct platform_device *pdev)
 	if (IS_ERR(hwmon_dev)) {
 		err = PTR_ERR(hwmon_dev);
 		dev_err(&pdev->dev, "Unable to register hwmon device, returned %d\n", err);
+		regulator_disable(regulator);
 		return err;
 	}
 
