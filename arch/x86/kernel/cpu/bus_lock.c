@@ -437,6 +437,9 @@ static void sld_state_show(void)
 			pr_info("#DB: setting system wide bus lock rate limit to %u/sec\n", bld_ratelimit.burst);
 		break;
 	}
+
+	if (cpu_feature_enabled(X86_FEATURE_TDX_GUEST))
+		pr_info("tdx: #AC depends on host configuration: crashing the kernel on kernel split_locks and sending SIGBUS on user-space split_locks\n");
 }
 
 void __init sld_setup(struct cpuinfo_x86 *c)
