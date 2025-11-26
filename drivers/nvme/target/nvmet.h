@@ -263,7 +263,9 @@ struct nvmet_ctrl {
 
 	uuid_t			hostid;
 	u16			cntlid;
+	u8			uniquifier;
 	u32			kato;
+	u64			random;
 
 	struct nvmet_port	*port;
 
