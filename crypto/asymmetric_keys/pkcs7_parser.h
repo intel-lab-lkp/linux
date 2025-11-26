@@ -63,3 +63,6 @@ struct pkcs7_message {
 	size_t		data_hdrlen;	/* Length of Data ASN.1 header */
 	const void	*data;		/* Content Data (or 0) */
 };
+
+int pkcs7_digest(struct pkcs7_message *pkcs7,
+		 struct pkcs7_signed_info *sinfo);

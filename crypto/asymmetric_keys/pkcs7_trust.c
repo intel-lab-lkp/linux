@@ -30,6 +30,14 @@ static int pkcs7_validate_trust_one(struct pkcs7_message *pkcs7,
 
 	kenter(",%u,", sinfo->index);
 
+	/*
+	 * if we're being called immediately after parse, the
+	 * signature won't have a calculated digest yet, so calculate
+	 * one.  This function returns immediately if a digest has
+	 * already been calculated
+	 */
+	pkcs7_digest(pkcs7, sinfo);
+
 	if (sinfo->unsupported_crypto) {
 		kleave(" = -ENOPKG [cached]");
 		return -ENOPKG;
