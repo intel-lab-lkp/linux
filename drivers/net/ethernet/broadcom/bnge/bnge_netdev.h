@@ -352,6 +352,7 @@ struct bnge_net {
 
 	unsigned long		state;
 #define BNGE_STATE_NAPI_DISABLED	0
+	atomic_t		intr_sem;
 
 	u32			msg_enable;
 	u16			max_tpa;
@@ -646,4 +647,6 @@ int bnge_alloc_rx_netmem(struct bnge_net *bn, struct bnge_rx_ring_info *rxr,
 void bnge_get_ring_err_stats(struct bnge_net *bn,
 			     struct bnge_total_ring_err_stats *stats);
 void bnge_copy_hw_masks(u64 *mask_arr, __le64 *hw_mask_arr, int count);
+void bnge_timer(struct timer_list *t);
+void bnge_sp_task(struct work_struct *work);
 #endif /* _BNGE_NETDEV_H_ */

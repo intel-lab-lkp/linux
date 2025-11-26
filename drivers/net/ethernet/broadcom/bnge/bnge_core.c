@@ -238,6 +238,23 @@ static int bnge_map_db_bar(struct bnge_dev *bd)
 	return 0;
 }
 
+static struct workqueue_struct *
+bnge_create_workqueue_thread(struct bnge_dev *bd, char thread_name[])
+{
+	struct workqueue_struct *wq;
+	char *wq_name;
+
+	wq_name = kasprintf(GFP_KERNEL, "%s-%s", thread_name,
+			    dev_name(bd->dev));
+	if (!wq_name)
+		return NULL;
+
+	wq = create_singlethread_workqueue(wq_name);
+
+	kfree(wq_name);
+	return wq;
+}
+
 static int bnge_probe_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	unsigned int max_irqs;
@@ -276,6 +293,10 @@ static int bnge_probe_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		rc = -ENOMEM;
 		goto err_devl_free;
 	}
+
+	INIT_WORK(&bd->sp_task, bnge_sp_task);
+	timer_setup(&bd->timer, bnge_timer, 0);
+	bd->current_interval = BNGE_TIMER_INTERVAL;
 
 	rc = bnge_init_hwrm_resources(bd);
 	if (rc)
@@ -318,13 +339,23 @@ static int bnge_probe_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto err_config_uninit;
 	}
 
+	bd->bnge_pf_wq = bnge_create_workqueue_thread(bd, "bnge_pf_wq");
+	if (!bd->bnge_pf_wq) {
+		dev_err(&pdev->dev, "Unable to create workqueue.\n");
+		rc = -ENOMEM;
+		goto err_free_irq;
+	}
+
 	rc = bnge_netdev_alloc(bd, max_irqs);
 	if (rc)
-		goto err_free_irq;
+		goto err_free_workq;
 
 	pci_save_state(pdev);
 
 	return 0;
+
+err_free_workq:
+	destroy_workqueue(bd->bnge_pf_wq);
 
 err_free_irq:
 	bnge_free_irqs(bd);
@@ -355,6 +386,8 @@ static void bnge_remove_one(struct pci_dev *pdev)
 	struct bnge_dev *bd = pci_get_drvdata(pdev);
 
 	bnge_netdev_free(bd);
+
+	destroy_workqueue(bd->bnge_pf_wq);
 
 	bnge_free_irqs(bd);
 
