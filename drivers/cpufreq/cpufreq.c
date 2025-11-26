@@ -2803,7 +2803,9 @@ static int cpufreq_boost_trigger_state(int state)
 {
 	struct cpufreq_policy *policy;
 	unsigned long flags;
-	int ret = 0;
+
+	/* Return -EINVAL if no policy is boost supported. */
+	int ret = -EINVAL;
 
 	/*
 	 * Don't compare 'cpufreq_driver->boost_enabled' with 'state' here to
@@ -2821,14 +2823,12 @@ static int cpufreq_boost_trigger_state(int state)
 
 		ret = policy_set_boost(policy, state);
 		if (ret)
-			goto err_reset_state;
+			break;
 	}
 	cpus_read_unlock();
 
-	return 0;
-
-err_reset_state:
-	cpus_read_unlock();
+	if (!ret)
+		return 0;
 
 	write_lock_irqsave(&cpufreq_driver_lock, flags);
 	cpufreq_driver->boost_enabled = !state;
