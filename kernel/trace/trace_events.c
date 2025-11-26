@@ -2168,51 +2168,52 @@ event_filter_write(struct file *filp, const char __user *ubuf, size_t cnt,
 
 static LIST_HEAD(event_subsystems);
 
+struct trace_subsystem_dir *trace_get_system_dir(struct inode *inode)
+{
+	struct trace_subsystem_dir *dir;
+	struct trace_array *tr = NULL;
+
+	guard(mutex)(&event_mutex);
+	guard(mutex)(&trace_types_lock);
+
+	/* Make sure the system still exists */
+	list_for_each_entry(tr, &ftrace_trace_arrays, list) {
+		list_for_each_entry(dir, &tr->systems, list) {
+			if (dir == inode->i_private) {
+				/* Don't open systems with no events */
+				if (!dir->nr_events)
+					return NULL;
+				if (__trace_array_get(tr) < 0)
+					return NULL;
+				__get_system_dir(dir);
+				return dir;
+			}
+		}
+	}
+	return NULL;
+}
+
+void trace_put_system_dir(struct trace_subsystem_dir *dir)
+{
+	trace_array_put(dir->tr);
+	put_system(dir);
+}
+
 static int subsystem_open(struct inode *inode, struct file *filp)
 {
-	struct trace_subsystem_dir *dir = NULL, *iter_dir;
-	struct trace_array *tr = NULL, *iter_tr;
-	struct event_subsystem *system = NULL;
+	struct trace_subsystem_dir *dir;
 	int ret;
 
 	if (tracing_is_disabled())
 		return -ENODEV;
 
-	/* Make sure the system still exists */
-	mutex_lock(&event_mutex);
-	mutex_lock(&trace_types_lock);
-	list_for_each_entry(iter_tr, &ftrace_trace_arrays, list) {
-		list_for_each_entry(iter_dir, &iter_tr->systems, list) {
-			if (iter_dir == inode->i_private) {
-				/* Don't open systems with no events */
-				tr = iter_tr;
-				dir = iter_dir;
-				if (dir->nr_events) {
-					__get_system_dir(dir);
-					system = dir->subsystem;
-				}
-				goto exit_loop;
-			}
-		}
-	}
- exit_loop:
-	mutex_unlock(&trace_types_lock);
-	mutex_unlock(&event_mutex);
-
-	if (!system)
+	dir = trace_get_system_dir(inode);
+	if (!dir)
 		return -ENODEV;
-
-	/* Still need to increment the ref count of the system */
-	if (trace_array_get(tr) < 0) {
-		put_system(dir);
-		return -ENODEV;
-	}
 
 	ret = tracing_open_generic(inode, filp);
-	if (ret < 0) {
-		trace_array_put(tr);
-		put_system(dir);
-	}
+	if (ret < 0)
+		trace_put_system_dir(dir);
 
 	return ret;
 }
@@ -2761,6 +2762,9 @@ static int system_callback(const char *name, umode_t *mode, void **data,
 	else if (strcmp(name, "enable") == 0)
 		*fops = &ftrace_system_enable_fops;
 
+	else if (strcmp(name, "trigger") == 0)
+		*fops = &event_system_trigger_fops;
+
 	else
 		return 0;
 
@@ -2783,6 +2787,10 @@ event_subsystem_dir(struct trace_array *tr, const char *name,
 		},
 		{
 			.name		= "enable",
+			.callback	= system_callback,
+		},
+		{
+			.name		= "trigger",
 			.callback	= system_callback,
 		}
 	};
