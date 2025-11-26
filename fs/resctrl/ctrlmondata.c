@@ -758,6 +758,50 @@ u32 resctrl_io_alloc_closid(struct rdt_resource *r)
 		return resctrl_arch_get_num_closid(r) - 1;
 }
 
+/*
+ * check_io_alloc_support() - Establish if io_alloc is supported
+ *
+ * @s: resctrl resource schema.
+ *
+ * This function must be called under the cpu hotplug lock
+ * and rdtgroup mutex
+ *
+ * Return: 0 on success, negative error code otherwise.
+ */
+static int check_io_alloc_support(struct resctrl_schema *s)
+{
+	struct rdt_resource *r = s->res;
+
+	if (!r->cache.io_alloc.io_alloc_capable) {
+		rdt_last_cmd_printf("io_alloc is not supported on %s\n", s->name);
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
+/*
+ * check_io_alloc_enabled() - Establish if io_alloc is enabled
+ *
+ * @s: resctrl resource schema
+ *
+ * This function must be called under the cpu hotplug lock
+ * and rdtgroup mutex
+ *
+ * Return: 0 on success, negative error code otherwise.
+ */
+static int check_io_alloc_enabled(struct resctrl_schema *s)
+{
+	struct rdt_resource *r = s->res;
+
+	if (!resctrl_arch_get_io_alloc_enabled(r)) {
+		rdt_last_cmd_printf("io_alloc is not enabled on %s\n", s->name);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 ssize_t resctrl_io_alloc_write(struct kernfs_open_file *of, char *buf,
 			       size_t nbytes, loff_t off)
 {
@@ -777,11 +821,9 @@ ssize_t resctrl_io_alloc_write(struct kernfs_open_file *of, char *buf,
 
 	rdt_last_cmd_clear();
 
-	if (!r->cache.io_alloc_capable) {
-		rdt_last_cmd_printf("io_alloc is not supported on %s\n", s->name);
-		ret = -ENODEV;
+	ret = check_io_alloc_support(s);
+	if (ret)
 		goto out_unlock;
-	}
 
 	/* If the feature is already up to date, no action is needed. */
 	if (resctrl_arch_get_io_alloc_enabled(r) == enable)
@@ -839,17 +881,13 @@ int resctrl_io_alloc_cbm_show(struct kernfs_open_file *of, struct seq_file *seq,
 
 	rdt_last_cmd_clear();
 
-	if (!r->cache.io_alloc_capable) {
-		rdt_last_cmd_printf("io_alloc is not supported on %s\n", s->name);
-		ret = -ENODEV;
+	ret = check_io_alloc_support(s);
+	if (ret)
 		goto out_unlock;
-	}
 
-	if (!resctrl_arch_get_io_alloc_enabled(r)) {
-		rdt_last_cmd_printf("io_alloc is not enabled on %s\n", s->name);
-		ret = -EINVAL;
+	ret = check_io_alloc_enabled(s);
+	if (ret)
 		goto out_unlock;
-	}
 
 	/*
 	 * When CDP is enabled, the CBMs of the highest CLOSID of CDP_CODE and
@@ -928,17 +966,13 @@ ssize_t resctrl_io_alloc_cbm_write(struct kernfs_open_file *of, char *buf,
 	mutex_lock(&rdtgroup_mutex);
 	rdt_last_cmd_clear();
 
-	if (!r->cache.io_alloc_capable) {
-		rdt_last_cmd_printf("io_alloc is not supported on %s\n", s->name);
-		ret = -ENODEV;
+	ret = check_io_alloc_support(s);
+	if (ret)
 		goto out_unlock;
-	}
 
-	if (!resctrl_arch_get_io_alloc_enabled(r)) {
-		rdt_last_cmd_printf("io_alloc is not enabled on %s\n", s->name);
-		ret = -EINVAL;
+	ret = check_io_alloc_enabled(s);
+	if (ret)
 		goto out_unlock;
-	}
 
 	io_alloc_closid = resctrl_io_alloc_closid(r);
 
