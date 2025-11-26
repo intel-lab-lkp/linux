@@ -28,6 +28,7 @@
  */
 void blk_pm_runtime_init(struct request_queue *q, struct device *dev)
 {
+	dev->power.force_check_resume = true;
 	q->dev = dev;
 	q->rpm_status = RPM_ACTIVE;
 	pm_runtime_set_autosuspend_delay(q->dev, -1);
