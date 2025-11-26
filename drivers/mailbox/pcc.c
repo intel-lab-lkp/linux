@@ -333,7 +333,7 @@ static irqreturn_t pcc_mbox_irq(int irq, void *p)
 {
 	struct pcc_chan_info *pchan;
 	struct mbox_chan *chan = p;
-	struct pcc_header *pcc_header = chan->active_req;
+	struct pcc_header *pcc_header = NULL;
 	void *handle = NULL;
 
 	pchan = chan->con_priv;
@@ -362,8 +362,8 @@ static irqreturn_t pcc_mbox_irq(int irq, void *p)
 	if (pchan->chan.rx_alloc)
 		handle = write_response(pchan);
 
-	if (chan->active_req) {
-		pcc_header = chan->active_req;
+	if (chan->active_req >= 0) {
+		pcc_header = chan->msg_data[chan->active_req];
 		if (pcc_header->flags & PCC_CMD_COMPLETION_NOTIFY)
 			mbox_chan_txdone(chan, 0);
 	}
