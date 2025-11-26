@@ -4,6 +4,19 @@
 #ifndef _BNGE_HW_DEF_H_
 #define _BNGE_HW_DEF_H_
 
+struct rx_agg_cmp {
+	__le32 rx_agg_cmp_len_flags_type;
+	#define RX_AGG_CMP_TYPE					(0x3f << 0)
+	#define RX_AGG_CMP_LEN					(0xffff << 16)
+	 #define RX_AGG_CMP_LEN_SHIFT				 16
+	u32 rx_agg_cmp_opaque;
+	__le32 rx_agg_cmp_v;
+	#define RX_AGG_CMP_V					(1 << 0)
+	#define RX_AGG_CMP_AGG_ID				(0xffff << 16)
+	 #define RX_AGG_CMP_AGG_ID_SHIFT			 16
+	__le32 rx_agg_cmp_unused;
+};
+
 struct tx_bd_ext {
 	__le32 tx_bd_hsize_lflags;
 	#define TX_BD_FLAGS_TCP_UDP_CHKSUM			(1 << 0)
