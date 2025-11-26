@@ -9,8 +9,10 @@
 
 #include <linux/etherdevice.h>
 #include <linux/bnxt/hsi.h>
+#include <linux/ethtool.h>
 #include "bnge_rmem.h"
 #include "bnge_resc.h"
+#include "bnge_link.h"
 
 #define DRV_VER_MAJ	1
 #define DRV_VER_MIN	15
@@ -141,6 +143,17 @@ struct bnge_dev {
 	struct bnge_ctx_mem_info	*ctx;
 
 	u64			flags;
+#define BNGE_PF(bd)		(1)
+#define BNGE_VF(bd)		(0)
+#define BNGE_NPAR(bd)		(0)
+#define BNGE_MH(bd)		(0)
+#define BNGE_SINGLE_PF(bd)	(BNGE_PF(bd) && !BNGE_NPAR(bd) && !BNGE_MH(bd))
+#define BNGE_SH_PORT_CFG_OK(bd)			\
+	(BNGE_PF(bd) && ((bd)->phy_flags & BNGE_PHY_FL_SHARED_PORT_CFG))
+#define BNGE_PHY_CFG_ABLE(bd)			\
+	((BNGE_SINGLE_PF(bd) ||			\
+	  BNGE_SH_PORT_CFG_OK(bd)) &&		\
+	 (bd)->link_info.phy_state == BNGE_PHY_STATE_ENABLED)
 
 	struct bnge_hw_resc	hw_resc;
 
@@ -197,6 +210,22 @@ struct bnge_dev {
 
 	struct bnge_irq		*irq_tbl;
 	u16			irqs_acquired;
+
+	/* To protect link related settings during link changes and
+	 * ethtool settings changes.
+	 */
+	struct mutex		link_lock;
+	struct bnge_link_info	link_info;
+
+	/* copied from flags and flags2 in hwrm_port_phy_qcaps_output */
+	u32			phy_flags;
+#define BNGE_PHY_FL_SHARED_PORT_CFG	\
+	PORT_PHY_QCAPS_RESP_FLAGS_SHARED_PHY_CFG_SUPPORTED
+#define BNGE_PHY_FL_NO_FCS		PORT_PHY_QCAPS_RESP_FLAGS_NO_FCS
+#define BNGE_PHY_FL_SPEEDS2		\
+	(PORT_PHY_QCAPS_RESP_FLAGS2_SPEEDS2_SUPPORTED << 8)
+
+	u32                     msg_enable;
 };
 
 static inline bool bnge_is_roce_en(struct bnge_dev *bd)
