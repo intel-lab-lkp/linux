@@ -1878,7 +1878,7 @@ static int tegra_vi_probe(struct platform_device *pdev)
 	struct tegra_vi *vi;
 	int ret;
 
-	vi = devm_kzalloc(&pdev->dev, sizeof(*vi), GFP_KERNEL);
+	vi = kzalloc(sizeof(*vi), GFP_KERNEL);
 	if (!vi)
 		return -ENOMEM;
 
@@ -1941,6 +1941,7 @@ rpm_disable:
 	if (vi->ops->vi_enable)
 		vi->ops->vi_enable(vi, false);
 	pm_runtime_disable(&pdev->dev);
+	kfree(vi);
 	return ret;
 }
 
