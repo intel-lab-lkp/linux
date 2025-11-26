@@ -10,6 +10,7 @@
 #include "regs/xe_irq_regs.h"
 
 #include "xe_device.h"
+#include "xe_drm_ras.h"
 #include "xe_hw_error.h"
 #include "xe_mmio.h"
 #include "xe_survivability_mode.h"
@@ -17,34 +18,12 @@
 #define  HEC_UNCORR_FW_ERR_BITS 4
 extern struct fault_attr inject_csc_hw_error;
 
-/* Error categories reported by hardware */
-enum hardware_error {
-	HARDWARE_ERROR_CORRECTABLE = 0,
-	HARDWARE_ERROR_NONFATAL = 1,
-	HARDWARE_ERROR_FATAL = 2,
-	HARDWARE_ERROR_MAX,
-};
-
 static const char * const hec_uncorrected_fw_errors[] = {
 	"Fatal",
 	"CSE Disabled",
 	"FD Corruption",
 	"Data Corruption"
 };
-
-static const char *hw_error_to_str(const enum hardware_error hw_err)
-{
-	switch (hw_err) {
-	case HARDWARE_ERROR_CORRECTABLE:
-		return "CORRECTABLE";
-	case HARDWARE_ERROR_NONFATAL:
-		return "NONFATAL";
-	case HARDWARE_ERROR_FATAL:
-		return "FATAL";
-	default:
-		return "UNKNOWN";
-	}
-}
 
 static bool fault_inject_csc_hw_error(void)
 {
@@ -146,6 +125,20 @@ void xe_hw_error_irq_handler(struct xe_tile *tile, const u32 master_ctl)
 			hw_error_source_handler(tile, hw_err);
 }
 
+static int hw_error_info_init(struct xe_device *xe)
+{
+	int ret;
+
+	if (xe->info.platform != XE_PVC)
+		return 0;
+
+	ret = xe_drm_ras_allocate_nodes(xe);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
 /*
  * Process hardware errors during boot
  */
@@ -178,5 +171,6 @@ void xe_hw_error_init(struct xe_device *xe)
 
 	INIT_WORK(&tile->csc_hw_error_work, csc_hw_error_work);
 
+	hw_error_info_init(xe);
 	process_hw_errors(xe);
 }

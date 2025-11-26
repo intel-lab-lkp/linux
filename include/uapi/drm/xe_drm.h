@@ -2273,6 +2273,11 @@ struct drm_xe_vm_query_mem_range_attr {
 
 };
 
+/**
+ * RAS Counters
+ */
+#define DRM_XE_GENL_CORE_COMPUTE	(1)
+
 #if defined(__cplusplus)
 }
 #endif
