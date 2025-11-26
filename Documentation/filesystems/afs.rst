@@ -23,17 +23,14 @@ This filesystem provides a fairly simple secure AFS filesystem driver. It is
 under development and does not yet provide the full feature set.  The features
 it does support include:
 
- (*) Security (currently only AFS kaserver and KerberosIV tickets).
-
- (*) File reading and writing.
-
- (*) Automounting.
-
- (*) Local caching (via fscache).
+ * Security (currently only AFS kaserver and KerberosIV tickets).
+ * File reading and writing.
+ * Automounting.
+ * Local caching (via fscache).
 
 It does not yet support the following AFS features:
 
- (*) pioctl() system call.
+ * pioctl() system call.
 
 
 Compilation
@@ -146,15 +143,15 @@ Proc Filesystem
 
 The AFS module creates a "/proc/fs/afs/" directory and populates it:
 
-  (*) A "cells" file that lists cells currently known to the afs module and
-      their usage counts::
+  * A "cells" file that lists cells currently known to the afs module and
+    their usage counts::
 
 	[root@andromeda ~]# cat /proc/fs/afs/cells
 	USE NAME
 	  3 cambridge.redhat.com
 
-  (*) A directory per cell that contains files that list volume location
-      servers, volumes, and active servers known within that cell::
+  * A directory per cell that contains files that list volume location
+    servers, volumes, and active servers known within that cell::
 
 	[root@andromeda ~]# cat /proc/fs/afs/cambridge.redhat.com/servers
 	USE ADDR            STATE
