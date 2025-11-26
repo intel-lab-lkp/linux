@@ -416,6 +416,31 @@ way, so beware about making generalizations between the two.
      can also enable triggers that are written into
      /sys/kernel/tracing/events/ftrace/print/trigger
 
+The system directory also has a trigger file that allows some triggers to be
+set for all the system's events. This is limited to only a small subset of the
+triggers and does not allow for the count parameter. But it does allow for
+filters. Writing into this file is the same as writing into each of the
+system's event's trigger files individually. Although only a subset of
+triggers may use this file for enabling, all triggers may use this file for
+disabling::
+
+	cd /sys/kernel/tracing
+	cat events/sched/trigger
+	# Available system triggers:
+	# stacktrace
+
+	echo stacktrace > events/sched/trigger
+	cat events/sched/sched_switch/trigger
+	stacktrace:unlimited
+
+	echo snapshot > events/sched/sched_waking/trigger
+	cat events/sched/sched_waking/trigger
+	snapshot:unlimited
+	echo '!snapshot' > events/sched/trigger
+	cat events/sched/sched_waking/trigger
+	# Available triggers:
+	# traceon traceoff snapshot stacktrace enable_event disable_event enable_hist disable_hist hist
+
 6.1 Expression syntax
 ---------------------
 

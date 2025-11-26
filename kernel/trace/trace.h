@@ -469,9 +469,13 @@ extern struct list_head ftrace_trace_arrays;
 extern struct mutex trace_types_lock;
 
 extern int trace_array_get(struct trace_array *tr);
+extern int __trace_array_get(struct trace_array *tr);
 extern int tracing_check_open_get_tr(struct trace_array *tr);
 extern struct trace_array *trace_array_find(const char *instance);
 extern struct trace_array *trace_array_find_get(const char *instance);
+
+extern struct trace_subsystem_dir *trace_get_system_dir(struct inode *inode);
+void trace_put_system_dir(struct trace_subsystem_dir *dir);
 
 extern u64 tracing_event_time_stamp(struct trace_buffer *buffer, struct ring_buffer_event *rbe);
 extern int tracing_set_filter_buffering(struct trace_array *tr, bool set);
@@ -1774,6 +1778,7 @@ static inline struct trace_event_file *event_file_file(struct file *filp)
 }
 
 extern const struct file_operations event_trigger_fops;
+extern const struct file_operations event_system_trigger_fops;
 extern const struct file_operations event_hist_fops;
 extern const struct file_operations event_hist_debug_fops;
 extern const struct file_operations event_inject_fops;
@@ -2070,10 +2075,16 @@ struct event_command {
  *	regardless of whether or not it has a filter associated with
  *	it (filters make a trigger require access to the trace record
  *	but are not always present).
+ *
+ * @SYSTEM: A flag that says whether or not this command can be used
+ *	at the event system level. For example, can it be written into
+ *	events/sched/trigger file where it will be enabled for all
+ *	sched events?
  */
 enum event_command_flags {
-	EVENT_CMD_FL_POST_TRIGGER	= 1,
-	EVENT_CMD_FL_NEEDS_REC		= 2,
+	EVENT_CMD_FL_POST_TRIGGER	= BIT(1),
+	EVENT_CMD_FL_NEEDS_REC		= BIT(2),
+	EVENT_CMD_FL_SYSTEM		= BIT(3),
 };
 
 static inline bool event_command_post_trigger(struct event_command *cmd_ops)
