@@ -39,6 +39,22 @@ static void siw_cm_llp_error_report(struct sock *s);
 static int siw_cm_upcall(struct siw_cep *cep, enum iw_cm_event_type reason,
 			 int status);
 
+
+static struct lock_class_key siw_sk_key;
+static struct lock_class_key siw_slock_key;
+
+static inline void siw_reclassify_socket(struct socket *sock)
+{
+	struct sock *sk = sock->sk;
+
+	if (WARN_ON_ONCE(!sock_allow_reclassification(sk)))
+		return;
+
+	sock_lock_init_class_and_name(sk,
+				      "slock-RDMA-SIW", &siw_slock_key,
+				      "sk_lock-RDMA-SIW", &siw_sk_key);
+}
+
 static void siw_sk_assign_cm_upcalls(struct sock *sk)
 {
 	struct siw_cep *cep = sk_to_cep(sk);
@@ -1394,6 +1410,7 @@ int siw_connect(struct iw_cm_id *id, struct iw_cm_conn_param *params)
 	rv = sock_create(v4 ? AF_INET : AF_INET6, SOCK_STREAM, IPPROTO_TCP, &s);
 	if (rv < 0)
 		goto error;
+	siw_reclassify_socket(s);
 
 	/*
 	 * NOTE: For simplification, connect() is called in blocking
@@ -1770,6 +1787,7 @@ int siw_create_listen(struct iw_cm_id *id, int backlog)
 	rv = sock_create(addr_family, SOCK_STREAM, IPPROTO_TCP, &s);
 	if (rv < 0)
 		return rv;
+	siw_reclassify_socket(s);
 
 	/*
 	 * Allow binding local port when still in TIME_WAIT from last close.
