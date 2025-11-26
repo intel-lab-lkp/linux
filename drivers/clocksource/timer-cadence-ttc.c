@@ -333,6 +333,7 @@ static int __init ttc_setup_clocksource(struct clk *clk, void __iomem *base,
 {
 	struct ttc_timer_clocksource *ttccs;
 	int err;
+	bool notifier_registered = false;
 
 	ttccs = kzalloc(sizeof(*ttccs), GFP_KERNEL);
 	if (!ttccs)
@@ -356,6 +357,8 @@ static int __init ttc_setup_clocksource(struct clk *clk, void __iomem *base,
 				    &ttccs->ttc.clk_rate_change_nb);
 	if (err)
 		pr_warn("Unable to register clock notifier.\n");
+	else
+		notifier_registered = true;
 
 	ttccs->ttc.base_addr = base;
 	ttccs->cs.name = "ttc_clocksource";
@@ -377,6 +380,10 @@ static int __init ttc_setup_clocksource(struct clk *clk, void __iomem *base,
 
 	err = clocksource_register_hz(&ttccs->cs, ttccs->ttc.freq / PRESCALE);
 	if (err) {
+		if (notifier_registered)
+			clk_notifier_unregister(ttccs->ttc.clk,
+					&ttccs->ttc.clk_rate_change_nb);
+		clk_disable_unprepare(ttccs->ttc.clk);
 		kfree(ttccs);
 		return err;
 	}
@@ -465,13 +472,16 @@ static int __init ttc_setup_clockevent(struct clk *clk,
 	err = request_irq(irq, ttc_clock_event_interrupt,
 			  IRQF_TIMER, ttcce->ce.name, ttcce);
 	if (err)
-		goto out_clk_unprepare;
+		goto out_clk_notifier_unregister;
 
 	clockevents_config_and_register(&ttcce->ce,
 			ttcce->ttc.freq / PRESCALE, 1, 0xfffe);
 
 	return 0;
 
+out_clk_notifier_unregister:
+	clk_notifier_unregister(ttcce->ttc.clk,
+			&ttcce->ttc.clk_rate_change_nb);
 out_clk_unprepare:
 	clk_disable_unprepare(ttcce->ttc.clk);
 out_kfree:
