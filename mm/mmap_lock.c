@@ -74,6 +74,14 @@ static inline int __vma_enter_locked(struct vm_area_struct *vma,
 		   refcount_read(&vma->vm_refcnt) == tgt_refcnt,
 		   state);
 	if (err) {
+		if (refcount_sub_and_test(VMA_LOCK_OFFSET, &vma->vm_refcnt)) {
+			/*
+			 * We got a fatal signal, but the last reader went
+			 * away as well.  Resolve the race in favour of
+			 * the vma being detached.
+			 */
+			err = 0;
+		}
 		rwsem_release(&vma->vmlock_dep_map, _RET_IP_);
 		return err;
 	}
