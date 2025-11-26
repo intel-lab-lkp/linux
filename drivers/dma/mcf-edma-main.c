@@ -81,8 +81,14 @@ static int mcf_edma_irq_init(struct platform_device *pdev,
 	if (!res)
 		return -1;
 
-	for (ret = 0, i = res->start; i <= res->end; ++i)
-		ret |= request_irq(i, mcf_edma_tx_handler, 0, "eDMA", mcf_edma);
+	for (ret = 0, i = res->start; i <= res->end; ++i) {
+		char *irq_name = devm_kasprintf(&pdev->dev, GFP_KERNEL,
+						"eDMA-%d", (int)(i - res->start));
+		if (!irq_name)
+			return -ENOMEM;
+
+		ret |= request_irq(i, mcf_edma_tx_handler, 0, irq_name, mcf_edma);
+	}
 	if (ret)
 		return ret;
 
@@ -91,23 +97,27 @@ static int mcf_edma_irq_init(struct platform_device *pdev,
 	if (!res)
 		return -1;
 
-	for (ret = 0, i = res->start; i <= res->end; ++i)
-		ret |= request_irq(i, mcf_edma_tx_handler, 0, "eDMA", mcf_edma);
+	for (ret = 0, i = res->start; i <= res->end; ++i) {
+		char *irq_name = devm_kasprintf(&pdev->dev, GFP_KERNEL,
+						"eDMA-%d", (int)(16 + i - res->start));
+		if (!irq_name)
+			return -ENOMEM;
+
+		ret |= request_irq(i, mcf_edma_tx_handler, 0, irq_name, mcf_edma);
+	}
 	if (ret)
 		return ret;
 
 	ret = platform_get_irq_byname(pdev, "edma-tx-56-63");
 	if (ret != -ENXIO) {
-		ret = request_irq(ret, mcf_edma_tx_handler,
-				  0, "eDMA", mcf_edma);
+		ret = request_irq(ret, mcf_edma_tx_handler, 0, "eDMA-tx-56", mcf_edma);
 		if (ret)
 			return ret;
 	}
 
 	ret = platform_get_irq_byname(pdev, "edma-err");
 	if (ret != -ENXIO) {
-		ret = request_irq(ret, mcf_edma_err_handler,
-				  0, "eDMA", mcf_edma);
+		ret = request_irq(ret, mcf_edma_err_handler, 0, "eDMA-err", mcf_edma);
 		if (ret)
 			return ret;
 	}
