@@ -314,7 +314,8 @@ static int rdtgroup_seqfile_show(struct seq_file *m, void *arg)
 
 	if (rft->seq_show)
 		return rft->seq_show(of, m, arg);
-	return 0;
+
+	return -EINVAL;
 }
 
 static ssize_t rdtgroup_file_write(struct kernfs_open_file *of, char *buf,
