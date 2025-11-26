@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/capability.h>
+#include <linux/cleanup.h>
 #include <linux/compat.h>
 #include <linux/blkdev.h>
 #include <linux/export.h>
@@ -423,6 +424,54 @@ static int blkdev_pr_clear(struct block_device *bdev, blk_mode_t mode,
 	return ops->pr_clear(bdev, c.key);
 }
 
+static int blkdev_pr_read_keys(struct block_device *bdev, blk_mode_t mode,
+		struct pr_read_keys __user *arg)
+{
+	const struct pr_ops *ops = bdev->bd_disk->fops->pr_ops;
+	struct pr_keys *keys_info __free(kfree) = NULL;
+	struct pr_read_keys inout;
+	int ret;
+
+	if (!blkdev_pr_allowed(bdev, mode))
+		return -EPERM;
+	if (!ops || !ops->pr_read_keys)
+		return -EOPNOTSUPP;
+
+	if (copy_from_user(&inout, arg, sizeof(inout)))
+		return -EFAULT;
+
+	if (inout.num_keys > -sizeof(*keys_info) / sizeof(keys_info->keys[0]))
+		return -EINVAL;
+
+	size_t keys_info_len = struct_size(keys_info, keys, inout.num_keys);
+
+	keys_info = kzalloc(keys_info_len, GFP_KERNEL);
+	if (!keys_info)
+		return -ENOMEM;
+
+	keys_info->num_keys = inout.num_keys;
+
+	ret = ops->pr_read_keys(bdev, keys_info);
+	if (ret)
+		return ret;
+
+	/* Copy out individual keys */
+	u64 __user *keys_ptr = u64_to_user_ptr(inout.keys_ptr);
+	u32 num_copy_keys = min(inout.num_keys, keys_info->num_keys);
+	size_t keys_copy_len = num_copy_keys * sizeof(keys_info->keys[0]);
+
+	if (copy_to_user(keys_ptr, keys_info->keys, keys_copy_len))
+		return -EFAULT;
+
+	/* Copy out the arg struct */
+	inout.generation = keys_info->generation;
+	inout.num_keys = keys_info->num_keys;
+
+	if (copy_to_user(arg, &inout, sizeof(inout)))
+		return -EFAULT;
+	return ret;
+}
+
 static int blkdev_flushbuf(struct block_device *bdev, unsigned cmd,
 		unsigned long arg)
 {
@@ -644,6 +693,8 @@ static int blkdev_common_ioctl(struct block_device *bdev, blk_mode_t mode,
 		return blkdev_pr_preempt(bdev, mode, argp, true);
 	case IOC_PR_CLEAR:
 		return blkdev_pr_clear(bdev, mode, argp);
+	case IOC_PR_READ_KEYS:
+		return blkdev_pr_read_keys(bdev, mode, argp);
 	default:
 		return blk_get_meta_cap(bdev, cmd, argp);
 	}
