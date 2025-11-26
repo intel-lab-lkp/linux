@@ -261,13 +261,20 @@ static ssize_t bind_store(struct device_driver *drv, const char *buf,
 	const struct bus_type *bus = bus_get(drv->bus);
 	struct device *dev;
 	int err = -ENODEV;
+	int ret;
 
 	dev = bus_find_device_by_name(bus, NULL, buf);
-	if (dev && driver_match_device(drv, dev)) {
-		err = device_driver_attach(drv, dev);
-		if (!err) {
-			/* success */
-			err = count;
+	if (dev) {
+		/* Protects against driver_set_override() races */
+		device_lock(dev);
+		ret = driver_match_device(drv, dev);
+		device_unlock(dev);
+		if (ret) {
+			err = device_driver_attach(drv, dev);
+			if (!err) {
+				/* success */
+				err = count;
+			}
 		}
 	}
 	put_device(dev);

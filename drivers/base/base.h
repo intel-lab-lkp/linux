@@ -182,6 +182,8 @@ void device_set_deferred_probe_reason(const struct device *dev, struct va_format
 static inline int driver_match_device(const struct device_driver *drv,
 				      struct device *dev)
 {
+	/* Protects against driver_set_override() races */
+	device_lock_assert(dev);
 	return drv->bus->match ? drv->bus->match(dev, drv) : 1;
 }
 
