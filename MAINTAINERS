@@ -3272,6 +3272,11 @@ F:	include/linux/firmware/qcom
 F:	include/linux/soc/qcom/
 F:	include/soc/qcom/
 
+ARM/QUALCOMM 845 ARCHITECTURE SUPPORT
+M:	David Heidelberg <david@ixit.cz
+S:	Maintained
+F:	arch/arm64/configs/sdm845.config
+
 ARM/RDA MICRO ARCHITECTURE
 M:	Manivannan Sadhasivam <mani@kernel.org>
 L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
