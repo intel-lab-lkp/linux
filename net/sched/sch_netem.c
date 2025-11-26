@@ -991,6 +991,12 @@ static int netem_change(struct Qdisc *sch, struct nlattr *opt,
 	int ret;
 
 	qopt = nla_data(opt);
+
+	if (dev_net(qdisc_dev(sch))->user_ns != &init_user_ns && qopt->duplicate) {
+		NL_SET_ERR_MSG(extack, "Duplication is not allowed in unprivileged namespaces");
+		return -EINVAL;
+	}
+
 	ret = parse_attr(tb, TCA_NETEM_MAX, opt, netem_policy, sizeof(*qopt));
 	if (ret < 0)
 		return ret;
