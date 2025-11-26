@@ -1625,20 +1625,7 @@ static struct platform_driver omap_i2c_driver = {
 		.of_match_table = of_match_ptr(omap_i2c_of_match),
 	},
 };
-
-/* I2C may be needed to bring up other drivers */
-static int __init
-omap_i2c_init_driver(void)
-{
-	return platform_driver_register(&omap_i2c_driver);
-}
-subsys_initcall(omap_i2c_init_driver);
-
-static void __exit omap_i2c_exit_driver(void)
-{
-	platform_driver_unregister(&omap_i2c_driver);
-}
-module_exit(omap_i2c_exit_driver);
+module_platform_driver(omap_i2c_driver);
 
 MODULE_AUTHOR("MontaVista Software, Inc. (and others)");
 MODULE_DESCRIPTION("TI OMAP I2C bus adapter");
