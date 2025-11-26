@@ -6,25 +6,34 @@
  *
  * 7-bit I2C slave address 0x4c
  *
- * TODO: interrupt
  * https://media.digikey.com/pdf/Data%20Sheets/RF%20Digital%20PDFs/RFD77402.pdf
  */
 
 #include <linux/module.h>
 #include <linux/i2c.h>
 #include <linux/delay.h>
-
+#include <linux/interrupt.h>
+#include <linux/completion.h>
+#include <linux/of.h>
 #include <linux/iio/iio.h>
 
 #define RFD77402_DRV_NAME "rfd77402"
 
 #define RFD77402_ICSR		0x00 /* Interrupt Control Status Register */
+#define RFD77402_ICSR_CLR_CFG   BIT(0)
+#define RFD77402_ICSR_CLR_TYPE  BIT(1)
 #define RFD77402_ICSR_INT_MODE	BIT(2)
 #define RFD77402_ICSR_INT_POL	BIT(3)
 #define RFD77402_ICSR_RESULT	BIT(4)
 #define RFD77402_ICSR_M2H_MSG	BIT(5)
 #define RFD77402_ICSR_H2M_MSG	BIT(6)
 #define RFD77402_ICSR_RESET	BIT(7)
+
+#define RFD77402_IER		0x02
+#define RFD77402_IER_RESULT	BIT(0)
+#define RFD77402_IER_M2H_MSG	BIT(1)
+#define RFD77402_IER_H2M_MSG	BIT(2)
+#define RFD77402_IER_RESET	BIT(3)
 
 #define RFD77402_CMD_R		0x04
 #define RFD77402_CMD_SINGLE	0x01
@@ -80,6 +89,10 @@ struct rfd77402_data {
 	struct i2c_client *client;
 	/* Serialize reads from the sensor */
 	struct mutex lock;
+	/* Completion for interrupt-driven measurements */
+	struct completion completion;
+	/* Flag to indicate if interrupt is available */
+	bool irq_en;
 };
 
 static const struct iio_chan_spec rfd77402_channels[] = {
@@ -110,8 +123,24 @@ static int rfd77402_set_state(struct i2c_client *client, u8 state, u16 check)
 	return 0;
 }
 
-static int rfd77402_measure(struct i2c_client *client)
+static irqreturn_t rfd77402_interrupt_handler(int irq, void *dev_id)
 {
+	struct rfd77402_data *data = dev_id;
+	int ret;
+
+	/* Check if the interrupt is from our device */
+	ret = i2c_smbus_read_byte_data(data->client, RFD77402_ICSR);
+	if (ret < 0 || !(ret & RFD77402_ICSR_RESULT))
+		return IRQ_NONE;
+
+	/* Signal completion of measurement */
+	complete(&data->completion);
+	return IRQ_HANDLED;
+}
+
+static int rfd77402_measure(struct rfd77402_data *data)
+{
+	struct i2c_client *client = data->client;
 	int ret;
 	int tries = 10;
 
@@ -120,24 +149,39 @@ static int rfd77402_measure(struct i2c_client *client)
 	if (ret < 0)
 		return ret;
 
+	/* Initialize completion for interrupt mode */
+	if (data->irq_en)
+		reinit_completion(&data->completion);
+
 	ret = i2c_smbus_write_byte_data(client, RFD77402_CMD_R,
 					RFD77402_CMD_SINGLE |
 					RFD77402_CMD_VALID);
 	if (ret < 0)
 		goto err;
 
-	while (tries-- > 0) {
-		ret = i2c_smbus_read_byte_data(client, RFD77402_ICSR);
-		if (ret < 0)
+	if (data->irq_en) {
+		/* Wait for interrupt-driven completion */
+		ret = wait_for_completion_timeout(&data->completion,
+						  msecs_to_jiffies(200));
+		if (ret == 0) {
+			ret = -ETIMEDOUT;
 			goto err;
-		if (ret & RFD77402_ICSR_RESULT)
-			break;
-		msleep(20);
-	}
+		}
+	} else {
+		/* Fallback to polling mode */
+		while (tries-- > 0) {
+			ret = i2c_smbus_read_byte_data(client, RFD77402_ICSR);
+			if (ret < 0)
+				goto err;
+			if (ret & RFD77402_ICSR_RESULT)
+				break;
+			msleep(20);
+		}
 
-	if (tries < 0) {
-		ret = -ETIMEDOUT;
-		goto err;
+		if (tries < 0) {
+			ret = -ETIMEDOUT;
+			goto err;
+		}
 	}
 
 	ret = i2c_smbus_read_word_data(client, RFD77402_RESULT_R);
@@ -168,7 +212,7 @@ static int rfd77402_read_raw(struct iio_dev *indio_dev,
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
 		mutex_lock(&data->lock);
-		ret = rfd77402_measure(data->client);
+		ret = rfd77402_measure(data);
 		mutex_unlock(&data->lock);
 		if (ret < 0)
 			return ret;
@@ -190,6 +234,8 @@ static const struct iio_info rfd77402_info = {
 
 static int rfd77402_init(struct i2c_client *client)
 {
+	struct iio_dev *indio_dev = i2c_get_clientdata(client);
+	struct rfd77402_data *data = iio_priv(indio_dev);
 	int ret, i;
 
 	ret = rfd77402_set_state(client, RFD77402_CMD_STANDBY,
@@ -197,11 +243,29 @@ static int rfd77402_init(struct i2c_client *client)
 	if (ret < 0)
 		return ret;
 
-	/* configure INT pad as push-pull, active low */
-	ret = i2c_smbus_write_byte_data(client, RFD77402_ICSR,
-					RFD77402_ICSR_INT_MODE);
-	if (ret < 0)
-		return ret;
+	if (data->irq_en) {
+		/* Configure ICSR: auto-clear on read, push-pull, falling edge */
+		ret = i2c_smbus_write_byte_data(client, RFD77402_ICSR,
+						RFD77402_ICSR_CLR_CFG |
+						RFD77402_ICSR_INT_MODE);
+		if (ret < 0)
+			return ret;
+
+		/* Enable 'new data available' interrupt in IER */
+		ret = i2c_smbus_write_byte_data(client, RFD77402_IER,
+						RFD77402_IER_RESULT);
+		if (ret < 0)
+			return ret;
+	} else {
+		/* Disable interrupts */
+		ret = i2c_smbus_write_byte_data(client, RFD77402_ICSR, 0);
+		if (ret < 0)
+			return ret;
+
+		ret = i2c_smbus_write_byte_data(client, RFD77402_IER, 0);
+		if (ret < 0)
+			return ret;
+	}
 
 	/* I2C configuration */
 	ret = i2c_smbus_write_word_data(client, RFD77402_I2C_INIT_CFG,
@@ -276,6 +340,29 @@ static int rfd77402_probe(struct i2c_client *client)
 	data = iio_priv(indio_dev);
 	data->client = client;
 	mutex_init(&data->lock);
+
+	init_completion(&data->completion);
+
+	i2c_set_clientdata(client, indio_dev);
+
+	/* Check if interrupt is mentioned in device tree */
+	data->irq_en = false;
+	if (client->irq > 0) {
+		ret = devm_request_threaded_irq(&client->dev, client->irq,
+						NULL, rfd77402_interrupt_handler,
+						IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+						"rfd77402", data);
+		if (ret == 0) {
+			data->irq_en = true;
+			dev_info(&client->dev, "Using interrupt mode\n");
+		} else {
+			dev_warn(&client->dev,
+				 "Failed to request IRQ %d, using polling mode: %d\n",
+				 client->irq, ret);
+		}
+	} else {
+		dev_info(&client->dev, "No interrupt specified, using polling mode\n");
+	}
 
 	indio_dev->info = &rfd77402_info;
 	indio_dev->channels = rfd77402_channels;
