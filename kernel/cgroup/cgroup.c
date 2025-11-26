@@ -2005,6 +2005,36 @@ static const struct fs_parameter_spec cgroup2_fs_parameters[] = {
 	{}
 };
 
+struct cgroup_mount_flag_desc {
+	u64 flag;
+	const char *name;
+	void (*apply)(struct cgroup_root *root, u64 bit, bool enable);
+};
+
+static void apply_cgroup_favor_flags(struct cgroup_root *root,
+					     u64 bit, bool enable)
+{
+	return cgroup_favor_dynmods(root, enable);
+}
+
+static void __apply_cgroup_root_flags(struct cgroup_root *root,
+					      u64 bit, bool enable)
+{
+	if (enable)
+		root->flags |= bit;
+	else
+		root->flags &= ~bit;
+}
+
+static const struct cgroup_mount_flag_desc mount_flags_desc[nr__cgroup2_params] = {
+{CGRP_ROOT_NS_DELEGATE, "nsdelegate", __apply_cgroup_root_flags},
+{CGRP_ROOT_FAVOR_DYNMODS, "favordynmods", apply_cgroup_favor_flags},
+{CGRP_ROOT_MEMORY_LOCAL_EVENTS, "memory_localevents", __apply_cgroup_root_flags},
+{CGRP_ROOT_MEMORY_RECURSIVE_PROT, "memory_recursiveprot", __apply_cgroup_root_flags},
+{CGRP_ROOT_MEMORY_HUGETLB_ACCOUNTING, "memory_hugetlb_accounting", __apply_cgroup_root_flags},
+{CGRP_ROOT_PIDS_LOCAL_EVENTS, "pids_localevents", __apply_cgroup_root_flags}
+};
+
 static int cgroup2_parse_param(struct fs_context *fc, struct fs_parameter *param)
 {
 	struct cgroup_fs_context *ctx = cgroup_fc2context(fc);
@@ -2014,28 +2044,11 @@ static int cgroup2_parse_param(struct fs_context *fc, struct fs_parameter *param
 	opt = fs_parse(fc, cgroup2_fs_parameters, param, &result);
 	if (opt < 0)
 		return opt;
+	if (opt >= nr__cgroup2_params)
+		return -EINVAL;
 
-	switch (opt) {
-	case Opt_nsdelegate:
-		ctx->flags |= CGRP_ROOT_NS_DELEGATE;
-		return 0;
-	case Opt_favordynmods:
-		ctx->flags |= CGRP_ROOT_FAVOR_DYNMODS;
-		return 0;
-	case Opt_memory_localevents:
-		ctx->flags |= CGRP_ROOT_MEMORY_LOCAL_EVENTS;
-		return 0;
-	case Opt_memory_recursiveprot:
-		ctx->flags |= CGRP_ROOT_MEMORY_RECURSIVE_PROT;
-		return 0;
-	case Opt_memory_hugetlb_accounting:
-		ctx->flags |= CGRP_ROOT_MEMORY_HUGETLB_ACCOUNTING;
-		return 0;
-	case Opt_pids_localevents:
-		ctx->flags |= CGRP_ROOT_PIDS_LOCAL_EVENTS;
-		return 0;
-	}
-	return -EINVAL;
+	ctx->flags |= mount_flags_desc[opt].flag;
+	return 0;
 }
 
 struct cgroup_of_peak *of_peak(struct kernfs_open_file *of)
@@ -2047,51 +2060,29 @@ struct cgroup_of_peak *of_peak(struct kernfs_open_file *of)
 
 static void apply_cgroup_root_flags(unsigned int root_flags)
 {
-	if (current->nsproxy->cgroup_ns == &init_cgroup_ns) {
-		if (root_flags & CGRP_ROOT_NS_DELEGATE)
-			cgrp_dfl_root.flags |= CGRP_ROOT_NS_DELEGATE;
-		else
-			cgrp_dfl_root.flags &= ~CGRP_ROOT_NS_DELEGATE;
+	int i;
 
-		cgroup_favor_dynmods(&cgrp_dfl_root,
-				     root_flags & CGRP_ROOT_FAVOR_DYNMODS);
+	if (current->nsproxy->cgroup_ns != &init_cgroup_ns)
+		return;
 
-		if (root_flags & CGRP_ROOT_MEMORY_LOCAL_EVENTS)
-			cgrp_dfl_root.flags |= CGRP_ROOT_MEMORY_LOCAL_EVENTS;
-		else
-			cgrp_dfl_root.flags &= ~CGRP_ROOT_MEMORY_LOCAL_EVENTS;
+	for (i = 0; i < nr__cgroup2_params; ++i) {
+		bool enable;
 
-		if (root_flags & CGRP_ROOT_MEMORY_RECURSIVE_PROT)
-			cgrp_dfl_root.flags |= CGRP_ROOT_MEMORY_RECURSIVE_PROT;
-		else
-			cgrp_dfl_root.flags &= ~CGRP_ROOT_MEMORY_RECURSIVE_PROT;
-
-		if (root_flags & CGRP_ROOT_MEMORY_HUGETLB_ACCOUNTING)
-			cgrp_dfl_root.flags |= CGRP_ROOT_MEMORY_HUGETLB_ACCOUNTING;
-		else
-			cgrp_dfl_root.flags &= ~CGRP_ROOT_MEMORY_HUGETLB_ACCOUNTING;
-
-		if (root_flags & CGRP_ROOT_PIDS_LOCAL_EVENTS)
-			cgrp_dfl_root.flags |= CGRP_ROOT_PIDS_LOCAL_EVENTS;
-		else
-			cgrp_dfl_root.flags &= ~CGRP_ROOT_PIDS_LOCAL_EVENTS;
+		enable = root_flags & mount_flags_desc[i].flag;
+		mount_flags_desc[i].apply(&cgrp_dfl_root, mount_flags_desc[i].flag, enable);
 	}
 }
 
 static int cgroup_show_options(struct seq_file *seq, struct kernfs_root *kf_root)
 {
-	if (cgrp_dfl_root.flags & CGRP_ROOT_NS_DELEGATE)
-		seq_puts(seq, ",nsdelegate");
-	if (cgrp_dfl_root.flags & CGRP_ROOT_FAVOR_DYNMODS)
-		seq_puts(seq, ",favordynmods");
-	if (cgrp_dfl_root.flags & CGRP_ROOT_MEMORY_LOCAL_EVENTS)
-		seq_puts(seq, ",memory_localevents");
-	if (cgrp_dfl_root.flags & CGRP_ROOT_MEMORY_RECURSIVE_PROT)
-		seq_puts(seq, ",memory_recursiveprot");
-	if (cgrp_dfl_root.flags & CGRP_ROOT_MEMORY_HUGETLB_ACCOUNTING)
-		seq_puts(seq, ",memory_hugetlb_accounting");
-	if (cgrp_dfl_root.flags & CGRP_ROOT_PIDS_LOCAL_EVENTS)
-		seq_puts(seq, ",pids_localevents");
+	int i;
+
+	for (i = 0; i < nr__cgroup2_params; ++i) {
+		if (cgrp_dfl_root.flags & mount_flags_desc[i].flag) {
+			seq_puts(seq, ",");
+			seq_puts(seq, mount_flags_desc[i].name);
+		}
+	}
 	return 0;
 }
 
