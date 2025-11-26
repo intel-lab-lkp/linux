@@ -557,6 +557,7 @@ static bool ghes_handle_arm_hw_error(struct acpi_hest_generic_data *gdata,
 {
 	struct cper_sec_proc_arm *err = acpi_hest_get_payload(gdata);
 	int flags = sync ? MF_ACTION_REQUIRED : 0;
+	int length = gdata->error_data_length;
 	char error_type[120];
 	bool queued = false;
 	int sec_sev, i;
@@ -568,7 +569,12 @@ static bool ghes_handle_arm_hw_error(struct acpi_hest_generic_data *gdata,
 		return false;
 
 	p = (char *)(err + 1);
+	length -= sizeof(err);
+
 	for (i = 0; i < err->err_info_num; i++) {
+		if (length <= 0)
+			break;
+
 		struct cper_arm_err_info *err_info = (struct cper_arm_err_info *)p;
 		bool is_cache = err_info->type & CPER_ARM_CACHE_ERROR;
 		bool has_pa = (err_info->validation_bits & CPER_ARM_INFO_VALID_PHYSICAL_ADDR);
@@ -580,10 +586,17 @@ static bool ghes_handle_arm_hw_error(struct acpi_hest_generic_data *gdata,
 		 * and don't filter out 'corrected' error here.
 		 */
 		if (is_cache && has_pa) {
+			length -= err_info->length;
+			if (length < 0)
+				break;
 			queued = ghes_do_memory_failure(err_info->physical_fault_addr, flags);
 			p += err_info->length;
+
 			continue;
 		}
+		length -= err_info->length;
+			if (length < 0)
+				break;
 
 		cper_bits_to_str(error_type, sizeof(error_type),
 				 FIELD_GET(CPER_ARM_ERR_TYPE_MASK, err_info->type),
