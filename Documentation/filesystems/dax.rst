@@ -38,7 +38,7 @@ Enabling DAX on xfs and ext4
 ----------------------------
 
 Summary
--------
+~~~~~~~
 
  1. There exists an in-kernel file access mode flag `S_DAX` that corresponds to
     the statx flag `STATX_ATTR_DAX`.  See the manpage for statx(2) for details
@@ -95,7 +95,7 @@ Summary
 
 
 Details
--------
+~~~~~~~
 
 There are 2 per-file dax flags.  One is a persistent inode setting (`FS_XFLAG_DAX`)
 and the other is a volatile flag indicating the active state of the feature
