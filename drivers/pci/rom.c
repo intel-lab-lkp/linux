@@ -69,6 +69,68 @@ void pci_disable_rom(struct pci_dev *pdev)
 }
 EXPORT_SYMBOL_GPL(pci_disable_rom);
 
+#define PCI_ROM_HEADER_SIZE 0x1A
+
+static inline bool pci_rom_header_valid(struct pci_dev *pdev,
+					void __iomem *image,
+					void __iomem *rom,
+					size_t size,
+					bool last_image)
+{
+	uintptr_t rom_end = (uintptr_t)rom + size;
+	uintptr_t header_end;
+
+	if (check_add_overflow((uintptr_t)image, PCI_ROM_HEADER_SIZE,
+	    &header_end))
+		return false;
+
+	if (image >= rom && header_end < rom_end &&
+	    IS_ALIGNED((uintptr_t)image, 2)) {
+		/* Standard PCI ROMs start out with these bytes 55 AA */
+		if (readw(image) == 0xAA55)
+			return true;
+
+		if (!last_image)
+			pci_info(pdev, "No more image in the PCI ROM\n");
+		else
+			pci_info(pdev, "Invalid PCI ROM header signature: expecting 0xaa55, got %#06x\n",
+				 readw(image));
+	}
+	return false;
+}
+
+static inline bool pci_rom_data_struct_valid(struct pci_dev *pdev,
+					     void __iomem *pds,
+					     void __iomem *rom,
+					     size_t size)
+{
+	uintptr_t rom_end = (uintptr_t)rom + size;
+	uintptr_t end;
+	u16 data_len;
+
+	if (!IS_ALIGNED((uintptr_t)pds, 4))
+		return false;
+
+	/* Before reading length, check range. */
+	if (check_add_overflow((uintptr_t)pds, 0x0B, &end))
+		return false;
+
+	if (pds > rom && end < rom_end) {
+		data_len = readw(pds + 0x0A);
+		if (!data_len || data_len == 0xFFFF ||
+		    check_add_overflow((uintptr_t)pds, data_len, &end))
+			return false;
+
+		if (end < rom_end) {
+			if (readl(pds) == 0x52494350)
+				return true;
+			pci_info(pdev, "Invalid PCI ROM data signature: expecting 0x52494350, got %#010x\n",
+				 readl(pds));
+		}
+	}
+	return false;
+}
+
 /**
  * pci_get_rom_size - obtain the actual size of the ROM image
  * @pdev: target PCI device
@@ -90,31 +152,21 @@ static size_t pci_get_rom_size(struct pci_dev *pdev, void __iomem *rom,
 	image = rom;
 	do {
 		void __iomem *pds;
-		/* Standard PCI ROMs start out with these bytes 55 AA */
-		if (readw(image) != 0xAA55) {
-			pci_info(pdev, "Invalid PCI ROM header signature: expecting 0xaa55, got %#06x\n",
-				 readw(image));
+
+		if (!pci_rom_header_valid(pdev, image, rom, size, true))
 			break;
-		}
+
 		/* get the PCI data structure and check its "PCIR" signature */
 		pds = image + readw(image + 24);
-		if (readl(pds) != 0x52494350) {
-			pci_info(pdev, "Invalid PCI ROM data signature: expecting 0x52494350, got %#010x\n",
-				 readl(pds));
+		if (!pci_rom_data_struct_valid(pdev, pds, rom, size))
 			break;
-		}
+
 		last_image = readb(pds + 21) & 0x80;
 		length = readw(pds + 16);
 		image += length * 512;
-		/* Avoid iterating through memory outside the resource window */
-		if (image >= rom + size)
+
+		if (!pci_rom_header_valid(pdev, image, rom, size, (bool)last_image))
 			break;
-		if (!last_image) {
-			if (readw(image) != 0xAA55) {
-				pci_info(pdev, "No more image in the PCI ROM\n");
-				break;
-			}
-		}
 	} while (length && !last_image);
 
 	/* never return a size larger than the PCI resource window */
