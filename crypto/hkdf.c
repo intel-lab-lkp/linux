@@ -46,6 +46,15 @@ int hkdf_extract(struct crypto_shash *hmac_tfm, const u8 *ikm,
 		 u8 *prk)
 {
 	int err;
+	u8 tmp_salt[HKDF_HASHLEN];
+
+	if (saltlen < HKDF_HASHLEN) {
+		/* Copy salt and pad with zeros to HashLen */
+		memcpy(tmp_salt, salt, saltlen);
+		memset(tmp_salt + saltlen, 0, HKDF_HASHLEN - saltlen);
+		salt = tmp_salt;
+		saltlen = HKDF_HASHLEN;
+	}
 
 	err = crypto_shash_setkey(hmac_tfm, salt, saltlen);
 	if (!err)
@@ -151,7 +160,7 @@ struct hkdf_testvec {
  */
 static const struct hkdf_testvec hkdf_sha256_tv[] = {
 	{
-		.test = "basic hdkf test",
+		.test = "basic hkdf test",
 		.ikm  = "\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b"
 			"\x0b\x0b\x0b\x0b\x0b\x0b",
 		.ikm_size = 22,

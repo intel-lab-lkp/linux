@@ -11,6 +11,19 @@
 
 #include <crypto/hash.h>
 
+/*
+ * HKDF supports any unkeyed cryptographic hash algorithm, but fscrypt uses
+ * SHA-512 because it is well-established, secure, and reasonably efficient.
+ *
+ * HKDF-SHA256 was also considered, as its 256-bit security strength would be
+ * sufficient here.  A 512-bit security strength is "nice to have", though.
+ * Also, on 64-bit CPUs, SHA-512 is usually just as fast as SHA-256.  In the
+ * common case of deriving an AES-256-XTS key (512 bits), that can result in
+ * HKDF-SHA512 being much faster than HKDF-SHA256, as the longer digest size of
+ * SHA-512 causes HKDF-Expand to only need to do one iteration rather than two.
+ */
+#define HKDF_HASHLEN            SHA512_DIGEST_SIZE
+
 int hkdf_extract(struct crypto_shash *hmac_tfm, const u8 *ikm,
 		 unsigned int ikmlen, const u8 *salt, unsigned int saltlen,
 		 u8 *prk);
