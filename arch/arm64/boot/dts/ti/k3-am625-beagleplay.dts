@@ -211,6 +211,9 @@
 		compatible = "hdmi-connector";
 		label = "hdmi";
 		type = "a";
+
+		post-init-providers = <&it66121>;
+
 		port {
 			hdmi_connector_in: endpoint {
 				remote-endpoint = <&it66121_out>;
@@ -622,6 +625,10 @@
 	};
 };
 
+&gic500 {
+	post-init-providers = <&gic500>;
+};
+
 &main_gpio0 {
 	bootph-all;
 	pinctrl-names = "default";
@@ -700,6 +707,8 @@
 
 		system-power-controller;
 		ti,power-button;
+
+		post-init-providers = <&buck2_reg>;
 
 		regulators {
 			buck1_reg: buck1 {
@@ -792,6 +801,8 @@
 		interrupt-parent = <&main_gpio0>;
 		interrupts = <36 IRQ_TYPE_EDGE_FALLING>;
 		#sound-dai-cells = <0>;
+
+		post-init-providers = <&dss>;
 
 		ports {
 			#address-cells = <1>;
