@@ -837,7 +837,6 @@ static bool is_access_to_paths_allowed(
 	 * restriction.
 	 */
 	while (true) {
-		struct dentry *parent_dentry;
 		const struct landlock_rule *rule;
 
 		/*
@@ -930,7 +929,9 @@ jump_up:
 			walker_path.dentry = walker_path.mnt->mnt_root;
 			dget(walker_path.dentry);
 		} else {
-			parent_dentry = dget_parent(walker_path.dentry);
+			struct dentry *const parent_dentry =
+				dget_parent(walker_path.dentry);
+
 			dput(walker_path.dentry);
 			walker_path.dentry = parent_dentry;
 		}
