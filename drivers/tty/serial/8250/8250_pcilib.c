@@ -28,13 +28,14 @@ int serial8250_pci_setup_port(struct pci_dev *dev, struct uart_8250_port *port,
 		return -EINVAL;
 
 	if (pci_resource_flags(dev, bar) & IORESOURCE_MEM) {
-		if (!pcim_iomap(dev, bar, 0) && !pcim_iomap_table(dev))
-			return -ENOMEM;
-
 		port->port.iotype = UPIO_MEM;
 		port->port.iobase = 0;
 		port->port.mapbase = pci_resource_start(dev, bar) + offset;
-		port->port.membase = pcim_iomap_table(dev)[bar] + offset;
+
+		port->port.membase = pcim_iomap_range(dev, bar, offset, 0);
+		if (IS_ERR(port->port.membase))
+			return PTR_ERR(port->port.membase);
+
 		port->port.regshift = regshift;
 	} else if (IS_ENABLED(CONFIG_HAS_IOPORT)) {
 		port->port.iotype = UPIO_PORT;
