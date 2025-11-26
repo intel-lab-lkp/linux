@@ -182,8 +182,10 @@ int hyperv_fill_flush_guest_mapping_list(
 void hv_apic_init(void);
 void __init hv_init_spinlocks(void);
 bool hv_vcpu_is_preempted(int vcpu);
+void hv_sleep_notifiers_register(void);
 #else
 static inline void hv_apic_init(void) {}
+static inline void hv_sleep_notifiers_register(void) {};
 #endif
 
 struct irq_domain *hv_create_pci_msi_domain(void);
