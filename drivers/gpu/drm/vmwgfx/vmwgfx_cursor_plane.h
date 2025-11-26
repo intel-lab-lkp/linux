@@ -35,6 +35,7 @@ enum vmw_cursor_update_type {
 	VMW_CURSOR_UPDATE_LEGACY,
 	VMW_CURSOR_UPDATE_GB_ONLY,
 	VMW_CURSOR_UPDATE_MOB,
+	VMW_CURSOR_UPDATE_DUMB,
 };
 
 struct vmw_cursor_plane_state {

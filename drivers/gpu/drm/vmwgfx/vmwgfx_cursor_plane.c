@@ -103,7 +103,11 @@ vmw_cursor_update_type(struct vmw_private *vmw, struct vmw_plane_state *vps)
 		else
 			return VMW_CURSOR_UPDATE_GB_ONLY;
 	}
-	drm_warn_once(&vmw->drm, "Unknown Cursor Type!\n");
+
+	if (vmw_user_object_buffer(&vps->uo))
+		return VMW_CURSOR_UPDATE_DUMB;
+	if (vps->base.fb)
+		drm_warn_once(&vmw->drm, "Unknown Cursor Type!\n");
 	return VMW_CURSOR_UPDATE_NONE;
 }
 
@@ -142,6 +146,7 @@ static u32 vmw_cursor_mob_size(enum vmw_cursor_update_type update_type,
 	switch (update_type) {
 	case VMW_CURSOR_UPDATE_LEGACY:
 	case VMW_CURSOR_UPDATE_GB_ONLY:
+	case VMW_CURSOR_UPDATE_DUMB:
 	case VMW_CURSOR_UPDATE_NONE:
 		return 0;
 	case VMW_CURSOR_UPDATE_MOB:
@@ -627,6 +632,7 @@ int vmw_cursor_plane_prepare_fb(struct drm_plane *plane,
 			vps->cursor.update_type = VMW_CURSOR_UPDATE_NONE;
 		break;
 	case VMW_CURSOR_UPDATE_GB_ONLY:
+	case VMW_CURSOR_UPDATE_DUMB:
 	case VMW_CURSOR_UPDATE_MOB: {
 		bo = vmw_user_object_buffer(&vps->uo);
 		if (bo) {
@@ -768,6 +774,7 @@ vmw_cursor_plane_atomic_update(struct drm_plane *plane,
 		vmw_cursor_update_mob(dev_priv, vps);
 		break;
 	case VMW_CURSOR_UPDATE_GB_ONLY:
+	case VMW_CURSOR_UPDATE_DUMB:
 		bo = vmw_user_object_buffer(&vps->uo);
 		if (bo)
 			vmw_send_define_cursor_cmd(dev_priv, bo->map.virtual,
