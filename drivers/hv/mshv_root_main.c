@@ -1089,13 +1089,9 @@ static int mshv_partition_create_region(struct mshv_partition *partition,
 	u64 nr_pages = HVPFN_DOWN(mem->size);
 
 	/* Reject overlapping regions */
-	hlist_for_each_entry(rg, &partition->pt_mem_regions, hnode) {
-		if (mem->guest_pfn + nr_pages <= rg->start_gfn ||
-		    rg->start_gfn + rg->nr_pages <= mem->guest_pfn)
-			continue;
-
+	if (mshv_partition_region_by_gfn(partition, mem->guest_pfn) ||
+	    mshv_partition_region_by_gfn(partition, mem->guest_pfn + nr_pages - 1))
 		return -EEXIST;
-	}
 
 	rg = mshv_region_create(mem->guest_pfn, nr_pages,
 				mem->userspace_addr, mem->flags,
