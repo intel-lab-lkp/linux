@@ -15,6 +15,7 @@
 
 static struct xe_drm_ras_counter error_info[] = {
 	ERR_INFO(DRM_XE_GENL_CORE_COMPUTE, "GT Error"),
+	ERR_INFO(DRM_XE_GENL_SOC_INTERNAL, "SOC Error"),
 };
 
 static int hw_query_error_counter(struct xe_drm_ras_counter *info,

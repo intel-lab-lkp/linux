@@ -16,7 +16,8 @@
 #include "xe_survivability_mode.h"
 
 #define XE_RAS_REG_SIZE 32
-#define  HEC_UNCORR_FW_ERR_BITS 4
+#define XE_SOC_NUM_IEH 2
+#define HEC_UNCORR_FW_ERR_BITS 4
 
 extern struct fault_attr inject_csc_hw_error;
 
@@ -32,6 +33,7 @@ static const char * const hec_uncorrected_fw_errors[] = {
 
 static const unsigned long xe_hw_error_map[] = {
 	ERR_INDEX(XE_GT_ERROR, DRM_XE_GENL_CORE_COMPUTE),
+	ERR_INDEX(XE_SOC_ERROR, DRM_XE_GENL_SOC_INTERNAL),
 };
 
 enum gt_vector_regs {
@@ -44,6 +46,92 @@ enum gt_vector_regs {
 	ERR_STAT_GT_VECTOR6,
 	ERR_STAT_GT_VECTOR7,
 	ERR_STAT_GT_VECTOR_MAX,
+};
+
+static const char * const pvc_slave_local_fatal_err_reg[] = {
+	[0]		= "Local IEH internal: Malformed PCIe AER",
+	[1]		= "Local IEH internal: Malformed PCIe ERR",
+	[2]		= "Local IEH internal: UR conditions in IEH",
+	[3]		= "Local IEH internal: From SERR Sources",
+	[4 ... 19]	= "Undefined",
+	[20]		= "Malformed MCA error packet (HBM/Punit)",
+	[21 ... 31]	= "Undefined",
+};
+
+static const char * const pvc_slave_global_err_reg[] = {
+	[0]         = "Undefined",
+	[1]         = "HBM SS2: Channel0",
+	[2]         = "HBM SS2: Channel1",
+	[3]         = "HBM SS2: Channel2",
+	[4]         = "HBM SS2: Channel3",
+	[5]         = "HBM SS2: Channel4",
+	[6]         = "HBM SS2: Channel5",
+	[7]         = "HBM SS2: Channel6",
+	[8]         = "HBM SS2: Channel7",
+	[9]         = "HBM SS3: Channel0",
+	[10]        = "HBM SS3: Channel1",
+	[11]        = "HBM SS3: Channel2",
+	[12]        = "HBM SS3: Channel3",
+	[13]        = "HBM SS3: Channel4",
+	[14]        = "HBM SS3: Channel5",
+	[15]        = "HBM SS3: Channel6",
+	[16]        = "HBM SS3: Channel7",
+	[17]        = "Undefined",
+	[18]        = "ANR MDFI",
+	[19 ... 31] = "Undefined",
+};
+
+static const char * const pvc_master_global_err_reg[] = {
+	[0 ... 1]   = "Undefined",
+	[2]         =  "HBM SS0: Channel0",
+	[3]         =  "HBM SS0: Channel1",
+	[4]         =  "HBM SS0: Channel2",
+	[5]         =  "HBM SS0: Channel3",
+	[6]         =  "HBM SS0: Channel4",
+	[7]         =  "HBM SS0: Channel5",
+	[8]         =  "HBM SS0: Channel6",
+	[9]         =  "HBM SS0: Channel7",
+	[10]        =  "HBM SS1: Channel0",
+	[11]        =  "HBM SS1: Channel1",
+	[12]        =  "HBM SS1: Channel2",
+	[13]        =  "HBM SS1: Channel3",
+	[14]        =  "HBM SS1: Channel4",
+	[15]        =  "HBM SS1: Channel5",
+	[16]        =  "HBM SS1: Channel6",
+	[17]        =  "HBM SS1: Channel7",
+	[18 ... 31] = "Undefined",
+};
+
+static const char * const pvc_master_local_fatal_err_reg[] = {
+	[0]         = "Local IEH internal: Malformed IOSF PCIe AER",
+	[1]         = "Local IEH internal: Malformed IOSF PCIe ERR",
+	[2]         = "Local IEH internal: IEH UR RESPONSE",
+	[3]         = "Local IEH internal: From SERR SPI controller",
+	[4]         = "Base Die MDFI T2T",
+	[5]         = "Undefined",
+	[6]         = "Base Die MDFI T2C",
+	[7]         = "Undefined",
+	[8]         = "Invalid CSC PSF Command Parity",
+	[9]         = "Invalid CSC PSF Unexpected Completion",
+	[10]        = "Invalid CSC PSF Unsupported Request",
+	[11]        = "Invalid PCIe PSF Command Parity",
+	[12]        = "PCIe PSF Unexpected Completion",
+	[13]        = "PCIe PSF Unsupported Request",
+	[14 ... 19] = "Undefined",
+	[20]        = "Malformed MCA error packet (HBM/Punit)",
+	[21 ... 31] = "Undefined",
+};
+
+static const char * const pvc_master_local_nonfatal_err_reg[] = {
+	[0 ... 3]   = "Undefined",
+	[4]         = "Base Die MDFI T2T",
+	[5]         = "Undefined",
+	[6]         = "Base Die MDFI T2C",
+	[7]         = "Undefined",
+	[8]         = "Invalid CSC PSF Command Parity",
+	[9]         = "Invalid CSC PSF Unexpected Completion",
+	[10]        = "Invalid PCIe PSF Command Parity",
+	[11 ... 31] = "Undefined",
 };
 
 static bool fault_inject_csc_hw_error(void)
@@ -191,6 +279,115 @@ static void gt_handle_errors(struct xe_tile *tile, const enum hardware_error hw_
 	}
 }
 
+static void log_soc_error(struct xe_tile *tile, const char * const *reg_info,
+			  const enum hardware_error hw_err, u32 err_bit, u32 index)
+{
+	const char *hw_err_str = hw_error_to_str(hw_err);
+	struct xe_device *xe = tile_to_xe(tile);
+	struct xe_drm_ras *ras = &xe->ras;
+	struct xe_drm_ras_counter *info = ras->info[hw_err];
+	const char *name;
+
+	name = reg_info[err_bit];
+
+	if (strcmp(name, "Undefined") != 0) {
+		drm_err_ratelimited(&xe->drm, "%s SOC %s error detected", name, hw_err_str);
+		info[index].counter += 1;
+	}
+}
+
+static void soc_hw_error_handler(struct xe_tile *tile, const enum hardware_error hw_err,
+				 u32 err_bit)
+{
+	struct xe_device *xe = tile_to_xe(tile);
+	struct xe_mmio *mmio = &tile->mmio;
+	unsigned long master_global_errstat, slave_global_errstat;
+	unsigned long master_local_errstat, slave_local_errstat;
+	u32 base, slave_base, index, regbit;
+	int i;
+
+	if (xe->info.platform != XE_PVC)
+		return;
+
+	base = SOC_PVC_BASE;
+	slave_base = SOC_PVC_SLAVE_BASE;
+
+	index = xe_hw_error_map[err_bit];
+
+	/*
+	 * Mask error type in GSYSEVTCTL so that no new errors of the type will be reported
+	 */
+	for (i = 0; i < XE_SOC_NUM_IEH; i++)
+		xe_mmio_write32(mmio, SOC_GSYSEVTCTL_REG(base, slave_base, i), ~REG_BIT(hw_err));
+
+	if (hw_err == HARDWARE_ERROR_CORRECTABLE) {
+		xe_mmio_write32(mmio, SOC_GLOBAL_ERR_STAT_REG(base, hw_err), REG_GENMASK(31, 0));
+		xe_mmio_write32(mmio, SOC_LOCAL_ERR_STAT_REG(base, hw_err), REG_GENMASK(31, 0));
+		xe_mmio_write32(mmio, SOC_GLOBAL_ERR_STAT_REG(slave_base, hw_err),
+				REG_GENMASK(31, 0));
+		xe_mmio_write32(mmio, SOC_LOCAL_ERR_STAT_REG(slave_base, hw_err),
+				REG_GENMASK(31, 0));
+		goto unmask_gsysevtctl;
+	}
+
+	/*
+	 * Read the master global IEH error register if
+	 * BIT 1 is set then process the slave IEH first. If BIT 0 in
+	 * global error register is set then process the corresponding
+	 * Local error registers
+	 */
+	master_global_errstat = xe_mmio_read32(mmio, SOC_GLOBAL_ERR_STAT_REG(base, hw_err));
+	if (master_global_errstat & SOC_SLAVE_IEH) {
+		slave_global_errstat = xe_mmio_read32(mmio,
+						      SOC_GLOBAL_ERR_STAT_REG(slave_base, hw_err));
+		if (slave_global_errstat & SOC_IEH1_LOCAL_ERR_STATUS) {
+			slave_local_errstat = xe_mmio_read32(mmio,
+							     SOC_LOCAL_ERR_STAT_REG(slave_base,
+										    hw_err));
+
+			for_each_set_bit(regbit, &slave_local_errstat, XE_RAS_REG_SIZE) {
+				if (hw_err == HARDWARE_ERROR_FATAL)
+					log_soc_error(tile, pvc_slave_local_fatal_err_reg, hw_err,
+						      regbit, index);
+			}
+
+			xe_mmio_write32(mmio, SOC_LOCAL_ERR_STAT_REG(slave_base, hw_err),
+					slave_local_errstat);
+		}
+
+		for_each_set_bit(regbit, &slave_global_errstat, XE_RAS_REG_SIZE)
+			log_soc_error(tile, pvc_slave_global_err_reg, hw_err, regbit, index);
+
+		xe_mmio_write32(mmio, SOC_GLOBAL_ERR_STAT_REG(slave_base, hw_err),
+				slave_global_errstat);
+	}
+
+	if (master_global_errstat & SOC_IEH0_LOCAL_ERR_STATUS) {
+		master_local_errstat = xe_mmio_read32(mmio, SOC_LOCAL_ERR_STAT_REG(base, hw_err));
+
+		for_each_set_bit(regbit, &master_local_errstat, XE_RAS_REG_SIZE) {
+			if (hw_err == HARDWARE_ERROR_FATAL)
+				log_soc_error(tile, pvc_master_local_fatal_err_reg, hw_err,
+					      regbit, index);
+			if (hw_err == HARDWARE_ERROR_NONFATAL)
+				log_soc_error(tile, pvc_master_local_nonfatal_err_reg, hw_err,
+					      regbit, index);
+		}
+
+		xe_mmio_write32(mmio, SOC_LOCAL_ERR_STAT_REG(base, hw_err), master_local_errstat);
+	}
+
+	for_each_set_bit(regbit, &master_global_errstat, XE_RAS_REG_SIZE)
+		log_soc_error(tile, pvc_master_global_err_reg, hw_err, regbit, index);
+
+	xe_mmio_write32(mmio, SOC_GLOBAL_ERR_STAT_REG(base, hw_err), master_global_errstat);
+
+unmask_gsysevtctl:
+	for (i = 0; i < XE_SOC_NUM_IEH; i++)
+		xe_mmio_write32(mmio, SOC_GSYSEVTCTL_REG(base, slave_base, i),
+				(HARDWARE_ERROR_MAX << 1) + 1);
+}
+
 static void gt_hw_error_handler(struct xe_tile *tile, const enum hardware_error hw_err, u32 err_bit)
 {
 	struct xe_device *xe = tile_to_xe(tile);
@@ -261,6 +458,9 @@ static void hw_error_source_handler(struct xe_tile *tile, const enum hardware_er
 
 		if (BIT(err_bit) & XE_GT_ERROR)
 			gt_hw_error_handler(tile, hw_err, err_bit);
+
+		if (BIT(err_bit) == XE_SOC_ERROR)
+			soc_hw_error_handler(tile, hw_err, err_bit);
 	}
 
 clear_reg:

@@ -2277,6 +2277,7 @@ struct drm_xe_vm_query_mem_range_attr {
  * RAS Counters
  */
 #define DRM_XE_GENL_CORE_COMPUTE	(1)
+#define DRM_XE_GENL_SOC_INTERNAL	(2)
 
 #if defined(__cplusplus)
 }

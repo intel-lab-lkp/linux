@@ -40,6 +40,7 @@
 								  DEV_ERR_STAT_NONFATAL))
 
 #define   XE_CSC_ERROR				BIT(17)
+#define   XE_SOC_ERROR				BIT(16)
 #define   XE_GT_ERROR				BIT(0)
 
 #define  ERR_STAT_GT_FATAL_VECTOR_0		0x100260
@@ -60,5 +61,28 @@
 #define ERR_STAT_GT_VECTOR_REG(hw_err, x)	(hw_err == HARDWARE_ERROR_CORRECTABLE ? \
 						 ERR_STAT_GT_COR_VECTOR_REG(x) : \
 						 ERR_STAT_GT_FATAL_VECTOR_REG(x))
+
+#define SOC_PVC_BASE				0x282000
+#define SOC_PVC_SLAVE_BASE			0x283000
+
+#define SOC_GCOERRSTS				0x200
+#define SOC_GNFERRSTS				0x210
+#define SOC_GLOBAL_ERR_STAT_REG(base, x)	XE_REG(_PICK_EVEN((x), \
+								  (base) + SOC_GCOERRSTS, \
+								  (base) + SOC_GNFERRSTS))
+#define   SOC_SLAVE_IEH				BIT(1)
+#define   SOC_IEH0_LOCAL_ERR_STATUS		BIT(0)
+#define   SOC_IEH1_LOCAL_ERR_STATUS		BIT(0)
+
+#define SOC_GSYSEVTCTL				0x264
+#define SOC_GSYSEVTCTL_REG(base, slave_base, x)	XE_REG(_PICK_EVEN((x), \
+								  (base) + SOC_GSYSEVTCTL, \
+								  slave_base + SOC_GSYSEVTCTL))
+
+#define SOC_LERRUNCSTS				0x280
+#define SOC_LERRCORSTS				0x294
+#define SOC_LOCAL_ERR_STAT_REG(base, x)		XE_REG(x == HARDWARE_ERROR_CORRECTABLE ? \
+						      (base) + SOC_LERRCORSTS : \
+						      (base) + SOC_LERRUNCSTS)
 
 #endif
