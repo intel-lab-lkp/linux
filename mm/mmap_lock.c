@@ -74,9 +74,18 @@ static inline int __vma_enter_locked(struct vm_area_struct *vma,
 		   refcount_read(&vma->vm_refcnt) == tgt_refcnt,
 		   state);
 	if (err) {
+		if (refcount_sub_and_test(VMA_LOCK_OFFSET, &vma->vm_refcnt)) {
+			/* Oh cobblers.  While we got a fatal signal, we
+			 * raced with the last user.  Pretend we didn't notice
+			 * the signal
+			 */
+			refcount_set(&vma->vm_refcnt, VMA_LOCK_OFFSET);
+			goto acquired;
+		}
 		rwsem_release(&vma->vmlock_dep_map, _RET_IP_);
 		return err;
 	}
+acquired:
 	lock_acquired(&vma->vmlock_dep_map, _RET_IP_);
 
 	return 1;
