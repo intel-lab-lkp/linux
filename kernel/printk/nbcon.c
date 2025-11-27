@@ -1498,15 +1498,29 @@ static int __nbcon_atomic_flush_pending_con(struct console *con, u64 stop_seq,
 {
 	struct nbcon_write_context wctxt = { };
 	struct nbcon_context *ctxt = &ACCESS_PRIVATE(&wctxt, ctxt);
+	bool ctx_acquired = false;
 	int err = 0;
+	int cookie;
 
 	ctxt->console			= con;
 	ctxt->spinwait_max_us		= 2000;
 	ctxt->prio			= nbcon_get_default_prio();
 	ctxt->allow_unsafe_takeover	= allow_unsafe_takeover;
 
-	if (!nbcon_context_try_acquire(ctxt, false))
-		return -EPERM;
+	/*
+	 * Match the console_srcu_read_lock()/unlock expectation embedded in
+	 * console_srcu_read_flags(), which is called from nbcon_emit_next_record().
+	 * Without this, unregister_console() cannot synchronise against the
+	 * atomic flusher.
+	 */
+	cookie = console_srcu_read_lock();
+
+	if (!nbcon_context_try_acquire(ctxt, false)) {
+		err = -EPERM;
+		goto out_unlock;
+	}
+
+	ctx_acquired = true;
 
 	while (nbcon_seq_read(con) < stop_seq) {
 		/*
@@ -1514,8 +1528,11 @@ static int __nbcon_atomic_flush_pending_con(struct console *con, u64 stop_seq,
 		 * handed over or taken over. In both cases the context is no
 		 * longer valid.
 		 */
-		if (!nbcon_emit_next_record(&wctxt, true))
-			return -EAGAIN;
+		if (!nbcon_emit_next_record(&wctxt, true)) {
+			err = -EAGAIN;
+			ctx_acquired = false;
+			goto out_unlock;
+		}
 
 		if (!ctxt->backlog) {
 			/* Are there reserved but not yet finalized records? */
@@ -1525,7 +1542,10 @@ static int __nbcon_atomic_flush_pending_con(struct console *con, u64 stop_seq,
 		}
 	}
 
-	nbcon_context_release(ctxt);
+out_unlock:
+	if (ctx_acquired)
+		nbcon_context_release(ctxt);
+	console_srcu_read_unlock(cookie);
 	return err;
 }
 
