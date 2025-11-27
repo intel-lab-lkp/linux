@@ -25,12 +25,37 @@ MODULE_DESCRIPTION("Xtables: statistics-based matching (\"Nth\", random)");
 MODULE_ALIAS("ipt_statistic");
 MODULE_ALIAS("ip6t_statistic");
 
+static int gso_pkt_cnt(const struct sk_buff *skb)
+{
+	int pkt_cnt = 1;
+
+	if (!skb_is_gso(skb))
+		return pkt_cnt;
+
+	/* GSO packets contain many smaller packets. This makes the probability
+	 * incorrect, when wanting the probability to be per packet based.
+	 */
+	if (skb_has_frag_list(skb)) {
+		struct sk_buff *iter;
+
+		skb_walk_frags(skb, iter)
+			pkt_cnt++;
+	} else {
+		pkt_cnt += skb_shinfo(skb)->nr_frags;
+	}
+
+	return pkt_cnt;
+}
+
 static bool
 statistic_mt(const struct sk_buff *skb, struct xt_action_param *par)
 {
 	const struct xt_statistic_info *info = par->matchinfo;
+	struct xt_statistic_priv *priv = info->master;
 	bool ret = info->flags & XT_STATISTIC_INVERT;
-	int nval, oval;
+	u32 nval, oval;
+	int pkt_cnt;
+	bool match;
 
 	switch (info->mode) {
 	case XT_STATISTIC_MODE_RANDOM:
@@ -38,11 +63,18 @@ statistic_mt(const struct sk_buff *skb, struct xt_action_param *par)
 			ret = !ret;
 		break;
 	case XT_STATISTIC_MODE_NTH:
+		pkt_cnt = gso_pkt_cnt(skb);
 		do {
-			oval = atomic_read(&info->master->count);
-			nval = (oval == info->u.nth.every) ? 0 : oval + 1;
-		} while (atomic_cmpxchg(&info->master->count, oval, nval) != oval);
-		if (nval == 0)
+			match = false;
+			oval = atomic_read(&priv->count);
+			nval = oval + pkt_cnt;
+			if (nval > info->u.nth.every) {
+				match = true;
+				nval = nval - info->u.nth.every - 1;
+				nval = min(nval, info->u.nth.every);
+			}
+		} while (atomic_cmpxchg(&priv->count, oval, nval) != oval);
+		if (match)
 			ret = !ret;
 		break;
 	}
