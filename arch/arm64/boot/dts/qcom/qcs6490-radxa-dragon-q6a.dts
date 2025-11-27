@@ -9,8 +9,6 @@
 #define PM7250B_SID 8
 #define PM7250B_SID1 9
 
-#include <dt-bindings/iio/qcom,spmi-adc7-pmk8350.h>
-#include <dt-bindings/iio/qcom,spmi-adc7-pm7325.h>
 #include <dt-bindings/leds/common.h>
 #include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
@@ -20,6 +18,8 @@
 #include "pm8350c.dtsi" /* PM7350C */
 #include "pmk8350.dtsi" /* PMK7325 */
 #include "qcs6490-audioreach.dtsi"
+#include "qcom,spmi-adc7-pmk8350.h"
+#include "qcom,spmi-adc7-pm7325.h"
 
 /delete-node/ &adsp_mem;
 /delete-node/ &cdsp_mem;

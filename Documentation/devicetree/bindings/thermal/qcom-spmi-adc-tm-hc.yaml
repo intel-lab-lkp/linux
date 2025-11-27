@@ -110,8 +110,8 @@ unevaluatedProperties: false
 
 examples:
   - |
-    #include <dt-bindings/iio/qcom,spmi-vadc.h>
     #include <dt-bindings/interrupt-controller/irq.h>
+    #include <arm/qcom/qcom,spmi-vadc.h>
 
     pmic {
         #address-cells = <1>;

@@ -5,8 +5,8 @@
 
 #include <dt-bindings/spmi/spmi.h>
 #include <dt-bindings/input/linux-event-codes.h>
-#include <dt-bindings/iio/qcom,spmi-vadc.h>
 #include <dt-bindings/thermal/thermal.h>
+#include <arm/qcom/qcom,spmi-vadc.h>
 
 / {
 	thermal-zones {

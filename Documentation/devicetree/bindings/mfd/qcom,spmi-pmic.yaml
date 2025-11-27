@@ -278,8 +278,8 @@ examples:
     #include <dt-bindings/input/input.h>
     #include <dt-bindings/interrupt-controller/irq.h>
     #include <dt-bindings/interrupt-controller/arm-gic.h>
-    #include <dt-bindings/iio/qcom,spmi-vadc.h>
     #include <dt-bindings/spmi/spmi.h>
+    #include <arm/qcom/qcom,spmi-vadc.h>
 
     pmic@0 {
         compatible = "qcom,pm6150", "qcom,spmi-pmic";
