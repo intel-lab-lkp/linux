@@ -996,7 +996,9 @@ static void panthor_fw_init_global_iface(struct panthor_device *ptdev)
 					 GLB_IDLE_EN |
 					 GLB_IDLE;
 
-	panthor_fw_update_reqs(glb_iface, req, GLB_IDLE_EN, GLB_IDLE_EN);
+	panthor_fw_update_reqs(glb_iface, req,
+			       GLB_IDLE_EN | GLB_COUNTER_EN,
+			       GLB_IDLE_EN | GLB_COUNTER_EN);
 	panthor_fw_toggle_reqs(glb_iface, req, ack,
 			       GLB_CFG_ALLOC_EN |
 			       GLB_CFG_POWEROFF_TIMER |
