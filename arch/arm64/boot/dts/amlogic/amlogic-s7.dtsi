@@ -8,6 +8,7 @@
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/pinctrl/amlogic,pinctrl.h>
 #include <dt-bindings/power/amlogic,s7-pwrc.h>
+#include "amlogic-s7-reset.h"
 
 / {
 	cpus {
@@ -140,6 +141,13 @@
 				clocks = <&xtal>, <&xtal>, <&xtal>;
 				clock-names = "xtal", "pclk", "baud";
 				status = "disabled";
+			};
+
+			reset: reset-controller@2000 {
+				compatible = "amlogic,s7-reset",
+					     "amlogic,meson-s4-reset";
+				reg = <0x0 0x2000 0x0 0x98>;
+				#reset-cells = <1>;
 			};
 
 			periphs_pinctrl: pinctrl@4000 {
