@@ -125,4 +125,6 @@ struct instruction *next_insn_same_sec(struct objtool_file *file, struct instruc
 	     insn && insn->sec == _sec;					\
 	     insn = next_insn_same_sec(file, insn))
 
+int pv_ops_idx_off(const char *symname);
+
 #endif /* _CHECK_H */
