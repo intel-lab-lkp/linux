@@ -2305,7 +2305,7 @@ struct dentry *__d_lookup_rcu(const struct dentry *parent,
 			continue;
 		if (dentry->d_name.hash_len != hashlen)
 			continue;
-		if (dentry_cmp(dentry, str, hashlen_len(hashlen)) != 0)
+		if (unlikely(dentry_cmp(dentry, str, hashlen_len(hashlen)) != 0))
 			continue;
 		*seqp = seq;
 		return dentry;
