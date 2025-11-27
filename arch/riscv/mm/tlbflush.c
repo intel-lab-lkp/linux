@@ -164,11 +164,6 @@ static void __ipi_flush_tlb_range_asid(void *info)
 	local_flush_tlb_range_asid(d->start, d->size, d->stride, d->asid);
 }
 
-static inline unsigned long get_mm_asid(struct mm_struct *mm)
-{
-	return mm ? cntx2asid(atomic_long_read(&mm->context.id)) : FLUSH_TLB_NO_ASID;
-}
-
 static void __flush_tlb_range(struct mm_struct *mm,
 			      const struct cpumask *cmask,
 			      unsigned long start, unsigned long size,
@@ -350,6 +345,35 @@ void local_load_tlb_mm(struct mm_struct *mm)
 		local_flush_tlb_all_asid(get_mm_asid(victim));
 		mmdrop_lazy_mm(victim);
 	}
+}
+
+void local_flush_tlb_mm(struct mm_struct *mm)
+{
+	struct tlb_info *info = this_cpu_ptr(&tlbinfo);
+	struct tlb_context *contexts = info->contexts;
+	unsigned long asid = get_mm_asid(mm);
+	unsigned int i;
+
+	if (!mm || mm == info->active_mm) {
+		local_flush_tlb_all_asid(asid);
+		return;
+	}
+
+	for (i = 0; i < MAX_LOADED_MM; i++) {
+		if (contexts[i].mm != mm)
+			continue;
+
+		write_lock(&info->rwlock);
+		contexts[i].mm = NULL;
+		contexts[i].gen = 0;
+		write_unlock(&info->rwlock);
+
+		cpumask_clear_cpu(raw_smp_processor_id(), mm_cpumask(mm));
+		mmdrop_lazy_mm(mm);
+		break;
+	}
+
+	local_flush_tlb_all_asid(asid);
 }
 
 #endif /* CONFIG_RISCV_LAZY_TLB_FLUSH */

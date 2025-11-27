@@ -274,6 +274,25 @@ static int __init asids_init(void)
 	return 0;
 }
 early_initcall(asids_init);
+
+#ifdef CONFIG_RISCV_LAZY_TLB_FLUSH
+void arch_do_shoot_lazy_tlb(void *arg)
+{
+	struct mm_struct *mm = arg;
+
+	if (current->active_mm == mm) {
+		WARN_ON_ONCE(current->mm);
+		current->active_mm = &init_mm;
+		switch_mm(mm, &init_mm, current);
+	}
+
+	if (!static_branch_unlikely(&use_asid_allocator) || !mm)
+		return;
+
+	local_flush_tlb_mm(mm);
+}
+#endif /* CONFIG_RISCV_LAZY_TLB_FLUSH */
+
 #else
 static inline void set_mm(struct mm_struct *prev,
 			  struct mm_struct *next, unsigned int cpu)

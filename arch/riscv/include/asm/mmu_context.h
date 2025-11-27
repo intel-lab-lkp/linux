@@ -16,6 +16,11 @@
 void switch_mm(struct mm_struct *prev, struct mm_struct *next,
 	struct task_struct *task);
 
+#ifdef CONFIG_RISCV_LAZY_TLB_FLUSH
+#define arch_do_shoot_lazy_tlb	arch_do_shoot_lazy_tlb
+void arch_do_shoot_lazy_tlb(void *arg);
+#endif
+
 #define activate_mm activate_mm
 static inline void activate_mm(struct mm_struct *prev,
 			       struct mm_struct *next)

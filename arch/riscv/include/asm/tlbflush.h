@@ -15,6 +15,11 @@
 #define FLUSH_TLB_NO_ASID       ((unsigned long)-1)
 
 #ifdef CONFIG_MMU
+static inline unsigned long get_mm_asid(struct mm_struct *mm)
+{
+	return mm ? cntx2asid(atomic_long_read(&mm->context.id)) : FLUSH_TLB_NO_ASID;
+}
+
 static inline void local_flush_tlb_all(void)
 {
 	__asm__ __volatile__ ("sfence.vma" : : : "memory");
@@ -86,10 +91,16 @@ struct tlb_info {
 DECLARE_PER_CPU_SHARED_ALIGNED(struct tlb_info, tlbinfo);
 
 void local_load_tlb_mm(struct mm_struct *mm);
+void local_flush_tlb_mm(struct mm_struct *mm);
 
 #else /* CONFIG_RISCV_LAZY_TLB_FLUSH */
 
 static inline void local_load_tlb_mm(struct mm_struct *mm) {}
+
+static inline void local_flush_tlb_mm(struct mm_struct *mm)
+{
+	local_flush_tlb_all_asid(get_mm_asid(mm));
+}
 
 #endif /* CONFIG_RISCV_LAZY_TLB_FLUSH */
 
