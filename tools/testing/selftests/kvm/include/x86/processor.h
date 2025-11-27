@@ -1450,6 +1450,8 @@ struct pte_masks {
 	uint64_t x;
 	uint64_t c;
 	uint64_t s;
+
+	uint64_t always_set;
 };
 
 struct kvm_mmu {
@@ -1468,6 +1470,8 @@ struct kvm_mmu {
 #define PTE_X_MASK(mmu) ((mmu)->pte_masks.x)
 #define PTE_C_MASK(mmu) ((mmu)->pte_masks.c)
 #define PTE_S_MASK(mmu) ((mmu)->pte_masks.s)
+
+#define PTE_ALWAYS_SET_MASK(mmu) ((mmu)->pte_masks.always_set)
 
 #define pte_present(mmu, pte) (!!(*(pte) & PTE_PRESENT_MASK(mmu)))
 #define pte_writable(mmu, pte) (!!(*(pte) & PTE_WRITABLE_MASK(mmu)))

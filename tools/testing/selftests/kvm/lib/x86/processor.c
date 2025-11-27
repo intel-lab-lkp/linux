@@ -227,7 +227,8 @@ static uint64_t *virt_create_upper_pte(struct kvm_vm *vm,
 	paddr = vm_untag_gpa(vm, paddr);
 
 	if (!pte_present(mmu, pte)) {
-		*pte = PTE_PRESENT_MASK(mmu) | PTE_WRITABLE_MASK(mmu) | PTE_X_MASK(mmu);
+		*pte = PTE_PRESENT_MASK(mmu) | PTE_WRITABLE_MASK(mmu)
+			| PTE_X_MASK(mmu) | PTE_ALWAYS_SET_MASK(mmu);
 		if (current_level == target_level)
 			*pte |= PTE_HUGE_MASK(mmu) | (paddr & PHYSICAL_PAGE_MASK);
 		else
@@ -293,7 +294,8 @@ void __virt_pg_map(struct kvm_vm *vm, struct kvm_mmu *mmu, uint64_t vaddr,
 	pte = virt_get_pte(vm, mmu, pte, vaddr, PG_LEVEL_4K);
 	TEST_ASSERT(!pte_present(mmu, pte),
 		    "PTE already present for 4k page at vaddr: 0x%lx", vaddr);
-	*pte = PTE_PRESENT_MASK(mmu) | PTE_WRITABLE_MASK(mmu) | PTE_X_MASK(mmu)
+	*pte = PTE_PRESENT_MASK(mmu) | PTE_WRITABLE_MASK(mmu)
+		| PTE_X_MASK(mmu) | PTE_ALWAYS_SET_MASK(mmu)
 		| (paddr & PHYSICAL_PAGE_MASK);
 
 	/*
