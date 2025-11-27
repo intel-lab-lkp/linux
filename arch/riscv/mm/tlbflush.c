@@ -97,6 +97,7 @@ void flush_tlb_all(void)
 }
 
 struct flush_tlb_range_data {
+	struct mm_struct *mm;
 	unsigned long asid;
 	unsigned long start;
 	unsigned long size;
@@ -109,7 +110,8 @@ DEFINE_PER_CPU_SHARED_ALIGNED(struct tlb_info, tlbinfo) = {
 	.rwlock = __RW_LOCK_UNLOCKED(tlbinfo.rwlock),
 	.active_mm = NULL,
 	.next_gen = 1,
-	.contexts = { { NULL, 0, }, },
+	.contexts = { { NULL, 0, false, }, },
+	.next_gen = 0,
 };
 
 static DEFINE_PER_CPU(mm_context_t *, mmdrop_victims);
@@ -155,6 +157,47 @@ static inline void mmdrop_lazy_mm(struct mm_struct *mm)
 	}
 }
 
+static bool should_ipi_flush(int cpu, void *data)
+{
+	struct tlb_info *info = per_cpu_ptr(&tlbinfo, cpu);
+	struct tlb_context *contexts = info->contexts;
+	struct tlb_flush_queue *queue = NULL;
+	struct flush_tlb_range_data *ftd = data;
+	unsigned int i, index;
+	unsigned long flags;
+
+	if (info->active_mm == ftd->mm)
+		return true;
+
+	read_lock_irqsave(&info->rwlock, flags);
+
+	if (info->active_mm == ftd->mm) {
+		read_unlock_irqrestore(&info->rwlock, flags);
+		return true;
+	}
+
+	for (i = 0; i < MAX_LOADED_MM; i++) {
+		if (contexts[i].mm != ftd->mm)
+			continue;
+
+		queue = &info->flush_queues[i];
+		index = atomic_fetch_add_unless(&queue->len, 1, MAX_TLB_FLUSH_TASK);
+		if (index < MAX_TLB_FLUSH_TASK) {
+			queue->tasks[index].start = ftd->start;
+			queue->tasks[index].stride = ftd->stride;
+			queue->tasks[index].size = ftd->size;
+		} else {
+			queue->flag |= FLUSH_TLB_ALL_ASID;
+		}
+		contexts[i].need_flush = true;
+		break;
+	}
+
+	read_unlock_irqrestore(&info->rwlock, flags);
+
+	return false;
+}
+
 #endif /* CONFIG_RISCV_LAZY_TLB_FLUSH */
 
 static void __ipi_flush_tlb_range_asid(void *info)
@@ -185,11 +228,20 @@ static void __flush_tlb_range(struct mm_struct *mm,
 	} else {
 		struct flush_tlb_range_data ftd;
 
+		ftd.mm = mm;
 		ftd.asid = asid;
 		ftd.start = start;
 		ftd.size = size;
 		ftd.stride = stride;
-		on_each_cpu_mask(cmask, __ipi_flush_tlb_range_asid, &ftd, 1);
+#ifdef CONFIG_RISCV_LAZY_TLB_FLUSH
+		if (static_branch_unlikely(&use_asid_allocator) && mm)
+			on_each_cpu_cond_mask(should_ipi_flush,
+					      __ipi_flush_tlb_range_asid,
+					      &ftd, 1, cmask);
+		else
+#endif
+			on_each_cpu_mask(cmask, __ipi_flush_tlb_range_asid,
+					 &ftd, 1);
 	}
 
 	put_cpu();
@@ -374,6 +426,21 @@ void local_flush_tlb_mm(struct mm_struct *mm)
 	}
 
 	local_flush_tlb_all_asid(asid);
+}
+
+void __init lazy_tlb_flush_init(void)
+{
+	struct tlb_flush_queue *queue;
+	unsigned int cpu, size;
+
+	size = MAX_LOADED_MM * sizeof(struct tlb_flush_queue);
+	for_each_possible_cpu(cpu) {
+		queue = kzalloc_node(size, GFP_KERNEL, cpu_to_node(cpu));
+		if (!queue)
+			panic("Failed to alloc per cpu tlb flush queue\n");
+
+		per_cpu(tlbinfo, cpu).flush_queues = queue;
+	}
 }
 
 #endif /* CONFIG_RISCV_LAZY_TLB_FLUSH */

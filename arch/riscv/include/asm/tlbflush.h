@@ -75,23 +75,40 @@ extern unsigned long tlb_flush_all_threshold;
 #ifdef CONFIG_RISCV_LAZY_TLB_FLUSH
 
 #define MAX_LOADED_MM					6
+#define MAX_TLB_FLUSH_TASK				32
+#define FLUSH_TLB_ALL_ASID				0x1
 
 struct tlb_context {
 	struct mm_struct *mm;
 	unsigned int gen;
+	bool need_flush;
 };
+
+struct tlb_flush_task {
+	unsigned long start;
+	unsigned long size;
+	unsigned long stride;
+};
+
+struct tlb_flush_queue {
+	atomic_t len;
+	unsigned int flag;
+	struct tlb_flush_task tasks[MAX_TLB_FLUSH_TASK];
+} ____cacheline_aligned_in_smp;
 
 struct tlb_info {
 	rwlock_t rwlock;
 	struct mm_struct *active_mm;
 	unsigned int next_gen;
 	struct tlb_context contexts[MAX_LOADED_MM];
+	struct tlb_flush_queue *flush_queues;
 };
 
 DECLARE_PER_CPU_SHARED_ALIGNED(struct tlb_info, tlbinfo);
 
 void local_load_tlb_mm(struct mm_struct *mm);
 void local_flush_tlb_mm(struct mm_struct *mm);
+void __init lazy_tlb_flush_init(void);
 
 #else /* CONFIG_RISCV_LAZY_TLB_FLUSH */
 
@@ -101,6 +118,8 @@ static inline void local_flush_tlb_mm(struct mm_struct *mm)
 {
 	local_flush_tlb_all_asid(get_mm_asid(mm));
 }
+
+static inline void lazy_tlb_flush_init(void) {}
 
 #endif /* CONFIG_RISCV_LAZY_TLB_FLUSH */
 

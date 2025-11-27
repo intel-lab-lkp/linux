@@ -263,6 +263,8 @@ static int __init asids_init(void)
 
 		__set_bit(0, context_asid_map);
 
+		lazy_tlb_flush_init();
+
 		static_branch_enable(&use_asid_allocator);
 
 		pr_info("ASID allocator using %lu bits (%lu entries)\n",
