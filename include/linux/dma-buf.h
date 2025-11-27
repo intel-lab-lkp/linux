@@ -568,6 +568,7 @@ static inline bool dma_buf_is_dynamic(struct dma_buf *dmabuf)
 	return !!dmabuf->ops->pin;
 }
 
+#ifdef CONFIG_DMA_SHARED_BUFFER
 struct dma_buf_attachment *dma_buf_attach(struct dma_buf *dmabuf,
 					  struct device *dev);
 struct dma_buf_attachment *
@@ -609,4 +610,119 @@ int dma_buf_vmap_unlocked(struct dma_buf *dmabuf, struct iosys_map *map);
 void dma_buf_vunmap_unlocked(struct dma_buf *dmabuf, struct iosys_map *map);
 struct dma_buf *dma_buf_iter_begin(void);
 struct dma_buf *dma_buf_iter_next(struct dma_buf *dmbuf);
+
+#else
+static inline struct dma_buf_attachment *dma_buf_attach(struct dma_buf *dmabuf,
+							struct device *dev)
+{
+	return NULL;
+}
+
+static inline struct dma_buf_attachment *
+dma_buf_dynamic_attach(struct dma_buf *dmabuf, struct device *dev,
+		       const struct dma_buf_attach_ops *importer_ops,
+		       void *importer_priv)
+{
+	return NULL;
+}
+
+static inline void dma_buf_detach(struct dma_buf *dmabuf,
+				  struct dma_buf_attachment *attach) { }
+
+static inline int dma_buf_pin(struct dma_buf_attachment *attach)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline void dma_buf_unpin(struct dma_buf_attachment *attach) { }
+
+static inline struct dma_buf *
+dma_buf_export(const struct dma_buf_export_info *exp_info)
+{
+	return NULL;
+}
+
+
+static inline int dma_buf_fd(struct dma_buf *dmabuf, int flags)
+{
+	return -EOPNOTSUPP;
+}
+
+
+static inline struct dma_buf *dma_buf_get(int fd)
+{
+	return NULL;
+}
+
+static inline void dma_buf_put(struct dma_buf *dmabuf) { }
+
+static inline struct sg_table *
+dma_buf_map_attachment(struct dma_buf_attachment *, enum dma_data_direction)
+{
+	return NULL;
+}
+
+static inline void dma_buf_unmap_attachment(struct dma_buf_attachment *,
+					    struct sg_table *,
+					    enum dma_data_direction) { }
+
+static inline void dma_buf_move_notify(struct dma_buf *dma_buf) { }
+
+static inline int dma_buf_begin_cpu_access(struct dma_buf *dma_buf,
+					   enum dma_data_direction dir)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int dma_buf_end_cpu_access(struct dma_buf *dma_buf,
+					 enum dma_data_direction dir)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline struct sg_table *
+dma_buf_map_attachment_unlocked(struct dma_buf_attachment *attach,
+				enum dma_data_direction direction)
+{
+	return NULL;
+}
+
+static inline void
+dma_buf_unmap_attachment_unlocked(struct dma_buf_attachment *attach,
+				  struct sg_table *sg_table,
+				  enum dma_data_direction direction) { }
+
+static inline int dma_buf_mmap(struct dma_buf *, struct vm_area_struct *,
+			       unsigned long)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int dma_buf_vmap(struct dma_buf *dmabuf, struct iosys_map *map)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline void dma_buf_vunmap(struct dma_buf *dmabuf, struct iosys_map *map)
+{ }
+
+static inline int dma_buf_vmap_unlocked(struct dma_buf *dmabuf,
+					struct iosys_map *map)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline void dma_buf_vunmap_unlocked(struct dma_buf *dmabuf,
+					   struct iosys_map *map) { }
+
+static inline struct dma_buf *dma_buf_iter_begin(void)
+{
+	return NULL;
+}
+
+static inline struct dma_buf *dma_buf_iter_next(struct dma_buf *dmbuf)
+{
+	return NULL;
+}
+#endif /* CONFIG_DMA_SHARED_BUFFER */
 #endif /* __DMA_BUF_H__ */
