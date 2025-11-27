@@ -1368,6 +1368,41 @@ static bool suppress_message_printing(int level, int con_eff_level)
 	return (level >= con_eff_level && !ignore_loglevel);
 }
 
+/**
+ * suppress_message_printing_everywhere - Check if message is suppressed on all consoles
+ *
+ * @level:	The loglevel of the message to check
+ *
+ * Iterates over all registered consoles and determines whether the message
+ * would be suppressed on every one of them based on their effective loglevels.
+ *
+ * This is used by printk_delay() to avoid applying delays for messages that
+ * no console will actually print.
+ *
+ * Return: true if the message would be suppressed on all consoles, false if
+ * at least one console would print it
+ */
+static bool suppress_message_printing_everywhere(int level)
+{
+	bool suppress_everywhere = true;
+	struct console *con;
+	int cookie;
+
+	cookie = console_srcu_read_lock();
+
+	for_each_console_srcu(con) {
+		int con_level = console_srcu_read_loglevel(con);
+
+		if (!suppress_message_printing(level, console_effective_loglevel(con_level))) {
+			suppress_everywhere = false;
+			break;
+		}
+	}
+	console_srcu_read_unlock(cookie);
+
+	return suppress_everywhere;
+}
+
 #ifdef CONFIG_BOOT_PRINTK_DELAY
 
 static int boot_delay; /* msecs delay after each printk during bootup */
@@ -2199,7 +2234,8 @@ int printk_delay_msec __read_mostly;
 static inline void printk_delay(int level)
 {
 	/* If the message is forced (e.g. panic), we must delay */
-	if (!is_printk_force_console() && suppress_message_printing(level, console_loglevel))
+	if (!is_printk_force_console() &&
+	    suppress_message_printing_everywhere(level))
 		return;
 
 	boot_delay_msec();
