@@ -26,13 +26,12 @@ pub const PAGE_SIZE: usize = bindings::PAGE_SIZE;
 pub const PAGE_MASK: usize = !(PAGE_SIZE - 1);
 
 /// Round up the given number to the next multiple of [`PAGE_SIZE`].
-///
-/// It is incorrect to pass an address where the next multiple of [`PAGE_SIZE`] doesn't fit in a
-/// [`usize`].
-pub const fn page_align(addr: usize) -> usize {
-    // Parentheses around `PAGE_SIZE - 1` to avoid triggering overflow sanitizers in the wrong
-    // cases.
-    (addr + (PAGE_SIZE - 1)) & PAGE_MASK
+/// Return None in cases where the next multiple of [`PAGE_SIZE`] would overflow a [`usize`]
+pub const fn page_align(addr: usize) -> Option<usize> {
+    if let Some(sum) = addr.checked_add(PAGE_SIZE - 1) {
+        return Some(sum & PAGE_MASK);
+    }
+    None
 }
 
 /// Representation of a non-owning reference to a [`Page`].
