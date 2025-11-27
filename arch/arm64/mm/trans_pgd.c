@@ -40,8 +40,13 @@ static void _copy_pte(pte_t *dst_ptep, pte_t *src_ptep, unsigned long addr)
 		 * Resume will overwrite areas that may be marked
 		 * read only (code, rodata). Clear the RDONLY bit from
 		 * the temporary mappings we use during restore.
+		 *
+		 * For kexec/hibernation, we need writable access regardless
+		 * of the page's dirty state, so force clear PTE_RDONLY.
 		 */
-		__set_pte(dst_ptep, pte_mkwrite_novma(pte));
+		pte = set_pte_bit(pte, __pgprot(PTE_WRITE));
+		pte = clear_pte_bit(pte, __pgprot(PTE_RDONLY));
+		__set_pte(dst_ptep, pte);
 	} else if (!pte_none(pte)) {
 		/*
 		 * debug_pagealloc will removed the PTE_VALID bit if
@@ -57,7 +62,10 @@ static void _copy_pte(pte_t *dst_ptep, pte_t *src_ptep, unsigned long addr)
 		 */
 		BUG_ON(!pfn_valid(pte_pfn(pte)));
 
-		__set_pte(dst_ptep, pte_mkvalid(pte_mkwrite_novma(pte)));
+		pte = pte_mkvalid(pte);
+		pte = set_pte_bit(pte, __pgprot(PTE_WRITE));
+		pte = clear_pte_bit(pte, __pgprot(PTE_RDONLY));
+		__set_pte(dst_ptep, pte);
 	}
 }
 
