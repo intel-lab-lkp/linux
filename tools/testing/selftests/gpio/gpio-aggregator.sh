@@ -351,7 +351,7 @@ test "$(agg_get_chip_num_lines _sysfs.0)" = "1" || fail "number of lines is not 
 test "$(agg_get_line_name _sysfs.0 0)" = "" || fail "line name is unset"
 echo "$(agg_configfs_dev_name _sysfs.0)" > "$SYSFS_AGG_DIR/delete_device"
 test -d $CONFIGFS_AGG_DIR/_sysfs.0 && fail "_sysfs.0 unexpectedly remains"
-test -d /dev/${CHIPNAME} && fail "/dev/${CHIPNAME} unexpectedly remains"
+test -c /dev/${CHIPNAME} && fail "/dev/${CHIPNAME} unexpectedly remains"
 
 echo "1.2.2. Complex creation/deletion"
 echo "chip0bank0_0 chip1_bank1 10-11" > "$SYSFS_AGG_DIR/new_device"
@@ -365,7 +365,7 @@ test "$(agg_get_line_name _sysfs.0 1)" = "" || fail "line name is unset"
 test "$(agg_get_line_name _sysfs.0 2)" = "" || fail "line name is unset"
 echo "$(agg_configfs_dev_name _sysfs.0)" > "$SYSFS_AGG_DIR/delete_device"
 test -d $CONFIGFS_AGG_DIR/_sysfs.0 && fail "_sysfs.0 unexpectedly remains"
-test -d /dev/${CHIPNAME} && fail "/dev/${CHIPNAME} unexpectedly remains"
+test -c /dev/${CHIPNAME} && fail "/dev/${CHIPNAME} unexpectedly remains"
 
 echo "1.2.3. Asynchronous creation with deferred probe"
 sim_disable_chip  chip0
@@ -382,7 +382,7 @@ test "$(agg_get_chip_num_lines _sysfs.0)" = "1" || fail "number of lines is not 
 test "$(agg_get_line_name _sysfs.0 0)" = "" || fail "line name unexpectedly set"
 echo "$(agg_configfs_dev_name _sysfs.0)" > "$SYSFS_AGG_DIR/delete_device"
 test -d $CONFIGFS_AGG_DIR/_sysfs.0 && fail "_sysfs.0 unexpectedly remains"
-test -d /dev/${CHIPNAME} && fail "/dev/${CHIPNAME} unexpectedly remains"
+test -c /dev/${CHIPNAME} && fail "/dev/${CHIPNAME} unexpectedly remains"
 
 echo "1.2.4. Can't instantiate a chip with invalid configuration"
 echo "xyz 0" > "$SYSFS_AGG_DIR/new_device"
