@@ -66,6 +66,33 @@ void arch_tlbbatch_add_pending(struct arch_tlbflush_unmap_batch *batch,
 void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch);
 
 extern unsigned long tlb_flush_all_threshold;
+
+#ifdef CONFIG_RISCV_LAZY_TLB_FLUSH
+
+#define MAX_LOADED_MM					6
+
+struct tlb_context {
+	struct mm_struct *mm;
+	unsigned int gen;
+};
+
+struct tlb_info {
+	rwlock_t rwlock;
+	struct mm_struct *active_mm;
+	unsigned int next_gen;
+	struct tlb_context contexts[MAX_LOADED_MM];
+};
+
+DECLARE_PER_CPU_SHARED_ALIGNED(struct tlb_info, tlbinfo);
+
+void local_load_tlb_mm(struct mm_struct *mm);
+
+#else /* CONFIG_RISCV_LAZY_TLB_FLUSH */
+
+static inline void local_load_tlb_mm(struct mm_struct *mm) {}
+
+#endif /* CONFIG_RISCV_LAZY_TLB_FLUSH */
+
 #else /* CONFIG_MMU */
 #define local_flush_tlb_all()			do { } while (0)
 #endif /* CONFIG_MMU */

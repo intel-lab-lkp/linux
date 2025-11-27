@@ -103,6 +103,15 @@ struct flush_tlb_range_data {
 	unsigned long stride;
 };
 
+#ifdef CONFIG_RISCV_LAZY_TLB_FLUSH
+DEFINE_PER_CPU_SHARED_ALIGNED(struct tlb_info, tlbinfo) = {
+	.rwlock = __RW_LOCK_UNLOCKED(tlbinfo.rwlock),
+	.active_mm = NULL,
+	.next_gen = 1,
+	.contexts = { { NULL, 0, }, },
+};
+#endif /* CONFIG_RISCV_LAZY_TLB_FLUSH */
+
 static void __ipi_flush_tlb_range_asid(void *info)
 {
 	struct flush_tlb_range_data *d = info;
@@ -240,3 +249,60 @@ void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 			  0, FLUSH_TLB_MAX_SIZE, PAGE_SIZE);
 	cpumask_clear(&batch->cpumask);
 }
+
+#ifdef CONFIG_RISCV_LAZY_TLB_FLUSH
+
+static inline unsigned int new_tlb_gen(struct tlb_info *info)
+{
+	unsigned int gen = info->next_gen++;
+	unsigned int i;
+
+	if (unlikely(!info->next_gen)) {
+		for (i = 0; i < MAX_LOADED_MM; i++) {
+			if (info->contexts[i].gen)
+				info->contexts[i].gen = 1;
+		}
+		info->next_gen = 1;
+		gen = info->next_gen++;
+	}
+
+	return gen;
+}
+
+void local_load_tlb_mm(struct mm_struct *mm)
+{
+	struct tlb_info *info = this_cpu_ptr(&tlbinfo);
+	struct tlb_context *contexts = info->contexts;
+	struct mm_struct *victim = NULL;
+	unsigned int i, pos = 0, min = UINT_MAX;
+
+	for (i = 0; i < MAX_LOADED_MM; i++) {
+		if (contexts[i].mm == mm) {
+			pos = i;
+			break;
+		}
+		if (min > contexts[i].gen) {
+			min = contexts[i].gen;
+			pos = i;
+		}
+	}
+
+	write_lock(&info->rwlock);
+
+	info->active_mm = mm;
+
+	if (contexts[pos].mm != mm) {
+		victim = contexts[pos].mm;
+		contexts[pos].mm = mm;
+	}
+	contexts[pos].gen = new_tlb_gen(info);
+
+	write_unlock(&info->rwlock);
+
+	if (victim) {
+		cpumask_clear_cpu(raw_smp_processor_id(), mm_cpumask(victim));
+		local_flush_tlb_all_asid(get_mm_asid(victim));
+	}
+}
+
+#endif /* CONFIG_RISCV_LAZY_TLB_FLUSH */

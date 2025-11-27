@@ -217,6 +217,7 @@ static inline void set_mm(struct mm_struct *prev,
 	 */
 	cpumask_set_cpu(cpu, mm_cpumask(next));
 	if (static_branch_unlikely(&use_asid_allocator)) {
+		local_load_tlb_mm(next);
 		set_mm_asid(next, cpu);
 	} else {
 		cpumask_clear_cpu(cpu, mm_cpumask(prev));
