@@ -4,6 +4,7 @@
  *
  * Based on ipt_random and ipt_nth by Fabrice MARIE <fabrice@netfilter.org>.
  */
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/init.h>
 #include <linux/spinlock.h>
@@ -26,7 +27,12 @@ MODULE_DESCRIPTION("Xtables: statistics-based matching (\"Nth\", random)");
 MODULE_ALIAS("ipt_statistic");
 MODULE_ALIAS("ip6t_statistic");
 
-static int gso_pkt_cnt(const struct sk_buff *skb)
+enum gso_type {
+	SKB_GSO_FRAGS_LIST,
+	SKB_GSO_FRAGS_ARRAY
+};
+
+static int gso_pkt_cnt(const struct sk_buff *skb, enum gso_type *type)
 {
 	int pkt_cnt = 1;
 
@@ -39,9 +45,11 @@ static int gso_pkt_cnt(const struct sk_buff *skb)
 	if (skb_has_frag_list(skb)) {
 		struct sk_buff *iter;
 
+		*type = SKB_GSO_FRAGS_LIST;
 		skb_walk_frags(skb, iter)
 			pkt_cnt++;
 	} else {
+		*type = SKB_GSO_FRAGS_ARRAY;
 		pkt_cnt += skb_shinfo(skb)->nr_frags;
 	}
 
@@ -54,9 +62,10 @@ statistic_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	const struct xt_statistic_info *info = par->matchinfo;
 	struct xt_statistic_priv *priv = info->master;
 	bool ret = info->flags & XT_STATISTIC_INVERT;
+	enum gso_type gso_type;
+	bool match = false;
 	u32 nval, oval;
 	int pkt_cnt;
-	bool match;
 
 	switch (info->mode) {
 	case XT_STATISTIC_MODE_RANDOM:
@@ -64,7 +73,7 @@ statistic_mt(const struct sk_buff *skb, struct xt_action_param *par)
 			ret = !ret;
 		break;
 	case XT_STATISTIC_MODE_NTH:
-		pkt_cnt = gso_pkt_cnt(skb);
+		pkt_cnt = gso_pkt_cnt(skb, &gso_type);
 		do {
 			match = false;
 			oval = this_cpu_read(*priv->cnt_pcpu);
@@ -79,7 +88,7 @@ statistic_mt(const struct sk_buff *skb, struct xt_action_param *par)
 			ret = !ret;
 		break;
 	case XT_STATISTIC_MODE_NTH_ATOMIC:
-		pkt_cnt = gso_pkt_cnt(skb);
+		pkt_cnt = gso_pkt_cnt(skb, &gso_type);
 		do {
 			match = false;
 			oval = atomic_read(&priv->count);
@@ -94,6 +103,10 @@ statistic_mt(const struct sk_buff *skb, struct xt_action_param *par)
 			ret = !ret;
 		break;
 	}
+
+	if (match)
+		pr_info("debug XXX: SKB is GRO type:%d contains %d packets\n",
+			gso_type, pkt_cnt);
 
 	return ret;
 }
@@ -154,11 +167,13 @@ static struct xt_match xt_statistic_mt_reg __read_mostly = {
 
 static int __init statistic_mt_init(void)
 {
+	pr_info("module init\n");
 	return xt_register_match(&xt_statistic_mt_reg);
 }
 
 static void __exit statistic_mt_exit(void)
 {
+	pr_info("module exit\n");
 	xt_unregister_match(&xt_statistic_mt_reg);
 }
 
