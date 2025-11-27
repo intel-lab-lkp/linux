@@ -2233,20 +2233,31 @@ int printk_delay_msec __read_mostly;
 
 static inline void printk_delay(int level)
 {
+	bool boot_delay_active = false;
+	int m;
+
+#ifdef CONFIG_BOOT_PRINTK_DELAY
+	boot_delay_active = boot_delay && system_state < SYSTEM_RUNNING;
+#endif
+
+	if (!boot_delay_active && !READ_ONCE(printk_delay_msec))
+		return;
+
 	/* If the message is forced (e.g. panic), we must delay */
 	if (!is_printk_force_console() &&
 	    suppress_message_printing_everywhere(level))
 		return;
 
-	boot_delay_msec();
+	if (boot_delay_active)
+		boot_delay_msec();
 
-	if (unlikely(printk_delay_msec)) {
-		int m = printk_delay_msec;
+	m = READ_ONCE(printk_delay_msec);
+	if (!m)
+		return;
 
-		while (m--) {
-			mdelay(1);
-			touch_nmi_watchdog();
-		}
+	while (m--) {
+		mdelay(1);
+		touch_nmi_watchdog();
 	}
 }
 
