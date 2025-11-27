@@ -585,6 +585,8 @@ struct amdgpu_display_manager {
 	 */
 	uint32_t active_vblank_irq_count;
 
+	bool prepare_vbl_disallow_idle
+
 #if defined(CONFIG_DRM_AMD_SECURE_DISPLAY)
 	/**
 	 * @secure_display_ctx:

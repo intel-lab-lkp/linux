@@ -656,6 +656,10 @@ int amdgpu_dm_crtc_set_crc_source(struct drm_crtc *crtc, const char *src_name)
 	 */
 	enabled = amdgpu_dm_is_valid_crc_source(cur_crc_src);
 	if (!enabled && enable) {
+		ret = drm_crtc_vblank_prepare(crtc);
+		if (ret)
+			goto cleanup;
+
 		ret = drm_crtc_vblank_get(crtc);
 		if (ret)
 			goto cleanup;
