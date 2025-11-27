@@ -1869,6 +1869,8 @@ int do_syslog(int type, char __user *buf, int len, int source)
 	struct printk_info info;
 	bool clear = false;
 	static int saved_console_loglevel = LOGLEVEL_DEFAULT;
+	static bool saved_ignore_per_console_loglevel;
+	static bool saved_ignore_per_console_loglevel_forced;
 	int error;
 
 	error = check_syslog_permissions(type, source);
@@ -1910,9 +1912,23 @@ int do_syslog(int type, char __user *buf, int len, int source)
 	/* Disable logging to console */
 	case SYSLOG_ACTION_CONSOLE_OFF:
 		mutex_lock(&syslog_lock);
-		if (saved_console_loglevel == LOGLEVEL_DEFAULT)
+		if (saved_console_loglevel == LOGLEVEL_DEFAULT) {
 			saved_console_loglevel = console_loglevel;
+			saved_ignore_per_console_loglevel = ignore_per_console_loglevel;
+			saved_ignore_per_console_loglevel_forced = false;
+		}
 		console_loglevel = minimum_console_loglevel;
+		if (!ignore_per_console_loglevel) {
+			/*
+			 * Only remember the saved value if this path actually
+			 * forced the override. Other contexts (sysrq, module
+			 * parameter writes, etc.) can legitimately toggle the
+			 * flag in parallel, so blindly restoring it later would
+			 * resurrect stale state.
+			 */
+			ignore_per_console_loglevel = true;
+			saved_ignore_per_console_loglevel_forced = true;
+		}
 		mutex_unlock(&syslog_lock);
 		break;
 	/* Enable logging to console */
@@ -1920,20 +1936,41 @@ int do_syslog(int type, char __user *buf, int len, int source)
 		mutex_lock(&syslog_lock);
 		if (saved_console_loglevel != LOGLEVEL_DEFAULT) {
 			console_loglevel = saved_console_loglevel;
+			if (saved_ignore_per_console_loglevel_forced)
+				ignore_per_console_loglevel = saved_ignore_per_console_loglevel;
 			saved_console_loglevel = LOGLEVEL_DEFAULT;
+			saved_ignore_per_console_loglevel_forced = false;
 		}
 		mutex_unlock(&syslog_lock);
 		break;
 	/* Set level of messages printed to console */
-	case SYSLOG_ACTION_CONSOLE_LEVEL:
-		if (len < 1 || len > 8)
+	case SYSLOG_ACTION_CONSOLE_LEVEL: {
+		int new_level = len;
+
+		if (!ignore_per_console_loglevel)
+			pr_warn_once(
+				"SYSLOG_ACTION_CONSOLE_LEVEL is ignored by consoles with an explicitly set per-console loglevel, see Documentation/admin-guide/per-console-loglevel.rst\n");
+		if (new_level < 1 || new_level > 8)
 			return -EINVAL;
-		if (len < minimum_console_loglevel)
-			len = minimum_console_loglevel;
-		console_loglevel = len;
-		/* Implicitly re-enable logging to console */
-		saved_console_loglevel = LOGLEVEL_DEFAULT;
+		if (new_level < minimum_console_loglevel)
+			new_level = minimum_console_loglevel;
+
+		mutex_lock(&syslog_lock);
+		console_loglevel = new_level;
+		/*
+		 * If SYSLOG_ACTION_CONSOLE_OFF forced ignore_per_console_loglevel,
+		 * restore the previous setting so per-console loglevels continue
+		 * to work after administrators re-enable logging via syslog().
+		 */
+		if (saved_console_loglevel != LOGLEVEL_DEFAULT) {
+			if (saved_ignore_per_console_loglevel_forced)
+				ignore_per_console_loglevel = saved_ignore_per_console_loglevel;
+			saved_console_loglevel = LOGLEVEL_DEFAULT;
+			saved_ignore_per_console_loglevel_forced = false;
+		}
+		mutex_unlock(&syslog_lock);
 		break;
+	}
 	/* Number of chars in the log buffer */
 	case SYSLOG_ACTION_SIZE_UNREAD:
 		mutex_lock(&syslog_lock);
