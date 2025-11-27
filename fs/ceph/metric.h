@@ -25,8 +25,9 @@ enum ceph_metric_type {
 	CLIENT_METRIC_TYPE_STDEV_WRITE_LATENCY,
 	CLIENT_METRIC_TYPE_AVG_METADATA_LATENCY,
 	CLIENT_METRIC_TYPE_STDEV_METADATA_LATENCY,
+	CLIENT_METRIC_TYPE_SUBVOLUME_METRICS,
 
-	CLIENT_METRIC_TYPE_MAX = CLIENT_METRIC_TYPE_STDEV_METADATA_LATENCY,
+	CLIENT_METRIC_TYPE_MAX = CLIENT_METRIC_TYPE_SUBVOLUME_METRICS,
 };
 
 /*
@@ -50,6 +51,7 @@ enum ceph_metric_type {
 	CLIENT_METRIC_TYPE_STDEV_WRITE_LATENCY,	   \
 	CLIENT_METRIC_TYPE_AVG_METADATA_LATENCY,   \
 	CLIENT_METRIC_TYPE_STDEV_METADATA_LATENCY, \
+	CLIENT_METRIC_TYPE_SUBVOLUME_METRICS,	   \
 						   \
 	CLIENT_METRIC_TYPE_MAX,			   \
 }
@@ -137,6 +139,29 @@ struct ceph_write_io_size {
 	struct ceph_metric_header header;
 	__le64 total_ops;
 	__le64 total_size;
+} __packed;
+
+/* Wire format for subvolume metrics - matches C++ AggregatedIOMetrics */
+struct ceph_subvolume_metric_entry_wire {
+	__le64 subvolume_id;
+	__le32 read_ops;
+	__le32 write_ops;
+	__le64 read_bytes;
+	__le64 write_bytes;
+	__le64 read_latency_us;
+	__le64 write_latency_us;
+	__le64 time_stamp;
+} __packed;
+
+/* Old struct kept for internal tracking, not used on wire */
+struct ceph_subvolume_metric_entry {
+	__le64 subvolume_id;
+	__le64 read_ops;
+	__le64 write_ops;
+	__le64 read_bytes;
+	__le64 write_bytes;
+	__le64 read_latency_us;
+	__le64 write_latency_us;
 } __packed;
 
 struct ceph_metric_head {

@@ -67,6 +67,22 @@ static void ceph_cap_reclaim_work(struct work_struct *work);
 
 static const struct ceph_connection_operations mds_con_ops;
 
+static void ceph_metric_bind_session(struct ceph_mds_client *mdsc,
+				     struct ceph_mds_session *session)
+{
+	struct ceph_mds_session *old;
+
+	if (!mdsc || !session || disable_send_metrics)
+		return;
+
+	old = mdsc->metric.session;
+	mdsc->metric.session = ceph_get_mds_session(session);
+	if (old)
+		ceph_put_mds_session(old);
+
+	metric_schedule_delayed(&mdsc->metric);
+}
+
 
 /*
  * mds reply parsing
@@ -95,21 +111,23 @@ bad:
 	return -EIO;
 }
 
-/*
- * parse individual inode info
- */
 static int parse_reply_info_in(void **p, void *end,
 			       struct ceph_mds_reply_info_in *info,
-			       u64 features)
+			       u64 features,
+			       struct ceph_mds_client *mdsc)
 {
 	int err = 0;
 	u8 struct_v = 0;
+	u8 struct_compat = 0;
+	u32 struct_len = 0;
+	struct ceph_client *cl = mdsc ? mdsc->fsc->client : NULL;
+
+	info->subvolume_id = 0;
+	doutc(cl, "subv_metric parse start features=0x%llx\n", features);
 
 	info->subvolume_id = 0;
 
 	if (features == (u64)-1) {
-		u32 struct_len;
-		u8 struct_compat;
 		ceph_decode_8_safe(p, end, struct_v, bad);
 		ceph_decode_8_safe(p, end, struct_compat, bad);
 		/* struct_v is expected to be >= 1. we only understand
@@ -381,12 +399,13 @@ bad:
  */
 static int parse_reply_info_trace(void **p, void *end,
 				  struct ceph_mds_reply_info_parsed *info,
-				  u64 features)
+				  u64 features,
+				  struct ceph_mds_client *mdsc)
 {
 	int err;
 
 	if (info->head->is_dentry) {
-		err = parse_reply_info_in(p, end, &info->diri, features);
+		err = parse_reply_info_in(p, end, &info->diri, features, mdsc);
 		if (err < 0)
 			goto out_bad;
 
@@ -406,7 +425,8 @@ static int parse_reply_info_trace(void **p, void *end,
 	}
 
 	if (info->head->is_target) {
-		err = parse_reply_info_in(p, end, &info->targeti, features);
+		err = parse_reply_info_in(p, end, &info->targeti, features,
+					  mdsc);
 		if (err < 0)
 			goto out_bad;
 	}
@@ -427,7 +447,8 @@ out_bad:
  */
 static int parse_reply_info_readdir(void **p, void *end,
 				    struct ceph_mds_request *req,
-				    u64 features)
+				    u64 features,
+				    struct ceph_mds_client *mdsc)
 {
 	struct ceph_mds_reply_info_parsed *info = &req->r_reply_info;
 	struct ceph_client *cl = req->r_mdsc->fsc->client;
@@ -542,7 +563,7 @@ static int parse_reply_info_readdir(void **p, void *end,
 		rde->name_len = oname.len;
 
 		/* inode */
-		err = parse_reply_info_in(p, end, &rde->inode, features);
+		err = parse_reply_info_in(p, end, &rde->inode, features, mdsc);
 		if (err < 0)
 			goto out_bad;
 		/* ceph_readdir_prepopulate() will update it */
@@ -750,7 +771,8 @@ static int parse_reply_info_extra(void **p, void *end,
 	if (op == CEPH_MDS_OP_GETFILELOCK)
 		return parse_reply_info_filelock(p, end, info, features);
 	else if (op == CEPH_MDS_OP_READDIR || op == CEPH_MDS_OP_LSSNAP)
-		return parse_reply_info_readdir(p, end, req, features);
+		return parse_reply_info_readdir(p, end, req, features,
+						req->r_mdsc);
 	else if (op == CEPH_MDS_OP_CREATE)
 		return parse_reply_info_create(p, end, info, features, s);
 	else if (op == CEPH_MDS_OP_GETVXATTR)
@@ -779,7 +801,8 @@ static int parse_reply_info(struct ceph_mds_session *s, struct ceph_msg *msg,
 	ceph_decode_32_safe(&p, end, len, bad);
 	if (len > 0) {
 		ceph_decode_need(&p, end, len, bad);
-		err = parse_reply_info_trace(&p, p+len, info, features);
+		err = parse_reply_info_trace(&p, p + len, info, features,
+					     s->s_mdsc);
 		if (err < 0)
 			goto out_bad;
 	}
@@ -788,7 +811,7 @@ static int parse_reply_info(struct ceph_mds_session *s, struct ceph_msg *msg,
 	ceph_decode_32_safe(&p, end, len, bad);
 	if (len > 0) {
 		ceph_decode_need(&p, end, len, bad);
-		err = parse_reply_info_extra(&p, p+len, req, features, s);
+		err = parse_reply_info_extra(&p, p + len, req, features, s);
 		if (err < 0)
 			goto out_bad;
 	}
@@ -4318,6 +4341,11 @@ skip_cap_auths:
 		}
 		mdsc->s_cap_auths_num = cap_auths_num;
 		mdsc->s_cap_auths = cap_auths;
+
+		session->s_features = features;
+		if (test_bit(CEPHFS_FEATURE_METRIC_COLLECT,
+			     &session->s_features))
+			ceph_metric_bind_session(mdsc, session);
 	}
 	if (op == CEPH_SESSION_CLOSE) {
 		ceph_get_mds_session(session);
@@ -4344,7 +4372,11 @@ skip_cap_auths:
 			pr_info_client(cl, "mds%d reconnect success\n",
 				       session->s_mds);
 
-		session->s_features = features;
+		if (test_bit(CEPHFS_FEATURE_SUBVOLUME_METRICS,
+			     &session->s_features))
+			ceph_subvolume_metrics_enable(&mdsc->subvol_metrics, true);
+		else
+			ceph_subvolume_metrics_enable(&mdsc->subvol_metrics, false);
 		if (session->s_state == CEPH_MDS_SESSION_OPEN) {
 			pr_notice_client(cl, "mds%d is already opened\n",
 					 session->s_mds);
@@ -5583,6 +5615,12 @@ int ceph_mdsc_init(struct ceph_fs_client *fsc)
 	err = ceph_metric_init(&mdsc->metric);
 	if (err)
 		goto err_mdsmap;
+	ceph_subvolume_metrics_init(&mdsc->subvol_metrics);
+	mutex_init(&mdsc->subvol_metrics_last_mutex);
+	mdsc->subvol_metrics_last = NULL;
+	mdsc->subvol_metrics_last_nr = 0;
+	mdsc->subvol_metrics_sent = 0;
+	mdsc->subvol_metrics_nonzero_sends = 0;
 
 	spin_lock_init(&mdsc->dentry_list_lock);
 	INIT_LIST_HEAD(&mdsc->dentry_leases);
@@ -6115,6 +6153,8 @@ void ceph_mdsc_destroy(struct ceph_fs_client *fsc)
 	ceph_mdsc_stop(mdsc);
 
 	ceph_metric_destroy(&mdsc->metric);
+	ceph_subvolume_metrics_destroy(&mdsc->subvol_metrics);
+	kfree(mdsc->subvol_metrics_last);
 
 	fsc->mdsc = NULL;
 	kfree(mdsc);

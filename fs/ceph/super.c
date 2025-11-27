@@ -21,6 +21,7 @@
 #include "mds_client.h"
 #include "cache.h"
 #include "crypto.h"
+#include "subvolume_metrics.h"
 
 #include <linux/ceph/ceph_features.h>
 #include <linux/ceph/decode.h>
