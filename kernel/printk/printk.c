@@ -200,6 +200,24 @@ static int __init control_devkmsg(char *str)
 }
 __setup("printk.devkmsg=", control_devkmsg);
 
+/**
+ * console_clamp_loglevel - Clamp a loglevel to valid console loglevel range
+ *
+ * @level: The loglevel to clamp
+ *
+ * Console loglevels must be within the range [LOGLEVEL_ALERT, LOGLEVEL_DEBUG + 1].
+ * This function clamps a given level to this valid range.
+ *
+ * Note: This does not allow LOGLEVEL_EMERG (0) for per-console loglevels, as
+ * level 0 is reserved for emergency messages that should always go to all consoles.
+ *
+ * Return: The clamped loglevel value
+ */
+int console_clamp_loglevel(int level)
+{
+	return clamp(level, LOGLEVEL_ALERT, LOGLEVEL_DEBUG + 1);
+}
+
 char devkmsg_log_str[DEVKMSG_STR_MAX_SIZE] = "ratelimit";
 #if defined(CONFIG_PRINTK) && defined(CONFIG_SYSCTL)
 int devkmsg_sysctl_set_loglvl(const struct ctl_table *table, int write,
@@ -4185,6 +4203,9 @@ void register_console(struct console *newcon)
 	u64 init_seq;
 	int err;
 
+	if (newcon->level == 0)
+		newcon->level = LOGLEVEL_DEFAULT;
+
 	console_list_lock();
 
 	for_each_console(con) {
@@ -4314,6 +4335,7 @@ void register_console(struct console *newcon)
 	if (use_device_lock)
 		newcon->device_unlock(newcon, flags);
 
+	console_register_device(newcon);
 	console_sysfs_notify();
 
 	/*
@@ -4428,6 +4450,13 @@ static int unregister_console_locked(struct console *console)
 	/* @have_nbcon_console must be updated before calling nbcon_free(). */
 	if (console->flags & CON_NBCON)
 		nbcon_free(console);
+
+	if (console->classdev) {
+		struct device *dev = console->classdev;
+
+		console->classdev = NULL;
+		device_unregister(dev);
+	}
 
 	console_sysfs_notify();
 
@@ -4578,6 +4607,9 @@ static int __init printk_late_init(void)
 					console_cpu_notify, NULL);
 	WARN_ON(ret < 0);
 	printk_sysctl_init();
+
+	console_setup_class();
+
 	return 0;
 }
 late_initcall(printk_late_init);

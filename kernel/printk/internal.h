@@ -21,6 +21,8 @@ enum loglevel_source {
 	LLS_IGNORE_LOGLEVEL,
 };
 
+int console_clamp_loglevel(int level);
+
 enum loglevel_source
 console_effective_loglevel_source(int con_level);
 int console_effective_loglevel(int con_level);
@@ -45,6 +47,9 @@ int console_effective_loglevel(int con_level);
 #endif
 
 #ifdef CONFIG_PRINTK
+
+void console_register_device(struct console *new);
+void console_setup_class(void);
 
 #ifdef CONFIG_PRINTK_CALLER
 #define PRINTK_PREFIX_MAX	48
@@ -216,6 +221,9 @@ static inline void nbcon_kthreads_wake(void) { }
 
 static inline bool console_is_usable(struct console *con, short flags,
 				     bool use_atomic) { return false; }
+
+static inline void console_register_device(struct console *new) { }
+static inline void console_setup_class(void) { }
 
 #endif /* CONFIG_PRINTK */
 
