@@ -2050,7 +2050,8 @@ static int dsc_compute_link_config(struct intel_dp *intel_dp,
 					continue;
 			} else {
 				if (!is_bw_sufficient_for_dsc_config(dsc_bpp_x16, link_rate,
-								     lane_count, adjusted_mode->clock,
+								     lane_count,
+								     adjusted_mode->crtc_clock,
 								     pipe_config->output_format,
 								     timeslots))
 					continue;
@@ -2211,7 +2212,7 @@ static int dsc_compute_compressed_bpp(struct intel_dp *intel_dp,
 	int bpp_x16;
 	int ret;
 
-	dsc_joiner_max_bpp = get_max_compressed_bpp_with_joiner(display, adjusted_mode->clock,
+	dsc_joiner_max_bpp = get_max_compressed_bpp_with_joiner(display, adjusted_mode->crtc_clock,
 								adjusted_mode->hdisplay,
 								num_joined_pipes);
 	max_bpp_x16 = min(fxp_q4_from_int(dsc_joiner_max_bpp), limits->link.max_bpp_x16);
