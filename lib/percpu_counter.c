@@ -185,11 +185,26 @@ s64 __percpu_counter_sum(struct percpu_counter *fbc)
 }
 EXPORT_SYMBOL(__percpu_counter_sum);
 
+static int cpu_hotplug_add_watchlist(struct percpu_counter *fbc, int nr_counters)
+{
+#ifdef CONFIG_HOTPLUG_CPU
+	unsigned long flags;
+	int i;
+
+	spin_lock_irqsave(&percpu_counters_lock, flags);
+	for (i = 0; i < nr_counters; i++) {
+		INIT_LIST_HEAD(&fbc[i].list);
+		list_add(&fbc[i].list, &percpu_counters);
+	}
+	spin_unlock_irqrestore(&percpu_counters_lock, flags);
+#endif
+	return 0;
+}
+
 int __percpu_counter_init_many(struct percpu_counter *fbc, s64 amount,
 			       gfp_t gfp, u32 nr_counters,
 			       struct lock_class_key *key)
 {
-	unsigned long flags __maybe_unused;
 	size_t counter_size;
 	s32 __percpu *counters;
 	u32 i;
@@ -205,21 +220,12 @@ int __percpu_counter_init_many(struct percpu_counter *fbc, s64 amount,
 	for (i = 0; i < nr_counters; i++) {
 		raw_spin_lock_init(&fbc[i].lock);
 		lockdep_set_class(&fbc[i].lock, key);
-#ifdef CONFIG_HOTPLUG_CPU
-		INIT_LIST_HEAD(&fbc[i].list);
-#endif
 		fbc[i].count = amount;
 		fbc[i].counters = (void __percpu *)counters + i * counter_size;
 
 		debug_percpu_counter_activate(&fbc[i]);
 	}
-
-#ifdef CONFIG_HOTPLUG_CPU
-	spin_lock_irqsave(&percpu_counters_lock, flags);
-	for (i = 0; i < nr_counters; i++)
-		list_add(&fbc[i].list, &percpu_counters);
-	spin_unlock_irqrestore(&percpu_counters_lock, flags);
-#endif
+	cpu_hotplug_add_watchlist(fbc, nr_counters);
 	return 0;
 }
 EXPORT_SYMBOL(__percpu_counter_init_many);
