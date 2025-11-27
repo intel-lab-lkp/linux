@@ -17,6 +17,7 @@
 
 struct xt_statistic_priv {
 	atomic_t count;
+	u32 __percpu *cnt_pcpu;
 } ____cacheline_aligned_in_smp;
 
 MODULE_LICENSE("GPL");
@@ -66,6 +67,21 @@ statistic_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		pkt_cnt = gso_pkt_cnt(skb);
 		do {
 			match = false;
+			oval = this_cpu_read(*priv->cnt_pcpu);
+			nval = oval + pkt_cnt;
+			if (nval > info->u.nth.every) {
+				match = true;
+				nval = nval - info->u.nth.every - 1;
+				nval = min(nval, info->u.nth.every);
+			}
+		} while (this_cpu_cmpxchg(*priv->cnt_pcpu, oval, nval) != oval);
+		if (match)
+			ret = !ret;
+		break;
+	case XT_STATISTIC_MODE_NTH_ATOMIC:
+		pkt_cnt = gso_pkt_cnt(skb);
+		do {
+			match = false;
 			oval = atomic_read(&priv->count);
 			nval = oval + pkt_cnt;
 			if (nval > info->u.nth.every) {
@@ -85,6 +101,10 @@ statistic_mt(const struct sk_buff *skb, struct xt_action_param *par)
 static int statistic_mt_check(const struct xt_mtchk_param *par)
 {
 	struct xt_statistic_info *info = par->matchinfo;
+	struct xt_statistic_priv *priv;
+	u32 *this_cpu;
+	u32 nth_count;
+	int cpu;
 
 	if (info->mode > XT_STATISTIC_MODE_MAX ||
 	    info->flags & ~XT_STATISTIC_MASK)
@@ -93,7 +113,21 @@ static int statistic_mt_check(const struct xt_mtchk_param *par)
 	info->master = kzalloc(sizeof(*info->master), GFP_KERNEL);
 	if (info->master == NULL)
 		return -ENOMEM;
-	atomic_set(&info->master->count, info->u.nth.count);
+	priv = info->master;
+
+	priv->cnt_pcpu = alloc_percpu(u32);
+	if (!priv->cnt_pcpu) {
+		kfree(priv);
+		return -ENOMEM;
+	}
+
+	/* Userspace specifies start nth.count value */
+	nth_count = info->u.nth.count;
+	for_each_possible_cpu(cpu) {
+		this_cpu = per_cpu_ptr(priv->cnt_pcpu, cpu);
+		(*this_cpu) = nth_count;
+	}
+	atomic_set(&priv->count, nth_count);
 
 	return 0;
 }
@@ -102,6 +136,7 @@ static void statistic_mt_destroy(const struct xt_mtdtor_param *par)
 {
 	const struct xt_statistic_info *info = par->matchinfo;
 
+	free_percpu(info->master->cnt_pcpu);
 	kfree(info->master);
 }
 
