@@ -971,10 +971,10 @@ static int intel_dp_dsc_min_slice_count(const struct intel_connector *connector,
 	 */
 	if (mode_clock > max(connector->dp.dsc_branch_caps.overall_throughput.rgb_yuv444,
 			     connector->dp.dsc_branch_caps.overall_throughput.yuv422_420))
-		return 0;
+		return false;
 
 	if (mode_hdisplay > connector->dp.dsc_branch_caps.max_line_width)
-		return 0;
+		return false;
 
 	/*
 	 * TODO: Pass the total pixel rate of all the streams transferred to
@@ -1009,7 +1009,7 @@ static int intel_dp_dsc_min_slice_count(const struct intel_connector *connector,
 		drm_dbg_kms(display->drm,
 			    "Unsupported slice width %d by DP DSC Sink device\n",
 			    max_slice_width);
-		return 0;
+		return false;
 	}
 	/* Also take into account max slice width */
 	min_slice_count = max(min_slice_count,
@@ -1018,9 +1018,11 @@ static int intel_dp_dsc_min_slice_count(const struct intel_connector *connector,
 	return min_slice_count;
 }
 
-u8 intel_dp_dsc_get_slice_count(const struct intel_connector *connector,
-				int mode_clock, int mode_hdisplay,
-				int num_joined_pipes)
+static bool
+intel_dp_dsc_get_slice_config(const struct intel_connector *connector,
+			      int mode_clock, int mode_hdisplay,
+			      int num_joined_pipes,
+			      struct intel_dsc_slice_config *config_ret)
 {
 	struct intel_display *display = to_intel_display(connector);
 	int min_slice_count =
@@ -1057,8 +1059,11 @@ u8 intel_dp_dsc_get_slice_count(const struct intel_connector *connector,
 		if (mode_hdisplay % slices_per_line)
 			continue;
 
-		if (min_slice_count <= slices_per_line)
-			return slices_per_line;
+		if (min_slice_count <= slices_per_line) {
+			*config_ret = config;
+
+			return true;
+		}
 	}
 
 	/* Print slice count 1,2,4,..24 if bit#0,1,3,..23 is set in the mask. */
@@ -1069,7 +1074,21 @@ u8 intel_dp_dsc_get_slice_count(const struct intel_connector *connector,
 		    min_slice_count,
 		    (int)BITS_PER_TYPE(sink_slice_count_mask), &sink_slice_count_mask);
 
-	return 0;
+	return false;
+}
+
+u8 intel_dp_dsc_get_slice_count(const struct intel_connector *connector,
+				int mode_clock, int mode_hdisplay,
+				int num_joined_pipes)
+{
+	struct intel_dsc_slice_config config;
+
+	if (!intel_dp_dsc_get_slice_config(connector,
+					   mode_clock, mode_hdisplay,
+					   num_joined_pipes, &config))
+		return 0;
+
+	return intel_dsc_line_slice_count(&config);
 }
 
 static bool source_can_output(struct intel_dp *intel_dp,
