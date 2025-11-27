@@ -231,6 +231,18 @@ static int parse_reply_info_in(void **p, void *end,
 						      info->fscrypt_file_len, bad);
 			}
 		}
+
+		/* struct_v 8 added a versioned field - skip it */
+		if (struct_v >= 8) {
+			u8 v8_struct_v, v8_struct_compat;
+			u32 v8_struct_len;
+
+			ceph_decode_8_safe(p, end, v8_struct_v, bad);
+			ceph_decode_8_safe(p, end, v8_struct_compat, bad);
+			ceph_decode_32_safe(p, end, v8_struct_len, bad);
+			ceph_decode_skip_n(p, end, v8_struct_len, bad);
+		}
+
 		*p = end;
 	} else {
 		/* legacy (unversioned) struct */
