@@ -1814,7 +1814,7 @@ static int azx_create(struct snd_card *card, struct pci_dev *pci,
 	else
 		chip->bdl_pos_adj = bdl_pos_adj[dev];
 
-	err = azx_bus_init(chip, model[dev]);
+	err = azx_bus_init(chip, model[dev], NULL);
 	if (err < 0)
 		return err;
 

@@ -899,7 +899,7 @@ static int azx_single_get_response(struct hdac_bus *bus, unsigned int addr,
  */
 
 /* send a command */
-static int azx_send_cmd(struct hdac_bus *bus, unsigned int val)
+int azx_send_cmd(struct hdac_bus *bus, unsigned int val)
 {
 	struct azx *chip = bus_to_azx(bus);
 
@@ -910,9 +910,10 @@ static int azx_send_cmd(struct hdac_bus *bus, unsigned int val)
 	else
 		return snd_hdac_bus_send_cmd(bus, val);
 }
+EXPORT_SYMBOL_GPL(azx_send_cmd);
 
 /* get a response */
-static int azx_get_response(struct hdac_bus *bus, unsigned int addr,
+int azx_get_response(struct hdac_bus *bus, unsigned int addr,
 			    unsigned int *res)
 {
 	struct azx *chip = bus_to_azx(bus);
@@ -924,6 +925,7 @@ static int azx_get_response(struct hdac_bus *bus, unsigned int addr,
 	else
 		return azx_rirb_get_response(bus, addr, res);
 }
+EXPORT_SYMBOL_GPL(azx_get_response);
 
 static const struct hdac_bus_ops bus_core_ops = {
 	.command = azx_send_cmd,
@@ -1147,12 +1149,19 @@ void snd_hda_bus_reset(struct hda_bus *bus)
 }
 
 /* HD-audio bus initialization */
-int azx_bus_init(struct azx *chip, const char *model)
+int azx_bus_init(struct azx *chip, const char *model,
+		 const struct hdac_bus_ops *ops)
 {
+	const struct hdac_bus_ops *bus_ops;
 	struct hda_bus *bus = &chip->bus;
 	int err;
 
-	err = snd_hdac_bus_init(&bus->core, chip->card->dev, &bus_core_ops);
+	if (ops)
+		bus_ops = ops;
+	else
+		bus_ops = &bus_core_ops;
+
+	err = snd_hdac_bus_init(&bus->core, chip->card->dev, bus_ops);
 	if (err < 0)
 		return err;
 

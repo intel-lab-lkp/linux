@@ -192,7 +192,7 @@ static int hda_acpi_create(struct hda_acpi *hda)
 	azx->driver_type = hda->data->flags & 0xff;
 	azx->codec_probe_mask = -1;
 
-	err = azx_bus_init(azx, NULL);
+	err = azx_bus_init(azx, NULL, NULL);
 	if (err < 0)
 		return err;
 

@@ -435,7 +435,7 @@ static int hda_tegra_create(struct snd_card *card,
 
 	INIT_WORK(&hda->probe_work, hda_tegra_probe_work);
 
-	err = azx_bus_init(chip, NULL);
+	err = azx_bus_init(chip, NULL, NULL);
 	if (err < 0)
 		return err;
 
