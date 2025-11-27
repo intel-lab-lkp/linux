@@ -2314,9 +2314,9 @@ struct dentry *cifs_mkdir(struct mnt_idmap *idmap, struct inode *inode,
 		goto mkdir_out;
 	}
 
-	/* TODO: skip this for smb2/smb3 */
-	rc = cifs_mkdir_qinfo(inode, direntry, mode, full_path, cifs_sb, tcon,
-			      xid);
+	if (server->vals->protocol_id == SMB10_PROT_ID)
+		rc = cifs_mkdir_qinfo(inode, direntry, mode, full_path, cifs_sb,
+				tcon, xid);
 mkdir_out:
 	/*
 	 * Force revalidate to get parent dir info when needed since cached
