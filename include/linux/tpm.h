@@ -25,7 +25,8 @@
 #include <crypto/hash_info.h>
 #include <crypto/aes.h>
 
-#define TPM_DIGEST_SIZE 20	/* Max TPM v1.2 PCR size */
+#define TPM_DIGEST_SIZE		20	/* Max TPM v1.2 PCR size */
+#define TPM_BUFSIZE		4096
 
 #define TPM2_MAX_DIGEST_SIZE	SHA512_DIGEST_SIZE
 #define TPM2_MAX_PCR_BANKS	8
@@ -376,13 +377,15 @@ enum tpm_buf_flags {
 };
 
 /*
- * A string buffer type for constructing TPM commands.
+ * A buffer for constructing and parsing TPM commands, responses and sized
+ * (TPM2B) buffers.
  */
 struct tpm_buf {
-	u32 flags;
-	u32 length;
-	u8 *data;
+	u8 flags;
 	u8 handles;
+	u16 length;
+	u16 capacity;
+	u8 data[];
 };
 
 enum tpm2_object_attributes {
@@ -413,12 +416,11 @@ struct tpm2_hash {
 	unsigned int tpm_id;
 };
 
-int tpm_buf_init(struct tpm_buf *buf, u16 tag, u32 ordinal);
+void tpm_buf_init(struct tpm_buf *buf, u16 buf_size);
+void tpm_buf_init_sized(struct tpm_buf *buf, u16 buf_size);
 void tpm_buf_reset(struct tpm_buf *buf, u16 tag, u32 ordinal);
-int tpm_buf_init_sized(struct tpm_buf *buf);
 void tpm_buf_reset_sized(struct tpm_buf *buf);
-void tpm_buf_destroy(struct tpm_buf *buf);
-u32 tpm_buf_length(struct tpm_buf *buf);
+u16 tpm_buf_length(struct tpm_buf *buf);
 void tpm_buf_append(struct tpm_buf *buf, const u8 *new_data, u16 new_length);
 void tpm_buf_append_u8(struct tpm_buf *buf, const u8 value);
 void tpm_buf_append_u16(struct tpm_buf *buf, const u16 value);
