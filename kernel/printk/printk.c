@@ -104,6 +104,9 @@ DEFINE_STATIC_SRCU(console_srcu);
  */
 int __read_mostly suppress_printk;
 
+/* The sysrq infrastructure needs this even on !CONFIG_PRINTK. */
+bool __read_mostly ignore_per_console_loglevel;
+
 #ifdef CONFIG_LOCKDEP
 static struct lockdep_map console_lock_dep_map = {
 	.name = "console_lock"
@@ -1280,6 +1283,18 @@ module_param(ignore_loglevel, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(ignore_loglevel,
 		 "ignore loglevel setting (prints all kernel messages to the console)");
 
+static int __init ignore_per_console_loglevel_setup(char *str)
+{
+	ignore_per_console_loglevel = true;
+	return 0;
+}
+
+early_param("ignore_per_console_loglevel", ignore_per_console_loglevel_setup);
+module_param(ignore_per_console_loglevel, bool, 0644);
+MODULE_PARM_DESC(
+	ignore_per_console_loglevel,
+	"ignore per-console loglevel setting (only respect global console loglevel)");
+
 /**
  * is_valid_per_console_loglevel - Check if a loglevel is valid for per-console
  *
@@ -1317,7 +1332,7 @@ console_effective_loglevel_source(int con_level)
 	if (ignore_loglevel)
 		return LLS_IGNORE_LOGLEVEL;
 
-	if (is_valid_per_console_loglevel(con_level))
+	if (!ignore_per_console_loglevel && is_valid_per_console_loglevel(con_level))
 		return LLS_LOCAL;
 
 	return LLS_GLOBAL;
