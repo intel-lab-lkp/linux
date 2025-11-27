@@ -155,6 +155,7 @@ How to configure your hardware within your Linux system.
    media/index
    nvme-multipath
    parport
+   per-console-loglevel
    pnp
    rapidio
    rtc
