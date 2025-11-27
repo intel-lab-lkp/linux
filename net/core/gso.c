@@ -180,6 +180,10 @@ static unsigned int skb_gso_network_seglen(const struct sk_buff *skb)
 	unsigned int hdr_len = skb_transport_header(skb) -
 			       skb_network_header(skb);
 
+	/* Jumbogram HBH header is removed upon segmentation. */
+	if (skb->protocol == htons(ETH_P_IPV6) && skb->len > IPV6_MAXPLEN)
+		hdr_len -= sizeof(struct hop_jumbo_hdr);
+
 	return hdr_len + skb_gso_transport_seglen(skb);
 }
 
