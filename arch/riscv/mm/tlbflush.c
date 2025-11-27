@@ -365,8 +365,10 @@ void local_load_tlb_mm(struct mm_struct *mm)
 {
 	struct tlb_info *info = this_cpu_ptr(&tlbinfo);
 	struct tlb_context *contexts = info->contexts;
+	struct tlb_flush_queue *queue = NULL;
 	struct mm_struct *victim = NULL;
-	unsigned int i, pos = 0, min = UINT_MAX;
+	unsigned int i, len, pos = 0, min = UINT_MAX;
+	unsigned long asid, start, size, stride;
 
 	for (i = 0; i < MAX_LOADED_MM; i++) {
 		if (contexts[i].mm == mm) {
@@ -387,10 +389,35 @@ void local_load_tlb_mm(struct mm_struct *mm)
 		mmgrab_lazy_mm(mm);
 		victim = contexts[pos].mm;
 		contexts[pos].mm = mm;
+		contexts[pos].need_flush = false;
+
+		queue = &info->flush_queues[pos];
+		atomic_set(&queue->len, 0);
+		queue->flag = 0;
 	}
 	contexts[pos].gen = new_tlb_gen(info);
 
 	write_unlock(&info->rwlock);
+
+	if (contexts[pos].need_flush) {
+		queue = &info->flush_queues[pos];
+		asid = get_mm_asid(mm);
+		if (queue->flag & FLUSH_TLB_ALL_ASID) {
+			local_flush_tlb_all_asid(asid);
+		} else {
+			len = atomic_read(&queue->len);
+			for (i = 0; i < len; i++) {
+				start = queue->tasks[i].start;
+				size = queue->tasks[i].size;
+				stride = queue->tasks[i].stride;
+				local_flush_tlb_range_asid(start, size,
+							   stride, asid);
+			}
+		}
+		contexts[pos].need_flush = false;
+		atomic_set(&queue->len, 0);
+		queue->flag = 0;
+	}
 
 	if (victim) {
 		cpumask_clear_cpu(raw_smp_processor_id(), mm_cpumask(victim));
