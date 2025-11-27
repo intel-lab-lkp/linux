@@ -861,6 +861,33 @@ struct drm_crtc_funcs {
 	u32 (*get_vblank_counter)(struct drm_crtc *crtc);
 
 	/**
+	 * @prepare_enable_vblank:
+	 *
+	 * An optional callback for preparing to enable vblank interrupts. It
+	 * allows drivers to perform blocking operations, and thus is called
+	 * without any vblank spinlocks. Consequently, this callback is not
+	 * synchronized with the rest of drm_vblank management; drivers are
+	 * responsible for ensuring it won't race with drm_vblank and it's other
+	 * driver callbacks.
+	 *
+	 * For example, drivers may use this to spin-up hardware from a low
+	 * power state -- which may require blocking operations -- such that
+	 * hardware registers are available to read/write. However, the driver
+	 * must be careful as to when to reenter low-power state, such that it
+	 * won't race with enable_vblank.
+	 *
+	 * It is called unconditionally, regardless of whether vblank interrupts
+	 * are already enabled or not.
+	 *
+	 * This callback is optional. If not set, no preparation is performed.
+	 *
+	 * Returns:
+	 *
+	 * Zero on success, negative errno on failure.
+	 */
+	int (*prepare_enable_vblank)(struct drm_crtc *crtc);
+
+	/**
 	 * @enable_vblank:
 	 *
 	 * Enable vblank interrupts for the CRTC. It's meant to be used by

@@ -1267,6 +1267,10 @@ crtc_disable(struct drm_device *dev, struct drm_atomic_state *state)
 		if (!drm_dev_has_vblank(dev))
 			continue;
 
+		ret = drm_crtc_vblank_prepare(crtc);
+		if (ret)
+			continue;
+
 		ret = drm_crtc_vblank_get(crtc);
 		/*
 		 * Self-refresh is not a true "disable"; ensure vblank remains
@@ -1820,6 +1824,10 @@ drm_atomic_helper_wait_for_vblanks(struct drm_device *dev,
 
 	for_each_oldnew_crtc_in_state(state, crtc, old_crtc_state, new_crtc_state, i) {
 		if (!new_crtc_state->active)
+			continue;
+
+		ret = drm_crtc_vblank_prepare(crtc);
+		if (ret != 0)
 			continue;
 
 		ret = drm_crtc_vblank_get(crtc);

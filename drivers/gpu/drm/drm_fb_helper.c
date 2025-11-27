@@ -1103,6 +1103,10 @@ int drm_fb_helper_ioctl(struct fb_info *info, unsigned int cmd,
 		 * enabled, otherwise just don't do anythintg,
 		 * not even report an error.
 		 */
+		ret = drm_crtc_vblank_prepare(crtc);
+		if (ret)
+			break;
+
 		ret = drm_crtc_vblank_get(crtc);
 		if (!ret) {
 			drm_crtc_wait_one_vblank(crtc);
