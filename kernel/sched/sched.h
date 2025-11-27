@@ -1477,6 +1477,13 @@ static inline bool sched_core_enqueued(struct task_struct *p)
 	return !RB_EMPTY_NODE(&p->core_node);
 }
 
+static inline bool rq_in_forceidle(struct rq *rq)
+{
+	return rq->core->core_forceidle_count > 0 &&
+		rq->nr_running &&
+		rq->curr == rq->idle;
+}
+
 extern void sched_core_enqueue(struct rq *rq, struct task_struct *p);
 extern void sched_core_dequeue(struct rq *rq, struct task_struct *p, int flags);
 
@@ -1520,6 +1527,11 @@ static inline bool sched_group_cookie_match(struct rq *rq,
 					    struct sched_group *group)
 {
 	return true;
+}
+
+static inline bool rq_in_forceidle(struct rq *rq)
+{
+	return false;
 }
 
 #endif /* !CONFIG_SCHED_CORE */

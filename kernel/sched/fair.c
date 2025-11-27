@@ -9988,6 +9988,7 @@ struct sg_lb_stats {
 	unsigned int nr_numa_running;
 	unsigned int nr_preferred_running;
 #endif
+	unsigned int forceidle_weight;
 };
 
 /*
@@ -10191,15 +10192,15 @@ static inline int sg_imbalanced(struct sched_group *group)
 static inline bool
 group_has_capacity(unsigned int imbalance_pct, struct sg_lb_stats *sgs)
 {
-	if (sgs->sum_nr_running < sgs->group_weight)
+	if (sgs->sum_nr_running < (sgs->group_weight - sgs->forceidle_weight))
 		return true;
 
-	if ((sgs->group_capacity * imbalance_pct) <
-			(sgs->group_runnable * 100))
+	if ((sgs->group_capacity * imbalance_pct * (sgs->group_weight - sgs->forceidle_weight)) <
+			(sgs->group_runnable * 100 * sgs->group_weight))
 		return false;
 
-	if ((sgs->group_capacity * 100) >
-			(sgs->group_util * imbalance_pct))
+	if ((sgs->group_capacity * 100 * (sgs->group_weight - sgs->forceidle_weight)) >
+			(sgs->group_util * imbalance_pct * sgs->group_weight))
 		return true;
 
 	return false;
@@ -10216,15 +10217,15 @@ group_has_capacity(unsigned int imbalance_pct, struct sg_lb_stats *sgs)
 static inline bool
 group_is_overloaded(unsigned int imbalance_pct, struct sg_lb_stats *sgs)
 {
-	if (sgs->sum_nr_running <= sgs->group_weight)
+	if (sgs->sum_nr_running <= (sgs->group_weight - sgs->forceidle_weight))
 		return false;
 
-	if ((sgs->group_capacity * 100) <
-			(sgs->group_util * imbalance_pct))
+	if ((sgs->group_capacity * 100 * (sgs->group_weight - sgs->forceidle_weight)) <
+			(sgs->group_util * imbalance_pct * sgs->group_weight))
 		return true;
 
-	if ((sgs->group_capacity * imbalance_pct) <
-			(sgs->group_runnable * 100))
+	if ((sgs->group_capacity * imbalance_pct * (sgs->group_weight - sgs->forceidle_weight)) <
+			(sgs->group_runnable * 100 * sgs->group_weight))
 		return true;
 
 	return false;
@@ -10427,13 +10428,19 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 		nr_running = rq->nr_running;
 		sgs->sum_nr_running += nr_running;
 
+		/*
+		 * Ignore force idle if we are balancing within the SMT mask
+		 */
+		if (rq_in_forceidle(rq) && !(env->sd->flags & SD_SHARE_CPUCAPACITY))
+			sgs->forceidle_weight++;
+
 		if (cpu_overutilized(i))
 			*sg_overutilized = 1;
 
 		/*
 		 * No need to call idle_cpu() if nr_running is not 0
 		 */
-		if (!nr_running && idle_cpu(i)) {
+		if (!rq_in_forceidle(rq) && !nr_running && idle_cpu(i)) {
 			sgs->idle_cpus++;
 			/* Idle cpu can't have misfit task */
 			continue;
@@ -10748,9 +10755,15 @@ static inline void update_sg_wakeup_stats(struct sched_domain *sd,
 		sgs->sum_nr_running += nr_running;
 
 		/*
+		 * Ignore force idle if we are balancing within the SMT mask
+		 */
+		if (rq_in_forceidle(rq) && !(sd->flags & SD_SHARE_CPUCAPACITY))
+			sgs->forceidle_weight++;
+
+		/*
 		 * No need to call idle_cpu_without() if nr_running is not 0
 		 */
-		if (!nr_running && idle_cpu_without(i, p))
+		if (!rq_in_forceidle(rq) && !nr_running && idle_cpu_without(i, p))
 			sgs->idle_cpus++;
 
 		/* Check if task fits in the CPU */
@@ -11179,7 +11192,8 @@ static inline void calculate_imbalance(struct lb_env *env, struct sd_lb_stats *s
 		return;
 	}
 
-	if (busiest->group_type == group_smt_balance) {
+	if (busiest->group_type == group_smt_balance ||
+	    busiest->forceidle_weight) {
 		/* Reduce number of tasks sharing CPU capacity */
 		env->migration_type = migrate_task;
 		env->imbalance = 1;
