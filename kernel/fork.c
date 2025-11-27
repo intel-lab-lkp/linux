@@ -655,7 +655,8 @@ static void do_check_lazy_tlb(void *arg)
 	WARN_ON_ONCE(current->active_mm == mm);
 }
 
-static void do_shoot_lazy_tlb(void *arg)
+#ifndef arch_do_shoot_lazy_tlb
+static void arch_do_shoot_lazy_tlb(void *arg)
 {
 	struct mm_struct *mm = arg;
 
@@ -665,6 +666,7 @@ static void do_shoot_lazy_tlb(void *arg)
 		switch_mm(mm, &init_mm, current);
 	}
 }
+#endif
 
 static void cleanup_lazy_tlbs(struct mm_struct *mm)
 {
@@ -704,7 +706,7 @@ static void cleanup_lazy_tlbs(struct mm_struct *mm)
 	 * - A delayed freeing and RCU-like quiescing sequence based on mm
 	 *   switching to avoid IPIs completely.
 	 */
-	on_each_cpu_mask(mm_cpumask(mm), do_shoot_lazy_tlb, (void *)mm, 1);
+	on_each_cpu_mask(mm_cpumask(mm), arch_do_shoot_lazy_tlb, (void *)mm, 1);
 	if (IS_ENABLED(CONFIG_DEBUG_VM_SHOOT_LAZIES))
 		on_each_cpu(do_check_lazy_tlb, (void *)mm, 1);
 }
