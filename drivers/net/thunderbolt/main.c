@@ -10,6 +10,7 @@
  */
 
 #include <linux/atomic.h>
+#include <linux/ethtool.h>
 #include <linux/highmem.h>
 #include <linux/if_vlan.h>
 #include <linux/jhash.h>
@@ -1276,6 +1277,77 @@ static const struct net_device_ops tbnet_netdev_ops = {
 	.ndo_change_mtu	= tbnet_change_mtu,
 };
 
+static int tbnet_get_link_ksettings(struct net_device *dev,
+				    struct ethtool_link_ksettings *cmd)
+{
+	const struct tbnet *net = netdev_priv(dev);
+	const struct tb_xdomain *xd = net->xd;
+	int speed;
+
+	ethtool_link_ksettings_zero_link_mode(cmd, supported);
+	ethtool_link_ksettings_zero_link_mode(cmd, advertising);
+
+	/* Figure out the current link speed and width */
+	switch (xd->link_speed) {
+	case 40:
+		/* For Gen 4 80G symmetric link the closest one
+		 * available is 56G so we report that.
+		 */
+		ethtool_link_ksettings_add_link_mode(cmd, supported,
+						     56000baseKR4_Full);
+		ethtool_link_ksettings_add_link_mode(cmd, advertising,
+						     56000baseKR4_Full);
+		speed = SPEED_56000;
+		break;
+
+	case 20:
+		if (xd->link_width == 2) {
+			ethtool_link_ksettings_add_link_mode(cmd, supported,
+							     40000baseKR4_Full);
+			ethtool_link_ksettings_add_link_mode(cmd, advertising,
+							     40000baseKR4_Full);
+			speed = SPEED_40000;
+		} else {
+			ethtool_link_ksettings_add_link_mode(cmd, supported,
+							     20000baseKR2_Full);
+			ethtool_link_ksettings_add_link_mode(cmd, advertising,
+							     20000baseKR2_Full);
+			speed = SPEED_20000;
+		}
+		break;
+
+	case 10:
+		if (xd->link_width == 2) {
+			ethtool_link_ksettings_add_link_mode(cmd, supported,
+							     20000baseKR2_Full);
+			ethtool_link_ksettings_add_link_mode(cmd, advertising,
+							     20000baseKR2_Full);
+			speed = SPEED_20000;
+			break;
+		}
+		fallthrough;
+
+	default:
+		ethtool_link_ksettings_add_link_mode(cmd, supported,
+						     10000baseT_Full);
+		ethtool_link_ksettings_add_link_mode(cmd, advertising,
+						     10000baseT_Full);
+		speed = SPEED_10000;
+		break;
+	}
+
+	cmd->base.speed = speed;
+	cmd->base.duplex = DUPLEX_FULL;
+	cmd->base.autoneg = AUTONEG_DISABLE;
+	cmd->base.port = PORT_OTHER;
+
+	return 0;
+}
+
+static const struct ethtool_ops tbnet_ethtool_ops = {
+	.get_link_ksettings = tbnet_get_link_ksettings,
+};
+
 static void tbnet_generate_mac(struct net_device *dev)
 {
 	const struct tbnet *net = netdev_priv(dev);
@@ -1326,6 +1398,7 @@ static int tbnet_probe(struct tb_service *svc, const struct tb_service_id *id)
 
 	strcpy(dev->name, "thunderbolt%d");
 	dev->netdev_ops = &tbnet_netdev_ops;
+	dev->ethtool_ops = &tbnet_ethtool_ops;
 
 	/* ThunderboltIP takes advantage of TSO packets but instead of
 	 * segmenting them we just split the packet into Thunderbolt
