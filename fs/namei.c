@@ -4279,6 +4279,47 @@ inline struct dentry *start_creating_user_path(
 EXPORT_SYMBOL(start_creating_user_path);
 
 /**
+ * dentry_create - Create and open a file
+ * @path: path to create
+ * @flags: O_ flags
+ * @mode: mode bits for new file
+ * @cred: credentials to use
+ *
+ * Caller must hold the parent directory's lock, and have prepared
+ * a negative dentry, placed in @path->dentry, for the new file.
+ *
+ * Caller sets @path->mnt to the vfsmount of the filesystem where
+ * the new file is to be created. The parent directory and the
+ * negative dentry must reside on the same filesystem instance.
+ *
+ * On success, returns a "struct file *". Otherwise a ERR_PTR
+ * is returned.
+ */
+struct file *dentry_create(const struct path *path, int flags, umode_t mode,
+			   const struct cred *cred)
+{
+	struct file *file;
+	int error;
+
+	file = alloc_empty_file(flags, cred);
+	if (IS_ERR(file))
+		return file;
+
+	error = vfs_create(mnt_idmap(path->mnt),
+			   d_inode(path->dentry->d_parent),
+			   path->dentry, mode, true);
+	if (!error)
+		error = vfs_open(path, file);
+
+	if (unlikely(error)) {
+		fput(file);
+		return ERR_PTR(error);
+	}
+	return file;
+}
+EXPORT_SYMBOL(dentry_create);
+
+/**
  * vfs_mknod - create device node or file
  * @idmap:	idmap of the mount the inode was found from
  * @dir:	inode of the parent directory
