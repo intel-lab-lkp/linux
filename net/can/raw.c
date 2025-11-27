@@ -892,37 +892,43 @@ static void raw_put_canxl_vcid(struct raw_sock *ro, struct sk_buff *skb)
 	}
 }
 
-static inline bool raw_dev_cc_enabled(struct net_device *dev,
-				      struct can_priv *priv)
+static bool raw_dev_cc_enabled(struct net_device *dev)
 {
+#if IS_ENABLED(CONFIG_CAN_DEV)
+	struct can_priv *priv = safe_candev_priv(dev);
+
 	/* The CANXL-only mode disables error-signalling on the CAN bus
 	 * which is needed to send CAN CC/FD frames
 	 */
 	if (priv)
 		return !can_dev_in_xl_only_mode(priv);
-
+#endif
 	/* virtual CAN interfaces always support CAN CC */
 	return true;
 }
 
-static inline bool raw_dev_fd_enabled(struct net_device *dev,
-				      struct can_priv *priv)
+static bool raw_dev_fd_enabled(struct net_device *dev)
 {
+#if IS_ENABLED(CONFIG_CAN_DEV)
+	struct can_priv *priv = safe_candev_priv(dev);
+
 	/* check FD ctrlmode on real CAN interfaces */
 	if (priv)
 		return (priv->ctrlmode & CAN_CTRLMODE_FD);
-
+#endif
 	/* check MTU for virtual CAN FD interfaces */
 	return (READ_ONCE(dev->mtu) >= CANFD_MTU);
 }
 
-static inline bool raw_dev_xl_enabled(struct net_device *dev,
-				      struct can_priv *priv)
+static bool raw_dev_xl_enabled(struct net_device *dev)
 {
+#if IS_ENABLED(CONFIG_CAN_DEV)
+	struct can_priv *priv = safe_candev_priv(dev);
+
 	/* check XL ctrlmode on real CAN interfaces */
 	if (priv)
 		return (priv->ctrlmode & CAN_CTRLMODE_XL);
-
+#endif
 	/* check MTU for virtual CAN XL interfaces */
 	return can_is_canxl_dev_mtu(READ_ONCE(dev->mtu));
 }
@@ -930,20 +936,18 @@ static inline bool raw_dev_xl_enabled(struct net_device *dev,
 static unsigned int raw_check_txframe(struct raw_sock *ro, struct sk_buff *skb,
 				      struct net_device *dev)
 {
-	struct can_priv *priv = safe_candev_priv(dev);
-
 	/* Classical CAN */
-	if (can_is_can_skb(skb) && raw_dev_cc_enabled(dev, priv))
+	if (can_is_can_skb(skb) && raw_dev_cc_enabled(dev))
 		return CAN_MTU;
 
 	/* CAN FD */
 	if (ro->fd_frames && can_is_canfd_skb(skb) &&
-	    raw_dev_fd_enabled(dev, priv))
+	    raw_dev_fd_enabled(dev))
 		return CANFD_MTU;
 
 	/* CAN XL */
 	if (ro->xl_frames && can_is_canxl_skb(skb) &&
-	    raw_dev_xl_enabled(dev, priv))
+	    raw_dev_xl_enabled(dev))
 		return CANXL_MTU;
 
 	return 0;
