@@ -25,7 +25,10 @@ struct percpu_counter {
 #ifdef CONFIG_HOTPLUG_CPU
 	struct list_head list;	/* All percpu_counters are on a list */
 #endif
-	s32 __percpu *counters;
+	union {
+		s32 __percpu *counters;
+		atomic_long_t remote;
+	};
 };
 
 extern int percpu_counter_batch;
