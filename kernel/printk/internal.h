@@ -333,7 +333,7 @@ struct printk_message {
 };
 
 bool printk_get_next_message(struct printk_message *pmsg, u64 seq,
-			     bool is_extended, bool may_supress);
+			     bool is_extended, int con_eff_level);
 
 #ifdef CONFIG_PRINTK
 void console_prepend_dropped(struct printk_message *pmsg, unsigned long dropped);

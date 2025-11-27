@@ -807,7 +807,8 @@ static ssize_t devkmsg_read(struct file *file, char __user *buf,
 	if (ret)
 		return ret;
 
-	if (!printk_get_next_message(&pmsg, atomic64_read(&user->seq), true, false)) {
+	if (!printk_get_next_message(&pmsg, atomic64_read(&user->seq), true,
+				     CONSOLE_LOGLEVEL_MOTORMOUTH)) {
 		if (file->f_flags & O_NONBLOCK) {
 			ret = -EAGAIN;
 			goto out;
@@ -825,7 +826,7 @@ static ssize_t devkmsg_read(struct file *file, char __user *buf,
 		 */
 		ret = wait_event_interruptible(log_wait,
 				printk_get_next_message(&pmsg, atomic64_read(&user->seq), true,
-							false)); /* LMM(devkmsg_read:A) */
+							CONSOLE_LOGLEVEL_MOTORMOUTH)); /* LMM(devkmsg_read:A) */
 		if (ret)
 			goto out;
 	}
@@ -1279,9 +1280,9 @@ module_param(ignore_loglevel, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(ignore_loglevel,
 		 "ignore loglevel setting (prints all kernel messages to the console)");
 
-static bool suppress_message_printing(int level)
+static bool suppress_message_printing(int level, int con_eff_level)
 {
-	return (level >= console_loglevel && !ignore_loglevel);
+	return (level >= con_eff_level && !ignore_loglevel);
 }
 
 #ifdef CONFIG_BOOT_PRINTK_DELAY
@@ -2115,7 +2116,7 @@ int printk_delay_msec __read_mostly;
 static inline void printk_delay(int level)
 {
 	/* If the message is forced (e.g. panic), we must delay */
-	if (!is_printk_force_console() && suppress_message_printing(level))
+	if (!is_printk_force_console() && suppress_message_printing(level, console_loglevel))
 		return;
 
 	boot_delay_msec();
@@ -2977,14 +2978,15 @@ void console_prepend_replay(struct printk_message *pmsg)
  * @is_extended specifies if the message should be formatted for extended
  * console output.
  *
- * @may_supress specifies if records may be skipped based on loglevel.
+ * @con_eff_level is the effective console loglevel to use for suppression
+ * checks.
  *
  * Returns false if no record is available. Otherwise true and all fields
  * of @pmsg are valid. (See the documentation of struct printk_message
  * for information about the @pmsg fields.)
  */
 bool printk_get_next_message(struct printk_message *pmsg, u64 seq,
-			     bool is_extended, bool may_suppress)
+			     bool is_extended, int con_eff_level)
 {
 	struct printk_buffers *pbufs = pmsg->pbufs;
 	const size_t scratchbuf_sz = sizeof(pbufs->scratchbuf);
@@ -3013,13 +3015,14 @@ bool printk_get_next_message(struct printk_message *pmsg, u64 seq,
 
 	pmsg->seq = r.info->seq;
 	pmsg->dropped = r.info->seq - seq;
+
 	force_con = r.info->flags & LOG_FORCE_CON;
 
 	/*
 	 * Skip records that are not forced to be printed on consoles and that
 	 * has level above the console loglevel.
 	 */
-	if (!force_con && may_suppress && suppress_message_printing(r.info->level))
+	if (!force_con && suppress_message_printing(r.info->level, con_eff_level))
 		goto out;
 
 	if (is_extended) {
@@ -3095,7 +3098,8 @@ static bool console_emit_next_record(struct console *con, bool *handover, int co
 
 	*handover = false;
 
-	if (!printk_get_next_message(&pmsg, con->seq, is_extended, true))
+	if (!printk_get_next_message(&pmsg, con->seq, is_extended,
+				     console_loglevel))
 		return false;
 
 	con->dropped += pmsg.dropped;
