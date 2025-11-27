@@ -35,7 +35,8 @@ static inline void local_sinval_vma(unsigned long vma, unsigned long asid)
  */
 unsigned long tlb_flush_all_threshold __read_mostly = 64;
 
-static void local_flush_tlb_range_threshold_asid(unsigned long start,
+static void local_flush_tlb_range_threshold_asid(struct mm_struct *mm,
+						 unsigned long start,
 						 unsigned long size,
 						 unsigned long stride,
 						 unsigned long asid)
@@ -44,7 +45,7 @@ static void local_flush_tlb_range_threshold_asid(unsigned long start,
 	int i;
 
 	if (nr_ptes_in_range > tlb_flush_all_threshold) {
-		local_flush_tlb_all_asid(asid);
+		local_flush_tlb_mm(mm);
 		return;
 	}
 
@@ -64,21 +65,26 @@ static void local_flush_tlb_range_threshold_asid(unsigned long start,
 	}
 }
 
-static inline void local_flush_tlb_range_asid(unsigned long start,
-		unsigned long size, unsigned long stride, unsigned long asid)
+static inline void local_flush_tlb_range_asid(struct mm_struct *mm,
+					      unsigned long start,
+					      unsigned long size,
+					      unsigned long stride,
+					      unsigned long asid)
 {
-	if (size <= stride)
+	if (size <= stride) {
 		local_flush_tlb_page_asid(start, asid);
-	else if (size == FLUSH_TLB_MAX_SIZE)
-		local_flush_tlb_all_asid(asid);
-	else
-		local_flush_tlb_range_threshold_asid(start, size, stride, asid);
+	} else if (size == FLUSH_TLB_MAX_SIZE) {
+		local_flush_tlb_mm(mm);
+	} else {
+		local_flush_tlb_range_threshold_asid(mm, start, size, stride,
+						     asid);
+	}
 }
 
 /* Flush a range of kernel pages without broadcasting */
 void local_flush_tlb_kernel_range(unsigned long start, unsigned long end)
 {
-	local_flush_tlb_range_asid(start, end - start, PAGE_SIZE, FLUSH_TLB_NO_ASID);
+	local_flush_tlb_range_asid(NULL, start, end - start, PAGE_SIZE, FLUSH_TLB_NO_ASID);
 }
 
 static void __ipi_flush_tlb_all(void *info)
@@ -204,7 +210,7 @@ static void __ipi_flush_tlb_range_asid(void *info)
 {
 	struct flush_tlb_range_data *d = info;
 
-	local_flush_tlb_range_asid(d->start, d->size, d->stride, d->asid);
+	local_flush_tlb_range_asid(d->mm, d->start, d->size, d->stride, d->asid);
 }
 
 static void __flush_tlb_range(struct mm_struct *mm,
@@ -222,7 +228,7 @@ static void __flush_tlb_range(struct mm_struct *mm,
 
 	/* Check if the TLB flush needs to be sent to other CPUs. */
 	if (cpumask_any_but(cmask, cpu) >= nr_cpu_ids) {
-		local_flush_tlb_range_asid(start, size, stride, asid);
+		local_flush_tlb_range_asid(mm, start, size, stride, asid);
 	} else if (riscv_use_sbi_for_rfence()) {
 		sbi_remote_sfence_vma_asid(cmask, start, size, asid);
 	} else {
@@ -410,7 +416,7 @@ void local_load_tlb_mm(struct mm_struct *mm)
 				start = queue->tasks[i].start;
 				size = queue->tasks[i].size;
 				stride = queue->tasks[i].stride;
-				local_flush_tlb_range_asid(start, size,
+				local_flush_tlb_range_asid(mm, start, size,
 							   stride, asid);
 			}
 		}
