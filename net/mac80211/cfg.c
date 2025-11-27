@@ -4595,6 +4595,8 @@ static int ieee80211_probe_client(struct wiphy *wiphy, struct net_device *dev,
 	struct sta_info *sta;
 	struct ieee80211_chanctx_conf *chanctx_conf;
 	enum nl80211_band band;
+	u8 link_id;
+	struct ieee80211_bss_conf *conf;
 	int ret;
 
 	/* the lock is needed to assign the cookie later */
@@ -4610,6 +4612,21 @@ static int ieee80211_probe_client(struct wiphy *wiphy, struct net_device *dev,
 	qos = sta->sta.wme;
 
 	if (ieee80211_vif_is_mld(&sdata->vif)) {
+		/*
+		 * For non-MLO clients connected to an MLD AP, band
+		 * information is not used; instead, sta->deflink is
+		 * used to send packets.
+		 */
+		if (!sta->sta.mlo) {
+			link_id = sta->deflink.link_id;
+
+			conf = rcu_dereference(sdata->vif.link_conf[link_id]);
+
+			if (unlikely(!conf)) {
+				ret = -ENOLINK;
+				goto unlock;
+			}
+		}
 		/* MLD transmissions must not rely on the band */
 		band = 0;
 	} else {
@@ -4646,8 +4663,13 @@ static int ieee80211_probe_client(struct wiphy *wiphy, struct net_device *dev,
 	nullfunc->frame_control = fc;
 	nullfunc->duration_id = 0;
 	memcpy(nullfunc->addr1, sta->sta.addr, ETH_ALEN);
-	memcpy(nullfunc->addr2, sdata->vif.addr, ETH_ALEN);
-	memcpy(nullfunc->addr3, sdata->vif.addr, ETH_ALEN);
+	if (ieee80211_vif_is_mld(&sdata->vif) && !sta->sta.mlo) {
+		memcpy(nullfunc->addr2, conf->addr, ETH_ALEN);
+		memcpy(nullfunc->addr3, conf->addr, ETH_ALEN);
+	} else {
+		memcpy(nullfunc->addr2, sdata->vif.addr, ETH_ALEN);
+		memcpy(nullfunc->addr3, sdata->vif.addr, ETH_ALEN);
+	}
 	nullfunc->seq_ctrl = 0;
 
 	info = IEEE80211_SKB_CB(skb);
@@ -4656,8 +4678,15 @@ static int ieee80211_probe_client(struct wiphy *wiphy, struct net_device *dev,
 		       IEEE80211_TX_INTFL_NL80211_FRAME_TX;
 	info->band = band;
 
-	if (ieee80211_vif_is_mld(&sdata->vif))
-		info->control.flags |= IEEE80211_TX_CTRL_MLO_LINK_UNSPEC;
+	if (ieee80211_vif_is_mld(&sdata->vif)) {
+		if (sta->sta.mlo)
+			info->control.flags |=
+					IEEE80211_TX_CTRL_MLO_LINK_UNSPEC;
+		else
+			info->control.flags |=
+				u32_encode_bits(link_id,
+						IEEE80211_TX_CTRL_MLO_LINK);
+	}
 
 	skb_set_queue_mapping(skb, IEEE80211_AC_VO);
 	skb->priority = 7;
