@@ -1447,6 +1447,7 @@ struct pte_masks {
 	uint64_t dirty;
 	uint64_t huge;
 	uint64_t nx;
+	uint64_t x;
 	uint64_t c;
 	uint64_t s;
 };
@@ -1464,6 +1465,7 @@ struct kvm_mmu {
 #define PTE_DIRTY_MASK(mmu) ((mmu)->pte_masks.dirty)
 #define PTE_HUGE_MASK(mmu) ((mmu)->pte_masks.huge)
 #define PTE_NX_MASK(mmu) ((mmu)->pte_masks.nx)
+#define PTE_X_MASK(mmu) ((mmu)->pte_masks.x)
 #define PTE_C_MASK(mmu) ((mmu)->pte_masks.c)
 #define PTE_S_MASK(mmu) ((mmu)->pte_masks.s)
 
@@ -1474,6 +1476,7 @@ struct kvm_mmu {
 #define pte_dirty(mmu, pte) (!!(*(pte) & PTE_DIRTY_MASK(mmu)))
 #define pte_huge(mmu, pte) (!!(*(pte) & PTE_HUGE_MASK(mmu)))
 #define pte_nx(mmu, pte) (!!(*(pte) & PTE_NX_MASK(mmu)))
+#define pte_x(mmu, pte) (!!(*(pte) & PTE_X_MASK(mmu)))
 #define pte_c(mmu, pte) (!!(*(pte) & PTE_C_MASK(mmu)))
 #define pte_s(mmu, pte) (!!(*(pte) & PTE_S_MASK(mmu)))
 

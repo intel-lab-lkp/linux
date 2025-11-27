@@ -25,21 +25,6 @@ bool enable_evmcs;
 struct hv_enlightened_vmcs *current_evmcs;
 struct hv_vp_assist_page *current_vp_assist;
 
-struct eptPageTableEntry {
-	uint64_t readable:1;
-	uint64_t writable:1;
-	uint64_t executable:1;
-	uint64_t memory_type:3;
-	uint64_t ignore_pat:1;
-	uint64_t page_size:1;
-	uint64_t accessed:1;
-	uint64_t dirty:1;
-	uint64_t ignored_11_10:2;
-	uint64_t address:40;
-	uint64_t ignored_62_52:11;
-	uint64_t suppress_ve:1;
-};
-
 int vcpu_enable_evmcs(struct kvm_vcpu *vcpu)
 {
 	uint16_t evmcs_ver;
@@ -58,12 +43,31 @@ int vcpu_enable_evmcs(struct kvm_vcpu *vcpu)
 
 void vm_enable_ept(struct kvm_vm *vm)
 {
+	struct pte_masks pte_masks;
+
 	TEST_ASSERT(kvm_cpu_has_ept(), "KVM doesn't support nested EPT");
 	if (vm->arch.nested.mmu)
 		return;
 
+	/*
+	 * EPTs do not have 'present' or 'user' bits, instead bit 0 is the
+	 * 'readable' bit. In some cases, EPTs can be execute-only and an entry
+	 * is present but not readable. However, for the purposes of testing we
+	 * assume 'present' == 'user' == 'readable' for simplicity.
+	 */
+	pte_masks = (struct pte_masks){
+		.present	=	BIT_ULL(0),
+		.user		=	BIT_ULL(0),
+		.writable	=	BIT_ULL(1),
+		.x		=	BIT_ULL(2),
+		.accessed	=	BIT_ULL(5),
+		.dirty		=	BIT_ULL(6),
+		.huge		=	BIT_ULL(7),
+		.nx		=	0,
+	};
+
 	/* EPTP_PWL_4 is always used */
-	vm->arch.nested.mmu = mmu_create(vm, 4, NULL);
+	vm->arch.nested.mmu = mmu_create(vm, 4, &pte_masks);
 }
 
 /* Allocate memory regions for nested VMX tests.
@@ -372,82 +376,6 @@ void prepare_vmcs(struct vmx_pages *vmx, void *guest_rip, void *guest_rsp)
 	init_vmcs_guest_state(guest_rip, guest_rsp);
 }
 
-static void tdp_create_pte(struct kvm_vm *vm,
-			   struct eptPageTableEntry *pte,
-			   uint64_t nested_paddr,
-			   uint64_t paddr,
-			   int current_level,
-			   int target_level)
-{
-	if (!pte->readable) {
-		pte->writable = true;
-		pte->readable = true;
-		pte->executable = true;
-		pte->page_size = (current_level == target_level);
-		if (pte->page_size)
-			pte->address = paddr >> vm->page_shift;
-		else
-			pte->address = vm_alloc_page_table(vm) >> vm->page_shift;
-	} else {
-		/*
-		 * Entry already present.  Assert that the caller doesn't want
-		 * a hugepage at this level, and that there isn't a hugepage at
-		 * this level.
-		 */
-		TEST_ASSERT(current_level != target_level,
-			    "Cannot create hugepage at level: %u, nested_paddr: 0x%lx",
-			    current_level, nested_paddr);
-		TEST_ASSERT(!pte->page_size,
-			    "Cannot create page table at level: %u, nested_paddr: 0x%lx",
-			    current_level, nested_paddr);
-	}
-}
-
-
-void __tdp_pg_map(struct kvm_vm *vm, uint64_t nested_paddr, uint64_t paddr,
-		  int target_level)
-{
-	const uint64_t page_size = PG_LEVEL_SIZE(target_level);
-	void *eptp_hva = addr_gpa2hva(vm, vm->arch.nested.mmu->root_gpa);
-	struct eptPageTableEntry *pt = eptp_hva, *pte;
-	uint16_t index;
-
-	TEST_ASSERT(vm->mode == VM_MODE_PXXVYY_4K,
-		    "Unknown or unsupported guest mode: 0x%x", vm->mode);
-
-	TEST_ASSERT((nested_paddr >> 48) == 0,
-		    "Nested physical address 0x%lx is > 48-bits and requires 5-level EPT",
-		    nested_paddr);
-	TEST_ASSERT((nested_paddr % page_size) == 0,
-		    "Nested physical address not on page boundary,\n"
-		    "  nested_paddr: 0x%lx page_size: 0x%lx",
-		    nested_paddr, page_size);
-	TEST_ASSERT((nested_paddr >> vm->page_shift) <= vm->max_gfn,
-		    "Physical address beyond beyond maximum supported,\n"
-		    "  nested_paddr: 0x%lx vm->max_gfn: 0x%lx vm->page_size: 0x%x",
-		    paddr, vm->max_gfn, vm->page_size);
-	TEST_ASSERT((paddr % page_size) == 0,
-		    "Physical address not on page boundary,\n"
-		    "  paddr: 0x%lx page_size: 0x%lx",
-		    paddr, page_size);
-	TEST_ASSERT((paddr >> vm->page_shift) <= vm->max_gfn,
-		    "Physical address beyond beyond maximum supported,\n"
-		    "  paddr: 0x%lx vm->max_gfn: 0x%lx vm->page_size: 0x%x",
-		    paddr, vm->max_gfn, vm->page_size);
-
-	for (int level = PG_LEVEL_512G; level >= PG_LEVEL_4K; level--) {
-		index = (nested_paddr >> PG_LEVEL_SHIFT(level)) & 0x1ffu;
-		pte = &pt[index];
-
-		tdp_create_pte(vm, pte, nested_paddr, paddr, level, target_level);
-
-		if (pte->page_size)
-			break;
-
-		pt = addr_gpa2hva(vm, pte->address * vm->page_size);
-	}
-}
-
 /*
  * Map a range of EPT guest physical addresses to the VM's physical address
  *
@@ -468,6 +396,7 @@ void __tdp_pg_map(struct kvm_vm *vm, uint64_t nested_paddr, uint64_t paddr,
 void __tdp_map(struct kvm_vm *vm, uint64_t nested_paddr, uint64_t paddr,
 	       uint64_t size, int level)
 {
+	struct kvm_mmu *mmu = vm->arch.nested.mmu;
 	size_t page_size = PG_LEVEL_SIZE(level);
 	size_t npages = size / page_size;
 
@@ -475,7 +404,7 @@ void __tdp_map(struct kvm_vm *vm, uint64_t nested_paddr, uint64_t paddr,
 	TEST_ASSERT(paddr + size > paddr, "Paddr overflow");
 
 	while (npages--) {
-		__tdp_pg_map(vm, nested_paddr, paddr, level);
+		__virt_pg_map(vm, mmu, nested_paddr, paddr, level);
 		nested_paddr += page_size;
 		paddr += page_size;
 	}

@@ -162,8 +162,7 @@ struct kvm_mmu *mmu_create(struct kvm_vm *vm, int pgtable_levels,
 	struct kvm_mmu *mmu = calloc(1, sizeof(*mmu));
 
 	TEST_ASSERT(mmu, "-ENOMEM when allocating MMU");
-	if (pte_masks)
-		mmu->pte_masks = *pte_masks;
+	mmu->pte_masks = *pte_masks;
 	mmu->root_gpa = vm_alloc_page_table(vm);
 	mmu->pgtable_levels = pgtable_levels;
 	return mmu;
@@ -179,6 +178,7 @@ static void mmu_init(struct kvm_vm *vm)
 		.dirty		=	BIT_ULL(6),
 		.huge		=	BIT_ULL(7),
 		.nx		=	BIT_ULL(63),
+		.x		=	0,
 		.c		=	vm->arch.c_bit,
 		.s		=	vm->arch.s_bit,
 	};
@@ -225,7 +225,7 @@ static uint64_t *virt_create_upper_pte(struct kvm_vm *vm,
 	paddr = vm_untag_gpa(vm, paddr);
 
 	if (!pte_present(mmu, pte)) {
-		*pte = PTE_PRESENT_MASK(mmu) | PTE_WRITABLE_MASK(mmu);
+		*pte = PTE_PRESENT_MASK(mmu) | PTE_WRITABLE_MASK(mmu) | PTE_X_MASK(mmu);
 		if (current_level == target_level)
 			*pte |= PTE_HUGE_MASK(mmu) | (paddr & PHYSICAL_PAGE_MASK);
 		else
@@ -271,6 +271,9 @@ void __virt_pg_map(struct kvm_vm *vm, struct kvm_mmu *mmu, uint64_t vaddr,
 	TEST_ASSERT(vm_untag_gpa(vm, paddr) == paddr,
 		    "Unexpected bits in paddr: %lx", paddr);
 
+	TEST_ASSERT(!PTE_X_MASK(mmu) || !PTE_NX_MASK(mmu),
+		    "X and NX bit masks cannot be used simultaneously");
+
 	/*
 	 * Allocate upper level page tables, if not already present.  Return
 	 * early if a hugepage was created.
@@ -288,7 +291,8 @@ void __virt_pg_map(struct kvm_vm *vm, struct kvm_mmu *mmu, uint64_t vaddr,
 	pte = virt_get_pte(vm, mmu, pte, vaddr, PG_LEVEL_4K);
 	TEST_ASSERT(!pte_present(mmu, pte),
 		    "PTE already present for 4k page at vaddr: 0x%lx", vaddr);
-	*pte = PTE_PRESENT_MASK(mmu) | PTE_WRITABLE_MASK(mmu) | (paddr & PHYSICAL_PAGE_MASK);
+	*pte = PTE_PRESENT_MASK(mmu) | PTE_WRITABLE_MASK(mmu) | PTE_X_MASK(mmu)
+		| (paddr & PHYSICAL_PAGE_MASK);
 
 	/*
 	 * Neither SEV nor TDX supports shared page tables, so only the final
