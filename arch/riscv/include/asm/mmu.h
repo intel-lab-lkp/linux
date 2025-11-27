@@ -30,6 +30,10 @@ typedef struct {
 #ifdef CONFIG_RISCV_ISA_SUPM
 	u8 pmlen;
 #endif
+#ifdef CONFIG_RISCV_LAZY_TLB_FLUSH
+	atomic_t lazy_tlb_cnt;
+	void *next;
+#endif
 } mm_context_t;
 
 /* Lock the pointer masking mode because this mm is multithreaded */

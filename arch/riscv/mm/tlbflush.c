@@ -104,12 +104,57 @@ struct flush_tlb_range_data {
 };
 
 #ifdef CONFIG_RISCV_LAZY_TLB_FLUSH
+
 DEFINE_PER_CPU_SHARED_ALIGNED(struct tlb_info, tlbinfo) = {
 	.rwlock = __RW_LOCK_UNLOCKED(tlbinfo.rwlock),
 	.active_mm = NULL,
 	.next_gen = 1,
 	.contexts = { { NULL, 0, }, },
 };
+
+static DEFINE_PER_CPU(mm_context_t *, mmdrop_victims);
+
+static void mmdrop_lazy_mms(struct tasklet_struct *tasklet)
+{
+	mm_context_t *victim = xchg_relaxed(this_cpu_ptr(&mmdrop_victims), NULL);
+	struct mm_struct *mm = NULL;
+
+	while (victim) {
+		mm = container_of(victim, struct mm_struct, context);
+		while (atomic_dec_return_relaxed(&victim->lazy_tlb_cnt) != 0)
+			mmdrop_lazy_tlb(mm);
+		victim = victim->next;
+	}
+}
+
+static DEFINE_PER_CPU(struct tasklet_struct, mmdrop_tasklets) = {
+	.count = ATOMIC_INIT(0),
+	.callback = mmdrop_lazy_mms,
+	.use_callback = true,
+};
+
+static inline void mmgrab_lazy_mm(struct mm_struct *mm)
+{
+	mmgrab_lazy_tlb(mm);
+	atomic_inc(&mm->context.lazy_tlb_cnt);
+}
+
+static inline void mmdrop_lazy_mm(struct mm_struct *mm)
+{
+	mm_context_t **head, *list, *context = &mm->context;
+
+	if (atomic_inc_return_relaxed(&context->lazy_tlb_cnt) == 1) {
+		head = this_cpu_ptr(&mmdrop_victims);
+
+		do {
+			list = *head;
+			context->next = list;
+		} while (cmpxchg_relaxed(head, list, context) != list);
+
+		tasklet_schedule(this_cpu_ptr(&mmdrop_tasklets));
+	}
+}
+
 #endif /* CONFIG_RISCV_LAZY_TLB_FLUSH */
 
 static void __ipi_flush_tlb_range_asid(void *info)
@@ -292,6 +337,7 @@ void local_load_tlb_mm(struct mm_struct *mm)
 	info->active_mm = mm;
 
 	if (contexts[pos].mm != mm) {
+		mmgrab_lazy_mm(mm);
 		victim = contexts[pos].mm;
 		contexts[pos].mm = mm;
 	}
@@ -302,6 +348,7 @@ void local_load_tlb_mm(struct mm_struct *mm)
 	if (victim) {
 		cpumask_clear_cpu(raw_smp_processor_id(), mm_cpumask(victim));
 		local_flush_tlb_all_asid(get_mm_asid(victim));
+		mmdrop_lazy_mm(victim);
 	}
 }
 
