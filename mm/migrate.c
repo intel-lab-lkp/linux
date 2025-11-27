@@ -330,7 +330,7 @@ static bool try_to_map_unused_to_zeropage(struct page_vma_mapped_walk *pvmw,
 
 	set_pte_at(pvmw->vma->vm_mm, pvmw->address, pvmw->pte, newpte);
 
-	dec_mm_counter(pvmw->vma->vm_mm, mm_counter(folio));
+	dec_mm_counter_other(pvmw->vma->vm_mm, mm_counter(folio));
 	return true;
 }
 

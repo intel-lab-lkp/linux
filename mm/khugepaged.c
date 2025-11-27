@@ -691,7 +691,7 @@ static void __collapse_huge_page_copy_succeeded(pte_t *pte,
 		nr_ptes = 1;
 		pteval = ptep_get(_pte);
 		if (pte_none(pteval) || is_zero_pfn(pte_pfn(pteval))) {
-			add_mm_counter(vma->vm_mm, MM_ANONPAGES, 1);
+			add_mm_counter_other(vma->vm_mm, MM_ANONPAGES, 1);
 			if (is_zero_pfn(pte_pfn(pteval))) {
 				/*
 				 * ptl mostly unnecessary.
@@ -1664,7 +1664,7 @@ int collapse_pte_mapped_thp(struct mm_struct *mm, unsigned long addr,
 	/* step 3: set proper refcount and mm_counters. */
 	if (nr_mapped_ptes) {
 		folio_ref_sub(folio, nr_mapped_ptes);
-		add_mm_counter(mm, mm_counter_file(folio), -nr_mapped_ptes);
+		add_mm_counter_other(mm, mm_counter_file(folio), -nr_mapped_ptes);
 	}
 
 	/* step 4: remove empty page table */
@@ -1700,7 +1700,7 @@ abort:
 	if (nr_mapped_ptes) {
 		flush_tlb_mm(mm);
 		folio_ref_sub(folio, nr_mapped_ptes);
-		add_mm_counter(mm, mm_counter_file(folio), -nr_mapped_ptes);
+		add_mm_counter_other(mm, mm_counter_file(folio), -nr_mapped_ptes);
 	}
 unlock:
 	if (start_pte)

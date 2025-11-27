@@ -686,11 +686,11 @@ void ptep_unshadow_pte(struct mm_struct *mm, unsigned long saddr, pte_t *ptep)
 static void ptep_zap_swap_entry(struct mm_struct *mm, swp_entry_t entry)
 {
 	if (!non_swap_entry(entry))
-		dec_mm_counter(mm, MM_SWAPENTS);
+		dec_mm_counter_other(mm, MM_SWAPENTS);
 	else if (is_migration_entry(entry)) {
 		struct folio *folio = pfn_swap_entry_folio(entry);
 
-		dec_mm_counter(mm, mm_counter(folio));
+		dec_mm_counter_other(mm, mm_counter(folio));
 	}
 	free_swap_and_cache(entry);
 }

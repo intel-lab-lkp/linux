@@ -776,7 +776,7 @@ static int madvise_free_pte_range(pmd_t *pmd, unsigned long addr,
 	}
 
 	if (nr_swap)
-		add_mm_counter(mm, MM_SWAPENTS, nr_swap);
+		add_mm_counter_local(mm, MM_SWAPENTS, nr_swap);
 	if (start_pte) {
 		arch_leave_lazy_mmu_mode();
 		pte_unmap_unlock(start_pte, ptl);

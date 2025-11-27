@@ -1410,7 +1410,7 @@ static int replace_page(struct vm_area_struct *vma, struct page *page,
 		 * will get wrong values in /proc, and a BUG message in dmesg
 		 * when tearing down the mm.
 		 */
-		dec_mm_counter(mm, MM_ANONPAGES);
+		dec_mm_counter_other(mm, MM_ANONPAGES);
 	}
 
 	flush_cache_page(vma, addr, pte_pfn(ptep_get(ptep)));

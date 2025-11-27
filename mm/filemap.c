@@ -3867,7 +3867,7 @@ vm_fault_t filemap_map_pages(struct vm_fault *vmf,
 
 		folio_unlock(folio);
 	} while ((folio = next_uptodate_folio(&xas, mapping, end_pgoff)) != NULL);
-	add_mm_counter(vma->vm_mm, folio_type, rss);
+	add_mm_counter_other(vma->vm_mm, folio_type, rss);
 	pte_unmap_unlock(vmf->pte, vmf->ptl);
 	trace_mm_filemap_map_pages(mapping, start_pgoff, end_pgoff);
 out:

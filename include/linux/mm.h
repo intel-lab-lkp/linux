@@ -2696,7 +2696,7 @@ static inline unsigned long get_mm_counter_sum(struct mm_struct *mm, int member)
 
 void mm_trace_rss_stat(struct mm_struct *mm, int member);
 
-static inline void add_mm_counter(struct mm_struct *mm, int member, long value)
+static inline void add_mm_counter_local(struct mm_struct *mm, int member, long value)
 {
 	if (READ_ONCE(current->mm) == mm)
 		lazy_percpu_counter_add_fast(&mm->rss_stat[member], value);
@@ -2705,9 +2705,17 @@ static inline void add_mm_counter(struct mm_struct *mm, int member, long value)
 
 	mm_trace_rss_stat(mm, member);
 }
+static inline void add_mm_counter_other(struct mm_struct *mm, int member, long value)
+{
+	lazy_percpu_counter_add_atomic(&mm->rss_stat[member], value);
 
-#define inc_mm_counter(mm, member) add_mm_counter(mm, member, 1)
-#define dec_mm_counter(mm, member) add_mm_counter(mm, member, -1)
+	mm_trace_rss_stat(mm, member);
+}
+
+#define inc_mm_counter_local(mm, member) add_mm_counter_local(mm, member, 1)
+#define dec_mm_counter_local(mm, member) add_mm_counter_local(mm, member, -1)
+#define inc_mm_counter_other(mm, member) add_mm_counter_other(mm, member, 1)
+#define dec_mm_counter_other(mm, member) add_mm_counter_other(mm, member, -1)
 
 /* Optimized variant when folio is already known not to be anon */
 static inline int mm_counter_file(struct folio *folio)

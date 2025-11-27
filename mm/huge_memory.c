@@ -1229,7 +1229,7 @@ static void map_anon_folio_pmd(struct folio *folio, pmd_t *pmd,
 	folio_add_lru_vma(folio, vma);
 	set_pmd_at(vma->vm_mm, haddr, pmd, entry);
 	update_mmu_cache_pmd(vma, haddr, pmd);
-	add_mm_counter(vma->vm_mm, MM_ANONPAGES, HPAGE_PMD_NR);
+	add_mm_counter_local(vma->vm_mm, MM_ANONPAGES, HPAGE_PMD_NR);
 	count_vm_event(THP_FAULT_ALLOC);
 	count_mthp_stat(HPAGE_PMD_ORDER, MTHP_STAT_ANON_FAULT_ALLOC);
 	count_memcg_event_mm(vma->vm_mm, THP_FAULT_ALLOC);
@@ -1445,7 +1445,7 @@ static vm_fault_t insert_pmd(struct vm_area_struct *vma, unsigned long addr,
 		} else {
 			folio_get(fop.folio);
 			folio_add_file_rmap_pmd(fop.folio, &fop.folio->page, vma);
-			add_mm_counter(mm, mm_counter_file(fop.folio), HPAGE_PMD_NR);
+			add_mm_counter_local(mm, mm_counter_file(fop.folio), HPAGE_PMD_NR);
 		}
 	} else {
 		entry = pmd_mkhuge(pfn_pmd(fop.pfn, prot));
@@ -1564,7 +1564,7 @@ static vm_fault_t insert_pud(struct vm_area_struct *vma, unsigned long addr,
 
 		folio_get(fop.folio);
 		folio_add_file_rmap_pud(fop.folio, &fop.folio->page, vma);
-		add_mm_counter(mm, mm_counter_file(fop.folio), HPAGE_PUD_NR);
+		add_mm_counter_local(mm, mm_counter_file(fop.folio), HPAGE_PUD_NR);
 	} else {
 		entry = pud_mkhuge(pfn_pud(fop.pfn, prot));
 		entry = pud_mkspecial(entry);
@@ -1715,7 +1715,7 @@ int copy_huge_pmd(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 				pmd = pmd_swp_mkuffd_wp(pmd);
 			set_pmd_at(src_mm, addr, src_pmd, pmd);
 		}
-		add_mm_counter(dst_mm, MM_ANONPAGES, HPAGE_PMD_NR);
+		add_mm_counter_local(dst_mm, MM_ANONPAGES, HPAGE_PMD_NR);
 		mm_inc_nr_ptes(dst_mm);
 		pgtable_trans_huge_deposit(dst_mm, dst_pmd, pgtable);
 		if (!userfaultfd_wp(dst_vma))
@@ -1759,7 +1759,7 @@ int copy_huge_pmd(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 		__split_huge_pmd(src_vma, src_pmd, addr, false);
 		return -EAGAIN;
 	}
-	add_mm_counter(dst_mm, MM_ANONPAGES, HPAGE_PMD_NR);
+	add_mm_counter_local(dst_mm, MM_ANONPAGES, HPAGE_PMD_NR);
 out_zero_page:
 	mm_inc_nr_ptes(dst_mm);
 	pgtable_trans_huge_deposit(dst_mm, dst_pmd, pgtable);
@@ -2224,11 +2224,11 @@ int zap_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
 
 		if (folio_test_anon(folio)) {
 			zap_deposited_table(tlb->mm, pmd);
-			add_mm_counter(tlb->mm, MM_ANONPAGES, -HPAGE_PMD_NR);
+			add_mm_counter_other(tlb->mm, MM_ANONPAGES, -HPAGE_PMD_NR);
 		} else {
 			if (arch_needs_pgtable_deposit())
 				zap_deposited_table(tlb->mm, pmd);
-			add_mm_counter(tlb->mm, mm_counter_file(folio),
+			add_mm_counter_other(tlb->mm, mm_counter_file(folio),
 				       -HPAGE_PMD_NR);
 
 			/*
@@ -2720,7 +2720,7 @@ int zap_huge_pud(struct mmu_gather *tlb, struct vm_area_struct *vma,
 		page = pud_page(orig_pud);
 		folio = page_folio(page);
 		folio_remove_rmap_pud(folio, page, vma);
-		add_mm_counter(tlb->mm, mm_counter_file(folio), -HPAGE_PUD_NR);
+		add_mm_counter_other(tlb->mm, mm_counter_file(folio), -HPAGE_PUD_NR);
 
 		spin_unlock(ptl);
 		tlb_remove_page_size(tlb, page, HPAGE_PUD_SIZE);
@@ -2756,7 +2756,7 @@ static void __split_huge_pud_locked(struct vm_area_struct *vma, pud_t *pud,
 		folio_set_referenced(folio);
 	folio_remove_rmap_pud(folio, page, vma);
 	folio_put(folio);
-	add_mm_counter(vma->vm_mm, mm_counter_file(folio),
+	add_mm_counter_local(vma->vm_mm, mm_counter_file(folio),
 		-HPAGE_PUD_NR);
 }
 
@@ -2875,7 +2875,7 @@ static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 			folio_remove_rmap_pmd(folio, page, vma);
 			folio_put(folio);
 		}
-		add_mm_counter(mm, mm_counter_file(folio), -HPAGE_PMD_NR);
+		add_mm_counter_local(mm, mm_counter_file(folio), -HPAGE_PMD_NR);
 		return;
 	}
 
@@ -3189,7 +3189,7 @@ static bool __discard_anon_folio_pmd_locked(struct vm_area_struct *vma,
 
 	folio_remove_rmap_pmd(folio, pmd_page(orig_pmd), vma);
 	zap_deposited_table(mm, pmdp);
-	add_mm_counter(mm, MM_ANONPAGES, -HPAGE_PMD_NR);
+	add_mm_counter_local(mm, MM_ANONPAGES, -HPAGE_PMD_NR);
 	if (vma->vm_flags & VM_LOCKED)
 		mlock_drain_local();
 	folio_put(folio);

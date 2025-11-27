@@ -2161,7 +2161,7 @@ static int unuse_pte(struct vm_area_struct *vma, pmd_t *pmd,
 	if (unlikely(hwpoisoned || !folio_test_uptodate(folio))) {
 		swp_entry_t swp_entry;
 
-		dec_mm_counter(vma->vm_mm, MM_SWAPENTS);
+		dec_mm_counter_other(vma->vm_mm, MM_SWAPENTS);
 		if (hwpoisoned) {
 			swp_entry = make_hwpoison_entry(page);
 		} else {
@@ -2179,8 +2179,8 @@ static int unuse_pte(struct vm_area_struct *vma, pmd_t *pmd,
 	 */
 	arch_swap_restore(folio_swap(entry, folio), folio);
 
-	dec_mm_counter(vma->vm_mm, MM_SWAPENTS);
-	inc_mm_counter(vma->vm_mm, MM_ANONPAGES);
+	dec_mm_counter_other(vma->vm_mm, MM_SWAPENTS);
+	inc_mm_counter_other(vma->vm_mm, MM_ANONPAGES);
 	folio_get(folio);
 	if (folio == swapcache) {
 		rmap_t rmap_flags = RMAP_NONE;

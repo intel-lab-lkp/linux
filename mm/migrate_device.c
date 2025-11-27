@@ -676,7 +676,7 @@ static void migrate_vma_insert_page(struct migrate_vma *migrate,
 	if (userfaultfd_missing(vma))
 		goto unlock_abort;
 
-	inc_mm_counter(mm, MM_ANONPAGES);
+	inc_mm_counter_other(mm, MM_ANONPAGES);
 	folio_add_new_anon_rmap(folio, vma, addr, RMAP_EXCLUSIVE);
 	if (!folio_is_zone_device(folio))
 		folio_add_lru_vma(folio, vma);

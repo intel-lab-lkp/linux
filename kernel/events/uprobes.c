@@ -447,7 +447,7 @@ static int __uprobe_write(struct vm_area_struct *vma,
 	if (!orig_page_is_identical(vma, vaddr, fw->page, &pmd_mappable))
 		goto remap;
 
-	dec_mm_counter(vma->vm_mm, MM_ANONPAGES);
+	dec_mm_counter_other(vma->vm_mm, MM_ANONPAGES);
 	folio_remove_rmap_pte(folio, fw->page, vma);
 	if (!folio_mapped(folio) && folio_test_swapcache(folio) &&
 	     folio_trylock(folio)) {

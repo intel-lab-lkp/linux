@@ -489,7 +489,7 @@ static inline void add_mm_rss_vec(struct mm_struct *mm, int *rss)
 
 	for (i = 0; i < NR_MM_COUNTERS; i++)
 		if (rss[i])
-			add_mm_counter(mm, i, rss[i]);
+			add_mm_counter_other(mm, i, rss[i]);
 }
 
 static bool is_bad_page_map_ratelimited(void)
@@ -2307,7 +2307,7 @@ static int insert_page_into_pte_locked(struct vm_area_struct *vma, pte_t *pte,
 			pteval = pte_mkyoung(pteval);
 			pteval = maybe_mkwrite(pte_mkdirty(pteval), vma);
 		}
-		inc_mm_counter(vma->vm_mm, mm_counter_file(folio));
+		inc_mm_counter_local(vma->vm_mm, mm_counter_file(folio));
 		folio_add_file_rmap_pte(folio, page, vma);
 	}
 	set_pte_at(vma->vm_mm, addr, pte, pteval);
@@ -3717,12 +3717,12 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 	if (likely(vmf->pte && pte_same(ptep_get(vmf->pte), vmf->orig_pte))) {
 		if (old_folio) {
 			if (!folio_test_anon(old_folio)) {
-				dec_mm_counter(mm, mm_counter_file(old_folio));
-				inc_mm_counter(mm, MM_ANONPAGES);
+				dec_mm_counter_other(mm, mm_counter_file(old_folio));
+				inc_mm_counter_other(mm, MM_ANONPAGES);
 			}
 		} else {
 			ksm_might_unmap_zero_page(mm, vmf->orig_pte);
-			inc_mm_counter(mm, MM_ANONPAGES);
+			inc_mm_counter_other(mm, MM_ANONPAGES);
 		}
 		flush_cache_page(vma, vmf->address, pte_pfn(vmf->orig_pte));
 		entry = folio_mk_pte(new_folio, vma->vm_page_prot);
@@ -4917,8 +4917,8 @@ check_folio:
 	if (should_try_to_free_swap(folio, vma, vmf->flags))
 		folio_free_swap(folio);
 
-	add_mm_counter(vma->vm_mm, MM_ANONPAGES, nr_pages);
-	add_mm_counter(vma->vm_mm, MM_SWAPENTS, -nr_pages);
+	add_mm_counter_other(vma->vm_mm, MM_ANONPAGES, nr_pages);
+	add_mm_counter_other(vma->vm_mm, MM_SWAPENTS, -nr_pages);
 	pte = mk_pte(page, vma->vm_page_prot);
 	if (pte_swp_soft_dirty(vmf->orig_pte))
 		pte = pte_mksoft_dirty(pte);
@@ -5224,7 +5224,7 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 	}
 
 	folio_ref_add(folio, nr_pages - 1);
-	add_mm_counter(vma->vm_mm, MM_ANONPAGES, nr_pages);
+	add_mm_counter_other(vma->vm_mm, MM_ANONPAGES, nr_pages);
 	count_mthp_stat(folio_order(folio), MTHP_STAT_ANON_FAULT_ALLOC);
 	folio_add_new_anon_rmap(folio, vma, addr, RMAP_EXCLUSIVE);
 	folio_add_lru_vma(folio, vma);
@@ -5376,7 +5376,7 @@ vm_fault_t do_set_pmd(struct vm_fault *vmf, struct folio *folio, struct page *pa
 	if (write)
 		entry = maybe_pmd_mkwrite(pmd_mkdirty(entry), vma);
 
-	add_mm_counter(vma->vm_mm, mm_counter_file(folio), HPAGE_PMD_NR);
+	add_mm_counter_other(vma->vm_mm, mm_counter_file(folio), HPAGE_PMD_NR);
 	folio_add_file_rmap_pmd(folio, page, vma);
 
 	/*
@@ -5579,7 +5579,7 @@ fallback:
 	folio_ref_add(folio, nr_pages - 1);
 	set_pte_range(vmf, folio, page, nr_pages, addr);
 	type = is_cow ? MM_ANONPAGES : mm_counter_file(folio);
-	add_mm_counter(vma->vm_mm, type, nr_pages);
+	add_mm_counter_other(vma->vm_mm, type, nr_pages);
 	ret = 0;
 
 unlock:
