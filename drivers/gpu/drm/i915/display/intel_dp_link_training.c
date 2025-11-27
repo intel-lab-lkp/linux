@@ -212,6 +212,7 @@ static int intel_dp_init_lttpr(struct intel_dp *intel_dp, const u8 dpcd[DP_RECEI
 int intel_dp_read_dprx_caps(struct intel_dp *intel_dp, u8 dpcd[DP_RECEIVER_CAP_SIZE])
 {
 	struct intel_display *display = to_intel_display(intel_dp);
+	int ret, i;
 
 	if (intel_dp_is_edp(intel_dp))
 		return 0;
@@ -225,7 +226,25 @@ int intel_dp_read_dprx_caps(struct intel_dp *intel_dp, u8 dpcd[DP_RECEIVER_CAP_S
 				      DP_LT_TUNABLE_PHY_REPEATER_FIELD_DATA_STRUCTURE_REV))
 			return -EIO;
 
-	if (drm_dp_read_dpcd_caps(&intel_dp->aux, dpcd))
+	ret = drm_dp_read_dpcd_caps(&intel_dp->aux, dpcd);
+	if (ret == 0)
+		return 0;
+
+	/*
+	 * Workaround for USB-C hubs/adapters with buggy firmware that fail
+	 * multi-byte AUX reads from DPCD address 0x00000 but work with
+	 * single-byte reads. Known affected devices:
+	 * - Lenovo USB-C to VGA adapter (VIA VL817, idVendor=17ef, idProduct=7217)
+	 * - Dell DA310 USB-C hub (idVendor=413c, idProduct=c010)
+	 * Read the DPCD capabilities byte-by-byte as a fallback.
+	 */
+	for (i = 0; i < DP_RECEIVER_CAP_SIZE; i++) {
+		ret = drm_dp_dpcd_readb(&intel_dp->aux, DP_DPCD_REV + i, &dpcd[i]);
+		if (ret < 0)
+			return -EIO;
+	}
+
+	if (dpcd[DP_DPCD_REV] == 0)
 		return -EIO;
 
 	return 0;
