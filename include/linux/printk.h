@@ -65,6 +65,7 @@ static inline const char *printk_skip_headers(const char *buffer)
 int match_devname_and_update_preferred_console(const char *match,
 					       const char *name,
 					       const short idx);
+int console_clamp_loglevel(int level);
 
 extern int console_printk[];
 

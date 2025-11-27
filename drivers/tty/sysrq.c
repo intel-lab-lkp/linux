@@ -101,7 +101,7 @@ __setup("sysrq_always_enabled", sysrq_always_enabled_setup);
 
 static void sysrq_handle_loglevel(u8 key)
 {
-	u8 loglevel = key - '0';
+	u8 loglevel = console_clamp_loglevel(key - '0');
 
 	console_loglevel = CONSOLE_LOGLEVEL_DEFAULT;
 	pr_info("Loglevel set to %u\n", loglevel);
