@@ -209,6 +209,9 @@ int main(void)
 	DEVID_FIELD(rio_device_id, asm_did);
 	DEVID_FIELD(rio_device_id, asm_vid);
 
+	DEVID(mcb_device_id);
+	DEVID_FIELD(mcb_device_id, device);
+
 	DEVID(ulpi_device_id);
 	DEVID_FIELD(ulpi_device_id, vendor);
 	DEVID_FIELD(ulpi_device_id, product);

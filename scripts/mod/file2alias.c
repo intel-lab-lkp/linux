@@ -1144,6 +1144,14 @@ static void do_rio_entry(struct module *mod, void *symval)
 	module_alias_printf(mod, true, "rapidio:%s", alias);
 }
 
+/* Looks like: mcb:16zN */
+static void do_mcb_entry(struct module *mod, void *symval)
+{
+	DEF_FIELD(symval, mcb_device_id, device);
+
+	module_alias_printf(mod, false, "mcb:16z%03d", device);
+}
+
 /* Looks like: ulpi:vNpN */
 static void do_ulpi_entry(struct module *mod, void *symval)
 {
@@ -1446,6 +1454,7 @@ static const struct devtable devtable[] = {
 	{"cpu", SIZE_cpu_feature, do_cpu_entry},
 	{"mei", SIZE_mei_cl_device_id, do_mei_entry},
 	{"rapidio", SIZE_rio_device_id, do_rio_entry},
+	{"mcb", SIZE_mcb_device_id, do_mcb_entry},
 	{"ulpi", SIZE_ulpi_device_id, do_ulpi_entry},
 	{"hdaudio", SIZE_hda_device_id, do_hda_entry},
 	{"sdw", SIZE_sdw_device_id, do_sdw_entry},
