@@ -812,6 +812,12 @@ struct scx_rq {
 
 static inline int rt_bandwidth_enabled(void)
 {
+#ifdef CONFIG_RT_GROUP_SCHED
+	/* Disable rt_bandwidth for cgroup v2 */
+	if (root_task_group.css.cgroup &&
+	    root_task_group.css.cgroup->root == &cgrp_dfl_root)
+		return 0;
+#endif
 	return sysctl_sched_rt_runtime >= 0;
 }
 
