@@ -56,6 +56,16 @@ int vcpu_enable_evmcs(struct kvm_vcpu *vcpu)
 	return evmcs_ver;
 }
 
+void vm_enable_ept(struct kvm_vm *vm)
+{
+	TEST_ASSERT(kvm_cpu_has_ept(), "KVM doesn't support nested EPT");
+	if (vm->arch.nested.mmu)
+		return;
+
+	/* EPTP_PWL_4 is always used */
+	vm->arch.nested.mmu = mmu_create(vm, 4, NULL);
+}
+
 /* Allocate memory regions for nested VMX tests.
  *
  * Input Args:
@@ -104,6 +114,9 @@ vcpu_alloc_vmx(struct kvm_vm *vm, vm_vaddr_t *p_vmx_gva)
 	vmx->vmwrite_hva = addr_gva2hva(vm, (uintptr_t)vmx->vmwrite);
 	vmx->vmwrite_gpa = addr_gva2gpa(vm, (uintptr_t)vmx->vmwrite);
 	memset(vmx->vmwrite_hva, 0, getpagesize());
+
+	if (vm->arch.nested.mmu)
+		vmx->eptp_gpa = vm->arch.nested.mmu->root_gpa;
 
 	*p_vmx_gva = vmx_gva;
 	return vmx;
@@ -395,7 +408,8 @@ void __tdp_pg_map(struct vmx_pages *vmx, struct kvm_vm *vm,
 		  uint64_t nested_paddr, uint64_t paddr, int target_level)
 {
 	const uint64_t page_size = PG_LEVEL_SIZE(target_level);
-	struct eptPageTableEntry *pt = vmx->eptp_hva, *pte;
+	void *eptp_hva = addr_gpa2hva(vm, vm->arch.nested.mmu->root_gpa);
+	struct eptPageTableEntry *pt = eptp_hva, *pte;
 	uint16_t index;
 
 	TEST_ASSERT(vm->mode == VM_MODE_PXXVYY_4K,
@@ -523,15 +537,6 @@ bool kvm_cpu_has_ept(void)
 
 	ctrl = kvm_get_feature_msr(MSR_IA32_VMX_PROCBASED_CTLS2) >> 32;
 	return ctrl & SECONDARY_EXEC_ENABLE_EPT;
-}
-
-void prepare_eptp(struct vmx_pages *vmx, struct kvm_vm *vm)
-{
-	TEST_ASSERT(kvm_cpu_has_ept(), "KVM doesn't support nested EPT");
-
-	vmx->eptp = (void *)vm_vaddr_alloc_page(vm);
-	vmx->eptp_hva = addr_gva2hva(vm, (uintptr_t)vmx->eptp);
-	vmx->eptp_gpa = addr_gva2gpa(vm, (uintptr_t)vmx->eptp);
 }
 
 void prepare_virtualize_apic_accesses(struct vmx_pages *vmx, struct kvm_vm *vm)

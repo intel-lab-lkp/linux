@@ -156,14 +156,14 @@ bool kvm_is_tdp_enabled(void)
 		return get_kvm_amd_param_bool("npt");
 }
 
-static struct kvm_mmu *mmu_create(struct kvm_vm *vm,
-				  int pgtable_levels,
-				  struct pte_masks *pte_masks)
+struct kvm_mmu *mmu_create(struct kvm_vm *vm, int pgtable_levels,
+			   struct pte_masks *pte_masks)
 {
 	struct kvm_mmu *mmu = calloc(1, sizeof(*mmu));
 
 	TEST_ASSERT(mmu, "-ENOMEM when allocating MMU");
-	mmu->pte_masks = *pte_masks;
+	if (pte_masks)
+		mmu->pte_masks = *pte_masks;
 	mmu->root_gpa = vm_alloc_page_table(vm);
 	mmu->pgtable_levels = pgtable_levels;
 	return mmu;

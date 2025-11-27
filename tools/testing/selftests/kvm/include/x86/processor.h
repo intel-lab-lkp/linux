@@ -1477,6 +1477,8 @@ struct kvm_mmu {
 #define pte_c(mmu, pte) (!!(*(pte) & PTE_C_MASK(mmu)))
 #define pte_s(mmu, pte) (!!(*(pte) & PTE_S_MASK(mmu)))
 
+struct kvm_mmu *mmu_create(struct kvm_vm *vm, int pgtable_levels,
+			   struct pte_masks *pte_masks);
 void __virt_pg_map(struct kvm_vm *vm, struct kvm_mmu *mmu, uint64_t vaddr,
 		   uint64_t paddr,  int level);
 void virt_map_level(struct kvm_vm *vm, uint64_t vaddr, uint64_t paddr,
