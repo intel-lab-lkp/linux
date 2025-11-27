@@ -3531,9 +3531,17 @@ s32 e1000e_get_base_timinca(struct e1000_adapter *adapter, u32 *timinca)
 		shift = INCVALUE_SHIFT_24MHZ;
 		adapter->cc.shift = shift;
 		break;
-	case e1000_pch_cnp:
 	case e1000_pch_tgp:
 	case e1000_pch_adp:
+		if (adapter->priv_flags & PRIV_FLAG_38_4MHZ_XTAL_CLK) {
+			incperiod = INCPERIOD_38400KHZ;
+			incvalue = INCVALUE_38400KHZ;
+			shift = INCVALUE_SHIFT_38400KHZ;
+			adapter->cc.shift = shift;
+			break;
+		}
+		fallthrough;
+	case e1000_pch_cnp:
 	case e1000_pch_nvp:
 		if (er32(TSYNCRXCTL) & E1000_TSYNCRXCTL_SYSCFI) {
 			/* Stable 24MHz frequency */
@@ -6987,7 +6995,7 @@ static int e1000e_pm_suspend(struct device *dev)
 	rc = __e1000_shutdown(pdev, false);
 	if (!rc) {
 		/* Introduce S0ix implementation */
-		if (adapter->flags2 & FLAG2_ENABLE_S0IX_FLOWS)
+		if (adapter->priv_flags & PRIV_FLAG_ENABLE_S0IX_FLOWS)
 			e1000e_s0ix_entry_flow(adapter);
 	}
 
@@ -7002,7 +7010,7 @@ static int e1000e_pm_resume(struct device *dev)
 	int rc;
 
 	/* Introduce S0ix implementation */
-	if (adapter->flags2 & FLAG2_ENABLE_S0IX_FLOWS)
+	if (adapter->priv_flags & PRIV_FLAG_ENABLE_S0IX_FLOWS)
 		e1000e_s0ix_exit_flow(adapter);
 
 	rc = __e1000_resume(pdev);
@@ -7676,7 +7684,7 @@ static int e1000_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	e1000e_ptp_init(adapter);
 
 	if (hw->mac.type >= e1000_pch_mtp)
-		adapter->flags2 |= FLAG2_DISABLE_K1;
+		adapter->priv_flags |= PRIV_FLAG_DISABLE_K1;
 
 	/* reset the hardware with the new settings */
 	e1000e_reset(adapter);
@@ -7689,7 +7697,7 @@ static int e1000_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		e1000e_get_hw_control(adapter);
 
 	if (hw->mac.type >= e1000_pch_cnp)
-		adapter->flags2 |= FLAG2_ENABLE_S0IX_FLOWS;
+		adapter->priv_flags |= PRIV_FLAG_ENABLE_S0IX_FLOWS;
 
 	strscpy(netdev->name, "eth%d", sizeof(netdev->name));
 	err = register_netdev(netdev);

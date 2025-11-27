@@ -310,6 +310,7 @@ struct e1000_adapter {
 
 	unsigned int flags;
 	unsigned int flags2;
+	unsigned int priv_flags;
 	struct work_struct downshift_task;
 	struct work_struct update_phy_task;
 	struct work_struct print_hang_task;
@@ -460,8 +461,10 @@ s32 e1000e_get_base_timinca(struct e1000_adapter *adapter, u32 *timinca);
 #define FLAG2_DFLT_CRC_STRIPPING          BIT(12)
 #define FLAG2_CHECK_RX_HWTSTAMP           BIT(13)
 #define FLAG2_CHECK_SYSTIM_OVERFLOW       BIT(14)
-#define FLAG2_ENABLE_S0IX_FLOWS           BIT(15)
-#define FLAG2_DISABLE_K1		   BIT(16)
+
+#define PRIV_FLAG_ENABLE_S0IX_FLOWS	   BIT(0)
+#define PRIV_FLAG_DISABLE_K1		   BIT(1)
+#define PRIV_FLAG_38_4MHZ_XTAL_CLK	   BIT(2)
 
 #define E1000_RX_DESC_PS(R, i)	    \
 	(&(((union e1000_rx_desc_packet_split *)((R).desc))[i]))

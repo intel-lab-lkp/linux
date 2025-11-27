@@ -24,10 +24,9 @@ struct e1000_stats {
 };
 
 static const char e1000e_priv_flags_strings[][ETH_GSTRING_LEN] = {
-#define E1000E_PRIV_FLAGS_S0IX_ENABLED	BIT(0)
 	"s0ix-enabled",
-#define E1000E_PRIV_FLAGS_DISABLE_K1	BIT(1)
 	"disable-k1",
+	"force_38_4mhz_xtal_clock",
 };
 
 #define E1000E_PRIV_FLAGS_STR_LEN ARRAY_SIZE(e1000e_priv_flags_strings)
@@ -2294,49 +2293,49 @@ static int e1000e_get_ts_info(struct net_device *netdev,
 static u32 e1000e_get_priv_flags(struct net_device *netdev)
 {
 	struct e1000_adapter *adapter = netdev_priv(netdev);
-	u32 priv_flags = 0;
 
-	if (adapter->flags2 & FLAG2_ENABLE_S0IX_FLOWS)
-		priv_flags |= E1000E_PRIV_FLAGS_S0IX_ENABLED;
-
-	if (adapter->flags2 & FLAG2_DISABLE_K1)
-		priv_flags |= E1000E_PRIV_FLAGS_DISABLE_K1;
-
-	return priv_flags;
+	return adapter->priv_flags;
 }
 
 static int e1000e_set_priv_flags(struct net_device *netdev, u32 priv_flags)
 {
 	struct e1000_adapter *adapter = netdev_priv(netdev);
 	struct e1000_hw *hw = &adapter->hw;
-	unsigned int flags2 = adapter->flags2;
+	unsigned int temp_flags = 0;
 	unsigned int changed;
 
-	flags2 &= ~(FLAG2_ENABLE_S0IX_FLOWS | FLAG2_DISABLE_K1);
-
-	if (priv_flags & E1000E_PRIV_FLAGS_S0IX_ENABLED) {
+	if (priv_flags & PRIV_FLAG_ENABLE_S0IX_FLOWS) {
 		if (hw->mac.type < e1000_pch_cnp) {
 			e_err("S0ix is not supported on this device\n");
 			return -EINVAL;
 		}
 
-		flags2 |= FLAG2_ENABLE_S0IX_FLOWS;
+		temp_flags |= PRIV_FLAG_ENABLE_S0IX_FLOWS;
 	}
 
-	if (priv_flags & E1000E_PRIV_FLAGS_DISABLE_K1) {
+	if (priv_flags & PRIV_FLAG_DISABLE_K1) {
 		if (hw->mac.type < e1000_ich8lan) {
 			e_err("Disabling K1 is not supported on this device\n");
 			return -EINVAL;
 		}
 
-		flags2 |= FLAG2_DISABLE_K1;
+		temp_flags |= PRIV_FLAG_DISABLE_K1;
 	}
 
-	changed = adapter->flags2 ^ flags2;
-	if (changed)
-		adapter->flags2 = flags2;
+	if (priv_flags & PRIV_FLAG_38_4MHZ_XTAL_CLK) {
+		if (hw->mac.type != e1000_pch_tgp && hw->mac.type != e1000_pch_adp) {
+			e_err("Forcing 38.4MHz frequency on the XTAL is not supported on this device\n");
+			return -EINVAL;
+		}
 
-	if (changed & FLAG2_DISABLE_K1) {
+		temp_flags |= PRIV_FLAG_38_4MHZ_XTAL_CLK;
+	}
+
+	changed = adapter->priv_flags ^ temp_flags;
+	if (changed)
+		adapter->priv_flags = temp_flags;
+
+	if (changed & (PRIV_FLAG_DISABLE_K1 | PRIV_FLAG_38_4MHZ_XTAL_CLK)) {
 		/* reset the hardware to apply the changes */
 		while (test_and_set_bit(__E1000_RESETTING,
 					&adapter->state))

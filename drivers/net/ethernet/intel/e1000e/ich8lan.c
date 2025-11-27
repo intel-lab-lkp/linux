@@ -302,7 +302,7 @@ static s32 e1000_reconfigure_k1_params(struct e1000_hw *hw)
 	s32 ret_val;
 
 	if (hw->mac.type < e1000_pch_mtp) {
-		if (hw->adapter->flags2 & FLAG2_DISABLE_K1)
+		if (hw->adapter->priv_flags & PRIV_FLAG_DISABLE_K1)
 			return e1000_configure_k1_ich8lan(hw, false);
 		return 0;
 	}
@@ -315,7 +315,7 @@ static s32 e1000_reconfigure_k1_params(struct e1000_hw *hw)
 
 	/* Wait for the interface the settle */
 	usleep_range(1000, 1100);
-	if (hw->adapter->flags2 & FLAG2_DISABLE_K1)
+	if (hw->adapter->flags2 & PRIV_FLAG_DISABLE_K1)
 		return e1000_configure_k1_ich8lan(hw, false);
 
 	/* Change K1 exit timeout */
