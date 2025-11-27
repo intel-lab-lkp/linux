@@ -333,6 +333,9 @@ struct Qdisc_ops {
 						     u32 block_index);
 	void			(*egress_block_set)(struct Qdisc *sch,
 						    u32 block_index);
+	int			(*quirk_chk)(struct Qdisc *sch,
+					     struct nlattr *arg,
+					     struct netlink_ext_ack *extack);
 	u32			(*ingress_block_get)(struct Qdisc *sch);
 	u32			(*egress_block_get)(struct Qdisc *sch);
 
