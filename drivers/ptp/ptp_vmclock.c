@@ -5,6 +5,9 @@
  * Copyright © 2024 Amazon.com, Inc. or its affiliates.
  */
 
+#include "linux/poll.h"
+#include "linux/types.h"
+#include "linux/wait.h"
 #include <linux/acpi.h>
 #include <linux/device.h>
 #include <linux/err.h>
@@ -39,6 +42,7 @@ struct vmclock_state {
 	struct resource res;
 	struct vmclock_abi *clk;
 	struct miscdevice miscdev;
+	wait_queue_head_t disrupt_wait;
 	struct ptp_clock_info ptp_clock_info;
 	struct ptp_clock *ptp_clock;
 	enum clocksource_ids cs_id, sys_cs_id;
@@ -357,10 +361,15 @@ static struct ptp_clock *vmclock_ptp_register(struct device *dev,
 	return ptp_clock_register(&st->ptp_clock_info, dev);
 }
 
+struct vmclock_file_state {
+	struct vmclock_state *st;
+	uint32_t seq;
+};
+
 static int vmclock_miscdev_mmap(struct file *fp, struct vm_area_struct *vma)
 {
-	struct vmclock_state *st = container_of(fp->private_data,
-						struct vmclock_state, miscdev);
+	struct vmclock_file_state *fst = fp->private_data;
+	struct vmclock_state *st = fst->st;
 
 	if ((vma->vm_flags & (VM_READ|VM_WRITE)) != VM_READ)
 		return -EROFS;
@@ -379,8 +388,9 @@ static int vmclock_miscdev_mmap(struct file *fp, struct vm_area_struct *vma)
 static ssize_t vmclock_miscdev_read(struct file *fp, char __user *buf,
 				    size_t count, loff_t *ppos)
 {
-	struct vmclock_state *st = container_of(fp->private_data,
-						struct vmclock_state, miscdev);
+	struct vmclock_file_state *fst = fp->private_data;
+	struct vmclock_state *st = fst->st;
+
 	ktime_t deadline = ktime_add(ktime_get(), VMCLOCK_MAX_WAIT);
 	size_t max_count;
 	uint32_t seq;
@@ -402,8 +412,10 @@ static ssize_t vmclock_miscdev_read(struct file *fp, char __user *buf,
 
 		/* Pairs with hypervisor wmb */
 		virt_rmb();
-		if (seq == le32_to_cpu(st->clk->seq_count))
+		if (seq == le32_to_cpu(st->clk->seq_count)) {
+			fst->seq = seq;
 			break;
+		}
 
 		if (ktime_after(ktime_get(), deadline))
 			return -ETIMEDOUT;
@@ -413,10 +425,58 @@ static ssize_t vmclock_miscdev_read(struct file *fp, char __user *buf,
 	return count;
 }
 
+static __poll_t vmclock_miscdev_poll(struct file *fp, poll_table *wait)
+{
+	struct vmclock_file_state *fst = fp->private_data;
+	struct vmclock_state *st = fst->st;
+	uint32_t seq;
+
+	/*
+	 * Hypervisor will not send us any notifications, so fail immediately
+	 * to avoid having caller sleeping for ever.
+	 */
+	if (!(st->clk->flags & VMCLOCK_FLAG_NOTIFICATION_PRESENT))
+		return POLLHUP;
+
+	poll_wait(fp, &st->disrupt_wait, wait);
+
+	seq = le32_to_cpu(st->clk->seq_count);
+	if (fst->seq != seq)
+		return POLLIN | POLLRDNORM;
+
+	return 0;
+}
+
+static int vmclock_miscdev_open(struct inode *inode, struct file *fp)
+{
+	struct vmclock_state *st = container_of(fp->private_data,
+						struct vmclock_state, miscdev);
+	struct vmclock_file_state *fst = kzalloc(sizeof(*fst), GFP_KERNEL);
+
+	if (!fst)
+		return -ENOMEM;
+
+	fst->st = st;
+	fst->seq = le32_to_cpu(st->clk->seq_count);
+
+	fp->private_data = fst;
+
+	return 0;
+}
+
+static int vmclock_miscdev_release(struct inode *inode, struct file *fp)
+{
+	kfree(fp->private_data);
+	return 0;
+}
+
 static const struct file_operations vmclock_miscdev_fops = {
 	.owner = THIS_MODULE,
+	.open = vmclock_miscdev_open,
+	.release = vmclock_miscdev_release,
 	.mmap = vmclock_miscdev_mmap,
 	.read = vmclock_miscdev_read,
+	.poll = vmclock_miscdev_poll,
 };
 
 /* module operations */
@@ -457,6 +517,44 @@ static acpi_status vmclock_acpi_resources(struct acpi_resource *ares, void *data
 	}
 
 	return AE_ERROR;
+}
+
+static void
+vmclock_acpi_notification_handler(acpi_handle __always_unused handle,
+				  u32 __always_unused event, void *dev)
+{
+	struct device *device = dev;
+	struct vmclock_state *st = device->driver_data;
+
+	wake_up_interruptible(&st->disrupt_wait);
+}
+
+static int vmclock_setup_notification(struct device *dev, struct vmclock_state *st)
+{
+	struct acpi_device *adev = ACPI_COMPANION(dev);
+	acpi_status status;
+
+	/*
+	 * This should never happen as this function is only called when
+	 * has_acpi_companion(dev) is true, but the logic is sufficiently
+	 * complex that Coverity can't see the tautology.
+	 */
+	if (!adev)
+		return -ENODEV;
+
+	/* The device does not support notifications. Nothing else to do */
+	if (!(le64_to_cpu(st->clk->flags) & VMCLOCK_FLAG_NOTIFICATION_PRESENT))
+		return 0;
+
+	status = acpi_install_notify_handler(adev->handle, ACPI_DEVICE_NOTIFY,
+					     vmclock_acpi_notification_handler,
+					     dev);
+	if (ACPI_FAILURE(status)) {
+		dev_err(dev, "failed to install notification handler");
+		return -ENODEV;
+	}
+
+	return 0;
 }
 
 static int vmclock_probe_acpi(struct device *dev, struct vmclock_state *st)
@@ -549,6 +647,9 @@ static int vmclock_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+	init_waitqueue_head(&st->disrupt_wait);
+	vmclock_setup_notification(dev, st);
+
 	/*
 	 * If the structure is big enough, it can be mapped to userspace.
 	 * Theoretically a guest OS even using larger pages could still
@@ -580,6 +681,8 @@ static int vmclock_probe(struct platform_device *pdev)
 		dev_info(dev, "vmclock: Neither miscdev nor PTP available; not registering\n");
 		return -ENODEV;
 	}
+
+	dev->driver_data = st;
 
 	dev_info(dev, "%s: registered %s%s%s\n", st->name,
 		 st->miscdev.minor ? "miscdev" : "",
