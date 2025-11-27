@@ -363,7 +363,7 @@ impl platform::Driver for Th1520PwmPlatformDriver {
             return Err(EINVAL);
         }
 
-        let chip = pwm::Chip::new(
+        pwm::Chip::new(
             dev,
             TH1520_MAX_PWM_NUM,
             try_pin_init!(Th1520PwmDriverData {
@@ -371,8 +371,6 @@ impl platform::Driver for Th1520PwmPlatformDriver {
                 clk <- clk,
             }),
         )?;
-
-        pwm::Registration::register(dev, chip)?;
 
         Ok(KBox::new(Th1520PwmPlatformDriver, GFP_KERNEL)?.into())
     }
