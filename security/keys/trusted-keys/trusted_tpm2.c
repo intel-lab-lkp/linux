@@ -98,9 +98,8 @@ struct tpm2_key_context {
 	u32 priv_len;
 };
 
-static int tpm2_key_decode(struct trusted_key_payload *payload,
-			   struct trusted_key_options *options,
-			   u8 **buf)
+static void *tpm2_key_decode(struct trusted_key_payload *payload,
+			     struct trusted_key_options *options)
 {
 	int ret;
 	struct tpm2_key_context ctx;
@@ -111,16 +110,15 @@ static int tpm2_key_decode(struct trusted_key_payload *payload,
 	ret = asn1_ber_decoder(&tpm2key_decoder, &ctx, payload->blob,
 			       payload->blob_len);
 	if (ret < 0)
-		return ret;
+		return ERR_PTR(ret);
 
 	if (ctx.priv_len + ctx.pub_len > MAX_BLOB_SIZE)
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 
 	blob = kmalloc(ctx.priv_len + ctx.pub_len + 4, GFP_KERNEL);
 	if (!blob)
-		return -ENOMEM;
+		return ERR_PTR(-ENOMEM);
 
-	*buf = blob;
 	options->keyhandle = ctx.parent;
 
 	memcpy(blob, ctx.priv, ctx.priv_len);
@@ -128,7 +126,7 @@ static int tpm2_key_decode(struct trusted_key_payload *payload,
 
 	memcpy(blob, ctx.pub, ctx.pub_len);
 
-	return 0;
+	return blob;
 }
 
 int tpm2_key_parent(void *context, size_t hdrlen,
@@ -372,6 +370,7 @@ static int tpm2_load_cmd(struct tpm_chip *chip,
 			 struct trusted_key_options *options,
 			 u32 *blob_handle)
 {
+	u8 *blob_ref __free(kfree) = NULL;
 	struct tpm_buf buf;
 	unsigned int private_len;
 	unsigned int public_len;
@@ -380,11 +379,14 @@ static int tpm2_load_cmd(struct tpm_chip *chip,
 	int rc;
 	u32 attrs;
 
-	rc = tpm2_key_decode(payload, options, &blob);
-	if (rc) {
+	blob = tpm2_key_decode(payload, options);
+	if (IS_ERR(blob)) {
 		/* old form */
 		blob = payload->blob;
 		payload->old_format = 1;
+	} else {
+		/* Bind to cleanup: */
+		blob_ref = blob;
 	}
 
 	/* new format carries keyhandle but old format doesn't */
@@ -449,8 +451,6 @@ static int tpm2_load_cmd(struct tpm_chip *chip,
 			(__be32 *) &buf.data[TPM_HEADER_SIZE]);
 
 out:
-	if (blob != payload->blob)
-		kfree(blob);
 	tpm_buf_destroy(&buf);
 
 	if (rc > 0)
