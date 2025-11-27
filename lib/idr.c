@@ -74,6 +74,7 @@ EXPORT_SYMBOL_GPL(idr_alloc_u32);
  * exclude simultaneous writers.
  *
  * Return: The newly allocated ID, -ENOMEM if memory allocation failed,
+ * -EINVAL is start value is less than 0 or if new id would be in wrong range,
  * or -ENOSPC if no free IDs could be found.
  */
 int idr_alloc(struct idr *idr, void *ptr, int start, int end, gfp_t gfp)
@@ -87,6 +88,11 @@ int idr_alloc(struct idr *idr, void *ptr, int start, int end, gfp_t gfp)
 	ret = idr_alloc_u32(idr, ptr, &id, end > 0 ? end - 1 : INT_MAX, gfp);
 	if (ret)
 		return ret;
+
+	if (WARN_ON_ONCE(id < start || (id >= end && end != 0))) {
+		idr_remove(idr, id);
+		return -EINVAL;
+	}
 
 	return id;
 }
@@ -112,6 +118,7 @@ EXPORT_SYMBOL_GPL(idr_alloc);
  * exclude simultaneous writers.
  *
  * Return: The newly allocated ID, -ENOMEM if memory allocation failed,
+ * -EINVAL if new id would be in wrong range,
  * or -ENOSPC if no free IDs could be found.
  */
 int idr_alloc_cyclic(struct idr *idr, void *ptr, int start, int end, gfp_t gfp)
@@ -129,6 +136,11 @@ int idr_alloc_cyclic(struct idr *idr, void *ptr, int start, int end, gfp_t gfp)
 	}
 	if (err)
 		return err;
+
+	if (WARN_ON_ONCE(id < start || (id >= end && end != 0))) {
+		idr_remove(idr, id);
+		return -EINVAL;
+	}
 
 	idr->idr_next = id + 1;
 	return id;
