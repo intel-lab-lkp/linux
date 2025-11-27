@@ -2560,7 +2560,12 @@ static int __add_preferred_console(const char *name, const short idx,
 		    (devname && strcmp(c->devname, devname) == 0)) {
 			if (!brl_options)
 				preferred_console = i;
+
+			if (options)
+				c->options = options;
+
 			set_user_specified(c, user_specified);
+			braille_set_options(c, brl_options);
 			return 0;
 		}
 	}
