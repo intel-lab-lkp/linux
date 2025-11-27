@@ -68,6 +68,14 @@ static int coalesced_mmio_write(struct kvm_vcpu *vcpu,
 
 	/* copy data in first free entry of the ring */
 
+	/* Prevent overflow of the fixed 8-byte data[] field */
+	if (len > sizeof(ring->coalesced_mmio[insert].data)) {
+		spin_unlock(&dev->kvm->ring_lock);
+		pr_warn_ratelimited("KVM: coalesced MMIO write too large (%d > %zu)\n",
+				    len, sizeof(ring->coalesced_mmio[insert].data));
+		return -E2BIG;
+	}
+
 	ring->coalesced_mmio[insert].phys_addr = addr;
 	ring->coalesced_mmio[insert].len = len;
 	memcpy(ring->coalesced_mmio[insert].data, val, len);
