@@ -320,6 +320,17 @@ config SAMPLE_HUNG_TASK
 	  Reading these files with multiple processes triggers hung task
 	  detection by holding locks for a long time (256 seconds).
 
+config SAMPLE_IRQCHIP
+	bool "Test IRQ chip driver"
+	depends on IRQ_DOMAIN_HIERARCHY
+	help
+	  Build a driver that demonstrates the implementation of multiple IRQ
+	  chip types (root, hierarchical, multiplexing). It serves as a
+	  reference implementation for IRQ chip driver development, showcasing
+	  different domain management patterns and interrupt routing mechanisms.
+	  It supports simulation of interrupt handling with CPU affinity through
+	  sysfs parameters.
+
 source "samples/rust/Kconfig"
 
 source "samples/damon/Kconfig"
