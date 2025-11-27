@@ -1114,36 +1114,6 @@ int __init_memblock memblock_reserved_mark_noinit(phys_addr_t base, phys_addr_t 
 				    MEMBLOCK_RSRV_NOINIT);
 }
 
-/**
- * memblock_mark_kho_scratch - Mark a memory region as MEMBLOCK_KHO_SCRATCH.
- * @base: the base phys addr of the region
- * @size: the size of the region
- *
- * Only memory regions marked with %MEMBLOCK_KHO_SCRATCH will be considered
- * for allocations during early boot with kexec handover.
- *
- * Return: 0 on success, -errno on failure.
- */
-__init int memblock_mark_kho_scratch(phys_addr_t base, phys_addr_t size)
-{
-	return memblock_setclr_flag(&memblock.memory, base, size, 1,
-				    MEMBLOCK_KHO_SCRATCH);
-}
-
-/**
- * memblock_clear_kho_scratch - Clear MEMBLOCK_KHO_SCRATCH flag for a
- * specified region.
- * @base: the base phys addr of the region
- * @size: the size of the region
- *
- * Return: 0 on success, -errno on failure.
- */
-__init int memblock_clear_kho_scratch(phys_addr_t base, phys_addr_t size)
-{
-	return memblock_setclr_flag(&memblock.memory, base, size, 0,
-				    MEMBLOCK_KHO_SCRATCH);
-}
-
 static bool should_skip_region(struct memblock_type *type,
 			       struct memblock_region *m,
 			       int nid, int flags)
@@ -2618,11 +2588,55 @@ static bool __init reserve_mem_kho_revive(const char *name, phys_addr_t size,
 
 	return true;
 }
+
+/**
+ * memblock_mark_kho_scratch - Mark a memory region as MEMBLOCK_KHO_SCRATCH.
+ * @base: the base phys addr of the region
+ * @size: the size of the region
+ *
+ * Only memory regions marked with %MEMBLOCK_KHO_SCRATCH will be considered
+ * for allocations during early boot with kexec handover.
+ *
+ * Return: 0 on success, -errno on failure.
+ */
+__init int memblock_mark_kho_scratch(phys_addr_t base, phys_addr_t size)
+{
+	if (is_kho_boot())
+		return memblock_setclr_flag(&memblock.memory, base, size, 1,
+					    MEMBLOCK_KHO_SCRATCH);
+	return 0;
+}
+
+/**
+ * memblock_clear_kho_scratch - Clear MEMBLOCK_KHO_SCRATCH flag for a
+ * specified region.
+ * @base: the base phys addr of the region
+ * @size: the size of the region
+ *
+ * Return: 0 on success, -errno on failure.
+ */
+__init int memblock_clear_kho_scratch(phys_addr_t base, phys_addr_t size)
+{
+	if (is_kho_boot())
+		return memblock_setclr_flag(&memblock.memory, base, size, 0,
+					    MEMBLOCK_KHO_SCRATCH);
+	return 0;
+}
 #else
 static bool __init reserve_mem_kho_revive(const char *name, phys_addr_t size,
 					  phys_addr_t align)
 {
 	return false;
+}
+
+__init int memblock_mark_kho_scratch(phys_addr_t base, phys_addr_t size)
+{
+	return 0;
+}
+
+__init int memblock_clear_kho_scratch(phys_addr_t base, phys_addr_t size)
+{
+	return 0;
 }
 #endif /* CONFIG_KEXEC_HANDOVER */
 
