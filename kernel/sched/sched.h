@@ -242,6 +242,8 @@ static inline void update_avg(u64 *avg, u64 sample)
 	*avg += diff / 8;
 }
 
+extern void update_rq_avg_idle(struct rq *);
+
 /*
  * Shifting a value by an exponent greater *or equal* to the size of said value
  * is UB; cap at size-1.

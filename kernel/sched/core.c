@@ -2135,6 +2135,7 @@ void activate_task(struct rq *rq, struct task_struct *p, int flags)
 		sched_mm_cid_migrate_to(rq, p);
 
 	enqueue_task(rq, p, flags);
+	update_rq_avg_idle(rq);
 
 	WRITE_ONCE(p->on_rq, TASK_ON_RQ_QUEUED);
 	ASSERT_EXCLUSIVE_WRITER(p->on_rq);
@@ -2410,6 +2411,21 @@ static inline bool is_cpu_allowed(struct task_struct *p, int cpu)
 
 	/* But are allowed during online. */
 	return cpu_online(cpu);
+}
+
+void update_rq_avg_idle(struct rq *rq)
+{
+	if (rq->idle_stamp) {
+		u64 delta = rq_clock(rq) - rq->idle_stamp;
+		u64 max = 2*rq->max_idle_balance_cost;
+
+		update_avg(&rq->avg_idle, delta);
+
+		if (rq->avg_idle > max)
+			rq->avg_idle = max;
+
+		rq->idle_stamp = 0;
+	}
 }
 
 /*
@@ -3644,18 +3660,6 @@ ttwu_do_activate(struct rq *rq, struct task_struct *p, int wake_flags,
 		rq_unpin_lock(rq, rf);
 		p->sched_class->task_woken(rq, p);
 		rq_repin_lock(rq, rf);
-	}
-
-	if (rq->idle_stamp) {
-		u64 delta = rq_clock(rq) - rq->idle_stamp;
-		u64 max = 2*rq->max_idle_balance_cost;
-
-		update_avg(&rq->avg_idle, delta);
-
-		if (rq->avg_idle > max)
-			rq->avg_idle = max;
-
-		rq->idle_stamp = 0;
 	}
 }
 
