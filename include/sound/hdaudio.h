@@ -246,6 +246,8 @@ struct hdac_bus_ops {
 	/* get a response from the last command */
 	int (*get_response)(struct hdac_bus *bus, unsigned int addr,
 			    unsigned int *res);
+	/* translate dma address from host to hdac */
+	dma_addr_t (*addr_host_to_hdac)(struct hdac_bus *bus, dma_addr_t addr);
 	/* notify of codec link power-up/down */
 	void (*link_power)(struct hdac_device *hdev, bool enable);
 };
@@ -385,6 +387,8 @@ struct hdac_bus {
 int snd_hdac_bus_init(struct hdac_bus *bus, struct device *dev,
 		      const struct hdac_bus_ops *ops);
 void snd_hdac_bus_exit(struct hdac_bus *bus);
+dma_addr_t snd_hdac_bus_addr_host_to_hdac(struct hdac_bus *bus,
+					  dma_addr_t addr);
 int snd_hdac_bus_exec_verb_unlocked(struct hdac_bus *bus, unsigned int addr,
 				    unsigned int cmd, unsigned int *res);
 

@@ -48,8 +48,10 @@ void snd_hdac_bus_init_cmd_io(struct hdac_bus *bus)
 	/* CORB set up */
 	bus->corb.addr = bus->rb.addr;
 	bus->corb.buf = (__le32 *)bus->rb.area;
-	snd_hdac_chip_writel(bus, CORBLBASE, (u32)bus->corb.addr);
-	snd_hdac_chip_writel(bus, CORBUBASE, upper_32_bits(bus->corb.addr));
+	snd_hdac_chip_writel(bus, CORBLBASE,
+			    (u32)snd_hdac_bus_addr_host_to_hdac(bus, bus->corb.addr));
+	snd_hdac_chip_writel(bus, CORBUBASE,
+			     upper_32_bits(snd_hdac_bus_addr_host_to_hdac(bus, bus->corb.addr)));
 
 	/* set the corb size to 256 entries (ULI requires explicitly) */
 	snd_hdac_chip_writeb(bus, CORBSIZE, 0x02);
@@ -70,8 +72,10 @@ void snd_hdac_bus_init_cmd_io(struct hdac_bus *bus)
 	bus->rirb.buf = (__le32 *)(bus->rb.area + 2048);
 	bus->rirb.wp = bus->rirb.rp = 0;
 	memset(bus->rirb.cmds, 0, sizeof(bus->rirb.cmds));
-	snd_hdac_chip_writel(bus, RIRBLBASE, (u32)bus->rirb.addr);
-	snd_hdac_chip_writel(bus, RIRBUBASE, upper_32_bits(bus->rirb.addr));
+	snd_hdac_chip_writel(bus, RIRBLBASE,
+			     (u32)snd_hdac_bus_addr_host_to_hdac(bus, bus->rirb.addr));
+	snd_hdac_chip_writel(bus, RIRBUBASE,
+			     upper_32_bits(snd_hdac_bus_addr_host_to_hdac(bus, bus->rirb.addr)));
 
 	/* set the rirb size to 256 entries (ULI requires explicitly) */
 	snd_hdac_chip_writeb(bus, RIRBSIZE, 0x02);
@@ -625,8 +629,10 @@ bool snd_hdac_bus_init_chip(struct hdac_bus *bus, bool full_reset)
 
 	/* program the position buffer */
 	if (bus->use_posbuf && bus->posbuf.addr) {
-		snd_hdac_chip_writel(bus, DPLBASE, (u32)bus->posbuf.addr);
-		snd_hdac_chip_writel(bus, DPUBASE, upper_32_bits(bus->posbuf.addr));
+		snd_hdac_chip_writel(bus, DPLBASE,
+				    (u32)snd_hdac_bus_addr_host_to_hdac(bus, bus->posbuf.addr));
+		snd_hdac_chip_writel(bus, DPUBASE,
+				     upper_32_bits(snd_hdac_bus_addr_host_to_hdac(bus, bus->posbuf.addr)));
 	}
 
 	bus->chip_init = true;

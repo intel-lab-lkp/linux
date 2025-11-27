@@ -76,6 +76,23 @@ void snd_hdac_bus_exit(struct hdac_bus *bus)
 EXPORT_SYMBOL_GPL(snd_hdac_bus_exit);
 
 /**
+ * snd_hdac_bus_addr_host_to_hdac - translate dma address from host to hdac
+ * @bus: HDA core bus
+ * @addr: dma address which need translate
+ *
+ * Returns dma address which is translated or the original address
+ */
+dma_addr_t snd_hdac_bus_addr_host_to_hdac(struct hdac_bus *bus,
+					  dma_addr_t addr)
+{
+	if (bus->ops->addr_host_to_hdac)
+		return bus->ops->addr_host_to_hdac(bus, addr);
+
+	return addr;
+}
+EXPORT_SYMBOL_GPL(snd_hdac_bus_addr_host_to_hdac);
+
+/**
  * snd_hdac_bus_exec_verb - execute a HD-audio verb on the given bus
  * @bus: bus object
  * @addr: the HDAC device address
