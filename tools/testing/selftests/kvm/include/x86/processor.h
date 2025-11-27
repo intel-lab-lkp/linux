@@ -362,16 +362,6 @@ static inline unsigned int x86_model(unsigned int eax)
 	return ((eax >> 12) & 0xf0) | ((eax >> 4) & 0x0f);
 }
 
-/* Page table bitfield declarations */
-#define PTE_PRESENT_MASK        BIT_ULL(0)
-#define PTE_WRITABLE_MASK       BIT_ULL(1)
-#define PTE_USER_MASK           BIT_ULL(2)
-#define PTE_ACCESSED_MASK       BIT_ULL(5)
-#define PTE_DIRTY_MASK          BIT_ULL(6)
-#define PTE_LARGE_MASK          BIT_ULL(7)
-#define PTE_GLOBAL_MASK         BIT_ULL(8)
-#define PTE_NX_MASK             BIT_ULL(63)
-
 #define PHYSICAL_PAGE_MASK      GENMASK_ULL(51, 12)
 
 #define PAGE_SHIFT		12
@@ -1449,10 +1439,43 @@ enum pg_level {
 #define PG_SIZE_2M PG_LEVEL_SIZE(PG_LEVEL_2M)
 #define PG_SIZE_1G PG_LEVEL_SIZE(PG_LEVEL_1G)
 
+struct pte_masks {
+	uint64_t present;
+	uint64_t writable;
+	uint64_t user;
+	uint64_t accessed;
+	uint64_t dirty;
+	uint64_t huge;
+	uint64_t nx;
+	uint64_t c;
+	uint64_t s;
+};
+
 struct kvm_mmu {
 	uint64_t root_gpa;
 	int pgtable_levels;
+	struct pte_masks pte_masks;
 };
+
+#define PTE_PRESENT_MASK(mmu) ((mmu)->pte_masks.present)
+#define PTE_WRITABLE_MASK(mmu) ((mmu)->pte_masks.writable)
+#define PTE_USER_MASK(mmu) ((mmu)->pte_masks.user)
+#define PTE_ACCESSED_MASK(mmu) ((mmu)->pte_masks.accessed)
+#define PTE_DIRTY_MASK(mmu) ((mmu)->pte_masks.dirty)
+#define PTE_HUGE_MASK(mmu) ((mmu)->pte_masks.huge)
+#define PTE_NX_MASK(mmu) ((mmu)->pte_masks.nx)
+#define PTE_C_MASK(mmu) ((mmu)->pte_masks.c)
+#define PTE_S_MASK(mmu) ((mmu)->pte_masks.s)
+
+#define pte_present(mmu, pte) (!!(*(pte) & PTE_PRESENT_MASK(mmu)))
+#define pte_writable(mmu, pte) (!!(*(pte) & PTE_WRITABLE_MASK(mmu)))
+#define pte_user(mmu, pte) (!!(*(pte) & PTE_USER_MASK(mmu)))
+#define pte_accessed(mmu, pte) (!!(*(pte) & PTE_ACCESSED_MASK(mmu)))
+#define pte_dirty(mmu, pte) (!!(*(pte) & PTE_DIRTY_MASK(mmu)))
+#define pte_huge(mmu, pte) (!!(*(pte) & PTE_HUGE_MASK(mmu)))
+#define pte_nx(mmu, pte) (!!(*(pte) & PTE_NX_MASK(mmu)))
+#define pte_c(mmu, pte) (!!(*(pte) & PTE_C_MASK(mmu)))
+#define pte_s(mmu, pte) (!!(*(pte) & PTE_S_MASK(mmu)))
 
 void __virt_pg_map(struct kvm_vm *vm, struct kvm_mmu *mmu, uint64_t vaddr,
 		   uint64_t paddr,  int level);
