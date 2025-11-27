@@ -375,7 +375,8 @@ static int suspend_prepare(suspend_state_t state)
 	if (error)
 		goto Restore;
 
-	filesystems_freeze(filesystem_freeze_enabled);
+	if (filesystem_freeze_enabled)
+		filesystems_freeze();
 	trace_suspend_resume(TPS("freeze_processes"), 0, true);
 	error = suspend_freeze_processes();
 	trace_suspend_resume(TPS("freeze_processes"), 0, false);

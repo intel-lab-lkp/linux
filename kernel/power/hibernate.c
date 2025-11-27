@@ -821,7 +821,8 @@ int hibernate(void)
 		goto Restore;
 
 	ksys_sync_helper();
-	filesystems_freeze(filesystem_freeze_enabled);
+	if (filesystem_freeze_enabled)
+		filesystems_freeze();
 
 	error = freeze_processes();
 	if (error)
@@ -927,7 +928,8 @@ int hibernate_quiet_exec(int (*func)(void *data), void *data)
 	if (error)
 		goto restore;
 
-	filesystems_freeze(filesystem_freeze_enabled);
+	if (filesystem_freeze_enabled)
+		filesystems_freeze();
 
 	error = freeze_processes();
 	if (error)
@@ -1077,7 +1079,8 @@ static int software_resume(void)
 	if (error)
 		goto Restore;
 
-	filesystems_freeze(filesystem_freeze_enabled);
+	if (filesystem_freeze_enabled)
+		filesystems_freeze();
 
 	pm_pr_dbg("Preparing processes for hibernation restore.\n");
 	error = freeze_processes();

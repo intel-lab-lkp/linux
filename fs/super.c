@@ -1183,12 +1183,9 @@ static inline bool get_active_super(struct super_block *sb)
 
 static const char *filesystems_freeze_ptr = "filesystems_freeze";
 
-static void filesystems_freeze_callback(struct super_block *sb, void *freeze_all_ptr)
+static void filesystems_freeze_callback(struct super_block *sb, void *unused)
 {
 	if (!sb->s_op->freeze_fs && !sb->s_op->freeze_super)
-		return;
-
-	if (freeze_all_ptr && !(sb->s_type->fs_flags & FS_POWER_FREEZE))
 		return;
 
 	if (!get_active_super(sb))
@@ -1204,13 +1201,9 @@ static void filesystems_freeze_callback(struct super_block *sb, void *freeze_all
 	deactivate_super(sb);
 }
 
-void filesystems_freeze(bool freeze_all)
+void filesystems_freeze(void)
 {
-	void *freeze_all_ptr = NULL;
-
-	if (freeze_all)
-		freeze_all_ptr = &freeze_all;
-	__iterate_supers(filesystems_freeze_callback, freeze_all_ptr,
+	__iterate_supers(filesystems_freeze_callback, NULL,
 			 SUPER_ITER_UNLOCKED | SUPER_ITER_REVERSE);
 }
 
