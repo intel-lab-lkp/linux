@@ -27,6 +27,7 @@ void arm64_notify_die(const char *str, struct pt_regs *regs,
 
 struct mm_struct;
 extern void __show_regs(struct pt_regs *);
+extern void __show_regs_alloc_free(struct pt_regs *regs);
 
 #endif	/* __ASSEMBLER__ */
 

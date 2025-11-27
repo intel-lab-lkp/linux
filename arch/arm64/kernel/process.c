@@ -199,6 +199,17 @@ static void print_pstate(struct pt_regs *regs)
 	}
 }
 
+void __show_regs_alloc_free(struct pt_regs *regs)
+{
+	int i;
+
+	/* check for x0 - x31 only */
+	for (i = 0; i < 31; i++) {
+		pr_alert("Register x%d information:", i);
+		mem_dump_obj((void *)regs->regs[i]);
+	}
+}
+
 void __show_regs(struct pt_regs *regs)
 {
 	int i, top_reg;

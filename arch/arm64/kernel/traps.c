@@ -189,7 +189,7 @@ static int __die(const char *str, long err, struct pt_regs *regs)
 
 	print_modules();
 	show_regs(regs);
-
+	__show_regs_alloc_free(regs);
 	if (user_mode(regs))
 		return ret;
 
