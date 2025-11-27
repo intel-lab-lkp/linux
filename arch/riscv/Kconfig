@@ -941,6 +941,18 @@ config RISCV_VECTOR_MISALIGNED
 	help
 	  Enable detecting support for vector misaligned loads and stores.
 
+config RISCV_LAZY_TLB_FLUSH
+	bool "Defer TLB Flush to context switch to avoid IPIs"
+	depends on MMU && SMP
+	def_bool n
+	help
+	  This feature avoids unnecessary TLB Flush IPIs. After memory mapping
+	  modifications on certain mm_struct, instead of sending IPIs, this feature
+	  records the TLB Flush information on percpu buffer, defer the TLB Flush
+	  to the moment when target CPUs really load this mm_struct.
+
+	  If unsure what to do here, say N.
+
 choice
 	prompt "Unaligned Accesses Support"
 	default RISCV_PROBE_UNALIGNED_ACCESS
