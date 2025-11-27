@@ -2179,6 +2179,32 @@ u16 printk_parse_prefix(const char *text, int *level,
 	return prefix_len;
 }
 
+/**
+ * printk_resolve_loglevel - Resolve the effective loglevel for a message
+ *
+ * @facility:	The log facility (0 for kernel messages)
+ * @level:	The initial loglevel, may be LOGLEVEL_DEFAULT
+ * @fmt:	The format string, potentially containing a loglevel prefix
+ *
+ * Determines the actual loglevel to use for a printk message. If the level
+ * is LOGLEVEL_DEFAULT and the facility indicates a kernel message, parses
+ * the format string prefix to extract an embedded loglevel. If no loglevel
+ * is found, falls back to the default_message_loglevel.
+ *
+ * Return: The resolved loglevel value
+ */
+static inline int printk_resolve_loglevel(int facility, int level,
+					  const char *fmt)
+{
+	if (facility == 0 && level == LOGLEVEL_DEFAULT && fmt)
+		printk_parse_prefix(fmt, &level, NULL);
+
+	if (level == LOGLEVEL_DEFAULT)
+		level = default_message_loglevel;
+
+	return level;
+}
+
 __printf(5, 0)
 static u16 printk_sprint(char *text, u16 size, int facility,
 			 enum printk_info_flags *flags, const char *fmt,
@@ -2394,7 +2420,7 @@ asmlinkage int vprintk_emit(int facility, int level,
 		ft.legacy_direct = false;
 	}
 
-	printk_delay(level);
+	printk_delay(printk_resolve_loglevel(facility, level, fmt));
 
 	printed_len = vprintk_store(facility, level, dev_info, fmt, args);
 
