@@ -51,6 +51,7 @@
 #include <linux/syscalls.h>
 #include <linux/of.h>
 #include <linux/rcupdate.h>
+#include <linux/printk.h>
 
 #include <asm/ptrace.h>
 #include <asm/irq_regs.h>
@@ -583,11 +584,15 @@ static void __sysrq_put_key_op(u8 key, const struct sysrq_key_op *op_p)
 void __handle_sysrq(u8 key, bool check_mask)
 {
 	const struct sysrq_key_op *op_p;
+	bool orig_ignore_per_console_loglevel;
 	int orig_suppress_printk;
 	int i;
 
 	orig_suppress_printk = suppress_printk;
 	suppress_printk = 0;
+
+	orig_ignore_per_console_loglevel = ignore_per_console_loglevel;
+	ignore_per_console_loglevel = true;
 
 	rcu_sysrq_start();
 	rcu_read_lock();
@@ -634,6 +639,7 @@ void __handle_sysrq(u8 key, bool check_mask)
 	rcu_read_unlock();
 	rcu_sysrq_end();
 
+	ignore_per_console_loglevel = orig_ignore_per_console_loglevel;
 	suppress_printk = orig_suppress_printk;
 }
 
