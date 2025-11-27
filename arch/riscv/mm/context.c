@@ -194,7 +194,7 @@ switch_mm_fast:
 		  satp_mode);
 
 	if (need_flush_tlb)
-		local_flush_tlb_all();
+		local_flush_tlb_all_mm();
 }
 
 static void set_mm_noasid(struct mm_struct *mm)

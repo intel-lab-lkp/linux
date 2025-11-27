@@ -108,6 +108,7 @@ DECLARE_PER_CPU_SHARED_ALIGNED(struct tlb_info, tlbinfo);
 
 void local_load_tlb_mm(struct mm_struct *mm);
 void local_flush_tlb_mm(struct mm_struct *mm);
+void local_flush_tlb_all_mm(void);
 void __init lazy_tlb_flush_init(void);
 
 #else /* CONFIG_RISCV_LAZY_TLB_FLUSH */
@@ -117,6 +118,11 @@ static inline void local_load_tlb_mm(struct mm_struct *mm) {}
 static inline void local_flush_tlb_mm(struct mm_struct *mm)
 {
 	local_flush_tlb_all_asid(get_mm_asid(mm));
+}
+
+static inline void local_flush_tlb_all_mm(void)
+{
+	local_flush_tlb_all();
 }
 
 static inline void lazy_tlb_flush_init(void) {}

@@ -89,13 +89,13 @@ void local_flush_tlb_kernel_range(unsigned long start, unsigned long end)
 
 static void __ipi_flush_tlb_all(void *info)
 {
-	local_flush_tlb_all();
+	local_flush_tlb_all_mm();
 }
 
 void flush_tlb_all(void)
 {
 	if (num_online_cpus() < 2)
-		local_flush_tlb_all();
+		local_flush_tlb_all_mm();
 	else if (riscv_use_sbi_for_rfence())
 		sbi_remote_sfence_vma_asid(NULL, 0, FLUSH_TLB_MAX_SIZE, FLUSH_TLB_NO_ASID);
 	else
@@ -459,6 +459,33 @@ void local_flush_tlb_mm(struct mm_struct *mm)
 	}
 
 	local_flush_tlb_all_asid(asid);
+}
+
+void local_flush_tlb_all_mm(void)
+{
+	struct tlb_info *info = this_cpu_ptr(&tlbinfo);
+	struct tlb_context *contexts = info->contexts;
+	struct mm_struct *mms[MAX_LOADED_MM];
+	unsigned int cpu = raw_smp_processor_id();
+	unsigned int i, num = 0;
+
+	write_lock(&info->rwlock);
+	for (i = 0; i < MAX_LOADED_MM; i++) {
+		if (!contexts[i].mm || contexts[i].mm == info->active_mm)
+			continue;
+
+		mms[num++] = contexts[i].mm;
+		contexts[i].mm = NULL;
+		contexts[i].gen = 0;
+	}
+	write_unlock(&info->rwlock);
+
+	for (i = 0; i < num; i++) {
+		cpumask_clear_cpu(cpu, mm_cpumask(mms[i]));
+		mmdrop_lazy_mm(mms[i]);
+	}
+
+	local_flush_tlb_all();
 }
 
 void __init lazy_tlb_flush_init(void)
