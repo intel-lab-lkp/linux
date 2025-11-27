@@ -314,6 +314,8 @@ struct nbcon_write_context {
  * @match:		Callback for matching a console (Optional)
  * @flags:		Console flags. See enum cons_flags
  * @index:		Console index, e.g. port number
+ * @level:		Per-console loglevel. -1 means use global console_loglevel,
+ *			values > 0 specify console-specific filtering level
  * @cflag:		TTY control mode flags
  * @ispeed:		TTY input speed
  * @ospeed:		TTY output speed
@@ -342,6 +344,7 @@ struct console {
 	int			(*match)(struct console *co, char *name, int idx, char *options);
 	short			flags;
 	short			index;
+	int			level;
 	int			cflag;
 	uint			ispeed;
 	uint			ospeed;
@@ -542,6 +545,39 @@ static inline void console_srcu_write_flags(struct console *con, short flags)
 
 	/* This matches the READ_ONCE() in console_srcu_read_flags(). */
 	WRITE_ONCE(con->flags, flags);
+}
+
+/**
+ * console_srcu_read_loglevel - Locklessly read the console specific loglevel
+ *				of a possibly registered console
+ * @con:	struct console pointer of console to read loglevel from
+ *
+ * Locklessly reading @con->level provides a consistent read value because
+ * there is at most one CPU modifying @con->level and that CPU is using only
+ * read-modify-write operations to do so.
+ *
+ * Requires console_srcu_read_lock to be held, which implies that @con might
+ * be a registered console. The purpose of holding console_srcu_read_lock is
+ * to guarantee that the console state is valid (CON_SUSPENDED/CON_ENABLED)
+ * and that no exit/cleanup routines will run if the console is currently
+ * undergoing unregistration.
+ *
+ * If the caller is holding the console_list_lock or it is _certain_ that
+ * @con is not and will not become registered, the caller may read
+ * @con->level directly instead.
+ *
+ * Context: Any context.
+ * Return: The current value of the @con->level field.
+ */
+static inline int console_srcu_read_loglevel(const struct console *con)
+{
+	WARN_ON_ONCE(!console_srcu_read_lock_is_held());
+
+	/*
+	 * The READ_ONCE() matches the WRITE_ONCE() when @level is modified
+	 * for registered consoles.
+	 */
+	return data_race(READ_ONCE(con->level));
 }
 
 /* Variant of console_is_registered() when the console_list_lock is held. */

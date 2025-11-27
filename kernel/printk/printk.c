@@ -3848,6 +3848,9 @@ static int try_enable_preferred_console(struct console *newcon,
 			if (newcon->index < 0)
 				newcon->index = c->index;
 
+			/* TODO: will be configurable in a later patch */
+			newcon->level = LOGLEVEL_DEFAULT;
+
 			if (_braille_register_console(newcon, c))
 				return 0;
 
