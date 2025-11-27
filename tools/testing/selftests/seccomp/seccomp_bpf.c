@@ -4513,9 +4513,14 @@ static char get_proc_stat(struct __test_metadata *_metadata, pid_t pid)
 	char proc_path[100] = {0};
 	char status;
 	char *line;
+	int rc;
 
 	snprintf(proc_path, sizeof(proc_path), "/proc/%d/stat", pid);
 	ASSERT_EQ(get_nth(_metadata, proc_path, 3, &line), 1);
+	rc = get_nth(_metadata, proc_path, 3, &line);
+	ASSERT_EQ(rc, 1) {
+		TH_LOG("user_notification_fifo: failed to read stat for PID %d (rc=%d)", pid, rc);
+	}
 
 	status = *line;
 	free(line);
