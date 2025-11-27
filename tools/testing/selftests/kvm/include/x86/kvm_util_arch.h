@@ -10,6 +10,8 @@
 
 extern bool is_forced_emulation_enabled;
 
+struct kvm_mmu;
+
 struct kvm_vm_arch {
 	vm_vaddr_t gdt;
 	vm_vaddr_t tss;
@@ -19,6 +21,8 @@ struct kvm_vm_arch {
 	uint64_t s_bit;
 	int sev_fd;
 	bool is_pt_protected;
+
+	struct kvm_mmu *mmu;
 };
 
 static inline bool __vm_arch_has_protected_memory(struct kvm_vm_arch *arch)
