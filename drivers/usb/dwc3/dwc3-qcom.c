@@ -13,6 +13,8 @@
 #include <linux/kernel.h>
 #include <linux/interconnect.h>
 #include <linux/platform_device.h>
+#include <linux/pm_domain.h>
+#include <linux/pm_opp.h>
 #include <linux/phy/phy.h>
 #include <linux/usb/of.h>
 #include <linux/reset.h>
@@ -85,9 +87,47 @@ struct dwc3_qcom {
 	struct icc_path		*icc_path_apps;
 
 	enum usb_role		current_role;
+	bool			fw_managed;
 };
 
 #define to_dwc3_qcom(d) container_of((d), struct dwc3_qcom, dwc)
+
+/*
+ * QCOM DWC3 USB Controller: Firmware-Managed Resource State Levels
+ *
+ * On select Qualcomm platforms, the USB controller’s power-related
+ * resources including GDSC, reset lines, clocks, and interconnects
+ * are managed collectively by system firmware via SCMI. The driver
+ * signals the controller’s operational state to firmware using these
+ * levels, each mapped to a specific power management transition or
+ * lifecycle event:
+ *
+ * DWC3_QCOM_FW_MANAGED_INIT
+ *	Enable GDSC, Assert and Deassert Resets, and turn ON all clocks
+ *	and interconnects.
+ *
+ * DWC3_QCOM_FW_MANAGED_SYSTEM_RESUME
+ *	Enable GDSC and turn ON all clocks and interconnects.
+ *
+ * DWC3_QCOM_FW_MANAGED_RUNTIME_RESUME
+ *	Turn ON all clocks and interconnects.
+ *
+ * DWC3_QCOM_FW_MANAGED_EXIT
+ *	Turn OFF all clocks and interconnects, Assert reset and disable GDSC.
+ *
+ * DWC3_QCOM_FW_MANAGED_SYSTEM_SUSPEND
+ *	Turn OFF all clocks and interconnects and disable GDSC.
+ *
+ * DWC3_QCOM_FW_MANAGED_RUNTIME_SUSPEND
+ *	Turn OFF clocks and interconnects.
+ */
+
+#define DWC3_QCOM_FW_MANAGED_INIT			1
+#define DWC3_QCOM_FW_MANAGED_SYSTEM_RESUME		2
+#define DWC3_QCOM_FW_MANAGED_RUNTIME_RESUME		3
+#define DWC3_QCOM_FW_MANAGED_EXIT			8
+#define DWC3_QCOM_FW_MANAGED_SYSTEM_SUSPEND		9
+#define DWC3_QCOM_FW_MANAGED_RUNTIME_SUSPEND		10
 
 static inline void dwc3_qcom_setbits(void __iomem *base, u32 offset, u32 val)
 {
@@ -335,7 +375,7 @@ static void dwc3_qcom_enable_interrupts(struct dwc3_qcom *qcom)
 		dwc3_qcom_enable_port_interrupts(&qcom->ports[i]);
 }
 
-static int dwc3_qcom_suspend(struct dwc3_qcom *qcom, bool wakeup)
+static int dwc3_qcom_suspend(struct dwc3_qcom *qcom, bool wakeup, pm_message_t msg)
 {
 	u32 val;
 	int i, ret;
@@ -348,6 +388,13 @@ static int dwc3_qcom_suspend(struct dwc3_qcom *qcom, bool wakeup)
 		if (!(val & PWR_EVNT_LPM_IN_L2_MASK))
 			dev_err(qcom->dev, "port-%d HS-PHY not in L2\n", i + 1);
 	}
+	if (qcom->fw_managed) {
+		if (PMSG_IS_AUTO(msg))
+			dev_pm_opp_set_level(qcom->dev, DWC3_QCOM_FW_MANAGED_RUNTIME_SUSPEND);
+		else
+			dev_pm_opp_set_level(qcom->dev, DWC3_QCOM_FW_MANAGED_SYSTEM_SUSPEND);
+	}
+
 	clk_bulk_disable_unprepare(qcom->num_clocks, qcom->clks);
 
 	ret = dwc3_qcom_interconnect_disable(qcom);
@@ -369,7 +416,7 @@ static int dwc3_qcom_suspend(struct dwc3_qcom *qcom, bool wakeup)
 	return 0;
 }
 
-static int dwc3_qcom_resume(struct dwc3_qcom *qcom, bool wakeup)
+static int dwc3_qcom_resume(struct dwc3_qcom *qcom, bool wakeup, pm_message_t msg)
 {
 	int ret;
 	int i;
@@ -379,6 +426,18 @@ static int dwc3_qcom_resume(struct dwc3_qcom *qcom, bool wakeup)
 
 	if (dwc3_qcom_is_host(qcom) && wakeup)
 		dwc3_qcom_disable_interrupts(qcom);
+
+	if (qcom->fw_managed) {
+		if (PMSG_IS_AUTO(msg))
+			ret = dev_pm_opp_set_level(qcom->dev, DWC3_QCOM_FW_MANAGED_RUNTIME_RESUME);
+		else
+			ret = dev_pm_opp_set_level(qcom->dev, DWC3_QCOM_FW_MANAGED_SYSTEM_RESUME);
+
+		if (ret < 0) {
+			dev_err(qcom->dev, "Failed to Resume fw managed device\n");
+			return ret;
+		}
+	}
 
 	ret = clk_bulk_prepare_enable(qcom->num_clocks, qcom->clks);
 	if (ret < 0)
@@ -624,10 +683,18 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 
 	qcom->dev = &pdev->dev;
 
+	qcom->fw_managed = device_get_match_data(dev);
+	if (qcom->fw_managed) {
+		ret = dev_pm_opp_set_level(qcom->dev, DWC3_QCOM_FW_MANAGED_INIT);
+		if (ret < 0)
+			return ret;
+	}
+
 	qcom->resets = devm_reset_control_array_get_optional_exclusive(dev);
 	if (IS_ERR(qcom->resets)) {
-		return dev_err_probe(&pdev->dev, PTR_ERR(qcom->resets),
-				     "failed to get resets\n");
+		dev_err_probe(&pdev->dev, PTR_ERR(qcom->resets),
+			      "failed to get resets\n");
+		goto resources_off;
 	}
 
 	ret = devm_clk_bulk_get_all(&pdev->dev, &qcom->clks);
@@ -638,7 +705,7 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 	ret = reset_control_assert(qcom->resets);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to assert resets, err=%d\n", ret);
-		return ret;
+		goto resources_off;
 	}
 
 	usleep_range(10, 1000);
@@ -727,6 +794,10 @@ remove_core:
 clk_disable:
 	clk_bulk_disable_unprepare(qcom->num_clocks, qcom->clks);
 
+resources_off:
+	if (qcom->fw_managed)
+		dev_pm_opp_set_level(qcom->dev, DWC3_QCOM_FW_MANAGED_EXIT);
+
 	return ret;
 }
 
@@ -739,6 +810,10 @@ static void dwc3_qcom_remove(struct platform_device *pdev)
 		return;
 
 	dwc3_core_remove(&qcom->dwc);
+
+	if (qcom->fw_managed)
+		dev_pm_opp_set_level(qcom->dev, DWC3_QCOM_FW_MANAGED_EXIT);
+
 	clk_bulk_disable_unprepare(qcom->num_clocks, qcom->clks);
 	dwc3_qcom_interconnect_exit(qcom);
 
@@ -756,7 +831,7 @@ static int dwc3_qcom_pm_suspend(struct device *dev)
 	if (ret)
 		return ret;
 
-	ret = dwc3_qcom_suspend(qcom, wakeup);
+	ret = dwc3_qcom_suspend(qcom, wakeup, PMSG_SUSPEND);
 	if (ret)
 		return ret;
 
@@ -772,7 +847,7 @@ static int dwc3_qcom_pm_resume(struct device *dev)
 	bool wakeup = device_may_wakeup(dev);
 	int ret;
 
-	ret = dwc3_qcom_resume(qcom, wakeup);
+	ret = dwc3_qcom_resume(qcom, wakeup, PMSG_RESUME);
 	if (ret)
 		return ret;
 
@@ -809,7 +884,7 @@ static int dwc3_qcom_runtime_suspend(struct device *dev)
 	if (ret)
 		return ret;
 
-	return dwc3_qcom_suspend(qcom, true);
+	return dwc3_qcom_suspend(qcom, true, PMSG_AUTO_SUSPEND);
 }
 
 static int dwc3_qcom_runtime_resume(struct device *dev)
@@ -818,7 +893,7 @@ static int dwc3_qcom_runtime_resume(struct device *dev)
 	struct dwc3_qcom *qcom = to_dwc3_qcom(dwc);
 	int ret;
 
-	ret = dwc3_qcom_resume(qcom, true);
+	ret = dwc3_qcom_resume(qcom, true, PMSG_AUTO_RESUME);
 	if (ret)
 		return ret;
 
@@ -839,6 +914,10 @@ static const struct dev_pm_ops dwc3_qcom_dev_pm_ops = {
 };
 
 static const struct of_device_id dwc3_qcom_of_match[] = {
+	{
+		.compatible	= "qcom,snps-dwc3-fw-managed",
+		.data		= (void *)true,
+	},
 	{ .compatible = "qcom,snps-dwc3" },
 	{ }
 };
