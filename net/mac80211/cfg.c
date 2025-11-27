@@ -4609,12 +4609,17 @@ static int ieee80211_probe_client(struct wiphy *wiphy, struct net_device *dev,
 
 	qos = sta->sta.wme;
 
-	chanctx_conf = rcu_dereference(sdata->vif.bss_conf.chanctx_conf);
-	if (WARN_ON(!chanctx_conf)) {
-		ret = -EINVAL;
-		goto unlock;
+	if (ieee80211_vif_is_mld(&sdata->vif)) {
+		/* MLD transmissions must not rely on the band */
+		band = 0;
+	} else {
+		chanctx_conf = rcu_dereference(sdata->vif.bss_conf.chanctx_conf);
+		if (WARN_ON(!chanctx_conf)) {
+			ret = -EINVAL;
+			goto unlock;
+		}
+		band = chanctx_conf->def.chan->band;
 	}
-	band = chanctx_conf->def.chan->band;
 
 	if (qos) {
 		fc = cpu_to_le16(IEEE80211_FTYPE_DATA |
@@ -4650,6 +4655,9 @@ static int ieee80211_probe_client(struct wiphy *wiphy, struct net_device *dev,
 	info->flags |= IEEE80211_TX_CTL_REQ_TX_STATUS |
 		       IEEE80211_TX_INTFL_NL80211_FRAME_TX;
 	info->band = band;
+
+	if (ieee80211_vif_is_mld(&sdata->vif))
+		info->control.flags |= IEEE80211_TX_CTRL_MLO_LINK_UNSPEC;
 
 	skb_set_queue_mapping(skb, IEEE80211_AC_VO);
 	skb->priority = 7;
