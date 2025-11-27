@@ -11,6 +11,9 @@
 
 static const int ten_thousand = 10000;
 
+static int min_msg_loglevel = LOGLEVEL_EMERG;
+static int max_msg_loglevel = LOGLEVEL_DEBUG;
+
 static int proc_dointvec_minmax_sysadmin(const struct ctl_table *table, int write,
 				void *buffer, size_t *lenp, loff_t *ppos)
 {
@@ -18,6 +21,50 @@ static int proc_dointvec_minmax_sysadmin(const struct ctl_table *table, int writ
 		return -EPERM;
 
 	return proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+}
+
+static int do_proc_dointvec_console_loglevel(bool *negp, unsigned long *lvalp,
+					     int *valp,
+					     int write, void *data)
+{
+	int level, ret;
+
+	/*
+	 * If writing, first do so via a temporary local int so we can
+	 * bounds-check it before touching *valp.
+	 */
+	int *intp = write ? &level : valp;
+
+	ret = do_proc_dointvec_conv(negp, lvalp, intp, write, data);
+	if (ret)
+		return ret;
+
+	if (write) {
+		if (level != console_clamp_loglevel(level))
+			return -ERANGE;
+
+		/*
+		 * Honour the administrator-configured minimum console
+		 * loglevel (third element of kernel.printk).  This mirrors
+		 * the syslog() and sysfs control paths so that once the floor
+		 * is raised we do not let this sysctl silently bypass it.
+		 */
+		if (minimum_console_loglevel > CONSOLE_LOGLEVEL_MIN &&
+		    level < minimum_console_loglevel)
+			level = minimum_console_loglevel;
+
+		WRITE_ONCE(*valp, level);
+	}
+
+	return 0;
+}
+
+static int proc_dointvec_console_loglevel(const struct ctl_table *table,
+					  int write, void *buffer, size_t *lenp,
+					  loff_t *ppos)
+{
+	return do_proc_dointvec(table, write, buffer, lenp, ppos,
+			       do_proc_dointvec_console_loglevel, NULL);
 }
 
 static const struct ctl_table printk_sysctls[] = {
@@ -75,6 +122,22 @@ static const struct ctl_table printk_sysctls[] = {
 		.proc_handler	= proc_dointvec_minmax_sysadmin,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_TWO,
+	},
+	{
+		.procname	= "console_loglevel",
+		.data		= &console_loglevel,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_console_loglevel,
+	},
+	{
+		.procname	= "default_message_loglevel",
+		.data		= &default_message_loglevel,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= &min_msg_loglevel,
+		.extra2		= &max_msg_loglevel,
 	},
 };
 

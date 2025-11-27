@@ -235,6 +235,13 @@ extern struct ctl_table_header *register_sysctl_mount_point(const char *path);
 
 void do_sysctl_args(void);
 bool sysctl_is_alias(char *param);
+int do_proc_dointvec_conv(bool *negp, unsigned long *lvalp, int *valp,
+			  int write, void *data);
+int do_proc_dointvec(const struct ctl_table *table, int write,
+		     void *buffer, size_t *lenp, loff_t *ppos,
+		     int (*conv)(bool *negp, unsigned long *lvalp, int *valp,
+				 int write, void *data),
+		     void *data);
 int do_proc_douintvec(const struct ctl_table *table, int write,
 		      void *buffer, size_t *lenp, loff_t *ppos,
 		      int (*conv)(unsigned long *lvalp,
