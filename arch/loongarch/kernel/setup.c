@@ -56,6 +56,7 @@
 #define SMBIOS_FREQLOW_MASK		0xFF
 #define SMBIOS_CORE_PACKAGE_OFFSET	0x23
 #define SMBIOS_THREAD_PACKAGE_OFFSET	0x25
+#define SMBIOS_THREAD_PACKAGE_2_OFFSET	0x2E
 #define LOONGSON_EFI_ENABLE		(1 << 3)
 
 unsigned long fw_arg0, fw_arg1, fw_arg2;
@@ -120,13 +121,19 @@ static void __init parse_cpu_table(const struct dmi_header *dm)
 {
 	long freq_temp = 0;
 	char *dmi_data = (char *)dm;
+	u8 thread_count;
 
 	freq_temp = ((*(dmi_data + SMBIOS_FREQHIGH_OFFSET) << 8) +
 			((*(dmi_data + SMBIOS_FREQLOW_OFFSET)) & SMBIOS_FREQLOW_MASK));
 	cpu_clock_freq = freq_temp * 1000000;
 
 	loongson_sysconf.cpuname = (void *)dmi_string_parse(dm, dmi_data[16]);
-	loongson_sysconf.cores_per_package = *(dmi_data + SMBIOS_THREAD_PACKAGE_OFFSET);
+	thread_count = *(dmi_data + SMBIOS_THREAD_PACKAGE_OFFSET);
+	if (thread_count != 0)
+		loongson_sysconf.cores_per_package =
+				dm->length >= 0x30 && thread_count == 0xFF ?
+				*(u16 *)(dmi_data + SMBIOS_THREAD_PACKAGE_2_OFFSET) :
+				thread_count;
 
 	pr_info("CpuClock = %llu\n", cpu_clock_freq);
 }
