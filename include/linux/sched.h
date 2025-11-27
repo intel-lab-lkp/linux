@@ -34,6 +34,7 @@
 #include <linux/sched/prio.h>
 #include <linux/sched/types.h>
 #include <linux/signal_types.h>
+#include <linux/prandom.h>
 #include <linux/spinlock.h>
 #include <linux/syscall_user_dispatch_types.h>
 #include <linux/mm_types_task.h>
@@ -1614,7 +1615,7 @@ struct task_struct {
 #endif
 
 #ifdef CONFIG_RANDOMIZE_KSTACK_OFFSET
-	u32				kstack_offset;
+	struct rnd_state		kstack_rnd_state;
 #endif
 
 #ifdef CONFIG_X86_MCE

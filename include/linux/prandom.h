@@ -10,12 +10,17 @@
 
 #include <linux/types.h>
 #include <linux/once.h>
-#include <linux/percpu.h>
 #include <linux/random.h>
 
 struct rnd_state {
 	__u32 s1, s2, s3, s4;
 };
+
+/*
+ * percpu.h includes sched.h, which requires struct rnd_state. So defer until
+ * after struct rnd_state is defined.
+ */
+#include <linux/percpu.h>
 
 u32 prandom_u32_state(struct rnd_state *state);
 void prandom_bytes_state(struct rnd_state *state, void *buf, size_t nbytes);
