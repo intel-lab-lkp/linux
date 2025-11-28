@@ -276,20 +276,24 @@ max6620_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			*val = max6620_fan_div_from_reg(data->fandyn[channel]);
 			break;
 		case hwmon_fan_input:
+			mutex_lock(&data->update_lock);
 			if (data->tach[channel] == 0) {
 				*val = 0;
 			} else {
 				div = max6620_fan_div_from_reg(data->fandyn[channel]);
 				*val = max6620_fan_tach_to_rpm(div, data->tach[channel]);
 			}
+			mutex_unlock(&data->update_lock);
 			break;
 		case hwmon_fan_target:
+			mutex_lock(&data->update_lock);
 			if (data->target[channel] == 0) {
 				*val = 0;
 			} else {
 				div = max6620_fan_div_from_reg(data->fandyn[channel]);
 				*val = max6620_fan_tach_to_rpm(div, data->target[channel]);
 			}
+			mutex_unlock(&data->update_lock);
 			break;
 		default:
 			return -EOPNOTSUPP;
