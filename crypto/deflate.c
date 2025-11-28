@@ -120,6 +120,7 @@ enum algo {
 
 static int _deflate_compress(struct acomp_req *req, enum algo algo)
 {
+	struct crypto_acomp_params *p = acomp_tfm_ctx(crypto_acomp_reqtfm(req));
 	struct crypto_acomp_stream *s;
 	struct deflate_stream *ds;
 	int window_bits;
@@ -139,7 +140,7 @@ static int _deflate_compress(struct acomp_req *req, enum algo algo)
 	s = crypto_acomp_lock_stream_bh(&deflate_streams);
 	ds = s->ctx;
 
-	err = zlib_deflateInit2(&ds->stream, DEFLATE_DEF_LEVEL, Z_DEFLATED,
+	err = zlib_deflateInit2(&ds->stream, p->level, Z_DEFLATED,
 				window_bits, DEFLATE_DEF_MEMLEVEL,
 				Z_DEFAULT_STRATEGY);
 	if (err != Z_OK) {
@@ -267,7 +268,10 @@ static int zlib_deflate_decompress(struct acomp_req *req)
 
 static int deflate_init(struct crypto_acomp *tfm)
 {
+	struct crypto_acomp_params *p = acomp_tfm_ctx(tfm);
 	int ret;
+
+	p->level = DEFLATE_DEF_LEVEL;
 
 	mutex_lock(&deflate_stream_lock);
 	ret = crypto_acomp_alloc_streams(&deflate_streams);
@@ -276,21 +280,55 @@ static int deflate_init(struct crypto_acomp *tfm)
 	return ret;
 }
 
+static int deflate_setparam(struct crypto_acomp *tfm, const u8 *param,
+			    unsigned int len)
+{
+	struct crypto_acomp_params *p = acomp_tfm_ctx(tfm);
+	int ret;
+
+	ret = crypto_acomp_getparams(p, param, len);
+	if (ret)
+		return ret;
+
+	if (p->level > Z_BEST_COMPRESSION || p->level < Z_DEFAULT_COMPRESSION) {
+		p->level = DEFLATE_DEF_LEVEL;
+		return -EINVAL;
+	}
+
+	if (p->level == CRYPTO_COMP_NO_LEVEL)
+		p->level = DEFLATE_DEF_LEVEL;
+
+	return 0;
+}
+
+static void deflate_exit(struct crypto_acomp *tfm)
+{
+	struct crypto_acomp_params *p = acomp_tfm_ctx(tfm);
+
+	crypto_acomp_putparams(p);
+}
+
 static struct acomp_alg acomps[] = { {
 	.compress		= deflate_compress,
 	.decompress		= deflate_decompress,
+	.setparam		= deflate_setparam,
 	.init			= deflate_init,
+	.exit			= deflate_exit,
 	.base.cra_name		= "deflate",
 	.base.cra_driver_name	= "deflate-generic",
 	.base.cra_flags		= CRYPTO_ALG_REQ_VIRT,
+	.base.cra_ctxsize	= sizeof(struct crypto_acomp_params),
 	.base.cra_module	= THIS_MODULE,
 }, {
 	.compress		= zlib_deflate_compress,
 	.decompress		= zlib_deflate_decompress,
+	.setparam		= deflate_setparam,
 	.init			= deflate_init,
+	.exit			= deflate_exit,
 	.base.cra_name		= "zlib-deflate",
 	.base.cra_driver_name	= "zlib-deflate-generic",
 	.base.cra_flags		= CRYPTO_ALG_REQ_VIRT,
+	.base.cra_ctxsize	= sizeof(struct crypto_acomp_params),
 	.base.cra_module	= THIS_MODULE,
 } };
 
