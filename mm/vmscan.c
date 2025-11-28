@@ -58,6 +58,7 @@
 #include <linux/random.h>
 #include <linux/mmu_notifier.h>
 #include <linux/parser.h>
+#include <linux/proc_fs.h>
 
 #include <asm/tlbflush.h>
 #include <asm/div64.h>
@@ -5290,8 +5291,16 @@ static const struct attribute_group lru_gen_attr_group = {
 };
 
 /******************************************************************************
- *                          debugfs interface
+ *                          lru_gen interface
  ******************************************************************************/
+
+static inline bool lru_gen_show_is_full(const struct file *file)
+{
+    /* procfs: i_private = (void *)1 means full
+     * debugfs: also works because debugfs sets i_private
+     */
+	return file->f_inode->i_private != NULL;
+}
 
 static void *lru_gen_seq_start(struct seq_file *m, loff_t *pos)
 {
@@ -5401,7 +5410,7 @@ static void lru_gen_seq_show_full(struct seq_file *m, struct lruvec *lruvec,
 static int lru_gen_seq_show(struct seq_file *m, void *v)
 {
 	unsigned long seq;
-	bool full = debugfs_get_aux_num(m->file);
+	bool full = lru_gen_show_is_full(m->file);
 	struct lruvec *lruvec = v;
 	struct lru_gen_folio *lrugen = &lruvec->lrugen;
 	int nid = lruvec_pgdat(lruvec)->node_id;
@@ -5639,6 +5648,7 @@ static int lru_gen_seq_open(struct inode *inode, struct file *file)
 	return seq_open(file, &lru_gen_seq_ops);
 }
 
+#ifndef CONFIG_LRU_GEN_PROCFS_CTRL
 static const struct file_operations lru_gen_rw_fops = {
 	.open = lru_gen_seq_open,
 	.read = seq_read,
@@ -5653,6 +5663,22 @@ static const struct file_operations lru_gen_ro_fops = {
 	.llseek = seq_lseek,
 	.release = seq_release,
 };
+#else
+static const struct proc_ops lru_gen_proc_rw_ops = {
+	.proc_open    = lru_gen_seq_open,
+	.proc_read    = seq_read,
+	.proc_write   = lru_gen_seq_write,
+	.proc_lseek   = seq_lseek,
+	.proc_release = seq_release,
+};
+
+static const struct proc_ops lru_gen_proc_ro_ops = {
+	.proc_open    = lru_gen_seq_open,
+	.proc_read    = seq_read,
+	.proc_lseek   = seq_lseek,
+	.proc_release = seq_release,
+};
+#endif
 
 /******************************************************************************
  *                          initialization
@@ -5740,10 +5766,17 @@ static int __init init_lru_gen(void)
 	if (sysfs_create_group(mm_kobj, &lru_gen_attr_group))
 		pr_err("lru_gen: failed to create sysfs group\n");
 
+#ifndef CONFIG_LRU_GEN_PROCFS_CTRL
 	debugfs_create_file_aux_num("lru_gen", 0644, NULL, NULL, false,
 				    &lru_gen_rw_fops);
 	debugfs_create_file_aux_num("lru_gen_full", 0444, NULL, NULL, true,
 				    &lru_gen_ro_fops);
+#else
+	proc_create_data("lru_gen", 0664, NULL,
+					&lru_gen_proc_rw_ops, NULL);
+	proc_create_data("lru_gen_full", 0444, NULL,
+					&lru_gen_proc_ro_ops, (void *)1);
+#endif
 
 	return 0;
 };
