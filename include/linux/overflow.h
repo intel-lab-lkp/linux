@@ -405,6 +405,25 @@ static inline size_t __must_check size_sub(size_t minuend, size_t subtrahend)
 }
 
 /**
+ * size_shl() - Calculate size_t left shift with saturation at SIZE_MAX
+ * @value: value to be shifted
+ * @shift: how many bits left to shift
+ *
+ * Returns: calculate @value << @shift, both promoted to size_t, with any
+ * overflow or invalid shift causing the return value to be SIZE_MAX. The
+ * lvalue must be size_t to avoid implicit type conversion.
+ */
+static inline size_t __must_check size_shl(size_t value, size_t shift)
+{
+	size_t out;
+
+	if (check_shl_overflow(value, shift, &out))
+		return SIZE_MAX;
+
+	return out;
+}
+
+/**
  * array_size() - Calculate size of 2-dimensional array.
  * @a: dimension one
  * @b: dimension two
