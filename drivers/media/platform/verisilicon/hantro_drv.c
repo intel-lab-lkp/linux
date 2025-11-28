@@ -35,6 +35,10 @@ module_param_named(debug, hantro_debug, int, 0644);
 MODULE_PARM_DESC(debug,
 		 "Debug level - higher value produces more verbose messages");
 
+static DEFINE_MUTEX(shared_dev_lock);
+static atomic_t shared_dev_ref_cnt = ATOMIC_INIT(0);
+static struct v4l2_m2m_dev *shared_m2m_dev;
+
 void *hantro_get_ctrl(struct hantro_ctx *ctx, u32 id)
 {
 	struct v4l2_ctrl *ctrl;
@@ -1035,6 +1039,37 @@ static int hantro_disable_multicore(struct hantro_dev *vpu)
 	return 0;
 }
 
+static struct v4l2_m2m_dev *hantro_get_v4l2_m2m_dev(struct hantro_dev *vpu)
+{
+	if (!vpu->variant || !vpu->variant->shared_resource)
+		return v4l2_m2m_init(&vpu_m2m_ops);
+
+	scoped_guard(mutex, &shared_dev_lock) {
+		if (atomic_inc_return(&shared_dev_ref_cnt) == 1) {
+			shared_m2m_dev = v4l2_m2m_init(&vpu_m2m_ops);
+			if (IS_ERR(shared_m2m_dev))
+				atomic_dec(&shared_dev_ref_cnt);
+		}
+	}
+
+	return shared_m2m_dev;
+}
+
+static void hantro_put_v4l2_m2m_dev(struct hantro_dev *vpu)
+{
+	if (!vpu->variant || !vpu->variant->shared_resource)
+		v4l2_m2m_release(vpu->m2m_dev);
+
+	scoped_guard(mutex, &shared_dev_lock) {
+		if (!atomic_dec_return(&shared_dev_ref_cnt)) {
+			if (!IS_ERR(shared_m2m_dev)) {
+				v4l2_m2m_release(shared_m2m_dev);
+				shared_m2m_dev = NULL;
+			}
+		}
+	}
+}
+
 static int hantro_probe(struct platform_device *pdev)
 {
 	const struct of_device_id *match;
@@ -1186,7 +1221,7 @@ static int hantro_probe(struct platform_device *pdev)
 	}
 	platform_set_drvdata(pdev, vpu);
 
-	vpu->m2m_dev = v4l2_m2m_init(&vpu_m2m_ops);
+	vpu->m2m_dev = hantro_get_v4l2_m2m_dev(vpu);
 	if (IS_ERR(vpu->m2m_dev)) {
 		v4l2_err(&vpu->v4l2_dev, "Failed to init mem2mem device\n");
 		ret = PTR_ERR(vpu->m2m_dev);
@@ -1225,7 +1260,7 @@ err_rm_enc_func:
 	hantro_remove_enc_func(vpu);
 err_m2m_rel:
 	media_device_cleanup(&vpu->mdev);
-	v4l2_m2m_release(vpu->m2m_dev);
+	hantro_put_v4l2_m2m_dev(vpu);
 err_v4l2_unreg:
 	v4l2_device_unregister(&vpu->v4l2_dev);
 err_clk_unprepare:
@@ -1248,7 +1283,7 @@ static void hantro_remove(struct platform_device *pdev)
 	hantro_remove_dec_func(vpu);
 	hantro_remove_enc_func(vpu);
 	media_device_cleanup(&vpu->mdev);
-	v4l2_m2m_release(vpu->m2m_dev);
+	hantro_put_v4l2_m2m_dev(vpu);
 	v4l2_device_unregister(&vpu->v4l2_dev);
 	clk_bulk_unprepare(vpu->variant->num_clocks, vpu->clocks);
 	reset_control_assert(vpu->resets);
