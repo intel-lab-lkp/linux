@@ -6,6 +6,7 @@
 #include <linux/kvm_host.h>
 #include <trace/events/kvm.h>
 #include <asm/kvm_pch_pic.h>
+#include <asm/kvm_vcpu.h>
 
 static int kvm_set_pic_irq(struct kvm_kernel_irq_routing_entry *e,
 		struct kvm *kvm, int irq_source_id, int level, bool line_status)
@@ -15,6 +16,22 @@ static int kvm_set_pic_irq(struct kvm_kernel_irq_routing_entry *e,
 
 	return 0;
 }
+
+static int kvm_dintc_set_msi_irq(struct kvm *kvm, u32 addr, int data, int level)
+{
+	unsigned int virq, dest;
+	struct kvm_vcpu *vcpu;
+
+	virq = (addr >> AVEC_VIRQ_SHIFT) & AVEC_VIRQ_MASK;
+	dest = (addr >> AVEC_CPU_SHIFT) & kvm->arch.dintc->cpu_mask;
+	if (dest > KVM_MAX_VCPUS)
+		return -EINVAL;
+	vcpu = kvm_get_vcpu_by_cpuid(kvm, dest);
+	if (!vcpu)
+		return -EINVAL;
+	return kvm_loongarch_deliver_msi_to_vcpu(kvm, vcpu, virq, level);
+}
+
 
 /*
  * kvm_set_msi: inject the MSI corresponding to the
@@ -26,10 +43,19 @@ static int kvm_set_pic_irq(struct kvm_kernel_irq_routing_entry *e,
 int kvm_set_msi(struct kvm_kernel_irq_routing_entry *e,
 		struct kvm *kvm, int irq_source_id, int level, bool line_status)
 {
+	u64 msg_addr;
+
 	if (!level)
 		return -1;
 
-	pch_msi_set_irq(kvm, e->msi.data, level);
+	msg_addr = (((u64)e->msi.address_hi) << 32) | e->msi.address_lo;
+	if (cpu_has_msgint && kvm->arch.dintc &&
+		msg_addr >= kvm->arch.dintc->msg_addr_base &&
+		msg_addr < (kvm->arch.dintc->msg_addr_base  + kvm->arch.dintc->msg_addr_size)) {
+		return kvm_dintc_set_msi_irq(kvm, msg_addr, e->msi.data, level);
+	} else if (msg_addr == 0) {
+		pch_msi_set_irq(kvm, e->msi.data, level);
+	}
 
 	return 0;
 }
