@@ -9460,6 +9460,7 @@ static const struct scsi_host_template sdebug_driver_template = {
 	.init_cmd_priv = sdebug_init_cmd_priv,
 	.target_alloc =		sdebug_target_alloc,
 	.target_destroy =	sdebug_target_destroy,
+	.enable_sdev_eh = 1,
 };
 
 static int sdebug_driver_probe(struct device *dev)

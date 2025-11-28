@@ -100,6 +100,24 @@ struct scsi_vpd {
 	unsigned char	data[];
 };
 
+/**
+ * struct scsi_device_eh - SCSI Device Error Handler
+ * @work: For schedule_work
+ * @lock: protect cmd_q
+ * @cmd_q: queue of failed scmd
+ * @action: error handle command's completion
+ * @fail_cnt: count of cmd_q
+ * @state: state of Error Handler working
+ */
+struct scsi_device_eh {
+	struct work_struct	work;
+	spinlock_t			lock;
+	struct list_head	cmd_q;
+	struct completion	*action;
+	atomic_t			fail_cnt;
+	atomic_t			state;
+};
+
 struct scsi_device {
 	struct Scsi_Host *host;
 	struct request_queue *request_queue;
@@ -289,6 +307,7 @@ struct scsi_device {
 	struct mutex		state_mutex;
 	enum scsi_device_state sdev_state;
 	struct task_struct	*quiesced_by;
+	struct scsi_device_eh eh;
 	unsigned long		sdev_data[];
 } __attribute__((aligned(sizeof(unsigned long))));
 

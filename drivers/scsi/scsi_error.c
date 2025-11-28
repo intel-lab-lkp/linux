@@ -57,9 +57,26 @@
 #define BUS_RESET_SETTLE_TIME   (10)
 #define HOST_RESET_SETTLE_TIME  (10)
 
+enum {
+	SDEV_EH_STOP = 0,
+	SDEV_EH_START,
+	SDEV_EH_DONE,
+};
+
 static int scsi_eh_try_stu(struct scsi_cmnd *scmd);
 static enum scsi_disposition scsi_try_to_abort_cmd(const struct scsi_host_template *,
 						   struct scsi_cmnd *);
+static void sdev_eh_add_cmnd(struct scsi_cmnd *scmd);
+static void sdev_eh_wakeup(struct scsi_device *sdev);
+
+static inline void shost_clear_eh_done(struct Scsi_Host *shost)
+{
+	struct scsi_device *sdev;
+
+	shost_for_each_device(sdev, shost) {
+		atomic_set(&sdev->eh.state, SDEV_EH_STOP);
+	}
+}
 
 void scsi_eh_wakeup(struct Scsi_Host *shost, unsigned int busy)
 {
@@ -292,10 +309,21 @@ static void scsi_eh_inc_host_failed(struct rcu_head *head)
 }
 
 /**
- * scsi_eh_scmd_add - add scsi cmd to error handling.
- * @scmd:	scmd to run eh on.
+ * scsi_eh_scmd_add_shost - Add cmd to error handling of scsi_device.
+ * @scmd:    scmd to run eh on.
  */
-void scsi_eh_scmd_add(struct scsi_cmnd *scmd)
+static void scsi_eh_scmd_add_sdev(struct scsi_cmnd *scmd)
+{
+	scsi_eh_reset(scmd);
+	sdev_eh_add_cmnd(scmd);
+	sdev_eh_wakeup(scmd->device);
+}
+
+/**
+ * scsi_eh_scmd_add_shost - Add cmd to error handling of Scsi_Host.
+ * @scmd:    scmd to run eh on.
+ */
+static void scsi_eh_scmd_add_shost(struct scsi_cmnd *scmd)
 {
 	struct Scsi_Host *shost = scmd->device->host;
 	unsigned long flags;
@@ -320,6 +348,21 @@ void scsi_eh_scmd_add(struct scsi_cmnd *scmd)
 	 * host_failed change.
 	 */
 	call_rcu_hurry(&scmd->rcu, scsi_eh_inc_host_failed);
+}
+
+/**
+ * scsi_eh_scmd_add - add scsi cmd to error handling.
+ * @scmd:	scmd to run eh on.
+ */
+void scsi_eh_scmd_add(struct scsi_cmnd *scmd)
+{
+	struct Scsi_Host *shost = scmd->device->host;
+	const struct scsi_host_template *sht = shost->hostt;
+
+	if (!sht->enable_sdev_eh || unlikely(scsi_host_in_recovery(shost)))
+		scsi_eh_scmd_add_shost(scmd);
+	else
+		scsi_eh_scmd_add_sdev(scmd);
 }
 
 /**
@@ -881,7 +924,7 @@ void scsi_eh_done(struct scsi_cmnd *scmd)
 	SCSI_LOG_ERROR_RECOVERY(3, scmd_printk(KERN_INFO, scmd,
 			"%s result: %x\n", __func__, scmd->result));
 
-	eh_action = scmd->device->host->eh_action;
+	eh_action = scmd->device->eh.action;
 	if (eh_action)
 		complete(eh_action);
 }
@@ -890,7 +933,7 @@ void scsi_eh_done(struct scsi_cmnd *scmd)
  * scsi_try_host_reset - ask host adapter to reset itself
  * @scmd:	SCSI cmd to send host reset.
  */
-static enum scsi_disposition scsi_try_host_reset(struct scsi_cmnd *scmd)
+static enum scsi_disposition __scsi_try_host_reset(struct scsi_cmnd *scmd)
 {
 	unsigned long flags;
 	enum scsi_disposition rtn;
@@ -916,11 +959,19 @@ static enum scsi_disposition scsi_try_host_reset(struct scsi_cmnd *scmd)
 	return rtn;
 }
 
+static enum scsi_disposition scsi_try_host_reset(struct scsi_cmnd *scmd)
+{
+	if (!scsi_host_in_recovery(scmd->device->host))
+		return FAILED;
+
+	return __scsi_try_host_reset(scmd);
+}
+
 /**
  * scsi_try_bus_reset - ask host to perform a bus reset
  * @scmd:	SCSI cmd to send bus reset.
  */
-static enum scsi_disposition scsi_try_bus_reset(struct scsi_cmnd *scmd)
+static enum scsi_disposition __scsi_try_bus_reset(struct scsi_cmnd *scmd)
 {
 	unsigned long flags;
 	enum scsi_disposition rtn;
@@ -944,6 +995,14 @@ static enum scsi_disposition scsi_try_bus_reset(struct scsi_cmnd *scmd)
 	}
 
 	return rtn;
+}
+
+static enum scsi_disposition scsi_try_bus_reset(struct scsi_cmnd *scmd)
+{
+	if (!scsi_host_in_recovery(scmd->device->host))
+		return FAILED;
+
+	return __scsi_try_bus_reset(scmd);
 }
 
 static void __scsi_report_device_reset(struct scsi_device *sdev, void *data)
@@ -1170,7 +1229,7 @@ static enum scsi_disposition scsi_send_eh_cmnd(struct scsi_cmnd *scmd,
 
 retry:
 	scsi_eh_prep_cmnd(scmd, &ses, cmnd, cmnd_size, sense_bytes);
-	shost->eh_action = &done;
+	sdev->eh.action = &done;
 
 	scsi_log_send(scmd);
 	scmd->submitter = SUBMITTED_BY_SCSI_ERROR_HANDLER;
@@ -1214,7 +1273,7 @@ retry:
 		rtn = SUCCESS;
 	}
 
-	shost->eh_action = NULL;
+	sdev->eh.action = NULL;
 
 	scsi_log_completion(scmd, rtn);
 
@@ -1345,6 +1404,8 @@ int scsi_eh_get_sense(struct list_head *work_q,
 					     current->comm));
 			break;
 		}
+		if (atomic_read(&scmd->device->eh.state) == SDEV_EH_DONE)
+			continue;
 		if (!scsi_status_is_check_condition(scmd->result))
 			/*
 			 * don't request sense if there's no check condition
@@ -1507,6 +1568,31 @@ static int scsi_eh_try_stu(struct scsi_cmnd *scmd)
 	return 1;
 }
 
+static int scsi_eh_sdev_stu(struct scsi_cmnd *scmd,
+			      struct list_head *work_q,
+			      struct list_head *done_q)
+{
+	struct scsi_device *sdev = scmd->device;
+	struct scsi_cmnd *next;
+
+	SCSI_LOG_ERROR_RECOVERY(3, sdev_printk(KERN_INFO, sdev,
+				"%s: Sending START_UNIT\n", current->comm));
+
+	if (scsi_eh_try_stu(scmd)) {
+		SCSI_LOG_ERROR_RECOVERY(3, sdev_printk(KERN_INFO, sdev,
+				    "%s: START_UNIT failed\n", current->comm));
+		return 0;
+	}
+
+	if (!scsi_device_online(sdev) || !scsi_eh_tur(scmd))
+		list_for_each_entry_safe(scmd, next, work_q, eh_entry)
+			if (scmd->device == sdev &&
+			    scsi_eh_action(scmd, SUCCESS) == SUCCESS)
+				scsi_eh_finish_cmd(scmd, done_q);
+
+	return list_empty(work_q);
+}
+
  /**
  * scsi_eh_stu - send START_UNIT if needed
  * @shost:	&scsi host being recovered.
@@ -1521,7 +1607,7 @@ static int scsi_eh_stu(struct Scsi_Host *shost,
 			      struct list_head *work_q,
 			      struct list_head *done_q)
 {
-	struct scsi_cmnd *scmd, *stu_scmd, *next;
+	struct scsi_cmnd *scmd, *stu_scmd;
 	struct scsi_device *sdev;
 
 	shost_for_each_device(sdev, shost) {
@@ -1533,6 +1619,8 @@ static int scsi_eh_stu(struct Scsi_Host *shost,
 			scsi_device_put(sdev);
 			break;
 		}
+		if (atomic_read(&scmd->device->eh.state) == SDEV_EH_DONE)
+			continue;
 		stu_scmd = NULL;
 		list_for_each_entry(scmd, work_q, eh_entry)
 			if (scmd->device == sdev && SCSI_SENSE_VALID(scmd) &&
@@ -1544,28 +1632,40 @@ static int scsi_eh_stu(struct Scsi_Host *shost,
 		if (!stu_scmd)
 			continue;
 
-		SCSI_LOG_ERROR_RECOVERY(3,
-			sdev_printk(KERN_INFO, sdev,
-				     "%s: Sending START_UNIT\n",
-				    current->comm));
-
-		if (!scsi_eh_try_stu(stu_scmd)) {
-			if (!scsi_device_online(sdev) ||
-			    !scsi_eh_tur(stu_scmd)) {
-				list_for_each_entry_safe(scmd, next,
-							  work_q, eh_entry) {
-					if (scmd->device == sdev &&
-					    scsi_eh_action(scmd, SUCCESS) == SUCCESS)
-						scsi_eh_finish_cmd(scmd, done_q);
-				}
-			}
-		} else {
-			SCSI_LOG_ERROR_RECOVERY(3,
-				sdev_printk(KERN_INFO, sdev,
-					    "%s: START_UNIT failed\n",
-					    current->comm));
+		if (scsi_eh_sdev_stu(stu_scmd, work_q, done_q)) {
+			scsi_device_put(sdev);
+			break;
 		}
 	}
+
+	return list_empty(work_q);
+}
+
+static int scsi_eh_sdev_reset(struct scsi_cmnd *scmd,
+			      struct list_head *work_q,
+			      struct list_head *done_q)
+{
+	struct scsi_cmnd *next;
+	struct scsi_device *sdev = scmd->device;
+	enum scsi_disposition rtn;
+
+	SCSI_LOG_ERROR_RECOVERY(3, sdev_printk(KERN_INFO, sdev,
+			     "%s: Sending BDR\n", current->comm));
+
+	rtn = scsi_try_bus_device_reset(scmd);
+	if (rtn != SUCCESS && rtn != FAST_IO_FAIL) {
+		SCSI_LOG_ERROR_RECOVERY(3,
+			sdev_printk(KERN_INFO, sdev,
+				    "%s: BDR failed\n", current->comm));
+		return 0;
+	}
+
+	if (!scsi_device_online(sdev) || rtn == FAST_IO_FAIL ||
+	    !scsi_eh_tur(scmd))
+		list_for_each_entry_safe(scmd, next, work_q, eh_entry)
+			if (scmd->device == sdev &&
+			    scsi_eh_action(scmd, rtn) != FAILED)
+				scsi_eh_finish_cmd(scmd, done_q);
 
 	return list_empty(work_q);
 }
@@ -1587,9 +1687,8 @@ static int scsi_eh_bus_device_reset(struct Scsi_Host *shost,
 				    struct list_head *work_q,
 				    struct list_head *done_q)
 {
-	struct scsi_cmnd *scmd, *bdr_scmd, *next;
+	struct scsi_cmnd *scmd, *bdr_scmd;
 	struct scsi_device *sdev;
-	enum scsi_disposition rtn;
 
 	shost_for_each_device(sdev, shost) {
 		if (scsi_host_eh_past_deadline(shost)) {
@@ -1606,30 +1705,15 @@ static int scsi_eh_bus_device_reset(struct Scsi_Host *shost,
 				bdr_scmd = scmd;
 				break;
 			}
+		if (atomic_read(&scmd->device->eh.state) == SDEV_EH_DONE)
+			continue;
 
 		if (!bdr_scmd)
 			continue;
 
-		SCSI_LOG_ERROR_RECOVERY(3,
-			sdev_printk(KERN_INFO, sdev,
-				     "%s: Sending BDR\n", current->comm));
-		rtn = scsi_try_bus_device_reset(bdr_scmd);
-		if (rtn == SUCCESS || rtn == FAST_IO_FAIL) {
-			if (!scsi_device_online(sdev) ||
-			    rtn == FAST_IO_FAIL ||
-			    !scsi_eh_tur(bdr_scmd)) {
-				list_for_each_entry_safe(scmd, next,
-							 work_q, eh_entry) {
-					if (scmd->device == sdev &&
-					    scsi_eh_action(scmd, rtn) != FAILED)
-						scsi_eh_finish_cmd(scmd,
-								   done_q);
-				}
-			}
-		} else {
-			SCSI_LOG_ERROR_RECOVERY(3,
-				sdev_printk(KERN_INFO, sdev,
-					    "%s: BDR failed\n", current->comm));
+		if (scsi_eh_sdev_reset(bdr_scmd, work_q, done_q)) {
+			scsi_device_put(sdev);
+			break;
 		}
 	}
 
@@ -2361,6 +2445,7 @@ int scsi_error_handler(void *data)
 
 		/* All scmds have been handled */
 		shost->host_failed = 0;
+		shost_clear_eh_done(shost);
 
 		/*
 		 * Note - if the above fails completely, the action is to take
@@ -2511,12 +2596,12 @@ scsi_ioctl_reset(struct scsi_device *dev, int __user *arg)
 			break;
 		fallthrough;
 	case SG_SCSI_RESET_BUS:
-		rtn = scsi_try_bus_reset(scmd);
+		rtn = __scsi_try_bus_reset(scmd);
 		if (rtn == SUCCESS || (val & SG_SCSI_RESET_NO_ESCALATE))
 			break;
 		fallthrough;
 	case SG_SCSI_RESET_HOST:
-		rtn = scsi_try_host_reset(scmd);
+		rtn = __scsi_try_host_reset(scmd);
 		if (rtn == SUCCESS)
 			break;
 		fallthrough;
@@ -2596,3 +2681,132 @@ bool scsi_get_sense_info_fld(const u8 *sense_buffer, int sb_len,
 	}
 }
 EXPORT_SYMBOL(scsi_get_sense_info_fld);
+
+static int scsi_sdev_eh(struct scsi_device *sdev,
+		 struct list_head *work_q,
+		 struct list_head *done_q)
+{
+	int ret = 0;
+	struct scsi_cmnd *scmd;
+
+	SCSI_LOG_ERROR_RECOVERY(2, sdev_printk(KERN_INFO, sdev,
+		"%s:luneh: checking sense\n", current->comm));
+	ret = scsi_eh_get_sense(work_q, done_q);
+	if (ret)
+		return ret;
+
+	SCSI_LOG_ERROR_RECOVERY(2, sdev_printk(KERN_INFO, sdev,
+		"%s:luneh: start unit\n", current->comm));
+	scmd = list_first_entry(work_q, struct scsi_cmnd, eh_entry);
+	ret = scsi_eh_sdev_stu(scmd, work_q, done_q);
+	if (ret)
+		return ret;
+
+	SCSI_LOG_ERROR_RECOVERY(2, sdev_printk(KERN_INFO, sdev,
+		"%s:luneh: reset LUN\n", current->comm));
+	scmd = list_first_entry(work_q, struct scsi_cmnd, eh_entry);
+	ret = scsi_eh_sdev_reset(scmd, work_q, done_q);
+
+	return ret;
+}
+static void sdev_eh_work(struct work_struct *work)
+{
+	int ret;
+	unsigned long flags;
+	struct scsi_device_eh *eh =
+		container_of(work, struct scsi_device_eh, work);
+	struct scsi_device *sdev =
+		container_of(eh, struct scsi_device, eh);
+	struct scsi_cmnd *scmd, *next;
+	LIST_HEAD(eh_work_q);
+	LIST_HEAD(eh_done_q);
+
+	spin_lock_irqsave(&eh->lock, flags);
+	list_splice_init(&eh->cmd_q, &eh_work_q);
+	spin_unlock_irqrestore(&eh->lock, flags);
+
+	ret = scsi_sdev_eh(sdev, &eh_work_q, &eh_done_q);
+	atomic_cmpxchg(&eh->state, SDEV_EH_START,
+		ret ? SDEV_EH_STOP : SDEV_EH_DONE);
+	if (ret)
+		goto out_flush_done;
+
+	SCSI_LOG_ERROR_RECOVERY(2, sdev_printk(KERN_INFO, sdev,
+		"%s:luneh fallback to host recovery\n", current->comm));
+	list_for_each_entry_safe(scmd, next, &eh_work_q, eh_entry) {
+		list_del_init(&scmd->eh_entry);
+		scsi_eh_scmd_add_shost(scmd);
+	}
+
+out_flush_done:
+	scsi_eh_flush_done_q(&eh_done_q);
+	atomic_set(&eh->fail_cnt, 0);
+}
+static void sdev_eh_add_cmnd(struct scsi_cmnd *scmd)
+{
+	unsigned long flags;
+	struct scsi_device_eh *eh = &scmd->device->eh;
+
+	atomic_inc(&eh->fail_cnt);
+	spin_lock_irqsave(&eh->lock, flags);
+	list_add_tail(&scmd->eh_entry, &eh->cmd_q);
+	spin_unlock_irqrestore(&eh->lock, flags);
+}
+bool scsi_device_in_recovery(struct scsi_device *sdev)
+{
+	return atomic_read(&sdev->eh.fail_cnt) != 0;
+}
+static void sdev_eh_wakeup(struct scsi_device *sdev)
+{
+	unsigned int fail_cnt;
+	unsigned int busy_cnt;
+	struct scsi_device_eh *eh = &sdev->eh;
+	int state;
+
+	fail_cnt = atomic_read(&eh->fail_cnt);
+	if (!fail_cnt) {
+		SCSI_LOG_ERROR_RECOVERY(6, sdev_printk(KERN_INFO, sdev,
+			"%s:luneh: no failed cmd\n", current->comm));
+		return;
+	}
+
+	busy_cnt = scsi_device_busy(sdev);
+	if (busy_cnt != fail_cnt) {
+		SCSI_LOG_ERROR_RECOVERY(5, sdev_printk(KERN_INFO, sdev,
+			"%s:luneh: do not wake up, busy/fail: %d/%d\n",
+			current->comm, busy_cnt, fail_cnt));
+		return;
+	}
+
+	state = atomic_cmpxchg(&eh->state, SDEV_EH_STOP, SDEV_EH_START);
+	if (state != SDEV_EH_STOP) {
+		SCSI_LOG_ERROR_RECOVERY(5, sdev_printk(KERN_INFO, sdev,
+			"%s:luneh: is waken up, busy/fail: %d/%d\n",
+			current->comm, busy_cnt, fail_cnt));
+		return;
+	}
+
+	SCSI_LOG_ERROR_RECOVERY(2, sdev_printk(KERN_INFO, sdev,
+		"%s:luneh: waking up, busy/fail: %d/%d\n",
+		current->comm, busy_cnt, fail_cnt));
+	schedule_work(&eh->work);
+}
+void sdev_eh_try_wakeup(struct scsi_device *sdev)
+{
+	const struct scsi_host_template *sht = sdev->host->hostt;
+
+	if (sht->enable_sdev_eh)
+		sdev_eh_wakeup(sdev);
+}
+
+void scsi_device_init_eh(struct scsi_device *sdev)
+{
+	struct scsi_device_eh *eh = &sdev->eh;
+
+	INIT_WORK(&eh->work, sdev_eh_work);
+	spin_lock_init(&eh->lock);
+	INIT_LIST_HEAD(&eh->cmd_q);
+	eh->action = NULL;
+	atomic_set(&eh->fail_cnt, 0);
+	atomic_set(&eh->state, SDEV_EH_STOP);
+}
