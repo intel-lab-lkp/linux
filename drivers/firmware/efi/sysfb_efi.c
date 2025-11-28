@@ -231,6 +231,18 @@ static const struct dmi_system_id efifb_dmi_system_table[] __initconst = {
 	{},
 };
 
+struct efifb_mode_fixup {
+	unsigned int width;
+	unsigned int height;
+	unsigned int pitch;
+};
+
+static const struct efifb_mode_fixup efifb_steamdeck_mode_fixup = {
+	.width = 1280,
+	.height = 800,
+	.pitch = 3328,
+};
+
 /*
  * Some devices have a portrait LCD but advertise a landscape resolution (and
  * pitch). We simply swap width and height for these devices so that we can
@@ -280,6 +292,24 @@ static const struct dmi_system_id efifb_dmi_swap_width_height[] __initconst = {
 			/* Non exact match to match F + L versions */
 			DMI_MATCH(DMI_PRODUCT_NAME, "Lenovo YB1-X91"),
 		},
+	},
+	{
+		/* Valve Steam Deck (Jupiter) */
+		.matches = {
+			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Valve"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Jupiter"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_VERSION, "1"),
+		},
+		.driver_data = (void *)&efifb_steamdeck_mode_fixup,
+	},
+	{
+		/* Valve Steam Deck (Galileo) */
+		.matches = {
+			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Valve"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Galileo"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_VERSION, "1"),
+		},
+		.driver_data = (void *)&efifb_steamdeck_mode_fixup,
 	},
 	{},
 };
@@ -351,17 +381,31 @@ static struct fwnode_handle efifb_fwnode;
 
 __init void sysfb_apply_efi_quirks(void)
 {
+	const struct dmi_system_id *match;
+
 	if (screen_info.orig_video_isVGA != VIDEO_TYPE_EFI ||
 	    !(screen_info.capabilities & VIDEO_CAPABILITY_SKIP_QUIRKS))
 		dmi_check_system(efifb_dmi_system_table);
 
-	if (screen_info.orig_video_isVGA == VIDEO_TYPE_EFI &&
-	    dmi_check_system(efifb_dmi_swap_width_height)) {
+	if (screen_info.orig_video_isVGA != VIDEO_TYPE_EFI)
+		return;
+
+	for (match = dmi_first_match(efifb_dmi_swap_width_height);
+	     match;
+	     match = dmi_first_match(match + 1)) {
+		const struct efifb_mode_fixup *data = match->driver_data;
 		u16 temp = screen_info.lfb_width;
 
 		screen_info.lfb_width = screen_info.lfb_height;
 		screen_info.lfb_height = temp;
 		screen_info.lfb_linelength = 4 * screen_info.lfb_width;
+
+		if (data && data->pitch &&
+		   data->width == screen_info.lfb_height &&
+		   data->height == screen_info.lfb_width) {
+			screen_info.lfb_linelength = data->pitch;
+			screen_info.lfb_size = data->pitch * data->width;
+		}
 	}
 }
 
