@@ -4064,6 +4064,7 @@ static const struct ata_dev_quirk_value __ata_dev_max_sec_quirks[] = {
 	{ "ST380013AS",			"3.20",		1024 },
 	{ "LITEON CX1-JB*-HP",		NULL,		1024 },
 	{ "LITEON EP1-*",		NULL,		1024 },
+	{ "DELLBOSS VD",		"MV.R00-0",	8191 },
 	{ },
 };
 
@@ -4128,6 +4129,12 @@ static const struct ata_dev_quirks_entry __ata_dev_quirks[] = {
 	 */
 	{ "LITEON CX1-JB*-HP",	NULL,		ATA_QUIRK_MAX_SEC },
 	{ "LITEON EP1-*",	NULL,		ATA_QUIRK_MAX_SEC },
+
+	/*
+	 * These devices time out with higher max sects.
+	 * https://bugzilla.kernel.org/show_bug.cgi?id=220693
+	 */
+	{ "DELLBOSS VD",	"MV.R00-0",	ATA_QUIRK_MAX_SEC },
 
 	/* Devices we expect to fail diagnostics */
 
