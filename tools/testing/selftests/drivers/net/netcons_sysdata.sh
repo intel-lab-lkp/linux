@@ -195,7 +195,7 @@ function runtest {
 	# Wait for socat to start and listen to the port.
 	wait_local_port_listen "${NAMESPACE}" "${PORT}" udp
 	# Send the message
-	taskset -c "${CPU}" echo "${MSG}: ${TARGET}" > /dev/kmsg
+	taskset -c "${CPU}" echo "${MSG}: ${TARGET}" > "$NETCONS_PATH"/send_msg
 	# Wait until socat saves the file to disk
 	busywait "${BUSYWAIT_TIMEOUT}" test -s "${OUTPUT_FILE}"
 }
