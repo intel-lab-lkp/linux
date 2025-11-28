@@ -91,7 +91,7 @@ def _set_ethtool_feat(dev, current, feats, host=None):
     defer(ethtool, " ".join(old), host=host)
 
 
-def _setup(cfg, test_name):
+def _setup(cfg, mode, test_name):
     """ Setup hardware loopback mode for GRO testing. """
 
     if not hasattr(cfg, "bin_remote"):
@@ -108,16 +108,37 @@ def _setup(cfg, test_name):
         _set_mtu_restore(cfg.dev, 4096, None)
         _set_mtu_restore(cfg.remote_dev, 4096, cfg.remote)
 
-    flush_path = f"/sys/class/net/{cfg.ifname}/gro_flush_timeout"
-    irq_path = f"/sys/class/net/{cfg.ifname}/napi_defer_hard_irqs"
+    if mode == "sw":
+        flush_path = f"/sys/class/net/{cfg.ifname}/gro_flush_timeout"
+        irq_path = f"/sys/class/net/{cfg.ifname}/napi_defer_hard_irqs"
 
-    _write_defer_restore(cfg, flush_path, "200000", defer_undo=True)
-    _write_defer_restore(cfg, irq_path, "10", defer_undo=True)
+        _write_defer_restore(cfg, flush_path, "200000", defer_undo=True)
+        _write_defer_restore(cfg, irq_path, "10", defer_undo=True)
 
-    _set_ethtool_feat(cfg.ifname, cfg.feat,
-                      {"generic-receive-offload": True,
-                       "rx-gro-hw": False,
-                       "large-receive-offload": False})
+        _set_ethtool_feat(cfg.ifname, cfg.feat,
+                          {"generic-receive-offload": True,
+                           "rx-gro-hw": False,
+                           "large-receive-offload": False})
+    elif mode == "hw":
+        # The only way to get HW GRO but elide SW GRO is to install
+        # a dummy XDP generic program. Disabling SW GRO as a feature
+        # would also disable HW GRO.
+        prog = cfg.net_lib_dir / "xdp_dummy.bpf.o"
+        ip(f"link set dev {cfg.ifname} xdpgeneric obj {prog} sec xdp")
+        defer(ip, f"link set dev {cfg.ifname} xdpgeneric off")
+
+        # Attaching XDP may change features, fetch the latest state
+        feat = ethtool(f"-k {cfg.ifname}", json=True)[0]
+
+        _set_ethtool_feat(cfg.ifname, feat,
+                          {"generic-receive-offload": True,
+                           "rx-gro-hw": True,
+                           "large-receive-offload": False})
+    elif mode == "lro":
+        _set_ethtool_feat(cfg.ifname, cfg.feat,
+                          {"generic-receive-offload": False,
+                           "rx-gro-hw": False,
+                           "large-receive-offload": True})
 
     try:
         # Disable TSO for local tests
@@ -132,19 +153,20 @@ def _setup(cfg, test_name):
 def _gro_variants():
     """Generator that yields all combinations of protocol and test types."""
 
-    for protocol in ["ipv4", "ipv6", "ipip"]:
-        for test_name in ["data", "ack", "flags", "tcp", "ip", "large"]:
-            yield protocol, test_name
+    for mode in ["sw", "hw", "lro"]:
+        for protocol in ["ipv4", "ipv6", "ipip"]:
+            for test_name in ["data", "ack", "flags", "tcp", "ip", "large"]:
+                yield mode, protocol, test_name
 
 
 @ksft_variants(_gro_variants())
-def test(cfg, protocol, test_name):
+def test(cfg, mode, protocol, test_name):
     """Run a single GRO test with retries."""
 
     ipver = "6" if protocol[-1] == "6" else "4"
     cfg.require_ipver(ipver)
 
-    _setup(cfg, test_name)
+    _setup(cfg, mode, test_name)
 
     base_cmd_args = [
         f"--{protocol}",
