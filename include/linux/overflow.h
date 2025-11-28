@@ -176,6 +176,26 @@ static inline bool __must_check __must_check_overflow(bool overflow)
 	})
 
 /**
+ * __shl_eval_type() - Choose evaluation type for shift checks
+ * @a: value to be shifted
+ * @d: destination pointer
+ *
+ * Returns the internal type used by check_shl_overflow() to evaluate
+ * (@a << @s), widening to unsigned __int128 when available and either
+ * @a or *@d promote wider than 64 bits, otherwise using unsigned long long.
+ */
+#if defined(__SIZEOF_INT128__)
+#define __shl_eval_type(a, d)							\
+	typeof(__builtin_choose_expr(						\
+		sizeof((a) + (typeof(*(d)))0) > sizeof(unsigned long long),	\
+		(unsigned __int128)0,						\
+		0ULL))
+#else
+#define __shl_eval_type(a, d)							\
+	typeof(0ULL + (a) + (typeof(*(d)))0)
+#endif
+
+/**
  * check_shl_overflow() - Calculate a left-shifted value and check overflow
  * @a: Value to be shifted
  * @s: How many bits left to shift
@@ -199,7 +219,7 @@ static inline bool __must_check __must_check_overflow(bool overflow)
 	typeof(a) _a = a;						\
 	typeof(s) _s = s;						\
 	typeof(d) _d = d;						\
-	unsigned long long _a_full = _a;				\
+	__shl_eval_type(_a, _d) _a_full = (__shl_eval_type(_a, _d))_a;	\
 	unsigned int _to_shift =					\
 		is_non_negative(_s) && _s < 8 * sizeof(*d) ? _s : 0;	\
 	*_d = (_a_full << _to_shift);					\
