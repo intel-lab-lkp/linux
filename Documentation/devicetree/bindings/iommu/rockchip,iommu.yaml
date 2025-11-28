@@ -27,6 +27,8 @@ properties:
           - enum:
               - rockchip,rk3576-iommu
               - rockchip,rk3588-iommu
+              - rockchip,rk3576-npu-iommu
+              - rockchip,rk3576-rkvdec-iommu
           - const: rockchip,rk3568-iommu
 
   reg:
@@ -42,14 +44,12 @@ properties:
     minItems: 1
 
   clocks:
-    items:
-      - description: Core clock
-      - description: Interface clock
+    minItems: 2
+    maxItems: 4
 
   clock-names:
-    items:
-      - const: aclk
-      - const: iface
+    minItems: 2
+    maxItems: 4
 
   "#iommu-cells":
     const: 0
@@ -63,6 +63,46 @@ properties:
       Do not use the mmu reset operation.
       Some mmu instances may produce unexpected results
       when the reset operation is used.
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - rockchip,rk3576-npu-iommu
+              - rockchip,rk3576-rkvdec-iommu
+    then:
+      properties:
+        clocks:
+          minItems: 4
+        clock-names:
+          minItems: 4
+  - if:
+      properties:
+        compatible:
+          items:
+            - const: rockchip,iommu
+            - const: rockchip,rk3568-iommu
+    then:
+      properties:
+        clocks:
+          maxItems: 2
+        clock-names:
+          maxItems: 2
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - rockchip,rk3576-iommu
+              - rockchip,rk3588-iommu
+    then:
+      properties:
+        clocks:
+          maxItems: 2
+        clock-names:
+          maxItems: 2
 
 required:
   - compatible
