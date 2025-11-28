@@ -106,6 +106,11 @@ properties:
   iommus:
     maxItems: 1
 
+  mux-states:
+    description:
+      mux controller node to route the SDIO signals from SoC to cards.
+    maxItems: 1
+
   power-domains:
     maxItems: 1
 
@@ -262,8 +267,16 @@ unevaluatedProperties: false
 examples:
   - |
     #include <dt-bindings/clock/r8a7790-cpg-mssr.h>
+    #include <dt-bindings/gpio/gpio.h>
     #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/pinctrl/rzg2l-pinctrl.h>
     #include <dt-bindings/power/r8a7790-sysc.h>
+
+    mux: mux-controller {
+            compatible = "gpio-mux";
+            #mux-state-cells = <1>;
+            mux-gpios = <&pinctrl RZG2L_GPIO(22, 1) GPIO_ACTIVE_LOW>;
+    };
 
     sdhi0: mmc@ee100000 {
         compatible = "renesas,sdhi-r8a7790", "renesas,rcar-gen2-sdhi";
@@ -275,6 +288,7 @@ examples:
         max-frequency = <195000000>;
         power-domains = <&sysc R8A7790_PD_ALWAYS_ON>;
         resets = <&cpg 314>;
+        mux-states = <&mux 0>;
     };
 
     sdhi1: mmc@ee120000 {
