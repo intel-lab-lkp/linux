@@ -36,7 +36,7 @@ static DEFINE_MUTEX(deflate_stream_lock);
 static void *deflate_alloc_stream(void)
 {
 	size_t size = max(zlib_inflate_workspacesize(),
-			  zlib_deflate_workspacesize(-DEFLATE_DEF_WINBITS,
+			  zlib_deflate_workspacesize(MAX_WBITS,
 						     DEFLATE_DEF_MEMLEVEL));
 	struct deflate_stream *ctx;
 
@@ -113,17 +113,34 @@ static int deflate_compress_one(struct acomp_req *req,
 	return 0;
 }
 
-static int deflate_compress(struct acomp_req *req)
+enum algo {
+	ALGO_DEFLATE,
+	ALGO_ZLIB_DEFLATE,
+};
+
+static int _deflate_compress(struct acomp_req *req, enum algo algo)
 {
 	struct crypto_acomp_stream *s;
 	struct deflate_stream *ds;
+	int window_bits;
 	int err;
+
+	switch (algo) {
+	case ALGO_DEFLATE:
+		window_bits = -DEFLATE_DEF_WINBITS;
+		break;
+	case ALGO_ZLIB_DEFLATE:
+		window_bits = DEFLATE_DEF_WINBITS;
+		break;
+	default:
+		return -EINVAL;
+	}
 
 	s = crypto_acomp_lock_stream_bh(&deflate_streams);
 	ds = s->ctx;
 
 	err = zlib_deflateInit2(&ds->stream, DEFLATE_DEF_LEVEL, Z_DEFLATED,
-				-DEFLATE_DEF_WINBITS, DEFLATE_DEF_MEMLEVEL,
+				window_bits, DEFLATE_DEF_MEMLEVEL,
 				Z_DEFAULT_STRATEGY);
 	if (err != Z_OK) {
 		err = -EINVAL;
@@ -136,6 +153,16 @@ out:
 	crypto_acomp_unlock_stream_bh(s);
 
 	return err;
+}
+
+static int deflate_compress(struct acomp_req *req)
+{
+	return _deflate_compress(req, ALGO_DEFLATE);
+}
+
+static int zlib_deflate_compress(struct acomp_req *req)
+{
+	return _deflate_compress(req, ALGO_ZLIB_DEFLATE);
 }
 
 static int deflate_decompress_one(struct acomp_req *req,
@@ -194,7 +221,7 @@ static int deflate_decompress_one(struct acomp_req *req,
 	return 0;
 }
 
-static int deflate_decompress(struct acomp_req *req)
+static int _deflate_decompress(struct acomp_req *req, enum algo algo)
 {
 	struct crypto_acomp_stream *s;
 	struct deflate_stream *ds;
@@ -203,7 +230,18 @@ static int deflate_decompress(struct acomp_req *req)
 	s = crypto_acomp_lock_stream_bh(&deflate_streams);
 	ds = s->ctx;
 
-	err = zlib_inflateInit2(&ds->stream, -DEFLATE_DEF_WINBITS);
+	switch (algo) {
+	case ALGO_DEFLATE:
+		err = zlib_inflateInit2(&ds->stream, -DEFLATE_DEF_WINBITS);
+		break;
+	case ALGO_ZLIB_DEFLATE:
+		err = zlib_inflateInit(&ds->stream);
+		break;
+	default:
+		err = -EINVAL;
+		break;
+	}
+
 	if (err != Z_OK) {
 		err = -EINVAL;
 		goto out;
@@ -217,6 +255,16 @@ out:
 	return err;
 }
 
+static int deflate_decompress(struct acomp_req *req)
+{
+	return _deflate_decompress(req, ALGO_DEFLATE);
+}
+
+static int zlib_deflate_decompress(struct acomp_req *req)
+{
+	return _deflate_decompress(req, ALGO_ZLIB_DEFLATE);
+}
+
 static int deflate_init(struct crypto_acomp *tfm)
 {
 	int ret;
@@ -228,7 +276,7 @@ static int deflate_init(struct crypto_acomp *tfm)
 	return ret;
 }
 
-static struct acomp_alg acomp = {
+static struct acomp_alg acomps[] = { {
 	.compress		= deflate_compress,
 	.decompress		= deflate_decompress,
 	.init			= deflate_init,
@@ -236,16 +284,24 @@ static struct acomp_alg acomp = {
 	.base.cra_driver_name	= "deflate-generic",
 	.base.cra_flags		= CRYPTO_ALG_REQ_VIRT,
 	.base.cra_module	= THIS_MODULE,
-};
+}, {
+	.compress		= zlib_deflate_compress,
+	.decompress		= zlib_deflate_decompress,
+	.init			= deflate_init,
+	.base.cra_name		= "zlib-deflate",
+	.base.cra_driver_name	= "zlib-deflate-generic",
+	.base.cra_flags		= CRYPTO_ALG_REQ_VIRT,
+	.base.cra_module	= THIS_MODULE,
+} };
 
 static int __init deflate_mod_init(void)
 {
-	return crypto_register_acomp(&acomp);
+	return crypto_register_acomps(acomps, ARRAY_SIZE(acomps));
 }
 
 static void __exit deflate_mod_fini(void)
 {
-	crypto_unregister_acomp(&acomp);
+	crypto_unregister_acomps(acomps, ARRAY_SIZE(acomps));
 	crypto_acomp_free_streams(&deflate_streams);
 }
 
