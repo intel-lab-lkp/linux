@@ -243,7 +243,6 @@ static void dmae_init(struct sh_dmae_chan *sh_chan)
 
 static int dmae_set_chcr(struct sh_dmae_chan *sh_chan, u32 val)
 {
-	/* If DMA is active, cannot set CHCR. TODO: remove this superfluous check */
 	if (dmae_is_busy(sh_chan))
 		return -EBUSY;
 
