@@ -1779,7 +1779,7 @@ static int hdmi_bridge_init(struct hdmi_context *hdata)
 		return -EINVAL;
 	}
 
-	hdata->bridge = of_drm_find_bridge(np);
+	hdata->bridge = devm_of_drm_get_bridge(dev, np);
 	of_node_put(np);
 
 	if (!hdata->bridge)
