@@ -210,6 +210,7 @@ struct quirk_printer_struct {
 #define USBLP_QUIRK_BIDIR	0x1	/* reports bidir but requires unidirectional mode (no INs/reads) */
 #define USBLP_QUIRK_USB_INIT	0x2	/* needs vendor USB init string */
 #define USBLP_QUIRK_BAD_CLASS	0x4	/* descriptor uses vendor-specific Class or SubClass */
+#define USBLP_QUIRK_RESET_DEV	0x8	/* reset USB device */
 
 static const struct quirk_printer_struct quirk_printers[] = {
 	{ 0x03f0, 0x0004, USBLP_QUIRK_BIDIR }, /* HP DeskJet 895C */
@@ -228,6 +229,7 @@ static const struct quirk_printer_struct quirk_printers[] = {
 	{ 0x0482, 0x0010, USBLP_QUIRK_BIDIR }, /* Kyocera Mita FS 820, by zut <kernel@zut.de> */
 	{ 0x04f9, 0x000d, USBLP_QUIRK_BIDIR }, /* Brother Industries, Ltd HL-1440 Laser Printer */
 	{ 0x04b8, 0x0202, USBLP_QUIRK_BAD_CLASS }, /* Seiko Epson Receipt Printer M129C */
+	{ 0x0550, 0x020e, USBLP_QUIRK_RESET_DEV }, /* FUJI XEROX DocuPrint P475 AP Printer */
 	{ 0, 0 }
 };
 
@@ -1188,6 +1190,13 @@ static int usblp_probe(struct usb_interface *intf,
 	usblp->quirks = usblp_quirks(
 		le16_to_cpu(dev->descriptor.idVendor),
 		le16_to_cpu(dev->descriptor.idProduct));
+
+	/*
+	 * Some printer need to reset the device here or it might not work
+	 * when finished probe.
+	 */
+	if (usblp->quirks & USBLP_QUIRK_RESET_DEV)
+		usb_reset_device(dev);
 
 	/* Analyze and pick initial alternate settings and endpoints. */
 	protocol = usblp_select_alts(usblp);
