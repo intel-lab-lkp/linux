@@ -13099,6 +13099,16 @@ static int task_is_throttled_fair(struct task_struct *p, int cpu)
 #endif
 	return throttled_hierarchy(cfs_rq);
 }
+
+static struct task_struct *select_next_task_push_fair(struct rq *rq, struct task_struct *p)
+{
+	p = list_prepare_entry(p, &rq->cfs_tasks, se.group_node);
+	list_for_each_entry_continue_reverse(p, &rq->cfs_tasks, se.group_node) {
+		return p;
+	}
+	return NULL;
+}
+
 #else /* !CONFIG_SCHED_CORE: */
 static inline void task_tick_core(struct rq *rq, struct task_struct *curr) {}
 #endif /* !CONFIG_SCHED_CORE */
@@ -13660,6 +13670,7 @@ DEFINE_SCHED_CLASS(fair) = {
 
 #ifdef CONFIG_SCHED_CORE
 	.task_is_throttled	= task_is_throttled_fair,
+	.select_next_task_push	= select_next_task_push_fair,
 #endif
 
 #ifdef CONFIG_UCLAMP_TASK

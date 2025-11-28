@@ -2465,6 +2465,7 @@ struct sched_class {
 
 #ifdef CONFIG_SCHED_CORE
 	int (*task_is_throttled)(struct task_struct *p, int cpu);
+	struct task_struct* (*select_next_task_push)(struct rq *rq, struct task_struct *p);
 #endif
 };
 

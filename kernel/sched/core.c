@@ -6338,6 +6338,81 @@ static bool steal_cookie_task(int cpu, struct sched_domain *sd)
 	return false;
 }
 
+static bool forceidle_try_push_task(int this, int that)
+{
+	struct rq *dst = cpu_rq(that), *src = cpu_rq(this);
+	struct task_struct *p;
+	int cpu;
+	bool cookie_check = false;
+	bool success = false;
+	const struct sched_class *class;
+
+	if (!available_idle_cpu(that))
+		return false;
+
+	if (sched_core_enabled(dst)) {
+		for_each_cpu(cpu, cpu_smt_mask(that)) {
+			if (cpu == that)
+				continue;
+			if (!available_idle_cpu(cpu)) {
+				cookie_check = true;
+				break;
+			}
+		}
+	}
+
+	guard(irq)();
+	double_rq_lock(dst, src);
+
+	for_each_class(class) {
+		if (!class->select_next_task_push)
+			continue;
+
+		p = class->select_next_task_push(src, NULL);
+		while (p) {
+			if (!is_cpu_allowed(p, that))
+				goto next;
+
+			if (sched_task_is_throttled(p, that))
+				goto next;
+
+			if (cookie_check && dst->core->core_cookie != p->core_cookie)
+				goto next;
+
+			deactivate_task(src, p, 0);
+			set_task_cpu(p, that);
+			activate_task(dst, p, 0);
+			wakeup_preempt(dst, p, 0);
+
+			success = true;
+			break;
+
+next:
+			p = class->select_next_task_push(src, p);
+		}
+	}
+
+	double_rq_unlock(dst, src);
+	return success;
+}
+
+static bool forceidle_push_tasks(int cpu, struct sched_domain *sd)
+{
+	int i;
+
+	for_each_cpu_wrap(i, sched_domain_span(sd), cpu + 1) {
+		if (cpumask_test_cpu(i, cpu_smt_mask(cpu)))
+			continue;
+
+		if (need_resched())
+			break;
+
+		if (forceidle_try_push_task(cpu, i))
+			return true;
+	}
+	return false;
+}
+
 static void sched_core_balance(struct rq *rq)
 {
 	struct sched_domain *sd;
@@ -6349,11 +6424,20 @@ static void sched_core_balance(struct rq *rq)
 	raw_spin_rq_unlock_irq(rq);
 	for_each_domain(cpu, sd) {
 		if (need_resched())
-			break;
+			goto out;
 
 		if (steal_cookie_task(cpu, sd))
-			break;
+			goto out;
 	}
+	for_each_domain(cpu, sd) {
+		if (need_resched())
+			goto out;
+
+		if (forceidle_push_tasks(cpu, sd))
+			goto out;
+	}
+
+out:
 	raw_spin_rq_lock_irq(rq);
 }
 
