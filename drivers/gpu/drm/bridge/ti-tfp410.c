@@ -362,7 +362,7 @@ static int tfp410_init(struct device *dev, bool i2c)
 	if (!node)
 		return -ENODEV;
 
-	dvi->next_bridge = of_drm_find_bridge(node);
+	dvi->next_bridge = devm_of_drm_get_bridge(dev, node);
 	of_node_put(node);
 
 	if (!dvi->next_bridge)
