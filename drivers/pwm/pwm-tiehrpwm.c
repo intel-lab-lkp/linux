@@ -242,6 +242,8 @@ static int ehrpwm_pwm_config(struct pwm_chip *chip, struct pwm_device *pwm,
 	unsigned int i, cmp_reg;
 	unsigned long long c;
 	u16 aqctl_val, aqctl_mask;
+	u16 up_normal, up_inverse;
+	u16 dn_normal, dn_inverse;
 	unsigned int aqctl_reg;
 
 	if (period_ns > NSEC_PER_SEC)
@@ -299,38 +301,38 @@ static int ehrpwm_pwm_config(struct pwm_chip *chip, struct pwm_device *pwm,
 	/* Update clock prescaler values */
 	ehrpwm_modify(pc->mmio_base, TIEHRPWM_TBCTL,  TIEHRPWM_TBCTL_PRESCALE_MASK, tb_divval);
 
+	/* Select channel-specific registers and presets once */
 	if (pwm->hwpwm == 1) {
-		/* Channel 1 configured with compare B register */
-		cmp_reg = TIEHRPWM_CMPB;
-
+		/* Channel B uses CMPB and AQCTLB */
+		cmp_reg   = TIEHRPWM_CMPB;
 		aqctl_reg = TIEHRPWM_AQCTLB;
-		aqctl_mask = TIEHRPWM_AQCTL_CBU_MASK;
+		aqctl_mask = TIEHRPWM_AQCTL_CBU_MASK | TIEHRPWM_AQCTL_CBD_MASK;
 
-		if (polarity == PWM_POLARITY_INVERSED)
-			aqctl_val = TIEHRPWM_AQCTL_CHB_UP_POLINVERSE;
-		else
-			aqctl_val = TIEHRPWM_AQCTL_CHB_UP_POLNORMAL;
-
-		/* if duty_cycle is big, don't toggle on CBU */
-		if (duty_cycles > period_cycles)
-			aqctl_val &= ~TIEHRPWM_AQCTL_CBU_MASK;
-
+		up_normal  = TIEHRPWM_AQCTL_CHB_UP_POLNORMAL;
+		up_inverse = TIEHRPWM_AQCTL_CHB_UP_POLINVERSE;
+		dn_normal  = TIEHRPWM_AQCTL_CHB_DN_POLNORMAL;
+		dn_inverse = TIEHRPWM_AQCTL_CHB_DN_POLINVERSE;
 	} else {
-		/* Channel 0 configured with compare A register */
-		cmp_reg = TIEHRPWM_CMPA;
-
+		/* Channel A uses CMPA and AQCTLA */
+		cmp_reg   = TIEHRPWM_CMPA;
 		aqctl_reg = TIEHRPWM_AQCTLA;
-		aqctl_mask = TIEHRPWM_AQCTL_CAU_MASK;
+		aqctl_mask = TIEHRPWM_AQCTL_CAU_MASK | TIEHRPWM_AQCTL_CAD_MASK;
 
-		if (polarity == PWM_POLARITY_INVERSED)
-			aqctl_val = TIEHRPWM_AQCTL_CHA_UP_POLINVERSE;
-		else
-			aqctl_val = TIEHRPWM_AQCTL_CHA_UP_POLNORMAL;
-
-		/* if duty_cycle is big, don't toggle on CAU */
-		if (duty_cycles > period_cycles)
-			aqctl_val &= ~TIEHRPWM_AQCTL_CAU_MASK;
+		up_normal  = TIEHRPWM_AQCTL_CHA_UP_POLNORMAL;
+		up_inverse = TIEHRPWM_AQCTL_CHA_UP_POLINVERSE;
+		dn_normal  = TIEHRPWM_AQCTL_CHA_DN_POLNORMAL;
+		dn_inverse = TIEHRPWM_AQCTL_CHA_DN_POLINVERSE;
 	}
+
+	/* Select polarity (up + down) */
+	if (polarity == PWM_POLARITY_INVERSED)
+		aqctl_val = up_inverse | dn_inverse;
+	else
+		aqctl_val = up_normal | dn_normal;
+
+	/* If duty is larger than period, don't toggle on compare events */
+	if (duty_cycles > period_cycles)
+		aqctl_val &= ~aqctl_mask;
 
 	aqctl_mask |= TIEHRPWM_AQCTL_PRD_MASK | TIEHRPWM_AQCTL_ZRO_MASK;
 	ehrpwm_modify(pc->mmio_base, aqctl_reg, aqctl_mask, aqctl_val);
