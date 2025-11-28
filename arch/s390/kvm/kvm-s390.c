@@ -5041,7 +5041,7 @@ xfer_to_guest_mode_check:
 			kvm_vcpu_srcu_read_unlock(vcpu);
 			break;
 		}
-	};
+	}
 
 	return rc;
 }
