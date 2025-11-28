@@ -877,7 +877,6 @@ again:
 		/* The folio is already unlocked. */
 		folio_put(folio);
 		if (!nowait && ret == -EAGAIN) {
-			ret = 0;
 			goto again;
 		}
 		return ret;
