@@ -2711,16 +2711,7 @@ static struct dst_entry *xfrm_bundle_create(struct xfrm_policy *policy,
 			 */
 			xfrm_dst_set_child(xdst_prev, &xdst->u.dst);
 
-		if (xfrm[i]->sel.family == AF_UNSPEC) {
-			inner_mode = xfrm_ip2inner_mode(xfrm[i],
-							xfrm_af2proto(family));
-			if (!inner_mode) {
-				err = -EAFNOSUPPORT;
-				dst_release(dst);
-				goto put_states;
-			}
-		} else
-			inner_mode = &xfrm[i]->inner_mode;
+		inner_mode = xfrm_ip2inner_mode(xfrm[i], xfrm_af2proto(family));
 
 		xdst->route = dst;
 		dst_copy_metrics(dst1, dst);
