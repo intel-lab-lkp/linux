@@ -17,77 +17,81 @@
 /* EHRPWM registers and bits definitions */
 
 /* Time base module registers */
-#define TBCTL			0x00
-#define TBPRD			0x0A
+#define TIEHRPWM_TBCTL				0x00
+#define TIEHRPWM_TBPRD				0x0A
 
-#define TBCTL_PRDLD_MASK	BIT(3)
-#define TBCTL_PRDLD_SHDW	0
-#define TBCTL_PRDLD_IMDT	BIT(3)
-#define TBCTL_CLKDIV_MASK	(BIT(12) | BIT(11) | BIT(10) | BIT(9) | \
-				BIT(8) | BIT(7))
-#define TBCTL_CTRMODE_MASK	(BIT(1) | BIT(0))
-#define TBCTL_CTRMODE_UP	0
-#define TBCTL_CTRMODE_DOWN	BIT(0)
-#define TBCTL_CTRMODE_UPDOWN	BIT(1)
-#define TBCTL_CTRMODE_FREEZE	(BIT(1) | BIT(0))
+#define TIEHRPWM_TBCTL_PRDLD_MASK		BIT(3)
+#define TIEHRPWM_TBCTL_PRDLD_SHDW		0
+#define TIEHRPWM_TBCTL_PRDLD_IMDT		BIT(3)
+#define TIEHRPWM_TBCTL_CLKDIV_MASK		(BIT(12) | BIT(11) | BIT(10) | BIT(9) | \
+						BIT(8) | BIT(7))
+#define TIEHRPWM_TBCTL_CTRMODE_MASK		(BIT(1) | BIT(0))
+#define TIEHRPWM_TBCTL_CTRMODE_UP		0
+#define TIEHRPWM_TBCTL_CTRMODE_DOWN		BIT(0)
+#define TIEHRPWM_TBCTL_CTRMODE_UPDOWN		BIT(1)
+#define TIEHRPWM_TBCTL_CTRMODE_FREEZE		(BIT(1) | BIT(0))
 
-#define TBCTL_HSPCLKDIV_SHIFT	7
-#define TBCTL_CLKDIV_SHIFT	10
+#define TIEHRPWM_TBCTL_HSPCLKDIV_SHIFT		7
+#define TIEHRPWM_TBCTL_CLKDIV_SHIFT		10
 
-#define CLKDIV_MAX		7
-#define HSPCLKDIV_MAX		7
-#define PERIOD_MAX		0x10000
+#define TIEHRPWM_CLKDIV_MAX			7
+#define TIEHRPWM_HSPCLKDIV_MAX			7
+#define TIEHRPWM_PERIOD_MAX			0x10000
 
 /* compare module registers */
-#define CMPA			0x12
-#define CMPB			0x14
+#define TIEHRPWM_CMPA				0x12
+#define TIEHRPWM_CMPB				0x14
 
 /* Action qualifier module registers */
-#define AQCTLA			0x16
-#define AQCTLB			0x18
-#define AQSFRC			0x1A
-#define AQCSFRC			0x1C
+#define TIEHRPWM_AQCTLA				0x16
+#define TIEHRPWM_AQCTLB				0x18
+#define TIEHRPWM_AQSFRC				0x1A
+#define TIEHRPWM_AQCSFRC			0x1C
 
-#define AQCTL_CBU_MASK		(BIT(9) | BIT(8))
-#define AQCTL_CBU_FRCLOW	BIT(8)
-#define AQCTL_CBU_FRCHIGH	BIT(9)
-#define AQCTL_CBU_FRCTOGGLE	(BIT(9) | BIT(8))
-#define AQCTL_CAU_MASK		(BIT(5) | BIT(4))
-#define AQCTL_CAU_FRCLOW	BIT(4)
-#define AQCTL_CAU_FRCHIGH	BIT(5)
-#define AQCTL_CAU_FRCTOGGLE	(BIT(5) | BIT(4))
-#define AQCTL_PRD_MASK		(BIT(3) | BIT(2))
-#define AQCTL_PRD_FRCLOW	BIT(2)
-#define AQCTL_PRD_FRCHIGH	BIT(3)
-#define AQCTL_PRD_FRCTOGGLE	(BIT(3) | BIT(2))
-#define AQCTL_ZRO_MASK		(BIT(1) | BIT(0))
-#define AQCTL_ZRO_FRCLOW	BIT(0)
-#define AQCTL_ZRO_FRCHIGH	BIT(1)
-#define AQCTL_ZRO_FRCTOGGLE	(BIT(1) | BIT(0))
+#define TIEHRPWM_AQCTL_CBU_MASK			(BIT(9) | BIT(8))
+#define TIEHRPWM_AQCTL_CBU_FRCLOW		BIT(8)
+#define TIEHRPWM_AQCTL_CBU_FRCHIGH		BIT(9)
+#define TIEHRPWM_AQCTL_CBU_FRCTOGGLE		(BIT(9) | BIT(8))
+#define TIEHRPWM_AQCTL_CAU_MASK			(BIT(5) | BIT(4))
+#define TIEHRPWM_AQCTL_CAU_FRCLOW		BIT(4)
+#define TIEHRPWM_AQCTL_CAU_FRCHIGH		BIT(5)
+#define TIEHRPWM_AQCTL_CAU_FRCTOGGLE		(BIT(5) | BIT(4))
+#define TIEHRPWM_AQCTL_PRD_MASK			(BIT(3) | BIT(2))
+#define TIEHRPWM_AQCTL_PRD_FRCLOW		BIT(2)
+#define TIEHRPWM_AQCTL_PRD_FRCHIGH		BIT(3)
+#define TIEHRPWM_AQCTL_PRD_FRCTOGGLE		(BIT(3) | BIT(2))
+#define TIEHRPWM_AQCTL_ZRO_MASK			(BIT(1) | BIT(0))
+#define TIEHRPWM_AQCTL_ZRO_FRCLOW		BIT(0)
+#define TIEHRPWM_AQCTL_ZRO_FRCHIGH		BIT(1)
+#define TIEHRPWM_AQCTL_ZRO_FRCTOGGLE		(BIT(1) | BIT(0))
 
-#define AQCTL_CHANA_POLNORMAL	(AQCTL_CAU_FRCLOW | AQCTL_ZRO_FRCHIGH)
-#define AQCTL_CHANA_POLINVERSED	(AQCTL_CAU_FRCHIGH | AQCTL_ZRO_FRCLOW)
-#define AQCTL_CHANB_POLNORMAL	(AQCTL_CBU_FRCLOW | AQCTL_ZRO_FRCHIGH)
-#define AQCTL_CHANB_POLINVERSED	(AQCTL_CBU_FRCHIGH | AQCTL_ZRO_FRCLOW)
+#define TIEHRPWM_AQCTL_CHANA_POLNORMAL		(TIEHRPWM_AQCTL_CAU_FRCLOW | \
+						TIEHRPWM_AQCTL_ZRO_FRCHIGH)
+#define TIEHRPWM_AQCTL_CHANA_POLINVERSED	(TIEHRPWM_AQCTL_CAU_FRCHIGH | \
+						TIEHRPWM_AQCTL_ZRO_FRCLOW)
+#define TIEHRPWM_AQCTL_CHANB_POLNORMAL		(TIEHRPWM_AQCTL_CBU_FRCLOW | \
+						TIEHRPWM_AQCTL_ZRO_FRCHIGH)
+#define TIEHRPWM_AQCTL_CHANB_POLINVERSED	(TIEHRPWM_AQCTL_CBU_FRCHIGH | \
+						TIEHRPWM_AQCTL_ZRO_FRCLOW)
 
-#define AQSFRC_RLDCSF_MASK	(BIT(7) | BIT(6))
-#define AQSFRC_RLDCSF_ZRO	0
-#define AQSFRC_RLDCSF_PRD	BIT(6)
-#define AQSFRC_RLDCSF_ZROPRD	BIT(7)
-#define AQSFRC_RLDCSF_IMDT	(BIT(7) | BIT(6))
+#define TIEHRPWM_AQSFRC_RLDCSF_MASK		(BIT(7) | BIT(6))
+#define TIEHRPWM_AQSFRC_RLDCSF_ZRO		0
+#define TIEHRPWM_AQSFRC_RLDCSF_PRD		BIT(6)
+#define TIEHRPWM_AQSFRC_RLDCSF_ZROPRD		BIT(7)
+#define TIEHRPWM_AQSFRC_RLDCSF_IMDT		(BIT(7) | BIT(6))
 
-#define AQCSFRC_CSFB_MASK	(BIT(3) | BIT(2))
-#define AQCSFRC_CSFB_FRCDIS	0
-#define AQCSFRC_CSFB_FRCLOW	BIT(2)
-#define AQCSFRC_CSFB_FRCHIGH	BIT(3)
-#define AQCSFRC_CSFB_DISSWFRC	(BIT(3) | BIT(2))
-#define AQCSFRC_CSFA_MASK	(BIT(1) | BIT(0))
-#define AQCSFRC_CSFA_FRCDIS	0
-#define AQCSFRC_CSFA_FRCLOW	BIT(0)
-#define AQCSFRC_CSFA_FRCHIGH	BIT(1)
-#define AQCSFRC_CSFA_DISSWFRC	(BIT(1) | BIT(0))
+#define TIEHRPWM_AQCSFRC_CSFB_MASK		(BIT(3) | BIT(2))
+#define TIEHRPWM_AQCSFRC_CSFB_FRCDIS		0
+#define TIEHRPWM_AQCSFRC_CSFB_FRCLOW		BIT(2)
+#define TIEHRPWM_AQCSFRC_CSFB_FRCHIGH		BIT(3)
+#define TIEHRPWM_AQCSFRC_CSFB_DISSWFRC		(BIT(3) | BIT(2))
+#define TIEHRPWM_AQCSFRC_CSFA_MASK		(BIT(1) | BIT(0))
+#define TIEHRPWM_AQCSFRC_CSFA_FRCDIS		0
+#define TIEHRPWM_AQCSFRC_CSFA_FRCLOW		BIT(0)
+#define TIEHRPWM_AQCSFRC_CSFA_FRCHIGH		BIT(1)
+#define TIEHRPWM_AQCSFRC_CSFA_DISSWFRC		(BIT(1) | BIT(0))
 
-#define NUM_PWM_CHANNEL		2	/* EHRPWM channels */
+#define TIEHRPWM_NUM_PWM_CHANNEL		2	/* EHRPWM channels */
 
 struct ehrpwm_context {
 	u16 tbctl;
@@ -103,7 +107,7 @@ struct ehrpwm_context {
 struct ehrpwm_pwm_chip {
 	unsigned long clk_rate;
 	void __iomem *mmio_base;
-	unsigned long period_cycles[NUM_PWM_CHANNEL];
+	unsigned long period_cycles[TIEHRPWM_NUM_PWM_CHANNEL];
 	struct clk *tbclk;
 	struct ehrpwm_context ctx;
 };
@@ -146,8 +150,8 @@ static int set_prescale_div(unsigned long rqst_prescaler, u16 *prescale_div,
 {
 	unsigned int clkdiv, hspclkdiv;
 
-	for (clkdiv = 0; clkdiv <= CLKDIV_MAX; clkdiv++) {
-		for (hspclkdiv = 0; hspclkdiv <= HSPCLKDIV_MAX; hspclkdiv++) {
+	for (clkdiv = 0; clkdiv <= TIEHRPWM_CLKDIV_MAX; clkdiv++) {
+		for (hspclkdiv = 0; hspclkdiv <= TIEHRPWM_HSPCLKDIV_MAX; hspclkdiv++) {
 			/*
 			 * calculations for prescaler value :
 			 * prescale_div = HSPCLKDIVIDER * CLKDIVIDER.
@@ -162,8 +166,8 @@ static int set_prescale_div(unsigned long rqst_prescaler, u16 *prescale_div,
 			*prescale_div = (1 << clkdiv) *
 					(hspclkdiv ? (hspclkdiv * 2) : 1);
 			if (*prescale_div >= rqst_prescaler) {
-				*tb_clk_div = (clkdiv << TBCTL_CLKDIV_SHIFT) |
-					(hspclkdiv << TBCTL_HSPCLKDIV_SHIFT);
+				*tb_clk_div = (clkdiv << TIEHRPWM_TBCTL_CLKDIV_SHIFT) |
+					(hspclkdiv << TIEHRPWM_TBCTL_HSPCLKDIV_SHIFT);
 				return 0;
 			}
 		}
@@ -204,7 +208,7 @@ static int ehrpwm_pwm_config(struct pwm_chip *chip, struct pwm_device *pwm,
 	 * Period values should be same for multiple PWM channels as IP uses
 	 * same period register for multiple channels.
 	 */
-	for (i = 0; i < NUM_PWM_CHANNEL; i++) {
+	for (i = 0; i < TIEHRPWM_NUM_PWM_CHANNEL; i++) {
 		if (pc->period_cycles[i] &&
 				(pc->period_cycles[i] != period_cycles)) {
 			/*
@@ -224,7 +228,7 @@ static int ehrpwm_pwm_config(struct pwm_chip *chip, struct pwm_device *pwm,
 	pc->period_cycles[pwm->hwpwm] = period_cycles;
 
 	/* Configure clock prescaler to support Low frequency PWM wave */
-	if (set_prescale_div(DIV_ROUND_UP(period_cycles, PERIOD_MAX), &ps_divval,
+	if (set_prescale_div(DIV_ROUND_UP(period_cycles, TIEHRPWM_PERIOD_MAX), &ps_divval,
 			     &tb_divval)) {
 		dev_err(pwmchip_parent(chip), "Unsupported values\n");
 		return -EINVAL;
@@ -240,52 +244,53 @@ static int ehrpwm_pwm_config(struct pwm_chip *chip, struct pwm_device *pwm,
 	pm_runtime_get_sync(pwmchip_parent(chip));
 
 	/* Update clock prescaler values */
-	ehrpwm_modify(pc->mmio_base, TBCTL, TBCTL_CLKDIV_MASK, tb_divval);
+	ehrpwm_modify(pc->mmio_base, TIEHRPWM_TBCTL, TIEHRPWM_TBCTL_CLKDIV_MASK, tb_divval);
 
 	if (pwm->hwpwm == 1) {
 		/* Channel 1 configured with compare B register */
-		cmp_reg = CMPB;
+		cmp_reg = TIEHRPWM_CMPB;
 
-		aqctl_reg = AQCTLB;
-		aqctl_mask = AQCTL_CBU_MASK;
+		aqctl_reg = TIEHRPWM_AQCTLB;
+		aqctl_mask = TIEHRPWM_AQCTL_CBU_MASK;
 
 		if (polarity == PWM_POLARITY_INVERSED)
-			aqctl_val = AQCTL_CHANB_POLINVERSED;
+			aqctl_val = TIEHRPWM_AQCTL_CHANB_POLINVERSED;
 		else
-			aqctl_val = AQCTL_CHANB_POLNORMAL;
+			aqctl_val = TIEHRPWM_AQCTL_CHANB_POLNORMAL;
 
 		/* if duty_cycle is big, don't toggle on CBU */
 		if (duty_cycles > period_cycles)
-			aqctl_val &= ~AQCTL_CBU_MASK;
+			aqctl_val &= ~TIEHRPWM_AQCTL_CBU_MASK;
 
 	} else {
 		/* Channel 0 configured with compare A register */
-		cmp_reg = CMPA;
+		cmp_reg = TIEHRPWM_CMPA;
 
-		aqctl_reg = AQCTLA;
-		aqctl_mask = AQCTL_CAU_MASK;
+		aqctl_reg = TIEHRPWM_AQCTLA;
+		aqctl_mask = TIEHRPWM_AQCTL_CAU_MASK;
 
 		if (polarity == PWM_POLARITY_INVERSED)
-			aqctl_val = AQCTL_CHANA_POLINVERSED;
+			aqctl_val = TIEHRPWM_AQCTL_CHANA_POLINVERSED;
 		else
-			aqctl_val = AQCTL_CHANA_POLNORMAL;
+			aqctl_val = TIEHRPWM_AQCTL_CHANA_POLNORMAL;
 
 		/* if duty_cycle is big, don't toggle on CAU */
 		if (duty_cycles > period_cycles)
-			aqctl_val &= ~AQCTL_CAU_MASK;
+			aqctl_val &= ~TIEHRPWM_AQCTL_CAU_MASK;
 	}
 
-	aqctl_mask |= AQCTL_PRD_MASK | AQCTL_ZRO_MASK;
+	aqctl_mask |= TIEHRPWM_AQCTL_PRD_MASK | TIEHRPWM_AQCTL_ZRO_MASK;
 	ehrpwm_modify(pc->mmio_base, aqctl_reg, aqctl_mask, aqctl_val);
 
 	/* Configure shadow loading on Period register */
-	ehrpwm_modify(pc->mmio_base, TBCTL, TBCTL_PRDLD_MASK, TBCTL_PRDLD_SHDW);
+	ehrpwm_modify(pc->mmio_base, TIEHRPWM_TBCTL, TIEHRPWM_TBCTL_PRDLD_MASK,
+		      TIEHRPWM_TBCTL_PRDLD_SHDW);
 
-	ehrpwm_write(pc->mmio_base, TBPRD, period_cycles - 1);
+	ehrpwm_write(pc->mmio_base, TIEHRPWM_TBPRD, period_cycles - 1);
 
 	/* Configure ehrpwm counter for up-count mode */
-	ehrpwm_modify(pc->mmio_base, TBCTL, TBCTL_CTRMODE_MASK,
-		      TBCTL_CTRMODE_UP);
+	ehrpwm_modify(pc->mmio_base, TIEHRPWM_TBCTL, TIEHRPWM_TBCTL_CTRMODE_MASK,
+		      TIEHRPWM_TBCTL_CTRMODE_UP);
 
 	if (!(duty_cycles > period_cycles))
 		ehrpwm_write(pc->mmio_base, cmp_reg, duty_cycles);
@@ -306,18 +311,18 @@ static int ehrpwm_pwm_enable(struct pwm_chip *chip, struct pwm_device *pwm)
 
 	/* Disabling Action Qualifier on PWM output */
 	if (pwm->hwpwm) {
-		aqcsfrc_val = AQCSFRC_CSFB_FRCDIS;
-		aqcsfrc_mask = AQCSFRC_CSFB_MASK;
+		aqcsfrc_val = TIEHRPWM_AQCSFRC_CSFB_FRCDIS;
+		aqcsfrc_mask = TIEHRPWM_AQCSFRC_CSFB_MASK;
 	} else {
-		aqcsfrc_val = AQCSFRC_CSFA_FRCDIS;
-		aqcsfrc_mask = AQCSFRC_CSFA_MASK;
+		aqcsfrc_val = TIEHRPWM_AQCSFRC_CSFA_FRCDIS;
+		aqcsfrc_mask = TIEHRPWM_AQCSFRC_CSFA_MASK;
 	}
 
 	/* Changes to shadow mode */
-	ehrpwm_modify(pc->mmio_base, AQSFRC, AQSFRC_RLDCSF_MASK,
-		      AQSFRC_RLDCSF_ZRO);
+	ehrpwm_modify(pc->mmio_base, TIEHRPWM_AQSFRC, TIEHRPWM_AQSFRC_RLDCSF_MASK,
+		      TIEHRPWM_AQSFRC_RLDCSF_ZRO);
 
-	ehrpwm_modify(pc->mmio_base, AQCSFRC, aqcsfrc_mask, aqcsfrc_val);
+	ehrpwm_modify(pc->mmio_base, TIEHRPWM_AQCSFRC, aqcsfrc_mask, aqcsfrc_val);
 
 	/* Enable TBCLK */
 	ret = clk_enable(pc->tbclk);
@@ -337,25 +342,25 @@ static void ehrpwm_pwm_disable(struct pwm_chip *chip, struct pwm_device *pwm)
 
 	/* Action Qualifier puts PWM output low forcefully */
 	if (pwm->hwpwm) {
-		aqcsfrc_val = AQCSFRC_CSFB_FRCLOW;
-		aqcsfrc_mask = AQCSFRC_CSFB_MASK;
+		aqcsfrc_val = TIEHRPWM_AQCSFRC_CSFB_FRCLOW;
+		aqcsfrc_mask = TIEHRPWM_AQCSFRC_CSFB_MASK;
 	} else {
-		aqcsfrc_val = AQCSFRC_CSFA_FRCLOW;
-		aqcsfrc_mask = AQCSFRC_CSFA_MASK;
+		aqcsfrc_val = TIEHRPWM_AQCSFRC_CSFA_FRCLOW;
+		aqcsfrc_mask = TIEHRPWM_AQCSFRC_CSFA_MASK;
 	}
 
 	/* Update shadow register first before modifying active register */
-	ehrpwm_modify(pc->mmio_base, AQSFRC, AQSFRC_RLDCSF_MASK,
-		      AQSFRC_RLDCSF_ZRO);
-	ehrpwm_modify(pc->mmio_base, AQCSFRC, aqcsfrc_mask, aqcsfrc_val);
+	ehrpwm_modify(pc->mmio_base, TIEHRPWM_AQSFRC, TIEHRPWM_AQSFRC_RLDCSF_MASK,
+		      TIEHRPWM_AQSFRC_RLDCSF_ZRO);
+	ehrpwm_modify(pc->mmio_base, TIEHRPWM_AQCSFRC, aqcsfrc_mask, aqcsfrc_val);
 	/*
 	 * Changes to immediate action on Action Qualifier. This puts
 	 * Action Qualifier control on PWM output from next TBCLK
 	 */
-	ehrpwm_modify(pc->mmio_base, AQSFRC, AQSFRC_RLDCSF_MASK,
-		      AQSFRC_RLDCSF_IMDT);
+	ehrpwm_modify(pc->mmio_base, TIEHRPWM_AQSFRC, TIEHRPWM_AQSFRC_RLDCSF_MASK,
+		      TIEHRPWM_AQSFRC_RLDCSF_IMDT);
 
-	ehrpwm_modify(pc->mmio_base, AQCSFRC, aqcsfrc_mask, aqcsfrc_val);
+	ehrpwm_modify(pc->mmio_base, TIEHRPWM_AQCSFRC, aqcsfrc_mask, aqcsfrc_val);
 
 	/* Disabling TBCLK on PWM disable */
 	clk_disable(pc->tbclk);
@@ -421,7 +426,7 @@ static int ehrpwm_pwm_probe(struct platform_device *pdev)
 	struct clk *clk;
 	int ret;
 
-	chip = devm_pwmchip_alloc(&pdev->dev, NUM_PWM_CHANNEL, sizeof(*pc));
+	chip = devm_pwmchip_alloc(&pdev->dev, TIEHRPWM_NUM_PWM_CHANNEL, sizeof(*pc));
 	if (IS_ERR(chip))
 		return PTR_ERR(chip);
 	pc = to_ehrpwm_pwm_chip(chip);
@@ -495,14 +500,14 @@ static void ehrpwm_pwm_save_context(struct pwm_chip *chip)
 
 	pm_runtime_get_sync(pwmchip_parent(chip));
 
-	pc->ctx.tbctl = ehrpwm_read(pc->mmio_base, TBCTL);
-	pc->ctx.tbprd = ehrpwm_read(pc->mmio_base, TBPRD);
-	pc->ctx.cmpa = ehrpwm_read(pc->mmio_base, CMPA);
-	pc->ctx.cmpb = ehrpwm_read(pc->mmio_base, CMPB);
-	pc->ctx.aqctla = ehrpwm_read(pc->mmio_base, AQCTLA);
-	pc->ctx.aqctlb = ehrpwm_read(pc->mmio_base, AQCTLB);
-	pc->ctx.aqsfrc = ehrpwm_read(pc->mmio_base, AQSFRC);
-	pc->ctx.aqcsfrc = ehrpwm_read(pc->mmio_base, AQCSFRC);
+	pc->ctx.tbctl = ehrpwm_read(pc->mmio_base, TIEHRPWM_TBCTL);
+	pc->ctx.tbprd = ehrpwm_read(pc->mmio_base, TIEHRPWM_TBPRD);
+	pc->ctx.cmpa = ehrpwm_read(pc->mmio_base, TIEHRPWM_CMPA);
+	pc->ctx.cmpb = ehrpwm_read(pc->mmio_base, TIEHRPWM_CMPB);
+	pc->ctx.aqctla = ehrpwm_read(pc->mmio_base, TIEHRPWM_AQCTLA);
+	pc->ctx.aqctlb = ehrpwm_read(pc->mmio_base, TIEHRPWM_AQCTLB);
+	pc->ctx.aqsfrc = ehrpwm_read(pc->mmio_base, TIEHRPWM_AQSFRC);
+	pc->ctx.aqcsfrc = ehrpwm_read(pc->mmio_base, TIEHRPWM_AQCSFRC);
 
 	pm_runtime_put_sync(pwmchip_parent(chip));
 }
@@ -511,14 +516,14 @@ static void ehrpwm_pwm_restore_context(struct pwm_chip *chip)
 {
 	struct ehrpwm_pwm_chip *pc = to_ehrpwm_pwm_chip(chip);
 
-	ehrpwm_write(pc->mmio_base, TBPRD, pc->ctx.tbprd);
-	ehrpwm_write(pc->mmio_base, CMPA, pc->ctx.cmpa);
-	ehrpwm_write(pc->mmio_base, CMPB, pc->ctx.cmpb);
-	ehrpwm_write(pc->mmio_base, AQCTLA, pc->ctx.aqctla);
-	ehrpwm_write(pc->mmio_base, AQCTLB, pc->ctx.aqctlb);
-	ehrpwm_write(pc->mmio_base, AQSFRC, pc->ctx.aqsfrc);
-	ehrpwm_write(pc->mmio_base, AQCSFRC, pc->ctx.aqcsfrc);
-	ehrpwm_write(pc->mmio_base, TBCTL, pc->ctx.tbctl);
+	ehrpwm_write(pc->mmio_base, TIEHRPWM_TBPRD, pc->ctx.tbprd);
+	ehrpwm_write(pc->mmio_base, TIEHRPWM_CMPA, pc->ctx.cmpa);
+	ehrpwm_write(pc->mmio_base, TIEHRPWM_CMPB, pc->ctx.cmpb);
+	ehrpwm_write(pc->mmio_base, TIEHRPWM_AQCTLA, pc->ctx.aqctla);
+	ehrpwm_write(pc->mmio_base, TIEHRPWM_AQCTLB, pc->ctx.aqctlb);
+	ehrpwm_write(pc->mmio_base, TIEHRPWM_AQSFRC, pc->ctx.aqsfrc);
+	ehrpwm_write(pc->mmio_base, TIEHRPWM_AQCSFRC, pc->ctx.aqcsfrc);
+	ehrpwm_write(pc->mmio_base, TIEHRPWM_TBCTL, pc->ctx.tbctl);
 }
 
 static int ehrpwm_pwm_suspend(struct device *dev)
