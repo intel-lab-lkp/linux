@@ -6,6 +6,7 @@
 #include <crypto/scatterwalk.h>
 #include <linux/dma-mapping.h>
 #include <linux/workqueue.h>
+#include <linux/zlib.h>
 #include <linux/zstd.h>
 #include "adf_accel_devices.h"
 #include "adf_common_drv.h"
@@ -28,6 +29,7 @@
 #define QAT_ZSTD_MAX_BLOCK_SIZE			65536
 #define QAT_MAX_SEQUENCES			(128 * 1024)
 #define QAT_ZSTD_MAX_CONTENT_SIZE		4096
+#define QAT_DEFAULT_COMP_LEVEL			1
 
 static DEFINE_MUTEX(algs_lock);
 static unsigned int active_devs_deflate;
@@ -132,6 +134,7 @@ struct qat_compression_ctx {
 	int (*qat_comp_callback)(struct qat_compression_req *qat_req, void *resp,
 				 struct qat_callback_params *params);
 	struct crypto_acomp *ftfm;
+	struct crypto_acomp_params params;
 };
 
 struct qat_compression_req {
@@ -327,7 +330,7 @@ static int qat_comp_alg_init_tfm(struct crypto_acomp *acomp_tfm, int alg)
 		return -EINVAL;
 	ctx->inst = inst;
 
-	return qat_comp_build_ctx(inst->accel_dev, ctx->comp_ctx, alg);
+	return qat_comp_build_ctx(inst->accel_dev, ctx->comp_ctx, alg, QAT_DEFAULT_COMP_LEVEL);
 }
 
 static int qat_comp_alg_deflate_init_tfm(struct crypto_acomp *acomp_tfm)
@@ -339,6 +342,8 @@ static void qat_comp_alg_exit_tfm(struct crypto_acomp *acomp_tfm)
 {
 	struct crypto_tfm *tfm = crypto_acomp_tfm(acomp_tfm);
 	struct qat_compression_ctx *ctx = crypto_tfm_ctx(tfm);
+
+	crypto_acomp_putparams(&ctx->params);
 
 	qat_compression_put_instance(ctx->inst);
 	memset(ctx, 0, sizeof(*ctx));
@@ -691,6 +696,80 @@ static int qat_comp_alg_sw_decompress(struct acomp_req *req)
 	return ret;
 }
 
+static int qat_comp_setparam_deflate(struct crypto_acomp *tfm, const u8 *param,
+				     unsigned int len)
+{
+	struct qat_compression_ctx *ctx = acomp_tfm_ctx(tfm);
+	struct crypto_acomp_params *p = &ctx->params;
+	struct adf_accel_dev *accel_dev;
+	int ret;
+
+	if (!ctx->inst || !ctx->inst->accel_dev)
+		return -EINVAL;
+
+	accel_dev = ctx->inst->accel_dev;
+
+	ret = crypto_acomp_getparams(p, param, len);
+	if (ret)
+		return ret;
+
+	if (p->level > Z_BEST_COMPRESSION || p->level < Z_DEFAULT_COMPRESSION) {
+		dev_warn(&GET_DEV(accel_dev),
+			 "[%s]: invalid level %d\n", __func__, p->level);
+		p->level = QAT_DEFAULT_COMP_LEVEL;
+		return -EINVAL;
+	}
+
+	if (p->level == CRYPTO_COMP_NO_LEVEL)
+		p->level = QAT_DEFAULT_COMP_LEVEL;
+
+	return qat_comp_build_ctx(ctx->inst->accel_dev, ctx->comp_ctx,
+				  QAT_DEFLATE, p->level);
+}
+
+static int qat_comp_setparam_zstd(struct crypto_acomp *tfm, const u8 *param,
+				  unsigned int len, enum adf_dc_algo algo)
+{
+	struct qat_compression_ctx *ctx = acomp_tfm_ctx(tfm);
+	struct crypto_acomp_params *p = &ctx->params;
+	struct adf_accel_dev *accel_dev;
+	int ret;
+
+	if (!ctx->inst || !ctx->inst->accel_dev)
+		return -EINVAL;
+
+	accel_dev = ctx->inst->accel_dev;
+
+	ret = crypto_acomp_getparams(p, param, len);
+	if (ret)
+		return ret;
+
+	if (p->level > zstd_max_clevel() || p->level < zstd_min_clevel()) {
+		dev_warn(&GET_DEV(accel_dev),
+			 "[%s]: invalid level %d\n", __func__, p->level);
+		p->level = QAT_DEFAULT_COMP_LEVEL;
+		return -EINVAL;
+	}
+
+	if (p->level == CRYPTO_COMP_NO_LEVEL || p->level <= 0)
+		p->level = QAT_DEFAULT_COMP_LEVEL;
+
+	return qat_comp_build_ctx(ctx->inst->accel_dev, ctx->comp_ctx, algo,
+				  p->level);
+}
+
+static int qat_comp_setparam_zstd_native(struct crypto_acomp *tfm, const u8 *param,
+					 unsigned int len)
+{
+	return qat_comp_setparam_zstd(tfm, param, len, QAT_ZSTD);
+}
+
+static int qat_comp_setparam_zstd_lz4s(struct crypto_acomp *tfm, const u8 *param,
+				       unsigned int len)
+{
+	return qat_comp_setparam_zstd(tfm, param, len, QAT_LZ4S);
+}
+
 static struct acomp_alg qat_acomp_deflate[] = { {
 	.base = {
 		.cra_name = "deflate",
@@ -705,6 +784,7 @@ static struct acomp_alg qat_acomp_deflate[] = { {
 	.exit = qat_comp_alg_exit_tfm,
 	.compress = qat_comp_alg_compress,
 	.decompress = qat_comp_alg_decompress,
+	.setparam = qat_comp_setparam_deflate,
 }, {
 	.base = {
 		.cra_name = "zlib-deflate",
@@ -719,6 +799,7 @@ static struct acomp_alg qat_acomp_deflate[] = { {
 	.exit = qat_comp_alg_exit_tfm,
 	.compress = qat_comp_alg_rfc1950_compress,
 	.decompress = qat_comp_alg_rfc1950_decompress,
+	.setparam = qat_comp_setparam_deflate,
 }};
 
 static struct acomp_alg qat_acomp_zstd_lz4s = {
@@ -736,6 +817,7 @@ static struct acomp_alg qat_acomp_zstd_lz4s = {
 	.exit = qat_comp_alg_zstd_exit_tfm,
 	.compress = qat_comp_alg_lz4s_zstd_compress,
 	.decompress = qat_comp_alg_sw_decompress,
+	.setparam = qat_comp_setparam_zstd_lz4s,
 };
 
 static struct acomp_alg qat_acomp_zstd_native = {
@@ -753,6 +835,7 @@ static struct acomp_alg qat_acomp_zstd_native = {
 	.exit = qat_comp_alg_zstd_exit_tfm,
 	.compress = qat_comp_alg_compress,
 	.decompress = qat_comp_alg_zstd_decompress,
+	.setparam = qat_comp_setparam_zstd_native,
 };
 
 static int qat_comp_algs_register_deflate(void)

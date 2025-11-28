@@ -4,7 +4,8 @@
 #include "adf_dc.h"
 #include "icp_qat_fw_comp.h"
 
-int qat_comp_build_ctx(struct adf_accel_dev *accel_dev, void *ctx, enum adf_dc_algo algo)
+int qat_comp_build_ctx(struct adf_accel_dev *accel_dev, void *ctx,
+		       enum adf_dc_algo algo, unsigned int level)
 {
 	struct icp_qat_fw_comp_req *req_tmpl = ctx;
 	struct icp_qat_fw_comp_cd_hdr *comp_cd_ctrl = &req_tmpl->comp_cd_ctrl;
@@ -27,7 +28,7 @@ int qat_comp_build_ctx(struct adf_accel_dev *accel_dev, void *ctx, enum adf_dc_a
 					    ICP_QAT_FW_COMP_ENABLE_SECURE_RAM_USED_AS_INTMD_BUF);
 
 	/* Build HW config block for compression */
-	ret = GET_DC_OPS(accel_dev)->build_comp_block(ctx, algo);
+	ret = GET_DC_OPS(accel_dev)->build_comp_block(ctx, algo, level);
 	if (ret) {
 		dev_err(&GET_DEV(accel_dev), "Failed to build compression block\n");
 		return ret;

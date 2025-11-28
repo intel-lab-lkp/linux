@@ -12,6 +12,7 @@ enum adf_dc_algo {
 	QAT_ZSTD,
 };
 
-int qat_comp_build_ctx(struct adf_accel_dev *accel_dev, void *ctx, enum adf_dc_algo algo);
+int qat_comp_build_ctx(struct adf_accel_dev *accel_dev, void *ctx, enum adf_dc_algo algo,
+		       unsigned int level);
 
 #endif /* ADF_DC_H */

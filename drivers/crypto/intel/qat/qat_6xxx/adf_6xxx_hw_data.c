@@ -459,7 +459,7 @@ static int ring_pair_reset(struct adf_accel_dev *accel_dev, u32 bank_number)
 	return ret;
 }
 
-static int build_comp_block(void *ctx, enum adf_dc_algo algo)
+static int build_comp_block(void *ctx, enum adf_dc_algo algo, unsigned int level)
 {
 	struct icp_qat_fw_comp_req *req_tmpl = ctx;
 	struct icp_qat_fw_comp_req_hdr_cd_pars *cd_pars = &req_tmpl->cd_pars;
@@ -478,8 +478,16 @@ static int build_comp_block(void *ctx, enum adf_dc_algo algo)
 		return -EINVAL;
 	}
 
+	if (level < 6)
+		hw_comp_lower_csr.sd = ICP_QAT_HW_COMP_51_SEARCH_DEPTH_LEVEL_1;
+	else if (level < 9)
+		hw_comp_lower_csr.sd = ICP_QAT_HW_COMP_51_SEARCH_DEPTH_LEVEL_6;
+	else if (level < 10)
+		hw_comp_lower_csr.sd = ICP_QAT_HW_COMP_51_SEARCH_DEPTH_LEVEL_9;
+	else
+		hw_comp_lower_csr.sd = ICP_QAT_HW_COMP_51_SEARCH_DEPTH_LEVEL_10;
+
 	hw_comp_lower_csr.lllbd = ICP_QAT_HW_COMP_51_LLLBD_CTRL_LLLBD_DISABLED;
-	hw_comp_lower_csr.sd = ICP_QAT_HW_COMP_51_SEARCH_DEPTH_LEVEL_1;
 	lower_val = ICP_QAT_FW_COMP_51_BUILD_CONFIG_LOWER(hw_comp_lower_csr);
 	cd_pars->u.sl.comp_slice_cfg_word[0] = lower_val;
 	cd_pars->u.sl.comp_slice_cfg_word[1] = 0;

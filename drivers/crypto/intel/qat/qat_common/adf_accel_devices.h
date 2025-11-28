@@ -245,7 +245,7 @@ struct adf_pfvf_ops {
 };
 
 struct adf_dc_ops {
-	int (*build_comp_block)(void *ctx, enum adf_dc_algo algo);
+	int (*build_comp_block)(void *ctx, enum adf_dc_algo algo, unsigned int level);
 	int (*build_decomp_block)(void *ctx, enum adf_dc_algo algo);
 };
 

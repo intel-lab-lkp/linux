@@ -491,7 +491,7 @@ int adf_gen4_bank_drain_start(struct adf_accel_dev *accel_dev,
 	return ret;
 }
 
-static int adf_gen4_build_comp_block(void *ctx, enum adf_dc_algo algo)
+static int adf_gen4_build_comp_block(void *ctx, enum adf_dc_algo algo, unsigned int level)
 {
 	struct icp_qat_fw_comp_req *req_tmpl = ctx;
 	struct icp_qat_fw_comp_req_hdr_cd_pars *cd_pars = &req_tmpl->cd_pars;
@@ -519,7 +519,13 @@ static int adf_gen4_build_comp_block(void *ctx, enum adf_dc_algo algo)
 		return -EINVAL;
 	}
 
-	hw_comp_lower_csr.sd = ICP_QAT_HW_COMP_20_SEARCH_DEPTH_LEVEL_1;
+	if (level < 4)
+		hw_comp_lower_csr.sd = ICP_QAT_HW_COMP_20_SEARCH_DEPTH_LEVEL_1;
+	else if (level < 7)
+		hw_comp_lower_csr.sd = ICP_QAT_HW_COMP_20_SEARCH_DEPTH_LEVEL_6;
+	else
+		hw_comp_lower_csr.sd = ICP_QAT_HW_COMP_20_SEARCH_DEPTH_LEVEL_9;
+
 	hw_comp_lower_csr.hash_update = ICP_QAT_HW_COMP_20_SKIP_HASH_UPDATE_DONT_ALLOW;
 	hw_comp_lower_csr.edmm = ICP_QAT_HW_COMP_20_EXTENDED_DELAY_MATCH_MODE_EDMM_ENABLED;
 	hw_comp_upper_csr.nice = ICP_QAT_HW_COMP_20_CONFIG_CSR_NICE_PARAM_DEFAULT_VAL;

@@ -172,11 +172,12 @@ void adf_gen2_set_ssm_wdtimer(struct adf_accel_dev *accel_dev)
 }
 EXPORT_SYMBOL_GPL(adf_gen2_set_ssm_wdtimer);
 
-static int adf_gen2_build_comp_block(void *ctx, enum adf_dc_algo algo)
+static int adf_gen2_build_comp_block(void *ctx, enum adf_dc_algo algo, unsigned int level)
 {
 	struct icp_qat_fw_comp_req *req_tmpl = ctx;
 	struct icp_qat_fw_comp_req_hdr_cd_pars *cd_pars = &req_tmpl->cd_pars;
 	struct icp_qat_fw_comn_req_hdr *header = &req_tmpl->comn_hdr;
+	u32 l;
 
 	switch (algo) {
 	case QAT_DEFLATE:
@@ -186,11 +187,22 @@ static int adf_gen2_build_comp_block(void *ctx, enum adf_dc_algo algo)
 		return -EINVAL;
 	}
 
+	if (level < 2)
+		l = ICP_QAT_HW_COMPRESSION_DEPTH_1;
+	else if (level < 4)
+		l = ICP_QAT_HW_COMPRESSION_DEPTH_4;
+	else if (level < 6)
+		l = ICP_QAT_HW_COMPRESSION_DEPTH_8;
+	else if (level < 8)
+		l = ICP_QAT_HW_COMPRESSION_DEPTH_16;
+	else
+		l = ICP_QAT_HW_COMPRESSION_DEPTH_128;
+
 	cd_pars->u.sl.comp_slice_cfg_word[0] =
 		ICP_QAT_HW_COMPRESSION_CONFIG_BUILD(ICP_QAT_HW_COMPRESSION_DIR_COMPRESS,
 						    ICP_QAT_HW_COMPRESSION_DELAYED_MATCH_DISABLED,
 						    ICP_QAT_HW_COMPRESSION_ALGO_DEFLATE,
-						    ICP_QAT_HW_COMPRESSION_DEPTH_1,
+						    l,
 						    ICP_QAT_HW_COMPRESSION_FILE_TYPE_0);
 
 	return 0;
