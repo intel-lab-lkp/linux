@@ -914,10 +914,6 @@ static int hwsim_get_chanwidth(enum nl80211_chan_width bw)
 	return INT_MAX;
 }
 
-static void mac80211_hwsim_tx_frame(struct ieee80211_hw *hw,
-				    struct sk_buff *skb,
-				    struct ieee80211_channel *chan);
-
 /* sysfs attributes */
 static void hwsim_send_ps_poll(void *dat, u8 *mac, struct ieee80211_vif *vif)
 {
@@ -1728,6 +1724,9 @@ static void mac80211_hwsim_rx(struct mac80211_hwsim_data *data,
 
 	mac80211_hwsim_add_vendor_rtap(skb);
 
+	if (data->nan.device_vif)
+		mac80211_hwsim_nan_rx(data->hw, skb);
+
 	data->rx_pkts++;
 	data->rx_bytes += skb->len;
 	ieee80211_rx_irqsafe(data->hw, skb);
@@ -2182,9 +2181,9 @@ static void mac80211_hwsim_remove_interface(
 		mac80211_hwsim_config_mac_nl(hw, vif->addr, false);
 }
 
-static void mac80211_hwsim_tx_frame(struct ieee80211_hw *hw,
-				    struct sk_buff *skb,
-				    struct ieee80211_channel *chan)
+void mac80211_hwsim_tx_frame(struct ieee80211_hw *hw,
+			     struct sk_buff *skb,
+			     struct ieee80211_channel *chan)
 {
 	struct mac80211_hwsim_data *data = hw->priv;
 	u32 _portid = READ_ONCE(data->wmediumd);
@@ -5281,6 +5280,11 @@ static int mac80211_hwsim_new_radio(struct genl_info *info,
 		hrtimer_setup(&data->nan.resume_txqs_timer,
 			      mac80211_hwsim_nan_resume_txqs_timer,
 			      CLOCK_BOOTTIME, HRTIMER_MODE_ABS_SOFT);
+		hrtimer_setup(&data->nan.discovery_beacon_timer,
+			      mac80211_hwsim_nan_discovery_beacon_timer,
+			      CLOCK_BOOTTIME, HRTIMER_MODE_ABS_SOFT);
+
+		spin_lock_init(&data->nan.state_lock);
 	}
 
 	data->if_combination.radar_detect_widths =
