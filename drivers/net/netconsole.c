@@ -1194,6 +1194,39 @@ static const struct config_item_type userdata_type = {
 	.ct_owner	= THIS_MODULE,
 };
 
+/* Forward declarations */
+static void send_ext_msg_udp(struct netconsole_target *nt, const char *msg,
+			     int msg_len);
+static void send_msg_udp(struct netconsole_target *nt, const char *msg,
+			 unsigned int len);
+
+static ssize_t send_msg_store(struct config_item *item, const char *buf,
+			      size_t count)
+{
+	struct netconsole_target *nt = to_target(item);
+	ssize_t ret = -EINVAL;
+	unsigned long flags;
+
+	mutex_lock(&dynamic_netconsole_mutex);
+	if (!nt->enabled)
+		goto out;
+
+	if (!netif_running(nt->np.dev))
+		goto out;
+
+	spin_lock_irqsave(&target_list_lock, flags);
+	if (nt->extended)
+		send_ext_msg_udp(nt, buf, count);
+	else
+		send_msg_udp(nt, buf, count);
+	spin_unlock_irqrestore(&target_list_lock, flags);
+
+	ret = count;
+out:
+	mutex_unlock(&dynamic_netconsole_mutex);
+
+	return ret;
+}
 CONFIGFS_ATTR(, enabled);
 CONFIGFS_ATTR(, extended);
 CONFIGFS_ATTR(, dev_name);
@@ -1205,6 +1238,7 @@ CONFIGFS_ATTR_RO(, local_mac);
 CONFIGFS_ATTR(, remote_mac);
 CONFIGFS_ATTR(, release);
 CONFIGFS_ATTR_RO(, transmit_errors);
+CONFIGFS_ATTR_WO(, send_msg);
 
 static struct configfs_attribute *netconsole_target_attrs[] = {
 	&attr_enabled,
@@ -1218,6 +1252,7 @@ static struct configfs_attribute *netconsole_target_attrs[] = {
 	&attr_local_mac,
 	&attr_remote_mac,
 	&attr_transmit_errors,
+	&attr_send_msg,
 	NULL,
 };
 
