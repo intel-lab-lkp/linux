@@ -1595,32 +1595,16 @@ static void pagetypeinfo_showfree_print(struct seq_file *m,
 					zone->name,
 					migratetype_names[mtype]);
 		for (order = 0; order < NR_PAGE_ORDERS; ++order) {
-			unsigned long freecount = 0;
-			struct free_area *area;
-			struct list_head *curr;
+			unsigned long freecount;
 			bool overflow = false;
 
-			area = &(zone->free_area[order]);
-
-			list_for_each(curr, &area->free_list[mtype]) {
-				/*
-				 * Cap the free_list iteration because it might
-				 * be really large and we are under a spinlock
-				 * so a long time spent here could trigger a
-				 * hard lockup detector. Anyway this is a
-				 * debugging tool so knowing there is a handful
-				 * of pages of this order should be more than
-				 * sufficient.
-				 */
-				if (++freecount >= 100000) {
-					overflow = true;
-					break;
-				}
+			/* Keep the same output format for user-space tools compatibility */
+			freecount = READ_ONCE(zone->free_area[order].mt_nr_free[mtype]);
+			if (freecount >= 100000) {
+				overflow = true;
+				freecount = 100000;
 			}
 			seq_printf(m, "%s%6lu ", overflow ? ">" : "", freecount);
-			spin_unlock_irq(&zone->lock);
-			cond_resched();
-			spin_lock_irq(&zone->lock);
 		}
 		seq_putc(m, '\n');
 	}
@@ -1638,7 +1622,7 @@ static void pagetypeinfo_showfree(struct seq_file *m, void *arg)
 		seq_printf(m, "%6d ", order);
 	seq_putc(m, '\n');
 
-	walk_zones_in_node(m, pgdat, true, false, pagetypeinfo_showfree_print);
+	walk_zones_in_node(m, pgdat, true, true, pagetypeinfo_showfree_print);
 }
 
 static void pagetypeinfo_showblockcount_print(struct seq_file *m,
