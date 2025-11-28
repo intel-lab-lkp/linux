@@ -139,6 +139,7 @@ The interface exposes these parameters of a netconsole target to userspace:
 	local_mac	Local interface's MAC address		(read-only)
 	remote_mac	Remote agent's MAC address		(read-write)
 	transmit_errors	Number of packet send errors		(read-only)
+	send_msg	Send custom messages directly		(write-only)
 	=============== =================================       ============
 
 The "enabled" attribute is also used to control whether the parameters of
@@ -157,6 +158,45 @@ To update a target's parameters::
 You can also update the local interface dynamically. This is especially
 useful if you want to use interfaces that have newly come up (and may not
 have existed when netconsole was loaded / initialized).
+
+Direct Message Sending
+----------------------
+
+The `send_msg` attribute allows sending custom messages directly through a
+netconsole target without going through the kernel's printk infrastructure.
+This is a write-only attribute that can be used to send arbitrary text to
+the configured remote logging agent.
+
+To send a message directly::
+
+ echo "Custom status message" > /sys/kernel/config/netconsole/target1/send_msg
+
+Key features:
+
+* Messages can be sent only when the target is enabled
+* The network interface must be up and running
+* For extended targets, messages are sent with the extended header format
+* For non-extended targets, messages are fragmented if they exceed the
+  maximum chunk size
+* Messages bypass the kernel log buffer entirely
+
+This is useful for:
+
+* Sending application-level alerts or status updates
+* Injecting custom markers or delimiters into the log stream
+* Sending diagnostic information from userspace scripts
+* Testing netconsole connectivity without generating kernel messages
+
+Example use case - sending periodic health checks::
+
+ while true; do
+   echo "[$(date)] System health: OK" > /sys/kernel/config/netconsole/target1/send_msg
+   sleep 60
+ done
+
+.. note::
+   The `send_msg` attribute requires the target to be enabled. Unlike other
+   parameters, you do not need to disable the target to use this attribute.
 
 Netconsole targets defined at boot time (or module load time) with the
 `netconsole=` param are assigned the name `cmdline<index>`.  For example, the
