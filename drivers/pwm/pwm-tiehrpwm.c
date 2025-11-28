@@ -20,7 +20,7 @@
 #define TIEHRPWM_TBCTL				0x00
 #define TIEHRPWM_TBPRD				0x0A
 
-#define TIEHRPWM_TBCTL_PRDLD_MASK		BIT(3)
+#define TIEHRPWM_TBCTL_PRDLD			BIT(3)
 #define TIEHRPWM_TBCTL_PRDLD_SHDW		0
 #define TIEHRPWM_TBCTL_PRDLD_IMDT		BIT(3)
 #define TIEHRPWM_TBCTL_CLKDIV_MASK		(BIT(12) | BIT(11) | BIT(10) | BIT(9) | \
@@ -283,7 +283,7 @@ static int ehrpwm_pwm_config(struct pwm_chip *chip, struct pwm_device *pwm,
 	ehrpwm_modify(pc->mmio_base, aqctl_reg, aqctl_mask, aqctl_val);
 
 	/* Configure shadow loading on Period register */
-	ehrpwm_modify(pc->mmio_base, TIEHRPWM_TBCTL, TIEHRPWM_TBCTL_PRDLD_MASK,
+	ehrpwm_modify(pc->mmio_base, TIEHRPWM_TBCTL, TIEHRPWM_TBCTL_PRDLD,
 		      TIEHRPWM_TBCTL_PRDLD_SHDW);
 
 	ehrpwm_write(pc->mmio_base, TIEHRPWM_TBPRD, period_cycles - 1);
