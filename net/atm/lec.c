@@ -382,6 +382,15 @@ static int lec_atm_send(struct atm_vcc *vcc, struct sk_buff *skb)
 			break;
 		fallthrough;
 	case l_arp_update:
+	{
+		int need_size = offsetofend(struct atmlec_msg,
+				content.normal.targetless_le_arp);
+		if (skb->len < need_size) {
+			pr_info("Input msg size too small, need %d got %u\n",
+				 need_size, skb->len);
+			dev_kfree_skb(skb);
+			return -EINVAL;
+		}
 		lec_arp_update(priv, mesg->content.normal.mac_addr,
 			       mesg->content.normal.atm_addr,
 			       mesg->content.normal.flag,
@@ -394,6 +403,7 @@ static int lec_atm_send(struct atm_vcc *vcc, struct sk_buff *skb)
 					    tmp, mesg->sizeoftlvs);
 		}
 		break;
+	}
 	case l_config:
 		priv->maximum_unknown_frame_count =
 		    mesg->content.config.maximum_unknown_frame_count;
