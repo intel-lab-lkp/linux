@@ -44,6 +44,8 @@ static struct tty_driver *pts_driver;
 static DEFINE_MUTEX(devpts_mutex);
 #endif
 
+static struct workqueue_struct *pty_flip_wq;
+
 static void pty_close(struct tty_struct *tty, struct file *filp)
 {
 	if (tty->driver->subtype == PTY_TYPE_MASTER)
@@ -407,6 +409,8 @@ static int pty_common_install(struct tty_driver *driver, struct tty_struct *tty,
 	o_tty->link = tty;
 	tty_port_init(ports[0]);
 	tty_port_init(ports[1]);
+	tty_port_link_wq(ports[0], pty_flip_wq);
+	tty_port_link_wq(ports[1], pty_flip_wq);
 	tty_buffer_set_limit(ports[0], 8192);
 	tty_buffer_set_limit(ports[1], 8192);
 	o_tty->port = ports[0];
@@ -536,16 +540,22 @@ static void __init legacy_pty_init(void)
 	pty_driver = tty_alloc_driver(legacy_count,
 			TTY_DRIVER_RESET_TERMIOS |
 			TTY_DRIVER_REAL_RAW |
-			TTY_DRIVER_DYNAMIC_ALLOC);
+			TTY_DRIVER_DYNAMIC_ALLOC |
+			TTY_DRIVER_CUSTOM_WORKQUEUE);
 	if (IS_ERR(pty_driver))
 		panic("Couldn't allocate pty driver");
 
 	pty_slave_driver = tty_alloc_driver(legacy_count,
 			TTY_DRIVER_RESET_TERMIOS |
 			TTY_DRIVER_REAL_RAW |
-			TTY_DRIVER_DYNAMIC_ALLOC);
+			TTY_DRIVER_DYNAMIC_ALLOC |
+			TTY_DRIVER_CUSTOM_WORKQUEUE);
 	if (IS_ERR(pty_slave_driver))
 		panic("Couldn't allocate pty slave driver");
+
+	pty_flip_wq = alloc_workqueue("pty-flip-wq", WQ_UNBOUND | WQ_SYSFS, 0);
+	if (!pty_flip_wq)
+		panic("Couldn't allocate pty flip workqueue");
 
 	pty_driver->driver_name = "pty_master";
 	pty_driver->name = "pty";
@@ -877,7 +887,8 @@ static void __init unix98_pty_init(void)
 			TTY_DRIVER_REAL_RAW |
 			TTY_DRIVER_DYNAMIC_DEV |
 			TTY_DRIVER_DEVPTS_MEM |
-			TTY_DRIVER_DYNAMIC_ALLOC);
+			TTY_DRIVER_DYNAMIC_ALLOC |
+			TTY_DRIVER_CUSTOM_WORKQUEUE);
 	if (IS_ERR(ptm_driver))
 		panic("Couldn't allocate Unix98 ptm driver");
 	pts_driver = tty_alloc_driver(NR_UNIX98_PTY_MAX,
@@ -885,9 +896,14 @@ static void __init unix98_pty_init(void)
 			TTY_DRIVER_REAL_RAW |
 			TTY_DRIVER_DYNAMIC_DEV |
 			TTY_DRIVER_DEVPTS_MEM |
-			TTY_DRIVER_DYNAMIC_ALLOC);
+			TTY_DRIVER_DYNAMIC_ALLOC |
+			TTY_DRIVER_CUSTOM_WORKQUEUE);
 	if (IS_ERR(pts_driver))
 		panic("Couldn't allocate Unix98 pts driver");
+
+	pty_flip_wq = alloc_workqueue("pty-flip-wq", WQ_UNBOUND | WQ_SYSFS, 0);
+	if (!pty_flip_wq)
+		panic("Couldn't allocate pty flip workqueue");
 
 	ptm_driver->driver_name = "pty_master";
 	ptm_driver->name = "ptm";
