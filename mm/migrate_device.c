@@ -147,7 +147,7 @@ again:
 			    pgmap->owner != migrate->pgmap_owner)
 				goto next;
 
-			mpfn = migrate_pfn(page_to_pfn(page)) |
+			mpfn = migrate_pfn(device_private_page_to_offset(page)) |
 					MIGRATE_PFN_MIGRATE |
 					MIGRATE_PFN_DEVICE;
 			if (is_writable_device_private_entry(entry))
@@ -238,21 +238,21 @@ again:
 			if (mpfn & MIGRATE_PFN_WRITE) {
 				if (is_device_private_page(page))
 					entry = make_writable_migration_device_private_entry(
-								page_to_pfn(page));
+								device_private_page_to_offset(page));
 				else
 					entry = make_writable_migration_entry(
 								page_to_pfn(page));
 			} else if (anon_exclusive) {
 				if (is_device_private_page(page))
 					entry = make_device_migration_readable_exclusive_migration_entry(
-								page_to_pfn(page));
+								device_private_page_to_offset(page));
 				else
 					entry = make_readable_exclusive_migration_entry(
 								page_to_pfn(page));
 			} else {
 				if (is_device_private_page(page))
 					entry = make_readable_migration_device_private_entry(
-								page_to_pfn(page));
+								device_private_page_to_offset(page));
 				else
 					entry = make_readable_migration_entry(
 								page_to_pfn(page));
@@ -650,10 +650,10 @@ static void migrate_vma_insert_page(struct migrate_vma *migrate,
 
 		if (vma->vm_flags & VM_WRITE)
 			swp_entry = make_writable_device_private_entry(
-						page_to_pfn(page));
+						device_private_page_to_offset(page));
 		else
 			swp_entry = make_readable_device_private_entry(
-						page_to_pfn(page));
+						device_private_page_to_offset(page));
 		entry = swp_entry_to_pte(swp_entry);
 	} else {
 		if (folio_is_zone_device(folio) &&
@@ -923,7 +923,7 @@ static unsigned long migrate_device_pfn_lock(unsigned long pfn)
 {
 	struct folio *folio;
 
-	folio = folio_get_nontail_page(pfn_to_page(pfn));
+	folio = folio_get_nontail_page(device_private_offset_to_page(pfn));
 	if (!folio)
 		return 0;
 

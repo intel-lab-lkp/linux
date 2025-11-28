@@ -565,7 +565,13 @@ static inline int pte_none_mostly(pte_t pte)
 
 static inline struct page *pfn_swap_entry_to_page(swp_entry_t entry)
 {
-	struct page *p = pfn_to_page(swp_offset_pfn(entry));
+	struct page *p;
+
+	if (is_device_private_entry(entry) ||
+	    is_device_private_migration_entry(entry))
+		p = device_private_entry_to_page(entry);
+	else
+		p = pfn_to_page(swp_offset_pfn(entry));
 
 	/*
 	 * Any use of migration entries may only occur while the
@@ -578,8 +584,13 @@ static inline struct page *pfn_swap_entry_to_page(swp_entry_t entry)
 
 static inline struct folio *pfn_swap_entry_folio(swp_entry_t entry)
 {
-	struct folio *folio = pfn_folio(swp_offset_pfn(entry));
+	struct folio *folio;
 
+	if (is_device_private_entry(entry) ||
+	    is_device_private_migration_entry(entry))
+		folio = page_folio(device_private_entry_to_page(entry));
+	else
+		folio = pfn_folio(swp_offset_pfn(entry));
 	/*
 	 * Any use of migration entries may only occur while the
 	 * corresponding folio is locked

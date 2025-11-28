@@ -1873,7 +1873,7 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 	struct mmu_notifier_range range;
 	enum ttu_flags flags = (enum ttu_flags)(long)arg;
 	unsigned long nr_pages = 1, end_addr;
-	unsigned long pfn;
+	unsigned long nr;
 	unsigned long hsz = 0;
 	int ptes = 0;
 
@@ -1980,13 +1980,20 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 		 */
 		pteval = ptep_get(pvmw.pte);
 		if (likely(pte_present(pteval))) {
-			pfn = pte_pfn(pteval);
+			nr = pte_pfn(pteval) - folio_pfn(folio);
 		} else {
-			pfn = swp_offset_pfn(pte_to_swp_entry(pteval));
+			swp_entry_t entry = pte_to_swp_entry(pteval);
+
+			if (is_device_private_entry(entry) ||
+			    is_device_private_migration_entry(entry))
+				nr = swp_offset_pfn(entry) - device_private_folio_to_offset(folio);
+			else
+				nr = swp_offset_pfn(entry) - folio_pfn(folio);
+
 			VM_WARN_ON_FOLIO(folio_test_hugetlb(folio), folio);
 		}
 
-		subpage = folio_page(folio, pfn - folio_pfn(folio));
+		subpage = folio_page(folio, nr);
 		address = pvmw.address;
 		anon_exclusive = folio_test_anon(folio) &&
 				 PageAnonExclusive(subpage);
@@ -2300,7 +2307,7 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 	struct page *subpage;
 	struct mmu_notifier_range range;
 	enum ttu_flags flags = (enum ttu_flags)(long)arg;
-	unsigned long pfn;
+	unsigned long nr;
 	unsigned long hsz = 0;
 
 	/*
@@ -2370,13 +2377,20 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 		 */
 		pteval = ptep_get(pvmw.pte);
 		if (likely(pte_present(pteval))) {
-			pfn = pte_pfn(pteval);
+			nr = pte_pfn(pteval) - folio_pfn(folio);
 		} else {
-			pfn = swp_offset_pfn(pte_to_swp_entry(pteval));
+			swp_entry_t entry = pte_to_swp_entry(pteval);
+
+			if (is_device_private_entry(entry) ||
+			    is_device_private_migration_entry(entry))
+				nr = swp_offset_pfn(entry) - device_private_folio_to_offset(folio);
+			else
+				nr = swp_offset_pfn(entry) - folio_pfn(folio);
+
 			VM_WARN_ON_FOLIO(folio_test_hugetlb(folio), folio);
 		}
 
-		subpage = folio_page(folio, pfn - folio_pfn(folio));
+		subpage = folio_page(folio, nr);
 		address = pvmw.address;
 		anon_exclusive = folio_test_anon(folio) &&
 				 PageAnonExclusive(subpage);
@@ -2436,7 +2450,7 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 				folio_mark_dirty(folio);
 			writable = pte_write(pteval);
 		} else if (likely(pte_present(pteval))) {
-			flush_cache_page(vma, address, pfn);
+			flush_cache_page(vma, address, pte_pfn(pteval));
 			/* Nuke the page table entry. */
 			if (should_defer_flush(mm, flags)) {
 				/*
@@ -2538,21 +2552,21 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 			if (writable) {
 				if (is_device_private_page(subpage))
 					entry = make_writable_migration_device_private_entry(
-								page_to_pfn(subpage));
+								device_private_page_to_offset(subpage));
 				else
 					entry = make_writable_migration_entry(
 								page_to_pfn(subpage));
 			} else if (anon_exclusive) {
 				if (is_device_private_page(subpage))
 					entry = make_device_migration_readable_exclusive_migration_entry(
-								page_to_pfn(subpage));
+								device_private_page_to_offset(subpage));
 				else
 					entry = make_readable_exclusive_migration_entry(
 								page_to_pfn(subpage));
 			} else {
 				if (is_device_private_page(subpage))
 					entry = make_readable_migration_device_private_entry(
-								page_to_pfn(subpage));
+								device_private_page_to_offset(subpage));
 				else
 					entry = make_readable_migration_entry(
 								page_to_pfn(subpage));

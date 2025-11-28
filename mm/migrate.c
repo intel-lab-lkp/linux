@@ -399,10 +399,10 @@ static bool remove_migration_pte(struct folio *folio,
 		if (unlikely(is_device_private_page(new))) {
 			if (pte_write(pte))
 				entry = make_writable_device_private_entry(
-							page_to_pfn(new));
+							device_private_page_to_offset(new));
 			else
 				entry = make_readable_device_private_entry(
-							page_to_pfn(new));
+							device_private_page_to_offset(new));
 			pte = swp_entry_to_pte(entry);
 			if (pte_swp_soft_dirty(old_pte))
 				pte = pte_swp_mksoft_dirty(pte);

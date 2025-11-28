@@ -104,6 +104,7 @@ again:
 static bool check_pte(struct page_vma_mapped_walk *pvmw, unsigned long pte_nr)
 {
 	unsigned long pfn;
+	bool device_private = false;
 	pte_t ptent = ptep_get(pvmw->pte);
 
 	if (pvmw->flags & PVMW_MIGRATION) {
@@ -115,6 +116,9 @@ static bool check_pte(struct page_vma_mapped_walk *pvmw, unsigned long pte_nr)
 		if (!(is_migration_entry(entry)))
 			return false;
 
+		if (is_device_private_migration_entry(entry))
+			device_private = true;
+
 		pfn = swp_offset_pfn(entry);
 	} else if (is_swap_pte(ptent)) {
 		swp_entry_t entry;
@@ -125,6 +129,9 @@ static bool check_pte(struct page_vma_mapped_walk *pvmw, unsigned long pte_nr)
 		    !is_device_exclusive_entry(entry))
 			return false;
 
+		if (is_device_private_entry(entry))
+			device_private = true;
+
 		pfn = swp_offset_pfn(entry);
 	} else {
 		if (!pte_present(ptent))
@@ -132,6 +139,9 @@ static bool check_pte(struct page_vma_mapped_walk *pvmw, unsigned long pte_nr)
 
 		pfn = pte_pfn(ptent);
 	}
+
+	if ((device_private) ^ !!(pvmw->pfn & PVMW_PFN_DEVICE_PRIVATE))
+		return false;
 
 	if ((pfn + pte_nr - 1) < (pvmw->pfn >> PVMW_PFN_SHIFT))
 		return false;

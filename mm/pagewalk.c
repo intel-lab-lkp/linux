@@ -1003,8 +1003,7 @@ pte_table:
 		swp_entry_t entry = pte_to_swp_entry(pte);
 
 		if ((flags & FW_MIGRATION) &&
-		    (is_migration_entry(entry) ||
-		     is_device_private_migration_entry(entry))) {
+		    (is_migration_entry(entry))) {
 			page = pfn_swap_entry_to_page(entry);
 			expose_page = false;
 			goto found;
