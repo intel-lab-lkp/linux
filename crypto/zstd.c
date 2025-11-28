@@ -37,7 +37,7 @@ static void *zstd_alloc_stream(int node)
 	struct zstd_ctx *ctx;
 	size_t wksp_size;
 
-	params = zstd_get_params(ZSTD_DEF_LEVEL, ZSTD_MAX_SIZE);
+	params = zstd_get_params(zstd_max_clevel(), ZSTD_MAX_SIZE);
 
 	wksp_size = max(zstd_cstream_workspace_bound(&params.cParams),
 			zstd_dstream_workspace_bound(ZSTD_MAX_SIZE));
@@ -66,7 +66,10 @@ static struct crypto_acomp_streams zstd_streams = {
 
 static int zstd_init(struct crypto_acomp *acomp_tfm)
 {
+	struct crypto_acomp_params *p = acomp_tfm_ctx(acomp_tfm);
 	int ret = 0;
+
+	p->level = ZSTD_DEF_LEVEL;
 
 	mutex_lock(&zstd_stream_lock);
 	ret = crypto_acomp_alloc_streams(&zstd_streams);
@@ -96,6 +99,7 @@ static int zstd_compress_one(struct acomp_req *req, struct zstd_ctx *ctx,
 
 static int zstd_compress(struct acomp_req *req)
 {
+	struct crypto_acomp_params *p = acomp_tfm_ctx(crypto_acomp_reqtfm(req));
 	struct crypto_acomp_stream *s;
 	unsigned int pos, scur, dcur;
 	unsigned int total_out = 0;
@@ -110,6 +114,8 @@ static int zstd_compress(struct acomp_req *req)
 
 	s = crypto_acomp_lock_stream_bh(&zstd_streams);
 	ctx = s->ctx;
+
+	ctx->params = zstd_get_params(p->level, ZSTD_MAX_SIZE);
 
 	ret = acomp_walk_virt(&walk, req, true);
 	if (ret)
@@ -284,14 +290,45 @@ out:
 	return ret;
 }
 
+static int zstd_setparam(struct crypto_acomp *tfm, const u8 *param,
+			 unsigned int len)
+{
+	struct crypto_acomp_params *p = acomp_tfm_ctx(tfm);
+	int ret;
+
+	ret = crypto_acomp_getparams(p, param, len);
+	if (ret)
+		return ret;
+
+	if (p->level > zstd_max_clevel() || p->level < zstd_min_clevel()) {
+		p->level = ZSTD_DEF_LEVEL;
+		return -EINVAL;
+	}
+
+	if (p->level == CRYPTO_COMP_NO_LEVEL)
+		p->level = ZSTD_DEF_LEVEL;
+
+	return 0;
+}
+
+static void zstd_exit(struct crypto_acomp *tfm)
+{
+	struct crypto_acomp_params *p = acomp_tfm_ctx(tfm);
+
+	crypto_acomp_putparams(p);
+}
+
 static struct acomp_alg zstd_acomp = {
 	.base = {
 		.cra_name = "zstd",
 		.cra_driver_name = "zstd-generic",
 		.cra_flags = CRYPTO_ALG_REQ_VIRT,
+		.cra_ctxsize = sizeof(struct crypto_acomp_params),
 		.cra_module = THIS_MODULE,
 	},
 	.init = zstd_init,
+	.exit = zstd_exit,
+	.setparam = zstd_setparam,
 	.compress = zstd_compress,
 	.decompress = zstd_decompress,
 };
