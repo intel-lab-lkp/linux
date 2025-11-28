@@ -1443,6 +1443,34 @@ struct drm_bridge *of_drm_get_bridge(struct device_node *np)
 EXPORT_SYMBOL(of_drm_get_bridge);
 
 /**
+ * devm_of_drm_get_bridge - find the bridge corresponding to the device
+ *			    node in the global bridge list and add a devm
+ *			    action to put it
+ *
+ * @dev: device requesting the bridge
+ * @np: device node
+ *
+ * On success the returned bridge refcount is incremented, and a devm
+ * action is added to call drm_bridge_put() when @dev is removed. So the
+ * caller does not have to put the returned bridge explicitly.
+ *
+ * RETURNS:
+ * drm_bridge control struct on success, NULL on failure
+ */
+struct drm_bridge *devm_of_drm_get_bridge(struct device *dev, struct device_node *np)
+{
+	struct drm_bridge *bridge = of_drm_get_bridge(np);
+
+	if (bridge) {
+		if (devm_add_action_or_reset(dev, drm_bridge_put_void, bridge))
+			return NULL;
+	}
+
+	return bridge;
+}
+EXPORT_SYMBOL(devm_of_drm_get_bridge);
+
+/**
  * of_drm_find_bridge - find the bridge corresponding to the device node in
  *			the global bridge list
  *
