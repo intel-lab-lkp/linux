@@ -471,6 +471,9 @@ static int build_comp_block(void *ctx, enum adf_dc_algo algo)
 	case QAT_DEFLATE:
 		header->service_cmd_id = ICP_QAT_FW_COMP_CMD_DYNAMIC;
 	break;
+	case QAT_ZSTD:
+		header->service_cmd_id = ICP_QAT_FW_COMP_CMD_ZSTD_COMPRESS;
+	break;
 	default:
 		return -EINVAL;
 	}
@@ -493,6 +496,9 @@ static int build_decomp_block(void *ctx, enum adf_dc_algo algo)
 	switch (algo) {
 	case QAT_DEFLATE:
 		header->service_cmd_id = ICP_QAT_FW_COMP_CMD_DECOMPRESS;
+	break;
+	case QAT_ZSTD:
+		header->service_cmd_id = ICP_QAT_FW_COMP_CMD_ZSTD_DECOMPRESS;
 	break;
 	default:
 		return -EINVAL;
@@ -933,6 +939,7 @@ void adf_init_hw_data_6xxx(struct adf_hw_device_data *hw_data)
 	hw_data->num_rps = ADF_GEN6_ETR_MAX_BANKS;
 	hw_data->clock_frequency = ADF_6XXX_AE_FREQ;
 	hw_data->get_svc_slice_cnt = adf_gen6_get_svc_slice_cnt;
+	hw_data->accel_capabilities_ext_mask = ADF_ACCEL_CAPABILITIES_EXT_ZSTD;
 
 	adf_gen6_init_hw_csr_ops(&hw_data->csr_ops);
 	adf_gen6_init_pf_pfvf_ops(&hw_data->pfvf_ops);

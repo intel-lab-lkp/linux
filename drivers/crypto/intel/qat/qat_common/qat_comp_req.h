@@ -7,6 +7,8 @@
 
 #define QAT_COMP_REQ_SIZE (sizeof(struct icp_qat_fw_comp_req))
 #define QAT_COMP_CTX_SIZE (QAT_COMP_REQ_SIZE * 2)
+#define QAT_ASB_RATIO_MODE_VAL 8
+#define QAT_ASB_VALUE(slen) (((slen) >> 4) * (QAT_ASB_RATIO_MODE_VAL + 1))
 
 static inline void qat_comp_create_req(void *ctx, void *req, u64 src, u32 slen,
 				       u64 dst, u32 dlen, u64 opaque)
@@ -23,6 +25,7 @@ static inline void qat_comp_create_req(void *ctx, void *req, u64 src, u32 slen,
 	fw_req->comn_mid.opaque_data = opaque;
 	req_pars->comp_len = slen;
 	req_pars->out_buffer_sz = dlen;
+	fw_req->u3.asb_threshold.asb_value = QAT_ASB_VALUE(slen);
 }
 
 static inline void qat_comp_create_compression_req(void *ctx, void *req,
@@ -108,6 +111,14 @@ static inline u8 qat_comp_get_cmp_cnv_flag(void *resp)
 	u8 flags = qat_resp->comn_resp.hdr_flags;
 
 	return ICP_QAT_FW_COMN_HDR_CNV_FLAG_GET(flags);
+}
+
+static inline u8 qat_comp_get_cmp_uncomp_flag(void *resp)
+{
+	struct icp_qat_fw_comp_resp *qat_resp = resp;
+	u8 flags = qat_resp->comn_resp.hdr_flags;
+
+	return ICP_QAT_FW_COMN_HDR_ST_BLK_FLAG_GET(flags);
 }
 
 #endif
