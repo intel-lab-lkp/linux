@@ -263,7 +263,7 @@ efs_block_t efs_map_block(struct inode *inode, efs_block_t block) {
 			/* should never happen */
 			pr_err("couldn't find direct extent for indirect extent %d (block %u)\n",
 			       cur, block);
-			if (bh) brelse(bh);
+			brelse(bh);
 			return 0;
 		}
 		
@@ -275,7 +275,7 @@ efs_block_t efs_map_block(struct inode *inode, efs_block_t block) {
 			(EFS_BLOCKSIZE / sizeof(efs_extent));
 
 		if (first || lastblock != iblock) {
-			if (bh) brelse(bh);
+			brelse(bh);
 
 			bh = sb_bread(inode->i_sb, iblock);
 			if (!bh) {
@@ -296,17 +296,17 @@ efs_block_t efs_map_block(struct inode *inode, efs_block_t block) {
 		if (ext.cooked.ex_magic != 0) {
 			pr_err("extent %d has bad magic number in block %d\n",
 			       cur, iblock);
-			if (bh) brelse(bh);
+			brelse(bh);
 			return 0;
 		}
 
 		if ((result = efs_extent_check(&ext, block, sb))) {
-			if (bh) brelse(bh);
+			brelse(bh);
 			in->lastextent = cur;
 			return result;
 		}
 	}
-	if (bh) brelse(bh);
+	brelse(bh);
 	pr_err("%s() failed to map block %u (indir)\n", __func__, block);
 	return 0;
 }  
