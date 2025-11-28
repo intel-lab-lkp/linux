@@ -2778,6 +2778,12 @@ void btrfs_init_fs_info(struct btrfs_fs_info *fs_info)
 	spin_lock_init(&fs_info->relocation_bg_lock);
 	rwlock_init(&fs_info->tree_mod_log_lock);
 	rwlock_init(&fs_info->global_root_lock);
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+	spin_lock_init(&fs_info->compress_offload_lock);
+	atomic_set(&fs_info->compress_offload_enabled, 0);
+	atomic_set(&fs_info->compr_resource_refcnt, 1);
+	init_waitqueue_head(&fs_info->compr_wait_queue);
+#endif
 	mutex_init(&fs_info->unused_bg_unpin_mutex);
 	mutex_init(&fs_info->reclaim_bgs_lock);
 	mutex_init(&fs_info->reloc_mutex);

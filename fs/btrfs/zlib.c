@@ -18,6 +18,9 @@
 #include <linux/pagemap.h>
 #include <linux/bio.h>
 #include <linux/refcount.h>
+#include <linux/scatterlist.h>
+#include <crypto/acompress.h>
+#include "acomp_workspace.h"
 #include "btrfs_inode.h"
 #include "compression.h"
 #include "fs.h"
@@ -32,6 +35,7 @@ struct workspace {
 	unsigned int buf_size;
 	struct list_head list;
 	int level;
+	struct btrfs_acomp_workspace *acomp_ws;
 };
 
 struct list_head *zlib_get_workspace(struct btrfs_fs_info *fs_info, unsigned int level)
@@ -48,10 +52,49 @@ void zlib_free_workspace(struct list_head *ws)
 {
 	struct workspace *workspace = list_entry(ws, struct workspace, list);
 
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+	if (workspace->acomp_ws)
+		acomp_workspace_free(workspace->acomp_ws);
+#endif
+
 	kvfree(workspace->strm.workspace);
 	kfree(workspace->buf);
 	kfree(workspace);
 }
+
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+int zlib_process_acomp_workspaces(struct btrfs_fs_info *fs_info, bool enable)
+{
+	struct workspace_manager *wsm = fs_info->compr_wsm[BTRFS_COMPRESS_ZLIB];
+	struct list_head *ws, *tmp;
+
+	if (!wsm)
+		return 0;
+
+	spin_lock(&wsm->ws_lock);
+
+	list_for_each_safe(ws, tmp, &wsm->idle_ws) {
+		struct workspace *workspace = list_entry(ws, struct workspace, list);
+
+		if (enable) {
+			if (!workspace->acomp_ws) {
+				workspace->acomp_ws = acomp_zlib_workspace_alloc(fs_info);
+				if (!workspace->acomp_ws)
+					btrfs_warn(fs_info, "Failed to allocate zlib acomp workspace");
+			}
+		} else {
+			if (workspace->acomp_ws) {
+				acomp_workspace_free(workspace->acomp_ws);
+				workspace->acomp_ws = NULL;
+			}
+		}
+	}
+
+	spin_unlock(&wsm->ws_lock);
+
+	return 0;
+}
+#endif
 
 /*
  * For s390 hardware acceleration, the buffer size should be at least
@@ -96,6 +139,14 @@ struct list_head *zlib_alloc_workspace(struct btrfs_fs_info *fs_info, unsigned i
 	}
 	if (!workspace->strm.workspace || !workspace->buf)
 		goto fail;
+
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+	/* Try to allocate acomp workspace (will be NULL if offload disabled) */
+	workspace->acomp_ws = acomp_zlib_workspace_alloc(fs_info);
+	/* It's OK if this returns NULL when offload is disabled */
+#else
+	workspace->acomp_ws = NULL;
+#endif
 
 	INIT_LIST_HEAD(&workspace->list);
 
@@ -164,6 +215,20 @@ int zlib_compress_folios(struct list_head *ws, struct btrfs_inode *inode,
 	const unsigned long max_out = nr_dest_folios << min_folio_shift;
 	const u32 blocksize = fs_info->sectorsize;
 	const u64 orig_end = start + len;
+
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+	if (workspace->acomp_ws && len >= 1024) {
+		ret = acomp_comp_folios(workspace->acomp_ws, fs_info, mapping, start,
+					len, folios, out_folios, total_in,
+					total_out, workspace->level);
+		/*
+		 * If hardware offload succeeded, or if there is an expansion,
+		 * return. Otherwise, compress in software.
+		 */
+		if (ret == 0 || ret == -E2BIG)
+			return ret;
+	}
+#endif
 
 	*out_folios = 0;
 	*total_out = 0;
@@ -347,6 +412,22 @@ int zlib_decompress_bio(struct list_head *ws, struct compressed_bio *cb)
 	unsigned long total_folios_in = DIV_ROUND_UP(srclen, min_folio_size);
 	unsigned long buf_start;
 	struct folio **folios_in = cb->compressed_folios;
+
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+	if (workspace->acomp_ws && srclen >= 1024) {
+		ret = acomp_decomp_bio(workspace->acomp_ws, fs_info, folios_in, cb,
+				       srclen, total_folios_in);
+		/* If hardware offload succeeded, return. */
+		if (ret == 0)
+			return 0;
+
+		/* Otherwise, decompress in software. This should not happen! */
+		if (ret)
+			btrfs_info(fs_info,
+				   "zlib hardware decompression offload failed, falling back to software ret=%d",
+				   ret);
+	}
+#endif
 
 	data_in = kmap_local_folio(folios_in[folio_in_index], 0);
 	workspace->strm.next_in = data_in;

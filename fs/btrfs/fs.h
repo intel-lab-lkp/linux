@@ -525,6 +525,14 @@ struct btrfs_fs_info {
 
 	int compress_type;
 	int compress_level;
+
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+	spinlock_t compress_offload_lock; /* protects the two fields below */
+	atomic_t compress_offload_enabled;
+	atomic_t compr_resource_refcnt;
+	wait_queue_head_t compr_wait_queue;
+#endif
+
 	u32 commit_interval;
 	/*
 	 * It is a suggestive number, the read side is safe even it gets a

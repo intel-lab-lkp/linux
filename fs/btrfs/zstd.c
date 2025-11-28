@@ -22,6 +22,7 @@
 #include "btrfs_inode.h"
 #include "compression.h"
 #include "super.h"
+#include "acomp_workspace.h"
 
 #define ZSTD_BTRFS_MAX_WINDOWLOG 17
 #define ZSTD_BTRFS_MAX_INPUT (1U << ZSTD_BTRFS_MAX_WINDOWLOG)
@@ -54,6 +55,7 @@ struct workspace {
 	zstd_in_buffer in_buf;
 	zstd_out_buffer out_buf;
 	zstd_parameters params;
+	struct btrfs_acomp_workspace *acomp_ws;
 };
 
 /*
@@ -363,10 +365,52 @@ void zstd_free_workspace(struct list_head *ws)
 {
 	struct workspace *workspace = list_entry(ws, struct workspace, list);
 
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+	if (workspace->acomp_ws)
+		acomp_workspace_free(workspace->acomp_ws);
+#endif
 	kvfree(workspace->mem);
 	kfree(workspace->buf);
 	kfree(workspace);
 }
+
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+int zstd_process_acomp_workspaces(struct btrfs_fs_info *fs_info, bool enable)
+{
+	struct zstd_workspace_manager *zwsm = fs_info->compr_wsm[BTRFS_COMPRESS_ZSTD];
+	int i;
+
+	if (!zwsm)
+		return 0;
+
+	spin_lock_bh(&zwsm->lock);
+
+	for (i = 0; i < ZSTD_BTRFS_MAX_LEVEL; i++) {
+		struct list_head *ws, *tmp;
+
+		list_for_each_safe(ws, tmp, &zwsm->idle_ws[i]) {
+			struct workspace *workspace = list_entry(ws, struct workspace, list);
+
+			if (enable) {
+				if (!workspace->acomp_ws) {
+					workspace->acomp_ws = acomp_zstd_workspace_alloc(fs_info);
+					if (!workspace->acomp_ws)
+						btrfs_warn(fs_info, "Failed to allocate zstd acomp workspace");
+				}
+			} else {
+				if (workspace->acomp_ws) {
+					acomp_workspace_free(workspace->acomp_ws);
+					workspace->acomp_ws = NULL;
+				}
+			}
+		}
+	}
+
+	spin_unlock_bh(&zwsm->lock);
+
+	return 0;
+}
+#endif
 
 struct list_head *zstd_alloc_workspace(struct btrfs_fs_info *fs_info, int level)
 {
@@ -386,6 +430,12 @@ struct list_head *zstd_alloc_workspace(struct btrfs_fs_info *fs_info, int level)
 	workspace->buf = kmalloc(blocksize, GFP_KERNEL);
 	if (!workspace->mem || !workspace->buf)
 		goto fail;
+
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+	/* Try to allocate acomp workspace (will be NULL if offload disabled) */
+	workspace->acomp_ws = acomp_zstd_workspace_alloc(fs_info);
+	/* It's OK if this returns NULL when offload is disabled */
+#endif
 
 	INIT_LIST_HEAD(&workspace->list);
 	INIT_LIST_HEAD(&workspace->lru_list);
@@ -417,6 +467,20 @@ int zstd_compress_folios(struct list_head *ws, struct btrfs_inode *inode,
 	const u32 min_folio_size = btrfs_min_folio_size(fs_info);
 	unsigned long max_out = nr_dest_folios * min_folio_size;
 	unsigned int cur_len;
+
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+	if (workspace->acomp_ws && len >= 2048) {
+		ret = acomp_comp_folios(workspace->acomp_ws, fs_info, mapping, start,
+					len, folios, out_folios, total_in,
+					total_out, workspace->req_level);
+		/*
+		 * If hardware offload succeeded, or if there is an expansion,
+		 * return. Otherwise, compress in software.
+		 */
+		if (ret == 0 || ret == -E2BIG)
+			return ret;
+	}
+#endif
 
 	workspace->params = zstd_get_btrfs_parameters(workspace->req_level, len);
 	*out_folios = 0;

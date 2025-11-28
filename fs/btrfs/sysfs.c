@@ -1578,6 +1578,34 @@ static ssize_t btrfs_offload_csum_store(struct kobject *kobj,
 	return len;
 }
 BTRFS_ATTR_RW(, offload_csum, btrfs_offload_csum_show, btrfs_offload_csum_store);
+
+static ssize_t offload_compress_show(struct kobject *kobj,
+				     struct kobj_attribute *a, char *buf)
+{
+	struct btrfs_fs_info *fs_info = to_fs_info(kobj);
+
+	return sysfs_emit(buf, "%d\n", atomic_read(&fs_info->compress_offload_enabled));
+}
+
+static ssize_t offload_compress_store(struct kobject *kobj,
+				      struct kobj_attribute *a, const char *buf,
+				      size_t len)
+{
+	struct btrfs_fs_info *fs_info = to_fs_info(kobj);
+	bool val;
+	int ret;
+
+	ret = kstrtobool(buf, &val);
+	if (ret)
+		return ret;
+
+	ret = btrfs_set_compress_offload(fs_info, val);
+	if (ret)
+		return ret;
+
+	return len;
+}
+BTRFS_ATTR_RW(, offload_compress, offload_compress_show, offload_compress_store);
 #endif
 
 /*
@@ -1601,6 +1629,7 @@ static const struct attribute *btrfs_attrs[] = {
 	BTRFS_ATTR_PTR(, temp_fsid),
 #ifdef CONFIG_BTRFS_EXPERIMENTAL
 	BTRFS_ATTR_PTR(, offload_csum),
+	BTRFS_ATTR_PTR(, offload_compress),
 #endif
 	NULL,
 };

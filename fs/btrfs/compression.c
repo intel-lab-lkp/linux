@@ -1695,3 +1695,69 @@ int btrfs_compress_str2level(unsigned int type, const char *str, int *level_ret)
 	*level_ret = btrfs_compress_set_level(type, level);
 	return 0;
 }
+
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+int btrfs_set_compress_offload(struct btrfs_fs_info *fs_info, bool enable)
+{
+	int compress_type;
+	int ret = 0;
+
+	if (!fs_info)
+		return -EINVAL;
+
+	compress_type = fs_info->compress_type;
+	switch (compress_type) {
+	case BTRFS_COMPRESS_ZLIB:
+		if (!acomp_has_zlib()) {
+			btrfs_warn(fs_info, "Hardware does not support zlib compression offload");
+			return -EOPNOTSUPP;
+		}
+		break;
+	case BTRFS_COMPRESS_ZSTD:
+		if (!acomp_has_zstd()) {
+			btrfs_warn(fs_info, "Hardware does not support zstd compression offload");
+			return -EOPNOTSUPP;
+		}
+		break;
+	default:
+		btrfs_warn(fs_info, "Compression offload only supported for zlib and zstd (current: %d)",
+			   compress_type);
+		return -EOPNOTSUPP;
+	}
+
+	spin_lock(&fs_info->compress_offload_lock);
+
+	if (atomic_read(&fs_info->compress_offload_enabled) == (enable ? 1 : 0)) {
+		spin_unlock(&fs_info->compress_offload_lock);
+		btrfs_info(fs_info, "Compression hardware offload already %s",
+			   enable ? "enabled" : "disabled");
+		return 0;
+	}
+
+	atomic_set(&fs_info->compress_offload_enabled, enable ? 1 : 0);
+	atomic_dec(&fs_info->compr_resource_refcnt);
+	spin_unlock(&fs_info->compress_offload_lock);
+
+	wait_event(fs_info->compr_wait_queue,
+		   atomic_read(&fs_info->compr_resource_refcnt) == 0);
+
+	switch (compress_type) {
+	case BTRFS_COMPRESS_ZLIB:
+		ret = zlib_process_acomp_workspaces(fs_info, enable);
+		break;
+	case BTRFS_COMPRESS_ZSTD:
+		ret = zstd_process_acomp_workspaces(fs_info, enable);
+		break;
+	}
+
+	atomic_set(&fs_info->compr_resource_refcnt, 1);
+
+	if (ret == 0) {
+		btrfs_info(fs_info, "Compression hardware offload %s for %s",
+			   enable ? "enabled" : "disabled",
+			   compress_type == BTRFS_COMPRESS_ZLIB ? "zlib" : "zstd");
+	}
+
+	return ret;
+}
+#endif /* CONFIG_BTRFS_EXPERIMENTAL */

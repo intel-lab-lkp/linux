@@ -22,6 +22,7 @@ struct inode;
 struct btrfs_inode;
 struct btrfs_ordered_extent;
 struct btrfs_bio;
+struct btrfs_acomp_workspace;
 
 /*
  * We want to make sure that amount of RAM required to uncompress an extent is
@@ -162,6 +163,9 @@ int zlib_decompress(struct list_head *ws, const u8 *data_in,
 struct list_head *zlib_alloc_workspace(struct btrfs_fs_info *fs_info, unsigned int level);
 void zlib_free_workspace(struct list_head *ws);
 struct list_head *zlib_get_workspace(struct btrfs_fs_info *fs_info, unsigned int level);
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+int zlib_process_acomp_workspaces(struct btrfs_fs_info *fs_info, bool enable);
+#endif
 
 int lzo_compress_folios(struct list_head *ws, struct btrfs_inode *inode,
 			u64 start, struct folio **folios, unsigned long *out_folios,
@@ -186,5 +190,31 @@ struct list_head *zstd_alloc_workspace(struct btrfs_fs_info *fs_info, int level)
 void zstd_free_workspace(struct list_head *ws);
 struct list_head *zstd_get_workspace(struct btrfs_fs_info *fs_info, int level);
 void zstd_put_workspace(struct btrfs_fs_info *fs_info, struct list_head *ws);
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+int zstd_process_acomp_workspaces(struct btrfs_fs_info *fs_info, bool enable);
+#endif
+
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+bool acomp_has_zlib(void);
+bool acomp_has_zstd(void);
+struct btrfs_acomp_workspace;
+
+struct btrfs_acomp_workspace *acomp_zlib_workspace_alloc(struct btrfs_fs_info *fs_info);
+struct btrfs_acomp_workspace *acomp_zstd_workspace_alloc(struct btrfs_fs_info *fs_info);
+void acomp_workspace_free(struct btrfs_acomp_workspace *acomp_ws);
+int acomp_comp_folios(struct btrfs_acomp_workspace *acomp_ws,
+		      struct btrfs_fs_info *fs_info,
+		      struct address_space *mapping, u64 start, unsigned long len,
+		      struct folio **folios, unsigned long *out_folios,
+		      unsigned long *total_in, unsigned long *total_out, int level);
+int acomp_decomp_bio(struct btrfs_acomp_workspace *acomp_ws,
+		     struct btrfs_fs_info *fs_info, struct folio **in_folios,
+		     struct compressed_bio *cb, size_t srclen,
+		     unsigned long total_folios_in);
+int btrfs_set_compress_offload(struct btrfs_fs_info *fs_info, bool enable);
+#else
+static inline bool acomp_has_zlib(void) { return false; }
+static inline bool acomp_has_zstd(void) { return false; }
+#endif
 
 #endif
