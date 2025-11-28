@@ -38,7 +38,9 @@
 
 #define TIEHRPWM_CLKDIV_MAX			7
 #define TIEHRPWM_HSPCLKDIV_MAX			7
-#define TIEHRPWM_PERIOD_MAX			0x10000
+
+#define TIEHRPWM_TBPRD_TBPRD			GENMASK(15, 0)
+#define TIEHRPWM_PERIOD_MAX			(FIELD_MAX(TIEHRPWM_TBPRD_TBPRD) + 1)
 
 /* compare module registers */
 #define TIEHRPWM_CMPA				0x12
