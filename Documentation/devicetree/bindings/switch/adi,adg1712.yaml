@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/switch/adi,adg1712.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Analog Devices ADG1712 quad SPST switch
+
+maintainers:
+  - Antoniu Miclaus <antoniu.miclaus@analog.com>
+
+description: |
+  The ADG1712 contains four independent single-pole, single-throw (SPST)
+  switches controlled by GPIO pins. The device operates with a low-voltage
+  single supply range from +1.08V to +5.5V or a low-voltage dual supply
+  range from ±1.08V to ±2.75V.
+
+  Datasheet: https://www.analog.com/en/products/adg1712.html
+
+select: false
+
+allOf:
+  - $ref: /schemas/mux/gpio-mux.yaml#
+
+properties:
+  compatible:
+    const: gpio-mux
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    /* ADG1712 with four independent switches, each as a 2-state mux */
+    adg1712_sw1: mux-controller-0 {
+        compatible = "gpio-mux";
+        #mux-control-cells = <0>;
+        mux-gpios = <&gpio 10 GPIO_ACTIVE_HIGH>;
+        idle-state = <0>;  /* Switch open */
+    };
+
+    adg1712_sw2: mux-controller-1 {
+        compatible = "gpio-mux";
+        #mux-control-cells = <0>;
+        mux-gpios = <&gpio 11 GPIO_ACTIVE_HIGH>;
+        idle-state = <0>;  /* Switch open */
+    };
+
+    adg1712_sw3: mux-controller-2 {
+        compatible = "gpio-mux";
+        #mux-control-cells = <0>;
+        mux-gpios = <&gpio 12 GPIO_ACTIVE_HIGH>;
+        idle-state = <1>;  /* Switch closed */
+    };
+
+    adg1712_sw4: mux-controller-3 {
+        compatible = "gpio-mux";
+        #mux-control-cells = <0>;
+        mux-gpios = <&gpio 13 GPIO_ACTIVE_HIGH>;
+        idle-state = <0>;  /* Switch open */
+    };
+...
