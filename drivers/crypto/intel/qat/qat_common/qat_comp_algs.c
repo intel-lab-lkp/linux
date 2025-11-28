@@ -101,11 +101,11 @@ static int qat_comp_rfc1950_callback(struct qat_compression_req *qat_req,
 		__be16 zlib_header;
 
 		zlib_header = cpu_to_be16(QAT_RFC_1950_COMP_HDR);
-		scatterwalk_map_and_copy(&zlib_header, areq->dst, 0, QAT_RFC_1950_HDR_SIZE, 1);
+		memcpy_to_sglist(areq->dst, 0, &zlib_header, QAT_RFC_1950_HDR_SIZE);
 		areq->dlen += QAT_RFC_1950_HDR_SIZE;
 
-		scatterwalk_map_and_copy(&qat_produced_adler, areq->dst, areq->dlen,
-					 QAT_RFC_1950_FOOTER_SIZE, 1);
+		memcpy_to_sglist(areq->dst, areq->dlen, &qat_produced_adler,
+				 QAT_RFC_1950_FOOTER_SIZE);
 		areq->dlen += QAT_RFC_1950_FOOTER_SIZE;
 	} else {
 		__be32 decomp_adler;
@@ -117,8 +117,8 @@ static int qat_comp_rfc1950_callback(struct qat_compression_req *qat_req,
 		if (footer_offset + QAT_RFC_1950_FOOTER_SIZE > areq->slen)
 			return -EBADMSG;
 
-		scatterwalk_map_and_copy(&decomp_adler, areq->src, footer_offset,
-					 QAT_RFC_1950_FOOTER_SIZE, 0);
+		memcpy_from_sglist(&decomp_adler, areq->src, footer_offset,
+				   QAT_RFC_1950_FOOTER_SIZE);
 
 		if (qat_produced_adler != decomp_adler)
 			return -EBADMSG;
@@ -342,7 +342,7 @@ static int qat_comp_alg_rfc1950_decompress(struct acomp_req *req)
 	if (req->slen <= QAT_RFC_1950_HDR_SIZE + QAT_RFC_1950_FOOTER_SIZE)
 		return -EBADMSG;
 
-	scatterwalk_map_and_copy(&zlib_header, req->src, 0, QAT_RFC_1950_HDR_SIZE, 0);
+	memcpy_from_sglist(&zlib_header, req->src, 0, QAT_RFC_1950_HDR_SIZE);
 
 	ret = parse_zlib_header(zlib_header);
 	if (ret) {
