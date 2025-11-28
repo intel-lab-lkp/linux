@@ -1405,6 +1405,16 @@ config LRU_GEN_STATS
 config LRU_GEN_WALKS_MMU
 	def_bool y
 	depends on LRU_GEN && ARCH_HAS_HW_PTE_YOUNG
+
+config LRU_GEN_PROCFS_CTRL
+	bool "Move lru_gen files from debugfs to procfs"
+	depends on LRU_GEN && PROC_FS
+	help
+	  Move lru_gen management from debugfs to procfs (/proc/lru_gen).
+	  This production-ready feature provides critical memory reclaim
+	  prediction and control. It is no longer experimental.
+	  The migration ensures availability in commercial products where
+	  debugfs may be disabled.
 # }
 
 config ARCH_SUPPORTS_PER_VMA_LOCK
