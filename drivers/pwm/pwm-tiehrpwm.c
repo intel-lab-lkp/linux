@@ -478,12 +478,19 @@ static int ehrpwm_pwm_probe(struct platform_device *pdev)
 	struct ehrpwm_pwm_chip *pc;
 	struct pwm_chip *chip;
 	struct clk *clk;
-	int ret;
+	int ret, ch_idx, ch_disable;
+	u16 aqcsfrc_reg, aqctla_reg, aqctlb_reg;
+	bool enabled_ch[TIEHRPWM_NUM_PWM_CHANNEL] = { false, false };
 
 	chip = devm_pwmchip_alloc(&pdev->dev, TIEHRPWM_NUM_PWM_CHANNEL, sizeof(*pc));
 	if (IS_ERR(chip))
 		return PTR_ERR(chip);
+
 	pc = to_ehrpwm_pwm_chip(chip);
+
+	pc->mmio_base = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(pc->mmio_base))
+		return PTR_ERR(pc->mmio_base);
 
 	clk = devm_clk_get(&pdev->dev, "fck");
 	if (IS_ERR(clk)) {
@@ -492,6 +499,22 @@ static int ehrpwm_pwm_probe(struct platform_device *pdev)
 			clk = devm_clk_get(pdev->dev.parent, "fck");
 		}
 	}
+
+	/*
+	 * Best-effort snapshot of AQCSFRC/AQCTLx before touching clocks or
+	 * runtime PM. If the eHRPWM block is power-gated or its clock is
+	 * disabled these registers are expected to read as 0, which we
+	 * interpret as "channel not configured / disabled".
+	 */
+	aqcsfrc_reg = ehrpwm_read(pc->mmio_base, TIEHRPWM_AQCSFRC);
+	aqctla_reg = ehrpwm_read(pc->mmio_base, TIEHRPWM_AQCTLA);
+	aqctlb_reg = ehrpwm_read(pc->mmio_base, TIEHRPWM_AQCTLB);
+
+	if (aqctla_reg != 0 && !FIELD_GET(TIEHRPWM_AQCSFRC_CSFA_MASK, aqcsfrc_reg))
+		enabled_ch[0] = true;
+
+	if (aqctlb_reg != 0 && !FIELD_GET(TIEHRPWM_AQCSFRC_CSFB_MASK, aqcsfrc_reg))
+		enabled_ch[1] = true;
 
 	if (IS_ERR(clk))
 		return dev_err_probe(&pdev->dev, PTR_ERR(clk), "Failed to get fck\n");
@@ -504,10 +527,6 @@ static int ehrpwm_pwm_probe(struct platform_device *pdev)
 
 	chip->ops = &ehrpwm_pwm_ops;
 
-	pc->mmio_base = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(pc->mmio_base))
-		return PTR_ERR(pc->mmio_base);
-
 	/* Acquire tbclk for Time Base EHRPWM submodule */
 	pc->tbclk = devm_clk_get(&pdev->dev, "tbclk");
 	if (IS_ERR(pc->tbclk))
@@ -519,17 +538,67 @@ static int ehrpwm_pwm_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	/*
+	 * For channels that were already running when we probed, take one
+	 * tbclk enable per channel, so that later per-channel disable paths
+	 * cannot underflow the clock reference count.
+	 */
+	for (ch_idx = 0; ch_idx < TIEHRPWM_NUM_PWM_CHANNEL; ch_idx++) {
+		if (enabled_ch[ch_idx]) {
+			ret = clk_enable(pc->tbclk);
+			if (ret) {
+				dev_err_probe(&pdev->dev, ret,
+					      "clk_enable(tbclk) failed for ch %d\n",
+					      ch_idx);
+
+				for (ch_disable = 0; ch_disable < ch_idx; ch_disable++) {
+					if (enabled_ch[ch_disable])
+						clk_disable(pc->tbclk);
+				}
+
+				goto err_clk_unprepare;
+			}
+		}
+	}
+
 	ret = pwmchip_add(chip);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "pwmchip_add() failed: %d\n", ret);
-		goto err_clk_unprepare;
+		goto err_disable_tbclk;
 	}
 
 	platform_set_drvdata(pdev, chip);
 	pm_runtime_enable(&pdev->dev);
 
+	/*
+	 * Treat channels that were configured and not software-forced at probe
+	 * time as "pre-enabled": take a runtime PM reference so the eHRPWM block
+	 * stays powered while such channels exist. Consumers still get/put PM
+	 * on top of this bias via pwm_enable()/pwm_disable().
+	 */
+	for (ch_idx = 0; ch_idx < TIEHRPWM_NUM_PWM_CHANNEL; ch_idx++) {
+		if (enabled_ch[ch_idx]) {
+			ret = pm_runtime_get_sync(&pdev->dev);
+			if (ret < 0) {
+				for (ch_disable = 0; ch_disable <= ch_idx; ch_disable++) {
+					if (enabled_ch[ch_disable])
+						pm_runtime_put_noidle(&pdev->dev);
+				}
+
+				pwmchip_remove(chip);
+				pm_runtime_disable(&pdev->dev);
+				goto err_disable_tbclk;
+			}
+		}
+	}
+
 	return 0;
 
+err_disable_tbclk:
+	for (ch_idx = 0; ch_idx < TIEHRPWM_NUM_PWM_CHANNEL; ch_idx++) {
+		if (enabled_ch[ch_idx])
+			clk_disable(pc->tbclk);
+	}
 err_clk_unprepare:
 	clk_unprepare(pc->tbclk);
 
