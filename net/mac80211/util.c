@@ -326,7 +326,7 @@ static void __ieee80211_wake_txqs(struct ieee80211_sub_if_data *sdata, int ac)
 	struct ieee80211_vif *vif = &sdata->vif;
 	struct fq *fq = &local->fq;
 	struct ps_data *ps = NULL;
-	struct txq_info *txqi;
+	struct txq_info *to_wake[2] = {};
 	struct sta_info *sta;
 	int i;
 
@@ -345,6 +345,7 @@ static void __ieee80211_wake_txqs(struct ieee80211_sub_if_data *sdata, int ac)
 
 		for (i = 0; i < ARRAY_SIZE(sta->sta.txq); i++) {
 			struct ieee80211_txq *txq = sta->sta.txq[i];
+			struct txq_info *txqi;
 
 			if (!txq)
 				continue;
@@ -364,18 +365,34 @@ static void __ieee80211_wake_txqs(struct ieee80211_sub_if_data *sdata, int ac)
 		}
 	}
 
-	if (!vif->txq)
-		goto out;
+	if (vif->txq) {
+		struct txq_info *txqi;
 
-	txqi = to_txq_info(vif->txq);
+		txqi = to_txq_info(vif->txq);
 
-	if (!test_and_clear_bit(IEEE80211_TXQ_DIRTY, &txqi->flags) ||
-	    (ps && atomic_read(&ps->num_sta_ps)) || ac != vif->txq->ac)
-		goto out;
+		if (test_and_clear_bit(IEEE80211_TXQ_DIRTY, &txqi->flags) &&
+		    !(ps && atomic_read(&ps->num_sta_ps)) &&
+		    ac == vif->txq->ac)
+			to_wake[0] = txqi;
+	}
+
+	if (vif->txq_mgmt) {
+		struct txq_info *txqi;
+
+		txqi = to_txq_info(vif->txq_mgmt);
+
+		if (test_and_clear_bit(IEEE80211_TXQ_DIRTY, &txqi->flags) &&
+		    ac == vif->txq->ac)
+			to_wake[1] = txqi;
+	}
 
 	spin_unlock(&fq->lock);
 
-	drv_wake_tx_queue(local, txqi);
+	if (to_wake[0])
+		drv_wake_tx_queue(local, to_wake[0]);
+	if (to_wake[1])
+		drv_wake_tx_queue(local, to_wake[0]);
+
 	local_bh_enable();
 	return;
 out:
