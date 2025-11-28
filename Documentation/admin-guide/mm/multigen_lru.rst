@@ -161,3 +161,22 @@ cold pages because of the overestimation, it retries on the next
 server according to the ranking result obtained from the working set
 estimation step. This less forceful approach limits the impacts on the
 existing jobs.
+
+Procfs Migration
+================
+The multi-gen LRU control interface has been moved from debugfs to procfs
+via ``CONFIG_LRU_GEN_PROCFS_CTRL``:
+
+New Path
+--------
+- Control interface: ``/proc/lru_gen``
+- Replaces debugfs path: ``/sys/kernel/debug/lru_gen``
+
+Key Advantages
+--------------
+1. Production-ready availability (works when debugfs is not allowed)
+2. Maintains identical ABI to original debugfs interface
+3. Preserves all core functionality (working set estimation, proactive reclaim)
+4. Standardized location matching memory management conventions
+
+Note: Requires both ``CONFIG_PROC_FS`` and ``CONFIG_LRU_GEN``
