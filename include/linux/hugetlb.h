@@ -15,6 +15,7 @@
 #include <linux/gfp.h>
 #include <linux/userfaultfd_k.h>
 #include <linux/nodemask.h>
+#include <linux/cleanup.h>
 
 struct ctl_table;
 struct user_struct;
@@ -467,6 +468,13 @@ static inline void fixup_hugetlb_reservations(struct vm_area_struct *vma)
 static inline void hugetlb_split(struct vm_area_struct *vma, unsigned long addr) {}
 
 #endif /* !CONFIG_HUGETLB_PAGE */
+
+DEFINE_GUARD(hugetlb_vma_read, struct vm_area_struct *,
+	     hugetlb_vma_lock_read(_T), hugetlb_vma_unlock_read(_T))
+
+DEFINE_GUARD(hugetlb_vma_write, struct vm_area_struct *,
+	     hugetlb_vma_lock_write(_T), hugetlb_vma_unlock_write(_T))
+DEFINE_GUARD_COND(hugetlb_vma_write, _try, hugetlb_vma_trylock_write(_T))
 
 #ifndef pgd_write
 static inline int pgd_write(pgd_t pgd)
