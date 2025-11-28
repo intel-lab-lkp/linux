@@ -826,6 +826,36 @@ TRACE_EVENT(sched_wake_idle_without_ipi,
 	TP_printk("cpu=%d", __entry->cpu)
 );
 
+#ifdef CONFIG_SCHED_CORE
+/*
+ * Tracepoint for assigning cookies.
+ */
+TRACE_EVENT(sched_setcookie,
+
+	TP_PROTO(struct task_struct *tsk, unsigned long cookie),
+
+	TP_ARGS(tsk, cookie),
+
+	TP_STRUCT__entry(
+		__array(char, comm, TASK_COMM_LEN)
+		__field(pid_t, pid)
+		__field(unsigned long, oldcookie)
+		__field(unsigned long, newcookie)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, tsk->comm, TASK_COMM_LEN);
+		__entry->pid		= tsk->pid;
+		__entry->oldcookie      = tsk->core_cookie;
+		__entry->newcookie      = cookie;
+	),
+
+	TP_printk("comm=%s pid=%d oldcookie=%lx newcookie=%lx",
+			__entry->comm, __entry->pid,
+			__entry->oldcookie, __entry->newcookie)
+);
+#endif
+
 /*
  * Following tracepoints are not exported in tracefs and provide hooking
  * mechanisms only for testing and debugging purposes.

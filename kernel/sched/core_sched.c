@@ -73,6 +73,7 @@ static unsigned long sched_core_update_cookie(struct task_struct *p,
 		sched_core_dequeue(rq, p, DEQUEUE_SAVE);
 
 	old_cookie = p->core_cookie;
+	trace_sched_setcookie(p, cookie);
 	p->core_cookie = cookie;
 
 	/*
