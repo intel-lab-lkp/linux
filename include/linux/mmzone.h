@@ -138,6 +138,7 @@ extern int page_group_by_mobility_disabled;
 struct free_area {
 	struct list_head	free_list[MIGRATE_TYPES];
 	unsigned long		nr_free;
+	unsigned long		mt_nr_free[MIGRATE_TYPES];
 };
 
 struct pglist_data;
