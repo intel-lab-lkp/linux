@@ -6,7 +6,7 @@
 #include <linux/scatterlist.h>
 #include <linux/types.h>
 
-#define QAT_MAX_BUFF_DESC	4
+#define QAT_MAX_BUFF_DESC	32
 
 struct qat_alg_buf {
 	u32 len;
