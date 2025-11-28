@@ -56,7 +56,7 @@
 **--on-threshold** *action*
 
         Defines an action to be executed when tracing is stopped on a latency threshold
-        specified by |threshold|.
+        specified by the threshold value.
 
         Multiple --on-threshold actions may be specified, and they will be executed in
         the order they are provided. If any action fails, subsequent actions in the list
@@ -85,17 +85,17 @@
 
         Example:
 
-        $ rtla |tool| |thresharg| 20 --on-threshold trace
-        --on-threshold shell,command="grep ipi_send |tracer|\_trace.txt"
+        $ rtla <tool> <threshold-option> 20 --on-threshold trace
+        --on-threshold shell,command="grep ipi_send <tracer>\_trace.txt"
         --on-threshold signal,num=2,pid=parent
 
-        This will save a trace with the default filename "|tracer|\_trace.txt", print its
+        This will save a trace with the default filename "<tracer>\_trace.txt", print its
         lines that contain the text "ipi_send" on standard output, and send signal 2
         (SIGINT) to the parent process.
 
         Performance Considerations:
 
-        |actionsperf|
+        Note: Executing actions during tracing may introduce additional performance overhead depending on system load, system configuration, and the number of actions triggered.
 
 **--on-end** *action*
 
@@ -110,7 +110,7 @@
 
         Example:
 
-        $ rtla |tool| -d 5s --on-end trace
+        $ rtla <tool> -d 5s --on-end trace
 
         This runs rtla with the default options, and saves trace output at the end.
 
