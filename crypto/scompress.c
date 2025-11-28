@@ -45,6 +45,46 @@ static cpumask_t scomp_scratch_want;
 static void scomp_scratch_workfn(struct work_struct *work);
 static DECLARE_WORK(scomp_scratch_work, scomp_scratch_workfn);
 
+static int scomp_no_setparam(struct crypto_scomp *tfm, const u8 *param,
+			     unsigned int len)
+{
+	return -ENOSYS;
+}
+
+static bool crypto_scomp_alg_has_setparam(struct scomp_alg *alg)
+{
+	return alg->setparam != scomp_no_setparam;
+}
+
+static bool crypto_scomp_alg_needs_param(struct scomp_alg *alg)
+{
+	return crypto_scomp_alg_has_setparam(alg) &&
+	       !(alg->base.cra_flags & CRYPTO_ALG_OPTIONAL_KEY);
+}
+
+static void scomp_set_need_param(struct crypto_scomp *tfm,
+				 struct scomp_alg *alg)
+{
+	if (crypto_scomp_alg_needs_param(alg))
+		crypto_scomp_set_flags(tfm, CRYPTO_TFM_NEED_KEY);
+}
+
+int crypto_scomp_setparam(struct crypto_scomp *tfm, const u8 *param,
+			  unsigned int len)
+{
+	struct scomp_alg *scomp = crypto_scomp_alg(tfm);
+	int err;
+
+	err = scomp->setparam(tfm, param, len);
+	if (unlikely(err)) {
+		scomp_set_need_param(tfm, scomp);
+		return err;
+	}
+
+	crypto_scomp_clear_flags(tfm, CRYPTO_TFM_NEED_KEY);
+	return 0;
+}
+
 static int __maybe_unused crypto_scomp_report(
 	struct sk_buff *skb, struct crypto_alg *alg)
 {
@@ -121,8 +161,11 @@ static int crypto_scomp_alloc_scratches(void)
 
 static int crypto_scomp_init_tfm(struct crypto_tfm *tfm)
 {
-	struct scomp_alg *alg = crypto_scomp_alg(__crypto_scomp_tfm(tfm));
+	struct crypto_scomp *comp = __crypto_scomp_tfm(tfm);
+	struct scomp_alg *alg = crypto_scomp_alg(comp);
 	int ret = 0;
+
+	scomp_set_need_param(comp, alg);
 
 	mutex_lock(&scomp_lock);
 	ret = crypto_acomp_alloc_streams(&alg->streams);
@@ -356,6 +399,9 @@ static void scomp_prepare_alg(struct scomp_alg *alg)
 	comp_prepare_alg(&alg->calg);
 
 	base->cra_flags |= CRYPTO_ALG_REQ_VIRT;
+
+	if (!alg->setparam)
+		alg->setparam = scomp_no_setparam;
 }
 
 int crypto_register_scomp(struct scomp_alg *alg)
