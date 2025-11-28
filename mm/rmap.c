@@ -2535,15 +2535,29 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 			 * pte. do_swap_page() will wait until the migration
 			 * pte is removed and then restart fault handling.
 			 */
-			if (writable)
-				entry = make_writable_migration_entry(
-							page_to_pfn(subpage));
-			else if (anon_exclusive)
-				entry = make_readable_exclusive_migration_entry(
-							page_to_pfn(subpage));
-			else
-				entry = make_readable_migration_entry(
-							page_to_pfn(subpage));
+			if (writable) {
+				if (is_device_private_page(subpage))
+					entry = make_writable_migration_device_private_entry(
+								page_to_pfn(subpage));
+				else
+					entry = make_writable_migration_entry(
+								page_to_pfn(subpage));
+			} else if (anon_exclusive) {
+				if (is_device_private_page(subpage))
+					entry = make_device_migration_readable_exclusive_migration_entry(
+								page_to_pfn(subpage));
+				else
+					entry = make_readable_exclusive_migration_entry(
+								page_to_pfn(subpage));
+			} else {
+				if (is_device_private_page(subpage))
+					entry = make_readable_migration_device_private_entry(
+								page_to_pfn(subpage));
+				else
+					entry = make_readable_migration_entry(
+								page_to_pfn(subpage));
+			}
+
 			if (likely(pte_present(pteval))) {
 				if (pte_young(pteval))
 					entry = make_migration_entry_young(entry);

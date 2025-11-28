@@ -235,15 +235,28 @@ again:
 				folio_mark_dirty(folio);
 
 			/* Setup special migration page table entry */
-			if (mpfn & MIGRATE_PFN_WRITE)
-				entry = make_writable_migration_entry(
-							page_to_pfn(page));
-			else if (anon_exclusive)
-				entry = make_readable_exclusive_migration_entry(
-							page_to_pfn(page));
-			else
-				entry = make_readable_migration_entry(
-							page_to_pfn(page));
+			if (mpfn & MIGRATE_PFN_WRITE) {
+				if (is_device_private_page(page))
+					entry = make_writable_migration_device_private_entry(
+								page_to_pfn(page));
+				else
+					entry = make_writable_migration_entry(
+								page_to_pfn(page));
+			} else if (anon_exclusive) {
+				if (is_device_private_page(page))
+					entry = make_device_migration_readable_exclusive_migration_entry(
+								page_to_pfn(page));
+				else
+					entry = make_readable_exclusive_migration_entry(
+								page_to_pfn(page));
+			} else {
+				if (is_device_private_page(page))
+					entry = make_readable_migration_device_private_entry(
+								page_to_pfn(page));
+				else
+					entry = make_readable_migration_entry(
+								page_to_pfn(page));
+			}
 			if (pte_present(pte)) {
 				if (pte_young(pte))
 					entry = make_migration_entry_young(entry);

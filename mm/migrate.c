@@ -495,7 +495,7 @@ void migration_entry_wait(struct mm_struct *mm, pmd_t *pmd,
 		goto out;
 
 	entry = pte_to_swp_entry(pte);
-	if (!is_migration_entry(entry))
+	if (!(is_migration_entry(entry)))
 		goto out;
 
 	migration_entry_wait_on_locked(entry, ptl);

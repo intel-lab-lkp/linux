@@ -196,6 +196,43 @@ static inline bool is_device_exclusive_entry(swp_entry_t entry)
 	return swp_type(entry) == SWP_DEVICE_EXCLUSIVE;
 }
 
+static inline swp_entry_t make_readable_migration_device_private_entry(pgoff_t offset)
+{
+	return swp_entry(SWP_MIGRATION_DEVICE_READ, offset);
+}
+
+static inline swp_entry_t make_writable_migration_device_private_entry(pgoff_t offset)
+{
+	return swp_entry(SWP_MIGRATION_DEVICE_WRITE, offset);
+}
+
+static inline bool is_device_private_migration_entry(swp_entry_t entry)
+{
+	return unlikely(swp_type(entry) == SWP_MIGRATION_DEVICE_READ ||
+			swp_type(entry) == SWP_MIGRATION_DEVICE_READ_EXCLUSIVE ||
+			swp_type(entry) == SWP_MIGRATION_DEVICE_WRITE);
+}
+
+static inline bool is_readable_device_migration_private_entry(swp_entry_t entry)
+{
+	return unlikely(swp_type(entry) == SWP_MIGRATION_DEVICE_READ);
+}
+
+static inline bool is_writable_device_migration_private_entry(swp_entry_t entry)
+{
+	return unlikely(swp_type(entry) == SWP_MIGRATION_DEVICE_WRITE);
+}
+
+static inline swp_entry_t make_device_migration_readable_exclusive_migration_entry(pgoff_t offset)
+{
+	return swp_entry(SWP_MIGRATION_DEVICE_READ_EXCLUSIVE, offset);
+}
+
+static inline bool is_device_migration_readable_exclusive_entry(swp_entry_t entry)
+{
+	return swp_type(entry) == SWP_MIGRATION_DEVICE_READ_EXCLUSIVE;
+}
+
 #else /* CONFIG_DEVICE_PRIVATE */
 static inline swp_entry_t make_readable_device_private_entry(pgoff_t offset)
 {
@@ -217,12 +254,47 @@ static inline bool is_writable_device_private_entry(swp_entry_t entry)
 	return false;
 }
 
+static inline bool is_readable_device_migration_private_entry(swp_entry_t entry)
+{
+	return false;
+}
+
 static inline swp_entry_t make_device_exclusive_entry(pgoff_t offset)
 {
 	return swp_entry(0, 0);
 }
 
 static inline bool is_device_exclusive_entry(swp_entry_t entry)
+{
+	return false;
+}
+
+static inline swp_entry_t make_readable_migration_device_private_entry(pgoff_t offset)
+{
+	return swp_entry(0, 0);
+}
+
+static inline swp_entry_t make_writable_migration_device_private_entry(pgoff_t offset)
+{
+	return swp_entry(0, 0);
+}
+
+static inline bool is_device_private_migration_entry(swp_entry_t entry)
+{
+	return false;
+}
+
+static inline bool is_writable_device_migration_private_entry(swp_entry_t entry)
+{
+	return false;
+}
+
+static inline swp_entry_t make_device_migration_readable_exclusive_migration_entry(pgoff_t offset)
+{
+	return swp_entry(0, 0);
+}
+
+static inline bool is_device_migration_readable_exclusive_entry(swp_entry_t entry)
 {
 	return false;
 }
@@ -234,22 +306,26 @@ static inline int is_migration_entry(swp_entry_t entry)
 {
 	return unlikely(swp_type(entry) == SWP_MIGRATION_READ ||
 			swp_type(entry) == SWP_MIGRATION_READ_EXCLUSIVE ||
-			swp_type(entry) == SWP_MIGRATION_WRITE);
+			swp_type(entry) == SWP_MIGRATION_WRITE ||
+			is_device_private_migration_entry(entry));
 }
 
 static inline int is_writable_migration_entry(swp_entry_t entry)
 {
-	return unlikely(swp_type(entry) == SWP_MIGRATION_WRITE);
+	return unlikely(swp_type(entry) == SWP_MIGRATION_WRITE ||
+			is_writable_device_migration_private_entry(entry));
 }
 
 static inline int is_readable_migration_entry(swp_entry_t entry)
 {
-	return unlikely(swp_type(entry) == SWP_MIGRATION_READ);
+	return unlikely(swp_type(entry) == SWP_MIGRATION_READ ||
+			is_readable_device_migration_private_entry(entry));
 }
 
 static inline int is_readable_exclusive_migration_entry(swp_entry_t entry)
 {
-	return unlikely(swp_type(entry) == SWP_MIGRATION_READ_EXCLUSIVE);
+	return unlikely(swp_type(entry) == SWP_MIGRATION_READ_EXCLUSIVE ||
+			is_device_migration_readable_exclusive_entry(entry));
 }
 
 static inline swp_entry_t make_readable_migration_entry(pgoff_t offset)
@@ -525,7 +601,8 @@ static inline bool is_pfn_swap_entry(swp_entry_t entry)
 	BUILD_BUG_ON(SWP_TYPE_SHIFT < SWP_PFN_BITS);
 
 	return is_migration_entry(entry) || is_device_private_entry(entry) ||
-	       is_device_exclusive_entry(entry) || is_hwpoison_entry(entry);
+	       is_device_exclusive_entry(entry) || is_hwpoison_entry(entry) ||
+	       is_device_private_migration_entry(entry);
 }
 
 struct page_vma_mapped_walk;
