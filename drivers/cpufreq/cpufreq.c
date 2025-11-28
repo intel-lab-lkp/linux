@@ -2821,18 +2821,13 @@ static int cpufreq_boost_trigger_state(int state)
 
 		ret = policy_set_boost(policy, state);
 		if (ret)
-			goto err_reset_state;
+			break;
 	}
 
-	if (ret)
-		goto err_reset_state;
-
 	cpus_read_unlock();
 
-	return 0;
-
-err_reset_state:
-	cpus_read_unlock();
+	if (!ret)
+		return 0;
 
 	write_lock_irqsave(&cpufreq_driver_lock, flags);
 	cpufreq_driver->boost_enabled = !state;
