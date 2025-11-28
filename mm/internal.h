@@ -954,7 +954,7 @@ int find_suitable_fallback(struct free_area *area, unsigned int order,
 
 static inline bool free_area_empty(struct free_area *area, int migratetype)
 {
-	return list_empty(&area->free_list[migratetype]);
+	return !READ_ONCE(area->mt_nr_free[migratetype]);
 }
 
 /* mm/util.c */
