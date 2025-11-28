@@ -264,8 +264,7 @@ static int ehrpwm_pwm_config(struct pwm_chip *chip, struct pwm_device *pwm,
 	 * same period register for multiple channels.
 	 */
 	for (i = 0; i < TIEHRPWM_NUM_PWM_CHANNEL; i++) {
-		if (pc->period_cycles[i] &&
-				(pc->period_cycles[i] != period_cycles)) {
+		if (pc->period_cycles[i] && pc->period_cycles[i] != period_cycles) {
 			/*
 			 * Allow channel to reconfigure period if no other
 			 * channels being configured.
