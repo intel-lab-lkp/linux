@@ -377,9 +377,10 @@ void sctp_generate_heartbeat_event(struct timer_list *t)
 	if (sock_owned_by_user(sk)) {
 		pr_debug("%s: sock is busy\n", __func__);
 
-		/* Try again later.  */
-		if (!mod_timer(&transport->hb_timer, jiffies + (HZ/20)))
-			sctp_transport_hold(transport);
+		/* Always hold a reference when rescheduling inside timer callback
+		* because this callback will put the reference at the end */
+		sctp_transport_hold(transport);
+		mod_timer(&transport->hb_timer, jiffies + (HZ/20));
 		goto out_unlock;
 	}
 
@@ -388,8 +389,10 @@ void sctp_generate_heartbeat_event(struct timer_list *t)
 	timeout = sctp_transport_timeout(transport);
 	if (elapsed < timeout) {
 		elapsed = timeout - elapsed;
-		if (!mod_timer(&transport->hb_timer, jiffies + elapsed))
-			sctp_transport_hold(transport);
+		/* Always hold a reference when rescheduling inside timer callback
+		* because this callback will put the reference at the end*/
+		sctp_transport_hold(transport);
+		mod_timer(&transport->hb_timer, jiffies + elapsed);
 		goto out_unlock;
 	}
 
