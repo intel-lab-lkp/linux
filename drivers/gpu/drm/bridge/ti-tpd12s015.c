@@ -138,7 +138,7 @@ static int tpd12s015_probe(struct platform_device *pdev)
 	if (!node)
 		return -ENODEV;
 
-	tpd->next_bridge = of_drm_find_bridge(node);
+	tpd->next_bridge = devm_of_drm_get_bridge(&pdev->dev, node);
 	of_node_put(node);
 
 	if (!tpd->next_bridge)
