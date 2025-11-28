@@ -7,6 +7,7 @@
 #include <linux/netdevice.h>
 #include <linux/wait.h>
 #include <linux/refcount.h>
+#include <linux/cleanup.h>
 #include <uapi/linux/rtnetlink.h>
 
 extern int rtnetlink_send(struct sk_buff *skb, struct net *net, u32 pid, u32 group, int echo);
@@ -157,6 +158,16 @@ static inline void ASSERT_RTNL_NET(struct net *net)
 #define rcu_replace_pointer_rtnl_net(net, rp, p)	\
 	rcu_replace_pointer_rtnl(rp, p)
 #endif
+
+DEFINE_LOCK_GUARD_0(rtnl, rtnl_lock(), rtnl_unlock())
+
+DEFINE_GUARD(__rtnl_net, struct net *, __rtnl_net_lock(_T),
+	     __rtnl_net_unlock(_T))
+
+DEFINE_GUARD(rtnl_net, struct net *, rtnl_net_lock(_T),
+	     rtnl_net_unlock(_T))
+DEFINE_GUARD_COND(rtnl_net, _try, rtnl_net_trylock(_T))
+DEFINE_GUARD_COND(rtnl_net, _kill, rtnl_net_lock_killable(_T), _RET == 0)
 
 static inline struct netdev_queue *dev_ingress_queue(struct net_device *dev)
 {
