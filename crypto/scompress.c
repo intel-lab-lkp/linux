@@ -45,15 +45,10 @@ static cpumask_t scomp_scratch_want;
 static void scomp_scratch_workfn(struct work_struct *work);
 static DECLARE_WORK(scomp_scratch_work, scomp_scratch_workfn);
 
-static int scomp_no_setparam(struct crypto_scomp *tfm, const u8 *param,
-			     unsigned int len)
+int scomp_no_setparam(struct crypto_scomp *tfm, const u8 *param,
+		      unsigned int len)
 {
 	return -ENOSYS;
-}
-
-static bool crypto_scomp_alg_has_setparam(struct scomp_alg *alg)
-{
-	return alg->setparam != scomp_no_setparam;
 }
 
 static bool crypto_scomp_alg_needs_param(struct scomp_alg *alg)

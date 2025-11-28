@@ -186,6 +186,21 @@ static inline struct comp_alg_common *crypto_comp_alg_common(
 	return __crypto_comp_alg_common(crypto_acomp_tfm(tfm)->__crt_alg);
 }
 
+static inline u32 crypto_acomp_get_flags(struct crypto_acomp *tfm)
+{
+	return crypto_tfm_get_flags(crypto_acomp_tfm(tfm));
+}
+
+static inline void crypto_acomp_set_flags(struct crypto_acomp *tfm, u32 flags)
+{
+	crypto_tfm_set_flags(crypto_acomp_tfm(tfm), flags);
+}
+
+static inline void crypto_acomp_clear_flags(struct crypto_acomp *tfm, u32 flags)
+{
+	crypto_tfm_clear_flags(crypto_acomp_tfm(tfm), flags);
+}
+
 static inline unsigned int crypto_acomp_reqsize(struct crypto_acomp *tfm)
 {
 	return tfm->reqsize;
@@ -553,5 +568,8 @@ static inline struct acomp_req *acomp_request_on_stack_init(
 
 struct acomp_req *acomp_request_clone(struct acomp_req *req,
 				      size_t total, gfp_t gfp);
+
+int crypto_acomp_setparam(struct crypto_acomp *tfm,
+			  const u8 *param, unsigned int len);
 
 #endif
