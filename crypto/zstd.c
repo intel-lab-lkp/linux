@@ -31,7 +31,7 @@ struct zstd_ctx {
 
 static DEFINE_MUTEX(zstd_stream_lock);
 
-static void *zstd_alloc_stream(void)
+static void *zstd_alloc_stream(int node)
 {
 	zstd_parameters params;
 	struct zstd_ctx *ctx;
@@ -44,7 +44,7 @@ static void *zstd_alloc_stream(void)
 	if (!wksp_size)
 		return ERR_PTR(-EINVAL);
 
-	ctx = kvmalloc(struct_size(ctx, wksp, wksp_size), GFP_KERNEL);
+	ctx = kvmalloc_node(struct_size(ctx, wksp, wksp_size), GFP_KERNEL, node);
 	if (!ctx)
 		return ERR_PTR(-ENOMEM);
 

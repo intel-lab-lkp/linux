@@ -438,12 +438,14 @@ static void acomp_stream_workfn(struct work_struct *work)
 	for_each_cpu(cpu, &s->stream_want) {
 		struct crypto_acomp_stream *ps;
 		void *ctx;
+		int node;
 
 		ps = per_cpu_ptr(streams, cpu);
 		if (ps->ctx)
 			continue;
 
-		ctx = s->alloc_ctx();
+		node = cpu_to_node(cpu);
+		ctx = s->alloc_ctx(node);
 		if (IS_ERR(ctx))
 			break;
 
@@ -487,6 +489,7 @@ int crypto_acomp_alloc_streams(struct crypto_acomp_streams *s)
 	struct crypto_acomp_stream *ps;
 	unsigned int i;
 	void *ctx;
+	int node;
 
 	if (s->streams)
 		return 0;
@@ -495,13 +498,15 @@ int crypto_acomp_alloc_streams(struct crypto_acomp_streams *s)
 	if (!streams)
 		return -ENOMEM;
 
-	ctx = s->alloc_ctx();
+	i = cpumask_first(cpu_possible_mask);
+	node = cpu_to_node(i);
+
+	ctx = s->alloc_ctx(node);
 	if (IS_ERR(ctx)) {
 		free_percpu(streams);
 		return PTR_ERR(ctx);
 	}
 
-	i = cpumask_first(cpu_possible_mask);
 	ps = per_cpu_ptr(streams, i);
 	ps->ctx = ctx;
 

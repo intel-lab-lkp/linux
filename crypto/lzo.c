@@ -9,11 +9,11 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 
-static void *lzo_alloc_ctx(void)
+static void *lzo_alloc_ctx(int node)
 {
 	void *ctx;
 
-	ctx = kvmalloc(LZO1X_MEM_COMPRESS, GFP_KERNEL);
+	ctx = kvmalloc_node(LZO1X_MEM_COMPRESS, GFP_KERNEL, node);
 	if (!ctx)
 		return ERR_PTR(-ENOMEM);
 

@@ -12,11 +12,11 @@
 #include <linux/lz4.h>
 #include <crypto/internal/scompress.h>
 
-static void *lz4_alloc_ctx(void)
+static void *lz4_alloc_ctx(int node)
 {
 	void *ctx;
 
-	ctx = vmalloc(LZ4_MEM_COMPRESS);
+	ctx = vmalloc_node(LZ4_MEM_COMPRESS, node);
 	if (!ctx)
 		return ERR_PTR(-ENOMEM);
 

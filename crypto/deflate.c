@@ -33,14 +33,14 @@ struct deflate_stream {
 
 static DEFINE_MUTEX(deflate_stream_lock);
 
-static void *deflate_alloc_stream(void)
+static void *deflate_alloc_stream(int node)
 {
 	size_t size = max(zlib_inflate_workspacesize(),
 			  zlib_deflate_workspacesize(MAX_WBITS,
 						     DEFLATE_DEF_MEMLEVEL));
 	struct deflate_stream *ctx;
 
-	ctx = kvmalloc(struct_size(ctx, workspace, size), GFP_KERNEL);
+	ctx = kvmalloc_node(struct_size(ctx, workspace, size), GFP_KERNEL, node);
 	if (!ctx)
 		return ERR_PTR(-ENOMEM);
 

@@ -23,11 +23,11 @@
 #include <linux/module.h>
 #include <linux/sw842.h>
 
-static void *crypto842_alloc_ctx(void)
+static void *crypto842_alloc_ctx(int node)
 {
 	void *ctx;
 
-	ctx = kmalloc(SW842_MEM_COMPRESS, GFP_KERNEL);
+	ctx = kmalloc_node(SW842_MEM_COMPRESS, GFP_KERNEL, node);
 	if (!ctx)
 		return ERR_PTR(-ENOMEM);
 

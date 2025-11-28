@@ -10,11 +10,11 @@
 #include <linux/vmalloc.h>
 #include <linux/lz4.h>
 
-static void *lz4hc_alloc_ctx(void)
+static void *lz4hc_alloc_ctx(int node)
 {
 	void *ctx;
 
-	ctx = vmalloc(LZ4HC_MEM_COMPRESS);
+	ctx = vmalloc_node(LZ4HC_MEM_COMPRESS, node);
 	if (!ctx)
 		return ERR_PTR(-ENOMEM);
 
