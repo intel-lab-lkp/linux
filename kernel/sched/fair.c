@@ -671,7 +671,11 @@ u64 avg_vruntime(struct cfs_rq *cfs_rq)
 		avg = div_s64(avg, load);
 	}
 
-	return cfs_rq->min_vruntime + avg;
+	avg += cfs_rq->min_vruntime;
+	if ((s64)(cfs_rq->forward_avg_vruntime - avg) < 0)
+		cfs_rq->forward_avg_vruntime = avg;
+
+	return cfs_rq->forward_avg_vruntime;
 }
 
 /*
@@ -724,6 +728,9 @@ static int vruntime_eligible(struct cfs_rq *cfs_rq, u64 vruntime)
 	struct sched_entity *curr = cfs_rq->curr;
 	s64 avg = cfs_rq->avg_vruntime;
 	long load = cfs_rq->avg_load;
+
+	if ((s64)(cfs_rq->forward_avg_vruntime - vruntime) >= 0)
+		return 1;
 
 	if (curr && curr->on_rq) {
 		unsigned long weight = scale_load_down(curr->load.weight);
@@ -5139,11 +5146,12 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	 *
 	 * EEVDF: placement strategy #1 / #2
 	 */
-	if (sched_feat(PLACE_LAG) && cfs_rq->nr_queued && se->vlag) {
+	if (sched_feat(PLACE_LAG) && cfs_rq->nr_queued && se->vlag)
+		lag = se->vlag;
+	/* positive lag does not evaporate with forward_avg_vruntime */
+	if (lag < 0) {
 		struct sched_entity *curr = cfs_rq->curr;
 		unsigned long load;
-
-		lag = se->vlag;
 
 		/*
 		 * If we want to place a task and preserve lag, we have to

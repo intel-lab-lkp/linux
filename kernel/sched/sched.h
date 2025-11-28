@@ -681,6 +681,7 @@ struct cfs_rq {
 
 	s64			avg_vruntime;
 	u64			avg_load;
+	u64			forward_avg_vruntime;
 
 	u64			min_vruntime;
 #ifdef CONFIG_SCHED_CORE
