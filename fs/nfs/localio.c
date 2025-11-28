@@ -830,7 +830,7 @@ static void nfs_local_call_write(struct work_struct *work)
 	current->flags |= PF_LOCAL_THROTTLE | PF_MEMALLOC_NOIO;
 
 	scoped_with_creds(filp->f_cred) {
-	file_start_write(filp);
+		file_start_write(filp);
 		n_iters = atomic_read(&iocb->n_iters);
 		for (int i = 0; i < n_iters ; i++) {
 			if (iocb->iter_is_dio_aligned[i]) {
