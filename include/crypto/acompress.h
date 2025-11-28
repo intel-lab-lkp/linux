@@ -15,6 +15,7 @@
 #include <linux/container_of.h>
 #include <linux/crypto.h>
 #include <linux/err.h>
+#include <linux/limits.h>
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
 #include <linux/spinlock_types.h>
@@ -67,6 +68,14 @@ struct acomp_req_chain {
 		struct folio *dfolio;
 	};
 	u32 flags;
+};
+
+#define CRYPTO_COMP_NO_LEVEL		INT_MIN
+
+enum {
+	CRYPTO_COMP_PARAM_UNSPEC,
+	CRYPTO_COMP_PARAM_LEVEL,
+	CRYPTO_COMP_PARAM_LAST,
 };
 
 /**

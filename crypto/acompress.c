@@ -15,6 +15,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/percpu.h>
+#include <linux/rtnetlink.h>
 #include <linux/scatterlist.h>
 #include <linux/sched.h>
 #include <linux/seq_file.h>
@@ -650,6 +651,54 @@ struct acomp_req *acomp_request_clone(struct acomp_req *req,
 	return nreq;
 }
 EXPORT_SYMBOL_GPL(acomp_request_clone);
+
+int crypto_acomp_getparams(struct crypto_acomp_params *params, const u8 *raw,
+			   unsigned int len)
+{
+	struct rtattr *rta = (struct rtattr *)raw;
+	void *dict;
+
+	crypto_acomp_putparams(params);
+	params->level = CRYPTO_COMP_NO_LEVEL;
+
+	for (;; rta = RTA_NEXT(rta, len)) {
+		if (!RTA_OK(rta, len))
+			return -EINVAL;
+
+		if (rta->rta_type == CRYPTO_COMP_PARAM_LAST)
+			break;
+
+		switch (rta->rta_type) {
+		case CRYPTO_COMP_PARAM_LEVEL:
+			if (RTA_PAYLOAD(rta) != 4)
+				return -EINVAL;
+			memcpy(&params->level, RTA_DATA(rta), 4);
+			break;
+		default:
+			return -EINVAL;
+		}
+	}
+
+	dict = RTA_NEXT(rta, len);
+	if (!len)
+		return 0;
+
+	params->dict = kvmemdup(dict, len, GFP_KERNEL);
+	if (!params->dict)
+		return -ENOMEM;
+	params->dict_sz = len;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(crypto_acomp_getparams);
+
+void crypto_acomp_putparams(struct crypto_acomp_params *params)
+{
+	kvfree(params->dict);
+	params->dict = NULL;
+	params->dict_sz = 0;
+}
+EXPORT_SYMBOL_GPL(crypto_acomp_putparams);
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Asynchronous compression type");

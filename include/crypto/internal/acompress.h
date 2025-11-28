@@ -104,6 +104,12 @@ struct acomp_walk {
 	int flags;
 };
 
+struct crypto_acomp_params {
+	int level;
+	unsigned int dict_sz;
+	void *dict;
+};
+
 /*
  * Transform internal helpers.
  */
@@ -243,5 +249,9 @@ static inline struct acomp_req *acomp_fbreq_on_stack_init(
 
 	return req;
 }
+
+int crypto_acomp_getparams(struct crypto_acomp_params *params, const u8 *raw,
+			   unsigned int len);
+void crypto_acomp_putparams(struct crypto_acomp_params *params);
 
 #endif
