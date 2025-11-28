@@ -25,16 +25,16 @@
 #define TIEHRPWM_TBCTL_PRDLD_SHDW		FIELD_PREP(TIEHRPWM_TBCTL_PRDLD, 0)
 #define TIEHRPWM_TBCTL_PRDLD_IMDT		FIELD_PREP(TIEHRPWM_TBCTL_PRDLD, 1)
 
-#define TIEHRPWM_TBCTL_CLKDIV_MASK		GENMASK(12, 7)
+#define TIEHRPWM_TBCTL_CLKDIV_MASK		GENMASK(12, 10)
+#define TIEHRPWM_TBCTL_HSPCLKDIV_MASK		GENMASK(9, 7)
+#define TIEHRPWM_TBCTL_PRESCALE_MASK		(TIEHRPWM_TBCTL_CLKDIV_MASK | \
+						TIEHRPWM_TBCTL_HSPCLKDIV_MASK)
 
 #define TIEHRPWM_TBCTL_CTRMODE_MASK		GENMASK(1, 0)
 #define TIEHRPWM_TBCTL_CTRMODE_UP		FIELD_PREP(TIEHRPWM_TBCTL_CTRMODE_MASK, 0)
 #define TIEHRPWM_TBCTL_CTRMODE_DOWN		FIELD_PREP(TIEHRPWM_TBCTL_CTRMODE_MASK, 1)
 #define TIEHRPWM_TBCTL_CTRMODE_UPDOWN		FIELD_PREP(TIEHRPWM_TBCTL_CTRMODE_MASK, 2)
 #define TIEHRPWM_TBCTL_CTRMODE_FREEZE		FIELD_PREP(TIEHRPWM_TBCTL_CTRMODE_MASK, 3)
-
-#define TIEHRPWM_TBCTL_HSPCLKDIV_SHIFT		7
-#define TIEHRPWM_TBCTL_CLKDIV_SHIFT		10
 
 #define TIEHRPWM_CLKDIV_MAX			7
 #define TIEHRPWM_HSPCLKDIV_MAX			7
@@ -174,8 +174,8 @@ static int set_prescale_div(unsigned long rqst_prescaler, u16 *prescale_div,
 			*prescale_div = (1 << clkdiv) *
 					(hspclkdiv ? (hspclkdiv * 2) : 1);
 			if (*prescale_div >= rqst_prescaler) {
-				*tb_clk_div = (clkdiv << TIEHRPWM_TBCTL_CLKDIV_SHIFT) |
-					(hspclkdiv << TIEHRPWM_TBCTL_HSPCLKDIV_SHIFT);
+				*tb_clk_div = FIELD_PREP(TIEHRPWM_TBCTL_CLKDIV_MASK, clkdiv) |
+					FIELD_PREP(TIEHRPWM_TBCTL_HSPCLKDIV_MASK, hspclkdiv);
 				return 0;
 			}
 		}
@@ -252,7 +252,7 @@ static int ehrpwm_pwm_config(struct pwm_chip *chip, struct pwm_device *pwm,
 	pm_runtime_get_sync(pwmchip_parent(chip));
 
 	/* Update clock prescaler values */
-	ehrpwm_modify(pc->mmio_base, TIEHRPWM_TBCTL, TIEHRPWM_TBCTL_CLKDIV_MASK, tb_divval);
+	ehrpwm_modify(pc->mmio_base, TIEHRPWM_TBCTL,  TIEHRPWM_TBCTL_PRESCALE_MASK, tb_divval);
 
 	if (pwm->hwpwm == 1) {
 		/* Channel 1 configured with compare B register */
