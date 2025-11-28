@@ -156,6 +156,7 @@ int mdio_device_register_reset(struct mdio_device *mdiodev)
 
 	return 0;
 }
+EXPORT_SYMBOL_NS_GPL(mdio_device_register_reset, "NET_PHY_CORE_ONLY");
 
 /**
  * mdio_device_unregister_reset - uninitialize the reset properties of
@@ -171,6 +172,7 @@ void mdio_device_unregister_reset(struct mdio_device *mdiodev)
 	mdiodev->reset_assert_delay = 0;
 	mdiodev->reset_deassert_delay = 0;
 }
+EXPORT_SYMBOL_NS_GPL(mdio_device_unregister_reset, "NET_PHY_CORE_ONLY");
 
 void mdio_device_reset(struct mdio_device *mdiodev, int value)
 {

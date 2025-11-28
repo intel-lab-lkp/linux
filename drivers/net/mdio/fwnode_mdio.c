@@ -13,9 +13,12 @@
 #include <linux/phy.h>
 #include <linux/pse-pd/pse.h>
 
+#include "../phy/mdio-private.h"
+
 MODULE_AUTHOR("Calvin Johnson <calvin.johnson@oss.nxp.com>");
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("FWNODE MDIO bus (Ethernet PHY) accessors");
+MODULE_IMPORT_NS("NET_PHY_CORE_ONLY");
 
 static struct pse_control *
 fwnode_find_pse_control(struct fwnode_handle *fwnode,
@@ -65,6 +68,34 @@ fwnode_find_mii_timestamper(struct fwnode_handle *fwnode)
 put_node:
 	of_node_put(arg.np);
 	return mii_ts;
+}
+
+/* Hard-reset a PHY before registration */
+static int fwnode_reset_phy(struct mii_bus *bus, u32 addr,
+			    struct fwnode_handle *phy_node)
+{
+	struct mdio_device *tmpdev;
+	int rc;
+
+	/* Create a temporary MDIO device to allocate reset resources */
+	tmpdev = mdio_device_create(bus, addr);
+	if (IS_ERR(tmpdev))
+		return PTR_ERR(tmpdev);
+
+	device_set_node(&tmpdev->dev, fwnode_handle_get(phy_node));
+	rc = mdio_device_register_reset(tmpdev);
+	if (rc) {
+		mdio_device_free(tmpdev);
+		return rc;
+	}
+
+	mdio_device_reset(tmpdev, 1);
+	mdio_device_reset(tmpdev, 0);
+
+	mdio_device_unregister_reset(tmpdev);
+	mdio_device_free(tmpdev);
+
+	return 0;
 }
 
 int fwnode_mdiobus_phy_device_register(struct mii_bus *mdio,
@@ -129,8 +160,17 @@ int fwnode_mdiobus_register_phy(struct mii_bus *bus,
 		return PTR_ERR(mii_ts);
 
 	is_c45 = fwnode_device_is_compatible(child, "ethernet-phy-ieee802.3-c45");
-	if (is_c45 || fwnode_get_phy_id(child, &phy_id))
+	if (is_c45 || fwnode_get_phy_id(child, &phy_id)) {
 		phy = get_phy_device(bus, addr, is_c45);
+		if (IS_ERR(phy)) {
+			/* get_phy_device() failed, retry after a reset */
+			rc = fwnode_reset_phy(bus, addr, child);
+			if (rc == -EPROBE_DEFER)
+				goto clean_mii_ts;
+			else if (!rc)
+				phy = get_phy_device(bus, addr, is_c45);
+		}
+	}
 	else
 		phy = phy_device_create(bus, addr, phy_id, 0, NULL);
 	if (IS_ERR(phy)) {
