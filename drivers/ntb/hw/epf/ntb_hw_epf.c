@@ -9,6 +9,7 @@
 #include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/pci-epf.h>
 #include <linux/slab.h>
 #include <linux/ntb.h>
 
@@ -48,16 +49,6 @@
 #define NTB_EPF_MAX_DB_COUNT	31
 
 #define NTB_EPF_COMMAND_TIMEOUT	1000 /* 1 Sec */
-
-enum pci_barno {
-	NO_BAR = -1,
-	BAR_0,
-	BAR_1,
-	BAR_2,
-	BAR_3,
-	BAR_4,
-	BAR_5,
-};
 
 enum epf_ntb_bar {
 	BAR_CONFIG,
