@@ -357,7 +357,7 @@ static int tas2563_save_calibration(struct tas2781_hda *h)
 			}
 			/*
 			 * Our variable names are ASCII by construction, but
-			 * EFI names are wide chars.  Convert and zero-pad.
+			 * EFI names are wide chars. Convert and zero-pad.
 			 */
 			memset(efi_name, 0, sizeof(efi_name));
 			for (k = 0; k < sizeof(var8) && var8[k]; k++)
