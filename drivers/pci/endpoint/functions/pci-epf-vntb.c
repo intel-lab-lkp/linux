@@ -1528,6 +1528,9 @@ static int vntb_epf_mw_get_align(struct ntb_dev *ndev, int pidx, int idx,
 	if (size_max)
 		*size_max = ntb->mws_size[idx];
 
+	if (offset)
+		*offset = ntb->mws_offset[idx];
+
 	return 0;
 }
 
