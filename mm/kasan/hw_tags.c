@@ -347,7 +347,7 @@ void *__kasan_unpoison_vmalloc(const void *start, unsigned long size,
 	 *
 	 * For non-VM_ALLOC allocations, page_alloc memory is tagged as usual.
 	 */
-	if (!(flags & KASAN_VMALLOC_VM_ALLOC)) {
+	if (!(flags & (KASAN_VMALLOC_VM_ALLOC | KASAN_VMALLOC_EXPAND))) {
 		WARN_ON(flags & KASAN_VMALLOC_INIT);
 		return (void *)start;
 	}
@@ -361,7 +361,14 @@ void *__kasan_unpoison_vmalloc(const void *start, unsigned long size,
 		return (void *)start;
 	}
 
-	tag = kasan_random_tag();
+	if (flags & KASAN_VMALLOC_EXPAND) {
+		size = round_up(size + ((unsigned long)start & KASAN_GRANULE_MASK),
+				KASAN_GRANULE_SIZE);
+		start = PTR_ALIGN_DOWN(start, KASAN_GRANULE_SIZE);
+		tag = get_tag(start);
+	} else
+		tag = kasan_random_tag();
+
 	start = set_tag(start, tag);
 
 	/* Unpoison and initialize memory up to size. */
