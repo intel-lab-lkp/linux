@@ -324,8 +324,10 @@ __ips_chipset_val(struct intel_ips *ips)
 	struct intel_uncore *uncore =
 		rps_to_uncore(container_of(ips, struct intel_rps, ips));
 	unsigned long now = jiffies_to_msecs(jiffies), dt;
+	u32 dmiec_delta, ddrec_delta, csiec_delta;
+	u32 dmiec, ddrec, csiec;
 	unsigned long result;
-	u64 total, delta;
+	u64 delta;
 
 	lockdep_assert_held(&mchdev_lock);
 
@@ -339,17 +341,21 @@ __ips_chipset_val(struct intel_ips *ips)
 	if (dt <= 10)
 		return ips->chipset_power;
 
-	/* FIXME: handle per-counter overflow */
-	total = intel_uncore_read(uncore, DMIEC);
-	total += intel_uncore_read(uncore, DDREC);
-	total += intel_uncore_read(uncore, CSIEC);
+	dmiec = intel_uncore_read(uncore, DMIEC);
+	ddrec = intel_uncore_read(uncore, DDREC);
+	csiec = intel_uncore_read(uncore, CSIEC);
 
-	delta = total - ips->last_count1;
+	dmiec_delta = dmiec - ips->last_dmiec;
+	ddrec_delta = ddrec - ips->last_ddrec;
+	csiec_delta = csiec - ips->last_csiec;
 
+	delta = dmiec_delta + ddrec_delta + csiec_delta;
 	result = div_u64(div_u64(ips->m * delta, dt) + ips->c, 10);
 
-	ips->last_count1 = total;
 	ips->last_time1 = now;
+	ips->last_dmiec = dmiec;
+	ips->last_ddrec = ddrec;
+	ips->last_csiec = csiec;
 
 	ips->chipset_power = result;
 
@@ -396,7 +402,7 @@ static void __gen5_ips_update(struct intel_ips *ips)
 	struct intel_uncore *uncore =
 		rps_to_uncore(container_of(ips, struct intel_rps, ips));
 	u64 now, delta, dt;
-	u32 count;
+	u32 gfxec;
 
 	lockdep_assert_held(&mchdev_lock);
 
@@ -408,10 +414,10 @@ static void __gen5_ips_update(struct intel_ips *ips)
 	if (dt <= 10)
 		return;
 
-	count = intel_uncore_read(uncore, GFXEC);
-	delta = count - ips->last_count2;
+	gfxec = intel_uncore_read(uncore, GFXEC);
+	delta = gfxec - ips->last_gfxec;
 
-	ips->last_count2 = count;
+	ips->last_gfxec = gfxec;
 	ips->last_time2 = now;
 
 	/* More magic constants... */
@@ -607,12 +613,12 @@ static bool gen5_rps_enable(struct intel_rps *rps)
 
 	__gen5_rps_set(rps, rps->cur_freq);
 
-	rps->ips.last_count1 = intel_uncore_read(uncore, DMIEC);
-	rps->ips.last_count1 += intel_uncore_read(uncore, DDREC);
-	rps->ips.last_count1 += intel_uncore_read(uncore, CSIEC);
+	rps->ips.last_dmiec = intel_uncore_read(uncore, DMIEC);
+	rps->ips.last_ddrec = intel_uncore_read(uncore, DDREC);
+	rps->ips.last_csiec = intel_uncore_read(uncore, CSIEC);
 	rps->ips.last_time1 = jiffies_to_msecs(jiffies);
 
-	rps->ips.last_count2 = intel_uncore_read(uncore, GFXEC);
+	rps->ips.last_gfxec = intel_uncore_read(uncore, GFXEC);
 	rps->ips.last_time2 = ktime_get_raw_ns();
 
 	ilk_display_rps_enable(display);
