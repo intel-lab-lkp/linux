@@ -373,7 +373,7 @@ static struct {
 	u32 hotkey_poll_active:1;
 	u32 has_adaptive_kbd:1;
 	u32 kbd_lang:1;
-	u32 trackpoint_doubletap:1;
+	u32 trackpoint_doubletap_filter:1;
 	struct quirk_entry *quirks;
 } tp_features;
 
@@ -3104,8 +3104,35 @@ static void tpacpi_send_radiosw_update(void)
 	hotkey_radio_sw_notify_change();
 }
 
+static ssize_t doubletap_filter_show(struct device *dev,
+				      struct device_attribute *attr,
+				      char *buf)
+{
+	return sysfs_emit(buf, "%d\n", tp_features.trackpoint_doubletap_filter);
+}
+
+static ssize_t doubletap_filter_store(struct device *dev,
+				       struct device_attribute *attr,
+				       const char *buf, size_t count)
+{
+	bool filter;
+	int err;
+
+	err = kstrtobool(buf, &filter);
+	if (err)
+		return err;
+
+	tp_features.trackpoint_doubletap_filter = filter;
+	return count;
+}
+
+static DEVICE_ATTR_RW(doubletap_filter);
+
 static void hotkey_exit(void)
 {
+	if (tpacpi_pdev)
+		device_remove_file(&tpacpi_pdev->dev, &dev_attr_doubletap_filter);
+
 	mutex_lock(&hotkey_mutex);
 	hotkey_poll_stop_sync();
 	dbg_printk(TPACPI_DBG_EXIT | TPACPI_DBG_HKEY,
@@ -3557,8 +3584,22 @@ static int __init hotkey_init(struct ibm_init_struct *iibm)
 
 	hotkey_poll_setup_safe(true);
 
-	/* Enable doubletap by default */
-	tp_features.trackpoint_doubletap = 1;
+	/*
+	 * Enable kernel-level doubletap event filtering by default.
+	 * This allows doubletap events to reach userspace.
+	 */
+	tp_features.trackpoint_doubletap_filter = 1;
+
+	/* Create doubletap_filter sysfs attribute */
+	if (tpacpi_pdev) {
+		int err = device_create_file(&tpacpi_pdev->dev, &dev_attr_doubletap_filter);
+		if (err) {
+			pr_warn("Unable to create doubletap_filter sysfs attribute\n");
+			/* Continue even if sysfs creation fails */
+		} else {
+			pr_info("ThinkPad ACPI doubletap_filter sysfs attribute created\n");
+		}
+	}
 
 	return 0;
 }
@@ -3863,7 +3904,8 @@ static bool hotkey_notify_8xxx(const u32 hkey, bool *send_acpi_ev)
 {
 	switch (hkey) {
 	case TP_HKEY_EV_TRACK_DOUBLETAP:
-		if (tp_features.trackpoint_doubletap)
+		/* Only send the event if kernel-level filtering allows it */
+		if (tp_features.trackpoint_doubletap_filter)
 			tpacpi_input_send_key(hkey, send_acpi_ev);
 
 		return true;
@@ -11285,7 +11327,9 @@ static bool tpacpi_driver_event(const unsigned int hkey_event)
 		mutex_unlock(&tpacpi_inputdev_send_mutex);
 		return true;
 	case TP_HKEY_EV_DOUBLETAP_TOGGLE:
-		tp_features.trackpoint_doubletap = !tp_features.trackpoint_doubletap;
+		/* Toggle kernel-level doubletap event filtering */
+		tp_features.trackpoint_doubletap_filter =
+			!tp_features.trackpoint_doubletap_filter;
 		return true;
 	case TP_HKEY_EV_PROFILE_TOGGLE:
 	case TP_HKEY_EV_PROFILE_TOGGLE2:
