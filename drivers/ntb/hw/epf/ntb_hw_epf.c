@@ -51,6 +51,12 @@
 
 #define NTB_EPF_COMMAND_TIMEOUT	1000 /* 1 Sec */
 
+struct ntb_epf_soc_data {
+	const enum pci_barno *barno_map;
+	/* non-zero to override MRRS for this SoC */
+	int force_mrrs;
+};
+
 enum epf_ntb_bar {
 	BAR_CONFIG,
 	BAR_PEER_SPAD,
@@ -594,11 +600,12 @@ static int ntb_epf_init_dev(struct ntb_epf_dev *ndev)
 }
 
 static int ntb_epf_init_pci(struct ntb_epf_dev *ndev,
-			    struct pci_dev *pdev)
+			    struct pci_dev *pdev,
+			    const struct ntb_epf_soc_data *soc)
 {
 	struct device *dev = ndev->dev;
 	size_t spad_sz, spad_off;
-	int ret;
+	int ret, cur;
 
 	pci_set_drvdata(pdev, ndev);
 
@@ -615,6 +622,17 @@ static int ntb_epf_init_pci(struct ntb_epf_dev *ndev,
 	}
 
 	pci_set_master(pdev);
+
+	if (soc && pci_is_pcie(pdev) && soc->force_mrrs) {
+		cur = pcie_get_readrq(pdev);
+		ret = pcie_set_readrq(pdev, soc->force_mrrs);
+		if (ret)
+			dev_warn(&pdev->dev, "failed to set MRRS=%d: %d\n",
+				 soc->force_mrrs, ret);
+		else
+			dev_info(&pdev->dev, "capped MRRS: %d->%d for ntb-epf\n",
+				 cur, soc->force_mrrs);
+	}
 
 	ret = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(64));
 	if (ret) {
@@ -690,6 +708,7 @@ static void ntb_epf_cleanup_isr(struct ntb_epf_dev *ndev)
 static int ntb_epf_pci_probe(struct pci_dev *pdev,
 			     const struct pci_device_id *id)
 {
+	const struct ntb_epf_soc_data *soc = (const void *)id->driver_data;
 	struct device *dev = &pdev->dev;
 	struct ntb_epf_dev *ndev;
 	int ret;
@@ -701,16 +720,16 @@ static int ntb_epf_pci_probe(struct pci_dev *pdev,
 	if (!ndev)
 		return -ENOMEM;
 
-	ndev->barno_map = (const enum pci_barno *)id->driver_data;
-	if (!ndev->barno_map)
+	if (!soc || !soc->barno_map)
 		return -EINVAL;
 
+	ndev->barno_map = soc->barno_map;
 	ndev->dev = dev;
 
 	ntb_epf_init_struct(ndev, pdev);
 	mutex_init(&ndev->cmd_lock);
 
-	ret = ntb_epf_init_pci(ndev, pdev);
+	ret = ntb_epf_init_pci(ndev, pdev, soc);
 	if (ret) {
 		dev_err(dev, "Failed to init PCI\n");
 		return ret;
@@ -778,21 +797,52 @@ static const enum pci_barno rcar_barno[NTB_BAR_NUM] = {
 	[BAR_MW4]	= NO_BAR,
 };
 
+static const struct ntb_epf_soc_data j721e_soc = {
+	.barno_map = j721e_map,
+};
+
+static const struct ntb_epf_soc_data mx8_soc = {
+	.barno_map = mx8_map,
+};
+
+static const struct ntb_epf_soc_data rcar_soc = {
+	.barno_map = rcar_barno,
+	/*
+	 * On some R-Car platforms using the Synopsys DWC PCIe + eDMA we
+	 * observe data corruption on RC->EP Remote DMA Read paths whenever
+	 * the EP issues large MRd requests. The corruption consistently
+	 * hits the tail of each 256-byte segment (e.g. offsets
+	 * 0x00E0..0x00FF within a 256B block, and again at 0x01E0..0x01FF
+	 * for larger transfers).
+	 *
+	 * The DMA injects multiple MRd requests of size less than or equal
+	 * to the min(MRRS, MPS) into the outbound request path. By
+	 * lowering MRRS to 128 we prevent 256B MRd TLPs from being
+	 * generated and avoid the issue on the affected hardware. We
+	 * intentionally keep MPS unchanged and scope this quirk to this
+	 * endpoint to avoid impacting unrelated devices.
+	 *
+	 * Remove this once the issue is resolved (maybe controller/IP
+	 * level) or a more preferable workaround becomes available.
+	 */
+	.force_mrrs = 128,
+};
+
 static const struct pci_device_id ntb_epf_pci_tbl[] = {
 	{
 		PCI_DEVICE(PCI_VENDOR_ID_TI, PCI_DEVICE_ID_TI_J721E),
 		.class = PCI_CLASS_MEMORY_RAM << 8, .class_mask = 0xffff00,
-		.driver_data = (kernel_ulong_t)j721e_map,
+		.driver_data = (kernel_ulong_t)&j721e_soc,
 	},
 	{
 		PCI_DEVICE(PCI_VENDOR_ID_FREESCALE, 0x0809),
 		.class = PCI_CLASS_MEMORY_RAM << 8, .class_mask = 0xffff00,
-		.driver_data = (kernel_ulong_t)mx8_map,
+		.driver_data = (kernel_ulong_t)&mx8_soc,
 	},
 	{
 		PCI_DEVICE(PCI_VENDOR_ID_RENESAS, 0x0030),
 		.class = PCI_CLASS_MEMORY_RAM << 8, .class_mask = 0xffff00,
-		.driver_data = (kernel_ulong_t)rcar_barno,
+		.driver_data = (kernel_ulong_t)&rcar_soc,
 	},
 	{ },
 };
