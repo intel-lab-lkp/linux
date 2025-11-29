@@ -26078,6 +26078,7 @@ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/trace/linux-trace.git
 F:	Documentation/trace/*
 F:	fs/tracefs/
 F:	include/linux/trace*.h
+F:	include/linux/tracing.h
 F:	include/trace/
 F:	kernel/trace/
 F:	kernel/tracepoint.c
