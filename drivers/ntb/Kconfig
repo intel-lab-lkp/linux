@@ -37,4 +37,15 @@ config NTB_TRANSPORT
 
 	 If unsure, say N.
 
+config NTB_TRANSPORT_EDMA
+	bool "NTB Transport backed by remote eDMA"
+	depends on NTB_TRANSPORT
+	depends on PCI
+	select DMA_ENGINE
+	help
+	  Enable a transport backend that uses a remote DesignWare eDMA engine
+	  exposed through a dedicated NTB memory window. The host uses the
+	  endpoint's eDMA engine to move data in both directions.
+	  Say Y here if you intend to use the 'use_remote_edma' module parameter.
+
 endif # NTB
