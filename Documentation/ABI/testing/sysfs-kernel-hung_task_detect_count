@@ -1,0 +1,7 @@
+What:		/sys/kernel/hung_task_detect_count
+Date:		Nov 2025
+KernelVersion:	6.18
+Contact:	Linux kernel mailing list <linux-kernel@vger.kernel.org>
+Description:
+        Indicates the total number of tasks that have been detected as hung since
+        the system boot.

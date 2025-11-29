@@ -32,10 +32,27 @@
  */
 static int __read_mostly sysctl_hung_task_check_count = PID_MAX_LIMIT;
 
-/*
- * Total number of tasks detected as hung since boot:
- */
-static unsigned long __read_mostly sysctl_hung_task_detect_count;
+#ifdef CONFIG_SYSFS
+/* Total number of tasks detected as hung since boot */
+static unsigned long hung_task_detect_count;
+
+static ssize_t hung_task_detect_count_show(struct kobject *kobj,
+					   struct kobj_attribute *attr,
+					   char *page)
+{
+	return sysfs_emit(page, "%lu\n", hung_task_detect_count);
+}
+
+static struct kobj_attribute hung_task_detect_count_attr = __ATTR_RO(hung_task_detect_count);
+
+static __init int kernel_hung_task_detect_sysfs_init(void)
+{
+	sysfs_add_file_to_group(kernel_kobj,
+				&hung_task_detect_count_attr.attr, NULL);
+	return 0;
+}
+late_initcall(kernel_hung_task_detect_sysfs_init);
+#endif
 
 /*
  * Limit number of tasks checked in a batch.
@@ -222,13 +239,9 @@ static void check_hung_task(struct task_struct *t, unsigned long timeout)
 {
 	if (!task_is_hung(t, timeout))
 		return;
-
-	/*
-	 * This counter tracks the total number of tasks detected as hung
-	 * since boot.
-	 */
-	sysctl_hung_task_detect_count++;
-
+#ifdef CONFIG_SYSFS
+	++hung_task_detect_count;
+#endif
 	trace_sched_process_hang(t);
 
 	if (sysctl_hung_task_panic) {
@@ -422,13 +435,6 @@ static const struct ctl_table hung_task_sysctls[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_NEG_ONE,
-	},
-	{
-		.procname	= "hung_task_detect_count",
-		.data		= &sysctl_hung_task_detect_count,
-		.maxlen		= sizeof(unsigned long),
-		.mode		= 0444,
-		.proc_handler	= proc_doulongvec_minmax,
 	},
 };
 
