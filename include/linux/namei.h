@@ -9,6 +9,10 @@
 #include <linux/errno.h>
 #include <linux/fs_struct.h>
 
+#ifndef MODULE
+#include <asm/runtime-const.h>
+#endif
+
 enum { MAX_NESTED_LINKS = 8 };
 
 #define MAXSYMLINKS 40
@@ -88,7 +92,12 @@ static inline struct filename *refname(struct filename *name)
 	return name;
 }
 
-extern struct kmem_cache *names_cachep;
+extern struct kmem_cache *__names_cachep;
+#ifdef MODULE
+#define names_cachep __names_cachep
+#else
+#define names_cachep runtime_const_ptr(__names_cachep)
+#endif
 
 #define __getname()		kmem_cache_alloc(names_cachep, GFP_KERNEL)
 #define __putname(name)		kmem_cache_free(names_cachep, (void *)(name))

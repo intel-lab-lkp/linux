@@ -3282,8 +3282,8 @@ static void __init dcache_init(void)
 }
 
 /* SLAB cache for __getname() consumers */
-struct kmem_cache *names_cachep __ro_after_init;
-EXPORT_SYMBOL(names_cachep);
+struct kmem_cache *__names_cachep __ro_after_init;
+EXPORT_SYMBOL(__names_cachep);
 
 void __init vfs_caches_init_early(void)
 {
@@ -3298,8 +3298,9 @@ void __init vfs_caches_init_early(void)
 
 void __init vfs_caches_init(void)
 {
-	names_cachep = kmem_cache_create_usercopy("names_cache", PATH_MAX, 0,
+	__names_cachep = kmem_cache_create_usercopy("names_cache", PATH_MAX, 0,
 			SLAB_HWCACHE_ALIGN|SLAB_PANIC, 0, PATH_MAX, NULL);
+	runtime_const_init(ptr, __names_cachep);
 
 	dcache_init();
 	inode_init();
