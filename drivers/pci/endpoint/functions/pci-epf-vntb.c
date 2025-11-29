@@ -1379,6 +1379,22 @@ static u64 vntb_epf_db_valid_mask(struct ntb_dev *ntb)
 	return BIT_ULL(ntb_ndev(ntb)->db_count) - 1;
 }
 
+static int vntb_epf_db_vector_count(struct ntb_dev *ntb)
+{
+	return ntb_ndev(ntb)->db_count;
+}
+
+static u64 vntb_epf_db_vector_mask(struct ntb_dev *ntb, int db_vector)
+{
+	struct epf_ntb *ndev = ntb_ndev(ntb);
+
+	db_vector--; /* vector 0 is reserved for link events */
+	if (db_vector < 0 || db_vector >= ndev->db_count)
+		return 0;
+
+	return 1ULL << db_vector;
+}
+
 static int vntb_epf_db_set_mask(struct ntb_dev *ntb, u64 db_bits)
 {
 	return 0;
@@ -1488,20 +1504,28 @@ static int vntb_epf_peer_spad_write(struct ntb_dev *ndev, int pidx, int idx, u32
 
 static int vntb_epf_peer_db_set(struct ntb_dev *ndev, u64 db_bits)
 {
-	u32 interrupt_num = ffs(db_bits) + 1;
 	struct epf_ntb *ntb = ntb_ndev(ndev);
 	u8 func_no, vfunc_no;
-	int ret;
+	u64 failed = 0;
+	int i;
 
 	func_no = ntb->epf->func_no;
 	vfunc_no = ntb->epf->vfunc_no;
 
-	ret = pci_epc_raise_irq(ntb->epf->epc, func_no, vfunc_no,
-				PCI_IRQ_MSI, interrupt_num + 1);
-	if (ret)
-		dev_err(&ntb->ntb.dev, "Failed to raise IRQ\n");
+	for_each_set_bit(i, (unsigned long *)&db_bits, ntb->db_count) {
+		/*
+		 * DB bit i is MSI interrupt (i + 2).
+		 * Vector 0 is used for link events and MSI vectors are
+		 * 1-based for pci_epc_raise_irq().
+		 */
+		if (pci_epc_raise_irq(ntb->epf->epc, func_no, vfunc_no,
+				      PCI_IRQ_MSI, i + 2))
+			failed |= BIT_ULL(i);
+	}
+	if (failed)
+		dev_err(&ntb->ntb.dev, "Failed to raise IRQ (0x%llx)\n", failed);
 
-	return ret;
+	return failed ? -EIO : 0;
 }
 
 static u64 vntb_epf_db_read(struct ntb_dev *ndev)
@@ -1575,6 +1599,8 @@ static const struct ntb_dev_ops vntb_epf_ops = {
 	.spad_count		= vntb_epf_spad_count,
 	.peer_mw_count		= vntb_epf_peer_mw_count,
 	.db_valid_mask		= vntb_epf_db_valid_mask,
+	.db_vector_count	= vntb_epf_db_vector_count,
+	.db_vector_mask		= vntb_epf_db_vector_mask,
 	.db_set_mask		= vntb_epf_db_set_mask,
 	.mw_set_trans		= vntb_epf_mw_set_trans,
 	.mw_clear_trans		= vntb_epf_mw_clear_trans,

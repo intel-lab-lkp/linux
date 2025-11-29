@@ -363,7 +363,7 @@ static int ntb_epf_init_isr(struct ntb_epf_dev *ndev, int msi_min, int msi_max)
 		}
 	}
 
-	ndev->db_count = irq;
+	ndev->db_count = irq - 1;
 
 	ret = ntb_epf_send_command(ndev, CMD_CONFIGURE_DOORBELL,
 				   argument | irq);
@@ -395,6 +395,22 @@ static int ntb_epf_spad_count(struct ntb_dev *ntb)
 static u64 ntb_epf_db_valid_mask(struct ntb_dev *ntb)
 {
 	return ntb_ndev(ntb)->db_valid_mask;
+}
+
+static int ntb_epf_db_vector_count(struct ntb_dev *ntb)
+{
+	return ntb_ndev(ntb)->db_count;
+}
+
+static u64 ntb_epf_db_vector_mask(struct ntb_dev *ntb, int db_vector)
+{
+	struct ntb_epf_dev *ndev = ntb_ndev(ntb);
+
+	db_vector--; /* vector 0 is reserved for link events */
+	if (db_vector < 0 || db_vector >= ndev->db_count)
+		return 0;
+
+	return ndev->db_valid_mask & (1ULL << db_vector);
 }
 
 static int ntb_epf_db_set_mask(struct ntb_dev *ntb, u64 db_bits)
@@ -480,26 +496,21 @@ static int ntb_epf_peer_mw_get_addr(struct ntb_dev *ntb, int idx,
 static int ntb_epf_peer_db_set(struct ntb_dev *ntb, u64 db_bits)
 {
 	struct ntb_epf_dev *ndev = ntb_ndev(ntb);
-	u32 interrupt_num = ffs(db_bits) + 1;
-	struct device *dev = ndev->dev;
+	u32 interrupt_num;
 	u32 db_entry_size;
 	u32 db_offset;
 	u32 db_data;
-
-	if (interrupt_num >= ndev->db_count) {
-		dev_err(dev, "DB interrupt %d greater than Max Supported %d\n",
-			interrupt_num, ndev->db_count);
-		return -EINVAL;
-	}
+	int i;
 
 	db_entry_size = readl(ndev->ctrl_reg + NTB_EPF_DB_ENTRY_SIZE);
 
-	db_data = readl(ndev->ctrl_reg + NTB_EPF_DB_DATA(interrupt_num));
-	db_offset = readl(ndev->ctrl_reg + NTB_EPF_DB_OFFSET(interrupt_num));
-
-	writel(db_data, ndev->db_reg + (db_entry_size * interrupt_num) +
-	       db_offset);
-
+	for_each_set_bit(i, (unsigned long *)&db_bits, ndev->db_count) {
+		interrupt_num = i + 1;
+		db_data = readl(ndev->ctrl_reg + NTB_EPF_DB_DATA(interrupt_num));
+		db_offset = readl(ndev->ctrl_reg + NTB_EPF_DB_OFFSET(interrupt_num));
+		writel(db_data, ndev->db_reg + (db_entry_size * interrupt_num) +
+		       db_offset);
+	}
 	return 0;
 }
 
@@ -529,6 +540,8 @@ static const struct ntb_dev_ops ntb_epf_ops = {
 	.spad_count		= ntb_epf_spad_count,
 	.peer_mw_count		= ntb_epf_peer_mw_count,
 	.db_valid_mask		= ntb_epf_db_valid_mask,
+	.db_vector_count	= ntb_epf_db_vector_count,
+	.db_vector_mask		= ntb_epf_db_vector_mask,
 	.db_set_mask		= ntb_epf_db_set_mask,
 	.mw_set_trans		= ntb_epf_mw_set_trans,
 	.mw_clear_trans		= ntb_epf_mw_clear_trans,
@@ -561,8 +574,8 @@ static int ntb_epf_init_dev(struct ntb_epf_dev *ndev)
 	int ret;
 
 	/* One Link interrupt and rest doorbell interrupt */
-	ret = ntb_epf_init_isr(ndev, NTB_EPF_MIN_DB_COUNT + NTB_EPF_IRQ_RESERVE,
-			       NTB_EPF_MAX_DB_COUNT + NTB_EPF_IRQ_RESERVE);
+	ret = ntb_epf_init_isr(ndev, NTB_EPF_MIN_DB_COUNT + 1 + NTB_EPF_IRQ_RESERVE,
+			       NTB_EPF_MAX_DB_COUNT + 1 + NTB_EPF_IRQ_RESERVE);
 	if (ret) {
 		dev_err(dev, "Failed to init ISR\n");
 		return ret;
