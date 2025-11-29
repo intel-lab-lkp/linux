@@ -6,6 +6,7 @@
  */
 
 #include <linux/fs.h>
+#include <linux/namei.h>
 #include <linux/nls.h>
 #include <linux/ctype.h>
 #include <linux/posix_acl.h>

@@ -8,6 +8,7 @@
  */
 
 #include <linux/fs.h>
+#include <linux/namei.h>
 #include <linux/nls.h>
 
 #include "debug.h"

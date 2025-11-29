@@ -8,6 +8,7 @@
 #include <linux/blkdev.h>
 #include <linux/buffer_head.h>
 #include <linux/fs.h>
+#include <linux/namei.h>
 #include <linux/kernel.h>
 #include <linux/nls.h>
 

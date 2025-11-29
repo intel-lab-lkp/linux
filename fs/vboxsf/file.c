@@ -10,6 +10,7 @@
 #include <linux/pagemap.h>
 #include <linux/highmem.h>
 #include <linux/sizes.h>
+#include <linux/namei.h>
 #include "vfsmod.h"
 
 struct vboxsf_handle {

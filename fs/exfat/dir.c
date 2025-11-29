@@ -7,6 +7,7 @@
 #include <linux/compat.h>
 #include <linux/bio.h>
 #include <linux/buffer_head.h>
+#include <linux/namei.h>
 
 #include "exfat_raw.h"
 #include "exfat_fs.h"

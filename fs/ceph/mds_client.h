@@ -11,6 +11,7 @@
 #include <linux/refcount.h>
 #include <linux/utsname.h>
 #include <linux/ktime.h>
+#include <linux/namei.h>
 
 #include <linux/ceph/types.h>
 #include <linux/ceph/messenger.h>

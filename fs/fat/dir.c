@@ -18,6 +18,7 @@
 #include <linux/compat.h>
 #include <linux/uaccess.h>
 #include <linux/iversion.h>
+#include <linux/namei.h>
 #include "fat.h"
 
 /*

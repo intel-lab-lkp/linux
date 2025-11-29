@@ -2,6 +2,7 @@
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/file.h>
+#include <linux/namei.h>
 #include <linux/io_uring.h>
 
 #include <uapi/linux/io_uring.h>

@@ -4,6 +4,7 @@
 #include <linux/uaccess.h>
 #include <linux/fs_struct.h>
 #include <linux/fs.h>
+#include <linux/namei.h>
 #include <linux/slab.h>
 #include <linux/prefetch.h>
 #include "mount.h"

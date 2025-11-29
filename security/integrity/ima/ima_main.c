@@ -25,6 +25,7 @@
 #include <linux/xattr.h>
 #include <linux/ima.h>
 #include <linux/fs.h>
+#include <linux/namei.h>
 #include <linux/iversion.h>
 #include <linux/evm.h>
 #include <linux/crash_dump.h>

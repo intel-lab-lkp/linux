@@ -29,6 +29,7 @@
 #include <linux/file.h>
 #include <linux/list.h>
 #include <linux/fs.h>
+#include <linux/namei.h>
 #include <linux/async.h>
 #include <linux/pm.h>
 #include <linux/suspend.h>

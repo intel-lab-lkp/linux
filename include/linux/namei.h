@@ -52,6 +52,47 @@ enum {LAST_NORM, LAST_ROOT, LAST_DOT, LAST_DOTDOT};
 
 extern int path_pts(struct path *path);
 
+struct audit_names;
+struct filename {
+	const char		*name;	/* pointer to actual string */
+	const __user char	*uptr;	/* original userland pointer */
+	atomic_t		refcnt;
+	struct audit_names	*aname;
+	const char		iname[];
+};
+static_assert(offsetof(struct filename, iname) % sizeof(long) == 0);
+
+struct filename *getname_flags(const char __user *, int);
+struct filename *getname_uflags(const char __user *, int);
+static inline struct filename *getname(const char __user *name)
+{
+	return getname_flags(name, 0);
+}
+struct filename *getname_kernel(const char *);
+struct filename *__getname_maybe_null(const char __user *);
+static inline struct filename *getname_maybe_null(const char __user *name, int flags)
+{
+	if (!(flags & AT_EMPTY_PATH))
+		return getname(name);
+
+	if (!name)
+		return NULL;
+	return __getname_maybe_null(name);
+}
+void putname(struct filename *name);
+DEFINE_FREE(putname, struct filename *, if (!IS_ERR_OR_NULL(_T)) putname(_T))
+
+static inline struct filename *refname(struct filename *name)
+{
+	atomic_inc(&name->refcnt);
+	return name;
+}
+
+extern struct kmem_cache *names_cachep;
+
+#define __getname()		kmem_cache_alloc(names_cachep, GFP_KERNEL)
+#define __putname(name)		kmem_cache_free(names_cachep, (void *)(name))
+
 extern int user_path_at(int, const char __user *, unsigned, struct path *);
 
 struct dentry *lookup_one_qstr_excl(const struct qstr *name,

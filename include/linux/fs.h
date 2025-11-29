@@ -55,6 +55,7 @@ struct bdi_writeback;
 struct bio;
 struct io_comp_batch;
 struct fiemap_extent_info;
+struct filename;
 struct hd_geometry;
 struct iovec;
 struct kiocb;
@@ -2408,16 +2409,6 @@ extern struct kobject *fs_kobj;
 #define MAX_RW_COUNT (INT_MAX & PAGE_MASK)
 
 /* fs/open.c */
-struct audit_names;
-struct filename {
-	const char		*name;	/* pointer to actual string */
-	const __user char	*uptr;	/* original userland pointer */
-	atomic_t		refcnt;
-	struct audit_names	*aname;
-	const char		iname[];
-};
-static_assert(offsetof(struct filename, iname) % sizeof(long) == 0);
-
 static inline struct mnt_idmap *file_mnt_idmap(const struct file *file)
 {
 	return mnt_idmap(file->f_path.mnt);
@@ -2491,32 +2482,6 @@ static inline struct file *file_clone_open(struct file *file)
 }
 extern int filp_close(struct file *, fl_owner_t id);
 
-extern struct filename *getname_flags(const char __user *, int);
-extern struct filename *getname_uflags(const char __user *, int);
-static inline struct filename *getname(const char __user *name)
-{
-	return getname_flags(name, 0);
-}
-extern struct filename *getname_kernel(const char *);
-extern struct filename *__getname_maybe_null(const char __user *);
-static inline struct filename *getname_maybe_null(const char __user *name, int flags)
-{
-	if (!(flags & AT_EMPTY_PATH))
-		return getname(name);
-
-	if (!name)
-		return NULL;
-	return __getname_maybe_null(name);
-}
-extern void putname(struct filename *name);
-DEFINE_FREE(putname, struct filename *, if (!IS_ERR_OR_NULL(_T)) putname(_T))
-
-static inline struct filename *refname(struct filename *name)
-{
-	atomic_inc(&name->refcnt);
-	return name;
-}
-
 extern int finish_open(struct file *file, struct dentry *dentry,
 			int (*open)(struct inode *, struct file *));
 extern int finish_no_open(struct file *file, struct dentry *dentry);
@@ -2533,11 +2498,6 @@ static inline int finish_open_simple(struct file *file, int error)
 /* fs/dcache.c */
 extern void __init vfs_caches_init_early(void);
 extern void __init vfs_caches_init(void);
-
-extern struct kmem_cache *names_cachep;
-
-#define __getname()		kmem_cache_alloc(names_cachep, GFP_KERNEL)
-#define __putname(name)		kmem_cache_free(names_cachep, (void *)(name))
 
 void emergency_thaw_all(void);
 extern int sync_filesystem(struct super_block *);
