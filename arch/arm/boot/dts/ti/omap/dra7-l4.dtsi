@@ -69,6 +69,7 @@
 					#address-cells = <1>;
 					#size-cells = <1>;
 					ranges = <0 0x0 0x1400>;
+					has-inaccessible-regs;
 
 					pbias_regulator: pbias_regulator@e00 {
 						compatible = "ti,pbias-dra7", "ti,pbias-omap";
@@ -110,11 +111,13 @@
 					compatible = "syscon";
 					reg = <0x1c04 0x0020>;
 					#syscon-cells = <2>;
+					has-inaccessible-regs;
 				};
 
 				scm_conf_pcie: scm_conf@1c24 {
 					compatible = "syscon";
 					reg = <0x1c24 0x0024>;
+					has-inaccessible-regs;
 				};
 
 				sdma_xbar: dma-router@b78 {
@@ -4306,6 +4309,7 @@
 			scm_wkup: scm_conf@0 {
 				compatible = "syscon";
 				reg = <0 0x1000>;
+				has-inaccessible-regs;
 			};
 		};
 	};

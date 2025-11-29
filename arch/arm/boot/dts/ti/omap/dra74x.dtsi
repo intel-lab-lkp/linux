@@ -47,6 +47,7 @@
 		dsp2_system: dsp_system@41500000 {
 			compatible = "syscon";
 			reg = <0x41500000 0x100>;
+			has-inaccessible-regs;
 		};
 
 
