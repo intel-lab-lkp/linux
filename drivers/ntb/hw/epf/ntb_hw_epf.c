@@ -47,6 +47,7 @@
 
 #define NTB_EPF_MIN_DB_COUNT	3
 #define NTB_EPF_MAX_DB_COUNT	31
+#define NTB_EPF_IRQ_RESERVE	8
 
 #define NTB_EPF_COMMAND_TIMEOUT	1000 /* 1 Sec */
 
@@ -74,6 +75,8 @@ struct ntb_epf_dev {
 	unsigned int mw_count;
 	unsigned int spad_count;
 	unsigned int db_count;
+
+	unsigned int num_irqs;
 
 	void __iomem *ctrl_reg;
 	void __iomem *db_reg;
@@ -329,7 +332,7 @@ static int ntb_epf_init_isr(struct ntb_epf_dev *ndev, int msi_min, int msi_max)
 	u32 argument = MSIX_ENABLE;
 	int irq;
 	int ret;
-	int i;
+	int i = 0;
 
 	irq = pci_alloc_irq_vectors(pdev, msi_min, msi_max, PCI_IRQ_MSIX);
 	if (irq < 0) {
@@ -343,33 +346,39 @@ static int ntb_epf_init_isr(struct ntb_epf_dev *ndev, int msi_min, int msi_max)
 		argument &= ~MSIX_ENABLE;
 	}
 
+	ndev->num_irqs = irq;
+	irq -= NTB_EPF_IRQ_RESERVE;
+	if (irq <= 0) {
+		dev_err(dev, "Not enough irqs allocated\n");
+		ret = -ENOSPC;
+		goto err_out;
+	}
+
 	for (i = 0; i < irq; i++) {
 		ret = request_irq(pci_irq_vector(pdev, i), ntb_epf_vec_isr,
 				  0, "ntb_epf", ndev);
 		if (ret) {
 			dev_err(dev, "Failed to request irq\n");
-			goto err_request_irq;
+			goto err_out;
 		}
 	}
 
-	ndev->db_count = irq - 1;
+	ndev->db_count = irq;
 
 	ret = ntb_epf_send_command(ndev, CMD_CONFIGURE_DOORBELL,
 				   argument | irq);
 	if (ret) {
 		dev_err(dev, "Failed to configure doorbell\n");
-		goto err_configure_db;
+		goto err_out;
 	}
 
 	return 0;
 
-err_configure_db:
-	for (i = 0; i < ndev->db_count + 1; i++)
+err_out:
+	while (i-- > 0)
 		free_irq(pci_irq_vector(pdev, i), ndev);
 
-err_request_irq:
 	pci_free_irq_vectors(pdev);
-
 	return ret;
 }
 
@@ -477,7 +486,7 @@ static int ntb_epf_peer_db_set(struct ntb_dev *ntb, u64 db_bits)
 	u32 db_offset;
 	u32 db_data;
 
-	if (interrupt_num > ndev->db_count) {
+	if (interrupt_num >= ndev->db_count) {
 		dev_err(dev, "DB interrupt %d greater than Max Supported %d\n",
 			interrupt_num, ndev->db_count);
 		return -EINVAL;
@@ -487,6 +496,7 @@ static int ntb_epf_peer_db_set(struct ntb_dev *ntb, u64 db_bits)
 
 	db_data = readl(ndev->ctrl_reg + NTB_EPF_DB_DATA(interrupt_num));
 	db_offset = readl(ndev->ctrl_reg + NTB_EPF_DB_OFFSET(interrupt_num));
+
 	writel(db_data, ndev->db_reg + (db_entry_size * interrupt_num) +
 	       db_offset);
 
@@ -551,8 +561,8 @@ static int ntb_epf_init_dev(struct ntb_epf_dev *ndev)
 	int ret;
 
 	/* One Link interrupt and rest doorbell interrupt */
-	ret = ntb_epf_init_isr(ndev, NTB_EPF_MIN_DB_COUNT + 1,
-			       NTB_EPF_MAX_DB_COUNT + 1);
+	ret = ntb_epf_init_isr(ndev, NTB_EPF_MIN_DB_COUNT + NTB_EPF_IRQ_RESERVE,
+			       NTB_EPF_MAX_DB_COUNT + NTB_EPF_IRQ_RESERVE);
 	if (ret) {
 		dev_err(dev, "Failed to init ISR\n");
 		return ret;
@@ -659,7 +669,7 @@ static void ntb_epf_cleanup_isr(struct ntb_epf_dev *ndev)
 
 	ntb_epf_send_command(ndev, CMD_TEARDOWN_DOORBELL, ndev->db_count + 1);
 
-	for (i = 0; i < ndev->db_count + 1; i++)
+	for (i = 0; i < ndev->num_irqs; i++)
 		free_irq(pci_irq_vector(pdev, i), ndev);
 	pci_free_irq_vectors(pdev);
 }
