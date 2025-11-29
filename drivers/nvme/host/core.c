@@ -1538,7 +1538,8 @@ static int nvme_identify_ns_descs(struct nvme_ctrl *ctrl,
 {
 	struct nvme_command c = { };
 	bool csi_seen = false;
-	int status, pos, len;
+	int status, len, remain;
+	struct nvme_ns_id_desc *cur;
 	void *data;
 
 	if (ctrl->vs < NVME_VS(1, 3, 0) && !nvme_multi_css(ctrl))
@@ -1563,10 +1564,12 @@ static int nvme_identify_ns_descs(struct nvme_ctrl *ctrl,
 		goto free_data;
 	}
 
-	for (pos = 0; pos < NVME_IDENTIFY_DATA_SIZE; pos += len) {
-		struct nvme_ns_id_desc *cur = data + pos;
-
+	remain = NVME_IDENTIFY_DATA_SIZE;
+	cur = data;
+	while (remain >= sizeof(*cur)) {
 		if (cur->nidl == 0)
+			break;
+		if (sizeof(*cur) + cur->nidl > remain)
 			break;
 
 		len = nvme_process_ns_desc(ctrl, &info->ids, cur, &csi_seen);
@@ -1574,6 +1577,8 @@ static int nvme_identify_ns_descs(struct nvme_ctrl *ctrl,
 			break;
 
 		len += sizeof(*cur);
+		remain -= len;
+		cur += len;
 	}
 
 	if (nvme_multi_css(ctrl) && !csi_seen) {
