@@ -235,6 +235,8 @@ struct bnxt_re_dev {
 	union ib_gid ugid;
 	u32 ugid_index;
 	u8 sniffer_flow_created : 1;
+	atomic_t		dv_cq_count;
+	atomic_t		dv_qp_count;
 };
 
 #define to_bnxt_re_dev(ptr, member)	\
@@ -278,6 +280,9 @@ static inline int bnxt_re_read_context_allowed(struct bnxt_re_dev *rdev)
 	return 0;
 }
 
+struct bnxt_qplib_nq *bnxt_re_get_nq(struct bnxt_re_dev *rdev);
+void bnxt_re_put_nq(struct bnxt_re_dev *rdev, struct bnxt_qplib_nq *nq);
+
 #define BNXT_RE_CONTEXT_TYPE_QPC_SIZE_P5	1088
 #define BNXT_RE_CONTEXT_TYPE_CQ_SIZE_P5		128
 #define BNXT_RE_CONTEXT_TYPE_MRW_SIZE_P5	128
@@ -290,5 +295,4 @@ static inline int bnxt_re_read_context_allowed(struct bnxt_re_dev *rdev)
 
 #define BNXT_RE_HWRM_CMD_TIMEOUT(rdev)		\
 		((rdev)->chip_ctx->hwrm_cmd_max_timeout * 1000)
-
 #endif
