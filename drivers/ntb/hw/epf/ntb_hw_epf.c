@@ -36,12 +36,13 @@
 #define NTB_EPF_LOWER_SIZE	0x18
 #define NTB_EPF_UPPER_SIZE	0x1C
 #define NTB_EPF_MW_COUNT	0x20
-#define NTB_EPF_MW1_OFFSET	0x24
-#define NTB_EPF_SPAD_OFFSET	0x28
-#define NTB_EPF_SPAD_COUNT	0x2C
-#define NTB_EPF_DB_ENTRY_SIZE	0x30
-#define NTB_EPF_DB_DATA(n)	(0x34 + (n) * 4)
-#define NTB_EPF_DB_OFFSET(n)	(0xB4 + (n) * 4)
+#define NTB_EPF_MW_OFFSET(n)	(0x24 + (n) * 4)
+#define NTB_EPF_MW_SIZE(n)	(0x34 + (n) * 4)
+#define NTB_EPF_SPAD_OFFSET	0x44
+#define NTB_EPF_SPAD_COUNT	0x48
+#define NTB_EPF_DB_ENTRY_SIZE	0x4C
+#define NTB_EPF_DB_DATA(n)	(0x50 + (n) * 4)
+#define NTB_EPF_DB_OFFSET(n)	(0xD0 + (n) * 4)
 
 #define NTB_EPF_MIN_DB_COUNT	3
 #define NTB_EPF_MAX_DB_COUNT	31
@@ -451,11 +452,12 @@ static int ntb_epf_peer_mw_get_addr(struct ntb_dev *ntb, int idx,
 				    phys_addr_t *base, resource_size_t *size)
 {
 	struct ntb_epf_dev *ndev = ntb_ndev(ntb);
-	u32 offset = 0;
+	resource_size_t bar_sz;
+	u32 offset, sz;
 	int bar;
 
-	if (idx == 0)
-		offset = readl(ndev->ctrl_reg + NTB_EPF_MW1_OFFSET);
+	offset = readl(ndev->ctrl_reg + NTB_EPF_MW_OFFSET(idx));
+	sz = readl(ndev->ctrl_reg + NTB_EPF_MW_SIZE(idx));
 
 	bar = ntb_epf_mw_to_bar(ndev, idx);
 	if (bar < 0)
@@ -464,8 +466,11 @@ static int ntb_epf_peer_mw_get_addr(struct ntb_dev *ntb, int idx,
 	if (base)
 		*base = pci_resource_start(ndev->ntb.pdev, bar) + offset;
 
-	if (size)
-		*size = pci_resource_len(ndev->ntb.pdev, bar) - offset;
+	if (size) {
+		bar_sz = pci_resource_len(ndev->ntb.pdev, bar);
+		*size = sz ? min_t(resource_size_t, sz, bar_sz - offset)
+			   : (bar_sz > offset ? bar_sz - offset : 0);
+	}
 
 	return 0;
 }
