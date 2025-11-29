@@ -569,7 +569,8 @@ static int ntb_transport_setup_qp_mw(struct ntb_transport_ctx *nt,
 	struct ntb_transport_mw *mw;
 	struct ntb_dev *ndev = nt->ndev;
 	struct ntb_queue_entry *entry;
-	unsigned int rx_size, num_qps_mw;
+	unsigned int num_qps_mw;
+	unsigned int mw_size, mw_size_per_qp, qp_offset, rx_info_offset;
 	unsigned int mw_num, mw_count, qp_count;
 	unsigned int i;
 	int node;
@@ -588,15 +589,33 @@ static int ntb_transport_setup_qp_mw(struct ntb_transport_ctx *nt,
 	else
 		num_qps_mw = qp_count / mw_count;
 
-	rx_size = (unsigned int)mw->xlat_size / num_qps_mw;
-	qp->rx_buff = mw->virt_addr + rx_size * (qp_num / mw_count);
-	rx_size -= sizeof(struct ntb_rx_info);
+	mw_size = min(nt->mw_vec[mw_num].phys_size, mw->xlat_size);
+	if (max_mw_size && mw_size > max_mw_size)
+		mw_size = max_mw_size;
 
-	qp->remote_rx_info = qp->rx_buff + rx_size;
+	/* Split this MW evenly among the queue pairs mapped to it. */
+	mw_size_per_qp = (unsigned int)mw_size / num_qps_mw;
+	qp_offset = mw_size_per_qp * (qp_num / mw_count);
+
+	/* Place remote_rx_info at the end of the per-QP region. */
+	rx_info_offset = mw_size_per_qp - sizeof(struct ntb_rx_info);
+
+	qp->tx_mw_size = mw_size_per_qp;
+	qp->tx_mw = nt->mw_vec[mw_num].vbase + qp_offset;
+	if (!qp->tx_mw)
+		return -EINVAL;
+	qp->tx_mw_phys = nt->mw_vec[mw_num].phys_addr + qp_offset;
+	if (!qp->tx_mw_phys)
+		return -EINVAL;
+	qp->rx_info = qp->tx_mw + rx_info_offset;
+	qp->rx_buff = mw->virt_addr + qp_offset;
+	qp->remote_rx_info = qp->rx_buff + rx_info_offset;
 
 	/* Due to housekeeping, there must be atleast 2 buffs */
-	qp->rx_max_frame = min(transport_mtu, rx_size / 2);
-	qp->rx_max_entry = rx_size / qp->rx_max_frame;
+	qp->tx_max_frame = min(transport_mtu, mw_size_per_qp / 2);
+	qp->tx_max_entry = mw_size_per_qp / qp->tx_max_frame;
+	qp->rx_max_frame = min(transport_mtu, mw_size_per_qp / 2);
+	qp->rx_max_entry = mw_size_per_qp / qp->rx_max_frame;
 	qp->rx_index = 0;
 
 	/*
@@ -1133,11 +1152,7 @@ static int ntb_transport_init_queue(struct ntb_transport_ctx *nt,
 				    unsigned int qp_num)
 {
 	struct ntb_transport_qp *qp;
-	phys_addr_t mw_base;
-	resource_size_t mw_size;
-	unsigned int num_qps_mw, tx_size;
 	unsigned int mw_num, mw_count, qp_count;
-	u64 qp_offset;
 
 	mw_count = nt->mw_count;
 	qp_count = nt->qp_count;
@@ -1151,36 +1166,6 @@ static int ntb_transport_init_queue(struct ntb_transport_ctx *nt,
 	qp->client_ready = false;
 	qp->event_handler = NULL;
 	ntb_qp_link_context_reset(qp);
-
-	if (mw_num < qp_count % mw_count)
-		num_qps_mw = qp_count / mw_count + 1;
-	else
-		num_qps_mw = qp_count / mw_count;
-
-	mw_base = nt->mw_vec[mw_num].phys_addr;
-	mw_size = nt->mw_vec[mw_num].phys_size;
-
-	if (max_mw_size && mw_size > max_mw_size)
-		mw_size = max_mw_size;
-
-	tx_size = (unsigned int)mw_size / num_qps_mw;
-	qp_offset = tx_size * (qp_num / mw_count);
-
-	qp->tx_mw_size = tx_size;
-	qp->tx_mw = nt->mw_vec[mw_num].vbase + qp_offset;
-	if (!qp->tx_mw)
-		return -EINVAL;
-
-	qp->tx_mw_phys = mw_base + qp_offset;
-	if (!qp->tx_mw_phys)
-		return -EINVAL;
-
-	tx_size -= sizeof(struct ntb_rx_info);
-	qp->rx_info = qp->tx_mw + tx_size;
-
-	/* Due to housekeeping, there must be atleast 2 buffs */
-	qp->tx_max_frame = min(transport_mtu, tx_size / 2);
-	qp->tx_max_entry = tx_size / qp->tx_max_frame;
 
 	if (nt->debugfs_node_dir) {
 		char debugfs_name[8];
