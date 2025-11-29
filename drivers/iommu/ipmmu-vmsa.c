@@ -741,7 +741,9 @@ static const char * const devices_allowlist[] = {
 	"ee100000.mmc",
 	"ee120000.mmc",
 	"ee140000.mmc",
-	"ee160000.mmc"
+	"ee160000.mmc",
+	"e65d0000.pcie",
+	"e65d0000.pcie-ep",
 };
 
 static bool ipmmu_device_is_allowed(struct device *dev)
