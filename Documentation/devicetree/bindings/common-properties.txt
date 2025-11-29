@@ -83,3 +83,15 @@ gpio@0 {
 	      #gpio-cells = <2>;
 	      #daisy-chained-devices = <3>;
 };
+
+Inaccessible registers
+----------------------
+
+If a register map as described by the 'reg' property contains registers
+that cannot be accessed for various reasons and splitting the register
+definition is not possible, use this property to denote that uncontrolled
+access outside of a device driver should be disabled.
+On Linux, for example, this disables regmap debugfs access
+
+Optional properties:
+- has-inaccessible-regs: Boolean
