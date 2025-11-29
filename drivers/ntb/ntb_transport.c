@@ -228,6 +228,8 @@ struct ntb_transport_ctx {
 
 	struct ntb_dev *ndev;
 
+	struct ntb_transport_backend_ops backend_ops;
+
 	struct ntb_transport_mw *mw_vec;
 	struct ntb_transport_qp *qp_vec;
 	unsigned int mw_count;
@@ -488,15 +490,9 @@ void ntb_transport_unregister_client(struct ntb_transport_client *drv)
 }
 EXPORT_SYMBOL_GPL(ntb_transport_unregister_client);
 
-static int ntb_qp_debugfs_stats_show(struct seq_file *s, void *v)
+static void ntb_transport_default_debugfs_stats_show(struct seq_file *s,
+						     struct ntb_transport_qp *qp)
 {
-	struct ntb_transport_qp *qp = s->private;
-
-	if (!qp || !qp->link_is_up)
-		return 0;
-
-	seq_puts(s, "\nNTB QP stats:\n\n");
-
 	seq_printf(s, "rx_bytes - \t%llu\n", qp->rx_bytes);
 	seq_printf(s, "rx_pkts - \t%llu\n", qp->rx_pkts);
 	seq_printf(s, "rx_memcpy - \t%llu\n", qp->rx_memcpy);
@@ -526,6 +522,17 @@ static int ntb_qp_debugfs_stats_show(struct seq_file *s, void *v)
 	seq_printf(s, "Using TX DMA - \t%s\n", qp->tx_dma_chan ? "Yes" : "No");
 	seq_printf(s, "Using RX DMA - \t%s\n", qp->rx_dma_chan ? "Yes" : "No");
 	seq_printf(s, "QP Link - \t%s\n", qp->link_is_up ? "Up" : "Down");
+}
+
+static int ntb_qp_debugfs_stats_show(struct seq_file *s, void *v)
+{
+	struct ntb_transport_qp *qp = s->private;
+
+	if (!qp || !qp->link_is_up)
+		return 0;
+
+	seq_puts(s, "\nNTB QP stats:\n\n");
+	qp->transport->backend_ops.debugfs_stats_show(s, qp);
 	seq_putc(s, '\n');
 
 	return 0;
@@ -583,8 +590,8 @@ static struct ntb_queue_entry *ntb_list_mv(spinlock_t *lock,
 	return entry;
 }
 
-static int ntb_transport_setup_qp_mw(struct ntb_transport_ctx *nt,
-				     unsigned int qp_num)
+static int ntb_transport_default_setup_qp_mw(struct ntb_transport_ctx *nt,
+					     unsigned int qp_num)
 {
 	struct ntb_transport_qp *qp = &nt->qp_vec[qp_num];
 	struct ntb_transport_mw *mw;
@@ -1128,7 +1135,7 @@ static void ntb_transport_link_work(struct work_struct *work)
 	for (i = 0; i < nt->qp_count; i++) {
 		struct ntb_transport_qp *qp = &nt->qp_vec[i];
 
-		ntb_transport_setup_qp_mw(nt, i);
+		nt->backend_ops.setup_qp_mw(nt, i);
 		ntb_transport_setup_qp_peer_msi(nt, i);
 
 		if (qp->client_ready)
@@ -1236,6 +1243,40 @@ static int ntb_transport_init_queue(struct ntb_transport_ctx *nt,
 	return 0;
 }
 
+static unsigned int ntb_transport_default_tx_free_entry(struct ntb_transport_qp *qp)
+{
+	unsigned int head = qp->tx_index;
+	unsigned int tail = qp->remote_rx_info->entry;
+
+	return tail >= head ? tail - head : qp->tx_max_entry + tail - head;
+}
+
+static int ntb_transport_default_rx_enqueue(struct ntb_transport_qp *qp,
+					    struct ntb_queue_entry *entry)
+{
+	ntb_list_add(&qp->ntb_rx_q_lock, &entry->entry, &qp->rx_pend_q);
+
+	if (qp->active)
+		tasklet_schedule(&qp->rxc_db_work);
+
+	return 0;
+}
+
+static void ntb_transport_default_rx_poll(struct ntb_transport_qp *qp);
+static int ntb_transport_default_tx_enqueue(struct ntb_transport_qp *qp,
+					    struct ntb_queue_entry *entry,
+					    void *cb, void *data, unsigned int len,
+					    unsigned int flags);
+
+static const struct ntb_transport_backend_ops default_backend_ops = {
+	.setup_qp_mw = ntb_transport_default_setup_qp_mw,
+	.tx_free_entry = ntb_transport_default_tx_free_entry,
+	.tx_enqueue = ntb_transport_default_tx_enqueue,
+	.rx_enqueue = ntb_transport_default_rx_enqueue,
+	.rx_poll = ntb_transport_default_rx_poll,
+	.debugfs_stats_show = ntb_transport_default_debugfs_stats_show,
+};
+
 static int ntb_transport_probe(struct ntb_client *self, struct ntb_dev *ndev)
 {
 	struct ntb_transport_ctx *nt;
@@ -1269,6 +1310,8 @@ static int ntb_transport_probe(struct ntb_client *self, struct ntb_dev *ndev)
 		return -ENOMEM;
 
 	nt->ndev = ndev;
+
+	nt->backend_ops = default_backend_ops;
 
 	/*
 	 * If we are using MSI, and have at least one extra memory window,
@@ -1679,13 +1722,9 @@ static int ntb_process_rxc(struct ntb_transport_qp *qp)
 	return 0;
 }
 
-static void ntb_transport_rxc_db(unsigned long data)
+static void ntb_transport_default_rx_poll(struct ntb_transport_qp *qp)
 {
-	struct ntb_transport_qp *qp = (void *)data;
 	int rc, i;
-
-	dev_dbg(&qp->ndev->pdev->dev, "%s: doorbell %d received\n",
-		__func__, qp->qp_num);
 
 	/* Limit the number of packets processed in a single interrupt to
 	 * provide fairness to others
@@ -1716,6 +1755,17 @@ static void ntb_transport_rxc_db(unsigned long data)
 		if (qp->active)
 			tasklet_schedule(&qp->rxc_db_work);
 	}
+}
+
+static void ntb_transport_rxc_db(unsigned long data)
+{
+	struct ntb_transport_qp *qp = (void *)data;
+	struct ntb_transport_ctx *nt = qp->transport;
+
+	dev_dbg(&qp->ndev->pdev->dev, "%s: doorbell %d received\n",
+		__func__, qp->qp_num);
+
+	nt->backend_ops.rx_poll(qp);
 }
 
 static void ntb_tx_copy_callback(void *data,
@@ -1887,9 +1937,18 @@ err:
 	qp->tx_memcpy++;
 }
 
-static int ntb_process_tx(struct ntb_transport_qp *qp,
-			  struct ntb_queue_entry *entry)
+static int ntb_transport_default_tx_enqueue(struct ntb_transport_qp *qp,
+					    struct ntb_queue_entry *entry,
+					    void *cb, void *data, unsigned int len,
+					    unsigned int flags)
 {
+	entry->cb_data = cb;
+	entry->buf = data;
+	entry->len = len;
+	entry->flags = flags;
+	entry->errors = 0;
+	entry->tx_index = 0;
+
 	if (!ntb_transport_tx_free_entry(qp)) {
 		qp->tx_ring_full++;
 		return -EAGAIN;
@@ -1916,6 +1975,7 @@ static int ntb_process_tx(struct ntb_transport_qp *qp,
 
 static void ntb_send_link_down(struct ntb_transport_qp *qp)
 {
+	struct ntb_transport_ctx *nt = qp->transport;
 	struct pci_dev *pdev = qp->ndev->pdev;
 	struct ntb_queue_entry *entry;
 	int i, rc;
@@ -1935,12 +1995,7 @@ static void ntb_send_link_down(struct ntb_transport_qp *qp)
 	if (!entry)
 		return;
 
-	entry->cb_data = NULL;
-	entry->buf = NULL;
-	entry->len = 0;
-	entry->flags = LINK_DOWN_FLAG;
-
-	rc = ntb_process_tx(qp, entry);
+	rc = nt->backend_ops.tx_enqueue(qp, entry, NULL, NULL, 0, LINK_DOWN_FLAG);
 	if (rc)
 		dev_err(&pdev->dev, "ntb: QP%d unable to send linkdown msg\n",
 			qp->qp_num);
@@ -2227,6 +2282,7 @@ EXPORT_SYMBOL_GPL(ntb_transport_rx_remove);
 int ntb_transport_rx_enqueue(struct ntb_transport_qp *qp, void *cb, void *data,
 			     unsigned int len)
 {
+	struct ntb_transport_ctx *nt = qp->transport;
 	struct ntb_queue_entry *entry;
 
 	if (!qp)
@@ -2244,12 +2300,7 @@ int ntb_transport_rx_enqueue(struct ntb_transport_qp *qp, void *cb, void *data,
 	entry->errors = 0;
 	entry->rx_index = 0;
 
-	ntb_list_add(&qp->ntb_rx_q_lock, &entry->entry, &qp->rx_pend_q);
-
-	if (qp->active)
-		tasklet_schedule(&qp->rxc_db_work);
-
-	return 0;
+	return nt->backend_ops.rx_enqueue(qp, entry);
 }
 EXPORT_SYMBOL_GPL(ntb_transport_rx_enqueue);
 
@@ -2269,6 +2320,7 @@ EXPORT_SYMBOL_GPL(ntb_transport_rx_enqueue);
 int ntb_transport_tx_enqueue(struct ntb_transport_qp *qp, void *cb, void *data,
 			     unsigned int len)
 {
+	struct ntb_transport_ctx *nt = qp->transport;
 	struct ntb_queue_entry *entry;
 	int rc;
 
@@ -2285,15 +2337,7 @@ int ntb_transport_tx_enqueue(struct ntb_transport_qp *qp, void *cb, void *data,
 		return -EBUSY;
 	}
 
-	entry->cb_data = cb;
-	entry->buf = data;
-	entry->len = len;
-	entry->flags = 0;
-	entry->errors = 0;
-	entry->retries = 0;
-	entry->tx_index = 0;
-
-	rc = ntb_process_tx(qp, entry);
+	rc = nt->backend_ops.tx_enqueue(qp, entry, cb, data, len, 0);
 	if (rc)
 		ntb_list_add(&qp->ntb_tx_free_q_lock, &entry->entry,
 			     &qp->tx_free_q);
@@ -2415,10 +2459,9 @@ EXPORT_SYMBOL_GPL(ntb_transport_max_size);
 
 unsigned int ntb_transport_tx_free_entry(struct ntb_transport_qp *qp)
 {
-	unsigned int head = qp->tx_index;
-	unsigned int tail = qp->remote_rx_info->entry;
+	struct ntb_transport_ctx *nt = qp->transport;
 
-	return tail >= head ? tail - head : qp->tx_max_entry + tail - head;
+	return nt->backend_ops.tx_free_entry(qp);
 }
 EXPORT_SYMBOL_GPL(ntb_transport_tx_free_entry);
 

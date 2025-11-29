@@ -49,6 +49,8 @@
  */
 
 struct ntb_transport_qp;
+struct ntb_transport_ctx;
+struct ntb_queue_entry;
 
 struct ntb_transport_client {
 	struct device_driver driver;
@@ -84,3 +86,22 @@ void ntb_transport_link_up(struct ntb_transport_qp *qp);
 void ntb_transport_link_down(struct ntb_transport_qp *qp);
 bool ntb_transport_link_query(struct ntb_transport_qp *qp);
 unsigned int ntb_transport_tx_free_entry(struct ntb_transport_qp *qp);
+
+/**
+ * struct ntb_transport_backend_ops - backend-specific transport hooks
+ * @setup_qp_mw:    Set up memory windows for a given queue pair.
+ * @tx_free_entry:  Return the number of free TX entries for the queue pair.
+ * @tx_enqueue:     Backend-specific TX enqueue implementation.
+ * @rx_enqueue:     Backend-specific RX enqueue implementation.
+ * @rx_poll:        Poll for RX completions / push new RX buffers.
+ * @debugfs_stats_show: Dump backend-specific statistics, if any.
+ */
+struct ntb_transport_backend_ops {
+	int (*setup_qp_mw)(struct ntb_transport_ctx *nt, unsigned int qp_num);
+	unsigned int (*tx_free_entry)(struct ntb_transport_qp *qp);
+	int (*tx_enqueue)(struct ntb_transport_qp *qp, struct ntb_queue_entry *entry,
+			  void *cb, void *data, unsigned int len, unsigned int flags);
+	int (*rx_enqueue)(struct ntb_transport_qp *qp, struct ntb_queue_entry *entry);
+	void (*rx_poll)(struct ntb_transport_qp *qp);
+	void (*debugfs_stats_show)(struct seq_file *s, struct ntb_transport_qp *qp);
+};
