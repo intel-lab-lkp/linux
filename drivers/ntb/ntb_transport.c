@@ -63,6 +63,7 @@
 #include <linux/mutex.h>
 #include "linux/ntb.h"
 #include "linux/ntb_transport.h"
+#include <linux/pci-epc.h>
 
 #define NTB_TRANSPORT_VERSION	4
 #define NTB_TRANSPORT_VER	"4"
@@ -258,6 +259,26 @@ struct ntb_payload_header {
 	unsigned int len;
 	unsigned int flags;
 };
+
+/*
+ * Return the device that should be used for DMA mapping.
+ *
+ * On RC, this is simply &pdev->dev.
+ * On EPF-backed NTB endpoints, use the EPC parent device so that
+ * DMA capabilities and IOMMU configuration are taken from the
+ * controller rather than the virtual NTB PCI function.
+ */
+static struct device *get_dma_dev(struct ntb_dev *ndev)
+{
+	struct device *dev = &ndev->pdev->dev;
+	struct pci_epc *epc;
+
+	epc = ntb_get_pci_epc(ndev);
+	if (epc)
+		dev = epc->dev.parent;
+
+	return dev;
+}
 
 enum {
 	VERSION = 0,
@@ -762,13 +783,13 @@ static void ntb_transport_msi_desc_changed(void *data)
 static void ntb_free_mw(struct ntb_transport_ctx *nt, int num_mw)
 {
 	struct ntb_transport_mw *mw = &nt->mw_vec[num_mw];
-	struct pci_dev *pdev = nt->ndev->pdev;
+	struct device *dev = get_dma_dev(nt->ndev);
 
 	if (!mw->virt_addr)
 		return;
 
 	ntb_mw_clear_trans(nt->ndev, PIDX, num_mw);
-	dma_free_coherent(&pdev->dev, mw->alloc_size,
+	dma_free_coherent(dev, mw->alloc_size,
 			  mw->alloc_addr, mw->dma_addr);
 	mw->xlat_size = 0;
 	mw->buff_size = 0;
@@ -838,7 +859,7 @@ static int ntb_set_mw(struct ntb_transport_ctx *nt, int num_mw,
 		      resource_size_t size)
 {
 	struct ntb_transport_mw *mw = &nt->mw_vec[num_mw];
-	struct pci_dev *pdev = nt->ndev->pdev;
+	struct device *dev = get_dma_dev(nt->ndev);
 	size_t xlat_size, buff_size;
 	resource_size_t xlat_align;
 	resource_size_t xlat_align_size;
@@ -868,12 +889,12 @@ static int ntb_set_mw(struct ntb_transport_ctx *nt, int num_mw,
 	mw->buff_size = buff_size;
 	mw->alloc_size = buff_size;
 
-	rc = ntb_alloc_mw_buffer(mw, &pdev->dev, xlat_align);
+	rc = ntb_alloc_mw_buffer(mw, dev, xlat_align);
 	if (rc) {
 		mw->alloc_size *= 2;
-		rc = ntb_alloc_mw_buffer(mw, &pdev->dev, xlat_align);
+		rc = ntb_alloc_mw_buffer(mw, dev, xlat_align);
 		if (rc) {
-			dev_err(&pdev->dev,
+			dev_err(dev,
 				"Unable to alloc aligned MW buff\n");
 			mw->xlat_size = 0;
 			mw->buff_size = 0;
@@ -886,7 +907,7 @@ static int ntb_set_mw(struct ntb_transport_ctx *nt, int num_mw,
 	rc = ntb_mw_set_trans(nt->ndev, PIDX, num_mw, mw->dma_addr,
 			      mw->xlat_size, offset);
 	if (rc) {
-		dev_err(&pdev->dev, "Unable to set mw%d translation", num_mw);
+		dev_err(dev, "Unable to set mw%d translation", num_mw);
 		ntb_free_mw(nt, num_mw);
 		return -EIO;
 	}
