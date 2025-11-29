@@ -395,6 +395,7 @@ typedef void (*regmap_unlock)(void *);
  *
  * @ranges: Array of configuration entries for virtual address ranges.
  * @num_ranges: Number of range configuration entries.
+ * @debugfs_disable: Disable debugfs access to this register.
  */
 struct regmap_config {
 	const char *name;
@@ -467,6 +468,8 @@ struct regmap_config {
 
 	const struct regmap_range_cfg *ranges;
 	unsigned int num_ranges;
+
+	bool debugfs_disable;
 };
 
 /**

@@ -697,6 +697,8 @@ struct regmap *__regmap_init(struct device *dev,
 	if (ret)
 		goto err_map;
 
+	map->debugfs_disable = config->debugfs_disable;
+
 	ret = -EINVAL; /* Later error paths rely on this */
 
 	if (config->disable_locking) {
