@@ -804,7 +804,8 @@ int intel_ntb_mw_count(struct ntb_dev *ntb, int pidx)
 int intel_ntb_mw_get_align(struct ntb_dev *ntb, int pidx, int idx,
 			   resource_size_t *addr_align,
 			   resource_size_t *size_align,
-			   resource_size_t *size_max)
+			   resource_size_t *size_max,
+			   resource_size_t *offset)
 {
 	struct intel_ntb_dev *ndev = ntb_ndev(ntb);
 	resource_size_t bar_size, mw_size;
@@ -840,7 +841,8 @@ int intel_ntb_mw_get_align(struct ntb_dev *ntb, int pidx, int idx,
 }
 
 static int intel_ntb_mw_set_trans(struct ntb_dev *ntb, int pidx, int idx,
-				  dma_addr_t addr, resource_size_t size)
+				  dma_addr_t addr, resource_size_t size,
+				  resource_size_t offset)
 {
 	struct intel_ntb_dev *ndev = ntb_ndev(ntb);
 	unsigned long base_reg, xlat_reg, limit_reg;

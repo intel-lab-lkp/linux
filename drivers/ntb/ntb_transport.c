@@ -883,7 +883,7 @@ static int ntb_set_mw(struct ntb_transport_ctx *nt, int num_mw,
 		return -EINVAL;
 
 	rc = ntb_mw_get_align(nt->ndev, PIDX, num_mw, &xlat_align,
-			      &xlat_align_size, NULL);
+			      &xlat_align_size, NULL, NULL);
 	if (rc)
 		return rc;
 
@@ -918,7 +918,7 @@ static int ntb_set_mw(struct ntb_transport_ctx *nt, int num_mw,
 
 	/* Notify HW the memory location of the receive buffer */
 	rc = ntb_mw_set_trans(nt->ndev, PIDX, num_mw, mw->dma_addr,
-			      mw->xlat_size);
+			      mw->xlat_size, 0);
 	if (rc) {
 		dev_err(&pdev->dev, "Unable to set mw%d translation", num_mw);
 		ntb_free_mw(nt, num_mw);

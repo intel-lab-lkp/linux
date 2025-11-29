@@ -164,7 +164,8 @@ static int ntb_epf_mw_count(struct ntb_dev *ntb, int pidx)
 static int ntb_epf_mw_get_align(struct ntb_dev *ntb, int pidx, int idx,
 				resource_size_t *addr_align,
 				resource_size_t *size_align,
-				resource_size_t *size_max)
+				resource_size_t *size_max,
+				resource_size_t *offset)
 {
 	struct ntb_epf_dev *ndev = ntb_ndev(ntb);
 	struct device *dev = ndev->dev;
@@ -402,7 +403,8 @@ static int ntb_epf_db_set_mask(struct ntb_dev *ntb, u64 db_bits)
 }
 
 static int ntb_epf_mw_set_trans(struct ntb_dev *ntb, int pidx, int idx,
-				dma_addr_t addr, resource_size_t size)
+				dma_addr_t addr, resource_size_t size,
+				resource_size_t offset)
 {
 	struct ntb_epf_dev *ndev = ntb_ndev(ntb);
 	struct device *dev = ndev->dev;

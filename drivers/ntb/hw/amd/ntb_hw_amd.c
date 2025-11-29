@@ -92,7 +92,8 @@ static int amd_ntb_mw_count(struct ntb_dev *ntb, int pidx)
 static int amd_ntb_mw_get_align(struct ntb_dev *ntb, int pidx, int idx,
 				resource_size_t *addr_align,
 				resource_size_t *size_align,
-				resource_size_t *size_max)
+				resource_size_t *size_max,
+				resource_size_t *offset)
 {
 	struct amd_ntb_dev *ndev = ntb_ndev(ntb);
 	int bar;
@@ -117,7 +118,8 @@ static int amd_ntb_mw_get_align(struct ntb_dev *ntb, int pidx, int idx,
 }
 
 static int amd_ntb_mw_set_trans(struct ntb_dev *ntb, int pidx, int idx,
-				dma_addr_t addr, resource_size_t size)
+				dma_addr_t addr, resource_size_t size,
+				resource_size_t offset)
 {
 	struct amd_ntb_dev *ndev = ntb_ndev(ntb);
 	unsigned long xlat_reg, limit_reg = 0;

@@ -159,7 +159,7 @@ int ndev_mw_to_bar(struct intel_ntb_dev *ndev, int idx);
 int intel_ntb_mw_count(struct ntb_dev *ntb, int pidx);
 int intel_ntb_mw_get_align(struct ntb_dev *ntb, int pidx, int idx,
 		resource_size_t *addr_align, resource_size_t *size_align,
-		resource_size_t *size_max);
+		resource_size_t *size_max, resource_size_t *offset);
 int intel_ntb_peer_mw_count(struct ntb_dev *ntb);
 int intel_ntb_peer_mw_get_addr(struct ntb_dev *ntb, int idx,
 		phys_addr_t *base, resource_size_t *size);

@@ -1190,7 +1190,8 @@ static int idt_ntb_mw_count(struct ntb_dev *ntb, int pidx)
 static int idt_ntb_mw_get_align(struct ntb_dev *ntb, int pidx, int widx,
 				resource_size_t *addr_align,
 				resource_size_t *size_align,
-				resource_size_t *size_max)
+				resource_size_t *size_max,
+				resource_size_t *offset)
 {
 	struct idt_ntb_dev *ndev = to_ndev_ntb(ntb);
 	struct idt_ntb_peer *peer;
