@@ -1015,6 +1015,7 @@ static void ntb_transport_link_work(struct work_struct *work)
 	struct ntb_dev *ndev = nt->ndev;
 	struct pci_dev *pdev = ndev->pdev;
 	resource_size_t size;
+	u64 qp_bitmap_free;
 	u32 val;
 	int rc = 0, i, spad;
 
@@ -1062,8 +1063,23 @@ static void ntb_transport_link_work(struct work_struct *work)
 
 	val = ntb_spad_read(ndev, NUM_QPS);
 	dev_dbg(&pdev->dev, "Remote max number of qps = %d\n", val);
-	if (val != nt->qp_count)
+	if (val == 0)
 		goto out;
+	else if (val < nt->qp_count) {
+		/*
+		 * Clamp local qp_count to peer-advertised NUM_QPS to avoid
+		 * mismatched queues.
+		 */
+		qp_bitmap_free = nt->qp_bitmap_free;
+		for (i = val; i < nt->qp_count; i++) {
+			nt->qp_bitmap &= ~BIT_ULL(i);
+			nt->qp_bitmap_free &= ~BIT_ULL(i);
+		}
+		dev_warn(&pdev->dev,
+			 "Local number of qps is reduced: %d->%d (qp_bitmap_free: 0x%llx->0x%llx)\n",
+			 nt->qp_count, val, qp_bitmap_free, nt->qp_bitmap_free);
+		nt->qp_count = val;
+	}
 
 	val = ntb_spad_read(ndev, NUM_MWS);
 	dev_dbg(&pdev->dev, "Remote number of mws = %d\n", val);
@@ -1298,8 +1314,6 @@ static int ntb_transport_probe(struct ntb_client *self, struct ntb_dev *ndev)
 
 	if (max_num_clients && max_num_clients < qp_count)
 		qp_count = max_num_clients;
-	else if (nt->mw_count < qp_count)
-		qp_count = nt->mw_count;
 
 	qp_bitmap &= BIT_ULL(qp_count) - 1;
 
