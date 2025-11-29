@@ -139,7 +139,9 @@ extern ktime_t tick_nohz_get_next_hrtimer(void);
 extern ktime_t tick_nohz_get_sleep_length(ktime_t *delta_next);
 extern unsigned long tick_nohz_get_idle_calls_cpu(int cpu);
 extern u64 get_cpu_idle_time_us(int cpu, u64 *last_update_time);
+extern u64 get_cpu_idle_time_us_raw(int cpu);
 extern u64 get_cpu_iowait_time_us(int cpu, u64 *last_update_time);
+extern u64 get_cpu_iowait_time_us_raw(int cpu);
 #else /* !CONFIG_NO_HZ_COMMON */
 #define tick_nohz_enabled (0)
 static inline int tick_nohz_tick_stopped(void) { return 0; }
@@ -161,7 +163,9 @@ static inline ktime_t tick_nohz_get_sleep_length(ktime_t *delta_next)
 	return *delta_next;
 }
 static inline u64 get_cpu_idle_time_us(int cpu, u64 *unused) { return -1; }
+static inline u64 get_cpu_idle_time_us_raw(int cpu) { return -1; }
 static inline u64 get_cpu_iowait_time_us(int cpu, u64 *unused) { return -1; }
+static inline u64 get_cpu_iowait_time_us_raw(int cpu) { return -1; }
 #endif /* !CONFIG_NO_HZ_COMMON */
 
 /*

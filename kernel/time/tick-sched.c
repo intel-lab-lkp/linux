@@ -808,6 +808,29 @@ u64 get_cpu_idle_time_us(int cpu, u64 *last_update_time)
 EXPORT_SYMBOL_GPL(get_cpu_idle_time_us);
 
 /**
+ * get_cpu_idle_time_us_raw - get the raw total idle time of a CPU
+ * @cpu: CPU number to query
+ *
+ * Return the raw idle time (since boot) for a given CPU, in
+ * microseconds.
+ *
+ * This time is measured via accounting rather than sampling,
+ * and is as accurate as ktime_get() is.
+ *
+ * This function returns -1 if NOHZ is not enabled.
+ */
+u64 get_cpu_idle_time_us_raw(int cpu)
+{
+	struct tick_sched *ts = &per_cpu(tick_cpu_sched, cpu);
+
+	if (!tick_nohz_active)
+		return -1;
+
+	return ktime_to_us(ts->idle_sleeptime);
+}
+EXPORT_SYMBOL_GPL(get_cpu_idle_time_us_raw);
+
+/**
  * get_cpu_iowait_time_us - get the total iowait time of a CPU
  * @cpu: CPU number to query
  * @last_update_time: variable to store update time in. Do not update
@@ -832,6 +855,29 @@ u64 get_cpu_iowait_time_us(int cpu, u64 *last_update_time)
 				     nr_iowait_cpu(cpu), last_update_time);
 }
 EXPORT_SYMBOL_GPL(get_cpu_iowait_time_us);
+
+/**
+ * get_cpu_iowait_time_us_raw - get the raw total iowait time of a CPU
+ * @cpu: CPU number to query
+ *
+ * Return the raw iowait time (since boot) for a given CPU, in
+ * microseconds.
+ *
+ * This time is measured via accounting rather than sampling,
+ * and is as accurate as ktime_get() is.
+ *
+ * This function returns -1 if NOHZ is not enabled.
+ */
+u64 get_cpu_iowait_time_us_raw(int cpu)
+{
+	struct tick_sched *ts = &per_cpu(tick_cpu_sched, cpu);
+
+	if (!tick_nohz_active)
+		return -1;
+
+	return ktime_to_us(ts->iowait_sleeptime);
+}
+EXPORT_SYMBOL_GPL(get_cpu_iowait_time_us_raw);
 
 static void tick_nohz_restart(struct tick_sched *ts, ktime_t now)
 {

@@ -28,6 +28,8 @@ u64 get_idle_time(struct kernel_cpustat *kcs, int cpu)
 
 	if (cpu_online(cpu))
 		idle_usecs = get_cpu_idle_time_us(cpu, NULL);
+	else
+		idle_usecs = get_cpu_idle_time_us_raw(cpu);
 
 	if (idle_usecs == -1ULL)
 		/* !NO_HZ or cpu offline so we can rely on cpustat.idle */
@@ -44,6 +46,8 @@ static u64 get_iowait_time(struct kernel_cpustat *kcs, int cpu)
 
 	if (cpu_online(cpu))
 		iowait_usecs = get_cpu_iowait_time_us(cpu, NULL);
+	else
+		iowait_usecs = get_cpu_iowait_time_us_raw(cpu);
 
 	if (iowait_usecs == -1ULL)
 		/* !NO_HZ or cpu offline so we can rely on cpustat.iowait */
