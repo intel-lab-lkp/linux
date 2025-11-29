@@ -70,6 +70,16 @@ static struct syscon *of_syscon_register(struct device_node *np, bool check_res)
 	else if (of_property_read_bool(np, "native-endian"))
 		syscon_config.val_format_endian = REGMAP_ENDIAN_NATIVE;
 
+
+	/*
+	 * Disable debugfs access if a register map has various inaccessible
+	 * registers.
+	 * In such a case the device driver has to know exactly how and when
+	 * access is allowed but general access via userspace can cause harm.
+	 */
+	if (of_property_read_bool(np, "has-inaccessible-regs"))
+		syscon_config.debugfs_disable = true;
+
 	/*
 	 * search for reg-io-width property in DT. If it is not provided,
 	 * default to 4 bytes. regmap_init_mmio will return an error if values
