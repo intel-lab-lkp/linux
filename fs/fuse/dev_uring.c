@@ -453,13 +453,15 @@ static void fuse_uring_async_stop_queues(struct work_struct *work)
 	 * If there are still queue references left
 	 */
 	if (atomic_read(&ring->queue_refs) > 0) {
-		if (time_after(jiffies,
+		if (!ring->stop_debug_log && time_after(jiffies,
 			       ring->teardown_time + FUSE_URING_TEARDOWN_TIMEOUT))
 			fuse_uring_log_ent_state(ring);
 
 		schedule_delayed_work(&ring->async_teardown_work,
 				      FUSE_URING_TEARDOWN_INTERVAL);
 	} else {
+		if (ring->stop_debug_log)
+			pr_info("All queues in the ring=%p have stopped\n", ring);
 		wake_up_all(&ring->stop_waitq);
 	}
 }
