@@ -2314,7 +2314,6 @@ struct dentry *cifs_mkdir(struct mnt_idmap *idmap, struct inode *inode,
 		goto mkdir_out;
 	}
 
-	/* TODO: skip this for smb2/smb3 */
 	rc = cifs_mkdir_qinfo(inode, direntry, mode, full_path, cifs_sb, tcon,
 			      xid);
 mkdir_out:
