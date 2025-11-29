@@ -32,6 +32,8 @@
 #include <linux/workqueue.h>
 #include <linux/sched/clock.h>
 
+#define STACK_MAGIC	0xdeadbeef
+
 #ifdef CONFIG_X86
 #include <asm/hypervisor.h>
 #endif
