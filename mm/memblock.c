@@ -2684,8 +2684,22 @@ static int __init reserve_mem(char *p)
 	if (reserve_mem_kho_revive(name, size, align))
 		return 1;
 
-	/* TODO: Allocation must be outside of scratch region */
-	start = memblock_phys_alloc(size, align);
+	phys_addr_t scratch_start, scratch_end;
+	phys_addr_t curr_start_addr = 0;
+	phys_addr_t alloc_end_addr = MEMBLOCK_ALLOC_ACCESSIBLE;
+	unsigned int i;
+
+	for (i = 0; i < kho_scratch_cnt; i++) {
+		scratch_start = kho_scratch[i].addr;
+		scratch_end = kho_scratch[i].addr + kho_scratch[i].size;
+		alloc_end_addr = scratch_start;
+		if (alloc_end_addr > curr_start_addr) {
+			start = memblock_phys_alloc_range(size, align, curr_start_addr, alloc_end_addr);
+			if (start)
+				break;
+		}
+   curr_start_addr = scratch_end;
+	}
 	if (!start)
 		return -ENOMEM;
 
