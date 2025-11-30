@@ -162,7 +162,8 @@ static inline bool blk_throtl_activated(struct request_queue *q)
 	 * blkcg_policy_enabled() guarantees that the policy is activated
 	 * in the request_queue.
 	 */
-	return q->td != NULL && blkcg_policy_enabled(q, &blkcg_policy_throtl);
+	return READ_ONCE(q->td) &&
+	       blkcg_policy_enabled(q, &blkcg_policy_throtl);
 }
 
 static inline bool blk_should_throtl(struct bio *bio)
