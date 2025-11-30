@@ -50,6 +50,11 @@ properties:
     description:
       Disable CLKOUT clock, CLKOUT clock default is enabled after hardware reset.
 
+  realtek,ssc-enable:
+    type: boolean
+    description:
+      Enable SSC mode, SSC mode default is disabled after hardware reset.
+
   wakeup-source:
     type: boolean
     description:
