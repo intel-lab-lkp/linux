@@ -410,20 +410,21 @@ config ALPHA_WTINT
 
 	  If unsure, say N.
 
-# LARGE_VMALLOC is racy, if you *really* need it then fix it first
-config ALPHA_LARGE_VMALLOC
-	bool
+config ALPHA_VMALLOC_SIZE
+	int "vmalloc space (in gigabytes)" if EXPERT
+	default "8"
+	range 8 2040
 	help
-	  Process creation and other aspects of virtual memory management can
-	  be streamlined if we restrict the kernel to one PGD for all vmalloc
-	  allocations.  This equates to about 8GB.
+	  We preallocate the second-level page tables to cover the entire
+	  vmalloc area; one 8Kb page for each 8Gb.
 
-	  Under normal circumstances, this is so far and above what is needed
-	  as to be laughable.  However, there are certain applications (such
-	  as benchmark-grade in-kernel web serving) that can make use of as
-	  much vmalloc space as is available.
+	  Default is 8Gb total and under normal circumstances, this is so
+	  far and above what is needed as to be laughable.  However, there are
+	  certain applications (such as benchmark-grade in-kernel web serving)
+	  that can make use of as much vmalloc space as is available.
 
-	  Say N unless you know you need gobs and gobs of vmalloc space.
+	  Leave it at 8 unless you know you need gobs and gobs of
+	  vmalloc space.
 
 config VERBOSE_MCHECK
 	bool "Verbose Machine Checks"

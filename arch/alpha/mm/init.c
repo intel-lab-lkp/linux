@@ -45,13 +45,10 @@ pgd_alloc(struct mm_struct *mm)
 	ret = __pgd_alloc(mm, 0);
 	init = pgd_offset(&init_mm, 0UL);
 	if (ret) {
-#ifdef CONFIG_ALPHA_LARGE_VMALLOC
-		memcpy (ret + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
-			(PTRS_PER_PGD - USER_PTRS_PER_PGD - 1)*sizeof(pgd_t));
-#else
-		pgd_val(ret[PTRS_PER_PGD-2]) = pgd_val(init[PTRS_PER_PGD-2]);
-#endif
-
+		for (int i = 0; i < VMALLOC_SLOTS; i++) {
+			pgd_val(ret[PTRS_PER_PGD - VMALLOC_SLOTS - 1 + i]) =
+			pgd_val(init[PTRS_PER_PGD - VMALLOC_SLOTS - 1 + i]);
+		}
 		/* The last PGD entry is the VPTB self-map.  */
 		pgd_val(ret[PTRS_PER_PGD-1])
 		  = pte_val(mk_pte(virt_to_page(ret), PAGE_KERNEL));
@@ -148,9 +145,10 @@ callback_init(void * kernel_end)
 	   On systems with larger consoles, additional pages will be
 	   allocated as needed during the mapping process.
 
-	   In the case of not SRM, but not CONFIG_ALPHA_LARGE_VMALLOC,
-	   we need to allocate the PGD we use for vmalloc before we start
-	   forking other tasks.  */
+	   In any case we need to allocate a PGD we use for vmalloc
+	   before we start forking other tasks.  If vmalloc wants more
+	   than one PGD slot, allocate the rest later (at mem_init() -
+	   it's still early enough).  */
 
 	two_pages = (void *)
 	  (((unsigned long)kernel_end + ~PAGE_MASK) & PAGE_MASK);
@@ -245,6 +243,22 @@ srm_paging_stop (void)
 	tbia();
 }
 #endif
+
+void __init mem_init(void)
+{
+	// first slot already filled by callback_init()
+	unsigned long addr = VMALLOC_START + PGDIR_SIZE;
+
+	while (addr < VMALLOC_END) {
+		pgd_t *pgd = pgd_offset_k(addr);
+		p4d_t *p4d = p4d_offset(pgd, addr);
+		pud_t *pud = pud_offset(p4d, addr);
+		pmd_t *pmd = pmd_alloc(&init_mm, pud, addr);
+		if (!pmd)
+			panic("can't preallocate tables for vmalloc");
+		addr += PGDIR_SIZE;
+	}
+}
 
 static const pgprot_t protection_map[16] = {
 	[VM_NONE]					= _PAGE_P(_PAGE_FOE | _PAGE_FOW |
