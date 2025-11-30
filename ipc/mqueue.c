@@ -889,6 +889,7 @@ static int prepare_open(struct dentry *dentry, int oflag, int ro,
 	if ((oflag & O_ACCMODE) == (O_RDWR | O_WRONLY))
 		return -EINVAL;
 	acc = oflag2acc[oflag & O_ACCMODE];
+	dget(dentry);
 	return inode_permission(&nop_mnt_idmap, d_inode(dentry), acc);
 }
 
