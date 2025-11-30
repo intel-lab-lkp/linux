@@ -725,7 +725,11 @@ void wbt_enable_default(struct gendisk *disk)
 		return;
 
 	if (queue_is_mq(q) && enable) {
+		unsigned int memflags = blk_mq_freeze_queue(q);
+
 		wbt_init(disk);
+		blk_mq_unfreeze_queue(q, memflags);
+
 		mutex_lock(&q->debugfs_mutex);
 		blk_mq_debugfs_register_rq_qos(q);
 		mutex_unlock(&q->debugfs_mutex);
@@ -926,7 +930,7 @@ int wbt_init(struct gendisk *disk)
 	 * Assign rwb and add the stats callback.
 	 */
 	mutex_lock(&q->rq_qos_mutex);
-	ret = rq_qos_add(&rwb->rqos, disk, RQ_QOS_WBT, &wbt_rqos_ops);
+	ret = rq_qos_add_frozen(&rwb->rqos, disk, RQ_QOS_WBT, &wbt_rqos_ops);
 	mutex_unlock(&q->rq_qos_mutex);
 	if (ret)
 		goto err_free;
