@@ -60,7 +60,7 @@
 #define VL		t2
 #define STRIDE		t3
 #define ROUND_CTR	t4
-#define KEY0		s0
+#define KEY0		t5
 #define KEY1		s1
 #define KEY2		s2
 #define KEY3		s3
@@ -142,8 +142,7 @@
 // the original Salsa20 paper which uses a 64-bit counter in state->x[12..13].
 // The updated 32-bit counter is written back to state->x[12] before returning.
 SYM_FUNC_START(chacha_zvkb)
-	addi		sp, sp, -96
-	sd		s0, 0(sp)
+	addi		sp, sp, -112
 	sd		s1, 8(sp)
 	sd		s2, 16(sp)
 	sd		s3, 24(sp)
@@ -155,6 +154,10 @@ SYM_FUNC_START(chacha_zvkb)
 	sd		s9, 72(sp)
 	sd		s10, 80(sp)
 	sd		s11, 88(sp)
+	sd		fp, 96(sp)
+	sd		ra, 104(sp)
+
+	addi		fp, sp, 112
 
 	li		STRIDE, 64
 
@@ -280,7 +283,6 @@ SYM_FUNC_START(chacha_zvkb)
 	bnez		NBLOCKS, .Lblock_loop
 
 	sw		COUNTER, 48(STATEP)
-	ld		s0, 0(sp)
 	ld		s1, 8(sp)
 	ld		s2, 16(sp)
 	ld		s3, 24(sp)
@@ -292,6 +294,7 @@ SYM_FUNC_START(chacha_zvkb)
 	ld		s9, 72(sp)
 	ld		s10, 80(sp)
 	ld		s11, 88(sp)
-	addi		sp, sp, 96
+	ld		fp, 96(sp)
+	addi		sp, sp, 112
 	ret
 SYM_FUNC_END(chacha_zvkb)
