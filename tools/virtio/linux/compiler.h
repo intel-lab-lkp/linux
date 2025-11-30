@@ -11,6 +11,10 @@
 
 #define __aligned(x) __attribute((__aligned__(x)))
 
+#ifndef __must_check
+# define __must_check
+#endif //__must_check
+
 /**
  * data_race - mark an expression as containing intentional data races
  *
