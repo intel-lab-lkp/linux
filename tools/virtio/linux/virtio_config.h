@@ -10,6 +10,27 @@ struct virtio_config_ops {
 	int (*enable_vq_after_reset)(struct virtqueue *vq);
 };
 
+struct virtio_map_ops {
+	dma_addr_t (*map_page)(union virtio_map map, struct page *page,
+			       unsigned long offset, size_t size,
+			       enum dma_data_direction dir, unsigned long attrs);
+	void (*unmap_page)(union virtio_map map, dma_addr_t map_handle,
+			   size_t size, enum dma_data_direction dir,
+			   unsigned long attrs);
+	void (*sync_single_for_cpu)(union virtio_map map, dma_addr_t map_handle,
+				    size_t size, enum dma_data_direction dir);
+	void (*sync_single_for_device)(union virtio_map map,
+				       dma_addr_t map_handle, size_t size,
+				       enum dma_data_direction dir);
+	void *(*alloc)(union virtio_map map, size_t size,
+		       dma_addr_t *map_handle, gfp_t gfp);
+	void (*free)(union virtio_map map, size_t size, void *vaddr,
+		     dma_addr_t map_handle, unsigned long attrs);
+	bool (*need_sync)(union virtio_map map, dma_addr_t map_handle);
+	int (*mapping_error)(union virtio_map map, dma_addr_t map_handle);
+	size_t (*max_mapping_size)(union virtio_map map);
+};
+
 /*
  * __virtio_test_bit - helper to test feature bits. For use by transports.
  *                     Devices should normally use virtio_has_feature,

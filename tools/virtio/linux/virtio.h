@@ -4,9 +4,14 @@
 #include <linux/scatterlist.h>
 #include <linux/kernel.h>
 #include <linux/spinlock.h>
+#include <linux/dma-mapping.h>
 
 struct device {
 	void *parent;
+};
+
+union virtio_map {
+	struct device *dma_dev;
 };
 
 struct virtio_device {
@@ -15,6 +20,8 @@ struct virtio_device {
 	struct list_head vqs;
 	spinlock_t vqs_list_lock;
 	const struct virtio_config_ops *config;
+	const struct virtio_map_ops *map;
+	union virtio_map vmap;
 };
 
 struct virtqueue {
@@ -69,4 +76,25 @@ struct virtqueue *vring_new_virtqueue(unsigned int index,
 				      const char *name);
 void vring_del_virtqueue(struct virtqueue *vq);
 
+void *virtqueue_map_alloc_coherent(struct virtio_device *vdev,
+				   union virtio_map mapping_token,
+				   size_t size, dma_addr_t *dma_handle,
+				   gfp_t gfp);
+
+void virtqueue_map_free_coherent(struct virtio_device *vdev,
+				 union virtio_map mapping_token,
+				 size_t size, void *vaddr,
+				 dma_addr_t dma_handle);
+
+dma_addr_t virtqueue_map_page_attrs(const struct virtqueue *_vq,
+				    struct page *page,
+				    unsigned long offset,
+				    size_t size,
+				    enum dma_data_direction dir,
+				    unsigned long attrs);
+
+void virtqueue_unmap_page_attrs(const struct virtqueue *_vq,
+				dma_addr_t dma_handle,
+				size_t size, enum dma_data_direction dir,
+				unsigned long attrs);
 #endif
