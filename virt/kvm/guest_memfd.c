@@ -4,6 +4,7 @@
 #include <linux/kvm_host.h>
 #include <linux/pagemap.h>
 #include <linux/anon_inodes.h>
+#include <linux/userfaultfd_k.h>
 
 #include "kvm_mm.h"
 
@@ -359,7 +360,15 @@ static vm_fault_t kvm_gmem_fault_user_mapping(struct vm_fault *vmf)
 	if (!((u64)inode->i_private & GUEST_MEMFD_FLAG_INIT_SHARED))
 		return VM_FAULT_SIGBUS;
 
-	folio = kvm_gmem_get_folio(inode, vmf->pgoff);
+	folio = filemap_lock_folio(inode->i_mapping, vmf->pgoff);
+	if (!IS_ERR_OR_NULL(folio) && userfaultfd_minor(vmf->vma)) {
+		ret = VM_FAULT_UFFD_MINOR;
+		goto out_folio;
+	}
+
+	if (PTR_ERR(folio) == -ENOENT)
+		folio = kvm_gmem_get_folio(inode, vmf->pgoff);
+
 	if (IS_ERR(folio)) {
 		int err = PTR_ERR(folio);
 
@@ -390,8 +399,30 @@ out_folio:
 	return ret;
 }
 
+#ifdef CONFIG_USERFAULTFD
+static struct folio *kvm_gmem_get_folio_noalloc(struct inode *inode,
+						pgoff_t pgoff)
+{
+	struct folio *folio;
+
+	folio = filemap_lock_folio(inode->i_mapping, pgoff);
+	if (IS_ERR_OR_NULL(folio))
+		return folio;
+
+	if (!folio_test_uptodate(folio)) {
+		clear_highpage(folio_page(folio, 0));
+		kvm_gmem_mark_prepared(folio);
+	}
+
+	return folio;
+}
+#endif
+
 static const struct vm_operations_struct kvm_gmem_vm_ops = {
 	.fault = kvm_gmem_fault_user_mapping,
+#ifdef CONFIG_USERFAULTFD
+	.get_folio_noalloc	= kvm_gmem_get_folio_noalloc,
+#endif
 };
 
 static int kvm_gmem_mmap(struct file *file, struct vm_area_struct *vma)
