@@ -419,11 +419,19 @@
 	};
 };
 
+&ibb {
+	status = "disabled";
+};
+
 &ipa {
 	qcom,gsi-loader = "self";
 	memory-region = <&ipa_fw_mem>;
 	firmware-name = "qcom/sdm845/oneplus6/ipa_fws.mbn";
 	status = "okay";
+};
+
+&lab {
+	status = "disabled";
 };
 
 &mdss {
