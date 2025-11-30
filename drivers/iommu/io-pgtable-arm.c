@@ -225,6 +225,8 @@ static inline int arm_lpae_max_entries(int i, struct arm_lpae_io_pgtable *data)
  *   b) 40 bits PA size with 16K: use level 2 instead of level 1 (16 tables for ias = oas)
  *   c) 42 bits PA size with 4K: use level 1 instead of level 0 (8 tables for ias = oas)
  *   d) 48 bits PA size with 16K: use level 1 instead of level 0 (2 tables for ias = oas)
+ *   f) 32/36 bits PA size with 4K and 40 bits IAS: use level 1 instead of level 0
+ *   g) 32/36 bits PA size with 16K and 40 bits IAS: use level 2 instead of level 1
  */
 static inline bool arm_lpae_concat_mandatory(struct io_pgtable_cfg *cfg,
 					     struct arm_lpae_io_pgtable *data)
@@ -236,13 +238,13 @@ static inline bool arm_lpae_concat_mandatory(struct io_pgtable_cfg *cfg,
 	if ((ARM_LPAE_GRANULE(data) == SZ_16K) && (data->start_level == 0))
 		return (oas == 48) || (ias == 48);
 
-	/* Covers 2.a and 2.c */
+	/* Covers 2.a, 2.c and 2.f */
 	if ((ARM_LPAE_GRANULE(data) == SZ_4K) && (data->start_level == 0))
-		return (oas == 40) || (oas == 42);
+		return (oas <= 42);
 
-	/* Case 2.b */
+	/* Case 2.b and 2.g */
 	return (ARM_LPAE_GRANULE(data) == SZ_16K) &&
-	       (data->start_level == 1) && (oas == 40);
+	       (data->start_level == 1) && (oas <= 40);
 }
 
 static dma_addr_t __arm_lpae_dma_addr(void *pages)
