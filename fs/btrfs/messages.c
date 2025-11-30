@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
+#include <linux/string.h>
 #include "fs.h"
 #include "messages.h"
 #include "discard.h"
@@ -230,8 +231,7 @@ void __cold _btrfs_printk(const struct btrfs_fs_info *fs_info, const char *fmt, 
 		size_t size = printk_skip_level(fmt) - fmt;
 
 		if (kern_level >= '0' && kern_level <= '7') {
-			memcpy(lvl, fmt,  size);
-			lvl[size] = '\0';
+			strscpy(lvl, fmt, size + 1);
 			type = logtypes[kern_level - '0'];
 			ratelimit = &printk_limits[kern_level - '0'];
 		}
