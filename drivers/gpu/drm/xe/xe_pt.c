@@ -1208,8 +1208,7 @@ static bool no_in_syncs(struct xe_sync_entry *syncs, u32 num_syncs)
 	for (i = 0; i < num_syncs; i++) {
 		struct dma_fence *fence = syncs[i].fence;
 
-		if (fence && !test_bit(DMA_FENCE_FLAG_SIGNALED_BIT,
-				       &fence->flags))
+		if (fence && !dma_fence_test_signaled_flag(fence))
 			return false;
 	}
 

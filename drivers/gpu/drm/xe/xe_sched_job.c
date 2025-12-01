@@ -188,7 +188,7 @@ static bool xe_fence_set_error(struct dma_fence *fence, int error)
 	bool signaled;
 
 	spin_lock_irqsave(fence->lock, irq_flags);
-	signaled = test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->flags);
+	signaled = dma_fence_test_signaled_flag(fence);
 	if (!signaled)
 		dma_fence_set_error(fence, error);
 	spin_unlock_irqrestore(fence->lock, irq_flags);

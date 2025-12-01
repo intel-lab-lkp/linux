@@ -1037,8 +1037,7 @@ struct dma_fence *xe_exec_queue_last_fence_get(struct xe_exec_queue *q,
 
 	xe_exec_queue_last_fence_lockdep_assert(q, vm);
 
-	if (q->last_fence &&
-	    test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &q->last_fence->flags))
+	if (q->last_fence && dma_fence_test_signaled_flag(q->last_fence))
 		xe_exec_queue_last_fence_put(q, vm);
 
 	fence = q->last_fence ? q->last_fence : dma_fence_get_stub();
@@ -1064,8 +1063,7 @@ struct dma_fence *xe_exec_queue_last_fence_get_for_resume(struct xe_exec_queue *
 
 	lockdep_assert_held_write(&q->hwe->hw_engine_group->mode_sem);
 
-	if (q->last_fence &&
-	    test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &q->last_fence->flags))
+	if (q->last_fence && dma_fence_test_signaled_flag(q->last_fence))
 		xe_exec_queue_last_fence_put_unlocked(q);
 
 	fence = q->last_fence ? q->last_fence : dma_fence_get_stub();
@@ -1106,8 +1104,7 @@ int xe_exec_queue_last_fence_test_dep(struct xe_exec_queue *q, struct xe_vm *vm)
 
 	fence = xe_exec_queue_last_fence_get(q, vm);
 	if (fence) {
-		err = test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->flags) ?
-			0 : -ETIME;
+		err = dma_fence_test_signaled_flag(fence) ? 0 : -ETIME;
 		dma_fence_put(fence);
 	}
 
