@@ -635,6 +635,12 @@ static void set_trbe_limit_pointer_enabled(struct trbe_buf *buf)
 	trblimitr &= ~TRBLIMITR_EL1_TM_MASK;
 	trblimitr &= ~TRBLIMITR_EL1_LIMIT_MASK;
 
+	if (buf->snapshot) {
+		trblimitr |= FIELD_PREP(TRBLIMITR_EL1_FM_MASK, TRBLIMITR_EL1_FM_CBUF) |
+			     FIELD_PREP(TRBLIMITR_EL1_TM_MASK, TRBLIMITR_EL1_TM_IGNR);
+		goto enable_trace_buf;
+	}
+
 	if (!buf->trbe_count ||
 	    buf->trbe_write + buf->trbe_count == buf->trbe_limit) {
 		/*
@@ -669,6 +675,7 @@ static void set_trbe_limit_pointer_enabled(struct trbe_buf *buf)
 			     FIELD_PREP(TRBLIMITR_EL1_TM_MASK, TRBLIMITR_EL1_TM_STOP);
 	}
 
+enable_trace_buf:
 	trblimitr |= (addr & PAGE_MASK);
 	set_trbe_enabled(buf->cpudata, trblimitr);
 }
