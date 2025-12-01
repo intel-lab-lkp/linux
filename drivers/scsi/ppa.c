@@ -1136,6 +1136,7 @@ static void ppa_detach(struct parport *pb)
 	ppa_struct *dev;
 	list_for_each_entry(dev, &ppa_hosts, list) {
 		if (dev->dev->port == pb) {
+			disable_delayed_work_sync(&dev->ppa_tq);
 			list_del_init(&dev->list);
 			scsi_remove_host(dev->host);
 			scsi_host_put(dev->host);
