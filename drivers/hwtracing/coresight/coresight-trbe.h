@@ -114,6 +114,20 @@ static inline void set_trbe_write_pointer(unsigned long addr)
 	write_sysreg_s(addr, SYS_TRBPTR_EL1);
 }
 
+static inline void set_trbe_trigger_count(unsigned long count)
+{
+	u64 trbsr;
+
+	write_sysreg_s(count, SYS_TRBTRG_EL1);
+
+	/* TRBSR_EL1.TRG has been cleared in clr_trbe_status() */
+	if (!count)
+		return;
+
+	trbsr = read_sysreg_s(SYS_TRBSR_EL1);
+	write_sysreg_s(trbsr | TRBSR_EL1_TRG, SYS_TRBSR_EL1);
+}
+
 static inline unsigned long get_trbe_limit_pointer(void)
 {
 	u64 trblimitr = read_sysreg_s(SYS_TRBLIMITR_EL1);
