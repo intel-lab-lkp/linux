@@ -801,62 +801,6 @@ out:
 	return err;
 }
 
-int filename__read_debuglink(const char *filename, char *debuglink,
-			     size_t size)
-{
-	int fd, err = -1;
-	Elf *elf;
-	GElf_Ehdr ehdr;
-	GElf_Shdr shdr;
-	Elf_Data *data;
-	Elf_Scn *sec;
-	Elf_Kind ek;
-
-	err = libbfd_filename__read_debuglink(filename, debuglink, size);
-	if (err >= 0)
-		goto out;
-
-	fd = open(filename, O_RDONLY);
-	if (fd < 0)
-		goto out;
-
-	elf = elf_begin(fd, PERF_ELF_C_READ_MMAP, NULL);
-	if (elf == NULL) {
-		pr_debug2("%s: cannot read %s ELF file.\n", __func__, filename);
-		goto out_close;
-	}
-
-	ek = elf_kind(elf);
-	if (ek != ELF_K_ELF)
-		goto out_elf_end;
-
-	if (gelf_getehdr(elf, &ehdr) == NULL) {
-		pr_err("%s: cannot get elf header.\n", __func__);
-		goto out_elf_end;
-	}
-
-	sec = elf_section_by_name(elf, &ehdr, &shdr,
-				  ".gnu_debuglink", NULL);
-	if (sec == NULL)
-		goto out_elf_end;
-
-	data = elf_getdata(sec, NULL);
-	if (data == NULL)
-		goto out_elf_end;
-
-	/* the start of this section is a zero-terminated string */
-	strncpy(debuglink, data->d_buf, size);
-
-	err = 0;
-
-out_elf_end:
-	elf_end(elf);
-out_close:
-	close(fd);
-out:
-	return err;
-}
-
 bool symsrc__possibly_runtime(struct symsrc *ss)
 {
 	return ss->dynsym || ss->opdsec;

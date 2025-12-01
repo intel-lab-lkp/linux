@@ -77,15 +77,6 @@ static int read_build_id(void *note_data, size_t note_len, struct build_id *bid,
 	return -1;
 }
 
-#ifndef HAVE_LIBELF_SUPPORT
-int filename__read_debuglink(const char *filename __maybe_unused,
-			     char *debuglink __maybe_unused,
-			     size_t size __maybe_unused)
-{
-	return -1;
-}
-#endif
-
 /*
  * Just try PT_NOTE header otherwise fails
  */
