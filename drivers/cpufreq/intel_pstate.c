@@ -2297,7 +2297,8 @@ static int hwp_get_cpu_scaling(int cpu)
 
 static void intel_pstate_set_pstate(struct cpudata *cpu, int pstate)
 {
-	trace_cpu_frequency(pstate * cpu->pstate.scaling, cpu->cpu);
+	trace_policy_frequency(pstate * cpu->pstate.scaling, cpu->cpu,
+			       cpumask_of(cpu->cpu));
 	cpu->pstate.current_pstate = pstate;
 	/*
 	 * Generally, there is no guarantee that this code will always run on
@@ -2587,7 +2588,8 @@ static void intel_pstate_adjust_pstate(struct cpudata *cpu)
 
 	target_pstate = get_target_pstate(cpu);
 	target_pstate = intel_pstate_prepare_request(cpu, target_pstate);
-	trace_cpu_frequency(target_pstate * cpu->pstate.scaling, cpu->cpu);
+	trace_policy_frequency(target_pstate * cpu->pstate.scaling, cpu->cpu,
+			       cpumask_of(cpu->cpu));
 	intel_pstate_update_pstate(cpu, target_pstate);
 
 	sample = &cpu->sample;

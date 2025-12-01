@@ -75,9 +75,9 @@ struct {
 } pstate_duration SEC(".maps");
 
 /*
- * The trace events for cpu_idle and cpu_frequency are taken from:
+ * The trace events for cpu_idle and policy_frequency are taken from:
  * /sys/kernel/tracing/events/power/cpu_idle/format
- * /sys/kernel/tracing/events/power/cpu_frequency/format
+ * /sys/kernel/tracing/events/power/policy_frequency/format
  *
  * These two events have same format, so define one common structure.
  */
@@ -162,7 +162,7 @@ int bpf_prog1(struct cpu_args *ctx)
 	 */
 	if (ctx->state != (u32)-1) {
 
-		/* record pstate after have first cpu_frequency event */
+		/* record pstate after have first policy_frequency event */
 		if (!*pts)
 			return 0;
 
@@ -208,7 +208,7 @@ int bpf_prog1(struct cpu_args *ctx)
 	return 0;
 }
 
-SEC("tracepoint/power/cpu_frequency")
+SEC("tracepoint/power/policy_frequency")
 int bpf_prog2(struct cpu_args *ctx)
 {
 	u64 *pts, *cstate, *pstate, cur_ts, delta;

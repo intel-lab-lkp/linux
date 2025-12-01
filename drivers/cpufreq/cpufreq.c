@@ -309,8 +309,6 @@ static void cpufreq_notify_transition(struct cpufreq_policy *policy,
 				      struct cpufreq_freqs *freqs,
 				      unsigned int state)
 {
-	int cpu;
-
 	BUG_ON(irqs_disabled());
 
 	if (cpufreq_disabled())
@@ -344,10 +342,7 @@ static void cpufreq_notify_transition(struct cpufreq_policy *policy,
 		adjust_jiffies(CPUFREQ_POSTCHANGE, freqs);
 		pr_debug("FREQ: %u - CPUs: %*pbl\n", freqs->new,
 			 cpumask_pr_args(policy->cpus));
-
-		for_each_cpu(cpu, policy->cpus)
-			trace_cpu_frequency(freqs->new, cpu);
-
+		trace_policy_frequency(freqs->new, policy->cpu, policy->cpus);
 		srcu_notifier_call_chain(&cpufreq_transition_notifier_list,
 					 CPUFREQ_POSTCHANGE, freqs);
 
@@ -2201,7 +2196,6 @@ unsigned int cpufreq_driver_fast_switch(struct cpufreq_policy *policy,
 					unsigned int target_freq)
 {
 	unsigned int freq;
-	int cpu;
 
 	target_freq = clamp_val(target_freq, policy->min, policy->max);
 	freq = cpufreq_driver->fast_switch(policy, target_freq);
@@ -2213,11 +2207,7 @@ unsigned int cpufreq_driver_fast_switch(struct cpufreq_policy *policy,
 	arch_set_freq_scale(policy->related_cpus, freq,
 			    arch_scale_freq_ref(policy->cpu));
 	cpufreq_stats_record_transition(policy, freq);
-
-	if (trace_cpu_frequency_enabled()) {
-		for_each_cpu(cpu, policy->cpus)
-			trace_cpu_frequency(freq, cpu);
-	}
+	trace_policy_frequency(freq, policy->cpu, policy->cpus);
 
 	return freq;
 }

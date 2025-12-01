@@ -143,12 +143,12 @@ static int cpu_stat_inject_cpu_idle_event(void)
 
 /*
  * It's possible to have no any frequency change for long time and cannot
- * get ftrace event 'trace_cpu_frequency' for long period, this introduces
+ * get ftrace event 'trace_policy_frequency' for long period, this introduces
  * big deviation for pstate statistics.
  *
  * To solve this issue, below code forces to set 'scaling_max_freq' to 208MHz
- * for triggering ftrace event 'trace_cpu_frequency' and then recovery back to
- * the maximum frequency value 1.2GHz.
+ * for triggering ftrace event 'trace_policy_frequency' and then recovery back
+ * to the maximum frequency value 1.2GHz.
  */
 static int cpu_stat_inject_cpu_frequency_event(void)
 {

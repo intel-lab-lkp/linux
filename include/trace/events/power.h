@@ -182,11 +182,29 @@ TRACE_EVENT(pstate_sample,
 		{ PM_EVENT_RECOVER, "recover" }, \
 		{ PM_EVENT_POWEROFF, "poweroff" })
 
-DEFINE_EVENT(cpu, cpu_frequency,
+TRACE_EVENT(policy_frequency,
 
-	TP_PROTO(unsigned int frequency, unsigned int cpu_id),
+	TP_PROTO(unsigned int frequency, unsigned int cpu_id,
+		 const struct cpumask *policy_cpus),
 
-	TP_ARGS(frequency, cpu_id)
+	TP_ARGS(frequency, cpu_id, policy_cpus),
+
+	TP_STRUCT__entry(
+		__field(u32, state)
+		__field(u32, cpu_id)
+		__cpumask(cpumask)
+	),
+
+	TP_fast_assign(
+		__entry->state = frequency;
+		__entry->cpu_id = cpu_id;
+		__assign_cpumask(cpumask, policy_cpus);
+	),
+
+	TP_printk("state=%lu cpu_id=%lu policy_cpus=%*pb",
+		  (unsigned long)__entry->state,
+		  (unsigned long)__entry->cpu_id,
+		  cpumask_pr_args((struct cpumask *)__get_dynamic_array(cpumask)))
 );
 
 TRACE_EVENT(cpu_frequency_limits,
