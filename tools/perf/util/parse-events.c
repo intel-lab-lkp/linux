@@ -1235,63 +1235,46 @@ do {								\
 	return 0;
 }
 
+#define ADD_CONFIG_CHG(format_type, term_type, new_term)		\
+{									\
+	struct parse_events_term *term;					\
+	u64 bits = 0;							\
+	int type;							\
+									\
+	list_for_each_entry(term, &head_config->terms, list) {		\
+		if (term->type_term == PARSE_EVENTS__TERM_TYPE_USER) {  \
+			type = perf_pmu__format_type(pmu, term->config);\
+			if (type != format_type)			\
+				continue;				\
+			bits |= perf_pmu__format_bits(pmu, term->config); \
+		} else if (term->type_term == term_type) {		\
+			bits = ~(u64)0;					\
+		}							\
+	}								\
+									\
+	if (bits)							\
+		ADD_CONFIG_TERM_VAL(new_term, cfg_chg, bits, false);	\
+	return 0;							\
+}
+
 /*
- * Add EVSEL__CONFIG_TERM_CFG_CHG where cfg_chg will have a bit set for
- * each bit of attr->config that the user has changed.
+ * Add EVSEL__CONFIG_TERM_USR_CFG_CONFIGn where cfg_chg will have a bit set for
+ * each bit of attr->configN that the user has changed.
  */
-static int get_config_chgs(struct perf_pmu *pmu, struct parse_events_terms *head_config,
+static int get_config_chgs(struct perf_pmu *pmu,
+			   struct parse_events_terms *head_config,
 			   struct list_head *head_terms)
 {
-	struct parse_events_term *term;
-	u64 bits = 0;
-	int type;
-
-	list_for_each_entry(term, &head_config->terms, list) {
-		switch (term->type_term) {
-		case PARSE_EVENTS__TERM_TYPE_USER:
-			type = perf_pmu__format_type(pmu, term->config);
-			if (type != PERF_PMU_FORMAT_VALUE_CONFIG)
-				continue;
-			bits |= perf_pmu__format_bits(pmu, term->config);
-			break;
-		case PARSE_EVENTS__TERM_TYPE_CONFIG:
-			bits = ~(u64)0;
-			break;
-		case PARSE_EVENTS__TERM_TYPE_CONFIG1:
-		case PARSE_EVENTS__TERM_TYPE_CONFIG2:
-		case PARSE_EVENTS__TERM_TYPE_CONFIG3:
-		case PARSE_EVENTS__TERM_TYPE_CONFIG4:
-		case PARSE_EVENTS__TERM_TYPE_LEGACY_HARDWARE_CONFIG:
-		case PARSE_EVENTS__TERM_TYPE_LEGACY_CACHE_CONFIG:
-		case PARSE_EVENTS__TERM_TYPE_NAME:
-		case PARSE_EVENTS__TERM_TYPE_SAMPLE_PERIOD:
-		case PARSE_EVENTS__TERM_TYPE_SAMPLE_FREQ:
-		case PARSE_EVENTS__TERM_TYPE_BRANCH_SAMPLE_TYPE:
-		case PARSE_EVENTS__TERM_TYPE_TIME:
-		case PARSE_EVENTS__TERM_TYPE_CALLGRAPH:
-		case PARSE_EVENTS__TERM_TYPE_STACKSIZE:
-		case PARSE_EVENTS__TERM_TYPE_NOINHERIT:
-		case PARSE_EVENTS__TERM_TYPE_INHERIT:
-		case PARSE_EVENTS__TERM_TYPE_MAX_STACK:
-		case PARSE_EVENTS__TERM_TYPE_MAX_EVENTS:
-		case PARSE_EVENTS__TERM_TYPE_NOOVERWRITE:
-		case PARSE_EVENTS__TERM_TYPE_OVERWRITE:
-		case PARSE_EVENTS__TERM_TYPE_DRV_CFG:
-		case PARSE_EVENTS__TERM_TYPE_PERCORE:
-		case PARSE_EVENTS__TERM_TYPE_AUX_OUTPUT:
-		case PARSE_EVENTS__TERM_TYPE_AUX_ACTION:
-		case PARSE_EVENTS__TERM_TYPE_AUX_SAMPLE_SIZE:
-		case PARSE_EVENTS__TERM_TYPE_METRIC_ID:
-		case PARSE_EVENTS__TERM_TYPE_RAW:
-		case PARSE_EVENTS__TERM_TYPE_CPU:
-		case PARSE_EVENTS__TERM_TYPE_RATIO_TO_PREV:
-		default:
-			break;
-		}
-	}
-
-	if (bits)
-		ADD_CONFIG_TERM_VAL(CFG_CHG, cfg_chg, bits, false);
+	ADD_CONFIG_CHG(PERF_PMU_FORMAT_VALUE_CONFIG,
+		       PARSE_EVENTS__TERM_TYPE_CONFIG, USR_CHG_CONFIG);
+	ADD_CONFIG_CHG(PERF_PMU_FORMAT_VALUE_CONFIG1,
+		       PARSE_EVENTS__TERM_TYPE_CONFIG1, USR_CHG_CONFIG1);
+	ADD_CONFIG_CHG(PERF_PMU_FORMAT_VALUE_CONFIG2,
+		       PARSE_EVENTS__TERM_TYPE_CONFIG2, USR_CHG_CONFIG2);
+	ADD_CONFIG_CHG(PERF_PMU_FORMAT_VALUE_CONFIG3,
+		       PARSE_EVENTS__TERM_TYPE_CONFIG3, USR_CHG_CONFIG3);
+	ADD_CONFIG_CHG(PERF_PMU_FORMAT_VALUE_CONFIG4,
+		       PARSE_EVENTS__TERM_TYPE_CONFIG4, USR_CHG_CONFIG4);
 
 #undef ADD_CONFIG_TERM
 	return 0;
