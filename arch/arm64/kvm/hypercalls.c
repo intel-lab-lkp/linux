@@ -126,14 +126,17 @@ static bool kvm_smccc_test_fw_bmap(struct kvm_vcpu *vcpu, u32 func_id)
 #define SMC32_ARCH_RANGE_BEGIN	ARM_SMCCC_VERSION_FUNC_ID
 #define SMC32_ARCH_RANGE_END	ARM_SMCCC_CALL_VAL(ARM_SMCCC_FAST_CALL,		\
 						   ARM_SMCCC_SMC_32,		\
-						   0, ARM_SMCCC_FUNC_MASK)
+						   ARM_SMCCC_OWNER_ARCH,	\
+						   ARM_SMCCC_FUNC_MASK)
 
 #define SMC64_ARCH_RANGE_BEGIN	ARM_SMCCC_CALL_VAL(ARM_SMCCC_FAST_CALL,		\
 						   ARM_SMCCC_SMC_64,		\
-						   0, 0)
+						   ARM_SMCCC_OWNER_ARCH,	\
+						   0)
 #define SMC64_ARCH_RANGE_END	ARM_SMCCC_CALL_VAL(ARM_SMCCC_FAST_CALL,		\
 						   ARM_SMCCC_SMC_64,		\
-						   0, ARM_SMCCC_FUNC_MASK)
+						   ARM_SMCCC_OWNER_ARCH,	\
+						   ARM_SMCCC_FUNC_MASK)
 
 static int kvm_smccc_filter_insert_reserved(struct kvm *kvm)
 {
