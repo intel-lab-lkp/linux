@@ -284,6 +284,9 @@ where
     ///
     /// The caller remains responsible for checking, either statically or dynamically, that `value`
     /// can be represented as a `T` using at most `N` bits.
+    ///
+    /// **Note**: This function is not marked as `unsafe` because it performs no memory-unsafe
+    /// operations itself.
     const fn __new(value: T) -> Self {
         // Enforce the type invariants.
         const {
