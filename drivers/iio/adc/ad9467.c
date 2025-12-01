@@ -145,6 +145,7 @@ struct ad9467_chip_info {
 	unsigned int num_lanes;
 	unsigned int dco_en;
 	unsigned int test_points;
+	const int *offset_range;
 	/* data clock output */
 	bool has_dco;
 	bool has_dco_invert;
@@ -234,6 +235,10 @@ static int ad9467_reg_access(struct iio_dev *indio_dev, unsigned int reg,
 	return 0;
 }
 
+static const int ad9434_offset_range[] = {
+	-128, 1, 127,
+};
+
 static const unsigned int ad9265_scale_table[][2] = {
 	{1250, 0x00}, {1500, 0x40}, {1750, 0x80}, {2000, 0xC0},
 };
@@ -281,6 +286,23 @@ static void __ad9467_get_scale(struct ad9467_state *st, int index,
 	*val2 = tmp % 1000000;
 }
 
+#define AD9434_CHAN(_chan, avai_mask, _si, _bits, _sign)		\
+{									\
+	.type = IIO_VOLTAGE,						\
+	.indexed = 1,							\
+	.channel = _chan,						\
+	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE) |		\
+		BIT(IIO_CHAN_INFO_SAMP_FREQ) |				\
+		BIT(IIO_CHAN_INFO_OFFSET),				\
+	.info_mask_shared_by_type_available = avai_mask,		\
+	.scan_index = _si,						\
+	.scan_type = {							\
+		.sign = _sign,						\
+		.realbits = _bits,					\
+		.storagebits = 16,					\
+	},								\
+}
+
 #define AD9467_CHAN(_chan, avai_mask, _si, _bits, _sign)		\
 {									\
 	.type = IIO_VOLTAGE,						\
@@ -298,7 +320,8 @@ static void __ad9467_get_scale(struct ad9467_state *st, int index,
 }
 
 static const struct iio_chan_spec ad9434_channels[] = {
-	AD9467_CHAN(0, BIT(IIO_CHAN_INFO_SCALE), 0, 12, 's'),
+	AD9434_CHAN(0, BIT(IIO_CHAN_INFO_SCALE) | BIT(IIO_CHAN_INFO_OFFSET),
+		    0, 12, 's'),
 };
 
 static const struct iio_chan_spec ad9467_channels[] = {
@@ -367,6 +390,7 @@ static const struct ad9467_chip_info ad9434_chip_tbl = {
 	.default_output_mode = AD9434_DEF_OUTPUT_MODE,
 	.vref_mask = AD9434_REG_VREF_MASK,
 	.num_lanes = 6,
+	.offset_range = ad9434_offset_range,
 };
 
 static const struct ad9467_chip_info ad9265_chip_tbl = {
@@ -497,6 +521,29 @@ static int ad9467_set_scale(struct ad9467_state *st, int val, int val2)
 	}
 
 	return -EINVAL;
+}
+
+static int ad9467_get_offset(struct ad9467_state *st, int *val)
+{
+	*val = ad9467_spi_read(st, AN877_ADC_REG_OFFSET);
+	if (*val < 0)
+		return *val;
+
+	return IIO_VAL_INT;
+}
+
+static int ad9467_set_offset(struct ad9467_state *st, int val)
+{
+	int ret;
+
+	if (val < st->info->offset_range[0] || val > st->info->offset_range[2])
+		return -EINVAL;
+
+	ret = ad9467_spi_write(st, AN877_ADC_REG_OFFSET, val);
+	if (ret < 0)
+		return ret;
+	return ad9467_spi_write(st, AN877_ADC_REG_TRANSFER,
+				AN877_ADC_TRANSFER_SYNC);
 }
 
 static int ad9467_outputmode_set(struct ad9467_state *st, unsigned int mode)
@@ -802,6 +849,8 @@ static int ad9467_read_raw(struct iio_dev *indio_dev,
 	struct ad9467_state *st = iio_priv(indio_dev);
 
 	switch (m) {
+	case IIO_CHAN_INFO_OFFSET:
+		return ad9467_get_offset(st, val);
 	case IIO_CHAN_INFO_SCALE:
 		return ad9467_get_scale(st, val, val2);
 	case IIO_CHAN_INFO_SAMP_FREQ:
@@ -836,6 +885,8 @@ static int ad9467_write_raw(struct iio_dev *indio_dev,
 	int ret;
 
 	switch (mask) {
+	case IIO_CHAN_INFO_OFFSET:
+		return ad9467_set_offset(st, val);
 	case IIO_CHAN_INFO_SCALE:
 		return ad9467_set_scale(st, val, val2);
 	case IIO_CHAN_INFO_SAMP_FREQ:
@@ -874,6 +925,11 @@ static int ad9467_read_avail(struct iio_dev *indio_dev,
 	const struct ad9467_chip_info *info = st->info;
 
 	switch (mask) {
+	case IIO_CHAN_INFO_OFFSET:
+		*type = IIO_VAL_INT;
+		*vals = info->offset_range;
+		*length = 3;
+		return IIO_AVAIL_RANGE;
 	case IIO_CHAN_INFO_SCALE:
 		*vals = (const int *)st->scales;
 		*type = IIO_VAL_INT_PLUS_MICRO;
