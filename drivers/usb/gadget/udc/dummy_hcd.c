@@ -73,11 +73,11 @@ static struct dummy_hcd_module_parameters mod_data = {
 	.is_high_speed = true,
 	.num = 1,
 };
-module_param_named(is_super_speed, mod_data.is_super_speed, bool, S_IRUGO);
+module_param_named(is_super_speed, mod_data.is_super_speed, bool, 0444);
 MODULE_PARM_DESC(is_super_speed, "true to simulate SuperSpeed connection");
-module_param_named(is_high_speed, mod_data.is_high_speed, bool, S_IRUGO);
+module_param_named(is_high_speed, mod_data.is_high_speed, bool, 0444);
 MODULE_PARM_DESC(is_high_speed, "true to simulate HighSpeed connection");
-module_param_named(num, mod_data.num, uint, S_IRUGO);
+module_param_named(num, mod_data.num, uint, 0444);
 MODULE_PARM_DESC(num, "number of emulated controllers");
 /*-------------------------------------------------------------------------*/
 
