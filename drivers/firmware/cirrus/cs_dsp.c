@@ -1446,7 +1446,7 @@ static int cs_dsp_load(struct cs_dsp *dsp, const struct firmware *firmware,
 	const struct wmfw_region *region;
 	const struct cs_dsp_region *mem;
 	const char *region_name;
-	u8 *buf __free(kfree) = NULL;
+	u8 *buf = NULL;
 	size_t buf_len = 0;
 	size_t region_len;
 	unsigned int reg;
@@ -1601,6 +1601,8 @@ static int cs_dsp_load(struct cs_dsp *dsp, const struct firmware *firmware,
 
 	ret = 0;
 out_fw:
+	kfree(buf);
+
 	if (ret == -EOVERFLOW)
 		cs_dsp_err(dsp, "%s: file content overflows file data\n", file);
 
@@ -2132,7 +2134,7 @@ static int cs_dsp_load_coeff(struct cs_dsp *dsp, const struct firmware *firmware
 	struct cs_dsp_alg_region *alg_region;
 	const char *region_name;
 	int ret, pos, blocks, type, offset, reg, version;
-	u8 *buf __free(kfree) = NULL;
+	u8 *buf = NULL;
 	size_t buf_len = 0;
 	size_t region_len;
 
@@ -2311,6 +2313,8 @@ static int cs_dsp_load_coeff(struct cs_dsp *dsp, const struct firmware *firmware
 
 	ret = 0;
 out_fw:
+	kfree(buf);
+
 	if (ret == -EOVERFLOW)
 		cs_dsp_err(dsp, "%s: file content overflows file data\n", file);
 
