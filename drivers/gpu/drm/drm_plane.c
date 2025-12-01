@@ -1421,6 +1421,10 @@ int drm_mode_page_flip_ioctl(struct drm_device *dev,
 		u32 current_vblank;
 		int r;
 
+		r = drm_crtc_vblank_prepare(crtc);
+		if (r)
+			return r;
+
 		r = drm_crtc_vblank_get(crtc);
 		if (r)
 			return r;
