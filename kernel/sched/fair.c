@@ -9991,6 +9991,10 @@ struct sg_lb_stats {
 	unsigned int nr_numa_running;
 	unsigned int nr_preferred_running;
 #endif
+#ifdef CONFIG_SCHED_CORE
+	unsigned int forceidle_weight;
+	unsigned long forceidle_capacity;
+#endif
 };
 
 /*
@@ -10179,6 +10183,29 @@ static inline int sg_imbalanced(struct sched_group *group)
 	return group->sgc->imbalance;
 }
 
+
+#ifdef CONFIG_SCHED_CORE
+static inline unsigned int sgs_available_weight(struct sg_lb_stats *sgs)
+{
+	return sgs->group_weight - sgs->forceidle_weight;
+}
+
+static inline unsigned long sgs_available_capacity(struct sg_lb_stats *sgs)
+{
+	return sgs->group_capacity - sgs->forceidle_capacity;
+}
+#else
+static inline unsigned int sgs_available_weight(struct sg_lb_stats *sgs)
+{
+	return sgs->group_weight;
+}
+
+static inline unsigned long sgs_available_capacity(struct sg_lb_stats *sgs)
+{
+	return sgs->group_capacity;
+}
+#endif /* CONFIG_SCHED_CORE */
+
 /*
  * group_has_capacity returns true if the group has spare capacity that could
  * be used by some tasks.
@@ -10194,14 +10221,14 @@ static inline int sg_imbalanced(struct sched_group *group)
 static inline bool
 group_has_capacity(unsigned int imbalance_pct, struct sg_lb_stats *sgs)
 {
-	if (sgs->sum_nr_running < sgs->group_weight)
+	if (sgs->sum_nr_running < sgs_available_weight(sgs))
 		return true;
 
-	if ((sgs->group_capacity * imbalance_pct) <
+	if ((sgs_available_capacity(sgs) * imbalance_pct) <
 			(sgs->group_runnable * 100))
 		return false;
 
-	if ((sgs->group_capacity * 100) >
+	if ((sgs_available_capacity(sgs) * 100) >
 			(sgs->group_util * imbalance_pct))
 		return true;
 
@@ -10219,14 +10246,14 @@ group_has_capacity(unsigned int imbalance_pct, struct sg_lb_stats *sgs)
 static inline bool
 group_is_overloaded(unsigned int imbalance_pct, struct sg_lb_stats *sgs)
 {
-	if (sgs->sum_nr_running <= sgs->group_weight)
+	if (sgs->sum_nr_running <= sgs_available_weight(sgs))
 		return false;
 
-	if ((sgs->group_capacity * 100) <
+	if ((sgs_available_capacity(sgs) * 100) <
 			(sgs->group_util * imbalance_pct))
 		return true;
 
-	if ((sgs->group_capacity * imbalance_pct) <
+	if ((sgs_available_capacity(sgs) * imbalance_pct) <
 			(sgs->group_runnable * 100))
 		return true;
 
@@ -10395,6 +10422,30 @@ sched_reduced_capacity(struct rq *rq, struct sched_domain *sd)
 	return check_cpu_capacity(rq, sd);
 }
 
+#ifdef CONFIG_SCHED_CORE
+static inline void
+update_forceidle_capacity(struct sched_domain *sd,
+			  struct sg_lb_stats *sgs,
+			  struct rq *rq)
+{
+	/*
+	 * Ignore force idle if we are balancing within the SMT mask
+	 */
+	if (sd->flags & SD_SHARE_CPUCAPACITY)
+		return;
+
+	if (rq_in_forceidle(rq)) {
+		sgs->forceidle_weight++;
+		sgs->forceidle_capacity += rq->cpu_capacity;
+	}
+}
+#else
+static inline void
+update_forceidle_capacity(struct sched_domain *sd,
+			  struct sg_lb_stats *sgs,
+			  struct rq *rq) {}
+#endif /* !CONFIG_SCHED_CORE */
+
 /**
  * update_sg_lb_stats - Update sched_group's statistics for load balancing.
  * @env: The load balancing environment.
@@ -10429,6 +10480,8 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 
 		nr_running = rq->nr_running;
 		sgs->sum_nr_running += nr_running;
+
+		update_forceidle_capacity(env->sd, sgs, rq);
 
 		if (cpu_overutilized(i))
 			*sg_overutilized = 1;
@@ -10749,6 +10802,8 @@ static inline void update_sg_wakeup_stats(struct sched_domain *sd,
 
 		nr_running = rq->nr_running - local;
 		sgs->sum_nr_running += nr_running;
+
+		update_forceidle_capacity(sd, sgs, rq);
 
 		/*
 		 * No need to call idle_cpu_without() if nr_running is not 0
