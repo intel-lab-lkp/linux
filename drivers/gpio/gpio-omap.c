@@ -861,6 +861,17 @@ static int omap_gpio_input(struct gpio_chip *chip, unsigned offset)
 	return 0;
 }
 
+/**
+ * omap_gpio_get - Get the logic level of an OMAP GPIO pin
+ * @chip: Pointer to the GPIO chip instance
+ * @offset: Offset of the GPIO pin within the chip's pin range
+ *
+ * Read the current logic level of the specified OMAP GPIO pin. If the pin is
+ * configured as input, read the actual pin level; if configured as output, read
+ * the last set output level.
+ *
+ * Return: 0 if the pin is at low level, 1 if at high level
+ */
 static int omap_gpio_get(struct gpio_chip *chip, unsigned offset)
 {
 	struct gpio_bank *bank = gpiochip_get_data(chip);
