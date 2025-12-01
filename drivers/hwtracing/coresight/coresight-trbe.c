@@ -696,7 +696,7 @@ static unsigned long trbe_get_trace_size(struct perf_output_handle *handle,
 {
 	u64 write;
 	u64 start_off, end_off;
-	u64 size;
+	u64 size, buf_size;
 	u64 overwrite_skip = TRBE_WORKAROUND_OVERWRITE_FILL_MODE_SKIP_BYTES;
 
 	/*
@@ -726,11 +726,18 @@ static unsigned long trbe_get_trace_size(struct perf_output_handle *handle,
 	 */
 	end_off = write - buf->trbe_base;
 	start_off = PERF_IDX2OFF(handle->head, buf);
+	buf_size = buf->trbe_limit - buf->trbe_base;
 
-	if (WARN_ON_ONCE(end_off < start_off))
-		return 0;
+	if (end_off > start_off)
+		size = end_off - start_off;
+	else if (end_off < start_off)
+		size = end_off + buf_size - start_off;
+	else if (wrap)
+		/* The start is the same as the end, just wrapped */
+		size = buf_size;
+	else
+		size = 0;
 
-	size = end_off - start_off;
 	/*
 	 * If the TRBE is affected by the following erratum, we must fill
 	 * the space we skipped with IGNORE packets. And we are always
