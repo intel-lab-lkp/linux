@@ -557,6 +557,12 @@ static void kvm_riscv_vcpu_setup_config(struct kvm_vcpu *vcpu)
 	if (riscv_isa_extension_available(isa, ZICBOZ))
 		cfg->henvcfg |= ENVCFG_CBZE;
 
+	if (riscv_isa_extension_available(isa, ZICFILP))
+		cfg->henvcfg |= ENVCFG_LPE;
+
+	if (riscv_isa_extension_available(isa, ZICFISS))
+		cfg->henvcfg |= ENVCFG_SSE;
+
 	if (riscv_isa_extension_available(isa, SVADU) &&
 	    !riscv_isa_extension_available(isa, SVADE))
 		cfg->henvcfg |= ENVCFG_ADUE;
