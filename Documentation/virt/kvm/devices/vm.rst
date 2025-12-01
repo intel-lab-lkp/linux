@@ -400,3 +400,14 @@ will reject attempts to define a filter for any portion of these ranges:
         0x8000_0000 0x8000_FFFF
         0xC000_0000 0xC000_FFFF
         =========== ===============
+
+Protected KVM (pKVM) reserves the 'Vendor Specific Hypervisor Service Calls'
+range of function IDs and will reject attempts to define a filter for any
+portion of these ranges for a protected VM (``KVM_VM_TYPE_ARM_PROTECTED``):
+
+        =========== ===============
+        Start       End (inclusive)
+        =========== ===============
+        0x8600_0000 0x8600_FFFF
+        0xC600_0000 0xC600_FFFF
+        =========== ===============
