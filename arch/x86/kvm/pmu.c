@@ -225,6 +225,19 @@ static u64 get_sample_period(struct kvm_pmc *pmc, u64 counter_value)
 {
 	u64 sample_period = (-counter_value) & pmc_bitmask(pmc);
 
+	/*
+	 * A sample_period of 1 might get mistaken by perf for a BTS event, see
+	 * intel_pmu_has_bts_period(). This would prevent re-arming the counter
+	 * via pmc_resume_counter(), followed by the accidental creation of an
+	 * actual BTS event, which we do not want.
+	 *
+	 * Avoid this by bumping the sampling period. Note, that we do not lose
+	 * any precision, because the same quirk happens later anyway (for
+	 * different reasons) in x86_perf_event_set_period().
+	 */
+	if (sample_period == 1)
+		sample_period = 2;
+
 	if (!sample_period)
 		sample_period = pmc_bitmask(pmc) + 1;
 	return sample_period;
