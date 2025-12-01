@@ -1983,10 +1983,10 @@ kfd_process_gpuid_from_node(struct kfd_process *p, struct kfd_node *node,
 	return -EINVAL;
 }
 
-static int signal_eviction_fence(struct kfd_process *p)
+static bool signal_eviction_fence(struct kfd_process *p)
 {
 	struct dma_fence *ef;
-	int ret;
+	bool ret;
 
 	rcu_read_lock();
 	ef = dma_fence_get_rcu_safe(&p->ef);
@@ -1994,7 +1994,7 @@ static int signal_eviction_fence(struct kfd_process *p)
 	if (!ef)
 		return -EINVAL;
 
-	ret = dma_fence_signal(ef);
+	ret = dma_fence_check_and_signal(ef);
 	dma_fence_put(ef);
 
 	return ret;
