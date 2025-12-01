@@ -669,21 +669,14 @@ static enum trbe_fault_action trbe_get_fault_act(struct perf_output_handle *hand
 	}
 
 	/*
-	 * Mark the buffer to indicate that there was a WRAP event by
-	 * setting the COLLISION flag. This indicates to the user that
-	 * the TRBE trace collection was stopped without stopping the
-	 * ETE and thus there might be some amount of trace that was
-	 * lost between the time the WRAP was detected and the IRQ
-	 * was consumed by the CPU.
-	 *
-	 * Setting the TRUNCATED flag would move the event to STOPPED
-	 * state unnecessarily, even when there is space left in the
-	 * ring buffer. Using the COLLISION flag doesn't have this side
-	 * effect. We only set TRUNCATED flag when there is no space
-	 * left in the ring buffer.
+	 * Mark the buffer to indicate that the trace is stopped by setting
+	 * the PARTIAL flag. This indicates to the user that the TRBE trace
+	 * collection was stopped without stopping the ETE and thus there
+	 * might be some amount of trace that was lost between the time the
+	 * TRBE event was detected and the IRQ was consumed by the CPU.
 	 */
 	if (!is_trbe_running(trbsr))
-		perf_aux_output_flag(handle, PERF_AUX_FLAG_COLLISION);
+		perf_aux_output_flag(handle, PERF_AUX_FLAG_PARTIAL);
 
 	if (is_trbe_wrap(trbsr))
 		return TRBE_FAULT_ACT_WRAP;
