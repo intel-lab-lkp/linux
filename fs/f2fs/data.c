@@ -3993,6 +3993,14 @@ static bool f2fs_dirty_data_folio(struct address_space *mapping,
 	return false;
 }
 
+static unsigned int f2fs_ra_folio_order(struct address_space *mapping,
+				     unsigned int order)
+{
+	if (!mapping_large_folio_support(mapping))
+		return order;
+
+	return max(order, F2FS_M_SB(mapping)->ra_folio_order);
+}
 
 static sector_t f2fs_bmap_compress(struct inode *inode, sector_t block)
 {
@@ -4311,6 +4319,7 @@ const struct address_space_operations f2fs_dblock_aops = {
 	.dirty_folio	= f2fs_dirty_data_folio,
 	.migrate_folio	= filemap_migrate_folio,
 	.invalidate_folio = f2fs_invalidate_folio,
+	.ra_folio_order	= f2fs_ra_folio_order,
 	.release_folio	= f2fs_release_folio,
 	.bmap		= f2fs_bmap,
 	.swap_activate  = f2fs_swap_activate,
