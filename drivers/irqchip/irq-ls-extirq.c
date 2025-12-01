@@ -192,26 +192,17 @@ static int ls_extirq_probe(struct platform_device *pdev)
 	if (!parent_domain)
 		return dev_err_probe(dev, -EPROBE_DEFER, "Cannot find parent domain\n");
 
-	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
-	if (!priv) {
-		ret = -ENOMEM;
-		goto err_alloc_priv;
-	}
+	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
+	if (!priv)
+		return -ENOMEM;
 
-	/*
-	 * All extirq OF nodes are under a scfg/syscon node with
-	 * the 'ranges' property
-	 */
-	priv->intpcr = of_iomap(node, 0);
-	if (!priv->intpcr) {
-		dev_err(dev, "Cannot ioremap OF node %pOF\n", node);
-		ret = -ENOMEM;
-		goto err_iomap;
-	}
+	priv->intpcr = devm_of_iomap(dev, node, 0, NULL);
+	if (!priv->intpcr)
+		return dev_err_probe(dev, -ENOMEM, "Cannot ioremap OF node %pOF\n", node);
 
 	ret = ls_extirq_parse_map(priv, node);
 	if (ret)
-		goto err_parse_map;
+		return dev_err_probe(dev, ret, "Failed to parse IRQ map\n");
 
 	priv->big_endian = of_device_is_big_endian(node->parent);
 	priv->is_ls1021a_or_ls1043a = of_device_is_compatible(node, "fsl,ls1021a-extirq") ||
@@ -220,20 +211,10 @@ static int ls_extirq_probe(struct platform_device *pdev)
 
 	domain = irq_domain_create_hierarchy(parent_domain, 0, priv->nirq, of_fwnode_handle(node),
 					     &extirq_domain_ops, priv);
-	if (!domain) {
-		ret = -ENOMEM;
-		goto err_add_hierarchy;
-	}
+	if (!domain)
+		return dev_err_probe(dev, -ENOMEM, "Failed to add IRQ domain\n");
 
 	return 0;
-
-err_add_hierarchy:
-err_parse_map:
-	iounmap(priv->intpcr);
-err_iomap:
-	kfree(priv);
-err_alloc_priv:
-	return ret;
 }
 
 static struct platform_driver ls_extirq_driver = {
