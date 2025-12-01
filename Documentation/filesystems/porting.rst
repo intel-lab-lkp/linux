@@ -1322,3 +1322,15 @@ When vfs_mkdir() returns an error, and so both dputs() the original
 dentry and doesn't provide a replacement, it also unlocks the parent.
 Consequently the return value from vfs_mkdir() can be passed to
 end_creating() and the parent will be unlocked precisely when necessary.
+
+---
+
+**mandatory**
+
+The ->create() operation has dropped the bool "excl" argument. This operation
+should now always provide O_EXCL semantics (i.e. fail with -EEXIST if the file
+exists). If the filesystem needs to handle the case where another entity could
+create the file on the backing store after a negative lookup or revalidate
+(e.g. it's a network filesystem and another client could create the file after
+a negative lookup), then it will require ->atomic_open() in addition to
+->create().
