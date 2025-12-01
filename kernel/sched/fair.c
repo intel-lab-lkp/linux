@@ -6987,6 +6987,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 }
 
 static void fair_remove_pushable_task(struct rq *rq, struct task_struct *p);
+
 /*
  * Basically dequeue_task_fair(), except it can deal with dequeue_entity()
  * failing half-way through and resume the dequeue later.
@@ -8496,8 +8497,72 @@ static inline bool sched_push_task_enabled(void)
 	return static_branch_unlikely(&sched_push_task);
 }
 
+static inline bool task_stuck_on_cpu(struct task_struct *p, int cpu)
+{
+	unsigned long max_capa, util;
+
+	max_capa = min(get_actual_cpu_capacity(cpu),
+		       uclamp_eff_value(p, UCLAMP_MAX));
+	util = max(task_util_est(p), task_runnable(p));
+
+	/*
+	 * Return true only if the task might not sleep/wakeup because of a low
+	 * compute capacity. Tasks, which wake up regularly, will be handled by
+	 * feec().
+	 */
+	return (util > max_capa);
+}
+
+static inline bool sched_energy_push_task(struct task_struct *p, struct rq *rq)
+{
+	if (!sched_energy_enabled())
+		return false;
+
+	if (is_rd_overutilized(rq->rd))
+		return false;
+
+	if (task_stuck_on_cpu(p, cpu_of(rq)))
+		return true;
+
+	if (!task_fits_cpu(p, cpu_of(rq)))
+		return true;
+
+	return false;
+}
+
+static inline bool sched_idle_push_task(struct task_struct *p, struct rq *rq)
+{
+	if (rq->nr_running == 1)
+		return false;
+
+	if (!is_rd_overutilized(rq->rd))
+		return false;
+
+	/* If there are idle cpus in the llc then try to push the task on it */
+	if (test_idle_cores(cpu_of(rq)))
+		return true;
+
+	return false;
+}
+
+
 static bool fair_push_task(struct rq *rq, struct task_struct *p)
 {
+	if (!task_on_rq_queued(p))
+		return false;
+
+	if (p->se.sched_delayed)
+		return false;
+
+	if (p->nr_cpus_allowed == 1)
+		return false;
+
+	if (sched_energy_push_task(p, rq))
+		return true;
+
+	if (sched_idle_push_task(p, rq))
+		return true;
+
 	return false;
 }
 

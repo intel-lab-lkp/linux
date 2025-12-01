@@ -391,10 +391,13 @@ static void sched_energy_set(bool has_eas)
 		if (sched_debug())
 			pr_info("%s: stopping EAS\n", __func__);
 		static_branch_disable_cpuslocked(&sched_energy_present);
+		static_branch_dec_cpuslocked(&sched_push_task);
+	} else if (has_eas && !sched_energy_enabled()) {
 	} else if (has_eas && !static_branch_unlikely(&sched_energy_present)) {
 		if (sched_debug())
 			pr_info("%s: starting EAS\n", __func__);
 		static_branch_enable_cpuslocked(&sched_energy_present);
+		static_branch_inc_cpuslocked(&sched_push_task);
 	}
 }
 
