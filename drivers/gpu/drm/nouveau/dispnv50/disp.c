@@ -2748,6 +2748,13 @@ nv50_display_read_hw_or_state(struct drm_device *dev, struct nv50_disp *disp,
 	if (drm_WARN_ON(dev, !found_conn))
 		return;
 
+	/*
+	 * Don't inherit eDP connections as it breaks the panel on
+	 * a bunch of laptops. It seems link training related,
+	 * but not inheriting just makes it work.
+	 */
+	if (nouveau_connector(conn)->type == DCB_CONNECTOR_eDP)
+		return;
 	armh->state.encoder_mask = encoder_mask;
 	armh->state.connector_mask = drm_connector_mask(conn);
 	armh->state.active = true;
