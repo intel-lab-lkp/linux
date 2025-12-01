@@ -642,8 +642,7 @@ static int intel_plane_atomic_calc_changes(const struct intel_crtc_state *old_cr
 	if (intel_plane_do_async_flip(plane, old_crtc_state, new_crtc_state)) {
 		new_crtc_state->do_async_flip = true;
 		new_crtc_state->async_flip_planes |= BIT(plane->id);
-	} else if (plane->need_async_flip_toggle_wa &&
-		   new_crtc_state->uapi.async_flip) {
+	} else if (new_crtc_state->uapi.async_flip) {
 		/*
 		 * On platforms with double buffered async flip bit we
 		 * set the bit already one frame early during the sync
@@ -651,6 +650,13 @@ static int intel_plane_atomic_calc_changes(const struct intel_crtc_state *old_cr
 		 * hardware will therefore be ready to perform a real
 		 * async flip during the next commit, without having
 		 * to wait yet another frame for the bit to latch.
+		 *
+		 * async_flip_planes bitmask is also used by selective
+		 * fetch calculation to continue full frame updates as
+		 * long as there may be pending async flip on any
+		 * plane which is part of selective
+		 * update. I.e. old_crtc_state->async_flip_planes &
+		 * BIT(<plane in su area>->id).
 		 */
 		new_crtc_state->async_flip_planes |= BIT(plane->id);
 	}
