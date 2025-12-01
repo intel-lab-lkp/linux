@@ -612,14 +612,24 @@ static inline bool cpusets_are_exclusive(struct cpuset *cs1, struct cpuset *cs2)
  * Returns: true if CPU exclusivity conflict exists, false otherwise
  *
  * Conflict detection rules:
- * 1. If either cpuset is CPU exclusive, they must be mutually exclusive
+ * For cgroup-v1:
+ *     see cpuset1_cpus_excl_conflict()
+ * For cgroup-v2:
+ * 1. If both cs1 and cs2 are exclusive, cs1 and cs2 must be mutually exclusive
  * 2. exclusive_cpus masks cannot intersect between cpusets
  * 3. The allowed CPUs of one cpuset cannot be a subset of another's exclusive CPUs
+ * 4. If a cpuset is exclusive and its exclusive CPUs are empty, its allowed CPUs
+ *    will be treated as exclusive CPUs; therefore, its allowed CPUs must not
+ *    intersect with another's exclusive CPUs.
  */
 static inline bool cpus_excl_conflict(struct cpuset *cs1, struct cpuset *cs2)
 {
-	/* If either cpuset is exclusive, check if they are mutually exclusive */
-	if (is_cpu_exclusive(cs1) || is_cpu_exclusive(cs2))
+	/* For cgroup-v1 */
+	if (!cpuset_v2())
+		return cpuset1_cpus_excl_conflict(cs1, cs2);
+
+	/* If cpusets are exclusive, check if they are mutually exclusive*/
+	if (is_cpu_exclusive(cs1) && is_cpu_exclusive(cs2))
 		return !cpusets_are_exclusive(cs1, cs2);
 
 	/* Exclusive_cpus cannot intersect */
@@ -633,6 +643,20 @@ static inline bool cpus_excl_conflict(struct cpuset *cs1, struct cpuset *cs2)
 
 	if (!cpumask_empty(cs2->cpus_allowed) &&
 	    cpumask_subset(cs2->cpus_allowed, cs1->exclusive_cpus))
+		return true;
+
+	/*
+	 * When a cpuset is exclusive and its exclusive CPUs are empty,
+	 * its cpus_allowed cannot intersect with another cpuset's exclusive_cpus.
+	 */
+	if (is_cpu_exclusive(cs1) &&
+	    cpumask_empty(cs1->exclusive_cpus) &&
+	    cpumask_intersects(cs1->cpus_allowed, cs2->exclusive_cpus))
+		return true;
+
+	if (is_cpu_exclusive(cs2) &&
+	    cpumask_empty(cs2->exclusive_cpus) &&
+	    cpumask_intersects(cs2->cpus_allowed, cs1->exclusive_cpus))
 		return true;
 
 	return false;
@@ -2475,34 +2499,17 @@ static int cpus_allowed_validate_change(struct cpuset *cs, struct cpuset *trialc
 					struct tmpmasks *tmp)
 {
 	int retval;
-	struct cpuset *parent = parent_cs(cs);
 
 	retval = validate_change(cs, trialcs);
 
 	if ((retval == -EINVAL) && cpuset_v2()) {
-		struct cgroup_subsys_state *css;
-		struct cpuset *cp;
-
 		/*
 		 * The -EINVAL error code indicates that partition sibling
 		 * CPU exclusivity rule has been violated. We still allow
 		 * the cpumask change to proceed while invalidating the
-		 * partition. However, any conflicting sibling partitions
-		 * have to be marked as invalid too.
+		 * partition.
 		 */
 		trialcs->prs_err = PERR_NOTEXCL;
-		rcu_read_lock();
-		cpuset_for_each_child(cp, css, parent) {
-			struct cpumask *xcpus = user_xcpus(trialcs);
-
-			if (is_partition_valid(cp) &&
-			    cpumask_intersects(xcpus, cp->effective_xcpus)) {
-				rcu_read_unlock();
-				update_parent_effective_cpumask(cp, partcmd_invalidate, NULL, tmp);
-				rcu_read_lock();
-			}
-		}
-		rcu_read_unlock();
 		retval = 0;
 	}
 	return retval;
@@ -2570,8 +2577,15 @@ static int update_cpumask(struct cpuset *cs, struct cpuset *trialcs,
 	if (alloc_tmpmasks(&tmp))
 		return -ENOMEM;
 
-	compute_trialcs_excpus(trialcs, cs);
-	trialcs->prs_err = PERR_NONE;
+	/*
+	 * if there is exclusive CPUs conflict with the siblings,
+	 * we still allow the cpumask change to proceed while
+	 * invalidating the partition.
+	 */
+	if (compute_trialcs_excpus(trialcs, cs))
+		trialcs->prs_err = PERR_NOTEXCL;
+	else
+		trialcs->prs_err = PERR_NONE;
 
 	retval = cpus_allowed_validate_change(cs, trialcs, &tmp);
 	if (retval < 0)
