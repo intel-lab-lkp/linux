@@ -424,6 +424,13 @@ static int cs_etm_recording_options(struct auxtrace_record *itr,
 		pr_debug2("%s snapshot size: %zu\n", CORESIGHT_ETM_PMU_NAME,
 			  opts->auxtrace_snapshot_size);
 
+	if (!opts->auxtrace_snapshot_mode && !opts->auxtrace_sample_mode) {
+		size_t aw = opts->auxtrace_mmap_pages * (size_t)page_size / 4;
+		u32 aux_watermark = aw > UINT_MAX ? UINT_MAX : aw;
+
+		cs_etm_evsel->core.attr.aux_watermark = aux_watermark;
+	}
+
 	/*
 	 * To obtain the auxtrace buffer file descriptor, the auxtrace
 	 * event must come first.
