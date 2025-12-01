@@ -77,6 +77,58 @@ static int read_build_id(void *note_data, size_t note_len, struct build_id *bid,
 	return -1;
 }
 
+static int read_build_id_fd(int fd, struct build_id *bid, bool need_swap)
+{
+	size_t size = sizeof(bid->data);
+	struct {
+		u32 n_namesz;
+		u32 n_descsz;
+		u32 n_type;
+	} nhdr;
+
+	while (true) {
+		size_t namesz, descsz, n;
+		ssize_t err;
+
+		err = read(fd, &nhdr, sizeof(nhdr));
+		if (err != sizeof(nhdr))
+			return err == -1 ? -errno : -EIO;
+
+		if (need_swap) {
+			nhdr.n_namesz = bswap_32(nhdr.n_namesz);
+			nhdr.n_descsz = bswap_32(nhdr.n_descsz);
+			nhdr.n_type = bswap_32(nhdr.n_type);
+		}
+		namesz = NOTE_ALIGN(nhdr.n_namesz);
+		descsz = NOTE_ALIGN(nhdr.n_descsz);
+		n = namesz + descsz; /* Remaining bytes of this note. */
+
+		if (nhdr.n_type == NT_GNU_BUILD_ID && nhdr.n_namesz == sizeof("GNU")) {
+			char name[NOTE_ALIGN(sizeof("GNU"))];
+
+			err = read(fd, name, sizeof(name));
+			if (err != sizeof(name))
+				return err == -1 ? -errno : -EIO;
+
+			n = descsz;
+			if (memcmp(name, "GNU", sizeof("GNU")) == 0) {
+				/* Successfully found build ID. */
+				ssize_t sz = min(descsz, size);
+
+				err = read(fd, bid->data, sz);
+				if (err != sz)
+					return err == -1 ? -errno : -EIO;
+
+				memset(bid->data + sz, 0, size - sz);
+				bid->size = sz;
+				return 0;
+			}
+		}
+		if (lseek(fd, n, SEEK_CUR) == -1)
+			return -errno;
+	}
+}
+
 /*
  * Just try PT_NOTE header otherwise fails
  */
@@ -194,38 +246,20 @@ out:
 	return ret;
 }
 
-#ifndef HAVE_LIBELF_SUPPORT
-int sysfs__read_build_id(const char *filename, struct build_id *bid)
+int sym_min_sysfs__read_build_id(const char *filename, struct build_id *bid)
 {
-	int fd;
-	int ret = -1;
-	struct stat stbuf;
-	size_t buf_size;
-	void *buf;
+	int fd, ret;
 
 	fd = open(filename, O_RDONLY);
 	if (fd < 0)
-		return -1;
+		return -errno;
 
-	if (fstat(fd, &stbuf) < 0)
-		goto out;
-
-	buf_size = stbuf.st_size;
-	buf = malloc(buf_size);
-	if (buf == NULL)
-		goto out;
-
-	if (read(fd, buf, buf_size) != (ssize_t) buf_size)
-		goto out_free;
-
-	ret = read_build_id(buf, buf_size, bid, false);
-out_free:
-	free(buf);
-out:
+	ret = read_build_id_fd(fd, bid, /*need_swap=*/false);
 	close(fd);
 	return ret;
 }
 
+#ifndef HAVE_LIBELF_SUPPORT
 int symsrc__init(struct symsrc *ss, struct dso *dso, const char *name,
 	         enum dso_binary_type type)
 {

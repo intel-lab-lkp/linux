@@ -751,56 +751,6 @@ out_elf_end:
 	return 0;
 }
 
-int sysfs__read_build_id(const char *filename, struct build_id *bid)
-{
-	size_t size = sizeof(bid->data);
-	int fd, err = -1;
-
-	fd = open(filename, O_RDONLY);
-	if (fd < 0)
-		goto out;
-
-	while (1) {
-		char bf[BUFSIZ];
-		GElf_Nhdr nhdr;
-		size_t namesz, descsz;
-
-		if (read(fd, &nhdr, sizeof(nhdr)) != sizeof(nhdr))
-			break;
-
-		namesz = NOTE_ALIGN(nhdr.n_namesz);
-		descsz = NOTE_ALIGN(nhdr.n_descsz);
-		if (nhdr.n_type == NT_GNU_BUILD_ID &&
-		    nhdr.n_namesz == sizeof("GNU")) {
-			if (read(fd, bf, namesz) != (ssize_t)namesz)
-				break;
-			if (memcmp(bf, "GNU", sizeof("GNU")) == 0) {
-				size_t sz = min(descsz, size);
-				if (read(fd, bid->data, sz) == (ssize_t)sz) {
-					memset(bid->data + sz, 0, size - sz);
-					bid->size = sz;
-					err = 0;
-					break;
-				}
-			} else if (read(fd, bf, descsz) != (ssize_t)descsz)
-				break;
-		} else {
-			int n = namesz + descsz;
-
-			if (n > (int)sizeof(bf)) {
-				n = sizeof(bf);
-				pr_debug("%s: truncating reading of build id in sysfs file %s: n_namesz=%u, n_descsz=%u.\n",
-					 __func__, filename, nhdr.n_namesz, nhdr.n_descsz);
-			}
-			if (read(fd, bf, n) != n)
-				break;
-		}
-	}
-	close(fd);
-out:
-	return err;
-}
-
 bool symsrc__possibly_runtime(struct symsrc *ss)
 {
 	return ss->dynsym || ss->opdsec;

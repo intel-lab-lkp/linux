@@ -2050,6 +2050,12 @@ out:
 	return err;
 }
 
+int sysfs__read_build_id(const char *filename, struct build_id *bid)
+{
+	/* Doesn't mmap file into memory. */
+	return sym_min_sysfs__read_build_id(filename, bid);
+}
+
 int filename__read_debuglink(const char *filename, char *debuglink, size_t size)
 {
 	int err = libbfd_filename__read_debuglink(filename, debuglink, size);
