@@ -7,8 +7,6 @@
 #include <linux/pci-ide.h>
 #include <uapi/linux/psp-sev.h>
 
-#if defined(CONFIG_CRYPTO_DEV_SP_PSP)
-
 struct sla_addr_t {
 	union {
 		u64 sla;
@@ -128,15 +126,5 @@ int sev_tio_dev_create(struct tsm_dsm_tio *dev_data, u16 device_id, u16 root_por
 int sev_tio_dev_connect(struct tsm_dsm_tio *dev_data, u8 tc_mask, u8 ids[8], u8 cert_slot);
 int sev_tio_dev_disconnect(struct tsm_dsm_tio *dev_data, bool force);
 int sev_tio_dev_reclaim(struct tsm_dsm_tio *dev_data);
-
-#endif	/* CONFIG_CRYPTO_DEV_SP_PSP */
-
-#if defined(CONFIG_PCI_TSM)
-void sev_tsm_init_locked(struct sev_device *sev, void *tio_status_page);
-void sev_tsm_uninit(struct sev_device *sev);
-int sev_tio_cmd_buffer_len(int cmd);
-#else
-static inline int sev_tio_cmd_buffer_len(int cmd) { return 0; }
-#endif
 
 #endif	/* __PSP_SEV_TIO_H__ */

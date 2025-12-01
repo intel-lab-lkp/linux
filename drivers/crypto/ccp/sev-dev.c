@@ -38,7 +38,6 @@
 
 #include "psp-dev.h"
 #include "sev-dev.h"
-#include "sev-dev-tio.h"
 
 #define DEVICE_NAME		"sev"
 #define SEV_FW_FILE		"amd/sev.fw"
@@ -1358,11 +1357,6 @@ static int snp_filter_reserved_mem_regions(struct resource *rs, void *arg)
 	return 0;
 }
 
-static bool sev_tio_present(struct sev_device *sev)
-{
-	return (sev->snp_feat_info_0.ebx & SNP_SEV_TIO_SUPPORTED) != 0;
-}
-
 static int __sev_snp_init_locked(int *error, unsigned int max_snp_asid)
 {
 	struct psp_device *psp = psp_master;
@@ -1441,10 +1435,12 @@ static int __sev_snp_init_locked(int *error, unsigned int max_snp_asid)
 		data.list_paddr = __psp_pa(snp_range_list);
 
 #if defined(CONFIG_PCI_TSM)
-		data.tio_en = sev_tio_present(sev) &&
+		bool tio_supp = !!(sev->snp_feat_info_0.ebx & SNP_SEV_TIO_SUPPORTED);
+
+		data.tio_en = tio_supp &&
 			sev_tio_enabled && psp_init_on_probe &&
 			amd_iommu_sev_tio_supported();
-		if (sev_tio_present(sev) && !psp_init_on_probe)
+		if (tio_supp && !psp_init_on_probe)
 			dev_warn(sev->dev, "SEV-TIO as incompatible with psp_init_on_probe=0\n");
 #endif
 		cmd = SEV_CMD_SNP_INIT_EX;
