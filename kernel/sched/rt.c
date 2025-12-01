@@ -319,6 +319,9 @@ static inline void rt_queue_push_tasks(struct rt_rq *rt_rq)
 {
 	struct rq *rq = served_rq_of_rt_rq(rt_rq);
 
+	BUG_ON(rt_rq == NULL);
+	BUG_ON(rq != cpu_rq(rq->cpu));
+
 	if (!has_pushable_tasks(rt_rq))
 		return;
 
@@ -328,6 +331,9 @@ static inline void rt_queue_push_tasks(struct rt_rq *rt_rq)
 static inline void rt_queue_pull_task(struct rt_rq *rt_rq)
 {
 	struct rq *rq = served_rq_of_rt_rq(rt_rq);
+
+	BUG_ON(rt_rq == NULL);
+	BUG_ON(rq != cpu_rq(rq->cpu));
 
 	queue_balance_callback(rq, &per_cpu(rt_pull_head, rq->cpu), pull_rt_task);
 }
