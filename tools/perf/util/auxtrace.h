@@ -8,6 +8,7 @@
 #define __PERF_AUXTRACE_H
 
 #include <stdio.h> // FILE
+#include <unistd.h> // pid_t
 #include <linux/perf_event.h>
 #include <linux/types.h>
 #include <asm/barrier.h>

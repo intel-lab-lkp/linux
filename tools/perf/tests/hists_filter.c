@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
+#include "util/addr_location.h"
 #include "util/debug.h"
 #include "util/map.h"
 #include "util/symbol.h"

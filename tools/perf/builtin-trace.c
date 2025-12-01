@@ -13,17 +13,22 @@
  *
  * http://lwn.net/Articles/415728/ ("Announcing a new utility: 'trace'")
  */
+#include <errno.h>
+#include <fcntl.h>
+#include <inttypes.h>
+#include <poll.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/sysmacros.h>
 
-#include "util/record.h"
-#include <api/fs/tracing_path.h>
-#ifdef HAVE_LIBBPF_SUPPORT
-#include <bpf/bpf.h>
-#include <bpf/libbpf.h>
-#include <bpf/btf.h>
-#endif
-#include "util/bpf_map.h"
-#include "util/rlimit.h"
 #include "builtin.h"
+#include "perf.h"
+
+#include "trace/beauty/beauty.h"
+#include "util/addr_location.h"
+#include "util/bpf_map.h"
+#include "util/callchain.h"
 #include "util/cgroup.h"
 #include "util/color.h"
 #include "util/config.h"
@@ -31,47 +36,39 @@
 #include "util/dso.h"
 #include "util/env.h"
 #include "util/event.h"
+#include "util/evlist.h"
 #include "util/evsel.h"
 #include "util/evsel_fprintf.h"
-#include "util/synthetic-events.h"
-#include "util/evlist.h"
 #include "util/evswitch.h"
 #include "util/hashmap.h"
-#include "util/mmap.h"
-#include <subcmd/pager.h>
-#include <subcmd/exec-cmd.h>
+#include "util/include/dwarf-regs.h"
+#include "util/intlist.h"
 #include "util/machine.h"
 #include "util/map.h"
-#include "util/symbol.h"
-#include "util/path.h"
-#include "util/session.h"
-#include "util/thread.h"
-#include <subcmd/parse-options.h>
-#include "util/strlist.h"
-#include "util/intlist.h"
-#include "util/thread_map.h"
-#include "util/stat.h"
-#include "util/tool.h"
-#include "util/trace.h"
-#include "util/util.h"
-#include "trace/beauty/beauty.h"
-#include "trace-event.h"
+#include "util/mmap.h"
 #include "util/parse-events.h"
+#include "util/path.h"
+#include "util/print_binary.h"
+#include "util/record.h"
+#include "util/rlimit.h"
+#include "util/session.h"
+#include "util/stat.h"
+#include "util/string2.h"
+#include "util/strlist.h"
+#include "util/symbol.h"
+#include "util/synthetic-events.h"
+#include "util/syscalltbl.h"
+#include "util/thread.h"
+#include "util/thread_map.h"
+#include "util/tool.h"
+#include "util/trace-event.h"
+#include "util/trace.h"
+#include "util/trace_augment.h"
 #include "util/tracepoint.h"
-#include "callchain.h"
-#include "print_binary.h"
-#include "string2.h"
-#include "syscalltbl.h"
-#include "../perf.h"
-#include "trace_augment.h"
-#include "dwarf-regs.h"
+#include "util/util.h"
 
-#include <errno.h>
-#include <inttypes.h>
-#include <poll.h>
-#include <signal.h>
-#include <stdlib.h>
-#include <string.h>
+#include <api/fs/tracing_path.h>
+#include <linux/ctype.h>
 #include <linux/err.h>
 #include <linux/filter.h>
 #include <linux/kernel.h>
@@ -80,12 +77,17 @@
 #include <linux/stringify.h>
 #include <linux/time64.h>
 #include <linux/zalloc.h>
-#include <fcntl.h>
-#include <sys/sysmacros.h>
-
-#include <linux/ctype.h>
 #include <perf/mmap.h>
+#include <subcmd/exec-cmd.h>
+#include <subcmd/pager.h>
+#include <subcmd/parse-options.h>
 #include <tools/libc_compat.h>
+
+#ifdef HAVE_LIBBPF_SUPPORT
+#include <bpf/bpf.h>
+#include <bpf/libbpf.h>
+#include <bpf/btf.h>
+#endif
 
 #ifdef HAVE_LIBTRACEEVENT
 #include <event-parse.h>

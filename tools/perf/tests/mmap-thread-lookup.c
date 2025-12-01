@@ -7,6 +7,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include "addr_location.h"
 #include "debug.h"
 #include "env.h"
 #include "event.h"

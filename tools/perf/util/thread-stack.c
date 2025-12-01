@@ -11,15 +11,17 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-#include "thread.h"
+
+#include "addr_location.h"
+#include "call-path.h"
+#include "comm.h"
+#include "debug.h"
+#include "env.h"
 #include "event.h"
 #include "machine.h"
-#include "env.h"
-#include "debug.h"
 #include "symbol.h"
-#include "comm.h"
-#include "call-path.h"
 #include "thread-stack.h"
+#include "thread.h"
 
 #define STACK_GROWTH 2048
 

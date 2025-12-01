@@ -21,6 +21,7 @@
 
 #include "asm/bug.h"
 
+#include "addr_location.h"
 #include "debug.h"
 #include "dso.h"
 #include "event.h"

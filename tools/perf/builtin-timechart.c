@@ -12,33 +12,35 @@
 #include <inttypes.h>
 
 #include "builtin.h"
+
+#include "util/addr_location.h"
+#include "util/callchain.h"
 #include "util/color.h"
-#include <linux/list.h>
+#include "util/data.h"
+#include "util/debug.h"
+#include "util/event.h"
 #include "util/evlist.h" // for struct evsel_str_handler
 #include "util/evsel.h"
+#include "util/header.h"
+#include "util/parse-events.h"
+#include "util/session.h"
+#include "util/string2.h"
+#include "util/svghelper.h"
+#include "util/symbol.h"
+#include "util/thread.h"
+#include "util/tool.h"
+#include "util/tracepoint.h"
+#include "util/util.h"
+
+#include <event-parse.h>
+#include <linux/err.h>
 #include <linux/kernel.h>
+#include <linux/list.h>
 #include <linux/rbtree.h>
 #include <linux/time64.h>
 #include <linux/zalloc.h>
-#include "util/symbol.h"
-#include "util/thread.h"
-#include "util/callchain.h"
-
-#include "util/header.h"
 #include <subcmd/pager.h>
 #include <subcmd/parse-options.h>
-#include "util/parse-events.h"
-#include "util/event.h"
-#include "util/session.h"
-#include "util/svghelper.h"
-#include "util/tool.h"
-#include "util/data.h"
-#include "util/debug.h"
-#include "util/string2.h"
-#include "util/tracepoint.h"
-#include "util/util.h"
-#include <linux/err.h>
-#include <event-parse.h>
 
 #ifdef LACKS_OPEN_MEMSTREAM_PROTOTYPE
 FILE *open_memstream(char **ptr, size_t *sizeloc);

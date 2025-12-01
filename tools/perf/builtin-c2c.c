@@ -12,41 +12,45 @@
  */
 #include <errno.h>
 #include <inttypes.h>
+#include <sys/param.h>
+
+#include "builtin.h"
+
+#include "ui/browsers/hists.h"
+#include "ui/progress.h"
+#include "ui/ui.h"
+#include "util/addr_location.h"
+#include "util/annotate.h"
+#include "util/cacheline.h"
+#include "util/data.h"
+#include "util/debug.h"
+#include "util/event.h"
+#include "util/evlist.h"
+#include "util/evsel.h"
+#include "util/hist.h"
+#include "util/map_symbol.h"
+#include "util/mem-events.h"
+#include "util/mem-info.h"
+#include "util/mem2node.h"
+#include "util/pmus.h"
+#include "util/session.h"
+#include "util/sort.h"
+#include "util/string2.h"
+#include "util/symbol.h"
+#include "util/symbol.h"
+#include "util/thread.h"
+#include "util/tool.h"
+#include "util/util.h"
+
+#include <asm/bug.h>
 #include <linux/compiler.h>
 #include <linux/err.h>
 #include <linux/kernel.h>
 #include <linux/stringify.h>
 #include <linux/zalloc.h>
-#include <asm/bug.h>
-#include <sys/param.h>
-#include "debug.h"
-#include "builtin.h"
 #include <perf/cpumap.h>
 #include <subcmd/pager.h>
 #include <subcmd/parse-options.h>
-#include "map_symbol.h"
-#include "mem-events.h"
-#include "session.h"
-#include "hist.h"
-#include "sort.h"
-#include "tool.h"
-#include "cacheline.h"
-#include "data.h"
-#include "event.h"
-#include "evlist.h"
-#include "evsel.h"
-#include "ui/browsers/hists.h"
-#include "thread.h"
-#include "mem2node.h"
-#include "mem-info.h"
-#include "symbol.h"
-#include "ui/ui.h"
-#include "ui/progress.h"
-#include "pmus.h"
-#include "string2.h"
-#include "util/util.h"
-#include "util/symbol.h"
-#include "util/annotate.h"
 
 struct c2c_hists {
 	struct hists		hists;

@@ -12,17 +12,18 @@
 #define PY_SSIZE_T_CLEAN
 
 #include <Python.h>
+#include "../../../util/addr_location.h"
+#include "../../../util/auxtrace.h"
 #include "../../../util/config.h"
-#include "../../../util/trace-event.h"
 #include "../../../util/event.h"
-#include "../../../util/symbol.h"
-#include "../../../util/thread.h"
 #include "../../../util/map.h"
 #include "../../../util/maps.h"
-#include "../../../util/auxtrace.h"
 #include "../../../util/session.h"
-#include "../../../util/srcline.h"
 #include "../../../util/srccode.h"
+#include "../../../util/srcline.h"
+#include "../../../util/symbol.h"
+#include "../../../util/thread.h"
+#include "../../../util/trace-event.h"
 
 #define _PyCapsule_GetPointer(arg1, arg2) \
   PyCapsule_GetPointer((arg1), (arg2))

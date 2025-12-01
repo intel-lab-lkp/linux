@@ -6,68 +6,66 @@
  * look up and read DSOs and symbol information and display
  * a histogram of results, along various sorting keys.
  */
-#include "builtin.h"
-
-#include "util/config.h"
-
-#include "util/annotate.h"
-#include "util/color.h"
-#include "util/dso.h"
-#include <linux/list.h>
-#include <linux/rbtree.h>
-#include <linux/err.h>
-#include <linux/zalloc.h>
-#include "util/map.h"
-#include "util/symbol.h"
-#include "util/map_symbol.h"
-#include "util/mem-events.h"
-#include "util/branch.h"
-#include "util/callchain.h"
-#include "util/values.h"
-
-#include "perf.h"
-#include "util/debug.h"
-#include "util/evlist.h"
-#include "util/evsel.h"
-#include "util/evswitch.h"
-#include "util/header.h"
-#include "util/mem-info.h"
-#include "util/session.h"
-#include "util/srcline.h"
-#include "util/tool.h"
-
-#include <subcmd/parse-options.h>
-#include <subcmd/exec-cmd.h>
-#include "util/parse-events.h"
-
-#include "util/thread.h"
-#include "util/sort.h"
-#include "util/hist.h"
-#include "util/data.h"
-#include "arch/common.h"
-#include "util/time-utils.h"
-#include "util/auxtrace.h"
-#include "util/units.h"
-#include "util/util.h" // perf_tip()
-#include "ui/ui.h"
-#include "ui/progress.h"
-#include "util/block-info.h"
-
 #include <dlfcn.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <regex.h>
-#include <linux/ctype.h>
 #include <signal.h>
-#include <linux/bitmap.h>
-#include <linux/list_sort.h>
-#include <linux/string.h>
-#include <linux/stringify.h>
-#include <linux/time64.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
+#include "builtin.h"
+#include "perf.h"
+
+#include "arch/common.h"
+#include "ui/progress.h"
+#include "ui/ui.h"
+#include "util/addr_location.h"
+#include "util/annotate.h"
+#include "util/auxtrace.h"
+#include "util/block-info.h"
+#include "util/branch.h"
+#include "util/callchain.h"
+#include "util/color.h"
+#include "util/config.h"
+#include "util/data.h"
+#include "util/debug.h"
+#include "util/dso.h"
+#include "util/evlist.h"
+#include "util/evsel.h"
+#include "util/evswitch.h"
+#include "util/header.h"
+#include "util/hist.h"
+#include "util/map.h"
+#include "util/map_symbol.h"
+#include "util/mem-events.h"
+#include "util/mem-info.h"
+#include "util/parse-events.h"
+#include "util/session.h"
+#include "util/sort.h"
+#include "util/srcline.h"
+#include "util/symbol.h"
+#include "util/thread.h"
+#include "util/time-utils.h"
+#include "util/tool.h"
+#include "util/units.h"
+#include "util/util.h" // perf_tip()
+#include "util/values.h"
+
+#include <linux/bitmap.h>
+#include <linux/ctype.h>
+#include <linux/err.h>
+#include <linux/list.h>
+#include <linux/list_sort.h>
 #include <linux/mman.h>
+#include <linux/rbtree.h>
+#include <linux/string.h>
+#include <linux/stringify.h>
+#include <linux/time64.h>
+#include <linux/zalloc.h>
+#include <subcmd/exec-cmd.h>
+#include <subcmd/parse-options.h>
 
 #ifdef HAVE_LIBTRACEEVENT
 #include <event-parse.h>

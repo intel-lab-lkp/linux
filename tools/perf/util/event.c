@@ -1,42 +1,45 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
-#include <linux/compiler.h>
-#include <linux/kernel.h>
-#include <linux/types.h>
-#include <perf/cpumap.h>
-#include <perf/event.h>
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <uapi/linux/mman.h> /* To get things like MAP_HUGETLB even on older libc headers */
-#include <linux/perf_event.h>
-#include <linux/zalloc.h>
+
+#include "addr_location.h"
+#include "bpf-event.h"
 #include "cpumap.h"
+#include "debug.h"
 #include "dso.h"
 #include "event.h"
-#include "debug.h"
 #include "hist.h"
 #include "machine.h"
+#include "map.h"
+#include "print_binary.h"
+#include "session.h"
 #include "sort.h"
+#include "stat.h"
 #include "string2.h"
 #include "strlist.h"
+#include "symbol.h"
+#include "symbol/kallsyms.h"
 #include "thread.h"
 #include "thread_map.h"
 #include "time-utils.h"
-#include <linux/ctype.h>
-#include "map.h"
-#include "util/namespaces.h"
-#include "symbol.h"
-#include "symbol/kallsyms.h"
-#include "asm/bug.h"
-#include "stat.h"
-#include "session.h"
-#include "bpf-event.h"
-#include "print_binary.h"
 #include "tool.h"
 #include "util.h"
+#include "namespaces.h"
+
+#include <asm/bug.h>
+#include <linux/compiler.h>
+#include <linux/ctype.h>
+#include <linux/kernel.h>
+#include <linux/perf_event.h>
+#include <linux/types.h>
+#include <linux/zalloc.h>
+#include <perf/cpumap.h>
+#include <perf/event.h>
+#include <uapi/linux/mman.h> /* To get things like MAP_HUGETLB even on older libc headers */
 
 static const char *perf_event__names[] = {
 	[0]					= "TOTAL",

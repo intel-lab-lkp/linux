@@ -1,42 +1,41 @@
 // SPDX-License-Identifier: GPL-2.0
-#include "builtin.h"
-
-#include "util/dso.h"
-#include "util/evlist.h"
-#include "util/evsel.h"
-#include "util/config.h"
-#include "util/map.h"
-#include "util/symbol.h"
-#include "util/thread.h"
-#include "util/header.h"
-#include "util/session.h"
-#include "util/tool.h"
-#include "util/callchain.h"
-#include "util/time-utils.h"
-#include <linux/err.h>
-
-#include <subcmd/pager.h>
-#include <subcmd/parse-options.h>
-#include "util/trace-event.h"
-#include "util/data.h"
-#include "util/cpumap.h"
-
-#include "util/debug.h"
-#include "util/string2.h"
-#include "util/util.h"
-
-#include <linux/kernel.h>
-#include <linux/numa.h>
-#include <linux/rbtree.h>
-#include <linux/string.h>
-#include <linux/zalloc.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <locale.h>
 #include <regex.h>
 
-#include <linux/ctype.h>
+#include "builtin.h"
+
+#include "util/addr_location.h"
+#include "util/callchain.h"
+#include "util/config.h"
+#include "util/cpumap.h"
+#include "util/data.h"
+#include "util/debug.h"
+#include "util/dso.h"
+#include "util/evlist.h"
+#include "util/evsel.h"
+#include "util/header.h"
+#include "util/map.h"
+#include "util/session.h"
+#include "util/string2.h"
+#include "util/symbol.h"
+#include "util/thread.h"
+#include "util/time-utils.h"
+#include "util/tool.h"
+#include "util/trace-event.h"
+#include "util/util.h"
+
 #include <event-parse.h>
+#include <linux/ctype.h>
+#include <linux/err.h>
+#include <linux/kernel.h>
+#include <linux/numa.h>
+#include <linux/rbtree.h>
+#include <linux/string.h>
+#include <linux/zalloc.h>
+#include <subcmd/pager.h>
+#include <subcmd/parse-options.h>
 
 static int	kmem_slab;
 static int	kmem_page;

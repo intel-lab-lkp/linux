@@ -15,6 +15,7 @@
 #include <perf/evlist.h>
 #include <perf/mmap.h>
 
+#include "addr_location.h"
 #include "debug.h"
 #include "dso.h"
 #include "env.h"

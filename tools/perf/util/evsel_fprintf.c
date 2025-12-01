@@ -2,16 +2,18 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdbool.h>
-#include "util/evlist.h"
-#include "evsel.h"
-#include "util/evsel_fprintf.h"
-#include "util/event.h"
+
+#include "addr_location.h"
 #include "callchain.h"
+#include "dso.h"
+#include "event.h"
+#include "evlist.h"
+#include "evsel.h"
+#include "evsel_fprintf.h"
 #include "map.h"
+#include "srcline.h"
 #include "strlist.h"
 #include "symbol.h"
-#include "srcline.h"
-#include "dso.h"
 
 #ifdef HAVE_LIBTRACEEVENT
 #include <event-parse.h>

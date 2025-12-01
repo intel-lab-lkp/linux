@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "tests.h"
+#include "addr_location.h"
 #include "debug.h"
 #include "symbol.h"
 #include "sort.h"

@@ -7,18 +7,20 @@
 #include <errno.h>
 #include <stdlib.h>
 
+#include "addr_location.h"
+#include "call-path.h"
+#include "callchain.h"
+#include "comm.h"
+#include "db-export.h"
 #include "dso.h"
+#include "event.h"
 #include "evsel.h"
 #include "machine.h"
-#include "thread.h"
-#include "comm.h"
-#include "symbol.h"
 #include "map.h"
-#include "event.h"
+#include "symbol.h"
 #include "thread-stack.h"
-#include "callchain.h"
-#include "call-path.h"
-#include "db-export.h"
+#include "thread.h"
+
 #include <linux/zalloc.h>
 
 int db_export__init(struct db_export *dbe)

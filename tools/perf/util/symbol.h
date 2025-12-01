@@ -2,20 +2,18 @@
 #ifndef __PERF_SYMBOL
 #define __PERF_SYMBOL 1
 
-#include <linux/types.h>
-#include <linux/refcount.h>
 #include <stdbool.h>
-#include <stdint.h>
-#include <linux/list.h>
-#include <linux/rbtree.h>
 #include <stdio.h>
-#include "addr_location.h"
-#include "path.h"
-#include "symbol_conf.h"
-#include "spark.h"
-
 #include <elf.h>
 
+#include <linux/types.h>
+#include <linux/list.h>
+#include <linux/rbtree.h>
+
+#include "path.h"
+#include "symbol_conf.h"
+
+struct addr_location;
 struct dso;
 struct map;
 struct maps;
