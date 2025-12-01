@@ -54,91 +54,11 @@ enum trbe_fault_action {
 	TRBE_FAULT_ACT_FATAL,
 };
 
-struct trbe_buf {
-	/*
-	 * Even though trbe_base represents vmap()
-	 * mapped allocated buffer's start address,
-	 * it's being as unsigned long for various
-	 * arithmetic and comparision operations &
-	 * also to be consistent with trbe_write &
-	 * trbe_limit sibling pointers.
-	 */
-	unsigned long trbe_base;
-	/* The base programmed into the TRBE */
-	unsigned long trbe_hw_base;
-	unsigned long trbe_limit;
-	unsigned long trbe_write;
-	unsigned long trbe_count;
-	int nr_pages;
-	void **pages;
-	bool snapshot;
-	struct trbe_cpudata *cpudata;
-};
-
-/*
- * TRBE erratum list
- *
- * The errata are defined in arm64 generic cpu_errata framework.
- * Since the errata work arounds could be applied individually
- * to the affected CPUs inside the TRBE driver, we need to know if
- * a given CPU is affected by the erratum. Unlike the other erratum
- * work arounds, TRBE driver needs to check multiple times during
- * a trace session. Thus we need a quicker access to per-CPU
- * errata and not issue costly this_cpu_has_cap() everytime.
- * We keep a set of the affected errata in trbe_cpudata, per TRBE.
- *
- * We rely on the corresponding cpucaps to be defined for a given
- * TRBE erratum. We map the given cpucap into a TRBE internal number
- * to make the tracking of the errata lean.
- *
- * This helps in :
- *   - Not duplicating the detection logic
- *   - Streamlined detection of erratum across the system
- */
-#define TRBE_WORKAROUND_OVERWRITE_FILL_MODE	0
-#define TRBE_WORKAROUND_WRITE_OUT_OF_RANGE	1
-#define TRBE_NEEDS_DRAIN_AFTER_DISABLE		2
-#define TRBE_NEEDS_CTXT_SYNC_AFTER_ENABLE	3
-#define TRBE_IS_BROKEN				4
-
-static int trbe_errata_cpucaps[] = {
-	[TRBE_WORKAROUND_OVERWRITE_FILL_MODE] = ARM64_WORKAROUND_TRBE_OVERWRITE_FILL_MODE,
-	[TRBE_WORKAROUND_WRITE_OUT_OF_RANGE] = ARM64_WORKAROUND_TRBE_WRITE_OUT_OF_RANGE,
-	[TRBE_NEEDS_DRAIN_AFTER_DISABLE] = ARM64_WORKAROUND_2064142,
-	[TRBE_NEEDS_CTXT_SYNC_AFTER_ENABLE] = ARM64_WORKAROUND_2038923,
-	[TRBE_IS_BROKEN] = ARM64_WORKAROUND_1902691,
-	-1,		/* Sentinel, must be the last entry */
-};
-
-/* The total number of listed errata in trbe_errata_cpucaps */
-#define TRBE_ERRATA_MAX			(ARRAY_SIZE(trbe_errata_cpucaps) - 1)
-
 /*
  * Safe limit for the number of bytes that may be overwritten
  * when ARM64_WORKAROUND_TRBE_OVERWRITE_FILL_MODE is triggered.
  */
 #define TRBE_WORKAROUND_OVERWRITE_FILL_MODE_SKIP_BYTES	256
-
-/*
- * struct trbe_cpudata: TRBE instance specific data
- * @trbe_flag		- TRBE dirty/access flag support
- * @trbe_hw_align	- Actual TRBE alignment required for TRBPTR_EL1.
- * @trbe_align		- Software alignment used for the TRBPTR_EL1.
- * @cpu			- CPU this TRBE belongs to.
- * @mode		- Mode of current operation. (perf/disabled)
- * @drvdata		- TRBE specific drvdata
- * @errata		- Bit map for the errata on this TRBE.
- */
-struct trbe_cpudata {
-	bool trbe_flag;
-	u64 trbe_hw_align;
-	u64 trbe_align;
-	int cpu;
-	enum cs_mode mode;
-	struct trbe_buf *buf;
-	struct trbe_drvdata *drvdata;
-	DECLARE_BITMAP(errata, TRBE_ERRATA_MAX);
-};
 
 struct trbe_drvdata {
 	struct trbe_cpudata __percpu *cpudata;
@@ -150,7 +70,8 @@ struct trbe_drvdata {
 	struct platform_device *pdev;
 };
 
-DEFINE_STATIC_KEY_FALSE(trbe_trigger_mode_bypass);
+VISIBLE_IF_KUNIT DEFINE_STATIC_KEY_FALSE(trbe_trigger_mode_bypass);
+EXPORT_SYMBOL_IF_KUNIT(trbe_trigger_mode_bypass);
 
 #define trbe_trigger_mode_need_bypass(cpudata)		\
 	(trbe_may_overwrite_in_fill_mode((cpudata)) ||	\
@@ -333,8 +254,17 @@ static void __trbe_pad_buf(struct trbe_buf *buf, u64 offset, int len)
 
 static void trbe_pad_buf(struct perf_output_handle *handle, int len)
 {
-	struct trbe_buf *buf = etm_perf_sink_config(handle);
-	u64 head = PERF_IDX2OFF(handle->head, buf);
+	struct trbe_buf *buf;
+	u64 head;
+
+	if (kunit_get_current_test()) {
+		handle->head += len;
+		handle->size -= len;
+		return;
+	}
+
+	buf = etm_perf_sink_config(handle);
+	head = PERF_IDX2OFF(handle->head, buf);
 
 	__trbe_pad_buf(buf, head, len);
 	if (!buf->snapshot)
@@ -383,9 +313,11 @@ static u64 trbe_min_trace_buf_size(struct perf_output_handle *handle)
  * %%%% - Free area, disabled, trace will not be written
  * ==== - Free area, padded with ETE_IGNORE_PACKET, trace will be skipped
  */
-static unsigned long __trbe_normal_offset(struct perf_output_handle *handle)
+VISIBLE_IF_KUNIT
+unsigned long __trbe_normal_offset(struct perf_output_handle *handle)
 {
-	struct trbe_buf *buf = etm_perf_sink_config(handle);
+	struct trbe_buf *buf =
+		kunit_get_current_test() ? handle->rb : etm_perf_sink_config(handle);
 	struct trbe_cpudata *cpudata = buf->cpudata;
 	const u64 bufsize = buf->nr_pages * PAGE_SIZE;
 	u64 limit = bufsize;
@@ -525,9 +457,13 @@ out:
 	return 0;
 }
 
-static u64 __trbe_normal_trigger_count(struct perf_output_handle *handle)
+EXPORT_SYMBOL_IF_KUNIT(__trbe_normal_offset);
+
+VISIBLE_IF_KUNIT
+u64 __trbe_normal_trigger_count(struct perf_output_handle *handle)
 {
-	struct trbe_buf *buf = etm_perf_sink_config(handle);
+	struct trbe_buf *buf =
+		kunit_get_current_test() ? handle->rb : etm_perf_sink_config(handle);
 	struct trbe_cpudata *cpudata = buf->cpudata;
 	u64 limit, head, wakeup;
 	u64 count = 0;
@@ -557,6 +493,8 @@ static u64 __trbe_normal_trigger_count(struct perf_output_handle *handle)
 
 	return count;
 }
+
+EXPORT_SYMBOL_IF_KUNIT(__trbe_normal_trigger_count);
 
 static int trbe_normal_offset(struct perf_output_handle *handle)
 {

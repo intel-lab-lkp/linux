@@ -214,6 +214,15 @@ config CORESIGHT_TRBE
 	  To compile this driver as a module, choose M here: the module will be
 	  called coresight-trbe.
 
+config CORESIGHT_TRBE_KUNIT_TESTS
+	tristate "Enable Coresight TRBE unit tests"
+	depends on KUNIT
+	depends on CORESIGHT_TRBE
+	default KUNIT_ALL_TESTS
+	help
+	  Enable Coresight TRBE unit tests. Only useful for development and not
+	  intended for production.
+
 config ULTRASOC_SMB
 	tristate "Ultrasoc system memory buffer drivers"
 	depends on ACPI || COMPILE_TEST
