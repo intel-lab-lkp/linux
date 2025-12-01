@@ -50,6 +50,8 @@ EXPORT_STATIC_CALL(pv_queued_spin_lock_slowpath);
 DEFINE_STATIC_CALL(pv_queued_spin_unlock, native_queued_spin_unlock);
 EXPORT_STATIC_CALL(pv_queued_spin_unlock);
 
+DEFINE_STATIC_KEY_FALSE(virt_spin_lock_key);
+
 bool __init pv_qspinlock_init(void)
 {
 	if (num_possible_cpus() == 1)
@@ -57,6 +59,12 @@ bool __init pv_qspinlock_init(void)
 
 	if (!sbi_probe_extension(SBI_EXT_PVLOCK))
 		return false;
+
+	if (nopvspin) {
+		static_branch_enable(&virt_spin_lock_key);
+		pr_info("virt_spin_lock enabled by nopvspin\n");
+		return true;
+	}
 
 	pr_info("PV qspinlocks enabled\n");
 	__pv_init_lock_hash();
