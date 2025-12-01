@@ -1288,8 +1288,11 @@ static int ov5647_init_controls(struct ov5647 *sensor)
 {
 	struct i2c_client *client = v4l2_get_subdevdata(&sensor->sd);
 	int hblank, exposure_max, exposure_def;
+	struct v4l2_ctrl_handler *hdl = &sensor->ctrls;
 
 	v4l2_ctrl_handler_init(&sensor->ctrls, 9);
+
+	hdl->lock = &sensor->lock;
 
 	v4l2_ctrl_new_std(&sensor->ctrls, &ov5647_ctrl_ops,
 			  V4L2_CID_AUTOGAIN, 0, 1, 1, 0);
