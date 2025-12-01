@@ -338,6 +338,11 @@ static bool pte_none_or_zero(pte_t pte)
 	return pte_present(pte) && is_zero_pfn(pte_pfn(pte));
 }
 
+static bool is_mthp_order(unsigned int order)
+{
+	return order != HPAGE_PMD_ORDER;
+}
+
 int hugepage_madvise(struct vm_area_struct *vma,
 		     vm_flags_t *vm_flags, int advice)
 {
@@ -1071,13 +1076,13 @@ static int alloc_charge_folio(struct folio **foliop, struct mm_struct *mm,
 	folio = __folio_alloc(gfp, order, node, &cc->alloc_nmask);
 	if (!folio) {
 		*foliop = NULL;
-		if (order == HPAGE_PMD_ORDER)
+		if (!is_mthp_order(order))
 			count_vm_event(THP_COLLAPSE_ALLOC_FAILED);
 		count_mthp_stat(order, MTHP_STAT_COLLAPSE_ALLOC_FAILED);
 		return SCAN_ALLOC_HUGE_PAGE_FAIL;
 	}
 
-	if (order == HPAGE_PMD_ORDER)
+	if (!is_mthp_order(order))
 		count_vm_event(THP_COLLAPSE_ALLOC);
 	count_mthp_stat(order, MTHP_STAT_COLLAPSE_ALLOC);
 
