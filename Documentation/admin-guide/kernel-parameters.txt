@@ -3294,6 +3294,10 @@
 			* [no]logdir: Enable or disable access to the general
 			  purpose log directory.
 
+			* max_sec=<sectors>: Set the transfer size limit, in
+			  sectors, to the value specified in <sectors>. The
+			  value specified in <sectors> has to be an integer.
+
 			* max_sec_128: Set transfer size limit to 128 sectors.
 
 			* max_sec_1024: Set or clear transfer size limit to
