@@ -332,7 +332,7 @@ static void trbe_pad_buf(struct perf_output_handle *handle, int len)
 		perf_aux_output_skip(handle, len);
 }
 
-static unsigned long trbe_snapshot_offset(struct perf_output_handle *handle)
+static int trbe_snapshot_offset(struct perf_output_handle *handle)
 {
 	struct trbe_buf *buf = etm_perf_sink_config(handle);
 
@@ -341,7 +341,8 @@ static unsigned long trbe_snapshot_offset(struct perf_output_handle *handle)
 	 * the decoder to reset in case of an overflow or corruption.
 	 * So we can use the entire buffer for the snapshot mode.
 	 */
-	return buf->nr_pages * PAGE_SIZE;
+	buf->trbe_limit = buf->trbe_base + buf->nr_pages * PAGE_SIZE;
+	return 0;
 }
 
 static u64 trbe_min_trace_buf_size(struct perf_output_handle *handle)
@@ -510,7 +511,7 @@ static unsigned long __trbe_normal_offset(struct perf_output_handle *handle)
 	return 0;
 }
 
-static unsigned long trbe_normal_offset(struct perf_output_handle *handle)
+static int trbe_normal_offset(struct perf_output_handle *handle)
 {
 	struct trbe_buf *buf = etm_perf_sink_config(handle);
 	u64 limit = __trbe_normal_offset(handle);
@@ -529,19 +530,34 @@ static unsigned long trbe_normal_offset(struct perf_output_handle *handle)
 		limit = __trbe_normal_offset(handle);
 		head = PERF_IDX2OFF(handle->head, buf);
 	}
-	return limit;
+
+	if (!limit)
+		return -ENOSPC;
+
+	buf->trbe_limit = buf->trbe_base + limit;
+	return 0;
 }
 
-static unsigned long compute_trbe_buffer_limit(struct perf_output_handle *handle)
+static int trbe_compute_next(struct perf_output_handle *handle)
 {
 	struct trbe_buf *buf = etm_perf_sink_config(handle);
-	unsigned long offset;
+	int ret;
+
+	perf_aux_output_flag(handle, PERF_AUX_FLAG_CORESIGHT_FORMAT_RAW);
 
 	if (buf->snapshot)
-		offset = trbe_snapshot_offset(handle);
+		ret = trbe_snapshot_offset(handle);
 	else
-		offset = trbe_normal_offset(handle);
-	return buf->trbe_base + offset;
+		ret = trbe_normal_offset(handle);
+
+	if (ret)
+		return ret;
+
+	buf->trbe_write = buf->trbe_base + PERF_IDX2OFF(handle->head, buf);
+
+	/* Set the base of the TRBE to the buffer base */
+	buf->trbe_hw_base = buf->trbe_base;
+	return 0;
 }
 
 static void clr_trbe_status(void)
@@ -986,15 +1002,9 @@ static int __arm_trbe_enable(struct trbe_buf *buf,
 {
 	int ret = 0;
 
-	perf_aux_output_flag(handle, PERF_AUX_FLAG_CORESIGHT_FORMAT_RAW);
-	buf->trbe_limit = compute_trbe_buffer_limit(handle);
-	buf->trbe_write = buf->trbe_base + PERF_IDX2OFF(handle->head, buf);
-	if (buf->trbe_limit == buf->trbe_base) {
-		ret = -ENOSPC;
+	ret = trbe_compute_next(handle);
+	if (ret)
 		goto err;
-	}
-	/* Set the base of the TRBE to the buffer base */
-	buf->trbe_hw_base = buf->trbe_base;
 
 	ret = trbe_apply_work_around_before_enable(buf);
 	if (ret)
