@@ -312,3 +312,4 @@ module_platform_driver(audio_iio_aux_driver);
 MODULE_AUTHOR("Herve Codina <herve.codina@bootlin.com>");
 MODULE_DESCRIPTION("IIO ALSA SoC aux driver");
 MODULE_LICENSE("GPL");
+MODULE_IMPORT_NS("IIO_CONSUMER");
