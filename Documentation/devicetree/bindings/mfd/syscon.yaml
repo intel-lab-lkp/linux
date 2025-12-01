@@ -102,6 +102,7 @@ select:
           - mstar,msc313-pmsleep
           - nuvoton,ma35d1-sys
           - nuvoton,wpcm450-shm
+          - nxp,s32-gpr
           - qcom,apq8064-mmss-sfpb
           - qcom,apq8064-sps-sic
           - rockchip,px30-qos
@@ -212,6 +213,7 @@ properties:
               - mstar,msc313-pmsleep
               - nuvoton,ma35d1-sys
               - nuvoton,wpcm450-shm
+              - nxp,s32-gpr
               - qcom,apq8064-mmss-sfpb
               - qcom,apq8064-sps-sic
               - rockchip,px30-qos
