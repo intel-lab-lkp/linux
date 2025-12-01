@@ -349,6 +349,9 @@ static void rt_queue_push_from_group(struct rt_rq *rt_rq)
 	struct rq *rq = served_rq_of_rt_rq(rt_rq);
 	struct rq *global_rq = cpu_rq(rq->cpu);
 
+	BUG_ON(rt_rq == NULL);
+	BUG_ON(rq == global_rq);
+
 	if (global_rq->rq_to_push_from)
 		return;
 
@@ -365,6 +368,10 @@ static void rt_queue_pull_to_group(struct rt_rq *rt_rq)
 	struct rq *rq = served_rq_of_rt_rq(rt_rq);
 	struct rq *global_rq = cpu_rq(rq->cpu);
 	struct sched_dl_entity *dl_se = dl_group_of(rt_rq);
+
+	BUG_ON(rt_rq == NULL);
+	BUG_ON(!is_dl_group(rt_rq));
+	BUG_ON(rq == global_rq);
 
 	if (dl_se->dl_throttled || global_rq->rq_to_pull_to)
 		return;
@@ -1393,6 +1400,8 @@ static struct rq *find_lock_lowest_rq(struct task_struct *task, struct rq *rq)
  */
 static int push_rt_task(struct rq *rq, bool pull)
 {
+	BUG_ON(is_dl_group(&rq->rt));
+
 	struct task_struct *next_task;
 	struct rq *lowest_rq;
 	int ret = 0;
@@ -1689,6 +1698,8 @@ void rto_push_irq_work_func(struct irq_work *work)
 
 static void pull_rt_task(struct rq *this_rq)
 {
+	BUG_ON(is_dl_group(&this_rq->rt));
+
 	int this_cpu = this_rq->cpu, cpu;
 	bool resched = false;
 	struct task_struct *p, *push_task;
@@ -1813,6 +1824,8 @@ static int group_find_lowest_rt_rq(struct task_struct *task, struct rt_rq *task_
 	int prio, lowest_prio;
 	int cpu, this_cpu = smp_processor_id();
 
+	BUG_ON(task->sched_task_group != task_rt_rq->tg);
+
 	if (task->nr_cpus_allowed == 1)
 		return -1; /* No other targets possible */
 
@@ -1915,6 +1928,8 @@ static struct rt_rq *group_find_lock_lowest_rt_rq(struct task_struct *task, stru
 	struct sched_dl_entity *lowest_dl_se;
 	int tries, cpu;
 
+	BUG_ON(task->sched_task_group != rt_rq->tg);
+
 	for (tries = 0; tries < RT_MAX_TRIES; tries++) {
 		cpu = group_find_lowest_rt_rq(task, rt_rq);
 
@@ -1971,6 +1986,8 @@ static struct rt_rq *group_find_lock_lowest_rt_rq(struct task_struct *task, stru
 
 static int group_push_rt_task(struct rt_rq *rt_rq, bool pull)
 {
+	BUG_ON(!is_dl_group(rt_rq));
+
 	struct rq *rq = rq_of_rt_rq(rt_rq);
 	struct task_struct *next_task;
 	struct rq *lowest_rq;
@@ -2090,6 +2107,8 @@ out:
 
 static void group_pull_rt_task(struct rt_rq *this_rt_rq)
 {
+	BUG_ON(!is_dl_group(this_rt_rq));
+
 	struct rq *this_rq = rq_of_rt_rq(this_rt_rq);
 	int this_cpu = this_rq->cpu, cpu;
 	bool resched = false;
@@ -2202,6 +2221,9 @@ static void group_push_rt_tasks_callback(struct rq *global_rq)
 {
 	struct rt_rq *rt_rq = &global_rq->rq_to_push_from->rt;
 
+	BUG_ON(global_rq->rq_to_push_from == NULL);
+	BUG_ON(served_rq_of_rt_rq(rt_rq) == global_rq);
+
 	if ((rt_rq->rt_nr_running > 1) ||
 	    (dl_group_of(rt_rq)->dl_throttled == 1)) {
 
@@ -2215,6 +2237,9 @@ static void group_push_rt_tasks_callback(struct rq *global_rq)
 static void group_pull_rt_task_callback(struct rq *global_rq)
 {
 	struct rt_rq *rt_rq = &global_rq->rq_to_pull_to->rt;
+
+	BUG_ON(global_rq->rq_to_pull_to == NULL);
+	BUG_ON(served_rq_of_rt_rq(rt_rq) == global_rq);
 
 	group_pull_rt_task(rt_rq);
 	global_rq->rq_to_pull_to = NULL;
