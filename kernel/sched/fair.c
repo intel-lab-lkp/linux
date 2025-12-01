@@ -12443,8 +12443,8 @@ static void nohz_balancer_kick(struct rq *rq)
 	 */
 	nohz_balance_exit_idle(rq);
 
-	if (READ_ONCE(nohz.has_blocked) &&
-	    time_after(now, READ_ONCE(nohz.next_blocked)))
+	if (time_after(now, READ_ONCE(nohz.next_blocked)) &&
+	    READ_ONCE(nohz.has_blocked))
 		flags = NOHZ_STATS_KICK;
 
 	if (time_before(now, nohz.next_balance))
