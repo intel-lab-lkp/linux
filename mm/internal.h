@@ -730,7 +730,13 @@ static inline struct page *pageblock_pfn_to_page(unsigned long start_pfn,
 	return __pageblock_pfn_to_page(start_pfn, end_pfn, zone);
 }
 
-void set_zone_contiguous(struct zone *zone);
+enum zone_contiguous_state {
+	CONTIGUOUS_DEFINITELY_NOT = 0,
+	CONTIGUOUS_DEFINITELY = 1,
+	CONTIGUOUS_UNDETERMINED = 2,
+};
+
+void set_zone_contiguous(struct zone *zone, enum zone_contiguous_state state);
 bool pfn_range_intersects_zones(int nid, unsigned long start_pfn,
 			   unsigned long nr_pages);
 

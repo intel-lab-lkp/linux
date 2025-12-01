@@ -2263,26 +2263,34 @@ void __init init_cma_pageblock(struct page *page)
 }
 #endif
 
-void set_zone_contiguous(struct zone *zone)
+void set_zone_contiguous(struct zone *zone, enum zone_contiguous_state state)
 {
 	unsigned long block_start_pfn = zone->zone_start_pfn;
 	unsigned long block_end_pfn;
 
-	block_end_pfn = pageblock_end_pfn(block_start_pfn);
-	for (; block_start_pfn < zone_end_pfn(zone);
-			block_start_pfn = block_end_pfn,
-			 block_end_pfn += pageblock_nr_pages) {
+	if (state == CONTIGUOUS_DEFINITELY) {
+		zone->contiguous = true;
+		return;
+	} else if (state == CONTIGUOUS_DEFINITELY_NOT) {
+		// zone contiguous has already cleared as false, just return.
+		return;
+	} else if (state == CONTIGUOUS_UNDETERMINED) {
+		block_end_pfn = pageblock_end_pfn(block_start_pfn);
+		for (; block_start_pfn < zone_end_pfn(zone);
+				block_start_pfn = block_end_pfn,
+				block_end_pfn += pageblock_nr_pages) {
 
-		block_end_pfn = min(block_end_pfn, zone_end_pfn(zone));
+			block_end_pfn = min(block_end_pfn, zone_end_pfn(zone));
 
-		if (!__pageblock_pfn_to_page(block_start_pfn,
-					     block_end_pfn, zone))
-			return;
-		cond_resched();
+			if (!__pageblock_pfn_to_page(block_start_pfn,
+						block_end_pfn, zone))
+				return;
+			cond_resched();
+		}
+
+		/* We confirm that there is no hole */
+		zone->contiguous = true;
 	}
-
-	/* We confirm that there is no hole */
-	zone->contiguous = true;
 }
 
 /*
@@ -2348,7 +2356,7 @@ void __init page_alloc_init_late(void)
 		shuffle_free_memory(NODE_DATA(nid));
 
 	for_each_populated_zone(zone)
-		set_zone_contiguous(zone);
+		set_zone_contiguous(zone, CONTIGUOUS_UNDETERMINED);
 
 	/* Initialize page ext after all struct pages are initialized. */
 	if (deferred_struct_pages)
