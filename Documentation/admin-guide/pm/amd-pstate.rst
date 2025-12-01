@@ -503,8 +503,8 @@ Trace Events
 --------------
 
 There are two static trace events that can be used for ``amd-pstate``
-diagnostics. One of them is the ``cpu_frequency`` trace event generally used
-by ``CPUFreq``, and the other one is the ``amd_pstate_perf`` trace event
+diagnostics. One of them is the ``policy_frequency`` trace event generally
+used by ``CPUFreq``, and the other one is the ``amd_pstate_perf`` trace event
 specific to ``amd-pstate``.  The following sequence of shell commands can
 be used to enable them and see their output (if the kernel is
 configured to support event tracing). ::
@@ -531,9 +531,9 @@ configured to support event tracing). ::
           <idle>-0       [003] d.s..  4995.980971: amd_pstate_perf: amd_min_perf=85 amd_des_perf=85 amd_max_perf=166 cpu_id=3 changed=false fast_switch=true
           <idle>-0       [011] d.s..  4995.980996: amd_pstate_perf: amd_min_perf=85 amd_des_perf=85 amd_max_perf=166 cpu_id=11 changed=false fast_switch=true
 
-The ``cpu_frequency`` trace event will be triggered either by the ``schedutil`` scaling
-governor (for the policies it is attached to), or by the ``CPUFreq`` core (for the
-policies with other scaling governors).
+The ``policy_frequency`` trace event will be triggered either by the
+``schedutil`` scaling governor (for the policies it is attached to), or by the
+``CPUFreq`` core (for the policies with other scaling governors).
 
 
 Tracer Tool

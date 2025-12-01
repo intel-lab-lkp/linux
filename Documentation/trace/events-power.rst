@@ -26,8 +26,8 @@ cpufreq.
 ::
 
   cpu_idle		"state=%lu cpu_id=%lu"
-  cpu_frequency		"state=%lu cpu_id=%lu"
   cpu_frequency_limits	"min=%lu max=%lu cpu_id=%lu"
+  policy_frequency	"state=%lu cpu_id=%lu policy_cpus=%*pb"
 
 A suspend event is used to indicate the system going in and out of the
 suspend mode:

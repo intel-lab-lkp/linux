@@ -822,23 +822,23 @@ Trace Events
 ------------
 
 There are two static trace events that can be used for ``intel_pstate``
-diagnostics.  One of them is the ``cpu_frequency`` trace event generally used
-by ``CPUFreq``, and the other one is the ``pstate_sample`` trace event specific
-to ``intel_pstate``.  Both of them are triggered by ``intel_pstate`` only if
-it works in the :ref:`active mode <active_mode>`.
+diagnostics.  One of them is the ``policy_frequency`` trace event generally
+used by ``CPUFreq``, and the other one is the ``pstate_sample`` trace event
+specific to ``intel_pstate``.  Both of them are triggered by ``intel_pstate``
+only if it works in the :ref:`active mode <active_mode>`.
 
 The following sequence of shell commands can be used to enable them and see
 their output (if the kernel is generally configured to support event tracing)::
 
  # cd /sys/kernel/tracing/
  # echo 1 > events/power/pstate_sample/enable
- # echo 1 > events/power/cpu_frequency/enable
+ # echo 1 > events/power/policy_frequency/enable
  # cat trace
  gnome-terminal--4510  [001] ..s.  1177.680733: pstate_sample: core_busy=107 scaled=94 from=26 to=26 mperf=1143818 aperf=1230607 tsc=29838618 freq=2474476
- cat-5235  [002] ..s.  1177.681723: cpu_frequency: state=2900000 cpu_id=2
+ cat-5235  [002] ..s.  1177.681723: policy_frequency: state=2900000 cpu_id=2 policy_cpus=04
 
 If ``intel_pstate`` works in the :ref:`passive mode <passive_mode>`, the
-``cpu_frequency`` trace event will be triggered either by the ``schedutil``
+``policy_frequency`` trace event will be triggered either by the ``schedutil``
 scaling governor (for the policies it is attached to), or by the ``CPUFreq``
 core (for the policies with other scaling governors).
 
