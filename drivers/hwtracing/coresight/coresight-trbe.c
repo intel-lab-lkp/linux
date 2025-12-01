@@ -488,10 +488,10 @@ static unsigned long __trbe_normal_offset(struct perf_output_handle *handle)
 		limit = min(limit, round_up(wakeup, PAGE_SIZE));
 
 	/*
-	 * There are two situation when this can happen i.e limit is before
+	 * There is a situation when this can happen i.e limit is before
 	 * the head and hence TRBE cannot be configured.
 	 *
-	 * 1) head < tail (aligned down with PAGE_SIZE) and also they are both
+	 * head < tail (aligned down with PAGE_SIZE) and also they are both
 	 * within the same PAGE size range.
 	 *
 	 *			PAGE_SIZE
@@ -501,18 +501,6 @@ static unsigned long __trbe_normal_offset(struct perf_output_handle *handle)
 	 * +------------|------|--------|-------+
 	 * |$$$$$$$$$$$$$$$$$$$|========|$$$$$$$|
 	 * +------------|------|--------|-------+
-	 * trbe_base				trbe_base + nr_pages
-	 *
-	 * 2) head < wakeup (aligned up with PAGE_SIZE) < tail and also both
-	 * head and wakeup are within same PAGE size range.
-	 *
-	 *		PAGE_SIZE
-	 *	|----------------------|
-	 *
-	 *	limit	head	wakeup  tail
-	 * +----|------|-------|--------|-------+
-	 * |$$$$$$$$$$$|=======|========|$$$$$$$|
-	 * +----|------|-------|--------|-------+
 	 * trbe_base				trbe_base + nr_pages
 	 */
 	if (limit > head)
