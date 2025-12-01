@@ -1,7 +1,7 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-2.0
 
-ALL_TESTS="standalone two_bridges one_bridge_two_pvids bridge_aware_vlan_uppers"
+ALL_TESTS="standalone two_bridges one_bridge_two_pvids bridge_unaware_vlan_upper bridge_aware_vlan_uppers"
 NUM_NETIFS=4
 
 source lib.sh
@@ -222,6 +222,24 @@ one_bridge_two_pvids()
 	bridge vlan add dev $swp2 vid 2 pvid untagged
 
 	run_test "Switch ports in VLAN-aware bridge with different PVIDs"
+
+	ip link del br0
+}
+
+bridge_unaware_vlan_upper()
+{
+	ip link add br0 type bridge && ip link set br0 up
+	ip link set $swp1 master br0
+	ip link set $swp2 master br0
+
+	if ! ip link add name $swp1.10 link $swp1 type vlan id 10 2>/dev/null; then
+		ip link del br0
+		echo "SKIP: bridge does not allow vlan uppers on bridge ports"
+		exit "$ksft_skip"
+	fi
+	vlan_destroy $swp1 10
+
+	run_test "Switch ports in VLAN-unaware bridge with VLAN upper" 1
 
 	ip link del br0
 }
