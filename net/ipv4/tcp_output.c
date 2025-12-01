@@ -3332,9 +3332,11 @@ u32 __tcp_select_window(struct sock *sk)
 		 * We also don't do any window rounding when the free space
 		 * is too small.
 		 */
-		if (window <= free_space - mss || window > free_space)
+		if (window <= free_space - mss || window > free_space) {
+			if (unlikely(mss == 0))
+				return 0;  /* Prevent division by zero */
 			window = rounddown(free_space, mss);
-		else if (mss == full_space &&
+		} else if (mss == full_space &&
 			 free_space > window + (full_space >> 1))
 			window = free_space;
 	}
