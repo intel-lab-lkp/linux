@@ -388,11 +388,44 @@ int dl_check_tg(unsigned long total)
 	return 1;
 }
 
-void dl_init_tg(struct sched_dl_entity *dl_se, u64 rt_runtime, u64 rt_period)
+/*
+ * A cgroup is deemed live if:
+ * - It is a leaf cgroup.
+ * - All it's children have zero runtime.
+ */
+bool is_live_sched_group(struct task_group *tg)
 {
+	struct task_group *child;
+	bool is_active = 1;
+
+	/* if there are no children, this is a leaf group, thus it is live */
+	list_for_each_entry_rcu(child, &tg->children, siblings) {
+		if (child->dl_bandwidth.dl_runtime > 0)
+			is_active = 0;
+	}
+	return is_active;
+}
+
+static inline bool sched_group_has_live_siblings(struct task_group *tg)
+{
+	struct task_group *child;
+	bool has_active_siblings = 0;
+
+	list_for_each_entry_rcu(child, &tg->parent->children, siblings) {
+		if (child != tg && child->dl_bandwidth.dl_runtime > 0)
+			has_active_siblings = 1;
+	}
+	return has_active_siblings;
+}
+
+void dl_init_tg(struct task_group *tg, int cpu, u64 rt_runtime, u64 rt_period)
+{
+	struct sched_dl_entity *dl_se = tg->dl_se[cpu];
 	struct rq *rq = container_of(dl_se->dl_rq, struct rq, dl);
-	int is_active;
-	u64 new_bw;
+	int is_active, is_live_group;
+	u64 old_runtime, new_bw;
+
+	is_live_group = is_live_sched_group(tg);
 
 	guard(raw_spin_rq_lock_irq)(rq);
 	is_active = dl_se->my_q->rt.rt_nr_running > 0;
@@ -400,8 +433,10 @@ void dl_init_tg(struct sched_dl_entity *dl_se, u64 rt_runtime, u64 rt_period)
 	update_rq_clock(rq);
 	dl_server_stop(dl_se);
 
+	old_runtime = dl_se->dl_runtime;
 	new_bw = to_ratio(rt_period, rt_runtime);
-	dl_rq_change_utilization(rq, dl_se, new_bw);
+	if (is_live_group)
+		dl_rq_change_utilization(rq, dl_se, new_bw);
 
 	dl_se->dl_runtime  = rt_runtime;
 	dl_se->dl_deadline = rt_period;
@@ -412,6 +447,24 @@ void dl_init_tg(struct sched_dl_entity *dl_se, u64 rt_runtime, u64 rt_period)
 
 	dl_se->dl_bw = new_bw;
 	dl_se->dl_density = new_bw;
+
+	/*
+	 * Handle parent bandwidth accounting when child runtime changes:
+	 * - When disabling the last child, the parent becomes a leaf group,
+	 *   and so the parent's bandwidth must be accounted back.
+	 * - When enabling the first child, the parent becomes a non-leaf group,
+	 *   and so the parent's bandwidth must be removed.
+	 * Only leaf groups (those without active children) have non-zero bandwidth.
+	 */
+	if (tg->parent && tg->parent != &root_task_group) {
+		if (rt_runtime == 0 && old_runtime != 0 &&
+		    !sched_group_has_live_siblings(tg)) {
+			__add_rq_bw(tg->parent->dl_se[cpu]->dl_bw, dl_se->dl_rq);
+		} else if (rt_runtime != 0 && old_runtime == 0 &&
+			   !sched_group_has_live_siblings(tg)) {
+			__sub_rq_bw(tg->parent->dl_se[cpu]->dl_bw, dl_se->dl_rq);
+		}
+	}
 
 	if (is_active)
 		dl_server_start(dl_se);
