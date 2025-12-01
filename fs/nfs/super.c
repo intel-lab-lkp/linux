@@ -1426,6 +1426,8 @@ unsigned short max_session_cb_slots = NFS4_DEF_CB_SLOT_TABLE_SIZE;
 unsigned short send_implementation_id = 1;
 char nfs4_client_id_uniquifier[NFS4_CLIENT_ID_UNIQ_LEN] = "";
 bool recover_lost_locks = false;
+/* Inherit parent transport for referral mounts */
+bool nfs4_inherit_referral_transport = true;
 short nfs_delay_retrans = -1;
 
 EXPORT_SYMBOL_GPL(nfs_callback_nr_threads);
@@ -1437,6 +1439,7 @@ EXPORT_SYMBOL_GPL(max_session_cb_slots);
 EXPORT_SYMBOL_GPL(send_implementation_id);
 EXPORT_SYMBOL_GPL(nfs4_client_id_uniquifier);
 EXPORT_SYMBOL_GPL(recover_lost_locks);
+EXPORT_SYMBOL_GPL(nfs4_inherit_referral_transport);
 EXPORT_SYMBOL_GPL(nfs_delay_retrans);
 
 #define NFS_CALLBACK_MAXPORTNR (65535U)
@@ -1485,6 +1488,11 @@ module_param(recover_lost_locks, bool, 0644);
 MODULE_PARM_DESC(recover_lost_locks,
 		 "If the server reports that a lock might be lost, "
 		 "try to recover it risking data corruption.");
+
+module_param(nfs4_inherit_referral_transport, bool, 0644);
+MODULE_PARM_DESC(nfs4_inherit_referral_transport,
+		 "Referral mounts inherit parent's transport protocol. "
+		 "If disabled, always try RDMA first (default=Y)");
 
 module_param_named(delay_retrans, nfs_delay_retrans, short, 0644);
 MODULE_PARM_DESC(delay_retrans,

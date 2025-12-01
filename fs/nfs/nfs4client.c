@@ -1263,12 +1263,20 @@ struct nfs_server *nfs4_create_referral_server(struct fs_context *fc)
 	nfs_server_copy_userdata(server, parent_server);
 
 	/* Get a client representation */
+	/*
+	 * If nfs4_inherit_referral_transport is enabled (default), only try
+	 * RDMA if the parent client is using RDMA. This avoids connection
+	 * delays when parent uses TCP and referral server doesn't support RDMA.
+	 */
 #if IS_ENABLED(CONFIG_SUNRPC_XPRT_RDMA)
-	rpc_set_port(&ctx->nfs_server.address, NFS_RDMA_PORT);
-	cl_init.proto = XPRT_TRANSPORT_RDMA;
-	error = nfs4_set_client(server, &cl_init);
-	if (!error)
-		goto init_server;
+	if (!nfs4_inherit_referral_transport ||
+	    parent_client->cl_proto == XPRT_TRANSPORT_RDMA) {
+		rpc_set_port(&ctx->nfs_server.address, NFS_RDMA_PORT);
+		cl_init.proto = XPRT_TRANSPORT_RDMA;
+		error = nfs4_set_client(server, &cl_init);
+		if (!error)
+			goto init_server;
+	}
 #endif	/* IS_ENABLED(CONFIG_SUNRPC_XPRT_RDMA) */
 
 	cl_init.proto = XPRT_TRANSPORT_TCP;
