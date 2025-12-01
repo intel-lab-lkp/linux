@@ -643,29 +643,61 @@ static void trbe_enable_hw(struct trbe_buf *buf)
 static enum trbe_fault_action trbe_get_fault_act(struct perf_output_handle *handle,
 						 u64 trbsr)
 {
+	const char *err_str;
 	int ec = get_trbe_ec(trbsr);
 	int bsc = get_trbe_bsc(trbsr);
-	struct trbe_buf *buf = etm_perf_sink_config(handle);
-	struct trbe_cpudata *cpudata = buf->cpudata;
 
 	WARN_ON(is_trbe_running(trbsr));
-	if (is_trbe_trg(trbsr) || is_trbe_abort(trbsr))
-		return TRBE_FAULT_ACT_FATAL;
 
-	if ((ec == TRBE_EC_STAGE1_ABORT) || (ec == TRBE_EC_STAGE2_ABORT))
-		return TRBE_FAULT_ACT_FATAL;
+	if (is_trbe_abort(trbsr)) {
+		err_str = "External abort";
+		goto out_fatal;
+	}
 
-	/*
-	 * If the trbe is affected by TRBE_WORKAROUND_OVERWRITE_FILL_MODE,
-	 * it might write data after a WRAP event in the fill mode.
-	 * Thus the check TRBPTR == TRBBASER will not be honored.
-	 */
-	if ((is_trbe_wrap(trbsr) && (ec == TRBE_EC_OTHERS) && (bsc == TRBE_BSC_FILLED)) &&
-	    (trbe_may_overwrite_in_fill_mode(cpudata) ||
-	     get_trbe_write_pointer() == get_trbe_base_pointer()))
+	switch (ec) {
+	case TRBE_EC_OTHERS:
+		break;
+	case TRBE_EC_BUF_MGMT_IMPL:
+		err_str = "Unexpected implemented management";
+		goto out_fatal;
+	case TRBE_EC_GP_CHECK_FAULT:
+		err_str = "Granule Protection Check fault";
+		goto out_fatal;
+	case TRBE_EC_STAGE1_ABORT:
+		err_str = "Stage 1 data abort";
+		goto out_fatal;
+	case TRBE_EC_STAGE2_ABORT:
+		err_str = "Stage 2 data abort";
+		goto out_fatal;
+	default:
+		err_str = "Unknown error code";
+		goto out_fatal;
+	}
+
+	switch (bsc) {
+	case TRBE_BSC_NOT_STOPPED:
+		break;
+	case TRBE_BSC_FILLED:
+		break;
+	case TRBE_BSC_TRIGGERED:
+		err_str = "Unexpected trigger status";
+		goto out_fatal;
+	default:
+		err_str = "Unexpected buffer status code";
+		goto out_fatal;
+	}
+
+	if (is_trbe_wrap(trbsr))
 		return TRBE_FAULT_ACT_WRAP;
 
 	return TRBE_FAULT_ACT_SPURIOUS;
+
+out_fatal:
+	pr_err_ratelimited("%s on CPU %d [TRBSR=0x%016llx, TRBPTR=0x%016llx, TRBLIMITR=0x%016llx]\n",
+			   err_str, smp_processor_id(), trbsr,
+			   read_sysreg_s(SYS_TRBPTR_EL1),
+			   read_sysreg_s(SYS_TRBLIMITR_EL1));
+	return TRBE_FAULT_ACT_FATAL;
 }
 
 static unsigned long trbe_get_trace_size(struct perf_output_handle *handle,

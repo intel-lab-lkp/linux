@@ -35,9 +35,11 @@ static inline bool is_trbe_enabled(void)
 	return trblimitr & TRBLIMITR_EL1_E;
 }
 
-#define TRBE_EC_OTHERS		0
-#define TRBE_EC_STAGE1_ABORT	36
-#define TRBE_EC_STAGE2_ABORT	37
+#define TRBE_EC_OTHERS			0x0
+#define TRBE_EC_GP_CHECK_FAULT		0X1e
+#define TRBE_EC_BUF_MGMT_IMPL		0x1f
+#define TRBE_EC_STAGE1_ABORT		0x24
+#define TRBE_EC_STAGE2_ABORT		0x25
 
 static inline int get_trbe_ec(u64 trbsr)
 {
