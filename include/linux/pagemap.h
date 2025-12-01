@@ -476,6 +476,18 @@ mapping_min_folio_order(const struct address_space *mapping)
 	return (mapping->flags & AS_FOLIO_ORDER_MIN_MASK) >> AS_FOLIO_ORDER_MIN;
 }
 
+static inline unsigned int
+mapping_ra_folio_order(struct address_space *mapping, unsigned int order)
+{
+	if (!IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE))
+		return 0;
+
+	if (!mapping->a_ops->ra_folio_order)
+		return order;
+
+	return mapping->a_ops->ra_folio_order(mapping, order);
+}
+
 static inline unsigned long
 mapping_min_folio_nrpages(const struct address_space *mapping)
 {
