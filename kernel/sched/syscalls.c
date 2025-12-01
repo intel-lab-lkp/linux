@@ -626,6 +626,19 @@ recheck:
 change:
 
 	if (user) {
+#ifdef CONFIG_RT_GROUP_SCHED
+		/*
+		 * Do not allow real-time tasks into groups that have no runtime
+		 * assigned.
+		 */
+		if (rt_group_sched_enabled() &&
+				dl_bandwidth_enabled() && rt_policy(policy) &&
+				!sched_rt_can_attach(task_group(p)) &&
+				!task_group_is_autogroup(task_group(p))) {
+			retval = -EPERM;
+			goto unlock;
+		}
+#endif
 		if (dl_bandwidth_enabled() && dl_policy(policy) &&
 				!(attr->sched_flags & SCHED_FLAG_SUGOV)) {
 			cpumask_t *span = rq->rd->span;
