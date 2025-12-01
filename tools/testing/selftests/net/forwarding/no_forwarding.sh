@@ -1,7 +1,7 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-2.0
 
-ALL_TESTS="standalone two_bridges one_bridge_two_pvids"
+ALL_TESTS="standalone two_bridges one_bridge_two_pvids bridge_aware_vlan_uppers"
 NUM_NETIFS=4
 
 source lib.sh
@@ -90,6 +90,7 @@ check_rcv()
 run_test()
 {
 	local test_name="$1"
+	local swp_uppers=${2:0}
 	local smac=$(mac_get $h1)
 	local dmac=$(mac_get $h2)
 	local h1_ipv6_lladdr=$(ipv6_lladdr_get $h1)
@@ -99,16 +100,24 @@ run_test()
 
 	tcpdump_start $h2
 
-	send_non_ip $h1 $smac $dmac
-	send_non_ip $h1 $smac $NON_IP_MC
-	send_non_ip $h1 $smac $BC
-	send_uc_ipv4 $h1 $dmac
-	send_mc_ipv4 $h1
-	send_uc_ipv6 $h1 $dmac
-	send_mc_ipv6 $h1
+	if [ "$swp_uppers" -eq 0 ]; then
+		send_non_ip $h1 $smac $dmac
+		send_non_ip $h1 $smac $NON_IP_MC
+		send_non_ip $h1 $smac $BC
+		send_uc_ipv4 $h1 $dmac
+		send_mc_ipv4 $h1
+		send_uc_ipv6 $h1 $dmac
+		send_mc_ipv6 $h1
+	fi
 
 	for vid in "${vids[@]}"; do
 		vlan_create $h1 $vid
+		if [  "$swp_uppers" -ge 1 ]; then
+			vlan_create $swp1 $vid
+		fi
+		if [  "$swp_uppers" -ge 2 ]; then
+			vlan_create $swp2 $vid
+		fi
 		simple_if_init $h1.$vid $H1_IPV4/24 $H1_IPV6/64
 
 		send_non_ip $h1.$vid $smac $dmac
@@ -120,6 +129,12 @@ run_test()
 		send_mc_ipv6 $h1.$vid
 
 		simple_if_fini $h1.$vid $H1_IPV4/24 $H1_IPV6/64
+		if [  "$swp_uppers" -ge 2 ]; then
+			vlan_destroy $swp2 $vid
+		fi
+		if [  "$swp_uppers" -ge 1 ]; then
+			vlan_destroy $swp1 $vid
+		fi
 		vlan_destroy $h1 $vid
 	done
 
@@ -129,26 +144,28 @@ run_test()
 
 	tcpdump_stop $h2
 
-	check_rcv $h2 "$test_name: Unicast non-IP untagged" \
-		"$smac > $dmac, 802.3, length 4:"
+	if [ "$swp_uppers" -eq 0 ]; then
+		check_rcv $h2 "$test_name: Unicast non-IP untagged" \
+			"$smac > $dmac, 802.3, length 4:"
 
-	check_rcv $h2 "$test_name: Multicast non-IP untagged" \
-		"$smac > $NON_IP_MC, 802.3, length 4:"
+		check_rcv $h2 "$test_name: Multicast non-IP untagged" \
+			"$smac > $NON_IP_MC, 802.3, length 4:"
 
-	check_rcv $h2 "$test_name: Broadcast non-IP untagged" \
-		"$smac > $BC, 802.3, length 4:"
+		check_rcv $h2 "$test_name: Broadcast non-IP untagged" \
+			"$smac > $BC, 802.3, length 4:"
 
-	check_rcv $h2 "$test_name: Unicast IPv4 untagged" \
-		"$smac > $dmac, ethertype IPv4 (0x0800)"
+		check_rcv $h2 "$test_name: Unicast IPv4 untagged" \
+			"$smac > $dmac, ethertype IPv4 (0x0800)"
 
-	check_rcv $h2 "$test_name: Multicast IPv4 untagged" \
-		"$smac > $MACV4_ALLNODES, ethertype IPv4 (0x0800).*: $H1_IPV4 > $IPV4_ALLNODES"
+		check_rcv $h2 "$test_name: Multicast IPv4 untagged" \
+			"$smac > $MACV4_ALLNODES, ethertype IPv4 (0x0800).*: $H1_IPV4 > $IPV4_ALLNODES"
 
-	check_rcv $h2 "$test_name: Unicast IPv6 untagged" \
-		"$smac > $dmac, ethertype IPv6 (0x86dd).*8: $H1_IPV6 > $H2_IPV6"
+		check_rcv $h2 "$test_name: Unicast IPv6 untagged" \
+			"$smac > $dmac, ethertype IPv6 (0x86dd).*8: $H1_IPV6 > $H2_IPV6"
 
-	check_rcv $h2 "$test_name: Multicast IPv6 untagged" \
-		"$smac > $MACV6_ALLNODES, ethertype IPv6 (0x86dd).*: $h1_ipv6_lladdr > $IPV6_ALLNODES"
+		check_rcv $h2 "$test_name: Multicast IPv6 untagged" \
+			"$smac > $MACV6_ALLNODES, ethertype IPv6 (0x86dd).*: $h1_ipv6_lladdr > $IPV6_ALLNODES"
+	fi
 
 	for vid in "${vids[@]}"; do
 		check_rcv $h2 "$test_name: Unicast non-IP VID $vid" \
@@ -205,6 +222,34 @@ one_bridge_two_pvids()
 	bridge vlan add dev $swp2 vid 2 pvid untagged
 
 	run_test "Switch ports in VLAN-aware bridge with different PVIDs"
+
+	ip link del br0
+}
+
+bridge_aware_vlan_uppers()
+{
+	ip link add br0 type bridge vlan_filtering 1 vlan_default_pvid 0
+	ip link set br0 up
+	ip link set $swp1 master br0
+	ip link set $swp2 master br0
+
+	if ! ip link add name $swp1.10 link $swp1 type vlan id 10 2>/dev/null; then
+		ip link del br0
+		echo "SKIP: vlan-aware bridge does not allow vlan uppers on bridge ports"
+		exit "$ksft_skip"
+	fi
+
+	if ! ip link add name $swp2.10 link $swp2 type vlan id 10 2>/dev/null; then
+		vlan_destroy $swp1 10
+		ip link del br0
+		echo "SKIP: vlan-aware bridge does not allow multiple vlan uppers per VLAN on bridge ports"
+		exit "$ksft_skip"
+	fi
+
+	vlan_destroy $swp1 10
+	vlan_destroy $swp2 10
+
+	run_test "Switch ports in VLAN-aware bridge with VLAN uppers" 2
 
 	ip link del br0
 }
