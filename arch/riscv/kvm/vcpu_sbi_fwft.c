@@ -213,6 +213,108 @@ static long kvm_sbi_fwft_get_pointer_masking_pmlen(struct kvm_vcpu *vcpu,
 	return SBI_SUCCESS;
 }
 
+static long kvm_sbi_fwft_set_henvcfg_flag(struct kvm_vcpu *vcpu,
+					 struct kvm_sbi_fwft_config *conf,
+					 bool one_reg_access, unsigned long value,
+					 unsigned long flag)
+{
+	struct kvm_vcpu_config *cfg = &vcpu->arch.cfg;
+
+	if (value == 1)
+		cfg->henvcfg |= flag;
+	else if (value == 0)
+		cfg->henvcfg &= ~flag;
+	else
+		return SBI_ERR_INVALID_PARAM;
+
+	if (!one_reg_access)
+		csr_write(CSR_HENVCFG, cfg->henvcfg);
+
+	return SBI_SUCCESS;
+}
+
+static bool kvm_sbi_fwft_pointer_landing_pad_supported(struct kvm_vcpu *vcpu)
+{
+	return riscv_isa_extension_available(vcpu->arch.isa, ZICFILP);
+}
+
+static void kvm_sbi_fwft_reset_landing_pad(struct kvm_vcpu *vcpu)
+{
+	vcpu->arch.cfg.henvcfg &= ~ENVCFG_LPE;
+}
+
+static long kvm_sbi_fwft_set_landing_pad(struct kvm_vcpu *vcpu,
+						   struct kvm_sbi_fwft_config *conf,
+						   bool one_reg_access, unsigned long value)
+{
+	return kvm_sbi_fwft_set_henvcfg_flag(vcpu, conf, one_reg_access, value, ENVCFG_LPE);
+}
+
+static long kvm_sbi_fwft_get_landing_pad(struct kvm_vcpu *vcpu,
+						   struct kvm_sbi_fwft_config *conf,
+						   bool one_reg_access, unsigned long *value)
+{
+	struct kvm_vcpu_config *cfg = &vcpu->arch.cfg;
+
+	*value = (cfg->henvcfg & ENVCFG_LPE) == ENVCFG_LPE;
+	return SBI_SUCCESS;
+}
+
+static bool kvm_sbi_fwft_pointer_shadow_stack_supported(struct kvm_vcpu *vcpu)
+{
+	return riscv_isa_extension_available(vcpu->arch.isa, ZICFISS);
+}
+
+static void kvm_sbi_fwft_reset_shadow_stack(struct kvm_vcpu *vcpu)
+{
+	vcpu->arch.cfg.henvcfg &= ~ENVCFG_SSE;
+}
+
+static long kvm_sbi_fwft_set_shadow_stack(struct kvm_vcpu *vcpu,
+						   struct kvm_sbi_fwft_config *conf,
+						   bool one_reg_access, unsigned long value)
+{
+	return kvm_sbi_fwft_set_henvcfg_flag(vcpu, conf, one_reg_access, value, ENVCFG_SSE);
+}
+
+static long kvm_sbi_fwft_get_shadow_stack(struct kvm_vcpu *vcpu,
+						   struct kvm_sbi_fwft_config *conf,
+						   bool one_reg_access, unsigned long *value)
+{
+	struct kvm_vcpu_config *cfg = &vcpu->arch.cfg;
+
+	*value = (cfg->henvcfg & ENVCFG_SSE) == ENVCFG_SSE;
+	return SBI_SUCCESS;
+}
+
+static bool kvm_sbi_fwft_pointer_pte_ad_hw_updating_supported(struct kvm_vcpu *vcpu)
+{
+	return riscv_isa_extension_available(vcpu->arch.isa, SVADU) &&
+		!riscv_isa_extension_available(vcpu->arch.isa, SVADE);
+}
+
+static void kvm_sbi_fwft_reset_pte_ad_hw_updating(struct kvm_vcpu *vcpu)
+{
+	vcpu->arch.cfg.henvcfg &= ~ENVCFG_ADUE;
+}
+
+static long kvm_sbi_fwft_set_pte_ad_hw_updating(struct kvm_vcpu *vcpu,
+						   struct kvm_sbi_fwft_config *conf,
+						   bool one_reg_access, unsigned long value)
+{
+	return kvm_sbi_fwft_set_henvcfg_flag(vcpu, conf, one_reg_access, value, ENVCFG_ADUE);
+}
+
+static long kvm_sbi_fwft_get_pte_ad_hw_updating(struct kvm_vcpu *vcpu,
+						   struct kvm_sbi_fwft_config *conf,
+						   bool one_reg_access, unsigned long *value)
+{
+	struct kvm_vcpu_config *cfg = &vcpu->arch.cfg;
+
+	*value = (cfg->henvcfg & ENVCFG_ADUE) == ENVCFG_ADUE;
+	return SBI_SUCCESS;
+}
+
 #endif
 
 static const struct kvm_sbi_fwft_feature features[] = {
@@ -236,6 +338,33 @@ static const struct kvm_sbi_fwft_feature features[] = {
 		.get = kvm_sbi_fwft_get_pointer_masking_pmlen,
 	},
 #endif
+	{
+		.id = SBI_FWFT_LANDING_PAD,
+		.first_reg_num = offsetof(struct kvm_riscv_sbi_fwft, landing_pad.enable) /
+				 sizeof(unsigned long),
+		.supported = kvm_sbi_fwft_landing_pad_supported,
+		.reset = kvm_sbi_fwft_reset_landing_pad,
+		.set = kvm_sbi_fwft_set_landing_pad,
+		.get = kvm_sbi_fwft_get_landing_pad,
+	},
+	{
+		.id = SBI_FWFT_SHADOW_STACK,
+		.first_reg_num = offsetof(struct kvm_riscv_sbi_fwft, shadow_stack.enable) /
+				 sizeof(unsigned long),
+		.supported = kvm_sbi_fwft_shadow_stack_supported,
+		.reset = kvm_sbi_fwft_reset_shadow_stack,
+		.set = kvm_sbi_fwft_set_shadow_stack,
+		.get = kvm_sbi_fwft_get_shadow_stack,
+	},
+	{
+		.id = SBI_FWFT_PTE_AD_HW_UPDATING,
+		.first_reg_num = offsetof(struct kvm_riscv_sbi_fwft, pte_ad_hw_updating.enable) /
+				 sizeof(unsigned long),
+		.supported = kvm_sbi_fwft_pte_ad_hw_updating_supported,
+		.reset = kvm_sbi_fwft_reset_pte_ad_hw_updating,
+		.set = kvm_sbi_fwft_set_pte_ad_hw_updating,
+		.get = kvm_sbi_fwft_get_pte_ad_hw_updating,
+	},
 };
 
 static const struct kvm_sbi_fwft_feature *kvm_sbi_fwft_regnum_to_feature(unsigned long reg_num)
