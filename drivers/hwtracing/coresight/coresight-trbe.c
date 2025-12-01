@@ -17,6 +17,7 @@
 
 #include <asm/barrier.h>
 #include <asm/cpufeature.h>
+#include <linux/jump_label.h>
 #include <linux/kvm_host.h>
 #include <linux/vmalloc.h>
 
@@ -146,6 +147,12 @@ struct trbe_drvdata {
 	enum cpuhp_state trbe_online;
 	struct platform_device *pdev;
 };
+
+DEFINE_STATIC_KEY_FALSE(trbe_trigger_mode_bypass);
+
+#define trbe_trigger_mode_need_bypass(cpudata)		\
+	(trbe_may_overwrite_in_fill_mode((cpudata)) ||	\
+	 trbe_may_write_out_of_range((cpudata)))
 
 static void trbe_check_errata(struct trbe_cpudata *cpudata)
 {
@@ -1306,6 +1313,14 @@ static void arm_trbe_register_coresight_cpu(struct trbe_drvdata *drvdata, int cp
 
 	dev_set_drvdata(&trbe_csdev->dev, cpudata);
 	coresight_set_percpu_sink(cpu, trbe_csdev);
+
+	/*
+	 * If any CPU cannot use trigger mode, bypass the mode globally for
+	 * consistent tracing behaviour.
+	 */
+	if (trbe_trigger_mode_need_bypass(cpudata))
+		static_branch_enable(&trbe_trigger_mode_bypass);
+
 	return;
 cpu_clear:
 	cpumask_clear_cpu(cpu, &drvdata->supported_cpus);
