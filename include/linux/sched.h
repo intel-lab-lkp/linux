@@ -633,7 +633,7 @@ struct sched_rt_entity {
 #endif
 } __randomize_layout;
 
-typedef bool (*dl_server_has_tasks_f)(struct sched_dl_entity *);
+typedef bool (*dl_server_try_pull_f)(struct sched_dl_entity *);
 typedef struct task_struct *(*dl_server_pick_f)(struct sched_dl_entity *);
 
 struct sched_dl_entity {
@@ -734,6 +734,7 @@ struct sched_dl_entity {
 	struct dl_rq			*dl_rq;
 	struct rq			*my_q;
 	dl_server_pick_f		server_pick_task;
+	dl_server_try_pull_f		server_try_pull_task;
 
 #ifdef CONFIG_RT_MUTEXES
 	/*

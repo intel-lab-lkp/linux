@@ -363,6 +363,11 @@ extern s64 dl_scaled_delta_exec(struct rq *rq, struct sched_dl_entity *dl_se, s6
  *
  *   dl_se::rq -- runqueue we belong to.
  *
+ *   dl_se::server_try_pull() -- used on bandwidth enforcement; the server has a
+ *				 chance to pull tasks from the other runqueues,
+ *				 otherwise it is stopped if there is no task to
+ *				 run.
+ *
  *   dl_se::server_pick() -- nested pick_next_task(); we yield the period if this
  *                           returns NULL.
  *
@@ -408,6 +413,7 @@ extern void dl_server_start(struct sched_dl_entity *dl_se);
 extern void dl_server_stop(struct sched_dl_entity *dl_se);
 extern void dl_server_init(struct sched_dl_entity *dl_se, struct dl_rq *dl_rq,
 		    struct rq *served_rq,
+		    dl_server_try_pull_f try_pull_task,
 		    dl_server_pick_f pick_task);
 extern void sched_init_dl_servers(void);
 extern int dl_check_tg(unsigned long total);

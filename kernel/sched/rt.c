@@ -134,6 +134,16 @@ void free_rt_sched_group(struct task_group *tg)
 static struct sched_rt_entity *pick_next_rt_entity(struct rt_rq *rt_rq);
 static inline void set_next_task_rt(struct rq *rq, struct task_struct *p, bool first);
 
+static bool rt_server_try_pull(struct sched_dl_entity *dl_se)
+{
+	struct rt_rq *rt_rq = &dl_se->my_q->rt;
+
+	if (dl_se->my_q->rt.rt_nr_running == 0)
+		group_pull_rt_task(rt_rq);
+
+	return dl_se->my_q->rt.rt_nr_running > 0;
+}
+
 static struct task_struct *rt_server_pick(struct sched_dl_entity *dl_se)
 {
 	struct rt_rq *rt_rq = &dl_se->my_q->rt;
@@ -235,7 +245,8 @@ int alloc_rt_sched_group(struct task_group *tg, struct task_group *parent)
 		dl_se->dl_density = to_ratio(dl_se->dl_period, dl_se->dl_runtime);
 		dl_se->dl_server = 1;
 
-		dl_server_init(dl_se, &cpu_rq(i)->dl, s_rq, rt_server_pick);
+		dl_server_init(dl_se, &cpu_rq(i)->dl, s_rq,
+			       rt_server_try_pull, rt_server_pick);
 	}
 
 	return 1;

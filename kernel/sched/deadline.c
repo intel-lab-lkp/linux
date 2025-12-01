@@ -1295,6 +1295,7 @@ static const u64 dl_server_min_res = 1 * NSEC_PER_MSEC;
 static enum hrtimer_restart dl_server_timer(struct hrtimer *timer, struct sched_dl_entity *dl_se)
 {
 	struct rq *rq = rq_of_dl_se(dl_se);
+	bool is_active;
 	u64 fw;
 
 	scoped_guard (rq_lock, rq) {
@@ -1308,6 +1309,15 @@ static enum hrtimer_restart dl_server_timer(struct hrtimer *timer, struct sched_
 
 		if (!dl_se->dl_runtime)
 			return HRTIMER_NORESTART;
+
+		rq_unpin_lock(rq, rf);
+		is_active = dl_se->server_try_pull_task(dl_se);
+		rq_repin_lock(rq, rf);
+		if (!is_active) {
+			replenish_dl_entity(dl_se);
+			dl_server_stop(dl_se);
+			return HRTIMER_NORESTART;
+		}
 
 		if (dl_se->dl_defer_armed) {
 			/*
@@ -1712,10 +1722,12 @@ void dl_server_stop(struct sched_dl_entity *dl_se)
 
 void dl_server_init(struct sched_dl_entity *dl_se, struct dl_rq *dl_rq,
 		    struct rq *served_rq,
+		    dl_server_try_pull_f try_pull_task,
 		    dl_server_pick_f pick_task)
 {
 	dl_se->dl_rq = dl_rq;
 	dl_se->my_q  = served_rq;
+	dl_se->server_try_pull_task = try_pull_task;
 	dl_se->server_pick_task = pick_task;
 }
 
