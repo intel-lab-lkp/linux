@@ -400,3 +400,13 @@ will reject attempts to define a filter for any portion of these ranges:
         0x8000_0000 0x8000_FFFF
         0xC000_0000 0xC000_FFFF
         =========== ===============
+
+Protected KVM (pKVM) handles some calls directly and will reject attempts to
+define a filter for a protected VM for any portion of these ranges:
+
+        =========== ===============
+        Start       End (inclusive)
+        =========== ===============
+        0x8600_FF01 0x8600_FF01
+        0xC600_0002 0xC600_003F
+        =========== ===============
