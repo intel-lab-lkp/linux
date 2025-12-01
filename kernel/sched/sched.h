@@ -1591,19 +1591,6 @@ do {						\
 	flags = _raw_spin_rq_lock_irqsave(rq);	\
 } while (0)
 
-#ifdef CONFIG_SCHED_SMT
-extern void __update_idle_core(struct rq *rq);
-
-static inline void update_idle_core(struct rq *rq)
-{
-	if (static_branch_unlikely(&sched_smt_present))
-		__update_idle_core(rq);
-}
-
-#else /* !CONFIG_SCHED_SMT: */
-static inline void update_idle_core(struct rq *rq) { }
-#endif /* !CONFIG_SCHED_SMT */
-
 #ifdef CONFIG_FAIR_GROUP_SCHED
 
 static inline struct task_struct *task_of(struct sched_entity *se)
@@ -2090,6 +2077,35 @@ static __always_inline bool sched_asym_cpucap_active(void)
 {
 	return static_branch_unlikely(&sched_asym_cpucapacity);
 }
+
+static inline void set_idle_cores(int cpu, int val)
+{
+	struct sched_domain_shared *sds;
+
+	sds = rcu_dereference(per_cpu(sd_llc_shared, cpu));
+	if (sds)
+		WRITE_ONCE(sds->has_idle_cores, val);
+}
+
+#ifdef CONFIG_SCHED_SMT
+extern void __update_idle_core(struct rq *rq);
+
+static inline void update_idle_core(struct rq *rq)
+{
+	if (static_branch_unlikely(&sched_smt_present))
+		__update_idle_core(rq);
+	else
+		set_idle_cores(cpu_of(rq), 1);
+
+}
+
+#else /* !CONFIG_SCHED_SMT: */
+static inline void update_idle_core(struct rq *rq)
+{
+	set_idle_cores(cpu_of(rq), 1);
+}
+#endif /* !CONFIG_SCHED_SMT */
+
 
 struct sched_group_capacity {
 	atomic_t		ref;
