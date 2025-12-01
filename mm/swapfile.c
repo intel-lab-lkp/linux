@@ -2277,6 +2277,8 @@ static int unuse_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
 			continue;
 
 		offset = swp_offset(entry);
+		if (offset >= si->max)
+			continue;
 		pte_unmap(pte);
 		pte = NULL;
 
