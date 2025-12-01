@@ -383,18 +383,13 @@ out_close:
 	return err;
 }
 
-int libbfd__read_build_id(const char *filename, struct build_id *bid)
+int libbfd__read_build_id(int _fd, const char *filename, struct build_id *bid)
 {
 	size_t size = sizeof(bid->data);
 	int err = -1, fd;
 	bfd *abfd;
 
-	if (!filename)
-		return -EFAULT;
-	if (!is_regular_file(filename))
-		return -EWOULDBLOCK;
-
-	fd = open(filename, O_RDONLY);
+	fd = dup(_fd);
 	if (fd < 0)
 		return -1;
 

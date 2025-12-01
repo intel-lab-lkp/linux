@@ -54,6 +54,7 @@ perf-util-y += usage.o
 perf-util-y += dso.o
 perf-util-y += dsos.o
 perf-util-y += symbol.o
+perf-util-y += symbol-minimal.o
 perf-util-y += symbol_fprintf.o
 perf-util-y += map_symbol.o
 perf-util-y += color.o
@@ -207,10 +208,6 @@ endif
 
 ifdef hashmap
 perf-util-y += hashmap.o
-endif
-
-ifndef CONFIG_LIBELF
-perf-util-y += symbol-minimal.o
 endif
 
 ifndef CONFIG_SETNS
