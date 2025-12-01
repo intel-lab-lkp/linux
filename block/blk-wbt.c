@@ -758,8 +758,12 @@ void wbt_enable_default(struct gendisk *disk)
 	if (queue_is_mq(q) && enable) {
 		struct rq_wb *rwb = wbt_alloc();
 
-		if (rwb)
+		if (rwb) {
 			wbt_init(disk, rwb);
+			mutex_lock(&q->debugfs_mutex);
+			blk_mq_debugfs_register_rq_qos(q);
+			mutex_unlock(&q->debugfs_mutex);
+		}
 	}
 }
 EXPORT_SYMBOL_GPL(wbt_enable_default);
@@ -999,5 +1003,9 @@ int wbt_set_lat(struct gendisk *disk, s64 val)
 	blk_mq_unquiesce_queue(q);
 out:
 	blk_mq_unfreeze_queue(q, memflags);
+	mutex_lock(&q->debugfs_mutex);
+	blk_mq_debugfs_register_rq_qos(q);
+	mutex_unlock(&q->debugfs_mutex);
+
 	return ret;
 }
