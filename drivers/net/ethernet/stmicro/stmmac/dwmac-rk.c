@@ -438,6 +438,7 @@ static int rk3328_init(struct rk_priv_data *bsp_priv)
 	case 1: /* gmac2phy */
 		bsp_priv->phy_intf_sel_grf_reg = RK3328_GRF_MAC_CON2;
 		bsp_priv->speed_grf_reg = RK3328_GRF_MAC_CON2;
+		bsp_priv->supports_rgmii = false;
 		return 0;
 
 	default:
