@@ -168,19 +168,29 @@ ls_extirq_parse_map(struct ls_extirq_data *priv, struct device_node *node)
 	return 0;
 }
 
-static int __init
-ls_extirq_of_init(struct device_node *node, struct device_node *parent)
+static const struct of_device_id ls_extirq_match[] = {
+	{ .compatible = "fsl,ls1021a-extirq" },
+	{ .compatible = "fsl,ls1043a-extirq" },
+	{ .compatible = "fsl,ls1088a-extirq" },
+	{}
+};
+
+static int ls_extirq_probe(struct platform_device *pdev)
 {
+	struct device_node *node = pdev->dev.of_node;
 	struct irq_domain *domain, *parent_domain;
+	struct device *dev = &pdev->dev;
+	struct device_node *irq_parent;
 	struct ls_extirq_data *priv;
 	int ret;
 
-	parent_domain = irq_find_host(parent);
-	if (!parent_domain) {
-		pr_err("Cannot find parent domain\n");
-		ret = -ENODEV;
-		goto err_irq_find_host;
-	}
+	irq_parent = of_irq_find_parent(dev->of_node);
+	if (!irq_parent)
+		return -ENODEV;
+
+	parent_domain = irq_find_host(irq_parent);
+	if (!parent_domain)
+		return dev_err_probe(dev, -EPROBE_DEFER, "Cannot find parent domain\n");
 
 	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv) {
@@ -194,7 +204,7 @@ ls_extirq_of_init(struct device_node *node, struct device_node *parent)
 	 */
 	priv->intpcr = of_iomap(node, 0);
 	if (!priv->intpcr) {
-		pr_err("Cannot ioremap OF node %pOF\n", node);
+		dev_err(dev, "Cannot ioremap OF node %pOF\n", node);
 		ret = -ENOMEM;
 		goto err_iomap;
 	}
@@ -223,10 +233,14 @@ err_parse_map:
 err_iomap:
 	kfree(priv);
 err_alloc_priv:
-err_irq_find_host:
 	return ret;
 }
 
-IRQCHIP_DECLARE(ls1021a_extirq, "fsl,ls1021a-extirq", ls_extirq_of_init);
-IRQCHIP_DECLARE(ls1043a_extirq, "fsl,ls1043a-extirq", ls_extirq_of_init);
-IRQCHIP_DECLARE(ls1088a_extirq, "fsl,ls1088a-extirq", ls_extirq_of_init);
+static struct platform_driver ls_extirq_driver = {
+	.driver = {
+		.name		= "irq-ls-extirq",
+		.of_match_table	= ls_extirq_match,
+	},
+	.probe = ls_extirq_probe,
+};
+builtin_platform_driver(ls_extirq_driver);
