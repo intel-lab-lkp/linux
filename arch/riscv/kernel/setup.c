@@ -288,6 +288,11 @@ static void __init riscv_spinlock_init(void)
 		return;
 	}
 
+#ifdef CONFIG_PARAVIRT_SPINLOCKS
+	if (pv_qspinlock_init())
+		return;
+#endif
+
 	if (IS_ENABLED(CONFIG_RISCV_ISA_ZABHA) &&
 	    IS_ENABLED(CONFIG_RISCV_ISA_ZACAS) &&
 	    IS_ENABLED(CONFIG_TOOLCHAIN_HAS_ZACAS) &&
