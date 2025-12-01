@@ -3167,10 +3167,17 @@ dsa_user_check_8021q_upper(struct net_device *dev,
 	int err = NOTIFY_DONE;
 	u16 vid;
 
-	if (!br || !br_vlan_enabled(br))
+	if (!br)
 		return NOTIFY_DONE;
 
 	extack = netdev_notifier_info_to_extack(&info->info);
+
+	if (!br_vlan_enabled(br)) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "VLAN uppers not supported with non filtering bridges");
+		return notifier_from_errno(-EBUSY);
+	}
+
 	vid = vlan_dev_vlan_id(info->upper_dev);
 
 	/* br_vlan_get_info() returns -EINVAL or -ENOENT if the
