@@ -1252,7 +1252,8 @@ static int dummy_urb_enqueue(
 	struct usb_hcd			*hcd,
 	struct urb			*urb,
 	gfp_t				mem_flags
-) {
+)
+{
 	struct dummy_hcd *dum_hcd;
 	struct urbp	*urbp;
 	unsigned long	flags;
@@ -2097,7 +2098,8 @@ static int dummy_hub_control(
 	u16		wIndex,
 	char		*buf,
 	u16		wLength
-) {
+)
+{
 	struct dummy_hcd *dum_hcd;
 	int		retval = 0;
 	unsigned long	flags;
