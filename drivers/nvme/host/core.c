@@ -1538,8 +1538,10 @@ static int nvme_identify_ns_descs(struct nvme_ctrl *ctrl,
 {
 	struct nvme_command c = { };
 	bool csi_seen = false;
-	int status, pos, len;
+	int status, len;
+	size_t pos;
 	void *data;
+	struct nvme_ns_id_desc *cur;
 
 	if (ctrl->vs < NVME_VS(1, 3, 0) && !nvme_multi_css(ctrl))
 		return 0;
@@ -1563,18 +1565,23 @@ static int nvme_identify_ns_descs(struct nvme_ctrl *ctrl,
 		goto free_data;
 	}
 
-	for (pos = 0; pos < NVME_IDENTIFY_DATA_SIZE; pos += len) {
-		struct nvme_ns_id_desc *cur = data + pos;
+	pos = 0;
+	do {
+		cur = data + pos;
 
 		if (cur->nidl == 0)
+			break;
+		/* check ns id desc does not exceed remaining buffer by size */
+		if (cur->nidl + sizeof(*cur) > NVME_IDENTIFY_DATA_SIZE - pos)
 			break;
 
 		len = nvme_process_ns_desc(ctrl, &info->ids, cur, &csi_seen);
 		if (len < 0)
 			break;
 
-		len += sizeof(*cur);
-	}
+		pos += sizeof(*cur);
+		pos += len;
+	} while (pos < NVME_IDENTIFY_DATA_SIZE - sizeof(*cur));
 
 	if (nvme_multi_css(ctrl) && !csi_seen) {
 		dev_warn(ctrl->device, "Command set not reported for nsid:%d\n",
