@@ -472,6 +472,10 @@ struct address_space_operations {
 	void (*is_dirty_writeback) (struct folio *, bool *dirty, bool *wb);
 	int (*error_remove_folio)(struct address_space *, struct folio *);
 
+	/* Min folio order to allocate pages. */
+	unsigned int (*ra_folio_order)(struct address_space *mapping,
+			unsigned int order);
+
 	/* swapfile support */
 	int (*swap_activate)(struct swap_info_struct *sis, struct file *file,
 				sector_t *span);
