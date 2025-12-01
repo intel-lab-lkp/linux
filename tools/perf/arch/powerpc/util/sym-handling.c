@@ -66,13 +66,6 @@ const char *arch__normalize_symbol_name(const char *name)
 
 #if defined(_CALL_ELF) && _CALL_ELF == 2
 
-#ifdef HAVE_LIBELF_SUPPORT
-void arch__sym_update(struct symbol *s, GElf_Sym *sym)
-{
-	s->arch_sym = sym->st_other;
-}
-#endif
-
 #define PPC64LE_LEP_OFFSET	8
 
 void arch__fix_tev_from_maps(struct perf_probe_event *pev,

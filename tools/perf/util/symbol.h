@@ -216,10 +216,6 @@ int setup_list(struct strlist **list, const char *list_str,
 int setup_intlist(struct intlist **list, const char *list_str,
 		  const char *list_name);
 
-#ifdef HAVE_LIBELF_SUPPORT
-void arch__sym_update(struct symbol *s, GElf_Sym *sym);
-#endif
-
 const char *arch__normalize_symbol_name(const char *name);
 #define SYMBOL_A 0
 #define SYMBOL_B 1
