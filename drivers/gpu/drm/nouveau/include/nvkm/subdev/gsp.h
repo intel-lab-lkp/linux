@@ -73,6 +73,11 @@ struct nvkm_gsp {
 
 		const struct firmware *bl;
 		const struct firmware *rm;
+
+		struct {
+			struct nvkm_falcon_fw sb;
+			struct nvkm_falcon_fw frts;
+		} falcon;
 	} fws;
 
 	struct nvkm_firmware fw;

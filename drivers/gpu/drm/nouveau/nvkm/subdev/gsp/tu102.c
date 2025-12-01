@@ -331,6 +331,10 @@ tu102_gsp_oneinit(struct nvkm_gsp *gsp)
 	if (ret)
 		return ret;
 
+	ret = nvkm_gsp_fwsec_frts_ctor(gsp);
+	if (WARN_ON(ret))
+		return ret;
+
 	ret = nvkm_gsp_fwsec_frts(gsp);
 	if (WARN_ON(ret))
 		return ret;

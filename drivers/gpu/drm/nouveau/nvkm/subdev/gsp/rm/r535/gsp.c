@@ -1817,12 +1817,16 @@ r535_gsp_rm_boot_ctor(struct nvkm_gsp *gsp)
 	RM_RISCV_UCODE_DESC *desc;
 	int ret;
 
+	ret = nvkm_gsp_fwsec_sb_ctor(gsp);
+	if (ret)
+		return ret;
+
 	hdr = nvfw_bin_hdr(&gsp->subdev, fw->data);
 	desc = (void *)fw->data + hdr->header_offset;
 
 	ret = nvkm_gsp_mem_ctor(gsp, hdr->data_size, &gsp->boot.fw);
 	if (ret)
-		return ret;
+		goto dtor_fwsec;
 
 	memcpy(gsp->boot.fw.data, fw->data + hdr->data_offset, hdr->data_size);
 
@@ -1831,6 +1835,9 @@ r535_gsp_rm_boot_ctor(struct nvkm_gsp *gsp)
 	gsp->boot.manifest_offset = desc->manifestOffset;
 	gsp->boot.app_version = desc->appVersion;
 	return 0;
+dtor_fwsec:
+	nvkm_gsp_fwsec_sb_dtor(gsp);
+	return ret;
 }
 
 static const struct nvkm_firmware_func
@@ -2087,6 +2094,7 @@ r535_gsp_dtor(struct nvkm_gsp *gsp)
 	nvkm_gsp_radix3_dtor(gsp, &gsp->radix3);
 	nvkm_gsp_mem_dtor(&gsp->sig);
 	nvkm_firmware_dtor(&gsp->fw);
+	nvkm_gsp_fwsec_sb_dtor(gsp);
 
 	nvkm_falcon_fw_dtor(&gsp->booter.unload);
 	nvkm_falcon_fw_dtor(&gsp->booter.load);
@@ -2105,6 +2113,7 @@ r535_gsp_dtor(struct nvkm_gsp *gsp)
 	nvkm_gsp_mem_dtor(&gsp->rmargs);
 	nvkm_gsp_mem_dtor(&gsp->wpr_meta);
 	nvkm_gsp_mem_dtor(&gsp->shm.mem);
+	nvkm_gsp_fwsec_frts_dtor(gsp);
 
 	r535_gsp_libos_debugfs_fini(gsp);
 
