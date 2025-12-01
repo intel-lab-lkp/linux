@@ -27,12 +27,36 @@ pub const PAGE_MASK: usize = !(PAGE_SIZE - 1);
 
 /// Round up the given number to the next multiple of [`PAGE_SIZE`].
 ///
-/// It is incorrect to pass an address where the next multiple of [`PAGE_SIZE`] doesn't fit in a
-/// [`usize`].
-pub const fn page_align(addr: usize) -> usize {
-    // Parentheses around `PAGE_SIZE - 1` to avoid triggering overflow sanitizers in the wrong
-    // cases.
-    (addr + (PAGE_SIZE - 1)) & PAGE_MASK
+/// Returns a page aligned [`usize`] in cases where the value can be aligned. Otherwise, returns [`None`]
+/// if the aligned size will overflow a [`usize`].
+///
+/// # Examples
+///
+/// ```rust
+/// use kernel::page::{page_align, PAGE_SIZE};
+/// // Case 1: Already aligned
+/// assert_eq!(page_align(0x0), Some(0x0));
+/// assert_eq!(page_align(PAGE_SIZE), Some(PAGE_SIZE));
+///
+/// // Case 2: Needs alignment up
+/// assert_eq!(page_align(0x1), Some(PAGE_SIZE));
+/// assert_eq!(page_align(PAGE_SIZE + 1), Some(2 * PAGE_SIZE));
+///
+/// // Case 3: Requested address causes overflow (returns None)
+/// // The check asserts that `None` is returned when a value is requested within one `PAGE_SIZE` of
+/// // `usize::MAX`.
+/// let overflow_addr = usize::MAX - (PAGE_SIZE / 2);
+/// assert_eq!(page_align(overflow_addr), None);
+///
+/// // Case 4: Requested address size of `usize::MAX` would overflow, and subsequently returns `None`.
+/// assert_eq!(page_align(usize::MAX), None);
+/// ```
+#[inline(always)]
+pub const fn page_align(addr: usize) -> Option<usize> {
+    let Some(sum) = addr.checked_add(PAGE_SIZE - 1) else {
+        return None;
+    };
+    Some(sum & PAGE_MASK)
 }
 
 /// Representation of a non-owning reference to a [`Page`].
