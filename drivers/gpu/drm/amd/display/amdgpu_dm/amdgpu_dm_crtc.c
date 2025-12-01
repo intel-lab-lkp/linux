@@ -258,8 +258,8 @@ static void amdgpu_dm_crtc_vblank_control_worker(struct work_struct *work)
 	else if (dm->active_vblank_irq_count)
 		dm->active_vblank_irq_count--;
 
-	if (dm->active_vblank_irq_count > 0)
-		dc_allow_idle_optimizations(dm->dc, false);
+	/* prepare_vblank_enable must disallow idle first */
+	ASSERT(dm->dc->idle_optimizations_allowed == false);
 
 	/*
 	 * Control PSR based on vblank requirements from OS
@@ -277,7 +277,13 @@ static void amdgpu_dm_crtc_vblank_control_worker(struct work_struct *work)
 			vblank_work->acrtc->dm_irq_params.allow_sr_entry);
 	}
 
-	if (dm->active_vblank_irq_count == 0) {
+	/*
+	 * If this worker runs disable between prepare_vblank and enable_vblank,
+	 * we need to block idle re-allow. Leave it to the next vblank disable
+	 * to re-allow idle.
+	 */
+	if (dm->active_vblank_irq_count == 0 &&
+	    !READ_ONCE(dm->prepare_vbl_disallow_idle)) {
 		dc_post_update_surfaces_to_stream(dm->dc);
 
 		r = amdgpu_dpm_pause_power_profile(adev, true);
@@ -307,6 +313,8 @@ static inline int amdgpu_dm_crtc_set_vblank(struct drm_crtc *crtc, bool enable)
 	struct vblank_control_work *work;
 	int irq_type;
 	int rc = 0;
+
+	ASSERT(dm->dc->idle_optimizations_allowed == false);
 
 	if (enable && !acrtc->base.enabled) {
 		drm_dbg_vbl(crtc->dev,
@@ -399,6 +407,9 @@ static inline int amdgpu_dm_crtc_set_vblank(struct drm_crtc *crtc, bool enable)
 	}
 #endif
 
+	/* Ensure compiler emits the write before worker is queued */
+	WRITE_ONCE(dm->prepare_vbl_disallow_idle, false);
+
 	if (amdgpu_in_reset(adev))
 		return 0;
 
@@ -418,6 +429,24 @@ static inline int amdgpu_dm_crtc_set_vblank(struct drm_crtc *crtc, bool enable)
 		}
 
 		queue_work(dm->vblank_control_workqueue, &work->work);
+	}
+
+	return 0;
+}
+
+static int amdgpu_prepare_enable_vblank(struct drm_crtc *crtc)
+{
+	struct amdgpu_device *adev = drm_to_adev(crtc->dev);
+	struct amdgpu_display_manager *dm = &adev->dm;
+
+	guard(mutex)(&adev->dm.dc_lock);
+
+	if (dm->dc->idle_optimizations_allowed) {
+		/* Prevent the disable worker from re-allowing idle until
+		 * interrupts are enabled. Ensure compiler emits the write
+		 * before disallowing idle. */
+		WRITE_ONCE(dm->prepare_vbl_disallow_idle, true);
+		dc_allow_idle_optimizations(dm->dc, false);
 	}
 
 	return 0;
@@ -590,6 +619,7 @@ static const struct drm_crtc_funcs amdgpu_dm_crtc_funcs = {
 	.verify_crc_source = amdgpu_dm_crtc_verify_crc_source,
 	.get_crc_sources = amdgpu_dm_crtc_get_crc_sources,
 	.get_vblank_counter = amdgpu_get_vblank_counter_kms,
+	.prepare_enable_vblank = amdgpu_prepare_enable_vblank,
 	.enable_vblank = amdgpu_dm_crtc_enable_vblank,
 	.disable_vblank = amdgpu_dm_crtc_disable_vblank,
 	.get_vblank_timestamp = drm_crtc_vblank_helper_get_vblank_timestamp,
