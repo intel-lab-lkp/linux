@@ -8959,7 +8959,7 @@ static struct task_struct *__pick_next_task_fair(struct rq *rq, struct task_stru
 
 static struct task_struct *fair_server_pick_task(struct sched_dl_entity *dl_se)
 {
-	return pick_task_fair(dl_se->rq);
+	return pick_task_fair(dl_se->my_q);
 }
 
 void fair_server_init(struct rq *rq)
@@ -8968,7 +8968,7 @@ void fair_server_init(struct rq *rq)
 
 	init_dl_entity(dl_se);
 
-	dl_server_init(dl_se, rq, fair_server_pick_task);
+	dl_server_init(dl_se, &rq->dl, rq, fair_server_pick_task);
 }
 
 /*
