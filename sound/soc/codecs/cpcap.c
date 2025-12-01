@@ -431,6 +431,7 @@ static int cpcap_output_mux_put_enum(struct snd_kcontrol *kcontrol,
 	unsigned int mask = BIT(e->shift_l);
 	u16 reg_voice = 0x00, reg_hifi = 0x00, reg_ext = 0x00;
 	int err;
+	bool change = false;
 
 	switch (muxval) {
 	case 1:
@@ -446,22 +447,22 @@ static int cpcap_output_mux_put_enum(struct snd_kcontrol *kcontrol,
 		break;
 	}
 
-	err = regmap_update_bits(cpcap->regmap, CPCAP_REG_RXCOA,
-				 mask, reg_voice);
+	err = regmap_update_bits_check(cpcap->regmap, CPCAP_REG_RXCOA,
+				 mask, reg_voice, &change);
 	if (err)
 		return err;
-	err = regmap_update_bits(cpcap->regmap, CPCAP_REG_RXSDOA,
-				 mask, reg_hifi);
+	err = regmap_update_bits_check(cpcap->regmap, CPCAP_REG_RXSDOA,
+				 mask, reg_hifi, &change);
 	if (err)
 		return err;
-	err = regmap_update_bits(cpcap->regmap, CPCAP_REG_RXEPOA,
-				 mask, reg_ext);
+	err = regmap_update_bits_check(cpcap->regmap, CPCAP_REG_RXEPOA,
+				 mask, reg_ext, &change);
 	if (err)
 		return err;
 
 	snd_soc_dapm_mux_update_power(dapm, kcontrol, muxval, e, NULL);
 
-	return 0;
+	return change ? 1 : 0;
 }
 
 static int cpcap_input_right_mux_get_enum(struct snd_kcontrol *kcontrol,
@@ -513,6 +514,7 @@ static int cpcap_input_right_mux_put_enum(struct snd_kcontrol *kcontrol,
 	unsigned int muxval = ucontrol->value.enumerated.item[0];
 	int regval = 0, mask;
 	int err;
+	bool change = false;
 
 	mask = 0;
 	mask |= BIT(CPCAP_BIT_MIC1_MUX);
@@ -537,14 +539,14 @@ static int cpcap_input_right_mux_put_enum(struct snd_kcontrol *kcontrol,
 		break;
 	}
 
-	err = regmap_update_bits(cpcap->regmap, CPCAP_REG_TXI,
-				 mask, regval);
+	err = regmap_update_bits_check(cpcap->regmap, CPCAP_REG_TXI,
+				 mask, regval, &change);
 	if (err)
 		return err;
 
 	snd_soc_dapm_mux_update_power(dapm, kcontrol, muxval, e, NULL);
 
-	return 0;
+	return change ? 1 : 0;
 }
 
 static int cpcap_input_left_mux_get_enum(struct snd_kcontrol *kcontrol,
@@ -588,6 +590,7 @@ static int cpcap_input_left_mux_put_enum(struct snd_kcontrol *kcontrol,
 	unsigned int muxval = ucontrol->value.enumerated.item[0];
 	int regval = 0, mask;
 	int err;
+	bool change = false;
 
 	mask = 0;
 	mask |= BIT(CPCAP_BIT_MIC2_MUX);
@@ -604,14 +607,14 @@ static int cpcap_input_left_mux_put_enum(struct snd_kcontrol *kcontrol,
 		break;
 	}
 
-	err = regmap_update_bits(cpcap->regmap, CPCAP_REG_TXI,
-				 mask, regval);
+	err = regmap_update_bits_check(cpcap->regmap, CPCAP_REG_TXI,
+				 mask, regval, &change);
 	if (err)
 		return err;
 
 	snd_soc_dapm_mux_update_power(dapm, kcontrol, muxval, e, NULL);
 
-	return 0;
+	return change ? 1 : 0;
 }
 
 static const struct snd_kcontrol_new cpcap_input_left_mux =
