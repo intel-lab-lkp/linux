@@ -1618,9 +1618,7 @@ thermal_zone_device_register_with_trips(const char *type,
 			goto unregister;
 	}
 
-	result = thermal_thresholds_init(tz);
-	if (result)
-		goto remove_hwmon;
+	thermal_thresholds_init(tz);
 
 	thermal_zone_init_complete(tz);
 
@@ -1630,8 +1628,6 @@ thermal_zone_device_register_with_trips(const char *type,
 
 	return tz;
 
-remove_hwmon:
-	thermal_remove_hwmon_sysfs(tz);
 unregister:
 	device_del(&tz->device);
 release_device:

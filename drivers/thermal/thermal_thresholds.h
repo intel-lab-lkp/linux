@@ -8,7 +8,7 @@ struct user_threshold {
 	int direction;
 };
 
-int thermal_thresholds_init(struct thermal_zone_device *tz);
+void thermal_thresholds_init(struct thermal_zone_device *tz);
 void thermal_thresholds_exit(struct thermal_zone_device *tz);
 void thermal_thresholds_handle(struct thermal_zone_device *tz, int *low, int *high);
 void thermal_thresholds_flush(struct thermal_zone_device *tz);

@@ -13,11 +13,9 @@
 #include "thermal_core.h"
 #include "thermal_thresholds.h"
 
-int thermal_thresholds_init(struct thermal_zone_device *tz)
+void thermal_thresholds_init(struct thermal_zone_device *tz)
 {
 	INIT_LIST_HEAD(&tz->user_thresholds);
-
-	return 0;
 }
 
 static void __thermal_thresholds_flush(struct thermal_zone_device *tz)
