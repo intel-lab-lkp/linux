@@ -225,8 +225,8 @@ static void netconsole_target_put(struct netconsole_target *nt)
 {
 }
 
-static void populate_configfs_item(struct netconsole_target *nt,
-				   int cmdline_count)
+static int populate_configfs_item(struct netconsole_target *nt,
+				  int cmdline_count)
 {
 }
 #endif	/* CONFIG_NETCONSOLE_DYNAMIC */
@@ -1256,23 +1256,6 @@ static void init_target_config_group(struct netconsole_target *nt,
 	configfs_add_default_group(&nt->userdata_group, &nt->group);
 }
 
-static struct netconsole_target *find_cmdline_target(const char *name)
-{
-	struct netconsole_target *nt, *ret = NULL;
-	unsigned long flags;
-
-	spin_lock_irqsave(&target_list_lock, flags);
-	list_for_each_entry(nt, &target_list, list) {
-		if (!strcmp(nt->group.cg_item.ci_name, name)) {
-			ret = nt;
-			break;
-		}
-	}
-	spin_unlock_irqrestore(&target_list_lock, flags);
-
-	return ret;
-}
-
 /*
  * Group operations and type for netconsole_subsys.
  */
@@ -1282,19 +1265,6 @@ static struct config_group *make_netconsole_target(struct config_group *group,
 {
 	struct netconsole_target *nt;
 	unsigned long flags;
-
-	/* Checking if a target by this name was created at boot time.  If so,
-	 * attach a configfs entry to that target.  This enables dynamic
-	 * control.
-	 */
-	if (!strncmp(name, NETCONSOLE_PARAM_TARGET_PREFIX,
-		     strlen(NETCONSOLE_PARAM_TARGET_PREFIX))) {
-		nt = find_cmdline_target(name);
-		if (nt) {
-			init_target_config_group(nt, name);
-			return &nt->group;
-		}
-	}
 
 	nt = alloc_and_init();
 	if (!nt)
@@ -1351,14 +1321,20 @@ static struct configfs_subsystem netconsole_subsys = {
 	},
 };
 
-static void populate_configfs_item(struct netconsole_target *nt,
-				   int cmdline_count)
+static int populate_configfs_item(struct netconsole_target *nt,
+				  int cmdline_count)
 {
 	char target_name[16];
+	int ret;
 
 	snprintf(target_name, sizeof(target_name), "%s%d",
 		 NETCONSOLE_PARAM_TARGET_PREFIX, cmdline_count);
+
 	init_target_config_group(nt, target_name);
+
+	ret = configfs_register_item(&netconsole_subsys.su_group,
+				     &nt->group.cg_item);
+	return ret;
 }
 
 static int sysdata_append_cpu_nr(struct netconsole_target *nt, int offset)
@@ -1899,7 +1875,9 @@ static struct netconsole_target *alloc_param_target(char *target_config,
 	} else {
 		nt->enabled = true;
 	}
-	populate_configfs_item(nt, cmdline_count);
+	err = populate_configfs_item(nt, cmdline_count);
+	if (err)
+		goto fail;
 
 	return nt;
 
@@ -1911,6 +1889,8 @@ fail:
 /* Cleanup netpoll for given target (from boot/module param) and free it */
 static void free_param_target(struct netconsole_target *nt)
 {
+	if (nt->group.cg_item.ci_dentry)
+		configfs_unregister_item(&nt->group.cg_item);
 	netpoll_cleanup(&nt->np);
 	kfree(nt);
 }
@@ -1936,6 +1916,10 @@ static int __init init_netconsole(void)
 	unsigned long flags;
 	char *target_config;
 	char *input = config;
+
+	err = dynamic_netconsole_init();
+	if (err)
+		goto exit;
 
 	if (strnlen(input, MAX_PARAM_LENGTH)) {
 		while ((target_config = strsep(&input, ";"))) {
@@ -1966,10 +1950,6 @@ static int __init init_netconsole(void)
 	if (err)
 		goto fail;
 
-	err = dynamic_netconsole_init();
-	if (err)
-		goto undonotifier;
-
 	if (console_type_needed & CONS_EXTENDED)
 		register_console(&netconsole_ext);
 	if (console_type_needed & CONS_BASIC)
@@ -1978,10 +1958,8 @@ static int __init init_netconsole(void)
 
 	return err;
 
-undonotifier:
-	unregister_netdevice_notifier(&netconsole_netdev_notifier);
-
 fail:
+	dynamic_netconsole_exit();
 	pr_err("cleaning up\n");
 
 	/*
@@ -1993,6 +1971,7 @@ fail:
 		list_del(&nt->list);
 		free_param_target(nt);
 	}
+exit:
 
 	return err;
 }
