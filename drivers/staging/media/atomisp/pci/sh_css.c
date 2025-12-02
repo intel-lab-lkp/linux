@@ -4528,7 +4528,7 @@ static int load_video_binaries(struct ia_css_pipe *pipe)
 			  NULL,
 			  &cas_scaler_descr);
 		if (err)
-			return err;
+			goto ERR;
 		mycs->num_yuv_scaler = cas_scaler_descr.num_stage;
 		mycs->yuv_scaler_binary = kcalloc(cas_scaler_descr.num_stage,
 						  sizeof(struct ia_css_binary),
@@ -4561,7 +4561,10 @@ static int load_video_binaries(struct ia_css_pipe *pipe)
 				return err;
 			}
 		}
+ERR:
 		ia_css_pipe_destroy_cas_scaler_desc(&cas_scaler_descr);
+		if (err)
+			return err;
 	}
 
 	{
@@ -5107,7 +5110,7 @@ static int load_primary_binaries(
 			  &cas_scaler_descr);
 		if (err) {
 			IA_CSS_LEAVE_ERR_PRIVATE(err);
-			return err;
+			goto ERR;
 		}
 		mycs->num_yuv_scaler = cas_scaler_descr.num_stage;
 		mycs->yuv_scaler_binary = kcalloc(cas_scaler_descr.num_stage,
@@ -5141,7 +5144,10 @@ static int load_primary_binaries(
 				return err;
 			}
 		}
+ERR:
 		ia_css_pipe_destroy_cas_scaler_desc(&cas_scaler_descr);
+		if (err)
+			return err;
 
 	} else {
 		capt_pp_out_info = pipe->output_info[0];
