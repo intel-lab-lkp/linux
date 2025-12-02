@@ -1201,7 +1201,7 @@ static irqreturn_t quad8_irq_handler(int irq, void *private)
 
 	ret = regmap_read(priv->map, QUAD8_INTERRUPT_STATUS, &status);
 	if (ret)
-		return ret;
+		return IRQ_NONE;
 	if (!status)
 		return IRQ_NONE;
 
@@ -1233,7 +1233,7 @@ static irqreturn_t quad8_irq_handler(int irq, void *private)
 
 	ret = regmap_write(priv->map, QUAD8_CHANNEL_OPERATION, CLEAR_PENDING_INTERRUPTS);
 	if (ret)
-		return ret;
+		return IRQ_NONE;
 
 	return IRQ_HANDLED;
 }
