@@ -110,9 +110,10 @@ static int lnbh25_set_voltage(struct dvb_frontend *fe,
 	}
 	priv->config[1] = data1_reg;
 	dev_dbg(&priv->i2c->dev,
-		"%s(): %s, I2C 0x%x write [ %02x %02x %02x ]\n",
+		"%s(): %s, I2C 0x%x write [ %*ph ]\n",
 		__func__, vsel, priv->i2c_address,
-		priv->config[0], priv->config[1], priv->config[2]);
+		3, priv->config);
+
 	ret = i2c_transfer(priv->i2c, &msg, 1);
 	if (ret >= 0 && ret != 1)
 		ret = -EIO;
