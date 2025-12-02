@@ -1,6 +1,7 @@
 #ifndef IOU_CORE_H
 #define IOU_CORE_H
 
+#include <linux/completion.h>
 #include <linux/errno.h>
 #include <linux/lockdep.h>
 #include <linux/resume_user_mode.h>
@@ -197,7 +198,45 @@ bool __io_alloc_req_refill(struct io_ring_ctx *ctx);
 
 void io_activate_pollwq(struct io_ring_ctx *ctx);
 
+/*
+ * The ctx uring lock protects most of the mutable struct io_ring_ctx state
+ * accessed in the struct io_kiocb issue path. In the I/O path, it is typically
+ * acquired in the io_uring_enter() syscall and in io_handle_tw_list(). For
+ * IORING_SETUP_SQPOLL, it's acquired by io_sq_thread() instead. io_kiocb's
+ * issued with IO_URING_F_UNLOCKED in issue_flags (e.g. by io_wq_submit_work())
+ * acquire and release the ctx uring lock whenever they must touch io_ring_ctx
+ * state. io_uring_register() also acquires the ctx uring lock because most
+ * opcodes mutate io_ring_ctx state accessed in the issue path.
+ *
+ * For !IORING_SETUP_SINGLE_ISSUER io_ring_ctx's, acquiring the ctx uring lock
+ * is done via mutex_(try)lock(&ctx->uring_lock).
+ *
+ * However, for IORING_SETUP_SINGLE_ISSUER, we can avoid the mutex_lock() +
+ * mutex_unlock() overhead on submitter_task because a single thread can't race
+ * with itself. In the uncommon case where the ctx uring lock is needed on
+ * another thread, it must suspend submitter_task by scheduling a task work item
+ * on it. io_ring_ctx_lock() returns once the task work item has started.
+ * io_ring_ctx_unlock() allows the task work item to complete.
+ * If io_ring_ctx_lock() is called while the ctx is IORING_SETUP_R_DISABLED
+ * (e.g. during ctx create or exit), io_ring_ctx_lock() must acquire uring_lock
+ * because submitter_task isn't set yet. submitter_task can be accessed once
+ * uring_lock is held. If submitter_task exists, we do the same thing as in the
+ * non-IORING_SETUP_R_DISABLED case (except with uring_lock also held). If
+ * submitter_task isn't set, all other io_ring_ctx_lock() callers will also
+ * acquire uring_lock, so it suffices for mutual exclusion.
+ */
+
+struct io_ring_suspend_work {
+	struct callback_head cb_head;
+	struct completion suspend_start;
+	struct completion **suspend_end;
+};
+
+void io_ring_suspend_work(struct callback_head *cb_head);
+
 struct io_ring_ctx_lock_state {
+	bool need_mutex;
+	struct completion *suspend_end;
 };
 
 /* Acquire the ctx uring lock with the given nesting level */
@@ -205,7 +244,35 @@ static inline void io_ring_ctx_lock_nested(struct io_ring_ctx *ctx,
 					   unsigned int subclass,
 					   struct io_ring_ctx_lock_state *state)
 {
-	mutex_lock_nested(&ctx->uring_lock, subclass);
+	struct io_ring_suspend_work suspend_work;
+
+	if (!(ctx->flags & IORING_SETUP_SINGLE_ISSUER)) {
+		mutex_lock_nested(&ctx->uring_lock, subclass);
+		return;
+	}
+
+	state->suspend_end = NULL;
+	state->need_mutex =
+		!!(smp_load_acquire(&ctx->flags) & IORING_SETUP_R_DISABLED);
+	if (unlikely(state->need_mutex)) {
+		mutex_lock_nested(&ctx->uring_lock, subclass);
+		if (likely(!ctx->submitter_task))
+			return;
+	}
+
+	if (likely(current == ctx->submitter_task))
+		return;
+
+	/* Use task work to suspend submitter_task */
+	init_task_work(&suspend_work.cb_head, io_ring_suspend_work);
+	init_completion(&suspend_work.suspend_start);
+	suspend_work.suspend_end = &state->suspend_end;
+	/* If task_work_add() fails, task is exiting, so no need to suspend */
+	if (unlikely(task_work_add(ctx->submitter_task, &suspend_work.cb_head,
+				   TWA_SIGNAL)))
+		return;
+
+	wait_for_completion(&suspend_work.suspend_start);
 }
 
 /* Acquire the ctx uring lock */
@@ -219,25 +286,66 @@ static inline void io_ring_ctx_lock(struct io_ring_ctx *ctx,
 static inline bool io_ring_ctx_trylock(struct io_ring_ctx *ctx,
 				       struct io_ring_ctx_lock_state *state)
 {
-	return mutex_trylock(&ctx->uring_lock);
+	if (!(ctx->flags & IORING_SETUP_SINGLE_ISSUER))
+		return mutex_trylock(&ctx->uring_lock);
+
+	state->suspend_end = NULL;
+	state->need_mutex =
+		!!(smp_load_acquire(&ctx->flags) & IORING_SETUP_R_DISABLED);
+	if (unlikely(state->need_mutex)) {
+		if (!mutex_trylock(&ctx->uring_lock))
+			return false;
+		if (likely(!ctx->submitter_task))
+			return true;
+	}
+
+	if (unlikely(current != ctx->submitter_task))
+		goto unlock;
+
+	return true;
+
+unlock:
+	if (unlikely(state->need_mutex))
+		mutex_unlock(&ctx->uring_lock);
+	return false;
 }
 
 /* Release the ctx uring lock */
 static inline void io_ring_ctx_unlock(struct io_ring_ctx *ctx,
 				      struct io_ring_ctx_lock_state *state)
 {
-	mutex_unlock(&ctx->uring_lock);
+	if (!(ctx->flags & IORING_SETUP_SINGLE_ISSUER)) {
+		mutex_unlock(&ctx->uring_lock);
+		return;
+	}
+
+	if (unlikely(state->need_mutex))
+		mutex_unlock(&ctx->uring_lock);
+	if (unlikely(state->suspend_end))
+		complete(state->suspend_end);
 }
 
 /* Return (if CONFIG_LOCKDEP) whether the ctx uring lock is held */
 static inline bool io_ring_ctx_lock_held(const struct io_ring_ctx *ctx)
 {
+	/*
+	 * No straightforward way to check that submitter_task is suspended
+	 * without access to struct io_ring_ctx_lock_state
+	 */
+	if (ctx->flags & IORING_SETUP_SINGLE_ISSUER &&
+	    !(ctx->flags & IORING_SETUP_R_DISABLED))
+		return true;
+
 	return lockdep_is_held(&ctx->uring_lock);
 }
 
 /* Assert (if CONFIG_LOCKDEP) that the ctx uring lock is held */
 static inline void io_ring_ctx_assert_locked(const struct io_ring_ctx *ctx)
 {
+	if (ctx->flags & IORING_SETUP_SINGLE_ISSUER &&
+	    !(ctx->flags & IORING_SETUP_R_DISABLED))
+		return;
+
 	lockdep_assert_held(&ctx->uring_lock);
 }
 
