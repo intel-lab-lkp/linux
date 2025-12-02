@@ -5798,6 +5798,7 @@ static void pci_disable_acs_sv(struct pci_dev *dev)
 	dev->acs_broken_cap |= PCI_ACS_SV;
 }
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_IDT, 0x80b5, pci_disable_acs_sv);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_IDT, 0x8090, pci_disable_acs_sv);
 
 /*
  * Microsemi Switchtec NTB uses devfn proxy IDs to move TLPs between
