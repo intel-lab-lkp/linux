@@ -1,0 +1,42 @@
+[
+  {
+    "EventName": "EXCEPTIONS",
+    "EventCode": "0x7",
+    "BriefDescription": "valid exceptions encountered"
+  },
+  {
+    "EventName": "EXCEPTION_HANDLER_RETURNS",
+    "EventCode": "0x8",
+    "BriefDescription": "return from an exception"
+  },
+  {
+    "EventName": "BRANCH_INSTRUCTIONS",
+    "EventCode": "0x9",
+    "BriefDescription": "number of branch instructions encountered"
+  },
+  {
+    "EventName": "CALL",
+    "EventCode": "0xC",
+    "BriefDescription": "number of call instructions"
+  },
+  {
+    "EventName": "RETURN",
+    "EventCode": "0xD",
+    "BriefDescription": "number of return instructions"
+  },
+  {
+    "EventName": "INSTRUCTION_FETCH_EMPTY",
+    "EventCode": "0xF",
+    "BriefDescription": "number of invalid instructions in IF"
+  },
+  {
+    "EventName": "INTEGER_INSTRUCTIONS",
+    "EventCode": "0x14",
+    "BriefDescription": "number of integer instructions"
+  },
+  {
+    "EventName": "FLOATING_POINT_INSTRUCTIONS",
+    "EventCode": "0x15",
+    "BriefDescription": "number of floating point instructions"
+  }
+]
