@@ -579,11 +579,17 @@ static void pcc_shutdown(struct mbox_chan *chan)
 		devm_free_irq(chan->mbox->dev, pchan->plat_irq, chan);
 }
 
+static bool pcc_peek_data(struct mbox_chan *chan)
+{
+	return pcc_mbox_error_check_and_clear(chan->con_priv) == 0;
+}
+
 static const struct mbox_chan_ops pcc_chan_ops = {
 	.send_data = pcc_send_data,
 	.startup = pcc_startup,
 	.shutdown = pcc_shutdown,
 	.last_tx_done = pcc_last_tx_done,
+	.peek_data = pcc_peek_data,
 };
 
 /**
