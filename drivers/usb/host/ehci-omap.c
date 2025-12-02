@@ -166,7 +166,11 @@ static int ehci_hcd_omap_probe(struct platform_device *pdev)
 		omap->phy[i] = phy;
 
 		if (pdata->port_mode[i] == OMAP_EHCI_PORT_MODE_PHY) {
-			usb_phy_init(omap->phy[i]);
+			ret = usb_phy_init(omap->phy[i]);
+			if (ret) {
+				dev_err(dev, "Failed to init PHY %d\n", i);
+				goto err_phy;
+			}
 			/* bring PHY out of suspend */
 			usb_phy_set_suspend(omap->phy[i], 0);
 		}
@@ -205,13 +209,19 @@ static int ehci_hcd_omap_probe(struct platform_device *pdev)
 		     pdata->port_mode[i] == OMAP_EHCI_PORT_MODE_PHY)
 			continue;
 
-		usb_phy_init(omap->phy[i]);
+		ret = usb_phy_init(omap->phy[i]);
+		if (ret) {
+			dev_err(dev, "Failed to init PHY %d\n", i);
+			goto err_remove_hcd;
+		}
 		/* bring PHY out of suspend */
 		usb_phy_set_suspend(omap->phy[i], 0);
 	}
 
 	return 0;
 
+err_remove_hcd:
+	usb_remove_hcd(hcd);
 err_pm_runtime:
 	pm_runtime_put_sync(dev);
 	pm_runtime_disable(dev);
