@@ -245,3 +245,14 @@ Date:           Aug 2025
 KernelVersion   6.18
 Contact:        Mao Jinlong <quic_jinlmao@quicinc.com>
 Description:    (Read) Show hardware context information of device.
+
+What:           /sys/bus/coresight/devices/<cti-name>/regs/ext_reg_sel
+Date:           Dec 2025
+KernelVersion:  6.19
+Contact:        Mao Jinlong <jinlong.mao@oss.qualcomm.com>
+Description:    (RW) Select the index for extended registers.
+		QCOM CTI supports up to 128 triggers, there are 6 registers
+		need to be expanded to up to 4 instances:
+		CTITRIGINSTATUS, CTITRIGOUTSTATUS,
+		ITTRIGIN, ITTRIGOUT,
+		ITTRIGINACK, ITTRIGOUTACK.

@@ -172,9 +172,8 @@ static struct attribute *coresight_cti_attrs[] = {
 
 /* register based attributes */
 
-/* Read registers with power check only (no enable check). */
-static ssize_t coresight_cti_reg_show(struct device *dev,
-			   struct device_attribute *attr, char *buf)
+static ssize_t coresight_cti_mgmt_reg_show(struct device *dev,
+					   struct device_attribute *attr, char *buf)
 {
 	struct cti_drvdata *drvdata = dev_get_drvdata(dev->parent);
 	struct cs_off_attribute *cti_attr = container_of(attr, struct cs_off_attribute, attr);
@@ -189,6 +188,40 @@ static ssize_t coresight_cti_reg_show(struct device *dev,
 	return sysfs_emit(buf, "0x%x\n", val);
 }
 
+/* Read registers with power check only (no enable check). */
+static ssize_t coresight_cti_reg_show(struct device *dev,
+				      struct device_attribute *attr, char *buf)
+{
+	struct cti_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	struct cs_off_attribute *cti_attr = container_of(attr, struct cs_off_attribute, attr);
+	u32 idx, val = 0;
+
+	pm_runtime_get_sync(dev->parent);
+	raw_spin_lock(&drvdata->spinlock);
+	idx = drvdata->config.ext_reg_sel;
+	if (drvdata->config.hw_powered) {
+		switch (cti_attr->off) {
+		case INDEX_CTITRIGINSTATUS:
+		case INDEX_CTITRIGOUTSTATUS:
+		case INDEX_ITTRIGINACK:
+		case INDEX_ITTRIGOUT:
+		case INDEX_ITTRIGOUTACK:
+		case INDEX_ITTRIGIN:
+			val = readl_relaxed(drvdata->base +
+					    cti_offset(drvdata, cti_attr->off, idx));
+			break;
+
+		default:
+			val = readl_relaxed(drvdata->base + cti_offset(drvdata, cti_attr->off, 0));
+			break;
+		}
+	}
+
+	raw_spin_unlock(&drvdata->spinlock);
+	pm_runtime_put_sync(dev->parent);
+	return sysfs_emit(buf, "0x%x\n", val);
+}
+
 /* Write registers with power check only (no enable check). */
 static __maybe_unused ssize_t coresight_cti_reg_store(struct device *dev,
 						      struct device_attribute *attr,
@@ -197,18 +230,38 @@ static __maybe_unused ssize_t coresight_cti_reg_store(struct device *dev,
 	struct cti_drvdata *drvdata = dev_get_drvdata(dev->parent);
 	struct cs_off_attribute *cti_attr = container_of(attr, struct cs_off_attribute, attr);
 	unsigned long val = 0;
+	u32 idx;
 
 	if (kstrtoul(buf, 0, &val))
 		return -EINVAL;
 
 	pm_runtime_get_sync(dev->parent);
 	raw_spin_lock(&drvdata->spinlock);
-	if (drvdata->config.hw_powered)
-		cti_write_single_reg(drvdata, cti_attr->off, val);
+	idx = drvdata->config.ext_reg_sel;
+	if (drvdata->config.hw_powered) {
+		switch (cti_attr->off) {
+		case INDEX_ITTRIGINACK:
+		case INDEX_ITTRIGOUT:
+			cti_write_single_reg(drvdata, cti_offset(drvdata, cti_attr->off, idx), val);
+			break;
+
+		default:
+			cti_write_single_reg(drvdata, cti_offset(drvdata, cti_attr->off, 0), val);
+			break;
+		}
+	}
 	raw_spin_unlock(&drvdata->spinlock);
 	pm_runtime_put_sync(dev->parent);
 	return size;
 }
+
+#define coresight_cti_mgmt_reg(name, offset)	                        \
+	(&((struct cs_off_attribute[]) {                                \
+	   {                                                            \
+		__ATTR(name, 0444, coresight_cti_mgmt_reg_show, NULL),  \
+		offset							\
+	   }								\
+	})[0].attr.attr)
 
 #define coresight_cti_reg(name, offset)					\
 	(&((struct cs_off_attribute[]) {				\
@@ -237,17 +290,17 @@ static __maybe_unused ssize_t coresight_cti_reg_store(struct device *dev,
 
 /* coresight management registers */
 static struct attribute *coresight_cti_mgmt_attrs[] = {
-	coresight_cti_reg(devaff0, CTIDEVAFF0),
-	coresight_cti_reg(devaff1, CTIDEVAFF1),
-	coresight_cti_reg(authstatus, CORESIGHT_AUTHSTATUS),
-	coresight_cti_reg(devarch, CORESIGHT_DEVARCH),
-	coresight_cti_reg(devid, CORESIGHT_DEVID),
-	coresight_cti_reg(devtype, CORESIGHT_DEVTYPE),
-	coresight_cti_reg(pidr0, CORESIGHT_PERIPHIDR0),
-	coresight_cti_reg(pidr1, CORESIGHT_PERIPHIDR1),
-	coresight_cti_reg(pidr2, CORESIGHT_PERIPHIDR2),
-	coresight_cti_reg(pidr3, CORESIGHT_PERIPHIDR3),
-	coresight_cti_reg(pidr4, CORESIGHT_PERIPHIDR4),
+	coresight_cti_mgmt_reg(devaff0, CTIDEVAFF0),
+	coresight_cti_mgmt_reg(devaff1, CTIDEVAFF1),
+	coresight_cti_mgmt_reg(authstatus, CORESIGHT_AUTHSTATUS),
+	coresight_cti_mgmt_reg(devarch, CORESIGHT_DEVARCH),
+	coresight_cti_mgmt_reg(devid, CORESIGHT_DEVID),
+	coresight_cti_mgmt_reg(devtype, CORESIGHT_DEVTYPE),
+	coresight_cti_mgmt_reg(pidr0, CORESIGHT_PERIPHIDR0),
+	coresight_cti_mgmt_reg(pidr1, CORESIGHT_PERIPHIDR1),
+	coresight_cti_mgmt_reg(pidr2, CORESIGHT_PERIPHIDR2),
+	coresight_cti_mgmt_reg(pidr3, CORESIGHT_PERIPHIDR3),
+	coresight_cti_mgmt_reg(pidr4, CORESIGHT_PERIPHIDR4),
 	NULL,
 };
 
@@ -258,13 +311,15 @@ static struct attribute *coresight_cti_mgmt_attrs[] = {
  * If inaccessible & pcached_val not NULL then show cached value.
  */
 static ssize_t cti_reg32_show(struct device *dev, char *buf,
-			      u32 *pcached_val, int reg_offset)
+			      u32 *pcached_val, int index)
 {
 	u32 val = 0;
 	struct cti_drvdata *drvdata = dev_get_drvdata(dev->parent);
 	struct cti_config *config = &drvdata->config;
+	int reg_offset;
 
 	raw_spin_lock(&drvdata->spinlock);
+	reg_offset = cti_offset(drvdata, index, 0);
 	if ((reg_offset >= 0) && cti_active(config)) {
 		CS_UNLOCK(drvdata->base);
 		val = readl_relaxed(drvdata->base + reg_offset);
@@ -284,11 +339,12 @@ static ssize_t cti_reg32_show(struct device *dev, char *buf,
  * if reg_offset >= 0 then write through if enabled.
  */
 static ssize_t cti_reg32_store(struct device *dev, const char *buf,
-			       size_t size, u32 *pcached_val, int reg_offset)
+			       size_t size, u32 *pcached_val, int index)
 {
 	unsigned long val;
 	struct cti_drvdata *drvdata = dev_get_drvdata(dev->parent);
 	struct cti_config *config = &drvdata->config;
+	int reg_offset;
 
 	if (kstrtoul(buf, 0, &val))
 		return -EINVAL;
@@ -298,6 +354,7 @@ static ssize_t cti_reg32_store(struct device *dev, const char *buf,
 	if (pcached_val)
 		*pcached_val = (u32)val;
 
+	reg_offset = cti_offset(drvdata, index, 0);
 	/* write through if offset and enabled */
 	if ((reg_offset >= 0) && cti_active(config))
 		cti_write_single_reg(drvdata, reg_offset, val);
@@ -306,14 +363,14 @@ static ssize_t cti_reg32_store(struct device *dev, const char *buf,
 }
 
 /* Standard macro for simple rw cti config registers */
-#define cti_config_reg32_rw(name, cfgname, offset)			\
+#define cti_config_reg32_rw(name, cfgname, index)			\
 static ssize_t name##_show(struct device *dev,				\
 			   struct device_attribute *attr,		\
 			   char *buf)					\
 {									\
 	struct cti_drvdata *drvdata = dev_get_drvdata(dev->parent);	\
 	return cti_reg32_show(dev, buf,					\
-			      &drvdata->config.cfgname, offset);	\
+			      &drvdata->config.cfgname, index);		\
 }									\
 									\
 static ssize_t name##_store(struct device *dev,				\
@@ -322,7 +379,7 @@ static ssize_t name##_store(struct device *dev,				\
 {									\
 	struct cti_drvdata *drvdata = dev_get_drvdata(dev->parent);	\
 	return cti_reg32_store(dev, buf, size,				\
-			       &drvdata->config.cfgname, offset);	\
+			       &drvdata->config.cfgname, index);	\
 }									\
 static DEVICE_ATTR_RW(name)
 
@@ -355,6 +412,46 @@ static ssize_t inout_sel_store(struct device *dev,
 	return size;
 }
 static DEVICE_ATTR_RW(inout_sel);
+
+/*
+ * QCOM CTI supports up to 128 triggers, there are 6 registers need to be
+ * expanded to up to 4 instances, and ext_reg_sel can be used to indicate
+ * which one is in use.
+ * CTITRIGINSTATUS, CTITRIGOUTSTATUS,
+ * ITTRIGIN, ITTRIGOUT,
+ * ITTRIGINACK, ITTRIGOUTACK.
+ */
+static ssize_t ext_reg_sel_show(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
+{
+	u32 val;
+	struct cti_drvdata *drvdata = dev_get_drvdata(dev->parent);
+
+	raw_spin_lock(&drvdata->spinlock);
+	val = drvdata->config.ext_reg_sel;
+	raw_spin_unlock(&drvdata->spinlock);
+	return sprintf(buf, "%d\n", val);
+}
+
+static ssize_t ext_reg_sel_store(struct device *dev,
+				 struct device_attribute *attr,
+				 const char *buf, size_t size)
+{
+	unsigned long val;
+	struct cti_drvdata *drvdata = dev_get_drvdata(dev->parent);
+
+	if (kstrtoul(buf, 0, &val))
+		return -EINVAL;
+	if (val > ((drvdata->config.nr_trig_max + 31) / 32 - 1))
+		return -EINVAL;
+
+	raw_spin_lock(&drvdata->spinlock);
+	drvdata->config.ext_reg_sel = val;
+	raw_spin_unlock(&drvdata->spinlock);
+	return size;
+}
+static DEVICE_ATTR_RW(ext_reg_sel);
 
 static ssize_t inen_show(struct device *dev,
 			 struct device_attribute *attr,
@@ -389,7 +486,7 @@ static ssize_t inen_store(struct device *dev,
 
 	/* write through if enabled */
 	if (cti_active(config))
-		cti_write_single_reg(drvdata, CTIINEN(index), val);
+		cti_write_single_reg(drvdata, cti_offset(drvdata, INDEX_CTIINEN, index), val);
 	raw_spin_unlock(&drvdata->spinlock);
 	return size;
 }
@@ -428,7 +525,7 @@ static ssize_t outen_store(struct device *dev,
 
 	/* write through if enabled */
 	if (cti_active(config))
-		cti_write_single_reg(drvdata, CTIOUTEN(index), val);
+		cti_write_single_reg(drvdata, cti_offset(drvdata, INDEX_CTIOUTEN, index), val);
 	raw_spin_unlock(&drvdata->spinlock);
 	return size;
 }
@@ -448,9 +545,9 @@ static ssize_t intack_store(struct device *dev,
 }
 static DEVICE_ATTR_WO(intack);
 
-cti_config_reg32_rw(gate, ctigate, CTIGATE);
-cti_config_reg32_rw(asicctl, asicctl, ASICCTL);
-cti_config_reg32_rw(appset, ctiappset, CTIAPPSET);
+cti_config_reg32_rw(gate, ctigate, INDEX_CTIGATE);
+cti_config_reg32_rw(asicctl, asicctl, INDEX_ASICCTL);
+cti_config_reg32_rw(appset, ctiappset, INDEX_CTIAPPSET);
 
 static ssize_t appclear_store(struct device *dev,
 			      struct device_attribute *attr,
@@ -504,6 +601,7 @@ static DEVICE_ATTR_WO(apppulse);
  */
 static struct attribute *coresight_cti_regs_attrs[] = {
 	&dev_attr_inout_sel.attr,
+	&dev_attr_ext_reg_sel.attr,
 	&dev_attr_inen.attr,
 	&dev_attr_outen.attr,
 	&dev_attr_gate.attr,
@@ -512,20 +610,20 @@ static struct attribute *coresight_cti_regs_attrs[] = {
 	&dev_attr_appset.attr,
 	&dev_attr_appclear.attr,
 	&dev_attr_apppulse.attr,
-	coresight_cti_reg(triginstatus, CTITRIGINSTATUS),
-	coresight_cti_reg(trigoutstatus, CTITRIGOUTSTATUS),
-	coresight_cti_reg(chinstatus, CTICHINSTATUS),
-	coresight_cti_reg(choutstatus, CTICHOUTSTATUS),
+	coresight_cti_reg(triginstatus, INDEX_CTITRIGINSTATUS),
+	coresight_cti_reg(trigoutstatus, INDEX_CTITRIGOUTSTATUS),
+	coresight_cti_reg(chinstatus, INDEX_CTICHINSTATUS),
+	coresight_cti_reg(choutstatus, INDEX_CTICHOUTSTATUS),
 #ifdef CONFIG_CORESIGHT_CTI_INTEGRATION_REGS
-	coresight_cti_reg_rw(itctrl, CORESIGHT_ITCTRL),
-	coresight_cti_reg(ittrigin, ITTRIGIN),
-	coresight_cti_reg(itchin, ITCHIN),
-	coresight_cti_reg_rw(ittrigout, ITTRIGOUT),
-	coresight_cti_reg_rw(itchout, ITCHOUT),
-	coresight_cti_reg(itchoutack, ITCHOUTACK),
-	coresight_cti_reg(ittrigoutack, ITTRIGOUTACK),
-	coresight_cti_reg_wo(ittriginack, ITTRIGINACK),
-	coresight_cti_reg_wo(itchinack, ITCHINACK),
+	coresight_cti_reg_rw(itctrl, INDEX_ITCTRL),
+	coresight_cti_reg(ittrigin, INDEX_ITTRIGIN),
+	coresight_cti_reg(itchin, INDEX_ITCHIN),
+	coresight_cti_reg_rw(ittrigout, INDEX_ITTRIGOUT),
+	coresight_cti_reg_rw(itchout, INDEX_ITCHOUT),
+	coresight_cti_reg(itchoutack, INDEX_ITCHOUTACK),
+	coresight_cti_reg(ittrigoutack, INDEX_ITTRIGOUTACK),
+	coresight_cti_reg_wo(ittriginack, INDEX_ITTRIGINACK),
+	coresight_cti_reg_wo(itchinack, INDEX_ITCHINACK),
 #endif
 	NULL,
 };
@@ -740,6 +838,7 @@ static ssize_t chan_xtrigs_reset_store(struct device *dev,
 	config->ctiappset = 0;
 	config->ctiinout_sel = 0;
 	config->xtrig_rchan_sel = 0;
+	config->ext_reg_sel = 0;
 
 	/* if enabled then write through */
 	if (cti_active(config))

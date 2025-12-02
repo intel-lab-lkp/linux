@@ -57,7 +57,38 @@ struct fwnode_handle;
  * Max of in and out defined in the DEVID register.
  * - pick up actual number used from .dts parameters if present.
  */
-#define CTIINOUTEN_MAX		32
+#define CTIINOUTEN_MAX		128
+
+/* Qcom CTI supports up to 128 triggers*/
+enum cti_subtype {
+	ARM_STD_CTI,
+	QCOM_CTI,
+};
+
+/* These registers are remapped in Qcom CTI*/
+enum cti_offset_index {
+	INDEX_CTIINTACK,
+	INDEX_CTIAPPSET,
+	INDEX_CTIAPPCLEAR,
+	INDEX_CTIAPPPULSE,
+	INDEX_CTIINEN,
+	INDEX_CTIOUTEN,
+	INDEX_CTITRIGINSTATUS,
+	INDEX_CTITRIGOUTSTATUS,
+	INDEX_CTICHINSTATUS,
+	INDEX_CTICHOUTSTATUS,
+	INDEX_CTIGATE,
+	INDEX_ASICCTL,
+	INDEX_ITCHINACK,
+	INDEX_ITTRIGINACK,
+	INDEX_ITCHOUT,
+	INDEX_ITTRIGOUT,
+	INDEX_ITCHOUTACK,
+	INDEX_ITTRIGOUTACK,
+	INDEX_ITCHIN,
+	INDEX_ITTRIGIN,
+	INDEX_ITCTRL,
+};
 
 /**
  * Group of related trigger signals
@@ -149,6 +180,9 @@ struct cti_config {
 	bool trig_filter_enable;
 	u8 xtrig_rchan_sel;
 
+	/* qcom_cti regs' index */
+	u8 ext_reg_sel;
+
 	/* cti cross trig programmable regs */
 	u8 ctiinout_sel;
 	u32 ctiappset;
@@ -181,6 +215,8 @@ struct cti_drvdata {
 	struct cti_config config;
 	struct list_head node;
 	void (*csdev_release)(struct device *dev);
+	enum cti_subtype subtype;
+	const u32 *offsets;
 };
 
 /*
@@ -234,6 +270,11 @@ int cti_create_cons_sysfs(struct device *dev, struct cti_drvdata *drvdata);
 struct coresight_platform_data *
 coresight_cti_get_platform_data(struct device *dev);
 const char *cti_plat_get_node_name(struct fwnode_handle *fwnode);
+
+static inline u32 cti_offset(struct cti_drvdata *drvdata, int index, int num)
+{
+	return drvdata->offsets[index] + 4 * num;
+}
 
 /* cti powered and enabled */
 static inline bool cti_active(struct cti_config *cfg)
