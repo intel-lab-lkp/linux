@@ -588,6 +588,7 @@ static int panthor_mmu_as_enable(struct panthor_device *ptdev, u32 as_nr,
 static int panthor_mmu_as_disable(struct panthor_device *ptdev, u32 as_nr,
 				  bool recycle_slot)
 {
+	struct panthor_vm *vm = ptdev->mmu->as.slots[as_nr].vm;
 	int ret;
 
 	/* Flush+invalidate RW caches, invalidate RO ones. */
@@ -595,6 +596,16 @@ static int panthor_mmu_as_disable(struct panthor_device *ptdev, u32 as_nr,
 				       CACHE_CLEAN | CACHE_INV, CACHE_INV);
 	if (ret)
 		return ret;
+
+	if (vm && vm->locked_region.size) {
+		/* Unlock the region if there a lock pending. */
+		ret = as_send_cmd_and_wait(ptdev, vm->as.id, AS_COMMAND_UNLOCK);
+		if (ret)
+			return ret;
+
+		vm->locked_region.start = 0;
+		vm->locked_region.size = 0;
+	}
 
 	/* If the slot is going to be used immediately, don't bother changing
 	 * the config.
