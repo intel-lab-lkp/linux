@@ -822,8 +822,8 @@ static void nfs_local_write_aio_complete(struct kiocb *kiocb, long ret)
 	nfs_local_pgio_aio_complete(iocb); /* Calls nfs_local_write_aio_complete_work */
 }
 
-static ssize_t do_nfs_local_call_write(struct nfs_local_kiocb *iocb,
-				       struct file *filp)
+static void do_nfs_local_call_write(struct nfs_local_kiocb *iocb,
+				    struct file *filp)
 {
 	bool force_done = false;
 	ssize_t status;
@@ -853,8 +853,6 @@ static ssize_t do_nfs_local_call_write(struct nfs_local_kiocb *iocb,
 		}
 	}
 	file_end_write(filp);
-
-	return status;
 }
 
 static void nfs_local_call_write(struct work_struct *work)
@@ -863,12 +861,11 @@ static void nfs_local_call_write(struct work_struct *work)
 		container_of(work, struct nfs_local_kiocb, work);
 	struct file *filp = iocb->kiocb.ki_filp;
 	unsigned long old_flags = current->flags;
-	ssize_t status;
 
 	current->flags |= PF_LOCAL_THROTTLE | PF_MEMALLOC_NOIO;
 
 	scoped_with_creds(filp->f_cred)
-		status = do_nfs_local_call_write(iocb, filp);
+		do_nfs_local_call_write(iocb, filp);
 
 	current->flags = old_flags;
 }
