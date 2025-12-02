@@ -80,7 +80,12 @@ vchiq_device_register(struct device *parent, const char *name)
 
 	device->drv_mgmt = dev_get_drvdata(parent);
 
-	of_dma_configure(&device->dev, parent->of_node, true);
+	ret = of_dma_configure(&device->dev, parent->of_node, true);
+	if (ret) {
+		dev_err(parent, "DMA configuration failed for %s: %d\n", name, ret);
+		kfree(device);
+		return NULL;
+	}
 
 	ret = device_register(&device->dev);
 	if (ret) {
