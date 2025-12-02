@@ -54,6 +54,118 @@ EXPORT_SYMBOL(__asm_copy_from_user_sum_enabled)
 EXPORT_SYMBOL(__asm_copy_to_user_sum_enabled)
 
 SYM_FUNC_START(fallback_scalar_usercopy_sum_enabled)
+       /*
+         * Save the terminal address which will be used to compute the number
+         * of bytes copied in case of a fixup exception.
+         */
+        add     t5, a0, a2
+
+        /*
+         * Register allocation for code below:
+         * a0 - start of uncopied dst
+         * a1 - start of uncopied src
+         * a2 - size
+         * t0 - end of uncopied dst
+         */
+        add     t0, a0, a2
+#ifdef CONFIG_RISCV_EFFICIENT_UNALIGNED_ACCESS
+        /* If length < 8, go to byte copy */
+        li      a3, 8
+        bltu    a2, a3, .Lbyte_copy_tail
+
+        /* check length >= 128 */
+        li      t1, 128
+        bltu    a2, t1, .L_len_less_16x_szreg
+
+.L_loop_16x_reg:
+        fixup REG_L   a4,        0(a1), 10f
+        fixup REG_L   a5,    SZREG(a1), 10f
+        fixup REG_L   a6,  2*SZREG(a1), 10f
+        fixup REG_L   a7,  3*SZREG(a1), 10f
+        fixup REG_S   a4,        0(a0), 10f
+        fixup REG_S   a5,    SZREG(a0), 10f
+        fixup REG_S   a6,  2*SZREG(a0), 10f
+        fixup REG_S   a7,  3*SZREG(a0), 10f
+
+        fixup REG_L   t1,  4*SZREG(a1), 10f
+        fixup REG_L   t2,  5*SZREG(a1), 10f
+        fixup REG_L   t3,  6*SZREG(a1), 10f
+        fixup REG_L   t4,  7*SZREG(a1), 10f
+        fixup REG_S   t1,  4*SZREG(a0), 10f
+        fixup REG_S   t2,  5*SZREG(a0), 10f
+        fixup REG_S   t3,  6*SZREG(a0), 10f
+        fixup REG_S   t4,  7*SZREG(a0), 10f
+
+        fixup REG_L   a4,  8*SZREG(a1), 10f
+        fixup REG_L   a5,  9*SZREG(a1), 10f
+        fixup REG_L   a6,  10*SZREG(a1), 10f
+        fixup REG_L   a7,  11*SZREG(a1), 10f
+        fixup REG_S   a4,  8*SZREG(a0), 10f
+        fixup REG_S   a5,  9*SZREG(a0), 10f
+        fixup REG_S   a6,  10*SZREG(a0), 10f
+        fixup REG_S   a7,  11*SZREG(a0), 10f
+
+        fixup REG_L   t1,  12*SZREG(a1), 10f
+        fixup REG_L   t2,  13*SZREG(a1), 10f
+        fixup REG_L   t3,  14*SZREG(a1), 10f
+        fixup REG_L   t4,  15*SZREG(a1), 10f
+        fixup REG_S   t1,  12*SZREG(a0), 10f
+        fixup REG_S   t2,  13*SZREG(a0), 10f
+        fixup REG_S   t3,  14*SZREG(a0), 10f
+        fixup REG_S   t4,  15*SZREG(a0), 10f
+
+        addi    a1, a1, 16*SZREG
+        addi    a0, a0, 16*SZREG
+
+        addi    t1, a0, 16*SZREG
+        bleu    t1, t0, .L_loop_16x_reg
+
+.L_len_less_16x_szreg:
+        # Pre-check: ensure at least one register copy is possible
+        addi     t1, a0, 4*SZREG
+        bgtu    t1, t0, .L_len_less_4x_szreg
+
+.L_loop_4x_reg:
+        fixup REG_L   a4,        0(a1), 10f
+        fixup REG_L   a5,    SZREG(a1), 10f
+        fixup REG_L   a6,  2*SZREG(a1), 10f
+        fixup REG_L   a7,  3*SZREG(a1), 10f
+        fixup REG_S   a4,        0(a0), 10f
+        fixup REG_S   a5,    SZREG(a0), 10f
+        fixup REG_S   a6,  2*SZREG(a0), 10f
+        fixup REG_S   a7,  3*SZREG(a0), 10f
+        addi    a1, a1, 4*SZREG
+        addi    a0, a0, 4*SZREG
+
+        # Check if another register copy is safe
+        addi    t1, a0, 4*SZREG
+        bleu    t1, t0, .L_loop_4x_reg
+
+.L_len_less_4x_szreg:
+        # Pre-check: ensure at least one register copy is possible
+        add     t1, a0, SZREG
+        bgtu    t1, t0, .Lbyte_copy_word
+
+.L_loop_reg:
+        fixup REG_L   a4, 0(a1), 10f
+        addi    a1, a1, SZREG
+        fixup REG_S   a4, 0(a0), 10f
+        addi    a0, a0, SZREG
+
+        # Check if another register copy is safe
+        addi    t1, a0, SZREG
+        bleu    t1, t0, .L_loop_reg
+.Lbyte_copy_word:
+#if __riscv_xlen == 64
+        add     t1, a0, 4
+        bgtu    t1, t0, .Lbyte_copy_tail
+
+        fixup lw   a4, 0(a1), 10f
+        addi    a1, a1, 4
+        fixup sw   a4, 0(a0), 10f
+        addi    a0, a0, 4
+#endif
+#else
 	/*
 	 * Save the terminal address which will be used to compute the number
 	 * of bytes copied in case of a fixup exception.
@@ -190,6 +302,7 @@ SYM_FUNC_START(fallback_scalar_usercopy_sum_enabled)
 	/* Revert src to original unaligned value  */
 	add	a1, a1, a3
 
+#endif  /* CONFIG_RISCV_EFFICIENT_UNALIGNED_ACCESS */
 .Lbyte_copy_tail:
 	/*
 	 * Byte copy anything left.
