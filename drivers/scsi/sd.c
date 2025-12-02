@@ -2919,10 +2919,8 @@ got_data:
 			  "assuming 512.\n");
 	}
 
-	if (sector_size != 512 &&
-	    sector_size != 1024 &&
-	    sector_size != 2048 &&
-	    sector_size != 4096) {
+	if (sector_size < 512 || sector_size > BLK_MAX_BLOCK_SIZE ||
+	    !is_power_of_2(sector_size)) {
 		sd_printk(KERN_NOTICE, sdkp, "Unsupported sector size %d.\n",
 			  sector_size);
 		/*
