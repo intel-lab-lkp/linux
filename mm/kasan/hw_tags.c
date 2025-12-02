@@ -316,8 +316,8 @@ static void init_vmalloc_pages(const void *start, unsigned long size)
 	}
 }
 
-void *__kasan_unpoison_vmalloc(const void *start, unsigned long size,
-				kasan_vmalloc_flags_t flags)
+static void *__kasan_unpoison_vmalloc(const void *start, unsigned long size,
+				      kasan_vmalloc_flags_t flags)
 {
 	u8 tag;
 	unsigned long redzone_start, redzone_size;
@@ -387,6 +387,12 @@ void *__kasan_unpoison_vmalloc(const void *start, unsigned long size,
 	return (void *)start;
 }
 
+void *__kasan_random_unpoison_vmalloc(const void *start, unsigned long size,
+				      kasan_vmalloc_flags_t flags)
+{
+	return __kasan_unpoison_vmalloc(start, size, flags);
+}
+
 void __kasan_poison_vmalloc(const void *start, unsigned long size)
 {
 	/*
@@ -396,6 +402,11 @@ void __kasan_poison_vmalloc(const void *start, unsigned long size)
 	 */
 }
 
+void *__kasan_unpoison_vmap_areas(void *addr, unsigned long size,
+				  kasan_vmalloc_flags_t flags, u8 tag)
+{
+	return __kasan_unpoison_vmalloc(addr, size, flags);
+}
 #endif
 
 void kasan_enable_hw_tags(void)
