@@ -655,6 +655,20 @@ void mgag200_crtc_helper_atomic_enable(struct drm_crtc *crtc, struct drm_atomic_
 	else
 		mgag200_crtc_fill_gamma(mdev, format);
 
+#ifdef __BIG_ENDIAN
+	/* Big-endian byte-swapping */
+	switch (format->format) {
+	case DRM_FORMAT_RGB565:
+		WREG32(MGAREG_OPMODE, 1 << 16);
+		break;
+	case DRM_FORMAT_XRGB8888:
+		WREG32(MGAREG_OPMODE, 2 << 16);
+		break;
+	default:
+		break;
+	}
+#endif
+
 	mgag200_enable_display(mdev);
 }
 
