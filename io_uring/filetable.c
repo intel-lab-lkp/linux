@@ -57,9 +57,10 @@ void io_free_file_tables(struct io_ring_ctx *ctx, struct io_file_table *table)
 
 static int io_install_fixed_file(struct io_ring_ctx *ctx, struct file *file,
 				 u32 slot_index)
-	__must_hold(&ctx->uring_lock)
 {
 	struct io_rsrc_node *node;
+
+	io_ring_ctx_assert_locked(ctx);
 
 	if (io_is_uring_fops(file))
 		return -EBADF;
@@ -107,12 +108,13 @@ int __io_fixed_fd_install(struct io_ring_ctx *ctx, struct file *file,
 int io_fixed_fd_install(struct io_kiocb *req, unsigned int issue_flags,
 			struct file *file, unsigned int file_slot)
 {
+	struct io_ring_ctx_lock_state lock_state;
 	struct io_ring_ctx *ctx = req->ctx;
 	int ret;
 
-	io_ring_submit_lock(ctx, issue_flags);
+	io_ring_submit_lock(ctx, issue_flags, &lock_state);
 	ret = __io_fixed_fd_install(ctx, file, file_slot);
-	io_ring_submit_unlock(ctx, issue_flags);
+	io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 
 	if (unlikely(ret < 0))
 		fput(file);
