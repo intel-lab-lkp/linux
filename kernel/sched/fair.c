@@ -9778,7 +9778,7 @@ static void attach_tasks(struct lb_env *env)
 }
 
 #ifdef CONFIG_NO_HZ_COMMON
-static inline bool cfs_rq_has_blocked(struct cfs_rq *cfs_rq)
+static inline bool cfs_rq_has_blocked_load_avg(struct cfs_rq *cfs_rq)
 {
 	if (cfs_rq->avg.load_avg)
 		return true;
@@ -9817,7 +9817,7 @@ static inline void update_blocked_load_status(struct rq *rq, bool has_blocked_lo
 		rq->has_blocked_load = 0;
 }
 #else /* !CONFIG_NO_HZ_COMMON: */
-static inline bool cfs_rq_has_blocked(struct cfs_rq *cfs_rq) { return false; }
+static inline bool cfs_rq_has_blocked_load_avg(struct cfs_rq *cfs_rq) { return false; }
 static inline bool others_have_blocked(struct rq *rq) { return false; }
 static inline void update_blocked_load_tick(struct rq *rq) {}
 static inline void update_blocked_load_status(struct rq *rq, bool has_blocked_load) {}
@@ -9877,7 +9877,7 @@ static bool __update_blocked_fair(struct rq *rq, bool *done)
 			list_del_leaf_cfs_rq(cfs_rq);
 
 		/* Don't need periodic decay once load/util_avg are null */
-		if (cfs_rq_has_blocked(cfs_rq))
+		if (cfs_rq_has_blocked_load_avg(cfs_rq))
 			*done = false;
 	}
 
@@ -9937,7 +9937,7 @@ static bool __update_blocked_fair(struct rq *rq, bool *done)
 	bool decayed;
 
 	decayed = update_cfs_rq_load_avg(cfs_rq_clock_pelt(cfs_rq), cfs_rq);
-	if (cfs_rq_has_blocked(cfs_rq))
+	if (cfs_rq_has_blocked_load_avg(cfs_rq))
 		*done = false;
 
 	return decayed;
