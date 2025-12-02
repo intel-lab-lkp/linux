@@ -665,7 +665,8 @@ static int pac1934_reg_snapshot(struct pac1934_chip_info *info,
 			/* add the power_acc field */
 			curr_energy += inc;
 
-			clamp(curr_energy, PAC_193X_MIN_POWER_ACC, PAC_193X_MAX_POWER_ACC);
+			curr_energy = clamp(curr_energy, PAC_193X_MIN_POWER_ACC,
+					    PAC_193X_MAX_POWER_ACC);
 
 			reg_data->energy_sec_acc[cnt] = curr_energy;
 		}
