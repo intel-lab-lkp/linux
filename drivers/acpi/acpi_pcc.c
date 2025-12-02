@@ -51,7 +51,6 @@ acpi_pcc_address_space_setup(acpi_handle region_handle, u32 function,
 {
 	struct pcc_data *data;
 	struct acpi_pcc_info *ctx = handler_context;
-	struct pcc_mbox_chan *pcc_chan;
 	static acpi_status ret;
 
 	data = kzalloc(sizeof(*data), GFP_KERNEL);
@@ -59,7 +58,7 @@ acpi_pcc_address_space_setup(acpi_handle region_handle, u32 function,
 		return AE_NO_MEMORY;
 
 	data->cl.rx_callback = pcc_rx_callback;
-	data->cl.knows_txdone = true;
+	data->cl.knows_txdone = false;
 	data->ctx.length = ctx->length;
 	data->ctx.subspace_id = ctx->subspace_id;
 	data->ctx.internal_buffer = ctx->internal_buffer;
@@ -73,19 +72,9 @@ acpi_pcc_address_space_setup(acpi_handle region_handle, u32 function,
 		goto err_free_data;
 	}
 
-	pcc_chan = data->pcc_chan;
-	if (!pcc_chan->mchan->mbox->txdone_irq) {
-		pr_err("This channel-%d does not support interrupt.\n",
-		       ctx->subspace_id);
-		ret = AE_SUPPORT;
-		goto err_free_channel;
-	}
-
 	*region_context = data;
 	return AE_OK;
 
-err_free_channel:
-	pcc_mbox_free_channel(data->pcc_chan);
 err_free_data:
 	kfree(data);
 
@@ -93,31 +82,37 @@ err_free_data:
 }
 
 static acpi_status
-acpi_pcc_address_space_handler(u32 function, acpi_physical_address addr,
-			       u32 bits, acpi_integer *value,
-			       void *handler_context, void *region_context)
+acpi_pcc_send_msg_polling(struct pcc_data *data)
 {
 	int ret;
-	struct pcc_data *data = region_context;
-	u64 usecs_lat;
 
-	reinit_completion(&data->done);
+	ret = mbox_send_message(data->pcc_chan->mchan,
+				(__force void *)data->pcc_chan->shmem);
+	if (ret == -ETIME) {
+		pr_err("PCC command executed timeout!\n");
+		return AE_TIME;
+	}
 
-	/* Write to Shared Memory */
-	memcpy_toio(data->pcc_chan->shmem, (void *)value, data->ctx.length);
+	if (ret < 0)
+		return AE_ERROR;
+
+	if (!mbox_client_peek_data(data->pcc_chan->mchan))
+		return AE_ERROR;
+
+	return AE_OK;
+}
+
+static acpi_status
+acpi_pcc_send_msg_irq(struct pcc_data *data)
+{
+	int ret;
 
 	ret = mbox_send_message(data->pcc_chan->mchan, NULL);
 	if (ret < 0)
 		return AE_ERROR;
 
-	/*
-	 * pcc_chan->latency is just a Nominal value. In reality the remote
-	 * processor could be much slower to reply. So add an arbitrary
-	 * amount of wait on top of Nominal.
-	 */
-	usecs_lat = PCC_CMD_WAIT_RETRIES_NUM * data->pcc_chan->latency;
 	ret = wait_for_completion_timeout(&data->done,
-						usecs_to_jiffies(usecs_lat));
+					  usecs_to_jiffies(data->cl.tx_tout * USEC_PER_MSEC));
 	if (ret == 0) {
 		pr_err("PCC command executed timeout!\n");
 		return AE_TIME;
@@ -125,9 +120,42 @@ acpi_pcc_address_space_handler(u32 function, acpi_physical_address addr,
 
 	mbox_chan_txdone(data->pcc_chan->mchan, ret);
 
+	return AE_OK;
+}
+
+static acpi_status
+acpi_pcc_address_space_handler(u32 function, acpi_physical_address addr,
+			       u32 bits, acpi_integer *value,
+			       void *handler_context, void *region_context)
+{
+	acpi_status ret;
+	struct pcc_data *data = region_context;
+	u64 usecs_lat;
+	bool use_polling = data->pcc_chan->mchan->mbox->txdone_poll;
+
+	reinit_completion(&data->done);
+
+	/* Write to Shared Memory */
+	memcpy_toio(data->pcc_chan->shmem, (void *)value, data->ctx.length);
+
+	/*
+	 * pcc_chan->latency is just a Nominal value. In reality the remote
+	 * processor could be much slower to reply. So add an arbitrary
+	 * amount of wait on top of Nominal.
+	 */
+	usecs_lat = PCC_CMD_WAIT_RETRIES_NUM * data->pcc_chan->latency;
+
+	data->cl.tx_block = use_polling;
+	data->cl.tx_tout = div_u64(usecs_lat, USEC_PER_MSEC);
+
+	if (use_polling)
+		ret = acpi_pcc_send_msg_polling(data);
+	else
+		ret = acpi_pcc_send_msg_irq(data);
+
 	memcpy_fromio(value, data->pcc_chan->shmem, data->ctx.length);
 
-	return AE_OK;
+	return ret;
 }
 
 void __init acpi_init_pcc(void)
