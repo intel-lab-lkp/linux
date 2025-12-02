@@ -113,12 +113,12 @@ struct user_event_mm;
 #define EXIT_TRACE			(EXIT_ZOMBIE | EXIT_DEAD)
 /* Used in tsk->__state again: */
 #define TASK_PARKED			0x00000040
-#define TASK_DEAD			0x00000080
-#define TASK_WAKEKILL			0x00000100
-#define TASK_WAKING			0x00000200
-#define TASK_NOLOAD			0x00000400
-#define TASK_NEW			0x00000800
-#define TASK_RTLOCK_WAIT		0x00001000
+#define TASK_RTLOCK_WAIT		0x00000080
+#define TASK_DEAD			0x00000100
+#define TASK_WAKEKILL			0x00000200
+#define TASK_WAKING			0x00000400
+#define TASK_NOLOAD			0x00000800
+#define TASK_NEW			0x00001000
 #define TASK_FREEZABLE			0x00002000
 #define __TASK_FREEZABLE_UNSAFE	       (0x00004000 * IS_ENABLED(CONFIG_LOCKDEP))
 #define TASK_FROZEN			0x00008000
@@ -145,7 +145,7 @@ struct user_event_mm;
 #define TASK_REPORT			(TASK_RUNNING | TASK_INTERRUPTIBLE | \
 					 TASK_UNINTERRUPTIBLE | __TASK_STOPPED | \
 					 __TASK_TRACED | EXIT_DEAD | EXIT_ZOMBIE | \
-					 TASK_PARKED)
+					 TASK_PARKED | TASK_RTLOCK_WAIT)
 
 #define task_is_running(task)		(READ_ONCE((task)->__state) == TASK_RUNNING)
 
@@ -1694,12 +1694,9 @@ static inline unsigned int __task_state_index(unsigned int tsk_state,
 		state = TASK_REPORT_IDLE;
 
 	/*
-	 * We're lying here, but rather than expose a completely new task state
-	 * to userspace, we can make this appear as if the task has gone through
-	 * a regular rt_mutex_lock() call.
 	 * Report frozen tasks as uninterruptible.
 	 */
-	if ((tsk_state & TASK_RTLOCK_WAIT) || (tsk_state & TASK_FROZEN))
+	if ((tsk_state & TASK_FROZEN))
 		state = TASK_UNINTERRUPTIBLE;
 
 	return fls(state);
@@ -1712,7 +1709,7 @@ static inline unsigned int task_state_index(struct task_struct *tsk)
 
 static inline char task_index_to_char(unsigned int state)
 {
-	static const char state_char[] = "RSDTtXZPI";
+	static const char state_char[] = "RSDTtXZPLI";
 
 	BUILD_BUG_ON(TASK_REPORT_MAX * 2 != 1 << (sizeof(state_char) - 1));
 
