@@ -3018,3 +3018,17 @@ int jfs_txstats_proc_show(struct seq_file *m, void *v)
 	return 0;
 }
 #endif
+
+void jfs_free_anon_inode(struct inode *inode)
+{
+	struct jfs_inode_info *ji = JFS_IP(inode);
+
+	TXN_LOCK();
+	if (!list_empty(&ji->anon_inode_list)) {
+		jfs_err("inode %lu evicted with anonymous tlocks",
+			inode->i_ino);
+		list_del_init(&ji->anon_inode_list);
+	}
+	TXN_UNLOCK();
+}
+

@@ -172,7 +172,7 @@ void jfs_evict_inode(struct inode *inode)
 	clear_inode(inode);
 	dquot_drop(inode);
 
-	BUG_ON(!list_empty(&ji->anon_inode_list));
+	jfs_free_anon_inode(inode);
 
 	spin_lock_irq(&ji->ag_lock);
 	if (ji->active_ag != -1) {

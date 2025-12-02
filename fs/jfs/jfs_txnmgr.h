@@ -295,4 +295,5 @@ extern void txResume(struct super_block *);
 extern void txLazyUnlock(struct tblock *);
 extern int jfs_lazycommit(void *);
 extern int jfs_sync(void *);
+extern void jfs_free_anon_inode(struct inode *);
 #endif				/* _H_JFS_TXNMGR */
