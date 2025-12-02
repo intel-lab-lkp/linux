@@ -45,7 +45,7 @@ static long restore_fp_state(struct pt_regs *regs,
 	long err;
 	struct __riscv_d_ext_state __user *state = &sc_fpregs->d;
 
-	err = __copy_from_user(&current->thread.fstate, state, sizeof(*state));
+	err = __asm_copy_from_user_sum_enabled(&current->thread.fstate, state, sizeof(*state));
 	if (unlikely(err))
 		return err;
 
@@ -60,7 +60,7 @@ static long save_fp_state(struct pt_regs *regs,
 	struct __riscv_d_ext_state __user *state = &sc_fpregs->d;
 
 	fstate_save(current, regs);
-	err = __copy_to_user(state, &current->thread.fstate, sizeof(*state));
+	err = __asm_copy_to_user_sum_enabled(state, &current->thread.fstate, sizeof(*state));
 	return err;
 }
 #else
@@ -91,15 +91,15 @@ static long save_v_state(struct pt_regs *regs, void __user **sc_vec)
 	put_cpu_vector_context();
 
 	/* Copy everything of vstate but datap. */
-	err = __copy_to_user(&state->v_state, &current->thread.vstate,
-			     offsetof(struct __riscv_v_ext_state, datap));
+	err = __asm_copy_to_user_sum_enabled(&state->v_state, &current->thread.vstate,
+					offsetof(struct __riscv_v_ext_state, datap));
 	/* Copy the pointer datap itself. */
-	err |= __put_user((__force void *)datap, &state->v_state.datap);
+	err |= __put_user_sum_enabled((__force void *)datap, &state->v_state.datap);
 	/* Copy the whole vector content to user space datap. */
-	err |= __copy_to_user(datap, current->thread.vstate.datap, riscv_v_vsize);
+	err |= __asm_copy_to_user_sum_enabled(datap, current->thread.vstate.datap, riscv_v_vsize);
 	/* Copy magic to the user space after saving  all vector conetext */
-	err |= __put_user(RISCV_V_MAGIC, &hdr->magic);
-	err |= __put_user(riscv_v_sc_size, &hdr->size);
+	err |= __put_user_sum_enabled(RISCV_V_MAGIC, &hdr->magic);
+	err |= __put_user_sum_enabled(riscv_v_sc_size, &hdr->size);
 	if (unlikely(err))
 		return err;
 
@@ -127,20 +127,20 @@ static long __restore_v_state(struct pt_regs *regs, void __user *sc_vec)
 	riscv_v_vstate_set_restore(current, regs);
 
 	/* Copy everything of __sc_riscv_v_state except datap. */
-	err = __copy_from_user(&current->thread.vstate, &state->v_state,
-			       offsetof(struct __riscv_v_ext_state, datap));
+	err = __asm_copy_from_user_sum_enabled(&current->thread.vstate, &state->v_state,
+					offsetof(struct __riscv_v_ext_state, datap));
 	if (unlikely(err))
 		return err;
 
 	/* Copy the pointer datap itself. */
-	err = __get_user(datap, &state->v_state.datap);
+	err = __get_user_sum_enabled(datap, &state->v_state.datap);
 	if (unlikely(err))
 		return err;
 	/*
 	 * Copy the whole vector content from user space datap. Use
 	 * copy_from_user to prevent information leak.
 	 */
-	return copy_from_user(current->thread.vstate.datap, datap, riscv_v_vsize);
+	return __asm_copy_from_user_sum_enabled(current->thread.vstate.datap, datap, riscv_v_vsize);
 }
 #else
 #define save_v_state(task, regs) (0)
@@ -154,7 +154,7 @@ static long restore_sigcontext(struct pt_regs *regs,
 	__u32 rsvd;
 	long err;
 	/* sc_regs is structured the same as the start of pt_regs */
-	err = __copy_from_user(regs, &sc->sc_regs, sizeof(sc->sc_regs));
+	err = __asm_copy_from_user_sum_enabled(regs, &sc->sc_regs, sizeof(sc->sc_regs));
 	if (unlikely(err))
 		return err;
 
@@ -166,7 +166,7 @@ static long restore_sigcontext(struct pt_regs *regs,
 	}
 
 	/* Check the reserved word before extensions parsing */
-	err = __get_user(rsvd, &sc->sc_extdesc.reserved);
+	err = __get_user_sum_enabled(rsvd, &sc->sc_extdesc.reserved);
 	if (unlikely(err))
 		return err;
 	if (unlikely(rsvd))
@@ -176,8 +176,8 @@ static long restore_sigcontext(struct pt_regs *regs,
 		__u32 magic, size;
 		struct __riscv_ctx_hdr __user *head = sc_ext_ptr;
 
-		err |= __get_user(magic, &head->magic);
-		err |= __get_user(size, &head->size);
+		err |= __get_user_sum_enabled(magic, &head->magic);
+		err |= __get_user_sum_enabled(size, &head->size);
 		if (unlikely(err))
 			return err;
 
@@ -238,7 +238,8 @@ SYSCALL_DEFINE0(rt_sigreturn)
 	if (!access_ok(frame, frame_size))
 		goto badframe;
 
-	if (__copy_from_user(&set, &frame->uc.uc_sigmask, sizeof(set)))
+	__enable_user_access();
+	if (__asm_copy_from_user_sum_enabled(&set, &frame->uc.uc_sigmask, sizeof(set)))
 		goto badframe;
 
 	set_current_blocked(&set);
@@ -248,12 +249,14 @@ SYSCALL_DEFINE0(rt_sigreturn)
 
 	if (restore_altstack(&frame->uc.uc_stack))
 		goto badframe;
+	__disable_user_access();
 
 	regs->cause = -1UL;
 
 	return regs->a0;
 
 badframe:
+	__disable_user_access();
 	task = current;
 	if (show_unhandled_signals) {
 		pr_info_ratelimited(
@@ -273,7 +276,7 @@ static long setup_sigcontext(struct rt_sigframe __user *frame,
 	long err;
 
 	/* sc_regs is structured the same as the start of pt_regs */
-	err = __copy_to_user(&sc->sc_regs, regs, sizeof(sc->sc_regs));
+	err = __asm_copy_to_user_sum_enabled(&sc->sc_regs, regs, sizeof(sc->sc_regs));
 	/* Save the floating-point state. */
 	if (has_fpu())
 		err |= save_fp_state(regs, &sc->sc_fpregs);
@@ -281,10 +284,10 @@ static long setup_sigcontext(struct rt_sigframe __user *frame,
 	if ((has_vector() || has_xtheadvector()) && riscv_v_vstate_query(regs))
 		err |= save_v_state(regs, (void __user **)&sc_ext_ptr);
 	/* Write zero to fp-reserved space and check it on restore_sigcontext */
-	err |= __put_user(0, &sc->sc_extdesc.reserved);
+	err |= __put_user_sum_enabled(0, &sc->sc_extdesc.reserved);
 	/* And put END __riscv_ctx_hdr at the end. */
-	err |= __put_user(END_MAGIC, &sc_ext_ptr->magic);
-	err |= __put_user(END_HDR_SIZE, &sc_ext_ptr->size);
+	err |= __put_user_sum_enabled(END_MAGIC, &sc_ext_ptr->magic);
+	err |= __put_user_sum_enabled(END_HDR_SIZE, &sc_ext_ptr->size);
 
 	return err;
 }
@@ -312,6 +315,15 @@ static inline void __user *get_sigframe(struct ksignal *ksig,
 	return (void __user *)sp;
 }
 
+static int __save_altstack_sum_enabled(stack_t __user *uss, unsigned long sp)
+{
+	struct task_struct *t = current;
+	int err = __put_user_sum_enabled((void __user *)t->sas_ss_sp, &uss->ss_sp) |
+		__put_user_sum_enabled(t->sas_ss_flags, &uss->ss_flags) |
+		__put_user_sum_enabled(t->sas_ss_size, &uss->ss_size);
+	return err;
+}
+
 static int setup_rt_frame(struct ksignal *ksig, sigset_t *set,
 	struct pt_regs *regs)
 {
@@ -327,13 +339,16 @@ static int setup_rt_frame(struct ksignal *ksig, sigset_t *set,
 	err |= copy_siginfo_to_user(&frame->info, &ksig->info);
 
 	/* Create the ucontext. */
-	err |= __put_user(0, &frame->uc.uc_flags);
-	err |= __put_user(NULL, &frame->uc.uc_link);
-	err |= __save_altstack(&frame->uc.uc_stack, regs->sp);
+	__enable_user_access();
+	err |= __put_user_sum_enabled(0, &frame->uc.uc_flags);
+	err |= __put_user_sum_enabled(NULL, &frame->uc.uc_link);
+	err |= __save_altstack_sum_enabled(&frame->uc.uc_stack, regs->sp);
 	err |= setup_sigcontext(frame, regs);
-	err |= __copy_to_user(&frame->uc.uc_sigmask, set, sizeof(*set));
-	if (err)
+	err |= __asm_copy_to_user_sum_enabled(&frame->uc.uc_sigmask, set, sizeof(*set));
+	if (err) {
+		__disable_user_access();
 		return -EFAULT;
+	}
 
 	/* Set up to return from userspace. */
 #ifdef CONFIG_MMU
@@ -344,9 +359,12 @@ static int setup_rt_frame(struct ksignal *ksig, sigset_t *set,
 	 * For the nommu case we don't have a VDSO.  Instead we push two
 	 * instructions to call the rt_sigreturn syscall onto the user stack.
 	 */
-	if (copy_to_user(&frame->sigreturn_code, __user_rt_sigreturn,
-			 sizeof(frame->sigreturn_code)))
+	if (__asm_copy_to_user_sum_enabled(&frame->sigreturn_code, __user_rt_sigreturn,
+					sizeof(frame->sigreturn_code))) {
+		__disable_user_access();
 		return -EFAULT;
+	}
+	__disable_user_access();
 
 	addr = (unsigned long)&frame->sigreturn_code;
 	/* Make sure the two instructions are pushed to icache. */

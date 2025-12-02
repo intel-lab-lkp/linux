@@ -214,6 +214,43 @@ __gu_failed:								\
 } while (0)
 
 /**
+ * __get_user_sum_enabled - Get a simple variable from user space,
+ * assuming user access is already enabled (SUM bit enabled).
+ * @x:   Variable to store result.
+ * @ptr: Source address, in user space.
+ *
+ * Context: User context only. This macro does NOT sleep.
+ *
+ * This variant of __get_user assumes that the CPU is already in a state
+ * where user-space addresses can be accessed directly from kernel mode.
+ * Therefore, it omits the __enable_user_access() / __disable_user_access()
+ * calls.
+ *
+ * @ptr must have pointer-to-simple-variable type, and the result of
+ * dereferencing @ptr must be assignable to @x without a cast.
+ *
+ * Caller MUST ensure:
+ *   - access_ok(ptr, sizeof(*ptr)) has been verified.
+ *   - The execution context permits direct user-space reads.
+ *
+ * Returns zero on success, or -EFAULT on error.
+ * On error, the variable @x is set to zero.
+ */
+#define __get_user_sum_enabled(x, ptr)                          \
+({                                                              \
+	const __typeof__(*(ptr)) __user *__gu_ptr = untagged_addr(ptr); \
+	long __gu_err = 0;                                      \
+	__typeof__(x) __gu_val = (__typeof__(x))0;              \
+								\
+	__chk_user_ptr(__gu_ptr);                               \
+								\
+	__get_user_error(__gu_val, __gu_ptr, __gu_err);         \
+								\
+	(x) = __gu_val;                                         \
+	__gu_err;                                               \
+})
+
+/**
  * __get_user: - Get a simple variable from user space, with less checking.
  * @x:   Variable to store result.
  * @ptr: Source address, in user space.
@@ -342,6 +379,44 @@ do {								\
 err_label:							\
 	(err) = -EFAULT;					\
 } while (0)
+
+
+/**
+ * __put_user_sum_enabled - Write a simple value into user space,
+ * assuming user access is already enabled (SUM bit enabled).
+ * @x:   Value to copy to user space.
+ * @ptr: Destination address, in user space.
+ *
+ * Context: User context only. This macro does NOT sleep.
+ *
+ * This variant of __put_user_sum_enabled assumes that the CPU is already
+ * in a state where user-space addresses can be accessed directly from
+ * kernel mode. Therefore, it omits the
+ * __enable_user_access() / __disable_user_access() calls.
+ *
+ * @ptr must have pointer-to-simple-variable type, and @x must be assignable
+ * to the result of dereferencing @ptr. The value of @x is copied to avoid
+ * re-ordering where @x is evaluated inside the block that enables user-space
+ * access (thus bypassing user space protection if @x is a function).
+ *
+ * Caller MUST ensure:
+ *   - access_ok(ptr, sizeof(*ptr)) has been verified.
+ *   - The execution context permits direct user-space writes.
+ *
+ * Returns zero on success, or -EFAULT on error.
+ */
+#define __put_user_sum_enabled(x, ptr)                          \
+({                                                              \
+	__typeof__(*(ptr)) __user *__gu_ptr = untagged_addr(ptr); \
+	__typeof__(*__gu_ptr) __val = (x);                      \
+	long __pu_err = 0;                                      \
+								\
+	__chk_user_ptr(__gu_ptr);                               \
+								\
+	__put_user_error(__val, __gu_ptr, __pu_err);            \
+								\
+	__pu_err;                                               \
+})
 
 /**
  * __put_user: - Write a simple value into user space, with less checking.
