@@ -492,14 +492,25 @@ static void btrfs_submit_dev_bio(struct btrfs_device *dev, struct bio *bio)
 
 	/*
 	 * For zone append writing, bi_sector must point the beginning of the
-	 * zone
+	 * zone.
+	 *
+	 * In case of a zoned RAID, it can happen that a data write is
+	 * targeting a sequential write required zone and a conventional zone.
+	 * In this case the bio will be marked as REQ_OP_ZONE_APPEND but for
+	 * the conventional zone, this needs to be REQ_OP_WRITE.
 	 */
 	if (bio_op(bio) == REQ_OP_ZONE_APPEND) {
 		u64 physical = bio->bi_iter.bi_sector << SECTOR_SHIFT;
-		u64 zone_start = round_down(physical, dev->fs_info->zone_size);
 
-		ASSERT(btrfs_dev_is_sequential(dev, physical));
-		bio->bi_iter.bi_sector = zone_start >> SECTOR_SHIFT;
+		if (btrfs_dev_is_sequential(dev, physical)) {
+			u64 zone_start =
+				round_down(physical, dev->fs_info->zone_size);
+
+			bio->bi_iter.bi_sector = zone_start >> SECTOR_SHIFT;
+		} else {
+			bio->bi_opf &= ~REQ_OP_ZONE_APPEND;
+			bio->bi_opf |= REQ_OP_WRITE;
+		}
 	}
 	btrfs_debug(dev->fs_info,
 	"%s: rw %d 0x%x, sector=%llu, dev=%lu (%s id %llu), size=%u",
