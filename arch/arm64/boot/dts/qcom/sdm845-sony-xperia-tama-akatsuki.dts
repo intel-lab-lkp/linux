@@ -28,14 +28,6 @@
 	};
 };
 
-&ibb {
-	status = "disabled";
-};
-
-&lab {
-	status = "disabled";
-};
-
 &panel {
 	/* Akatsuki uses an OLED panel. */
 	/delete-property/ backlight;
