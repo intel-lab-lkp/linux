@@ -88,6 +88,7 @@ struct hid_item {
  * HID report descriptor main item contents
  */
 
+#define HID_MAIN_ITEM_RESERVED_MASK	0x0c8 /* HID 1.11: flags reserved bits (3, 6, 7) must be zero */
 #define HID_MAIN_ITEM_CONSTANT		0x001
 #define HID_MAIN_ITEM_VARIABLE		0x002
 #define HID_MAIN_ITEM_RELATIVE		0x004
@@ -560,6 +561,17 @@ struct hid_field_entry {
 	__s32 priority;
 };
 
+struct hid_const_slice {
+	__u16 bit_off;
+	__u16 bit_len;
+};
+
+struct hid_report_validate {
+	struct hid_const_slice *const_slices;
+	__u16 const_count;
+	__u16 payload_len;
+};
+
 struct hid_report {
 	struct list_head list;
 	struct list_head hidinput_list;
@@ -576,6 +588,7 @@ struct hid_report {
 	/* tool related state */
 	bool tool_active;				/* whether the current tool is active */
 	unsigned int tool;				/* BTN_TOOL_* */
+	struct hid_report_validate validate;
 };
 
 #define HID_MAX_IDS 256
@@ -760,6 +773,8 @@ struct hid_parser {
 	unsigned int          collection_stack_size;
 	struct hid_device    *device;
 	unsigned int          scan_flags;
+	__u16                 curr_offset;
+	struct hid_report    *curr_report;
 };
 
 struct hid_class_descriptor {

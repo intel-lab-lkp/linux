@@ -281,6 +281,81 @@ static int hid_add_usage(struct hid_parser *parser, unsigned usage, u8 size)
 }
 
 /*
+ * Append metadata for runtime payload validation.
+ */
+
+static int hid_validate_append_bits(struct hid_report *r, const __u16 bit_off, const __u16 bit_len)
+{
+	struct hid_report_validate *v = &r->validate;
+	struct hid_const_slice *slices = krealloc(v->const_slices,
+		(v->const_count + 1) * sizeof(*slices), GFP_KERNEL);
+	if (!slices)
+		return -ENOMEM;
+
+	v->const_slices = slices;
+	v->const_slices[v->const_count].bit_off = bit_off;
+	v->const_slices[v->const_count].bit_len = bit_len;
+	v->const_count++;
+
+	return 0;
+}
+
+/*
+ * Validate runtime payload.
+ */
+
+static bool hid_validate_report(struct hid_device *hid, struct hid_report *r,
+		const __u8 *buf, size_t len)
+{
+	const __u8 *payload;
+	size_t payload_len;
+	__u16 i;
+
+	/* Report ID handling: if present, buf[0] is ID; payload follows */
+	payload = r->id ? buf + 1 : buf;
+	payload_len = r->id ? (len ? len - 1 : 0) : len;
+
+	if (r->validate.payload_len && payload_len != r->validate.payload_len) {
+		hid_warn_ratelimited(hid,
+			"Malformed report: length %zu != expected %u (ID %u)\n",
+			payload_len, r->validate.payload_len, r->id);
+		return false;
+	}
+
+	for (i = 0; i < r->validate.const_count; i++) {
+		const __u16 bit_off = r->validate.const_slices[i].bit_off;
+		const __u16 bit_len = r->validate.const_slices[i].bit_len;
+		const __u16 end_bit = bit_off + bit_len;
+
+		for (__u16 b = bit_off; b < end_bit;) {
+			size_t byte_off = b >> 3;
+			size_t bit_in_byte = b & 7;
+
+			__u16 rem_bits = end_bit - b;
+			__u8 span = (__u8)min_t(__u16, rem_bits, 8 - bit_in_byte);
+			__u8 mask = ((1u << span) - 1) << bit_in_byte;
+
+			if (byte_off >= payload_len) {
+				hid_warn_ratelimited(hid,
+					"Malformed report: const slice OOB (bit_off %u, len %u)\n",
+					bit_off, bit_len);
+				return false;
+			}
+			if (payload[byte_off] & mask) {
+				hid_warn_ratelimited(hid,
+					"Malformed report: non-zero constant at byte %zu mask 0x%02x val 0x%02x\n",
+					byte_off, mask, payload[byte_off]);
+				return false;
+			}
+
+			b += span;
+		}
+	}
+
+	return true;
+}
+
+/*
  * Register a new field for this report.
  */
 
@@ -302,6 +377,8 @@ static int hid_add_field(struct hid_parser *parser, unsigned report_type, unsign
 		hid_err(parser->device, "hid_register_report failed\n");
 		return -1;
 	}
+
+	parser->curr_report = report;
 
 	/* Handle both signed and unsigned cases properly */
 	if ((parser->global.logical_minimum < 0 &&
@@ -638,11 +715,13 @@ static void hid_concatenate_last_usage_page(struct hid_parser *parser)
 static int hid_parser_main(struct hid_parser *parser, struct hid_item *item)
 {
 	__u32 data;
+	__u8 flags;
 	int ret;
 
 	hid_concatenate_last_usage_page(parser);
 
 	data = item_udata(item);
+	flags = (u8)data;
 
 	switch (item->tag) {
 	case HID_MAIN_ITEM_TAG_BEGIN_COLLECTION:
@@ -651,15 +730,61 @@ static int hid_parser_main(struct hid_parser *parser, struct hid_item *item)
 	case HID_MAIN_ITEM_TAG_END_COLLECTION:
 		ret = close_collection(parser);
 		break;
-	case HID_MAIN_ITEM_TAG_INPUT:
+	case HID_MAIN_ITEM_TAG_INPUT: {
+		__u16 offset_bits, size_bits;
+
+		if (flags & HID_MAIN_ITEM_RESERVED_MASK) {
+			hid_warn_ratelimited(parser->device,
+				"Malformed input descriptor: reserved bits set (0x%02x)\n",
+				flags);
+			return -EINVAL;
+		}
+
+		/* Compute field range in bits */
+		offset_bits = parser->curr_offset;
+		size_bits   = parser->global.report_size * parser->global.report_count;
+
+		/* Record Input(Constant) slices for runtime validation */
+		if ((flags & HID_MAIN_ITEM_CONSTANT) && parser->curr_report) {
+			/* Record bit-granular slice: store bit offset and size */
+			ret = hid_validate_append_bits(parser->curr_report, offset_bits, size_bits);
+			if (ret)
+				return ret;
+		}
+
+		/* Advance offset and add field */
+		parser->curr_offset += size_bits;
+
 		ret = hid_add_field(parser, HID_INPUT_REPORT, data);
+		if (!ret && parser->curr_report) {
+			/* Expected payload length (bytes) excluding the optional ID */
+			parser->curr_report->validate.payload_len = (parser->curr_report->size + 7) / 8;
+		}
+
 		break;
-	case HID_MAIN_ITEM_TAG_OUTPUT:
+	}
+	case HID_MAIN_ITEM_TAG_OUTPUT: {
+		if (flags & HID_MAIN_ITEM_RESERVED_MASK) {
+			hid_warn_ratelimited(parser->device,
+				"Malformed output descriptor: reserved bits set (0x%02x)\n",
+				flags);
+			return -EINVAL;
+		}
+
 		ret = hid_add_field(parser, HID_OUTPUT_REPORT, data);
 		break;
-	case HID_MAIN_ITEM_TAG_FEATURE:
+	}
+	case HID_MAIN_ITEM_TAG_FEATURE: {
+		if (flags & HID_MAIN_ITEM_RESERVED_MASK) {
+			hid_warn_ratelimited(parser->device,
+				"Malformed feature descriptor: reserved bits set (0x%02x)\n",
+				flags);
+			return -EINVAL;
+		}
+
 		ret = hid_add_field(parser, HID_FEATURE_REPORT, data);
 		break;
+	}
 	default:
 		if (item->tag >= HID_MAIN_ITEM_TAG_RESERVED_MIN &&
 			item->tag <= HID_MAIN_ITEM_TAG_RESERVED_MAX)
@@ -2061,6 +2186,9 @@ int hid_report_raw_event(struct hid_device *hid, enum hid_report_type type, u8 *
 				csize, rsize);
 		memset(cdata + csize, 0, rsize - csize);
 	}
+
+	if (!hid_validate_report(hid, report, data, size))
+		goto out;
 
 	if ((hid->claimed & HID_CLAIMED_HIDDEV) && hid->hiddev_report_event)
 		hid->hiddev_report_event(hid, report);
