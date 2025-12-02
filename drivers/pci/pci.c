@@ -3004,9 +3004,9 @@ bool pci_bridge_d3_possible(struct pci_dev *bridge)
 
 		/*
 		 * Out of caution, we only allow PCIe ports from 2015 or newer
-		 * into D3 on x86.
+		 * into D3 or other modern ISAs only.
 		 */
-		if (!IS_ENABLED(CONFIG_X86) || dmi_get_bios_year() >= 2015)
+		if (IS_ENABLED(CONFIG_ARM64) || IS_ENABLED(CONFIG_PPC64) || IS_ENABLED(CONFIG_RISCV) || dmi_get_bios_year() >= 2015)
 			return true;
 		break;
 	}
