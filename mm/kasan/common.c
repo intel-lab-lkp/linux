@@ -591,11 +591,12 @@ void kasan_unpoison_vmap_areas(struct vm_struct **vms, int nr_vms,
 	unsigned long size;
 	void *addr;
 	int area;
+	u8 tag = get_tag(vms[0]->addr);
 
 	for (area = 0 ; area < nr_vms ; area++) {
 		size = vms[area]->size;
 		addr = vms[area]->addr;
-		vms[area]->addr = __kasan_unpoison_vmap_areas(addr, size, flags);
+		vms[area]->addr = __kasan_unpoison_vmap_areas(addr, size, flags, tag);
 	}
 }
 #endif
