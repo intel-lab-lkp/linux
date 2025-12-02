@@ -75,4 +75,10 @@
 #define AST_IO_VGAIR1_R			(0x5A)
 #define AST_IO_VGAIR1_VREFRESH		BIT(3)
 
+/*
+ * PCI Control
+ */
+
+#define AST_IO_VGACRA2			(0xA2) /* PCI control & big-endian */
+
 #endif

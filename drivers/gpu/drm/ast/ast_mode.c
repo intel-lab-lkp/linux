@@ -698,6 +698,20 @@ static void ast_crtc_helper_mode_set_nofb(struct drm_crtc *crtc)
 	ast_set_dclk_reg(ast, adjusted_mode, vmode);
 	ast_set_crtthd_reg(ast);
 	ast_set_sync_reg(ast, adjusted_mode, vmode);
+
+#ifdef __BIG_ENDIAN
+	/* Big-endian byte-swapping */
+	switch (ast_crtc_state->format->format) {
+	case DRM_FORMAT_RGB565:
+		ast_set_index_reg_mask(ast, AST_IO_VGACRI, AST_IO_VGACRA2, 0x3f, 0x40);
+		break;
+	case DRM_FORMAT_XRGB8888:
+		ast_set_index_reg_mask(ast, AST_IO_VGACRI, AST_IO_VGACRA2, 0x3f, 0x80);
+		break;
+	default:
+		break;
+	}
+#endif
 }
 
 static int ast_crtc_helper_atomic_check(struct drm_crtc *crtc,
