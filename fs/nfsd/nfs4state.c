@@ -5969,11 +5969,16 @@ static int nfsd4_check_conflicting_opens(struct nfs4_client *clp,
 	 */
 	spin_lock(&fp->fi_lock);
 	list_for_each_entry(st, &fp->fi_stateids, st_perfile) {
-		if (st->st_openstp == NULL /* it's an open */ &&
-		    access_permit_write(st) &&
-		    st->st_stid.sc_client != clp) {
-			spin_unlock(&fp->fi_lock);
-			return -EAGAIN;
+		if (st->st_openstp == NULL /* it's an open */) {
+			if (st->st_stid.sc_client != clp &&
+			    access_permit_write(st)) {
+				spin_unlock(&fp->fi_lock);
+				return -EAGAIN;
+			}
+			if (st->st_stid.sc_client == clp) {
+				spin_unlock(&fp->fi_lock);
+				return -EAGAIN;
+			}
 		}
 	}
 	spin_unlock(&fp->fi_lock);
