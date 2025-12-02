@@ -246,6 +246,7 @@ static void pv_disable_steal_time(void)
 }
 
 #ifdef CONFIG_SMP
+static DEFINE_STATIC_KEY_FALSE(virt_preempt_key);
 static int pv_time_cpu_online(unsigned int cpu)
 {
 	unsigned long flags;
@@ -267,6 +268,18 @@ static int pv_time_cpu_down_prepare(unsigned int cpu)
 
 	return 0;
 }
+
+bool notrace vcpu_is_preempted(int cpu)
+{
+	struct kvm_steal_time *src;
+
+	if (!static_branch_unlikely(&virt_preempt_key))
+		return false;
+
+	src = &per_cpu(steal_time, cpu);
+	return !!(src->preempted & KVM_VCPU_PREEMPTED);
+}
+EXPORT_SYMBOL(vcpu_is_preempted);
 #endif
 
 static void pv_cpu_reboot(void *unused)
@@ -308,6 +321,9 @@ int __init pv_time_init(void)
 		pr_err("Failed to install cpu hotplug callbacks\n");
 		return r;
 	}
+
+	if (kvm_para_has_feature(KVM_FEATURE_PREEMPT))
+		static_branch_enable(&virt_preempt_key);
 #endif
 
 	static_call_update(pv_steal_clock, paravt_steal_clock);
@@ -318,7 +334,12 @@ int __init pv_time_init(void)
 		static_key_slow_inc(&paravirt_steal_rq_enabled);
 #endif
 
-	pr_info("Using paravirt steal-time\n");
+#ifdef CONFIG_SMP
+	if (static_key_enabled(&virt_preempt_key))
+		pr_info("Using paravirt steal-time with preempt enabled\n");
+	else
+#endif
+		pr_info("Using paravirt steal-time with preempt disabled\n");
 
 	return 0;
 }
