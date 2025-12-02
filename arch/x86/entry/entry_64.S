@@ -1536,7 +1536,11 @@ SYM_FUNC_START(clear_bhb_loop)
 	ANNOTATE_NOENDBR
 	push	%rbp
 	mov	%rsp, %rbp
-	movl	$5, %ecx
+
+	/* loop count differs based on BHI_CTRL, see Intel's BHI guidance */
+	ALTERNATIVE "movl $5,  %ecx; movl $5, %edx",	\
+		    "movl $12, %ecx; movl $7, %edx", X86_FEATURE_BHI_CTRL
+
 	ANNOTATE_INTRA_FUNCTION_CALL
 	call	1f
 	jmp	5f
@@ -1557,7 +1561,7 @@ SYM_FUNC_START(clear_bhb_loop)
 	 * but some Clang versions (e.g. 18) don't like this.
 	 */
 	.skip 32 - 18, 0xcc
-2:	movl	$5, %eax
+2:	movl	%edx, %eax
 3:	jmp	4f
 	nop
 4:	sub	$1, %eax
