@@ -6258,7 +6258,7 @@ nfsd4_add_rdaccess_to_wrdeleg(struct svc_rqst *rqstp, struct nfsd4_open *open,
 		fp = stp->st_stid.sc_file;
 		spin_lock(&fp->fi_lock);
 		__nfs4_file_get_access(fp, NFS4_SHARE_ACCESS_READ);
-		fp = stp->st_stid.sc_file;
+		WARN_ON_ONCE(fp->fi_fds[O_RDONLY] != NULL);
 		fp->fi_fds[O_RDONLY] = nf;
 		fp->fi_rdeleg_file = nf;
 		spin_unlock(&fp->fi_lock);
