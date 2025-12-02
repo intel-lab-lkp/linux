@@ -76,7 +76,7 @@ static unsigned int amd_powersave_bias_target(struct cpufreq_policy *policy,
 	sensitivity = POWERSAVE_BIAS_MAX -
 		(POWERSAVE_BIAS_MAX * (d_reference - d_actual) / d_reference);
 
-	clamp(sensitivity, 0, POWERSAVE_BIAS_MAX);
+	sensitivity = clamp(sensitivity, 0, POWERSAVE_BIAS_MAX);
 
 	/* this workload is not CPU bound, so choose a lower freq */
 	if (sensitivity < od_tuners->powersave_bias) {
