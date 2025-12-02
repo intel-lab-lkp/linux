@@ -894,6 +894,7 @@ void print_rt_rq(struct seq_file *m, int cpu, struct rt_rq *rt_rq)
 	P(rt_throttled);
 	PN(rt_time);
 	PN(rt_runtime);
+	PU(throttle_count);
 #endif
 
 #undef PN

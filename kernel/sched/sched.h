@@ -838,6 +838,7 @@ struct rt_rq {
 	int			rt_throttled;
 	u64			rt_time; /* consumed RT time, goes up in update_curr_rt */
 	u64			rt_runtime; /* allotted RT time, "slice" from rt_bandwidth, RT sharing/balancing */
+	u64			throttle_count;
 	/* Nests inside the rq lock: */
 	raw_spinlock_t		rt_runtime_lock;
 

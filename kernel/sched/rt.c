@@ -884,6 +884,7 @@ static int sched_rt_runtime_exceeded(struct rt_rq *rt_rq)
 		 */
 		if (likely(rt_b->rt_runtime)) {
 			rt_rq->rt_throttled = 1;
+			rt_rq->throttle_count++;
 			printk_deferred_once("sched: RT throttling activated\n");
 		} else {
 			/*
