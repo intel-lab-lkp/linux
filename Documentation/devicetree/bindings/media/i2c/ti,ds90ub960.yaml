@@ -13,12 +13,10 @@ description:
   The TI DS90UB9XX devices are FPD-Link video deserializers with I2C and GPIO
   forwarding.
 
-allOf:
-  - $ref: /schemas/i2c/i2c-atr.yaml#
-
 properties:
   compatible:
     enum:
+      - ti,ds90ub954-q1
       - ti,ds90ub960-q1
       - ti,ds90ub9702-q1
 
@@ -129,39 +127,6 @@ properties:
       Ports represent FPD-Link inputs to the deserializer and CSI TX outputs from the deserializer.
       Their number is model-dependent.
 
-    properties:
-      port@0:
-        $ref: '#/$defs/FPDLink-input-port'
-        description: FPD-Link input 0
-
-      port@1:
-        $ref: '#/$defs/FPDLink-input-port'
-        description: FPD-Link input 1
-
-      port@2:
-        $ref: '#/$defs/FPDLink-input-port'
-        description: FPD-Link input 2
-
-      port@3:
-        $ref: '#/$defs/FPDLink-input-port'
-        description: FPD-Link input 3
-
-      port@4:
-        $ref: '#/$defs/CSI2-output-port'
-        description: CSI-2 Output 0
-
-      port@5:
-        $ref: '#/$defs/CSI2-output-port'
-        description: CSI-2 Output 1
-
-    required:
-      - port@0
-      - port@1
-      - port@2
-      - port@3
-      - port@4
-      - port@5
-
 required:
   - compatible
   - reg
@@ -204,9 +169,86 @@ $defs:
           - data-lanes
           - link-frequencies
 
+allOf:
+  - $ref: /schemas/i2c/i2c-atr.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - ti,ds90ub960-q1
+              - ti,ds90ub9702-q1
+    then:
+      properties:
+        ports:
+          properties:
+            port@0:
+              $ref: '#/$defs/FPDLink-input-port'
+              description: FPD-Link input 0
+
+            port@1:
+              $ref: '#/$defs/FPDLink-input-port'
+              description: FPD-Link input 1
+
+            port@2:
+              $ref: '#/$defs/FPDLink-input-port'
+              description: FPD-Link input 2
+
+            port@3:
+              $ref: '#/$defs/FPDLink-input-port'
+              description: FPD-Link input 3
+
+            port@4:
+              $ref: '#/$defs/CSI2-output-port'
+              description: CSI-2 Output 0
+
+            port@5:
+              $ref: '#/$defs/CSI2-output-port'
+              description: CSI-2 Output 1
+
+          required:
+            - port@0
+            - port@1
+            - port@2
+            - port@3
+            - port@4
+            - port@5
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: ti,ds90ub954-q1
+    then:
+      properties:
+        ports:
+          properties:
+            port@0:
+              $ref: '#/$defs/FPDLink-input-port'
+              description: FPD-Link input 0
+
+            port@1:
+              $ref: '#/$defs/FPDLink-input-port'
+              description: FPD-Link input 1
+
+            port@2:
+              $ref: '#/$defs/CSI2-output-port'
+              description: CSI-2 Output 0
+
+          required:
+            - port@0
+            - port@1
+            - port@2
+
+        links:
+          properties:
+            link@2: false
+            link@3: false
+
 unevaluatedProperties: false
 
 examples:
+  # Example with ds90ub960 Deserializer
   - |
     #include <dt-bindings/gpio/gpio.h>
 
@@ -397,6 +439,192 @@ examples:
                   port {
                     sensor_2_out: endpoint {
                       remote-endpoint = <&ub913_2_in>;
+                    };
+                  };
+                };
+              };
+            };
+          }; /* End of link@1 */
+        };
+      };
+    };
+
+  # Example with ds90ub954 Deserializer
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    i2c {
+      clock-frequency = <400000>;
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      deser@3d {
+        compatible = "ti,ds90ub954-q1";
+        reg = <0x3d>;
+
+        clock-names = "refclk";
+        clocks = <&fixed_clock>;
+
+        powerdown-gpios = <&pca9555 7 GPIO_ACTIVE_LOW>;
+
+        i2c-alias-pool = <0x4a 0x4b 0x4c>;
+
+        ports {
+          #address-cells = <1>;
+          #size-cells = <0>;
+
+          /* Port 0, Camera 0 */
+          port@0 {
+            reg = <0>;
+
+            ub954_fpd3_1_in: endpoint {
+              remote-endpoint = <&ub953_2_out>;
+            };
+          };
+
+          /* Port 1, Camera 1 */
+          port@1 {
+            reg = <1>;
+
+            ub954_fpd3_2_in: endpoint {
+              remote-endpoint = <&ub913_3_out>;
+              hsync-active = <0>;
+              vsync-active = <1>;
+            };
+          };
+
+          /* Port 2, CSI-2 TX */
+          port@2 {
+            reg = <2>;
+            ds90ub954_0_csi_out: endpoint {
+              data-lanes = <1 2 3 4>;
+              link-frequencies = /bits/ 64 <800000000>;
+              remote-endpoint = <&csi2_phy0>;
+            };
+          };
+        };
+
+        links {
+          #address-cells = <1>;
+          #size-cells = <0>;
+
+          /* Link 0 has DS90UB953 serializer and IMX274 sensor */
+
+          link@0 {
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            reg = <0>;
+            i2c-alias = <0x44>;
+
+            ti,rx-mode = <3>;
+
+            serializer3: serializer@30 {
+              compatible = "ti,ds90ub953-q1";
+              reg = <0x30>;
+
+              gpio-controller;
+              #gpio-cells = <2>;
+
+              #clock-cells = <0>;
+
+              ports {
+                #address-cells = <1>;
+                #size-cells = <0>;
+
+                port@0 {
+                  reg = <0>;
+                  ub953_2_in: endpoint {
+                    data-lanes = <1 2 3 4>;
+                    remote-endpoint = <&sensor_3_out>;
+                  };
+                };
+
+                port@1 {
+                  reg = <1>;
+
+                  ub953_2_out: endpoint {
+                    remote-endpoint = <&ub954_fpd3_1_in>;
+                  };
+                };
+              };
+
+              i2c {
+                #address-cells = <1>;
+                #size-cells = <0>;
+
+                sensor@1a {
+                  compatible = "sony,imx274";
+                  reg = <0x1a>;
+
+                  clocks = <&serializer>;
+                  clock-names = "inck";
+
+                  reset-gpios = <&serializer3 0 GPIO_ACTIVE_LOW>;
+
+                  port {
+                    sensor_3_out: endpoint {
+                      remote-endpoint = <&ub953_2_in>;
+                    };
+                  };
+                };
+              };
+            };
+          };  /* End of link@0 */
+
+          /* Link 1 has DS90UB913 serializer and MT9V111 sensor */
+
+          link@1 {
+            reg = <1>;
+            i2c-alias = <0x45>;
+
+            ti,rx-mode = <0>;
+
+            serializer4: serializer {
+              compatible = "ti,ds90ub913a-q1";
+
+              gpio-controller;
+              #gpio-cells = <2>;
+
+              clocks = <&clk_cam_48M>;
+              clock-names = "clkin";
+
+              #clock-cells = <0>;
+
+              ports {
+                #address-cells = <1>;
+                #size-cells = <0>;
+
+                port@0 {
+                  reg = <0>;
+                  ub913_3_in: endpoint {
+                    remote-endpoint = <&sensor_4_out>;
+                    pclk-sample = <1>;
+                  };
+                };
+
+                port@1 {
+                  reg = <1>;
+
+                  ub913_3_out: endpoint {
+                    remote-endpoint = <&ub954_fpd3_2_in>;
+                  };
+                };
+              };
+
+              i2c {
+                #address-cells = <1>;
+                #size-cells = <0>;
+
+                sensor@48 {
+                  compatible = "aptina,mt9v111";
+                  reg = <0x48>;
+
+                  clocks = <&serializer4>;
+
+                  port {
+                    sensor_4_out: endpoint {
+                      remote-endpoint = <&ub913_3_in>;
                     };
                   };
                 };
