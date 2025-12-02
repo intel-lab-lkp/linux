@@ -3681,6 +3681,7 @@ void pci_acs_init(struct pci_dev *dev)
 		return;
 
 	pci_read_config_word(dev, pos + PCI_ACS_CAP, &dev->acs_capabilities);
+	dev->acs_capabilities &= ~dev->acs_broken_cap;
 }
 
 void pci_rebar_init(struct pci_dev *pdev)
