@@ -2670,11 +2670,7 @@ int btrfs_clean_one_deleted_snapshot(struct btrfs_fs_info *fs_info)
 
 	btrfs_kill_all_delayed_nodes(root);
 
-	if (btrfs_header_backref_rev(root->node) <
-			BTRFS_MIXED_BACKREF_REV)
-		ret = btrfs_drop_snapshot(root, false, false);
-	else
-		ret = btrfs_drop_snapshot(root, true, false);
+	ret = btrfs_drop_snapshot(root, false);
 
 	btrfs_put_root(root);
 	return (ret < 0) ? 0 : 1;

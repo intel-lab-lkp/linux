@@ -6034,15 +6034,14 @@ static noinline int walk_up_tree(struct btrfs_trans_handle *trans,
  * referenced by the tree.
  *
  * when a shared tree block is found. this function decreases its
- * reference count by one. if update_ref is true, this function
+ * reference count by one. If for_reloc is false, this function
  * also make sure backrefs for the shared block and all lower level
  * blocks are properly updated.
  *
- * If called with for_reloc set, may exit early with -EAGAIN
+ * If called with for_reloc == false, may exit early with -EAGAIN
  */
-int btrfs_drop_snapshot(struct btrfs_root *root, bool update_ref, bool for_reloc)
+int btrfs_drop_snapshot(struct btrfs_root *root, bool for_reloc)
 {
-	const bool is_reloc_root = (btrfs_root_id(root) == BTRFS_TREE_RELOC_OBJECTID);
 	struct btrfs_fs_info *fs_info = root->fs_info;
 	struct btrfs_path *path;
 	struct btrfs_trans_handle *trans;
@@ -6053,6 +6052,9 @@ int btrfs_drop_snapshot(struct btrfs_root *root, bool update_ref, bool for_reloc
 	const u64 rootid = btrfs_root_id(root);
 	int ret = 0;
 	int level;
+	const bool is_reloc_root = (rootid == BTRFS_TREE_RELOC_OBJECTID);
+	const bool update_ref = (!for_reloc &&
+				 btrfs_header_backref_rev(root->node) >= BTRFS_MIXED_BACKREF_REV);
 	bool root_dropped = false;
 	bool unfinished_drop = false;
 

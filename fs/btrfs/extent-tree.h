@@ -154,7 +154,7 @@ int btrfs_pin_reserved_extent(struct btrfs_trans_handle *trans,
 			      const struct extent_buffer *eb);
 int btrfs_finish_extent_commit(struct btrfs_trans_handle *trans);
 int btrfs_inc_extent_ref(struct btrfs_trans_handle *trans, struct btrfs_ref *generic_ref);
-int btrfs_drop_snapshot(struct btrfs_root *root, bool update_ref, bool for_reloc);
+int btrfs_drop_snapshot(struct btrfs_root *root, bool for_reloc);
 int btrfs_drop_subtree(struct btrfs_trans_handle *trans,
 			struct btrfs_root *root,
 			struct extent_buffer *node,
