@@ -454,11 +454,27 @@ static void free_transport(struct smb_direct_transport *t)
 	struct smbdirect_socket *sc = &t->socket;
 	struct smbdirect_recv_io *recvmsg;
 
+	pr_notice("%s:%u: %p %d %1pe %d %s\n",
+		  __func__, __LINE__,
+		  sc,
+		  sc->first_error,
+		  SMBDIRECT_DEBUG_ERR_PTR(sc->first_error),
+		  sc->status,
+		  smbdirect_socket_status_string(sc->status));
+
 	disable_work_sync(&sc->disconnect_work);
 	if (sc->status < SMBDIRECT_SOCKET_DISCONNECTING)
 		smb_direct_disconnect_rdma_work(&sc->disconnect_work);
 	if (sc->status < SMBDIRECT_SOCKET_DISCONNECTED)
 		wait_event(sc->status_wait, sc->status == SMBDIRECT_SOCKET_DISCONNECTED);
+
+	pr_notice("%s:%u: %p %d %1pe %d %s\n",
+		  __func__, __LINE__,
+		  sc,
+		  sc->first_error,
+		  SMBDIRECT_DEBUG_ERR_PTR(sc->first_error),
+		  sc->status,
+		  smbdirect_socket_status_string(sc->status));
 
 	/*
 	 * Wake up all waiters in all wait queues
@@ -473,6 +489,14 @@ static void free_transport(struct smb_direct_transport *t)
 	disable_work_sync(&sc->recv_io.posted.refill_work);
 	disable_delayed_work_sync(&sc->idle.timer_work);
 	disable_work_sync(&sc->idle.immediate_work);
+
+	pr_notice("%s:%u: %p %d %1pe %d %s\n",
+		  __func__, __LINE__,
+		  sc,
+		  sc->first_error,
+		  SMBDIRECT_DEBUG_ERR_PTR(sc->first_error),
+		  sc->status,
+		  smbdirect_socket_status_string(sc->status));
 
 	if (sc->rdma.cm_id)
 		rdma_lock_handler(sc->rdma.cm_id);
@@ -801,6 +825,7 @@ static void smb_direct_negotiate_recv_done(struct ib_cq *cq, struct ib_wc *wc)
 	spin_lock_irqsave(&sc->connect.lock, flags);
 	if (!sc->first_error) {
 		INIT_WORK(&sc->connect.work, smb_direct_negotiate_recv_work);
+		pr_notice("%s: %p %s\n", __func__, sc, smbdirect_socket_status_string(sc->status));
 		if (sc->status == SMBDIRECT_SOCKET_NEGOTIATE_NEEDED)
 			queue_work(sc->workqueue, &sc->connect.work);
 	}
@@ -814,10 +839,25 @@ static void smb_direct_negotiate_recv_work(struct work_struct *work)
 	const struct smbdirect_socket_parameters *sp = &sc->parameters;
 	struct smbdirect_recv_io *recv_io;
 
+	pr_notice("%s:%u: %p %d %1pe %d %s\n",
+		  __func__, __LINE__,
+		  sc,
+		  sc->first_error,
+		  SMBDIRECT_DEBUG_ERR_PTR(sc->first_error),
+		  sc->status,
+		  smbdirect_socket_status_string(sc->status));
+
 	if (sc->first_error)
 		return;
 
 	ksmbd_debug(RDMA, "Negotiate Recv Work running\n");
+	pr_notice("%s:%u: %p %d %1pe %d %s\n",
+		  __func__, __LINE__,
+		  sc,
+		  sc->first_error,
+		  SMBDIRECT_DEBUG_ERR_PTR(sc->first_error),
+		  sc->status,
+		  smbdirect_socket_status_string(sc->status));
 
 	/*
 	 * Reset timer to the keepalive interval in
@@ -837,11 +877,25 @@ static void smb_direct_negotiate_recv_work(struct work_struct *work)
 		return;
 	}
 
+	pr_notice("%s:%u: %p %d %1pe %d %s\n",
+		  __func__, __LINE__,
+		  sc,
+		  sc->first_error,
+		  SMBDIRECT_DEBUG_ERR_PTR(sc->first_error),
+		  sc->status,
+		  smbdirect_socket_status_string(sc->status));
 	if (SMBDIRECT_CHECK_STATUS_WARN(sc, SMBDIRECT_SOCKET_NEGOTIATE_NEEDED)) {
 		smb_direct_disconnect_rdma_connection(sc);
 		return;
 	}
 	sc->status = SMBDIRECT_SOCKET_NEGOTIATE_RUNNING;
+	pr_notice("%s:%u: %p %d %1pe %d %s\n",
+		  __func__, __LINE__,
+		  sc,
+		  sc->first_error,
+		  SMBDIRECT_DEBUG_ERR_PTR(sc->first_error),
+		  sc->status,
+		  smbdirect_socket_status_string(sc->status));
 	wake_up(&sc->status_wait);
 }
 
@@ -1816,6 +1870,14 @@ static void smb_direct_disconnect(struct ksmbd_transport *t)
 	struct smbdirect_socket *sc = &st->socket;
 
 	ksmbd_debug(RDMA, "Disconnecting cm_id=%p\n", sc->rdma.cm_id);
+	pr_notice("%s:%u: %p %d %1pe %d %s\n",
+		  __func__, __LINE__,
+		  sc,
+		  sc->first_error,
+		  SMBDIRECT_DEBUG_ERR_PTR(sc->first_error),
+		  sc->status,
+		  smbdirect_socket_status_string(sc->status));
+
 
 	free_transport(st);
 }
@@ -1826,6 +1888,13 @@ static void smb_direct_shutdown(struct ksmbd_transport *t)
 	struct smbdirect_socket *sc = &st->socket;
 
 	ksmbd_debug(RDMA, "smb-direct shutdown cm_id=%p\n", sc->rdma.cm_id);
+	pr_notice("%s:%u: %p %d %1pe %d %s\n",
+		  __func__, __LINE__,
+		  sc,
+		  sc->first_error,
+		  SMBDIRECT_DEBUG_ERR_PTR(sc->first_error),
+		  sc->status,
+		  smbdirect_socket_status_string(sc->status));
 
 	smb_direct_disconnect_rdma_work(&sc->disconnect_work);
 }
@@ -1856,10 +1925,15 @@ static int smb_direct_cm_handler(struct rdma_cm_id *cm_id,
 		 * yet. sc->connect.work is still be disabled and
 		 * queue_work() is a no-op.
 		 */
+		pr_notice("%s: %p %s\n", __func__, sc, smbdirect_socket_status_string(sc->status));
 		if (SMBDIRECT_CHECK_STATUS_DISCONNECT(sc, SMBDIRECT_SOCKET_RDMA_CONNECT_RUNNING))
 			break;
 		sc->status = SMBDIRECT_SOCKET_NEGOTIATE_NEEDED;
 		spin_lock_irqsave(&sc->connect.lock, flags);
+		pr_notice("%s: %p %s %s\n", __func__, sc, smbdirect_socket_status_string(sc->status),
+			  sc->connect.work.func == smb_direct_negotiate_recv_work ?
+			  "queue_work(smb_direct_negotiate_recv_work)":
+			  "queue_work(no-op)");
 		if (!sc->first_error)
 			queue_work(sc->workqueue, &sc->connect.work);
 		spin_unlock_irqrestore(&sc->connect.lock, flags);
@@ -1869,7 +1943,9 @@ static int smb_direct_cm_handler(struct rdma_cm_id *cm_id,
 	case RDMA_CM_EVENT_DEVICE_REMOVAL:
 	case RDMA_CM_EVENT_DISCONNECTED: {
 		sc->status = SMBDIRECT_SOCKET_DISCONNECTED;
+		pr_notice("%s: %p %s\n", __func__, sc, smbdirect_socket_status_string(sc->status));
 		smb_direct_disconnect_rdma_work(&sc->disconnect_work);
+		pr_notice("%s: %p %s\n", __func__, sc, smbdirect_socket_status_string(sc->status));
 		if (sc->ib.qp)
 			ib_drain_qp(sc->ib.qp);
 		break;
@@ -2042,12 +2118,26 @@ static int smb_direct_prepare_negotiation(struct smbdirect_socket *sc)
 	}
 	recv_posted = true;
 
+	pr_notice("%s:%u: %p %d %1pe %d %s\n",
+		  __func__, __LINE__,
+		  sc,
+		  sc->first_error,
+		  SMBDIRECT_DEBUG_ERR_PTR(sc->first_error),
+		  sc->status,
+		  smbdirect_socket_status_string(sc->status));
 	ret = smb_direct_accept_client(sc);
 	if (ret) {
 		pr_err("Can't accept client\n");
 		goto out_err;
 	}
 
+	pr_notice("%s:%u: %p %d %1pe %d %s\n",
+		  __func__, __LINE__,
+		  sc,
+		  sc->first_error,
+		  SMBDIRECT_DEBUG_ERR_PTR(sc->first_error),
+		  sc->status,
+		  smbdirect_socket_status_string(sc->status));
 	return 0;
 out_err:
 	/*
@@ -2386,11 +2476,25 @@ static int smb_direct_prepare(struct ksmbd_transport *t)
 	 * Everything else is unexpected and an error.
 	 */
 	ksmbd_debug(RDMA, "Waiting for SMB_DIRECT negotiate request\n");
+	pr_notice("%s:%u: %p %d %1pe %d %s\n",
+		  __func__, __LINE__,
+		  sc,
+		  sc->first_error,
+		  SMBDIRECT_DEBUG_ERR_PTR(sc->first_error),
+		  sc->status,
+		  smbdirect_socket_status_string(sc->status));
 	ret = wait_event_interruptible_timeout(sc->status_wait,
 					sc->status != SMBDIRECT_SOCKET_RDMA_CONNECT_NEEDED &&
 					sc->status != SMBDIRECT_SOCKET_RDMA_CONNECT_RUNNING &&
 					sc->status != SMBDIRECT_SOCKET_NEGOTIATE_NEEDED,
 					msecs_to_jiffies(sp->negotiate_timeout_msec));
+	pr_notice("%s:%u: %p %d %1pe %d %s\n",
+		  __func__, __LINE__,
+		  sc,
+		  sc->first_error,
+		  SMBDIRECT_DEBUG_ERR_PTR(sc->first_error),
+		  sc->status,
+		  smbdirect_socket_status_string(sc->status));
 	if (ret <= 0 || sc->status != SMBDIRECT_SOCKET_NEGOTIATE_RUNNING)
 		return ret < 0 ? ret : -ETIMEDOUT;
 
@@ -2398,10 +2502,24 @@ static int smb_direct_prepare(struct ksmbd_transport *t)
 	if (!recvmsg)
 		return -ECONNABORTED;
 
+	pr_notice("%s:%u: %p %d %1pe %d %s\n",
+		  __func__, __LINE__,
+		  sc,
+		  sc->first_error,
+		  SMBDIRECT_DEBUG_ERR_PTR(sc->first_error),
+		  sc->status,
+		  smbdirect_socket_status_string(sc->status));
 	ret = smb_direct_check_recvmsg(recvmsg);
 	if (ret)
 		goto put;
 
+	pr_notice("%s:%u: %p %d %1pe %d %s\n",
+		  __func__, __LINE__,
+		  sc,
+		  sc->first_error,
+		  SMBDIRECT_DEBUG_ERR_PTR(sc->first_error),
+		  sc->status,
+		  smbdirect_socket_status_string(sc->status));
 	req = (struct smbdirect_negotiate_req *)recvmsg->packet;
 	sp->max_recv_size = min_t(int, sp->max_recv_size,
 				  le32_to_cpu(req->preferred_send_size));
@@ -2415,6 +2533,13 @@ static int smb_direct_prepare(struct ksmbd_transport *t)
 	sc->recv_io.credits.target = min_t(u16, sc->recv_io.credits.target, sp->recv_credit_max);
 	sc->recv_io.credits.target = max_t(u16, sc->recv_io.credits.target, 1);
 
+	pr_notice("%s:%u: %p %d %1pe %d %s\n",
+		  __func__, __LINE__,
+		  sc,
+		  sc->first_error,
+		  SMBDIRECT_DEBUG_ERR_PTR(sc->first_error),
+		  sc->status,
+		  smbdirect_socket_status_string(sc->status));
 put:
 	spin_lock_irqsave(&sc->recv_io.reassembly.lock, flags);
 	sc->recv_io.reassembly.queue_length--;
@@ -2428,6 +2553,13 @@ put:
 	if (ret)
 		goto respond;
 
+	pr_notice("%s:%u: %p %d %1pe %d %s\n",
+		  __func__, __LINE__,
+		  sc,
+		  sc->first_error,
+		  SMBDIRECT_DEBUG_ERR_PTR(sc->first_error),
+		  sc->status,
+		  smbdirect_socket_status_string(sc->status));
 	/*
 	 * We negotiated with success, so we need to refill the recv queue.
 	 * We do that with sc->idle.immediate_work still being disabled
@@ -2444,9 +2576,23 @@ put:
 		return sc->first_error;
 	INIT_WORK(&sc->idle.immediate_work, smb_direct_send_immediate_work);
 
+	pr_notice("%s:%u: %p %d %1pe %d %s\n",
+		  __func__, __LINE__,
+		  sc,
+		  sc->first_error,
+		  SMBDIRECT_DEBUG_ERR_PTR(sc->first_error),
+		  sc->status,
+		  smbdirect_socket_status_string(sc->status));
 respond:
 	ret = smb_direct_send_negotiate_response(sc, ret);
 
+	pr_notice("%s:%u: %p %d %1pe %d %s\n",
+		  __func__, __LINE__,
+		  sc,
+		  sc->first_error,
+		  SMBDIRECT_DEBUG_ERR_PTR(sc->first_error),
+		  sc->status,
+		  smbdirect_socket_status_string(sc->status));
 	return ret;
 }
 
