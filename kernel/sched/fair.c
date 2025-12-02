@@ -12673,7 +12673,7 @@ static void _nohz_idle_balance(struct rq *this_rq, unsigned int flags)
 	/* Earliest time when we have to do rebalance again */
 	unsigned long now = jiffies;
 	unsigned long next_balance = now + 60*HZ;
-	bool has_blocked_load = false;
+	bool has_blocked = false;
 	int update_next_balance = 0;
 	int this_cpu = this_rq->cpu;
 	int balance_cpu;
@@ -12717,7 +12717,7 @@ static void _nohz_idle_balance(struct rq *this_rq, unsigned int flags)
 		 */
 		if (!idle_cpu(this_cpu) && need_resched()) {
 			if (flags & NOHZ_STATS_KICK)
-				has_blocked_load = true;
+				has_blocked = true;
 			if (flags & NOHZ_NEXT_KICK)
 				WRITE_ONCE(nohz.needs_update, 1);
 			goto abort;
@@ -12726,7 +12726,7 @@ static void _nohz_idle_balance(struct rq *this_rq, unsigned int flags)
 		rq = cpu_rq(balance_cpu);
 
 		if (flags & NOHZ_STATS_KICK)
-			has_blocked_load |= update_nohz_stats(rq);
+			has_blocked |= update_nohz_stats(rq);
 
 		/*
 		 * If time for next balance is due,
@@ -12763,7 +12763,7 @@ static void _nohz_idle_balance(struct rq *this_rq, unsigned int flags)
 
 abort:
 	/* There is still blocked load, enable periodic update */
-	if (has_blocked_load)
+	if (has_blocked)
 		WRITE_ONCE(nohz.has_blocked, 1);
 }
 
