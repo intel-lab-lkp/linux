@@ -7501,19 +7501,6 @@ static inline int __select_idle_cpu(int cpu, struct task_struct *p)
 	return -1;
 }
 
-#ifdef CONFIG_SCHED_SMT
-DEFINE_STATIC_KEY_FALSE(sched_smt_present);
-EXPORT_SYMBOL_GPL(sched_smt_present);
-
-static inline void set_idle_cores(int cpu, int val)
-{
-	struct sched_domain_shared *sds;
-
-	sds = rcu_dereference(per_cpu(sd_llc_shared, cpu));
-	if (sds)
-		WRITE_ONCE(sds->has_idle_cores, val);
-}
-
 static inline bool test_idle_cores(int cpu)
 {
 	struct sched_domain_shared *sds;
@@ -7524,6 +7511,10 @@ static inline bool test_idle_cores(int cpu)
 
 	return false;
 }
+
+#ifdef CONFIG_SCHED_SMT
+DEFINE_STATIC_KEY_FALSE(sched_smt_present);
+EXPORT_SYMBOL_GPL(sched_smt_present);
 
 /*
  * Scans the local SMT mask to see if the entire core is idle, and records this
@@ -7611,15 +7602,6 @@ static int select_idle_smt(struct task_struct *p, struct sched_domain *sd, int t
 }
 
 #else /* !CONFIG_SCHED_SMT: */
-
-static inline void set_idle_cores(int cpu, int val)
-{
-}
-
-static inline bool test_idle_cores(int cpu)
-{
-	return false;
-}
 
 static inline int select_idle_core(struct task_struct *p, int core, struct cpumask *cpus, int *idle_cpu)
 {
@@ -7885,6 +7867,9 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
 	i = select_idle_cpu(p, sd, has_idle_core, target);
 	if ((unsigned)i < nr_cpumask_bits)
 		return i;
+
+	if (!sched_smt_active())
+		set_idle_cores(target, 0);
 
 	/*
 	 * For cluster machines which have lower sharing cache like L2 or
