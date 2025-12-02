@@ -1866,6 +1866,140 @@ void configfs_unregister_default_group(struct config_group *group)
 }
 EXPORT_SYMBOL(configfs_unregister_default_group);
 
+/**
+ * configfs_register_item() - registers a kernel-created item with a parent group
+ * @parent_group: parent group for the new item
+ * @item: item to be registered
+ *
+ * This function allows kernel code to register configfs items whose lifecycle
+ * is controlled by kernel space rather than userspace (via mkdir/rmdir).
+ * The item must be already initialized with config_item_init_type_name().
+ *
+ * Return: 0 on success, negative errno on failure
+ */
+int configfs_register_item(struct config_group *parent_group,
+			   struct config_item *item)
+{
+	struct configfs_subsystem *subsys = parent_group->cg_subsys;
+	struct configfs_fragment *frag;
+	struct dentry *parent, *child;
+	struct configfs_dirent *sd;
+	int ret;
+
+	if (!subsys || !item->ci_name)
+		return -EINVAL;
+
+	frag = new_fragment();
+	if (!frag)
+		return -ENOMEM;
+
+	parent = parent_group->cg_item.ci_dentry;
+	/* Allocate dentry for the item */
+	child = d_alloc_name(parent, item->ci_name);
+	if (!child) {
+		put_fragment(frag);
+		return -ENOMEM;
+	}
+
+	mutex_lock(&subsys->su_mutex);
+	link_obj(&parent_group->cg_item, item);
+	mutex_unlock(&subsys->su_mutex);
+
+	inode_lock_nested(d_inode(parent), I_MUTEX_PARENT);
+	d_add(child, NULL);
+
+	/* Attach the item to the filesystem */
+	ret = configfs_attach_item(&parent_group->cg_item, item, child, frag);
+	if (ret)
+		goto err_out;
+
+	/*
+	 * CONFIGFS_USET_DEFAULT mark item as kernel-created (cannot be removed
+	 * by userspace)
+	 */
+	sd = child->d_fsdata;
+	sd->s_type |= CONFIGFS_USET_DEFAULT;
+
+	/* Mark directory as ready */
+	spin_lock(&configfs_dirent_lock);
+	configfs_dir_set_ready(child->d_fsdata);
+	spin_unlock(&configfs_dirent_lock);
+
+	inode_unlock(d_inode(parent));
+	put_fragment(frag);
+	return 0;
+
+err_out:
+	d_drop(child);
+	dput(child);
+	inode_unlock(d_inode(parent));
+	mutex_lock(&subsys->su_mutex);
+	unlink_obj(item);
+	mutex_unlock(&subsys->su_mutex);
+	put_fragment(frag);
+	return ret;
+}
+EXPORT_SYMBOL(configfs_register_item);
+
+/**
+ * configfs_unregister_item() - unregisters a kernel-created item
+ * @item: item to be unregistered
+ *
+ * This function reverses the effect of configfs_register_item(), removing
+ * the item from the configfs filesystem and releasing associated resources.
+ * The item must have been previously registered with configfs_register_item().
+ */
+void configfs_unregister_item(struct config_item *item)
+{
+	struct config_group *group = item->ci_group;
+	struct dentry *dentry = item->ci_dentry;
+	struct configfs_subsystem *subsys;
+	struct configfs_fragment *frag;
+	struct configfs_dirent *sd;
+	struct dentry *parent;
+
+	if (!group || !dentry)
+		return;
+
+	subsys = group->cg_subsys;
+	if (!subsys)
+		return;
+
+	parent = item->ci_parent->ci_dentry;
+	sd = dentry->d_fsdata;
+	frag = get_fragment(sd->s_frag);
+
+	if (WARN_ON(!(sd->s_type & CONFIGFS_USET_DEFAULT))) {
+		put_fragment(frag);
+		return;
+	}
+
+	/* Mark fragment as dead */
+	down_write(&frag->frag_sem);
+	frag->frag_dead = true;
+	up_write(&frag->frag_sem);
+
+	inode_lock_nested(d_inode(parent), I_MUTEX_PARENT);
+	spin_lock(&configfs_dirent_lock);
+	configfs_detach_prep(dentry, NULL);
+	spin_unlock(&configfs_dirent_lock);
+
+	configfs_detach_item(item);
+	d_inode(dentry)->i_flags |= S_DEAD;
+	dont_mount(dentry);
+	d_drop(dentry);
+	fsnotify_rmdir(d_inode(parent), dentry);
+	dput(dentry);
+	inode_unlock(d_inode(parent));
+
+	mutex_lock(&subsys->su_mutex);
+	unlink_obj(item);
+	mutex_unlock(&subsys->su_mutex);
+
+	put_fragment(frag);
+}
+EXPORT_SYMBOL(configfs_unregister_item);
+
 int configfs_register_subsystem(struct configfs_subsystem *subsys)
 {
 	int err;
