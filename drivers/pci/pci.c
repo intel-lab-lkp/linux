@@ -4640,6 +4640,63 @@ static int pci_bus_max_d3cold_delay(const struct pci_bus *bus)
 	return max(min_delay, max_delay);
 }
 
+static int pci_readiness_check(struct pci_dev *pdev, struct pci_dev *child,
+		unsigned long start_t, char *reset_type)
+{
+	int elapsed = jiffies_to_msecs(jiffies - start_t);
+
+	if (pci_dev_is_disconnected(pdev) || pci_dev_is_disconnected(child))
+		return 0;
+
+	if (pcie_get_speed_cap(pdev) <= PCIE_SPEED_5_0GT) {
+		u16 status;
+
+		pci_dbg(pdev, "waiting %d ms for downstream link\n", elapsed);
+
+		if (!pci_dev_wait(child, reset_type, 0))
+			return 0;
+
+		if (PCI_RESET_WAIT > elapsed)
+			return PCI_RESET_WAIT - elapsed;
+
+		/*
+		 * If the port supports active link reporting we now check
+		 * whether the link is active and if not bail out early with
+		 * the assumption that the device is not present anymore.
+		 */
+		if (!pdev->link_active_reporting)
+			return -ENOTTY;
+
+		pcie_capability_read_word(pdev, PCI_EXP_LNKSTA, &status);
+		if (!(status & PCI_EXP_LNKSTA_DLLLA))
+			return -ENOTTY;
+
+		if (!pci_dev_wait(child, reset_type, 0))
+			return 0;
+
+		if (PCIE_RESET_READY_POLL_MS > elapsed)
+			return PCIE_RESET_READY_POLL_MS - elapsed;
+
+		return -ENOTTY;
+	}
+
+	pci_dbg(pdev, "waiting %d ms for downstream link, after activation\n",
+		elapsed);
+	if (!pcie_wait_for_link_delay(pdev, true, 0)) {
+		/* Did not train, no need to wait any further */
+		pci_info(pdev, "Data Link Layer Link Active not set in %d msec\n", elapsed);
+		return -ENOTTY;
+	}
+
+	if (!pci_dev_wait(child, reset_type, 0))
+		return 0;
+
+	if (PCIE_RESET_READY_POLL_MS > elapsed)
+		return PCIE_RESET_READY_POLL_MS - elapsed;
+
+	return -ENOTTY;
+}
+
 /**
  * pci_bridge_wait_for_secondary_bus - Wait for secondary bus to be accessible
  * @dev: PCI bridge
@@ -4654,12 +4711,14 @@ static int pci_bus_max_d3cold_delay(const struct pci_bus *bus)
  * 4.3.2.
  *
  * Return 0 on success or -ENOTTY if the first device on the secondary bus
- * failed to become accessible.
+ * failed to become accessible or a value greater than 0 indicates the
+ * left required waiting time..
  */
-int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
+static int __pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, unsigned long start_t,
+		char *reset_type)
 {
-	struct pci_dev *child __free(pci_dev_put) = NULL;
-	int delay;
+	struct pci_dev *child;
+	int delay, ret, elapsed = jiffies_to_msecs(jiffies - start_t);
 
 	if (pci_dev_is_disconnected(dev))
 		return 0;
@@ -4687,8 +4746,6 @@ int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
 		return 0;
 	}
 
-	child = pci_dev_get(list_first_entry(&dev->subordinate->devices,
-					     struct pci_dev, bus_list));
 	up_read(&pci_bus_sem);
 
 	/*
@@ -4696,8 +4753,10 @@ int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
 	 * accessing the device after reset (that is 1000 ms + 100 ms).
 	 */
 	if (!pci_is_pcie(dev)) {
-		pci_dbg(dev, "waiting %d ms for secondary bus\n", 1000 + delay);
-		msleep(1000 + delay);
+		if (1000 + delay > elapsed)
+			return 1000 + delay - elapsed;
+
+		pci_dbg(dev, "waiting %d ms for secondary bus\n", elapsed);
 		return 0;
 	}
 
@@ -4719,41 +4778,47 @@ int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
 	if (!pcie_downstream_port(dev))
 		return 0;
 
-	if (pcie_get_speed_cap(dev) <= PCIE_SPEED_5_0GT) {
-		u16 status;
+	if (delay > elapsed)
+		return delay - elapsed;
 
-		pci_dbg(dev, "waiting %d ms for downstream link\n", delay);
-		msleep(delay);
-
-		if (!pci_dev_wait(child, reset_type, PCI_RESET_WAIT - delay))
-			return 0;
-
+	down_read(&pci_bus_sem);
+	list_for_each_entry(child, &dev->subordinate->devices, bus_list) {
 		/*
-		 * If the port supports active link reporting we now check
-		 * whether the link is active and if not bail out early with
-		 * the assumption that the device is not present anymore.
+		 * Check if all devices under the same bus have completed
+		 * the reset process, including multifunction devices in
+		 * the same bus.
 		 */
-		if (!dev->link_active_reporting)
-			return -ENOTTY;
+		ret = pci_readiness_check(dev, child, start_t, reset_type);
 
-		pcie_capability_read_word(dev, PCI_EXP_LNKSTA, &status);
-		if (!(status & PCI_EXP_LNKSTA_DLLLA))
-			return -ENOTTY;
+		if (ret == 0 && child->subordinate) {
+			pci_restore_config_space(child);
+			ret = __pci_bridge_wait_for_secondary_bus(child, start_t, reset_type);
+		}
 
-		return pci_dev_wait(child, reset_type,
-				    PCIE_RESET_READY_POLL_MS - PCI_RESET_WAIT);
+		if(ret)
+			break;
+	}
+	up_read(&pci_bus_sem);
+
+	return ret;
+}
+
+int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
+{
+	int res, gap = 1;
+	unsigned long start_t = jiffies;
+
+	res = __pci_bridge_wait_for_secondary_bus(dev, start_t, reset_type);
+
+	while (res > 0) {
+		gap = gap < res ? gap : res;
+		msleep(gap);
+		gap <<= 1;
+
+		res = __pci_bridge_wait_for_secondary_bus(dev, start_t, reset_type);
 	}
 
-	pci_dbg(dev, "waiting %d ms for downstream link, after activation\n",
-		delay);
-	if (!pcie_wait_for_link_delay(dev, true, delay)) {
-		/* Did not train, no need to wait any further */
-		pci_info(dev, "Data Link Layer Link Active not set in %d msec\n", delay);
-		return -ENOTTY;
-	}
-
-	return pci_dev_wait(child, reset_type,
-			    PCIE_RESET_READY_POLL_MS - delay);
+	return res;
 }
 
 void pci_reset_secondary_bus(struct pci_dev *dev)
@@ -5394,10 +5459,8 @@ static void pci_bus_restore_locked(struct pci_bus *bus)
 
 	list_for_each_entry(dev, &bus->devices, bus_list) {
 		pci_dev_restore(dev);
-		if (dev->subordinate) {
-			pci_bridge_wait_for_secondary_bus(dev, "bus reset");
+		if (dev->subordinate)
 			pci_bus_restore_locked(dev->subordinate);
-		}
 	}
 }
 
@@ -5427,14 +5490,14 @@ static void pci_slot_restore_locked(struct pci_slot *slot)
 {
 	struct pci_dev *dev;
 
+	pci_bridge_wait_for_secondary_bus(slot->bus->self, "slot reset");
+
 	list_for_each_entry(dev, &slot->bus->devices, bus_list) {
 		if (!dev->slot || dev->slot != slot)
 			continue;
 		pci_dev_restore(dev);
-		if (dev->subordinate) {
-			pci_bridge_wait_for_secondary_bus(dev, "slot reset");
+		if (dev->subordinate)
 			pci_bus_restore_locked(dev->subordinate);
-		}
 	}
 }
 
