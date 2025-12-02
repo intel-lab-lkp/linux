@@ -1,0 +1,11 @@
+config DRM_YHGCH
+    tristate "DRM Support for YHGCH BMC"
+    depends on DRM && PCI && MMU
+    select DRM_CLIENT_SELECTION
+    select DRM_KMS_HELPER
+    select DRM_GEM_SHMEM_HELPER
+    help
+        Choose this option if you have a YHGCH ZX1000 chipset.
+        If M is selected the module will be called yhgch-drm.
+        IF Y is selected the module will be built into the kernel.
+        IF N is selected the module will be excluded from the kernel.
