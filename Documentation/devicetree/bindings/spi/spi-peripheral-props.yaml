@@ -89,6 +89,20 @@ properties:
     description:
       Delay, in microseconds, after a write transfer.
 
+  data-lanes:
+    description:
+      Array of data lane numbers that describes which SPI data lanes of the
+      controller are connected to the peripheral. The index in the array
+      corresponds to the lane on the peripheral and the value corresponds to
+      the lane on the controller. This only applies to peripherals connected to
+      specialized SPI controllers that have multiple SPI data lanes (a set of
+      independent SDI/SDO lines each with its own serializer) on a single
+      controller.
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 1
+    maxItems: 8
+    default: [0]
+
   stacked-memories:
     description: Several SPI memories can be wired in stacked mode.
       This basically means that either a device features several chip
