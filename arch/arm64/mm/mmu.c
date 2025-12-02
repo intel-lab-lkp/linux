@@ -29,6 +29,7 @@
 #include <linux/mm_inline.h>
 #include <linux/pagewalk.h>
 #include <linux/stop_machine.h>
+#include <linux/preempt.h>
 
 #include <asm/barrier.h>
 #include <asm/cputype.h>
@@ -2145,7 +2146,7 @@ void __cpu_replace_ttbr1(pgd_t *pgdp, bool cnp)
 		ttbr1 |= TTBR_CNP_BIT;
 
 	replace_phys = (void *)__pa_symbol(idmap_cpu_replace_ttbr1);
-
+	preempt_disable();
 	cpu_install_idmap();
 
 	/*
@@ -2157,6 +2158,7 @@ void __cpu_replace_ttbr1(pgd_t *pgdp, bool cnp)
 	local_daif_restore(daif);
 
 	cpu_uninstall_idmap();
+	preempt_enable();
 }
 
 #ifdef CONFIG_ARCH_HAS_PKEYS
