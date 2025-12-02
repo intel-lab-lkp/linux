@@ -9811,16 +9811,16 @@ static inline void update_blocked_load_tick(struct rq *rq)
 	WRITE_ONCE(rq->last_blocked_load_update_tick, jiffies);
 }
 
-static inline void update_blocked_load_status(struct rq *rq, bool has_blocked)
+static inline void update_blocked_load_status(struct rq *rq, bool has_blocked_load)
 {
-	if (!has_blocked)
+	if (!has_blocked_load)
 		rq->has_blocked_load = 0;
 }
 #else /* !CONFIG_NO_HZ_COMMON: */
 static inline bool cfs_rq_has_blocked(struct cfs_rq *cfs_rq) { return false; }
 static inline bool others_have_blocked(struct rq *rq) { return false; }
 static inline void update_blocked_load_tick(struct rq *rq) {}
-static inline void update_blocked_load_status(struct rq *rq, bool has_blocked) {}
+static inline void update_blocked_load_status(struct rq *rq, bool has_blocked_load) {}
 #endif /* !CONFIG_NO_HZ_COMMON */
 
 static bool __update_blocked_others(struct rq *rq, bool *done)
