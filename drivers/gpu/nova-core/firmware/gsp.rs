@@ -164,7 +164,24 @@ impl GspFirmware {
 
         let sigs_section = match chipset.arch() {
             Architecture::Ampere => ".fwsignature_ga10x",
+            Architecture::Hopper => ".fwsignature_gh10x",
             Architecture::Ada => ".fwsignature_ad10x",
+            Architecture::Blackwell => {
+                // Distinguish between GB10x and GB20x series
+                match chipset {
+                    // GB10x series: GB100, GB102
+                    Chipset::GB100 | Chipset::GB102 => ".fwsignature_gb10x",
+                    // GB20x series: GB202, GB203, GB205, GB206, GB207
+                    Chipset::GB202
+                    | Chipset::GB203
+                    | Chipset::GB205
+                    | Chipset::GB206
+                    | Chipset::GB207 => ".fwsignature_gb20x",
+                    // Non-Blackwell chipsets, which can't happen here, but Rust doesn't know that.
+                    _ => return Err(ENOTSUPP),
+                }
+            }
+
             _ => return Err(ENOTSUPP),
         };
         let signatures = elf::elf64_section(fw.data(), sigs_section)
