@@ -104,10 +104,6 @@ static void tmon_sig_handler(int sig)
 		printf("sigterm, exit and clean up\n");
 		fflush(stdout);
 		break;
-	case SIGKILL:
-		printf("sigkill, exit and clean up\n");
-		fflush(stdout);
-		break;
 	case SIGINT:
 		printf("ctrl-c, exit and clean up\n");
 		fflush(stdout);
