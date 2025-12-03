@@ -13,16 +13,14 @@ use crate::{
     gpu::Chipset, //
 };
 
-#[expect(unused)]
 pub(crate) struct FspFirmware {
     /// FMC firmware image data (only the .image section)
-    fmc_image: DmaObject,
+    pub(crate) fmc_image: DmaObject,
     /// Full FMC ELF data (for signature extraction)
-    fmc_full: DmaObject,
+    pub(crate) fmc_full: DmaObject,
 }
 
 impl FspFirmware {
-    #[expect(unused)]
     pub(crate) fn new(
         dev: &device::Device<device::Bound>,
         chipset: Chipset,
