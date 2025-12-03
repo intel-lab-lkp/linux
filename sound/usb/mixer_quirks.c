@@ -2449,7 +2449,7 @@ static int snd_rme_get_status1(struct snd_kcontrol *kcontrol,
 static int snd_rme_rate_get(struct snd_kcontrol *kcontrol,
 			    struct snd_ctl_elem_value *ucontrol)
 {
-	u32 status1;
+	u32 status1 = 0;
 	u32 rate = 0;
 	int idx;
 	int err;
@@ -2483,7 +2483,7 @@ static int snd_rme_rate_get(struct snd_kcontrol *kcontrol,
 static int snd_rme_sync_state_get(struct snd_kcontrol *kcontrol,
 				  struct snd_ctl_elem_value *ucontrol)
 {
-	u32 status1;
+	u32 status1 = 0;
 	int idx = SND_RME_CLOCK_NOLOCK;
 	int err;
 
@@ -2513,7 +2513,7 @@ static int snd_rme_sync_state_get(struct snd_kcontrol *kcontrol,
 static int snd_rme_spdif_if_get(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
-	u32 status1;
+	u32 status1 = 0;
 	int err;
 
 	err = snd_rme_get_status1(kcontrol, &status1);
@@ -2526,7 +2526,7 @@ static int snd_rme_spdif_if_get(struct snd_kcontrol *kcontrol,
 static int snd_rme_spdif_format_get(struct snd_kcontrol *kcontrol,
 				    struct snd_ctl_elem_value *ucontrol)
 {
-	u32 status1;
+	u32 status1 = 0;
 	int err;
 
 	err = snd_rme_get_status1(kcontrol, &status1);
@@ -2539,7 +2539,7 @@ static int snd_rme_spdif_format_get(struct snd_kcontrol *kcontrol,
 static int snd_rme_sync_source_get(struct snd_kcontrol *kcontrol,
 				   struct snd_ctl_elem_value *ucontrol)
 {
-	u32 status1;
+	u32 status1 = 0;
 	int err;
 
 	err = snd_rme_get_status1(kcontrol, &status1);
