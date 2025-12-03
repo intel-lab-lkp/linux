@@ -4,6 +4,8 @@
 //!
 //! C header: [`include/asm-generic/io.h`](srctree/include/asm-generic/io.h)
 
+use core::num::TryFromIntError;
+
 use crate::{
     bindings,
     prelude::*, //
@@ -23,9 +25,41 @@ pub type PhysAddr = bindings::phys_addr_t;
 
 /// Resource Size type.
 ///
-/// This is a type alias to either `u32` or `u64` depending on the config option
+/// This is a transparent wrapper around either `u32` or `u64` depending on the config option
 /// `CONFIG_PHYS_ADDR_T_64BIT`, and it can be a u64 even on 32-bit architectures.
-pub type ResourceSize = bindings::resource_size_t;
+#[repr(transparent)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct ResourceSize(bindings::phys_addr_t);
+
+impl From<ffi::c_uint> for ResourceSize {
+    #[inline]
+    fn from(value: ffi::c_uint) -> Self {
+        Self(value.into())
+    }
+}
+
+impl From<bindings::resource_size_t> for ResourceSize {
+    #[inline]
+    fn from(value: bindings::resource_size_t) -> Self {
+        Self(value.into())
+    }
+}
+
+impl TryFrom<ResourceSize> for usize {
+    type Error = TryFromIntError;
+
+    #[inline]
+    fn try_from(value: ResourceSize) -> Result<Self, Self::Error> {
+        usize::try_from(value.0)
+    }
+}
+
+impl From<ResourceSize> for bindings::resource_size_t {
+    #[inline]
+    fn from(value: ResourceSize) -> Self {
+        value.0
+    }
+}
 
 /// Raw representation of an MMIO region.
 ///
