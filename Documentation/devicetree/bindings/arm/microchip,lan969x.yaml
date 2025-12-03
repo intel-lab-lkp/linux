@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/arm/microchip,lan969x.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Microchip LAN969x Boards
+
+maintainers:
+  - Robert Marko <robert.marko@sartura.hr>
+
+description: |+
+   The Microchip LAN969x SoC is a ARMv8-based used in a family of
+   multi-port, multi-gigabit switches.
+
+properties:
+  $nodename:
+    const: '/'
+  compatible:
+    oneOf:
+      - description: The LAN969x EVB (EV23X71A) is a 24x 1G + 4x 10G
+          Ethernet development system board.
+        items:
+          - const: microchip,ev23x71a
+          - const: microchip,lan969x
+
+required:
+  - compatible
+
+additionalProperties: true
+
+...
