@@ -872,7 +872,6 @@ retry:
 		p.offset = segno + p.ofs_unit;
 		nsearched++;
 
-#ifdef CONFIG_F2FS_CHECK_FS
 		/*
 		 * skip selecting the invalid segno (that is failed due to block
 		 * validity check failure during GC) to avoid endless GC loop in
@@ -880,7 +879,6 @@ retry:
 		 */
 		if (test_bit(segno, sm->invalid_segmap))
 			goto next;
-#endif
 
 		secno = GET_SEC_FROM_SEG(sbi, segno);
 
@@ -1145,16 +1143,19 @@ static bool is_alive(struct f2fs_sb_info *sbi, struct f2fs_summary *sum,
 	unsigned int ofs_in_node, max_addrs, base;
 	block_t source_blkaddr;
 
+	unsigned int segno = GET_SEGNO(sbi, blkaddr);
 	nid = le32_to_cpu(sum->nid);
 	ofs_in_node = le16_to_cpu(sum->ofs_in_node);
 
 	node_folio = f2fs_get_node_folio(sbi, nid, NODE_TYPE_REGULAR);
-	if (IS_ERR(node_folio))
-		return false;
+	if (IS_ERR(node_folio)) {
+		f2fs_err(sbi, "get_node_folio err(%ld) for nid(%u)", PTR_ERR(node_folio), nid);
+		goto check_invalid;
+	}
 
 	if (f2fs_get_node_info(sbi, nid, dni, false)) {
 		f2fs_folio_put(node_folio, true);
-		return false;
+		goto check_invalid;
 	}
 
 	if (sum->version != dni->version) {
@@ -1165,7 +1166,7 @@ static bool is_alive(struct f2fs_sb_info *sbi, struct f2fs_summary *sum,
 
 	if (f2fs_check_nid_range(sbi, dni->ino)) {
 		f2fs_folio_put(node_folio, true);
-		return false;
+		goto check_invalid;
 	}
 
 	if (IS_INODE(node_folio)) {
@@ -1180,7 +1181,7 @@ static bool is_alive(struct f2fs_sb_info *sbi, struct f2fs_summary *sum,
 		f2fs_err(sbi, "Inconsistent blkaddr offset: base:%u, ofs_in_node:%u, max:%u, ino:%u, nid:%u",
 			base, ofs_in_node, max_addrs, dni->ino, dni->nid);
 		f2fs_folio_put(node_folio, true);
-		return false;
+		goto check_invalid;
 	}
 
 	*nofs = ofs_of_node(node_folio);
@@ -1188,21 +1189,18 @@ static bool is_alive(struct f2fs_sb_info *sbi, struct f2fs_summary *sum,
 	f2fs_folio_put(node_folio, true);
 
 	if (source_blkaddr != blkaddr) {
-#ifdef CONFIG_F2FS_CHECK_FS
-		unsigned int segno = GET_SEGNO(sbi, blkaddr);
 		unsigned long offset = GET_BLKOFF_FROM_SEG0(sbi, blkaddr);
-
 		if (unlikely(check_valid_map(sbi, segno, offset))) {
-			if (!test_and_set_bit(segno, SIT_I(sbi)->invalid_segmap)) {
-				f2fs_err(sbi, "mismatched blkaddr %u (source_blkaddr %u) in seg %u",
-					 blkaddr, source_blkaddr, segno);
-				set_sbi_flag(sbi, SBI_NEED_FSCK);
-			}
+			f2fs_err(sbi, "mismatched blkaddr %u (source_blkaddr %u) in seg %u",
+				blkaddr, source_blkaddr, segno);
+			set_sbi_flag(sbi, SBI_NEED_FSCK);
+			goto check_invalid;
 		}
-#endif
-		return false;
 	}
 	return true;
+check_invalid:
+	set_bit(segno, SIT_I(sbi)->invalid_segmap);
+	return false;
 }
 
 static int ra_data_block(struct inode *inode, pgoff_t index)
