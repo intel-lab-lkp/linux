@@ -98,6 +98,16 @@ impl SysmemFlush {
     }
 }
 
+/// Calculate non-WPR heap size based on chipset architecture.
+/// This matches the logic used in FSP for consistency.
+pub(crate) fn calc_non_wpr_heap_size(chipset: Chipset) -> u64 {
+    if chipset.needs_large_reserved_mem() {
+        0x220000 // ~2.1MB for Hopper/Blackwell+
+    } else {
+        SZ_1M as u64 // 1MB for older architectures
+    }
+}
+
 pub(crate) struct FbRange(Range<u64>);
 
 impl FbRange {
@@ -238,9 +248,8 @@ impl FbLayout {
         };
 
         let heap = {
-            const HEAP_SIZE: u64 = usize_as_u64(SZ_1M);
-
-            FbRange(wpr2.start - HEAP_SIZE..wpr2.start)
+            let heap_size = calc_non_wpr_heap_size(chipset);
+            FbRange(wpr2.start - heap_size..wpr2.start)
         };
 
         // Calculate reserved sizes. PMU reservation is a subset of the total reserved size.

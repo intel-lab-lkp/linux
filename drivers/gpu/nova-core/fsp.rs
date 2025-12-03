@@ -454,7 +454,7 @@ impl Fsp {
         // frts_offset is relative to FB end: FRTS_location = FB_END - frts_offset
         let frts_offset = if !resume {
             let mut frts_reserved_size = if chipset.needs_large_reserved_mem() {
-                0x220000 // heap_size_non_wpr for Hopper/Blackwell+
+                crate::fb::calc_non_wpr_heap_size(chipset)
             } else {
                 total_reserved_size
             };
