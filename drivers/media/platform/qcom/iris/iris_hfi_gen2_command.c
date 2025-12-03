@@ -1212,5 +1212,13 @@ void iris_hfi_gen2_command_ops_init(struct iris_core *core)
 
 struct iris_inst *iris_hfi_gen2_get_instance(void)
 {
-	return (struct iris_inst *)kzalloc(sizeof(struct iris_inst_hfi_gen2), GFP_KERNEL);
+	struct iris_inst_hfi_gen2 *out;
+
+	/*
+	 * The allocation is intentionally larger. The first member of
+	 * struct iris_hfi_gen2 is struct iris_inst.
+	 */
+	out = kzalloc(sizeof(*out), GFP_KERNEL);
+
+	return (struct iris_inst *)out;
 }
