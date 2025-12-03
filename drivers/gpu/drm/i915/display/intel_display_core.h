@@ -386,13 +386,17 @@ struct intel_display {
 
 	struct {
 		struct intel_dmc *dmc;
-		intel_wakeref_t wakeref;
+		struct ref_tracker *wakeref;
 	} dmc;
 
 	struct {
 		/* VLV/CHV/BXT/GLK DSI MMIO register base address */
 		u32 mmio_base;
 	} dsi;
+
+	struct {
+		const struct dram_info *info;
+	} dram;
 
 	struct {
 		/* list of fbdev register on this device */
