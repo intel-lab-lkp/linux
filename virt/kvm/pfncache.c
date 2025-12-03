@@ -96,10 +96,16 @@ bool kvm_gpc_check(struct gfn_to_pfn_cache *gpc, unsigned long len)
 	return true;
 }
 
-static void *gpc_map(kvm_pfn_t pfn)
+static void *gpc_map(struct gfn_to_pfn_cache *gpc, kvm_pfn_t pfn)
 {
-	if (pfn_valid(pfn))
-		return kmap(pfn_to_page(pfn));
+	if (pfn_valid(pfn)) {
+		struct page *page = pfn_to_page(pfn);
+
+		if (kvm_slot_no_direct_map(gpc->memslot))
+			return vmap(&page, 1, VM_MAP, PAGE_KERNEL);
+
+		return kmap(page);
+	}
 
 #ifdef CONFIG_HAS_IOMEM
 	return memremap(pfn_to_hpa(pfn), PAGE_SIZE, MEMREMAP_WB);
@@ -115,6 +121,11 @@ static void gpc_unmap(kvm_pfn_t pfn, void *khva)
 		return;
 
 	if (pfn_valid(pfn)) {
+		if (is_vmalloc_addr(khva)) {
+			vunmap(khva);
+			return;
+		}
+
 		kunmap(pfn_to_page(pfn));
 		return;
 	}
@@ -224,13 +235,16 @@ static kvm_pfn_t gpc_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 
 		/*
 		 * Obtain a new kernel mapping if KVM itself will access the
-		 * pfn.  Note, kmap() and memremap() can both sleep, so this
-		 * too must be done outside of gpc->lock!
+		 * pfn.  Note, kmap(), vmap() and memremap() can sleep, so this
+		 * too must be done outside of gpc->lock! Note that even though
+		 * the rwlock is dropped, it's still fine to read gpc->pfn and
+		 * other fields because gpc->fresh_lock mutex prevents those
+		 * from being changed.
 		 */
 		if (new_pfn == gpc->pfn)
 			new_khva = old_khva;
 		else
-			new_khva = gpc_map(new_pfn);
+			new_khva = gpc_map(gpc, new_pfn);
 
 		if (!new_khva) {
 			kvm_release_page_unused(page);
