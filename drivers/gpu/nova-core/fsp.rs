@@ -256,4 +256,108 @@ impl Fsp {
         })
         .map(|_| ())
     }
+
+    /// Extract FMC firmware signatures for Chain of Trust verification.
+    ///
+    /// Extracts real cryptographic signatures from FMC ELF32 firmware sections.
+    /// Returns signatures in a heap-allocated structure to prevent stack overflow.
+    pub(crate) fn extract_fmc_signatures_static(
+        dev: &device::Device<device::Bound>,
+        fmc_fw_data: &[u8],
+    ) -> Result<KBox<FmcSignatures>> {
+        dev_dbg!(dev, "FMC firmware size: {} bytes\n", fmc_fw_data.len());
+
+        // Extract hash section (SHA-384)
+        let hash_section = crate::firmware::elf_section(fmc_fw_data, "hash")
+            .ok_or(EINVAL)
+            .inspect_err(|_| dev_err!(dev, "FMC firmware missing 'hash' section\n"))?;
+
+        // Extract public key section (RSA public key)
+        let pkey_section = crate::firmware::elf_section(fmc_fw_data, "publickey")
+            .ok_or(EINVAL)
+            .inspect_err(|_| dev_err!(dev, "FMC firmware missing 'publickey' section\n"))?;
+
+        // Extract signature section (RSA signature)
+        let sig_section = crate::firmware::elf_section(fmc_fw_data, "signature")
+            .ok_or(EINVAL)
+            .inspect_err(|_| dev_err!(dev, "FMC firmware missing 'signature' section\n"))?;
+
+        dev_dbg!(
+            dev,
+            "FMC ELF sections: hash={} bytes, pkey={} bytes, sig={} bytes\n",
+            hash_section.len(),
+            pkey_section.len(),
+            sig_section.len()
+        );
+
+        // Validate section sizes - hash must be exactly 48 bytes
+        if hash_section.len() != FSP_HASH_SIZE {
+            dev_err!(
+                dev,
+                "FMC hash section size {} != expected {}\n",
+                hash_section.len(),
+                FSP_HASH_SIZE
+            );
+            return Err(EINVAL);
+        }
+
+        // Public key and signature can be smaller than the fixed array sizes
+        if pkey_section.len() > FSP_PKEY_SIZE * 4 {
+            dev_err!(
+                dev,
+                "FMC publickey section size {} > maximum {}\n",
+                pkey_section.len(),
+                FSP_PKEY_SIZE * 4
+            );
+            return Err(EINVAL);
+        }
+
+        if sig_section.len() > FSP_SIG_SIZE * 4 {
+            dev_err!(
+                dev,
+                "FMC signature section size {} > maximum {}\n",
+                sig_section.len(),
+                FSP_SIG_SIZE * 4
+            );
+            return Err(EINVAL);
+        }
+
+        // Allocate signature structure on heap to avoid stack overflow
+        let mut signatures = KBox::new(FmcSignatures::default(), GFP_KERNEL)?;
+
+        // Copy hash section directly as bytes (48 bytes exactly)
+        // SAFETY: hash384 is a [u32; 12] array (48 bytes), and we create a byte slice of
+        // exactly FSP_HASH_SIZE (48) bytes. The pointer is valid and properly aligned.
+        let hash_bytes = unsafe {
+            core::slice::from_raw_parts_mut(
+                signatures.hash384.as_mut_ptr().cast::<u8>(),
+                FSP_HASH_SIZE,
+            )
+        };
+        hash_bytes.copy_from_slice(hash_section);
+
+        // Copy public key section (up to 388 bytes, zero-padded)
+        // SAFETY: public_key is a [u32; 96] array (384 bytes), and we create a byte slice of
+        // FSP_PKEY_SIZE * 4 bytes. The pointer is valid and properly aligned.
+        let pkey_bytes = unsafe {
+            core::slice::from_raw_parts_mut(
+                signatures.public_key.as_mut_ptr().cast::<u8>(),
+                FSP_PKEY_SIZE * 4,
+            )
+        };
+        pkey_bytes[..pkey_section.len()].copy_from_slice(pkey_section);
+
+        // Copy signature section (up to 384 bytes, zero-padded)
+        // SAFETY: signature is a [u32; 96] array (384 bytes), and we create a byte slice of
+        // FSP_SIG_SIZE * 4 bytes. The pointer is valid and properly aligned.
+        let sig_bytes = unsafe {
+            core::slice::from_raw_parts_mut(
+                signatures.signature.as_mut_ptr().cast::<u8>(),
+                FSP_SIG_SIZE * 4,
+            )
+        };
+        sig_bytes[..sig_section.len()].copy_from_slice(sig_section);
+
+        Ok(signatures)
+    }
 }
