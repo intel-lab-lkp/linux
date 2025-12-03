@@ -6,7 +6,6 @@
 #include <linux/errno.h>
 #include <linux/verification.h>
 
-#include "ipe.h"
 #include "eval.h"
 #include "fs.h"
 #include "policy.h"

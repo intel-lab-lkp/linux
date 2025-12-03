@@ -8,7 +8,6 @@
 #include <linux/types.h>
 #include <crypto/sha2.h>
 
-#include "ipe.h"
 #include "eval.h"
 #include "hooks.h"
 #include "policy.h"

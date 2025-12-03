@@ -8,7 +8,6 @@
 #include <linux/dcache.h>
 #include <linux/security.h>
 
-#include "ipe.h"
 #include "policy.h"
 #include "eval.h"
 #include "fs.h"
