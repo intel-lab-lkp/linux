@@ -13,6 +13,10 @@ use kernel::{
     device,
     io::poll::read_poll_timeout,
     prelude::*,
+    ptr::{
+        Alignable,
+        Alignment, //
+    },
     time::Delta,
     transmute::{
         AsBytes,
@@ -21,6 +25,10 @@ use kernel::{
 };
 
 use crate::regs::FSP_BOOT_COMPLETE_SUCCESS;
+
+/// FSP Chain of Trust (COT) version for Blackwell.
+/// GB202 uses version 2 (not 1 like GH100)
+const FSP_COT_VERSION: u16 = 2;
 
 /// FSP message timeout in milliseconds.
 const FSP_MSG_TIMEOUT_MS: i64 = 2000;
@@ -362,6 +370,154 @@ impl Fsp {
         sig_bytes[..sig_section.len()].copy_from_slice(sig_section);
 
         Ok(signatures)
+    }
+
+    /// Creates FMC boot parameters structure for FSP.
+    ///
+    /// This structure tells FSP how to boot GSP-RM with the correct memory layout.
+    pub(crate) fn create_fmc_boot_params(
+        dev: &device::Device<device::Bound>,
+        wpr_meta_addr: u64,
+        wpr_meta_size: u32,
+        libos_addr: u64,
+    ) -> Result<kernel::dma::CoherentAllocation<GspFmcBootParams>> {
+        use kernel::dma::CoherentAllocation;
+
+        const GSP_DMA_TARGET_COHERENT_SYSTEM: u32 = 1;
+        const GSP_DMA_TARGET_NONCOHERENT_SYSTEM: u32 = 2;
+
+        let fmc_boot_params = CoherentAllocation::<GspFmcBootParams>::alloc_coherent(
+            dev,
+            1,
+            GFP_KERNEL | __GFP_ZERO,
+        )?;
+
+        // Configure ACR boot parameters (WPR metadata location) using dma_write! macro
+        kernel::dma_write!(
+            fmc_boot_params[0].boot_gsp_rm_params.target = GSP_DMA_TARGET_COHERENT_SYSTEM
+        )?;
+        kernel::dma_write!(
+            fmc_boot_params[0].boot_gsp_rm_params.gsp_rm_desc_offset = wpr_meta_addr
+        )?;
+        kernel::dma_write!(fmc_boot_params[0].boot_gsp_rm_params.gsp_rm_desc_size = wpr_meta_size)?;
+
+        // Blackwell FSP expects wpr_carveout_offset and wpr_carveout_size to be zero;
+        // it obtains WPR info from other sources.
+
+        kernel::dma_write!(fmc_boot_params[0].boot_gsp_rm_params.b_is_gsp_rm_boot = 1)?;
+
+        // Configure RM parameters (libos location) using dma_write! macro
+        kernel::dma_write!(
+            fmc_boot_params[0].gsp_rm_params.target = GSP_DMA_TARGET_NONCOHERENT_SYSTEM
+        )?;
+        kernel::dma_write!(fmc_boot_params[0].gsp_rm_params.boot_args_offset = libos_addr)?;
+
+        dev_dbg!(
+            dev,
+            "FMC Boot Params (addr={:#x}):\n  target={}\n  desc_size={:#x}\n  \
+             desc_offset={:#x}\n  rm_target={}\n  boot_args_offset={:#x} \
+             (libos_addr passed in: {:#x})\n",
+            fmc_boot_params.dma_handle(),
+            GSP_DMA_TARGET_COHERENT_SYSTEM,
+            wpr_meta_size,
+            wpr_meta_addr,
+            GSP_DMA_TARGET_NONCOHERENT_SYSTEM,
+            libos_addr,
+            libos_addr
+        );
+
+        Ok(fmc_boot_params)
+    }
+
+    /// Boot GSP FMC with pre-extracted signatures.
+    ///
+    /// This version takes pre-extracted signatures and FMC image data.
+    /// Used when signatures are extracted separately from the full ELF file.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn boot_gsp_fmc_with_signatures(
+        dev: &device::Device<device::Bound>,
+        bar: &crate::driver::Bar0,
+        chipset: crate::gpu::Chipset,
+        fmc_image_fw: &crate::dma::DmaObject, // Contains only the image section
+        fmc_boot_params: &kernel::dma::CoherentAllocation<GspFmcBootParams>,
+        total_reserved_size: u64,
+        resume: bool,
+        fsp_falcon: &crate::falcon::Falcon<crate::falcon::fsp::Fsp>,
+        signatures: &FmcSignatures,
+    ) -> Result<()> {
+        dev_dbg!(dev, "Starting FSP boot sequence for {}\n", chipset);
+
+        // Build FSP Chain of Trust message
+        let fmc_addr = fmc_image_fw.dma_handle(); // Now points to image data only
+        let fmc_boot_params_addr = fmc_boot_params.dma_handle();
+
+        // frts_offset is relative to FB end: FRTS_location = FB_END - frts_offset
+        let frts_offset = if !resume {
+            let mut frts_reserved_size = if chipset.needs_large_reserved_mem() {
+                0x220000 // heap_size_non_wpr for Hopper/Blackwell+
+            } else {
+                total_reserved_size
+            };
+
+            // Add PMU reserved size
+            frts_reserved_size += u64::from(crate::fb::PMU_RESERVED_SIZE);
+
+            frts_reserved_size
+                .align_up(Alignment::new::<0x200000>())
+                .unwrap_or(frts_reserved_size)
+        } else {
+            0
+        };
+        let frts_size = if !resume { 0x100000 } else { 0 }; // 1MB FRTS size
+
+        // Build the FSP message
+        let msg = KBox::new(
+            FspMessage {
+                mctp_header: (mctp::HEADER_SOM << 31)
+                    | (mctp::HEADER_EOM << 30)
+                    | (mctp::HEADER_SEID << 16)
+                    | (mctp::HEADER_SEQ << 28),
+
+                nvdm_header: (mctp::MSG_TYPE_VENDOR_PCI)
+                    | (mctp::VENDOR_ID_NV << 8)
+                    | (mctp::NVDM_TYPE_COT << 24),
+
+                cot: NvdmPayloadCot {
+                    version: FSP_COT_VERSION,
+                    size: core::mem::size_of::<NvdmPayloadCot>() as u16,
+                    gsp_fmc_sysmem_offset: fmc_addr,
+                    frts_sysmem_offset: 0,
+                    frts_sysmem_size: 0,
+                    frts_vidmem_offset: frts_offset,
+                    frts_vidmem_size: frts_size,
+                    hash384: signatures.hash384,
+                    public_key: signatures.public_key,
+                    signature: signatures.signature,
+                    gsp_boot_args_sysmem_offset: fmc_boot_params_addr,
+                },
+            },
+            GFP_KERNEL,
+        )?;
+
+        // Convert message to bytes for sending
+        let msg_bytes = msg.as_bytes();
+
+        dev_dbg!(
+            dev,
+            "FSP COT Message:\n  size={} bytes\n  fmc_addr={:#x}\n  boot_params={:#x}\n  \
+             frts_offset={:#x}\n  frts_size={:#x}\n",
+            msg_bytes.len(),
+            fmc_addr,
+            fmc_boot_params_addr,
+            frts_offset,
+            frts_size
+        );
+
+        // Send COT message to FSP and wait for response
+        Self::send_sync_fsp(dev, bar, fsp_falcon, mctp::NVDM_TYPE_COT, msg_bytes)?;
+
+        dev_dbg!(dev, "FSP Chain of Trust completed successfully\n");
+        Ok(())
     }
 
     /// Send message to FSP and wait for response.
