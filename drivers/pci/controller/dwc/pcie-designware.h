@@ -435,8 +435,8 @@ struct dw_pcie_rp {
 	struct pci_host_bridge  *bridge;
 	raw_spinlock_t		lock;
 	DECLARE_BITMAP(msi_irq_in_use, MAX_MSI_IRQS);
+	int			ob_atu_index;
 	bool			use_atu_msg;
-	int			msg_atu_index;
 	struct resource		*msg_res;
 	struct pci_eq_presets	presets;
 	struct pci_config_window *cfg;
