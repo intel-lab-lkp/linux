@@ -1114,7 +1114,7 @@ static int ath11k_ahb_probe(struct platform_device *pdev)
 	enum ath11k_hw_rev hw_rev;
 	int ret;
 
-	hw_rev = (uintptr_t)device_get_match_data(&pdev->dev);
+	hw_rev = (uintptr_t)of_device_get_match_data(&pdev->dev);
 
 	switch (hw_rev) {
 	case ATH11K_HW_IPQ8074:
