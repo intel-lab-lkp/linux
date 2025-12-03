@@ -496,11 +496,8 @@ static int eip93_scatter_combine(struct eip93_device *eip93,
 again:
 		scoped_guard(spinlock_irqsave, &eip93->ring->write_lock)
 			err = eip93_put_descriptor(eip93, cdesc);
-		if (err) {
-			usleep_range(EIP93_RING_BUSY_DELAY,
-				     EIP93_RING_BUSY_DELAY * 2);
+		if (err)
 			goto again;
-		}
 		/* Writing new descriptor count starts DMA action */
 		writel(1, eip93->base + EIP93_REG_PE_CD_COUNT);
 	} while (n);

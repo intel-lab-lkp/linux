@@ -270,11 +270,8 @@ static int eip93_send_hash_req(struct crypto_async_request *async, u8 *data,
 again:
 	scoped_guard(spinlock_irqsave, &eip93->ring->write_lock)
 		ret = eip93_put_descriptor(eip93, &cdesc);
-	if (ret) {
-		usleep_range(EIP93_RING_BUSY_DELAY,
-			     EIP93_RING_BUSY_DELAY * 2);
+	if (ret)
 		goto again;
-	}
 
 	/* Writing new descriptor count starts DMA action */
 	writel(1, eip93->base + EIP93_REG_PE_CD_COUNT);

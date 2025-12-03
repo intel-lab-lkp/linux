@@ -14,8 +14,6 @@
 #include <linux/bitfield.h>
 #include <linux/interrupt.h>
 
-#define EIP93_RING_BUSY_DELAY		500
-
 #define EIP93_RING_NUM			512
 #define EIP93_RING_BUSY			32
 #define EIP93_CRA_PRIORITY		1500
