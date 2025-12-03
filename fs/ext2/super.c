@@ -874,6 +874,19 @@ static void ext2_set_options(struct fs_context *fc, struct ext2_sb_info *sbi)
 					   le16_to_cpu(es->s_def_resgid));
 }
 
+static void ext2_free_sbi(struct super_block *sb,
+			  struct ext2_sb_info *sbi,
+			  struct buffer_head *bh)
+{
+	if (bh)
+		brelse(bh);
+
+	fs_put_dax(sbi->s_daxdev, NULL);
+	sb->s_fs_info = NULL;
+	kfree(sbi->s_blockgroup_lock);
+	kfree(sbi);
+}
+
 static int ext2_fill_super(struct super_block *sb, struct fs_context *fc)
 {
 	struct ext2_fs_context *ctx = fc->fs_private;
@@ -1251,12 +1264,8 @@ failed_mount_group_desc:
 	kvfree(sbi->s_group_desc);
 	kfree(sbi->s_debts);
 failed_mount:
-	brelse(bh);
 failed_sbi:
-	fs_put_dax(sbi->s_daxdev, NULL);
-	sb->s_fs_info = NULL;
-	kfree(sbi->s_blockgroup_lock);
-	kfree(sbi);
+	ext2_free_sbi(sb, sbi, bh);
 	return ret;
 }
 
