@@ -51,6 +51,7 @@ INCLUDES = \
 -I$(srctree)/tools/include/uapi
 
 # Append required CFLAGS
+override CFLAGS += -std=gnu17
 override CFLAGS += -g -Werror -Wall
 override CFLAGS += -fPIC
 override CFLAGS += $(INCLUDES)
