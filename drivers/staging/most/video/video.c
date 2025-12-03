@@ -60,6 +60,8 @@ static inline struct comp_fh *to_comp_fh(struct file *filp)
 static LIST_HEAD(video_devices);
 static DEFINE_SPINLOCK(list_lock);
 
+static bool comp_exiting;
+
 static inline bool data_ready(struct most_video_dev *mdev)
 {
 	return !list_empty(&mdev->pending_mbos);
@@ -498,11 +500,17 @@ static int comp_probe_channel(struct most_interface *iface, int channel_idx,
 		goto err_unreg;
 
 	spin_lock_irq(&list_lock);
+	if (comp_exiting) {
+		spin_unlock_irq(&list_lock);
+		ret = -EBUSY;
+		goto err_unreg;
+	}
 	list_add(&mdev->list, &video_devices);
 	spin_unlock_irq(&list_lock);
 	return 0;
 
 err_unreg:
+	comp_unregister_videodev(mdev);
 	v4l2_device_disconnect(&mdev->v4l2_dev);
 	v4l2_device_put(&mdev->v4l2_dev);
 	return ret;
@@ -555,6 +563,8 @@ static void __exit comp_exit(void)
 {
 	struct most_video_dev *mdev, *tmp;
 
+	comp_exiting = true;
+
 	/*
 	 * As the mostcore currently doesn't call disconnect_channel()
 	 * for linked channels while we call most_deregister_component()
@@ -575,7 +585,6 @@ static void __exit comp_exit(void)
 
 	most_deregister_configfs_subsys(&comp);
 	most_deregister_component(&comp);
-	BUG_ON(!list_empty(&video_devices));
 }
 
 module_init(comp_init);
