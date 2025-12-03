@@ -14,6 +14,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/string.h>
+#include <linux/unroll.h>
 #include <linux/types.h>
 
 static const u8 blake2b_sigma[12][16] = {
@@ -83,18 +84,18 @@ blake2b_compress_generic(struct blake2b_ctx *ctx,
 	G(r, 6, v[2], v[ 7], v[ 8], v[13]); \
 	G(r, 7, v[3], v[ 4], v[ 9], v[14]); \
 } while (0)
-		ROUND(0);
-		ROUND(1);
-		ROUND(2);
-		ROUND(3);
-		ROUND(4);
-		ROUND(5);
-		ROUND(6);
-		ROUND(7);
-		ROUND(8);
-		ROUND(9);
-		ROUND(10);
-		ROUND(11);
+
+#ifdef CONFIG_64BIT
+		/*
+		 * Unroll the rounds loop to enable constant-folding of the
+		 * blake2b_sigma values.  Seems worthwhile on 64-bit kernels.
+		 * Not worthwhile on 32-bit kernels because the code size is
+		 * already so large there due to BLAKE2b using 64-bit words.
+		 */
+		unrolled_full
+#endif
+		for (int r = 0; r < 12; r++)
+			ROUND(r);
 
 #undef G
 #undef ROUND
