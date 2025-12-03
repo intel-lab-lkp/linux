@@ -102,7 +102,7 @@ define_chipset!({
 });
 
 impl Chipset {
-    pub(crate) fn arch(&self) -> Architecture {
+    pub(crate) const fn arch(&self) -> Architecture {
         match self {
             Self::TU102 | Self::TU104 | Self::TU106 | Self::TU117 | Self::TU116 => {
                 Architecture::Turing
@@ -155,6 +155,19 @@ pub(crate) enum Architecture {
     Blackwell = 0x1b,
 }
 
+impl Architecture {
+    /// Returns the number of DMA address bits supported by this architecture.
+    ///
+    /// Hopper and Blackwell support 52-bit DMA addresses, while earlier architectures
+    /// (Turing, Ampere, Ada) support 47-bit DMA addresses.
+    pub(crate) const fn dma_addr_bits(&self) -> u32 {
+        match self {
+            Self::Turing | Self::Ampere | Self::Ada => 47,
+            Self::Hopper | Self::Blackwell => 52,
+        }
+    }
+}
+
 impl TryFrom<u8> for Architecture {
     type Error = Error;
 
@@ -201,6 +214,20 @@ impl fmt::Display for Revision {
 pub(crate) struct Spec {
     chipset: Chipset,
     revision: Revision,
+}
+
+/// Reads the GPU architecture from BAR0 registers.
+///
+/// This is a lightweight check used early in probe to determine the correct DMA address width
+/// before the full [`Spec`] is constructed.
+pub(crate) fn read_architecture(bar: &Bar0) -> Result<Architecture> {
+    let boot0 = regs::NV_PMC_BOOT_0::read(bar);
+
+    if boot0.is_older_than_fermi() {
+        return Err(ENODEV);
+    }
+
+    regs::NV_PMC_BOOT_42::read(bar).architecture()
 }
 
 impl Spec {
