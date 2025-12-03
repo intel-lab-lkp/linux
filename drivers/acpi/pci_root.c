@@ -760,6 +760,20 @@ static int acpi_pci_root_add(struct acpi_device *device,
 	pci_lock_rescan_remove();
 	pci_bus_add_devices(root->bus);
 	pci_unlock_rescan_remove();
+#ifdef CONFIG_RISCV
+    /*
+     * Clear dependencies to allow dependent devices to be enumerated.
+     * This is particularly important for RISC-V platforms where multiple
+     * PCIe host bridges may have initialization order dependencies defined
+     * via ACPI _DEP method in DSDT. If a host bridge B depends on host
+     * bridge A (via _DEP), this call allows bridge B to proceed with
+     * enumeration after bridge A is fully initialized.
+     */
+#ifdef CONFIG_ACPI
+	if (!acpi_disabled)
+		acpi_dev_clear_dependencies(device);
+#endif
+#endif
 	return 1;
 
 remove_dmar:
