@@ -1804,6 +1804,7 @@ err_free_msg:
  */
 int nfsd_nl_version_set_doit(struct sk_buff *skb, struct genl_info *info)
 {
+	struct net *net = genl_info_net(info);
 	const struct nlattr *attr;
 	struct nfsd_net *nn;
 	int i, rem;
@@ -1811,10 +1812,22 @@ int nfsd_nl_version_set_doit(struct sk_buff *skb, struct genl_info *info)
 	if (GENL_REQ_ATTR_CHECK(info, NFSD_A_SERVER_PROTO_VERSION))
 		return -EINVAL;
 
+	pr_info("nfsd: %s[%d] attempting to acquire nfsd_mutex\n",
+		current->comm, current->pid);
+
 	mutex_lock(&nfsd_mutex);
 
-	nn = net_generic(genl_info_net(info), nfsd_net_id);
+	pr_info("nfsd: %s[%d] acquired nfsd_mutex\n",
+		current->comm, current->pid);
+
+	nn = net_generic(net, nfsd_net_id);
+
+	pr_info("nfsd: version_set: nn=%p, nfsd_serv=%p, net=%p\n",
+		nn, nn->nfsd_serv, net);
+
 	if (nn->nfsd_serv) {
+		pr_info("nfsd: version_set: service is running (nrthreads=%d), returning -EBUSY\n",
+			nn->nfsd_serv->sv_nrthreads);
 		mutex_unlock(&nfsd_mutex);
 		return -EBUSY;
 	}
