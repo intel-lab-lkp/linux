@@ -242,7 +242,7 @@ adfs_f_setpos(struct adfs_dir *dir, unsigned int fpos)
 static int
 adfs_f_getnext(struct adfs_dir *dir, struct object_info *obj)
 {
-	unsigned int ret;
+	int ret;
 
 	ret = __adfs_dir_get(dir, dir->pos, obj);
 	if (ret == 0)
