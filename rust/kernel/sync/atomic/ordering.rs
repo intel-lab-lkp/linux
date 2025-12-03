@@ -20,7 +20,7 @@
 //!   described in "DEPENDENCY RELATIONS" in [`LKMM`]'s [`explanation`].
 //!
 //! [`LKMM`]: srctree/tools/memory-model/
-//! [`explanation`]: srctree/tools/memory-model/Documentation/explanation.txt
+//! [`explanation`]: tools/memory-model/Documentation/explanation.txt
 
 /// The annotation type for relaxed memory ordering, for the description of relaxed memory
 /// ordering, see [module-level documentation].
