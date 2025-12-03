@@ -234,7 +234,8 @@ retry:
 			pr_err("\n");
 		}
 
-		panic("VFS: Unable to mount root fs on %s", b);
+		printk("VFS: Unable to mount root fs on %s", b);
+		goto out;
 	}
 	if (!(flags & SB_RDONLY)) {
 		flags |= SB_RDONLY;
@@ -247,7 +248,7 @@ retry:
 	for (i = 0, p = fs_names; i < num_fs; i++, p += strlen(p)+1)
 		printk(" %s", p);
 	printk("\n");
-	panic("VFS: Unable to mount root fs on \"%s\" or %s", pretty_name, b);
+	printk("VFS: Unable to mount root fs on \"%s\" or %s", pretty_name, b);
 out:
 	put_page(page);
 }
