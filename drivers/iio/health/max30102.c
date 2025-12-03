@@ -476,7 +476,7 @@ static int max30102_read_raw(struct iio_dev *indio_dev,
 		 * shutdown; leave shutdown briefly when buffer not running
 		 */
 any_mode_retry:
-		if (!iio_device_claim_buffer_mode(indio_dev)) {
+		if (!iio_device_claim_buffer(indio_dev)) {
 			/*
 			 * This one is a *bit* hacky. If we cannot claim buffer
 			 * mode, then try direct mode so that we make sure
@@ -490,7 +490,7 @@ any_mode_retry:
 			iio_device_release_direct(indio_dev);
 		} else {
 			ret = max30102_get_temp(data, val, false);
-			iio_device_release_buffer_mode(indio_dev);
+			iio_device_release_buffer(indio_dev);
 		}
 		if (ret)
 			return ret;

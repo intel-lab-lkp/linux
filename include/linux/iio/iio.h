@@ -687,8 +687,8 @@ static inline void iio_device_release_direct(struct iio_dev *indio_dev)
 	__release(indio_dev);
 }
 
-bool iio_device_claim_buffer_mode(struct iio_dev *indio_dev);
-void iio_device_release_buffer_mode(struct iio_dev *indio_dev);
+bool iio_device_claim_buffer(struct iio_dev *indio_dev);
+void iio_device_release_buffer(struct iio_dev *indio_dev);
 
 extern const struct bus_type iio_bus_type;
 

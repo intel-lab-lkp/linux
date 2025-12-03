@@ -304,7 +304,7 @@ static int opt4060_set_driver_state(struct iio_dev *indio_dev,
 	struct opt4060_chip *chip = iio_priv(indio_dev);
 	int ret = 0;
 any_mode_retry:
-	if (!iio_device_claim_buffer_mode(indio_dev)) {
+	if (!iio_device_claim_buffer(indio_dev)) {
 		/*
 		 * This one is a *bit* hacky. If we cannot claim buffer mode,
 		 * then try direct mode so that we make sure things cannot
@@ -334,7 +334,7 @@ any_mode_retry:
 		else
 			ret = opt4060_set_state_common(chip, continuous_sampling,
 						       continuous_irq);
-		iio_device_release_buffer_mode(indio_dev);
+		iio_device_release_buffer(indio_dev);
 	}
 	return ret;
 }

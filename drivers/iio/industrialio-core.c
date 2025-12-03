@@ -2216,17 +2216,17 @@ void __iio_device_release_direct(struct iio_dev *indio_dev)
 EXPORT_SYMBOL_GPL(__iio_device_release_direct);
 
 /**
- * iio_device_claim_buffer_mode - Keep device in buffer mode
+ * iio_device_claim_buffer - Keep device in buffer mode
  * @indio_dev:	the iio_dev associated with the device
  *
  * If the device is in buffer mode it is guaranteed to stay
  * that way until iio_device_release_buffer_mode() is called.
  *
- * Use with iio_device_release_buffer_mode().
+ * Use with iio_device_release_buffer().
  *
  * Returns: true on success, false on failure.
  */
-bool iio_device_claim_buffer_mode(struct iio_dev *indio_dev)
+bool iio_device_claim_buffer(struct iio_dev *indio_dev)
 {
 	struct iio_dev_opaque *iio_dev_opaque = to_iio_dev_opaque(indio_dev);
 
@@ -2238,22 +2238,22 @@ bool iio_device_claim_buffer_mode(struct iio_dev *indio_dev)
 	mutex_unlock(&iio_dev_opaque->mlock);
 	return false;
 }
-EXPORT_SYMBOL_GPL(iio_device_claim_buffer_mode);
+EXPORT_SYMBOL_GPL(iio_device_claim_buffer);
 
 /**
- * iio_device_release_buffer_mode - releases claim on buffer mode
+ * iio_device_release_buffer - releases claim on buffer mode
  * @indio_dev:	the iio_dev associated with the device
  *
  * Release the claim. Device is no longer guaranteed to stay
  * in buffer mode.
  *
- * Use with iio_device_claim_buffer_mode().
+ * Use with iio_device_claim_buffer().
  */
-void iio_device_release_buffer_mode(struct iio_dev *indio_dev)
+void iio_device_release_buffer(struct iio_dev *indio_dev)
 {
 	mutex_unlock(&to_iio_dev_opaque(indio_dev)->mlock);
 }
-EXPORT_SYMBOL_GPL(iio_device_release_buffer_mode);
+EXPORT_SYMBOL_GPL(iio_device_release_buffer);
 
 /**
  * iio_device_get_current_mode() - helper function providing read-only access to

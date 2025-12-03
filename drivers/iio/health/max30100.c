@@ -417,7 +417,7 @@ static int max30100_read_raw(struct iio_dev *indio_dev,
 		 * Temperature reading can only be acquired while engine
 		 * is running
 		 */
-		if (!iio_device_claim_buffer_mode(indio_dev)) {
+		if (!iio_device_claim_buffer(indio_dev)) {
 			/*
 			 * Replacing -EBUSY or other error code
 			 * returned by iio_device_claim_buffer_mode()
@@ -430,7 +430,7 @@ static int max30100_read_raw(struct iio_dev *indio_dev,
 			if (!ret)
 				ret = IIO_VAL_INT;
 
-			iio_device_release_buffer_mode(indio_dev);
+			iio_device_release_buffer(indio_dev);
 		}
 		break;
 	case IIO_CHAN_INFO_SCALE:
