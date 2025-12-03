@@ -1785,15 +1785,15 @@ iwl_mld_send_proto_offload(struct iwl_mld *mld,
 			   struct ieee80211_vif *vif,
 			   u8 ap_sta_id)
 {
-	struct iwl_proto_offload_cmd_v4 *cmd __free(kfree);
 	struct iwl_host_cmd hcmd = {
 		.id = PROT_OFFLOAD_CONFIG_CMD,
 		.dataflags[0] = IWL_HCMD_DFL_NOCOPY,
-		.len[0] = sizeof(*cmd),
+		.len[0] = sizeof(struct iwl_proto_offload_cmd_v4),
 	};
 	u32 enabled = 0;
 
-	cmd = kzalloc(hcmd.len[0], GFP_KERNEL);
+	struct iwl_proto_offload_cmd_v4 *cmd __free(kfree) =
+		kzalloc(hcmd.len[0], GFP_KERNEL);
 
 #if IS_ENABLED(CONFIG_IPV6)
 	struct iwl_mld_vif *mld_vif = iwl_mld_vif_from_mac80211(vif);
