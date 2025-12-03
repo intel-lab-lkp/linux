@@ -1095,11 +1095,23 @@ void fw_core_handle_request(struct fw_card *card, struct fw_packet *p)
 }
 EXPORT_SYMBOL(fw_core_handle_request);
 
+static size_t get_request_data_length(const struct fw_packet *request)
+{
+	int request_tcode = async_header_get_tcode(request->header);
+
+	if (request_tcode == TCODE_READ_QUADLET_REQUEST)
+		return 4;
+	else if (request_tcode == TCODE_READ_BLOCK_REQUEST)
+		return async_header_get_data_length(request->header);
+	return 0;
+}
+
 void fw_core_handle_response(struct fw_card *card, struct fw_packet *p)
 {
 	struct fw_transaction *t = NULL, *iter;
 	u32 *data;
 	size_t data_length;
+	size_t request_length;
 	int tcode, tlabel, source, rcode;
 
 	tcode = async_header_get_tcode(p->header);
@@ -1107,9 +1119,6 @@ void fw_core_handle_response(struct fw_card *card, struct fw_packet *p)
 	source = async_header_get_source(p->header);
 	rcode = async_header_get_rcode(p->header);
 
-	// FIXME: sanity check packet, is length correct, does tcodes
-	// and addresses match to the transaction request queried later.
-	//
 	// For the tracepoints event, let us decode the header here against the concern.
 
 	switch (tcode) {
@@ -1158,6 +1167,13 @@ void fw_core_handle_response(struct fw_card *card, struct fw_packet *p)
 		fw_notice(card, "unsolicited response (source %x, tlabel %x)\n",
 			  source, tlabel);
 		return;
+	}
+
+	request_length = get_request_data_length(&t->packet);
+	if (request_length > 0 && data_length > request_length) {
+		fw_notice(card, "response length (%zu) exceeds request length (%zu) from node %x, truncating\n",
+			  data_length, request_length, source);
+		data_length = request_length;
 	}
 
 	/*
