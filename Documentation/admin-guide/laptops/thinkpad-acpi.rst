@@ -54,6 +54,7 @@ detailed description):
 	- Setting keyboard language
 	- WWAN Antenna type
 	- Auxmac
+	- Hardware damage detection capability
 
 A compatibility table by model and feature is maintained on the web
 site, http://ibm-acpi.sf.net/. I appreciate any success or failure
@@ -1575,6 +1576,31 @@ percentage level, above which charging will stop.
 
 The exact semantics of the attributes may be found in
 Documentation/ABI/testing/sysfs-class-power.
+
+Hardware damage detection capability
+-----------------
+
+sysfs attributes: hwdd_status
+
+Thinkpads are adding the ability to detect and report hardware damage.
+Add new sysfs interface to identify the impacted component.
+Initial support is available for the USB-C replaceable connector.
+
+The available commands are::
+
+        cat /sys/devices/platform/thinkpad_acpi/hwdd_status
+
+This value displays device type and location of device with damage status.
+For example:
+if no damage is detected:
+  No damage detected
+if damage detected:
+  Damage detected:
+  Device: TYPE-C
+  Location: Base, Right side, Center port
+
+The property is read-only. If feature is not supported then sysfs
+class is not created.
 
 Multiple Commands, Module Parameters
 ------------------------------------

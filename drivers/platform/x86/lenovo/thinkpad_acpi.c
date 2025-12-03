@@ -11080,6 +11080,180 @@ static const struct attribute_group auxmac_attr_group = {
 	.attrs = auxmac_attributes,
 };
 
+/*************************************************************************
+ * HWDD subdriver, for the Lenovo Hardware Damage Detection feature.
+ */
+
+#define HWDD_GET_DMG_USBC 0x80000001
+#define HWDD_GET_CAP 0
+#define HWDD_NOT_SUPPORTED BIT(31)
+#define HWDD_SUPPORT_USBC BIT(0)
+#define HWDD_GET_CAP       0
+
+#define DAMAGE_STATUS_BIT  BIT(0)
+#define PORT_STATUS_OFFSET  4
+#define LID_STATUS_OFFSET  8
+#define BASE_STATUS_OFFSET 12
+#define PORT_DETAIL_OFFSET 16
+
+#define PORT_POS_OFFSET    2
+#define PORT_LOC_MASK      0x3
+
+#define PANEL_TOP   0
+#define PANEL_BASE  1
+#define PANEL_LEFT  2
+#define PANEL_RIGHT 3
+
+#define POS_LEFT    0
+#define POS_CENTER  1
+#define POS_RIGHT   2
+
+#define NUM_PORTS 4
+static bool hwdd_support_available;
+static bool ucdd_supported;
+static int hwdd_command(int command, int *output)
+{
+	acpi_handle hwdd_handle;
+
+	if (ACPI_FAILURE(acpi_get_handle(hkey_handle, "HWDD", &hwdd_handle)))
+		return -ENODEV;
+
+	if (!acpi_evalf(hwdd_handle, output, NULL, "dd", command))
+		return -EIO;
+
+	return 0;
+}
+
+static bool display_damage(char *buf, int *count, char *type, unsigned int dmg_status)
+{
+	unsigned char lid_status, base_status, port_status;
+	unsigned char loc_status, pos_status, panel_status;
+	bool damage_detected = false;
+	unsigned int i;
+
+	port_status = (dmg_status >> PORT_STATUS_OFFSET) & 0xF;
+	lid_status = (dmg_status >> LID_STATUS_OFFSET) & 0xF;
+	base_status = (dmg_status >> BASE_STATUS_OFFSET) & 0xF;
+	for (i = 0; i < NUM_PORTS; i++) {
+		if (dmg_status & BIT(i)) {
+			if (port_status & BIT(i)) {
+				*count += sysfs_emit_at(buf, *count, "%s damage detected:\n", type);
+				loc_status = (dmg_status >> (PORT_DETAIL_OFFSET + (4 * i))) & 0xF;
+				pos_status = (loc_status  >> PORT_POS_OFFSET) & PORT_LOC_MASK;
+				panel_status = loc_status & PORT_LOC_MASK;
+
+				*count += sysfs_emit_at(buf, *count, "Location: ");
+				if (lid_status & BIT(i))
+					*count += sysfs_emit_at(buf, *count, "Lid, ");
+				if (base_status & BIT(i))
+					*count += sysfs_emit_at(buf, *count, "Base, ");
+
+				switch (pos_status) {
+				case PANEL_TOP:
+					*count += sysfs_emit_at(buf, *count, "Top, ");
+					break;
+				case PANEL_BASE:
+					*count += sysfs_emit_at(buf, *count, "Bottom, ");
+					break;
+				case PANEL_LEFT:
+					*count += sysfs_emit_at(buf, *count, "Left, ");
+					break;
+				case PANEL_RIGHT:
+					*count += sysfs_emit_at(buf, *count, "Right, ");
+					break;
+				};
+
+				switch (panel_status) {
+				case POS_LEFT:
+					*count += sysfs_emit_at(buf, *count, "Left port\n");
+					break;
+				case POS_CENTER:
+					*count += sysfs_emit_at(buf, *count, "Center port\n");
+					break;
+				case POS_RIGHT:
+					*count += sysfs_emit_at(buf, *count, "Right port\n");
+					break;
+				default:
+					*count += sysfs_emit_at(buf, *count, "Undefined\n");
+					break;
+				};
+				damage_detected = true;
+			}
+		}
+	}
+	return damage_detected;
+}
+
+/* sysfs typc damage detection capability */
+static ssize_t hwdd_status_show(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
+{
+	bool damage_detected = false;
+	unsigned int damage_status;
+	int err, count = 0;
+
+	if (ucdd_supported) {
+		/* Get USB TYPE-C damage status */
+		err = hwdd_command(HWDD_GET_DMG_USBC, &damage_status);
+		if (err)
+			return err;
+
+		if (display_damage(buf, &count, "Type-C", damage_status))
+			damage_detected = true;
+	}
+
+	if (!damage_detected)
+		count  = count + sysfs_emit_at(buf, count, "No damage detected\n");
+
+	return count;
+}
+static DEVICE_ATTR_RO(hwdd_status);
+
+static struct attribute *hwdd_attributes[] = {
+	&dev_attr_hwdd_status.attr,
+	NULL
+};
+
+static umode_t hwdd_attr_is_visible(struct kobject *kobj,
+				struct attribute *attr, int n)
+{
+	return hwdd_support_available ? attr->mode : 0;
+}
+
+static const struct attribute_group hwdd_attr_group = {
+	.is_visible = hwdd_attr_is_visible,
+	.attrs = hwdd_attributes,
+};
+
+static int tpacpi_hwdd_init(struct ibm_init_struct *iibm)
+{
+	int err, output;
+
+	/* Below command checks the HWDD damage capability */
+	err = hwdd_command(HWDD_GET_CAP, &output);
+	if (err)
+		return err;
+
+	if (!(output & HWDD_NOT_SUPPORTED))
+		return -ENODEV;
+
+	hwdd_support_available = true;
+
+	/*
+	 * BIT(0) is assigned to check capability of damage detection is
+	 * supported for USB Type-C port or not.
+	 */
+	if (output & HWDD_SUPPORT_USBC)
+		ucdd_supported = true;
+
+	return err;
+}
+
+static struct ibm_struct hwdd_driver_data = {
+	.name = "hwdd",
+};
+
 /* --------------------------------------------------------------------- */
 
 static struct attribute *tpacpi_driver_attributes[] = {
@@ -11139,6 +11313,7 @@ static const struct attribute_group *tpacpi_groups[] = {
 	&kbdlang_attr_group,
 	&dprc_attr_group,
 	&auxmac_attr_group,
+	&hwdd_attr_group,
 	NULL,
 };
 
@@ -11751,6 +11926,10 @@ static struct ibm_init_struct ibms_init[] __initdata = {
 	{
 		.init = auxmac_init,
 		.data = &auxmac_data,
+	},
+	{
+		.init = tpacpi_hwdd_init,
+		.data = &hwdd_driver_data,
 	},
 };
 
