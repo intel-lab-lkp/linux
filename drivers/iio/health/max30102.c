@@ -24,6 +24,7 @@
 #include <linux/iio/iio.h>
 #include <linux/iio/buffer.h>
 #include <linux/iio/kfifo_buf.h>
+#include <linux/cleanup.h>
 
 #define MAX30102_DRV_NAME	"max30102"
 #define MAX30102_PART_NUMBER	0x15
@@ -468,6 +469,7 @@ static int max30102_read_raw(struct iio_dev *indio_dev,
 {
 	struct max30102_data *data = iio_priv(indio_dev);
 	int ret = -EINVAL;
+	bool direct_en;
 
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
@@ -475,25 +477,13 @@ static int max30102_read_raw(struct iio_dev *indio_dev,
 		 * Temperature reading can only be acquired when not in
 		 * shutdown; leave shutdown briefly when buffer not running
 		 */
-any_mode_retry:
-		if (!iio_device_claim_buffer(indio_dev)) {
-			/*
-			 * This one is a *bit* hacky. If we cannot claim buffer
-			 * mode, then try direct mode so that we make sure
-			 * things cannot concurrently change. And we just keep
-			 * trying until we get one of the modes...
-			 */
-			if (!iio_device_claim_direct(indio_dev))
-				goto any_mode_retry;
+		scoped_guard(iio_device_claim, indio_dev) {
+			direct_en = !iio_buffer_enabled(indio_dev);
 
-			ret = max30102_get_temp(data, val, true);
-			iio_device_release_direct(indio_dev);
-		} else {
-			ret = max30102_get_temp(data, val, false);
-			iio_device_release_buffer(indio_dev);
+			ret = max30102_get_temp(data, val, direct_en);
+			if (ret)
+				return ret;
 		}
-		if (ret)
-			return ret;
 
 		ret = IIO_VAL_INT;
 		break;
