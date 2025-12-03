@@ -123,6 +123,11 @@ impl Chipset {
             | Self::GB207 => Architecture::Blackwell,
         }
     }
+
+    #[expect(dead_code)]
+    pub(crate) fn needs_large_reserved_mem(&self) -> bool {
+        matches!(self.arch(), Architecture::Hopper | Architecture::Blackwell)
+    }
 }
 
 // TODO
