@@ -985,6 +985,10 @@ mshv_partition_ioctl_create_vp(struct mshv_partition *partition,
 	if (hv_scheduler_type == HV_SCHEDULER_TYPE_ROOT)
 		memcpy(vp->vp_stats_pages, stats_pages, sizeof(stats_pages));
 
+	ret = mshv_debugfs_vp_create(vp);
+	if (ret)
+		goto put_partition;
+
 	/*
 	 * Keep anon_inode_getfd last: it installs fd in the file struct and
 	 * thus makes the state accessible in user space.
@@ -992,7 +996,7 @@ mshv_partition_ioctl_create_vp(struct mshv_partition *partition,
 	ret = anon_inode_getfd("mshv_vp", &mshv_vp_fops, vp,
 			       O_RDWR | O_CLOEXEC);
 	if (ret < 0)
-		goto put_partition;
+		goto remove_debugfs_vp;
 
 	/* already exclusive with the partition mutex for all ioctls */
 	partition->pt_vp_count++;
@@ -1000,6 +1004,8 @@ mshv_partition_ioctl_create_vp(struct mshv_partition *partition,
 
 	return ret;
 
+remove_debugfs_vp:
+	mshv_debugfs_vp_remove(vp);
 put_partition:
 	mshv_partition_put(partition);
 free_vp:
@@ -1559,13 +1565,18 @@ mshv_partition_ioctl_initialize(struct mshv_partition *partition)
 
 	ret = hv_call_initialize_partition(partition->pt_id);
 	if (ret)
-		goto withdraw_mem;
+		return ret;
+
+	ret = mshv_debugfs_partition_create(partition);
+	if (ret)
+		goto finalize_partition;
 
 	partition->pt_initialized = true;
 
 	return 0;
 
-withdraw_mem:
+finalize_partition:
+	hv_call_finalize_partition(partition->pt_id);
 	hv_call_withdraw_memory(U64_MAX, NUMA_NO_NODE, partition->pt_id);
 
 	return ret;
@@ -1744,6 +1755,8 @@ static void destroy_partition(struct mshv_partition *partition)
 			if (!vp)
 				continue;
 
+			mshv_debugfs_vp_remove(vp);
+
 			if (hv_scheduler_type == HV_SCHEDULER_TYPE_ROOT)
 				mshv_vp_stats_unmap(partition->pt_id, vp->vp_index,
 						    (void **)vp->vp_stats_pages);
@@ -1777,6 +1790,8 @@ static void destroy_partition(struct mshv_partition *partition)
 
 			partition->pt_vp_array[i] = NULL;
 		}
+
+		mshv_debugfs_partition_remove(partition);
 
 		/* Deallocates and unmaps everything including vcpus, GPA mappings etc */
 		hv_call_finalize_partition(partition->pt_id);
@@ -2336,9 +2351,13 @@ static int __init mshv_parent_partition_init(void)
 
 	mshv_init_vmm_caps(dev);
 
-	ret = mshv_irqfd_wq_init();
+	ret = mshv_debugfs_init();
 	if (ret)
 		goto exit_partition;
+
+	ret = mshv_irqfd_wq_init();
+	if (ret)
+		goto exit_debugfs;
 
 	spin_lock_init(&mshv_root.pt_ht_lock);
 	hash_init(mshv_root.pt_htable);
@@ -2347,6 +2366,10 @@ static int __init mshv_parent_partition_init(void)
 
 	return 0;
 
+destroy_irqds_wq:
+	mshv_irqfd_wq_cleanup();
+exit_debugfs:
+	mshv_debugfs_exit();
 exit_partition:
 	if (hv_root_partition())
 		mshv_root_partition_exit();
@@ -2363,6 +2386,7 @@ static void __exit mshv_parent_partition_exit(void)
 {
 	hv_setup_mshv_handler(NULL);
 	mshv_port_table_fini();
+	mshv_debugfs_exit();
 	misc_deregister(&mshv_dev);
 	mshv_irqfd_wq_cleanup();
 	if (hv_root_partition())
