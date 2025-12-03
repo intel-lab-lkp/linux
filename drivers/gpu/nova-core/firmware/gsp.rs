@@ -98,10 +98,10 @@ impl GspFirmware {
     ) -> Result<impl PinInit<Self, Error> + 'a> {
         let fw = super::request_firmware(dev, chipset, "gsp", ver)?;
 
-        let fw_section = elf::elf64_section(fw.data(), ".fwimage").ok_or(EINVAL)?;
+        let fw_section = elf::elf_section(fw.data(), ".fwimage").ok_or(EINVAL)?;
 
         let sigs_section = Self::get_gsp_sigs_section(chipset)?;
-        let signatures = elf::elf64_section(fw.data(), sigs_section)
+        let signatures = elf::elf_section(fw.data(), sigs_section)
             .ok_or(EINVAL)
             .and_then(|data| DmaObject::from_data(dev, data))?;
 
