@@ -22,6 +22,15 @@
 #include <linux/cleanup.h>
 #include <linux/hash.h>
 
+#ifndef COMPILE_OFFSETS
+#include <generated/kmem_cache_size.h>
+
+/* same size and alignment as struct kmem_cache: */
+struct kmem_cache_opaque {
+	unsigned char opaque[KMEM_CACHE_SIZE];
+} __aligned(KMEM_CACHE_ALIGN);
+#endif
+
 enum _slab_flag_bits {
 	_SLAB_CONSISTENCY_CHECKS,
 	_SLAB_RED_ZONE,
@@ -261,10 +270,16 @@ enum _slab_flag_bits {
 
 struct list_lru;
 struct mem_cgroup;
+struct kmem_cache_opaque;
 /*
  * struct kmem_cache related prototypes
  */
 bool slab_is_available(void);
+
+static inline struct kmem_cache *to_kmem_cache(struct kmem_cache_opaque *p)
+{
+	return (struct kmem_cache *)p;
+}
 
 /**
  * struct kmem_cache_args - Less common arguments for kmem_cache_create()
@@ -366,6 +381,7 @@ struct kmem_cache_args {
 	 * %0 means no sheaves will be created.
 	 */
 	unsigned int sheaf_capacity;
+	struct kmem_cache *preallocated;
 };
 
 struct kmem_cache *__kmem_cache_create_args(const char *name,
@@ -492,6 +508,34 @@ int kmem_cache_shrink(struct kmem_cache *s);
 				.useroffset	= offsetof(struct __struct, __field),		\
 				.usersize	= sizeof_field(struct __struct, __field),	\
 			}, (__flags))
+
+static inline int
+kmem_cache_setup_usercopy(const char *name, unsigned int size,
+			  unsigned int align, slab_flags_t flags,
+			  unsigned int useroffset, unsigned int usersize,
+			  void (*ctor)(void *), struct kmem_cache *s)
+{
+	struct kmem_cache *res;
+
+	res = __kmem_cache_create_args(name, size,
+				       &(struct kmem_cache_args) {
+						.align		= align,
+						.ctor		= ctor,
+						.useroffset	= useroffset,
+						.usersize	= usersize,
+						.preallocated	= s},
+				       flags);
+	return PTR_ERR_OR_ZERO(res);
+}
+
+static inline int
+kmem_cache_setup(const char *name, unsigned int size,
+		 unsigned int align, slab_flags_t flags,
+		 void (*ctor)(void *), struct kmem_cache *s)
+{
+	return kmem_cache_setup_usercopy(name, size, align, flags,
+					 0, 0, ctor, s);
+}
 
 /*
  * Common kmalloc functions provided by all allocators
