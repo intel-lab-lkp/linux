@@ -391,7 +391,7 @@ void update_bmc_sta(struct adapter *padapter)
 
 		memset((void *)&psta->sta_stats, 0, sizeof(struct stainfo_stats));
 
-		/* psta->dot118021XPrivacy = _NO_PRIVACY_;//!!! remove it, because it has been set before this. */
+		/* psta->dot118021XPrivacy is already set earlier; do not reset it here. */
 
 		/* prepare for add_RATid */
 		supportRateNum = rtw_get_rateset_len((u8 *)&pcur_network->supported_rates);
@@ -658,9 +658,11 @@ void start_bss_network(struct adapter *padapter)
 	cur_bwmode = CHANNEL_WIDTH_20;
 	cur_ch_offset = HAL_PRIME_CHNL_OFFSET_DONT_CARE;
 
-	/* check if there is wps ie, */
-	/* if there is wpsie in beacon, the hostapd will update beacon twice when stating hostapd, */
-	/* and at first time the security ie (RSN/WPA IE) will not include in beacon. */
+	/*
+	 * Check for a WPS IE. When WPS information is present in the beacon,
+	 * hostapd updates the beacon twice during startup. On the first update,
+	 * the security IE (RSN/WPA) may not yet be included.
+	 */
 	if (!rtw_get_wps_ie(pnetwork->ies + _FIXED_IE_LENGTH_,
 			    pnetwork->ie_length - _FIXED_IE_LENGTH_, NULL, NULL))
 		pmlmeext->bstart_bss = true;
@@ -841,8 +843,16 @@ int rtw_check_beacon_data(struct adapter *padapter, u8 *pbuf,  int len)
 	memcpy(pbss_network->mac_address, myid(&padapter->eeprompriv), ETH_ALEN);
 
 	/* beacon interval */
-	p = rtw_get_beacon_interval_from_ie(ie);/* ie + 8;	8: TimeStamp, 2: Beacon Interval 2:Capability */
-	/* pbss_network->configuration.beacon_period = le16_to_cpu(*(unsigned short*)p); */
+	/*
+	 * In the beacon IE, the layout starts with:
+	 *   - 8 bytes: timestamp
+	 *   - 2 bytes: beacon interval
+	 *   - 2 bytes: capability info
+	 * rtw_get_beacon_interval_from_ie() extracts the beacon interval field.
+	 */
+	p = rtw_get_beacon_interval_from_ie(ie);
+
+	/* pbss_network->configuration.beacon_period = le16_to_cpu(*(unsigned short *)p); */
 	pbss_network->configuration.beacon_period = get_unaligned_le16(p);
 
 	/* capability */
@@ -1147,7 +1157,8 @@ int rtw_check_beacon_data(struct adapter *padapter, u8 *pbuf,  int len)
 	/*  update AP's sta info */
 	update_ap_info(padapter, psta);
 
-	psta->state |= WIFI_AP_STATE;		/* Aries, add, fix bug of flush_cam_entry at STOP AP mode , 0724 */
+	/* Aries, add, fix bug of flush_cam_entry at STOP AP mode, 0724 */
+	psta->state |= WIFI_AP_STATE;
 	rtw_indicate_connect(padapter);
 
 	pmlmepriv->cur_network.join_res = true;/* for check if already set beacon */
