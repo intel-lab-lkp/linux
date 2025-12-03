@@ -136,8 +136,9 @@ void ceph_subvolume_metrics_record(struct ceph_subvolume_metrics_tracker *tracke
 	struct ceph_subvol_metric_rb_entry *entry, *new_entry = NULL;
 	bool retry = false;
 
-	/* 0 means unknown/unset subvolume (matches FUSE client convention) */
-	if (!READ_ONCE(tracker->enabled) || !subvol_id || !size || !latency_us)
+	/* CEPH_SUBVOLUME_ID_NONE (0) means unknown/unset subvolume */
+	if (!READ_ONCE(tracker->enabled) ||
+	    subvol_id == CEPH_SUBVOLUME_ID_NONE || !size || !latency_us)
 		return;
 
 	do {
@@ -403,7 +404,7 @@ void ceph_subvolume_metrics_record_io(struct ceph_mds_client *mdsc,
 	}
 
 	subvol_id = READ_ONCE(ci->i_subvolume_id);
-	if (!subvol_id) {
+	if (subvol_id == CEPH_SUBVOLUME_ID_NONE) {
 		atomic64_inc(&tracker->record_no_subvol);
 		return;
 	}

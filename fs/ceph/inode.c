@@ -638,7 +638,7 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 
 	ci->i_max_bytes = 0;
 	ci->i_max_files = 0;
-	ci->i_subvolume_id = 0;
+	ci->i_subvolume_id = CEPH_SUBVOLUME_ID_NONE;
 
 	memset(&ci->i_dir_layout, 0, sizeof(ci->i_dir_layout));
 	memset(&ci->i_cached_layout, 0, sizeof(ci->i_cached_layout));
@@ -743,7 +743,7 @@ void ceph_evict_inode(struct inode *inode)
 
 	percpu_counter_dec(&mdsc->metric.total_inodes);
 
-	ci->i_subvolume_id = 0;
+	ci->i_subvolume_id = CEPH_SUBVOLUME_ID_NONE;
 
 	netfs_wait_for_outstanding_io(inode);
 	truncate_inode_pages_final(&inode->i_data);
@@ -877,19 +877,37 @@ int ceph_fill_file_size(struct inode *inode, int issued,
 }
 
 /*
- * Set the subvolume ID for an inode. Following the FUSE client convention,
- * 0 means unknown/unset (MDS only sends non-zero IDs for subvolume inodes).
+ * Set the subvolume ID for an inode.
+ *
+ * The subvolume_id identifies which CephFS subvolume this inode belongs to.
+ * CEPH_SUBVOLUME_ID_NONE (0) means unknown/unset - the MDS only sends
+ * non-zero IDs for inodes within subvolumes.
+ *
+ * An inode's subvolume membership is immutable - once an inode is created
+ * in a subvolume, it stays there. Therefore, if we already have a valid
+ * (non-zero) subvolume_id and receive a different one, that indicates a bug.
  */
 void ceph_inode_set_subvolume(struct inode *inode, u64 subvolume_id)
 {
 	struct ceph_inode_info *ci;
+	u64 old;
 
-	if (!inode || !subvolume_id)
+	if (!inode || subvolume_id == CEPH_SUBVOLUME_ID_NONE)
 		return;
 
 	ci = ceph_inode(inode);
-	if (READ_ONCE(ci->i_subvolume_id) != subvolume_id)
-		WRITE_ONCE(ci->i_subvolume_id, subvolume_id);
+	old = READ_ONCE(ci->i_subvolume_id);
+
+	if (old == subvolume_id)
+		return;
+
+	if (old != CEPH_SUBVOLUME_ID_NONE) {
+		/* subvolume_id should not change once set */
+		WARN_ON_ONCE(1);
+		return;
+	}
+
+	WRITE_ONCE(ci->i_subvolume_id, subvolume_id);
 }
 
 void ceph_fill_file_time(struct inode *inode, int issued,

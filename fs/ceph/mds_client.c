@@ -122,10 +122,7 @@ static int parse_reply_info_in(void **p, void *end,
 	u32 struct_len = 0;
 	struct ceph_client *cl = mdsc ? mdsc->fsc->client : NULL;
 
-	info->subvolume_id = 0;
-	doutc(cl, "subv_metric parse start features=0x%llx\n", features);
-
-	info->subvolume_id = 0;
+	info->subvolume_id = CEPH_SUBVOLUME_ID_NONE;
 
 	if (features == (u64)-1) {
 		ceph_decode_8_safe(p, end, struct_v, bad);
