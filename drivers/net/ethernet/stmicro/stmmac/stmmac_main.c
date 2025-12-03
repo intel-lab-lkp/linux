@@ -4611,6 +4611,15 @@ static bool stmmac_has_ip_ethertype(struct sk_buff *skb)
 		(proto == htons(ETH_P_IP) || proto == htons(ETH_P_IPV6));
 }
 
+static inline int stmmac_extra_space(struct stmmac_priv *priv,
+				     struct sk_buff *skb)
+{
+	if (!priv->dma_cap.vlins || !skb_vlan_tag_present(skb))
+		return 0;
+
+	return 1;
+}
+
 /**
  *  stmmac_xmit - Tx entry point of the driver
  *  @skb : the socket buffer
@@ -4665,7 +4674,8 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 		}
 	}
 
-	if (unlikely(stmmac_tx_avail(priv, queue) < nfrags + 1)) {
+	if (unlikely(stmmac_tx_avail(priv, queue) <
+		nfrags + 1 + stmmac_extra_space(priv, skb))) {
 		if (!netif_tx_queue_stopped(netdev_get_tx_queue(dev, queue))) {
 			netif_tx_stop_queue(netdev_get_tx_queue(priv->dev,
 								queue));
@@ -4811,7 +4821,7 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 		print_pkt(skb->data, skb->len);
 	}
 
-	if (unlikely(stmmac_tx_avail(priv, queue) <= (MAX_SKB_FRAGS + 1))) {
+	if (unlikely(stmmac_tx_avail(priv, queue) <= (MAX_SKB_FRAGS + 2))) {
 		netif_dbg(priv, hw, priv->dev, "%s: stop transmitted packets\n",
 			  __func__);
 		netif_tx_stop_queue(netdev_get_tx_queue(priv->dev, queue));
