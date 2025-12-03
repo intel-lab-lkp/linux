@@ -152,7 +152,27 @@ static inline bool mmu_notifier_retry_cache(struct kvm *kvm, unsigned long mmu_s
 	return kvm->mmu_invalidate_seq != mmu_seq;
 }
 
-static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
+static kvm_pfn_t gpc_to_pfn(struct gfn_to_pfn_cache *gpc, struct page **page)
+{
+	if (kvm_slot_has_gmem(gpc->memslot)) {
+		kvm_pfn_t pfn;
+
+		kvm_gmem_get_pfn(gpc->kvm, gpc->memslot, gpa_to_gfn(gpc->gpa),
+				 &pfn, page, NULL);
+		return pfn;
+	}
+
+	struct kvm_follow_pfn kfp = {
+		.slot = gpc->memslot,
+		.gfn = gpa_to_gfn(gpc->gpa),
+		.flags = FOLL_WRITE,
+		.hva = gpc->uhva,
+		.refcounted_page = page,
+	};
+	return hva_to_pfn(&kfp);
+}
+
+static kvm_pfn_t gpc_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 {
 	/* Note, the new page offset may be different than the old! */
 	void *old_khva = (void *)PAGE_ALIGN_DOWN((uintptr_t)gpc->khva);
@@ -160,14 +180,6 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 	void *new_khva = NULL;
 	unsigned long mmu_seq;
 	struct page *page;
-
-	struct kvm_follow_pfn kfp = {
-		.slot = gpc->memslot,
-		.gfn = gpa_to_gfn(gpc->gpa),
-		.flags = FOLL_WRITE,
-		.hva = gpc->uhva,
-		.refcounted_page = &page,
-	};
 
 	lockdep_assert_held(&gpc->refresh_lock);
 
@@ -206,7 +218,7 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 			cond_resched();
 		}
 
-		new_pfn = hva_to_pfn(&kfp);
+		new_pfn = gpc_to_pfn(gpc, &page);
 		if (is_error_noslot_pfn(new_pfn))
 			goto out_error;
 
@@ -319,7 +331,7 @@ static int __kvm_gpc_refresh(struct gfn_to_pfn_cache *gpc, gpa_t gpa, unsigned l
 		}
 	}
 
-	/* Note: the offset must be correct before calling hva_to_pfn_retry() */
+	/* Note: the offset must be correct before calling gpc_to_pfn_retry() */
 	gpc->uhva += page_offset;
 
 	/*
@@ -327,7 +339,7 @@ static int __kvm_gpc_refresh(struct gfn_to_pfn_cache *gpc, gpa_t gpa, unsigned l
 	 * drop the lock and do the HVA to PFN lookup again.
 	 */
 	if (!gpc->valid || hva_change) {
-		ret = hva_to_pfn_retry(gpc);
+		ret = gpc_to_pfn_retry(gpc);
 	} else {
 		/*
 		 * If the HVA→PFN mapping was already valid, don't unmap it.
