@@ -267,6 +267,24 @@ mod elf {
     // SAFETY: all bit patterns are valid for this type, and it doesn't use interior mutability.
     unsafe impl FromBytes for Elf64SHdr {}
 
+    /// Check if the section name at `strtab_offset + name_offset` equals `target`.
+    fn section_name_eq(elf: &[u8], strtab_offset: u64, name_offset: u32, target: &str) -> bool {
+        strtab_offset
+            // Compute the index into the ELF image.
+            .checked_add(u64::from(name_offset))
+            .and_then(|idx| usize::try_from(idx).ok())
+            // Get the start of the name.
+            .and_then(|name_idx| elf.get(name_idx..))
+            // Stop at the first `0`.
+            .and_then(|s| s.get(0..=s.iter().position(|b| *b == 0)?))
+            // Convert into CStr.
+            .and_then(|s| CStr::from_bytes_with_nul(s).ok())
+            // Convert into str.
+            .and_then(|s| s.to_str().ok())
+            // Check that the name matches.
+            .is_some_and(|s| s == target)
+    }
+
     /// Tries to extract section with name `name` from the ELF64 image `elf`, and returns it.
     pub(super) fn elf64_section<'a, 'b>(elf: &'a [u8], name: &'b str) -> Option<&'a [u8]> {
         let hdr = &elf
@@ -298,26 +316,7 @@ mod elf {
                 return false;
             };
 
-            let Some(name_idx) = strhdr
-                .0
-                .sh_offset
-                .checked_add(u64::from(hdr.0.sh_name))
-                .and_then(|idx| usize::try_from(idx).ok())
-            else {
-                return false;
-            };
-
-            // Get the start of the name.
-            elf.get(name_idx..)
-                // Stop at the first `0`.
-                .and_then(|nstr| nstr.get(0..=nstr.iter().position(|b| *b == 0)?))
-                // Convert into CStr. This should never fail because of the line above.
-                .and_then(|nstr| CStr::from_bytes_with_nul(nstr).ok())
-                // Convert into str.
-                .and_then(|c_str| c_str.to_str().ok())
-                // Check that the name matches.
-                .map(|str| str == name)
-                .unwrap_or(false)
+            section_name_eq(elf, strhdr.0.sh_offset, hdr.0.sh_name, name)
         })
         // Return the slice containing the section.
         .and_then(|sh| {
