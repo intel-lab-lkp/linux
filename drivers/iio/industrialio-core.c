@@ -2224,19 +2224,19 @@ EXPORT_SYMBOL_GPL(__iio_device_release_direct);
  *
  * Use with iio_device_release_buffer_mode().
  *
- * Returns: 0 on success, -EBUSY on failure.
+ * Returns: true on success, false on failure.
  */
-int iio_device_claim_buffer_mode(struct iio_dev *indio_dev)
+bool iio_device_claim_buffer_mode(struct iio_dev *indio_dev)
 {
 	struct iio_dev_opaque *iio_dev_opaque = to_iio_dev_opaque(indio_dev);
 
 	mutex_lock(&iio_dev_opaque->mlock);
 
 	if (iio_buffer_enabled(indio_dev))
-		return 0;
+		return true;
 
 	mutex_unlock(&iio_dev_opaque->mlock);
-	return -EBUSY;
+	return false;
 }
 EXPORT_SYMBOL_GPL(iio_device_claim_buffer_mode);
 
