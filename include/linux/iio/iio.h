@@ -10,6 +10,7 @@
 #include <linux/align.h>
 #include <linux/device.h>
 #include <linux/cdev.h>
+#include <linux/cleanup.h>
 #include <linux/compiler_types.h>
 #include <linux/minmax.h>
 #include <linux/slab.h>
@@ -661,8 +662,22 @@ void iio_device_unregister(struct iio_dev *indio_dev);
 int __devm_iio_device_register(struct device *dev, struct iio_dev *indio_dev,
 			       struct module *this_mod);
 int iio_push_event(struct iio_dev *indio_dev, u64 ev_code, s64 timestamp);
+void __iio_device_claim(struct iio_dev *indio_dev);
+void __iio_device_release(struct iio_dev *indio_dev);
 bool __iio_device_claim_direct(struct iio_dev *indio_dev);
 void __iio_device_release_direct(struct iio_dev *indio_dev);
+
+static inline void iio_device_claim(struct iio_dev *indio_dev)
+	__acquires(indio_dev)
+{
+	__iio_device_claim(indio_dev);
+}
+
+static inline void iio_device_release(struct iio_dev *indio_dev)
+	__releases(indio_dev)
+{
+	__iio_device_release(indio_dev);
+}
 
 /*
  * Helper functions that allow claim and release of direct mode
@@ -689,6 +704,11 @@ static inline void iio_device_release_direct(struct iio_dev *indio_dev)
 
 bool iio_device_claim_buffer(struct iio_dev *indio_dev);
 void iio_device_release_buffer(struct iio_dev *indio_dev);
+
+DEFINE_GUARD(iio_device_claim, struct iio_dev *, iio_device_claim(_T),
+	     iio_device_release(_T));
+DEFINE_GUARD_COND(iio_device_claim, _buffer, iio_device_claim_buffer(_T));
+DEFINE_GUARD_COND(iio_device_claim, _direct, iio_device_claim_direct(_T));
 
 extern const struct bus_type iio_bus_type;
 
