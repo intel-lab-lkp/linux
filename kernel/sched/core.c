@@ -2078,6 +2078,21 @@ unsigned long get_wchan(struct task_struct *p)
 	return ip;
 }
 
+static void update_rq_avg_idle(struct rq *rq)
+{
+	if (rq->idle_stamp) {
+		u64 delta = rq_clock(rq) - rq->idle_stamp;
+		u64 max = 2*rq->max_idle_balance_cost;
+
+		update_avg(&rq->avg_idle, delta);
+
+		if (rq->avg_idle > max)
+			rq->avg_idle = max;
+
+		rq->idle_stamp = 0;
+	}
+}
+
 void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 {
 	if (!(flags & ENQUEUE_NOCLOCK))
@@ -2100,6 +2115,8 @@ void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 
 	if (sched_core_enabled(rq))
 		sched_core_enqueue(rq, p);
+
+	update_rq_avg_idle(rq);
 }
 
 /*
@@ -3644,18 +3661,6 @@ ttwu_do_activate(struct rq *rq, struct task_struct *p, int wake_flags,
 		rq_unpin_lock(rq, rf);
 		p->sched_class->task_woken(rq, p);
 		rq_repin_lock(rq, rf);
-	}
-
-	if (rq->idle_stamp) {
-		u64 delta = rq_clock(rq) - rq->idle_stamp;
-		u64 max = 2*rq->max_idle_balance_cost;
-
-		update_avg(&rq->avg_idle, delta);
-
-		if (rq->avg_idle > max)
-			rq->avg_idle = max;
-
-		rq->idle_stamp = 0;
 	}
 }
 
