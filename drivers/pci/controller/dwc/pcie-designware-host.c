@@ -366,9 +366,13 @@ int dw_pcie_msi_host_init(struct dw_pcie_rp *pp)
 	 * order not to miss MSI TLPs from those devices the MSI target
 	 * address has to be within the lowest 4GB.
 	 *
-	 * Note until there is a better alternative found the reservation is
-	 * done by allocating from the artificially limited DMA-coherent
-	 * memory.
+	 * Since iMSI-RX monitors a virtual address space that doesn't require
+	 * physical memory mapping, we simplify the implementation by reusing
+	 * cfg0_base as the target address. This approach guarantees the address
+	 * won't be allocated to endpoint drivers for normal memory operations.
+	 *
+	 * Limitation: 32-bit MSI endpoints cannot be supported when cfg0_base
+	 * is a 64-bit address.
 	 */
 	ret = dma_set_coherent_mask(dev, DMA_BIT_MASK(32));
 	if (!ret)
@@ -376,15 +380,9 @@ int dw_pcie_msi_host_init(struct dw_pcie_rp *pp)
 						GFP_KERNEL);
 
 	if (!msi_vaddr) {
-		dev_warn(dev, "Failed to allocate 32-bit MSI address\n");
-		dma_set_coherent_mask(dev, DMA_BIT_MASK(64));
-		msi_vaddr = dmam_alloc_coherent(dev, sizeof(u64), &pp->msi_data,
-						GFP_KERNEL);
-		if (!msi_vaddr) {
-			dev_err(dev, "Failed to allocate MSI address\n");
-			dw_pcie_free_msi(pp);
-			return -ENOMEM;
-		}
+		pp->msi_data = pp->cfg0_base;
+		dev_info(dev, "Use cfg0_base 0x%llx as iMSI-RX target address\n", pp->cfg0_base);
+		return 0;
 	}
 
 	return 0;
