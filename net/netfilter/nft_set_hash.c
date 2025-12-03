@@ -231,6 +231,9 @@ nft_rhash_deactivate(const struct net *net, const struct nft_set *set,
 
 	rcu_read_unlock();
 
+	if (!he)
+		return NULL;
+
 	return &he->priv;
 }
 
