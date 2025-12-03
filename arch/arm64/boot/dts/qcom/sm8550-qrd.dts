@@ -717,10 +717,9 @@
 };
 
 &camss {
-	status = "okay";
-
 	vdda-phy-supply = <&vreg_l1e_0p88>;
 	vdda-pll-supply = <&vreg_l3e_1p2>;
+	status = "okay";
 
 	ports {
 		port@3 {
