@@ -22,10 +22,7 @@
 #include <linux/string.h>
 #include <linux/types.h>
 #include <asm/byteorder.h>
-#include "md4.h"
-
-MODULE_DESCRIPTION("MD4 Message Digest Algorithm (RFC1320)");
-MODULE_LICENSE("GPL");
+#include "common.h"
 
 static inline u32 lshift(u32 x, unsigned int s)
 {

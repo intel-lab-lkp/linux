@@ -1,12 +1,13 @@
 /* SPDX-License-Identifier: GPL-2.0+ */
+
+#ifndef __SMB_COMMON_H__
+#define __SMB_COMMON_H__
+
+#include <linux/types.h>
+
 /*
  * Common values for ARC4 Cipher Algorithm
  */
-
-#ifndef _CIFS_MD4_H
-#define _CIFS_MD4_H
-
-#include <linux/types.h>
 
 #define MD4_DIGEST_SIZE		16
 #define MD4_HMAC_BLOCK_SIZE	64
@@ -19,9 +20,8 @@ struct md4_ctx {
 	u64 byte_count;
 };
 
-
 int cifs_md4_init(struct md4_ctx *mctx);
 int cifs_md4_update(struct md4_ctx *mctx, const u8 *data, unsigned int len);
 int cifs_md4_final(struct md4_ctx *mctx, u8 *out);
 
-#endif /* _CIFS_MD4_H */
+#endif /* __SMB_COMMON_H__ */
