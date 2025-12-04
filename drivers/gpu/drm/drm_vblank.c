@@ -1684,7 +1684,7 @@ static int drm_queue_vblank_event(struct drm_device *dev, unsigned int pipe,
 		send_vblank_event(dev, e, seq, now);
 		vblwait->reply.sequence = seq;
 	} else {
-		/* drm_handle_vblank_events will call drm_vblank_crtc_put */
+		/* drm_vblank_crtc_handle_events will call drm_vblank_crtc_put */
 		list_add_tail(&e->base.link, &dev->vblank_event_list);
 		vblwait->reply.sequence = req_seq;
 	}
@@ -1892,8 +1892,10 @@ done:
 	return ret;
 }
 
-static void drm_handle_vblank_events(struct drm_device *dev, unsigned int pipe)
+static void drm_vblank_crtc_handle_events(struct drm_vblank_crtc *vblank)
 {
+	struct drm_device *dev = vblank->dev;
+	unsigned int pipe = vblank->pipe;
 	struct drm_crtc *crtc = drm_crtc_from_index(dev, pipe);
 	bool high_prec = false;
 	struct drm_pending_vblank_event *e, *t;
@@ -1914,7 +1916,7 @@ static void drm_handle_vblank_events(struct drm_device *dev, unsigned int pipe)
 			     e->sequence, seq);
 
 		list_del(&e->base.link);
-		drm_vblank_put(dev, pipe);
+		drm_vblank_crtc_put(vblank);
 		send_vblank_event(dev, e, seq, now);
 	}
 
@@ -1970,13 +1972,13 @@ bool drm_handle_vblank(struct drm_device *dev, unsigned int pipe)
 	/* With instant-off, we defer disabling the interrupt until after
 	 * we finish processing the following vblank after all events have
 	 * been signaled. The disable has to be last (after
-	 * drm_handle_vblank_events) so that the timestamp is always accurate.
+	 * drm_vblank_crtc_handle_events) so that the timestamp is always accurate.
 	 */
 	disable_irq = (vblank->config.disable_immediate &&
 		       vblank->config.offdelay_ms > 0 &&
 		       !atomic_read(&vblank->refcount));
 
-	drm_handle_vblank_events(dev, pipe);
+	drm_vblank_crtc_handle_events(vblank);
 	drm_handle_vblank_works(vblank);
 
 	spin_unlock_irqrestore(&dev->event_lock, irqflags);
@@ -2165,7 +2167,7 @@ int drm_crtc_queue_sequence_ioctl(struct drm_device *dev, void *data,
 		send_vblank_event(dev, e, seq, now);
 		queue_seq->sequence = seq;
 	} else {
-		/* drm_handle_vblank_events will call drm_vblank_crtc_put */
+		/* drm_vblank_crtc_handle_events will call drm_vblank_crtc_put */
 		list_add_tail(&e->base.link, &dev->vblank_event_list);
 		queue_seq->sequence = req_seq;
 	}
