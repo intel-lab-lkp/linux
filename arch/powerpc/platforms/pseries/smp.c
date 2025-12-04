@@ -327,25 +327,45 @@ void trigger_softoffline(unsigned long steal_ratio)
 {
 	int currcpu = smp_processor_id();
 	static int prev_direction;
+	int success = 0;
 	int cpu, i;
 
+	/*
+	 * Compare delta runtime versus delta steal time.
+	 *  [0]<----------->[EC]--------->[VP]
+	 *  [0]<------------------>{AC}-->[VP]
+	 *  EC == Entitled Cores
+	 *  VP == Virtual Processors
+	 *  AC == Available Cores Varies between 0 to EC/VP.
+	 * If Steal time is high, then reduce Available Cores.
+	 * If steal time is low, increase Available Cores
+	 */
 	if (steal_ratio >= STEAL_RATIO_HIGH && prev_direction > 0) {
 		/*
 		 * System entitlement was reduced earlier but we continue to
-		 * see steal time. Reduce entitlement further.
+		 * see steal time. Reduce entitlement further if possible.
 		 */
+		if (available_cores <= entitled_cores)
+			return;
+
 		cpu = cpumask_last(cpu_active_mask);
 		for_each_cpu_andnot(i, cpu_sibling_mask(cpu), cpu_sibling_mask(currcpu)) {
 			struct offline_worker *worker = &per_cpu(offline_workers, i);
 
 			worker->offline = 1;
 			schedule_work_on(i, &worker->work);
+			success = 1;
 		}
+		if (success)
+			available_cores--;
 	} else if (steal_ratio <= STEAL_RATIO_LOW && prev_direction < 0) {
 		/*
 		 * System entitlement was increased but we continue to see
-		 * less steal time. Increase entitlement further.
+		 * less steal time. Increase entitlement further if possible.
 		 */
+		if (available_cores >= max_virtual_cores)
+			return;
+
 		cpumask_andnot(cpus, cpu_online_mask, cpu_active_mask);
 		if (cpumask_empty(cpus))
 			return;
@@ -356,7 +376,10 @@ void trigger_softoffline(unsigned long steal_ratio)
 
 			worker->offline = 0;
 			schedule_work_on(i, &worker->work);
+			success = 1;
 		}
+		if (success)
+			available_cores++;
 	}
 	if (steal_ratio >= STEAL_RATIO_HIGH)
 		prev_direction = 1;
