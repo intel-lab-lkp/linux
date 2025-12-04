@@ -648,7 +648,8 @@ static void detach_memdev(struct work_struct *work)
 static struct lock_class_key cxl_memdev_key;
 
 static struct cxl_memdev *cxl_memdev_alloc(struct cxl_dev_state *cxlds,
-					   const struct file_operations *fops)
+					   const struct file_operations *fops,
+					   const struct cxl_memdev_ops *ops)
 {
 	struct cxl_memdev *cxlmd;
 	struct device *dev;
@@ -664,6 +665,8 @@ static struct cxl_memdev *cxl_memdev_alloc(struct cxl_dev_state *cxlds,
 		goto err;
 	cxlmd->id = rc;
 	cxlmd->depth = -1;
+	cxlmd->ops = ops;
+	cxlmd->endpoint = ERR_PTR(-ENXIO);
 
 	dev = &cxlmd->dev;
 	device_initialize(dev);
@@ -1077,17 +1080,48 @@ static int cxlmd_add(struct cxl_memdev *cxlmd, struct cxl_dev_state *cxlds)
 DEFINE_FREE(put_cxlmd, struct cxl_memdev *,
 	    if (!IS_ERR_OR_NULL(_T)) put_device(&_T->dev);)
 
+static struct cxl_memdev *cxl_memdev_autoremove(struct cxl_memdev *cxlmd)
+{
+	struct cxl_memdev *ret = cxlmd;
+	int rc;
+
+	/*
+	 * If ops is provided fail if the driver is not attached upon
+	 * return. The ->endpoint ERR_PTR may have a more precise error
+	 * code to convey. Note that failure here could be the result of
+	 * a race to teardown the CXL port topology. I.e.
+	 * cxl_mem_probe() could have succeeded and then cxl_mem unbound
+	 * before the lock is acquired.
+	 */
+	guard(device)(&cxlmd->dev);
+	if (cxlmd->ops && !cxlmd->dev.driver) {
+		ret = ERR_PTR(-ENXIO);
+		if (IS_ERR(cxlmd->endpoint))
+			ret = ERR_CAST(cxlmd->endpoint);
+		cxl_memdev_unregister(cxlmd);
+		return ret;
+	}
+
+	rc = devm_add_action_or_reset(cxlmd->cxlds->dev, cxl_memdev_unregister,
+				      cxlmd);
+	if (rc)
+		return ERR_PTR(rc);
+
+	return ret;
+}
+
 /*
  * Core helper for devm_cxl_add_memdev() that wants to both create a device and
  * assert to the caller that upon return cxl_mem::probe() has been invoked.
  */
-struct cxl_memdev *__devm_cxl_add_memdev(struct cxl_dev_state *cxlds)
+struct cxl_memdev *__devm_cxl_add_memdev(struct cxl_dev_state *cxlds,
+					 const struct cxl_memdev_ops *ops)
 {
 	struct device *dev;
 	int rc;
 
 	struct cxl_memdev *cxlmd __free(put_cxlmd) =
-		cxl_memdev_alloc(cxlds, &cxl_memdev_fops);
+		cxl_memdev_alloc(cxlds, &cxl_memdev_fops, ops);
 	if (IS_ERR(cxlmd))
 		return cxlmd;
 
@@ -1100,11 +1134,7 @@ struct cxl_memdev *__devm_cxl_add_memdev(struct cxl_dev_state *cxlds)
 	if (rc)
 		return ERR_PTR(rc);
 
-	rc = devm_add_action_or_reset(cxlds->dev, cxl_memdev_unregister,
-				      no_free_ptr(cxlmd));
-	if (rc)
-		return ERR_PTR(rc);
-	return cxlmd;
+	return cxl_memdev_autoremove(no_free_ptr(cxlmd));
 }
 EXPORT_SYMBOL_FOR_MODULES(__devm_cxl_add_memdev, "cxl_mem");
 
