@@ -1,0 +1,38 @@
+drm drm-fixes 7d0a66e4bb9081d75c82ec4957c50034cb0ea449
+	Linux 6.18
+drm-misc drm-misc-fixes eb76d0f5553575599561010f24c277cc5b31d003
+	drm, fbcon, vga_switcheroo: Avoid race condition in fbcon setup
+drm-rust drm-rust-fixes 211ddde0823f1442e4ad052a2f30f050145ccada
+	Linux 6.18-rc2
+drm-intel drm-intel-fixes 7d0a66e4bb9081d75c82ec4957c50034cb0ea449
+	Linux 6.18
+drm-xe drm-xe-fixes 7276878b069c57d9a9cca5db01d2f7a427b73456
+	drm/xe: Fix conversion from clock ticks to milliseconds
+drm drm-next 0692602defb0c273f80dec9c564ca50726404aca
+	Merge tag 'amd-drm-next-6.19-2025-12-02' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm-misc drm-misc-next-fixes 308eeb8ca3fdee54bcd3ec7272c05688e178299a
+	drm/rcar-du: dsi: Handle both DRM_MODE_FLAG_N.SYNC and !DRM_MODE_FLAG_P.SYNC
+drm-intel drm-intel-next-fixes 611d4d160616a8f96959a3045ed01bc9afe0900f
+	Merge tag 'mediatek-drm-next-20251120' of https://git.kernel.org/pub/scm/linux/kernel/git/chunkuang.hu/linux into drm-next
+drm-xe drm-xe-next-fixes d72312d730450aab225a80bc84436757b85b08b5
+	drm/xe: Protect against unset LRC when pausing submissions
+drm-misc drm-misc-next 2976aeb0de77da599ad37691963efbdcb07435ce
+	gpu/panel-edp: add AUO panel entry for B140HAN06.4
+drm-rust drm-rust-next 57dc2ea0b7bdb828c5d966d9135c28fe854933a4
+	rust: slice: fix broken intra-doc links
+drm-intel drm-intel-next d4ee41f9e19ea89a9cdf32b14be3fe8823f64cc8
+	drm/i915/fbc: Apply Wa_14025769978
+drm-intel drm-intel-gt-next 3bcf7894a93e18bff802088a368c13d86a5987a0
+	drm/i915/gt: Use standard API for seqcount read in TLB invalidation
+drm-xe drm-xe-next 78d91ba6bd7968d4750dad57c62bf5225ddcb388
+	drm/xe/uapi: Add NO_COMPRESSION BO flag and query capability
+drm-intel topic/core-for-CI 7699f1e58837bde8d1038b84841c2b7929ef708b
+	Revert "lockdep: Enable PROVE_RAW_LOCK_NESTING with PROVE_LOCKING."
+drm-xe topic/xe-for-CI da39e07e72ce7927980f9eada791aa74cd2c9717
+	topic/for-xe-CI: drm/xe/cri: Define GuC firmware for CRI
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
+drm-xe topic/xe-vfio 1f5556ec8b9efbb784aeb3536e147182dee73d0f
+	vfio/xe: Add device specific vfio_pci driver variant for Intel graphics
+drm-intel topic/drm-intel-plane-color-pipeline 0692602defb0c273f80dec9c564ca50726404aca
+	Merge tag 'amd-drm-next-6.19-2025-12-02' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
