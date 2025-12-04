@@ -177,13 +177,22 @@ MODULE_PARM_DESC(timestamp_precision_usec, "Max. error on timestamps [usecs]");
 static struct drm_vblank_crtc *
 drm_vblank_crtc(struct drm_device *dev, unsigned int pipe)
 {
+	if (pipe >= dev->num_crtcs)
+		return NULL;
+
 	return &dev->vblank[pipe];
 }
 
 struct drm_vblank_crtc *
 drm_crtc_vblank_crtc(struct drm_crtc *crtc)
 {
-	return drm_vblank_crtc(crtc->dev, drm_crtc_index(crtc));
+	struct drm_vblank_crtc *vblank;
+
+	vblank = drm_vblank_crtc(crtc->dev, drm_crtc_index(crtc));
+	if (drm_WARN_ON(crtc->dev, !vblank))
+		return NULL;
+
+	return vblank;
 }
 EXPORT_SYMBOL(drm_crtc_vblank_crtc);
 
@@ -631,15 +640,11 @@ void drm_calc_timestamping_constants(struct drm_crtc *crtc,
 				     const struct drm_display_mode *mode)
 {
 	struct drm_device *dev = crtc->dev;
-	unsigned int pipe = drm_crtc_index(crtc);
 	struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(crtc);
 	int linedur_ns = 0, framedur_ns = 0;
 	int dotclock = mode->crtc_clock;
 
 	if (!drm_dev_has_vblank(dev))
-		return;
-
-	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
 		return;
 
 	/* Valid dotclock? */
@@ -722,11 +727,6 @@ drm_crtc_vblank_helper_get_vblank_timestamp_internal(
 	const struct drm_display_mode *mode;
 	int vpos, hpos, i;
 	int delta_ns, duration_ns;
-
-	if (pipe >= dev->num_crtcs) {
-		drm_err(dev, "Invalid crtc %u\n", pipe);
-		return false;
-	}
 
 	/* Scanout position query not supported? Should not happen. */
 	if (!get_scanout_position) {
@@ -1342,9 +1342,6 @@ void drm_crtc_vblank_off(struct drm_crtc *crtc)
 	ktime_t now;
 	u64 seq;
 
-	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
-		return;
-
 	/*
 	 * Grab event_lock early to prevent vblank work from being scheduled
 	 * while we're in the middle of shutting down vblank interrupts
@@ -1482,9 +1479,6 @@ void drm_crtc_vblank_on_config(struct drm_crtc *crtc,
 	struct drm_device *dev = crtc->dev;
 	unsigned int pipe = drm_crtc_index(crtc);
 	struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(crtc);
-
-	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
-		return;
 
 	spin_lock_irq(&dev->vbl_lock);
 	drm_dbg_vbl(dev, "crtc %d, vblank enabled %d, inmodeset %d\n",
@@ -1767,10 +1761,9 @@ int drm_wait_vblank_ioctl(struct drm_device *dev, void *data,
 		pipe = pipe_index;
 	}
 
-	if (pipe >= dev->num_crtcs)
-		return -EINVAL;
-
 	vblank = drm_vblank_crtc(dev, pipe);
+	if (!vblank)
+		return -EINVAL;
 
 	/* If the counter is currently enabled and accurate, short-circuit
 	 * queries to return the cached timestamp of the last vblank.
@@ -1905,14 +1898,15 @@ static void drm_vblank_crtc_handle_events(struct drm_vblank_crtc *vblank)
  */
 bool drm_handle_vblank(struct drm_device *dev, unsigned int pipe)
 {
-	struct drm_vblank_crtc *vblank = drm_vblank_crtc(dev, pipe);
+	struct drm_vblank_crtc *vblank;
 	unsigned long irqflags;
 	bool disable_irq;
 
 	if (drm_WARN_ON_ONCE(dev, !drm_dev_has_vblank(dev)))
 		return false;
 
-	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
+	vblank = drm_vblank_crtc(dev, pipe);
+	if (drm_WARN_ON(dev, !vblank))
 		return false;
 
 	spin_lock_irqsave(&dev->event_lock, irqflags);
