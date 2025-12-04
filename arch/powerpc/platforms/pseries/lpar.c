@@ -662,15 +662,20 @@ machine_device_initcall(pseries, vcpudispatch_stats_procfs_init);
 u64 pseries_paravirt_steal_clock(int cpu)
 {
 	struct lppaca *lppaca = &lppaca_of(cpu);
+	unsigned long steal;
+
+	steal = be64_to_cpu(READ_ONCE(lppaca->ready_enqueue_tb));
+	steal += be64_to_cpu(READ_ONCE(lppaca->enqueue_dispatch_tb));
 
 	/*
 	 * VPA steal time counters are reported at TB frequency. Hence do a
-	 * conversion to ns before returning
+	 * conversion to ns before using.
 	 */
-	return tb_to_ns(be64_to_cpu(READ_ONCE(lppaca->enqueue_dispatch_tb)) +
-			be64_to_cpu(READ_ONCE(lppaca->ready_enqueue_tb)));
+	steal = tb_to_ns(steal);
+
+	return steal;
 }
-#endif
+#endif /* CONFIG_PARAVIRT_TIME_ACCOUNTING */
 
 #endif /* CONFIG_PPC_SPLPAR */
 
