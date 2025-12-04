@@ -1834,3 +1834,20 @@ void __noreturn arch_cpu_idle_dead(void)
 }
 
 #endif
+
+#ifdef CONFIG_PPC_SPLPAR
+#define MIN_CAPACITY 1
+
+/*
+ * Assume CPU capacity to be low if CPU number happens be above soft
+ * available limit. This forces load balancer to prefer higher capacity CPUs
+ */
+unsigned long arch_scale_cpu_capacity(int cpu)
+{
+	if (is_shared_processor() && !is_kvm_guest()) {
+		if (!cpu_active(cpu))
+			return MIN_CAPACITY;
+	}
+	return SCHED_CAPACITY_SCALE;
+}
+#endif /* CONFIG_PPC_SPLPAR */

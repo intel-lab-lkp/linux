@@ -177,5 +177,10 @@ static inline bool topology_is_core_online(unsigned int cpu)
 }
 #endif
 
+#ifdef CONFIG_PPC_SPLPAR
+#define arch_scale_cpu_capacity arch_scale_cpu_capacity
+unsigned long arch_scale_cpu_capacity(int cpu);
+#endif
+
 #endif /* __KERNEL__ */
 #endif	/* _ASM_POWERPC_TOPOLOGY_H */
