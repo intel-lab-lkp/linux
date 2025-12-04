@@ -145,6 +145,15 @@ static inline bool vcpu_is_preempted(int cpu)
 	if (!is_shared_processor())
 		return false;
 
+#ifdef CONFIG_PPC_SPLPAR
+	/*
+	 * Assume the target CPU to be preempted if it is above soft
+	 * entitlement limit
+	 */
+	if (!is_kvm_guest())
+		return !cpu_active(cpu);
+#endif
+
 	/*
 	 * If the hypervisor has dispatched the target CPU on a physical
 	 * processor, then the target CPU is definitely not preempted.
@@ -159,59 +168,6 @@ static inline bool vcpu_is_preempted(int cpu)
 	if (!is_vcpu_idle(cpu))
 		return true;
 
-#ifdef CONFIG_PPC_SPLPAR
-	if (!is_kvm_guest()) {
-		int first_cpu, i;
-
-		/*
-		 * The result of vcpu_is_preempted() is used in a
-		 * speculative way, and is always subject to invalidation
-		 * by events internal and external to Linux. While we can
-		 * be called in preemptable context (in the Linux sense),
-		 * we're not accessing per-cpu resources in a way that can
-		 * race destructively with Linux scheduler preemption and
-		 * migration, and callers can tolerate the potential for
-		 * error introduced by sampling the CPU index without
-		 * pinning the task to it. So it is permissible to use
-		 * raw_smp_processor_id() here to defeat the preempt debug
-		 * warnings that can arise from using smp_processor_id()
-		 * in arbitrary contexts.
-		 */
-		first_cpu = cpu_first_thread_sibling(raw_smp_processor_id());
-
-		/*
-		 * The PowerVM hypervisor dispatches VMs on a whole core
-		 * basis. So we know that a thread sibling of the executing CPU
-		 * cannot have been preempted by the hypervisor, even if it
-		 * has called H_CONFER, which will set the yield bit.
-		 */
-		if (cpu_first_thread_sibling(cpu) == first_cpu)
-			return false;
-
-		/*
-		 * The specific target CPU was marked by guest OS as idle, but
-		 * then also check all other cpus in the core for PowerVM
-		 * because it does core scheduling and one of the vcpu
-		 * of the core getting preempted by hypervisor implies
-		 * other vcpus can also be considered preempted.
-		 */
-		first_cpu = cpu_first_thread_sibling(cpu);
-		for (i = first_cpu; i < first_cpu + threads_per_core; i++) {
-			if (i == cpu)
-				continue;
-			if (vcpu_is_dispatched(i))
-				return false;
-			if (!is_vcpu_idle(i))
-				return true;
-		}
-	}
-#endif
-
-	/*
-	 * None of the threads in target CPU's core are running but none of
-	 * them were preempted too. Hence assume the target CPU to be
-	 * non-preempted.
-	 */
 	return false;
 }
 
