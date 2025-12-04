@@ -1640,6 +1640,55 @@ static unsigned long vma_to_pfn(struct vm_area_struct *vma)
 	return (pci_resource_start(vdev->pdev, index) >> PAGE_SHIFT) + pgoff;
 }
 
+/*
+ * Hint function for mmap() about the size of mapping to be carried out.
+ * This helps to enable huge pfnmaps as much as possible on BAR mappings.
+ *
+ * This function does the minimum check on mmap() parameters to make the
+ * hint valid only. The majority of mmap() sanity check will be done later
+ * in mmap().
+ */
+int vfio_pci_core_get_mapping_order(struct vfio_device *device,
+				    unsigned long pgoff, size_t len)
+{
+	struct vfio_pci_core_device *vdev =
+	    container_of(device, struct vfio_pci_core_device, vdev);
+	struct pci_dev *pdev = vdev->pdev;
+	unsigned int index = pgoff >> (VFIO_PCI_OFFSET_SHIFT - PAGE_SHIFT);
+	unsigned long req_start;
+	size_t phys_len;
+
+	/* Currently, only bars 0-5 supports huge pfnmap */
+	if (index >= VFIO_PCI_ROM_REGION_INDEX)
+		return 0;
+
+	/*
+	 * NOTE: we're keeping things simple as of now, assuming the
+	 * physical address of BARs (aka, pci_resource_start(pdev, index))
+	 * should always be aligned with pgoff in vfio-pci's address space.
+	 */
+	req_start = (pgoff << PAGE_SHIFT) & ((1UL << VFIO_PCI_OFFSET_SHIFT) - 1);
+	phys_len = PAGE_ALIGN(pci_resource_len(pdev, index));
+
+	/*
+	 * If this happens, it will probably fail mmap() later.. mapping
+	 * hint isn't important anymore.
+	 */
+	if (req_start >= phys_len)
+		return 0;
+
+	phys_len = MIN(phys_len - req_start, len);
+
+	if (IS_ENABLED(CONFIG_ARCH_SUPPORTS_PUD_PFNMAP) && phys_len >= PUD_SIZE)
+		return PUD_ORDER;
+
+	if (IS_ENABLED(CONFIG_ARCH_SUPPORTS_PMD_PFNMAP) && phys_len >= PMD_SIZE)
+		return PMD_ORDER;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(vfio_pci_core_get_mapping_order);
+
 static vm_fault_t vfio_pci_mmap_huge_fault(struct vm_fault *vmf,
 					   unsigned int order)
 {
