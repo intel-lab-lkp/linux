@@ -776,10 +776,16 @@ EXPORT_SYMBOL(page_alloc_tagging_ops);
 static int proc_mem_profiling_handler(const struct ctl_table *table, int write,
 				      void *buffer, size_t *lenp, loff_t *ppos)
 {
+	int ret;
+
 	if (!mem_profiling_support && write)
 		return -EINVAL;
 
-	return proc_do_static_key(table, write, buffer, lenp, ppos);
+	ret = proc_do_static_key(table, write, buffer, lenp, ppos);
+	if (!ret && write && mem_alloc_profiling_enabled())
+		codetag_flush_rcu_on_module_unload();
+
+	return ret;
 }
 
 
@@ -828,6 +834,9 @@ static int __init alloc_tag_init(void)
 		pr_info("Memory allocation profiling is not supported!\n");
 		return 0;
 	}
+
+	if (mem_alloc_profiling_enabled())
+		codetag_flush_rcu_on_module_unload();
 
 	if (!proc_create_seq_private(ALLOCINFO_FILE_NAME, 0400, NULL, &allocinfo_seq_op,
 				     sizeof(struct allocinfo_private), NULL)) {

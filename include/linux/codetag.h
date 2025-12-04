@@ -95,6 +95,7 @@ void codetag_free_module_sections(struct module *mod);
 void codetag_module_replaced(struct module *mod, struct module *new_mod);
 int codetag_load_module(struct module *mod);
 void codetag_unload_module(struct module *mod);
+void codetag_flush_rcu_on_module_unload(void);
 
 #else /* defined(CONFIG_CODE_TAGGING) && defined(CONFIG_MODULES) */
 
@@ -109,6 +110,7 @@ static inline void codetag_free_module_sections(struct module *mod) {}
 static inline void codetag_module_replaced(struct module *mod, struct module *new_mod) {}
 static inline int codetag_load_module(struct module *mod) { return 0; }
 static inline void codetag_unload_module(struct module *mod) {}
+static inline void codetag_flush_rcu_on_module_unload(void) {}
 
 #endif /* defined(CONFIG_CODE_TAGGING) && defined(CONFIG_MODULES) */
 

@@ -34,6 +34,7 @@ struct codetag_module {
 
 static DEFINE_MUTEX(codetag_lock);
 static LIST_HEAD(codetag_types);
+static bool flush_rcu_on_module_unload;
 
 void codetag_lock_module_list(struct codetag_type *cttype, bool lock)
 {
@@ -335,6 +336,11 @@ int codetag_load_module(struct module *mod)
 	return ret;
 }
 
+void codetag_flush_rcu_on_module_unload(void)
+{
+	flush_rcu_on_module_unload = true;
+}
+
 void codetag_unload_module(struct module *mod)
 {
 	struct codetag_type *cttype;
@@ -342,8 +348,12 @@ void codetag_unload_module(struct module *mod)
 	if (!mod)
 		return;
 
-	/* await any module's kfree_rcu() operations to complete */
-	kvfree_rcu_barrier();
+	/*
+	 * Await any module's kfree_rcu() operations to complete
+	 * if profiling was ever enabled.
+	 */
+	if (flush_rcu_on_module_unload)
+		kvfree_rcu_barrier();
 
 	mutex_lock(&codetag_lock);
 	list_for_each_entry(cttype, &codetag_types, link) {
