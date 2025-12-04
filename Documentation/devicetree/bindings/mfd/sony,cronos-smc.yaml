@@ -1,0 +1,115 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+# Copyright 2025 Raptor Engineering, LLC
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mfd/sony,cronos-smc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Sony Cronos Platform Controller CPLD multi-function device
+
+maintainers:
+  - Georgy Yakovlev <Georgy.Yakovlev@sony.com>
+
+description:
+  The Sony Cronos Platform Controller CPLD is a multi-purpose platform
+  controller that provides both a watchdog timer and an LED controller for the
+  Sony Interactive Entertainment Cronos x86 server platform. As both functions
+  are provided by the same CPLD, a multi-function device is exposed as the
+  parent of both functions.
+
+properties:
+  compatible:
+    const: sony,cronos-smc
+
+  reg:
+    maxItems: 1
+
+  leds:
+    type: object
+    additionalProperties: false
+    description: |
+      The Cronos LED controller is a subfunction of the Cronos platform
+      controller, which is a multi-function device.
+
+      Each led is represented as a child node of sony,cronos-led. Fifteen RGB
+      LEDs are supported by the platform.
+
+    properties:
+      compatible:
+        const: sony,cronos-led
+
+      reg:
+        maxItems: 1
+
+      "#address-cells":
+        const: 1
+
+      "#size-cells":
+        const: 0
+
+    patternProperties:
+      "^multi-led@[0-9a-f]$":
+        type: object
+        $ref: leds-class-multicolor.yaml#
+        unevaluatedProperties: false
+
+        properties:
+          reg:
+            description:
+              LED channel number (0..14)
+            minimum: 0
+            maximum: 14
+
+        required:
+          - reg
+
+    required:
+      - compatible
+      - "#address-cells"
+      - "#size-cells"
+
+required:
+  - compatible
+  - reg
+
+allOf:
+  - $ref: /schemas/watchdog/watchdog.yaml
+
+unevaluatedProperties: false
+
+examples:
+  - |
+
+    #include <dt-bindings/leds/common.h>
+
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        smc@3f {
+            compatible = "sony,cronos-smc";
+            reg = <0x3f>;
+
+            timeout-sec = <20>;
+
+            watchdog {
+                compatible = "sony,cronos-watchdog";
+            };
+
+            leds {
+                compatible = "sony,cronos-led";
+                #address-cells = <1>;
+                #size-cells = <0>;
+
+                multi-led@0 {
+                    /*
+                     * No subnodes are needed, this controller only supports RGB
+                     * LEDs.
+                     */
+                    reg = <0>;
+                    color = <LED_COLOR_ID_MULTI>;
+                    function = LED_FUNCTION_STATUS;
+                };
+            };
+        };
+    };
