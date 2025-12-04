@@ -1165,9 +1165,10 @@ static int __enable_vblank(struct drm_device *dev, unsigned int pipe)
 	return -EINVAL;
 }
 
-static int drm_vblank_enable(struct drm_device *dev, unsigned int pipe)
+static int drm_vblank_enable(struct drm_vblank_crtc *vblank)
 {
-	struct drm_vblank_crtc *vblank = drm_vblank_crtc(dev, pipe);
+	struct drm_device *dev = vblank->dev;
+	unsigned int pipe = vblank->pipe;
 	int ret = 0;
 
 	assert_spin_locked(&dev->vbl_lock);
@@ -1207,7 +1208,6 @@ static int drm_vblank_enable(struct drm_device *dev, unsigned int pipe)
 int drm_vblank_crtc_get(struct drm_vblank_crtc *vblank)
 {
 	struct drm_device *dev = vblank->dev;
-	int pipe = vblank->pipe;
 	unsigned long irqflags;
 	int ret = 0;
 
@@ -1217,7 +1217,7 @@ int drm_vblank_crtc_get(struct drm_vblank_crtc *vblank)
 	spin_lock_irqsave(&dev->vbl_lock, irqflags);
 	/* Going from 0->1 means we have to enable interrupts again */
 	if (atomic_add_return(1, &vblank->refcount) == 1) {
-		ret = drm_vblank_enable(dev, pipe);
+		ret = drm_vblank_enable(vblank);
 	} else {
 		if (!vblank->enabled) {
 			atomic_dec(&vblank->refcount);
@@ -1499,7 +1499,7 @@ void drm_crtc_vblank_on_config(struct drm_crtc *crtc,
 	 * user wishes vblank interrupts to be enabled all the time.
 	 */
 	if (atomic_read(&vblank->refcount) != 0 || !vblank->config.offdelay_ms)
-		drm_WARN_ON(dev, drm_vblank_enable(dev, pipe));
+		drm_WARN_ON(dev, drm_vblank_enable(vblank));
 	spin_unlock_irq(&dev->vbl_lock);
 }
 EXPORT_SYMBOL(drm_crtc_vblank_on_config);
