@@ -12517,6 +12517,7 @@ F:	include/drm/intel/
 F:	include/uapi/drm/i915_drm.h
 
 INTEL DRM XE DRIVER (Lunar Lake and newer)
+M:	Matthew Brost <matthew.brost@intel.com>
 M:	Thomas Hellström <thomas.hellstrom@linux.intel.com>
 M:	Rodrigo Vivi <rodrigo.vivi@intel.com>
 L:	intel-xe@lists.freedesktop.org
