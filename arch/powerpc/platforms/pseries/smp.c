@@ -51,6 +51,9 @@
  * interface by prom_hold_cpus and is spinning on secondary_hold_spinloop.
  */
 static cpumask_var_t of_spin_mask;
+#ifdef CONFIG_PPC_SPLPAR
+static cpumask_var_t cpus;
+#endif
 
 /* Query where a cpu is now.  Return codes #defined in plpar_wrappers.h */
 int smp_query_cpu_stopped(unsigned int pcpu)
@@ -277,6 +280,14 @@ static __init void pSeries_smp_probe(void)
 }
 
 #ifdef CONFIG_PPC_SPLPAR
+/*
+ * Set higher threshold values to which steal has to be limited. Also set
+ * lower threshold values below which allow work to spread out to more
+ * cores.
+ */
+#define STEAL_RATIO_HIGH (10 * STEAL_RATIO)
+#define STEAL_RATIO_LOW (5 * STEAL_RATIO)
+
 static unsigned int max_virtual_cores __read_mostly;
 static unsigned int entitled_cores __read_mostly;
 static unsigned int available_cores;
@@ -311,6 +322,49 @@ static unsigned int pseries_num_available_cores(void)
 
 	return available_cores;
 }
+
+void trigger_softoffline(unsigned long steal_ratio)
+{
+	int currcpu = smp_processor_id();
+	static int prev_direction;
+	int cpu, i;
+
+	if (steal_ratio >= STEAL_RATIO_HIGH && prev_direction > 0) {
+		/*
+		 * System entitlement was reduced earlier but we continue to
+		 * see steal time. Reduce entitlement further.
+		 */
+		cpu = cpumask_last(cpu_active_mask);
+		for_each_cpu_andnot(i, cpu_sibling_mask(cpu), cpu_sibling_mask(currcpu)) {
+			struct offline_worker *worker = &per_cpu(offline_workers, i);
+
+			worker->offline = 1;
+			schedule_work_on(i, &worker->work);
+		}
+	} else if (steal_ratio <= STEAL_RATIO_LOW && prev_direction < 0) {
+		/*
+		 * System entitlement was increased but we continue to see
+		 * less steal time. Increase entitlement further.
+		 */
+		cpumask_andnot(cpus, cpu_online_mask, cpu_active_mask);
+		if (cpumask_empty(cpus))
+			return;
+
+		cpu = cpumask_first(cpus);
+		for_each_cpu_andnot(i, cpu_sibling_mask(cpu), cpu_sibling_mask(currcpu)) {
+			struct offline_worker *worker = &per_cpu(offline_workers, i);
+
+			worker->offline = 0;
+			schedule_work_on(i, &worker->work);
+		}
+	}
+	if (steal_ratio >= STEAL_RATIO_HIGH)
+		prev_direction = 1;
+	else if (steal_ratio <= STEAL_RATIO_LOW)
+		prev_direction = -1;
+	else
+		prev_direction = 0;
+}
 #endif
 
 static struct smp_ops_t pseries_smp_ops = {
@@ -336,6 +390,9 @@ void __init smp_init_pseries(void)
 	smp_ops = &pseries_smp_ops;
 
 	alloc_bootmem_cpumask_var(&of_spin_mask);
+#ifdef CONFIG_PPC_SPLPAR
+	alloc_bootmem_cpumask_var(&cpus);
+#endif
 
 	/*
 	 * Mark threads which are still spinning in hold loops

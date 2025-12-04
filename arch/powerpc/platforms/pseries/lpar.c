@@ -662,9 +662,6 @@ machine_device_initcall(pseries, vcpudispatch_stats_procfs_init);
 #define STEAL_MULTIPLE (STEAL_RATIO * STEAL_RATIO)
 #define PURR_UPDATE_TB tb_ticks_per_sec
 
-static void trigger_softoffline(unsigned long steal_ratio)
-{
-}
 
 static bool should_cpu_process_steal(int cpu)
 {
