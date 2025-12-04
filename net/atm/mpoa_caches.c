@@ -132,7 +132,6 @@ static in_cache_entry *in_cache_add_entry(__be32 dst_ip,
 
 static int cache_hit(in_cache_entry *entry, struct mpoa_client *mpc)
 {
-	struct atm_mpoa_qos *qos;
 	struct k_message msg;
 
 	entry->count++;
@@ -144,9 +143,8 @@ static int cache_hit(in_cache_entry *entry, struct mpoa_client *mpc)
 			msg.type = SND_MPOA_RES_RQST;
 			msg.content.in_info = entry->ctrl_info;
 			memcpy(msg.MPS_ctrl, mpc->mps_ctrl_addr, ATM_ESA_LEN);
-			qos = atm_mpoa_search_qos(entry->ctrl_info.in_dst_ip);
-			if (qos != NULL)
-				msg.qos = qos->qos;
+			if (!atm_mpoa_get_qos(entry->ctrl_info.in_dst_ip, &msg.qos))
+				memset(&msg.qos, 0, sizeof(msg.qos));
 			msg_to_mpoad(&msg, mpc);
 			entry->reply_wait = ktime_get_seconds();
 			entry->entry_state = INGRESS_RESOLVING;
@@ -167,9 +165,8 @@ static int cache_hit(in_cache_entry *entry, struct mpoa_client *mpc)
 		msg.type = SND_MPOA_RES_RQST;
 		memcpy(msg.MPS_ctrl, mpc->mps_ctrl_addr, ATM_ESA_LEN);
 		msg.content.in_info = entry->ctrl_info;
-		qos = atm_mpoa_search_qos(entry->ctrl_info.in_dst_ip);
-		if (qos != NULL)
-			msg.qos = qos->qos;
+		if (!atm_mpoa_get_qos(entry->ctrl_info.in_dst_ip, &msg.qos))
+			memset(&msg.qos, 0, sizeof(msg.qos));
 		msg_to_mpoad(&msg, mpc);
 		entry->reply_wait = ktime_get_seconds();
 	}
@@ -249,7 +246,6 @@ static void clear_count_and_expired(struct mpoa_client *client)
 static void check_resolving_entries(struct mpoa_client *client)
 {
 
-	struct atm_mpoa_qos *qos;
 	in_cache_entry *entry;
 	time64_t now;
 	struct k_message msg;
@@ -283,9 +279,8 @@ static void check_resolving_entries(struct mpoa_client *client)
 				msg.type = SND_MPOA_RES_RTRY;
 				memcpy(msg.MPS_ctrl, client->mps_ctrl_addr, ATM_ESA_LEN);
 				msg.content.in_info = entry->ctrl_info;
-				qos = atm_mpoa_search_qos(entry->ctrl_info.in_dst_ip);
-				if (qos != NULL)
-					msg.qos = qos->qos;
+				if (!atm_mpoa_get_qos(entry->ctrl_info.in_dst_ip, &msg.qos))
+					memset(&msg.qos, 0, sizeof(msg.qos));
 				msg_to_mpoad(&msg, client);
 				entry->reply_wait = ktime_get_seconds();
 			}

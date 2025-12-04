@@ -9,6 +9,7 @@
 #include <linux/bitops.h>
 #include <linux/capability.h>
 #include <linux/seq_file.h>
+#include <linux/mutex.h>
 
 /* We are an ethernet device */
 #include <linux/if_ether.h>
@@ -122,6 +123,7 @@ static struct notifier_block mpoa_notifier = {
 
 struct mpoa_client *mpcs = NULL; /* FIXME */
 static struct atm_mpoa_qos *qos_head = NULL;
+static DEFINE_MUTEX(qos_mutex); /* Protect qos_head list */
 static DEFINE_TIMER(mpc_timer, mpc_cache_check);
 
 
@@ -172,67 +174,63 @@ static struct mpoa_client *find_mpc_by_lec(struct net_device *dev)
  */
 
 /*
- * Overwrites the old entry or makes a new one.
+ * Search for a QoS entry. Caller must hold qos_mutex.
+ * Returns pointer to entry if found, NULL otherwise.
  */
-struct atm_mpoa_qos *atm_mpoa_add_qos(__be32 dst_ip, struct atm_qos *qos)
+static struct atm_mpoa_qos *__atm_mpoa_search_qos(__be32 dst_ip)
 {
-	struct atm_mpoa_qos *entry;
+	struct atm_mpoa_qos *qos = qos_head;
 
-	entry = atm_mpoa_search_qos(dst_ip);
-	if (entry != NULL) {
-		entry->qos = *qos;
-		return entry;
-	}
-
-	entry = kmalloc(sizeof(struct atm_mpoa_qos), GFP_KERNEL);
-	if (entry == NULL) {
-		pr_info("mpoa: out of memory\n");
-		return entry;
-	}
-
-	entry->ipaddr = dst_ip;
-	entry->qos = *qos;
-
-	entry->next = qos_head;
-	qos_head = entry;
-
-	return entry;
-}
-
-struct atm_mpoa_qos *atm_mpoa_search_qos(__be32 dst_ip)
-{
-	struct atm_mpoa_qos *qos;
-
-	qos = qos_head;
 	while (qos) {
 		if (qos->ipaddr == dst_ip)
-			break;
+			return qos;
 		qos = qos->next;
 	}
-
-	return qos;
+	return NULL;
 }
 
 /*
- * Returns 0 for failure
+ * Get a QoS entry by copying its value.
+ * Caller gets a COPY of qos under lock.
+ * Returns true if found and copied, false if not found.
+ * This avoids lifetime issues with the returned pointer.
  */
-int atm_mpoa_delete_qos(struct atm_mpoa_qos *entry)
+bool atm_mpoa_get_qos(__be32 dst_ip, struct atm_qos *out)
+{
+	struct atm_mpoa_qos *q;
+
+	if (!out)
+		return false;
+
+	mutex_lock(&qos_mutex);
+	q = __atm_mpoa_search_qos(dst_ip);
+	if (q)
+		*out = q->qos;
+	mutex_unlock(&qos_mutex);
+
+	return q;
+}
+
+/*
+ * Delete a QoS entry from the list. Caller must hold qos_mutex.
+ * Returns 1 if found and deleted, 0 if not found.
+ */
+static int __atm_mpoa_delete_qos_locked(struct atm_mpoa_qos *entry)
 {
 	struct atm_mpoa_qos *curr;
 
-	if (entry == NULL)
+	if (!entry)
 		return 0;
+
 	if (entry == qos_head) {
-		qos_head = qos_head->next;
-		kfree(entry);
+		qos_head = entry->next;
 		return 1;
 	}
 
 	curr = qos_head;
-	while (curr != NULL) {
+	while (curr) {
 		if (curr->next == entry) {
 			curr->next = entry->next;
-			kfree(entry);
 			return 1;
 		}
 		curr = curr->next;
@@ -241,15 +239,107 @@ int atm_mpoa_delete_qos(struct atm_mpoa_qos *entry)
 	return 0;
 }
 
+/*
+ * Delete a QoS entry by IP address.
+ * This is atomic: search+unlink+free happens entirely under lock,
+ * avoiding the double-free issue with atm_mpoa_delete_qos(atm_mpoa_search_qos(ipaddr)).
+ */
+int atm_mpoa_delete_qos_by_ip(__be32 dst_ip)
+{
+	struct atm_mpoa_qos *entry;
+	int ret = 0;
+
+	mutex_lock(&qos_mutex);
+	entry = __atm_mpoa_search_qos(dst_ip);
+	if (entry) {
+		ret = __atm_mpoa_delete_qos_locked(entry);
+		if (ret)
+			kfree(entry);
+	}
+	mutex_unlock(&qos_mutex);
+
+	return ret;
+}
+
+/*
+ * Overwrites the old entry or makes a new one.
+ */
+struct atm_mpoa_qos *atm_mpoa_add_qos(__be32 dst_ip, struct atm_qos *qos)
+{
+	struct atm_mpoa_qos *entry;
+	struct atm_mpoa_qos *new;
+
+	/* Fast path: update existing entry */
+	mutex_lock(&qos_mutex);
+	entry = __atm_mpoa_search_qos(dst_ip);
+	if (entry) {
+		entry->qos = *qos;
+		mutex_unlock(&qos_mutex);
+		return entry;
+	}
+	mutex_unlock(&qos_mutex);
+
+	/* Allocate outside lock */
+	new = kmalloc(sizeof(*new), GFP_KERNEL);
+	if (!new)
+		return NULL;
+
+	new->ipaddr = dst_ip;
+	new->qos = *qos;
+
+	/* Re-check under lock to avoid duplicates */
+	mutex_lock(&qos_mutex);
+	entry = __atm_mpoa_search_qos(dst_ip);
+	if (entry) {
+		entry->qos = *qos;
+		mutex_unlock(&qos_mutex);
+		kfree(new);
+		return entry;
+	}
+
+	new->next = qos_head;
+	qos_head = new;
+	mutex_unlock(&qos_mutex);
+
+	return new;
+}
+
+/*
+ * Delete a QoS entry by pointer.
+ * WARNING: This function is unsafe if called with an entry pointer
+ * obtained outside of qos_mutex protection. The entry may have been
+ * freed by another thread between the time the pointer was obtained
+ * and when this function is called.
+ * Use atm_mpoa_delete_qos_by_ip() instead for safe deletion by IP address.
+ * Returns 0 for failure, 1 for success
+ */
+int atm_mpoa_delete_qos(struct atm_mpoa_qos *entry)
+{
+	int ret;
+
+	if (!entry)
+		return 0;
+
+	mutex_lock(&qos_mutex);
+	ret = __atm_mpoa_delete_qos_locked(entry);
+	if (ret)
+		kfree(entry);
+	mutex_unlock(&qos_mutex);
+
+	return ret;
+}
+
 /* this is buggered - we need locking for qos_head */
 void atm_mpoa_disp_qos(struct seq_file *m)
 {
 	struct atm_mpoa_qos *qos;
 
-	qos = qos_head;
 	seq_printf(m, "QoS entries for shortcuts:\n");
-	seq_printf(m, "IP address\n  TX:max_pcr pcr     min_pcr max_cdv max_sdu\n  RX:max_pcr pcr     min_pcr max_cdv max_sdu\n");
+	seq_printf(m, "IP address\n  TX:max_pcr pcr     min_pcr max_cdv max_sdu\n"
+		   "  RX:max_pcr pcr     min_pcr max_cdv max_sdu\n");
 
+	mutex_lock(&qos_mutex);
+	qos = qos_head;
 	while (qos != NULL) {
 		seq_printf(m, "%pI4\n     %-7d %-7d %-7d %-7d %-7d\n     %-7d %-7d %-7d %-7d %-7d\n",
 			   &qos->ipaddr,
@@ -265,6 +355,7 @@ void atm_mpoa_disp_qos(struct seq_file *m)
 			   qos->qos.rxtp.max_sdu);
 		qos = qos->next;
 	}
+	mutex_unlock(&qos_mutex);
 }
 
 static struct net_device *find_lec_by_itfnum(int itf)
@@ -1118,13 +1209,16 @@ static void check_qos_and_open_shortcut(struct k_message *msg,
 					in_cache_entry *entry)
 {
 	__be32 dst_ip = msg->content.in_info.in_dst_ip;
-	struct atm_mpoa_qos *qos = atm_mpoa_search_qos(dst_ip);
+	struct atm_qos tmp_qos;
+	bool has_qos;
 	eg_cache_entry *eg_entry = client->eg_ops->get_by_src_ip(dst_ip, client);
+
+	has_qos = atm_mpoa_get_qos(dst_ip, &tmp_qos);
 
 	if (eg_entry && eg_entry->shortcut) {
 		if (eg_entry->shortcut->qos.txtp.traffic_class &
 		    msg->qos.txtp.traffic_class &
-		    (qos ? qos->qos.txtp.traffic_class : ATM_UBR | ATM_CBR)) {
+		    (has_qos ? tmp_qos.txtp.traffic_class : ATM_UBR | ATM_CBR)) {
 			if (eg_entry->shortcut->qos.txtp.traffic_class == ATM_UBR)
 				entry->shortcut = eg_entry->shortcut;
 			else if (eg_entry->shortcut->qos.txtp.max_pcr > 0)
@@ -1142,9 +1236,9 @@ static void check_qos_and_open_shortcut(struct k_message *msg,
 
 	/* No luck in the egress cache we must open an ingress SVC */
 	msg->type = OPEN_INGRESS_SVC;
-	if (qos &&
-	    (qos->qos.txtp.traffic_class == msg->qos.txtp.traffic_class)) {
-		msg->qos = qos->qos;
+	if (has_qos &&
+	    tmp_qos.txtp.traffic_class == msg->qos.txtp.traffic_class) {
+		msg->qos = tmp_qos;
 		pr_info("(%s) trying to get a CBR shortcut\n",
 			client->dev->name);
 	} else
@@ -1521,8 +1615,10 @@ static void __exit atm_mpoa_cleanup(void)
 		mpc = tmp;
 	}
 
+	mutex_lock(&qos_mutex);
 	qos = qos_head;
 	qos_head = NULL;
+	mutex_unlock(&qos_mutex);
 	while (qos != NULL) {
 		nextqos = qos->next;
 		dprintk("freeing qos entry %p\n", qos);

@@ -47,8 +47,9 @@ struct atm_mpoa_qos {
 
 /* MPOA QoS operations */
 struct atm_mpoa_qos *atm_mpoa_add_qos(__be32 dst_ip, struct atm_qos *qos);
-struct atm_mpoa_qos *atm_mpoa_search_qos(__be32 dst_ip);
+bool atm_mpoa_get_qos(__be32 dst_ip, struct atm_qos *out);
 int atm_mpoa_delete_qos(struct atm_mpoa_qos *qos);
+int atm_mpoa_delete_qos_by_ip(__be32 dst_ip);
 
 /* Display QoS entries. This is for the procfs */
 struct seq_file;

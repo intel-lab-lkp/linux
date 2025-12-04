@@ -254,7 +254,7 @@ static int parse_qos(const char *buff)
 	if (sscanf(buff, "del %hhu.%hhu.%hhu.%hhu",
 			ip, ip+1, ip+2, ip+3) == 4) {
 		ipaddr = *(__be32 *)ip;
-		return atm_mpoa_delete_qos(atm_mpoa_search_qos(ipaddr));
+		return atm_mpoa_delete_qos_by_ip(ipaddr);
 	}
 
 	if (sscanf(buff, "add %hhu.%hhu.%hhu.%hhu tx=%d,%d rx=tx",
