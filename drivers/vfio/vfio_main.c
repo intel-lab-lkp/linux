@@ -1372,6 +1372,19 @@ static void vfio_device_show_fdinfo(struct seq_file *m, struct file *filep)
 }
 #endif
 
+static int vfio_device_get_mapping_order(struct file *file,
+					 unsigned long pgoff,
+					 size_t len)
+{
+	struct vfio_device_file *df = file->private_data;
+	struct vfio_device *device = df->device;
+
+	if (device->ops->get_mapping_order)
+		return device->ops->get_mapping_order(device, pgoff, len);
+
+	return 0;
+}
+
 const struct file_operations vfio_device_fops = {
 	.owner		= THIS_MODULE,
 	.open		= vfio_device_fops_cdev_open,
@@ -1384,6 +1397,7 @@ const struct file_operations vfio_device_fops = {
 #ifdef CONFIG_PROC_FS
 	.show_fdinfo	= vfio_device_show_fdinfo,
 #endif
+	.get_mapping_order	= vfio_device_get_mapping_order,
 };
 
 static struct vfio_device *vfio_device_from_file(struct file *file)

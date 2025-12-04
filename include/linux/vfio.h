@@ -111,6 +111,8 @@ struct vfio_device {
  * @dma_unmap: Called when userspace unmaps IOVA from the container
  *             this device is attached to.
  * @device_feature: Optional, fill in the VFIO_DEVICE_FEATURE ioctl
+ * @get_mapping_order: Optional, provide mapping order hints for mmap().
+ *                     When unavailable, use the default order (zero).
  */
 struct vfio_device_ops {
 	char	*name;
@@ -139,6 +141,9 @@ struct vfio_device_ops {
 	void	(*dma_unmap)(struct vfio_device *vdev, u64 iova, u64 length);
 	int	(*device_feature)(struct vfio_device *device, u32 flags,
 				  void __user *arg, size_t argsz);
+	int	(*get_mapping_order)(struct vfio_device *device,
+				     unsigned long pgoff,
+				     size_t len);
 };
 
 #if IS_ENABLED(CONFIG_IOMMUFD)
