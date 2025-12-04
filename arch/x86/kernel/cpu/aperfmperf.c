@@ -330,23 +330,6 @@ static void __init bp_init_freq_invariance(void)
 	}
 }
 
-static void disable_freq_invariance_workfn(struct work_struct *work)
-{
-	int cpu;
-
-	static_branch_disable(&arch_scale_freq_key);
-
-	/*
-	 * Set arch_freq_scale to a default value on all cpus
-	 * This negates the effect of scaling
-	 */
-	for_each_possible_cpu(cpu)
-		per_cpu(arch_freq_scale, cpu) = SCHED_CAPACITY_SCALE;
-}
-
-static DECLARE_WORK(disable_freq_invariance_work,
-		    disable_freq_invariance_workfn);
-
 DEFINE_PER_CPU(unsigned long, arch_freq_scale) = SCHED_CAPACITY_SCALE;
 EXPORT_PER_CPU_SYMBOL_GPL(arch_freq_scale);
 
@@ -437,30 +420,33 @@ static void scale_freq_tick(u64 acnt, u64 mcnt)
 	if (!arch_scale_freq_invariant())
 		return;
 
+	/*
+	 * On any over/underflow just ignore the sample. It could
+	 * be due to an unlucky NMI or similar between the
+	 * APERF and MPERF reads.
+	 */
 	if (check_shl_overflow(acnt, 2*SCHED_CAPACITY_SHIFT, &acnt))
-		goto error;
+		goto out;
 
 	if (static_branch_unlikely(&arch_hybrid_cap_scale_key))
 		freq_ratio = READ_ONCE(this_cpu_ptr(arch_cpu_scale)->freq_ratio);
 	else
 		freq_ratio = arch_max_freq_ratio;
 
+	freq_scale = SCHED_CAPACITY_SCALE;
+
 	if (check_mul_overflow(mcnt, freq_ratio, &mcnt) || !mcnt)
-		goto error;
+		goto out;
 
 	freq_scale = div64_u64(acnt, mcnt);
 	if (!freq_scale)
-		goto error;
+		goto out;
 
 	if (freq_scale > SCHED_CAPACITY_SCALE)
 		freq_scale = SCHED_CAPACITY_SCALE;
 
+out:
 	this_cpu_write(arch_freq_scale, freq_scale);
-	return;
-
-error:
-	pr_warn("Scheduler frequency invariance went wobbly, disabling!\n");
-	schedule_work(&disable_freq_invariance_work);
 }
 #else
 static inline void bp_init_freq_invariance(void) { }
