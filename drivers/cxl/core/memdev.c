@@ -1081,8 +1081,7 @@ DEFINE_FREE(put_cxlmd, struct cxl_memdev *,
  * Core helper for devm_cxl_add_memdev() that wants to both create a device and
  * assert to the caller that upon return cxl_mem::probe() has been invoked.
  */
-struct cxl_memdev *__devm_cxl_add_memdev(struct device *host,
-					 struct cxl_dev_state *cxlds)
+struct cxl_memdev *__devm_cxl_add_memdev(struct cxl_dev_state *cxlds)
 {
 	struct device *dev;
 	int rc;
@@ -1101,7 +1100,7 @@ struct cxl_memdev *__devm_cxl_add_memdev(struct device *host,
 	if (rc)
 		return ERR_PTR(rc);
 
-	rc = devm_add_action_or_reset(host, cxl_memdev_unregister,
+	rc = devm_add_action_or_reset(cxlds->dev, cxl_memdev_unregister,
 				      no_free_ptr(cxlmd));
 	if (rc)
 		return ERR_PTR(rc);
