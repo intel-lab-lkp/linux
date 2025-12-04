@@ -585,15 +585,20 @@ static int fuse_uring_copy_from_ring(struct fuse_ring *ring,
 	int err;
 	struct fuse_uring_ent_in_out ring_in_out;
 
-	err = copy_from_user(&ring_in_out, &ent->headers->ring_ent_in_out,
-			     sizeof(ring_in_out));
-	if (err)
-		return -EFAULT;
+	if (ent->zero_copy) {
+		iter = ent->payload_iter;
+		ring_in_out.payload_sz = ent->cmd->sqe->len;
+	} else {
+		err = copy_from_user(&ring_in_out, &ent->headers->ring_ent_in_out,
+					sizeof(ring_in_out));
+		if (err)
+			return -EFAULT;
 
-	err = import_ubuf(ITER_SOURCE, ent->payload, ring->max_payload_sz,
-			  &iter);
-	if (err)
-		return err;
+		err = import_ubuf(ITER_SOURCE, ent->payload, ring->max_payload_sz,
+				 &iter);
+		if (err)
+			return err;
+	}
 
 	fuse_copy_init(&cs, false, &iter);
 	cs.is_uring = true;
@@ -621,10 +626,14 @@ static int fuse_uring_args_to_ring(struct fuse_ring *ring, struct fuse_req *req,
 		.commit_id = req->in.h.unique,
 	};
 
-	err = import_ubuf(ITER_DEST, ent->payload, ring->max_payload_sz, &iter);
-	if (err) {
-		pr_info_ratelimited("fuse: Import of user buffer failed\n");
-		return err;
+	if (ent->zero_copy) {
+		iter = ent->payload_iter;
+	} else {
+		err = import_ubuf(ITER_DEST, ent->payload, ring->max_payload_sz, &iter);
+		if (err) {
+			pr_info_ratelimited("fuse: Import of user buffer failed\n");
+			return err;
+		}
 	}
 
 	fuse_copy_init(&cs, true, &iter);
@@ -1071,6 +1080,17 @@ fuse_uring_create_ring_ent(struct io_uring_cmd *cmd,
 	ent->queue = queue;
 	ent->headers = iov[0].iov_base;
 	ent->payload = iov[1].iov_base;
+
+	if (READ_ONCE(cmd->sqe->uring_cmd_flags) & IORING_URING_CMD_FIXED) {
+		ent->zero_copy = true;
+		err = io_uring_cmd_import_fixed((u64)ent->payload, payload_size, ITER_DEST,
+						&ent->payload_iter, cmd, 0);
+
+		if (err) {
+			kfree(ent);
+			return ERR_PTR(err);
+		}
+	}
 
 	atomic_inc(&ring->queue_refs);
 	return ent;

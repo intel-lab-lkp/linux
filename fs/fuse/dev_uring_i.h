@@ -38,6 +38,10 @@ enum fuse_ring_req_state {
 
 /** A fuse ring entry, part of the ring queue */
 struct fuse_ring_ent {
+	bool zero_copy;
+
+	struct iov_iter payload_iter;
+
 	/* userspace buffer */
 	struct fuse_uring_req_header __user *headers;
 	void __user *payload;
