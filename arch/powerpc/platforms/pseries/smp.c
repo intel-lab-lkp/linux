@@ -42,6 +42,7 @@
 #include <asm/text-patching.h>
 #include <asm/svm.h>
 #include <asm/kvm_guest.h>
+#include <asm/hvcall.h>
 
 #include "pseries.h"
 
@@ -239,6 +240,40 @@ static __init void pSeries_smp_probe(void)
 	smp_ops->cause_ipi = dbell_or_ic_cause_ipi;
 }
 
+#ifdef CONFIG_PPC_SPLPAR
+static unsigned int max_virtual_cores __read_mostly;
+static unsigned int entitled_cores __read_mostly;
+static unsigned int available_cores;
+
+/* Get pseries soft entitlement limit */
+static unsigned int pseries_num_available_cores(void)
+{
+	unsigned int present_cores = num_present_cpus() / threads_per_core;
+	unsigned long retbuf[PLPAR_HCALL9_BUFSIZE];
+
+	if (!is_shared_processor() || is_kvm_guest())
+		return present_cores;
+
+	if (entitled_cores && max_virtual_cores == present_cores)
+		return available_cores;
+
+	if (plpar_hcall9(H_GET_PPP, retbuf))
+		return num_present_cpus() / threads_per_core;
+
+	entitled_cores = retbuf[0] / 100;
+	max_virtual_cores = present_cores;
+
+	if (!available_cores)
+		available_cores = max_virtual_cores;
+	else if (available_cores < entitled_cores)
+		available_cores = entitled_cores;
+	else if (available_cores > max_virtual_cores)
+		available_cores = max_virtual_cores;
+
+	return available_cores;
+}
+#endif
+
 static struct smp_ops_t pseries_smp_ops = {
 	.message_pass	= NULL,	/* Use smp_muxed_ipi_message_pass */
 	.cause_ipi	= NULL,	/* Filled at runtime by pSeries_smp_probe() */
@@ -248,6 +283,9 @@ static struct smp_ops_t pseries_smp_ops = {
 	.kick_cpu	= smp_pSeries_kick_cpu,
 	.setup_cpu	= smp_setup_cpu,
 	.cpu_bootable	= smp_generic_cpu_bootable,
+#ifdef CONFIG_PPC_SPLPAR
+	.num_available_cores = pseries_num_available_cores,
+#endif
 };
 
 /* This is called very early */
