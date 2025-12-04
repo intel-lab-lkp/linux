@@ -232,7 +232,7 @@ static ssize_t bin_attr_nvmem_read(struct file *filp, struct kobject *kobj,
 	count = round_down(count, nvmem->word_size);
 
 	if (!nvmem->reg_read)
-		return -EPERM;
+		return -EOPNOTSUPP;
 
 	rc = nvmem_reg_read(nvmem, pos, buf, count);
 
@@ -264,7 +264,9 @@ static ssize_t bin_attr_nvmem_write(struct file *filp, struct kobject *kobj,
 
 	count = round_down(count, nvmem->word_size);
 
-	if (!nvmem->reg_write || nvmem->read_only)
+	if (!nvmem->reg_write)
+		return -EOPNOTSUPP;
+	if (nvmem->read_only)
 		return -EPERM;
 
 	rc = nvmem_reg_write(nvmem, pos, buf, count);
