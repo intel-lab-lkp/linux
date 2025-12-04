@@ -508,40 +508,41 @@ void nr_rt_device_down(struct net_device *dev)
 {
 	struct nr_neigh *s;
 	struct hlist_node *nodet, *node2t;
-	struct nr_node  *t;
+	struct nr_node *t;
 	int i;
+
+	spin_lock_bh(&nr_node_list_lock);
+	nr_node_for_each_safe(t, node2t, &nr_node_list) {
+		nr_node_lock(t);
+		for (i = 0; i < t->count; i++) {
+			s = t->routes[i].neighbour;
+			if (s->dev == dev) {
+				t->count--;
+
+				switch (i) {
+				case 0:
+					t->routes[0] = t->routes[1];
+					fallthrough;
+				case 1:
+					t->routes[1] = t->routes[2];
+					break;
+				case 2:
+					break;
+				}
+				i--;
+			}
+		}
+
+		if (t->count <= 0)
+			nr_remove_node_locked(t);
+		nr_node_unlock(t);
+	}
+	spin_unlock_bh(&nr_node_list_lock);
 
 	spin_lock_bh(&nr_neigh_list_lock);
 	nr_neigh_for_each_safe(s, nodet, &nr_neigh_list) {
-		if (s->dev == dev) {
-			spin_lock_bh(&nr_node_list_lock);
-			nr_node_for_each_safe(t, node2t, &nr_node_list) {
-				nr_node_lock(t);
-				for (i = 0; i < t->count; i++) {
-					if (t->routes[i].neighbour == s) {
-						t->count--;
-
-						switch (i) {
-						case 0:
-							t->routes[0] = t->routes[1];
-							fallthrough;
-						case 1:
-							t->routes[1] = t->routes[2];
-							break;
-						case 2:
-							break;
-						}
-					}
-				}
-
-				if (t->count <= 0)
-					nr_remove_node_locked(t);
-				nr_node_unlock(t);
-			}
-			spin_unlock_bh(&nr_node_list_lock);
-
+		if (s->dev == dev)
 			nr_remove_neigh_locked(s);
-		}
 	}
 	spin_unlock_bh(&nr_neigh_list_lock);
 }
@@ -962,23 +963,23 @@ const struct seq_operations nr_neigh_seqops = {
 void nr_rt_free(void)
 {
 	struct nr_neigh *s = NULL;
-	struct nr_node  *t = NULL;
+	struct nr_node *t = NULL;
 	struct hlist_node *nodet;
 
-	spin_lock_bh(&nr_neigh_list_lock);
 	spin_lock_bh(&nr_node_list_lock);
+	spin_lock_bh(&nr_neigh_list_lock);
 	nr_node_for_each_safe(t, nodet, &nr_node_list) {
 		nr_node_lock(t);
 		nr_remove_node_locked(t);
 		nr_node_unlock(t);
 	}
 	nr_neigh_for_each_safe(s, nodet, &nr_neigh_list) {
-		while(s->count) {
+		while (s->count) {
 			s->count--;
 			nr_neigh_put(s);
 		}
 		nr_remove_neigh_locked(s);
 	}
-	spin_unlock_bh(&nr_node_list_lock);
 	spin_unlock_bh(&nr_neigh_list_lock);
+	spin_unlock_bh(&nr_node_list_lock);
 }
