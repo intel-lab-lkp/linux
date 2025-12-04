@@ -119,6 +119,21 @@ def each_active_cpu():
         yield cpu
 
 
+class LxCpuFunc(gdb.Function):
+    """Return current CPU number.
+
+$lx_cpu(): Return the current CPU number."""
+
+    def __init__(self):
+        super(LxCpuFunc, self).__init__("lx_cpu")
+
+    def invoke(self):
+        return get_current_cpu()
+
+
+LxCpuFunc()
+
+
 class LxCpus(gdb.Command):
     """List CPU status arrays
 
