@@ -56,6 +56,7 @@
 #include <linux/phy/phy.h>
 #include <linux/usb/typec_dp.h>
 #include <linux/usb/typec_mux.h>
+#include <drm/bridge/aux-bridge.h>
 
 #define CMN_SSM_BANDGAP			(0x21 << 2)
 #define CMN_SSM_BIAS			(0x22 << 2)
@@ -1310,6 +1311,10 @@ static int tcphy_setup_typec_mux(struct rockchip_typec_phy *tcphy)
 		return 0;
 
 	if (!of_property_read_bool(np, "mode-switch"))
+		goto put_np;
+
+	ret = drm_aux_bridge_register_from_node(tcphy->dev, np);
+	if (ret)
 		goto put_np;
 
 	mux_desc.drvdata = tcphy;
