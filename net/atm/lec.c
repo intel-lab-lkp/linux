@@ -340,6 +340,23 @@ static int lec_close(struct net_device *dev)
 	return 0;
 }
 
+static int lec_atm_pre_send(struct atm_vcc *vcc, struct sk_buff *skb)
+{
+	u32 sizeoftlvs;
+	struct atmlec_msg *mesg;
+	int msg_size = sizeof(struct atmlec_msg);
+
+	if (skb->len < msg_size)
+		return -EINVAL;
+
+	mesg = (struct atmlec_msg *)skb->data;
+	sizeoftlvs = mesg->sizeoftlvs;
+	if (sizeoftlvs && !pskb_may_pull(skb, msg_size + sizeoftlvs))
+		return -EINVAL;
+
+	return 0;
+}
+
 static int lec_atm_send(struct atm_vcc *vcc, struct sk_buff *skb)
 {
 	static const u8 zero_addr[ETH_ALEN] = {};
@@ -491,6 +508,7 @@ static void lec_atm_close(struct atm_vcc *vcc)
 
 static const struct atmdev_ops lecdev_ops = {
 	.close = lec_atm_close,
+	.pre_send = lec_atm_pre_send,
 	.send = lec_atm_send
 };
 
