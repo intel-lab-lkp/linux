@@ -1163,6 +1163,7 @@ config DRM_PANEL_VISIONOX_R66451
 
 config DRM_PANEL_VISIONOX_RM69299
 	tristate "Visionox RM69299"
+	depends on BACKLIGHT_CLASS_DEVICE
 	depends on OF
 	depends on DRM_MIPI_DSI
 	help
