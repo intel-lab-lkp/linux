@@ -48,6 +48,7 @@ DEFINE_LOCK_GUARD_1(ksimd,
 		    kernel_neon_begin(_T->lock),
 		    kernel_neon_end(_T->lock))
 
-#define scoped_ksimd()	scoped_guard(ksimd, &(struct user_fpsimd_state){})
+#define scoped_ksimd()	\
+	scoped_guard(ksimd, ({ struct user_fpsimd_state __uninitialized s; &s; }))
 
 #endif
