@@ -1755,6 +1755,11 @@ void __init smp_cpus_done(unsigned int max_cpus)
 
 	dump_numa_cpu_topology();
 	build_sched_topology();
+
+#ifdef CONFIG_PPC_SPLPAR
+	if (smp_ops->num_available_cores)
+		smp_ops->num_available_cores();
+#endif
 }
 
 /*
