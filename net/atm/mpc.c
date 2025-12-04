@@ -9,6 +9,7 @@
 #include <linux/bitops.h>
 #include <linux/capability.h>
 #include <linux/seq_file.h>
+#include <linux/mutex.h>
 
 /* We are an ethernet device */
 #include <linux/if_ether.h>
@@ -122,6 +123,7 @@ static struct notifier_block mpoa_notifier = {
 
 struct mpoa_client *mpcs = NULL; /* FIXME */
 static struct atm_mpoa_qos *qos_head = NULL;
+static DEFINE_MUTEX(qos_mutex); /* Protect qos_head list */
 static DEFINE_TIMER(mpc_timer, mpc_cache_check);
 
 
@@ -172,73 +174,119 @@ static struct mpoa_client *find_mpc_by_lec(struct net_device *dev)
  */
 
 /*
- * Overwrites the old entry or makes a new one.
+ * Search for a QoS entry. Caller must hold qos_mutex.
+ * Returns pointer to entry if found, NULL otherwise.
  */
-struct atm_mpoa_qos *atm_mpoa_add_qos(__be32 dst_ip, struct atm_qos *qos)
+static struct atm_mpoa_qos *__atm_mpoa_search_qos(__be32 dst_ip)
 {
-	struct atm_mpoa_qos *entry;
+	struct atm_mpoa_qos *qos = qos_head;
 
-	entry = atm_mpoa_search_qos(dst_ip);
-	if (entry != NULL) {
-		entry->qos = *qos;
-		return entry;
+	while (qos) {
+		if (qos->ipaddr == dst_ip)
+			return qos;
+		qos = qos->next;
 	}
-
-	entry = kmalloc(sizeof(struct atm_mpoa_qos), GFP_KERNEL);
-	if (entry == NULL) {
-		pr_info("mpoa: out of memory\n");
-		return entry;
-	}
-
-	entry->ipaddr = dst_ip;
-	entry->qos = *qos;
-
-	entry->next = qos_head;
-	qos_head = entry;
-
-	return entry;
+	return NULL;
 }
 
+/*
+ * Search for a QoS entry.
+ * WARNING: The returned pointer is not protected. The caller must ensure
+ * that the entry is not freed while using it, or hold qos_mutex during use.
+ */
 struct atm_mpoa_qos *atm_mpoa_search_qos(__be32 dst_ip)
 {
 	struct atm_mpoa_qos *qos;
 
-	qos = qos_head;
-	while (qos) {
-		if (qos->ipaddr == dst_ip)
-			break;
-		qos = qos->next;
-	}
+	mutex_lock(&qos_mutex);
+	qos = __atm_mpoa_search_qos(dst_ip);
+	mutex_unlock(&qos_mutex);
 
 	return qos;
 }
 
 /*
- * Returns 0 for failure
+ * Overwrites the old entry or makes a new one.
+ */
+struct atm_mpoa_qos *atm_mpoa_add_qos(__be32 dst_ip, struct atm_qos *qos)
+{
+	struct atm_mpoa_qos *entry;
+	struct atm_mpoa_qos *new;
+
+	/* Fast path: update existing entry */
+	mutex_lock(&qos_mutex);
+	entry = __atm_mpoa_search_qos(dst_ip);
+	if (entry) {
+		entry->qos = *qos;
+		mutex_unlock(&qos_mutex);
+		return entry;
+	}
+	mutex_unlock(&qos_mutex);
+
+	/* Allocate outside lock */
+	new = kmalloc(sizeof(*new), GFP_KERNEL);
+	if (!new) {
+		pr_info("mpoa: out of memory\n");
+		return NULL;
+	}
+
+	new->ipaddr = dst_ip;
+	new->qos = *qos;
+
+	/* Re-check under lock to avoid duplicates */
+	mutex_lock(&qos_mutex);
+	entry = __atm_mpoa_search_qos(dst_ip);
+	if (entry) {
+		entry->qos = *qos;
+		mutex_unlock(&qos_mutex);
+		kfree(new);
+		return entry;
+	}
+
+	new->next = qos_head;
+	qos_head = new;
+	mutex_unlock(&qos_mutex);
+
+	return new;
+}
+
+/*
+ * Returns 0 for failure, 1 for success
  */
 int atm_mpoa_delete_qos(struct atm_mpoa_qos *entry)
 {
 	struct atm_mpoa_qos *curr;
+	int ret = 0;
 
 	if (entry == NULL)
 		return 0;
+
+	mutex_lock(&qos_mutex);
+
 	if (entry == qos_head) {
 		qos_head = qos_head->next;
-		kfree(entry);
-		return 1;
+		ret = 1;
+		goto out_free;
 	}
 
 	curr = qos_head;
-	while (curr != NULL) {
+	while (curr) {
 		if (curr->next == entry) {
 			curr->next = entry->next;
-			kfree(entry);
-			return 1;
+			ret = 1;
+			goto out_free;
 		}
 		curr = curr->next;
 	}
 
-	return 0;
+out:
+	mutex_unlock(&qos_mutex);
+	return ret;
+
+out_free:
+	mutex_unlock(&qos_mutex);
+	kfree(entry);
+	return ret;
 }
 
 /* this is buggered - we need locking for qos_head */
@@ -246,10 +294,12 @@ void atm_mpoa_disp_qos(struct seq_file *m)
 {
 	struct atm_mpoa_qos *qos;
 
-	qos = qos_head;
 	seq_printf(m, "QoS entries for shortcuts:\n");
-	seq_printf(m, "IP address\n  TX:max_pcr pcr     min_pcr max_cdv max_sdu\n  RX:max_pcr pcr     min_pcr max_cdv max_sdu\n");
+	seq_printf(m, "IP address\n  TX:max_pcr pcr     min_pcr max_cdv max_sdu\n"
+		   "  RX:max_pcr pcr     min_pcr max_cdv max_sdu\n");
 
+	mutex_lock(&qos_mutex);
+	qos = qos_head;
 	while (qos != NULL) {
 		seq_printf(m, "%pI4\n     %-7d %-7d %-7d %-7d %-7d\n     %-7d %-7d %-7d %-7d %-7d\n",
 			   &qos->ipaddr,
@@ -265,6 +315,7 @@ void atm_mpoa_disp_qos(struct seq_file *m)
 			   qos->qos.rxtp.max_sdu);
 		qos = qos->next;
 	}
+	mutex_unlock(&qos_mutex);
 }
 
 static struct net_device *find_lec_by_itfnum(int itf)
@@ -1521,8 +1572,10 @@ static void __exit atm_mpoa_cleanup(void)
 		mpc = tmp;
 	}
 
+	mutex_lock(&qos_mutex);
 	qos = qos_head;
 	qos_head = NULL;
+	mutex_unlock(&qos_mutex);
 	while (qos != NULL) {
 		nextqos = qos->next;
 		dprintk("freeing qos entry %p\n", qos);
