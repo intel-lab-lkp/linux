@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 
 menuconfig CAN_DEV
-	tristate "CAN Device Drivers"
+	bool "CAN Device Drivers"
 	default y
 	depends on CAN
 	help
@@ -20,7 +20,7 @@ menuconfig CAN_DEV
 	  To compile as a module, choose M here: the module will be called
 	  can-dev.
 
-if CAN_DEV
+if CAN_DEV && CAN
 
 config CAN_VCAN
 	tristate "Virtual Local CAN Interface (vcan)"
