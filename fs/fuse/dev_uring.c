@@ -426,7 +426,6 @@ static void fuse_uring_log_ent_state(struct fuse_ring *ring)
 		}
 		spin_unlock(&queue->lock);
 	}
-	ring->stop_debug_log = 1;
 }
 
 static void fuse_uring_async_stop_queues(struct work_struct *work)
@@ -453,9 +452,11 @@ static void fuse_uring_async_stop_queues(struct work_struct *work)
 	 * If there are still queue references left
 	 */
 	if (atomic_read(&ring->queue_refs) > 0) {
-		if (time_after(jiffies,
-			       ring->teardown_time + FUSE_URING_TEARDOWN_TIMEOUT))
+		if (time_after(jiffies, ring->teardown_time +
+					FUSE_URING_TEARDOWN_TIMEOUT)) {
 			fuse_uring_log_ent_state(ring);
+			ring->teardown_time = jiffies;
+		}
 
 		schedule_delayed_work(&ring->async_teardown_work,
 				      FUSE_URING_TEARDOWN_INTERVAL);

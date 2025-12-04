@@ -117,11 +117,6 @@ struct fuse_ring {
 
 	struct fuse_ring_queue **queues;
 
-	/*
-	 * Log ring entry states on stop when entries cannot be released
-	 */
-	unsigned int stop_debug_log : 1;
-
 	wait_queue_head_t stop_waitq;
 
 	/* async tear down */
