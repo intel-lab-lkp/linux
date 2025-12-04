@@ -181,6 +181,8 @@ static int __nf_conncount_add(struct net *net,
 			nf_ct_put(ct);
 		return -EEXIST;
 	}
+	if (refcounted)
+		nf_ct_put(ct);
 
 	if ((u32)jiffies == list->last_gc)
 		goto add_new_node;
@@ -197,7 +199,7 @@ static int __nf_conncount_add(struct net *net,
 				if (nf_ct_tuple_equal(&conn->tuple, &tuple) &&
 				    nf_ct_zone_id(&conn->zone, conn->zone.dir) ==
 				    nf_ct_zone_id(zone, zone->dir))
-					goto out_put; /* already exists */
+					return 0; /* already exists */
 			} else {
 				collect++;
 			}
@@ -215,7 +217,7 @@ static int __nf_conncount_add(struct net *net,
 			 * Attempt to avoid a re-add in this case.
 			 */
 			nf_ct_put(found_ct);
-			goto out_put;
+			return 0;
 		} else if (already_closed(found_ct)) {
 			/*
 			 * we do not care about connections which are
@@ -246,9 +248,6 @@ add_new_node:
 	list->count++;
 	list->last_gc = (u32)jiffies;
 
-out_put:
-	if (refcounted)
-		nf_ct_put(ct);
 	return 0;
 }
 
@@ -456,11 +455,10 @@ restart:
 
 		rb_link_node_rcu(&rbconn->node, parent, rbnode);
 		rb_insert_color(&rbconn->node, root);
-
-		if (refcounted)
-			nf_ct_put(ct);
 	}
 out_unlock:
+	if (refcounted)
+		nf_ct_put(ct);
 	spin_unlock_bh(&nf_conncount_locks[hash]);
 	return count;
 }
