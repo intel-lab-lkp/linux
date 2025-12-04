@@ -1692,6 +1692,66 @@ DEFINE_SMB3_CREDIT_EVENT(waitff_credits);
 DEFINE_SMB3_CREDIT_EVENT(overflow_credits);
 DEFINE_SMB3_CREDIT_EVENT(set_credits);
 
+DECLARE_EVENT_CLASS(smb3_kerberos_class,
+		    TP_PROTO(int vers,
+			     const char *host,
+			     const struct __kernel_sockaddr_storage *addr,
+			     const char *sec,
+			     uid_t uid,
+			     uid_t cruid,
+			     const char *user,
+			     pid_t pid,
+			     const char *upcall_target,
+			     int rc),
+		    TP_ARGS(vers, host, addr, sec, uid, cruid, user, pid, upcall_target, rc),
+		    TP_STRUCT__entry(
+			    __field(int, vers)
+			    __string(host, host)
+			    __array(__u8, addr, sizeof(struct sockaddr_storage))
+			    __string(sec, sec)
+			    __field(uid_t, uid)
+			    __field(uid_t, cruid)
+			    __string(user, user)
+			    __field(pid_t, pid)
+			    __string(upcall_target, upcall_target)
+			    __field(int, rc)
+		    ),
+		    TP_fast_assign(
+			    struct sockaddr_storage *pss = NULL;
+
+			    __entry->vers = vers;
+			    __assign_str(host);
+			    pss = (struct sockaddr_storage *)__entry->addr;
+			    *pss = *addr;
+			    __assign_str(sec);
+			    __entry->uid = uid;
+			    __entry->cruid = cruid;
+			    __assign_str(user);
+			    __entry->pid = pid;
+			    __assign_str(upcall_target);
+			    __entry->rc = rc;
+		    ),
+		    TP_printk("vers=%d host=%s ip=%pISpsfc sec=%s uid=%d cruid=%d user=%s pid=%d upcall_target=%s err=%d",
+			      __entry->vers, __get_str(host), __entry->addr,
+			      __get_str(sec), __entry->uid, __entry->cruid,
+			      __get_str(user), __entry->pid, __get_str(upcall_target),
+			      __entry->rc))
+
+#define DEFINE_SMB3_KERBEROS_EVENT(name) \
+DEFINE_EVENT(smb3_kerberos_class, smb3_##name, \
+	TP_PROTO(int vers, \
+		 const char *host, \
+		 const struct __kernel_sockaddr_storage *addr, \
+		 const char *sec, \
+		 uid_t uid, \
+		 uid_t cruid, \
+		 const char *user, \
+		 pid_t pid, \
+		 const char *upcall_target, \
+		 int rc), \
+	TP_ARGS(vers, host, addr, sec, uid, cruid, user, pid, upcall_target, rc))
+
+DEFINE_SMB3_KERBEROS_EVENT(kerberos_auth);
 
 TRACE_EVENT(smb3_tcon_ref,
 	    TP_PROTO(unsigned int tcon_debug_id, int ref,

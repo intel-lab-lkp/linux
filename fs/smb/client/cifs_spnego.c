@@ -84,12 +84,13 @@ struct key *
 cifs_get_spnego_key(struct cifs_ses *sesInfo,
 		    struct TCP_Server_Info *server)
 {
-	struct sockaddr_in *sa = (struct sockaddr_in *) &server->dstaddr;
 	struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *) &server->dstaddr;
-	char *description, *dp;
-	size_t desc_len;
-	struct key *spnego_key;
+	struct sockaddr_in *sa = (struct sockaddr_in *) &server->dstaddr;
 	const char *hostname = server->hostname;
+	const char *sec = "krb5";
+	char *description, *dp;
+	struct key *spnego_key;
+	size_t desc_len;
 
 	/* length of fields (with semicolons): ver=0xyz ip4=ipaddress
 	   host=hostname sec=mechanism uid=0xFF user=username */
@@ -130,15 +131,14 @@ cifs_get_spnego_key(struct cifs_ses *sesInfo,
 
 	/* for now, only sec=krb5 and sec=mskrb5 and iakerb are valid */
 	if (server->sec_kerberos)
-		dp += sprintf(dp, ";sec=krb5");
+		sec = "krb5";
 	else if (server->sec_mskerberos)
-		dp += sprintf(dp, ";sec=mskrb5");
+		sec = "mskrb5";
 	else if (server->sec_iakerb)
-		dp += sprintf(dp, ";sec=iakerb");
-	else {
+		sec = "iakerb";
+	else
 		cifs_dbg(VFS, "unknown or missing server auth type, use krb5\n");
-		dp += sprintf(dp, ";sec=krb5");
-	}
+	dp += sprintf(dp, ";sec=%s", sec);
 
 	dp += sprintf(dp, ";uid=0x%x",
 		      from_kuid_munged(&init_user_ns, sesInfo->linux_uid));
@@ -159,6 +159,13 @@ cifs_get_spnego_key(struct cifs_ses *sesInfo,
 	cifs_dbg(FYI, "key description = %s\n", description);
 	scoped_with_creds(spnego_cred)
 		spnego_key = request_key(&cifs_spnego_key_type, description, "");
+	trace_smb3_kerberos_auth(CIFS_SPNEGO_UPCALL_VERSION,
+				 hostname, &server->dstaddr, sec,
+				 from_kuid_munged(&init_user_ns, sesInfo->linux_uid),
+				 from_kuid_munged(&init_user_ns, sesInfo->cred_uid),
+				 sesInfo->user_name, current->pid,
+				 sesInfo->upcall_target == UPTARGET_MOUNT ? "mount" : "app",
+				 IS_ERR(spnego_key) ? PTR_ERR(spnego_key) : 0);
 
 #ifdef CONFIG_CIFS_DEBUG2
 	if (cifsFYI && !IS_ERR(spnego_key)) {
