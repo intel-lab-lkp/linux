@@ -2155,12 +2155,15 @@ static struct device *svs_add_device_link(struct svs_platform *svsp,
 	sup_link = device_link_add(svsp->dev, dev,
 				   DL_FLAG_AUTOREMOVE_CONSUMER);
 	if (!sup_link) {
+		put_device(dev);
 		dev_err(svsp->dev, "sup_link is NULL\n");
 		return ERR_PTR(-EINVAL);
 	}
 
-	if (sup_link->supplier->links.status != DL_DEV_DRIVER_BOUND)
+	if (sup_link->supplier->links.status != DL_DEV_DRIVER_BOUND) {
+		put_device(dev);
 		return ERR_PTR(-EPROBE_DEFER);
+	}
 
 	return dev;
 }
