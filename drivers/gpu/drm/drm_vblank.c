@@ -245,8 +245,10 @@ static u32 __get_vblank_counter(struct drm_device *dev, unsigned int pipe)
  * Note: caller must hold &drm_device.vbl_lock since this reads & writes
  * device vblank fields.
  */
-static void drm_reset_vblank_timestamp(struct drm_device *dev, unsigned int pipe)
+static void drm_vblank_crtc_reset_timestamp(struct drm_vblank_crtc *vblank)
 {
+	struct drm_device *dev = vblank->dev;
+	unsigned int pipe = vblank->pipe;
 	u32 cur_vblank;
 	bool rc;
 	ktime_t t_vblank;
@@ -1490,7 +1492,7 @@ void drm_crtc_vblank_on_config(struct drm_crtc *crtc,
 		vblank->inmodeset = 0;
 	}
 
-	drm_reset_vblank_timestamp(dev, pipe);
+	drm_vblank_crtc_reset_timestamp(vblank);
 
 	/*
 	 * re-enable interrupts if there are users left, or the
