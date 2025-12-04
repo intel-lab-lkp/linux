@@ -403,14 +403,6 @@ u64 drm_vblank_crtc_count(struct drm_vblank_crtc *vblank)
 	return count;
 }
 
-static u64 drm_vblank_count(struct drm_device *dev, unsigned int pipe)
-{
-	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
-		return 0;
-
-	return drm_vblank_crtc_count(drm_vblank_crtc(dev, pipe));
-}
-
 /**
  * drm_crtc_accurate_vblank_count - retrieve the master vblank counter
  * @crtc: which counter to retrieve
@@ -942,7 +934,7 @@ drm_get_last_vbltimestamp(struct drm_device *dev, unsigned int pipe,
  */
 u64 drm_crtc_vblank_count(struct drm_crtc *crtc)
 {
-	return drm_vblank_count(crtc->dev, drm_crtc_index(crtc));
+	return drm_vblank_crtc_count(drm_crtc_vblank_crtc(crtc));
 }
 EXPORT_SYMBOL(drm_crtc_vblank_count);
 
@@ -1241,14 +1233,6 @@ int drm_vblank_crtc_get(struct drm_vblank_crtc *vblank)
 	return ret;
 }
 
-static int drm_vblank_get(struct drm_device *dev, unsigned int pipe)
-{
-	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
-		return -EINVAL;
-
-	return drm_vblank_crtc_get(drm_vblank_crtc(dev, pipe));
-}
-
 /**
  * drm_crtc_vblank_get - get a reference count on vblank events
  * @crtc: which CRTC to own
@@ -1261,7 +1245,7 @@ static int drm_vblank_get(struct drm_device *dev, unsigned int pipe)
  */
 int drm_crtc_vblank_get(struct drm_crtc *crtc)
 {
-	return drm_vblank_get(crtc->dev, drm_crtc_index(crtc));
+	return drm_vblank_crtc_get(drm_crtc_vblank_crtc(crtc));
 }
 EXPORT_SYMBOL(drm_crtc_vblank_get);
 
@@ -1285,14 +1269,6 @@ void drm_vblank_crtc_put(struct drm_vblank_crtc *vblank)
 	}
 }
 
-static void drm_vblank_put(struct drm_device *dev, unsigned int pipe)
-{
-	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
-		return;
-
-	drm_vblank_crtc_put(drm_vblank_crtc(dev, pipe));
-}
-
 /**
  * drm_crtc_vblank_put - give up ownership of vblank events
  * @crtc: which counter to give up
@@ -1303,7 +1279,7 @@ static void drm_vblank_put(struct drm_device *dev, unsigned int pipe)
  */
 void drm_crtc_vblank_put(struct drm_crtc *crtc)
 {
-	drm_vblank_put(crtc->dev, drm_crtc_index(crtc));
+	drm_vblank_crtc_put(drm_crtc_vblank_crtc(crtc));
 }
 EXPORT_SYMBOL(drm_crtc_vblank_put);
 
@@ -1404,7 +1380,7 @@ void drm_crtc_vblank_off(struct drm_crtc *crtc)
 			     "wanted %llu, current %llu\n",
 			     e->sequence, seq);
 		list_del(&e->base.link);
-		drm_vblank_put(dev, pipe);
+		drm_vblank_crtc_put(vblank);
 		send_vblank_event(dev, e, seq, now);
 	}
 
@@ -1680,7 +1656,7 @@ static int drm_queue_vblank_event(struct drm_device *dev, unsigned int pipe,
 
 	e->sequence = req_seq;
 	if (drm_vblank_passed(seq, req_seq)) {
-		drm_vblank_put(dev, pipe);
+		drm_vblank_crtc_put(vblank);
 		send_vblank_event(dev, e, seq, now);
 		vblwait->reply.sequence = seq;
 	} else {
@@ -1697,7 +1673,7 @@ err_unlock:
 	spin_unlock_irq(&dev->event_lock);
 	kfree(e);
 err_put:
-	drm_vblank_put(dev, pipe);
+	drm_vblank_crtc_put(vblank);
 	return ret;
 }
 
@@ -1815,14 +1791,14 @@ int drm_wait_vblank_ioctl(struct drm_device *dev, void *data,
 		return 0;
 	}
 
-	ret = drm_vblank_get(dev, pipe);
+	ret = drm_vblank_crtc_get(vblank);
 	if (ret) {
 		drm_dbg_core(dev,
 			     "crtc %d failed to acquire vblank counter, %d\n",
 			     pipe, ret);
 		return ret;
 	}
-	seq = drm_vblank_count(dev, pipe);
+	seq = drm_vblank_crtc_count(vblank);
 
 	switch (vblwait->request.type & _DRM_VBLANK_TYPES_MASK) {
 	case _DRM_VBLANK_RELATIVE:
@@ -1858,7 +1834,7 @@ int drm_wait_vblank_ioctl(struct drm_device *dev, void *data,
 		drm_dbg_core(dev, "waiting on vblank count %llu, crtc %u\n",
 			     req_seq, pipe);
 		wait = wait_event_interruptible_timeout(vblank->queue,
-			drm_vblank_passed(drm_vblank_count(dev, pipe), req_seq) ||
+			drm_vblank_passed(drm_vblank_crtc_count(vblank), req_seq) ||
 				      !READ_ONCE(vblank->enabled),
 			msecs_to_jiffies(3000));
 
@@ -1888,7 +1864,7 @@ int drm_wait_vblank_ioctl(struct drm_device *dev, void *data,
 	}
 
 done:
-	drm_vblank_put(dev, pipe);
+	drm_vblank_crtc_put(vblank);
 	return ret;
 }
 
