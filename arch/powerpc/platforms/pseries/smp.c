@@ -122,6 +122,42 @@ static inline int smp_startup_cpu(unsigned int lcpu)
 	return 1;
 }
 
+#ifdef CONFIG_PPC_SPLPAR
+struct offline_worker {
+	struct work_struct work;
+	int offline;
+	int cpu;
+};
+
+static DEFINE_PER_CPU(struct offline_worker, offline_workers);
+
+static void softoffline_work_fn(struct work_struct *work)
+{
+	struct offline_worker *worker = this_cpu_ptr(&offline_workers);
+
+	set_cpu_softoffline(worker->cpu, worker->offline);
+}
+
+static void softoffline_work_init(void)
+{
+	int cpu;
+
+	if (!is_shared_processor() || is_kvm_guest())
+		return;
+
+	for_each_possible_cpu(cpu) {
+		struct offline_worker *worker = &per_cpu(offline_workers, cpu);
+
+		INIT_WORK(&worker->work, softoffline_work_fn);
+		worker->cpu = cpu;
+	}
+}
+#else
+static void softoffline_work_init(void)
+{
+}
+#endif
+
 static void smp_setup_cpu(int cpu)
 {
 	if (xive_enabled())
@@ -259,6 +295,9 @@ static unsigned int pseries_num_available_cores(void)
 
 	if (plpar_hcall9(H_GET_PPP, retbuf))
 		return num_present_cpus() / threads_per_core;
+
+	if (!entitled_cores)
+		softoffline_work_init();
 
 	entitled_cores = retbuf[0] / 100;
 	max_virtual_cores = present_cores;
