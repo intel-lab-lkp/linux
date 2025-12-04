@@ -183,11 +183,11 @@ nouveau_fence_context_new(struct nouveau_channel *chan, struct nouveau_fence_cha
 	fctx->context = drm->runl[chan->runlist].context_base + chan->chid;
 
 	if (chan == drm->cechan)
-		strcpy(fctx->name, "copy engine channel");
+		strscpy(fctx->name, "copy engine channel", sizeof(fctx->name));
 	else if (chan == drm->channel)
-		strcpy(fctx->name, "generic kernel channel");
+		strscpy(fctx->name, "generic kernel channel", sizeof(fctx->name));
 	else
-		strcpy(fctx->name, cli->name);
+		strscpy(fctx->name, cli->name, sizeof(fctx->name));
 
 	kref_init(&fctx->fence_ref);
 	if (!priv->uevent)
