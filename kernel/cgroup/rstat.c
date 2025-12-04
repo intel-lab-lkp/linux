@@ -283,6 +283,16 @@ static struct cgroup_subsys_state *css_rstat_updated_list(
 
 	css_process_update_tree(root->ss, cpu);
 
+	/*
+	 * We allow race between rstat updater and flusher which can cause a
+	 * scenario where the updater skips adding the css to the list but the
+	 * flusher might not see updater's updates. Usually the subsequent
+	 * updater would take care of that but what if that was the last updater
+	 * on that CPU before getting removed. Handle that scenario here.
+	 */
+	if (!css_is_online(root))
+		__css_process_update_tree(root, cpu);
+
 	/* Return NULL if this subtree is not on-list */
 	if (!rstatc->updated_next)
 		return NULL;
