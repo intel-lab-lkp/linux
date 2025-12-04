@@ -581,8 +581,10 @@ static int __init create_spu(void *data)
 		goto out_destroy;
 
 	ret = spu_create_dev(spu);
-	if (ret)
+	if (ret) {
+		put_device(&spu->dev);
 		goto out_free_irqs;
+	}
 
 	mutex_lock(&cbe_spu_info[spu->node].list_mutex);
 	list_add(&spu->cbe_list, &cbe_spu_info[spu->node].spus);
