@@ -5,6 +5,10 @@
 #ifndef _ASM_RISCV_USERCFI_H
 #define _ASM_RISCV_USERCFI_H
 
+#define CMDLINE_DISABLE_RISCV_USERCFI_FCFI	1
+#define CMDLINE_DISABLE_RISCV_USERCFI_BCFI	2
+#define CMDLINE_DISABLE_RISCV_USERCFI		3
+
 #ifndef __ASSEMBLER__
 #include <linux/types.h>
 #include <linux/prctl.h>
@@ -14,6 +18,9 @@ struct task_struct;
 struct kernel_clone_args;
 
 #ifdef CONFIG_RISCV_USER_CFI
+
+extern unsigned long riscv_nousercfi;
+
 struct cfi_state {
 	unsigned long ubcfi_en : 1; /* Enable for backward cfi. */
 	unsigned long ubcfi_locked : 1;
@@ -82,6 +89,9 @@ void set_indir_lp_lock(struct task_struct *task);
 #define get_active_shstk(task) 0UL
 
 #endif /* CONFIG_RISCV_USER_CFI */
+
+bool is_user_shstk_enabled(void);
+bool is_user_lpad_enabled(void);
 
 #endif /* __ASSEMBLER__ */
 
