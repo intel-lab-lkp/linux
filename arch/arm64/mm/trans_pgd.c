@@ -40,8 +40,14 @@ static void _copy_pte(pte_t *dst_ptep, pte_t *src_ptep, unsigned long addr)
 		 * Resume will overwrite areas that may be marked
 		 * read only (code, rodata). Clear the RDONLY bit from
 		 * the temporary mappings we use during restore.
+		 *
+		 * For both kexec and hibernation, writable accesses are required
+		 * for all pages in the linear map to copy over new kernel image.
+		 * Hence mark these pages dirty first via pte_mkdirty() to ensure
+		 * pte_mkwrite_novma() subsequently clears PTE_RDONLY - providing
+		 * required write access for the pages.
 		 */
-		__set_pte(dst_ptep, pte_mkwrite_novma(pte));
+		__set_pte(dst_ptep, pte_mkwrite_novma(pte_mkdirty(pte)));
 	} else if (!pte_none(pte)) {
 		/*
 		 * debug_pagealloc will removed the PTE_VALID bit if
@@ -57,7 +63,14 @@ static void _copy_pte(pte_t *dst_ptep, pte_t *src_ptep, unsigned long addr)
 		 */
 		BUG_ON(!pfn_valid(pte_pfn(pte)));
 
-		__set_pte(dst_ptep, pte_mkvalid(pte_mkwrite_novma(pte)));
+		/*
+		 * For both kexec and hibernation, writable accesses are required
+		 * for all pages in the linear map to copy over new kernel image.
+		 * Hence mark these pages dirty first via pte_mkdirty() to ensure
+		 * pte_mkwrite_novma() subsequently clears PTE_RDONLY - providing
+		 * required write access for the pages.
+		 */
+		__set_pte(dst_ptep, pte_mkvalid(pte_mkwrite_novma(pte_mkdirty(pte))));
 	}
 }
 
