@@ -241,4 +241,5 @@ static inline int task_node(const struct task_struct *p)
 	return cpu_to_node(task_cpu(p));
 }
 
+extern void set_cpu_softoffline(int cpu, bool soft_offline);
 #endif /* _LINUX_SCHED_TOPOLOGY_H */

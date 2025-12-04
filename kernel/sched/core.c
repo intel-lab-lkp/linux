@@ -8177,13 +8177,16 @@ static void balance_push(struct rq *rq)
 	 * Only active while going offline and when invoked on the outgoing
 	 * CPU.
 	 */
-	if (!cpu_dying(rq->cpu) || rq != this_rq())
+	if (cpu_active(rq->cpu) || rq != this_rq())
 		return;
 
 	/*
-	 * Ensure the thing is persistent until balance_push_set(.on = false);
+	 * Unless soft-offline, Ensure the thing is persistent until
+	 * balance_push_set(.on = false); In case of soft-offline, just
+	 * enough to push current non-pinned tasks out.
 	 */
-	rq->balance_callback = &balance_push_callback;
+	if (cpu_dying(rq->cpu) || rq->nr_running)
+		rq->balance_callback = &balance_push_callback;
 
 	/*
 	 * Both the cpu-hotplug and stop task are in this case and are
@@ -8392,6 +8395,8 @@ static inline void sched_smt_present_dec(int cpu)
 #endif
 }
 
+static struct cpumask cpu_softoffline_mask;
+
 int sched_cpu_activate(unsigned int cpu)
 {
 	struct rq *rq = cpu_rq(cpu);
@@ -8411,7 +8416,10 @@ int sched_cpu_activate(unsigned int cpu)
 	if (sched_smp_initialized) {
 		sched_update_numa(cpu, true);
 		sched_domains_numa_masks_set(cpu);
-		cpuset_cpu_active();
+
+		/* For CPU soft-offline, dont need to rebuild sched-domains */
+		if (!cpumask_test_cpu(cpu, &cpu_softoffline_mask))
+			cpuset_cpu_active();
 	}
 
 	scx_rq_activate(rq);
@@ -8485,7 +8493,11 @@ int sched_cpu_deactivate(unsigned int cpu)
 		return 0;
 
 	sched_update_numa(cpu, false);
-	cpuset_cpu_inactive(cpu);
+
+	/* For CPU soft-offline, dont need to rebuild sched-domains */
+	if (!cpumask_test_cpu(cpu, &cpu_softoffline_mask))
+		cpuset_cpu_inactive(cpu);
+
 	sched_domains_numa_masks_clear(cpu);
 	return 0;
 }
@@ -10928,3 +10940,25 @@ void sched_enq_and_set_task(struct sched_enq_and_set_ctx *ctx)
 		set_next_task(rq, ctx->p);
 }
 #endif /* CONFIG_SCHED_CLASS_EXT */
+
+void set_cpu_softoffline(int cpu, bool soft_offline)
+{
+	struct sched_domain *sd;
+
+	if (!cpu_online(cpu))
+		return;
+
+	cpumask_set_cpu(cpu, &cpu_softoffline_mask);
+
+	rcu_read_lock();
+	for_each_domain(cpu, sd)
+		update_group_capacity(sd, cpu);
+	rcu_read_unlock();
+
+	if (soft_offline)
+		sched_cpu_deactivate(cpu);
+	else
+		sched_cpu_activate(cpu);
+
+	cpumask_clear_cpu(cpu, &cpu_softoffline_mask);
+}
