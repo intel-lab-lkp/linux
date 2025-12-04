@@ -422,11 +422,26 @@ static __always_inline void setup_lass(struct cpuinfo_x86 *c)
 	if (IS_ENABLED(CONFIG_X86_VSYSCALL_EMULATION) ||
 	    IS_ENABLED(CONFIG_EFI)) {
 		setup_clear_cpu_cap(X86_FEATURE_LASS);
-		return;
 	}
-
-	cr4_set_bits(X86_CR4_LASS);
 }
+
+static int enable_lass(unsigned int cpu)
+{
+	cr4_set_bits(X86_CR4_LASS);
+
+	return 0;
+}
+
+static int cpu_finalize_pre_userspace(void)
+{
+	if (!cpu_feature_enabled(X86_FEATURE_LASS))
+		return 0;
+
+	cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "x86/lass:enable", enable_lass, NULL);
+
+	return 0;
+}
+late_initcall(cpu_finalize_pre_userspace);
 
 /* These bits should not change their value after CPU init is finished. */
 static const unsigned long cr4_pinned_mask = X86_CR4_SMEP | X86_CR4_SMAP | X86_CR4_UMIP |
