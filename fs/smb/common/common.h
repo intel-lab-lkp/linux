@@ -24,4 +24,17 @@ int cifs_md4_init(struct md4_ctx *mctx);
 int cifs_md4_update(struct md4_ctx *mctx, const u8 *data, unsigned int len);
 int cifs_md4_final(struct md4_ctx *mctx, u8 *out);
 
+/*
+ * Definitions for smb2 map error
+ */
+
+struct status_to_posix_error {
+	__le32 smb2_status;
+	int posix_error;
+	char *status_string;
+};
+
+struct status_to_posix_error *smb2_get_err_map(__le32 smb2_status);
+void smb2_init_maperror(void);
+
 #endif /* __SMB_COMMON_H__ */

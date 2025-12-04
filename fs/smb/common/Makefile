@@ -4,4 +4,4 @@
 #
 
 obj-$(CONFIG_SMBFS) += smb_common.o
-smb_common-objs := common.o cifs_md4.o
+smb_common-objs := common.o cifs_md4.o smb2maperror.o

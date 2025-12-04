@@ -18,6 +18,7 @@
 #include "smb2glob.h"
 #include "nterr.h"
 #include "cached_dir.h"
+#include "../common/common.h"
 
 static int
 check_smb2_hdr(struct smb2_hdr *shdr, __u64 mid)
@@ -926,4 +927,47 @@ ok:
 	for (i = 0; i < nvec; i++)
 		sha512_update(&sha_ctx, iov[i].iov_base, iov[i].iov_len);
 	sha512_final(&sha_ctx, ses->preauth_sha_hash);
+}
+
+int
+map_smb2_to_linux_error(char *buf, bool log_err)
+{
+	struct smb2_hdr *shdr = (struct smb2_hdr *)buf;
+	int rc = -EIO;
+	__le32 smb2err = shdr->Status;
+	struct status_to_posix_error *err_map;
+
+	if (smb2err == 0) {
+		trace_smb3_cmd_done(le32_to_cpu(shdr->Id.SyncId.TreeId),
+			      le64_to_cpu(shdr->SessionId),
+			      le16_to_cpu(shdr->Command),
+			      le64_to_cpu(shdr->MessageId));
+		return 0;
+	}
+
+	log_err = (log_err && (smb2err != STATUS_MORE_PROCESSING_REQUIRED) &&
+		   (smb2err != STATUS_END_OF_FILE)) ||
+		  (cifsFYI & CIFS_RC);
+
+	err_map = smb2_get_err_map(smb2err);
+	if (!err_map)
+		goto out;
+
+	rc = err_map->posix_error;
+	if (log_err)
+		pr_notice("Status code returned 0x%08x %s\n", smb2err,
+			  err_map->status_string);
+
+out:
+	/* on error mapping not found  - return EIO */
+
+	cifs_dbg(FYI, "Mapping SMB2 status code 0x%08x to POSIX err %d\n",
+		 __le32_to_cpu(smb2err), rc);
+
+	trace_smb3_cmd_err(le32_to_cpu(shdr->Id.SyncId.TreeId),
+			   le64_to_cpu(shdr->SessionId),
+			   le16_to_cpu(shdr->Command),
+			   le64_to_cpu(shdr->MessageId),
+			   le32_to_cpu(smb2err), rc);
+	return rc;
 }

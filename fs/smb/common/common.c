@@ -13,6 +13,8 @@ static int __init smb_common_init(void)
 {
 	int rc = 0;
 
+	smb2_init_maperror();
+
 	return rc;
 }
 

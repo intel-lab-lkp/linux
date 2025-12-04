@@ -7,21 +7,11 @@
  *   Author(s): Steve French (sfrench@us.ibm.com)
  *
  */
-#include <linux/errno.h>
+#include <linux/kernel.h>
 #include <linux/sort.h>
-#include "cifsglob.h"
-#include "cifs_debug.h"
-#include "smb2pdu.h"
-#include "smb2proto.h"
-#include "../common/smb2status.h"
-#include "smb2glob.h"
-#include "trace.h"
-
-struct status_to_posix_error {
-	__le32 smb2_status;
-	int posix_error;
-	char *status_string;
-};
+#include <linux/bsearch.h>
+#include "common.h"
+#include "smb2status.h"
 
 static struct status_to_posix_error smb2_error_map_table[] = {
 	{STATUS_WAIT_1, -EIO, "STATUS_WAIT_1"},
@@ -2433,7 +2423,7 @@ static int cmp_smb2_status(const void *_a, const void *_b)
 	return 0;
 }
 
-static struct status_to_posix_error *
+struct status_to_posix_error *
 smb2_get_err_map(__le32 smb2_status)
 {
 	struct status_to_posix_error *err_map, key;
@@ -2446,49 +2436,7 @@ smb2_get_err_map(__le32 smb2_status)
 			  cmp_smb2_status);
 	return err_map;
 }
-
-int
-map_smb2_to_linux_error(char *buf, bool log_err)
-{
-	struct smb2_hdr *shdr = (struct smb2_hdr *)buf;
-	int rc = -EIO;
-	__le32 smb2err = shdr->Status;
-	struct status_to_posix_error *err_map;
-
-	if (smb2err == 0) {
-		trace_smb3_cmd_done(le32_to_cpu(shdr->Id.SyncId.TreeId),
-			      le64_to_cpu(shdr->SessionId),
-			      le16_to_cpu(shdr->Command),
-			      le64_to_cpu(shdr->MessageId));
-		return 0;
-	}
-
-	log_err = (log_err && (smb2err != STATUS_MORE_PROCESSING_REQUIRED) &&
-		   (smb2err != STATUS_END_OF_FILE)) ||
-		  (cifsFYI & CIFS_RC);
-
-	err_map = smb2_get_err_map(smb2err);
-	if (!err_map)
-		goto out;
-
-	rc = err_map->posix_error;
-	if (log_err)
-		pr_notice("Status code returned 0x%08x %s\n", smb2err,
-			  err_map->status_string);
-
-out:
-	/* on error mapping not found  - return EIO */
-
-	cifs_dbg(FYI, "Mapping SMB2 status code 0x%08x to POSIX err %d\n",
-		 __le32_to_cpu(smb2err), rc);
-
-	trace_smb3_cmd_err(le32_to_cpu(shdr->Id.SyncId.TreeId),
-			   le64_to_cpu(shdr->SessionId),
-			   le16_to_cpu(shdr->Command),
-			   le64_to_cpu(shdr->MessageId),
-			   le32_to_cpu(smb2err), rc);
-	return rc;
-}
+EXPORT_SYMBOL_GPL(smb2_get_err_map);
 
 void smb2_init_maperror(void)
 {

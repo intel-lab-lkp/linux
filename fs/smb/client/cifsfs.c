@@ -49,7 +49,6 @@
 #endif
 #include "fs_context.h"
 #include "cached_dir.h"
-#include "smb2proto.h"
 
 /*
  * DOS dates from 1980/1/1 through 2107/12/31
@@ -1909,7 +1908,6 @@ static int __init
 init_cifs(void)
 {
 	int rc = 0;
-	smb2_init_maperror();
 	cifs_proc_init();
 	INIT_LIST_HEAD(&cifs_tcp_ses_list);
 /*
