@@ -1222,8 +1222,12 @@ static void csiphy_lanes_enable(struct csiphy_device *csiphy,
 		}
 		break;
 	case CAMSS_2290:
-		regs->lane_regs = &lane_regs_qcm2290[0];
-		regs->lane_array_size = ARRAY_SIZE(lane_regs_qcm2290);
+		if (c->phy_cfg == V4L2_MBUS_CSI2_CPHY) {
+			dev_err(dev, "Missing lane_regs definition for %d\n", c->phy_cfg);
+		} else { /* V4L2_MBUS_CSI2_DPHY */
+			regs->lane_regs = &lane_regs_qcm2290[0];
+			regs->lane_array_size = ARRAY_SIZE(lane_regs_qcm2290);
+		}
 		break;
 	case CAMSS_7280:
 	case CAMSS_8250:
@@ -1236,25 +1240,45 @@ static void csiphy_lanes_enable(struct csiphy_device *csiphy,
 		}
 		break;
 	case CAMSS_8280XP:
-		regs->lane_regs = &lane_regs_sc8280xp[0];
-		regs->lane_array_size = ARRAY_SIZE(lane_regs_sc8280xp);
+		if (c->phy_cfg == V4L2_MBUS_CSI2_CPHY) {
+			dev_err(dev, "Missing lane_regs definition for %d\n", c->phy_cfg);
+		} else { /* V4L2_MBUS_CSI2_DPHY */
+			regs->lane_regs = &lane_regs_sc8280xp[0];
+			regs->lane_array_size = ARRAY_SIZE(lane_regs_sc8280xp);
+		}
 		break;
 	case CAMSS_X1E80100:
-		regs->lane_regs = &lane_regs_x1e80100[0];
-		regs->lane_array_size = ARRAY_SIZE(lane_regs_x1e80100);
+		if (c->phy_cfg == V4L2_MBUS_CSI2_CPHY) {
+			dev_err(dev, "Missing lane_regs definition for %d\n", c->phy_cfg);
+		} else { /* V4L2_MBUS_CSI2_DPHY */
+			regs->lane_regs = &lane_regs_x1e80100[0];
+			regs->lane_array_size = ARRAY_SIZE(lane_regs_x1e80100);
+		}
 		break;
 	case CAMSS_8550:
-		regs->lane_regs = &lane_regs_sm8550[0];
-		regs->lane_array_size = ARRAY_SIZE(lane_regs_sm8550);
+		if (c->phy_cfg == V4L2_MBUS_CSI2_CPHY) {
+			dev_err(dev, "Missing lane_regs definition for %d\n", c->phy_cfg);
+		} else { /* V4L2_MBUS_CSI2_DPHY */
+			regs->lane_regs = &lane_regs_sm8550[0];
+			regs->lane_array_size = ARRAY_SIZE(lane_regs_sm8550);
+		}
 		break;
 	case CAMSS_8650:
-		regs->lane_regs = &lane_regs_sm8650[0];
-		regs->lane_array_size = ARRAY_SIZE(lane_regs_sm8650);
+		if (c->phy_cfg == V4L2_MBUS_CSI2_CPHY) {
+			dev_err(dev, "Missing lane_regs definition for %d\n", c->phy_cfg);
+		} else { /* V4L2_MBUS_CSI2_DPHY */
+			regs->lane_regs = &lane_regs_sm8650[0];
+			regs->lane_array_size = ARRAY_SIZE(lane_regs_sm8650);
+		}
 		break;
 	case CAMSS_8300:
 	case CAMSS_8775P:
-		regs->lane_regs = &lane_regs_sa8775p[0];
-		regs->lane_array_size = ARRAY_SIZE(lane_regs_sa8775p);
+		if (c->phy_cfg == V4L2_MBUS_CSI2_CPHY) {
+			dev_err(dev, "Missing lane_regs definition for %d\n", c->phy_cfg);
+		} else { /* V4L2_MBUS_CSI2_DPHY */
+			regs->lane_regs = &lane_regs_sa8775p[0];
+			regs->lane_array_size = ARRAY_SIZE(lane_regs_sa8775p);
+		}
 		break;
 	default:
 		break;
