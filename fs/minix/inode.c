@@ -381,6 +381,7 @@ out_bad_hblock:
 	goto out;
 
 out_bad_sb:
+	ret = -EIO;
 	printk("MINIX-fs: unable to read superblock\n");
 out:
 	s->s_fs_info = NULL;
