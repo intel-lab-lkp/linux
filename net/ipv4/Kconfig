@@ -743,7 +743,8 @@ config DEFAULT_TCP_CONG
 	default "cubic"
 
 config TCP_SIGPOOL
-	tristate
+	tristate "TCP: Per-CPU pool of crypto requests" if COMPILE_TEST
+	depends on CRYPTO
 
 config TCP_AO
 	bool "TCP: Authentication Option (RFC5925)"
