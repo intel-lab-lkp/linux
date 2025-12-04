@@ -808,6 +808,33 @@ unsigned long mm_get_unmapped_area_vmflags(struct mm_struct *mm, struct file *fi
 	return arch_get_unmapped_area(filp, addr, len, pgoff, flags, vm_flags);
 }
 
+static inline bool file_has_mmap_order_hint(struct file *file)
+{
+	return file && file->f_op && file->f_op->get_mapping_order;
+}
+
+static inline bool
+mmap_should_align(struct file *file, unsigned long addr, unsigned long len)
+{
+	/* When THP not enabled at all, skip */
+	if (!IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE))
+		return false;
+
+	/* Never try any alignment if the mmap() address hint is provided */
+	if (addr)
+		return false;
+
+	/* Anonymous THP could use some better alignment when len aligned */
+	if (!file)
+		return IS_ALIGNED(len, PMD_SIZE);
+
+	/*
+	 * It's a file mapping, no address hint provided by caller, try any
+	 * alignment if the file backend would provide a hint
+	 */
+	return file_has_mmap_order_hint(file);
+}
+
 unsigned long
 __get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 		unsigned long pgoff, unsigned long flags, vm_flags_t vm_flags)
@@ -815,8 +842,9 @@ __get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 	unsigned long (*get_area)(struct file *, unsigned long,
 				  unsigned long, unsigned long, unsigned long)
 				  = NULL;
-
 	unsigned long error = arch_mmap_check(addr, len, flags);
+	unsigned long align;
+
 	if (error)
 		return error;
 
@@ -841,13 +869,30 @@ __get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 
 	if (get_area) {
 		addr = get_area(file, addr, len, pgoff, flags);
-	} else if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) && !file
-		   && !addr /* no hint */
-		   && IS_ALIGNED(len, PMD_SIZE)) {
-		/* Ensures that larger anonymous mappings are THP aligned. */
+	} else if (mmap_should_align(file, addr, len)) {
+		if (file_has_mmap_order_hint(file)) {
+			int order;
+			/*
+			 * Allow driver to opt-in on the order hint.
+			 *
+			 * Sanity check on the order returned. Treating
+			 * either negative or too big order to be invalid,
+			 * where alignment will be skipped.
+			 */
+			order = file->f_op->get_mapping_order(file, pgoff, len);
+			if (order < 0)
+				order = 0;
+			if (check_shl_overflow(PAGE_SIZE, order, &align))
+				/* No alignment applied */
+				align = PAGE_SIZE;
+		} else {
+			/* Default alignment for anonymous THPs */
+			align = PMD_SIZE;
+		}
+
 		addr = thp_get_unmapped_area_vmflags(file, addr, len,
-						     pgoff, flags, PMD_SIZE,
-						     vm_flags);
+						     pgoff, flags,
+						     align, vm_flags);
 	} else {
 		addr = mm_get_unmapped_area_vmflags(current->mm, file, addr, len,
 						    pgoff, flags, vm_flags);
