@@ -13,6 +13,7 @@ config DRM_IMX
 config DRM_IMX_PARALLEL_DISPLAY
 	tristate "Support for parallel displays"
 	depends on DRM_IMX
+	select DRM_DISPLAY_HELPER
 	select DRM_BRIDGE
 	select DRM_BRIDGE_CONNECTOR
 	select DRM_IMX_LEGACY_BRIDGE
@@ -33,6 +34,7 @@ config DRM_IMX_LDB
 	depends on DRM_IMX
 	depends on COMMON_CLK
 	select MFD_SYSCON
+	select DRM_DISPLAY_HELPER
 	select DRM_BRIDGE
 	select DRM_BRIDGE_CONNECTOR
 	select DRM_PANEL_BRIDGE
