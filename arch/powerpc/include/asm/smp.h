@@ -269,6 +269,9 @@ extern char __secondary_hold;
 extern unsigned int booting_thread_hwid;
 
 extern void __early_start(void);
+#ifdef CONFIG_PPC_SPLPAR
+int arch_update_cpu_topology(void);
+#endif /* CONFIG_PPC_SPLPAR */
 #endif /* __ASSEMBLER__ */
 
 #endif /* __KERNEL__ */

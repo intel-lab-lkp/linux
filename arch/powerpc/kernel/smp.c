@@ -1850,4 +1850,12 @@ unsigned long arch_scale_cpu_capacity(int cpu)
 	}
 	return SCHED_CAPACITY_SCALE;
 }
+
+int arch_update_cpu_topology(void)
+{
+	if (is_shared_processor() && !is_kvm_guest())
+		return (num_online_cpus() != cpumask_weight(cpu_active_mask));
+
+	return 0;
+}
 #endif /* CONFIG_PPC_SPLPAR */
