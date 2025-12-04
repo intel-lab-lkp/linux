@@ -2433,13 +2433,27 @@ static int cmp_smb2_status(const void *_a, const void *_b)
 	return 0;
 }
 
+static struct status_to_posix_error *
+smb2_get_err_map(__le32 smb2_status)
+{
+	struct status_to_posix_error *err_map, key;
+
+	key = (struct status_to_posix_error) {
+		.smb2_status = smb2_status,
+	};
+	err_map = bsearch(&key, smb2_error_map_table, err_map_num,
+			  sizeof(struct status_to_posix_error),
+			  cmp_smb2_status);
+	return err_map;
+}
+
 int
 map_smb2_to_linux_error(char *buf, bool log_err)
 {
 	struct smb2_hdr *shdr = (struct smb2_hdr *)buf;
 	int rc = -EIO;
 	__le32 smb2err = shdr->Status;
-	struct status_to_posix_error *err_map, key;
+	struct status_to_posix_error *err_map;
 
 	if (smb2err == 0) {
 		trace_smb3_cmd_done(le32_to_cpu(shdr->Id.SyncId.TreeId),
@@ -2453,12 +2467,7 @@ map_smb2_to_linux_error(char *buf, bool log_err)
 		   (smb2err != STATUS_END_OF_FILE)) ||
 		  (cifsFYI & CIFS_RC);
 
-	key = (struct status_to_posix_error) {
-		.smb2_status = smb2err,
-	};
-	err_map = bsearch(&key, smb2_error_map_table, err_map_num,
-			  sizeof(struct status_to_posix_error),
-			  cmp_smb2_status);
+	err_map = smb2_get_err_map(smb2err);
 	if (!err_map)
 		goto out;
 
