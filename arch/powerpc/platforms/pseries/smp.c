@@ -21,6 +21,9 @@
 #include <linux/device.h>
 #include <linux/cpu.h>
 #include <linux/pgtable.h>
+#if defined(CONFIG_DEBUG_FS) && defined(CONFIG_PPC_SPLPAR)
+#include <linux/debugfs.h>
+#endif
 
 #include <asm/ptrace.h>
 #include <linux/atomic.h>
@@ -285,9 +288,6 @@ static __init void pSeries_smp_probe(void)
  * lower threshold values below which allow work to spread out to more
  * cores.
  */
-#define STEAL_RATIO_HIGH (10 * STEAL_RATIO)
-#define STEAL_RATIO_LOW (5 * STEAL_RATIO)
-
 static unsigned int max_virtual_cores __read_mostly;
 static unsigned int entitled_cores __read_mostly;
 static unsigned int available_cores;
@@ -323,6 +323,9 @@ unsigned int pseries_num_available_cores(void)
 	return available_cores;
 }
 
+static u8 steal_ratio_high = 10;
+static u8 steal_ratio_low = 5;
+
 void trigger_softoffline(unsigned long steal_ratio)
 {
 	int currcpu = smp_processor_id();
@@ -340,7 +343,7 @@ void trigger_softoffline(unsigned long steal_ratio)
 	 * If Steal time is high, then reduce Available Cores.
 	 * If steal time is low, increase Available Cores
 	 */
-	if (steal_ratio >= STEAL_RATIO_HIGH && prev_direction > 0) {
+	if (steal_ratio >= STEAL_RATIO * steal_ratio_high && prev_direction > 0) {
 		/*
 		 * System entitlement was reduced earlier but we continue to
 		 * see steal time. Reduce entitlement further if possible.
@@ -358,7 +361,7 @@ void trigger_softoffline(unsigned long steal_ratio)
 		}
 		if (success)
 			available_cores--;
-	} else if (steal_ratio <= STEAL_RATIO_LOW && prev_direction < 0) {
+	} else if (steal_ratio <= STEAL_RATIO * steal_ratio_low && prev_direction < 0) {
 		/*
 		 * System entitlement was increased but we continue to see
 		 * less steal time. Increase entitlement further if possible.
@@ -381,9 +384,9 @@ void trigger_softoffline(unsigned long steal_ratio)
 		if (success)
 			available_cores++;
 	}
-	if (steal_ratio >= STEAL_RATIO_HIGH)
+	if (steal_ratio >= STEAL_RATIO * steal_ratio_high)
 		prev_direction = 1;
-	else if (steal_ratio <= STEAL_RATIO_LOW)
+	else if (steal_ratio <= STEAL_RATIO * steal_ratio_low)
 		prev_direction = -1;
 	else
 		prev_direction = 0;
@@ -437,3 +440,16 @@ void __init smp_init_pseries(void)
 
 	pr_debug(" <- smp_init_pSeries()\n");
 }
+
+#if defined(CONFIG_DEBUG_FS) && defined(CONFIG_PPC_SPLPAR)
+static int __init steal_ratio_debugfs_init(void)
+{
+	if (!firmware_has_feature(FW_FEATURE_SPLPAR))
+		return 0;
+
+	debugfs_create_u8("steal_high", 0600, arch_debugfs_dir, &steal_ratio_high);
+	debugfs_create_u8("steal_low", 0600, arch_debugfs_dir, &steal_ratio_low);
+	return 0;
+}
+machine_arch_initcall(pseries, steal_ratio_debugfs_init);
+#endif /* CONFIG_DEBUG_FS && CONFIG_PPC_SPLPAR*/
