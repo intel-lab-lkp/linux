@@ -5817,7 +5817,7 @@ EXPORT_SYMBOL_GPL(shmem_truncate_range);
 #define shmem_vm_ops				generic_file_vm_ops
 #define shmem_anon_vm_ops			generic_file_vm_ops
 #define shmem_file_operations			ramfs_file_operations
-#define shmem_acct_size(flags, size)		0
+static inline int shmem_acct_size(unsigned long flags, loff_t size) { return 0; }
 #define shmem_unacct_size(flags, size)		do {} while (0)
 
 static inline struct inode *shmem_get_inode(struct mnt_idmap *idmap,
