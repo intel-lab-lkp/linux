@@ -2589,6 +2589,26 @@ local:
 		params = esr_sys64_to_params(esr);
 
 		/*
+		 * This implements the pseudocode UnimplementedIDRegister()
+		 * helper for the purpose of fealing with FEAT_IDST.
+		 *
+		 * The Feature ID space is defined as the System register
+		 * space in AArch64 with op0==3, op1=={0, 1, 3}, CRn==0,
+		 * CRm=={0-7}, op2=={0-7}.
+		 */
+		if (params.Op0 == 3 &&
+		    !(params.Op1 & 0b100) && params.Op1 != 2 &&
+		    params.CRn == 0 &&
+		    !(params.CRm & 0b1000)) {
+			if (kvm_has_feat_enum(vcpu->kvm, ID_AA64MMFR2_EL1, IDS, IMP))
+				kvm_inject_sync(vcpu, kvm_vcpu_get_esr(vcpu));
+			else
+				kvm_inject_undefined(vcpu);
+
+			return true;
+		}
+
+		/*
 		 * Check for the IMPDEF range, as per DDI0487 J.a,
 		 * D18.3.2 Reserved encodings for IMPLEMENTATION
 		 * DEFINED registers.
