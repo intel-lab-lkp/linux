@@ -1013,6 +1013,25 @@ config LEDS_IP30
 	  To compile this driver as a module, choose M here: the module
 	  will be called leds-ip30.
 
+config LEDS_SONY_CRONOS
+	tristate "LED support for the Sony Cronos SMC"
+	depends on ARCH_ASPEED || COMPILE_TEST
+	depends on LEDS_CLASS && I2C
+	depends on LEDS_CLASS_MULTICOLOR
+	depends on MFD_SONY_CRONOS_SMC
+
+	help
+	  Say Y here to include support for LEDs for the
+	  Sony Cronos system management controller.
+
+	  All known Cronos systems use the ASpeed AST2600 SoC,
+	  therefore the configuration option is gated on
+	  ARCH_ASPEED selection.  If this changes, add the new
+	  SoCs to the selection list.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called leds-sony-cronos.
+
 config LEDS_ACER_A500
 	tristate "Power button LED support for Acer Iconia Tab A500"
 	depends on LEDS_CLASS && MFD_ACER_A500_EC
