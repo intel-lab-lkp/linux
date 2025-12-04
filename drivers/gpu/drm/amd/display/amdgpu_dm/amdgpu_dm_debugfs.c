@@ -185,72 +185,40 @@ static int parse_write_buffer_into_params(char *wr_buf, uint32_t wr_buf_size,
  * check current and preferred settings.
  *
  */
-static ssize_t dp_link_settings_read(struct file *f, char __user *buf,
-				 size_t size, loff_t *pos)
+static ssize_t dp_link_settings_read(struct file *f, char __user *ubuf,
+				     size_t count, loff_t *pos)
 {
 	struct amdgpu_dm_connector *connector = file_inode(f)->i_private;
 	struct dc_link *link = connector->dc_link;
-	char *rd_buf = NULL;
-	char *rd_buf_ptr = NULL;
-	const uint32_t rd_buf_size = 100;
-	uint32_t result = 0;
-	uint8_t str_len = 0;
-	int r;
+	size_t size = 1024;
+	int off;
 
-	if (*pos & 3 || size & 3)
-		return -EINVAL;
+	char *buf __free(kfree) = kcalloc(size, sizeof(char), GFP_KERNEL);
+	if (!buf)
+		return  -ENOMEM;
 
-	rd_buf = kcalloc(rd_buf_size, sizeof(char), GFP_KERNEL);
-	if (!rd_buf)
-		return 0;
+	off = 0;
+	off += scnprintf(buf + off, size - off, "Current:  %d  0x%x  %d  ",
+			 link->cur_link_settings.lane_count,
+			 link->cur_link_settings.link_rate,
+			 link->cur_link_settings.link_spread);
 
-	rd_buf_ptr = rd_buf;
+	off += scnprintf(buf + off, size - off, "Verified:  %d  0x%x  %d  ",
+			 link->verified_link_cap.lane_count,
+			 link->verified_link_cap.link_rate,
+			 link->verified_link_cap.link_spread);
 
-	str_len = strlen("Current:  %d  0x%x  %d  ");
-	snprintf(rd_buf_ptr, str_len, "Current:  %d  0x%x  %d  ",
-			link->cur_link_settings.lane_count,
-			link->cur_link_settings.link_rate,
-			link->cur_link_settings.link_spread);
-	rd_buf_ptr += str_len;
+	off += scnprintf(buf + off, size - off, "Reported:  %d  0x%x  %d  ",
+			 link->reported_link_cap.lane_count,
+			 link->reported_link_cap.link_rate,
+			 link->reported_link_cap.link_spread);
 
-	str_len = strlen("Verified:  %d  0x%x  %d  ");
-	snprintf(rd_buf_ptr, str_len, "Verified:  %d  0x%x  %d  ",
-			link->verified_link_cap.lane_count,
-			link->verified_link_cap.link_rate,
-			link->verified_link_cap.link_spread);
-	rd_buf_ptr += str_len;
+	off += scnprintf(buf + off, size - off, "Preferred:  %d  0x%x  %d\n",
+			 link->preferred_link_setting.lane_count,
+			 link->preferred_link_setting.link_rate,
+			 link->preferred_link_setting.link_spread);
 
-	str_len = strlen("Reported:  %d  0x%x  %d  ");
-	snprintf(rd_buf_ptr, str_len, "Reported:  %d  0x%x  %d  ",
-			link->reported_link_cap.lane_count,
-			link->reported_link_cap.link_rate,
-			link->reported_link_cap.link_spread);
-	rd_buf_ptr += str_len;
-
-	str_len = strlen("Preferred:  %d  0x%x  %d  ");
-	snprintf(rd_buf_ptr, str_len, "Preferred:  %d  0x%x  %d\n",
-			link->preferred_link_setting.lane_count,
-			link->preferred_link_setting.link_rate,
-			link->preferred_link_setting.link_spread);
-
-	while (size) {
-		if (*pos >= rd_buf_size)
-			break;
-
-		r = put_user(*(rd_buf + result), buf);
-		if (r) {
-			kfree(rd_buf);
-			return r; /* r = -EFAULT */
-		}
-
-		buf += 1;
-		size -= 1;
-		*pos += 1;
-		result += 1;
-	}
-
-	kfree(rd_buf);
-	return result;
+	return simple_read_from_buffer(ubuf, count, pos, buf, off);
 }
 
 static ssize_t dp_link_settings_write(struct file *f, const char __user *buf,
