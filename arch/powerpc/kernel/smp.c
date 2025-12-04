@@ -82,6 +82,9 @@ bool has_big_cores __ro_after_init;
 bool coregroup_enabled __ro_after_init;
 bool thread_group_shares_l2 __ro_after_init;
 bool thread_group_shares_l3 __ro_after_init;
+#ifdef CONFIG_PPC_SPLPAR
+bool process_steal_enable __ro_after_init;
+#endif
 
 DEFINE_PER_CPU(cpumask_var_t, cpu_sibling_map);
 DEFINE_PER_CPU(cpumask_var_t, cpu_smallcore_map);
@@ -1759,6 +1762,11 @@ void __init smp_cpus_done(unsigned int max_cpus)
 #ifdef CONFIG_PPC_SPLPAR
 	if (smp_ops->num_available_cores)
 		smp_ops->num_available_cores();
+
+	if (is_shared_processor() && !is_kvm_guest())
+		process_steal_enable = true;
+	else
+		process_steal_enable = false;
 #endif
 }
 

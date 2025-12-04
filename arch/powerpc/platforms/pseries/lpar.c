@@ -674,6 +674,7 @@ static bool should_cpu_process_steal(int cpu)
 	return false;
 }
 
+extern bool process_steal_enable;
 static void process_steal(int cpu)
 {
 	static unsigned long next_tb, prev_steal;
@@ -681,6 +682,9 @@ static void process_steal(int cpu)
 	unsigned long tb = mftb();
 	unsigned long steal = 0;
 	unsigned int i;
+
+	if (!process_steal_enable)
+		return;
 
 	if (!should_cpu_process_steal(cpu))
 		return;
