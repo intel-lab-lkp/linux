@@ -635,7 +635,7 @@ int tb_domain_runtime_resume(struct tb *tb)
 int tb_domain_disapprove_switch(struct tb *tb, struct tb_switch *sw)
 {
 	if (!tb->cm_ops->disapprove_switch)
-		return -EPERM;
+		return -ENOTSUPP;
 
 	return tb->cm_ops->disapprove_switch(tb, sw);
 }
@@ -656,7 +656,7 @@ int tb_domain_approve_switch(struct tb *tb, struct tb_switch *sw)
 	struct tb_switch *parent_sw;
 
 	if (!tb->cm_ops->approve_switch)
-		return -EPERM;
+		return -ENOTSUPP;
 
 	/* The parent switch must be authorized before this one */
 	parent_sw = tb_to_switch(sw->dev.parent);
@@ -683,7 +683,7 @@ int tb_domain_approve_switch_key(struct tb *tb, struct tb_switch *sw)
 	int ret;
 
 	if (!tb->cm_ops->approve_switch || !tb->cm_ops->add_switch_key)
-		return -EPERM;
+		return -ENOTSUPP;
 
 	/* The parent switch must be authorized before this one */
 	parent_sw = tb_to_switch(sw->dev.parent);
@@ -718,7 +718,7 @@ int tb_domain_challenge_switch_key(struct tb *tb, struct tb_switch *sw)
 	int ret;
 
 	if (!tb->cm_ops->approve_switch || !tb->cm_ops->challenge_switch_key)
-		return -EPERM;
+		return -ENOTSUPP;
 
 	/* The parent switch must be authorized before this one */
 	parent_sw = tb_to_switch(sw->dev.parent);
@@ -753,7 +753,7 @@ int tb_domain_challenge_switch_key(struct tb *tb, struct tb_switch *sw)
 int tb_domain_disconnect_pcie_paths(struct tb *tb)
 {
 	if (!tb->cm_ops->disconnect_pcie_paths)
-		return -EPERM;
+		return -ENOTSUPP;
 
 	return tb->cm_ops->disconnect_pcie_paths(tb);
 }
