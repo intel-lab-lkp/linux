@@ -517,6 +517,9 @@ void nr_rt_device_down(struct net_device *dev)
 		for (i = 0; i < t->count; i++) {
 			s = t->routes[i].neighbour;
 			if (s->dev == dev) {
+				s->count--;
+				nr_neigh_put(s);
+
 				t->count--;
 
 				switch (i) {
