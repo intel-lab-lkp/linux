@@ -483,4 +483,91 @@ fail_early:													\
 	}													\
 	static void kfuzztest_logic_##test_name(test_arg_type *arg)
 
+struct kfuzztest_simple_target {
+	const char *name;
+	ssize_t (*write_input_cb)(struct file *filp, const char __user *buf, size_t len, loff_t *off);
+} __aligned(32);
+
+struct kfuzztest_simple_arg {
+	char *data;
+	size_t datalen;
+};
+
+/* Define constraint and annotation metadata for reused kfuzztest_simple_arg. */
+__KFUZZTEST_CONSTRAINT(kfuzztest_simple_arg, data, NULL, 0x0, EXPECT_NE);
+__KFUZZTEST_ANNOTATE(kfuzztest_simple_arg, data, NULL, ATTRIBUTE_ARRAY);
+__KFUZZTEST_ANNOTATE(kfuzztest_simple_arg, datalen, data, ATTRIBUTE_LEN);
+
+/**
+ * FUZZ_TEST_SIMPLE - defines a simple KFuzzTest target
+ *
+ * @test_name: the unique identifier for the fuzz test, which is used to name
+ *	the debugfs entry.
+ *
+ * This macro function nearly identically to the standard FUZZ_TEST target, the
+ * key difference being that a simple fuzz target is constrained to inputs of
+ * the form `(char *data, size_t datalen)` - a common pattern in kernel APIs.
+ *
+ * The FUZZ_TEST_SIMPLE macro expands to define an equivalent FUZZ_TEST,
+ * effectively creating two debugfs input files for the fuzz target. In essence,
+ * on top of creating an input file under kfuzztest/@test_name/input, a new
+ * simple input file is created under kfuzztest/@test_name/input_simple. This
+ * debugfs file takes raw byte buffers as input and doesn't require any special
+ * serialization.
+ *
+ * User-provided Logic:
+ * The developer must provide the body of the fuzz test logic within the curly
+ * braces following the macro invocation. Within this scope, the framework
+ * provides the `data` and `datalen` variables, where `datalen == len(data)`.
+ *
+ * Example Usage:
+ *
+ * // 1. The kernel function that we wnat to fuzz.
+ * int process_data(const char *data, size_t datalen);
+ *
+ * // 2. Define a fuzz target using the FUZZ_TEST_SIMPLE macro.
+ * FUZZ_TEST_SIMPLE(test_process_data)
+ * {
+ *	// Call the function under test using the `data` and `datalen`
+ *	// variables.
+ *	process_data(data, datalen);
+ * }
+ *
+ */
+#define FUZZ_TEST_SIMPLE(test_name)											\
+	static ssize_t kfuzztest_simple_write_cb_##test_name(struct file *filp, const char __user *buf, size_t len,	\
+							     loff_t *off);						\
+	static void kfuzztest_simple_logic_##test_name(char *data, size_t datalen);					\
+	static const struct kfuzztest_simple_target __fuzz_test_simple__##test_name __section(				\
+		".kfuzztest_simple_target") __used = {									\
+		.name = #test_name,											\
+		.write_input_cb = kfuzztest_simple_write_cb_##test_name,						\
+	};														\
+	FUZZ_TEST(test_name, struct kfuzztest_simple_arg)								\
+	{														\
+		/* We don't use the KFUZZTEST_EXPECT macro to define the
+		 * non-null constraint on `arg->data` as we only want metadata
+		 * to be emitted once, so we enforce it here manually. */						\
+		if (arg->data == NULL)											\
+			return;												\
+		kfuzztest_simple_logic_##test_name(arg->data, arg->datalen);						\
+	}														\
+	static ssize_t kfuzztest_simple_write_cb_##test_name(struct file *filp, const char __user *buf, size_t len,	\
+							     loff_t *off)						\
+	{														\
+		void *buffer;												\
+		int ret;												\
+															\
+		ret = kfuzztest_write_cb_common(filp, buf, len, off, &buffer);						\
+		if (ret < 0)												\
+			goto out;											\
+		kfuzztest_simple_logic_##test_name(buffer, len);							\
+		record_invocation();											\
+		ret = len;												\
+		kfree(buffer);												\
+out:															\
+		return ret;												\
+	}														\
+	static void kfuzztest_simple_logic_##test_name(char *data, size_t datalen)
+
 #endif /* KFUZZTEST_H */

@@ -976,6 +976,10 @@ defined(CONFIG_AUTOFDO_CLANG) || defined(CONFIG_PROPELLER_CLANG)
 	KEEP(*(.kfuzztest_target));					\
 	__kfuzztest_targets_end = .;					\
 	. = ALIGN(PAGE_SIZE);						\
+	__kfuzztest_simple_targets_start = .;				\
+	KEEP(*(.kfuzztest_simple_target));				\
+	__kfuzztest_simple_targets_end = .;				\
+	. = ALIGN(PAGE_SIZE);						\
 	__kfuzztest_constraints_start = .;				\
 	KEEP(*(.kfuzztest_constraint));					\
 	__kfuzztest_constraints_end = .;				\
