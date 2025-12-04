@@ -121,6 +121,7 @@ extern u32 pseries_security_flavor;
 void pseries_setup_security_mitigations(void);
 #ifdef CONFIG_PPC_SPLPAR
 void trigger_softoffline(unsigned long steal_ratio);
+unsigned int pseries_num_available_cores(void);
 #endif
 
 #ifdef CONFIG_PPC_64S_HASH_MMU

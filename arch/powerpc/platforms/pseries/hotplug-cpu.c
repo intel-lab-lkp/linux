@@ -284,6 +284,9 @@ static int pseries_add_processor(struct device_node *np)
 
 out:
 	cpu_maps_update_done();
+#ifdef CONFIG_PPC_SPLPAR
+	pseries_num_available_cores();
+#endif
 	free_cpumask_var(cpu_mask);
 	return rc;
 }
@@ -323,6 +326,9 @@ static void pseries_remove_processor(struct device_node *np)
 			       "with physical id 0x%x\n", thread);
 	}
 	cpu_maps_update_done();
+#ifdef CONFIG_PPC_SPLPAR
+	pseries_num_available_cores();
+#endif
 }
 
 static int dlpar_offline_cpu(struct device_node *dn)

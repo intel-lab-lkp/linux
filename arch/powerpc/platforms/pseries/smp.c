@@ -293,7 +293,7 @@ static unsigned int entitled_cores __read_mostly;
 static unsigned int available_cores;
 
 /* Get pseries soft entitlement limit */
-static unsigned int pseries_num_available_cores(void)
+unsigned int pseries_num_available_cores(void)
 {
 	unsigned int present_cores = num_present_cpus() / threads_per_core;
 	unsigned long retbuf[PLPAR_HCALL9_BUFSIZE];
