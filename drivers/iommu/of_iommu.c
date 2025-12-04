@@ -45,10 +45,11 @@ static int of_iommu_configure_dev_id(struct device_node *master_np,
 				     struct device *dev,
 				     const u32 *id)
 {
-	struct of_phandle_args iommu_spec = { .args_count = 1 };
+	struct of_phandle_args iommu_spec = {};
 	struct of_map_id_arg arg = {
 		.target = &iommu_spec.np,
 		.id_out = iommu_spec.args,
+		.map_cells = &iommu_spec.args_count,
 	};
 	int err;
 
