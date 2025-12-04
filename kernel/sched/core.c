@@ -8174,16 +8174,16 @@ static void balance_push(struct rq *rq)
 	lockdep_assert_rq_held(rq);
 
 	/*
-	 * Ensure the thing is persistent until balance_push_set(.on = false);
-	 */
-	rq->balance_callback = &balance_push_callback;
-
-	/*
 	 * Only active while going offline and when invoked on the outgoing
 	 * CPU.
 	 */
 	if (!cpu_dying(rq->cpu) || rq != this_rq())
 		return;
+
+	/*
+	 * Ensure the thing is persistent until balance_push_set(.on = false);
+	 */
+	rq->balance_callback = &balance_push_callback;
 
 	/*
 	 * Both the cpu-hotplug and stop task are in this case and are
