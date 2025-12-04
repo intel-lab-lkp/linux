@@ -13,7 +13,7 @@
 
 import gdb
 
-from linux import tasks, utils
+from linux import constants, tasks, utils
 
 
 task_type = utils.CachedType("struct task_struct")
@@ -207,6 +207,11 @@ def get_current_task(cpu):
             current_task = scratch_reg.cast(task_ptr_type)
 
         return current_task.dereference()
+    elif utils.is_target_arch("s390"):
+        lowcore = s390_lowcore(cpu)
+        current_task_addr = lowcore["current_task"]
+        current_task = current_task_addr.cast(task_ptr_type)
+        return current_task.dereference()
     else:
         raise gdb.GdbError("Sorry, obtaining the current task is not yet "
                            "supported with this arch")
@@ -225,3 +230,31 @@ number. If CPU is omitted, the CPU of the current context is used."""
 
 
 LxCurrentFunc()
+
+
+def s390_machine_feature(nr):
+    if nr >= constants.LX_MAX_MFEATURE_BIT:
+        raise gdb.GdbError("Sorry, the s390 machine feature number is "
+                           "out of bounds.")
+
+    machine_features = gdb.parse_and_eval("machine_features")
+    bits_per_entry = machine_features[0].type.sizeof * 8
+    entry = machine_features[nr // bits_per_entry]
+    return (entry & (1 << (nr % bits_per_entry))) != 0
+
+
+def s390_machine_has_relocated_lowcore():
+    return s390_machine_feature(constants.LX_MFEATURE_LOWCORE)
+
+
+def s390_lowcore(cpu):
+    if cpu == -1 or cpu == get_current_cpu():
+        if s390_machine_has_relocated_lowcore():
+            lowcore = constants.LX_LOWCORE_ALT_ADDRESS
+        else:
+            lowcore = gdb.Value(0)
+    else:
+        lowcore = gdb.parse_and_eval("lowcore_ptr[{0}]".format(str(cpu)))
+
+    lowcore_ptr_type = gdb.lookup_type("struct lowcore").pointer()
+    return lowcore.cast(lowcore_ptr_type)

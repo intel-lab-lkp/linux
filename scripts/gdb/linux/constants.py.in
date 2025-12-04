@@ -24,6 +24,10 @@
 #include <linux/slab.h>
 #include <linux/threads.h>
 #include <linux/vmalloc.h>
+#ifdef CONFIG_S390
+#include <asm/lowcore.h>
+#include <asm/machine.h>
+#endif
 
 /* We need to stringify expanded macros so that they can be parsed */
 
@@ -122,6 +126,15 @@ LX_GDBPARSED(SLAB_CACHE_DMA32)
 LX_GDBPARSED(SLAB_STORE_USER)
 LX_GDBPARSED(SLAB_PANIC)
 
+/* asm/lowcore.h */
+if IS_BUILTIN(CONFIG_S390):
+    LX_GDBPARSED(LOWCORE_ALT_ADDRESS)
+
+/* asm/machine.h */
+if IS_BUILTIN(CONFIG_S390):
+    LX_VALUE(MFEATURE_LOWCORE)
+    LX_GDBPARSED(MAX_MFEATURE_BIT)
+
 /* Kernel Configs */
 LX_CONFIG(CONFIG_GENERIC_CLOCKEVENTS)
 LX_CONFIG(CONFIG_GENERIC_CLOCKEVENTS_BROADCAST)
@@ -170,3 +183,4 @@ LX_CONFIG(CONFIG_PAGE_OWNER)
 LX_CONFIG(CONFIG_SLUB_DEBUG)
 LX_CONFIG(CONFIG_SLAB_FREELIST_HARDENED)
 LX_CONFIG(CONFIG_MMU)
+LX_CONFIG(CONFIG_S390)
