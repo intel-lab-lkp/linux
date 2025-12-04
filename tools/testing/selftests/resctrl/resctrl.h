@@ -38,6 +38,7 @@
  */
 #define ARCH_INTEL     1
 #define ARCH_AMD       2
+#define ARCH_HYGON     3
 
 #define END_OF_TESTS	1
 
