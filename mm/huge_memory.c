@@ -1154,12 +1154,12 @@ static unsigned long __thp_get_unmapped_area(struct file *filp,
 
 unsigned long thp_get_unmapped_area_vmflags(struct file *filp, unsigned long addr,
 		unsigned long len, unsigned long pgoff, unsigned long flags,
-		vm_flags_t vm_flags)
+		unsigned long align, vm_flags_t vm_flags)
 {
 	unsigned long ret;
 	loff_t off = (loff_t)pgoff << PAGE_SHIFT;
 
-	ret = __thp_get_unmapped_area(filp, addr, len, off, flags, PMD_SIZE, vm_flags);
+	ret = __thp_get_unmapped_area(filp, addr, len, off, flags, align, vm_flags);
 	if (ret)
 		return ret;
 
@@ -1170,7 +1170,8 @@ unsigned long thp_get_unmapped_area_vmflags(struct file *filp, unsigned long add
 unsigned long thp_get_unmapped_area(struct file *filp, unsigned long addr,
 		unsigned long len, unsigned long pgoff, unsigned long flags)
 {
-	return thp_get_unmapped_area_vmflags(filp, addr, len, pgoff, flags, 0);
+	return thp_get_unmapped_area_vmflags(filp, addr, len, pgoff, flags,
+					     PMD_SIZE, 0);
 }
 EXPORT_SYMBOL_GPL(thp_get_unmapped_area);
 
