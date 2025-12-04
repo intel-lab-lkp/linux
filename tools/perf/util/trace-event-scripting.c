@@ -123,6 +123,7 @@ void scripting_context__update(struct scripting_context *c,
 	c->addr_al = addr_al;
 }
 
+#if !defined(HAVE_LIBPERL_SUPPORT) || !defined(HAVE_LIBPYTHON_SUPPORT)
 static int flush_script_unsupported(void)
 {
 	return 0;
@@ -140,7 +141,22 @@ static void process_event_unsupported(union perf_event *event __maybe_unused,
 				      struct addr_location *addr_al __maybe_unused)
 {
 }
+#endif
 
+static void register_python_scripting(struct scripting_ops *scripting_ops)
+{
+	if (scripting_context == NULL)
+		scripting_context = malloc(sizeof(*scripting_context));
+
+	if (scripting_context == NULL ||
+	   script_spec_register("Python", scripting_ops) ||
+	   script_spec_register("py", scripting_ops)) {
+		pr_err("Error registering Python script extension: disabling it\n");
+		zfree(&scripting_context);
+	}
+}
+
+#ifndef HAVE_LIBPYTHON_SUPPORT
 static void print_python_unsupported_msg(void)
 {
 	fprintf(stderr, "Python scripting not supported."
@@ -170,32 +186,18 @@ static int python_generate_script_unsupported(struct tep_handle *pevent
 	return -1;
 }
 
-struct scripting_ops python_scripting_unsupported_ops = {
-	.name = "Python",
-	.dirname = "python",
-	.start_script = python_start_script_unsupported,
-	.flush_script = flush_script_unsupported,
-	.stop_script = stop_script_unsupported,
-	.process_event = process_event_unsupported,
-	.generate_script = python_generate_script_unsupported,
-};
-
-static void register_python_scripting(struct scripting_ops *scripting_ops)
-{
-	if (scripting_context == NULL)
-		scripting_context = malloc(sizeof(*scripting_context));
-
-       if (scripting_context == NULL ||
-	   script_spec_register("Python", scripting_ops) ||
-	   script_spec_register("py", scripting_ops)) {
-		pr_err("Error registering Python script extension: disabling it\n");
-		zfree(&scripting_context);
-	}
-}
-
-#ifndef HAVE_LIBPYTHON_SUPPORT
 void setup_python_scripting(void)
 {
+	static struct scripting_ops python_scripting_unsupported_ops = {
+		.name = "Python",
+		.dirname = "python",
+		.start_script = python_start_script_unsupported,
+		.flush_script = flush_script_unsupported,
+		.stop_script = stop_script_unsupported,
+		.process_event = process_event_unsupported,
+		.generate_script = python_generate_script_unsupported,
+	};
+
 	register_python_scripting(&python_scripting_unsupported_ops);
 }
 #else
@@ -208,6 +210,20 @@ void setup_python_scripting(void)
 #endif
 
 #ifdef HAVE_LIBTRACEEVENT
+static void register_perl_scripting(struct scripting_ops *scripting_ops)
+{
+	if (scripting_context == NULL)
+		scripting_context = malloc(sizeof(*scripting_context));
+
+	if (scripting_context == NULL ||
+	   script_spec_register("Perl", scripting_ops) ||
+	   script_spec_register("pl", scripting_ops)) {
+		pr_err("Error registering Perl script extension: disabling it\n");
+		zfree(&scripting_context);
+	}
+}
+
+#ifndef HAVE_LIBPERL_SUPPORT
 static void print_perl_unsupported_msg(void)
 {
 	fprintf(stderr, "Perl scripting not supported."
@@ -236,32 +252,18 @@ static int perl_generate_script_unsupported(struct tep_handle *pevent
 	return -1;
 }
 
-struct scripting_ops perl_scripting_unsupported_ops = {
-	.name = "Perl",
-	.dirname = "perl",
-	.start_script = perl_start_script_unsupported,
-	.flush_script = flush_script_unsupported,
-	.stop_script = stop_script_unsupported,
-	.process_event = process_event_unsupported,
-	.generate_script = perl_generate_script_unsupported,
-};
-
-static void register_perl_scripting(struct scripting_ops *scripting_ops)
-{
-	if (scripting_context == NULL)
-		scripting_context = malloc(sizeof(*scripting_context));
-
-       if (scripting_context == NULL ||
-	   script_spec_register("Perl", scripting_ops) ||
-	   script_spec_register("pl", scripting_ops)) {
-		pr_err("Error registering Perl script extension: disabling it\n");
-		zfree(&scripting_context);
-	}
-}
-
-#ifndef HAVE_LIBPERL_SUPPORT
 void setup_perl_scripting(void)
 {
+	static struct scripting_ops perl_scripting_unsupported_ops = {
+		.name = "Perl",
+		.dirname = "perl",
+		.start_script = perl_start_script_unsupported,
+		.flush_script = flush_script_unsupported,
+		.stop_script = stop_script_unsupported,
+		.process_event = process_event_unsupported,
+		.generate_script = perl_generate_script_unsupported,
+	};
+
 	register_perl_scripting(&perl_scripting_unsupported_ops);
 }
 #else

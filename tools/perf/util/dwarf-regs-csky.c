@@ -6,7 +6,7 @@
 #include <dwarf-regs.h>
 
 #define CSKY_ABIV2_MAX_REGS 73
-const char *csky_dwarf_regs_table_abiv2[CSKY_ABIV2_MAX_REGS] = {
+static const char *csky_dwarf_regs_table_abiv2[CSKY_ABIV2_MAX_REGS] = {
 	/* r0 ~ r8 */
 	"%a0", "%a1", "%a2", "%a3", "%regs0", "%regs1", "%regs2", "%regs3",
 	/* r9 ~ r15 */
@@ -27,7 +27,7 @@ const char *csky_dwarf_regs_table_abiv2[CSKY_ABIV2_MAX_REGS] = {
 };
 
 #define CSKY_ABIV1_MAX_REGS 57
-const char *csky_dwarf_regs_table_abiv1[CSKY_ABIV1_MAX_REGS] = {
+static const char *csky_dwarf_regs_table_abiv1[CSKY_ABIV1_MAX_REGS] = {
 	/* r0 ~ r8 */
 	"%sp", "%regs9", "%a0", "%a1", "%a2", "%a3", "%regs0", "%regs1",
 	/* r9 ~ r15 */

@@ -178,7 +178,7 @@ static int set_debug_file(const char *path)
 	return 0;
 }
 
-struct option options[] = {
+static const struct option options[] = {
 	OPT_ARGUMENT("help", "help"),
 	OPT_ARGUMENT("version", "version"),
 	OPT_ARGUMENT("exec-path", "exec-path"),
@@ -289,7 +289,7 @@ static int handle_options(const char ***argv, int *argc, int *envchanged)
 			unsigned int i;
 
 			for (i = 0; i < ARRAY_SIZE(options)-1; i++) {
-				struct option *p = options+i;
+				const struct option *p = options+i;
 				printf("--%s ", p->long_name);
 			}
 			putchar('\n');

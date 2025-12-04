@@ -76,8 +76,6 @@ bool sysctl__nmi_watchdog_enabled(void)
 	return nmi_watchdog;
 }
 
-bool test_attr__enabled;
-
 bool exclude_GH_default;
 
 bool perf_host  = true;
