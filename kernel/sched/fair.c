@@ -10664,11 +10664,13 @@ static int idle_cpu_without(int cpu, struct task_struct *p)
  * @group: sched_group whose statistics are to be updated.
  * @sgs: variable to hold the statistics for this group.
  * @p: The task for which we look for the idlest group/CPU.
+ * @this_cpu: current cpu
  */
 static inline void update_sg_wakeup_stats(struct sched_domain *sd,
 					  struct sched_group *group,
 					  struct sg_lb_stats *sgs,
-					  struct task_struct *p)
+					  struct task_struct *p,
+					  int asym_prefer_cpu)
 {
 	int i, nr_running;
 
@@ -10705,6 +10707,12 @@ static inline void update_sg_wakeup_stats(struct sched_domain *sd,
 
 	}
 
+	if (asym_prefer_cpu != READ_ONCE(group->asym_prefer_cpu) &&
+			sched_asym(sd, READ_ONCE(group->asym_prefer_cpu),
+			READ_ONCE(asym_prefer_cpu))) {
+		sgs->group_asym_packing = 1;
+	}
+
 	sgs->group_capacity = group->sgc->capacity;
 
 	sgs->group_weight = group->group_weight;
@@ -10721,7 +10729,8 @@ static inline void update_sg_wakeup_stats(struct sched_domain *sd,
 				sgs->group_capacity;
 }
 
-static bool update_pick_idlest(struct sched_group *idlest,
+static bool update_pick_idlest(struct sched_domain *sd,
+			       struct sched_group *idlest,
 			       struct sg_lb_stats *idlest_sgs,
 			       struct sched_group *group,
 			       struct sg_lb_stats *sgs)
@@ -10745,8 +10754,11 @@ static bool update_pick_idlest(struct sched_group *idlest,
 			return false;
 		break;
 
-	case group_imbalanced:
 	case group_asym_packing:
+		return sched_asym(sd, READ_ONCE(group->asym_prefer_cpu),
+				READ_ONCE(idlest->asym_prefer_cpu));
+
+	case group_imbalanced:
 	case group_smt_balance:
 		/* Those types are not used in the slow wakeup path */
 		return false;
@@ -10790,6 +10802,7 @@ sched_balance_find_dst_group(struct sched_domain *sd, struct task_struct *p, int
 			.avg_load = UINT_MAX,
 			.group_type = group_overloaded,
 	};
+	int asym_prefer_cpu;
 
 	do {
 		int local_group;
@@ -10812,10 +10825,12 @@ sched_balance_find_dst_group(struct sched_domain *sd, struct task_struct *p, int
 		} else {
 			sgs = &tmp_sgs;
 		}
+		if (!local || local_group)
+			asym_prefer_cpu = READ_ONCE(group->asym_prefer_cpu);
 
-		update_sg_wakeup_stats(sd, group, sgs, p);
+		update_sg_wakeup_stats(sd, group, sgs, p, asym_prefer_cpu);
 
-		if (!local_group && update_pick_idlest(idlest, &idlest_sgs, group, sgs)) {
+		if (!local_group && update_pick_idlest(sd, idlest, &idlest_sgs, group, sgs)) {
 			idlest = group;
 			idlest_sgs = *sgs;
 		}
@@ -10844,6 +10859,14 @@ sched_balance_find_dst_group(struct sched_domain *sd, struct task_struct *p, int
 	 */
 	if (local_sgs.group_type > idlest_sgs.group_type)
 		return idlest;
+
+	if (idlest_sgs.group_type == group_asym_packing) {
+		if (sched_asym(sd, READ_ONCE(idlest->asym_prefer_cpu),
+				READ_ONCE(local->asym_prefer_cpu))) {
+			return idlest;
+		}
+		return NULL;
+	}
 
 	switch (local_sgs.group_type) {
 	case group_overloaded:
