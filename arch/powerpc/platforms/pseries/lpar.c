@@ -659,6 +659,53 @@ static int __init vcpudispatch_stats_procfs_init(void)
 machine_device_initcall(pseries, vcpudispatch_stats_procfs_init);
 
 #ifdef CONFIG_PARAVIRT_TIME_ACCOUNTING
+#define STEAL_MULTIPLE (STEAL_RATIO * STEAL_RATIO)
+#define PURR_UPDATE_TB tb_ticks_per_sec
+
+static void trigger_softoffline(unsigned long steal_ratio)
+{
+}
+
+static bool should_cpu_process_steal(int cpu)
+{
+	if (cpu == cpumask_first(cpu_online_mask))
+		return true;
+
+	return false;
+}
+
+static void process_steal(int cpu)
+{
+	static unsigned long next_tb, prev_steal;
+	unsigned long steal_ratio, delta_tb;
+	unsigned long tb = mftb();
+	unsigned long steal = 0;
+	unsigned int i;
+
+	if (!should_cpu_process_steal(cpu))
+		return;
+
+	if (tb < next_tb)
+		return;
+
+	for_each_online_cpu(i) {
+		struct lppaca *lppaca = &lppaca_of(i);
+
+		steal += be64_to_cpu(READ_ONCE(lppaca->ready_enqueue_tb));
+		steal += be64_to_cpu(READ_ONCE(lppaca->enqueue_dispatch_tb));
+	}
+
+	if (next_tb && prev_steal) {
+		delta_tb = max(tb - (next_tb - PURR_UPDATE_TB), 1);
+		steal_ratio = (steal - prev_steal) * STEAL_MULTIPLE;
+		steal_ratio /= (delta_tb * num_online_cpus());
+		trigger_softoffline(steal_ratio);
+	}
+
+	next_tb = tb + PURR_UPDATE_TB;
+	prev_steal = steal;
+}
+
 u64 pseries_paravirt_steal_clock(int cpu)
 {
 	struct lppaca *lppaca = &lppaca_of(cpu);
@@ -666,6 +713,9 @@ u64 pseries_paravirt_steal_clock(int cpu)
 
 	steal = be64_to_cpu(READ_ONCE(lppaca->ready_enqueue_tb));
 	steal += be64_to_cpu(READ_ONCE(lppaca->enqueue_dispatch_tb));
+
+	if (is_shared_processor() && !is_kvm_guest())
+		process_steal(cpu);
 
 	/*
 	 * VPA steal time counters are reported at TB frequency. Hence do a

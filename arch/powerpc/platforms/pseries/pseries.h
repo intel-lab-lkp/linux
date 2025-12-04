@@ -26,6 +26,10 @@ void pSeries_machine_check_log_err(void);
 #ifdef CONFIG_SMP
 extern void smp_init_pseries(void);
 
+#ifdef CONFIG_PPC_SPLPAR
+#define STEAL_RATIO 100
+#endif
+
 /* Get state of physical CPU from query_cpu_stopped */
 int smp_query_cpu_stopped(unsigned int pcpu);
 #define QCSS_STOPPED 0
