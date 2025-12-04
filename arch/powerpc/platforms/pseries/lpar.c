@@ -660,8 +660,8 @@ machine_device_initcall(pseries, vcpudispatch_stats_procfs_init);
 
 #ifdef CONFIG_PARAVIRT_TIME_ACCOUNTING
 #define STEAL_MULTIPLE (STEAL_RATIO * STEAL_RATIO)
-#define PURR_UPDATE_TB tb_ticks_per_sec
 
+static u8 steal_interval = 1;
 
 static bool should_cpu_process_steal(int cpu)
 {
@@ -674,8 +674,8 @@ static bool should_cpu_process_steal(int cpu)
 extern bool process_steal_enable;
 static void process_steal(int cpu)
 {
+	unsigned long steal_ratio, delta_tb, interval_tb;
 	static unsigned long next_tb, prev_steal;
-	unsigned long steal_ratio, delta_tb;
 	unsigned long tb = mftb();
 	unsigned long steal = 0;
 	unsigned int i;
@@ -696,14 +696,18 @@ static void process_steal(int cpu)
 		steal += be64_to_cpu(READ_ONCE(lppaca->enqueue_dispatch_tb));
 	}
 
+	if (!steal_interval)
+		steal_interval = 1;
+
+	interval_tb = steal_interval * tb_ticks_per_sec;
 	if (next_tb && prev_steal) {
-		delta_tb = max(tb - (next_tb - PURR_UPDATE_TB), 1);
+		delta_tb = max(tb - (next_tb - interval_tb), 1);
 		steal_ratio = (steal - prev_steal) * STEAL_MULTIPLE;
 		steal_ratio /= (delta_tb * num_online_cpus());
 		trigger_softoffline(steal_ratio);
 	}
 
-	next_tb = tb + PURR_UPDATE_TB;
+	next_tb = tb + interval_tb;
 	prev_steal = steal;
 }
 
@@ -2081,6 +2085,9 @@ static int __init vpa_debugfs_init(void)
 		debugfs_create_file(name, 0400, vpa_dir, (void *)i, &vpa_fops);
 	}
 
+#ifdef CONFIG_PARAVIRT_TIME_ACCOUNTING
+	debugfs_create_u8("steal_interval_secs", 0600, arch_debugfs_dir, &steal_interval);
+#endif
 	return 0;
 }
 machine_arch_initcall(pseries, vpa_debugfs_init);
