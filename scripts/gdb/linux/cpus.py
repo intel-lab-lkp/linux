@@ -258,3 +258,20 @@ def s390_lowcore(cpu):
 
     lowcore_ptr_type = gdb.lookup_type("struct lowcore").pointer()
     return lowcore.cast(lowcore_ptr_type)
+
+
+class LxLowcoreFunc(gdb.Function):
+    """Return current s390 lowcore.
+
+$lx_lowcore([CPU]): Return the s390 lowcore for the given CPU number.
+If CPU is omitted, the CPU of the current context is used."""
+
+    def __init__(self):
+        super(LxLowcoreFunc, self).__init__("lx_lowcore")
+
+    def invoke(self, cpu=-1):
+        return s390_lowcore(cpu)
+
+
+if constants.LX_CONFIG_S390:
+    LxLowcoreFunc()
