@@ -462,9 +462,9 @@ static void __disable_vblank(struct drm_vblank_crtc *vblank)
  * are preserved, even if there are any spurious vblank irq's after
  * disable.
  */
-void drm_vblank_disable_and_save(struct drm_device *dev, unsigned int pipe)
+static void drm_vblank_crtc_disable_and_save(struct drm_vblank_crtc *vblank)
 {
-	struct drm_vblank_crtc *vblank = drm_vblank_crtc(dev, pipe);
+	struct drm_device *dev = vblank->dev;
 	unsigned long irqflags;
 
 	assert_spin_locked(&dev->vbl_lock);
@@ -509,7 +509,7 @@ static void vblank_disable_fn(struct timer_list *t)
 	spin_lock_irqsave(&dev->vbl_lock, irqflags);
 	if (atomic_read(&vblank->refcount) == 0 && vblank->enabled) {
 		drm_dbg_core(dev, "disabling vblank on crtc %u\n", pipe);
-		drm_vblank_disable_and_save(dev, pipe);
+		drm_vblank_crtc_disable_and_save(vblank);
 	}
 	spin_unlock_irqrestore(&dev->vbl_lock, irqflags);
 }
@@ -1358,7 +1358,7 @@ void drm_crtc_vblank_off(struct drm_crtc *crtc)
 	/* Avoid redundant vblank disables without previous
 	 * drm_crtc_vblank_on(). */
 	if (drm_core_check_feature(dev, DRIVER_ATOMIC) || !vblank->inmodeset)
-		drm_vblank_disable_and_save(dev, pipe);
+		drm_vblank_crtc_disable_and_save(vblank);
 
 	wake_up(&vblank->queue);
 
