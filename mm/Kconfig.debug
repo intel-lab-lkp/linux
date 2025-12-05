@@ -119,6 +119,15 @@ config PAGE_OWNER
 
 	  If unsure, say N.
 
+config SWAP_PAGE_OWNER
+	bool "Track page owner in swap space (EXPERIMENTAL)"
+	depends on PAGE_OWNER
+	help
+	  This also keeps track of what call chain is the owner of a page
+	  in swap space, maintaining the initial call chain over swap-out
+	  and swap-in (otherwise lost at swap-out and reset at swap-in).
+	  You should pass the "page_owner=on,swap" parameter to enable it.
+
 config PAGE_TABLE_CHECK
 	bool "Check for invalid mappings in user page tables"
 	depends on ARCH_SUPPORTS_PAGE_TABLE_CHECK
