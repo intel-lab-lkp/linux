@@ -1764,6 +1764,10 @@ bool nbcon_alloc(struct console *con)
 	if (WARN_ON(!con->write_thread))
 		return false;
 
+	/* The device_lock() and device_unlock() callbacks are mandatory. */
+	if (WARN_ON(!con->device_lock || !con->device_unlock))
+		return false;
+
 	rcuwait_init(&con->rcuwait);
 	init_irq_work(&con->irq_work, nbcon_irq_work);
 	atomic_long_set(&ACCESS_PRIVATE(con, nbcon_prev_seq), -1UL);
