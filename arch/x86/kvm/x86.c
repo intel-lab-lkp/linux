@@ -2130,6 +2130,7 @@ static int __kvm_emulate_rdmsr(struct kvm_vcpu *vcpu, u32 msr, int reg,
 	u64 data;
 	int r;
 
+	/* Call MSR emulation. */
 	r = kvm_emulate_msr_read(vcpu, msr, &data);
 
 	if (!r) {
@@ -2171,6 +2172,7 @@ static int __kvm_emulate_wrmsr(struct kvm_vcpu *vcpu, u32 msr, u64 data)
 {
 	int r;
 
+	/* Call MSR emulation. */
 	r = kvm_emulate_msr_write(vcpu, msr, data);
 	if (!r) {
 		trace_kvm_msr_write(msr, data);

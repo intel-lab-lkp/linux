@@ -639,15 +639,21 @@ enum kvm_msr_access {
 /*
  * Internal error codes that are used to indicate that MSR emulation encountered
  * an error that should result in #GP in the guest, unless userspace handles it.
- * Note, '1', '0', and negative numbers are off limits, as they are used by KVM
- * as part of KVM's lightly documented internal KVM_RUN return codes.
+ * Note, negative errno values are possible for return values, too.
+ * In case MSR emulation is called from an exit handler, any return value other
+ * than KVM_MSR_RET_OK will normally result in a GP in the guest.
  *
+ * OK		- Emulation succeeded. Must be 0, as in some cases return values
+ *		  of functions returning 0 or -errno will just be passed on.
+ * ERR		- Some error occurred.
  * UNSUPPORTED	- The MSR isn't supported, either because it is completely
  *		  unknown to KVM, or because the MSR should not exist according
  *		  to the vCPU model.
  *
  * FILTERED	- Access to the MSR is denied by a userspace MSR filter.
  */
+#define  KVM_MSR_RET_OK			0
+#define  KVM_MSR_RET_ERR		1
 #define  KVM_MSR_RET_UNSUPPORTED	2
 #define  KVM_MSR_RET_FILTERED		3
 
