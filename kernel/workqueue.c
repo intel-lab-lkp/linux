@@ -55,6 +55,7 @@
 #include <linux/kvm_para.h>
 #include <linux/delay.h>
 #include <linux/irq_work.h>
+#include <uapi/linux/sched/types.h>
 
 #include "workqueue_internal.h"
 
@@ -1202,7 +1203,7 @@ static bool assign_work(struct work_struct *work, struct worker *worker,
 
 static struct irq_work *bh_pool_irq_work(struct worker_pool *pool)
 {
-	int high = pool->attrs->nice == HIGHPRI_NICE_LEVEL ? 1 : 0;
+	int high = PRIO_TO_NICE(pool->attrs->prio) == HIGHPRI_NICE_LEVEL ? 1 : 0;
 
 	return &per_cpu(bh_pool_irq_works, pool->cpu)[high];
 }
@@ -1217,7 +1218,7 @@ static void kick_bh_pool(struct worker_pool *pool)
 		return;
 	}
 #endif
-	if (pool->attrs->nice == HIGHPRI_NICE_LEVEL)
+	if (PRIO_TO_NICE(pool->attrs->prio) == HIGHPRI_NICE_LEVEL)
 		raise_softirq_irqoff(HI_SOFTIRQ);
 	else
 		raise_softirq_irqoff(TASKLET_SOFTIRQ);
@@ -2747,7 +2748,7 @@ static int format_worker_id(char *buf, size_t size, struct worker *worker,
 		if (pool->cpu >= 0)
 			return scnprintf(buf, size, "kworker/%d:%d%s",
 					 pool->cpu, worker->id,
-					 pool->attrs->nice < 0  ? "H" : "");
+					 pool->attrs->prio  < DEFAULT_PRIO  ? "H" : "");
 		else
 			return scnprintf(buf, size, "kworker/u%d:%d",
 					 pool->id, worker->id);
@@ -2772,6 +2773,8 @@ static struct worker *create_worker(struct worker_pool *pool)
 {
 	struct worker *worker;
 	int id;
+	struct workqueue_attrs *attrs = pool->attrs;
+	struct sched_param sp;
 
 	/* ID is needed to determine kthread name */
 	id = ida_alloc(&pool->worker_ida, GFP_KERNEL);
@@ -2806,7 +2809,12 @@ static struct worker *create_worker(struct worker_pool *pool)
 			goto fail;
 		}
 
-		set_user_nice(worker->task, pool->attrs->nice);
+		if (attrs->policy == SCHED_NORMAL)
+			set_user_nice(worker->task, PRIO_TO_NICE(attrs->prio));
+		else {
+			sp.sched_priority = MAX_RT_PRIO - attrs->prio;
+			sched_setscheduler_nocheck(worker->task, attrs->policy, &sp);
+		}
 		kthread_bind_mask(worker->task, pool_allowed_cpus(pool));
 	}
 
@@ -3676,7 +3684,7 @@ static void drain_dead_softirq_workfn(struct work_struct *work)
 	 * don't hog this CPU's BH.
 	 */
 	if (repeat) {
-		if (pool->attrs->nice == HIGHPRI_NICE_LEVEL)
+		if (PRIO_TO_NICE(pool->attrs->prio) == HIGHPRI_NICE_LEVEL)
 			queue_work(system_bh_highpri_wq, work);
 		else
 			queue_work(system_bh_wq, work);
@@ -3708,7 +3716,7 @@ void workqueue_softirq_dead(unsigned int cpu)
 		dead_work.pool = pool;
 		init_completion(&dead_work.done);
 
-		if (pool->attrs->nice == HIGHPRI_NICE_LEVEL)
+		if (PRIO_TO_NICE(pool->attrs->prio) == HIGHPRI_NICE_LEVEL)
 			queue_work(system_bh_highpri_wq, &dead_work.work);
 		else
 			queue_work(system_bh_wq, &dead_work.work);
@@ -4683,7 +4691,8 @@ fail:
 static void copy_workqueue_attrs(struct workqueue_attrs *to,
 				 const struct workqueue_attrs *from)
 {
-	to->nice = from->nice;
+	to->policy = from->policy;
+	to->prio = from->prio;
 	cpumask_copy(to->cpumask, from->cpumask);
 	cpumask_copy(to->__pod_cpumask, from->__pod_cpumask);
 	to->affn_strict = from->affn_strict;
@@ -4714,7 +4723,7 @@ static u32 wqattrs_hash(const struct workqueue_attrs *attrs)
 {
 	u32 hash = 0;
 
-	hash = jhash_1word(attrs->nice, hash);
+	hash = jhash_1word(attrs->prio, hash);
 	hash = jhash_1word(attrs->affn_strict, hash);
 	hash = jhash(cpumask_bits(attrs->__pod_cpumask),
 		     BITS_TO_LONGS(nr_cpumask_bits) * sizeof(long), hash);
@@ -4728,7 +4737,9 @@ static u32 wqattrs_hash(const struct workqueue_attrs *attrs)
 static bool wqattrs_equal(const struct workqueue_attrs *a,
 			  const struct workqueue_attrs *b)
 {
-	if (a->nice != b->nice)
+	if (a->policy != b->policy)
+		return false;
+	if (a->prio != b->prio)
 		return false;
 	if (a->affn_strict != b->affn_strict)
 		return false;
@@ -6202,9 +6213,9 @@ static void pr_cont_pool_info(struct worker_pool *pool)
 	pr_cont(" flags=0x%x", pool->flags);
 	if (pool->flags & POOL_BH)
 		pr_cont(" bh%s",
-			pool->attrs->nice == HIGHPRI_NICE_LEVEL ? "-hi" : "");
+			PRIO_TO_NICE(pool->attrs->prio) == HIGHPRI_NICE_LEVEL ? "-hi" : "");
 	else
-		pr_cont(" nice=%d", pool->attrs->nice);
+		pr_cont(" prio=%d", pool->attrs->prio);
 }
 
 static void pr_cont_worker_id(struct worker *worker)
@@ -6213,7 +6224,7 @@ static void pr_cont_worker_id(struct worker *worker)
 
 	if (pool->flags & WQ_BH)
 		pr_cont("bh%s",
-			pool->attrs->nice == HIGHPRI_NICE_LEVEL ? "-hi" : "");
+			PRIO_TO_NICE(pool->attrs->prio) == HIGHPRI_NICE_LEVEL ? "-hi" : "");
 	else
 		pr_cont("%d%s", task_pid_nr(worker->task),
 			worker->rescue_wq ? "(RESCUER)" : "");
@@ -7055,8 +7066,19 @@ module_param_cb(default_affinity_scope, &wq_affn_dfl_ops, NULL, 0644);
  *  max_active		RW int	: maximum number of in-flight work items
  *
  * Unbound workqueues have the following extra attributes.
+ * Set the desire policy before set nice/rtprio.
+ * When policy change from SCHED_NORMAL to SCHED_FIFO/SCHED_RR, set rtprio to 1
+ * as default.
+ * When policy change from SCHED_FIFO/SCHED_RR to SCHED_NORMAL, set nice to 0
+ * as default.
+ * When policy change between SCHED_FIFO and SCHED_RR, all values except policy
+ * remain the same.
+ * Return -EINVAL when you read nice value when policy is SCHED_FIFO/SCHED_RR.
+ * Return -EINVAL when you read rtprio value when policy is SCHED_NORMAL.
  *
+ *  policy		RW int	: SCHED_NORMAL/SCHED_FIFO/SCHED_RR
  *  nice		RW int	: nice value of the workers
+ *  rtprio		RW int	: rtprio value of the workers
  *  cpumask		RW mask	: bitmask of allowed CPUs for the workers
  *  affinity_scope	RW str  : worker CPU affinity scope (cache, numa, none)
  *  affinity_strict	RW bool : worker CPU affinity is strict
@@ -7097,7 +7119,7 @@ static ssize_t max_active_store(struct device *dev,
 	struct workqueue_struct *wq = dev_to_wq(dev);
 	int val;
 
-	if (sscanf(buf, "%d", &val) != 1 || val <= 0)
+	if (kstrtoint(buf, 10, &val) || val <= 0)
 		return -EINVAL;
 
 	workqueue_set_max_active(wq, val);
@@ -7112,14 +7134,16 @@ static struct attribute *wq_sysfs_attrs[] = {
 };
 ATTRIBUTE_GROUPS(wq_sysfs);
 
-static ssize_t wq_nice_show(struct device *dev, struct device_attribute *attr,
-			    char *buf)
+static ssize_t wq_policy_show(struct device *dev,
+			      struct device_attribute *attr,
+			      char *buf)
 {
 	struct workqueue_struct *wq = dev_to_wq(dev);
 	int written;
 
 	mutex_lock(&wq->mutex);
-	written = scnprintf(buf, PAGE_SIZE, "%d\n", wq->unbound_attrs->nice);
+	written = scnprintf(buf, PAGE_SIZE, "%d\n",
+			    wq->unbound_attrs->policy);
 	mutex_unlock(&wq->mutex);
 
 	return written;
@@ -7140,11 +7164,67 @@ static struct workqueue_attrs *wq_sysfs_prep_attrs(struct workqueue_struct *wq)
 	return attrs;
 }
 
+static void wq_attrs_policy_change(struct workqueue_struct *wq,
+				   struct workqueue_attrs *attrs)
+{
+	if (wq->unbound_attrs->policy == SCHED_NORMAL)
+		attrs->prio = MAX_RT_PRIO - 1;
+	else if (attrs->policy == SCHED_NORMAL)
+		attrs->prio = DEFAULT_PRIO;
+}
+
+static ssize_t wq_policy_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	struct workqueue_struct *wq = dev_to_wq(dev);
+	struct workqueue_attrs *attrs;
+	int policy, ret = -ENOMEM;
+
+	apply_wqattrs_lock();
+
+	attrs = wq_sysfs_prep_attrs(wq);
+	if (!attrs)
+		goto out_unlock;
+
+	ret = -EINVAL;
+	if (!kstrtoint(buf, 10, &policy) &&
+		policy >= SCHED_NORMAL && policy <= SCHED_RR) {
+		ret = 0;
+		if (policy != wq->unbound_attrs->policy) {
+			attrs->policy = policy;
+			wq_attrs_policy_change(wq, attrs);
+			ret = apply_workqueue_attrs_locked(wq, attrs);
+		}
+	}
+
+out_unlock:
+	apply_wqattrs_unlock();
+	free_workqueue_attrs(attrs);
+	return ret ?: count;
+}
+
+static ssize_t wq_nice_show(struct device *dev, struct device_attribute *attr,
+			    char *buf)
+{
+	struct workqueue_struct *wq = dev_to_wq(dev);
+	int written = -EINVAL;
+
+	mutex_lock(&wq->mutex);
+	if (wq->unbound_attrs->policy == SCHED_NORMAL)
+		written = scnprintf(buf, PAGE_SIZE, "%d\n",
+				    PRIO_TO_NICE(wq->unbound_attrs->prio));
+	mutex_unlock(&wq->mutex);
+
+	return written;
+}
+
 static ssize_t wq_nice_store(struct device *dev, struct device_attribute *attr,
 			     const char *buf, size_t count)
 {
 	struct workqueue_struct *wq = dev_to_wq(dev);
 	struct workqueue_attrs *attrs;
+	int nice;
 	int ret = -ENOMEM;
 
 	apply_wqattrs_lock();
@@ -7153,11 +7233,55 @@ static ssize_t wq_nice_store(struct device *dev, struct device_attribute *attr,
 	if (!attrs)
 		goto out_unlock;
 
-	if (sscanf(buf, "%d", &attrs->nice) == 1 &&
-	    attrs->nice >= MIN_NICE && attrs->nice <= MAX_NICE)
+	ret = -EINVAL;
+	if (attrs->policy == SCHED_NORMAL &&
+		!kstrtoint(buf, 10, &nice) &&
+		nice >= MIN_NICE && nice <= MAX_NICE) {
+		attrs->prio = NICE_TO_PRIO(nice);
 		ret = apply_workqueue_attrs_locked(wq, attrs);
-	else
-		ret = -EINVAL;
+	}
+
+out_unlock:
+	apply_wqattrs_unlock();
+	free_workqueue_attrs(attrs);
+	return ret ?: count;
+}
+
+static ssize_t wq_rtprio_show(struct device *dev, struct device_attribute *attr,
+			      char *buf)
+{
+	struct workqueue_struct *wq = dev_to_wq(dev);
+	int written = -EINVAL;
+
+	mutex_lock(&wq->mutex);
+	if (wq->unbound_attrs->policy != SCHED_NORMAL)
+		written = scnprintf(buf, PAGE_SIZE, "%d\n",
+				    MAX_RT_PRIO - wq->unbound_attrs->prio);
+	mutex_unlock(&wq->mutex);
+
+	return written;
+}
+
+static ssize_t wq_rtprio_store(struct device *dev, struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	struct workqueue_struct *wq = dev_to_wq(dev);
+	struct workqueue_attrs *attrs;
+	int rtprio, ret = -ENOMEM;
+
+	apply_wqattrs_lock();
+
+	attrs = wq_sysfs_prep_attrs(wq);
+	if (!attrs)
+		goto out_unlock;
+
+	ret = -EINVAL;
+	if (attrs->policy != SCHED_NORMAL &&
+		!kstrtoint(buf, 10, &rtprio) &&
+		rtprio > 0 && rtprio < MAX_RT_PRIO) {
+		attrs->prio = MAX_RT_PRIO - rtprio;
+		ret = apply_workqueue_attrs_locked(wq, attrs);
+	}
 
 out_unlock:
 	apply_wqattrs_unlock();
@@ -7259,16 +7383,15 @@ static ssize_t wq_affinity_strict_store(struct device *dev,
 {
 	struct workqueue_struct *wq = dev_to_wq(dev);
 	struct workqueue_attrs *attrs;
-	int v, ret = -ENOMEM;
-
-	if (sscanf(buf, "%d", &v) != 1)
-		return -EINVAL;
+	int ret = -ENOMEM;
 
 	apply_wqattrs_lock();
 	attrs = wq_sysfs_prep_attrs(wq);
 	if (attrs) {
-		attrs->affn_strict = (bool)v;
-		ret = apply_workqueue_attrs_locked(wq, attrs);
+		if (!kstrtobool(buf, &attrs->affn_strict))
+			ret = apply_workqueue_attrs_locked(wq, attrs);
+		else
+			ret = -EINVAL;
 	}
 	apply_wqattrs_unlock();
 	free_workqueue_attrs(attrs);
@@ -7276,7 +7399,9 @@ static ssize_t wq_affinity_strict_store(struct device *dev,
 }
 
 static struct device_attribute wq_sysfs_unbound_attrs[] = {
+	__ATTR(policy, 0644, wq_policy_show, wq_policy_store),
 	__ATTR(nice, 0644, wq_nice_show, wq_nice_store),
+	__ATTR(rtprio, 0644, wq_rtprio_show, wq_rtprio_store),
 	__ATTR(cpumask, 0644, wq_cpumask_show, wq_cpumask_store),
 	__ATTR(affinity_scope, 0644, wq_affn_scope_show, wq_affn_scope_store),
 	__ATTR(affinity_strict, 0644, wq_affinity_strict_show, wq_affinity_strict_store),
@@ -7737,7 +7862,7 @@ static void __init init_cpu_worker_pool(struct worker_pool *pool, int cpu, int n
 	pool->cpu = cpu;
 	cpumask_copy(pool->attrs->cpumask, cpumask_of(cpu));
 	cpumask_copy(pool->attrs->__pod_cpumask, cpumask_of(cpu));
-	pool->attrs->nice = nice;
+	pool->attrs->prio = NICE_TO_PRIO(nice);
 	pool->attrs->affn_strict = true;
 	pool->node = cpu_to_node(cpu);
 
@@ -7829,7 +7954,7 @@ void __init workqueue_init_early(void)
 		struct workqueue_attrs *attrs;
 
 		BUG_ON(!(attrs = alloc_workqueue_attrs()));
-		attrs->nice = std_nice[i];
+		attrs->prio = NICE_TO_PRIO(std_nice[i]);
 		unbound_std_wq_attrs[i] = attrs;
 
 		/*
@@ -7837,7 +7962,7 @@ void __init workqueue_init_early(void)
 		 * guaranteed by max_active which is enforced by pwqs.
 		 */
 		BUG_ON(!(attrs = alloc_workqueue_attrs()));
-		attrs->nice = std_nice[i];
+		attrs->prio = NICE_TO_PRIO(std_nice[i]);
 		attrs->ordered = true;
 		ordered_wq_attrs[i] = attrs;
 	}
