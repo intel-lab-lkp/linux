@@ -13,6 +13,7 @@
 #include <drm/ttm/ttm_device.h>
 
 #include "xe_devcoredump_types.h"
+#include "xe_drm_ras_types.h"
 #include "xe_heci_gsc.h"
 #include "xe_late_bind_fw_types.h"
 #include "xe_lmtt_types.h"
@@ -361,6 +362,9 @@ struct xe_device {
 		 */
 		bool oob_initialized;
 	} wa_active;
+
+	/** @ras: ras structure for device */
+	struct xe_drm_ras ras;
 
 	/** @survivability: survivability information for device */
 	struct xe_survivability survivability;
