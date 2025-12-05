@@ -2595,11 +2595,14 @@ static void mac80211_hwsim_link_info_changed(struct ieee80211_hw *hw,
 			link_data->beacon_int = info->beacon_int * 1024;
 			tsf = mac80211_hwsim_get_tsf(hw, vif);
 			bcn_int = link_data->beacon_int;
-			until_tbtt = bcn_int - do_div(tsf, bcn_int);
+			/* Proceed only when bcn_int != 0 */
+			if (bcn_int) {
+				until_tbtt = bcn_int - do_div(tsf, bcn_int);
 
-			hrtimer_start(&link_data->beacon_timer,
-				      ns_to_ktime(until_tbtt * NSEC_PER_USEC),
-				      HRTIMER_MODE_REL_SOFT);
+				hrtimer_start(&link_data->beacon_timer,
+					      ns_to_ktime(until_tbtt * NSEC_PER_USEC),
+					      HRTIMER_MODE_REL_SOFT);
+			}
 		} else if (!info->enable_beacon) {
 			unsigned int count = 0;
 			ieee80211_iterate_active_interfaces_atomic(
