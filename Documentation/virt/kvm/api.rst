@@ -6440,15 +6440,19 @@ a single guest_memfd file, but the bound ranges must not overlap).
 The capability KVM_CAP_GUEST_MEMFD_FLAGS enumerates the `flags` that can be
 specified via KVM_CREATE_GUEST_MEMFD.  Currently defined flags:
 
-  ============================ ================================================
-  GUEST_MEMFD_FLAG_MMAP        Enable using mmap() on the guest_memfd file
-                               descriptor.
-  GUEST_MEMFD_FLAG_INIT_SHARED Make all memory in the file shared during
-                               KVM_CREATE_GUEST_MEMFD (memory files created
-                               without INIT_SHARED will be marked private).
-                               Shared memory can be faulted into host userspace
-                               page tables. Private memory cannot.
-  ============================ ================================================
+  ============================== ================================================
+  GUEST_MEMFD_FLAG_MMAP          Enable using mmap() on the guest_memfd file
+                                 descriptor.
+  GUEST_MEMFD_FLAG_INIT_SHARED   Make all memory in the file shared during
+                                 KVM_CREATE_GUEST_MEMFD (memory files created
+                                 without INIT_SHARED will be marked private).
+                                 Shared memory can be faulted into host userspace
+                                 page tables. Private memory cannot.
+  GUEST_MEMFD_FLAG_NO_DIRECT_MAP The guest_memfd instance will behave similarly
+                                 to memfd_secret, and unmaps the memory backing
+                                 it from the kernel's address space before
+                                 being passed off to userspace or the guest.
+  ============================== ================================================
 
 When the KVM MMU performs a PFN lookup to service a guest fault and the backing
 guest_memfd has the GUEST_MEMFD_FLAG_MMAP set, then the fault will always be
