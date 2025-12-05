@@ -1550,7 +1550,7 @@ static u64 kvm_dr6_fixed(struct kvm_vcpu *vcpu)
 	return fixed;
 }
 
-int kvm_set_dr(struct kvm_vcpu *vcpu, int dr, unsigned long val)
+bool kvm_set_dr(struct kvm_vcpu *vcpu, int dr, unsigned long val)
 {
 	size_t size = ARRAY_SIZE(vcpu->arch.db);
 
@@ -1563,19 +1563,19 @@ int kvm_set_dr(struct kvm_vcpu *vcpu, int dr, unsigned long val)
 	case 4:
 	case 6:
 		if (!kvm_dr6_valid(val))
-			return 1; /* #GP */
+			return true; /* #GP */
 		vcpu->arch.dr6 = (val & DR6_VOLATILE) | kvm_dr6_fixed(vcpu);
 		break;
 	case 5:
 	default: /* 7 */
 		if (!kvm_dr7_valid(val))
-			return 1; /* #GP */
+			return true; /* #GP */
 		vcpu->arch.dr7 = (val & DR7_VOLATILE) | DR7_FIXED_1;
 		kvm_update_dr7(vcpu);
 		break;
 	}
 
-	return 0;
+	return false;
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_set_dr);
 
@@ -8530,8 +8530,8 @@ static unsigned long emulator_get_dr(struct x86_emulate_ctxt *ctxt, int dr)
 	return kvm_get_dr(emul_to_vcpu(ctxt), dr);
 }
 
-static int emulator_set_dr(struct x86_emulate_ctxt *ctxt, int dr,
-			   unsigned long value)
+static bool emulator_set_dr(struct x86_emulate_ctxt *ctxt, int dr,
+			    unsigned long value)
 {
 
 	return kvm_set_dr(emul_to_vcpu(ctxt), dr, value);

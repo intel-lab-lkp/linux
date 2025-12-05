@@ -2556,7 +2556,7 @@ static int dr_interception(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
 	int reg, dr;
-	int err = 0;
+	bool err = false;
 
 	/*
 	 * SEV-ES intercepts DR7 only to disable guest debugging and the guest issues a VMGEXIT
