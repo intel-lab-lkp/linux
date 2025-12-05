@@ -25,11 +25,18 @@
 /*
  * Define shape of hierarchy based on NR_CPUS, CONFIG_RCU_FANOUT, and
  * CONFIG_RCU_FANOUT_LEAF.
+ * - RCU_FANOUT: Controls fan-out of middle levels in the RCU hierarchy.
+ * - RCU_FANOUT_LEAF: Controls fan-out of the leaf level (directly managing CPUs).
+ *
+ * These parameters are determined by Kconfig options if configured; otherwise,
+ * they use sensible defaults based on system architecture (for RCU_FANOUT)
+ * or a fixed default (for RCU_FANOUT_LEAF).
  * In theory, it should be possible to add more levels straightforwardly.
  * In practice, this did work well going from three levels to four.
  * Of course, your mileage may vary.
  */
 
+/* Define RCU_FANOUT: middle-level fan-out parameter */
 #ifdef CONFIG_RCU_FANOUT
 #define RCU_FANOUT CONFIG_RCU_FANOUT
 #else /* #ifdef CONFIG_RCU_FANOUT */
@@ -40,6 +47,7 @@
 # endif
 #endif /* #else #ifdef CONFIG_RCU_FANOUT */
 
+/* Define RCU_FANOUT_LEAF: leaf-level fan-out parameter (manages CPUs directly) */
 #ifdef CONFIG_RCU_FANOUT_LEAF
 #define RCU_FANOUT_LEAF CONFIG_RCU_FANOUT_LEAF
 #else /* #ifdef CONFIG_RCU_FANOUT_LEAF */
