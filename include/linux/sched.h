@@ -49,6 +49,8 @@
 #include <linux/tracepoint-defs.h>
 #include <linux/unwind_deferred_types.h>
 #include <asm/kmap_size.h>
+#include <linux/spinlock.h>
+#include <linux/dept.h>
 #ifndef COMPILE_OFFSETS
 #include <generated/rq-offsets.h>
 #endif
@@ -816,6 +818,110 @@ struct kmap_ctrl {
 #endif
 };
 
+#ifdef CONFIG_DEPT
+struct dept_task {
+	/*
+	 * all event contexts that have entered and before exiting
+	 */
+	struct dept_ecxt_held		ecxt_held[DEPT_MAX_ECXT_HELD];
+	int				ecxt_held_pos;
+
+	/*
+	 * ring buffer holding all waits that have happened
+	 */
+	struct dept_wait_hist		wait_hist[DEPT_MAX_WAIT_HIST];
+	int				wait_hist_pos;
+
+	/*
+	 * sequential id to identify each IRQ context
+	 */
+	unsigned int			irq_id[DEPT_IRQS_NR];
+
+	/*
+	 * for tracking IRQ-enabled points with cross-event
+	 */
+	unsigned int			wgen_enirq[DEPT_IRQS_NR];
+
+	/*
+	 * for keeping up-to-date IRQ-enabled points
+	 */
+	unsigned long			enirq_ip[DEPT_IRQS_NR];
+
+	/*
+	 * for reserving a current stack instance at each operation
+	 */
+	struct dept_stack		*stack;
+
+	/*
+	 * for preventing recursive call into DEPT engine
+	 */
+	int				recursive;
+
+	/*
+	 * for preventing reentrance to WARN*() while warning
+	 */
+	int				in_warning;
+
+	/*
+	 * for staging data to commit a wait
+	 */
+	struct dept_map			stage_m;
+	struct dept_map			*stage_real_m;
+	bool				stage_sched_map;
+	const char			*stage_w_fn;
+	unsigned long			stage_ip;
+	arch_spinlock_t			stage_lock;
+
+	/*
+	 * the number of missing ecxts
+	 */
+	int				missing_ecxt;
+
+	/*
+	 * for tracking IRQ-enable state
+	 */
+	bool				hardirqs_enabled;
+	bool				softirqs_enabled;
+
+	/*
+	 * whether the current is on do_exit()
+	 */
+	bool				task_exit;
+
+	/*
+	 * whether the current is running __schedule()
+	 */
+	bool				in_sched;
+};
+
+#define DEPT_TASK_INITIALIZER(t)				\
+{								\
+	.wait_hist = { { .wait = NULL, } },			\
+	.ecxt_held_pos = 0,					\
+	.wait_hist_pos = 0,					\
+	.irq_id = { 0U },					\
+	.wgen_enirq = { 0U },					\
+	.enirq_ip = { 0UL },					\
+	.stack = NULL,						\
+	.recursive = 0,						\
+	.in_warning = 0,					\
+	.stage_m = DEPT_MAP_INITIALIZER((t)->stage_m, NULL),	\
+	.stage_real_m = NULL,					\
+	.stage_sched_map = false,				\
+	.stage_w_fn = NULL,					\
+	.stage_ip = 0UL,					\
+	.stage_lock = (arch_spinlock_t)__ARCH_SPIN_LOCK_UNLOCKED,\
+	.missing_ecxt = 0,					\
+	.hardirqs_enabled = false,				\
+	.softirqs_enabled = false,				\
+	.task_exit = false,					\
+	.in_sched = false,					\
+}
+#else
+struct dept_task { };
+#define DEPT_TASK_INITIALIZER(t) { }
+#endif
+
 struct task_struct {
 #ifdef CONFIG_THREAD_INFO_IN_TASK
 	/*
@@ -1273,6 +1379,8 @@ struct task_struct {
 	unsigned int			lockdep_recursion;
 	struct held_lock		held_locks[MAX_LOCK_DEPTH];
 #endif
+
+	struct dept_task		dept_task;
 
 #if defined(CONFIG_UBSAN) && !defined(CONFIG_UBSAN_TRAP)
 	unsigned int			in_ubsan;

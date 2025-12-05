@@ -106,6 +106,7 @@
 #include <linux/pidfs.h>
 #include <linux/tick.h>
 #include <linux/unwind_deferred.h>
+#include <linux/dept.h>
 
 #include <asm/pgalloc.h>
 #include <linux/uaccess.h>
@@ -2130,6 +2131,7 @@ __latent_entropy struct task_struct *copy_process(
 	p->pagefault_disabled = 0;
 
 	lockdep_init_task(p);
+	dept_task_init(p);
 
 	p->blocked_on = NULL; /* not blocked yet */
 

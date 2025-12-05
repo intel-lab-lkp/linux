@@ -69,6 +69,7 @@
 #include <linux/wait_api.h>
 #include <linux/workqueue_api.h>
 #include <linux/livepatch_sched.h>
+#include <linux/dept.h>
 
 #ifdef CONFIG_PREEMPT_DYNAMIC
 # ifdef CONFIG_GENERIC_IRQ_ENTRY
@@ -4136,6 +4137,8 @@ int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 		if (READ_ONCE(p->on_rq) && ttwu_runnable(p, wake_flags))
 			break;
 
+		dept_ttwu_stage_wait(p, _RET_IP_);
+
 		/*
 		 * Ensure we load p->on_cpu _after_ p->on_rq, otherwise it would be
 		 * possible to, falsely, observe p->on_cpu == 0.
@@ -6737,6 +6740,11 @@ static void __sched notrace __schedule(int sched_mode)
 	rq = cpu_rq(cpu);
 	prev = rq->curr;
 
+	prev_state = READ_ONCE(prev->__state);
+	if (sched_mode != SM_PREEMPT && prev_state & TASK_NORMAL)
+		dept_request_event_wait_commit();
+
+	dept_sched_enter();
 	schedule_debug(prev, preempt);
 
 	if (sched_feat(HRTICK) || sched_feat(HRTICK_DL))
@@ -6871,6 +6879,7 @@ keep_resched:
 		raw_spin_rq_unlock_irq(rq);
 	}
 	trace_sched_exit_tp(is_switch);
+	dept_sched_exit();
 }
 
 void __noreturn do_task_dead(void)
