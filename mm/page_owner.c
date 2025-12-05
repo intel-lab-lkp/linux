@@ -57,6 +57,11 @@ struct stack_print_ctx {
 static bool page_owner_enabled __initdata;
 DEFINE_STATIC_KEY_FALSE(page_owner_inited);
 
+#ifdef CONFIG_SWAP_PAGE_OWNER
+static bool swap_page_owner_enabled __initdata;
+DEFINE_STATIC_KEY_FALSE(swap_page_owner_inited);
+#endif
+
 static depot_stack_handle_t dummy_handle;
 static depot_stack_handle_t failure_handle;
 static depot_stack_handle_t early_handle;
@@ -81,7 +86,18 @@ static inline void unset_current_in_page_owner(void)
 
 static int __init early_page_owner_param(char *buf)
 {
-	int ret = kstrtobool(buf, &page_owner_enabled);
+	int ret;
+
+#ifdef CONFIG_SWAP_PAGE_OWNER
+	char *swap = strchr(buf, ',');
+
+	if (swap) {
+		*swap++ = '\0';
+		if (!strcmp(swap, "swap"))
+			swap_page_owner_enabled = true;
+	}
+#endif
+	ret = kstrtobool(buf, &page_owner_enabled);
 
 	if (page_owner_enabled)
 		stack_depot_request_early_init();
@@ -138,6 +154,10 @@ static __init void init_page_owner(void)
 	dummy_stack.next = &failure_stack;
 	stack_list = &dummy_stack;
 	static_branch_enable(&page_owner_inited);
+#ifdef CONFIG_SWAP_PAGE_OWNER
+	if (swap_page_owner_enabled)
+		static_branch_enable(&swap_page_owner_inited);
+#endif
 }
 
 struct page_ext_operations page_owner_ops = {
