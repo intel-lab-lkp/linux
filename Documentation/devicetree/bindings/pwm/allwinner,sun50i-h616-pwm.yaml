@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/pwm/allwinner,sun50i-h616-pwm.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Allwinner H616 PWM
+
+maintainers:
+  - Richard Genoud <richard.genoud@bootlin.com>
+
+description: |
+  Allwinner H616 PWM can generate standard PWM signals with variable pulse width
+  and period.
+  Also, instead of a PWM signal, a channel can be used to provide a clock.
+
+properties:
+  compatible:
+    const: allwinner,sun50i-h616-pwm
+
+  reg:
+    maxItems: 1
+
+  clocks:
+    items:
+      - description: Bus Clock
+
+  clock-names:
+    items:
+      - const: bus
+
+  resets:
+    maxItems: 1
+
+  "#clock-cells":
+    const: 1
+
+  "#pwm-cells":
+    const: 3
+
+required:
+  - compatible
+  - reg
+  - clocks
+  - clock-names
+  - resets
+
+allOf:
+  - $ref: pwm.yaml#
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/sun50i-h616-ccu.h>
+    #include <dt-bindings/reset/sun50i-h616-ccu.h>
+
+    pwm@300a000 {
+      compatible = "allwinner,sun50i-h616-pwm";
+      reg = <0x0300a000 0x400>;
+      clocks = <&ccu CLK_BUS_PWM>;
+      clock-names = "bus";
+      resets = <&ccu RST_BUS_PWM>;
+      #pwm-cells = <3>;
+      #clock-cells = <1>;
+    };
+...
