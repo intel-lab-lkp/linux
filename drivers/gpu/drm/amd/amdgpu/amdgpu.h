@@ -1846,4 +1846,8 @@ void amdgpu_device_set_uid(struct amdgpu_uid *uid_info,
 			   uint64_t uid);
 uint64_t amdgpu_device_get_uid(struct amdgpu_uid *uid_info,
 			       enum amdgpu_uid_type type, uint8_t inst);
+
+int amdgpu_acpi_uma_option_init(struct amdgpu_device *adev);
+void amdgpu_acpi_uma_option_fini(struct amdgpu_device *adev);
+
 #endif

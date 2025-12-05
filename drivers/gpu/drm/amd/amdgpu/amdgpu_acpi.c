@@ -1288,6 +1288,12 @@ static int amdgpu_acpi_event(struct notifier_block *nb,
 int amdgpu_acpi_init(struct amdgpu_device *adev)
 {
 	struct amdgpu_atif *atif = &amdgpu_acpi_priv.atif;
+	int rc;
+
+	rc = amdgpu_acpi_uma_option_init(adev);
+
+	if (rc)
+		drm_dbg(adev_to_drm(adev), "Not creating uma carveout interfaces: %d", rc);
 
 	if (atif->notifications.brightness_change) {
 		if (adev->dc_enabled) {
@@ -1340,6 +1346,7 @@ void amdgpu_acpi_get_backlight_caps(struct amdgpu_dm_backlight_caps *caps)
 void amdgpu_acpi_fini(struct amdgpu_device *adev)
 {
 	unregister_acpi_notifier(&adev->acpi_nb);
+	amdgpu_acpi_uma_option_fini(adev);
 }
 
 /**
