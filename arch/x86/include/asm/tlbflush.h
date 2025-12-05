@@ -317,7 +317,6 @@ extern void flush_tlb_all(void);
 extern void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
 				unsigned long end, unsigned int stride_shift,
 				bool freed_tables);
-extern void flush_tlb_kernel_range(unsigned long start, unsigned long end);
 
 static inline void flush_tlb_page(struct vm_area_struct *vma, unsigned long a)
 {
@@ -482,6 +481,8 @@ static inline void cpu_tlbstate_update_lam(unsigned long lam, u64 untag_mask)
 }
 #endif
 #endif /* !MODULE */
+
+extern void flush_tlb_kernel_range(unsigned long start, unsigned long end);
 
 static inline void __native_tlb_flush_global(unsigned long cr4)
 {

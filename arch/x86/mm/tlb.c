@@ -1561,6 +1561,7 @@ void flush_tlb_kernel_range(unsigned long start, unsigned long end)
 
 	put_flush_tlb_info();
 }
+EXPORT_SYMBOL_FOR_MODULES(flush_tlb_kernel_range, "kvm");
 
 /*
  * This can be used from process context to figure out what the value of
