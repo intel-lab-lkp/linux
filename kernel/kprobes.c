@@ -1512,19 +1512,15 @@ static inline int warn_kprobe_rereg(struct kprobe *p)
 	return 0;
 }
 
-static int check_ftrace_location(struct kprobe *p)
+#ifdef CONFIG_KPROBES_ON_FTRACE
+static void check_ftrace_location(struct kprobe *p)
 {
 	unsigned long addr = (unsigned long)p->addr;
 
-	if (ftrace_location(addr) == addr) {
-#ifdef CONFIG_KPROBES_ON_FTRACE
+	if (ftrace_location(addr) == addr)
 		p->flags |= KPROBE_FLAG_FTRACE;
-#else
-		return -EINVAL;
-#endif
-	}
-	return 0;
 }
+#endif
 
 static bool is_cfi_preamble_symbol(unsigned long addr)
 {
@@ -1540,11 +1536,9 @@ static bool is_cfi_preamble_symbol(unsigned long addr)
 static int check_kprobe_address_safe(struct kprobe *p,
 				     struct module **probed_mod)
 {
-	int ret;
-
-	ret = check_ftrace_location(p);
-	if (ret)
-		return ret;
+#ifdef CONFIG_KPROBES_ON_FTRACE
+	check_ftrace_location(p);
+#endif
 
 	guard(jump_label_lock)();
 
