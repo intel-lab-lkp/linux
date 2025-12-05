@@ -496,6 +496,20 @@ void mgag200_primary_plane_helper_atomic_update(struct drm_plane *plane,
 	struct drm_atomic_helper_damage_iter iter;
 	struct drm_rect damage;
 
+#ifdef __BIG_ENDIAN
+	/* Big-endian byte-swapping */
+	switch (fb->format->format) {
+	case DRM_FORMAT_RGB565:
+		WREG32(MGAREG_OPMODE, 0x10100);
+		break;
+	case DRM_FORMAT_XRGB8888:
+		WREG32(MGAREG_OPMODE, 0x20200);
+		break;
+	default:
+		break;
+	}
+#endif
+
 	drm_atomic_helper_damage_iter_init(&iter, old_plane_state, plane_state);
 	drm_atomic_for_each_plane_damage(&iter, &damage) {
 		mgag200_handle_damage(mdev, shadow_plane_state->data, fb, &damage);
