@@ -2819,6 +2819,11 @@ sub process {
 			$is_patch = 1;
 		}
 
+# Once the patch separator is encountered git-mailinfo will treat the rest as a patch
+		if ($has_patch_separator) {
+			$is_patch = 1;
+		}
+
 #extract the line range in the file after the patch is applied
 		if (!$in_commit_log &&
 		    $line =~ /^\@\@ -\d+(?:,\d+)? \+(\d+)(,(\d+))? \@\@(.*)/) {
@@ -2989,7 +2994,7 @@ sub process {
 		}
 
 # Check the patch for a signoff:
-		if ($line =~ /^\s*signed-off-by:\s*(.*)/i) {
+		if (!$is_patch && $line =~ /^\s*signed-off-by:\s*(.*)/i) {
 			$signoff++;
 			$in_commit_log = 0;
 			if ($author ne ''  && $authorsignoff != 1) {
@@ -3028,7 +3033,7 @@ sub process {
 		}
 
 # Check for patch separator
-		if ($line =~ /^---$/) {
+		if ($line =~ /^---/) {
 			$has_patch_separator = 1;
 			$in_commit_log = 0;
 		}
