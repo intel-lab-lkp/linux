@@ -1527,44 +1527,6 @@ void drm_crtc_vblank_on(struct drm_crtc *crtc)
 }
 EXPORT_SYMBOL(drm_crtc_vblank_on);
 
-static void drm_vblank_restore(struct drm_device *dev, unsigned int pipe)
-{
-	ktime_t t_vblank;
-	struct drm_vblank_crtc *vblank;
-	int framedur_ns;
-	u64 diff_ns;
-	u32 cur_vblank, diff = 1;
-	int count = DRM_TIMESTAMP_MAXRETRIES;
-	u32 max_vblank_count = drm_max_vblank_count(dev, pipe);
-
-	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
-		return;
-
-	assert_spin_locked(&dev->vbl_lock);
-	assert_spin_locked(&dev->vblank_time_lock);
-
-	vblank = drm_vblank_crtc(dev, pipe);
-	drm_WARN_ONCE(dev,
-		      drm_debug_enabled(DRM_UT_VBL) && !vblank->framedur_ns,
-		      "Cannot compute missed vblanks without frame duration\n");
-	framedur_ns = vblank->framedur_ns;
-
-	do {
-		cur_vblank = __get_vblank_counter(dev, pipe);
-		drm_get_last_vbltimestamp(dev, pipe, &t_vblank, false);
-	} while (cur_vblank != __get_vblank_counter(dev, pipe) && --count > 0);
-
-	diff_ns = ktime_to_ns(ktime_sub(t_vblank, vblank->time));
-	if (framedur_ns)
-		diff = DIV_ROUND_CLOSEST_ULL(diff_ns, framedur_ns);
-
-
-	drm_dbg_vbl(dev,
-		    "missed %d vblanks in %lld ns, frame duration=%d ns, hw_diff=%d\n",
-		    diff, diff_ns, framedur_ns, cur_vblank - vblank->last);
-	vblank->last = (cur_vblank - diff) & max_vblank_count;
-}
-
 /**
  * drm_crtc_vblank_restore - estimate missed vblanks and update vblank count.
  * @crtc: CRTC in question
@@ -1585,13 +1547,40 @@ void drm_crtc_vblank_restore(struct drm_crtc *crtc)
 {
 	struct drm_device *dev = crtc->dev;
 	unsigned int pipe = drm_crtc_index(crtc);
-	struct drm_vblank_crtc *vblank = drm_vblank_crtc(dev, pipe);
+	struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(crtc);
+	ktime_t t_vblank;
+	int framedur_ns;
+	u64 diff_ns;
+	u32 cur_vblank, diff = 1;
+	int count = DRM_TIMESTAMP_MAXRETRIES;
+	u32 max_vblank_count = drm_max_vblank_count(dev, pipe);
 
 	drm_WARN_ON_ONCE(dev, !crtc->funcs->get_vblank_timestamp);
 	drm_WARN_ON_ONCE(dev, vblank->inmodeset);
 	drm_WARN_ON_ONCE(dev, !vblank->config.disable_immediate);
 
-	drm_vblank_restore(dev, pipe);
+	assert_spin_locked(&dev->vbl_lock);
+	assert_spin_locked(&dev->vblank_time_lock);
+
+	drm_WARN_ONCE(dev,
+		      drm_debug_enabled(DRM_UT_VBL) && !vblank->framedur_ns,
+		      "Cannot compute missed vblanks without frame duration\n");
+	framedur_ns = vblank->framedur_ns;
+
+	do {
+		cur_vblank = __get_vblank_counter(dev, pipe);
+		drm_get_last_vbltimestamp(dev, pipe, &t_vblank, false);
+	} while (cur_vblank != __get_vblank_counter(dev, pipe) && --count > 0);
+
+	diff_ns = ktime_to_ns(ktime_sub(t_vblank, vblank->time));
+	if (framedur_ns)
+		diff = DIV_ROUND_CLOSEST_ULL(diff_ns, framedur_ns);
+
+
+	drm_dbg_vbl(dev,
+		    "missed %d vblanks in %lld ns, frame duration=%d ns, hw_diff=%d\n",
+		    diff, diff_ns, framedur_ns, cur_vblank - vblank->last);
+	vblank->last = (cur_vblank - diff) & max_vblank_count;
 }
 EXPORT_SYMBOL(drm_crtc_vblank_restore);
 
