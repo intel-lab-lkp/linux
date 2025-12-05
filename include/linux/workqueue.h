@@ -97,6 +97,9 @@ enum wq_misc_consts {
 
 	/* maximum string length for set_worker_desc() */
 	WORKER_DESC_LEN		= 32,
+
+	/* default value of nr_idle_extra when policy is SCHED_FIFO/SCHED_RR */
+	WORKER_NR_RT_DEF	= 2,
 };
 
 /* Convenience constants - of type 'unsigned long', not 'enum'! */
@@ -154,6 +157,19 @@ struct workqueue_attrs {
 	 * @prio: static priority
 	 */
 	int prio;
+
+	/**
+	 * @nr_idle_extra: number of extra idle thread reserved
+	 *
+	 * Default value:
+	 * 0 when policy is SCHED_NORMAL.
+	 * WORKER_NR_RT_DEF when policy is SCHED_FIFO/SCHED_RR.
+	 *
+	 * Reduce tail latency when enqueue multiple work in bursts.
+	 * When nr_idle_extra != 0, work will be queue immediately to an idle
+	 * worker.
+	 */
+	int nr_idle_extra;
 
 	/**
 	 * @cpumask: allowed CPUs

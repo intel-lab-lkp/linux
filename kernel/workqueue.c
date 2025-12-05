@@ -929,10 +929,12 @@ static unsigned long work_offqd_pack_flags(struct work_offq_data *offqd)
  * Note that, because unbound workers never contribute to nr_running, this
  * function will always return %true for unbound pools as long as the
  * worklist isn't empty.
+ * Wake up an idle worker unconditionally when nr_idle_extra != 0.
  */
 static bool need_more_worker(struct worker_pool *pool)
 {
-	return !list_empty(&pool->worklist) && !pool->nr_running;
+	return !list_empty(&pool->worklist) &&
+		(!pool->nr_running || pool->attrs->nr_idle_extra);
 }
 
 /* Can I start working?  Called from busy but !running workers. */
@@ -953,14 +955,25 @@ static bool need_to_create_worker(struct worker_pool *pool)
 	return need_more_worker(pool) && !may_start_working(pool);
 }
 
+static bool need_idle_extra(struct worker_pool *pool)
+{
+	return pool->nr_idle < pool->attrs->nr_idle_extra;
+}
+
+static bool need_to_create_worker_extra(struct worker_pool *pool)
+{
+	return need_to_create_worker(pool) || need_idle_extra(pool);
+}
+
 /* Do we have too many workers and should some go away? */
 static bool too_many_workers(struct worker_pool *pool)
 {
 	bool managing = pool->flags & POOL_MANAGER_ACTIVE;
 	int nr_idle = pool->nr_idle + managing; /* manager is considered idle */
 	int nr_busy = pool->nr_workers - nr_idle;
+	int f = 2 + pool->attrs->nr_idle_extra; /* factor of idle check */
 
-	return nr_idle > 2 && (nr_idle - 2) * MAX_IDLE_WORKERS_RATIO >= nr_busy;
+	return nr_idle > f && (nr_idle - f) * MAX_IDLE_WORKERS_RATIO >= nr_busy;
 }
 
 /**
@@ -3062,12 +3075,12 @@ restart:
 	mod_timer(&pool->mayday_timer, jiffies + MAYDAY_INITIAL_TIMEOUT);
 
 	while (true) {
-		if (create_worker(pool) || !need_to_create_worker(pool))
+		if (create_worker(pool) || !need_to_create_worker_extra(pool))
 			break;
 
 		schedule_timeout_interruptible(CREATE_COOLDOWN);
 
-		if (!need_to_create_worker(pool))
+		if (!need_to_create_worker_extra(pool))
 			break;
 	}
 
@@ -3078,7 +3091,7 @@ restart:
 	 * created as @pool->lock was dropped and the new worker might have
 	 * already become busy.
 	 */
-	if (need_to_create_worker(pool))
+	if (need_to_create_worker_extra(pool))
 		goto restart;
 }
 
@@ -3396,6 +3409,10 @@ woke_up:
 
 	worker_leave_idle(worker);
 recheck:
+	/* reserve idle worker if nr_idle_extra != 0 */
+	if (need_idle_extra(pool))
+		manage_workers(worker);
+
 	/* no more worker necessary? */
 	if (!need_more_worker(pool))
 		goto sleep;
@@ -4693,6 +4710,7 @@ static void copy_workqueue_attrs(struct workqueue_attrs *to,
 {
 	to->policy = from->policy;
 	to->prio = from->prio;
+	to->nr_idle_extra = from->nr_idle_extra;
 	cpumask_copy(to->cpumask, from->cpumask);
 	cpumask_copy(to->__pod_cpumask, from->__pod_cpumask);
 	to->affn_strict = from->affn_strict;
@@ -4740,6 +4758,8 @@ static bool wqattrs_equal(const struct workqueue_attrs *a,
 	if (a->policy != b->policy)
 		return false;
 	if (a->prio != b->prio)
+		return false;
+	if (a->nr_idle_extra != b->nr_idle_extra)
 		return false;
 	if (a->affn_strict != b->affn_strict)
 		return false;
@@ -7068,9 +7088,9 @@ module_param_cb(default_affinity_scope, &wq_affn_dfl_ops, NULL, 0644);
  * Unbound workqueues have the following extra attributes.
  * Set the desire policy before set nice/rtprio.
  * When policy change from SCHED_NORMAL to SCHED_FIFO/SCHED_RR, set rtprio to 1
- * as default.
+ * as default, set nr_idle_extra to WORKER_NR_RT_DEF as default.
  * When policy change from SCHED_FIFO/SCHED_RR to SCHED_NORMAL, set nice to 0
- * as default.
+ * as default, set nr_idle_extra to 0 as default.
  * When policy change between SCHED_FIFO and SCHED_RR, all values except policy
  * remain the same.
  * Return -EINVAL when you read nice value when policy is SCHED_FIFO/SCHED_RR.
@@ -7079,6 +7099,7 @@ module_param_cb(default_affinity_scope, &wq_affn_dfl_ops, NULL, 0644);
  *  policy		RW int	: SCHED_NORMAL/SCHED_FIFO/SCHED_RR
  *  nice		RW int	: nice value of the workers
  *  rtprio		RW int	: rtprio value of the workers
+ *  nr_idle_extra	RW int	: number of extra idle thread reserved
  *  cpumask		RW mask	: bitmask of allowed CPUs for the workers
  *  affinity_scope	RW str  : worker CPU affinity scope (cache, numa, none)
  *  affinity_strict	RW bool : worker CPU affinity is strict
@@ -7167,10 +7188,13 @@ static struct workqueue_attrs *wq_sysfs_prep_attrs(struct workqueue_struct *wq)
 static void wq_attrs_policy_change(struct workqueue_struct *wq,
 				   struct workqueue_attrs *attrs)
 {
-	if (wq->unbound_attrs->policy == SCHED_NORMAL)
+	if (wq->unbound_attrs->policy == SCHED_NORMAL) {
 		attrs->prio = MAX_RT_PRIO - 1;
-	else if (attrs->policy == SCHED_NORMAL)
+		attrs->nr_idle_extra = WORKER_NR_RT_DEF;
+	} else if (attrs->policy == SCHED_NORMAL) {
 		attrs->prio = DEFAULT_PRIO;
+		attrs->nr_idle_extra = 0;
+	}
 }
 
 static ssize_t wq_policy_store(struct device *dev,
@@ -7280,6 +7304,44 @@ static ssize_t wq_rtprio_store(struct device *dev, struct device_attribute *attr
 		!kstrtoint(buf, 10, &rtprio) &&
 		rtprio > 0 && rtprio < MAX_RT_PRIO) {
 		attrs->prio = MAX_RT_PRIO - rtprio;
+		ret = apply_workqueue_attrs_locked(wq, attrs);
+	}
+
+out_unlock:
+	apply_wqattrs_unlock();
+	free_workqueue_attrs(attrs);
+	return ret ?: count;
+}
+
+static ssize_t wq_idle_extra_show(struct device *dev, struct device_attribute *attr,
+				  char *buf)
+{
+	struct workqueue_struct *wq = dev_to_wq(dev);
+	int written;
+
+	mutex_lock(&wq->mutex);
+	written = scnprintf(buf, PAGE_SIZE, "%d\n", wq->unbound_attrs->nr_idle_extra);
+	mutex_unlock(&wq->mutex);
+
+	return written;
+}
+
+static ssize_t wq_idle_extra_store(struct device *dev, struct device_attribute *attr,
+				   const char *buf, size_t count)
+{
+	struct workqueue_struct *wq = dev_to_wq(dev);
+	struct workqueue_attrs *attrs;
+	int nr_idle_extra, ret = -ENOMEM;
+
+	apply_wqattrs_lock();
+
+	attrs = wq_sysfs_prep_attrs(wq);
+	if (!attrs)
+		goto out_unlock;
+
+	ret = -EINVAL;
+	if (!kstrtoint(buf, 10, &nr_idle_extra) && nr_idle_extra >= 0) {
+		attrs->nr_idle_extra = nr_idle_extra;
 		ret = apply_workqueue_attrs_locked(wq, attrs);
 	}
 
@@ -7402,6 +7464,7 @@ static struct device_attribute wq_sysfs_unbound_attrs[] = {
 	__ATTR(policy, 0644, wq_policy_show, wq_policy_store),
 	__ATTR(nice, 0644, wq_nice_show, wq_nice_store),
 	__ATTR(rtprio, 0644, wq_rtprio_show, wq_rtprio_store),
+	__ATTR(nr_idle_extra, 0644, wq_idle_extra_show, wq_idle_extra_store),
 	__ATTR(cpumask, 0644, wq_cpumask_show, wq_cpumask_store),
 	__ATTR(affinity_scope, 0644, wq_affn_scope_show, wq_affn_scope_store),
 	__ATTR(affinity_strict, 0644, wq_affinity_strict_show, wq_affinity_strict_store),
