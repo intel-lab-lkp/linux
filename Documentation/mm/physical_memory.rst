@@ -296,15 +296,6 @@ See also Documentation/mm/page_reclaim.rst.
 ``kswapd_failures``
   Number of runs kswapd was unable to reclaim any pages
 
-``min_unmapped_pages``
-  Minimal number of unmapped file backed pages that cannot be reclaimed.
-  Determined by ``vm.min_unmapped_ratio`` sysctl. Only defined when
-  ``CONFIG_NUMA`` is enabled.
-
-``min_slab_pages``
-  Minimal number of SLAB pages that cannot be reclaimed. Determined by
-  ``vm.min_slab_ratio sysctl``. Only defined when ``CONFIG_NUMA`` is enabled
-
 ``flags``
   Flags controlling reclaim behavior.
 

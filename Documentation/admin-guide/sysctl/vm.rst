@@ -49,8 +49,6 @@ Currently, these files are in /proc/sys/vm:
 - memory_failure_early_kill
 - memory_failure_recovery
 - min_free_kbytes
-- min_slab_ratio
-- min_unmapped_ratio
 - mmap_min_addr
 - mmap_rnd_bits
 - mmap_rnd_compat_bits
@@ -547,41 +545,6 @@ allocations; if you set this to lower than 1024KB, your system will
 become subtly broken, and prone to deadlock under high loads.
 
 Setting this too high will OOM your machine instantly.
-
-
-min_slab_ratio
-==============
-
-This is available only on NUMA kernels.
-
-A percentage of the total pages in each zone.  On Zone reclaim
-(fallback from the local zone occurs) slabs will be reclaimed if more
-than this percentage of pages in a zone are reclaimable slab pages.
-This insures that the slab growth stays under control even in NUMA
-systems that rarely perform global reclaim.
-
-The default is 5 percent.
-
-Note that slab reclaim is triggered in a per zone / node fashion.
-The process of reclaiming slab memory is currently not node specific
-and may not be fast.
-
-
-min_unmapped_ratio
-==================
-
-This is available only on NUMA kernels.
-
-This is a percentage of the total pages in each zone. Zone reclaim will
-only occur if more than this percentage of pages are in a state that
-zone_reclaim_mode allows to be reclaimed.
-
-If zone_reclaim_mode has the value 4 OR'd, then the percentage is compared
-against all file-backed unmapped pages including swapcache pages and tmpfs
-files. Otherwise, only unmapped pages backed by normal files but not tmpfs
-files and similar are considered.
-
-The default is 1 percent.
 
 
 mmap_min_addr

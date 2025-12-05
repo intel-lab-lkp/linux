@@ -5676,8 +5676,6 @@ int local_memory_node(int node)
 }
 #endif
 
-static void setup_min_unmapped_ratio(void);
-static void setup_min_slab_ratio(void);
 #else	/* CONFIG_NUMA */
 
 static void build_zonelists(pg_data_t *pgdat)
@@ -6487,11 +6485,6 @@ int __meminit init_per_zone_wmark_min(void)
 	refresh_zone_stat_thresholds();
 	setup_per_zone_lowmem_reserve();
 
-#ifdef CONFIG_NUMA
-	setup_min_unmapped_ratio();
-	setup_min_slab_ratio();
-#endif
-
 	khugepaged_min_free_kbytes_update();
 
 	return 0;
@@ -6533,63 +6526,6 @@ static int watermark_scale_factor_sysctl_handler(const struct ctl_table *table, 
 
 	return 0;
 }
-
-#ifdef CONFIG_NUMA
-static void setup_min_unmapped_ratio(void)
-{
-	pg_data_t *pgdat;
-	struct zone *zone;
-
-	for_each_online_pgdat(pgdat)
-		pgdat->min_unmapped_pages = 0;
-
-	for_each_zone(zone)
-		zone->zone_pgdat->min_unmapped_pages += (zone_managed_pages(zone) *
-						         sysctl_min_unmapped_ratio) / 100;
-}
-
-
-static int sysctl_min_unmapped_ratio_sysctl_handler(const struct ctl_table *table, int write,
-		void *buffer, size_t *length, loff_t *ppos)
-{
-	int rc;
-
-	rc = proc_dointvec_minmax(table, write, buffer, length, ppos);
-	if (rc)
-		return rc;
-
-	setup_min_unmapped_ratio();
-
-	return 0;
-}
-
-static void setup_min_slab_ratio(void)
-{
-	pg_data_t *pgdat;
-	struct zone *zone;
-
-	for_each_online_pgdat(pgdat)
-		pgdat->min_slab_pages = 0;
-
-	for_each_zone(zone)
-		zone->zone_pgdat->min_slab_pages += (zone_managed_pages(zone) *
-						     sysctl_min_slab_ratio) / 100;
-}
-
-static int sysctl_min_slab_ratio_sysctl_handler(const struct ctl_table *table, int write,
-		void *buffer, size_t *length, loff_t *ppos)
-{
-	int rc;
-
-	rc = proc_dointvec_minmax(table, write, buffer, length, ppos);
-	if (rc)
-		return rc;
-
-	setup_min_slab_ratio();
-
-	return 0;
-}
-#endif
 
 /*
  * lowmem_reserve_ratio_sysctl_handler - just a wrapper around
@@ -6719,24 +6655,6 @@ static const struct ctl_table page_alloc_sysctl_table[] = {
 		.maxlen		= NUMA_ZONELIST_ORDER_LEN,
 		.mode		= 0644,
 		.proc_handler	= numa_zonelist_order_handler,
-	},
-	{
-		.procname	= "min_unmapped_ratio",
-		.data		= &sysctl_min_unmapped_ratio,
-		.maxlen		= sizeof(sysctl_min_unmapped_ratio),
-		.mode		= 0644,
-		.proc_handler	= sysctl_min_unmapped_ratio_sysctl_handler,
-		.extra1		= SYSCTL_ZERO,
-		.extra2		= SYSCTL_ONE_HUNDRED,
-	},
-	{
-		.procname	= "min_slab_ratio",
-		.data		= &sysctl_min_slab_ratio,
-		.maxlen		= sizeof(sysctl_min_slab_ratio),
-		.mode		= 0644,
-		.proc_handler	= sysctl_min_slab_ratio_sysctl_handler,
-		.extra1		= SYSCTL_ZERO,
-		.extra2		= SYSCTL_ONE_HUNDRED,
 	},
 #endif
 };

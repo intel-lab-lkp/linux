@@ -280,14 +280,6 @@ kswapd线程可以回收的最高区域索引。
 ``kswapd_failures``
 kswapd无法回收任何页面的运行次数。
 
-``min_unmapped_pages``
-无法回收的未映射文件支持的最小页面数量。由 ``vm.min_unmapped_ratio``
-系统控制台（sysctl）参数决定。在开启 ``CONFIG_NUMA`` 配置时定义。
-
-``min_slab_pages``
-无法回收的SLAB页面的最少数量。由 ``vm.min_slab_ratio`` 系统控制台
-（sysctl）参数决定。在开启 ``CONFIG_NUMA`` 时定义。
-
 ``flags``
 控制回收行为的标志位。
 

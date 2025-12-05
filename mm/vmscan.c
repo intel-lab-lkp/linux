@@ -7538,62 +7538,6 @@ module_init(kswapd_init)
 int node_reclaim_mode __read_mostly;
 
 /*
- * Percentage of pages in a zone that must be unmapped for node_reclaim to
- * occur.
- */
-int sysctl_min_unmapped_ratio = 1;
-
-/*
- * If the number of slab pages in a zone grows beyond this percentage then
- * slab reclaim needs to occur.
- */
-int sysctl_min_slab_ratio = 5;
-
-static inline unsigned long node_unmapped_file_pages(struct pglist_data *pgdat)
-{
-	unsigned long file_mapped = node_page_state(pgdat, NR_FILE_MAPPED);
-	unsigned long file_lru = node_page_state(pgdat, NR_INACTIVE_FILE) +
-		node_page_state(pgdat, NR_ACTIVE_FILE);
-
-	/*
-	 * It's possible for there to be more file mapped pages than
-	 * accounted for by the pages on the file LRU lists because
-	 * tmpfs pages accounted for as ANON can also be FILE_MAPPED
-	 */
-	return (file_lru > file_mapped) ? (file_lru - file_mapped) : 0;
-}
-
-/* Work out how many page cache pages we can reclaim in this reclaim_mode */
-static unsigned long node_pagecache_reclaimable(struct pglist_data *pgdat)
-{
-	unsigned long nr_pagecache_reclaimable;
-	unsigned long delta = 0;
-
-	/*
-	 * If RECLAIM_UNMAP is set, then all file pages are considered
-	 * potentially reclaimable. Otherwise, we have to worry about
-	 * pages like swapcache and node_unmapped_file_pages() provides
-	 * a better estimate
-	 */
-	if (node_reclaim_mode & RECLAIM_UNMAP)
-		nr_pagecache_reclaimable = node_page_state(pgdat, NR_FILE_PAGES);
-	else
-		nr_pagecache_reclaimable = node_unmapped_file_pages(pgdat);
-
-	/*
-	 * Since we can't clean folios through reclaim, remove dirty file
-	 * folios from consideration.
-	 */
-	delta += node_page_state(pgdat, NR_FILE_DIRTY);
-
-	/* Watch for any possible underflows due to delta */
-	if (unlikely(delta > nr_pagecache_reclaimable))
-		delta = nr_pagecache_reclaimable;
-
-	return nr_pagecache_reclaimable - delta;
-}
-
-/*
  * Try to free up some pages from this node through reclaim.
  */
 static unsigned long __node_reclaim(struct pglist_data *pgdat, gfp_t gfp_mask,
@@ -7617,16 +7561,13 @@ static unsigned long __node_reclaim(struct pglist_data *pgdat, gfp_t gfp_mask,
 	noreclaim_flag = memalloc_noreclaim_save();
 	set_task_reclaim_state(p, &sc->reclaim_state);
 
-	if (node_pagecache_reclaimable(pgdat) > pgdat->min_unmapped_pages ||
-	    node_page_state_pages(pgdat, NR_SLAB_RECLAIMABLE_B) > pgdat->min_slab_pages) {
-		/*
-		 * Free memory by calling shrink node with increasing
-		 * priorities until we have enough memory freed.
-		 */
-		do {
-			shrink_node(pgdat, sc);
-		} while (sc->nr_reclaimed < nr_pages && --sc->priority >= 0);
-	}
+	/*
+	 * Free memory by calling shrink node with increasing priorities until
+	 * we have enough memory freed.
+	 */
+	do {
+		shrink_node(pgdat, sc);
+	} while (sc->nr_reclaimed < nr_pages && --sc->priority >= 0);
 
 	set_task_reclaim_state(p, NULL);
 	memalloc_noreclaim_restore(noreclaim_flag);

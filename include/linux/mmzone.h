@@ -1451,14 +1451,6 @@ typedef struct pglist_data {
 	 */
 	unsigned long		totalreserve_pages;
 
-#ifdef CONFIG_NUMA
-	/*
-	 * node reclaim becomes active if more unmapped pages exist.
-	 */
-	unsigned long		min_unmapped_pages;
-	unsigned long		min_slab_pages;
-#endif /* CONFIG_NUMA */
-
 	/* Write-intensive fields used by page reclaim */
 	CACHELINE_PADDING(_pad1_);
 
