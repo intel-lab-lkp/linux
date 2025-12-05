@@ -174,7 +174,7 @@ static __always_inline void td_##lclass##_clearbit##bits(struct vcpu_tdx *tdx,	\
 
 
 bool tdx_interrupt_allowed(struct kvm_vcpu *vcpu);
-int tdx_complete_emulated_msr(struct kvm_vcpu *vcpu, int err);
+int tdx_complete_emulated_msr(struct kvm_vcpu *vcpu, bool err);
 
 TDX_BUILD_TDVPS_ACCESSORS(16, VMCS, vmcs);
 TDX_BUILD_TDVPS_ACCESSORS(32, VMCS, vmcs);

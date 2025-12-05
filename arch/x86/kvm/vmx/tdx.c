@@ -2028,7 +2028,7 @@ static int tdx_handle_ept_violation(struct kvm_vcpu *vcpu)
 	return ret;
 }
 
-int tdx_complete_emulated_msr(struct kvm_vcpu *vcpu, int err)
+int tdx_complete_emulated_msr(struct kvm_vcpu *vcpu, bool err)
 {
 	if (err) {
 		tdvmcall_set_return_code(vcpu, TDVMCALL_STATUS_INVALID_OPERAND);

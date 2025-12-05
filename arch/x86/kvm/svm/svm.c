@@ -2777,7 +2777,7 @@ static int svm_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	return 0;
 }
 
-static int svm_complete_emulated_msr(struct kvm_vcpu *vcpu, int err)
+static int svm_complete_emulated_msr(struct kvm_vcpu *vcpu, bool err)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
 	if (!err || !sev_es_guest(vcpu->kvm) || WARN_ON_ONCE(!svm->sev_es.ghcb))

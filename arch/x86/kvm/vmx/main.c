@@ -202,7 +202,7 @@ static void vt_recalc_intercepts(struct kvm_vcpu *vcpu)
 	vmx_recalc_intercepts(vcpu);
 }
 
-static int vt_complete_emulated_msr(struct kvm_vcpu *vcpu, int err)
+static int vt_complete_emulated_msr(struct kvm_vcpu *vcpu, bool err)
 {
 	if (is_td_vcpu(vcpu))
 		return tdx_complete_emulated_msr(vcpu, err);
