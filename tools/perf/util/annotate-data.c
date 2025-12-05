@@ -459,7 +459,8 @@ static bool is_pointer_type(Dwarf_Die *type_die)
 {
 	int tag = dwarf_tag(type_die);
 
-	return tag == DW_TAG_pointer_type || tag == DW_TAG_array_type;
+	return tag == DW_TAG_pointer_type || tag == DW_TAG_reference_type ||
+	       tag == DW_TAG_array_type;
 }
 
 static bool is_compound_type(Dwarf_Die *type_die)

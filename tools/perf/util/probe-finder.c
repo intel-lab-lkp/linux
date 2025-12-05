@@ -360,12 +360,20 @@ static int convert_variable_fields(Dwarf_Die *vr_die, const char *varname,
 		ref->offset += dwarf_bytesize(&type) * field->index;
 		ref->user_access = user_access;
 		goto next;
-	} else if (tag == DW_TAG_pointer_type) {
+	} else if (tag == DW_TAG_pointer_type || tag == DW_TAG_reference_type) {
 		/* Check the pointer and dereference */
-		if (!field->ref) {
-			pr_err("Semantic error: %s must be referred by '->'\n",
-			       field->name);
-			return -EINVAL;
+		if (tag == DW_TAG_pointer_type) {
+			if (!field->ref) {
+				pr_err("Semantic error: %s must be referred by '->'\n",
+				       field->name);
+				return -EINVAL;
+			}
+		} else {
+			if (field->ref) {
+				pr_err("Semantic error: %s must be referred by '.'\n",
+				       field->name);
+				return -EINVAL;
+			}
 		}
 		/* Get the type pointed by this pointer */
 		if (die_get_real_type(&type, &type) == NULL) {
@@ -374,7 +382,8 @@ static int convert_variable_fields(Dwarf_Die *vr_die, const char *varname,
 		}
 		/* Verify it is a data structure  */
 		tag = dwarf_tag(&type);
-		if (tag != DW_TAG_structure_type && tag != DW_TAG_union_type) {
+		if (tag != DW_TAG_structure_type && tag != DW_TAG_union_type &&
+		    tag != DW_TAG_class_type) {
 			pr_warning("%s is not a data structure nor a union.\n",
 				   varname);
 			return -EINVAL;
@@ -389,7 +398,8 @@ static int convert_variable_fields(Dwarf_Die *vr_die, const char *varname,
 			*ref_ptr = ref;
 	} else {
 		/* Verify it is a data structure  */
-		if (tag != DW_TAG_structure_type && tag != DW_TAG_union_type) {
+		if (tag != DW_TAG_structure_type && tag != DW_TAG_union_type &&
+		    tag != DW_TAG_class_type) {
 			pr_warning("%s is not a data structure nor a union.\n",
 				   varname);
 			return -EINVAL;
