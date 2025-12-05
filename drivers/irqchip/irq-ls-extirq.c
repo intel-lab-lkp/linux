@@ -168,12 +168,20 @@ ls_extirq_parse_map(struct ls_extirq_data *priv, struct device_node *node)
 	return 0;
 }
 
-static int __init
-ls_extirq_of_init(struct device_node *node, struct device_node *parent)
+static int ls_extirq_probe(struct platform_device *pdev)
 {
 	struct irq_domain *domain, *parent_domain;
+	struct device_node *node, *parent;
+	struct device *dev = &pdev->dev;
 	struct ls_extirq_data *priv;
 	int ret;
+
+	node = dev->of_node;
+	parent = of_irq_find_parent(node);
+	if (!parent) {
+		dev_err(dev, "Failed to get IRQ parent node\n");
+		return -ENODEV;
+	}
 
 	parent_domain = irq_find_host(parent);
 	if (!parent_domain) {
@@ -227,6 +235,20 @@ err_irq_find_host:
 	return ret;
 }
 
-IRQCHIP_DECLARE(ls1021a_extirq, "fsl,ls1021a-extirq", ls_extirq_of_init);
-IRQCHIP_DECLARE(ls1043a_extirq, "fsl,ls1043a-extirq", ls_extirq_of_init);
-IRQCHIP_DECLARE(ls1088a_extirq, "fsl,ls1088a-extirq", ls_extirq_of_init);
+static const struct of_device_id ls_extirq_dt_ids[] = {
+	{ .compatible = "fsl,ls1021a-extirq" },
+	{ .compatible = "fsl,ls1043a-extirq" },
+	{ .compatible = "fsl,ls1088a-extirq" },
+	{}
+};
+MODULE_DEVICE_TABLE(of, ls_extirq_dt_ids);
+
+static struct platform_driver ls_extirq_driver = {
+	.probe = ls_extirq_probe,
+	.driver = {
+		.name = "ls-extirq",
+		.of_match_table = ls_extirq_dt_ids,
+	}
+};
+
+builtin_platform_driver(ls_extirq_driver);
