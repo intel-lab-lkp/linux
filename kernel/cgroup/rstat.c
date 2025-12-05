@@ -71,8 +71,7 @@ __bpf_kfunc void css_rstat_updated(struct cgroup_subsys_state *css, int cpu)
 {
 	struct llist_head *lhead;
 	struct css_rstat_cpu *rstatc;
-	struct css_rstat_cpu __percpu *rstatc_pcpu;
-	struct llist_node *self;
+	struct llist_node *expected;
 
 	/*
 	 * Since bpf programs can call this function, prevent access to
@@ -113,9 +112,8 @@ __bpf_kfunc void css_rstat_updated(struct cgroup_subsys_state *css, int cpu)
 	 * successful and the winner will eventually add the per-cpu lnode to
 	 * the llist.
 	 */
-	self = &rstatc->lnode;
-	rstatc_pcpu = css->rstat_cpu;
-	if (this_cpu_cmpxchg(rstatc_pcpu->lnode.next, self, NULL) != self)
+	expected = &rstatc->lnode;
+	if (!try_cmpxchg(&rstatc->lnode.next, &expected, NULL))
 		return;
 
 	lhead = ss_lhead_cpu(css->ss, cpu);
