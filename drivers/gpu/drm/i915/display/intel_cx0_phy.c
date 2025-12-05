@@ -2456,8 +2456,8 @@ static int intel_c20_compute_hdmi_tmds_pll(const struct intel_crtc_state *crtc_s
 }
 
 static const struct intel_c20pll_state * const *
-intel_c20_pll_tables_get(const struct intel_crtc_state *crtc_state,
-			 struct intel_encoder *encoder)
+intel_c20pll_tables_get(const struct intel_crtc_state *crtc_state,
+			struct intel_encoder *encoder)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
 
@@ -2630,7 +2630,7 @@ intel_c20_pll_find_table(const struct intel_crtc_state *crtc_state,
 	const struct intel_c20pll_state * const *tables;
 	int i;
 
-	tables = intel_c20_pll_tables_get(crtc_state, encoder);
+	tables = intel_c20pll_tables_get(crtc_state, encoder);
 	if (!tables)
 		return NULL;
 
