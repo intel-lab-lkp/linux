@@ -138,7 +138,7 @@ struct ext4_tune_sb_params {
 	__u32 clear_feature_compat_mask;
 	__u32 clear_feature_incompat_mask;
 	__u32 clear_feature_ro_compat_mask;
-	__u8  mount_opts[64];
+	__u8  mount_opts[68];
 	__u8  pad[64];
 };
 
