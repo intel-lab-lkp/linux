@@ -89,7 +89,7 @@ static ssize_t driver_override_show(struct device *_dev,
 	ssize_t len;
 
 	device_lock(_dev);
-	len = sprintf(buf, "%s\n", dev->driver_override);
+	len = sysfs_emit(buf, "%s\n", dev->driver_override);
 	device_unlock(_dev);
 	return len;
 }
@@ -114,7 +114,7 @@ static ssize_t name##_show(struct device *_dev,				\
 			   struct device_attribute *attr, char *buf)	\
 {									\
 	struct amba_device *dev = to_amba_device(_dev);			\
-	return sprintf(buf, fmt, arg);					\
+	return sysfs_emit(buf, fmt, arg);					\
 }									\
 static DEVICE_ATTR_RO(name)
 
