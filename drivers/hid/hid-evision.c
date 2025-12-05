@@ -14,14 +14,29 @@
 
 #include "hid-ids.h"
 
-static int evision_input_mapping(struct hid_device *hdev, struct hid_input *hi,
+static int evision_k552_input_mapping(struct hid_device *hdev, struct hid_input *hi,
 		struct hid_field *field, struct hid_usage *usage,
 		unsigned long **bit, int *max)
 {
-	/* mapping only applies to USB_DEVICE_ID_EVISION_ICL01 */
-	if (hdev->product != USB_DEVICE_ID_EVISION_ICL01)
+	if ((usage->hid & HID_USAGE_PAGE) != HID_UP_CONSUMER)
 		return 0;
 
+	switch (usage->hid & HID_USAGE) {
+	/* report 3 */
+	case 0x183:
+		hid_map_usage_clear(hi, usage, bit, max, EV_KEY, KEY_MEDIA);
+		break;
+	default:
+		return 0;
+	}
+
+	return 1;
+}
+
+static int evision_icl01_input_mapping(struct hid_device *hdev, struct hid_input *hi,
+		struct hid_field *field, struct hid_usage *usage,
+		unsigned long **bit, int *max)
+{
 	if ((usage->hid & HID_USAGE_PAGE) != HID_UP_CONSUMER)
 		return 0;
 
@@ -39,6 +54,23 @@ static int evision_input_mapping(struct hid_device *hdev, struct hid_input *hi,
 	case 0x0402: return -1;
 	}
 	return 0;
+}
+
+static int evision_input_mapping(struct hid_device *hdev, struct hid_input *hi,
+		struct hid_field *field, struct hid_usage *usage,
+		unsigned long **bit, int *max)
+{
+	int ret = 0;
+
+	if (hdev->product == USB_DEVICE_ID_EVISION_ICL01) {
+		ret = evision_icl01_input_mapping(hdev, hi,
+			field, usage, bit, max);
+	} else if (hdev->product == USB_DEVICE_ID_EVISION_K552) {
+		ret = evision_k552_input_mapping(hdev, hi,
+			field, usage, bit, max);
+	}
+
+	return ret;
 }
 
 #define REP_DSC_SIZE 236
@@ -59,6 +91,7 @@ static const __u8 *evision_report_fixup(struct hid_device *hdev, __u8 *rdesc,
 static const struct hid_device_id evision_devices[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_EVISION, USB_DEVICE_ID_EVISION_ICL01) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_EVISION, USB_DEVICE_ID_EV_TELINK_RECEIVER) },
+	{ HID_USB_DEVICE(USB_VENDOR_ID_EVISION, USB_DEVICE_ID_EVISION_K552) },
 	{ }
 };
 MODULE_DEVICE_TABLE(hid, evision_devices);
