@@ -173,10 +173,24 @@ static void dbell_or_ic_cause_ipi(int cpu)
 
 static int pseries_cause_nmi_ipi(int cpu)
 {
-	int hwcpu;
+	int hwcpu, k;
 
 	if (cpu == NMI_IPI_ALL_OTHERS) {
-		hwcpu = H_SIGNAL_SYS_RESET_ALL_OTHERS;
+
+		for_each_present_cpu(k) {
+			if (k != smp_processor_id()) {
+				hwcpu = get_hard_smp_processor_id(k);
+
+				/* it is possible that cpu is present,
+				 * but not started yet
+				 */
+				if (paca_ptrs[hwcpu]->cpu_start == 1)
+					plpar_signal_sys_reset(hwcpu);
+			}
+		}
+
+		return 1;
+
 	} else {
 		if (cpu < 0) {
 			WARN_ONCE(true, "incorrect cpu parameter %d", cpu);
