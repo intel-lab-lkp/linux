@@ -1103,6 +1103,77 @@ static const struct file_operations page_owner_fops = {
 	.llseek		= lseek_page_owner,
 };
 
+#ifdef CONFIG_SWAP_PAGE_OWNER
+static ssize_t print_swap_page_owner(char __user *buf, size_t count,
+				     swp_entry_t entry,
+				     struct swap_page_owner *spo)
+{
+	int ret;
+	char *kbuf;
+
+	count = min_t(size_t, count, PAGE_SIZE);
+	kbuf = kmalloc(count, GFP_KERNEL);
+	if (!kbuf)
+		return -ENOMEM;
+
+	ret = scnprintf(kbuf, count,
+			"Page allocated via pid %d, tgid %d (%s), ts %llu ns\n",
+			spo->pid, spo->tgid, spo->comm, spo->ts_nsec);
+
+	ret += scnprintf(kbuf + ret, count - ret,
+			 "SWP entry 0x%lx\n", entry.val);
+
+	ret += stack_depot_snprint(spo->handle, kbuf + ret, count - ret, 0);
+	if (ret >= count)
+		goto err;
+
+	ret += snprintf(kbuf + ret, count - ret, "\n");
+	if (ret >= count)
+		goto err;
+
+	if (copy_to_user(buf, kbuf, ret))
+		ret = -EFAULT;
+
+	kfree(kbuf);
+	return ret;
+
+err:
+	kfree(kbuf);
+	return -ENOMEM;
+}
+
+static ssize_t read_swap_page_owner(struct file *file, char __user *buf,
+				    size_t count, loff_t *ppos)
+{
+	swp_entry_t entry = { .val = *ppos };
+	void *spo;
+	XA_STATE(xa_state, &swap_page_owners, entry.val);
+
+	if (!static_branch_unlikely(&swap_page_owner_inited))
+		return -EINVAL;
+
+	xa_lock(&swap_page_owners);
+	xas_for_each(&xa_state, spo, ULONG_MAX) {
+
+		/* Resume after current index. */
+		entry.val = xa_state.xa_index;
+		*ppos = entry.val + 1;
+
+		xa_unlock(&swap_page_owners);
+		return print_swap_page_owner(buf, count, entry,
+					     (struct swap_page_owner *) spo);
+	}
+	xa_unlock(&swap_page_owners);
+
+	return 0;
+}
+
+static const struct file_operations swap_page_owner_fops = {
+	.read		= read_swap_page_owner,
+	.llseek		= lseek_page_owner,
+};
+#endif
+
 static void *stack_start(struct seq_file *m, loff_t *ppos)
 {
 	struct stack *stack;
@@ -1247,6 +1318,10 @@ static int __init pageowner_init(void)
 			    &page_owner_stack_fops);
 	debugfs_create_file("count_threshold", 0600, dir, NULL,
 			    &page_owner_threshold_fops);
+#ifdef CONFIG_SWAP_PAGE_OWNER
+	debugfs_create_file("swap_page_owner", 0400, NULL, NULL,
+			    &swap_page_owner_fops);
+#endif
 	return 0;
 }
 late_initcall(pageowner_init)
