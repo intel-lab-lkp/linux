@@ -1068,14 +1068,16 @@ può migliorare la leggibilità.
 18) Non reinventate le macro del kernel
 ---------------------------------------
 
-Il file di intestazione include/linux/kernel.h contiene un certo numero
-di macro che dovreste usare piuttosto che implementarne una qualche variante.
-Per esempio, se dovete calcolare la lunghezza di un vettore, sfruttate la
-macro:
+I file header presenti in include/linux mettono a disposizione numerose macro
+che è preferibile utilizzare, evitando di sviluppare implementazioni
+alternative. Per esempio, se dovete calcolare la lunghezza di un vettore,
+sfruttate la macro:
 
 .. code-block:: c
 
 	#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+
+definita in array_size.h.
 
 Analogamente, se dovete calcolare la dimensione di un qualche campo di una
 struttura, usate
@@ -1084,10 +1086,11 @@ struttura, usate
 
 	#define sizeof_field(t, f) (sizeof(((t*)0)->f))
 
-Ci sono anche le macro min() e max() che, se vi serve, effettuano un controllo
-rigido sui tipi.  Sentitevi liberi di leggere attentamente questo file
-d'intestazione per scoprire cos'altro è stato definito che non dovreste
-reinventare nel vostro codice.
+definita in stddef.h.
+
+Ci sono anche le macro min() e max() definite in minmax.h che effettuano un
+controllo rigoroso sui tipi. È consigliato consultare i vari file header per
+vedere altre macro già disponibili.
 
 19) Linee di configurazione degli editor e altre schifezze
 -----------------------------------------------------------
