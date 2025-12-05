@@ -593,9 +593,6 @@ static int drm_atomic_plane_set_property(struct drm_plane *plane,
 		return ret;
 	} else if (property == plane->scaling_filter_property) {
 		state->scaling_filter = val;
-	} else if (plane->funcs->atomic_set_property) {
-		return plane->funcs->atomic_set_property(plane, state,
-				property, val);
 	} else if (property == plane->hotspot_x_property) {
 		if (plane->type != DRM_PLANE_TYPE_CURSOR) {
 			drm_dbg_atomic(plane->dev,
@@ -612,6 +609,9 @@ static int drm_atomic_plane_set_property(struct drm_plane *plane,
 			return -EINVAL;
 		}
 		state->hotspot_y = val;
+	} else if (plane->funcs->atomic_set_property) {
+		return plane->funcs->atomic_set_property(plane, state,
+				property, val);
 	} else {
 		drm_dbg_atomic(plane->dev,
 			       "[PLANE:%d:%s] unknown property [PROP:%d:%s]\n",
@@ -672,12 +672,12 @@ drm_atomic_plane_get_property(struct drm_plane *plane,
 			state->fb_damage_clips->base.id : 0;
 	} else if (property == plane->scaling_filter_property) {
 		*val = state->scaling_filter;
-	} else if (plane->funcs->atomic_get_property) {
-		return plane->funcs->atomic_get_property(plane, state, property, val);
 	} else if (property == plane->hotspot_x_property) {
 		*val = state->hotspot_x;
 	} else if (property == plane->hotspot_y_property) {
 		*val = state->hotspot_y;
+	} else if (plane->funcs->atomic_get_property) {
+		return plane->funcs->atomic_get_property(plane, state, property, val);
 	} else {
 		drm_dbg_atomic(dev,
 			       "[PLANE:%d:%s] unknown property [PROP:%d:%s]\n",
