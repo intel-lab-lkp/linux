@@ -2701,7 +2701,7 @@ intel_psr2_sel_fetch_et_alignment(struct intel_atomic_state *state,
 	for_each_new_intel_plane_in_state(state, plane, new_plane_state, i) {
 		struct drm_rect inter;
 
-		if (new_plane_state->uapi.crtc != crtc_state->uapi.crtc)
+		if (new_plane_state->hw.crtc != crtc_state->uapi.crtc)
 			continue;
 
 		if (plane->id != PLANE_CURSOR)
@@ -2734,7 +2734,7 @@ static bool psr2_sel_fetch_plane_state_supported(const struct intel_plane_state 
 	if (plane_state->uapi.dst.y1 < 0 ||
 	    plane_state->uapi.dst.x1 < 0 ||
 	    plane_state->scaler_id >= 0 ||
-	    plane_state->uapi.rotation != DRM_MODE_ROTATE_0)
+	    plane_state->hw.rotation != DRM_MODE_ROTATE_0)
 		return false;
 
 	return true;
@@ -2838,7 +2838,7 @@ int intel_psr2_sel_fetch_update(struct intel_atomic_state *state,
 		struct drm_rect src, damaged_area = { .x1 = 0, .y1 = -1,
 						      .x2 = INT_MAX };
 
-		if (new_plane_state->uapi.crtc != crtc_state->uapi.crtc)
+		if (new_plane_state->hw.crtc != crtc_state->uapi.crtc)
 			continue;
 
 		if (!new_plane_state->uapi.visible &&
@@ -2937,7 +2937,7 @@ int intel_psr2_sel_fetch_update(struct intel_atomic_state *state,
 		struct drm_rect *sel_fetch_area, inter;
 		struct intel_plane *linked = new_plane_state->planar_linked_plane;
 
-		if (new_plane_state->uapi.crtc != crtc_state->uapi.crtc ||
+		if (new_plane_state->hw.crtc != crtc_state->uapi.crtc ||
 		    !new_plane_state->uapi.visible)
 			continue;
 
@@ -2992,9 +2992,9 @@ skip_sel_fetch_set_loop:
 	return 0;
 }
 
-void intel_psr2_panic_force_full_update(struct intel_display *display,
-					struct intel_crtc_state *crtc_state)
+void intel_psr2_panic_force_full_update(const struct intel_crtc_state *crtc_state)
 {
+	struct intel_display *display = to_intel_display(crtc_state);
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 	u32 val = man_trk_ctl_enable_bit_get(display);

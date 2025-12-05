@@ -13,8 +13,6 @@
 #include <drm/drm_vblank.h>
 #include <drm/drm_vblank_work.h>
 
-#include "i915_drv.h"
-#include "i915_vgpu.h"
 #include "i9xx_plane.h"
 #include "icl_dsi.h"
 #include "intel_atomic.h"
@@ -28,6 +26,7 @@
 #include "intel_drrs.h"
 #include "intel_dsi.h"
 #include "intel_fifo_underrun.h"
+#include "intel_parent.h"
 #include "intel_pipe_crc.h"
 #include "intel_plane.h"
 #include "intel_psr.h"
@@ -396,7 +395,7 @@ int intel_crtc_init(struct intel_display *display, enum pipe pipe)
 
 	drm_WARN_ON(display->drm, drm_crtc_index(&crtc->base) != crtc->pipe);
 
-	if (HAS_CASF(display))
+	if (HAS_CASF(display) && crtc->num_scalers >= 2)
 		drm_crtc_create_sharpness_strength_property(&crtc->base);
 
 	return 0;
@@ -553,7 +552,7 @@ void intel_pipe_update_start(struct intel_atomic_state *state,
 
 		for_each_oldnew_intel_plane_in_state(state, plane, old_plane_state,
 						     new_plane_state, i) {
-			if (old_plane_state->uapi.crtc == &crtc->base)
+			if (old_plane_state->hw.crtc == &crtc->base)
 				intel_plane_init_cursor_vblank_work(old_plane_state,
 								    new_plane_state);
 		}
@@ -671,7 +670,6 @@ void intel_pipe_update_end(struct intel_atomic_state *state,
 	int scanline_end = intel_get_crtc_scanline(crtc);
 	u32 end_vbl_count = intel_crtc_get_vblank_counter(crtc);
 	ktime_t end_vbl_time = ktime_get();
-	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
 
 	drm_WARN_ON(display->drm, new_crtc_state->use_dsb);
 
@@ -706,7 +704,7 @@ void intel_pipe_update_end(struct intel_atomic_state *state,
 		int i;
 
 		for_each_old_intel_plane_in_state(state, plane, old_plane_state, i) {
-			if (old_plane_state->uapi.crtc == &crtc->base &&
+			if (old_plane_state->hw.crtc == &crtc->base &&
 			    old_plane_state->unpin_work.vblank) {
 				drm_vblank_work_schedule(&old_plane_state->unpin_work,
 							 drm_crtc_accurate_vblank_count(&crtc->base) + 1,
@@ -737,7 +735,7 @@ void intel_pipe_update_end(struct intel_atomic_state *state,
 
 	local_irq_enable();
 
-	if (intel_vgpu_active(dev_priv))
+	if (intel_parent_vgpu_active(display))
 		goto out;
 
 	if (crtc->debug.start_vbl_count &&
