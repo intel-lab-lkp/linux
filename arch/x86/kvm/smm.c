@@ -419,7 +419,7 @@ static int rsm_load_seg_64(struct kvm_vcpu *vcpu,
 static int rsm_enter_protected_mode(struct kvm_vcpu *vcpu,
 				    u64 cr0, u64 cr3, u64 cr4)
 {
-	int bad;
+	bool bad;
 	u64 pcid;
 
 	/* In order to later set CR4.PCIDE, CR3[11:0] must be zero.  */

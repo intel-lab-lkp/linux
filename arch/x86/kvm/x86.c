@@ -1153,12 +1153,12 @@ void kvm_post_set_cr0(struct kvm_vcpu *vcpu, unsigned long old_cr0, unsigned lon
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_post_set_cr0);
 
-int kvm_set_cr0(struct kvm_vcpu *vcpu, unsigned long cr0)
+bool kvm_set_cr0(struct kvm_vcpu *vcpu, unsigned long cr0)
 {
 	unsigned long old_cr0 = kvm_read_cr0(vcpu);
 
 	if (!kvm_is_valid_cr0(vcpu, cr0))
-		return 1;
+		return true;
 
 	cr0 |= X86_CR0_ET;
 
@@ -1171,29 +1171,29 @@ int kvm_set_cr0(struct kvm_vcpu *vcpu, unsigned long cr0)
 		int cs_db, cs_l;
 
 		if (!is_pae(vcpu))
-			return 1;
+			return true;
 		kvm_x86_call(get_cs_db_l_bits)(vcpu, &cs_db, &cs_l);
 		if (cs_l)
-			return 1;
+			return true;
 	}
 #endif
 	if (!(vcpu->arch.efer & EFER_LME) && (cr0 & X86_CR0_PG) &&
 	    is_pae(vcpu) && ((cr0 ^ old_cr0) & X86_CR0_PDPTR_BITS) &&
 	    !load_pdptrs(vcpu, kvm_read_cr3(vcpu)))
-		return 1;
+		return true;
 
 	if (!(cr0 & X86_CR0_PG) &&
 	    (is_64_bit_mode(vcpu) || kvm_is_cr4_bit_set(vcpu, X86_CR4_PCIDE)))
-		return 1;
+		return true;
 
 	if (!(cr0 & X86_CR0_WP) && kvm_is_cr4_bit_set(vcpu, X86_CR4_CET))
-		return 1;
+		return true;
 
 	kvm_x86_call(set_cr0)(vcpu, cr0);
 
 	kvm_post_set_cr0(vcpu, old_cr0, cr0);
 
-	return 0;
+	return false;
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_set_cr0);
 
@@ -1366,37 +1366,37 @@ void kvm_post_set_cr4(struct kvm_vcpu *vcpu, unsigned long old_cr4, unsigned lon
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_post_set_cr4);
 
-int kvm_set_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
+bool kvm_set_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
 {
 	unsigned long old_cr4 = kvm_read_cr4(vcpu);
 
 	if (!kvm_is_valid_cr4(vcpu, cr4))
-		return 1;
+		return true;
 
 	if (is_long_mode(vcpu)) {
 		if (!(cr4 & X86_CR4_PAE))
-			return 1;
+			return true;
 		if ((cr4 ^ old_cr4) & X86_CR4_LA57)
-			return 1;
+			return true;
 	} else if (is_paging(vcpu) && (cr4 & X86_CR4_PAE)
 		   && ((cr4 ^ old_cr4) & X86_CR4_PDPTR_BITS)
 		   && !load_pdptrs(vcpu, kvm_read_cr3(vcpu)))
-		return 1;
+		return true;
 
 	if ((cr4 & X86_CR4_PCIDE) && !(old_cr4 & X86_CR4_PCIDE)) {
 		/* PCID can not be enabled when cr3[11:0]!=000H or EFER.LMA=0 */
 		if ((kvm_read_cr3(vcpu) & X86_CR3_PCID_MASK) || !is_long_mode(vcpu))
-			return 1;
+			return true;
 	}
 
 	if ((cr4 & X86_CR4_CET) && !kvm_is_cr0_bit_set(vcpu, X86_CR0_WP))
-		return 1;
+		return true;
 
 	kvm_x86_call(set_cr4)(vcpu, cr4);
 
 	kvm_post_set_cr4(vcpu, old_cr4, cr4);
 
-	return 0;
+	return false;
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_set_cr4);
 
@@ -1443,7 +1443,7 @@ static void kvm_invalidate_pcid(struct kvm_vcpu *vcpu, unsigned long pcid)
 	kvm_mmu_free_roots(vcpu->kvm, mmu, roots_to_free);
 }
 
-int kvm_set_cr3(struct kvm_vcpu *vcpu, unsigned long cr3)
+bool kvm_set_cr3(struct kvm_vcpu *vcpu, unsigned long cr3)
 {
 	bool skip_tlb_flush = false;
 	unsigned long pcid = 0;
@@ -1465,10 +1465,10 @@ int kvm_set_cr3(struct kvm_vcpu *vcpu, unsigned long cr3)
 	 * the current vCPU mode is accurate.
 	 */
 	if (!kvm_vcpu_is_legal_cr3(vcpu, cr3))
-		return 1;
+		return true;
 
 	if (is_pae_paging(vcpu) && !load_pdptrs(vcpu, cr3))
-		return 1;
+		return true;
 
 	if (cr3 != kvm_read_cr3(vcpu))
 		kvm_mmu_new_pgd(vcpu, cr3);
@@ -1488,19 +1488,19 @@ handle_tlb_flush:
 	if (!skip_tlb_flush)
 		kvm_invalidate_pcid(vcpu, pcid);
 
-	return 0;
+	return false;
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_set_cr3);
 
-int kvm_set_cr8(struct kvm_vcpu *vcpu, unsigned long cr8)
+bool kvm_set_cr8(struct kvm_vcpu *vcpu, unsigned long cr8)
 {
 	if (cr8 & CR8_RESERVED_BITS)
-		return 1;
+		return true;
 	if (lapic_in_kernel(vcpu))
 		kvm_lapic_set_tpr(vcpu, cr8);
 	else
 		vcpu->arch.cr8 = cr8;
-	return 0;
+	return false;
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_set_cr8);
 
@@ -8571,10 +8571,10 @@ static unsigned long emulator_get_cr(struct x86_emulate_ctxt *ctxt, int cr)
 	return value;
 }
 
-static int emulator_set_cr(struct x86_emulate_ctxt *ctxt, int cr, ulong val)
+static bool emulator_set_cr(struct x86_emulate_ctxt *ctxt, int cr, ulong val)
 {
 	struct kvm_vcpu *vcpu = emul_to_vcpu(ctxt);
-	int res = 0;
+	bool res = false;
 
 	switch (cr) {
 	case 0:
@@ -8594,7 +8594,7 @@ static int emulator_set_cr(struct x86_emulate_ctxt *ctxt, int cr, ulong val)
 		break;
 	default:
 		kvm_err("%s: unexpected cr %u\n", __func__, cr);
-		res = -1;
+		res = true;
 	}
 
 	return res;
@@ -11912,7 +11912,7 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu)
 
 	/* re-sync apic's tpr */
 	if (!lapic_in_kernel(vcpu)) {
-		if (kvm_set_cr8(vcpu, kvm_run->cr8) != 0) {
+		if (kvm_set_cr8(vcpu, kvm_run->cr8)) {
 			r = -EINVAL;
 			goto out;
 		}

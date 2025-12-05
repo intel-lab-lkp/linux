@@ -2448,7 +2448,7 @@ static int cr_interception(struct kvm_vcpu *vcpu)
 	struct vcpu_svm *svm = to_svm(vcpu);
 	int reg, cr;
 	unsigned long val;
-	int err;
+	bool err;
 
 	if (!static_cpu_has(X86_FEATURE_DECODEASSISTS))
 		return emulate_on_interception(vcpu);
@@ -2462,7 +2462,7 @@ static int cr_interception(struct kvm_vcpu *vcpu)
 	else
 		cr = svm->vmcb->control.exit_code - SVM_EXIT_READ_CR0;
 
-	err = 0;
+	err = false;
 	if (cr >= 16) { /* mov to cr */
 		cr -= 16;
 		val = kvm_register_read(vcpu, reg);
@@ -2522,7 +2522,7 @@ static int cr_trap(struct kvm_vcpu *vcpu)
 	struct vcpu_svm *svm = to_svm(vcpu);
 	unsigned long old_value, new_value;
 	unsigned int cr;
-	int ret = 0;
+	bool ret = false;
 
 	new_value = (unsigned long)svm->vmcb->control.exit_info_1;
 

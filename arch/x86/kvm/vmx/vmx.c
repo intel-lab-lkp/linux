@@ -5394,7 +5394,7 @@ void vmx_patch_hypercall(struct kvm_vcpu *vcpu, unsigned char *hypercall)
 }
 
 /* called to set cr0 as appropriate for a mov-to-cr0 exit. */
-static int handle_set_cr0(struct kvm_vcpu *vcpu, unsigned long val)
+static bool handle_set_cr0(struct kvm_vcpu *vcpu, unsigned long val)
 {
 	if (is_guest_mode(vcpu)) {
 		struct vmcs12 *vmcs12 = get_vmcs12(vcpu);
@@ -5412,15 +5412,15 @@ static int handle_set_cr0(struct kvm_vcpu *vcpu, unsigned long val)
 			(vmcs12->guest_cr0 & vmcs12->cr0_guest_host_mask);
 
 		if (kvm_set_cr0(vcpu, val))
-			return 1;
+			return true;
 		vmcs_writel(CR0_READ_SHADOW, orig_val);
-		return 0;
+		return false;
 	} else {
 		return kvm_set_cr0(vcpu, val);
 	}
 }
 
-static int handle_set_cr4(struct kvm_vcpu *vcpu, unsigned long val)
+static bool handle_set_cr4(struct kvm_vcpu *vcpu, unsigned long val)
 {
 	if (is_guest_mode(vcpu)) {
 		struct vmcs12 *vmcs12 = get_vmcs12(vcpu);
@@ -5430,9 +5430,9 @@ static int handle_set_cr4(struct kvm_vcpu *vcpu, unsigned long val)
 		val = (val & ~vmcs12->cr4_guest_host_mask) |
 			(vmcs12->guest_cr4 & vmcs12->cr4_guest_host_mask);
 		if (kvm_set_cr4(vcpu, val))
-			return 1;
+			return true;
 		vmcs_writel(CR4_READ_SHADOW, orig_val);
-		return 0;
+		return false;
 	} else
 		return kvm_set_cr4(vcpu, val);
 }
@@ -5454,7 +5454,7 @@ static int handle_cr(struct kvm_vcpu *vcpu)
 	unsigned long exit_qualification, val;
 	int cr;
 	int reg;
-	int err;
+	bool err;
 	int ret;
 
 	exit_qualification = vmx_get_exit_qual(vcpu);
