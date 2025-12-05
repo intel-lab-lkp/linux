@@ -324,15 +324,18 @@ static void program_hpx_type2(struct pci_dev *dev, struct hpx_type2 *hpx)
 		return;
 	}
 
-	/*
-	 * Don't allow _HPX to change MPS or MRRS settings.  We manage
-	 * those to make sure they're consistent with the rest of the
-	 * platform.
+	/* Don't allow _HPX to change MPS, MRRS, ExtTag, or RO
+	 * settings.  We manage those to make sure they're consistent
+	 * with the rest of the platform.
 	 */
 	hpx->pci_exp_devctl_and |= PCI_EXP_DEVCTL_PAYLOAD |
-				    PCI_EXP_DEVCTL_READRQ;
+				   PCI_EXP_DEVCTL_READRQ  |
+				   PCI_EXP_DEVCTL_EXT_TAG |
+				   PCI_EXP_DEVCTL_RELAX_EN;
 	hpx->pci_exp_devctl_or &= ~(PCI_EXP_DEVCTL_PAYLOAD |
-				    PCI_EXP_DEVCTL_READRQ);
+				    PCI_EXP_DEVCTL_READRQ  |
+				    PCI_EXP_DEVCTL_EXT_TAG |
+				    PCI_EXP_DEVCTL_RELAX_EN);
 
 	/* Initialize Device Control Register */
 	pcie_capability_clear_and_set_word(dev, PCI_EXP_DEVCTL,
