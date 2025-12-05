@@ -3452,6 +3452,20 @@ int tty_register_driver(struct tty_driver *driver)
 			goto err_unreg_char;
 	}
 
+	if (!(driver->flags & TTY_DRIVER_CUSTOM_WORKQUEUE)) {
+		driver->flip_wq = alloc_workqueue("%s-flip-wq",
+						WQ_UNBOUND | WQ_SYSFS,
+						0, driver->name);
+		if (!driver->flip_wq) {
+			error = -ENOMEM;
+			goto err_unreg_char;
+		}
+		for (i = 0; i < driver->num; i++) {
+			if (driver->ports[i] && !driver->ports[i]->buf.flip_wq)
+				tty_port_link_driver_wq(driver->ports[i], driver);
+		}
+	}
+
 	scoped_guard(mutex, &tty_mutex)
 		list_add(&driver->tty_drivers, &tty_drivers);
 
@@ -3475,6 +3489,9 @@ err_unreg_devs:
 	scoped_guard(mutex, &tty_mutex)
 		list_del(&driver->tty_drivers);
 
+	if (!(driver->flags & TTY_DRIVER_CUSTOM_WORKQUEUE))
+		destroy_workqueue(driver->flip_wq);
+
 err_unreg_char:
 	unregister_chrdev_region(dev, driver->num);
 err:
@@ -3494,6 +3511,8 @@ void tty_unregister_driver(struct tty_driver *driver)
 				driver->num);
 	scoped_guard(mutex, &tty_mutex)
 		list_del(&driver->tty_drivers);
+	if (!(driver->flags & TTY_DRIVER_CUSTOM_WORKQUEUE))
+		destroy_workqueue(driver->flip_wq);
 }
 EXPORT_SYMBOL(tty_unregister_driver);
 
