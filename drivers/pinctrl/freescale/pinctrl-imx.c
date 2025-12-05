@@ -624,8 +624,14 @@ static int imx_pinctrl_parse_functions(struct device_node *np,
 		 * FIXME: This should use pinctrl_generic_add_group() and not
 		 * access the private radix tree directly.
 		 */
-		radix_tree_insert(&pctl->pin_group_tree,
-				  ipctl->group_index++, grp);
+		ret = radix_tree_insert(&pctl->pin_group_tree,
+				  ipctl->group_index, grp);
+		if (ret) {
+			mutex_unlock(&ipctl->mutex);
+			dev_err(ipctl->dev, "radix_tree_insert failed\n");
+			return ret;
+		}
+		ipctl->group_index++;
 		mutex_unlock(&ipctl->mutex);
 
 		imx_pinctrl_parse_groups(child, grp, ipctl, i++);
