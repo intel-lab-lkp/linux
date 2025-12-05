@@ -4,11 +4,12 @@
 #include <pthread.h>
 #include <signal.h>
 #include <stdlib.h>
-#include <unistd.h>
+#include <sys/sysinfo.h>
 #include "common.h"
 
 struct trace_instance *trace_inst;
 int stop_tracing;
+int nr_cpus;
 
 static void stop_trace(int sig)
 {
@@ -55,7 +56,7 @@ common_apply_config(struct osnoise_tool *tool, struct common_params *params)
 	}
 
 	if (!params->cpus) {
-		for (i = 0; i < sysconf(_SC_NPROCESSORS_CONF); i++)
+		for (i = 0; i < nr_cpus; i++)
 			CPU_SET(i, &params->monitored_cpus);
 	}
 
@@ -103,6 +104,7 @@ int run_tool(struct tool_ops *ops, int argc, char *argv[])
 	bool stopped;
 	int retval;
 
+	nr_cpus = get_nprocs_conf();
 	params = ops->parse_args(argc, argv);
 	if (!params)
 		exit(1);
