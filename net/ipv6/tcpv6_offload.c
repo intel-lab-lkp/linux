@@ -27,7 +27,7 @@ static void tcp6_check_fraglist_gro(struct list_head *head, struct sk_buff *skb,
 	if (likely(!(skb->dev->features & NETIF_F_GRO_FRAGLIST)))
 		return;
 
-	p = tcp_gro_lookup(head, th);
+	p = tcp_gro_lookup(head, skb, th);
 	if (p) {
 		NAPI_GRO_CB(skb)->is_flist = NAPI_GRO_CB(p)->is_flist;
 		return;

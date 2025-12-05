@@ -420,6 +420,18 @@ struct sk_buff *udp_gro_receive(struct list_head *head, struct sk_buff *skb,
 				struct udphdr *uh, struct sock *sk);
 int udp_gro_complete(struct sk_buff *skb, int nhoff, udp_lookup_t lookup);
 
+/* Return the skb hdr corresponding to the specified skb2 hdr.
+ * skb2 is held in the gro engine, i.e. its headers are in the linear part.
+ */
+static inline const void *
+skb_gro_header_from(const struct sk_buff *skb, const struct sk_buff *skb2,
+		    const void *hdr2)
+{
+	size_t offset = (unsigned char *)hdr2 - skb2->data;
+
+	return skb->data + offset;
+}
+
 static inline struct udphdr *udp_gro_udphdr(struct sk_buff *skb)
 {
 	struct udphdr *uh;
@@ -430,6 +442,13 @@ static inline struct udphdr *udp_gro_udphdr(struct sk_buff *skb)
 	uh   = skb_gro_header(skb, hlen, off);
 
 	return uh;
+}
+
+static inline const struct udphdr *
+udp_gro_udphdr_from(const struct sk_buff *skb, const struct sk_buff *skb2,
+		    const struct udphdr *uh)
+{
+	return (const struct udphdr *)skb_gro_header_from(skb, skb2, uh);
 }
 
 static inline __wsum ip6_gro_compute_pseudo(const struct sk_buff *skb,
@@ -618,6 +637,13 @@ static inline struct tcphdr *tcp_gro_pull_header(struct sk_buff *skb)
 	skb_gro_pull(skb, thlen);
 
 	return th;
+}
+
+static inline const struct tcphdr *
+tcp_gro_header_from(const struct sk_buff *skb, const struct sk_buff *skb2,
+		    const struct tcphdr *th)
+{
+	return (const struct tcphdr *)skb_gro_header_from(skb, skb2, th);
 }
 
 #endif /* _NET_GRO_H */

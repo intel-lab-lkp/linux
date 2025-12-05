@@ -261,16 +261,17 @@ out:
 	return segs;
 }
 
-struct sk_buff *tcp_gro_lookup(struct list_head *head, struct tcphdr *th)
+struct sk_buff *tcp_gro_lookup(struct list_head *head, struct sk_buff *skb,
+			       struct tcphdr *th)
 {
-	struct tcphdr *th2;
+	const struct tcphdr *th2;
 	struct sk_buff *p;
 
 	list_for_each_entry(p, head, list) {
 		if (!NAPI_GRO_CB(p)->same_flow)
 			continue;
 
-		th2 = tcp_hdr(p);
+		th2 = tcp_gro_header_from(p, skb, th);
 		if (*(u32 *)&th->source ^ *(u32 *)&th2->source) {
 			NAPI_GRO_CB(p)->same_flow = 0;
 			continue;
@@ -287,8 +288,8 @@ struct sk_buff *tcp_gro_receive(struct list_head *head, struct sk_buff *skb,
 {
 	unsigned int thlen = th->doff * 4;
 	struct sk_buff *pp = NULL;
+	const struct tcphdr *th2;
 	struct sk_buff *p;
-	struct tcphdr *th2;
 	unsigned int len;
 	__be32 flags;
 	unsigned int mss = 1;
@@ -298,11 +299,11 @@ struct sk_buff *tcp_gro_receive(struct list_head *head, struct sk_buff *skb,
 	len = skb_gro_len(skb);
 	flags = tcp_flag_word(th);
 
-	p = tcp_gro_lookup(head, th);
+	p = tcp_gro_lookup(head, skb, th);
 	if (!p)
 		goto out_check_final;
 
-	th2 = tcp_hdr(p);
+	th2 = tcp_gro_header_from(p, skb, th);
 	flush = (__force int)(flags & TCP_FLAG_CWR);
 	flush |= (__force int)((flags ^ tcp_flag_word(th2)) &
 		  ~(TCP_FLAG_FIN | TCP_FLAG_PSH));
@@ -398,7 +399,7 @@ static void tcp4_check_fraglist_gro(struct list_head *head, struct sk_buff *skb,
 	if (likely(!(skb->dev->features & NETIF_F_GRO_FRAGLIST)))
 		return;
 
-	p = tcp_gro_lookup(head, th);
+	p = tcp_gro_lookup(head, skb, th);
 	if (p) {
 		NAPI_GRO_CB(skb)->is_flist = NAPI_GRO_CB(p)->is_flist;
 		return;
