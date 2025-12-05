@@ -10,10 +10,6 @@ struct drmem_lmb;
 
 #ifdef CONFIG_NUMA
 
-/*
- * If zone_reclaim_mode is enabled, a RECLAIM_DISTANCE of 10 will mean that
- * all zones on all nodes will be eligible for zone_reclaim().
- */
 #define RECLAIM_DISTANCE 10
 
 #include <asm/mmzone.h>

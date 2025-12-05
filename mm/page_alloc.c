@@ -3823,8 +3823,8 @@ retry:
 		 * If kswapd is already active on a node, keep looking
 		 * for other nodes that might be idle. This can happen
 		 * if another process has NUMA bindings and is causing
-		 * kswapd wakeups on only some nodes. Avoid accidental
-		 * "node_reclaim_mode"-like behavior in this case.
+		 * kswapd wakeups on only some nodes. Avoid accidentally
+		 * overpressuring the local node when remote nodes are free.
 		 */
 		if (skip_kswapd_nodes &&
 		    !waitqueue_active(&zone->zone_pgdat->kswapd_wait)) {

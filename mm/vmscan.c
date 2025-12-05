@@ -7503,16 +7503,6 @@ static const struct ctl_table vmscan_sysctl_table[] = {
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_TWO_HUNDRED,
 	},
-#ifdef CONFIG_NUMA
-	{
-		.procname	= "zone_reclaim_mode",
-		.data		= &node_reclaim_mode,
-		.maxlen		= sizeof(node_reclaim_mode),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax,
-		.extra1		= SYSCTL_ZERO,
-	}
-#endif
 };
 
 static int __init kswapd_init(void)
@@ -7529,14 +7519,6 @@ static int __init kswapd_init(void)
 module_init(kswapd_init)
 
 #ifdef CONFIG_NUMA
-/*
- * Node reclaim mode
- *
- * If non-zero call node_reclaim when the number of free pages falls below
- * the watermarks.
- */
-int node_reclaim_mode __read_mostly;
-
 /*
  * Try to free up some pages from this node through reclaim.
  */
