@@ -188,11 +188,11 @@ drm_crtc_vblank_crtc(struct drm_crtc *crtc)
 }
 EXPORT_SYMBOL(drm_crtc_vblank_crtc);
 
-static void store_vblank(struct drm_device *dev, unsigned int pipe,
-			 u32 vblank_count_inc,
-			 ktime_t t_vblank, u32 last)
+static void drm_vblank_crtc_store(struct drm_vblank_crtc *vblank,
+				  u32 vblank_count_inc,
+				  ktime_t t_vblank, u32 last)
 {
-	struct drm_vblank_crtc *vblank = drm_vblank_crtc(dev, pipe);
+	struct drm_device *dev = vblank->dev;
 
 	assert_spin_locked(&dev->vblank_time_lock);
 
@@ -277,7 +277,7 @@ static void drm_vblank_crtc_reset_timestamp(struct drm_vblank_crtc *vblank)
 	 * +1 to make sure user will never see the same
 	 * vblank counter value before and after a modeset
 	 */
-	store_vblank(dev, pipe, 1, t_vblank, cur_vblank);
+	drm_vblank_crtc_store(vblank, 1, t_vblank, cur_vblank);
 
 	spin_unlock(&dev->vblank_time_lock);
 }
@@ -384,7 +384,7 @@ static void drm_vblank_crtc_update_count(struct drm_vblank_crtc *vblank,
 	if (!rc && !in_vblank_irq)
 		t_vblank = 0;
 
-	store_vblank(dev, pipe, diff, t_vblank, cur_vblank);
+	drm_vblank_crtc_store(vblank, diff, t_vblank, cur_vblank);
 }
 
 u64 drm_vblank_crtc_count(struct drm_vblank_crtc *vblank)
@@ -395,8 +395,8 @@ u64 drm_vblank_crtc_count(struct drm_vblank_crtc *vblank)
 
 	/*
 	 * This read barrier corresponds to the implicit write barrier of the
-	 * write seqlock in store_vblank(). Note that this is the only place
-	 * where we need an explicit barrier, since all other access goes
+	 * write seqlock in drm_vblank_crtc_store(). Note that this is the only
+	 * place where we need an explicit barrier, since all other access goes
 	 * through drm_vblank_crtc_count_and_time(), which already has the
 	 * required read barrier curtesy of the read seqlock.
 	 */
