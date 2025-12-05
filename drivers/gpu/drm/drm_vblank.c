@@ -209,27 +209,27 @@ static void drm_vblank_crtc_store(struct drm_vblank_crtc *vblank,
 	write_sequnlock(&vblank->seqlock);
 }
 
-static u32 drm_max_vblank_count(struct drm_device *dev, unsigned int pipe)
+static u32 drm_vblank_crtc_max_count(struct drm_vblank_crtc *vblank)
 {
-	struct drm_vblank_crtc *vblank = drm_vblank_crtc(dev, pipe);
-
-	return vblank->max_vblank_count ?: dev->max_vblank_count;
+	return vblank->max_vblank_count ?: vblank->dev->max_vblank_count;
 }
 
 /*
  * "No hw counter" fallback implementation of .get_vblank_counter() hook,
  * if there is no usable hardware frame counter available.
  */
-static u32 drm_vblank_no_hw_counter(struct drm_device *dev, unsigned int pipe)
+static u32 drm_vblank_crtc_no_hw_counter(struct drm_vblank_crtc *vblank)
 {
-	drm_WARN_ON_ONCE(dev, drm_max_vblank_count(dev, pipe) != 0);
+	drm_WARN_ON_ONCE(vblank->dev, drm_vblank_crtc_max_count(vblank) != 0);
 	return 0;
 }
 
-static u32 __get_vblank_counter(struct drm_device *dev, unsigned int pipe)
+static u32 drm_vblank_crtc_get_counter(struct drm_vblank_crtc *vblank)
 {
+	struct drm_device *dev = vblank->dev;
+
 	if (drm_core_check_feature(dev, DRIVER_MODESET)) {
-		struct drm_crtc *crtc = drm_crtc_from_index(dev, pipe);
+		struct drm_crtc *crtc = drm_crtc_from_vblank(vblank);
 
 		if (drm_WARN_ON(dev, !crtc))
 			return 0;
@@ -238,7 +238,7 @@ static u32 __get_vblank_counter(struct drm_device *dev, unsigned int pipe)
 			return crtc->funcs->get_vblank_counter(crtc);
 	}
 
-	return drm_vblank_no_hw_counter(dev, pipe);
+	return drm_vblank_crtc_no_hw_counter(vblank);
 }
 
 /*
@@ -266,9 +266,9 @@ static void drm_vblank_crtc_reset_timestamp(struct drm_vblank_crtc *vblank)
 	 * when drm_vblank_enable() applies the diff
 	 */
 	do {
-		cur_vblank = __get_vblank_counter(dev, pipe);
+		cur_vblank = drm_vblank_crtc_get_counter(vblank);
 		rc = drm_get_last_vbltimestamp(dev, pipe, &t_vblank, false);
-	} while (cur_vblank != __get_vblank_counter(dev, pipe) && --count > 0);
+	} while (cur_vblank != drm_vblank_crtc_get_counter(vblank) && --count > 0);
 
 	/*
 	 * Only reinitialize corresponding vblank timestamp if high-precision query
@@ -309,7 +309,7 @@ static void drm_vblank_crtc_update_count(struct drm_vblank_crtc *vblank,
 	ktime_t t_vblank;
 	int count = DRM_TIMESTAMP_MAXRETRIES;
 	int framedur_ns = vblank->framedur_ns;
-	u32 max_vblank_count = drm_max_vblank_count(dev, pipe);
+	u32 max_vblank_count = drm_vblank_crtc_max_count(vblank);
 
 	/*
 	 * Interrupts were disabled prior to this call, so deal with counter
@@ -324,9 +324,9 @@ static void drm_vblank_crtc_update_count(struct drm_vblank_crtc *vblank,
 	 * corresponding vblank timestamp.
 	 */
 	do {
-		cur_vblank = __get_vblank_counter(dev, pipe);
+		cur_vblank = drm_vblank_crtc_get_counter(vblank);
 		rc = drm_get_last_vbltimestamp(dev, pipe, &t_vblank, in_vblank_irq);
-	} while (cur_vblank != __get_vblank_counter(dev, pipe) && --count > 0);
+	} while (cur_vblank != drm_vblank_crtc_get_counter(vblank) && --count > 0);
 
 	if (max_vblank_count) {
 		/* trust the hw counter when it's around */
@@ -1558,7 +1558,7 @@ void drm_crtc_vblank_restore(struct drm_crtc *crtc)
 	u64 diff_ns;
 	u32 cur_vblank, diff = 1;
 	int count = DRM_TIMESTAMP_MAXRETRIES;
-	u32 max_vblank_count = drm_max_vblank_count(dev, pipe);
+	u32 max_vblank_count = drm_vblank_crtc_max_count(vblank);
 
 	drm_WARN_ON_ONCE(dev, !crtc->funcs->get_vblank_timestamp);
 	drm_WARN_ON_ONCE(dev, vblank->inmodeset);
@@ -1573,9 +1573,9 @@ void drm_crtc_vblank_restore(struct drm_crtc *crtc)
 	framedur_ns = vblank->framedur_ns;
 
 	do {
-		cur_vblank = __get_vblank_counter(dev, pipe);
+		cur_vblank = drm_vblank_crtc_get_counter(vblank);
 		drm_get_last_vbltimestamp(dev, pipe, &t_vblank, false);
-	} while (cur_vblank != __get_vblank_counter(dev, pipe) && --count > 0);
+	} while (cur_vblank != drm_vblank_crtc_get_counter(vblank) && --count > 0);
 
 	diff_ns = ktime_to_ns(ktime_sub(t_vblank, vblank->time));
 	if (framedur_ns)
