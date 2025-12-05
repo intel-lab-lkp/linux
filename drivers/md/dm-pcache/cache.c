@@ -42,7 +42,7 @@ static int cache_info_init(struct pcache_cache *cache, struct pcache_cache_optio
 	if (IS_ERR(cache_info_addr))
 		return PTR_ERR(cache_info_addr);
 
-    if (cache_info_addr) {
+	if (cache_info_addr) {
 		int index = ((char *)cache_info_addr - (char *)cache->cache_info_addr) /
 				PCACHE_CACHE_INFO_SIZE;
 
