@@ -185,7 +185,11 @@
 				interrupt-parent = <&CPM_PIC>;
 				fsl,cpm-command = <0000>;
 				linux,network-index = <0>;
-				fixed-link = <0 0 10 0 0>;
+
+				fixed-link {
+					speed = <10>;
+					full-duplex;
+				};
 			};
 		};
 	};

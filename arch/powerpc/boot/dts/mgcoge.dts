@@ -153,7 +153,11 @@
 				interrupt-parent = <&PIC>;
 				linux,network-index = <0>;
 				fsl,cpm-command = <0xce00000>;
-				fixed-link = <0 0 10 0 0>;
+
+				fixed-link {
+					speed = <10>;
+					full-duplex;
+				};
 			};
 
 			i2c@11860 {
