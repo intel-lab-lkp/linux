@@ -256,8 +256,6 @@ INDIRECT_CALLABLE_SCOPE struct sk_buff *ipv6_gro_receive(struct list_head *head,
 		skb_gro_pull(skb, sizeof(*iph));
 	}
 
-	skb_set_transport_header(skb, skb_gro_offset(skb));
-
 	NAPI_GRO_CB(skb)->proto = proto;
 
 	flush--;
@@ -382,6 +380,7 @@ INDIRECT_CALLABLE_SCOPE int ipv6_gro_complete(struct sk_buff *skb, int nhoff)
 	if (WARN_ON(!ops || !ops->callbacks.gro_complete))
 		goto out;
 
+	skb_set_transport_header(skb, nhoff);
 	err = INDIRECT_CALL_L4(ops->callbacks.gro_complete, tcp6_gro_complete,
 			       udp6_gro_complete, skb, nhoff);
 

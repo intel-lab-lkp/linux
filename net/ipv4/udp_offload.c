@@ -751,6 +751,8 @@ static struct sk_buff *udp_gro_receive_segment(struct list_head *head,
 			pp = p;
 		} else {
 			if (NAPI_GRO_CB(skb)->is_flist) {
+				int offset;
+
 				if (!pskb_may_pull(skb, skb_gro_offset(skb))) {
 					NAPI_GRO_CB(skb)->flush = 1;
 					return NULL;
@@ -761,6 +763,8 @@ static struct sk_buff *udp_gro_receive_segment(struct list_head *head,
 					return NULL;
 				}
 				skb_set_network_header(skb, skb_gro_receive_network_offset(skb));
+				offset = (unsigned char *)uh - skb->data;
+				skb_set_transport_header(skb, offset);
 				ret = skb_gro_receive_list(p, skb);
 			} else {
 				skb_gro_postpull_rcsum(skb, uh,
