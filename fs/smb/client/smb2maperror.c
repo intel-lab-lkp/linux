@@ -8,6 +8,7 @@
  *
  */
 #include <linux/errno.h>
+#include <linux/sort.h>
 #include "cifsglob.h"
 #include "cifs_debug.h"
 #include "smb2pdu.h"
@@ -22,7 +23,7 @@ struct status_to_posix_error {
 	char *status_string;
 };
 
-static const struct status_to_posix_error smb2_error_map_table[] = {
+static struct status_to_posix_error smb2_error_map_table[] = {
 	{STATUS_WAIT_1, -EIO, "STATUS_WAIT_1"},
 	{STATUS_WAIT_2, -EIO, "STATUS_WAIT_2"},
 	{STATUS_WAIT_3, -EIO, "STATUS_WAIT_3"},
@@ -2418,6 +2419,20 @@ static const struct status_to_posix_error smb2_error_map_table[] = {
 	"STATUS_SMB_NO_PREAUTH_INTEGRITY_HASH_OVERLAP"},
 };
 
+static unsigned int err_map_num = sizeof(smb2_error_map_table) /
+				     sizeof(struct status_to_posix_error);
+
+static int cmp_smb2_status(const void *_a, const void *_b)
+{
+	const struct status_to_posix_error *a = _a, *b = _b;
+
+	if (a->smb2_status < b->smb2_status)
+		return -1;
+	if (a->smb2_status > b->smb2_status)
+		return 1;
+	return 0;
+}
+
 int
 map_smb2_to_linux_error(char *buf, bool log_err)
 {
@@ -2460,4 +2475,12 @@ map_smb2_to_linux_error(char *buf, bool log_err)
 			   le64_to_cpu(shdr->MessageId),
 			   le32_to_cpu(smb2err), rc);
 	return rc;
+}
+
+void smb2_init_maperror(void)
+{
+	/* Sort in ascending order */
+	sort(smb2_error_map_table, err_map_num,
+	     sizeof(struct status_to_posix_error),
+	     cmp_smb2_status, NULL);
 }
