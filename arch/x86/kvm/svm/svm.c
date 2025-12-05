@@ -1011,6 +1011,8 @@ static void svm_recalc_instruction_intercepts(struct kvm_vcpu *vcpu)
 			svm->vmcb->control.virt_ext |= VIRTUAL_VMLOAD_VMSAVE_ENABLE_MASK;
 		}
 	}
+
+	svm_recalc_nested_intercepts_mask(vcpu);
 }
 
 static void svm_recalc_intercepts(struct kvm_vcpu *vcpu)

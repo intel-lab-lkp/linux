@@ -185,6 +185,33 @@ void recalc_intercepts(struct vcpu_svm *svm)
 }
 
 /*
+ * If a feature is not advertised to L1, set the mask bit for the corresponding
+ * vmcb12 intercept.
+ */
+void svm_recalc_nested_intercepts_mask(struct kvm_vcpu *vcpu)
+{
+	struct vcpu_svm *svm = to_svm(vcpu);
+
+	memset(svm->nested.nested_intercept_mask, 0,
+	       sizeof(svm->nested.nested_intercept_mask));
+
+	if (!guest_cpu_cap_has(vcpu, X86_FEATURE_RDTSCP))
+		set_nested_intercept_mask(&svm->nested, INTERCEPT_RDTSCP);
+
+	if (!guest_cpu_cap_has(vcpu, X86_FEATURE_SKINIT))
+		set_nested_intercept_mask(&svm->nested, INTERCEPT_SKINIT);
+
+	if (!guest_cpu_cap_has(vcpu, X86_FEATURE_XSAVE))
+		set_nested_intercept_mask(&svm->nested, INTERCEPT_XSETBV);
+
+	if (!guest_cpu_cap_has(vcpu, X86_FEATURE_RDPRU))
+		set_nested_intercept_mask(&svm->nested, INTERCEPT_RDPRU);
+
+	if (!guest_cpu_cap_has(vcpu, X86_FEATURE_INVPCID))
+		set_nested_intercept_mask(&svm->nested, INTERCEPT_INVPCID);
+}
+
+/*
  * This array (and its actual size) holds the set of offsets (indexing by chunk
  * size) to process when merging vmcb12's MSRPM with vmcb01's MSRPM.  Note, the
  * set of MSRs for which interception is disabled in vmcb01 is per-vCPU, e.g.
@@ -408,10 +435,11 @@ void __nested_copy_vmcb_control_to_cache(struct kvm_vcpu *vcpu,
 					 struct vmcb_ctrl_area_cached *to,
 					 struct vmcb_control_area *from)
 {
+	struct vcpu_svm *svm = to_svm(vcpu);
 	unsigned int i;
 
 	for (i = 0; i < MAX_INTERCEPT; i++)
-		to->intercepts[i] = from->intercepts[i];
+		to->intercepts[i] = from->intercepts[i] & ~(svm->nested.nested_intercept_mask[i]);
 
 	to->iopm_base_pa        = from->iopm_base_pa;
 	to->msrpm_base_pa       = from->msrpm_base_pa;

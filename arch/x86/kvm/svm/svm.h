@@ -217,6 +217,12 @@ struct svm_nested_state {
 	 * on its side.
 	 */
 	bool force_msr_bitmap_recalc;
+
+	/*
+	 * Reserved bitmask for instruction intercepts that should not be set
+	 * by L1 if the feature is not advertised to L1 in guest CPUID.
+	 */
+	u32 nested_intercept_mask[MAX_INTERCEPT];
 };
 
 struct vcpu_sev_es_state {
@@ -476,6 +482,12 @@ static inline void clr_exception_intercept(struct vcpu_svm *svm, u32 bit)
 	vmcb_clr_intercept(&vmcb->control, INTERCEPT_EXCEPTION_OFFSET + bit);
 
 	recalc_intercepts(svm);
+}
+
+static inline void set_nested_intercept_mask(struct svm_nested_state *nested, u32 bit)
+{
+	WARN_ON_ONCE(bit >= 32 * MAX_INTERCEPT);
+	__set_bit(bit, (unsigned long *)&nested->nested_intercept_mask);
 }
 
 static inline void svm_set_intercept(struct vcpu_svm *svm, int bit)
@@ -745,6 +757,8 @@ static inline bool nested_exit_on_nmi(struct vcpu_svm *svm)
 {
 	return vmcb12_is_intercept(&svm->nested.ctl, INTERCEPT_NMI);
 }
+
+void svm_recalc_nested_intercepts_mask(struct kvm_vcpu *vcpu);
 
 int __init nested_svm_init_msrpm_merge_offsets(void);
 
