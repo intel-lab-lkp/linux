@@ -60,7 +60,9 @@ static void rnbd_clt_put_dev(struct rnbd_clt_dev *dev)
 	kfree(dev->pathname);
 	rnbd_clt_put_sess(dev->sess);
 	mutex_destroy(&dev->lock);
-	kfree(dev);
+
+	if (dev->kobj.state_initialized)
+		kobject_put(&dev->kobj);
 }
 
 static inline bool rnbd_clt_get_dev(struct rnbd_clt_dev *dev)
@@ -1514,7 +1516,7 @@ static bool insert_dev_if_not_exists_devpath(struct rnbd_clt_dev *dev)
 	return found;
 }
 
-static void delete_dev(struct rnbd_clt_dev *dev)
+static void rnbd_delete_dev(struct rnbd_clt_dev *dev)
 {
 	struct rnbd_clt_session *sess = dev->sess;
 
@@ -1635,7 +1637,7 @@ put_iu:
 	kfree(rsp);
 	rnbd_put_iu(sess, iu);
 del_dev:
-	delete_dev(dev);
+	rnbd_delete_dev(dev);
 put_dev:
 	rnbd_clt_put_dev(dev);
 put_sess:
@@ -1644,13 +1646,13 @@ put_sess:
 	return ERR_PTR(ret);
 }
 
-static void destroy_gen_disk(struct rnbd_clt_dev *dev)
+static void rnbd_destroy_gen_disk(struct rnbd_clt_dev *dev)
 {
 	del_gendisk(dev->gd);
 	put_disk(dev->gd);
 }
 
-static void destroy_sysfs(struct rnbd_clt_dev *dev,
+static void rnbd_destroy_sysfs(struct rnbd_clt_dev *dev,
 			  const struct attribute *sysfs_self)
 {
 	rnbd_clt_remove_dev_symlink(dev);
@@ -1688,9 +1690,9 @@ int rnbd_clt_unmap_device(struct rnbd_clt_dev *dev, bool force,
 	dev->dev_state = DEV_STATE_UNMAPPED;
 	mutex_unlock(&dev->lock);
 
-	delete_dev(dev);
-	destroy_sysfs(dev, sysfs_self);
-	destroy_gen_disk(dev);
+	rnbd_delete_dev(dev);
+	rnbd_destroy_sysfs(dev, sysfs_self);
+	rnbd_destroy_gen_disk(dev);
 	if (was_mapped && sess->rtrs)
 		send_msg_close(dev, dev->device_id, RTRS_PERMIT_WAIT);
 
