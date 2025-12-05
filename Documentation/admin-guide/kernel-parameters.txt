@@ -1867,6 +1867,9 @@
 				 param "no_hash_pointers" is an alias for
 				 this mode.
 
+			For controlling hashing dynamically at runtime,
+			use the sysctl `kernel.kptr_restrict` instead.
+
 	hashdist=	[KNL,NUMA] Large hashes allocated during boot
 			are distributed across NUMA nodes.  Defaults on
 			for 64-bit NUMA, off otherwise.

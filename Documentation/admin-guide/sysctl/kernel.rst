@@ -576,6 +576,8 @@ if leaking kernel pointer values to unprivileged users is a concern.
 When ``kptr_restrict`` is set to 2, kernel pointers printed using
 %pK will be replaced with 0s regardless of privileges.
 
+For disabling these security restrictions early at boot time (and once
+for all), use the ``hash_pointers`` boot parameter instead.
 
 modprobe
 ========
