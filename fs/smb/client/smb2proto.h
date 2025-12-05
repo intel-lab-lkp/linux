@@ -12,8 +12,8 @@
 #include <linux/nls.h>
 #include <linux/key-type.h>
 
-struct statfs;
 struct smb_rqst;
+struct status_to_posix_error;
 
 /*
  *****************************************************************
@@ -21,6 +21,7 @@ struct smb_rqst;
  *****************************************************************
  */
 extern int map_smb2_to_linux_error(char *buf, bool log_err);
+extern struct status_to_posix_error *smb2_get_err_map(__le32 smb2_status);
 extern void smb2_init_maperror(void);
 extern int smb2_check_message(char *buf, unsigned int length,
 			      struct TCP_Server_Info *server);
