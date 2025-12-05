@@ -403,6 +403,17 @@ static void test_guest_memfd(unsigned long vm_type)
 		__test_guest_memfd(vm, GUEST_MEMFD_FLAG_MMAP |
 				       GUEST_MEMFD_FLAG_INIT_SHARED);
 
+	if (flags & GUEST_MEMFD_FLAG_NO_DIRECT_MAP) {
+		__test_guest_memfd(vm, GUEST_MEMFD_FLAG_NO_DIRECT_MAP);
+		if (flags & GUEST_MEMFD_FLAG_MMAP)
+			__test_guest_memfd(vm, GUEST_MEMFD_FLAG_NO_DIRECT_MAP |
+					       GUEST_MEMFD_FLAG_MMAP);
+		if (flags & GUEST_MEMFD_FLAG_INIT_SHARED)
+			__test_guest_memfd(vm, GUEST_MEMFD_FLAG_NO_DIRECT_MAP |
+					       GUEST_MEMFD_FLAG_MMAP |
+					       GUEST_MEMFD_FLAG_INIT_SHARED);
+	}
+
 	kvm_vm_free(vm);
 }
 
@@ -445,10 +456,14 @@ static void test_guest_memfd_guest(void)
 	TEST_ASSERT(vm_check_cap(vm, KVM_CAP_GUEST_MEMFD_FLAGS) & GUEST_MEMFD_FLAG_INIT_SHARED,
 		    "Default VM type should support INIT_SHARED, supported flags = 0x%x",
 		    vm_check_cap(vm, KVM_CAP_GUEST_MEMFD_FLAGS));
+	TEST_ASSERT(vm_check_cap(vm, KVM_CAP_GUEST_MEMFD_FLAGS) & GUEST_MEMFD_FLAG_NO_DIRECT_MAP,
+		    "Default VM type should support INIT_SHARED, supported flags = 0x%x",
+		    vm_check_cap(vm, KVM_CAP_GUEST_MEMFD_FLAGS));
 
 	size = vm->page_size;
 	fd = vm_create_guest_memfd(vm, size, GUEST_MEMFD_FLAG_MMAP |
-					     GUEST_MEMFD_FLAG_INIT_SHARED);
+					     GUEST_MEMFD_FLAG_INIT_SHARED |
+					     GUEST_MEMFD_FLAG_NO_DIRECT_MAP);
 	vm_set_user_memory_region2(vm, slot, KVM_MEM_GUEST_MEMFD, gpa, size, NULL, fd, 0);
 
 	mem = kvm_mmap(size, PROT_READ | PROT_WRITE, MAP_SHARED, fd);
