@@ -7538,13 +7538,6 @@ module_init(kswapd_init)
 int node_reclaim_mode __read_mostly;
 
 /*
- * Priority for NODE_RECLAIM. This determines the fraction of pages
- * of a node considered for each zone_reclaim. 4 scans 1/16th of
- * a zone.
- */
-#define NODE_RECLAIM_PRIORITY 4
-
-/*
  * Percentage of pages in a zone that must be unmapped for node_reclaim to
  * occur.
  */
@@ -7644,66 +7637,6 @@ static unsigned long __node_reclaim(struct pglist_data *pgdat, gfp_t gfp_mask,
 	trace_mm_vmscan_node_reclaim_end(sc->nr_reclaimed);
 
 	return sc->nr_reclaimed;
-}
-
-int node_reclaim(struct pglist_data *pgdat, gfp_t gfp_mask, unsigned int order)
-{
-	int ret;
-	/* Minimum pages needed in order to stay on node */
-	const unsigned long nr_pages = 1 << order;
-	struct scan_control sc = {
-		.nr_to_reclaim = max(nr_pages, SWAP_CLUSTER_MAX),
-		.gfp_mask = current_gfp_context(gfp_mask),
-		.order = order,
-		.priority = NODE_RECLAIM_PRIORITY,
-		.may_writepage = !!(node_reclaim_mode & RECLAIM_WRITE),
-		.may_unmap = !!(node_reclaim_mode & RECLAIM_UNMAP),
-		.may_swap = 1,
-		.reclaim_idx = gfp_zone(gfp_mask),
-	};
-
-	/*
-	 * Node reclaim reclaims unmapped file backed pages and
-	 * slab pages if we are over the defined limits.
-	 *
-	 * A small portion of unmapped file backed pages is needed for
-	 * file I/O otherwise pages read by file I/O will be immediately
-	 * thrown out if the node is overallocated. So we do not reclaim
-	 * if less than a specified percentage of the node is used by
-	 * unmapped file backed pages.
-	 */
-	if (node_pagecache_reclaimable(pgdat) <= pgdat->min_unmapped_pages &&
-	    node_page_state_pages(pgdat, NR_SLAB_RECLAIMABLE_B) <=
-	    pgdat->min_slab_pages)
-		return NODE_RECLAIM_FULL;
-
-	/*
-	 * Do not scan if the allocation should not be delayed.
-	 */
-	if (!gfpflags_allow_blocking(gfp_mask) || (current->flags & PF_MEMALLOC))
-		return NODE_RECLAIM_NOSCAN;
-
-	/*
-	 * Only run node reclaim on the local node or on nodes that do not
-	 * have associated processors. This will favor the local processor
-	 * over remote processors and spread off node memory allocations
-	 * as wide as possible.
-	 */
-	if (node_state(pgdat->node_id, N_CPU) && pgdat->node_id != numa_node_id())
-		return NODE_RECLAIM_NOSCAN;
-
-	if (test_and_set_bit_lock(PGDAT_RECLAIM_LOCKED, &pgdat->flags))
-		return NODE_RECLAIM_NOSCAN;
-
-	ret = __node_reclaim(pgdat, gfp_mask, nr_pages, &sc) >= nr_pages;
-	clear_bit_unlock(PGDAT_RECLAIM_LOCKED, &pgdat->flags);
-
-	if (ret)
-		count_vm_event(PGSCAN_ZONE_RECLAIM_SUCCESS);
-	else
-		count_vm_event(PGSCAN_ZONE_RECLAIM_FAILED);
-
-	return ret;
 }
 
 enum {

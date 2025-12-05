@@ -3684,17 +3684,6 @@ static inline bool zone_watermark_fast(struct zone *z, unsigned int order,
 
 #ifdef CONFIG_NUMA
 int __read_mostly node_reclaim_distance = RECLAIM_DISTANCE;
-
-static bool zone_allows_reclaim(struct zone *local_zone, struct zone *zone)
-{
-	return node_distance(zone_to_nid(local_zone), zone_to_nid(zone)) <=
-				node_reclaim_distance;
-}
-#else	/* CONFIG_NUMA */
-static bool zone_allows_reclaim(struct zone *local_zone, struct zone *zone)
-{
-	return true;
-}
 #endif	/* CONFIG_NUMA */
 
 /*
@@ -3868,8 +3857,6 @@ check_alloc_wmark:
 		if (!zone_watermark_fast(zone, order, mark,
 				       ac->highest_zoneidx, alloc_flags,
 				       gfp_mask)) {
-			int ret;
-
 			if (cond_accept_memory(zone, order, alloc_flags))
 				goto try_this_zone;
 
@@ -3885,27 +3872,6 @@ check_alloc_wmark:
 			BUILD_BUG_ON(ALLOC_NO_WATERMARKS < NR_WMARK);
 			if (alloc_flags & ALLOC_NO_WATERMARKS)
 				goto try_this_zone;
-
-			if (!node_reclaim_enabled() ||
-			    !zone_allows_reclaim(zonelist_zone(ac->preferred_zoneref), zone))
-				continue;
-
-			ret = node_reclaim(zone->zone_pgdat, gfp_mask, order);
-			switch (ret) {
-			case NODE_RECLAIM_NOSCAN:
-				/* did not scan */
-				continue;
-			case NODE_RECLAIM_FULL:
-				/* scanned but unreclaimable */
-				continue;
-			default:
-				/* did we reclaim enough */
-				if (zone_watermark_ok(zone, order, mark,
-					ac->highest_zoneidx, alloc_flags))
-					goto try_this_zone;
-
-				continue;
-			}
 		}
 
 try_this_zone:

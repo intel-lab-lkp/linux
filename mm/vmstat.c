@@ -1349,10 +1349,6 @@ const char * const vmstat_text[] = {
 	[I(PGSTEAL_ANON)]			= "pgsteal_anon",
 	[I(PGSTEAL_FILE)]			= "pgsteal_file",
 
-#ifdef CONFIG_NUMA
-	[I(PGSCAN_ZONE_RECLAIM_SUCCESS)]	= "zone_reclaim_success",
-	[I(PGSCAN_ZONE_RECLAIM_FAILED)]		= "zone_reclaim_failed",
-#endif
 	[I(PGINODESTEAL)]			= "pginodesteal",
 	[I(SLABS_SCANNED)]			= "slabs_scanned",
 	[I(KSWAPD_INODESTEAL)]			= "kswapd_inodesteal",
