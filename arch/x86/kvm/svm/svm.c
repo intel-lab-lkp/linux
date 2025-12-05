@@ -2638,7 +2638,7 @@ static int svm_get_feature_msr(u32 msr, u64 *data)
 		return KVM_MSR_RET_UNSUPPORTED;
 	}
 
-	return 0;
+	return KVM_MSR_RET_OK;
 }
 
 static bool sev_es_prevent_msr_access(struct kvm_vcpu *vcpu,
@@ -2655,14 +2655,14 @@ static int svm_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 
 	if (sev_es_prevent_msr_access(vcpu, msr_info)) {
 		msr_info->data = 0;
-		return vcpu->kvm->arch.has_protected_state ? -EINVAL : 0;
+		return vcpu->kvm->arch.has_protected_state ? -EINVAL : KVM_MSR_RET_OK;
 	}
 
 	switch (msr_info->index) {
 	case MSR_AMD64_TSC_RATIO:
 		if (!msr_info->host_initiated &&
 		    !guest_cpu_cap_has(vcpu, X86_FEATURE_TSCRATEMSR))
-			return 1;
+			return KVM_MSR_RET_ERR;
 		msr_info->data = svm->tsc_ratio_msr;
 		break;
 	case MSR_STAR:
@@ -2737,7 +2737,7 @@ static int svm_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	case MSR_IA32_SPEC_CTRL:
 		if (!msr_info->host_initiated &&
 		    !guest_has_spec_ctrl_msr(vcpu))
-			return 1;
+			return KVM_MSR_RET_ERR;
 
 		if (boot_cpu_has(X86_FEATURE_V_SPEC_CTRL))
 			msr_info->data = svm->vmcb->save.spec_ctrl;
@@ -2747,7 +2747,7 @@ static int svm_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	case MSR_AMD64_VIRT_SPEC_CTRL:
 		if (!msr_info->host_initiated &&
 		    !guest_cpu_cap_has(vcpu, X86_FEATURE_VIRT_SSBD))
-			return 1;
+			return KVM_MSR_RET_ERR;
 
 		msr_info->data = svm->virt_spec_ctrl;
 		break;
@@ -2774,7 +2774,7 @@ static int svm_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	default:
 		return kvm_get_msr_common(vcpu, msr_info);
 	}
-	return 0;
+	return KVM_MSR_RET_OK;
 }
 
 static int svm_complete_emulated_msr(struct kvm_vcpu *vcpu, bool err)
@@ -2793,7 +2793,7 @@ static int svm_set_vm_cr(struct kvm_vcpu *vcpu, u64 data)
 	int svm_dis, chg_mask;
 
 	if (data & ~SVM_VM_CR_VALID_MASK)
-		return 1;
+		return KVM_MSR_RET_ERR;
 
 	chg_mask = SVM_VM_CR_VALID_MASK;
 
@@ -2807,21 +2807,21 @@ static int svm_set_vm_cr(struct kvm_vcpu *vcpu, u64 data)
 
 	/* check for svm_disable while efer.svme is set */
 	if (svm_dis && (vcpu->arch.efer & EFER_SVME))
-		return 1;
+		return KVM_MSR_RET_ERR;
 
-	return 0;
+	return KVM_MSR_RET_OK;
 }
 
 static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
-	int ret = 0;
+	int ret = KVM_MSR_RET_OK;
 
 	u32 ecx = msr->index;
 	u64 data = msr->data;
 
 	if (sev_es_prevent_msr_access(vcpu, msr))
-		return vcpu->kvm->arch.has_protected_state ? -EINVAL : 0;
+		return vcpu->kvm->arch.has_protected_state ? -EINVAL : KVM_MSR_RET_OK;
 
 	switch (ecx) {
 	case MSR_AMD64_TSC_RATIO:
@@ -2829,7 +2829,7 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 		if (!guest_cpu_cap_has(vcpu, X86_FEATURE_TSCRATEMSR)) {
 
 			if (!msr->host_initiated)
-				return 1;
+				return KVM_MSR_RET_ERR;
 			/*
 			 * In case TSC scaling is not enabled, always
 			 * leave this MSR at the default value.
@@ -2839,12 +2839,12 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 			 * Ignore this value as well.
 			 */
 			if (data != 0 && data != svm->tsc_ratio_msr)
-				return 1;
+				return KVM_MSR_RET_ERR;
 			break;
 		}
 
 		if (data & SVM_TSC_RATIO_RSVD)
-			return 1;
+			return KVM_MSR_RET_ERR;
 
 		svm->tsc_ratio_msr = data;
 
@@ -2866,10 +2866,10 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 	case MSR_IA32_SPEC_CTRL:
 		if (!msr->host_initiated &&
 		    !guest_has_spec_ctrl_msr(vcpu))
-			return 1;
+			return KVM_MSR_RET_ERR;
 
 		if (kvm_spec_ctrl_test_value(data))
-			return 1;
+			return KVM_MSR_RET_ERR;
 
 		if (boot_cpu_has(X86_FEATURE_V_SPEC_CTRL))
 			svm->vmcb->save.spec_ctrl = data;
@@ -2894,10 +2894,10 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 	case MSR_AMD64_VIRT_SPEC_CTRL:
 		if (!msr->host_initiated &&
 		    !guest_cpu_cap_has(vcpu, X86_FEATURE_VIRT_SSBD))
-			return 1;
+			return KVM_MSR_RET_ERR;
 
 		if (data & ~SPEC_CTRL_SSBD)
-			return 1;
+			return KVM_MSR_RET_ERR;
 
 		svm->virt_spec_ctrl = data;
 		break;
@@ -2992,7 +2992,7 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 		}
 
 		if (data & DEBUGCTL_RESERVED_BITS)
-			return 1;
+			return KVM_MSR_RET_ERR;
 
 		if (svm->vmcb->save.dbgctl == data)
 			break;
@@ -3009,7 +3009,7 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 		 * originating from those kernels.
 		 */
 		if (!msr->host_initiated && !page_address_valid(vcpu, data))
-			return 1;
+			return KVM_MSR_RET_ERR;
 
 		svm->nested.hsave_msr = data & PAGE_MASK;
 		break;
@@ -3022,10 +3022,10 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 		u64 supported_de_cfg;
 
 		if (svm_get_feature_msr(ecx, &supported_de_cfg))
-			return 1;
+			return KVM_MSR_RET_ERR;
 
 		if (data & ~supported_de_cfg)
-			return 1;
+			return KVM_MSR_RET_ERR;
 
 		svm->msr_decfg = data;
 		break;
