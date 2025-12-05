@@ -34,6 +34,9 @@ struct page_owner {
 	pid_t tgid;
 	pid_t free_pid;
 	pid_t free_tgid;
+#ifdef CONFIG_SWAP_PAGE_OWNER
+	bool swapped;
+#endif
 };
 
 struct stack {
@@ -275,7 +278,8 @@ static inline void __update_page_owner_handle(struct page *page,
 					      unsigned short order,
 					      gfp_t gfp_mask,
 					      short last_migrate_reason, u64 ts_nsec,
-					      pid_t pid, pid_t tgid, char *comm)
+					      pid_t pid, pid_t tgid, char *comm,
+					      bool __maybe_unused swapped)
 {
 	struct page_ext_iter iter;
 	struct page_ext *page_ext;
@@ -293,6 +297,9 @@ static inline void __update_page_owner_handle(struct page *page,
 		page_owner->ts_nsec = ts_nsec;
 		strscpy(page_owner->comm, comm,
 			sizeof(page_owner->comm));
+#ifdef CONFIG_SWAP_PAGE_OWNER
+		page_owner->swapped = swapped;
+#endif
 		__set_bit(PAGE_EXT_OWNER, &page_ext->flags);
 		__set_bit(PAGE_EXT_OWNER_ALLOCATED, &page_ext->flags);
 	}
@@ -316,6 +323,9 @@ static inline void __update_page_owner_free_handle(struct page *page,
 		if (handle) {
 			__clear_bit(PAGE_EXT_OWNER_ALLOCATED, &page_ext->flags);
 			page_owner->free_handle = handle;
+#ifdef CONFIG_SWAP_PAGE_OWNER
+			page_owner->swapped = false;
+#endif
 		}
 		page_owner->free_ts_nsec = free_ts_nsec;
 		page_owner->free_pid = current->pid;
@@ -370,7 +380,7 @@ noinline void __set_page_owner(struct page *page, unsigned short order,
 	handle = save_stack(gfp_mask);
 	__update_page_owner_handle(page, handle, order, gfp_mask, -1,
 				   ts_nsec, current->pid, current->tgid,
-				   current->comm);
+				   current->comm, false);
 	inc_stack_record_count(handle, gfp_mask, 1 << order);
 }
 
@@ -428,7 +438,13 @@ void __folio_copy_owner(struct folio *newfolio, struct folio *old)
 				   old_page_owner->order, old_page_owner->gfp_mask,
 				   old_page_owner->last_migrate_reason,
 				   old_page_owner->ts_nsec, old_page_owner->pid,
-				   old_page_owner->tgid, old_page_owner->comm);
+				   old_page_owner->tgid, old_page_owner->comm,
+#ifdef CONFIG_SWAP_PAGE_OWNER
+				   old_page_owner->swapped
+#else
+				   false
+#endif
+				  );
 	/*
 	 * Do not proactively clear PAGE_EXT_OWNER{_ALLOCATED} bits as the folio
 	 * will be freed after migration. Keep them until then as they may be
@@ -602,6 +618,7 @@ void __page_owner_swap_restore(swp_entry_t entry, struct folio *folio)
 
 		page_owner = get_page_owner(page_ext);
 		copy_from_swap_page_owner(page_owner, spo);
+		page_owner->swapped = true;
 
 		if (!handle)
 			handle = page_owner->handle;
@@ -783,11 +800,19 @@ print_page_owner(char __user *buf, size_t count, unsigned long pfn,
 		return -ENOMEM;
 
 	ret = scnprintf(kbuf, count,
-			"Page allocated via order %u, mask %#x(%pGg), pid %d, tgid %d (%s), ts %llu ns\n",
+			"Page allocated via order %u, mask %#x(%pGg), pid %d, tgid %d (%s), ts %llu ns",
 			page_owner->order, page_owner->gfp_mask,
 			&page_owner->gfp_mask, page_owner->pid,
 			page_owner->tgid, page_owner->comm,
 			page_owner->ts_nsec);
+
+#ifdef CONFIG_SWAP_PAGE_OWNER
+	if (static_branch_unlikely(&swap_page_owner_inited) &&
+	    page_owner->swapped) {
+		ret += scnprintf(kbuf + ret, count - ret, " (swapped)");
+	}
+#endif
+	ret += scnprintf(kbuf + ret, count - ret, "\n");
 
 	/* Print information relevant to grouping pages by mobility */
 	pageblock_mt = get_pageblock_migratetype(page);
@@ -1052,7 +1077,8 @@ static void init_pages_in_zone(struct zone *zone)
 			/* Found early allocated page */
 			__update_page_owner_handle(page, early_handle, 0, 0,
 						   -1, local_clock(), current->pid,
-						   current->tgid, current->comm);
+						   current->tgid, current->comm,
+						   false);
 			count++;
 ext_put_continue:
 			page_ext_put(page_ext);
