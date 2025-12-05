@@ -384,13 +384,9 @@ static void drm_update_vblank_count(struct drm_device *dev, unsigned int pipe,
 	store_vblank(dev, pipe, diff, t_vblank, cur_vblank);
 }
 
-u64 drm_vblank_count(struct drm_device *dev, unsigned int pipe)
+u64 drm_vblank_crtc_count(struct drm_vblank_crtc *vblank)
 {
-	struct drm_vblank_crtc *vblank = drm_vblank_crtc(dev, pipe);
 	u64 count;
-
-	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
-		return 0;
 
 	count = atomic64_read(&vblank->count);
 
@@ -404,6 +400,14 @@ u64 drm_vblank_count(struct drm_device *dev, unsigned int pipe)
 	smp_rmb();
 
 	return count;
+}
+
+static u64 drm_vblank_count(struct drm_device *dev, unsigned int pipe)
+{
+	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
+		return 0;
+
+	return drm_vblank_crtc_count(drm_vblank_crtc(dev, pipe));
 }
 
 /**
@@ -1210,16 +1214,14 @@ static int drm_vblank_enable(struct drm_device *dev, unsigned int pipe)
 	return ret;
 }
 
-int drm_vblank_get(struct drm_device *dev, unsigned int pipe)
+int drm_vblank_crtc_get(struct drm_vblank_crtc *vblank)
 {
-	struct drm_vblank_crtc *vblank = drm_vblank_crtc(dev, pipe);
+	struct drm_device *dev = vblank->dev;
+	int pipe = vblank->pipe;
 	unsigned long irqflags;
 	int ret = 0;
 
 	if (!drm_dev_has_vblank(dev))
-		return -EINVAL;
-
-	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
 		return -EINVAL;
 
 	spin_lock_irqsave(&dev->vbl_lock, irqflags);
@@ -1235,6 +1237,14 @@ int drm_vblank_get(struct drm_device *dev, unsigned int pipe)
 	spin_unlock_irqrestore(&dev->vbl_lock, irqflags);
 
 	return ret;
+}
+
+static int drm_vblank_get(struct drm_device *dev, unsigned int pipe)
+{
+	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
+		return -EINVAL;
+
+	return drm_vblank_crtc_get(drm_vblank_crtc(dev, pipe));
 }
 
 /**
@@ -1253,13 +1263,10 @@ int drm_crtc_vblank_get(struct drm_crtc *crtc)
 }
 EXPORT_SYMBOL(drm_crtc_vblank_get);
 
-void drm_vblank_put(struct drm_device *dev, unsigned int pipe)
+void drm_vblank_crtc_put(struct drm_vblank_crtc *vblank)
 {
-	struct drm_vblank_crtc *vblank = drm_vblank_crtc(dev, pipe);
+	struct drm_device *dev = vblank->dev;
 	int vblank_offdelay = vblank->config.offdelay_ms;
-
-	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
-		return;
 
 	if (drm_WARN_ON(dev, atomic_read(&vblank->refcount) == 0))
 		return;
@@ -1274,6 +1281,14 @@ void drm_vblank_put(struct drm_device *dev, unsigned int pipe)
 			mod_timer(&vblank->disable_timer,
 				  jiffies + ((vblank_offdelay * HZ) / 1000));
 	}
+}
+
+static void drm_vblank_put(struct drm_device *dev, unsigned int pipe)
+{
+	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
+		return;
+
+	drm_vblank_crtc_put(drm_vblank_crtc(dev, pipe));
 }
 
 /**
@@ -1308,20 +1323,20 @@ int drm_crtc_wait_one_vblank(struct drm_crtc *crtc)
 	int ret;
 	u64 last;
 
-	ret = drm_vblank_get(dev, pipe);
+	ret = drm_vblank_crtc_get(vblank);
 	if (drm_WARN(dev, ret, "vblank not available on crtc %i, ret=%i\n",
 		     pipe, ret))
 		return ret;
 
-	last = drm_vblank_count(dev, pipe);
+	last = drm_vblank_crtc_count(vblank);
 
 	ret = wait_event_timeout(vblank->queue,
-				 last != drm_vblank_count(dev, pipe),
+				 last != drm_vblank_crtc_count(vblank),
 				 msecs_to_jiffies(1000));
 
 	drm_WARN(dev, ret == 0, "vblank wait timed out on crtc %i\n", pipe);
 
-	drm_vblank_put(dev, pipe);
+	drm_vblank_crtc_put(vblank);
 
 	return ret ? 0 : -ETIMEDOUT;
 }
@@ -1368,7 +1383,7 @@ void drm_crtc_vblank_off(struct drm_crtc *crtc)
 	wake_up(&vblank->queue);
 
 	/*
-	 * Prevent subsequent drm_vblank_get() from re-enabling
+	 * Prevent subsequent drm_vblank_crtc_get() from re-enabling
 	 * the vblank interrupt by bumping the refcount.
 	 */
 	if (!vblank->inmodeset) {
@@ -1424,7 +1439,7 @@ void drm_crtc_vblank_reset(struct drm_crtc *crtc)
 
 	spin_lock_irq(&dev->vbl_lock);
 	/*
-	 * Prevent subsequent drm_vblank_get() from enabling the vblank
+	 * Prevent subsequent drm_vblank_crtc_get() from enabling the vblank
 	 * interrupt by bumping the refcount.
 	 */
 	if (!vblank->inmodeset) {
@@ -1497,7 +1512,7 @@ void drm_crtc_vblank_on_config(struct drm_crtc *crtc,
 
 	vblank->config = *config;
 
-	/* Drop our private "prevent drm_vblank_get" refcount */
+	/* Drop our private "prevent drm_vblank_crtc_get" refcount */
 	if (vblank->inmodeset) {
 		atomic_dec(&vblank->refcount);
 		vblank->inmodeset = 0;
@@ -1639,9 +1654,9 @@ static int drm_queue_vblank_event(struct drm_device *dev, unsigned int pipe,
 
 	/*
 	 * drm_crtc_vblank_off() might have been called after we called
-	 * drm_vblank_get(). drm_crtc_vblank_off() holds event_lock around the
+	 * drm_vblank_crtc_get(). drm_crtc_vblank_off() holds event_lock around the
 	 * vblank disable, so no need for further locking.  The reference from
-	 * drm_vblank_get() protects against vblank disable from another source.
+	 * drm_vblank_crtc_get() protects against vblank disable from another source.
 	 */
 	if (!READ_ONCE(vblank->enabled)) {
 		ret = -EINVAL;
@@ -1667,7 +1682,7 @@ static int drm_queue_vblank_event(struct drm_device *dev, unsigned int pipe,
 		send_vblank_event(dev, e, seq, now);
 		vblwait->reply.sequence = seq;
 	} else {
-		/* drm_handle_vblank_events will call drm_vblank_put */
+		/* drm_handle_vblank_events will call drm_vblank_crtc_put */
 		list_add_tail(&e->base.link, &dev->vblank_event_list);
 		vblwait->reply.sequence = req_seq;
 	}
@@ -1830,7 +1845,7 @@ int drm_wait_vblank_ioctl(struct drm_device *dev, void *data,
 
 	if (flags & _DRM_VBLANK_EVENT) {
 		/* must hold on to the vblank ref until the event fires
-		 * drm_vblank_put will be called asynchronously
+		 * drm_vblank_crtc_put will be called asynchronously
 		 */
 		return drm_queue_vblank_event(dev, pipe, req_seq, vblwait, file_priv);
 	}
@@ -2148,7 +2163,7 @@ int drm_crtc_queue_sequence_ioctl(struct drm_device *dev, void *data,
 		send_vblank_event(dev, e, seq, now);
 		queue_seq->sequence = seq;
 	} else {
-		/* drm_handle_vblank_events will call drm_vblank_put */
+		/* drm_handle_vblank_events will call drm_vblank_crtc_put */
 		list_add_tail(&e->base.link, &dev->vblank_event_list);
 		queue_seq->sequence = req_seq;
 	}

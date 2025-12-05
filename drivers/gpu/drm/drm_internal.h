@@ -112,9 +112,9 @@ static inline bool drm_vblank_passed(u64 seq, u64 ref)
 }
 
 void drm_vblank_disable_and_save(struct drm_device *dev, unsigned int pipe);
-int drm_vblank_get(struct drm_device *dev, unsigned int pipe);
-void drm_vblank_put(struct drm_device *dev, unsigned int pipe);
-u64 drm_vblank_count(struct drm_device *dev, unsigned int pipe);
+int drm_vblank_crtc_get(struct drm_vblank_crtc *vblank);
+void drm_vblank_crtc_put(struct drm_vblank_crtc *vblank);
+u64 drm_vblank_crtc_count(struct drm_vblank_crtc *vblank);
 
 /* drm_vblank_work.c */
 static inline void drm_vblank_flush_worker(struct drm_vblank_crtc *vblank)

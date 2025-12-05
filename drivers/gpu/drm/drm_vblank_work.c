@@ -58,7 +58,7 @@ void drm_handle_vblank_works(struct drm_vblank_crtc *vblank)
 			continue;
 
 		list_del_init(&work->node);
-		drm_vblank_put(vblank->dev, vblank->pipe);
+		drm_vblank_crtc_put(vblank);
 		kthread_queue_work(vblank->worker, &work->base);
 		wake = true;
 	}
@@ -80,7 +80,7 @@ void drm_vblank_cancel_pending_works(struct drm_vblank_crtc *vblank)
 
 	list_for_each_entry_safe(work, next, &vblank->pending_work, node) {
 		list_del_init(&work->node);
-		drm_vblank_put(vblank->dev, vblank->pipe);
+		drm_vblank_crtc_put(vblank);
 	}
 
 	wake_up_all(&vblank->work_wait_queue);
@@ -129,7 +129,7 @@ int drm_vblank_work_schedule(struct drm_vblank_work *work,
 		goto out;
 
 	if (list_empty(&work->node)) {
-		ret = drm_vblank_get(dev, vblank->pipe);
+		ret = drm_vblank_crtc_get(vblank);
 		if (ret < 0)
 			goto out;
 	} else if (work->count == count) {
@@ -140,7 +140,7 @@ int drm_vblank_work_schedule(struct drm_vblank_work *work,
 	}
 
 	work->count = count;
-	cur_vbl = drm_vblank_count(dev, vblank->pipe);
+	cur_vbl = drm_vblank_crtc_count(vblank);
 	passed = drm_vblank_passed(cur_vbl, count);
 	if (passed)
 		drm_dbg_core(dev,
@@ -148,7 +148,7 @@ int drm_vblank_work_schedule(struct drm_vblank_work *work,
 			     vblank->pipe, count, cur_vbl);
 
 	if (!nextonmiss && passed) {
-		drm_vblank_put(dev, vblank->pipe);
+		drm_vblank_crtc_put(vblank);
 		ret = kthread_queue_work(vblank->worker, &work->base);
 
 		if (rescheduling) {
@@ -193,7 +193,7 @@ bool drm_vblank_work_cancel_sync(struct drm_vblank_work *work)
 	spin_lock_irq(&dev->event_lock);
 	if (!list_empty(&work->node)) {
 		list_del_init(&work->node);
-		drm_vblank_put(vblank->dev, vblank->pipe);
+		drm_vblank_crtc_put(vblank);
 		ret = true;
 	}
 
