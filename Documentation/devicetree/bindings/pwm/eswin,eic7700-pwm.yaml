@@ -1,0 +1,73 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/pwm/eswin,eic7700-pwm.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: ESWIN EIC7700 PWM controller
+
+maintainers:
+  - Xiang Xu <xuxiang@eswincomputing.com>
+  - Guosheng Wang <wangguosheng@eswincomputing.com>
+  - Xuyang Dong <dongxuyang@eswincomputing.com>
+
+description: |
+  The EIC7700 PWM used the DesignWare APB timers module. The PWM driver
+  supports a duty cycle range from 0% to 100%, with explicit support for
+  both 0% and 100% duty cycles.
+
+allOf:
+  - $ref: pwm.yaml#
+
+properties:
+  compatible:
+    const: eswin,eic7700-pwm
+
+  reg:
+    maxItems: 1
+
+  clocks:
+    maxItems: 1
+
+  resets:
+    maxItems: 1
+
+  "#pwm-cells":
+    const: 3
+
+  pinctrl-0: true
+  pinctrl-1: true
+
+  pinctrl-names:
+    minItems: 1
+    items:
+      - const: default
+      - const: sleep
+
+  snps,pwm-full-range-enable:
+    type: boolean
+    description: |
+      Enable support for 0% and 100% duty cycle.
+      When present, the PWM controller can output 0% and 100% duty cycles.
+
+required:
+  - compatible
+  - reg
+  - clocks
+  - resets
+  - snps,pwm-full-range-enable
+
+additionalProperties: false
+
+examples:
+  - |
+    pwm@50818000 {
+        compatible = "eswin,eic7700-pwm";
+        reg = <0x50818000 0x4000>;
+        clocks = <&clock 242>;
+        resets = <&reset 136>;
+        #pwm-cells = <3>;
+        pinctrl-names = "default";
+        pinctrl-0 = <&fan_pwm>;
+        snps,pwm-full-range-enable;
+    };
