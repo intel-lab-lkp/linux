@@ -40,7 +40,6 @@ enum scan_result {
 	SCAN_PTE_MAPPED_HUGEPAGE,
 	SCAN_LACK_REFERENCED_PAGE,
 	SCAN_PAGE_NULL,
-	SCAN_SCAN_ABORT,
 	SCAN_PAGE_COUNT,
 	SCAN_PAGE_LRU,
 	SCAN_PAGE_LOCK,
@@ -830,30 +829,6 @@ struct collapse_control khugepaged_collapse_control = {
 	.is_khugepaged = true,
 };
 
-static bool hpage_collapse_scan_abort(int nid, struct collapse_control *cc)
-{
-	int i;
-
-	/*
-	 * If node_reclaim_mode is disabled, then no extra effort is made to
-	 * allocate memory locally.
-	 */
-	if (!node_reclaim_enabled())
-		return false;
-
-	/* If there is a count for this node already, it must be acceptable */
-	if (cc->node_load[nid])
-		return false;
-
-	for (i = 0; i < MAX_NUMNODES; i++) {
-		if (!cc->node_load[i])
-			continue;
-		if (node_distance(nid, i) > node_reclaim_distance)
-			return true;
-	}
-	return false;
-}
-
 #define khugepaged_defrag()					\
 	(transparent_hugepage_flags &				\
 	 (1<<TRANSPARENT_HUGEPAGE_DEFRAG_KHUGEPAGED_FLAG))
@@ -1355,10 +1330,6 @@ static int hpage_collapse_scan_pmd(struct mm_struct *mm,
 		 * hit record.
 		 */
 		node = folio_nid(folio);
-		if (hpage_collapse_scan_abort(node, cc)) {
-			result = SCAN_SCAN_ABORT;
-			goto out_unmap;
-		}
 		cc->node_load[node]++;
 		if (!folio_test_lru(folio)) {
 			result = SCAN_PAGE_LRU;
@@ -2342,11 +2313,6 @@ static int hpage_collapse_scan_file(struct mm_struct *mm, unsigned long addr,
 		}
 
 		node = folio_nid(folio);
-		if (hpage_collapse_scan_abort(node, cc)) {
-			result = SCAN_SCAN_ABORT;
-			folio_put(folio);
-			break;
-		}
 		cc->node_load[node]++;
 
 		if (!folio_test_lru(folio)) {
