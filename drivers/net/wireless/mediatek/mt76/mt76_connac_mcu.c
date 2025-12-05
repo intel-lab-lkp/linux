@@ -3125,8 +3125,11 @@ int mt76_connac2_load_patch(struct mt76_dev *dev, const char *fw_name)
 	}
 
 	hdr = (const void *)fw->data;
-	strscpy(build_date, hdr->build_date, sizeof(build_date));
-	build_date[16] = '\0';
+	/* hdr->build_date is 16 bytes. Copy exactly 16 bytes to the 17-byte buffer,
+	 * and then add the null terminator at index 16.
+	 */
+	memcpy(build_date, hdr->build_date, sizeof(hdr->build_date));
+	build_date[sizeof(hdr->build_date)] = '\0';
 	strim(build_date);
 	dev_info(dev->dev, "HW/SW Version: 0x%x, Build Time: %.16s\n",
 		 be32_to_cpu(hdr->hw_sw_ver), build_date);
