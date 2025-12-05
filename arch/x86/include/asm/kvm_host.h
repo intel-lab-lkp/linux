@@ -28,6 +28,7 @@
 #include <linux/sched/vhost_task.h>
 #include <linux/call_once.h>
 #include <linux/atomic.h>
+#include <linux/set_memory.h>
 
 #include <asm/apic.h>
 #include <asm/pvclock-abi.h>
@@ -2480,5 +2481,13 @@ static inline bool kvm_arch_has_irq_bypass(void)
 {
 	return enable_device_posted_irqs;
 }
+
+#ifdef CONFIG_KVM_GUEST_MEMFD
+static inline bool kvm_arch_gmem_supports_no_direct_map(void)
+{
+	return can_set_direct_map();
+}
+#define kvm_arch_gmem_supports_no_direct_map kvm_arch_gmem_supports_no_direct_map
+#endif /* CONFIG_KVM_GUEST_MEMFD */
 
 #endif /* _ASM_X86_KVM_HOST_H */
