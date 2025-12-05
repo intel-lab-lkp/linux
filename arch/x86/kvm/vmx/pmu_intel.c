@@ -374,10 +374,10 @@ static int intel_pmu_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		} else if (intel_pmu_handle_lbr_msrs_access(vcpu, msr_info, true)) {
 			break;
 		}
-		return 1;
+		return KVM_MSR_RET_ERR;
 	}
 
-	return 0;
+	return KVM_MSR_RET_OK;
 }
 
 static int intel_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
@@ -391,14 +391,14 @@ static int intel_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	switch (msr) {
 	case MSR_CORE_PERF_FIXED_CTR_CTRL:
 		if (data & pmu->fixed_ctr_ctrl_rsvd)
-			return 1;
+			return KVM_MSR_RET_ERR;
 
 		if (pmu->fixed_ctr_ctrl != data)
 			reprogram_fixed_counters(pmu, data);
 		break;
 	case MSR_IA32_PEBS_ENABLE:
 		if (data & pmu->pebs_enable_rsvd)
-			return 1;
+			return KVM_MSR_RET_ERR;
 
 		if (pmu->pebs_enable != data) {
 			diff = pmu->pebs_enable ^ data;
@@ -408,13 +408,13 @@ static int intel_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		break;
 	case MSR_IA32_DS_AREA:
 		if (is_noncanonical_msr_address(data, vcpu))
-			return 1;
+			return KVM_MSR_RET_ERR;
 
 		pmu->ds_area = data;
 		break;
 	case MSR_PEBS_DATA_CFG:
 		if (data & pmu->pebs_data_cfg_rsvd)
-			return 1;
+			return KVM_MSR_RET_ERR;
 
 		pmu->pebs_data_cfg = data;
 		break;
@@ -423,7 +423,7 @@ static int intel_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		    (pmc = get_gp_pmc(pmu, msr, MSR_IA32_PMC0))) {
 			if ((msr & MSR_PMC_FULL_WIDTH_BIT) &&
 			    (data & ~pmu->counter_bitmask[KVM_PMC_GP]))
-				return 1;
+				return KVM_MSR_RET_ERR;
 
 			if (!msr_info->host_initiated &&
 			    !(msr & MSR_PMC_FULL_WIDTH_BIT))
@@ -439,7 +439,7 @@ static int intel_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			    (pmu->raw_event_mask & HSW_IN_TX_CHECKPOINTED))
 				reserved_bits ^= HSW_IN_TX_CHECKPOINTED;
 			if (data & reserved_bits)
-				return 1;
+				return KVM_MSR_RET_ERR;
 
 			if (data != pmc->eventsel) {
 				pmc->eventsel = data;
@@ -450,10 +450,10 @@ static int intel_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			break;
 		}
 		/* Not a known PMU MSR. */
-		return 1;
+		return KVM_MSR_RET_ERR;
 	}
 
-	return 0;
+	return KVM_MSR_RET_OK;
 }
 
 /*

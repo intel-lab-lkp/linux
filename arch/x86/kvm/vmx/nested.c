@@ -1325,7 +1325,7 @@ static int vmx_restore_vmx_basic(struct vcpu_vmx *vmx, u64 data)
 		return -EINVAL;
 
 	vmx->nested.msrs.basic = data;
-	return 0;
+	return KVM_MSR_RET_OK;
 }
 
 static void vmx_get_control_msr(struct nested_vmx_msrs *msrs, u32 msr_index,
@@ -1378,7 +1378,7 @@ vmx_restore_control_msr(struct vcpu_vmx *vmx, u32 msr_index, u64 data)
 	vmx_get_control_msr(&vmx->nested.msrs, msr_index, &lowp, &highp);
 	*lowp = data;
 	*highp = data >> 32;
-	return 0;
+	return KVM_MSR_RET_OK;
 }
 
 static int vmx_restore_vmx_misc(struct vcpu_vmx *vmx, u64 data)
@@ -1426,7 +1426,7 @@ static int vmx_restore_vmx_misc(struct vcpu_vmx *vmx, u64 data)
 	vmx->nested.msrs.misc_low = data;
 	vmx->nested.msrs.misc_high = data >> 32;
 
-	return 0;
+	return KVM_MSR_RET_OK;
 }
 
 static int vmx_restore_vmx_ept_vpid_cap(struct vcpu_vmx *vmx, u64 data)
@@ -1440,7 +1440,7 @@ static int vmx_restore_vmx_ept_vpid_cap(struct vcpu_vmx *vmx, u64 data)
 
 	vmx->nested.msrs.ept_caps = data;
 	vmx->nested.msrs.vpid_caps = data >> 32;
-	return 0;
+	return KVM_MSR_RET_OK;
 }
 
 static u64 *vmx_get_fixed0_msr(struct nested_vmx_msrs *msrs, u32 msr_index)
@@ -1467,7 +1467,7 @@ static int vmx_restore_fixed0_msr(struct vcpu_vmx *vmx, u32 msr_index, u64 data)
 		return -EINVAL;
 
 	*vmx_get_fixed0_msr(&vmx->nested.msrs, msr_index) = data;
-	return 0;
+	return KVM_MSR_RET_OK;
 }
 
 /*
@@ -1525,12 +1525,12 @@ int vmx_set_vmx_msr(struct kvm_vcpu *vcpu, u32 msr_index, u64 data)
 		return vmx_restore_vmx_ept_vpid_cap(vmx, data);
 	case MSR_IA32_VMX_VMCS_ENUM:
 		vmx->nested.msrs.vmcs_enum = data;
-		return 0;
+		return KVM_MSR_RET_OK;
 	case MSR_IA32_VMX_VMFUNC:
 		if (data & ~vmcs_config.nested.vmfunc_controls)
 			return -EINVAL;
 		vmx->nested.msrs.vmfunc_controls = data;
-		return 0;
+		return KVM_MSR_RET_OK;
 	default:
 		/*
 		 * The rest of the VMX capability MSRs do not support restore.
@@ -1611,10 +1611,10 @@ int vmx_get_vmx_msr(struct nested_vmx_msrs *msrs, u32 msr_index, u64 *pdata)
 		*pdata = msrs->vmfunc_controls;
 		break;
 	default:
-		return 1;
+		return KVM_MSR_RET_ERR;
 	}
 
-	return 0;
+	return KVM_MSR_RET_OK;
 }
 
 /*

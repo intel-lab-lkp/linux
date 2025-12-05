@@ -2236,15 +2236,15 @@ int tdx_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 		msr->data = FEAT_CTL_LOCKED;
 		if (vcpu->arch.mcg_cap & MCG_LMCE_P)
 			msr->data |= FEAT_CTL_LMCE_ENABLED;
-		return 0;
+		return KVM_MSR_RET_OK;
 	case MSR_IA32_MCG_EXT_CTL:
 		if (!msr->host_initiated && !(vcpu->arch.mcg_cap & MCG_LMCE_P))
-			return 1;
+			return KVM_MSR_RET_ERR;
 		msr->data = vcpu->arch.mcg_ext_ctl;
-		return 0;
+		return KVM_MSR_RET_OK;
 	default:
 		if (!tdx_has_emulated_msr(msr->index))
-			return 1;
+			return KVM_MSR_RET_ERR;
 
 		return kvm_get_msr_common(vcpu, msr);
 	}
@@ -2256,15 +2256,15 @@ int tdx_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 	case MSR_IA32_MCG_EXT_CTL:
 		if ((!msr->host_initiated && !(vcpu->arch.mcg_cap & MCG_LMCE_P)) ||
 		    (msr->data & ~MCG_EXT_CTL_LMCE_EN))
-			return 1;
+			return KVM_MSR_RET_ERR;
 		vcpu->arch.mcg_ext_ctl = msr->data;
-		return 0;
+		return KVM_MSR_RET_OK;
 	default:
 		if (tdx_is_read_only_msr(msr->index))
-			return 1;
+			return KVM_MSR_RET_ERR;
 
 		if (!tdx_has_emulated_msr(msr->index))
-			return 1;
+			return KVM_MSR_RET_ERR;
 
 		return kvm_set_msr_common(vcpu, msr);
 	}
