@@ -19,15 +19,34 @@ static const guid_t img_clk_guid =
 	GUID_INIT(0x82c0d13a, 0x78c5, 0x4244,
 		  0x9b, 0xb1, 0xeb, 0x8b, 0x53, 0x9a, 0x8d, 0x11);
 
+/*
+ * The PCH clock frequency argument to the _DSM method:
+ * PCH_CLK_FREQ_19M = 19.2MHz (default)
+ * PCH_CLK_FREQ_24M = 24MHz
+ */
+#define PCH_CLK_FREQ_19M	1
+#define PCH_CLK_FREQ_24M	3
+
 static void skl_int3472_enable_clk(struct int3472_clock *clk, int enable)
 {
 	struct int3472_discrete_device *int3472 = to_int3472_device(clk);
 	union acpi_object args[3];
 	union acpi_object argv4;
+	u32 dsm_freq_arg;
 
 	if (clk->ena_gpio) {
 		gpiod_set_value_cansleep(clk->ena_gpio, enable);
 		return;
+	}
+
+	switch (clk->frequency) {
+	case 24000000:
+		dsm_freq_arg = PCH_CLK_FREQ_24M;
+		break;
+	case 19200000:
+	default:
+		dsm_freq_arg = PCH_CLK_FREQ_19M;
+		break;
 	}
 
 	args[0].integer.type = ACPI_TYPE_INTEGER;
@@ -35,7 +54,7 @@ static void skl_int3472_enable_clk(struct int3472_clock *clk, int enable)
 	args[1].integer.type = ACPI_TYPE_INTEGER;
 	args[1].integer.value = enable;
 	args[2].integer.type = ACPI_TYPE_INTEGER;
-	args[2].integer.value = 1;
+	args[2].integer.value = dsm_freq_arg;
 
 	argv4.type = ACPI_TYPE_PACKAGE;
 	argv4.package.count = 3;
