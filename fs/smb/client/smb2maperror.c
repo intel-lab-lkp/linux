@@ -2490,3 +2490,7 @@ void smb2_init_maperror(void)
 	     sizeof(struct status_to_posix_error),
 	     cmp_smb2_status, NULL);
 }
+
+#if IS_ENABLED(CONFIG_SMB_KUNIT_TESTS)
+#include "smb2maperror_test.c"
+#endif /* CONFIG_SMB_KUNIT_TESTS */
