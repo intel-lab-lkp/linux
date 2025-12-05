@@ -2655,6 +2655,7 @@ int set_direct_map_valid_noflush(struct page *page, unsigned nr, bool valid)
 
 	return __set_pages_np(page, nr);
 }
+EXPORT_SYMBOL_FOR_MODULES(set_direct_map_valid_noflush, "kvm");
 
 #ifdef CONFIG_DEBUG_PAGEALLOC
 void __kernel_map_pages(struct page *page, int numpages, int enable)
