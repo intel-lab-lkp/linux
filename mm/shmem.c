@@ -2396,7 +2396,7 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 	 * Some architectures may have to restore extra metadata to the
 	 * folio after reading from swap.
 	 */
-	arch_swap_restore(folio_swap(swap, folio), folio);
+	hook_swap_restore(folio_swap(swap, folio), folio);
 
 	if (shmem_should_replace_folio(folio, gfp)) {
 		error = shmem_replace_folio(&folio, gfp, info, index, vma);

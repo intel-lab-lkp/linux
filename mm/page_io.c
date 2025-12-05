@@ -248,7 +248,7 @@ int swap_writeout(struct folio *folio, struct swap_iocb **swap_plug)
 	 * Arch code may have to preserve more data than just the page
 	 * contents, e.g. memory tags.
 	 */
-	ret = arch_prepare_to_swap(folio);
+	ret = hook_prepare_to_swap(folio);
 	if (ret) {
 		folio_mark_dirty(folio);
 		goto out_unlock;

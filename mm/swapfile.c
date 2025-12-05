@@ -1270,7 +1270,7 @@ static void swap_range_free(struct swap_info_struct *si, unsigned long offset,
 	else
 		swap_slot_free_notify = NULL;
 	while (offset <= end) {
-		arch_swap_invalidate_page(si->type, offset);
+		hook_swap_invalidate_page(si->type, offset);
 		if (swap_slot_free_notify)
 			swap_slot_free_notify(si->bdev, offset);
 		offset++;
@@ -2196,7 +2196,7 @@ static int unuse_pte(struct vm_area_struct *vma, pmd_t *pmd,
 	 * when reading from swap. This metadata may be indexed by swap entry
 	 * so this must be called before swap_free().
 	 */
-	arch_swap_restore(folio_swap(entry, folio), folio);
+	hook_swap_restore(folio_swap(entry, folio), folio);
 
 	dec_mm_counter(vma->vm_mm, MM_SWAPENTS);
 	inc_mm_counter(vma->vm_mm, MM_ANONPAGES);
@@ -2931,7 +2931,7 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 	p->cluster_info = NULL;
 	spin_unlock(&p->lock);
 	spin_unlock(&swap_lock);
-	arch_swap_invalidate_area(p->type);
+	hook_swap_invalidate_area(p->type);
 	zswap_swapoff(p->type);
 	mutex_unlock(&swapon_mutex);
 	kfree(p->global_cluster);

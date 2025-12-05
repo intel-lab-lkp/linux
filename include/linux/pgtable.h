@@ -1220,6 +1220,26 @@ static inline void arch_swap_restore(swp_entry_t entry, struct folio *folio)
 }
 #endif
 
+static inline int hook_prepare_to_swap(struct folio *folio)
+{
+	return arch_prepare_to_swap(folio);
+}
+
+static inline void hook_swap_invalidate_page(int type, pgoff_t offset)
+{
+	arch_swap_invalidate_page(type, offset);
+}
+
+static inline void hook_swap_invalidate_area(int type)
+{
+	arch_swap_invalidate_area(type);
+}
+
+static inline void hook_swap_restore(swp_entry_t entry, struct folio *folio)
+{
+	arch_swap_restore(entry, folio);
+}
+
 #ifndef __HAVE_ARCH_MOVE_PTE
 #define move_pte(pte, old_addr, new_addr)	(pte)
 #endif

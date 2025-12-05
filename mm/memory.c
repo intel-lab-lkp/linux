@@ -4945,7 +4945,7 @@ check_folio:
 	 * when reading from swap. This metadata may be indexed by swap entry
 	 * so this must be called before swap_free().
 	 */
-	arch_swap_restore(folio_swap(entry, folio), folio);
+	hook_swap_restore(folio_swap(entry, folio), folio);
 
 	/*
 	 * Remove the swap entry and conditionally try to free up the swapcache.
