@@ -68,6 +68,7 @@ struct swap_page_owner {
 	pid_t pid;
 	pid_t tgid;
 };
+static DEFINE_XARRAY(swap_page_owners);
 #endif
 
 static depot_stack_handle_t dummy_handle;
@@ -459,6 +460,50 @@ static void *alloc_swap_page_owner(void)
 static void free_swap_page_owner(void *spo)
 {
 	kfree(spo);
+}
+
+static int store_swap_page_owner(struct swap_page_owner *spo, swp_entry_t entry)
+{
+	/* lookup the swap entry.val from the page */
+	void *ret = xa_store(&swap_page_owners, entry.val, spo, GFP_KERNEL);
+
+	if (WARN(xa_is_err(ret),
+	    "page_owner: swap: swp_entry not stored (%lu)\n", entry.val)) {
+		free_swap_page_owner(spo);
+		return xa_err(ret);
+	} else if (ret) {
+		/* Entry is being replaced, free the old entry */
+		free_swap_page_owner(ret);
+	}
+
+	return 0;
+}
+
+static void *load_swap_page_owner(swp_entry_t entry)
+{
+	void *spo = xa_load(&swap_page_owners, entry.val);
+
+	if (WARN(!spo,
+	    "page_owner: swap: swp_entry not loaded (%lu)\n", entry.val))
+		return NULL;
+
+	return spo;
+}
+
+static void erase_swap_page_owner(swp_entry_t entry, bool lock)
+{
+	void *spo;
+
+	if (lock)
+		spo = xa_erase(&swap_page_owners, entry.val);
+	else
+		spo = __xa_erase(&swap_page_owners, entry.val);
+
+	if (WARN(!spo,
+	    "page_owner: swap: swp_entry not erased (%lu)\n", entry.val))
+		return;
+
+	free_swap_page_owner(spo);
 }
 
 static void copy_to_swap_page_owner(struct swap_page_owner *spo,
