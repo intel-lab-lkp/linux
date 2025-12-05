@@ -5,12 +5,15 @@
  * Copyright (C) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+#include <linux/cleanup.h>
 #include <linux/completion.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/spi/spi.h>
 #include <linux/stddef.h>
+#include <linux/string.h>
 #include <linux/virtio.h>
 #include <linux/virtio_ring.h>
 #include <linux/virtio_spi.h>
@@ -330,6 +333,170 @@ static void virtio_spi_del_vq(void *data)
 	vdev->config->del_vqs(vdev);
 }
 
+static ssize_t new_device_store(struct device *dev, struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	struct spi_controller *ctlr = container_of(dev, struct spi_controller, dev);
+	char *cs_str = NULL, *max_hz_str = NULL, *mode_str = NULL;
+	u32 mode = SPI_MODE_0, max_hz = 500000, cs = 0; /* MODE_0, 500KHz */
+	char *tok, *save;
+	struct spi_board_info bi = { };
+	struct spi_device *spi;
+	char *modalias = NULL;
+	int err;
+
+	char *kbuf __free(kfree) = kstrdup(buf, GFP_KERNEL);
+	if (!kbuf)
+		return -ENOMEM;
+
+	/*
+	 * Parse: "<modalias> <cs> [max_hz] [mode]"
+	 * Example: "spidev 0 5000000 0"
+	 */
+	tok = strim(strsep(&kbuf, "\n"));
+	if (!tok || !*tok)
+		return -EINVAL;
+
+	save = tok;
+
+	/* Extract all tokens first */
+	modalias = strsep(&save, " \t");
+	if (save && *save)
+		cs_str = strsep(&save, " \t");
+	if (save && *save)
+		max_hz_str = strsep(&save, " \t");
+	if (save && *save)
+		mode_str = strsep(&save, " \t");
+
+	/* Validate required parameters */
+	if (!modalias || !*modalias) {
+		dev_err(dev, "Missing modalias\n");
+		return -EINVAL;
+	}
+
+	if (cs_str && *cs_str) {
+		/* Parse chip_select (optional) */
+		err = kstrtou32(cs_str, 0, &cs);
+		if (err) {
+			dev_err(dev, "Invalid chip_select: %s\n", cs_str);
+			return -EINVAL;
+		}
+
+		if (cs >= ctlr->num_chipselect) {
+			dev_err(dev, "chip_select %u out of range (max %u)\n",
+				cs, ctlr->num_chipselect - 1);
+			return -EINVAL;
+		}
+	}
+
+	/* Parse max_speed_hz (optional) */
+	if (max_hz_str && *max_hz_str) {
+		err = kstrtou32(max_hz_str, 0, &max_hz);
+		if (err) {
+			dev_err(dev, "Invalid max_speed_hz: %s\n", max_hz_str);
+			return -EINVAL;
+		}
+
+		if (max_hz == 0 || max_hz > ctlr->max_speed_hz) {
+			dev_err(dev, "max_speed_hz %u out of range (1-%u)\n",
+				max_hz, ctlr->max_speed_hz);
+			return -EINVAL;
+		}
+	}
+
+	/* Parse mode (optional) */
+	if (mode_str && *mode_str) {
+		err = kstrtouint(mode_str, 0, &mode);
+		if (err) {
+			dev_err(dev, "Invalid mode: %s\n", mode_str);
+			return -EINVAL;
+		}
+	}
+
+	/* Check for extra unexpected parameters */
+	if (save && *save)
+		dev_warn(dev, "Ignoring extra parameters: %s\n", save);
+
+	/* Populate board info */
+	strscpy(bi.modalias, modalias, sizeof(bi.modalias));
+	bi.chip_select	= cs;
+	bi.max_speed_hz	= max_hz;
+	bi.mode		= mode;
+
+	/* Serialize against controller add/remove paths */
+	mutex_lock(&ctlr->bus_lock_mutex);
+	spi = spi_new_device(ctlr, &bi);
+	mutex_unlock(&ctlr->bus_lock_mutex);
+
+	if (!spi) {
+		dev_err(dev, "Failed to create SPI device %s (cs=%u, mode=0x%x)\n",
+			modalias, cs, mode);
+		return -ENODEV;
+	}
+
+	dev_info(dev, "Created SPI device %s: cs=%u, max_hz=%u, mode=0x%x\n",
+		 modalias, cs, max_hz, mode);
+
+	/*
+	 * generic "spidev" may NOT auto-bind. force-bind from userspace via:
+	 * echo spidev > /sys/bus/spi/devices/spiB.C/driver_override
+	 * echo spiB.C > /sys/bus/spi/drivers/spidev/bind
+	 */
+
+	return count;
+}
+
+static ssize_t delete_device_store(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t count)
+{
+	struct spi_controller *ctlr = container_of(dev, struct spi_controller, dev);
+	struct spi_device *spi;
+	struct device *child;
+	char *device_name;
+
+	char *kbuf __free(kfree) = kstrdup(buf, GFP_KERNEL);
+	if (!kbuf)
+		return -ENOMEM;
+
+	device_name = strim(kbuf);
+	if (!device_name || !*device_name) {
+		dev_err(dev, "Empty device name\n");
+		return -EINVAL;
+	}
+
+	guard(mutex)(&ctlr->bus_lock_mutex);
+
+	/* Find and remove device with matching name */
+	child = device_find_child_by_name(&ctlr->dev, device_name);
+	if (!child) {
+		dev_err(dev, "SPI device '%s' not found\n", device_name);
+		return -ENODEV;
+	}
+
+	spi = to_spi_device(child);
+	dev_info(dev, "Removing SPI device %s (cs=%u, modalias=%s)\n",
+		 dev_name(&spi->dev), spi_get_chipselect(spi, 0),
+		 spi->modalias);
+
+	spi_unregister_device(spi);
+
+	return count;
+}
+
+static DEVICE_ATTR_WO(new_device);
+static DEVICE_ATTR_WO(delete_device);
+
+static struct attribute *virtio_spi_attrs[] = {
+	&dev_attr_new_device.attr,
+	&dev_attr_delete_device.attr,
+	NULL,
+};
+
+static const struct attribute_group virtio_spi_attr_group = {
+	.attrs = virtio_spi_attrs,
+};
+
 static int virtio_spi_probe(struct virtio_device *vdev)
 {
 	struct virtio_spi_priv *priv;
@@ -365,6 +532,10 @@ static int virtio_spi_probe(struct virtio_device *vdev)
 	ret = devm_spi_register_controller(&vdev->dev, ctrl);
 	if (ret)
 		return dev_err_probe(&vdev->dev, ret, "Cannot register controller\n");
+
+	ret = devm_device_add_group(&ctrl->dev, &virtio_spi_attr_group);
+	if (ret)
+		return dev_err_probe(&ctrl->dev, ret, "Cannot add virtio_spi_attr_group\n");
 
 	return 0;
 }
