@@ -292,10 +292,11 @@ static void drm_reset_vblank_timestamp(struct drm_device *dev, unsigned int pipe
  * Note: caller must hold &drm_device.vbl_lock since this reads & writes
  * device vblank fields.
  */
-static void drm_update_vblank_count(struct drm_device *dev, unsigned int pipe,
-				    bool in_vblank_irq)
+static void drm_vblank_crtc_update_count(struct drm_vblank_crtc *vblank,
+					 bool in_vblank_irq)
 {
-	struct drm_vblank_crtc *vblank = drm_vblank_crtc(dev, pipe);
+	struct drm_device *dev = vblank->dev;
+	unsigned int pipe = vblank->pipe;
 	u32 cur_vblank, diff;
 	bool rc;
 	ktime_t t_vblank;
@@ -424,8 +425,8 @@ static u64 drm_vblank_count(struct drm_device *dev, unsigned int pipe)
 u64 drm_crtc_accurate_vblank_count(struct drm_crtc *crtc)
 {
 	struct drm_device *dev = crtc->dev;
-	unsigned int pipe = drm_crtc_index(crtc);
-	u64 vblank;
+	struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(crtc);
+	u64 vblank_count;
 	unsigned long flags;
 
 	drm_WARN_ONCE(dev, drm_debug_enabled(DRM_UT_VBL) &&
@@ -434,12 +435,12 @@ u64 drm_crtc_accurate_vblank_count(struct drm_crtc *crtc)
 
 	spin_lock_irqsave(&dev->vblank_time_lock, flags);
 
-	drm_update_vblank_count(dev, pipe, false);
-	vblank = drm_vblank_count(dev, pipe);
+	drm_vblank_crtc_update_count(vblank, false);
+	vblank_count = drm_vblank_crtc_count(vblank);
 
 	spin_unlock_irqrestore(&dev->vblank_time_lock, flags);
 
-	return vblank;
+	return vblank_count;
 }
 EXPORT_SYMBOL(drm_crtc_accurate_vblank_count);
 
@@ -490,7 +491,7 @@ void drm_vblank_disable_and_save(struct drm_device *dev, unsigned int pipe)
 	 * this time. This makes the count account for the entire time
 	 * between drm_crtc_vblank_on() and drm_crtc_vblank_off().
 	 */
-	drm_update_vblank_count(dev, pipe, false);
+	drm_vblank_crtc_update_count(vblank, false);
 	__disable_vblank(dev, pipe);
 	vblank->enabled = false;
 
@@ -1199,11 +1200,12 @@ static int drm_vblank_enable(struct drm_device *dev, unsigned int pipe)
 		if (ret) {
 			atomic_dec(&vblank->refcount);
 		} else {
-			drm_update_vblank_count(dev, pipe, 0);
-			/* drm_update_vblank_count() includes a wmb so we just
-			 * need to ensure that the compiler emits the write
-			 * to mark the vblank as enabled after the call
-			 * to drm_update_vblank_count().
+			drm_vblank_crtc_update_count(vblank, 0);
+			/*
+			 * drm_vblank_crtc_update_count() includes a wmb so we
+			 * just need to ensure that the compiler emits the write
+			 * to mark the vblank as enabled after the call to
+			 * drm_vblank_crtc_update_count().
 			 */
 			WRITE_ONCE(vblank->enabled, true);
 		}
@@ -1959,7 +1961,7 @@ bool drm_handle_vblank(struct drm_device *dev, unsigned int pipe)
 		return false;
 	}
 
-	drm_update_vblank_count(dev, pipe, true);
+	drm_vblank_crtc_update_count(vblank, true);
 
 	spin_unlock(&dev->vblank_time_lock);
 
