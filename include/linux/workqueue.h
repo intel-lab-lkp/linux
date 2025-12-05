@@ -172,6 +172,13 @@ struct workqueue_attrs {
 	int nr_idle_extra;
 
 	/**
+	 * @private: whether use individual worker_pool
+	 *
+	 * true means do not share with others even if attributes are the same
+	 */
+	bool private;
+
+	/**
 	 * @cpumask: allowed CPUs
 	 *
 	 * Work items in this workqueue are affine to these CPUs and not allowed

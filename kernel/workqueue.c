@@ -4711,6 +4711,7 @@ static void copy_workqueue_attrs(struct workqueue_attrs *to,
 	to->policy = from->policy;
 	to->prio = from->prio;
 	to->nr_idle_extra = from->nr_idle_extra;
+	to->private = from->private;
 	cpumask_copy(to->cpumask, from->cpumask);
 	cpumask_copy(to->__pod_cpumask, from->__pod_cpumask);
 	to->affn_strict = from->affn_strict;
@@ -4760,6 +4761,8 @@ static bool wqattrs_equal(const struct workqueue_attrs *a,
 	if (a->prio != b->prio)
 		return false;
 	if (a->nr_idle_extra != b->nr_idle_extra)
+		return false;
+	if (a->private || b->private)
 		return false;
 	if (a->affn_strict != b->affn_strict)
 		return false;
@@ -7100,6 +7103,7 @@ module_param_cb(default_affinity_scope, &wq_affn_dfl_ops, NULL, 0644);
  *  nice		RW int	: nice value of the workers
  *  rtprio		RW int	: rtprio value of the workers
  *  nr_idle_extra	RW int	: number of extra idle thread reserved
+ *  private		RW int	: number of extra idle thread reserved
  *  cpumask		RW mask	: bitmask of allowed CPUs for the workers
  *  affinity_scope	RW str  : worker CPU affinity scope (cache, numa, none)
  *  affinity_strict	RW bool : worker CPU affinity is strict
@@ -7351,6 +7355,38 @@ out_unlock:
 	return ret ?: count;
 }
 
+static ssize_t wq_private_show(struct device *dev, struct device_attribute *attr,
+			       char *buf)
+{
+	struct workqueue_struct *wq = dev_to_wq(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 wq->unbound_attrs->private);
+}
+
+static ssize_t wq_private_store(struct device *dev, struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	struct workqueue_struct *wq = dev_to_wq(dev);
+	struct workqueue_attrs *attrs;
+	int ret = -ENOMEM;
+
+	apply_wqattrs_lock();
+
+	attrs = wq_sysfs_prep_attrs(wq);
+	if (!attrs)
+		goto out_unlock;
+
+	ret = -EINVAL;
+	if (!kstrtobool(buf, &attrs->private))
+		ret = apply_workqueue_attrs_locked(wq, attrs);
+
+out_unlock:
+	apply_wqattrs_unlock();
+	free_workqueue_attrs(attrs);
+	return ret ?: count;
+}
+
 static ssize_t wq_cpumask_show(struct device *dev,
 			       struct device_attribute *attr, char *buf)
 {
@@ -7465,6 +7501,7 @@ static struct device_attribute wq_sysfs_unbound_attrs[] = {
 	__ATTR(nice, 0644, wq_nice_show, wq_nice_store),
 	__ATTR(rtprio, 0644, wq_rtprio_show, wq_rtprio_store),
 	__ATTR(nr_idle_extra, 0644, wq_idle_extra_show, wq_idle_extra_store),
+	__ATTR(private, 0644, wq_private_show, wq_private_store),
 	__ATTR(cpumask, 0644, wq_cpumask_show, wq_cpumask_store),
 	__ATTR(affinity_scope, 0644, wq_affn_scope_show, wq_affn_scope_store),
 	__ATTR(affinity_strict, 0644, wq_affinity_strict_show, wq_affinity_strict_store),
