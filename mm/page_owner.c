@@ -525,6 +525,126 @@ static void copy_from_swap_page_owner(struct page_owner *page_owner,
 	page_owner->tgid = spo->tgid;
 	strscpy(page_owner->comm, spo->comm, sizeof(page_owner->comm));
 }
+
+/* Store the initial stack information from page_owner to xarray. */
+int __page_owner_prepare_to_swap(struct folio *folio)
+{
+	struct page_ext_iter iter;
+	struct page_ext *page_ext;
+	struct page_owner *page_owner;
+	struct swap_page_owner *spo;
+	depot_stack_handle_t handle = 0;
+	swp_entry_t entry;
+	long i = 0, nr_pages = folio_nr_pages(folio);
+	int err;
+
+	rcu_read_lock();
+	for_each_page_ext(&folio->page, nr_pages, page_ext, iter) {
+		spo = alloc_swap_page_owner();
+		if (!spo) {
+			err = -ENOMEM;
+			goto out_locked;
+		}
+
+		page_owner = get_page_owner(page_ext);
+		copy_to_swap_page_owner(spo, page_owner);
+		entry = page_swap_entry(folio_page(folio, i));
+		err = store_swap_page_owner(spo, entry);
+		if (err)
+			goto out_locked;
+
+		if (!handle)
+			handle = page_owner->handle;
+		i++;
+	}
+	rcu_read_unlock();
+
+	/*
+	 * Fix-up: increment refcount of the initial allocation.
+	 * It will be decremented by page-free at swap-out.
+	 */
+	inc_stack_record_count(handle, GFP_KERNEL, nr_pages);
+
+	return 0;
+
+out_locked:
+	for_each_page_ext(&folio->page, nr_pages, page_ext, iter) {
+		if (!i--)
+			break;
+
+		entry = page_swap_entry(folio_page(folio, i));
+		erase_swap_page_owner(entry, true);
+
+		page_owner = get_page_owner(page_ext);
+
+	}
+	rcu_read_unlock();
+	return err;
+}
+
+/* Load the initial stack information from xarray to page_owner. */
+void __page_owner_swap_restore(swp_entry_t entry, struct folio *folio)
+{
+	struct page_ext_iter iter;
+	struct page_ext *page_ext;
+	struct page_owner *page_owner;
+	struct swap_page_owner *spo;
+	depot_stack_handle_t handle = 0;
+	long i = 0, nr_pages = folio_nr_pages(folio);
+
+	rcu_read_lock();
+	for_each_page_ext(&folio->page, nr_pages, page_ext, iter) {
+		spo = (struct swap_page_owner *) load_swap_page_owner(entry);
+		if (!spo) {
+			rcu_read_unlock();
+			return;
+		}
+
+		page_owner = get_page_owner(page_ext);
+		copy_from_swap_page_owner(page_owner, spo);
+
+		if (!handle)
+			handle = page_owner->handle;
+		i++;
+		entry.val++;
+	}
+	rcu_read_unlock();
+
+	/*
+	 * Fix-up: decrement refcount of the swap-in allocation.
+	 * It was incremented by the page-alloc at swap-in.
+	 * (early_handle: see __reset_page_owner().)
+	 *
+	 * FIXME(mfo): 'dec_stack_record_count: refcount went to 0 ...'
+	 * with stack_depot oops is hit occasionaly on tests or shutdown.
+	 */
+	if (handle != early_handle)
+		dec_stack_record_count(handle, nr_pages);
+}
+
+void __page_owner_swap_invalidate_page(int type, pgoff_t offset)
+{
+	swp_entry_t entry = swp_entry(type, offset);
+
+	erase_swap_page_owner(entry, true);
+}
+
+void __page_owner_swap_invalidate_area(int type)
+{
+	swp_entry_t first_entry = swp_entry(type, 0);
+	swp_entry_t last_entry = swp_entry(type + 1, 0);
+	swp_entry_t entry;
+	void *spo;
+
+	XA_STATE(xa_state, &swap_page_owners, first_entry.val);
+
+	xa_lock(&swap_page_owners);
+	xas_for_each(&xa_state, spo, last_entry.val - 1) {
+		entry.val = xa_state.xa_index;
+		erase_swap_page_owner(entry, false);
+	}
+	xa_unlock(&swap_page_owners);
+}
 #endif
 
 void pagetypeinfo_showmixedcount_print(struct seq_file *m,

@@ -75,4 +75,53 @@ static inline void dump_page_owner(const struct page *page)
 {
 }
 #endif /* CONFIG_PAGE_OWNER */
+
+#ifdef CONFIG_SWAP_PAGE_OWNER
+extern struct static_key_false swap_page_owner_inited;
+
+extern int __page_owner_prepare_to_swap(struct folio *folio);
+extern void __page_owner_swap_restore(swp_entry_t entry, struct folio *folio);
+extern void __page_owner_swap_invalidate_page(int type, pgoff_t offset);
+extern void __page_owner_swap_invalidate_area(int type);
+
+static inline int page_owner_prepare_to_swap(struct folio *folio)
+{
+	if (static_branch_unlikely(&swap_page_owner_inited))
+		return __page_owner_prepare_to_swap(folio);
+
+	return 0;
+}
+
+static inline void page_owner_swap_restore(swp_entry_t entry, struct folio *folio)
+{
+	if (static_branch_unlikely(&swap_page_owner_inited))
+		return __page_owner_swap_restore(entry, folio);
+}
+
+static inline void page_owner_swap_invalidate_page(int type, pgoff_t offset)
+{
+	if (static_branch_unlikely(&swap_page_owner_inited))
+		return __page_owner_swap_invalidate_page(type, offset);
+}
+
+static inline void page_owner_swap_invalidate_area(int type)
+{
+	if (static_branch_unlikely(&swap_page_owner_inited))
+		return __page_owner_swap_invalidate_area(type);
+}
+#else
+static inline int page_owner_prepare_to_swap(struct folio *folio)
+{
+	return 0;
+}
+static inline void page_owner_swap_restore(swp_entry_t entry, struct folio *folio)
+{
+}
+static inline void page_owner_swap_invalidate_page(int type, pgoff_t offset)
+{
+}
+static inline void page_owner_swap_invalidate_area(int type)
+{
+}
+#endif /* CONFIG_SWAP_PAGE_OWNER */
 #endif /* __LINUX_PAGE_OWNER_H */
