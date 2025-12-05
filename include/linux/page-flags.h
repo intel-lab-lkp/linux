@@ -198,8 +198,6 @@ enum pageflags {
 
 #ifndef __GENERATING_BOUNDS_H
 
-DECLARE_STATIC_KEY_FALSE(hugetlb_optimize_vmemmap_key);
-
 static __always_inline unsigned long _compound_head(const struct page *page)
 {
 	unsigned long info = READ_ONCE(page->compound_info);
