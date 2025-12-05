@@ -239,6 +239,18 @@ config PWM_DWC
 	  To compile this driver as a module, choose M here: the module
 	  will be called pwm-dwc.
 
+config PWM_EIC7700
+	tristate "EIC7700 PWM Controller"
+	depends on ARCH_ESWIN || COMPILE_TEST
+	depends on HAS_IOMEM
+	select PWM_DWC_CORE
+	help
+	  PWM driver for Synopsys DWC PWM Controller on a platform for EIC7700
+	  SoCs.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called pwm-dwc-eic7700.
+
 config PWM_EP93XX
 	tristate "Cirrus Logic EP93xx PWM support"
 	depends on ARCH_EP93XX || COMPILE_TEST

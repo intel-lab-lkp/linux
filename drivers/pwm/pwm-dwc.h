@@ -26,12 +26,13 @@ MODULE_IMPORT_NS("dwc_pwm");
 #define DWC_TIMERS_TOTAL	8
 
 /* Timer Control Register */
-#define DWC_TIM_CTRL_EN		BIT(0)
-#define DWC_TIM_CTRL_MODE	BIT(1)
-#define DWC_TIM_CTRL_MODE_FREE	(0 << 1)
-#define DWC_TIM_CTRL_MODE_USER	(1 << 1)
-#define DWC_TIM_CTRL_INT_MASK	BIT(2)
-#define DWC_TIM_CTRL_PWM	BIT(3)
+#define DWC_TIM_CTRL_EN			BIT(0)
+#define DWC_TIM_CTRL_MODE		BIT(1)
+#define DWC_TIM_CTRL_MODE_FREE		(0 << 1)
+#define DWC_TIM_CTRL_MODE_USER		BIT(1)
+#define DWC_TIM_CTRL_INT_MASK		BIT(2)
+#define DWC_TIM_CTRL_PWM		BIT(3)
+#define DWC_TIM_CTRL_0N100PWM_EN	BIT(4)
 
 struct dwc_pwm_info {
 	unsigned int nr;
@@ -53,6 +54,9 @@ struct dwc_pwm_ctx {
 struct dwc_pwm {
 	void __iomem *base;
 	unsigned int clk_ns;
+	struct clk *clk;
+	struct reset_control *rst;
+	bool pwm_0n100_enable;
 	struct dwc_pwm_ctx ctx[DWC_TIMERS_TOTAL];
 };
 

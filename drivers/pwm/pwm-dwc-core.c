@@ -44,21 +44,47 @@ static int __dwc_pwm_configure_timer(struct dwc_pwm *dwc,
 	u32 high;
 	u32 low;
 
-	/*
-	 * Calculate width of low and high period in terms of input clock
-	 * periods and check are the result within HW limits between 1 and
-	 * 2^32 periods.
-	 */
-	tmp = DIV_ROUND_CLOSEST_ULL(state->duty_cycle, dwc->clk_ns);
-	if (tmp < 1 || tmp > (1ULL << 32))
-		return -ERANGE;
-	low = tmp - 1;
+	if (dwc->pwm_0n100_enable) {
+		/*
+		 * Calculate width of low and high period in terms of input
+		 * clock periods and check are the result within HW limits
+		 * between 0 and 2^32 periods.
+		 */
+		tmp = DIV_ROUND_CLOSEST_ULL(state->duty_cycle, dwc->clk_ns);
+		if (tmp < 0 || tmp > (1UL << 32))
+			return -ERANGE;
 
-	tmp = DIV_ROUND_CLOSEST_ULL(state->period - state->duty_cycle,
-				    dwc->clk_ns);
-	if (tmp < 1 || tmp > (1ULL << 32))
-		return -ERANGE;
-	high = tmp - 1;
+		if (pwm->args.polarity == PWM_POLARITY_INVERSED)
+			high = tmp;
+		else
+			low = tmp;
+
+		tmp = DIV_ROUND_CLOSEST_ULL(state->period - state->duty_cycle,
+					    dwc->clk_ns);
+		if (tmp < 0 || tmp > (1UL << 32))
+			return -ERANGE;
+
+		if (pwm->args.polarity == PWM_POLARITY_INVERSED)
+			low = tmp;
+		else
+			high = tmp;
+	} else {
+		/*
+		 * Calculate width of low and high period in terms of input
+		 * clock periods and check are the result within HW limits
+		 * between 1 and 2^32 periods.
+		 */
+		tmp = DIV_ROUND_CLOSEST_ULL(state->duty_cycle, dwc->clk_ns);
+		if (tmp < 1 || tmp > (1ULL << 32))
+			return -ERANGE;
+		low = tmp - 1;
+
+		tmp = DIV_ROUND_CLOSEST_ULL(state->period - state->duty_cycle,
+					    dwc->clk_ns);
+		if (tmp < 1 || tmp > (1ULL << 32))
+			return -ERANGE;
+		high = tmp - 1;
+	}
 
 	/*
 	 * Specification says timer usage flow is to disable timer, then
@@ -73,7 +99,8 @@ static int __dwc_pwm_configure_timer(struct dwc_pwm *dwc,
 	 * Write Load Count and Load Count 2 registers. Former defines the
 	 * width of low period and latter the width of high period in terms
 	 * multiple of input clock periods:
-	 * Width = ((Count + 1) * input clock period).
+	 * Width = ((Count + 1) * input clock period) or
+	 * Width = (Count * input clock period) : supported 0% and 100%).
 	 */
 	dwc_pwm_writel(dwc, low, DWC_TIM_LD_CNT(pwm->hwpwm));
 	dwc_pwm_writel(dwc, high, DWC_TIM_LD_CNT2(pwm->hwpwm));
@@ -85,6 +112,9 @@ static int __dwc_pwm_configure_timer(struct dwc_pwm *dwc,
 	 * periods are set by Load Count registers.
 	 */
 	ctrl = DWC_TIM_CTRL_MODE_USER | DWC_TIM_CTRL_PWM;
+	if (dwc->pwm_0n100_enable)
+		ctrl |= DWC_TIM_CTRL_0N100PWM_EN;
+
 	dwc_pwm_writel(dwc, ctrl, DWC_TIM_CTRL(pwm->hwpwm));
 
 	/*
@@ -137,9 +167,17 @@ static int dwc_pwm_get_state(struct pwm_chip *chip, struct pwm_device *pwm,
 	 * based on the timer load-count only.
 	 */
 	if (ctrl & DWC_TIM_CTRL_PWM) {
-		duty = (ld + 1) * dwc->clk_ns;
-		period = (ld2 + 1)  * dwc->clk_ns;
-		period += duty;
+		if (dwc->pwm_0n100_enable) {
+			if (pwm->args.polarity == PWM_POLARITY_INVERSED)
+				duty = ld2 * dwc->clk_ns;
+			else
+				duty = ld * dwc->clk_ns;
+			period = (ld + ld2) * dwc->clk_ns;
+		} else {
+			duty = (ld + 1) * dwc->clk_ns;
+			period = (ld2 + 1)  * dwc->clk_ns;
+			period += duty;
+		}
 	} else {
 		duty = (ld + 1) * dwc->clk_ns;
 		period = duty * 2;
