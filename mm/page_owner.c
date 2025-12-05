@@ -60,6 +60,14 @@ DEFINE_STATIC_KEY_FALSE(page_owner_inited);
 #ifdef CONFIG_SWAP_PAGE_OWNER
 static bool swap_page_owner_enabled __initdata;
 DEFINE_STATIC_KEY_FALSE(swap_page_owner_inited);
+
+struct swap_page_owner {
+	depot_stack_handle_t handle;
+	u64 ts_nsec;
+	char comm[TASK_COMM_LEN];
+	pid_t pid;
+	pid_t tgid;
+};
 #endif
 
 static depot_stack_handle_t dummy_handle;
@@ -441,6 +449,38 @@ void __folio_copy_owner(struct folio *newfolio, struct folio *old)
 	}
 	rcu_read_unlock();
 }
+
+#ifdef CONFIG_SWAP_PAGE_OWNER
+static void *alloc_swap_page_owner(void)
+{
+	return kmalloc(sizeof(struct swap_page_owner), GFP_KERNEL);
+}
+
+static void free_swap_page_owner(void *spo)
+{
+	kfree(spo);
+}
+
+static void copy_to_swap_page_owner(struct swap_page_owner *spo,
+				    struct page_owner *page_owner)
+{
+	spo->handle = page_owner->handle;
+	spo->ts_nsec = page_owner->ts_nsec;
+	spo->pid = page_owner->pid;
+	spo->tgid = page_owner->tgid;
+	strscpy(spo->comm, page_owner->comm, sizeof(page_owner->comm));
+}
+
+static void copy_from_swap_page_owner(struct page_owner *page_owner,
+				      struct swap_page_owner *spo)
+{
+	page_owner->handle = spo->handle;
+	page_owner->ts_nsec = spo->ts_nsec;
+	page_owner->pid = spo->pid;
+	page_owner->tgid = spo->tgid;
+	strscpy(page_owner->comm, spo->comm, sizeof(page_owner->comm));
+}
+#endif
 
 void pagetypeinfo_showmixedcount_print(struct seq_file *m,
 				       pg_data_t *pgdat, struct zone *zone)
