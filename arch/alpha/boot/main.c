@@ -180,7 +180,7 @@ void start_kernel(void)
 		nbytes = 0;
 	}
 	envval[nbytes] = '\0';
-	strcpy((char*)ZERO_PGE, envval);
+	strscpy((char *)ZERO_PGE, envval, PAGE_SIZE);
 
 	srm_printk(" Ok\nNow booting the kernel\n");
 	runkernel();
