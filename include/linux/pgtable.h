@@ -16,6 +16,7 @@
 #include <linux/errno.h>
 #include <asm-generic/pgtable_uffd.h>
 #include <linux/page_table_check.h>
+#include <linux/page_owner.h>
 
 #if 5 - defined(__PAGETABLE_P4D_FOLDED) - defined(__PAGETABLE_PUD_FOLDED) - \
 	defined(__PAGETABLE_PMD_FOLDED) != CONFIG_PGTABLE_LEVELS
@@ -1222,22 +1223,31 @@ static inline void arch_swap_restore(swp_entry_t entry, struct folio *folio)
 
 static inline int hook_prepare_to_swap(struct folio *folio)
 {
-	return arch_prepare_to_swap(folio);
+	int ret;
+
+	ret = arch_prepare_to_swap(folio);
+	if (ret)
+		return ret;
+
+	return page_owner_prepare_to_swap(folio);
 }
 
 static inline void hook_swap_invalidate_page(int type, pgoff_t offset)
 {
 	arch_swap_invalidate_page(type, offset);
+	page_owner_swap_invalidate_page(type, offset);
 }
 
 static inline void hook_swap_invalidate_area(int type)
 {
 	arch_swap_invalidate_area(type);
+	page_owner_swap_invalidate_area(type);
 }
 
 static inline void hook_swap_restore(swp_entry_t entry, struct folio *folio)
 {
 	arch_swap_restore(entry, folio);
+	page_owner_swap_restore(entry, folio);
 }
 
 #ifndef __HAVE_ARCH_MOVE_PTE
