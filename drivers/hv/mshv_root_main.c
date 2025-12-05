@@ -39,23 +39,6 @@ MODULE_AUTHOR("Microsoft");
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Microsoft Hyper-V root partition VMM interface /dev/mshv");
 
-/* TODO move this to another file when debugfs code is added */
-enum hv_stats_vp_counters {			/* HV_THREAD_COUNTER */
-#if defined(CONFIG_X86)
-	VpRootDispatchThreadBlocked			= 202,
-#elif defined(CONFIG_ARM64)
-	VpRootDispatchThreadBlocked			= 94,
-#endif
-	VpStatsMaxCounter
-};
-
-struct hv_stats_page {
-	union {
-		u64 vp_cntrs[VpStatsMaxCounter];		/* VP counters */
-		u8 data[HV_HYP_PAGE_SIZE];
-	};
-} __packed;
-
 struct mshv_root mshv_root;
 
 enum hv_scheduler_type hv_scheduler_type;
