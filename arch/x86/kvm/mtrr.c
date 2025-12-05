@@ -99,13 +99,13 @@ int kvm_mtrr_set_msr(struct kvm_vcpu *vcpu, u32 msr, u64 data)
 
 	mtrr = find_mtrr(vcpu, msr);
 	if (!mtrr)
-		return 1;
+		return KVM_MSR_RET_ERR;
 
 	if (!kvm_mtrr_valid(vcpu, msr, data))
-		return 1;
+		return KVM_MSR_RET_ERR;
 
 	*mtrr = data;
-	return 0;
+	return KVM_MSR_RET_OK;
 }
 
 int kvm_mtrr_get_msr(struct kvm_vcpu *vcpu, u32 msr, u64 *pdata)
@@ -121,13 +121,13 @@ int kvm_mtrr_get_msr(struct kvm_vcpu *vcpu, u32 msr, u64 *pdata)
 		 * VCNT = KVM_NR_VAR_MTRR
 		 */
 		*pdata = 0x500 | KVM_NR_VAR_MTRR;
-		return 0;
+		return KVM_MSR_RET_OK;
 	}
 
 	mtrr = find_mtrr(vcpu, msr);
 	if (!mtrr)
-		return 1;
+		return KVM_MSR_RET_ERR;
 
 	*pdata = *mtrr;
-	return 0;
+	return KVM_MSR_RET_OK;
 }

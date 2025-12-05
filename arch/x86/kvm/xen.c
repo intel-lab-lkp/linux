@@ -1279,7 +1279,7 @@ int kvm_xen_write_hypercall_page(struct kvm_vcpu *vcpu, u64 data)
 	u32 page_num = data & ~PAGE_MASK;
 	u64 page_addr = data & PAGE_MASK;
 	bool lm = is_long_mode(vcpu);
-	int r = 0;
+	int r = KVM_MSR_RET_OK;
 
 	mutex_lock(&kvm->arch.xen.xen_lock);
 	if (kvm->arch.xen.long_mode != lm) {
@@ -1291,11 +1291,11 @@ int kvm_xen_write_hypercall_page(struct kvm_vcpu *vcpu, u64 data)
 		 */
 		if (kvm->arch.xen.shinfo_cache.active &&
 		    kvm_xen_shared_info_init(kvm))
-			r = 1;
+			r = KVM_MSR_RET_ERR;
 	}
 	mutex_unlock(&kvm->arch.xen.xen_lock);
 
-	if (r)
+	if (r != KVM_MSR_RET_OK)
 		return r;
 
 	/*
@@ -1328,7 +1328,7 @@ int kvm_xen_write_hypercall_page(struct kvm_vcpu *vcpu, u64 data)
 			if (kvm_vcpu_write_guest(vcpu,
 						 page_addr + (i * sizeof(instructions)),
 						 instructions, sizeof(instructions)))
-				return 1;
+				return KVM_MSR_RET_ERR;
 		}
 	} else {
 		/*
@@ -1343,7 +1343,7 @@ int kvm_xen_write_hypercall_page(struct kvm_vcpu *vcpu, u64 data)
 		int ret;
 
 		if (page_num >= blob_size)
-			return 1;
+			return KVM_MSR_RET_ERR;
 
 		blob_addr += page_num * PAGE_SIZE;
 
@@ -1354,9 +1354,9 @@ int kvm_xen_write_hypercall_page(struct kvm_vcpu *vcpu, u64 data)
 		ret = kvm_vcpu_write_guest(vcpu, page_addr, page, PAGE_SIZE);
 		kfree(page);
 		if (ret)
-			return 1;
+			return KVM_MSR_RET_ERR;
 	}
-	return 0;
+	return KVM_MSR_RET_OK;
 }
 
 int kvm_xen_hvm_config(struct kvm *kvm, struct kvm_xen_hvm_config *xhc)
