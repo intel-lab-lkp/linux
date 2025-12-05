@@ -509,6 +509,7 @@ int zynqmp_dpsub_drm_init(struct zynqmp_dpsub *dpsub)
 	drm->mode_config.min_height = 0;
 	drm->mode_config.max_width = ZYNQMP_DISP_MAX_WIDTH;
 	drm->mode_config.max_height = ZYNQMP_DISP_MAX_HEIGHT;
+	drm->mode_config.preferred_depth = 16;
 
 	ret = drm_vblank_init(drm, 1);
 	if (ret)
