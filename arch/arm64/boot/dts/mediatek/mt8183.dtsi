@@ -1754,15 +1754,21 @@
 				#size-cells = <0>;
 
 				port@0 {
+					#address-cells = <1>;
+					#size-cells = <0>;
 					reg = <0>;
-					ovl0_in: endpoint {
+					ovl0_in: endpoint@0 {
+						reg = <0>;
 						remote-endpoint = <&mmsys_ep_main>;
 					};
 				};
 
 				port@1 {
+					#address-cells = <1>;
+					#size-cells = <0>;
 					reg = <1>;
-					ovl0_out: endpoint {
+					ovl0_out: endpoint@0 {
+						reg = <0>;
 						remote-endpoint = <&ovl_2l0_in>;
 					};
 				};
@@ -1783,15 +1789,21 @@
 				#size-cells = <0>;
 
 				port@0 {
+					#address-cells = <1>;
+					#size-cells = <0>;
 					reg = <0>;
-					ovl_2l0_in: endpoint {
+					ovl_2l0_in: endpoint@0 {
+						reg = <0>;
 						remote-endpoint = <&ovl0_out>;
 					};
 				};
 
 				port@1 {
+					#address-cells = <1>;
+					#size-cells = <0>;
 					reg = <1>;
-					ovl_2l0_out: endpoint {
+					ovl_2l0_out: endpoint@0 {
+						reg = <0>;
 						remote-endpoint = <&rdma0_in>;
 					};
 				};
@@ -1812,15 +1824,21 @@
 				#size-cells = <0>;
 
 				port@0 {
+					#address-cells = <1>;
+					#size-cells = <0>;
 					reg = <0>;
-					ovl_2l1_in: endpoint {
+					ovl_2l1_in: endpoint@1 {
+						reg = <1>;
 						remote-endpoint = <&mmsys_ep_ext>;
 					};
 				};
 
 				port@1 {
+					#address-cells = <1>;
+					#size-cells = <0>;
 					reg = <1>;
-					ovl_2l1_out: endpoint {
+					ovl_2l1_out: endpoint@1 {
+						reg = <1>;
 						remote-endpoint = <&rdma1_in>;
 					};
 				};
@@ -1842,15 +1860,21 @@
 				#size-cells = <0>;
 
 				port@0 {
+					#address-cells = <1>;
+					#size-cells = <0>;
 					reg = <0>;
-					rdma0_in: endpoint {
+					rdma0_in: endpoint@0 {
+						reg = <0>;
 						remote-endpoint = <&ovl_2l0_out>;
 					};
 				};
 
 				port@1 {
+					#address-cells = <1>;
+					#size-cells = <0>;
 					reg = <1>;
-					rdma0_out: endpoint {
+					rdma0_out: endpoint@0 {
+						reg = <0>;
 						remote-endpoint = <&color0_in>;
 					};
 				};
@@ -1872,15 +1896,21 @@
 				#size-cells = <0>;
 
 				port@0 {
+					#address-cells = <1>;
+					#size-cells = <0>;
 					reg = <0>;
-					rdma1_in: endpoint {
+					rdma1_in: endpoint@1 {
+						reg = <1>;
 						remote-endpoint = <&ovl_2l1_out>;
 					};
 				};
 
 				port@1 {
+					#address-cells = <1>;
+					#size-cells = <0>;
 					reg = <1>;
-					rdma1_out: endpoint {
+					rdma1_out: endpoint@1 {
+						reg = <1>;
 						remote-endpoint = <&dpi_in>;
 					};
 				};
@@ -1901,15 +1931,21 @@
 				#size-cells = <0>;
 
 				port@0 {
+					#address-cells = <1>;
+					#size-cells = <0>;
 					reg = <0>;
-					color0_in: endpoint {
+					color0_in: endpoint@0 {
+						reg = <0>;
 						remote-endpoint = <&rdma0_out>;
 					};
 				};
 
 				port@1 {
+					#address-cells = <1>;
+					#size-cells = <0>;
 					reg = <1>;
-					color0_out: endpoint {
+					color0_out: endpoint@0 {
+						reg = <0>;
 						remote-endpoint = <&ccorr0_in>;
 					};
 				};
@@ -1929,15 +1965,21 @@
 				#size-cells = <0>;
 
 				port@0 {
+					#address-cells = <1>;
+					#size-cells = <0>;
 					reg = <0>;
-					ccorr0_in: endpoint {
+					ccorr0_in: endpoint@0 {
+						reg = <0>;
 						remote-endpoint = <&color0_out>;
 					};
 				};
 
 				port@1 {
+					#address-cells = <1>;
+					#size-cells = <0>;
 					reg = <1>;
-					ccorr0_out: endpoint {
+					ccorr0_out: endpoint@0 {
+						reg = <0>;
 						remote-endpoint = <&aal0_in>;
 					};
 				};
@@ -1957,15 +1999,21 @@
 				#size-cells = <0>;
 
 				port@0 {
+					#address-cells = <1>;
+					#size-cells = <0>;
 					reg = <0>;
-					aal0_in: endpoint {
+					aal0_in: endpoint@0 {
+						reg = <0>;
 						remote-endpoint = <&ccorr0_out>;
 					};
 				};
 
 				port@1 {
+					#address-cells = <1>;
+					#size-cells = <0>;
 					reg = <1>;
-					aal0_out: endpoint {
+					aal0_out: endpoint@0 {
+						reg = <0>;
 						remote-endpoint = <&gamma0_in>;
 					};
 				};
@@ -1985,15 +2033,21 @@
 				#size-cells = <0>;
 
 				port@0 {
+					#address-cells = <1>;
+					#size-cells = <0>;
 					reg = <0>;
-					gamma0_in: endpoint {
+					gamma0_in: endpoint@0 {
+						reg = <0>;
 						remote-endpoint = <&aal0_out>;
 					};
 				};
 
 				port@1 {
+					#address-cells = <1>;
+					#size-cells = <0>;
 					reg = <1>;
-					gamma0_out: endpoint {
+					gamma0_out: endpoint@0 {
+						reg = <0>;
 						remote-endpoint = <&dither0_in>;
 					};
 				};
@@ -2013,15 +2067,21 @@
 				#size-cells = <0>;
 
 				port@0 {
+					#address-cells = <1>;
+					#size-cells = <0>;
 					reg = <0>;
-					dither0_in: endpoint {
+					dither0_in: endpoint@0 {
+						reg = <0>;
 						remote-endpoint = <&gamma0_out>;
 					};
 				};
 
 				port@1 {
+					#address-cells = <1>;
+					#size-cells = <0>;
 					reg = <1>;
-					dither0_out: endpoint {
+					dither0_out: endpoint@0 {
+						reg = <0>;
 						remote-endpoint = <&dsi_in>;
 					};
 				};
@@ -2047,15 +2107,22 @@
 				#size-cells = <0>;
 
 				port@0 {
+					#address-cells = <1>;
+					#size-cells = <0>;
 					reg = <0>;
-					dsi_in: endpoint {
+					dsi_in: endpoint@0 {
+						reg = <0>;
 						remote-endpoint = <&dither0_out>;
 					};
 				};
 
 				port@1 {
+					#address-cells = <1>;
+					#size-cells = <0>;
 					reg = <1>;
-					dsi_out: endpoint { };
+					dsi_out: endpoint@0 {
+						reg = <0>;
+					};
 				};
 			};
 		};
@@ -2076,15 +2143,22 @@
 				#size-cells = <0>;
 
 				port@0 {
+					#address-cells = <1>;
+					#size-cells = <0>;
 					reg = <0>;
-					dpi_in: endpoint {
+					dpi_in: endpoint@1 {
+						reg = <1>;
 						remote-endpoint = <&rdma1_out>;
 					};
 				};
 
 				port@1 {
+					#address-cells = <1>;
+					#size-cells = <0>;
 					reg = <1>;
-					dpi_out: endpoint { };
+					dpi_out: endpoint@1 {
+						reg = <1>;
+					};
 				};
 			};
 		};
