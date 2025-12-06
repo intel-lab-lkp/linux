@@ -14,7 +14,7 @@ SYM_FUNC_START(__efi_call)
 	/*
 	 * The EFI code doesn't have any CFI, annotate away the CFI violation.
 	 */
-	ANNOTATE_NOCFI_SYM
+	ANNOTATE_NOCFI
 	pushq %rbp
 	movq %rsp, %rbp
 	and $~0xf, %rsp
