@@ -2448,13 +2448,13 @@ static int __ceph_pool_perm_get(struct ceph_inode_info *ci,
 
 	err = ceph_osdc_alloc_messages(rd_req, GFP_NOFS);
 	if (err)
-		goto out_unlock;
+		goto put_string;
 
 	wr_req = ceph_osdc_alloc_request(&fsc->client->osdc, NULL,
 					 1, false, GFP_NOFS);
 	if (!wr_req) {
 		err = -ENOMEM;
-		goto out_unlock;
+		goto put_string;
 	}
 
 	wr_req->r_flags = CEPH_OSD_FLAG_WRITE;
@@ -2464,13 +2464,13 @@ static int __ceph_pool_perm_get(struct ceph_inode_info *ci,
 
 	err = ceph_osdc_alloc_messages(wr_req, GFP_NOFS);
 	if (err)
-		goto out_unlock;
+		goto put_string;
 
 	/* one page should be large enough for STAT data */
 	pages = ceph_alloc_page_vector(1, GFP_KERNEL);
 	if (IS_ERR(pages)) {
 		err = PTR_ERR(pages);
-		goto out_unlock;
+		goto put_string;
 	}
 
 	osd_req_op_raw_data_in_pages(rd_req, 0, pages, PAGE_SIZE,
@@ -2488,7 +2488,7 @@ static int __ceph_pool_perm_get(struct ceph_inode_info *ci,
 	else if (err != -EPERM) {
 		if (err == -EBLOCKLISTED)
 			fsc->blocklisted = true;
-		goto out_unlock;
+		goto put_string;
 	}
 
 	if (err2 == 0 || err2 == -EEXIST)
@@ -2497,14 +2497,14 @@ static int __ceph_pool_perm_get(struct ceph_inode_info *ci,
 		if (err2 == -EBLOCKLISTED)
 			fsc->blocklisted = true;
 		err = err2;
-		goto out_unlock;
+		goto put_string;
 	}
 
 	pool_ns_len = pool_ns ? pool_ns->len : 0;
 	perm = kmalloc(struct_size(perm, pool_ns, pool_ns_len + 1), GFP_NOFS);
 	if (!perm) {
 		err = -ENOMEM;
-		goto out_unlock;
+		goto put_string;
 	}
 
 	perm->pool = pool;
@@ -2517,6 +2517,8 @@ static int __ceph_pool_perm_get(struct ceph_inode_info *ci,
 	rb_link_node(&perm->node, parent, p);
 	rb_insert_color(&perm->node, &mdsc->pool_perm_tree);
 	err = 0;
+put_string:
+	ceph_put_string(rd_req->r_base_oloc.pool_ns);
 out_unlock:
 	up_write(&mdsc->pool_perm_rwsem);
 
