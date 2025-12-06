@@ -42,7 +42,7 @@ struct lockref {
  */
 static inline void lockref_init(struct lockref *lockref)
 {
-	spin_lock_init(&lockref->lock);
+	spin_lock_init_hq(&lockref->lock);
 	lockref->count = 1;
 }
 
