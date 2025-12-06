@@ -629,7 +629,6 @@ out_free_vhdr:
 out_unload_nls:
 	unload_nls(sbi->nls);
 	unload_nls(nls);
-	kfree(sbi);
 	return err;
 }
 
@@ -688,10 +687,23 @@ static int hfsplus_init_fs_context(struct fs_context *fc)
 	return 0;
 }
 
+static void hfsplus_kill_sb(struct super_block *sb)
+{
+    struct hfsplus_sb_info *sbi = HFSPLUS_SB(sb);
+
+    if (sbi) {
+        unload_nls(sbi->nls);
+        kfree(sbi);
+        sb->s_fs_info = NULL;
+    }
+
+    kill_block_super(sb);
+}
+
 static struct file_system_type hfsplus_fs_type = {
 	.owner		= THIS_MODULE,
 	.name		= "hfsplus",
-	.kill_sb	= kill_block_super,
+	.kill_sb	= hfsplus_kill_sb,
 	.fs_flags	= FS_REQUIRES_DEV,
 	.init_fs_context = hfsplus_init_fs_context,
 };
