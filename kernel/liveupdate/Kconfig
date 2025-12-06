@@ -82,6 +82,9 @@ config LIVEUPDATE_HUGETLB
 	  use hugetlb memfd to back VM memory, or for other user workloads needing
 	  to live update huge pages.
 
+	  Enabling this config disables CMA for hugetlb pages. It is not yet
+	  supported with live update.
+
 	  If unsure, say N.
 
 endmenu

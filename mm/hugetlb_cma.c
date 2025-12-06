@@ -4,6 +4,7 @@
 #include <linux/cma.h>
 #include <linux/compiler.h>
 #include <linux/mm_inline.h>
+#include <linux/liveupdate.h>
 
 #include <asm/page.h>
 #include <asm/setup.h>
@@ -151,6 +152,12 @@ void __init hugetlb_cma_reserve(int order)
 
 	if (!hugetlb_cma_size)
 		return;
+
+	if (IS_ENABLED(CONFIG_LIVEUPDATE_HUGETLB) && liveupdate_enabled()) {
+		pr_warn("HugeTLB: CMA not supported with live update. Falling back to pre-allocating pages.\n");
+		hugetlb_cma_size = 0;
+		return;
+	}
 
 	hugetlb_bootmem_set_nodes();
 
