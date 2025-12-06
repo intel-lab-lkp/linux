@@ -1432,14 +1432,23 @@ static void __init kho_release_scratch(void)
 	}
 }
 
+static bool kho_memory_initialized;
+
 void __init kho_memory_init(void)
 {
+	if (kho_memory_initialized)
+		return;
+
+	kho_memory_initialized = true;
+
 	if (kho_in.scratch_phys) {
 		kho_scratch = phys_to_virt(kho_in.scratch_phys);
-		kho_release_scratch();
 
 		if (!kho_mem_deserialize(kho_get_fdt()))
 			kho_in.fdt_phys = 0;
+
+		memblock_clear_kho_scratch_only();
+		kho_release_scratch();
 	} else {
 		kho_reserve_scratch();
 	}

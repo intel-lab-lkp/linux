@@ -1203,11 +1203,6 @@ void __init setup_arch(char **cmdline_p)
 	initmem_init();
 	dma_contiguous_reserve(max_pfn_mapped << PAGE_SHIFT);
 
-	if (boot_cpu_has(X86_FEATURE_GBPAGES)) {
-		hugetlb_cma_reserve(PUD_SHIFT - PAGE_SHIFT);
-		hugetlb_bootmem_alloc();
-	}
-
 	/*
 	 * Reserve memory for crash kernel after SRAT is parsed so that it
 	 * won't consume hotpluggable memory.
@@ -1218,6 +1213,13 @@ void __init setup_arch(char **cmdline_p)
 		early_xdbc_register_console();
 
 	x86_init.paging.pagetable_init();
+
+	kho_memory_init();
+
+	if (boot_cpu_has(X86_FEATURE_GBPAGES)) {
+		hugetlb_cma_reserve(PUD_SHIFT - PAGE_SHIFT);
+		hugetlb_bootmem_alloc();
+	}
 
 	kasan_init();
 

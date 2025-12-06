@@ -2679,6 +2679,8 @@ void __init __weak mem_init(void)
 void __init mm_core_init(void)
 {
 	arch_mm_preinit();
+
+	kho_memory_init();
 	hugetlb_bootmem_alloc();
 
 	/* Initializations relying on SMP setup */
@@ -2696,12 +2698,6 @@ void __init mm_core_init(void)
 	report_meminit();
 	kmsan_init_shadow();
 	stack_depot_early_init();
-
-	/*
-	 * KHO memory setup must happen while memblock is still active, but
-	 * as close as possible to buddy initialization
-	 */
-	kho_memory_init();
 
 	memblock_free_all();
 	mem_init();
