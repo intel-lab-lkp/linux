@@ -226,6 +226,7 @@ impl<const N: usize> ModInfoBuilder<N> {
             .make_entry_file(chipset, "booter_unload")
             .make_entry_file(chipset, "bootloader")
             .make_entry_file(chipset, "gsp")
+            .make_entry_file(chipset, "scrubber")
     }
 
     pub(crate) const fn create(

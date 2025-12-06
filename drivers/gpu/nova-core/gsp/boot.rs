@@ -151,6 +151,33 @@ impl super::Gsp {
 
         Self::run_fwsec_frts(dev, gsp_falcon, bar, &bios, &fb_layout)?;
 
+        if vgpu_support {
+            let scrubber = BooterFirmware::new(
+                dev,
+                BooterKind::Scrubber,
+                chipset,
+                FIRMWARE_VERSION,
+                sec2_falcon,
+                bar,
+            )?;
+
+            sec2_falcon.reset(bar)?;
+            sec2_falcon.dma_load(bar, &scrubber)?;
+
+            let (mbox0, mbox1) = sec2_falcon.boot(bar, None, None)?;
+
+            dev_dbg!(
+                pdev.as_ref(),
+                "SEC2 MBOX0: {:#x}, MBOX1{:#x}\n",
+                mbox0,
+                mbox1
+            );
+
+            if !regs::NV_PGC6_BSI_SECURE_SCRATCH_15::read(bar).scrubber_completed() {
+                return Err(ETIMEDOUT);
+            }
+        }
+
         let booter_loader = BooterFirmware::new(
             dev,
             BooterKind::Loader,

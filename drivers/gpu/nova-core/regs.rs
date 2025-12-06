@@ -173,6 +173,17 @@ register!(NV_PGC6_BSI_SECURE_SCRATCH_14 @ 0x001180f8 {
     26:26   boot_stage_3_handoff as bool;
 });
 
+register!(NV_PGC6_BSI_SECURE_SCRATCH_15 @ 0x001180fc {
+    31:29   scrubber_handoff as u8;
+});
+
+impl NV_PGC6_BSI_SECURE_SCRATCH_15 {
+    /// Returns `true` if scrubber is completed.
+    pub(crate) fn scrubber_completed(self) -> bool {
+        self.scrubber_handoff() >= 0x3
+    }
+}
+
 // Privilege level mask register. It dictates whether the host CPU has privilege to access the
 // `PGC6_AON_SECURE_SCRATCH_GROUP_05` register (which it needs to read GFW_BOOT).
 register!(NV_PGC6_AON_SECURE_SCRATCH_GROUP_05_PRIV_LEVEL_MASK @ 0x00118128,
