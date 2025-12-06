@@ -9,8 +9,10 @@ use r570_144 as bindings;
 use core::ops::Range;
 
 use kernel::{
+    device,
     dma::CoherentAllocation,
     fmt,
+    pci,
     prelude::*,
     ptr::{
         Alignable,
@@ -27,6 +29,7 @@ use kernel::{
 };
 
 use crate::{
+    driver::Bar0,
     fb::FbLayout,
     firmware::gsp::GspFirmware,
     gpu::Chipset,
@@ -926,3 +929,75 @@ impl MessageQueueInitArguments {
         })
     }
 }
+
+/// VF information - gspVFInfo in SetSystemInfo.
+#[derive(Clone, Copy, Zeroable)]
+#[repr(transparent)]
+pub(crate) struct GspVfInfo {
+    inner: bindings::GSP_VF_INFO,
+}
+
+impl GspVfInfo {
+    /// Creates a new GspVfInfo structure.
+    pub(crate) fn new<'a>(
+        pdev: &'a pci::Device<device::Bound>,
+        bar: &Bar0,
+        vgpu_support: bool,
+    ) -> Result<GspVfInfo> {
+        let mut vf_info = GspVfInfo::zeroed();
+        let info = &mut vf_info.inner;
+
+        if vgpu_support {
+            let val = pdev.sriov_get_totalvfs()?;
+            info.totalVFs = u32::try_from(val)?;
+
+            let pos = pdev
+                .find_ext_capability(kernel::bindings::PCI_EXT_CAP_ID_SRIOV as i32)
+                .ok_or(ENODEV)?;
+
+            let val = pdev.config_read_word(
+                i32::from(pos) + i32::from(kernel::bindings::PCI_SRIOV_VF_OFFSET as i32),
+            )?;
+            info.firstVFOffset = u32::from(val);
+
+            let val = pdev.config_read_dword(
+                i32::from(pos) + i32::from(kernel::bindings::PCI_SRIOV_BAR as i32),
+            )?;
+            info.FirstVFBar0Address = u64::from(val);
+
+            let bar1_lo = pdev.config_read_dword(
+                i32::from(pos) + i32::from(kernel::bindings::PCI_SRIOV_BAR as i32 + 4),
+            )?;
+            let bar1_hi = pdev.config_read_dword(
+                i32::from(pos) + i32::from(kernel::bindings::PCI_SRIOV_BAR as i32 + 8),
+            )?;
+
+            let addr_mask = u64::try_from(kernel::bindings::PCI_BASE_ADDRESS_MEM_MASK)?;
+
+            info.FirstVFBar1Address =
+                (u64::from(bar1_hi) << 32) | ((u64::from(bar1_lo)) & addr_mask);
+
+            let bar2_lo = pdev.config_read_dword(
+                i32::from(pos) + i32::from(kernel::bindings::PCI_SRIOV_BAR as i32 + 12),
+            )?;
+            let bar2_hi = pdev.config_read_dword(
+                i32::from(pos) + i32::from(kernel::bindings::PCI_SRIOV_BAR as i32 + 16),
+            )?;
+
+            info.FirstVFBar2Address = (u64::from(bar2_hi) << 32) | (u64::from(bar2_lo) & addr_mask);
+
+            let val = bar.read32(0x88000 + 0xbf4);
+            info.b64bitBar1 = u8::from((val & 0x00000006) == 0x00000004);
+
+            let val = bar.read32(0x88000 + 0xbfc);
+            info.b64bitBar2 = u8::from((val & 0x00000006) == 0x00000004);
+        }
+        Ok(vf_info)
+    }
+}
+
+// SAFETY: Padding is explicit and does not contain uninitialized data.
+unsafe impl AsBytes for GspVfInfo {}
+
+// SAFETY: This struct only contains integer types for which all bit patterns are valid.
+unsafe impl FromBytes for GspVfInfo {}

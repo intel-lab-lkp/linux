@@ -285,7 +285,7 @@ impl Gpu {
 
             sec2_falcon: Falcon::new(pdev.as_ref(), spec.chipset)?,
 
-            gsp <- Gsp::new(pdev)?,
+            gsp <- Gsp::new(pdev, vgpu.vgpu_support)?,
 
             _: { gsp.boot(pdev, bar, spec.chipset, gsp_falcon, sec2_falcon)? },
 

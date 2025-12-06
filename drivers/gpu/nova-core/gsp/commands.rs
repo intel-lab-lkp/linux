@@ -26,6 +26,7 @@ use crate::{
         },
         fw::{
             commands::*,
+            GspVfInfo,
             MsgFunction, //
         },
     },
@@ -36,12 +37,13 @@ use crate::{
 /// The `GspSetSystemInfo` command.
 pub(crate) struct SetSystemInfo<'a> {
     pdev: &'a pci::Device<device::Bound>,
+    vf_info: GspVfInfo,
 }
 
 impl<'a> SetSystemInfo<'a> {
     /// Creates a new `GspSetSystemInfo` command using the parameters of `pdev`.
-    pub(crate) fn new(pdev: &'a pci::Device<device::Bound>) -> Self {
-        Self { pdev }
+    pub(crate) fn new(pdev: &'a pci::Device<device::Bound>, vf_info: GspVfInfo) -> Self {
+        Self { pdev, vf_info }
     }
 }
 
@@ -51,7 +53,7 @@ impl<'a> CommandToGsp for SetSystemInfo<'a> {
     type InitError = Error;
 
     fn init(&self) -> impl Init<Self::Command, Self::InitError> {
-        GspSetSystemInfo::init(self.pdev)
+        GspSetSystemInfo::init(self.pdev, self.vf_info)
     }
 }
 

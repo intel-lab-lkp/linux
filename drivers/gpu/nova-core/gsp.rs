@@ -115,11 +115,16 @@ pub(crate) struct Gsp {
     pub(crate) cmdq: Cmdq,
     /// RM arguments.
     rmargs: CoherentAllocation<GspArgumentsCached>,
+    /// Support vGPU.
+    vgpu_support: bool,
 }
 
 impl Gsp {
     // Creates an in-place initializer for a `Gsp` manager for `pdev`.
-    pub(crate) fn new(pdev: &pci::Device<device::Bound>) -> Result<impl PinInit<Self, Error>> {
+    pub(crate) fn new(
+        pdev: &pci::Device<device::Bound>,
+        vgpu_support: bool,
+    ) -> Result<impl PinInit<Self, Error>> {
         let dev = pdev.as_ref();
         let libos = CoherentAllocation::<LibosMemoryRegionInitArgument>::alloc_coherent(
             dev,
@@ -156,6 +161,7 @@ impl Gsp {
             logrm,
             rmargs,
             cmdq,
+            vgpu_support,
         }))
     }
 }

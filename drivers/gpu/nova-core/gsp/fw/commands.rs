@@ -4,7 +4,10 @@ use kernel::prelude::*;
 use kernel::transmute::{AsBytes, FromBytes};
 use kernel::{device, pci};
 
-use crate::gsp::GSP_PAGE_SIZE;
+use crate::gsp::{
+    fw::GspVfInfo,
+    GSP_PAGE_SIZE, //
+};
 
 use super::bindings;
 
@@ -18,7 +21,10 @@ static_assert!(size_of::<GspSetSystemInfo>() < GSP_PAGE_SIZE);
 impl GspSetSystemInfo {
     /// Returns an in-place initializer for the `GspSetSystemInfo` command.
     #[allow(non_snake_case)]
-    pub(crate) fn init<'a>(dev: &'a pci::Device<device::Bound>) -> impl Init<Self, Error> + 'a {
+    pub(crate) fn init<'a>(
+        dev: &'a pci::Device<device::Bound>,
+        info: GspVfInfo,
+    ) -> impl Init<Self, Error> + 'a {
         type InnerGspSystemInfo = bindings::GspSystemInfo;
         let init_inner = try_init!(InnerGspSystemInfo {
             gpuPhysAddr: dev.resource_start(0)?,
@@ -38,6 +44,7 @@ impl GspSetSystemInfo {
             PCIRevisionID: u32::from(dev.revision_id()),
             bIsPrimary: 0,
             bPreserveVideoMemoryAllocations: 0,
+            gspVFInfo: info.inner,
             ..Zeroable::init_zeroed()
         });
 

@@ -33,6 +33,7 @@ use crate::{
     gpu::Chipset,
     gsp::{
         commands,
+        fw::GspVfInfo,
         sequencer::{
             GspSequencer,
             GspSequencerParams, //
@@ -136,6 +137,7 @@ impl super::Gsp {
         sec2_falcon: &Falcon<Sec2>,
     ) -> Result {
         let dev = pdev.as_ref();
+        let vgpu_support = self.vgpu_support;
 
         let bios = Vbios::new(dev, bar)?;
 
@@ -162,8 +164,10 @@ impl super::Gsp {
             CoherentAllocation::<GspFwWprMeta>::alloc_coherent(dev, 1, GFP_KERNEL | __GFP_ZERO)?;
         dma_write!(wpr_meta[0] = GspFwWprMeta::new(&gsp_fw, &fb_layout))?;
 
+        let vf_info = GspVfInfo::new(pdev, bar, vgpu_support)?;
+
         self.cmdq
-            .send_command(bar, commands::SetSystemInfo::new(pdev))?;
+            .send_command(bar, commands::SetSystemInfo::new(pdev, vf_info))?;
         self.cmdq.send_command(bar, commands::SetRegistry::new())?;
 
         gsp_falcon.reset(bar)?;
