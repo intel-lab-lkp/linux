@@ -50,6 +50,8 @@ enum {
 
 static int memmap_mode __read_mostly = MEMMAP_ON_MEMORY_DISABLE;
 
+static struct auto_movable_stats global_auto_movable_stats;
+
 static inline unsigned long memory_block_memmap_size(void)
 {
 	return PHYS_PFN(memory_block_size_bytes()) * sizeof(struct page);
@@ -851,9 +853,7 @@ static bool auto_movable_can_online_movable(int nid, struct memory_group *group,
 
 	/* Walk all relevant zones and collect MOVABLE vs. KERNEL stats. */
 	if (nid == NUMA_NO_NODE) {
-		/* TODO: cache values */
-		for_each_populated_zone(zone)
-			auto_movable_stats_account_zone(&stats, zone);
+		stats = global_auto_movable_stats;
 	} else {
 		for (i = 0; i < MAX_NR_ZONES; i++) {
 			pg_data_t *pgdat = NODE_DATA(nid);
@@ -1071,12 +1071,13 @@ void adjust_present_page_count(struct page *page, struct memory_group *group,
 {
 	struct zone *zone = page_zone(page);
 	const bool movable = zone_idx(zone) == ZONE_MOVABLE;
+	const bool early = early_section(__pfn_to_section(page_to_pfn(page)));
 
 	/*
 	 * We only support onlining/offlining/adding/removing of complete
 	 * memory blocks; therefore, either all is either early or hotplugged.
 	 */
-	if (early_section(__pfn_to_section(page_to_pfn(page))))
+	if (early)
 		zone->present_early_pages += nr_pages;
 	zone->present_pages += nr_pages;
 	zone->zone_pgdat->node_present_pages += nr_pages;
@@ -1085,6 +1086,12 @@ void adjust_present_page_count(struct page *page, struct memory_group *group,
 		group->present_movable_pages += nr_pages;
 	else if (group && !movable)
 		group->present_kernel_pages += nr_pages;
+
+	if (movable) {
+		global_auto_movable_stats.movable_pages += nr_pages;
+	} else if (early) {
+		global_auto_movable_stats.kernel_early_pages += nr_pages;
+	}
 }
 
 int mhp_init_memmap_on_memory(unsigned long pfn, unsigned long nr_pages,
