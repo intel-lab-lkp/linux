@@ -397,9 +397,7 @@ static inline void mapping_set_gfp_mask(struct address_space *m, gfp_t mask)
  */
 static inline size_t mapping_max_folio_size_supported(void)
 {
-	if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE))
-		return 1U << (PAGE_SHIFT + MAX_PAGECACHE_ORDER);
-	return PAGE_SIZE;
+	return 1U << (PAGE_SHIFT + MAX_PAGECACHE_ORDER);
 }
 
 /*
@@ -422,16 +420,17 @@ static inline void mapping_set_folio_order_range(struct address_space *mapping,
 						 unsigned int min,
 						 unsigned int max)
 {
-	if (!IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE))
-		return;
-
 	if (min > MAX_PAGECACHE_ORDER)
 		min = MAX_PAGECACHE_ORDER;
 
 	if (max > MAX_PAGECACHE_ORDER)
 		max = MAX_PAGECACHE_ORDER;
 
-	if (max < min)
+	/* Large folios depend on THP infrastructure for splitting.
+	 * If THP is disabled, we cap the max order to min order to avoid
+	 * splitting the folios.
+	 */
+	if ((max < min) || !IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE))
 		max = min;
 
 	mapping->flags = (mapping->flags & ~AS_FOLIO_ORDER_MASK) |
@@ -463,16 +462,12 @@ static inline void mapping_set_large_folios(struct address_space *mapping)
 static inline unsigned int
 mapping_max_folio_order(const struct address_space *mapping)
 {
-	if (!IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE))
-		return 0;
 	return (mapping->flags & AS_FOLIO_ORDER_MAX_MASK) >> AS_FOLIO_ORDER_MAX;
 }
 
 static inline unsigned int
 mapping_min_folio_order(const struct address_space *mapping)
 {
-	if (!IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE))
-		return 0;
 	return (mapping->flags & AS_FOLIO_ORDER_MIN_MASK) >> AS_FOLIO_ORDER_MIN;
 }
 
