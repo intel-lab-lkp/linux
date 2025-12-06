@@ -72,4 +72,16 @@ config LIVEUPDATE
 
 	  If unsure, say N.
 
+config LIVEUPDATE_HUGETLB
+	bool "Live update support for HugeTLB"
+	depends on LIVEUPDATE && HUGETLBFS
+	help
+
+	  Enable live update support for the HugeTLB subsystem. This allows live
+	  updating memfd backed by huge pages. This can be used by hypervisors that
+	  use hugetlb memfd to back VM memory, or for other user workloads needing
+	  to live update huge pages.
+
+	  If unsure, say N.
+
 endmenu

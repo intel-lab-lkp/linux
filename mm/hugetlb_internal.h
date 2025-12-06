@@ -9,6 +9,7 @@
 #include <linux/hugetlb.h>
 #include <linux/hugetlb_cgroup.h>
 #include <linux/list.h>
+#include <linux/liveupdate.h>
 
 void init_new_hugetlb_folio(struct folio *folio);
 void account_new_hugetlb_folio(struct hstate *h, struct folio *folio);
@@ -31,5 +32,19 @@ static inline struct resv_map *inode_resv_map(struct inode *inode)
 	 */
 	return (struct resv_map *)(&inode->i_data)->i_private_data;
 }
+
+#ifdef CONFIG_LIVEUPDATE_HUGETLB
+void hugetlb_luo_init(void);
+unsigned long hstate_liveupdate_pages(struct hstate *h);
+#else
+static inline void hugetlb_luo_init(void)
+{
+}
+
+static inline unsigned long hstate_liveupdate_pages(struct hstate *h)
+{
+	return 0;
+}
+#endif /* CONFIG_LIVEUPDATE_HUGETLB */
 
 #endif /* __HUGETLB_INTERNAL_H */

@@ -16,6 +16,15 @@ Memfd Preservation ABI
 .. kernel-doc:: include/linux/kho/abi/memfd.h
    :internal:
 
+HugeTLB-backed memfd Preservation ABI
+=====================================
+
+.. kernel-doc:: include/linux/kho/abi/hugetlb.h
+   :doc: hugetlb-backed memfd live update ABI
+
+.. kernel-doc:: include/linux/kho/abi/hugetlb.h
+   :internal:
+
 See Also
 ========
 

@@ -4702,6 +4702,7 @@ static int __init hugetlb_init(void)
 	hugetlb_sysfs_init();
 	hugetlb_cgroup_file_init();
 	hugetlb_sysctl_init();
+	hugetlb_luo_init();
 
 #ifdef CONFIG_SMP
 	num_fault_mutexes = roundup_pow_of_two(8 * num_possible_cpus());
