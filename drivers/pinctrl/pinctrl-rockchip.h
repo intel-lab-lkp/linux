@@ -183,6 +183,9 @@
 #define RK_GPIO4_D6	158
 #define RK_GPIO4_D7	159
 
+#define RK_RMIO_NC			0
+#define RK_RMIO_WRITE_ENABLE_MASK	0xFFFF0000
+
 enum rockchip_pinctrl_type {
 	PX30,
 	RV1108,
@@ -470,6 +473,45 @@ struct rockchip_pinctrl {
 	struct rockchip_pin_group	*groups;
 	unsigned int			ngroups;
 	struct rockchip_pmx_func	*functions;
+	unsigned int			nfunctions;
+};
+
+/**
+ * struct rockchip_rmio_group: represent a group of pins in RMIO controller.
+ * @name: name of the pin group, used to lookup the group.
+ * @pins: array of pins included in this group.
+ * @npins: number of pins included in this group.
+ * @func: local pins function select
+ */
+struct rockchip_rmio_group {
+	const char			*name;
+	unsigned int			npins;
+	unsigned int			*pins;
+	unsigned int			*func;
+};
+
+/**
+ * struct rockchip_rmio_func: represent a RMIO pin function.
+ * @name: name of the RMIO function, used to lookup the function.
+ * @groups: array of group names that can provide this RMIO function.
+ * @ngroups: number of groups included in @groups.
+ */
+struct rockchip_rmio_func {
+	const char		*name;
+	const char		**groups;
+	u8			ngroups;
+};
+
+struct rockchip_rmio {
+	struct regmap			*regmap;
+	u32				offset;
+	struct device			*dev;
+	struct pinctrl_desc		pctl;
+	struct pinctrl_dev		*pctl_dev;
+	unsigned int			nr_pins;
+	struct rockchip_rmio_group	*groups;
+	unsigned int			ngroups;
+	struct rockchip_rmio_func	*functions;
 	unsigned int			nfunctions;
 };
 
