@@ -119,7 +119,12 @@ pub(crate) struct FbLayout {
 
 impl FbLayout {
     /// Computes the FB layout for `chipset` required to run the `gsp_fw` GSP firmware.
-    pub(crate) fn new(chipset: Chipset, bar: &Bar0, gsp_fw: &GspFirmware) -> Result<Self> {
+    pub(crate) fn new(
+        chipset: Chipset,
+        bar: &Bar0,
+        gsp_fw: &GspFirmware,
+        vgpu_support: bool,
+    ) -> Result<Self> {
         let hal = hal::fb_hal(chipset);
 
         let fb = {
@@ -181,8 +186,12 @@ impl FbLayout {
 
         let wpr2_heap = {
             const WPR2_HEAP_DOWN_ALIGN: Alignment = Alignment::new::<SZ_1M>();
-            let wpr2_heap_size =
-                gsp::LibosParams::from_chipset(chipset).wpr_heap_size(chipset, fb.end);
+            let wpr2_heap_size = if !vgpu_support {
+                gsp::LibosParams::from_chipset(chipset).wpr_heap_size(chipset, fb.end)
+            } else {
+                581 * usize_as_u64(SZ_1M)
+            };
+
             let wpr2_heap_addr = (elf.start - wpr2_heap_size).align_down(WPR2_HEAP_DOWN_ALIGN);
 
             wpr2_heap_addr..(elf.start).align_down(WPR2_HEAP_DOWN_ALIGN)
@@ -202,6 +211,8 @@ impl FbLayout {
             wpr2.start - HEAP_SIZE..wpr2.start
         };
 
+        let vf_partition_count = if vgpu_support { 32 } else { 0 };
+
         Ok(Self {
             fb,
             vga_workspace,
@@ -211,7 +222,7 @@ impl FbLayout {
             wpr2_heap,
             wpr2,
             heap,
-            vf_partition_count: 0,
+            vf_partition_count,
         })
     }
 }
