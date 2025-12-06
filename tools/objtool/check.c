@@ -2358,7 +2358,7 @@ static int __annotate_early(struct objtool_file *file, int type, struct instruct
 	switch (type) {
 
 	/* Must be before add_special_section_alts() */
-	case ANNOTYPE_IGNORE_ALTS:
+	case ANNOTYPE_IGNORE_ALTERNATIVE:
 		insn->ignore_alts = true;
 		break;
 
@@ -2439,7 +2439,7 @@ static int __annotate_late(struct objtool_file *file, int type, struct instructi
 		insn->unret = 1;
 		break;
 
-	case ANNOTYPE_IGNORE_ALTS:
+	case ANNOTYPE_IGNORE_ALTERNATIVE:
 		/* early */
 		break;
 
