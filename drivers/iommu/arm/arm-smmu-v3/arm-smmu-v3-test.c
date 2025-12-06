@@ -37,6 +37,7 @@ enum arm_smmu_test_master_feat {
 
 static bool arm_smmu_entry_differs_in_used_bits(const __le64 *entry,
 						const __le64 *used_bits,
+						const __le64 *ignored,
 						const __le64 *target,
 						unsigned int length)
 {
@@ -44,7 +45,7 @@ static bool arm_smmu_entry_differs_in_used_bits(const __le64 *entry,
 	unsigned int i;
 
 	for (i = 0; i < length; i++) {
-		if ((entry[i] & used_bits[i]) != target[i])
+		if ((entry[i] & used_bits[i]) != (target[i] & ~ignored[i]))
 			differs = true;
 	}
 	return differs;
@@ -56,11 +57,17 @@ arm_smmu_test_writer_record_syncs(struct arm_smmu_entry_writer *writer)
 	struct arm_smmu_test_writer *test_writer =
 		container_of(writer, struct arm_smmu_test_writer, writer);
 	__le64 *entry_used_bits;
+	__le64 *ignored_bits;
 
 	entry_used_bits = kunit_kzalloc(
 		test_writer->test, sizeof(*entry_used_bits) * NUM_ENTRY_QWORDS,
 		GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test_writer->test, entry_used_bits);
+
+	ignored_bits = kunit_kzalloc(test_writer->test,
+				     sizeof(*ignored_bits) * NUM_ENTRY_QWORDS,
+				     GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test_writer->test, ignored_bits);
 
 	pr_debug("STE value is now set to: ");
 	print_hex_dump_debug("    ", DUMP_PREFIX_NONE, 16, 8,
@@ -79,14 +86,17 @@ arm_smmu_test_writer_record_syncs(struct arm_smmu_entry_writer *writer)
 		 * configuration.
 		 */
 		writer->ops->get_used(test_writer->entry, entry_used_bits);
+		if (writer->ops->get_ignored)
+			writer->ops->get_ignored(ignored_bits);
 		KUNIT_EXPECT_FALSE(
 			test_writer->test,
 			arm_smmu_entry_differs_in_used_bits(
 				test_writer->entry, entry_used_bits,
-				test_writer->init_entry, NUM_ENTRY_QWORDS) &&
+				ignored_bits, test_writer->init_entry,
+				NUM_ENTRY_QWORDS) &&
 				arm_smmu_entry_differs_in_used_bits(
 					test_writer->entry, entry_used_bits,
-					test_writer->target_entry,
+					ignored_bits, test_writer->target_entry,
 					NUM_ENTRY_QWORDS));
 	}
 }
@@ -106,6 +116,7 @@ arm_smmu_v3_test_debug_print_used_bits(struct arm_smmu_entry_writer *writer,
 static const struct arm_smmu_entry_writer_ops test_ste_ops = {
 	.sync = arm_smmu_test_writer_record_syncs,
 	.get_used = arm_smmu_get_ste_used,
+	.get_ignored = arm_smmu_get_ste_ignored,
 };
 
 static const struct arm_smmu_entry_writer_ops test_cd_ops = {
