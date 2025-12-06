@@ -20,6 +20,7 @@ use crate::{
     gfw,
     gsp::Gsp,
     regs,
+    vgpu::Vgpu, //
 };
 
 macro_rules! define_chipset {
@@ -252,6 +253,7 @@ pub(crate) struct Gpu {
     /// GSP runtime data. Temporarily an empty placeholder.
     #[pin]
     gsp: Gsp,
+    vgpu: Vgpu,
 }
 
 impl Gpu {
@@ -270,6 +272,8 @@ impl Gpu {
                 gfw::wait_gfw_boot_completion(bar)
                     .inspect_err(|_| dev_err!(pdev.as_ref(), "GFW boot did not complete"))?;
             },
+
+            vgpu: Vgpu::new(pdev)?,
 
             sysmem_flush: SysmemFlush::register(pdev.as_ref(), bar, spec.chipset)?,
 
