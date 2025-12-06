@@ -83,6 +83,15 @@ required:
   - rockchip,grf
 
 patternProperties:
+  "rmio[0-9]*$":
+    type: object
+
+    $ref: "/schemas/pinctrl/rockchip,rmio.yaml#"
+
+    description:
+      The RMIO (Rockchip Matrix I/O) controller node which functions as a
+      sub-device of the main pinctrl to handle flexible function routing.
+
   "gpio@[0-9a-f]+$":
     type: object
 

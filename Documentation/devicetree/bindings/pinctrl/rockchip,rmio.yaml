@@ -1,0 +1,130 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/pinctrl/rockchip,rmio.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: RMIO (Rockchip Matrix I/O) Controller
+
+maintainers:
+  - Heiko Stuebner <heiko@sntech.de>
+
+description: |
+  The RMIO controller provides a flexible routing matrix that allows mapping
+  various internal peripheral functions (UART, SPI, PWM, etc.) to specific
+  physical pins. This block is typically a sub-block of the GRF
+  (General Register Files).
+
+properties:
+  compatible:
+    enum:
+      - rockchip,rmio
+
+  rockchip,grf:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      The phandle of the syscon node for the GRF registers.
+
+  rockchip,offset:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      The offset of the RMIO configuration registers within the GRF.
+
+  rockchip,pins-num:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      The number of physical pins supported by this RMIO instance.
+      Used for boundary checking and driver initialization.
+
+additionalProperties:
+  type: object
+  additionalProperties:
+    type: object
+    properties:
+      rockchip,rmio:
+        $ref: "/schemas/types.yaml#/definitions/uint32-matrix"
+        description: |
+          A list of pin-function pairs. The format is <pin_id function_id>.
+          - pin_id: The index of the RMIO pin (0 to pins-num - 1).
+          - function_id: The mux value selecting the peripheral function.
+        minItems: 1
+        items:
+          items:
+            - minimum: 0
+              maximum: 31
+              description:
+                RMIO Pin ID.
+            - minimum: 0
+              maximum: 98
+              description:
+                Function ID.
+
+    required:
+      - rockchip,rmio
+
+    additionalProperties: false
+
+  additionalProperties: false
+
+required:
+  - compatible
+  - rockchip,grf
+  - rockchip,offset
+  - rockchip,pins-num
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/pinctrl/rockchip.h>
+    #include <dt-bindings/pinctrl/rockchip,rk3506-rmio.h>
+
+    pinctrl {
+        #address-cells = <1>;
+        #size-cells = <1>;
+        ranges;
+
+        rmio {
+            compatible = "rockchip,rmio";
+            rockchip,grf = <&grf_pmu>;
+            rockchip,offset = <0x80>;
+            rockchip,pins-num = <32>;
+
+            rmio-uart {
+                rmio_pin27_uart1_tx: rmio-pin27-uart1-tx {
+                    rockchip,rmio = <RMIO_PIN27 RMIO_UART1_TX>;
+                };
+
+                rmio_pin28_uart1_rx: rmio-pin28-uart1-rx {
+                    rockchip,rmio = <RMIO_PIN28 RMIO_UART1_RX>;
+                };
+            };
+        };
+
+        pcfg_pull_default: pcfg-pull-default {
+          bias-pull-pin-default;
+        };
+
+        rm {
+          rmio_pin27_pins: rmio-pin27-pins {
+            rockchip,pins = <1 RK_PC2 7 &pcfg-pull-default>;
+          };
+
+          rmio_pin28_pins: rmio-pin28-pins {
+            rockchip,pins = <1 RK_PC3 7 &pcfg-pull-default>;
+          };
+        };
+    };
+
+    uart1: serial@20064000 {
+      compatible = "snps,dw-apb-uart";
+      reg = <0x20064000 0x400>;
+      interrupts = <GIC_SPI 36 IRQ_TYPE_LEVEL_HIGH>;
+      clocks = <&mux_uart2>;
+      pinctrl-0 = <&rmio_pin27_pins &rmio_pin27_uart1_tx
+                   &rmio_pin28_pins &rmio_pin28_uart1_rx>;
+      pinctrl-names = "default";
+      reg-io-width = <1>;
+      reg-shift = <2>;
+    };
