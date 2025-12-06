@@ -4020,6 +4020,47 @@ static bool __wp_can_reuse_large_anon_folio(struct folio *folio,
 {
 	BUILD_BUG();
 }
+
+int split_huge_page_to_list_to_order(struct page *page, struct list_head *list,
+				     unsigned int new_order)
+{
+	struct folio *folio = page_folio(page);
+	unsigned int order = mapping_min_folio_order(folio->mapping);
+
+	if (!folio_test_anon(folio) && order == folio_order(folio))
+		return -EINVAL;
+
+	VM_WARN_ON_ONCE_PAGE(1, page);
+	return -EINVAL;
+}
+
+int split_huge_page_to_order(struct page *page, unsigned int new_order)
+{
+	return split_huge_page_to_list_to_order(page, NULL, new_order);
+}
+
+int split_folio_to_list(struct folio *folio, struct list_head *list)
+{
+	unsigned int order = mapping_min_folio_order(folio->mapping);
+
+	if (!folio_test_anon(folio) && order == folio_order(folio))
+		return -EINVAL;
+
+	VM_WARN_ON_ONCE_FOLIO(1, folio);
+	return -EINVAL;
+}
+
+unsigned int min_order_for_split(struct folio *folio)
+{
+	return split_folio_to_list(folio, NULL);
+}
+
+
+int try_folio_split_to_order(struct folio *folio, struct page *page,
+			     unsigned int new_order)
+{
+	return split_folio_to_list(folio, NULL);
+}
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
 
 static bool wp_can_reuse_anon_folio(struct folio *folio,
