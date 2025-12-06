@@ -22,7 +22,7 @@ static __always_inline u32 queued_fetch_set_pending_acquire(struct qspinlock *lo
 	 */
 	val = GEN_BINARY_RMWcc(LOCK_PREFIX "btsl", lock->val.counter, c,
 			       "I", _Q_PENDING_OFFSET) * _Q_PENDING_VAL;
-	val |= atomic_read(&lock->val) & ~_Q_PENDING_MASK;
+	val |= atomic_read(&lock->val) & ~_Q_PENDING_VAL;
 
 	return val;
 }
@@ -64,6 +64,39 @@ static inline bool vcpu_is_preempted(long cpu)
 }
 #endif
 
+// CONFIG_PARAVIRT_SPINLOCKS
+
+#ifdef CONFIG_HQSPINLOCKS
+extern void hq_configure_spin_lock_slowpath(void);
+
+#ifndef CONFIG_PARAVIRT_SPINLOCKS
+extern void (*hq_queued_spin_lock_slowpath)(struct qspinlock *lock, u32 val);
+extern void native_queued_spin_lock_slowpath(struct qspinlock *lock, u32 val);
+
+#define	queued_spin_unlock queued_spin_unlock
+/**
+ * queued_spin_unlock - release a queued spinlock
+ * @lock : Pointer to queued spinlock structure
+ *
+ * A smp_store_release() on the least-significant byte.
+ */
+static inline void native_queued_spin_unlock(struct qspinlock *lock)
+{
+	smp_store_release(&lock->locked, 0);
+}
+
+static inline void queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
+{
+	hq_queued_spin_lock_slowpath(lock, val);
+}
+
+static inline void queued_spin_unlock(struct qspinlock *lock)
+{
+	native_queued_spin_unlock(lock);
+}
+#endif // !CONFIG_PARAVIRT_SPINLOCKS
+#endif // CONFIG_HQSPINLOCKS
+
 #ifdef CONFIG_PARAVIRT
 /*
  * virt_spin_lock_key - disables by default the virt_spin_lock() hijack.
@@ -101,7 +134,8 @@ static inline bool virt_spin_lock(struct qspinlock *lock)
  __retry:
 	val = atomic_read(&lock->val);
 
-	if (val || !atomic_try_cmpxchg(&lock->val, &val, _Q_LOCKED_VAL)) {
+	if ((val & ~_Q_SERVICE_MASK) ||
+	     !atomic_try_cmpxchg(&lock->val, &val, _Q_LOCKED_VAL | (val & _Q_SERVICE_MASK))) {
 		cpu_relax();
 		goto __retry;
 	}

@@ -42,6 +42,29 @@ typedef struct spinlock {
 
 #define DEFINE_SPINLOCK(x)	spinlock_t x = __SPIN_LOCK_UNLOCKED(x)
 
+#ifdef __ARCH_SPIN_LOCK_UNLOCKED_HQ
+#define ___SPIN_LOCK_INITIALIZER_HQ(lockname)	\
+	{					\
+	.raw_lock = __ARCH_SPIN_LOCK_UNLOCKED_HQ,	\
+	SPIN_DEBUG_INIT(lockname)		\
+	SPIN_DEP_MAP_INIT(lockname) }
+
+#else
+#define ___SPIN_LOCK_INITIALIZER_HQ(lockname)	\
+	{					\
+	.raw_lock = __ARCH_SPIN_LOCK_UNLOCKED,	\
+	SPIN_DEBUG_INIT(lockname)		\
+	SPIN_DEP_MAP_INIT(lockname) }
+#endif
+
+#define __SPIN_LOCK_INITIALIZER_HQ(lockname) \
+	{ { .rlock = ___SPIN_LOCK_INITIALIZER_HQ(lockname) } }
+
+#define __SPIN_LOCK_UNLOCKED_HQ(lockname) \
+	((spinlock_t) __SPIN_LOCK_INITIALIZER_HQ(lockname))
+
+#define DEFINE_SPINLOCK_HQ(x) spinlock_t x = __SPIN_LOCK_UNLOCKED_HQ(x)
+
 #else /* !CONFIG_PREEMPT_RT */
 
 /* PREEMPT_RT kernels map spinlock to rt_mutex */
@@ -67,6 +90,9 @@ typedef struct spinlock {
 	}
 
 #define DEFINE_SPINLOCK(name)					\
+	spinlock_t name = __SPIN_LOCK_UNLOCKED(name)
+
+#define DEFINE_SPINLOCK_HQ(name)					\
 	spinlock_t name = __SPIN_LOCK_UNLOCKED(name)
 
 #endif /* CONFIG_PREEMPT_RT */

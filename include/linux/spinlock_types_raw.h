@@ -70,4 +70,24 @@ typedef struct raw_spinlock {
 
 #define DEFINE_RAW_SPINLOCK(x)  raw_spinlock_t x = __RAW_SPIN_LOCK_UNLOCKED(x)
 
+#ifdef __ARCH_SPIN_LOCK_UNLOCKED_HQ
+#define __RAW_SPIN_LOCK_INITIALIZER_HQ(lockname)	\
+{						\
+	.raw_lock = __ARCH_SPIN_LOCK_UNLOCKED_HQ,	\
+	SPIN_DEBUG_INIT(lockname)		\
+	RAW_SPIN_DEP_MAP_INIT(lockname) }
+
+#else
+#define __RAW_SPIN_LOCK_INITIALIZER_HQ(lockname)	\
+{						\
+	.raw_lock = __ARCH_SPIN_LOCK_UNLOCKED,	\
+	SPIN_DEBUG_INIT(lockname)		\
+	RAW_SPIN_DEP_MAP_INIT(lockname) }
+#endif
+
+#define __RAW_SPIN_LOCK_UNLOCKED_HQ(lockname)	\
+	((raw_spinlock_t) __RAW_SPIN_LOCK_INITIALIZER_HQ(lockname))
+
+#define DEFINE_RAW_SPINLOCK_HQ(x)  raw_spinlock_t x = __RAW_SPIN_LOCK_UNLOCKED_HQ(x)
+
 #endif /* __LINUX_SPINLOCK_TYPES_RAW_H */

@@ -100,6 +100,8 @@
 #ifdef CONFIG_DEBUG_SPINLOCK
   extern void __raw_spin_lock_init(raw_spinlock_t *lock, const char *name,
 				   struct lock_class_key *key, short inner);
+  extern void __raw_spin_lock_init_hq(raw_spinlock_t *lock, const char *name,
+				   struct lock_class_key *key, short inner);
 
 # define raw_spin_lock_init(lock)					\
 do {									\
@@ -108,9 +110,19 @@ do {									\
 	__raw_spin_lock_init((lock), #lock, &__key, LD_WAIT_SPIN);	\
 } while (0)
 
+# define raw_spin_lock_init_hq(lock)					\
+do {									\
+	static struct lock_class_key __key;				\
+									\
+	__raw_spin_lock_init_hq((lock), #lock, &__key, LD_WAIT_SPIN);	\
+} while (0)
+
 #else
 # define raw_spin_lock_init(lock)				\
 	do { *(lock) = __RAW_SPIN_LOCK_UNLOCKED(lock); } while (0)
+
+# define raw_spin_lock_init_hq(lock)				\
+	do { *(lock) = __RAW_SPIN_LOCK_UNLOCKED_HQ(lock); } while (0)
 #endif
 
 #define raw_spin_is_locked(lock)	arch_spin_is_locked(&(lock)->raw_lock)
@@ -336,12 +348,26 @@ do {								\
 			     #lock, &__key, LD_WAIT_CONFIG);	\
 } while (0)
 
+# define spin_lock_init_hq(lock)					\
+do {								\
+	static struct lock_class_key __key;			\
+								\
+	__raw_spin_lock_init_hq(spinlock_check(lock),		\
+			     #lock, &__key, LD_WAIT_CONFIG);	\
+} while (0)
+
 #else
 
 # define spin_lock_init(_lock)			\
 do {						\
 	spinlock_check(_lock);			\
 	*(_lock) = __SPIN_LOCK_UNLOCKED(_lock);	\
+} while (0)
+
+# define spin_lock_init_hq(_lock)			\
+do {						\
+	spinlock_check(_lock);			\
+	*(_lock) = __SPIN_LOCK_UNLOCKED_HQ(_lock);	\
 } while (0)
 
 #endif
