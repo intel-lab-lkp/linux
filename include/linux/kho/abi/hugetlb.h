@@ -9,6 +9,7 @@
 #define _LINUX_KHO_ABI_HUGETLB_H
 
 #include <linux/hugetlb.h>
+#include <linux/kexec_handover.h>
 
 /**
  * DOC: hugetlb-backed memfd live update ABI
@@ -62,5 +63,36 @@ struct hugetlb_ser {
 static_assert(sizeof(struct hugetlb_ser) <= PAGE_SIZE);
 
 #define HUGETLB_FLB_COMPATIBLE "hugetlb-v1"
+
+/**
+ * struct hugemfd_folio_ser - Serialized state of a single folio.
+ * @pfn:          The page frame number of the folio.
+ * @reserved:     Reserved bits. Might be used for flags later.
+ * @index:        The page offset of the folio in the original file.
+ */
+struct hugemfd_folio_ser {
+	u64 pfn:52;
+	u64 reserved:12;
+	u64 index;
+} __packed;
+
+/**
+ * struct hugemfd_ser - Main serialization structure of a HugeTLB-backed memfd.
+ * @pos:          The file's current position (f_pos).
+ * @size:         The total size of the file in bytes (i_size).
+ * @nr_folios:    Number of folios in the folios array.
+ * @folios:       KHO vmalloc descriptor pointing to the array of
+ *                struct hugemfd_folio_ser.
+ * @order:        Order of the hugepages that back this file.
+ */
+struct hugemfd_ser {
+	u64 size;
+	u64 pos;
+	u64 nr_folios;
+	struct kho_vmalloc folios;
+	u8 order;
+} __packed;
+
+#define HUGE_MEMFD_COMPATIBLE "huge-memfd-v1"
 
 #endif /* _LINUX_KHO_ABI_HUGETLB_H */
