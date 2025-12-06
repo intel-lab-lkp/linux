@@ -453,8 +453,10 @@ static int fluke_dma_write(struct gpib_board *board, u8 *buffer, size_t length,
 		retval = wait_for_sids_or_sgns(board);
 
 	*bytes_written = readl(e_priv->write_transfer_counter) & write_transfer_counter_mask;
-	if (WARN_ON_ONCE(*bytes_written > length))
-		return -EFAULT;
+	if (WARN_ON_ONCE(*bytes_written > length)) {
+		retval = -EFAULT;
+		goto cleanup;
+	}
 
 cleanup:
 	dma_unmap_single(board->dev, address, length, DMA_TO_DEVICE);
@@ -640,8 +642,10 @@ static int fluke_dma_read(struct gpib_board *board, u8 *buffer,
 	 */
 	usleep_range(10, 15);
 	residue = fluke_get_dma_residue(e_priv->dma_channel, dma_cookie);
-	if (WARN_ON_ONCE(residue > length || residue < 0))
+	if (WARN_ON_ONCE(residue > length || residue < 0)) {
+		dma_unmap_single(board->dev, bus_address, length, DMA_FROM_DEVICE);
 		return -EFAULT;
+	}
 	*bytes_read += length - residue;
 	dmaengine_terminate_all(e_priv->dma_channel);
 	// make sure fluke_dma_callback got called
