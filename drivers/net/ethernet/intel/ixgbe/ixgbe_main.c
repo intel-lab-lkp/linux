@@ -11508,6 +11508,11 @@ shutdown_aci:
 	mutex_destroy(&adapter->hw.aci.lock);
 	ixgbe_release_hw_control(adapter);
 clean_up_probe:
+	iounmap(adapter->io_addr);
+	kfree(adapter->jump_tables[0]);
+	kfree(adapter->mac_table);
+	kfree(adapter->rss_key);
+	bitmap_free(adapter->af_xdp_zc_qps);
 	disable_dev = !test_and_set_bit(__IXGBE_DISABLED, &adapter->state);
 	free_netdev(netdev);
 	devlink_free(adapter->devlink);
