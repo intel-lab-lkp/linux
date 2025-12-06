@@ -11,6 +11,7 @@
 
 #include <linux/stringify.h>
 #include <linux/types.h>
+#include <linux/annotate.h>
 
 #define JUMP_TABLE_ENTRY(key, label)			\
 	".pushsection __jump_table,  \"aw\" \n\t"	\

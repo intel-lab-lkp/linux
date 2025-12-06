@@ -2,15 +2,15 @@
 #ifndef _ASM_X86_ASM_H
 #define _ASM_X86_ASM_H
 
-#include <linux/annotate.h>
-
 #ifdef __ASSEMBLER__
+# define __ASM_C(a,b)			a
 # define __ASM_FORM(x, ...)		x,## __VA_ARGS__
 # define __ASM_FORM_RAW(x, ...)		x,## __VA_ARGS__
 # define __ASM_FORM_COMMA(x, ...)	x,## __VA_ARGS__,
 # define __ASM_REGPFX			%
 #else
 #include <linux/stringify.h>
+# define __ASM_C(a,b)			b
 # define __ASM_FORM(x, ...)		" " __stringify(x,##__VA_ARGS__) " "
 # define __ASM_FORM_RAW(x, ...)		    __stringify(x,##__VA_ARGS__)
 # define __ASM_FORM_COMMA(x, ...)	" " __stringify(x,##__VA_ARGS__) ","
@@ -114,6 +114,10 @@
 #define _ASM_ARG6B	r9b
 
 #endif
+
+#define DEFINE_MACRO(name)						\
+	__ASM_C(DEFINE_ ## name,					\
+		asm(__stringify(DEFINE_ ## name)))
 
 #ifndef __ASSEMBLER__
 static __always_inline __pure void *rip_rel_ptr(void *p)
