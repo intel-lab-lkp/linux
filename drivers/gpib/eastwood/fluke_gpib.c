@@ -585,7 +585,7 @@ static int fluke_dma_read(struct gpib_board *board, u8 *buffer,
 					      DMA_PREP_INTERRUPT | DMA_CTRL_ACK);
 	if (!tx_desc) {
 		dev_err(board->gpib_dev, "failed to allocate dma transmit descriptor\n");
-		dma_unmap_single(NULL, bus_address, length, DMA_FROM_DEVICE);
+		dma_unmap_single(board->dev, bus_address, length, DMA_FROM_DEVICE);
 		return -EIO;
 	}
 	tx_desc->callback = fluke_dma_callback;
