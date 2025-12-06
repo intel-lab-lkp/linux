@@ -126,9 +126,9 @@
  */
 #define __FILL_RETURN_SLOT			\
 	ANNOTATE_INTRA_FUNCTION_CALL;		\
-	call	772f;				\
+	call	872f;				\
 	int3;					\
-772:
+872:
 
 /*
  * Stuff the entire RSB.
@@ -140,12 +140,12 @@
 #ifdef CONFIG_X86_64
 #define __FILL_RETURN_BUFFER(reg, nr)			\
 	mov	$(nr/2), reg;				\
-771:							\
+871:							\
 	__FILL_RETURN_SLOT				\
 	__FILL_RETURN_SLOT				\
 	add	$(BITS_PER_LONG/8) * 2, %_ASM_SP;	\
 	dec	reg;					\
-	jnz	771b;					\
+	jnz	871b;					\
 	/* barrier for jnz misprediction */		\
 	lfence;						\
 	CREDIT_CALL_DEPTH				\
