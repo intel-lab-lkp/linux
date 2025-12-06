@@ -706,7 +706,7 @@ static inline u32 per_cpu_l2c_id(unsigned int cpu)
  */
 static __always_inline void amd_clear_divider(void)
 {
-	asm volatile(ALTERNATIVE("", "div %2\n\t", X86_BUG_DIV0)
+	asm volatile(ALTERNATIVE("", "div %2", X86_BUG_DIV0)
 		     :: "a" (0), "d" (0), "r" (1));
 }
 

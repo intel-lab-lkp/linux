@@ -90,7 +90,7 @@ extern unsigned long vmware_tdx_hypercall(unsigned long cmd,
  * set. The high word of %edx may contain input data from the caller.
  */
 #define VMWARE_HYPERCALL					\
-	ALTERNATIVE_2("movw %[port], %%dx\n\t"			\
+	ALTERNATIVE_2("movw %[port], %%dx; "			\
 		      "inl (%%dx), %%eax",			\
 		      "vmcall", X86_FEATURE_VMCALL,		\
 		      "vmmcall", X86_FEATURE_VMW_VMMCALL)
