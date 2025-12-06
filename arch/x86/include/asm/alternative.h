@@ -8,6 +8,90 @@
 #include <asm/asm.h>
 #include <asm/bug.h>
 
+/*
+ * CALC_MAX: assembler-compatible max based on the idea from:
+ * http://graphics.stanford.edu/~seander/bithacks.html#IntegerMinOrMax
+ *
+ * The additional "-" is needed because gas uses a "true" value of -1.
+ */
+#define CALC_MAX(a, b) (a ^ ((a ^ b) & -(-(a < b))))
+
+/* Add padding after the original instructions so the replacements can fit. */
+#define __ALT_SKIP(orig_len, len1, len2, len3)				\
+	.skip -((CALC_MAX(CALC_MAX(len1, len2), len3) - orig_len) > 0) *\
+	       (CALC_MAX(CALC_MAX(len1, len2), len3) - orig_len), 0x90
+
+#define ALT_SKIP __ALT_SKIP((772b-771b), (775f-774f), (776f-775f), (777f-776f))
+
+#define ALT_REPLACE(newinstr1, newinstr2, newinstr3)			\
+	.pushsection .altinstr_replacement, "ax";			\
+		774: newinstr1;						\
+		775: newinstr2;						\
+		776: newinstr3;						\
+		777:							\
+	.popsection
+
+#define ALT_ENTRY(orig_begin, orig_end, new_begin, new_end, ft_flags)	\
+	__ANNOTATE_DATA_SPECIAL(new_begin);				\
+	.pushsection .altinstructions, "aM", @progbits, ALT_INSTR_SIZE;	\
+		.long	orig_begin - .;					\
+		.long	new_begin - .;					\
+		.4byte	ft_flags;					\
+		.byte	orig_end - orig_begin;				\
+		.byte	new_end - new_begin;				\
+	.popsection
+
+/*
+ * These ALTERNATIVE .macros get created when this file gets included:
+ */
+
+#define DEFINE_ALTERNATIVE						\
+.macro ALTERNATIVE oldinstr, newinstr, ft_flags;			\
+	771: __ASM_C(\oldinstr, \\oldinstr);				\
+	772: ALT_SKIP;							\
+	773:								\
+	ALT_REPLACE(__ASM_C(\newinstr, \\newinstr),,);			\
+	ALT_ENTRY(771b, 773b, 774b, 775b,				\
+		  __ASM_C(\ft_flags, \\ft_flags));			\
+.endm
+
+#define DEFINE_ALTERNATIVE_2						\
+.macro ALTERNATIVE_2 oldinstr, newinstr1, ft_flags1,			\
+			       newinstr2, ft_flags2;			\
+	771: __ASM_C(\oldinstr, \\oldinstr);				\
+	772: ALT_SKIP;							\
+	773:								\
+	ALT_REPLACE(__ASM_C(\newinstr1, \\newinstr1),			\
+		    __ASM_C(\newinstr2, \\newinstr2),);			\
+	ALT_ENTRY(771b, 773b, 774b, 775b,				\
+		  __ASM_C(\ft_flags1, \\ft_flags1));			\
+	ALT_ENTRY(771b, 773b, 775b, 776b,				\
+		  __ASM_C(\ft_flags2, \\ft_flags2));			\
+.endm
+
+#define DEFINE_ALTERNATIVE_3						\
+.macro ALTERNATIVE_3 oldinstr, newinstr1, ft_flags1,			\
+			       newinstr2, ft_flags2,			\
+			       newinstr3, ft_flags3;			\
+	771: __ASM_C(\oldinstr, \\oldinstr);				\
+	772: ALT_SKIP;							\
+	773:								\
+	ALT_REPLACE(__ASM_C(\newinstr1, \\newinstr1),			\
+		    __ASM_C(\newinstr2, \\newinstr2),			\
+		    __ASM_C(\newinstr3, \\newinstr3));			\
+	ALT_ENTRY(771b, 773b, 774b, 775b,				\
+		  __ASM_C(\ft_flags1, \\ft_flags1));			\
+	ALT_ENTRY(771b, 773b, 775b, 776b,				\
+		  __ASM_C(\ft_flags2, \\ft_flags2));			\
+	ALT_ENTRY(771b, 773b, 776b, 777b,				\
+		  __ASM_C(\ft_flags3, \\ft_flags3));			\
+.endm
+
+DEFINE_MACRO(ALTERNATIVE);
+DEFINE_MACRO(ALTERNATIVE_2);
+DEFINE_MACRO(ALTERNATIVE_3);
+
+
 #define ALT_FLAGS_SHIFT		16
 
 #define ALT_FLAG_NOT		(1 << 0)
@@ -184,52 +268,29 @@ static inline int alternatives_text_reserved(void *start, void *end)
 
 #define ALT_CALL_INSTR		"call BUG_func"
 
-#define alt_slen		"772b-771b"
-#define alt_total_slen		"773b-771b"
-#define alt_rlen		"775f-774f"
+#define ALTERNATIVE(oldinstr, newinstr, ft_flags)				\
+	"ALTERNATIVE \"" oldinstr "\", "					\
+		    "\"" newinstr "\", \"" __stringify(ft_flags) "\"\n"
 
-#define OLDINSTR(oldinstr)						\
-	"# ALT: oldinstr\n"						\
-	"771:\n\t" oldinstr "\n772:\n"					\
-	"# ALT: padding\n"						\
-	".skip -(((" alt_rlen ")-(" alt_slen ")) > 0) * "		\
-		"((" alt_rlen ")-(" alt_slen ")),0x90\n"		\
-	"773:\n"
+#define ALTERNATIVE_2(oldinstr,							\
+		      newinstr1, ft_flags1,					\
+		      newinstr2, ft_flags2)					\
+	"ALTERNATIVE_2   \"" oldinstr "\", "					\
+			"\"" newinstr1 "\", \"" __stringify(ft_flags1) "\", "	\
+			"\"" newinstr2 "\", \"" __stringify(ft_flags2) "\"\n"
 
-#define ALTINSTR_ENTRY(ft_flags)					      \
-	".pushsection .altinstructions, \"aM\", @progbits, "		      \
-		      __stringify(ALT_INSTR_SIZE) "\n"			      \
-	" .long 771b - .\n"				/* label           */ \
-	" .long 774f - .\n"				/* new instruction */ \
-	" .4byte " __stringify(ft_flags) "\n"		/* feature + flags */ \
-	" .byte " alt_total_slen "\n"			/* source len      */ \
-	" .byte " alt_rlen "\n"				/* replacement len */ \
-	".popsection\n"
-
-#define ALTINSTR_REPLACEMENT(newinstr)		/* replacement */	\
-	".pushsection .altinstr_replacement, \"ax\"\n"			\
-	ANNOTATE_DATA_SPECIAL "\n"					\
-	"# ALT: replacement\n"						\
-	"774:\n\t" newinstr "\n775:\n"					\
-	".popsection\n"
-
-/* alternative assembly primitive: */
-#define ALTERNATIVE(oldinstr, newinstr, ft_flags)			\
-	OLDINSTR(oldinstr)						\
-	ALTINSTR_ENTRY(ft_flags)					\
-	ALTINSTR_REPLACEMENT(newinstr)
-
-#define ALTERNATIVE_2(oldinstr, newinstr1, ft_flags1, newinstr2, ft_flags2) \
-	ALTERNATIVE(ALTERNATIVE(oldinstr, newinstr1, ft_flags1), newinstr2, ft_flags2)
+#define ALTERNATIVE_3(oldinstr,							\
+		      newinstr1, ft_flags1,					\
+		      newinstr2, ft_flags2,					\
+		      newinstr3, ft_flags3)					\
+	"ALTERNATIVE_3   \"" oldinstr "\", "					\
+			"\"" newinstr1 "\", \"" __stringify(ft_flags1) "\", "	\
+			"\"" newinstr2 "\", \"" __stringify(ft_flags2) "\", "	\
+			"\"" newinstr3 "\", \"" __stringify(ft_flags3) "\"\n"
 
 /* If @feature is set, patch in @newinstr_yes, otherwise @newinstr_no. */
 #define ALTERNATIVE_TERNARY(oldinstr, ft_flags, newinstr_yes, newinstr_no) \
 	ALTERNATIVE_2(oldinstr, newinstr_no, X86_FEATURE_ALWAYS, newinstr_yes, ft_flags)
-
-#define ALTERNATIVE_3(oldinstr, newinstr1, ft_flags1, newinstr2, ft_flags2, \
-			newinstr3, ft_flags3)				\
-	ALTERNATIVE(ALTERNATIVE_2(oldinstr, newinstr1, ft_flags1, newinstr2, ft_flags2), \
-		      newinstr3, ft_flags3)
 
 /*
  * Alternative instructions for different CPU types or capabilities.
@@ -332,63 +393,8 @@ void nop_func(void);
 	.endm
 #endif
 
-/*
- * Issue one struct alt_instr descriptor entry (need to put it into
- * the section .altinstructions, see below). This entry contains
- * enough information for the alternatives patching code to patch an
- * instruction. See apply_alternatives().
- */
-.macro altinstr_entry orig alt ft_flags orig_len alt_len
-	.long \orig - .
-	.long \alt - .
-	.4byte \ft_flags
-	.byte \orig_len
-	.byte \alt_len
-.endm
-
 .macro ALT_CALL_INSTR
 	call BUG_func
-.endm
-
-/*
- * Define an alternative between two instructions. If @feature is
- * present, early code in apply_alternatives() replaces @oldinstr with
- * @newinstr. ".skip" directive takes care of proper instruction padding
- * in case @newinstr is longer than @oldinstr.
- */
-#define __ALTERNATIVE(oldinst, newinst, flag)				\
-740:									\
-	oldinst	;							\
-741:									\
-	.skip -(((744f-743f)-(741b-740b)) > 0) * ((744f-743f)-(741b-740b)),0x90	;\
-742:									\
-	.pushsection .altinstructions, "aM", @progbits, ALT_INSTR_SIZE ;\
-	altinstr_entry 740b,743f,flag,742b-740b,744f-743f ;		\
-	.popsection ;							\
-	.pushsection .altinstr_replacement,"ax"	;			\
-743:									\
-	ANNOTATE_DATA_SPECIAL ;						\
-	newinst	;							\
-744:									\
-	.popsection ;
-
-.macro ALTERNATIVE oldinstr, newinstr, ft_flags
-	__ALTERNATIVE(\oldinstr, \newinstr, \ft_flags)
-.endm
-
-/*
- * Same as ALTERNATIVE macro above but for two alternatives. If CPU
- * has @feature1, it replaces @oldinstr with @newinstr1. If CPU has
- * @feature2, it replaces @oldinstr with @feature2.
- */
-.macro ALTERNATIVE_2 oldinstr, newinstr1, ft_flags1, newinstr2, ft_flags2
-	__ALTERNATIVE(__ALTERNATIVE(\oldinstr, \newinstr1, \ft_flags1),
-		      \newinstr2, \ft_flags2)
-.endm
-
-.macro ALTERNATIVE_3 oldinstr, newinstr1, ft_flags1, newinstr2, ft_flags2, newinstr3, ft_flags3
-	__ALTERNATIVE(ALTERNATIVE_2(\oldinstr, \newinstr1, \ft_flags1, \newinstr2, \ft_flags2),
-		      \newinstr3, \ft_flags3)
 .endm
 
 /* If @feature is set, patch in @newinstr_yes, otherwise @newinstr_no. */

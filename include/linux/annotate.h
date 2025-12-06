@@ -100,8 +100,13 @@ DEFINE_MACRO(ANNOTATE_DATA(DATA_SPECIAL));
  * to find and extract individual special section entries as needed.
  */
 #define ANNOTATE_DATA_SPECIAL		"ANNOTATE_DATA_SPECIAL"
+#define __ANNOTATE_DATA_SPECIAL(label)	__ANNOTATE .discard.annotate_data, ANNOTYPE_DATA_SPECIAL, label
 
-#endif /* !__ASSEMBLY__ */
+#else /* __ASSEMBLY__ */
+
+#define __ANNOTATE_DATA_SPECIAL(label)	ANNOTATE_DATA_SPECIAL loc=label
+
+#endif /* __ASSEMBLY__ */
 
 #else /* !OBJTOOL */
 
