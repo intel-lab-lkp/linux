@@ -52,15 +52,11 @@ static int damon_sample_prcl_repeat_call_fn(void *data)
 	return 0;
 }
 
-static struct damon_call_control repeat_call_control = {
-	.fn = damon_sample_prcl_repeat_call_fn,
-	.repeat = true,
-};
-
 static int damon_sample_prcl_start(void)
 {
 	struct damon_target *target;
 	struct damos *scheme;
+	struct damon_call_control *call_control;
 	int err;
 
 	pr_info("start\n");
@@ -109,8 +105,15 @@ static int damon_sample_prcl_start(void)
 	if (err)
 		return err;
 
-	repeat_call_control.data = ctx;
-	return damon_call(ctx, &repeat_call_control);
+	call_control = kmalloc(sizeof(*call_control), GFP_KERNEL);
+	if (!call_control)
+		return -ENOMEM;
+
+	call_control->fn = damon_sample_prcl_repeat_call_fn;
+	call_control->repeat = true;
+	call_control->data = ctx;
+
+	return damon_call(ctx, call_control);
 }
 
 static void damon_sample_prcl_stop(void)

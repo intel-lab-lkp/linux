@@ -197,14 +197,10 @@ free_out:
 	return NULL;
 }
 
-static struct damon_call_control call_control = {
-	.fn = damon_stat_damon_call_fn,
-	.repeat = true,
-};
-
 static int damon_stat_start(void)
 {
 	int err;
+	struct damon_call_control *call_control;
 
 	damon_stat_context = damon_stat_build_ctx();
 	if (!damon_stat_context)
@@ -214,8 +210,16 @@ static int damon_stat_start(void)
 		return err;
 
 	damon_stat_last_refresh_jiffies = jiffies;
-	call_control.data = damon_stat_context;
-	return damon_call(damon_stat_context, &call_control);
+
+	call_control = kmalloc(sizeof(*call_control), GFP_KERNEL);
+	if (!call_control)
+		return -ENOMEM;
+
+	call_control->fn = damon_stat_damon_call_fn;
+	call_control->repeat = true;
+	call_control->data = damon_stat_context;
+
+	return damon_call(damon_stat_context, call_control);
 }
 
 static void damon_stat_stop(void)

@@ -2566,7 +2566,7 @@ static void kdamond_call(struct damon_ctx *ctx, bool cancel)
 		mutex_unlock(&ctx->call_controls_lock);
 		if (!control->repeat) {
 			complete(&control->completion);
-		} else if (control->canceled && control->dealloc_on_cancel) {
+		} else if (control->canceled) {
 			kfree(control);
 			continue;
 		} else {

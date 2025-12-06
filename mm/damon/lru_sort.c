@@ -280,14 +280,10 @@ static int damon_lru_sort_damon_call_fn(void *arg)
 	return damon_lru_sort_handle_commit_inputs();
 }
 
-static struct damon_call_control call_control = {
-	.fn = damon_lru_sort_damon_call_fn,
-	.repeat = true,
-};
-
 static int damon_lru_sort_turn(bool on)
 {
 	int err;
+	struct damon_call_control *call_control;
 
 	if (!on) {
 		err = damon_stop(&ctx, 1);
@@ -303,8 +299,18 @@ static int damon_lru_sort_turn(bool on)
 	err = damon_start(&ctx, 1, true);
 	if (err)
 		return err;
+
 	kdamond_pid = ctx->kdamond->pid;
-	return damon_call(ctx, &call_control);
+
+	call_control = kmalloc(sizeof(*call_control), GFP_KERNEL);
+	if (!call_control)
+		return -ENOMEM;
+
+	call_control->fn = damon_lru_sort_damon_call_fn;
+	call_control->repeat = true;
+	call_control->data = ctx;
+
+	return damon_call(ctx, call_control);
 }
 
 static int damon_lru_sort_addr_unit_store(const char *val,
@@ -378,8 +384,6 @@ static int __init damon_lru_sort_init(void)
 	err = damon_modules_new_paddr_ctx_target(&ctx, &target);
 	if (err)
 		goto out;
-
-	call_control.data = ctx;
 
 	/* 'enabled' has set before this function, probably via command line */
 	if (enabled)
