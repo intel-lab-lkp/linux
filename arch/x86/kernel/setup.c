@@ -26,6 +26,7 @@
 #include <linux/tboot.h>
 #include <linux/usb/xhci-dbgp.h>
 #include <linux/vmalloc.h>
+#include <linux/liveupdate.h>
 
 #include <uapi/linux/mount.h>
 
@@ -1215,6 +1216,12 @@ void __init setup_arch(char **cmdline_p)
 	x86_init.paging.pagetable_init();
 
 	kho_memory_init();
+
+	/*
+	 * Hugepages might be preserved from a liveupdate. Make sure it is
+	 * initialized so hugetlb can query its state.
+	 */
+	liveupdate_early_init();
 
 	if (boot_cpu_has(X86_FEATURE_GBPAGES)) {
 		hugetlb_cma_reserve(PUD_SHIFT - PAGE_SHIFT);

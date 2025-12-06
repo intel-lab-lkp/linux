@@ -69,6 +69,13 @@ static struct {
 	u64 liveupdate_num;
 } luo_global;
 
+static bool __luo_early_initialized __initdata;
+
+bool __init luo_early_initialized(void)
+{
+	return __luo_early_initialized;
+}
+
 static int __init early_liveupdate_param(char *buf)
 {
 	return kstrtobool(buf, &luo_global.enabled);
@@ -133,9 +140,27 @@ static int __init luo_early_startup(void)
 	return err;
 }
 
-static int __init liveupdate_early_init(void)
+/*
+ * This should only be called after KHO FDT is known. It gets the LUO subtree
+ * and does initial validation, making early boot read-only access possible.
+ */
+void __init liveupdate_early_init(void)
 {
 	int err;
+
+	/*
+	 * HugeTLB needs LUO to be initialized early in boot, before gigantic
+	 * hugepages are allocated. On x86, that happens in setup_arch(), but on
+	 * ARM64 (and other architectures) that happens in mm_core_init().
+	 *
+	 * Since the code in mm_core_init() is shared between all architectures,
+	 * this can lead to the init being called twice. Skip if initialization
+	 * was already done.
+	 */
+	if (__luo_early_initialized)
+		return;
+
+	__luo_early_initialized = true;
 
 	err = luo_early_startup();
 	if (err) {
@@ -143,10 +168,7 @@ static int __init liveupdate_early_init(void)
 		luo_restore_fail("The incoming tree failed to initialize properly [%pe], disabling live update\n",
 				 ERR_PTR(err));
 	}
-
-	return err;
 }
-early_initcall(liveupdate_early_init);
 
 /* Called during boot to create outgoing LUO fdt tree */
 static int __init luo_fdt_setup(void)

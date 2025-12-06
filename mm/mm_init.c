@@ -31,6 +31,7 @@
 #include <linux/execmem.h>
 #include <linux/vmstat.h>
 #include <linux/kexec_handover.h>
+#include <linux/liveupdate.h>
 #include <linux/hugetlb.h>
 #include "internal.h"
 #include "slab.h"
@@ -2681,6 +2682,12 @@ void __init mm_core_init(void)
 	arch_mm_preinit();
 
 	kho_memory_init();
+	/*
+	 * Hugepages might be preserved from a liveupdate. Make sure it is
+	 * initialized so hugetlb can query its state.
+	 */
+	liveupdate_early_init();
+
 	hugetlb_bootmem_alloc();
 
 	/* Initializations relying on SMP setup */
