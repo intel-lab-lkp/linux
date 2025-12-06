@@ -333,6 +333,10 @@ bool handshake_req_cancel(struct sock *sk)
 		return false;
 	}
 
+	/* Duplicate cancellation request */
+	trace_handshake_cancel_none(net, req, sk);
+	return false;
+
 out_true:
 	trace_handshake_cancel(net, req, sk);
 
