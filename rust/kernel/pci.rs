@@ -526,6 +526,40 @@ impl Device {
             Err(ENODEV)
         }
     }
+
+    /// Find the extended capability
+    pub fn find_ext_capability(&self, cap: i32) -> Option<u16> {
+        // SAFETY: `self.as_raw()` is a valid pointer to a `struct pci_dev`.
+        let offset = unsafe { bindings::pci_find_ext_capability(self.as_raw(), cap) };
+        if offset != 0 {
+            Some(offset as u16)
+        } else {
+            None
+        }
+    }
+
+    /// Read configuration space by word
+    pub fn config_read_word(&self, where_: i32) -> Result<u16, Error> {
+        let mut val: u16 = 0;
+
+        // SAFETY: `self.as_raw()` is a valid pointer to `struct pci_dev`,
+        // and `&mut val` is a valid pointer to writable memory.
+        to_result(unsafe {
+            bindings::pci_read_config_word(self.as_raw(), where_, &mut val)
+        })?;
+
+        Ok(val)
+    }
+
+    /// Read configuration space by dword
+    pub fn config_read_dword(&self, where_: i32) -> Result<u32, Error> {
+        let mut val: u32 = 0;
+        // SAFETY: `self.as_raw()` is a valid pointer to `struct pci_dev`,
+        // and `&mut val` is a valid pointer to writable memory.
+        to_result(unsafe { bindings::pci_read_config_dword(self.as_raw(), where_, &mut val) })?;
+
+        Ok(val)
+    }
 }
 
 impl Device<device::Bound> {
