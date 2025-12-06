@@ -64,16 +64,18 @@ struct RegistryEntry {
 
 /// The `SetRegistry` command.
 pub(crate) struct SetRegistry {
-    entries: [RegistryEntry; Self::NUM_ENTRIES],
+    entries: [RegistryEntry; Self::MAX_NUM_ENTRIES],
+    num_entries: usize,
 }
 
 impl SetRegistry {
     // For now we hard-code the registry entries. Future work will allow others to
     // be added as module parameters.
-    const NUM_ENTRIES: usize = 3;
+    const MAX_NUM_ENTRIES: usize = 4;
 
     /// Creates a new `SetRegistry` command, using a set of hardcoded entries.
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(vgpu_support: bool) -> Self {
+        let num_entries = if vgpu_support { 4 } else { 3 };
         Self {
             entries: [
                 // RMSecBusResetEnable - enables PCI secondary bus reset
@@ -93,7 +95,12 @@ impl SetRegistry {
                     key: "RMDevidCheckIgnore",
                     value: 1,
                 },
+                RegistryEntry {
+                    key: "RMSetSriovMode",
+                    value: 1,
+                },
             ],
+            num_entries,
         }
     }
 }
@@ -104,15 +111,15 @@ impl CommandToGsp for SetRegistry {
     type InitError = Infallible;
 
     fn init(&self) -> impl Init<Self::Command, Self::InitError> {
-        PackedRegistryTable::init(Self::NUM_ENTRIES as u32, self.variable_payload_len() as u32)
+        PackedRegistryTable::init(self.num_entries as u32, self.variable_payload_len() as u32)
     }
 
     fn variable_payload_len(&self) -> usize {
         let mut key_size = 0;
-        for i in 0..Self::NUM_ENTRIES {
+        for i in 0..self.num_entries {
             key_size += self.entries[i].key.len() + 1; // +1 for NULL terminator
         }
-        Self::NUM_ENTRIES * size_of::<PackedRegistryEntry>() + key_size
+        self.num_entries * size_of::<PackedRegistryEntry>() + key_size
     }
 
     fn init_variable_payload(
@@ -120,12 +127,12 @@ impl CommandToGsp for SetRegistry {
         dst: &mut SBufferIter<core::array::IntoIter<&mut [u8], 2>>,
     ) -> Result {
         let string_data_start_offset =
-            size_of::<PackedRegistryTable>() + Self::NUM_ENTRIES * size_of::<PackedRegistryEntry>();
+            size_of::<PackedRegistryTable>() + self.num_entries * size_of::<PackedRegistryEntry>();
 
         // Array for string data.
         let mut string_data = KVec::new();
 
-        for entry in self.entries.iter().take(Self::NUM_ENTRIES) {
+        for entry in self.entries.iter().take(self.num_entries) {
             dst.write_all(
                 PackedRegistryEntry::new(
                     (string_data_start_offset + string_data.len()) as u32,

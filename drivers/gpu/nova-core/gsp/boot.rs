@@ -168,7 +168,8 @@ impl super::Gsp {
 
         self.cmdq
             .send_command(bar, commands::SetSystemInfo::new(pdev, vf_info))?;
-        self.cmdq.send_command(bar, commands::SetRegistry::new())?;
+        self.cmdq
+            .send_command(bar, commands::SetRegistry::new(vgpu_support))?;
 
         gsp_falcon.reset(bar)?;
         let libos_handle = self.libos.dma_handle();
