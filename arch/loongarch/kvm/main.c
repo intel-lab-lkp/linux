@@ -408,6 +408,11 @@ static int kvm_loongarch_env_init(void)
 
 	/* Register LoongArch PCH-PIC interrupt controller interface. */
 	ret = kvm_loongarch_register_pch_pic_device();
+	if (ret)
+		return ret;
+
+	/* Register LoongArch DINTC interrupt contrroller interface */
+	ret = kvm_loongarch_register_dintc_device();
 
 	return ret;
 }
