@@ -13,6 +13,12 @@
 #ifndef _SMB2_GLOB_H
 #define _SMB2_GLOB_H
 
+struct status_to_posix_error {
+	__le32 smb2_status;
+	int posix_error;
+	char *status_string;
+};
+
 /*
  *****************************************************************
  * Constants go here
