@@ -94,7 +94,7 @@
  * terminating, like a noreturn CALL or UD2 when we know they are not -- eg
  * WARN using UD2.
  */
-#define ANNOTATE_REACHABLE(label)	ASM_ANNOTATE_LABEL(label, ANNOTYPE_REACHABLE)
+#define ANNOTATE_REACHABLE_LABEL(label)	ASM_ANNOTATE_LABEL(label, ANNOTYPE_REACHABLE)
 /*
  * This should not be used; it annotates away CFI violations. There are a few
  * valid use cases like kexec handover to the next kernel image, and there is

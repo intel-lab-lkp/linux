@@ -125,7 +125,7 @@ do {								\
  * message out than not know about it.
  */
 
-#define ARCH_WARN_REACHABLE	ANNOTATE_REACHABLE(1b)
+#define ARCH_WARN_REACHABLE	ANNOTATE_REACHABLE_LABEL(1b)
 
 #define __WARN_FLAGS(cond_str, flags)					\
 do {									\
