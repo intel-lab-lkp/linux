@@ -145,12 +145,25 @@ static void luo_flb_file_unpreserve_one(struct liveupdate_flb *flb)
 	}
 }
 
+static struct luo_flb_ser *luo_flb_find_ser(struct luo_flb_header *fh,
+					    const char *name)
+{
+	if (!fh->active)
+		return ERR_PTR(-ENODATA);
+
+	for (int i = 0; i < fh->header_ser->count; i++) {
+		if (!strcmp(fh->ser[i].name, name))
+			return &fh->ser[i];
+	}
+
+	return ERR_PTR(-ENOENT);
+}
+
 static int luo_flb_retrieve_one(struct liveupdate_flb *flb)
 {
 	struct luo_flb_private *private = luo_flb_get_private(flb);
-	struct luo_flb_header *fh = &luo_flb_global.incoming;
 	struct liveupdate_flb_op_args args = {0};
-	bool found = false;
+	struct luo_flb_ser *ser;
 	int err;
 
 	guard(mutex)(&private->incoming.lock);
@@ -158,20 +171,12 @@ static int luo_flb_retrieve_one(struct liveupdate_flb *flb)
 	if (private->incoming.obj)
 		return 0;
 
-	if (!fh->active)
-		return -ENODATA;
+	ser = luo_flb_find_ser(&luo_flb_global.incoming, flb->compatible);
+	if (IS_ERR(ser))
+		return PTR_ERR(ser);
 
-	for (int i = 0; i < fh->header_ser->count; i++) {
-		if (!strcmp(fh->ser[i].name, flb->compatible)) {
-			private->incoming.data = fh->ser[i].data;
-			private->incoming.count = fh->ser[i].count;
-			found = true;
-			break;
-		}
-	}
-
-	if (!found)
-		return -ENOENT;
+	private->incoming.data = ser->data;
+	private->incoming.count = ser->count;
 
 	args.flb = flb;
 	args.data = private->incoming.data;
@@ -185,6 +190,40 @@ static int luo_flb_retrieve_one(struct liveupdate_flb *flb)
 	if (WARN_ON_ONCE(!private->incoming.obj))
 		return -EIO;
 
+	return 0;
+}
+
+/**
+ * liveupdate_flb_incoming_early - Fetch FLB data in early boot.
+ * @flb:   The FLB definition
+ * @datap: Pointer to serialized state handle of the FLB
+ *
+ * This function is intended to be called during early boot, before the
+ * liveupdate subsystem is fully initialized. It must only be called after
+ * liveupdate_early_init().
+ *
+ * Directly returns the u64 handle to the serialized state of the FLB, and does
+ * not trigger its retrieve. A later fetch of the FLB will trigger the retrieve.
+ * Callers must make sure there are no side effects because of this.
+ *
+ * Return: 0 on success, -errno on failure. -ENODATA means no incoming FLB data,
+ * -ENOENT means specific FLB not found in incoming data, and -EOPNOTSUPP when
+ * live update is disabled or not early initialization not finished.
+ */
+int __init liveupdate_flb_incoming_early(struct liveupdate_flb *flb, u64 *datap)
+{
+	struct luo_flb_ser *ser;
+
+	if (!luo_early_initialized()) {
+		pr_warn("LUO FLB retrieved before LUO early init!\n");
+		return -EOPNOTSUPP;
+	}
+
+	ser = luo_flb_find_ser(&luo_flb_global.incoming, flb->compatible);
+	if (IS_ERR(ser))
+		return PTR_ERR(ser);
+
+	*datap = ser->data;
 	return 0;
 }
 

@@ -232,6 +232,7 @@ int liveupdate_unregister_flb(struct liveupdate_file_handler *fh,
 
 int liveupdate_flb_get_incoming(struct liveupdate_flb *flb, void **objp);
 int liveupdate_flb_get_outgoing(struct liveupdate_flb *flb, void **objp);
+int liveupdate_flb_incoming_early(struct liveupdate_flb *flb, u64 *datap);
 
 #else /* CONFIG_LIVEUPDATE */
 
@@ -279,6 +280,11 @@ static inline int liveupdate_flb_get_incoming(struct liveupdate_flb *flb,
 
 static inline int liveupdate_flb_get_outgoing(struct liveupdate_flb *flb,
 					      void **objp)
+{
+	return -EOPNOTSUPP;
+}
+
+int liveupdate_flb_incoming_early(struct liveupdate_flb *flb, u64 *datap)
 {
 	return -EOPNOTSUPP;
 }
