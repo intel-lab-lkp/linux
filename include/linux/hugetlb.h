@@ -511,6 +511,7 @@ static inline struct hugetlbfs_sb_info *HUGETLBFS_SB(struct super_block *sb)
 struct hugetlbfs_inode_info {
 	struct inode vfs_inode;
 	unsigned int seals;
+	bool frozen;
 };
 
 static inline struct hugetlbfs_inode_info *HUGETLBFS_I(struct inode *inode)
@@ -531,6 +532,13 @@ static inline struct hstate *hstate_inode(struct inode *i)
 {
 	return HUGETLBFS_SB(i->i_sb)->hstate;
 }
+
+/* Must be called with inode lock taken exclusive. */
+static inline void hugetlb_i_freeze(struct inode *inode, bool freeze)
+{
+	HUGETLBFS_I(inode)->frozen = freeze;
+}
+
 #else /* !CONFIG_HUGETLBFS */
 
 #define is_file_hugepages(file)			false
