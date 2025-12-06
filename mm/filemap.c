@@ -3894,12 +3894,18 @@ EXPORT_SYMBOL(filemap_map_pages);
 
 vm_fault_t filemap_page_mkwrite(struct vm_fault *vmf)
 {
-	struct address_space *mapping = vmf->vma->vm_file->f_mapping;
+	struct file *file = vmf->vma->vm_file;
+	struct address_space *mapping = file->f_mapping;
 	struct folio *folio = page_folio(vmf->page);
 	vm_fault_t ret = VM_FAULT_LOCKED;
 
+	if (unlikely(IS_IMMUTABLE(file_inode(file)))) {
+		ret = VM_FAULT_SIGBUS;
+		goto out;
+	}
+
 	sb_start_pagefault(mapping->host->i_sb);
-	file_update_time(vmf->vma->vm_file);
+	file_update_time(file);
 	folio_lock(folio);
 	if (folio->mapping != mapping) {
 		folio_unlock(folio);

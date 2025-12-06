@@ -1295,6 +1295,14 @@ static int shmem_setattr(struct mnt_idmap *idmap,
 	bool update_mtime = false;
 	bool update_ctime = true;
 
+	if (unlikely(IS_IMMUTABLE(inode)))
+		return -EPERM;
+
+	if (unlikely(IS_APPEND(inode) &&
+		     (attr->ia_valid & (ATTR_MODE | ATTR_UID |
+					ATTR_GID | ATTR_TIMES_SET))))
+		return -EPERM;
+
 	error = setattr_prepare(idmap, dentry, attr);
 	if (error)
 		return error;
@@ -3482,6 +3490,10 @@ static ssize_t shmem_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	ret = generic_write_checks(iocb, from);
 	if (ret <= 0)
 		goto unlock;
+	if (unlikely(IS_IMMUTABLE(inode))) {
+		ret = -EPERM;
+		goto unlock;
+	}
 	ret = file_remove_privs(file);
 	if (ret)
 		goto unlock;
