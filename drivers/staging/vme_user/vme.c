@@ -1766,8 +1766,8 @@ int vme_register_bridge(struct vme_bridge *bridge)
 
 	mutex_lock(&vme_buses_lock);
 	for (i = 0; i < sizeof(vme_bus_numbers) * 8; i++) {
-		if ((vme_bus_numbers & (1 << i)) == 0) {
-			vme_bus_numbers |= (1 << i);
+		if ((vme_bus_numbers & BIT(i)) == 0) {
+			vme_bus_numbers |= BIT(i);
 			bridge->num = i;
 			INIT_LIST_HEAD(&bridge->devices);
 			list_add_tail(&bridge->bus_list, &vme_bus_list);
@@ -1787,7 +1787,7 @@ void vme_unregister_bridge(struct vme_bridge *bridge)
 	struct vme_dev *tmp;
 
 	mutex_lock(&vme_buses_lock);
-	vme_bus_numbers &= ~(1 << bridge->num);
+	vme_bus_numbers &= ~BIT(bridge->num);
 	list_for_each_entry_safe(vdev, tmp, &bridge->devices, bridge_list) {
 		list_del(&vdev->drv_list);
 		list_del(&vdev->bridge_list);
