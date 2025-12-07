@@ -811,6 +811,17 @@ struct tlock *txLock(tid_t tid, struct inode *ip, struct metapage * mp,
 	 * update tlock vector
 	 */
       grantLock:
+	/*
+	 * Reset index for new DTREE locks to ensure clean state.
+	 * When locks are reused, index may contain stale values from
+	 * previous operations. Operations like dtSplitRoot() expect
+	 * index to be 0 when creating new pages (tlckNEW flag).
+	 */
+	if ((type & tlckDTREE) && (type & tlckNEW)) {
+		struct dt_lock *dtlck = (struct dt_lock *)&tlck->lock;
+
+		dtlck->index = 0;
+	}
 	tlck->type |= type;
 
 	return tlck;
