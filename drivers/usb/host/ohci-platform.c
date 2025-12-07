@@ -281,15 +281,7 @@ static int ohci_platform_suspend(struct device *dev)
 	if (pdata->power_suspend)
 		pdata->power_suspend(pdev);
 
-	ret = reset_control_assert(priv->resets);
-	if (ret) {
-		if (pdata->power_on)
-			pdata->power_on(pdev);
-
-		ohci_resume(hcd, false);
-	}
-
-	return ret;
+	return reset_control_assert(priv->resets);
 }
 
 static int ohci_platform_resume_common(struct device *dev, bool hibernated)
