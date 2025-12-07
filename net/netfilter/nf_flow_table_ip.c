@@ -297,23 +297,23 @@ static unsigned int nf_flow_xmit_xfrm(struct sk_buff *skb,
 	return NF_STOLEN;
 }
 
-static bool nf_flow_ip4_tunnel_proto(struct nf_flowtable_ctx *ctx,
-				     struct sk_buff *skb)
+static int nf_flow_ip4_tunnel_proto(struct nf_flowtable_ctx *ctx,
+				    struct sk_buff *skb)
 {
 	struct iphdr *iph;
 	u16 size;
 
 	if (!pskb_may_pull(skb, sizeof(*iph) + ctx->offset))
-		return false;
+		return -1;
 
 	iph = (struct iphdr *)(skb_network_header(skb) + ctx->offset);
 	size = iph->ihl << 2;
 
 	if (ip_is_fragment(iph) || unlikely(ip_has_options(size)))
-		return false;
+		return -1;
 
 	if (iph->ttl <= 1)
-		return false;
+		return -1;
 
 	if (iph->protocol == IPPROTO_IPIP) {
 		ctx->tun.proto = IPPROTO_IPIP;
@@ -321,7 +321,7 @@ static bool nf_flow_ip4_tunnel_proto(struct nf_flowtable_ctx *ctx,
 		ctx->offset += size;
 	}
 
-	return true;
+	return 0;
 }
 
 static void nf_flow_ip4_tunnel_pop(struct nf_flowtable_ctx *ctx,
@@ -334,30 +334,30 @@ static void nf_flow_ip4_tunnel_pop(struct nf_flowtable_ctx *ctx,
 	skb_reset_network_header(skb);
 }
 
-static bool nf_flow_skb_encap_protocol(struct nf_flowtable_ctx *ctx,
-				       struct sk_buff *skb, __be16 proto)
+static int nf_flow_skb_encap_protocol(struct nf_flowtable_ctx *ctx,
+				      struct sk_buff *skb, __be16 proto)
 {
 	__be16 inner_proto = skb->protocol;
 	struct vlan_ethhdr *veth;
-	bool ret = false;
+	int ret = -1;
 
 	switch (skb->protocol) {
 	case htons(ETH_P_8021Q):
 		if (!pskb_may_pull(skb, skb_mac_offset(skb) + sizeof(*veth)))
-			return false;
+			return -1;
 
 		veth = (struct vlan_ethhdr *)skb_mac_header(skb);
 		if (veth->h_vlan_encapsulated_proto == proto) {
 			ctx->offset += VLAN_HLEN;
 			inner_proto = proto;
-			ret = true;
+			ret = 0;
 		}
 		break;
 	case htons(ETH_P_PPP_SES):
 		if (nf_flow_pppoe_proto(skb, &inner_proto) &&
 		    inner_proto == proto) {
 			ctx->offset += PPPOE_SES_HLEN;
-			ret = true;
+			ret = 0;
 		}
 		break;
 	}
@@ -422,7 +422,7 @@ nf_flow_offload_lookup(struct nf_flowtable_ctx *ctx,
 {
 	struct flow_offload_tuple tuple = {};
 
-	if (!nf_flow_skb_encap_protocol(ctx, skb, htons(ETH_P_IP)))
+	if (nf_flow_skb_encap_protocol(ctx, skb, htons(ETH_P_IP)) < 0)
 		return NULL;
 
 	if (nf_flow_tuple_ip(ctx, skb, &tuple) < 0)
@@ -903,7 +903,7 @@ nf_flow_offload_ipv6_lookup(struct nf_flowtable_ctx *ctx,
 	struct flow_offload_tuple tuple = {};
 
 	if (skb->protocol != htons(ETH_P_IPV6) &&
-	    !nf_flow_skb_encap_protocol(ctx, skb, htons(ETH_P_IPV6)))
+	    nf_flow_skb_encap_protocol(ctx, skb, htons(ETH_P_IPV6)) < 0)
 		return NULL;
 
 	if (nf_flow_tuple_ipv6(ctx, skb, &tuple) < 0)
