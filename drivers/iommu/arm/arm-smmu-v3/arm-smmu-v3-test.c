@@ -555,6 +555,65 @@ static void arm_smmu_v3_write_ste_test_s2_to_s1_stall(struct kunit *test)
 						       NUM_EXPECTED_SYNCS(3));
 }
 
+static void arm_smmu_test_make_nested_cdtable_ste(
+	struct arm_smmu_ste *ste, unsigned int s1dss, const dma_addr_t dma_addr,
+	enum arm_smmu_test_master_feat feat)
+{
+	bool stall_enabled = feat & ARM_SMMU_MASTER_TEST_STALL;
+	bool ats_enabled = feat & ARM_SMMU_MASTER_TEST_ATS;
+	struct arm_smmu_ste s1ste;
+
+	struct arm_smmu_master master = {
+		.ats_enabled = ats_enabled,
+		.cd_table.cdtab_dma = dma_addr,
+		.cd_table.s1cdmax = 0xFF,
+		.cd_table.s1fmt = STRTAB_STE_0_S1FMT_64K_L2,
+		.smmu = &smmu,
+		.stall_enabled = stall_enabled,
+	};
+
+	arm_smmu_test_make_s2_ste(ste, ARM_SMMU_MASTER_TEST_ATS);
+	arm_smmu_make_cdtable_ste(&s1ste, &master, ats_enabled, s1dss);
+
+	ste->data[0] = cpu_to_le64(
+		STRTAB_STE_0_V |
+		FIELD_PREP(STRTAB_STE_0_CFG, STRTAB_STE_0_CFG_NESTED));
+	ste->data[0] |= s1ste.data[0] & ~cpu_to_le64(STRTAB_STE_0_CFG);
+	ste->data[1] |= s1ste.data[1];
+	/* Merge events for DoS mitigations on eventq */
+	ste->data[1] |= cpu_to_le64(STRTAB_STE_1_MEV);
+}
+
+static void
+arm_smmu_v3_write_ste_test_nested_s1dssbypass_to_s1bypass(struct kunit *test)
+{
+	struct arm_smmu_ste s1_ste;
+	struct arm_smmu_ste s2_ste;
+
+	arm_smmu_test_make_nested_cdtable_ste(&s1_ste,
+					      STRTAB_STE_1_S1DSS_BYPASS,
+					      fake_cdtab_dma_addr,
+					      ARM_SMMU_MASTER_TEST_ATS);
+	arm_smmu_test_make_s2_ste(&s2_ste, 0);
+	arm_smmu_v3_test_ste_expect_hitless_transition(test, &s1_ste, &s2_ste,
+						       NUM_EXPECTED_SYNCS(3));
+}
+
+static void
+arm_smmu_v3_write_ste_test_nested_s1bypass_to_s1dssbypass(struct kunit *test)
+{
+	struct arm_smmu_ste s1_ste;
+	struct arm_smmu_ste s2_ste;
+
+	arm_smmu_test_make_nested_cdtable_ste(&s1_ste,
+					      STRTAB_STE_1_S1DSS_BYPASS,
+					      fake_cdtab_dma_addr,
+					      ARM_SMMU_MASTER_TEST_ATS);
+	arm_smmu_test_make_s2_ste(&s2_ste, 0);
+	arm_smmu_v3_test_ste_expect_hitless_transition(test, &s2_ste, &s1_ste,
+						       NUM_EXPECTED_SYNCS(2));
+}
+
 static void arm_smmu_v3_write_cd_test_sva_clear(struct kunit *test)
 {
 	struct arm_smmu_cd cd = {};
@@ -601,6 +660,8 @@ static struct kunit_case arm_smmu_v3_test_cases[] = {
 	KUNIT_CASE(arm_smmu_v3_write_cd_test_s1_change_asid),
 	KUNIT_CASE(arm_smmu_v3_write_ste_test_s1_to_s2_stall),
 	KUNIT_CASE(arm_smmu_v3_write_ste_test_s2_to_s1_stall),
+	KUNIT_CASE(arm_smmu_v3_write_ste_test_nested_s1dssbypass_to_s1bypass),
+	KUNIT_CASE(arm_smmu_v3_write_ste_test_nested_s1bypass_to_s1dssbypass),
 	KUNIT_CASE(arm_smmu_v3_write_cd_test_sva_clear),
 	KUNIT_CASE(arm_smmu_v3_write_cd_test_sva_release),
 	{},
