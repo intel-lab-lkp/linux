@@ -3,11 +3,11 @@
 HOWTO do Linux kernel development
 =================================
 
-This is the be-all, end-all document on this topic.  It contains
-instructions on how to become a Linux kernel developer and how to learn
-to work with the Linux kernel development community.  It tries to not
-contain anything related to the technical aspects of kernel programming,
-but will help point you in the right direction for that.
+This is a complete introductory document on this topic. It
+contains instructions on how to become a Linux kernel developer
+and how to work with the Linux kernel development community. It
+does not cover the technical aspects of kernel programming, but
+will help point you in the right direction for that.
 
 If anything in this document becomes out of date, please send in patches
 to the maintainer of this file, who is listed at the bottom of the
