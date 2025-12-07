@@ -489,8 +489,33 @@ static void lec_atm_close(struct atm_vcc *vcc)
 	module_put(THIS_MODULE);
 }
 
+static int lec_atm_pre_send(struct atm_vcc *vcc, struct sk_buff *skb)
+{
+	struct atmlec_msg *mesg;
+	u32 sizeoftlvs;
+	unsigned int msg_size = sizeof(struct atmlec_msg);
+
+	/* Must contain the base message */
+	if (skb->len < msg_size)
+		return -EINVAL;
+
+   /* Must have at least msg_size bytes in linear data */
+   if (!pskb_may_pull(skb, msg_size))
+   	return -EINVAL;
+
+	mesg = (struct atmlec_msg *)skb->data;
+   sizeoftlvs = mesg->sizeoftlvs;
+
+   /* Validate TLVs if present */
+   if (sizeoftlvs && !pskb_may_pull(skb, msg_size + sizeoftlvs))
+       return -EINVAL;
+
+   return 0;
+}
+
 static const struct atmdev_ops lecdev_ops = {
 	.close = lec_atm_close,
+	.pre_send = lec_atm_pre_send, 
 	.send = lec_atm_send
 };
 
