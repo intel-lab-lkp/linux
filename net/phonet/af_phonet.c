@@ -208,6 +208,8 @@ static int pn_raw_send(const void *data, int len, struct net_device *dev,
 	if (skb == NULL)
 		return -ENOMEM;
 
+	memset(skb, 0, MAX_PHONET_HEADER + len);
+
 	if (phonet_address_lookup(dev_net(dev), pn_addr(dst)) == 0)
 		skb->pkt_type = PACKET_LOOPBACK;
 
