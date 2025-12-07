@@ -454,18 +454,7 @@ static int __maybe_unused ehci_platform_suspend(struct device *dev)
 	if (pdata->power_suspend)
 		pdata->power_suspend(pdev);
 
-	ret = reset_control_assert(priv->rsts);
-	if (ret) {
-		if (pdata->power_on)
-			pdata->power_on(pdev);
-
-		ehci_resume(hcd, false);
-
-		if (priv->quirk_poll)
-			quirk_poll_init(priv);
-	}
-
-	return ret;
+	return reset_control_assert(priv->rsts);
 }
 
 static int __maybe_unused ehci_platform_resume(struct device *dev)
