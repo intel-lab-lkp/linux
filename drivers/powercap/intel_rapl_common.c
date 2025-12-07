@@ -1406,6 +1406,13 @@ err_cleanup:
 					 &rd->power_zone);
 	}
 
+	/* Also unregister the package domain if it was registered */
+	if (rp->power_zone) {
+		powercap_unregister_zone(rp->priv->control_type,
+					 rp->power_zone);
+		rp->power_zone = NULL;
+	}
+
 	return ret;
 }
 
