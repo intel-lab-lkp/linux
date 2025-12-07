@@ -2291,6 +2291,8 @@ static int dbFreeBits(struct bmap * bmp, struct dmap * dp, s64 blkno,
 	int rc = 0;
 	int size;
 
+	if (tp->dmt_budmin < 0)
+		return -EUCLEAN;
 	/* determine the bit number and word within the dmap of the
 	 * starting block.
 	 */
