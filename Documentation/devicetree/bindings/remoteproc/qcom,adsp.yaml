@@ -32,6 +32,9 @@ properties:
   reg:
     maxItems: 1
 
+  cx-supply:
+    description: Phandle to the CX regulator
+
   px-supply:
     description: Phandle to the PX regulator
 
