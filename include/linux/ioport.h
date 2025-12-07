@@ -288,6 +288,9 @@ static inline void resource_set_range(struct resource *res,
 
 static inline resource_size_t resource_size(const struct resource *res)
 {
+	if (!res->start && !res->end)
+		return 0;
+
 	return res->end - res->start + 1;
 }
 static inline unsigned long resource_type(const struct resource *res)
