@@ -1295,6 +1295,14 @@ static int shmem_setattr(struct mnt_idmap *idmap,
 	bool update_mtime = false;
 	bool update_ctime = true;
 
+	if (unlikely(IS_IMMUTABLE(inode)))
+		return -EPERM;
+
+	if (unlikely(IS_APPEND(inode) &&
+		     (attr->ia_valid & (ATTR_MODE | ATTR_UID |
+					ATTR_GID | ATTR_TIMES_SET))))
+		return -EPERM;
+
 	error = setattr_prepare(idmap, dentry, attr);
 	if (error)
 		return error;
@@ -2766,6 +2774,17 @@ static vm_fault_t shmem_fault(struct vm_fault *vmf)
 	return ret;
 }
 
+static vm_fault_t shmem_page_mkwrite(struct vm_fault *vmf)
+{
+	struct file *file = vmf->vma->vm_file;
+
+	if (unlikely(IS_IMMUTABLE(file_inode(file))))
+		return VM_FAULT_SIGBUS;
+
+	file_update_time(file);
+	return 0;
+}
+
 unsigned long shmem_get_unmapped_area(struct file *file,
 				      unsigned long uaddr, unsigned long len,
 				      unsigned long pgoff, unsigned long flags)
@@ -3482,6 +3501,10 @@ static ssize_t shmem_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	ret = generic_write_checks(iocb, from);
 	if (ret <= 0)
 		goto unlock;
+	if (unlikely(IS_IMMUTABLE(inode))) {
+		ret = -EPERM;
+		goto unlock;
+	}
 	ret = file_remove_privs(file);
 	if (ret)
 		goto unlock;
@@ -5320,6 +5343,7 @@ static const struct super_operations shmem_ops = {
 static const struct vm_operations_struct shmem_vm_ops = {
 	.fault		= shmem_fault,
 	.map_pages	= filemap_map_pages,
+	.page_mkwrite	= shmem_page_mkwrite,
 #ifdef CONFIG_NUMA
 	.set_policy     = shmem_set_policy,
 	.get_policy     = shmem_get_policy,
@@ -5329,6 +5353,7 @@ static const struct vm_operations_struct shmem_vm_ops = {
 static const struct vm_operations_struct shmem_anon_vm_ops = {
 	.fault		= shmem_fault,
 	.map_pages	= filemap_map_pages,
+	.page_mkwrite	= shmem_page_mkwrite,
 #ifdef CONFIG_NUMA
 	.set_policy     = shmem_set_policy,
 	.get_policy     = shmem_get_policy,
