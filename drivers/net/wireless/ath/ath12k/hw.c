@@ -1359,7 +1359,7 @@ static const struct ath12k_hw_params ath12k_hw_params[] = {
 		.download_calib = true,
 		.supports_suspend = false,
 		.tcl_ring_retry = true,
-		.reoq_lut_support = true,
+		.reoq_lut_support = false,
 		.supports_shadow_regs = false,
 
 		.num_tcl_banks = 48,
