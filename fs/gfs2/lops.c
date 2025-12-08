@@ -484,6 +484,10 @@ static struct bio *gfs2_chain_bio(struct bio *prev, unsigned int nr_iovecs)
 	new = bio_alloc(prev->bi_bdev, nr_iovecs, prev->bi_opf, GFP_NOIO);
 	bio_clone_blkg_association(new, prev);
 	new->bi_iter.bi_sector = bio_end_sector(prev);
+	new->bi_end_io = prev->bi_end_io;
+	new->bi_private = prev->bi_private;
+	prev->bi_end_io = NULL;
+	prev->bi_private = NULL;
 	bio_chain(prev, new);
 	submit_bio(prev);
 	return new;
