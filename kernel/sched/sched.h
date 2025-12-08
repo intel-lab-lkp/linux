@@ -1044,7 +1044,7 @@ struct root_domain {
 
 extern void init_defrootdomain(void);
 extern int sched_init_domains(const struct cpumask *cpu_map);
-extern void rq_attach_root(struct rq *rq, struct root_domain *rd);
+extern void rq_attach_root(struct rq *rq, struct root_domain *rd, struct sched_domain *sd);
 extern void sched_get_rd(struct root_domain *rd);
 extern void sched_put_rd(struct root_domain *rd);
 

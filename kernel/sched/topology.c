@@ -469,9 +469,12 @@ static void free_rootdomain(struct rcu_head *rcu)
 	kfree(rd);
 }
 
-void rq_attach_root(struct rq *rq, struct root_domain *rd)
+static void update_top_cache_domain(int cpu);
+
+void rq_attach_root(struct rq *rq, struct root_domain *rd, struct sched_domain *sd)
 {
 	struct root_domain *old_rd = NULL;
+	int cpu = cpu_of(rq);
 	struct rq_flags rf;
 
 	rq_lock_irqsave(rq, &rf);
@@ -494,6 +497,8 @@ void rq_attach_root(struct rq *rq, struct root_domain *rd)
 	}
 
 	atomic_inc(&rd->refcount);
+	rcu_assign_pointer(rq->sd, sd);
+	update_top_cache_domain(cpu);
 	rq->rd = rd;
 
 	cpumask_set_cpu(rq->cpu, rd->span);
@@ -711,15 +716,26 @@ static void update_top_cache_domain(int cpu)
 	rcu_assign_pointer(per_cpu(sd_asym_cpucapacity, cpu), sd);
 }
 
+struct s_data {
+	struct sched_domain_shared * __percpu *sds;
+	struct sched_domain * __percpu *sd;
+	struct root_domain	*rd;
+};
+
 /*
  * Attach the domain 'sd' to 'cpu' as its base domain. Callers must
  * hold the hotplug lock.
  */
 static void
-cpu_attach_domain(struct sched_domain *sd, struct root_domain *rd, int cpu)
+cpu_attach_domain(struct s_data *d, int cpu)
 {
+	struct root_domain *rd = d->rd;
+	struct sched_domain *sd = NULL;
 	struct rq *rq = cpu_rq(cpu);
 	struct sched_domain *tmp;
+
+	if (d->sd)
+		sd = *per_cpu_ptr(d->sd, cpu);
 
 	/* Remove the sched domains which do not contribute to scheduling. */
 	for (tmp = sd; tmp; ) {
@@ -776,20 +792,12 @@ cpu_attach_domain(struct sched_domain *sd, struct root_domain *rd, int cpu)
 
 	sched_domain_debug(sd, cpu);
 
-	rq_attach_root(rq, rd);
 	tmp = rq->sd;
-	rcu_assign_pointer(rq->sd, sd);
+	rq_attach_root(rq, rd, sd);
 	dirty_sched_domain_sysctl(cpu);
 	destroy_sched_domains(tmp);
 
-	update_top_cache_domain(cpu);
 }
-
-struct s_data {
-	struct sched_domain_shared * __percpu *sds;
-	struct sched_domain * __percpu *sd;
-	struct root_domain	*rd;
-};
 
 enum s_alloc {
 	sa_rootdomain,
@@ -2717,9 +2725,8 @@ build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *att
 	rcu_read_lock();
 	for_each_cpu(i, cpu_map) {
 		rq = cpu_rq(i);
-		sd = *per_cpu_ptr(d.sd, i);
 
-		cpu_attach_domain(sd, d.rd, i);
+		cpu_attach_domain(&d, i);
 
 		if (lowest_flag_domain(i, SD_CLUSTER))
 			has_cluster = true;
@@ -2824,6 +2831,9 @@ int __init sched_init_domains(const struct cpumask *cpu_map)
 static void detach_destroy_domains(const struct cpumask *cpu_map)
 {
 	unsigned int cpu = cpumask_any(cpu_map);
+	struct s_data d = {
+		.rd = &def_root_domain,
+	};
 	int i;
 
 	if (rcu_access_pointer(per_cpu(sd_asym_cpucapacity, cpu)))
@@ -2834,7 +2844,7 @@ static void detach_destroy_domains(const struct cpumask *cpu_map)
 
 	rcu_read_lock();
 	for_each_cpu(i, cpu_map)
-		cpu_attach_domain(NULL, &def_root_domain, i);
+		cpu_attach_domain(&d, i);
 	rcu_read_unlock();
 }
 
