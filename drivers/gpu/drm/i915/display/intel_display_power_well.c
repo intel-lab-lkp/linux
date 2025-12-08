@@ -204,9 +204,6 @@ int intel_power_well_refcount(struct i915_power_well *power_well)
 static void hsw_power_well_post_enable(struct intel_display *display,
 				       u8 irq_pipe_mask, bool has_vga)
 {
-	if (has_vga)
-		intel_vga_reset_io_mem(display);
-
 	if (irq_pipe_mask)
 		gen8_irq_power_well_post_enable(display, irq_pipe_mask);
 }
