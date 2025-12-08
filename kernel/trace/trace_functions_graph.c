@@ -15,6 +15,7 @@
 
 #include "trace.h"
 #include "trace_output.h"
+#include "trace_btf.h"
 
 /* When set, irq functions might be ignored */
 static int ftrace_graph_skip_irqs;
@@ -862,6 +863,46 @@ static void print_graph_retaddr(struct trace_seq *s, struct fgraph_retaddr_ent_e
 
 #if defined(CONFIG_FUNCTION_GRAPH_RETVAL) || defined(CONFIG_FUNCTION_GRAPH_RETADDR)
 
+static void trim_retval(unsigned long func, unsigned long *retval, bool *print_retval)
+{
+	const struct btf_type *t;
+	char name[KSYM_NAME_LEN];
+	struct btf *btf;
+	u32 v, msb;
+
+	if (!IS_ENABLED(CONFIG_DEBUG_INFO_BTF))
+		return;
+
+	if (lookup_symbol_name(func, name))
+		return;
+
+	t = btf_find_func_proto(name, &btf);
+	if (IS_ERR_OR_NULL(t))
+		return;
+
+	t = btf_type_skip_modifiers(btf, t->type, NULL);
+	switch (t ? BTF_INFO_KIND(t->info) : BTF_KIND_UNKN) {
+	case BTF_KIND_UNKN:
+		*print_retval = false;
+		break;
+	case BTF_KIND_ENUM:
+	case BTF_KIND_ENUM64:
+		msb = BITS_PER_BYTE * t->size - 1;
+		*retval &= GENMASK(msb, 0);
+		break;
+	case BTF_KIND_INT:
+		v = *(u32 *)(t + 1);
+		if (BTF_INT_ENCODING(v) == BTF_INT_BOOL)
+			msb = 0;
+		else
+			msb = BTF_INT_BITS(v) - 1;
+		*retval &= GENMASK(msb, 0);
+		break;
+	default:
+		break;
+	}
+}
+
 static void print_graph_retval(struct trace_seq *s, struct ftrace_graph_ent_entry *entry,
 				struct ftrace_graph_ret *graph_ret, void *func,
 				u32 opt_flags, u32 trace_flags, int args_size)
@@ -881,17 +922,20 @@ static void print_graph_retval(struct trace_seq *s, struct ftrace_graph_ent_entr
 	print_retaddr = !!(opt_flags & TRACE_GRAPH_PRINT_RETADDR);
 #endif
 
-	if (print_retval && retval && !hex_format) {
-		/* Check if the return value matches the negative format */
-		if (IS_ENABLED(CONFIG_64BIT) && (retval & BIT(31)) &&
-			(((u64)retval) >> 32) == 0) {
-			err_code = sign_extend64(retval, 31);
-		} else {
-			err_code = retval;
-		}
+	if (print_retval) {
+		trim_retval((unsigned long)func, &retval, &print_retval);
+		if (print_retval && retval && !hex_format) {
+			/* Check if the return value matches the negative format */
+			if (IS_ENABLED(CONFIG_64BIT) && (retval & BIT(31)) &&
+				(((u64)retval) >> 32) == 0) {
+				err_code = sign_extend64(retval, 31);
+			} else {
+				err_code = retval;
+			}
 
-		if (!IS_ERR_VALUE(err_code))
-			err_code = 0;
+			if (!IS_ERR_VALUE(err_code))
+				err_code = 0;
+		}
 	}
 
 	if (entry) {
