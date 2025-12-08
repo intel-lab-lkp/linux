@@ -389,6 +389,11 @@ static inline int split_huge_page_to_order(struct page *page, unsigned int new_o
 	return split_huge_page_to_list_to_order(page, NULL, new_order);
 }
 
+static inline int split_folio_to_order(struct folio *folio, int new_order)
+{
+	return split_huge_page_to_list_to_order(&folio->page, NULL, new_order);
+}
+
 /**
  * try_folio_split_to_order() - try to split a @folio at @page to @new_order
  * using non uniform split.
@@ -407,7 +412,7 @@ static inline int try_folio_split_to_order(struct folio *folio,
 		struct page *page, unsigned int new_order)
 {
 	if (folio_check_splittable(folio, new_order, SPLIT_TYPE_NON_UNIFORM))
-		return split_huge_page_to_order(&folio->page, new_order);
+		return split_folio_to_order(folio, new_order);
 	return folio_split(folio, new_order, page, NULL);
 }
 static inline int split_huge_page(struct page *page)
@@ -770,11 +775,6 @@ static inline bool pmd_is_huge(pmd_t pmd)
 	return false;
 }
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
-
-static inline int split_folio_to_order(struct folio *folio, int new_order)
-{
-	return split_huge_page_to_list_to_order(&folio->page, NULL, new_order);
-}
 
 /**
  * largest_zero_folio - Get the largest zero size folio available
