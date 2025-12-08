@@ -12367,18 +12367,27 @@ static inline int on_null_domain(struct rq *rq)
  */
 static inline int find_new_ilb(void)
 {
+	struct sched_domain_shared *sds;
 	const struct cpumask *hk_mask;
-	int ilb_cpu;
 
 	hk_mask = housekeeping_cpumask(HK_TYPE_KERNEL_NOISE);
 
-	for_each_cpu_and(ilb_cpu, nohz.idle_cpus_mask, hk_mask) {
+	guard(rcu)();
 
-		if (ilb_cpu == smp_processor_id())
+	list_for_each_entry_rcu(sds, &nohz_shared_list, nohz_list_node) {
+		int ilb_cpu;
+
+		/* No idle CPUs in this domain */
+		if (!atomic_read(&sds->nr_idle_cpus))
 			continue;
 
-		if (idle_cpu(ilb_cpu))
-			return ilb_cpu;
+		for_each_cpu_and(ilb_cpu, sds->nohz_idle_cpus_mask, hk_mask) {
+			if (ilb_cpu == smp_processor_id())
+				continue;
+
+			if (idle_cpu(ilb_cpu))
+				return ilb_cpu;
+		}
 	}
 
 	return -1;
