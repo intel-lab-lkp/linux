@@ -678,6 +678,16 @@ void vfio_pci_core_disable(struct vfio_pci_core_device *vdev)
 		if (!vdev->reset_works)
 			goto out;
 
+		/*
+		 * Skip hot reset on Link-Down. This avoids the reset_lock
+		 * deadlock in pciehp_reset_slot() when multiple PCIe devices
+		 * go down at the same time.
+		 */
+		if (pci_dev_is_disconnected(pdev)) {
+			vdev->needs_reset = false;
+			goto out;
+		}
+
 		pci_save_state(pdev);
 	}
 
