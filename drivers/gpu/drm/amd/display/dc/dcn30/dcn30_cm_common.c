@@ -225,7 +225,7 @@ bool cm3_helper_translate_curve_to_hw_format(
 
 	// DCN3+ have 257 pts in lieu of no separate slope registers
 	// Prior HW had 256 base+slope pairs
-	lut_params->hw_points_num = hw_points + 1;
+	lut_params->hw_points_num = hw_points;
 
 	k = 0;
 	for (i = 1; i < MAX_REGIONS_NUMBER; i++) {
