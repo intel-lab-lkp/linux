@@ -33,6 +33,7 @@
 #include <drm/drm_edid.h>
 #include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
+#include <video/vga.h>
 
 #include "intel_connector.h"
 #include "intel_crt.h"
@@ -55,6 +56,7 @@
 #include "intel_pch_display.h"
 #include "intel_pch_refclk.h"
 #include "intel_pfit.h"
+#include "intel_vga.h"
 
 /* Here's the desired hotplug mode */
 #define ADPA_HOTPLUG_BITS (ADPA_CRT_HOTPLUG_ENABLE |			\
@@ -736,7 +738,7 @@ intel_crt_load_detect(struct intel_crt *crt, enum pipe pipe)
 		 * border color for Color info.
 		 */
 		intel_crtc_wait_for_next_vblank(intel_crtc_for_pipe(display, pipe));
-		st00 = intel_de_read8(display, _VGA_MSR_WRITE);
+		st00 = intel_vga_read(display, VGA_MIS_W, true);
 		status = ((st00 & (1 << 4)) != 0) ?
 			connector_status_connected :
 			connector_status_disconnected;
@@ -784,7 +786,7 @@ intel_crt_load_detect(struct intel_crt *crt, enum pipe pipe)
 		do {
 			count++;
 			/* Read the ST00 VGA status register */
-			st00 = intel_de_read8(display, _VGA_MSR_WRITE);
+			st00 = intel_vga_read(display, VGA_MIS_W, true);
 			if (st00 & (1 << 4))
 				detect++;
 		} while ((intel_de_read(display, PIPEDSL(display, pipe)) == dsl));
