@@ -105,7 +105,7 @@ static void virtio_gpu_get_capsets(struct virtio_gpu_device *vgdev,
 			return;
 		}
 
-		vgdev->capset_id_mask |= 1 << vgdev->capsets[i].id;
+		vgdev->capset_id_mask |= 1ULL << vgdev->capsets[i].id;
 		DRM_INFO("cap set %d: id %d, max-version %d, max-size %d\n",
 			 i, vgdev->capsets[i].id,
 			 vgdev->capsets[i].max_version,
