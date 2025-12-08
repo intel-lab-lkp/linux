@@ -20,7 +20,7 @@
 
 static unsigned int intel_gmch_ctrl_reg(struct intel_display *display)
 {
-	return DISPLAY_VER(display) >= 6 ? SNB_GMCH_CTRL : INTEL_GMCH_CTRL;
+	return DISPLAY_VER(display) >= 6 ? SNB_GMCH_CTRL : I830_GMCH_CTRL;
 }
 
 static bool intel_vga_decode_is_enabled(struct intel_display *display)
