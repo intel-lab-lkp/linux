@@ -83,36 +83,28 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += mt8188-evb.dtb
 
 mt8188-geralt-ciri-sku0-dtbs := mt8188-geralt-ciri.dtb \
 				mt8188-geralt-ciri-panel-boe.dtbo \
-				mt8188-geralt-ciri-audio-max98390-rt5682s.dtbo \
-				mt8188-geralt-ciri-sku0.dtbo
+				mt8188-geralt-ciri-audio-max98390-rt5682s.dtbo
 mt8188-geralt-ciri-sku1-dtbs := mt8188-geralt-ciri.dtb \
 				mt8188-geralt-ciri-panel-ivo.dtbo \
-				mt8188-geralt-ciri-audio-max98390-es8326.dtbo \
-				mt8188-geralt-ciri-sku1.dtbo
+				mt8188-geralt-ciri-audio-max98390-es8326.dtbo
 mt8188-geralt-ciri-sku2-dtbs := mt8188-geralt-ciri.dtb \
 				mt8188-geralt-ciri-panel-boe.dtbo \
-				mt8188-geralt-ciri-audio-max98390-es8326.dtbo \
-				mt8188-geralt-ciri-sku2.dtbo
+				mt8188-geralt-ciri-audio-max98390-es8326.dtbo
 mt8188-geralt-ciri-sku3-dtbs := mt8188-geralt-ciri.dtb \
 				mt8188-geralt-ciri-panel-ivo.dtbo \
-				mt8188-geralt-ciri-audio-max98390-rt5682s.dtbo \
-				mt8188-geralt-ciri-sku3.dtbo
+				mt8188-geralt-ciri-audio-max98390-rt5682s.dtbo
 mt8188-geralt-ciri-sku4-dtbs := mt8188-geralt-ciri.dtb \
 				mt8188-geralt-ciri-panel-boe.dtbo \
-				mt8188-geralt-ciri-audio-tas2563-rt5682s.dtbo \
-				mt8188-geralt-ciri-sku4.dtbo
+				mt8188-geralt-ciri-audio-tas2563-rt5682s.dtbo
 mt8188-geralt-ciri-sku5-dtbs := mt8188-geralt-ciri.dtb \
 				mt8188-geralt-ciri-panel-ivo.dtbo \
-				mt8188-geralt-ciri-audio-tas2563-es8326.dtbo \
-				mt8188-geralt-ciri-sku5.dtbo
+				mt8188-geralt-ciri-audio-tas2563-es8326.dtbo
 mt8188-geralt-ciri-sku6-dtbs := mt8188-geralt-ciri.dtb \
 				mt8188-geralt-ciri-panel-boe.dtbo \
-				mt8188-geralt-ciri-audio-tas2563-es8326.dtbo \
-				mt8188-geralt-ciri-sku6.dtbo
+				mt8188-geralt-ciri-audio-tas2563-es8326.dtbo
 mt8188-geralt-ciri-sku7-dtbs := mt8188-geralt-ciri.dtb \
 				mt8188-geralt-ciri-panel-ivo.dtbo \
-				mt8188-geralt-ciri-audio-tas2563-rt5682s.dtbo \
-				mt8188-geralt-ciri-sku7.dtbo
+				mt8188-geralt-ciri-audio-tas2563-rt5682s.dtbo
 
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8188-geralt-ciri-sku0.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8188-geralt-ciri-sku1.dtb

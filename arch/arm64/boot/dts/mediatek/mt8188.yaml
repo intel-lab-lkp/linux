@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: (GPL-2.0 OR MIT)
+%YAML 1.2
+---
+- dtb: mt8188-geralt-ciri-sku0.dtb
+  description: Google Ciri board SKU0
+  compatibles:
+    - google,ciri-sku0
+    - google,ciri
+    - mediatek,mt8188
+- dtb: mt8188-geralt-ciri-sku1.dtb
+  description: Google Ciri board SKU1
+  compatibles:
+    - google,ciri-sku1
+    - google,ciri
+    - mediatek,mt8188
+- dtb: mt8188-geralt-ciri-sku2.dtb
+  description: Google Ciri board SKU2
+  compatibles:
+    - google,ciri-sku2
+    - google,ciri
+    - mediatek,mt8188
+- dtb: mt8188-geralt-ciri-sku3.dtb
+  description: Google Ciri board SKU3
+  compatibles:
+    - google,ciri-sku3
+    - google,ciri
+    - mediatek,mt8188
+- dtb: mt8188-geralt-ciri-sku4.dtb
+  description: Google Ciri board SKU4
+  compatibles:
+    - google,ciri-sku4
+    - google,ciri
+    - mediatek,mt8188
+- dtb: mt8188-geralt-ciri-sku5.dtb
+  description: Google Ciri board SKU5
+  compatibles:
+    - google,ciri-sku5
+    - google,ciri
+    - mediatek,mt8188
+- dtb: mt8188-geralt-ciri-sku6.dtb
+  description: Google Ciri board SKU6
+  compatibles:
+    - google,ciri-sku6
+    - google,ciri
+    - mediatek,mt8188
+- dtb: mt8188-geralt-ciri-sku7.dtb
+  description: Google Ciri board SKU7
+  compatibles:
+    - google,ciri-sku7
+    - google,ciri
+    - mediatek,mt8188
