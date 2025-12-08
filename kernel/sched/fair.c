@@ -12789,27 +12789,59 @@ static int sched_balance_nohz_idle(int balancing_cpu, unsigned int flags, unsign
 {
 	/* Earliest time when we have to do rebalance again */
 	unsigned long next_balance = start + 60*HZ;
+	struct sched_domain_shared *sds;
 	unsigned int update_flags = 0;
-	int target_cpu;
 
-	/*
-	 * Start with the next CPU after the balancing CPU so we will end with
-	 * balancing CPU and let a chance for other idle cpu to pull load.
-	 */
-	for_each_cpu_wrap(target_cpu, nohz.idle_cpus_mask, balancing_cpu + 1) {
-		if (!idle_cpu(target_cpu))
+	rcu_read_lock();
+	list_for_each_entry_rcu(sds, &nohz_shared_list, nohz_list_node) {
+		int target_cpu;
+
+		/* No idle CPUs in this domain */
+		if (!atomic_read(&sds->nr_idle_cpus))
 			continue;
 
-		/*
-		 * If balancing CPU gets work to do, stop the load balancing
-		 * work being done for other CPUs. Next load balancing owner
-		 * will pick it up.
-		 */
-		if (!idle_cpu(balancing_cpu) && need_resched())
-			return -EBUSY;
+		for_each_cpu(target_cpu, sds->nohz_idle_cpus_mask) {
+			/* Deal with the balancing CPU at the end. */
+			if (balancing_cpu == target_cpu)
+				continue;
 
-		update_flags |= sched_balance_idle_rq(cpu_rq(target_cpu), flags, &next_balance);
+			if (!idle_cpu(target_cpu))
+				continue;
+
+			/*
+			 * If balancing CPU gets work to do, stop the load balancing
+			 * work being done for other CPUs. Next load balancing owner
+			 * will pick it up.
+			 */
+			if (!idle_cpu(balancing_cpu) && need_resched()) {
+				rcu_read_unlock();
+				return -EBUSY;
+			}
+
+			update_flags |= sched_balance_idle_rq(cpu_rq(target_cpu),
+						flags, &next_balance);
+		}
 	}
+	rcu_read_unlock();
+
+	/*
+	 * If we reach here, all CPUs have been balance and it is time
+	 * to balance the balancing_cpu.
+	 *
+	 * If coincidentally the balancing CPU turns busy at this point
+	 * and is the only nohz idle CPU, we still need to set
+	 * nohz.{needs_update,has_blocked} since the CPU can transition
+	 * back to nohz idle before the tick hits.
+	 *
+	 * In the above case, rq->nohz_tick_stopped is never cleared and
+	 * nohz_balance_enter_idle() skips setting nohz.has_blocked.
+	 * Return -EBUSY instructing the caller to reset the nohz
+	 * signals allowing a reattempt.
+	 */
+	if (!idle_cpu(balancing_cpu) && need_resched())
+		return -EBUSY;
+
+	update_flags |= sched_balance_idle_rq(cpu_rq(balancing_cpu), flags, &next_balance);
 
 	/*
 	 * next_balance will be updated only when there is a need.
