@@ -615,6 +615,7 @@ static int sds_delayed_free(struct sched_domain_shared *sds)
 	scoped_guard(raw_spinlock_irqsave, &nohz_shared_list_lock)
 		list_del_rcu(&sds->nohz_list_node);
 
+	__nohz_exit_idle_tracking(sds);
 	call_rcu(&sds->rcu, destroy_sched_domain_shared_rcu);
 	return 1;
 }

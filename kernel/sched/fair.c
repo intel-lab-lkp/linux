@@ -7143,7 +7143,7 @@ static DEFINE_PER_CPU(cpumask_var_t, should_we_balance_tmpmask);
 #ifdef CONFIG_NO_HZ_COMMON
 
 static struct {
-	atomic_t nr_cpus;
+	atomic_t nr_doms;
 	int has_blocked;		/* Idle CPUS has blocked load */
 	int needs_update;		/* Newly idle CPUs need their next_balance collated */
 	unsigned long next_balance;     /* in jiffy units */
@@ -12512,7 +12512,7 @@ static void nohz_balancer_kick(struct rq *rq)
 	 * None are in tickless mode and hence no need for NOHZ idle load
 	 * balancing:
 	 */
-	if (likely(!atomic_read(&nohz.nr_cpus)))
+	if (likely(!atomic_read(&nohz.nr_doms)))
 		return;
 
 	if (READ_ONCE(nohz.has_blocked) &&
@@ -12609,7 +12609,8 @@ static void set_cpu_sd_state_busy(int cpu)
 		return;
 
 	cpumask_clear_cpu(cpu, sd->shared->nohz_idle_cpus_mask);
-	atomic_dec(&sd->shared->nr_idle_cpus);
+	if (!atomic_dec_return(&sd->shared->nr_idle_cpus))
+		atomic_dec(&nohz.nr_doms);
 }
 
 void nohz_balance_exit_idle(struct rq *rq)
@@ -12620,7 +12621,6 @@ void nohz_balance_exit_idle(struct rq *rq)
 		return;
 
 	WRITE_ONCE(rq->nohz_tick_stopped, 0);
-	atomic_dec(&nohz.nr_cpus);
 
 	set_cpu_sd_state_busy(rq->cpu);
 }
@@ -12639,7 +12639,58 @@ static void set_cpu_sd_state_idle(int cpu)
 		return;
 
 	cpumask_set_cpu(cpu, sd->shared->nohz_idle_cpus_mask);
-	atomic_inc(&sd->shared->nr_idle_cpus);
+	if (!atomic_fetch_inc(&sd->shared->nr_idle_cpus))
+		atomic_inc(&nohz.nr_doms);
+}
+
+/*
+ * Correct nohz.nr_doms if sd_nohz->shared was found to have non-zero
+ * nr_idle_cpus when freeing. No local references to sds remain at
+ * this point and the only reference possible via "nohz_shared_list"
+ * will be dropped after the grace period.
+ */
+void __nohz_exit_idle_tracking(struct sched_domain_shared *sds)
+{
+
+	/*
+	 * It is possible for a idle entry to race with sched domain rebuild like:
+	 *
+	 *  CPU0 (hotplug)			CPU1 (nohz idle)
+	 *
+	 *  rq->offline(CPU1)
+	 *    set_cpu_sd_state_busy()
+	 *    rq->sd = sdd;			# Processes IPI, re-enters nohz idle
+	 *    ...				# For old sd_nohz
+	 *    ...				atomic_fetch_inc(&sd_nohz->shared->nr_idle_cpus);
+	 *    ...				atomic_inc(&nohz.nr_doms); # XXX: Accounted once
+	 *    update_top_cache_domains()
+	 *  rq->online(CPU1)
+	 *  # rq->nohz_tick_stopped is true
+	 *  set_cpu_sd_state_idle()
+	 *    # For new sd_nohz
+	 *    atomic_fetch_inc(&sd_nohz->shared->nr_idle_cpus);
+	 *    atomic_inc(&nohz.nr_doms); # XXX: Accounted twice
+	 *  ...
+	 *
+	 * "nohz.nr_doms" is used as an entry criteria in nohz_balancer_kick()
+	 * and this double accounting can lead to wasted idle balancing
+	 * triggers. Use this path to correct the accounting:
+	 *
+	 *  # In sds_delayed_free()
+	 *  __nohz_exit_idle_tracking(sds)
+	 *    # sd->shared->nr_idle_cpus is != 0
+	 *    atomic_dec(&nohz.nr_doms); # XXX: Fixes nohz.nr_doms
+	 */
+	if (atomic_read(&sds->nr_idle_cpus)) {
+		/*
+		 * Reset the "nr_idle_cpus" indicator to prevent
+		 * existing readers from traversing the idle mask
+		 * to reduce chances of traversing the same CPU
+		 * twice.
+		 */
+		atomic_set(&sds->nr_idle_cpus, 0);
+		atomic_dec(&nohz.nr_doms);
+	}
 }
 
 static void cpu_sd_exit_nohz_balance(struct rq *rq)
@@ -12690,8 +12741,6 @@ void nohz_balance_enter_idle(int cpu)
 		return;
 
 	WRITE_ONCE(rq->nohz_tick_stopped, 1);
-
-	atomic_inc(&nohz.nr_cpus);
 
 	set_cpu_sd_state_idle(cpu);
 

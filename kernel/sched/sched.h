@@ -3266,6 +3266,7 @@ extern void cfs_bandwidth_usage_dec(void);
 DECLARE_PER_CPU(struct sched_domain __rcu *, sd_nohz);
 extern struct list_head nohz_shared_list;
 
+extern void __nohz_exit_idle_tracking(struct sched_domain_shared *sds);
 extern void nohz_balance_exit_idle(struct rq *rq);
 #else /* !CONFIG_NO_HZ_COMMON: */
 static inline void nohz_balance_exit_idle(struct rq *rq) { }
