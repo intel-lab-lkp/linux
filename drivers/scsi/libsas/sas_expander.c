@@ -1266,6 +1266,11 @@ static int sas_check_edge_expander_topo(struct domain_device *child,
 	struct expander_device *parent_ex = &child->parent->ex_dev;
 	struct ex_phy *child_phy;
 
+	if (parent_phy->attached_phy_id >= child_ex->num_phys) {
+		pr_err("Invalid attached_phy_id:%u, num_phys:%u\n",
+			parent_phy->attached_phy_id, child_ex->num_phys);
+		return -EINVAL;
+	}
 	child_phy = &child_ex->ex_phy[parent_phy->attached_phy_id];
 
 	if (child->dev_type == SAS_FANOUT_EXPANDER_DEVICE) {
@@ -1296,6 +1301,11 @@ static int sas_check_fanout_expander_topo(struct domain_device *child,
 	struct expander_device *child_ex = &child->ex_dev;
 	struct ex_phy *child_phy;
 
+	if (parent_phy->attached_phy_id >= child_ex->num_phys) {
+		pr_err("Invalid attached_phy_id:%u, num_phys:%u\n",
+			parent_phy->attached_phy_id, child_ex->num_phys);
+		return -EINVAL;
+	}
 	child_phy = &child_ex->ex_phy[parent_phy->attached_phy_id];
 
 	if (parent_phy->routing_attr == TABLE_ROUTING &&
