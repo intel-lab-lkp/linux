@@ -1484,6 +1484,13 @@ int ocfs2_validate_inode_block(struct super_block *sb,
 		goto bail;
 	}
 
+	if ((di->i_dyn_features & cpu_to_le16(OCFS2_HAS_REFCOUNT_FL)) &&
+	    !di->i_refcount_loc) {
+		rc = ocfs2_error(sb, "Invalid dinode #%llu: refcount flag set but i_refcount_loc is zero\n",
+		      (unsigned long long)bh->b_blocknr);
+		goto bail;
+	}
+
 	rc = 0;
 
 bail:
