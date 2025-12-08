@@ -861,6 +861,7 @@ static int fsi_master_gpio_probe(struct platform_device *pdev)
 	}
 	return 0;
  err_free:
+	of_node_put(master->master.dev.of_node);
 	kfree(master);
 	return rc;
 }
