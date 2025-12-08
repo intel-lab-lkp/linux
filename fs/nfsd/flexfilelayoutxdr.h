@@ -39,7 +39,7 @@ struct pnfs_ff_layout {
 	kgid_t				gid;
 	struct nfsd4_deviceid		deviceid;
 	stateid_t			stateid;
-	struct nfs_fh			fh;
+	struct knfsd_fh			fh;
 };
 
 __be32 nfsd4_ff_encode_getdeviceinfo(struct xdr_stream *xdr,
