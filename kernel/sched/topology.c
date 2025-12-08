@@ -468,6 +468,24 @@ struct s_data {
 
 DEFINE_PER_CPU(struct sched_domain __rcu *, sd_nohz);
 
+static int __sds_nohz_idle_alloc(struct sched_domain_shared *sds, int node)
+{
+	sds->nohz_idle_cpus_mask = kzalloc_node(cpumask_size(), GFP_KERNEL, node);
+
+	if (!sds->nohz_idle_cpus_mask)
+		return -ENOMEM;
+
+	return 0;
+}
+
+static void __sds_nohz_idle_free(struct sched_domain_shared *sds)
+{
+	if (!sds)
+		return;
+
+	kfree(sds->nohz_idle_cpus_mask);
+}
+
 static int __fallback_sds_alloc(struct s_data *d, unsigned long *visited_nodes)
 {
 	int j;
@@ -490,6 +508,9 @@ static int __fallback_sds_alloc(struct s_data *d, unsigned long *visited_nodes)
 			return -ENOMEM;
 
 		d->fallback_nohz_sds[j] = sds;
+
+		if (__sds_nohz_idle_alloc(sds, j))
+			return -ENOMEM;
 	}
 
 	return 0;
@@ -502,8 +523,10 @@ static void __fallback_sds_free(struct s_data *d)
 	if (!d->fallback_nohz_sds)
 		return;
 
-	for (j = 0; j < nr_node_ids; ++j)
+	for (j = 0; j < nr_node_ids; ++j) {
+		__sds_nohz_idle_free(d->fallback_nohz_sds[j]);
 		kfree(d->fallback_nohz_sds[j]);
+	}
 
 	kfree(d->fallback_nohz_sds);
 	d->fallback_nohz_sds = NULL;
@@ -552,6 +575,13 @@ static void update_nohz_domain(int cpu)
 }
 
 #else /* !CONFIG_NO_HZ_COMMON */
+
+static int __sds_nohz_idle_alloc(struct sched_domain_shared *sds, int node)
+{
+	return 0;
+}
+
+static void __sds_nohz_idle_free(struct sched_domain_shared *sds) { }
 
 static inline int __fallback_sds_alloc(struct s_data *d, unsigned long *visited_nodes)
 {
@@ -740,8 +770,10 @@ static void destroy_sched_domain(struct sched_domain *sd)
 	 */
 	free_sched_groups(sd->groups, 1);
 
-	if (sd->shared && atomic_dec_and_test(&sd->shared->ref))
+	if (sd->shared && atomic_dec_and_test(&sd->shared->ref)) {
+		__sds_nohz_idle_free(sd->shared);
 		kfree(sd->shared);
+	}
 	kfree(sd);
 }
 
@@ -2599,6 +2631,9 @@ static int __sds_alloc(struct s_data *d, const struct cpumask *cpu_map)
 
 		bitmap_set(visited_nodes, cpu_to_node(j), 1);
 		*per_cpu_ptr(d->sds, j) = sds;
+
+		if (__sds_nohz_idle_alloc(sds, cpu_to_node(j)))
+			return -ENOMEM;
 	}
 
 	if (__fallback_sds_alloc(d, visited_nodes))
@@ -2614,8 +2649,13 @@ static void __sds_free(struct s_data *d, const struct cpumask *cpu_map)
 	if (!d->sds)
 		return;
 
-	for_each_cpu(j, cpu_map)
-		kfree(*per_cpu_ptr(d->sds, j));
+	for_each_cpu(j, cpu_map) {
+		struct sched_domain_shared *sds;
+
+		sds = *per_cpu_ptr(d->sds, j);
+		__sds_nohz_idle_free(sds);
+		kfree(sds);
+	}
 
 	__fallback_sds_free(d);
 

@@ -67,6 +67,7 @@ struct sched_domain_shared {
 	atomic_t	ref;
 #ifdef CONFIG_NO_HZ_COMMON
 	atomic_t	nr_idle_cpus;
+	struct cpumask	*nohz_idle_cpus_mask;
 #endif
 	int		has_idle_cores;
 	int		nr_idle_scan;
