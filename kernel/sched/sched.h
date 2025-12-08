@@ -2100,6 +2100,7 @@ struct sched_group_capacity {
 	unsigned long		max_capacity;		/* Max per-CPU capacity in group */
 	unsigned long		next_update;
 	int			imbalance;		/* XXX unrelated to capacity but shared group state */
+	int			busy_balance_cpu;
 
 	int			id;
 

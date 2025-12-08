@@ -11747,7 +11747,7 @@ static int should_we_balance(struct lb_env *env)
 	if (idle_smt != -1)
 		return idle_smt == env->dst_cpu;
 
-	/* Are we the first CPU of this group ? */
+	/* Are we the busy load balancing CPU of this group ? */
 	return group_balance_cpu(sg) == env->dst_cpu;
 }
 
@@ -11771,6 +11771,22 @@ static void update_lb_imbalance_stat(struct lb_env *env, struct sched_domain *sd
 		__schedstat_add(sd->lb_imbalance_misfit[idle], env->imbalance);
 		break;
 	}
+}
+
+static void update_busy_balance_cpu(int this_cpu, struct lb_env *env)
+{
+	struct sched_group *group = env->sd->groups;
+	int balance_cpu = group_balance_cpu(group);
+
+	/*
+	 * Only the current CPU responsible for busy load balancing
+	 * should update the "busy_balance_cpu" for next instance.
+	 */
+	if (this_cpu != balance_cpu)
+		return;
+
+	balance_cpu = cpumask_next_wrap(balance_cpu, group_balance_mask(group));
+	WRITE_ONCE(group->sgc->busy_balance_cpu, balance_cpu);
 }
 
 /*
@@ -12075,6 +12091,12 @@ out_one_pinned:
 out:
 	if (need_unlock)
 		atomic_set_release(&sched_balance_running, 0);
+	/*
+	 * If this was a successful busy balancing attempt,
+	 * update the "busy_balance_cpu" of the group.
+	 */
+	if (!idle && continue_balancing)
+		update_busy_balance_cpu(this_cpu, &env);
 
 	return ld_moved;
 }

@@ -810,7 +810,7 @@ enum s_alloc {
  */
 int group_balance_cpu(struct sched_group *sg)
 {
-	return cpumask_first(group_balance_mask(sg));
+	return READ_ONCE(sg->sgc->busy_balance_cpu);
 }
 
 
@@ -992,6 +992,8 @@ static void init_overlap_sched_group(struct sched_domain *sd,
 	cpu = cpumask_first(mask);
 
 	sg->sgc = *per_cpu_ptr(sdd->sgc, cpu);
+	sg->sgc->busy_balance_cpu = cpu;
+
 	if (atomic_inc_return(&sg->sgc->ref) == 1)
 		cpumask_copy(group_balance_mask(sg), mask);
 	else
@@ -1211,6 +1213,7 @@ static struct sched_group *get_group(int cpu, struct sd_data *sdd)
 
 	sg = *per_cpu_ptr(sdd->sg, cpu);
 	sg->sgc = *per_cpu_ptr(sdd->sgc, cpu);
+	sg->sgc->busy_balance_cpu = cpu;
 
 	/* Increase refcounts for claim_allocations: */
 	already_visited = atomic_inc_return(&sg->ref) > 1;
