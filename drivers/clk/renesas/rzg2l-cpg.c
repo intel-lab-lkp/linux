@@ -1669,8 +1669,11 @@ static int __rzg2l_cpg_assert(struct reset_controller_dev *rcdev,
 
 	ret = readl_poll_timeout_atomic(priv->base + reg, value,
 					assert == !!(value & mask), 10, 200);
-	if (ret && !assert) {
+	if (ret) {
 		value = mask << 16;
+		if (assert)
+			value |= mask;
+
 		writel(value, priv->base + CLK_RST_R(info->resets[id].off));
 	}
 
