@@ -12648,14 +12648,14 @@ void nohz_balance_enter_idle(int cpu)
 	cpumask_set_cpu(cpu, nohz.idle_cpus_mask);
 	atomic_inc(&nohz.nr_cpus);
 
+	set_cpu_sd_state_idle(cpu);
+
 	/*
 	 * Ensures that if nohz_idle_balance() fails to observe our
 	 * @idle_cpus_mask store, it must observe the @has_blocked
 	 * and @needs_update stores.
 	 */
 	smp_mb__after_atomic();
-
-	set_cpu_sd_state_idle(cpu);
 
 	WRITE_ONCE(nohz.needs_update, 1);
 out:
