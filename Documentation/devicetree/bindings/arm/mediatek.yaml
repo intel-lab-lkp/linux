@@ -367,6 +367,10 @@ properties:
           - const: mediatek,mt8186
       - description: Google Ciri (Lenovo Chromebook Duet (11", 9))
         items:
+          - const: google,ciri
+          - const: mediatek,mt8188
+      - description: Google Ciri (Lenovo Chromebook Duet (11", 9))
+        items:
           - enum:
               - google,ciri-sku0
               - google,ciri-sku1
