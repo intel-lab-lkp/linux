@@ -92,7 +92,6 @@ struct rtrs_permit {
  * rtrs_clt_io_req - describes one inflight IO request
  */
 struct rtrs_clt_io_req {
-	struct list_head        list;
 	struct rtrs_iu		*iu;
 	struct scatterlist	*sglist; /* list holding user data */
 	unsigned int		sg_cnt;
