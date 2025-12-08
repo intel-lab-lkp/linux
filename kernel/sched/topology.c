@@ -471,6 +471,20 @@ DEFINE_PER_CPU(struct sched_domain __rcu *, sd_nohz);
 static DEFINE_RAW_SPINLOCK(nohz_shared_list_lock);
 LIST_HEAD(nohz_shared_list);
 
+static void debug_nohz_shared_list_update(void)
+{
+	struct sched_domain_shared *sds;
+	int count = 0;
+
+	if (!sched_debug())
+		return;
+
+	list_for_each_entry(sds, &nohz_shared_list, nohz_list_node)
+		count++;
+
+	pr_info("%s: %d nohz_shared_list entries found.\n", __func__, count);
+}
+
 static int __sds_nohz_idle_alloc_init(struct sched_domain_shared *sds, int node)
 {
 	sds->nohz_list_node = (struct list_head)LIST_HEAD_INIT(sds->nohz_list_node);
@@ -588,6 +602,7 @@ static void update_nohz_domain(int cpu)
 
 		guard(raw_spinlock)(&nohz_shared_list_lock);
 		list_add(&sds->nohz_list_node, &nohz_shared_list);
+		debug_nohz_shared_list_update();
 	}
 
 	WARN_ON_ONCE(sd && !sds);
@@ -612,8 +627,10 @@ static int sds_delayed_free(struct sched_domain_shared *sds)
 	if (list_empty(&sds->nohz_list_node))
 		return 0;
 
-	scoped_guard(raw_spinlock_irqsave, &nohz_shared_list_lock)
+	scoped_guard(raw_spinlock_irqsave, &nohz_shared_list_lock) {
 		list_del_rcu(&sds->nohz_list_node);
+		debug_nohz_shared_list_update();
+	}
 
 	__nohz_exit_idle_tracking(sds);
 	call_rcu(&sds->rcu, destroy_sched_domain_shared_rcu);
