@@ -23,6 +23,7 @@ properties:
       - enum:
           - ti,tcan1042
           - ti,tcan1043
+          - ti,tcan1046
           - nxp,tja1048
           - nxp,tja1051
           - nxp,tja1057
@@ -84,7 +85,9 @@ allOf:
       properties:
         compatible:
           contains:
-            const: nxp,tja1048
+            enum:
+              - ti,tcan1046
+              - nxp,tja1048
     then:
       properties:
         '#phy-cells':
