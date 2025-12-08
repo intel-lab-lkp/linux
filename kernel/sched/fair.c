@@ -6865,6 +6865,9 @@ requeue_delayed_entity(struct sched_entity *se)
 	clear_delayed(se);
 }
 
+static void fair_remove_pushable_task(struct rq *rq, struct task_struct *p);
+static void fair_add_pushable_task(struct rq *rq, struct task_struct *p);
+
 /*
  * The enqueue_task method is called before nr_running is
  * increased. Here we update the fair scheduling stats and
@@ -7015,6 +7018,7 @@ static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags)
 		h_nr_idle = task_has_idle_policy(p);
 		if (task_sleep || task_delayed || !se->sched_delayed)
 			h_nr_runnable = 1;
+		fair_remove_pushable_task(rq, p);
 	}
 
 	for_each_sched_entity(se) {
@@ -8954,6 +8958,12 @@ again:
 		put_prev_entity(cfs_rq, pse);
 		set_next_entity(cfs_rq, se);
 
+		/*
+		 * The previous task might be eligible for being pushed on
+		 * another cpu if it is still active.
+		 */
+		fair_add_pushable_task(rq, prev);
+
 		__set_next_task_fair(rq, p, true);
 	}
 
@@ -9017,6 +9027,13 @@ static void put_prev_task_fair(struct rq *rq, struct task_struct *prev, struct t
 		cfs_rq = cfs_rq_of(se);
 		put_prev_entity(cfs_rq, se);
 	}
+
+	/*
+	 * The previous task might be eligible for being pushed on another cpu
+	 * if it is still active.
+	 */
+	fair_add_pushable_task(rq, prev);
+
 }
 
 /*
@@ -13028,6 +13045,79 @@ static void nohz_newidle_balance(struct rq *this_rq)
 	atomic_or(NOHZ_NEWILB_KICK, nohz_flags(this_cpu));
 }
 
+/*
+ * Push based load balancing: It may take several ticks before a nohz idle CPU
+ * is selected for load balancing which is less than ideal for latency
+ * sensitive tasks stuck on overloaded CPUs.
+ *
+ * If a fair task is preempted, opportunistically try pushing to an idle CPU if
+ * the indicators say it is favourable. Since a busy CPU is handling the push,
+ * this is a time sensitive operation.
+ */
+static inline bool fair_push_task(struct rq *rq, struct task_struct *p)
+{
+	if (!task_on_rq_queued(p))
+		return false;
+
+	if (p->se.sched_delayed)
+		return false;
+
+	if (p->nr_cpus_allowed == 1)
+		return false;
+
+	if (task_current_donor(rq, p))
+		return false;
+
+	if (task_current(rq, p))
+		return false;
+
+	return true;
+}
+
+static inline int has_pushable_tasks(struct rq *rq)
+{
+	return !plist_head_empty(&rq->cfs.pushable_tasks);
+}
+
+/*
+ * See if the non running fair tasks on this rq can be sent on other CPUs
+ * that fits better with their profile.
+ */
+static bool push_fair_task(struct rq *rq)
+{
+	return false;
+}
+
+static void push_fair_tasks(struct rq *rq)
+{
+	/* push_fair_task() will return true if it moved a fair task */
+	while (push_fair_task(rq))
+		;
+}
+
+static DEFINE_PER_CPU(struct balance_callback, fair_push_head);
+
+static inline void fair_queue_pushable_tasks(struct rq *rq)
+{
+	if (!has_pushable_tasks(rq))
+		return;
+
+	queue_balance_callback(rq, &per_cpu(fair_push_head, rq->cpu), push_fair_tasks);
+}
+static void fair_remove_pushable_task(struct rq *rq, struct task_struct *p)
+{
+	plist_del(&p->pushable_tasks, &rq->cfs.pushable_tasks);
+}
+
+static void fair_add_pushable_task(struct rq *rq, struct task_struct *p)
+{
+	if (fair_push_task(rq, p)) {
+		plist_del(&p->pushable_tasks, &rq->cfs.pushable_tasks);
+		/* Place the task with greates chance to be pushed first. */
+		plist_node_init(&p->pushable_tasks, p->prio);
+		plist_add(&p->pushable_tasks, &rq->cfs.pushable_tasks);
+	}
+}
 #else /* !CONFIG_NO_HZ_COMMON: */
 static inline void cpu_sd_exit_nohz_balance(struct rq *rq) { }
 static inline void cpu_sd_reenter_nohz_balance(struct rq *rq) { }
@@ -13039,6 +13129,10 @@ static inline bool nohz_idle_balance(struct rq *this_rq, enum cpu_idle_type idle
 }
 
 static inline void nohz_newidle_balance(struct rq *this_rq) { }
+
+static inline void fair_remove_pushable_task(struct rq *rq, struct task_struct *p) { }
+static inline void fair_add_pushable_task(struct rq *rq, struct task_struct *p) { }
+static inline void fair_queue_pushable_tasks(struct rq *rq) { }
 #endif /* !CONFIG_NO_HZ_COMMON */
 
 /*
@@ -13738,6 +13832,8 @@ static void __set_next_task_fair(struct rq *rq, struct task_struct *p, bool firs
 {
 	struct sched_entity *se = &p->se;
 
+	fair_remove_pushable_task(rq, p);
+
 	if (task_on_rq_queued(p)) {
 		/*
 		 * Move the next running task to the front of the list, so our
@@ -13753,6 +13849,11 @@ static void __set_next_task_fair(struct rq *rq, struct task_struct *p, bool firs
 	if (hrtick_enabled_fair(rq))
 		hrtick_start_fair(rq, p);
 
+	/*
+	 * Try to push prev task before checking misfit for next task as
+	 * the migration of prev can make next fitting the CPU
+	 */
+	fair_queue_pushable_tasks(rq);
 	update_misfit_status(p, rq);
 	sched_fair_update_stop_tick(rq, p);
 }
@@ -13782,6 +13883,7 @@ void init_cfs_rq(struct cfs_rq *cfs_rq)
 {
 	cfs_rq->tasks_timeline = RB_ROOT_CACHED;
 	cfs_rq->zero_vruntime = (u64)(-(1LL << 20));
+	plist_head_init(&cfs_rq->pushable_tasks);
 	raw_spin_lock_init(&cfs_rq->removed.lock);
 }
 
