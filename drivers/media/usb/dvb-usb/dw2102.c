@@ -733,6 +733,36 @@ static int su3000_i2c_transfer(struct i2c_adapter *adap, struct i2c_msg msg[],
 		return -EAGAIN;
 	}
 
+		/* Validate incoming I²C messages */
+	if (!msg || num <= 0) {
+		mutex_unlock(&d->data_mutex);
+        mutex_unlock(&d->i2c_mutex);
+		return -EINVAL;
+	}
+
+	for (j = 0; j < num; j++) {
+		/* msg buffer must exist */
+		if (!msg[j].buf) {
+			mutex_unlock(&d->data_mutex);
+            mutex_unlock(&d->i2c_mutex);
+			return -EINVAL;
+		}
+
+		/* zero or negative length is invalid */
+		if (msg[j].len <= 0) {
+			mutex_unlock(&d->data_mutex);
+            mutex_unlock(&d->i2c_mutex);
+			return -EINVAL;
+		}
+
+		/* protect against unreasonable sizes */
+		if (msg[j].len > 256) {
+			mutex_unlock(&d->data_mutex);
+            mutex_unlock(&d->i2c_mutex);
+			return -EOPNOTSUPP;
+		}
+	}
+
 	j = 0;
 	while (j < num) {
 		switch (msg[j].addr) {
