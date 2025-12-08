@@ -771,15 +771,9 @@ static inline bool pmd_is_huge(pmd_t pmd)
 }
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
 
-static inline int split_folio_to_list_to_order(struct folio *folio,
-		struct list_head *list, int new_order)
-{
-	return split_huge_page_to_list_to_order(&folio->page, list, new_order);
-}
-
 static inline int split_folio_to_order(struct folio *folio, int new_order)
 {
-	return split_folio_to_list_to_order(folio, NULL, new_order);
+	return split_huge_page_to_list_to_order(&folio->page, NULL, new_order);
 }
 
 /**
