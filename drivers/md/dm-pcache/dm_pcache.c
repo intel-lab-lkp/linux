@@ -199,6 +199,8 @@ static int parse_cache_opts(struct dm_pcache *pcache, struct dm_arg_set *as,
 static int pcache_start(struct dm_pcache *pcache, char **error)
 {
 	int ret;
+	struct dm_target *ti = pcache->ti;
+	struct pcache_backing_dev *backing_dev;
 
 	ret = cache_dev_start(pcache);
 	if (ret) {
@@ -210,6 +212,19 @@ static int pcache_start(struct dm_pcache *pcache, char **error)
 	if (ret) {
 		*error = "Failed to start backing dev";
 		goto stop_cache;
+	}
+
+	/* Sanity-check: logical size must not exceed backing device size */
+	backing_dev = &pcache->backing_dev;
+	if (ti->len > backing_dev->dev_size) {
+		pcache_dev_err(
+			pcache,
+			"backing device too small: logical=%llu sectors, backing=%llu sectors",
+			(unsigned long long)ti->len,
+			(unsigned long long)backing_dev->dev_size);
+		*error = "Requested mapping exceeds backing device size";
+		ret = -EINVAL;
+		goto stop_backing;
 	}
 
 	ret = pcache_cache_start(pcache);
