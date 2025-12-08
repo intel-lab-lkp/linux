@@ -47,8 +47,8 @@ void intel_vga_disable(struct intel_display *display)
 	struct pci_dev *pdev = to_pci_dev(display->drm->dev);
 	i915_reg_t vga_reg = intel_vga_cntrl_reg(display);
 	enum pipe pipe;
+	u8 msr, sr1;
 	u32 tmp;
-	u8 sr1;
 
 	tmp = intel_de_read(display, vga_reg);
 	if (tmp & VGA_DISP_DISABLE)
@@ -66,33 +66,33 @@ void intel_vga_disable(struct intel_display *display)
 
 	/* WaEnableVGAAccessThroughIOPort:ctg,elk,ilk,snb,ivb,vlv,hsw */
 	vga_get_uninterruptible(pdev, VGA_RSRC_LEGACY_IO);
+
 	outb(0x01, VGA_SEQ_I);
 	sr1 = inb(VGA_SEQ_D);
 	outb(sr1 | VGA_SR01_SCREEN_OFF, VGA_SEQ_D);
+
+	msr = inb(VGA_MIS_R);
+	/*
+	 * VGA_MIS_COLOR controls both GPU level and display engine level
+	 * MDA vs. CGA decode logic. But when the register gets reset
+	 * (reset value has VGA_MIS_COLOR=0) by the power well, only the
+	 * display engine level decode logic gets notified.
+	 *
+	 * Switch to MDA mode to make sure the GPU level decode logic will
+	 * be in sync with the display engine level decode logic after the
+	 * power well has been reset. Otherwise the GPU will claim CGA
+	 * register accesses but the display engine will not, causing
+	 * RMbus NoClaim errors.
+	 */
+	msr &= ~VGA_MIS_COLOR;
+	outb(msr, VGA_MIS_W);
+
 	vga_put(pdev, VGA_RSRC_LEGACY_IO);
+
 	udelay(300);
 
 	intel_de_write(display, vga_reg, VGA_DISP_DISABLE);
 	intel_de_posting_read(display, vga_reg);
-}
-
-void intel_vga_reset_io_mem(struct intel_display *display)
-{
-	struct pci_dev *pdev = to_pci_dev(display->drm->dev);
-
-	/*
-	 * After we re-enable the power well, if we touch VGA register 0x3d5
-	 * we'll get unclaimed register interrupts. This stops after we write
-	 * anything to the VGA MSR register. The vgacon module uses this
-	 * register all the time, so if we unbind our driver and, as a
-	 * consequence, bind vgacon, we'll get stuck in an infinite loop at
-	 * console_unlock(). So make here we touch the VGA MSR register, making
-	 * sure vgacon can keep working normally without triggering interrupts
-	 * and error messages.
-	 */
-	vga_get_uninterruptible(pdev, VGA_RSRC_LEGACY_IO);
-	outb(inb(VGA_MIS_R), VGA_MIS_W);
-	vga_put(pdev, VGA_RSRC_LEGACY_IO);
 }
 
 static int intel_gmch_vga_set_state(struct intel_display *display, bool enable_decode)
