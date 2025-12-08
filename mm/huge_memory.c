@@ -3995,7 +3995,8 @@ static int __folio_split(struct folio *folio, unsigned int new_order,
 	VM_WARN_ON_ONCE_FOLIO(!folio_test_locked(folio), folio);
 	VM_WARN_ON_ONCE_FOLIO(!folio_test_large(folio), folio);
 
-	if (folio != page_folio(split_at) || folio != page_folio(lock_at)) {
+	if ((split_type == SPLIT_TYPE_NON_UNIFORM && folio != page_folio(split_at))
+	    || folio != page_folio(lock_at)) {
 		ret = -EINVAL;
 		goto out;
 	}
