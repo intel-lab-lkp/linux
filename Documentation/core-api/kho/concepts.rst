@@ -71,7 +71,7 @@ in the FDT. That state is called the KHO finalization phase.
 Public API
 ==========
 .. kernel-doc:: kernel/liveupdate/kexec_handover.c
-   :export:
+   :identifiers: kho_is_enabled kho_restore_folio kho_restore_pages kho_add_subtree kho_remove_subtree kho_preserve_folio kho_unpreserve_folio kho_preserve_pages kho_unpreserve_pages kho_preserve_vmalloc kho_unpreserve_vmalloc kho_restore_vmalloc kho_alloc_preserve kho_unpreserve_free kho_restore_free is_kho_boot kho_retrieve_subtree
 
 Internal API
 ============

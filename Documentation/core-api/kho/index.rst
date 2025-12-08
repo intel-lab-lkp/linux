@@ -9,5 +9,6 @@ Kexec Handover Subsystem
 
    concepts
    fdt
+   radix_tree
 
 .. only::  subproject and html
