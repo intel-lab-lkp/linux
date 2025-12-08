@@ -122,6 +122,10 @@ struct sched_domain {
 	unsigned int alb_failed;
 	unsigned int alb_pushed;
 
+	/* Push load balancing */
+	unsigned long last_nr_push_update;
+	int nr_push_attempt;
+
 	/* SD_BALANCE_EXEC stats */
 	unsigned int sbe_count;
 	unsigned int sbe_balanced;

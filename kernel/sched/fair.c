@@ -12356,6 +12356,16 @@ static void sched_balance_domains(struct rq *rq, enum cpu_idle_type idle)
 		rq->max_idle_balance_cost =
 			max((u64)sysctl_sched_migration_cost, max_cost);
 	}
+	if (sched_feat(SIS_UTIL)) {
+		sd = rcu_dereference(per_cpu(sd_llc, cpu));
+
+		if (sd && sd->shared &&
+		    time_after_eq(jiffies, sd->last_nr_push_update + sd->min_interval)) {
+			sd->nr_push_attempt = READ_ONCE(sd->shared->nr_idle_scan);
+			sd->last_nr_push_update = jiffies;
+		}
+	}
+
 	rcu_read_unlock();
 
 	/*
@@ -13110,8 +13120,6 @@ static inline bool should_push_tasks(struct rq *rq)
 	struct sched_domain *sd;
 	int cpu = cpu_of(rq);
 
-	/* TODO: Add a CPU local failure counter. */
-
 	/* CPU doesn't have any fair task to push. */
 	if (!has_pushable_tasks(rq))
 		return false;
@@ -13124,6 +13132,10 @@ static inline bool should_push_tasks(struct rq *rq)
 
 	sd = rcu_dereference(per_cpu(sd_nohz, cpu));
 	if (!sd)
+		return false;
+
+	/* We've failed to push task too many times. */
+	if (sched_feat(SIS_UTIL) && sd->nr_push_attempt <= 0)
 		return false;
 
 	/*
@@ -13175,6 +13187,13 @@ static bool push_fair_task(struct rq *rq)
 		__ttwu_queue_wakelist(p, cpu, 0);
 		return true;
 	}
+
+	/*
+	 * If the push failed after a full search, decrement the
+	 * attempt counter to dicourage further attempts. Periodic
+	 * balancer will reset the "nr_push_attempt" after a while.
+	 */
+	sd->nr_push_attempt--;
 
 	return false;
 }
