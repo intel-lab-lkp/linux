@@ -455,6 +455,96 @@ free:
 static void free_pd(struct perf_domain *pd) { }
 #endif /* !(CONFIG_ENERGY_MODEL && CONFIG_CPU_FREQ_GOV_SCHEDUTIL) */
 
+struct s_data {
+#ifdef CONFIG_NO_HZ_COMMON
+	struct sched_domain_shared **fallback_nohz_sds;
+#endif
+	struct sched_domain_shared * __percpu *sds;
+	struct sched_domain * __percpu *sd;
+	struct root_domain	*rd;
+};
+
+#ifdef CONFIG_NO_HZ_COMMON
+
+static int __fallback_sds_alloc(struct s_data *d, unsigned long *visited_nodes)
+{
+	int j;
+
+	d->fallback_nohz_sds = kcalloc(nr_node_ids,
+			sizeof(*d->fallback_nohz_sds), GFP_KERNEL);
+	if (!d->fallback_nohz_sds)
+		return -ENOMEM;
+
+	/*
+	 * Allocate a fallback sd->shared object
+	 * for each node covered by the cpu_map.
+	 */
+	for_each_set_bit(j, visited_nodes, nr_node_ids) {
+		struct sched_domain_shared *sds;
+
+		sds = kzalloc_node(sizeof(struct sched_domain_shared),
+				GFP_KERNEL, j);
+		if (!sds)
+			return -ENOMEM;
+
+		d->fallback_nohz_sds[j] = sds;
+	}
+
+	return 0;
+}
+
+static void __fallback_sds_free(struct s_data *d)
+{
+	int j;
+
+	if (!d->fallback_nohz_sds)
+		return;
+
+	for (j = 0; j < nr_node_ids; ++j)
+		kfree(d->fallback_nohz_sds[j]);
+
+	kfree(d->fallback_nohz_sds);
+	d->fallback_nohz_sds = NULL;
+}
+
+static void assign_fallback_sds(struct s_data *d, struct sched_domain *sd, int cpu)
+{
+	struct sched_domain_shared *sds;
+
+	sds = d->fallback_nohz_sds[cpu_to_node(cpu)];
+	sd->shared = sds;
+	atomic_inc(&sd->shared->ref);
+}
+
+static void claim_fallback_sds(struct s_data *d)
+{
+	int j;
+
+	/*
+	 * Claim allocations for the fallback shared objects
+	 * if they were assigned during cpu_attach_domain().
+	 */
+	for (j = 0; j < nr_node_ids; ++j) {
+		struct sched_domain_shared *sds = d->fallback_nohz_sds[j];
+
+		if (sds && atomic_read(&sds->ref))
+			d->fallback_nohz_sds[j] = NULL;
+	}
+}
+
+#else /* !CONFIG_NO_HZ_COMMON */
+
+static inline int __fallback_sds_alloc(struct s_data *d, unsigned long *visited_nodes)
+{
+	return 0;
+}
+
+static inline void __fallback_sds_free(struct s_data *d) { }
+static inline void assign_fallback_sds(struct s_data *d, struct sched_domain *sd, int cpu) { }
+static inline void claim_fallback_sds(struct s_data *d) { }
+
+#endif /* CONFIG_NO_HZ_COMMON */
+
 static void free_rootdomain(struct rcu_head *rcu)
 {
 	struct root_domain *rd = container_of(rcu, struct root_domain, rcu);
@@ -716,12 +806,6 @@ static void update_top_cache_domain(int cpu)
 	rcu_assign_pointer(per_cpu(sd_asym_cpucapacity, cpu), sd);
 }
 
-struct s_data {
-	struct sched_domain_shared * __percpu *sds;
-	struct sched_domain * __percpu *sd;
-	struct root_domain	*rd;
-};
-
 /*
  * Attach the domain 'sd' to 'cpu' as its base domain. Callers must
  * hold the hotplug lock.
@@ -789,6 +873,14 @@ cpu_attach_domain(struct s_data *d, int cpu)
 			sd->child = NULL;
 		}
 	}
+
+	/*
+	 * Ensure there is at least one domain in the
+	 * hierarchy with sd->shared attached to
+	 * ensure participation in nohz balancing.
+	 */
+	if (sd && !(sd->flags & SD_SHARE_LLC))
+		assign_fallback_sds(d, sd, cpu);
 
 	sched_domain_debug(sd, cpu);
 
@@ -2462,11 +2554,18 @@ static void __sdt_free(const struct cpumask *cpu_map)
 
 static int __sds_alloc(struct s_data *d, const struct cpumask *cpu_map)
 {
+	unsigned long *visited_nodes;
 	int j;
+
+	visited_nodes = bitmap_alloc(nr_node_ids, GFP_KERNEL);
+	if (!visited_nodes)
+		return -ENOMEM;
 
 	d->sds = alloc_percpu(struct sched_domain_shared *);
 	if (!d->sds)
 		return -ENOMEM;
+
+	bitmap_zero(visited_nodes, nr_node_ids);
 
 	for_each_cpu(j, cpu_map) {
 		struct sched_domain_shared *sds;
@@ -2476,8 +2575,12 @@ static int __sds_alloc(struct s_data *d, const struct cpumask *cpu_map)
 		if (!sds)
 			return -ENOMEM;
 
+		bitmap_set(visited_nodes, cpu_to_node(j), 1);
 		*per_cpu_ptr(d->sds, j) = sds;
 	}
+
+	if (__fallback_sds_alloc(d, visited_nodes))
+		return -ENOMEM;
 
 	return 0;
 }
@@ -2491,6 +2594,8 @@ static void __sds_free(struct s_data *d, const struct cpumask *cpu_map)
 
 	for_each_cpu(j, cpu_map)
 		kfree(*per_cpu_ptr(d->sds, j));
+
+	__fallback_sds_free(d);
 
 	free_percpu(d->sds);
 	d->sds = NULL;
@@ -2730,6 +2835,12 @@ build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *att
 		if (lowest_flag_domain(i, SD_CLUSTER))
 			has_cluster = true;
 	}
+
+	/*
+	 * Claim allocations for the fallback shared objects
+	 * if they were assigned during cpu_attach_domain().
+	 */
+	claim_fallback_sds(&d);
 	rcu_read_unlock();
 
 	if (has_asym)
