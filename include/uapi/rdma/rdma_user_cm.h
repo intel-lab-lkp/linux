@@ -192,6 +192,7 @@ struct rdma_ucm_query_path_resp {
 
 struct rdma_ucm_query_ib_service_resp {
 	__u32 num_service_recs;
+	__u32 :32;
 	struct ib_user_service_rec recs[];
 };
 
@@ -362,6 +363,7 @@ struct rdma_ucm_ib_service {
 
 struct rdma_ucm_resolve_ib_service {
 	__u32 id;
+	__u32 :32;
 	struct rdma_ucm_ib_service ibs;
 };
 
