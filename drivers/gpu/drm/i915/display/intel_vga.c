@@ -18,6 +18,11 @@
 #include "intel_vga.h"
 #include "intel_vga_regs.h"
 
+static unsigned int intel_gmch_ctrl_reg(struct intel_display *display)
+{
+	return DISPLAY_VER(display) >= 6 ? SNB_GMCH_CTRL : INTEL_GMCH_CTRL;
+}
+
 static i915_reg_t intel_vga_cntrl_reg(struct intel_display *display)
 {
 	if (display->platform.valleyview || display->platform.cherryview)
@@ -98,10 +103,10 @@ void intel_vga_disable(struct intel_display *display)
 static int intel_gmch_vga_set_state(struct intel_display *display, bool enable_decode)
 {
 	struct pci_dev *pdev = to_pci_dev(display->drm->dev);
-	unsigned int reg = DISPLAY_VER(display) >= 6 ? SNB_GMCH_CTRL : INTEL_GMCH_CTRL;
 	u16 gmch_ctrl;
 
-	if (pci_bus_read_config_word(pdev->bus, PCI_DEVFN(0, 0), reg, &gmch_ctrl)) {
+	if (pci_bus_read_config_word(pdev->bus, PCI_DEVFN(0, 0),
+				     intel_gmch_ctrl_reg(display), &gmch_ctrl)) {
 		drm_err(display->drm, "failed to read control word\n");
 		return -EIO;
 	}
@@ -114,7 +119,8 @@ static int intel_gmch_vga_set_state(struct intel_display *display, bool enable_d
 	else
 		gmch_ctrl |= INTEL_GMCH_VGA_DISABLE;
 
-	if (pci_bus_write_config_word(pdev->bus, PCI_DEVFN(0, 0), reg, gmch_ctrl)) {
+	if (pci_bus_write_config_word(pdev->bus, PCI_DEVFN(0, 0),
+				      intel_gmch_ctrl_reg(display), gmch_ctrl)) {
 		drm_err(display->drm, "failed to write control word\n");
 		return -EIO;
 	}
