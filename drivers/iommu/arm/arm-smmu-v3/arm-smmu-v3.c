@@ -138,12 +138,6 @@ static bool queue_has_space(struct arm_smmu_ll_queue *q, u32 n)
 	return space >= n;
 }
 
-static bool queue_full(struct arm_smmu_ll_queue *q)
-{
-	return Q_IDX(q, q->prod) == Q_IDX(q, q->cons) &&
-	       Q_WRP(q, q->prod) != Q_WRP(q, q->cons);
-}
-
 static bool queue_empty(struct arm_smmu_ll_queue *q)
 {
 	return Q_IDX(q, q->prod) == Q_IDX(q, q->cons) &&
@@ -633,14 +627,13 @@ static void arm_smmu_cmdq_poll_valid_map(struct arm_smmu_cmdq *cmdq,
 	__arm_smmu_cmdq_poll_set_valid_map(cmdq, sprod, eprod, false);
 }
 
-/* Wait for the command queue to become non-full */
-static int arm_smmu_cmdq_poll_until_not_full(struct arm_smmu_device *smmu,
-					     struct arm_smmu_cmdq *cmdq,
-					     struct arm_smmu_ll_queue *llq)
+
+static inline void arm_smmu_cmdq_poll(struct arm_smmu_device *smmu,
+				       struct arm_smmu_cmdq *cmdq,
+				       struct arm_smmu_ll_queue *llq,
+				       struct arm_smmu_queue_poll *qp)
 {
 	unsigned long flags;
-	struct arm_smmu_queue_poll qp;
-	int ret = 0;
 
 	/*
 	 * Try to update our copy of cons by grabbing exclusive cmdq access. If
@@ -650,19 +643,16 @@ static int arm_smmu_cmdq_poll_until_not_full(struct arm_smmu_device *smmu,
 		WRITE_ONCE(cmdq->q.llq.cons, readl_relaxed(cmdq->q.cons_reg));
 		arm_smmu_cmdq_exclusive_unlock_irqrestore(cmdq, flags);
 		llq->val = READ_ONCE(cmdq->q.llq.val);
-		return 0;
+		return;
 	}
 
-	queue_poll_init(smmu, &qp);
-	do {
-		llq->val = READ_ONCE(cmdq->q.llq.val);
-		if (!queue_full(llq))
-			break;
-
-		ret = queue_poll(&qp);
-	} while (!ret);
-
-	return ret;
+	if (queue_poll(qp) == -ETIMEDOUT) {
+		dev_err_ratelimited(smmu->dev, "CMDQ timed out, cons: %08x, prod: 0x%08x\n",
+				    llq->cons, llq->prod);
+		/* Restart the timer */
+		queue_poll_init(smmu, qp, false);
+	}
+	llq->val = READ_ONCE(cmdq->q.llq.val);
 }
 
 /*
@@ -802,12 +792,21 @@ int arm_smmu_cmdq_issue_cmdlist(struct arm_smmu_device *smmu,
 	local_irq_save(flags);
 	llq.val = READ_ONCE(cmdq->q.llq.val);
 	do {
+		struct arm_smmu_queue_poll qp;
 		u64 old;
 
+		/*
+		 * Poll without WFE because:
+		 * 1) Running out of space should be rare. Power saving is not
+		 *    an issue.
+		 * 2) WFE depends on queue full break events, which occur only
+		 *    when the queue is full, but here we’re polling for
+		 *    sufficient space, not just queue full condition.
+		 */
+		queue_poll_init(smmu, &qp, false);
 		while (!queue_has_space(&llq, n + sync)) {
 			local_irq_restore(flags);
-			if (arm_smmu_cmdq_poll_until_not_full(smmu, cmdq, &llq))
-				dev_err_ratelimited(smmu->dev, "CMDQ timeout\n");
+			arm_smmu_cmdq_poll(smmu, cmdq, &llq, &qp);
 			local_irq_save(flags);
 		}
 
