@@ -212,11 +212,11 @@ static u32 queue_inc_prod_n(struct arm_smmu_ll_queue *q, int n)
 }
 
 static void queue_poll_init(struct arm_smmu_device *smmu,
-			    struct arm_smmu_queue_poll *qp)
+			    struct arm_smmu_queue_poll *qp, bool want_wfe)
 {
 	qp->delay = 1;
 	qp->spin_cnt = 0;
-	qp->wfe = !!(smmu->features & ARM_SMMU_FEAT_SEV);
+	qp->wfe = want_wfe && (!!(smmu->features & ARM_SMMU_FEAT_SEV));
 	qp->timeout = ktime_add_us(ktime_get(), ARM_SMMU_POLL_TIMEOUT_US);
 }
 
@@ -677,13 +677,11 @@ static int __arm_smmu_cmdq_poll_until_msi(struct arm_smmu_device *smmu,
 	struct arm_smmu_queue_poll qp;
 	u32 *cmd = (u32 *)(Q_ENT(&cmdq->q, llq->prod));
 
-	queue_poll_init(smmu, &qp);
-
 	/*
 	 * The MSI won't generate an event, since it's being written back
 	 * into the command queue.
 	 */
-	qp.wfe = false;
+	queue_poll_init(smmu, &qp, false);
 	smp_cond_load_relaxed(cmd, !VAL || (ret = queue_poll(&qp)));
 	llq->cons = ret ? llq->prod : queue_inc_prod_n(llq, 1);
 	return ret;
@@ -701,7 +699,7 @@ static int __arm_smmu_cmdq_poll_until_consumed(struct arm_smmu_device *smmu,
 	u32 prod = llq->prod;
 	int ret = 0;
 
-	queue_poll_init(smmu, &qp);
+	queue_poll_init(smmu, &qp, true);
 	llq->val = READ_ONCE(cmdq->q.llq.val);
 	do {
 		if (queue_consumed(llq, prod))
