@@ -58,6 +58,28 @@ static bool has_vga_pipe_sel(struct intel_display *display)
 	return DISPLAY_VER(display) < 7;
 }
 
+static bool intel_pci_has_vga_io_decode(struct pci_dev *pdev)
+{
+	u16 cmd = 0;
+
+	pci_read_config_word(pdev, PCI_COMMAND, &cmd);
+	if ((cmd & PCI_COMMAND_IO) == 0)
+		return false;
+
+	pdev = pdev->bus->self;
+	while (pdev) {
+		u16 ctl = 0;
+
+		pci_read_config_word(pdev, PCI_BRIDGE_CONTROL, &ctl);
+		if ((ctl & PCI_BRIDGE_CTL_VGA) == 0)
+			return false;
+
+		pdev = pdev->bus->self;
+	}
+
+	return true;
+}
+
 static bool intel_pci_set_io_decode(struct pci_dev *pdev, bool enable)
 {
 	u16 old = 0, cmd;
@@ -168,6 +190,8 @@ void intel_vga_disable(struct intel_display *display)
 	}
 
 	io_decode = intel_vga_get(display);
+
+	drm_WARN_ON(display->drm, !intel_pci_has_vga_io_decode(pdev));
 
 	outb(0x01, VGA_SEQ_I);
 	sr1 = inb(VGA_SEQ_D);
