@@ -11701,6 +11701,11 @@ static int need_active_balance(struct lb_env *env)
 
 static int active_load_balance_cpu_stop(void *data);
 
+static inline bool sched_newidle_stop_balance(struct rq *rq)
+{
+	return (rq->nr_running > 0 || rq->ttwu_pending);
+}
+
 static int should_we_balance(struct lb_env *env)
 {
 	struct cpumask *swb_cpus = this_cpu_cpumask_var_ptr(should_we_balance_tmpmask);
@@ -11722,7 +11727,7 @@ static int should_we_balance(struct lb_env *env)
 	 * to optimize wakeup latency.
 	 */
 	if (env->idle == CPU_NEWLY_IDLE) {
-		if (env->dst_rq->nr_running > 0 || env->dst_rq->ttwu_pending)
+		if (sched_newidle_stop_balance(env->dst_rq))
 			return 0;
 		return 1;
 	}
@@ -13256,6 +13261,7 @@ static inline void fair_queue_pushable_tasks(struct rq *rq) { }
  */
 static int sched_balance_newidle(struct rq *this_rq, struct rq_flags *rf)
 {
+	struct cpumask *cpus = this_cpu_cpumask_var_ptr(load_balance_mask);
 	unsigned long next_balance = jiffies + HZ;
 	int this_cpu = this_rq->cpu;
 	int continue_balancing = 1;
@@ -13315,8 +13321,11 @@ static int sched_balance_newidle(struct rq *this_rq, struct rq_flags *rf)
 	t0 = sched_clock_cpu(this_cpu);
 	sched_balance_update_blocked_averages(this_cpu);
 
+	cpumask_clear(cpus);
+
 	rcu_read_lock();
 	for_each_domain(this_cpu, sd) {
+		unsigned int weight = 1;
 		u64 domain_cost;
 
 		update_next_balance(sd, &next_balance);
@@ -13324,39 +13333,97 @@ static int sched_balance_newidle(struct rq *this_rq, struct rq_flags *rf)
 		if (this_rq->avg_idle < curr_cost + sd->max_newidle_lb_cost)
 			break;
 
-		if (sd->flags & SD_BALANCE_NEWIDLE) {
-			unsigned int weight = 1;
+		if (!(sd->flags & SD_BALANCE_NEWIDLE))
+			continue;
 
-			if (sched_feat(NI_RANDOM)) {
-				/*
-				 * Throw a 1k sided dice; and only run
-				 * newidle_balance according to the success
-				 * rate.
-				 */
-				u32 d1k = sched_rng() % 1024;
-				weight = 1 + sd->newidle_ratio;
-				if (d1k > weight) {
-					update_newidle_stats(sd, 0);
-					continue;
-				}
-				weight = (1024 + weight/2) / weight;
+		if (sched_feat(NI_RANDOM)) {
+			/*
+			 * Throw a 1k sided dice; and only run
+			 * newidle_balance according to the success
+			 * rate.
+			 */
+			u32 d1k = sched_rng() % 1024;
+			weight = 1 + sd->newidle_ratio;
+			if (d1k > weight) {
+				update_newidle_stats(sd, 0);
+				continue;
 			}
+			weight = (1024 + weight/2) / weight;
+		}
 
+
+		/*
+		 * Non-preemptible kernels can pull more than one task during
+		 * newidle balance and NUMA domains may need special
+		 * consideration to preserve tasks on preferred NUMA node.
+		 *
+		 * Only take fast-path on preemptible kernels for intra NUMA
+		 * domains.
+		 */
+		if (!IS_ENABLED(CONFIG_PREEMPTION) || (sd->flags & SD_NUMA)) {
 			pulled_task = sched_balance_rq(this_cpu, this_rq,
-						   sd, CPU_NEWLY_IDLE,
-						   &continue_balancing);
-
-			t1 = sched_clock_cpu(this_cpu);
-			domain_cost = t1 - t0;
-			curr_cost += domain_cost;
-			t0 = t1;
+						       sd, CPU_NEWLY_IDLE,
+						       &continue_balancing);
+		} else {
+			struct lb_env env = {
+				.sd		= sd,
+				.dst_cpu	= this_cpu,
+				.dst_rq		= this_rq,
+				.idle		= CPU_NEWLY_IDLE,
+			};
+			int cpu;
 
 			/*
-			 * Track max cost of a domain to make sure to not delay the
-			 * next wakeup on the CPU.
+			 * Clear the CPUs of child domain. They have already
+			 * been visited during last balance. !NUMA domains do
+			 * not overlap so simply excluding the previous
+			 * domain's span should be enough.
 			 */
-			update_newidle_cost(sd, domain_cost, weight * !!pulled_task);
+			cpumask_andnot(cpus, sched_domain_span(sd), cpus);
+
+			/* Commit to searching the sd if we are idle at start. */
+			continue_balancing = sched_newidle_stop_balance(this_rq);
+			if (!continue_balancing)
+				break;
+
+			for_each_cpu_wrap(cpu, cpus, this_cpu + 1) {
+				struct task_struct *p = NULL;
+				struct rq *rq = cpu_rq(cpu);
+
+				/* Not overloaded with runnable tasks. */
+				if (rq->cfs.h_nr_runnable <= 1)
+					continue;
+
+				scoped_guard(rq_lock, rq) {
+					/* Check again with rq lock held. */
+					if (rq->cfs.h_nr_runnable <= 1)
+						break;
+
+					env.src_cpu = cpu;
+					env.src_rq = rq;
+
+					update_rq_clock(rq);
+					p = detach_one_task(&env);
+				}
+
+				if (p) {
+					attach_one_task(this_rq, p);
+					pulled_task = 1;
+					break;
+				}
+			}
 		}
+
+		t1 = sched_clock_cpu(this_cpu);
+		domain_cost = t1 - t0;
+		curr_cost += domain_cost;
+		t0 = t1;
+
+		/*
+		 * Track max cost of a domain to make sure to not delay the
+		 * next wakeup on the CPU.
+		 */
+		update_newidle_cost(sd, domain_cost, weight * !!pulled_task);
 
 		/*
 		 * Stop searching for tasks to pull if there are
