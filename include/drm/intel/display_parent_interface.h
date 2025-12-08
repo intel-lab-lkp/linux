@@ -6,7 +6,9 @@
 
 #include <linux/types.h>
 
+struct dma_fence;
 struct drm_device;
+struct intel_hdcp_gsc_context;
 struct ref_tracker;
 
 struct intel_display_rpm_interface {
@@ -25,6 +27,26 @@ struct intel_display_rpm_interface {
 	void (*assert_unblock)(const struct drm_device *drm);
 };
 
+struct intel_display_hdcp_interface {
+	ssize_t (*gsc_msg_send)(struct intel_hdcp_gsc_context *gsc_context,
+				void *msg_in, size_t msg_in_len,
+				void *msg_out, size_t msg_out_len);
+	bool (*gsc_check_status)(struct drm_device *drm);
+	struct intel_hdcp_gsc_context *(*gsc_context_alloc)(struct drm_device *drm);
+	void (*gsc_context_free)(struct intel_hdcp_gsc_context *gsc_context);
+};
+
+struct intel_display_irq_interface {
+	bool (*enabled)(struct drm_device *drm);
+	void (*synchronize)(struct drm_device *drm);
+};
+
+struct intel_display_rps_interface {
+	void (*boost_if_not_started)(struct dma_fence *fence);
+	void (*mark_interactive)(struct drm_device *drm, bool interactive);
+	void (*ilk_irq_handler)(struct drm_device *drm);
+};
+
 /**
  * struct intel_display_parent_interface - services parent driver provides to display
  *
@@ -38,8 +60,26 @@ struct intel_display_rpm_interface {
  * check the optional pointers.
  */
 struct intel_display_parent_interface {
+	/** @hdcp: HDCP GSC interface */
+	const struct intel_display_hdcp_interface *hdcp;
+
 	/** @rpm: Runtime PM functions */
 	const struct intel_display_rpm_interface *rpm;
+
+	/** @irq: IRQ interface */
+	const struct intel_display_irq_interface *irq;
+
+	/** @rpm: RPS interface. Optional. */
+	const struct intel_display_rps_interface *rps;
+
+	/** @vgpu_active: Is vGPU active? Optional. */
+	bool (*vgpu_active)(struct drm_device *drm);
+
+	/** @has_fenced_regions: Support legacy fencing? Optional. */
+	bool (*has_fenced_regions)(struct drm_device *drm);
+
+	/** @fence_priority_display: Set display priority. Optional. */
+	void (*fence_priority_display)(struct dma_fence *fence);
 };
 
 #endif
