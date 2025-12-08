@@ -2893,6 +2893,10 @@ drop_buffers(struct folio *folio, struct buffer_head **buffers_to_free)
 	struct buffer_head *head = folio_buffers(folio);
 	struct buffer_head *bh;
 
+	/* In cases of folio without buffer_head*/
+	if (!head)
+		return false;
+
 	bh = head;
 	do {
 		if (buffer_busy(bh))
