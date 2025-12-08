@@ -4200,6 +4200,24 @@ int __split_huge_page_to_list_to_order(struct page *page, struct list_head *list
 }
 
 /**
+ * folio_split_uniform() - split a folio at @split_at to a @new_order folio
+ * @folio: folio to split
+ * @new_order: the order of the new folio
+ * @list: after-split folios are added to @list if not null, otherwise to LRU
+ *        list
+ *
+ * After split, folio is left locked for caller.
+ *
+ * Return: 0 - successful, <0 - failed (if -ENOMEM is returned, @folio might be
+ * split but not to @new_order, the caller needs to check)
+ */
+int folio_split_uniform(struct folio *folio, unsigned int new_order, struct list_head *list)
+{
+	return __folio_split(folio, new_order, NULL, &folio->page, list,
+			     SPLIT_TYPE_UNIFORM);
+}
+
+/**
  * folio_split() - split a folio at @split_at to a @new_order folio
  * @folio: folio to split
  * @new_order: the order of the new folio
