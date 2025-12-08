@@ -1,23 +1,15 @@
 // SPDX-License-Identifier: (GPL-2.0 OR MIT)
 /*
- * Copyright 2024 Google LLC
+ * Copyright 2023 Google LLC
  */
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
 /dts-v1/;
-#include "mt8188-geralt-ciri.dtsi"
-
-/ {
-	model = "Google Ciri sku5 board (rev4)";
-	compatible = "google,ciri-sku5", "google,ciri", "mediatek,mt8188";
-};
-
-&dsi_panel {
-	compatible = "ivo,t109nw41", "himax,hx83102";
-};
+/plugin/;
 
 &i2c0 {
-	/delete-node/ audio-codec@1a;
-	/delete-node/ amplifier@38;
-	/delete-node/ amplifier@39;
+	#address-cells = <1>;
+	#size-cells = <0>;
 
 	es8326: audio-codec@19 {
 		compatible = "everest,es8326";
@@ -30,17 +22,27 @@
 		everest,interrupt-clk = [00];
 	};
 
-	tas2563: amplifier@4f {
-		compatible = "ti,tas2563", "ti,tas2781";
-		reg = <0x4f>, <0x4c>; /* left / right channel */
-		reset-gpios = <&pio 118 GPIO_ACTIVE_HIGH>;
+	max98390_38: amplifier@38 {
+		compatible = "maxim,max98390";
+		reg = <0x38>;
+		sound-name-prefix = "Front Right";
+		reset-gpios = <&pio 118 GPIO_ACTIVE_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&speaker_en>;
+		#sound-dai-cells = <0>;
+	};
+
+	max98390_39: amplifier@39 {
+		compatible = "maxim,max98390";
+		reg = <0x39>;
+		sound-name-prefix = "Front Left";
 		#sound-dai-cells = <0>;
 	};
 };
 
 &sound {
 	compatible = "mediatek,mt8188-es8326";
-	model = "mt8188_tas2563_8326";
+	model = "mt8188_m98390_8326";
 
 	audio-routing =
 		"ETDM1_OUT", "ETDM_SPK_PIN",
@@ -50,11 +52,14 @@
 		"ADDA Capture", "MTKAIF_PIN",
 		"Headphone Jack", "HPOL",
 		"Headphone Jack", "HPOR",
-		"MIC1", "Headset Mic";
+		"MIC1", "Headset Mic",
+		"Left Spk", "Front Left BE_OUT",
+		"Right Spk", "Front Right BE_OUT";
 
 	dai-link-1 {
 		codec {
-			sound-dai = <&tas2563>;
+			sound-dai = <&max98390_38>,
+				    <&max98390_39>;
 		};
 	};
 

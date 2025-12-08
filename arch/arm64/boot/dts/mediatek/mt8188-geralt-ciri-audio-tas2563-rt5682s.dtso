@@ -2,32 +2,28 @@
 /*
  * Copyright 2024 Google LLC
  */
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
 /dts-v1/;
-#include "mt8188-geralt-ciri.dtsi"
-
-/ {
-	model = "Google Ciri sku6 board (rev4)";
-	compatible = "google,ciri-sku6", "google,ciri", "mediatek,mt8188";
-};
-
-&dsi_panel {
-	compatible = "boe,nv110wum-l60", "himax,hx83102";
-};
+/plugin/;
 
 &i2c0 {
-	/delete-node/ audio-codec@1a;
-	/delete-node/ amplifier@38;
-	/delete-node/ amplifier@39;
+	#address-cells = <1>;
+	#size-cells = <0>;
 
-	es8326: audio-codec@19 {
-		compatible = "everest,es8326";
-		reg = <0x19>;
-		interrupts-extended = <&pio 108 IRQ_TYPE_LEVEL_LOW>;
+	rt5682s: audio-codec@1a {
+		compatible = "realtek,rt5682s";
+		reg = <0x1a>;
+		interrupts-extended = <&pio 108 IRQ_TYPE_EDGE_BOTH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&audio_codec_pins>;
-		#sound-dai-cells = <0>;
-		everest,jack-pol = [0e];
-		everest,interrupt-clk = [00];
+		#sound-dai-cells = <1>;
+
+		AVDD-supply = <&mt6359_vio18_ldo_reg>;
+		DBVDD-supply = <&mt6359_vio18_ldo_reg>;
+		LDO1-IN-supply = <&mt6359_vio18_ldo_reg>;
+		MICVDD-supply = <&pp3300_s3>;
+		realtek,jd-src = <1>;
 	};
 
 	tas2563: amplifier@4f {
@@ -39,8 +35,8 @@
 };
 
 &sound {
-	compatible = "mediatek,mt8188-es8326";
-	model = "mt8188_tas2563_8326";
+	compatible = "mediatek,mt8188-rt5682s";
+	model = "mt8188_tas2563_5682";
 
 	audio-routing =
 		"ETDM1_OUT", "ETDM_SPK_PIN",
@@ -50,7 +46,7 @@
 		"ADDA Capture", "MTKAIF_PIN",
 		"Headphone Jack", "HPOL",
 		"Headphone Jack", "HPOR",
-		"MIC1", "Headset Mic";
+		"IN1P", "Headset Mic";
 
 	dai-link-1 {
 		codec {
@@ -60,13 +56,13 @@
 
 	dai-link-2 {
 		codec {
-			sound-dai = <&es8326>;
+			sound-dai = <&rt5682s 0>;
 		};
 	};
 
 	dai-link-3 {
 		codec {
-			sound-dai = <&es8326>;
+			sound-dai = <&rt5682s 0>;
 		};
 	};
 };

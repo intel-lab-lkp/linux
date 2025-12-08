@@ -5,6 +5,11 @@
 /dts-v1/;
 #include "mt8188-geralt.dtsi"
 
+/ {
+	model = "Google Ciri board";
+	compatible = "google,ciri", "mediatek,mt8188";
+};
+
 &aud_etdm_hp_on {
 	pins-mclk {
 		pinmux = <PINMUX_GPIO114__FUNC_O_I2SO2_MCK>;
@@ -16,40 +21,6 @@
 		pinmux = <PINMUX_GPIO114__FUNC_B_GPIO114>;
 		bias-pull-down;
 		input-enable;
-	};
-};
-
-&i2c0 {
-	rt5682s: audio-codec@1a {
-		compatible = "realtek,rt5682s";
-		reg = <0x1a>;
-		interrupts-extended = <&pio 108 IRQ_TYPE_EDGE_BOTH>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&audio_codec_pins>;
-		#sound-dai-cells = <1>;
-
-		AVDD-supply = <&mt6359_vio18_ldo_reg>;
-		DBVDD-supply = <&mt6359_vio18_ldo_reg>;
-		LDO1-IN-supply = <&mt6359_vio18_ldo_reg>;
-		MICVDD-supply = <&pp3300_s3>;
-		realtek,jd-src = <1>;
-	};
-
-	max98390_38: amplifier@38 {
-		compatible = "maxim,max98390";
-		reg = <0x38>;
-		sound-name-prefix = "Front Right";
-		reset-gpios = <&pio 118 GPIO_ACTIVE_LOW>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&speaker_en>;
-		#sound-dai-cells = <0>;
-	};
-
-	max98390_39: amplifier@39 {
-		compatible = "maxim,max98390";
-		reg = <0x39>;
-		sound-name-prefix = "Front Left";
-		#sound-dai-cells = <0>;
 	};
 };
 
@@ -77,6 +48,8 @@
 };
 
 &sound {
+	/* compatible, model, routing, and dai-link codecs added by overlays */
+
 	dai-link-0 {
 		link-name = "ETDM1_IN_BE";
 		dai-format = "i2s";
@@ -87,29 +60,16 @@
 		link-name = "ETDM1_OUT_BE";
 		dai-format = "i2s";
 		mediatek,clk-provider = "cpu";
-
-		codec {
-			sound-dai = <&max98390_38>,
-				    <&max98390_39>;
-		};
 	};
 
 	dai-link-2 {
 		link-name = "ETDM2_IN_BE";
 		mediatek,clk-provider = "cpu";
-
-		codec {
-			sound-dai = <&rt5682s 0>;
-		};
 	};
 
 	dai-link-3 {
 		link-name = "ETDM2_OUT_BE";
 		mediatek,clk-provider = "cpu";
-
-		codec {
-			sound-dai = <&rt5682s 0>;
-		};
 	};
 
 	dai-link-4 {
