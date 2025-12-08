@@ -693,6 +693,11 @@ static bool intel_crt_detect_ddc(struct drm_connector *connector)
 	return ret;
 }
 
+static bool intel_crt_sense_above_threshold(struct intel_display *display)
+{
+	return intel_vga_read(display, VGA_IS0_R, true) & (1 << 4);
+}
+
 static enum drm_connector_status
 intel_crt_load_detect(struct intel_crt *crt, enum pipe pipe)
 {
@@ -704,7 +709,6 @@ intel_crt_load_detect(struct intel_crt *crt, enum pipe pipe)
 	u32 vsample;
 	u32 vblank, vblank_start, vblank_end;
 	u32 dsl;
-	u8 st00;
 	enum drm_connector_status status;
 
 	drm_dbg_kms(display->drm, "starting load-detect on CRT\n");
@@ -738,8 +742,8 @@ intel_crt_load_detect(struct intel_crt *crt, enum pipe pipe)
 		 * border color for Color info.
 		 */
 		intel_crtc_wait_for_next_vblank(intel_crtc_for_pipe(display, pipe));
-		st00 = intel_vga_read(display, VGA_IS0_R, true);
-		status = ((st00 & (1 << 4)) != 0) ?
+
+		status = intel_crt_sense_above_threshold(display) ?
 			connector_status_connected :
 			connector_status_disconnected;
 
@@ -779,15 +783,13 @@ intel_crt_load_detect(struct intel_crt *crt, enum pipe pipe)
 		while ((dsl = intel_de_read(display, PIPEDSL(display, pipe))) <= vsample)
 			;
 		/*
-		 * Watch ST00 for an entire scanline
+		 * Watch sense for an entire scanline
 		 */
 		detect = 0;
 		count = 0;
 		do {
 			count++;
-			/* Read the ST00 VGA status register */
-			st00 = intel_vga_read(display, VGA_IS0_R, true);
-			if (st00 & (1 << 4))
+			if (intel_crt_sense_above_threshold(display))
 				detect++;
 		} while ((intel_de_read(display, PIPEDSL(display, pipe)) == dsl));
 
