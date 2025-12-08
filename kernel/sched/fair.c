@@ -13079,12 +13079,103 @@ static inline int has_pushable_tasks(struct rq *rq)
 	return !plist_head_empty(&rq->cfs.pushable_tasks);
 }
 
+static struct task_struct *pick_next_pushable_fair_task(struct rq *rq)
+{
+	struct task_struct *p;
+
+	if (!has_pushable_tasks(rq))
+		return NULL;
+
+	p = plist_first_entry(&rq->cfs.pushable_tasks,
+			      struct task_struct, pushable_tasks);
+
+	WARN_ON_ONCE(rq->cpu != task_cpu(p));
+	WARN_ON_ONCE(task_current(rq, p));
+	WARN_ON_ONCE(task_current_donor(rq, p));
+	WARN_ON_ONCE(p->nr_cpus_allowed <= 1);
+	WARN_ON_ONCE(!task_on_rq_queued(p));
+
+	/*
+	 * Remove task from the pushable list as we try only once after that
+	 * the task has been put back in enqueued list.
+	 */
+	plist_del(&p->pushable_tasks, &rq->cfs.pushable_tasks);
+
+	return p;
+}
+
+static inline bool should_push_tasks(struct rq *rq)
+{
+	struct sched_domain_shared *sds;
+	struct sched_domain *sd;
+	int cpu = cpu_of(rq);
+
+	/* TODO: Add a CPU local failure counter. */
+
+	/* CPU doesn't have any fair task to push. */
+	if (!has_pushable_tasks(rq))
+		return false;
+
+	/* CPU is overloaded! Do not waste cycles pushing tasks. */
+	if (!fits_capacity(cpu_util_cfs(cpu), capacity_of(cpu)))
+		return false;
+
+	guard(rcu)();
+
+	sd = rcu_dereference(per_cpu(sd_nohz, cpu));
+	if (!sd)
+		return false;
+
+	/*
+	 * We may not be able to find a push target.
+	 * Skip for this tick and depend on the periodic
+	 * balance to pull the queued tasks.
+	 */
+	sds = sd->shared;
+	if (!sds || !atomic_read(&sds->nr_idle_cpus))
+		return false;
+
+	return true;
+}
+
 /*
  * See if the non running fair tasks on this rq can be sent on other CPUs
  * that fits better with their profile.
  */
 static bool push_fair_task(struct rq *rq)
 {
+	struct task_struct *p = pick_next_pushable_fair_task(rq);
+	struct sched_domain_shared *sds;
+	int cpu, this_cpu = cpu_of(rq);
+	struct sched_domain *sd;
+
+	if (!p)
+		return false;
+
+	guard(rcu)();
+
+	sd = rcu_dereference(per_cpu(sd_nohz, cpu));
+	if (!sd)
+		return false;
+
+	/*
+	 * It is possble to have idle CPUs with ticks enabled. To maximize the chance
+	 * of pulling a task, traverse the entire sched_domain_span() instead of just
+	 * the sd->shared->nohz_idle_cpus.
+	 */
+	for_each_cpu_and_wrap(cpu, p->cpus_ptr, sched_domain_span(sd), this_cpu + 1) {
+		struct rq *target_rq;
+
+		if (!idle_cpu(cpu))
+			continue;
+
+		target_rq = cpu_rq(cpu);
+		deactivate_task(rq, p, 0);
+		set_task_cpu(p, cpu);
+		__ttwu_queue_wakelist(p, cpu, 0);
+		return true;
+	}
+
 	return false;
 }
 
@@ -13099,7 +13190,7 @@ static DEFINE_PER_CPU(struct balance_callback, fair_push_head);
 
 static inline void fair_queue_pushable_tasks(struct rq *rq)
 {
-	if (!has_pushable_tasks(rq))
+	if (should_push_tasks(rq))
 		return;
 
 	queue_balance_callback(rq, &per_cpu(fair_push_head, rq->cpu), push_fair_tasks);

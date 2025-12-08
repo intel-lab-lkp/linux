@@ -2939,6 +2939,7 @@ static inline void __block_task(struct rq *rq, struct task_struct *p)
 
 extern void activate_task(struct rq *rq, struct task_struct *p, int flags);
 extern void deactivate_task(struct rq *rq, struct task_struct *p, int flags);
+void __ttwu_queue_wakelist(struct task_struct *p, int cpu, int wake_flags);
 
 extern void wakeup_preempt(struct rq *rq, struct task_struct *p, int flags);
 
