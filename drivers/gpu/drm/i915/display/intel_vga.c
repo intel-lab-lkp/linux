@@ -140,6 +140,22 @@ static void intel_vga_put(struct intel_display *display, bool io_decode)
 		vga_put(pdev, VGA_RSRC_LEGACY_IO);
 }
 
+u8 intel_vga_read(struct intel_display *display, u16 reg, bool mmio)
+{
+	if (mmio)
+		return intel_de_read8(display, _MMIO(reg));
+	else
+		return inb(reg);
+}
+
+static void intel_vga_write(struct intel_display *display, u16 reg, u8 val, bool mmio)
+{
+	if (mmio)
+		intel_de_write8(display, _MMIO(reg), val);
+	else
+		outb(val, reg);
+}
+
 /* Disable the VGA plane that we never use */
 void intel_vga_disable(struct intel_display *display)
 {
@@ -193,11 +209,12 @@ void intel_vga_disable(struct intel_display *display)
 
 	drm_WARN_ON(display->drm, !intel_pci_has_vga_io_decode(pdev));
 
-	outb(0x01, VGA_SEQ_I);
-	sr1 = inb(VGA_SEQ_D);
-	outb(sr1 | VGA_SR01_SCREEN_OFF, VGA_SEQ_D);
+	intel_vga_write(display, VGA_SEQ_I, 0x01, false);
+	sr1 = intel_vga_read(display, VGA_SEQ_D, false);
+	sr1 |= VGA_SR01_SCREEN_OFF;
+	intel_vga_write(display, VGA_SEQ_D, sr1, false);
 
-	msr = inb(VGA_MIS_R);
+	msr = intel_vga_read(display, VGA_MIS_R, false);
 	/*
 	 * Always disable VGA memory decode for iGPU so that
 	 * intel_vga_set_decode() doesn't need to access VGA registers.
@@ -217,7 +234,7 @@ void intel_vga_disable(struct intel_display *display)
 	 * RMbus NoClaim errors.
 	 */
 	msr &= ~VGA_MIS_COLOR;
-	outb(msr, VGA_MIS_W);
+	intel_vga_write(display, VGA_MIS_W, msr, false);
 
 	intel_vga_put(display, io_decode);
 
