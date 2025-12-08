@@ -468,8 +468,12 @@ struct s_data {
 
 DEFINE_PER_CPU(struct sched_domain __rcu *, sd_nohz);
 
-static int __sds_nohz_idle_alloc(struct sched_domain_shared *sds, int node)
+static DEFINE_RAW_SPINLOCK(nohz_shared_list_lock);
+LIST_HEAD(nohz_shared_list);
+
+static int __sds_nohz_idle_alloc_init(struct sched_domain_shared *sds, int node)
 {
+	sds->nohz_list_node = (struct list_head)LIST_HEAD_INIT(sds->nohz_list_node);
 	sds->nohz_idle_cpus_mask = kzalloc_node(cpumask_size(), GFP_KERNEL, node);
 
 	if (!sds->nohz_idle_cpus_mask)
@@ -483,6 +487,7 @@ static void __sds_nohz_idle_free(struct sched_domain_shared *sds)
 	if (!sds)
 		return;
 
+	WARN_ON_ONCE(!list_empty(&sds->nohz_list_node));
 	kfree(sds->nohz_idle_cpus_mask);
 }
 
@@ -509,7 +514,7 @@ static int __fallback_sds_alloc(struct s_data *d, unsigned long *visited_nodes)
 
 		d->fallback_nohz_sds[j] = sds;
 
-		if (__sds_nohz_idle_alloc(sds, j))
+		if (__sds_nohz_idle_alloc_init(sds, j))
 			return -ENOMEM;
 	}
 
@@ -560,6 +565,7 @@ static void claim_fallback_sds(struct s_data *d)
 static void update_nohz_domain(int cpu)
 {
 	struct sched_domain *sd = highest_flag_domain(cpu, SD_SHARE_LLC);
+	struct sched_domain_shared *sds = NULL;
 
 	/*
 	 * If sd_llc doesn't exist, use the lowest sd for nohz idle
@@ -570,13 +576,52 @@ static void update_nohz_domain(int cpu)
 	if (!sd)
 		sd = rcu_dereference(cpu_rq(cpu)->sd);
 
-	WARN_ON_ONCE(sd && !sd->shared);
+	if (sd)
+		sds = sd->shared;
+
+	if (sds && list_empty(&sds->nohz_list_node)) {
+		/*
+		 * IRQs should be disabled by the caller since they
+		 * hold the rq_lock.
+		 */
+		lockdep_assert_irqs_disabled();
+
+		guard(raw_spinlock)(&nohz_shared_list_lock);
+		list_add(&sds->nohz_list_node, &nohz_shared_list);
+	}
+
+	WARN_ON_ONCE(sd && !sds);
 	rcu_assign_pointer(per_cpu(sd_nohz, cpu), sd);
+}
+
+static void destroy_sched_domain_shared_rcu(struct rcu_head *rcu)
+{
+	struct sched_domain_shared *sds = container_of(rcu, struct sched_domain_shared, rcu);
+
+	kfree(sds->nohz_idle_cpus_mask);
+	kfree(sds);
+}
+
+/*
+ * If sd->shared is on the rcu protected nohz_shared_list,
+ * remove it the list and wait once grace period before
+ * freeing.
+ */
+static int sds_delayed_free(struct sched_domain_shared *sds)
+{
+	if (list_empty(&sds->nohz_list_node))
+		return 0;
+
+	scoped_guard(raw_spinlock_irqsave, &nohz_shared_list_lock)
+		list_del_rcu(&sds->nohz_list_node);
+
+	call_rcu(&sds->rcu, destroy_sched_domain_shared_rcu);
+	return 1;
 }
 
 #else /* !CONFIG_NO_HZ_COMMON */
 
-static int __sds_nohz_idle_alloc(struct sched_domain_shared *sds, int node)
+static int __sds_nohz_idle_alloc_init(struct sched_domain_shared *sds, int node)
 {
 	return 0;
 }
@@ -592,6 +637,7 @@ static inline void __fallback_sds_free(struct s_data *d) { }
 static inline void assign_fallback_sds(struct s_data *d, struct sched_domain *sd, int cpu) { }
 static inline void claim_fallback_sds(struct s_data *d) { }
 static inline void update_nohz_domain(int cpu) { }
+static inline int sds_delayed_free(struct sched_domain_shared *sds) { return 0; }
 
 #endif /* CONFIG_NO_HZ_COMMON */
 
@@ -771,9 +817,15 @@ static void destroy_sched_domain(struct sched_domain *sd)
 	free_sched_groups(sd->groups, 1);
 
 	if (sd->shared && atomic_dec_and_test(&sd->shared->ref)) {
+		if (sds_delayed_free(sd->shared)) {
+			sd->shared = NULL;
+			goto out;
+		}
+
 		__sds_nohz_idle_free(sd->shared);
 		kfree(sd->shared);
 	}
+out:
 	kfree(sd);
 }
 
@@ -2632,7 +2684,7 @@ static int __sds_alloc(struct s_data *d, const struct cpumask *cpu_map)
 		bitmap_set(visited_nodes, cpu_to_node(j), 1);
 		*per_cpu_ptr(d->sds, j) = sds;
 
-		if (__sds_nohz_idle_alloc(sds, cpu_to_node(j)))
+		if (__sds_nohz_idle_alloc_init(sds, cpu_to_node(j)))
 			return -ENOMEM;
 	}
 

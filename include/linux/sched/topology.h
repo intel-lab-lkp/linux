@@ -64,13 +64,15 @@ extern int sched_domain_level_max;
 struct sched_group;
 
 struct sched_domain_shared {
-	atomic_t	ref;
+	atomic_t		ref;
 #ifdef CONFIG_NO_HZ_COMMON
-	atomic_t	nr_idle_cpus;
-	struct cpumask	*nohz_idle_cpus_mask;
+	atomic_t		nr_idle_cpus;
+	struct cpumask		*nohz_idle_cpus_mask;
+	struct list_head	nohz_list_node;
+	struct rcu_head		rcu;
 #endif
-	int		has_idle_cores;
-	int		nr_idle_scan;
+	int			has_idle_cores;
+	int			nr_idle_scan;
 };
 
 struct sched_domain {
