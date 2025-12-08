@@ -1960,6 +1960,9 @@ int ieee80211_reconfig(struct ieee80211_local *local)
 			ieee80211_assign_chanctx(local, sdata, link);
 		}
 
+		if (sdata->vif.cfg.s1g)
+			changed |= BSS_CHANGED_S1G_RI;
+
 		switch (sdata->vif.type) {
 		case NL80211_IFTYPE_AP_VLAN:
 		case NL80211_IFTYPE_MONITOR:
