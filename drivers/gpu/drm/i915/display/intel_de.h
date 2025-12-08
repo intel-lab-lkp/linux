@@ -42,6 +42,14 @@ intel_de_read8(struct intel_display *display, i915_reg_t reg)
 	return intel_uncore_read8(__to_uncore(display), reg);
 }
 
+static inline void
+intel_de_write8(struct intel_display *display, i915_reg_t reg, u8 val)
+{
+	drm_WARN_ON(display->drm, DISPLAY_VER(display) >= 5 || display->platform.g4x);
+
+	intel_uncore_write8(__to_uncore(display), reg, val);
+}
+
 static inline u64
 intel_de_read64_2x32(struct intel_display *display,
 		     i915_reg_t lower_reg, i915_reg_t upper_reg)
