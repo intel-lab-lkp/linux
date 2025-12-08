@@ -173,7 +173,7 @@ struct bug_entry *find_bug(unsigned long bugaddr)
 	return module_find_bug(bugaddr);
 }
 
-static void __warn_printf(const char *fmt, struct pt_regs *regs)
+static __printf(1, 0) void __warn_printf(const char *fmt, struct pt_regs *regs)
 {
 	if (!fmt)
 		return;
