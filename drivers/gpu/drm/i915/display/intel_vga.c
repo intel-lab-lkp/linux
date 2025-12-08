@@ -58,11 +58,58 @@ static bool has_vga_pipe_sel(struct intel_display *display)
 	return DISPLAY_VER(display) < 7;
 }
 
+static bool intel_pci_set_io_decode(struct pci_dev *pdev, bool enable)
+{
+	u16 old = 0, cmd;
+
+	pci_read_config_word(pdev, PCI_COMMAND, &old);
+	cmd = old & ~PCI_COMMAND_IO;
+	if (enable)
+		cmd |= PCI_COMMAND_IO;
+	pci_write_config_word(pdev, PCI_COMMAND, cmd);
+
+	return old & PCI_COMMAND_IO;
+}
+
+static bool intel_vga_get(struct intel_display *display)
+{
+	struct pci_dev *pdev = to_pci_dev(display->drm->dev);
+
+	/* WaEnableVGAAccessThroughIOPort:ctg+ */
+
+	/*
+	 * Bypass the VGA arbiter on the iGPU and just enable
+	 * IO decode by hand. This avoids clobbering the VGA
+	 * routing for an external GPU when it's the current
+	 * VGA device, and thus prevents the all 0xff/white
+	 * readout from VGA memory when taking over from vgacon.
+	 *
+	 * The iGPU has the highest VGA decode priority so it will
+	 * grab any VGA IO access when IO decode is enabled, regardless
+	 * of how any other VGA routing bits are configured.
+	 */
+	if (display->platform.dgfx)
+		vga_get_uninterruptible(pdev, VGA_RSRC_LEGACY_IO);
+
+	return intel_pci_set_io_decode(pdev, true);
+}
+
+static void intel_vga_put(struct intel_display *display, bool io_decode)
+{
+	struct pci_dev *pdev = to_pci_dev(display->drm->dev);
+
+	/* see intel_vga_get() */
+	intel_pci_set_io_decode(pdev, io_decode);
+
+	if (display->platform.dgfx)
+		vga_put(pdev, VGA_RSRC_LEGACY_IO);
+}
+
 /* Disable the VGA plane that we never use */
 void intel_vga_disable(struct intel_display *display)
 {
-	struct pci_dev *pdev = to_pci_dev(display->drm->dev);
 	i915_reg_t vga_reg = intel_vga_cntrl_reg(display);
+	bool io_decode;
 	u8 msr, sr1;
 	u32 tmp;
 
@@ -106,8 +153,7 @@ void intel_vga_disable(struct intel_display *display)
 			goto reset_vgacntr;
 	}
 
-	/* WaEnableVGAAccessThroughIOPort:ctg,elk,ilk,snb,ivb,vlv,hsw */
-	vga_get_uninterruptible(pdev, VGA_RSRC_LEGACY_IO);
+	io_decode = intel_vga_get(display);
 
 	outb(0x01, VGA_SEQ_I);
 	sr1 = inb(VGA_SEQ_D);
@@ -129,7 +175,7 @@ void intel_vga_disable(struct intel_display *display)
 	msr &= ~VGA_MIS_COLOR;
 	outb(msr, VGA_MIS_W);
 
-	vga_put(pdev, VGA_RSRC_LEGACY_IO);
+	intel_vga_put(display, io_decode);
 
 	udelay(300);
 
