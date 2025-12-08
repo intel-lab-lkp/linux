@@ -493,6 +493,8 @@ static void sctp_v6_copy_ip_options(struct sock *sk, struct sock *newsk)
 	struct ipv6_txoptions *opt;
 
 	newnp = inet6_sk(newsk);
+	newnp->pktoptions = NULL;
+	newnp->rxpmtu = NULL;
 
 	rcu_read_lock();
 	opt = rcu_dereference(np->opt);
