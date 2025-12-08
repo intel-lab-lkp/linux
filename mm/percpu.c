@@ -2800,7 +2800,7 @@ static struct pcpu_alloc_info * __init __flatten pcpu_build_alloc_info(
 	const size_t static_size = __per_cpu_end - __per_cpu_start;
 	int nr_groups = 1, nr_units = 0;
 	size_t size_sum, min_unit_size, alloc_size;
-	int upa, max_upa, best_upa;	/* units_per_alloc */
+	int upa, best_upa;	/* units_per_alloc */
 	int last_allocs, group, unit;
 	unsigned int cpu, tcpu;
 	struct pcpu_alloc_info *ai;
@@ -2817,7 +2817,7 @@ static struct pcpu_alloc_info * __init __flatten pcpu_build_alloc_info(
 	dyn_size = size_sum - static_size - reserved_size;
 
 	/*
-	 * Determine min_unit_size, alloc_size and max_upa such that
+	 * Determine min_unit_size, alloc_size such that
 	 * alloc_size is multiple of atom_size and is the smallest
 	 * which can accommodate 4k aligned segments which are equal to
 	 * or larger than min_unit_size.
@@ -2829,7 +2829,6 @@ static struct pcpu_alloc_info * __init __flatten pcpu_build_alloc_info(
 	upa = alloc_size / min_unit_size;
 	while (alloc_size % upa || (offset_in_page(alloc_size / upa)))
 		upa--;
-	max_upa = upa;
 
 	cpumask_copy(&mask, cpu_possible_mask);
 
@@ -2860,7 +2859,7 @@ static struct pcpu_alloc_info * __init __flatten pcpu_build_alloc_info(
 	 */
 	last_allocs = INT_MAX;
 	best_upa = 0;
-	for (upa = max_upa; upa; upa--) {
+	for (; upa; upa--) {
 		int allocs = 0, wasted = 0;
 
 		if (alloc_size % upa || (offset_in_page(alloc_size / upa)))
