@@ -170,6 +170,9 @@ macro_rules! impl_frombytes {
 }
 
 impl_frombytes! {
+    // SAFETY: This type is empty and thus does not consume any data.
+    (),
+
     // SAFETY: All bit patterns are acceptable values of the types below.
     u8, u16, u32, u64, usize,
     i8, i16, i32, i64, isize,
@@ -230,6 +233,9 @@ macro_rules! impl_asbytes {
 }
 
 impl_asbytes! {
+    // SAFETY: This type is empty and thus returns an empty slice.
+    (),
+
     // SAFETY: Instances of the following types have no uninitialized portions.
     u8, u16, u32, u64, usize,
     i8, i16, i32, i64, isize,
