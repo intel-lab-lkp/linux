@@ -12685,20 +12685,105 @@ static bool update_nohz_stats(struct rq *rq)
 }
 
 /*
+ * sched_balance_idle_rq(): Balance a target idle rq.
+ * @rq: rq of the idle CPU that may require stats update or balancing.
+ * @flags: nohz flags of the balancing CPU.
+ * @next_balance: Pointer to variable storing the time in jiffies to
+ *		  trigger the next nohz idle balancing.
+ *
+ * Returns: Update flags for caller to take appropriate actions.
+ * NOHZ_STATS_KICK indicates rq still has blocked load after the update.
+ * NOHZ_NEXT_KICK indicates that *next_balance was updated to rq->next_balance.
+ */
+static unsigned int sched_balance_idle_rq(struct rq *rq,
+					  unsigned int flags,
+					  unsigned long *next_balance)
+{
+	unsigned int update_flags = 0;
+
+	/* If rq has blocked load, indicate via NOHZ_STATS_KICK. */
+	if ((flags & NOHZ_STATS_KICK) && update_nohz_stats(rq))
+		update_flags |= NOHZ_STATS_KICK;
+
+	/* If time for next balance is due, do the balance. */
+	if (time_after_eq(jiffies, rq->next_balance)) {
+		struct rq_flags rf;
+
+		rq_lock_irqsave(rq, &rf);
+		update_rq_clock(rq);
+		rq_unlock_irqrestore(rq, &rf);
+
+		if (flags & NOHZ_BALANCE_KICK)
+			sched_balance_domains(rq, CPU_IDLE);
+	}
+
+	/* Indicate update to next_balance via NOHZ_NEXT_KICK. */
+	if (time_after(*next_balance, rq->next_balance)) {
+		*next_balance = rq->next_balance;
+		update_flags |= NOHZ_NEXT_KICK;
+	}
+
+	return update_flags;
+}
+
+/*
+ * sched_balance_nohz_idle(): Core nohz idle balancing loop.
+ * @balancing_cpu: CPU doing the balancing on behalf of all nohz idle CPUs.
+ * @flags: nohz flags of the balancing CPU.
+ * @start: Time in jiffies when nohz indicators were cleared.
+ *
+ * Returns:
+ * < 0 - The balancing CPU turned busy while balancing.
+ *   0 - All CPUs were balanced; No blocked load if @flags had NOHZ_STATS_KICK.
+ * > 0 - One or more idle CPUs still have blocked load if @flags had
+ *	 NOHZ_STATS_KICK.
+ */
+static int sched_balance_nohz_idle(int balancing_cpu, unsigned int flags, unsigned long start)
+{
+	/* Earliest time when we have to do rebalance again */
+	unsigned long next_balance = start + 60*HZ;
+	unsigned int update_flags = 0;
+	int target_cpu;
+
+	/*
+	 * Start with the next CPU after the balancing CPU so we will end with
+	 * balancing CPU and let a chance for other idle cpu to pull load.
+	 */
+	for_each_cpu_wrap(target_cpu, nohz.idle_cpus_mask, balancing_cpu + 1) {
+		if (!idle_cpu(target_cpu))
+			continue;
+
+		/*
+		 * If balancing CPU gets work to do, stop the load balancing
+		 * work being done for other CPUs. Next load balancing owner
+		 * will pick it up.
+		 */
+		if (!idle_cpu(balancing_cpu) && need_resched())
+			return -EBUSY;
+
+		update_flags |= sched_balance_idle_rq(cpu_rq(target_cpu), flags, &next_balance);
+	}
+
+	/*
+	 * next_balance will be updated only when there is a need.
+	 * When the CPU is attached to null domain for ex, it will not be
+	 * updated.
+	 */
+	if (likely(update_flags & NOHZ_NEXT_KICK))
+		nohz.next_balance = next_balance;
+
+	return update_flags & NOHZ_STATS_KICK;
+}
+
+/*
  * Internal function that runs load balance for all idle CPUs. The load balance
  * can be a simple update of blocked load or a complete load balance with
  * tasks movement depending of flags.
  */
 static void _nohz_idle_balance(struct rq *this_rq, unsigned int flags)
 {
-	/* Earliest time when we have to do rebalance again */
 	unsigned long now = jiffies;
-	unsigned long next_balance = now + 60*HZ;
-	bool has_blocked_load = false;
-	int update_next_balance = 0;
-	int this_cpu = this_rq->cpu;
-	int balance_cpu;
-	struct rq *rq;
+	int ret;
 
 	WARN_ON_ONCE((flags & NOHZ_KICK_MASK) == NOHZ_BALANCE_KICK);
 
@@ -12723,60 +12808,18 @@ static void _nohz_idle_balance(struct rq *this_rq, unsigned int flags)
 	 */
 	smp_mb();
 
+	ret = sched_balance_nohz_idle(cpu_of(this_rq), flags, now);
+
 	/*
-	 * Start with the next CPU after this_cpu so we will end with this_cpu and let a
-	 * chance for other idle cpu to pull load.
+	 * The balancing CPU turned busy. Set nohz.{needs_update,has_blocked}
+	 * indicators to ensure next CPU observing them triggers nohz idle
+	 * balance again.
 	 */
-	for_each_cpu_wrap(balance_cpu,  nohz.idle_cpus_mask, this_cpu+1) {
-		if (!idle_cpu(balance_cpu))
-			continue;
-
-		/*
-		 * If this CPU gets work to do, stop the load balancing
-		 * work being done for other CPUs. Next load
-		 * balancing owner will pick it up.
-		 */
-		if (!idle_cpu(this_cpu) && need_resched()) {
-			if (flags & NOHZ_STATS_KICK)
-				has_blocked_load = true;
-			if (flags & NOHZ_NEXT_KICK)
-				WRITE_ONCE(nohz.needs_update, 1);
-			goto abort;
-		}
-
-		rq = cpu_rq(balance_cpu);
-
-		if (flags & NOHZ_STATS_KICK)
-			has_blocked_load |= update_nohz_stats(rq);
-
-		/*
-		 * If time for next balance is due,
-		 * do the balance.
-		 */
-		if (time_after_eq(jiffies, rq->next_balance)) {
-			struct rq_flags rf;
-
-			rq_lock_irqsave(rq, &rf);
-			update_rq_clock(rq);
-			rq_unlock_irqrestore(rq, &rf);
-
-			if (flags & NOHZ_BALANCE_KICK)
-				sched_balance_domains(rq, CPU_IDLE);
-		}
-
-		if (time_after(next_balance, rq->next_balance)) {
-			next_balance = rq->next_balance;
-			update_next_balance = 1;
-		}
+	if (ret < 0) {
+		if (flags & NOHZ_NEXT_KICK)
+			WRITE_ONCE(nohz.needs_update, 1);
+		goto abort;
 	}
-
-	/*
-	 * next_balance will be updated only when there is a need.
-	 * When the CPU is attached to null domain for ex, it will not be
-	 * updated.
-	 */
-	if (likely(update_next_balance))
-		nohz.next_balance = next_balance;
 
 	if (flags & NOHZ_STATS_KICK)
 		WRITE_ONCE(nohz.next_blocked,
@@ -12784,7 +12827,7 @@ static void _nohz_idle_balance(struct rq *this_rq, unsigned int flags)
 
 abort:
 	/* There is still blocked load, enable periodic update */
-	if (has_blocked_load)
+	if (ret)
 		WRITE_ONCE(nohz.has_blocked, 1);
 }
 
