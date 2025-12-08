@@ -12393,6 +12393,56 @@ static inline int find_new_ilb(void)
 	return -1;
 }
 
+static inline int
+__asym_prefer_idle(int cpu, struct sched_domain *sd_asym, struct cpumask *idle_mask)
+{
+	int i;
+
+	for_each_cpu_and(i, idle_mask, sched_domain_span(sd_asym)) {
+		if (sched_asym(sd_asym, i, cpu))
+			return 1;
+	}
+
+	return 0;
+}
+
+static int sched_asym_prefer_idle(int cpu, struct sched_domain *sd_asym)
+{
+	struct sched_domain *sd = rcu_dereference(per_cpu(sd_nohz, cpu));
+	struct sched_domain_shared *sds;
+
+	if (!sd)
+		return 0;
+
+	/*
+	 * If sd_asym_packing is a subset of sd_llc, don't traverse
+	 * the nohz_shared_list and directly use the mask from
+	 * sd_nohz->shared to find it a preferred CPU is idling.
+	 */
+	if (sd_asym->flags & SD_SHARE_LLC) {
+		sds = sd->shared;
+
+		if (sds &&
+		    atomic_read(&sds->nr_idle_cpus) &&
+		    __asym_prefer_idle(cpu, sd_asym, sds->nohz_idle_cpus_mask))
+			return 1;
+
+		return 0;
+	}
+
+	/* Try the entire list id sd_asym_packing is larger than sd_nohz. */
+	list_for_each_entry_rcu(sds, &nohz_shared_list, nohz_list_node) {
+		/* No idle CPUs in this domain */
+		if (!atomic_read(&sds->nr_idle_cpus))
+			continue;
+
+		if (__asym_prefer_idle(cpu, sd_asym, sds->nohz_idle_cpus_mask))
+			return 1;
+	}
+
+	return 0;
+}
+
 /*
  * Kick a CPU to do the NOHZ balancing, if it is time for it, via a cross-CPU
  * SMP function call (IPI).
@@ -12447,7 +12497,7 @@ static void nohz_balancer_kick(struct rq *rq)
 	unsigned long now = jiffies;
 	struct sched_domain_shared *sds;
 	struct sched_domain *sd;
-	int nr_busy, i, cpu = rq->cpu;
+	int nr_busy, cpu = rq->cpu;
 	unsigned int flags = 0;
 
 	if (unlikely(rq->idle_balance))
@@ -12493,21 +12543,9 @@ static void nohz_balancer_kick(struct rq *rq)
 	}
 
 	sd = rcu_dereference(per_cpu(sd_asym_packing, cpu));
-	if (sd) {
-		/*
-		 * When ASYM_PACKING; see if there's a more preferred CPU
-		 * currently idle; in which case, kick the ILB to move tasks
-		 * around.
-		 *
-		 * When balancing between cores, all the SMT siblings of the
-		 * preferred CPU must be idle.
-		 */
-		for_each_cpu_and(i, sched_domain_span(sd), nohz.idle_cpus_mask) {
-			if (sched_asym(sd, i, cpu)) {
-				flags = NOHZ_STATS_KICK | NOHZ_BALANCE_KICK;
-				goto unlock;
-			}
-		}
+	if (sd && sched_asym_prefer_idle(cpu, sd)) {
+		flags = NOHZ_STATS_KICK | NOHZ_BALANCE_KICK;
+		goto unlock;
 	}
 
 	sd = rcu_dereference(per_cpu(sd_asym_cpucapacity, cpu));
