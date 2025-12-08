@@ -286,8 +286,20 @@ static inline void resource_set_range(struct resource *res,
 	resource_set_size(res, size);
 }
 
+/**
+ * resource_size - Get the size of the resource
+ * @res: Resource descriptor
+ *
+ * This MUST be used ONLY with correctly inizialized resource descriptor.
+ * Passing a resource descriptor with zeroed flags will produce a WARN
+ * signaling a misusage of this helper and probably a BUG in the user
+ * of this helper.
+ *
+ * Return: Size of the resource calculated from resource end - start + 1.
+ */
 static inline resource_size_t resource_size(const struct resource *res)
 {
+	WARN_ON_ONCE(!res->flags);
 	return res->end - res->start + 1;
 }
 static inline unsigned long resource_type(const struct resource *res)
