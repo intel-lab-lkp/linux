@@ -23,6 +23,18 @@ static unsigned int intel_gmch_ctrl_reg(struct intel_display *display)
 	return DISPLAY_VER(display) >= 6 ? SNB_GMCH_CTRL : INTEL_GMCH_CTRL;
 }
 
+static bool intel_vga_decode_is_enabled(struct intel_display *display)
+{
+	struct pci_dev *pdev = to_pci_dev(display->drm->dev);
+	u16 gmch_ctrl = 0;
+
+	if (pci_bus_read_config_word(pdev->bus, PCI_DEVFN(0, 0),
+				     intel_gmch_ctrl_reg(display), &gmch_ctrl))
+		return false;
+
+	return !(gmch_ctrl & INTEL_GMCH_VGA_DISABLE);
+}
+
 static i915_reg_t intel_vga_cntrl_reg(struct intel_display *display)
 {
 	if (display->platform.valleyview || display->platform.cherryview)
@@ -54,6 +66,17 @@ void intel_vga_disable(struct intel_display *display)
 	enum pipe pipe;
 	u8 msr, sr1;
 	u32 tmp;
+
+	if (!intel_vga_decode_is_enabled(display)) {
+		drm_dbg_kms(display->drm, "VGA decode is disabled\n");
+
+		/*
+		 * On older hardware VGA_DISP_DISABLE defaults to 0, but
+		 * it *must* be set or else the pipe will be completely
+		 * stuck (at least on g4x).
+		 */
+		goto reset_vgacntr;
+	}
 
 	tmp = intel_de_read(display, vga_reg);
 	if (tmp & VGA_DISP_DISABLE)
@@ -96,6 +119,7 @@ void intel_vga_disable(struct intel_display *display)
 
 	udelay(300);
 
+reset_vgacntr:
 	intel_de_write(display, vga_reg, VGA_DISP_DISABLE);
 	intel_de_posting_read(display, vga_reg);
 }
