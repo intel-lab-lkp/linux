@@ -847,19 +847,25 @@ retry:
 	init_waitqueue_head(&lt9611uxc->wq);
 	INIT_WORK(&lt9611uxc->work, lt9611uxc_hpd_work);
 
-	ret = request_threaded_irq(client->irq, NULL,
-				   lt9611uxc_irq_thread_handler,
-				   IRQF_ONESHOT, "lt9611uxc", lt9611uxc);
-	if (ret) {
-		dev_err(dev, "failed to request irq\n");
-		goto err_disable_regulators;
+	if (client->irq) {
+		ret = request_threaded_irq(client->irq, NULL,
+					   lt9611uxc_irq_thread_handler,
+					   IRQF_ONESHOT, "lt9611uxc", lt9611uxc);
+		if (ret) {
+			dev_err(dev, "failed to request irq\n");
+			goto err_disable_regulators;
+		}
+		dev_dbg(dev, "Uses IRQ\n");
+	} else {
+		dev_warn(dev, "The interrupt (IRQ) is not specified in the DTS.\n");
+		dev_warn(dev, "Check the interrupt (IRQ) or polling will be used!!!\n");
 	}
 
 	i2c_set_clientdata(client, lt9611uxc);
 
 	lt9611uxc->bridge.of_node = client->dev.of_node;
 	lt9611uxc->bridge.ops = DRM_BRIDGE_OP_DETECT | DRM_BRIDGE_OP_EDID;
-	if (lt9611uxc->hpd_supported)
+	if (lt9611uxc->hpd_supported && client->irq)
 		lt9611uxc->bridge.ops |= DRM_BRIDGE_OP_HPD;
 	lt9611uxc->bridge.type = DRM_MODE_CONNECTOR_HDMIA;
 
@@ -888,7 +894,8 @@ retry:
 	return 0;
 
 err_remove_bridge:
-	free_irq(client->irq, lt9611uxc);
+	if (client->irq)
+		free_irq(client->irq, lt9611uxc);
 	cancel_work_sync(&lt9611uxc->work);
 	drm_bridge_remove(&lt9611uxc->bridge);
 
@@ -906,7 +913,8 @@ static void lt9611uxc_remove(struct i2c_client *client)
 {
 	struct lt9611uxc *lt9611uxc = i2c_get_clientdata(client);
 
-	free_irq(client->irq, lt9611uxc);
+	if (client->irq)
+		free_irq(client->irq, lt9611uxc);
 	cancel_work_sync(&lt9611uxc->work);
 	lt9611uxc_audio_exit(lt9611uxc);
 	drm_bridge_remove(&lt9611uxc->bridge);
