@@ -466,6 +466,8 @@ struct s_data {
 
 #ifdef CONFIG_NO_HZ_COMMON
 
+DEFINE_PER_CPU(struct sched_domain __rcu *, sd_nohz);
+
 static int __fallback_sds_alloc(struct s_data *d, unsigned long *visited_nodes)
 {
 	int j;
@@ -532,6 +534,23 @@ static void claim_fallback_sds(struct s_data *d)
 	}
 }
 
+static void update_nohz_domain(int cpu)
+{
+	struct sched_domain *sd = highest_flag_domain(cpu, SD_SHARE_LLC);
+
+	/*
+	 * If sd_llc doesn't exist, use the lowest sd for nohz idle
+	 * tracking. cpu_attach_domain() already ensures sd->shared is
+	 * assigned for the lowest domain if sd_llc doesn't exist after
+	 * degeneration of the hierarchy.
+	 */
+	if (!sd)
+		sd = rcu_dereference(cpu_rq(cpu)->sd);
+
+	WARN_ON_ONCE(sd && !sd->shared);
+	rcu_assign_pointer(per_cpu(sd_nohz, cpu), sd);
+}
+
 #else /* !CONFIG_NO_HZ_COMMON */
 
 static inline int __fallback_sds_alloc(struct s_data *d, unsigned long *visited_nodes)
@@ -542,6 +561,7 @@ static inline int __fallback_sds_alloc(struct s_data *d, unsigned long *visited_
 static inline void __fallback_sds_free(struct s_data *d) { }
 static inline void assign_fallback_sds(struct s_data *d, struct sched_domain *sd, int cpu) { }
 static inline void claim_fallback_sds(struct s_data *d) { }
+static inline void update_nohz_domain(int cpu) { }
 
 #endif /* CONFIG_NO_HZ_COMMON */
 
@@ -804,6 +824,8 @@ static void update_top_cache_domain(int cpu)
 
 	sd = lowest_flag_domain(cpu, SD_ASYM_CPUCAPACITY_FULL);
 	rcu_assign_pointer(per_cpu(sd_asym_cpucapacity, cpu), sd);
+
+	update_nohz_domain(cpu);
 }
 
 /*

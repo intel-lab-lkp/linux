@@ -12555,7 +12555,7 @@ static void set_cpu_sd_state_busy(int cpu)
 
 	guard(rcu)();
 
-	sd = rcu_dereference(per_cpu(sd_llc, cpu));
+	sd = rcu_dereference(per_cpu(sd_nohz, cpu));
 	if (!sd || !sd->nohz_idle)
 		return;
 
@@ -12585,7 +12585,7 @@ static void set_cpu_sd_state_idle(int cpu)
 
 	guard(rcu)();
 
-	sd = rcu_dereference(per_cpu(sd_llc, cpu));
+	sd = rcu_dereference(per_cpu(sd_nohz, cpu));
 	if (!sd || sd->nohz_idle)
 		return;
 
