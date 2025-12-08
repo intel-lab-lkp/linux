@@ -45,55 +45,38 @@
 
 #define __bf_shf(x) (__builtin_ffsll(x) - 1)
 
-#define __scalar_type_to_unsigned_cases(type)				\
-		unsigned type:	(unsigned type)0,			\
-		signed type:	(unsigned type)0
+#define __BF_VALIDATE_MASK(mask) \
+	(!(mask) || ((mask) & ((mask) + ((mask) & -(mask)))))
 
-#define __unsigned_scalar_typeof(x) typeof(				\
-		_Generic((x),						\
-			char:	(unsigned char)0,			\
-			__scalar_type_to_unsigned_cases(char),		\
-			__scalar_type_to_unsigned_cases(short),		\
-			__scalar_type_to_unsigned_cases(int),		\
-			__scalar_type_to_unsigned_cases(long),		\
-			__scalar_type_to_unsigned_cases(long long),	\
-			default: (x)))
-
-#define __bf_cast_unsigned(type, x)	((__unsigned_scalar_typeof(type))(x))
-
-#define __BF_FIELD_CHECK_MASK(mask, val, pfx)				\
-	({								\
+#define __BF_FIELD_CHECK_MASK(mask, pfx)				\
+	do {								\
 		BUILD_BUG_ON_MSG(!__builtin_constant_p(mask),		\
 				 pfx "mask is not constant");		\
-		BUILD_BUG_ON_MSG((mask) == 0, _pfx "mask is zero");	\
-		BUILD_BUG_ON_MSG(__builtin_constant_p(val) ?		\
-				 ~((mask) >> __bf_shf(mask)) &		\
-					(0 + (val)) : 0,		\
-				 pfx "value too large for the field");	\
-		__BUILD_BUG_ON_NOT_POWER_OF_2((mask) +			\
-					      (1ULL << __bf_shf(mask))); \
-	})
+		BUILD_BUG_ON_MSG(__BF_VALIDATE_MASK(mask),		\
+				 pfx "mask is zero or not contiguous");	\
+	} while (0)
+
+#define __BF_FIELD_CHECK_VAL(mask, val, pfx)			\
+	BUILD_BUG_ON_MSG(__builtin_constant_p(val) &&		\
+			 ~((mask) >> __bf_shf(mask)) & (val),	\
+			 pfx "value too large for the field")
 
 #define __BF_FIELD_CHECK_REG(mask, reg, pfx)				\
-	BUILD_BUG_ON_MSG(__bf_cast_unsigned(mask, mask) >		\
-			 __bf_cast_unsigned(reg, ~0ull),		\
+	BUILD_BUG_ON_MSG(mask + 0U + 0UL + 0ULL >			\
+			 ~0ULL >> (64 - 8 * sizeof (reg)),		\
 			 pfx "type of reg too small for mask")
-
-#define __BF_FIELD_CHECK(mask, reg, val, pfx)				\
-	({								\
-		__BF_FIELD_CHECK_MASK(mask, val, pfx);			\
-		__BF_FIELD_CHECK_REG(mask, reg, pfx);			\
-	})
 
 #define __BF_FIELD_PREP(mask, val, pfx)					\
 	({								\
-		__BF_FIELD_CHECK_MASK(mask, val, pfx);			\
+		__BF_FIELD_CHECK_MASK(mask, pfx);			\
+		__BF_FIELD_CHECK_VAL(mask, val, pfx);			\
 		((val) << __bf_shf(mask)) & (mask);			\
 	})
 
 #define __BF_FIELD_GET(mask, reg, pfx)					\
 	({								\
-		__BF_FIELD_CHECK_MASK(mask, 0U, pfx);			\
+		__BF_FIELD_CHECK_MASK(mask, pfx);			\
+		__BF_FIELD_CHECK_REG(mask, reg, pfx);			\
 		((reg) & (mask)) >> __bf_shf(mask);			\
 	})
 
@@ -107,7 +90,7 @@
 #define FIELD_MAX(mask)							\
 	({								\
 		__auto_type _mask = mask;				\
-		__BF_FIELD_CHECK(_mask, 0ULL, 0ULL, "FIELD_MAX: ");	\
+		__BF_FIELD_CHECK_MASK(_mask, "FIELD_MAX: ");		\
 		(_mask >> __bf_shf(_mask));				\
 	})
 
@@ -122,7 +105,7 @@
 	({								\
 		__auto_type _mask = mask;				\
 		__auto_type _val = 1 ? (val) : _mask;			\
-		__BF_FIELD_CHECK(_mask, 0ULL, 0ULL, "FIELD_FIT: ");	\
+		__BF_FIELD_CHECK_MASK(_mask, "FIELD_FIT: ");		\
 		!((_val << __bf_shf(_mask)) & ~_mask); 			\
 	})
 
@@ -138,11 +121,8 @@
 	({								\
 		__auto_type _mask = mask;				\
 		__auto_type _val = 1 ? (val) : _mask;			\
-		__BF_FIELD_CHECK_REG(_mask, 0ULL, "FIELD_PREP: ");	\
 		__BF_FIELD_PREP(_mask, _val, "FIELD_PREP: ");		\
 	})
-
-#define __BF_CHECK_POW2(n)	BUILD_BUG_ON_ZERO(((n) & ((n) - 1)) != 0)
 
 /**
  * FIELD_PREP_CONST() - prepare a constant bitfield element
@@ -158,12 +138,10 @@
  */
 #define FIELD_PREP_CONST(mask, val)					\
 	(								\
-		/* mask must be non-zero */				\
-		BUILD_BUG_ON_ZERO((mask) == 0) +			\
+		/* mask must be non-zero and contiguous */		\
+		BUILD_BUG_ON_ZERO(__BF_VALIDATE_MASK(mask)) +		\
 		/* check if value fits */				\
 		BUILD_BUG_ON_ZERO(~((mask) >> __bf_shf(mask)) & (val)) + \
-		/* check if mask is contiguous */			\
-		__BF_CHECK_POW2((mask) + (1ULL << __bf_shf(mask))) +	\
 		/* and create the value */				\
 		(((typeof(mask))(val) << __bf_shf(mask)) & (mask))	\
 	)
@@ -180,7 +158,6 @@
 	({								\
 		__auto_type _mask = mask;				\
 		__auto_type _reg = reg;					\
-		__BF_FIELD_CHECK_REG(_mask, _reg, "FIELD_GET: ");	\
 		__BF_FIELD_GET(_mask, _reg, "FIELD_GET: ");		\
 	})
 
@@ -198,8 +175,9 @@
 		__auto_type _mask = mask;						\
 		__auto_type _reg_p = reg_p;						\
 		__auto_type _val = 1 ? (val) : _mask;					\
-		typecheck_pointer(_reg_p);						\
-		__BF_FIELD_CHECK(_mask, *_reg_p, _val, "FIELD_MODIFY: ");		\
+		__BF_FIELD_CHECK_MASK(_mask, "FIELD_MODIFY: ");				\
+		__BF_FIELD_CHECK_VAL(_mask, _val, "FIELD_MODIFY: ");			\
+		__BF_FIELD_CHECK_REG(_mask, *_reg_p, "FIELD_MODIFY: ");			\
 		*_reg_p = (*_reg_p & ~_mask) | ((_val << __bf_shf(_mask)) & _mask);	\
 	})
 
@@ -209,7 +187,7 @@ extern void __compiletime_error("bad bitfield mask")
 __bad_mask(void);
 static __always_inline u64 field_multiplier(u64 field)
 {
-	if ((field | (field - 1)) & ((field | (field - 1)) + 1))
+	if (__BF_VALIDATE_MASK(field))
 		__bad_mask();
 	return field & -field;
 }
