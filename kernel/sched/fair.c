@@ -12595,6 +12595,18 @@ static void set_cpu_sd_state_idle(int cpu)
 	atomic_dec(&sd->shared->nr_busy_cpus);
 }
 
+static void cpu_sd_exit_nohz_balance(struct rq *rq)
+{
+	if (READ_ONCE(rq->nohz_tick_stopped))
+		set_cpu_sd_state_busy(cpu_of(rq));
+}
+
+static void cpu_sd_reenter_nohz_balance(struct rq *rq)
+{
+	if (READ_ONCE(rq->nohz_tick_stopped))
+		set_cpu_sd_state_idle(cpu_of(rq));
+}
+
 /*
  * This routine will record that the CPU is going idle with tick stopped.
  * This info will be used in performing idle load balancing in the future.
@@ -12845,6 +12857,8 @@ static void nohz_newidle_balance(struct rq *this_rq)
 }
 
 #else /* !CONFIG_NO_HZ_COMMON: */
+static inline void cpu_sd_exit_nohz_balance(struct rq *rq) { }
+static inline void cpu_sd_reenter_nohz_balance(struct rq *rq) { }
 static inline void nohz_balancer_kick(struct rq *rq) { }
 
 static inline bool nohz_idle_balance(struct rq *this_rq, enum cpu_idle_type idle)
@@ -13060,6 +13074,9 @@ static void rq_online_fair(struct rq *rq)
 	update_sysctl();
 
 	update_runtime_enabled(rq);
+
+	/* Fixup nr_busy_cpus and nohz stats. */
+	cpu_sd_reenter_nohz_balance(rq);
 }
 
 static void rq_offline_fair(struct rq *rq)
@@ -13071,6 +13088,9 @@ static void rq_offline_fair(struct rq *rq)
 
 	/* Ensure that we remove rq contribution to group share: */
 	clear_tg_offline_cfs_rqs(rq);
+
+	/* Fixup nr_busy_cpus and nohz stats. */
+	cpu_sd_exit_nohz_balance(rq);
 }
 
 #ifdef CONFIG_SCHED_CORE
