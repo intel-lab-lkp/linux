@@ -7143,7 +7143,6 @@ static DEFINE_PER_CPU(cpumask_var_t, should_we_balance_tmpmask);
 #ifdef CONFIG_NO_HZ_COMMON
 
 static struct {
-	cpumask_var_t idle_cpus_mask;
 	atomic_t nr_cpus;
 	int has_blocked;		/* Idle CPUS has blocked load */
 	int needs_update;		/* Newly idle CPUs need their next_balance collated */
@@ -12621,7 +12620,6 @@ void nohz_balance_exit_idle(struct rq *rq)
 		return;
 
 	WRITE_ONCE(rq->nohz_tick_stopped, 0);
-	cpumask_clear_cpu(rq->cpu, nohz.idle_cpus_mask);
 	atomic_dec(&nohz.nr_cpus);
 
 	set_cpu_sd_state_busy(rq->cpu);
@@ -12680,8 +12678,9 @@ void nohz_balance_enter_idle(int cpu)
 	/*
 	 * The tick is still stopped but load could have been added in the
 	 * meantime. We set the nohz.has_blocked flag to trig a check of the
-	 * *_avg. The CPU is already part of nohz.idle_cpus_mask so the clear
-	 * of nohz.has_blocked can only happen after checking the new load
+	 * *_avg. The CPU is already part of sd_nohz->idle_cpus_mask so the
+	 * clear of nohz.has_blocked can only happen after checking the new
+	 * load
 	 */
 	if (READ_ONCE(rq->nohz_tick_stopped))
 		goto out;
@@ -12692,7 +12691,6 @@ void nohz_balance_enter_idle(int cpu)
 
 	WRITE_ONCE(rq->nohz_tick_stopped, 1);
 
-	cpumask_set_cpu(cpu, nohz.idle_cpus_mask);
 	atomic_inc(&nohz.nr_cpus);
 
 	set_cpu_sd_state_idle(cpu);
@@ -12936,15 +12934,16 @@ static bool nohz_idle_balance(struct rq *this_rq, enum cpu_idle_type idle)
  * entering idle state. Here we run ILB directly without issuing IPIs.
  *
  * Note that when this function is called, the tick may not yet be stopped on
- * this CPU yet. nohz.idle_cpus_mask is updated only when tick is stopped and
- * cleared on the next busy tick. In other words, nohz.idle_cpus_mask updates
- * don't align with CPUs enter/exit idle to avoid bottlenecks due to high idle
- * entry/exit rate (usec). So it is possible that _nohz_idle_balance() is
- * called from this function on (this) CPU that's not yet in the mask. That's
- * OK because the goal of nohz_run_idle_balance() is to run ILB only for
- * updating the blocked load of already idle CPUs without waking up one of
- * those idle CPUs and outside the preempt disable / IRQ off phase of the local
- * cpu about to enter idle, because it can take a long time.
+ * this CPU yet. sd_nohz->nohz_idle_cpus_mask is updated only when tick is
+ * stopped and cleared on the next busy tick. In other words,
+ * sd_nohz->nohz_idle_cpus_mask updates don't align with CPUs enter/exit idle
+ * to avoid bottlenecks due to high idle entry/exit rate (usec). So it is
+ * possible that _nohz_idle_balance() is called from this function on (this)
+ * CPU that's not yet in the mask. That's OK because the goal of
+ * nohz_run_idle_balance() is to run ILB only for updating the blocked load of
+ * already idle CPUs without waking up one of those idle CPUs and outside the
+ * preempt disable / IRQ off phase of the local cpu about to enter idle,
+ * because it can take a long time.
  */
 void nohz_run_idle_balance(int cpu)
 {
@@ -14138,6 +14137,5 @@ __init void init_sched_fair_class(void)
 #ifdef CONFIG_NO_HZ_COMMON
 	nohz.next_balance = jiffies;
 	nohz.next_blocked = jiffies;
-	zalloc_cpumask_var(&nohz.idle_cpus_mask, GFP_NOWAIT);
 #endif
 }
