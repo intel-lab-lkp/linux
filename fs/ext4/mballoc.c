@@ -4522,7 +4522,10 @@ static inline bool ext4_mb_check_size(loff_t req, loff_t size,
 
 /*
  * Predict file size for preallocation. Returns the predicted size
- * in bytes and sets start_off if alignment is needed for large files.
+ * in bytes. When stripe width (io_opt) is configured, returns sizes
+ * that are multiples of stripe for optimal RAID performance.
+ *
+ * Sets start_off if alignment is needed for large files.
  */
 static loff_t ext4_mb_predict_file_size(struct ext4_sb_info *sbi,
 					struct ext4_allocation_context *ac,
@@ -4533,6 +4536,59 @@ static loff_t ext4_mb_predict_file_size(struct ext4_sb_info *sbi,
 
 	*start_off = 0;
 
+	/*
+	 * For RAID/striped devices, align preallocation size to stripe
+	 * width (io_opt) for optimal I/O performance. Use power-of-2
+	 * multiples of stripe size for size prediction.
+	 */
+	if (sbi->s_stripe) {
+		loff_t stripe_bytes = (loff_t)sbi->s_stripe << bsbits;
+		loff_t max_size = (loff_t)max << bsbits;
+
+		/*
+		 * TODO: If stripe is larger than max chunk size, we can't
+		 * do stripe-aligned allocation. Fall back to traditional
+		 * size prediction. This can happen with very large stripe
+		 * configurations on small block sizes.
+		 */
+		if (stripe_bytes > max_size)
+			goto no_stripe;
+
+		if (size <= stripe_bytes) {
+			size = stripe_bytes;
+		} else if (size <= stripe_bytes * 2) {
+			size = stripe_bytes * 2;
+		} else if (size <= stripe_bytes * 4) {
+			size = stripe_bytes * 4;
+		} else if (size <= stripe_bytes * 8) {
+			size = stripe_bytes * 8;
+		} else if (size <= stripe_bytes * 16) {
+			size = stripe_bytes * 16;
+		} else if (size <= stripe_bytes * 32) {
+			size = stripe_bytes * 32;
+		} else {
+			size = roundup(size, stripe_bytes);
+		}
+
+		/*
+		 * Limit size to max free chunk size, rounded down to
+		 * stripe alignment.
+		 */
+		if (size > max_size)
+			size = rounddown(max_size, stripe_bytes);
+
+		/*
+		 * Align start offset to stripe boundary for large allocations
+		 * to ensure both start and size are stripe-aligned.
+		 */
+		*start_off = rounddown((loff_t)ac->ac_o_ex.fe_logical << bsbits,
+				       stripe_bytes);
+
+		return size;
+	}
+
+no_stripe:
+	/* No stripe: use traditional hardcoded size prediction */
 	if (size <= 16 * 1024) {
 		size = 16 * 1024;
 	} else if (size <= 32 * 1024) {
@@ -4578,7 +4634,7 @@ ext4_mb_normalize_request(struct ext4_allocation_context *ac,
 {
 	struct ext4_sb_info *sbi = EXT4_SB(ac->ac_sb);
 	struct ext4_super_block *es = sbi->s_es;
-	int bsbits, max;
+	int bsbits;
 	loff_t size, start_off = 0, end;
 	loff_t orig_size __maybe_unused;
 	ext4_lblk_t start;
