@@ -593,7 +593,68 @@ static inline s64 entity_key(struct cfs_rq *cfs_rq, struct sched_entity *se)
  *
  *	      V +-= lag_i / W
  *
- *	    Also see the comment in place_entity() that deals with this. ]]
+ * If a joining/leaving task j has non-zero lag, V will change. Although
+ * v_i of other tasks remains unchanged, their vlag_i = V - v_i changes.
+ * We define join_lag of each task as jlag, the average jlag in the queue:
+ *
+ *   J = \Sum jlag_i / W
+ *
+ * 1) Before and after task j joins, v_i and jlag_i of other tasks remain
+ * unchanged:
+ *   W_j = W + w_j
+ *   V_j = (V * W + v_j * w_j) / W_j
+ *   V_j = (V * W_j - V * w_j + v_j * w_j) / W_j
+ *   V_j = V - (V - v_j) * w_j / W_j
+ * and
+ *   J_j = (J * W + jlag_j) / W_j
+ *   J_j = (J * W_j - J * w_j + vjlag_j * w_j) / W_j
+ *   J_j = J - (J - vjlag_j) * w_j / W_j
+ *
+ * Therefore:
+ *   (V_j + J_j) - (V + J) = ((v_j + vjlag_j) - (V + J)) * w_j / W_j
+ *
+ * The v_j of the joining task j is determined based on vjlag and V. If we set
+ *   v_j = V + J - vjlag_j
+ * then we have:
+ *   (V_j + J_j) - (V + J) = 0
+ * meaning adding a task keeps V_j + J_j unchanged.
+ *
+ * Since
+ *   v_j = V_j - vlag_j
+ * we get:
+ *   v_j = V_j - vlag_j = V + J - vjlag_j
+ *   vlag_j = vjlag_j - J_j
+ * so after adding task j, preserve vlag: vlag_last_leave - J_j.
+ *
+ * 2) When any task i runs, V changes with v_i, but J does not:
+ * from
+ *   v_i = V - vlag_i = V + J - vjlag_i
+ * we get
+ *   vlag_i = V - v_i
+ *   vjlag_i = V + J - v_i = vlag_i + J
+ * vlag_i and vjlag_i change accordingly.
+ *
+ * 3) When task l leaves, v_i and jlag_i of other tasks remain unchanged:
+ *   W' = W_l - w_l
+ *   V' = (V_l * W_l - v_l * w_l) / W'
+ *   V' = (V_l * W' + V_l * w_l - v_l * w_l) / W'
+ *   V' = V_l + (V_l - v_l) * w_l / W'
+ * and
+ *   J' = (J_l * W_l - jlag_l) / W'
+ *   J' = (J_l * W' + J_l * w_l - vjlag_j * w_l) / W'
+ *   J' = J_l + (J_l - vjlag_l) * w_l / W'
+ *
+ * Therefore:
+ *   (V' + J') - (V_l + J_l) = ((V_l + J_l) - (v_l + vjlag_l)) * w_l / W' = 0
+ * so V'+J' also remains unchanged when removing a task.
+ *
+ * For n tasks in the queue, the upper bound of \Sum jlag_i is:
+ *   \Sum jlag_i = \Sum (vjlag_i * w_i)
+ *               = \Sum (vlag_i + J) * w_i
+ *               = \Sum (vlag_i * w_i) + J * \Sum w_i
+ *               = \Sum lag_i + J * W
+ *               = 0 + J * W <= n * q
+ * where q is the upper bound of lag. ]]
  *
  * However, since v_i is u64, and the multiplication could easily overflow
  * transform it into a relative form that uses smaller quantities:
@@ -636,6 +697,33 @@ avg_vruntime_sub(struct cfs_rq *cfs_rq, struct sched_entity *se)
 
 	cfs_rq->avg_vruntime -= key * weight;
 	cfs_rq->avg_load -= weight;
+}
+
+s64 avg_vjlag(struct cfs_rq *cfs_rq)
+{
+	struct sched_entity *curr = cfs_rq->curr;
+	long load = cfs_rq->avg_load;
+
+	if (curr && curr->on_rq)
+		load += scale_load_down(curr->load.weight);
+
+	return load ? div_s64(cfs_rq->sum_jlag, load) : 0;
+}
+
+static void sum_jlag_add(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	unsigned long weight = scale_load_down(se->load.weight);
+	s64 jlag_join = se->vlag * weight; /* preserve vlag: vlag - J_j */
+
+	cfs_rq->sum_jlag += jlag_join;
+}
+
+static void sum_jlag_sub(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	unsigned long weight = scale_load_down(se->load.weight);
+	s64 jlag_leave = (se->vlag + avg_vjlag(cfs_rq)) * weight;
+
+	cfs_rq->sum_jlag -= jlag_leave;
 }
 
 static inline
@@ -5106,82 +5194,9 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 		se->slice = sysctl_sched_base_slice;
 	vslice = calc_delta_fair(se->slice, se);
 
-	/*
-	 * Due to how V is constructed as the weighted average of entities,
-	 * adding tasks with positive lag, or removing tasks with negative lag
-	 * will move 'time' backwards, this can screw around with the lag of
-	 * other tasks.
-	 *
-	 * EEVDF: placement strategy #1 / #2
-	 */
-	if (sched_feat(PLACE_LAG) && cfs_rq->nr_queued && se->vlag) {
-		struct sched_entity *curr = cfs_rq->curr;
-		unsigned long load;
-
-		lag = se->vlag;
-
-		/*
-		 * If we want to place a task and preserve lag, we have to
-		 * consider the effect of the new entity on the weighted
-		 * average and compensate for this, otherwise lag can quickly
-		 * evaporate.
-		 *
-		 * Lag is defined as:
-		 *
-		 *   lag_i = S - s_i = w_i * (V - v_i)
-		 *
-		 * To avoid the 'w_i' term all over the place, we only track
-		 * the virtual lag:
-		 *
-		 *   vl_i = V - v_i <=> v_i = V - vl_i
-		 *
-		 * And we take V to be the weighted average of all v:
-		 *
-		 *   V = (\Sum w_j*v_j) / W
-		 *
-		 * Where W is: \Sum w_j
-		 *
-		 * Then, the weighted average after adding an entity with lag
-		 * vl_i is given by:
-		 *
-		 *   V' = (\Sum w_j*v_j + w_i*v_i) / (W + w_i)
-		 *      = (W*V + w_i*(V - vl_i)) / (W + w_i)
-		 *      = (W*V + w_i*V - w_i*vl_i) / (W + w_i)
-		 *      = (V*(W + w_i) - w_i*vl_i) / (W + w_i)
-		 *      = V - w_i*vl_i / (W + w_i)
-		 *
-		 * And the actual lag after adding an entity with vl_i is:
-		 *
-		 *   vl'_i = V' - v_i
-		 *         = V - w_i*vl_i / (W + w_i) - (V - vl_i)
-		 *         = vl_i - w_i*vl_i / (W + w_i)
-		 *
-		 * Which is strictly less than vl_i. So in order to preserve lag
-		 * we should inflate the lag before placement such that the
-		 * effective lag after placement comes out right.
-		 *
-		 * As such, invert the above relation for vl'_i to get the vl_i
-		 * we need to use such that the lag after placement is the lag
-		 * we computed before dequeue.
-		 *
-		 *   vl'_i = vl_i - w_i*vl_i / (W + w_i)
-		 *         = ((W + w_i)*vl_i - w_i*vl_i) / (W + w_i)
-		 *
-		 *   (W + w_i)*vl'_i = (W + w_i)*vl_i - w_i*vl_i
-		 *                   = W*vl_i
-		 *
-		 *   vl_i = (W + w_i)*vl'_i / W
-		 */
-		load = cfs_rq->avg_load;
-		if (curr && curr->on_rq)
-			load += scale_load_down(curr->load.weight);
-
-		lag *= load + scale_load_down(se->load.weight);
-		if (WARN_ON_ONCE(!load))
-			load = 1;
-		lag = div_s64(lag, load);
-	}
-
+	/* v_j: V - (vjlag_j - J) */
+	if (sched_feat(PLACE_LAG))
+		lag = se->vlag - avg_vjlag(cfs_rq);
 	se->vruntime = vruntime - lag;
 
 	if (se->rel_deadline) {
@@ -5257,6 +5272,7 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 
 	check_schedstat_required();
 	update_stats_enqueue_fair(cfs_rq, se, flags);
+	sum_jlag_add(cfs_rq, se);
 	if (!curr)
 		__enqueue_entity(cfs_rq, se);
 	se->on_rq = 1;
@@ -5394,6 +5410,7 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 		se->rel_deadline = 1;
 	}
 
+	sum_jlag_sub(cfs_rq, se);
 	if (se != cfs_rq->curr)
 		__dequeue_entity(cfs_rq, se);
 	se->on_rq = 0;
