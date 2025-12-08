@@ -135,7 +135,7 @@ static unsigned int intel_gmch_vga_set_decode(struct pci_dev *pdev, bool enable_
 		return VGA_RSRC_NORMAL_IO | VGA_RSRC_NORMAL_MEM;
 }
 
-int intel_vga_register(struct intel_display *display)
+void intel_vga_register(struct intel_display *display)
 {
 
 	struct pci_dev *pdev = to_pci_dev(display->drm->dev);
@@ -150,10 +150,7 @@ int intel_vga_register(struct intel_display *display)
 	 * vga_client_register() fails with -ENODEV.
 	 */
 	ret = vga_client_register(pdev, intel_gmch_vga_set_decode);
-	if (ret && ret != -ENODEV)
-		return ret;
-
-	return 0;
+	drm_WARN_ON(display->drm, ret && ret != -ENODEV);
 }
 
 void intel_vga_unregister(struct intel_display *display)
