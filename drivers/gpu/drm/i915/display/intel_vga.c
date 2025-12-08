@@ -71,6 +71,19 @@ static bool intel_pci_set_io_decode(struct pci_dev *pdev, bool enable)
 	return old & PCI_COMMAND_IO;
 }
 
+static bool intel_pci_bridge_set_vga(struct pci_dev *pdev, bool enable)
+{
+	u16 old = 0, ctl;
+
+	pci_read_config_word(pdev->bus->self, PCI_BRIDGE_CONTROL, &old);
+	ctl = old & ~PCI_BRIDGE_CTL_VGA;
+	if (enable)
+		ctl |= PCI_BRIDGE_CTL_VGA;
+	pci_write_config_word(pdev->bus->self, PCI_BRIDGE_CONTROL, ctl);
+
+	return old & PCI_BRIDGE_CTL_VGA;
+}
+
 static bool intel_vga_get(struct intel_display *display)
 {
 	struct pci_dev *pdev = to_pci_dev(display->drm->dev);
@@ -108,6 +121,7 @@ static void intel_vga_put(struct intel_display *display, bool io_decode)
 /* Disable the VGA plane that we never use */
 void intel_vga_disable(struct intel_display *display)
 {
+	struct pci_dev *pdev = to_pci_dev(display->drm->dev);
 	i915_reg_t vga_reg = intel_vga_cntrl_reg(display);
 	bool io_decode;
 	u8 msr, sr1;
@@ -161,6 +175,12 @@ void intel_vga_disable(struct intel_display *display)
 
 	msr = inb(VGA_MIS_R);
 	/*
+	 * Always disable VGA memory decode for iGPU so that
+	 * intel_vga_set_decode() doesn't need to access VGA registers.
+	 * VGA_MIS_ENB_MEM_ACCESS=0 is also the reset value.
+	 */
+	msr &= ~VGA_MIS_ENB_MEM_ACCESS;
+	/*
 	 * VGA_MIS_COLOR controls both GPU level and display engine level
 	 * MDA vs. CGA decode logic. But when the register gets reset
 	 * (reset value has VGA_MIS_COLOR=0) by the power well, only the
@@ -177,6 +197,14 @@ void intel_vga_disable(struct intel_display *display)
 
 	intel_vga_put(display, io_decode);
 
+	/*
+	 * Inform the arbiter about VGA memory decode being disabled so
+	 * that it doesn't disable all memory decode for the iGPU when
+	 * targeting another GPU.
+	 */
+	if (!display->platform.dgfx)
+		vga_set_legacy_decoding(pdev, VGA_RSRC_LEGACY_IO);
+
 	udelay(300);
 
 reset_vgacntr:
@@ -184,45 +212,38 @@ reset_vgacntr:
 	intel_de_posting_read(display, vga_reg);
 }
 
-static int intel_gmch_vga_set_state(struct intel_display *display, bool enable_decode)
-{
-	struct pci_dev *pdev = to_pci_dev(display->drm->dev);
-	u16 gmch_ctrl;
-
-	if (pci_bus_read_config_word(pdev->bus, PCI_DEVFN(0, 0),
-				     intel_gmch_ctrl_reg(display), &gmch_ctrl)) {
-		drm_err(display->drm, "failed to read control word\n");
-		return -EIO;
-	}
-
-	if (!!(gmch_ctrl & INTEL_GMCH_VGA_DISABLE) == !enable_decode)
-		return 0;
-
-	if (enable_decode)
-		gmch_ctrl &= ~INTEL_GMCH_VGA_DISABLE;
-	else
-		gmch_ctrl |= INTEL_GMCH_VGA_DISABLE;
-
-	if (pci_bus_write_config_word(pdev->bus, PCI_DEVFN(0, 0),
-				      intel_gmch_ctrl_reg(display), gmch_ctrl)) {
-		drm_err(display->drm, "failed to write control word\n");
-		return -EIO;
-	}
-
-	return 0;
-}
-
-static unsigned int intel_gmch_vga_set_decode(struct pci_dev *pdev, bool enable_decode)
+static unsigned int intel_vga_set_decode(struct pci_dev *pdev, bool enable_decode)
 {
 	struct intel_display *display = to_intel_display(pdev);
+	unsigned int decodes = VGA_RSRC_NORMAL_IO | VGA_RSRC_NORMAL_MEM;
 
-	intel_gmch_vga_set_state(display, enable_decode);
+	drm_dbg_kms(display->drm, "%s VGA decode due to VGA arbitration\n",
+		    str_enable_disable(enable_decode));
 
-	if (enable_decode)
-		return VGA_RSRC_LEGACY_IO | VGA_RSRC_LEGACY_MEM |
-		       VGA_RSRC_NORMAL_IO | VGA_RSRC_NORMAL_MEM;
-	else
-		return VGA_RSRC_NORMAL_IO | VGA_RSRC_NORMAL_MEM;
+	/*
+	 * Can't use GMCH_CTRL INTEL_GMCH_VGA_DISABLE to disable VGA
+	 * decode on ILK+ since the register is locked. Instead
+	 * intel_disable_vga() will disable VGA memory decode for the
+	 * iGPU, and here we just need to take care of the IO decode.
+	 * For discrete GPUs we rely on the bridge VGA control.
+	 *
+	 * We can't disable IO decode already in intel_vga_disable()
+	 * because at least some laptops (eg. CTG Dell Latitude E5400)
+	 * will hang during reboot/shutfown with IO decode disabled.
+	 */
+	if (display->platform.dgfx) {
+		if (!enable_decode)
+			intel_pci_bridge_set_vga(pdev, false);
+		else
+			decodes |= VGA_RSRC_LEGACY_IO | VGA_RSRC_LEGACY_MEM;
+	} else {
+		if (!enable_decode)
+			intel_pci_set_io_decode(pdev, false);
+		else
+			decodes |= VGA_RSRC_LEGACY_IO;
+	}
+
+	return decodes;
 }
 
 void intel_vga_register(struct intel_display *display)
@@ -239,7 +260,7 @@ void intel_vga_register(struct intel_display *display)
 	 * then we do not take part in VGA arbitration and the
 	 * vga_client_register() fails with -ENODEV.
 	 */
-	ret = vga_client_register(pdev, intel_gmch_vga_set_decode);
+	ret = vga_client_register(pdev, intel_vga_set_decode);
 	drm_WARN_ON(display->drm, ret && ret != -ENODEV);
 }
 
