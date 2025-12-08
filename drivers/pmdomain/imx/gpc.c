@@ -415,8 +415,10 @@ static int imx_gpc_probe(struct platform_device *pdev)
 		return 0;
 
 	base = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(base))
-		return PTR_ERR(base);
+	if (IS_ERR(base)) {
+		ret = PTR_ERR(base);
+		goto err_free;
+	}
 
 	regmap = devm_regmap_init_mmio_clk(&pdev->dev, NULL, base,
 					   &imx_gpc_regmap_config);
@@ -424,7 +426,7 @@ static int imx_gpc_probe(struct platform_device *pdev)
 		ret = PTR_ERR(regmap);
 		dev_err(&pdev->dev, "failed to init regmap: %d\n",
 			ret);
-		return ret;
+		goto err_free;
 	}
 
 	/*
@@ -459,29 +461,33 @@ static int imx_gpc_probe(struct platform_device *pdev)
 		int domain_index;
 
 		ipg_clk = devm_clk_get(&pdev->dev, "ipg");
-		if (IS_ERR(ipg_clk))
-			return PTR_ERR(ipg_clk);
+		if (IS_ERR(ipg_clk)) {
+			ret = PTR_ERR(ipg_clk);
+			goto err_free;
+		}
 		ipg_rate_mhz = clk_get_rate(ipg_clk) / 1000000;
 
 		for_each_child_of_node_scoped(pgc_node, np) {
 			ret = of_property_read_u32(np, "reg", &domain_index);
 			if (ret)
-				return ret;
+				goto err_free;
 
 			if (domain_index >= of_id_data->num_domains)
 				continue;
 
 			pd_pdev = platform_device_alloc("imx-pgc-power-domain",
 							domain_index);
-			if (!pd_pdev)
-				return -ENOMEM;
+			if (!pd_pdev) {
+				ret = -ENOMEM;
+				goto err_free;
+			}
 
 			ret = platform_device_add_data(pd_pdev,
 						       &imx_gpc_domains[domain_index],
 						       sizeof(imx_gpc_domains[domain_index]));
 			if (ret) {
 				platform_device_put(pd_pdev);
-				return ret;
+				goto err_free;
 			}
 			domain = pd_pdev->dev.platform_data;
 			domain->regmap = regmap;
@@ -494,12 +500,17 @@ static int imx_gpc_probe(struct platform_device *pdev)
 			ret = platform_device_add(pd_pdev);
 			if (ret) {
 				platform_device_put(pd_pdev);
-				return ret;
+				goto err_free;
 			}
 		}
 	}
 
+	of_node_put(pgc_node);
 	return 0;
+
+err_free:
+	of_node_put(pgc_node);
+	return ret;
 }
 
 static void imx_gpc_remove(struct platform_device *pdev)
