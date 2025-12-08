@@ -4190,12 +4190,11 @@ int folio_split_unmapped(struct folio *folio, unsigned int new_order)
 	return ret;
 }
 
-int __split_huge_page_to_list_to_order(struct page *page, struct list_head *list,
-				     unsigned int new_order)
+int split_huge_page(struct page *page)
 {
 	struct folio *folio = page_folio(page);
 
-	return __folio_split(folio, new_order, &folio->page, page, list,
+	return __folio_split(folio, 0, &folio->page, page, NULL,
 			     SPLIT_TYPE_UNIFORM);
 }
 
