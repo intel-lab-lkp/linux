@@ -875,7 +875,7 @@ __xfs_sb_from_disk(
 	} else {
 		to->sb_metadirino = NULLFSINO;
 		to->sb_rgcount = 1;
-		to->sb_rgextents = 0;
+		to->sb_rgextents = to->sb_rextents;
 	}
 
 	if (to->sb_features_incompat & XFS_SB_FEAT_INCOMPAT_ZONED) {
@@ -1586,10 +1586,8 @@ xfs_fs_geometry(
 
 	geo->version = XFS_FSOP_GEOM_VERSION_V5;
 
-	if (xfs_has_rtgroups(mp)) {
-		geo->rgcount = sbp->sb_rgcount;
-		geo->rgextents = sbp->sb_rgextents;
-	}
+	geo->rgcount = sbp->sb_rgcount;
+	geo->rgextents = sbp->sb_rgextents;
 	if (xfs_has_zoned(mp)) {
 		geo->rtstart = sbp->sb_rtstart;
 		geo->rtreserved = sbp->sb_rtreserved;
