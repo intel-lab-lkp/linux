@@ -12557,10 +12557,10 @@ void nohz_balance_exit_idle(struct rq *rq)
 {
 	WARN_ON_ONCE(rq != this_rq());
 
-	if (likely(!rq->nohz_tick_stopped))
+	if (likely(!READ_ONCE(rq->nohz_tick_stopped)))
 		return;
 
-	rq->nohz_tick_stopped = 0;
+	WRITE_ONCE(rq->nohz_tick_stopped, 0);
 	cpumask_clear_cpu(rq->cpu, nohz.idle_cpus_mask);
 	atomic_dec(&nohz.nr_cpus);
 
@@ -12608,14 +12608,14 @@ void nohz_balance_enter_idle(int cpu)
 	 * *_avg. The CPU is already part of nohz.idle_cpus_mask so the clear
 	 * of nohz.has_blocked can only happen after checking the new load
 	 */
-	if (rq->nohz_tick_stopped)
+	if (READ_ONCE(rq->nohz_tick_stopped))
 		goto out;
 
 	/* If we're a completely isolated CPU, we don't play: */
 	if (on_null_domain(rq))
 		return;
 
-	rq->nohz_tick_stopped = 1;
+	WRITE_ONCE(rq->nohz_tick_stopped, 1);
 
 	cpumask_set_cpu(cpu, nohz.idle_cpus_mask);
 	atomic_inc(&nohz.nr_cpus);
@@ -12645,7 +12645,7 @@ static bool update_nohz_stats(struct rq *rq)
 	if (!rq->has_blocked_load)
 		return false;
 
-	if (!cpumask_test_cpu(cpu, nohz.idle_cpus_mask))
+	if (!READ_ONCE(rq->nohz_tick_stopped))
 		return false;
 
 	if (!time_after(jiffies, READ_ONCE(rq->last_blocked_load_update_tick)))
