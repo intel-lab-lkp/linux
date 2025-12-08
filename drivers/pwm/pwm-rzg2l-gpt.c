@@ -90,14 +90,26 @@ struct rzg2l_gpt_info {
 	u8 prescale_mult;
 };
 
+struct rzg2l_gpt_cache {
+	u32 gtpr;
+	u32 gtccr[2];
+	u32 gtcr;
+	u32 gtior;
+};
+
 struct rzg2l_gpt_chip {
 	void __iomem *mmio;
 	struct mutex lock; /* lock to protect shared channel resources */
 	const struct rzg2l_gpt_info *info;
+	struct clk *clk;
+	struct clk *bus_clk;
+	struct reset_control *rst;
+	struct reset_control *rst_s;
 	unsigned long rate_khz;
 	u32 period_ticks[RZG2L_MAX_HW_CHANNELS];
 	u32 channel_request_count[RZG2L_MAX_HW_CHANNELS];
 	u32 channel_enable_count[RZG2L_MAX_HW_CHANNELS];
+	struct rzg2l_gpt_cache hw_cache[RZG2L_MAX_HW_CHANNELS];
 };
 
 /* This represents a hardware configuration for one channel */
@@ -462,10 +474,8 @@ static int rzg2l_gpt_probe(struct platform_device *pdev)
 {
 	struct rzg2l_gpt_chip *rzg2l_gpt;
 	struct device *dev = &pdev->dev;
-	struct reset_control *rstc;
 	struct pwm_chip *chip;
 	unsigned long rate;
-	struct clk *clk;
 	int ret;
 
 	chip = devm_pwmchip_alloc(dev, RZG2L_MAX_PWM_CHANNELS, sizeof(*rzg2l_gpt));
@@ -479,27 +489,29 @@ static int rzg2l_gpt_probe(struct platform_device *pdev)
 
 	rzg2l_gpt->info = of_device_get_match_data(dev);
 
-	rstc = devm_reset_control_get_exclusive_deasserted(dev, NULL);
-	if (IS_ERR(rstc))
-		return dev_err_probe(dev, PTR_ERR(rstc), "Cannot deassert reset control\n");
+	rzg2l_gpt->rst = devm_reset_control_get_exclusive_deasserted(dev, NULL);
+	if (IS_ERR(rzg2l_gpt->rst))
+		return dev_err_probe(dev, PTR_ERR(rzg2l_gpt->rst),
+				     "Cannot deassert reset control\n");
 
-	rstc = devm_reset_control_get_optional_exclusive_deasserted(dev, "rst_s");
-	if (IS_ERR(rstc))
-		return dev_err_probe(dev, PTR_ERR(rstc), "Cannot deassert rst_s reset\n");
+	rzg2l_gpt->rst_s = devm_reset_control_get_optional_exclusive_deasserted(dev, "rst_s");
+	if (IS_ERR(rzg2l_gpt->rst_s))
+		return dev_err_probe(dev, PTR_ERR(rzg2l_gpt->rst_s),
+				     "Cannot deassert rst_s reset\n");
 
-	clk = devm_clk_get_optional_enabled(dev, "bus");
-	if (IS_ERR(clk))
-		return dev_err_probe(dev, PTR_ERR(clk), "Cannot get bus clock\n");
+	rzg2l_gpt->bus_clk = devm_clk_get_optional_enabled(dev, "bus");
+	if (IS_ERR(rzg2l_gpt->bus_clk))
+		return dev_err_probe(dev, PTR_ERR(rzg2l_gpt->bus_clk), "Cannot get bus clock\n");
 
-	clk = devm_clk_get_enabled(dev, NULL);
-	if (IS_ERR(clk))
-		return dev_err_probe(dev, PTR_ERR(clk), "Cannot get clock\n");
+	rzg2l_gpt->clk = devm_clk_get_enabled(dev, NULL);
+	if (IS_ERR(rzg2l_gpt->clk))
+		return dev_err_probe(dev, PTR_ERR(rzg2l_gpt->clk), "Cannot get clock\n");
 
-	ret = devm_clk_rate_exclusive_get(dev, clk);
+	ret = devm_clk_rate_exclusive_get(dev, rzg2l_gpt->clk);
 	if (ret)
 		return ret;
 
-	rate = clk_get_rate(clk);
+	rate = clk_get_rate(rzg2l_gpt->clk);
 	if (!rate)
 		return dev_err_probe(dev, -EINVAL, "The gpt clk rate is 0");
 
@@ -526,7 +538,92 @@ static int rzg2l_gpt_probe(struct platform_device *pdev)
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to add PWM chip\n");
 
+	platform_set_drvdata(pdev, chip);
+
 	return 0;
+}
+
+static int rzg2l_gpt_suspend(struct device *dev)
+{
+	struct pwm_chip *chip = dev_get_drvdata(dev);
+	struct rzg2l_gpt_chip *rzg2l_gpt = to_rzg2l_gpt_chip(chip);
+	unsigned int i;
+	int ret;
+
+	for (i = 0; i < RZG2L_MAX_HW_CHANNELS; i++) {
+		if (!rzg2l_gpt->channel_enable_count[i])
+			continue;
+
+		rzg2l_gpt->hw_cache[i].gtpr = rzg2l_gpt_read(rzg2l_gpt, RZG2L_GTPR(i));
+		rzg2l_gpt->hw_cache[i].gtccr[0] = rzg2l_gpt_read(rzg2l_gpt, RZG2L_GTCCR(i, 0));
+		rzg2l_gpt->hw_cache[i].gtccr[1] = rzg2l_gpt_read(rzg2l_gpt, RZG2L_GTCCR(i, 1));
+		rzg2l_gpt->hw_cache[i].gtcr = rzg2l_gpt_read(rzg2l_gpt, RZG2L_GTCR(i));
+		rzg2l_gpt->hw_cache[i].gtior = rzg2l_gpt_read(rzg2l_gpt, RZG2L_GTIOR(i));
+	}
+
+	clk_disable_unprepare(rzg2l_gpt->clk);
+	clk_disable_unprepare(rzg2l_gpt->bus_clk);
+	ret = reset_control_assert(rzg2l_gpt->rst_s);
+	if (ret)
+		goto fail_clk;
+
+	ret = reset_control_assert(rzg2l_gpt->rst);
+	if (ret)
+		goto fail_reset_s;
+
+	return 0;
+
+fail_reset_s:
+	reset_control_deassert(rzg2l_gpt->rst_s);
+fail_clk:
+	clk_prepare_enable(rzg2l_gpt->bus_clk);
+	clk_prepare_enable(rzg2l_gpt->clk);
+	return ret;
+}
+
+static int rzg2l_gpt_resume(struct device *dev)
+{
+	struct pwm_chip *chip = dev_get_drvdata(dev);
+	struct rzg2l_gpt_chip *rzg2l_gpt = to_rzg2l_gpt_chip(chip);
+	unsigned int i;
+	int ret;
+
+	ret = reset_control_deassert(rzg2l_gpt->rst);
+	if (ret)
+		return ret;
+
+	ret = reset_control_deassert(rzg2l_gpt->rst_s);
+	if (ret)
+		goto fail_reset;
+
+	ret = clk_prepare_enable(rzg2l_gpt->bus_clk);
+	if (ret)
+		goto fail_reset_all;
+
+	ret = clk_prepare_enable(rzg2l_gpt->clk);
+	if (ret)
+		goto fail_bus_clk;
+
+	for (i = 0; i < RZG2L_MAX_HW_CHANNELS; i++) {
+		if (!rzg2l_gpt->channel_enable_count[i])
+			continue;
+
+		rzg2l_gpt_write(rzg2l_gpt, RZG2L_GTPR(i), rzg2l_gpt->hw_cache[i].gtpr);
+		rzg2l_gpt_write(rzg2l_gpt, RZG2L_GTCCR(i, 0), rzg2l_gpt->hw_cache[i].gtccr[0]);
+		rzg2l_gpt_write(rzg2l_gpt, RZG2L_GTCCR(i, 1), rzg2l_gpt->hw_cache[i].gtccr[1]);
+		rzg2l_gpt_write(rzg2l_gpt, RZG2L_GTCR(i), rzg2l_gpt->hw_cache[i].gtcr);
+		rzg2l_gpt_write(rzg2l_gpt, RZG2L_GTIOR(i), rzg2l_gpt->hw_cache[i].gtior);
+	}
+
+	return 0;
+
+fail_bus_clk:
+	clk_disable_unprepare(rzg2l_gpt->bus_clk);
+fail_reset_all:
+	reset_control_assert(rzg2l_gpt->rst_s);
+fail_reset:
+	reset_control_assert(rzg2l_gpt->rst);
+	return ret;
 }
 
 static const struct rzg2l_gpt_info rzg3e_data = {
@@ -548,10 +645,13 @@ static const struct of_device_id rzg2l_gpt_of_table[] = {
 };
 MODULE_DEVICE_TABLE(of, rzg2l_gpt_of_table);
 
+static DEFINE_SIMPLE_DEV_PM_OPS(rzg2l_gpt_pm_ops, rzg2l_gpt_suspend, rzg2l_gpt_resume);
+
 static struct platform_driver rzg2l_gpt_driver = {
 	.driver = {
 		.name = "pwm-rzg2l-gpt",
 		.of_match_table = rzg2l_gpt_of_table,
+		.pm = pm_sleep_ptr(&rzg2l_gpt_pm_ops),
 	},
 	.probe = rzg2l_gpt_probe,
 };
