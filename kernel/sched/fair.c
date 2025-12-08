@@ -7636,20 +7636,17 @@ static int select_idle_cpu(struct task_struct *p, struct sched_domain *sd, bool 
 {
 	struct cpumask *cpus = this_cpu_cpumask_var_ptr(select_rq_mask);
 	int i, cpu, idle_cpu = -1, nr = INT_MAX;
-	struct sched_domain_shared *sd_share;
-
-	cpumask_and(cpus, sched_domain_span(sd), p->cpus_ptr);
 
 	if (sched_feat(SIS_UTIL)) {
-		sd_share = rcu_dereference(per_cpu(sd_llc_shared, target));
-		if (sd_share) {
-			/* because !--nr is the condition to stop scan */
-			nr = READ_ONCE(sd_share->nr_idle_scan) + 1;
-			/* overloaded LLC is unlikely to have idle cpu/core */
-			if (nr == 1)
-				return -1;
-		}
+		/* because !--nr is the condition to stop scan */
+		nr = READ_ONCE(sd->shared->nr_idle_scan) + 1;
+		/* overloaded LLC is unlikely to have idle cpu/core */
+		if (nr == 1)
+			return -1;
 	}
+
+	if (!cpumask_and(cpus, sched_domain_span(sd), p->cpus_ptr))
+		return -1;
 
 	if (static_branch_unlikely(&sched_cluster_active)) {
 		struct sched_group *sg = sd->groups;
