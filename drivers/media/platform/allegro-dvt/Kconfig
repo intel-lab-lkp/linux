@@ -2,4 +2,5 @@
 
 comment "Allegro DVT media platform drivers"
 
+source "drivers/media/platform/allegro-dvt/al300/Kconfig"
 source "drivers/media/platform/allegro-dvt/zynqmp/Kconfig"
