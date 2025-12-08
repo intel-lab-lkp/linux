@@ -3289,10 +3289,6 @@ int btrfs_qgroup_inherit(struct btrfs_trans_handle *trans, u64 srcid,
 	if (!btrfs_qgroup_enabled(fs_info))
 		return 0;
 
-	prealloc = kzalloc(sizeof(*prealloc), GFP_NOFS);
-	if (!prealloc)
-		return -ENOMEM;
-
 	/*
 	 * There are only two callers of this function.
 	 *
@@ -3386,6 +3382,12 @@ int btrfs_qgroup_inherit(struct btrfs_trans_handle *trans, u64 srcid,
 				goto out;
 			}
 		}
+	}
+
+	prealloc = kzalloc(sizeof(*prealloc), GFP_NOFS);
+	if (!prealloc) {
+		ret = -ENOMEM;
+		goto out;
 	}
 
 	spin_lock(&fs_info->qgroup_lock);
