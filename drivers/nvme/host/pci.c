@@ -3327,7 +3327,9 @@ static unsigned long nvme_pci_get_virt_boundary(struct nvme_ctrl *ctrl,
 {
 	if (!nvme_ctrl_sgl_supported(ctrl) || is_admin)
 		return NVME_CTRL_PAGE_SIZE - 1;
-	return 0;
+	else if (ctrl->sgls & NVME_CTRL_SGLS_BYTE_ALIGNED)
+		return 0;
+	return 3;
 }
 
 static const struct nvme_ctrl_ops nvme_pci_ctrl_ops = {
