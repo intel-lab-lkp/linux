@@ -44,8 +44,6 @@ extern struct resource intel_graphics_stolen_res;
  * This is all handled in the intel-gtt.ko module. i915.ko only
  * cares about the vga bit for the vga arbiter.
  */
-#define INTEL_GMCH_CTRL		0x52
-#define INTEL_GMCH_VGA_DISABLE  (1 << 1)
 #define SNB_GMCH_CTRL		0x50
 #define    SNB_GMCH_GGMS_SHIFT	8 /* GTT Graphics Memory Size */
 #define    SNB_GMCH_GGMS_MASK	0x3
@@ -79,6 +77,9 @@ extern struct resource intel_graphics_stolen_res;
 #define INTEL_GMCH_GMS_STOLEN_160M	(0xb << 4)
 #define INTEL_GMCH_GMS_STOLEN_224M	(0xc << 4)
 #define INTEL_GMCH_GMS_STOLEN_352M	(0xd << 4)
+
+/* valid for both I830_GMCH_CTRL and SNB_GMCH_CTRL */
+#define   INTEL_GMCH_VGA_DISABLE  (1 << 1)
 
 #define I830_DRB3		0x63
 #define I85X_DRB3		0x43
