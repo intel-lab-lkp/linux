@@ -738,7 +738,7 @@ intel_crt_load_detect(struct intel_crt *crt, enum pipe pipe)
 		 * border color for Color info.
 		 */
 		intel_crtc_wait_for_next_vblank(intel_crtc_for_pipe(display, pipe));
-		st00 = intel_vga_read(display, VGA_MIS_W, true);
+		st00 = intel_vga_read(display, VGA_IS0_R, true);
 		status = ((st00 & (1 << 4)) != 0) ?
 			connector_status_connected :
 			connector_status_disconnected;
@@ -786,7 +786,7 @@ intel_crt_load_detect(struct intel_crt *crt, enum pipe pipe)
 		do {
 			count++;
 			/* Read the ST00 VGA status register */
-			st00 = intel_vga_read(display, VGA_MIS_W, true);
+			st00 = intel_vga_read(display, VGA_IS0_R, true);
 			if (st00 & (1 << 4))
 				detect++;
 		} while ((intel_de_read(display, PIPEDSL(display, pipe)) == dsl));
