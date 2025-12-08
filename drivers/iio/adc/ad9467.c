@@ -12,7 +12,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/device.h>
-#include <linux/kernel.h>
+#include <linux/array_size.h>
 #include <linux/slab.h>
 #include <linux/spi/spi.h>
 #include <linux/seq_file.h>
