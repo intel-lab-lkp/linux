@@ -39,11 +39,11 @@ bool i915_gpu_turbo_disable(void);
 extern struct resource intel_graphics_stolen_res;
 
 /*
- * The Bridge device's PCI config space has information about the
- * fb aperture size and the amount of pre-reserved memory.
- * This is all handled in the intel-gtt.ko module. i915.ko only
- * cares about the vga bit for the vga arbiter.
+ * The bridge device's (device 0) PCI config space has information
+ * about the fb aperture size and the amount of pre-reserved memory.
  */
+
+/* device 2 has a read-only mirror */
 #define SNB_GMCH_CTRL		0x50
 #define   SNB_GMCH_GGMS_SHIFT	8 /* GTT Graphics Memory Size */
 #define   SNB_GMCH_GGMS_MASK	0x3
@@ -54,6 +54,7 @@ extern struct resource intel_graphics_stolen_res;
 #define   BDW_GMCH_GMS_SHIFT	8
 #define   BDW_GMCH_GMS_MASK	0xff
 
+/* device 2 has a read-only mirror from i85x/i865 onwards */
 #define I830_GMCH_CTRL			0x52
 #define   I830_GMCH_GMS_MASK		(0x7 << 4)
 #define   I830_GMCH_GMS_LOCAL		(0x1 << 4)
