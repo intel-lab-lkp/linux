@@ -270,7 +270,14 @@ static bool lru_gen_test_recent(void *shadow, struct lruvec **lruvec,
 	struct pglist_data *pgdat;
 
 	unpack_shadow(shadow, &memcg_id, &pgdat, token, workingset);
-
+	/*
+	 * If pgdat is NULL, the shadow entry contains an invalid node ID.
+	 * Set lruvec to NULL so caller can detect and skip processing.
+	 */
+	if (unlikely(!pgdat)) {
+		*lruvec = NULL;
+		return false;
+	}
 	memcg = mem_cgroup_from_id(memcg_id);
 	*lruvec = mem_cgroup_lruvec(memcg, pgdat);
 
@@ -294,9 +301,8 @@ static void lru_gen_refault(struct folio *folio, void *shadow)
 	rcu_read_lock();
 
 	recent = lru_gen_test_recent(shadow, &lruvec, &token, &workingset);
-	if (lruvec != folio_lruvec(folio))
+	if (!lruvec || lruvec != folio_lruvec(folio))
 		goto unlock;
-
 	mod_lruvec_state(lruvec, WORKINGSET_REFAULT_BASE + type, delta);
 
 	if (!recent)
