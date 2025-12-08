@@ -193,7 +193,7 @@ noinline static void real_init(void)
 			BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
 		};
 		struct sock_fprog prog = {
-			.len = sizeof(filter) / sizeof(filter[0]),
+			.len = ARRAY_SIZE(filter),
 			.filter = filter,
 		};
 
