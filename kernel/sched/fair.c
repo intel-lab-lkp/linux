@@ -12559,7 +12559,9 @@ static void set_cpu_sd_state_busy(int cpu)
 	if (!sd || !sd->nohz_idle)
 		return;
 
-	sd->nohz_idle = 0;
+	if (!xchg(&sd->nohz_idle, 0))
+		return;
+
 	atomic_inc(&sd->shared->nr_busy_cpus);
 }
 
@@ -12587,7 +12589,9 @@ static void set_cpu_sd_state_idle(int cpu)
 	if (!sd || sd->nohz_idle)
 		return;
 
-	sd->nohz_idle = 1;
+	if (xchg(&sd->nohz_idle, 1))
+		return;
+
 	atomic_dec(&sd->shared->nr_busy_cpus);
 }
 
