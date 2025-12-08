@@ -484,6 +484,12 @@ static int seg6_input_core(struct net *net, struct sock *sk,
 	 * now and use it later as a comparison.
 	 */
 	lwtst = orig_dst->lwtstate;
+	if (orig_dst->dev) {
+		rcu_read_lock();
+		skb->dev = l3mdev_master_dev_rcu(orig_dst->dev) ?:
+			dev_net(skb->dev)->loopback_dev;
+		rcu_read_unlock();
+	}
 
 	slwt = seg6_lwt_lwtunnel(lwtst);
 

@@ -287,7 +287,7 @@ setup_vpn_config()
 	# host hssrc and destined to the access router rtsrc.
 	ip -netns ${rtsrc_name} -4 route add ${IPv4_HS_NETWORK}.${hsdst}/32 vrf vrf-${tid} \
 		encap seg6 mode encap segs ${vpn_sid} dev veth0
-	ip -netns ${rtsrc_name} -6 route add ${vpn_sid}/128 vrf vrf-${tid} \
+	ip -netns ${rtsrc_name} -6 route add ${vpn_sid}/128 \
 		via fd00::${rtdst} dev veth0
 
 	# set the decap route for decapsulating packets which arrive from
