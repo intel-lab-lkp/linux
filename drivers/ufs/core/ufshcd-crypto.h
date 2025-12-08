@@ -16,7 +16,12 @@
 static inline void ufshcd_prepare_lrbp_crypto(struct request *rq,
 					      struct ufshcd_lrb *lrbp)
 {
-	if (!rq || !rq->crypt_keyslot) {
+	/*
+	 * Do not use the crypto settings if the SCSI error handler has replaced
+	 * the SCSI command
+	 */
+	if (!rq || !rq->crypt_keyslot ||
+	    unlikely(lrbp->cmd->submitter == SUBMITTED_BY_SCSI_ERROR_HANDLER)) {
 		lrbp->crypto_key_slot = -1;
 		return;
 	}
