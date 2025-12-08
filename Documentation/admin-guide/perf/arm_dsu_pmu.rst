@@ -16,7 +16,7 @@ registers. There is no way for the driver to determine if the other events
 are available or not. Hence the driver exposes only those events advertised
 by the DSU, in "events" directory under::
 
-  /sys/bus/event_sources/devices/arm_dsu_<N>/
+  /sys/bus/event_source/devices/arm_dsu_<N>/
 
 The user should refer to the TRM of the product to figure out the supported events
 and use the raw event code for the unlisted events.
