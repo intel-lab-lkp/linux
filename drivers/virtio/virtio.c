@@ -61,12 +61,41 @@ static ssize_t features_show(struct device *_d,
 }
 static DEVICE_ATTR_RO(features);
 
+static ssize_t driver_override_store(struct device *_d,
+				     struct device_attribute *attr,
+				     const char *buf, size_t count)
+{
+	struct virtio_device *dev = dev_to_virtio(_d);
+	int ret;
+
+	ret = driver_set_override(_d, &dev->driver_override, buf, count);
+	if (ret)
+		return ret;
+
+	return count;
+}
+
+static ssize_t driver_override_show(struct device *_d,
+				    struct device_attribute *attr, char *buf)
+{
+	struct virtio_device *dev = dev_to_virtio(_d);
+	ssize_t len;
+
+	device_lock(_d);
+	len = sysfs_emit(buf, "%s\n", dev->driver_override);
+	device_unlock(_d);
+
+	return len;
+}
+static DEVICE_ATTR_RW(driver_override);
+
 static struct attribute *virtio_dev_attrs[] = {
 	&dev_attr_device.attr,
 	&dev_attr_vendor.attr,
 	&dev_attr_status.attr,
 	&dev_attr_modalias.attr,
 	&dev_attr_features.attr,
+	&dev_attr_driver_override.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(virtio_dev);
@@ -87,6 +116,10 @@ static int virtio_dev_match(struct device *_dv, const struct device_driver *_dr)
 	unsigned int i;
 	struct virtio_device *dev = dev_to_virtio(_dv);
 	const struct virtio_device_id *ids;
+
+	/* Check override first, and if set, only use the named driver */
+	if (dev->driver_override)
+		return !strcmp(dev->driver_override, _dr->name);
 
 	ids = drv_to_virtio(_dr)->id_table;
 	for (i = 0; ids[i].device; i++)
@@ -582,6 +615,7 @@ void unregister_virtio_device(struct virtio_device *dev)
 {
 	int index = dev->index; /* save for after device release */
 
+	kfree(dev->driver_override);
 	device_unregister(&dev->dev);
 	virtio_debug_device_exit(dev);
 	ida_free(&virtio_index_ida, index);

@@ -147,6 +147,9 @@ struct virtio_admin_cmd {
  * @config_lock: protects configuration change reporting
  * @vqs_list_lock: protects @vqs.
  * @dev: underlying device.
+ * @driver_override: driver name to force a match; do not set directly,
+ *                   because core frees it; use driver_set_override() to
+ *                   set or clear it.
  * @id: the device type identification (used to match it with a driver).
  * @config: the configuration ops for this device.
  * @vringh_config: configuration ops for host vrings.
@@ -167,6 +170,7 @@ struct virtio_device {
 	spinlock_t config_lock;
 	spinlock_t vqs_list_lock;
 	struct device dev;
+	const char *driver_override;
 	struct virtio_device_id id;
 	const struct virtio_config_ops *config;
 	const struct vringh_config_ops *vringh_config;
