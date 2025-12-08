@@ -509,8 +509,7 @@ int nfp_eth_set_configured(struct nfp_cpp *cpp, unsigned int idx, bool configed)
 
 static int
 nfp_eth_set_bit_config(struct nfp_nsp *nsp, unsigned int raw_idx,
-		       const u64 mask, const unsigned int shift,
-		       u64 val, const u64 ctrl_bit)
+		       const u64 mask, u64 shifted_val, const u64 ctrl_bit)
 {
 	union eth_table_entry *entries = nfp_nsp_config_entries(nsp);
 	unsigned int idx = nfp_nsp_config_idx(nsp);
@@ -527,11 +526,11 @@ nfp_eth_set_bit_config(struct nfp_nsp *nsp, unsigned int raw_idx,
 
 	/* Check if we are already in requested state */
 	reg = le64_to_cpu(entries[idx].raw[raw_idx]);
-	if (val == (reg & mask) >> shift)
+	if (shifted_val == (reg & mask))
 		return 0;
 
 	reg &= ~mask;
-	reg |= (val << shift) & mask;
+	reg |= shifted_val;
 	entries[idx].raw[raw_idx] = cpu_to_le64(reg);
 
 	entries[idx].control |= cpu_to_le64(ctrl_bit);
@@ -571,12 +570,9 @@ int nfp_eth_set_idmode(struct nfp_cpp *cpp, unsigned int idx, bool state)
 	return nfp_eth_config_commit_end(nsp);
 }
 
-#define NFP_ETH_SET_BIT_CONFIG(nsp, raw_idx, mask, val, ctrl_bit)	\
-	({								\
-		__BF_FIELD_CHECK(mask, 0ULL, val, "NFP_ETH_SET_BIT_CONFIG: "); \
-		nfp_eth_set_bit_config(nsp, raw_idx, mask, __bf_shf(mask), \
-				       val, ctrl_bit);			\
-	})
+#define NFP_ETH_SET_BIT_CONFIG(nsp, raw_idx, mask, val, ctrl_bit)	  \
+	nfp_eth_set_bit_config(nsp, raw_idx, mask, FIELD_PREP(mask, val), \
+			       ctrl_bit)
 
 /**
  * __nfp_eth_set_aneg() - set PHY autonegotiation control bit
