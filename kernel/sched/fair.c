@@ -12533,7 +12533,7 @@ static void nohz_balancer_kick(struct rq *rq)
 		 * the others are - so just get a NOHZ balance going if it looks
 		 * like this LLC domain has tasks we could move.
 		 */
-		nr_busy = atomic_read(&sds->nr_busy_cpus);
+		nr_busy = per_cpu(sd_llc_size, cpu) - atomic_read(&sds->nr_idle_cpus);
 		if (nr_busy > 1) {
 			flags = NOHZ_STATS_KICK | NOHZ_BALANCE_KICK;
 			goto unlock;
@@ -12562,7 +12562,7 @@ static void set_cpu_sd_state_busy(int cpu)
 	if (!xchg(&sd->nohz_idle, 0))
 		return;
 
-	atomic_inc(&sd->shared->nr_busy_cpus);
+	atomic_dec(&sd->shared->nr_idle_cpus);
 }
 
 void nohz_balance_exit_idle(struct rq *rq)
@@ -12592,7 +12592,7 @@ static void set_cpu_sd_state_idle(int cpu)
 	if (xchg(&sd->nohz_idle, 1))
 		return;
 
-	atomic_dec(&sd->shared->nr_busy_cpus);
+	atomic_inc(&sd->shared->nr_idle_cpus);
 }
 
 static void cpu_sd_exit_nohz_balance(struct rq *rq)
@@ -13075,7 +13075,7 @@ static void rq_online_fair(struct rq *rq)
 
 	update_runtime_enabled(rq);
 
-	/* Fixup nr_busy_cpus and nohz stats. */
+	/* Fixup nr_idle_cpus and nohz stats. */
 	cpu_sd_reenter_nohz_balance(rq);
 }
 
@@ -13089,7 +13089,7 @@ static void rq_offline_fair(struct rq *rq)
 	/* Ensure that we remove rq contribution to group share: */
 	clear_tg_offline_cfs_rqs(rq);
 
-	/* Fixup nr_busy_cpus and nohz stats. */
+	/* Fixup nr_idle_cpus and nohz stats. */
 	cpu_sd_exit_nohz_balance(rq);
 }
 

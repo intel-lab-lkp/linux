@@ -65,7 +65,9 @@ struct sched_group;
 
 struct sched_domain_shared {
 	atomic_t	ref;
-	atomic_t	nr_busy_cpus;
+#ifdef CONFIG_NO_HZ_COMMON
+	atomic_t	nr_idle_cpus;
+#endif
 	int		has_idle_cores;
 	int		nr_idle_scan;
 };

@@ -2656,7 +2656,6 @@ build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *att
 				int llc_id = cpumask_first(sched_domain_span(sd));
 
 				sd->shared = *per_cpu_ptr(d.sds, llc_id);
-				atomic_set(&sd->shared->nr_busy_cpus, sd->span_weight);
 				atomic_inc(&sd->shared->ref);
 			}
 
