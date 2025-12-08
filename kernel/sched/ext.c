@@ -4171,7 +4171,7 @@ static void scx_dump_task(struct seq_buf *s, struct scx_dump_ctx *dctx,
 
 static void scx_dump_state(struct scx_exit_info *ei, size_t dump_len)
 {
-	static DEFINE_SPINLOCK(dump_lock);
+	static DEFINE_RAW_SPINLOCK(dump_lock);
 	static const char trunc_marker[] = "\n\n~~~~ TRUNCATED ~~~~\n";
 	struct scx_sched *sch = scx_root;
 	struct scx_dump_ctx dctx = {
@@ -4187,7 +4187,7 @@ static void scx_dump_state(struct scx_exit_info *ei, size_t dump_len)
 	char *buf;
 	int cpu;
 
-	spin_lock_irqsave(&dump_lock, flags);
+	raw_spin_lock_irqsave(&dump_lock, flags);
 
 	seq_buf_init(&s, ei->dump, dump_len);
 
@@ -4311,7 +4311,7 @@ static void scx_dump_state(struct scx_exit_info *ei, size_t dump_len)
 		memcpy(ei->dump + dump_len - sizeof(trunc_marker),
 		       trunc_marker, sizeof(trunc_marker));
 
-	spin_unlock_irqrestore(&dump_lock, flags);
+	raw_spin_unlock_irqrestore(&dump_lock, flags);
 }
 
 static void scx_error_irq_workfn(struct irq_work *irq_work)
