@@ -58,6 +58,12 @@ static bool has_vga_pipe_sel(struct intel_display *display)
 	return DISPLAY_VER(display) < 7;
 }
 
+static bool has_vga_mmio_access(struct intel_display *display)
+{
+	/* WaEnableVGAAccessThroughIOPort:ctg+ */
+	return DISPLAY_VER(display) < 5 && !display->platform.g4x;
+}
+
 static bool intel_pci_has_vga_io_decode(struct pci_dev *pdev)
 {
 	u16 cmd = 0;
@@ -106,11 +112,12 @@ static bool intel_pci_bridge_set_vga(struct pci_dev *pdev, bool enable)
 	return old & PCI_BRIDGE_CTL_VGA;
 }
 
-static bool intel_vga_get(struct intel_display *display)
+static bool intel_vga_get(struct intel_display *display, bool mmio)
 {
 	struct pci_dev *pdev = to_pci_dev(display->drm->dev);
 
-	/* WaEnableVGAAccessThroughIOPort:ctg+ */
+	if (mmio)
+		return false;
 
 	/*
 	 * Bypass the VGA arbiter on the iGPU and just enable
@@ -129,9 +136,12 @@ static bool intel_vga_get(struct intel_display *display)
 	return intel_pci_set_io_decode(pdev, true);
 }
 
-static void intel_vga_put(struct intel_display *display, bool io_decode)
+static void intel_vga_put(struct intel_display *display, bool io_decode, bool mmio)
 {
 	struct pci_dev *pdev = to_pci_dev(display->drm->dev);
+
+	if (mmio)
+		return;
 
 	/* see intel_vga_get() */
 	intel_pci_set_io_decode(pdev, io_decode);
@@ -161,6 +171,7 @@ void intel_vga_disable(struct intel_display *display)
 {
 	struct pci_dev *pdev = to_pci_dev(display->drm->dev);
 	i915_reg_t vga_reg = intel_vga_cntrl_reg(display);
+	bool mmio = has_vga_mmio_access(display);
 	bool io_decode;
 	u8 msr, sr1;
 	u32 tmp;
@@ -205,16 +216,16 @@ void intel_vga_disable(struct intel_display *display)
 			goto reset_vgacntr;
 	}
 
-	io_decode = intel_vga_get(display);
+	io_decode = intel_vga_get(display, mmio);
 
-	drm_WARN_ON(display->drm, !intel_pci_has_vga_io_decode(pdev));
+	drm_WARN_ON(display->drm, !mmio && !intel_pci_has_vga_io_decode(pdev));
 
-	intel_vga_write(display, VGA_SEQ_I, 0x01, false);
-	sr1 = intel_vga_read(display, VGA_SEQ_D, false);
+	intel_vga_write(display, VGA_SEQ_I, 0x01, mmio);
+	sr1 = intel_vga_read(display, VGA_SEQ_D, mmio);
 	sr1 |= VGA_SR01_SCREEN_OFF;
-	intel_vga_write(display, VGA_SEQ_D, sr1, false);
+	intel_vga_write(display, VGA_SEQ_D, sr1, mmio);
 
-	msr = intel_vga_read(display, VGA_MIS_R, false);
+	msr = intel_vga_read(display, VGA_MIS_R, mmio);
 	/*
 	 * Always disable VGA memory decode for iGPU so that
 	 * intel_vga_set_decode() doesn't need to access VGA registers.
@@ -234,9 +245,9 @@ void intel_vga_disable(struct intel_display *display)
 	 * RMbus NoClaim errors.
 	 */
 	msr &= ~VGA_MIS_COLOR;
-	intel_vga_write(display, VGA_MIS_W, msr, false);
+	intel_vga_write(display, VGA_MIS_W, msr, mmio);
 
-	intel_vga_put(display, io_decode);
+	intel_vga_put(display, io_decode, mmio);
 
 	/*
 	 * Inform the arbiter about VGA memory decode being disabled so
