@@ -820,12 +820,10 @@ static int atmel_aes_dma_transfer_start(struct atmel_aes_dev *dd,
 		return -EINVAL;
 	}
 
-	err = dmaengine_slave_config(dma->chan, &config);
-	if (err)
-		return err;
-
-	desc = dmaengine_prep_slave_sg(dma->chan, dma->sg, dma->sg_len, dir,
-				       DMA_PREP_INTERRUPT | DMA_CTRL_ACK);
+	desc = dmaengine_prep_slave_sg_config(dma->chan, dma->sg, dma->sg_len,
+					      dir,
+					      DMA_PREP_INTERRUPT | DMA_CTRL_ACK,
+					      &config);
 	if (!desc)
 		return -ENOMEM;
 
