@@ -4274,7 +4274,7 @@ unsigned int min_order_for_split(struct folio *folio)
 
 int split_folio_to_list(struct folio *folio, struct list_head *list)
 {
-	return split_huge_page_to_list_to_order(&folio->page, list, 0);
+	return folio_split_uniform(folio, 0, list);
 }
 
 /*

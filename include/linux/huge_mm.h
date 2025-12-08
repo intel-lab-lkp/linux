@@ -388,7 +388,7 @@ static inline int split_huge_page_to_list_to_order(struct page *page, struct lis
 
 static inline int split_folio_to_order(struct folio *folio, int new_order)
 {
-	return split_huge_page_to_list_to_order(&folio->page, NULL, new_order);
+	return folio_split_uniform(folio, new_order, NULL);
 }
 
 /**
