@@ -200,8 +200,7 @@
 		__auto_type _val = 1 ? (val) : _mask;					\
 		typecheck_pointer(_reg_p);						\
 		__BF_FIELD_CHECK(_mask, *_reg_p, _val, "FIELD_MODIFY: ");		\
-		*_reg_p &= ~_mask;							\
-		*_reg_p |= ((_val << __bf_shf(_mask)) & _mask);				\
+		*_reg_p = (*_reg_p & ~_mask) | ((_val << __bf_shf(_mask)) & _mask);	\
 	})
 
 extern void __compiletime_error("value doesn't fit into mask")
