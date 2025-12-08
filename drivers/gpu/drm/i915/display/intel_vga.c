@@ -63,7 +63,6 @@ void intel_vga_disable(struct intel_display *display)
 {
 	struct pci_dev *pdev = to_pci_dev(display->drm->dev);
 	i915_reg_t vga_reg = intel_vga_cntrl_reg(display);
-	enum pipe pipe;
 	u8 msr, sr1;
 	u32 tmp;
 
@@ -79,18 +78,33 @@ void intel_vga_disable(struct intel_display *display)
 	}
 
 	tmp = intel_de_read(display, vga_reg);
-	if (tmp & VGA_DISP_DISABLE)
-		return;
 
-	if (display->platform.cherryview)
-		pipe = REG_FIELD_GET(VGA_PIPE_SEL_MASK_CHV, tmp);
-	else if (has_vga_pipe_sel(display))
-		pipe = REG_FIELD_GET(VGA_PIPE_SEL_MASK, tmp);
-	else
-		pipe = PIPE_A;
+	if ((tmp & VGA_DISP_DISABLE) == 0) {
+		enum pipe pipe;
 
-	drm_dbg_kms(display->drm, "Disabling VGA plane on pipe %c\n",
-		    pipe_name(pipe));
+		if (display->platform.cherryview)
+			pipe = REG_FIELD_GET(VGA_PIPE_SEL_MASK_CHV, tmp);
+		else if (has_vga_pipe_sel(display))
+			pipe = REG_FIELD_GET(VGA_PIPE_SEL_MASK, tmp);
+		else
+			pipe = PIPE_A;
+
+		drm_dbg_kms(display->drm, "Disabling VGA plane on pipe %c\n",
+			    pipe_name(pipe));
+	} else {
+		drm_dbg_kms(display->drm, "VGA plane is disabled\n");
+
+		/*
+		 * Unfortunately at least some BIOSes (eg. HSW Lenovo
+		 * ThinkCentre E73) set up the VGA registers even when
+		 * in UEFI mode with the VGA plane disabled. So we need to
+		 * always clean up the mess for iGPUs. For discrete GPUs we
+		 * don't really care about the state of the VGA registers
+		 * since all VGA accesses can be blocked via the bridge.
+		 */
+		if (display->platform.dgfx)
+			goto reset_vgacntr;
+	}
 
 	/* WaEnableVGAAccessThroughIOPort:ctg,elk,ilk,snb,ivb,vlv,hsw */
 	vga_get_uninterruptible(pdev, VGA_RSRC_LEGACY_IO);
