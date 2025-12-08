@@ -76,7 +76,7 @@ static int airoha_trng_irq_unmask(struct airoha_trng *trng)
 static int airoha_trng_init(struct hwrng *rng)
 {
 	struct airoha_trng *trng = container_of(rng, struct airoha_trng, rng);
-	int ret;
+	unsigned long ret;
 	u32 val;
 
 	val = readl(trng->base + TRNG_NS_SEK_AND_DAT_EN);
@@ -88,7 +88,7 @@ static int airoha_trng_init(struct hwrng *rng)
 	writel(0, trng->base + TRNG_HEALTH_TEST_SW_RST);
 
 	ret = wait_for_completion_timeout(&trng->rng_op_done, BUSY_LOOP_TIMEOUT);
-	if (ret <= 0) {
+	if (ret == 0) {
 		dev_err(trng->dev, "Timeout waiting for Health Check\n");
 		airoha_trng_irq_mask(trng);
 		return -ENODEV;
