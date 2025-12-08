@@ -186,7 +186,7 @@ out_remove_dev_pasid:
 	return ret;
 }
 
-static const struct iommu_domain_ops intel_nested_domain_ops = {
+const struct iommu_domain_ops intel_nested_domain_ops = {
 	.attach_dev		= intel_nested_attach_dev,
 	.set_dev_pasid		= intel_nested_set_dev_pasid,
 	.free			= intel_nested_domain_free,

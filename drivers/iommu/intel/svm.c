@@ -195,7 +195,7 @@ static void intel_svm_domain_free(struct iommu_domain *domain)
 	mmu_notifier_put(&dmar_domain->notifier);
 }
 
-static const struct iommu_domain_ops intel_svm_domain_ops = {
+const struct iommu_domain_ops intel_svm_domain_ops = {
 	.set_dev_pasid		= intel_svm_set_dev_pasid,
 	.free			= intel_svm_domain_free
 };
