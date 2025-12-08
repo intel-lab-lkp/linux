@@ -125,7 +125,7 @@ static void usage(void)
 		"-n|--numa              Show NUMA information\n"
 		"-N|--lines=K           Show the first K slabs\n"
 		"-o|--ops               Show kmem_cache_ops\n"
-		"-P|--partial           Sort by number of partial slabs\n"
+		"-p|--partial           Sort by number of partial slabs\n"
 		"-r|--report            Detailed report on single slabs\n"
 		"-s|--shrink            Shrink slabs\n"
 		"-S|--Size              Sort by size\n"
@@ -1427,7 +1427,7 @@ int main(int argc, char *argv[])
 
 	page_size = getpagesize();
 
-	while ((c = getopt_long(argc, argv, "aABd::DefhilLnN:oPrsStTUvXz1",
+	while ((c = getopt_long(argc, argv, "aABd::DefhilLnN:oprsStTUvXz1",
 						opts, NULL)) != -1)
 		switch (c) {
 		case 'a':
@@ -1481,7 +1481,7 @@ int main(int argc, char *argv[])
 		case 'r':
 			show_report = 1;
 			break;
-		case 'P':
+		case 'p':
 			sort_partial = 1;
 			break;
 		case 's':
