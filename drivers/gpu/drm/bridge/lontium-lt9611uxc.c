@@ -555,6 +555,7 @@ static int lt9611uxc_audio_init(struct device *dev, struct lt9611uxc *lt9611uxc)
 	struct hdmi_codec_pdata codec_data = {
 		.ops = &lt9611uxc_codec_ops,
 		.max_i2s_channels = 2,
+		.no_i2s_capture = 1,
 		.i2s = 1,
 		.data = lt9611uxc,
 	};
