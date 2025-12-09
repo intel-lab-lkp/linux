@@ -349,6 +349,10 @@ static void lnl_alpm_configure(struct intel_dp *intel_dp,
 
 	alpm_ctl |= ALPM_CTL_ALPM_ENTRY_CHECK(crtc_state->alpm_state.check_entry_lines);
 
+	if (intel_dc3co_allowed(display)) {
+		alpm_ctl |= (PR_ALPM_CTL_USE_DC3CO_IDLE_PROTOCOL);
+		intel_dc3co_source_set(display, DC3CO_SOURCE_ALPM);
+	}
 	intel_de_write(display, ALPM_CTL(display, cpu_transcoder), alpm_ctl);
 	mutex_unlock(&intel_dp->alpm.lock);
 }
