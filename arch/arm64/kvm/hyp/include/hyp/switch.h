@@ -311,7 +311,7 @@ static inline void __activate_traps_common(struct kvm_vcpu *vcpu)
 	 * counter, which could make a PMXEVCNTR_EL0 access UNDEF at
 	 * EL1 instead of being trapped to EL2.
 	 */
-	if (system_supports_pmuv3()) {
+	if (system_supports_pmuv3() && !kvm_vcpu_pmu_is_partitioned(vcpu)) {
 		write_sysreg(0, pmselr_el0);
 
 		ctxt_sys_reg(hctxt, PMUSERENR_EL0) = read_sysreg(pmuserenr_el0);
@@ -340,7 +340,7 @@ static inline void __deactivate_traps_common(struct kvm_vcpu *vcpu)
 	struct kvm_cpu_context *hctxt = host_data_ptr(host_ctxt);
 
 	write_sysreg(0, hstr_el2);
-	if (system_supports_pmuv3()) {
+	if (system_supports_pmuv3() && !kvm_vcpu_pmu_is_partitioned(vcpu)) {
 		write_sysreg(ctxt_sys_reg(hctxt, PMUSERENR_EL0), pmuserenr_el0);
 		vcpu_clear_flag(vcpu, PMUSERENR_ON_CPU);
 	}
