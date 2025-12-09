@@ -20,6 +20,7 @@
 #include <linux/irqbypass.h>
 #include <linux/sched/stat.h>
 #include <linux/psci.h>
+#include <linux/perf/arm_pmu.h>
 #include <trace/events/kvm.h>
 
 #define CREATE_TRACE_POINTS
@@ -37,6 +38,7 @@
 #include <asm/kvm_emulate.h>
 #include <asm/kvm_mmu.h>
 #include <asm/kvm_nested.h>
+#include <asm/kvm_pmu.h>
 #include <asm/kvm_pkvm.h>
 #include <asm/kvm_pmu.h>
 #include <asm/kvm_ptrauth.h>
@@ -131,6 +133,16 @@ int kvm_vm_ioctl_enable_cap(struct kvm *kvm,
 			set_bit(KVM_ARCH_FLAG_WRITABLE_IMP_ID_REGS, &kvm->arch.flags);
 		}
 		mutex_unlock(&kvm->lock);
+		break;
+	case KVM_CAP_ARM_PARTITION_PMU:
+		if (kvm->created_vcpus) {
+			r = -EBUSY;
+		} else if (!kvm_pmu_partition_ready()) {
+			r = -EPERM;
+		} else {
+			r = 0;
+			kvm_pmu_partition_enable(kvm, cap->args[0]);
+		}
 		break;
 	default:
 		break;
@@ -387,6 +399,9 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 		break;
 	case KVM_CAP_ARM_PMU_V3:
 		r = kvm_supports_guest_pmuv3();
+		break;
+	case KVM_CAP_ARM_PARTITION_PMU:
+		r = kvm_pmu_partition_ready();
 		break;
 	case KVM_CAP_ARM_INJECT_SERROR_ESR:
 		r = cpus_have_final_cap(ARM64_HAS_RAS_EXTN);

@@ -8703,6 +8703,30 @@ This capability indicate to the userspace whether a PFNMAP memory region
 can be safely mapped as cacheable. This relies on the presence of
 force write back (FWB) feature support on the hardware.
 
+
+7.245 KVM_CAP_ARM_PARTITION_PMU
+-------------------------------------
+
+:Architectures: arm64
+:Target: VM
+:Parameters: arg[0] is a boolean that enables or disables the capability
+:Returns: 0 on success
+	  -EPERM if host doesn't support
+	  -EBUSY if vPMU was already created
+
+This API controls the PMU implementation used for VMs. The capability
+is only available if the host PMUv3 driver was configured for
+partitioning via the module parameter
+``arm-pmuv3.reserved_guest_counters=[0-$NR_COUNTERS]``. When enabled,
+VMs are configured to have direct hardware access to the most
+frequently used registers for the counters configured by the
+aforementioned module parameters, bypassing the KVM traps in the
+standard emulated PMU implementation and reducing overhead of any
+guest software that uses PMU capabilities such as ``perf``.
+
+If the host driver was configured for partitioning but the partitioned
+PMU is disabled through this interface, the VM will use the legacy PMU
+
 8. Other capabilities.
 ======================
 
