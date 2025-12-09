@@ -841,16 +841,16 @@ static void smb311_posix_info_to_fattr(struct cifs_fattr *fattr,
 	memset(fattr, 0, sizeof(*fattr));
 
 	/* no fattr->flags to set */
-	fattr->cf_cifsattrs = le32_to_cpu(info->DosAttributes);
-	fattr->cf_uniqueid = le64_to_cpu(info->Inode);
+	fattr->cf_cifsattrs = le32_to_cpu(info->fpinfo.DosAttributes);
+	fattr->cf_uniqueid = le64_to_cpu(info->fpinfo.Inode);
 
-	if (info->LastAccessTime)
-		fattr->cf_atime = cifs_NTtimeToUnix(info->LastAccessTime);
+	if (info->fpinfo.LastAccessTime)
+		fattr->cf_atime = cifs_NTtimeToUnix(info->fpinfo.LastAccessTime);
 	else
 		ktime_get_coarse_real_ts64(&fattr->cf_atime);
 
-	fattr->cf_ctime = cifs_NTtimeToUnix(info->ChangeTime);
-	fattr->cf_mtime = cifs_NTtimeToUnix(info->LastWriteTime);
+	fattr->cf_ctime = cifs_NTtimeToUnix(info->fpinfo.ChangeTime);
+	fattr->cf_mtime = cifs_NTtimeToUnix(info->fpinfo.LastWriteTime);
 
 	if (data->adjust_tz) {
 		fattr->cf_ctime.tv_sec += tcon->ses->server->timeAdj;
@@ -861,11 +861,11 @@ static void smb311_posix_info_to_fattr(struct cifs_fattr *fattr,
 	 * The srv fs device id is overridden on network mount so setting
 	 * @fattr->cf_rdev isn't needed here.
 	 */
-	fattr->cf_eof = le64_to_cpu(info->EndOfFile);
-	fattr->cf_bytes = le64_to_cpu(info->AllocationSize);
-	fattr->cf_createtime = le64_to_cpu(info->CreationTime);
-	fattr->cf_nlink = le32_to_cpu(info->HardLinks);
-	fattr->cf_mode = wire_mode_to_posix(le32_to_cpu(info->Mode),
+	fattr->cf_eof = le64_to_cpu(info->fpinfo.EndOfFile);
+	fattr->cf_bytes = le64_to_cpu(info->fpinfo.AllocationSize);
+	fattr->cf_createtime = le64_to_cpu(info->fpinfo.CreationTime);
+	fattr->cf_nlink = le32_to_cpu(info->fpinfo.HardLinks);
+	fattr->cf_mode = wire_mode_to_posix(le32_to_cpu(info->fpinfo.Mode),
 					    fattr->cf_cifsattrs & ATTR_DIRECTORY);
 
 	if (cifs_open_data_reparse(data) &&

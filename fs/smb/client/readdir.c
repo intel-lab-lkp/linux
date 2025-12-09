@@ -247,22 +247,22 @@ cifs_posix_to_fattr(struct cifs_fattr *fattr, struct smb2_posix_info *info,
 	posix_info_parse(info, NULL, &parsed);
 
 	memset(fattr, 0, sizeof(*fattr));
-	fattr->cf_uniqueid = le64_to_cpu(info->Inode);
-	fattr->cf_bytes = le64_to_cpu(info->AllocationSize);
-	fattr->cf_eof = le64_to_cpu(info->EndOfFile);
+	fattr->cf_uniqueid = le64_to_cpu(info->fpinfo.Inode);
+	fattr->cf_bytes = le64_to_cpu(info->fpinfo.AllocationSize);
+	fattr->cf_eof = le64_to_cpu(info->fpinfo.EndOfFile);
 
-	fattr->cf_atime = cifs_NTtimeToUnix(info->LastAccessTime);
-	fattr->cf_mtime = cifs_NTtimeToUnix(info->LastWriteTime);
-	fattr->cf_ctime = cifs_NTtimeToUnix(info->CreationTime);
+	fattr->cf_atime = cifs_NTtimeToUnix(info->fpinfo.LastAccessTime);
+	fattr->cf_mtime = cifs_NTtimeToUnix(info->fpinfo.LastWriteTime);
+	fattr->cf_ctime = cifs_NTtimeToUnix(info->fpinfo.CreationTime);
 
-	fattr->cf_nlink = le32_to_cpu(info->HardLinks);
-	fattr->cf_cifsattrs = le32_to_cpu(info->DosAttributes);
+	fattr->cf_nlink = le32_to_cpu(info->fpinfo.HardLinks);
+	fattr->cf_cifsattrs = le32_to_cpu(info->fpinfo.DosAttributes);
 
 	if (fattr->cf_cifsattrs & ATTR_REPARSE_POINT)
-		fattr->cf_cifstag = le32_to_cpu(info->ReparseTag);
+		fattr->cf_cifstag = le32_to_cpu(info->fpinfo.ReparseTag);
 
 	/* The Mode field in the response can now include the file type as well */
-	fattr->cf_mode = wire_mode_to_posix(le32_to_cpu(info->Mode),
+	fattr->cf_mode = wire_mode_to_posix(le32_to_cpu(info->fpinfo.Mode),
 					    fattr->cf_cifsattrs & ATTR_DIRECTORY);
 	fattr->cf_dtype = S_DT(fattr->cf_mode);
 
@@ -277,9 +277,9 @@ cifs_posix_to_fattr(struct cifs_fattr *fattr, struct smb2_posix_info *info,
 	}
 
 	cifs_dbg(FYI, "posix fattr: dev %d, reparse %d, mode %o\n",
-		 le32_to_cpu(info->DeviceId),
-		 le32_to_cpu(info->ReparseTag),
-		 le32_to_cpu(info->Mode));
+		 le32_to_cpu(info->fpinfo.DeviceId),
+		 le32_to_cpu(info->fpinfo.ReparseTag),
+		 le32_to_cpu(info->fpinfo.Mode));
 
 	sid_to_id(cifs_sb, &parsed.owner, fattr, SIDOWNER);
 	sid_to_id(cifs_sb, &parsed.group, fattr, SIDGROUP);
@@ -516,7 +516,7 @@ static void cifs_fill_dirent_posix(struct cifs_dirent *de,
 	de->name = parsed.name;
 	de->namelen = parsed.name_len;
 	de->resume_key = info->Ignored;
-	de->ino = le64_to_cpu(info->Inode);
+	de->ino = le64_to_cpu(info->fpinfo.Inode);
 }
 
 static void cifs_fill_dirent_unix(struct cifs_dirent *de,

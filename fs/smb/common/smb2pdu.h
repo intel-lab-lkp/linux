@@ -1606,31 +1606,6 @@ struct smb2_query_info_rsp {
 	__u8   Buffer[];
 } __packed;
 
-/* Level 100 query info */
-struct smb311_posix_qinfo {
-	__le64 CreationTime;
-	__le64 LastAccessTime;
-	__le64 LastWriteTime;
-	__le64 ChangeTime;
-	__le64 EndOfFile;
-	__le64 AllocationSize;
-	__le32 DosAttributes;
-	__le64 Inode;
-	__le32 DeviceId;
-	__le32 Zero;
-	/* beginning of POSIX Create Context Response */
-	__le32 HardLinks;
-	__le32 ReparseTag;
-	__le32 Mode;
-	u8     Sids[];
-	/*
-	 * var sized owner SID
-	 * var sized group SID
-	 * le32 filenamelength
-	 * u8  filename[]
-	 */
-} __packed;
-
 /* See MS-SMB2 2.2.23 through 2.2.25 */
 struct smb2_oplock_break {
 	struct smb2_hdr hdr;

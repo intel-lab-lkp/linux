@@ -4036,44 +4036,44 @@ static int smb2_populate_readdir_entry(struct ksmbd_conn *conn, int info_level,
 
 		posix_info = (struct smb2_posix_info *)kstat;
 		posix_info->Ignored = 0;
-		posix_info->CreationTime = cpu_to_le64(ksmbd_kstat->create_time);
+		posix_info->fpinfo.CreationTime = cpu_to_le64(ksmbd_kstat->create_time);
 		time = ksmbd_UnixTimeToNT(ksmbd_kstat->kstat->ctime);
-		posix_info->ChangeTime = cpu_to_le64(time);
+		posix_info->fpinfo.ChangeTime = cpu_to_le64(time);
 		time = ksmbd_UnixTimeToNT(ksmbd_kstat->kstat->atime);
-		posix_info->LastAccessTime = cpu_to_le64(time);
+		posix_info->fpinfo.LastAccessTime = cpu_to_le64(time);
 		time = ksmbd_UnixTimeToNT(ksmbd_kstat->kstat->mtime);
-		posix_info->LastWriteTime = cpu_to_le64(time);
-		posix_info->EndOfFile = cpu_to_le64(ksmbd_kstat->kstat->size);
-		posix_info->AllocationSize = cpu_to_le64(ksmbd_kstat->kstat->blocks << 9);
-		posix_info->DeviceId = cpu_to_le32(ksmbd_kstat->kstat->rdev);
-		posix_info->HardLinks = cpu_to_le32(ksmbd_kstat->kstat->nlink);
-		posix_info->Mode = cpu_to_le32(ksmbd_kstat->kstat->mode & 0777);
+		posix_info->fpinfo.LastWriteTime = cpu_to_le64(time);
+		posix_info->fpinfo.EndOfFile = cpu_to_le64(ksmbd_kstat->kstat->size);
+		posix_info->fpinfo.AllocationSize = cpu_to_le64(ksmbd_kstat->kstat->blocks << 9);
+		posix_info->fpinfo.DeviceId = cpu_to_le32(ksmbd_kstat->kstat->rdev);
+		posix_info->fpinfo.HardLinks = cpu_to_le32(ksmbd_kstat->kstat->nlink);
+		posix_info->fpinfo.Mode = cpu_to_le32(ksmbd_kstat->kstat->mode & 0777);
 		switch (ksmbd_kstat->kstat->mode & S_IFMT) {
 		case S_IFDIR:
-			posix_info->Mode |= cpu_to_le32(POSIX_TYPE_DIR << POSIX_FILETYPE_SHIFT);
+			posix_info->fpinfo.Mode |= cpu_to_le32(POSIX_TYPE_DIR << POSIX_FILETYPE_SHIFT);
 			break;
 		case S_IFLNK:
-			posix_info->Mode |= cpu_to_le32(POSIX_TYPE_SYMLINK << POSIX_FILETYPE_SHIFT);
+			posix_info->fpinfo.Mode |= cpu_to_le32(POSIX_TYPE_SYMLINK << POSIX_FILETYPE_SHIFT);
 			break;
 		case S_IFCHR:
-			posix_info->Mode |= cpu_to_le32(POSIX_TYPE_CHARDEV << POSIX_FILETYPE_SHIFT);
+			posix_info->fpinfo.Mode |= cpu_to_le32(POSIX_TYPE_CHARDEV << POSIX_FILETYPE_SHIFT);
 			break;
 		case S_IFBLK:
-			posix_info->Mode |= cpu_to_le32(POSIX_TYPE_BLKDEV << POSIX_FILETYPE_SHIFT);
+			posix_info->fpinfo.Mode |= cpu_to_le32(POSIX_TYPE_BLKDEV << POSIX_FILETYPE_SHIFT);
 			break;
 		case S_IFIFO:
-			posix_info->Mode |= cpu_to_le32(POSIX_TYPE_FIFO << POSIX_FILETYPE_SHIFT);
+			posix_info->fpinfo.Mode |= cpu_to_le32(POSIX_TYPE_FIFO << POSIX_FILETYPE_SHIFT);
 			break;
 		case S_IFSOCK:
-			posix_info->Mode |= cpu_to_le32(POSIX_TYPE_SOCKET << POSIX_FILETYPE_SHIFT);
+			posix_info->fpinfo.Mode |= cpu_to_le32(POSIX_TYPE_SOCKET << POSIX_FILETYPE_SHIFT);
 		}
 
-		posix_info->Inode = cpu_to_le64(ksmbd_kstat->kstat->ino);
-		posix_info->DosAttributes =
+		posix_info->fpinfo.Inode = cpu_to_le64(ksmbd_kstat->kstat->ino);
+		posix_info->fpinfo.DosAttributes =
 			S_ISDIR(ksmbd_kstat->kstat->mode) ?
 				FILE_ATTRIBUTE_DIRECTORY_LE : FILE_ATTRIBUTE_ARCHIVE_LE;
 		if (d_info->hide_dot_file && d_info->name[0] == '.')
-			posix_info->DosAttributes |= FILE_ATTRIBUTE_HIDDEN_LE;
+			posix_info->fpinfo.DosAttributes |= FILE_ATTRIBUTE_HIDDEN_LE;
 		/*
 		 * SidBuffer(32) contain two sids(Domain sid(16), UNIX group sid(16)).
 		 * UNIX sid(16) = revision(1) + num_subauth(1) + authority(6) +
@@ -5259,45 +5259,45 @@ static int find_file_posix_info(struct smb2_query_info_rsp *rsp,
 		return ret;
 
 	file_info = (struct smb311_posix_qinfo *)rsp->Buffer;
-	file_info->CreationTime = cpu_to_le64(fp->create_time);
+	file_info->fpinfo.CreationTime = cpu_to_le64(fp->create_time);
 	time = ksmbd_UnixTimeToNT(stat.atime);
-	file_info->LastAccessTime = cpu_to_le64(time);
+	file_info->fpinfo.LastAccessTime = cpu_to_le64(time);
 	time = ksmbd_UnixTimeToNT(stat.mtime);
-	file_info->LastWriteTime = cpu_to_le64(time);
+	file_info->fpinfo.LastWriteTime = cpu_to_le64(time);
 	time = ksmbd_UnixTimeToNT(stat.ctime);
-	file_info->ChangeTime = cpu_to_le64(time);
-	file_info->DosAttributes = fp->f_ci->m_fattr;
-	file_info->Inode = cpu_to_le64(stat.ino);
+	file_info->fpinfo.ChangeTime = cpu_to_le64(time);
+	file_info->fpinfo.DosAttributes = fp->f_ci->m_fattr;
+	file_info->fpinfo.Inode = cpu_to_le64(stat.ino);
 	if (ksmbd_stream_fd(fp) == false) {
-		file_info->EndOfFile = cpu_to_le64(stat.size);
-		file_info->AllocationSize = cpu_to_le64(stat.blocks << 9);
+		file_info->fpinfo.EndOfFile = cpu_to_le64(stat.size);
+		file_info->fpinfo.AllocationSize = cpu_to_le64(stat.blocks << 9);
 	} else {
-		file_info->EndOfFile = cpu_to_le64(fp->stream.size);
-		file_info->AllocationSize = cpu_to_le64(fp->stream.size);
+		file_info->fpinfo.EndOfFile = cpu_to_le64(fp->stream.size);
+		file_info->fpinfo.AllocationSize = cpu_to_le64(fp->stream.size);
 	}
-	file_info->HardLinks = cpu_to_le32(stat.nlink);
-	file_info->Mode = cpu_to_le32(stat.mode & 0777);
+	file_info->fpinfo.HardLinks = cpu_to_le32(stat.nlink);
+	file_info->fpinfo.Mode = cpu_to_le32(stat.mode & 0777);
 	switch (stat.mode & S_IFMT) {
 	case S_IFDIR:
-		file_info->Mode |= cpu_to_le32(POSIX_TYPE_DIR << POSIX_FILETYPE_SHIFT);
+		file_info->fpinfo.Mode |= cpu_to_le32(POSIX_TYPE_DIR << POSIX_FILETYPE_SHIFT);
 		break;
 	case S_IFLNK:
-		file_info->Mode |= cpu_to_le32(POSIX_TYPE_SYMLINK << POSIX_FILETYPE_SHIFT);
+		file_info->fpinfo.Mode |= cpu_to_le32(POSIX_TYPE_SYMLINK << POSIX_FILETYPE_SHIFT);
 		break;
 	case S_IFCHR:
-		file_info->Mode |= cpu_to_le32(POSIX_TYPE_CHARDEV << POSIX_FILETYPE_SHIFT);
+		file_info->fpinfo.Mode |= cpu_to_le32(POSIX_TYPE_CHARDEV << POSIX_FILETYPE_SHIFT);
 		break;
 	case S_IFBLK:
-		file_info->Mode |= cpu_to_le32(POSIX_TYPE_BLKDEV << POSIX_FILETYPE_SHIFT);
+		file_info->fpinfo.Mode |= cpu_to_le32(POSIX_TYPE_BLKDEV << POSIX_FILETYPE_SHIFT);
 		break;
 	case S_IFIFO:
-		file_info->Mode |= cpu_to_le32(POSIX_TYPE_FIFO << POSIX_FILETYPE_SHIFT);
+		file_info->fpinfo.Mode |= cpu_to_le32(POSIX_TYPE_FIFO << POSIX_FILETYPE_SHIFT);
 		break;
 	case S_IFSOCK:
-		file_info->Mode |= cpu_to_le32(POSIX_TYPE_SOCKET << POSIX_FILETYPE_SHIFT);
+		file_info->fpinfo.Mode |= cpu_to_le32(POSIX_TYPE_SOCKET << POSIX_FILETYPE_SHIFT);
 	}
 
-	file_info->DeviceId = cpu_to_le32(stat.rdev);
+	file_info->fpinfo.DeviceId = cpu_to_le32(stat.rdev);
 
 	/*
 	 * Sids(32) contain two sids(Domain sid(16), UNIX group sid(16)).

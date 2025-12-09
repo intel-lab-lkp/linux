@@ -521,9 +521,50 @@ struct file_notify_information {
 } __packed;
 
 /*
- * See POSIX Extensions to MS-FSCC 2.3.2.1
+ * [POSIX-FSCC] POSIX Extensions to MS-FSCC
  * Link: https://gitlab.com/samba-team/smb3-posix-spec/-/blob/master/fscc_posix_extensions.md
  */
+
+/*
+ * This information class is used to query file posix information.
+ * See POSIX-FSCC 2.3.1.1
+ */
+struct file_posix_info {
+	__le64 CreationTime;
+	__le64 LastAccessTime;
+	__le64 LastWriteTime;
+	__le64 ChangeTime;
+	__le64 EndOfFile;
+	__le64 AllocationSize;
+	__le32 DosAttributes;
+	__le64 Inode;
+	__le32 DeviceId;
+	__le32 Zero;
+	/*
+	 * beginning of POSIX Create Context Response
+	 * See POSIX-SMB2 2.2.14.2.16
+	 */
+	__le32 HardLinks;
+	__le32 ReparseTag;
+	__le32 Mode;
+	// var sized owner SID
+	// var sized group SID
+	/* end of POSIX Create Context Response */
+	// le32 filenamelength
+	// u8 filename[]
+} __packed;
+
+/* Level 100 query info */
+struct smb311_posix_qinfo {
+	struct file_posix_info fpinfo;
+	u8     Sids[];
+	/*
+	 * le32 filenamelength
+	 * u8  filename[]
+	 */
+} __packed;
+
+/* See POSIX-FSCC 2.3.2.1 */
 typedef struct {
 	/* For undefined recommended transfer size return -1 in that field */
 	__le32 OptimalTransferSize;  /* bsize on some os, iosize on other os */
