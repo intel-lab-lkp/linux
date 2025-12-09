@@ -5514,11 +5514,11 @@ static int smb2_get_info_filesystem(struct ksmbd_work *work,
 	}
 	case FS_VOLUME_INFORMATION:
 	{
-		struct filesystem_vol_info *info;
+		struct smb3_fs_vol_info *info;
 		size_t sz;
 		unsigned int serial_crc = 0;
 
-		info = (struct filesystem_vol_info *)(rsp->Buffer);
+		info = (struct smb3_fs_vol_info *)(rsp->Buffer);
 		info->VolumeCreationTime = 0;
 		serial_crc = crc32_le(serial_crc, share->name,
 				      strlen(share->name));
@@ -5527,14 +5527,14 @@ static int smb2_get_info_filesystem(struct ksmbd_work *work,
 		serial_crc = crc32_le(serial_crc, ksmbd_netbios_name(),
 				      strlen(ksmbd_netbios_name()));
 		/* Taking dummy value of serial number*/
-		info->SerialNumber = cpu_to_le32(serial_crc);
+		info->VolumeSerialNumber = cpu_to_le32(serial_crc);
 		len = smbConvertToUTF16((__le16 *)info->VolumeLabel,
 					share->name, PATH_MAX,
 					conn->local_nls, 0);
 		len = len * 2;
-		info->VolumeLabelSize = cpu_to_le32(len);
+		info->VolumeLabelLength = cpu_to_le32(len);
 		info->Reserved = 0;
-		sz = sizeof(struct filesystem_vol_info) + len;
+		sz = sizeof(struct smb3_fs_vol_info) + len;
 		rsp->OutputBufferLength = cpu_to_le32(sz);
 		break;
 	}
