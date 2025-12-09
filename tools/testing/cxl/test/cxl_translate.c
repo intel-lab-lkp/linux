@@ -69,7 +69,7 @@ static u64 to_hpa(u64 dpa_offset, int pos, u8 r_eiw, u16 r_eig, u8 hb_ways,
 	/* Calculate base HPA offset from DPA and position */
 	hpa_offset = cxl_calculate_hpa_offset(dpa_offset, pos, r_eiw, r_eig);
 
-	if (math == XOR_MATH) {
+	if (hpa_offset != ULLONG_MAX && math == XOR_MATH) {
 		cximsd->nr_maps = hbiw_to_nr_maps[hb_ways];
 		if (cximsd->nr_maps)
 			return cxl_do_xormap_calc(cximsd, hpa_offset, hb_ways);
@@ -262,7 +262,7 @@ static int test_random_params(void)
 		reverse_dpa = cxl_calculate_dpa_offset(hpa, eiw, eig);
 		reverse_pos = cxl_calculate_position(hpa, eiw, eig);
 
-		if (reverse_dpa != dpa || reverse_pos != pos) {
+		if (hpa == ULLONG_MAX || reverse_dpa != dpa || reverse_pos != pos) {
 			pr_err("test random iter %d FAIL hpa=%llu, dpa=%llu reverse_dpa=%llu, pos=%d reverse_pos=%d eiw=%u eig=%u\n",
 			       i, hpa, dpa, reverse_dpa, pos, reverse_pos, eiw,
 			       eig);
