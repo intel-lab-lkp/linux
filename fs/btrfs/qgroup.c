@@ -415,7 +415,7 @@ int btrfs_read_qgroup_config(struct btrfs_fs_info *fs_info)
 	key.objectid = 0;
 	key.type = 0;
 	key.offset = 0;
-	ret = btrfs_search_slot_for_read(quota_root, &key, path, 1, 1);
+	ret = btrfs_search_slot_for_read(quota_root, &key, path, 1, 0);
 	if (ret)
 		goto out;
 
