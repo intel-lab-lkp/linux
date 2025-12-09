@@ -702,7 +702,7 @@
 			status = "disabled";
 		};
 
-		usb_0_qusbphy: phy@7b000 {
+		usb_0_qusbphy: usb-phy@7b000 {
 			compatible = "qcom,ipq9574-qusb2-phy";
 			reg = <0x0007b000 0x180>;
 			#phy-cells = <0>;
@@ -716,7 +716,7 @@
 			status = "disabled";
 		};
 
-		usb_0_qmpphy: phy@7d000 {
+		usb_0_qmpphy: usb-phy@7d000 {
 			compatible = "qcom,ipq9574-qmp-usb3-phy";
 			reg = <0x0007d000 0xa00>;
 			#phy-cells = <0>;
