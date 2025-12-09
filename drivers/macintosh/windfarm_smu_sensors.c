@@ -374,6 +374,8 @@ smu_cpu_power_create(struct wf_sensor *volts, struct wf_sensor *amps)
 		goto fail;
 	return pow;
  fail:
+	wf_put_sensor(amps);
+	wf_put_sensor(volts);
 	kfree(pow);
 	return NULL;
 }
