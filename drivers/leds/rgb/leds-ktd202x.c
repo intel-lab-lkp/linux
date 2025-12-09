@@ -410,7 +410,7 @@ static int ktd202x_setup_led_rgb(struct ktd202x *chip, struct fwnode_handle *fwn
 		if (ret != 0 || reg >= chip->num_leds) {
 			dev_err(chip->dev, "invalid 'reg' of %pfw\n", child);
 			fwnode_handle_put(child);
-			return ret;
+			return ret ?: -EINVAL;
 		}
 
 		ret = fwnode_property_read_u32(child, "color", &mono_color);
