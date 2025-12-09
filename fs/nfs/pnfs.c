@@ -1370,12 +1370,29 @@ pnfs_send_layoutreturn(struct pnfs_layout_hdr *lo,
 	lrp->args.ld_private = &lrp->ld_private;
 	lrp->clp = NFS_SERVER(ino)->nfs_client;
 	lrp->cred = cred;
-	if (ld->prepare_layoutreturn)
-		ld->prepare_layoutreturn(&lrp->args);
+	if (ld->prepare_layoutreturn) {
+		status = ld->prepare_layoutreturn(&lrp->args);
+		if (status) {
+			pr_warn_ratelimited("NFS: pNFS layoutreturn prepare failed (%d) for layout driver %s\n",
+				status, ld->name ? ld->name : "unknown");
+			goto out_prepare_fail;
+		}
+	}
 
 	status = nfs4_proc_layoutreturn(lrp, flags);
 out:
 	dprintk("<-- %s status: %d\n", __func__, status);
+	return status;
+
+out_prepare_fail:
+	pnfs_layoutreturn_retry_later(lo, &lrp->args.stateid, &lrp->args.range);
+	if (lrp->ld_private.ops && lrp->ld_private.ops->free)
+		lrp->ld_private.ops->free(&lrp->ld_private);
+	if (lrp->inode)
+		nfs_iput_and_deactive(lrp->inode);
+	put_cred(cred);
+	kfree(lrp);
+	pnfs_put_layout_hdr(lo);
 	return status;
 }
 

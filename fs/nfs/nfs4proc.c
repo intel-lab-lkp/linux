@@ -10132,25 +10132,34 @@ out_restart:
 	rpc_restart_call_prepare(task);
 }
 
-static void nfs4_layoutreturn_release(void *calldata)
+static void nfs4_layoutreturn_cleanup(struct nfs4_layoutreturn *lrp, int status)
 {
-	struct nfs4_layoutreturn *lrp = calldata;
 	struct pnfs_layout_hdr *lo = lrp->args.layout;
 
-	if (lrp->rpc_status == 0 || !lrp->inode)
-		pnfs_layoutreturn_free_lsegs(
-			lo, &lrp->args.stateid, &lrp->args.range,
-			lrp->res.lrs_present ? &lrp->res.stateid : NULL);
+	if (status == 0 || !lrp->inode)
+		pnfs_layoutreturn_free_lsegs(lo, &lrp->args.stateid,
+					     &lrp->args.range,
+					     lrp->res.lrs_present ?
+					     &lrp->res.stateid : NULL);
 	else
 		pnfs_layoutreturn_retry_later(lo, &lrp->args.stateid,
 					      &lrp->args.range);
-	nfs4_sequence_free_slot(&lrp->res.seq_res);
+	if (lrp->res.seq_res.sr_slot)
+		nfs4_sequence_free_slot(&lrp->res.seq_res);
 	if (lrp->ld_private.ops && lrp->ld_private.ops->free)
 		lrp->ld_private.ops->free(&lrp->ld_private);
-	pnfs_put_layout_hdr(lrp->args.layout);
-	nfs_iput_and_deactive(lrp->inode);
+	pnfs_put_layout_hdr(lo);
+	if (lrp->inode)
+		nfs_iput_and_deactive(lrp->inode);
 	put_cred(lrp->cred);
-	kfree(calldata);
+	kfree(lrp);
+}
+
+static void nfs4_layoutreturn_release(void *calldata)
+{
+	struct nfs4_layoutreturn *lrp = calldata;
+
+	nfs4_layoutreturn_cleanup(lrp, lrp->rpc_status);
 }
 
 static const struct rpc_call_ops nfs4_layoutreturn_call_ops = {
@@ -10198,8 +10207,12 @@ int nfs4_proc_layoutreturn(struct nfs4_layoutreturn *lrp, unsigned int flags)
 		nfs4_init_sequence(&lrp->args.seq_args, &lrp->res.seq_res, 1,
 				   0);
 	task = rpc_run_task(&task_setup_data);
-	if (IS_ERR(task))
-		return PTR_ERR(task);
+	if (IS_ERR(task)) {
+		status = PTR_ERR(task);
+		trace_nfs4_layoutreturn(lrp->args.inode, &lrp->args.stateid, status);
+		nfs4_layoutreturn_cleanup(lrp, status);
+		return status;
+	}
 	if (!(flags & PNFS_FL_LAYOUTRETURN_ASYNC))
 		status = task->tk_status;
 	trace_nfs4_layoutreturn(lrp->args.inode, &lrp->args.stateid, status);
