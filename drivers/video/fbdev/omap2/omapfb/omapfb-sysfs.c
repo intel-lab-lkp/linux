@@ -24,6 +24,7 @@
 
 #include "omapfb.h"
 
+#ifdef CONFIG_FB_DEVICE
 static ssize_t show_rotate_type(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -585,4 +586,14 @@ void omapfb_remove_sysfs(struct omapfb2_device *fbdev)
 					&omapfb_attrs[t]);
 	}
 }
+#else
+int omapfb_create_sysfs(struct omapfb2_device *fbdev)
+{
+	return 0;
+}
+
+void omapfb_remove_sysfs(struct omapfb2_device *fbdev)
+{
+}
+#endif
 
