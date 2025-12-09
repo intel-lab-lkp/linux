@@ -1145,11 +1145,18 @@ static ssize_t ffs_epfile_io(struct file *file, struct ffs_io_data *io_data)
 
 		if (interrupted)
 			ret = -EINTR;
-		else if (io_data->read && io_data->status > 0)
+		else if (io_data->read && io_data->status > 0) {
+			if (io_data->status > data_len) {
+				dev_warn(&epfile->ffs->gadget->dev,
+					 "trim read length from %d to %zi\n",
+					 io_data->status, data_len);
+				io_data->status = data_len;
+			}
 			ret = __ffs_epfile_read_data(epfile, data, io_data->status,
 						     &io_data->data);
-		else
+		} else {
 			ret = io_data->status;
+		}
 		goto error_mutex;
 	} else if (!(req = usb_ep_alloc_request(ep->ep, GFP_ATOMIC))) {
 		ret = -ENOMEM;
