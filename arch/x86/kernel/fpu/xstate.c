@@ -1983,8 +1983,6 @@ int elf_coredump_extra_notes_write(struct coredump_params *cprm)
 		return 1;
 
 	num_records = dump_xsave_layout_desc(cprm);
-	if (!num_records)
-		return 1;
 
 	/* Total size should be equal to the number of records */
 	if ((sizeof(struct x86_xfeat_component) * num_records) != en.n_descsz)
