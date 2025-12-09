@@ -254,9 +254,8 @@ static int it87_gpio_direction_out(struct gpio_chip *chip,
 	if (rc)
 		goto exit;
 
-	superio_exit();
-
 exit:
+	superio_exit();
 	spin_unlock(&it87_gpio->lock);
 	return rc;
 }
