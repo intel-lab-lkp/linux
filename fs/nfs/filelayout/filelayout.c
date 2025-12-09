@@ -121,6 +121,7 @@ static void filelayout_reset_read(struct nfs_pgio_header *hdr)
 }
 
 static int filelayout_async_handle_error(struct rpc_task *task,
+					 u32 op_status,
 					 struct nfs4_state *state,
 					 struct nfs_client *clp,
 					 struct pnfs_layout_segment *lseg)
@@ -129,6 +130,48 @@ static int filelayout_async_handle_error(struct rpc_task *task,
 	struct inode *inode = lo->plh_inode;
 	struct nfs4_deviceid_node *devid = FILELAYOUT_DEVID_NODE(lseg);
 	struct nfs4_slot_table *tbl = &clp->cl_session->fc_slot_table;
+
+	if (op_status) {
+		switch (op_status) {
+		case NFS4_OK:
+		case NFS4ERR_NXIO:
+			break;
+		case NFS4ERR_BADSESSION:
+		case NFS4ERR_BADSLOT:
+		case NFS4ERR_BAD_HIGH_SLOT:
+		case NFS4ERR_DEADSESSION:
+		case NFS4ERR_CONN_NOT_BOUND_TO_SESSION:
+		case NFS4ERR_SEQ_FALSE_RETRY:
+		case NFS4ERR_SEQ_MISORDERED:
+			dprintk("%s op_status %u, Reset session. Exchangeid "
+				"flags 0x%x\n", __func__, op_status,
+				clp->cl_exchange_flags);
+			nfs4_schedule_session_recovery(clp->cl_session,
+						      op_status);
+			goto out_retry;
+		case NFS4ERR_DELAY:
+		case NFS4ERR_GRACE:
+		case NFS4ERR_RETRY_UNCACHED_REP:
+			rpc_delay(task, FILELAYOUT_POLL_RETRY_MAX);
+			goto out_retry;
+		case NFS4ERR_ACCESS:
+		case NFS4ERR_PNFS_NO_LAYOUT:
+		case NFS4ERR_STALE:
+		case NFS4ERR_BADHANDLE:
+		case NFS4ERR_ISDIR:
+		case NFS4ERR_FHEXPIRED:
+		case NFS4ERR_WRONG_TYPE:
+		case NFS4ERR_NOMATCHING_LAYOUT:
+		case NFSERR_PERM:
+			dprintk("%s Invalid layout op_status %u\n", __func__,
+				op_status);
+			pnfs_destroy_layout(NFS_I(inode));
+			rpc_wake_up(&tbl->slot_tbl_waitq);
+			goto reset;
+		default:
+			goto reset;
+		}
+	}
 
 	if (task->tk_status >= 0)
 		return 0;
@@ -196,6 +239,8 @@ reset:
 			task->tk_status);
 		return -NFS4ERR_RESET_TO_MDS;
 	}
+
+out_retry:
 	task->tk_status = 0;
 	return -EAGAIN;
 }
@@ -208,7 +253,8 @@ static int filelayout_read_done_cb(struct rpc_task *task,
 	int err;
 
 	trace_nfs4_pnfs_read(hdr, task->tk_status);
-	err = filelayout_async_handle_error(task, hdr->args.context->state,
+	err = filelayout_async_handle_error(task, hdr->res.op_status,
+					    hdr->args.context->state,
 					    hdr->ds_clp, hdr->lseg);
 
 	switch (err) {
@@ -318,7 +364,8 @@ static int filelayout_write_done_cb(struct rpc_task *task,
 	int err;
 
 	trace_nfs4_pnfs_write(hdr, task->tk_status);
-	err = filelayout_async_handle_error(task, hdr->args.context->state,
+	err = filelayout_async_handle_error(task, hdr->res.op_status,
+					    hdr->args.context->state,
 					    hdr->ds_clp, hdr->lseg);
 
 	switch (err) {
@@ -346,7 +393,8 @@ static int filelayout_commit_done_cb(struct rpc_task *task,
 	int err;
 
 	trace_nfs4_pnfs_commit_ds(data, task->tk_status);
-	err = filelayout_async_handle_error(task, NULL, data->ds_clp,
+	err = filelayout_async_handle_error(task, data->res.op_status,
+					    NULL, data->ds_clp,
 					    data->lseg);
 
 	switch (err) {
