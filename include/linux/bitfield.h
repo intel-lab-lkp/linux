@@ -48,37 +48,37 @@
 #define __BF_VALIDATE_MASK(mask) \
 	(!(mask) || ((mask) & ((mask) + ((mask) & -(mask)))))
 
-#define __BF_FIELD_CHECK_MASK(mask, pfx)				\
-	do {								\
-		BUILD_BUG_ON_MSG(!__builtin_constant_p(mask),		\
-				 pfx "mask is not constant");		\
-		BUILD_BUG_ON_MSG(__BF_VALIDATE_MASK(mask),		\
-				 pfx "mask is zero or not contiguous");	\
-	} while (0)
+#define __BF_FIELD_CHECK_MASK(mask, pfx)			\
+do {								\
+	BUILD_BUG_ON_MSG(!__builtin_constant_p(mask),		\
+			 pfx "mask is not constant");		\
+	BUILD_BUG_ON_MSG(__BF_VALIDATE_MASK(mask),		\
+			 pfx "mask is zero or not contiguous");	\
+} while (0)
 
 #define __BF_FIELD_CHECK_VAL(mask, val, pfx)			\
 	BUILD_BUG_ON_MSG(__builtin_constant_p(val) &&		\
 			 ~((mask) >> __bf_shf(mask)) & (val),	\
 			 pfx "value too large for the field")
 
-#define __BF_FIELD_CHECK_REG(mask, reg, pfx)				\
-	BUILD_BUG_ON_MSG(mask + 0U + 0UL + 0ULL >			\
-			 ~0ULL >> (64 - 8 * sizeof (reg)),		\
+#define __BF_FIELD_CHECK_REG(mask, reg, pfx)			\
+	BUILD_BUG_ON_MSG(mask + 0U + 0UL + 0ULL >		\
+			 ~0ULL >> (64 - 8 * sizeof (reg)),	\
 			 pfx "type of reg too small for mask")
 
-#define __BF_FIELD_PREP(mask, val, pfx)					\
-	({								\
-		__BF_FIELD_CHECK_MASK(mask, pfx);			\
-		__BF_FIELD_CHECK_VAL(mask, val, pfx);			\
-		((val) << __bf_shf(mask)) & (mask);			\
-	})
+#define __BF_FIELD_PREP(mask, val, pfx)		\
+({						\
+	__BF_FIELD_CHECK_MASK(mask, pfx);	\
+	__BF_FIELD_CHECK_VAL(mask, val, pfx);	\
+	((val) << __bf_shf(mask)) & (mask);	\
+})
 
-#define __BF_FIELD_GET(mask, reg, pfx)					\
-	({								\
-		__BF_FIELD_CHECK_MASK(mask, pfx);			\
-		__BF_FIELD_CHECK_REG(mask, reg, pfx);			\
-		((reg) & (mask)) >> __bf_shf(mask);			\
-	})
+#define __BF_FIELD_GET(mask, reg, pfx)		\
+({						\
+	__BF_FIELD_CHECK_MASK(mask, pfx);	\
+	__BF_FIELD_CHECK_REG(mask, reg, pfx);	\
+	((reg) & (mask)) >> __bf_shf(mask);	\
+})
 
 /**
  * FIELD_MAX() - produce the maximum value representable by a field
@@ -87,12 +87,12 @@
  * FIELD_MAX() returns the maximum value that can be held in the field
  * specified by @mask.
  */
-#define FIELD_MAX(mask)							\
-	({								\
-		__auto_type _mask = mask;				\
-		__BF_FIELD_CHECK_MASK(_mask, "FIELD_MAX: ");		\
-		(_mask >> __bf_shf(_mask));				\
-	})
+#define FIELD_MAX(mask)					\
+({							\
+	__auto_type _mask = mask;			\
+	__BF_FIELD_CHECK_MASK(_mask, "FIELD_MAX: ");	\
+	(_mask >> __bf_shf(_mask));			\
+})
 
 /**
  * FIELD_FIT() - check if value fits in the field
@@ -101,13 +101,13 @@
  *
  * Return: true if @val can fit inside @mask, false if @val is too big.
  */
-#define FIELD_FIT(mask, val)						\
-	({								\
-		__auto_type _mask = mask;				\
-		__auto_type _val = 1 ? (val) : _mask;			\
-		__BF_FIELD_CHECK_MASK(_mask, "FIELD_FIT: ");		\
-		!((_val << __bf_shf(_mask)) & ~_mask); 			\
-	})
+#define FIELD_FIT(mask, val)				\
+({							\
+	__auto_type _mask = mask;			\
+	__auto_type _val = 1 ? (val) : _mask;		\
+	__BF_FIELD_CHECK_MASK(_mask, "FIELD_FIT: ");	\
+	!((_val << __bf_shf(_mask)) & ~_mask); 		\
+})
 
 /**
  * FIELD_PREP() - prepare a bitfield element
@@ -117,12 +117,12 @@
  * FIELD_PREP() masks and shifts up the value.  The result should
  * be combined with other fields of the bitfield using logical OR.
  */
-#define FIELD_PREP(mask, val)						\
-	({								\
-		__auto_type _mask = mask;				\
-		__auto_type _val = 1 ? (val) : _mask;			\
-		__BF_FIELD_PREP(_mask, _val, "FIELD_PREP: ");		\
-	})
+#define FIELD_PREP(mask, val)				\
+({							\
+	__auto_type _mask = mask;			\
+	__auto_type _val = 1 ? (val) : _mask;		\
+	__BF_FIELD_PREP(_mask, _val, "FIELD_PREP: ");	\
+})
 
 /**
  * FIELD_PREP_CONST() - prepare a constant bitfield element
@@ -136,15 +136,15 @@
  * be used in initializers. Error checking is less comfortable for this
  * version, and non-constant masks cannot be used.
  */
-#define FIELD_PREP_CONST(mask, val)					\
-	(								\
-		/* mask must be non-zero and contiguous */		\
-		BUILD_BUG_ON_ZERO(__BF_VALIDATE_MASK(mask)) +		\
-		/* check if value fits */				\
-		BUILD_BUG_ON_ZERO(~((mask) >> __bf_shf(mask)) & (val)) + \
-		/* and create the value */				\
-		(((typeof(mask))(val) << __bf_shf(mask)) & (mask))	\
-	)
+#define FIELD_PREP_CONST(mask, val)				\
+(								\
+	/* mask must be non-zero and contiguous */		\
+	BUILD_BUG_ON_ZERO(__BF_VALIDATE_MASK(mask)) +		\
+	/* check if value fits */				\
+	BUILD_BUG_ON_ZERO(~((mask) >> __bf_shf(mask)) & (val)) + \
+	/* and create the value */				\
+	(((typeof(mask))(val) << __bf_shf(mask)) & (mask))	\
+)
 
 /**
  * FIELD_GET() - extract a bitfield element
@@ -154,12 +154,12 @@
  * FIELD_GET() extracts the field specified by @mask from the
  * bitfield passed in as @reg by masking and shifting it down.
  */
-#define FIELD_GET(mask, reg)						\
-	({								\
-		__auto_type _mask = mask;				\
-		__auto_type _reg = reg;					\
-		__BF_FIELD_GET(_mask, _reg, "FIELD_GET: ");		\
-	})
+#define FIELD_GET(mask, reg)				\
+({							\
+	__auto_type _mask = mask;			\
+	__auto_type _reg = reg;				\
+	__BF_FIELD_GET(_mask, _reg, "FIELD_GET: ");	\
+})
 
 /**
  * FIELD_MODIFY() - modify a bitfield element
@@ -170,16 +170,16 @@
  * FIELD_MODIFY() modifies the set of bits in @reg_p specified by @mask,
  * by replacing them with the bitfield value passed in as @val.
  */
-#define FIELD_MODIFY(mask, reg_p, val)							\
-	({										\
-		__auto_type _mask = mask;						\
-		__auto_type _reg_p = reg_p;						\
-		__auto_type _val = 1 ? (val) : _mask;					\
-		__BF_FIELD_CHECK_MASK(_mask, "FIELD_MODIFY: ");				\
-		__BF_FIELD_CHECK_VAL(_mask, _val, "FIELD_MODIFY: ");			\
-		__BF_FIELD_CHECK_REG(_mask, *_reg_p, "FIELD_MODIFY: ");			\
-		*_reg_p = (*_reg_p & ~_mask) | ((_val << __bf_shf(_mask)) & _mask);	\
-	})
+#define FIELD_MODIFY(mask, reg_p, val)						\
+({										\
+	__auto_type _mask = mask;						\
+	__auto_type _reg_p = reg_p;						\
+	__auto_type _val = 1 ? (val) : _mask;					\
+	__BF_FIELD_CHECK_MASK(_mask, "FIELD_MODIFY: ");				\
+	__BF_FIELD_CHECK_VAL(_mask, _val, "FIELD_MODIFY: ");			\
+	__BF_FIELD_CHECK_REG(_mask, *_reg_p, "FIELD_MODIFY: ");			\
+	*_reg_p = (*_reg_p & ~_mask) | ((_val << __bf_shf(_mask)) & _mask);	\
+})
 
 extern void __compiletime_error("value doesn't fit into mask")
 __field_overflow(void);
