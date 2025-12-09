@@ -7,11 +7,10 @@
 #include <linux/io.h>
 #include <linux/uaccess.h>
 
-#include <kvm/arm_vgic.h>
-
 #include <asm/kvm_arm.h>
 #include <asm/kvm_emulate.h>
 #include <asm/kvm_nested.h>
+#include <asm/kvm_vgic.h>
 
 #include "vgic.h"
 

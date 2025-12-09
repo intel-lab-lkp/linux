@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
-#include <kvm/arm_vgic.h>
+#include <asm/kvm_vgic.h>
 #include <linux/irqchip/arm-vgic-info.h>
 
 #include "vgic.h"

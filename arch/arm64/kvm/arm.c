@@ -38,10 +38,9 @@
 #include <asm/kvm_mmu.h>
 #include <asm/kvm_nested.h>
 #include <asm/kvm_pkvm.h>
+#include <asm/kvm_pmu.h>
 #include <asm/kvm_ptrauth.h>
 #include <asm/sections.h>
-
-#include <kvm/arm_pmu.h>
 
 #include "arm_hypercalls.h"
 #include "arm_psci.h"
