@@ -1416,6 +1416,7 @@ static void dw_mci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 {
 	struct dw_mci_slot *slot = mmc_priv(mmc);
 	struct dw_mci *host = slot->host;
+	const struct dw_mci_drv_data *drv_data = host->drv_data;
 
 	WARN_ON(slot->mrq);
 
@@ -1430,7 +1431,8 @@ static void dw_mci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 		mmc_request_done(mmc, mrq);
 		return;
 	}
-
+	if (drv_data && drv_data->pre_request)
+		drv_data->pre_request(host);
 	spin_lock_bh(&host->lock);
 
 	dw_mci_queue_request(host, slot, mrq);
@@ -1897,6 +1899,7 @@ static void dw_mci_request_end(struct dw_mci *host, struct mmc_request *mrq)
 {
 	struct dw_mci_slot *slot;
 	struct mmc_host	*prev_mmc = host->slot->mmc;
+	const struct dw_mci_drv_data *drv_data = host->drv_dat
 
 	WARN_ON(host->cmd || host->data);
 
@@ -1921,6 +1924,8 @@ static void dw_mci_request_end(struct dw_mci *host, struct mmc_request *mrq)
 
 	spin_unlock(&host->lock);
 	mmc_request_done(prev_mmc, mrq);
+	if (drv_data && drv_data->post_request_end)
+		drv_data->post_request_end(host);
 	spin_lock(&host->lock);
 }
 
