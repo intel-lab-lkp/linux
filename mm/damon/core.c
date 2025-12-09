@@ -2462,7 +2462,8 @@ static void kdamond_split_regions(struct damon_ctx *ctx)
  */
 static bool kdamond_need_stop(struct damon_ctx *ctx)
 {
-	struct damon_target *t;
+	struct damon_target *t, *next;
+	bool valid_target_exist = false;
 
 	if (kthread_should_stop())
 		return true;
@@ -2470,10 +2471,15 @@ static bool kdamond_need_stop(struct damon_ctx *ctx)
 	if (!ctx->ops.target_valid)
 		return false;
 
-	damon_for_each_target(t, ctx) {
+	damon_for_each_target_safe(t, next, ctx) {
 		if (ctx->ops.target_valid(t))
-			return false;
+			valid_target_exist = true;
+		else
+			damon_destroy_target(t, ctx);
 	}
+
+	if (valid_target_exist)
+		return false;
 
 	return true;
 }
