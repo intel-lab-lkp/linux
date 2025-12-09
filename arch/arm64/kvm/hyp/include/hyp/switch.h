@@ -16,8 +16,6 @@
 #include <linux/jump_label.h>
 #include <uapi/linux/psci.h>
 
-#include <kvm/arm_psci.h>
-
 #include <asm/barrier.h>
 #include <asm/cpufeature.h>
 #include <asm/extable.h>
@@ -31,6 +29,8 @@
 #include <asm/debug-monitors.h>
 #include <asm/processor.h>
 #include <asm/traps.h>
+
+#include "arm_psci.h"
 
 struct kvm_exception_table_entry {
 	int insn, fixup;
