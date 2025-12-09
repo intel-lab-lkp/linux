@@ -415,7 +415,7 @@ int btrfs_read_qgroup_config(struct btrfs_fs_info *fs_info)
 	key.objectid = 0;
 	key.type = 0;
 	key.offset = 0;
-	ret = btrfs_search_slot_for_read(quota_root, &key, path, 1, 0);
+	ret = btrfs_search_slot_for_read(quota_root, &key, path, true);
 	if (ret)
 		goto out;
 
@@ -530,7 +530,7 @@ next1:
 	key.objectid = 0;
 	key.type = BTRFS_QGROUP_RELATION_KEY;
 	key.offset = 0;
-	ret = btrfs_search_slot_for_read(quota_root, &key, path, 1, 0);
+	ret = btrfs_search_slot_for_read(quota_root, &key, path, true);
 	if (ret)
 		goto out;
 	while (1) {
@@ -1088,7 +1088,7 @@ int btrfs_quota_enable(struct btrfs_fs_info *fs_info,
 	key.offset = 0;
 
 	btrfs_release_path(path);
-	ret = btrfs_search_slot_for_read(tree_root, &key, path, 1, 0);
+	ret = btrfs_search_slot_for_read(tree_root, &key, path, true);
 	if (ret > 0)
 		goto out_add_root;
 	if (unlikely(ret < 0)) {
@@ -1130,7 +1130,7 @@ int btrfs_quota_enable(struct btrfs_fs_info *fs_info,
 				goto out_free_path;
 			}
 			ret = btrfs_search_slot_for_read(tree_root, &found_key,
-							 path, 1, 0);
+							 path, true);
 			if (unlikely(ret < 0)) {
 				btrfs_abort_transaction(trans, ret);
 				goto out_free_path;
@@ -3692,7 +3692,7 @@ static int qgroup_rescan_leaf(struct btrfs_trans_handle *trans,
 				fs_info->qgroup_rescan_progress.objectid);
 	ret = btrfs_search_slot_for_read(extent_root,
 					 &fs_info->qgroup_rescan_progress,
-					 path, 1, 0);
+					 path, true);
 
 	btrfs_debug(fs_info,
 		    "current progress key " BTRFS_KEY_FMT ", search_slot ret %d",

@@ -1089,7 +1089,7 @@ static int populate_free_space_tree(struct btrfs_trans_handle *trans,
 	key.offset = 0;
 
 	extent_root = btrfs_extent_root(trans->fs_info, key.objectid);
-	ret = btrfs_search_slot_for_read(extent_root, &key, path, 1, 0);
+	ret = btrfs_search_slot_for_read(extent_root, &key, path, true);
 	if (ret < 0)
 		goto out_locked;
 	/*

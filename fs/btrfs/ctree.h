@@ -595,8 +595,7 @@ int btrfs_search_old_slot(struct btrfs_root *root, const struct btrfs_key *key,
 			  struct btrfs_path *p, u64 time_seq);
 int btrfs_search_slot_for_read(struct btrfs_root *root,
 			       const struct btrfs_key *key,
-			       struct btrfs_path *p, int find_higher,
-			       int return_any);
+			       struct btrfs_path *p, bool find_higher);
 void btrfs_release_path(struct btrfs_path *p);
 struct btrfs_path *btrfs_alloc_path(void);
 void btrfs_free_path(struct btrfs_path *p);

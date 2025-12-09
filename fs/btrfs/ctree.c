@@ -2450,22 +2450,14 @@ static int btrfs_prev_leaf(struct btrfs_root *root, struct btrfs_path *path)
  * instead the next or previous item should be returned.
  * When find_higher is true, the next higher item is returned, the next lower
  * otherwise.
- * When return_any and find_higher are both true, and no higher item is found,
- * return the next lower instead.
- * When return_any is true and find_higher is false, and no lower item is found,
- * return the next higher instead.
- * It returns 0 if any item is found, 1 if none is found (tree empty), and
- * < 0 on error
+ * It returns 0 if any item is found, 1 if none is found and < 0 on error
  */
 int btrfs_search_slot_for_read(struct btrfs_root *root,
 			       const struct btrfs_key *key,
-			       struct btrfs_path *p, int find_higher,
-			       int return_any)
+			       struct btrfs_path *p, bool find_higher)
 {
 	int ret;
-	struct extent_buffer *leaf;
 
-again:
 	ret = btrfs_search_slot(NULL, root, key, p, 0, 0);
 	if (ret <= 0)
 		return ret;
@@ -2476,47 +2468,22 @@ again:
 	 * to the first free slot in the previous leaf, i.e. at an invalid
 	 * item.
 	 */
-	leaf = p->nodes[0];
-
 	if (find_higher) {
-		if (p->slots[0] >= btrfs_header_nritems(leaf)) {
-			ret = btrfs_next_leaf(root, p);
-			if (ret <= 0)
-				return ret;
-			if (!return_any)
-				return 1;
-			/*
-			 * no higher item found, return the next
-			 * lower instead
-			 */
-			return_any = 0;
-			find_higher = 0;
-			btrfs_release_path(p);
-			goto again;
-		}
+		if (p->slots[0] >= btrfs_header_nritems(p->nodes[0]))
+			return btrfs_next_leaf(root, p);
 	} else {
 		if (p->slots[0] == 0) {
 			ret = btrfs_prev_leaf(root, p);
 			if (ret < 0)
 				return ret;
 			if (!ret) {
-				leaf = p->nodes[0];
-				if (p->slots[0] == btrfs_header_nritems(leaf))
+				if (p->slots[0] == btrfs_header_nritems(p->nodes[0]))
 					p->slots[0]--;
 				return 0;
 			}
-			if (!return_any)
-				return 1;
-			/*
-			 * no lower item found, return the next
-			 * higher instead
-			 */
-			return_any = 0;
-			find_higher = 1;
-			btrfs_release_path(p);
-			goto again;
+			return 1;
 		} else {
-			--p->slots[0];
+			p->slots[0]--;
 		}
 	}
 	return 0;
