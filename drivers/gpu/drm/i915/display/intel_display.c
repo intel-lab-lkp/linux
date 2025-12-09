@@ -7300,6 +7300,8 @@ static void intel_atomic_dsb_finish(struct intel_atomic_state *state,
 	struct intel_display *display = to_intel_display(state);
 	struct intel_crtc_state *new_crtc_state =
 		intel_atomic_get_new_crtc_state(state, crtc);
+	struct intel_crtc_state *old_crtc_state =
+		intel_atomic_get_old_crtc_state(state, crtc);
 	unsigned int size = new_crtc_state->plane_color_changed ? 8192 : 1024;
 
 	if (!new_crtc_state->use_flipq &&
@@ -7332,6 +7334,16 @@ static void intel_atomic_dsb_finish(struct intel_atomic_state *state,
 		if (intel_crtc_needs_color_update(new_crtc_state))
 			intel_color_commit_noarm(new_crtc_state->dsb_commit,
 						 new_crtc_state);
+		if (intel_casf_enabling(new_crtc_state, old_crtc_state))
+			intel_casf_enable(new_crtc_state->dsb_commit,
+					  new_crtc_state);
+		else if (new_crtc_state->hw.casf_params.strength !=
+				old_crtc_state->hw.casf_params.strength)
+			intel_casf_update_strength(new_crtc_state->dsb_commit,
+						   new_crtc_state);
+		if (intel_casf_disabling(old_crtc_state, new_crtc_state))
+			intel_casf_disable(new_crtc_state->dsb_commit,
+					   new_crtc_state);
 		intel_crtc_planes_update_noarm(new_crtc_state->dsb_commit,
 					       state, crtc);
 
