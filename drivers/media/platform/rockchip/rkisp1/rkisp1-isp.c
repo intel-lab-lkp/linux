@@ -630,6 +630,11 @@ static void rkisp1_isp_set_src_fmt(struct rkisp1_isp *isp,
 	 */
 	sink_info = rkisp1_mbus_info_get_by_code(sink_fmt->code);
 
+	if (sink_info->pixel_enc == V4L2_PIXEL_ENC_YUV) {
+		format->code = sink_fmt->code;
+		dev_dbg(isp->rkisp1->dev, "ISP sink pad is YUV");
+	}
+
 	src_fmt->code = format->code;
 	src_info = rkisp1_mbus_info_get_by_code(src_fmt->code);
 	if (!src_info || !(src_info->direction & RKISP1_ISP_SD_SRC)) {
