@@ -44,6 +44,20 @@ properties:
       where the lower 16 bits are reserved. This property is specified only
       when the keyboard has a custom design for the top row keys.
 
+  fn-key:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      An u32 containing the coordinate of the Fn key, use the MATRIX_KEY(row,
+      col, code) macro, code is ignored.
+
+  fn-keymap:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 1
+    maxItems: 32
+    description: |
+      An array of u32 mapping the row, column and codes for the function keys,
+      use the MATRIX_KEY macro to define the elements.
+
 dependencies:
   function-row-physmap: [ 'linux,keymap' ]
   google,needs-ghost-filter: [ 'linux,keymap' ]
@@ -51,17 +65,28 @@ dependencies:
 required:
   - compatible
 
-if:
-  properties:
-    compatible:
-      contains:
-        const: google,cros-ec-keyb
-then:
-  $ref: /schemas/input/matrix-keymap.yaml#
-  required:
-    - keypad,num-rows
-    - keypad,num-columns
-    - linux,keymap
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: google,cros-ec-keyb
+    then:
+      $ref: /schemas/input/matrix-keymap.yaml#
+      required:
+        - keypad,num-rows
+        - keypad,num-columns
+        - linux,keymap
+  - if:
+      anyOf:
+        - required:
+          - fn-key
+        - required:
+          - fn-keymap
+    then:
+      required:
+        - fn-key
+        - fn-keymap
 
 unevaluatedProperties: false
 
@@ -132,6 +157,19 @@ examples:
             /* UP      LEFT    */
             0x070b0067 0x070c0069>;
     };
+    fn-key = <MATRIX_KEY(0x04, 0x0a, 0)>;
+    fn-keymap = <
+            MATRIX_KEY(0x00, 0x02, KEY_F1)  /* T1 */
+            MATRIX_KEY(0x03, 0x02, KEY_F2)  /* T2 */
+            MATRIX_KEY(0x02, 0x02, KEY_F3)  /* T3 */
+            MATRIX_KEY(0x01, 0x02, KEY_F4)  /* T4 */
+            MATRIX_KEY(0x04, 0x04, KEY_F5)  /* T5 */
+            MATRIX_KEY(0x02, 0x04, KEY_F6)  /* T6 */
+            MATRIX_KEY(0x01, 0x04, KEY_F7)  /* T7 */
+            MATRIX_KEY(0x02, 0x0b, KEY_F8)  /* T8 */
+            MATRIX_KEY(0x01, 0x09, KEY_F9)  /* T9 */
+            MATRIX_KEY(0x00, 0x04, KEY_F10) /* T10 */
+    >;
   - |
     /* No matrix keyboard, just buttons/switches */
     keyboard-controller {
