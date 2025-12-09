@@ -106,24 +106,25 @@ int handshake_nl_accept_doit(struct sk_buff *skb, struct genl_info *info)
 
 	err = -EAGAIN;
 	req = handshake_req_next(hn, class);
-	if (req) {
-		sock = req->hr_sk->sk_socket;
+	if (!req)
+		goto out_status;
 
-		FD_PREPARE(fdf, O_CLOEXEC, sock->file);
-		if (fdf.err) {
-			err = fdf.err;
-			goto out_complete;
-		}
+	sock = req->hr_sk->sk_socket;
 
-		get_file(sock->file); /* FD_PREPARE() consumes a reference. */
-		err = req->hr_proto->hp_accept(req, info, fd_prepare_fd(fdf));
-		if (err)
-			goto out_complete; /* Automatic cleanup handles fput */
-
-		trace_handshake_cmd_accept(net, req, req->hr_sk, fd_prepare_fd(fdf));
-		fd_publish(fdf);
-		return 0;
+	FD_PREPARE(fdf, O_CLOEXEC, sock->file);
+	if (fdf.err) {
+		err = fdf.err;
+		goto out_complete;
 	}
+
+	get_file(sock->file); /* FD_PREPARE() consumes a reference. */
+	err = req->hr_proto->hp_accept(req, info, fd_prepare_fd(fdf));
+	if (err)
+		goto out_complete; /* Automatic cleanup handles fput */
+
+	trace_handshake_cmd_accept(net, req, req->hr_sk, fd_prepare_fd(fdf));
+	fd_publish(fdf);
+	return 0;
 
 out_complete:
 	handshake_complete(req, -EIO, NULL);
