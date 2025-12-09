@@ -6319,16 +6319,14 @@ static int get_last_extent(struct send_ctx *sctx, u64 offset)
 	key.objectid = sctx->cur_ino;
 	key.type = BTRFS_EXTENT_DATA_KEY;
 	key.offset = offset;
-	ret = btrfs_search_slot_for_read(root, &key, path, 0, 1);
+	ret = btrfs_search_slot_for_read(root, &key, path, 0, 0);
 	if (ret < 0)
 		return ret;
-	ret = 0;
+	ASSERT(ret == 0);
 	btrfs_item_key_to_cpu(path->nodes[0], &key, path->slots[0]);
-	if (key.objectid != sctx->cur_ino || key.type != BTRFS_EXTENT_DATA_KEY)
-		return ret;
-
-	sctx->cur_inode_last_extent = btrfs_file_extent_end(path);
-	return ret;
+	if (key.objectid == sctx->cur_ino && key.type == BTRFS_EXTENT_DATA_KEY)
+		sctx->cur_inode_last_extent = btrfs_file_extent_end(path);
+	return 0;
 }
 
 static int range_is_hole_in_parent(struct send_ctx *sctx,
