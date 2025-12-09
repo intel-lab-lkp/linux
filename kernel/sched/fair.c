@@ -12865,6 +12865,7 @@ static int sched_balance_newidle(struct rq *this_rq, struct rq_flags *rf)
 	u64 t0, t1, curr_cost = 0;
 	struct sched_domain *sd;
 	int pulled_task = 0;
+	u64 idle_stamp;
 
 	update_misfit_status(NULL, this_rq);
 
@@ -12880,7 +12881,7 @@ static int sched_balance_newidle(struct rq *this_rq, struct rq_flags *rf)
 	 * for CPU_NEWLY_IDLE, such that we measure the this duration
 	 * as idle time.
 	 */
-	this_rq->idle_stamp = rq_clock(this_rq);
+	idle_stamp = rq_clock(this_rq);
 
 	/*
 	 * Do not pull tasks towards !active CPUs...
@@ -12992,10 +12993,13 @@ out:
 	if (time_after(this_rq->next_balance, next_balance))
 		this_rq->next_balance = next_balance;
 
-	if (pulled_task)
+	if (pulled_task) {
 		this_rq->idle_stamp = 0;
-	else
+	} else {
+		/* Set it here on purpose. */
+		this_rq->idle_stamp = idle_stamp;
 		nohz_newidle_balance(this_rq);
+	}
 
 	rq_repin_lock(this_rq, rf);
 
