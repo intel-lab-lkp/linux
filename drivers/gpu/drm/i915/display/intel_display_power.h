@@ -129,6 +129,16 @@ struct intel_power_domain_mask {
 	DECLARE_BITMAP(bits, POWER_DOMAIN_NUM);
 };
 
+enum intel_dc3co_source {
+	DC3CO_SOURCE_NONE = 0,
+	DC3CO_SOURCE_PSR2 = BIT(0),
+	DC3CO_SOURCE_ALPM = BIT(1),
+	DC3CO_SOURCE_LOBF = BIT(2),
+	DC3CO_SOURCE_ALL  = DC3CO_SOURCE_PSR2 |
+			    DC3CO_SOURCE_ALPM |
+			    DC3CO_SOURCE_LOBF,
+};
+
 struct i915_power_domains {
 	/*
 	 * Power wells needed for initialization at driver init and suspend

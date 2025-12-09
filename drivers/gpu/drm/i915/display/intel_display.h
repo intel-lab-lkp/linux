@@ -46,6 +46,7 @@ struct intel_link_m_n;
 struct intel_plane;
 struct intel_plane_state;
 struct intel_power_domain_mask;
+enum intel_dc3co_source;
 
 #define pipe_name(p) ((p) + 'A')
 
@@ -560,5 +561,6 @@ bool assert_port_valid(struct intel_display *display, enum port port);
 bool intel_scanout_needs_vtd_wa(struct intel_display *display);
 int intel_crtc_num_joined_pipes(const struct intel_crtc_state *crtc_state);
 bool intel_dc3co_allowed(struct intel_display *display);
-
+void intel_dc3co_source_set(struct intel_display *display, enum intel_dc3co_source source);
+void intel_dc3co_source_unset(struct intel_display *display, enum intel_dc3co_source source);
 #endif

@@ -6298,6 +6298,16 @@ bool intel_dc3co_allowed(struct intel_display *display)
 	return display->power.dc3co_allow;
 }
 
+void intel_dc3co_source_set(struct intel_display *display, enum intel_dc3co_source source)
+{
+	display->power.dc3co_source |= source;
+}
+
+void intel_dc3co_source_unset(struct intel_display *display, enum intel_dc3co_source source)
+{
+	display->power.dc3co_source &= ~source;
+}
+
 static bool intel_dc3co_port_pipe_compatible(struct intel_dp *intel_dp,
 					     const struct intel_crtc_state *crtc_state)
 {
@@ -6328,6 +6338,7 @@ static void intel_dc3co_allow_check(struct intel_atomic_state *state)
 	bool allow = true;
 
 	display->power.dc3co_allow = 0;
+	intel_dc3co_source_unset(display, DC3CO_SOURCE_ALL);
 
 	if ((power_domains->allowed_dc_mask & DC_STATE_EN_UPTO_DC3CO) != DC_STATE_EN_UPTO_DC3CO)
 		return;

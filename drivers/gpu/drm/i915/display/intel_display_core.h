@@ -526,6 +526,7 @@ struct intel_display {
 
 		/* mark dc3co entry is allowed*/
 		bool dc3co_allow;
+		u32 dc3co_source;
 	} power;
 
 	struct {
