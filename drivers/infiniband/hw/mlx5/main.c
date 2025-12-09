@@ -645,6 +645,8 @@ int set_roce_addr(struct mlx5_ib_dev *dev, u32 port_num,
 		ret = rdma_read_gid_l2_fields(attr, &vlan_id, &mac[0]);
 		if (ret)
 			return ret;
+	} else {
+		return -EINVAL;
 	}
 
 	switch (gid_type) {
@@ -653,7 +655,7 @@ int set_roce_addr(struct mlx5_ib_dev *dev, u32 port_num,
 		break;
 	case IB_GID_TYPE_ROCE_UDP_ENCAP:
 		roce_version = MLX5_ROCE_VERSION_2;
-		if (gid && ipv6_addr_v4mapped((void *)gid))
+		if (ipv6_addr_v4mapped((void *)gid))
 			roce_l3_type = MLX5_ROCE_L3_TYPE_IPV4;
 		else
 			roce_l3_type = MLX5_ROCE_L3_TYPE_IPV6;
