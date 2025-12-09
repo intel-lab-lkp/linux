@@ -1138,6 +1138,7 @@ int live_rps_power(void *arg)
 	struct intel_engine_cs *engine;
 	enum intel_engine_id id;
 	struct igt_spinner spin;
+	u32 throttle;
 	int err = 0;
 
 	/*
@@ -1216,6 +1217,13 @@ int live_rps_power(void *arg)
 		if (11 * min.power > 10 * max.power) {
 			pr_err("%s: did not conserve power when setting lower frequency!\n",
 			       engine->name);
+
+			throttle = intel_uncore_read(gt->uncore,
+						     intel_gt_perf_limit_reasons_reg(gt));
+
+			pr_warn("%s: GPU throttled with reasons 0x%08x\n",
+				engine->name, throttle & GT0_PERF_LIMIT_REASONS_MASK);
+
 			err = -EINVAL;
 			break;
 		}
@@ -1241,6 +1249,7 @@ int live_rps_dynamic(void *arg)
 	struct intel_engine_cs *engine;
 	enum intel_engine_id id;
 	struct igt_spinner spin;
+	u32 throttle;
 	int err = 0;
 
 	/*
@@ -1298,6 +1307,14 @@ int live_rps_dynamic(void *arg)
 		min.dt = ktime_get();
 		min.freq = wait_for_freq(rps, rps->min_freq, 2000);
 		min.dt = ktime_sub(ktime_get(), min.dt);
+
+		if (max.freq != rps->max_freq) {
+			throttle = intel_uncore_read(gt->uncore,
+						     intel_gt_perf_limit_reasons_reg(gt));
+
+			pr_warn("%s: GPU throttled with reasons 0x%08x\n",
+				engine->name, throttle & GT0_PERF_LIMIT_REASONS_MASK);
+		}
 
 		pr_info("%s: dynamically reclocked to %u:%uMHz while busy in %lluns, and %u:%uMHz while idle in %lluns\n",
 			engine->name,
