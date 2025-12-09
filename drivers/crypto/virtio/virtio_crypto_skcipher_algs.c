@@ -561,31 +561,57 @@ static void virtio_crypto_skcipher_finalize_req(
 					   req, err);
 }
 
-static struct virtio_crypto_algo virtio_crypto_algs[] = { {
-	.algonum = VIRTIO_CRYPTO_CIPHER_AES_CBC,
-	.service = VIRTIO_CRYPTO_SERVICE_CIPHER,
-	.algo.base = {
-		.base.cra_name		= "cbc(aes)",
-		.base.cra_driver_name	= "virtio_crypto_aes_cbc",
-		.base.cra_priority	= 150,
-		.base.cra_flags		= CRYPTO_ALG_ASYNC |
-					  CRYPTO_ALG_ALLOCATES_MEMORY,
-		.base.cra_blocksize	= AES_BLOCK_SIZE,
-		.base.cra_ctxsize	= sizeof(struct virtio_crypto_skcipher_ctx),
-		.base.cra_module	= THIS_MODULE,
-		.init			= virtio_crypto_skcipher_init,
-		.exit			= virtio_crypto_skcipher_exit,
-		.setkey			= virtio_crypto_skcipher_setkey,
-		.decrypt		= virtio_crypto_skcipher_decrypt,
-		.encrypt		= virtio_crypto_skcipher_encrypt,
-		.min_keysize		= AES_MIN_KEY_SIZE,
-		.max_keysize		= AES_MAX_KEY_SIZE,
-		.ivsize			= AES_BLOCK_SIZE,
+static struct virtio_crypto_algo virtio_crypto_algs[] = {
+	{
+		.algonum = VIRTIO_CRYPTO_CIPHER_AES_CBC,
+		.service = VIRTIO_CRYPTO_SERVICE_CIPHER,
+		.algo.base = {
+			.base.cra_name		= "cbc(aes)",
+			.base.cra_driver_name	= "virtio_crypto_aes_cbc",
+			.base.cra_priority	= 150,
+			.base.cra_flags		= CRYPTO_ALG_ASYNC |
+				CRYPTO_ALG_ALLOCATES_MEMORY,
+			.base.cra_blocksize	= AES_BLOCK_SIZE,
+			.base.cra_ctxsize	= sizeof(struct virtio_crypto_skcipher_ctx),
+			.base.cra_module	= THIS_MODULE,
+			.init			= virtio_crypto_skcipher_init,
+			.exit			= virtio_crypto_skcipher_exit,
+			.setkey			= virtio_crypto_skcipher_setkey,
+			.decrypt		= virtio_crypto_skcipher_decrypt,
+			.encrypt		= virtio_crypto_skcipher_encrypt,
+			.min_keysize		= AES_MIN_KEY_SIZE,
+			.max_keysize		= AES_MAX_KEY_SIZE,
+			.ivsize			= AES_BLOCK_SIZE,
+		},
+		.algo.op = {
+			.do_one_request = virtio_crypto_skcipher_crypt_req,
+		},
 	},
-	.algo.op = {
-		.do_one_request = virtio_crypto_skcipher_crypt_req,
-	},
-} };
+	{
+		.algonum = VIRTIO_CRYPTO_CIPHER_AES_ECB,
+		.service = VIRTIO_CRYPTO_SERVICE_CIPHER,
+		.algo.base = {
+			.base.cra_name		= "ecb(aes)",
+			.base.cra_driver_name	= "virtio_crypto_aes_ecb",
+			.base.cra_priority	= 150,
+			.base.cra_flags		= CRYPTO_ALG_ASYNC |
+				CRYPTO_ALG_ALLOCATES_MEMORY,
+			.base.cra_blocksize	= AES_BLOCK_SIZE,
+			.base.cra_ctxsize	= sizeof(struct virtio_crypto_skcipher_ctx),
+			.base.cra_module	= THIS_MODULE,
+			.init			= virtio_crypto_skcipher_init,
+			.exit			= virtio_crypto_skcipher_exit,
+			.setkey			= virtio_crypto_skcipher_setkey,
+			.decrypt		= virtio_crypto_skcipher_decrypt,
+			.encrypt		= virtio_crypto_skcipher_encrypt,
+			.min_keysize		= AES_MIN_KEY_SIZE,
+			.max_keysize		= AES_MAX_KEY_SIZE,
+		},
+		.algo.op = {
+			.do_one_request = virtio_crypto_skcipher_crypt_req,
+		},
+	}
+};
 
 int virtio_crypto_skcipher_algs_register(struct virtio_crypto *vcrypto)
 {
