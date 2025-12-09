@@ -1333,7 +1333,7 @@ int btmtk_usb_setup(struct hci_dev *hdev)
 						btmtk_usb_hci_wmt_sync);
 		if (err < 0) {
 			bt_dev_err(hdev, "Failed to set up firmware (%d)", err);
-			return err;
+			goto reset_fw;
 		}
 
 		/* It's Device EndPoint Reset Option Register */
@@ -1353,7 +1353,7 @@ int btmtk_usb_setup(struct hci_dev *hdev)
 		err = btmtk_usb_hci_wmt_sync(hdev, &wmt_params);
 		if (err < 0) {
 			bt_dev_err(hdev, "Failed to send wmt func ctrl (%d)", err);
-			return err;
+			goto reset_fw;
 		}
 
 		hci_set_msft_opcode(hdev, 0xFD30);
@@ -1443,6 +1443,13 @@ ignore_func_on:
 		return err;
 	}
 	kfree_skb(skb);
+
+reset_fw:
+	if (btmtk_data->reset_sync) {
+		bt_dev_err(hdev, "Mediatek do firmware reset");
+		btmtk_reset_sync(hdev);
+		return err;
+	}
 
 done:
 	rettime = ktime_get();
