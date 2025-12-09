@@ -10,6 +10,7 @@
 #include "intel_display_core.h"
 #include "intel_display_regs.h"
 #include "intel_display_wa.h"
+#include "intel_step.h"
 
 static void gen11_display_wa_apply(struct intel_display *display)
 {
@@ -74,6 +75,9 @@ bool __intel_display_wa(struct intel_display *display, enum intel_display_wa wa,
 		return display->platform.battlemage;
 	case INTEL_DISPLAY_WA_14025769978:
 		return DISPLAY_VER(display) == 35;
+	case INTEL_DISPLAY_WA_16026694205:
+		return (DISPLAY_VER(display) == 35 &&
+			IS_DISPLAY_STEP(display, STEP_A0, STEP_A0));
 	default:
 		drm_WARN(display->drm, 1, "Missing Wa number: %s\n", name);
 		break;

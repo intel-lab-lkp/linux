@@ -1545,6 +1545,13 @@ struct intel_crtc {
 	/* scalers available on this crtc */
 	int num_scalers;
 
+	/*
+	 * wakeref for Wa_16026694205 where we need to prevent DC5/DC6
+	 * when using scaler coefficients (PS_CTRL_FILTER_SELECT is
+	 * programmed).
+	 */
+	struct ref_tracker *wa_no_dc5_wakeref;
+
 	/* for loading single buffered registers during vblank */
 	struct pm_qos_request vblank_pm_qos;
 

@@ -8,6 +8,7 @@
 #include "intel_casf.h"
 #include "intel_casf_regs.h"
 #include "intel_de.h"
+#include "intel_display_power.h"
 #include "intel_display_regs.h"
 #include "intel_display_trace.h"
 #include "intel_display_types.h"
@@ -725,6 +726,33 @@ static void glk_program_nearest_filter_coefs(struct intel_display *display,
 			   GLK_PS_COEF_INDEX_SET(pipe, id, set), 0);
 }
 
+/*
+ * Wa_16026694205:
+ * Fixes: Possible corruption of display scaler coefficients sign bit
+ *	  when DC5 is entered.
+ * Workaround: Do not enable DC5 or DC6 (DC_STATE_EN Dynamic DC State
+ *	       Enable = Enable up to DC5 OR Enable up to DC6) when
+ *	       using scaler coefficients (PS_CTRL FILTER SELECT=01b
+ *	       programmed).
+ */
+void wa_no_dc5_if_ps_filter_programmed(struct intel_display *display,
+				       struct intel_crtc *crtc,
+				       u32 ps_ctrl, bool set)
+{
+	if (!(ps_ctrl & PS_FILTER_PROGRAMMED))
+		return;
+
+	drm_dbg_kms(display->drm,
+		    "using programmed scaler coefficients, need to handle Wa_16026694205\n");
+
+	if (set)
+		crtc->wa_no_dc5_wakeref =
+			intel_display_power_get(display, POWER_DOMAIN_DC_OFF);
+	else
+		intel_display_power_put(display, POWER_DOMAIN_DC_OFF,
+					crtc->wa_no_dc5_wakeref);
+}
+
 static u32 skl_scaler_get_filter_select(enum drm_scaling_filter filter)
 {
 	if (filter == DRM_SCALING_FILTER_NEAREST_NEIGHBOR)
@@ -846,6 +874,9 @@ void skl_pfit_enable(const struct intel_crtc_state *crtc_state)
 	skl_scaler_setup_filter(display, NULL, pipe, id, 0,
 				crtc_state->hw.scaling_filter);
 
+	if (intel_display_wa(display, 16026694205))
+		wa_no_dc5_if_ps_filter_programmed(display, crtc, ps_ctrl, true);
+
 	intel_de_write_fw(display, SKL_PS_CTRL(pipe, id), ps_ctrl);
 
 	intel_de_write_fw(display, SKL_PS_VPHASE(pipe, id),
@@ -868,6 +899,7 @@ skl_program_plane_scaler(struct intel_dsb *dsb,
 	const struct drm_framebuffer *fb = plane_state->hw.fb;
 	enum pipe pipe = plane->pipe;
 	int scaler_id = plane_state->scaler_id;
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	const struct intel_scaler *scaler =
 		&crtc_state->scaler_state.scalers[scaler_id];
 	int crtc_x = plane_state->uapi.dst.x1;
@@ -912,6 +944,9 @@ skl_program_plane_scaler(struct intel_dsb *dsb,
 
 	skl_scaler_setup_filter(display, dsb, pipe, scaler_id, 0,
 				plane_state->hw.scaling_filter);
+
+	if (intel_display_wa(display, 16026694205))
+		wa_no_dc5_if_ps_filter_programmed(display, crtc, ps_ctrl, true);
 
 	intel_de_write_dsb(display, dsb, SKL_PS_CTRL(pipe, scaler_id),
 			   ps_ctrl);

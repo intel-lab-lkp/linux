@@ -5,6 +5,8 @@
 #ifndef INTEL_SCALER_H
 #define INTEL_SCALER_H
 
+#include <linux/types.h>
+
 enum drm_mode_status;
 struct drm_display_mode;
 struct intel_atomic_state;
@@ -62,4 +64,7 @@ unsigned int skl_scaler_2nd_prefill_adjustment(const struct intel_crtc_state *cr
 unsigned int skl_scaler_1st_prefill_lines(const struct intel_crtc_state *crtc_state);
 unsigned int skl_scaler_2nd_prefill_lines(const struct intel_crtc_state *crtc_state);
 
+void wa_no_dc5_if_ps_filter_programmed(struct intel_display *display,
+				       struct intel_crtc *crtc,
+				       u32 ps_ctrl, bool set);
 #endif

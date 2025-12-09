@@ -7299,6 +7299,8 @@ static void intel_atomic_dsb_finish(struct intel_atomic_state *state,
 	struct intel_crtc_state *new_crtc_state =
 		intel_atomic_get_new_crtc_state(state, crtc);
 	unsigned int size = new_crtc_state->plane_color_changed ? 8192 : 1024;
+	u32 ps_ctrl;
+	int i;
 
 	if (!new_crtc_state->use_flipq &&
 	    !new_crtc_state->use_dsb &&
@@ -7384,6 +7386,14 @@ static void intel_atomic_dsb_finish(struct intel_atomic_state *state,
 	}
 
 	intel_dsb_finish(new_crtc_state->dsb_commit);
+
+	/* Wa_16026694205: check and re-enable DC5 if needed */
+	for (i = 0; i < crtc->num_scalers; i++) {
+		ps_ctrl = intel_de_read(display, SKL_PS_CTRL(crtc->pipe, i));
+		if (intel_display_wa(display, 16026694205))
+			wa_no_dc5_if_ps_filter_programmed(display, crtc,
+							  ps_ctrl, false);
+	}
 }
 
 static void intel_atomic_commit_tail(struct intel_atomic_state *state)
