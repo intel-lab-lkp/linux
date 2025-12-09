@@ -156,11 +156,6 @@ static int init_file(struct file *f, int flags, const struct cred *cred)
 	int error;
 
 	f->f_cred = get_cred(cred);
-	error = security_file_alloc(f);
-	if (unlikely(error)) {
-		put_cred(f->f_cred);
-		return error;
-	}
 
 	spin_lock_init(&f->f_lock);
 	/*
@@ -202,6 +197,14 @@ static int init_file(struct file *f, int flags, const struct cred *cred)
 	 * They may be enabled later by fsnotify_open_perm_and_set_mode().
 	 */
 	file_set_fsnotify_mode(f, FMODE_NONOTIFY_PERM);
+
+	error = security_file_alloc(f);
+	if (unlikely(error)) {
+		mutex_destroy(&f->f_pos_lock);
+		put_cred(f->f_cred);
+		return error;
+	}
+
 	return 0;
 }
 
