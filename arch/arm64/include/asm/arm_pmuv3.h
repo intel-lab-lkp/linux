@@ -70,9 +70,14 @@ static inline u64 read_pmcr(void)
 	return read_sysreg(pmcr_el0);
 }
 
-static inline void write_pmselr(u32 val)
+static inline void write_pmselr(u64 val)
 {
 	write_sysreg(val, pmselr_el0);
+}
+
+static inline u64 read_pmselr(void)
+{
+	return read_sysreg(pmselr_el0);
 }
 
 static inline void write_pmccntr(u64 val)
