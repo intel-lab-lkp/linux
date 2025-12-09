@@ -23,15 +23,14 @@
  * register, a bit in the lower half is only updated if the corresponding bit
  * in the upper half is high.
  */
-#define FIELD_PREP_WM16(_mask, _val)					     \
-	({								     \
-		typeof(_val) __val = _val;				     \
-		typeof(_mask) __mask = _mask;				     \
-		__BF_FIELD_CHECK(__mask, ((u16)0U), __val,		     \
-				 "HWORD_UPDATE: ");			     \
-		(((typeof(__mask))(__val) << __bf_shf(__mask)) & (__mask)) | \
-		((__mask) << 16);					     \
-	})
+#define FIELD_PREP_WM16(mask, val)				\
+({								\
+	__auto_type _mask = mask;				\
+	u32 _val = FIELD_PREP(_mask, val);			\
+	BUILD_BUG_ON_MSG(_mask > 0xffffu,			\
+			 "FIELD_PREP_WM16: mask too large");	\
+	_val | (_mask << 16);					\
+})
 
 /**
  * FIELD_PREP_WM16_CONST() - prepare a constant bitfield element with a mask in
