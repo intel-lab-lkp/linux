@@ -33,6 +33,22 @@ static const struct rkisp1_rsz_yuv_mbus_info rkisp1_rsz_yuv_src_formats[] = {
 		.hdiv		= 2,
 		.vdiv		= 2,
 	},
+	{
+		.mbus_code	= MEDIA_BUS_FMT_YUYV8_2X8, /* YUV420 */
+		.hdiv		= 1,
+		.vdiv		= 1,
+	},
+	{
+		.mbus_code	= MEDIA_BUS_FMT_VYUY8_2X8, /* YUV420 */
+		.hdiv		= 1,
+		.vdiv		= 1,
+	},
+	{
+		.mbus_code	= MEDIA_BUS_FMT_UYVY8_2X8, /* YUV420 */
+		.hdiv		= 1,
+		.vdiv		= 1,
+	},
+
 };
 
 static const struct rkisp1_rsz_yuv_mbus_info *rkisp1_rsz_get_yuv_mbus_info(u32 mbus_code)
