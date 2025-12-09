@@ -1584,4 +1584,18 @@ rdev_set_epcs(struct cfg80211_registered_device *rdev,
 	return ret;
 }
 
+static inline int
+rdev_set_s1g_ri(struct cfg80211_registered_device *rdev,
+		struct net_device *dev, u8 val)
+{
+	struct wiphy *wiphy = &rdev->wiphy;
+	int ret = -EOPNOTSUPP;
+
+	trace_rdev_set_s1g_ri(wiphy, dev, val);
+	ret = rdev->ops->set_s1g_ri(wiphy, dev, val);
+	trace_rdev_return_int(wiphy, ret);
+
+	return ret;
+}
+
 #endif /* __CFG80211_RDEV_OPS */

@@ -1361,6 +1361,10 @@
  *	user space that the NAN new cluster has been joined. The cluster ID is
  *	indicated by %NL80211_ATTR_MAC.
  *
+ * @NL80211_CMD_SET_S1G_RI: This command is used to enable and set the
+ *	response indication type for an S1G station. The frame type is
+ *	indicated by %NL80211_ATTR_S1G_RI_FRAME_TYPE.
+ *
  * @NL80211_CMD_MAX: highest used command number
  * @__NL80211_CMD_AFTER_LAST: internal use
  */
@@ -1623,6 +1627,8 @@ enum nl80211_commands {
 
 	NL80211_CMD_NAN_NEXT_DW_NOTIFICATION,
 	NL80211_CMD_NAN_CLUSTER_JOINED,
+
+	NL80211_CMD_SET_S1G_RI,
 
 	/* add new commands above here */
 
@@ -2973,6 +2979,12 @@ enum nl80211_commands {
  *	primary channel is 2 MHz wide, and the control channel designates
  *	the 1 MHz primary subchannel within that 2 MHz primary.
  *
+ * @NL80211_ATTR_S1G_RI_FRAME_TYPE: (u8) Integer attibute used with
+ *	%NL80211_CMD_SET_S1G_RI that represents the RID
+ *	(Response Indication Deferral) information distributed by
+ *	an S1G STA in order to protect the response frame, which is
+ *	expected a SIFS time after the frame that elicits that response.
+ *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
  * @__NL80211_ATTR_AFTER_LAST: internal use
@@ -3540,6 +3552,8 @@ enum nl80211_attrs {
 	NL80211_ATTR_NAN_CAPABILITIES,
 
 	NL80211_ATTR_S1G_PRIMARY_2MHZ,
+
+	NL80211_ATTR_S1G_RI_FRAME_TYPE,
 
 	/* add attributes here, update the policy in nl80211.c */
 

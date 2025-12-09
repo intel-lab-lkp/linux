@@ -3122,6 +3122,24 @@ TRACE_EVENT(rdev_set_epcs,
 		  WIPHY_PR_ARG, NETDEV_PR_ARG, __entry->val)
 );
 
+TRACE_EVENT(rdev_set_s1g_ri,
+	TP_PROTO(struct wiphy *wiphy, struct net_device *netdev,
+		 u8 val),
+	TP_ARGS(wiphy, netdev, val),
+	TP_STRUCT__entry(
+		WIPHY_ENTRY
+		NETDEV_ENTRY
+		__field(u8, val)
+	),
+	TP_fast_assign(
+		WIPHY_ASSIGN;
+		NETDEV_ASSIGN;
+		__entry->val = val;
+	),
+	TP_printk(WIPHY_PR_FMT ", " NETDEV_PR_FMT ", ri=%u",
+		  WIPHY_PR_ARG, NETDEV_PR_ARG, __entry->val)
+);
+
 /*************************************************************
  *	     cfg80211 exported functions traces		     *
  *************************************************************/
