@@ -530,6 +530,8 @@ int tb_wait_for_port(struct tb_port *port, bool wait_if_unplugged)
 			return 0;
 
 		case TB_PORT_UP:
+			msleep(2000);
+			fallthrough;
 		case TB_PORT_TX_CL0S:
 		case TB_PORT_RX_CL0S:
 		case TB_PORT_CL1:
