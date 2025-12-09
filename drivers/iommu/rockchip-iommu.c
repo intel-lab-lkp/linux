@@ -1153,6 +1153,8 @@ static int rk_iommu_of_xlate(struct device *dev,
 	struct rk_iommudata *data;
 
 	iommu_dev = of_find_device_by_node(args->np);
+	if (!iommu_dev)
+		return -ENODEV;
 
 	data = devm_kzalloc(&iommu_dev->dev, sizeof(*data), GFP_KERNEL);
 	if (!data)
