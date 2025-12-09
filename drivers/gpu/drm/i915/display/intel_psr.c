@@ -2996,6 +2996,12 @@ void intel_psr_post_plane_update(struct intel_atomic_state *state,
 		if (crtc_state->crc_enabled && psr->enabled)
 			intel_psr_force_update(intel_dp);
 
+		if (psr->enabled &&
+		    psr->sel_update_enabled &&
+		    intel_dc3co_allowed(display)) {
+			intel_dc3co_source_set(display, DC3CO_SOURCE_PSR2);
+		}
+
 		/*
 		 * Clear possible busy bits in case we have
 		 * invalidate -> flip -> flush sequence.
