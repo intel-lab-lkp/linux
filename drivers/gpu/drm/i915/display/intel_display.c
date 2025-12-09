@@ -6293,6 +6293,15 @@ static int intel_joiner_add_affected_crtcs(struct intel_atomic_state *state)
 	return 0;
 }
 
+bool intel_dc3co_can_enable(struct intel_display *display)
+{
+	/*
+	 * ToDo - Check CMTG enabled
+	 * ToDo - Check flipq enabled
+	 */
+	return (display->power.dc3co_allow && display->power.dc3co_source);
+}
+
 bool intel_dc3co_allowed(struct intel_display *display)
 {
 	return display->power.dc3co_allow;
@@ -7678,7 +7687,7 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 		 */
 		intel_uncore_arm_unclaimed_mmio_detection(&dev_priv->uncore);
 	}
-	if (intel_dc3co_allowed(display))
+	if (intel_dc3co_can_enable(display))
 		intel_display_power_set_target_dc_state(display, DC_STATE_EN_UPTO_DC3CO);
 	else
 		intel_display_power_set_target_dc_state(display, DC_STATE_EN_UPTO_DC6);

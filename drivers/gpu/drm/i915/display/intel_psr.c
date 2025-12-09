@@ -3898,7 +3898,7 @@ void intel_psr_notify_vblank_enable_disable(struct intel_display *display,
 		return;
 	}
 
-	if (intel_dc3co_allowed(display))
+	if (intel_dc3co_can_enable(display))
 		intel_display_power_set_target_dc_state(display, enable ? DC_STATE_DISABLE :
 						DC_STATE_EN_UPTO_DC3CO);
 	else

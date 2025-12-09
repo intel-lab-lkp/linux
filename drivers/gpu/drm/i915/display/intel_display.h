@@ -563,4 +563,5 @@ int intel_crtc_num_joined_pipes(const struct intel_crtc_state *crtc_state);
 bool intel_dc3co_allowed(struct intel_display *display);
 void intel_dc3co_source_set(struct intel_display *display, enum intel_dc3co_source source);
 void intel_dc3co_source_unset(struct intel_display *display, enum intel_dc3co_source source);
+bool intel_dc3co_can_enable(struct intel_display *display);
 #endif
