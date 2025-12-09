@@ -1182,6 +1182,7 @@ static int __sh_mobile_lcdc_check_var(struct fb_var_screeninfo *var,
  * Frame buffer operations - Overlays
  */
 
+#ifdef CONFIG_FB_DEVICE
 static ssize_t
 overlay_alpha_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
@@ -1351,6 +1352,7 @@ static struct attribute *overlay_sysfs_attrs[] = {
 	NULL,
 };
 ATTRIBUTE_GROUPS(overlay_sysfs);
+#endif
 
 static const struct fb_fix_screeninfo sh_mobile_lcdc_overlay_fix  = {
 	.id =		"SH Mobile LCDC",
@@ -2637,7 +2639,9 @@ err1:
 static struct platform_driver sh_mobile_lcdc_driver = {
 	.driver		= {
 		.name		= "sh_mobile_lcdc_fb",
+#ifdef CONFIG_FB_DEVICE
 		.dev_groups	= overlay_sysfs_groups,
+#endif
 		.pm		= &sh_mobile_lcdc_dev_pm_ops,
 	},
 	.probe		= sh_mobile_lcdc_probe,
