@@ -29,6 +29,14 @@
 
 #include <linux/unaligned.h>
 
+/* Maximum number of Fn keys, limited by the key status mask size. */
+#define CROS_EC_FN_KEYMAP_MAX 32
+
+/* Maximum size of the normal key matrix, this is limited by the host command
+ * key_matrix field defined in ec_response_get_next_data_v3
+ */
+#define CROS_EC_KEYBOARD_COLS_MAX 18
+
 /**
  * struct cros_ec_keyb - Structure representing EC keyboard device
  *
@@ -44,6 +52,13 @@
  * @bs_idev: The input device for non-matrix buttons and switches (or NULL).
  * @notifier: interrupt event notifier for transport devices
  * @vdata: vivaldi function row data
+ * @fn_key: coordinate of the function key
+ * @fn_keymap: array of coordinate and codes for the function keys
+ * @fn_keymap_len: number of entries in the fn_keymap array
+ * @fn_key_status: active function keys bitmap
+ * @normal_key_status: active normal keys bitmap
+ * @fn_key_pressed: tracks the function key status
+ * @fn_key_triggered: tracks where any function key fired
  */
 struct cros_ec_keyb {
 	unsigned int rows;
@@ -61,6 +76,14 @@ struct cros_ec_keyb {
 	struct notifier_block notifier;
 
 	struct vivaldi_data vdata;
+
+	uint32_t fn_key;
+	uint32_t *fn_keymap;
+	int fn_keymap_len;
+	uint32_t fn_key_status;
+	uint8_t normal_key_status[CROS_EC_KEYBOARD_COLS_MAX];
+	bool fn_key_pressed;
+	bool fn_key_triggered;
 };
 
 /**
@@ -166,16 +189,108 @@ static bool cros_ec_keyb_has_ghosting(struct cros_ec_keyb *ckdev, uint8_t *buf)
 	return false;
 }
 
+static bool cros_ec_key_is(int row, int col, uint32_t key)
+{
+	if (row == KEY_ROW(key) && col == KEY_COL(key))
+		return true;
+
+	return false;
+}
+
+static void cros_ec_keyb_process_one(struct cros_ec_keyb *ckdev,
+				     int row, int col, bool state)
+{
+	struct input_dev *idev = ckdev->idev;
+	const unsigned short *keycodes = idev->keycode;
+	int pos = MATRIX_SCAN_CODE(row, col, ckdev->row_shift);
+	unsigned int code = keycodes[pos];
+
+	dev_dbg(ckdev->dev, "changed: [r%d c%d]: byte %02x\n", row, col, state);
+
+	if (ckdev->fn_keymap) {
+		if (cros_ec_key_is(row, col, ckdev->fn_key)) {
+			ckdev->fn_key_pressed = state;
+
+			if (state) {
+				ckdev->fn_key_triggered = false;
+			} else if (!ckdev->fn_key_triggered) {
+				/*
+				 * Send the original code if nothing else has
+				 * been pressed together with Fn.
+				 */
+				input_event(idev, EV_MSC, MSC_SCAN, pos);
+				input_report_key(idev, code, true);
+				input_sync(ckdev->idev);
+
+				input_event(idev, EV_MSC, MSC_SCAN, pos);
+				input_report_key(idev, code, false);
+			}
+
+			return;
+		}
+
+		if (!state) {
+			/* Key release, may need to release the Fn code */
+			for (int i = 0; i < ckdev->fn_keymap_len; i++) {
+				if (!cros_ec_key_is(row, col,
+						    ckdev->fn_keymap[i]))
+					continue;
+
+				if ((ckdev->fn_key_status & BIT(i)) == 0)
+					continue;
+
+				code = KEY_VAL(ckdev->fn_keymap[i]);
+				ckdev->fn_key_status &= ~BIT(i);
+
+				input_event(idev, EV_MSC, MSC_SCAN, pos);
+				input_report_key(idev, code, state);
+
+				return;
+			}
+
+			if ((ckdev->normal_key_status[col] & BIT(row)) == 0)
+				/* Discard, key press code was not sent */
+				return;
+		} else if (ckdev->fn_key_pressed) {
+			/* Key press while holding Fn */
+			ckdev->fn_key_triggered = true;
+
+			for (int i = 0; i < ckdev->fn_keymap_len; i++) {
+				if (!cros_ec_key_is(row, col,
+						    ckdev->fn_keymap[i]))
+					continue;
+
+				code = KEY_VAL(ckdev->fn_keymap[i]);
+				ckdev->fn_key_status |= BIT(i);
+
+				input_event(idev, EV_MSC, MSC_SCAN, pos);
+				input_report_key(idev, code, state);
+
+				return;
+			}
+
+			/* Do not emit a code if the key is not mapped */
+			return;
+		}
+	}
+
+	if (state)
+		ckdev->normal_key_status[col] |= BIT(row);
+	else
+		ckdev->normal_key_status[col] &= ~BIT(row);
+
+	input_event(idev, EV_MSC, MSC_SCAN, pos);
+	input_report_key(idev, code, state);
+}
 
 /*
  * Compares the new keyboard state to the old one and produces key
- * press/release events accordingly.  The keyboard state is 13 bytes (one byte
- * per column)
+ * press/release events accordingly.  The keyboard state is one byte
+ * per column.
  */
 static void cros_ec_keyb_process(struct cros_ec_keyb *ckdev,
 			 uint8_t *kb_state, int len)
 {
-	struct input_dev *idev = ckdev->idev;
 	int col, row;
 	int new_state;
 	int old_state;
@@ -192,20 +307,13 @@ static void cros_ec_keyb_process(struct cros_ec_keyb *ckdev,
 
 	for (col = 0; col < ckdev->cols; col++) {
 		for (row = 0; row < ckdev->rows; row++) {
-			int pos = MATRIX_SCAN_CODE(row, col, ckdev->row_shift);
-			const unsigned short *keycodes = idev->keycode;
-
 			new_state = kb_state[col] & (1 << row);
 			old_state = ckdev->old_kb_state[col] & (1 << row);
-			if (new_state != old_state) {
-				dev_dbg(ckdev->dev,
-					"changed: [r%d c%d]: byte %02x\n",
-					row, col, new_state);
 
-				input_event(idev, EV_MSC, MSC_SCAN, pos);
-				input_report_key(idev, keycodes[pos],
-						 new_state);
-			}
+			if (new_state == old_state)
+				continue;
+
+			cros_ec_keyb_process_one(ckdev, row, col, new_state);
 		}
 		ckdev->old_kb_state[col] = kb_state[col];
 	}
@@ -598,6 +706,12 @@ static int cros_ec_keyb_register_matrix(struct cros_ec_keyb *ckdev)
 	if (err)
 		return err;
 
+	if (ckdev->cols > CROS_EC_KEYBOARD_COLS_MAX) {
+		dev_err(dev, "keypad,num-columns too large: %d (max: %d)\n",
+			ckdev->cols, CROS_EC_KEYBOARD_COLS_MAX);
+		return -EINVAL;
+	}
+
 	ckdev->valid_keys = devm_kzalloc(dev, ckdev->cols, GFP_KERNEL);
 	if (!ckdev->valid_keys)
 		return -ENOMEM;
@@ -650,6 +764,47 @@ static int cros_ec_keyb_register_matrix(struct cros_ec_keyb *ckdev)
 		dev_err(dev, "cannot register input device\n");
 		return err;
 	}
+
+	return 0;
+}
+
+static int cros_ec_keyb_register_fn_keys(struct cros_ec_keyb *ckdev)
+{
+	struct device *dev = ckdev->dev;
+	uint32_t fn_key;
+	uint32_t *keymap;
+	int keymap_len;
+	int ret;
+
+	if (!(device_property_present(dev, "fn-key") &&
+	      device_property_present(dev, "fn-keymap")))
+		return 0;
+
+	device_property_read_u32(dev, "fn-key", &fn_key);
+
+	keymap_len = device_property_count_u32(ckdev->dev, "fn-keymap");
+	if (keymap_len > CROS_EC_FN_KEYMAP_MAX) {
+		dev_err(dev, "fn-keymap too large: %d limit=%d",
+			keymap_len, CROS_EC_FN_KEYMAP_MAX);
+		return -EINVAL;
+	}
+
+	keymap = devm_kcalloc(dev, keymap_len, sizeof(*keymap), GFP_KERNEL);
+	if (!keymap)
+		return -ENOMEM;
+
+	ret = device_property_read_u32_array(dev, "fn-keymap", keymap, keymap_len);
+	if (ret) {
+		dev_err(dev, "failed to read fn-keymap property: %d\n", ret);
+		return ret;
+	}
+
+	for (int i = 0; i < keymap_len; i++)
+		__set_bit(KEY_VAL(keymap[i]), ckdev->idev->keybit);
+
+	ckdev->fn_key = fn_key;
+	ckdev->fn_keymap = keymap;
+	ckdev->fn_keymap_len = keymap_len;
 
 	return 0;
 }
@@ -719,6 +874,13 @@ static int cros_ec_keyb_probe(struct platform_device *pdev)
 		err = cros_ec_keyb_register_matrix(ckdev);
 		if (err) {
 			dev_err(dev, "cannot register matrix inputs: %d\n",
+				err);
+			return err;
+		}
+
+		err = cros_ec_keyb_register_fn_keys(ckdev);
+		if (err) {
+			dev_err(dev, "cannot register fn-keys inputs: %d\n",
 				err);
 			return err;
 		}
