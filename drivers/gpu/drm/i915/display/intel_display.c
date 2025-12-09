@@ -6293,6 +6293,75 @@ static int intel_joiner_add_affected_crtcs(struct intel_atomic_state *state)
 	return 0;
 }
 
+bool intel_dc3co_allowed(struct intel_display *display)
+{
+	return display->power.dc3co_allow;
+}
+
+static bool intel_dc3co_port_pipe_compatible(struct intel_dp *intel_dp,
+					     const struct intel_crtc_state *crtc_state)
+{
+	struct intel_digital_port *dig_port = dp_to_dig_port(intel_dp);
+	enum pipe pipe = to_intel_crtc(crtc_state->uapi.crtc)->pipe;
+	enum port port = dig_port->base.port;
+	int num_pipes = intel_crtc_num_joined_pipes(crtc_state);
+
+	if (num_pipes != 1)
+		return false;
+
+	if (!(pipe <= PIPE_B && port <= PORT_B))
+		return false;
+
+	return true;
+}
+
+static void intel_dc3co_allow_check(struct intel_atomic_state *state)
+{
+	struct intel_display *display = to_intel_display(state);
+	struct intel_crtc *crtc;
+	struct intel_crtc_state *new_crtc_state;
+	struct intel_encoder *encoder;
+	struct intel_dp *intel_dp;
+	int i;
+	struct i915_power_domains *power_domains = &display->power.domains;
+	bool any_active = false;
+	bool allow = true;
+
+	display->power.dc3co_allow = 0;
+
+	if ((power_domains->allowed_dc_mask & DC_STATE_EN_UPTO_DC3CO) != DC_STATE_EN_UPTO_DC3CO)
+		return;
+
+	for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state, i) {
+		if (!new_crtc_state->hw.active)
+			continue;
+
+		any_active = true;
+
+		for_each_intel_encoder_mask(display->drm, encoder,
+					    new_crtc_state->uapi.encoder_mask) {
+			/* If any active pipe not eDP disable*/
+			if (!intel_encoder_is_dp(encoder) ||
+			    encoder->type != INTEL_OUTPUT_EDP) {
+				allow = false;
+				goto out;
+			}
+			intel_dp = enc_to_intel_dp(encoder);
+			/* Port, joiner, pipe placement checks */
+			if (!intel_dc3co_port_pipe_compatible(intel_dp, new_crtc_state)) {
+				allow = false;
+				goto out;
+			}
+		}
+	}
+
+	if (!any_active)
+		allow = false;
+
+out:
+	display->power.dc3co_allow = allow;
+}
+
 static int intel_atomic_check_config(struct intel_atomic_state *state,
 				     struct intel_link_bw_limits *limits,
 				     enum pipe *failed_pipe)
@@ -6562,6 +6631,8 @@ int intel_atomic_check(struct drm_device *dev,
 	ret = intel_fbc_atomic_check(state);
 	if (ret)
 		goto fail;
+
+	intel_dc3co_allow_check(state);
 
 	for_each_oldnew_intel_crtc_in_state(state, crtc, old_crtc_state,
 					    new_crtc_state, i) {
@@ -7596,6 +7667,10 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 		 */
 		intel_uncore_arm_unclaimed_mmio_detection(&dev_priv->uncore);
 	}
+	if (intel_dc3co_allowed(display))
+		intel_display_power_set_target_dc_state(display, DC_STATE_EN_UPTO_DC3CO);
+	else
+		intel_display_power_set_target_dc_state(display, DC_STATE_EN_UPTO_DC6);
 	/*
 	 * Delay re-enabling DC states by 17 ms to avoid the off->on->off
 	 * toggling overhead at and above 60 FPS.

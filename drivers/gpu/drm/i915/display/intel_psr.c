@@ -3892,14 +3892,11 @@ void intel_psr_notify_vblank_enable_disable(struct intel_display *display,
 		return;
 	}
 
-	/*
-	 * NOTE: intel_display_power_set_target_dc_state is used
-	 * only by PSR * code for DC3CO handling. DC3CO target
-	 * state is currently disabled in * PSR code. If DC3CO
-	 * is taken into use we need take that into account here
-	 * as well.
-	 */
-	intel_display_power_set_target_dc_state(display, enable ? DC_STATE_DISABLE :
+	if (intel_dc3co_allowed(display))
+		intel_display_power_set_target_dc_state(display, enable ? DC_STATE_DISABLE :
+						DC_STATE_EN_UPTO_DC3CO);
+	else
+		intel_display_power_set_target_dc_state(display, enable ? DC_STATE_DISABLE :
 						DC_STATE_EN_UPTO_DC6);
 }
 

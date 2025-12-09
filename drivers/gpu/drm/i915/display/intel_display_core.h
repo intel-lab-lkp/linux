@@ -523,6 +523,9 @@ struct intel_display {
 
 		/* perform PHY state sanity checks? */
 		bool chv_phy_assert[2];
+
+		/* mark dc3co entry is allowed*/
+		bool dc3co_allow;
 	} power;
 
 	struct {
