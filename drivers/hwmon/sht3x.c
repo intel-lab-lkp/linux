@@ -63,6 +63,7 @@ static const unsigned char sht3x_cmd_read_serial_number[]      = { 0x37, 0x80 };
 enum sht3x_chips {
 	sht3x,
 	sts3x,
+	sht85,
 };
 
 enum sht3x_limits {
@@ -666,6 +667,8 @@ static umode_t sht3x_is_visible(const void *data, enum hwmon_sensor_types type,
 		}
 		break;
 	case hwmon_temp:
+		if (chip_data->chip_id == sht85 && attr != hwmon_temp_input)
+			break;
 		switch (attr) {
 		case hwmon_temp_input:
 		case hwmon_temp_alarm:
@@ -681,6 +684,8 @@ static umode_t sht3x_is_visible(const void *data, enum hwmon_sensor_types type,
 		break;
 	case hwmon_humidity:
 		if (chip_data->chip_id == sts3x)
+			break;
+		if (chip_data->chip_id == sht85 && attr != hwmon_humidity_input)
 			break;
 		switch (attr) {
 		case hwmon_humidity_input:
@@ -901,16 +906,18 @@ static int sht3x_probe(struct i2c_client *client)
 	mutex_init(&data->i2c_lock);
 	mutex_init(&data->data_lock);
 
-	/*
-	 * An attempt to read limits register too early
-	 * causes a NACK response from the chip.
-	 * Waiting for an empirical delay of 500 us solves the issue.
-	 */
-	usleep_range(500, 600);
+	if (data->chip_id == sht3x || data->chip_id == sts3x) {
+		/*
+		 * An attempt to read limits register too early
+		 * causes a NACK response from the chip.
+		 * Waiting for an empirical delay of 500 us solves the issue.
+		 */
+		usleep_range(500, 600);
 
-	ret = limits_update(data);
-	if (ret)
-		return ret;
+		ret = limits_update(data);
+		if (ret)
+			return ret;
+	}
 
 	hwmon_dev = devm_hwmon_device_register_with_info(dev, client->name, data,
 							 &sht3x_chip_info, sht3x_groups);
@@ -926,6 +933,7 @@ static int sht3x_probe(struct i2c_client *client)
 static const struct i2c_device_id sht3x_ids[] = {
 	{"sht3x", sht3x},
 	{"sts3x", sts3x},
+	{"sht85", sht85},
 	{}
 };
 

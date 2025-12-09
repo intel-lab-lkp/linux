@@ -23,6 +23,15 @@ Supported chips:
         - https://sensirion.com/media/documents/1DA31AFD/61641F76/Sensirion_Temperature_Sensors_STS3x_Datasheet.pdf
         - https://sensirion.com/media/documents/292A335C/65537BAF/Sensirion_Datasheet_STS32_STS33.pdf
 
+  * Sensirion SHT85
+
+    Prefix: 'sht85'
+
+    Addresses scanned: none
+
+    Datasheets:
+        - https://sensirion.com/media/documents/4B40CEF3/640B2346/Sensirion_Humidity_Sensors_SHT85_Datasheet.pdf
+
 Author:
 
   - David Frey <david.frey@sensirion.com>
@@ -31,7 +40,7 @@ Author:
 Description
 -----------
 
-This driver implements support for the Sensirion SHT3x-DIS and STS3x-DIS
+This driver implements support for the Sensirion SHT3x-DIS, STS3x-DIS and SHT85
 series of humidity and temperature sensors. Temperature is measured in degrees
 celsius, relative humidity is expressed as a percentage. In the sysfs interface,
 all values are scaled by 1000, i.e. the value for 31.5 degrees celsius is 31500.
