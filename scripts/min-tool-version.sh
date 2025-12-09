@@ -19,6 +19,8 @@ binutils)
 gcc)
 	if [ "$ARCH" = parisc64 ]; then
 		echo 12.0.0
+	elif [ "$ARCH" = s390 ]; then
+		echo 9.1.0
 	else
 		echo 8.1.0
 	fi
