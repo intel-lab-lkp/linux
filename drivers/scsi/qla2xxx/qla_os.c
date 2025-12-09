@@ -532,25 +532,15 @@ static void qla2x00_free_rsp_que(struct qla_hw_data *ha, struct rsp_que *rsp)
 	kfree(rsp);
 }
 
-static void qla2x00_free_queues(struct qla_hw_data *ha)
+static void qla2x00_free_req_queues(struct qla_hw_data *ha)
 {
-	struct req_que *req;
-	struct rsp_que *rsp;
-	int cnt;
 	unsigned long flags;
+	int cnt;
 
-	if (ha->queue_pair_map) {
-		kfree(ha->queue_pair_map);
-		ha->queue_pair_map = NULL;
-	}
-	if (ha->base_qpair) {
-		kfree(ha->base_qpair);
-		ha->base_qpair = NULL;
-	}
-
-	qla_mapq_free_qp_cpu_map(ha);
 	spin_lock_irqsave(&ha->hardware_lock, flags);
 	for (cnt = 0; cnt < ha->max_req_queues; cnt++) {
+		struct req_que *req;
+
 		if (!test_bit(cnt, ha->req_qid_map))
 			continue;
 
@@ -566,16 +556,24 @@ static void qla2x00_free_queues(struct qla_hw_data *ha)
 
 	kfree(ha->req_q_map);
 	ha->req_q_map = NULL;
+}
 
+static void qla2x00_free_rsp_queues(struct qla_hw_data *ha)
+{
+	unsigned long flags;
+	int cnt;
 
 	spin_lock_irqsave(&ha->hardware_lock, flags);
 	for (cnt = 0; cnt < ha->max_rsp_queues; cnt++) {
+		struct rsp_que *rsp;
+
 		if (!test_bit(cnt, ha->rsp_qid_map))
 			continue;
 
 		rsp = ha->rsp_q_map[cnt];
 		clear_bit(cnt, ha->rsp_qid_map);
-		ha->rsp_q_map[cnt] =  NULL;
+		ha->rsp_q_map[cnt] = NULL;
+
 		spin_unlock_irqrestore(&ha->hardware_lock, flags);
 		qla2x00_free_rsp_que(ha, rsp);
 		spin_lock_irqsave(&ha->hardware_lock, flags);
@@ -584,6 +582,21 @@ static void qla2x00_free_queues(struct qla_hw_data *ha)
 
 	kfree(ha->rsp_q_map);
 	ha->rsp_q_map = NULL;
+}
+
+static void qla2x00_free_queues(struct qla_hw_data *ha)
+{
+
+	kfree(ha->queue_pair_map);
+	ha->queue_pair_map = NULL;
+
+	kfree(ha->base_qpair);
+	ha->base_qpair = NULL;
+
+	qla_mapq_free_qp_cpu_map(ha);
+
+	qla2x00_free_req_queues(ha);
+	qla2x00_free_rsp_queues(ha);
 }
 
 static char *
