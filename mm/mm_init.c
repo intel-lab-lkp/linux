@@ -1745,7 +1745,6 @@ static void __init free_area_init_node(int nid)
 	pgdat_set_deferred_range(pgdat);
 
 	free_area_init_core(pgdat);
-	lru_gen_init_pgdat(pgdat);
 }
 
 /* Any regular or high memory on that node ? */
