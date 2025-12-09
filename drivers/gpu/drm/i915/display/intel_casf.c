@@ -288,3 +288,17 @@ void intel_casf_disable(const struct intel_crtc_state *crtc_state)
 	intel_de_write(display, SHARPNESS_CTL(crtc->pipe), 0);
 	intel_de_write(display, SKL_PS_WIN_SZ(crtc->pipe, 1), 0);
 }
+
+void intel_casf_check(struct intel_atomic_state *state)
+{
+	int i;
+	struct intel_crtc_state *old_crtc_state, *new_crtc_state;
+	struct intel_crtc *crtc;
+
+	for_each_oldnew_intel_crtc_in_state(state, crtc, old_crtc_state,
+					    new_crtc_state, i) {
+		if (new_crtc_state->uapi.sharpness_strength !=
+		    old_crtc_state->uapi.sharpness_strength)
+			new_crtc_state->uapi.mode_changed = true;
+	}
+}
