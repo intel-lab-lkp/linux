@@ -154,3 +154,68 @@ void kvm_pmu_host_counters_disable(void)
 	mdcr &= ~MDCR_EL2_HPME;
 	write_sysreg(mdcr, mdcr_el2);
 }
+
+/**
+ * kvm_pmu_guest_num_counters() - Number of counters to show to guest
+ * @vcpu: Pointer to struct kvm_vcpu
+ *
+ * Calculate the number of counters to show to the guest via
+ * PMCR_EL0.N, making sure to respect the maximum the host allows,
+ * which is hpmn_max if partitioned and host_max otherwise.
+ *
+ * Return: Valid value for PMCR_EL0.N
+ */
+u8 kvm_pmu_guest_num_counters(struct kvm_vcpu *vcpu)
+{
+	u8 nr_cnt = vcpu->kvm->arch.nr_pmu_counters;
+	int hpmn_max = armv8pmu_hpmn_max;
+	u8 host_max = *host_data_ptr(nr_event_counters);
+
+	if (vcpu->kvm->arch.arm_pmu)
+		hpmn_max = vcpu->kvm->arch.arm_pmu->hpmn_max;
+
+	if (kvm_vcpu_pmu_is_partitioned(vcpu)) {
+		if (nr_cnt <= hpmn_max && nr_cnt <= host_max)
+			return nr_cnt;
+		if (hpmn_max <= host_max)
+			return hpmn_max;
+	}
+
+	if (nr_cnt <= host_max)
+		return nr_cnt;
+
+	return host_max;
+}
+
+/**
+ * kvm_pmu_hpmn() - Calculate HPMN field value
+ * @vcpu: Pointer to struct kvm_vcpu
+ *
+ * Calculate the appropriate value to set for MDCR_EL2.HPMN. If
+ * partitioned, this is the number of counters set for the guest if
+ * supported, falling back to hpmn_max if needed. If we are not
+ * partitioned or can't set the implied HPMN value, fall back to the
+ * host value.
+ *
+ * Return: A valid HPMN value
+ */
+u8 kvm_pmu_hpmn(struct kvm_vcpu *vcpu)
+{
+	u8 nr_guest_cnt = kvm_pmu_guest_num_counters(vcpu);
+	int nr_guest_cnt_max = armv8pmu_hpmn_max;
+	u8 nr_host_cnt_max = *host_data_ptr(nr_event_counters);
+
+	if (vcpu->kvm->arch.arm_pmu)
+		nr_guest_cnt_max = vcpu->kvm->arch.arm_pmu->hpmn_max;
+
+	if (kvm_vcpu_pmu_is_partitioned(vcpu)) {
+		if (cpus_have_final_cap(ARM64_HAS_HPMN0))
+			return nr_guest_cnt;
+		else if (nr_guest_cnt > 0)
+			return nr_guest_cnt;
+		else if (nr_guest_cnt_max > 0)
+			return nr_guest_cnt_max;
+	}
+
+	return nr_host_cnt_max;
+}
