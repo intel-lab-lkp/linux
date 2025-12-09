@@ -110,6 +110,20 @@ enum ieee80211_s1g_pri_chanwidth {
 };
 
 /**
+ * enum ieee80211_s1g_ri - S1G Response Indication type
+ * @IEEE80211_S1G_RI_NO_RESPONSE: No immediate response
+ * @IEEE80211_S1G_RI_NDP_RESPONSE: NDP Ack/CTS/BlockAck
+ * @IEEE80211_S1G_RI_NORMAL_RESPONSE: Ack/CTS/BlockAck/TACK
+ * @IEEE80211_S1G_RI_LONG_RESPONSE: Not an individual control response frame
+ */
+enum ieee80211_s1g_ri {
+	IEEE80211_S1G_RI_NO_RESPONSE = 0,
+	IEEE80211_S1G_RI_NDP_RESPONSE = 1,
+	IEEE80211_S1G_RI_NORMAL_RESPONSE = 2,
+	IEEE80211_S1G_RI_LONG_RESPONSE = 3,
+};
+
+/**
  * struct ieee80211_s1g_bcn_compat_ie - S1G Beacon Compatibility element
  * @compat_info: Compatibility Information
  * @beacon_int: Beacon Interval
