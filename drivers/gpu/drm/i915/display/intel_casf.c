@@ -76,7 +76,8 @@ static void intel_casf_filter_lut_load(struct intel_crtc *crtc,
 			       sharpness_lut[i]);
 }
 
-void intel_casf_update_strength(struct intel_crtc_state *crtc_state)
+void intel_casf_update_strength(struct intel_dsb *dsb,
+				struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
@@ -259,7 +260,8 @@ void intel_casf_scaler_compute_config(struct intel_crtc_state *crtc_state)
 	}
 }
 
-void intel_casf_enable(struct intel_crtc_state *crtc_state)
+void intel_casf_enable(struct intel_dsb *dsb,
+		       struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
@@ -273,20 +275,21 @@ void intel_casf_enable(struct intel_crtc_state *crtc_state)
 
 	sharpness_ctl |= crtc_state->hw.casf_params.win_size;
 
-	intel_de_write(display, SHARPNESS_CTL(crtc->pipe), sharpness_ctl);
+	intel_de_write_dsb(display, dsb, SHARPNESS_CTL(crtc->pipe), sharpness_ctl);
 
 	skl_scaler_setup_casf(crtc_state);
 }
 
-void intel_casf_disable(const struct intel_crtc_state *crtc_state)
+void intel_casf_disable(struct intel_dsb *dsb,
+			const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 
-	intel_de_write(display, SKL_PS_CTRL(crtc->pipe, 1), 0);
-	intel_de_write(display, SKL_PS_WIN_POS(crtc->pipe, 1), 0);
-	intel_de_write(display, SHARPNESS_CTL(crtc->pipe), 0);
-	intel_de_write(display, SKL_PS_WIN_SZ(crtc->pipe, 1), 0);
+	intel_de_write_dsb(display, dsb, SKL_PS_CTRL(crtc->pipe, 1), 0);
+	intel_de_write_dsb(display, dsb, SKL_PS_WIN_POS(crtc->pipe, 1), 0);
+	intel_de_write_dsb(display, dsb, SHARPNESS_CTL(crtc->pipe), 0);
+	intel_de_write_dsb(display, dsb, SKL_PS_WIN_SZ(crtc->pipe, 1), 0);
 }
 
 void intel_casf_check(struct intel_atomic_state *state)

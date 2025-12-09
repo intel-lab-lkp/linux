@@ -1165,7 +1165,7 @@ static void intel_pre_plane_update(struct intel_atomic_state *state,
 		intel_encoders_audio_disable(state, crtc);
 
 	if (intel_casf_disabling(old_crtc_state, new_crtc_state))
-		intel_casf_disable(new_crtc_state);
+		intel_casf_disable(NULL, new_crtc_state);
 
 	intel_drrs_deactivate(old_crtc_state);
 
@@ -6804,9 +6804,9 @@ static void intel_pre_update_crtc(struct intel_atomic_state *state,
 	}
 
 	if (intel_casf_enabling(new_crtc_state, old_crtc_state))
-		intel_casf_enable(new_crtc_state);
+		intel_casf_enable(NULL, new_crtc_state);
 	else if (new_crtc_state->hw.casf_params.strength != old_crtc_state->hw.casf_params.strength)
-		intel_casf_update_strength(new_crtc_state);
+		intel_casf_update_strength(NULL, new_crtc_state);
 
 	intel_fbc_update(state, crtc);
 
