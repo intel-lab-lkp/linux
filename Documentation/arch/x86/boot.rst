@@ -433,30 +433,30 @@ Protocol:	2.00+
 
   Assigned boot loader IDs:
 
-	== =======================================
-	0x0  LILO
-	     (0x00 reserved for pre-2.00 bootloader)
-	0x1  Loadlin
-	0x2  bootsect-loader
-	     (0x20, all other values reserved)
-	0x3  Syslinux
-	0x4  Etherboot/gPXE/iPXE
-	0x5  ELILO
-	0x7  GRUB
-	0x8  U-Boot
-	0x9  Xen
-	0xA  Gujin
-	0xB  Qemu
-	0xC  Arcturus Networks uCbootloader
-	0xD  kexec-tools
-	0xE  Extended (see ext_loader_type)
-	0xF  Special (0xFF = undefined)
-	0x10 Reserved
-	0x11 Minimal Linux Bootloader
-	     <http://sebastian-plotz.blogspot.de>
-	0x12 OVMF UEFI virtualization stack
-	0x13 barebox
-	== =======================================
+==== ==============================
+0x0  LILO
+      (0x00 reserved for pre-2.00 bootloader)
+0x1  Loadlin
+0x2  bootsect-loader
+      (0x20, all other values reserved)
+0x3  Syslinux
+0x4  Etherboot/gPXE/iPXE
+0x5  ELILO
+0x7  GRUB
+0x8  U-Boot
+0x9  Xen
+0xA  Gujin
+0xB  Qemu
+0xC  Arcturus Networks uCbootloader
+0xD  kexec-tools
+0xE  Extended (see ext_loader_type)
+0xF  Special (0xFF = undefined)
+0x10 Reserved
+0x11 Minimal Linux Bootloader
+      <http://sebastian-plotz.blogspot.de>
+0x12 OVMF UEFI virtualization stack
+0x13 barebox
+==== ==============================
 
   Please contact <hpa@zytor.com> if you need a bootloader ID value assigned.
 
