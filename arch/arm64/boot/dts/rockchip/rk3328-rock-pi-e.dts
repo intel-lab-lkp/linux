@@ -163,6 +163,7 @@
 		#size-cells = <0>;
 
 		rtl8211: ethernet-phy@1 {
+			compatible = "ethernet-phy-id001c.c916";
 			reg = <1>;
 			pinctrl-0 = <&eth_phy_int_pin>, <&eth_phy_reset_pin>;
 			pinctrl-names = "default";
