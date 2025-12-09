@@ -1197,6 +1197,8 @@ static bool access_pmu_evtyper(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
 		p->regval = __vcpu_sys_reg(vcpu, reg);
 	}
 
+	kvm_pmu_set_physical_access(vcpu);
+
 	return true;
 }
 
@@ -1301,6 +1303,8 @@ static bool access_pmovs(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
 	} else {
 		p->regval = __vcpu_sys_reg(vcpu, PMOVSSET_EL0);
 	}
+
+	kvm_pmu_set_physical_access(vcpu);
 
 	return true;
 }

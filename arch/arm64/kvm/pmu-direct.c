@@ -73,6 +73,7 @@ bool kvm_vcpu_pmu_use_fgt(struct kvm_vcpu *vcpu)
 	u8 hpmn = vcpu->kvm->arch.nr_pmu_counters;
 
 	return kvm_vcpu_pmu_is_partitioned(vcpu) &&
+		vcpu->arch.pmu.access == VCPU_PMU_ACCESS_PHYSICAL &&
 		cpus_have_final_cap(ARM64_HAS_FGT) &&
 		(hpmn != 0 || cpus_have_final_cap(ARM64_HAS_HPMN0));
 }
@@ -90,6 +91,26 @@ u64 kvm_pmu_fgt2_bits(void)
 {
 	return HDFGRTR2_EL2_nPMICFILTR_EL0
 		| HDFGRTR2_EL2_nPMICNTR_EL0;
+}
+
+/**
+ * kvm_pmu_set_physical_access()
+ * @vcpu: Pointer to vcpu struct
+ *
+ * Reconfigure the guest for physical access of PMU hardware if
+ * allowed. This means reconfiguring mdcr_el2 and loading the vCPU
+ * state onto hardware.
+ *
+ */
+
+void kvm_pmu_set_physical_access(struct kvm_vcpu *vcpu)
+{
+	if (kvm_vcpu_pmu_is_partitioned(vcpu)
+	    && vcpu->arch.pmu.access == VCPU_PMU_ACCESS_VIRTUAL) {
+		vcpu->arch.pmu.access = VCPU_PMU_ACCESS_PHYSICAL;
+		kvm_arm_setup_mdcr_el2(vcpu);
+		kvm_pmu_load(vcpu);
+	}
 }
 
 /**

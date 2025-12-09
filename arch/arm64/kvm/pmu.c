@@ -471,6 +471,12 @@ int kvm_arm_pmu_v3_enable(struct kvm_vcpu *vcpu)
 	return 0;
 }
 
+static void kvm_pmu_register_init(struct kvm_vcpu *vcpu)
+{
+	if (vcpu->arch.pmu.access == VCPU_PMU_ACCESS_UNSET)
+		vcpu->arch.pmu.access = VCPU_PMU_ACCESS_VIRTUAL;
+}
+
 static int kvm_arm_pmu_v3_init(struct kvm_vcpu *vcpu)
 {
 	if (irqchip_in_kernel(vcpu->kvm)) {
@@ -496,6 +502,7 @@ static int kvm_arm_pmu_v3_init(struct kvm_vcpu *vcpu)
 	init_irq_work(&vcpu->arch.pmu.overflow_work,
 		      kvm_pmu_perf_overflow_notify_vcpu);
 
+	kvm_pmu_register_init(vcpu);
 	vcpu->arch.pmu.created = true;
 	return 0;
 }

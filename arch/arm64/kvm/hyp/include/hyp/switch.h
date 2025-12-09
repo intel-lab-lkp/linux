@@ -963,6 +963,8 @@ static bool kvm_hyp_handle_pmu_regs(struct kvm_vcpu *vcpu)
 	if (ret)
 		__kvm_skip_instr(vcpu);
 
+	kvm_pmu_set_physical_access(vcpu);
+
 	return ret;
 }
 
