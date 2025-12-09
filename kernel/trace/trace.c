@@ -6109,8 +6109,10 @@ static int cmp_mod_entry(const void *key, const void *pivot)
 
 	if (addr >= ent[0].mod_addr && addr < ent[1].mod_addr)
 		return 0;
+	else if (addr > ent->mod_addr)
+		return 1;
 	else
-		return addr - ent->mod_addr;
+		return -1;
 }
 
 /**
