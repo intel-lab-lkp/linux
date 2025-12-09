@@ -251,11 +251,9 @@ struct smb2_file_id_extd_directory_info {
 
 extern char smb2_padding[7];
 
-/* equivalent of the contents of SMB3.1.1 POSIX open context response */
+/* See POSIX-SMB2 2.2.14.2.16 */
 struct create_posix_rsp {
-	u32 nlink;
-	u32 reparse_tag;
-	u32 mode;
+	struct create_posix_ctxt_rsp ctxt_rsp;
 	struct smb_sid owner; /* var-sized on the wire */
 	struct smb_sid group; /* var-sized on the wire */
 } __packed;

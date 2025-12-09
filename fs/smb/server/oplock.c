@@ -1703,7 +1703,7 @@ void create_posix_rsp_buf(char *cc, struct ksmbd_file *fp)
 	buf = (struct create_posix_rsp *)cc;
 	memset(buf, 0, sizeof(struct create_posix_rsp));
 	buf->ccontext.DataOffset = cpu_to_le16(offsetof
-			(struct create_posix_rsp, nlink));
+			(struct create_posix_rsp, ctxt_rsp));
 	/*
 	 * DataLength = nlink(4) + reparse_tag(4) + mode(4) +
 	 * domain sid(28) + unix group sid(16).
@@ -1730,9 +1730,9 @@ void create_posix_rsp_buf(char *cc, struct ksmbd_file *fp)
 	buf->Name[14] = 0xCD;
 	buf->Name[15] = 0x7C;
 
-	buf->nlink = cpu_to_le32(inode->i_nlink);
-	buf->reparse_tag = cpu_to_le32(fp->volatile_id);
-	buf->mode = cpu_to_le32(inode->i_mode & 0777);
+	buf->ctxt_rsp.nlink = cpu_to_le32(inode->i_nlink);
+	buf->ctxt_rsp.reparse_tag = cpu_to_le32(fp->volatile_id);
+	buf->ctxt_rsp.mode = cpu_to_le32(inode->i_mode & 0777);
 	/*
 	 * SidBuffer(44) contain two sids(Domain sid(28), UNIX group sid(16)).
 	 * Domain sid(28) = revision(1) + num_subauth(1) + authority(6) +

@@ -2298,9 +2298,9 @@ parse_posix_ctxt(struct create_context *cc, struct smb2_file_all_info *info,
 
 	memset(posix, 0, sizeof(*posix));
 
-	posix->nlink = le32_to_cpu(*(__le32 *)(beg + 0));
-	posix->reparse_tag = le32_to_cpu(*(__le32 *)(beg + 4));
-	posix->mode = le32_to_cpu(*(__le32 *)(beg + 8));
+	posix->ctxt_rsp.nlink = le32_to_cpu(*(__le32 *)(beg + 0));
+	posix->ctxt_rsp.reparse_tag = le32_to_cpu(*(__le32 *)(beg + 4));
+	posix->ctxt_rsp.mode = le32_to_cpu(*(__le32 *)(beg + 8));
 
 	sid = beg + 12;
 	sid_len = posix_info_sid_size(sid, end);
@@ -2319,7 +2319,8 @@ parse_posix_ctxt(struct create_context *cc, struct smb2_file_all_info *info,
 	memcpy(&posix->group, sid, sid_len);
 
 	cifs_dbg(FYI, "nlink=%d mode=%o reparse_tag=%x\n",
-		 posix->nlink, posix->mode, posix->reparse_tag);
+		 posix->ctxt_rsp.nlink, posix->ctxt_rsp.mode,
+		 posix->ctxt_rsp.reparse_tag);
 }
 
 int smb2_parse_contexts(struct TCP_Server_Info *server,
