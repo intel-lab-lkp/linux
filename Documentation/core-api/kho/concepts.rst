@@ -72,3 +72,16 @@ Public API
 ==========
 .. kernel-doc:: kernel/liveupdate/kexec_handover.c
    :export:
+
+Internal API
+============
+.. kernel-doc:: kernel/liveupdate/kexec_handover_internal.h
+
+.. kernel-doc:: kernel/liveupdate/kexec_handover.c
+   :internal:
+
+.. kernel-doc:: kernel/liveupdate/kexec_handover_debugfs.c
+   :internal:
+
+.. kernel-doc:: kernel/liveupdate/kexec_handover_debug.c
+   :internal:
