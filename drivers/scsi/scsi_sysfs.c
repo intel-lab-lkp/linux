@@ -610,9 +610,59 @@ static DEVICE_ATTR(field, S_IRUGO, sdev_show_##field, NULL);
  */
 sdev_rd_attr (type, "%d\n");
 sdev_rd_attr (scsi_level, "%d\n");
-sdev_rd_attr (vendor, "%.8s\n");
-sdev_rd_attr (model, "%.16s\n");
-sdev_rd_attr (rev, "%.4s\n");
+
+/* Custom show functions for inquiry strings that take the inquiry_mutex */
+static ssize_t
+sdev_show_vendor(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct scsi_device *sdev = to_scsi_device(dev);
+	ssize_t ret;
+
+	mutex_lock(&sdev->inquiry_mutex);
+	if (sdev->inquiry)
+		ret = snprintf(buf, 20, "%.*s\n", SCSI_INQ_VENDOR_LEN,
+			       scsi_inq_vendor(sdev->inquiry));
+	else
+		ret = snprintf(buf, 20, "\n");
+	mutex_unlock(&sdev->inquiry_mutex);
+	return ret;
+}
+static DEVICE_ATTR(vendor, S_IRUGO, sdev_show_vendor, NULL);
+
+static ssize_t
+sdev_show_model(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct scsi_device *sdev = to_scsi_device(dev);
+	ssize_t ret;
+
+	mutex_lock(&sdev->inquiry_mutex);
+	if (sdev->inquiry)
+		ret = snprintf(buf, 20, "%.*s\n", SCSI_INQ_PRODUCT_LEN,
+			       scsi_inq_product(sdev->inquiry));
+	else
+		ret = snprintf(buf, 20, "\n");
+	mutex_unlock(&sdev->inquiry_mutex);
+	return ret;
+}
+static DEVICE_ATTR(model, S_IRUGO, sdev_show_model, NULL);
+
+static ssize_t
+sdev_show_rev(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct scsi_device *sdev = to_scsi_device(dev);
+	ssize_t ret;
+
+	mutex_lock(&sdev->inquiry_mutex);
+	if (sdev->inquiry)
+		ret = snprintf(buf, 20, "%.*s\n", SCSI_INQ_REVISION_LEN,
+			       scsi_inq_revision(sdev->inquiry));
+	else
+		ret = snprintf(buf, 20, "\n");
+	mutex_unlock(&sdev->inquiry_mutex);
+	return ret;
+}
+static DEVICE_ATTR(rev, S_IRUGO, sdev_show_rev, NULL);
+
 sdev_rd_attr (cdl_supported, "%d\n");
 
 static ssize_t
@@ -877,12 +927,18 @@ static ssize_t show_inquiry(struct file *filep, struct kobject *kobj,
 {
 	struct device *dev = kobj_to_dev(kobj);
 	struct scsi_device *sdev = to_scsi_device(dev);
+	ssize_t ret;
 
-	if (!sdev->inquiry)
-		return -EINVAL;
+	mutex_lock(&sdev->inquiry_mutex);
+	if (!sdev->inquiry) {
+		ret = -EINVAL;
+	} else {
+		ret = memory_read_from_buffer(buf, count, &off, sdev->inquiry,
+					       sdev->inquiry_len);
+	}
+	mutex_unlock(&sdev->inquiry_mutex);
 
-	return memory_read_from_buffer(buf, count, &off, sdev->inquiry,
-				       sdev->inquiry_len);
+	return ret;
 }
 
 static const struct bin_attribute dev_attr_inquiry = {

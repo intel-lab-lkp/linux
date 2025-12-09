@@ -169,6 +169,177 @@ enum scsi_disposition {
 #define SCSI_INQ_PQ_NOT_CON     0x01
 #define SCSI_INQ_PQ_NOT_CAP     0x03
 
+/*
+ * INQUIRY data field offsets and lengths (SPC-6 section 6.7.2)
+ */
+#define SCSI_INQ_STD_LEN		36	/* Minimum standard INQUIRY response */
+#define SCSI_INQ_VENDOR_OFFSET		8	/* Vendor Identification (8 bytes) */
+#define SCSI_INQ_VENDOR_LEN		8
+#define SCSI_INQ_PRODUCT_OFFSET		16	/* Product Identification (16 bytes) */
+#define SCSI_INQ_PRODUCT_LEN		16
+#define SCSI_INQ_REVISION_OFFSET	32	/* Product Revision Level (4 bytes) */
+#define SCSI_INQ_REVISION_LEN		4
+
+/*
+ * INQUIRY data byte 0 bit masks
+ */
+#define SCSI_INQ_PERIPH_QUAL_MASK	0xe0	/* Peripheral Qualifier (bits 5-7) */
+#define SCSI_INQ_PERIPH_QUAL_SHIFT	5
+#define SCSI_INQ_DEVICE_TYPE_MASK	0x1f	/* Peripheral Device Type (bits 0-4) */
+
+/*
+ * INQUIRY data byte 1 bit masks
+ */
+#define SCSI_INQ_RMB_MASK		0x80	/* Removable Media Bit (bit 7) */
+
+/*
+ * INQUIRY data byte 3 bit masks
+ */
+#define SCSI_INQ_RESP_DATA_FMT_MASK	0x07	/* Response Data Format (bits 0-2) */
+
+/*
+ * INQUIRY data byte 7 bit masks
+ */
+#define SCSI_INQ_WBUS16			0x20	/* Wide Bus 16 (bit 5) */
+#define SCSI_INQ_SYNC			0x10	/* Synchronous (bit 4) */
+#define SCSI_INQ_CMDQUE			0x02	/* Command Queuing (bit 1) */
+#define SCSI_INQ_SFTRE			0x01	/* Soft Reset (bit 0) */
+
+/**
+ * scsi_inq_periph_qual - Extract peripheral qualifier from INQUIRY byte 0
+ * @inq_byte0: INQUIRY data byte 0
+ *
+ * Returns: Peripheral Qualifier (0-7)
+ */
+static inline unsigned char scsi_inq_periph_qual(unsigned char inq_byte0)
+{
+	return (inq_byte0 & SCSI_INQ_PERIPH_QUAL_MASK) >> SCSI_INQ_PERIPH_QUAL_SHIFT;
+}
+
+/**
+ * scsi_inq_device_type - Extract device type from INQUIRY byte 0
+ * @inq_byte0: INQUIRY data byte 0
+ * @lun: Logical Unit Number
+ *
+ * Extracts the peripheral device type from INQUIRY byte 0. For well-known
+ * logical units (W-LUNs), automatically corrects the type to TYPE_WLUN if
+ * the device reports an incorrect type, as some devices respond with wrong
+ * type for W-LUNs.
+ *
+ * Returns: Peripheral Device Type (0-31), corrected to TYPE_WLUN for W-LUNs
+ */
+static inline unsigned char scsi_inq_device_type(unsigned char inq_byte0, u64 lun)
+{
+	unsigned char type = inq_byte0 & SCSI_INQ_DEVICE_TYPE_MASK;
+
+	/*
+	 * Some devices may respond with wrong type for well-known logical
+	 * units. Force well-known type to enumerate them correctly.
+	 */
+	if (scsi_is_wlun(lun) && type != TYPE_WLUN)
+		type = TYPE_WLUN;
+
+	return type;
+}
+
+/**
+ * scsi_inq_removable - Extract removable media bit from INQUIRY byte 1
+ * @inq_byte1: INQUIRY data byte 1
+ *
+ * Returns: 1 if removable, 0 if not
+ */
+static inline unsigned char scsi_inq_removable(unsigned char inq_byte1)
+{
+	return (inq_byte1 & SCSI_INQ_RMB_MASK) ? 1 : 0;
+}
+
+/**
+ * scsi_inq_resp_data_fmt - Extract response data format from INQUIRY byte 3
+ * @inq_byte3: INQUIRY data byte 3
+ *
+ * Returns: Response Data Format (0-7)
+ */
+static inline unsigned char scsi_inq_resp_data_fmt(unsigned char inq_byte3)
+{
+	return inq_byte3 & SCSI_INQ_RESP_DATA_FMT_MASK;
+}
+
+/**
+ * scsi_inq_wbus16 - Check if device supports 16-bit wide bus from INQUIRY byte 7
+ * @inq_byte7: INQUIRY data byte 7
+ *
+ * Returns: 1 if 16-bit wide bus supported, 0 if not
+ */
+static inline unsigned char scsi_inq_wbus16(unsigned char inq_byte7)
+{
+	return (inq_byte7 & SCSI_INQ_WBUS16) ? 1 : 0;
+}
+
+/**
+ * scsi_inq_sync - Check if device supports synchronous transfers from INQUIRY byte 7
+ * @inq_byte7: INQUIRY data byte 7
+ *
+ * Returns: 1 if synchronous transfers supported, 0 if not
+ */
+static inline unsigned char scsi_inq_sync(unsigned char inq_byte7)
+{
+	return (inq_byte7 & SCSI_INQ_SYNC) ? 1 : 0;
+}
+
+/**
+ * scsi_inq_cmdque - Check if device supports command queuing from INQUIRY byte 7
+ * @inq_byte7: INQUIRY data byte 7
+ *
+ * Returns: 1 if command queuing supported, 0 if not
+ */
+static inline unsigned char scsi_inq_cmdque(unsigned char inq_byte7)
+{
+	return (inq_byte7 & SCSI_INQ_CMDQUE) ? 1 : 0;
+}
+
+/**
+ * scsi_inq_sftre - Check if device supports soft reset from INQUIRY byte 7
+ * @inq_byte7: INQUIRY data byte 7
+ *
+ * Returns: 1 if soft reset supported, 0 if not
+ */
+static inline unsigned char scsi_inq_sftre(unsigned char inq_byte7)
+{
+	return (inq_byte7 & SCSI_INQ_SFTRE) ? 1 : 0;
+}
+
+/**
+ * scsi_inq_vendor - Get pointer to vendor string in INQUIRY data
+ * @inq_data: Pointer to INQUIRY data buffer
+ *
+ * Returns: Pointer to 8-byte vendor identification string (not null-terminated)
+ */
+static inline const char *scsi_inq_vendor(const unsigned char *inq_data)
+{
+	return (const char *)(inq_data + SCSI_INQ_VENDOR_OFFSET);
+}
+
+/**
+ * scsi_inq_product - Get pointer to product string in INQUIRY data
+ * @inq_data: Pointer to INQUIRY data buffer
+ *
+ * Returns: Pointer to 16-byte product identification string (not null-terminated)
+ */
+static inline const char *scsi_inq_product(const unsigned char *inq_data)
+{
+	return (const char *)(inq_data + SCSI_INQ_PRODUCT_OFFSET);
+}
+
+/**
+ * scsi_inq_revision - Get pointer to revision string in INQUIRY data
+ * @inq_data: Pointer to INQUIRY data buffer
+ *
+ * Returns: Pointer to 4-byte product revision level string (not null-terminated)
+ */
+static inline const char *scsi_inq_revision(const unsigned char *inq_data)
+{
+	return (const char *)(inq_data + SCSI_INQ_REVISION_OFFSET);
+}
 
 /*
  * Here are some scsi specific ioctl commands which are sometimes useful.
