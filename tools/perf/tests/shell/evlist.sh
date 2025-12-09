@@ -38,13 +38,13 @@ test_evlist_simple() {
 
 test_evlist_group() {
 	echo "Group evlist test"
-	if ! perf record -e "{cycles,instructions}" -o "${perfdata}" true 2> /dev/null
+	if ! perf record -e "{cycles,cycles}" -o "${perfdata}" true 2> /dev/null
 	then
 		echo "Group evlist [Skipped event group recording failed]"
 		return
 	fi
 
-	if ! perf evlist -i "${perfdata}" -g | grep -q "{.*cycles.*,.*instructions.*}"
+	if ! perf evlist -i "${perfdata}" -g | grep -q "{.*cycles.*,.*cycles.*}"
 	then
 		echo "Group evlist [Failed to list event group]"
 		err=1
