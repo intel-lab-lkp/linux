@@ -20,6 +20,11 @@ struct dwc3_generic {
 	struct reset_control	*resets;
 };
 
+struct dwc3_generic_config {
+	u32 flags;
+};
+
+#define DWC3_HAS_40BIT_DMA_QUIRK BIT(0)
 #define to_dwc3_generic(d) container_of((d), struct dwc3_generic, dwc)
 
 static void dwc3_generic_reset_control_assert(void *data)
@@ -34,6 +39,7 @@ static int dwc3_generic_probe(struct platform_device *pdev)
 	struct dwc3_generic *dwc3g;
 	struct resource *res;
 	int ret;
+	const struct dwc3_generic_config *drvdata;
 
 	dwc3g = devm_kzalloc(dev, sizeof(*dwc3g), GFP_KERNEL);
 	if (!dwc3g)
@@ -69,6 +75,10 @@ static int dwc3_generic_probe(struct platform_device *pdev)
 	ret = devm_clk_bulk_get_all_enabled(dwc3g->dev, &dwc3g->clks);
 	if (ret < 0)
 		return dev_err_probe(dev, ret, "failed to get clocks\n");
+
+	drvdata = device_get_match_data(dev);
+	if (drvdata && (drvdata->flags & DWC3_HAS_40BIT_DMA_QUIRK))
+		dwc3g->dwc.dma_addressable_bits = 40;
 
 	dwc3g->num_clocks = ret;
 	dwc3g->dwc.dev = dev;
@@ -145,8 +155,16 @@ static const struct dev_pm_ops dwc3_generic_dev_pm_ops = {
 		       dwc3_generic_runtime_idle)
 };
 
+static const struct dwc3_generic_config agilex5_config = {
+	.flags = DWC3_HAS_40BIT_DMA_QUIRK,
+};
+
 static const struct of_device_id dwc3_generic_of_match[] = {
-	{ .compatible = "spacemit,k1-dwc3", },
+	{	.compatible = "spacemit,k1-dwc3", },
+	{
+		.compatible = "altr,agilex5-dwc3",
+		.data = &agilex5_config,
+	},
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, dwc3_generic_of_match);

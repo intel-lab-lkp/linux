@@ -1180,6 +1180,10 @@ struct dwc3_glue_ops {
  * @wakeup_pending_funcs: Indicates whether any interface has requested for
  *			 function wakeup in bitmap format where bit position
  *			 represents interface_id.
+ * @dma_addressable_bits: The number of address bits the device can drive on
+ *			the DMA bus. The driver uses this value to program DMA masks and
+ *			ensure DMA buffers are allocated within the device’s reachable
+ *			address space.
  */
 struct dwc3 {
 	struct work_struct	drd_work;
@@ -1414,6 +1418,7 @@ struct dwc3 {
 	struct dentry		*debug_root;
 	u32			gsbuscfg0_reqinfo;
 	u32			wakeup_pending_funcs;
+	u32			dma_addressable_bits;
 };
 
 #define INCRX_BURST_MODE 0

@@ -2243,7 +2243,11 @@ int dwc3_core_probe(const struct dwc3_probe_data *data)
 
 	if (!dwc->sysdev_is_parent &&
 	    DWC3_GHWPARAMS0_AWIDTH(dwc->hwparams.hwparams0) == 64) {
-		ret = dma_set_mask_and_coherent(dwc->sysdev, DMA_BIT_MASK(64));
+		if (!dwc->dma_addressable_bits)
+			dwc->dma_addressable_bits = 64;
+
+		ret = dma_set_mask_and_coherent(dwc->sysdev,
+						DMA_BIT_MASK(dwc->dma_addressable_bits));
 		if (ret)
 			goto err_disable_clks;
 	}
