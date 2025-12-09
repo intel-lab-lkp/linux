@@ -89,6 +89,7 @@ out:
 	return ret;
 }
 
+#ifdef CONFIG_FB_DEVICE
 static ssize_t
 sprintf_gamma(struct fbtft_par *par, u32 *curves, char *buf)
 {
@@ -145,6 +146,7 @@ static ssize_t show_gamma_curve(struct device *device,
 static struct device_attribute gamma_device_attrs[] = {
 	__ATTR(gamma, 0660, show_gamma_curve, store_gamma_curve),
 };
+#endif
 
 void fbtft_expand_debug_value(unsigned long *debug)
 {
@@ -173,6 +175,7 @@ void fbtft_expand_debug_value(unsigned long *debug)
 	}
 }
 
+#ifdef CONFIG_FB_DEVICE
 static ssize_t store_debug(struct device *device,
 			   struct device_attribute *attr,
 			   const char *buf, size_t count)
@@ -200,17 +203,22 @@ static ssize_t show_debug(struct device *device,
 
 static struct device_attribute debug_device_attr =
 	__ATTR(debug, 0660, show_debug, store_debug);
+#endif
 
 void fbtft_sysfs_init(struct fbtft_par *par)
 {
+#ifdef CONFIG_FB_DEVICE
 	device_create_file(par->info->dev, &debug_device_attr);
 	if (par->gamma.curves && par->fbtftops.set_gamma)
 		device_create_file(par->info->dev, &gamma_device_attrs[0]);
+#endif
 }
 
 void fbtft_sysfs_exit(struct fbtft_par *par)
 {
+#ifdef CONFIG_FB_DEVICE
 	device_remove_file(par->info->dev, &debug_device_attr);
 	if (par->gamma.curves && par->fbtftops.set_gamma)
 		device_remove_file(par->info->dev, &gamma_device_attrs[0]);
+#endif
 }
