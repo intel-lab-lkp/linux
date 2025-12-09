@@ -2,6 +2,8 @@
 
 #include <linux/pci.h>
 
+#ifdef CONFIG_PCI
+
 u16 rust_helper_pci_dev_id(struct pci_dev *dev)
 {
 	return PCI_DEVID(dev->bus->number, dev->devfn);
@@ -40,4 +42,6 @@ int rust_helper_pci_irq_vector(struct pci_dev *pdev, unsigned int nvec)
 {
 	return pci_irq_vector(pdev, nvec);
 }
+#endif
+
 #endif
