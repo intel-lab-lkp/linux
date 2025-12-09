@@ -38,12 +38,12 @@ properties:
     maxItems: 1
 
   clocks:
-    items:
-      - description: PLL reference clock
+    minItems: 1
+    maxItems: 4
 
   clock-names:
-    items:
-      - const: pll_ref
+    minItems: 1
+    maxItems: 4
 
   clock-output-names:
     maxItems: 1
@@ -78,6 +78,34 @@ required:
   - clock-output-names
   - "#phy-cells"
   - "#clock-cells"
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          const: mediatek,mt8195-hdmi-phy
+    then:
+      properties:
+        clocks:
+          items:
+            - description: PLL reference clock
+            - description: HDMI 26MHz clock
+            - description: HDMI PLL1 clock
+            - description: HDMI PLL2 clock
+        clock-names:
+          items:
+            - const: pll_ref
+            - const: hdmi_26m
+            - const: hdmi_pll1
+            - const: hdmi_pll2
+    else:
+      properties:
+        clocks:
+          items:
+            - description: PLL reference clock
+        clock-names:
+          items:
+            - const: pll_ref
 
 additionalProperties: false
 
