@@ -20,6 +20,10 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/damon.h>
 
+#ifdef CONFIG_DAMON_AUTO_TUNING
+#include "auto-tuning.h"
+#endif
+
 static DEFINE_MUTEX(damon_lock);
 static int nr_running_ctxs;
 static bool running_exclusive_ctxs;
@@ -476,6 +480,9 @@ struct damon_target *damon_new_target(void)
 	INIT_LIST_HEAD(&t->list);
 	t->obsolete = false;
 
+#ifdef CONFIG_DAMON_AUTO_TUNING
+	t->priority = 0;
+#endif
 	return t;
 }
 
@@ -2609,6 +2616,11 @@ static int kdamond_wait_activation(struct damon_ctx *ctx)
 
 		kdamond_usleep(min_wait_time);
 
+		/* TODO: Adapt to the damond_call mechanism. */
+#ifdef CONFIG_DAMON_AUTO_TUNING
+		kdamond_targets_auto_tuning(ctx);
+#endif
+
 		kdamond_call(ctx, false);
 		damos_walk_cancel(ctx);
 	}
@@ -2672,6 +2684,11 @@ static int kdamond_fn(void *data)
 		unsigned long next_aggregation_sis = ctx->next_aggregation_sis;
 		unsigned long next_ops_update_sis = ctx->next_ops_update_sis;
 		unsigned long sample_interval = ctx->attrs.sample_interval;
+
+		/* TODO: Adapt to the damond_call mechanism. */
+#ifdef CONFIG_DAMON_AUTO_TUNING
+		kdamond_targets_auto_tuning(ctx);
+#endif
 
 		if (kdamond_wait_activation(ctx))
 			break;

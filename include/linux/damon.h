@@ -108,6 +108,9 @@ struct damon_target {
 	struct list_head regions_list;
 	struct list_head list;
 	bool obsolete;
+#ifdef CONFIG_DAMON_AUTO_TUNING
+	unsigned int priority;
+#endif
 };
 
 /**

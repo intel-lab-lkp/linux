@@ -12,6 +12,17 @@ config DAMON
 	  See https://www.kernel.org/doc/html/latest/mm/damon/index.html for
 	  more information.
 
+config DAMON_AUTO_TUNING
+	bool "Build DAMON-based auto-tuning"
+	depends on DAMON_VADDR
+	default n
+	help
+	  This option enables the DAMON-based auto-tuning module, which
+	  automates memory management optimizations by dynamically adapting
+	  to observed data access patterns.
+
+	  If unsure, say N.
+
 config DAMON_KUNIT_TEST
 	bool "Test for damon" if !KUNIT_ALL_TESTS
 	depends on DAMON && KUNIT=y
