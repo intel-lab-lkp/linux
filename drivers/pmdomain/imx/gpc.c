@@ -402,7 +402,7 @@ clk_err:
 static int imx_gpc_probe(struct platform_device *pdev)
 {
 	const struct imx_gpc_dt_data *of_id_data = device_get_match_data(&pdev->dev);
-	struct device_node *pgc_node;
+	struct device_node *pgc_node __free(pgc_node);
 	struct regmap *regmap;
 	void __iomem *base;
 	int ret;
