@@ -41,6 +41,11 @@ struct intel_display_irq_interface {
 	void (*synchronize)(struct drm_device *drm);
 };
 
+struct intel_display_pc8_interface {
+	void (*block)(struct drm_device *drm);
+	void (*unblock)(struct drm_device *drm);
+};
+
 struct intel_display_rps_interface {
 	void (*boost_if_not_started)(struct dma_fence *fence);
 	void (*mark_interactive)(struct drm_device *drm, bool interactive);
@@ -68,6 +73,9 @@ struct intel_display_parent_interface {
 
 	/** @irq: IRQ interface */
 	const struct intel_display_irq_interface *irq;
+
+	/** @pc8: PC8 interface */
+	const struct intel_display_pc8_interface *pc8;
 
 	/** @rpm: RPS interface. Optional. */
 	const struct intel_display_rps_interface *rps;

@@ -56,6 +56,16 @@ void intel_parent_irq_synchronize(struct intel_display *display)
 	display->parent->irq->synchronize(display->drm);
 }
 
+void intel_parent_pc8_block(struct intel_display *display)
+{
+	display->parent->pc8->block(display->drm);
+}
+
+void intel_parent_pc8_unblock(struct intel_display *display)
+{
+	display->parent->pc8->unblock(display->drm);
+}
+
 bool intel_parent_rps_available(struct intel_display *display)
 {
 	return display->parent->rps;
