@@ -539,6 +539,37 @@ static int watchdog(void *dummy)
 	return 0;
 }
 
+#ifdef CONFIG_SYSFS
+static ssize_t hung_task_detect_count_reset_store(struct kobject *kobj,
+						  struct kobj_attribute *attr,
+						  const char *buf, size_t count)
+{
+	unsigned long val;
+	int ret;
+
+	ret = kstrtoul(buf, 0, &val);
+	if (ret)
+		return ret;
+	if (val != 1)
+		return -EINVAL;
+
+	WRITE_ONCE(sysctl_hung_task_detect_count, 0);
+
+	return count;
+}
+
+static struct kobj_attribute hung_task_detect_count_reset_attr = __ATTR_WO(hung_task_detect_count_reset);
+
+static __init int hung_task_detect_sysfs_init(void)
+{
+	sysfs_add_file_to_group(kernel_kobj,
+				&hung_task_detect_count_reset_attr.attr,
+				NULL);
+	return 0;
+}
+late_initcall(hung_task_detect_sysfs_init);
+#endif
+
 static int __init hung_task_init(void)
 {
 	atomic_notifier_chain_register(&panic_notifier_list, &panic_block);

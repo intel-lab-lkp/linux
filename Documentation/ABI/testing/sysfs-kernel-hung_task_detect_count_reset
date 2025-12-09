@@ -1,0 +1,8 @@
+What:		/sys/kernel/hung_task_detect_count_reset
+Date:		Dec 2025
+KernelVersion:	6.19
+Contact:	Linux kernel mailing list <linux-kernel@vger.kernel.org>
+Description:
+        A write-only interface to reset the persistent counter of tasks
+        detected as hung since boot. Write 1 to clear the counter and
+        restart diagnostic tracking without rebooting.
