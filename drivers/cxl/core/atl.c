@@ -57,6 +57,39 @@ static u64 prm_cxl_dpa_spa(struct pci_dev *pci_dev, u64 dpa)
 	return spa;
 }
 
+static u64 atl_hpa_to_spa(struct cxl_root_decoder *cxlrd, u64 hpa)
+{
+	/*
+	 * PRM translation could be expensive in tracing or error
+	 * handling code paths. Avoid this for now and return an
+	 * error instead.
+	 */
+
+	return ULLONG_MAX;
+}
+
+static u64 atl_spa_to_hpa(struct cxl_root_decoder *cxlrd, u64 spa)
+{
+	/*
+	 * The callback will be used in region_offset_to_dpa_result()
+	 * to determine the endpoint by the position in the
+	 * interleaving chunk. With Normalized addressing, the order
+	 * of endpoints in the interleaving chunk is implementation
+	 * defined. Do not use this approach and and return an error
+	 * instead.
+	 */
+
+	return ULLONG_MAX;
+}
+
+static int cxl_prm_setup_region(struct cxl_region *cxlr)
+{
+	cxlr->cxlrd->ops.hpa_to_spa = atl_hpa_to_spa;
+	cxlr->cxlrd->ops.spa_to_hpa = atl_spa_to_hpa;
+
+	return 0;
+}
+
 static int cxl_prm_setup_root(struct cxl_root *cxl_root, void *data)
 {
 	struct cxl_region_context *ctx = data;
@@ -182,6 +215,8 @@ static int cxl_prm_setup_root(struct cxl_root *cxl_root, void *data)
 	ctx->hpa_range = hpa_range;
 	ctx->interleave_ways = ways;
 	ctx->interleave_granularity = gran;
+
+	cxl_root->ops.translation_setup_region = cxl_prm_setup_region;
 
 	dev_dbg(&cxld->dev,
 		"address mapping found for %s (hpa -> spa): %#llx+%#llx -> %#llx+%#llx ways:%d granularity:%d\n",

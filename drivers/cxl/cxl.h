@@ -653,6 +653,7 @@ struct cxl_root_ops {
 			 struct access_coordinate *coord, int entries,
 			 int *qos_class);
 	int (*translation_setup_root)(struct cxl_root *cxl_root, void *data);
+	int (*translation_setup_region)(struct cxl_region *cxlr);
 };
 
 /**

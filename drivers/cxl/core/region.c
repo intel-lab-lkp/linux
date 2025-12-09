@@ -623,6 +623,21 @@ static ssize_t mode_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RO(mode);
 
+static int cxl_region_setup_translation(struct cxl_region *cxlr)
+{
+	struct cxl_port *root = to_cxl_port(cxlr->dev.parent->parent);
+	struct cxl_root *cxl_root;
+
+	if (!root || !is_cxl_root(root))
+		return 0;
+
+	cxl_root = to_cxl_root(root);
+	if (!cxl_root || !cxl_root->ops.translation_setup_region)
+		return 0;
+
+	return cxl_root->ops.translation_setup_region(cxlr);
+}
+
 static int alloc_hpa(struct cxl_region *cxlr, resource_size_t size)
 {
 	struct cxl_root_decoder *cxlrd = cxlr->cxlrd;
@@ -666,7 +681,7 @@ static int alloc_hpa(struct cxl_region *cxlr, resource_size_t size)
 	p->res = res;
 	p->state = CXL_CONFIG_INTERLEAVE_ACTIVE;
 
-	return 0;
+	return cxl_region_setup_translation(cxlr);
 }
 
 static void cxl_region_iomem_release(struct cxl_region *cxlr)
@@ -3662,6 +3677,10 @@ static int __construct_region(struct cxl_region *cxlr,
 	p->interleave_ways = ctx->interleave_ways;
 	p->interleave_granularity = ctx->interleave_granularity;
 	p->state = CXL_CONFIG_INTERLEAVE_ACTIVE;
+
+	rc = cxl_region_setup_translation(cxlr);
+	if (rc)
+		return rc;
 
 	rc = sysfs_update_group(&cxlr->dev.kobj, get_cxl_region_target_group());
 	if (rc)
