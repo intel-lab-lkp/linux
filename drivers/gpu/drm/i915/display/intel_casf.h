@@ -24,5 +24,8 @@ void intel_casf_disable(struct intel_dsb *dsb,
 void intel_casf_scaler_compute_config(struct intel_crtc_state *crtc_state);
 bool intel_casf_needs_scaler(const struct intel_crtc_state *crtc_state);
 void intel_casf_check(struct intel_atomic_state *state);
+void intel_casf_arm(struct intel_dsb *dsb,
+		    const struct intel_crtc_state *crtc_state);
+
 
 #endif /* __INTEL_CASF_H__ */

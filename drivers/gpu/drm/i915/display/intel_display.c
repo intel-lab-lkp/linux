@@ -6722,6 +6722,9 @@ static void commit_pipe_post_planes(struct intel_atomic_state *state,
 
 	drm_WARN_ON(display->drm, new_crtc_state->use_dsb || new_crtc_state->use_flipq);
 
+	if (new_crtc_state->hw.casf_params.casf_enable)
+		intel_casf_arm(new_crtc_state->dsb_commit,
+			       new_crtc_state);
 	/*
 	 * Disable the scaler(s) after the plane(s) so that we don't
 	 * get a catastrophic underrun even if the two operations
@@ -7364,6 +7367,9 @@ static void intel_atomic_dsb_finish(struct intel_atomic_state *state,
 		if (intel_crtc_needs_color_update(new_crtc_state))
 			intel_color_commit_arm(new_crtc_state->dsb_commit,
 					       new_crtc_state);
+		if (new_crtc_state->hw.casf_params.casf_enable)
+			intel_casf_arm(new_crtc_state->dsb_commit,
+				       new_crtc_state);
 		bdw_set_pipe_misc(new_crtc_state->dsb_commit,
 				  new_crtc_state);
 		intel_psr2_program_trans_man_trk_ctl(new_crtc_state->dsb_commit,

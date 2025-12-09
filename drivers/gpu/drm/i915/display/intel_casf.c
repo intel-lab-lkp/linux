@@ -81,14 +81,9 @@ void intel_casf_update_strength(struct intel_dsb *dsb,
 {
 	struct intel_display *display = to_intel_display(crtc_state);
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
-	int win_size;
 
 	intel_de_rmw(display, SHARPNESS_CTL(crtc->pipe), FILTER_STRENGTH_MASK,
 		     FILTER_STRENGTH(crtc_state->hw.casf_params.strength));
-
-	win_size = intel_de_read(display, SKL_PS_WIN_SZ(crtc->pipe, 1));
-
-	intel_de_write_fw(display, SKL_PS_WIN_SZ(crtc->pipe, 1), win_size);
 }
 
 static void intel_casf_compute_win_size(struct intel_crtc_state *crtc_state)
@@ -280,6 +275,27 @@ void intel_casf_enable(struct intel_dsb *dsb,
 	skl_scaler_setup_casf(crtc_state);
 }
 
+void intel_casf_arm(struct intel_dsb *dsb,
+		    const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	const struct drm_display_mode *adjusted_mode =
+		&crtc_state->hw.adjusted_mode;
+	const struct intel_crtc_scaler_state *scaler_state =
+		&crtc_state->scaler_state;
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	enum pipe pipe = crtc->pipe;
+
+	int id, width, height;
+
+	width = adjusted_mode->crtc_hdisplay;
+	height = adjusted_mode->crtc_vdisplay;
+	id = scaler_state->scaler_id;
+
+	intel_de_write_fw(display, SKL_PS_WIN_SZ(pipe, id),
+			  PS_WIN_XSIZE(width) | PS_WIN_YSIZE(height));
+}
+
 void intel_casf_disable(struct intel_dsb *dsb,
 			const struct intel_crtc_state *crtc_state)
 {
@@ -289,7 +305,6 @@ void intel_casf_disable(struct intel_dsb *dsb,
 	intel_de_write_dsb(display, dsb, SKL_PS_CTRL(crtc->pipe, 1), 0);
 	intel_de_write_dsb(display, dsb, SKL_PS_WIN_POS(crtc->pipe, 1), 0);
 	intel_de_write_dsb(display, dsb, SHARPNESS_CTL(crtc->pipe), 0);
-	intel_de_write_dsb(display, dsb, SKL_PS_WIN_SZ(crtc->pipe, 1), 0);
 }
 
 void intel_casf_check(struct intel_atomic_state *state)
