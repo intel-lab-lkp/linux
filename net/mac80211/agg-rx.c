@@ -94,7 +94,8 @@ void __ieee80211_stop_rx_ba_session(struct sta_info *sta, u16 tid,
 	/* check if this is a self generated aggregation halt */
 	if (initiator == WLAN_BACK_RECIPIENT && tx)
 		ieee80211_send_delba(sta->sdata, sta->sta.addr,
-				     tid, WLAN_BACK_RECIPIENT, reason);
+				     tid, WLAN_BACK_RECIPIENT, reason,
+				     ieee80211_s1g_use_ndp_ba(sta->sdata, sta));
 
 	/*
 	 * return here in case tid_rx is not assigned - which will happen if
@@ -240,6 +241,7 @@ static void ieee80211_send_addba_resp(struct sta_info *sta, u8 *da, u16 tid,
 	struct sk_buff *skb;
 	struct ieee80211_mgmt *mgmt;
 	bool amsdu = ieee80211_hw_check(&local->hw, SUPPORTS_AMSDU_IN_AMPDU);
+	bool use_ndp = ieee80211_s1g_use_ndp_ba(sdata, sta);
 	u16 capab;
 
 	skb = dev_alloc_skb(sizeof(*mgmt) +
@@ -253,7 +255,8 @@ static void ieee80211_send_addba_resp(struct sta_info *sta, u8 *da, u16 tid,
 
 	skb_put(skb, 1 + sizeof(mgmt->u.action.u.addba_resp));
 	mgmt->u.action.category = WLAN_CATEGORY_BACK;
-	mgmt->u.action.u.addba_resp.action_code = WLAN_ACTION_ADDBA_RESP;
+	mgmt->u.action.u.addba_resp.action_code = use_ndp ?
+		WLAN_ACTION_NDP_ADDBA_RESP : WLAN_ACTION_ADDBA_RESP;
 	mgmt->u.action.u.addba_resp.dialog_token = dialog_token;
 
 	capab = u16_encode_bits(amsdu, IEEE80211_ADDBA_PARAM_AMSDU_MASK);
@@ -275,6 +278,7 @@ void __ieee80211_start_rx_ba_session(struct sta_info *sta,
 				     u8 dialog_token, u16 timeout,
 				     u16 start_seq_num, u16 ba_policy, u16 tid,
 				     u16 buf_size, bool tx, bool auto_seq,
+				     bool req_ndp,
 				     const u8 addba_ext_data)
 {
 	struct ieee80211_local *local = sta->sdata->local;
@@ -296,6 +300,18 @@ void __ieee80211_start_rx_ba_session(struct sta_info *sta,
 	if (tid >= IEEE80211_FIRST_TSPEC_TSID) {
 		ht_dbg(sta->sdata,
 		       "STA %pM requests BA session on unsupported tid %d\n",
+		       sta->sta.addr, tid);
+		goto end;
+	}
+
+	if (tx && ieee80211_s1g_use_ndp_ba(sta->sdata, sta) && !req_ndp) {
+		/*
+		 * According to IEEE 802.11-2024: Inform S1G originator
+		 * ADDBA rejected as NDP BlockAck is preferred
+		 */
+		status = WLAN_STATUS_REJECTED_NDP_BLOCK_ACK_SUGGESTED;
+		ht_dbg(sta->sdata,
+		       "Rejecting AddBA Req from %pM tid %u - require NDP BlockAck\n",
 		       sta->sta.addr, tid);
 		goto end;
 	}
@@ -457,6 +473,18 @@ void __ieee80211_start_rx_ba_session(struct sta_info *sta,
 
 end:
 	if (status == WLAN_STATUS_SUCCESS) {
+		/*
+		 * Keep user-forced NO_RESPONSE; otherwise
+		 * track negotiated BA type
+		 */
+		if (sta->sdata->vif.bss_conf.s1g_ri !=
+		    IEEE80211_S1G_RI_NO_RESPONSE) {
+			u8 ri = req_ndp ? IEEE80211_S1G_RI_NDP_RESPONSE :
+				IEEE80211_S1G_RI_NORMAL_RESPONSE;
+
+			ieee80211_s1g_update_ri(sta->sdata,
+						&sta->sdata->deflink, ri);
+		}
 		__set_bit(tid, sta->ampdu_mlme.agg_session_valid);
 		__clear_bit(tid, sta->ampdu_mlme.unexpected_agg);
 		sta->ampdu_mlme.tid_rx_token[tid] = dialog_token;
@@ -473,6 +501,8 @@ void ieee80211_process_addba_request(struct ieee80211_local *local,
 				     struct ieee80211_mgmt *mgmt,
 				     size_t len)
 {
+	bool req_ndp = mgmt->u.action.u.addba_req.action_code ==
+				WLAN_ACTION_NDP_ADDBA_REQ;
 	u16 capab, tid, timeout, ba_policy, buf_size, start_seq_num;
 	u8 dialog_token, addba_ext_data;
 
@@ -497,7 +527,8 @@ void ieee80211_process_addba_request(struct ieee80211_local *local,
 
 	__ieee80211_start_rx_ba_session(sta, dialog_token, timeout,
 					start_seq_num, ba_policy, tid,
-					buf_size, true, false, addba_ext_data);
+					buf_size, true, false,
+					req_ndp, addba_ext_data);
 }
 
 void ieee80211_manage_rx_ba_offl(struct ieee80211_vif *vif,

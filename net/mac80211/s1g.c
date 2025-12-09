@@ -220,3 +220,26 @@ void ieee80211_s1g_cap_to_sta_s1g_cap(struct ieee80211_sub_if_data *sdata,
 
 	ieee80211_sta_recalc_aggregates(&link_sta->sta->sta);
 }
+
+bool ieee80211_s1g_use_ndp_ba(const struct ieee80211_sub_if_data *sdata,
+			      const struct sta_info *sta)
+{
+	if (!sdata->vif.cfg.s1g ||
+	    !ieee80211_hw_check(&sdata->local->hw, SUPPORTS_NDP_BLOCKACK))
+		return false;
+
+	return sdata->vif.bss_conf.s1g_ri == IEEE80211_S1G_RI_NDP_RESPONSE ||
+		(sta && sta->sta.deflink.s1g_cap.s1g);
+}
+
+void ieee80211_s1g_update_ri(struct ieee80211_sub_if_data *sdata,
+			     struct ieee80211_link_data *link,
+			     enum ieee80211_s1g_ri ri)
+{
+	if (!sdata->vif.cfg.s1g ||
+	    sdata->vif.bss_conf.s1g_ri == ri)
+		return;
+
+	sdata->vif.bss_conf.s1g_ri = ri;
+	ieee80211_link_info_change_notify(sdata, link, BSS_CHANGED_S1G_RI);
+}
