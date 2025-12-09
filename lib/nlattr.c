@@ -854,12 +854,12 @@ EXPORT_SYMBOL(nla_memcpy);
 int nla_memcmp(const struct nlattr *nla, const void *data,
 			     size_t size)
 {
-	int d = nla_len(nla) - size;
+	u16 l = nla_len(nla);
 
-	if (d == 0)
-		d = memcmp(nla_data(nla), data, size);
+	if (l == size)
+		return memcmp(nla_data(nla), data, size);
 
-	return d;
+	return l > size ? 1 : -1;
 }
 EXPORT_SYMBOL(nla_memcmp);
 
