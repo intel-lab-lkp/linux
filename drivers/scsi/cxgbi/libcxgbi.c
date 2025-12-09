@@ -539,18 +539,14 @@ static void sock_put_port(struct cxgbi_sock *csk)
  */
 void cxgbi_sock_free_cpl_skbs(struct cxgbi_sock *csk)
 {
-	if (csk->cpl_close) {
-		kfree_skb(csk->cpl_close);
-		csk->cpl_close = NULL;
-	}
-	if (csk->cpl_abort_req) {
-		kfree_skb(csk->cpl_abort_req);
-		csk->cpl_abort_req = NULL;
-	}
-	if (csk->cpl_abort_rpl) {
-		kfree_skb(csk->cpl_abort_rpl);
-		csk->cpl_abort_rpl = NULL;
-	}
+	kfree_skb(csk->cpl_close);
+	csk->cpl_close = NULL;
+
+	kfree_skb(csk->cpl_abort_req);
+	csk->cpl_abort_req = NULL;
+
+	kfree_skb(csk->cpl_abort_rpl);
+	csk->cpl_abort_rpl = NULL;
 }
 EXPORT_SYMBOL_GPL(cxgbi_sock_free_cpl_skbs);
 
