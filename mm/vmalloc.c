@@ -305,6 +305,7 @@ static int vmap_range_noflush(unsigned long addr, unsigned long end,
 	int err;
 	pgtbl_mod_mask mask = 0;
 
+	/* Might allocate pagetables. */
 	might_sleep();
 	BUG_ON(addr >= end);
 
