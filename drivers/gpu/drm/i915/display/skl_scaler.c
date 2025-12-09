@@ -761,41 +761,14 @@ static void skl_scaler_setup_filter(struct intel_display *display,
 
 void skl_scaler_setup_casf(struct intel_crtc_state *crtc_state)
 {
-	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
-	struct intel_display *display = to_intel_display(crtc);
 	struct drm_display_mode *adjusted_mode =
-	&crtc_state->hw.adjusted_mode;
-	struct intel_crtc_scaler_state *scaler_state =
-		&crtc_state->scaler_state;
-	struct drm_rect src, dest;
-	int id, width, height;
-	int x = 0, y = 0;
-	enum pipe pipe = crtc->pipe;
-	u32 ps_ctrl;
+		&crtc_state->hw.adjusted_mode;
+	int width, height, x = 0, y = 0;
 
 	width = adjusted_mode->crtc_hdisplay;
 	height = adjusted_mode->crtc_vdisplay;
 
-	drm_rect_init(&dest, x, y, width, height);
-
-	width = drm_rect_width(&dest);
-	height = drm_rect_height(&dest);
-	id = scaler_state->scaler_id;
-
-	drm_rect_init(&src, 0, 0,
-		      drm_rect_width(&crtc_state->pipe_src) << 16,
-		      drm_rect_height(&crtc_state->pipe_src) << 16);
-
-	trace_intel_pipe_scaler_update_arm(crtc, id, x, y, width, height);
-
-	ps_ctrl = PS_SCALER_EN | PS_BINDING_PIPE | scaler_state->scalers[id].mode |
-		  CASF_SCALER_FILTER_SELECT;
-
-	intel_de_write_fw(display, SKL_PS_CTRL(pipe, id), ps_ctrl);
-	intel_de_write_fw(display, SKL_PS_WIN_POS(pipe, id),
-			  PS_WIN_XPOS(x) | PS_WIN_YPOS(y));
-	intel_de_write_fw(display, SKL_PS_WIN_SZ(pipe, id),
-			  PS_WIN_XSIZE(width) | PS_WIN_YSIZE(height));
+	skl_pipe_scaler_setup(crtc_state, width, height, x, y);
 }
 
 void skl_pfit_enable(const struct intel_crtc_state *crtc_state)
@@ -805,16 +778,15 @@ void skl_pfit_enable(const struct intel_crtc_state *crtc_state)
 	const struct intel_crtc_scaler_state *scaler_state =
 		&crtc_state->scaler_state;
 	const struct drm_rect *dst = &crtc_state->pch_pfit.dst;
+	struct drm_rect src;
 	u16 uv_rgb_hphase, uv_rgb_vphase;
-	enum pipe pipe = crtc->pipe;
+	int hscale, vscale;
 	int width = drm_rect_width(dst);
 	int height = drm_rect_height(dst);
 	int x = dst->x1;
 	int y = dst->y1;
-	int hscale, vscale;
-	struct drm_rect src;
 	int id;
-	u32 ps_ctrl;
+	enum pipe pipe = crtc->pipe;
 
 	if (!crtc_state->pch_pfit.enabled)
 		return;
@@ -836,10 +808,34 @@ void skl_pfit_enable(const struct intel_crtc_state *crtc_state)
 	uv_rgb_hphase = skl_scaler_calc_phase(1, hscale, false);
 	uv_rgb_vphase = skl_scaler_calc_phase(1, vscale, false);
 
+	skl_pipe_scaler_setup(crtc_state, width, height, x, y);
+
+	id = scaler_state->scaler_id;
+
+	intel_de_write_fw(display, SKL_PS_VPHASE(pipe, id),
+			  PS_Y_PHASE(0) | PS_UV_RGB_PHASE(uv_rgb_vphase));
+	intel_de_write_fw(display, SKL_PS_HPHASE(pipe, id),
+			  PS_Y_PHASE(0) | PS_UV_RGB_PHASE(uv_rgb_hphase));
+	intel_de_write_fw(display, SKL_PS_WIN_SZ(pipe, id),
+			  PS_WIN_XSIZE(width) | PS_WIN_YSIZE(height));
+}
+
+void skl_pipe_scaler_setup(const struct intel_crtc_state *crtc_state,
+			   int width, int height, int x, int y)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	const struct intel_crtc_scaler_state *scaler_state =
+		&crtc_state->scaler_state;
+	enum pipe pipe = crtc->pipe;
+	int id;
+	u32 ps_ctrl;
+
 	id = scaler_state->scaler_id;
 
 	ps_ctrl = PS_SCALER_EN | PS_BINDING_PIPE | scaler_state->scalers[id].mode |
-		skl_scaler_get_filter_select(crtc_state->hw.scaling_filter);
+		  skl_scaler_get_filter_select(crtc_state->hw.scaling_filter) |
+		  CASF_SCALER_FILTER_SELECT;
 
 	trace_intel_pipe_scaler_update_arm(crtc, id, x, y, width, height);
 
@@ -848,14 +844,8 @@ void skl_pfit_enable(const struct intel_crtc_state *crtc_state)
 
 	intel_de_write_fw(display, SKL_PS_CTRL(pipe, id), ps_ctrl);
 
-	intel_de_write_fw(display, SKL_PS_VPHASE(pipe, id),
-			  PS_Y_PHASE(0) | PS_UV_RGB_PHASE(uv_rgb_vphase));
-	intel_de_write_fw(display, SKL_PS_HPHASE(pipe, id),
-			  PS_Y_PHASE(0) | PS_UV_RGB_PHASE(uv_rgb_hphase));
 	intel_de_write_fw(display, SKL_PS_WIN_POS(pipe, id),
 			  PS_WIN_XPOS(x) | PS_WIN_YPOS(y));
-	intel_de_write_fw(display, SKL_PS_WIN_SZ(pipe, id),
-			  PS_WIN_XSIZE(width) | PS_WIN_YSIZE(height));
 }
 
 void

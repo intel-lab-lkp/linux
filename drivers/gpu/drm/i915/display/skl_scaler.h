@@ -30,6 +30,8 @@ void skl_program_plane_scaler(struct intel_dsb *dsb,
 			      struct intel_plane *plane,
 			      const struct intel_crtc_state *crtc_state,
 			      const struct intel_plane_state *plane_state);
+void skl_pipe_scaler_setup(const struct intel_crtc_state *crtc_state,
+			   int width, int height, int x, int y);
 void skl_detach_scalers(struct intel_dsb *dsb,
 			const struct intel_crtc_state *crtc_state);
 void skl_scaler_disable(const struct intel_crtc_state *old_crtc_state);
