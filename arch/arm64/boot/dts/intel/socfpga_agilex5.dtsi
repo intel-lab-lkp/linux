@@ -428,6 +428,24 @@
 			status = "disabled";
 		};
 
+		usb31: usb1@11000000 {
+			compatible = "altr,agilex5-dwc3";
+			reg = <0x11000000 0x100000>;
+			interrupts = <GIC_SPI 94 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&clkmgr AGILEX5_USB31_SUSPEND_CLK>,
+				 <&clkmgr AGILEX5_USB31_BUS_CLK_EARLY>;
+			clock-names = "suspend_clk", "bus_clk";
+			resets = <&rst USB1_RESET>, <&rst USB1_OCP_RESET>;
+			reset-names = "dwc3", "dwc3-ecc";
+			iommus = <&smmu 7>;
+			phys = <&usbphy0>, <&usbphy0>;
+			phy-names = "usb2-phy", "usb3-phy";
+			maximum-speed = "super-speed";
+			snps,dis_u2_susphy_quirk;
+			snps,dis_u3_susphy_quirk;
+			status = "disabled";
+		};
+
 		watchdog0: watchdog@10d00200 {
 			compatible = "snps,dw-wdt";
 			reg = <0x10d00200 0x100>;
