@@ -1052,7 +1052,7 @@ int machine__create_extra_kernel_map(struct machine *machine,
 
 	kmap = map__kmap(map);
 
-	strlcpy(kmap->name, xm->name, KMAP_NAME_LEN);
+	strscpy(kmap->name, xm->name, KMAP_NAME_LEN);
 
 	err = maps__insert(machine__kernel_maps(machine), map);
 
