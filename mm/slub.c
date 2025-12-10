@@ -5077,6 +5077,11 @@ __pcs_replace_empty_main(struct kmem_cache *s, struct slub_percpu_sheaves *pcs, 
 	 */
 
 	if (pcs->main->size == 0) {
+		if (!pcs->spare) {
+			pcs->spare = pcs->main;
+			pcs->main = full;
+			return pcs;
+		}
 		barn_put_empty_sheaf(barn, pcs->main);
 		pcs->main = full;
 		return pcs;
