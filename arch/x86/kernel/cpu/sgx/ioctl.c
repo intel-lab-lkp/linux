@@ -521,14 +521,9 @@ static int sgx_encl_init(struct sgx_encl *encl, struct sgx_sigstruct *sigstruct,
 
 			preempt_enable();
 
-			if (ret == SGX_UNMASKED_EVENT)
-				continue;
-			else
-				break;
+			if (ret != SGX_UNMASKED_EVENT)
+				goto skip_loop;
 		}
-
-		if (ret != SGX_UNMASKED_EVENT)
-			break;
 
 		msleep_interruptible(SGX_EINIT_SLEEP_TIME);
 
@@ -538,6 +533,7 @@ static int sgx_encl_init(struct sgx_encl *encl, struct sgx_sigstruct *sigstruct,
 		}
 	}
 
+skip_loop:
 	if (encls_faulted(ret)) {
 		if (encls_failed(ret))
 			ENCLS_WARN(ret, "EINIT");
