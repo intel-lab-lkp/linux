@@ -290,19 +290,12 @@ int bnxt_re_assign_pma_port_ext_counters(struct bnxt_re_dev *rdev, struct ib_mad
 	pma_cnt_ext = (struct ib_pma_portcounters_ext *)(out_mad->data + 40);
 	if ((bnxt_qplib_is_chip_gen_p5(rdev->chip_ctx) && rdev->is_virtfn) ||
 	    !bnxt_qplib_is_chip_gen_p5(rdev->chip_ctx)) {
-		pma_cnt_ext->port_xmit_data =
-			cpu_to_be64(le64_to_cpu(hw_stats->tx_ucast_bytes) / 4);
-		pma_cnt_ext->port_rcv_data =
-			cpu_to_be64(le64_to_cpu(hw_stats->rx_ucast_bytes) / 4);
-		pma_cnt_ext->port_xmit_packets =
-			cpu_to_be64(le64_to_cpu(hw_stats->tx_ucast_pkts));
-		pma_cnt_ext->port_rcv_packets =
-			cpu_to_be64(le64_to_cpu(hw_stats->rx_ucast_pkts));
-		pma_cnt_ext->port_unicast_rcv_packets =
-			cpu_to_be64(le64_to_cpu(hw_stats->rx_ucast_pkts));
-		pma_cnt_ext->port_unicast_xmit_packets =
-			cpu_to_be64(le64_to_cpu(hw_stats->tx_ucast_pkts));
-
+		pma_cnt_ext->port_xmit_data = swab64(hw_stats->tx_ucast_bytes / 4);
+		pma_cnt_ext->port_rcv_data = swab64(hw_stats->rx_ucast_bytes / 4);
+		pma_cnt_ext->port_xmit_packets = swab64(hw_stats->tx_ucast_pkts);
+		pma_cnt_ext->port_rcv_packets = swab64(hw_stats->rx_ucast_pkts);
+		pma_cnt_ext->port_unicast_rcv_packets = swab64(hw_stats->rx_ucast_pkts);
+		pma_cnt_ext->port_unicast_xmit_packets = swab64(hw_stats->tx_ucast_pkts);
 	} else {
 		pma_cnt_ext->port_rcv_packets = cpu_to_be64(estat->rx_roce_good_pkts);
 		pma_cnt_ext->port_rcv_data = cpu_to_be64(estat->rx_roce_good_bytes / 4);
