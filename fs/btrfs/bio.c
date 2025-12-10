@@ -726,7 +726,7 @@ static u64 btrfs_append_map_length(struct btrfs_bio *bbio, u64 map_length)
 	int sector_offset;
 
 	map_length = min(map_length, fs_info->max_zone_append_size);
-	sector_offset = bio_split_rw_at(&bbio->bio, &fs_info->limits,
+	sector_offset = bio_split_io_at(&bbio->bio, &fs_info->limits,
 					&nr_segs, map_length);
 	if (sector_offset) {
 		/*

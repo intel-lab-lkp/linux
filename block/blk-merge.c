@@ -314,7 +314,6 @@ static inline unsigned int bvec_seg_gap(struct bio_vec *bvprv,
  * @lim:  [in] queue limits to split based on
  * @segs: [out] number of segments in the bio with the first half of the sectors
  * @max_bytes: [in] maximum number of bytes per bio
- * @len_align_mask: [in] length alignment mask for each vector
  *
  * Find out if @bio needs to be split to fit the queue limits in @lim and a
  * maximum size of @max_bytes.  Returns a negative error number if @bio can't be
@@ -322,15 +321,14 @@ static inline unsigned int bvec_seg_gap(struct bio_vec *bvprv,
  * @bio needs to be split.
  */
 int bio_split_io_at(struct bio *bio, const struct queue_limits *lim,
-		unsigned *segs, unsigned max_bytes, unsigned len_align_mask)
+		unsigned *segs, unsigned max_bytes)
 {
 	struct bio_vec bv, bvprv, *bvprvp = NULL;
 	unsigned nsegs = 0, bytes = 0, gaps = 0;
 	struct bvec_iter iter;
 
 	bio_for_each_bvec(bv, bio, iter) {
-		if (bv.bv_offset & lim->dma_alignment ||
-		    bv.bv_len & len_align_mask)
+		if (bv.bv_offset & lim->dma_alignment)
 			return -EINVAL;
 
 		/*
@@ -404,14 +402,14 @@ struct bio *bio_split_rw(struct bio *bio, const struct queue_limits *lim,
 		unsigned *nr_segs)
 {
 	return bio_submit_split(bio,
-		bio_split_rw_at(bio, lim, nr_segs,
+		bio_split_io_at(bio, lim, nr_segs,
 			get_max_io_size(bio, lim) << SECTOR_SHIFT));
 }
 
 /*
  * REQ_OP_ZONE_APPEND bios must never be split by the block layer.
  *
- * But we want the nr_segs calculation provided by bio_split_rw_at, and having
+ * But we want the nr_segs calculation provided by bio_split_io_at, and having
  * a good sanity check that the submitter built the bio correctly is nice to
  * have as well.
  */
@@ -420,7 +418,7 @@ struct bio *bio_split_zone_append(struct bio *bio,
 {
 	int split_sectors;
 
-	split_sectors = bio_split_rw_at(bio, lim, nr_segs,
+	split_sectors = bio_split_io_at(bio, lim, nr_segs,
 			lim->max_zone_append_sectors << SECTOR_SHIFT);
 	if (WARN_ON_ONCE(split_sectors > 0))
 		split_sectors = -EINVAL;

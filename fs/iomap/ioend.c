@@ -387,7 +387,7 @@ struct iomap_ioend *iomap_split_ioend(struct iomap_ioend *ioend,
 		max_len = min(max_len,
 			      lim->max_zone_append_sectors << SECTOR_SHIFT);
 
-		sector_offset = bio_split_rw_at(bio, lim, &nr_segs, max_len);
+		sector_offset = bio_split_io_at(bio, lim, &nr_segs, max_len);
 		if (unlikely(sector_offset < 0))
 			return ERR_PTR(sector_offset);
 		if (!sector_offset)

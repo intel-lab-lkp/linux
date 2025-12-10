@@ -323,7 +323,7 @@ void bio_trim(struct bio *bio, sector_t offset, sector_t size);
 extern struct bio *bio_split(struct bio *bio, int sectors,
 			     gfp_t gfp, struct bio_set *bs);
 int bio_split_io_at(struct bio *bio, const struct queue_limits *lim,
-		unsigned *segs, unsigned max_bytes, unsigned len_align);
+		unsigned *segs, unsigned max_bytes);
 u8 bio_seg_gap(struct request_queue *q, struct bio *prev, struct bio *next,
 		u8 gaps_bit);
 

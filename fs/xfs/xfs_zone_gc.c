@@ -767,7 +767,7 @@ xfs_zone_gc_split_write(
 	if (!chunk->is_seq)
 		return NULL;
 
-	split_sectors = bio_split_rw_at(&chunk->bio, lim, &nsegs,
+	split_sectors = bio_split_io_at(&chunk->bio, lim, &nsegs,
 			lim->max_zone_append_sectors << SECTOR_SHIFT);
 	if (!split_sectors)
 		return NULL;
