@@ -593,6 +593,8 @@ static void synaptics_i2c_remove(struct i2c_client *client)
 	if (!polling_req)
 		free_irq(client->irq, touch);
 
+	cancel_delayed_work_sync(&touch->dwork);
+
 	input_unregister_device(touch->input);
 	kfree(touch);
 }
