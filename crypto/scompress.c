@@ -377,26 +377,6 @@ void crypto_unregister_scomp(struct scomp_alg *alg)
 }
 EXPORT_SYMBOL_GPL(crypto_unregister_scomp);
 
-int crypto_register_scomps(struct scomp_alg *algs, int count)
-{
-	int i, ret;
-
-	for (i = 0; i < count; i++) {
-		ret = crypto_register_scomp(&algs[i]);
-		if (ret)
-			goto err;
-	}
-
-	return 0;
-
-err:
-	for (--i; i >= 0; --i)
-		crypto_unregister_scomp(&algs[i]);
-
-	return ret;
-}
-EXPORT_SYMBOL_GPL(crypto_register_scomps);
-
 void crypto_unregister_scomps(struct scomp_alg *algs, int count)
 {
 	int i;
@@ -405,6 +385,22 @@ void crypto_unregister_scomps(struct scomp_alg *algs, int count)
 		crypto_unregister_scomp(&algs[i]);
 }
 EXPORT_SYMBOL_GPL(crypto_unregister_scomps);
+
+int crypto_register_scomps(struct scomp_alg *algs, int count)
+{
+	int i, ret;
+
+	for (i = 0; i < count; i++) {
+		ret = crypto_register_scomp(&algs[i]);
+		if (ret) {
+			crypto_unregister_scomps(algs, i);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(crypto_register_scomps);
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Synchronous compression type");
