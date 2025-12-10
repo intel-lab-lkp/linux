@@ -28,6 +28,7 @@
 #define MEN_UART3_MASK	0x04
 #define MEN_UART4_MASK	0x08
 
+#define MEN_8250_MAX_SETUP		64
 #define MEN_Z025_MAX_UARTS		4
 #define MEN_UART_MEM_SIZE		0x10
 #define MEM_UART_REGISTER_SIZE		0x01
@@ -45,12 +46,18 @@ struct serial_8250_men_mcb_data {
 	int line[MEN_Z025_MAX_UARTS];
 	unsigned int offset[MEN_Z025_MAX_UARTS];
 };
+static int portindex;
+static ulong uartclk[MEN_8250_MAX_SETUP];
+module_param_array(uartclk, ulong, NULL, 0664);
+MODULE_PARM_DESC(
+	uartclk,
+	"Base for baudrate generation for each port. E.g.: uartclk=1843200,1843200,1041666,1041666. If set to 0 it will use board's default");
 
 /*
  * The Z125 16550-compatible UART has no fixed base clock assigned
  * So, depending on the board we're on, we need to adjust the
- * parameter in order to really set the correct baudrate, and
- * do so if possible without user interaction
+ * parameter in order to really set the correct baudrate. Can be
+ * overridden with uartclk parameter.
  */
 static u32 men_lookup_uartclk(struct mcb_device *mdev)
 {
@@ -60,7 +67,9 @@ static u32 men_lookup_uartclk(struct mcb_device *mdev)
 	dev_info(&mdev->dev, "%s on board %s\n",
 		dev_name(&mdev->dev),
 		mdev->bus->name);
-	if  (strncmp(mdev->bus->name, "F075", 4) == 0)
+	if (portindex < MEN_8250_MAX_SETUP && uartclk[portindex])
+		clkval = uartclk[portindex];
+	else if (strncmp(mdev->bus->name, "F075", 4) == 0)
 		clkval = 1041666;
 	else if (strncmp(mdev->bus->name, "F216", 4) == 0)
 		clkval = 1843200;
@@ -72,6 +81,7 @@ static u32 men_lookup_uartclk(struct mcb_device *mdev)
 		dev_info(&mdev->dev,
 			 "board not detected, using default uartclk\n");
 
+	++portindex;
 	clkval = clkval  << 4;
 
 	return clkval;
