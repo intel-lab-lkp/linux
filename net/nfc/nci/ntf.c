@@ -58,7 +58,8 @@ static int nci_core_conn_credits_ntf_packet(struct nci_dev *ndev,
 	struct nci_conn_info *conn_info;
 	int i;
 
-	if (skb->len < sizeof(struct nci_core_conn_credit_ntf))
+	/* Minimal packet size for num_entries=1 is 1 x __u8 + 1 x conn_credit_entry */
+	if (skb->len < (sizeof(__u8) + sizeof(struct conn_credit_entry)))
 		return -EINVAL;
 
 	ntf = (struct nci_core_conn_credit_ntf *)skb->data;
@@ -364,7 +365,8 @@ static int nci_rf_discover_ntf_packet(struct nci_dev *ndev,
 	const __u8 *data;
 	bool add_target = true;
 
-	if (skb->len < sizeof(struct nci_rf_discover_ntf))
+	/* Minimal packet size is 5 if rf_tech_specific_params_len=0 */
+	if (skb->len < (5 * sizeof(__u8)))
 		return -EINVAL;
 
 	data = skb->data;
@@ -596,7 +598,10 @@ static int nci_rf_intf_activated_ntf_packet(struct nci_dev *ndev,
 	const __u8 *data;
 	int err = NCI_STATUS_OK;
 
-	if (skb->len < sizeof(struct nci_rf_intf_activated_ntf))
+	/* Minimal packet size is 11 if
+	 * f_tech_specific_params_len=0 and activation_params_len=0
+	 */
+	if (skb->len < (11 * sizeof(__u8)))
 		return -EINVAL;
 
 	data = skb->data;
