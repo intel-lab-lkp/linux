@@ -823,7 +823,8 @@ static void __team_queue_override_port_del(struct team *team,
 {
 	if (!port->queue_id)
 		return;
-	list_del_rcu(&port->qom_list);
+	/* Ensure safe repeated deletion */
+	list_del_init_rcu(&port->qom_list);
 }
 
 static bool team_queue_override_port_has_gt_prio_than(struct team_port *port,
