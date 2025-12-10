@@ -1105,7 +1105,7 @@ static int ionic_prep_reg(struct ionic_qp *qp,
 	wqe->reg_mr.length = cpu_to_be64(mr->ibmr.length);
 	wqe->reg_mr.offset = ionic_pgtbl_off(&mr->buf, mr->ibmr.iova);
 	dma_addr = ionic_pgtbl_dma(&mr->buf, mr->ibmr.iova);
-	wqe->reg_mr.dma_addr = cpu_to_be64(le64_to_cpu(dma_addr));
+	wqe->reg_mr.dma_addr = swab64(dma_addr);
 
 	wqe->reg_mr.map_count = cpu_to_be32(mr->buf.tbl_pages);
 	wqe->reg_mr.flags = cpu_to_be16(flags);
