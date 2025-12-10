@@ -1,0 +1,112 @@
+#!/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2025 Guillaume Tucker
+
+"""Containerized builds"""
+
+import argparse
+import logging
+import os
+import subprocess
+import sys
+
+
+def get_logger(verbose):
+    """Set up a logger with the appropriate level"""
+    logger = logging.getLogger('container')
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter(
+        fmt='[container {levelname}] {message}', style='{'
+    ))
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG if verbose is True else logging.INFO)
+    return logger
+
+
+def run_docker(args):
+    """Run a command in a Docker container"""
+    uid = args.uid or os.getuid()
+    gid = args.gid or args.uid or os.getgid()
+    cmd = [
+        'docker', 'run',
+        '--interactive',
+        '--volume', f'{os.getcwd()}:/src',
+        '--workdir', '/src',
+        '--user', f'{uid}:{gid}'
+    ]
+    if args.env_file:
+        cmd += ['--env-file', args.env_file]
+    cmd.append(args.image)
+    cmd += args.cmd
+    return subprocess.call(cmd)
+
+
+def run_podman(args):
+    """Run a command in a Podman container"""
+    uid = args.uid or 1000
+    gid = args.gid or args.uid or 1000
+    cmd = [
+        'podman', 'run',
+        '--interactive',
+        '--volume', f'{os.getcwd()}:/src',
+        '--workdir', '/src',
+        '--userns', f'keep-id:uid={uid},gid={gid}',
+    ]
+    if args.env_file:
+        cmd += ['--env-file', args.env_file]
+    cmd.append(args.image)
+    cmd += args.cmd
+    return subprocess.call(cmd)
+
+
+def main(args):
+    """Main entry point for the container tool"""
+    logger = get_logger(args.verbose)
+    logger.debug("runtime=%s, image=%s", args.runtime, args.image)
+    runtimes = {
+        'docker': run_docker,
+        'podman': run_podman,
+    }
+    handler = runtimes.get(args.runtime)
+    if not handler:
+        logger.error("Unknown container runtime: %s", args.runtime)
+        return 1
+    try:
+        return handler(args)
+    except KeyboardInterrupt:
+        logger.error("aborted")
+        return 1
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser("Containerized builds")
+    parser.add_argument(
+        '-e', '--env-file',
+        help="Path to an environment file to load in the container."
+    )
+    parser.add_argument(
+        '-g', '--gid',
+        help="Group ID to use inside the container."
+    )
+    parser.add_argument(
+        '-i', '--image', default='gcc',
+        help="Container image, default is gcc."
+    )
+    parser.add_argument(
+        '-r', '--runtime', choices=['docker', 'podman'], default='docker',
+        help="Container runtime, default is docker."
+    )
+    parser.add_argument(
+        '-u', '--uid',
+        help="User ID to use inside the container.  If the -g option is not"
+        "specified, the user ID will also be used for the group ID."
+    )
+    parser.add_argument(
+        '-v', '--verbose', action='store_true',
+        help="Enable verbose output."
+    )
+    parser.add_argument(
+        'cmd', nargs='+',
+        help="Command to run in the container"
+    )
+    sys.exit(main(parser.parse_args(sys.argv[1:])))
