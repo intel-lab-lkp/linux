@@ -1000,6 +1000,9 @@ struct sk_buff {
 	/* Indicates the inner headers are valid in the skbuff. */
 	__u8			encapsulation:1;
 	__u8			encap_hdr_csum:1;
+#ifdef CONFIG_NET_REDIRECT
+	__u8			ttl:2;
+#endif
 	__u8			csum_valid:1;
 #ifdef CONFIG_IPV6_NDISC_NODETYPE
 	__u8			ndisc_nodetype:2;
@@ -1016,9 +1019,6 @@ struct sk_buff {
 	__u8			offload_l3_fwd_mark:1;
 #endif
 	__u8			redirected:1;
-#ifdef CONFIG_NET_REDIRECT
-	__u8			from_ingress:1;
-#endif
 #ifdef CONFIG_NETFILTER_SKIP_EGRESS
 	__u8			nf_skip_egress:1;
 #endif
@@ -5345,35 +5345,6 @@ static inline __wsum lco_csum(struct sk_buff *skb)
 	 * adjustment filled in by caller) and return result.
 	 */
 	return csum_partial(l4_hdr, csum_start - l4_hdr, partial);
-}
-
-static inline bool skb_is_redirected(const struct sk_buff *skb)
-{
-	return skb->redirected;
-}
-
-static inline void skb_set_redirected(struct sk_buff *skb, bool from_ingress)
-{
-	skb->redirected = 1;
-#ifdef CONFIG_NET_REDIRECT
-	skb->from_ingress = from_ingress;
-	if (skb->from_ingress)
-		skb_clear_tstamp(skb);
-#endif
-}
-
-static inline void skb_reset_redirect(struct sk_buff *skb)
-{
-	skb->redirected = 0;
-}
-
-static inline void skb_set_redirected_noclear(struct sk_buff *skb,
-					      bool from_ingress)
-{
-	skb->redirected = 1;
-#ifdef CONFIG_NET_REDIRECT
-	skb->from_ingress = from_ingress;
-#endif
 }
 
 static inline bool skb_csum_is_sctp(struct sk_buff *skb)

@@ -459,6 +459,7 @@ struct qdisc_skb_cb {
 	u8			post_ct:1;
 	u8			post_ct_snat:1;
 	u8			post_ct_dnat:1;
+	u8			from_ingress:1;
 };
 
 typedef void tcf_chain_head_change_t(struct tcf_proto *tp_head, void *priv);
@@ -1138,6 +1139,35 @@ static inline void qdisc_dequeue_drop(struct Qdisc *q, struct sk_buff *skb,
 	tcf_set_drop_reason(skb, reason);
 	skb->next = q->to_free;
 	q->to_free = skb;
+}
+
+static inline bool skb_is_redirected(const struct sk_buff *skb)
+{
+	return skb->redirected;
+}
+
+static inline void skb_set_redirected(struct sk_buff *skb, bool from_ingress)
+{
+	skb->redirected = 1;
+#ifdef CONFIG_NET_REDIRECT
+	qdisc_skb_cb(skb)->from_ingress = from_ingress;
+	if (qdisc_skb_cb(skb)->from_ingress)
+		skb_clear_tstamp(skb);
+#endif
+}
+
+static inline void skb_reset_redirect(struct sk_buff *skb)
+{
+	skb->redirected = 0;
+}
+
+static inline void skb_set_redirected_noclear(struct sk_buff *skb,
+					      bool from_ingress)
+{
+	skb->redirected = 1;
+#ifdef CONFIG_NET_REDIRECT
+	qdisc_skb_cb(skb)->from_ingress = from_ingress;
+#endif
 }
 
 /* Instead of calling kfree_skb() while root qdisc lock is held,
