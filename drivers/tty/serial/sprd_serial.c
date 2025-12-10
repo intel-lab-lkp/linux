@@ -1115,34 +1115,21 @@ static void sprd_remove(struct platform_device *dev)
 		uart_unregister_driver(&sprd_uart_driver);
 }
 
-static bool sprd_uart_is_console(struct uart_port *uport)
-{
-	struct console *cons = sprd_uart_driver.cons;
-
-	if ((cons && cons->index >= 0 && cons->index == uport->line) ||
-	    of_console_check(uport->dev->of_node, SPRD_TTY_NAME, uport->line))
-		return true;
-
-	return false;
-}
-
 static int sprd_clk_init(struct uart_port *uport)
 {
 	struct clk *clk_uart, *clk_parent;
 	struct sprd_uart_port *u = container_of(uport, struct sprd_uart_port, port);
 
-	clk_uart = devm_clk_get(uport->dev, "uart");
+	clk_uart = devm_clk_get_optional(uport->dev, "uart");
 	if (IS_ERR(clk_uart)) {
-		dev_warn(uport->dev, "uart%d can't get uart clock\n",
-			 uport->line);
-		clk_uart = NULL;
+		return dev_err_probe(uport->dev, PTR_ERR(clk_uart),
+			"uart%d can't get uart clock\n", uport->line);
 	}
 
-	clk_parent = devm_clk_get(uport->dev, "source");
+	clk_parent = devm_clk_get_optional(uport->dev, "source");
 	if (IS_ERR(clk_parent)) {
-		dev_warn(uport->dev, "uart%d can't get source clock\n",
-			 uport->line);
-		clk_parent = NULL;
+		return dev_err_probe(uport->dev, PTR_ERR(clk_parent),
+			"uart%d can't get source clock\n", uport->line);
 	}
 
 	if (!clk_uart || clk_set_parent(clk_uart, clk_parent))
@@ -1150,19 +1137,10 @@ static int sprd_clk_init(struct uart_port *uport)
 	else
 		uport->uartclk = clk_get_rate(clk_uart);
 
-	u->clk = devm_clk_get(uport->dev, "enable");
+	u->clk = devm_clk_get_optional(uport->dev, "enable");
 	if (IS_ERR(u->clk)) {
-		if (PTR_ERR(u->clk) == -EPROBE_DEFER)
-			return -EPROBE_DEFER;
-
-		dev_warn(uport->dev, "uart%d can't get enable clock\n",
-			uport->line);
-
-		/* To keep console alive even if the error occurred */
-		if (!sprd_uart_is_console(uport))
-			return PTR_ERR(u->clk);
-
-		u->clk = NULL;
+		return dev_err_probe(uport->dev, PTR_ERR(u->clk),
+			"uart%d can't get enable clock\n", uport->line);
 	}
 
 	return 0;
