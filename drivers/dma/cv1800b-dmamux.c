@@ -214,7 +214,7 @@ static int cv1800_dmamux_probe(struct platform_device *pdev)
 		}
 
 		init_llist_node(&tmp->node);
-		tmp->channel = i;
+		tmp->channel = MAX_DMA_CH_ID - i;
 		llist_add(&tmp->node, &data->free_maps);
 	}
 
