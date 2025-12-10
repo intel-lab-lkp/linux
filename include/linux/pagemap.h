@@ -299,6 +299,9 @@ static inline bool mapping_release_always(const struct address_space *mapping)
 
 static inline void mapping_set_release_always(struct address_space *mapping)
 {
+	/* Alert while setting the flag with no release_folio callback */
+	VM_WARN_ONCE(!mapping->a_ops->release_folio,
+		     "Setting AS_RELEASE_ALWAYS with no release_folio");
 	set_bit(AS_RELEASE_ALWAYS, &mapping->flags);
 }
 
