@@ -6,6 +6,24 @@
 #include <linux/kasan-tags.h>
 #include <linux/types.h>
 #define KASAN_SHADOW_OFFSET _AC(CONFIG_KASAN_SHADOW_OFFSET, UL)
+
+/*
+ * LLVM ABI for reporting tag mismatches in inline KASAN mode.
+ * On x86 the UD1 instruction is used to carry metadata in the ECX register
+ * to the KASAN report. ECX is used to differentiate KASAN from UBSan when
+ * decoding the UD1 instruction.
+ *
+ * SIZE refers to how many bytes the faulty memory access
+ * requested.
+ * WRITE bit, when set, indicates the access was a write, otherwise
+ * it was a read.
+ * RECOVER bit, when set, should allow the kernel to carry on after
+ * a tag mismatch. Otherwise die() is called.
+ */
+#define KASAN_ECX_RECOVER	0x20
+#define KASAN_ECX_WRITE		0x10
+#define KASAN_ECX_SIZE_MASK	0x0f
+#define KASAN_ECX_SIZE(ecx)	(1 << ((ecx) & KASAN_ECX_SIZE_MASK))
 #define KASAN_SHADOW_SCALE_SHIFT 3
 
 /*
@@ -34,10 +52,12 @@
 #define __tag_shifted(tag)		FIELD_PREP(GENMASK_ULL(60, 57), tag)
 #define __tag_reset(addr)		(sign_extend64((u64)(addr), 56))
 #define __tag_get(addr)			((u8)FIELD_GET(GENMASK_ULL(60, 57), (u64)addr))
+void kasan_inline_handler(struct pt_regs *regs, unsigned int metadata, u64 addr);
 #else
 #define __tag_shifted(tag)		0UL
 #define __tag_reset(addr)		(addr)
 #define __tag_get(addr)			0
+static inline void kasan_inline_handler(struct pt_regs *regs, unsigned int metadata, u64 addr) { }
 #endif /* CONFIG_KASAN_SW_TAGS */
 
 #ifdef CONFIG_64BIT

@@ -37,6 +37,7 @@ extern void __WARN_trap(struct bug_entry *bug, ...);
 #define BUG_UD1			0xfffd
 #define BUG_UD1_UBSAN		0xfffc
 #define BUG_UD1_WARN		0xfffb
+#define BUG_UD1_KASAN		0xfffa
 #define BUG_UDB			0xffd6
 #define BUG_LOCK		0xfff0
 

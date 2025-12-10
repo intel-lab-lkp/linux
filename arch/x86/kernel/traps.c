@@ -102,6 +102,7 @@ __always_inline int is_valid_bugaddr(unsigned long addr)
  * FineIBT:      f0 75 f9                lock jne . - 6
  * UBSan{0}:     67 0f b9 00             ud1    (%eax),%eax
  * UBSan{10}:    67 0f b9 40 10          ud1    0x10(%eax),%eax
+ * KASAN:        48 0f b9 41 XX          ud1    0xXX(%rcx),%reg
  * static_call:  0f b9 cc                ud1    %esp,%ecx
  * __WARN_trap:  67 48 0f b9 3a          ud1    (%edx),%reg
  *
@@ -190,6 +191,10 @@ __always_inline int decode_bug(unsigned long addr, s32 *imm, int *len)
 		addr += 1;
 		if (rm == 0)		/* (%eax) */
 			type = BUG_UD1_UBSAN;
+		if (rm == 1) {		/* (%ecx) */
+			type = BUG_UD1_KASAN;
+			*imm += reg << 8;
+		}
 		break;
 
 	case 2: *imm = *(s32 *)addr;
@@ -399,7 +404,7 @@ static inline void handle_invalid_op(struct pt_regs *regs)
 
 static noinstr bool handle_bug(struct pt_regs *regs)
 {
-	unsigned long addr = regs->ip;
+	unsigned long kasan_addr, addr = regs->ip;
 	bool handled = false;
 	int ud_type, ud_len;
 	s32 ud_imm;
@@ -452,6 +457,12 @@ static noinstr bool handle_bug(struct pt_regs *regs)
 				report_ubsan_failure(ud_imm),
 				(void *)regs->ip);
 		}
+		break;
+
+	case BUG_UD1_KASAN:
+		kasan_addr = (u64)pt_regs_val(regs, ud_imm >> 8);
+		kasan_inline_handler(regs, ud_imm, kasan_addr);
+		handled = true;
 		break;
 
 	default:
