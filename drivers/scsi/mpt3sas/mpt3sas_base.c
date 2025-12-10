@@ -5539,7 +5539,7 @@ mpt3sas_atto_get_sas_addr(struct MPT3SAS_ADAPTER *ioc, union ATTO_SAS_ADDRESS *s
 		return r;
 
 	addr = *((__be64 *) nvram->SasAddr);
-	sas_addr->q = cpu_to_le64(be64_to_cpu(addr));
+	sas_addr->q = swab64(addr);
 	return r;
 }
 
