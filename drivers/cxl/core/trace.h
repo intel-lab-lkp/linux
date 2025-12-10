@@ -367,6 +367,7 @@ TRACE_EVENT(cxl_generic_event,
 #define CXL_GMER_MEM_EVT_TYPE_SCRUB_MEDIA_ECC_ERROR	0x04
 #define CXL_GMER_MEM_EVT_TYPE_AP_CME_COUNTER_EXPIRE	0x05
 #define CXL_GMER_MEM_EVT_TYPE_CKID_VIOLATION		0x06
+#define CXL_GMER_MEM_EVT_TYPE_AP_CME_PS_CYCLE_END	0x07
 #define show_gmer_mem_event_type(type)	__print_symbolic(type,				\
 	{ CXL_GMER_MEM_EVT_TYPE_ECC_ERROR,		"ECC Error" },			\
 	{ CXL_GMER_MEM_EVT_TYPE_INV_ADDR,		"Invalid Address" },		\
@@ -374,7 +375,8 @@ TRACE_EVENT(cxl_generic_event,
 	{ CXL_GMER_MEM_EVT_TYPE_TE_STATE_VIOLATION,	"TE State Violation" },		\
 	{ CXL_GMER_MEM_EVT_TYPE_SCRUB_MEDIA_ECC_ERROR,	"Scrub Media ECC Error" },	\
 	{ CXL_GMER_MEM_EVT_TYPE_AP_CME_COUNTER_EXPIRE,	"Adv Prog CME Counter Expiration" },	\
-	{ CXL_GMER_MEM_EVT_TYPE_CKID_VIOLATION,		"CKID Violation" }		\
+	{ CXL_GMER_MEM_EVT_TYPE_CKID_VIOLATION,		"CKID Violation" },		\
+	{ CXL_GMER_MEM_EVT_TYPE_AP_CME_PS_CYCLE_END,	"Adv Prog CME Patrol Scrub Cycle End" }	\
 )
 
 #define CXL_GMER_TRANS_UNKNOWN				0x00
@@ -554,6 +556,7 @@ TRACE_EVENT(cxl_general_media,
 #define CXL_DER_MEM_EVT_TYPE_TE_STATE_VIOLATION	0x04
 #define CXL_DER_MEM_EVT_TYPE_AP_CME_COUNTER_EXPIRE	0x05
 #define CXL_DER_MEM_EVT_TYPE_CKID_VIOLATION		0x06
+#define CXL_DER_MEM_EVT_TYPE_AP_CME_PS_CYCLE_END	0x07
 #define show_dram_mem_event_type(type)	__print_symbolic(type,					\
 	{ CXL_DER_MEM_EVT_TYPE_ECC_ERROR,		"ECC Error" },				\
 	{ CXL_DER_MEM_EVT_TYPE_SCRUB_MEDIA_ECC_ERROR,	"Scrub Media ECC Error" },		\
@@ -561,7 +564,8 @@ TRACE_EVENT(cxl_general_media,
 	{ CXL_DER_MEM_EVT_TYPE_DATA_PATH_ERROR,		"Data Path Error" },			\
 	{ CXL_DER_MEM_EVT_TYPE_TE_STATE_VIOLATION,	"TE State Violation" },			\
 	{ CXL_DER_MEM_EVT_TYPE_AP_CME_COUNTER_EXPIRE,	"Adv Prog CME Counter Expiration" },	\
-	{ CXL_DER_MEM_EVT_TYPE_CKID_VIOLATION,		"CKID Violation" }			\
+	{ CXL_DER_MEM_EVT_TYPE_CKID_VIOLATION,		"CKID Violation" },			\
+	{ CXL_DER_MEM_EVT_TYPE_AP_CME_PS_CYCLE_END,	"Adv Prog CME Patrol Scrub Cycle End" }	\
 )
 
 #define CXL_DER_VALID_CHANNEL				BIT(0)
