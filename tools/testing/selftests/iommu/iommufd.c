@@ -758,9 +758,7 @@ TEST_F(iommufd_ioas, get_hw_info)
 		struct iommu_test_hw_info info;
 		uint64_t trailing_bytes;
 	} buffer_larger;
-	struct iommu_test_hw_info_buffer_smaller {
-		__u32 flags;
-	} buffer_smaller;
+	struct iommu_test_hw_info buffer_smaller;
 
 	if (self->device_id) {
 		uint8_t max_pasid = 0;
