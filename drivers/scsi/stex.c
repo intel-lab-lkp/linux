@@ -2011,19 +2011,4 @@ static struct pci_driver stex_pci_driver = {
 	.resume		= stex_resume,
 };
 
-static int __init stex_init(void)
-{
-	printk(KERN_INFO DRV_NAME
-		": Promise SuperTrak EX Driver version: %s\n",
-		 ST_DRIVER_VERSION);
-
-	return pci_register_driver(&stex_pci_driver);
-}
-
-static void __exit stex_exit(void)
-{
-	pci_unregister_driver(&stex_pci_driver);
-}
-
-module_init(stex_init);
-module_exit(stex_exit);
+module_pci_driver(stex_pci_driver);

@@ -1606,17 +1606,4 @@ static struct pci_driver pvscsi_pci_driver = {
 	.shutdown       = pvscsi_shutdown,
 };
 
-static int __init pvscsi_init(void)
-{
-	pr_info("%s - version %s\n",
-		PVSCSI_LINUX_DRIVER_DESC, PVSCSI_DRIVER_VERSION_STRING);
-	return pci_register_driver(&pvscsi_pci_driver);
-}
-
-static void __exit pvscsi_exit(void)
-{
-	pci_unregister_driver(&pvscsi_pci_driver);
-}
-
-module_init(pvscsi_init);
-module_exit(pvscsi_exit);
+module_pci_driver(pvscsi_pci_driver);

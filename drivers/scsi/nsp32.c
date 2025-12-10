@@ -178,8 +178,6 @@ static nsp32_sync_table nsp32_sync_table_pci[] = {
 /* module entry point */
 static int nsp32_probe (struct pci_dev *, const struct pci_device_id *);
 static void nsp32_remove(struct pci_dev *);
-static int  __init init_nsp32  (void);
-static void __exit exit_nsp32  (void);
 
 /* struct struct scsi_host_template */
 static int	   nsp32_show_info   (struct seq_file *, struct Scsi_Host *);
@@ -3385,20 +3383,4 @@ static struct pci_driver nsp32_driver = {
 #endif
 };
 
-/*********************************************************************
- * Moule entry point
- */
-static int __init init_nsp32(void) {
-	nsp32_msg(KERN_INFO, "loading...");
-	return pci_register_driver(&nsp32_driver);
-}
-
-static void __exit exit_nsp32(void) {
-	nsp32_msg(KERN_INFO, "unloading...");
-	pci_unregister_driver(&nsp32_driver);
-}
-
-module_init(init_nsp32);
-module_exit(exit_nsp32);
-
-/* end */
+module_pci_driver(nsp32_driver);

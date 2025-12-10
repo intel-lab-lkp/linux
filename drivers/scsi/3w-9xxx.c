@@ -2286,20 +2286,4 @@ static struct pci_driver twa_driver = {
 	.shutdown	= twa_shutdown
 };
 
-/* This function is called on driver initialization */
-static int __init twa_init(void)
-{
-	printk(KERN_WARNING "3ware 9000 Storage Controller device driver for Linux v%s.\n", TW_DRIVER_VERSION);
-
-	return pci_register_driver(&twa_driver);
-} /* End twa_init() */
-
-/* This function is called on driver exit */
-static void __exit twa_exit(void)
-{
-	pci_unregister_driver(&twa_driver);
-} /* End twa_exit() */
-
-module_init(twa_init);
-module_exit(twa_exit);
-
+module_pci_driver(twa_driver);

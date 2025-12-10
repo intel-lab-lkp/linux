@@ -1775,19 +1775,7 @@ static void arcmsr_shutdown(struct pci_dev *pdev)
 	arcmsr_flush_adapter_cache(acb);
 }
 
-static int __init arcmsr_module_init(void)
-{
-	int error = 0;
-	error = pci_register_driver(&arcmsr_pci_driver);
-	return error;
-}
-
-static void __exit arcmsr_module_exit(void)
-{
-	pci_unregister_driver(&arcmsr_pci_driver);
-}
-module_init(arcmsr_module_init);
-module_exit(arcmsr_module_exit);
+module_pci_driver(arcmsr_pci_driver);
 
 static void arcmsr_enable_outbound_ints(struct AdapterControlBlock *acb,
 						u32 intmask_org)

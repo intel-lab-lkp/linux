@@ -1840,20 +1840,4 @@ static struct pci_driver twl_driver = {
 	.shutdown	= twl_shutdown
 };
 
-/* This function is called on driver initialization */
-static int __init twl_init(void)
-{
-	printk(KERN_INFO "LSI 3ware SAS/SATA-RAID Controller device driver for Linux v%s.\n", TW_DRIVER_VERSION);
-
-	return pci_register_driver(&twl_driver);
-} /* End twl_init() */
-
-/* This function is called on driver exit */
-static void __exit twl_exit(void)
-{
-	pci_unregister_driver(&twl_driver);
-} /* End twl_exit() */
-
-module_init(twl_init);
-module_exit(twl_exit);
-
+module_pci_driver(twl_driver);
