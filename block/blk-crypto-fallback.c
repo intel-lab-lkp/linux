@@ -253,6 +253,7 @@ static void __blk_crypto_fallback_encrypt_bio(struct bio *src_bio,
 	unsigned int enc_idx;
 	struct bio *enc_bio;
 	unsigned int j;
+	blk_status_t status;
 
 	skcipher_request_set_callback(ciph_req,
 			CRYPTO_TFM_REQ_MAY_BACKLOG | CRYPTO_TFM_REQ_MAY_SLEEP,
@@ -274,6 +275,12 @@ new_bio:
 			bio_iter_iovec(src_bio, src_bio->bi_iter);
 		struct page *enc_page = enc_pages[enc_idx];
 
+		if (!IS_ALIGNED(src_bv.bv_len | src_bv.bv_offset,
+				data_unit_size)) {
+			status = BLK_STS_INVAL;
+			goto out_free_bounce_pages;
+		}
+
 		__bio_add_page(enc_bio, enc_page, src_bv.bv_len,
 				src_bv.bv_offset);
 
@@ -285,7 +292,7 @@ new_bio:
 		for (j = 0; j < src_bv.bv_len; j += data_unit_size) {
 			blk_crypto_dun_to_iv(curr_dun, &iv);
 			if (crypto_skcipher_encrypt(ciph_req)) {
-				enc_idx++;
+				status = BLK_STS_IOERR;
 				goto out_free_bounce_pages;
 			}
 			bio_crypt_dun_increment(curr_dun, 1);
@@ -317,11 +324,12 @@ new_bio:
 	return;
 
 out_free_bounce_pages:
+	enc_idx++;
 	while (enc_idx > 0)
 		mempool_free(enc_bio->bi_io_vec[--enc_idx].bv_page,
 			     blk_crypto_bounce_page_pool);
 	bio_put(enc_bio);
-	cmpxchg(&src_bio->bi_status, 0, BLK_STS_IOERR);
+	cmpxchg(&src_bio->bi_status, 0, status);
 	bio_endio(src_bio);
 }
 
@@ -374,6 +382,9 @@ static blk_status_t __blk_crypto_fallback_decrypt_bio(struct bio *bio,
 	/* Decrypt each segment in the bio */
 	__bio_for_each_segment(bv, bio, iter, iter) {
 		struct page *page = bv.bv_page;
+
+		if (!IS_ALIGNED(bv.bv_len | bv.bv_offset, data_unit_size))
+			return BLK_STS_INVAL;
 
 		sg_set_page(&sg, page, data_unit_size, bv.bv_offset);
 

@@ -326,9 +326,16 @@ int bio_split_io_at(struct bio *bio, const struct queue_limits *lim,
 	struct bio_vec bv, bvprv, *bvprvp = NULL;
 	unsigned nsegs = 0, bytes = 0, gaps = 0;
 	struct bvec_iter iter;
+	unsigned len_align_mask = lim->dma_alignment;
+
+	if (bio_has_crypt_ctx(bio)) {
+		struct bio_crypt_ctx *bc = bio->bi_crypt_context;
+
+		len_align_mask |= (bc->bc_key->crypto_cfg.data_unit_size - 1);
+	}
 
 	bio_for_each_bvec(bv, bio, iter) {
-		if (bv.bv_offset & lim->dma_alignment)
+		if (bv.bv_offset & len_align_mask)
 			return -EINVAL;
 
 		/*
