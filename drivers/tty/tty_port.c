@@ -100,6 +100,26 @@ void tty_port_init(struct tty_port *port)
 EXPORT_SYMBOL(tty_port_init);
 
 /**
+ * tty_port_link_wq - link tty_port and flip workqueue
+ * @port: tty_port of the device
+ * @flip_wq: workqueue to queue flip buffer work on
+ *
+ * When %TTY_DRIVER_CUSTOM_WORKQUEUE is used, you must link every tty port to
+ * workqueue manually by this function, otherwise tty_flip_buffer_push() will
+ * see NULL flip_wq pointer when queue_work.
+ * When %TTY_DRIVER_CUSTOM_WORKQUEUE is NOT used, you can also use the function
+ * to link a certain port to a specific workqueue, instead of using the
+ * workqueue allocated in tty_register_driver().
+ *
+ * Note tty port api will not destroy the workqueue in the TTY port API.
+ */
+void tty_port_link_wq(struct tty_port *port, struct workqueue_struct *flip_wq)
+{
+	port->buf.flip_wq = flip_wq;
+}
+EXPORT_SYMBOL_GPL(tty_port_link_wq);
+
+/**
  * tty_port_link_device - link tty and tty_port
  * @port: tty_port of the device
  * @driver: tty_driver for this device
@@ -157,6 +177,7 @@ struct device *tty_port_register_device_attr(struct tty_port *port,
 		const struct attribute_group **attr_grp)
 {
 	tty_port_link_device(port, driver, index);
+	tty_port_link_driver_wq(port, driver);
 	return tty_register_device_attr(driver, index, device, drvdata,
 			attr_grp);
 }
@@ -183,6 +204,7 @@ struct device *tty_port_register_device_attr_serdev(struct tty_port *port,
 	struct device *dev;
 
 	tty_port_link_device(port, driver, index);
+	tty_port_link_driver_wq(port, driver);
 
 	dev = serdev_tty_port_register(port, host, parent, driver, index);
 	if (PTR_ERR(dev) != -ENODEV) {
@@ -703,6 +725,7 @@ int tty_port_install(struct tty_port *port, struct tty_driver *driver,
 		struct tty_struct *tty)
 {
 	tty->port = port;
+	tty_port_link_driver_wq(port, driver);
 	return tty_standard_install(driver, tty);
 }
 EXPORT_SYMBOL_GPL(tty_port_install);
