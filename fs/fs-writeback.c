@@ -1866,6 +1866,8 @@ static int writeback_single_inode(struct inode *inode,
 	 * as it can be finally deleted at this moment.
 	 */
 	if (!(inode_state_read(inode) & I_FREEING)) {
+		if (inode_state_read(inode) & I_WILL_FREE)
+			WARN_ON_ONCE(inode_state_read(inode) & I_DIRTY_ALL);
 		/*
 		 * If the inode is now fully clean, then it can be safely
 		 * removed from its writeback list (if any). Otherwise the
