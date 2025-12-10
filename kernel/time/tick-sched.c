@@ -830,6 +830,33 @@ u64 get_cpu_idle_time_us(int cpu, u64 *last_update_time)
 EXPORT_SYMBOL_GPL(get_cpu_idle_time_us);
 
 /**
+ * get_cpu_idle_time_us_offline - get the total idle time of an offline CPU
+ * @cpu: CPU number to query
+ *
+ * Return the idle time (since boot) for a given offline CPU, in microseconds.
+ *
+ * This function does not calculate the latest idle time based on
+ * idle_entrytime and current time like get_cpu_idle_time_us() does.
+ * If get_cpu_idle_time_us() is used to obtain idle time of an offline CPU,
+ * its value will continue to increase, which is unexpected.
+ *
+ * This time is measured via accounting rather than sampling,
+ * and is as accurate as ktime_get() is.
+ *
+ * This function returns -1 if NOHZ is not enabled.
+ */
+u64 get_cpu_idle_time_us_offline(int cpu)
+{
+	struct tick_sched *ts = &per_cpu(tick_cpu_sched, cpu);
+
+	if (!tick_nohz_active)
+		return -1;
+
+	return ktime_to_us(ts->idle_sleeptime);
+}
+EXPORT_SYMBOL_GPL(get_cpu_idle_time_us_offline);
+
+/**
  * get_cpu_iowait_time_us - get the total iowait time of a CPU
  * @cpu: CPU number to query
  * @last_update_time: variable to store update time in. Do not update
@@ -854,6 +881,33 @@ u64 get_cpu_iowait_time_us(int cpu, u64 *last_update_time)
 				     nr_iowait_cpu(cpu), last_update_time);
 }
 EXPORT_SYMBOL_GPL(get_cpu_iowait_time_us);
+
+/**
+ * get_cpu_iowait_time_us_offline - get the total iowait time of an offline CPU
+ * @cpu: CPU number to query
+ *
+ * Return the iowait time (since boot) for a given CPU, in microseconds.
+ *
+ * This function does not calculate the latest iowait time based on
+ * idle_entrytime and current time like get_cpu_iowait_time_us() does.
+ * If get_cpu_iowait_time_us is used to obtain iowait time of an offline CPU,
+ * its value will continue to increase, which is unexpected.
+ *
+ * This time is measured via accounting rather than sampling,
+ * and is as accurate as ktime_get() is.
+ *
+ * This function returns -1 if NOHZ is not enabled.
+ */
+u64 get_cpu_iowait_time_us_offline(int cpu)
+{
+	struct tick_sched *ts = &per_cpu(tick_cpu_sched, cpu);
+
+	if (!tick_nohz_active)
+		return -1;
+
+	return ktime_to_us(ts->iowait_sleeptime);
+}
+EXPORT_SYMBOL_GPL(get_cpu_iowait_time_us_offline);
 
 static void tick_nohz_restart(struct tick_sched *ts, ktime_t now)
 {
