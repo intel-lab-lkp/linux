@@ -3,6 +3,7 @@
 #define PAGE_FLAGS_LAYOUT_H
 
 #include <linux/numa.h>
+#include <linux/kasan-tags.h>
 #include <generated/bounds.h>
 
 /*
@@ -70,14 +71,6 @@
  */
 #if NODES_SHIFT != 0 && NODES_WIDTH == 0
 #define NODE_NOT_IN_PAGE_FLAGS	1
-#endif
-
-#if defined(CONFIG_KASAN_SW_TAGS)
-#define KASAN_TAG_WIDTH 8
-#elif defined(CONFIG_KASAN_HW_TAGS)
-#define KASAN_TAG_WIDTH 4
-#else
-#define KASAN_TAG_WIDTH 0
 #endif
 
 #ifdef CONFIG_NUMA_BALANCING
