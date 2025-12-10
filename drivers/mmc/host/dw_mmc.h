@@ -618,5 +618,7 @@ struct dw_mci_drv_data {
 					  unsigned int timeout_ns);
 	u32		(*get_drto_clks)(struct dw_mci *host);
 	void		(*hw_reset)(struct dw_mci *host);
+	void		(*pre_request)(struct dw_mci *host);
+	void		(*post_request_end)(struct dw_mci *host);
 };
 #endif /* _DW_MMC_H_ */
