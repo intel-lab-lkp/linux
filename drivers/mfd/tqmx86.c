@@ -13,6 +13,7 @@
 #include <linux/io.h>
 #include <linux/mfd/core.h>
 #include <linux/module.h>
+#include <linux/platform_data/i2c-machxo2.h>
 #include <linux/platform_data/i2c-ocores.h>
 #include <linux/platform_device.h>
 
@@ -58,6 +59,8 @@
 
 #define TQMX86_REG_I2C_DETECT	0x7
 #define TQMX86_REG_I2C_DETECT_OCORES	0xa5
+
+#define TQMX86_REG_I2C_IEN	0x9
 
 static uint gpio_irq;
 module_param(gpio_irq, uint, 0);
@@ -128,12 +131,26 @@ static const struct mfd_cell tqmx86_i2c1_dev_ocores = {
 	.num_resources = ARRAY_SIZE(tqmx_i2c1_resources),
 };
 
+/* Only one of the tqmx86_i2c2_* instances is registered, depending on which is detected */
+
 static struct ocores_i2c_platform_data tqmx86_i2c2_platform_data_ocores = {};
 
 static const struct mfd_cell tqmx86_i2c2_dev_ocores = {
 	.name = "ocores-i2c",
 	.platform_data = &tqmx86_i2c2_platform_data_ocores,
 	.pdata_size = sizeof(tqmx86_i2c2_platform_data_ocores),
+	.resources = tqmx_i2c2_resources,
+	.num_resources = ARRAY_SIZE(tqmx_i2c2_resources),
+};
+
+struct machxo2_i2c_platform_data tqmx86_i2c2_platform_data_machxo2 = {
+	.bus_khz = 100,
+};
+
+static const struct mfd_cell tqmx86_i2c2_dev_machxo2 = {
+	.name = "i2c-machxo2",
+	.platform_data = &tqmx86_i2c2_platform_data_machxo2,
+	.pdata_size = sizeof(tqmx86_i2c2_platform_data_machxo2),
 	.resources = tqmx_i2c2_resources,
 	.num_resources = ARRAY_SIZE(tqmx_i2c2_resources),
 };
@@ -274,9 +291,9 @@ static int tqmx86_detect_i2c1(struct device *dev, void __iomem *io_base, int clo
 	}
 
 	/*
-	 * The I2C_DETECT register is in the range assigned to the I2C driver
-	 * later, so we don't extend TQMX86_IOSIZE. Use inb() for this one-off
-	 * access instead of ioport_map + unmap.
+	 * These registers are in the range assigned to the I2C driver
+	 * later, so we don't extend TQMX86_IOSIZE. Use inb() for these one-off
+	 * accesses instead of ioport_map + unmap.
 	 */
 	i2c_det = inb(TQMX86_IOBASE_I2C1 + TQMX86_REG_I2C_DETECT);
 
@@ -292,7 +309,7 @@ static int tqmx86_detect_i2c1(struct device *dev, void __iomem *io_base, int clo
 
 static int tqmx86_detect_i2c2(struct device *dev, void __iomem *io_base, int clock_khz)
 {
-	u8 i2c_det;
+	u8 i2c_det, i2c_ien;
 
 	if (i2c2_irq) {
 		if (!tqmx86_setup_irq(dev, "I2C2", i2c2_irq, io_base,
@@ -304,15 +321,32 @@ static int tqmx86_detect_i2c2(struct device *dev, void __iomem *io_base, int clo
 	 * The I2C_DETECT register is in the range assigned to the I2C driver
 	 * later, so we don't extend TQMX86_IOSIZE. Use inb() for this one-off
 	 * access instead of ioport_map + unmap.
+	 *
+	 * There are 3 cases to distinguish for the secondary controller:
+	 *
+	 * - ocores: i2c_det is a TQMx86-specific register that always contains
+	 *   the value 0xa5. i2c_ien is unused and reads as 0xff.
+	 * - machxo2: i2c_det is the data register can read as any value.
+	 *   i2c_ien is the interrupt enable register; the upper nibble is
+	 *   reserved and always reads as 0.
+	 * - none: both i2c_det and i2c_ien read as 0xff if no I2C controller
+	 *   exists at a given base address.
 	 */
 	i2c_det = inb(TQMX86_IOBASE_I2C2 + TQMX86_REG_I2C_DETECT);
+	i2c_ien = inb(TQMX86_IOBASE_I2C2 + TQMX86_REG_I2C_IEN);
 
-	if (i2c_det == TQMX86_REG_I2C_DETECT_OCORES) {
+	if (i2c_det == TQMX86_REG_I2C_DETECT_OCORES && i2c_ien == 0xff) {
 		tqmx86_i2c2_platform_data_ocores.clock_khz = clock_khz;
 		return devm_mfd_add_devices(dev, PLATFORM_DEVID_NONE,
 					    &tqmx86_i2c2_dev_ocores, 1, NULL, 0,
 					    NULL);
+	} else if ((i2c_ien & 0xf0) == 0x00) {
+		tqmx86_i2c2_platform_data_machxo2.clock_khz = clock_khz;
+		return devm_mfd_add_devices(dev, PLATFORM_DEVID_NONE,
+					    &tqmx86_i2c2_dev_machxo2, 1, NULL, 0,
+					    NULL);
 	}
+
 
 	return 0;
 }
