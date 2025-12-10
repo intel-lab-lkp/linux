@@ -207,7 +207,19 @@ void make_bad_inode(struct inode *inode)
 {
 	remove_inode_hash(inode);
 
-	inode->i_mode = S_IFREG;
+	switch (inode->i_mode & S_IFMT) {
+	case S_IFREG:
+	case S_IFDIR:
+	case S_IFLNK:
+	case S_IFCHR:
+	case S_IFBLK:
+	case S_IFIFO:
+	case S_IFSOCK:
+		inode->i_mode &= S_IFMT;
+		break;
+	default:
+		inode->i_mode = S_IFREG;
+	}
 	simple_inode_init_ts(inode);
 	inode->i_op = &bad_inode_ops;	
 	inode->i_opflags &= ~IOP_XATTR;
