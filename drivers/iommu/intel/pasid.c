@@ -1099,7 +1099,18 @@ int intel_pasid_setup_sm_context(struct device *dev)
  */
 static void __context_flush_dev_iotlb(struct device_domain_info *info)
 {
+	struct pci_dev *pdev;
+
 	if (!info->ats_enabled)
+		return;
+
+	/*
+	 * Skip dev-IOTLB flush for inaccessible PCIe devices to prevent the
+	 * Intel IOMMU from waiting indefinitely for an ATS invalidation that
+	 * cannot complete.
+	 */
+	pdev = dev_is_pci(info->dev) ? to_pci_dev(info->dev) : NULL;
+	if (pdev && !pci_device_is_present(pdev))
 		return;
 
 	qi_flush_dev_iotlb(info->iommu, PCI_DEVID(info->bus, info->devfn),
