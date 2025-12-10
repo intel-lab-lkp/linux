@@ -53,7 +53,7 @@ nfs4_ff_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 	u32 mp_count;
 	u32 version_count;
 	__be32 *p;
-	int i, ret = -ENOMEM;
+	int i = -ENOMEM;
 
 	/* set up xdr stream */
 	scratch = folio_alloc(gfp_flags, 0);
@@ -88,7 +88,6 @@ nfs4_ff_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 	if (list_empty(&dsaddrs)) {
 		dprintk("%s: no suitable DS addresses found\n",
 			__func__);
-		ret = -ENOMEDIUM;
 		goto out_err_drain_dsaddrs;
 	}
 
@@ -134,7 +133,6 @@ nfs4_ff_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 			dprintk("%s: [%d] unsupported ds version %d-%d\n", __func__,
 				i, ds_versions[i].version,
 				ds_versions[i].minor_version);
-			ret = -EPROTONOSUPPORT;
 			goto out_err_drain_dsaddrs;
 		}
 
