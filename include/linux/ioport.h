@@ -14,6 +14,9 @@
 #include <linux/compiler.h>
 #include <linux/minmax.h>
 #include <linux/types.h>
+
+#include <asm/bug.h>
+
 /*
  * Resources are tree-like, allowing
  * nesting etc..
@@ -286,8 +289,30 @@ static inline void resource_set_range(struct resource *res,
 	resource_set_size(res, size);
 }
 
+/**
+ * resource_size - Get the size of the resource
+ * @res: Resource descriptor
+ *
+ * Calculated size is derived from @res end and start values following
+ * the logic:
+ *
+ *	end - start + 1
+ *
+ * The caller MUST ensure @res is properly initialized.
+ *
+ * Do NOT use resource_size() as a proxy for checking validity of @res or
+ * for checking if @res is in a resource tree (use flags checks or call
+ * resource_assigned() instead).
+ *
+ * Passing a @res descriptor with zeroed flags will produce a WARN
+ * signaling a misusage of this helper and probably a BUG in the user of
+ * this helper.
+ *
+ * Return: size of the resource.
+ */
 static inline resource_size_t resource_size(const struct resource *res)
 {
+	WARN_ON_ONCE(!res->flags);
 	return res->end - res->start + 1;
 }
 static inline unsigned long resource_type(const struct resource *res)
