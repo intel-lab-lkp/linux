@@ -2244,11 +2244,18 @@ static ssize_t target_nid_store(struct kobject *kobj,
 	struct damon_sysfs_scheme *scheme = container_of(kobj,
 			struct damon_sysfs_scheme, kobj);
 	int err = 0;
+	int nid;
 
-	/* TODO: error handling for target_nid range. */
-	err = kstrtoint(buf, 0, &scheme->target_nid);
+	err = kstrtoint(buf, 0, &nid);
+	if (err)
+		return err;
 
-	return err ? err : count;
+	if (!node_online(nid))
+		return -EINVAL;
+
+	scheme->target_nid = nid;
+
+	return count;
 }
 
 static void damon_sysfs_scheme_release(struct kobject *kobj)
