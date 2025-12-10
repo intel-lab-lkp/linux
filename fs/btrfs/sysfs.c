@@ -1189,6 +1189,20 @@ static ssize_t btrfs_commit_stats_store(struct kobject *kobj,
 }
 BTRFS_ATTR_RW(, commit_stats, btrfs_commit_stats_show, btrfs_commit_stats_store);
 
+static const char *btrfs_block_group_type_name(u64 flags)
+{
+	switch (flags & BTRFS_BLOCK_GROUP_TYPE_MASK) {
+	case BTRFS_BLOCK_GROUP_SYSTEM:
+		return "SYSTEM";
+	case BTRFS_BLOCK_GROUP_METADATA:
+		return "METADATA";
+	case BTRFS_BLOCK_GROUP_DATA:
+		return "DATA";
+	default:
+		return "UNKNOWN";
+	}
+}
+
 static ssize_t btrfs_zoned_stats_show(struct kobject *kobj,
 				      struct kobj_attribute *a, char *buf)
 {
@@ -1230,9 +1244,9 @@ static ssize_t btrfs_zoned_stats_show(struct kobject *kobj,
 	ret += sysfs_emit_at(buf, ret, "active zones:\n");
 	list_for_each_entry(bg, &fs_info->zone_active_bgs, active_bg_list) {
 		ret += sysfs_emit_at(buf, ret,
-				     "\tstart: %llu, wp: %llu used: %llu, reserved: %llu, unusable: %llu\n",
+				     "\tstart: %llu, wp: %llu used: %llu, reserved: %llu, unusable: %llu (%s)\n",
 				     bg->start, bg->alloc_offset, bg->used,
-				     bg->reserved, bg->zone_unusable);
+				     bg->reserved, bg->zone_unusable, btrfs_block_group_type_name(bg->flags));
 	}
 	spin_unlock(&fs_info->zone_active_bgs_lock);
 	return ret;
