@@ -459,7 +459,7 @@ static int omap_i2c_init(struct omap_i2c_dev *omap)
 		if (psc > 2)
 			psc = 2;
 		scll = fclk_rate / (omap->speed * 2) - 7 + psc;
-		sclh = fclk_rate / (omap->speed * 2) - 7 + psc;
+		sclh = fclk_rate / (omap->speed * 2) - 5 + psc;
 	}
 
 	omap->iestate = (OMAP_I2C_IE_XRDY | OMAP_I2C_IE_RRDY |
