@@ -227,7 +227,7 @@ static struct snd_soc_acpi_mach avs_apl_i2s_machines[] = {
 	{},
 };
 
-static struct snd_soc_acpi_mach avs_gml_i2s_machines[] = {
+static struct snd_soc_acpi_mach avs_glk_i2s_machines[] = {
 	{
 		.id = "INT343A",
 		.drv_name = "avs_rt298",
@@ -367,7 +367,7 @@ static const struct avs_acpi_boards i2s_boards[] = {
 	AVS_MACH_ENTRY(HDA_SKL_LP,	avs_skl_i2s_machines),
 	AVS_MACH_ENTRY(HDA_KBL_LP,	avs_kbl_i2s_machines),
 	AVS_MACH_ENTRY(HDA_APL,		avs_apl_i2s_machines),
-	AVS_MACH_ENTRY(HDA_GML,		avs_gml_i2s_machines),
+	AVS_MACH_ENTRY(HDA_GLK,		avs_glk_i2s_machines),
 	AVS_MACH_ENTRY(HDA_CNL_LP,	avs_cnl_i2s_machines),
 	AVS_MACH_ENTRY(HDA_CNL_H,	avs_cnl_i2s_machines),
 	AVS_MACH_ENTRY(HDA_CML_LP,	avs_cnl_i2s_machines),
