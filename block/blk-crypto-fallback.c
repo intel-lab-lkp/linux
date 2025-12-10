@@ -81,7 +81,7 @@ static struct blk_crypto_fallback_keyslot {
 static struct blk_crypto_profile *blk_crypto_fallback_profile;
 static struct workqueue_struct *blk_crypto_wq;
 static mempool_t *blk_crypto_bounce_page_pool;
-static struct bio_set crypto_bio_split;
+static struct bio_set enc_bio_set;
 
 /*
  * This is the key we set when evicting a keyslot. This *should* be the all 0's
@@ -150,37 +150,30 @@ static void blk_crypto_fallback_encrypt_endio(struct bio *enc_bio)
 		mempool_free(enc_bio->bi_io_vec[i].bv_page,
 			     blk_crypto_bounce_page_pool);
 
-	src_bio->bi_status = enc_bio->bi_status;
+	if (enc_bio->bi_status)
+		cmpxchg(&src_bio->bi_status, 0, enc_bio->bi_status);
 
-	bio_uninit(enc_bio);
-	kfree(enc_bio);
+	bio_put(enc_bio);
 	bio_endio(src_bio);
 }
 
-static struct bio *blk_crypto_fallback_clone_bio(struct bio *bio_src)
+static struct bio *blk_crypto_alloc_enc_bio(struct bio *bio_src,
+		unsigned int nr_segs)
 {
-	unsigned int nr_segs = bio_segments(bio_src);
-	struct bvec_iter iter;
-	struct bio_vec bv;
 	struct bio *bio;
 
-	bio = bio_kmalloc(nr_segs, GFP_NOIO);
-	if (!bio)
-		return NULL;
-	bio_init_inline(bio, bio_src->bi_bdev, nr_segs, bio_src->bi_opf);
+	nr_segs = min(nr_segs, BIO_MAX_VECS);
+	bio = bio_alloc_bioset(bio_src->bi_bdev, nr_segs, bio_src->bi_opf,
+			GFP_NOIO, &enc_bio_set);
 	if (bio_flagged(bio_src, BIO_REMAPPED))
 		bio_set_flag(bio, BIO_REMAPPED);
+	bio->bi_private		= bio_src;
+	bio->bi_end_io		= blk_crypto_fallback_encrypt_endio;
 	bio->bi_ioprio		= bio_src->bi_ioprio;
 	bio->bi_write_hint	= bio_src->bi_write_hint;
 	bio->bi_write_stream	= bio_src->bi_write_stream;
 	bio->bi_iter.bi_sector	= bio_src->bi_iter.bi_sector;
-	bio->bi_iter.bi_size	= bio_src->bi_iter.bi_size;
-
-	bio_for_each_segment(bv, bio_src, iter)
-		bio->bi_io_vec[bio->bi_vcnt++] = bv;
-
 	bio_clone_blkg_association(bio, bio_src);
-
 	return bio;
 }
 
@@ -208,32 +201,6 @@ blk_crypto_fallback_alloc_cipher_req(struct blk_crypto_keyslot *slot,
 	return true;
 }
 
-static bool blk_crypto_fallback_split_bio_if_needed(struct bio **bio_ptr)
-{
-	struct bio *bio = *bio_ptr;
-	unsigned int i = 0;
-	unsigned int num_sectors = 0;
-	struct bio_vec bv;
-	struct bvec_iter iter;
-
-	bio_for_each_segment(bv, bio, iter) {
-		num_sectors += bv.bv_len >> SECTOR_SHIFT;
-		if (++i == BIO_MAX_VECS)
-			break;
-	}
-
-	if (num_sectors < bio_sectors(bio)) {
-		bio = bio_submit_split_bioset(bio, num_sectors,
-					      &crypto_bio_split);
-		if (!bio)
-			return false;
-
-		*bio_ptr = bio;
-	}
-
-	return true;
-}
-
 union blk_crypto_iv {
 	__le64 dun[BLK_CRYPTO_DUN_ARRAY_SIZE];
 	u8 bytes[BLK_CRYPTO_MAX_IV_SIZE];
@@ -257,46 +224,32 @@ static void blk_crypto_dun_to_iv(const u64 dun[BLK_CRYPTO_DUN_ARRAY_SIZE],
  */
 static void blk_crypto_fallback_encrypt_bio(struct bio *src_bio)
 {
-	struct bio *enc_bio;
-	struct bio_crypt_ctx *bc;
-	struct blk_crypto_keyslot *slot;
-	int data_unit_size;
+	struct bio_crypt_ctx *bc = src_bio->bi_crypt_context;
+	int data_unit_size = bc->bc_key->crypto_cfg.data_unit_size;
+	unsigned int nr_segs = bio_segments(src_bio);
 	struct skcipher_request *ciph_req = NULL;
+	struct blk_crypto_keyslot *slot;
 	DECLARE_CRYPTO_WAIT(wait);
 	u64 curr_dun[BLK_CRYPTO_DUN_ARRAY_SIZE];
 	struct scatterlist src, dst;
 	union blk_crypto_iv iv;
-	unsigned int i, j;
-	blk_status_t blk_st;
-
-	/* Split the bio if it's too big for single page bvec */
-	if (!blk_crypto_fallback_split_bio_if_needed(&src_bio))
-		goto out_endio;
-
-	bc = src_bio->bi_crypt_context;
-	data_unit_size = bc->bc_key->crypto_cfg.data_unit_size;
-
-	/* Allocate bounce bio for encryption */
-	enc_bio = blk_crypto_fallback_clone_bio(src_bio);
-	if (!enc_bio) {
-		src_bio->bi_status = BLK_STS_RESOURCE;
-		goto out_endio;
-	}
+	unsigned int enc_idx;
+	struct bio *enc_bio;
+	blk_status_t status;
+	unsigned int j;
 
 	/*
 	 * Get a blk-crypto-fallback keyslot that contains a crypto_skcipher for
 	 * this bio's algorithm and key.
 	 */
-	blk_st = blk_crypto_get_keyslot(blk_crypto_fallback_profile,
+	status = blk_crypto_get_keyslot(blk_crypto_fallback_profile,
 					bc->bc_key, &slot);
-	if (blk_st != BLK_STS_OK) {
-		src_bio->bi_status = blk_st;
-		goto out_put_enc_bio;
-	}
+	if (status != BLK_STS_OK)
+		goto out_endio;
 
 	/* and then allocate an skcipher_request for it */
 	if (!blk_crypto_fallback_alloc_cipher_req(slot, &ciph_req, &wait)) {
-		src_bio->bi_status = BLK_STS_RESOURCE;
+		status = BLK_STS_RESOURCE;
 		goto out_release_keyslot;
 	}
 
@@ -307,58 +260,73 @@ static void blk_crypto_fallback_encrypt_bio(struct bio *src_bio)
 	skcipher_request_set_crypt(ciph_req, &src, &dst, data_unit_size,
 				   iv.bytes);
 
-	/* Encrypt each page in the bounce bio */
-	for (i = 0; i < enc_bio->bi_vcnt; i++) {
-		struct bio_vec *enc_bvec = &enc_bio->bi_io_vec[i];
-		struct page *plaintext_page = enc_bvec->bv_page;
-		struct page *ciphertext_page =
-			mempool_alloc(blk_crypto_bounce_page_pool, GFP_NOIO);
+	/* Encrypt each page in the source bio */
+new_bio:
+	enc_bio = blk_crypto_alloc_enc_bio(src_bio, nr_segs);
+	enc_idx = 0;
+	for (;;) {
+		struct bio_vec src_bv =
+			bio_iter_iovec(src_bio, src_bio->bi_iter);
+		struct page *enc_page;
 
-		enc_bvec->bv_page = ciphertext_page;
+		enc_page = mempool_alloc(blk_crypto_bounce_page_pool,
+				GFP_NOIO);
+		__bio_add_page(enc_bio, enc_page, src_bv.bv_len,
+				src_bv.bv_offset);
 
-		if (!ciphertext_page) {
-			src_bio->bi_status = BLK_STS_RESOURCE;
-			goto out_free_bounce_pages;
-		}
-
-		sg_set_page(&src, plaintext_page, data_unit_size,
-			    enc_bvec->bv_offset);
-		sg_set_page(&dst, ciphertext_page, data_unit_size,
-			    enc_bvec->bv_offset);
+		sg_set_page(&src, src_bv.bv_page, data_unit_size,
+			    src_bv.bv_offset);
+		sg_set_page(&dst, enc_page, data_unit_size, src_bv.bv_offset);
 
 		/* Encrypt each data unit in this page */
-		for (j = 0; j < enc_bvec->bv_len; j += data_unit_size) {
+		for (j = 0; j < src_bv.bv_len; j += data_unit_size) {
 			blk_crypto_dun_to_iv(curr_dun, &iv);
 			if (crypto_wait_req(crypto_skcipher_encrypt(ciph_req),
 					    &wait)) {
-				i++;
-				src_bio->bi_status = BLK_STS_IOERR;
+				enc_idx++;
+				status = BLK_STS_IOERR;
 				goto out_free_bounce_pages;
 			}
 			bio_crypt_dun_increment(curr_dun, 1);
 			src.offset += data_unit_size;
 			dst.offset += data_unit_size;
 		}
+
+		bio_advance_iter_single(src_bio, &src_bio->bi_iter,
+				src_bv.bv_len);
+		if (!src_bio->bi_iter.bi_size)
+			break;
+
+		nr_segs--;
+		if (++enc_idx == enc_bio->bi_max_vecs) {
+			/*
+			 * For each additional encrypted bio submitted,
+			 * increment the source bio's remaining count.  Each
+			 * encrypted bio's completion handler calls bio_endio on
+			 * the source bio, so this keeps the source bio from
+			 * completing until the last encrypted bio does.
+			 */
+			bio_inc_remaining(src_bio);
+			submit_bio(enc_bio);
+			goto new_bio;
+		}
 	}
 
-	enc_bio->bi_private = src_bio;
-	enc_bio->bi_end_io = blk_crypto_fallback_encrypt_endio;
 	skcipher_request_free(ciph_req);
 	blk_crypto_put_keyslot(slot);
 	submit_bio(enc_bio);
 	return;
 
 out_free_bounce_pages:
-	while (i > 0)
-		mempool_free(enc_bio->bi_io_vec[--i].bv_page,
+	while (enc_idx > 0)
+		mempool_free(enc_bio->bi_io_vec[--enc_idx].bv_page,
 			     blk_crypto_bounce_page_pool);
+	bio_put(enc_bio);
 	skcipher_request_free(ciph_req);
 out_release_keyslot:
 	blk_crypto_put_keyslot(slot);
-out_put_enc_bio:
-	bio_uninit(enc_bio);
-	kfree(enc_bio);
 out_endio:
+	cmpxchg(&src_bio->bi_status, 0, status);
 	bio_endio(src_bio);
 }
 
@@ -532,7 +500,7 @@ static int blk_crypto_fallback_init(void)
 
 	get_random_bytes(blank_key, sizeof(blank_key));
 
-	err = bioset_init(&crypto_bio_split, 64, 0, 0);
+	err = bioset_init(&enc_bio_set, 64, 0, BIOSET_NEED_BVECS);
 	if (err)
 		goto out;
 
@@ -602,7 +570,7 @@ fail_destroy_profile:
 fail_free_profile:
 	kfree(blk_crypto_fallback_profile);
 fail_free_bioset:
-	bioset_exit(&crypto_bio_split);
+	bioset_exit(&enc_bio_set);
 out:
 	return err;
 }
