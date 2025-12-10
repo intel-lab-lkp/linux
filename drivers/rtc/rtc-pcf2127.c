@@ -1329,8 +1329,11 @@ static int pcf2127_probe(struct device *dev, struct regmap *regmap,
 	 * Clear battery interrupt flags which can block new trigger events.
 	 * Note: This is the default chip behaviour but added to ensure
 	 * correct tamper timestamp and interrupt function.
+	 * For pcf2131, clear the PWRMNG bits[7:5] because the reset value
+	 * is 111, which is different from 2127/2129.
 	 */
 	ret = regmap_update_bits(pcf2127->regmap, PCF2127_REG_CTRL3,
+				 (pcf2127->cfg->type == PCF2131 ? PCF2127_CTRL3_PM : 0) |
 				 PCF2127_BIT_CTRL3_BTSE |
 				 PCF2127_BIT_CTRL3_BIE |
 				 PCF2127_BIT_CTRL3_BLIE, 0);
