@@ -211,6 +211,15 @@ check_2 tools/perf/arch/parisc/entry/syscalls/syscall.tbl arch/parisc/entry/sysc
 check_2 tools/perf/arch/arm64/entry/syscalls/syscall_32.tbl arch/arm64/entry/syscalls/syscall_32.tbl
 check_2 tools/perf/arch/arm64/entry/syscalls/syscall_64.tbl arch/arm64/entry/syscalls/syscall_64.tbl
 
+# Generate Arm64's unistd_64.h dynamically and compare it with the one in tools.
+if tmpdir=$(mktemp -d); then
+	make -f scripts/Makefile.asm-headers srctree=$PWD SRCARCH=arm64 \
+		obj=$tmpdir/generated generic=include/uapi/asm-generic \
+		$tmpdir/generated/unistd_64.h > /dev/null
+	check_2 tools/arch/arm64/include/uapi/asm/unistd_64.h $tmpdir/generated/unistd_64.h
+	rm -rf $tmpdir
+fi
+
 for i in "${BEAUTY_FILES[@]}"
 do
   beauty_check "$i" -B
