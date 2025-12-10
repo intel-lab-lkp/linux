@@ -19,6 +19,7 @@
 #define TQMX86_IOBASE	0x180
 #define TQMX86_IOSIZE	0x20
 #define TQMX86_IOBASE_I2C1	0x1a0
+#define TQMX86_IOBASE_I2C2	0x1aa
 #define TQMX86_IOSIZE_I2C	0xa
 #define TQMX86_IOBASE_WATCHDOG	0x18b
 #define TQMX86_IOSIZE_WATCHDOG	0x2
@@ -51,6 +52,7 @@
 #define TQMX86_REG_IO_EXT_INT_12		3
 #define TQMX86_REG_IO_EXT_INT_MASK		0x3
 #define TQMX86_REG_IO_EXT_INT_I2C1_SHIFT	0
+#define TQMX86_REG_IO_EXT_INT_I2C2_SHIFT	2
 #define TQMX86_REG_IO_EXT_INT_GPIO_SHIFT	4
 #define TQMX86_REG_SAUC		0x17
 
@@ -65,6 +67,10 @@ static uint i2c1_irq;
 module_param(i2c1_irq, uint, 0);
 MODULE_PARM_DESC(i2c1_irq, "I2C1 IRQ number (valid parameters: 7, 9, 12)");
 
+static uint i2c2_irq;
+module_param(i2c2_irq, uint, 0);
+MODULE_PARM_DESC(i2c2_irq, "I2C2 IRQ number (valid parameters: 7, 9, 12)");
+
 enum tqmx86_i2c1_resource_type {
 	TQMX86_I2C1_IO,
 	TQMX86_I2C1_IRQ,
@@ -74,6 +80,17 @@ static struct resource tqmx_i2c1_resources[] = {
 	[TQMX86_I2C1_IO] = DEFINE_RES_IO(TQMX86_IOBASE_I2C1, TQMX86_IOSIZE_I2C),
 	/* Placeholder for IRQ resource */
 	[TQMX86_I2C1_IRQ] = {},
+};
+
+enum tqmx86_i2c2_resource_type {
+	TQMX86_I2C2_IO,
+	TQMX86_I2C2_IRQ,
+};
+
+static struct resource tqmx_i2c2_resources[] = {
+	[TQMX86_I2C2_IO] = DEFINE_RES_IO(TQMX86_IOBASE_I2C2, TQMX86_IOSIZE_I2C),
+	/* Placeholder for IRQ resource */
+	[TQMX86_I2C2_IRQ] = {},
 };
 
 static const struct resource tqmx_watchdog_resources[] = {
@@ -109,6 +126,16 @@ static const struct mfd_cell tqmx86_i2c1_dev_ocores = {
 	.pdata_size = sizeof(tqmx86_i2c1_platform_data_ocores),
 	.resources = tqmx_i2c1_resources,
 	.num_resources = ARRAY_SIZE(tqmx_i2c1_resources),
+};
+
+static struct ocores_i2c_platform_data tqmx86_i2c2_platform_data_ocores = {};
+
+static const struct mfd_cell tqmx86_i2c2_dev_ocores = {
+	.name = "ocores-i2c",
+	.platform_data = &tqmx86_i2c2_platform_data_ocores,
+	.pdata_size = sizeof(tqmx86_i2c2_platform_data_ocores),
+	.resources = tqmx_i2c2_resources,
+	.num_resources = ARRAY_SIZE(tqmx_i2c2_resources),
 };
 
 static const struct mfd_cell tqmx86_devs[] = {
@@ -263,6 +290,33 @@ static int tqmx86_detect_i2c1(struct device *dev, void __iomem *io_base, int clo
 	return 0;
 }
 
+static int tqmx86_detect_i2c2(struct device *dev, void __iomem *io_base, int clock_khz)
+{
+	u8 i2c_det;
+
+	if (i2c2_irq) {
+		if (!tqmx86_setup_irq(dev, "I2C2", i2c2_irq, io_base,
+				      TQMX86_REG_IO_EXT_INT_I2C2_SHIFT))
+			tqmx_i2c2_resources[TQMX86_I2C2_IRQ] = DEFINE_RES_IRQ(i2c2_irq);
+	}
+
+	/*
+	 * The I2C_DETECT register is in the range assigned to the I2C driver
+	 * later, so we don't extend TQMX86_IOSIZE. Use inb() for this one-off
+	 * access instead of ioport_map + unmap.
+	 */
+	i2c_det = inb(TQMX86_IOBASE_I2C2 + TQMX86_REG_I2C_DETECT);
+
+	if (i2c_det == TQMX86_REG_I2C_DETECT_OCORES) {
+		tqmx86_i2c2_platform_data_ocores.clock_khz = clock_khz;
+		return devm_mfd_add_devices(dev, PLATFORM_DEVID_NONE,
+					    &tqmx86_i2c2_dev_ocores, 1, NULL, 0,
+					    NULL);
+	}
+
+	return 0;
+}
+
 static int tqmx86_probe(struct platform_device *pdev)
 {
 	u8 board_id, sauc, rev;
@@ -294,6 +348,10 @@ static int tqmx86_probe(struct platform_device *pdev)
 	clock_khz = tqmx86_board_id_to_clk_rate(dev, board_id);
 
 	err = tqmx86_detect_i2c1(dev, io_base, clock_khz);
+	if (err)
+		return err;
+
+	err = tqmx86_detect_i2c2(dev, io_base, clock_khz);
 	if (err)
 		return err;
 
