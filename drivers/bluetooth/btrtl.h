@@ -203,7 +203,26 @@ struct btrealtek_data {
 	DECLARE_BITMAP(flags, __REALTEK_NUM_FLAGS);
 
 	struct rtl_dump_info rtl_dump;
+
+	wait_queue_head_t	dlreq_wait_q;
+	__u32                   dlreq_status;
+	__u32                   dlreq_result;
+	struct sk_buff          *dlreq_rsp;
 };
+
+struct rtl_acl_download_rp {
+	__u8 index;
+	__le16 handle;
+	__le32 loaded_len;
+} __packed;
+
+struct hci_rp_enhanced_download_mode {
+	__u8 status;
+	__u8 reserved1;
+	__le16 handle;
+	__le16 acldata_pkt_len;
+	__u8 reserved2;
+} __packed;
 
 #define btrealtek_set_flag(hdev, nr)					\
 	do {								\
