@@ -67,7 +67,7 @@ static struct rtattr *rtattr_add_strsz(struct nlmsghdr *nh, unsigned short type,
 {
 	struct rtattr *rta = rtattr_add(nh, type, strlen(s) + 1);
 
-	strcpy(RTA_DATA(rta), s);
+	memcpy(RTA_DATA(rta), s, strlen(s) + 1);
 	return rta;
 }
 
