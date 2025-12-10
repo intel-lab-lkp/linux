@@ -196,8 +196,9 @@ static bool blk_dma_map_iter_start(struct request *req, struct device *dma_dev,
 		return false;
 	}
 
-	if (blk_can_dma_map_iova(req, dma_dev) &&
-	    dma_iova_try_alloc(dma_dev, state, vec.paddr, total_len))
+	if (!blk_can_dma_map_iova(req, dma_dev))
+		memset(state, 0, sizeof(*state));
+	else if (dma_iova_try_alloc(dma_dev, state, vec.paddr, total_len))
 		return blk_rq_dma_map_iova(req, dma_dev, state, iter, &vec);
 	return blk_dma_map_direct(req, dma_dev, iter, &vec);
 }
