@@ -3751,6 +3751,10 @@ sub process {
 
 				next if $compat !~ /^([a-zA-Z0-9\-]+)\,/;
 				my $vendor = $1;
+				if ($vendor =~ /^pci[0-9a-fA-F]{4}$/) {
+					# Skip vendor-prefix documentation check for pciNNNN
+					next;
+				}
 				`grep -Eq "\\"\\^\Q$vendor\E,\\.\\*\\":" $vp_file`;
 				if ( $? >> 8 ) {
 					WARN("UNDOCUMENTED_DT_STRING",
