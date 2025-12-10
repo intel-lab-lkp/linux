@@ -1254,7 +1254,8 @@ xfs_falloc_zero_range(
 	int			mode,
 	loff_t			offset,
 	loff_t			len,
-	struct xfs_zone_alloc_ctx *ac)
+	struct xfs_zone_alloc_ctx *ac,
+	bool			force_zero_range)
 {
 	struct inode		*inode = file_inode(file);
 	struct xfs_inode	*ip = XFS_I(inode);
@@ -1274,8 +1275,7 @@ xfs_falloc_zero_range(
 	 * extents than to perform zeroing here, so use an errortag to randomly
 	 * force zeroing on DEBUG kernels for added test coverage.
 	 */
-	if (XFS_TEST_ERROR(ip->i_mount,
-			   XFS_ERRTAG_FORCE_ZERO_RANGE)) {
+	if (force_zero_range) {
 		error = xfs_zero_range(ip, offset, len, ac, NULL);
 	} else {
 		error = xfs_free_file_space(ip, offset, len, ac);
@@ -1357,7 +1357,8 @@ __xfs_file_fallocate(
 	int			mode,
 	loff_t			offset,
 	loff_t			len,
-	struct xfs_zone_alloc_ctx *ac)
+	struct xfs_zone_alloc_ctx *ac,
+	bool			force_zero_range)
 {
 	struct inode		*inode = file_inode(file);
 	struct xfs_inode	*ip = XFS_I(inode);
@@ -1393,7 +1394,8 @@ __xfs_file_fallocate(
 		error = xfs_falloc_insert_range(file, offset, len);
 		break;
 	case FALLOC_FL_ZERO_RANGE:
-		error = xfs_falloc_zero_range(file, mode, offset, len, ac);
+		error = xfs_falloc_zero_range(file, mode, offset, len, ac,
+				force_zero_range);
 		break;
 	case FALLOC_FL_UNSHARE_RANGE:
 		error = xfs_falloc_unshare_range(file, mode, offset, len);
@@ -1419,17 +1421,24 @@ xfs_file_zoned_fallocate(
 	struct file		*file,
 	int			mode,
 	loff_t			offset,
-	loff_t			len)
+	loff_t			len,
+	bool			force_zero_range)
 {
 	struct xfs_zone_alloc_ctx ac = { };
 	struct xfs_inode	*ip = XFS_I(file_inode(file));
+	struct xfs_mount	*mp = ip->i_mount;
 	int			error;
+	xfs_filblks_t		count_fsb = 2;
 
-	error = xfs_zoned_space_reserve(ip->i_mount, 2, XFS_ZR_RESERVED, &ac);
+	if (force_zero_range)
+		count_fsb += XFS_B_TO_FSB(mp, len) + 1;
+
+	error = xfs_zoned_space_reserve(mp, count_fsb, XFS_ZR_RESERVED, &ac);
 	if (error)
 		return error;
-	error = __xfs_file_fallocate(file, mode, offset, len, &ac);
-	xfs_zoned_space_unreserve(ip->i_mount, &ac);
+	error = __xfs_file_fallocate(file, mode, offset, len, &ac,
+			force_zero_range);
+	xfs_zoned_space_unreserve(mp, &ac);
 	return error;
 }
 
@@ -1441,11 +1450,17 @@ xfs_file_fallocate(
 	loff_t			len)
 {
 	struct inode		*inode = file_inode(file);
+	struct xfs_inode	*ip = XFS_I(inode);
+	bool			force_zero_range = false;
 
 	if (!S_ISREG(inode->i_mode))
 		return -EINVAL;
 	if (mode & ~XFS_FALLOC_FL_SUPPORTED)
 		return -EOPNOTSUPP;
+
+	if ((mode & FALLOC_FL_MODE_MASK) == FALLOC_FL_ZERO_RANGE &&
+	    XFS_TEST_ERROR(ip->i_mount, XFS_ERRTAG_FORCE_ZERO_RANGE))
+		force_zero_range = true;
 
 	/*
 	 * For zoned file systems, zeroing the first and last block of a hole
@@ -1455,11 +1470,14 @@ xfs_file_fallocate(
 	 * expected to be able to punch a hole even on a completely full
 	 * file system.
 	 */
-	if (xfs_is_zoned_inode(XFS_I(inode)) &&
-	    (mode & (FALLOC_FL_PUNCH_HOLE | FALLOC_FL_ZERO_RANGE |
-		     FALLOC_FL_COLLAPSE_RANGE)))
-		return xfs_file_zoned_fallocate(file, mode, offset, len);
-	return __xfs_file_fallocate(file, mode, offset, len, NULL);
+	if (xfs_is_zoned_inode(ip) &&
+	    (force_zero_range ||
+	     (mode & (FALLOC_FL_PUNCH_HOLE | FALLOC_FL_ZERO_RANGE |
+		      FALLOC_FL_COLLAPSE_RANGE))))
+		return xfs_file_zoned_fallocate(file, mode, offset, len,
+				force_zero_range);
+	return __xfs_file_fallocate(file, mode, offset, len, NULL,
+			force_zero_range);
 }
 
 STATIC int
