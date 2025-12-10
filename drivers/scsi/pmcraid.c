@@ -1213,7 +1213,7 @@ static void pmcraid_prepare_cancel_cmd(
 	 * cdb[2]..cdb[9] is Big-Endian format. Note that length bits in
 	 * IOARCB address are not masked.
 	 */
-	ioarcb_addr = cpu_to_be64(le64_to_cpu(cmd_to_cancel->ioa_cb->ioarcb.ioarcb_bus_addr));
+	ioarcb_addr = swab64(cmd_to_cancel->ioa_cb->ioarcb.ioarcb_bus_addr);
 
 	/* Get the resource handle to where the command to be aborted has been
 	 * sent.
