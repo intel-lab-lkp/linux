@@ -82,9 +82,22 @@ static __always_inline void *pfn_to_kaddr(unsigned long pfn)
 	return __va(pfn << PAGE_SHIFT);
 }
 
+#ifdef CONFIG_KASAN_SW_TAGS
+#define CANONICAL_MASK(vaddr_bits) (BIT_ULL(63) | BIT_ULL((vaddr_bits) - 1))
+#else
+#define CANONICAL_MASK(vaddr_bits) GENMASK_ULL(63, vaddr_bits)
+#endif
+
+/*
+ * To make an address canonical either set or clear the bits defined by the
+ * CANONICAL_MASK(). Clear the bits for userspace addresses if the top address
+ * bit is a zero. Set the bits for kernel addresses if the top address bit is a
+ * one.
+ */
 static __always_inline u64 __canonical_address(u64 vaddr, u8 vaddr_bits)
 {
-	return ((s64)vaddr << (64 - vaddr_bits)) >> (64 - vaddr_bits);
+	return (vaddr & BIT_ULL(63)) ? vaddr | CANONICAL_MASK(vaddr_bits) :
+				       vaddr & ~CANONICAL_MASK(vaddr_bits);
 }
 
 static __always_inline u64 __is_canonical_address(u64 vaddr, u8 vaddr_bits)
