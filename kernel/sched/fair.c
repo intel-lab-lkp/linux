@@ -7146,13 +7146,14 @@ static DEFINE_PER_CPU(cpumask_var_t, should_we_balance_tmpmask);
 #ifdef CONFIG_NO_HZ_COMMON
 
 static struct {
-	cpumask_var_t idle_cpus_mask;
-	atomic_t nr_cpus;
+	/* Isolate frequently updated fields in a cacheline to avoid false sharing issue. */
+	atomic_t nr_cpus ____cacheline_aligned;
 	int has_blocked;		/* Idle CPUS has blocked load */
 	int needs_update;		/* Newly idle CPUs need their next_balance collated */
 	unsigned long next_balance;     /* in jiffy units */
 	unsigned long next_blocked;	/* Next update of blocked load in jiffies */
-} nohz ____cacheline_aligned;
+	cpumask_var_t idle_cpus_mask ____cacheline_aligned;
+} nohz;
 
 #endif /* CONFIG_NO_HZ_COMMON */
 
