@@ -1,0 +1,73 @@
+#!/usr/bin/perl -w
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# Generate an SMB2 status -> error mapping table, sorted by NT status code.
+#
+# Copyright (C) 2025 Red Hat, Inc. All Rights Reserved.
+# Written by David Howells (dhowells@redhat.com)
+#
+use strict;
+
+if ($#ARGV != 1) {
+    print STDERR "Format: ", $0, " <in-h-file> <out-c-file>\n";
+    exit(2);
+}
+
+my %statuses = ();
+my @list = ();
+my %codes = ();
+
+#
+# Read the file
+#
+open IN_FILE, "<$ARGV[0]" || die;
+while (<IN_FILE>) {
+    chomp;
+    if (m!^#define\s*([A-Za-z0-9_]+)\s+st[(]([0-9a-fA-Fx]+),\s+([-A-Z0-9_]+)[)]!) {
+	my $status = $1;
+	my $code = $2;
+	my $ncode = hex($2);
+	my $error = $3;
+	my $s;
+
+	next if ($status =~ /^STATUS_SEVERITY/);
+
+	die "Duplicate status $status"
+	    if exists($statuses{$status});
+
+	my %s = (
+	    status => $status,
+	    code   => $code,
+	    ncode  => $ncode,
+	    error  => $error
+	    );
+	$statuses{$status} = \%s;
+	push @list, \%s;
+    }
+}
+close IN_FILE || die;
+
+
+@list = sort( { $a->{ncode} <=> $b->{ncode} } @list);
+
+open OUT_FILE, ">$ARGV[1]" || die;
+foreach my $entry (@list) {
+    my $status = $entry->{status};
+    my $code   = $entry->{code};
+    my $ncode  = $entry->{ncode};
+    my $error  = $entry->{error};
+
+    # There may be synonyms
+    unless (exists($codes{$ncode})) {
+	my $pad = " ";
+	if (length($status) < 40) {
+	    my $n = 40 - length($status);
+	    $pad = "\t" x ((($n-1) / 8) + 1);
+	}
+	$codes{$ncode} = $status;
+	print(OUT_FILE "{ /*$code*/ $status, $error, \"$status\" },\n");
+    } else {
+	print(OUT_FILE "/*-- $code $status dup of ", $codes{$ncode}, " --*/\n");
+    }
+}
+close OUT_FILE || die;
