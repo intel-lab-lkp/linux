@@ -2376,12 +2376,9 @@ done:
 static int btrfs_prev_leaf(struct btrfs_root *root, struct btrfs_path *path)
 {
 	struct btrfs_key key;
-	struct btrfs_key orig_key;
-	struct btrfs_disk_key found_key;
 	int ret;
 
 	btrfs_item_key_to_cpu(path->nodes[0], &key, 0);
-	orig_key = key;
 
 	if (key.offset > 0) {
 		key.offset--;
@@ -2401,48 +2398,12 @@ static int btrfs_prev_leaf(struct btrfs_root *root, struct btrfs_path *path)
 	if (ret <= 0)
 		return ret;
 
-	/*
-	 * Previous key not found. Even if we were at slot 0 of the leaf we had
-	 * before releasing the path and calling btrfs_search_slot(), we now may
-	 * be in a slot pointing to the same original key - this can happen if
-	 * after we released the path, one of more items were moved from a
-	 * sibling leaf into the front of the leaf we had due to an insertion
-	 * (see push_leaf_right()).
-	 * If we hit this case and our slot is > 0 and just decrement the slot
-	 * so that the caller does not process the same key again, which may or
-	 * may not break the caller, depending on its logic.
-	 */
-	if (path->slots[0] < btrfs_header_nritems(path->nodes[0])) {
-		btrfs_item_key(path->nodes[0], &found_key, path->slots[0]);
-		ret = btrfs_comp_keys(&found_key, &orig_key);
-		if (ret == 0) {
-			if (path->slots[0] > 0) {
-				path->slots[0]--;
-				return 0;
-			}
-			/*
-			 * At slot 0, same key as before, it means orig_key is
-			 * the lowest, leftmost, key in the tree. We're done.
-			 */
-			return 1;
-		}
-	}
+	/* There's no smaller keys in the whole tree. */
+	if (path->slots[0] == 0)
+		return 1;
 
-	btrfs_item_key(path->nodes[0], &found_key, 0);
-	ret = btrfs_comp_keys(&found_key, &key);
-	/*
-	 * We might have had an item with the previous key in the tree right
-	 * before we released our path. And after we released our path, that
-	 * item might have been pushed to the first slot (0) of the leaf we
-	 * were holding due to a tree balance. Alternatively, an item with the
-	 * previous key can exist as the only element of a leaf (big fat item).
-	 * Therefore account for these 2 cases, so that our callers (like
-	 * btrfs_previous_item) don't miss an existing item with a key matching
-	 * the previous key we computed above.
-	 */
-	if (ret <= 0)
-		return 0;
-	return 1;
+	path->slots[0]--;
+	return 0;
 }
 
 /*
@@ -2473,19 +2434,11 @@ int btrfs_search_slot_for_read(struct btrfs_root *root,
 		if (p->slots[0] >= btrfs_header_nritems(p->nodes[0]))
 			return btrfs_next_leaf(root, p);
 	} else {
-		if (p->slots[0] == 0) {
-			ret = btrfs_prev_leaf(root, p);
-			if (ret < 0)
-				return ret;
-			if (!ret) {
-				if (p->slots[0] == btrfs_header_nritems(p->nodes[0]))
-					p->slots[0]--;
-				return 0;
-			}
+		/* We have no lower key in the tree. */
+		if (p->slots[0] == 0)
 			return 1;
-		} else {
-			p->slots[0]--;
-		}
+
+		p->slots[0]--;
 	}
 	return 0;
 }
@@ -4969,26 +4922,19 @@ int btrfs_previous_item(struct btrfs_root *root,
 			int type)
 {
 	struct btrfs_key found_key;
-	struct extent_buffer *leaf;
-	u32 nritems;
 	int ret;
 
 	while (1) {
 		if (path->slots[0] == 0) {
 			ret = btrfs_prev_leaf(root, path);
-			if (ret != 0)
+			if (ret)
 				return ret;
-		} else {
-			path->slots[0]--;
-		}
-		leaf = path->nodes[0];
-		nritems = btrfs_header_nritems(leaf);
-		if (nritems == 0)
-			return 1;
-		if (path->slots[0] == nritems)
+		} else
 			path->slots[0]--;
 
-		btrfs_item_key_to_cpu(leaf, &found_key, path->slots[0]);
+		ASSERT(path->slots[0] < btrfs_header_nritems(path->nodes[0]));
+
+		btrfs_item_key_to_cpu(path->nodes[0], &found_key, path->slots[0]);
 		if (found_key.objectid < min_objectid)
 			break;
 		if (found_key.type == type)
@@ -5010,26 +4956,19 @@ int btrfs_previous_extent_item(struct btrfs_root *root,
 			struct btrfs_path *path, u64 min_objectid)
 {
 	struct btrfs_key found_key;
-	struct extent_buffer *leaf;
-	u32 nritems;
 	int ret;
 
 	while (1) {
 		if (path->slots[0] == 0) {
 			ret = btrfs_prev_leaf(root, path);
-			if (ret != 0)
+			if (ret)
 				return ret;
-		} else {
-			path->slots[0]--;
-		}
-		leaf = path->nodes[0];
-		nritems = btrfs_header_nritems(leaf);
-		if (nritems == 0)
-			return 1;
-		if (path->slots[0] == nritems)
+		} else
 			path->slots[0]--;
 
-		btrfs_item_key_to_cpu(leaf, &found_key, path->slots[0]);
+		ASSERT(path->slots[0] < btrfs_header_nritems(path->nodes[0]));
+
+		btrfs_item_key_to_cpu(path->nodes[0], &found_key, path->slots[0]);
 		if (found_key.objectid < min_objectid)
 			break;
 		if (found_key.type == BTRFS_EXTENT_ITEM_KEY ||
