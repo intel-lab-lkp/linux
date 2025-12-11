@@ -7029,14 +7029,6 @@ static struct ccb *ncr_get_ccb(struct ncb *np, struct scsi_cmnd *cmd)
 	/*
 	**	Wait until available.
 	*/
-#if 0
-	while (cp->magic) {
-		if (flags & SCSI_NOSLEEP) break;
-		if (tsleep ((caddr_t)cp, PRIBIO|PCATCH, "ncr", 0))
-			break;
-	}
-#endif
-
 	if (cp->magic)
 		return NULL;
 
@@ -7124,11 +7116,6 @@ static void ncr_free_ccb (struct ncb *np, struct ccb *cp)
 		--np->queuedccbs;
 		cp->queued = 0;
 	}
-
-#if 0
-	if (cp == np->ccb)
-		wakeup ((caddr_t) cp);
-#endif
 }
 
 
@@ -7524,11 +7511,7 @@ static int __init ncr_regtest (struct ncb* np)
 	data = 0xffffffff;
 	OUTL_OFF(offsetof(struct ncr_reg, nc_dstat), data);
 	data = INL_OFF(offsetof(struct ncr_reg, nc_dstat));
-#if 1
 	if (data == 0xffffffff) {
-#else
-	if ((data & 0xe2f0fffd) != 0x02000080) {
-#endif
 		printk ("CACHE TEST FAILED: reg dstat-sstat2 readback %x.\n",
 			(unsigned) data);
 		return (0x10);
