@@ -1086,6 +1086,7 @@ static inline void __ublk_complete_rq(struct request *req, struct ublk_io *io,
 {
 	unsigned int unmapped_bytes;
 	blk_status_t res = BLK_STS_OK;
+	bool requeue;
 
 	/* failed read IO if nothing is read */
 	if (!io->res && req_op(req) == REQ_OP_READ)
@@ -1117,14 +1118,28 @@ static inline void __ublk_complete_rq(struct request *req, struct ublk_io *io,
 	if (unlikely(unmapped_bytes < io->res))
 		io->res = unmapped_bytes;
 
-	if (blk_update_request(req, BLK_STS_OK, io->res))
+	/*
+	 * Run bio->bi_end_io() from softirq context for preventing this
+	 * ublk's blkdev_release() from being called on current's task
+	 * work, see fput() implementation.
+	 *
+	 * Otherwise, ublk server may not provide forward progress in
+	 * case of reading partition table from bdev_open() with
+	 * disk->open_mutex grabbed, and causes dead lock.
+	 */
+	local_bh_disable();
+	requeue = blk_update_request(req, BLK_STS_OK, io->res);
+	local_bh_enable();
+	if (requeue)
 		blk_mq_requeue_request(req, true);
 	else if (likely(!blk_should_fake_timeout(req->q)))
 		__blk_mq_end_request(req, BLK_STS_OK);
 
 	return;
 exit:
+	local_bh_disable();
 	blk_mq_end_request(req, res);
+	local_bh_enable();
 }
 
 static struct io_uring_cmd *__ublk_prep_compl_io_cmd(struct ublk_io *io,
