@@ -1719,6 +1719,13 @@ UNUSUAL_DEV(  0x0fce, 0xe092, 0x0000, 0x0000,
 		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
 		US_FL_IGNORE_RESIDUE ),
 
+/* Ignore driver CD interface of SR9700 USB Ethernet adapters */
+UNUSUAL_DEV( 0x0fe6, 0x9702, 0x0000, 0xffff,
+		"CoreChips",
+		"SR9700 USB Ethernet Adapter",
+		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
+		US_FL_IGNORE_DEVICE ),
+
 /*
  * Reported by Kevin Cernekee <kpc-usbdev@gelato.uiuc.edu>
  * Tested on hardware version 1.10.
