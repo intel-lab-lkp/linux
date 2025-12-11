@@ -127,3 +127,10 @@ impl<T> Drop for SetOnce<T> {
         }
     }
 }
+
+// SAFETY: `SetOnce` can be transferred across thread boundaries iff the data it contains can.
+unsafe impl<T: Send> Send for SetOnce<T> {}
+
+// SAFETY: `SetOnce` synchronises access to the inner value via atomic operations, so it is `Sync`
+// as long as the data it contains is `Sync`.
+unsafe impl<T: Sync> Sync for SetOnce<T> {}
