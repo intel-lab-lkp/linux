@@ -71,7 +71,6 @@ impl<'a> ModInfoBuilder<'a> {
         );
         self.ts.extend(quote! {
             #cfg
-            #[doc(hidden)]
             #[cfg_attr(not(target_os = "macos"), link_section = ".modinfo")]
             #[used(compiler)]
             pub static #counter: [u8; #length] = *#string;
@@ -375,6 +374,7 @@ pub(crate) fn module(info: ModuleInfo) -> Result<TokenStream> {
         }
 
         // Double nested modules, since then nobody can access the public items inside.
+        #[doc(hidden)]
         mod __module_init {
             mod __module_init {
                 use pin_init::PinInit;
@@ -384,7 +384,6 @@ pub(crate) fn module(info: ModuleInfo) -> Result<TokenStream> {
                 // This may be best done another way later on, e.g. as a new modinfo
                 // key or a new section. For the moment, keep it simple.
                 #[cfg(MODULE)]
-                #[doc(hidden)]
                 #[used(compiler)]
                 static __IS_RUST_MODULE: () = ();
 
@@ -397,7 +396,6 @@ pub(crate) fn module(info: ModuleInfo) -> Result<TokenStream> {
                 /// This function must not be called after module initialization, because it may be
                 /// freed after that completes.
                 #[cfg(MODULE)]
-                #[doc(hidden)]
                 #[no_mangle]
                 #[link_section = ".init.text"]
                 pub unsafe extern "C" fn init_module() -> ::kernel::ffi::c_int {
@@ -408,14 +406,12 @@ pub(crate) fn module(info: ModuleInfo) -> Result<TokenStream> {
                 }
 
                 #[cfg(MODULE)]
-                #[doc(hidden)]
                 #[used(compiler)]
                 #[link_section = ".init.data"]
                 static __UNIQUE_ID___addressable_init_module: unsafe extern "C" fn() -> i32 =
                     init_module;
 
                 #[cfg(MODULE)]
-                #[doc(hidden)]
                 #[no_mangle]
                 #[link_section = ".exit.text"]
                 pub extern "C" fn cleanup_module() {
@@ -429,7 +425,6 @@ pub(crate) fn module(info: ModuleInfo) -> Result<TokenStream> {
                 }
 
                 #[cfg(MODULE)]
-                #[doc(hidden)]
                 #[used(compiler)]
                 #[link_section = ".exit.data"]
                 static __UNIQUE_ID___addressable_cleanup_module: extern "C" fn() = cleanup_module;
@@ -438,7 +433,6 @@ pub(crate) fn module(info: ModuleInfo) -> Result<TokenStream> {
                 // and the identifiers need to be unique.
                 #[cfg(not(MODULE))]
                 #[cfg(not(CONFIG_HAVE_ARCH_PREL32_RELOCATIONS))]
-                #[doc(hidden)]
                 #[link_section = #initcall_section]
                 #[used(compiler)]
                 pub static #ident_initcall: extern "C" fn() ->
@@ -449,7 +443,6 @@ pub(crate) fn module(info: ModuleInfo) -> Result<TokenStream> {
                 ::core::arch::global_asm!(#global_asm);
 
                 #[cfg(not(MODULE))]
-                #[doc(hidden)]
                 #[no_mangle]
                 pub extern "C" fn #ident_init() -> ::kernel::ffi::c_int {
                     // SAFETY: This function is inaccessible to the outside due to the double
@@ -459,7 +452,6 @@ pub(crate) fn module(info: ModuleInfo) -> Result<TokenStream> {
                 }
 
                 #[cfg(not(MODULE))]
-                #[doc(hidden)]
                 #[no_mangle]
                 pub extern "C" fn #ident_exit() {
                     // SAFETY:
