@@ -212,7 +212,8 @@ rustdoc-ffi: $(src)/ffi.rs rustdoc-core FORCE
 
 rustdoc-pin_init_internal: private rustdoc_host = yes
 rustdoc-pin_init_internal: private rustc_target_flags = --cfg kernel \
-    --extern proc_macro --crate-type proc-macro
+    --extern proc_macro --extern proc_macro2 --extern quote --extern syn \
+    --crate-type proc-macro
 rustdoc-pin_init_internal: $(src)/pin-init/internal/src/lib.rs \
     rustdoc-clean FORCE
 	+$(call if_changed,rustdoc)
@@ -273,7 +274,7 @@ rusttestlib-macros: $(src)/macros/lib.rs \
 	+$(call if_changed,rustc_test_library)
 
 rusttestlib-pin_init_internal: private rustc_target_flags = --cfg kernel \
-    --extern proc_macro
+    --extern proc_macro --extern proc_macro2 --extern quote --extern syn
 rusttestlib-pin_init_internal: private rustc_test_library_proc = yes
 rusttestlib-pin_init_internal: $(src)/pin-init/internal/src/lib.rs FORCE
 	+$(call if_changed,rustc_test_library)
@@ -547,7 +548,8 @@ $(obj)/$(libmacros_name): $(src)/macros/lib.rs $(obj)/libproc_macro2.rlib \
     $(obj)/libquote.rlib $(obj)/libsyn.rlib FORCE
 	+$(call if_changed_dep,rustc_procmacro)
 
-$(obj)/$(libpin_init_internal_name): private rustc_target_flags = --cfg kernel
+$(obj)/$(libpin_init_internal_name): private rustc_target_flags = --cfg kernel \
+    --extern proc_macro2 --extern quote --extern syn
 $(obj)/$(libpin_init_internal_name): $(src)/pin-init/internal/src/lib.rs FORCE
 	+$(call if_changed_dep,rustc_procmacro)
 
