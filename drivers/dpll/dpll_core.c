@@ -41,6 +41,7 @@ struct dpll_device_registration {
 	struct list_head list;
 	const struct dpll_device_ops *ops;
 	void *priv;
+	dpll_tracker tracker;
 };
 
 struct dpll_pin_registration {
@@ -48,6 +49,7 @@ struct dpll_pin_registration {
 	const struct dpll_pin_ops *ops;
 	void *priv;
 	void *cookie;
+	dpll_tracker tracker;
 };
 
 static int call_dpll_notifiers(unsigned long action, void *info)
@@ -83,33 +85,68 @@ void dpll_pin_notify(struct dpll_pin *pin, unsigned long action)
 	call_dpll_notifiers(action, &info);
 }
 
-static void __dpll_device_hold(struct dpll_device *dpll)
+static void dpll_device_tracker_alloc(struct dpll_device *dpll,
+				      dpll_tracker *tracker)
 {
+#ifdef CONFIG_DPLL_REFCNT_TRACKER
+	ref_tracker_alloc(&dpll->refcnt_tracker, tracker, GFP_KERNEL);
+#endif
+}
+
+static void dpll_device_tracker_free(struct dpll_device *dpll,
+				     dpll_tracker *tracker)
+{
+#ifdef CONFIG_DPLL_REFCNT_TRACKER
+	ref_tracker_free(&dpll->refcnt_tracker, tracker);
+#endif
+}
+
+static void __dpll_device_hold(struct dpll_device *dpll, dpll_tracker *tracker)
+{
+	dpll_device_tracker_alloc(dpll, tracker);
 	refcount_inc(&dpll->refcount);
 }
 
-static void __dpll_device_put(struct dpll_device *dpll)
+static void __dpll_device_put(struct dpll_device *dpll, dpll_tracker *tracker)
 {
+	dpll_device_tracker_free(dpll, tracker);
 	if (refcount_dec_and_test(&dpll->refcount)) {
 		ASSERT_DPLL_NOT_REGISTERED(dpll);
 		WARN_ON_ONCE(!xa_empty(&dpll->pin_refs));
 		xa_destroy(&dpll->pin_refs);
 		xa_erase(&dpll_device_xa, dpll->id);
 		WARN_ON(!list_empty(&dpll->registration_list));
+		ref_tracker_dir_exit(&dpll->refcnt_tracker);
 		kfree(dpll);
 	}
 }
 
-static void __dpll_pin_hold(struct dpll_pin *pin)
+static void dpll_pin_tracker_alloc(struct dpll_pin *pin, dpll_tracker *tracker)
 {
+#ifdef CONFIG_DPLL_REFCNT_TRACKER
+	ref_tracker_alloc(&pin->refcnt_tracker, tracker, GFP_KERNEL);
+#endif
+}
+
+static void dpll_pin_tracker_free(struct dpll_pin *pin, dpll_tracker *tracker)
+{
+#ifdef CONFIG_DPLL_REFCNT_TRACKER
+	ref_tracker_free(&pin->refcnt_tracker, tracker);
+#endif
+}
+
+static void __dpll_pin_hold(struct dpll_pin *pin, dpll_tracker *tracker)
+{
+	dpll_pin_tracker_alloc(pin, tracker);
 	refcount_inc(&pin->refcount);
 }
 
 static void dpll_pin_idx_free(u32 pin_idx);
 static void dpll_pin_prop_free(struct dpll_pin_properties *prop);
 
-static void __dpll_pin_put(struct dpll_pin *pin)
+static void __dpll_pin_put(struct dpll_pin *pin, dpll_tracker *tracker)
 {
+	dpll_pin_tracker_free(pin, tracker);
 	if (refcount_dec_and_test(&pin->refcount)) {
 		xa_erase(&dpll_pin_xa, pin->id);
 		xa_destroy(&pin->dpll_refs);
@@ -118,6 +155,7 @@ static void __dpll_pin_put(struct dpll_pin *pin)
 		dpll_pin_prop_free(&pin->prop);
 		fwnode_handle_put(pin->fwnode);
 		dpll_pin_idx_free(pin->pin_idx);
+		ref_tracker_dir_exit(&pin->refcnt_tracker);
 		kfree_rcu(pin, rcu);
 	}
 }
@@ -191,7 +229,7 @@ dpll_xa_ref_pin_add(struct xarray *xa_pins, struct dpll_pin *pin,
 	reg->ops = ops;
 	reg->priv = priv;
 	reg->cookie = cookie;
-	__dpll_pin_hold(pin);
+	__dpll_pin_hold(pin, &reg->tracker);
 	if (ref_exists)
 		refcount_inc(&ref->refcount);
 	list_add_tail(&reg->list, &ref->registration_list);
@@ -214,7 +252,7 @@ static int dpll_xa_ref_pin_del(struct xarray *xa_pins, struct dpll_pin *pin,
 		if (WARN_ON(!reg))
 			return -EINVAL;
 		list_del(&reg->list);
-		__dpll_pin_put(pin);
+		__dpll_pin_put(pin, &reg->tracker);
 		kfree(reg);
 		if (refcount_dec_and_test(&ref->refcount)) {
 			xa_erase(xa_pins, i);
@@ -272,7 +310,7 @@ dpll_xa_ref_dpll_add(struct xarray *xa_dplls, struct dpll_device *dpll,
 	reg->ops = ops;
 	reg->priv = priv;
 	reg->cookie = cookie;
-	__dpll_device_hold(dpll);
+	__dpll_device_hold(dpll, &reg->tracker);
 	if (ref_exists)
 		refcount_inc(&ref->refcount);
 	list_add_tail(&reg->list, &ref->registration_list);
@@ -295,7 +333,7 @@ dpll_xa_ref_dpll_del(struct xarray *xa_dplls, struct dpll_device *dpll,
 		if (WARN_ON(!reg))
 			return;
 		list_del(&reg->list);
-		__dpll_device_put(dpll);
+		__dpll_device_put(dpll, &reg->tracker);
 		kfree(reg);
 		if (refcount_dec_and_test(&ref->refcount)) {
 			xa_erase(xa_dplls, i);
@@ -337,6 +375,7 @@ dpll_device_alloc(const u64 clock_id, u32 device_idx, struct module *module)
 		return ERR_PTR(ret);
 	}
 	xa_init_flags(&dpll->pin_refs, XA_FLAGS_ALLOC);
+	ref_tracker_dir_init(&dpll->refcnt_tracker, 128, "dpll_device");
 
 	return dpll;
 }
@@ -356,7 +395,8 @@ dpll_device_alloc(const u64 clock_id, u32 device_idx, struct module *module)
  * * ERR_PTR(X) - error
  */
 struct dpll_device *
-dpll_device_get(u64 clock_id, u32 device_idx, struct module *module)
+dpll_device_get(u64 clock_id, u32 device_idx, struct module *module,
+		dpll_tracker *tracker)
 {
 	struct dpll_device *dpll, *ret = NULL;
 	unsigned long index;
@@ -366,13 +406,17 @@ dpll_device_get(u64 clock_id, u32 device_idx, struct module *module)
 		if (dpll->clock_id == clock_id &&
 		    dpll->device_idx == device_idx &&
 		    dpll->module == module) {
-			__dpll_device_hold(dpll);
+			__dpll_device_hold(dpll, tracker);
 			ret = dpll;
 			break;
 		}
 	}
-	if (!ret)
+	if (!ret) {
 		ret = dpll_device_alloc(clock_id, device_idx, module);
+		if (!IS_ERR(ret))
+			dpll_device_tracker_alloc(ret, tracker);
+	}
+
 	mutex_unlock(&dpll_lock);
 
 	return ret;
@@ -387,10 +431,10 @@ EXPORT_SYMBOL_GPL(dpll_device_get);
  * Drop reference for a dpll device, if all references are gone, delete
  * dpll device object.
  */
-void dpll_device_put(struct dpll_device *dpll)
+void dpll_device_put(struct dpll_device *dpll, dpll_tracker *tracker)
 {
 	mutex_lock(&dpll_lock);
-	__dpll_device_put(dpll);
+	__dpll_device_put(dpll, tracker);
 	mutex_unlock(&dpll_lock);
 }
 EXPORT_SYMBOL_GPL(dpll_device_put);
@@ -452,7 +496,7 @@ int dpll_device_register(struct dpll_device *dpll, enum dpll_type type,
 	reg->ops = ops;
 	reg->priv = priv;
 	dpll->type = type;
-	__dpll_device_hold(dpll);
+	__dpll_device_hold(dpll, &reg->tracker);
 	first_registration = list_empty(&dpll->registration_list);
 	list_add_tail(&reg->list, &dpll->registration_list);
 	if (!first_registration) {
@@ -492,7 +536,7 @@ void dpll_device_unregister(struct dpll_device *dpll,
 		return;
 	}
 	list_del(&reg->list);
-	__dpll_device_put(dpll);
+	__dpll_device_put(dpll, &reg->tracker);
 	kfree(reg);
 
 	if (!list_empty(&dpll->registration_list)) {
@@ -624,6 +668,7 @@ dpll_pin_alloc(u64 clock_id, u32 pin_idx, struct module *module,
 	if (ret < 0)
 		goto err_xa_alloc;
 	pin->fwnode = fwnode_handle_get(fwnode);
+	ref_tracker_dir_init(&pin->refcnt_tracker, 128, "dpll_pin");
 	return pin;
 err_xa_alloc:
 	xa_destroy(&pin->dpll_refs);
@@ -698,7 +743,7 @@ EXPORT_SYMBOL_GPL(unregister_dpll_notifier);
 struct dpll_pin *
 dpll_pin_get(u64 clock_id, u32 pin_idx, struct module *module,
 	     const struct dpll_pin_properties *prop,
-	     struct fwnode_handle *fwnode)
+	     struct fwnode_handle *fwnode, dpll_tracker *tracker)
 {
 	struct dpll_pin *pos, *ret = NULL;
 	unsigned long i;
@@ -709,13 +754,16 @@ dpll_pin_get(u64 clock_id, u32 pin_idx, struct module *module,
 		    pos->pin_idx == pin_idx &&
 		    pos->module == module &&
 		    pos->fwnode == fwnode) {
-			__dpll_pin_hold(pos);
+			__dpll_pin_hold(pos, tracker);
 			ret = pos;
 			break;
 		}
 	}
-	if (!ret)
+	if (!ret) {
 		ret = dpll_pin_alloc(clock_id, pin_idx, module, prop, fwnode);
+		if (!IS_ERR(ret))
+			dpll_pin_tracker_alloc(ret, tracker);
+	}
 	mutex_unlock(&dpll_lock);
 
 	return ret;
@@ -730,10 +778,10 @@ EXPORT_SYMBOL_GPL(dpll_pin_get);
  *
  * Context: Acquires a lock (dpll_lock)
  */
-void dpll_pin_put(struct dpll_pin *pin)
+void dpll_pin_put(struct dpll_pin *pin, dpll_tracker *tracker)
 {
 	mutex_lock(&dpll_lock);
-	__dpll_pin_put(pin);
+	__dpll_pin_put(pin, tracker);
 	mutex_unlock(&dpll_lock);
 }
 EXPORT_SYMBOL_GPL(dpll_pin_put);
@@ -750,7 +798,8 @@ EXPORT_SYMBOL_GPL(dpll_pin_put);
  * * valid dpll_pin struct pointer if succeeded
  * * ERR_PTR(X) - error
  */
-struct dpll_pin *fwnode_dpll_pin_find(struct fwnode_handle *fwnode)
+struct dpll_pin *fwnode_dpll_pin_find(struct fwnode_handle *fwnode,
+				      dpll_tracker *tracker)
 {
 	struct dpll_pin *pin, *ret = NULL;
 	unsigned long index;
@@ -758,7 +807,7 @@ struct dpll_pin *fwnode_dpll_pin_find(struct fwnode_handle *fwnode)
 	mutex_lock(&dpll_lock);
 	xa_for_each(&dpll_pin_xa, index, pin) {
 		if (pin->fwnode == fwnode) {
-			__dpll_pin_hold(pin);
+			__dpll_pin_hold(pin, tracker);
 			ret = pin;
 			break;
 		}
