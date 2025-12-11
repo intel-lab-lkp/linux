@@ -749,8 +749,12 @@ int __zerocopy_sg_from_iter(struct msghdr *msg, struct sock *sk,
 			    struct net_devmem_dmabuf_binding *binding)
 {
 	unsigned long orig_size = skb->truesize;
+	struct iov_iter_state state;
 	unsigned long truesize;
-	int ret;
+	int ret, orig_len;
+
+	iov_iter_save_state(from, &state);
+	orig_len = skb->len;
 
 	if (msg && msg->msg_ubuf && msg->sg_from_iter)
 		ret = msg->sg_from_iter(skb, from, length);
@@ -758,6 +762,9 @@ int __zerocopy_sg_from_iter(struct msghdr *msg, struct sock *sk,
 		ret = zerocopy_fill_skb_from_devmem(skb, from, length, binding);
 	else
 		ret = zerocopy_fill_skb_from_iter(skb, from, length);
+
+	if (ret == -EFAULT || (ret == -EMSGSIZE && skb->len == orig_len))
+		iov_iter_restore(from, &state);
 
 	truesize = skb->truesize - orig_size;
 	if (sk && sk->sk_type == SOCK_STREAM) {
