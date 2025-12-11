@@ -237,8 +237,9 @@
 	clocks = <&scmi_clk IMX95_CLK_HSIO>,
 		 <&pcieclk 1>,
 		 <&scmi_clk IMX95_CLK_HSIOPLL_VCO>,
-		 <&scmi_clk IMX95_CLK_HSIOPCIEAUX>;
-	clock-names = "pcie", "pcie_bus", "pcie_phy", "pcie_aux";
+		 <&scmi_clk IMX95_CLK_HSIOPCIEAUX>,
+		 <&hsio_blk_ctl 0>;
+	clock-names = "pcie", "pcie_bus", "pcie_phy", "pcie_aux", "ref";
 	reset-gpio = <&expander2 9 GPIO_ACTIVE_LOW>;
 	status = "okay";
 };
@@ -250,8 +251,9 @@
 	clocks = <&scmi_clk IMX95_CLK_HSIO>,
 		 <&pcieclk 0>,
 		 <&scmi_clk IMX95_CLK_HSIOPLL_VCO>,
-		 <&scmi_clk IMX95_CLK_HSIOPCIEAUX>;
-	clock-names = "pcie", "pcie_bus", "pcie_phy", "pcie_aux";
+		 <&scmi_clk IMX95_CLK_HSIOPCIEAUX>,
+		 <&hsio_blk_ctl 0>;
+	clock-names = "pcie", "pcie_bus", "pcie_phy", "pcie_aux", "ref";
 	reset-gpio = <&expander2 10 GPIO_ACTIVE_LOW>;
 	status = "okay";
 };
