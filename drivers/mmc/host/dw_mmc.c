@@ -3670,15 +3670,18 @@ int dw_mci_runtime_resume(struct device *dev)
 	if (host->slot && host->slot->mmc->pm_flags & MMC_PM_KEEP_POWER)
 		dw_mci_set_ios(host->slot->mmc, &host->slot->mmc->ios);
 
-	/* Force setup bus to guarantee available clock output */
-	dw_mci_setup_bus(host->slot, true);
 
-	/* Re-enable SDIO interrupts. */
-	if (sdio_irq_claimed(host->slot->mmc))
-		__dw_mci_enable_sdio_irq(host->slot, 1);
+	if (host->slot) {
+		/* Force setup bus to guarantee available clock output */
+		dw_mci_setup_bus(host->slot, true);
 
-	/* Now that slots are all setup, we can enable card detect */
-	dw_mci_enable_cd(host);
+		/* Re-enable SDIO interrupts. */
+		if (sdio_irq_claimed(host->slot->mmc))
+			__dw_mci_enable_sdio_irq(host->slot, 1);
+
+		/* Now that slots are all setup, we can enable card detect */
+		dw_mci_enable_cd(host);
+	}
 
 	return 0;
 
