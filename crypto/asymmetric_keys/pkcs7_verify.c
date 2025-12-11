@@ -19,8 +19,8 @@
 /*
  * Digest the relevant parts of the PKCS#7 data
  */
-static int pkcs7_digest(struct pkcs7_message *pkcs7,
-			struct pkcs7_signed_info *sinfo)
+int pkcs7_digest(struct pkcs7_message *pkcs7,
+		 struct pkcs7_signed_info *sinfo)
 {
 	struct public_key_signature *sig = sinfo->sig;
 	struct crypto_shash *tfm;
@@ -85,8 +85,8 @@ static int pkcs7_digest(struct pkcs7_message *pkcs7,
 			goto error;
 		}
 
-		if (memcmp(sig->digest, sinfo->msgdigest,
-			   sinfo->msgdigest_len) != 0) {
+		if (pkcs7->data && memcmp(sig->digest, sinfo->msgdigest,
+					  sinfo->msgdigest_len) != 0) {
 			pr_warn("Sig %u: Message digest doesn't match\n",
 				sinfo->index);
 			ret = -EKEYREJECTED;
@@ -437,6 +437,11 @@ int pkcs7_verify(struct pkcs7_message *pkcs7,
 		break;
 	default:
 		return -EINVAL;
+	}
+
+	if (!pkcs7->data) {
+		pr_warn("Data not supplied to verify operation\n");
+		return -EBADMSG;
 	}
 
 	for (sinfo = pkcs7->signed_infos; sinfo; sinfo = sinfo->next) {
