@@ -3480,6 +3480,17 @@ static int arm_smmu_insert_master(struct arm_smmu_device *smmu,
 			if (existing_master == master)
 				continue;
 
+			/* Allow PCI devices on the same bus to share stream IDs
+			 * due to PCIe-to-PCI bridge aliasing.
+			 */
+			if (dev_is_pci(master->dev) && dev_is_pci(existing_master->dev)) {
+				struct pci_dev *pdev = to_pci_dev(master->dev);
+				struct pci_dev *existing_pdev = to_pci_dev(existing_master->dev);
+
+				if (pdev->bus == existing_pdev->bus)
+					continue;
+			}
+
 			dev_warn(master->dev,
 				 "Aliasing StreamID 0x%x (from %s) unsupported, expect DMA to be broken\n",
 				 sid, dev_name(existing_master->dev));
