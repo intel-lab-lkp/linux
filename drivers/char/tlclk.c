@@ -331,7 +331,8 @@ static ssize_t store_received_ref_clk3a(struct device *d,
 	unsigned char val;
 	unsigned long flags;
 
-	sscanf(buf, "%lX", &tmp);
+	if (sscanf(buf, "%lX", &tmp) != 1)
+		return 0;
 	dev_dbg(d, ": tmp = 0x%lX\n", tmp);
 
 	val = (unsigned char)tmp;
@@ -353,7 +354,8 @@ static ssize_t store_received_ref_clk3b(struct device *d,
 	unsigned char val;
 	unsigned long flags;
 
-	sscanf(buf, "%lX", &tmp);
+	if (sscanf(buf, "%lX", &tmp) != 1)
+		return 0;
 	dev_dbg(d, ": tmp = 0x%lX\n", tmp);
 
 	val = (unsigned char)tmp;
@@ -375,7 +377,8 @@ static ssize_t store_enable_clk3b_output(struct device *d,
 	unsigned char val;
 	unsigned long flags;
 
-	sscanf(buf, "%lX", &tmp);
+	if (sscanf(buf, "%lX", &tmp) != 1)
+		return 0;
 	dev_dbg(d, ": tmp = 0x%lX\n", tmp);
 
 	val = (unsigned char)tmp;
@@ -396,7 +399,8 @@ static ssize_t store_enable_clk3a_output(struct device *d,
 	unsigned long tmp;
 	unsigned char val;
 
-	sscanf(buf, "%lX", &tmp);
+	if (sscanf(buf, "%lX", &tmp) != 1)
+		return 0;
 	dev_dbg(d, "tmp = 0x%lX\n", tmp);
 
 	val = (unsigned char)tmp;
@@ -417,7 +421,8 @@ static ssize_t store_enable_clkb1_output(struct device *d,
 	unsigned long tmp;
 	unsigned char val;
 
-	sscanf(buf, "%lX", &tmp);
+	if (sscanf(buf, "%lX", &tmp) != 1)
+		return 0;
 	dev_dbg(d, "tmp = 0x%lX\n", tmp);
 
 	val = (unsigned char)tmp;
@@ -439,7 +444,8 @@ static ssize_t store_enable_clka1_output(struct device *d,
 	unsigned long tmp;
 	unsigned char val;
 
-	sscanf(buf, "%lX", &tmp);
+	if (sscanf(buf, "%lX", &tmp) != 1)
+		return 0;
 	dev_dbg(d, "tmp = 0x%lX\n", tmp);
 
 	val = (unsigned char)tmp;
@@ -460,7 +466,8 @@ static ssize_t store_enable_clkb0_output(struct device *d,
 	unsigned long tmp;
 	unsigned char val;
 
-	sscanf(buf, "%lX", &tmp);
+	if (sscanf(buf, "%lX", &tmp) != 1)
+		return 0;
 	dev_dbg(d, "tmp = 0x%lX\n", tmp);
 
 	val = (unsigned char)tmp;
@@ -481,7 +488,8 @@ static ssize_t store_enable_clka0_output(struct device *d,
 	unsigned long tmp;
 	unsigned char val;
 
-	sscanf(buf, "%lX", &tmp);
+	if (sscanf(buf, "%lX", &tmp) != 1)
+		return 0;
 	dev_dbg(d, "tmp = 0x%lX\n", tmp);
 
 	val = (unsigned char)tmp;
@@ -502,7 +510,8 @@ static ssize_t store_select_amcb2_transmit_clock(struct device *d,
 	unsigned long tmp;
 	unsigned char val;
 
-	sscanf(buf, "%lX", &tmp);
+	if (sscanf(buf, "%lX", &tmp) != 1)
+		return 0;
 	dev_dbg(d, "tmp = 0x%lX\n", tmp);
 
 	val = (unsigned char)tmp;
@@ -544,7 +553,8 @@ static ssize_t store_select_amcb1_transmit_clock(struct device *d,
 	unsigned char val;
 	unsigned long flags;
 
-	sscanf(buf, "%lX", &tmp);
+	if (sscanf(buf, "%lX", &tmp) != 1)
+		return 0;
 	dev_dbg(d, "tmp = 0x%lX\n", tmp);
 
 	val = (unsigned char)tmp;
@@ -586,7 +596,8 @@ static ssize_t store_select_redundant_clock(struct device *d,
 	unsigned char val;
 	unsigned long flags;
 
-	sscanf(buf, "%lX", &tmp);
+	if (sscanf(buf, "%lX", &tmp) != 1)
+		return 0;
 	dev_dbg(d, "tmp = 0x%lX\n", tmp);
 
 	val = (unsigned char)tmp;
@@ -607,7 +618,8 @@ static ssize_t store_select_ref_frequency(struct device *d,
 	unsigned char val;
 	unsigned long flags;
 
-	sscanf(buf, "%lX", &tmp);
+	if (sscanf(buf, "%lX", &tmp) != 1)
+		return 0;
 	dev_dbg(d, "tmp = 0x%lX\n", tmp);
 
 	val = (unsigned char)tmp;
@@ -628,7 +640,8 @@ static ssize_t store_filter_select(struct device *d,
 	unsigned char val;
 	unsigned long flags;
 
-	sscanf(buf, "%lX", &tmp);
+	if (sscanf(buf, "%lX", &tmp) != 1)
+		return 0;
 	dev_dbg(d, "tmp = 0x%lX\n", tmp);
 
 	val = (unsigned char)tmp;
@@ -648,7 +661,8 @@ static ssize_t store_hardware_switching_mode(struct device *d,
 	unsigned char val;
 	unsigned long flags;
 
-	sscanf(buf, "%lX", &tmp);
+	if (sscanf(buf, "%lX", &tmp) != 1)
+		return 0;
 	dev_dbg(d, "tmp = 0x%lX\n", tmp);
 
 	val = (unsigned char)tmp;
@@ -669,7 +683,8 @@ static ssize_t store_hardware_switching(struct device *d,
 	unsigned char val;
 	unsigned long flags;
 
-	sscanf(buf, "%lX", &tmp);
+	if (sscanf(buf, "%lX", &tmp) != 1)
+		return 0;
 	dev_dbg(d, "tmp = 0x%lX\n", tmp);
 
 	val = (unsigned char)tmp;
@@ -689,7 +704,8 @@ static ssize_t store_refalign (struct device *d,
 	unsigned long tmp;
 	unsigned long flags;
 
-	sscanf(buf, "%lX", &tmp);
+	if (sscanf(buf, "%lX", &tmp) != 1)
+		return 0;
 	dev_dbg(d, "tmp = 0x%lX\n", tmp);
 	spin_lock_irqsave(&event_lock, flags);
 	SET_PORT_BITS(TLCLK_REG0, 0xf7, 0);
@@ -709,7 +725,8 @@ static ssize_t store_mode_select (struct device *d,
 	unsigned char val;
 	unsigned long flags;
 
-	sscanf(buf, "%lX", &tmp);
+	if (sscanf(buf, "%lX", &tmp) != 1)
+		return 0;
 	dev_dbg(d, "tmp = 0x%lX\n", tmp);
 
 	val = (unsigned char)tmp;
@@ -729,7 +746,8 @@ static ssize_t store_reset (struct device *d,
 	unsigned char val;
 	unsigned long flags;
 
-	sscanf(buf, "%lX", &tmp);
+	if (sscanf(buf, "%lX", &tmp) != 1)
+		return 0;
 	dev_dbg(d, "tmp = 0x%lX\n", tmp);
 
 	val = (unsigned char)tmp;
