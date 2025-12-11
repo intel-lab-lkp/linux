@@ -299,6 +299,12 @@ acpi_ex_store_object_to_index(union acpi_operand_object *source_desc,
 
 			/* Note: Takes advantage of common string/buffer fields */
 
+			if (source_desc->buffer.pointer == NULL ||
+			    source_desc->buffer.length == 0) {
+				status = AE_BAD_PARAMETER;
+				break;
+			}
+
 			value = source_desc->buffer.pointer[0];
 			break;
 
