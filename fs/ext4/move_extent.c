@@ -287,6 +287,7 @@ again:
 		*err = PTR_ERR(handle);
 		return 0;
 	}
+	ext4_fc_mark_ineligible(sb, EXT4_FC_REASON_MOVE_EXT, handle);
 
 	orig_blk_offset = orig_page_offset * blocks_per_page +
 		data_offset_in_page;
