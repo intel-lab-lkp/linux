@@ -199,6 +199,7 @@ static int smp_85xx_start_cpu(int cpu)
 	cpu_rel_addr = of_get_property(np, "cpu-release-addr", NULL);
 	if (!cpu_rel_addr) {
 		pr_err("No cpu-release-addr for cpu %d\n", cpu);
+		of_node_put(np);
 		return -ENOENT;
 	}
 
@@ -216,6 +217,8 @@ static int smp_85xx_start_cpu(int cpu)
 					      sizeof(struct epapr_spin_table));
 	else
 		spin_table = phys_to_virt(*cpu_rel_addr);
+
+	of_node_put(np);
 
 	local_irq_save(flags);
 	hard_irq_disable();
@@ -485,6 +488,7 @@ void __init mpc85xx_smp_init(void)
 		smp_85xx_ops.probe = smp_mpic_probe;
 		smp_85xx_ops.setup_cpu = smp_85xx_setup_cpu;
 		smp_85xx_ops.message_pass = smp_mpic_message_pass;
+		of_node_put(np);
 	} else
 		smp_85xx_ops.setup_cpu = NULL;
 
