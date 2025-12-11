@@ -223,6 +223,34 @@ static inline void debug_show_blocker(struct task_struct *task, unsigned long ti
 }
 #endif
 
+/**
+ * hung_task_diagnostics - Print structured diagnostic info for a hung task.
+ * @t: The struct task_struct of the detected hung task.
+ *
+ * This function consolidates the printing of core diagnostic information
+ * for a task found to be blocked. This approach ensures atomic logging
+ * of the multi-line message block, preventing interleaving by other
+ * console activity, thus maintaining contextual clarity.
+ */
+static inline void hung_task_diagnostics(struct task_struct *t)
+{
+	unsigned long blocked_secs = (jiffies - t->last_switch_time) / HZ;
+	const char *coredump_msg = "";
+	const char *disable_msg =
+		"\"echo 0 > /proc/sys/kernel/hung_task_timeout_secs\""
+		" disables this message.\n";
+
+	if (t->flags & PF_POSTCOREDUMP)
+		coredump_msg = "      Blocked by coredump.\n";
+
+	pr_err("INFO: task %s:%d blocked for more than %ld seconds.\n"
+	       "      %s %s %.*s\n%s%s",
+	       t->comm, t->pid, blocked_secs,
+	       print_tainted(), init_utsname()->release,
+	       (int)strcspn(init_utsname()->version, " "),
+	       init_utsname()->version, coredump_msg, disable_msg);
+}
+
 static void check_hung_task(struct task_struct *t, unsigned long timeout,
 		unsigned long prev_detect_count)
 {
@@ -252,16 +280,7 @@ static void check_hung_task(struct task_struct *t, unsigned long timeout,
 	if (sysctl_hung_task_warnings || hung_task_call_panic) {
 		if (sysctl_hung_task_warnings > 0)
 			sysctl_hung_task_warnings--;
-		pr_err("INFO: task %s:%d blocked for more than %ld seconds.\n",
-		       t->comm, t->pid, (jiffies - t->last_switch_time) / HZ);
-		pr_err("      %s %s %.*s\n",
-			print_tainted(), init_utsname()->release,
-			(int)strcspn(init_utsname()->version, " "),
-			init_utsname()->version);
-		if (t->flags & PF_POSTCOREDUMP)
-			pr_err("      Blocked by coredump.\n");
-		pr_err("\"echo 0 > /proc/sys/kernel/hung_task_timeout_secs\""
-			" disables this message.\n");
+		hung_task_diagnostics(t);
 		sched_show_task(t);
 		debug_show_blocker(t, timeout);
 
