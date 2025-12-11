@@ -9,8 +9,19 @@
 #include <linux/export.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
+#include <linux/bits.h>
 
 #include "pci.h"
+
+#define PCI_ROM_HEADER_SIZE			0x1A
+#define PCI_ROM_POINTER_TO_DATA_STRUCT		0x18
+#define PCI_ROM_LAST_IMAGE_INDICATOR		0x15
+#define PCI_ROM_LAST_IMAGE_INDICATOR_BIT	BIT(7)
+#define PCI_ROM_IMAGE_LEN			0x10
+#define PCI_ROM_IMAGE_LEN_UNIT_SZ_512		512
+#define PCI_ROM_IMAGE_SIGNATURE			0xAA55
+#define PCI_ROM_DATA_STRUCT_SIGNATURE		0x52494350
+#define PCI_ROM_DATA_STRUCT_LEN			0x0A
 
 /**
  * pci_enable_rom - enable ROM decoding for a PCI device
