@@ -489,7 +489,10 @@ static int fealnx_init_one(struct pci_dev *pdev,
 	int bar = 1;
 #endif
 
-	card_idx++;
+	if (card_idx == INT_MAX)
+		return -EINVAL;
+	else
+		card_idx++;
 	sprintf(boardname, "fealnx%d", card_idx);
 
 	option = card_idx < MAX_UNITS ? options[card_idx] : 0;
