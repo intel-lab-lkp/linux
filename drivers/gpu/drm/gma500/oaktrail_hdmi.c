@@ -712,10 +712,10 @@ void oaktrail_hdmi_setup(struct drm_device *dev)
 	dev_info(dev->dev, "HDMI hardware present.\n");
 
 	return;
-
 free:
 	kfree(hdmi_dev);
 out:
+	pci_dev_put(pdev);
 	return;
 }
 
