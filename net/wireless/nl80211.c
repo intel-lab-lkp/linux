@@ -933,6 +933,8 @@ static const struct nla_policy nl80211_policy[NUM_NL80211_ATTR] = {
 	[NL80211_ATTR_BSS_PARAM] = { .type = NLA_FLAG },
 	[NL80211_ATTR_S1G_PRIMARY_2MHZ] = { .type = NLA_FLAG },
 	[NL80211_ATTR_KEY_PREASSOC] = { .type = NLA_FLAG },
+	[NL80211_ATTR_KEY_KCK] = { .type = NLA_BINARY,
+				   .len = WLAN_MAX_KEY_LEN },
 };
 
 /* policy for the key attributes */
@@ -12033,6 +12035,14 @@ static int nl80211_authenticate(struct sk_buff *skb, struct genl_info *info)
 			akm_suite = get_unaligned_be32(akm_list);
 			if (!cfg80211_is_sae_akmp(akm_suite))
 				return -EINVAL;
+		}
+
+		if (auth_trans == 3) {
+			if (!info->attrs[NL80211_ATTR_KEY_KCK])
+				return -EINVAL;
+
+			req.kck_len = nla_len(info->attrs[NL80211_ATTR_KEY_KCK]);
+			req.kck = nla_data(info->attrs[NL80211_ATTR_KEY_KCK]);
 		}
 	}
 

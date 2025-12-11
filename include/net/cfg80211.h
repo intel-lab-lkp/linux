@@ -3187,6 +3187,8 @@ static inline const u8 *ieee80211_bss_get_ie(struct cfg80211_bss *bss, u8 id)
  * @key_len: length of WEP key for shared key authentication
  * @key_idx: index of WEP key for shared key authentication
  * @key: WEP key for shared key authentication
+ * @kck: Key Confirmation Key for EPPKE Authentication.
+ * @kck_len: length of the KCK key for EPPKE Authentication.
  * @auth_data: Fields and elements in Authentication frames. This contains
  *	the authentication frame body (non-IE and IE data), excluding the
  *	Authentication algorithm number, i.e., starting at the Authentication
@@ -3209,6 +3211,8 @@ struct cfg80211_auth_request {
 	const u8 *key;
 	u8 key_len;
 	s8 key_idx;
+	const u8 *kck;
+	u8 kck_len;
 	const u8 *auth_data;
 	size_t auth_data_len;
 	s8 link_id;

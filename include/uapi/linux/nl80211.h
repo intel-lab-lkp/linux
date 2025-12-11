@@ -2981,6 +2981,12 @@ enum nl80211_commands {
  *	(e.g., EPPKE). If set, transmit key data to the driver for installation/
  *	removal/modification before the non-AP STA is associated.
  *
+ * @NL80211_ATTR_KEY_KCK: (Binary) Key Confirmation Key (KCK);
+ *	This attribute is used with %NL80211_CMD_AUTHENTICATE. In case of the
+ *	Enhanced Privacy Protection Key Exchange (EPPKE) authentication protocol
+ *	as specified in "IEEE P802.11bi/D3.0, 12.16.9", this attribute
+ *	is used for MIC calculation.
+ *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
  * @__NL80211_ATTR_AFTER_LAST: internal use
@@ -3550,6 +3556,8 @@ enum nl80211_attrs {
 	NL80211_ATTR_S1G_PRIMARY_2MHZ,
 
 	NL80211_ATTR_KEY_PREASSOC,
+
+	NL80211_ATTR_KEY_KCK,
 
 	/* add attributes here, update the policy in nl80211.c */
 
