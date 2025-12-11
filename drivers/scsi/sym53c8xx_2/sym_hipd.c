@@ -31,10 +31,6 @@
 #include "sym_glue.h"
 #include "sym_nvram.h"
 
-#if 0
-#define SYM_DEBUG_GENERIC_SUPPORT
-#endif
-
 /*
  *  Needed function prototypes.
  */
@@ -438,11 +434,7 @@ static int sym_getpciclock (struct sym_hcb *np)
 	 *  For now, we only need to know about the actual 
 	 *  PCI BUS clock frequency for C1010-66 chips.
 	 */
-#if 1
 	if (np->features & FE_66MHZ) {
-#else
-	if (1) {
-#endif
 		OUTB(np, nc_stest1, SCLK); /* Use the PCI clock as SCSI clock */
 		f = sym_getfreq(np);
 		OUTB(np, nc_stest1, 0);
@@ -496,7 +488,6 @@ sym_getsync(struct sym_hcb *np, u_char dt, u_char sfac, u_char *divp, u_char *fa
 	 *  to 5 Mega-transfers per second and may result in
 	 *  using higher clock divisors.
 	 */
-#if 1
 	if ((np->features & (FE_C10|FE_U3EN)) == FE_C10) {
 		/*
 		 *  Look for the lowest clock divisor that allows an 
@@ -517,7 +508,6 @@ sym_getsync(struct sym_hcb *np, u_char dt, u_char sfac, u_char *divp, u_char *fa
 		*fakp = fak;
 		return ret;
 	}
-#endif
 
 	/*
 	 *  Look for the greatest clock divisor that allows an 
@@ -825,11 +815,7 @@ static int sym_prepare_setting(struct Scsi_Host *shost, struct sym_hcb *np, stru
 		np->rv_dmode	|= BOF;		/* Burst Opcode Fetch */
 	if (np->features & FE_ERMP)
 		np->rv_dmode	|= ERMP;	/* Enable Read Multiple */
-#if 1
 	if ((np->features & FE_PFEN) && !np->ram_ba)
-#else
-	if (np->features & FE_PFEN)
-#endif
 		np->rv_dcntl	|= PFEN;	/* Prefetch Enable */
 	if (np->features & FE_CLSE)
 		np->rv_dcntl	|= CLSE;	/* Cache Line Size Enable */
@@ -1032,7 +1018,7 @@ restart_test:
 	 *  Check for fatal DMA errors.
 	 */
 	dstat = INB(np, nc_dstat);
-#if 1	/* Band aiding for broken hardwares that fail PCI parity */
+	/* Band aiding for broken hardware that fails PCI parity */
 	if ((dstat & MDPE) && (np->rv_ctest4 & MPEE)) {
 		printf ("%s: PCI DATA PARITY ERROR DETECTED - "
 			"DISABLING MASTER DATA PARITY CHECKING.\n",
@@ -1040,7 +1026,6 @@ restart_test:
 		np->rv_ctest4 &= ~MPEE;
 		goto restart_test;
 	}
-#endif
 	if (dstat & (MDPE|BF|IID)) {
 		printf ("CACHE TEST FAILED: DMA error (dstat=0x%02x).", dstat);
 		return (0x80);
@@ -1187,15 +1172,9 @@ static struct sym_chip sym_dev_table[] = {
  {PCI_DEVICE_ID_NCR_53C810, 0x0f, "810", 4, 8, 4, 64,
  FE_ERL}
  ,
-#ifdef SYM_DEBUG_GENERIC_SUPPORT
- {PCI_DEVICE_ID_NCR_53C810, 0xff, "810a", 4,  8, 4, 1,
- FE_BOF}
- ,
-#else
  {PCI_DEVICE_ID_NCR_53C810, 0xff, "810a", 4,  8, 4, 1,
  FE_CACHE_SET|FE_LDSTR|FE_PFEN|FE_BOF}
  ,
-#endif
  {PCI_DEVICE_ID_NCR_53C815, 0xff, "815", 4,  8, 4, 64,
  FE_BOF|FE_ERL}
  ,
@@ -1224,17 +1203,10 @@ static struct sym_chip sym_dev_table[] = {
  FE_WIDE|FE_ULTRA|FE_DBLR|FE_CACHE0_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|
  FE_RAM|FE_DIFF|FE_VARCLK}
  ,
-#ifdef SYM_DEBUG_GENERIC_SUPPORT
- {PCI_DEVICE_ID_NCR_53C895, 0xff, "895", 6, 31, 7, 2,
- FE_WIDE|FE_ULTRA2|FE_QUAD|FE_CACHE_SET|FE_BOF|FE_DFS|
- FE_RAM|FE_LCKFRQ}
- ,
-#else
  {PCI_DEVICE_ID_NCR_53C895, 0xff, "895", 6, 31, 7, 2,
  FE_WIDE|FE_ULTRA2|FE_QUAD|FE_CACHE_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|
  FE_RAM|FE_LCKFRQ}
  ,
-#endif
  {PCI_DEVICE_ID_NCR_53C896, 0xff, "896", 6, 31, 7, 4,
  FE_WIDE|FE_ULTRA2|FE_QUAD|FE_CACHE_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|
  FE_RAM|FE_RAM8K|FE_64BIT|FE_DAC|FE_IO256|FE_NOPM|FE_LEDC|FE_LCKFRQ}
@@ -1941,10 +1913,6 @@ static void sym_settrans(struct sym_hcb *np, int target, u_char opts, u_char ofs
 	wval = tp->head.wval;
 	uval = tp->head.uval;
 
-#if 0
-	printf("XXXX sval=%x wval=%x uval=%x (%x)\n", 
-		sval, wval, uval, np->rv_scntl3);
-#endif
 	/*
 	 *  Set the offset.
 	 */
@@ -2363,11 +2331,8 @@ static void sym_int_par (struct sym_hcb *np, u_short sist)
 		}
 	}
 	else if (phase == 7)	/* We definitely cannot handle parity errors */
-#if 1				/* in message-in phase due to the relection  */
+				/* in message-in phase due to the relection  */
 		goto reset_all; /* path and various message anticipations.   */
-#else
-		OUTL_DSP(np, SCRIPTA_BA(np, clrack));
-#endif
 	else
 		OUTL_DSP(np, SCRIPTA_BA(np, dispatch));
 	return;
@@ -3219,9 +3184,6 @@ int sym_clear_tasks(struct sym_hcb *np, int cam_status, int target, int lun, int
 		if (sym_get_cam_status(cmd) != DID_TIME_OUT)
 			sym_set_cam_status(cmd, cam_status);
 		++i;
-#if 0
-printf("XXXX TASK @%p CLEARED\n", cp);
-#endif
 	}
 	return i;
 }
@@ -4950,15 +4912,6 @@ static struct sym_ccb *sym_ccb_from_dsa(struct sym_hcb *np, u32 dsa)
  */
 static void sym_init_tcb (struct sym_hcb *np, u_char tn)
 {
-#if 0	/*  Hmmm... this checking looks paranoid. */
-	/*
-	 *  Check some alignments required by the chip.
-	 */	
-	assert (((offsetof(struct sym_reg, nc_sxfer) ^
-		offsetof(struct sym_tcb, head.sval)) &3) == 0);
-	assert (((offsetof(struct sym_reg, nc_scntl3) ^
-		offsetof(struct sym_tcb, head.wval)) &3) == 0);
-#endif
 }
 
 /*
@@ -5394,15 +5347,6 @@ void sym_complete_error(struct sym_hcb *np, struct sym_ccb *cp)
 	 */
 	resid = sym_compute_residual(np, cp);
 
-	if (!SYM_SETUP_RESIDUAL_SUPPORT) {/* If user does not want residuals */
-		resid  = 0;		 /* throw them away. :)		    */
-		cp->sv_resid = 0;
-	}
-#ifdef DEBUG_2_0_X
-if (resid)
-	printf("XXXX RESID= %d - 0x%x\n", resid, resid);
-#endif
-
 	/*
 	 *  Dequeue all queued CCBs for that device 
 	 *  not yet started by SCRIPTS.
@@ -5518,18 +5462,6 @@ void sym_complete_ok (struct sym_hcb *np, struct sym_ccb *cp)
 	resid = 0;
 	if (cp->phys.head.lastp != cp->goalp)
 		resid = sym_compute_residual(np, cp);
-
-	/*
-	 *  Wrong transfer residuals may be worse than just always 
-	 *  returning zero. User can disable this feature in 
-	 *  sym53c8xx.h. Residual support is enabled by default.
-	 */
-	if (!SYM_SETUP_RESIDUAL_SUPPORT)
-		resid  = 0;
-#ifdef DEBUG_2_0_X
-if (resid)
-	printf("XXXX RESID= %d - 0x%x\n", resid, resid);
-#endif
 
 	/*
 	 *  Build result in CAM ccb.

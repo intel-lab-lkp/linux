@@ -36,7 +36,6 @@
 #define	PADDR_B(label)		SYM_GEN_PADDR_B(struct SYM_FWB_SCR, label)
 
 
-#if	SYM_CONF_GENERIC_SUPPORT
 /*
  *  Allocate firmware #1 script area.
  */
@@ -56,7 +55,6 @@ static struct sym_fwz_ofs sym_fw1z_ofs = {
 #undef	SYM_FWA_SCR
 #undef	SYM_FWB_SCR
 #undef	SYM_FWZ_SCR
-#endif	/* SYM_CONF_GENERIC_SUPPORT */
 
 /*
  *  Allocate firmware #2 script area.
@@ -86,7 +84,6 @@ static struct sym_fwz_ofs sym_fw2z_ofs = {
 #undef	PADDR_A
 #undef	PADDR_B
 
-#if	SYM_CONF_GENERIC_SUPPORT
 /*
  *  Patch routine for firmware #1.
  */
@@ -127,7 +124,6 @@ sym_fw1_patch(struct Scsi_Host *shost)
 	scriptb0->done_pos[0]	= cpu_to_scr(np->dqueue_ba);
 	scriptb0->targtbl[0]	= cpu_to_scr(np->targtbl_ba);
 }
-#endif	/* SYM_CONF_GENERIC_SUPPORT */
 
 /*
  *  Patch routine for firmware #2.
@@ -274,7 +270,6 @@ sym_fw_setup_bus_addresses(struct sym_hcb *np, struct sym_fw *fw)
 		pa[i] = np->scriptz_ba + po[i];
 }
 
-#if	SYM_CONF_GENERIC_SUPPORT
 /*
  *  Setup routine for firmware #1.
  */
@@ -295,7 +290,6 @@ sym_fw1_setup(struct sym_hcb *np, struct sym_fw *fw)
 	 */
 	sym_fw_setup_bus_addresses(np, fw);
 }
-#endif	/* SYM_CONF_GENERIC_SUPPORT */
 
 /*
  *  Setup routine for firmware #2.
@@ -321,9 +315,7 @@ sym_fw2_setup(struct sym_hcb *np, struct sym_fw *fw)
 /*
  *  Allocate firmware descriptors.
  */
-#if	SYM_CONF_GENERIC_SUPPORT
 static struct sym_fw sym_fw1 = SYM_FW_ENTRY(sym_fw1, "NCR-generic");
-#endif	/* SYM_CONF_GENERIC_SUPPORT */
 static struct sym_fw sym_fw2 = SYM_FW_ENTRY(sym_fw2, "LOAD/STORE-based");
 
 /*
@@ -334,10 +326,8 @@ sym_find_firmware(struct sym_chip *chip)
 {
 	if (chip->features & FE_LDSTR)
 		return &sym_fw2;
-#if	SYM_CONF_GENERIC_SUPPORT
 	else if (!(chip->features & (FE_PFEN|FE_NOPM|FE_DAC)))
 		return &sym_fw1;
-#endif
 	else
 		return NULL;
 }

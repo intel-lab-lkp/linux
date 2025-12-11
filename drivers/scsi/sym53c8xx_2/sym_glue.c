@@ -908,7 +908,6 @@ static const char *sym53c8xx_info (struct Scsi_Host *host)
 }
 
 
-#ifdef SYM_LINUX_PROC_INFO_SUPPORT
 /*
  *  Proc file system stuff
  *
@@ -917,8 +916,6 @@ static const char *sym53c8xx_info (struct Scsi_Host *host)
  *  The string is parsed in the driver code and the command is passed 
  *  to the sym_usercmd() function.
  */
-
-#ifdef SYM_LINUX_USER_COMMAND_SUPPORT
 
 struct	sym_usrcmd {
 	u_long	target;
@@ -944,11 +941,9 @@ static void sym_exec_user_command (struct sym_hcb *np, struct sym_usrcmd *uc)
 	switch (uc->cmd) {
 	case 0: return;
 
-#ifdef SYM_LINUX_DEBUG_CONTROL_SUPPORT
 	case UC_SETDEBUG:
 		sym_debug_flags = uc->data;
 		break;
-#endif
 	case UC_SETVERBOSE:
 		np->verbose = uc->data;
 		break;
@@ -1084,10 +1079,8 @@ static int sym_user_command(struct Scsi_Host *shost, char *buffer, int length)
 		uc->cmd = UC_SETVERBOSE;
 	else if	((arg_len = is_keyword(ptr, len, "setwide")) != 0)
 		uc->cmd = UC_SETWIDE;
-#ifdef SYM_LINUX_DEBUG_CONTROL_SUPPORT
 	else if	((arg_len = is_keyword(ptr, len, "setdebug")) != 0)
 		uc->cmd = UC_SETDEBUG;
-#endif
 	else if	((arg_len = is_keyword(ptr, len, "setflag")) != 0)
 		uc->cmd = UC_SETFLAG;
 	else if	((arg_len = is_keyword(ptr, len, "resetdev")) != 0)
@@ -1096,10 +1089,6 @@ static int sym_user_command(struct Scsi_Host *shost, char *buffer, int length)
 		uc->cmd = UC_CLEARDEV;
 	else
 		arg_len = 0;
-
-#ifdef DEBUG_PROC_INFO
-printk("sym_user_command: arg_len=%d, cmd=%ld\n", arg_len, uc->cmd);
-#endif
 
 	if (!arg_len)
 		return -EINVAL;
@@ -1119,9 +1108,6 @@ printk("sym_user_command: arg_len=%d, cmd=%ld\n", arg_len, uc->cmd);
 		} else {
 			GET_INT_ARG(ptr, len, target);
 			uc->target = (1<<target);
-#ifdef DEBUG_PROC_INFO
-printk("sym_user_command: target=%ld\n", target);
-#endif
 		}
 		break;
 	}
@@ -1133,11 +1119,7 @@ printk("sym_user_command: target=%ld\n", target);
 	case UC_SETWIDE:
 		SKIP_SPACES(ptr, len);
 		GET_INT_ARG(ptr, len, uc->data);
-#ifdef DEBUG_PROC_INFO
-printk("sym_user_command: data=%ld\n", uc->data);
-#endif
 		break;
-#ifdef SYM_LINUX_DEBUG_CONTROL_SUPPORT
 	case UC_SETDEBUG:
 		while (len > 0) {
 			SKIP_SPACES(ptr, len);
@@ -1167,11 +1149,7 @@ printk("sym_user_command: data=%ld\n", uc->data);
 				return -EINVAL;
 			ptr += arg_len; len -= arg_len;
 		}
-#ifdef DEBUG_PROC_INFO
-printk("sym_user_command: data=%ld\n", uc->data);
-#endif
 		break;
-#endif /* SYM_LINUX_DEBUG_CONTROL_SUPPORT */
 	case UC_SETFLAG:
 		while (len > 0) {
 			SKIP_SPACES(ptr, len);
@@ -1198,15 +1176,12 @@ printk("sym_user_command: data=%ld\n", uc->data);
 	return length;
 }
 
-#endif	/* SYM_LINUX_USER_COMMAND_SUPPORT */
-
 
 /*
  *  Copy formatted information into the input buffer.
  */
 static int sym_show_info(struct seq_file *m, struct Scsi_Host *shost)
 {
-#ifdef SYM_LINUX_USER_INFO_SUPPORT
 	struct sym_data *sym_data = shost_priv(shost);
 	struct pci_dev *pdev = sym_data->pdev;
 	struct sym_hcb *np = sym_data->ncb;
@@ -1226,12 +1201,7 @@ static int sym_show_info(struct seq_file *m, struct Scsi_Host *shost)
 		 SYM_CONF_MAX_START, SYM_CONF_MAX_TAG);
 
 	return 0;
-#else
-	return -EINVAL;
-#endif /* SYM_LINUX_USER_INFO_SUPPORT */
 }
-
-#endif /* SYM_LINUX_PROC_INFO_SUPPORT */
 
 /*
  * Free resources claimed by sym_iomap_device().  Note that
@@ -1431,7 +1401,6 @@ static struct Scsi_Host *sym_attach(const struct scsi_host_template *tpnt, int u
 /*
  *    Detect and try to read SYMBIOS and TEKRAM NVRAM.
  */
-#if SYM_CONF_NVRAM_SUPPORT
 static void sym_get_nvram(struct sym_device *devp, struct sym_nvram *nvp)
 {
 	devp->nvram = nvp;
@@ -1439,11 +1408,6 @@ static void sym_get_nvram(struct sym_device *devp, struct sym_nvram *nvp)
 
 	sym_read_nvram(devp, nvp);
 }
-#else
-static inline void sym_get_nvram(struct sym_device *devp, struct sym_nvram *nvp)
-{
-}
-#endif	/* SYM_CONF_NVRAM_SUPPORT */
 
 static int sym_check_supported(struct sym_device *device)
 {
@@ -1694,13 +1658,9 @@ static const struct scsi_host_template sym2_template = {
 	.eh_host_reset_handler	= sym53c8xx_eh_host_reset_handler,
 	.this_id		= 7,
 	.max_sectors		= 0xFFFF,
-#ifdef SYM_LINUX_PROC_INFO_SUPPORT
 	.show_info		= sym_show_info,
-#ifdef	SYM_LINUX_USER_COMMAND_SUPPORT
 	.write_info		= sym_user_command,
-#endif
 	.proc_name		= NAME53C8XX,
-#endif
 };
 
 static int attach_count;

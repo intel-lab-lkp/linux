@@ -170,32 +170,16 @@ struct sym_nvram {
 #define	SYM_SYMBIOS_NVRAM	(1)
 #define	SYM_TEKRAM_NVRAM	(2)
 #define SYM_PARISC_PDC		(3)
-#if SYM_CONF_NVRAM_SUPPORT
 	union {
 		Symbios_nvram Symbios;
 		Tekram_nvram Tekram;
 		struct pdc_initiator parisc;
 	} data;
-#endif
 };
 
-#if SYM_CONF_NVRAM_SUPPORT
 void sym_nvram_setup_host(struct Scsi_Host *shost, struct sym_hcb *np, struct sym_nvram *nvram);
 void sym_nvram_setup_target (struct sym_tcb *tp, int target, struct sym_nvram *nvp);
 int sym_read_nvram (struct sym_device *np, struct sym_nvram *nvp);
 char *sym_nvram_type(struct sym_nvram *nvp);
-#else
-static inline void sym_nvram_setup_host(struct Scsi_Host *shost, struct sym_hcb *np, struct sym_nvram *nvram) { }
-static inline void sym_nvram_setup_target(struct sym_tcb *tp, struct sym_nvram *nvram) { }
-static inline int sym_read_nvram(struct sym_device *np, struct sym_nvram *nvp)
-{
-	nvp->type = 0;
-	return 0;
-}
-static inline char *sym_nvram_type(struct sym_nvram *nvp)
-{
-	return "No NVRAM";
-}
-#endif
 
 #endif /* SYM_NVRAM_H */
