@@ -39,28 +39,6 @@
 #define	SYM_CONF_DMA_ADDRESSING_MODE CONFIG_SCSI_SYM53C8XX_DMA_ADDRESSING_MODE
 
 /*
- *  NVRAM support.
- */
-#if 1
-#define SYM_CONF_NVRAM_SUPPORT		(1)
-#endif
-
-/*
- *  These options are not tunable from 'make config'
- */
-#if 1
-#define	SYM_LINUX_PROC_INFO_SUPPORT
-#define SYM_LINUX_USER_COMMAND_SUPPORT
-#define SYM_LINUX_USER_INFO_SUPPORT
-#define SYM_LINUX_DEBUG_CONTROL_SUPPORT
-#endif
-
-/*
- *  Also handle old NCR chips if not (0).
- */
-#define SYM_CONF_GENERIC_SUPPORT	(1)
-
-/*
  *  Allow tags from 2 to 256, default 8
  */
 #ifndef CONFIG_SCSI_SYM53C8XX_MAX_TAGS
@@ -190,13 +168,5 @@ extern unsigned int sym_debug_flags;
  */
 #define SYM_CONF_IARB_MAX 3
 #define SYM_CONF_SET_IARB_ON_ARB_LOST 1
-
-/*
- *  Returning wrong residuals may make problems.
- *  When zero, this define tells the driver to 
- *  always return 0 as transfer residual.
- *  Btw, all my testings of residuals have succeeded.
- */
-#define SYM_SETUP_RESIDUAL_SUPPORT 1
 
 #endif /* SYM53C8XX_H */

@@ -293,12 +293,8 @@
 #define CCB_HASH_SHIFT		8
 #define CCB_HASH_SIZE		(1UL << CCB_HASH_SHIFT)
 #define CCB_HASH_MASK		(CCB_HASH_SIZE-1)
-#if 1
 #define CCB_HASH_CODE(dsa)	\
 	(((dsa) >> (_LGRU16_(sizeof(struct sym_ccb)))) & CCB_HASH_MASK)
-#else
-#define CCB_HASH_CODE(dsa)	(((dsa) >> 9) & CCB_HASH_MASK)
-#endif
 
 #if	SYM_CONF_DMA_ADDRESSING_MODE == 2
 /*
@@ -660,7 +656,6 @@ struct sym_ccbh {
  *  that use directly the header in the CCB, and the NCR-GENERIC 
  *  SCRIPTS that use the copy of the header in the HCB.
  */
-#if	SYM_CONF_GENERIC_SUPPORT
 #define sym_set_script_dp(np, cp, dp)				\
 	do {							\
 		if (np->features & FE_LDSTR)			\
@@ -671,14 +666,6 @@ struct sym_ccbh {
 #define sym_get_script_dp(np, cp) 				\
 	scr_to_cpu((np->features & FE_LDSTR) ?			\
 		cp->phys.head.lastp : np->ccb_head.lastp)
-#else
-#define sym_set_script_dp(np, cp, dp)				\
-	do {							\
-		cp->phys.head.lastp = cpu_to_scr(dp);		\
-	} while (0)
-
-#define sym_get_script_dp(np, cp) (cp->phys.head.lastp)
-#endif
 
 /*
  *  Data Structure Block
@@ -801,11 +788,10 @@ struct sym_hcb {
 	 *  chips (810, 815, 825) copy part of the data structures 
 	 *  (CCB, TCB and LCB) in fixed areas.
 	 */
-#if	SYM_CONF_GENERIC_SUPPORT
 	struct sym_ccbh	ccb_head;
 	struct sym_tcbh	tcb_head;
 	struct sym_lcbh	lcb_head;
-#endif
+
 	/*
 	 *  Idle task and invalid task actions and 
 	 *  their bus addresses.
