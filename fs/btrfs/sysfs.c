@@ -1230,9 +1230,10 @@ static ssize_t btrfs_zoned_stats_show(struct kobject *kobj,
 	ret += sysfs_emit_at(buf, ret, "active zones:\n");
 	list_for_each_entry(bg, &fs_info->zone_active_bgs, active_bg_list) {
 		ret += sysfs_emit_at(buf, ret,
-				     "\tstart: %llu, wp: %llu used: %llu, reserved: %llu, unusable: %llu\n",
+				     "\tstart: %llu, wp: %llu used: %llu, reserved: %llu, unusable: %llu (%s)\n",
 				     bg->start, bg->alloc_offset, bg->used,
-				     bg->reserved, bg->zone_unusable);
+				     bg->reserved, bg->zone_unusable,
+				     btrfs_bg_type_to_str(bg->flags & BTRFS_BLOCK_GROUP_TYPE_MASK));
 	}
 	spin_unlock(&fs_info->zone_active_bgs_lock);
 	return ret;
