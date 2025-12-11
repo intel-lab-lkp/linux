@@ -2,27 +2,26 @@
 
 use std::fmt::Write;
 
-use proc_macro2::{token_stream, Delimiter, Literal, TokenStream, TokenTree};
+use proc_macro2::{
+    Literal,
+    TokenStream, //
+};
+use syn::{
+    bracketed,
+    parse::{
+        Parse,
+        ParseStream, //
+    },
+    punctuated::Punctuated,
+    token::Bracket,
+    Error,
+    Ident,
+    LitStr,
+    Result,
+    Token, //
+};
 
 use crate::helpers::*;
-
-fn expect_string_array(it: &mut token_stream::IntoIter) -> Vec<String> {
-    let group = expect_group(it);
-    assert_eq!(group.delimiter(), Delimiter::Bracket);
-    let mut values = Vec::new();
-    let mut it = group.stream().into_iter();
-
-    while let Some(val) = try_string(&mut it) {
-        assert!(val.is_ascii(), "Expected ASCII string");
-        values.push(val);
-        match it.next() {
-            Some(TokenTree::Punct(punct)) => assert_eq!(punct.as_char(), ','),
-            None => break,
-            _ => panic!("Expected ',' or end of array"),
-        }
-    }
-    values
-}
 
 struct ModInfoBuilder<'a> {
     module: &'a str,
@@ -91,8 +90,107 @@ impl<'a> ModInfoBuilder<'a> {
     }
 }
 
+mod kw {
+    syn::custom_keyword!(name);
+    syn::custom_keyword!(authors);
+    syn::custom_keyword!(description);
+    syn::custom_keyword!(license);
+    syn::custom_keyword!(alias);
+    syn::custom_keyword!(firmware);
+}
+
+#[allow(dead_code, reason = "some fields are only parsed into")]
+enum ModInfoField {
+    Type(Token![type], Token![:], Ident),
+    Name(kw::name, Token![:], AsciiLitStr),
+    Authors(
+        kw::authors,
+        Token![:],
+        Bracket,
+        Punctuated<LitStr, Token![,]>,
+    ),
+    Description(kw::description, Token![:], LitStr),
+    License(kw::license, Token![:], AsciiLitStr),
+    Alias(
+        kw::authors,
+        Token![:],
+        Bracket,
+        Punctuated<LitStr, Token![,]>,
+    ),
+    Firmware(
+        kw::firmware,
+        Token![:],
+        Bracket,
+        Punctuated<LitStr, Token![,]>,
+    ),
+}
+
+impl ModInfoField {
+    /// Obtain the key identifying the field.
+    fn key(&self) -> Ident {
+        match self {
+            ModInfoField::Type(key, ..) => Ident::new("type", key.span),
+            ModInfoField::Name(key, ..) => Ident::new("name", key.span),
+            ModInfoField::Authors(key, ..) => Ident::new("authors", key.span),
+            ModInfoField::Description(key, ..) => Ident::new("description", key.span),
+            ModInfoField::License(key, ..) => Ident::new("license", key.span),
+            ModInfoField::Alias(key, ..) => Ident::new("alias", key.span),
+            ModInfoField::Firmware(key, ..) => Ident::new("firmware", key.span),
+        }
+    }
+}
+
+impl Parse for ModInfoField {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let key = input.lookahead1();
+        if key.peek(Token![type]) {
+            Ok(Self::Type(input.parse()?, input.parse()?, input.parse()?))
+        } else if key.peek(kw::name) {
+            Ok(Self::Name(input.parse()?, input.parse()?, input.parse()?))
+        } else if key.peek(kw::authors) {
+            let list;
+            Ok(Self::Authors(
+                input.parse()?,
+                input.parse()?,
+                bracketed!(list in input),
+                Punctuated::parse_terminated(&list)?,
+            ))
+        } else if key.peek(kw::description) {
+            Ok(Self::Description(
+                input.parse()?,
+                input.parse()?,
+                input.parse()?,
+            ))
+        } else if key.peek(kw::license) {
+            Ok(Self::License(
+                input.parse()?,
+                input.parse()?,
+                input.parse()?,
+            ))
+        } else if key.peek(kw::alias) {
+            let list;
+            Ok(Self::Alias(
+                input.parse()?,
+                input.parse()?,
+                bracketed!(list in input),
+                Punctuated::parse_terminated(&list)?,
+            ))
+        } else if key.peek(kw::firmware) {
+            let list;
+            Ok(Self::Firmware(
+                input.parse()?,
+                input.parse()?,
+                bracketed!(list in input),
+                Punctuated::parse_terminated(&list)?,
+            ))
+        } else {
+            Err(key.error())
+        }
+    }
+}
+
 #[derive(Debug, Default)]
-struct ModuleInfo {
+pub(crate) struct ModuleInfo {
     type_: String,
     license: String,
     name: String,
@@ -102,9 +200,13 @@ struct ModuleInfo {
     firmware: Option<Vec<String>>,
 }
 
-impl ModuleInfo {
-    fn parse(it: &mut token_stream::IntoIter) -> Self {
-        let mut info = ModuleInfo::default();
+impl Parse for ModuleInfo {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let mut info = Self::default();
+
+        let span = input.span();
+        let fields = Punctuated::<ModInfoField, Token![,]>::parse_terminated(input)?;
+        let mut errors = Vec::new();
 
         const EXPECTED_KEYS: &[&str] = &[
             "type",
@@ -118,40 +220,38 @@ impl ModuleInfo {
         const REQUIRED_KEYS: &[&str] = &["type", "name", "license"];
         let mut seen_keys = Vec::new();
 
-        loop {
-            let key = match it.next() {
-                Some(TokenTree::Ident(ident)) => ident.to_string(),
-                Some(_) => panic!("Expected Ident or end"),
-                None => break,
-            };
+        for field in fields {
+            let key = field.key();
 
             if seen_keys.contains(&key) {
-                panic!("Duplicated key \"{key}\". Keys can only be specified once.");
+                errors.push(Error::new_spanned(
+                    &key,
+                    format!(r#"duplicated key "{key}". Keys can only be specified once."#),
+                ));
+                continue;
             }
-
-            assert_eq!(expect_punct(it), ':');
-
-            match key.as_str() {
-                "type" => info.type_ = expect_ident(it),
-                "name" => info.name = expect_string_ascii(it),
-                "authors" => info.authors = Some(expect_string_array(it)),
-                "description" => info.description = Some(expect_string(it)),
-                "license" => info.license = expect_string_ascii(it),
-                "alias" => info.alias = Some(expect_string_array(it)),
-                "firmware" => info.firmware = Some(expect_string_array(it)),
-                _ => panic!("Unknown key \"{key}\". Valid keys are: {EXPECTED_KEYS:?}."),
-            }
-
-            assert_eq!(expect_punct(it), ',');
-
             seen_keys.push(key);
-        }
 
-        expect_end(it);
+            match field {
+                ModInfoField::Type(_, _, ty) => info.type_ = ty.to_string(),
+                ModInfoField::Name(_, _, name) => info.name = name.value(),
+                ModInfoField::Authors(_, _, _, list) => {
+                    info.authors = Some(list.into_iter().map(|x| x.value()).collect())
+                }
+                ModInfoField::Description(_, _, desc) => info.description = Some(desc.value()),
+                ModInfoField::License(_, _, license) => info.license = license.value(),
+                ModInfoField::Alias(_, _, _, list) => {
+                    info.alias = Some(list.into_iter().map(|x| x.value()).collect())
+                }
+                ModInfoField::Firmware(_, _, _, list) => {
+                    info.firmware = Some(list.into_iter().map(|x| x.value()).collect())
+                }
+            }
+        }
 
         for key in REQUIRED_KEYS {
             if !seen_keys.iter().any(|e| e == key) {
-                panic!("Missing required key \"{key}\".");
+                errors.push(Error::new(span, format!(r#"missing required key "{key}""#)));
             }
         }
 
@@ -163,18 +263,24 @@ impl ModuleInfo {
         }
 
         if seen_keys != ordered_keys {
-            panic!("Keys are not ordered as expected. Order them like: {ordered_keys:?}.");
+            errors.push(Error::new(
+                span,
+                format!(r#"keys are not ordered as expected. Order them like: {ordered_keys:?}."#),
+            ));
         }
 
-        info
+        if let Some(err) = errors.into_iter().reduce(|mut e1, e2| {
+            e1.combine(e2);
+            e1
+        }) {
+            return Err(err);
+        }
+
+        Ok(info)
     }
 }
 
-pub(crate) fn module(ts: TokenStream) -> TokenStream {
-    let mut it = ts.into_iter();
-
-    let info = ModuleInfo::parse(&mut it);
-
+pub(crate) fn module(info: ModuleInfo) -> Result<TokenStream> {
     // Rust does not allow hyphens in identifiers, use underscore instead.
     let ident = info.name.replace('-', "_");
     let mut modinfo = ModInfoBuilder::new(ident.as_ref());
@@ -203,7 +309,7 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
         std::env::var("RUST_MODFILE").expect("Unable to fetch RUST_MODFILE environmental variable");
     modinfo.emit_only_builtin("file", &file);
 
-    format!(
+    Ok(format!(
         "
             /// The module name.
             ///
@@ -377,5 +483,5 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
         initcall_section = ".initcall6.init"
     )
     .parse()
-    .expect("Error parsing formatted string into token stream.")
+    .expect("Error parsing formatted string into token stream."))
 }
