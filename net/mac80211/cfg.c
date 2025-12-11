@@ -699,6 +699,11 @@ static int ieee80211_add_key(struct wiphy *wiphy, struct net_device *dev,
 			    !test_sta_flag(sta, WLAN_STA_ASSOC))
 				goto fail;
 			break;
+		case NL80211_IFTYPE_AP:
+			if (!sta->sta.epp_peer &&
+			    !test_sta_flag(sta, WLAN_STA_ASSOC))
+				goto fail;
+			break;
 		default:
 			if (!test_sta_flag(sta, WLAN_STA_ASSOC))
 				goto fail;
