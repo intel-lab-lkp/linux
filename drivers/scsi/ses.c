@@ -446,25 +446,6 @@ struct ses_host_edev {
 	struct enclosure_device *edev;
 };
 
-#if 0
-int ses_match_host(struct enclosure_device *edev, void *data)
-{
-	struct ses_host_edev *sed = data;
-	struct scsi_device *sdev;
-
-	if (!scsi_is_sdev_device(edev->edev.parent))
-		return 0;
-
-	sdev = to_scsi_device(edev->edev.parent);
-
-	if (sdev->host != sed->shost)
-		return 0;
-
-	sed->edev = edev;
-	return 1;
-}
-#endif  /*  0  */
-
 static int ses_process_descriptor(struct enclosure_component *ecomp,
 				   unsigned char *desc, int max_desc_len)
 {
