@@ -4,9 +4,10 @@
 //!
 //! Copyright (c) 2023 José Expósito <jose.exposito89@gmail.com>
 
-use proc_macro::{Delimiter, Group, TokenStream, TokenTree};
 use std::collections::HashMap;
 use std::fmt::Write;
+
+use proc_macro2::{Delimiter, Group, TokenStream, TokenTree};
 
 pub(crate) fn kunit_tests(attr: TokenStream, ts: TokenStream) -> TokenStream {
     let attr = attr.to_string();
