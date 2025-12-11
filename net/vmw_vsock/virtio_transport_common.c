@@ -1550,7 +1550,7 @@ virtio_transport_recv_listen(struct sock *sk, struct sk_buff *skb,
 		release_sock(child);
 		virtio_transport_reset_no_sock(t, skb);
 		sock_put(child);
-		return ret;
+		return ret ?: -EINVAL;
 	}
 
 	if (virtio_transport_space_update(child, skb))
