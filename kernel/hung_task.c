@@ -377,6 +377,32 @@ static long hung_timeout_jiffies(unsigned long last_checked,
 }
 
 #ifdef CONFIG_SYSCTL
+
+/**
+ * proc_dohung_task_detect_count - proc handler for hung_task_detect_count
+ *
+ * Handles read access for the hung task counter. For write access, it
+ * accepts any successfully parsed value and atomically resets the counter
+ * to zero. Returns the byte count written on success or a negative error
+ * code on failure.
+ */
+static int proc_dohung_task_detect_count(const struct ctl_table *table, int write,
+					 void *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+
+	if (!write)
+		return proc_doulongvec_minmax(table, write, buffer, lenp, ppos);
+
+	ret = proc_doulongvec_minmax(table, write, buffer, lenp, ppos);
+	if (ret)
+		return ret;
+
+	WRITE_ONCE(sysctl_hung_task_detect_count, 0);
+
+	return ret;
+}
+
 /*
  * Process updating of timeout sysctl
  */
@@ -459,8 +485,8 @@ static const struct ctl_table hung_task_sysctls[] = {
 		.procname	= "hung_task_detect_count",
 		.data		= &sysctl_hung_task_detect_count,
 		.maxlen		= sizeof(unsigned long),
-		.mode		= 0444,
-		.proc_handler	= proc_doulongvec_minmax,
+		.mode		= 0644,
+		.proc_handler	= proc_dohung_task_detect_count,
 	},
 	{
 		.procname	= "hung_task_sys_info",
