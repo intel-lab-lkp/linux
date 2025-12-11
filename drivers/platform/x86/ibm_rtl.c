@@ -13,6 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/module.h>
+#include <linux/sysfs.h>
 #include <linux/io.h>
 #include <linux/dmi.h>
 #include <linux/efi.h>
@@ -144,14 +145,14 @@ static ssize_t rtl_show_version(struct device *dev,
                                 struct device_attribute *attr,
                                 char *buf)
 {
-	return sprintf(buf, "%d\n", (int)ioread8(&rtl_table->version));
+	return sysfs_emit(buf, "%d\n", (int)ioread8(&rtl_table->version));
 }
 
 static ssize_t rtl_show_state(struct device *dev,
                               struct device_attribute *attr,
                               char *buf)
 {
-	return sprintf(buf, "%d\n", ioread8(&rtl_table->rt_status));
+	return sysfs_emit(buf, "%d\n", ioread8(&rtl_table->rt_status));
 }
 
 static ssize_t rtl_set_state(struct device *dev,
