@@ -932,6 +932,7 @@ static const struct nla_policy nl80211_policy[NUM_NL80211_ATTR] = {
 		NLA_POLICY_NESTED(nl80211_s1g_short_beacon),
 	[NL80211_ATTR_BSS_PARAM] = { .type = NLA_FLAG },
 	[NL80211_ATTR_S1G_PRIMARY_2MHZ] = { .type = NLA_FLAG },
+	[NL80211_ATTR_KEY_PREASSOC] = { .type = NLA_FLAG },
 };
 
 /* policy for the key attributes */
@@ -1659,7 +1660,8 @@ nl80211_parse_connkeys(struct cfg80211_registered_device *rdev,
 	return ERR_PTR(err);
 }
 
-static int nl80211_key_allowed(struct wireless_dev *wdev)
+static int nl80211_key_allowed(struct wireless_dev *wdev,
+			       bool preassoc)
 {
 	lockdep_assert_wiphy(wdev->wiphy);
 
@@ -1675,7 +1677,10 @@ static int nl80211_key_allowed(struct wireless_dev *wdev)
 		return -ENOLINK;
 	case NL80211_IFTYPE_STATION:
 	case NL80211_IFTYPE_P2P_CLIENT:
-		if (wdev->connected)
+		if (wdev->connected ||
+		    (preassoc &&
+		     wiphy_ext_feature_isset(wdev->wiphy,
+					     NL80211_EXT_FEATURE_ASSOC_FRAME_ENCRYPTION)))
 			return 0;
 		return -ENOLINK;
 	case NL80211_IFTYPE_NAN:
@@ -4995,6 +5000,7 @@ static int nl80211_set_key(struct sk_buff *skb, struct genl_info *info)
 	struct net_device *dev = info->user_ptr[1];
 	int link_id = nl80211_link_id_or_invalid(info->attrs);
 	struct wireless_dev *wdev = dev->ieee80211_ptr;
+	bool preassoc;
 
 	err = nl80211_parse_key(info, &key);
 	if (err)
@@ -5010,11 +5016,13 @@ static int nl80211_set_key(struct sk_buff *skb, struct genl_info *info)
 	    !(key.p.mode == NL80211_KEY_SET_TX))
 		return -EINVAL;
 
+	preassoc = nla_get_flag(info->attrs[NL80211_ATTR_KEY_PREASSOC]);
+
 	if (key.def) {
 		if (!rdev->ops->set_default_key)
 			return -EOPNOTSUPP;
 
-		err = nl80211_key_allowed(wdev);
+		err = nl80211_key_allowed(wdev, preassoc);
 		if (err)
 			return err;
 
@@ -5039,7 +5047,7 @@ static int nl80211_set_key(struct sk_buff *skb, struct genl_info *info)
 		if (!rdev->ops->set_default_mgmt_key)
 			return -EOPNOTSUPP;
 
-		err = nl80211_key_allowed(wdev);
+		err = nl80211_key_allowed(wdev, preassoc);
 		if (err)
 			return err;
 
@@ -5062,7 +5070,7 @@ static int nl80211_set_key(struct sk_buff *skb, struct genl_info *info)
 		if (!rdev->ops->set_default_beacon_key)
 			return -EOPNOTSUPP;
 
-		err = nl80211_key_allowed(wdev);
+		err = nl80211_key_allowed(wdev, preassoc);
 		if (err)
 			return err;
 
@@ -5103,6 +5111,7 @@ static int nl80211_new_key(struct sk_buff *skb, struct genl_info *info)
 	const u8 *mac_addr = NULL;
 	int link_id = nl80211_link_id_or_invalid(info->attrs);
 	struct wireless_dev *wdev = dev->ieee80211_ptr;
+	bool preassoc;
 
 	err = nl80211_parse_key(info, &key);
 	if (err)
@@ -5144,7 +5153,9 @@ static int nl80211_new_key(struct sk_buff *skb, struct genl_info *info)
 		return -EINVAL;
 	}
 
-	err = nl80211_key_allowed(wdev);
+	preassoc = nla_get_flag(info->attrs[NL80211_ATTR_KEY_PREASSOC]);
+
+	err = nl80211_key_allowed(wdev, preassoc);
 	if (err)
 		GENL_SET_ERR_MSG(info, "key not allowed");
 
@@ -5172,6 +5183,7 @@ static int nl80211_del_key(struct sk_buff *skb, struct genl_info *info)
 	struct key_parse key;
 	int link_id = nl80211_link_id_or_invalid(info->attrs);
 	struct wireless_dev *wdev = dev->ieee80211_ptr;
+	bool preassoc;
 
 	err = nl80211_parse_key(info, &key);
 	if (err)
@@ -5199,7 +5211,9 @@ static int nl80211_del_key(struct sk_buff *skb, struct genl_info *info)
 	if (!rdev->ops->del_key)
 		return -EOPNOTSUPP;
 
-	err = nl80211_key_allowed(wdev);
+	preassoc = nla_get_flag(info->attrs[NL80211_ATTR_KEY_PREASSOC]);
+
+	err = nl80211_key_allowed(wdev, preassoc);
 
 	if (key.type == NL80211_KEYTYPE_GROUP && mac_addr &&
 	    !(rdev->wiphy.flags & WIPHY_FLAG_IBSS_RSN))
@@ -16781,7 +16795,7 @@ static int nl80211_set_qos_map(struct sk_buff *skb,
 		memcpy(qos_map->up, pos, IEEE80211_QOS_MAP_LEN_MIN);
 	}
 
-	ret = nl80211_key_allowed(dev->ieee80211_ptr);
+	ret = nl80211_key_allowed(dev->ieee80211_ptr, false);
 	if (!ret)
 		ret = rdev_set_qos_map(rdev, dev, qos_map);
 

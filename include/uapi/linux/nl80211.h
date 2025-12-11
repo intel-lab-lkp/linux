@@ -2973,6 +2973,14 @@ enum nl80211_commands {
  *	primary channel is 2 MHz wide, and the control channel designates
  *	the 1 MHz primary subchannel within that 2 MHz primary.
  *
+ * @NL80211_ATTR_KEY_PREASSOC: flag attribute used with %NL80211_CMD_NEW_KEY,
+ *	%NL80211_CMD_DEL_KEY and %NL80211_CMD_SET_KEY indicating that the key
+ *	configuration commands should be allowed before the non-AP STA is
+ *	associated. This is used in cases when the authentication method
+ *	requires key installation/removal/modification before association
+ *	(e.g., EPPKE). If set, transmit key data to the driver for installation/
+ *	removal/modification before the non-AP STA is associated.
+ *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
  * @__NL80211_ATTR_AFTER_LAST: internal use
@@ -3540,6 +3548,8 @@ enum nl80211_attrs {
 	NL80211_ATTR_NAN_CAPABILITIES,
 
 	NL80211_ATTR_S1G_PRIMARY_2MHZ,
+
+	NL80211_ATTR_KEY_PREASSOC,
 
 	/* add attributes here, update the policy in nl80211.c */
 
