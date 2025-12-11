@@ -94,6 +94,37 @@ int vfs_fileattr_get(struct dentry *dentry, struct file_kattr *fa)
 }
 EXPORT_SYMBOL(vfs_fileattr_get);
 
+/**
+ * vfs_get_case_info - retrieve case sensitivity info for a filesystem
+ * @dentry:	the object to retrieve from
+ * @case_info:	pointer to store result
+ *
+ * Call i_op->fileattr_get() to retrieve case sensitivity information.
+ * If the filesystem does not provide a fileattr_get hook, return
+ * the default POSIX behavior (case-sensitive, case-preserving).
+ *
+ * Return: 0 on success, or a negative error on failure.
+ */
+int vfs_get_case_info(struct dentry *dentry, u32 *case_info)
+{
+	struct file_kattr fa = {};
+	int error;
+
+	/* Default: POSIX semantics (case-sensitive, case-preserving) */
+	*case_info = FILEATTR_CASEFOLD_NONE | FILEATTR_CASE_PRESERVING;
+
+	error = vfs_fileattr_get(dentry, &fa);
+	if (error == -ENOIOCTLCMD)
+		return 0;
+	if (error)
+		return error;
+
+	if (fa.case_info)
+		*case_info = fa.case_info;
+	return 0;
+}
+EXPORT_SYMBOL(vfs_get_case_info);
+
 static void fileattr_to_file_attr(const struct file_kattr *fa,
 				  struct file_attr *fattr)
 {

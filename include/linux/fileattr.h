@@ -48,10 +48,32 @@ struct file_kattr {
 	u32	fsx_nextents;	/* nextents field value (get)	*/
 	u32	fsx_projid;	/* project identifier (get/set) */
 	u32	fsx_cowextsize;	/* CoW extsize field value (get/set)*/
+	u32	case_info;	/* case sensitivity behavior */
 	/* selectors: */
 	bool	flags_valid:1;
 	bool	fsx_valid:1;
 };
+
+/*
+ * Values for file_kattr.case_info.
+ */
+
+/* File name case is preserved at rest. */
+#define FILEATTR_CASE_PRESERVING	0x80000000
+
+/* Values stored in the low-order byte */
+enum fileattr_case_folding {
+	/* Code points are compared directly with no case folding. */
+	FILEATTR_CASEFOLD_NONE = 0,
+
+	/* ASCII case-insensitive: A-Z are treated as a-z. */
+	FILEATTR_CASEFOLD_ASCII,
+
+	/* Unicode case-insensitive matching. */
+	FILEATTR_CASEFOLD_UNICODE,
+};
+
+#define FILEATTR_CASEFOLD_TYPE		0x000000ff
 
 int copy_fsxattr_to_user(const struct file_kattr *fa, struct fsxattr __user *ufa);
 
@@ -75,6 +97,7 @@ static inline bool fileattr_has_fsx(const struct file_kattr *fa)
 int vfs_fileattr_get(struct dentry *dentry, struct file_kattr *fa);
 int vfs_fileattr_set(struct mnt_idmap *idmap, struct dentry *dentry,
 		     struct file_kattr *fa);
+int vfs_get_case_info(struct dentry *dentry, u32 *case_info);
 int ioctl_getflags(struct file *file, unsigned int __user *argp);
 int ioctl_setflags(struct file *file, unsigned int __user *argp);
 int ioctl_fsgetxattr(struct file *file, void __user *argp);
