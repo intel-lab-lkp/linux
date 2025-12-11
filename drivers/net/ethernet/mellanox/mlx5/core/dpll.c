@@ -451,7 +451,8 @@ static int mlx5_dpll_probe(struct auxiliary_device *adev,
 
 	/* Multiple mdev instances might share one DPLL pin. */
 	mdpll->dpll_pin = dpll_pin_get(clock_id, mlx5_get_dev_index(mdev),
-				       THIS_MODULE, &mlx5_dpll_pin_properties);
+				       THIS_MODULE, &mlx5_dpll_pin_properties,
+				       NULL);
 	if (IS_ERR(mdpll->dpll_pin)) {
 		err = PTR_ERR(mdpll->dpll_pin);
 		goto err_unregister_dpll_device;

@@ -10,6 +10,7 @@
 
 #include <linux/device.h>
 #include <linux/err.h>
+#include <linux/property.h>
 #include <linux/slab.h>
 #include <linux/string.h>
 
@@ -484,7 +485,8 @@ err_board_label:
 
 static struct dpll_pin *
 dpll_pin_alloc(u64 clock_id, u32 pin_idx, struct module *module,
-	       const struct dpll_pin_properties *prop)
+	       const struct dpll_pin_properties *prop,
+	       struct fwnode_handle *fwnode)
 {
 	struct dpll_pin *pin;
 	int ret;
@@ -511,6 +513,7 @@ dpll_pin_alloc(u64 clock_id, u32 pin_idx, struct module *module,
 			      &dpll_pin_xa_id, GFP_KERNEL);
 	if (ret < 0)
 		goto err_xa_alloc;
+	pin->fwnode = fwnode_handle_get(fwnode);
 	return pin;
 err_xa_alloc:
 	xa_destroy(&pin->dpll_refs);
@@ -548,6 +551,7 @@ EXPORT_SYMBOL(dpll_netdev_pin_clear);
  * @pin_idx: idx given by dev driver
  * @module: reference to registering module
  * @prop: dpll pin properties
+ * @fwnode: optional reference to firmware node
  *
  * Get existing object of a pin (unique for given arguments) or create new
  * if doesn't exist yet.
@@ -559,7 +563,8 @@ EXPORT_SYMBOL(dpll_netdev_pin_clear);
  */
 struct dpll_pin *
 dpll_pin_get(u64 clock_id, u32 pin_idx, struct module *module,
-	     const struct dpll_pin_properties *prop)
+	     const struct dpll_pin_properties *prop,
+	     struct fwnode_handle *fwnode)
 {
 	struct dpll_pin *pos, *ret = NULL;
 	unsigned long i;
@@ -568,14 +573,15 @@ dpll_pin_get(u64 clock_id, u32 pin_idx, struct module *module,
 	xa_for_each(&dpll_pin_xa, i, pos) {
 		if (pos->clock_id == clock_id &&
 		    pos->pin_idx == pin_idx &&
-		    pos->module == module) {
+		    pos->module == module &&
+		    pos->fwnode == fwnode) {
 			ret = pos;
 			refcount_inc(&ret->refcount);
 			break;
 		}
 	}
 	if (!ret)
-		ret = dpll_pin_alloc(clock_id, pin_idx, module, prop);
+		ret = dpll_pin_alloc(clock_id, pin_idx, module, prop, fwnode);
 	mutex_unlock(&dpll_lock);
 
 	return ret;
@@ -599,11 +605,43 @@ void dpll_pin_put(struct dpll_pin *pin)
 		xa_destroy(&pin->parent_refs);
 		xa_destroy(&pin->ref_sync_pins);
 		dpll_pin_prop_free(&pin->prop);
+		fwnode_handle_put(pin->fwnode);
 		kfree_rcu(pin, rcu);
 	}
 	mutex_unlock(&dpll_lock);
 }
 EXPORT_SYMBOL_GPL(dpll_pin_put);
+
+/**
+ * fwnode_dpll_pin_find - find dpll pin by firmware node reference
+ * @fwnode: reference to firmware node
+ *
+ * Get existing object of a pin that is associated with given firmware node
+ * reference.
+ *
+ * Context: Acquires a lock (dpll_lock)
+ * Return:
+ * * valid dpll_pin struct pointer if succeeded
+ * * ERR_PTR(X) - error
+ */
+struct dpll_pin *fwnode_dpll_pin_find(struct fwnode_handle *fwnode)
+{
+	struct dpll_pin *pin, *ret = NULL;
+	unsigned long index;
+
+	mutex_lock(&dpll_lock);
+	xa_for_each(&dpll_pin_xa, index, pin) {
+		if (pin->fwnode == fwnode) {
+			ret = pin;
+			refcount_inc(&ret->refcount);
+			break;
+		}
+	}
+	mutex_unlock(&dpll_lock);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(fwnode_dpll_pin_find);
 
 static int
 __dpll_pin_register(struct dpll_device *dpll, struct dpll_pin *pin,
