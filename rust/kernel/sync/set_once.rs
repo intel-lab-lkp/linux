@@ -23,7 +23,7 @@ use core::{cell::UnsafeCell, mem::MaybeUninit};
 /// - `init == 2` if and only if `value` is initialized and valid for shared
 ///   access.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
 /// # use kernel::sync::SetOnce;
