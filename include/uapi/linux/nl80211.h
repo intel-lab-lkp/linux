@@ -2994,6 +2994,13 @@ enum nl80211_commands {
  *	This attribute is used with %NL80211_CMD_AUTHENTICATE.
  *	See &enum nl80211_hash_alg for details.
  *
+ * @NL80211_ATTR_EPP_PEER: A flag attribute to indicate if the peer is an EPP
+ *	STA. Used with %NL80211_CMD_NEW_STA and %NL80211_CMD_ADD_LINK_STA
+ *
+ * @NL80211_ATTR_EPP_FLAGS: A (u32) bitmap attribute to indicate the negotiated
+ *	EPP capabilities of an EPP AP and an EPP non-AP STA. See
+ *	&enum nl80211_epp_flags for details. Used with %NL80211_CMD_SET_STATION
+ *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
  * @__NL80211_ATTR_AFTER_LAST: internal use
@@ -3568,6 +3575,10 @@ enum nl80211_attrs {
 
 	NL80211_ATTR_HASH_ALG,
 
+	NL80211_ATTR_EPP_PEER,
+
+	NL80211_ATTR_EPP_FLAGS,
+
 	/* add attributes here, update the policy in nl80211.c */
 
 	__NL80211_ATTR_AFTER_LAST,
@@ -3727,6 +3738,21 @@ enum nl80211_sta_flags {
 	/* keep last */
 	__NL80211_STA_FLAG_AFTER_LAST,
 	NL80211_STA_FLAG_MAX = __NL80211_STA_FLAG_AFTER_LAST - 1
+};
+
+/**
+ * enum nl80211_epp_flags - EPP Flags
+ *
+ * Negotiated EPP capabilities of an EPP STA
+ *
+ * @NL80211_EPP_FLAG_ASSOC_FRAME_ENCRYPTION: (Re)Association
+ *	Request/Response frame encryption support
+ * @NL80211_EPP_FLAG_1X_UTILIZING_AUTHENTICATION_FRAMES:
+ *	IEEE 802.1X (EAP) Authentication utilizing Authentication frames
+ */
+enum nl80211_epp_flags {
+	NL80211_EPP_FLAG_ASSOC_FRAME_ENCRYPTION = 0,
+	NL80211_EPP_FLAG_1X_UTILIZING_AUTHENTICATION_FRAMES,
 };
 
 /**

@@ -1785,6 +1785,9 @@ struct cfg80211_ttlm_params {
  *	present/updated
  * @eml_cap: EML capabilities of this station
  * @link_sta_params: link related params.
+ * @epp_peer: EPP peer indication
+ * @epp_flags: Negotiated EPP capabilities
+ *	(bitmask of BIT(%NL80211_EPP_FLAG_...))
  */
 struct station_parameters {
 	struct net_device *vlan;
@@ -1811,6 +1814,8 @@ struct station_parameters {
 	bool eml_cap_present;
 	u16 eml_cap;
 	struct link_station_parameters link_sta_params;
+	bool epp_peer;
+	u32 epp_flags;
 };
 
 /**
