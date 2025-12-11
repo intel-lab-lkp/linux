@@ -492,9 +492,10 @@ size_t FSE_normalizeCount (short* normalizedCounter, unsigned tableLog,
                 stillToDistribute--;
             } else {
                 short proba = (short)((count[s]*step) >> scale);
-                if (proba<8) {
-                    U64 restToBeat = vStep * rtbTable[proba];
-                    proba += (count[s]*step) - ((U64)proba<<scale) > restToBeat;
+		if ((proba >= 0) && (proba < 8)) {
+			U64 restToBeat = vStep * rtbTable[proba];
+
+			proba += (count[s]*step) - ((U64)proba<<scale) > restToBeat;
                 }
                 if (proba > largestP) { largestP=proba; largest=s; }
                 normalizedCounter[s] = proba;
