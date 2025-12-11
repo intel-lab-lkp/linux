@@ -1909,7 +1909,7 @@ static ssize_t kbd_led_als_enabled_show(struct device *dev,
 		return ret;
 	enabled = kbd_is_als_mode_bit(state.mode_bit);
 
-	return sprintf(buf, "%d\n", enabled ? 1 : 0);
+	return sysfs_emit(buf, "%d\n", enabled ? 1 : 0);
 }
 
 static DEVICE_ATTR(als_enabled, S_IRUGO | S_IWUSR,
@@ -1958,7 +1958,7 @@ static ssize_t kbd_led_als_setting_show(struct device *dev,
 	if (ret)
 		return ret;
 
-	return sprintf(buf, "%d\n", state.als_setting);
+	return sysfs_emit(buf, "%d\n", state.als_setting);
 }
 
 static DEVICE_ATTR(als_setting, S_IRUGO | S_IWUSR,
