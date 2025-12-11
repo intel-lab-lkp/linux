@@ -1188,7 +1188,7 @@ static int mb86a16_set_fe(struct mb86a16_state *state)
 
 			signal_dupl = 0;
 			for (j = 0; j < prev_freq_num; j++) {
-				if ((abs(prev_swp_freq[j] - swp_freq)) < (swp_ofs * 3 / 2)) {
+				if ((prev_freq_num < 20) && (abs(prev_swp_freq[j] - swp_freq)) < (swp_ofs * 3 / 2)) {
 					signal_dupl = 1;
 					dprintk(verbose, MB86A16_INFO, 1, "Probably Duplicate Signal, j = %d", j);
 				}
