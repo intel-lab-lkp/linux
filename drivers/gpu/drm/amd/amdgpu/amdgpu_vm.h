@@ -627,20 +627,20 @@ bool amdgpu_vm_is_bo_always_valid(struct amdgpu_vm *vm, struct amdgpu_bo *bo);
  */
 static inline uint64_t amdgpu_vm_tlb_seq(struct amdgpu_vm *vm)
 {
+	struct dma_fence *fence;
 	unsigned long flags;
-	spinlock_t *lock;
 
 	/*
 	 * Workaround to stop racing between the fence signaling and handling
-	 * the cb. The lock is static after initially setting it up, just make
-	 * sure that the dma_fence structure isn't freed up.
+	 * the cb.
 	 */
 	rcu_read_lock();
-	lock = vm->last_tlb_flush->lock;
+	fence = dma_fence_get_rcu(vm->last_tlb_flush);
 	rcu_read_unlock();
 
-	spin_lock_irqsave(lock, flags);
-	spin_unlock_irqrestore(lock, flags);
+	dma_fence_lock_irqsave(fence, flags);
+	dma_fence_unlock_irqrestore(fence, flags);
+	dma_fence_put(fence);
 
 	return atomic64_read(&vm->tlb_seq);
 }
