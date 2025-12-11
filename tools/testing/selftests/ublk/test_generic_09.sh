@@ -16,7 +16,7 @@ fi
 
 _prep_test "null" "basic IO test"
 
-dev_id=$(_add_ublk_dev -t null -z --auto_zc --auto_zc_fallback)
+dev_id=$(_add_ublk_dev -t null --auto_zc --auto_zc_fallback)
 _check_add_dev $TID $?
 
 # run fio over the two disks

@@ -1599,7 +1599,7 @@ int main(int argc, char *argv[])
 			ctx.queue_depth = strtol(optarg, NULL, 10);
 			break;
 		case 'z':
-			ctx.flags |= UBLK_F_SUPPORT_ZERO_COPY | UBLK_F_USER_COPY;
+			ctx.flags |= UBLK_F_SUPPORT_ZERO_COPY;
 			break;
 		case 'r':
 			value = strtol(optarg, NULL, 10);
@@ -1662,13 +1662,18 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	/* auto_zc_fallback depends on F_AUTO_BUF_REG & F_SUPPORT_ZERO_COPY */
-	if (ctx.auto_zc_fallback &&
-	    !((ctx.flags & UBLK_F_AUTO_BUF_REG) &&
-		    (ctx.flags & UBLK_F_SUPPORT_ZERO_COPY))) {
-		ublk_err("%s: auto_zc_fallback is set but neither "
-				"F_AUTO_BUF_REG nor F_SUPPORT_ZERO_COPY is enabled\n",
-					__func__);
+	/* auto_zc_fallback depends on F_AUTO_BUF_REG */
+	if (ctx.auto_zc_fallback && !(ctx.flags & UBLK_F_AUTO_BUF_REG)) {
+		ublk_err("%s: auto_zc_fallback is set but F_AUTO_BUF_REG is disabled\n",
+			 __func__);
+		return -EINVAL;
+	}
+
+	if (!!(ctx.flags & UBLK_F_SUPPORT_ZERO_COPY) +
+	    !!(ctx.flags & UBLK_F_NEED_GET_DATA) +
+	    !!(ctx.flags & UBLK_F_USER_COPY) +
+	    !!(ctx.flags & UBLK_F_AUTO_BUF_REG) > 1) {
+		fprintf(stderr, "too many data copy modes specified\n");
 		return -EINVAL;
 	}
 
