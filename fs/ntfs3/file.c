@@ -105,6 +105,32 @@ long ntfs_compat_ioctl(struct file *filp, u32 cmd, unsigned long arg)
 #endif
 
 /*
+ * ntfs_fileattr_get - inode_operations::fileattr_get
+ */
+int ntfs_fileattr_get(struct dentry *dentry, struct file_kattr *fa)
+{
+	struct inode *inode = d_inode(dentry);
+	struct ntfs_sb_info *sbi = inode->i_sb->s_fs_info;
+
+	/* Avoid any operation if inode is bad. */
+	if (unlikely(is_bad_ni(ntfs_i(inode))))
+		return -EINVAL;
+
+	/*
+	 * NTFS preserves case. Case sensitivity depends on mount options:
+	 * with "nocase" mount option, NTFS is case-insensitive using
+	 * Unicode case folding; otherwise it is case-sensitive.
+	 */
+	if (sbi->options && sbi->options->nocase)
+		fa->case_info = FILEATTR_CASEFOLD_UNICODE |
+				FILEATTR_CASE_PRESERVING;
+	else
+		fa->case_info = FILEATTR_CASEFOLD_NONE |
+				FILEATTR_CASE_PRESERVING;
+	return 0;
+}
+
+/*
  * ntfs_getattr - inode_operations::getattr
  */
 int ntfs_getattr(struct mnt_idmap *idmap, const struct path *path,
@@ -1383,6 +1409,7 @@ const struct inode_operations ntfs_file_inode_operations = {
 	.get_acl	= ntfs_get_acl,
 	.set_acl	= ntfs_set_acl,
 	.fiemap		= ntfs_fiemap,
+	.fileattr_get	= ntfs_fileattr_get,
 };
 
 const struct file_operations ntfs_file_operations = {
