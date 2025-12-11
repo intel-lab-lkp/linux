@@ -212,6 +212,29 @@ struct liveupdate_flb {
 	struct luo_flb_private __private private;
 };
 
+#define LIVEUPDATE_SEC_VERSION(_name, _ver)				\
+	static const char __ ## _name ## _vers[LIVEUPDATE_HNDL_COMPAT_LENGTH] \
+	__used __section(".liveupdate_versions")			\
+	__aligned(1) = _ver
+
+/**
+ * LIVEUPDATE_FILE_HANDLER - Define a live update file handler.
+ * @_name:        The name for the variable.
+ * @_compatible:  The compatible string for the file handler.
+ * @ops:          The file handler operations.
+ *
+ * Defines a struct liveupdate_file_handler called _name. It also makes sure the
+ * compatible of the handler gets added to the liveupdate versions section. All
+ * file handler must be defined using this macro.
+ */
+#define LIVEUPDATE_FILE_HANDLER(_name, _compatible, _ops)		\
+	static struct liveupdate_file_handler _name = {\
+		.compatible = _compatible,				\
+		.ops = _ops,						\
+	};								\
+									\
+	LIVEUPDATE_SEC_VERSION(_name, _compatible)
+
 #ifdef CONFIG_LIVEUPDATE
 
 /* Return true if live update orchestrator is enabled */

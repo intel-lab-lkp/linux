@@ -62,6 +62,20 @@
 #include "kexec_handover_internal.h"
 #include "luo_internal.h"
 
+/*
+ * This is the header for the ".liveupdate_versions" section in vmlinux. See
+ * struct liveupdate_ver_table for more info. The linker makes sure that the
+ * this header precedes the compatibles added by LIVEUPDATE_FILE_HANDLER().
+ */
+static const struct liveupdate_ver_hdr ver_hdr
+	__used __section(".liveupdate_sec_hdr") __aligned(8) = {
+	.magic = LIVEUPDATE_VER_HDR_MAGIC,
+	.version = LIVEUPDATE_VER_HDR_VER,
+};
+
+/* Also list the LUO core version. */
+LIVEUPDATE_SEC_VERSION(luo_ver, LUO_FDT_COMPATIBLE);
+
 static struct {
 	bool enabled;
 	void *fdt_out;

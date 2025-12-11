@@ -244,4 +244,38 @@ struct luo_flb_ser {
 #define LIVEUPDATE_TEST_FLB_COMPATIBLE(i)	"liveupdate-test-flb-v" #i
 #endif
 
+#define LIVEUPDATE_VER_HDR_MAGIC 0x4c565550 /* 'LVUP' */
+#define LIVEUPDATE_VER_HDR_VER   1
+
+/**
+ * struct liveupdate_ver_hdr - Header of vmlinux section with version lists
+ * @magic:     Magic number.
+ * @version:   Version of the header format.
+ *
+ * This struct is the header for the vmlinux section ".liveupdate_versions". The
+ * section contains the list of file handler versions that the kernel can
+ * support.
+ */
+struct liveupdate_ver_hdr {
+	u32 magic;
+	u32 version;
+};
+
+/**
+ * struct liveupdate_ver_table - Table of file handler versions that the kernel
+ * can support.
+ *
+ * @hdr:        Table header.
+ * @versions:   List of versions the kernel supports. The strings ate
+ *              NUL-terminated, but to keep the format simpler always take up
+ *              LIVEUPDATE_HNDL_COMPAT_LENGTH bytes.
+ *
+ * The list of versions immediately follows the header. The number of versions
+ * are determined by section length.
+ */
+struct liveupdate_ver_table {
+	struct liveupdate_ver_hdr hdr;
+	char versions[][LIVEUPDATE_HNDL_COMPAT_LENGTH];
+};
+
 #endif /* _LINUX_KHO_ABI_LUO_H */
