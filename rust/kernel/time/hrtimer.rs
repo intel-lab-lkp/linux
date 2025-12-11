@@ -66,6 +66,41 @@
 //!
 //! A `restart` operation on a timer in the **stopped** state is equivalent to a
 //! `start` operation.
+//!
+//! # Examples
+//!
+//! ```
+//! use kernel::sync::{Arc, ArcBorrow};
+//! use kernel::time::hrtimer::{
+//!     AbsoluteMode, HrTimer, HrTimerCallback, HrTimerCallbackContext, HrTimerRestart,
+//! };
+//! use kernel::{impl_has_hr_timer, prelude::*};
+//!
+//! #[pin_data]
+//! struct MyDriver {
+//!     #[pin]
+//!     timer: HrTimer<Self>,
+//! }
+//!
+//! impl HrTimerCallback for MyDriver {
+//!     type Pointer<'a> = Arc<Self>;
+//!
+//!     fn run<'a>(
+//!         _this: ArcBorrow<'a, MyDriver>,
+//!         _ctx: HrTimerCallbackContext<'a, Self>,
+//!     ) -> HrTimerRestart {
+//!         // Timer callback logic here
+//!         HrTimerRestart::NoRestart
+//!     }
+//! }
+//!
+//! impl_has_hr_timer! {
+//!     impl HasHrTimer<Self> for MyDriver {
+//!         mode : AbsoluteMode<kernel::time::Monotonic>,
+//!         field : self.timer
+//!     }
+//! }
+//! ```
 
 use super::{ClockSource, Delta, Instant};
 use crate::{prelude::*, types::Opaque};
