@@ -145,6 +145,9 @@ enum OID {
 	OID_id_rsassa_pkcs1_v1_5_with_sha3_384, /* 2.16.840.1.101.3.4.3.15 */
 	OID_id_rsassa_pkcs1_v1_5_with_sha3_512, /* 2.16.840.1.101.3.4.3.16 */
 
+	/* Hornet LSM */
+	OID_hornet_data,	  /* 2.25.316487325684022475439036912669789383960 */
+
 	OID__NR
 };
 
