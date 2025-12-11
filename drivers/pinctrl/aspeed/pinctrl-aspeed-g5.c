@@ -2648,24 +2648,34 @@ static struct regmap *aspeed_g5_acquire_regmap(struct aspeed_pinmux_data *ctx,
 	}
 
 	if (ip == ASPEED_IP_LPC) {
-		struct device_node *np;
+		struct device_node *np, *rnp;
 		struct regmap *map;
 
 		np = of_parse_phandle(ctx->dev->of_node,
 					"aspeed,external-nodes", 1);
-		if (np) {
-			if (!of_device_is_compatible(np->parent, "aspeed,ast2500-lpc-v2"))
-				return ERR_PTR(-ENODEV);
-
-			map = syscon_node_to_regmap(np->parent);
-			of_node_put(np);
-			if (IS_ERR(map))
-				return map;
-		} else
+		if (!np)
 			return ERR_PTR(-ENODEV);
+
+		if (of_device_is_compatible(np, "aspeed,ast2500-lpc-v2")) {
+			rnp = np;
+		} else if (of_device_is_compatible(np->parent, "aspeed,ast2500-lpc-v2")) {
+			/* Maintain compatibility with old aspeed,ast2500-lhc node */
+			rnp = np->parent;
+		} else {
+			map = ERR_PTR(-ENODEV);
+			goto put_external_node;
+		}
+
+		map = syscon_node_to_regmap(rnp);
+		if (IS_ERR(map))
+			goto put_external_node;
 
 		ctx->maps[ASPEED_IP_LPC] = map;
 		dev_dbg(ctx->dev, "Acquired LPC regmap");
+
+put_external_node:
+		of_node_put(np);
+
 		return map;
 	}
 
