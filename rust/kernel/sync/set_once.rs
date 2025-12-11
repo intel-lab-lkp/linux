@@ -80,6 +80,10 @@ impl<T> SetOnce<T> {
     ///
     /// Returns `true` if the [`SetOnce`] was successfully populated.
     pub fn populate(&self, value: T) -> bool {
+        // Avoid expensive cmpxchg if already initialized.
+        if self.init.load(Relaxed) != 0 {
+            return false;
+        }
         // INVARIANT: If the swap succeeds:
         //  - We increase `init`.
         //  - We write the valid value `1` to `init`.
