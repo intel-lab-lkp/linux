@@ -892,6 +892,7 @@ struct mt76_phy {
 #endif
 
 	struct delayed_work mac_work;
+	atomic_t mac_work_running;
 	u8 mac_work_count;
 
 	struct {

@@ -107,6 +107,7 @@ struct mt76_connac_pm {
 	struct mutex mutex;
 
 	struct delayed_work ps_work;
+	atomic_t ps_work_running;
 	unsigned long last_activity;
 	unsigned long idle_timeout;
 

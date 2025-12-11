@@ -15,6 +15,10 @@ void mt792x_mac_work(struct work_struct *work)
 					       mac_work.work);
 	phy = mphy->priv;
 
+	if (atomic_read(&phy->dev->pm.ps_work_running))
+		goto out;
+	atomic_set(&mphy->mac_work_running, 1);
+
 	mt792x_mutex_acquire(phy->dev);
 
 	mt76_update_survey(mphy);
@@ -27,8 +31,10 @@ void mt792x_mac_work(struct work_struct *work)
 	mt792x_mutex_release(phy->dev);
 
 	mt76_tx_status_check(mphy->dev, false);
+out:
 	ieee80211_queue_delayed_work(phy->mt76->hw, &mphy->mac_work,
 				     MT792x_WATCHDOG_TIME);
+	atomic_set(&mphy->mac_work_running, 0);
 }
 EXPORT_SYMBOL_GPL(mt792x_mac_work);
 
@@ -356,6 +362,11 @@ void mt792x_pm_power_save_work(struct work_struct *work)
 	mphy = dev->phy.mt76;
 
 	delta = dev->pm.idle_timeout;
+
+	if (atomic_read(&mphy->mac_work_running))
+		goto out;
+	atomic_set(&dev->pm.ps_work_running, 1);
+
 	if (test_bit(MT76_HW_SCANNING, &mphy->state) ||
 	    test_bit(MT76_HW_SCHED_SCANNING, &mphy->state) ||
 	    dev->fw_assert)
@@ -376,9 +387,11 @@ void mt792x_pm_power_save_work(struct work_struct *work)
 
 	if (!mt792x_mcu_fw_pmctrl(dev)) {
 		cancel_delayed_work_sync(&mphy->mac_work);
+		atomic_set(&dev->pm.ps_work_running, 0);
 		return;
 	}
 out:
 	queue_delayed_work(dev->mt76.wq, &dev->pm.ps_work, delta);
+	atomic_set(&dev->pm.ps_work_running, 0);
 }
 EXPORT_SYMBOL_GPL(mt792x_pm_power_save_work);
