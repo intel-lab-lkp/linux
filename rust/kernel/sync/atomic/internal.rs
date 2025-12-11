@@ -13,23 +13,36 @@ mod private {
     pub trait Sealed {}
 }
 
-// `i32` and `i64` are only supported atomic implementations.
+// The C side supports atomic primitives only for `i32` and `i64` (`atomic_t` and `atomic64_t`),
+// while the Rust side also layers provides atomic support for `i8` and `i16`
+// on top of lower-level C primitives.
+impl private::Sealed for i8 {}
+impl private::Sealed for i16 {}
 impl private::Sealed for i32 {}
 impl private::Sealed for i64 {}
 
 /// A marker trait for types that implement atomic operations with C side primitives.
 ///
-/// This trait is sealed, and only types that have directly mapping to the C side atomics should
-/// impl this:
+/// This trait is sealed, and only types that map directly to the C side atomics
+/// or can be implemented with lower-level C primitives are allowed to implement this:
 ///
-/// - `i32` maps to `atomic_t`.
-/// - `i64` maps to `atomic64_t`.
+/// - `i8` and `i16` are implemented with lower-level C primitives.
+/// - `i32` map to `atomic_t`
+/// - `i64` map to `atomic64_t`
 pub trait AtomicImpl: Sized + Send + Copy + private::Sealed {
     /// The type of the delta in arithmetic or logical operations.
     ///
     /// For example, in `atomic_add(ptr, v)`, it's the type of `v`. Usually it's the same type of
     /// [`Self`], but it may be different for the atomic pointer type.
     type Delta;
+}
+
+impl AtomicImpl for i8 {
+    type Delta = Self;
+}
+
+impl AtomicImpl for i16 {
+    type Delta = Self;
 }
 
 // `atomic_t` implements atomic operations on `i32`.
@@ -215,6 +228,15 @@ declare_and_impl_atomic_methods!(
     }
 );
 
+// It is still unclear whether i8/i16 atomics will eventually support
+// the same set of operations as i32/i64, because some architectures
+// do not provide hardware support for the required atomic primitives.
+// Furthermore, supporting Atomic<bool> will require even more
+// significant structural changes.
+//
+// To avoid premature refactoring, a separate macro for i8 and i16 is
+// used for now, leaving the existing macros untouched until the overall
+// design requirements are settled.
 declare_and_impl_atomic_methods!(
     /// Exchange and compare-and-exchange atomic operations
     pub trait AtomicExchangeOps {
@@ -263,3 +285,40 @@ declare_and_impl_atomic_methods!(
         }
     }
 );
+
+macro_rules! impl_atomic_only_load_and_store_ops {
+    ($($ty:ty),* $(,)?) => {
+        $(
+            impl AtomicBasicOps for $ty {
+                paste! {
+                    #[inline(always)]
+                    fn atomic_read(a: &AtomicRepr<Self>) -> Self {
+                        // SAFETY: `a.as_ptr()` is valid and properly aligned.
+                        unsafe { bindings::[< atomic_ $ty _load >](a.as_ptr().cast()) }
+                    }
+
+                    #[inline(always)]
+                    fn atomic_read_acquire(a: &AtomicRepr<Self>) -> Self {
+                        // SAFETY: `a.as_ptr()` is valid and properly aligned.
+                        unsafe { bindings::[< atomic_ $ty _load_acquire >](a.as_ptr().cast()) }
+                    }
+
+                    // Generate atomic_set and atomic_set_release
+                    #[inline(always)]
+                    fn atomic_set(a: &AtomicRepr<Self>, v: Self) {
+                        // SAFETY: `a.as_ptr()` is valid and properly aligned.
+                        unsafe { bindings::[< atomic_ $ty _store >](a.as_ptr().cast(), v) }
+                    }
+
+                    #[inline(always)]
+                    fn atomic_set_release(a: &AtomicRepr<Self>, v: Self) {
+                        // SAFETY: `a.as_ptr()` is valid and properly aligned.
+                        unsafe { bindings::[< atomic_ $ty _store_release >](a.as_ptr().cast(), v) }
+                    }
+                }
+            }
+        )*
+    };
+}
+
+impl_atomic_only_load_and_store_ops!(i8, i16);
