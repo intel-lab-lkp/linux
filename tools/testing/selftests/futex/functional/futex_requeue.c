@@ -62,6 +62,8 @@ TEST(requeue_single)
 	} else {
 		ksft_test_result_pass("futex_requeue simple succeeds\n");
 	}
+
+	pthread_join(waiter, NULL);
 }
 
 TEST(requeue_multiple)
@@ -101,6 +103,9 @@ TEST(requeue_multiple)
 	} else {
 		ksft_test_result_pass("futex_requeue many succeeds\n");
 	}
+
+	for (i = 0; i < 10; i++)
+		pthread_join(waiter[i], NULL);
 }
 
 TEST_HARNESS_MAIN
