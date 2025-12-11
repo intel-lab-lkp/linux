@@ -311,11 +311,110 @@ ieee80211_crypto_tkip_decrypt(struct ieee80211_rx_data *rx)
 	return RX_CONTINUE;
 }
 
+static bool ccmp_gcmp_aad_nonce_addr_translate_rx(struct ieee80211_rx_data *rx,
+						  u8 *aad, u8 *b_0, u32 cipher,
+						  __le16 fc)
+{
+	struct ieee80211_link_data *link = rx->link;
+	struct ieee80211_bss_conf *bss_conf = link->conf;
+	struct link_sta_info *link_sta = rx->link_sta;
+	struct ieee80211_vif *vif = &rx->sdata->vif;
+
+	if (!rx->sta || !rx->sta->sta.mlo ||
+	    (vif->type != NL80211_IFTYPE_AP &&
+	     vif->type != NL80211_IFTYPE_STATION))
+		return false;
+
+	/* Address Translation for AAD computation */
+	ether_addr_copy(&aad[4], bss_conf->addr);
+	ether_addr_copy(&aad[4] + ETH_ALEN, link_sta->addr);
+
+	if (!ieee80211_has_tods(fc) && !ieee80211_has_fromds(fc)) {
+		if (vif->type == NL80211_IFTYPE_STATION && bss_conf->bssid)
+			ether_addr_copy(&aad[4] + 2 * ETH_ALEN,
+					bss_conf->bssid);
+		else if (vif->type == NL80211_IFTYPE_AP)
+			ether_addr_copy(&aad[4] + 2 * ETH_ALEN,
+					bss_conf->addr);
+	}
+
+	/* Address Translation for Nonce computation */
+	if (cipher == WLAN_CIPHER_SUITE_CCMP ||
+	    cipher == WLAN_CIPHER_SUITE_CCMP_256)
+		ether_addr_copy(&b_0[2], link_sta->addr);
+	if (cipher == WLAN_CIPHER_SUITE_GCMP ||
+	    cipher == WLAN_CIPHER_SUITE_GCMP_256)
+		ether_addr_copy(&b_0[0], link_sta->addr);
+	return true;
+}
+
+/* This function is called with the caller held under RCU Read Lock */
+static bool ccmp_gcmp_aad_nonce_addr_translate_tx(struct ieee80211_tx_data *tx,
+						  struct ieee80211_tx_info *info,
+						  u8 *aad, u8 *b_0,
+						  u32 cipher, __le16 fc)
+{
+	struct ieee80211_vif *vif = info->control.vif;
+	struct sta_info *sta = tx->sta;
+	u8 link_id = u32_get_bits(info->control.flags,
+				  IEEE80211_TX_CTRL_MLO_LINK);
+	struct ieee80211_bss_conf *bss_conf;
+	struct link_sta_info *link_sta;
+
+	if (!sta || !vif || !sta->sta.mlo ||
+	    (vif->type != NL80211_IFTYPE_AP &&
+	     vif->type != NL80211_IFTYPE_STATION))
+		return false;
+
+	/*
+	 * When link_id is IEEE80211_LINK_UNSPECIFIED, use default link
+	 * for AAD computations and update the control flags to encode
+	 * the default link_id. This is to make sure that the driver
+	 * also uses the same link to transmit the frame
+	 */
+	if (link_id == IEEE80211_LINK_UNSPECIFIED) {
+		link_id = sta->deflink.link_id;
+		info->control.flags &= ~IEEE80211_TX_CTRL_MLO_LINK;
+		info->control.flags |=
+			u32_encode_bits(link_id, IEEE80211_TX_CTRL_MLO_LINK);
+	}
+
+	bss_conf = rcu_dereference(vif->link_conf[link_id]);
+	link_sta = rcu_dereference(sta->link[link_id]);
+
+	if (!bss_conf || !link_sta)
+		return false;
+
+	/* Address Translation for AAD computation */
+	ether_addr_copy(&aad[4], link_sta->addr);
+	ether_addr_copy(&aad[4] + ETH_ALEN, bss_conf->addr);
+
+	if (!ieee80211_has_tods(fc) && !ieee80211_has_fromds(fc)) {
+		if (vif->type == NL80211_IFTYPE_STATION && bss_conf->bssid)
+			ether_addr_copy(&aad[4] + 2 * ETH_ALEN,
+					bss_conf->bssid);
+		else if (vif->type == NL80211_IFTYPE_AP)
+			ether_addr_copy(&aad[4] + 2 * ETH_ALEN,
+					bss_conf->addr);
+	}
+
+	/* Address Translation for Nonce computation */
+	if (cipher == WLAN_CIPHER_SUITE_CCMP ||
+	    cipher == WLAN_CIPHER_SUITE_CCMP_256)
+		ether_addr_copy(&b_0[2], bss_conf->addr);
+	if (cipher == WLAN_CIPHER_SUITE_GCMP ||
+	    cipher == WLAN_CIPHER_SUITE_GCMP_256)
+		ether_addr_copy(&b_0[0], bss_conf->addr);
+
+	return true;
+}
+
 /*
  * Calculate AAD for CCMP/GCMP, returning qos_tid since we
  * need that in CCMP also for b_0.
  */
-static u8 ccmp_gcmp_aad(struct sk_buff *skb, u8 *aad, bool spp_amsdu)
+static u8 ccmp_gcmp_aad(struct sk_buff *skb, u8 *aad, bool spp_amsdu,
+			bool is_translated)
 {
 	struct ieee80211_hdr *hdr = (void *)skb->data;
 	__le16 mask_fc;
@@ -358,7 +457,8 @@ static u8 ccmp_gcmp_aad(struct sk_buff *skb, u8 *aad, bool spp_amsdu)
 	 * FC | A1 | A2 | A3 | SC | [A4] | [QC] */
 	put_unaligned_be16(len_a, &aad[0]);
 	put_unaligned(mask_fc, (__le16 *)&aad[2]);
-	memcpy(&aad[4], &hdr->addrs, 3 * ETH_ALEN);
+	if (!is_translated)
+		memcpy(&aad[4], &hdr->addrs, 3 * ETH_ALEN);
 
 	/* Mask Seq#, leave Frag# */
 	aad[22] = *((u8 *) &hdr->seq_ctrl) & 0x0f;
@@ -377,10 +477,10 @@ static u8 ccmp_gcmp_aad(struct sk_buff *skb, u8 *aad, bool spp_amsdu)
 }
 
 static void ccmp_special_blocks(struct sk_buff *skb, u8 *pn, u8 *b_0, u8 *aad,
-				bool spp_amsdu)
+				bool spp_amsdu, bool is_translated)
 {
 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
-	u8 qos_tid = ccmp_gcmp_aad(skb, aad, spp_amsdu);
+	u8 qos_tid = ccmp_gcmp_aad(skb, aad, spp_amsdu, is_translated);
 
 	/* In CCM, the initial vectors (IV) used for CTR mode encryption and CBC
 	 * mode authentication are not allowed to collide, yet both are derived
@@ -395,7 +495,8 @@ static void ccmp_special_blocks(struct sk_buff *skb, u8 *pn, u8 *b_0, u8 *aad,
 	 * Nonce Flags: Priority (b0..b3) | Management (b4) | Reserved (b5..b7)
 	 */
 	b_0[1] = qos_tid | (ieee80211_is_mgmt(hdr->frame_control) << 4);
-	memcpy(&b_0[2], hdr->addr2, ETH_ALEN);
+	if (!is_translated)
+		memcpy(&b_0[2], hdr->addr2, ETH_ALEN);
 	memcpy(&b_0[8], pn, IEEE80211_CCMP_PN_LEN);
 }
 
@@ -435,6 +536,8 @@ static int ccmp_encrypt_skb(struct ieee80211_tx_data *tx, struct sk_buff *skb,
 	u64 pn64;
 	u8 aad[CCM_AAD_LEN];
 	u8 b_0[AES_BLOCK_SIZE];
+	__le16 fc = hdr->frame_control;
+	bool is_translated = false;
 
 	if (info->control.hw_key &&
 	    !(info->control.hw_key->flags & IEEE80211_KEY_FLAG_GENERATE_IV) &&
@@ -487,8 +590,15 @@ static int ccmp_encrypt_skb(struct ieee80211_tx_data *tx, struct sk_buff *skb,
 		return 0;
 
 	pos += IEEE80211_CCMP_HDR_LEN;
+
+	if (ieee80211_is_mgmt(fc))
+		is_translated = ccmp_gcmp_aad_nonce_addr_translate_tx(tx, info,
+								      aad, b_0,
+								      key->conf.cipher,
+								      fc);
 	ccmp_special_blocks(skb, pn, b_0, aad,
-			    key->conf.flags & IEEE80211_KEY_FLAG_SPP_AMSDU);
+			    key->conf.flags & IEEE80211_KEY_FLAG_SPP_AMSDU,
+			    is_translated);
 	return ieee80211_aes_ccm_encrypt(key->u.ccmp.tfm, b_0, aad, pos, len,
 					 skb_put(skb, mic_len));
 }
@@ -565,9 +675,21 @@ ieee80211_crypto_ccmp_decrypt(struct ieee80211_rx_data *rx,
 		if (!(status->flag & RX_FLAG_DECRYPTED)) {
 			u8 aad[2 * AES_BLOCK_SIZE];
 			u8 b_0[AES_BLOCK_SIZE];
+			bool is_translated = false;
+			__le16 fc = hdr->frame_control;
+
+			if (ieee80211_is_mgmt(fc))
+				is_translated =
+					ccmp_gcmp_aad_nonce_addr_translate_rx(rx,
+									      aad,
+									      b_0,
+									      key->conf.cipher,
+									      fc);
+
 			/* hardware didn't decrypt/verify MIC */
 			ccmp_special_blocks(skb, pn, b_0, aad,
-					    key->conf.flags & IEEE80211_KEY_FLAG_SPP_AMSDU);
+					    key->conf.flags & IEEE80211_KEY_FLAG_SPP_AMSDU,
+					    is_translated);
 
 			if (ieee80211_aes_ccm_decrypt(
 				    key->u.ccmp.tfm, b_0, aad,
@@ -592,14 +714,15 @@ ieee80211_crypto_ccmp_decrypt(struct ieee80211_rx_data *rx,
 }
 
 static void gcmp_special_blocks(struct sk_buff *skb, u8 *pn, u8 *j_0, u8 *aad,
-				bool spp_amsdu)
+				bool spp_amsdu, bool is_translated)
 {
 	struct ieee80211_hdr *hdr = (void *)skb->data;
 
-	memcpy(j_0, hdr->addr2, ETH_ALEN);
+	if (!is_translated)
+		memcpy(j_0, hdr->addr2, ETH_ALEN);
 	memcpy(&j_0[ETH_ALEN], pn, IEEE80211_GCMP_PN_LEN);
 
-	ccmp_gcmp_aad(skb, aad, spp_amsdu);
+	ccmp_gcmp_aad(skb, aad, spp_amsdu, is_translated);
 }
 
 static inline void gcmp_pn2hdr(u8 *hdr, const u8 *pn, int key_id)
@@ -635,6 +758,8 @@ static int gcmp_encrypt_skb(struct ieee80211_tx_data *tx, struct sk_buff *skb)
 	u64 pn64;
 	u8 aad[GCM_AAD_LEN];
 	u8 j_0[AES_BLOCK_SIZE];
+	__le16 fc = hdr->frame_control;
+	bool is_translated = false;
 
 	if (info->control.hw_key &&
 	    !(info->control.hw_key->flags & IEEE80211_KEY_FLAG_GENERATE_IV) &&
@@ -688,8 +813,15 @@ static int gcmp_encrypt_skb(struct ieee80211_tx_data *tx, struct sk_buff *skb)
 		return 0;
 
 	pos += IEEE80211_GCMP_HDR_LEN;
+
+	if (ieee80211_is_mgmt(fc))
+		is_translated = ccmp_gcmp_aad_nonce_addr_translate_tx(tx, info,
+								      aad, j_0,
+								      key->conf.cipher,
+								      fc);
 	gcmp_special_blocks(skb, pn, j_0, aad,
-			    key->conf.flags & IEEE80211_KEY_FLAG_SPP_AMSDU);
+			    key->conf.flags & IEEE80211_KEY_FLAG_SPP_AMSDU,
+			    is_translated);
 	return ieee80211_aes_gcm_encrypt(key->u.gcmp.tfm, j_0, aad, pos, len,
 					 skb_put(skb, IEEE80211_GCMP_MIC_LEN));
 }
@@ -761,9 +893,20 @@ ieee80211_crypto_gcmp_decrypt(struct ieee80211_rx_data *rx)
 		if (!(status->flag & RX_FLAG_DECRYPTED)) {
 			u8 aad[2 * AES_BLOCK_SIZE];
 			u8 j_0[AES_BLOCK_SIZE];
+			bool is_translated = false;
+			__le16 fc = hdr->frame_control;
+
+			if (ieee80211_is_mgmt(fc))
+				is_translated =
+					ccmp_gcmp_aad_nonce_addr_translate_rx(rx,
+									      aad,
+									      j_0,
+									      key->conf.cipher,
+									      fc);
 			/* hardware didn't decrypt/verify MIC */
 			gcmp_special_blocks(skb, pn, j_0, aad,
-					    key->conf.flags & IEEE80211_KEY_FLAG_SPP_AMSDU);
+					    key->conf.flags & IEEE80211_KEY_FLAG_SPP_AMSDU,
+					    is_translated);
 
 			if (ieee80211_aes_gcm_decrypt(
 				    key->u.gcmp.tfm, j_0, aad,
