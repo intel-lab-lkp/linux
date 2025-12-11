@@ -2152,6 +2152,7 @@ static int ieee80211_send_assoc(struct ieee80211_sub_if_data *sdata)
 	struct ieee80211_prep_tx_info info = {};
 	unsigned int link_id, n_links = 0;
 	u16 present_elems[PRESENT_ELEMS_MAX] = {};
+	bool assoc_encrypt = false;
 	void *capab_pos;
 	size_t size;
 	int ret;
@@ -2332,7 +2333,18 @@ static int ieee80211_send_assoc(struct ieee80211_sub_if_data *sdata)
 	info.link_id = assoc_data->assoc_link_id;
 	drv_mgd_prepare_tx(local, sdata, &info);
 
-	IEEE80211_SKB_CB(skb)->flags |= IEEE80211_TX_INTFL_DONT_ENCRYPT;
+	if (!is_zero_ether_addr(sdata->vif.cfg.ap_addr)) {
+		struct sta_info *sta = sta_info_get_bss(sdata,
+							sdata->vif.cfg.ap_addr);
+
+		if (sta && wiphy_dereference(sdata->local->hw.wiphy,
+					     sta->ptk[sta->ptk_idx]))
+			assoc_encrypt = true;
+	}
+
+	if (!assoc_encrypt)
+		IEEE80211_SKB_CB(skb)->flags |= IEEE80211_TX_INTFL_DONT_ENCRYPT;
+
 	if (ieee80211_hw_check(&local->hw, REPORTS_TX_ACK_STATUS))
 		IEEE80211_SKB_CB(skb)->flags |= IEEE80211_TX_CTL_REQ_TX_STATUS |
 						IEEE80211_TX_INTFL_MLME_CONN_TX;
@@ -8964,6 +8976,10 @@ static int ieee80211_prep_connection(struct ieee80211_sub_if_data *sdata,
 			err = -ENOMEM;
 			goto out_err;
 		}
+
+		if (ifmgd->auth_data &&
+		    ifmgd->auth_data->algorithm == WLAN_AUTH_EPPKE)
+			new_sta->sta.epp_peer = true;
 
 		new_sta->sta.mlo = mlo;
 	}

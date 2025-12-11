@@ -2497,6 +2497,7 @@ struct ieee80211_link_sta {
  *	valid if the STA is a TDLS peer in the first place.
  * @mfp: indicates whether the STA uses management frame protection or not.
  * @mlo: indicates whether the STA is MLO station.
+ * @epp_peer: indicates that the peer is an EPP peer.
  * @max_amsdu_subframes: indicates the maximal number of MSDUs in a single
  *	A-MSDU. Taken from the Extended Capabilities element. 0 means
  *	unlimited.
@@ -2533,6 +2534,7 @@ struct ieee80211_sta {
 	bool tdls_initiator;
 	bool mfp;
 	bool mlo;
+	bool epp_peer;
 	bool spp_amsdu;
 	u8 max_amsdu_subframes;
 	u16 eml_cap;
