@@ -46,6 +46,24 @@
 	pci_resource_len(NDEV2PDEV(_ndev), (_ndev)->xdna->dev_info->mbox_bar); \
 })
 
+#if IS_ENABLED(CONFIG_AMD_PMF)
+#define AIE2_GET_PMF_NPU_DATA(field, val) \
+({ \
+	struct amd_pmf_npu_metrics _npu_metrics; \
+	int _ret; \
+	_ret = amd_pmf_get_npu_data(&_npu_metrics); \
+	val = _ret ? U32_MAX : _npu_metrics.field; \
+	(_ret); \
+})
+#else
+#define SENSOR_DEFAULT_npu_power	U32_MAX
+#define AIE2_GET_PMF_NPU_DATA(field, val) \
+({ \
+	val = SENSOR_DEFAULT_##field; \
+	(-EOPNOTSUPP); \
+})
+#endif
+
 enum aie2_smu_reg_idx {
 	SMU_CMD_REG = 0,
 	SMU_ARG_REG,
