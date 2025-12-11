@@ -3,8 +3,8 @@
 menu "DAMON Samples"
 
 config SAMPLE_DAMON_WSSE
-	bool "DAMON sample module for working set size estimation"
-	depends on DAMON && DAMON_VADDR
+	tristate "DAMON sample module for working set size estimation"
+	depends on DAMON && DAMON_VADDR && m
 	help
 	  This builds DAMON sample module for working set size estimation.
 
@@ -15,8 +15,8 @@ config SAMPLE_DAMON_WSSE
 	  If unsure, say N.
 
 config SAMPLE_DAMON_PRCL
-	bool "DAMON sample module for access-aware proactive reclamation"
-	depends on DAMON && DAMON_VADDR
+	tristate "DAMON sample module for access-aware proactive reclamation"
+	depends on DAMON && DAMON_VADDR && m
 	help
 	  This builds DAMON sample module for access-aware proactive
 	  reclamation.
@@ -28,8 +28,8 @@ config SAMPLE_DAMON_PRCL
 	  If unsure, say N.
 
 config SAMPLE_DAMON_MTIER
-	bool "DAMON sample module for memory tiering"
-	depends on DAMON && DAMON_PADDR
+	tristate "DAMON sample module for memory tiering"
+	depends on DAMON && DAMON_PADDR && m
 	help
 	  Thps builds DAMON sample module for memory tierign.
 

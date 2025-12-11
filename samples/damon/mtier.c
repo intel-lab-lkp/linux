@@ -238,3 +238,6 @@ static int __init damon_sample_mtier_init(void)
 }
 
 module_init(damon_sample_mtier_init);
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("A DAMON module for memory tiering");
+MODULE_AUTHOR("SeongJae Park <sj@kernel.org>");
