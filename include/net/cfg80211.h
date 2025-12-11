@@ -10376,4 +10376,59 @@ cfg80211_s1g_get_primary_sibling(struct wiphy *wiphy,
 	return ieee80211_get_channel_khz(wiphy, sibling_1mhz_khz);
 }
 
+/**
+ * struct rsne - RSN element (RSNE)
+ * @version: RSN version field (must be 1 for valid RSNE).
+ * @group_data_cipher_suite: group data cipher suite selector.
+ * @pairwise_cipher_suite_count: number of pairwise cipher suites.
+ * @pairwise_cipher_suite_list: list of pairwise cipher suite selectors.
+ * @akm_suite_count: number of AKM suites.
+ * @akm_suite_list: list of AKM suite selectors.
+ * @capabilities: RSN capabilities bitfield.
+ * @pmkid_count: (optional) number of PMKIDs.
+ * @pmkid_list: (optional) list of PMKIDs.
+ * @group_mgmt_cipher_suite: (optional) group management cipher suite selector.
+ *
+ * Represents the RSN element defined in "IEEE Std 802.11-2020, 9.4.2.24"
+ * so that cfg80211/mac80211 can parse and access its fields.
+ */
+struct rsne {
+	u16 version;
+	u32 group_data_cipher_suite;
+	u16 pairwise_cipher_suite_count;
+	const u8 *pairwise_cipher_suite_list;
+
+	u16 akm_suite_count;
+	const u8 *akm_suite_list;
+
+	u16 capabilities;
+
+	u16 pmkid_count;
+	const u8 *pmkid_list;
+
+	u32 group_mgmt_cipher_suite;
+};
+
+/**
+ * cfg80211_parse_rsne - Parse an RSN element (RSNE)
+ * @rsne: pointer to RSNE buffer.
+ * @elem: pointer to struct rsne to fill.
+ *
+ * Parse the RSN element as defined in "IEEE Std 802.11-2020, 9.4.2.24".
+ *
+ * Return: 0 on success, -EINVAL on failure.
+ */
+int cfg80211_parse_rsne(const u8 *rsne, struct rsne *elem);
+
+/**
+ * cfg80211_rsne_get_akm_list - Parse RSNE and return AKM suite list
+ * @rsne: pointer to RSNE buffer.
+ * @count: pointer to store number of AKM suites.
+ *
+ * Parse the RSN element and return a pointer to the AKM suite list.
+ *
+ * Return: pointer to list, or NULL if parsing fails or inputs are invalid.
+ */
+const u8 *cfg80211_rsne_get_akm_list(const u8 *rsne, u16 *count);
+
 #endif /* __NET_CFG80211_H */

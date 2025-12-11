@@ -579,6 +579,8 @@ int cfg80211_assoc_ml_reconf(struct cfg80211_registered_device *rdev,
 			     struct net_device *dev,
 			     struct cfg80211_ml_reconf_req *req);
 
+bool cfg80211_is_sae_akmp(u32 akm_suite);
+
 /**
  * struct cfg80211_colocated_ap - colocated AP information
  *

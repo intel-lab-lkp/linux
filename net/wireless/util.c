@@ -2984,3 +2984,129 @@ bool cfg80211_wdev_channel_allowed(struct wireless_dev *wdev,
 	return false;
 }
 EXPORT_SYMBOL(cfg80211_wdev_channel_allowed);
+
+int cfg80211_parse_rsne(const u8 *rsne, struct rsne *elem)
+{
+	u16 len, cnt, field_len;
+
+	if (!rsne)
+		return -EINVAL;
+
+	memset(elem, 0, sizeof(*elem));
+
+	/* Version present? */
+	if (rsne[1] < 2)
+		return -EINVAL;
+
+	elem->version = get_unaligned_le16(rsne + 2);
+	if (elem->version != 1)
+		return -EINVAL;
+
+	len = rsne[1] - 2;
+	rsne += 4;
+
+	/* Group Data Cipher Suite present? */
+	if (len >= 4) {
+		elem->group_data_cipher_suite = get_unaligned_be32(rsne);
+		rsne += 4;
+		len -= 4;
+	} else if (len > 0) {
+		return -EINVAL;
+	}
+
+	/* Pairwise Cipher Suite Count present? */
+	if (len >= 2) {
+		cnt = get_unaligned_le16(rsne);
+		field_len = 2 + cnt * 4;
+
+		if (len < field_len)
+			return -EINVAL;
+
+		elem->pairwise_cipher_suite_count = cnt;
+		elem->pairwise_cipher_suite_list = rsne + 2;
+
+		rsne += field_len;
+		len -= field_len;
+	} else if (len == 1) {
+		return -EINVAL;
+	}
+
+	/* AKM Suite Count present? */
+	if (len >= 2) {
+		cnt = get_unaligned_le16(rsne);
+		field_len = 2 + cnt * 4;
+
+		if (len < field_len)
+			return -EINVAL;
+
+		elem->akm_suite_count = cnt;
+		elem->akm_suite_list = rsne + 2;
+
+		rsne += field_len;
+		len  -= field_len;
+	} else if (len == 1) {
+		return -EINVAL;
+	}
+
+	/* RSN Capabilities present? */
+	if (len >= 2) {
+		elem->capabilities = get_unaligned_le16(rsne);
+		rsne += 2;
+		len -= 2;
+	}
+
+	/* PMKID Count present? */
+	if (len >= 2) {
+		cnt = get_unaligned_le16(rsne);
+		field_len = 2 + cnt * 16;
+
+		if (len < field_len)
+			return -EINVAL;
+
+		elem->pmkid_count = cnt;
+		elem->pmkid_list = rsne + 2;
+
+		rsne += field_len;
+		len -= field_len;
+	}
+
+	/* Group Management Cipher Suite present? */
+	if (len >= 4) {
+		elem->group_mgmt_cipher_suite = get_unaligned_be32(rsne);
+		rsne += 4;
+		len -= 4;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(cfg80211_parse_rsne);
+
+const u8 *cfg80211_rsne_get_akm_list(const u8 *rsne, u16 *count)
+{
+	struct rsne elem;
+	int ret;
+
+	if (!rsne || !count)
+		return NULL;
+
+	ret = cfg80211_parse_rsne(rsne, &elem);
+	if (ret)
+		return NULL;
+
+	*count = elem.akm_suite_count;
+
+	return elem.akm_suite_list;
+}
+
+bool cfg80211_is_sae_akmp(u32 akm_suite)
+{
+	switch (akm_suite) {
+	case WLAN_AKM_SUITE_SAE:
+	case WLAN_AKM_SUITE_FT_OVER_SAE:
+	case WLAN_AKM_SUITE_SAE_EXT_KEY:
+	case WLAN_AKM_SUITE_FT_SAE_EXT_KEY:
+		return true;
+	default:
+		return false;
+	}
+}

@@ -6470,6 +6470,10 @@ static bool nl80211_valid_auth_type(struct cfg80211_registered_device *rdev,
 		     auth_type == NL80211_AUTHTYPE_FILS_SK_PFS ||
 		     auth_type == NL80211_AUTHTYPE_FILS_PK))
 			return false;
+		if (!wiphy_ext_feature_isset(&rdev->wiphy,
+					     NL80211_EXT_FEATURE_EPPKE) &&
+		    auth_type == NL80211_AUTHTYPE_EPPKE)
+			return false;
 		return true;
 	case NL80211_CMD_CONNECT:
 		if (!(rdev->wiphy.features & NL80211_FEATURE_SAE) &&
@@ -6486,6 +6490,10 @@ static bool nl80211_valid_auth_type(struct cfg80211_registered_device *rdev,
 			    &rdev->wiphy,
 			    NL80211_EXT_FEATURE_FILS_SK_OFFLOAD) &&
 		    auth_type == NL80211_AUTHTYPE_FILS_SK)
+			return false;
+		if (!wiphy_ext_feature_isset(&rdev->wiphy,
+					     NL80211_EXT_FEATURE_EPPKE) &&
+		    auth_type == NL80211_AUTHTYPE_EPPKE)
 			return false;
 		return true;
 	case NL80211_CMD_START_AP:
@@ -11953,7 +11961,8 @@ static int nl80211_authenticate(struct sk_buff *skb, struct genl_info *info)
 	if ((auth_type == NL80211_AUTHTYPE_SAE ||
 	     auth_type == NL80211_AUTHTYPE_FILS_SK ||
 	     auth_type == NL80211_AUTHTYPE_FILS_SK_PFS ||
-	     auth_type == NL80211_AUTHTYPE_FILS_PK) &&
+	     auth_type == NL80211_AUTHTYPE_FILS_PK ||
+	     auth_type == NL80211_AUTHTYPE_EPPKE) &&
 	    !info->attrs[NL80211_ATTR_AUTH_DATA])
 		return -EINVAL;
 
@@ -11961,10 +11970,56 @@ static int nl80211_authenticate(struct sk_buff *skb, struct genl_info *info)
 		if (auth_type != NL80211_AUTHTYPE_SAE &&
 		    auth_type != NL80211_AUTHTYPE_FILS_SK &&
 		    auth_type != NL80211_AUTHTYPE_FILS_SK_PFS &&
-		    auth_type != NL80211_AUTHTYPE_FILS_PK)
+		    auth_type != NL80211_AUTHTYPE_FILS_PK &&
+		    auth_type != NL80211_AUTHTYPE_EPPKE)
 			return -EINVAL;
 		req.auth_data = nla_data(info->attrs[NL80211_ATTR_AUTH_DATA]);
 		req.auth_data_len = nla_len(info->attrs[NL80211_ATTR_AUTH_DATA]);
+	}
+
+	if (auth_type == NL80211_AUTHTYPE_EPPKE) {
+		u16 auth_trans;
+		__le16 *pos;
+
+		/*
+		 * Validate auth_data length for Authentication
+		 * Transaction Sequence Number and Status Code.
+		 */
+		if (req.auth_data_len <= 4)
+			return -EINVAL;
+
+		pos = (__le16 *)req.auth_data;
+		auth_trans = le16_to_cpu(*pos);
+
+		if (auth_trans == 1) {
+			const u8 *rsne, *akm_list;
+			u16 akm_count;
+			u32 akm_suite;
+
+			rsne = cfg80211_find_ie(WLAN_EID_RSN,
+						req.auth_data + 4,
+						req.auth_data_len - 4);
+
+			akm_list = cfg80211_rsne_get_akm_list(rsne, &akm_count);
+
+			/*
+			 * Validate AKMP from RSNE for EPPKE Authentication:
+			 * EPPKE uses PASN with SAE AKMPs as Base AKMP as
+			 * mentioned in "IEEE P802.11bi/D3.0, 12.16.9".
+			 * Valid AKMPs: SAE (00-0F-AC:8), FT-SAE (00-0F-AC:9),
+			 * SAE-EXT (00-0F-AC:24), FT-SAE-EXT (00-0F-AC:25).
+			 *
+			 * If RSNE has none or multiple Base AKMPs, reject the
+			 * Authentication frame as mentioned in
+			 * "IEEE Std 802.11‑2024, 12.13.3.2".
+			 */
+			if (akm_count != 1 || !akm_list)
+				return -EINVAL;
+
+			akm_suite = get_unaligned_be32(akm_list);
+			if (!cfg80211_is_sae_akmp(akm_suite))
+				return -EINVAL;
+		}
 	}
 
 	local_state_change = !!info->attrs[NL80211_ATTR_LOCAL_STATE_CHANGE];
