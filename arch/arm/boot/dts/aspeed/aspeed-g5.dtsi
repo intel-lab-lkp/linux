@@ -251,7 +251,7 @@
 				pinctrl: pinctrl@80 {
 					compatible = "aspeed,ast2500-pinctrl";
 					reg = <0x80 0x18>, <0xa0 0x10>;
-					aspeed,external-nodes = <&gfx>, <&lhc>;
+					aspeed,external-nodes = <&gfx>, <&lpc>;
 				};
 			};
 
