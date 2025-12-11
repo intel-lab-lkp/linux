@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
 /***************************************************************************
- * GPIB Driver for Fluke cda devices.  Basically, its a driver for a (bugfixed)
+ * GPIB Driver for Fluke cda devices.  Basically, it's a driver for a (bugfixed)
  * cb7210 connected to channel 0 of a pl330 dma controller.
  *    Author: Frank Mori Hess <fmh6jj@gmail.com>
  *   copyright: (C) 2006, 2010, 2015 Fluke Corporation
@@ -286,7 +286,7 @@ static int wait_for_read(struct gpib_board *board)
  * in the case where the handshake is stuck in SGNS due to no byte being
  * available to the chip (and thus we can be confident a dma transfer will
  * result in at least one byte making it into the chip).  This matters
- * because we want to be confident before sending a "send eoi" auxilary
+ * because we want to be confident before sending a "send eoi" auxiliary
  * command that we will be able to also put the associated data byte
  * in the chip before any potential timeout.
  */
@@ -316,7 +316,7 @@ static int source_handshake_is_sids_or_sgns(struct fluke_priv *e_priv)
 
 /*
  * Wait until the gpib chip is ready to accept a data out byte.
- * If the chip is SGNS it is probably waiting for a a byte to
+ * If the chip is SGNS it is probably waiting for a byte to
  * be written to it.
  */
 static int wait_for_data_out_ready(struct gpib_board *board)
@@ -517,7 +517,7 @@ static int fluke_accel_write(struct gpib_board *board, u8 *buffer, size_t length
 		/*
 		 * wait until we are sure we will be able to write the data byte
 		 * into the chip before we send AUX_SEOI.  This prevents a timeout
-		 * scenerio where we send AUX_SEOI but then timeout without getting
+		 * scenario where we send AUX_SEOI but then timeout without getting
 		 * any bytes into the gpib chip.  This will result in the first byte
 		 * of the next write having a spurious EOI set on the first byte.
 		 */
@@ -547,7 +547,7 @@ static int fluke_get_dma_residue(struct dma_chan *chan, dma_cookie_t cookie)
 	}
 	dmaengine_tx_status(chan, cookie, &state);
 	/*
-	 * hardware doesn't support resume, so dont call this
+	 * hardware doesn't support resume, so don't call this
 	 * method unless the dma transfer is done.
 	 */
 	return state.residue;
