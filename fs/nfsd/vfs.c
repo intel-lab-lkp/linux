@@ -32,6 +32,7 @@
 #include <linux/writeback.h>
 #include <linux/security.h>
 #include <linux/sunrpc/xdr.h>
+#include <linux/fileattr.h>
 
 #include "xdr3.h"
 
@@ -2678,4 +2679,28 @@ nfsd_permission(struct svc_cred *cred, struct svc_export *exp,
 		err = inode_permission(&nop_mnt_idmap, inode, MAY_EXEC);
 
 	return err? nfserrno(err) : 0;
+}
+
+/**
+ * nfsd_get_case_info - get case sensitivity info for a file handle
+ * @fhp: file handle that has already been verified
+ * @case_insensitive: output, true if the filesystem is case-insensitive
+ * @case_preserving: output, true if the filesystem preserves case
+ *
+ * Returns nfs_ok on success, or an nfserr on failure.
+ */
+__be32
+nfsd_get_case_info(struct svc_fh *fhp, bool *case_insensitive,
+		   bool *case_preserving)
+{
+	u32 case_info;
+	int err;
+
+	err = vfs_get_case_info(fhp->fh_dentry, &case_info);
+	if (err)
+		return nfserrno(err);
+
+	*case_insensitive = (case_info & FILEATTR_CASEFOLD_TYPE) != 0;
+	*case_preserving = (case_info & FILEATTR_CASE_PRESERVING) != 0;
+	return nfs_ok;
 }
