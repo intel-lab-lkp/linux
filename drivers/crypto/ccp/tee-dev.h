@@ -112,4 +112,10 @@ struct tee_ring_cmd {
 int tee_dev_init(struct psp_device *psp);
 void tee_dev_destroy(struct psp_device *psp);
 
+#ifdef CONFIG_CRYPTO_DEV_SP_PSP
+int tee_restore(struct psp_device *psp);
+#else
+static inline int tee_restore(struct psp_device *psp) { return 0; }
+#endif /* CONFIG_CRYPTO_DEV_SP_PSP */
+
 #endif /* __TEE_DEV_H__ */

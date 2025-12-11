@@ -21,6 +21,7 @@
 
 #include "sev-dev.h"
 #include "ccp-dev.h"
+#include "tee-dev.h"
 #include "sp-dev.h"
 
 MODULE_AUTHOR("Tom Lendacky <thomas.lendacky@amd.com>");
@@ -228,6 +229,18 @@ int sp_resume(struct sp_device *sp)
 	}
 
 	return 0;
+}
+
+int sp_restore(struct sp_device *sp)
+{
+	if (sp->dev_vdata->psp_vdata->tee) {
+		int r = tee_restore(sp->psp_data);
+
+		if (r)
+			return r;
+	}
+
+	return sp_resume(sp);
 }
 
 struct sp_device *sp_get_psp_master_device(void)
