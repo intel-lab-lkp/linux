@@ -620,6 +620,8 @@ struct ieee80211_sta_removed_link_stats {
 	} pertid_stats;
 };
 
+#define SHA512_DIGEST_LEN 64
+
 /**
  * struct sta_info - STA information
  *
@@ -680,6 +682,10 @@ struct ieee80211_sta_removed_link_stats {
  *
  * @fast_tx: TX fastpath information
  * @fast_rx: RX fastpath information
+ * @f1_hash: The HASH of body of the first EPPKE Authentication frame. Used
+ *	only for non-AP STA.
+ * @hash_alg: (u32) Hash algorithm used to drive @f1_ hash and used for MIC
+ *	computation in EPPKE Authentication. Used only for non-AP STA.
  * @tdls_chandef: a TDLS peer can have a wider chandef that is compatible to
  *	the BSS one.
  * @frags: fragment cache
@@ -715,6 +721,9 @@ struct sta_info {
 
 	struct ieee80211_fast_tx __rcu *fast_tx;
 	struct ieee80211_fast_rx __rcu *fast_rx;
+
+	u8 f1_hash[SHA512_DIGEST_LEN];
+	u32 hash_alg;
 
 #ifdef CONFIG_MAC80211_MESH
 	struct mesh_sta *mesh;

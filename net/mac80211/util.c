@@ -25,6 +25,7 @@
 #include <net/cfg80211.h>
 #include <net/rtnetlink.h>
 #include <kunit/visibility.h>
+#include <crypto/hash.h>
 
 #include "ieee80211_i.h"
 #include "driver-ops.h"
@@ -1073,6 +1074,240 @@ void ieee80211_set_wmm_default(struct ieee80211_link_data *link,
 	}
 }
 
+static const char *ieee80211_crypto_alg(u32 alg, bool hmac)
+{
+	switch (alg) {
+	case NL80211_HASH_ALG_SHA256:
+		return hmac ? "hmac(sha256)" : "sha256";
+	case NL80211_HASH_ALG_SHA384:
+		return hmac ? "hmac(sha384)" : "sha384";
+	case NL80211_HASH_ALG_SHA512:
+		return hmac ? "hmac(sha512)" : "sha512";
+	default:
+		return NULL;
+	}
+}
+
+static size_t ieee80211_hash_digest_len(u32 alg)
+{
+	switch (alg) {
+	case NL80211_HASH_ALG_SHA256:
+		return 32;
+	case NL80211_HASH_ALG_SHA384:
+		return 48;
+	case NL80211_HASH_ALG_SHA512:
+		return 64;
+	default:
+		return 0;
+	}
+}
+
+static size_t ieee80211_mic_len(u32 alg)
+{
+	return ieee80211_hash_digest_len(alg) / 2;
+}
+
+static int ieee80211_compute_hash(const char *alg, const u8 *data,
+				  size_t data_len, u8 *hash)
+{
+	struct crypto_shash *tfm;
+	struct shash_desc *desc;
+	int ret;
+
+	/*
+	 * Compute a hash over the input buffer.
+	 *
+	 * Steps:
+	 * - crypto_alloc_shash: Allocate a transform handle for the "alg"
+	 *	algorithm.
+	 * - crypto_shash_init: Initialize a shash descriptor.
+	 * - crypto_shash_update: Feed input data into the hash context.
+	 * - crypto_shash_final: Finalize the hash and store the digest.
+	 *
+	 * The calls are chained: if any step fails, the subsequent ones are
+	 * skipped and the error code from the failing call is returned.
+	 */
+	tfm = crypto_alloc_shash(alg, 0, 0);
+	if (IS_ERR(tfm))
+		return PTR_ERR(tfm);
+
+	desc = kzalloc(sizeof(*desc) + crypto_shash_descsize(tfm), GFP_KERNEL);
+	if (!desc) {
+		crypto_free_shash(tfm);
+		return -ENOMEM;
+	}
+	desc->tfm = tfm;
+
+	ret = crypto_shash_init(desc);
+	if (ret)
+		goto free;
+
+	ret = crypto_shash_update(desc, data, data_len);
+	if (ret)
+		goto free;
+
+	ret = crypto_shash_final(desc, hash);
+free:
+	kfree(desc);
+	crypto_free_shash(tfm);
+	return ret;
+}
+
+static int calc_f1_hash(struct sk_buff *skb, struct ieee80211_mgmt *mgmt,
+			struct sta_info *sta)
+{
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)mgmt;
+	int hdrlen = ieee80211_hdrlen(hdr->frame_control);
+	const u8 *body = (const u8 *)mgmt + hdrlen;
+	size_t body_len = skb->len - hdrlen;
+	const char *hash_alg;
+
+	hash_alg = ieee80211_crypto_alg(sta->hash_alg, false);
+	if (!hash_alg)
+		return -EINVAL;
+
+	return ieee80211_compute_hash(hash_alg, body, body_len, sta->f1_hash);
+}
+
+static int ieee80211_hmac_hash(const char *alg, const u8 *key, size_t key_len,
+			       const u8 **fields, const size_t *len,
+			       size_t num_elem, u8 *out)
+{
+	struct crypto_shash *tfm;
+	struct shash_desc *desc;
+	int ret, i;
+
+	/*
+	 * Compute an HMAC-HASH over multiple input fields.
+	 *
+	 * Steps:
+	 * - crypto_alloc_shash: Allocate a handle for HMAC-SHA256 transform.
+	 * - crypto_shash_setkey: Configure the transform with the provided key.
+	 * - crypto_shash_init: Initialize the hashing context.
+	 * - crypto_shash_update: Feed input buffer into the HMAC state in
+	 *	sequence.
+	 * - crypto_shash_final: Finalize the hash and store the digest.
+	 *
+	 * If any step fails, execution jumps to "free", skipping the remaining
+	 * operations. The error code from the failing call is returned.
+	 */
+	tfm = crypto_alloc_shash(alg, 0, 0);
+	if (IS_ERR(tfm))
+		return PTR_ERR(tfm);
+
+	ret = crypto_shash_setkey(tfm, key, key_len);
+	if (ret)
+		goto free_tfm;
+
+	desc = kzalloc(sizeof(*desc) + crypto_shash_descsize(tfm), GFP_KERNEL);
+	if (!desc) {
+		crypto_free_shash(tfm);
+		return -ENOMEM;
+	}
+	desc->tfm = tfm;
+
+	ret = crypto_shash_init(desc);
+	if (ret)
+		goto free;
+
+	for (i = 0; i < num_elem; i++) {
+		ret = crypto_shash_update(desc, fields[i], len[i]);
+		if (ret)
+			goto free;
+	}
+	ret = crypto_shash_final(desc, out);
+free:
+	kfree(desc);
+
+free_tfm:
+	crypto_free_shash(tfm);
+	return ret;
+}
+
+static int add_mic_element(struct ieee80211_sub_if_data *sdata,
+			   struct sk_buff *skb,
+			   struct ieee80211_mgmt *mgmt,
+			   struct sta_info *sta, size_t mic_len)
+{
+	struct ieee80211_if_managed *ifmgd = &sdata->u.mgd;
+	struct ieee80211_mgd_auth_data *auth_data = ifmgd->auth_data;
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)mgmt;
+	int hdrlen = ieee80211_hdrlen(hdr->frame_control);
+	u8 *frame_body;
+	size_t body_len;
+	const u8 *spa = sdata->vif.addr;
+	const u8 *bssid = mgmt->da;
+	const u8 *f1_hash = sta->f1_hash;
+	const char *alg;
+	size_t digest_len;
+	const u8 *fields[4];
+	size_t len[4];
+	u8 mic_elem[2 + 24];
+	u8 mic_buf[SHA512_DIGEST_SIZE];
+	int n = 0, ret;
+	size_t mic_ie_offset;
+
+	if (!mic_len || mic_len > 32)
+		return -EINVAL;
+
+	if (skb_tailroom(skb) < (2 + mic_len))
+		return -ENOMEM;
+
+	alg = ieee80211_crypto_alg(sta->hash_alg, true);
+	if (!alg)
+		return -EINVAL;
+
+	digest_len = ieee80211_hash_digest_len(sta->hash_alg);
+	if (!digest_len)
+		return -EINVAL;
+	/*
+	 * Append and compute the MIC element for the Authentication frame.
+	 *
+	 * The MIC as specified in "IEEE 802.11-2024, 12.13.9.2" is
+	 * constructed as follows:
+	 *
+	 *   MIC = first MMM octets of
+	 *         HMAC-HASH(KCK, SPA || BSSID || F1-Auth || Frame-Data)
+	 *
+	 *   - HASH is the algorithm used in 12.13.8.
+	 *   - KCK is the Key Confirmation Key.
+	 *   - SPA is the MAC address of the non-AP STA (transmitter of the
+	 *     first Auth frame)
+	 *   - BSSID is the BSSID for the AP’s BSS.
+	 *   - F1-Auth is the HASH of the body of the 1st Auth frame.
+	 *   - Frame-Data is the body of the Auth frame, including the MIC
+	 *     element with its MIC field set to all zeros during computation.
+	 *   - MMM is half the digest length of the hash function
+	 *     (16 for SHA-256, 24 for SHA-384 etc).
+	 */
+	mic_elem[0] = WLAN_EID_MIC;
+	mic_elem[1] = mic_len;
+	memset(&mic_elem[2], 0, mic_len);
+	skb_put_data(skb, mic_elem, 2 + mic_len);
+
+	frame_body = ((u8 *)mgmt) + hdrlen;
+	body_len = skb->len - hdrlen;
+
+	fields[n] = spa;
+	len[n++] = ETH_ALEN;
+	fields[n] = bssid;
+	len[n++] = ETH_ALEN;
+	fields[n] = f1_hash;
+	len[n++] = digest_len;
+	fields[n] = frame_body;
+	len[n++] = body_len;
+
+	ret = ieee80211_hmac_hash(alg, auth_data->kck, auth_data->kck_len,
+				  fields, len, n, mic_buf);
+	if (ret)
+		return ret;
+
+	mic_ie_offset = skb->len - (2 + mic_len);
+	memcpy(skb->data + mic_ie_offset + 2, mic_buf, mic_len);
+
+	return 0;
+}
+
 void ieee80211_send_auth(struct ieee80211_sub_if_data *sdata,
 			 u16 transaction, u16 auth_alg, u16 status,
 			 const u8 *extra, size_t extra_len, const u8 *da,
@@ -1122,6 +1357,49 @@ void ieee80211_send_auth(struct ieee80211_sub_if_data *sdata,
 		skb_put_data(skb, extra, extra_len);
 	if (multi_link)
 		skb_put_data(skb, &mle, sizeof(mle));
+
+	if (auth_alg == WLAN_AUTH_EPPKE && transaction == 1) {
+		struct ieee80211_if_managed *ifmgd = &sdata->u.mgd;
+		struct ieee80211_mgd_auth_data *auth_data = ifmgd->auth_data;
+		struct sta_info *sta;
+
+		sta = sta_info_get_bss(sdata, mgmt->da);
+		if (!sta) {
+			kfree_skb(skb);
+			return;
+		}
+
+		spin_lock_bh(&sta->lock);
+		sta->hash_alg = auth_data->hash_alg;
+		err = calc_f1_hash(skb, mgmt, sta);
+		spin_unlock_bh(&sta->lock);
+
+		if (WARN_ON(err)) {
+			kfree_skb(skb);
+			return;
+		}
+	}
+
+	if (auth_alg == WLAN_AUTH_EPPKE && transaction == 3) {
+		struct sta_info *sta;
+		size_t mic_len;
+
+		sta = sta_info_get_bss(sdata, mgmt->da);
+		if (!sta) {
+			kfree_skb(skb);
+			return;
+		}
+
+		spin_lock_bh(&sta->lock);
+		mic_len = ieee80211_mic_len(sta->hash_alg);
+		err = add_mic_element(sdata, skb, mgmt, sta, mic_len);
+		spin_unlock_bh(&sta->lock);
+
+		if (WARN_ON(err)) {
+			kfree_skb(skb);
+			return;
+		}
+	}
 
 	if (auth_alg == WLAN_AUTH_SHARED_KEY && transaction == 3) {
 		mgmt->frame_control |= cpu_to_le16(IEEE80211_FCTL_PROTECTED);

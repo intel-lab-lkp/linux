@@ -9279,6 +9279,15 @@ int ieee80211_mgd_auth(struct ieee80211_sub_if_data *sdata,
 		memcpy(auth_data->key, req->key, req->key_len);
 	}
 
+	if (req->auth_type == NL80211_AUTHTYPE_EPPKE && req->kck &&
+	    req->kck_len) {
+		auth_data->kck_len = req->kck_len;
+		memcpy(auth_data->kck, req->kck, req->kck_len);
+	}
+
+	if (req->auth_type == NL80211_AUTHTYPE_EPPKE && auth_data->trans == 1)
+		auth_data->hash_alg = req->hash_alg;
+
 	ieee80211_parse_cfg_selectors(auth_data->userspace_selectors,
 				      req->supported_selectors,
 				      req->supported_selectors_len);

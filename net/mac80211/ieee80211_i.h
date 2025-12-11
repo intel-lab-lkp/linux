@@ -423,12 +423,16 @@ struct ieee80211_mgd_auth_data {
 
 	u8 key[WLAN_KEY_LEN_WEP104];
 	u8 key_len, key_idx;
+	u8 kck[WLAN_MAX_KEY_LEN];
+	u8 kck_len;
 	bool done, waiting;
 	bool peer_confirmed;
 	bool timeout_started;
 	int link_id;
 
 	u8 ap_addr[ETH_ALEN] __aligned(2);
+
+	u32 hash_alg;
 
 	u16 trans, status;
 	size_t data_len;
