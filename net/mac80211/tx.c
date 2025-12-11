@@ -644,7 +644,11 @@ ieee80211_tx_h_select_key(struct ieee80211_tx_data *tx)
 			    !ieee80211_epp_assoc_req(hdr->frame_control,
 						     tx->sta) &&
 			    !ieee80211_epp_reassoc_req(hdr->frame_control,
-						       tx->sta))
+						       tx->sta) &&
+			    !ieee80211_epp_assoc_resp(hdr->frame_control,
+						      tx->sta) &&
+			    !ieee80211_epp_reassoc_resp(hdr->frame_control,
+							tx->sta))
 				tx->key = NULL;
 			else
 				skip_hw = (tx->key->conf.flags &

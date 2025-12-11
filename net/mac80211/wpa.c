@@ -529,7 +529,9 @@ ieee80211_crypto_ccmp_decrypt(struct ieee80211_rx_data *rx,
 	if (!ieee80211_is_data(hdr->frame_control) &&
 	    !ieee80211_is_robust_mgmt_frame(skb) &&
 	    !ieee80211_epp_assoc_resp(hdr->frame_control, rx->sta) &&
-	    !ieee80211_epp_reassoc_resp(hdr->frame_control, rx->sta))
+	    !ieee80211_epp_reassoc_resp(hdr->frame_control, rx->sta) &&
+	    !ieee80211_epp_assoc_req(hdr->frame_control, rx->sta) &&
+	    !ieee80211_epp_reassoc_req(hdr->frame_control, rx->sta))
 		return RX_CONTINUE;
 
 	if (status->flag & RX_FLAG_DECRYPTED) {
@@ -727,7 +729,9 @@ ieee80211_crypto_gcmp_decrypt(struct ieee80211_rx_data *rx)
 	if (!ieee80211_is_data(hdr->frame_control) &&
 	    !ieee80211_is_robust_mgmt_frame(skb) &&
 	    !ieee80211_epp_assoc_resp(hdr->frame_control, rx->sta) &&
-	    !ieee80211_epp_reassoc_resp(hdr->frame_control, rx->sta))
+	    !ieee80211_epp_reassoc_resp(hdr->frame_control, rx->sta) &&
+	    !ieee80211_epp_assoc_req(hdr->frame_control, rx->sta) &&
+	    !ieee80211_epp_reassoc_req(hdr->frame_control, rx->sta))
 		return RX_CONTINUE;
 
 	if (status->flag & RX_FLAG_DECRYPTED) {

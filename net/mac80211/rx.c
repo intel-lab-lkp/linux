@@ -2610,12 +2610,14 @@ ieee80211_drop_unencrypted_mgmt(struct ieee80211_rx_data *rx)
 		return RX_DROP_U_UNPROT_ROBUST_ACTION;
 
 	/*
-	 * Drop unprotected (Re)Association Response frame received from
+	 * Drop unprotected (Re)Association Request/Response frame received from
 	 * an EPP Peer.
 	 */
 	if (!ieee80211_has_protected(fc) &&
 	    (ieee80211_epp_assoc_resp(fc, rx->sta) ||
-	     ieee80211_epp_reassoc_resp(fc, rx->sta)))
+	     ieee80211_epp_reassoc_resp(fc, rx->sta) ||
+	     ieee80211_epp_assoc_req(fc, rx->sta) ||
+	     ieee80211_epp_reassoc_req(fc, rx->sta)))
 		return RX_DROP_U_UNPROT_UCAST_MGMT;
 
 	return RX_CONTINUE;
