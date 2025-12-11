@@ -56,6 +56,7 @@
 static int sysctl_panic_on_oom;
 static int sysctl_oom_kill_allocating_task;
 static int sysctl_oom_dump_tasks = 1;
+static int sysctl_oom_dump_stack = 1;
 
 /*
  * Serializes oom killer invocations (out_of_memory()) from all contexts to
@@ -464,7 +465,9 @@ static void dump_header(struct oom_control *oc)
 	if (!IS_ENABLED(CONFIG_COMPACTION) && oc->order)
 		pr_warn("COMPACTION is disabled!!!\n");
 
-	dump_stack();
+	if (sysctl_oom_dump_stack)
+		dump_stack();
+
 	if (is_memcg_oom(oc))
 		mem_cgroup_print_oom_meminfo(oc->memcg);
 	else {
@@ -736,6 +739,13 @@ static const struct ctl_table vm_oom_kill_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec,
 	},
+	{
+                .procname       = "oom_dump_stack",
+                .data           = &sysctl_oom_dump_stack,
+                .maxlen         = sizeof(sysctl_oom_dump_stack),
+                .mode           = 0644,
+                .proc_handler   = proc_dointvec,
+        },
 };
 #endif
 
