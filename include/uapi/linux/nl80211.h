@@ -2987,6 +2987,13 @@ enum nl80211_commands {
  *	as specified in "IEEE P802.11bi/D3.0, 12.16.9", this attribute
  *	is used for MIC calculation.
  *
+ * @NL80211_ATTR_HASH_ALG: (u32) Hash algorithm used both for Message Integrity
+ *	Code (MIC) computation and for generating the hash of the Authentication
+ *	frame in the Enhanced Privacy Protection Key Exchange (EPPKE)
+ *	authentication protocol as specified in "IEEE P802.11bi/D3.0, 12.16.9".
+ *	This attribute is used with %NL80211_CMD_AUTHENTICATE.
+ *	See &enum nl80211_hash_alg for details.
+ *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
  * @__NL80211_ATTR_AFTER_LAST: internal use
@@ -3558,6 +3565,8 @@ enum nl80211_attrs {
 	NL80211_ATTR_KEY_PREASSOC,
 
 	NL80211_ATTR_KEY_KCK,
+
+	NL80211_ATTR_HASH_ALG,
 
 	/* add attributes here, update the policy in nl80211.c */
 
@@ -8461,6 +8470,33 @@ enum nl80211_nan_capabilities {
 	/* keep last */
 	__NL80211_NAN_CAPABILITIES_LAST,
 	NL80211_NAN_CAPABILITIES_MAX = __NL80211_NAN_CAPABILITIES_LAST - 1,
+};
+
+/**
+ * enum nl80211_hash_alg - Hash algorithms used in EPPKE
+ *
+ * @__NL80211_HASH_ALG_INVALID: invalid, not used
+ * @NL80211_HASH_ALG_SHA256: SHA-256
+ * @NL80211_HASH_ALG_SHA384: SHA-384
+ * @NL80211_HASH_ALG_SHA512: SHA-512
+ * @__NL80211_HASH_ALG_LAST: internal use
+ * @NL80211_HASH_ALG_MAX: highest hash algorithm number currently defined
+ *
+ * These values are used with %NL80211_ATTR_HASH_ALG to select the hash
+ * algorithm used both for computing the MIC and for generating the hash
+ * of the Authentication frame in the EPPKE authentication protocol.
+ */
+
+enum nl80211_hash_alg {
+	__NL80211_HASH_ALG_INVALID,
+
+	NL80211_HASH_ALG_SHA256,
+	NL80211_HASH_ALG_SHA384,
+	NL80211_HASH_ALG_SHA512,
+
+	/* keep last */
+	__NL80211_HASH_ALG_LAST,
+	NL80211_HASH_ALG_MAX = __NL80211_HASH_ALG_LAST - 1
 };
 
 #endif /* __LINUX_NL80211_H */

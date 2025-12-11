@@ -935,6 +935,9 @@ static const struct nla_policy nl80211_policy[NUM_NL80211_ATTR] = {
 	[NL80211_ATTR_KEY_PREASSOC] = { .type = NLA_FLAG },
 	[NL80211_ATTR_KEY_KCK] = { .type = NLA_BINARY,
 				   .len = WLAN_MAX_KEY_LEN },
+	[NL80211_ATTR_HASH_ALG] = { .type = NLA_U32,
+				    .min = NL80211_HASH_ALG_SHA256,
+				    .max = NL80211_HASH_ALG_MAX },
 };
 
 /* policy for the key attributes */
@@ -12035,6 +12038,12 @@ static int nl80211_authenticate(struct sk_buff *skb, struct genl_info *info)
 			akm_suite = get_unaligned_be32(akm_list);
 			if (!cfg80211_is_sae_akmp(akm_suite))
 				return -EINVAL;
+
+			if (!info->attrs[NL80211_ATTR_HASH_ALG])
+				return -EINVAL;
+
+			req.hash_alg =
+				nla_get_u32(info->attrs[NL80211_ATTR_HASH_ALG]);
 		}
 
 		if (auth_trans == 3) {
