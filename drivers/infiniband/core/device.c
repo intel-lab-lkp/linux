@@ -1156,6 +1156,13 @@ static void rdma_dev_exit_net(struct net *net)
 	unsigned long index;
 	int ret;
 
+	/*
+	 * Fix ABBA deadlock: acquire locks in same order as rdma_dev_init_net
+	 * to prevent deadlock with concurrent namespace operations.
+	 * rdma_dev_init_net: devices_rwsem -> rdma_nets_rwsem
+	 * rdma_dev_exit_net: devices_rwsem -> rdma_nets_rwsem (was reversed)
+	 */
+	down_read(&devices_rwsem);
 	down_write(&rdma_nets_rwsem);
 	/*
 	 * Prevent the ID from being re-used and hide the id from xa_for_each.
@@ -1163,8 +1170,6 @@ static void rdma_dev_exit_net(struct net *net)
 	ret = xa_err(xa_store(&rdma_nets, rnet->id, NULL, GFP_KERNEL));
 	WARN_ON(ret);
 	up_write(&rdma_nets_rwsem);
-
-	down_read(&devices_rwsem);
 	xa_for_each (&devices, index, dev) {
 		get_device(&dev->dev);
 		/*
