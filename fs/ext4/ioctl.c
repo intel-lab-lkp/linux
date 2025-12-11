@@ -996,6 +996,18 @@ int ext4_fileattr_get(struct dentry *dentry, struct file_kattr *fa)
 	if (ext4_has_feature_project(inode->i_sb))
 		fa->fsx_projid = from_kprojid(&init_user_ns, ei->i_projid);
 
+	/*
+	 * ext4 always preserves case. If this inode is a casefolded
+	 * directory, report Unicode case-insensitive; otherwise
+	 * report case-sensitive (standard POSIX behavior).
+	 */
+	if (IS_CASEFOLDED(inode))
+		fa->case_info = FILEATTR_CASEFOLD_UNICODE |
+				FILEATTR_CASE_PRESERVING;
+	else
+		fa->case_info = FILEATTR_CASEFOLD_NONE |
+				FILEATTR_CASE_PRESERVING;
+
 	return 0;
 }
 
