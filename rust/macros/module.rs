@@ -4,7 +4,6 @@ use std::ffi::CString;
 
 use proc_macro2::{
     Literal,
-    Span,
     TokenStream, //
 };
 use quote::{
@@ -23,7 +22,8 @@ use syn::{
     Ident,
     LitStr,
     Result,
-    Token, //
+    Token,
+    Type, //
 };
 
 use crate::helpers::*;
@@ -105,7 +105,7 @@ mod kw {
 
 #[allow(dead_code, reason = "some fields are only parsed into")]
 enum ModInfoField {
-    Type(Token![type], Token![:], Ident),
+    Type(Token![type], Token![:], Type),
     Name(kw::name, Token![:], AsciiLitStr),
     Authors(
         kw::authors,
@@ -193,9 +193,9 @@ impl Parse for ModInfoField {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub(crate) struct ModuleInfo {
-    type_: String,
+    type_: Option<Type>,
     license: String,
     name: String,
     authors: Option<Vec<String>>,
@@ -237,7 +237,7 @@ impl Parse for ModuleInfo {
             seen_keys.push(key);
 
             match field {
-                ModInfoField::Type(_, _, ty) => info.type_ = ty.to_string(),
+                ModInfoField::Type(_, _, ty) => info.type_ = Some(ty),
                 ModInfoField::Name(_, _, name) => info.name = name.value(),
                 ModInfoField::Authors(_, _, _, list) => {
                     info.authors = Some(list.into_iter().map(|x| x.value()).collect())
@@ -286,16 +286,17 @@ impl Parse for ModuleInfo {
 
 pub(crate) fn module(info: ModuleInfo) -> Result<TokenStream> {
     let ModuleInfo {
-        type_,
+        type_: Some(type_),
         license,
         name,
         authors,
         description,
         alias,
         firmware,
-    } = info;
-
-    let type_ = Ident::new(&type_, Span::mixed_site());
+    } = info
+    else {
+        unreachable!();
+    };
 
     // Rust does not allow hyphens in identifiers, use underscore instead.
     let ident = name.replace('-', "_");
@@ -376,7 +377,6 @@ pub(crate) fn module(info: ModuleInfo) -> Result<TokenStream> {
         // Double nested modules, since then nobody can access the public items inside.
         mod __module_init {
             mod __module_init {
-                use super::super::#type_;
                 use pin_init::PinInit;
 
                 /// The "Rust loadable module" mark.
@@ -388,7 +388,7 @@ pub(crate) fn module(info: ModuleInfo) -> Result<TokenStream> {
                 #[used(compiler)]
                 static __IS_RUST_MODULE: () = ();
 
-                static mut __MOD: ::core::mem::MaybeUninit<#type_> =
+                static mut __MOD: ::core::mem::MaybeUninit<super::super::LocalModule> =
                     ::core::mem::MaybeUninit::uninit();
 
                 // Loadable modules need to export the `{init,cleanup}_module` identifiers.
@@ -475,8 +475,9 @@ pub(crate) fn module(info: ModuleInfo) -> Result<TokenStream> {
                 ///
                 /// This function must only be called once.
                 unsafe fn __init() -> ::kernel::ffi::c_int {
-                    let initer =
-                        <#type_ as ::kernel::InPlaceModule>::init(&super::super::THIS_MODULE);
+                    let initer = <super::super::LocalModule as ::kernel::InPlaceModule>::init(
+                        &super::super::THIS_MODULE
+                    );
                     // SAFETY: No data race, since `__MOD` can only be accessed by this module
                     // and there only `__init` and `__exit` access it. These functions are only
                     // called once and `__exit` cannot be called before or during `__init`.
