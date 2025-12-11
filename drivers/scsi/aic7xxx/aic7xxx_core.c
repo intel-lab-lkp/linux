@@ -2072,41 +2072,6 @@ ahc_clear_intstat(struct ahc_softc *ahc)
 uint32_t ahc_debug = AHC_DEBUG_OPTS;
 #endif
 
-#if 0 /* unused */
-static void
-ahc_print_scb(struct scb *scb)
-{
-	int i;
-
-	struct hardware_scb *hscb = scb->hscb;
-
-	printk("scb:%p control:0x%x scsiid:0x%x lun:%d cdb_len:%d\n",
-	       (void *)scb,
-	       hscb->control,
-	       hscb->scsiid,
-	       hscb->lun,
-	       hscb->cdb_len);
-	printk("Shared Data: ");
-	for (i = 0; i < sizeof(hscb->shared_data.cdb); i++)
-		printk("%#02x", hscb->shared_data.cdb[i]);
-	printk("        dataptr:%#x datacnt:%#x sgptr:%#x tag:%#x\n",
-		ahc_le32toh(hscb->dataptr),
-		ahc_le32toh(hscb->datacnt),
-		ahc_le32toh(hscb->sgptr),
-		hscb->tag);
-	if (scb->sg_count > 0) {
-		for (i = 0; i < scb->sg_count; i++) {
-			printk("sg[%d] - Addr 0x%x%x : Length %d\n",
-			       i,
-			       (ahc_le32toh(scb->sg_list[i].len) >> 24
-				& SG_HIGH_ADDR_BITS),
-			       ahc_le32toh(scb->sg_list[i].addr),
-			       ahc_le32toh(scb->sg_list[i].len));
-		}
-	}
-}
-#endif
-
 /************************* Transfer Negotiation *******************************/
 /*
  * Allocate per target mode instance (ID we respond to as a target)
