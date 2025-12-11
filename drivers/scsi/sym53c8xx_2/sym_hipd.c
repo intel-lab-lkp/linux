@@ -4907,25 +4907,12 @@ static struct sym_ccb *sym_ccb_from_dsa(struct sym_hcb *np, u32 dsa)
 }
 
 /*
- *  Target control block initialisation.
- *  Nothing important to do at the moment.
- */
-static void sym_init_tcb (struct sym_hcb *np, u_char tn)
-{
-}
-
-/*
  *  Lun control block allocation and initialization.
  */
 struct sym_lcb *sym_alloc_lcb (struct sym_hcb *np, u_char tn, u_char ln)
 {
 	struct sym_tcb *tp = &np->target[tn];
 	struct sym_lcb *lp = NULL;
-
-	/*
-	 *  Initialize the target control block if not yet.
-	 */
-	sym_init_tcb (np, tn);
 
 	/*
 	 *  Allocate the LCB bus address array.
