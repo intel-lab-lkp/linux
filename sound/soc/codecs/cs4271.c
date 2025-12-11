@@ -486,9 +486,9 @@ static int cs4271_reset(struct snd_soc_component *component)
 {
 	struct cs4271_private *cs4271 = snd_soc_component_get_drvdata(component);
 
-	gpiod_direction_output(cs4271->reset, 1);
+	gpiod_direction_output(cs4271->reset, 0);
 	mdelay(1);
-	gpiod_set_value(cs4271->reset, 0);
+	gpiod_set_value(cs4271->reset, 1);
 	mdelay(1);
 
 	return 0;
