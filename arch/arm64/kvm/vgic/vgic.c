@@ -362,9 +362,9 @@ static bool vgic_validate_injection(struct vgic_irq *irq, bool level, void *owne
 		return irq->line_level != level;
 	case VGIC_CONFIG_EDGE:
 		return level;
+	default:
+		return false;
 	}
-
-	return false;
 }
 
 static bool vgic_model_needs_bcst_kick(struct kvm *kvm)
