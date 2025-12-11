@@ -1529,6 +1529,20 @@ int ocfs2_validate_inode_block(struct super_block *sb,
 		}
 	}
 
+	if (S_ISDIR(le16_to_cpu(di->i_mode)) &&
+	    (di->i_dyn_features & cpu_to_le16(OCFS2_INLINE_DATA_FL))) {
+		struct ocfs2_inline_data *data = &di->id2.i_data;
+
+		if (le64_to_cpu(di->i_size) > le16_to_cpu(data->id_count)) {
+			rc = ocfs2_error(sb,
+					 "Invalid dinode #%llu: inline directory i_size %llu exceeds id_count %u\n",
+					 (unsigned long long)bh->b_blocknr,
+					 (unsigned long long)le64_to_cpu(di->i_size),
+					 le16_to_cpu(data->id_count));
+			goto bail;
+		}
+	}
+
 	rc = 0;
 
 bail:
