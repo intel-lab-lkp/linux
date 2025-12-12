@@ -349,9 +349,8 @@ static const struct i2c_algorithm riic_algo = {
 	.functionality = riic_func,
 };
 
-static int riic_init_hw(struct riic_dev *riic)
+static int __riic_init_hw(struct riic_dev *riic)
 {
-	int ret;
 	unsigned long rate;
 	unsigned long ns_per_tick;
 	int total_ticks, cks, brl, brh;
@@ -431,10 +430,6 @@ static int riic_init_hw(struct riic_dev *riic)
 		 rate / total_ticks, ((brl + 3) * 100) / (brl + brh + 6),
 		 t->scl_fall_ns / ns_per_tick, t->scl_rise_ns / ns_per_tick, cks, brl, brh);
 
-	ret = pm_runtime_resume_and_get(dev);
-	if (ret)
-		return ret;
-
 	/* Changing the order of accessing IICRST and ICE may break things! */
 	riic_writeb(riic, ICCR1_IICRST | ICCR1_SOWP, RIIC_ICCR1);
 	riic_clear_set_bit(riic, 0, ICCR1_ICE, RIIC_ICCR1);
@@ -451,8 +446,23 @@ static int riic_init_hw(struct riic_dev *riic)
 
 	riic_clear_set_bit(riic, ICCR1_IICRST, 0, RIIC_ICCR1);
 
-	pm_runtime_put_autosuspend(dev);
 	return 0;
+}
+
+static int riic_init_hw(struct riic_dev *riic)
+{
+	struct device *dev = riic->adapter.dev.parent;
+	int ret;
+
+	ret = pm_runtime_resume_and_get(dev);
+	if (ret)
+		return ret;
+
+	ret = __riic_init_hw(riic);
+
+	pm_runtime_put_autosuspend(dev);
+
+	return ret;
 }
 
 static int riic_get_scl(struct i2c_adapter *adap)
@@ -572,6 +582,8 @@ static int riic_i2c_probe(struct platform_device *pdev)
 
 	i2c_parse_fw_timings(dev, &riic->i2c_t, true);
 
+	platform_set_drvdata(pdev, riic);
+
 	/* Default 0 to save power. Can be overridden via sysfs for lower latency. */
 	pm_runtime_set_autosuspend_delay(dev, 0);
 	pm_runtime_use_autosuspend(dev);
@@ -584,8 +596,6 @@ static int riic_i2c_probe(struct platform_device *pdev)
 	ret = i2c_add_adapter(adap);
 	if (ret)
 		goto out;
-
-	platform_set_drvdata(pdev, riic);
 
 	dev_info(dev, "registered with %dHz bus speed\n", riic->i2c_t.bus_freq_hz);
 	return 0;
@@ -668,27 +678,17 @@ static const struct riic_of_data riic_rz_t2h_info = {
 	.num_irqs = ARRAY_SIZE(riic_rzt2h_irqs),
 };
 
-static int riic_i2c_suspend(struct device *dev)
+static int riic_i2c_runtime_suspend(struct device *dev)
 {
 	struct riic_dev *riic = dev_get_drvdata(dev);
-	int ret;
-
-	ret = pm_runtime_resume_and_get(dev);
-	if (ret)
-		return ret;
-
-	i2c_mark_adapter_suspended(&riic->adapter);
 
 	/* Disable output on SDA, SCL pins. */
 	riic_clear_set_bit(riic, ICCR1_ICE, 0, RIIC_ICCR1);
 
-	pm_runtime_mark_last_busy(dev);
-	pm_runtime_put_sync(dev);
-
 	return reset_control_assert(riic->rstc);
 }
 
-static int riic_i2c_resume(struct device *dev)
+static int riic_i2c_runtime_resume(struct device *dev)
 {
 	struct riic_dev *riic = dev_get_drvdata(dev);
 	int ret;
@@ -697,7 +697,7 @@ static int riic_i2c_resume(struct device *dev)
 	if (ret)
 		return ret;
 
-	ret = riic_init_hw(riic);
+	ret = __riic_init_hw(riic);
 	if (ret) {
 		/*
 		 * In case this happens there is no way to recover from this
@@ -708,13 +708,30 @@ static int riic_i2c_resume(struct device *dev)
 		return ret;
 	}
 
-	i2c_mark_adapter_resumed(&riic->adapter);
-
 	return 0;
 }
 
+static int riic_i2c_suspend(struct device *dev)
+{
+	struct riic_dev *riic = dev_get_drvdata(dev);
+
+	i2c_mark_adapter_suspended(&riic->adapter);
+
+	return pm_runtime_force_suspend(dev);
+}
+
+static int riic_i2c_resume(struct device *dev)
+{
+	struct riic_dev *riic = dev_get_drvdata(dev);
+
+	i2c_mark_adapter_resumed(&riic->adapter);
+
+	return pm_runtime_force_resume(dev);
+}
+
 static const struct dev_pm_ops riic_i2c_pm_ops = {
-	SYSTEM_SLEEP_PM_OPS(riic_i2c_suspend, riic_i2c_resume)
+	NOIRQ_SYSTEM_SLEEP_PM_OPS(riic_i2c_suspend, riic_i2c_resume)
+	RUNTIME_PM_OPS(riic_i2c_runtime_suspend, riic_i2c_runtime_resume, NULL)
 };
 
 static const struct of_device_id riic_i2c_dt_ids[] = {
