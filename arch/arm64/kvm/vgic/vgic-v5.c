@@ -54,6 +54,28 @@ int vgic_v5_probe(const struct gic_kvm_info *info)
 	return 0;
 }
 
+/*
+ * Sets/clears the corresponding bit in the ICH_PPI_DVIR register.
+ */
+int vgic_v5_set_ppi_dvi(struct kvm_vcpu *vcpu, u32 irq, bool dvi)
+{
+	struct vgic_v5_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v5;
+	u32 ppi = FIELD_GET(GICV5_HWIRQ_ID, irq);
+
+	if (ppi >= 128)
+		return -EINVAL;
+
+	if (dvi) {
+		/* Set the bit */
+		cpu_if->vgic_ppi_dvir[ppi / 64] |= 1UL << (ppi % 64);
+	} else {
+		/* Clear the bit */
+		cpu_if->vgic_ppi_dvir[ppi / 64] &= ~(1UL << (ppi % 64));
+	}
+
+	return 0;
+}
+
 void vgic_v5_load(struct kvm_vcpu *vcpu)
 {
 	struct vgic_v5_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v5;
