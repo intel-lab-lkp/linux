@@ -1910,6 +1910,8 @@ static vm_fault_t btrfs_page_mkwrite(struct vm_fault *vmf)
 		if (!only_release_metadata)
 			btrfs_free_reserved_data_space(inode, data_reserved,
 						       page_start, reserved_space);
+		extent_changeset_free(data_reserved);
+		data_reserved = NULL;
 		goto out_noreserve;
 	}
 
