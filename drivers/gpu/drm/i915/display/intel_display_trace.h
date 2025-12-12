@@ -22,6 +22,7 @@
 #include "intel_display_core.h"
 #include "intel_display_limits.h"
 #include "intel_display_types.h"
+#include "intel_dsb.h"
 #include "intel_vblank.h"
 
 #define __dev_name_display(display) dev_name((display)->drm->dev)
@@ -678,6 +679,56 @@ TRACE_EVENT(intel_fbc_nuke,
 
 	    TP_printk("dev %s, pipe %c, %s, frame=%u, scanline=%u",
 		      __get_str(dev), __entry->pipe_name, __get_str(name),
+		      __entry->frame, __entry->scanline)
+);
+
+TRACE_EVENT(intel_dsb_commit,
+	    TP_PROTO(struct intel_crtc *crtc, enum intel_dsb_id dsb_id),
+	    TP_ARGS(crtc, dsb_id),
+
+	    TP_STRUCT__entry(
+			     __string(dev, __dev_name_kms(crtc))
+			     __field(char, pipe_name)
+			     __field(u32, dsb_id)
+			     __field(u32, frame)
+			     __field(u32, scanline)
+			     ),
+
+	    TP_fast_assign(
+			   __assign_str(dev);
+			   __entry->pipe_name = pipe_name(crtc->pipe);
+			   __entry->dsb_id = dsb_id;
+			   __entry->frame = intel_crtc_get_vblank_counter(crtc);
+			   __entry->scanline = intel_get_crtc_scanline(crtc);
+			   ),
+
+	    TP_printk("dev %s, pipe %c, DSB %d, frame=%u, scanline=%u",
+		      __get_str(dev), __entry->pipe_name, __entry->dsb_id,
+		      __entry->frame, __entry->scanline)
+);
+
+TRACE_EVENT(intel_dsb_done,
+	    TP_PROTO(struct intel_crtc *crtc, enum intel_dsb_id dsb_id),
+	    TP_ARGS(crtc, dsb_id),
+
+	    TP_STRUCT__entry(
+			     __string(dev, __dev_name_kms(crtc))
+			     __field(char, pipe_name)
+			     __field(u32, dsb_id)
+			     __field(u32, frame)
+			     __field(u32, scanline)
+			     ),
+
+	    TP_fast_assign(
+			   __assign_str(dev);
+			   __entry->pipe_name = pipe_name(crtc->pipe);
+			   __entry->dsb_id = dsb_id;
+			   __entry->frame = intel_crtc_get_vblank_counter(crtc);
+			   __entry->scanline = intel_get_crtc_scanline(crtc);
+			   ),
+
+	    TP_printk("dev %s, pipe %c, DSB %d, frame=%u, scanline=%u",
+		      __get_str(dev), __entry->pipe_name, __entry->dsb_id,
 		      __entry->frame, __entry->scanline)
 );
 
