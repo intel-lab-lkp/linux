@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mfd/aaeon,srg-imx8pl-mcu.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: AAEON Embedded Controller
+
+maintainers:
+  - Jérémie Dautheribes <jeremie.dautheribes@bootlin.com>
+  - Thomas Perrot <thomas.perrot@bootlin.com>
+
+description: |
+  AAEON embeds a microcontroller on their embedded boards providing system
+  features such as GPIO control, watchdog timer, and LED management.
+  The MCU is connected via I2C bus.
+
+properties:
+  compatible:
+    const: aaeon,srg-imx8pl-mcu
+
+  reg:
+    maxItems: 1
+
+  gpio:
+    $ref: /schemas/gpio/aaeon,srg-imx8pl-gpio.yaml
+
+  watchdog:
+    $ref: /schemas/watchdog/aaeon,srg-imx8pl-wdt.yaml
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      aaeon_mcu: embedded-controller@62 {
+        compatible = "aaeon,srg-imx8pl-mcu";
+        reg = <0x62>;
+
+        gpio {
+          compatible = "aaeon,srg-imx8pl-gpio";
+          gpio-controller;
+          #gpio-cells = <2>;
+          ngpios = <19>;
+        };
+
+        watchdog {
+          compatible = "aaeon,srg-imx8pl-wdt";
+        };
+      };
+    };
