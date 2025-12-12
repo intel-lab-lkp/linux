@@ -62,7 +62,9 @@ static int cpc_hd_message_send(struct cpc_host_device *cpc_hd, u16 cport_id,
 	CPC_SKB_CB(skb)->cport = cport;
 	CPC_SKB_CB(skb)->gb_message = message;
 
-	return cpc_cport_transmit(cport, skb);
+	cpc_cport_transmit(cport, skb);
+
+	return 0;
 }
 
 static int cpc_hd_cport_allocate(struct cpc_host_device *cpc_hd, int cport_id, unsigned long flags)
