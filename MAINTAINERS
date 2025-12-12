@@ -620,6 +620,7 @@ ADVANTECH EIO DRIVER
 M:	Ramiro Oliveira <ramiro.oliveira@advantech.com>
 S:	Maintained
 F:	drivers/gpio/gpio-eio.c
+F:	drivers/hwmon/eio-hwmon.c
 F:	drivers/mfd/eio_core.c
 F:	include/linux/mfd/eio.h
 

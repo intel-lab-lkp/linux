@@ -2043,6 +2043,16 @@ config SENSORS_DME1737
 	  This driver can also be built as a module. If so, the module
 	  will be called dme1737.
 
+config SENSORS_EIO
+	tristate "Advantech EIO HWMON"
+	depends on MFD_EIO
+	help
+	  If you say yes here you get support for the Advantech EIO
+	  temperature, voltage and fan speed monitoring block.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called eio-hwmon
+
 config SENSORS_EMC1403
 	tristate "SMSC EMC1403/23 thermal sensor"
 	depends on I2C
