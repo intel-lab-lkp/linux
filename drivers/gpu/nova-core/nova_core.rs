@@ -2,7 +2,7 @@
 
 //! Nova Core GPU Driver
 
-use kernel::{error::Error, pci, prelude::*, InPlaceModule};
+use kernel::{error::Error, pci, prelude::*, InPlaceModule, debugfs::Dir};
 use pin_init::{PinInit, pinned_drop};
 
 #[macro_use]
@@ -24,6 +24,8 @@ mod vbios;
 
 pub(crate) const MODULE_NAME: &kernel::str::CStr = <LocalModule as kernel::ModuleMetadata>::NAME;
 
+static mut DEBUGFS_ROOT: Option<Dir> = None;
+
 #[pin_data(PinnedDrop)]
 struct NovaCoreModule {
     #[pin]
@@ -33,6 +35,13 @@ struct NovaCoreModule {
 impl InPlaceModule for NovaCoreModule {
     fn init(module: &'static kernel::ThisModule) -> impl PinInit<Self, Error> {
         pr_info!("NovaCore GPU driver loaded\n");
+
+        let dir = Dir::new(kernel::c_str!("nova_core"));
+
+        // SAFETY: we are the only driver code running, so there cannot be any concurrent access to
+        // `DEBUGFS_ROOT`.
+        unsafe { DEBUGFS_ROOT = Some(dir) };
+
         try_pin_init!(Self {
             _driver <- kernel::driver::Registration::new(MODULE_NAME, module),
         })
@@ -42,6 +51,9 @@ impl InPlaceModule for NovaCoreModule {
 #[pinned_drop]
 impl PinnedDrop for NovaCoreModule {
     fn drop(self: Pin<&mut Self>) {
+        // SAFETY: we are the only driver code running, so there cannot be any concurrent access to
+        // `DEBUGFS_ROOT`.
+        unsafe { DEBUGFS_ROOT = None };
     }
 }
 
