@@ -190,6 +190,7 @@ static void fuse_lookup_init(struct fuse_conn *fc, struct fuse_args *args,
 
 		args->opcode = FUSE_LOOKUP_HANDLE;
 		args->out_argvar = true;
+		args->out_argvar_idx = 0;
 
 		if (dir)
 			fi = get_fuse_inode(dir);

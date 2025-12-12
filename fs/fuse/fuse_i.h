@@ -1164,6 +1164,8 @@ extern const struct file_operations fuse_dev_operations;
 
 extern const struct dentry_operations fuse_dentry_operations;
 
+extern int fuse_inode_eq(struct inode *inode, void *_nodeidp);
+
 /**
  * Get a filled in inode
  */
@@ -1646,5 +1648,9 @@ extern void fuse_sysctl_unregister(void);
 #define fuse_sysctl_register()		(0)
 #define fuse_sysctl_unregister()	do { } while (0)
 #endif /* CONFIG_SYSCTL */
+
+/* export.c */
+extern const struct export_operations fuse_export_operations;
+extern const struct export_operations fuse_export_fid_operations;
 
 #endif /* _FS_FUSE_I_H */
