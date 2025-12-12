@@ -569,11 +569,11 @@ static int __vgic_v3_highest_priority_lr(struct kvm_vcpu *vcpu, u32 vmcr,
 			continue;
 
 		/* Group-0 interrupt, but Group-0 disabled? */
-		if (!(val & ICH_LR_GROUP) && !(vmcr & ICH_VMCR_ENG0_MASK))
+		if (!(val & ICH_LR_GROUP) && !(vmcr & ICH_VMCR_EL2_VENG0_MASK))
 			continue;
 
 		/* Group-1 interrupt, but Group-1 disabled? */
-		if ((val & ICH_LR_GROUP) && !(vmcr & ICH_VMCR_ENG1_MASK))
+		if ((val & ICH_LR_GROUP) && !(vmcr & ICH_VMCR_EL2_VENG1_MASK))
 			continue;
 
 		/* Not the highest priority? */
@@ -646,19 +646,19 @@ static int __vgic_v3_get_highest_active_priority(void)
 
 static unsigned int __vgic_v3_get_bpr0(u32 vmcr)
 {
-	return (vmcr & ICH_VMCR_BPR0_MASK) >> ICH_VMCR_BPR0_SHIFT;
+	return FIELD_GET(ICH_VMCR_EL2_VBPR0, vmcr);
 }
 
 static unsigned int __vgic_v3_get_bpr1(u32 vmcr)
 {
 	unsigned int bpr;
 
-	if (vmcr & ICH_VMCR_CBPR_MASK) {
+	if (vmcr & ICH_VMCR_EL2_VCBPR_MASK) {
 		bpr = __vgic_v3_get_bpr0(vmcr);
 		if (bpr < 7)
 			bpr++;
 	} else {
-		bpr = (vmcr & ICH_VMCR_BPR1_MASK) >> ICH_VMCR_BPR1_SHIFT;
+		bpr = FIELD_GET(ICH_VMCR_EL2_VBPR1, vmcr);
 	}
 
 	return bpr;
@@ -758,7 +758,7 @@ static void __vgic_v3_read_iar(struct kvm_vcpu *vcpu, u32 vmcr, int rt)
 	if (grp != !!(lr_val & ICH_LR_GROUP))
 		goto spurious;
 
-	pmr = (vmcr & ICH_VMCR_PMR_MASK) >> ICH_VMCR_PMR_SHIFT;
+	pmr = FIELD_GET(ICH_VMCR_EL2_VPMR, vmcr);
 	lr_prio = (lr_val & ICH_LR_PRIORITY_MASK) >> ICH_LR_PRIORITY_SHIFT;
 	if (pmr <= lr_prio)
 		goto spurious;
@@ -806,7 +806,7 @@ static int ___vgic_v3_write_dir(struct kvm_vcpu *vcpu, u32 vmcr, int rt)
 	int lr;
 
 	/* EOImode == 0, nothing to be done here */
-	if (!(vmcr & ICH_VMCR_EOIM_MASK))
+	if (!FIELD_GET(ICH_VMCR_EL2_VEOIM_MASK, vmcr))
 		return 1;
 
 	/* No deactivate to be performed on an LPI */
@@ -849,7 +849,7 @@ static void __vgic_v3_write_eoir(struct kvm_vcpu *vcpu, u32 vmcr, int rt)
 	}
 
 	/* EOImode == 1 and not an LPI, nothing to be done here */
-	if ((vmcr & ICH_VMCR_EOIM_MASK) && !(vid >= VGIC_MIN_LPI))
+	if (FIELD_GET(ICH_VMCR_EL2_VEOIM_MASK, vmcr) && !(vid >= VGIC_MIN_LPI))
 		return;
 
 	lr_prio = (lr_val & ICH_LR_PRIORITY_MASK) >> ICH_LR_PRIORITY_SHIFT;
@@ -865,12 +865,12 @@ static void __vgic_v3_write_eoir(struct kvm_vcpu *vcpu, u32 vmcr, int rt)
 
 static void __vgic_v3_read_igrpen0(struct kvm_vcpu *vcpu, u32 vmcr, int rt)
 {
-	vcpu_set_reg(vcpu, rt, !!(vmcr & ICH_VMCR_ENG0_MASK));
+	vcpu_set_reg(vcpu, rt, !!FIELD_GET(ICH_VMCR_EL2_VENG0_MASK, vmcr));
 }
 
 static void __vgic_v3_read_igrpen1(struct kvm_vcpu *vcpu, u32 vmcr, int rt)
 {
-	vcpu_set_reg(vcpu, rt, !!(vmcr & ICH_VMCR_ENG1_MASK));
+	vcpu_set_reg(vcpu, rt, !!FIELD_GET(ICH_VMCR_EL2_VENG1_MASK, vmcr));
 }
 
 static void __vgic_v3_write_igrpen0(struct kvm_vcpu *vcpu, u32 vmcr, int rt)
@@ -878,9 +878,9 @@ static void __vgic_v3_write_igrpen0(struct kvm_vcpu *vcpu, u32 vmcr, int rt)
 	u64 val = vcpu_get_reg(vcpu, rt);
 
 	if (val & 1)
-		vmcr |= ICH_VMCR_ENG0_MASK;
+		vmcr |= ICH_VMCR_EL2_VENG0_MASK;
 	else
-		vmcr &= ~ICH_VMCR_ENG0_MASK;
+		vmcr &= ~ICH_VMCR_EL2_VENG0_MASK;
 
 	__vgic_v3_write_vmcr(vmcr);
 }
@@ -890,9 +890,9 @@ static void __vgic_v3_write_igrpen1(struct kvm_vcpu *vcpu, u32 vmcr, int rt)
 	u64 val = vcpu_get_reg(vcpu, rt);
 
 	if (val & 1)
-		vmcr |= ICH_VMCR_ENG1_MASK;
+		vmcr |= ICH_VMCR_EL2_VENG1_MASK;
 	else
-		vmcr &= ~ICH_VMCR_ENG1_MASK;
+		vmcr &= ~ICH_VMCR_EL2_VENG1_MASK;
 
 	__vgic_v3_write_vmcr(vmcr);
 }
@@ -916,10 +916,8 @@ static void __vgic_v3_write_bpr0(struct kvm_vcpu *vcpu, u32 vmcr, int rt)
 	if (val < bpr_min)
 		val = bpr_min;
 
-	val <<= ICH_VMCR_BPR0_SHIFT;
-	val &= ICH_VMCR_BPR0_MASK;
-	vmcr &= ~ICH_VMCR_BPR0_MASK;
-	vmcr |= val;
+	vmcr &= ~ICH_VMCR_EL2_VBPR0_MASK;
+	vmcr |= FIELD_PREP(ICH_VMCR_EL2_VBPR0, val);
 
 	__vgic_v3_write_vmcr(vmcr);
 }
@@ -929,17 +927,15 @@ static void __vgic_v3_write_bpr1(struct kvm_vcpu *vcpu, u32 vmcr, int rt)
 	u64 val = vcpu_get_reg(vcpu, rt);
 	u8 bpr_min = __vgic_v3_bpr_min();
 
-	if (vmcr & ICH_VMCR_CBPR_MASK)
+	if (FIELD_GET(ICH_VMCR_EL2_VCBPR_MASK, val))
 		return;
 
 	/* Enforce BPR limiting */
 	if (val < bpr_min)
 		val = bpr_min;
 
-	val <<= ICH_VMCR_BPR1_SHIFT;
-	val &= ICH_VMCR_BPR1_MASK;
-	vmcr &= ~ICH_VMCR_BPR1_MASK;
-	vmcr |= val;
+	vmcr &= ~ICH_VMCR_EL2_VBPR1_MASK;
+	vmcr |= FIELD_PREP(ICH_VMCR_EL2_VBPR1, val);
 
 	__vgic_v3_write_vmcr(vmcr);
 }
@@ -1029,19 +1025,15 @@ spurious:
 
 static void __vgic_v3_read_pmr(struct kvm_vcpu *vcpu, u32 vmcr, int rt)
 {
-	vmcr &= ICH_VMCR_PMR_MASK;
-	vmcr >>= ICH_VMCR_PMR_SHIFT;
-	vcpu_set_reg(vcpu, rt, vmcr);
+	vcpu_set_reg(vcpu, rt, FIELD_GET(ICH_VMCR_EL2_VPMR, vmcr));
 }
 
 static void __vgic_v3_write_pmr(struct kvm_vcpu *vcpu, u32 vmcr, int rt)
 {
 	u32 val = vcpu_get_reg(vcpu, rt);
 
-	val <<= ICH_VMCR_PMR_SHIFT;
-	val &= ICH_VMCR_PMR_MASK;
-	vmcr &= ~ICH_VMCR_PMR_MASK;
-	vmcr |= val;
+	vmcr &= ~ICH_VMCR_EL2_VPMR_MASK;
+	vmcr |= FIELD_PREP(ICH_VMCR_EL2_VPMR, val);
 
 	write_gicreg(vmcr, ICH_VMCR_EL2);
 }
@@ -1064,9 +1056,9 @@ static void __vgic_v3_read_ctlr(struct kvm_vcpu *vcpu, u32 vmcr, int rt)
 	/* A3V */
 	val |= ((vtr >> 21) & 1) << ICC_CTLR_EL1_A3V_SHIFT;
 	/* EOImode */
-	val |= ((vmcr & ICH_VMCR_EOIM_MASK) >> ICH_VMCR_EOIM_SHIFT) << ICC_CTLR_EL1_EOImode_SHIFT;
+	val |= FIELD_GET(ICH_VMCR_EL2_VEOIM, vmcr) << ICC_CTLR_EL1_EOImode_SHIFT;
 	/* CBPR */
-	val |= (vmcr & ICH_VMCR_CBPR_MASK) >> ICH_VMCR_CBPR_SHIFT;
+	val |= FIELD_GET(ICH_VMCR_EL2_VCBPR, vmcr);
 
 	vcpu_set_reg(vcpu, rt, val);
 }
@@ -1076,14 +1068,14 @@ static void __vgic_v3_write_ctlr(struct kvm_vcpu *vcpu, u32 vmcr, int rt)
 	u32 val = vcpu_get_reg(vcpu, rt);
 
 	if (val & ICC_CTLR_EL1_CBPR_MASK)
-		vmcr |= ICH_VMCR_CBPR_MASK;
+		vmcr |= ICH_VMCR_EL2_VCBPR_MASK;
 	else
-		vmcr &= ~ICH_VMCR_CBPR_MASK;
+		vmcr &= ~ICH_VMCR_EL2_VCBPR_MASK;
 
 	if (val & ICC_CTLR_EL1_EOImode_MASK)
-		vmcr |= ICH_VMCR_EOIM_MASK;
+		vmcr |= ICH_VMCR_EL2_VEOIM_MASK;
 	else
-		vmcr &= ~ICH_VMCR_EOIM_MASK;
+		vmcr &= ~ICH_VMCR_EL2_VEOIM_MASK;
 
 	write_gicreg(vmcr, ICH_VMCR_EL2);
 }
