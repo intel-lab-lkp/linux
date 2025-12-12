@@ -199,15 +199,6 @@ void cpc_hd_del(struct cpc_host_device *cpc_hd)
 }
 EXPORT_SYMBOL_GPL(cpc_hd_del);
 
-void cpc_hd_message_sent(struct sk_buff *skb, int status)
-{
-	struct cpc_host_device *cpc_hd = CPC_SKB_CB(skb)->cport->cpc_hd;
-	struct gb_host_device *hd = cpc_hd->gb_hd;
-
-	greybus_message_sent(hd, CPC_SKB_CB(skb)->gb_message, status);
-}
-EXPORT_SYMBOL_GPL(cpc_hd_message_sent);
-
 void cpc_hd_rcvd(struct cpc_host_device *cpc_hd, struct sk_buff *skb)
 {
 	struct gb_operation_msg_hdr *gb_hdr;
