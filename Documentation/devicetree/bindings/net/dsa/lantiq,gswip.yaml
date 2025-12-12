@@ -106,6 +106,11 @@ patternProperties:
         unevaluatedProperties: false
 
         properties:
+          maxlinear,mii-slew-rate-slow:
+            type: boolean
+            description:
+              Configure R(G)MII TXD/TXC pads' slew rate to "slow" instead
+              of "normal" to reduce radiated emissions.
           maxlinear,rmii-refclk-out:
             type: boolean
             description:
