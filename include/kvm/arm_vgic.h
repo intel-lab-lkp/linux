@@ -533,6 +533,11 @@ int vgic_v4_load(struct kvm_vcpu *vcpu);
 void vgic_v4_commit(struct kvm_vcpu *vcpu);
 int vgic_v4_put(struct kvm_vcpu *vcpu);
 
+bool vgic_v5_ppi_set_pending_state(struct kvm_vcpu *vcpu,
+				   struct vgic_irq *irq);
+bool vgic_v5_ppi_queue_irq_unlock(struct kvm *kvm, struct vgic_irq *irq,
+				  unsigned long flags);
+
 bool vgic_state_is_nested(struct kvm_vcpu *vcpu);
 
 /* CPU HP callbacks */
