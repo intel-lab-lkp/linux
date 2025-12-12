@@ -594,7 +594,7 @@ void nfsd_shutdown_threads(struct net *net)
 	}
 
 	/* Kill outstanding nfsd threads */
-	svc_set_num_threads(serv, 0);
+	svc_set_num_threads(serv, 0, 0);
 	nfsd_destroy_serv(net);
 	mutex_unlock(&nfsd_mutex);
 }
@@ -704,7 +704,7 @@ int nfsd_set_nrthreads(int n, int *nthreads, struct net *net)
 
 	/* Special case: When n == 1, distribute threads equally among pools. */
 	if (n == 1)
-		return svc_set_num_threads(nn->nfsd_serv, nthreads[0]);
+		return svc_set_num_threads(nn->nfsd_serv, nthreads[0], 0);
 
 	if (n > nn->nfsd_serv->sv_nrpools)
 		n = nn->nfsd_serv->sv_nrpools;
@@ -732,7 +732,7 @@ int nfsd_set_nrthreads(int n, int *nthreads, struct net *net)
 	for (i = 0; i < n; i++) {
 		err = svc_set_pool_threads(nn->nfsd_serv,
 					   &nn->nfsd_serv->sv_pools[i],
-					   nthreads[i]);
+					   nthreads[i], 0);
 		if (err)
 			goto out;
 	}
@@ -741,7 +741,7 @@ int nfsd_set_nrthreads(int n, int *nthreads, struct net *net)
 	for (i = n; i < nn->nfsd_serv->sv_nrpools; ++i) {
 		err = svc_set_pool_threads(nn->nfsd_serv,
 					   &nn->nfsd_serv->sv_pools[i],
-					   0);
+					   0, 0);
 		if (err)
 			goto out;
 	}

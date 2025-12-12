@@ -821,6 +821,7 @@ svc_stop_kthreads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
  * @serv: RPC service to adjust
  * @pool: Specific pool from which to choose threads
  * @nrservs: New number of threads for @serv (0 or less means kill all threads)
+ * @min_threads: minimum number of threads per pool (0 means set to same as nrservs)
  *
  * Create or destroy threads in @pool to bring it to @nrservs.
  *
@@ -831,12 +832,22 @@ svc_stop_kthreads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
  * starting a thread.
  */
 int
-svc_set_pool_threads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
+svc_set_pool_threads(struct svc_serv *serv, struct svc_pool *pool, int nrservs,
+		     unsigned int min_threads)
 {
 	if (!pool)
 		return -EINVAL;
 
 	pool->sp_nrthrmax = nrservs;
+	if (min_threads) {
+		if (pool->sp_nrthreads > nrservs) {
+			// fallthrough to update nrservs
+		} else if (pool->sp_nrthreads < min_threads) {
+			nrservs = min_threads;
+		} else {
+			return 0;
+		}
+	}
 	nrservs -= pool->sp_nrthreads;
 
 	if (nrservs > 0)
@@ -851,6 +862,7 @@ EXPORT_SYMBOL_GPL(svc_set_pool_threads);
  * svc_set_num_threads - adjust number of threads in serv
  * @serv: RPC service to adjust
  * @nrservs: New number of threads for @serv (0 or less means kill all threads)
+ * @min_threads: minimum number of threads per pool (0 means set to same as nrservs)
  *
  * Create or destroy threads in @serv to bring it to @nrservs. If there
  * are multiple pools then the new threads or victims will be distributed
@@ -863,20 +875,23 @@ EXPORT_SYMBOL_GPL(svc_set_pool_threads);
  * starting a thread.
  */
 int
-svc_set_num_threads(struct svc_serv *serv, int nrservs)
+svc_set_num_threads(struct svc_serv *serv, int nrservs, unsigned int min_threads)
 {
 	int base = nrservs / serv->sv_nrpools;
 	int remain = nrservs % serv->sv_nrpools;
 	int i, err;
 
 	for (i = 0; i < serv->sv_nrpools; ++i) {
+		struct svc_pool *pool = &serv->sv_pools[i];
 		int threads = base;
 
 		if (remain) {
 			++threads;
 			--remain;
 		}
-		err = svc_set_pool_threads(serv, &serv->sv_pools[i], threads);
+
+		pool->sp_nrthrmin = min_threads;
+		err = svc_set_pool_threads(serv, pool, threads, min_threads);
 		if (err)
 			break;
 	}
