@@ -9,6 +9,7 @@
 #include <linux/device.h>
 #include <linux/greybus.h>
 #include <linux/mutex.h>
+#include <linux/skbuff.h>
 #include <linux/types.h>
 
 #define GB_CPC_MSG_SIZE_MAX 4096
@@ -18,7 +19,7 @@ struct cpc_cport;
 struct cpc_host_device;
 
 struct cpc_hd_driver {
-	int (*transmit)(struct cpc_host_device *hd, struct sk_buff *skb);
+	int (*wake_tx)(struct cpc_host_device *cpc_hd);
 };
 
 /**
@@ -34,6 +35,8 @@ struct cpc_host_device {
 
 	struct mutex lock; /* Synchronize access to cports */
 	struct cpc_cport *cports[GB_CPC_NUM_CPORTS];
+
+	struct sk_buff_head tx_queue;
 };
 
 static inline struct device *cpc_hd_dev(struct cpc_host_device *cpc_hd)
@@ -47,6 +50,11 @@ void cpc_hd_put(struct cpc_host_device *cpc_hd);
 void cpc_hd_del(struct cpc_host_device *cpc_hd);
 void cpc_hd_rcvd(struct cpc_host_device *cpc_hd, struct sk_buff *skb);
 
-int cpc_hd_send_skb(struct cpc_host_device *cpc_hd, struct sk_buff *skb);
+void cpc_hd_send_skb(struct cpc_host_device *cpc_hd, struct sk_buff *skb);
+
+bool cpc_hd_tx_queue_empty(struct cpc_host_device *cpc_hd);
+struct sk_buff *cpc_hd_dequeue(struct cpc_host_device *cpc_hd);
+u32 cpc_hd_dequeue_many(struct cpc_host_device *cpc_hd, struct sk_buff_head *frame_list,
+			unsigned int max_frames);
 
 #endif
