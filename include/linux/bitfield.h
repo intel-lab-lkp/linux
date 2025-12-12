@@ -45,22 +45,6 @@
 
 #define __bf_shf(x) (__builtin_ffsll(x) - 1)
 
-#define __scalar_type_to_unsigned_cases(type)				\
-		unsigned type:	(unsigned type)0,			\
-		signed type:	(unsigned type)0
-
-#define __unsigned_scalar_typeof(x) typeof(				\
-		_Generic((x),						\
-			char:	(unsigned char)0,			\
-			__scalar_type_to_unsigned_cases(char),		\
-			__scalar_type_to_unsigned_cases(short),		\
-			__scalar_type_to_unsigned_cases(int),		\
-			__scalar_type_to_unsigned_cases(long),		\
-			__scalar_type_to_unsigned_cases(long long),	\
-			default: (x)))
-
-#define __bf_cast_unsigned(type, x)	((__unsigned_scalar_typeof(type))(x))
-
 #define __BF_FIELD_CHECK_MASK(_mask, _val, _pfx)			\
 	({								\
 		BUILD_BUG_ON_MSG(!__builtin_constant_p(_mask),		\
@@ -75,8 +59,8 @@
 	})
 
 #define __BF_FIELD_CHECK_REG(mask, reg, pfx)				\
-	BUILD_BUG_ON_MSG(__bf_cast_unsigned(mask, mask) >		\
-			 __bf_cast_unsigned(reg, ~0ull),		\
+	BUILD_BUG_ON_MSG((mask) + 0U + 0UL + 0ULL >			\
+			 ~0ULL >> (64 - 8 * sizeof (reg)),		\
 			 pfx "type of reg too small for mask")
 
 #define __BF_FIELD_CHECK(mask, reg, val, pfx)				\
