@@ -12,8 +12,8 @@
 
 /**
  * FIELD_PREP_WM16() - prepare a bitfield element with a mask in the upper half
- * @_mask: shifted mask defining the field's length and position
- * @_val:  value to put in the field
+ * @mask: shifted mask defining the field's length and position
+ * @val:  value to put in the field
  *
  * FIELD_PREP_WM16() masks and shifts up the value, as well as bitwise ORs the
  * result with the mask shifted up by 16.
@@ -23,15 +23,14 @@
  * register, a bit in the lower half is only updated if the corresponding bit
  * in the upper half is high.
  */
-#define FIELD_PREP_WM16(_mask, _val)					     \
-	({								     \
-		typeof(_val) __val = _val;				     \
-		typeof(_mask) __mask = _mask;				     \
-		__BF_FIELD_CHECK(__mask, ((u16)0U), __val,		     \
-				 "HWORD_UPDATE: ");			     \
-		(((typeof(__mask))(__val) << __bf_shf(__mask)) & (__mask)) | \
-		((__mask) << 16);					     \
-	})
+#define FIELD_PREP_WM16(mask, val)				\
+({								\
+	__auto_type _wm16_mask = mask;				\
+	u32 _wm16_val = FIELD_PREP(_wm16_mask, val);		\
+	BUILD_BUG_ON_MSG(_wm16_mask > 0xffffu,			\
+			 "FIELD_PREP_WM16: mask too large");	\
+	_wm16_val | (_wm16_mask << 16);				\
+})
 
 /**
  * FIELD_PREP_WM16_CONST() - prepare a constant bitfield element with a mask in
