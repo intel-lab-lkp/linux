@@ -896,9 +896,11 @@ static int
 nfsd(void *vrqstp)
 {
 	struct svc_rqst *rqstp = (struct svc_rqst *) vrqstp;
+	struct svc_pool *pool = rqstp->rq_pool;
 	struct svc_xprt *perm_sock = list_entry(rqstp->rq_server->sv_permsocks.next, typeof(struct svc_xprt), xpt_list);
 	struct net *net = perm_sock->xpt_net;
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+	bool have_mutex = false;
 
 	/* At this point, the thread shares current->fs
 	 * with the init process. We need to create files with the
@@ -916,7 +918,36 @@ nfsd(void *vrqstp)
 	 * The main request loop
 	 */
 	while (!svc_thread_should_stop(rqstp)) {
-		svc_recv(rqstp);
+		switch (svc_recv(rqstp)) {
+		case -ETIMEDOUT: /* Nothing to do */
+			if (mutex_trylock(&nfsd_mutex)) {
+				if (pool->sp_nrthreads > pool->sp_nrthrmin) {
+					trace_nfsd_dynthread_kill(net, pool);
+					set_bit(RQ_VICTIM, &rqstp->rq_flags);
+					have_mutex = true;
+				} else
+					mutex_unlock(&nfsd_mutex);
+			} else {
+				trace_nfsd_dynthread_trylock_fail(net, pool);
+			}
+			break;
+		case -EBUSY: /* Too much to do */
+			if (pool->sp_nrthreads < pool->sp_nrthrmax &&
+			    mutex_trylock(&nfsd_mutex)) {
+				// check no idle threads?
+				if (pool->sp_nrthreads < pool->sp_nrthrmax) {
+					trace_nfsd_dynthread_start(net, pool);
+					svc_new_thread(rqstp->rq_server, pool);
+				}
+				mutex_unlock(&nfsd_mutex);
+			} else {
+				trace_nfsd_dynthread_trylock_fail(net, pool);
+			}
+			clear_bit(SP_TASK_STARTING, &pool->sp_flags);
+			break;
+		default:
+			break;
+		}
 		nfsd_file_net_dispose(nn);
 	}
 
@@ -924,6 +955,8 @@ nfsd(void *vrqstp)
 
 	/* Release the thread */
 	svc_exit_thread(rqstp);
+	if (have_mutex)
+		mutex_unlock(&nfsd_mutex);
 	return 0;
 }
 

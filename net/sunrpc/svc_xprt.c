@@ -714,15 +714,22 @@ svc_thread_should_sleep(struct svc_rqst *rqstp)
 	return true;
 }
 
-static void svc_thread_wait_for_work(struct svc_rqst *rqstp)
+static bool nfsd_schedule_timeout(long timeout)
+{
+	return schedule_timeout(timeout) == 0;
+}
+
+static bool svc_thread_wait_for_work(struct svc_rqst *rqstp)
 {
 	struct svc_pool *pool = rqstp->rq_pool;
+	bool did_timeout = false;
 
 	if (svc_thread_should_sleep(rqstp)) {
 		set_current_state(TASK_IDLE | TASK_FREEZABLE);
 		llist_add(&rqstp->rq_idle, &pool->sp_idle_threads);
+		clear_bit(SP_TASK_STARTING, &pool->sp_flags);
 		if (likely(svc_thread_should_sleep(rqstp)))
-			schedule();
+			did_timeout = nfsd_schedule_timeout(5 * HZ);
 
 		while (!llist_del_first_this(&pool->sp_idle_threads,
 					     &rqstp->rq_idle)) {
@@ -734,7 +741,10 @@ static void svc_thread_wait_for_work(struct svc_rqst *rqstp)
 			 * for this new work.  This thread can safely sleep
 			 * until woken again.
 			 */
-			schedule();
+			if (did_timeout)
+				did_timeout = nfsd_schedule_timeout(HZ);
+			else
+				did_timeout = nfsd_schedule_timeout(5 * HZ);
 			set_current_state(TASK_IDLE | TASK_FREEZABLE);
 		}
 		__set_current_state(TASK_RUNNING);
@@ -742,6 +752,7 @@ static void svc_thread_wait_for_work(struct svc_rqst *rqstp)
 		cond_resched();
 	}
 	try_to_freeze();
+	return did_timeout;
 }
 
 static void svc_add_new_temp_xprt(struct svc_serv *serv, struct svc_xprt *newxpt)
@@ -825,6 +836,8 @@ out:
 
 static void svc_thread_wake_next(struct svc_rqst *rqstp)
 {
+	clear_bit(SP_TASK_STARTING, &rqstp->rq_pool->sp_flags);
+
 	if (!svc_thread_should_sleep(rqstp))
 		/* More work pending after I dequeued some,
 		 * wake another worker
@@ -839,21 +852,31 @@ static void svc_thread_wake_next(struct svc_rqst *rqstp)
  * This code is carefully organised not to touch any cachelines in
  * the shared svc_serv structure, only cachelines in the local
  * svc_pool.
+ *
+ * Returns -ETIMEDOUT if idle for an extended period
+ *         -EBUSY is there is more work to do than available threads
+ *         0 otherwise.
  */
-void svc_recv(struct svc_rqst *rqstp)
+int svc_recv(struct svc_rqst *rqstp)
 {
 	struct svc_pool *pool = rqstp->rq_pool;
+	bool did_wait;
+	int ret = 0;
 
 	if (!svc_alloc_arg(rqstp))
-		return;
+		return ret;
 
-	svc_thread_wait_for_work(rqstp);
+	did_wait = svc_thread_wait_for_work(rqstp);
+
+	if (did_wait && svc_thread_should_sleep(rqstp) &&
+	    pool->sp_nrthrmin && (pool->sp_nrthreads > pool->sp_nrthrmin))
+		ret = -ETIMEDOUT;
 
 	clear_bit(SP_TASK_PENDING, &pool->sp_flags);
 
 	if (svc_thread_should_stop(rqstp)) {
 		svc_thread_wake_next(rqstp);
-		return;
+		return ret;
 	}
 
 	rqstp->rq_xprt = svc_xprt_dequeue(pool);
@@ -867,8 +890,13 @@ void svc_recv(struct svc_rqst *rqstp)
 		 */
 		if (pool->sp_idle_threads.first)
 			rqstp->rq_chandle.thread_wait = 5 * HZ;
-		else
+		else {
 			rqstp->rq_chandle.thread_wait = 1 * HZ;
+			if (!did_wait &&
+			    !test_and_set_bit(SP_TASK_STARTING,
+					      &pool->sp_flags))
+				ret = -EBUSY;
+		}
 
 		trace_svc_xprt_dequeue(rqstp);
 		svc_handle_xprt(rqstp, xprt);
@@ -887,6 +915,7 @@ void svc_recv(struct svc_rqst *rqstp)
 		}
 	}
 #endif
+	return ret;
 }
 EXPORT_SYMBOL_GPL(svc_recv);
 
