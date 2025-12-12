@@ -2991,6 +2991,24 @@ static inline struct ptdesc *pagetable_alloc_noprof(gfp_t gfp, unsigned int orde
 #define pagetable_alloc(...)	alloc_hooks(pagetable_alloc_noprof(__VA_ARGS__))
 
 /**
+ * pagetable_alloc_nolock - opportunistic reetentrant pagetables allocation
+ *                          from any context
+ * @gfp:    GFP flags. Only __GFP_ZERO, __GFP_HIGH, __GFP_ACCOUNT allowed.
+ * @order:  desired pagetable order
+ *
+ * opportunistic reetentrant version of pagetable_alloc().
+ *
+ * Return: The ptdesc describing the allocated page tables.
+ */
+static inline struct ptdesc *pagetable_alloc_nolock_noprof(gfp_t gfp, unsigned int order)
+{
+	struct page *page = alloc_pages_nolock_noprof(gfp, NUMA_NO_NODE, order);
+
+	return page_ptdesc(page);
+}
+#define pagetable_alloc_nolock(...)	alloc_hooks(pagetable_alloc_nolock_noprof(__VA_ARGS__))
+
+/**
  * pagetable_free - Free pagetables
  * @pt:	The page table descriptor
  *
