@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/watchdog/aaeon,srg-imx8pl-wdt.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: AAEON Embedded Controller Watchdog Timer
+
+maintainers:
+  - Jérémie Dautheribes <jeremie.dautheribes@bootlin.com>
+  - Thomas Perrot <thomas.perrot@bootlin.com>
+
+description: |
+  Watchdog timer functionality provided by the AAEON embedded controller.
+  The watchdog has a fixed maximum hardware heartbeat of 25 seconds and supports
+  a timeout of 240 seconds through automatic pinging. The timeout is not
+  programmable and cannot be changed via device tree properties.
+
+  The watchdog is a sub-device of the AAEON MCU and must be defined as a
+  child node of the MCU device.
+
+allOf:
+  - $ref: watchdog.yaml#
+
+properties:
+  compatible:
+    const: aaeon,srg-imx8pl-wdt
+
+required:
+  - compatible
+
+additionalProperties: false
+
+examples:
+  - |
+    watchdog {
+      compatible = "aaeon,srg-imx8pl-wdt";
+    };
