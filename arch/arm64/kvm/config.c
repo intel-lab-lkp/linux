@@ -1586,8 +1586,12 @@ static void __compute_ich_hfgrtr(struct kvm_vcpu *vcpu)
 {
 	__compute_fgt(vcpu, ICH_HFGRTR_EL2);
 
-	/* ICC_IAFFIDR_EL1 *always* needs to be trapped when running a guest */
+	/*
+	 * ICC_IAFFIDR_EL1 and ICH_PPI_HMRx_EL1 *always* needs to be
+	 * trapped when running a guest.
+	 **/
 	*vcpu_fgt(vcpu, ICH_HFGRTR_EL2) &= ~ICH_HFGRTR_EL2_ICC_IAFFIDR_EL1;
+	*vcpu_fgt(vcpu, ICH_HFGRTR_EL2) &= ~ICH_HFGRTR_EL2_ICC_PPI_HMRn_EL1;
 }
 
 void kvm_vcpu_load_fgt(struct kvm_vcpu *vcpu)

@@ -358,11 +358,16 @@ struct vgic_v3_cpu_if {
 	unsigned int used_lrs;
 };
 
+struct vgic_v5_cpu_if {
+	u64	vgic_ppi_hmr[2];
+};
+
 struct vgic_cpu {
 	/* CPU vif control registers for world switch */
 	union {
 		struct vgic_v2_cpu_if	vgic_v2;
 		struct vgic_v3_cpu_if	vgic_v3;
+		struct vgic_v5_cpu_if	vgic_v5;
 	};
 
 	struct vgic_irq *private_irqs;
