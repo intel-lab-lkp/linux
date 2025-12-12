@@ -3086,6 +3086,67 @@ static int insert_ordered_extent_file_extent(struct btrfs_trans_handle *trans,
 					   update_inode_bytes, oe->qgroup_rsv);
 }
 
+static u64 oe_csum_bytes(struct btrfs_ordered_extent *oe)
+{
+	struct btrfs_ordered_sum *sum;
+	u64 ret = 0;
+
+	list_for_each_entry(sum, &oe->list, list)
+		ret += sum->len;
+	return ret;
+}
+
+#define ASSERT_OE(cond, oe)				\
+	ASSERT(cond,					\
+"root=%lld ino=%llu file_pos=%llu num_bytes=%llu ram_bytes=%llu truncated_len=%lld csum_bytes=%llu disk_bytenr=%llu disk_num_bytes=%llu flags=0x%lx", \
+	       btrfs_root_id((oe)->inode->root),	\
+	       btrfs_ino((oe)->inode),			\
+	       (oe)->file_offset, (oe)->num_bytes,	\
+	       (oe)->ram_bytes, (oe)->truncated_len,	\
+	       oe_csum_bytes(oe),			\
+	       (oe)->disk_bytenr, (oe)->disk_num_bytes, \
+	       (oe)->flags);
+
+static void assert_oe_csums(struct btrfs_ordered_extent *oe)
+{
+	struct btrfs_inode *inode = oe->inode;
+
+	/*
+	 * Skip data reloc inodes. They are for relocation and they
+	 * can have ranges with csum and ranges without.
+	 */
+	if (btrfs_is_data_reloc_root(inode->root))
+		return;
+
+	/*
+	 * There should be no csum for NODATACOW (implies NOCSUM),
+	 * NODATASUM inode.
+	 */
+	if (test_bit(BTRFS_ORDERED_NOCOW, &oe->flags) ||
+	    inode->flags & BTRFS_INODE_NODATASUM) {
+		ASSERT_OE(list_empty(&oe->list), oe);
+		return;
+	}
+	/* For compressed OE, csum must cover the on-disk range. */
+	if (test_bit(BTRFS_ORDERED_COMPRESSED, &oe->flags)) {
+		ASSERT_OE(oe->disk_num_bytes == oe_csum_bytes(oe), oe);
+		return;
+	}
+
+	/* For truncated uncompressed OE, the csum must cover the truncated length. */
+	if (test_bit(BTRFS_ORDERED_TRUNCATED, &oe->flags)) {
+		ASSERT_OE(oe->truncated_len == oe_csum_bytes(oe), oe);
+		return;
+	}
+
+	/*
+	 * The remaining case is untruncated regular extents.
+	 *
+	 * The csum must cover the whole range.
+	 */
+	ASSERT_OE(oe->num_bytes == oe_csum_bytes(oe), oe);
+}
+
 /*
  * As ordered data IO finishes, this gets called so we can finish
  * an ordered extent if the range of bytes in the file it covers are
@@ -3165,6 +3226,8 @@ int btrfs_finish_one_ordered(struct btrfs_ordered_extent *ordered_extent)
 	}
 
 	trans->block_rsv = &inode->block_rsv;
+
+	assert_oe_csums(ordered_extent);
 
 	ret = btrfs_insert_raid_extent(trans, ordered_extent);
 	if (unlikely(ret)) {
