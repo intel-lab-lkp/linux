@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 /*
- * Copyright 2021 NXP
+ * Copyright 2021, 2025 NXP
  */
 
 /dts-v1/;
@@ -35,6 +35,12 @@
 			reusable;
 			size = <0 0x28000000>;
 			linux,cma-default;
+		};
+
+		ele_reserved: memory@90000000 {
+			compatible = "shared-dma-pool";
+			reg = <0 0x90000000 0 0x100000>;
+			no-map;
 		};
 
 		m33_reserved: noncacheable-section@a8600000 {
@@ -257,6 +263,10 @@
 	non-removable;
 	bus-width = <8>;
 	status = "okay";
+};
+
+&hsm0 {
+	memory-region = <&ele_reserved>;
 };
 
 &fec {
