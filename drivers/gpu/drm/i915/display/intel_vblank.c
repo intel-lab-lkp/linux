@@ -700,10 +700,10 @@ void intel_vblank_evade_init(const struct intel_crtc_state *old_crtc_state,
 	 * undelayed vblank, so with seamless M/N and LRR we must evade
 	 * both vblanks.
 	 *
-	 * DSB execution waits for the transcoder's undelayed vblank,
-	 * hence we must kick off the commit before that.
+	 * Chained DSB execution waits for the transcoder's undelayed
+	 * vblank, hence we must kick off the commit before that.
 	 */
-	if (intel_color_uses_dsb(new_crtc_state) ||
+	if (intel_color_uses_chained_dsb(new_crtc_state) ||
 	    new_crtc_state->update_m_n || new_crtc_state->update_lrr)
 		evade->min -= vblank_delay;
 }
