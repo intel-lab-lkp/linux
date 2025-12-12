@@ -2,6 +2,11 @@
 
 #include <linux/pci.h>
 
+const char *rust_helper_pci_name(const struct pci_dev *pdev)
+{
+	return pci_name(pdev);
+}
+
 u16 rust_helper_pci_dev_id(struct pci_dev *dev)
 {
 	return PCI_DEVID(dev->bus->number, dev->devfn);
