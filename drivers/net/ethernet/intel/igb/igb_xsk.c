@@ -529,7 +529,9 @@ int igb_xsk_wakeup(struct net_device *dev, u32 qid, u32 flags)
 	struct igb_adapter *adapter = netdev_priv(dev);
 	struct e1000_hw *hw = &adapter->hw;
 	struct igb_ring *ring;
+	struct igb_q_vector *q_vector;
 	u32 eics = 0;
+	bool trigger_irq_no_msix = false;
 
 	if (test_bit(__IGB_DOWN, &adapter->state))
 		return -ENETDOWN;
@@ -537,13 +539,76 @@ int igb_xsk_wakeup(struct net_device *dev, u32 qid, u32 flags)
 	if (!igb_xdp_is_enabled(adapter))
 		return -EINVAL;
 
-	if (qid >= adapter->num_tx_queues)
+	if ((flags & XDP_WAKEUP_RX) && (flags & XDP_WAKEUP_TX)) {
+		/* If both TX and RX need to be woken up */
+		/* check if queue pairs are active. */
+		if ((adapter->flags & IGB_FLAG_QUEUE_PAIRS)) {
+			/* Extract ring params from Rx. */
+			if (qid >= adapter->num_rx_queues)
+				return -EINVAL;
+			ring = adapter->rx_ring[qid];
+		} else {
+			/* Two irqs for Rx AND Tx need to be triggered */
+			if (qid >= adapter->num_rx_queues)
+				return -EINVAL;
+
+			if (qid >= adapter->num_tx_queues)
+				return -EINVAL;
+
+			/* IRQ trigger preparation for Rx */
+			ring = adapter->rx_ring[qid];
+			if (!ring->xsk_pool)
+				return -ENXIO;
+
+			q_vector = ring->q_vector;
+			if (!napi_if_scheduled_mark_missed(&q_vector->napi)) {
+				/* Extend the BIT mask for eics */
+				if (adapter->flags & IGB_FLAG_HAS_MSIX)
+					eics |= ring->q_vector->eims_value;
+				else
+					trigger_irq_no_msix = true;
+			}
+			/* IRQ trigger preparation for Tx */
+			ring = adapter->tx_ring[qid];
+			if (test_bit(IGB_RING_FLAG_TX_DISABLED, &ring->flags))
+				return -ENETDOWN;
+
+			if (!ring->xsk_pool)
+				return -ENXIO;
+
+			/* Retrieve the q_vector saved in the ring */
+			q_vector = ring->q_vector;
+			if (!napi_if_scheduled_mark_missed(&q_vector->napi)) {
+				/* Extend the BIT mask for eics */
+				if (adapter->flags & IGB_FLAG_HAS_MSIX)
+					eics |= ring->q_vector->eims_value;
+				else
+					trigger_irq_no_msix = true;
+			}
+			/* Now we trigger the split irqs for Rx and Tx over eics */
+			if (eics)
+				wr32(E1000_EICS, eics);
+			else if (trigger_irq_no_msix)
+				wr32(E1000_ICS, E1000_ICS_RXDMT0);
+
+			return 0;
+		}
+	} else if (flags & XDP_WAKEUP_TX) {
+		if (qid >= adapter->num_tx_queues)
+			return -EINVAL;
+		/* Get the ring params from Tx */
+		ring = adapter->tx_ring[qid];
+		if (test_bit(IGB_RING_FLAG_TX_DISABLED, &ring->flags))
+			return -ENETDOWN;
+	} else if (flags & XDP_WAKEUP_RX) {
+		if (qid >= adapter->num_rx_queues)
+			return -EINVAL;
+		/* Get the ring params from Rx */
+		ring = adapter->rx_ring[qid];
+	} else {
+		/* Invalid Flags */
 		return -EINVAL;
-
-	ring = adapter->tx_ring[qid];
-
-	if (test_bit(IGB_RING_FLAG_TX_DISABLED, &ring->flags))
-		return -ENETDOWN;
+	}
 
 	if (!READ_ONCE(ring->xsk_pool))
 		return -EINVAL;
