@@ -1671,8 +1671,11 @@ int btrfs_create_qgroup(struct btrfs_trans_handle *trans, u64 qgroupid)
 	}
 
 	ret = add_qgroup_item(trans, quota_root, qgroupid);
-	if (ret)
+	if (ret) {
+		kfree(prealloc);
+		prealloc = NULL;
 		goto out;
+	}
 
 	spin_lock(&fs_info->qgroup_lock);
 	qgroup = add_qgroup_rb(fs_info, prealloc, qgroupid);
