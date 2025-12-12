@@ -122,6 +122,78 @@ pub unsafe trait FromBytes {
         }
     }
 
+    /// Converts a slice of bytes to a slice of `Self`.
+    ///
+    /// Succeeds if the reference is properly aligned, and the size of `bytes` is a multiple of that
+    /// of `Self`.
+    ///
+    /// Otherwise, returns [`None`].
+    fn from_bytes_to_slice(bytes: &[u8]) -> Option<&[Self]>
+    where
+        Self: Sized,
+    {
+        let size = size_of::<Self>();
+        if size == 0 {
+            return None;
+        }
+        if bytes.len() % size != 0 {
+            return None;
+        }
+        let len = bytes.len() / size;
+        let ptr = bytes.as_ptr().cast::<Self>();
+
+        #[allow(clippy::incompatible_msrv)]
+        if ptr.is_aligned() {
+            // SAFETY:
+            // - `ptr` is valid for reads of `bytes.len()` bytes, which is
+            //   `len * size_of::<Self>()`.
+            // - `ptr` is aligned for `Self`.
+            // - `ptr` points to `len` consecutive properly initialized values of type `Self`
+            //   because `Self` implements `FromBytes` (any bit pattern is valid).
+            // - The lifetime of the returned slice is bound to the input `bytes`.
+            unsafe { Some(core::slice::from_raw_parts(ptr, len)) }
+        } else {
+            None
+        }
+    }
+
+    /// Converts a mutable slice of bytes to a mutable slice of `Self`.
+    ///
+    /// Succeeds if the reference is properly aligned, and the size of `bytes` is a multiple of that
+    /// of `Self`.
+    ///
+    /// Otherwise, returns [`None`].
+    fn from_bytes_to_mut_slice(bytes: &mut [u8]) -> Option<&mut [Self]>
+    where
+        Self: AsBytes + Sized,
+    {
+        let size = size_of::<Self>();
+        if size == 0 {
+            return None;
+        }
+        if bytes.len() % size != 0 {
+            return None;
+        }
+        let len = bytes.len() / size;
+        let ptr = bytes.as_mut_ptr().cast::<Self>();
+
+        #[allow(clippy::incompatible_msrv)]
+        if ptr.is_aligned() {
+            // SAFETY:
+            // - `ptr` is valid for reads and writes of `bytes.len()` bytes, which is
+            //   `len * size_of::<Self>()`.
+            // - `ptr` is aligned for `Self`.
+            // - `ptr` points to `len` consecutive properly initialized values of type `Self`
+            //   because `Self` implements `FromBytes`.
+            // - `AsBytes` guarantees that writing a new `Self` to the resulting slice can safely
+            //   be reflected as bytes in the original slice.
+            // - The lifetime of the returned slice is bound to the input `bytes`.
+            unsafe { Some(core::slice::from_raw_parts_mut(ptr, len)) }
+        } else {
+            None
+        }
+    }
+
     /// Creates an owned instance of `Self` by copying `bytes`.
     ///
     /// Unlike [`FromBytes::from_bytes`], which requires aligned input, this method can be used on
