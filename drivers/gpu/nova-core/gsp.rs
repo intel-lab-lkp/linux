@@ -107,7 +107,8 @@ pub(crate) struct Gsp {
     /// Libos arguments.
     pub(crate) libos: CoherentAllocation<LibosMemoryRegionInitArgument>,
     /// Init log buffer.
-    loginit: LogBuffer,
+    #[pin]
+    pub loginit: debugfs::File<LogBuffer>,
     /// Interrupts log buffer.
     logintr: LogBuffer,
     /// RM log buffer.
@@ -143,7 +144,9 @@ unsafe impl Sync for LogBuffer {}
 
 impl Gsp {
     // Creates an in-place initializer for a `Gsp` manager for `pdev`.
-    pub(crate) fn new(pdev: &pci::Device<device::Bound>) -> Result<impl PinInit<Self, Error>> {
+    pub(crate) fn new<'a>(
+        pdev: &'a pci::Device<device::Bound>,
+    ) -> Result<impl PinInit<Self, Error> + 'a> {
         let dev = pdev.as_ref();
         let libos = CoherentAllocation::<LibosMemoryRegionInitArgument>::alloc_coherent(
             dev,
@@ -173,9 +176,17 @@ impl Gsp {
         dma_write!(rmargs[0] = fw::GspArgumentsCached::new(&cmdq))?;
         dma_write!(libos[3] = LibosMemoryRegionInitArgument::new("RMARGS", &rmargs))?;
 
+        #[allow(static_mut_refs)]
+        let debugfs_dir =
+            // SAFETY: `DEBUGFS_ROOT` is never modified after initialization, so it is safe to
+            // create a shared reference to it.
+            unsafe { crate::DEBUGFS_ROOT.as_ref() }
+            .map(|root| root.subdir(pdev.name()))
+            .ok_or(ENOENT)?;
+
         Ok(try_pin_init!(Self {
             libos,
-            loginit,
+            loginit <- debugfs_dir.read_binary_file(kernel::c_str!("loginit"), loginit),
             logintr,
             logrm,
             rmargs,
