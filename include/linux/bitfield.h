@@ -45,13 +45,15 @@
 
 #define __bf_shf(x) (__builtin_ffsll(x) - 1)
 
+#define __BF_VALIDATE_MASK(mask) \
+	(!(mask) || ((mask) & ((mask) + ((mask) & -(mask)))))
+
 #define __BF_FIELD_CHECK_MASK(_mask, _pfx)				\
 	do {								\
 		BUILD_BUG_ON_MSG(!__builtin_constant_p(_mask),		\
 				 _pfx "mask is not constant");		\
-		BUILD_BUG_ON_MSG((_mask) == 0, _pfx "mask is zero");	\
-		__BUILD_BUG_ON_NOT_POWER_OF_2((_mask) +			\
-					      (1ULL << __bf_shf(_mask))); \
+		BUILD_BUG_ON_MSG(__BF_VALIDATE_MASK(_mask),		\
+				 _pfx "mask is zero or not contiguous");	\
 	} while (0)
 
 #define __BF_FIELD_CHECK_VAL(mask, val, pfx)			\
@@ -122,8 +124,6 @@
 		__BF_FIELD_PREP(_mask, _val, "FIELD_PREP: ");		\
 	})
 
-#define __BF_CHECK_POW2(n)	BUILD_BUG_ON_ZERO(((n) & ((n) - 1)) != 0)
-
 /**
  * FIELD_PREP_CONST() - prepare a constant bitfield element
  * @_mask: shifted mask defining the field's length and position
@@ -138,12 +138,10 @@
  */
 #define FIELD_PREP_CONST(_mask, _val)					\
 	(								\
-		/* mask must be non-zero */				\
-		BUILD_BUG_ON_ZERO((_mask) == 0) +			\
+		/* mask must be non-zero and contiguous */		\
+		BUILD_BUG_ON_ZERO(__BF_VALIDATE_MASK(_mask)) +		\
 		/* check if value fits */				\
 		BUILD_BUG_ON_ZERO(~((_mask) >> __bf_shf(_mask)) & (_val)) + \
-		/* check if mask is contiguous */			\
-		__BF_CHECK_POW2((_mask) + (1ULL << __bf_shf(_mask))) +	\
 		/* and create the value */				\
 		(((typeof(_mask))(_val) << __bf_shf(_mask)) & (_mask))	\
 	)
@@ -189,7 +187,7 @@ extern void __compiletime_error("bad bitfield mask")
 __bad_mask(void);
 static __always_inline u64 field_multiplier(u64 field)
 {
-	if ((field | (field - 1)) & ((field | (field - 1)) + 1))
+	if (__BF_VALIDATE_MASK(field))
 		__bad_mask();
 	return field & -field;
 }
