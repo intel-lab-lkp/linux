@@ -22,19 +22,32 @@
 
 #define AUDIT_CAUSE_LEN_MAX 32
 
+bool ima_flush_htable;
+static int __init ima_flush_htable_setup(char *str)
+{
+	ima_flush_htable = true;
+	return 1;
+}
+__setup("ima_flush_htable", ima_flush_htable_setup);
+
 /* pre-allocated array of tpm_digest structures to extend a PCR */
 static struct tpm_digest *digests;
 
 LIST_HEAD(ima_measurements);	/* list of all measurements */
+LIST_HEAD(ima_measurements_staged); /* list of staged measurements */
+static LIST_HEAD(ima_measurements_trim); /* list of measurements to trim */
+bool ima_measurements_staged_exist; /* If there are staged measurements */
 #ifdef CONFIG_IMA_KEXEC
-static unsigned long binary_runtime_size;
+static unsigned long binary_runtime_size[BINARY__LAST];
 #else
-static unsigned long binary_runtime_size = ULONG_MAX;
+static unsigned long binary_runtime_size[BINARY_SIZE] = ULONG_MAX;
+static unsigned long binary_runtime_size[BINARY_SIZE_FULL] = ULONG_MAX;
+static unsigned long binary_runtime_size[BINARY_SIZE_STAGED] = ULONG_MAX;
 #endif
 
 /* key: inode (before secure-hashing a file) */
 struct ima_h_table ima_htable = {
-	.len = ATOMIC_LONG_INIT(0),
+	.len = { ATOMIC_LONG_INIT(0) },
 	.violations = ATOMIC_LONG_INIT(0),
 	.queue[0 ... IMA_MEASURE_HTABLE_SIZE - 1] = HLIST_HEAD_INIT
 };
@@ -43,7 +56,7 @@ struct ima_h_table ima_htable = {
  * and extending the TPM PCR aggregate. Since tpm_extend can take
  * long (and the tpm driver uses a mutex), we can't use the spinlock.
  */
-static DEFINE_MUTEX(ima_extend_list_mutex);
+DEFINE_MUTEX(ima_extend_list_mutex);
 
 /*
  * Used internally by the kernel to suspend measurements.
@@ -101,7 +114,7 @@ static int ima_add_digest_entry(struct ima_template_entry *entry,
 				bool update_htable)
 {
 	struct ima_queue_entry *qe;
-	unsigned int key;
+	unsigned int i, key;
 
 	qe = kmalloc(sizeof(*qe), GFP_KERNEL);
 	if (qe == NULL) {
@@ -113,18 +126,23 @@ static int ima_add_digest_entry(struct ima_template_entry *entry,
 	INIT_LIST_HEAD(&qe->later);
 	list_add_tail_rcu(&qe->later, &ima_measurements);
 
-	atomic_long_inc(&ima_htable.len);
+	for (i = 0; i < BINARY__LAST; i++)
+		atomic_long_inc(&ima_htable.len[i]);
+
 	if (update_htable) {
 		key = ima_hash_key(entry->digests[ima_hash_algo_idx].digest);
 		hlist_add_head_rcu(&qe->hnext, &ima_htable.queue[key]);
 	}
 
-	if (binary_runtime_size != ULONG_MAX) {
+	if (binary_runtime_size[BINARY_SIZE_FULL] != ULONG_MAX) {
 		int size;
 
 		size = get_binary_runtime_size(entry);
-		binary_runtime_size = (binary_runtime_size < ULONG_MAX - size) ?
-		     binary_runtime_size + size : ULONG_MAX;
+
+		for (i = 0; i < BINARY__LAST; i++)
+			binary_runtime_size[i] =
+				(binary_runtime_size[i] < ULONG_MAX - size) ?
+				binary_runtime_size[i] + size : ULONG_MAX;
 	}
 	return 0;
 }
@@ -134,12 +152,18 @@ static int ima_add_digest_entry(struct ima_template_entry *entry,
  * entire binary_runtime_measurement list, including the ima_kexec_hdr
  * structure.
  */
-unsigned long ima_get_binary_runtime_size(void)
+unsigned long ima_get_binary_runtime_size(enum binary_size_types type)
 {
-	if (binary_runtime_size >= (ULONG_MAX - sizeof(struct ima_kexec_hdr)))
+	unsigned long val;
+
+	mutex_lock(&ima_extend_list_mutex);
+	val = binary_runtime_size[type];
+	mutex_unlock(&ima_extend_list_mutex);
+
+	if (val >= (ULONG_MAX - sizeof(struct ima_kexec_hdr)))
 		return ULONG_MAX;
 	else
-		return binary_runtime_size + sizeof(struct ima_kexec_hdr);
+		return val + sizeof(struct ima_kexec_hdr);
 }
 
 static int ima_pcr_extend(struct tpm_digest *digests_arg, int pcr)
@@ -218,6 +242,127 @@ out:
 	integrity_audit_msg(AUDIT_INTEGRITY_PCR, inode, filename,
 			    op, audit_cause, result, audit_info);
 	return result;
+}
+
+int ima_queue_stage_trim(unsigned long req_value, bool trim)
+{
+	unsigned long req_value_copy = req_value, to_remove = 0;
+	struct list_head *moved = &ima_measurements_staged;
+	struct ima_queue_entry *qe;
+
+	if (req_value == 0 || req_value > LONG_MAX)
+		return -EINVAL;
+
+	if (ima_measurements_staged_exist)
+		return -EEXIST;
+
+	if (trim)
+		moved = &ima_measurements_trim;
+
+	mutex_lock(&ima_extend_list_mutex);
+	if (list_empty(&ima_measurements)) {
+		mutex_unlock(&ima_extend_list_mutex);
+		return -ENOENT;
+	}
+
+	if (req_value == LONG_MAX) {
+		list_replace(&ima_measurements, moved);
+		INIT_LIST_HEAD(&ima_measurements);
+		atomic_long_set(&ima_htable.len[BINARY_SIZE], 0);
+		if (IS_ENABLED(CONFIG_IMA_KEXEC))
+			binary_runtime_size[BINARY_SIZE] = 0;
+
+		if (trim) {
+			atomic_long_set(&ima_htable.len[BINARY_SIZE_STAGED], 0);
+			if (IS_ENABLED(CONFIG_IMA_KEXEC))
+				binary_runtime_size[BINARY_SIZE_STAGED] = 0;
+		}
+	} else {
+		list_for_each_entry(qe, &ima_measurements, later) {
+			to_remove += get_binary_runtime_size(qe->entry);
+			if (--req_value_copy == 0)
+				break;
+		}
+
+		if (req_value_copy > 0) {
+			mutex_unlock(&ima_extend_list_mutex);
+			return -ENOENT;
+		}
+
+		__list_cut_position(moved, &ima_measurements, &qe->later);
+		atomic_long_sub(req_value, &ima_htable.len[BINARY_SIZE]);
+		if (IS_ENABLED(CONFIG_IMA_KEXEC))
+			binary_runtime_size[BINARY_SIZE] -= to_remove;
+
+		if (trim) {
+			atomic_long_sub(req_value,
+					&ima_htable.len[BINARY_SIZE_STAGED]);
+			if (IS_ENABLED(CONFIG_IMA_KEXEC))
+				binary_runtime_size[BINARY_SIZE_STAGED] -=
+								to_remove;
+		}
+	}
+
+	if (ima_flush_htable)
+		/* Either staged/trimmed entries are removed from hash table. */
+		list_for_each_entry(qe, moved, later)
+			/* It can race with ima_lookup_digest_entry(). */
+			hlist_del_rcu(&qe->hnext);
+
+	mutex_unlock(&ima_extend_list_mutex);
+	ima_measurements_staged_exist = true;
+
+	if (ima_flush_htable)
+		synchronize_rcu();
+
+	if (trim)
+		return ima_queue_delete_staged_trimmed(true);
+
+	return 0;
+}
+
+int ima_queue_delete_staged_trimmed(bool staged_moved)
+{
+	struct ima_queue_entry *qe, *qe_tmp;
+	unsigned int i;
+
+	if (!ima_measurements_staged_exist)
+		return -ENOENT;
+
+	if (!staged_moved) {
+		mutex_lock(&ima_extend_list_mutex);
+		list_replace(&ima_measurements_staged, &ima_measurements_trim);
+		INIT_LIST_HEAD(&ima_measurements_staged);
+		atomic_long_set(&ima_htable.len[BINARY_SIZE_STAGED], 0);
+		if (IS_ENABLED(CONFIG_IMA_KEXEC))
+			binary_runtime_size[BINARY_SIZE_STAGED] = 0;
+
+		mutex_unlock(&ima_extend_list_mutex);
+	}
+
+	list_for_each_entry_safe(qe, qe_tmp, &ima_measurements_trim, later) {
+		/*
+		 * Ok because after list delete qe is only accessed by
+		 * ima_lookup_digest_entry().
+		 */
+		for (i = 0; i < qe->entry->template_desc->num_fields; i++) {
+			kfree(qe->entry->template_data[i].data);
+			qe->entry->template_data[i].data = NULL;
+			qe->entry->template_data[i].len = 0;
+		}
+
+		list_del(&qe->later);
+
+		/* No leak if !ima_flush_htable, referenced by ima_htable. */
+		if (ima_flush_htable) {
+			kfree(qe->entry->digests);
+			kfree(qe->entry);
+			kfree(qe);
+		}
+	}
+
+	ima_measurements_staged_exist = false;
+	return 0;
 }
 
 int ima_restore_measurement_entry(struct ima_template_entry *entry)
