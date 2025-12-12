@@ -3,6 +3,7 @@
 mod boot;
 
 use kernel::{
+    debugfs,
     device,
     dma::{
         CoherentAllocation,
@@ -116,6 +117,29 @@ pub(crate) struct Gsp {
     /// RM arguments.
     rmargs: CoherentAllocation<GspArgumentsCached>,
 }
+
+impl debugfs::BinaryWriter for LogBuffer {
+    fn write_to_slice(
+        &self,
+        writer: &mut kernel::uaccess::UserSliceWriter,
+        offset: &mut kernel::fs::file::Offset,
+    ) -> Result<usize> {
+        // SAFETY: This is a debug log buffer. GSP may write concurrently, so the
+        // snapshot may contain partially-written entries. This is acceptable for
+        // debugging purposes - users should be aware logs may be slightly garbled
+        // if read while GSP is actively logging.
+        let slice = unsafe { self.0.as_slice(0, self.0.count()) }?;
+
+        writer.write_slice_file(slice, offset)
+    }
+}
+
+// SAFETY: `LogBuffer` only provides shared access to the underlying `CoherentAllocation`.
+// GSP may write to the buffer concurrently regardless of CPU access, so concurrent reads
+// from multiple CPU threads do not introduce any additional races beyond what already
+// exists with the device. Reads may observe partially-written log entries, which is
+// acceptable for debug logging purposes.
+unsafe impl Sync for LogBuffer {}
 
 impl Gsp {
     // Creates an in-place initializer for a `Gsp` manager for `pdev`.
