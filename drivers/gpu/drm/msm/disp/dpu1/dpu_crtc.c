@@ -1114,7 +1114,12 @@ static void dpu_crtc_reset(struct drm_crtc *crtc)
  */
 static struct drm_crtc_state *dpu_crtc_duplicate_state(struct drm_crtc *crtc)
 {
-	struct dpu_crtc_state *cstate, *old_cstate = to_dpu_crtc_state(crtc->state);
+	struct dpu_crtc_state *cstate, *old_cstate;
+
+	if (WARN_ON(!crtc->state))
+		return NULL;
+
+	old_cstate = to_dpu_crtc_state(crtc->state);
 
 	cstate = kmemdup(old_cstate, sizeof(*old_cstate), GFP_KERNEL);
 	if (!cstate) {
