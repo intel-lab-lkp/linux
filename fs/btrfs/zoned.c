@@ -3017,9 +3017,9 @@ void btrfs_show_zoned_stats(struct btrfs_fs_info *fs_info, struct seq_file *s)
 	seq_puts(s, "\tactive zones:\n");
 	list_for_each_entry(bg, &fs_info->zone_active_bgs, active_bg_list) {
 		seq_printf(s,
-			   "\t  start: %llu, wp: %llu used: %llu, reserved: %llu, unusable: %llu\n",
+			   "\t  start: %llu, wp: %llu used: %llu, reserved: %llu, unusable: %llu (%s)\n",
 			   bg->start, bg->alloc_offset, bg->used, bg->reserved,
-			   bg->zone_unusable);
+			   bg->zone_unusable, btrfs_space_info_type_str(bg->space_info));
 	}
 	spin_unlock(&fs_info->zone_active_bgs_lock);
 }
