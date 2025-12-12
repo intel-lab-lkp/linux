@@ -248,6 +248,13 @@ config DA9062_WATCHDOG
 
 	  This driver can be built as a module. The module name is da9062_wdt.
 
+config EIO_WATCHDOG
+	tristate "Advantech EIO Watchdog"
+	depends on MFD_EIO
+	help
+	  Watchdog timer driver for the Advantech EIO.
+	  If unsure, say N.
+
 config GPIO_WATCHDOG
 	tristate "Watchdog device controlled through GPIO-line"
 	depends on OF_GPIO
