@@ -2019,8 +2019,11 @@ void intel_color_prepare_commit(struct intel_atomic_state *state,
 	else
 		crtc_state->dsb_color = intel_dsb_prepare(state, crtc, INTEL_DSB_1, 1024);
 
-	if (!intel_color_uses_dsb(crtc_state))
+	if (!intel_color_uses_dsb(crtc_state)) {
+		crtc_state->use_flipq = false;
+		crtc_state->use_dsb = false;
 		return;
+	}
 
 	display->funcs.color->load_luts(crtc_state);
 

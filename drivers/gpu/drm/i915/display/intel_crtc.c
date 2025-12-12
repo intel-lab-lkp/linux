@@ -449,8 +449,7 @@ static bool intel_crtc_needs_vblank_work(const struct intel_crtc_state *crtc_sta
 		!intel_crtc_needs_modeset(crtc_state) &&
 		(intel_crtc_needs_color_update(crtc_state) &&
 		 !HAS_DOUBLE_BUFFERED_LUT(display)) &&
-		!intel_color_uses_dsb(crtc_state) &&
-		!crtc_state->use_dsb;
+		!intel_color_uses_dsb(crtc_state);
 }
 
 static void intel_crtc_vblank_work(struct kthread_work *base)
