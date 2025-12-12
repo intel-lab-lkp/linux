@@ -1478,13 +1478,11 @@ static void rtw89_mac_power_switch_boot_mode(struct rtw89_dev *rtwdev)
 
 static int rtw89_mac_power_switch(struct rtw89_dev *rtwdev, bool on)
 {
-#define PWR_ACT 1
 	const struct rtw89_mac_gen_def *mac = rtwdev->chip->mac_def;
 	const struct rtw89_chip_info *chip = rtwdev->chip;
 	const struct rtw89_pwr_cfg * const *cfg_seq;
 	int (*cfg_func)(struct rtw89_dev *rtwdev);
 	int ret;
-	u8 val;
 
 	rtw89_mac_power_switch_boot_mode(rtwdev);
 
@@ -1499,10 +1497,10 @@ static int rtw89_mac_power_switch(struct rtw89_dev *rtwdev, bool on)
 	if (test_bit(RTW89_FLAG_FW_RDY, rtwdev->flags))
 		__rtw89_leave_ps_mode(rtwdev);
 
-	val = rtw89_read32_mask(rtwdev, R_AX_IC_PWR_STATE, B_AX_WLMAC_PWR_STE_MASK);
-	if (on && val == PWR_ACT) {
-		rtw89_err(rtwdev, "MAC has already powered on\n");
-		return -EBUSY;
+	if (on) {
+		ret = mac->reset_pwr_state(rtwdev);
+		if (ret)
+			return ret;
 	}
 
 	ret = cfg_func ? cfg_func(rtwdev) : rtw89_mac_pwr_seq(rtwdev, cfg_seq);
@@ -1529,7 +1527,6 @@ static int rtw89_mac_power_switch(struct rtw89_dev *rtwdev, bool on)
 	}
 
 	return 0;
-#undef PWR_ACT
 }
 
 int rtw89_mac_pwr_on(struct rtw89_dev *rtwdev)
@@ -3927,6 +3924,83 @@ static int rtw89_mac_feat_init(struct rtw89_dev *rtwdev)
 	offset += users * BACAM_1024BMP_OCC_ENTRY;
 	users = BACAM_MAX_RU_SUPPORT_B1_STA;
 	rtw89_fw_h2c_init_ba_cam_users(rtwdev, users, offset, RTW89_MAC_1);
+
+	return 0;
+}
+
+static int rtw89_mac_reset_pwr_state_ax(struct rtw89_dev *rtwdev)
+{
+	enum rtw89_core_chip_id chip_id = rtwdev->chip->chip_id;
+	u32 val32;
+	int ret;
+
+	val32 = rtw89_read32(rtwdev, R_AX_SYSON_FSM_MON);
+	val32 &= WLAN_FSM_MASK;
+	val32 |= WLAN_FSM_SET;
+	rtw89_write32(rtwdev, R_AX_SYSON_FSM_MON, val32);
+
+	ret = read_poll_timeout(rtw89_read32_mask, val32, val32 == WLAN_FSM_IDLE,
+				1000, 2000000, false,
+				rtwdev, R_AX_SYSON_FSM_MON, WLAN_FSM_STATE_MASK);
+	if (ret) {
+		rtw89_err(rtwdev, "[ERR]Polling WLAN PMC timeout= %X\n", val32);
+		return ret;
+	}
+
+	val32 = rtw89_read32_mask(rtwdev, R_AX_IC_PWR_STATE, B_AX_WLMAC_PWR_STE_MASK);
+	if (val32 == MAC_AX_MAC_OFF) {
+		rtw89_write32_clr(rtwdev, R_AX_SYS_PW_CTRL, B_AX_EN_WLON);
+		rtw89_write32_clr(rtwdev, R_AX_SYS_PW_CTRL, B_AX_APFM_SWLPS);
+	} else if (val32 == MAC_AX_MAC_ON) {
+		rtw89_write32_set(rtwdev, R_AX_SYS_PW_CTRL, B_AX_EN_WLON);
+		rtw89_write32_set(rtwdev, R_AX_SYS_PW_CTRL, B_AX_APFM_OFFMAC);
+
+		ret = read_poll_timeout(rtw89_read32_mask, val32, val32 == MAC_AX_MAC_OFF,
+					1000, 2000000, false,
+					rtwdev, R_AX_SYS_PW_CTRL, B_AX_APFM_OFFMAC);
+		if (ret) {
+			rtw89_err(rtwdev, "[ERR]Polling MAC state timeout= %X\n", val32);
+			return ret;
+		}
+
+		rtw89_write32_clr(rtwdev, R_AX_SYS_PW_CTRL, B_AX_EN_WLON);
+		rtw89_write32_clr(rtwdev, R_AX_SYS_PW_CTRL, B_AX_APFM_SWLPS);
+	} else if (val32 == MAC_AX_MAC_LPS) {
+		rtw89_write32_set(rtwdev, R_AX_WLLPS_CTRL, B_AX_FORCE_LEAVE_LPS);
+
+		ret = read_poll_timeout(rtw89_read32_mask, val32, val32 == MAC_AX_MAC_ON,
+					1000, 2000000, false,
+					rtwdev, R_AX_IC_PWR_STATE, B_AX_WLMAC_PWR_STE_MASK);
+		if (ret) {
+			rtw89_err(rtwdev, "[ERR]Polling MAC STS timeout= %X\n", val32);
+			return ret;
+		}
+
+		rtw89_write32_set(rtwdev, R_AX_SYS_PW_CTRL, B_AX_EN_WLON);
+		rtw89_write32_set(rtwdev, R_AX_SYS_PW_CTRL, B_AX_APFM_OFFMAC);
+
+		ret = read_poll_timeout(rtw89_read32_mask, val32, val32 == MAC_AX_MAC_OFF,
+					1000, 2000000, false,
+					rtwdev, R_AX_SYS_PW_CTRL, B_AX_APFM_OFFMAC);
+		if (ret) {
+			rtw89_err(rtwdev, "[ERR]Polling MAC state timeout= %X\n", val32);
+			return ret;
+		}
+
+		rtw89_write32_clr(rtwdev, R_AX_WLLPS_CTRL, B_AX_FORCE_LEAVE_LPS);
+		rtw89_write32_clr(rtwdev, R_AX_SYS_PW_CTRL, B_AX_EN_WLON);
+		rtw89_write32_clr(rtwdev, R_AX_SYS_PW_CTRL, B_AX_APFM_SWLPS);
+	}
+
+	switch (chip_id) {
+	case RTL8852A:
+	case RTL8852B:
+	case RTL8851B:
+		rtw89_write32_clr(rtwdev, R_AX_AFE_CTRL1, B_AX_CMAC_CLK_SEL);
+		break;
+	default:
+		break;
+	}
 
 	return 0;
 }
@@ -7206,6 +7280,7 @@ const struct rtw89_mac_gen_def rtw89_mac_gen_ax = {
 	.set_cpuio = set_cpuio_ax,
 	.dle_quota_change = dle_quota_change_ax,
 
+	.reset_pwr_state = rtw89_mac_reset_pwr_state_ax,
 	.disable_cpu = rtw89_mac_disable_cpu_ax,
 	.fwdl_enable_wcpu = rtw89_mac_enable_cpu_ax,
 	.fwdl_get_status = rtw89_fw_get_rdy_ax,
