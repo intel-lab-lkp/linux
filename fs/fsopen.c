@@ -229,6 +229,10 @@ static int vfs_cmd_create(struct fs_context *fc, bool exclusive)
 	fc->exclusive = exclusive;
 
 	ret = vfs_get_tree(fc);
+	if (ret == -ERESTARTNOINTR) {
+		fc->phase = FS_CONTEXT_CREATE_PARAMS;
+		return ret;
+	}
 	if (ret) {
 		fc->phase = FS_CONTEXT_FAILED;
 		return ret;
