@@ -70,7 +70,7 @@ int create_rt_thread(pthread_t *pth, void*(*func)(void *), void *arg,
 void handle_signal(int signo)
 {
 	ksft_print_dbg_msg("signal received %s requeue\n",
-	     requeued.val ? "after" : "prior to");
+	     atomic_read(&requeued) ? "after" : "prior to");
 }
 
 void *waiterfn(void *arg)
@@ -83,7 +83,7 @@ void *waiterfn(void *arg)
 	old_val = f1;
 	res = futex_wait_requeue_pi(&f1, old_val, &(f2), NULL,
 				    FUTEX_PRIVATE_FLAG);
-	if (!requeued.val || errno != EWOULDBLOCK) {
+	if (!atomic_read(&requeued) || errno != EWOULDBLOCK) {
 		ksft_test_result_fail("unexpected return from futex_wait_requeue_pi: %d (%s)\n",
 		     res, strerror(errno));
 		ksft_print_dbg_msg("w2:futex: %x\n", f2);

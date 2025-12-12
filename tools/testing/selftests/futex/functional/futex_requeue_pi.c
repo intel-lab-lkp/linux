@@ -201,7 +201,7 @@ void *broadcast_wakerfn(void *arg)
 	int i = 0;
 
 	ksft_print_dbg_msg("Waker: waiting for waiters to block\n");
-	while (waiters_blocked.val < THREAD_MAX)
+	while (atomic_read(&waiters_blocked) < THREAD_MAX)
 		usleep(1000);
 	usleep(1000);
 
@@ -218,7 +218,7 @@ void *broadcast_wakerfn(void *arg)
 		ksft_exit_fail_msg("FUTEX_CMP_REQUEUE_PI failed\n");
 	} else if (++i < MAX_WAKE_ITERS) {
 		task_count += args->ret;
-		if (task_count < THREAD_MAX - waiters_woken.val)
+		if (task_count < THREAD_MAX - atomic_read(&waiters_woken))
 			goto continue_requeue;
 	} else {
 		ksft_exit_fail_msg("max broadcast iterations (%d) reached with %d/%d tasks woken or requeued\n",
@@ -247,13 +247,13 @@ void *signal_wakerfn(void *arg)
 	int i = 0;
 
 	ksft_print_dbg_msg("Waker: waiting for waiters to block\n");
-	while (waiters_blocked.val < THREAD_MAX)
+	while (atomic_read(&waiters_blocked) < THREAD_MAX)
 		usleep(1000);
 	usleep(1000);
 
-	while (task_count < THREAD_MAX && waiters_woken.val < THREAD_MAX) {
+	while (task_count < THREAD_MAX && atomic_read(&waiters_woken) < THREAD_MAX) {
 		ksft_print_dbg_msg("task_count: %d, waiters_woken: %d\n",
-		     task_count, waiters_woken.val);
+		     task_count, atomic_read(&waiters_woken));
 		if (args->lock) {
 			ksft_print_dbg_msg("Calling FUTEX_LOCK_PI on mutex=%x @ %p\n",
 			    f2, &f2);
@@ -293,7 +293,7 @@ void *signal_wakerfn(void *arg)
 		args->ret = task_count;
 
 	ksft_print_dbg_msg("Waker: exiting with %d\n", args->ret);
-	ksft_print_dbg_msg("Waker: waiters_woken: %d\n", waiters_woken.val);
+	ksft_print_dbg_msg("Waker: waiters_woken: %d\n", atomic_read(&waiters_woken));
 	pthread_exit((void *)&args->ret);
 }
 

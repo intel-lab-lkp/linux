@@ -76,4 +76,16 @@ atomic_set(atomic_t *addr, int newval)
 	return newval;
 }
 
+/**
+ * atomic_read() - Atomic read
+ * @addr:	Address of the variable to read
+ *
+ * Return the value of addr->val.
+ */
+static inline int
+atomic_read(atomic_t *addr)
+{
+	return addr->val;
+}
+
 #endif
