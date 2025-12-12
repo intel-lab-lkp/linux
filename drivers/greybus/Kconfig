@@ -30,6 +30,8 @@ config GREYBUS_BEAGLEPLAY
 	  To compile this code as a module, chose M here: the module
 	  will be called gb-beagleplay.ko
 
+source "drivers/greybus/cpc/Kconfig"
+
 config GREYBUS_ES2
 	tristate "Greybus ES3 USB host controller"
 	depends on USB
