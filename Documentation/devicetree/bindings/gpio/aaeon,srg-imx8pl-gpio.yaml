@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/gpio/aaeon,srg-imx8pl-gpio.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: AAEON Embedded Controller GPIO
+
+maintainers:
+  - Jérémie Dautheribes <jeremie.dautheribes@bootlin.com>
+  - Thomas Perrot <thomas.perrot@bootlin.com>
+
+description: |
+  GPIO controller functionality provided by the AAEON embedded controller.
+  This controller provides 7 GPOs and 12 GPIOs.
+
+  The GPIO controller is a sub-device of the AAEON MCU and must be defined
+  as a child node of the MCU device.
+
+properties:
+  compatible:
+    const: aaeon,srg-imx8pl-gpio
+
+  gpio-controller: true
+
+  "#gpio-cells":
+    const: 2
+    description: |
+      The first cell is the GPIO number (0-6 for GPOs, 7-18 for
+      general-purpose GPIOs).
+      The second cell is the GPIO flags as defined in
+      <dt-bindings/gpio/gpio.h>.
+
+  ngpios:
+    description: |
+      Total number of GPIOs available (GPOs + GPIOs).
+      This should be 19 (7 GPOs + 12 GPIOs).
+    const: 19
+
+required:
+  - compatible
+  - gpio-controller
+  - "#gpio-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    gpio {
+      compatible = "aaeon,srg-imx8pl-gpio";
+      gpio-controller;
+      #gpio-cells = <2>;
+      ngpios = <19>;
+    };
