@@ -209,19 +209,24 @@ EXPORT_SYMBOL_GPL(cpc_hd_message_sent);
 void cpc_hd_rcvd(struct cpc_host_device *cpc_hd, struct sk_buff *skb)
 {
 	struct gb_operation_msg_hdr *gb_hdr;
+	struct cpc_cport *cport;
 	u16 cport_id;
 
 	/* Prevent an out-of-bound access if called with non-sensical parameters. */
 	if (skb->len < (sizeof(*gb_hdr) + CPC_HEADER_SIZE))
 		goto free_skb;
 
-	skb_pull(skb, CPC_HEADER_SIZE);
-
 	/* Retrieve cport ID that was packed in Greybus header */
-	gb_hdr = (struct gb_operation_msg_hdr *)skb->data;
+	gb_hdr = (struct gb_operation_msg_hdr *)(skb->data + CPC_HEADER_SIZE);
 	cport_id = cpc_cport_unpack(gb_hdr);
 
-	greybus_data_rcvd(cpc_hd->gb_hd, cport_id, skb->data, skb->len);
+	cport = cpc_hd_get_cport(cpc_hd, cport_id);
+	if (!cport) {
+		dev_warn(cpc_hd_dev(cpc_hd), "cport %u not allocated\n", cport_id);
+		goto free_skb;
+	}
+
+	cpc_protocol_on_data(cport, skb);
 
 free_skb:
 	kfree_skb(skb);
