@@ -88,13 +88,13 @@
 #define __FIELD_PREP(mask, val, pfx)					\
 	({								\
 		__BF_FIELD_CHECK_MASK(mask, val, pfx);			\
-		((typeof(mask))(val) << __bf_shf(mask)) & (mask);	\
+		((val) << __bf_shf(mask)) & (mask);			\
 	})
 
 #define __FIELD_GET(mask, reg, pfx)					\
 	({								\
 		__BF_FIELD_CHECK_MASK(mask, 0U, pfx);			\
-		(typeof(mask))(((reg) & (mask)) >> __bf_shf(mask));	\
+		((reg) & (mask)) >> __bf_shf(mask);			\
 	})
 
 /**
@@ -108,7 +108,7 @@
 	({								\
 		__auto_type _mask = mask;				\
 		__BF_FIELD_CHECK(_mask, 0ULL, 0ULL, "FIELD_MAX: ");	\
-		(typeof(_mask))((_mask) >> __bf_shf(_mask));		\
+		(_mask >> __bf_shf(_mask));				\
 	})
 
 /**
@@ -123,7 +123,7 @@
 		__auto_type _mask = mask;				\
 		__auto_type _val = 1 ? (val) : _mask;			\
 		__BF_FIELD_CHECK(_mask, 0ULL, 0ULL, "FIELD_FIT: ");	\
-		!((((typeof(_mask))_val) << __bf_shf(_mask)) & ~(_mask)); \
+		!((_val << __bf_shf(_mask)) & ~_mask);			\
 	})
 
 /**
@@ -201,7 +201,7 @@
 		typecheck_pointer(_reg_p);						\
 		__BF_FIELD_CHECK(_mask, *(_reg_p), _val, "FIELD_MODIFY: ");		\
 		*(_reg_p) &= ~(_mask);							\
-		*(_reg_p) |= (((typeof(_mask))(_val) << __bf_shf(_mask)) & (_mask));	\
+		*(_reg_p) |= (_val << __bf_shf(_mask)) & _mask;				\
 	})
 
 extern void __compiletime_error("value doesn't fit into mask")
