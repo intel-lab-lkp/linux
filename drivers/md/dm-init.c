@@ -296,10 +296,24 @@ static int __init dm_init_init(void)
 	for (i = 0; i < ARRAY_SIZE(waitfor); i++) {
 		if (waitfor[i]) {
 			dev_t dev;
+			struct block_device *bdev;
 
 			DMINFO("waiting for device %s ...", waitfor[i]);
 			while (early_lookup_bdev(waitfor[i], &dev))
 				fsleep(5000);
+
+			/*
+			 * early_lookup_bdev() only checks if the device node exists and
+			 * returns the dev_t. It does not guarantee that the underlying
+			 * block device is fully initialized and ready to be opened. On
+			 * some platforms, this can lead to a race condition where
+			 * dm_early_create() fails because the device is not yet ready.
+			 * Ensure the block device is truly available by attempting to
+			 * get it.
+			 */
+			while (!(bdev = blkdev_get_no_open(dev, false)))
+				fsleep(5000);
+			blkdev_put_no_open(bdev);
 		}
 	}
 
