@@ -180,14 +180,14 @@ struct tb_regs_switch_header {
 	u32 route_hi:31;
 	bool enabled:1;
 	/* DWORD 4 */
-	u32 plug_events_delay:8; /*
-				  * RW, pause between plug events in
-				  * milliseconds. Writing 0x00 is interpreted
-				  * as 255ms.
-				  */
-	u32 cmuv:8;
-	u32 __unknown4:8;
-	u32 thunderbolt_version:8;
+	u8 plug_events_delay; /*
+			       * RW, pause between plug events in
+			       * milliseconds. Writing 0x00 is interpreted
+			       * as 255ms.
+			       */
+	u8 cmuv;
+	u8 __unknown4;
+	u8 thunderbolt_version;
 } __packed;
 
 /* Used with the router thunderbolt_version */
