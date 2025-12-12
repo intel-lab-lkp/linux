@@ -4011,7 +4011,7 @@ void *__vmalloc_node_range_noprof(unsigned long size, unsigned long align,
 		return NULL;
 	}
 
-	if (vmap_allow_huge && (vm_flags & VM_ALLOW_HUGE_VMAP)) {
+	if (vmap_allow_huge && ((arch_wants_vmalloc_huge_always()) || (vm_flags & VM_ALLOW_HUGE_VMAP))) {
 		/*
 		 * Try huge pages. Only try for PAGE_KERNEL allocations,
 		 * others like modules don't yet expect huge pages in
@@ -4025,6 +4025,9 @@ void *__vmalloc_node_range_noprof(unsigned long size, unsigned long align,
 			shift = arch_vmap_pte_supported_shift(size);
 
 		align = max(original_align, 1UL << shift);
+
+		/* If arch wants huge by default, set flag unconditionally */
+		vm_flags |= VM_ALLOW_HUGE_VMAP;
 	}
 
 again:
