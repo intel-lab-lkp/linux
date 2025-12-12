@@ -836,6 +836,7 @@ svc_set_pool_threads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
 	if (!pool)
 		return -EINVAL;
 
+	pool->sp_nrthrmax = nrservs;
 	nrservs -= pool->sp_nrthreads;
 
 	if (nrservs > 0)
