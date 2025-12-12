@@ -433,6 +433,18 @@ static int rkvdec_s_capture_fmt(struct file *file, void *priv,
 		return ret;
 
 	ctx->decoded_fmt = *f;
+
+	u32 fourcc = f->fmt.pix_mp.pixelformat;
+
+	if (fourcc == V4L2_PIX_FMT_NV12)
+		ctx->image_fmt = RKVDEC_IMG_FMT_420_8BIT;
+	else if (fourcc == V4L2_PIX_FMT_NV15)
+		ctx->image_fmt = RKVDEC_IMG_FMT_420_10BIT;
+	else if (fourcc == V4L2_PIX_FMT_NV16)
+		ctx->image_fmt = RKVDEC_IMG_FMT_422_8BIT;
+	else if (fourcc == V4L2_PIX_FMT_NV20)
+		ctx->image_fmt = RKVDEC_IMG_FMT_422_10BIT;
+
 	return 0;
 }
 
