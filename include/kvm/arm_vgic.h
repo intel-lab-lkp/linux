@@ -32,6 +32,9 @@
 #define VGIC_MIN_LPI		8192
 #define KVM_IRQCHIP_NUM_PINS	(1020 - 32)
 
+/* GICv5 constants */
+#define VGIC_V5_NR_PRIVATE_IRQS	128
+
 #define irq_is_ppi_legacy(irq) ((irq) >= VGIC_NR_SGIS && (irq) < VGIC_NR_PRIVATE_IRQS)
 #define irq_is_spi_legacy(irq) ((irq) >= VGIC_NR_PRIVATE_IRQS && \
 					(irq) <= VGIC_MAX_SPI)

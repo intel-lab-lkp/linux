@@ -132,6 +132,28 @@ static inline bool irq_is_pending(struct vgic_irq *irq)
 		return irq->pending_latch || irq->line_level;
 }
 
+/* Requires the irq_lock to be held by the caller. */
+static inline bool irq_is_enabled(struct vgic_irq *irq)
+{
+	if (irq->enabled)
+		return true;
+
+	/*
+	 * We always consider GICv5 interrupts as enabled as we can
+	 * always inject them. The state is handled by the hardware,
+	 * and the hardware will only signal the interrupt to the
+	 * guest once the guest enables it.
+	 */
+	if (irq->target_vcpu) {
+		u32 vgic_model = irq->target_vcpu->kvm->arch.vgic.vgic_model;
+
+		if (vgic_model == KVM_DEV_TYPE_ARM_VGIC_V5)
+			return true;
+	}
+
+	return false;
+}
+
 static inline bool vgic_irq_is_mapped_level(struct vgic_irq *irq)
 {
 	return irq->config == VGIC_CONFIG_LEVEL && irq->hw;
@@ -306,7 +328,7 @@ static inline bool vgic_try_get_irq_ref(struct vgic_irq *irq)
 	if (!irq)
 		return false;
 
-	if (irq->intid < VGIC_MIN_LPI)
+	if (irq->target_vcpu && !irq_is_lpi(irq->target_vcpu->kvm, irq->intid))
 		return true;
 
 	return refcount_inc_not_zero(&irq->refcount);
@@ -363,7 +385,10 @@ void vgic_debug_init(struct kvm *kvm);
 void vgic_debug_destroy(struct kvm *kvm);
 
 int vgic_v5_probe(const struct gic_kvm_info *info);
+void vgic_v5_set_ppi_ops(struct vgic_irq *irq);
 int vgic_v5_set_ppi_dvi(struct kvm_vcpu *vcpu, u32 irq, bool dvi);
+void vgic_v5_flush_ppi_state(struct kvm_vcpu *vcpu);
+void vgic_v5_fold_irq_state(struct kvm_vcpu *vcpu);
 void vgic_v5_load(struct kvm_vcpu *vcpu);
 void vgic_v5_put(struct kvm_vcpu *vcpu);
 void vgic_v5_set_vmcr(struct kvm_vcpu *vcpu, struct vgic_vmcr *vmcr);
@@ -432,15 +457,6 @@ void vgic_its_invalidate_all_caches(struct kvm *kvm);
 int vgic_its_inv_lpi(struct kvm *kvm, struct vgic_irq *irq);
 int vgic_its_invall(struct kvm_vcpu *vcpu);
 
-bool system_supports_direct_sgis(void);
-bool vgic_supports_direct_msis(struct kvm *kvm);
-bool vgic_supports_direct_sgis(struct kvm *kvm);
-
-static inline bool vgic_supports_direct_irqs(struct kvm *kvm)
-{
-	return vgic_supports_direct_msis(kvm) || vgic_supports_direct_sgis(kvm);
-}
-
 int vgic_v4_init(struct kvm *kvm);
 void vgic_v4_teardown(struct kvm *kvm);
 void vgic_v4_configure_vsgis(struct kvm *kvm);
@@ -483,6 +499,19 @@ static inline bool vgic_is_v3(struct kvm *kvm)
 static inline bool vgic_is_v5(struct kvm *kvm)
 {
 	return kvm_vgic_global_state.type == VGIC_V5 && !vgic_is_v3_compat(kvm);
+}
+
+bool system_supports_direct_sgis(void);
+bool vgic_supports_direct_msis(struct kvm *kvm);
+bool vgic_supports_direct_sgis(struct kvm *kvm);
+
+static inline bool vgic_supports_direct_irqs(struct kvm *kvm)
+{
+	/* GICv5 always supports direct IRQs */
+	if (vgic_is_v5(kvm))
+		return true;
+
+	return vgic_supports_direct_msis(kvm) || vgic_supports_direct_sgis(kvm);
 }
 
 int vgic_its_debug_init(struct kvm_device *dev);

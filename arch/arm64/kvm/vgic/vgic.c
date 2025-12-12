@@ -105,6 +105,15 @@ struct vgic_irq *vgic_get_vcpu_irq(struct kvm_vcpu *vcpu, u32 intid)
 	if (WARN_ON(!vcpu))
 		return NULL;
 
+	if (vcpu->kvm->arch.vgic.vgic_model == KVM_DEV_TYPE_ARM_VGIC_V5) {
+		u32 int_num = FIELD_GET(GICV5_HWIRQ_ID, intid);
+
+		if (irq_is_ppi_v5(intid)) {
+			int_num = array_index_nospec(int_num, VGIC_V5_NR_PRIVATE_IRQS);
+			return &vcpu->arch.vgic_cpu.private_irqs[int_num];
+		}
+	}
+
 	/* SGIs and PPIs */
 	if (intid < VGIC_NR_PRIVATE_IRQS) {
 		intid = array_index_nospec(intid, VGIC_NR_PRIVATE_IRQS);
@@ -258,10 +267,12 @@ struct kvm_vcpu *vgic_target_oracle(struct vgic_irq *irq)
 	 * If the distributor is disabled, pending interrupts shouldn't be
 	 * forwarded.
 	 */
-	if (irq->enabled && irq_is_pending(irq)) {
-		if (unlikely(irq->target_vcpu &&
-			     !irq->target_vcpu->kvm->arch.vgic.enabled))
-			return NULL;
+	if (irq_is_enabled(irq) && irq_is_pending(irq)) {
+		if (irq->target_vcpu) {
+			if (!vgic_is_v5(irq->target_vcpu->kvm) &&
+			    unlikely(!irq->target_vcpu->kvm->arch.vgic.enabled))
+				return NULL;
+		}
 
 		return irq->target_vcpu;
 	}
@@ -1044,7 +1055,11 @@ void kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 	if (can_access_vgic_from_kernel())
 		vgic_save_state(vcpu);
 
-	vgic_fold_lr_state(vcpu);
+	if (!vgic_is_v5(vcpu->kvm))
+		vgic_fold_lr_state(vcpu);
+	else
+		vgic_v5_fold_irq_state(vcpu);
+
 	vgic_prune_ap_list(vcpu);
 }
 
@@ -1105,13 +1120,17 @@ void kvm_vgic_flush_hwstate(struct kvm_vcpu *vcpu)
 
 	DEBUG_SPINLOCK_BUG_ON(!irqs_disabled());
 
-	scoped_guard(raw_spinlock, &vcpu->arch.vgic_cpu.ap_list_lock)
-		vgic_flush_lr_state(vcpu);
+	if (!vgic_is_v5(vcpu->kvm)) {
+		scoped_guard(raw_spinlock, &vcpu->arch.vgic_cpu.ap_list_lock)
+			vgic_flush_lr_state(vcpu);
+	} else {
+		vgic_v5_flush_ppi_state(vcpu);
+	}
 
 	if (can_access_vgic_from_kernel())
 		vgic_restore_state(vcpu);
 
-	if (vgic_supports_direct_irqs(vcpu->kvm))
+	if (vgic_supports_direct_irqs(vcpu->kvm) && !vgic_is_v5(vcpu->kvm))
 		vgic_v4_commit(vcpu);
 }
 
