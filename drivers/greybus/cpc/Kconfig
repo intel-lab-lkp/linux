@@ -8,3 +8,15 @@ config GREYBUS_CPC
 
 	  To compile this code as a module, chose M here: the module will be
 	  called gb-cpc.ko
+
+config GREYBUS_CPC_SDIO
+	tristate "Greybus CPC over SDIO"
+	depends on GREYBUS_CPC && MMC
+	help
+	  This driver provides Greybus CPC host support for devices
+	  connected via SDIO interface.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called gb-cpc-sdio.
+
+	  If unsure, say N.
