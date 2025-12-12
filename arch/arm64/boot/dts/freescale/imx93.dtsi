@@ -3,7 +3,7 @@
  * Copyright 2022,2025 NXP
  */
 
-#include "imx91_93_common.dtsi"
+#include "imx91-93-common.dtsi"
 
 /{
 	cm33: remoteproc-cm33 {

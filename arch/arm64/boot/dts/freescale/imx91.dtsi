@@ -4,7 +4,7 @@
  */
 
 #include "imx91-pinfunc.h"
-#include "imx91_93_common.dtsi"
+#include "imx91-93-common.dtsi"
 
 /{
 	thermal_zones: thermal-zones {
