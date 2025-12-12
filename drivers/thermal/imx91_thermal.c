@@ -108,10 +108,20 @@ static int imx91_tmu_get_temp(struct thermal_zone_device *tz, int *temp)
 {
 	struct imx91_tmu *tmu = thermal_zone_device_priv(tz);
 	s16 data;
+	int ret;
+	u32 val;
+
+	ret = readl_relaxed_poll_timeout(tmu->base + IMX91_TMU_STAT0, val,
+					 val & IMX91_TMU_STAT0_DRDY0_IF_MASK, 1000,
+					 40000);
+	if (ret)
+		return -EAGAIN;
 
 	/* DATA0 is 16bit signed number */
 	data = readw_relaxed(tmu->base + IMX91_TMU_DATA0);
 	*temp = imx91_tmu_to_mcelsius(data);
+	if (*temp < IMX91_TMU_TEMP_LOW_LIMIT || *temp > IMX91_TMU_TEMP_HIGH_LIMIT)
+		return -EAGAIN;
 
 	return 0;
 }
