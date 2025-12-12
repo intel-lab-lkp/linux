@@ -530,6 +530,7 @@ int pasemi_dma_init(void)
 		BUG();
 		pr_warn("Can't find DMA controller\n");
 		err = -ENODEV;
+		pci_dev_put(iob_pdev);
 		goto out;
 	}
 	dma_regs = map_onedev(dma_pdev, 0);
