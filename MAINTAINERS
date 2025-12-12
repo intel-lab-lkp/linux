@@ -623,6 +623,7 @@ F:	drivers/gpio/gpio-eio.c
 F:	drivers/hwmon/eio-hwmon.c
 F:	drivers/i2c/busses/i2c-eio.c
 F:	drivers/mfd/eio_core.c
+F:	drivers/video/backlight/eio_bl.c
 F:	include/linux/mfd/eio.h
 
 ADXL313 THREE-AXIS DIGITAL ACCELEROMETER DRIVER
