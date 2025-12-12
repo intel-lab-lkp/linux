@@ -697,9 +697,12 @@ static blk_status_t zloop_queue_rq(struct blk_mq_hw_ctx *hctx,
 	struct zloop_cmd *cmd = blk_mq_rq_to_pdu(rq);
 	struct zloop_device *zlo = rq->q->queuedata;
 
-	if (zlo->state == Zlo_deleting)
+	mutex_lock(&zloop_ctl_mutex);
+	if (zlo->state == Zlo_deleting) {
+		mutex_unlock(&zloop_ctl_mutex);
 		return BLK_STS_IOERR;
-
+	}
+	mutex_unlock(&zloop_ctl_mutex);
 	/*
 	 * If we need to strongly order zone append operations, set the request
 	 * sector to the zone write pointer location now instead of when the
