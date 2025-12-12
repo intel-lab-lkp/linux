@@ -9,12 +9,25 @@
 struct page **dma_common_find_pages(void *cpu_addr)
 {
 	struct vm_struct *area = find_vm_area(cpu_addr);
+	unsigned long vaddr, area_vaddr;
+	size_t page_index;
 
 	if (!area || !(area->flags & VM_DMA_COHERENT))
 		return NULL;
 	WARN(area->flags != VM_DMA_COHERENT,
 	     "unexpected flags in area: %p\n", cpu_addr);
-	return area->pages;
+
+	vaddr = (unsigned long)cpu_addr;
+	area_vaddr = (unsigned long)area->addr;
+	if (unlikely(vaddr < area_vaddr ||
+		     vaddr >= area_vaddr + area->size))
+		return NULL;
+
+	page_index = (vaddr - area_vaddr) >> PAGE_SHIFT;
+	if (unlikely(page_index >= area->nr_pages))
+		return NULL;
+
+	return &area->pages[page_index];
 }
 
 /*
