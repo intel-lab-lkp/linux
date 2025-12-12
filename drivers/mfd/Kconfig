@@ -506,6 +506,16 @@ config MFD_DLN2
 	  etc. must be enabled in order to use the functionality of
 	  the device.
 
+config MFD_EIO
+	tristate "Advantech EIO MFD core"
+	select MFD_CORE
+	help
+	  This enables support for the Advantech EIO multi-function device.
+	  This core driver provides register access and coordination for the
+	  EIO's subdevices (GPIO, watchdog, hwmon, thermal, backlight, I2C).
+	  This driver supports EIO-IS200, EIO-201, EIO-210 and EIO-211.
+
+
 config MFD_ENE_KB3930
 	tristate "ENE KB3930 Embedded Controller support"
 	depends on I2C

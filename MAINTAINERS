@@ -616,6 +616,12 @@ L:	platform-driver-x86@vger.kernel.org
 S:	Maintained
 F:	drivers/platform/x86/adv_swbutton.c
 
+ADVANTECH EIO DRIVER
+M:	Ramiro Oliveira <ramiro.oliveira@advantech.com>
+S:	Maintained
+F:	drivers/mfd/eio_core.c
+F:	include/linux/mfd/eio.h
+
 ADXL313 THREE-AXIS DIGITAL ACCELEROMETER DRIVER
 M:	Lucas Stankus <lucas.p.stankus@gmail.com>
 S:	Supported
