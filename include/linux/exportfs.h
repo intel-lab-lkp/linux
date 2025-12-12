@@ -111,6 +111,13 @@ enum fid_type {
 	FILEID_INO64_GEN_PARENT = 0x82,
 
 	/*
+	 * 64 bit nodeid number, 32 bit generation number,
+	 * variable length handle.
+	 */
+	FILEID_FUSE_WITHOUT_PARENT = 0x91,
+	FILEID_FUSE_WITH_PARENT = 0x92,
+
+	/*
 	 * 128 bit child FID (struct lu_fid)
 	 * 128 bit parent FID (struct lu_fid)
 	 */

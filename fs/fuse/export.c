@@ -3,6 +3,7 @@
  * FUSE NFS export support.
  *
  * Copyright (C) 2001-2008  Miklos Szeredi <miklos@szeredi.hu>
+ * Copyright (C) 2025 Jump Trading LLC, author: Luis Henriques <luis@igalia.com>
  */
 
 #include "fuse_i.h"
@@ -10,7 +11,8 @@
 
 struct fuse_inode_handle {
 	u64 nodeid;
-	u32 generation;
+	u32 generation; /* XXX change to u64, and use fid->i64.ino in encode/decode? */
+	struct fuse_file_handle fh;
 };
 
 static struct dentry *fuse_get_dentry(struct super_block *sb,
@@ -67,8 +69,8 @@ static struct dentry *fuse_get_dentry(struct super_block *sb,
 	return ERR_PTR(err);
 }
 
-static int fuse_encode_fh(struct inode *inode, u32 *fh, int *max_len,
-			   struct inode *parent)
+static int fuse_encode_gen_fh(struct inode *inode, u32 *fh, int *max_len,
+			      struct inode *parent)
 {
 	int len = parent ? 6 : 3;
 	u64 nodeid;
@@ -96,36 +98,178 @@ static int fuse_encode_fh(struct inode *inode, u32 *fh, int *max_len,
 	}
 
 	*max_len = len;
+
 	return parent ? FILEID_INO64_GEN_PARENT : FILEID_INO64_GEN;
 }
 
-static struct dentry *fuse_fh_to_dentry(struct super_block *sb,
-		struct fid *fid, int fh_len, int fh_type)
+static int fuse_encode_fuse_fh(struct inode *inode, u32 *fh, int *max_len,
+			       struct inode *parent)
+{
+	struct fuse_inode *fi = get_fuse_inode(inode);
+	struct fuse_inode *fip = NULL;
+	struct fuse_inode_handle *handle = (void *)fh;
+	int type = FILEID_FUSE_WITHOUT_PARENT;
+	int len, lenp = 0;
+	int buflen = *max_len << 2; /* max_len: number of words */
+
+	len = sizeof(struct fuse_inode_handle) + fi->fh->size;
+	if (parent) {
+		fip = get_fuse_inode(parent);
+		if (fip->fh && fip->fh->size) {
+			lenp = sizeof(struct fuse_inode_handle) +
+				fip->fh->size;
+			type = FILEID_FUSE_WITH_PARENT;
+		}
+	}
+
+	if (buflen < (len + lenp)) {
+		*max_len = (len + lenp) >> 2;
+		return  FILEID_INVALID;
+	}
+
+	handle[0].nodeid = fi->nodeid;
+	handle[0].generation = inode->i_generation;
+	memcpy(&handle[0].fh, fi->fh, len);
+	if (lenp) {
+		handle[1].nodeid = fip->nodeid;
+		handle[1].generation = parent->i_generation;
+		memcpy(&handle[1].fh, fip->fh, lenp);
+	}
+
+	*max_len = (len + lenp) >> 2;
+
+	return type;
+}
+
+static int fuse_encode_fh(struct inode *inode, u32 *fh, int *max_len,
+			   struct inode *parent)
+{
+	struct fuse_conn *fc = get_fuse_conn(inode);
+	struct fuse_inode *fi = get_fuse_inode(inode);
+
+	if (fc->lookup_handle && fi->fh && fi->fh->size)
+		return fuse_encode_fuse_fh(inode, fh, max_len, parent);
+
+	return fuse_encode_gen_fh(inode, fh, max_len, parent);
+}
+
+static struct dentry *fuse_fh_gen_to_dentry(struct super_block *sb,
+					    struct fid *fid, int fh_len)
 {
 	struct fuse_inode_handle handle;
 
-	if ((fh_type != FILEID_INO64_GEN &&
-	     fh_type != FILEID_INO64_GEN_PARENT) || fh_len < 3)
+	if (fh_len < 3)
 		return NULL;
 
 	handle.nodeid = (u64) fid->raw[0] << 32;
 	handle.nodeid |= (u64) fid->raw[1];
 	handle.generation = fid->raw[2];
+
 	return fuse_get_dentry(sb, &handle);
 }
 
-static struct dentry *fuse_fh_to_parent(struct super_block *sb,
+static struct dentry *fuse_fh_fuse_to_dentry(struct super_block *sb,
+					     struct fid *fid, int fh_len)
+{
+	struct fuse_inode_handle *handle;
+	struct dentry *dentry;
+	int len = sizeof(struct fuse_file_handle);
+
+	handle = (void *)fid;
+	len += handle->fh.size;
+
+	if ((fh_len << 2) < len)
+		return NULL;
+
+	handle = kzalloc(len, GFP_KERNEL);
+	if (!handle)
+		return NULL;
+
+	memcpy(handle, fid, len);
+
+	dentry = fuse_get_dentry(sb, handle);
+	kfree(handle);
+
+	return dentry;
+}
+
+static struct dentry *fuse_fh_to_dentry(struct super_block *sb,
 		struct fid *fid, int fh_len, int fh_type)
+{
+	switch (fh_type) {
+	case FILEID_INO64_GEN:
+	case FILEID_INO64_GEN_PARENT:
+		return fuse_fh_gen_to_dentry(sb, fid, fh_len);
+	case FILEID_FUSE_WITHOUT_PARENT:
+	case FILEID_FUSE_WITH_PARENT:
+		return fuse_fh_fuse_to_dentry(sb, fid, fh_len);
+	}
+
+	return NULL;
+
+}
+
+static struct dentry *fuse_fh_gen_to_parent(struct super_block *sb,
+					    struct fid *fid, int fh_len)
 {
 	struct fuse_inode_handle parent;
 
-	if (fh_type != FILEID_INO64_GEN_PARENT || fh_len < 6)
+	if (fh_len < 6)
 		return NULL;
 
 	parent.nodeid = (u64) fid->raw[3] << 32;
 	parent.nodeid |= (u64) fid->raw[4];
 	parent.generation = fid->raw[5];
+
 	return fuse_get_dentry(sb, &parent);
+}
+
+static struct dentry *fuse_fh_fuse_to_parent(struct super_block *sb,
+					     struct fid *fid, int fh_len)
+{
+	struct fuse_inode_handle *handle;
+	struct dentry *dentry;
+	int total_len;
+	int len;
+
+	handle = (void *)fid;
+	total_len = len = sizeof(struct fuse_inode_handle) + handle->fh.size;
+
+	if ((fh_len << 2) < total_len)
+		return NULL;
+
+	handle = (void *)(fid + len);
+	len = sizeof(struct fuse_file_handle) + handle->fh.size;
+	total_len += len;
+
+	if ((fh_len << 2) < total_len)
+		return NULL;
+	
+	handle = kzalloc(len, GFP_KERNEL);
+	if (!handle)
+		return NULL;
+
+	memcpy(handle, fid, len);
+
+	dentry = fuse_get_dentry(sb, handle);
+	kfree(handle);
+
+	return dentry;
+}
+
+static struct dentry *fuse_fh_to_parent(struct super_block *sb,
+		struct fid *fid, int fh_len, int fh_type)
+{
+	switch (fh_type) {
+	case FILEID_INO64_GEN:
+	case FILEID_INO64_GEN_PARENT:
+		return fuse_fh_gen_to_parent(sb, fid, fh_len);
+	case FILEID_FUSE_WITHOUT_PARENT:
+	case FILEID_FUSE_WITH_PARENT:
+		return fuse_fh_fuse_to_parent(sb, fid, fh_len);
+	}
+
+	return NULL;
 }
 
 static struct dentry *fuse_get_parent(struct dentry *child)
