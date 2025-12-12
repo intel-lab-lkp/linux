@@ -443,7 +443,7 @@ static int blkdev_pr_read_keys(struct block_device *bdev, blk_mode_t mode,
 		return -EFAULT;
 
 	keys_info_len = struct_size(keys_info, keys, read_keys.num_keys);
-	if (keys_info_len == SIZE_MAX)
+	if (keys_info_len == SIZE_MAX || keys_info_len > KMALLOC_MAX_SIZE)
 		return -EINVAL;
 
 	keys_info = kzalloc(keys_info_len, GFP_KERNEL);
