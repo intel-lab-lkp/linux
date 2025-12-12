@@ -1174,11 +1174,15 @@ int kvm_vgic_vcpu_pending_irq(struct kvm_vcpu *vcpu)
 	unsigned long flags;
 	struct vgic_vmcr vmcr;
 
-	if (!vcpu->kvm->arch.vgic.enabled)
+	if (!vcpu->kvm->arch.vgic.enabled && !vgic_is_v5(vcpu->kvm))
 		return false;
 
-	if (vcpu->arch.vgic_cpu.vgic_v3.its_vpe.pending_last)
-		return true;
+	if (vcpu->kvm->arch.vgic.vgic_model == KVM_DEV_TYPE_ARM_VGIC_V5) {
+		return vgic_v5_has_pending_ppi(vcpu);
+	} else {
+		if (vcpu->arch.vgic_cpu.vgic_v3.its_vpe.pending_last)
+			return true;
+	}
 
 	vgic_get_vmcr(vcpu, &vmcr);
 

@@ -54,6 +54,31 @@ int vgic_v5_probe(const struct gic_kvm_info *info)
 	return 0;
 }
 
+static u32 vgic_v5_get_effective_priority_mask(struct kvm_vcpu *vcpu)
+{
+	struct vgic_v5_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v5;
+	unsigned highest_ap, priority_mask;
+
+	/*
+	 * Counting the number of trailing zeros gives the current
+	 * active priority. Explicitly use the 32-bit version here as
+	 * we have 32 priorities. 0x20 then means that there are no
+	 * active priorities.
+	 */
+	highest_ap = __builtin_ctz(cpu_if->vgic_apr);
+
+	/*
+	 * An interrupt is of sufficient priority if it is equal to or
+	 * greater than the priority mask. Add 1 to the priority mask
+	 * (i.e., lower priority) to match the APR logic before taking
+	 * the min. This gives us the lowest priority that is masked.
+	 */
+	priority_mask = FIELD_GET(FEAT_GCIE_ICH_VMCR_EL2_VPMR, cpu_if->vgic_vmcr);
+	priority_mask = min(highest_ap, priority_mask + 1);
+
+	return priority_mask;
+}
+
 static bool vgic_v5_ppi_set_pending_state(struct kvm_vcpu *vcpu,
 					  struct vgic_irq *irq)
 {
@@ -119,6 +144,104 @@ void vgic_v5_set_ppi_ops(struct vgic_irq *irq)
 		return;
 
 	irq->ops = &vgic_v5_ppi_irq_ops;
+}
+
+
+/*
+ * Sync back the PPI priorities to the vgic_irq shadow state
+ */
+static void vgic_v5_sync_ppi_priorities(struct kvm_vcpu *vcpu)
+{
+	struct vgic_v5_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v5;
+	unsigned long flags;
+	int i, reg;
+
+	/* We have 16 PPI Priority regs */
+	for (reg = 0; reg < 16; reg++) {
+		const unsigned long priorityr = cpu_if->vgic_ppi_priorityr[reg];
+
+		for (i = 0; i < 8; ++i) {
+			struct vgic_irq *irq;
+			u32 intid;
+			u8 priority;
+
+			priority = (priorityr >> (i * 8)) & 0x1f;
+
+			intid = FIELD_PREP(GICV5_HWIRQ_TYPE, GICV5_HWIRQ_TYPE_PPI);
+			intid |= FIELD_PREP(GICV5_HWIRQ_ID, reg * 8 + i);
+
+			irq = vgic_get_vcpu_irq(vcpu, intid);
+			raw_spin_lock_irqsave(&irq->irq_lock, flags);
+
+			irq->priority = priority;
+
+			raw_spin_unlock_irqrestore(&irq->irq_lock, flags);
+			vgic_put_irq(vcpu->kvm, irq);
+		}
+	}
+}
+
+bool vgic_v5_has_pending_ppi(struct kvm_vcpu *vcpu)
+{
+	struct vgic_v5_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v5;
+	unsigned long flags;
+	int i, reg;
+	unsigned int priority_mask;
+
+	/* If no pending bits are set, exit early */
+	if (likely(!cpu_if->vgic_ppi_pendr[0] && !cpu_if->vgic_ppi_pendr[1]))
+		return false;
+
+	priority_mask = vgic_v5_get_effective_priority_mask(vcpu);
+
+	/* If the combined priority mask is 0, nothing can be signalled! */
+	if (!priority_mask)
+		return false;
+
+	/* The shadow priority is only updated on demand, sync it across first */
+	vgic_v5_sync_ppi_priorities(vcpu);
+
+	for (reg = 0; reg < 2; reg++) {
+		unsigned long possible_bits;
+		const unsigned long enabler = cpu_if->vgic_ich_ppi_enabler_exit[reg];
+		const unsigned long pendr = cpu_if->vgic_ppi_pendr_exit[reg];
+		bool has_pending = false;
+
+		/* Check all interrupts that are enabled and pending */
+		possible_bits = enabler & pendr;
+
+		/*
+		 * Optimisation: pending and enabled with no active priorities
+		 */
+		if (possible_bits && priority_mask > 0x1f)
+			return true;
+
+		for_each_set_bit(i, &possible_bits, 64) {
+			struct vgic_irq *irq;
+			u32 intid;
+
+			intid = FIELD_PREP(GICV5_HWIRQ_TYPE, GICV5_HWIRQ_TYPE_PPI);
+			intid |= FIELD_PREP(GICV5_HWIRQ_ID, reg * 64 + i);
+
+			irq = vgic_get_vcpu_irq(vcpu, intid);
+			raw_spin_lock_irqsave(&irq->irq_lock, flags);
+
+			/*
+			 * We know that the interrupt is enabled and pending, so
+			 * only check the priority.
+			 */
+			if (irq->priority <= priority_mask)
+				has_pending = true;
+
+			raw_spin_unlock_irqrestore(&irq->irq_lock, flags);
+			vgic_put_irq(vcpu->kvm, irq);
+
+			if (has_pending)
+				return true;
+		}
+	}
+
+	return false;
 }
 
 /*
