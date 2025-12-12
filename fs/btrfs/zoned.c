@@ -2987,6 +2987,7 @@ int btrfs_reset_unused_block_groups(struct btrfs_space_info *space_info, u64 num
 void btrfs_show_zoned_stats(struct btrfs_fs_info *fs_info, struct seq_file *s)
 {
 	struct btrfs_block_group *bg;
+	size_t reclaimable;
 
 	seq_puts(s, "\n");
 
@@ -2997,8 +2998,8 @@ void btrfs_show_zoned_stats(struct btrfs_fs_info *fs_info, struct seq_file *s)
 
 	mutex_lock(&fs_info->reclaim_bgs_lock);
 	spin_lock(&fs_info->unused_bgs_lock);
-	seq_printf(s, "\t  reclaimable: %zu\n",
-			     list_count_nodes(&fs_info->reclaim_bgs));
+	reclaimable = list_count_nodes(&fs_info->reclaim_bgs);
+	seq_printf(s, "\t  reclaimable: %zu\n", reclaimable);
 	seq_printf(s, "\t  unused: %zu\n", list_count_nodes(&fs_info->unused_bgs));
 	spin_unlock(&fs_info->unused_bgs_lock);
 	mutex_unlock(&fs_info->reclaim_bgs_lock);
@@ -3022,4 +3023,18 @@ void btrfs_show_zoned_stats(struct btrfs_fs_info *fs_info, struct seq_file *s)
 			   bg->zone_unusable, btrfs_space_info_type_str(bg->space_info));
 	}
 	spin_unlock(&fs_info->zone_active_bgs_lock);
+
+	if (reclaimable) {
+		seq_puts(s, "\treclaimable zones:\n");
+		mutex_lock(&fs_info->reclaim_bgs_lock);
+		spin_lock(&fs_info->unused_bgs_lock);
+		list_for_each_entry(bg, &fs_info->reclaim_bgs, list) {
+			seq_printf(s,
+					"\t    start: %llu, wp: %llu used: %llu, reserved: %llu, unusable: %llu (%s)\n",
+					bg->start, bg->alloc_offset, bg->used, bg->reserved,
+					bg->zone_unusable, btrfs_space_info_type_str(bg->space_info));
+		}
+		spin_unlock(&fs_info->unused_bgs_lock);
+		mutex_unlock(&fs_info->reclaim_bgs_lock);
+	}
 }
