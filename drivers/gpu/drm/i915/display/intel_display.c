@@ -7279,21 +7279,27 @@ intel_atomic_commit_type(struct intel_atomic_state *state,
 	if (state->base.legacy_cursor_update)
 		return INTEL_COMMIT_MMIO;
 
-	/* FIXME deal with everything */
+	/* TODO maybe enable/disable planes via DSB/flip queue during modeset? */
+	if (intel_crtc_needs_modeset(new_crtc_state))
+		return INTEL_COMMIT_MMIO;
+
+	/* TODO implement fastsets via DSB/flip queue */
+	if (intel_crtc_needs_fastset(new_crtc_state))
+		return INTEL_COMMIT_MMIO;
+
+	/* TODO implement async flips via DSB/flip queue */
+	if (new_crtc_state->do_async_flip)
+		return INTEL_COMMIT_MMIO;
+
+	/* TODO handle VRR with flip queue */
 	if (intel_flipq_supported(display) &&
-	    !new_crtc_state->do_async_flip &&
 	    !new_crtc_state->vrr.enable &&
 	    !new_crtc_state->has_psr &&
-	    !intel_crtc_needs_modeset(new_crtc_state) &&
-	    !intel_crtc_needs_fastset(new_crtc_state) &&
 	    !intel_crtc_needs_color_update(new_crtc_state))
 		return INTEL_COMMIT_FLIPQ;
 
 	if (intel_dsb_supported(display) &&
-	    !new_crtc_state->do_async_flip &&
-	    (DISPLAY_VER(display) >= 20 || !new_crtc_state->has_psr) &&
-	    !intel_crtc_needs_modeset(new_crtc_state) &&
-	    !intel_crtc_needs_fastset(new_crtc_state))
+	    (DISPLAY_VER(display) >= 20 || !new_crtc_state->has_psr))
 		return INTEL_COMMIT_DSB;
 
 	return INTEL_COMMIT_MMIO;
