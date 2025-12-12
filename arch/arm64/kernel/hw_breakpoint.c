@@ -475,11 +475,13 @@ static int arch_build_bp_info(struct perf_event *bp,
 				return -EINVAL;
 		} else if (hw->ctrl.len != ARM_BREAKPOINT_LEN_4) {
 			/*
-			 * FIXME: Some tools (I'm looking at you perf) assume
-			 *	  that breakpoints should be sizeof(long). This
-			 *	  is nonsense. For now, we fix up the parameter
-			 *	  but we should probably return -EINVAL instead.
+			 * Some tools (e.g. perf) incorrectly assume that
+			 * breakpoints should be sizeof(long). This is wrong
+			 * for AArch64 where breakpoints must be 4 bytes.
+			 * Warn the user and fix up the parameter.
 			 */
+			pr_warn_once("hw_breakpoint: invalid AArch64 breakpoint length %d,
+				fixing to 4 bytes\n", hw->ctrl.len);
 			hw->ctrl.len = ARM_BREAKPOINT_LEN_4;
 		}
 	}
