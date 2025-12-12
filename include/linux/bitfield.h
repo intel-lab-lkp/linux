@@ -184,24 +184,24 @@ do {								\
 /*
  * Primitives for manipulating bitfields both in host- and fixed-endian.
  *
- * * u32 le32_get_bits(__le32 val, u32 field) extracts the contents of the
- *   bitfield specified by @field in little-endian 32bit object @val and
- *   converts it to host-endian.
+ *
+ * * u32 le32_get_bits(__le32 val, u32 field) converts the little-endian 32bit
+ *   object @val to host-endian then extracts the contents of the bitfield
+ *   specified by @field.
+ *
+ * * __le32 le32_encode_bits(u32 v, u32 field) encodes the value of @v into
+ *   the bitfield specified by @field then converts the value to little-endian.
+ *   All the bits outside that bitfield being zero.
+ *
+ * * __le32 le32_replace_bits(__le32 old, u32 v, u32 field) converts the
+ *   little-endian 32bit object @old to host order, replaces the contents
+ *   of the bitfield specified by @field with @v, then returns the value
+ *   converted back to little-endian.
  *
  * * void le32p_replace_bits(__le32 *p, u32 v, u32 field) replaces
  *   the contents of the bitfield specified by @field in little-endian
- *   32bit object pointed to by @p with the value of @v.  New value is
- *   given in host-endian and stored as little-endian.
- *
- * * __le32 le32_replace_bits(__le32 old, u32 v, u32 field) is equivalent to
- *   ({__le32 tmp = old; le32p_replace_bits(&tmp, v, field); tmp;})
- *   In other words, instead of modifying an object in memory, it takes
- *   the initial value and returns the modified one.
- *
- * * __le32 le32_encode_bits(u32 v, u32 field) is equivalent to
- *   le32_replace_bits(0, v, field).  In other words, it returns a little-endian
- *   32bit object with the bitfield specified by @field containing the
- *   value of @v and all bits outside that bitfield being zero.
+ *   32bit object pointed to by @p with the value of @v.
+ *   Equivalent to *p = le32_replace_bits(*p, v, field).
  *
  * Such set of helpers is defined for each of little-, big- and host-endian
  * types; e.g. u64_get_bits(val, field) will return the contents of the bitfield
@@ -210,15 +210,13 @@ do {								\
  *
  * Fields to access are specified as GENMASK() values - an N-bit field
  * starting at bit #M is encoded as GENMASK(M + N - 1, M).  Note that
- * bit numbers refer to endianness of the object we are working with -
+ * bit numbers refer to the value after being converted to host order -
  * e.g. GENMASK(11, 0) in __be16 refers to the second byte and the lower
  * 4 bits of the first byte.  In __le16 it would refer to the first byte
  * and the lower 4 bits of the second byte, etc.
  *
- * Field specification must be a constant; __builtin_constant_p() doesn't
- * have to be true for it, but compiler must be able to evaluate it at
- * build time.  If it cannot or if the value does not encode any bitfield,
- * the build will fail.
+ * Field specification must be a non-zero constant, otherwise the build
+ * will fail.
  *
  * If the value being stored in a bitfield is a constant that does not fit
  * into that bitfield, a warning will be generated at compile time.
