@@ -7283,6 +7283,7 @@ static void intel_atomic_dsb_prepare(struct intel_atomic_state *state,
 		!intel_crtc_needs_color_update(new_crtc_state);
 
 	new_crtc_state->use_dsb =
+		intel_dsb_supported(display) &&
 		!new_crtc_state->use_flipq &&
 		!new_crtc_state->do_async_flip &&
 		(DISPLAY_VER(display) >= 20 || !new_crtc_state->has_psr) &&
