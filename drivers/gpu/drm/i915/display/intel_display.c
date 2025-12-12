@@ -7293,18 +7293,12 @@ static void intel_atomic_dsb_prepare(struct intel_atomic_state *state,
 	intel_color_prepare_commit(state, crtc);
 }
 
-static void intel_atomic_dsb_finish(struct intel_atomic_state *state,
-				    struct intel_crtc *crtc)
+static unsigned int
+commit_dsb_max_cmds(const struct intel_crtc_state *crtc_state)
 {
-	struct intel_display *display = to_intel_display(state);
-	struct intel_crtc_state *new_crtc_state =
-		intel_atomic_get_new_crtc_state(state, crtc);
-	unsigned int size = new_crtc_state->plane_color_changed ? 8192 : 1024;
-
-	if (!new_crtc_state->use_flipq &&
-	    !new_crtc_state->use_dsb &&
-	    !new_crtc_state->dsb_color)
-		return;
+	/* just enough to start the chained DSB */
+	if (!crtc_state->use_dsb && !crtc_state->use_flipq)
+		return 16;
 
 	/*
 	 * Rough estimate:
@@ -7313,9 +7307,26 @@ static void intel_atomic_dsb_finish(struct intel_atomic_state *state,
 	 * ~4913 registers for 3DLUT
 	 * ~200 color registers * 3 HDR planes
 	 */
+	if (crtc_state->plane_color_changed)
+		return 8192;
+	else
+		return 1024;
+}
+
+static void intel_atomic_dsb_finish(struct intel_atomic_state *state,
+				    struct intel_crtc *crtc)
+{
+	struct intel_display *display = to_intel_display(state);
+	struct intel_crtc_state *new_crtc_state =
+		intel_atomic_get_new_crtc_state(state, crtc);
+
+	if (!new_crtc_state->use_flipq &&
+	    !new_crtc_state->use_dsb &&
+	    !new_crtc_state->dsb_color)
+		return;
+
 	new_crtc_state->dsb_commit = intel_dsb_prepare(state, crtc, INTEL_DSB_0,
-						       new_crtc_state->use_dsb ||
-						       new_crtc_state->use_flipq ? size : 16);
+						       commit_dsb_max_cmds(new_crtc_state));
 	if (!new_crtc_state->dsb_commit) {
 		new_crtc_state->use_flipq = false;
 		new_crtc_state->use_dsb = false;
