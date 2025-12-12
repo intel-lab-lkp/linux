@@ -9,6 +9,7 @@
 #include <linux/skbuff.h>
 
 #include "cpc.h"
+#include "header.h"
 #include "host.h"
 
 static struct cpc_host_device *gb_hd_to_cpc_hd(struct gb_host_device *hd)
@@ -48,10 +49,12 @@ static int cpc_hd_message_send(struct cpc_host_device *cpc_hd, u16 cport_id,
 		return -EINVAL;
 	}
 
-	size = sizeof(*message->header) + message->payload_size;
+	size = sizeof(*message->header) + message->payload_size + CPC_HEADER_SIZE;
 	skb = alloc_skb(size, gfp_mask);
 	if (!skb)
 		return -ENOMEM;
+
+	skb_reserve(skb, CPC_HEADER_SIZE);
 
 	/* Header and payload are already contiguous in Greybus message */
 	skb_put_data(skb, message->buffer, sizeof(*message->header) + message->payload_size);
@@ -209,8 +212,10 @@ void cpc_hd_rcvd(struct cpc_host_device *cpc_hd, struct sk_buff *skb)
 	u16 cport_id;
 
 	/* Prevent an out-of-bound access if called with non-sensical parameters. */
-	if (skb->len < sizeof(*gb_hdr))
+	if (skb->len < (sizeof(*gb_hdr) + CPC_HEADER_SIZE))
 		goto free_skb;
+
+	skb_pull(skb, CPC_HEADER_SIZE);
 
 	/* Retrieve cport ID that was packed in Greybus header */
 	gb_hdr = (struct gb_operation_msg_hdr *)skb->data;
