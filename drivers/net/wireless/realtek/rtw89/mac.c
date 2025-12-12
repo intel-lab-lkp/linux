@@ -7023,6 +7023,11 @@ int rtw89_mac_write_xtal_si_ax(struct rtw89_dev *rtwdev, u8 offset, u8 val, u8 m
 		return ret;
 	}
 
+	if (u32_get_bits(val32, B_AX_WL_XTAL_SI_ADDR_MASK) != offset ||
+	    u32_get_bits(val32, B_AX_WL_XTAL_SI_DATA_MASK) != val)
+		rtw89_warn(rtwdev, "xtal si write: offset=%x val=%x poll=%x\n",
+			   offset, val, val32);
+
 	return 0;
 }
 
@@ -7046,7 +7051,11 @@ int rtw89_mac_read_xtal_si_ax(struct rtw89_dev *rtwdev, u8 offset, u8 *val)
 		return ret;
 	}
 
-	*val = rtw89_read8(rtwdev, R_AX_WLAN_XTAL_SI_CTRL + 1);
+	if (u32_get_bits(val32, B_AX_WL_XTAL_SI_ADDR_MASK) != offset)
+		rtw89_warn(rtwdev, "xtal si read: offset=%x poll=%x\n",
+			   offset, val32);
+
+	*val = u32_get_bits(val32, B_AX_WL_XTAL_SI_DATA_MASK);
 
 	return 0;
 }
