@@ -66,12 +66,12 @@ static int vgic_allocate_private_irqs_locked(struct kvm_vcpu *vcpu, u32 type);
  * or through the generic KVM_CREATE_DEVICE API ioctl.
  * irqchip_in_kernel() tells you if this function succeeded or not.
  * @kvm: kvm struct pointer
- * @type: KVM_DEV_TYPE_ARM_VGIC_V[23]
+ * @type: KVM_DEV_TYPE_ARM_VGIC_V[235]
  */
 int kvm_vgic_create(struct kvm *kvm, u32 type)
 {
 	struct kvm_vcpu *vcpu;
-	u64 aa64pfr0, pfr1;
+	u64 aa64pfr0, aa64pfr2, pfr1;
 	unsigned long i;
 	int ret;
 
@@ -132,8 +132,11 @@ int kvm_vgic_create(struct kvm *kvm, u32 type)
 
 	if (type == KVM_DEV_TYPE_ARM_VGIC_V2)
 		kvm->max_vcpus = VGIC_V2_MAX_CPUS;
-	else
+	else if (type == KVM_DEV_TYPE_ARM_VGIC_V3)
 		kvm->max_vcpus = VGIC_V3_MAX_CPUS;
+	else if (type == KVM_DEV_TYPE_ARM_VGIC_V5)
+		kvm->max_vcpus = min(VGIC_V5_MAX_CPUS,
+				     kvm_vgic_global_state.max_gic_vcpus);
 
 	if (atomic_read(&kvm->online_vcpus) > kvm->max_vcpus) {
 		ret = -E2BIG;
@@ -163,17 +166,21 @@ int kvm_vgic_create(struct kvm *kvm, u32 type)
 	}
 
 	aa64pfr0 = kvm_read_vm_id_reg(kvm, SYS_ID_AA64PFR0_EL1) & ~ID_AA64PFR0_EL1_GIC;
+	aa64pfr2 = kvm_read_vm_id_reg(kvm, SYS_ID_AA64PFR2_EL1) & ~ID_AA64PFR2_EL1_GCIE;
 	pfr1 = kvm_read_vm_id_reg(kvm, SYS_ID_PFR1_EL1) & ~ID_PFR1_EL1_GIC;
 
 	if (type == KVM_DEV_TYPE_ARM_VGIC_V2) {
 		kvm->arch.vgic.vgic_cpu_base = VGIC_ADDR_UNDEF;
-	} else {
+	} else if (type == KVM_DEV_TYPE_ARM_VGIC_V3) {
 		INIT_LIST_HEAD(&kvm->arch.vgic.rd_regions);
 		aa64pfr0 |= SYS_FIELD_PREP_ENUM(ID_AA64PFR0_EL1, GIC, IMP);
 		pfr1 |= SYS_FIELD_PREP_ENUM(ID_PFR1_EL1, GIC, GICv3);
+	} else {
+		aa64pfr2 |= SYS_FIELD_PREP_ENUM(ID_AA64PFR2_EL1, GCIE, IMP);
 	}
 
 	kvm_set_vm_id_reg(kvm, SYS_ID_AA64PFR0_EL1, aa64pfr0);
+	kvm_set_vm_id_reg(kvm, SYS_ID_AA64PFR2_EL1, aa64pfr2);
 	kvm_set_vm_id_reg(kvm, SYS_ID_PFR1_EL1, pfr1);
 
 	if (type == KVM_DEV_TYPE_ARM_VGIC_V3)
@@ -420,20 +427,26 @@ int vgic_init(struct kvm *kvm)
 	if (kvm->created_vcpus != atomic_read(&kvm->online_vcpus))
 		return -EBUSY;
 
-	/* freeze the number of spis */
-	if (!dist->nr_spis)
-		dist->nr_spis = VGIC_NR_IRQS_LEGACY - VGIC_NR_PRIVATE_IRQS;
+	if (!vgic_is_v5(kvm)) {
+		/* freeze the number of spis */
+		if (!dist->nr_spis)
+			dist->nr_spis = VGIC_NR_IRQS_LEGACY - VGIC_NR_PRIVATE_IRQS;
 
-	ret = kvm_vgic_dist_init(kvm, dist->nr_spis);
-	if (ret)
-		goto out;
+		ret = kvm_vgic_dist_init(kvm, dist->nr_spis);
+		if (ret)
+			goto out;
 
-	/*
-	 * Ensure vPEs are allocated if direct IRQ injection (e.g. vSGIs,
-	 * vLPIs) is supported.
-	 */
-	if (vgic_supports_direct_irqs(kvm)) {
-		ret = vgic_v4_init(kvm);
+		/*
+		 * Ensure vPEs are allocated if direct IRQ injection (e.g. vSGIs,
+		 * vLPIs) is supported.
+		 */
+		if (vgic_supports_direct_irqs(kvm)) {
+			ret = vgic_v4_init(kvm);
+			if (ret)
+				goto out;
+		}
+	} else {
+		ret = vgic_v5_init(kvm);
 		if (ret)
 			goto out;
 	}
@@ -610,9 +623,13 @@ int kvm_vgic_map_resources(struct kvm *kvm)
 	if (dist->vgic_model == KVM_DEV_TYPE_ARM_VGIC_V2) {
 		ret = vgic_v2_map_resources(kvm);
 		type = VGIC_V2;
-	} else {
+	} else if (dist->vgic_model == KVM_DEV_TYPE_ARM_VGIC_V3) {
 		ret = vgic_v3_map_resources(kvm);
 		type = VGIC_V3;
+	} else {
+		ret = vgic_v5_map_resources(kvm);
+		type = VGIC_V5;
+		goto out;
 	}
 
 	if (ret)
