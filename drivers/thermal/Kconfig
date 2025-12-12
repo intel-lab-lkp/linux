@@ -427,6 +427,15 @@ config DA9062_THERMAL
 	  zone.
 	  Compatible with the DA9062 and DA9061 PMICs.
 
+config EIO_THERMAL
+	tristate "Advantech EIO Thermal zone"
+	depends on MFD_EIO && THERMAL
+	help
+	  Thermal zone support for the Advantech EIO. This driver exposes
+	  temperature readings, trip points and protection enable/disable via
+	  the Linux thermal framework. It communicates with the EC through the
+	  EIO MFD core.
+
 menu "Mediatek thermal drivers"
 depends on ARCH_MEDIATEK || COMPILE_TEST
 source "drivers/thermal/mediatek/Kconfig"
