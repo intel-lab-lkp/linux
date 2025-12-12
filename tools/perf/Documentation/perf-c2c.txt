@@ -170,10 +170,15 @@ following on AMD:
 
   ibs_op//
 
-and following on PowerPC:
+following on PowerPC:
 
   cpu/mem-loads/
   cpu/mem-stores/
+
+following on Arm:
+
+  arm_spe_0/ts_enable=1,pa_enable=1,load_filter=1,min_latency=30/
+  arm_spe_0/ts_enable=1,pa_enable=1,store_filter=1/
 
 User can pass any 'perf record' option behind '--' mark, like (to enable
 callchains and system wide monitoring):
