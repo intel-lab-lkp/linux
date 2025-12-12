@@ -18,9 +18,8 @@
 #ifndef _ATOMIC_H
 #define _ATOMIC_H
 
-typedef struct {
-	volatile int val;
-} atomic_t;
+#include <linux/types.h>
+#include <linux/compiler.h>
 
 #define ATOMIC_INITIALIZER { 0 }
 
@@ -30,36 +29,36 @@ typedef struct {
  * @oldval:	The expected value of the futex
  * @newval:	The new value to try and assign the futex
  *
- * Return the old value of addr->val.
+ * Return the old value of addr->counter.
  */
 static inline int
 atomic_cmpxchg(atomic_t *addr, int oldval, int newval)
 {
-	return __sync_val_compare_and_swap(&addr->val, oldval, newval);
+	return __sync_val_compare_and_swap(&addr->counter, oldval, newval);
 }
 
 /**
  * atomic_inc() - Atomic incrememnt
  * @addr:	Address of the variable to increment
  *
- * Return the new value of addr->val.
+ * Return the new value of addr->counter.
  */
 static inline int
 atomic_inc(atomic_t *addr)
 {
-	return __sync_add_and_fetch(&addr->val, 1);
+	return __sync_add_and_fetch(&addr->counter, 1);
 }
 
 /**
  * atomic_dec() - Atomic decrement
  * @addr:	Address of the variable to decrement
  *
- * Return the new value of addr-val.
+ * Return the new value of addr-counter.
  */
 static inline int
 atomic_dec(atomic_t *addr)
 {
-	return __sync_sub_and_fetch(&addr->val, 1);
+	return __sync_sub_and_fetch(&addr->counter, 1);
 }
 
 /**
@@ -67,12 +66,12 @@ atomic_dec(atomic_t *addr)
  * @addr:	Address of the variable to set
  * @newval:	New value for the atomic_t
  *
- * Return the new value of addr->val.
+ * Return the new value of addr->counter.
  */
 static inline int
 atomic_set(atomic_t *addr, int newval)
 {
-	addr->val = newval;
+	WRITE_ONCE(addr->counter, newval);
 	return newval;
 }
 
@@ -80,12 +79,12 @@ atomic_set(atomic_t *addr, int newval)
  * atomic_read() - Atomic read
  * @addr:	Address of the variable to read
  *
- * Return the value of addr->val.
+ * Return the value of addr->counter.
  */
 static inline int
 atomic_read(atomic_t *addr)
 {
-	return addr->val;
+	return READ_ONCE(addr->counter);
 }
 
 #endif
