@@ -19,6 +19,7 @@
 #include <linux/jump_label.h>
 
 #include <linux/irqchip/arm-gic-v4.h>
+#include <linux/irqchip/arm-gic-v5.h>
 
 #define VGIC_V3_MAX_CPUS	512
 #define VGIC_V2_MAX_CPUS	8
@@ -31,9 +32,22 @@
 #define VGIC_MIN_LPI		8192
 #define KVM_IRQCHIP_NUM_PINS	(1020 - 32)
 
-#define irq_is_ppi(irq) ((irq) >= VGIC_NR_SGIS && (irq) < VGIC_NR_PRIVATE_IRQS)
-#define irq_is_spi(irq) ((irq) >= VGIC_NR_PRIVATE_IRQS && \
-			 (irq) <= VGIC_MAX_SPI)
+#define irq_is_ppi_legacy(irq) ((irq) >= VGIC_NR_SGIS && (irq) < VGIC_NR_PRIVATE_IRQS)
+#define irq_is_spi_legacy(irq) ((irq) >= VGIC_NR_PRIVATE_IRQS && \
+					(irq) <= VGIC_MAX_SPI)
+#define irq_is_lpi_legacy(irq) ((irq) > VGIC_MAX_SPI)
+
+#define irq_is_ppi_v5(irq) (FIELD_GET(GICV5_HWIRQ_TYPE, irq) == GICV5_HWIRQ_TYPE_PPI)
+#define irq_is_spi_v5(irq) (FIELD_GET(GICV5_HWIRQ_TYPE, irq) == GICV5_HWIRQ_TYPE_SPI)
+#define irq_is_lpi_v5(irq) (FIELD_GET(GICV5_HWIRQ_TYPE, irq) == GICV5_HWIRQ_TYPE_LPI)
+
+#define gic_is_v5(k) ((k)->arch.vgic.vgic_model == KVM_DEV_TYPE_ARM_VGIC_V5)
+
+#define irq_is_ppi(k, i) (gic_is_v5(k) ? irq_is_ppi_v5(i) : irq_is_ppi_legacy(i))
+#define irq_is_spi(k, i) (gic_is_v5(k) ? irq_is_spi_v5(i) : irq_is_spi_legacy(i))
+#define irq_is_lpi(k, i) (gic_is_v5(k) ? irq_is_lpi_v5(i) : irq_is_lpi_legacy(i))
+
+#define irq_is_private(k, i) (gic_is_v5(k) ? irq_is_ppi_v5(i) : i < VGIC_NR_PRIVATE_IRQS)
 
 enum vgic_type {
 	VGIC_V2,		/* Good ol' GICv2 */
@@ -418,8 +432,13 @@ u64 vgic_v3_get_misr(struct kvm_vcpu *vcpu);
 
 #define irqchip_in_kernel(k)	(!!((k)->arch.vgic.in_kernel))
 #define vgic_initialized(k)	((k)->arch.vgic.initialized)
-#define vgic_valid_spi(k, i)	(((i) >= VGIC_NR_PRIVATE_IRQS) && \
+#define vgic_ready(k)		((k)->arch.vgic.ready)
+#define vgic_valid_spi_legacy(k, i)	(((i) >= VGIC_NR_PRIVATE_IRQS) && \
 			((i) < (k)->arch.vgic.nr_spis + VGIC_NR_PRIVATE_IRQS))
+#define vgic_valid_spi_v5(k, i)	(irq_is_spi(k, i) && \
+				 (FIELD_GET(GICV5_HWIRQ_ID, i) < (k)->arch.vgic.nr_spis))
+#define vgic_valid_spi(k, i) (((k)->arch.vgic.vgic_model != KVM_DEV_TYPE_ARM_VGIC_V5) ? \
+				vgic_valid_spi_legacy(k, i) : vgic_valid_spi_v5(k, i))
 
 bool kvm_vcpu_has_pending_irqs(struct kvm_vcpu *vcpu);
 void kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu);
