@@ -108,11 +108,13 @@ pub(crate) struct Gsp {
     pub(crate) libos: CoherentAllocation<LibosMemoryRegionInitArgument>,
     /// Init log buffer.
     #[pin]
-    pub loginit: debugfs::File<LogBuffer>,
+    loginit: debugfs::File<LogBuffer>,
     /// Interrupts log buffer.
-    logintr: LogBuffer,
+    #[pin]
+    logintr: debugfs::File<LogBuffer>,
     /// RM log buffer.
-    logrm: LogBuffer,
+    #[pin]
+    logrm: debugfs::File<LogBuffer>,
     /// Command queue.
     pub(crate) cmdq: Cmdq,
     /// RM arguments.
@@ -177,18 +179,17 @@ impl Gsp {
         dma_write!(libos[3] = LibosMemoryRegionInitArgument::new("RMARGS", &rmargs))?;
 
         #[allow(static_mut_refs)]
-        let debugfs_dir =
-            // SAFETY: `DEBUGFS_ROOT` is never modified after initialization, so it is safe to
-            // create a shared reference to it.
-            unsafe { crate::DEBUGFS_ROOT.as_ref() }
-            .map(|root| root.subdir(pdev.name()))
-            .ok_or(ENOENT)?;
+        // SAFETY: `DEBUGFS_ROOT` is never modified after initialization, so it is safe to
+        // create a shared reference to it.
+        let novacore_dir = unsafe { crate::DEBUGFS_ROOT.as_ref() }.ok_or(ENOENT)?;
+
+        let root = novacore_dir.subdir(pdev.name());
 
         Ok(try_pin_init!(Self {
             libos,
-            loginit <- debugfs_dir.read_binary_file(kernel::c_str!("loginit"), loginit),
-            logintr,
-            logrm,
+            loginit <- root.read_binary_file(kernel::c_str!("loginit"), loginit),
+            logintr <- root.read_binary_file(kernel::c_str!("logintr"), logintr),
+            logrm <- root.read_binary_file(kernel::c_str!("logrm"), logrm),
             rmargs,
             cmdq,
         }))
