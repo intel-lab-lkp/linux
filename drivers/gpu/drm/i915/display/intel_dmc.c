@@ -35,6 +35,7 @@
 #include "intel_display_power_well.h"
 #include "intel_display_regs.h"
 #include "intel_display_rpm.h"
+#include "intel_display_trace.h"
 #include "intel_display_types.h"
 #include "intel_display_utils.h"
 #include "intel_dmc.h"
@@ -1699,6 +1700,8 @@ void intel_pipedmc_irq_handler(struct intel_display *display, enum pipe pipe)
 			spin_lock(&display->drm->event_lock);
 
 			if (crtc->flipq_event) {
+				trace_intel_flipq_done(crtc);
+
 				/*
 				 * Update vblank counter/timestamp in case it
 				 * hasn't been done yet for this frame.
