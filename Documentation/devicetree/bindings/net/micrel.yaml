@@ -1,0 +1,527 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/micrel.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Micrel KSZ series PHYs and switches
+
+maintainers:
+  - Andrew Lunn <andrew@lunn.ch>
+  - Stefan Eichenberger <eichest@gmail.com>
+
+description: |
+  The Micrel KSZ series contains different network phys and switches.
+
+  Some boards require special tuning values, particularly when it comes to
+  clock delays. You can specify clock delay values in the PHY OF device node.
+
+properties:
+  compatible:
+    enum:
+      - ethernet-phy-id000e.7237 # KSZ8873MLL
+      - ethernet-phy-id0022.1430 # KSZ886X
+      - ethernet-phy-id0022.1435 # KSZ8863
+      - ethernet-phy-id0022.1510 # KSZ8041
+      - ethernet-phy-id0022.1537 # KSZ8041RNLI
+      - ethernet-phy-id0022.1550 # KSZ8051
+      - ethernet-phy-id0022.1555 # KSZ8021
+      - ethernet-phy-id0022.1556 # KSZ8031
+      - ethernet-phy-id0022.1560 # KSZ8081, KSZ8091
+      - ethernet-phy-id0022.1570 # KSZ8061
+      - ethernet-phy-id0022.1610 # KSZ9021
+      - ethernet-phy-id0022.1611 # KSZ9021RLRN
+      - ethernet-phy-id0022.161a # KSZ8001
+      - ethernet-phy-id0022.1620 # KSZ9031
+      - ethernet-phy-id0022.1631 # KSZ9477
+      - ethernet-phy-id0022.1640 # KSZ9131
+      - ethernet-phy-id0022.1650 # LAN8841
+      - ethernet-phy-id0022.1660 # LAN8814
+      - ethernet-phy-id0022.1670 # LAN8804
+      - ethernet-phy-id0022.1720 # KS8737
+
+allOf:
+  - $ref: ethernet-phy.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: ethernet-phy-id0022.1510
+    then:
+      properties:
+        micrel,fiber-mode:
+          type: boolean
+          description: |
+            If present the PHY is configured to operate in fiber mode.
+
+            The KSZ8041FTL variant, supports fiber mode, enabled by the FXEN
+            boot strapping pin. It can't be determined from the PHY registers
+            whether the PHY is in fiber mode, so this boolean device tree
+            property can be used to describe it.
+
+            In fiber mode, auto-negotiation is disabled and the PHY can only work in
+            100base-fx (full and half duplex) modes.
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - ethernet-phy-id0022.1555
+              - ethernet-phy-id0022.1556
+              - ethernet-phy-id0022.1560
+    then:
+      properties:
+        clock-names:
+          const: rmii-ref
+          description: |
+            supported clocks:
+              - The RMII reference input clock. Used to determine the XI
+                input clock.
+        micrel,rmii-reference-clock-select-25-mhz:
+          type: boolean
+          description: |
+            RMII Reference Clock Select bit selects 25 MHz mode
+
+            Setting the RMII Reference Clock Select bit enables 25 MHz rather
+            than 50 MHz clock mode.
+
+            Note that this option in only needed for certain PHY revisions with a
+            non-standard, inverted function of this configuration bit.
+            Specifically, a clock reference ("rmii-ref") is always needed to
+            actually select a mode.
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: ethernet-phy-id0022.1660
+    then:
+      properties:
+        coma-mode-gpios:
+          maxItems: 1
+          description: |
+            If present the given gpio will be deasserted when the PHY is probed.
+
+            Some PHYs have a COMA mode input pin which puts the PHY into
+            isolate and power-down mode. On some boards this input is connected
+            to a GPIO of the SoC.
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - ethernet-phy-id0022.1510
+              - ethernet-phy-id0022.1555
+              - ethernet-phy-id0022.1556
+              - ethernet-phy-id0022.1550
+              - ethernet-phy-id0022.1560
+              - ethernet-phy-id0022.161a
+              - ethernet-phy-id0022.1660
+    then:
+      properties:
+        micrel,led-mode:
+          description: |
+            LED mode value to set for PHYs with configurable LEDs.
+
+            Configure the LED mode with single value. The list of PHYs and the
+            bits that are currently supported:
+
+            KSZ8001: register 0x1e, bits 15..14
+            KSZ8041: register 0x1e, bits 15..14
+            KSZ8021: register 0x1f, bits 5..4
+            KSZ8031: register 0x1f, bits 5..4
+            KSZ8051: register 0x1f, bits 5..4
+            KSZ8081: register 0x1f, bits 5..4
+            KSZ8091: register 0x1f, bits 5..4
+            LAN8814: register EP5.0, bit 6
+
+            See the respective PHY datasheet for the mode values.
+          minimum: 0
+          maximum: 3
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: ethernet-phy-id0022.1620
+    then:
+      properties:
+        enable-edpd:
+          type: boolean
+          description:
+            Enable Energy Detect Power Down mode. Reduces power consumption when the
+            link is down.
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - ethernet-phy-id0022.1555
+              - ethernet-phy-id0022.1556
+              - ethernet-phy-id0022.1560
+    then:
+      properties:
+        clock-names:
+          const: rmii-ref
+          description: |
+            supported clocks:
+              - The RMII reference input clock. Used to determine the XI
+                input clock.
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - ethernet-phy-id0022.1610
+              - ethernet-phy-id0022.1611
+    then:
+      properties:
+        rxc-skew-ps:
+          description: |
+            Skew control of RXC pad (picoseconds). A value of 0 equals to a
+            skew of -840ps. Increments of 200ps are allowed.
+
+            The actual increment on the chip is 120ps ranging from -840ps to
+            960ps, this mismatch comes from a documentation error before
+            datasheet revision 1.2 (Feb 2014):
+          minimum: 0
+          maximum: 3000
+          default: 1400
+        txc-skew-ps:
+          description: |
+            Skew control of TXC pad (picoseconds). A value of 0 equals to a
+            skew of -840ps. Increments of 200ps are allowed.
+
+            The actual increment on the chip is 120ps ranging from -840ps to
+            960ps, this mismatch comes from a documentation error before
+            datasheet revision 1.2 (Feb 2014):
+          minimum: 0
+          maximum: 3000
+          default: 1400
+        rxdv-skew-ps:
+          description: |
+            Skew control of RX CTL pad (picoseconds). A value of 0 equals to a
+            skew of -840ps. Increments of 200ps are allowed.
+
+            The actual increment on the chip is 120ps ranging from -840ps to
+            960ps, this mismatch comes from a documentation error before
+            datasheet revision 1.2 (Feb 2014):
+          minimum: 0
+          maximum: 3000
+          default: 1400
+        txen-skew-ps:
+          description: |
+            Skew control of TX CTL pad (picoseconds). A value of 0 equals to a
+            skew of -840ps. Increments of 200ps are allowed.
+
+            The actual increment on the chip is 120ps ranging from -840ps to
+            960ps, this mismatch comes from a documentation error before
+            datasheet revision 1.2 (Feb 2014):
+          minimum: 0
+          maximum: 3000
+          default: 1400
+        rxd0-skew-ps:
+          description: |
+            Skew control of RX data 0 pad (picoseconds). A value of 0 equals to
+            a skew of -840ps. Increments of 200ps are allowed.
+
+            The actual increment on the chip is 120ps ranging from -840ps to
+            960ps, this mismatch comes from a documentation error before
+            datasheet revision 1.2 (Feb 2014):
+          minimum: 0
+          maximum: 3000
+          default: 1400
+        rxd1-skew-ps:
+          description: |
+            Skew control of RX data 1 pad (picoseconds). A value of 0 equals to
+            a skew of -840ps. Increments of 200ps are allowed.
+
+            The actual increment on the chip is 120ps ranging from -840ps to
+            960ps, this mismatch comes from a documentation error before
+            datasheet revision 1.2 (Feb 2014):
+          minimum: 0
+          maximum: 3000
+          default: 1400
+        rxd2-skew-ps:
+          description: |
+            Skew control of RX data 2 pad (picoseconds). A value of 0 equals to
+            a skew of -840ps. Increments of 200ps are allowed.
+
+            The actual increment on the chip is 120ps ranging from -840ps to
+            960ps, this mismatch comes from a documentation error before
+            datasheet revision 1.2 (Feb 2014):
+          minimum: 0
+          maximum: 3000
+          default: 1400
+        rxd3-skew-ps:
+          description: |
+            Skew control of RX data 3 pad (picoseconds). A value of 0 equals to
+            a skew of -840ps. Increments of 200ps are allowed.
+
+            The actual increment on the chip is 120ps ranging from -840ps to
+            960ps, this mismatch comes from a documentation error before
+            datasheet revision 1.2 (Feb 2014):
+          minimum: 0
+          maximum: 3000
+          default: 1400
+        txd0-skew-ps:
+          description: |
+            Skew control of TX data 0 pad (picoseconds). A value of 0 equals to
+            a skew of -840ps. Increments of 200ps are allowed.
+
+            The actual increment on the chip is 120ps ranging from -840ps to
+            960ps, this mismatch comes from a documentation error before
+            datasheet revision 1.2 (Feb 2014):
+          minimum: 0
+          maximum: 3000
+          default: 1400
+        txd1-skew-ps:
+          description: |
+            Skew control of TX data 1 pad (picoseconds). A value of 0 equals to
+            a skew of -840ps. Increments of 200ps are allowed.
+
+            The actual increment on the chip is 120ps ranging from -840ps to
+            960ps, this mismatch comes from a documentation error before
+            datasheet revision 1.2 (Feb 2014):
+          minimum: 0
+          maximum: 3000
+          default: 1400
+        txd2-skew-ps:
+          description: |
+            Skew control of TX data 2 pad (picoseconds). A value of 0 equals to
+            a skew of -840ps. Increments of 200ps are allowed.
+
+            The actual increment on the chip is 120ps ranging from -840ps to
+            960ps, this mismatch comes from a documentation error before
+            datasheet revision 1.2 (Feb 2014):
+          minimum: 0
+          maximum: 3000
+          default: 1400
+        txd3-skew-ps:
+          description: |
+            Skew control of TX data 3 pad (picoseconds). A value of 0 equals to
+            a skew of -840ps. Increments of 200ps are allowed.
+
+            The actual increment on the chip is 120ps ranging from -840ps to
+            960ps, this mismatch comes from a documentation error before
+            datasheet revision 1.2 (Feb 2014):
+          minimum: 0
+          maximum: 3000
+          default: 1400
+    else:
+      if:
+        properties:
+          compatible:
+            contains:
+              const: ethernet-phy-id0022.1620
+      then:
+        properties:
+          rxc-skew-ps:
+            description: |
+              Skew control of RXC pad (picoseconds). A value of 0 equals to a skew
+              of -900ps. Increments of 60ps are allowed.
+            minimum: 0
+            maximum: 1860
+            default: 900
+          txc-skew-ps:
+            description: |
+              Skew control of TXC pad (picoseconds). A value of 0 equals to a skew
+              of -900ps. Increments of 60ps are allowed.
+            minimum: 0
+            maximum: 1860
+            default: 900
+          rxdv-skew-ps:
+            description: |
+              Skew control of RX CTL pad (picoseconds). A value of 0 equals to a
+              skew of -420ps. Increments of 60ps are allowed.
+            minimum: 0
+            maximum: 900
+            default: 420
+          txen-skew-ps:
+            description: |
+              Skew control of TX CTL pad (picoseconds). A value of 0 equals to a
+              skew of -420ps. Increments of 60ps are allowed.
+            minimum: 0
+            maximum: 900
+            default: 420
+          rxd0-skew-ps:
+            description: |
+              Skew control of RX data 0 pad (picoseconds). A value of 0 equals to a
+              skew of -420ps. Increments of 60ps are allowed.
+            minimum: 0
+            maximum: 900
+            default: 420
+          rxd1-skew-ps:
+            description: |
+              Skew control of RX data 1 pad (picoseconds). A value of 0 equals to a
+              skew of -420ps. Increments of 60ps are allowed.
+            minimum: 0
+            maximum: 900
+            default: 420
+          rxd2-skew-ps:
+            description: |
+              Skew control of RX data 2 pad (picoseconds). A value of 0 equals to a
+              skew of -420ps. Increments of 60ps are allowed.
+            minimum: 0
+            maximum: 900
+            default: 420
+          rxd3-skew-ps:
+            description: |
+              Skew control of RX data 3 pad (picoseconds). A value of 0 equals to a
+              skew of -420ps. Increments of 60ps are allowed.
+            minimum: 0
+            maximum: 900
+            default: 420
+          txd0-skew-ps:
+            description: |
+              Skew control of TX data 0 pad (picoseconds). A value of 0 equals to a
+              skew of -420ps. Increments of 60ps are allowed.
+            minimum: 0
+            maximum: 900
+            default: 420
+          txd1-skew-ps:
+            description: |
+              Skew control of TX data 1 pad (picoseconds). A value of 0 equals to a
+              skew of -420ps. Increments of 60ps are allowed.
+            minimum: 0
+            maximum: 900
+            default: 420
+          txd2-skew-ps:
+            description: |
+              Skew control of TX data 2 pad (picoseconds). A value of 0 equals to a
+              skew of -420ps. Increments of 60ps are allowed.
+            minimum: 0
+            maximum: 900
+            default: 420
+          txd3-skew-ps:
+            description: |
+              Skew control of TX data 3 pad (picoseconds). A value of 0 equals to a
+              skew of -420ps. Increments of 60ps are allowed.
+            minimum: 0
+            maximum: 900
+            default: 420
+      else:
+        if:
+          properties:
+            compatible:
+              contains:
+                enum:
+                  - ethernet-phy-id0022.1640
+                  - ethernet-phy-id0022.1660
+        then:
+          properties:
+            rxc-skew-psec:
+              description: |
+                Skew control of RXC pad (picoseconds). A value of 0 equals to a
+                skew value of 0ps. Increments of 100ps are allowed.
+              minimum: -700
+              maximum: 2400
+              default: 0
+            txc-skew-psec:
+              description: |
+                Skew control of TXC pad (picoseconds). A value of 0 equals to a
+                skew value of 0ps. Increments of 100ps are allowed.
+              minimum: -700
+              maximum: 2400
+              default: 0
+            rxdv-skew-psec:
+              description: |
+                Skew control of RX CTL pad (picoseconds). A value of 0 equals to a
+                skew value of 0ps. Increments of 100ps are allowed.
+              minimum: -700
+              maximum: 800
+              default: 0
+            txen-skew-psec:
+              description: |
+                Skew control of TX CTL pad (picoseconds). A value of 0 equals to a
+                skew value of 0ps. Increments of 100ps are allowed.
+              minimum: -700
+              maximum: 800
+              default: 0
+            rxd0-skew-psec:
+              description: |
+                Skew control of RX data 0 pad (picoseconds). A value of 0 equals to
+                a skew value of 0ps. Increments of 100ps are allowed.
+              minimum: -700
+              maximum: 800
+              default: 0
+            rxd1-skew-psec:
+              description: |
+                Skew control of RX data 1 pad (picoseconds). A value of 0 equals to
+                a skew value of 0ps. Increments of 100ps are allowed.
+              minimum: -700
+              maximum: 800
+              default: 0
+            rxd2-skew-psec:
+              description: |
+                Skew control of RX data 2 pad (picoseconds). A value of 0 equals to
+                a skew value of 0ps. Increments of 100ps are allowed.
+              minimum: -700
+              maximum: 800
+              default: 0
+            rxd3-skew-psec:
+              description: |
+                Skew control of RX data 3 pad (picoseconds). A value of 0 equals to
+                a skew value of 0ps. Increments of 100ps are allowed.
+              minimum: -700
+              maximum: 800
+              default: 0
+            txd0-skew-psec:
+              description: |
+                Skew control of TX data 0 pad (picoseconds). A value of 0 equals to
+                a skew value of 0ps. Increments of 100ps are allowed.
+              minimum: -700
+              maximum: 800
+              default: 0
+            txd1-skew-psec:
+              description: |
+                Skew control of TX data 1 pad (picoseconds). A value of 0 equals to
+                a skew value of 0ps. Increments of 100ps are allowed.
+              minimum: -700
+              maximum: 800
+              default: 0
+            txd2-skew-psec:
+              description: |
+                Skew control of TX data 2 pad (picoseconds). A value of 0 equals to
+                a skew value of 0ps. Increments of 100ps are allowed.
+              minimum: -700
+              maximum: 800
+              default: 0
+            txd3-skew-psec:
+              description: |
+                Skew control of TX data 3 pad (picoseconds). A value of 0 equals to
+                a skew value of 0ps. Increments of 100ps are allowed.
+              minimum: -700
+              maximum: 800
+              default: 0
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    ethernet {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+
+        ethernet-phy@5 {
+            compatible = "ethernet-phy-id0022.1510";
+            reg = <5>;
+            micrel,led-mode = <2>;
+            micrel,fiber-mode;
+        };
+
+        ethernet-phy@7 {
+            compatible = "ethernet-phy-id0022.1610";
+            reg = <7>;
+            rxc-skew-ps = <3000>;
+            rxdv-skew-ps = <0>;
+            txc-skew-ps = <3000>;
+            txen-skew-ps = <0>;
+        };
+
+        ethernet-phy@9 {
+            compatible = "ethernet-phy-id0022.1640";
+            reg = <9>;
+            rxc-skew-psec = <(-100)>;
+            txc-skew-psec = <(-100)>;
+        };
+    };
