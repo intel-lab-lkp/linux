@@ -45,39 +45,36 @@
 
 #define __bf_shf(x) (__builtin_ffsll(x) - 1)
 
-#define __BF_FIELD_CHECK_MASK(_mask, _val, _pfx)			\
-	({								\
+#define __BF_FIELD_CHECK_MASK(_mask, _pfx)				\
+	do {								\
 		BUILD_BUG_ON_MSG(!__builtin_constant_p(_mask),		\
 				 _pfx "mask is not constant");		\
 		BUILD_BUG_ON_MSG((_mask) == 0, _pfx "mask is zero");	\
-		BUILD_BUG_ON_MSG(__builtin_constant_p(_val) ?		\
-				 ~((_mask) >> __bf_shf(_mask)) &	\
-					(0 + (_val)) : 0,		\
-				 _pfx "value too large for the field"); \
 		__BUILD_BUG_ON_NOT_POWER_OF_2((_mask) +			\
 					      (1ULL << __bf_shf(_mask))); \
-	})
+	} while (0)
+
+#define __BF_FIELD_CHECK_VAL(mask, val, pfx)			\
+	BUILD_BUG_ON_MSG(__builtin_constant_p(val) &&		\
+			 ~((mask) >> __bf_shf(mask)) & (val),	\
+			 pfx "value too large for the field")
 
 #define __BF_FIELD_CHECK_REG(mask, reg, pfx)				\
 	BUILD_BUG_ON_MSG((mask) + 0U + 0UL + 0ULL >			\
 			 ~0ULL >> (64 - 8 * sizeof (reg)),		\
 			 pfx "type of reg too small for mask")
 
-#define __BF_FIELD_CHECK(mask, reg, val, pfx)				\
-	({								\
-		__BF_FIELD_CHECK_MASK(mask, val, pfx);			\
-		__BF_FIELD_CHECK_REG(mask, reg, pfx);			\
-	})
-
 #define __BF_FIELD_PREP(mask, val, pfx)					\
 	({								\
-		__BF_FIELD_CHECK_MASK(mask, val, pfx);			\
+		__BF_FIELD_CHECK_MASK(mask, pfx);			\
+		__BF_FIELD_CHECK_VAL(mask, val, pfx);			\
 		((val) << __bf_shf(mask)) & (mask);			\
 	})
 
 #define __BF_FIELD_GET(mask, reg, pfx)					\
 	({								\
-		__BF_FIELD_CHECK_MASK(mask, 0U, pfx);			\
+		__BF_FIELD_CHECK_MASK(mask, pfx);			\
+		__BF_FIELD_CHECK_REG(mask, reg, pfx);			\
 		((reg) & (mask)) >> __bf_shf(mask);			\
 	})
 
@@ -91,7 +88,7 @@
 #define FIELD_MAX(mask)							\
 	({								\
 		__auto_type _mask = mask;				\
-		__BF_FIELD_CHECK(_mask, 0ULL, 0ULL, "FIELD_MAX: ");	\
+		__BF_FIELD_CHECK_MASK(_mask, "FIELD_MAX: ");		\
 		(_mask >> __bf_shf(_mask));				\
 	})
 
@@ -106,7 +103,7 @@
 	({								\
 		__auto_type _mask = mask;				\
 		__auto_type _val = 1 ? (val) : _mask;			\
-		__BF_FIELD_CHECK(_mask, 0ULL, 0ULL, "FIELD_FIT: ");	\
+		__BF_FIELD_CHECK_MASK(_mask, "FIELD_FIT: ");		\
 		!((_val << __bf_shf(_mask)) & ~_mask);			\
 	})
 
@@ -122,7 +119,6 @@
 	({								\
 		__auto_type _mask = mask;				\
 		__auto_type _val = 1 ? (val) : _mask;			\
-		__BF_FIELD_CHECK_REG(_mask, 0ULL, "FIELD_PREP: ");	\
 		__BF_FIELD_PREP(_mask, _val, "FIELD_PREP: ");		\
 	})
 
@@ -164,7 +160,6 @@
 	({								\
 		__auto_type _mask = mask;				\
 		__auto_type _reg = reg;					\
-		__BF_FIELD_CHECK_REG(_mask, _reg, "FIELD_GET: ");	\
 		__BF_FIELD_GET(_mask, _reg, "FIELD_GET: ");		\
 	})
 
@@ -182,8 +177,9 @@
 		__auto_type _mask = mask;						\
 		__auto_type _reg_p = reg_p;						\
 		__auto_type _val = 1 ? (val) : _mask;					\
-		typecheck_pointer(_reg_p);						\
-		__BF_FIELD_CHECK(_mask, *(_reg_p), _val, "FIELD_MODIFY: ");		\
+		__BF_FIELD_CHECK_MASK(_mask, "FIELD_MODIFY: ");				\
+		__BF_FIELD_CHECK_VAL(_mask, _val, "FIELD_MODIFY: ");			\
+		__BF_FIELD_CHECK_REG(_mask, *_reg_p, "FIELD_MODIFY: ");			\
 		*_reg_p = (*_reg_p & ~_mask) | ((_val << __bf_shf(_mask)) & _mask);	\
 	})
 
