@@ -158,7 +158,8 @@ static void cpc_hd_init(struct cpc_host_device *cpc_hd)
 	skb_queue_head_init(&cpc_hd->tx_queue);
 }
 
-struct cpc_host_device *cpc_hd_create(struct cpc_hd_driver *driver, struct device *parent)
+struct cpc_host_device *cpc_hd_create(struct cpc_hd_driver *driver, struct device *parent,
+				      void *priv)
 {
 	struct cpc_host_device *cpc_hd;
 	struct gb_host_device *hd;
@@ -175,6 +176,7 @@ struct cpc_host_device *cpc_hd_create(struct cpc_hd_driver *driver, struct devic
 	cpc_hd = gb_hd_to_cpc_hd(hd);
 	cpc_hd->gb_hd = hd;
 	cpc_hd->driver = driver;
+	cpc_hd->priv = priv;
 
 	cpc_hd_init(cpc_hd);
 
