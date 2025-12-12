@@ -635,8 +635,6 @@ static int ov2722_set_fmt(struct v4l2_subdev *sd,
 
 	if (format->pad)
 		return -EINVAL;
-	if (!fmt)
-		return -EINVAL;
 	ov2722_info = v4l2_get_subdev_hostdata(sd);
 	if (!ov2722_info)
 		return -EINVAL;
@@ -704,8 +702,6 @@ static int ov2722_get_fmt(struct v4l2_subdev *sd,
 	struct ov2722_device *dev = to_ov2722_sensor(sd);
 
 	if (format->pad)
-		return -EINVAL;
-	if (!fmt)
 		return -EINVAL;
 
 	fmt->width = dev->res->width;

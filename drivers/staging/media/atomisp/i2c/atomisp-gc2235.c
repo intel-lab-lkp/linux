@@ -535,8 +535,6 @@ static int gc2235_set_fmt(struct v4l2_subdev *sd,
 		return -EINVAL;
 	if (format->pad)
 		return -EINVAL;
-	if (!fmt)
-		return -EINVAL;
 
 	mutex_lock(&dev->input_lock);
 	res = v4l2_find_nearest_size(gc2235_res_preview,
@@ -575,9 +573,6 @@ static int gc2235_get_fmt(struct v4l2_subdev *sd,
 	struct gc2235_device *dev = to_gc2235_sensor(sd);
 
 	if (format->pad)
-		return -EINVAL;
-
-	if (!fmt)
 		return -EINVAL;
 
 	fmt->width = dev->res->width;
