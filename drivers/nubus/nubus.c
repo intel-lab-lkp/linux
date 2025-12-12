@@ -883,8 +883,10 @@ static int __init nubus_init(void)
 
 	nubus_proc_init();
 	err = nubus_parent_device_register();
-	if (err)
+	if (err) {
+		put_device(&nubus_parent);
 		return err;
+	}
 	nubus_scan_bus();
 	return 0;
 }
