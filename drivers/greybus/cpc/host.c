@@ -6,6 +6,7 @@
 #include <linux/err.h>
 #include <linux/greybus.h>
 #include <linux/module.h>
+#include <linux/skbuff.h>
 
 #include "cpc.h"
 #include "host.h"
@@ -38,6 +39,8 @@ static int cpc_hd_message_send(struct cpc_host_device *cpc_hd, u16 cport_id,
 			       struct gb_message *message, gfp_t gfp_mask)
 {
 	struct cpc_cport *cport;
+	struct sk_buff *skb;
+	unsigned int size;
 
 	cport = cpc_hd_get_cport(cpc_hd, cport_id);
 	if (!cport) {
@@ -45,7 +48,18 @@ static int cpc_hd_message_send(struct cpc_host_device *cpc_hd, u16 cport_id,
 		return -EINVAL;
 	}
 
-	return cpc_cport_message_send(cport, message, gfp_mask);
+	size = sizeof(*message->header) + message->payload_size;
+	skb = alloc_skb(size, gfp_mask);
+	if (!skb)
+		return -ENOMEM;
+
+	/* Header and payload are already contiguous in Greybus message */
+	skb_put_data(skb, message->buffer, sizeof(*message->header) + message->payload_size);
+
+	CPC_SKB_CB(skb)->cport = cport;
+	CPC_SKB_CB(skb)->gb_message = message;
+
+	return cpc_cport_transmit(cport, skb);
 }
 
 static int cpc_hd_cport_allocate(struct cpc_host_device *cpc_hd, int cport_id, unsigned long flags)
@@ -143,8 +157,8 @@ struct cpc_host_device *cpc_hd_create(struct cpc_hd_driver *driver, struct devic
 	struct cpc_host_device *cpc_hd;
 	struct gb_host_device *hd;
 
-	if ((!driver->message_send) || (!driver->message_cancel)) {
-		dev_err(parent, "missing mandatory callbacks\n");
+	if (!driver->transmit) {
+		dev_err(parent, "missing mandatory callback\n");
 		return ERR_PTR(-EINVAL);
 	}
 
@@ -180,11 +194,32 @@ void cpc_hd_del(struct cpc_host_device *cpc_hd)
 }
 EXPORT_SYMBOL_GPL(cpc_hd_del);
 
+void cpc_hd_message_sent(struct sk_buff *skb, int status)
+{
+	struct cpc_host_device *cpc_hd = CPC_SKB_CB(skb)->cport->cpc_hd;
+	struct gb_host_device *hd = cpc_hd->gb_hd;
+
+	greybus_message_sent(hd, CPC_SKB_CB(skb)->gb_message, status);
+}
+EXPORT_SYMBOL_GPL(cpc_hd_message_sent);
+
 void cpc_hd_rcvd(struct cpc_host_device *cpc_hd, u16 cport_id, u8 *data, size_t length)
 {
 	greybus_data_rcvd(cpc_hd->gb_hd, cport_id, data, length);
 }
 EXPORT_SYMBOL_GPL(cpc_hd_rcvd);
+
+/**
+ * cpc_hd_send_skb() - Queue a socket buffer for transmission.
+ * @cpc_hd: Host device to send SKB over.
+ * @skb: SKB to send.
+ */
+int cpc_hd_send_skb(struct cpc_host_device *cpc_hd, struct sk_buff *skb)
+{
+	const struct cpc_hd_driver *drv = cpc_hd->driver;
+
+	return drv->transmit(cpc_hd, skb);
+}
 
 MODULE_DESCRIPTION("Greybus over CPC");
 MODULE_LICENSE("GPL");

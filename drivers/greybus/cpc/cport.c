@@ -31,7 +31,14 @@ void cpc_cport_release(struct cpc_cport *cport)
 	kfree(cport);
 }
 
-int cpc_cport_message_send(struct cpc_cport *cport, struct gb_message *message, gfp_t gfp_mask)
+/**
+ * cpc_cport_transmit() - Transmit skb over cport.
+ * @cport: cport.
+ * @skb: skb to be transmitted.
+ */
+int cpc_cport_transmit(struct cpc_cport *cport, struct sk_buff *skb)
 {
-	return cport->cpc_hd->driver->message_send(cport->cpc_hd, cport->id, message, gfp_mask);
+	struct cpc_host_device *cpc_hd = cport->cpc_hd;
+
+	return cpc_hd_send_skb(cpc_hd, skb);
 }
