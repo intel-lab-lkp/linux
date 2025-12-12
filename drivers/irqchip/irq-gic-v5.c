@@ -1064,6 +1064,11 @@ static struct gic_kvm_info gic_v5_kvm_info __initdata;
 
 static void __init gic_of_setup_kvm_info(struct device_node *node)
 {
+	if (!gicv5_global_data.virt_capable) {
+		pr_info("GIC implementation is not virtualization capable\n");
+		return;
+	}
+
 	gic_v5_kvm_info.type = GIC_V5;
 
 	/* GIC Virtual CPU interface maintenance interrupt */
