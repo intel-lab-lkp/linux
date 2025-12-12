@@ -1182,6 +1182,24 @@ static int clk_pixel_set_rate(struct clk_hw *hw, unsigned long rate,
 		f.m = frac->num;
 		f.n = frac->den;
 
+		/*
+		 * If clock is disabled, update the M, N and D registers and
+		 * don't hit the update bit.
+		 */
+		if (!clk_hw_is_enabled(hw)) {
+			int ret;
+
+			ret = regmap_read(rcg->clkr.regmap, RCG_CFG_OFFSET(rcg), &cfg);
+			if (ret)
+				return ret;
+
+			ret = __clk_rcg2_configure(rcg, &f, &cfg);
+			if (ret)
+				return ret;
+
+			return regmap_write(rcg->clkr.regmap, RCG_CFG_OFFSET(rcg), cfg);
+		}
+
 		return clk_rcg2_configure(rcg, &f);
 	}
 	return -EINVAL;

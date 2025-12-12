@@ -762,6 +762,12 @@ dsi_get_cmd_fmt(const enum mipi_dsi_pixel_format mipi_fmt)
 
 static void dsi_ctrl_disable(struct msm_dsi_host *msm_host)
 {
+	/* Check if we're already powered off before writing registers */
+	if (!msm_host->power_on) {
+		pr_info("DSI CTRL: Skipping register write - host already powered off\n");
+		return;
+	}
+
 	dsi_write(msm_host, REG_DSI_CTRL, 0);
 }
 
@@ -2489,12 +2495,19 @@ int msm_dsi_host_power_off(struct mipi_dsi_host *host)
 {
 	struct msm_dsi_host *msm_host = to_msm_dsi_host(host);
 	const struct msm_dsi_cfg_handler *cfg_hnd = msm_host->cfg_hnd;
+	int ret;
+
 
 	mutex_lock(&msm_host->dev_mutex);
 	if (!msm_host->power_on) {
 		DBG("dsi host already off");
 		goto unlock_ret;
 	}
+
+	/* Ensure clocks are enabled before register access */
+	ret = pm_runtime_get_sync(&msm_host->pdev->dev);
+	if (ret < 0)
+		pm_runtime_put_noidle(&msm_host->pdev->dev);
 
 	dsi_ctrl_disable(msm_host);
 
