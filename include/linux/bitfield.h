@@ -251,23 +251,9 @@ __MAKE_OP(64)
 #undef __MAKE_OP
 #undef ____MAKE_OP
 
-#define __field_prep(mask, val)						\
-	({								\
-		__auto_type __mask = (mask);				\
-		typeof(__mask) __val = (val);				\
-		unsigned int __shift = BITS_PER_TYPE(__mask) <= 32 ?	\
-				       __ffs(__mask) : __ffs64(__mask);	\
-		(__val << __shift) & __mask;				\
-	})
-
-#define __field_get(mask, reg)						\
-	({								\
-		__auto_type __mask = (mask);				\
-		typeof(__mask) __reg =  (reg);				\
-		unsigned int __shift = BITS_PER_TYPE(__mask) <= 32 ?	\
-				       __ffs(__mask) : __ffs64(__mask);	\
-		(__reg & __mask) >> __shift;				\
-	})
+/* As __bf_shf() but for non-zero variables */
+#define __BF_SHIFT(mask) \
+	(BITS_PER_TYPE(mask) <= 32 ? __ffs(mask) : __ffs64(mask))
 
 /**
  * field_prep() - prepare a bitfield element
@@ -285,9 +271,14 @@ __MAKE_OP(64)
  * If you want to ensure that @mask is a compile-time constant, please use
  * FIELD_PREP() directly instead.
  */
-#define field_prep(mask, val)						\
-	(__builtin_constant_p(mask) ? __FIELD_PREP(mask, val, "field_prep: ") \
-				    : __field_prep(mask, val))
+#define field_prep(mask, val)					\
+({								\
+	__auto_type _mask = mask;				\
+	__auto_type _val = 1 ? (val) : _mask;			\
+	__builtin_constant_p(_mask) ?				\
+		__FIELD_PREP(_mask, _val, "field_prep: ") :	\
+		(_val << __BF_SHIFT(_mask)) & _mask;		\
+})
 
 /**
  * field_get() - extract a bitfield element
@@ -305,8 +296,13 @@ __MAKE_OP(64)
  * If you want to ensure that @mask is a compile-time constant, please use
  * FIELD_GET() directly instead.
  */
-#define field_get(mask, reg)						\
-	(__builtin_constant_p(mask) ? __FIELD_GET(mask, reg, "field_get: ") \
-				    : __field_get(mask, reg))
+#define field_get(mask, reg)					\
+({								\
+	__auto_type _mask = mask;				\
+	__auto_type _reg = reg;					\
+	__builtin_constant_p(_mask) ?				\
+		__FIELD_GET(_mask, _reg, "field_get: ") :	\
+		(_reg & _mask) >> __BF_SHIFT(_mask);		\
+})
 
 #endif
