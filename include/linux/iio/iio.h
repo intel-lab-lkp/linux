@@ -10,6 +10,7 @@
 #include <linux/align.h>
 #include <linux/device.h>
 #include <linux/cdev.h>
+#include <linux/cleanup.h>
 #include <linux/compiler_types.h>
 #include <linux/minmax.h>
 #include <linux/slab.h>
@@ -738,6 +739,88 @@ static inline void iio_device_release_buffer_mode(struct iio_dev *indio_dev)
 {
 	__iio_dev_mode_unlock(indio_dev);
 }
+
+DEFINE_GUARD(__priv__iio_dev_mode_lock, struct iio_dev *,
+	     __iio_dev_mode_lock(_T), __iio_dev_mode_unlock(_T));
+DEFINE_GUARD_COND(__priv__iio_dev_mode_lock, _try_buffer,
+		  iio_device_claim_buffer_mode(_T));
+DEFINE_GUARD_COND(__priv__iio_dev_mode_lock, _try_direct,
+		  iio_device_claim_direct(_T));
+
+/**
+ * IIO_DEV_ACQUIRE_DIRECT_MODE(_dev, _var) - Tries to acquire the direct mode
+ *                                           lock with automatic release
+ * @_dev: IIO device instance
+ * @_var: Dummy variable identifier to store acquire result
+ *
+ * Tries to acquire the direct mode lock with cleanup ACQUIRE() semantics and
+ * automatically releases it at the end of the scope. It most be always paired
+ * with IIO_DEV_ACQUIRE_ERR(), for example::
+ *
+ *	IIO_DEV_ACQUIRE_DIRECT_MODE(indio_dev, claim);
+ *	if (IIO_DEV_ACQUIRE_ERR(&claim))
+ *		return -EBUSY;
+ *
+ * ...or a more common scenario (notice scope the braces)::
+ *
+ *	switch() {
+ *	case IIO_CHAN_INFO_RAW: {
+ *		IIO_DEV_ACQUIRE_DIRECT_MODE(indio_dev, claim);
+ *		if (IIO_DEV_ACQUIRE_ERR(&claim))
+ *			return -EBUSY;
+ *
+ *		...
+ *	}
+ *	case IIO_CHAN_INFO_SCALE:
+ *		...
+ *	...
+ *	}
+ *
+ * Context: Can sleep
+ */
+#define IIO_DEV_ACQUIRE_DIRECT_MODE(_dev, _var) \
+	ACQUIRE(__priv__iio_dev_mode_lock_try_direct, _var)(_dev)
+
+/**
+ * IIO_DEV_ACQUIRE_BUFFER_MODE(_dev, _var) - Tries to acquire the buffer mode
+ *                                           lock with automatic release
+ * @_dev: IIO device instance
+ * @_var: Dummy variable identifier to store acquire result
+ *
+ * Tries to acquire the direct mode lock and automatically releases it at the
+ * end of the scope. It most be paired with IIO_DEV_ACQUIRE_ERR(), for example::
+ *
+ *	IIO_DEV_ACQUIRE_BUFFER_MODE(indio_dev, claim);
+ *	if (IIO_DEV_ACQUIRE_ERR(&claim))
+ *		return IRQ_HANDLED;
+ *
+ * Context: Can sleep
+ */
+#define IIO_DEV_ACQUIRE_BUFFER_MODE(_dev, _var) \
+	ACQUIRE(__priv__iio_dev_mode_lock_try_buffer, _var)(_dev)
+
+/**
+ * IIO_DEV_ACQUIRE_ERR() - ACQUIRE_ERR() wrapper
+ * @_var: Dummy variable passed to IIO_DEV_ACQUIRE_*_MODE()
+ *
+ * Return: true on success, false on error
+ */
+#define IIO_DEV_ACQUIRE_ERR(_var_ptr) \
+	ACQUIRE_ERR(__priv__iio_dev_mode_lock_try_buffer, _var_ptr)
+
+/**
+ * IIO_DEV_GUARD_ANY_MODE - Acquires the mode lock with automatic release
+ * @_dev: IIO device instance
+ *
+ * Acquires the mode lock with cleanup guard() semantics. It is usually paired
+ * with iio_buffer_enabled().
+ *
+ * This should *not* be used to protect internal driver state and it's use in
+ * general is *strongly* discouraged. Use any of the IIO_DEV_ACQUIRE_*_MODE()
+ * variants.
+ */
+#define IIO_DEV_GUARD_ANY_MODE(_dev) \
+	guard(__priv__iio_dev_mode_lock)(_dev)
 
 extern const struct bus_type iio_bus_type;
 
