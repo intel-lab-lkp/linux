@@ -44,6 +44,7 @@
 #include "intel_dmc.h"
 #include "intel_dp.h"
 #include "intel_dp_aux.h"
+#include "intel_dp_tunnel.h"
 #include "intel_dsb.h"
 #include "intel_frontbuffer.h"
 #include "intel_hdmi.h"
@@ -1032,6 +1033,25 @@ static u8 frames_before_su_entry(struct intel_dp *intel_dp)
 	return frames_before_su_entry;
 }
 
+static void intel_psr_set_pr_bw_optimization(struct intel_dp *intel_dp)
+{
+	struct intel_display *display = to_intel_display(intel_dp);
+	u8 val;
+
+	if (DISPLAY_VER(display) < 35)
+		return;
+
+	if (!intel_dp_tunnel_bw_alloc_is_enabled(intel_dp))
+		return;
+
+	drm_dp_dpcd_readb(&intel_dp->aux, DP_TUNNELING_CAPABILITIES, &val);
+	if (!(val & DP_PANEL_REPLAY_OPTIMIZATION_SUPPORT))
+		return;
+
+	intel_de_rmw(display, TRANS_DP2_CTL(intel_dp->psr.transcoder), 0,
+		     TRANS_DP2_PR_TUNNELING_ENABLE);
+}
+
 static void dg2_activate_panel_replay(struct intel_dp *intel_dp)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
@@ -1055,6 +1075,9 @@ static void dg2_activate_panel_replay(struct intel_dp *intel_dp)
 
 	intel_de_rmw(display, TRANS_DP2_CTL(intel_dp->psr.transcoder), 0,
 		     TRANS_DP2_PANEL_REPLAY_ENABLE);
+
+	if (!intel_dp_is_edp(intel_dp))
+		intel_psr_set_pr_bw_optimization(intel_dp);
 }
 
 static void hsw_activate_psr2(struct intel_dp *intel_dp)
