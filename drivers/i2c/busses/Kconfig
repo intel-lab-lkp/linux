@@ -656,6 +656,12 @@ config I2C_DIGICOLOR
 	  This driver can also be built as a module.  If so, the module
 	  will be called i2c-digicolor.
 
+config I2C_EIO
+	tristate "Advantech EIO I2C bus"
+	depends on MFD_EIO
+	help
+	  Say Y or M to build support for Advantech EIO I2C block.
+
 config I2C_EG20T
 	tristate "Intel EG20T PCH/LAPIS Semicon IOH(ML7213/ML7223/ML7831) I2C"
 	depends on PCI && (X86_32 || MIPS || COMPILE_TEST)
