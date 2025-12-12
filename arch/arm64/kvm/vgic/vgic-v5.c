@@ -54,6 +54,45 @@ int vgic_v5_probe(const struct gic_kvm_info *info)
 	return 0;
 }
 
+static void vgic_v5_construct_hmrs(struct kvm_vcpu *vcpu);
+
+void vgic_v5_reset(struct kvm_vcpu *vcpu)
+{
+	u64 idr0;
+
+	idr0 = read_sysreg_s(SYS_ICC_IDR0_EL1);
+	switch (FIELD_GET(ICC_IDR0_EL1_ID_BITS, idr0)) {
+	case ICC_IDR0_EL1_ID_BITS_16BITS:
+		vcpu->arch.vgic_cpu.num_id_bits = 16;
+		break;
+	case ICC_IDR0_EL1_ID_BITS_24BITS:
+		vcpu->arch.vgic_cpu.num_id_bits = 24;
+		break;
+	default:
+		pr_warn("unknown value for id_bits");
+		vcpu->arch.vgic_cpu.num_id_bits = 16;
+	}
+
+	switch (FIELD_GET(ICC_IDR0_EL1_PRI_BITS, idr0)) {
+	case ICC_IDR0_EL1_PRI_BITS_4BITS:
+		vcpu->arch.vgic_cpu.num_pri_bits = 4;
+		break;
+	case ICC_IDR0_EL1_PRI_BITS_5BITS:
+		vcpu->arch.vgic_cpu.num_pri_bits = 5;
+		break;
+	default:
+		pr_warn("unknown value for priority_bits");
+		vcpu->arch.vgic_cpu.num_pri_bits = 4;
+	}
+
+	/*
+	 * We're now ready to run this VCPU so no more changes to the
+	 * PPI config are expected.
+	 */
+	vgic_v5_construct_hmrs(vcpu);
+
+}
+
 int vgic_v5_init(struct kvm *kvm)
 {
 	struct kvm_vcpu *vcpu;
@@ -105,8 +144,30 @@ static u32 vgic_v5_get_effective_priority_mask(struct kvm_vcpu *vcpu)
 	return priority_mask;
 }
 
+static void vgic_v5_construct_hmrs(struct kvm_vcpu *vcpu)
+{
+	/*
+	 * Calculate the PPI HMR to present to the guest (and for
+	 * internal interrupt masking).
+	 */
+	vcpu->arch.vgic_cpu.vgic_v5.vgic_ppi_hmr[0] = 0;
+	vcpu->arch.vgic_cpu.vgic_v5.vgic_ppi_hmr[1] = 0;
+	for (int i = 0; i < VGIC_V5_NR_PRIVATE_IRQS; ++i) {
+		int reg = i / 64;
+		u64 bit = BIT_ULL(i % 64);
+		struct vgic_irq *irq = &vcpu->arch.vgic_cpu.private_irqs[i];
+
+		raw_spin_lock(&irq->irq_lock);
+
+		if (irq->config == VGIC_CONFIG_LEVEL)
+			vcpu->arch.vgic_cpu.vgic_v5.vgic_ppi_hmr[reg] |= bit;
+
+		raw_spin_unlock(&irq->irq_lock);
+	}
+}
+
 static bool vgic_v5_ppi_set_pending_state(struct kvm_vcpu *vcpu,
-					  struct vgic_irq *irq)
+				   struct vgic_irq *irq)
 {
 	struct vgic_v5_cpu_if *cpu_if;
 	const u32 id_bit = BIT_ULL(irq->intid % 64);
