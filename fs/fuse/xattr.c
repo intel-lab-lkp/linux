@@ -73,6 +73,7 @@ ssize_t fuse_getxattr(struct inode *inode, const char *name, void *value,
 	args.out_numargs = 1;
 	if (size) {
 		args.out_argvar = true;
+		args.out_argvar_idx = 0;
 		args.out_args[0].size = size;
 		args.out_args[0].value = value;
 	} else {
@@ -135,6 +136,7 @@ ssize_t fuse_listxattr(struct dentry *entry, char *list, size_t size)
 	args.out_numargs = 1;
 	if (size) {
 		args.out_argvar = true;
+		args.out_argvar_idx = 0;
 		args.out_args[0].size = size;
 		args.out_args[0].value = list;
 	} else {

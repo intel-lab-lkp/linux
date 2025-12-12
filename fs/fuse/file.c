@@ -581,6 +581,7 @@ void fuse_read_args_fill(struct fuse_io_args *ia, struct file *file, loff_t pos,
 	args->in_args[0].size = sizeof(ia->read.in);
 	args->in_args[0].value = &ia->read.in;
 	args->out_argvar = true;
+	args->out_argvar_idx = 0;
 	args->out_numargs = 1;
 	args->out_args[0].size = count;
 }

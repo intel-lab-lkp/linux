@@ -337,6 +337,7 @@ long fuse_do_ioctl(struct file *file, unsigned int cmd, unsigned long arg,
 	ap.args.out_args[1].size = out_size;
 	ap.args.out_pages = true;
 	ap.args.out_argvar = true;
+	ap.args.out_argvar_idx = 1;
 
 	transferred = fuse_send_ioctl(fm, &ap.args, &outarg);
 	err = transferred;

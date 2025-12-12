@@ -694,7 +694,7 @@ ssize_t __fuse_simple_request(struct mnt_idmap *idmap,
 	ret = req->out.h.error;
 	if (!ret && args->out_argvar) {
 		BUG_ON(args->out_numargs == 0);
-		ret = args->out_args[args->out_numargs - 1].size;
+		ret = args->out_args[args->out_argvar_idx].size;
 	}
 	fuse_put_request(req);
 
@@ -2157,7 +2157,7 @@ int fuse_copy_out_args(struct fuse_copy_state *cs, struct fuse_args *args,
 	if (reqsize < nbytes || (reqsize > nbytes && !args->out_argvar))
 		return -EINVAL;
 	else if (reqsize > nbytes) {
-		struct fuse_arg *lastarg = &args->out_args[args->out_numargs-1];
+		struct fuse_arg *lastarg = &args->out_args[args->out_argvar_idx];
 		unsigned diffsize = reqsize - nbytes;
 
 		if (diffsize > lastarg->size)

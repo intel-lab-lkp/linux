@@ -319,6 +319,8 @@ struct fuse_args {
 	uint32_t opcode;
 	uint8_t in_numargs;
 	uint8_t out_numargs;
+	/* The index of the variable lenght out arg */
+	uint8_t out_argvar_idx;
 	uint8_t ext_idx;
 	bool force:1;
 	bool noreply:1;

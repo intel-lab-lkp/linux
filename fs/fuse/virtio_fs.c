@@ -738,7 +738,7 @@ static void copy_args_from_argbuf(struct fuse_args *args, struct fuse_req *req)
 		unsigned int argsize = args->out_args[i].size;
 
 		if (args->out_argvar &&
-		    i == args->out_numargs - 1 &&
+		    i == args->out_argvar_idx &&
 		    argsize > remaining) {
 			argsize = remaining;
 		}
@@ -746,13 +746,13 @@ static void copy_args_from_argbuf(struct fuse_args *args, struct fuse_req *req)
 		memcpy(args->out_args[i].value, req->argbuf + offset, argsize);
 		offset += argsize;
 
-		if (i != args->out_numargs - 1)
+		if (i != args->out_argvar_idx)
 			remaining -= argsize;
 	}
 
 	/* Store the actual size of the variable-length arg */
 	if (args->out_argvar)
-		args->out_args[args->out_numargs - 1].size = remaining;
+		args->out_args[args->out_argvar_idx].size = remaining;
 
 	kfree(req->argbuf);
 	req->argbuf = NULL;

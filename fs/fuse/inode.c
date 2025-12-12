@@ -1534,6 +1534,7 @@ static struct fuse_init_args *fuse_new_init(struct fuse_mount *fm)
 	   with interface version < 7.5.  Rest of init_out is zeroed
 	   by do_get_request(), so a short reply is not a problem */
 	ia->args.out_argvar = true;
+	ia->args.out_argvar_idx = 0;
 	ia->args.out_args[0].size = sizeof(ia->out);
 	ia->args.out_args[0].value = &ia->out;
 	ia->args.force = true;

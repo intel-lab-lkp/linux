@@ -460,6 +460,7 @@ static int cuse_send_init(struct cuse_conn *cc)
 	ap->args.out_args[0].value = &ia->out;
 	ap->args.out_args[1].size = CUSE_INIT_INFO_MAX;
 	ap->args.out_argvar = true;
+	ap->args.out_argvar = 1;
 	ap->args.out_pages = true;
 	ap->num_folios = 1;
 	ap->folios = &ia->folio;

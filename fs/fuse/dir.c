@@ -1629,6 +1629,7 @@ static int fuse_readlink_folio(struct inode *inode, struct folio *folio)
 	ap.args.nodeid = get_node_id(inode);
 	ap.args.out_pages = true;
 	ap.args.out_argvar = true;
+	ap.args.out_argvar_idx = 0;
 	ap.args.page_zeroing = true;
 	ap.args.out_numargs = 1;
 	ap.args.out_args[0].size = desc.length;
