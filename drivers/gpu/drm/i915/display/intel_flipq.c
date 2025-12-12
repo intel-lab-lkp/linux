@@ -129,6 +129,9 @@ void intel_flipq_init(struct intel_display *display)
 {
 	struct intel_crtc *crtc;
 
+	if (DISPLAY_VER(display) < 20)
+		return;
+
 	intel_dmc_wait_fw_load(display);
 
 	for_each_intel_crtc(display->drm, crtc)
