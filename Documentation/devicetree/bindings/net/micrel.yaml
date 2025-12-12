@@ -169,6 +169,19 @@ allOf:
       properties:
         compatible:
           contains:
+            const: ethernet-phy-id0022.1640
+    then:
+      properties:
+        micrel,keep-preamble-before-sfd:
+          type: boolean
+          description: |
+            If set, the PHY keeps sending preamble bits before SFD in
+            10BASE-T mode. By default, the PHY removes preamble bits
+            before SFD.
+  - if:
+      properties:
+        compatible:
+          contains:
             enum:
               - ethernet-phy-id0022.1610
               - ethernet-phy-id0022.1611
