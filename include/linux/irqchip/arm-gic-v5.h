@@ -13,6 +13,8 @@
 
 #define GICV5_IPIS_PER_CPU		MAX_IPI
 
+#define GICV5_SW_PPI			0x20000003
+
 /*
  * INTID handling
  */
