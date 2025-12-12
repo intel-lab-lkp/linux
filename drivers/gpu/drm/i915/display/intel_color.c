@@ -2020,14 +2020,14 @@ void intel_color_prepare_commit(struct intel_atomic_state *state,
 		crtc_state->dsb_color = intel_dsb_prepare(state, crtc, INTEL_DSB_1, 1024);
 
 	if (!intel_color_uses_dsb(crtc_state)) {
-		crtc_state->use_flipq = false;
-		crtc_state->use_dsb = false;
+		crtc_state->commit_type = INTEL_COMMIT_MMIO;
 		return;
 	}
 
 	display->funcs.color->load_luts(crtc_state);
 
-	if (crtc_state->use_dsb && intel_color_uses_chained_dsb(crtc_state)) {
+	if (crtc_state->commit_type == INTEL_COMMIT_DSB &&
+	    intel_color_uses_chained_dsb(crtc_state)) {
 		intel_vrr_send_push(crtc_state->dsb_color, crtc_state);
 		intel_dsb_wait_for_delayed_vblank(state, crtc_state->dsb_color);
 		intel_vrr_check_push_sent(crtc_state->dsb_color, crtc_state);

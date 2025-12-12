@@ -1369,8 +1369,12 @@ struct intel_crtc_state {
 
 	/* For DSB based pipe updates */
 	struct intel_dsb *dsb_color, *dsb_commit;
-	bool use_dsb;
-	bool use_flipq;
+
+	enum intel_commit_type {
+		INTEL_COMMIT_MMIO,
+		INTEL_COMMIT_DSB,
+		INTEL_COMMIT_FLIPQ,
+	} commit_type;
 
 	u32 psr2_man_track_ctl;
 

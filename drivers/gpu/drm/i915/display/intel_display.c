@@ -6688,7 +6688,7 @@ static void commit_pipe_pre_planes(struct intel_atomic_state *state,
 		intel_atomic_get_new_crtc_state(state, crtc);
 	bool modeset = intel_crtc_needs_modeset(new_crtc_state);
 
-	drm_WARN_ON(display->drm, new_crtc_state->use_dsb || new_crtc_state->use_flipq);
+	drm_WARN_ON(display->drm, new_crtc_state->commit_type != INTEL_COMMIT_MMIO);
 
 	/*
 	 * During modesets pipe configuration was programmed as the
@@ -6718,7 +6718,7 @@ static void commit_pipe_post_planes(struct intel_atomic_state *state,
 		intel_atomic_get_new_crtc_state(state, crtc);
 	bool modeset = intel_crtc_needs_modeset(new_crtc_state);
 
-	drm_WARN_ON(display->drm, new_crtc_state->use_dsb || new_crtc_state->use_flipq);
+	drm_WARN_ON(display->drm, new_crtc_state->commit_type != INTEL_COMMIT_MMIO);
 
 	/*
 	 * Disable the scaler(s) after the plane(s) so that we don't
@@ -6810,13 +6810,13 @@ static void intel_pre_update_crtc(struct intel_atomic_state *state,
 
 	drm_WARN_ON(display->drm, !intel_display_power_is_enabled(display, POWER_DOMAIN_DC_OFF));
 
-	if (!modeset &&
-	    intel_crtc_needs_color_update(new_crtc_state) &&
-	    !new_crtc_state->use_dsb && !new_crtc_state->use_flipq)
-		intel_color_commit_noarm(NULL, new_crtc_state);
+	if (new_crtc_state->commit_type == INTEL_COMMIT_MMIO) {
+		if (!modeset &&
+		    intel_crtc_needs_color_update(new_crtc_state))
+			intel_color_commit_noarm(NULL, new_crtc_state);
 
-	if (!new_crtc_state->use_dsb && !new_crtc_state->use_flipq)
 		intel_crtc_planes_update_noarm(NULL, state, crtc);
+	}
 }
 
 static void intel_update_crtc(struct intel_atomic_state *state,
@@ -6827,18 +6827,23 @@ static void intel_update_crtc(struct intel_atomic_state *state,
 	struct intel_crtc_state *new_crtc_state =
 		intel_atomic_get_new_crtc_state(state, crtc);
 
-	if (new_crtc_state->use_flipq) {
+	switch (new_crtc_state->commit_type) {
+	case INTEL_COMMIT_FLIPQ:
 		intel_flipq_enable(new_crtc_state);
 
 		intel_crtc_prepare_vblank_event(new_crtc_state, &crtc->flipq_event);
 
 		intel_flipq_add(crtc, INTEL_FLIPQ_PLANE_1, 0, INTEL_DSB_0,
 				new_crtc_state->dsb_commit);
-	} else if (new_crtc_state->use_dsb) {
+		break;
+
+	case INTEL_COMMIT_DSB:
 		intel_crtc_prepare_vblank_event(new_crtc_state, &crtc->dsb_event);
 
 		intel_dsb_commit(new_crtc_state->dsb_commit);
-	} else {
+		break;
+
+	case INTEL_COMMIT_MMIO:
 		/* Perform vblank evasion around commit operation */
 		intel_pipe_update_start(state, crtc);
 
@@ -6852,6 +6857,7 @@ static void intel_update_crtc(struct intel_atomic_state *state,
 		commit_pipe_post_planes(state, crtc);
 
 		intel_pipe_update_end(state, crtc);
+		break;
 	}
 
 	/*
@@ -7259,36 +7265,47 @@ static void intel_atomic_prepare_plane_clear_colors(struct intel_atomic_state *s
 	}
 }
 
-static void intel_atomic_dsb_prepare(struct intel_atomic_state *state,
-				     struct intel_crtc *crtc)
+static enum intel_commit_type
+intel_atomic_commit_type(struct intel_atomic_state *state,
+			 struct intel_crtc *crtc)
 {
 	struct intel_display *display = to_intel_display(state);
 	struct intel_crtc_state *new_crtc_state =
 		intel_atomic_get_new_crtc_state(state, crtc);
 
 	if (!new_crtc_state->hw.active)
-		return;
+		return INTEL_COMMIT_MMIO;
 
 	if (state->base.legacy_cursor_update)
-		return;
+		return INTEL_COMMIT_MMIO;
 
 	/* FIXME deal with everything */
-	new_crtc_state->use_flipq =
-		intel_flipq_supported(display) &&
-		!new_crtc_state->do_async_flip &&
-		!new_crtc_state->vrr.enable &&
-		!new_crtc_state->has_psr &&
-		!intel_crtc_needs_modeset(new_crtc_state) &&
-		!intel_crtc_needs_fastset(new_crtc_state) &&
-		!intel_crtc_needs_color_update(new_crtc_state);
+	if (intel_flipq_supported(display) &&
+	    !new_crtc_state->do_async_flip &&
+	    !new_crtc_state->vrr.enable &&
+	    !new_crtc_state->has_psr &&
+	    !intel_crtc_needs_modeset(new_crtc_state) &&
+	    !intel_crtc_needs_fastset(new_crtc_state) &&
+	    !intel_crtc_needs_color_update(new_crtc_state))
+		return INTEL_COMMIT_FLIPQ;
 
-	new_crtc_state->use_dsb =
-		intel_dsb_supported(display) &&
-		!new_crtc_state->use_flipq &&
-		!new_crtc_state->do_async_flip &&
-		(DISPLAY_VER(display) >= 20 || !new_crtc_state->has_psr) &&
-		!intel_crtc_needs_modeset(new_crtc_state) &&
-		!intel_crtc_needs_fastset(new_crtc_state);
+	if (intel_dsb_supported(display) &&
+	    !new_crtc_state->do_async_flip &&
+	    (DISPLAY_VER(display) >= 20 || !new_crtc_state->has_psr) &&
+	    !intel_crtc_needs_modeset(new_crtc_state) &&
+	    !intel_crtc_needs_fastset(new_crtc_state))
+		return INTEL_COMMIT_DSB;
+
+	return INTEL_COMMIT_MMIO;
+}
+
+static void intel_atomic_dsb_prepare(struct intel_atomic_state *state,
+				     struct intel_crtc *crtc)
+{
+	struct intel_crtc_state *new_crtc_state =
+		intel_atomic_get_new_crtc_state(state, crtc);
+
+	new_crtc_state->commit_type = intel_atomic_commit_type(state, crtc);
 
 	intel_color_prepare_commit(state, crtc);
 }
@@ -7297,7 +7314,7 @@ static unsigned int
 commit_dsb_max_cmds(const struct intel_crtc_state *crtc_state)
 {
 	/* just enough to start the chained DSB */
-	if (!crtc_state->use_dsb && !crtc_state->use_flipq)
+	if (crtc_state->commit_type == INTEL_COMMIT_MMIO)
 		return 16;
 
 	/*
@@ -7320,23 +7337,21 @@ static void intel_atomic_dsb_finish(struct intel_atomic_state *state,
 	struct intel_crtc_state *new_crtc_state =
 		intel_atomic_get_new_crtc_state(state, crtc);
 
-	if (!new_crtc_state->use_flipq &&
-	    !new_crtc_state->use_dsb &&
+	if (new_crtc_state->commit_type == INTEL_COMMIT_MMIO &&
 	    !new_crtc_state->dsb_color)
 		return;
 
 	new_crtc_state->dsb_commit = intel_dsb_prepare(state, crtc, INTEL_DSB_0,
 						       commit_dsb_max_cmds(new_crtc_state));
 	if (!new_crtc_state->dsb_commit) {
-		new_crtc_state->use_flipq = false;
-		new_crtc_state->use_dsb = false;
+		new_crtc_state->commit_type = INTEL_COMMIT_MMIO;
 		intel_color_cleanup_commit(new_crtc_state);
 		return;
 	}
 
-	if (new_crtc_state->use_flipq || new_crtc_state->use_dsb) {
+	if (new_crtc_state->commit_type != INTEL_COMMIT_MMIO) {
 		/* Wa_18034343758 */
-		if (new_crtc_state->use_flipq)
+		if (new_crtc_state->commit_type == INTEL_COMMIT_FLIPQ)
 			intel_flipq_wait_dmc_halt(new_crtc_state->dsb_commit, crtc);
 
 		if (intel_crtc_needs_color_update(new_crtc_state))
@@ -7356,7 +7371,7 @@ static void intel_atomic_dsb_finish(struct intel_atomic_state *state,
 		intel_psr_wait_for_idle_dsb(new_crtc_state->dsb_commit,
 					    new_crtc_state);
 
-		if (new_crtc_state->use_dsb)
+		if (new_crtc_state->commit_type == INTEL_COMMIT_DSB)
 			intel_dsb_vblank_evade(state, new_crtc_state->dsb_commit);
 
 		if (intel_crtc_needs_color_update(new_crtc_state))
@@ -7374,7 +7389,7 @@ static void intel_atomic_dsb_finish(struct intel_atomic_state *state,
 					   new_crtc_state);
 
 		/* Wa_18034343758 */
-		if (new_crtc_state->use_flipq)
+		if (new_crtc_state->commit_type == INTEL_COMMIT_FLIPQ)
 			intel_flipq_unhalt_dmc(new_crtc_state->dsb_commit, crtc);
 	}
 
@@ -7385,7 +7400,8 @@ static void intel_atomic_dsb_finish(struct intel_atomic_state *state,
 		intel_dsb_gosub(new_crtc_state->dsb_commit,
 				new_crtc_state->dsb_color);
 
-	if (new_crtc_state->use_dsb && !intel_color_uses_chained_dsb(new_crtc_state)) {
+	if (new_crtc_state->commit_type == INTEL_COMMIT_DSB &&
+	    !intel_color_uses_chained_dsb(new_crtc_state)) {
 		intel_dsb_wait_vblanks(new_crtc_state->dsb_commit, 1);
 
 		intel_vrr_send_push(new_crtc_state->dsb_commit, new_crtc_state);
@@ -7538,10 +7554,11 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 
 		intel_atomic_dsb_wait_commit(new_crtc_state);
 
-		if (!state->base.legacy_cursor_update && !new_crtc_state->use_dsb)
+		if (!state->base.legacy_cursor_update &&
+		    new_crtc_state->commit_type == INTEL_COMMIT_MMIO)
 			intel_vrr_check_push_sent(NULL, new_crtc_state);
 
-		if (new_crtc_state->use_flipq)
+		if (new_crtc_state->commit_type == INTEL_COMMIT_FLIPQ)
 			intel_flipq_disable(new_crtc_state);
 	}
 
