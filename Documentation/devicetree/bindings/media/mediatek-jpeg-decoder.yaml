@@ -19,11 +19,15 @@ properties:
           - enum:
               - mediatek,mt8173-jpgdec
               - mediatek,mt2701-jpgdec
+              - mediatek,mt8189-jpgdec
       - items:
           - enum:
               - mediatek,mt7623-jpgdec
-              - mediatek,mt8188-jpgdec
           - const: mediatek,mt2701-jpgdec
+      - items:
+          - enum:
+              - mediatek,mt8188-jpgdec
+          - const: mediatek,mt8189-jpgdec
 
   reg:
     maxItems: 1
@@ -32,13 +36,16 @@ properties:
     maxItems: 1
 
   clocks:
+    minItems: 1
     maxItems: 2
-    minItems: 2
 
   clock-names:
-    items:
-      - const: jpgdec-smi
-      - const: jpgdec
+    minItems: 1
+    maxItems: 2
+
+  mediatek,larb:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: a phandle to the smi_larb node.
 
   power-domains:
     maxItems: 1
@@ -50,6 +57,35 @@ properties:
       Points to the respective IOMMU block with master port as argument, see
       Documentation/devicetree/bindings/iommu/mediatek,iommu.yaml for details.
       Ports are according to the HW.
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - mediatek,mt8189-jpgdec
+
+    then:
+      properties:
+        clock-names:
+          items:
+            - const: jpgdec
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - mediatek,mt8173-jpgdec
+              - mediatek,mt2701-jpgdec
+
+    then:
+      properties:
+        clock-names:
+          items:
+            - const: jpgdec-smi
+            - const: jpgdec
 
 required:
   - compatible
