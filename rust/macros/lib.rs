@@ -503,7 +503,7 @@ pub fn kunit_tests(attr: TokenStream, ts: TokenStream) -> TokenStream {
 #[proc_macro_derive(FromBytes)]
 pub fn derive_from_bytes(tokens: TokenStream) -> TokenStream {
     let input = parse_macro_input!(tokens as DeriveInput);
-    transmute::from_bytes(input).into()
+    transmute::from_bytes("kernel", input).into()
 }
 
 /// Implements `AsBytes` for a struct.
@@ -533,5 +533,25 @@ pub fn derive_from_bytes(tokens: TokenStream) -> TokenStream {
 #[proc_macro_derive(AsBytes)]
 pub fn derive_as_bytes(tokens: TokenStream) -> TokenStream {
     let input = parse_macro_input!(tokens as DeriveInput);
-    transmute::as_bytes(input).into()
+    transmute::as_bytes("kernel", input).into()
+}
+
+#[doc(hidden)]
+#[proc_macro_derive(FromBytesTrait)]
+/// This is equivalent to `FromBytes`, but uses the `trait` crate as the trait definition site
+/// instead of `kernel`. This is intended for use inside `bindings`. Everyone else can refer to the
+/// trait through `kernel`.
+pub fn derive_from_bytes_trait(tokens: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(tokens as DeriveInput);
+    transmute::from_bytes("traits", input).into()
+}
+
+#[doc(hidden)]
+#[proc_macro_derive(AsBytesTrait)]
+/// This is equivalent to `AsBytes`, but uses the `trait` crate as the trait definition site
+/// instead of `kernel`. This is intended for use inside `bindings`. Everyone else can refer to the
+/// trait through `kernel`.
+pub fn derive_as_bytes_trait(tokens: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(tokens as DeriveInput);
+    transmute::as_bytes("traits", input).into()
 }

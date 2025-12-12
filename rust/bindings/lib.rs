@@ -31,6 +31,7 @@
 #[allow(clippy::undocumented_unsafe_blocks)]
 #[cfg_attr(CONFIG_RUSTC_HAS_UNNECESSARY_TRANSMUTES, allow(unnecessary_transmutes))]
 mod bindings_raw {
+    use macros::{AsBytesTrait, FromBytesTrait};
     use pin_init::{MaybeZeroable, Zeroable};
 
     // Manual definition for blocklisted types.
