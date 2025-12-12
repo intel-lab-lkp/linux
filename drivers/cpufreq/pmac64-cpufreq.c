@@ -356,8 +356,10 @@ static int __init g5_neo2_cpufreq_init(struct device_node *cpunode)
 		use_volts_smu = 1;
 	else if (of_machine_is_compatible("PowerMac11,2"))
 		use_volts_vdnap = 1;
-	else
-		return -ENODEV;
+	else {
+		rc = -ENODEV;
+		goto bail_noprops;
+	}
 
 	/* Check 970FX for now */
 	valp = of_get_property(cpunode, "cpu-version", NULL);
@@ -430,8 +432,11 @@ static int __init g5_neo2_cpufreq_init(struct device_node *cpunode)
 	 * supporting anything else.
 	 */
 	valp = of_get_property(cpunode, "clock-frequency", NULL);
-	if (!valp)
-		return -ENODEV;
+	if (!valp) {
+		rc = -ENODEV;
+		goto bail_noprops;
+	}
+
 	max_freq = (*valp)/1000;
 	g5_cpu_freqs[0].frequency = max_freq;
 	g5_cpu_freqs[1].frequency = max_freq/2;
