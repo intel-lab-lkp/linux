@@ -526,6 +526,12 @@ static struct phylink_pcs *gsw1xx_phylink_mac_select_pcs(struct phylink_config *
 	switch (dp->index) {
 	case GSW1XX_SGMII_PORT:
 		return &gsw1xx_priv->pcs;
+	case GSW1XX_MII_PORT:
+		if (of_property_read_bool(dp->dn, "maxlinear,mii-slew-rate-slow"))
+			regmap_set_bits(gsw1xx_priv->shell,
+					RGMII_SLEW_CFG_DRV_TXD | RGMII_SLEW_CFG_DRV_TXC,
+					GSW1XX_SHELL_RGMII_SLEW_CFG);
+		return NULL;
 	default:
 		return NULL;
 	}
