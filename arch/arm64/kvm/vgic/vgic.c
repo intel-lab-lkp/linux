@@ -547,7 +547,14 @@ int kvm_vgic_inject_irq(struct kvm *kvm, struct kvm_vcpu *vcpu,
 	else
 		irq->pending_latch = true;
 
-	vgic_queue_irq_unlock(kvm, irq, flags);
+	if (irq->ops && irq->ops->set_pending_state)
+		WARN_ON_ONCE(!irq->ops->set_pending_state(vcpu, irq));
+
+	if (irq->ops && irq->ops->queue_irq_unlock)
+		WARN_ON_ONCE(!irq->ops->queue_irq_unlock(kvm, irq, flags));
+	else
+		vgic_queue_irq_unlock(kvm, irq, flags);
+
 	vgic_put_irq(kvm, irq);
 
 	return 0;
