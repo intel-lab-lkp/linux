@@ -101,6 +101,14 @@
 #define LAN8814_CABLE_DIAG_VCT_DATA_MASK	GENMASK(7, 0)
 #define LAN8814_PAIR_BIT_SHIFT			12
 
+/* KSZ9x31 remote loopback register */
+#define KSZ9x31_REMOTE_LOOPBACK			0x11
+/* This is an undocumented bit of the KSZ9131RNX.
+ * It was reported by NXP in cooperation with Micrel.
+ */
+#define KSZ9x31_REMOTE_LOOPBACK_KEEP_PREAMBLE	BIT(2)
+#define KSZ9x31_REMOTE_LOOPBACK_EN		BIT(8)
+
 #define LAN8814_SKUS				0xB
 
 #define LAN8814_WIRE_PAIR_MASK			0xF
@@ -455,6 +463,7 @@ struct kszphy_priv {
 	bool rmii_ref_clk_sel_val;
 	bool clk_enable;
 	bool is_ptp_available;
+	bool keep_preamble_before_sfd;
 	u64 stats[ARRAY_SIZE(kszphy_hw_stats)];
 	struct kszphy_phy_stats phy_stats;
 };
@@ -1452,6 +1461,7 @@ static int ksz9131_config_init(struct phy_device *phydev)
 		"txd2-skew-psec", "txd3-skew-psec"
 	};
 	char *control_skews[2] = {"txen-skew-psec", "rxdv-skew-psec"};
+	struct kszphy_priv *priv = phydev->priv;
 	const struct device *dev_walker;
 	int ret;
 
@@ -1499,6 +1509,17 @@ static int ksz9131_config_init(struct phy_device *phydev)
 	ret = ksz9131_led_errata(phydev);
 	if (ret < 0)
 		return ret;
+
+	if (priv->keep_preamble_before_sfd) {
+		ret = phy_read(phydev, KSZ9x31_REMOTE_LOOPBACK);
+		if (ret < 0)
+			return ret;
+
+		ret |= KSZ9x31_REMOTE_LOOPBACK_KEEP_PREAMBLE;
+		ret = phy_write(phydev, KSZ9x31_REMOTE_LOOPBACK, ret);
+		if (ret < 0)
+			return ret;
+	}
 
 	return 0;
 }
@@ -2682,6 +2703,14 @@ static int kszphy_probe(struct phy_device *phydev)
 		priv->rmii_ref_clk_sel = true;
 		priv->rmii_ref_clk_sel_val = true;
 	}
+
+	/* Keep the preamble before the SFD (Start Frame Delimiter). This might
+	 * be needed on some boards with a broken Ethernet controller like the
+	 * eqos used in the NXP i.MX8MP.
+	 */
+	if (phydev_id_compare(phydev, PHY_ID_KSZ9131))
+		priv->keep_preamble_before_sfd = of_property_read_bool(np,
+								       "micrel,keep-preamble-before-sfd");
 
 	return 0;
 }
