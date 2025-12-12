@@ -4234,7 +4234,7 @@ ext4_mb_mark_diskspace_used(struct ext4_allocation_context *ac,
 				   ac->ac_b_ex.fe_start, ac->ac_b_ex.fe_len,
 				   flags, &changed);
 
-	if (err && changed == 0)
+	if (err)
 		return err;
 
 #ifdef AGGRESSIVE_CHECK
