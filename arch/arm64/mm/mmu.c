@@ -475,9 +475,14 @@ static void __create_pgd_mapping(pgd_t *pgdir, phys_addr_t phys,
 static phys_addr_t __pgd_pgtable_alloc(struct mm_struct *mm, gfp_t gfp,
 				       enum pgtable_type pgtable_type)
 {
-	/* Page is zeroed by init_clear_pgtable() so don't duplicate effort. */
-	struct ptdesc *ptdesc = pagetable_alloc(gfp & ~__GFP_ZERO, 0);
+	struct ptdesc *ptdesc;
 	phys_addr_t pa;
+
+	/* Page is zeroed by init_clear_pgtable() so don't duplicate effort. */
+	if (gfpflags_allow_spinning(gfp))
+		ptdesc  = pagetable_alloc(gfp & ~__GFP_ZERO, 0);
+	else
+		ptdesc  = pagetable_alloc_nolock(gfp & ~__GFP_ZERO, 0);
 
 	if (!ptdesc)
 		return INVALID_PHYS_ADDR;
@@ -869,6 +874,7 @@ static int __init linear_map_split_to_ptes(void *__unused)
 		unsigned long kstart = (unsigned long)lm_alias(_stext);
 		unsigned long kend = (unsigned long)lm_alias(__init_begin);
 		int ret;
+		gfp_t gfp = IS_ENABLED(CONFIG_PREEMPT_RT) ? __GFP_HIGH : GFP_ATOMIC;
 
 		/*
 		 * Wait for all secondary CPUs to be put into the waiting area.
@@ -881,9 +887,9 @@ static int __init linear_map_split_to_ptes(void *__unused)
 		 * PTE. The kernel alias remains static throughout runtime so
 		 * can continue to be safely mapped with large mappings.
 		 */
-		ret = range_split_to_ptes(lstart, kstart, GFP_ATOMIC);
+		ret = range_split_to_ptes(lstart, kstart, gfp);
 		if (!ret)
-			ret = range_split_to_ptes(kend, lend, GFP_ATOMIC);
+			ret = range_split_to_ptes(kend, lend, gfp);
 		if (ret)
 			panic("Failed to split linear map\n");
 		flush_tlb_kernel_range(lstart, lend);
@@ -1207,7 +1213,14 @@ static int __init __kpti_install_ng_mappings(void *__unused)
 	remap_fn = (void *)__pa_symbol(idmap_kpti_install_ng_mappings);
 
 	if (!cpu) {
-		alloc = __get_free_pages(GFP_ATOMIC | __GFP_ZERO, order);
+		if (IS_ENABLED(CONFIG_PREEMPT_RT))
+			alloc = (u64) pagetable_alloc_nolock(__GFP_HIGH | __GFP_ZERO, order);
+		else
+			alloc = __get_free_pages(GFP_ATOMIC | __GFP_ZERO, order);
+
+		if (!alloc)
+			panic("Failed to alloc kpti_ng_pgd\n");
+
 		kpti_ng_temp_pgd = (pgd_t *)(alloc + (levels - 1) * PAGE_SIZE);
 		kpti_ng_temp_alloc = kpti_ng_temp_pgd_pa = __pa(kpti_ng_temp_pgd);
 
