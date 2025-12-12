@@ -861,7 +861,7 @@ sun4i_dma_prep_dma_cyclic(struct dma_chan *chan, dma_addr_t buf, size_t len,
 							plength, sconfig, dir);
 
 		if (!promise) {
-			/* TODO: should we free everything? */
+			sun4i_dma_free_contract(&contract->vd);
 			return NULL;
 		}
 		promise->cfg |= endpoints;
@@ -954,8 +954,10 @@ sun4i_dma_prep_slave_sg(struct dma_chan *chan, struct scatterlist *sgl,
 							sg_dma_len(sg),
 							sconfig, dir);
 
-		if (!promise)
-			return NULL; /* TODO: should we free everything? */
+		if (!promise) {
+			sun4i_dma_free_contract(&contract->vd);
+			return NULL;
+		}
 
 		promise->cfg |= endpoints;
 		promise->para = para;
