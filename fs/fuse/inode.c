@@ -95,6 +95,25 @@ out_free:
 	return NULL;
 }
 
+/*
+ * XXX postpone this allocation and later use the real size instead of max
+ */
+static bool fuse_inode_handle_alloc(struct super_block *sb,
+				    struct fuse_inode *fi)
+{
+	struct fuse_conn *fc = get_fuse_conn_super(sb);
+
+	fi->fh = NULL;
+	if (fc->lookup_handle) {
+		fi->fh = kzalloc(sizeof(*fi->fh) + fc->max_handle_sz,
+				 GFP_KERNEL_ACCOUNT);
+		if (!fi->fh)
+			return false;
+	}
+
+	return true;
+}
+
 static struct inode *fuse_alloc_inode(struct super_block *sb)
 {
 	struct fuse_inode *fi;
@@ -120,8 +139,15 @@ static struct inode *fuse_alloc_inode(struct super_block *sb)
 	if (IS_ENABLED(CONFIG_FUSE_PASSTHROUGH))
 		fuse_inode_backing_set(fi, NULL);
 
+	if (!fuse_inode_handle_alloc(sb, fi))
+		goto out_free_dax;
+
 	return &fi->inode;
 
+out_free_dax:
+#ifdef CONFIG_FUSE_DAX
+	kfree(fi->dax);
+#endif
 out_free_forget:
 	kfree(fi->forget);
 out_free:
@@ -132,6 +158,7 @@ out_free:
 static void fuse_free_inode(struct inode *inode)
 {
 	struct fuse_inode *fi = get_fuse_inode(inode);
+	struct fuse_conn *fc = get_fuse_conn(inode);
 
 	mutex_destroy(&fi->mutex);
 	kfree(fi->forget);
@@ -140,6 +167,9 @@ static void fuse_free_inode(struct inode *inode)
 #endif
 	if (IS_ENABLED(CONFIG_FUSE_PASSTHROUGH))
 		fuse_backing_put(fuse_inode_backing(fi));
+
+	if (fc->lookup_handle)
+		kfree(fi->fh);
 
 	kmem_cache_free(fuse_inode_cachep, fi);
 }
@@ -465,7 +495,7 @@ static int fuse_inode_set(struct inode *inode, void *_nodeidp)
 struct inode *fuse_iget(struct super_block *sb, u64 nodeid,
 			int generation, struct fuse_attr *attr,
 			u64 attr_valid, u64 attr_version,
-			u64 evict_ctr)
+			u64 evict_ctr, struct fuse_file_handle *fh)
 {
 	struct inode *inode;
 	struct fuse_inode *fi;
@@ -505,6 +535,30 @@ retry:
 	if (!inode)
 		return NULL;
 
+	fi = get_fuse_inode(inode);
+	if (fc->lookup_handle) {
+		if ((fh == NULL) && (nodeid != FUSE_ROOT_ID)) {
+			pr_err("NULL file handle for nodeid %llu\n", nodeid);
+			iput(inode);
+			return NULL;
+		}
+		if (fi->fh->size)
+			pr_warn_ratelimited(
+				"Handle already set for nodeid %llu (size: %u)\n",
+				nodeid, fi->fh->size);
+		if (fh) {
+			if (fh->size >= fc->max_handle_sz) {
+				pr_err("File handle too big (%u)\n", fh->size);
+				iput(inode);
+				return NULL;
+			}
+			fi->fh->size = fh->size;
+			memcpy(fi->fh->handle, fh->handle, fi->fh->size);
+		} else {
+			fi->fh->size = 0;
+			memset(fi->fh, 0, fc->max_handle_sz);
+		}
+	}
 	if ((inode->i_state & I_NEW)) {
 		inode->i_flags |= S_NOATIME;
 		if (!fc->writeback_cache || !S_ISREG(attr->mode))
@@ -512,7 +566,8 @@ retry:
 		inode->i_generation = generation;
 		fuse_init_inode(inode, attr, fc);
 		unlock_new_inode(inode);
-	} else if (fuse_stale_inode(inode, generation, attr)) {
+	} else if (fuse_stale_inode(inode, generation, attr) ||
+		   !fuse_file_handle_is_equal(fc, fi->fh, fh)) {
 		/* nodeid was reused, any I/O on the old inode should fail */
 		fuse_make_bad(inode);
 		if (inode != d_inode(sb->s_root)) {
@@ -521,7 +576,6 @@ retry:
 			goto retry;
 		}
 	}
-	fi = get_fuse_inode(inode);
 	spin_lock(&fi->lock);
 	fi->nlookup++;
 	spin_unlock(&fi->lock);
@@ -1059,7 +1113,7 @@ static struct inode *fuse_get_root_inode(struct super_block *sb, unsigned int mo
 	attr.mode = mode;
 	attr.ino = FUSE_ROOT_ID;
 	attr.nlink = 1;
-	return fuse_iget(sb, FUSE_ROOT_ID, 0, &attr, 0, 0, 0);
+	return fuse_iget(sb, FUSE_ROOT_ID, 0, &attr, 0, 0, 0, NULL); // XXX
 }
 
 struct fuse_inode_handle {
@@ -1092,7 +1146,7 @@ static struct dentry *fuse_get_dentry(struct super_block *sb,
 			goto out_err;
 		}
 
-		err = fuse_lookup_name(sb, handle->nodeid, &name, outarg,
+		err = fuse_lookup_name(sb, handle->nodeid, NULL, &name, outarg,
 				       &inode);
 		kfree(outarg);
 		if (err && err != -ENOENT)
@@ -1199,7 +1253,7 @@ static struct dentry *fuse_get_parent(struct dentry *child)
 		return ERR_PTR(-ENOMEM);
 
 	err = fuse_lookup_name(child_inode->i_sb, get_node_id(child_inode),
-			       &dotdot_name, outarg, &inode);
+			       child_inode, &dotdot_name, outarg, &inode);
 	kfree(outarg);
 	if (err) {
 		if (err == -ENOENT)
@@ -1757,8 +1811,9 @@ static int fuse_fill_super_submount(struct super_block *sb,
 		return -ENOMEM;
 
 	fuse_fill_attr_from_inode(&root_attr, parent_fi);
+	/* XXX using parent fh */
 	root = fuse_iget(sb, parent_fi->nodeid, 0, &root_attr, 0, 0,
-			 fuse_get_evict_ctr(fm->fc));
+			 fuse_get_evict_ctr(fm->fc), parent_fi->fh);
 	/*
 	 * This inode is just a duplicate, so it is not looked up and
 	 * its nlookup should not be incremented.  fuse_iget() does

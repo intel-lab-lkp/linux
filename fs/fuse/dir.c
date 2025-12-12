@@ -169,7 +169,8 @@ static void fuse_invalidate_entry(struct dentry *entry)
 }
 
 static void fuse_lookup_init(struct fuse_conn *fc, struct fuse_args *args,
-			     u64 nodeid, const struct qstr *name,
+			     u64 nodeid, struct inode *dir,
+			     const struct qstr *name,
 			     struct fuse_entry_out *outarg)
 {
 	args->opcode = FUSE_LOOKUP;
@@ -181,8 +182,24 @@ static void fuse_lookup_init(struct fuse_conn *fc, struct fuse_args *args,
 	args->in_args[2].size = 1;
 	args->in_args[2].value = "";
 	args->out_numargs = 1;
-	args->out_args[0].size = sizeof(struct fuse_entry_out);
+	args->out_args[0].size = sizeof(*outarg) + outarg->fh.size;
 	args->out_args[0].value = outarg;
+
+	if (fc->lookup_handle) {
+		struct fuse_inode *fi = NULL;
+
+		args->opcode = FUSE_LOOKUP_HANDLE;
+		args->out_argvar = true;
+
+		if (dir)
+			fi = get_fuse_inode(dir);
+
+		if (fi && fi->fh) {
+			args->in_numargs = 4;
+			args->in_args[3].size = sizeof(*fi->fh) + fi->fh->size;
+			args->in_args[3].value = fi->fh;
+		}
+	}
 }
 
 /*
@@ -240,7 +257,7 @@ static int fuse_dentry_revalidate(struct inode *dir, const struct qstr *name,
 
 		attr_version = fuse_get_attr_version(fm->fc);
 
-		fuse_lookup_init(fm->fc, &args, get_node_id(dir),
+		fuse_lookup_init(fm->fc, &args, get_node_id(dir), dir,
 				 name, outarg);
 		ret = fuse_simple_request(fm, &args);
 		/* Zero nodeid is same as -ENOENT */
@@ -248,7 +265,8 @@ static int fuse_dentry_revalidate(struct inode *dir, const struct qstr *name,
 			ret = -ENOENT;
 		if (!ret) {
 			fi = get_fuse_inode(inode);
-			if (outarg->nodeid != get_node_id(inode) ||
+			if (!fuse_file_handle_is_equal(fm->fc, fi->fh, &outarg->fh) ||
+			    outarg->nodeid != get_node_id(inode) ||
 			    (bool) IS_AUTOMOUNT(inode) != (bool) (outarg->attr.flags & FUSE_ATTR_SUBMOUNT)) {
 				fuse_queue_forget(fm->fc, forget,
 						  outarg->nodeid, 1);
@@ -365,8 +383,9 @@ bool fuse_invalid_attr(struct fuse_attr *attr)
 	return !fuse_valid_type(attr->mode) || !fuse_valid_size(attr->size);
 }
 
-int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name,
-		     struct fuse_entry_out *outarg, struct inode **inode)
+int fuse_lookup_name(struct super_block *sb, u64 nodeid, struct inode *dir,
+		     const struct qstr *name, struct fuse_entry_out *outarg,
+		     struct inode **inode)
 {
 	struct fuse_mount *fm = get_fuse_mount_super(sb);
 	FUSE_ARGS(args);
@@ -388,14 +407,15 @@ int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name
 	attr_version = fuse_get_attr_version(fm->fc);
 	evict_ctr = fuse_get_evict_ctr(fm->fc);
 
-	fuse_lookup_init(fm->fc, &args, nodeid, name, outarg);
+	fuse_lookup_init(fm->fc, &args, nodeid, dir, name, outarg);
 	err = fuse_simple_request(fm, &args);
 	/* Zero nodeid is same as -ENOENT, but with valid timeout */
-	if (err || !outarg->nodeid)
+	if (err < 0 || !outarg->nodeid) // XXX err = size if args->out_argvar = true
 		goto out_put_forget;
 
 	err = -EIO;
-	if (fuse_invalid_attr(&outarg->attr))
+	if (fuse_invalid_attr(&outarg->attr) ||
+	    fuse_invalid_file_handle(fm->fc, &outarg->fh))
 		goto out_put_forget;
 	if (outarg->nodeid == FUSE_ROOT_ID && outarg->generation != 0) {
 		pr_warn_once("root generation should be zero\n");
@@ -404,7 +424,8 @@ int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name
 
 	*inode = fuse_iget(sb, outarg->nodeid, outarg->generation,
 			   &outarg->attr, ATTR_TIMEOUT(outarg),
-			   attr_version, evict_ctr);
+			   attr_version, evict_ctr,
+			   &outarg->fh);
 	err = -ENOMEM;
 	if (!*inode) {
 		fuse_queue_forget(fm->fc, forget, outarg->nodeid, 1);
@@ -440,14 +461,14 @@ static struct dentry *fuse_lookup(struct inode *dir, struct dentry *entry,
 		return ERR_PTR(-ENOMEM);
 
 	locked = fuse_lock_inode(dir);
-	err = fuse_lookup_name(dir->i_sb, get_node_id(dir), &entry->d_name,
+	err = fuse_lookup_name(dir->i_sb, get_node_id(dir), dir, &entry->d_name,
 			       outarg, &inode);
 	fuse_unlock_inode(dir, locked);
 	if (err == -ENOENT) {
 		outarg_valid = false;
 		err = 0;
 	}
-	if (err)
+	if (err < 0) // XXX err = size if args->out_argvar = true
 		goto out_err;
 
 	err = -EIO;
@@ -689,12 +710,23 @@ static int fuse_create_open(struct mnt_idmap *idmap, struct inode *dir,
 	args.in_args[1].size = entry->d_name.len + 1;
 	args.in_args[1].value = entry->d_name.name;
 	args.out_numargs = 2;
-	args.out_args[0].size = sizeof(*outentry);
+	args.out_args[0].size = sizeof(*outentry) + outentry->fh.size;
 	args.out_args[0].value = outentry;
 	/* Store outarg for fuse_finish_open() */
 	outopenp = &ff->args->open_outarg;
 	args.out_args[1].size = sizeof(*outopenp);
 	args.out_args[1].value = outopenp;
+
+	if (fm->fc->lookup_handle) {
+		fi = get_fuse_inode(dir);
+		args.out_argvar = true;
+		args.out_argvar_idx = 0;
+		if (fi->fh) {
+			args.in_numargs = 3;
+			args.in_args[2].size = sizeof(*fi->fh) + fi->fh->size;
+			args.in_args[2].value = fi->fh;
+		}
+	}
 
 	err = get_create_ext(idmap, &args, dir, entry, mode);
 	if (err)
@@ -702,11 +734,12 @@ static int fuse_create_open(struct mnt_idmap *idmap, struct inode *dir,
 
 	err = fuse_simple_idmap_request(idmap, fm, &args);
 	free_ext_value(&args);
-	if (err)
+	if (err < 0) // XXX err = size if args->out_argvar = true
 		goto out_free_outentry;
 
 	err = -EIO;
 	if (!S_ISREG(outentry->attr.mode) || invalid_nodeid(outentry->nodeid) ||
+	    fuse_invalid_file_handle(fm->fc, &outentry->fh) ||
 	    fuse_invalid_attr(&outentry->attr))
 		goto out_free_outentry;
 
@@ -714,7 +747,8 @@ static int fuse_create_open(struct mnt_idmap *idmap, struct inode *dir,
 	ff->nodeid = outentry->nodeid;
 	ff->open_flags = outopenp->open_flags;
 	inode = fuse_iget(dir->i_sb, outentry->nodeid, outentry->generation,
-			  &outentry->attr, ATTR_TIMEOUT(outentry), 0, 0);
+			  &outentry->attr, ATTR_TIMEOUT(outentry), 0, 0,
+			  &outentry->fh);
 	if (!inode) {
 		flags &= ~(O_CREAT | O_EXCL | O_TRUNC);
 		fuse_sync_release(NULL, ff, flags);
@@ -830,8 +864,21 @@ static struct dentry *create_new_entry(struct mnt_idmap *idmap, struct fuse_moun
 
 	args->nodeid = get_node_id(dir);
 	args->out_numargs = 1;
-	args->out_args[0].size = sizeof(*outarg);
+	args->out_args[0].size = sizeof(*outarg) + outarg->fh.size;
 	args->out_args[0].value = outarg;
+
+	if (fm->fc->lookup_handle) {
+		struct fuse_inode *fi = get_fuse_inode(dir);
+		int idx = args->in_numargs;
+
+		args->out_argvar = true;
+		args->out_argvar_idx = 0;
+		if (fi->fh && !WARN_ON_ONCE(idx >= 4)) {		
+			args->in_args[idx].size = sizeof(*fi->fh) + fi->fh->size;
+			args->in_args[idx].value = fi->fh;
+			args->in_numargs++;
+		}
+	}
 
 	if (args->opcode != FUSE_LINK) {
 		err = get_create_ext(idmap, args, dir, entry, mode);
@@ -841,18 +888,20 @@ static struct dentry *create_new_entry(struct mnt_idmap *idmap, struct fuse_moun
 
 	err = fuse_simple_idmap_request(idmap, fm, args);
 	free_ext_value(args);
-	if (err)
+	if (err < 0) // XXX err = size if args->out_argvar = true
 		goto out_free_outarg;
 
 	err = -EIO;
-	if (invalid_nodeid(outarg->nodeid) || fuse_invalid_attr(&outarg->attr))
+	if (invalid_nodeid(outarg->nodeid) || fuse_invalid_attr(&outarg->attr) ||
+	    fuse_invalid_file_handle(fm->fc, &outarg->fh))
 		goto out_free_outarg;
 
 	if ((outarg->attr.mode ^ mode) & S_IFMT)
 		goto out_free_outarg;
 
 	inode = fuse_iget(dir->i_sb, outarg->nodeid, outarg->generation,
-			  &outarg->attr, ATTR_TIMEOUT(outarg), 0, 0);
+			  &outarg->attr, ATTR_TIMEOUT(outarg), 0, 0,
+			  &outarg->fh);
 	if (!inode) {
 		fuse_queue_forget(fm->fc, forget, outarg->nodeid, 1);
 		kfree(outarg);

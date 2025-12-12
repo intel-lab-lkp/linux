@@ -606,6 +606,22 @@ static void fuse_adjust_compat(struct fuse_conn *fc, struct fuse_args *args)
 	if (fc->minor < 4 && args->opcode == FUSE_STATFS)
 		args->out_args[0].size = FUSE_COMPAT_STATFS_SIZE;
 
+	if (fc->minor < 45) {
+		switch (args->opcode) {
+		case FUSE_CREATE:
+		case FUSE_LINK:
+		case FUSE_LOOKUP:
+		case FUSE_MKDIR:
+		case FUSE_MKNOD:
+		/* XXX case FUSE_READDIRPLUS: */
+		case FUSE_SYMLINK:
+		case FUSE_TMPFILE:
+			if (!WARN_ON_ONCE(args->in_numargs == 0))
+				args->in_numargs--;
+			args->out_args[0].size = FUSE_COMPAT_45_ENTRY_OUT_SIZE;
+			break;
+		}
+	}
 	if (fc->minor < 9) {
 		switch (args->opcode) {
 		case FUSE_LOOKUP:
