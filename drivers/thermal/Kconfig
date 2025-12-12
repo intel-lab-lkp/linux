@@ -436,6 +436,14 @@ config EIO_THERMAL
 	  the Linux thermal framework. It communicates with the EC through the
 	  EIO MFD core.
 
+config EIO_FAN
+        tristate "Advantech EIO Fan cooling device"
+        depends on MFD_EIO && THERMAL
+        help
+          Fan cooling device for the Advantech EIO. This driver exposes a
+          thermal cooling device with controllable states (e.g. Auto/Manual/PWM).
+          It communicates with the EC through the EIO MFD core.
+
 menu "Mediatek thermal drivers"
 depends on ARCH_MEDIATEK || COMPILE_TEST
 source "drivers/thermal/mediatek/Kconfig"
