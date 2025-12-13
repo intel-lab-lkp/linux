@@ -343,8 +343,8 @@ xfs_inode_item_format_data_fork(
 
 	switch (ip->i_df.if_format) {
 	case XFS_DINODE_FMT_EXTENTS:
-		iip->ili_fields &=
-			~(XFS_ILOG_DDATA | XFS_ILOG_DBROOT | XFS_ILOG_DEV);
+		iip->ili_fields &= ~(XFS_ILOG_DDATA | XFS_ILOG_DBROOT |
+				     XFS_ILOG_DEV | XFS_ILOG_DOWNER);
 
 		if ((iip->ili_fields & XFS_ILOG_DEXT) &&
 		    ip->i_df.if_nextents > 0 &&
