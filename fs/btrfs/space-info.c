@@ -1752,6 +1752,14 @@ static int __reserve_bytes(struct btrfs_fs_info *fs_info,
 		ASSERT(flush != BTRFS_RESERVE_FLUSH_EVICT);
 	}
 
+	/*
+	 * During mount, the global block reserve might not have its space_info
+	 * initialized yet. If we try to reserve bytes in this state (e.g. via
+	 * early sysfs writes), we must not crash.
+	 */
+	if (unlikely(!space_info))
+		return -EBUSY;
+
 	if (flush == BTRFS_RESERVE_FLUSH_DATA)
 		async_work = &fs_info->async_data_reclaim_work;
 	else
