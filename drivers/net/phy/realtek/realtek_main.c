@@ -1509,7 +1509,7 @@ static int rtl822x_c45_soft_reset(struct phy_device *phydev)
 	return phy_read_mmd_poll_timeout(phydev, MDIO_MMD_PMAPMD,
 					 MDIO_CTRL1, val,
 					 !(val & MDIO_CTRL1_RESET),
-					 5000, 100000, true);
+					 5000, 600000, true);
 }
 
 static int rtl822xb_c45_read_status(struct phy_device *phydev)
