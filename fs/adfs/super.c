@@ -462,10 +462,19 @@ static int adfs_init_fs_context(struct fs_context *fc)
 	return 0;
 }
 
+static void adfs_kill_sb(struct super_block *sb)
+{
+	struct adfs_sb_info *asb = ADFS_SB(sb);
+
+	kill_block_super(sb);
+
+	kfree(asb);
+}
+
 static struct file_system_type adfs_fs_type = {
 	.owner		= THIS_MODULE,
 	.name		= "adfs",
-	.kill_sb	= kill_block_super,
+	.kill_sb	= adfs_kill_sb,
 	.fs_flags	= FS_REQUIRES_DEV,
 	.init_fs_context = adfs_init_fs_context,
 	.parameters	= adfs_param_spec,
