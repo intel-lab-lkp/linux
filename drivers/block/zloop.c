@@ -110,7 +110,7 @@ struct zloop_zone {
 
 struct zloop_device {
 	unsigned int		id;
-	unsigned int		state;
+	atomic_t		state;
 
 	struct blk_mq_tag_set	tag_set;
 	struct gendisk		*disk;
@@ -145,6 +145,16 @@ struct zloop_cmd {
 
 static DEFINE_IDR(zloop_index_idr);
 static DEFINE_MUTEX(zloop_ctl_mutex);
+
+static inline int zloop_get_state(struct zloop_device *zlo)
+{
+	return atomic_read(&zlo->state);
+}
+
+static inline void zloop_set_state(struct zloop_device *zlo, int state)
+{
+	atomic_set(&zlo->state, state);
+}
 
 static unsigned int rq_zone_no(struct request *rq)
 {
@@ -697,7 +707,7 @@ static blk_status_t zloop_queue_rq(struct blk_mq_hw_ctx *hctx,
 	struct zloop_cmd *cmd = blk_mq_rq_to_pdu(rq);
 	struct zloop_device *zlo = rq->q->queuedata;
 
-	if (zlo->state == Zlo_deleting)
+	if (zloop_get_state(zlo) == Zlo_deleting)
 		return BLK_STS_IOERR;
 
 	/*
@@ -726,16 +736,10 @@ static const struct blk_mq_ops zloop_mq_ops = {
 static int zloop_open(struct gendisk *disk, blk_mode_t mode)
 {
 	struct zloop_device *zlo = disk->private_data;
-	int ret;
 
-	ret = mutex_lock_killable(&zloop_ctl_mutex);
-	if (ret)
-		return ret;
-
-	if (zlo->state != Zlo_live)
-		ret = -ENXIO;
-	mutex_unlock(&zloop_ctl_mutex);
-	return ret;
+	if (zloop_get_state(zlo) != Zlo_live)
+		return -ENXIO;
+	return 0;
 }
 
 static int zloop_report_zones(struct gendisk *disk, sector_t sector,
@@ -1002,7 +1006,7 @@ static int zloop_ctl_add(struct zloop_options *opts)
 		ret = -ENOMEM;
 		goto out;
 	}
-	zlo->state = Zlo_creating;
+	zloop_set_state(zlo, Zlo_creating);
 
 	ret = mutex_lock_killable(&zloop_ctl_mutex);
 	if (ret)
@@ -1112,9 +1116,7 @@ static int zloop_ctl_add(struct zloop_options *opts)
 		goto out_cleanup_disk;
 	}
 
-	mutex_lock(&zloop_ctl_mutex);
-	zlo->state = Zlo_live;
-	mutex_unlock(&zloop_ctl_mutex);
+	zloop_set_state(zlo, Zlo_live);
 
 	pr_info("zloop: device %d, %u zones of %llu MiB, %u B block size\n",
 		zlo->id, zlo->nr_zones,
@@ -1171,13 +1173,14 @@ static int zloop_ctl_remove(struct zloop_options *opts)
 		return ret;
 
 	zlo = idr_find(&zloop_index_idr, opts->id);
-	if (!zlo || zlo->state == Zlo_creating) {
+	if (!zlo || zloop_get_state(zlo) == Zlo_creating) {
 		ret = -ENODEV;
-	} else if (zlo->state == Zlo_deleting) {
+	} else if (zloop_get_state(zlo) == Zlo_deleting) {
 		ret = -EINVAL;
 	} else {
 		idr_remove(&zloop_index_idr, zlo->id);
-		zlo->state = Zlo_deleting;
+		zloop_set_state(zlo, Zlo_deleting);
+
 	}
 
 	mutex_unlock(&zloop_ctl_mutex);
