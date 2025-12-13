@@ -2165,9 +2165,9 @@ static bool fib_good_nh(const struct fib_nh *nh)
 void fib_select_multipath(struct fib_result *res, int hash,
 			  const struct flowi4 *fl4)
 {
+	bool first = false, found = false;
 	struct fib_info *fi = res->fi;
 	struct net *net = fi->fib_net;
-	bool found = false;
 	bool use_neigh;
 	__be32 saddr;
 
@@ -2190,23 +2190,24 @@ void fib_select_multipath(struct fib_result *res, int hash,
 		    (use_neigh && !fib_good_nh(nexthop_nh)))
 			continue;
 
-		if (!found) {
+		if (saddr && nexthop_nh->nh_saddr == saddr) {
 			res->nh_sel = nhsel;
 			res->nhc = &nexthop_nh->nh_common;
-			found = !saddr || nexthop_nh->nh_saddr == saddr;
+			return;
 		}
 
-		if (hash > nh_upper_bound)
+		if (!first) {
+			res->nh_sel = nhsel;
+			res->nhc = &nexthop_nh->nh_common;
+			first = true;
+		}
+
+		if (found || hash > nh_upper_bound)
 			continue;
 
-		if (!saddr || nexthop_nh->nh_saddr == saddr) {
-			res->nh_sel = nhsel;
-			res->nhc = &nexthop_nh->nh_common;
-			return;
-		}
-
-		if (found)
-			return;
+		res->nh_sel = nhsel;
+		res->nhc = &nexthop_nh->nh_common;
+		found = true;
 
 	} endfor_nexthops(fi);
 }
