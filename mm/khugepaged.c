@@ -1178,7 +1178,12 @@ static int collapse_huge_page(struct mm_struct *mm, unsigned long address,
 	_pmd = pmdp_collapse_flush(vma, address, pmd);
 	spin_unlock(pmd_ptl);
 	mmu_notifier_invalidate_range_end(&range);
-	tlb_remove_table_sync_one();
+	/*
+	 * Skip the second IPI if the TLB flush above already synchronized
+	 * with concurrent GUP-fast via broadcast IPIs.
+	 */
+	if (!tlb_table_flush_implies_ipi_broadcast())
+		tlb_remove_table_sync_one();
 
 	pte = pte_offset_map_lock(mm, &_pmd, address, &pte_ptl);
 	if (pte) {
