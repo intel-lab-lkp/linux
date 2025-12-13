@@ -39,8 +39,6 @@
 
 /* a single mutex to manage channel initialization and attachment */
 static DEFINE_MUTEX(virtio_9p_lock);
-static DECLARE_WAIT_QUEUE_HEAD(vp_wq);
-static atomic_t vp_pinned = ATOMIC_INIT(0);
 
 /**
  * struct virtio_chan - per-instance transport information
@@ -51,7 +49,6 @@ static atomic_t vp_pinned = ATOMIC_INIT(0);
  * @vq: virtio queue associated with this channel
  * @ring_bufs_avail: flag to indicate there is some available in the ring buf
  * @vc_wq: wait queue for waiting for thing to be added to ring buf
- * @p9_max_pages: maximum number of pinned pages
  * @sg: scatter gather list which is used to pack a request (protected?)
  * @chan_list: linked list of channels
  *
@@ -71,10 +68,6 @@ struct virtio_chan {
 	struct virtqueue *vq;
 	int ring_bufs_avail;
 	wait_queue_head_t *vc_wq;
-	/* This is global limit. Since we don't have a global structure,
-	 * will be placing it in each channel.
-	 */
-	unsigned long p9_max_pages;
 	/* Scatterlist: can be too big for stack. */
 	struct scatterlist sg[VIRTQUEUE_NUM];
 	/**
@@ -203,48 +196,6 @@ static int p9_virtio_cancelled(struct p9_client *client, struct p9_req_t *req)
 }
 
 /**
- * pack_sg_list_p - Just like pack_sg_list. Instead of taking a buffer,
- * this takes a list of pages.
- * @sg: scatter/gather list to pack into
- * @start: which segment of the sg_list to start at
- * @limit: maximum number of pages in sg list.
- * @pdata: a list of pages to add into sg.
- * @nr_pages: number of pages to pack into the scatter/gather list
- * @offs: amount of data in the beginning of first page _not_ to pack
- * @count: amount of data to pack into the scatter/gather list
- */
-static int
-pack_sg_list_p(struct scatterlist *sg, int start, int limit,
-	       struct page **pdata, int nr_pages, size_t offs, int count)
-{
-	int i = 0, s;
-	int data_off = offs;
-	int index = start;
-
-	BUG_ON(nr_pages > (limit - start));
-	/*
-	 * if the first page doesn't start at
-	 * page boundary find the offset
-	 */
-	while (nr_pages) {
-		s = PAGE_SIZE - data_off;
-		if (s > count)
-			s = count;
-		BUG_ON(index >= limit);
-		/* Make sure we don't terminate early. */
-		sg_unmark_end(&sg[index]);
-		sg_set_page(&sg[index++], pdata[i++], s, data_off);
-		data_off = 0;
-		count -= s;
-		nr_pages--;
-	}
-
-	if (index-start)
-		sg_mark_end(&sg[index - 1]);
-	return index - start;
-}
-
-/**
  * p9_virtio_request - issue a request
  * @client: client instance issuing the request
  * @req: request to be issued
@@ -305,86 +256,15 @@ req_retry:
 	return 0;
 }
 
-static int p9_get_mapped_pages(struct virtio_chan *chan,
-			       struct page ***pages,
-			       struct iov_iter *data,
-			       int count,
-			       size_t *offs,
-			       int *need_drop)
-{
-	int nr_pages;
-	int err;
-
-	if (!iov_iter_count(data))
-		return 0;
-
-	if (!iov_iter_is_kvec(data)) {
-		int n;
-		/*
-		 * We allow only p9_max_pages pinned. We wait for the
-		 * Other zc request to finish here
-		 */
-		if (atomic_read(&vp_pinned) >= chan->p9_max_pages) {
-			err = wait_event_killable(vp_wq,
-			      (atomic_read(&vp_pinned) < chan->p9_max_pages));
-			if (err == -ERESTARTSYS)
-				return err;
-		}
-		n = iov_iter_get_pages_alloc2(data, pages, count, offs);
-		if (n < 0)
-			return n;
-		*need_drop = 1;
-		nr_pages = DIV_ROUND_UP(n + *offs, PAGE_SIZE);
-		atomic_add(nr_pages, &vp_pinned);
-		return n;
-	} else {
-		/* kernel buffer, no need to pin pages */
-		int index;
-		size_t len;
-		void *p;
-
-		/* we'd already checked that it's non-empty */
-		while (1) {
-			len = iov_iter_single_seg_count(data);
-			if (likely(len)) {
-				p = data->kvec->iov_base + data->iov_offset;
-				break;
-			}
-			iov_iter_advance(data, 0);
-		}
-		if (len > count)
-			len = count;
-
-		nr_pages = DIV_ROUND_UP((unsigned long)p + len, PAGE_SIZE) -
-			   (unsigned long)p / PAGE_SIZE;
-
-		*pages = kmalloc_array(nr_pages, sizeof(struct page *),
-				       GFP_NOFS);
-		if (!*pages)
-			return -ENOMEM;
-
-		*need_drop = 0;
-		p -= (*offs = offset_in_page(p));
-		for (index = 0; index < nr_pages; index++) {
-			if (is_vmalloc_addr(p))
-				(*pages)[index] = vmalloc_to_page(p);
-			else
-				(*pages)[index] = kmap_to_page(p);
-			p += PAGE_SIZE;
-		}
-		iov_iter_advance(data, len);
-		return len;
-	}
-}
-
 static void handle_rerror(struct p9_req_t *req, int in_hdr_len,
-			  size_t offs, struct page **pages)
+			  size_t offs, struct sg_table *sg_table)
 {
 	unsigned size, n;
 	void *to = req->rc.sdata + in_hdr_len;
+	struct scatterlist *sg = sg_table->sgl;
 
 	// Fits entirely into the static data?  Nothing to do.
-	if (req->rc.size < in_hdr_len || !pages)
+	if (req->rc.size < in_hdr_len)
 		return;
 
 	// Really long error message?  Tough, truncate the reply.  Might get
@@ -398,12 +278,39 @@ static void handle_rerror(struct p9_req_t *req, int in_hdr_len,
 	size = req->rc.size - in_hdr_len;
 	n = PAGE_SIZE - offs;
 	if (size > n) {
-		memcpy_from_page(to, *pages++, offs, n);
+		memcpy_from_page(to, sg_page(sg), offs, n);
 		offs = 0;
 		to += n;
 		size -= n;
+		if (sg_table->nents < 2)
+			return;
+		sg++;
 	}
-	memcpy_from_page(to, *pages, offs, size);
+	memcpy_from_page(to, sg_page(sg), offs, size);
+}
+
+/**
+ * compute sg_max depending on length, allocate sg_table->sgl and run
+ * extract_iter_to_sg()
+ */
+static ssize_t p9_get_mapped_sg(struct iov_iter *iter, int len,
+				struct sg_table *sg_table)
+{
+	size_t sg_max;
+	ssize_t n;
+
+	sg_max = DIV_ROUND_UP(len, PAGE_SIZE);
+	sg_table->sgl = kcalloc(sg_max, sizeof(*sg_table->sgl), GFP_NOFS);
+	if (!sg_table->sgl)
+		return -ENOMEM;
+
+	n = extract_iter_to_sg(iter, len, sg_table, sg_max, 0);
+
+	WARN_ON(n < 0);
+	if (sg_table->nents > 0)
+		sg_mark_end(&sg_table->sgl[sg_table->nents - 1]);
+
+	return n;
 }
 
 /**
@@ -424,10 +331,9 @@ p9_virtio_zc_request(struct p9_client *client, struct p9_req_t *req,
 {
 	int in, out, err, out_sgs, in_sgs;
 	unsigned long flags;
-	int in_nr_pages = 0, out_nr_pages = 0;
-	struct page **in_pages = NULL, **out_pages = NULL;
 	struct virtio_chan *chan = client->trans;
 	struct scatterlist *sgs[4];
+	struct sg_table sg_table = { 0 };
 	size_t offs = 0;
 	int need_drop = 0;
 	int kicked = 0;
@@ -435,14 +341,15 @@ p9_virtio_zc_request(struct p9_client *client, struct p9_req_t *req,
 	p9_debug(P9_DEBUG_TRANS, "virtio request\n");
 
 	if (uodata) {
+		ssize_t n;
 		__le32 sz;
-		int n = p9_get_mapped_pages(chan, &out_pages, uodata,
-					    outlen, &offs, &need_drop);
+
+		n = p9_get_mapped_sg(uodata, outlen, &sg_table);
 		if (n < 0) {
 			err = n;
 			goto err_out;
 		}
-		out_nr_pages = DIV_ROUND_UP(n + offs, PAGE_SIZE);
+		need_drop = n > 0 && iov_iter_extract_will_pin(uodata);
 		if (n != outlen) {
 			__le32 v = cpu_to_le32(n);
 			memcpy(&req->tc.sdata[req->tc.size - 4], &v, 4);
@@ -455,13 +362,14 @@ p9_virtio_zc_request(struct p9_client *client, struct p9_req_t *req,
 		sz = cpu_to_le32(req->tc.size + outlen);
 		memcpy(&req->tc.sdata[0], &sz, sizeof(sz));
 	} else if (uidata) {
-		int n = p9_get_mapped_pages(chan, &in_pages, uidata,
-					    inlen, &offs, &need_drop);
+		ssize_t n;
+
+		n = p9_get_mapped_sg(uidata, inlen, &sg_table);
 		if (n < 0) {
 			err = n;
 			goto err_out;
 		}
-		in_nr_pages = DIV_ROUND_UP(n + offs, PAGE_SIZE);
+		need_drop = n > 0 && iov_iter_extract_will_pin(uidata);
 		if (n != inlen) {
 			__le32 v = cpu_to_le32(n);
 			memcpy(&req->tc.sdata[req->tc.size - 4], &v, 4);
@@ -481,11 +389,8 @@ req_retry_pinned:
 	if (out)
 		sgs[out_sgs++] = chan->sg;
 
-	if (out_pages) {
-		sgs[out_sgs++] = chan->sg + out;
-		out += pack_sg_list_p(chan->sg, out, VIRTQUEUE_NUM,
-				      out_pages, out_nr_pages, offs, outlen);
-	}
+	if (uodata && outlen > 0)
+		sgs[out_sgs++] = sg_table.sgl;
 
 	/*
 	 * Take care of in data
@@ -499,11 +404,8 @@ req_retry_pinned:
 	if (in)
 		sgs[out_sgs + in_sgs++] = chan->sg + out;
 
-	if (in_pages) {
-		sgs[out_sgs + in_sgs++] = chan->sg + out + in;
-		pack_sg_list_p(chan->sg, out + in, VIRTQUEUE_NUM,
-			       in_pages, in_nr_pages, offs, inlen);
-	}
+	if (uidata && inlen > 0)
+		sgs[out_sgs + in_sgs++] = sg_table.sgl;
 
 	BUG_ON(out_sgs + in_sgs > ARRAY_SIZE(sgs));
 	err = virtqueue_add_sgs(chan->vq, sgs, out_sgs, in_sgs, req,
@@ -535,27 +437,20 @@ req_retry_pinned:
 			          READ_ONCE(req->status) >= REQ_STATUS_RCVD);
 	// RERROR needs reply (== error string) in static data
 	if (READ_ONCE(req->status) == REQ_STATUS_RCVD &&
-	    unlikely(req->rc.sdata[4] == P9_RERROR))
-		handle_rerror(req, in_hdr_len, offs, in_pages);
+	    unlikely(req->rc.sdata[4] == P9_RERROR) &&
+	    uidata && inlen > 0)
+		handle_rerror(req, in_hdr_len, offs, &sg_table);
 
 	/*
 	 * Non kernel buffers are pinned, unpin them
 	 */
 err_out:
 	if (need_drop) {
-		if (in_pages) {
-			p9_release_pages(in_pages, in_nr_pages);
-			atomic_sub(in_nr_pages, &vp_pinned);
-		}
-		if (out_pages) {
-			p9_release_pages(out_pages, out_nr_pages);
-			atomic_sub(out_nr_pages, &vp_pinned);
-		}
-		/* wakeup anybody waiting for slots to pin pages */
-		wake_up(&vp_wq);
+		/* from extract_user_to_sg() error cleanup code */
+		while (sg_table.nents > 0)
+			unpin_user_page(sg_page(&sg_table.sgl[--sg_table.nents]));
 	}
-	kvfree(in_pages);
-	kvfree(out_pages);
+	kfree(sg_table.sgl);
 	if (!kicked) {
 		/* reply won't come */
 		p9_req_put(client, req);
@@ -649,8 +544,6 @@ static int p9_virtio_probe(struct virtio_device *vdev)
 	}
 	init_waitqueue_head(chan->vc_wq);
 	chan->ring_bufs_avail = 1;
-	/* Ceiling limit to avoid denial of service attacks */
-	chan->p9_max_pages = nr_free_buffer_pages()/4;
 
 	virtio_device_ready(vdev);
 
