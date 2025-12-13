@@ -3815,7 +3815,9 @@ static int ext4_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 			 * For atomic writes the entire requested length should
 			 * be mapped.
 			 */
-			if (map.m_flags & EXT4_MAP_MAPPED) {
+			if ((map.m_flags & EXT4_MAP_MAPPED) ||
+			    (!(flags & IOMAP_DAX) &&
+			     (map.m_flags & EXT4_MAP_UNWRITTEN))) {
 				if ((!(flags & IOMAP_ATOMIC) && ret > 0) ||
 				   (flags & IOMAP_ATOMIC && ret >= orig_mlen))
 					goto out;
