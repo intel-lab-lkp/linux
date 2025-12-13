@@ -566,13 +566,18 @@ xlog_recover_inode_commit_pass2(
 	}
 
 out_owner_change:
+	/*
+	 * re-generate the checksum before recover inode owner change as
+	 * xfs_inode_from_disk() will call xfs_dinode_verify().
+	 */
+	xfs_dinode_calc_crc(log->l_mp, dip);
+
 	/* Recover the swapext owner change unless inode has been deleted */
 	if ((in_f->ilf_fields & (XFS_ILOG_DOWNER|XFS_ILOG_AOWNER)) &&
 	    (dip->di_mode != 0))
 		error = xfs_recover_inode_owner_change(mp, dip, in_f,
 						       buffer_list);
-	/* re-generate the checksum and validate the recovered inode. */
-	xfs_dinode_calc_crc(log->l_mp, dip);
+	/* Validate the recovered inode */
 	fa = xfs_dinode_verify(log->l_mp, in_f->ilf_ino, dip);
 	if (fa) {
 		XFS_CORRUPTION_ERROR(
