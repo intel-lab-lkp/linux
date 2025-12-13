@@ -34,8 +34,7 @@ early_initcall(spin_retry_init);
  */
 static int __init spin_retry_setup(char *str)
 {
-	spin_retry = simple_strtoul(str, &str, 0);
-	return 1;
+	return kstrtouint(str, 0, &spin_retry) == 0;
 }
 __setup("spin_retry=", spin_retry_setup);
 
