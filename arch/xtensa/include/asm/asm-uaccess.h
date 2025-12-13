@@ -68,7 +68,7 @@
  * 	<aa>	register containing memory address
  * 	<as>	register containing memory size
  * 	<at>	temp register
- * 	<sp>
+ * 	<sp>	unused; ignored
  * 	<error>	label to branch to on error; implies fall-through
  * 		macro on success
  * On Exit:

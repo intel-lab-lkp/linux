@@ -21,6 +21,9 @@
 #include <asm/asm-offsets.h>
 #include <asm/asmmacro.h>
 #include <asm/processor.h>
+#ifdef CONFIG_MMU
+#include <asm/asm-uaccess.h>
+#endif
 
 #if XCHAL_UNALIGNED_LOAD_EXCEPTION || defined CONFIG_XTENSA_LOAD_STORE
 #define LOAD_EXCEPTION_HANDLER
@@ -178,15 +181,15 @@ ENTRY(fast_load_store)
 	bbsi.l	a4, OP1_SI_BIT + INSN_OP1, .Linvalid_instruction
 
 1:
-	movi	a3, ~3
+	movi    a3, ~3
 	and	a3, a3, a8		# align memory address
 
 	__ssa8	a8
 
 #ifdef CONFIG_MMU
 	/* l32e can't be used here even when it's available. */
-	/* TODO access_ok(a3) could be used here */
-	j	.Linvalid_instruction
+    movi    a5, 8
+    access_ok a3, a5, a0, a2, .Linvalid_instruction
 #endif
 	l32i	a5, a3, 0
 	l32i	a6, a3, 4
