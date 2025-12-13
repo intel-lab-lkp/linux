@@ -2052,6 +2052,44 @@ static int panthor_gpuva_sm_step_map(struct drm_gpuva_op *op, void *priv)
 	return 0;
 }
 
+static bool
+iova_mapped_as_huge_page(const struct panthor_vma *vma, u64 addr)
+{
+	const struct page *pg;
+	pgoff_t bo_offset;
+
+	bo_offset = addr - vma->base.va.addr + vma->base.gem.offset;
+	pg = to_panthor_bo(vma->base.gem.obj)->base.pages[bo_offset >> PAGE_SHIFT];
+
+	return (folio_size(page_folio(pg)) >= SZ_2M);
+}
+
+static void
+get_map_unmap_intervals(const struct drm_gpuva_op_remap *op,
+			const struct panthor_vma *unmap_vma,
+			u64 *unmap_start, u64 *unmap_range)
+{
+	u64 aligned_unmap_start, aligned_unmap_end, unmap_end;
+
+	drm_gpuva_op_remap_to_unmap_range(op, unmap_start, unmap_range);
+	unmap_end = *unmap_start + *unmap_range;
+
+	aligned_unmap_start = ALIGN_DOWN(*unmap_start, SZ_2M);
+	if (op->prev && aligned_unmap_start < *unmap_start &&
+	    op->prev->va.addr <= aligned_unmap_start &&
+	    iova_mapped_as_huge_page(unmap_vma, *unmap_start)) {
+		*unmap_range += *unmap_start - aligned_unmap_start;
+		*unmap_start = aligned_unmap_start;
+	}
+
+	aligned_unmap_end = ALIGN(unmap_end, SZ_2M);
+	if (op->next && aligned_unmap_end > unmap_end &&
+	    op->next->va.addr + op->next->va.range >= aligned_unmap_end &&
+	    iova_mapped_as_huge_page(unmap_vma, unmap_end - 1)) {
+		*unmap_range += aligned_unmap_end - unmap_end;
+	}
+}
+
 static int panthor_gpuva_sm_step_remap(struct drm_gpuva_op *op,
 				       void *priv)
 {
@@ -2063,16 +2101,44 @@ static int panthor_gpuva_sm_step_remap(struct drm_gpuva_op *op,
 	int ret;
 
 	drm_gpuva_op_remap_to_unmap_range(&op->remap, &unmap_start, &unmap_range);
+
+	/*
+	 * ARM IOMMU page table management code disallows partial unmaps of huge pages,
+	 * so when a partial unmap is requested, we must first unmap the entire huge
+	 * page and then remap the difference between the huge page minus the requested
+	 * unmap region. Calculating the right offsets and ranges for the different unmap
+	 * and map operations is the responsibility of the following function.
+	 */
+	get_map_unmap_intervals(&op->remap, unmap_vma, &unmap_start, &unmap_range);
+
 	ret = panthor_vm_unmap_pages(vm, unmap_start, unmap_range);
 	if (ret)
 		return ret;
 
 	if (op->remap.prev) {
+		ret = panthor_vm_map_pages(vm, unmap_start,
+					   flags_to_prot(unmap_vma->flags),
+					   to_drm_gem_shmem_obj(op->remap.prev->gem.obj)->sgt,
+					   op->remap.prev->gem.offset +
+					   (unmap_start - op->remap.prev->va.addr),
+					   op->remap.prev->va.addr + op->remap.prev->va.range -
+					   unmap_start);
+		if (ret)
+			return ret;
+
 		prev_vma = panthor_vm_op_ctx_get_vma(op_ctx);
 		panthor_vma_init(prev_vma, unmap_vma->flags);
 	}
 
 	if (op->remap.next) {
+		ret = panthor_vm_map_pages(vm, op->remap.next->va.addr,
+					   flags_to_prot(unmap_vma->flags),
+					   to_drm_gem_shmem_obj(op->remap.next->gem.obj)->sgt,
+					   op->remap.next->gem.offset,
+					   unmap_start + unmap_range - op->remap.next->va.addr);
+		if (ret)
+			return ret;
+
 		next_vma = panthor_vm_op_ctx_get_vma(op_ctx);
 		panthor_vma_init(next_vma, unmap_vma->flags);
 	}
