@@ -3811,15 +3811,15 @@ static int ext4_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 		 */
 		if (offset + length <= i_size_read(inode)) {
 			ret = ext4_map_blocks(NULL, inode, &map, 0);
-			/*
-			 * For atomic writes the entire requested length should
-			 * be mapped.
-			 */
 			if ((map.m_flags & EXT4_MAP_MAPPED) ||
 			    (!(flags & IOMAP_DAX) &&
 			     (map.m_flags & EXT4_MAP_UNWRITTEN))) {
-				if ((!(flags & IOMAP_ATOMIC) && ret > 0) ||
-				   (flags & IOMAP_ATOMIC && ret >= orig_mlen))
+				/*
+				 * For atomic writes the entire requested
+				 * length should be mapped.
+				 */
+				if (ret == orig_mlen ||
+				    (!(flags & IOMAP_ATOMIC) && ret > 0))
 					goto out;
 			}
 			map.m_len = orig_mlen;
