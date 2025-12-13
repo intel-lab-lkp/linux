@@ -1018,6 +1018,12 @@ static int ark_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 
 	pcibios_bus_to_resource(dev->bus, &vga_res, &bus_reg);
 
+	if (!devm_request_region(&dev->dev, vga_res.start, resource_size(&vga_res), "arkfb-vga")) {
+		dev_err(info->device, "cannot reserve legacy VGA ports\n");
+		rc = -EBUSY;
+		goto err_find_mode;
+	}
+
 	par->state.vgabase = (void __iomem *) (unsigned long) vga_res.start;
 
 	/* FIXME get memsize */
