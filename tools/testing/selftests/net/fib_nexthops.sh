@@ -31,6 +31,7 @@ IPV4_TESTS="
 	ipv4_compat_mode
 	ipv4_fdb_grp_fcnal
 	ipv4_mpath_select
+	ipv4_mpath_select_nogrp
 	ipv4_torture
 	ipv4_res_torture
 "
@@ -375,6 +376,17 @@ check_large_res_grp()
 	log_test $? 0 "Dump large (x$buckets) nexthop buckets"
 }
 
+get_route_dev_src()
+{
+	local pfx="$1"
+	local src="$2"
+	local out
+
+	if out=$($IP -j route get "$pfx" from "$src" | jq -re ".[0].dev"); then
+		echo "$out"
+	fi
+}
+
 get_route_dev()
 {
 	local pfx="$1"
@@ -639,6 +651,79 @@ ipv4_fdb_grp_fcnal()
 	log_test $? 254 "Fdb entry after deleting a nexthop group"
 
 	$IP link del dev vx10
+}
+
+ipv4_mpath_select_nogrp()
+{
+	local rc dev match h addr
+
+	echo
+	echo "IPv4 multipath selection no group"
+	echo "------------------------"
+	if [ ! -x "$(command -v jq)" ]; then
+		echo "SKIP: Could not run test; need jq tool"
+		return $ksft_skip
+	fi
+
+	IP="ip -netns $peer"
+	# Use status of existing neighbor entry when determining nexthop for
+	# multipath routes.
+	local -A gws
+	gws=([veth2]=172.16.1.1 [veth4]=172.16.2.1)
+	local -A other_dev
+	other_dev=([veth2]=veth4 [veth4]=veth2)
+	local -A local_ips
+	local_ips=([veth2]=172.16.1.2 [veth4]=172.16.2.2 [veth5]=172.16.100.1)
+	local -A route_devs
+	route_devs=([veth2]=0 [veth4]=0)
+
+	run_cmd "$IP address add 172.16.100.1/32 dev lo"
+	run_cmd "$IP ro add 172.16.102.0/24 nexthop via ${gws['veth2']} dev veth2 nexthop via ${gws['veth4']} dev veth4"
+	rc=0
+	for dev in veth2 veth4; do
+		match=0
+		from_ip="${local_ips[$dev]}"
+		for h in {1..254}; do
+			addr="172.16.102.$h"
+			if [ "$(get_route_dev_src "$addr" "$from_ip")" = "$dev" ]; then
+				match=1
+				break
+			fi
+		done
+		if (( match == 0 )); then
+			echo "SKIP: Did not find a route using device $dev"
+			return $ksft_skip
+		fi
+		run_cmd "$IP neigh add ${gws[$dev]} dev $dev nud failed"
+		if ! check_route_dev "$addr" "${other_dev[$dev]}"; then
+			rc=1
+			break
+		fi
+		run_cmd "$IP neigh del ${gws[$dev]} dev $dev"
+	done
+
+	log_test $rc 0 "Use valid neighbor during multipath selection"
+
+	from_ip="${local_ips["veth5"]}"
+	for h in {1..254}; do
+		addr="172.16.102.$h"
+		route_dev=$(get_route_dev_src "$addr" "$from_ip")
+		route_devs[$route_dev]=1
+	done
+	for dev in veth2 veth4; do
+		if [ ${route_devs[$dev]} -eq 0 ]; then
+			rc=1
+			break;
+		fi
+	done
+
+	log_test $rc 0 "Use both neighbors during multipath selection"
+
+	run_cmd "$IP neigh add 172.16.1.2 dev veth1 nud incomplete"
+	run_cmd "$IP neigh add 172.16.2.2 dev veth3 nud incomplete"
+	run_cmd "$IP route get 172.16.101.1"
+	# if we did not crash, success
+	log_test $rc 0 "Multipath selection with no valid neighbor"
 }
 
 ipv4_mpath_select()
