@@ -19,6 +19,7 @@
  * Copyright (C) 2016 Jens Axboe
  *
  */
+#include "linux/blk-mq.h"
 #include <linux/kernel.h>
 #include <linux/blk_types.h>
 #include <linux/slab.h>
@@ -763,14 +764,18 @@ void wbt_enable_default(struct gendisk *disk)
 
 	if (queue_is_mq(q) && enable) {
 		struct rq_wb *rwb = wbt_alloc();
+		unsigned int memflags;
 
 		if (WARN_ON_ONCE(!rwb))
 			return;
 
+		memflags = blk_mq_freeze_queue(q);
 		if (WARN_ON_ONCE(wbt_init(disk, rwb))) {
+			blk_mq_unfreeze_queue(q, memflags);
 			wbt_free(rwb);
 			return;
 		}
+		blk_mq_unfreeze_queue(q, memflags);
 
 		mutex_lock(&q->debugfs_mutex);
 		blk_mq_debugfs_register_rq_qos(q);
@@ -947,7 +952,7 @@ static int wbt_init(struct gendisk *disk, struct rq_wb *rwb)
 	 * Assign rwb and add the stats callback.
 	 */
 	mutex_lock(&q->rq_qos_mutex);
-	ret = rq_qos_add(&rwb->rqos, disk, RQ_QOS_WBT, &wbt_rqos_ops);
+	ret = rq_qos_add_frozen(&rwb->rqos, disk, RQ_QOS_WBT, &wbt_rqos_ops);
 	mutex_unlock(&q->rq_qos_mutex);
 	if (ret)
 		return ret;
