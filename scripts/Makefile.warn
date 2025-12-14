@@ -151,7 +151,6 @@ KBUILD_CFLAGS += -Wformat-insufficient-args
 endif
 endif
 KBUILD_CFLAGS += $(call cc-option, -Wno-pointer-to-enum-cast)
-KBUILD_CFLAGS += -Wno-tautological-constant-out-of-range-compare
 KBUILD_CFLAGS += $(call cc-option, -Wno-unaligned-access)
 KBUILD_CFLAGS += -Wno-enum-compare-conditional
 endif
@@ -179,6 +178,7 @@ KBUILD_CFLAGS += -Wno-shift-negative-value
 
 ifdef CONFIG_CC_IS_CLANG
 KBUILD_CFLAGS += -Wno-enum-enum-conversion
+KBUILD_CFLAGS += -Wno-tautological-constant-out-of-range-compare
 endif
 
 ifdef CONFIG_CC_IS_GCC
