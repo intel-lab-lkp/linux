@@ -3,7 +3,7 @@
 #ifndef _ASM_PPC_ENTRY_COMMON_H
 #define _ASM_PPC_ENTRY_COMMON_H
 
-#ifdef CONFIG_GENERIC_IRQ_ENTRY
+#ifdef CONFIG_GENERIC_ENTRY
 
 #include <asm/cputime.h>
 #include <asm/interrupt.h>
@@ -217,9 +217,6 @@ static inline void arch_interrupt_enter_prepare(struct pt_regs *regs)
 
 	if (user_mode(regs)) {
 		kuap_lock();
-		CT_WARN_ON(ct_state() != CT_STATE_USER);
-		user_exit_irqoff();
-
 		account_cpu_user_entry();
 		account_stolen_time();
 	} else {
