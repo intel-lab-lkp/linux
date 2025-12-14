@@ -494,46 +494,38 @@ struct tpm1_get_random_out {
 static int tpm1_get_random(struct tpm_chip *chip, u8 *out, size_t max)
 {
 	struct tpm1_get_random_out *resp;
-	struct tpm_buf buf;
 	u32 recd;
 	int rc;
 
 	if (!out || !max || max > TPM_MAX_RNG_DATA)
 		return -EINVAL;
 
-	rc = tpm_buf_init(&buf, TPM_TAG_RQU_COMMAND, TPM_ORD_GETRANDOM);
-	if (rc)
-		return rc;
+	struct tpm_buf *buf __free(kfree) = kzalloc(TPM_BUFSIZE, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
 
-	tpm_buf_append_u32(&buf, max);
+	tpm_buf_init(buf, TPM_BUFSIZE);
+	tpm_buf_reset(buf, TPM_TAG_RQU_COMMAND, TPM_ORD_GETRANDOM);
+	tpm_buf_append_u32(buf, max);
 
-	rc = tpm_transmit_cmd(chip, &buf, sizeof(resp->rng_data_len), "TPM_GetRandom");
+	rc = tpm_transmit_cmd(chip, buf, sizeof(resp->rng_data_len), "TPM_GetRandom");
 	if (rc) {
 		if (rc > 0)
 			rc = -EIO;
-		goto err;
+		return rc;
 	}
 
-	resp = (struct tpm1_get_random_out *)&buf.data[TPM_HEADER_SIZE];
+	resp = (struct tpm1_get_random_out *)&buf->data[TPM_HEADER_SIZE];
 
 	recd = be32_to_cpu(resp->rng_data_len);
-	if (recd > max) {
-		rc = -EIO;
-		goto err;
-	}
+	if (recd > max)
+		return -EIO;
 
-	if (buf.length < TPM_HEADER_SIZE + sizeof(resp->rng_data_len) + recd) {
-		rc = -EIO;
-		goto err;
-	}
+	if (buf->length < TPM_HEADER_SIZE + sizeof(resp->rng_data_len) + recd)
+		return -EIO;
 
 	memcpy(out, resp->rng_data, recd);
-	tpm_buf_destroy(&buf);
 	return recd;
-
-err:
-	tpm_buf_destroy(&buf);
-	return rc;
 }
 
 struct tpm2_get_random_out {
@@ -545,7 +537,6 @@ static int tpm2_get_random(struct tpm_chip *chip, u8 *out, size_t max)
 {
 	struct tpm2_get_random_out *resp;
 	struct tpm_header *head;
-	struct tpm_buf buf;
 	off_t offset;
 	u32 recd;
 	int ret;
@@ -553,30 +544,30 @@ static int tpm2_get_random(struct tpm_chip *chip, u8 *out, size_t max)
 	if (!out || !max || max > TPM_MAX_RNG_DATA)
 		return -EINVAL;
 
-	ret = tpm_buf_init(&buf, TPM2_ST_SESSIONS, TPM2_CC_GET_RANDOM);
-	if (ret)
-		return ret;
+	struct tpm_buf *buf __free(kfree) = kzalloc(TPM_BUFSIZE, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
 
+	tpm_buf_init(buf, TPM_BUFSIZE);
+	tpm_buf_reset(buf, TPM2_ST_SESSIONS, TPM2_CC_GET_RANDOM);
 	if (tpm2_chip_auth(chip)) {
-		tpm_buf_append_hmac_session(chip, &buf,
+		tpm_buf_append_hmac_session(chip, buf,
 					    TPM2_SA_ENCRYPT | TPM2_SA_CONTINUE_SESSION,
 					    NULL, 0);
 	} else  {
-		head = (struct tpm_header *)buf.data;
+		head = (struct tpm_header *)buf->data;
 		head->tag = cpu_to_be16(TPM2_ST_NO_SESSIONS);
 	}
-	tpm_buf_append_u16(&buf, max);
+	tpm_buf_append_u16(buf, max);
 
-	ret = tpm_buf_fill_hmac_session(chip, &buf);
-	if (ret) {
-		tpm_buf_destroy(&buf);
+	ret = tpm_buf_fill_hmac_session(chip, buf);
+	if (ret)
 		return ret;
-	}
 
-	ret = tpm_transmit_cmd(chip, &buf, offsetof(struct tpm2_get_random_out, buffer),
+	ret = tpm_transmit_cmd(chip, buf, offsetof(struct tpm2_get_random_out, buffer),
 			       "TPM2_GetRandom");
 
-	ret = tpm_buf_check_hmac_response(chip, &buf, ret);
+	ret = tpm_buf_check_hmac_response(chip, buf, ret);
 	if (ret) {
 		if (ret > 0)
 			ret = -EIO;
@@ -584,17 +575,17 @@ static int tpm2_get_random(struct tpm_chip *chip, u8 *out, size_t max)
 		goto out;
 	}
 
-	head = (struct tpm_header *)buf.data;
+	head = (struct tpm_header *)buf->data;
 	offset = TPM_HEADER_SIZE;
 
 	/* Skip the parameter size field: */
 	if (be16_to_cpu(head->tag) == TPM2_ST_SESSIONS)
 		offset += 4;
 
-	resp = (struct tpm2_get_random_out *)&buf.data[offset];
+	resp = (struct tpm2_get_random_out *)&buf->data[offset];
 	recd = min_t(u32, be16_to_cpu(resp->size), max);
 
-	if (tpm_buf_length(&buf) <
+	if (tpm_buf_length(buf) <
 	    TPM_HEADER_SIZE + offsetof(struct tpm2_get_random_out, buffer) + recd) {
 		ret = -EIO;
 		goto out;
@@ -605,7 +596,6 @@ static int tpm2_get_random(struct tpm_chip *chip, u8 *out, size_t max)
 
 out:
 	tpm2_end_auth_session(chip);
-	tpm_buf_destroy(&buf);
 	return ret;
 }
 
