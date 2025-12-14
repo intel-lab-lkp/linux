@@ -4,6 +4,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/ctype.h>
+#include <linux/debugfs.h>
 #include <linux/dmi.h>
 #include <linux/efi.h>
 #include <linux/memblock.h>
@@ -30,6 +31,7 @@ static u32 dmi_len;
 static u16 dmi_num;
 static u8 smbios_entry_point[32];
 static int smbios_entry_point_size;
+static struct dentry *debugfs_dir;
 
 /* DMI system identification string used during boot */
 static char dmi_ids_string[128] __initdata;
@@ -179,6 +181,17 @@ static const char *dmi_ident[DMI_STRING_MAX];
 static LIST_HEAD(dmi_devices);
 int dmi_available;
 EXPORT_SYMBOL_GPL(dmi_available);
+
+static int additional_show(struct seq_file *m, void *v)
+{
+	const struct dmi_device *dev = NULL;
+
+	while ((dev = dmi_find_device(DMI_DEV_TYPE_ADDITIONAL, NULL, dev)))
+		seq_printf(m, "%s\n", dev->name);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(additional);
 
 /*
  *	Save a DMI string
@@ -810,6 +823,20 @@ static void __init dmi_scan_machine(void)
 static __ro_after_init BIN_ATTR_SIMPLE_ADMIN_RO(smbios_entry_point);
 static __ro_after_init BIN_ATTR_SIMPLE_ADMIN_RO(DMI);
 
+static void __init dmi_create_debugfs(void)
+{
+	if (!arch_debugfs_dir)
+		return;
+	debugfs_dir = debugfs_create_dir("dmi", arch_debugfs_dir);
+	if (!debugfs_dir)
+		return;
+	if (!dmi_find_device(DMI_DEV_TYPE_ADDITIONAL, NULL, NULL))
+		return;
+	debugfs_create_file("additional", 0444,
+			    debugfs_dir, NULL,
+			    &additional_fops);
+}
+
 static int __init dmi_init(void)
 {
 	struct kobject *tables_kobj;
@@ -845,9 +872,14 @@ static int __init dmi_init(void)
 	bin_attr_DMI.size = dmi_len;
 	bin_attr_DMI.private = dmi_table;
 	ret = sysfs_create_bin_file(tables_kobj, &bin_attr_DMI);
-	if (!ret)
-		return 0;
+	if (ret)
+		goto err_sysfs;
 
+	dmi_create_debugfs();
+
+	return 0;
+
+ err_sysfs:
 	sysfs_remove_bin_file(tables_kobj,
 			      &bin_attr_smbios_entry_point);
  err_unmap:
