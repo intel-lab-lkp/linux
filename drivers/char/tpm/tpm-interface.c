@@ -614,9 +614,11 @@ out:
  * @chip:	A &tpm_chip instance. Whenset to %NULL, the default chip is used.
  * @out:	Destination buffer for the acquired random bytes.
  * @max:	The maximum number of bytes to write to @out.
+ * @wait:	Set to true when all of the @max bytes need to be acquired.
  *
  * Iterates pulling more bytes from TPM up until all of the @max bytes have been
- * received.
+ * received, when @wait it sets true. Otherwise, the queries for @max bytes from
+ * TPM exactly once, and returns the bytes that were received.
  *
  * Returns the number of random bytes read on success.
  * Returns -EINVAL when @out is NULL, or @max is not between zero and
@@ -624,7 +626,7 @@ out:
  * Returns tpm_transmit_cmd() error codes when the TPM command results an
  * error.
  */
-int tpm_get_random(struct tpm_chip *chip, u8 *out, size_t max)
+int tpm_get_random(struct tpm_chip *chip, u8 *out, size_t max, bool wait)
 {
 	u32 num_bytes = max;
 	u8 *out_ptr = out;
@@ -656,6 +658,11 @@ int tpm_get_random(struct tpm_chip *chip, u8 *out, size_t max)
 
 		if (rc < 0)
 			goto err;
+
+		if (!wait) {
+			total = rc;
+			break;
+		}
 
 		out_ptr += rc;
 		total += rc;

@@ -361,7 +361,7 @@ static int osap(struct tpm_buf *tb, struct osapsess *s,
 	unsigned char ononce[TPM_NONCE_SIZE];
 	int ret;
 
-	ret = tpm_get_random(chip, ononce, TPM_NONCE_SIZE);
+	ret = tpm_get_random(chip, ononce, TPM_NONCE_SIZE, true);
 	if (ret < 0)
 		return ret;
 
@@ -454,7 +454,7 @@ static int tpm_seal(struct tpm_buf *tb, uint16_t keytype,
 	memcpy(td->xorwork + SHA1_DIGEST_SIZE, sess.enonce, SHA1_DIGEST_SIZE);
 	sha1(td->xorwork, SHA1_DIGEST_SIZE * 2, td->xorhash);
 
-	ret = tpm_get_random(chip, td->nonceodd, TPM_NONCE_SIZE);
+	ret = tpm_get_random(chip, td->nonceodd, TPM_NONCE_SIZE, true);
 	if (ret < 0)
 		goto out;
 
@@ -565,7 +565,7 @@ static int tpm_unseal(struct tpm_buf *tb,
 	}
 
 	ordinal = htonl(TPM_ORD_UNSEAL);
-	ret = tpm_get_random(chip, nonceodd, TPM_NONCE_SIZE);
+	ret = tpm_get_random(chip, nonceodd, TPM_NONCE_SIZE, true);
 	if (ret < 0)
 		return ret;
 
@@ -938,7 +938,7 @@ out:
 
 static int trusted_tpm_get_random(unsigned char *key, size_t key_len)
 {
-	return tpm_get_random(chip, key, key_len);
+	return tpm_get_random(chip, key, key_len, true);
 }
 
 static int __init init_digests(void)

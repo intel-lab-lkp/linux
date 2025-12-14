@@ -494,7 +494,7 @@ static int tpm_hwrng_read(struct hwrng *rng, void *data, size_t max, bool wait)
 {
 	struct tpm_chip *chip = container_of(rng, struct tpm_chip, hwrng);
 
-	return tpm_get_random(chip, data, max);
+	return tpm_get_random(chip, data, max, false);
 }
 
 static bool tpm_is_hwrng_enabled(struct tpm_chip *chip)
