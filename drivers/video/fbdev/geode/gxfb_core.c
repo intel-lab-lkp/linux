@@ -223,31 +223,33 @@ static int gxfb_map_video_memory(struct fb_info *info, struct pci_dev *dev)
 	if (ret < 0)
 		return ret;
 
-	ret = pci_request_region(dev, 3, "gxfb (video processor)");
-	if (ret < 0)
-		return ret;
+	if (!devm_request_mem_region(&dev->dev, pci_resource_start(dev, 3),
+			      pci_resource_len(dev, 3), "gxfb (video processor)"))
+		return -EBUSY;
+
 	par->vid_regs = pci_ioremap_bar(dev, 3);
 	if (!par->vid_regs)
 		return -ENOMEM;
 
-	ret = pci_request_region(dev, 2, "gxfb (display controller)");
-	if (ret < 0)
-		return ret;
+	if (!devm_request_mem_region(&dev->dev, pci_resource_start(dev, 2),
+			      pci_resource_len(dev, 2), "gxfb (display controller)"))
+		return -EBUSY;
+
 	par->dc_regs = pci_ioremap_bar(dev, 2);
 	if (!par->dc_regs)
 		return -ENOMEM;
 
-	ret = pci_request_region(dev, 1, "gxfb (graphics processor)");
-	if (ret < 0)
-		return ret;
-	par->gp_regs = pci_ioremap_bar(dev, 1);
+	if (!devm_request_mem_region(&dev->dev, pci_resource_start(dev, 1),
+			      pci_resource_len(dev, 1), "gxfb (graphics processor)"))
+		return -EBUSY;
 
+	par->gp_regs = pci_ioremap_bar(dev, 1);
 	if (!par->gp_regs)
 		return -ENOMEM;
 
-	ret = pci_request_region(dev, 0, "gxfb (framebuffer)");
-	if (ret < 0)
-		return ret;
+	if (!devm_request_mem_region(&dev->dev, pci_resource_start(dev, 0),
+			      pci_resource_len(dev, 0), "gxfb (framebuffer)"))
+		return -EBUSY;
 
 	info->fix.smem_start = pci_resource_start(dev, 0);
 	info->fix.smem_len = vram ? vram : gx_frame_buffer_size();
@@ -414,19 +416,15 @@ static int gxfb_probe(struct pci_dev *pdev, const struct pci_device_id *id)
   err:
 	if (info->screen_base) {
 		iounmap(info->screen_base);
-		pci_release_region(pdev, 0);
 	}
 	if (par->vid_regs) {
 		iounmap(par->vid_regs);
-		pci_release_region(pdev, 3);
 	}
 	if (par->dc_regs) {
 		iounmap(par->dc_regs);
-		pci_release_region(pdev, 2);
 	}
 	if (par->gp_regs) {
 		iounmap(par->gp_regs);
-		pci_release_region(pdev, 1);
 	}
 
 	fb_dealloc_cmap(&info->cmap);
@@ -442,16 +440,12 @@ static void gxfb_remove(struct pci_dev *pdev)
 	unregister_framebuffer(info);
 
 	iounmap((void __iomem *)info->screen_base);
-	pci_release_region(pdev, 0);
 
 	iounmap(par->vid_regs);
-	pci_release_region(pdev, 3);
 
 	iounmap(par->dc_regs);
-	pci_release_region(pdev, 2);
 
 	iounmap(par->gp_regs);
-	pci_release_region(pdev, 1);
 
 	fb_dealloc_cmap(&info->cmap);
 
