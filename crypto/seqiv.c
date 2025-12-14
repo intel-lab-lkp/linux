@@ -23,9 +23,6 @@ static void seqiv_aead_encrypt_complete2(struct aead_request *req, int err)
 	struct aead_request *subreq = aead_request_ctx(req);
 	struct crypto_aead *geniv;
 
-	if (err == -EINPROGRESS || err == -EBUSY)
-		return;
-
 	if (err)
 		goto out;
 
@@ -40,7 +37,8 @@ static void seqiv_aead_encrypt_complete(void *data, int err)
 {
 	struct aead_request *req = data;
 
-	seqiv_aead_encrypt_complete2(req, err);
+	if (err != -EINPROGRESS && err != -EBUSY)
+		seqiv_aead_encrypt_complete2(req, err);
 	aead_request_complete(req, err);
 }
 
@@ -89,7 +87,7 @@ static int seqiv_aead_encrypt(struct aead_request *req)
 	scatterwalk_map_and_copy(info, req->dst, req->assoclen, ivsize, 1);
 
 	err = crypto_aead_encrypt(subreq);
-	if (unlikely(info != req->iv))
+	if (err != -EINPROGRESS && err != -EBUSY && unlikely(info != req->iv))
 		seqiv_aead_encrypt_complete2(req, err);
 	return err;
 }
