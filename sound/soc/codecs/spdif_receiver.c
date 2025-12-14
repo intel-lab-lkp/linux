@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * ALSA SoC SPDIF DIR (Digital Interface Reciever) driver
+ * ALSA SoC SPDIF DIR (Digital Interface Receiver) driver
  *
  * Based on ALSA SoC SPDIF DIT driver
  *

@@ -569,7 +569,7 @@ static const struct snd_kcontrol_new da732x_snd_controls[] = {
 		       DA732X_EQ_BAND5_SHIFT, DA732X_EQ_VOL_VAL_MAX,
 		       DA732X_INVERT, eq_band_pga_tlv),
 
-	/* Lineout 2 Reciever*/
+	/* Lineout 2 Receiver*/
 	SOC_SINGLE("Lineout 2 Switch", DA732X_REG_LIN2, DA732X_LOUT_MUTE_SHIFT,
 		   DA732X_SWITCH_MAX, DA732X_INVERT),
 	SOC_SINGLE_TLV("Lineout 2 Volume", DA732X_REG_LIN2,
