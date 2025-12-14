@@ -297,7 +297,7 @@ static void cblist_init_generic(struct rcu_tasks *rtp)
 		shift++;
 	WRITE_ONCE(rtp->percpu_enqueue_shift, shift);
 	WRITE_ONCE(rtp->percpu_dequeue_lim, lim);
-	smp_store_release(&rtp->percpu_enqueue_lim, lim);
+	WRITE_ONCE(rtp->percpu_enqueue_lim, lim);
 
 	pr_info("%s: Setting shift to %d and lim to %d rcu_task_cb_adjust=%d rcu_task_cpu_ids=%d.\n",
 			rtp->name, data_race(rtp->percpu_enqueue_shift), data_race(rtp->percpu_enqueue_lim),
