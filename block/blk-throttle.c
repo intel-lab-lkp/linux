@@ -1313,7 +1313,7 @@ static int blk_throtl_init(struct gendisk *disk)
 	unsigned int memflags;
 	int ret;
 
-	td = kzalloc_node(sizeof(*td), GFP_KERNEL, q->node);
+	td = kzalloc_node(sizeof(*td), GFP_NOIO, q->node);
 	if (!td)
 		return -ENOMEM;
 
