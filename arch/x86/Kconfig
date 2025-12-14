@@ -3116,6 +3116,7 @@ config AMD_NB
 config AMD_NODE
 	def_bool y
 	depends on CPU_SUP_AMD && PCI
+	select DMI
 
 endmenu
 

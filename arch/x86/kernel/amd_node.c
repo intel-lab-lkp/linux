@@ -9,6 +9,7 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/dmi.h>
 #include <asm/amd/node.h>
 
 /*
@@ -247,6 +248,7 @@ __setup("amd_smn_debugfs_enable", amd_smn_enable_dfs);
 static int __init amd_smn_init(void)
 {
 	u16 count, num_roots, roots_per_node, node, num_nodes;
+	const struct dmi_device *dev = NULL;
 	struct pci_dev *root;
 
 	if (!cpu_feature_enabled(X86_FEATURE_ZEN))
@@ -309,6 +311,12 @@ static int __init amd_smn_init(void)
 	}
 
 	smn_exclusive = true;
+
+	while ((dev = dmi_find_device(DMI_DEV_TYPE_ADDITIONAL, NULL, dev)))
+		if (!strncmp(dev->name, "AGESA", 5)) {
+			pr_info("%s\n", dev->name);
+			break;
+		}
 
 	return 0;
 }
