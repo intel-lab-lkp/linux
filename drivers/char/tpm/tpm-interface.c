@@ -630,7 +630,6 @@ int tpm_get_random(struct tpm_chip *chip, u8 *out, size_t max, bool wait)
 {
 	u32 num_bytes = max;
 	u8 *out_ptr = out;
-	int retries = 5;
 	int total = 0;
 	int rc;
 
@@ -656,8 +655,12 @@ int tpm_get_random(struct tpm_chip *chip, u8 *out, size_t max, bool wait)
 		else
 			rc = tpm1_get_random(chip, out_ptr, num_bytes);
 
-		if (rc < 0)
+		if (rc <= 0) {
+			if (!rc)
+				rc = -EIO;
+
 			goto err;
+		}
 
 		if (!wait) {
 			total = rc;
@@ -667,7 +670,7 @@ int tpm_get_random(struct tpm_chip *chip, u8 *out, size_t max, bool wait)
 		out_ptr += rc;
 		total += rc;
 		num_bytes -= rc;
-	} while (retries-- && total < max);
+	} while (total < max);
 
 	tpm_put_ops(chip);
 	return total ? total : -EIO;
