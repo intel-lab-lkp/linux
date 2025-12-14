@@ -38,6 +38,7 @@ Find your role below:
 * Maintainer - Leading subsystems and reviewing patches
 * Hardware Vendor - Writing drivers for new hardware
 * Distribution Maintainer - Packaging kernels for distros
+* AI Coding Assistants - AI tools and developers using AI for contributions
 
 
 For Specific Users
@@ -144,6 +145,38 @@ Package and distribute the kernel:
 * Kernel Parameters: Documentation/admin-guide/kernel-parameters.rst
 * Tainted Kernels: Documentation/admin-guide/tainted-kernels.rst
 
+AI Coding Assistants
+--------------------
+
+AI assistants and developers using AI tools for kernel contributions must follow
+the standard kernel development processes:
+
+* Development Process: Documentation/process/development-process.rst
+* Coding Style: Documentation/process/coding-style.rst
+* Submitting Patches: Documentation/process/submitting-patches.rst
+* Programming Language: Documentation/process/programming-language.rst
+
+Important requirements:
+
+* License Compliance: All contributions must comply with GPL-2.0-only licensing.
+  See Documentation/process/license-rules.rst for SPDX identifier requirements.
+
+* Signed-off-by: AI agents MUST NOT add Signed-off-by tags. Only humans can
+  legally certify the Developer Certificate of Origin (Documentation/process/
+  submitting-patches.rst). The human submitting AI-assisted code is responsible
+  for the Signed-off-by certification.
+
+* Attribution: Contributions involving AI assistance should include an Assisted-by
+  tag in the following format:
+
+    Assisted-by: AGENT_NAME:MODEL_VERSION [TOOL1] [TOOL2] ...
+
+  Where AGENT_NAME is the AI tool/assistant name, MODEL_VERSION is the specific
+  model or version used, and optional tool names indicate specialized analysis
+  tools used during development.
+
+  List specialized tools (coccinelle, sparse, smatch, cppcheck, clang-tidy,
+  custom scripts) but omit basic tools (git, gcc, make, editors).
 
 
 Communication and Support
