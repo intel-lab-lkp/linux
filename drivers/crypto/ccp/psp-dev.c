@@ -351,6 +351,21 @@ struct psp_device *psp_get_master_device(void)
 	return sp ? sp->psp_data : NULL;
 }
 
+
+int psp_restore(struct sp_device *sp)
+{
+	struct psp_device *psp = sp->psp_data;
+
+	if (psp->tee_data) {
+		int r = tee_restore(psp);
+
+		if (r)
+			return r;
+	}
+
+	return 0;
+}
+
 void psp_pci_init(void)
 {
 	psp_master = psp_get_master_device();
