@@ -57,6 +57,7 @@ struct device;
  *  bitmap_weight(src, nbits)                   Hamming Weight: number set bits
  *  bitmap_weight_and(src1, src2, nbits)        Hamming Weight of and'ed bitmap
  *  bitmap_weight_andnot(src1, src2, nbits)     Hamming Weight of andnot'ed bitmap
+ *  bitmap_weight_from(src, start, nbits)       Hamming Weight starting from @start
  *  bitmap_set(dst, pos, nbits)                 Set specified bit area
  *  bitmap_clear(dst, pos, nbits)               Clear specified bit area
  *  bitmap_find_next_zero_area(buf, len, pos, n, mask)  Find bit free area
@@ -184,6 +185,8 @@ unsigned int __bitmap_weight_and(const unsigned long *bitmap1,
 				 const unsigned long *bitmap2, unsigned int nbits);
 unsigned int __bitmap_weight_andnot(const unsigned long *bitmap1,
 				    const unsigned long *bitmap2, unsigned int nbits);
+unsigned long __bitmap_weight_from(const unsigned long *bitmap,
+				   unsigned int start, unsigned int nbits);
 void __bitmap_set(unsigned long *map, unsigned int start, int len);
 void __bitmap_clear(unsigned long *map, unsigned int start, int len);
 
@@ -477,6 +480,28 @@ unsigned long bitmap_weight_andnot(const unsigned long *src1,
 	if (small_const_nbits(nbits))
 		return hweight_long(*src1 & ~(*src2) & BITMAP_LAST_WORD_MASK(nbits));
 	return __bitmap_weight_andnot(src1, src2, nbits);
+}
+
+/**
+ * bitmap_weight_from - Hamming weight for a memory region
+ * @bitmap: The base address
+ * @start: The bitnumber to starts weighting
+ * @nbits: the bitmap size in bits
+ *
+ * Returns the number of set bits in the region, or > @nbits in case of error.
+ */
+static __always_inline
+unsigned long bitmap_weight_from(const unsigned long *bitmap,
+				   unsigned int start, unsigned int nbits)
+{
+	if (small_const_nbits(nbits)) {
+		if (unlikely(start >= nbits))
+			return nbits + 1;
+
+		return hweight_long(*bitmap & GENMASK(nbits - 1, start));
+	}
+
+	return __bitmap_weight_from(bitmap, start, nbits);
 }
 
 static __always_inline
