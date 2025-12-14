@@ -99,7 +99,7 @@ static inline void receive_chars(struct uart_pxa_port *up, int *status)
 		 * Specification Update (May 2005)
 		 *
 		 * Step 2
-		 * Disable the Reciever Time Out Interrupt via IER[RTOEI]
+		 * Disable the Receiver Time Out Interrupt via IER[RTOEI]
 		 */
 		up->ier &= ~UART_IER_RTOIE;
 		serial_out(up, UART_IER, up->ier);
