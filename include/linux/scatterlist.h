@@ -696,7 +696,7 @@ sg_page_iter_dma_address(struct sg_dma_page_iter *dma_iter)
 #define SG_MITER_LOCAL		(1 << 3)	 /* use kmap_local */
 
 struct sg_mapping_iter {
-	/* the following three fields can be accessed directly */
+	/* the following fields can be accessed directly */
 	struct page		*page;		/* currently mapped page */
 	void			*addr;		/* pointer to the mapped area */
 	size_t			length;		/* length of the mapped area */
