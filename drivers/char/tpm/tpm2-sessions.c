@@ -136,8 +136,8 @@ struct tpm2_auth {
 	 * handle, but they are part of the session by name, which
 	 * we must compute and remember
 	 */
-	u32 name_h[AUTH_MAX_NAMES];
 	u8 name[AUTH_MAX_NAMES][TPM2_MAX_NAME_SIZE];
+	u16 name_size_tbl[AUTH_MAX_NAMES];
 };
 
 #ifdef CONFIG_TCG_TPM2_HMAC
@@ -163,7 +163,17 @@ static int name_size(const u8 *name)
 	}
 }
 
-static int tpm2_read_public(struct tpm_chip *chip, u32 handle, void *name)
+/**
+ * tpm2_read_public: Resolve TPM name for a handle
+ * @chip:		TPM chip to use.
+ * @handle:		TPM handle.
+ * @name:		A buffer for returning the name blob. Must have a
+ *			capacity of 'SHA512_DIGET_SIZE + 2' bytes at minimum
+ *
+ * Returns size of TPM handle name of success.
+ * Returns tpm_transmit_cmd error codes when TPM2_ReadPublic fails.
+ */
+int tpm2_read_public(struct tpm_chip *chip, u32 handle, void *name)
 {
 	u32 mso = tpm2_handle_mso(handle);
 	off_t offset = TPM_HEADER_SIZE;
@@ -219,14 +229,16 @@ static int tpm2_read_public(struct tpm_chip *chip, u32 handle, void *name)
 	memcpy(name, &buf.data[offset], rc);
 	return name_size_alg;
 }
+EXPORT_SYMBOL_GPL(tpm2_read_public);
 #endif /* CONFIG_TCG_TPM2_HMAC */
 
 /**
- * tpm_buf_append_name() - add a handle area to the buffer
- * @chip: the TPM chip structure
- * @buf: The buffer to be appended
- * @handle: The handle to be appended
- * @name: The name of the handle (may be NULL)
+ * tpm_buf_append_name() - Append a handle and store TPM name
+ * @chip:		TPM chip to use.
+ * @buf:		TPM buffer containing the TPM command in-transit.
+ * @handle:		TPM handle to be appended.
+ * @name:		TPM name of the handle
+ * @name_size:		Size of the TPM name.
  *
  * In order to compute session HMACs, we need to know the names of the
  * objects pointed to by the handles.  For most objects, this is simply
@@ -243,15 +255,14 @@ static int tpm2_read_public(struct tpm_chip *chip, u32 handle, void *name)
  * will be caused by an incorrect programming model and indicated by a
  * kernel message.
  *
- * Ends the authorization session on failure.
+ * Returns zero on success.
+ * Returns -EIO when the authorization area state is malformed.
  */
 int tpm_buf_append_name(struct tpm_chip *chip, struct tpm_buf *buf,
-			u32 handle, u8 *name)
+			u32 handle, u8 *name, u16 name_size)
 {
 #ifdef CONFIG_TCG_TPM2_HMAC
-	enum tpm2_mso_type mso = tpm2_handle_mso(handle);
 	struct tpm2_auth *auth;
-	u16 name_size_alg;
 	int slot;
 	int ret;
 #endif
@@ -276,36 +287,15 @@ int tpm_buf_append_name(struct tpm_chip *chip, struct tpm_buf *buf,
 	}
 	tpm_buf_append_u32(buf, handle);
 	auth->session += 4;
-
-	if (mso == TPM2_MSO_PERSISTENT ||
-	    mso == TPM2_MSO_VOLATILE ||
-	    mso == TPM2_MSO_NVRAM) {
-		if (!name) {
-			ret = tpm2_read_public(chip, handle, auth->name[slot]);
-			if (ret < 0)
-				goto err;
-
-			name_size_alg = ret;
-		}
-	} else {
-		if (name) {
-			dev_err(&chip->dev, "handle 0x%08x does not use a name\n",
-				handle);
-			ret = -EIO;
-			goto err;
-		}
-	}
-
-	auth->name_h[slot] = handle;
-	if (name)
-		memcpy(auth->name[slot], name, name_size_alg);
+	memcpy(auth->name[slot], name, name_size);
+	auth->name_size_tbl[slot] = name_size;
 #endif
 	return 0;
 
 #ifdef CONFIG_TCG_TPM2_HMAC
 err:
 	tpm2_end_auth_session(chip);
-	return tpm_ret_to_err(ret);
+	return ret;
 #endif
 }
 EXPORT_SYMBOL_GPL(tpm_buf_append_name);
@@ -613,22 +603,8 @@ int tpm_buf_fill_hmac_session(struct tpm_chip *chip, struct tpm_buf *buf)
 	attrs = chip->cc_attrs_tbl[i];
 
 	handles = (attrs >> TPM2_CC_ATTR_CHANDLES) & GENMASK(2, 0);
+	offset_s += handles * sizeof(u32);
 
-	/*
-	 * just check the names, it's easy to make mistakes.  This
-	 * would happen if someone added a handle via
-	 * tpm_buf_append_u32() instead of tpm_buf_append_name()
-	 */
-	for (i = 0; i < handles; i++) {
-		u32 handle = tpm_buf_read_u32(buf, &offset_s);
-
-		if (auth->name_h[i] != handle) {
-			dev_err(&chip->dev, "invalid handle 0x%08x\n", handle);
-			ret = -EIO;
-			goto err;
-		}
-	}
-	/* point offset_s to the start of the sessions */
 	val = tpm_buf_read_u32(buf, &offset_s);
 	/* point offset_p to the start of the parameters */
 	offset_p = offset_s + val;
@@ -689,23 +665,8 @@ int tpm_buf_fill_hmac_session(struct tpm_chip *chip, struct tpm_buf *buf)
 	/* ordinal is already BE */
 	sha256_update(&sctx, (u8 *)&head->ordinal, sizeof(head->ordinal));
 	/* add the handle names */
-	for (i = 0; i < handles; i++) {
-		enum tpm2_mso_type mso = tpm2_handle_mso(auth->name_h[i]);
-
-		if (mso == TPM2_MSO_PERSISTENT ||
-		    mso == TPM2_MSO_VOLATILE ||
-		    mso == TPM2_MSO_NVRAM) {
-			ret = name_size(auth->name[i]);
-			if (ret < 0)
-				goto err;
-
-			sha256_update(&sctx, auth->name[i], ret);
-		} else {
-			__be32 h = cpu_to_be32(auth->name_h[i]);
-
-			sha256_update(&sctx, (u8 *)&h, 4);
-		}
-	}
+	for (i = 0; i < handles; i++)
+		sha256_update(&sctx, auth->name[i], auth->name_size_tbl[i]);
 	if (offset_s != tpm_buf_length(buf))
 		sha256_update(&sctx, &buf->data[offset_s],
 			      tpm_buf_length(buf) - offset_s);

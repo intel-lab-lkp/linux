@@ -202,7 +202,8 @@ int tpm2_pcr_extend(struct tpm_chip *chip, u32 pcr_idx,
 	}
 
 	if (!disable_pcr_integrity) {
-		rc = tpm_buf_append_name(chip, &buf, pcr_idx, NULL);
+		rc = tpm_buf_append_name(chip, &buf, pcr_idx, (u8 *)&pcr_idx,
+					 sizeof(u32));
 		if (rc) {
 			tpm_buf_destroy(&buf);
 			return rc;

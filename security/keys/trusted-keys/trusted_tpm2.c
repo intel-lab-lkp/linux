@@ -203,8 +203,10 @@ int tpm2_seal_trusted(struct tpm_chip *chip,
 		      struct trusted_key_payload *payload,
 		      struct trusted_key_options *options)
 {
+	u8 parent_name[TPM2_MAX_NAME_SIZE];
 	off_t offset = TPM_HEADER_SIZE;
 	struct tpm_buf buf, sized;
+	u16 parent_name_size;
 	int blob_len = 0;
 	int hash;
 	u32 flags;
@@ -220,6 +222,12 @@ int tpm2_seal_trusted(struct tpm_chip *chip,
 	rc = tpm_try_get_ops(chip);
 	if (rc)
 		return rc;
+
+	rc = tpm2_read_public(chip, options->keyhandle, parent_name);
+	if (rc < 0)
+		goto out_put;
+
+	parent_name_size = rc;
 
 	rc = tpm2_start_auth_session(chip);
 	if (rc)
@@ -238,7 +246,8 @@ int tpm2_seal_trusted(struct tpm_chip *chip,
 		goto out_put;
 	}
 
-	rc = tpm_buf_append_name(chip, &buf, options->keyhandle, NULL);
+	rc = tpm_buf_append_name(chip, &buf, options->keyhandle, parent_name,
+				 parent_name_size);
 	if (rc)
 		goto out;
 
@@ -325,21 +334,25 @@ out_put:
 }
 
 /**
- * tpm2_load_cmd() - execute a TPM2_Load command
+ * tpm2_load_cmd() - Execute TPM2_Load
+ * @chip:		TPM chip to use.
+ * @payload:		Key data in clear text.
+ * @options:		Trusted key options.
+ * @parent_name:	A cryptographic name, i.e. a TPMT_HA blob, of the
+ *			parent key.
+ * @blob:		The decoded payload for the key.
+ * @blob_handle:	On success, will contain handle to the loaded keyedhash
+ *			blob.
  *
- * @chip: TPM chip to use
- * @payload: the key data in clear and encrypted form
- * @options: authentication values and other options
- * @blob_handle: returned blob handle
- *
- * Return: 0 on success.
- *        -E2BIG on wrong payload size.
- *        -EPERM on tpm error status.
- *        < 0 error from tpm_send.
+ * Return -E2BIG when the blob size is too small for all the data.
+ * Returns tpm_transmit_cmd() error codes when either TPM2_Load fails.
  */
 static int tpm2_load_cmd(struct tpm_chip *chip,
 			 struct trusted_key_payload *payload,
 			 struct trusted_key_options *options,
+			 u8 *parent_name,
+			 u16 parent_name_size,
+			 const u8 *blob,
 			 u32 *blob_handle)
 {
 	u8 *blob_ref __free(kfree) = NULL;
@@ -347,27 +360,13 @@ static int tpm2_load_cmd(struct tpm_chip *chip,
 	unsigned int private_len;
 	unsigned int public_len;
 	unsigned int blob_len;
-	u8 *blob, *pub;
+	const u8 *pub;
 	int rc;
 	u32 attrs;
 
-	rc = tpm2_key_decode(payload, options, &blob);
-	if (rc) {
-		/* old form */
-		blob = payload->blob;
-		payload->old_format = 1;
-	} else {
-		/* Bind for cleanup: */
-		blob_ref = blob;
-	}
-
-	/* new format carries keyhandle but old format doesn't */
-	if (!options->keyhandle)
-		return -EINVAL;
-
 	/* must be big enough for at least the two be16 size counts */
 	if (payload->blob_len < 4)
-		return -EINVAL;
+		return -E2BIG;
 
 	private_len = get_unaligned_be16(blob);
 
@@ -403,7 +402,8 @@ static int tpm2_load_cmd(struct tpm_chip *chip,
 		return rc;
 	}
 
-	rc = tpm_buf_append_name(chip, &buf, options->keyhandle, NULL);
+	rc = tpm_buf_append_name(chip, &buf, options->keyhandle, parent_name,
+				 parent_name_size);
 	if (rc)
 		goto out;
 
@@ -435,20 +435,23 @@ out:
 }
 
 /**
- * tpm2_unseal_cmd() - execute a TPM2_Unload command
+ * tpm2_unseal_cmd() - Execute TPM2_Unload
  *
- * @chip: TPM chip to use
- * @payload: the key data in clear and encrypted form
- * @options: authentication values and other options
- * @blob_handle: blob handle
+ * @chip:		TPM chip to use
+ * @payload:		Key data in clear text.
+ * @options:		Trusted key options.
+ * @parent_name:	A cryptographic name, i.e. a TPMT_HA blob, of the
+ *			parent key.
+ * @blob_handle:	Handle to the loaded keyedhash blob.
  *
- * Return: 0 on success
- *         -EPERM on tpm error status
- *         < 0 error from tpm_send
+ * Return -E2BIG when the blob size is too small for all the data.
+ * Returns tpm_transmit_cmd() error codes when either TPM2_Load fails.
  */
 static int tpm2_unseal_cmd(struct tpm_chip *chip,
 			   struct trusted_key_payload *payload,
 			   struct trusted_key_options *options,
+			   u8 *parent_name,
+			   u16 parent_name_size,
 			   u32 blob_handle)
 {
 	struct tpm_buf buf;
@@ -466,7 +469,8 @@ static int tpm2_unseal_cmd(struct tpm_chip *chip,
 		return rc;
 	}
 
-	rc = tpm_buf_append_name(chip, &buf, options->keyhandle, NULL);
+	rc = tpm_buf_append_name(chip, &buf, options->keyhandle, parent_name,
+				 parent_name_size);
 	if (rc)
 		goto out;
 
@@ -539,30 +543,60 @@ out:
 }
 
 /**
- * tpm2_unseal_trusted() - unseal the payload of a trusted key
+ * tpm2_unseal_trusted() - Unseal a trusted key
+ * @chip:	TPM chip to use.
+ * @payload:	Key data in clear text.
+ * @options:	Trusted key options.
  *
- * @chip: TPM chip to use
- * @payload: the key data in clear and encrypted form
- * @options: authentication values and other options
- *
- * Return: Same as with tpm_send.
+ * Return -E2BIG when the blob size is too small for all the data.
+ * Return -EINVAL when parent's key handle has not been set.
+ * Returns tpm_transmit_cmd() error codes when either TPM2_Load or TPM2_Unseal
+ * fails.
  */
 int tpm2_unseal_trusted(struct tpm_chip *chip,
 			struct trusted_key_payload *payload,
 			struct trusted_key_options *options)
 {
+	u8 *blob_ref __free(kfree) = NULL;
+	u8 parent_name[TPM2_MAX_NAME_SIZE];
+	u16 parent_name_size;
 	u32 blob_handle;
+	u8 *blob;
 	int rc;
+
+	/*
+	 * Try to decode the provided blob as an ASN.1 blob. Assume that the
+	 * blob is in the legacy format if decoding does not end successfully.
+	 */
+	rc = tpm2_key_decode(payload, options, &blob);
+	if (rc) {
+		blob = payload->blob;
+		payload->old_format = 1;
+	} else {
+		blob_ref = blob;
+	}
+
+	if (!options->keyhandle)
+		return -EINVAL;
 
 	rc = tpm_try_get_ops(chip);
 	if (rc)
 		return rc;
 
-	rc = tpm2_load_cmd(chip, payload, options, &blob_handle);
+	rc = tpm2_read_public(chip, options->keyhandle, parent_name);
+	if (rc < 0)
+		goto out;
+
+	parent_name_size = rc;
+
+	rc = tpm2_load_cmd(chip, payload, options, parent_name,
+			   parent_name_size, blob, &blob_handle);
 	if (rc)
 		goto out;
 
-	rc = tpm2_unseal_cmd(chip, payload, options, blob_handle);
+	rc = tpm2_unseal_cmd(chip, payload, options, parent_name,
+			     parent_name_size, blob_handle);
+
 	tpm2_flush_context(chip, blob_handle);
 
 out:
