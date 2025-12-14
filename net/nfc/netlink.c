@@ -159,6 +159,11 @@ static int nfc_genl_dump_targets(struct sk_buff *skb,
 
 	cb->args[0] = i;
 
+	if (rc < 0 || i >= dev->n_targets) {
+		nfc_put_device(dev);
+		cb->args[1] = 0;
+	}
+
 	return skb->len;
 }
 
