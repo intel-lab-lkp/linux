@@ -328,8 +328,14 @@ static int mac802154_set_header_security(struct ieee802154_sub_if_data *sdata,
 
 	mac802154_llsec_get_params(&sdata->sec, &params);
 
-	if (!params.enabled && cb->secen_override && cb->secen)
-		return -EINVAL;
+	if (!cb->secen_override) {
+        	if (!params.enabled)
+                	return 0;
+	} else {
+        	if (cb->secen && !params.enabled)
+                	return -EINVAL;
+	}
+
 	if (!params.enabled ||
 	    (cb->secen_override && !cb->secen) ||
 	    !params.out_level)
@@ -366,7 +372,7 @@ static int ieee802154_header_create(struct sk_buff *skb,
 	if (!daddr)
 		return -EINVAL;
 
-	memset(&hdr.fc, 0, sizeof(hdr.fc));
+	memset(&hdr, 0, sizeof(hdr));
 	hdr.fc.type = cb->type;
 	hdr.fc.security_enabled = cb->secen;
 	hdr.fc.ack_request = cb->ackreq;
@@ -432,7 +438,7 @@ static int mac802154_header_create(struct sk_buff *skb,
 	if (!daddr)
 		return -EINVAL;
 
-	memset(&hdr.fc, 0, sizeof(hdr.fc));
+	memset(&hdr, 0, sizeof(hdr));
 	hdr.fc.type = IEEE802154_FC_TYPE_DATA;
 	hdr.fc.ack_request = wpan_dev->ackreq;
 	hdr.seq = atomic_inc_return(&dev->ieee802154_ptr->dsn) & 0xFF;
