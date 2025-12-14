@@ -659,27 +659,11 @@ ahd_set_scbptr(struct ahd_softc *ahd, u_int scbptr)
 	ahd_outb(ahd, SCBPTR+1, (scbptr >> 8) & 0xFF);
 }
 
-#if 0 /* unused */
-static u_int
-ahd_get_hnscb_qoff(struct ahd_softc *ahd)
-{
-	return (ahd_inw_atomic(ahd, HNSCB_QOFF));
-}
-#endif
-
 static void
 ahd_set_hnscb_qoff(struct ahd_softc *ahd, u_int value)
 {
 	ahd_outw_atomic(ahd, HNSCB_QOFF, value);
 }
-
-#if 0 /* unused */
-static u_int
-ahd_get_hescb_qoff(struct ahd_softc *ahd)
-{
-	return (ahd_inb(ahd, HESCB_QOFF));
-}
-#endif
 
 static void
 ahd_set_hescb_qoff(struct ahd_softc *ahd, u_int value)
@@ -705,30 +689,12 @@ ahd_set_snscb_qoff(struct ahd_softc *ahd, u_int value)
 	ahd_outw(ahd, SNSCB_QOFF, value);
 }
 
-#if 0 /* unused */
-static u_int
-ahd_get_sescb_qoff(struct ahd_softc *ahd)
-{
-	AHD_ASSERT_MODES(ahd, AHD_MODE_CCHAN_MSK, AHD_MODE_CCHAN_MSK);
-	return (ahd_inb(ahd, SESCB_QOFF));
-}
-#endif
-
 static void
 ahd_set_sescb_qoff(struct ahd_softc *ahd, u_int value)
 {
 	AHD_ASSERT_MODES(ahd, AHD_MODE_CCHAN_MSK, AHD_MODE_CCHAN_MSK);
 	ahd_outb(ahd, SESCB_QOFF, value);
 }
-
-#if 0 /* unused */
-static u_int
-ahd_get_sdscb_qoff(struct ahd_softc *ahd)
-{
-	AHD_ASSERT_MODES(ahd, AHD_MODE_CCHAN_MSK, AHD_MODE_CCHAN_MSK);
-	return (ahd_inb(ahd, SDSCB_QOFF) | (ahd_inb(ahd, SDSCB_QOFF + 1) << 8));
-}
-#endif
 
 static void
 ahd_set_sdscb_qoff(struct ahd_softc *ahd, u_int value)
@@ -3559,33 +3525,6 @@ ahd_clear_intstat(struct ahd_softc *ahd)
 #ifdef AHD_DEBUG
 uint32_t ahd_debug = AHD_DEBUG_OPTS;
 #endif
-
-#if 0
-void
-ahd_print_scb(struct scb *scb)
-{
-	struct hardware_scb *hscb;
-	int i;
-
-	hscb = scb->hscb;
-	printk("scb:%p control:0x%x scsiid:0x%x lun:%d cdb_len:%d\n",
-	       (void *)scb,
-	       hscb->control,
-	       hscb->scsiid,
-	       hscb->lun,
-	       hscb->cdb_len);
-	printk("Shared Data: ");
-	for (i = 0; i < sizeof(hscb->shared_data.idata.cdb); i++)
-		printk("%#02x", hscb->shared_data.idata.cdb[i]);
-	printk("        dataptr:%#x%x datacnt:%#x sgptr:%#x tag:%#x\n",
-	       (uint32_t)((ahd_le64toh(hscb->dataptr) >> 32) & 0xFFFFFFFF),
-	       (uint32_t)(ahd_le64toh(hscb->dataptr) & 0xFFFFFFFF),
-	       ahd_le32toh(hscb->datacnt),
-	       ahd_le32toh(hscb->sgptr),
-	       SCB_GET_TAG(scb));
-	ahd_dump_sglist(scb);
-}
-#endif  /*  0  */
 
 /************************* Transfer Negotiation *******************************/
 /*
@@ -9888,34 +9827,6 @@ ahd_dump_card_state(struct ahd_softc *ahd)
 	if (paused == 0)
 		ahd_unpause(ahd);
 }
-
-#if 0
-void
-ahd_dump_scbs(struct ahd_softc *ahd)
-{
-	ahd_mode_state saved_modes;
-	u_int	       saved_scb_index;
-	int	       i;
-
-	saved_modes = ahd_save_modes(ahd);
-	ahd_set_modes(ahd, AHD_MODE_SCSI, AHD_MODE_SCSI);
-	saved_scb_index = ahd_get_scbptr(ahd);
-	for (i = 0; i < AHD_SCB_MAX; i++) {
-		ahd_set_scbptr(ahd, i);
-		printk("%3d", i);
-		printk("(CTRL 0x%x ID 0x%x N 0x%x N2 0x%x SG 0x%x, RSG 0x%x)\n",
-		       ahd_inb_scbram(ahd, SCB_CONTROL),
-		       ahd_inb_scbram(ahd, SCB_SCSIID),
-		       ahd_inw_scbram(ahd, SCB_NEXT),
-		       ahd_inw_scbram(ahd, SCB_NEXT2),
-		       ahd_inl_scbram(ahd, SCB_SGPTR),
-		       ahd_inl_scbram(ahd, SCB_RESIDUAL_SGPTR));
-	}
-	printk("\n");
-	ahd_set_scbptr(ahd, saved_scb_index);
-	ahd_restore_modes(ahd, saved_modes);
-}
-#endif  /*  0  */
 
 /**************************** Flexport Logic **********************************/
 /*

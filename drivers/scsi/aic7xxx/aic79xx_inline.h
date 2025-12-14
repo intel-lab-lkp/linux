@@ -144,16 +144,6 @@ static inline uint8_t *ahd_get_sense_buf(struct ahd_softc *ahd,
 static inline uint32_t ahd_get_sense_bufaddr(struct ahd_softc *ahd,
 					      struct scb *scb);
 
-#if 0 /* unused */
-
-#define AHD_COPY_COL_IDX(dst, src)				\
-do {								\
-	dst->hscb->scsiid = src->hscb->scsiid;			\
-	dst->hscb->lun = src->hscb->lun;			\
-} while (0)
-
-#endif
-
 static inline uint8_t *
 ahd_get_sense_buf(struct ahd_softc *ahd, struct scb *scb)
 {

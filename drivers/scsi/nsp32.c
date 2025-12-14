@@ -425,25 +425,6 @@ static void nsp32_build_reject(struct scsi_cmnd *SCpnt)
 }
 
 /*
- * timer
- */
-#if 0
-static void nsp32_start_timer(struct scsi_cmnd *SCpnt, int time)
-{
-	unsigned int base = SCpnt->host->io_port;
-
-	nsp32_dbg(NSP32_DEBUG_INTR, "timer=%d", time);
-
-	if (time & (~TIMER_CNT_MASK)) {
-		nsp32_dbg(NSP32_DEBUG_INTR, "timer set overflow");
-	}
-
-	nsp32_write2(base, TIMER_SET, time & TIMER_CNT_MASK);
-}
-#endif
-
-
-/*
  * set SCSI command and other parameter to asic, and start selection phase
  */
 static int nsp32_selection_autopara(struct scsi_cmnd *SCpnt)

@@ -411,22 +411,6 @@ ahd_inb(struct ahd_softc * ahd, long port)
 	return (x);
 }
 
-#if 0 /* unused */
-static uint16_t
-ahd_inw_atomic(struct ahd_softc * ahd, long port)
-{
-	uint8_t x;
-
-	if (ahd->tags[0] == BUS_SPACE_MEMIO) {
-		x = readw(ahd->bshs[0].maddr + port);
-	} else {
-		x = inw(ahd->bshs[(port) >> 8].ioport + ((port) & 0xFF));
-	}
-	mb();
-	return (x);
-}
-#endif
-
 void
 ahd_outb(struct ahd_softc * ahd, long port, uint8_t val)
 {
