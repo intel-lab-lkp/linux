@@ -376,7 +376,7 @@ static void tsm_report_item_release(struct config_item *cfg)
 	kfree(state);
 }
 
-static struct configfs_item_operations tsm_report_item_ops = {
+static const struct configfs_item_operations tsm_report_item_ops = {
 	.release = tsm_report_item_release,
 };
 
@@ -406,7 +406,7 @@ static bool tsm_report_is_bin_visible(struct config_item *item,
 	return provider.ops->report_bin_attr_visible(n);
 }
 
-static struct configfs_group_operations tsm_report_attr_group_ops = {
+static const struct configfs_group_operations tsm_report_attr_group_ops = {
 	.is_visible = tsm_report_is_visible,
 	.is_bin_visible = tsm_report_is_bin_visible,
 };
@@ -443,7 +443,7 @@ static void tsm_report_drop_item(struct config_group *group, struct config_item 
 	atomic_dec(&provider.count);
 }
 
-static struct configfs_group_operations tsm_report_group_ops = {
+static const struct configfs_group_operations tsm_report_group_ops = {
 	.make_item = tsm_report_make_item,
 	.drop_item = tsm_report_drop_item,
 };
