@@ -335,25 +335,21 @@ static int lxfb_map_video_memory(struct fb_info *info, struct pci_dev *dev)
 	if (ret)
 		return ret;
 
-	ret = pci_request_region(dev, 0, "lxfb-framebuffer");
+	if (!devm_request_mem_region(&dev->dev, pci_resource_start(dev, 0),
+			      pci_resource_len(dev, 0), "lxfb-framebuffer"))
+		return -EBUSY;
 
-	if (ret)
-		return ret;
+	if (!devm_request_mem_region(&dev->dev, pci_resource_start(dev, 1),
+			      pci_resource_len(dev, 1), "lxfb-gp"))
+		return -EBUSY;
 
-	ret = pci_request_region(dev, 1, "lxfb-gp");
+	if (!devm_request_mem_region(&dev->dev, pci_resource_start(dev, 2),
+			      pci_resource_len(dev, 2), "lxfb-vg"))
+		return -EBUSY;
 
-	if (ret)
-		return ret;
-
-	ret = pci_request_region(dev, 2, "lxfb-vg");
-
-	if (ret)
-		return ret;
-
-	ret = pci_request_region(dev, 3, "lxfb-vp");
-
-	if (ret)
-		return ret;
+	if (!devm_request_mem_region(&dev->dev, pci_resource_start(dev, 3),
+			      pci_resource_len(dev, 3), "lxfb-vp"))
+		return -EBUSY;
 
 	info->fix.smem_start = pci_resource_start(dev, 0);
 	info->fix.smem_len = vram ? vram : lx_framebuffer_size();
@@ -546,19 +542,15 @@ static int lxfb_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 err:
 	if (info->screen_base) {
 		iounmap(info->screen_base);
-		pci_release_region(pdev, 0);
 	}
 	if (par->gp_regs) {
 		iounmap(par->gp_regs);
-		pci_release_region(pdev, 1);
 	}
 	if (par->dc_regs) {
 		iounmap(par->dc_regs);
-		pci_release_region(pdev, 2);
 	}
 	if (par->vp_regs) {
 		iounmap(par->vp_regs);
-		pci_release_region(pdev, 3);
 	}
 
 	fb_dealloc_cmap(&info->cmap);
@@ -575,16 +567,12 @@ static void lxfb_remove(struct pci_dev *pdev)
 	unregister_framebuffer(info);
 
 	iounmap(info->screen_base);
-	pci_release_region(pdev, 0);
 
 	iounmap(par->gp_regs);
-	pci_release_region(pdev, 1);
 
 	iounmap(par->dc_regs);
-	pci_release_region(pdev, 2);
 
 	iounmap(par->vp_regs);
-	pci_release_region(pdev, 3);
 
 	fb_dealloc_cmap(&info->cmap);
 	framebuffer_release(info);
