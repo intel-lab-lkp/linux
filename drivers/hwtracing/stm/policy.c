@@ -181,7 +181,7 @@ static void stp_policy_node_release(struct config_item *item)
 	kfree(node);
 }
 
-static struct configfs_item_operations stp_policy_node_item_ops = {
+static const struct configfs_item_operations stp_policy_node_item_ops = {
 	.release		= stp_policy_node_release,
 };
 
@@ -270,7 +270,7 @@ stp_policy_node_drop(struct config_group *group, struct config_item *item)
 	config_item_put(item);
 }
 
-static struct configfs_group_operations stp_policy_node_group_ops = {
+static const struct configfs_group_operations stp_policy_node_group_ops = {
 	.make_group	= stp_policy_node_make,
 	.drop_item	= stp_policy_node_drop,
 };
@@ -364,11 +364,11 @@ static void stp_policy_release(struct config_item *item)
 	kfree(policy);
 }
 
-static struct configfs_item_operations stp_policy_item_ops = {
+static const struct configfs_item_operations stp_policy_item_ops = {
 	.release		= stp_policy_release,
 };
 
-static struct configfs_group_operations stp_policy_group_ops = {
+static const struct configfs_group_operations stp_policy_group_ops = {
 	.make_group	= stp_policy_node_make,
 };
 
@@ -466,7 +466,7 @@ unlock_policy:
 	return ret;
 }
 
-static struct configfs_group_operations stp_policy_root_group_ops = {
+static const struct configfs_group_operations stp_policy_root_group_ops = {
 	.make_group	= stp_policy_make,
 };
 
