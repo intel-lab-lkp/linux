@@ -7,6 +7,8 @@
 /dts-v1/;
 /plugin/;
 
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+
 /* We can't and don't need to use zap shader in EL2 as linux can zap the gpu on it's own. */
 &gpu_zap_shader {
 	status = "disabled";
@@ -54,4 +56,18 @@
  */
 &sbsa_watchdog {
 	status = "disabled";
+};
+
+&soc {
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	/* The APSS watchdog is only accessible in EL2 */
+	watchdog@17410000 {
+		compatible = "qcom,apss-wdt-x1e80100", "qcom,kpss-wdt";
+		reg = <0x0 0x17410000 0x0 0x1000>;
+		clocks = <&sleep_clk>;
+		interrupts = <GIC_SPI 0 IRQ_TYPE_EDGE_RISING>;
+		interrupt-parent = <&intc>;
+	};
 };
