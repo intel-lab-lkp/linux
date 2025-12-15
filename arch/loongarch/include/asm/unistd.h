@@ -8,7 +8,10 @@
 
 #include <uapi/asm/unistd.h>
 
+#if defined(__LP64__) && !defined(__SYSCALL_COMPAT)
 #define __ARCH_WANT_NEW_STAT
+#endif
+
 #define __ARCH_WANT_SYS_CLONE
 
 #define NR_syscalls (__NR_syscalls)
