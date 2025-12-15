@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: GPL-2.0
+
+menu "DAMON ready-to-use modules"
+
+config DAMON_PRDM
+	tristate "Build proactive reclamation DAMON-based module"
+	depends on DAMON && DAMON_VADDR && m
+	default n
+	help
+	  This builds DAMON module for access-aware proactive reclamation of
+	  multiple processes.
+
+	  The module receives pids, monitor access to the virtual address space
+	  of these processes, find memory regions that not accessed, and
+	  proactively reclaim the regions.
+
+	  If unsure, say N.
+
+endmenu
