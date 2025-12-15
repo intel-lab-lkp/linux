@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0+
 // Copyright (c) 2024 Hisilicon Limited.
 
+#include <linux/acpi.h>
 #include <linux/phy.h>
 #include <linux/phy_fixed.h>
 #include <linux/rtnetlink.h>
@@ -348,11 +349,35 @@ static int hbg_register_phy_leds_software_node(struct hbg_priv *priv,
 					&phydev->mdio.dev);
 }
 
+static int hbg_find_phy_device_from_acpi(struct hbg_priv *priv)
+{
+	struct device *dev = &priv->pdev->dev;
+	struct fwnode_handle *phy_fwnode;
+	struct phy_device *phydev;
+
+	phy_fwnode = fwnode_get_phy_node(dev_fwnode(dev));
+	if (IS_ERR(phy_fwnode))
+		return dev_err_probe(dev, PTR_ERR(phydev),
+				     "failed to get phy fwnode\n");
+
+	phydev = fwnode_phy_find_device(phy_fwnode);
+	/* We're done with the phy_node handle */
+	fwnode_handle_put(phy_fwnode);
+	if (!phydev)
+		return dev_err_probe(dev, -ENODEV,
+				     "failed to get phy fwnode device\n");
+	priv->mac.phydev = phydev;
+	return 0;
+}
+
 static int hbg_find_phy_device(struct hbg_priv *priv, struct mii_bus *mdio_bus)
 {
 	struct device *dev = &priv->pdev->dev;
 	struct phy_device *phydev;
 	int ret;
+
+	if (has_acpi_companion(dev))
+		return hbg_find_phy_device_from_acpi(priv);
 
 	phydev = get_phy_device(mdio_bus, priv->mac.phy_addr, false);
 	if (IS_ERR(phydev))
