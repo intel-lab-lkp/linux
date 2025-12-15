@@ -114,6 +114,7 @@ struct khugepaged_scan {
 	struct list_head mm_head;
 	struct mm_slot *mm_slot;
 	unsigned long address;
+	bool maybe_collapse;
 };
 
 static struct khugepaged_scan khugepaged_scan = {
@@ -1415,22 +1416,19 @@ out:
 	return result;
 }
 
-static void collect_mm_slot(struct mm_slot *slot)
+static void collect_mm_slot(struct mm_slot *slot, bool maybe_collapse)
 {
 	struct mm_struct *mm = slot->mm;
 
 	lockdep_assert_held(&khugepaged_mm_lock);
 
-	if (hpage_collapse_test_exit(mm)) {
+	if (hpage_collapse_test_exit(mm) || !maybe_collapse) {
 		/* free mm_slot */
 		hash_del(&slot->hash);
 		list_del(&slot->mm_node);
 
-		/*
-		 * Not strictly needed because the mm exited already.
-		 *
-		 * mm_flags_clear(MMF_VM_HUGEPAGE, mm);
-		 */
+		if (!maybe_collapse)
+			mm_flags_clear(MMF_VM_HUGEPAGE, mm);
 
 		/* khugepaged_mm_lock actually not necessary for the below */
 		mm_slot_free(mm_slot_cache, slot);
@@ -2414,6 +2412,7 @@ static unsigned int khugepaged_scan_mm_slot(unsigned int pages, int *result,
 				     struct mm_slot, mm_node);
 		khugepaged_scan.address = 0;
 		khugepaged_scan.mm_slot = slot;
+		khugepaged_scan.maybe_collapse = false;
 	}
 	spin_unlock(&khugepaged_mm_lock);
 
@@ -2487,8 +2486,18 @@ skip:
 					khugepaged_scan.address, &mmap_locked, cc);
 			}
 
-			if (*result == SCAN_SUCCEED)
+			switch (*result) {
+			case SCAN_PMD_NULL:
+			case SCAN_PMD_NONE:
+			case SCAN_PMD_MAPPED:
+			case SCAN_PTE_MAPPED_HUGEPAGE:
+				break;
+			case SCAN_SUCCEED:
 				++khugepaged_pages_collapsed;
+				fallthrough;
+			default:
+				khugepaged_scan.maybe_collapse = true;
+			}
 
 			/* move to next address */
 			khugepaged_scan.address += HPAGE_PMD_SIZE;
@@ -2517,6 +2526,11 @@ breakouterloop_mmap_lock:
 	 * if we scanned all vmas of this mm.
 	 */
 	if (hpage_collapse_test_exit(mm) || !vma) {
+		bool maybe_collapse = khugepaged_scan.maybe_collapse;
+
+		if (mm_flags_test(MMF_DISABLE_THP_COMPLETELY, mm))
+			maybe_collapse = true;
+
 		/*
 		 * Make sure that if mm_users is reaching zero while
 		 * khugepaged runs here, khugepaged_exit will find
@@ -2525,12 +2539,13 @@ breakouterloop_mmap_lock:
 		if (!list_is_last(&slot->mm_node, &khugepaged_scan.mm_head)) {
 			khugepaged_scan.mm_slot = list_next_entry(slot, mm_node);
 			khugepaged_scan.address = 0;
+			khugepaged_scan.maybe_collapse = false;
 		} else {
 			khugepaged_scan.mm_slot = NULL;
 			khugepaged_full_scans++;
 		}
 
-		collect_mm_slot(slot);
+		collect_mm_slot(slot, maybe_collapse);
 	}
 
 	trace_mm_khugepaged_scan(mm, progress, khugepaged_scan.mm_slot == NULL);
@@ -2633,7 +2648,7 @@ static int khugepaged(void *none)
 	slot = khugepaged_scan.mm_slot;
 	khugepaged_scan.mm_slot = NULL;
 	if (slot)
-		collect_mm_slot(slot);
+		collect_mm_slot(slot, true);
 	spin_unlock(&khugepaged_mm_lock);
 	return 0;
 }
