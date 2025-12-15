@@ -74,10 +74,8 @@ static int adc_keys_load_keymap(struct device *dev, struct adc_keys_state *st)
 	int i;
 
 	st->num_keys = device_get_child_node_count(dev);
-	if (st->num_keys == 0) {
-		dev_err(dev, "keymap is missing\n");
-		return -EINVAL;
-	}
+	if (!st->num_keys)
+		return dev_err_probe(dev, -EINVAL, "keymap is missing\n");
 
 	map = devm_kmalloc_array(dev, st->num_keys, sizeof(*map), GFP_KERNEL);
 	if (!map)
@@ -86,17 +84,16 @@ static int adc_keys_load_keymap(struct device *dev, struct adc_keys_state *st)
 	i = 0;
 	device_for_each_child_node_scoped(dev, child) {
 		if (fwnode_property_read_u32(child, "press-threshold-microvolt",
-					     &map[i].voltage)) {
-			dev_err(dev, "Key with invalid or missing voltage\n");
-			return -EINVAL;
-		}
+					     &map[i].voltage))
+			return dev_err_probe(dev, -EINVAL,
+					     "Key with invalid or missing voltage\n");
+
 		map[i].voltage /= 1000;
 
 		if (fwnode_property_read_u32(child, "linux,code",
-					     &map[i].code)) {
-			dev_err(dev, "Key with invalid or missing linux,code\n");
-			return -EINVAL;
-		}
+					     &map[i].code))
+			return dev_err_probe(dev, -EINVAL,
+					     "Key with invalid or missing linux,code\n");
 
 		if (fwnode_property_read_u32(child, "linux,input-type",
 					     &map[i].type))
@@ -129,7 +126,8 @@ static int adc_keys_probe(struct platform_device *pdev)
 
 	st->channel = devm_iio_channel_get(dev, "buttons");
 	if (IS_ERR(st->channel))
-		return PTR_ERR(st->channel);
+		return dev_err_probe(dev, PTR_ERR(st->channel),
+				     "Could not get iio channel\n");
 
 	if (!st->channel->indio_dev)
 		return -ENXIO;
@@ -138,16 +136,13 @@ static int adc_keys_probe(struct platform_device *pdev)
 	if (error < 0)
 		return error;
 
-	if (type != IIO_VOLTAGE) {
-		dev_err(dev, "Incompatible channel type %d\n", type);
-		return -EINVAL;
-	}
+	if (type != IIO_VOLTAGE)
+		return dev_err_probe(dev, -EINVAL, "Incompatible channel type %d\n", type);
 
 	if (device_property_read_u32(dev, "keyup-threshold-microvolt",
-				     &st->keyup_voltage)) {
-		dev_err(dev, "Invalid or missing keyup voltage\n");
-		return -EINVAL;
-	}
+				     &st->keyup_voltage))
+		return dev_err_probe(dev, -EINVAL, "Invalid or missing keyup voltage\n");
+
 	st->keyup_voltage /= 1000;
 
 	error = adc_keys_load_keymap(dev, st);
@@ -155,10 +150,8 @@ static int adc_keys_probe(struct platform_device *pdev)
 		return error;
 
 	input = devm_input_allocate_device(dev);
-	if (!input) {
-		dev_err(dev, "failed to allocate input device\n");
+	if (!input)
 		return -ENOMEM;
-	}
 
 	input_set_drvdata(input, st);
 
@@ -178,19 +171,15 @@ static int adc_keys_probe(struct platform_device *pdev)
 
 
 	error = input_setup_polling(input, adc_keys_poll);
-	if (error) {
-		dev_err(dev, "Unable to set up polling: %d\n", error);
-		return error;
-	}
+	if (error)
+		return dev_err_probe(dev, error, "Unable to set up polling\n");
 
 	if (!device_property_read_u32(dev, "poll-interval", &value))
 		input_set_poll_interval(input, value);
 
 	error = input_register_device(input);
-	if (error) {
-		dev_err(dev, "Unable to register input device: %d\n", error);
-		return error;
-	}
+	if (error)
+		return dev_err_probe(dev, error, "Unable to register input device\n");
 
 	return 0;
 }
