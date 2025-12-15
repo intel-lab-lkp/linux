@@ -830,6 +830,7 @@ static inline void initcall_debug_enable(void)
 #ifdef CONFIG_RANDOMIZE_KSTACK_OFFSET
 DEFINE_STATIC_KEY_MAYBE_RO(CONFIG_RANDOMIZE_KSTACK_OFFSET_DEFAULT,
 			   randomize_kstack_offset);
+DEFINE_PER_CPU(struct rnd_state, kstack_rnd_state);
 
 static int __init early_randomize_kstack_offset(char *buf)
 {
