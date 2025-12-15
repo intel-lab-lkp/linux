@@ -2587,9 +2587,10 @@ static void handle_write_finished(struct r1conf *conf, struct r1bio *r1_bio)
 	int m, idx;
 	bool fail = false;
 
-	for (m = 0; m < conf->raid_disks * 2 ; m++)
+	for (m = 0; m < conf->raid_disks * 2 ; m++) {
+		struct md_rdev *rdev = conf->mirrors[m].rdev;
+
 		if (r1_bio->bios[m] == IO_MADE_GOOD) {
-			struct md_rdev *rdev = conf->mirrors[m].rdev;
 			rdev_clear_badblocks(rdev,
 					     r1_bio->sector,
 					     r1_bio->sectors, 0);
@@ -2599,11 +2600,26 @@ static void handle_write_finished(struct r1conf *conf, struct r1bio *r1_bio)
 			 * narrow down and record precise write
 			 * errors.
 			 */
-			fail = true;
-			narrow_write_error(r1_bio, m);
+			if (narrow_write_error(r1_bio, m)) {
+				/* re-write success */
+				if (rdev_has_badblock(rdev,
+						      r1_bio->sector,
+						      r1_bio->sectors))
+					rdev_clear_badblocks(rdev,
+							     r1_bio->sector,
+							     r1_bio->sectors, 0);
+				if (test_bit(In_sync, &rdev->flags) &&
+				    !test_bit(Faulty, &rdev->flags))
+					set_bit(R1BIO_Uptodate,
+						&r1_bio->state);
+			} else {
+				fail = true;
+			}
+
 			rdev_dec_pending(conf->mirrors[m].rdev,
 					 conf->mddev);
 		}
+	}
 	if (fail) {
 		spin_lock_irq(&conf->device_lock);
 		list_add(&r1_bio->retry_list, &conf->bio_end_io_list);

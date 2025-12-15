@@ -2939,8 +2939,21 @@ static void handle_write_completed(struct r10conf *conf, struct r10bio *r10_bio)
 					r10_bio->sectors, 0);
 				rdev_dec_pending(rdev, conf->mddev);
 			} else if (bio != NULL && bio->bi_status) {
-				fail = true;
-				narrow_write_error(r10_bio, m);
+				if (narrow_write_error(r10_bio, m)) {
+					/* re-write success */
+					if (rdev_has_badblock(rdev,
+							r10_bio->devs[m].addr,
+							r10_bio->sectors))
+						rdev_clear_badblocks(
+							rdev,
+							r10_bio->devs[m].addr,
+							r10_bio->sectors, 0);
+					if (test_bit(In_sync, &rdev->flags) &&
+					    !test_bit(Faulty, &rdev->flags))
+						set_bit(R10BIO_Uptodate, &r10_bio->state);
+				} else {
+					fail = true;
+				}
 				rdev_dec_pending(rdev, conf->mddev);
 			}
 			bio = r10_bio->devs[m].repl_bio;
