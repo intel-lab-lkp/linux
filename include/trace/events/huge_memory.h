@@ -236,5 +236,29 @@ TRACE_EVENT(mm_khugepaged_collapse_file,
 		__print_symbolic(__entry->result, SCAN_STATUS))
 );
 
+TRACE_EVENT(mm_khugepaged_scan,
+
+	TP_PROTO(struct mm_struct *mm, int progress, bool full),
+
+	TP_ARGS(mm, progress, full),
+
+	TP_STRUCT__entry(
+		__field(struct mm_struct *, mm)
+		__field(int, progress)
+		__field(bool, full)
+	),
+
+	TP_fast_assign(
+		__entry->mm = mm;
+		__entry->progress = progress;
+		__entry->full = full;
+	),
+
+	TP_printk("mm=%p, progress=%d, full=%d",
+		__entry->mm,
+		__entry->progress,
+		__entry->full)
+);
+
 #endif /* __HUGE_MEMORY_H */
 #include <trace/define_trace.h>
