@@ -912,8 +912,8 @@
 
 			bus-width = <8>;
 
-			qcom,dll-config = <0x0007642c>;
-			qcom,ddr-config = <0x80040868>;
+			qcom,dll-presets = <0x000F64EC 0x0 0x01	0x2C010800 0x80040868>,
+					   <0x0007642C 0x0 0x10 0x2C010800 0x80040868>;
 
 			status = "disabled";
 
