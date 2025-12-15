@@ -544,7 +544,7 @@ static ssize_t xe_eu_stall_stream_read_locked(struct xe_eu_stall_data_stream *st
 	int ret = 0;
 
 	mutex_lock(&stream->xecore_buf_lock);
-	if (bitmap_weight(stream->data_drop.mask, XE_MAX_DSS_FUSE_BITS)) {
+	if (!bitmap_empty(stream->data_drop.mask, XE_MAX_DSS_FUSE_BITS)) {
 		if (!stream->data_drop.reported_to_user) {
 			stream->data_drop.reported_to_user = true;
 			xe_gt_dbg(gt, "EU stall data dropped in XeCores: %*pb\n",
