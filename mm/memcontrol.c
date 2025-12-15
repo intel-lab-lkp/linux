@@ -2412,14 +2412,14 @@ retry:
 	if (nr_reclaimed && nr_pages <= (1 << PAGE_ALLOC_COSTLY_ORDER))
 		goto retry;
 
+	/* Avoid endless loop for tasks bypassed by the oom killer */
+	if (passed_oom && task_is_dying())
+		goto nomem;
+
 	if (nr_retries--)
 		goto retry;
 
 	if (gfp_mask & __GFP_RETRY_MAYFAIL)
-		goto nomem;
-
-	/* Avoid endless loop for tasks bypassed by the oom killer */
-	if (passed_oom && task_is_dying())
 		goto nomem;
 
 	/*
