@@ -22,6 +22,7 @@
 #include <linux/reboot.h>
 #include <linux/regmap.h>
 #include <linux/remoteproc.h>
+#include <linux/suspend.h>
 #include <linux/workqueue.h>
 
 #include "imx_rproc.h"
@@ -111,11 +112,13 @@ struct imx_rproc {
 	void __iomem			*rsc_table;
 	struct imx_sc_ipc		*ipc_handle;
 	struct notifier_block		rproc_nb;
+	struct notifier_block		pm_nb;
 	u32				rproc_pt;	/* partition id */
 	u32				rsrc_id;	/* resource id */
 	u32				entry;		/* cpu start address */
 	u32				core_index;
 	struct dev_pm_domain_list	*pd_list;
+	bool				use_sync_rx;
 };
 
 static const struct imx_rproc_att imx_rproc_att_imx93[] = {
@@ -725,7 +728,10 @@ static void imx_rproc_rx_callback(struct mbox_client *cl, void *msg)
 	struct rproc *rproc = dev_get_drvdata(cl->dev);
 	struct imx_rproc *priv = rproc->priv;
 
-	queue_work(priv->workqueue, &priv->rproc_work);
+	if (priv->use_sync_rx)
+		idr_for_each(&rproc->notifyids, imx_rproc_notified_idr_cb, rproc);
+	else
+		queue_work(priv->workqueue, &priv->rproc_work);
 }
 
 static int imx_rproc_xtr_mbox_init(struct rproc *rproc, bool tx_block)
@@ -1009,6 +1015,38 @@ static int imx_rproc_sys_off_handler(struct sys_off_data *data)
 	return NOTIFY_DONE;
 }
 
+static int imx_rproc_pm_notify(struct notifier_block *nb,
+	unsigned long action, void *data)
+{
+	int ret;
+	struct imx_rproc *priv = container_of(nb, struct imx_rproc, pm_nb);
+
+	imx_rproc_free_mbox(priv->rproc);
+
+	switch (action) {
+	case PM_SUSPEND_PREPARE:
+		ret = imx_rproc_xtr_mbox_init(priv->rproc, false);
+		if (ret) {
+			dev_err(&priv->rproc->dev, "Failed to request non-blocking mbox\n");
+			return NOTIFY_BAD;
+		}
+		priv->use_sync_rx = true;
+		break;
+	case PM_POST_SUSPEND:
+		ret = imx_rproc_xtr_mbox_init(priv->rproc, true);
+		if (ret) {
+			dev_err(&priv->rproc->dev, "Failed to request blocking mbox\n");
+			return NOTIFY_BAD;
+		}
+		priv->use_sync_rx = false;
+		break;
+	default:
+		break;
+	}
+
+	return NOTIFY_OK;
+}
+
 static void imx_rproc_destroy_workqueue(void *data)
 {
 	struct workqueue_struct *workqueue = data;
@@ -1101,6 +1139,13 @@ static int imx_rproc_probe(struct platform_device *pdev)
 						    imx_rproc_sys_off_handler, rproc);
 		if (ret)
 			return dev_err_probe(dev, ret, "register restart handler failure\n");
+	}
+
+	if (dcfg->flags & IMX_RPROC_NEED_PM_SYNC) {
+		priv->pm_nb.notifier_call = imx_rproc_pm_notify;
+		ret = register_pm_notifier(&priv->pm_nb);
+		if (ret)
+			return dev_err_probe(dev, ret, "register pm notifier failure\n");
 	}
 
 	pm_runtime_enable(dev);
@@ -1202,7 +1247,7 @@ static const struct imx_rproc_dcfg imx_rproc_cfg_imx8ulp = {
 static const struct imx_rproc_dcfg imx_rproc_cfg_imx7ulp = {
 	.att		= imx_rproc_att_imx7ulp,
 	.att_size	= ARRAY_SIZE(imx_rproc_att_imx7ulp),
-	.flags		= IMX_RPROC_NEED_SYSTEM_OFF,
+	.flags		= IMX_RPROC_NEED_SYSTEM_OFF | IMX_RPROC_NEED_PM_SYNC,
 };
 
 static const struct imx_rproc_dcfg imx_rproc_cfg_imx7d = {
