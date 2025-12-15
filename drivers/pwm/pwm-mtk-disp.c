@@ -176,19 +176,18 @@ static int mtk_disp_pwm_get_state(struct pwm_chip *chip,
 	struct mtk_disp_pwm *mdp = to_mtk_disp_pwm(chip);
 	u64 rate, period, high_width;
 	u32 clk_div, pwm_en, con0, con1;
-	int err;
+	int ret;
 
-	err = clk_prepare_enable(mdp->clk_main);
-	if (err < 0) {
-		dev_err(pwmchip_parent(chip), "Can't enable mdp->clk_main: %pe\n", ERR_PTR(err));
-		return err;
+	ret = clk_prepare_enable(mdp->clk_main);
+	if (ret < 0) {
+		dev_err(pwmchip_parent(chip), "Can't enable mdp->clk_main: %pe\n", ERR_PTR(ret));
+		goto err_handle;
 	}
 
-	err = clk_prepare_enable(mdp->clk_mm);
-	if (err < 0) {
-		dev_err(pwmchip_parent(chip), "Can't enable mdp->clk_mm: %pe\n", ERR_PTR(err));
-		clk_disable_unprepare(mdp->clk_main);
-		return err;
+	ret = clk_prepare_enable(mdp->clk_mm);
+	if (ret < 0) {
+		dev_err(pwmchip_parent(chip), "Can't enable mdp->clk_mm: %pe\n", ERR_PTR(ret));
+		goto err_disable_clk_main;
 	}
 
 	/*
@@ -212,15 +211,23 @@ static int mtk_disp_pwm_get_state(struct pwm_chip *chip,
 	 * period has 12 bits, clk_div 11 and NSEC_PER_SEC has 30,
 	 * so period * (clk_div + 1) * NSEC_PER_SEC doesn't overflow.
 	 */
+	if (rate == 0) {
+		dev_err(pwmchip_parent(chip), "rate is zero, cannot calculate period\n");
+		ret = -EINVAL;
+		goto err_disable_clk_mm;
+	}
 	state->period = DIV64_U64_ROUND_UP(period * (clk_div + 1) * NSEC_PER_SEC, rate);
 	high_width = FIELD_GET(PWM_HIGH_WIDTH_MASK, con1);
 	state->duty_cycle = DIV64_U64_ROUND_UP(high_width * (clk_div + 1) * NSEC_PER_SEC,
 					       rate);
 	state->polarity = PWM_POLARITY_NORMAL;
-	clk_disable_unprepare(mdp->clk_mm);
-	clk_disable_unprepare(mdp->clk_main);
 
-	return 0;
+err_disable_clk_mm:
+	clk_disable_unprepare(mdp->clk_mm);
+err_disable_clk_main:
+	clk_disable_unprepare(mdp->clk_main);
+err_handle:
+	return ret;
 }
 
 static const struct pwm_ops mtk_disp_pwm_ops = {
