@@ -2665,7 +2665,7 @@ static int pass_accept_req(struct c4iw_dev *dev, struct sk_buff *skb)
 	}
 	goto out;
 fail:
-	c4iw_put_ep(&child_ep->com);
+	kfree(child_ep);
 reject:
 	reject_cr(dev, hwtid, skb);
 out:
