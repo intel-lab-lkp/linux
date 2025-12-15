@@ -50,7 +50,7 @@ properties:
     const: 1
 
   "#size-cells":
-    const: 1
+    enum: [ 1, 2 ]
 
   ranges: true
 
