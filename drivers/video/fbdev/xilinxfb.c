@@ -280,19 +280,27 @@ static int xilinxfb_assign(struct platform_device *pdev,
 	/* Allocate the framebuffer memory */
 	if (pdata->fb_phys) {
 		drvdata->fb_phys = pdata->fb_phys;
-		drvdata->fb_virt = ioremap(pdata->fb_phys, fbsize);
+		/* Request the memory region before mapping */
+		if (!devm_request_mem_region(dev, pdata->fb_phys, fbsize,
+					DRIVER_NAME)) {
+			dev_err(dev, "Cannot request framebuffer memory region\n");
+			return -EBUSY;
+		}
+		drvdata->fb_virt = devm_ioremap(dev, pdata->fb_phys, fbsize);
+		if (!drvdata->fb_virt) {
+			dev_err(dev, "Could not map framebuffer memory\n");
+			return -ENOMEM;
+		}
 	} else {
 		drvdata->fb_alloced = 1;
 		drvdata->fb_virt = dma_alloc_coherent(dev, PAGE_ALIGN(fbsize),
-						      &drvdata->fb_phys,
-						      GFP_KERNEL);
+					&drvdata->fb_phys,
+					GFP_KERNEL);
+		if (!drvdata->fb_virt) {
+			dev_err(dev, "Could not allocate frame buffer memory\n");
+			return -ENOMEM;
+		}
 	}
-
-	if (!drvdata->fb_virt) {
-		dev_err(dev, "Could not allocate frame buffer memory\n");
-		return -ENOMEM;
-	}
-
 	/* Clear (turn to black) the framebuffer */
 	memset_io((void __iomem *)drvdata->fb_virt, 0, fbsize);
 
@@ -362,8 +370,6 @@ err_cmap:
 	if (drvdata->fb_alloced)
 		dma_free_coherent(dev, PAGE_ALIGN(fbsize), drvdata->fb_virt,
 				  drvdata->fb_phys);
-	else
-		iounmap(drvdata->fb_virt);
 
 	/* Turn off the display */
 	xilinx_fb_out32(drvdata, REG_CTRL, 0);
@@ -386,8 +392,6 @@ static void xilinxfb_release(struct device *dev)
 	if (drvdata->fb_alloced)
 		dma_free_coherent(dev, PAGE_ALIGN(drvdata->info.fix.smem_len),
 				  drvdata->fb_virt, drvdata->fb_phys);
-	else
-		iounmap(drvdata->fb_virt);
 
 	/* Turn off the display */
 	xilinx_fb_out32(drvdata, REG_CTRL, 0);
