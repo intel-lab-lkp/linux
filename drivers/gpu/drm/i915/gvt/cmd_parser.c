@@ -59,6 +59,8 @@
 #include "gem/i915_gem_pm.h"
 #include "gt/intel_context.h"
 
+#include "gvt/display_helpers.h"
+
 #define INVALID_OP    (~0U)
 
 #define OP_LEN_MI           9

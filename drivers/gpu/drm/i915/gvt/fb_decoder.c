@@ -47,6 +47,8 @@
 #include "display/intel_sprite_regs.h"
 #include "display/skl_universal_plane_regs.h"
 
+#include "gvt/display_helpers.h"
+
 #define PRIMARY_FORMAT_NUM	16
 struct pixel_format {
 	int drm_format;	/* Pixel format in DRM definition */

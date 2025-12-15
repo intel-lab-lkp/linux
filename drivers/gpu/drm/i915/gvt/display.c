@@ -49,6 +49,8 @@
 #include "display/intel_dpio_phy.h"
 #include "display/intel_sprite_regs.h"
 
+#include "gvt/display_helpers.h"
+
 static int get_edp_pipe(struct intel_vgpu *vgpu)
 {
 	u32 data = vgpu_vreg(vgpu, _TRANS_DDI_FUNC_CTL_EDP);

@@ -67,6 +67,8 @@
 #include "gt/intel_gt_regs.h"
 #include <linux/vmalloc.h>
 
+#include "gvt/display_helpers.h"
+
 /* XXX FIXME i915 has changed PP_XXX definition */
 #define PCH_PP_STATUS  _MMIO(0xc7200)
 #define PCH_PP_CONTROL _MMIO(0xc7204)
