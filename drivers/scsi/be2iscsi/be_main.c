@@ -2554,8 +2554,18 @@ static int beiscsi_alloc_mem(struct beiscsi_hba *phba)
 	kfree(mem_arr_orig);
 	return 0;
 free_mem:
-	mem_descr->num_elements = j;
-	while ((i) || (j)) {
+	while (j) {
+		j--;
+		mem_arr--;
+		dma_free_coherent(&phba->pcidev->dev,
+					    mem_arr->size,
+					    mem_arr->virtual_address,
+					    (unsigned long)mem_arr->
+					    bus_address.u.a64.address);
+	}
+	while (i) {
+		i--;
+		mem_descr--;
 		for (j = mem_descr->num_elements; j > 0; j--) {
 			dma_free_coherent(&phba->pcidev->dev,
 					    mem_descr->mem_array[j - 1].size,
@@ -2565,11 +2575,7 @@ free_mem:
 					    mem_array[j - 1].
 					    bus_address.u.a64.address);
 		}
-		if (i) {
-			i--;
-			kfree(mem_descr->mem_array);
-			mem_descr--;
-		}
+		kfree(mem_descr->mem_array);
 	}
 	kfree(mem_arr_orig);
 	kfree(phba->init_mem);
