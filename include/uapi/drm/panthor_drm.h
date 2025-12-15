@@ -975,6 +975,23 @@ enum drm_panthor_group_state_flags {
 };
 
 /**
+ * struct drm_panthor_queue_event - Fault or fatal event occurring on a single queue.
+ */
+struct drm_panthor_queue_event {
+	/** @queue_id: The ID of the queue that faulted. */
+	__u32 queue_id;
+
+	/** @event_type: What kind of event is being propagated. */
+	__u32 event_type;
+
+	/** @exception_type: The type of exception that caused the fault. */
+	__u32 exception_type;
+
+	/** @exception_data: Exception-specific data. */
+	__u32 exception_data;
+};
+
+/**
  * struct drm_panthor_group_get_state - Arguments passed to DRM_IOCTL_PANTHOR_GROUP_GET_STATE
  *
  * Used to query the state of a group and decide whether a new group should be created to
