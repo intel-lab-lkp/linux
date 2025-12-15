@@ -4373,6 +4373,280 @@ static bool hidpp_application_equals(struct hid_device *hdev,
 	return report && report->application == application;
 }
 
+/* -------------------------------------------------------------------------- */
+/* 0x4531: Multi-Platform Support                                             */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * Some Logitech devices expose the HID++ feature 0x4531 (Multi-Platform) allowing
+ * the host to specify which operating system platform to use on the device. Changing device's
+ * platform may alter the behavior of the device to match the specified platform.
+ */
+
+static char *hidpp_platform;
+module_param(hidpp_platform, charp, 0644);
+MODULE_PARM_DESC(hidpp_platform, "Select host platform type for Logitech HID++ Multi-Platform feature "
+		 "0x4531, valid values: (linux|chrome|android).  If unset, no "
+		 "change is applied.");
+
+#define HIDPP_MULTIPLATFORM_FEAT_ID			0x4531
+#define HIDPP_MULTIPLATFORM_GET_FEATURE_INFO		0x0F
+#define HIDPP_MULTIPLATFORM_GET_PLATFORM_DESCRIPTOR	0x1F
+#define HIDPP_MULTIPLATFORM_SET_CURRENT_PLATFORM	0x3F
+
+#define HIDPP_MULTIPLATFORM_PLATFORM_MASK_LINUX		BIT(10)
+#define HIDPP_MULTIPLATFORM_PLATFORM_MASK_CHROME	BIT(11)
+#define HIDPP_MULTIPLATFORM_PLATFORM_MASK_ANDROID	BIT(12)
+
+struct hidpp_platform_desc {
+	u8 plat_idx;
+	u8 desc_idx;
+	u16 plat_mask;
+};
+
+/**
+ * hidpp_multiplatform_mask_from_str() - Convert platform name to an HID++ platform mask
+ * @pname: Platform name string
+ *
+ * Converts a platform name string to its corresponding HID++ platform mask based on
+ * the Multi-Platform feature specification.
+ *
+ * Return: Platform mask corresponding to @pname on success,
+ * or 0 if @pname is NULL or unsupported.
+ */
+static u16 hidpp_multiplatform_mask_from_str(const char *pname)
+{
+	if (!pname)
+		return 0;
+
+	if (!strcasecmp(pname, "linux"))
+		return HIDPP_MULTIPLATFORM_PLATFORM_MASK_LINUX;
+	if (!strcasecmp(pname, "chrome"))
+		return HIDPP_MULTIPLATFORM_PLATFORM_MASK_CHROME;
+	if (!strcasecmp(pname, "android"))
+		return HIDPP_MULTIPLATFORM_PLATFORM_MASK_ANDROID;
+
+	return 0;
+}
+
+/**
+ * hidpp_multiplatform_get_num_pdesc() - Retrieve number of platform descriptors
+ * @hidpp: Pointer to the hidpp_device instance
+ * @feat_index: Feature index of the Multi-Platform feature
+ * @num_desc: Pointer to store the number of platform descriptors
+ *
+ * Retrieves the number of platform descriptors supported by the device through
+ * the Multi-Platform feature and stores it in @num_desc.
+ *
+ * Return: 0 on success, or non-zero on failure.
+ */
+static int hidpp_multiplatform_get_num_pdesc(struct hidpp_device *hidpp,
+					     u8 feat_index, u8 *num_desc)
+{
+	int ret;
+	struct hidpp_report response;
+	struct hid_device *hdev = hidpp->hid_dev;
+
+	ret = hidpp_send_fap_command_sync(hidpp, feat_index,
+					  HIDPP_MULTIPLATFORM_GET_FEATURE_INFO,
+					  NULL, 0, &response);
+	if (ret) {
+		hid_warn(hdev, "Multiplatform: GET_FEATURE_INFO failed (err=%d)", ret);
+		return ret;
+	}
+
+	*num_desc = response.fap.params[3];
+	hid_dbg(hdev, "Multiplatform: Device supports %d platform descriptors", *num_desc);
+
+	return 0;
+}
+
+/**
+ * hidpp_multiplatform_get_platform_desc() - Retrieve a platform descriptor entry
+ * @hidpp: Pointer to the hidpp_device instance
+ * @feat_index: Feature index of the Multi-Platform feature
+ * @platform_idx: Index of the platform descriptor to retrieve
+ * @pdesc: Pointer to store the retrieved platform descriptor
+ *
+ * Retrieves a single platform descriptor identified by @platform_idx from the
+ * device and stores the parsed descriptor fields in @pdesc.
+ *
+ * Return: 0 on success, or non-zero on failure.
+ */
+static int hidpp_multiplatform_get_platform_desc(struct hidpp_device *hidpp, u8 feat_index,
+						 u8 platform_idx, struct hidpp_platform_desc *pdesc)
+{
+	int ret;
+	struct hidpp_report response;
+	u8 params[1] = { platform_idx };
+	struct hid_device *hdev = hidpp->hid_dev;
+
+	ret = hidpp_send_fap_command_sync(hidpp, feat_index,
+					  HIDPP_MULTIPLATFORM_GET_PLATFORM_DESCRIPTOR,
+					  params, sizeof(params), &response);
+
+	if (ret) {
+		hid_warn(hdev,
+			 "Multiplatform: GET_PLATFORM_DESCRIPTOR failed for index %d (err=%d)",
+			 platform_idx, ret);
+		return ret;
+	}
+
+	pdesc->plat_idx = response.fap.params[0];
+	pdesc->desc_idx = response.fap.params[1];
+	pdesc->plat_mask = get_unaligned_be16(&response.fap.params[2]);
+
+	hid_dbg(hdev,
+		"Multiplatform: descriptor %d: plat_idx=%d, desc_idx=%d, plat_mask=0x%04x",
+		platform_idx, pdesc->plat_idx, pdesc->desc_idx, pdesc->plat_mask);
+
+	return 0;
+}
+
+/**
+ * hidpp_multiplatform_get_platform_index() - Find platform index for a mask
+ * @hidpp: Pointer to the hidpp_device instance
+ * @feat_index: Feature index of the Multi-Platform feature
+ * @plat_mask: Platform mask to search for
+ * @plat_index: Pointer to store the matched platform index
+ *
+ * Iterates through all platform descriptors exposed by the device via the
+ * Multi-Platform feature, retrieving each descriptor and comparing its
+ * platform mask to @plat_mask. A descriptor matches if its mask overlaps with
+ * the requested @plat_mask (i.e. (pdesc.plat_mask & plat_mask) is non-zero).
+ *
+ * When a matching descriptor is found, its platform index (plat_idx) is
+ * written to @plat_index and the function returns success.
+ *
+ * If no descriptor matches, -ENOENT is returned.
+ *
+ * Return: 0 on success; -ENOENT if no matching descriptor exists;
+ *         or non-zero on failure.
+ */
+static int hidpp_multiplatform_get_platform_index(struct hidpp_device *hidpp,
+						  u8 feat_index, u16 plat_mask,
+						  u8 *plat_index)
+{
+	int i;
+	int ret;
+	u8 num_desc;
+	struct hidpp_platform_desc pdesc;
+	struct hid_device *hdev = hidpp->hid_dev;
+
+	ret = hidpp_multiplatform_get_num_pdesc(hidpp, feat_index, &num_desc);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < num_desc; i++) {
+		ret = hidpp_multiplatform_get_platform_desc(hidpp, feat_index, i, &pdesc);
+		if (ret)
+			return ret;
+
+		if (pdesc.plat_mask & plat_mask) {
+			*plat_index = pdesc.plat_idx;
+			hid_dbg(hdev,
+				"Multiplatform: Selected platform index %d for platform '%s'",
+				*plat_index, hidpp_platform);
+			return 0;
+		}
+	}
+
+	hid_dbg(hdev,
+		"Multiplatform: No matching platform descriptor found for platform '%s'",
+		hidpp_platform);
+	return -ENOENT;
+}
+
+/**
+ * hidpp_multiplatform_update_device_platform() - Update the device platform
+ * @hidpp: Pointer to the hidpp_device instance
+ * @feat_index: Feature index of the Multi-Platform feature
+ * @plat_index: Platform index to set on the device
+ *
+ * Sends the HID++ Multi-Platform 'SET_CURRENT_PLATFORM' command to the device to
+ * update its platform index to @plat_index.
+ *
+ * Return: 0 on success, or non-zero on failure.
+ */
+static int hidpp_multiplatform_update_device_platform(struct hidpp_device *hidpp,
+						      u8 feat_index, u8 plat_index)
+{
+	int ret;
+	struct hidpp_report response;
+	/* Byte 0 (hostIndex): 0xFF selects the current host. */
+	u8 params[2] = { 0xFF, plat_index };
+
+	ret = hidpp_send_fap_command_sync(hidpp, feat_index,
+					  HIDPP_MULTIPLATFORM_SET_CURRENT_PLATFORM,
+					  params, sizeof(params), &response);
+
+	if (ret)
+		hid_warn(hidpp->hid_dev,
+			 "Multiplatform: SET_CURRENT_PLATFORM failed for index %d (err=%d)",
+			 plat_index, ret);
+
+	return ret;
+}
+
+/**
+ * hidpp_multiplatform_init() - Apply the HID++ Multi-Platform (0x4531) feature
+ * @hidpp: Pointer to the hidpp_device instance
+ *
+ * Initializes the Multi-Platform feature by selecting the device platform
+ * corresponding to the module parameter @hidpp_platform, if provided.
+ *
+ * The function performs the following steps:
+ *   1. Convert the @hidpp_platform string into a platform mask.
+ *   2. Check whether the device supports the Multi-Platform feature (0x4531).
+ *   3. Look up the device's platform index whose mask matches the host
+ *      platform mask.
+ *   4. Apply that platform index to the device via 'SET_CURRENT_PLATFORM'.
+ *
+ * If the module parameter is unset or invalid, or the device does not support
+ * the feature, or no matching platform descriptor is found, the function exits
+ * silently without modifying the device state.
+ *
+ * On success, the device's platform configuration is updated.
+ */
+static void hidpp_multiplatform_init(struct hidpp_device *hidpp)
+{
+	int ret;
+	u8 feat_index;
+	u8 plat_index;
+	u16 host_plat_mask;
+	struct hid_device *hdev = hidpp->hid_dev;
+
+	if (!hidpp_platform)
+		return;
+
+	host_plat_mask = hidpp_multiplatform_mask_from_str(hidpp_platform);
+	if (!host_plat_mask) {
+		hid_warn(hdev,
+			 "Multiplatform: Invalid or unsupported platform name '%s'",
+			 hidpp_platform);
+		return;
+	}
+
+	ret = hidpp_root_get_feature(hidpp, HIDPP_MULTIPLATFORM_FEAT_ID, &feat_index);
+	if (ret) {
+		hid_warn(hdev,
+			 "Multiplatform: Failed to get the HID++ multiplatform feature 0x4531");
+		return;
+	}
+
+	ret = hidpp_multiplatform_get_platform_index(hidpp, feat_index, host_plat_mask,
+						     &plat_index);
+	if (ret)
+		return;
+
+	ret = hidpp_multiplatform_update_device_platform(hidpp, feat_index, plat_index);
+	if (ret)
+		return;
+
+	hid_info(hdev,
+		 "Multiplatform: Device platform successfully set to '%s'", hidpp_platform);
+}
+
 static int hidpp_probe(struct hid_device *hdev, const struct hid_device_id *id)
 {
 	struct hidpp_device *hidpp;
@@ -4466,6 +4740,8 @@ static int hidpp_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 	if (hidpp->quirks & HIDPP_QUIRK_DELAYED_INIT)
 		connect_mask &= ~HID_CONNECT_HIDINPUT;
+
+	hidpp_multiplatform_init(hidpp);
 
 	/* Now export the actual inputs and hidraw nodes to the world */
 	hid_device_io_stop(hdev);
@@ -4664,6 +4940,10 @@ static const struct hid_device_id hidpp_devices[] = {
 	  HID_BLUETOOTH_DEVICE(USB_VENDOR_ID_LOGITECH, 0xb034) },
 	{ /* MX Anywhere 3SB mouse over Bluetooth */
 	  HID_BLUETOOTH_DEVICE(USB_VENDOR_ID_LOGITECH, 0xb038) },
+	{ /* Casa Keys keyboard over Bluetooth */
+	  HID_BLUETOOTH_DEVICE(USB_VENDOR_ID_LOGITECH, USB_DEVICE_ID_LOGITECH_CASA_KEYS_KEYBOARD) },
+	{ /* MX Keys S keyboard over Bluetooth */
+	  HID_BLUETOOTH_DEVICE(USB_VENDOR_ID_LOGITECH, USB_DEVICE_ID_LOGITECH_MX_KEYS_S_KEYBOARD) },
 	{}
 };
 
