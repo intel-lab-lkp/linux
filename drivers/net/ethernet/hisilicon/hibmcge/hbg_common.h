@@ -5,8 +5,10 @@
 #define __HBG_COMMON_H
 
 #include <linux/ethtool.h>
+#include <linux/fwnode.h>
 #include <linux/netdevice.h>
 #include <linux/pci.h>
+#include <linux/property.h>
 #include <net/page_pool/helpers.h>
 #include "hbg_reg.h"
 
@@ -130,6 +132,9 @@ struct hbg_vector {
 	u32 info_array_len;
 };
 
+#define HBG_LED_MAX_NUM			(sizeof(u32) / sizeof(u8))
+#define HBG_LED_SOFTWARE_NODE_MAX_NUM	(HBG_LED_MAX_NUM + 2)
+
 struct hbg_mac {
 	struct mii_bus *mdio_bus;
 	struct phy_device *phydev;
@@ -140,6 +145,12 @@ struct hbg_mac {
 	u32 autoneg;
 	u32 link_status;
 	u32 pause_autoneg;
+
+	struct software_node phy_node;
+	struct software_node leds_node;
+	struct software_node led_nodes[HBG_LED_MAX_NUM];
+	struct property_entry leds_props[HBG_LED_MAX_NUM][4];
+	const struct software_node *nodes[HBG_LED_SOFTWARE_NODE_MAX_NUM + 1];
 };
 
 struct hbg_mac_table_entry {

@@ -263,11 +263,119 @@ static int hbg_fixed_phy_init(struct hbg_priv *priv)
 	return hbg_phy_connect(priv);
 }
 
+static void hbg_phy_device_free(void *data)
+{
+	phy_device_free((struct phy_device *)data);
+}
+
+static void hbg_phy_device_remove(void *data)
+{
+	phy_device_remove((struct phy_device *)data);
+}
+
+static void hbg_software_node_unregister_group(void *data)
+{
+	const struct software_node **node = data;
+
+	software_node_unregister_node_group(node);
+}
+
+static void hbg_device_remove_software_node(void *data)
+{
+	device_remove_software_node((struct device *)data);
+}
+
+static int hbg_register_phy_leds_software_node(struct hbg_priv *priv,
+					       struct phy_device *phydev)
+{
+	struct fwnode_handle *fwnode = dev_fwnode(&phydev->mdio.dev);
+	struct device *dev = &priv->pdev->dev;
+	struct hbg_mac *mac = &priv->mac;
+	u32 node_index = 0, i;
+	const char *label;
+	int ret;
+
+	if (fwnode) {
+		dev_dbg(dev, "phy fwnode is already exists\n");
+		return 0;
+	}
+
+	mac->phy_node.name = devm_kasprintf(dev, GFP_KERNEL, "%s-%s-%u",
+					    "mii", dev_name(dev),
+					    mac->phy_addr);
+	mac->nodes[node_index++] = &mac->phy_node;
+
+	mac->leds_node.name = devm_kasprintf(dev, GFP_KERNEL, "leds");
+	mac->leds_node.parent = &mac->phy_node;
+	mac->nodes[node_index++] = &mac->leds_node;
+
+	for (i = 0; i < HBG_LED_MAX_NUM; i++) {
+		mac->leds_props[i][0] = PROPERTY_ENTRY_U32("reg", i);
+		label = devm_kasprintf(dev, GFP_KERNEL, "%u", i);
+		mac->leds_props[i][1] = PROPERTY_ENTRY_STRING("label", label);
+
+		mac->led_nodes[i].name = devm_kasprintf(dev, GFP_KERNEL,
+							"led@%u", i);
+		mac->led_nodes[i].properties = mac->leds_props[i];
+		mac->led_nodes[i].parent = &mac->leds_node;
+
+		mac->nodes[node_index++] = &mac->led_nodes[i];
+	}
+
+	ret = software_node_register_node_group(mac->nodes);
+	if (ret)
+		return dev_err_probe(dev, ret,
+				     "failed to register software node\n");
+
+	ret = devm_add_action_or_reset(dev, hbg_software_node_unregister_group,
+				       mac->nodes);
+	if (ret)
+		return ret;
+
+	ret = device_add_software_node(&phydev->mdio.dev, &mac->phy_node);
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to add software node\n");
+
+	return devm_add_action_or_reset(dev, hbg_device_remove_software_node,
+					&phydev->mdio.dev);
+}
+
+static int hbg_find_phy_device(struct hbg_priv *priv, struct mii_bus *mdio_bus)
+{
+	struct device *dev = &priv->pdev->dev;
+	struct phy_device *phydev;
+	int ret;
+
+	phydev = get_phy_device(mdio_bus, priv->mac.phy_addr, false);
+	if (IS_ERR(phydev))
+		return dev_err_probe(dev, -ENODEV,
+				     "failed to get phy device\n");
+
+	ret = devm_add_action_or_reset(dev, hbg_phy_device_free, phydev);
+	if (ret)
+		return ret;
+
+	ret = hbg_register_phy_leds_software_node(priv, phydev);
+	if (ret)
+		return ret;
+
+	ret = phy_device_register(phydev);
+	if (ret)
+		return dev_err_probe(dev, ret,
+				     "failed to register phy device\n");
+
+	ret = devm_add_action_or_reset(dev, hbg_phy_device_remove, phydev);
+	if (ret)
+		return ret;
+
+	priv->mac.phydev = phydev;
+	return 0;
+}
+
 int hbg_mdio_init(struct hbg_priv *priv)
 {
 	struct device *dev = &priv->pdev->dev;
 	struct hbg_mac *mac = &priv->mac;
-	struct phy_device *phydev;
 	struct mii_bus *mdio_bus;
 	int ret;
 
@@ -281,7 +389,7 @@ int hbg_mdio_init(struct hbg_priv *priv)
 
 	mdio_bus->parent = dev;
 	mdio_bus->priv = priv;
-	mdio_bus->phy_mask = ~(1 << mac->phy_addr);
+	mdio_bus->phy_mask = 0xFFFFFFFF; /* not scan phy device */
 	mdio_bus->name = "hibmcge mii bus";
 	mac->mdio_bus = mdio_bus;
 
@@ -293,12 +401,10 @@ int hbg_mdio_init(struct hbg_priv *priv)
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to register MDIO bus\n");
 
-	phydev = mdiobus_get_phy(mdio_bus, mac->phy_addr);
-	if (!phydev)
-		return dev_err_probe(dev, -ENODEV,
-				     "failed to get phy device\n");
+	ret = hbg_find_phy_device(priv, mdio_bus);
+	if (ret)
+		return ret;
 
-	mac->phydev = phydev;
 	hbg_mdio_init_hw(priv);
 	return hbg_phy_connect(priv);
 }
