@@ -123,4 +123,6 @@ void panthor_mmu_pt_cache_fini(void);
 void panthor_mmu_debugfs_init(struct drm_minor *minor);
 #endif
 
+struct panthor_vm_fault *panthor_vm_get_fault(struct panthor_vm *vm);
+
 #endif

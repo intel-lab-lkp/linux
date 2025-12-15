@@ -722,6 +722,11 @@ struct panthor_group {
 	 * panthor_group::groups::waiting list.
 	 */
 	struct list_head wait_node;
+
+	/**
+	 * @fatal: VM-level fault that caused a fatal error on the group.
+	 */
+	struct panthor_vm_fault fatal;
 };
 
 struct panthor_job_profiling_data {
@@ -1575,6 +1580,14 @@ cs_slot_process_fatal_event_locked(struct panthor_device *ptdev,
 			 group->task_info.pid, group->task_info.comm);
 
 		group->fatal_queues |= BIT(cs_id);
+
+		if (panthor_vm_has_unhandled_faults(group->vm)) {
+			struct panthor_vm_fault *fault;
+
+			fault = panthor_vm_get_fault(group->vm);
+			if (fault)
+				group->fatal = *fault;
+		}
 	}
 
 	if (CS_EXCEPTION_TYPE(fatal) == DRM_PANTHOR_EXCEPTION_CS_UNRECOVERABLE) {

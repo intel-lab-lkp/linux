@@ -2895,3 +2895,11 @@ void panthor_mmu_pt_cache_fini(void)
 {
 	kmem_cache_destroy(pt_cache);
 }
+
+struct panthor_vm_fault *panthor_vm_get_fault(struct panthor_vm *vm)
+{
+	if (!vm)
+		return NULL;
+
+	return &vm->fault;
+}
