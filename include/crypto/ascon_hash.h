@@ -18,7 +18,7 @@
 
 /*
  * The standard of Ascon permutation in NIST SP 800-232 specifies 16 round
- * constants to accomodate potential functionality extensions in the future
+ * constants to accommodate potential functionality extensions in the future
  * (see page 2).
  */
 static const u64 ascon_p_rndc[] = {
