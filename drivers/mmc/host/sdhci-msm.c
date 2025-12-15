@@ -266,6 +266,19 @@ struct sdhci_msm_variant_info {
 	const struct sdhci_msm_offset *offset;
 };
 
+/*
+ * DLL registers which needs be programmed with HSR settings.
+ * Add any new register only at the end and don't change the
+ * sequence.
+ */
+struct sdhci_msm_dll {
+	u32 dll_config;
+	u32 dll_config_2;
+	u32 dll_config_3;
+	u32 dll_usr_ctl;
+	u32 ddr_config;
+};
+
 struct sdhci_msm_host {
 	struct platform_device *pdev;
 	void __iomem *core_mem;	/* MSM SDCC mapped address */
@@ -274,6 +287,7 @@ struct sdhci_msm_host {
 	struct clk *xo_clk;	/* TCXO clk needed for FLL feature of cm_dll*/
 	/* core, iface, cal and sleep clocks */
 	struct clk_bulk_data bulk_clks[4];
+	struct sdhci_msm_dll dll[2];
 #ifdef CONFIG_MMC_CRYPTO
 	struct qcom_ice *ice;
 #endif
@@ -302,6 +316,7 @@ struct sdhci_msm_host {
 	u32 dll_config;
 	u32 ddr_config;
 	bool vqmmc_enabled;
+	bool artanis_dll;
 };
 
 static const struct sdhci_msm_offset *sdhci_priv_msm_offset(struct sdhci_host *host)
@@ -2534,6 +2549,23 @@ static int sdhci_msm_gcc_reset(struct device *dev, struct sdhci_host *host)
 	return ret;
 }
 
+#define DLL_SIZE 10
+static int sdhci_msm_dt_parse_dll_info(struct device *dev, struct sdhci_msm_host *msm_host)
+{
+	u32 *dll_table = &msm_host->dll[0].dll_config;
+	int ret;
+
+	msm_host->artanis_dll = false;
+
+	ret = of_property_read_variable_u32_array(dev->of_node,
+						  "qcom,dll-presets",
+						  dll_table, DLL_SIZE, DLL_SIZE);
+	if (ret == DLL_SIZE)
+		msm_host->artanis_dll = true;
+
+	return ret;
+}
+
 static int sdhci_msm_probe(struct platform_device *pdev)
 {
 	struct sdhci_host *host;
@@ -2579,6 +2611,15 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	sdhci_msm_get_of_property(pdev, host);
 
 	msm_host->saved_tuning_phase = INVALID_TUNING_PHASE;
+
+	/*
+	 * Parse HSR dll only when property is present in DT.
+	 */
+	ret = sdhci_msm_dt_parse_dll_info(&pdev->dev, msm_host);
+	if (ret == -ENODATA || ret == -EOVERFLOW) {
+		dev_err(&pdev->dev, "Bad DLL in dt (%d)\n", ret);
+		return ret;
+	}
 
 	ret = sdhci_msm_gcc_reset(&pdev->dev, host);
 	if (ret)
