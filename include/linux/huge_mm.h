@@ -57,6 +57,7 @@ enum transparent_hugepage_flag {
 	TRANSPARENT_HUGEPAGE_DEFRAG_REQ_MADV_FLAG,
 	TRANSPARENT_HUGEPAGE_DEFRAG_KHUGEPAGED_FLAG,
 	TRANSPARENT_HUGEPAGE_USE_ZERO_PAGE_FLAG,
+	TRANSPARENT_HUGEPAGE_USE_EXEC_COW_FLAG,
 };
 
 struct kobject;
@@ -325,6 +326,9 @@ struct thpsize {
 	(transparent_hugepage_flags &					\
 	 (1<<TRANSPARENT_HUGEPAGE_USE_ZERO_PAGE_FLAG))
 
+#define transparent_hugepage_use_exec_cow()				\
+	(transparent_hugepage_flags &					\
+	 (1<<TRANSPARENT_HUGEPAGE_USE_EXEC_COW_FLAG))
 /*
  * Check whether THPs are explicitly disabled for this VMA, for example,
  * through madvise or prctl.

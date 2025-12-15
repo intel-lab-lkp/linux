@@ -6128,7 +6128,8 @@ static inline vm_fault_t wp_huge_pmd(struct vm_fault *vmf)
 	}
 
 
-	if (is_exec_mapping(vma->vm_flags) &&
+	if (transparent_hugepage_use_exec_cow() &&
+	    is_exec_mapping(vma->vm_flags) &&
 	    is_cow_mapping(vma->vm_flags)) {
 		/* Skip special and shmem */
 		if (vma_is_special_huge(vma) || vma_is_shmem(vma))

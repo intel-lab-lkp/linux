@@ -203,6 +203,14 @@ page by writing 0 or enable it back by writing 1::
 	echo 0 >/sys/kernel/mm/transparent_hugepage/use_zero_page
 	echo 1 >/sys/kernel/mm/transparent_hugepage/use_zero_page
 
+By default kernel tries to use huge, PMD-mappable page on private
+executable file THP mmap fault handle. It's possible to disable
+THP COW of private executable mmap by writing 0 or enable it back
+by writing 1::
+
+	echo 0 >/sys/kernel/mm/transparent_hugepage/use_exec_cow
+	echo 1 >/sys/kernel/mm/transparent_hugepage/use_exec_cow
+
 Some userspace (such as a test program, or an optimized memory
 allocation library) may want to know the size (in bytes) of a
 PMD-mappable transparent hugepage::

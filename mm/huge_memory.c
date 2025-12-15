@@ -65,7 +65,8 @@ unsigned long transparent_hugepage_flags __read_mostly =
 #endif
 	(1<<TRANSPARENT_HUGEPAGE_DEFRAG_REQ_MADV_FLAG)|
 	(1<<TRANSPARENT_HUGEPAGE_DEFRAG_KHUGEPAGED_FLAG)|
-	(1<<TRANSPARENT_HUGEPAGE_USE_ZERO_PAGE_FLAG);
+	(1<<TRANSPARENT_HUGEPAGE_USE_ZERO_PAGE_FLAG)|
+	(1<<TRANSPARENT_HUGEPAGE_USE_EXEC_COW_FLAG);
 
 static struct shrinker *deferred_split_shrinker;
 static unsigned long deferred_split_count(struct shrinker *shrink,
@@ -444,6 +445,20 @@ static ssize_t use_zero_page_store(struct kobject *kobj,
 }
 static struct kobj_attribute use_zero_page_attr = __ATTR_RW(use_zero_page);
 
+static ssize_t use_exec_cow_show(struct kobject *kobj,
+				  struct kobj_attribute *attr, char *buf)
+{
+	return single_hugepage_flag_show(kobj, attr, buf,
+					 TRANSPARENT_HUGEPAGE_USE_EXEC_COW_FLAG);
+}
+static ssize_t use_exec_cow_store(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	return single_hugepage_flag_store(kobj, attr, buf, count,
+				 TRANSPARENT_HUGEPAGE_USE_EXEC_COW_FLAG);
+}
+static struct kobj_attribute use_exec_cow_attr = __ATTR_RW(use_exec_cow);
+
 static ssize_t hpage_pmd_size_show(struct kobject *kobj,
 				   struct kobj_attribute *attr, char *buf)
 {
@@ -477,6 +492,7 @@ static struct attribute *hugepage_attr[] = {
 	&enabled_attr.attr,
 	&defrag_attr.attr,
 	&use_zero_page_attr.attr,
+	&use_exec_cow_attr.attr,
 	&hpage_pmd_size_attr.attr,
 #ifdef CONFIG_SHMEM
 	&shmem_enabled_attr.attr,
