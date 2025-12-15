@@ -4404,11 +4404,15 @@ unlock:
 	return ret;
 }
 
+#define CONNSTS_POLL_RETRIES       80
+#define CONNSTS_POLL_DELAY_US_MIN  3000
+#define CONNSTS_POLL_DELAY_US_MAX  5000
 static int _dwc2_hcd_resume(struct usb_hcd *hcd)
 {
 	struct dwc2_hsotg *hsotg = dwc2_hcd_to_hsotg(hcd);
 	unsigned long flags;
 	u32 hprt0;
+	int retry;
 	int ret = 0;
 
 	spin_lock_irqsave(&hsotg->lock, flags);
@@ -4501,8 +4505,26 @@ static int _dwc2_hcd_resume(struct usb_hcd *hcd)
 	spin_unlock_irqrestore(&hsotg->lock, flags);
 	dwc2_vbus_supply_init(hsotg);
 
-	/* Wait for controller to correctly update D+/D- level */
-	usleep_range(3000, 5000);
+	/*
+	 * Wait for device connection to stabilize after VBUS is restored.
+	 * Some externally powered devices may need time for D+/D- lines to settle.
+	 * This runs in the resume path where sleeping is allowed.
+	 */
+	for (retry = 0; retry < CONNSTS_POLL_RETRIES; retry++) {
+		spin_lock_irqsave(&hsotg->lock, flags);
+		hprt0 = dwc2_read_hprt0(hsotg);
+		spin_unlock_irqrestore(&hsotg->lock, flags);
+
+		if (hprt0 & HPRT0_CONNSTS) {
+			dev_dbg(hsotg->dev,
+				"Device connected after %d retries\n", retry);
+			break;
+		}
+
+		usleep_range(CONNSTS_POLL_DELAY_US_MIN,
+			     CONNSTS_POLL_DELAY_US_MAX);
+	}
+
 	spin_lock_irqsave(&hsotg->lock, flags);
 
 	/*
