@@ -469,6 +469,20 @@ void khugepaged_enter_vma(struct vm_area_struct *vma,
 	}
 }
 
+void khugepaged_move_tail(struct mm_struct *mm)
+{
+	struct mm_slot *slot;
+
+	if (!mm_flags_test(MMF_VM_HUGEPAGE, mm))
+		return;
+
+	spin_lock(&khugepaged_mm_lock);
+	slot = mm_slot_lookup(mm_slots_hash, mm);
+	if (slot && khugepaged_scan.mm_slot != slot)
+		list_move_tail(&slot->mm_node, &khugepaged_scan.mm_head);
+	spin_unlock(&khugepaged_mm_lock);
+}
+
 void __khugepaged_exit(struct mm_struct *mm)
 {
 	struct mm_slot *slot;

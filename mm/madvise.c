@@ -606,6 +606,8 @@ static long madvise_cold(struct madvise_behavior *madv_behavior)
 	madvise_cold_page_range(&tlb, madv_behavior);
 	tlb_finish_mmu(&tlb);
 
+	khugepaged_move_tail(vma->vm_mm);
+
 	return 0;
 }
 
@@ -832,6 +834,7 @@ static int madvise_free_single_vma(struct madvise_behavior *madv_behavior)
 			&walk_ops, tlb);
 	tlb_end_vma(tlb, vma);
 	mmu_notifier_invalidate_range_end(&range);
+	khugepaged_move_tail(mm);
 	return 0;
 }
 
