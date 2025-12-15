@@ -214,7 +214,7 @@ void page_cache_ra_unbounded(struct readahead_control *ractl,
 	unsigned long index = readahead_index(ractl);
 	gfp_t gfp_mask = readahead_gfp_mask(mapping);
 	unsigned long mark = ULONG_MAX, i = 0;
-	unsigned int min_nrpages = mapping_min_folio_nrpages(mapping);
+	unsigned int min_nrpages;
 
 	/*
 	 * Partway through the readahead operation, we will have added
@@ -232,6 +232,7 @@ void page_cache_ra_unbounded(struct readahead_control *ractl,
 				      lookahead_size);
 	filemap_invalidate_lock_shared(mapping);
 	index = mapping_align_index(mapping, index);
+	min_nrpages = mapping_min_folio_nrpages(mapping);
 
 	/*
 	 * As iterator `i` is aligned to min_nrpages, round_up the
@@ -467,7 +468,7 @@ void page_cache_ra_order(struct readahead_control *ractl,
 	struct address_space *mapping = ractl->mapping;
 	pgoff_t start = readahead_index(ractl);
 	pgoff_t index = start;
-	unsigned int min_order = mapping_min_folio_order(mapping);
+	unsigned int min_order;
 	pgoff_t limit = (i_size_read(mapping->host) - 1) >> PAGE_SHIFT;
 	pgoff_t mark = index + ra->size - ra->async_size;
 	unsigned int nofs;
@@ -485,13 +486,16 @@ void page_cache_ra_order(struct readahead_control *ractl,
 
 	new_order = min(mapping_max_folio_order(mapping), new_order);
 	new_order = min_t(unsigned int, new_order, ilog2(ra->size));
-	new_order = max(new_order, min_order);
 
 	ra->order = new_order;
 
 	/* See comment in page_cache_ra_unbounded() */
 	nofs = memalloc_nofs_save();
 	filemap_invalidate_lock_shared(mapping);
+
+	min_order = mapping_min_folio_order(mapping);
+	new_order = max(new_order, min_order);
+
 	/*
 	 * If the new_order is greater than min_order and index is
 	 * already aligned to new_order, then this will be noop as index
