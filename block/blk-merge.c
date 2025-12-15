@@ -169,8 +169,13 @@ struct bio *bio_split_discard(struct bio *bio, const struct queue_limits *lim,
 
 	granularity = max(lim->discard_granularity >> 9, 1U);
 
-	max_discard_sectors =
-		min(lim->max_discard_sectors, bio_allowed_max_sectors(lim));
+	if (bio_op(bio) == REQ_OP_SECURE_ERASE)
+		max_discard_sectors = min(lim->max_secure_erase_sectors,
+					  bio_allowed_max_sectors(lim));
+	else
+		max_discard_sectors = min(lim->max_discard_sectors,
+					  bio_allowed_max_sectors(lim));
+
 	max_discard_sectors -= max_discard_sectors % granularity;
 	if (unlikely(!max_discard_sectors))
 		return bio;
