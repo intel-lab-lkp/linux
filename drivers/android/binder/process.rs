@@ -222,15 +222,53 @@ impl ProcessInner {
         count: usize,
         othread: Option<&Thread>,
     ) {
-        let push = node.update_refcount_locked(inc, strong, count, self);
+        let push: Option<DLArc<dyn DeliverToRead>> = if inc {
+            if count == 0 {
+                None
+            } else {
+                // First increment must use the zero2one-aware API so delivery_state is correct.
+                let first_push = match node.incr_refcount_allow_zero2one(strong, self) {
+                    Ok(Some(work)) => Some(work as _),
+                    Ok(None) => None,
+                    Err(CouldNotDeliverCriticalIncrement) => {
+                        // Strong-only: we need the wrapper to avoid misdelivery.
+                        match CritIncrWrapper::new() {
+                            Ok(wrapper) => node
+                                .incr_refcount_allow_zero2one_with_wrapper(strong, wrapper, self),
+                            Err(_) => {
+                                // OOM fallback: keep the refcount,
+                                // but rely on the already
+                                // scheduled node to eventually deliver (degrades
+                                // "critical" guarantee).
+                                node.add_refcount_locked(strong, 1, self);
+                                None
+                            }
+                        }
+                    }
+                };
+
+                if count > 1 {
+                    node.add_refcount_locked(strong, count - 1, self);
+                }
+
+                first_push
+            }
+        } else {
+            match core::num::NonZeroUsize::new(count) {
+                Some(nz) => node
+                    .dec_refcount_locked(strong, nz, self)
+                    .map(|work| work as _),
+                None => None,
+            }
+        };
 
         // If we decided that we need to push work, push either to the process or to a thread if
         // one is specified.
-        if let Some(node) = push {
+        if let Some(work) = push {
             if let Some(thread) = othread {
-                thread.push_work_deferred(node);
+                thread.push_work_deferred(work);
             } else {
-                let _ = self.push_work(node);
+                let _ = self.push_work(work);
                 // Nothing to do: `push_work` may fail if the process is dead, but that's ok as in
                 // that case, it doesn't care about the notification.
             }
@@ -922,6 +960,7 @@ impl Process {
         handle: u32,
         inc: bool,
         strong: bool,
+        thread: Option<&Thread>,
     ) -> Result {
         if inc && handle == 0 {
             if let Ok(node_ref) = self.ctx.get_manager_node(strong) {
@@ -937,7 +976,7 @@ impl Process {
         // increment references on itself.
         let mut refs = self.node_refs.lock();
         if let Some(info) = refs.by_handle.get_mut(&handle) {
-            if info.node_ref().update(inc, strong) {
+            if info.node_ref().update_with_thread(inc, strong, thread) {
                 // Clean up death if there is one attached to this node reference.
                 if let Some(death) = info.death().take() {
                     death.set_cleared(true);

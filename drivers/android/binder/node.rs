@@ -21,6 +21,7 @@ use crate::{
 };
 
 use core::mem;
+use core::num::NonZeroUsize;
 
 mod wrapper;
 pub(crate) use self::wrapper::CritIncrWrapper;
@@ -204,6 +205,73 @@ kernel::list::impl_list_item! {
 }
 
 impl Node {
+    pub(crate) fn dec_refcount_locked(
+        self: &DArc<Node>,
+        strong: bool,
+        count: NonZeroUsize,
+        owner_inner: &mut ProcessInner,
+    ) -> Option<DLArc<Node>> {
+        let is_dead = owner_inner.is_dead;
+        let inner = self.inner.access_mut(owner_inner);
+
+        let state = if strong {
+            &mut inner.strong
+        } else {
+            &mut inner.weak
+        };
+
+        let dec = count.get();
+        if state.count < dec {
+            pr_err!("Failure: refcount underflow!");
+            return None;
+        }
+
+        state.count -= dec;
+        let need_push = !is_dead && state.count == 0 && state.has_count;
+
+        if need_push && inner.delivery_state.should_normal_push() {
+            let list_arc = ListArc::try_from_arc(self.clone()).ok().unwrap();
+            inner.delivery_state.did_normal_push();
+            Some(list_arc)
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn add_refcount_locked(
+        self: &DArc<Self>,
+        strong: bool,
+        delta: usize,
+        owner_inner: &mut ProcessInner,
+    ) {
+        if delta == 0 {
+            return;
+        }
+
+        let inner = self.inner.access_mut(owner_inner);
+        let state = if strong {
+            &mut inner.strong
+        } else {
+            &mut inner.weak
+        };
+
+        match state.count.checked_add(delta) {
+            Some(new_count) => state.count = new_count,
+            None => pr_err!("Failure: refcount overflow!"),
+        }
+    }
+
+    pub(crate) fn update_refcount_with_thread(
+        self: &DArc<Self>,
+        inc: bool,
+        count: usize,
+        strong: bool,
+        thread: Option<&Thread>,
+    ) {
+        let mut owner_inner = self.owner.inner.lock();
+        owner_inner.update_node_refcount(self, inc, strong, count, thread);
+    }
+
     pub(crate) fn new(
         ptr: u64,
         cookie: u64,
@@ -374,37 +442,21 @@ impl Node {
         count: usize,
         owner_inner: &mut ProcessInner,
     ) -> Option<DLArc<Node>> {
-        let is_dead = owner_inner.is_dead;
-        let inner = self.inner.access_mut(owner_inner);
-
-        // Get a reference to the state we'll update.
-        let state = if strong {
-            &mut inner.strong
-        } else {
-            &mut inner.weak
-        };
-
-        // Update the count and determine whether we need to push work.
-        let need_push = if inc {
-            state.count += count;
-            // TODO: This method shouldn't be used for zero-to-one increments.
-            !is_dead && !state.has_count
-        } else {
-            if state.count < count {
-                pr_err!("Failure: refcount underflow!");
-                return None;
-            }
-            state.count -= count;
-            !is_dead && state.count == 0 && state.has_count
-        };
-
-        if need_push && inner.delivery_state.should_normal_push() {
-            let list_arc = ListArc::try_from_arc(self.clone()).ok().unwrap();
-            inner.delivery_state.did_normal_push();
-            Some(list_arc)
-        } else {
-            None
+        debug_assert!(
+            !inc,
+            "update_refcount_locked: increments forbidden; use incr_refcount_allow_zero2one*"
+        );
+        if inc {
+            pr_err!(
+                "update_refcount_locked called for increment; use incr_refcount_allow_zero2one*"
+            );
+            return None;
         }
+        let nz = match NonZeroUsize::new(count) {
+            Some(nz) => nz,
+            None => return None,
+        };
+        self.dec_refcount_locked(strong, nz, owner_inner)
     }
 
     pub(crate) fn incr_refcount_allow_zero2one(
@@ -773,6 +825,55 @@ impl NodeRef {
         }
     }
 
+    pub(crate) fn update_with_thread(
+        &mut self,
+        inc: bool,
+        strong: bool,
+        thread: Option<&Thread>,
+    ) -> bool {
+        if strong && self.strong_count == 0 {
+            return false;
+        }
+        let (count, node_count, other_count) = if strong {
+            (
+                &mut self.strong_count,
+                &mut self.strong_node_count,
+                self.weak_count,
+            )
+        } else {
+            (
+                &mut self.weak_count,
+                &mut self.weak_node_count,
+                self.strong_count,
+            )
+        };
+        if inc {
+            if *count == 0 {
+                *node_count = 1;
+                // Critical: zero --> one must be pinned to the initiating thread when available.
+                self.node
+                    .update_refcount_with_thread(true, 1, strong, thread);
+            }
+            *count += 1;
+        } else {
+            if *count == 0 {
+                pr_warn!(
+                    "pid {} performed invalid decrement on ref\n",
+                    kernel::current!().pid()
+                );
+                return false;
+            }
+            *count -= 1;
+            if *count == 0 {
+                // Decrements are not "critical"; preserve existing semantics (no thread pinning).
+                self.node.update_refcount(false, *node_count, strong);
+                *node_count = 0;
+                return other_count == 0;
+            }
+        }
+        false
+    }
+
     pub(crate) fn absorb(&mut self, mut other: Self) {
         assert!(
             Arc::ptr_eq(&self.node, &other.node),
@@ -826,44 +927,7 @@ impl NodeRef {
     ///
     /// Returns whether `self` should be removed (when both counts are zero).
     pub(crate) fn update(&mut self, inc: bool, strong: bool) -> bool {
-        if strong && self.strong_count == 0 {
-            return false;
-        }
-        let (count, node_count, other_count) = if strong {
-            (
-                &mut self.strong_count,
-                &mut self.strong_node_count,
-                self.weak_count,
-            )
-        } else {
-            (
-                &mut self.weak_count,
-                &mut self.weak_node_count,
-                self.strong_count,
-            )
-        };
-        if inc {
-            if *count == 0 {
-                *node_count = 1;
-                self.node.update_refcount(true, 1, strong);
-            }
-            *count += 1;
-        } else {
-            if *count == 0 {
-                pr_warn!(
-                    "pid {} performed invalid decrement on ref\n",
-                    kernel::current!().pid()
-                );
-                return false;
-            }
-            *count -= 1;
-            if *count == 0 {
-                self.node.update_refcount(false, *node_count, strong);
-                *node_count = 0;
-                return other_count == 0;
-            }
-        }
-        false
+        self.update_with_thread(inc, strong, None)
     }
 }
 

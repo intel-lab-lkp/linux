@@ -402,7 +402,7 @@ impl<'a> AllocationView<'a> {
                     .alloc
                     .process
                     .as_arc_borrow()
-                    .update_ref(handle, false, strong);
+                    .update_ref(handle, false, strong, None);
                 return Err(EINVAL);
             }
         }
@@ -433,7 +433,7 @@ impl<'a> AllocationView<'a> {
                 self.alloc
                     .process
                     .as_arc_borrow()
-                    .update_ref(handle, false, strong)
+                    .update_ref(handle, false, strong, None)
             }
             _ => Ok(()),
         }

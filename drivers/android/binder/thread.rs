@@ -1330,26 +1330,30 @@ impl Thread {
                         drop(buffer);
                     }
                 }
-                BC_INCREFS => {
-                    self.process
-                        .as_arc_borrow()
-                        .update_ref(reader.read()?, true, false)?
-                }
-                BC_ACQUIRE => {
-                    self.process
-                        .as_arc_borrow()
-                        .update_ref(reader.read()?, true, true)?
-                }
-                BC_RELEASE => {
-                    self.process
-                        .as_arc_borrow()
-                        .update_ref(reader.read()?, false, true)?
-                }
-                BC_DECREFS => {
-                    self.process
-                        .as_arc_borrow()
-                        .update_ref(reader.read()?, false, false)?
-                }
+                BC_INCREFS => self.process.as_arc_borrow().update_ref(
+                    reader.read()?,
+                    true,
+                    false,
+                    Some(self),
+                )?,
+                BC_ACQUIRE => self.process.as_arc_borrow().update_ref(
+                    reader.read()?,
+                    true,
+                    true,
+                    Some(self),
+                )?,
+                BC_RELEASE => self.process.as_arc_borrow().update_ref(
+                    reader.read()?,
+                    false,
+                    true,
+                    Some(self),
+                )?,
+                BC_DECREFS => self.process.as_arc_borrow().update_ref(
+                    reader.read()?,
+                    false,
+                    false,
+                    Some(self),
+                )?,
                 BC_INCREFS_DONE => self.process.inc_ref_done(&mut reader, false)?,
                 BC_ACQUIRE_DONE => self.process.inc_ref_done(&mut reader, true)?,
                 BC_REQUEST_DEATH_NOTIFICATION => self.process.request_death(&mut reader, self)?,
