@@ -6127,6 +6127,18 @@ static inline vm_fault_t wp_huge_pmd(struct vm_fault *vmf)
 		}
 	}
 
+
+	if (is_exec_mapping(vma->vm_flags) &&
+	    is_cow_mapping(vma->vm_flags)) {
+		/* Skip special and shmem */
+		if (vma_is_special_huge(vma) || vma_is_shmem(vma))
+			goto split;
+
+		ret = do_huge_pmd_exec_cow(vmf);
+		if (!(ret & VM_FAULT_FALLBACK))
+			return ret;
+	}
+
 split:
 	/* COW or write-notify handled on pte level: split pmd. */
 	__split_huge_pmd(vma, vmf->pmd, vmf->address, false);
