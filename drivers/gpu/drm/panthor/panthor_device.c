@@ -22,6 +22,7 @@
 #include "panthor_gpu.h"
 #include "panthor_hw.h"
 #include "panthor_mmu.h"
+#include "panthor_perf.h"
 #include "panthor_pwr.h"
 #include "panthor_regs.h"
 #include "panthor_sched.h"
@@ -305,6 +306,10 @@ int panthor_device_init(struct panthor_device *ptdev)
 
 	panthor_gem_init(ptdev);
 
+	ret = panthor_perf_init(ptdev);
+	if (ret)
+		goto err_unplug_sched;
+
 	/* ~3 frames */
 	pm_runtime_set_autosuspend_delay(ptdev->base.dev, 50);
 	pm_runtime_use_autosuspend(ptdev->base.dev);
@@ -318,6 +323,8 @@ int panthor_device_init(struct panthor_device *ptdev)
 
 err_disable_autosuspend:
 	pm_runtime_dont_use_autosuspend(ptdev->base.dev);
+
+err_unplug_sched:
 	panthor_sched_unplug(ptdev);
 
 err_unplug_fw:

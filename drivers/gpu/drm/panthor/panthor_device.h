@@ -142,6 +142,9 @@ struct panthor_device {
 	/** @pwr: Power control management data. */
 	struct panthor_pwr *pwr;
 
+	/** @perf_info: Performance counter interface information. */
+	struct drm_panthor_perf_info perf_info;
+
 	/** @gpu: GPU management data. */
 	struct panthor_gpu *gpu;
 
