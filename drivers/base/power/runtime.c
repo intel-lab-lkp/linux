@@ -1879,11 +1879,22 @@ void pm_runtime_reinit(struct device *dev)
 				pm_runtime_put(dev->parent);
 		}
 	}
+
 	/*
 	 * Clear power.needs_force_resume in case it has been set by
 	 * pm_runtime_force_suspend() invoked from a driver remove callback.
 	 */
+	if (dev->power.irq_safe)
+		spin_lock(&dev->power.lock);
+	else
+		spin_lock_irq(&dev->power.lock);
+
 	dev->power.needs_force_resume = false;
+
+	if (dev->power.irq_safe)
+		spin_unlock(&dev->power.lock);
+	else
+		spin_unlock_irq(&dev->power.lock);
 }
 
 /**
