@@ -2158,7 +2158,6 @@ int otx2_stop(struct net_device *netdev)
 	struct otx2_nic *pf = netdev_priv(netdev);
 	struct otx2_cq_poll *cq_poll = NULL;
 	struct otx2_qset *qset = &pf->qset;
-	struct otx2_rss_info *rss;
 	int qidx, vec, wrk;
 
 	/* If the DOWN flag is set resources are already freed */
@@ -2176,10 +2175,7 @@ int otx2_stop(struct net_device *netdev)
 	otx2_rxtx_enable(pf, false);
 
 	/* Clear RSS enable flag */
-	rss = &pf->hw.rss_info;
-	rss->enable = false;
-	if (!netif_is_rxfh_configured(netdev))
-		kfree(rss->rss_ctx[DEFAULT_RSS_CONTEXT_GROUP]);
+	pf->hw.rss_info.enable = false;
 
 	/* Cleanup Queue IRQ */
 	vec = pci_irq_vector(pf->pdev,
@@ -2224,6 +2220,7 @@ static netdev_tx_t otx2_xmit(struct sk_buff *skb, struct net_device *netdev)
 {
 	struct otx2_nic *pf = netdev_priv(netdev);
 	int qidx = skb_get_queue_mapping(skb);
+	struct otx2_dev_stats *dev_stats;
 	struct otx2_snd_queue *sq;
 	struct netdev_queue *txq;
 	int sq_idx;
@@ -2236,6 +2233,8 @@ static netdev_tx_t otx2_xmit(struct sk_buff *skb, struct net_device *netdev)
 	/* Check for minimum and maximum packet length */
 	if (skb->len <= ETH_HLEN ||
 	    (!skb_shinfo(skb)->gso_size && skb->len > pf->tx_max_pktlen)) {
+		dev_stats = &pf->hw.dev_stats;
+		atomic_long_inc(&dev_stats->tx_discards);
 		dev_kfree_skb(skb);
 		return NETDEV_TX_OK;
 	}
@@ -2446,18 +2445,26 @@ static int otx2_config_hw_tx_tstamp(struct otx2_nic *pfvf, bool enable)
 	return 0;
 }
 
-int otx2_config_hwtstamp(struct net_device *netdev, struct ifreq *ifr)
+int otx2_config_hwtstamp_get(struct net_device *netdev,
+			     struct kernel_hwtstamp_config *config)
 {
 	struct otx2_nic *pfvf = netdev_priv(netdev);
-	struct hwtstamp_config config;
+
+	*config = pfvf->tstamp;
+	return 0;
+}
+EXPORT_SYMBOL(otx2_config_hwtstamp_get);
+
+int otx2_config_hwtstamp_set(struct net_device *netdev,
+			     struct kernel_hwtstamp_config *config,
+			     struct netlink_ext_ack *extack)
+{
+	struct otx2_nic *pfvf = netdev_priv(netdev);
 
 	if (!pfvf->ptp)
 		return -ENODEV;
 
-	if (copy_from_user(&config, ifr->ifr_data, sizeof(config)))
-		return -EFAULT;
-
-	switch (config.tx_type) {
+	switch (config->tx_type) {
 	case HWTSTAMP_TX_OFF:
 		if (pfvf->flags & OTX2_FLAG_PTP_ONESTEP_SYNC)
 			pfvf->flags &= ~OTX2_FLAG_PTP_ONESTEP_SYNC;
@@ -2466,8 +2473,11 @@ int otx2_config_hwtstamp(struct net_device *netdev, struct ifreq *ifr)
 		otx2_config_hw_tx_tstamp(pfvf, false);
 		break;
 	case HWTSTAMP_TX_ONESTEP_SYNC:
-		if (!test_bit(CN10K_PTP_ONESTEP, &pfvf->hw.cap_flag))
+		if (!test_bit(CN10K_PTP_ONESTEP, &pfvf->hw.cap_flag)) {
+			NL_SET_ERR_MSG_MOD(extack,
+					   "One-step time stamping is not supported");
 			return -ERANGE;
+		}
 		pfvf->flags |= OTX2_FLAG_PTP_ONESTEP_SYNC;
 		schedule_delayed_work(&pfvf->ptp->synctstamp_work,
 				      msecs_to_jiffies(500));
@@ -2479,7 +2489,7 @@ int otx2_config_hwtstamp(struct net_device *netdev, struct ifreq *ifr)
 		return -ERANGE;
 	}
 
-	switch (config.rx_filter) {
+	switch (config->rx_filter) {
 	case HWTSTAMP_FILTER_NONE:
 		otx2_config_hw_rx_tstamp(pfvf, false);
 		break;
@@ -2498,35 +2508,17 @@ int otx2_config_hwtstamp(struct net_device *netdev, struct ifreq *ifr)
 	case HWTSTAMP_FILTER_PTP_V2_SYNC:
 	case HWTSTAMP_FILTER_PTP_V2_DELAY_REQ:
 		otx2_config_hw_rx_tstamp(pfvf, true);
-		config.rx_filter = HWTSTAMP_FILTER_ALL;
+		config->rx_filter = HWTSTAMP_FILTER_ALL;
 		break;
 	default:
 		return -ERANGE;
 	}
 
-	memcpy(&pfvf->tstamp, &config, sizeof(config));
+	pfvf->tstamp = *config;
 
-	return copy_to_user(ifr->ifr_data, &config,
-			    sizeof(config)) ? -EFAULT : 0;
+	return 0;
 }
-EXPORT_SYMBOL(otx2_config_hwtstamp);
-
-int otx2_ioctl(struct net_device *netdev, struct ifreq *req, int cmd)
-{
-	struct otx2_nic *pfvf = netdev_priv(netdev);
-	struct hwtstamp_config *cfg = &pfvf->tstamp;
-
-	switch (cmd) {
-	case SIOCSHWTSTAMP:
-		return otx2_config_hwtstamp(netdev, req);
-	case SIOCGHWTSTAMP:
-		return copy_to_user(req->ifr_data, cfg,
-				    sizeof(*cfg)) ? -EFAULT : 0;
-	default:
-		return -EOPNOTSUPP;
-	}
-}
-EXPORT_SYMBOL(otx2_ioctl);
+EXPORT_SYMBOL(otx2_config_hwtstamp_set);
 
 static int otx2_do_set_vf_mac(struct otx2_nic *pf, int vf, const u8 *mac)
 {
@@ -2943,7 +2935,6 @@ static const struct net_device_ops otx2_netdev_ops = {
 	.ndo_set_features	= otx2_set_features,
 	.ndo_tx_timeout		= otx2_tx_timeout,
 	.ndo_get_stats64	= otx2_get_stats64,
-	.ndo_eth_ioctl		= otx2_ioctl,
 	.ndo_set_vf_mac		= otx2_set_vf_mac,
 	.ndo_set_vf_vlan	= otx2_set_vf_vlan,
 	.ndo_get_vf_config	= otx2_get_vf_config,
@@ -2952,6 +2943,8 @@ static const struct net_device_ops otx2_netdev_ops = {
 	.ndo_xdp_xmit           = otx2_xdp_xmit,
 	.ndo_setup_tc		= otx2_setup_tc,
 	.ndo_set_vf_trust	= otx2_ndo_set_vf_trust,
+	.ndo_hwtstamp_get	= otx2_config_hwtstamp_get,
+	.ndo_hwtstamp_set	= otx2_config_hwtstamp_set,
 };
 
 int otx2_wq_init(struct otx2_nic *pf)
@@ -3543,6 +3536,7 @@ static void otx2_remove(struct pci_dev *pdev)
 	otx2_disable_mbox_intr(pf);
 	otx2_pfaf_mbox_destroy(pf);
 	pci_free_irq_vectors(pf->pdev);
+	bitmap_free(pf->af_xdp_zc_qidx);
 	pci_set_drvdata(pdev, NULL);
 	free_netdev(netdev);
 }

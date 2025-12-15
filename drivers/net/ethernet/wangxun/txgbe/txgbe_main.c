@@ -398,9 +398,11 @@ static int txgbe_sw_init(struct wx *wx)
 	wx->configure_fdir = txgbe_configure_fdir;
 
 	set_bit(WX_FLAG_RSC_CAPABLE, wx->flags);
+	set_bit(WX_FLAG_RSC_ENABLED, wx->flags);
 	set_bit(WX_FLAG_MULTI_64_FUNC, wx->flags);
 
 	/* enable itr by default in dynamic mode */
+	wx->adaptive_itr = true;
 	wx->rx_itr_setting = 1;
 	wx->tx_itr_setting = 1;
 
@@ -422,6 +424,8 @@ static int txgbe_sw_init(struct wx *wx)
 		break;
 	case wx_mac_aml:
 	case wx_mac_aml40:
+		set_bit(WX_FLAG_RX_MERGE_ENABLED, wx->flags);
+		set_bit(WX_FLAG_TXHEAD_WB_ENABLED, wx->flags);
 		set_bit(WX_FLAG_SWFW_RING, wx->flags);
 		wx->swfw_index = 0;
 		break;
@@ -800,6 +804,8 @@ static int txgbe_probe(struct pci_dev *pdev,
 	netdev->features |= NETIF_F_HIGHDMA;
 	netdev->hw_features |= NETIF_F_GRO;
 	netdev->features |= NETIF_F_GRO;
+	netdev->hw_features |= NETIF_F_LRO;
+	netdev->features |= NETIF_F_LRO;
 	netdev->features |= NETIF_F_RX_UDP_TUNNEL_PORT;
 
 	netdev->priv_flags |= IFF_UNICAST_FLT;

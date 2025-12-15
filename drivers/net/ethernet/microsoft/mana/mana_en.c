@@ -10,6 +10,7 @@
 #include <linux/filter.h>
 #include <linux/mm.h>
 #include <linux/pci.h>
+#include <linux/export.h>
 
 #include <net/checksum.h>
 #include <net/ip6_checksum.h>
@@ -19,6 +20,7 @@
 
 #include <net/mana/mana.h>
 #include <net/mana/mana_auxiliary.h>
+#include <net/mana/hw_channel.h>
 
 static DEFINE_IDA(mana_adev_ida);
 
@@ -56,6 +58,15 @@ static bool mana_en_need_log(struct mana_port_context *apc, int err)
 		return true;
 }
 
+static void mana_put_rx_page(struct mana_rxq *rxq, struct page *page,
+			     bool from_pool)
+{
+	if (from_pool)
+		page_pool_put_full_page(rxq->page_pool, page, false);
+	else
+		put_page(page);
+}
+
 /* Microsoft Azure Network Adapter (MANA) functions */
 
 static int mana_open(struct net_device *ndev)
@@ -74,7 +85,6 @@ static int mana_open(struct net_device *ndev)
 	/* Ensure port state updated before txq state */
 	smp_wmb();
 
-	netif_carrier_on(ndev);
 	netif_tx_wake_all_queues(ndev);
 	netdev_dbg(ndev, "%s successful\n", __func__);
 	return 0;
@@ -88,6 +98,46 @@ static int mana_close(struct net_device *ndev)
 		return 0;
 
 	return mana_detach(ndev, true);
+}
+
+static void mana_link_state_handle(struct work_struct *w)
+{
+	struct mana_context *ac;
+	struct net_device *ndev;
+	u32 link_event;
+	bool link_up;
+	int i;
+
+	ac = container_of(w, struct mana_context, link_change_work);
+
+	rtnl_lock();
+
+	link_event = READ_ONCE(ac->link_event);
+
+	if (link_event == HWC_DATA_HW_LINK_CONNECT)
+		link_up = true;
+	else if (link_event == HWC_DATA_HW_LINK_DISCONNECT)
+		link_up = false;
+	else
+		goto out;
+
+	/* Process all ports */
+	for (i = 0; i < ac->num_ports; i++) {
+		ndev = ac->ports[i];
+		if (!ndev)
+			continue;
+
+		if (link_up) {
+			netif_carrier_on(ndev);
+
+			__netdev_notify_peers(ndev);
+		} else {
+			netif_carrier_off(ndev);
+		}
+	}
+
+out:
+	rtnl_unlock();
 }
 
 static bool mana_can_tx(struct gdma_queue *wq)
@@ -629,21 +679,40 @@ static void *mana_get_rxbuf_pre(struct mana_rxq *rxq, dma_addr_t *da)
 }
 
 /* Get RX buffer's data size, alloc size, XDP headroom based on MTU */
-static void mana_get_rxbuf_cfg(int mtu, u32 *datasize, u32 *alloc_size,
-			       u32 *headroom)
+static void mana_get_rxbuf_cfg(struct mana_port_context *apc,
+			       int mtu, u32 *datasize, u32 *alloc_size,
+			       u32 *headroom, u32 *frag_count)
 {
-	if (mtu > MANA_XDP_MTU_MAX)
-		*headroom = 0; /* no support for XDP */
-	else
-		*headroom = XDP_PACKET_HEADROOM;
+	u32 len, buf_size;
 
-	*alloc_size = SKB_DATA_ALIGN(mtu + MANA_RXBUF_PAD + *headroom);
-
-	/* Using page pool in this case, so alloc_size is PAGE_SIZE */
-	if (*alloc_size < PAGE_SIZE)
-		*alloc_size = PAGE_SIZE;
-
+	/* Calculate datasize first (consistent across all cases) */
 	*datasize = mtu + ETH_HLEN;
+
+	/* For xdp and jumbo frames make sure only one packet fits per page */
+	if (mtu + MANA_RXBUF_PAD > PAGE_SIZE / 2 || mana_xdp_get(apc)) {
+		if (mana_xdp_get(apc)) {
+			*headroom = XDP_PACKET_HEADROOM;
+			*alloc_size = PAGE_SIZE;
+		} else {
+			*headroom = 0; /* no support for XDP */
+			*alloc_size = SKB_DATA_ALIGN(mtu + MANA_RXBUF_PAD +
+						     *headroom);
+		}
+
+		*frag_count = 1;
+		return;
+	}
+
+	/* Standard MTU case - optimize for multiple packets per page */
+	*headroom = 0;
+
+	/* Calculate base buffer size needed */
+	len = SKB_DATA_ALIGN(mtu + MANA_RXBUF_PAD + *headroom);
+	buf_size = ALIGN(len, MANA_RX_FRAG_ALIGNMENT);
+
+	/* Calculate how many packets can fit in a page */
+	*frag_count = PAGE_SIZE / buf_size;
+	*alloc_size = buf_size;
 }
 
 int mana_pre_alloc_rxbufs(struct mana_port_context *mpc, int new_mtu, int num_queues)
@@ -655,8 +724,9 @@ int mana_pre_alloc_rxbufs(struct mana_port_context *mpc, int new_mtu, int num_qu
 	void *va;
 	int i;
 
-	mana_get_rxbuf_cfg(new_mtu, &mpc->rxbpre_datasize,
-			   &mpc->rxbpre_alloc_size, &mpc->rxbpre_headroom);
+	mana_get_rxbuf_cfg(mpc, new_mtu, &mpc->rxbpre_datasize,
+			   &mpc->rxbpre_alloc_size, &mpc->rxbpre_headroom,
+			   &mpc->rxbpre_frag_count);
 
 	dev = mpc->ac->gdma_dev->gdma_context->dev;
 
@@ -784,7 +854,7 @@ static int mana_shaper_del(struct net_shaper_binding *binding,
 		/* Reset mana port context parameters */
 		apc->handle.id = 0;
 		apc->handle.scope = NET_SHAPER_SCOPE_UNSPEC;
-		apc->speed = 0;
+		apc->speed = apc->max_speed;
 	}
 
 	return err;
@@ -1841,8 +1911,11 @@ drop_xdp:
 
 drop:
 	if (from_pool) {
-		page_pool_recycle_direct(rxq->page_pool,
-					 virt_to_head_page(buf_va));
+		if (rxq->frag_count == 1)
+			page_pool_recycle_direct(rxq->page_pool,
+						 virt_to_head_page(buf_va));
+		else
+			page_pool_free_va(rxq->page_pool, buf_va, true);
 	} else {
 		WARN_ON_ONCE(rxq->xdp_save_va);
 		/* Save for reuse */
@@ -1858,33 +1931,46 @@ static void *mana_get_rxfrag(struct mana_rxq *rxq, struct device *dev,
 			     dma_addr_t *da, bool *from_pool)
 {
 	struct page *page;
+	u32 offset;
 	void *va;
-
 	*from_pool = false;
 
-	/* Reuse XDP dropped page if available */
-	if (rxq->xdp_save_va) {
-		va = rxq->xdp_save_va;
-		rxq->xdp_save_va = NULL;
-	} else {
-		page = page_pool_dev_alloc_pages(rxq->page_pool);
-		if (!page)
+	/* Don't use fragments for jumbo frames or XDP where it's 1 fragment
+	 * per page.
+	 */
+	if (rxq->frag_count == 1) {
+		/* Reuse XDP dropped page if available */
+		if (rxq->xdp_save_va) {
+			va = rxq->xdp_save_va;
+			page = virt_to_head_page(va);
+			rxq->xdp_save_va = NULL;
+		} else {
+			page = page_pool_dev_alloc_pages(rxq->page_pool);
+			if (!page)
+				return NULL;
+
+			*from_pool = true;
+			va = page_to_virt(page);
+		}
+
+		*da = dma_map_single(dev, va + rxq->headroom, rxq->datasize,
+				     DMA_FROM_DEVICE);
+		if (dma_mapping_error(dev, *da)) {
+			mana_put_rx_page(rxq, page, *from_pool);
 			return NULL;
+		}
 
-		*from_pool = true;
-		va = page_to_virt(page);
+		return va;
 	}
 
-	*da = dma_map_single(dev, va + rxq->headroom, rxq->datasize,
-			     DMA_FROM_DEVICE);
-	if (dma_mapping_error(dev, *da)) {
-		if (*from_pool)
-			page_pool_put_full_page(rxq->page_pool, page, false);
-		else
-			put_page(virt_to_head_page(va));
-
+	page =  page_pool_dev_alloc_frag(rxq->page_pool, &offset,
+					 rxq->alloc_size);
+	if (!page)
 		return NULL;
-	}
+
+	va  = page_to_virt(page) + offset;
+	*da = page_pool_get_dma_addr(page) + offset + rxq->headroom;
+	*from_pool = true;
 
 	return va;
 }
@@ -1901,9 +1987,9 @@ static void mana_refill_rx_oob(struct device *dev, struct mana_rxq *rxq,
 	va = mana_get_rxfrag(rxq, dev, &da, &from_pool);
 	if (!va)
 		return;
-
-	dma_unmap_single(dev, rxoob->sgl[0].address, rxq->datasize,
-			 DMA_FROM_DEVICE);
+	if (!rxoob->from_pool || rxq->frag_count == 1)
+		dma_unmap_single(dev, rxoob->sgl[0].address, rxq->datasize,
+				 DMA_FROM_DEVICE);
 	*old_buf = rxoob->buf_va;
 	*old_fp = rxoob->from_pool;
 
@@ -2099,10 +2185,8 @@ static void mana_destroy_txq(struct mana_port_context *apc)
 		napi = &apc->tx_qp[i].tx_cq.napi;
 		if (apc->tx_qp[i].txq.napi_initialized) {
 			napi_synchronize(napi);
-			netdev_lock_ops_to_full(napi->dev);
 			napi_disable_locked(napi);
 			netif_napi_del_locked(napi);
-			netdev_unlock_full_to_ops(napi->dev);
 			apc->tx_qp[i].txq.napi_initialized = false;
 		}
 		mana_destroy_wq_obj(apc, GDMA_SQ, apc->tx_qp[i].tx_object);
@@ -2255,10 +2339,8 @@ static int mana_create_txq(struct mana_port_context *apc,
 		mana_create_txq_debugfs(apc, i);
 
 		set_bit(NAPI_STATE_NO_BUSY_POLL, &cq->napi.state);
-		netdev_lock_ops_to_full(net);
 		netif_napi_add_locked(net, &cq->napi, mana_poll);
 		napi_enable_locked(&cq->napi);
-		netdev_unlock_full_to_ops(net);
 		txq->napi_initialized = true;
 
 		mana_gd_ring_cq(cq->gdma_cq, SET_ARM_BIT);
@@ -2294,10 +2376,8 @@ static void mana_destroy_rxq(struct mana_port_context *apc,
 	if (napi_initialized) {
 		napi_synchronize(napi);
 
-		netdev_lock_ops_to_full(napi->dev);
 		napi_disable_locked(napi);
 		netif_napi_del_locked(napi);
-		netdev_unlock_full_to_ops(napi->dev);
 	}
 	xdp_rxq_info_unreg(&rxq->xdp_rxq);
 
@@ -2314,15 +2394,15 @@ static void mana_destroy_rxq(struct mana_port_context *apc,
 		if (!rx_oob->buf_va)
 			continue;
 
-		dma_unmap_single(dev, rx_oob->sgl[0].address,
-				 rx_oob->sgl[0].size, DMA_FROM_DEVICE);
-
 		page = virt_to_head_page(rx_oob->buf_va);
 
-		if (rx_oob->from_pool)
-			page_pool_put_full_page(rxq->page_pool, page, false);
-		else
-			put_page(page);
+		if (rxq->frag_count == 1 || !rx_oob->from_pool) {
+			dma_unmap_single(dev, rx_oob->sgl[0].address,
+					 rx_oob->sgl[0].size, DMA_FROM_DEVICE);
+			mana_put_rx_page(rxq, page, rx_oob->from_pool);
+		} else {
+			page_pool_free_va(rxq->page_pool, rx_oob->buf_va, true);
+		}
 
 		rx_oob->buf_va = NULL;
 	}
@@ -2428,11 +2508,22 @@ static int mana_create_page_pool(struct mana_rxq *rxq, struct gdma_context *gc)
 	struct page_pool_params pprm = {};
 	int ret;
 
-	pprm.pool_size = mpc->rx_queue_size;
+	pprm.pool_size = mpc->rx_queue_size / rxq->frag_count + 1;
 	pprm.nid = gc->numa_node;
 	pprm.napi = &rxq->rx_cq.napi;
 	pprm.netdev = rxq->ndev;
 	pprm.order = get_order(rxq->alloc_size);
+	pprm.queue_idx = rxq->rxq_idx;
+	pprm.dev = gc->dev;
+
+	/* Let the page pool do the dma map when page sharing with multiple
+	 * fragments enabled for rx buffers.
+	 */
+	if (rxq->frag_count > 1) {
+		pprm.flags =  PP_FLAG_DMA_MAP | PP_FLAG_DMA_SYNC_DEV;
+		pprm.max_len = PAGE_SIZE;
+		pprm.dma_dir = DMA_FROM_DEVICE;
+	}
 
 	rxq->page_pool = page_pool_create(&pprm);
 
@@ -2471,9 +2562,8 @@ static struct mana_rxq *mana_create_rxq(struct mana_port_context *apc,
 	rxq->rxq_idx = rxq_idx;
 	rxq->rxobj = INVALID_MANA_HANDLE;
 
-	mana_get_rxbuf_cfg(ndev->mtu, &rxq->datasize, &rxq->alloc_size,
-			   &rxq->headroom);
-
+	mana_get_rxbuf_cfg(apc, ndev->mtu, &rxq->datasize, &rxq->alloc_size,
+			   &rxq->headroom, &rxq->frag_count);
 	/* Create page pool for RX queue */
 	err = mana_create_page_pool(rxq, gc);
 	if (err) {
@@ -2548,18 +2638,14 @@ static struct mana_rxq *mana_create_rxq(struct mana_port_context *apc,
 
 	gc->cq_table[cq->gdma_id] = cq->gdma_cq;
 
-	netdev_lock_ops_to_full(ndev);
 	netif_napi_add_weight_locked(ndev, &cq->napi, mana_poll, 1);
-	netdev_unlock_full_to_ops(ndev);
 
 	WARN_ON(xdp_rxq_info_reg(&rxq->xdp_rxq, ndev, rxq_idx,
 				 cq->napi.napi_id));
 	WARN_ON(xdp_rxq_info_reg_mem_model(&rxq->xdp_rxq, MEM_TYPE_PAGE_POOL,
 					   rxq->page_pool));
 
-	netdev_lock_ops_to_full(ndev);
 	napi_enable_locked(&cq->napi);
-	netdev_unlock_full_to_ops(ndev);
 
 	mana_gd_ring_cq(cq->gdma_cq, SET_ARM_BIT);
 out:
@@ -3013,9 +3099,6 @@ int mana_attach(struct net_device *ndev)
 	/* Ensure port state updated before txq state */
 	smp_wmb();
 
-	if (apc->port_is_up)
-		netif_carrier_on(ndev);
-
 	netif_device_attach(ndev);
 
 	return 0;
@@ -3108,7 +3191,6 @@ int mana_detach(struct net_device *ndev, bool from_close)
 	smp_wmb();
 
 	netif_tx_disable(ndev);
-	netif_carrier_off(ndev);
 
 	if (apc->port_st_save) {
 		err = mana_dealloc_queues(ndev);
@@ -3196,6 +3278,8 @@ static int mana_probe_port(struct mana_context *ac, int port_idx,
 		netdev_err(ndev, "Unable to register netdev.\n");
 		goto free_indir;
 	}
+
+	netif_carrier_on(ndev);
 
 	debugfs_create_u32("current_speed", 0400, apc->mana_port_debugfs, &apc->speed);
 
@@ -3385,6 +3469,8 @@ int mana_probe(struct gdma_dev *gd, bool resuming)
 
 	if (!resuming) {
 		ac->num_ports = num_ports;
+
+		INIT_WORK(&ac->link_change_work, mana_link_state_handle);
 	} else {
 		if (ac->num_ports != num_ports) {
 			dev_err(dev, "The number of vPorts changed: %d->%d\n",
@@ -3392,6 +3478,8 @@ int mana_probe(struct gdma_dev *gd, bool resuming)
 			err = -EPROTO;
 			goto out;
 		}
+
+		enable_work(&ac->link_change_work);
 	}
 
 	if (ac->num_ports == 0)
@@ -3453,6 +3541,8 @@ void mana_remove(struct gdma_dev *gd, bool suspending)
 	struct net_device *ndev;
 	int err;
 	int i;
+
+	disable_work_sync(&ac->link_change_work);
 
 	/* adev currently doesn't support suspending, always remove it */
 	if (gd->adev)

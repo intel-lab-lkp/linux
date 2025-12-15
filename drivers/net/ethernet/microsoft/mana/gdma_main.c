@@ -8,6 +8,7 @@
 #include <linux/version.h>
 #include <linux/msi.h>
 #include <linux/irqdomain.h>
+#include <linux/export.h>
 
 #include <net/mana/mana.h>
 #include <net/mana/hw_channel.h>
@@ -527,6 +528,7 @@ static void mana_gd_process_eqe(struct gdma_queue *eq)
 	case GDMA_EQE_HWC_INIT_DONE:
 	case GDMA_EQE_HWC_SOC_SERVICE:
 	case GDMA_EQE_RNIC_QP_FATAL:
+	case GDMA_EQE_HWC_SOC_RECONFIG_DATA:
 		if (!eq->eq.callback)
 			break;
 
@@ -657,7 +659,7 @@ static int mana_gd_register_irq(struct gdma_queue *queue,
 	return 0;
 }
 
-static void mana_gd_deregiser_irq(struct gdma_queue *queue)
+static void mana_gd_deregister_irq(struct gdma_queue *queue)
 {
 	struct gdma_dev *gd = queue->gdma_dev;
 	struct gdma_irq_context *gic;
@@ -750,7 +752,7 @@ static void mana_gd_destroy_eq(struct gdma_context *gc, bool flush_evenets,
 			dev_warn(gc->dev, "Failed to flush EQ: %d\n", err);
 	}
 
-	mana_gd_deregiser_irq(queue);
+	mana_gd_deregister_irq(queue);
 
 	if (queue->eq.disable_needed)
 		mana_gd_disable_queue(queue);

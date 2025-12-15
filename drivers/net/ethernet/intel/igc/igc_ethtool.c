@@ -627,11 +627,11 @@ igc_ethtool_set_ringparam(struct net_device *netdev,
 	}
 
 	if (adapter->num_tx_queues > adapter->num_rx_queues)
-		temp_ring = vmalloc(array_size(sizeof(struct igc_ring),
-					       adapter->num_tx_queues));
+		temp_ring = vmalloc_array(adapter->num_tx_queues,
+					  sizeof(struct igc_ring));
 	else
-		temp_ring = vmalloc(array_size(sizeof(struct igc_ring),
-					       adapter->num_rx_queues));
+		temp_ring = vmalloc_array(adapter->num_rx_queues,
+					  sizeof(struct igc_ring));
 
 	if (!temp_ring) {
 		err = -ENOMEM;
@@ -810,7 +810,7 @@ static int igc_ethtool_get_sset_count(struct net_device *netdev, int sset)
 	case ETH_SS_PRIV_FLAGS:
 		return IGC_PRIV_FLAGS_STR_LEN;
 	default:
-		return -ENOTSUPP;
+		return -EOPNOTSUPP;
 	}
 }
 
@@ -1283,6 +1283,24 @@ static void igc_ethtool_init_nfc_rule(struct igc_nfc_rule *rule,
 		rule->flex = true;
 	else
 		rule->flex = false;
+
+	/* The wildcard rule is only applied if:
+	 *  a) None of the other filtering rules match (match_flags is zero)
+	 *  b) The flow type is ETHER_FLOW only (no additional fields set)
+	 *  c) Mask for Source MAC address is not specified (all zeros)
+	 *  d) Mask for Destination MAC address is not specified (all zeros)
+	 *  e) Mask for L2 EtherType is not specified (zero)
+	 *
+	 * If all these conditions are met, the rule is treated as a wildcard
+	 * rule. Default queue feature will be used, so that all packets that do
+	 * not match any other rule will be routed to the default queue.
+	 */
+	if (!rule->filter.match_flags &&
+	    fsp->flow_type == ETHER_FLOW &&
+	    is_zero_ether_addr(fsp->m_u.ether_spec.h_source) &&
+	    is_zero_ether_addr(fsp->m_u.ether_spec.h_dest) &&
+	    !fsp->m_u.ether_spec.h_proto)
+		rule->filter.match_flags = IGC_FILTER_FLAG_DEFAULT_QUEUE;
 }
 
 /**
@@ -2075,6 +2093,9 @@ static void igc_ethtool_diag_test(struct net_device *netdev,
 	if (eth_test->flags == ETH_TEST_FL_OFFLINE) {
 		netdev_info(adapter->netdev, "Offline testing starting");
 		set_bit(__IGC_TESTING, &adapter->state);
+
+		/* power up PHY for link test */
+		igc_power_up_phy_copper(&adapter->hw);
 
 		/* Link test performed before hardware reset so autoneg doesn't
 		 * interfere with test result

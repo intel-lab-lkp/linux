@@ -706,9 +706,9 @@ static int emac_rx_packet(struct prueth_emac *emac, u32 flow_id, u32 *xdp_state)
 	struct page_pool *pool;
 	struct sk_buff *skb;
 	struct xdp_buff xdp;
+	int headroom, ret;
 	u32 *psdata;
 	void *pa;
-	int ret;
 
 	*xdp_state = 0;
 	pool = rx_chn->pg_pool;
@@ -757,22 +757,23 @@ static int emac_rx_packet(struct prueth_emac *emac, u32 flow_id, u32 *xdp_state)
 		xdp_prepare_buff(&xdp, pa, PRUETH_HEADROOM, pkt_len, false);
 
 		*xdp_state = emac_run_xdp(emac, &xdp, page, &pkt_len);
-		if (*xdp_state == ICSSG_XDP_PASS)
-			skb = xdp_build_skb_from_buff(&xdp);
-		else
+		if (*xdp_state != ICSSG_XDP_PASS)
 			goto requeue;
+		headroom = xdp.data - xdp.data_hard_start;
+		pkt_len = xdp.data_end - xdp.data;
 	} else {
-		/* prepare skb and send to n/w stack */
-		skb = napi_build_skb(pa, PAGE_SIZE);
+		headroom = PRUETH_HEADROOM;
 	}
 
+	/* prepare skb and send to n/w stack */
+	skb = napi_build_skb(pa, PAGE_SIZE);
 	if (!skb) {
 		ndev->stats.rx_dropped++;
 		page_pool_recycle_direct(pool, page);
 		goto requeue;
 	}
 
-	skb_reserve(skb, PRUETH_HEADROOM);
+	skb_reserve(skb, headroom);
 	skb_put(skb, pkt_len);
 	skb->dev = ndev;
 
@@ -1222,15 +1223,13 @@ void icssg_ndo_tx_timeout(struct net_device *ndev, unsigned int txqueue)
 }
 EXPORT_SYMBOL_GPL(icssg_ndo_tx_timeout);
 
-static int emac_set_ts_config(struct net_device *ndev, struct ifreq *ifr)
+int icssg_ndo_set_ts_config(struct net_device *ndev,
+			    struct kernel_hwtstamp_config *config,
+			    struct netlink_ext_ack *extack)
 {
 	struct prueth_emac *emac = netdev_priv(ndev);
-	struct hwtstamp_config config;
 
-	if (copy_from_user(&config, ifr->ifr_data, sizeof(config)))
-		return -EFAULT;
-
-	switch (config.tx_type) {
+	switch (config->tx_type) {
 	case HWTSTAMP_TX_OFF:
 		emac->tx_ts_enabled = 0;
 		break;
@@ -1241,7 +1240,7 @@ static int emac_set_ts_config(struct net_device *ndev, struct ifreq *ifr)
 		return -ERANGE;
 	}
 
-	switch (config.rx_filter) {
+	switch (config->rx_filter) {
 	case HWTSTAMP_FILTER_NONE:
 		emac->rx_ts_enabled = 0;
 		break;
@@ -1261,43 +1260,28 @@ static int emac_set_ts_config(struct net_device *ndev, struct ifreq *ifr)
 	case HWTSTAMP_FILTER_PTP_V2_DELAY_REQ:
 	case HWTSTAMP_FILTER_NTP_ALL:
 		emac->rx_ts_enabled = 1;
-		config.rx_filter = HWTSTAMP_FILTER_ALL;
+		config->rx_filter = HWTSTAMP_FILTER_ALL;
 		break;
 	default:
 		return -ERANGE;
 	}
 
-	return copy_to_user(ifr->ifr_data, &config, sizeof(config)) ?
-		-EFAULT : 0;
+	return 0;
 }
+EXPORT_SYMBOL_GPL(icssg_ndo_set_ts_config);
 
-static int emac_get_ts_config(struct net_device *ndev, struct ifreq *ifr)
+int icssg_ndo_get_ts_config(struct net_device *ndev,
+			    struct kernel_hwtstamp_config *config)
 {
 	struct prueth_emac *emac = netdev_priv(ndev);
-	struct hwtstamp_config config;
 
-	config.flags = 0;
-	config.tx_type = emac->tx_ts_enabled ? HWTSTAMP_TX_ON : HWTSTAMP_TX_OFF;
-	config.rx_filter = emac->rx_ts_enabled ? HWTSTAMP_FILTER_ALL : HWTSTAMP_FILTER_NONE;
+	config->flags = 0;
+	config->tx_type = emac->tx_ts_enabled ? HWTSTAMP_TX_ON : HWTSTAMP_TX_OFF;
+	config->rx_filter = emac->rx_ts_enabled ? HWTSTAMP_FILTER_ALL : HWTSTAMP_FILTER_NONE;
 
-	return copy_to_user(ifr->ifr_data, &config, sizeof(config)) ?
-			    -EFAULT : 0;
+	return 0;
 }
-
-int icssg_ndo_ioctl(struct net_device *ndev, struct ifreq *ifr, int cmd)
-{
-	switch (cmd) {
-	case SIOCGHWTSTAMP:
-		return emac_get_ts_config(ndev, ifr);
-	case SIOCSHWTSTAMP:
-		return emac_set_ts_config(ndev, ifr);
-	default:
-		break;
-	}
-
-	return phy_do_ioctl(ndev, ifr, cmd);
-}
-EXPORT_SYMBOL_GPL(icssg_ndo_ioctl);
+EXPORT_SYMBOL_GPL(icssg_ndo_get_ts_config);
 
 void icssg_ndo_get_stats64(struct net_device *ndev,
 			   struct rtnl_link_stats64 *stats)

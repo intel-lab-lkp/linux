@@ -276,28 +276,41 @@ int move_addr_to_kernel(void __user *uaddr, int ulen, struct sockaddr_storage *k
 static int move_addr_to_user(struct sockaddr_storage *kaddr, int klen,
 			     void __user *uaddr, int __user *ulen)
 {
-	int err;
 	int len;
 
 	BUG_ON(klen > sizeof(struct sockaddr_storage));
-	err = get_user(len, ulen);
-	if (err)
-		return err;
+
+	if (can_do_masked_user_access())
+		ulen = masked_user_access_begin(ulen);
+	else if (!user_access_begin(ulen, 4))
+		return -EFAULT;
+
+	unsafe_get_user(len, ulen, efault_end);
+
 	if (len > klen)
 		len = klen;
-	if (len < 0)
-		return -EINVAL;
+	/*
+	 *      "fromlen shall refer to the value before truncation.."
+	 *                      1003.1g
+	 */
+	if (len >= 0)
+		unsafe_put_user(klen, ulen, efault_end);
+
+	user_access_end();
+
 	if (len) {
+		if (len < 0)
+			return -EINVAL;
 		if (audit_sockaddr(klen, kaddr))
 			return -ENOMEM;
 		if (copy_to_user(uaddr, kaddr, len))
 			return -EFAULT;
 	}
-	/*
-	 *      "fromlen shall refer to the value before truncation.."
-	 *                      1003.1g
-	 */
-	return __put_user(klen, ulen);
+	return 0;
+
+efault_end:
+	user_access_end();
+	return -EFAULT;
 }
 
 static struct kmem_cache *sock_inode_cachep __ro_after_init;
@@ -1176,6 +1189,9 @@ static ssize_t sock_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	if (sock->type == SOCK_SEQPACKET)
 		msg.msg_flags |= MSG_EOR;
 
+	if (iocb->ki_flags & IOCB_NOSIGNAL)
+		msg.msg_flags |= MSG_NOSIGNAL;
+
 	res = __sock_sendmsg(sock, &msg);
 	*from = msg.msg_iter;
 	return res;
@@ -1856,7 +1872,7 @@ int __sys_bind_socket(struct socket *sock, struct sockaddr_storage *address,
 				   addrlen);
 	if (!err)
 		err = READ_ONCE(sock->ops)->bind(sock,
-						 (struct sockaddr *)address,
+						 (struct sockaddr_unsized *)address,
 						 addrlen);
 	return err;
 }
@@ -2083,8 +2099,8 @@ int __sys_connect_file(struct file *file, struct sockaddr_storage *address,
 	if (err)
 		goto out;
 
-	err = READ_ONCE(sock->ops)->connect(sock, (struct sockaddr *)address,
-				addrlen, sock->file->f_flags | file_flags);
+	err = READ_ONCE(sock->ops)->connect(sock, (struct sockaddr_unsized *)address,
+					    addrlen, sock->file->f_flags | file_flags);
 out:
 	return err;
 }
@@ -3567,13 +3583,13 @@ static long compat_sock_ioctl(struct file *file, unsigned int cmd,
  *	Returns 0 or an error.
  */
 
-int kernel_bind(struct socket *sock, struct sockaddr *addr, int addrlen)
+int kernel_bind(struct socket *sock, struct sockaddr_unsized *addr, int addrlen)
 {
 	struct sockaddr_storage address;
 
 	memcpy(&address, addr, addrlen);
 
-	return READ_ONCE(sock->ops)->bind(sock, (struct sockaddr *)&address,
+	return READ_ONCE(sock->ops)->bind(sock, (struct sockaddr_unsized *)&address,
 					  addrlen);
 }
 EXPORT_SYMBOL(kernel_bind);
@@ -3646,14 +3662,14 @@ EXPORT_SYMBOL(kernel_accept);
  *	Returns 0 or an error code.
  */
 
-int kernel_connect(struct socket *sock, struct sockaddr *addr, int addrlen,
+int kernel_connect(struct socket *sock, struct sockaddr_unsized *addr, int addrlen,
 		   int flags)
 {
 	struct sockaddr_storage address;
 
 	memcpy(&address, addr, addrlen);
 
-	return READ_ONCE(sock->ops)->connect(sock, (struct sockaddr *)&address,
+	return READ_ONCE(sock->ops)->connect(sock, (struct sockaddr_unsized *)&address,
 					     addrlen, flags);
 }
 EXPORT_SYMBOL(kernel_connect);

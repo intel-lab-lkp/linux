@@ -228,19 +228,16 @@ static void refill_skbs(struct netpoll *np)
 {
 	struct sk_buff_head *skb_pool;
 	struct sk_buff *skb;
-	unsigned long flags;
 
 	skb_pool = &np->skb_pool;
 
-	spin_lock_irqsave(&skb_pool->lock, flags);
-	while (skb_pool->qlen < MAX_SKBS) {
+	while (READ_ONCE(skb_pool->qlen) < MAX_SKBS) {
 		skb = alloc_skb(MAX_SKB_SIZE, GFP_ATOMIC);
 		if (!skb)
 			break;
 
-		__skb_queue_tail(skb_pool, skb);
+		skb_queue_tail(skb_pool, skb);
 	}
-	spin_unlock_irqrestore(&skb_pool->lock, flags);
 }
 
 static void zap_completion_queue(void)
@@ -372,6 +369,31 @@ out:
 	return ret;
 }
 
+static void netpoll_udp_checksum(struct netpoll *np, struct sk_buff *skb,
+				 int len)
+{
+	struct udphdr *udph;
+	int udp_len;
+
+	udp_len = len + sizeof(struct udphdr);
+	udph = udp_hdr(skb);
+
+	/* check needs to be set, since it will be consumed in csum_partial */
+	udph->check = 0;
+	if (np->ipv6)
+		udph->check = csum_ipv6_magic(&np->local_ip.in6,
+					      &np->remote_ip.in6,
+					      udp_len, IPPROTO_UDP,
+					      csum_partial(udph, udp_len, 0));
+	else
+		udph->check = csum_tcpudp_magic(np->local_ip.ip,
+						np->remote_ip.ip,
+						udp_len, IPPROTO_UDP,
+						csum_partial(udph, udp_len, 0));
+	if (udph->check == 0)
+		udph->check = CSUM_MANGLED_0;
+}
+
 netdev_tx_t netpoll_send_skb(struct netpoll *np, struct sk_buff *skb)
 {
 	unsigned long flags;
@@ -389,24 +411,101 @@ netdev_tx_t netpoll_send_skb(struct netpoll *np, struct sk_buff *skb)
 }
 EXPORT_SYMBOL(netpoll_send_skb);
 
+static void push_ipv6(struct netpoll *np, struct sk_buff *skb, int len)
+{
+	struct ipv6hdr *ip6h;
+
+	skb_push(skb, sizeof(struct ipv6hdr));
+	skb_reset_network_header(skb);
+	ip6h = ipv6_hdr(skb);
+
+	/* ip6h->version = 6; ip6h->priority = 0; */
+	*(unsigned char *)ip6h = 0x60;
+	ip6h->flow_lbl[0] = 0;
+	ip6h->flow_lbl[1] = 0;
+	ip6h->flow_lbl[2] = 0;
+
+	ip6h->payload_len = htons(sizeof(struct udphdr) + len);
+	ip6h->nexthdr = IPPROTO_UDP;
+	ip6h->hop_limit = 32;
+	ip6h->saddr = np->local_ip.in6;
+	ip6h->daddr = np->remote_ip.in6;
+
+	skb->protocol = htons(ETH_P_IPV6);
+}
+
+static void push_ipv4(struct netpoll *np, struct sk_buff *skb, int len)
+{
+	static atomic_t ip_ident;
+	struct iphdr *iph;
+	int ip_len;
+
+	ip_len = len + sizeof(struct udphdr) + sizeof(struct iphdr);
+
+	skb_push(skb, sizeof(struct iphdr));
+	skb_reset_network_header(skb);
+	iph = ip_hdr(skb);
+
+	/* iph->version = 4; iph->ihl = 5; */
+	*(unsigned char *)iph = 0x45;
+	iph->tos = 0;
+	put_unaligned(htons(ip_len), &iph->tot_len);
+	iph->id = htons(atomic_inc_return(&ip_ident));
+	iph->frag_off = 0;
+	iph->ttl = 64;
+	iph->protocol = IPPROTO_UDP;
+	iph->check = 0;
+	put_unaligned(np->local_ip.ip, &iph->saddr);
+	put_unaligned(np->remote_ip.ip, &iph->daddr);
+	iph->check = ip_fast_csum((unsigned char *)iph, iph->ihl);
+	skb->protocol = htons(ETH_P_IP);
+}
+
+static void push_udp(struct netpoll *np, struct sk_buff *skb, int len)
+{
+	struct udphdr *udph;
+	int udp_len;
+
+	udp_len = len + sizeof(struct udphdr);
+
+	skb_push(skb, sizeof(struct udphdr));
+	skb_reset_transport_header(skb);
+
+	udph = udp_hdr(skb);
+	udph->source = htons(np->local_port);
+	udph->dest = htons(np->remote_port);
+	udph->len = htons(udp_len);
+
+	netpoll_udp_checksum(np, skb, len);
+}
+
+static void push_eth(struct netpoll *np, struct sk_buff *skb)
+{
+	struct ethhdr *eth;
+
+	eth = skb_push(skb, ETH_HLEN);
+	skb_reset_mac_header(skb);
+	ether_addr_copy(eth->h_source, np->dev->dev_addr);
+	ether_addr_copy(eth->h_dest, np->remote_mac);
+	if (np->ipv6)
+		eth->h_proto = htons(ETH_P_IPV6);
+	else
+		eth->h_proto = htons(ETH_P_IP);
+}
+
 int netpoll_send_udp(struct netpoll *np, const char *msg, int len)
 {
 	int total_len, ip_len, udp_len;
 	struct sk_buff *skb;
-	struct udphdr *udph;
-	struct iphdr *iph;
-	struct ethhdr *eth;
-	static atomic_t ip_ident;
-	struct ipv6hdr *ip6h;
 
 	if (!IS_ENABLED(CONFIG_PREEMPT_RT))
 		WARN_ON_ONCE(!irqs_disabled());
 
-	udp_len = len + sizeof(*udph);
+	udp_len = len + sizeof(struct udphdr);
 	if (np->ipv6)
-		ip_len = udp_len + sizeof(*ip6h);
+		ip_len = udp_len + sizeof(struct ipv6hdr);
 	else
-		ip_len = udp_len + sizeof(*iph);
+		ip_len = udp_len + sizeof(struct iphdr);
 
 	total_len = ip_len + LL_RESERVED_SPACE(np->dev);
 
@@ -418,74 +517,12 @@ int netpoll_send_udp(struct netpoll *np, const char *msg, int len)
 	skb_copy_to_linear_data(skb, msg, len);
 	skb_put(skb, len);
 
-	skb_push(skb, sizeof(*udph));
-	skb_reset_transport_header(skb);
-	udph = udp_hdr(skb);
-	udph->source = htons(np->local_port);
-	udph->dest = htons(np->remote_port);
-	udph->len = htons(udp_len);
-
-	udph->check = 0;
-	if (np->ipv6) {
-		udph->check = csum_ipv6_magic(&np->local_ip.in6,
-					      &np->remote_ip.in6,
-					      udp_len, IPPROTO_UDP,
-					      csum_partial(udph, udp_len, 0));
-		if (udph->check == 0)
-			udph->check = CSUM_MANGLED_0;
-
-		skb_push(skb, sizeof(*ip6h));
-		skb_reset_network_header(skb);
-		ip6h = ipv6_hdr(skb);
-
-		/* ip6h->version = 6; ip6h->priority = 0; */
-		*(unsigned char *)ip6h = 0x60;
-		ip6h->flow_lbl[0] = 0;
-		ip6h->flow_lbl[1] = 0;
-		ip6h->flow_lbl[2] = 0;
-
-		ip6h->payload_len = htons(sizeof(struct udphdr) + len);
-		ip6h->nexthdr = IPPROTO_UDP;
-		ip6h->hop_limit = 32;
-		ip6h->saddr = np->local_ip.in6;
-		ip6h->daddr = np->remote_ip.in6;
-
-		eth = skb_push(skb, ETH_HLEN);
-		skb_reset_mac_header(skb);
-		skb->protocol = eth->h_proto = htons(ETH_P_IPV6);
-	} else {
-		udph->check = csum_tcpudp_magic(np->local_ip.ip,
-						np->remote_ip.ip,
-						udp_len, IPPROTO_UDP,
-						csum_partial(udph, udp_len, 0));
-		if (udph->check == 0)
-			udph->check = CSUM_MANGLED_0;
-
-		skb_push(skb, sizeof(*iph));
-		skb_reset_network_header(skb);
-		iph = ip_hdr(skb);
-
-		/* iph->version = 4; iph->ihl = 5; */
-		*(unsigned char *)iph = 0x45;
-		iph->tos      = 0;
-		put_unaligned(htons(ip_len), &(iph->tot_len));
-		iph->id       = htons(atomic_inc_return(&ip_ident));
-		iph->frag_off = 0;
-		iph->ttl      = 64;
-		iph->protocol = IPPROTO_UDP;
-		iph->check    = 0;
-		put_unaligned(np->local_ip.ip, &(iph->saddr));
-		put_unaligned(np->remote_ip.ip, &(iph->daddr));
-		iph->check    = ip_fast_csum((unsigned char *)iph, iph->ihl);
-
-		eth = skb_push(skb, ETH_HLEN);
-		skb_reset_mac_header(skb);
-		skb->protocol = eth->h_proto = htons(ETH_P_IP);
-	}
-
-	ether_addr_copy(eth->h_source, np->dev->dev_addr);
-	ether_addr_copy(eth->h_dest, np->remote_mac);
-
+	push_udp(np, skb, len);
+	if (np->ipv6)
+		push_ipv6(np, skb, len);
+	else
+		push_ipv4(np, skb, len);
+	push_eth(np, skb);
 	skb->dev = np->dev;
 
 	return (int)netpoll_send_skb(np, skb);
@@ -551,7 +588,6 @@ int __netpoll_setup(struct netpoll *np, struct net_device *ndev)
 
 	np->dev = ndev;
 	strscpy(np->dev_name, ndev->name, IFNAMSIZ);
-	npinfo->netpoll = np;
 
 	/* fill up the skb queue */
 	refill_skbs(np);
@@ -728,6 +764,13 @@ int netpoll_setup(struct netpoll *np)
 	if (err)
 		goto flush;
 	rtnl_unlock();
+
+	/* Make sure all NAPI polls which started before dev->npinfo
+	 * was visible have exited before we start calling NAPI poll.
+	 * NAPI skips locking if dev->npinfo is NULL.
+	 */
+	synchronize_rcu();
+
 	return 0;
 
 flush:
@@ -768,6 +811,10 @@ static void __netpoll_cleanup(struct netpoll *np)
 	if (!npinfo)
 		return;
 
+	/* At this point, there is a single npinfo instance per netdevice, and
+	 * its refcnt tracks how many netpoll structures are linked to it. We
+	 * only perform npinfo cleanup when the refcnt decrements to zero.
+	 */
 	if (refcount_dec_and_test(&npinfo->refcnt)) {
 		const struct net_device_ops *ops;
 
@@ -777,8 +824,7 @@ static void __netpoll_cleanup(struct netpoll *np)
 
 		RCU_INIT_POINTER(np->dev->npinfo, NULL);
 		call_rcu(&npinfo->rcu, rcu_cleanup_netpoll_info);
-	} else
-		RCU_INIT_POINTER(np->dev->npinfo, NULL);
+	}
 
 	skb_pool_flush(np);
 }
@@ -788,7 +834,7 @@ void __netpoll_free(struct netpoll *np)
 	ASSERT_RTNL();
 
 	/* Wait for transmitting packets to finish before freeing. */
-	synchronize_rcu();
+	synchronize_net();
 	__netpoll_cleanup(np);
 	kfree(np);
 }

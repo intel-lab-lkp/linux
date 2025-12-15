@@ -4,17 +4,17 @@
  * Copyright (C) 2008-2009 Wolfgang Grandegger <wg@grandegger.com>
  */
 
-#include <linux/kernel.h>
-#include <linux/slab.h>
-#include <linux/netdevice.h>
-#include <linux/if_arp.h>
-#include <linux/workqueue.h>
 #include <linux/can.h>
 #include <linux/can/can-ml.h>
 #include <linux/can/dev.h>
 #include <linux/can/skb.h>
 #include <linux/gpio/consumer.h>
+#include <linux/if_arp.h>
+#include <linux/kernel.h>
+#include <linux/netdevice.h>
 #include <linux/of.h>
+#include <linux/slab.h>
+#include <linux/workqueue.h>
 
 static void can_update_state_error_stats(struct net_device *dev,
 					 enum can_state new_state)
@@ -88,6 +88,39 @@ const char *can_get_state_str(const enum can_state state)
 }
 EXPORT_SYMBOL_GPL(can_get_state_str);
 
+const char *can_get_ctrlmode_str(u32 ctrlmode)
+{
+	switch (ctrlmode & ~(ctrlmode - 1)) {
+	case 0:
+		return "none";
+	case CAN_CTRLMODE_LOOPBACK:
+		return "loopback";
+	case CAN_CTRLMODE_LISTENONLY:
+		return "listen-only";
+	case CAN_CTRLMODE_3_SAMPLES:
+		return "triple-sampling";
+	case CAN_CTRLMODE_ONE_SHOT:
+		return "one-shot";
+	case CAN_CTRLMODE_BERR_REPORTING:
+		return "berr-reporting";
+	case CAN_CTRLMODE_FD:
+		return "fd";
+	case CAN_CTRLMODE_PRESUME_ACK:
+		return "presume-ack";
+	case CAN_CTRLMODE_FD_NON_ISO:
+		return "fd-non-iso";
+	case CAN_CTRLMODE_CC_LEN8_DLC:
+		return "cc-len8-dlc";
+	case CAN_CTRLMODE_TDC_AUTO:
+		return "fd-tdc-auto";
+	case CAN_CTRLMODE_TDC_MANUAL:
+		return "fd-tdc-manual";
+	default:
+		return "<unknown>";
+	}
+}
+EXPORT_SYMBOL_GPL(can_get_ctrlmode_str);
+
 static enum can_state can_state_err_to_state(u16 err)
 {
 	if (err < CAN_ERROR_WARNING_THRESHOLD)
@@ -145,12 +178,15 @@ void can_change_state(struct net_device *dev, struct can_frame *cf,
 EXPORT_SYMBOL_GPL(can_change_state);
 
 /* CAN device restart for bus-off recovery */
-static void can_restart(struct net_device *dev)
+static int can_restart(struct net_device *dev)
 {
 	struct can_priv *priv = netdev_priv(dev);
 	struct sk_buff *skb;
 	struct can_frame *cf;
 	int err;
+
+	if (!priv->do_set_mode)
+		return -EOPNOTSUPP;
 
 	if (netif_carrier_ok(dev))
 		netdev_err(dev, "Attempt to restart for bus-off recovery, but carrier is OK?\n");
@@ -173,10 +209,14 @@ static void can_restart(struct net_device *dev)
 	if (err) {
 		netdev_err(dev, "Restart failed, error %pe\n", ERR_PTR(err));
 		netif_carrier_off(dev);
+
+		return err;
 	} else {
 		netdev_dbg(dev, "Restarted\n");
 		priv->can_stats.restarts++;
 	}
+
+	return 0;
 }
 
 static void can_restart_work(struct work_struct *work)
@@ -201,9 +241,8 @@ int can_restart_now(struct net_device *dev)
 		return -EBUSY;
 
 	cancel_delayed_work_sync(&priv->restart_work);
-	can_restart(dev);
 
-	return 0;
+	return can_restart(dev);
 }
 
 /* CAN bus-off
@@ -234,6 +273,8 @@ void can_setup(struct net_device *dev)
 {
 	dev->type = ARPHRD_CAN;
 	dev->mtu = CAN_MTU;
+	dev->min_mtu = CAN_MTU;
+	dev->max_mtu = CAN_MTU;
 	dev->hard_header_len = 0;
 	dev->addr_len = 0;
 	dev->tx_queue_len = 10;
@@ -303,72 +344,68 @@ void free_candev(struct net_device *dev)
 }
 EXPORT_SYMBOL_GPL(free_candev);
 
-/* changing MTU and control mode for CAN/CANFD devices */
-int can_change_mtu(struct net_device *dev, int new_mtu)
+void can_set_default_mtu(struct net_device *dev)
 {
 	struct can_priv *priv = netdev_priv(dev);
-	u32 ctrlmode_static = can_get_static_ctrlmode(priv);
 
-	/* Do not allow changing the MTU while running */
-	if (dev->flags & IFF_UP)
-		return -EBUSY;
+	if (priv->ctrlmode & CAN_CTRLMODE_FD) {
+		dev->mtu = CANFD_MTU;
+		dev->min_mtu = CANFD_MTU;
+		dev->max_mtu = CANFD_MTU;
+	} else {
+		dev->mtu = CAN_MTU;
+		dev->min_mtu = CAN_MTU;
+		dev->max_mtu = CAN_MTU;
+	}
+}
 
-	/* allow change of MTU according to the CANFD ability of the device */
-	switch (new_mtu) {
-	case CAN_MTU:
-		/* 'CANFD-only' controllers can not switch to CAN_MTU */
-		if (ctrlmode_static & CAN_CTRLMODE_FD)
-			return -EINVAL;
+/* helper to define static CAN controller features at device creation time */
+int can_set_static_ctrlmode(struct net_device *dev, u32 static_mode)
+{
+	struct can_priv *priv = netdev_priv(dev);
 
-		priv->ctrlmode &= ~CAN_CTRLMODE_FD;
-		break;
-
-	case CANFD_MTU:
-		/* check for potential CANFD ability */
-		if (!(priv->ctrlmode_supported & CAN_CTRLMODE_FD) &&
-		    !(ctrlmode_static & CAN_CTRLMODE_FD))
-			return -EINVAL;
-
-		priv->ctrlmode |= CAN_CTRLMODE_FD;
-		break;
-
-	default:
+	/* alloc_candev() succeeded => netdev_priv() is valid at this point */
+	if (priv->ctrlmode_supported & static_mode) {
+		netdev_warn(dev,
+			    "Controller features can not be supported and static at the same time\n");
 		return -EINVAL;
 	}
+	priv->ctrlmode = static_mode;
 
-	WRITE_ONCE(dev->mtu, new_mtu);
+	/* override MTU which was set by default in can_setup()? */
+	can_set_default_mtu(dev);
+
 	return 0;
 }
-EXPORT_SYMBOL_GPL(can_change_mtu);
+EXPORT_SYMBOL_GPL(can_set_static_ctrlmode);
 
-/* generic implementation of netdev_ops::ndo_eth_ioctl for CAN devices
+/* generic implementation of netdev_ops::ndo_hwtstamp_get for CAN devices
  * supporting hardware timestamps
  */
-int can_eth_ioctl_hwts(struct net_device *netdev, struct ifreq *ifr, int cmd)
+int can_hwtstamp_get(struct net_device *netdev,
+		     struct kernel_hwtstamp_config *cfg)
 {
-	struct hwtstamp_config hwts_cfg = { 0 };
+	cfg->tx_type = HWTSTAMP_TX_ON;
+	cfg->rx_filter = HWTSTAMP_FILTER_ALL;
 
-	switch (cmd) {
-	case SIOCSHWTSTAMP: /* set */
-		if (copy_from_user(&hwts_cfg, ifr->ifr_data, sizeof(hwts_cfg)))
-			return -EFAULT;
-		if (hwts_cfg.tx_type == HWTSTAMP_TX_ON &&
-		    hwts_cfg.rx_filter == HWTSTAMP_FILTER_ALL)
-			return 0;
-		return -ERANGE;
-
-	case SIOCGHWTSTAMP: /* get */
-		hwts_cfg.tx_type = HWTSTAMP_TX_ON;
-		hwts_cfg.rx_filter = HWTSTAMP_FILTER_ALL;
-		if (copy_to_user(ifr->ifr_data, &hwts_cfg, sizeof(hwts_cfg)))
-			return -EFAULT;
-		return 0;
-
-	default:
-		return -EOPNOTSUPP;
-	}
+	return 0;
 }
-EXPORT_SYMBOL(can_eth_ioctl_hwts);
+EXPORT_SYMBOL(can_hwtstamp_get);
+
+/* generic implementation of netdev_ops::ndo_hwtstamp_set for CAN devices
+ * supporting hardware timestamps
+ */
+int can_hwtstamp_set(struct net_device *netdev,
+		     struct kernel_hwtstamp_config *cfg,
+		     struct netlink_ext_ack *extack)
+{
+	if (cfg->tx_type == HWTSTAMP_TX_ON &&
+	    cfg->rx_filter == HWTSTAMP_FILTER_ALL)
+		return 0;
+	NL_SET_ERR_MSG_MOD(extack, "Only TX on and RX all packets filter supported");
+	return -ERANGE;
+}
+EXPORT_SYMBOL(can_hwtstamp_set);
 
 /* generic implementation of ethtool_ops::get_ts_info for CAN devices
  * supporting hardware timestamps

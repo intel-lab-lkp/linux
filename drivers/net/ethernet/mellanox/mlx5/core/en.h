@@ -47,6 +47,7 @@
 #include <linux/rhashtable.h>
 #include <net/udp_tunnel.h>
 #include <net/switchdev.h>
+#include <net/psp/types.h>
 #include <net/xdp.h>
 #include <linux/dim.h>
 #include <linux/bits.h>
@@ -68,7 +69,7 @@ struct page_pool;
 #define MLX5E_METADATA_ETHER_TYPE (0x8CE4)
 #define MLX5E_METADATA_ETHER_LEN 8
 
-#define MLX5E_ETH_HARD_MTU (ETH_HLEN + VLAN_HLEN + ETH_FCS_LEN)
+#define MLX5E_ETH_HARD_MTU (ETH_HLEN + PSP_ENCAP_HLEN + PSP_TRL_SIZE + VLAN_HLEN + ETH_FCS_LEN)
 
 #define MLX5E_HW2SW_MTU(params, hwmtu) ((hwmtu) - ((params)->hard_mtu))
 #define MLX5E_SW2HW_MTU(params, swmtu) ((swmtu) + ((params)->hard_mtu))
@@ -84,9 +85,10 @@ struct page_pool;
 #define MLX5E_SHAMPO_LOG_MAX_HEADER_ENTRY_SIZE (9)
 #define MLX5E_SHAMPO_WQ_HEADER_PER_PAGE (PAGE_SIZE >> MLX5E_SHAMPO_LOG_MAX_HEADER_ENTRY_SIZE)
 #define MLX5E_SHAMPO_LOG_WQ_HEADER_PER_PAGE (PAGE_SHIFT - MLX5E_SHAMPO_LOG_MAX_HEADER_ENTRY_SIZE)
-#define MLX5E_SHAMPO_WQ_BASE_HEAD_ENTRY_SIZE (64)
-#define MLX5E_SHAMPO_WQ_RESRV_SIZE (64 * 1024)
-#define MLX5E_SHAMPO_WQ_BASE_RESRV_SIZE (4096)
+#define MLX5E_SHAMPO_WQ_BASE_HEAD_ENTRY_SIZE_SHIFT (6)
+#define MLX5E_SHAMPO_WQ_RESRV_SIZE_BASE_SHIFT (12)
+#define MLX5E_SHAMPO_WQ_LOG_RESRV_SIZE (16)
+#define MLX5E_SHAMPO_WQ_RESRV_SIZE BIT(MLX5E_SHAMPO_WQ_LOG_RESRV_SIZE)
 
 #define MLX5_MPWRQ_MIN_LOG_STRIDE_SZ(mdev) \
 	(6 + MLX5_CAP_GEN(mdev, cache_line_128byte)) /* HW restriction */
@@ -343,6 +345,7 @@ struct mlx5e_cq {
 	/* data path - accessed per napi poll */
 	u16                        event_ctr;
 	struct napi_struct        *napi;
+	struct mlx5_uars_page     *uar;
 	struct mlx5_core_cq        mcq;
 	struct mlx5e_ch_stats     *ch_stats;
 
@@ -374,7 +377,7 @@ struct mlx5e_sq_dma {
 	enum mlx5e_dma_map_type type;
 };
 
-/* Keep this enum consistent with with the corresponding strings array
+/* Keep this enum consistent with the corresponding strings array
  * declared in en/reporter_tx.c
  */
 enum {
@@ -383,7 +386,6 @@ enum {
 	MLX5E_SQ_STATE_RECOVERING,
 	MLX5E_SQ_STATE_IPSEC,
 	MLX5E_SQ_STATE_DIM,
-	MLX5E_SQ_STATE_VLAN_NEED_L2_INLINE,
 	MLX5E_SQ_STATE_PENDING_XSK_TX,
 	MLX5E_SQ_STATE_PENDING_TLS_RX_RESYNC,
 	MLX5E_NUM_SQ_STATES, /* Must be kept last */
@@ -630,14 +632,16 @@ struct mlx5e_dma_info {
 };
 
 struct mlx5e_shampo_hd {
-	u32 mkey;
 	struct mlx5e_frag_page *pages;
 	u32 hd_per_wq;
+	u32 hd_per_page;
 	u16 hd_per_wqe;
+	u8 log_hd_per_page;
+	u8 log_hd_entry_size;
 	unsigned long *bitmap;
 	u16 pi;
 	u16 ci;
-	__be32 key;
+	__be32 mkey_be;
 };
 
 struct mlx5e_hw_gro_data {
@@ -695,7 +699,7 @@ struct mlx5e_rq {
 	struct mlx5e_rq_stats *stats;
 	struct mlx5e_cq        cq;
 	struct mlx5e_cq_decomp cqd;
-	struct hwtstamp_config *tstamp;
+	struct kernel_hwtstamp_config *hwtstamp_config;
 	struct mlx5_clock      *clock;
 	struct mlx5e_icosq    *icosq;
 	struct mlx5e_priv     *priv;
@@ -727,6 +731,7 @@ struct mlx5e_rq {
 	struct xsk_buff_pool  *xsk_pool;
 
 	struct work_struct     recover_work;
+	struct work_struct     rx_timeout_work;
 
 	/* control */
 	struct mlx5_wq_ctrl    wq_ctrl;
@@ -782,12 +787,12 @@ struct mlx5e_channel {
 	/* control */
 	struct mlx5e_priv         *priv;
 	struct mlx5_core_dev      *mdev;
-	struct hwtstamp_config    *tstamp;
 	DECLARE_BITMAP(state, MLX5E_CHANNEL_NUM_STATES);
 	int                        ix;
 	int                        vec_ix;
 	int                        sd_ix;
 	int                        cpu;
+	struct mlx5_sq_bfreg      *bfreg;
 	/* Sync between icosq recovery and XSK enable/disable. */
 	struct mutex               icosq_recovery_lock;
 
@@ -915,11 +920,13 @@ struct mlx5e_priv {
 	u8                         max_opened_tc;
 	bool                       tx_ptp_opened;
 	bool                       rx_ptp_opened;
-	struct hwtstamp_config     tstamp;
+	struct kernel_hwtstamp_config hwtstamp_config;
 	u16                        q_counter[MLX5_SD_MAX_GROUP_SZ];
 	u16                        drop_rq_q_counter;
 	struct notifier_block      events_nb;
 	struct notifier_block      blocking_events_nb;
+
+	struct mlx5e_pcie_cong_event *cong_event;
 
 	struct udp_tunnel_nic_info nic_info;
 #ifdef CONFIG_MLX5_CORE_EN_DCB
@@ -933,6 +940,9 @@ struct mlx5e_priv {
 #endif
 #ifdef CONFIG_MLX5_EN_IPSEC
 	struct mlx5e_ipsec        *ipsec;
+#endif
+#ifdef CONFIG_MLX5_EN_PSP
+	struct mlx5e_psp          *psp;
 #endif
 #ifdef CONFIG_MLX5_EN_TLS
 	struct mlx5e_tls          *tls;
@@ -948,6 +958,7 @@ struct mlx5e_priv {
 	struct mlx5e_mqprio_rl    *mqprio_rl;
 	struct dentry             *dfs_root;
 	struct mlx5_devcom_comp_dev *devcom;
+	struct ethtool_fec_hist_range *fec_ranges;
 };
 
 struct mlx5e_dev {
@@ -1018,8 +1029,11 @@ void mlx5e_self_test(struct net_device *ndev, struct ethtool_test *etest,
 		     u64 *buf);
 void mlx5e_set_rx_mode_work(struct work_struct *work);
 
-int mlx5e_hwstamp_set(struct mlx5e_priv *priv, struct ifreq *ifr);
-int mlx5e_hwstamp_get(struct mlx5e_priv *priv, struct ifreq *ifr);
+int mlx5e_hwtstamp_set(struct mlx5e_priv *priv,
+		       struct kernel_hwtstamp_config *config,
+		       struct netlink_ext_ack *extack);
+int mlx5e_hwtstamp_get(struct mlx5e_priv *priv,
+		       struct kernel_hwtstamp_config *config);
 int mlx5e_modify_rx_cqe_compression_locked(struct mlx5e_priv *priv, bool val, bool rx_filter);
 
 int mlx5e_vlan_rx_add_vid(struct net_device *dev, __always_unused __be16 proto,
@@ -1058,6 +1072,7 @@ struct mlx5e_create_cq_param {
 	struct mlx5e_ch_stats *ch_stats;
 	int node;
 	int ix;
+	struct mlx5_uars_page *uar;
 };
 
 struct mlx5e_cq_param;
@@ -1144,7 +1159,9 @@ extern const struct ethtool_ops mlx5e_ethtool_ops;
 int mlx5e_create_mkey(struct mlx5_core_dev *mdev, u32 pdn, u32 *mkey);
 int mlx5e_create_mdev_resources(struct mlx5_core_dev *mdev, bool create_tises);
 void mlx5e_destroy_mdev_resources(struct mlx5_core_dev *mdev);
-int mlx5e_refresh_tirs(struct mlx5e_priv *priv, bool enable_uc_lb,
+int mlx5e_modify_tirs_lb(struct mlx5_core_dev *mdev, bool enable_uc_lb,
+			 bool enable_mc_lb);
+int mlx5e_refresh_tirs(struct mlx5_core_dev *mdev, bool enable_uc_lb,
 		       bool enable_mc_lb);
 void mlx5e_mkey_set_relaxed_ordering(struct mlx5_core_dev *mdev, void *mkc);
 

@@ -1480,17 +1480,12 @@ static u32 mlx5e_get_rxfh_indir_size(struct net_device *netdev)
 static int mlx5e_get_rxfh(struct net_device *netdev, struct ethtool_rxfh_param *rxfh)
 {
 	struct mlx5e_priv *priv = netdev_priv(netdev);
-	u32 rss_context = rxfh->rss_context;
 	bool symmetric;
-	int err;
 
 	mutex_lock(&priv->state_lock);
-	err = mlx5e_rx_res_rss_get_rxfh(priv->rx_res, rss_context,
-					rxfh->indir, rxfh->key, &rxfh->hfunc, &symmetric);
+	mlx5e_rx_res_rss_get_rxfh(priv->rx_res, 0, rxfh->indir, rxfh->key,
+				  &rxfh->hfunc, &symmetric);
 	mutex_unlock(&priv->state_lock);
-
-	if (err)
-		return err;
 
 	if (symmetric)
 		rxfh->input_xfrm = RXH_XFRM_SYM_OR_XOR;
@@ -1498,48 +1493,130 @@ static int mlx5e_get_rxfh(struct net_device *netdev, struct ethtool_rxfh_param *
 	return 0;
 }
 
-static int mlx5e_set_rxfh(struct net_device *dev, struct ethtool_rxfh_param *rxfh,
+static int mlx5e_rxfh_hfunc_check(struct mlx5e_priv *priv,
+				  const struct ethtool_rxfh_param *rxfh,
+				  struct netlink_ext_ack *extack)
+{
+	unsigned int count;
+
+	count = priv->channels.params.num_channels;
+
+	if (rxfh->hfunc == ETH_RSS_HASH_XOR) {
+		unsigned int xor8_max_channels = mlx5e_rqt_max_num_channels_allowed_for_xor8();
+
+		if (count > xor8_max_channels) {
+			NL_SET_ERR_MSG_FMT_MOD(
+				extack,
+				"Number of channels (%u) exceeds the max for XOR8 RSS (%u)",
+				count, xor8_max_channels);
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
+static int mlx5e_set_rxfh(struct net_device *dev,
+			  struct ethtool_rxfh_param *rxfh,
 			  struct netlink_ext_ack *extack)
 {
 	bool symmetric = rxfh->input_xfrm == RXH_XFRM_SYM_OR_XOR;
 	struct mlx5e_priv *priv = netdev_priv(dev);
-	u32 *rss_context = &rxfh->rss_context;
 	u8 hfunc = rxfh->hfunc;
-	unsigned int count;
 	int err;
 
 	mutex_lock(&priv->state_lock);
 
-	count = priv->channels.params.num_channels;
-
-	if (hfunc == ETH_RSS_HASH_XOR) {
-		unsigned int xor8_max_channels = mlx5e_rqt_max_num_channels_allowed_for_xor8();
-
-		if (count > xor8_max_channels) {
-			err = -EINVAL;
-			netdev_err(priv->netdev, "%s: Cannot set RSS hash function to XOR, current number of channels (%d) exceeds the maximum allowed for XOR8 RSS hfunc (%d)\n",
-				   __func__, count, xor8_max_channels);
-			goto unlock;
-		}
-	}
-
-	if (*rss_context && rxfh->rss_delete) {
-		err = mlx5e_rx_res_rss_destroy(priv->rx_res, *rss_context);
+	err = mlx5e_rxfh_hfunc_check(priv, rxfh, extack);
+	if (err)
 		goto unlock;
-	}
 
-	if (*rss_context == ETH_RXFH_CONTEXT_ALLOC) {
-		err = mlx5e_rx_res_rss_init(priv->rx_res, rss_context, count);
-		if (err)
-			goto unlock;
-	}
-
-	err = mlx5e_rx_res_rss_set_rxfh(priv->rx_res, *rss_context,
+	err = mlx5e_rx_res_rss_set_rxfh(priv->rx_res, rxfh->rss_context,
 					rxfh->indir, rxfh->key,
 					hfunc == ETH_RSS_HASH_NO_CHANGE ? NULL : &hfunc,
 					rxfh->input_xfrm == RXH_XFRM_NO_CHANGE ? NULL : &symmetric);
 
 unlock:
+	mutex_unlock(&priv->state_lock);
+	return err;
+}
+
+static int mlx5e_create_rxfh_context(struct net_device *dev,
+				     struct ethtool_rxfh_context *ctx,
+				     const struct ethtool_rxfh_param *rxfh,
+				     struct netlink_ext_ack *extack)
+{
+	bool symmetric = rxfh->input_xfrm == RXH_XFRM_SYM_OR_XOR;
+	struct mlx5e_priv *priv = netdev_priv(dev);
+	u8 hfunc = rxfh->hfunc;
+	int err;
+
+	mutex_lock(&priv->state_lock);
+
+	err = mlx5e_rxfh_hfunc_check(priv, rxfh, extack);
+	if (err)
+		goto unlock;
+
+	err = mlx5e_rx_res_rss_init(priv->rx_res, rxfh->rss_context,
+				    priv->channels.params.num_channels);
+	if (err)
+		goto unlock;
+
+	err = mlx5e_rx_res_rss_set_rxfh(priv->rx_res, rxfh->rss_context,
+					rxfh->indir, rxfh->key,
+					hfunc == ETH_RSS_HASH_NO_CHANGE ? NULL : &hfunc,
+					rxfh->input_xfrm == RXH_XFRM_NO_CHANGE ? NULL : &symmetric);
+	if (err)
+		goto unlock;
+
+	mlx5e_rx_res_rss_get_rxfh(priv->rx_res, rxfh->rss_context,
+				  ethtool_rxfh_context_indir(ctx),
+				  ethtool_rxfh_context_key(ctx),
+				  &ctx->hfunc, &symmetric);
+	if (symmetric)
+		ctx->input_xfrm = RXH_XFRM_SYM_OR_XOR;
+
+unlock:
+	mutex_unlock(&priv->state_lock);
+	return err;
+}
+
+static int mlx5e_modify_rxfh_context(struct net_device *dev,
+				     struct ethtool_rxfh_context *ctx,
+				     const struct ethtool_rxfh_param *rxfh,
+				     struct netlink_ext_ack *extack)
+{
+	bool symmetric = rxfh->input_xfrm == RXH_XFRM_SYM_OR_XOR;
+	struct mlx5e_priv *priv = netdev_priv(dev);
+	u8 hfunc = rxfh->hfunc;
+	int err;
+
+	mutex_lock(&priv->state_lock);
+
+	err = mlx5e_rxfh_hfunc_check(priv, rxfh, extack);
+	if (err)
+		goto unlock;
+
+	err = mlx5e_rx_res_rss_set_rxfh(priv->rx_res, rxfh->rss_context,
+					rxfh->indir, rxfh->key,
+					hfunc == ETH_RSS_HASH_NO_CHANGE ? NULL : &hfunc,
+					rxfh->input_xfrm == RXH_XFRM_NO_CHANGE ? NULL : &symmetric);
+
+unlock:
+	mutex_unlock(&priv->state_lock);
+	return err;
+}
+
+static int mlx5e_remove_rxfh_context(struct net_device *dev,
+				     struct ethtool_rxfh_context *ctx,
+				     u32 rss_context,
+				     struct netlink_ext_ack *extack)
+{
+	struct mlx5e_priv *priv = netdev_priv(dev);
+	int err;
+
+	mutex_lock(&priv->state_lock);
+	err = mlx5e_rx_res_rss_destroy(priv->rx_res, rss_context);
 	mutex_unlock(&priv->state_lock);
 	return err;
 }
@@ -1853,11 +1930,12 @@ static int mlx5e_set_wol(struct net_device *netdev, struct ethtool_wolinfo *wol)
 }
 
 static void mlx5e_get_fec_stats(struct net_device *netdev,
-				struct ethtool_fec_stats *fec_stats)
+				struct ethtool_fec_stats *fec_stats,
+				struct ethtool_fec_hist *hist)
 {
 	struct mlx5e_priv *priv = netdev_priv(netdev);
 
-	mlx5e_stats_fec_get(priv, fec_stats);
+	mlx5e_stats_fec_get(priv, fec_stats, hist);
 }
 
 static int mlx5e_get_fecparam(struct net_device *netdev,
@@ -2047,14 +2125,12 @@ static int mlx5e_get_module_eeprom_by_page(struct net_device *netdev,
 		if (!size_read)
 			return i;
 
-		if (size_read == -EINVAL)
-			return -EINVAL;
 		if (size_read < 0) {
 			NL_SET_ERR_MSG_FMT_MOD(
 				extack,
 				"Query module eeprom by page failed, read %u bytes, err %d",
 				i, size_read);
-			return i;
+			return size_read;
 		}
 
 		i += size_read;
@@ -2195,7 +2271,7 @@ static int set_pflag_rx_cqe_compress(struct net_device *netdev,
 	if (!MLX5_CAP_GEN(mdev, cqe_compression))
 		return -EOPNOTSUPP;
 
-	rx_filter = priv->tstamp.rx_filter != HWTSTAMP_FILTER_NONE;
+	rx_filter = priv->hwtstamp_config.rx_filter != HWTSTAMP_FILTER_NONE;
 	err = mlx5e_modify_rx_cqe_compression_locked(priv, enable, rx_filter);
 	if (err)
 		return err;
@@ -2654,9 +2730,9 @@ static void mlx5e_get_ts_stats(struct net_device *netdev,
 
 const struct ethtool_ops mlx5e_ethtool_ops = {
 	.cap_link_lanes_supported = true,
-	.cap_rss_ctx_supported	= true,
 	.rxfh_per_ctx_fields	= true,
 	.rxfh_per_ctx_key	= true,
+	.rxfh_max_num_contexts	= MLX5E_MAX_NUM_RSS,
 	.supported_coalesce_params = ETHTOOL_COALESCE_USECS |
 				     ETHTOOL_COALESCE_MAX_FRAMES |
 				     ETHTOOL_COALESCE_USE_ADAPTIVE |
@@ -2685,6 +2761,9 @@ const struct ethtool_ops mlx5e_ethtool_ops = {
 	.set_rxfh          = mlx5e_set_rxfh,
 	.get_rxfh_fields   = mlx5e_get_rxfh_fields,
 	.set_rxfh_fields   = mlx5e_set_rxfh_fields,
+	.create_rxfh_context	= mlx5e_create_rxfh_context,
+	.modify_rxfh_context	= mlx5e_modify_rxfh_context,
+	.remove_rxfh_context	= mlx5e_remove_rxfh_context,
 	.get_rxnfc         = mlx5e_get_rxnfc,
 	.set_rxnfc         = mlx5e_set_rxnfc,
 	.get_tunable       = mlx5e_get_tunable,

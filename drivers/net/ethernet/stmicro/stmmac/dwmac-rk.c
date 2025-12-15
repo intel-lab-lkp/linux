@@ -8,6 +8,7 @@
  */
 
 #include <linux/stmmac.h>
+#include <linux/hw_bitfield.h>
 #include <linux/bitops.h>
 #include <linux/clk.h>
 #include <linux/phy.h>
@@ -71,7 +72,6 @@ struct rk_priv_data {
 	phy_interface_t phy_iface;
 	int id;
 	struct regulator *regulator;
-	bool suspended;
 	const struct rk_gmac_ops *ops;
 
 	bool clk_enabled;
@@ -150,7 +150,7 @@ static int rk_set_clk_mac_speed(struct rk_priv_data *bsp_priv,
 }
 
 #define HIWORD_UPDATE(val, mask, shift) \
-		((val) << (shift) | (mask) << ((shift) + 16))
+		(FIELD_PREP_WM16((mask) << (shift), (val)))
 
 #define GRF_BIT(nr)	(BIT(nr) | BIT(nr+16))
 #define GRF_CLR_BIT(nr)	(BIT(nr+16))
@@ -557,9 +557,7 @@ static const struct rk_gmac_ops rk3308_ops = {
 #define RK3328_GMAC_RMII_MODE		GRF_BIT(9)
 #define RK3328_GMAC_RMII_MODE_CLR	GRF_CLR_BIT(9)
 #define RK3328_GMAC_TXCLK_DLY_ENABLE	GRF_BIT(0)
-#define RK3328_GMAC_TXCLK_DLY_DISABLE	GRF_CLR_BIT(0)
 #define RK3328_GMAC_RXCLK_DLY_ENABLE	GRF_BIT(1)
-#define RK3328_GMAC_RXCLK_DLY_DISABLE	GRF_CLR_BIT(0)
 
 /* RK3328_GRF_MACPHY_CON1 */
 #define RK3328_MACPHY_RMII_MODE		GRF_BIT(9)
@@ -827,6 +825,69 @@ static const struct rk_gmac_ops rk3399_ops = {
 	.set_to_rgmii = rk3399_set_to_rgmii,
 	.set_to_rmii = rk3399_set_to_rmii,
 	.set_speed = rk3399_set_speed,
+};
+
+#define RK3506_GRF_SOC_CON8		0x0020
+#define RK3506_GRF_SOC_CON11		0x002c
+
+#define RK3506_GMAC_RMII_MODE		GRF_BIT(1)
+
+#define RK3506_GMAC_CLK_RMII_DIV2	GRF_BIT(3)
+#define RK3506_GMAC_CLK_RMII_DIV20	GRF_CLR_BIT(3)
+
+#define RK3506_GMAC_CLK_SELECT_CRU	GRF_CLR_BIT(5)
+#define RK3506_GMAC_CLK_SELECT_IO	GRF_BIT(5)
+
+#define RK3506_GMAC_CLK_RMII_GATE	GRF_BIT(2)
+#define RK3506_GMAC_CLK_RMII_NOGATE	GRF_CLR_BIT(2)
+
+static void rk3506_set_to_rmii(struct rk_priv_data *bsp_priv)
+{
+	unsigned int id = bsp_priv->id, offset;
+
+	offset = (id == 1) ? RK3506_GRF_SOC_CON11 : RK3506_GRF_SOC_CON8;
+	regmap_write(bsp_priv->grf, offset, RK3506_GMAC_RMII_MODE);
+}
+
+static const struct rk_reg_speed_data rk3506_reg_speed_data = {
+	.rmii_10 = RK3506_GMAC_CLK_RMII_DIV20,
+	.rmii_100 = RK3506_GMAC_CLK_RMII_DIV2,
+};
+
+static int rk3506_set_speed(struct rk_priv_data *bsp_priv,
+			    phy_interface_t interface, int speed)
+{
+	unsigned int id = bsp_priv->id, offset;
+
+	offset = (id == 1) ? RK3506_GRF_SOC_CON11 : RK3506_GRF_SOC_CON8;
+	return rk_set_reg_speed(bsp_priv, &rk3506_reg_speed_data,
+				offset, interface, speed);
+}
+
+static void rk3506_set_clock_selection(struct rk_priv_data *bsp_priv,
+				       bool input, bool enable)
+{
+	unsigned int value, offset, id = bsp_priv->id;
+
+	offset = (id == 1) ? RK3506_GRF_SOC_CON11 : RK3506_GRF_SOC_CON8;
+
+	value = input ? RK3506_GMAC_CLK_SELECT_IO :
+			RK3506_GMAC_CLK_SELECT_CRU;
+	value |= enable ? RK3506_GMAC_CLK_RMII_NOGATE :
+			  RK3506_GMAC_CLK_RMII_GATE;
+	regmap_write(bsp_priv->grf, offset, value);
+}
+
+static const struct rk_gmac_ops rk3506_ops = {
+	.set_to_rmii = rk3506_set_to_rmii,
+	.set_speed = rk3506_set_speed,
+	.set_clock_selection = rk3506_set_clock_selection,
+	.regs_valid = true,
+	.regs = {
+		0xff4c8000, /* gmac0 */
+		0xff4d0000, /* gmac1 */
+		0x0, /* sentinel */
+	},
 };
 
 #define RK3528_VO_GRF_GMAC_CON		0x0018
@@ -1448,13 +1509,14 @@ static int gmac_clk_enable(struct rk_priv_data *bsp_priv, bool enable)
 		}
 	} else {
 		if (bsp_priv->clk_enabled) {
+			if (bsp_priv->ops && bsp_priv->ops->set_clock_selection) {
+				bsp_priv->ops->set_clock_selection(bsp_priv,
+					      bsp_priv->clock_input, false);
+			}
+
 			clk_bulk_disable_unprepare(bsp_priv->num_clks,
 						   bsp_priv->clks);
 			clk_disable_unprepare(bsp_priv->clk_phy);
-
-			if (bsp_priv->ops && bsp_priv->ops->set_clock_selection)
-				bsp_priv->ops->set_clock_selection(bsp_priv,
-					      bsp_priv->clock_input, false);
 
 			bsp_priv->clk_enabled = false;
 		}
@@ -1706,6 +1768,28 @@ static int rk_set_clk_tx_rate(void *bsp_priv_, struct clk *clk_tx_i,
 	return -EINVAL;
 }
 
+static int rk_gmac_suspend(struct device *dev, void *bsp_priv_)
+{
+	struct rk_priv_data *bsp_priv = bsp_priv_;
+
+	/* Keep the PHY up if we use Wake-on-Lan. */
+	if (!device_may_wakeup(dev))
+		rk_gmac_powerdown(bsp_priv);
+
+	return 0;
+}
+
+static int rk_gmac_resume(struct device *dev, void *bsp_priv_)
+{
+	struct rk_priv_data *bsp_priv = bsp_priv_;
+
+	/* The PHY was up for Wake-on-Lan. */
+	if (!device_may_wakeup(dev))
+		rk_gmac_powerup(bsp_priv);
+
+	return 0;
+}
+
 static int rk_gmac_probe(struct platform_device *pdev)
 {
 	struct plat_stmmacenet_data *plat_dat;
@@ -1730,14 +1814,16 @@ static int rk_gmac_probe(struct platform_device *pdev)
 	/* If the stmmac is not already selected as gmac4,
 	 * then make sure we fallback to gmac.
 	 */
-	if (!plat_dat->has_gmac4) {
-		plat_dat->has_gmac = true;
+	if (plat_dat->core_type != DWMAC_CORE_GMAC4) {
+		plat_dat->core_type = DWMAC_CORE_GMAC;
 		plat_dat->rx_fifo_size = 4096;
 		plat_dat->tx_fifo_size = 2048;
 	}
 
 	plat_dat->get_interfaces = rk_get_interfaces;
 	plat_dat->set_clk_tx_rate = rk_set_clk_tx_rate;
+	plat_dat->suspend = rk_gmac_suspend;
+	plat_dat->resume = rk_gmac_resume;
 
 	plat_dat->bsp_priv = rk_gmac_setup(pdev, plat_dat, data);
 	if (IS_ERR(plat_dat->bsp_priv))
@@ -1765,43 +1851,16 @@ err_gmac_powerdown:
 
 static void rk_gmac_remove(struct platform_device *pdev)
 {
-	struct rk_priv_data *bsp_priv = get_stmmac_bsp_priv(&pdev->dev);
+	struct stmmac_priv *priv = netdev_priv(platform_get_drvdata(pdev));
+	struct rk_priv_data *bsp_priv = priv->plat->bsp_priv;
 
 	stmmac_dvr_remove(&pdev->dev);
 
 	rk_gmac_powerdown(bsp_priv);
+
+	if (priv->plat->phy_node && bsp_priv->integrated_phy)
+		clk_put(bsp_priv->clk_phy);
 }
-
-#ifdef CONFIG_PM_SLEEP
-static int rk_gmac_suspend(struct device *dev)
-{
-	struct rk_priv_data *bsp_priv = get_stmmac_bsp_priv(dev);
-	int ret = stmmac_suspend(dev);
-
-	/* Keep the PHY up if we use Wake-on-Lan. */
-	if (!device_may_wakeup(dev)) {
-		rk_gmac_powerdown(bsp_priv);
-		bsp_priv->suspended = true;
-	}
-
-	return ret;
-}
-
-static int rk_gmac_resume(struct device *dev)
-{
-	struct rk_priv_data *bsp_priv = get_stmmac_bsp_priv(dev);
-
-	/* The PHY was up for Wake-on-Lan. */
-	if (bsp_priv->suspended) {
-		rk_gmac_powerup(bsp_priv);
-		bsp_priv->suspended = false;
-	}
-
-	return stmmac_resume(dev);
-}
-#endif /* CONFIG_PM_SLEEP */
-
-static SIMPLE_DEV_PM_OPS(rk_gmac_pm_ops, rk_gmac_suspend, rk_gmac_resume);
 
 static const struct of_device_id rk_gmac_dwmac_match[] = {
 	{ .compatible = "rockchip,px30-gmac",	.data = &px30_ops   },
@@ -1813,6 +1872,7 @@ static const struct of_device_id rk_gmac_dwmac_match[] = {
 	{ .compatible = "rockchip,rk3366-gmac", .data = &rk3366_ops },
 	{ .compatible = "rockchip,rk3368-gmac", .data = &rk3368_ops },
 	{ .compatible = "rockchip,rk3399-gmac", .data = &rk3399_ops },
+	{ .compatible = "rockchip,rk3506-gmac", .data = &rk3506_ops },
 	{ .compatible = "rockchip,rk3528-gmac", .data = &rk3528_ops },
 	{ .compatible = "rockchip,rk3568-gmac", .data = &rk3568_ops },
 	{ .compatible = "rockchip,rk3576-gmac", .data = &rk3576_ops },
@@ -1828,7 +1888,7 @@ static struct platform_driver rk_gmac_dwmac_driver = {
 	.remove = rk_gmac_remove,
 	.driver = {
 		.name           = "rk_gmac-dwmac",
-		.pm		= &rk_gmac_pm_ops,
+		.pm		= &stmmac_simple_pm_ops,
 		.of_match_table = rk_gmac_dwmac_match,
 	},
 };
