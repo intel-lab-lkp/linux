@@ -289,9 +289,11 @@ static int hbg_register_phy_leds_software_node(struct hbg_priv *priv,
 					       struct phy_device *phydev)
 {
 	struct fwnode_handle *fwnode = dev_fwnode(&phydev->mdio.dev);
+	u32 phy_reg_num = hbg_reg_read(priv, HBG_REG_PHY_LEDS_REG);
 	struct device *dev = &priv->pdev->dev;
 	struct hbg_mac *mac = &priv->mac;
-	u32 node_index = 0, i;
+	u32 node_index = 0, i, reg;
+	unsigned long rules;
 	const char *label;
 	int ret;
 
@@ -310,12 +312,18 @@ static int hbg_register_phy_leds_software_node(struct hbg_priv *priv,
 	mac->nodes[node_index++] = &mac->leds_node;
 
 	for (i = 0; i < HBG_LED_MAX_NUM; i++) {
+		reg = (phy_reg_num >> (8 * i)) & 0xFF;
+
 		mac->leds_props[i][0] = PROPERTY_ENTRY_U32("reg", i);
 		label = devm_kasprintf(dev, GFP_KERNEL, "%u", i);
 		mac->leds_props[i][1] = PROPERTY_ENTRY_STRING("label", label);
 
+		rules = hbg_reg_read(priv,
+				     HBG_REG_PHY_LED0_RULES_ADDR + i * 4);
+		mac->leds_props[i][2] = PROPERTY_ENTRY_U32("rules", rules);
+
 		mac->led_nodes[i].name = devm_kasprintf(dev, GFP_KERNEL,
-							"led@%u", i);
+							"led@%u", reg);
 		mac->led_nodes[i].properties = mac->leds_props[i];
 		mac->led_nodes[i].parent = &mac->leds_node;
 
