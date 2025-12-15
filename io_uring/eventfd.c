@@ -8,6 +8,7 @@
 #include <linux/io_uring.h>
 #include <linux/io_uring_types.h>
 
+#include "io_uring.h"
 #include "io-wq.h"
 #include "eventfd.h"
 
@@ -120,7 +121,7 @@ int io_eventfd_register(struct io_ring_ctx *ctx, void __user *arg,
 	int fd;
 
 	ev_fd = rcu_dereference_protected(ctx->io_ev_fd,
-					lockdep_is_held(&ctx->uring_lock));
+					io_ring_ctx_lock_held(ctx));
 	if (ev_fd)
 		return -EBUSY;
 
@@ -156,7 +157,7 @@ int io_eventfd_unregister(struct io_ring_ctx *ctx)
 	struct io_ev_fd *ev_fd;
 
 	ev_fd = rcu_dereference_protected(ctx->io_ev_fd,
-					lockdep_is_held(&ctx->uring_lock));
+					io_ring_ctx_lock_held(ctx));
 	if (ev_fd) {
 		ctx->has_evfd = false;
 		rcu_assign_pointer(ctx->io_ev_fd, NULL);

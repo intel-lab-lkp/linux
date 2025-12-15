@@ -191,11 +191,12 @@ void io_open_cleanup(struct io_kiocb *req)
 int __io_close_fixed(struct io_ring_ctx *ctx, unsigned int issue_flags,
 		     unsigned int offset)
 {
+	struct io_ring_ctx_lock_state lock_state;
 	int ret;
 
-	io_ring_submit_lock(ctx, issue_flags);
+	io_ring_submit_lock(ctx, issue_flags, &lock_state);
 	ret = io_fixed_fd_remove(ctx, offset);
-	io_ring_submit_unlock(ctx, issue_flags);
+	io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 
 	return ret;
 }
@@ -335,6 +336,7 @@ static int io_pipe_fixed(struct io_kiocb *req, struct file **files,
 			 unsigned int issue_flags)
 {
 	struct io_pipe *p = io_kiocb_to_cmd(req, struct io_pipe);
+	struct io_ring_ctx_lock_state lock_state;
 	struct io_ring_ctx *ctx = req->ctx;
 	int ret, fds[2] = { -1, -1 };
 	int slot = p->file_slot;
@@ -342,7 +344,7 @@ static int io_pipe_fixed(struct io_kiocb *req, struct file **files,
 	if (p->flags & O_CLOEXEC)
 		return -EINVAL;
 
-	io_ring_submit_lock(ctx, issue_flags);
+	io_ring_submit_lock(ctx, issue_flags, &lock_state);
 
 	ret = __io_fixed_fd_install(ctx, files[0], slot);
 	if (ret < 0)
@@ -363,19 +365,19 @@ static int io_pipe_fixed(struct io_kiocb *req, struct file **files,
 	fds[1] = ret;
 	files[1] = NULL;
 
-	io_ring_submit_unlock(ctx, issue_flags);
+	io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 
 	if (!copy_to_user(p->fds, fds, sizeof(fds)))
 		return 0;
 
 	ret = -EFAULT;
-	io_ring_submit_lock(ctx, issue_flags);
+	io_ring_submit_lock(ctx, issue_flags, &lock_state);
 err:
 	if (fds[0] != -1)
 		io_fixed_fd_remove(ctx, fds[0]);
 	if (fds[1] != -1)
 		io_fixed_fd_remove(ctx, fds[1]);
-	io_ring_submit_unlock(ctx, issue_flags);
+	io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 	return ret;
 }
 

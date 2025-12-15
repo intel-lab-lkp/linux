@@ -32,13 +32,15 @@ struct io_msg {
 	u32 flags;
 };
 
-static void io_double_unlock_ctx(struct io_ring_ctx *octx)
+static void io_double_unlock_ctx(struct io_ring_ctx *octx,
+				 struct io_ring_ctx_lock_state *lock_state)
 {
-	mutex_unlock(&octx->uring_lock);
+	io_ring_ctx_unlock(octx, lock_state);
 }
 
 static int io_lock_external_ctx(struct io_ring_ctx *octx,
-				unsigned int issue_flags)
+				unsigned int issue_flags,
+				struct io_ring_ctx_lock_state *lock_state)
 {
 	/*
 	 * To ensure proper ordering between the two ctxs, we can only
@@ -46,11 +48,11 @@ static int io_lock_external_ctx(struct io_ring_ctx *octx,
 	 * the source ctx lock, punt to io-wq.
 	 */
 	if (!(issue_flags & IO_URING_F_UNLOCKED)) {
-		if (!mutex_trylock(&octx->uring_lock))
+		if (!io_ring_ctx_trylock(octx, lock_state))
 			return -EAGAIN;
 		return 0;
 	}
-	mutex_lock(&octx->uring_lock);
+	io_ring_ctx_lock(octx, lock_state);
 	return 0;
 }
 
@@ -118,6 +120,7 @@ static int io_msg_data_remote(struct io_ring_ctx *target_ctx,
 static int __io_msg_ring_data(struct io_ring_ctx *target_ctx,
 			      struct io_msg *msg, unsigned int issue_flags)
 {
+	struct io_ring_ctx_lock_state lock_state;
 	u32 flags = 0;
 	int ret;
 
@@ -136,13 +139,14 @@ static int __io_msg_ring_data(struct io_ring_ctx *target_ctx,
 
 	ret = -EOVERFLOW;
 	if (target_ctx->flags & IORING_SETUP_IOPOLL) {
-		if (unlikely(io_lock_external_ctx(target_ctx, issue_flags)))
+		if (unlikely(io_lock_external_ctx(target_ctx, issue_flags,
+						  &lock_state)))
 			return -EAGAIN;
 	}
 	if (io_post_aux_cqe(target_ctx, msg->user_data, msg->len, flags))
 		ret = 0;
 	if (target_ctx->flags & IORING_SETUP_IOPOLL)
-		io_double_unlock_ctx(target_ctx);
+		io_double_unlock_ctx(target_ctx, &lock_state);
 	return ret;
 }
 
@@ -157,11 +161,12 @@ static int io_msg_ring_data(struct io_kiocb *req, unsigned int issue_flags)
 static int io_msg_grab_file(struct io_kiocb *req, unsigned int issue_flags)
 {
 	struct io_msg *msg = io_kiocb_to_cmd(req, struct io_msg);
+	struct io_ring_ctx_lock_state lock_state;
 	struct io_ring_ctx *ctx = req->ctx;
 	struct io_rsrc_node *node;
 	int ret = -EBADF;
 
-	io_ring_submit_lock(ctx, issue_flags);
+	io_ring_submit_lock(ctx, issue_flags, &lock_state);
 	node = io_rsrc_node_lookup(&ctx->file_table.data, msg->src_fd);
 	if (node) {
 		msg->src_file = io_slot_file(node);
@@ -170,7 +175,7 @@ static int io_msg_grab_file(struct io_kiocb *req, unsigned int issue_flags)
 		req->flags |= REQ_F_NEED_CLEANUP;
 		ret = 0;
 	}
-	io_ring_submit_unlock(ctx, issue_flags);
+	io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 	return ret;
 }
 
@@ -178,10 +183,12 @@ static int io_msg_install_complete(struct io_kiocb *req, unsigned int issue_flag
 {
 	struct io_ring_ctx *target_ctx = req->file->private_data;
 	struct io_msg *msg = io_kiocb_to_cmd(req, struct io_msg);
+	struct io_ring_ctx_lock_state lock_state;
 	struct file *src_file = msg->src_file;
 	int ret;
 
-	if (unlikely(io_lock_external_ctx(target_ctx, issue_flags)))
+	if (unlikely(io_lock_external_ctx(target_ctx, issue_flags,
+					  &lock_state)))
 		return -EAGAIN;
 
 	ret = __io_fixed_fd_install(target_ctx, src_file, msg->dst_fd);
@@ -202,7 +209,7 @@ static int io_msg_install_complete(struct io_kiocb *req, unsigned int issue_flag
 	if (!io_post_aux_cqe(target_ctx, msg->user_data, ret, 0))
 		ret = -EOVERFLOW;
 out_unlock:
-	io_double_unlock_ctx(target_ctx);
+	io_double_unlock_ctx(target_ctx, &lock_state);
 	return ret;
 }
 

@@ -222,10 +222,11 @@ int io_futexv_wait(struct io_kiocb *req, unsigned int issue_flags)
 {
 	struct io_futex *iof = io_kiocb_to_cmd(req, struct io_futex);
 	struct io_futexv_data *ifd = req->async_data;
+	struct io_ring_ctx_lock_state lock_state;
 	struct io_ring_ctx *ctx = req->ctx;
 	int ret, woken = -1;
 
-	io_ring_submit_lock(ctx, issue_flags);
+	io_ring_submit_lock(ctx, issue_flags, &lock_state);
 
 	ret = futex_wait_multiple_setup(ifd->futexv, iof->futex_nr, &woken);
 
@@ -233,7 +234,7 @@ int io_futexv_wait(struct io_kiocb *req, unsigned int issue_flags)
 	 * Error case, ret is < 0. Mark the request as failed.
 	 */
 	if (unlikely(ret < 0)) {
-		io_ring_submit_unlock(ctx, issue_flags);
+		io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 		req_set_fail(req);
 		io_req_set_res(req, ret, 0);
 		io_req_async_data_free(req);
@@ -267,13 +268,14 @@ int io_futexv_wait(struct io_kiocb *req, unsigned int issue_flags)
 			io_req_set_res(req, woken, 0);
 	}
 
-	io_ring_submit_unlock(ctx, issue_flags);
+	io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 	return IOU_ISSUE_SKIP_COMPLETE;
 }
 
 int io_futex_wait(struct io_kiocb *req, unsigned int issue_flags)
 {
 	struct io_futex *iof = io_kiocb_to_cmd(req, struct io_futex);
+	struct io_ring_ctx_lock_state lock_state;
 	struct io_ring_ctx *ctx = req->ctx;
 	struct io_futex_data *ifd = NULL;
 	int ret;
@@ -283,7 +285,7 @@ int io_futex_wait(struct io_kiocb *req, unsigned int issue_flags)
 		goto done;
 	}
 
-	io_ring_submit_lock(ctx, issue_flags);
+	io_ring_submit_lock(ctx, issue_flags, &lock_state);
 	ifd = io_cache_alloc(&ctx->futex_cache, GFP_NOWAIT);
 	if (!ifd) {
 		ret = -ENOMEM;
@@ -301,13 +303,13 @@ int io_futex_wait(struct io_kiocb *req, unsigned int issue_flags)
 			       &ifd->q, NULL, NULL);
 	if (!ret) {
 		hlist_add_head(&req->hash_node, &ctx->futex_list);
-		io_ring_submit_unlock(ctx, issue_flags);
+		io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 
 		return IOU_ISSUE_SKIP_COMPLETE;
 	}
 
 done_unlock:
-	io_ring_submit_unlock(ctx, issue_flags);
+	io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 done:
 	if (ret < 0)
 		req_set_fail(req);

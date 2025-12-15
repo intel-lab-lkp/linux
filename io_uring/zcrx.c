@@ -853,7 +853,7 @@ void io_unregister_zcrx_ifqs(struct io_ring_ctx *ctx)
 {
 	struct io_zcrx_ifq *ifq;
 
-	lockdep_assert_held(&ctx->uring_lock);
+	io_ring_ctx_assert_locked(ctx);
 
 	while (1) {
 		scoped_guard(mutex, &ctx->mmap_lock) {

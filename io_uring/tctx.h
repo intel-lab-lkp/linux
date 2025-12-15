@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
+#include "io_uring.h"
+
 struct io_tctx_node {
 	struct list_head	ctx_node;
 	struct task_struct	*task;
@@ -15,7 +17,8 @@ void io_uring_clean_tctx(struct io_uring_task *tctx);
 
 void io_uring_unreg_ringfd(void);
 int io_ringfd_register(struct io_ring_ctx *ctx, void __user *__arg,
-		       unsigned nr_args);
+		       unsigned nr_args,
+		       struct io_ring_ctx_lock_state *lock_state);
 int io_ringfd_unregister(struct io_ring_ctx *ctx, void __user *__arg,
 			 unsigned nr_args);
 

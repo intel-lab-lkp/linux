@@ -37,7 +37,7 @@ static inline void io_region_publish(struct io_ring_ctx *ctx,
 {
 	/*
 	 * Once published mmap can find it without holding only the ->mmap_lock
-	 * and not ->uring_lock.
+	 * and not the ctx uring lock.
 	 */
 	guard(mutex)(&ctx->mmap_lock);
 	*dst_region = *src_region;

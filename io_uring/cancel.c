@@ -170,6 +170,7 @@ static int __io_async_cancel(struct io_cancel_data *cd,
 			     unsigned int issue_flags)
 {
 	bool all = cd->flags & (IORING_ASYNC_CANCEL_ALL|IORING_ASYNC_CANCEL_ANY);
+	struct io_ring_ctx_lock_state lock_state;
 	struct io_ring_ctx *ctx = cd->ctx;
 	struct io_tctx_node *node;
 	int ret, nr = 0;
@@ -184,7 +185,7 @@ static int __io_async_cancel(struct io_cancel_data *cd,
 	} while (1);
 
 	/* slow path, try all io-wq's */
-	io_ring_submit_lock(ctx, issue_flags);
+	io_ring_submit_lock(ctx, issue_flags, &lock_state);
 	ret = -ENOENT;
 	list_for_each_entry(node, &ctx->tctx_list, ctx_node) {
 		ret = io_async_cancel_one(node->task->io_uring, cd);
@@ -194,7 +195,7 @@ static int __io_async_cancel(struct io_cancel_data *cd,
 			nr++;
 		}
 	}
-	io_ring_submit_unlock(ctx, issue_flags);
+	io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 	return all ? nr : ret;
 }
 
@@ -240,7 +241,7 @@ static int __io_sync_cancel(struct io_uring_task *tctx,
 {
 	struct io_ring_ctx *ctx = cd->ctx;
 
-	/* fixed must be grabbed every time since we drop the uring_lock */
+	/* fixed must be grabbed every time since we drop the ctx uring lock */
 	if ((cd->flags & IORING_ASYNC_CANCEL_FD) &&
 	    (cd->flags & IORING_ASYNC_CANCEL_FD_FIXED)) {
 		struct io_rsrc_node *node;
@@ -256,8 +257,8 @@ static int __io_sync_cancel(struct io_uring_task *tctx,
 	return __io_async_cancel(cd, tctx, 0);
 }
 
-int io_sync_cancel(struct io_ring_ctx *ctx, void __user *arg)
-	__must_hold(&ctx->uring_lock)
+int io_sync_cancel(struct io_ring_ctx *ctx, void __user *arg,
+		   struct io_ring_ctx_lock_state *lock_state)
 {
 	struct io_cancel_data cd = {
 		.ctx	= ctx,
@@ -268,6 +269,8 @@ int io_sync_cancel(struct io_ring_ctx *ctx, void __user *arg)
 	struct file *file = NULL;
 	DEFINE_WAIT(wait);
 	int ret, i;
+
+	io_ring_ctx_assert_locked(ctx);
 
 	if (copy_from_user(&sc, arg, sizeof(sc)))
 		return -EFAULT;
@@ -319,7 +322,7 @@ int io_sync_cancel(struct io_ring_ctx *ctx, void __user *arg)
 
 		ret = __io_sync_cancel(current->io_uring, &cd, sc.fd);
 
-		mutex_unlock(&ctx->uring_lock);
+		io_ring_ctx_unlock(ctx, lock_state);
 		if (ret != -EALREADY)
 			break;
 
@@ -331,11 +334,11 @@ int io_sync_cancel(struct io_ring_ctx *ctx, void __user *arg)
 			ret = -ETIME;
 			break;
 		}
-		mutex_lock(&ctx->uring_lock);
+		io_ring_ctx_lock(ctx, lock_state);
 	} while (1);
 
 	finish_wait(&ctx->cq_wait, &wait);
-	mutex_lock(&ctx->uring_lock);
+	io_ring_ctx_lock(ctx, lock_state);
 
 	if (ret == -ENOENT || ret > 0)
 		ret = 0;
@@ -353,7 +356,7 @@ bool io_cancel_remove_all(struct io_ring_ctx *ctx, struct io_uring_task *tctx,
 	struct io_kiocb *req;
 	bool found = false;
 
-	lockdep_assert_held(&ctx->uring_lock);
+	io_ring_ctx_assert_locked(ctx);
 
 	hlist_for_each_entry_safe(req, tmp, list, hash_node) {
 		if (!io_match_task_safe(req, tctx, cancel_all))
@@ -370,11 +373,12 @@ int io_cancel_remove(struct io_ring_ctx *ctx, struct io_cancel_data *cd,
 		     unsigned int issue_flags, struct hlist_head *list,
 		     bool (*cancel)(struct io_kiocb *))
 {
+	struct io_ring_ctx_lock_state lock_state;
 	struct hlist_node *tmp;
 	struct io_kiocb *req;
 	int nr = 0;
 
-	io_ring_submit_lock(ctx, issue_flags);
+	io_ring_submit_lock(ctx, issue_flags, &lock_state);
 	hlist_for_each_entry_safe(req, tmp, list, hash_node) {
 		if (!io_cancel_req_match(req, cd))
 			continue;
@@ -383,7 +387,7 @@ int io_cancel_remove(struct io_ring_ctx *ctx, struct io_cancel_data *cd,
 		if (!(cd->flags & IORING_ASYNC_CANCEL_ALL))
 			break;
 	}
-	io_ring_submit_unlock(ctx, issue_flags);
+	io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 	return nr ?: -ENOENT;
 }
 
@@ -479,24 +483,25 @@ __cold bool io_cancel_ctx_cb(struct io_wq_work *work, void *data)
 
 static __cold bool io_uring_try_cancel_iowq(struct io_ring_ctx *ctx)
 {
+	struct io_ring_ctx_lock_state lock_state;
 	struct io_tctx_node *node;
 	enum io_wq_cancel cret;
 	bool ret = false;
 
-	mutex_lock(&ctx->uring_lock);
+	io_ring_ctx_lock(ctx, &lock_state);
 	list_for_each_entry(node, &ctx->tctx_list, ctx_node) {
 		struct io_uring_task *tctx = node->task->io_uring;
 
 		/*
-		 * io_wq will stay alive while we hold uring_lock, because it's
-		 * killed after ctx nodes, which requires to take the lock.
+		 * io_wq will stay alive while we hold ctx uring lock, because
+		 * it's killed after ctx nodes, which requires to take the lock.
 		 */
 		if (!tctx || !tctx->io_wq)
 			continue;
 		cret = io_wq_cancel_cb(tctx->io_wq, io_cancel_ctx_cb, ctx, true);
 		ret |= (cret != IO_WQ_CANCEL_NOTFOUND);
 	}
-	mutex_unlock(&ctx->uring_lock);
+	io_ring_ctx_unlock(ctx, &lock_state);
 
 	return ret;
 }
@@ -506,6 +511,7 @@ __cold bool io_uring_try_cancel_requests(struct io_ring_ctx *ctx,
 					 bool cancel_all, bool is_sqpoll_thread)
 {
 	struct io_task_cancel cancel = { .tctx = tctx, .all = cancel_all, };
+	struct io_ring_ctx_lock_state lock_state;
 	enum io_wq_cancel cret;
 	bool ret = false;
 
@@ -544,13 +550,13 @@ __cold bool io_uring_try_cancel_requests(struct io_ring_ctx *ctx,
 	if ((ctx->flags & IORING_SETUP_DEFER_TASKRUN) &&
 	    io_allowed_defer_tw_run(ctx))
 		ret |= io_run_local_work(ctx, INT_MAX, INT_MAX) > 0;
-	mutex_lock(&ctx->uring_lock);
+	io_ring_ctx_lock(ctx, &lock_state);
 	ret |= io_cancel_defer_files(ctx, tctx, cancel_all);
 	ret |= io_poll_remove_all(ctx, tctx, cancel_all);
 	ret |= io_waitid_remove_all(ctx, tctx, cancel_all);
 	ret |= io_futex_remove_all(ctx, tctx, cancel_all);
 	ret |= io_uring_try_cancel_uring_cmd(ctx, tctx, cancel_all);
-	mutex_unlock(&ctx->uring_lock);
+	io_ring_ctx_unlock(ctx, &lock_state);
 	ret |= io_kill_timeouts(ctx, tctx, cancel_all);
 	if (tctx)
 		ret |= io_run_task_work() > 0;

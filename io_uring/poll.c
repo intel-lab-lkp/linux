@@ -123,7 +123,7 @@ static void io_poll_req_insert(struct io_kiocb *req)
 	struct io_hash_table *table = &req->ctx->cancel_table;
 	u32 index = hash_long(req->cqe.user_data, table->hash_bits);
 
-	lockdep_assert_held(&req->ctx->uring_lock);
+	io_ring_ctx_assert_locked(req->ctx);
 
 	hlist_add_head(&req->hash_node, &table->hbs[index].list);
 }
@@ -341,7 +341,7 @@ void io_poll_task_func(struct io_tw_req tw_req, io_tw_token_t tw)
 		return;
 	}
 	io_poll_remove_entries(req);
-	/* task_work always has ->uring_lock held */
+	/* task_work always holds ctx uring lock */
 	hash_del(&req->hash_node);
 
 	if (req->opcode == IORING_OP_POLL_ADD) {
@@ -527,11 +527,12 @@ static bool io_poll_can_finish_inline(struct io_kiocb *req,
 
 static void io_poll_add_hash(struct io_kiocb *req, unsigned int issue_flags)
 {
+	struct io_ring_ctx_lock_state lock_state;
 	struct io_ring_ctx *ctx = req->ctx;
 
-	io_ring_submit_lock(ctx, issue_flags);
+	io_ring_submit_lock(ctx, issue_flags, &lock_state);
 	io_poll_req_insert(req);
-	io_ring_submit_unlock(ctx, issue_flags);
+	io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 }
 
 /*
@@ -730,7 +731,7 @@ __cold bool io_poll_remove_all(struct io_ring_ctx *ctx, struct io_uring_task *tc
 	bool found = false;
 	int i;
 
-	lockdep_assert_held(&ctx->uring_lock);
+	io_ring_ctx_assert_locked(ctx);
 
 	for (i = 0; i < nr_buckets; i++) {
 		struct io_hash_bucket *hb = &ctx->cancel_table.hbs[i];
@@ -816,11 +817,12 @@ static int __io_poll_cancel(struct io_ring_ctx *ctx, struct io_cancel_data *cd)
 int io_poll_cancel(struct io_ring_ctx *ctx, struct io_cancel_data *cd,
 		   unsigned issue_flags)
 {
+	struct io_ring_ctx_lock_state lock_state;
 	int ret;
 
-	io_ring_submit_lock(ctx, issue_flags);
+	io_ring_submit_lock(ctx, issue_flags, &lock_state);
 	ret = __io_poll_cancel(ctx, cd);
-	io_ring_submit_unlock(ctx, issue_flags);
+	io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 	return ret;
 }
 
@@ -907,12 +909,13 @@ int io_poll_add(struct io_kiocb *req, unsigned int issue_flags)
 int io_poll_remove(struct io_kiocb *req, unsigned int issue_flags)
 {
 	struct io_poll_update *poll_update = io_kiocb_to_cmd(req, struct io_poll_update);
+	struct io_ring_ctx_lock_state lock_state;
 	struct io_ring_ctx *ctx = req->ctx;
 	struct io_cancel_data cd = { .ctx = ctx, .data = poll_update->old_user_data, };
 	struct io_kiocb *preq;
 	int ret2, ret = 0;
 
-	io_ring_submit_lock(ctx, issue_flags);
+	io_ring_submit_lock(ctx, issue_flags, &lock_state);
 	preq = io_poll_find(ctx, true, &cd);
 	ret2 = io_poll_disarm(preq);
 	if (ret2) {
@@ -952,7 +955,7 @@ complete:
 	preq->io_task_work.func = io_req_task_complete;
 	io_req_task_work_add(preq);
 out:
-	io_ring_submit_unlock(ctx, issue_flags);
+	io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 	if (ret < 0) {
 		req_set_fail(req);
 		return ret;

@@ -53,7 +53,7 @@ bool io_uring_try_cancel_uring_cmd(struct io_ring_ctx *ctx,
 	struct io_kiocb *req;
 	bool ret = false;
 
-	lockdep_assert_held(&ctx->uring_lock);
+	io_ring_ctx_assert_locked(ctx);
 
 	hlist_for_each_entry_safe(req, tmp, &ctx->cancelable_uring_cmd,
 			hash_node) {
@@ -78,15 +78,16 @@ static void io_uring_cmd_del_cancelable(struct io_uring_cmd *cmd,
 		unsigned int issue_flags)
 {
 	struct io_kiocb *req = cmd_to_io_kiocb(cmd);
+	struct io_ring_ctx_lock_state lock_state;
 	struct io_ring_ctx *ctx = req->ctx;
 
 	if (!(cmd->flags & IORING_URING_CMD_CANCELABLE))
 		return;
 
 	cmd->flags &= ~IORING_URING_CMD_CANCELABLE;
-	io_ring_submit_lock(ctx, issue_flags);
+	io_ring_submit_lock(ctx, issue_flags, &lock_state);
 	hlist_del(&req->hash_node);
-	io_ring_submit_unlock(ctx, issue_flags);
+	io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 }
 
 /*
@@ -105,10 +106,12 @@ void io_uring_cmd_mark_cancelable(struct io_uring_cmd *cmd,
 	struct io_ring_ctx *ctx = req->ctx;
 
 	if (!(cmd->flags & IORING_URING_CMD_CANCELABLE)) {
+		struct io_ring_ctx_lock_state lock_state;
+
 		cmd->flags |= IORING_URING_CMD_CANCELABLE;
-		io_ring_submit_lock(ctx, issue_flags);
+		io_ring_submit_lock(ctx, issue_flags, &lock_state);
 		hlist_add_head(&req->hash_node, &ctx->cancelable_uring_cmd);
-		io_ring_submit_unlock(ctx, issue_flags);
+		io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 	}
 }
 EXPORT_SYMBOL_GPL(io_uring_cmd_mark_cancelable);

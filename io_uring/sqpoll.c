@@ -213,6 +213,7 @@ static int __io_sq_thread(struct io_ring_ctx *ctx, struct io_sq_data *sqd,
 		to_submit = IORING_SQPOLL_CAP_ENTRIES_VALUE;
 
 	if (to_submit || !wq_list_empty(&ctx->iopoll_list)) {
+		struct io_ring_ctx_lock_state lock_state;
 		const struct cred *creds = NULL;
 
 		io_sq_start_worktime(ist);
@@ -220,7 +221,7 @@ static int __io_sq_thread(struct io_ring_ctx *ctx, struct io_sq_data *sqd,
 		if (ctx->sq_creds != current_cred())
 			creds = override_creds(ctx->sq_creds);
 
-		mutex_lock(&ctx->uring_lock);
+		io_ring_ctx_lock(ctx, &lock_state);
 		if (!wq_list_empty(&ctx->iopoll_list))
 			io_do_iopoll(ctx, true);
 
@@ -231,7 +232,7 @@ static int __io_sq_thread(struct io_ring_ctx *ctx, struct io_sq_data *sqd,
 		if (to_submit && likely(!percpu_ref_is_dying(&ctx->refs)) &&
 		    !(ctx->flags & IORING_SETUP_R_DISABLED))
 			ret = io_submit_sqes(ctx, to_submit);
-		mutex_unlock(&ctx->uring_lock);
+		io_ring_ctx_unlock(ctx, &lock_state);
 
 		if (to_submit && wq_has_sleeper(&ctx->sqo_sq_wait))
 			wake_up(&ctx->sqo_sq_wait);

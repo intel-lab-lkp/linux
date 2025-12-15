@@ -88,7 +88,7 @@ struct io_mapped_region {
  * Return value from io_buffer_list selection, to avoid stashing it in
  * struct io_kiocb. For legacy/classic provided buffers, keeping a reference
  * across execution contexts are fine. But for ring provided buffers, the
- * list may go away as soon as ->uring_lock is dropped. As the io_kiocb
+ * list may go away as soon as the ctx uring lock is dropped. As the io_kiocb
  * persists, it's better to just keep the buffer local for those cases.
  */
 struct io_br_sel {
@@ -233,7 +233,7 @@ struct io_submit_link {
 };
 
 struct io_submit_state {
-	/* inline/task_work completion list, under ->uring_lock */
+	/* inline/task_work completion list, under ctx uring lock */
 	struct io_wq_work_node	free_list;
 	/* batch completion logic */
 	struct io_wq_work_list	compl_reqs;
@@ -305,12 +305,12 @@ struct io_ring_ctx {
 
 		/*
 		 * Fixed resources fast path, should be accessed only under
-		 * uring_lock, and updated through io_uring_register(2)
+		 * ctx uring lock, and updated through io_uring_register(2)
 		 */
 		atomic_t		cancel_seq;
 
 		/*
-		 * ->iopoll_list is protected by the ctx->uring_lock for
+		 * ->iopoll_list is protected by the ctx uring lock for
 		 * io_uring instances that don't use IORING_SETUP_SQPOLL.
 		 * For SQPOLL, only the single threaded io_sq_thread() will
 		 * manipulate the list, hence no extra locking is needed there.
@@ -326,7 +326,7 @@ struct io_ring_ctx {
 		struct io_submit_state	submit_state;
 
 		/*
-		 * Modifications are protected by ->uring_lock and ->mmap_lock.
+		 * Modifications protected by ctx uring lock and ->mmap_lock.
 		 * The buffer list's io mapped region should be stable once
 		 * published.
 		 */
@@ -469,7 +469,7 @@ struct io_ring_ctx {
 
 /*
  * Token indicating function is called in task work context:
- * ctx->uring_lock is held and any completions generated will be flushed.
+ * ctx uring lock is held and any completions generated will be flushed.
  * ONLY core io_uring.c should instantiate this struct.
  */
 struct io_tw_state {
