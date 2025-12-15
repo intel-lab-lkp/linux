@@ -3872,21 +3872,86 @@ static struct panthor_group *group_from_handle(struct panthor_group_pool *pool,
 	return group;
 }
 
+static int panthor_group_count_faults(struct panthor_scheduler *sched, struct panthor_group *group)
+{
+	int count = 0;
+	unsigned long queue_events = group->fault_queues | group->fatal_queues;
+
+	lockdep_assert(&sched->lock);
+
+	for (size_t i = 0; i < group->queue_count; i++) {
+		struct panthor_queue *queue;
+		struct panthor_queue_event *evnt;
+
+		if (!test_bit(i, &queue_events))
+			continue;
+
+		queue = group->queues[i];
+		if (!queue)
+			continue;
+
+		list_for_each_entry(evnt, &queue->events, link)
+			count++;
+	}
+
+	return count;
+}
+
+static void panthor_group_get_faults(struct panthor_scheduler *sched, struct panthor_group *group,
+				     struct drm_panthor_queue_event *events, u32 count)
+{
+	int nr_events = 0;
+	unsigned long queue_events = group->fault_queues | group->fatal_queues;
+
+	lockdep_assert(&sched->lock);
+
+	for (u32 i = 0; i < group->queue_count; i++) {
+		struct panthor_queue *queue;
+		struct panthor_queue_event *evnt, *tmp;
+
+		if (!test_bit(i, &queue_events))
+			continue;
+
+		queue = group->queues[i];
+
+		if (!queue)
+			continue;
+
+		list_for_each_entry_safe(evnt, tmp, &queue->events, link) {
+			if (nr_events >= count)
+				return;
+
+			events[nr_events++] = evnt->event;
+			list_del(&evnt->link);
+			kfree(evnt);
+		}
+
+		/* In case of additional faults being generated between invocations
+		 * of group_get state, there may not be enough space to drain
+		 * events to the user provided buffer. In those cases, the queue
+		 * should remain listed as faulted.
+		 */
+		if ((group->fault_queues & BIT(i)) && list_empty(&queue->events))
+			group->fault_queues &= ~BIT(i);
+	}
+}
+
 int panthor_group_get_state(struct panthor_file *pfile,
-			    struct drm_panthor_group_get_state *get_state)
+			    struct drm_panthor_group_get_state *get_state,
+			    struct drm_panthor_queue_event *events, u32 count)
 {
 	struct panthor_group_pool *gpool = pfile->groups;
 	struct panthor_device *ptdev = pfile->ptdev;
 	struct panthor_scheduler *sched = ptdev->scheduler;
-	struct panthor_group *group;
+	struct panthor_group *group = NULL;
+	u32 fault_count;
 
 	group = group_from_handle(gpool, get_state->group_handle);
 	if (!group)
 		return -EINVAL;
 
-	memset(get_state, 0, sizeof(*get_state));
+	guard(mutex)(&sched->lock);
 
-	mutex_lock(&sched->lock);
 	if (group->timedout)
 		get_state->state |= DRM_PANTHOR_GROUP_STATE_TIMEDOUT;
 	if (group->fatal_queues) {
@@ -3898,10 +3963,25 @@ int panthor_group_get_state(struct panthor_file *pfile,
 	if (group->fault_queues) {
 		get_state->state |= DRM_PANTHOR_GROUP_STATE_QUEUE_FAULT;
 		get_state->fault_queues = group->fault_queues;
-		group->fault_queues = 0;
 	}
-	mutex_unlock(&sched->lock);
 
+	get_state->exception_type = group->fault.exception_type;
+	get_state->access_type = group->fault.access_type;
+	get_state->source_id = group->fault.source_id;
+	get_state->valid_address = group->fault.valid_address;
+	get_state->address = group->fault.address;
+
+	fault_count = panthor_group_count_faults(sched, group);
+
+	if (!count && !events) {
+		get_state->faults.count = fault_count;
+		get_state->faults.stride = sizeof(struct drm_panthor_queue_event);
+		goto exit;
+	}
+
+	panthor_group_get_faults(sched, group, events, min(get_state->faults.count, count));
+
+exit:
 	group_put(group);
 	return 0;
 }

@@ -1012,6 +1012,30 @@ struct drm_panthor_group_get_state {
 
 	/** @fatal_queues: Bitmask of queues that faced fatal faults. */
 	__u32 fault_queues;
+
+	/** @exception_type: The type of exception that caused the fault. */
+	__u32 exception_type;
+
+	/** @access_type: The direction of the data transfer that caused the fault., if known. */
+	__u32 access_type;
+
+	/** @source_id: ID supplying further data about the source of the fault. */
+	__u32 source_id;
+
+	/**
+	 * @valid_address: Whether the address is valid or not. Some faults may not come with
+	 * a valid GPU VA.
+	 */
+	__u8 valid_address;
+
+	/** @pad0: MBZ. */
+	__u8 pad0[3];
+
+	/** @address: GPU VA of the faulting access, if present. */
+	__u64 address;
+
+	/** @faults: Array of faults passed back to the user. */
+	struct drm_panthor_obj_array faults;
 };
 
 /**

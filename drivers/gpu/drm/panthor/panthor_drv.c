@@ -76,6 +76,55 @@ panthor_set_uobj(u64 usr_ptr, u32 usr_size, u32 min_size, u32 kern_size, const v
 }
 
 /**
+ * panthor_set_uobj_array() - Copy a kernel object array into a user object array.
+ * @out: The object array to copy to.
+ * @min_stride: Minimum array stride.
+ * @obj_size: Kernel object size.
+ * @in: Kernel object array to copy from.
+ *
+ * Helper automating kernel -> user object copies.
+ *
+ * Don't use this function directly, use PANTHOR_UOBJ_SET_ARRAY() instead.
+ *
+ * Return: 0 on success, a negative error code otherwise.
+ */
+static int
+panthor_set_uobj_array(const struct drm_panthor_obj_array *out, u32 min_stride, u32 obj_size,
+		       const void *in)
+{
+	if (out->stride < min_stride)
+		return -EINVAL;
+
+	if (!out->count)
+		return 0;
+
+	if (obj_size == out->stride) {
+		if (copy_to_user(u64_to_user_ptr(out->array), in,
+				 (unsigned long)obj_size * out->count))
+			return -EFAULT;
+	} else {
+		u32 cpy_elem_size = min_t(u32, out->stride, obj_size);
+		void __user *out_ptr = u64_to_user_ptr(out->array);
+		const void *in_ptr = in;
+
+		for (u32 i = 0; i < out->count; i++) {
+			if (copy_to_user(out_ptr, in_ptr, cpy_elem_size))
+				return -EFAULT;
+
+			if (out->stride > obj_size &&
+			    clear_user(out_ptr + cpy_elem_size, out->stride - obj_size)) {
+				return -EFAULT;
+			}
+
+			out_ptr += out->stride;
+			in_ptr += obj_size;
+		}
+	}
+
+	return 0;
+}
+
+/**
  * panthor_get_uobj_array() - Copy a user object array into a kernel accessible object array.
  * @in: The object array to copy.
  * @min_stride: Minimum array stride.
@@ -178,7 +227,8 @@ panthor_get_uobj_array(const struct drm_panthor_obj_array *in, u32 min_stride,
 		 PANTHOR_UOBJ_DECL(struct drm_panthor_queue_submit, syncs), \
 		 PANTHOR_UOBJ_DECL(struct drm_panthor_queue_create, ringbuf_size), \
 		 PANTHOR_UOBJ_DECL(struct drm_panthor_vm_bind_op, syncs), \
-		 PANTHOR_UOBJ_DECL(struct drm_panthor_bo_sync_op, size))
+		 PANTHOR_UOBJ_DECL(struct drm_panthor_bo_sync_op, size), \
+		 PANTHOR_UOBJ_DECL(struct drm_panthor_queue_event, exception_data))
 
 /**
  * PANTHOR_UOBJ_SET() - Copy a kernel object to a user object.
@@ -192,6 +242,20 @@ panthor_get_uobj_array(const struct drm_panthor_obj_array *in, u32 min_stride,
 	panthor_set_uobj(_dest_usr_ptr, _usr_size, \
 			 PANTHOR_UOBJ_MIN_SIZE(_src_obj), \
 			 sizeof(_src_obj), &(_src_obj))
+
+/**
+ * PANTHOR_UOBJ_SET_ARRAY() - Copies from _src_array to @_dest_drm_panthor_obj_array.array.
+ * @_dest_drm_panthor_obj_array: The &struct drm_panthor_obj_array containing a __u64 raw
+ * pointer to the destination C array in user space and the size of each array
+ * element in user space (the 'stride').
+ * @_src_array: The source C array object in kernel space.
+ *
+ * Return: Error code. See panthor_set_uobj_array().
+ */
+#define PANTHOR_UOBJ_SET_ARRAY(_dest_drm_panthor_obj_array, _src_array) \
+	panthor_set_uobj_array(_dest_drm_panthor_obj_array, \
+			       PANTHOR_UOBJ_MIN_SIZE((_src_array)[0]), \
+			       sizeof((_src_array)[0]), _src_array)
 
 /**
  * PANTHOR_UOBJ_GET_ARRAY() - Copy a user object array to a kernel accessible
@@ -1128,9 +1192,23 @@ static int panthor_ioctl_group_get_state(struct drm_device *ddev, void *data,
 					 struct drm_file *file)
 {
 	struct panthor_file *pfile = file->driver_priv;
+	struct drm_panthor_queue_event *__free(kvfree) events = NULL;
 	struct drm_panthor_group_get_state *args = data;
+	int ret;
 
-	return panthor_group_get_state(pfile, args);
+	/* First call enumerates the faults. */
+	if (!args->faults.count && !args->faults.array)
+		return panthor_group_get_state(pfile, args, NULL, 0);
+
+	ret = PANTHOR_UOBJ_GET_ARRAY(events, &args->faults);
+	if (ret)
+		return ret;
+
+	ret = panthor_group_get_state(pfile, args, events, args->faults.count);
+	if (!ret)
+		ret = PANTHOR_UOBJ_SET_ARRAY(&args->faults, events);
+
+	return ret;
 }
 
 static int panthor_ioctl_tiler_heap_create(struct drm_device *ddev, void *data,
@@ -1678,6 +1756,7 @@ static void panthor_debugfs_init(struct drm_minor *minor)
  *       - adds DRM_IOCTL_PANTHOR_BO_SYNC ioctl
  *       - adds DRM_IOCTL_PANTHOR_BO_QUERY_INFO ioctl
  *       - adds drm_panthor_gpu_info::selected_coherency
+ * - 1.8 - extends GROUP_GET_STATE to propagate fault and fatal event metadata
  */
 static const struct drm_driver panthor_drm_driver = {
 	.driver_features = DRIVER_RENDER | DRIVER_GEM | DRIVER_SYNCOBJ |
@@ -1691,7 +1770,7 @@ static const struct drm_driver panthor_drm_driver = {
 	.name = "panthor",
 	.desc = "Panthor DRM driver",
 	.major = 1,
-	.minor = 7,
+	.minor = 8,
 
 	.gem_create_object = panthor_gem_create_object,
 	.gem_prime_import_sg_table = drm_gem_shmem_prime_import_sg_table,
