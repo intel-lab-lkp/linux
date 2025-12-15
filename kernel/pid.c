@@ -270,7 +270,6 @@ struct pid *alloc_pid(struct pid_namespace *ns, pid_t *set_tid,
 	INIT_HLIST_HEAD(&pid->inodes);
 
 	upid = pid->numbers + ns->level;
-	idr_preload(GFP_KERNEL);
 	spin_lock(&pidmap_lock);
 	if (!(ns->pid_allocated & PIDNS_ADDING))
 		goto out_unlock;
@@ -281,14 +280,12 @@ struct pid *alloc_pid(struct pid_namespace *ns, pid_t *set_tid,
 		upid->ns->pid_allocated++;
 	}
 	spin_unlock(&pidmap_lock);
-	idr_preload_end();
 	ns_ref_active_get(ns);
 
 	return pid;
 
 out_unlock:
 	spin_unlock(&pidmap_lock);
-	idr_preload_end();
 	put_pid_ns(ns);
 
 out_free:
