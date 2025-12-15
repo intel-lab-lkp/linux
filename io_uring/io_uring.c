@@ -3649,6 +3649,15 @@ static __cold int io_uring_create(struct io_ctx_config *config)
 	mmgrab(current->mm);
 	ctx->mm_account = current->mm;
 
+	if (ctx->flags & IORING_SETUP_SINGLE_ISSUER
+	    && !(ctx->flags & IORING_SETUP_R_DISABLED)) {
+		/*
+		 * Unlike io_register_enable_rings(), don't need WRITE_ONCE()
+		 * since ctx isn't yet accessible from other tasks
+		 */
+		ctx->submitter_task = get_task_struct(current);
+	}
+
 	ret = io_allocate_scq_urings(ctx, config);
 	if (ret)
 		goto err;
@@ -3662,15 +3671,6 @@ static __cold int io_uring_create(struct io_ctx_config *config)
 	if (copy_to_user(config->uptr, p, sizeof(*p))) {
 		ret = -EFAULT;
 		goto err;
-	}
-
-	if (ctx->flags & IORING_SETUP_SINGLE_ISSUER
-	    && !(ctx->flags & IORING_SETUP_R_DISABLED)) {
-		/*
-		 * Unlike io_register_enable_rings(), don't need WRITE_ONCE()
-		 * since ctx isn't yet accessible from other tasks
-		 */
-		ctx->submitter_task = get_task_struct(current);
 	}
 
 	file = io_uring_get_file(ctx);
