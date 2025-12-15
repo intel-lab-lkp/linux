@@ -2102,7 +2102,10 @@ static void isp_parse_of_csi1_endpoint(struct device *dev,
 	buscfg->bus.ccp2.ccp2_mode = vep->bus_type == V4L2_MBUS_CCP2;
 	buscfg->bus.ccp2.vp_clk_pol = 1;
 
-	buscfg->bus.ccp2.crc = 1;
+	u32 use_crc = 1;
+
+	fwnode_property_read_u32(vep->base.local_fwnode, "crc", &use_crc);
+	buscfg->bus.ccp2.crc = use_crc;
 }
 
 static struct {
