@@ -18,13 +18,15 @@
 
 struct adc_keys_button {
 	u32 voltage;
-	u32 keycode;
+	u32 code;
+	u32 type;
 };
 
 struct adc_keys_state {
 	struct iio_channel *channel;
 	u32 num_keys;
 	u32 last_key;
+	u32 last_type;
 	u32 keyup_voltage;
 	const struct adc_keys_button *map;
 };
@@ -34,7 +36,8 @@ static void adc_keys_poll(struct input_dev *input)
 	struct adc_keys_state *st = input_get_drvdata(input);
 	int i, value, ret;
 	u32 diff, closest = 0xffffffff;
-	int keycode = 0;
+	u32 code = 0;
+	u32 type = EV_KEY;
 
 	ret = iio_read_channel_processed(st->channel, &value);
 	if (unlikely(ret < 0)) {
@@ -45,22 +48,24 @@ static void adc_keys_poll(struct input_dev *input)
 			diff = abs(st->map[i].voltage - value);
 			if (diff < closest) {
 				closest = diff;
-				keycode = st->map[i].keycode;
+				code = st->map[i].code;
+				type = st->map[i].type;
 			}
 		}
 	}
 
 	if (abs(st->keyup_voltage - value) < closest)
-		keycode = 0;
+		code = 0;
 
-	if (st->last_key && st->last_key != keycode)
-		input_report_key(input, st->last_key, 0);
+	if (st->last_key && st->last_key != code)
+		input_event(input, st->last_type, st->last_key, 0);
 
-	if (keycode)
-		input_report_key(input, keycode, 1);
+	if (code)
+		input_event(input, type, code, 1);
 
 	input_sync(input);
-	st->last_key = keycode;
+	st->last_key = code;
+	st->last_type = type;
 }
 
 static int adc_keys_load_keymap(struct device *dev, struct adc_keys_state *st)
@@ -88,10 +93,19 @@ static int adc_keys_load_keymap(struct device *dev, struct adc_keys_state *st)
 		map[i].voltage /= 1000;
 
 		if (fwnode_property_read_u32(child, "linux,code",
-					     &map[i].keycode)) {
+					     &map[i].code)) {
 			dev_err(dev, "Key with invalid or missing linux,code\n");
 			return -EINVAL;
 		}
+
+		if (fwnode_property_read_u32(child, "linux,input-type",
+					     &map[i].type))
+			map[i].type = EV_KEY;
+
+		if (map[i].type != EV_KEY && map[i].type != EV_SW)
+			return dev_err_probe(dev, -EINVAL,
+					     "Invalid linux,input-type: 0x%x\n",
+					     map[i].type);
 
 		i++;
 	}
@@ -156,9 +170,8 @@ static int adc_keys_probe(struct platform_device *pdev)
 	input->id.product = 0x0001;
 	input->id.version = 0x0100;
 
-	__set_bit(EV_KEY, input->evbit);
 	for (i = 0; i < st->num_keys; i++)
-		__set_bit(st->map[i].keycode, input->keybit);
+		input_set_capability(input, st->map[i].type, st->map[i].code);
 
 	if (device_property_read_bool(dev, "autorepeat"))
 		__set_bit(EV_REP, input->evbit);
