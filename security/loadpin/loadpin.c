@@ -53,17 +53,28 @@ static bool deny_reading_verity_digests;
 #endif
 
 #ifdef CONFIG_SYSCTL
-static struct ctl_table loadpin_sysctl_table[] = {
+static bool is_loadpin_writable;
+
+static int proc_handler_loadpin(const struct ctl_table *table, int dir,
+				void *buffer, size_t *lenp, loff_t *ppos)
+{
+	if (!is_loadpin_writable && SYSCTL_USER_TO_KERN(dir))
+		return -EINVAL;
+	return proc_dointvec_minmax(table, dir, buffer, lenp, ppos);
+}
+
+static const struct ctl_table loadpin_sysctl_table[] = {
 	{
 		.procname       = "enforce",
 		.data           = &enforce,
 		.maxlen         = sizeof(int),
 		.mode           = 0644,
-		.proc_handler   = proc_dointvec_minmax,
-		.extra1         = SYSCTL_ONE,
+		.proc_handler   = proc_handler_loadpin,
+		.extra1         = SYSCTL_ZERO,
 		.extra2         = SYSCTL_ONE,
 	},
 };
+
 
 static void set_sysctl(bool is_writable)
 {
@@ -72,9 +83,9 @@ static void set_sysctl(bool is_writable)
 	 * device, allow sysctl to change modes for testing.
 	 */
 	if (is_writable)
-		loadpin_sysctl_table[0].extra1 = SYSCTL_ZERO;
+		is_loadpin_writable = true;
 	else
-		loadpin_sysctl_table[0].extra1 = SYSCTL_ONE;
+		is_loadpin_writable = false;
 }
 #else
 static inline void set_sysctl(bool is_writable) { }
