@@ -109,14 +109,14 @@ struct ipvl_addr *ipvlan_find_addr(const struct ipvl_dev *ipvlan,
 {
 	struct ipvl_addr *addr, *ret = NULL;
 
-	rcu_read_lock();
-	list_for_each_entry_rcu(addr, &ipvlan->addrs, anode) {
+	assert_spin_locked(&ipvlan->port->addrs_lock);
+
+	list_for_each_entry(addr, &ipvlan->addrs, anode) {
 		if (addr_equal(is_v6, addr, iaddr)) {
 			ret = addr;
 			break;
 		}
 	}
-	rcu_read_unlock();
 	return ret;
 }
 
@@ -125,14 +125,14 @@ bool ipvlan_addr_busy(struct ipvl_port *port, void *iaddr, bool is_v6)
 	struct ipvl_dev *ipvlan;
 	bool ret = false;
 
-	rcu_read_lock();
-	list_for_each_entry_rcu(ipvlan, &port->ipvlans, pnode) {
+	assert_spin_locked(&port->addrs_lock);
+
+	list_for_each_entry(ipvlan, &port->ipvlans, pnode) {
 		if (ipvlan_find_addr(ipvlan, iaddr, is_v6)) {
 			ret = true;
 			break;
 		}
 	}
-	rcu_read_unlock();
 	return ret;
 }
 
