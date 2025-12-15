@@ -1836,7 +1836,7 @@ static int __ocfs2_find_path(struct ocfs2_caching_info *ci,
 			    break;
 		}
 
-		blkno = le64_to_cpu(el->l_recs[i].e_blkno);
+		blkno = le64_to_cpu(rec->e_blkno);
 		if (blkno == 0) {
 			ocfs2_error(ocfs2_metadata_cache_get_super(ci),
 				    "Owner %llu has bad blkno in extent list at depth %u (index %d)\n",
