@@ -84,6 +84,7 @@ extern struct crashtype_category usercopy_crashtypes;
 extern struct crashtype_category stackleak_crashtypes;
 extern struct crashtype_category cfi_crashtypes;
 extern struct crashtype_category fortify_crashtypes;
+extern struct crashtype_category lockdep_crashtypes;
 extern struct crashtype_category powerpc_crashtypes;
 
 /* Each category's init/exit routines. */

@@ -83,3 +83,11 @@ FORTIFY_STR_MEMBER detected buffer overflow
 FORTIFY_MEM_OBJECT detected buffer overflow
 FORTIFY_MEM_MEMBER detected field-spanning write
 PPC_SLB_MULTIHIT Recovered
+#LOCKDEP_CIRCULAR_LOCK Lockdep can only trigger once
+#LOCKDEP_RECURSIVE_LOCK Hangs the system
+#LOCKDEP_INCONSISTENT_LOCK Lockdep can only trigger once
+#LOCKDEP_NESTED_LOCK_NOT_HELD Cause a deadlock in subsequent lockdep tests
+#LOCKDEP_BAD_UNLOCK_BALANCE Lockdep can only trigger once
+#LOCKDEP_HELD_LOCK_FREED Lockdep can only trigger once
+#LOCKDEP_HELD_LOCK Cause a deadlock in subsequent lockdep tests
+#LOCKDEP_SUSPICIOUS_RCU Lockdep can only trigger once
