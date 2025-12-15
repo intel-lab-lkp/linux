@@ -32,6 +32,7 @@ const char *const hash_algo_name[HASH_ALGO__LAST] = {
 	[HASH_ALGO_SHA3_256]    = "sha3-256",
 	[HASH_ALGO_SHA3_384]    = "sha3-384",
 	[HASH_ALGO_SHA3_512]    = "sha3-512",
+	[HASH_ALGO_ASCON_HASH256] = "ascon-hash256",
 };
 EXPORT_SYMBOL_GPL(hash_algo_name);
 
@@ -59,5 +60,6 @@ const int hash_digest_size[HASH_ALGO__LAST] = {
 	[HASH_ALGO_SHA3_256]    = SHA3_256_DIGEST_SIZE,
 	[HASH_ALGO_SHA3_384]    = SHA3_384_DIGEST_SIZE,
 	[HASH_ALGO_SHA3_512]    = SHA3_512_DIGEST_SIZE,
+	[HASH_ALGO_ASCON_HASH256] = ASCON_HASH256_DIGEST_SIZE,
 };
 EXPORT_SYMBOL_GPL(hash_digest_size);

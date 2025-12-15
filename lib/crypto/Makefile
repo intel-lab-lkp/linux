@@ -297,6 +297,11 @@ endif # CONFIG_CRYPTO_LIB_SHA3_ARCH
 
 ################################################################################
 
+obj-$(CONFIG_CRYPTO_LIB_ASCON_HASH) += libascon_hash.o
+libascon_hash-y := ascon_hash.o
+
+################################################################################
+
 obj-$(CONFIG_MPILIB) += mpi/
 
 obj-$(CONFIG_CRYPTO_SELFTESTS_FULL)		+= simd.o
