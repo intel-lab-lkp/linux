@@ -51,15 +51,15 @@ properties:
     minItems: 1
 
   mbox-names:
+    minItems: 2
+    maxItems: 6
     description: |
       Specifies the mailboxes used to communicate with TI-SCI Controller
       made available from TI-SCI controller.
-    items:
-      - const: rx
-      - const: tx
 
   mboxes:
     minItems: 2
+    maxItems: 6
 
   ti,host-id:
     $ref: /schemas/types.yaml#/definitions/uint32
@@ -78,6 +78,42 @@ properties:
   reset-controller:
     type: object
     $ref: /schemas/reset/ti,sci-reset.yaml#
+
+if:
+  properties:
+    compatible:
+      contains:
+        const: ti,am654-sci
+then:
+  properties:
+    mbox-names:
+      minItems: 2
+      items:
+        - const: rx
+        - const: tx
+        - const: notify
+        - const: boot_rx
+        - const: boot_tx
+        - const: boot_notify
+    mboxes:
+      minItems: 2
+      items:
+        - description: RX thread
+        - description: TX thread
+        - description: Notify thread
+        - description: boot stage RX thread
+        - description: boot stage TX thread
+        - description: boot stage Notify thread
+else:
+  properties:
+    mbox-names:
+      items:
+        - const: rx
+        - const: tx
+    mboxes:
+      items:
+        - description: RX thread
+        - description: TX thread
 
 required:
   - compatible
@@ -99,11 +135,11 @@ examples:
 
   - |
     dmsc: system-controller@44083000 {
-      compatible = "ti,k2g-sci";
+      compatible = "ti,am654-sci";
       ti,host-id = <12>;
-      mbox-names = "rx", "tx";
-      mboxes = <&secure_proxy_main 11>,
-               <&secure_proxy_main 13>;
+      mbox-names = "rx", "tx", "notify", "boot_rx", "boot_tx";
+      mboxes= <&secure_proxy_mcu 6>, <&secure_proxy_mcu 8>,
+        <&secure_proxy_mcu 5>, <&secure_proxy_mcu 5>, <&secure_proxy_mcu 4>;
       reg-names = "debug_messages";
       reg = <0x44083000 0x1000>;
 
