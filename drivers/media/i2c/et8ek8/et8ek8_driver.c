@@ -29,6 +29,7 @@
 #include <media/media-entity.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
+#include <media/v4l2-fwnode.h>
 #include <media/v4l2-subdev.h>
 
 #include "et8ek8_reg.h"
@@ -45,6 +46,7 @@ struct et8ek8_sensor {
 	struct regulator *vana;
 	struct clk *ext_clk;
 	u32 xclk_freq;
+	u32 use_crc;
 
 	u16 version;
 
@@ -129,8 +131,6 @@ static struct et8ek8_gain {
 #define PRIV_MEM_WIN_SIZE	8
 
 #define ET8EK8_I2C_DELAY	3	/* msec delay b/w accesses */
-
-#define USE_CRC			1
 
 /*
  * Register access helpers
@@ -844,20 +844,16 @@ static int et8ek8_power_on(struct et8ek8_sensor *sensor)
 	if (rval)
 		goto out;
 
-#ifdef USE_CRC
 	rval = et8ek8_i2c_read_reg(client, ET8EK8_REG_8BIT, 0x1263, &val);
 	if (rval)
 		goto out;
-#if USE_CRC /* TODO get crc setting from DT */
-	val |= BIT(4);
-#else
-	val &= ~BIT(4);
-#endif
+	if (sensor->use_crc)
+		val |= BIT(4);
+	else
+		val &= ~BIT(4);
 	rval = et8ek8_i2c_write_reg(client, ET8EK8_REG_8BIT, 0x1263, val);
 	if (rval)
 		goto out;
-#endif
-
 out:
 	if (rval)
 		et8ek8_power_off(sensor);
@@ -1396,6 +1392,34 @@ static int __maybe_unused et8ek8_resume(struct device *dev)
 	return __et8ek8_set_power(sensor, true);
 }
 
+static int et8ek8_parse_fwnode(struct device *dev, struct et8ek8_sensor *sensor)
+{
+	struct v4l2_fwnode_endpoint bus_cfg = {
+		.bus_type = V4L2_MBUS_CCP2,
+	};
+	struct fwnode_handle *ep;
+	int ret;
+
+	ep = fwnode_graph_get_endpoint_by_id(dev_fwnode(dev), 0, 0,
+					     FWNODE_GRAPH_ENDPOINT_NEXT);
+	if (!ep) {
+		dev_warn(dev, "could not get endpoint node\n");
+		return -EINVAL;
+	}
+
+	ret = v4l2_fwnode_endpoint_alloc_parse(ep, &bus_cfg);
+	if (ret) {
+		dev_warn(dev, "parsing endpoint node failed\n");
+		goto done;
+	}
+
+	fwnode_property_read_u32(ep, "crc", &sensor->use_crc);
+done:
+	v4l2_fwnode_endpoint_free(&bus_cfg);
+	fwnode_handle_put(ep);
+	return ret;
+}
+
 static int et8ek8_probe(struct i2c_client *client)
 {
 	struct et8ek8_sensor *sensor;
@@ -1405,6 +1429,11 @@ static int et8ek8_probe(struct i2c_client *client)
 	sensor = devm_kzalloc(&client->dev, sizeof(*sensor), GFP_KERNEL);
 	if (!sensor)
 		return -ENOMEM;
+
+	sensor->use_crc = 1;
+	ret = et8ek8_parse_fwnode(dev, sensor);
+	if (ret)
+		dev_warn(dev, "parsing endpoint failed\n");
 
 	sensor->reset = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
 	if (IS_ERR(sensor->reset)) {
