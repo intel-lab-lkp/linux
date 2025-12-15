@@ -234,7 +234,6 @@ static ssize_t cpu_list_show(struct kobject *kobj,
 	struct virtio_fs *fs = container_of(kobj->parent->parent, struct virtio_fs, kobj);
 	struct virtio_fs_vq *fsvq = virtio_fs_kobj_to_vq(fs, kobj);
 	unsigned int cpu, qid;
-	const size_t size = PAGE_SIZE - 1;
 	bool first = true;
 	int ret = 0, pos = 0;
 
@@ -244,18 +243,20 @@ static ssize_t cpu_list_show(struct kobject *kobj,
 	qid = fsvq->vq->index;
 	for (cpu = 0; cpu < nr_cpu_ids; cpu++) {
 		if (qid < VQ_REQUEST || (fs->mq_map[cpu] == qid)) {
-			if (first)
-				ret = snprintf(buf + pos, size - pos, "%u", cpu);
-			else
-				ret = snprintf(buf + pos, size - pos, ", %u", cpu);
+			if (first) {
+				ret = sysfs_emit_at(buf, pos, "%u", cpu);
+				first = false;
+			} else
+				ret = sysfs_emit_at(buf, pos, ", %u", cpu);
 
-			if (ret >= size - pos)
-				break;
-			first = false;
+			if (ret < 0)
+				return  -EINVAL;
 			pos += ret;
 		}
 	}
-	ret = snprintf(buf + pos, size + 1 - pos, "\n");
+	ret = sysfs_emit_at(buf, pos, "\n");
+	if (ret < 0)
+		return -EINVAL;
 	return pos + ret;
 }
 
