@@ -361,6 +361,7 @@ i915-y += \
 	display/intel_dvo.o \
 	display/intel_encoder.o \
 	display/intel_gmbus.o \
+	display/intel_gvt_api.o \
 	display/intel_hdmi.o \
 	display/intel_lspcon.o \
 	display/intel_lt_phy.o \
