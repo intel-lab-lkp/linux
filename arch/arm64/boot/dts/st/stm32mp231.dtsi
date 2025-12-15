@@ -360,6 +360,7 @@
 				dma-names = "rx", "tx";
 				access-controllers = <&rifsc 41>;
 				power-domains = <&cluster_pd>;
+				i2c-analog-filter;
 				status = "disabled";
 			};
 
@@ -377,6 +378,7 @@
 				dma-names = "rx", "tx";
 				access-controllers = <&rifsc 42>;
 				power-domains = <&cluster_pd>;
+				i2c-analog-filter;
 				status = "disabled";
 			};
 
@@ -394,6 +396,7 @@
 				dma-names = "rx", "tx";
 				access-controllers = <&rifsc 47>;
 				power-domains = <&cluster_pd>;
+				i2c-analog-filter;
 				status = "disabled";
 			};
 
@@ -668,6 +671,7 @@
 				dma-names = "rx", "tx";
 				access-controllers = <&rifsc 48>;
 				power-domains = <&cluster_pd>;
+				i2c-analog-filter;
 				status = "disabled";
 			};
 
