@@ -358,6 +358,8 @@ static int cmd_db_dev_probe(struct platform_device *pdev)
 
 	if (!cmd_db_magic_matches(cmd_db_header)) {
 		dev_err(&pdev->dev, "Invalid Command DB Magic\n");
+		memunmap(cmd_db_header);
+		cmd_db_header = NULL;
 		return -EINVAL;
 	}
 
