@@ -581,6 +581,7 @@ static ssize_t send_control_msg(struct port *port, unsigned int event,
 static void reclaim_consumed_buffers(struct port *port)
 {
 	struct port_buffer *buf;
+	bool freed = false;
 	unsigned int len;
 
 	if (!port->portdev) {
@@ -589,7 +590,15 @@ static void reclaim_consumed_buffers(struct port *port)
 	}
 	while ((buf = virtqueue_get_buf(port->out_vq, &len))) {
 		free_buf(buf, false);
+		freed = true;
+	}
+	if (freed) {
+		/* We freed all used buffers. Issue a wake up so that other pending
+		 * tasks do not get stuck. This is necessary because vring_interrupt()
+		 * will drop wakeups from the host if there are no used buffers.
+		 */
 		port->outvq_full = false;
+		wake_up_interruptible(&port->waitqueue);
 	}
 }
 
