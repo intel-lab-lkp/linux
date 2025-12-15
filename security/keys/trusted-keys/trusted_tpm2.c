@@ -2,6 +2,15 @@
 /*
  * Copyright (C) 2004 IBM Corporation
  * Copyright (C) 2014 Intel Corporation
+
+/**
+ * DOC: Random Number Generation
+ *
+ * tpm_get_random() was previously used here as the RNG in order to have equal
+ * entropy with the objects fully inside the TPM. However, as far as goes,
+ * kernel RNG is equally fine, as long as long as it is FIPS certified. Also,
+ * using kernel RNG has the benefit of mitigating bugs in the TPM firmware
+ * associated with the RNG.
  */
 
 #include <linux/asn1_encoder.h>
