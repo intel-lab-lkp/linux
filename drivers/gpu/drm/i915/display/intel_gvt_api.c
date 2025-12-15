@@ -32,3 +32,9 @@ u32 intel_display_device_mmio_base(struct intel_display *display)
 	return DISPLAY_MMIO_BASE(display);
 }
 EXPORT_SYMBOL_GPL(intel_display_device_mmio_base);
+
+u8 intel_display_runtime_info_pipe_mask(struct intel_display *display)
+{
+	return DISPLAY_RUNTIME_INFO(display)->pipe_mask;
+}
+EXPORT_SYMBOL_GPL(intel_display_runtime_info_pipe_mask);

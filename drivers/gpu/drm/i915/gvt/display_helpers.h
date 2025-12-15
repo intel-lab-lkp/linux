@@ -36,4 +36,11 @@ struct display;
 #define INTEL_DISPLAY_DEVICE_CURSOR_OFFSET(display, pipe) \
 	intel_display_device_cursor_offset((display), (pipe))
 
+#ifdef for_each_pipe
+#undef for_each_pipe
+#endif
+#define for_each_pipe(display, __p) \
+	for ((__p) = 0; (__p) < I915_MAX_PIPES; (__p)++) \
+		for_each_if(intel_display_runtime_info_pipe_mask((display)) & BIT(__p))
+
 #endif /* __DISPLAY_HELPERS_H__ */

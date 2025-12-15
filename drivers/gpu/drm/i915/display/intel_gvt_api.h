@@ -16,5 +16,6 @@ u32 intel_display_device_pipe_offset(struct intel_display *display, enum pipe pi
 u32 intel_display_device_trans_offset(struct intel_display *display, enum transcoder trans);
 u32 intel_display_device_cursor_offset(struct intel_display *display, enum pipe pipe);
 u32 intel_display_device_mmio_base(struct intel_display *display);
+u8 intel_display_runtime_info_pipe_mask(struct intel_display *display);
 
 #endif /* __INTEL_GVT_API_H__ */
