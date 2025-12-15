@@ -31,6 +31,7 @@
 #include <linux/irqdomain.h>
 #include <linux/percpu.h>
 #include <linux/cc_platform.h>
+#include <linux/iommu.h>
 #include <asm/irq_remapping.h>
 #include <asm/io_apic.h>
 #include <asm/apic.h>
@@ -3095,22 +3096,44 @@ const struct iommu_ops amd_iommu_ops = {
 static struct irq_chip amd_ir_chip;
 static DEFINE_SPINLOCK(iommu_table_lock);
 
+static int iommu_flush_dev_irt(struct pci_dev *pdev, u16 devid, void *data)
+{
+	int ret;
+	struct iommu_cmd cmd;
+	struct amd_iommu *iommu = data;
+
+	build_inv_irt(&cmd, devid);
+	ret = __iommu_queue_command_sync(iommu, &cmd, true);
+	return ret;
+}
+
 static void iommu_flush_irt_and_complete(struct amd_iommu *iommu, u16 devid)
 {
 	int ret;
 	u64 data;
+	int domain = iommu->pci_seg->id;
+	unsigned int bus = PCI_BUS_NUM(devid);
+	unsigned int devfn = devid & 0xff;
 	unsigned long flags;
 	struct iommu_cmd cmd, cmd2;
+	struct pci_dev *pdev = NULL;
 
 	if (iommu->irtcachedis_enabled)
 		return;
 
-	build_inv_irt(&cmd, devid);
 	data = atomic64_inc_return(&iommu->cmd_sem_val);
 	build_completion_wait(&cmd2, iommu, data);
 
-	raw_spin_lock_irqsave(&iommu->lock, flags);
-	ret = __iommu_queue_command_sync(iommu, &cmd, true);
+	pdev = pci_get_domain_bus_and_slot(domain, bus, devfn);
+	if (pdev) {
+		raw_spin_lock_irqsave(&iommu->lock, flags);
+		ret = pci_for_each_dma_alias(pdev, iommu_flush_dev_irt, iommu);
+	} else {
+		build_inv_irt(&cmd, devid);
+		raw_spin_lock_irqsave(&iommu->lock, flags);
+		ret = __iommu_queue_command_sync(iommu, &cmd, true);
+	}
+
 	if (ret)
 		goto out;
 	ret = __iommu_queue_command_sync(iommu, &cmd2, false);
@@ -3119,6 +3142,8 @@ static void iommu_flush_irt_and_complete(struct amd_iommu *iommu, u16 devid)
 	wait_on_sem(iommu, data);
 out:
 	raw_spin_unlock_irqrestore(&iommu->lock, flags);
+	if (pdev)
+		pci_dev_put(pdev);
 }
 
 static inline u8 iommu_get_int_tablen(struct iommu_dev_data *dev_data)
