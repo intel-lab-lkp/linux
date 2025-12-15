@@ -697,7 +697,7 @@ static blk_status_t zloop_queue_rq(struct blk_mq_hw_ctx *hctx,
 	struct zloop_cmd *cmd = blk_mq_rq_to_pdu(rq);
 	struct zloop_device *zlo = rq->q->queuedata;
 
-	if (zlo->state == Zlo_deleting)
+	if (data_race(READ_ONCE(zlo->state)) == Zlo_deleting)
 		return BLK_STS_IOERR;
 
 	/*
