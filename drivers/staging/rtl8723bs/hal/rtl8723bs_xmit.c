@@ -548,11 +548,10 @@ void rtl8723bs_free_xmit_priv(struct adapter *padapter)
 	struct xmit_buf *pxmitbuf;
 	struct __queue *pqueue = &pxmitpriv->pending_xmitbuf_queue;
 	struct list_head *plist, *phead;
-	struct list_head tmplist;
+	LIST_HEAD(tmplist);
 
 
 	phead = get_list_head(pqueue);
-	INIT_LIST_HEAD(&tmplist);
 
 	spin_lock_bh(&pqueue->lock);
 	if (!list_empty(&pqueue->queue)) {
