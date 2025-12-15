@@ -147,18 +147,16 @@ static int hdaps_readb_one(unsigned int port, u8 *val)
 {
 	int ret;
 
-	mutex_lock(&hdaps_mtx);
+	guard(mutex)(&hdaps_mtx);
 
 	/* do a sync refresh -- we need to be sure that we read fresh data */
 	ret = __device_refresh_sync();
 	if (ret)
-		goto out;
+		return ret;
 
 	*val = inb(port);
 	__device_complete();
 
-out:
-	mutex_unlock(&hdaps_mtx);
 	return ret;
 }
 
@@ -208,12 +206,12 @@ static int hdaps_device_init(void)
 {
 	int total, ret = -ENXIO;
 
-	mutex_lock(&hdaps_mtx);
+	guard(mutex)(&hdaps_mtx);
 
 	outb(0x13, 0x1610);
 	outb(0x01, 0x161f);
 	if (__wait_latch(0x161f, 0x00))
-		goto out;
+		return ret;
 
 	/*
 	 * Most ThinkPads return 0x01.
@@ -226,7 +224,7 @@ static int hdaps_device_init(void)
 	if (__check_latch(0x1611, 0x03) &&
 		     __check_latch(0x1611, 0x02) &&
 		     __check_latch(0x1611, 0x01))
-		goto out;
+		return ret;
 
 	printk(KERN_DEBUG "hdaps: initial latch check good (0x%02x)\n",
 	       __get_latch(0x1611));
@@ -235,29 +233,29 @@ static int hdaps_device_init(void)
 	outb(0x81, 0x1611);
 	outb(0x01, 0x161f);
 	if (__wait_latch(0x161f, 0x00))
-		goto out;
+		return ret;
 	if (__wait_latch(0x1611, 0x00))
-		goto out;
+		return ret;
 	if (__wait_latch(0x1612, 0x60))
-		goto out;
+		return ret;
 	if (__wait_latch(0x1613, 0x00))
-		goto out;
+		return ret;
 	outb(0x14, 0x1610);
 	outb(0x01, 0x1611);
 	outb(0x01, 0x161f);
 	if (__wait_latch(0x161f, 0x00))
-		goto out;
+		return ret;
 	outb(0x10, 0x1610);
 	outb(0xc8, 0x1611);
 	outb(0x00, 0x1612);
 	outb(0x02, 0x1613);
 	outb(0x01, 0x161f);
 	if (__wait_latch(0x161f, 0x00))
-		goto out;
+		return ret;
 	if (__device_refresh_sync())
-		goto out;
+		return ret;
 	if (__wait_latch(0x1611, 0x00))
-		goto out;
+		return ret;
 
 	/* we have done our dance, now let's wait for the applause */
 	for (total = INIT_TIMEOUT_MSECS; total > 0; total -= INIT_WAIT_MSECS) {
@@ -273,8 +271,6 @@ static int hdaps_device_init(void)
 		msleep(INIT_WAIT_MSECS);
 	}
 
-out:
-	mutex_unlock(&hdaps_mtx);
 	return ret;
 }
 
@@ -322,17 +318,14 @@ static void hdaps_mousedev_poll(struct input_dev *input_dev)
 {
 	int x, y;
 
-	mutex_lock(&hdaps_mtx);
+	guard(mutex)(&hdaps_mtx);
 
 	if (__hdaps_read_pair(HDAPS_PORT_XPOS, HDAPS_PORT_YPOS, &x, &y))
-		goto out;
+		return;
 
 	input_report_abs(input_dev, ABS_X, x - rest_x);
 	input_report_abs(input_dev, ABS_Y, y - rest_y);
 	input_sync(input_dev);
-
-out:
-	mutex_unlock(&hdaps_mtx);
 }
 
 
