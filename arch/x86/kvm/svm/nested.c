@@ -889,21 +889,18 @@ int enter_svm_guest_mode(struct kvm_vcpu *vcpu, u64 vmcb12_gpa,
 				    vmcb12->control.intercepts[INTERCEPT_WORD4],
 				    vmcb12->control.intercepts[INTERCEPT_WORD5]);
 
-
 	svm->nested.vmcb12_gpa = vmcb12_gpa;
 
 	WARN_ON(svm->vmcb == svm->nested.vmcb02.ptr);
 
 	enter_guest_mode(vcpu);
 
+	if (!nested_vmcb_check_save(vcpu, &svm->nested.save) ||
+	    !nested_vmcb_check_controls(vcpu, &svm->nested.ctl))
+		return -EINVAL;
+
 	if (nested_npt_enabled(svm))
 		nested_svm_init_mmu_context(vcpu);
-
-	nested_svm_copy_common_state(svm->vmcb01.ptr, svm->nested.vmcb02.ptr);
-
-	svm_switch_vmcb(svm, &svm->nested.vmcb02);
-	nested_vmcb02_prepare_control(svm, vmcb12->save.rip, vmcb12->save.cs.base);
-	nested_vmcb02_prepare_save(svm, vmcb12);
 
 	ret = nested_svm_load_cr3(&svm->vcpu, svm->nested.save.cr3,
 				  nested_npt_enabled(svm), from_vmrun);
@@ -915,6 +912,17 @@ int enter_svm_guest_mode(struct kvm_vcpu *vcpu, u64 vmcb12_gpa,
 		if (ret)
 			return ret;
 	}
+
+	/*
+	 * Any VMRUN failure needs to happen before this point, such that the
+	 * nested #VMEXIT is injected properly by nested_svm_failed_vmrun().
+	 */
+
+	nested_svm_copy_common_state(svm->vmcb01.ptr, svm->nested.vmcb02.ptr);
+
+	svm_switch_vmcb(svm, &svm->nested.vmcb02);
+	nested_vmcb02_prepare_control(svm, vmcb12->save.rip, vmcb12->save.cs.base);
+	nested_vmcb02_prepare_save(svm, vmcb12);
 
 	if (!from_vmrun)
 		kvm_make_request(KVM_REQ_GET_NESTED_STATE_PAGES, vcpu);
@@ -955,6 +963,17 @@ static void __nested_svm_vmexit(struct vcpu_svm *svm)
 	 */
 	if (unlikely(vmcb01->save.rflags & X86_EFLAGS_TF))
 		kvm_queue_exception(vcpu, DB_VECTOR);
+}
+
+static void nested_svm_failed_vmrun(struct vcpu_svm *svm, struct vmcb *vmcb12)
+{
+	WARN_ON(svm->vmcb == svm->nested.vmcb02.ptr);
+
+	vmcb12->control.exit_code = SVM_EXIT_ERR;
+	vmcb12->control.exit_code_hi = -1u;
+	vmcb12->control.exit_info_1 = 0;
+	vmcb12->control.exit_info_2 = 0;
+	__nested_svm_vmexit(svm);
 }
 
 int nested_svm_vmrun(struct kvm_vcpu *vcpu)
@@ -999,15 +1018,6 @@ int nested_svm_vmrun(struct kvm_vcpu *vcpu)
 	nested_copy_vmcb_control_to_cache(svm, &vmcb12->control);
 	nested_copy_vmcb_save_to_cache(svm, &vmcb12->save);
 
-	if (!nested_vmcb_check_save(vcpu, &svm->nested.save) ||
-	    !nested_vmcb_check_controls(vcpu, &svm->nested.ctl)) {
-		vmcb12->control.exit_code    = SVM_EXIT_ERR;
-		vmcb12->control.exit_code_hi = -1u;
-		vmcb12->control.exit_info_1  = 0;
-		vmcb12->control.exit_info_2  = 0;
-		goto out;
-	}
-
 	/*
 	 * Since vmcb01 is not in use, we can use it to store some of the L1
 	 * state.
@@ -1028,15 +1038,9 @@ int nested_svm_vmrun(struct kvm_vcpu *vcpu)
 		svm->nmi_l1_to_l2 = false;
 		svm->soft_int_injected = false;
 
-		svm->vmcb->control.exit_code    = SVM_EXIT_ERR;
-		svm->vmcb->control.exit_code_hi = -1u;
-		svm->vmcb->control.exit_info_1  = 0;
-		svm->vmcb->control.exit_info_2  = 0;
-
-		nested_svm_vmexit(svm);
+		nested_svm_failed_vmrun(svm, vmcb12);
 	}
 
-out:
 	kvm_vcpu_unmap(vcpu, &map);
 
 	return ret;
@@ -1172,6 +1176,8 @@ void nested_svm_vmexit(struct vcpu_svm *svm)
 
 	kvm_nested_vmexit_handle_ibrs(vcpu);
 
+	/* VMRUN failures before switching to VMCB02 are handled by nested_svm_failed_vmrun() */
+	WARN_ON_ONCE(svm->vmcb != svm->nested.vmcb02.ptr);
 	svm_switch_vmcb(svm, &svm->vmcb01);
 
 	/*
@@ -1859,9 +1865,6 @@ static int svm_set_nested_state(struct kvm_vcpu *vcpu,
 	if (nested_npt_enabled(svm))
 		nested_svm_init_mmu_context(vcpu);
 
-	svm_switch_vmcb(svm, &svm->nested.vmcb02);
-	nested_vmcb02_prepare_control(svm, svm->vmcb->save.rip, svm->vmcb->save.cs.base);
-
 	/*
 	 * While the nested guest CR3 is already checked and set by
 	 * KVM_SET_SREGS, it was set when nested state was yet loaded,
@@ -1873,6 +1876,9 @@ static int svm_set_nested_state(struct kvm_vcpu *vcpu,
 				  nested_npt_enabled(svm), false);
 	if (WARN_ON_ONCE(ret))
 		goto out_free;
+
+	svm_switch_vmcb(svm, &svm->nested.vmcb02);
+	nested_vmcb02_prepare_control(svm, svm->vmcb->save.rip, svm->vmcb->save.cs.base);
 
 	svm->nested.force_msr_bitmap_recalc = true;
 
