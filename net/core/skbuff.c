@@ -5157,7 +5157,7 @@ void __init skb_init(void)
 					      NULL);
 	skbuff_cache_size = kmem_cache_size(net_hotdata.skbuff_cache);
 
-	net_hotdata.skbuff_fclone_cache = kmem_cache_create("skbuff_fclone_cache",
+	net_hotdata.skbuff_fclone_cache = kmem_cache_create_usercopy("skbuff_fclone_cache",
 						sizeof(struct sk_buff_fclones),
 						0,
 						SLAB_HWCACHE_ALIGN|SLAB_PANIC,
