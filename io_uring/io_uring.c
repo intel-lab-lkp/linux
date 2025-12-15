@@ -365,6 +365,18 @@ err:
 	return NULL;
 }
 
+void io_ring_suspend_work(struct callback_head *cb_head)
+{
+	struct io_ring_suspend_work *suspend_work =
+		container_of(cb_head, struct io_ring_suspend_work, cb_head);
+	DECLARE_COMPLETION_ONSTACK(suspend_end);
+
+	*suspend_work->suspend_end = &suspend_end;
+	complete(&suspend_work->suspend_start);
+
+	wait_for_completion(&suspend_end);
+}
+
 static void io_clean_op(struct io_kiocb *req)
 {
 	if (unlikely(req->flags & REQ_F_BUFFER_SELECTED))
