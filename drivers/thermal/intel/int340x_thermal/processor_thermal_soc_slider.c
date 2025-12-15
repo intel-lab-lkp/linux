@@ -80,7 +80,7 @@ static int slider_def_balance_set(const char *arg, const struct kernel_param *kp
 static int slider_def_balance_get(char *buf, const struct kernel_param *kp)
 {
 	guard(mutex)(&slider_param_lock);
-	return sysfs_emit(buf, "%02x\n", slider_values[SOC_POWER_SLIDER_BALANCE]);
+	return sysfs_emit(buf, "%02x\n", slider_balanced_param);
 }
 
 static const struct kernel_param_ops slider_def_balance_ops = {
