@@ -986,6 +986,7 @@ struct rfkill * __must_check rfkill_alloc(const char *name,
 {
 	struct rfkill *rfkill;
 	struct device *dev;
+	size_t name_sz;
 
 	if (WARN_ON(!ops))
 		return NULL;
@@ -999,14 +1000,15 @@ struct rfkill * __must_check rfkill_alloc(const char *name,
 	if (WARN_ON(type == RFKILL_TYPE_ALL || type >= NUM_RFKILL_TYPES))
 		return NULL;
 
-	rfkill = kzalloc(sizeof(*rfkill) + strlen(name) + 1, GFP_KERNEL);
+	name_sz = strlen(name) + 1;
+	rfkill = kzalloc(struct_size(rfkill, name, name_sz), GFP_KERNEL);
 	if (!rfkill)
 		return NULL;
 
 	spin_lock_init(&rfkill->lock);
 	INIT_LIST_HEAD(&rfkill->node);
 	rfkill->type = type;
-	strcpy(rfkill->name, name);
+	memcpy(rfkill->name, name, name_sz);
 	rfkill->ops = ops;
 	rfkill->data = ops_data;
 
