@@ -413,9 +413,7 @@ static void sld_state_show(void)
 		if (boot_cpu_has(X86_FEATURE_SPLIT_LOCK_DETECT)) {
 			pr_info("#AC: crashing the kernel on kernel split_locks and sending SIGBUS on user-space split_locks\n");
 		} else if (boot_cpu_has(X86_FEATURE_BUS_LOCK_DETECT)) {
-			pr_info("#DB: sending SIGBUS on user-space bus_locks%s\n",
-				boot_cpu_has(X86_FEATURE_SPLIT_LOCK_DETECT) ?
-				" from non-WB" : "");
+			pr_info("#DB: sending SIGBUS on user-space bus_locks\n");
 		}
 		break;
 	case sld_ratelimit:
