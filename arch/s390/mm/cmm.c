@@ -311,9 +311,9 @@ static int cmm_timeout_handler(const struct ctl_table *ctl, int write,
 	}
 
 	if (write) {
-		len = min(*lenp, sizeof(buf));
+		len = min(*lenp, sizeof(buf) - 1);
 		memcpy(buf, buffer, len);
-		buf[len - 1] = '\0';
+		buf[len] = '\0';
 		cmm_skip_blanks(buf, &p);
 		nr = simple_strtoul(p, &p, 0);
 		cmm_skip_blanks(p, &p);
