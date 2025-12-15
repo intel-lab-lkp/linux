@@ -10,6 +10,7 @@
 struct panthor_device;
 
 int panthor_perf_init(struct panthor_device *ptdev);
+void panthor_perf_unplug(struct panthor_device *ptdev);
 
 #endif /* __PANTHOR_PERF_H__ */
 
