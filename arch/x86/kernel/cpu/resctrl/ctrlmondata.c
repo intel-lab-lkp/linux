@@ -57,14 +57,19 @@ int resctrl_arch_update_domains(struct rdt_resource *r, u32 closid)
 		hw_dom = resctrl_to_arch_ctrl_dom(d);
 		msr_param.res = NULL;
 		for (t = 0; t < CDP_NUM_TYPES; t++) {
-			cfg = &hw_dom->d_resctrl.staged_config[t];
-			if (!cfg->have_new_ctrl)
-				continue;
+			if (resctrl_should_io_alloc_min_cbm(r)) {
+				idx = resctrl_get_config_index(closid, t);
+				hw_dom->ctrl_val[idx] = apply_io_alloc_min_cbm(r);
+			} else {
+				cfg = &hw_dom->d_resctrl.staged_config[t];
+				if (!cfg->have_new_ctrl)
+					continue;
 
-			idx = resctrl_get_config_index(closid, t);
-			if (cfg->new_ctrl == hw_dom->ctrl_val[idx])
-				continue;
-			hw_dom->ctrl_val[idx] = cfg->new_ctrl;
+				idx = resctrl_get_config_index(closid, t);
+				if (cfg->new_ctrl == hw_dom->ctrl_val[idx])
+					continue;
+				hw_dom->ctrl_val[idx] = cfg->new_ctrl;
+			}
 
 			if (!msr_param.res) {
 				msr_param.low = idx;
@@ -123,7 +128,7 @@ int resctrl_arch_io_alloc_enable(struct rdt_resource *r, bool enable)
 {
 	struct rdt_hw_resource *hw_res = resctrl_to_arch_res(r);
 
-	if (hw_res->r_resctrl.cache.io_alloc_capable &&
+	if (hw_res->r_resctrl.cache.io_alloc.io_alloc_capable &&
 	    hw_res->sdciae_enabled != enable) {
 		_resctrl_sdciae_enable(r, enable);
 		hw_res->sdciae_enabled = enable;
