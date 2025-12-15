@@ -157,7 +157,7 @@ static int omap_cpufreq_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	mpu_reg = regulator_get(mpu_dev, "vcc");
+	mpu_reg = devm_regulator_get(mpu_dev, "vcc");
 	if (IS_ERR(mpu_reg)) {
 		pr_warn("%s: unable to get MPU regulator\n", __func__);
 		mpu_reg = NULL;
@@ -169,7 +169,6 @@ static int omap_cpufreq_probe(struct platform_device *pdev)
 		if (regulator_get_voltage(mpu_reg) < 0) {
 			pr_warn("%s: physical regulator not present for MPU\n",
 				__func__);
-			regulator_put(mpu_reg);
 			mpu_reg = NULL;
 		}
 	}
