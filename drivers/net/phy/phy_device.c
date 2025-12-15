@@ -3208,6 +3208,26 @@ static void phy_leds_unregister(struct phy_device *phydev)
 	}
 }
 
+static int fwnode_phy_led_set_rules(struct phy_device *phydev,
+				    struct fwnode_handle *led, u32 index)
+{
+	u32 rules;
+	int err;
+
+	if (!fwnode_property_present(led, "rules"))
+		return 0;
+
+	err = fwnode_property_read_u32(led, "rules", &rules);
+	if (err)
+		return err;
+
+	err = phydev->drv->led_hw_is_supported(phydev, index, rules);
+	if (err)
+		return err;
+
+	return phydev->drv->led_hw_control_set(phydev, index, rules);
+}
+
 static int fwnode_phy_led(struct phy_device *phydev,
 			  struct fwnode_handle *led)
 {
@@ -3252,6 +3272,11 @@ static int fwnode_phy_led(struct phy_device *phydev,
 		if (err)
 			return err;
 	}
+
+	err = fwnode_phy_led_set_rules(phydev, led, index);
+	if (err)
+		phydev_warn(phydev, "failed to set rules for led%u, err = %d\n",
+			    index, err);
 
 	phyled->index = index;
 	if (phydev->drv->led_brightness_set)
