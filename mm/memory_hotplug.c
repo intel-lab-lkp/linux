@@ -810,8 +810,7 @@ void move_pfn_range_to_zone(struct zone *zone, unsigned long start_pfn,
 {
 	struct pglist_data *pgdat = zone->zone_pgdat;
 	int nid = pgdat->node_id;
-	const enum zone_contig_state new_contiguous_state =
-		zone_contig_state_after_growing(zone, start_pfn, nr_pages);
+
 	clear_zone_contiguous(zone);
 
 	if (zone_is_empty(zone))
@@ -841,8 +840,6 @@ void move_pfn_range_to_zone(struct zone *zone, unsigned long start_pfn,
 	memmap_init_range(nr_pages, nid, zone_idx(zone), start_pfn, 0,
 			 MEMINIT_HOTPLUG, altmap, migratetype,
 			 isolate_pageblock);
-
-	set_zone_contiguous(zone, new_contiguous_state);
 }
 
 struct auto_movable_stats {
@@ -1151,6 +1148,7 @@ int mhp_init_memmap_on_memory(unsigned long pfn, unsigned long nr_pages,
 {
 	unsigned long end_pfn = pfn + nr_pages;
 	int ret, i;
+	enum zone_contig_state new_contiguous_state = ZONE_CONTIG_NO;
 
 	ret = kasan_add_zero_shadow(__va(PFN_PHYS(pfn)), PFN_PHYS(nr_pages));
 	if (ret)
@@ -1164,6 +1162,14 @@ int mhp_init_memmap_on_memory(unsigned long pfn, unsigned long nr_pages,
 	 */
 	if (mhp_off_inaccessible)
 		page_init_poison(pfn_to_page(pfn), sizeof(struct page) * nr_pages);
+
+	/*
+	 * If the allocated memmap pages are not in a full section, keep the
+	 * contiguous state as ZONE_CONTIG_NO.
+	 */
+	if (IS_ALIGNED(end_pfn, PAGES_PER_SECTION))
+		new_contiguous_state = zone_contig_state_after_growing(zone,
+								pfn, nr_pages);
 
 	move_pfn_range_to_zone(zone, pfn, nr_pages, NULL, MIGRATE_UNMOVABLE,
 			       false);
@@ -1183,6 +1189,7 @@ int mhp_init_memmap_on_memory(unsigned long pfn, unsigned long nr_pages,
 	if (nr_pages >= PAGES_PER_SECTION)
 	        online_mem_sections(pfn, ALIGN_DOWN(end_pfn, PAGES_PER_SECTION));
 
+	set_zone_contiguous(zone, new_contiguous_state);
 	return ret;
 }
 
@@ -1221,6 +1228,7 @@ int online_pages(unsigned long pfn, unsigned long nr_pages,
 	};
 	const int nid = zone_to_nid(zone);
 	int need_zonelists_rebuild = 0;
+	enum zone_contig_state new_contiguous_state = ZONE_CONTIG_NO;
 	unsigned long flags;
 	int ret;
 
@@ -1235,6 +1243,7 @@ int online_pages(unsigned long pfn, unsigned long nr_pages,
 			 !IS_ALIGNED(pfn + nr_pages, PAGES_PER_SECTION)))
 		return -EINVAL;
 
+	new_contiguous_state = zone_contig_state_after_growing(zone, pfn, nr_pages);
 
 	/* associate pfn range with the zone */
 	move_pfn_range_to_zone(zone, pfn, nr_pages, NULL, MIGRATE_MOVABLE,
@@ -1273,6 +1282,7 @@ int online_pages(unsigned long pfn, unsigned long nr_pages,
 	}
 
 	online_pages_range(pfn, nr_pages);
+	set_zone_contiguous(zone, new_contiguous_state);
 	adjust_present_page_count(pfn_to_page(pfn), group, nr_pages);
 
 	if (node_arg.nid >= 0)
