@@ -21,8 +21,8 @@ pub mod ordering;
 mod predefine;
 
 pub use internal::AtomicImpl;
-pub use ordering::{Acquire, Full, Relaxed, Release};
 pub(crate) use internal::{AtomicArithmeticOps, AtomicBasicOps, AtomicExchangeOps};
+pub use ordering::{Acquire, Full, Relaxed, Release};
 
 use crate::build_error;
 use internal::AtomicRepr;
