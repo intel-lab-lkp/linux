@@ -16,6 +16,26 @@ struct panthor_vm;
 struct panthor_vma;
 struct panthor_mmu;
 
+/**
+ * struct panthor_vm_fault - Tracking information for VM-level faults.
+ */
+struct panthor_vm_fault {
+	/** @address: Virtual address of the faulting access. */
+	u64 address;
+
+	/** @exception_type: The type of exception that caused the fault. */
+	u32 exception_type;
+
+	/** @access_type: The direction of data transfer that caused the fault. */
+	u32 access_type;
+
+	/** @source_id: ID supplying further data about the source of the fault. */
+	u32 source_id;
+
+	/** @valid_address: Whether the virtual address is valid. */
+	bool valid_address;
+};
+
 int panthor_mmu_init(struct panthor_device *ptdev);
 void panthor_mmu_unplug(struct panthor_device *ptdev);
 void panthor_mmu_pre_reset(struct panthor_device *ptdev);
