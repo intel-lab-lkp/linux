@@ -569,6 +569,14 @@ struct panthor_group {
 	/** @fatal_queues: Bitmask reflecting the queues that hit a fatal exception. */
 	u32 fatal_queues;
 
+	/**
+	 * @fault_queues: Bitmask reflecting the queues that hit a recoverable exception.
+	 *
+	 * This field is reset when the GROUP_GET_STATE ioctl is used to collect the fault
+	 * information.
+	 */
+	u32 fault_queues;
+
 	/** @tiler_oom: Mask of queues that have a tiler OOM event to process. */
 	atomic_t tiler_oom;
 
@@ -1553,6 +1561,8 @@ cs_slot_process_fault_event_locked(struct panthor_device *ptdev,
 	if (group) {
 		drm_warn(&ptdev->base, "CS_FAULT: pid=%d, comm=%s\n",
 			 group->task_info.pid, group->task_info.comm);
+
+		group->fault_queues |= BIT(cs_id);
 	}
 
 	drm_warn(&ptdev->base,
@@ -3807,9 +3817,6 @@ int panthor_group_get_state(struct panthor_file *pfile,
 	struct panthor_scheduler *sched = ptdev->scheduler;
 	struct panthor_group *group;
 
-	if (get_state->pad)
-		return -EINVAL;
-
 	group = group_from_handle(gpool, get_state->group_handle);
 	if (!group)
 		return -EINVAL;
@@ -3825,6 +3832,11 @@ int panthor_group_get_state(struct panthor_file *pfile,
 	}
 	if (group->innocent)
 		get_state->state |= DRM_PANTHOR_GROUP_STATE_INNOCENT;
+	if (group->fault_queues) {
+		get_state->state |= DRM_PANTHOR_GROUP_STATE_QUEUE_FAULT;
+		get_state->fault_queues = group->fault_queues;
+		group->fault_queues = 0;
+	}
 	mutex_unlock(&sched->lock);
 
 	group_put(group);
