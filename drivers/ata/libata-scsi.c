@@ -4499,6 +4499,7 @@ int ata_scsi_add_hosts(struct ata_host *host, const struct scsi_host_template *s
 		shost->max_lun = 1;
 		shost->max_channel = 1;
 		shost->max_cmd_len = 32;
+		shost->needs_budget_token = true;
 
 		/* Schedule policy is determined by ->qc_defer()
 		 * callback and it needs to see every deferred qc.
