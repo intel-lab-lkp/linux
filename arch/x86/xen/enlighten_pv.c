@@ -1046,10 +1046,6 @@ static void xen_update_io_bitmap(void)
 }
 #endif
 
-static void xen_io_delay(void)
-{
-}
-
 static DEFINE_PER_CPU(unsigned long, xen_cr0_value);
 
 static unsigned long xen_read_cr0(void)
@@ -1209,6 +1205,7 @@ void __init xen_setup_vcpu_info_placement(void)
 
 static const struct pv_info xen_info __initconst = {
 	.extra_user_64bit_cs = FLAT_USER_CS64,
+	.io_delay = false,
 	.name = "Xen",
 };
 
@@ -1253,7 +1250,6 @@ static const typeof(pv_ops) xen_cpu_ops __initconst = {
 		.invalidate_io_bitmap = xen_invalidate_io_bitmap,
 		.update_io_bitmap = xen_update_io_bitmap,
 #endif
-		.io_delay = xen_io_delay,
 
 		.start_context_switch = xen_start_context_switch,
 		.end_context_switch = xen_end_context_switch,

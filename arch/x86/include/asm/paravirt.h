@@ -53,16 +53,7 @@ static inline u64 paravirt_steal_clock(int cpu)
 void __init paravirt_set_cap(void);
 #endif
 
-/* The paravirtualized I/O functions */
-static inline void slow_down_io(void)
-{
-	PVOP_VCALL0(cpu.io_delay);
-#ifdef REALLY_SLOW_IO
-	PVOP_VCALL0(cpu.io_delay);
-	PVOP_VCALL0(cpu.io_delay);
-	PVOP_VCALL0(cpu.io_delay);
-#endif
-}
+#define call_io_delay() pv_info.io_delay
 
 void native_flush_tlb_local(void);
 void native_flush_tlb_global(void);
