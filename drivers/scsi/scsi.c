@@ -216,9 +216,6 @@ int scsi_device_max_queue_depth(struct scsi_device *sdev)
  */
 int scsi_change_queue_depth(struct scsi_device *sdev, int depth)
 {
-	if (!sdev->budget_map.map)
-		return -EINVAL;
-
 	depth = min_t(int, depth, scsi_device_max_queue_depth(sdev));
 
 	if (depth > 0) {
@@ -229,7 +226,8 @@ int scsi_change_queue_depth(struct scsi_device *sdev, int depth)
 	if (sdev->request_queue)
 		blk_set_queue_depth(sdev->request_queue, depth);
 
-	sbitmap_resize(&sdev->budget_map, sdev->queue_depth);
+	if (sdev->budget_map.map)
+		sbitmap_resize(&sdev->budget_map, sdev->queue_depth);
 
 	return sdev->queue_depth;
 }
