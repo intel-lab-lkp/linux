@@ -203,61 +203,6 @@ void mdio_device_reset(struct mdio_device *mdiodev, int value)
 EXPORT_SYMBOL(mdio_device_reset);
 
 /**
- * mdio_probe - probe an MDIO device
- * @dev: device to probe
- *
- * Description: Take care of setting up the mdio_device structure
- * and calling the driver to probe the device.
- *
- * Return: Zero if successful, negative error code on failure
- */
-static int mdio_probe(struct device *dev)
-{
-	struct mdio_device *mdiodev = to_mdio_device(dev);
-	struct device_driver *drv = mdiodev->dev.driver;
-	struct mdio_driver *mdiodrv = to_mdio_driver(drv);
-	int err = 0;
-
-	/* Deassert the reset signal */
-	mdio_device_reset(mdiodev, 0);
-
-	if (mdiodrv->probe) {
-		err = mdiodrv->probe(mdiodev);
-		if (err) {
-			/* Assert the reset signal */
-			mdio_device_reset(mdiodev, 1);
-		}
-	}
-
-	return err;
-}
-
-static int mdio_remove(struct device *dev)
-{
-	struct mdio_device *mdiodev = to_mdio_device(dev);
-	struct device_driver *drv = mdiodev->dev.driver;
-	struct mdio_driver *mdiodrv = to_mdio_driver(drv);
-
-	if (mdiodrv->remove)
-		mdiodrv->remove(mdiodev);
-
-	/* Assert the reset signal */
-	mdio_device_reset(mdiodev, 1);
-
-	return 0;
-}
-
-static void mdio_shutdown(struct device *dev)
-{
-	struct mdio_device *mdiodev = to_mdio_device(dev);
-	struct device_driver *drv = mdiodev->dev.driver;
-	struct mdio_driver *mdiodrv = to_mdio_driver(drv);
-
-	if (mdiodrv->shutdown)
-		mdiodrv->shutdown(mdiodev);
-}
-
-/**
  * mdio_driver_register - register an mdio_driver with the MDIO layer
  * @drv: new mdio_driver to register
  *
@@ -271,9 +216,6 @@ int mdio_driver_register(struct mdio_driver *drv)
 	pr_debug("%s: %s\n", __func__, mdiodrv->driver.name);
 
 	mdiodrv->driver.bus = &mdio_bus_type;
-	mdiodrv->driver.probe = mdio_probe;
-	mdiodrv->driver.remove = mdio_remove;
-	mdiodrv->driver.shutdown = mdio_shutdown;
 
 	retval = driver_register(&mdiodrv->driver);
 	if (retval) {
