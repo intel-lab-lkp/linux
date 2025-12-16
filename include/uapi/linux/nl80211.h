@@ -2973,6 +2973,10 @@ enum nl80211_commands {
  *	primary channel is 2 MHz wide, and the control channel designates
  *	the 1 MHz primary subchannel within that 2 MHz primary.
  *
+ * @NL80211_ATTR_UHR_CAPABILITY: UHR Capability information element (from
+ *	association request when used with NL80211_CMD_NEW_STATION). Can be set
+ *	only if %NL80211_STA_FLAG_WME is set.
+ *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
  * @__NL80211_ATTR_AFTER_LAST: internal use
@@ -3541,6 +3545,8 @@ enum nl80211_attrs {
 
 	NL80211_ATTR_S1G_PRIMARY_2MHZ,
 
+	NL80211_ATTR_UHR_CAPABILITY,
+
 	/* add attributes here, update the policy in nl80211.c */
 
 	__NL80211_ATTR_AFTER_LAST,
@@ -3611,6 +3617,13 @@ enum nl80211_attrs {
 #define NL80211_SCAN_RSSI_THOLD_OFF		-300
 
 #define NL80211_CQM_TXE_MAX_INTVL		1800
+
+/*
+ * TODO: as of now used the len same as EHT, modify it
+ * based on UHR once spec is finalized
+ */
+#define NL80211_UHR_MIN_CAPABILITY_LEN		2
+#define NL80211_UHR_MAX_CAPABILITY_LEN		51
 
 /**
  * enum nl80211_iftype - (virtual) interface types

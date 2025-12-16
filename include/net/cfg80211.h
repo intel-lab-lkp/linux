@@ -1734,6 +1734,8 @@ struct sta_txpwr {
  * @eht_capa: EHT capabilities of station
  * @eht_capa_len: the length of the EHT capabilities
  * @s1g_capa: S1G capabilities of station
+ * @uhr_capa: UHR capabilities of station
+ * @uhr_capa_len: the length of the UHR capabilities
  */
 struct link_station_parameters {
 	const u8 *mld_mac;
@@ -1753,6 +1755,8 @@ struct link_station_parameters {
 	const struct ieee80211_eht_cap_elem *eht_capa;
 	u8 eht_capa_len;
 	const struct ieee80211_s1g_cap *s1g_capa;
+	const struct ieee80211_uhr_cap_elem *uhr_capa;
+	u8 uhr_capa_len;
 };
 
 /**

@@ -932,6 +932,9 @@ static const struct nla_policy nl80211_policy[NUM_NL80211_ATTR] = {
 		NLA_POLICY_NESTED(nl80211_s1g_short_beacon),
 	[NL80211_ATTR_BSS_PARAM] = { .type = NLA_FLAG },
 	[NL80211_ATTR_S1G_PRIMARY_2MHZ] = { .type = NLA_FLAG },
+	[NL80211_ATTR_UHR_CAPABILITY] =
+		NLA_POLICY_RANGE(NLA_BINARY, NL80211_UHR_MIN_CAPABILITY_LEN,
+				 NL80211_UHR_MAX_CAPABILITY_LEN),
 };
 
 /* policy for the key attributes */
@@ -8292,6 +8295,19 @@ static int nl80211_set_station_tdls(struct genl_info *info,
 		}
 	}
 
+	if (info->attrs[NL80211_ATTR_HE_CAPABILITY] &&
+	    info->attrs[NL80211_ATTR_EHT_CAPABILITY] &&
+	    info->attrs[NL80211_ATTR_UHR_CAPABILITY]) {
+		lsta->uhr_capa =
+			nla_data(info->attrs[NL80211_ATTR_UHR_CAPABILITY]);
+		lsta->uhr_capa_len =
+			nla_len(info->attrs[NL80211_ATTR_UHR_CAPABILITY]);
+
+		if (!ieee80211_uhr_capa_size_ok((const u8 *)lsta->uhr_capa,
+						lsta->uhr_capa_len))
+			return -EINVAL;
+	}
+
 	if (info->attrs[NL80211_ATTR_S1G_CAPABILITY])
 		lsta->s1g_capa =
 			nla_data(info->attrs[NL80211_ATTR_S1G_CAPABILITY]);
@@ -8615,6 +8631,23 @@ static int nl80211_new_station(struct sk_buff *skb, struct genl_info *info)
 		}
 	}
 
+	if (info->attrs[NL80211_ATTR_HE_CAPABILITY] &&
+	    info->attrs[NL80211_ATTR_EHT_CAPABILITY] &&
+	    info->attrs[NL80211_ATTR_UHR_CAPABILITY]) {
+		const u8 *uhr_capa;
+
+		lsta->uhr_capa =
+			nla_data(info->attrs[NL80211_ATTR_UHR_CAPABILITY]);
+		lsta->uhr_capa_len =
+			nla_len(info->attrs[NL80211_ATTR_UHR_CAPABILITY]);
+
+		uhr_capa = (const u8 *)lsta->uhr_capa;
+
+		if (!ieee80211_uhr_capa_size_ok(uhr_capa,
+						lsta->uhr_capa_len))
+			return -EINVAL;
+	}
+
 	if (info->attrs[NL80211_ATTR_EML_CAPABILITY]) {
 		params.eml_cap_present = true;
 		params.eml_cap =
@@ -8665,19 +8698,20 @@ static int nl80211_new_station(struct sk_buff *skb, struct genl_info *info)
 	if (parse_station_flags(info, dev->ieee80211_ptr->iftype, &params))
 		return -EINVAL;
 
-	/* HT/VHT requires QoS, but if we don't have that just ignore HT/VHT
-	 * as userspace might just pass through the capabilities from the IEs
-	 * directly, rather than enforcing this restriction and returning an
-	 * error in this case.
+	/* HT/VHT/EHT and UHR requires QoS, but if we don't have that just
+	 * ignore HT/VHT/EHT and UHR as userspace might just pass through
+	 * the capabilities from the IEs directly, rather than enforcing
+	 * this restriction and returning an error in this case.
 	 */
 	if (!(params.sta_flags_set & BIT(NL80211_STA_FLAG_WME))) {
 		lsta->ht_capa = NULL;
 		lsta->vht_capa = NULL;
 
-		/* HE and EHT require WME */
+		/* HE, EHT and UHR require WME */
 		if (lsta->he_capa_len ||
 		    lsta->he_6ghz_capa ||
-		    lsta->eht_capa_len)
+		    lsta->eht_capa_len ||
+		    lsta->uhr_capa_len)
 			return -EINVAL;
 	}
 
@@ -17649,6 +17683,23 @@ nl80211_add_mod_link_station(struct sk_buff *skb, struct genl_info *info,
 							false))
 				return -EINVAL;
 		}
+	}
+
+	if (info->attrs[NL80211_ATTR_HE_CAPABILITY] &&
+	    info->attrs[NL80211_ATTR_EHT_CAPABILITY] &&
+	    info->attrs[NL80211_ATTR_UHR_CAPABILITY]) {
+		const u8  *uhr_capa;
+
+		params.uhr_capa =
+			nla_data(info->attrs[NL80211_ATTR_UHR_CAPABILITY]);
+		params.uhr_capa_len =
+			nla_len(info->attrs[NL80211_ATTR_UHR_CAPABILITY]);
+
+		uhr_capa = (const u8 *)params.uhr_capa;
+
+		if (!ieee80211_uhr_capa_size_ok(uhr_capa,
+						params.uhr_capa_len))
+			return -EINVAL;
 	}
 
 	if (info->attrs[NL80211_ATTR_HE_6GHZ_CAPABILITY])
