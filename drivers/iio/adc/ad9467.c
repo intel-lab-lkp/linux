@@ -1000,6 +1000,9 @@ static int ad9467_update_scan_mode(struct iio_dev *indio_dev,
 	unsigned int c;
 	int ret;
 
+	if (!st->back)
+		return -EOPNOTSUPP;
+
 	for (c = 0; c < st->info->num_channels; c++) {
 		if (test_bit(c, scan_mask))
 			ret = iio_backend_chan_enable(st->back, c);
@@ -1066,6 +1069,7 @@ static int ad9467_iio_backend_get(struct ad9467_state *st)
 {
 	struct device *dev = &st->spi->dev;
 	struct device_node *__back;
+	unsigned int nr_nodes = 0;
 
 	st->back = devm_iio_backend_get(dev, NULL);
 	if (!IS_ERR(st->back))
@@ -1084,6 +1088,7 @@ static int ad9467_iio_backend_get(struct ad9467_state *st)
 	for_each_node_with_property(__back, "adi,adc-dev") {
 		struct device_node *__me;
 
+		nr_nodes++;
 		__me = of_parse_phandle(__back, "adi,adc-dev", 0);
 		if (!__me)
 			continue;
@@ -1099,6 +1104,10 @@ static int ad9467_iio_backend_get(struct ad9467_state *st)
 		of_node_put(__back);
 		return PTR_ERR_OR_ZERO(st->back);
 	}
+
+	st->back = NULL;
+	if (!nr_nodes)
+		return -ENOENT;
 
 	return -ENODEV;
 }
@@ -1294,8 +1303,8 @@ static void ad9467_debugfs_init(struct iio_dev *indio_dev)
 
 	debugfs_create_file("in_voltage_test_mode_available", 0400, d, st,
 			    &ad9467_test_mode_available_fops);
-
-	iio_backend_debugfs_add(st->back, indio_dev);
+	if (st->back)
+		iio_backend_debugfs_add(st->back, indio_dev);
 }
 
 static int ad9467_probe(struct spi_device *spi)
@@ -1352,21 +1361,25 @@ static int ad9467_probe(struct spi_device *spi)
 	indio_dev->channels = st->info->channels;
 	indio_dev->num_channels = st->info->num_channels;
 
+	/* Using a backend is optional */
 	ret = ad9467_iio_backend_get(st);
-	if (ret)
+	if (ret && ret != -ENOENT)
 		return ret;
 
-	ret = devm_iio_backend_request_buffer(&spi->dev, st->back, indio_dev);
-	if (ret)
-		return ret;
+	if (!ret) {
+		ret = devm_iio_backend_request_buffer(&spi->dev, st->back,
+						      indio_dev);
+		if (ret)
+			return ret;
 
-	ret = devm_iio_backend_enable(&spi->dev, st->back);
-	if (ret)
-		return ret;
+		ret = devm_iio_backend_enable(&spi->dev, st->back);
+		if (ret)
+			return ret;
 
-	ret = ad9467_calibrate(st);
-	if (ret)
-		return ret;
+		ret = ad9467_calibrate(st);
+		if (ret)
+			return ret;
+	}
 
 	ret = devm_iio_device_register(&spi->dev, indio_dev);
 	if (ret)
