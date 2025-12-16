@@ -649,9 +649,9 @@ bool trace_event_ignore_this_pid(struct trace_event_file *trace_file)
 }
 EXPORT_SYMBOL_GPL(trace_event_ignore_this_pid);
 
-void *trace_event_buffer_reserve(struct trace_event_buffer *fbuffer,
-				 struct trace_event_file *trace_file,
-				 unsigned long len)
+static __always_inline void *buffer_reserve(struct trace_event_buffer *fbuffer,
+					    struct trace_event_file *trace_file,
+					    unsigned long len)
 {
 	struct trace_event_call *event_call = trace_file->event_call;
 
@@ -659,13 +659,6 @@ void *trace_event_buffer_reserve(struct trace_event_buffer *fbuffer,
 	    trace_event_ignore_this_pid(trace_file))
 		return NULL;
 
-	/*
-	 * If CONFIG_PREEMPTION is enabled, then the tracepoint itself disables
-	 * preemption (adding one to the preempt_count). Since we are
-	 * interested in the preempt_count at the time the tracepoint was
-	 * hit, we need to subtract one to offset the increment.
-	 */
-	fbuffer->trace_ctx = tracing_gen_ctx_dec();
 	fbuffer->trace_file = trace_file;
 
 	fbuffer->event =
@@ -679,7 +672,24 @@ void *trace_event_buffer_reserve(struct trace_event_buffer *fbuffer,
 	fbuffer->entry = ring_buffer_event_data(fbuffer->event);
 	return fbuffer->entry;
 }
+
+void *trace_event_buffer_reserve(struct trace_event_buffer *fbuffer,
+				 struct trace_event_file *trace_file,
+				 unsigned long len)
+{
+	fbuffer->trace_ctx = tracing_gen_ctx_dec_cond();
+	return buffer_reserve(fbuffer, trace_file, len);
+}
 EXPORT_SYMBOL_GPL(trace_event_buffer_reserve);
+
+void *trace_event_buffer_reserve_syscall(struct trace_event_buffer *fbuffer,
+					 struct trace_event_file *trace_file,
+					 unsigned long len)
+{
+	fbuffer->trace_ctx = tracing_gen_ctx_dec();
+	return buffer_reserve(fbuffer, trace_file, len);
+}
+
 
 int trace_event_reg(struct trace_event_call *call,
 		    enum trace_reg type, void *data)
