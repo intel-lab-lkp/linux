@@ -1929,6 +1929,16 @@ static const struct pmbus_sensor_attr current_attributes[] = {
 		.gbit = PB_STATUS_IOUT_OC,
 		.limit = iout_limit_attrs,
 		.nlimit = ARRAY_SIZE(iout_limit_attrs),
+	}, {
+		.reg = PMBUS_VIRT_READ_IIN,
+		.class = PSC_VIRT_CURRENT_IN,
+		.label = "viin",
+		.func = PMBUS_HAVE_VIRT_IIN
+	}, {
+		.reg = PMBUS_VIRT_READ_IOUT,
+		.class = PSC_VIRT_CURRENT_OUT,
+		.label = "viout",
+		.func = PMBUS_HAVE_VIRT_IOUT
 	}
 };
 
@@ -2501,6 +2511,14 @@ static const struct pmbus_class_attr_map class_attr_map[] = {
 		.class = PSC_TEMPERATURE,
 		.attr = temp_attributes,
 		.nattr = ARRAY_SIZE(temp_attributes),
+	}, {
+		.class = PSC_VIRT_CURRENT_IN,
+		.attr = current_attributes,
+		.nattr = ARRAY_SIZE(current_attributes),
+	}, {
+		.class = PSC_VIRT_CURRENT_OUT,
+		.attr = current_attributes,
+		.nattr = ARRAY_SIZE(current_attributes),
 	}
 };
 

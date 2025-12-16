@@ -236,6 +236,14 @@ enum pmbus_regs {
 	PMBUS_VIRT_CURR_SAMPLES,
 	PMBUS_VIRT_POWER_SAMPLES,
 	PMBUS_VIRT_TEMP_SAMPLES,
+
+	/* Multiple function pin
+	 *
+	 * Drivers wanting to expose the value from multiple function pin
+	 * should implement support in read_word_data callback.
+	 */
+	PMBUS_VIRT_READ_IIN,
+	PMBUS_VIRT_READ_IOUT,
 };
 
 /*
@@ -381,6 +389,8 @@ enum pmbus_sensor_classes {
 	PSC_TEMPERATURE,
 	PSC_FAN,
 	PSC_PWM,
+	PSC_VIRT_CURRENT_IN,
+	PSC_VIRT_CURRENT_OUT,
 	PSC_NUM_CLASSES		/* Number of power sensor classes */
 };
 
@@ -411,6 +421,8 @@ enum pmbus_sensor_classes {
 #define PMBUS_HAVE_PWM12	BIT(20)
 #define PMBUS_HAVE_PWM34	BIT(21)
 #define PMBUS_HAVE_SAMPLES	BIT(22)
+#define PMBUS_HAVE_VIRT_IIN	BIT(23)
+#define PMBUS_HAVE_VIRT_IOUT	BIT(24)
 
 #define PMBUS_PHASE_VIRTUAL	BIT(30)	/* Phases on this page are virtual */
 #define PMBUS_PAGE_VIRTUAL	BIT(31)	/* Page is virtual */
