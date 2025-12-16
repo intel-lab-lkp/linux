@@ -8250,38 +8250,39 @@ static int nl80211_parse_sta_channel_info(struct genl_info *info,
 static int nl80211_set_station_tdls(struct genl_info *info,
 				    struct station_parameters *params)
 {
+	struct link_station_parameters *lsta = &params->link_sta_params;
 	int err;
 	/* Dummy STA entry gets updated once the peer capabilities are known */
 	if (info->attrs[NL80211_ATTR_PEER_AID])
 		params->aid = nla_get_u16(info->attrs[NL80211_ATTR_PEER_AID]);
 	if (info->attrs[NL80211_ATTR_HT_CAPABILITY])
-		params->link_sta_params.ht_capa =
+		lsta->ht_capa =
 			nla_data(info->attrs[NL80211_ATTR_HT_CAPABILITY]);
 	if (info->attrs[NL80211_ATTR_VHT_CAPABILITY])
-		params->link_sta_params.vht_capa =
+		lsta->vht_capa =
 			nla_data(info->attrs[NL80211_ATTR_VHT_CAPABILITY]);
 	if (info->attrs[NL80211_ATTR_HE_CAPABILITY]) {
-		params->link_sta_params.he_capa =
+		lsta->he_capa =
 			nla_data(info->attrs[NL80211_ATTR_HE_CAPABILITY]);
-		params->link_sta_params.he_capa_len =
+		lsta->he_capa_len =
 			nla_len(info->attrs[NL80211_ATTR_HE_CAPABILITY]);
 
 		if (info->attrs[NL80211_ATTR_EHT_CAPABILITY]) {
-			params->link_sta_params.eht_capa =
+			lsta->eht_capa =
 				nla_data(info->attrs[NL80211_ATTR_EHT_CAPABILITY]);
-			params->link_sta_params.eht_capa_len =
+			lsta->eht_capa_len =
 				nla_len(info->attrs[NL80211_ATTR_EHT_CAPABILITY]);
 
-			if (!ieee80211_eht_capa_size_ok((const u8 *)params->link_sta_params.he_capa,
-							(const u8 *)params->link_sta_params.eht_capa,
-							params->link_sta_params.eht_capa_len,
+			if (!ieee80211_eht_capa_size_ok((const u8 *)lsta->he_capa,
+							(const u8 *)lsta->eht_capa,
+							lsta->eht_capa_len,
 							false))
 				return -EINVAL;
 		}
 	}
 
 	if (info->attrs[NL80211_ATTR_S1G_CAPABILITY])
-		params->link_sta_params.s1g_capa =
+		lsta->s1g_capa =
 			nla_data(info->attrs[NL80211_ATTR_S1G_CAPABILITY]);
 
 	err = nl80211_parse_sta_channel_info(info, params);
@@ -8492,6 +8493,7 @@ static int nl80211_set_station(struct sk_buff *skb, struct genl_info *info)
 static int nl80211_new_station(struct sk_buff *skb, struct genl_info *info)
 {
 	struct cfg80211_registered_device *rdev = info->user_ptr[0];
+	struct link_station_parameters *lsta;
 	int err;
 	struct net_device *dev = info->user_ptr[1];
 	struct wireless_dev *wdev = dev->ieee80211_ptr;
@@ -8518,23 +8520,25 @@ static int nl80211_new_station(struct sk_buff *skb, struct genl_info *info)
 	    !info->attrs[NL80211_ATTR_PEER_AID])
 		return -EINVAL;
 
-	params.link_sta_params.link_id =
+	lsta = &params.link_sta_params;
+
+	lsta->link_id =
 		nl80211_link_id_or_invalid(info->attrs);
 
 	if (info->attrs[NL80211_ATTR_MLD_ADDR]) {
 		mac_addr = nla_data(info->attrs[NL80211_ATTR_MLD_ADDR]);
-		params.link_sta_params.mld_mac = mac_addr;
-		params.link_sta_params.link_mac =
+		lsta->mld_mac = mac_addr;
+		lsta->link_mac =
 			nla_data(info->attrs[NL80211_ATTR_MAC]);
-		if (!is_valid_ether_addr(params.link_sta_params.link_mac))
+		if (!is_valid_ether_addr(lsta->link_mac))
 			return -EINVAL;
 	} else {
 		mac_addr = nla_data(info->attrs[NL80211_ATTR_MAC]);
 	}
 
-	params.link_sta_params.supported_rates =
+	lsta->supported_rates =
 		nla_data(info->attrs[NL80211_ATTR_STA_SUPPORTED_RATES]);
-	params.link_sta_params.supported_rates_len =
+	lsta->supported_rates_len =
 		nla_len(info->attrs[NL80211_ATTR_STA_SUPPORTED_RATES]);
 	params.listen_interval =
 		nla_get_u16(info->attrs[NL80211_ATTR_STA_LISTEN_INTERVAL]);
@@ -8573,28 +8577,28 @@ static int nl80211_new_station(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	if (info->attrs[NL80211_ATTR_HT_CAPABILITY])
-		params.link_sta_params.ht_capa =
+		lsta->ht_capa =
 			nla_data(info->attrs[NL80211_ATTR_HT_CAPABILITY]);
 
 	if (info->attrs[NL80211_ATTR_VHT_CAPABILITY])
-		params.link_sta_params.vht_capa =
+		lsta->vht_capa =
 			nla_data(info->attrs[NL80211_ATTR_VHT_CAPABILITY]);
 
 	if (info->attrs[NL80211_ATTR_HE_CAPABILITY]) {
-		params.link_sta_params.he_capa =
+		lsta->he_capa =
 			nla_data(info->attrs[NL80211_ATTR_HE_CAPABILITY]);
-		params.link_sta_params.he_capa_len =
+		lsta->he_capa_len =
 			nla_len(info->attrs[NL80211_ATTR_HE_CAPABILITY]);
 
 		if (info->attrs[NL80211_ATTR_EHT_CAPABILITY]) {
-			params.link_sta_params.eht_capa =
+			lsta->eht_capa =
 				nla_data(info->attrs[NL80211_ATTR_EHT_CAPABILITY]);
-			params.link_sta_params.eht_capa_len =
+			lsta->eht_capa_len =
 				nla_len(info->attrs[NL80211_ATTR_EHT_CAPABILITY]);
 
-			if (!ieee80211_eht_capa_size_ok((const u8 *)params.link_sta_params.he_capa,
-							(const u8 *)params.link_sta_params.eht_capa,
-							params.link_sta_params.eht_capa_len,
+			if (!ieee80211_eht_capa_size_ok((const u8 *)lsta->he_capa,
+							(const u8 *)lsta->eht_capa,
+							lsta->eht_capa_len,
 							false))
 				return -EINVAL;
 		}
@@ -8607,7 +8611,7 @@ static int nl80211_new_station(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	if (info->attrs[NL80211_ATTR_HE_6GHZ_CAPABILITY])
-		params.link_sta_params.he_6ghz_capa =
+		lsta->he_6ghz_capa =
 			nla_data(info->attrs[NL80211_ATTR_HE_6GHZ_CAPABILITY]);
 
 	if (info->attrs[NL80211_ATTR_S1G_CAPABILITY])
@@ -8615,8 +8619,8 @@ static int nl80211_new_station(struct sk_buff *skb, struct genl_info *info)
 			nla_data(info->attrs[NL80211_ATTR_S1G_CAPABILITY]);
 
 	if (info->attrs[NL80211_ATTR_OPMODE_NOTIF]) {
-		params.link_sta_params.opmode_notif_used = true;
-		params.link_sta_params.opmode_notif =
+		lsta->opmode_notif_used = true;
+		lsta->opmode_notif =
 			nla_get_u8(info->attrs[NL80211_ATTR_OPMODE_NOTIF]);
 	}
 
@@ -8634,8 +8638,8 @@ static int nl80211_new_station(struct sk_buff *skb, struct genl_info *info)
 		return -EOPNOTSUPP;
 
 	err = nl80211_parse_sta_txpower_setting(info,
-						&params.link_sta_params.txpwr,
-						&params.link_sta_params.txpwr_set);
+						&lsta->txpwr,
+						&lsta->txpwr_set);
 	if (err)
 		return err;
 
@@ -8656,19 +8660,19 @@ static int nl80211_new_station(struct sk_buff *skb, struct genl_info *info)
 	 * error in this case.
 	 */
 	if (!(params.sta_flags_set & BIT(NL80211_STA_FLAG_WME))) {
-		params.link_sta_params.ht_capa = NULL;
-		params.link_sta_params.vht_capa = NULL;
+		lsta->ht_capa = NULL;
+		lsta->vht_capa = NULL;
 
 		/* HE and EHT require WME */
-		if (params.link_sta_params.he_capa_len ||
-		    params.link_sta_params.he_6ghz_capa ||
-		    params.link_sta_params.eht_capa_len)
+		if (lsta->he_capa_len ||
+		    lsta->he_6ghz_capa ||
+		    lsta->eht_capa_len)
 			return -EINVAL;
 	}
 
 	/* Ensure that HT/VHT capabilities are not set for 6 GHz HE STA */
-	if (params.link_sta_params.he_6ghz_capa &&
-	    (params.link_sta_params.ht_capa || params.link_sta_params.vht_capa))
+	if (lsta->he_6ghz_capa &&
+	    (lsta->ht_capa || lsta->vht_capa))
 		return -EINVAL;
 
 	/* When you run into this, adjust the code below for the new flag */
@@ -8765,16 +8769,16 @@ static int nl80211_new_station(struct sk_buff *skb, struct genl_info *info)
 	/* be aware of params.vlan when changing code here */
 
 	if (wdev->valid_links) {
-		if (params.link_sta_params.link_id < 0) {
+		if (lsta->link_id < 0) {
 			err = -EINVAL;
 			goto out;
 		}
-		if (!(wdev->valid_links & BIT(params.link_sta_params.link_id))) {
+		if (!(wdev->valid_links & BIT(lsta->link_id))) {
 			err = -ENOLINK;
 			goto out;
 		}
 	} else {
-		if (params.link_sta_params.link_id >= 0) {
+		if (lsta->link_id >= 0) {
 			err = -EINVAL;
 			goto out;
 		}
