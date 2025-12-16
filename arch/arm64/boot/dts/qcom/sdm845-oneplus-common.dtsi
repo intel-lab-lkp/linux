@@ -352,6 +352,26 @@
 	};
 };
 
+&cci {
+	status = "okay";
+};
+
+&cci_i2c0 {
+	/* front sony,imx371 @10 */
+
+	/* rear sony,imx519 @1a */
+
+	/* rear onnn,lc898217xc @72 */
+};
+
+&cci_i2c1 {
+	/* sa,sa3103 @0d */
+
+	/* rear sony,imx376k @10 */
+
+	/* onnn,lc898217xc @74 */
+};
+
 &cdsp_pas {
 	status = "okay";
 	firmware-name = "qcom/sdm845/oneplus6/cdsp.mbn";
@@ -371,6 +391,14 @@
 
 &gpu_zap_shader {
 	firmware-name = "qcom/sdm845/oneplus6/a630_zap.mbn";
+};
+
+&i2c3 {
+	clock-frequency = <400000>;
+
+	status = "okay";
+
+	/* nxp,nxp-nci-i2c @28 */
 };
 
 &i2c10 {
