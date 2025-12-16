@@ -43,6 +43,7 @@
 #include <asm/tlbflush.h>
 #include <asm/shmparam.h>
 #include <linux/page_owner.h>
+#include <linux/moduleparam.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/vmalloc.h>
@@ -3709,6 +3710,9 @@ vm_area_alloc_pages_large_order(gfp_t gfp, int nid, unsigned int order,
 	return nr_allocated;
 }
 
+static int attempt_larger_order_alloc;
+module_param(attempt_larger_order_alloc, int, 0644);
+
 static inline unsigned int
 vm_area_alloc_pages(gfp_t gfp, int nid,
 		unsigned int order, unsigned int nr_pages, struct page **pages)
@@ -3717,8 +3721,9 @@ vm_area_alloc_pages(gfp_t gfp, int nid,
 	struct page *page;
 	int i;
 
-	nr_allocated = vm_area_alloc_pages_large_order(gfp, nid,
-		order, nr_pages, pages);
+	if (attempt_larger_order_alloc)
+		nr_allocated = vm_area_alloc_pages_large_order(gfp, nid,
+			order, nr_pages, pages);
 
 	/*
 	 * For order-0 pages we make use of bulk allocator, if
