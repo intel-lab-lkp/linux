@@ -414,11 +414,6 @@
 			pinctrl-0 = <&pinctrl_system_bus>;
 		};
 
-		smpctrl@59801000 {
-			compatible = "socionext,uniphier-smpctrl";
-			reg = <0x59801000 0x400>;
-		};
-
 		syscon@59810000 {
 			compatible = "socionext,uniphier-ld11-sdctrl",
 				     "simple-mfd", "syscon";
