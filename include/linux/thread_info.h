@@ -159,8 +159,6 @@ static __always_inline unsigned long read_ti_thread_flags(struct thread_info *ti
 	read_ti_thread_flags(task_thread_info(t))
 
 #ifdef CONFIG_GENERIC_ENTRY
-#define set_syscall_work(fl) \
-	set_bit(SYSCALL_WORK_BIT_##fl, &current_thread_info()->syscall_work)
 #define test_syscall_work(fl) \
 	test_bit(SYSCALL_WORK_BIT_##fl, &current_thread_info()->syscall_work)
 #define clear_syscall_work(fl) \
@@ -175,8 +173,6 @@ static __always_inline unsigned long read_ti_thread_flags(struct thread_info *ti
 
 #else /* CONFIG_GENERIC_ENTRY */
 
-#define set_syscall_work(fl)						\
-	set_ti_thread_flag(current_thread_info(), TIF_##fl)
 #define test_syscall_work(fl) \
 	test_ti_thread_flag(current_thread_info(), TIF_##fl)
 #define clear_syscall_work(fl) \
