@@ -181,8 +181,8 @@ CAIF Core protocol. The IP Interface and CAIF socket have an instance of
 'struct cflayer', just like the CAIF Core protocol stack.
 Net device and Socket implement the 'receive()' function defined by
 'struct cflayer', just like the rest of the CAIF stack. In this way, transmit and
-receive of packets is handled as by the rest of the layers: the 'dn->transmit()'
-function is called in order to transmit data.
+receive of packets is handled like the rest of the layers: the 'dn->transmit()'
+function is called to transmit data.
 
 Configuration of Link Layer
 ---------------------------
