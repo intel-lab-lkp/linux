@@ -776,13 +776,22 @@ _hci_cmd_sync_lookup_entry(struct hci_dev *hdev, hci_cmd_sync_work_func_t func,
  * - Lookup if an entry already exist and only if it doesn't creates a new entry
  *   and queue it.
  */
-int hci_cmd_sync_queue_once(struct hci_dev *hdev, hci_cmd_sync_work_func_t func,
+static int __hci_cmd_sync_queue_once(struct hci_dev *hdev, hci_cmd_sync_work_func_t func,
 			    void *data, hci_cmd_sync_work_destroy_t destroy)
 {
 	if (hci_cmd_sync_lookup_entry(hdev, func, data, destroy))
-		return 0;
+		return -EEXIST;
 
 	return hci_cmd_sync_queue(hdev, func, data, destroy);
+}
+
+int hci_cmd_sync_queue_once(struct hci_dev *hdev, hci_cmd_sync_work_func_t func,
+			    void *data, hci_cmd_sync_work_destroy_t destroy)
+{
+	int ret;
+
+	ret = __hci_cmd_sync_queue_once(hdev, func, data, destroy);
+	return ret == -EEXIST ? 0 : ret;
 }
 EXPORT_SYMBOL(hci_cmd_sync_queue_once);
 
@@ -7338,10 +7347,8 @@ static void le_read_features_complete(struct hci_dev *hdev, void *data, int err)
 
 	bt_dev_dbg(hdev, "err %d", err);
 
-	if (err == -ECANCELED)
-		return;
-
 	hci_conn_drop(conn);
+	hci_conn_put(conn);
 }
 
 static int hci_le_read_all_remote_features_sync(struct hci_dev *hdev,
@@ -7408,12 +7415,20 @@ int hci_le_read_remote_features(struct hci_conn *conn)
 	 * role is possible. Otherwise just transition into the
 	 * connected state without requesting the remote features.
 	 */
-	if (conn->out || (hdev->le_features[0] & HCI_LE_PERIPHERAL_FEATURES))
-		err = hci_cmd_sync_queue_once(hdev,
-					      hci_le_read_remote_features_sync,
-					      hci_conn_hold(conn),
-					      le_read_features_complete);
-	else
+	if (conn->out || (hdev->le_features[0] & HCI_LE_PERIPHERAL_FEATURES)) {
+		hci_conn_get(conn);
+		hci_conn_hold(conn);
+		err = __hci_cmd_sync_queue_once(hdev,
+						hci_le_read_remote_features_sync,
+						conn,
+						le_read_features_complete);
+		if (err) {
+			hci_conn_drop(conn);
+			hci_conn_put(conn);
+			if (err == -EEXIST)
+				err = 0;
+		}
+	} else
 		err = -EOPNOTSUPP;
 
 	return err;
