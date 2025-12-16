@@ -453,6 +453,12 @@ mpt_turbo_reply(MPT_ADAPTER *ioc, u32 pa)
 	switch (pa >> MPI_CONTEXT_REPLY_TYPE_SHIFT) {
 	case MPI_CONTEXT_REPLY_TYPE_SCSI_INIT:
 		req_idx = pa & 0x0000FFFF;
+		if (req_idx >= ioc->req_depth) {
+			printk(MYIOC_s_WARN_FMT
+			       "TURBO reply: req_idx %u out of range (depth %u)\n",
+			       ioc->name, req_idx, ioc->req_depth);
+			return;
+		}
 		cb_idx = (pa & 0x00FF0000) >> 16;
 		mf = MPT_INDEX_2_MFPTR(ioc, req_idx);
 		break;
@@ -469,6 +475,12 @@ mpt_turbo_reply(MPT_ADAPTER *ioc, u32 pa)
 		 */
 		if ((pa & 0x58000000) == 0x58000000) {
 			req_idx = pa & 0x0000FFFF;
+			if (req_idx >= ioc->req_depth) {
+				printk(MYIOC_s_WARN_FMT
+				       "LAN TURBO reply: req_idx %u out of range (depth %u)\n",
+				       ioc->name, req_idx, ioc->req_depth);
+				return;
+			}
 			mf = MPT_INDEX_2_MFPTR(ioc, req_idx);
 			mpt_free_msg_frame(ioc, mf);
 			mb();
@@ -527,6 +539,13 @@ mpt_reply(MPT_ADAPTER *ioc, u32 pa)
 
 	req_idx = le16_to_cpu(mr->u.frame.hwhdr.msgctxu.fld.req_idx);
 	cb_idx = mr->u.frame.hwhdr.msgctxu.fld.cb_idx;
+	if (req_idx >= ioc->req_depth) {
+		printk(MYIOC_s_WARN_FMT
+		       "reply: req_idx %u out of range (depth %u)\n",
+		       ioc->name, req_idx, ioc->req_depth);
+		freeme = 0;
+		goto out;
+	}
 	mf = MPT_INDEX_2_MFPTR(ioc, req_idx);
 
 	dmfprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Got non-TURBO reply=%p req_idx=%x cb_idx=%x Function=%x\n",
