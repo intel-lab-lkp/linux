@@ -393,6 +393,40 @@ static void __init dmi_save_dev_pciaddr(int instance, int segment, int bus,
 	list_add(&dev->dev.list, &dmi_devices);
 }
 
+static void __init dmi_save_additional(const struct dmi_additional_info *info)
+{
+	const u8 *data;
+	int i;
+
+	if (!info || info->header.length < 5 + info->count * 5)
+		return;
+
+	data = info->entries;
+
+	for (i = 0; i < info->count; i++) {
+		u8 string_num = data[i * 5 + 4];
+		const char *string_ptr;
+		char *value;
+		int len;
+
+		string_ptr = dmi_string_nosave(&info->header, string_num);
+		if (!string_ptr || !*string_ptr)
+			continue;
+
+		len = strlen(string_ptr);
+		if (len == 0)
+			continue;
+
+		value = dmi_alloc(len + 1);
+		if (!value)
+			continue;
+
+		strscpy(value, string_ptr, len + 1);
+
+		dmi_save_one_device(DMI_DEV_TYPE_ADDITIONAL, value);
+	}
+}
+
 static void __init dmi_save_extended_devices(const struct dmi_header *dm)
 {
 	const char *name;
@@ -526,8 +560,12 @@ static void __init dmi_decode(const struct dmi_header *dm, void *dummy)
 	case DMI_ENTRY_IPMI_DEV:
 		dmi_save_ipmi_device(dm);
 		break;
+	case DMI_ENTRY_ADDITIONAL:
+		dmi_save_additional((const struct dmi_additional_info *)dm);
+		break;
 	case DMI_ENTRY_ONBOARD_DEV_EXT:
 		dmi_save_extended_devices(dm);
+		break;
 	}
 }
 
