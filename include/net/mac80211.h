@@ -7237,6 +7237,20 @@ ieee80211_get_eht_iftype_cap_vif(const struct ieee80211_supported_band *sband,
 }
 
 /**
+ * ieee80211_get_uhr_iftype_cap_vif - return UHR capabilities for sband/vif
+ * @sband: the sband to search for the iftype on
+ * @vif: the vif to get the iftype from
+ *
+ * Return: pointer to the struct ieee80211_sta_uhr_cap, or %NULL is none found
+ */
+static inline const struct ieee80211_sta_uhr_cap *
+ieee80211_get_uhr_iftype_cap_vif(const struct ieee80211_supported_band *sband,
+				 struct ieee80211_vif *vif)
+{
+	return ieee80211_get_uhr_iftype_cap(sband, ieee80211_vif_type_p2p(vif));
+}
+
+/**
  * ieee80211_update_mu_groups - set the VHT MU-MIMO groud data
  *
  * @vif: the specified virtual interface

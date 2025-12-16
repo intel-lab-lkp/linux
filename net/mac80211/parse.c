@@ -190,12 +190,16 @@ ieee80211_parse_extension_element(u32 *crc,
 		}
 		break;
 	case WLAN_EID_EXT_UHR_CAPABILITY:
+		if (params->mode < IEEE80211_CONN_MODE_UHR)
+			break;
 		if (ieee80211_uhr_capa_size_ok(data, len)) {
 			elems->uhr_cap = data;
 			elems->uhr_cap_len = len;
 		}
 		break;
 	case WLAN_EID_EXT_UHR_OPERATION:
+		if (params->mode < IEEE80211_CONN_MODE_UHR)
+			break;
 		if (ieee80211_uhr_oper_size_ok(data, len, params->is_beacon))
 			elems->uhr_operation = data;
 		calc_crc = true;

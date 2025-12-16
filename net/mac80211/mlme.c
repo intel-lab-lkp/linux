@@ -162,6 +162,7 @@ ieee80211_determine_ap_chan(struct ieee80211_sub_if_data *sdata,
 	const struct ieee80211_vht_operation *vht_oper = elems->vht_operation;
 	const struct ieee80211_he_operation *he_oper = elems->he_operation;
 	const struct ieee80211_eht_operation *eht_oper = elems->eht_operation;
+	const struct ieee80211_uhr_operation *uhr_oper = elems->uhr_operation;
 	struct ieee80211_supported_band *sband =
 		sdata->local->hw.wiphy->bands[channel->band];
 	struct cfg80211_chan_def vht_chandef;
@@ -340,7 +341,12 @@ ieee80211_determine_ap_chan(struct ieee80211_sub_if_data *sdata,
 		*chandef = eht_chandef;
 	}
 
-	return IEEE80211_CONN_MODE_EHT;
+	/* stick to EHT if STA or the AP don't have UHR */
+	if (conn->mode < IEEE80211_CONN_MODE_UHR ||
+	    !uhr_oper)
+		return IEEE80211_CONN_MODE_EHT;
+
+	return IEEE80211_CONN_MODE_UHR;
 }
 
 static bool
@@ -1091,6 +1097,7 @@ again:
 				       IEEE80211_CONN_BW_LIMIT_160);
 		break;
 	case IEEE80211_CONN_MODE_EHT:
+	case IEEE80211_CONN_MODE_UHR:
 		conn->bw_limit = min_t(enum ieee80211_conn_bw_limit,
 				       conn->bw_limit,
 				       IEEE80211_CONN_BW_LIMIT_320);
@@ -1147,6 +1154,15 @@ again:
 	    !cfg80211_chandef_usable(sdata->wdev.wiphy, &chanreq->oper,
 				     IEEE80211_CHAN_NO_EHT)) {
 		conn->mode = IEEE80211_CONN_MODE_HE;
+		conn->bw_limit = min_t(enum ieee80211_conn_bw_limit,
+				       conn->bw_limit,
+				       IEEE80211_CONN_BW_LIMIT_160);
+	}
+
+	if (conn->mode >= IEEE80211_CONN_MODE_UHR &&
+	    !cfg80211_chandef_usable(sdata->wdev.wiphy, &chanreq->oper,
+				     IEEE80211_CHAN_NO_UHR)) {
+		conn->mode = IEEE80211_CONN_MODE_EHT;
 		conn->bw_limit = min_t(enum ieee80211_conn_bw_limit,
 				       conn->bw_limit,
 				       IEEE80211_CONN_BW_LIMIT_160);
@@ -1887,6 +1903,9 @@ ieee80211_add_link_elems(struct ieee80211_sub_if_data *sdata,
 	if (assoc_data->link[link_id].conn.mode >= IEEE80211_CONN_MODE_EHT)
 		ADD_PRESENT_EXT_ELEM(WLAN_EID_EXT_EHT_CAPABILITY);
 
+	if (assoc_data->link[link_id].conn.mode >= IEEE80211_CONN_MODE_UHR)
+		ADD_PRESENT_EXT_ELEM(WLAN_EID_EXT_UHR_CAPABILITY);
+
 	if (link_id == assoc_data->assoc_link_id)
 		ieee80211_assoc_add_ml_elem(sdata, skb, orig_capab, ext_capa,
 					    present_elems, assoc_data);
@@ -1897,6 +1916,9 @@ ieee80211_add_link_elems(struct ieee80211_sub_if_data *sdata,
 	if (assoc_data->link[link_id].conn.mode >= IEEE80211_CONN_MODE_EHT)
 		ieee80211_put_eht_cap(skb, sdata, sband,
 				      &assoc_data->link[link_id].conn);
+
+	if (assoc_data->link[link_id].conn.mode >= IEEE80211_CONN_MODE_UHR)
+		ieee80211_put_uhr_cap(skb, sdata, sband);
 
 	if (sband->band == NL80211_BAND_S1GHZ) {
 		ieee80211_add_aid_request_ie(sdata, skb);
@@ -2131,6 +2153,8 @@ ieee80211_link_common_elems_size(struct ieee80211_sub_if_data *sdata,
 	size += 2 + 1 + sizeof(struct ieee80211_eht_cap_elem) +
 		sizeof(struct ieee80211_eht_mcs_nss_supp) +
 		IEEE80211_EHT_PPE_THRES_MAX_LEN;
+
+	size += 2 + 1 + sizeof(struct ieee80211_uhr_cap_elem);
 
 	return size;
 }
@@ -5808,6 +5832,7 @@ ieee80211_determine_our_sta_mode(struct ieee80211_sub_if_data *sdata,
 	const struct ieee80211_sta_he_cap *he_cap;
 	const struct ieee80211_sta_eht_cap *eht_cap;
 	struct ieee80211_sta_vht_cap vht_cap;
+	const struct ieee80211_sta_uhr_cap *uhr_cap;
 
 	if (sband->band == NL80211_BAND_S1GHZ) {
 		conn->mode = IEEE80211_CONN_MODE_S1G;
@@ -5994,6 +6019,16 @@ ieee80211_determine_our_sta_mode(struct ieee80211_sub_if_data *sdata,
 	else if (is_6ghz)
 		mlme_link_id_dbg(sdata, link_id,
 				 "no EHT 320 MHz cap in 6 GHz, limiting to 160 MHz\n");
+
+	uhr_cap = ieee80211_get_uhr_iftype_cap_vif(sband, &sdata->vif);
+	if (!uhr_cap) {
+		mlme_link_id_dbg(sdata, link_id,
+				 "no UHR support, limiting to EHT\n");
+		goto out;
+	}
+
+	/* we have UHR */
+	conn->mode = IEEE80211_CONN_MODE_UHR;
 
 out:
 	mlme_link_id_dbg(sdata, link_id,
