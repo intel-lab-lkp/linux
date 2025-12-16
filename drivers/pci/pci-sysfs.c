@@ -1141,6 +1141,13 @@ static int pci_mmap_resource_wc(struct file *filp, struct kobject *kobj,
 	return pci_mmap_resource(kobj, attr, vma, 1);
 }
 
+#if !defined(CONFIG_X86)
+static bool is_unaligned(unsigned long port, size_t size)
+{
+	return port & (size - 1);
+}
+#endif
+
 static ssize_t pci_resource_io(struct file *filp, struct kobject *kobj,
 			       const struct bin_attribute *attr, char *buf,
 			       loff_t off, size_t count, bool write)
@@ -1157,6 +1164,11 @@ static ssize_t pci_resource_io(struct file *filp, struct kobject *kobj,
 
 	if (port + count - 1 > pci_resource_end(pdev, bar))
 		return -EINVAL;
+
+#if !defined(CONFIG_X86)
+	if (is_unaligned(port, count))
+		return -EFAULT;
+#endif
 
 	switch (count) {
 	case 1:
