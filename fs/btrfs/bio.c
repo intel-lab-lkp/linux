@@ -108,7 +108,7 @@ void btrfs_bio_end_io(struct btrfs_bio *bbio, blk_status_t status)
 	ASSERT(in_task());
 
 	if (bbio->async_csum)
-		wait_for_completion(&bbio->csum_done);
+		flush_work(&bbio->csum_work);
 
 	bbio->bio.bi_status = status;
 	if (bbio->bio.bi_pool == &btrfs_clone_bioset) {

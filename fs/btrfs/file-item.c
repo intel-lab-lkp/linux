@@ -797,7 +797,6 @@ static void csum_one_bio_work(struct work_struct *work)
 	ASSERT(btrfs_op(&bbio->bio) == BTRFS_MAP_WRITE);
 	ASSERT(bbio->async_csum == true);
 	csum_one_bio(bbio, &bbio->csum_saved_iter);
-	complete(&bbio->csum_done);
 }
 
 /*
@@ -830,11 +829,10 @@ int btrfs_csum_one_bio(struct btrfs_bio *bbio, bool async)
 		csum_one_bio(bbio, &bbio->bio.bi_iter);
 		return 0;
 	}
-	init_completion(&bbio->csum_done);
 	bbio->async_csum = true;
 	bbio->csum_saved_iter = bbio->bio.bi_iter;
 	INIT_WORK(&bbio->csum_work, csum_one_bio_work);
-	schedule_work(&bbio->csum_work);
+	queue_work(fs_info->endio_workers, &bbio->csum_work);
 	return 0;
 }
 
