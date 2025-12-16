@@ -2073,6 +2073,13 @@ megaraid_ack_sequence(adapter_t *adapter)
 		}
 		mbox->numstatus = 0xFF;
 
+		if (nstatus > MBOX_MAX_FIRMWARE_STATUS) {
+			con_log(CL_ANN, (KERN_ERR
+				"megaraid: firmware reported %u status entries (max %d)\n",
+				nstatus, MBOX_MAX_FIRMWARE_STATUS));
+			nstatus = MBOX_MAX_FIRMWARE_STATUS;
+		}
+
 		adapter->outstanding_cmds -= nstatus;
 
 		for (i = 0; i < nstatus; i++) {
@@ -2090,6 +2097,12 @@ megaraid_ack_sequence(adapter_t *adapter)
 				"megaraid: command posting timed out\n"));
 
 				BUG();
+				continue;
+			}
+
+			if (completed[i] >= MBOX_MAX_SCSI_CMDS + MBOX_MAX_USER_CMDS) {
+				con_log(CL_ANN, (KERN_ERR
+					"megaraid: invalid command id %u\n", completed[i]));
 				continue;
 			}
 
