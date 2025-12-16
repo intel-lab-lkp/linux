@@ -446,6 +446,44 @@ static void scsi_single_lun_run(struct scsi_device *current_sdev)
 	spin_unlock_irqrestore(shost->host_lock, flags);
 }
 
+struct sdev_cmds_allocated_data {
+	const struct scsi_device *sdev;
+	int count;
+};
+
+static bool scsi_device_check_allocated(struct request *rq, void *data)
+{
+	struct scsi_cmnd *cmd = blk_mq_rq_to_pdu(rq);
+	struct sdev_cmds_allocated_data *sifd = data;
+
+	if (cmd->device == sifd->sdev)
+		sifd->count++;
+
+	return true;
+}
+
+/**
+ * scsi_device_busy() - Number of commands allocated for a SCSI device
+ * @sdev: SCSI device.
+ *
+ * Note: There is a subtle difference between this function and
+ * scsi_host_busy(). scsi_host_busy() counts the number of commands that have
+ * been started. This function counts the number of commands that have been
+ * allocated. At least the UFS driver depends on this function counting commands
+ * that have already been allocated but that have not yet been started.
+ */
+int scsi_device_busy(const struct scsi_device *sdev)
+{
+	struct sdev_cmds_allocated_data sifd = { .sdev = sdev };
+	struct blk_mq_tag_set *set = &sdev->host->tag_set;
+
+	if (sdev->budget_map.map)
+		return sbitmap_weight(&sdev->budget_map);
+	blk_mq_tagset_iter(set, scsi_device_check_allocated, &sifd);
+	return sifd.count;
+}
+EXPORT_SYMBOL(scsi_device_busy);
+
 static inline bool scsi_device_is_busy(struct scsi_device *sdev)
 {
 	if (scsi_device_busy(sdev) >= sdev->queue_depth)

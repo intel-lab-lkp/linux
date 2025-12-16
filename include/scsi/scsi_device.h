@@ -713,10 +713,7 @@ static inline int scsi_device_supports_vpd(struct scsi_device *sdev)
 	return 0;
 }
 
-static inline int scsi_device_busy(struct scsi_device *sdev)
-{
-	return sbitmap_weight(&sdev->budget_map);
-}
+int scsi_device_busy(const struct scsi_device *sdev);
 
 /* Macros to access the UNIT ATTENTION counters */
 #define scsi_get_ua_new_media_ctr(sdev)	atomic_read(&sdev->ua_new_media_ctr)
