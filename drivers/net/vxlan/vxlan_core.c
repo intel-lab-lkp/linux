@@ -2486,8 +2486,10 @@ void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 			err = encap_bypass_if_local(skb, dev, vxlan, AF_INET,
 						    dst_port, ifindex, vni,
 						    &rt->dst, rt->rt_flags);
-			if (err)
+			if (err) {
+				dst_release(&rt->dst);
 				goto out_unlock;
+			}
 
 			if (vxlan->cfg.df == VXLAN_DF_SET) {
 				df = htons(IP_DF);
@@ -2573,8 +2575,10 @@ void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 			err = encap_bypass_if_local(skb, dev, vxlan, AF_INET6,
 						    dst_port, ifindex, vni,
 						    ndst, rt6i_flags);
-			if (err)
+			if (err) {
+				dst_release(ndst);
 				goto out_unlock;
+			}
 		}
 
 		err = skb_tunnel_check_pmtu(skb, ndst,
