@@ -5937,6 +5937,7 @@ sub process {
 # (0) loop.  Grab the first statement and ensure its the whole macro
 # if its not enclosed in a known good container
 		if ($realfile !~ m@/vmlinux.lds.h$@ &&
+		    $realfile !~ m@/imx\d+-pinfunc\.h$@ &&
 		    $line =~ /^.\s*\#\s*define\s*$Ident(\()?/) {
 			my $ln = $linenr;
 			my $cnt = $realcnt;
