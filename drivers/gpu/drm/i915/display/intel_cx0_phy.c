@@ -2093,10 +2093,9 @@ static bool intel_c10pll_ssc_enabled(const struct intel_c10pll_state *pll_state)
 			  0, sizeof(pll_state->pll[0]) * C10_PLL_SSC_REG_COUNT);
 }
 
-static void intel_c10pll_update_pll(struct intel_encoder *encoder,
+static void intel_c10pll_update_pll(struct intel_display *display,
 				    struct intel_cx0pll_state *pll_state)
 {
-	struct intel_display *display = to_intel_display(encoder);
 	int i;
 
 	if (pll_state->ssc_enabled)
@@ -2128,8 +2127,7 @@ static bool cx0pll_state_is_dp(const struct intel_cx0pll_state *pll_state)
 	return c20pll_state_is_dp(&pll_state->c20);
 }
 
-static int intel_c10pll_calc_port_clock(struct intel_encoder *encoder,
-					const struct intel_c10pll_state *pll_state)
+static int intel_c10pll_calc_port_clock(const struct intel_c10pll_state *pll_state)
 {
 	unsigned int frac_quot = 0, frac_rem = 0, frac_den = 1;
 	unsigned int multiplier, tx_clk_div, hdmi_div, refclk = 38400;
@@ -2160,8 +2158,7 @@ static bool intel_c20phy_use_mpllb(const struct intel_c20pll_state *state)
 	return state->tx[0] & C20_PHY_USE_MPLLB;
 }
 
-static int intel_c20pll_calc_port_clock(struct intel_encoder *encoder,
-					const struct intel_c20pll_state *pll_state)
+static int intel_c20pll_calc_port_clock(const struct intel_c20pll_state *pll_state)
 {
 	unsigned int frac, frac_en, frac_quot, frac_rem, frac_den;
 	unsigned int multiplier, refclk = 38400;
@@ -2229,7 +2226,7 @@ static int intel_c10pll_calc_state_from_table(struct intel_encoder *encoder,
 		if (intel_cx0pll_clock_matches(port_clock, clock)) {
 			pll_state->c10 = *tables[i].c10;
 			intel_cx0pll_update_ssc(encoder, pll_state, is_dp);
-			intel_c10pll_update_pll(encoder, pll_state);
+			intel_c10pll_update_pll(display, pll_state);
 
 			pll_state->use_c10 = true;
 			pll_state->lane_count = lane_count;
@@ -2266,7 +2263,7 @@ static int intel_c10pll_calc_state(const struct intel_crtc_state *crtc_state,
 	/* For HDMI PLLs try SNPS PHY algorithm, if there are no precomputed tables */
 	intel_snps_hdmi_pll_compute_c10pll(&hw_state->cx0pll.c10,
 					   crtc_state->port_clock);
-	intel_c10pll_update_pll(encoder, &hw_state->cx0pll);
+	intel_c10pll_update_pll(display, &hw_state->cx0pll);
 
 	hw_state->cx0pll.use_c10 = true;
 	hw_state->cx0pll.lane_count = crtc_state->lane_count;
@@ -2358,7 +2355,7 @@ static void intel_c10pll_readout_hw_state(struct intel_encoder *encoder,
 
 	intel_cx0_phy_transaction_end(encoder, wakeref);
 
-	pll_state->clock = intel_c10pll_calc_port_clock(encoder, pll_state);
+	pll_state->clock = intel_c10pll_calc_port_clock(pll_state);
 
 	cx0pll_state->ssc_enabled = readout_ssc_state(encoder, true);
 
@@ -2859,7 +2856,7 @@ static void intel_c20pll_readout_hw_state(struct intel_encoder *encoder,
 		}
 	}
 
-	pll_state->clock = intel_c20pll_calc_port_clock(encoder, pll_state);
+	pll_state->clock = intel_c20pll_calc_port_clock(pll_state);
 
 	intel_cx0_phy_transaction_end(encoder, wakeref);
 
@@ -3751,9 +3748,9 @@ int intel_cx0pll_calc_port_clock(struct intel_encoder *encoder,
 				 const struct intel_cx0pll_state *pll_state)
 {
 	if (intel_encoder_is_c10phy(encoder))
-		return intel_c10pll_calc_port_clock(encoder, &pll_state->c10);
+		return intel_c10pll_calc_port_clock(&pll_state->c10);
 
-	return intel_c20pll_calc_port_clock(encoder, &pll_state->c20);
+	return intel_c20pll_calc_port_clock(&pll_state->c20);
 }
 
 /*
