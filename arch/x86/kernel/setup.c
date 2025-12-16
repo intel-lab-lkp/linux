@@ -183,6 +183,7 @@ static const struct ctl_table x86_sysctl_table[] = {
 		.mode		= 0444,
 		.proc_handler	= proc_dointvec,
 	},
+#ifdef CONFIG_IO_DELAY
 	{
 		.procname	= "io_delay_type",
 		.data		= &io_delay_type,
@@ -190,6 +191,7 @@ static const struct ctl_table x86_sysctl_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec,
 	},
+#endif
 #if defined(CONFIG_ACPI_SLEEP)
 	{
 		.procname	= "acpi_video_flags",
