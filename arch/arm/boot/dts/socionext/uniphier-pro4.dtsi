@@ -496,6 +496,10 @@
 				compatible = "socionext,uniphier-pro4-reset";
 				#reset-cells = <1>;
 			};
+
+			watchdog {
+				compatible = "socionext,uniphier-wdt";
+			};
 		};
 
 		eth: ethernet@65000000 {

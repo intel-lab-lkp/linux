@@ -572,6 +572,10 @@
 				#reset-cells = <1>;
 			};
 
+			watchdog {
+				compatible = "socionext,uniphier-wdt";
+			};
+
 			pvtctl: thermal-sensor {
 				compatible = "socionext,uniphier-pxs2-thermal";
 				interrupts = <GIC_SPI 3 IRQ_TYPE_LEVEL_HIGH>;

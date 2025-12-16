@@ -413,6 +413,10 @@
 				compatible = "socionext,uniphier-sld8-reset";
 				#reset-cells = <1>;
 			};
+
+			watchdog {
+				compatible = "socionext,uniphier-wdt";
+			};
 		};
 
 		nand: nand-controller@68000000 {
