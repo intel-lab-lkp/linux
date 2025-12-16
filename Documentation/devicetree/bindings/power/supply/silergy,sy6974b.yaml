@@ -1,0 +1,90 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+# Copyright (C) 2025 Silergy Semiconductor Technology Co., Ltd.
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/power/supply/silergy,sy6974b.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Silergy SY6974B 3A Single Cell Switching Battery charger
+
+maintainers:
+  - Tian Ge <tian.ge@silergymicro.com>
+
+allOf:
+  - $ref: power-supply.yaml#
+
+properties:
+  compatible:
+    const: silergy,sy6974b
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  sy,charge-current:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      maximum charging current (in mA).
+      Range: 0 ~ 3000 mA, step: 60 mA
+
+  sy,precharge-current:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      maximum charge current during precharge phase (in mA).
+      Range: 60 ~ 780 mA, step: 60 mA
+
+  sy,termination-current:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      charge will be terminated when current in constant-voltage phase
+      drops below this value (in mA).
+      Range: 60 ~ 960 mA, step: 60 mA
+
+  sy,regulation-voltage:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      maximum charging voltage (in mV).
+      Range: 3856 ~ 4624 mV, step: 32 mV
+
+  sy,minimum-sys-voltage:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      when battery is charging and it is below minimum system voltage,
+      the system will be regulated above minimum-sys-voltage setting (in mV).
+      Allowed values: 2600, 2800, 3000, 3200, 3400, 3500, 3600, 3700 mV
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - sy,charge-current
+  - sy,precharge-current
+  - sy,termination-current
+  - sy,regulation-voltage
+  - sy,minimum-sys-voltage
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      charger@6b {
+        compatible = "silergy,sy6974b";
+        reg = <0x6b>;
+
+        interrupt-parent = <&tlmm>;
+        interrupts = <64 IRQ_TYPE_EDGE_FALLING>;
+
+        sy,charge-current = <3000>;		/* 3000 mA */
+        sy,precharge-current = <500>;		/* 500 mA */
+        sy,termination-current = <300>;		/* 300 mA */
+        sy,regulation-voltage = <4480>;		/* 4480 mV */
+        sy,minimum-sys-voltage = <3500>;	/* 3500 mV */
+      };
+    };
