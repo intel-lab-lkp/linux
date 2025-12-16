@@ -944,10 +944,16 @@ static void intel_fbc_program_workarounds(struct intel_fbc *fbc)
 	 * Wa_22014263786
 	 * Fixes: Screen flicker with FBC and Package C state enabled
 	 * Workaround: Forced SLB invalidation before start of new frame.
+	 *             For DG2, wa is applied only if the number of planes
+	 *             in PIPE A and PIPE B is > 1. If the wa condition is
+	 *             not met, this chicken bit must be unset for DG2.
 	 */
 	if (intel_display_wa(display, 22014263786))
 		intel_de_rmw(display, ILK_DPFC_CHICKEN(fbc->id),
 			     0, DPFC_CHICKEN_FORCE_SLB_INVALIDATION);
+	else if (display->platform.dg2)
+		intel_de_rmw(display, ILK_DPFC_CHICKEN(fbc->id),
+			     DPFC_CHICKEN_FORCE_SLB_INVALIDATION, 0);
 
 	/* wa_18038517565 Disable DPFC clock gating before FBC enable */
 	if (display->platform.dg2 || DISPLAY_VER(display) >= 14)

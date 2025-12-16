@@ -7,6 +7,7 @@
 
 #include "i915_reg.h"
 #include "intel_de.h"
+#include "intel_display_types.h"
 #include "intel_display_core.h"
 #include "intel_display_regs.h"
 #include "intel_display_wa.h"
@@ -53,6 +54,32 @@ static bool intel_display_needs_wa_16025573575(struct intel_display *display)
 		DISPLAY_VERx100(display) == 3500;
 }
 
+static bool intel_display_needs_wa_22014263786(struct intel_display *display)
+{
+	if (!IS_DISPLAY_VERx100(display, 1100, 1400))
+		return false;
+
+	if (display->platform.dg2) {
+		u8 pipe_mask = PIPE_A | PIPE_B;
+		int num_active_planes = 0;
+		struct intel_crtc *crtc;
+
+		for_each_intel_crtc_in_pipe_mask(display->drm, crtc, pipe_mask) {
+			const struct intel_crtc_state *crtc_state =
+				to_intel_crtc_state(crtc->base.state);
+			u8 active_planes =
+				crtc_state->active_planes & ~BIT(PLANE_CURSOR);
+
+			num_active_planes += hweight8(active_planes);
+		}
+
+		if (num_active_planes <= 1)
+			return false;
+	}
+
+	return true;
+}
+
 /*
  * Wa_14011503117:
  * Fixes: Before enabling the scaler DE fatal error is masked
@@ -69,7 +96,7 @@ bool __intel_display_wa(struct intel_display *display, enum intel_display_wa wa,
 	case INTEL_DISPLAY_WA_14011503117:
 		return DISPLAY_VER(display) == 13;
 	case INTEL_DISPLAY_WA_22014263786:
-		return IS_DISPLAY_VERx100(display, 1100, 1400);
+		return intel_display_needs_wa_22014263786(display);
 	case INTEL_DISPLAY_WA_15018326506:
 		return display->platform.battlemage;
 	case INTEL_DISPLAY_WA_14025769978:
