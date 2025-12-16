@@ -474,6 +474,13 @@
 			watchdog {
 				compatible = "socionext,uniphier-wdt";
 			};
+
+			pvtctl: thermal-sensor {
+				compatible = "socionext,uniphier-pxs2-thermal";
+				interrupts = <GIC_SPI 3 IRQ_TYPE_LEVEL_HIGH>;
+				#thermal-sensor-cells = <0>;
+				socionext,tmod-calibration = <0x0f86 0x6844>;
+			};
 		};
 
 		usb0: usb@65a00000 {
