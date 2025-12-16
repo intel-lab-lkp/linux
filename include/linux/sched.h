@@ -2283,14 +2283,20 @@ extern void sched_set_stop_task(int cpu, struct task_struct *stop);
 #ifdef CONFIG_MEM_ALLOC_PROFILING
 static __always_inline struct alloc_tag *alloc_tag_save(struct alloc_tag *tag)
 {
+#ifdef CONFIG_MEM_ALLOC_PROFILING_PICK_FIRST_CODETAG
+	if (current->alloc_tag)
+		return current->alloc_tag;
+#endif
 	swap(current->alloc_tag, tag);
 	return tag;
 }
 
 static __always_inline void alloc_tag_restore(struct alloc_tag *tag, struct alloc_tag *old)
 {
+#ifndef CONFIG_MEM_ALLOC_PROFILING_PICK_FIRST_CODETAG
 #ifdef CONFIG_MEM_ALLOC_PROFILING_DEBUG
 	WARN(current->alloc_tag != tag, "current->alloc_tag was changed:\n");
+#endif
 #endif
 	current->alloc_tag = old;
 }

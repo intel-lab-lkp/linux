@@ -1038,6 +1038,18 @@ config MEM_ALLOC_PROFILING_DEBUG
 	  Adds warnings with helpful error messages for memory allocation
 	  profiling.
 
+config MEM_ALLOC_PROFILING_PICK_FIRST_CODETAG
+	bool "Use the first tag along the call chain"
+	default n
+	depends on MEM_ALLOC_PROFILING
+	select MEM_ALLOC_PROFILING_ENABLED_BY_DEFAULT
+	help
+	  Make memory allocation profiling store counters to the first
+	  codetag along the call chain. This help profiling memory allocation
+	  for specific function by simply adding codetag to the function,
+	  without clearup all the codetag down the callchain.
+	  It is used for debug purpose.
+
 source "lib/Kconfig.kasan"
 source "lib/Kconfig.kfence"
 source "lib/Kconfig.kmsan"
