@@ -1,0 +1,106 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/pinctrl/rockchip,rmio.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: RMIO (Rockchip Matrix I/O) Controller
+
+maintainers:
+  - Heiko Stuebner <heiko@sntech.de>
+
+description: |
+  The RMIO controller provides a flexible routing matrix that allows mapping
+  various internal peripheral functions (UART, SPI, PWM, etc.) to specific
+  physical pins. This block is typically a sub-block of the GRF
+  (General Register Files) or PMU (Power Management Unit).
+
+properties:
+  compatible:
+    items:
+      - enum:
+          - rockchip,rk3506-rmio
+      - const: rockchip,rmio
+
+  rockchip,rmio-grf:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      The phandle of the syscon node (GRF or PMU) containing the RMIO registers.
+      This property is required if the RMIO registers are located in a different
+      syscon than the parent pinctrl node.
+
+  rockchip,offset:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      The offset of the RMIO configuration registers within the GRF.
+
+  rockchip,pins-num:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      The number of physical pins supported by this RMIO instance.
+      Used for boundary checking and driver initialization.
+
+patternProperties:
+  "^[a-z0-9-]+$":
+    type: object
+    description:
+      Function node grouping multiple groups.
+
+    patternProperties:
+      "^[a-z0-9-]+$":
+        type: object
+        description:
+          Group node containing the pinmux configuration.
+
+        properties:
+          rockchip,rmio:
+            $ref: /schemas/types.yaml#/definitions/uint32-matrix
+            description:
+              A list of pin-function pairs. The format is <pin_id function_id>.
+            minItems: 1
+            items:
+              items:
+                - description: RMIO Pin ID (0 to pins-num - 1)
+                  minimum: 0
+                  maximum: 31
+                - description: Function ID
+                  minimum: 0
+                  maximum: 98
+
+        required:
+          - rockchip,rmio
+
+        additionalProperties: false
+
+    additionalProperties: false
+
+required:
+  - compatible
+  - rockchip,rmio-grf
+  - rockchip,offset
+  - rockchip,pins-num
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/pinctrl/rockchip,rk3506-rmio.h>
+
+    pinctrl: pinctrl {
+        rmio: rmio {
+            compatible = "rockchip,rk3506-rmio", "rockchip,rmio";
+            rockchip,rmio-grf = <&grf_pmu>;
+            rockchip,offset = <0x80>;
+            rockchip,pins-num = <32>;
+
+            rmio-uart {
+                rmio_pin27_uart1_tx: rmio-pin27-uart1-tx {
+                    rockchip,rmio = <27 RMIO_UART1_TX>;
+                };
+
+                rmio_pin28_uart1_rx: rmio-pin28-uart1-rx {
+                    rockchip,rmio = <28 RMIO_UART1_RX>;
+                };
+            };
+        };
+    };
