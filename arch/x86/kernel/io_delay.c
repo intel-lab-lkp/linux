@@ -9,8 +9,6 @@
 #include <linux/kernel.h>
 #include <linux/export.h>
 #include <linux/delay.h>
-#include <linux/init.h>
-#include <linux/dmi.h>
 #include <linux/io.h>
 
 #define IO_DELAY_TYPE_0X80	0
@@ -18,19 +16,7 @@
 #define IO_DELAY_TYPE_UDELAY	2
 #define IO_DELAY_TYPE_NONE	3
 
-#if defined(CONFIG_IO_DELAY_0X80)
-#define DEFAULT_IO_DELAY_TYPE	IO_DELAY_TYPE_0X80
-#elif defined(CONFIG_IO_DELAY_0XED)
-#define DEFAULT_IO_DELAY_TYPE	IO_DELAY_TYPE_0XED
-#elif defined(CONFIG_IO_DELAY_UDELAY)
-#define DEFAULT_IO_DELAY_TYPE	IO_DELAY_TYPE_UDELAY
-#elif defined(CONFIG_IO_DELAY_NONE)
-#define DEFAULT_IO_DELAY_TYPE	IO_DELAY_TYPE_NONE
-#endif
-
-int io_delay_type __read_mostly = DEFAULT_IO_DELAY_TYPE;
-
-static int __initdata io_delay_override;
+int io_delay_type __read_mostly = IO_DELAY_TYPE_NONE;
 
 /*
  * Paravirt wants native_io_delay to be a constant.
@@ -61,70 +47,6 @@ void native_io_delay(void)
 }
 EXPORT_SYMBOL(native_io_delay);
 
-static int __init dmi_io_delay_0xed_port(const struct dmi_system_id *id)
-{
-	if (io_delay_type == IO_DELAY_TYPE_0X80) {
-		pr_notice("%s: using 0xed I/O delay port\n", id->ident);
-		io_delay_type = IO_DELAY_TYPE_0XED;
-	}
-
-	return 0;
-}
-
-/*
- * Quirk table for systems that misbehave (lock up, etc.) if port
- * 0x80 is used:
- */
-static const struct dmi_system_id io_delay_0xed_port_dmi_table[] __initconst = {
-	{
-		.callback	= dmi_io_delay_0xed_port,
-		.ident		= "Compaq Presario V6000",
-		.matches	= {
-			DMI_MATCH(DMI_BOARD_VENDOR,	"Quanta"),
-			DMI_MATCH(DMI_BOARD_NAME,	"30B7")
-		}
-	},
-	{
-		.callback	= dmi_io_delay_0xed_port,
-		.ident		= "HP Pavilion dv9000z",
-		.matches	= {
-			DMI_MATCH(DMI_BOARD_VENDOR,	"Quanta"),
-			DMI_MATCH(DMI_BOARD_NAME,	"30B9")
-		}
-	},
-	{
-		.callback	= dmi_io_delay_0xed_port,
-		.ident		= "HP Pavilion dv6000",
-		.matches	= {
-			DMI_MATCH(DMI_BOARD_VENDOR,	"Quanta"),
-			DMI_MATCH(DMI_BOARD_NAME,	"30B8")
-		}
-	},
-	{
-		.callback	= dmi_io_delay_0xed_port,
-		.ident		= "HP Pavilion tx1000",
-		.matches	= {
-			DMI_MATCH(DMI_BOARD_VENDOR,	"Quanta"),
-			DMI_MATCH(DMI_BOARD_NAME,	"30BF")
-		}
-	},
-	{
-		.callback	= dmi_io_delay_0xed_port,
-		.ident		= "Presario F700",
-		.matches	= {
-			DMI_MATCH(DMI_BOARD_VENDOR,	"Quanta"),
-			DMI_MATCH(DMI_BOARD_NAME,	"30D3")
-		}
-	},
-	{ }
-};
-
-void __init io_delay_init(void)
-{
-	if (!io_delay_override)
-		dmi_check_system(io_delay_0xed_port_dmi_table);
-}
-
 static int __init io_delay_param(char *s)
 {
 	if (!s)
@@ -141,7 +63,6 @@ static int __init io_delay_param(char *s)
 	else
 		return -EINVAL;
 
-	io_delay_override = 1;
 	return 0;
 }
 
