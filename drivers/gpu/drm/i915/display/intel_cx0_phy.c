@@ -2205,6 +2205,11 @@ static int intel_c20pll_calc_port_clock(struct intel_encoder *encoder,
 	return vco << tx_rate_mult >> tx_clk_div >> tx_rate;
 }
 
+bool intel_cx0pll_clock_matches(int clock1, int clock2)
+{
+	return abs(clock1 - clock2) <= 2;
+}
+
 /*
  * TODO: Convert the following to align with intel_c20pll_find_table() and
  * intel_c20pll_calc_state_from_table().
@@ -2218,7 +2223,10 @@ static int intel_c10pll_calc_state_from_table(struct intel_encoder *encoder,
 	int i;
 
 	for (i = 0; tables; i++) {
-		if (port_clock == tables[i].clock_rate) {
+		int clock = intel_c10pll_calc_port_clock(tables[i].c10);
+
+		drm_WARN_ON(display->drm, !intel_cx0pll_clock_matches(clock, tables[i].clock_rate));
+		if (intel_cx0pll_clock_matches(port_clock, clock)) {
 			pll_state->c10 = *tables[i].c10;
 			intel_cx0pll_update_ssc(encoder, pll_state, is_dp);
 			intel_c10pll_update_pll(encoder, pll_state);
@@ -2709,9 +2717,14 @@ intel_c20_pll_find_table(struct intel_display *display,
 	if (!tables)
 		return NULL;
 
-	for (i = 0; tables; i++)
-		if (port_clock == tables[i].clock_rate)
+	for (i = 0; tables; i++) {
+		int clock = intel_c20pll_calc_port_clock(tables[i].c20);
+
+		drm_WARN_ON(display->drm, !intel_cx0pll_clock_matches(clock, tables[i].clock_rate));
+
+		if (intel_cx0pll_clock_matches(port_clock, clock))
 			return &tables[i];
+	}
 
 	return NULL;
 }
