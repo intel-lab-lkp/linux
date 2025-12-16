@@ -438,24 +438,29 @@ static const struct intel_lt_phy_pll_state xe3plpd_lt_dp_uhbr20 = {
 
 struct intel_lt_phy_pll_params {
 	const char *name;
+	bool is_hdmi;
 	int clock_rate;
-	const struct intel_lt_phy_pll_state *pll;
+	const struct intel_lt_phy_pll_state *state;
 };
 
-#define LT_PHY_PLL_PARAMS(__clock_rate, __state)    { \
+#define __LT_PHY_PLL_PARAMS(__is_hdmi, __clock_rate, __state)    { \
 	.name = __stringify(__state), \
+	.is_hdmi = __is_hdmi, \
 	.clock_rate = __clock_rate, \
-	.pll = &__state, \
+	.state = &__state, \
 }
 
+#define LT_PHY_PLL_HDMI_PARAMS(__clock_rate, __state)	__LT_PHY_PLL_PARAMS(true, __clock_rate, __state)
+#define LT_PHY_PLL_DP_PARAMS(__clock_rate, __state)	__LT_PHY_PLL_PARAMS(false, __clock_rate, __state)
+
 static const struct intel_lt_phy_pll_params xe3plpd_lt_dp_tables[] = {
-	LT_PHY_PLL_PARAMS(162000, xe3plpd_lt_dp_rbr),
-	LT_PHY_PLL_PARAMS(270000, xe3plpd_lt_dp_hbr1),
-	LT_PHY_PLL_PARAMS(540000, xe3plpd_lt_dp_hbr2),
-	LT_PHY_PLL_PARAMS(810000, xe3plpd_lt_dp_hbr3),
-	LT_PHY_PLL_PARAMS(1000000, xe3plpd_lt_dp_uhbr10),
-	LT_PHY_PLL_PARAMS(1350000, xe3plpd_lt_dp_uhbr13_5),
-	LT_PHY_PLL_PARAMS(2000000, xe3plpd_lt_dp_uhbr20),
+	LT_PHY_PLL_DP_PARAMS(162000, xe3plpd_lt_dp_rbr),
+	LT_PHY_PLL_DP_PARAMS(270000, xe3plpd_lt_dp_hbr1),
+	LT_PHY_PLL_DP_PARAMS(540000, xe3plpd_lt_dp_hbr2),
+	LT_PHY_PLL_DP_PARAMS(810000, xe3plpd_lt_dp_hbr3),
+	LT_PHY_PLL_DP_PARAMS(1000000, xe3plpd_lt_dp_uhbr10),
+	LT_PHY_PLL_DP_PARAMS(1350000, xe3plpd_lt_dp_uhbr13_5),
+	LT_PHY_PLL_DP_PARAMS(2000000, xe3plpd_lt_dp_uhbr20),
 };
 
 static const struct intel_lt_phy_pll_state xe3plpd_lt_edp_2_16 = {
@@ -729,15 +734,15 @@ static const struct intel_lt_phy_pll_state xe3plpd_lt_edp_6_75 = {
 };
 
 static const struct intel_lt_phy_pll_params xe3plpd_lt_edp_tables[] = {
-	LT_PHY_PLL_PARAMS(162000, xe3plpd_lt_dp_rbr),
-	LT_PHY_PLL_PARAMS(216000, xe3plpd_lt_edp_2_16),
-	LT_PHY_PLL_PARAMS(243000, xe3plpd_lt_edp_2_43),
-	LT_PHY_PLL_PARAMS(270000, xe3plpd_lt_dp_hbr1),
-	LT_PHY_PLL_PARAMS(324000, xe3plpd_lt_edp_3_24),
-	LT_PHY_PLL_PARAMS(432000, xe3plpd_lt_edp_4_32),
-	LT_PHY_PLL_PARAMS(540000, xe3plpd_lt_dp_hbr2),
-	LT_PHY_PLL_PARAMS(675000, xe3plpd_lt_edp_6_75),
-	LT_PHY_PLL_PARAMS(810000, xe3plpd_lt_dp_hbr3),
+	LT_PHY_PLL_DP_PARAMS(162000, xe3plpd_lt_dp_rbr),
+	LT_PHY_PLL_DP_PARAMS(216000, xe3plpd_lt_edp_2_16),
+	LT_PHY_PLL_DP_PARAMS(243000, xe3plpd_lt_edp_2_43),
+	LT_PHY_PLL_DP_PARAMS(270000, xe3plpd_lt_dp_hbr1),
+	LT_PHY_PLL_DP_PARAMS(324000, xe3plpd_lt_edp_3_24),
+	LT_PHY_PLL_DP_PARAMS(432000, xe3plpd_lt_edp_4_32),
+	LT_PHY_PLL_DP_PARAMS(540000, xe3plpd_lt_dp_hbr2),
+	LT_PHY_PLL_DP_PARAMS(675000, xe3plpd_lt_edp_6_75),
+	LT_PHY_PLL_DP_PARAMS(810000, xe3plpd_lt_dp_hbr3),
 };
 
 static const struct intel_lt_phy_pll_state xe3plpd_lt_hdmi_252 = {
@@ -1011,11 +1016,11 @@ static const struct intel_lt_phy_pll_state xe3plpd_lt_hdmi_5p94 = {
 };
 
 static const struct intel_lt_phy_pll_params xe3plpd_lt_hdmi_tables[] = {
-	LT_PHY_PLL_PARAMS(25200, xe3plpd_lt_hdmi_252),
-	LT_PHY_PLL_PARAMS(27200, xe3plpd_lt_hdmi_272),
-	LT_PHY_PLL_PARAMS(74250, xe3plpd_lt_hdmi_742p5),
-	LT_PHY_PLL_PARAMS(148500, xe3plpd_lt_hdmi_1p485),
-	LT_PHY_PLL_PARAMS(594000, xe3plpd_lt_hdmi_5p94),
+	LT_PHY_PLL_HDMI_PARAMS(25200, xe3plpd_lt_hdmi_252),
+	LT_PHY_PLL_HDMI_PARAMS(27200, xe3plpd_lt_hdmi_272),
+	LT_PHY_PLL_HDMI_PARAMS(74250, xe3plpd_lt_hdmi_742p5),
+	LT_PHY_PLL_HDMI_PARAMS(148500, xe3plpd_lt_hdmi_1p485),
+	LT_PHY_PLL_HDMI_PARAMS(594000, xe3plpd_lt_hdmi_5p94),
 };
 
 static u8 intel_lt_phy_get_owned_lane_mask(struct intel_encoder *encoder)
@@ -1792,8 +1797,8 @@ intel_lt_phy_pll_calc_state(struct intel_crtc_state *crtc_state,
 		return -EINVAL;
 
 	for (i = 0; tables; i++) {
-		if (crtc_state->port_clock == tables[i].clock_rate) {
-			crtc_state->dpll_hw_state.ltpll = *tables[i].pll;
+		if (intel_cx0pll_clock_matches(crtc_state->port_clock, tables[i].clock_rate)) {
+			crtc_state->dpll_hw_state.ltpll = *tables[i].state;
 			if (intel_crtc_has_dp_encoder(crtc_state)) {
 				if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP))
 					crtc_state->dpll_hw_state.ltpll.config[2] = 1;
@@ -2330,4 +2335,70 @@ void intel_xe3plpd_pll_disable(struct intel_encoder *encoder)
 	else
 		intel_lt_phy_pll_disable(encoder);
 
+}
+
+static void intel_lt_phy_pll_verify_clock(struct intel_display *display,
+					  int precomputed_clock,
+					  const char *pll_params_name,
+					  const struct intel_lt_phy_pll_state *pll_state,
+					  bool pre_computed_params)
+{
+	struct drm_printer p;
+	int clock;
+
+	clock = intel_lt_phy_calc_port_clock(display, pll_state);
+
+	if (intel_cx0pll_clock_matches(clock, precomputed_clock))
+		return;
+
+	drm_warn(display->drm,
+		 "%s (%s): clock difference too high: computed %d, pre-computed %d\n",
+		 pll_params_name,
+		 pre_computed_params ? "precomputed" : "computed",
+		 clock, precomputed_clock);
+
+	if (!drm_debug_enabled(DRM_UT_KMS))
+		return;
+
+	p = drm_dbg_printer(display->drm, DRM_UT_KMS, NULL);
+
+	drm_printf(&p, "PLL state (%s):\n",
+		   pre_computed_params ? "precomputed" : "computed");
+	intel_lt_phy_dump_hw_state(display, pll_state);
+}
+
+static void intel_lt_phy_pll_verify_params(struct intel_display *display,
+					   const struct intel_lt_phy_pll_params *pll_params)
+{
+	struct intel_lt_phy_pll_state pll_state;
+
+	intel_lt_phy_pll_verify_clock(display, pll_params->clock_rate, pll_params->name, pll_params->state, true);
+
+	if (!pll_params->is_hdmi)
+		return;
+
+	if (intel_lt_phy_calculate_hdmi_state(&pll_state, pll_params->clock_rate) != 0)
+		return;
+
+	intel_lt_phy_pll_verify_clock(display, pll_params->clock_rate, pll_params->name, &pll_state, false);
+}
+
+static void intel_lt_phy_pll_verify_tables(struct intel_display *display,
+					   const struct intel_lt_phy_pll_params *tables,
+					   int size)
+{
+	int i;
+
+	for (i = 0; i < size; i++)
+		intel_lt_phy_pll_verify_params(display, &tables[i]);
+}
+
+void intel_lt_phy_verify_plls(struct intel_display *display)
+{
+	intel_lt_phy_pll_verify_tables(display, xe3plpd_lt_dp_tables,
+				       ARRAY_SIZE(xe3plpd_lt_dp_tables));
+	intel_lt_phy_pll_verify_tables(display, xe3plpd_lt_edp_tables,
+				       ARRAY_SIZE(xe3plpd_lt_edp_tables));
+	intel_lt_phy_pll_verify_tables(display, xe3plpd_lt_hdmi_tables,
+				       ARRAY_SIZE(xe3plpd_lt_hdmi_tables));
 }
