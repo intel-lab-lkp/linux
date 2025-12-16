@@ -126,7 +126,7 @@ properties:
 
   vdda-phy-supply:
     description:
-      Phandle to a regulator supply to PHY core block.
+      0.88V regulator supply to CSIPHY IP blocks.
 
   vdda-pll-supply:
     description:
