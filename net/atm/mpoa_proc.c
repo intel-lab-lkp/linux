@@ -253,8 +253,15 @@ static int parse_qos(const char *buff)
 
 	if (sscanf(buff, "del %hhu.%hhu.%hhu.%hhu",
 			ip, ip+1, ip+2, ip+3) == 4) {
+		struct atm_mpoa_qos *entry;
+		int ret;
+
 		ipaddr = *(__be32 *)ip;
-		return atm_mpoa_delete_qos(atm_mpoa_search_qos(ipaddr));
+		mutex_lock(&qos_mutex);
+		entry = atm_mpoa_search_qos(ipaddr);
+		ret = atm_mpoa_delete_qos(entry);
+		mutex_unlock(&qos_mutex);
+		return ret;
 	}
 
 	if (sscanf(buff, "add %hhu.%hhu.%hhu.%hhu tx=%d,%d rx=tx",
@@ -277,7 +284,9 @@ static int parse_qos(const char *buff)
 		qos.txtp.max_pcr, qos.txtp.max_sdu,
 		qos.rxtp.max_pcr, qos.rxtp.max_sdu);
 
+	mutex_lock(&qos_mutex);
 	atm_mpoa_add_qos(ipaddr, &qos);
+	mutex_unlock(&qos_mutex);
 	return 1;
 }
 

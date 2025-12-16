@@ -7,6 +7,7 @@
 #include <linux/atmmpc.h>
 #include <linux/skbuff.h>
 #include <linux/spinlock.h>
+#include <linux/mutex.h>
 #include "mpoa_caches.h"
 
 /* kernel -> mpc-daemon */
@@ -53,6 +54,9 @@ int atm_mpoa_delete_qos(struct atm_mpoa_qos *qos);
 /* Display QoS entries. This is for the procfs */
 struct seq_file;
 void atm_mpoa_disp_qos(struct seq_file *m);
+
+/* Protect qos_head list */
+extern struct mutex qos_mutex;
 
 #ifdef CONFIG_PROC_FS
 int mpc_proc_init(void);
