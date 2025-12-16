@@ -6020,6 +6020,12 @@ ieee80211_determine_our_sta_mode(struct ieee80211_sub_if_data *sdata,
 		mlme_link_id_dbg(sdata, link_id,
 				 "no EHT 320 MHz cap in 6 GHz, limiting to 160 MHz\n");
 
+	if (req && req->flags & ASSOC_REQ_DISABLE_UHR) {
+		mlme_link_id_dbg(sdata, link_id,
+				 "UHR disabled by flag, limiting to EHT\n");
+		goto out;
+	}
+
 	uhr_cap = ieee80211_get_uhr_iftype_cap_vif(sband, &sdata->vif);
 	if (!uhr_cap) {
 		mlme_link_id_dbg(sdata, link_id,
@@ -9727,7 +9733,8 @@ int ieee80211_mgd_assoc(struct ieee80211_sub_if_data *sdata,
 		if (req->flags & (ASSOC_REQ_DISABLE_HT |
 				  ASSOC_REQ_DISABLE_VHT |
 				  ASSOC_REQ_DISABLE_HE |
-				  ASSOC_REQ_DISABLE_EHT)) {
+				  ASSOC_REQ_DISABLE_EHT |
+				  ASSOC_REQ_DISABLE_UHR)) {
 			err = -EINVAL;
 			goto err_free;
 		}
