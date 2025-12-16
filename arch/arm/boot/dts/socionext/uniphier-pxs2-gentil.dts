@@ -68,7 +68,7 @@
 		reg = <0x1a>;
 		#sound-dai-cells = <0>;
 
-		port@0 {
+		port {
 			wm_speaker: endpoint {
 				dai-format = "i2s";
 				remote-endpoint = <&i2s_aux>;
