@@ -347,7 +347,12 @@ void ocfs2_populate_inode(struct inode *inode, struct ocfs2_dinode *fe,
 	} else if (fe->i_flags & cpu_to_le32(OCFS2_SUPER_BLOCK_FL)) {
 		/* we can't actually hit this as read_inode can't
 		 * handle superblocks today ;-) */
-		BUG();
+		ocfs2_error(sb,
+			    "System Inode %llu has "
+			    "OCFS2_SUPER_BLOCK_FL set",
+			    (unsigned long long)le64_to_cpu(fe->i_blkno));
+		make_bad_inode(inode);
+		return;
 	}
 
 	switch (inode->i_mode & S_IFMT) {
@@ -555,6 +560,11 @@ static int ocfs2_read_locked_inode(struct inode *inode,
 
 	ocfs2_populate_inode(inode, fe, 0);
 
+	if (is_bad_inode(inode)) {
+		status = -EIO;
+		goto bail;
+	}
+
 	BUG_ON(args->fi_blkno != le64_to_cpu(fe->i_blkno));
 
 	if (buffer_dirty(bh) && !buffer_jbd(bh)) {
@@ -576,7 +586,7 @@ bail:
 	if (can_lock)
 		ocfs2_inode_unlock(inode, lock_level);
 
-	if (status < 0)
+	if (status < 0 && !is_bad_inode(inode))
 		make_bad_inode(inode);
 
 	brelse(bh);
