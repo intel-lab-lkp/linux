@@ -2591,7 +2591,7 @@ void hci_conn_enter_active_mode(struct hci_conn *conn, __u8 force_active)
 
 timer:
 	if (hdev->idle_timeout > 0)
-		queue_delayed_work(hdev->workqueue, &conn->idle_work,
+		mod_delayed_work(hdev->workqueue, &conn->idle_work,
 				   msecs_to_jiffies(hdev->idle_timeout));
 }
 
