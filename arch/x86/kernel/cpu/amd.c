@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #define pr_fmt(fmt) "x86/amd: " fmt
 
+#include <linux/dmi.h>
 #include <linux/export.h>
 #include <linux/bitops.h>
 #include <linux/elf.h>
@@ -1376,3 +1377,20 @@ static __init int print_s5_reset_status_mmio(void)
 	return 0;
 }
 late_initcall(print_s5_reset_status_mmio);
+
+#ifdef CONFIG_DMI
+static __init int print_agesa_dmi_info(void)
+{
+	const struct dmi_device *dev = NULL;
+
+	while ((dev = dmi_find_device(DMI_DEV_TYPE_ADDITIONAL, NULL, dev))) {
+		if (!strncmp(dev->name, "AGESA", 5)) {
+			pr_info("%s\n", dev->name);
+			break;
+		}
+	}
+
+	return 0;
+}
+late_initcall(print_agesa_dmi_info);
+#endif
