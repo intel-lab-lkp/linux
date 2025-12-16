@@ -1,0 +1,286 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/hwmon/altr,socfpga-hwmon.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Altera Hardware monitor SOC FPGA
+
+maintainers:
+  - Ang Tien Sung <tiensung.ang@altera.com>
+  - Muhammad Amirul Asyraf Mohamad Jamian <muhammad.amirul.asyraf.mohamad.jamian@altera.com>
+
+description: |
+  The Altera SoC FPGA hardware monitor unit provides on-chip voltage and
+  temperature sensors. You can use these sensors to monitor external
+  voltages and on-chip operating conditions such as internal power rails
+  and on-chip junction temperatures.
+
+  The specific sensor configurations vary for each device family and
+  each device within a family does not offer all potential sensor
+  options. The information below attempts to illustrate the super set of
+  possible sensor options that are potentially available within each
+  device family, but the user should check the documentation for the
+  specific device they are using to verify which sensor options it
+  actually provides.
+
+  Stratix 10 Device Family
+
+    Stratix 10 Voltage Sensors
+
+      page 0, channel 2 = 0.8V VCC
+      page 0, channel 3 = 1.8V VCCIO_SDM
+      page 0, channel 6 = 0.9V VCCERAM
+
+    Stratix 10 Temperature Sensors
+
+      page 0, channel 0 = main die
+      page 0, channel 1 = tile bottom left
+      page 0, channel 2 = tile middle left
+      page 0, channel 3 = tile top left
+      page 0, channel 4 = tile bottom right
+      page 0, channel 5 = tile middle right
+      page 0, channel 6 = tile top right
+      page 0, channel 7 = hbm2 bottom
+      page 0, channel 8 = hbm2 top
+
+  Agilex Device Family
+
+    Agilex Voltage Sensors
+
+      page 0, channel 2 = 0.8V VCC
+      page 0, channel 3 = 1.8V VCCIO_SDM
+      page 0, channel 4 = 1.8V VCCPT
+      page 0, channel 5 = 1.2V VCCRCORE
+      page 0, channel 6 = 0.9V VCCH
+      page 0, channel 7 = 0.8V VCCL
+
+    Agilex Temperature Sensors
+
+      page 0, channel 0 = main die sdm max
+      page 0, channel 1 = main die sdm 1
+
+      page 1, channel 0 = main die corner bottom left max
+      page 1, channel 1 = main die corner bottom left 1
+      page 1, channel 2 = main die corner bottom left 2
+
+      page 2, channel 0 = main die corner top left max
+      page 2, channel 1 = main die corner top left 1
+      page 2, channel 2 = main die corner top left 2
+
+      page 3, channel 0 = main die corner bottom right max
+      page 3, channel 1 = main die corner bottom right 1
+      page 3, channel 2 = main die corner bottom right 2
+
+      page 4, channel 0 = main die corner top right max
+      page 4, channel 1 = main die corner top right 1
+      page 4, channel 2 = main die corner top right 2
+
+      page 5, channel 0 = tile die bottom left max
+      page 5, channel 1 = tile die bottom left 1
+      page 5, channel 6..2 = tile die bottom left 6..2 R-tile only
+      page 5, channel 5..2 = tile die bottom left 5..2 F-tile only
+      page 5, channel 4..2 = tile die bottom left 4..2 E-tile only
+
+      page 7, channel 0 = tile die top left max
+      page 7, channel 1 = tile die top left 1
+      page 7, channel 6..2 = tile die top left 6..2 R-tile only
+      page 7, channel 5..2 = tile die top left 5..2 F-tile only
+      page 7, channel 4..2 = tile die top left 4..2 E-tile only
+
+      page 8, channel 0 = tile die bottom right max
+      page 8, channel 1 = tile die bottom right 1
+      page 8, channel 6..2 = tile die bottom right 6..2 R-tile only
+      page 8, channel 5..2 = tile die bottom right 5..2 F-tile only
+      page 8, channel 4..2 = tile die bottom right 4..2 E-tile only
+
+      page 10, channel 0 = tile die top right max
+      page 10, channel 1 = tile die top right 1
+      page 10, channel 6..2 = tile die top right 6..2 R-tile only
+      page 10, channel 5..2 = tile die top right 5..2 F-tile only
+      page 10, channel 4..2 = tile die top right 4..2 E-tile only
+
+  N5X Device Family
+
+    N5X Voltage Sensors
+
+      page 0, channel 2 = 0.8V VDD
+      page 0, channel 3 = 0.8V VDD_SDM
+      page 0, channel 4 = 1.8V VCCADC
+      page 0, channel 5 = 1.8V VCCPD
+      page 0, channel 6 = 1.8V VCCIO_SDM
+      page 0, channel 7 = 0.8V VDD_HPS
+
+    N5X Temperature Sensors
+
+      page 0, channel 0 = main die
+
+properties:
+
+  compatible:
+    const: altr,socfpga-hwmon
+
+  temperature:
+    description:
+      The temperature node specifies mappings of temperature sensor diodes on
+      the SoC FPGA main die and tile die.
+    type: object
+    properties:
+      '#address-cells':
+        const: 1
+      '#size-cells':
+        const: 0
+    patternProperties:
+      "^input(@[0-9a-f]+)?$":
+        description:
+          The input node specifies each individual temperature sensor.
+        type: object
+        properties:
+          reg:
+            description:
+              The temperature sensor address format contains a page number and
+              a channel number to identify a specific temperature sensor. The
+              page number selects the region of the device that the sensor
+              resides. The channel number selects the temperature sensor diode
+              in the page. The page number is defined in the upper 16-bits of
+              the reg value while the channel number is defined in the lower
+              16-bits of the reg value. Channel 0 is represented by the value 0
+              and channel 1 is represented by the value 1, and so on.
+          label:
+            description:
+              A label to describe the sensor.
+        required:
+          - reg
+        additionalProperties: false
+    required:
+      - '#address-cells'
+      - '#size-cells'
+    additionalProperties: false
+
+  voltage:
+    description:
+      The voltage node specifies mappings of voltage sensorson the SoC FPGA
+      analog to digital converter of the Secure Device Manager(SDM).
+    type: object
+    properties:
+      '#address-cells':
+        const: 1
+      '#size-cells':
+        const: 0
+    patternProperties:
+      "^input(@[0-9a-f]+)?$":
+        description:
+          The input node specifies each individual voltage sensor.
+        type: object
+        properties:
+          reg:
+            description:
+              The voltage sensor address format contains a channel number to
+              identify a specific voltage sensor. The channel number is defined
+              in the lower 16-bits of the reg value. Channel 0 is represented by
+              the value 0 and channel 1 is represented by the value 1, and so
+              on.
+          label:
+            description:
+              A label to describe the sensor.
+        required:
+          - reg
+        additionalProperties: false
+    required:
+      - '#address-cells'
+      - '#size-cells'
+    additionalProperties: false
+
+required:
+  - compatible
+
+additionalProperties: false
+
+examples:
+  - |
+    temp_volt {
+      compatible = "altr,socfpga-hwmon";
+      voltage {
+        #address-cells = <1>;
+        #size-cells = <0>;
+        input@2 {
+          label = "0.8V VCC";
+          reg = <2>;
+        };
+
+        input@3 {
+          label = "1.8V VCCIO_SDM";
+          reg = <3>;
+        };
+
+        input@4 {
+          label = "1.8V VCCPT";
+          reg = <4>;
+        };
+
+        input@5 {
+          label = "1.2V VCCCRCORE";
+          reg = <5>;
+        };
+
+        input@6 {
+          label = "0.9V VCCH";
+          reg = <6>;
+        };
+
+        input@7 {
+          label = "0.8V VCCL";
+          reg = <7>;
+        };
+      };
+
+      temperature {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        input@0 {
+          label = "Main Die SDM";
+          reg = <0x0>;
+        };
+
+        input@10001 {
+          label = "Main Die corner bottom left 1";
+          reg = <0x10001>;
+        };
+
+        input@10002 {
+          label = "Main Die corner bottom left 2";
+          reg = <0x10002>;
+        };
+
+        input@20001 {
+          label = "Main Die corner top left 1";
+          reg = <0x20001>;
+        };
+
+        input@20002 {
+          label = "Main Die corner top left 2";
+          reg = <0x20002>;
+        };
+
+        input@30001 {
+          label = "Main Die corner bottom right 1";
+          reg = <0x30001>;
+        };
+
+        input@30002 {
+          label = "Main Die corner bottom right 2";
+          reg = <0x30002>;
+        };
+
+        input@40001 {
+          label = "Main Die corner top right 1 HPS";
+          reg = <0x40001>;
+        };
+
+        input@40002 {
+          label = "Main Die corner top right 2";
+          reg = <0x40002>;
+        };
+      };
+    };
