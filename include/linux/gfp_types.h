@@ -218,6 +218,8 @@ enum {
  * caller must handle the failure which is quite likely to happen under
  * heavy memory pressure. The flag is suitable when failure can easily be
  * handled at small cost, such as reduced throughput.
+ * For costly orders, only memory compaction can be attempted with no reclaim
+ * under some conditions.
  *
  * %__GFP_RETRY_MAYFAIL: The VM implementation will retry memory reclaim
  * procedures that have previously failed if there is some indication
