@@ -1184,6 +1184,15 @@ static irqreturn_t twl_interrupt(int irq, void *dev_instance)
 		} else
 			request_id = TW_RESID_OUT(response);
 
+		if (request_id >= TW_Q_LENGTH) {
+			TW_PRINTK(tw_dev->host, TW_DRIVER, 0x10,
+				  "Received out-of-range request id %u",
+				  request_id);
+			TWL_MASK_INTERRUPTS(tw_dev);
+			/* let the reset / error handling path deal with it */
+			goto twl_interrupt_bail;
+		}
+
 		full_command_packet = tw_dev->command_packet_virt[request_id];
 
 		/* Check for correct state */
