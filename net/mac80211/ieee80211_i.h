@@ -1826,6 +1826,8 @@ struct ieee802_11_elems {
 	const struct ieee80211_multi_link_elem *ml_epcs;
 	const struct ieee80211_bandwidth_indication *bandwidth_indication;
 	const struct ieee80211_ttlm_elem *ttlm[IEEE80211_TTLM_MAX_CNT];
+	const struct ieee80211_uhr_cap_elem *uhr_cap;
+	const struct ieee80211_uhr_operation *uhr_operation;
 
 	/* not the order in the psd values is per element, not per chandef */
 	struct ieee80211_parsed_tpe tpe;
@@ -1866,6 +1868,7 @@ struct ieee802_11_elems {
 	struct ieee80211_mle_per_sta_profile *prof;
 	size_t sta_prof_len;
 
+	u8 uhr_cap_len;
 	/* whether/which parse error occurred while retrieving these elements */
 	u8 parse_error;
 };
@@ -2423,6 +2426,7 @@ static inline void ieee80211_tx_skb(struct ieee80211_sub_if_data *sdata,
  * @mode: connection mode for parsing
  * @start: pointer to the elements
  * @len: length of the elements
+ * @is_beacon: %true if the elements came from beacon frame
  * @type: type of the frame the elements came from
  *	(action, probe response, beacon, etc.)
  * @filter: bitmap of element IDs to filter out while calculating
@@ -2442,6 +2446,7 @@ struct ieee80211_elems_parse_params {
 	enum ieee80211_conn_mode mode;
 	const u8 *start;
 	size_t len;
+	bool is_beacon;
 	u8 type;
 	u64 filter;
 	u32 crc;

@@ -7400,6 +7400,7 @@ static void ieee80211_rx_mgmt_beacon(struct ieee80211_link_data *link,
 	    !WARN_ON(ieee80211_vif_is_mld(&sdata->vif)) &&
 	    ieee80211_rx_our_beacon(bssid, ifmgd->assoc_data->link[0].bss)) {
 		parse_params.bss = ifmgd->assoc_data->link[0].bss;
+		parse_params.is_beacon = true;
 		elems = ieee802_11_parse_elems_full(&parse_params);
 		if (!elems)
 			return;
@@ -7470,6 +7471,7 @@ static void ieee80211_rx_mgmt_beacon(struct ieee80211_link_data *link,
 	parse_params.bss = bss_conf->bss;
 	parse_params.filter = care_about_ies;
 	parse_params.crc = ncrc;
+	parse_params.is_beacon = true;
 	elems = ieee802_11_parse_elems_full(&parse_params);
 	if (!elems)
 		return;
