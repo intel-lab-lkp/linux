@@ -471,9 +471,6 @@ static bool intel_plane_do_async_flip(struct intel_plane *plane,
 {
 	struct intel_display *display = to_intel_display(plane);
 
-	if (!plane->async_flip)
-		return false;
-
 	if (!new_crtc_state->uapi.async_flip)
 		return false;
 
@@ -653,6 +650,8 @@ static int intel_plane_atomic_calc_changes(const struct intel_crtc_state *old_cr
 	if ((display->platform.ironlake || display->platform.sandybridge || display->platform.ivybridge) &&
 	    ilk_must_disable_cxsr(new_crtc_state, old_plane_state, new_plane_state))
 		new_crtc_state->disable_cxsr = true;
+
+	drm_WARN_ON(display->drm, new_crtc_state->uapi.async_flip && !plane->async_flip);
 
 	if (intel_plane_do_async_flip(plane, old_crtc_state, new_crtc_state))
 		new_crtc_state->do_async_flip = true;
