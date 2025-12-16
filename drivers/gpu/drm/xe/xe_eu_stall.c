@@ -737,9 +737,9 @@ static int xe_eu_stall_stream_init(struct xe_eu_stall_data_stream *stream,
 	u32 vaddr_offset;
 	int ret;
 
-	bitmap_or(all_xecores, gt->fuse_topo.g_dss_mask, gt->fuse_topo.c_dss_mask,
-		  XE_MAX_DSS_FUSE_BITS);
-	num_xecores = bitmap_weight(all_xecores, XE_MAX_DSS_FUSE_BITS);
+	num_xecores = bitmap_weighted_or(all_xecores, gt->fuse_topo.g_dss_mask,
+						      gt->fuse_topo.c_dss_mask,
+						      XE_MAX_DSS_FUSE_BITS);
 	last_xecore = xe_gt_topology_mask_last_dss(all_xecores) + 1;
 
 	max_wait_num_reports = num_data_rows(per_xecore_buf_size * num_xecores);
