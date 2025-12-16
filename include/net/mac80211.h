@@ -760,6 +760,7 @@ struct ieee80211_parsed_tpe {
  *	(as opposed to hearing its value from another link's beacon).
  * @s1g_long_beacon_period: number of beacon intervals between each long
  *	beacon transmission.
+ * @uhr_support: does this BSS support UHR
  */
 struct ieee80211_bss_conf {
 	struct ieee80211_vif *vif;
@@ -861,6 +862,7 @@ struct ieee80211_bss_conf {
 	u8 bss_param_ch_cnt_link_id;
 
 	u8 s1g_long_beacon_period;
+	bool uhr_support;
 };
 
 /**
@@ -2442,6 +2444,7 @@ struct ieee80211_sta_aggregates {
  *	notifications and capabilities. The value is only valid after
  *	the station moves to associated state.
  * @txpwr: the station tx power configuration
+ * @uhr_cap: UHR capabilities of this STA
  *
  */
 struct ieee80211_link_sta {
@@ -2464,6 +2467,7 @@ struct ieee80211_link_sta {
 	u8 rx_nss;
 	enum ieee80211_sta_rx_bandwidth bandwidth;
 	struct ieee80211_sta_txpwr txpwr;
+	struct ieee80211_sta_uhr_cap uhr_cap;
 };
 
 /**

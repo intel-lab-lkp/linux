@@ -2170,6 +2170,12 @@ static int sta_link_apply_parameters(struct ieee80211_local *local,
 		ieee80211_s1g_cap_to_sta_s1g_cap(sdata, params->s1g_capa,
 						 link_sta);
 
+	if (params->uhr_capa)
+		ieee80211_uhr_ie_to_sta_uhr(sdata, sband,
+					    params->uhr_capa,
+					    params->uhr_capa_len,
+					    link_sta);
+
 	ieee80211_sta_init_nss(link_sta);
 
 	if (params->opmode_notif_used) {
