@@ -2931,6 +2931,21 @@ config PCI_MMCONFIG
 
 	  Say Y otherwise.
 
+config PREFER_MMCONFIG
+        bool "Perfer to use mmconfig over IO Port"
+        depends on PCI_MMCONFIG
+        help
+          This setting will prioritize the use of mmcfg, which is superior to
+          io port from a performance perspective, mainly for the following reasons:
+          1) io port is an indirect access; 2) io port instructions are decoded
+          by microcode, which is more likely to cause CPU front-end bound compared
+          to mmcfg using mov instructions.
+
+          For CPUs that support both MMCFG and IO Port access methods, if a
+          hardware register only supports IO Port access, this configuration
+          may lead to illegal access. Therefore, users must ensure that the
+          configuration will not cause any exceptions before enabling it.
+
 config PCI_OLPC
 	def_bool y
 	depends on PCI && OLPC && (PCI_GOOLPC || PCI_GOANY)
