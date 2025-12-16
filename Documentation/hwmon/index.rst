@@ -40,6 +40,7 @@ Hardware Monitoring Kernel Drivers
    adt7470
    adt7475
    aht10
+   altr-hwmon
    amc6821
    aquacomputer_d5next
    asb100

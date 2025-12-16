@@ -942,6 +942,8 @@ M:	Muhammad Amirul Asyraf Mohamad Jamian <muhammad.amirul.asyraf.mohamad.jamian@
 L:	linux-hwmon@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/hwmon/altr,socfpga-hwmon.yaml
+F:	Documentation/hwmon/altr-hwmon.rst
+F:	drivers/hwmon/altr-hwmon.c
 
 ALTERA MAILBOX DRIVER
 M:	Tien Sung Ang <tiensung.ang@altera.com>
