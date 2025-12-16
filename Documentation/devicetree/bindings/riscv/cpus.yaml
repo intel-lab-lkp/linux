@@ -62,6 +62,7 @@ properties:
               - sifive,u74
               - sifive,u74-mc
               - spacemit,x60
+              - spacemit,x100
               - thead,c906
               - thead,c908
               - thead,c910
