@@ -245,4 +245,6 @@ int drm_pagemap_populate_mm(struct drm_pagemap *dpagemap,
 			    struct mm_struct *mm,
 			    unsigned long timeslice_ms);
 
+void *drm_pagemap_page_zone_device_data(struct page *page);
+
 #endif
