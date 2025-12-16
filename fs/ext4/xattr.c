@@ -1980,7 +1980,10 @@ clone_block:
 			goto cleanup;
 		s->first = ENTRY(header(s->base)+1);
 		header(s->base)->h_refcount = cpu_to_le32(1);
-		s->here = ENTRY(s->base + offset);
+		if (s->not_found)
+			s->here = s->first;
+		else
+			s->here = ENTRY(s->base + offset);
 		s->end = s->base + bs->bh->b_size;
 
 		/*
