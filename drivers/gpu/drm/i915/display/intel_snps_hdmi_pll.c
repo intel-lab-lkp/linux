@@ -259,7 +259,6 @@ void intel_snps_hdmi_pll_compute_mpllb(struct intel_mpllb_state *pll_state, u64 
 			      dg2_curve_freq_hz, dg2_curve_0, dg2_curve_1, dg2_curve_2,
 			      prescaler_divider, &pll_params);
 
-	pll_state->clock = pixel_clock;
 	pll_state->ref_control =
 		REG_FIELD_PREP(SNPS_PHY_REF_CONTROL_REF_RANGE, ref_range);
 	pll_state->mpllb_cp =
@@ -331,8 +330,6 @@ void intel_snps_hdmi_pll_compute_c10pll(struct intel_c10pll_state *pll_state, u6
 			      c10_curve_freq_hz, c10_curve_0,
 			      c10_curve_1, c10_curve_2, prescaler_divider,
 			      &pll_params);
-
-	pll_state->clock = pixel_clock;
 
 	pll_state->tx = 0x10;
 	pll_state->cmn = 0x1;
