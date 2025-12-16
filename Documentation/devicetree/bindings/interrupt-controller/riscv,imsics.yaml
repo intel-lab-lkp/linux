@@ -47,6 +47,7 @@ properties:
   compatible:
     items:
       - enum:
+          - spacemit,k3-imsics
           - qemu,imsics
       - const: riscv,imsics
 
