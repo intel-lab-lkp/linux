@@ -721,6 +721,26 @@ ieee80211_get_eht_iftype_cap(const struct ieee80211_supported_band *sband,
 }
 
 /**
+ * ieee80211_get_uhr_iftype_cap - return UHR capabilities for an sband's iftype
+ * @sband: the sband to search for the iftype on
+ * @iftype: enum nl80211_iftype
+ *
+ * Return: pointer to the struct ieee80211_sta_uhr_cap, or NULL if none found
+ */
+static inline const struct ieee80211_sta_uhr_cap *
+ieee80211_get_uhr_iftype_cap(const struct ieee80211_supported_band *sband,
+			     enum nl80211_iftype iftype)
+{
+	const struct ieee80211_sband_iftype_data *data =
+		ieee80211_get_sband_iftype_data(sband, iftype);
+
+	if (data && data->uhr_cap.has_uhr)
+		return &data->uhr_cap;
+
+	return NULL;
+}
+
+/**
  * wiphy_read_of_freq_limits - read frequency limits from device tree
  *
  * @wiphy: the wireless device to get extra limits for
