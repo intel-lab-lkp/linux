@@ -668,7 +668,7 @@ static void panthor_gem_debugfs_bo_print(struct panthor_gem_object *bo,
 
 	if (bo->base.base.import_attach)
 		gem_state_flags |= PANTHOR_DEBUGFS_GEM_STATE_FLAG_IMPORTED;
-	if (bo->base.base.dma_buf)
+	else if (bo->base.base.dma_buf)
 		gem_state_flags |= PANTHOR_DEBUGFS_GEM_STATE_FLAG_EXPORTED;
 
 	seq_printf(m, "0x%-8x 0x%-10x", gem_state_flags, gem_usage_flags);
