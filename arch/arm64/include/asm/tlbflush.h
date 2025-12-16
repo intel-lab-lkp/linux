@@ -267,16 +267,16 @@ static inline void __tlbi_level(tlbi_op op, u64 addr, u32 level)
  *		CPUs, ensuring that any walk-cache entries associated with the
  *		translation are also invalidated.
  *
- *	__flush_tlb_range(vma, start, end, stride, last_level, tlb_level)
+ *	__flush_tlb_range(vma, start, end, stride, last_level, tlb_level, flags)
  *		Invalidate the virtual-address range '[start, end)' on all
  *		CPUs for the user address space corresponding to 'vma->mm'.
  *		The invalidation operations are issued at a granularity
- *		determined by 'stride' and only affect any walk-cache entries
- *		if 'last_level' is equal to false. tlb_level is the level at
+ *		determined by 'stride'. tlb_level is the level at
  *		which the invalidation must take place. If the level is wrong,
  *		no invalidation may take place. In the case where the level
  *		cannot be easily determined, the value TLBI_TTL_UNKNOWN will
- *		perform a non-hinted invalidation.
+ *		perform a non-hinted invalidation. flags may be TLBF_NONE (0) or
+ *		TLBF_NOWALKCACHE (elide eviction of walk cache entries).
  *
  *	local_flush_tlb_page(vma, addr)
  *		Local variant of flush_tlb_page().  Stale TLB entries may
@@ -528,10 +528,14 @@ static inline bool __flush_tlb_range_limit_excess(unsigned long pages,
 	return pages >= (MAX_DVM_OPS * stride) >> PAGE_SHIFT;
 }
 
+typedef unsigned __bitwise tlbf_t;
+#define TLBF_NONE		((__force tlbf_t)0)
+#define TLBF_NOWALKCACHE	((__force tlbf_t)BIT(0))
+
 static inline void __flush_tlb_range_nosync(struct mm_struct *mm,
 				     unsigned long start, unsigned long end,
-				     unsigned long stride, bool last_level,
-				     int tlb_level)
+				     unsigned long stride, int tlb_level,
+				     tlbf_t flags)
 {
 	unsigned long asid, pages;
 
@@ -547,7 +551,7 @@ static inline void __flush_tlb_range_nosync(struct mm_struct *mm,
 	dsb(ishst);
 	asid = ASID(mm);
 
-	if (last_level)
+	if (flags & TLBF_NOWALKCACHE)
 		__flush_s1_tlb_range_op(vale1is, start, pages, stride,
 				     asid, tlb_level);
 	else
@@ -559,11 +563,11 @@ static inline void __flush_tlb_range_nosync(struct mm_struct *mm,
 
 static inline void __flush_tlb_range(struct vm_area_struct *vma,
 				     unsigned long start, unsigned long end,
-				     unsigned long stride, bool last_level,
-				     int tlb_level)
+				     unsigned long stride, int tlb_level,
+				     tlbf_t flags)
 {
 	__flush_tlb_range_nosync(vma->vm_mm, start, end, stride,
-				 last_level, tlb_level);
+				 tlb_level, flags);
 	dsb(ish);
 }
 
@@ -591,7 +595,7 @@ static inline void flush_tlb_range(struct vm_area_struct *vma,
 	 * Set the tlb_level to TLBI_TTL_UNKNOWN because we can not get enough
 	 * information here.
 	 */
-	__flush_tlb_range(vma, start, end, PAGE_SIZE, false, TLBI_TTL_UNKNOWN);
+	__flush_tlb_range(vma, start, end, PAGE_SIZE, TLBI_TTL_UNKNOWN, TLBF_NONE);
 }
 
 static inline void flush_tlb_kernel_range(unsigned long start, unsigned long end)
@@ -632,7 +636,7 @@ static inline void __flush_tlb_kernel_pgtable(unsigned long kaddr)
 static inline void arch_tlbbatch_add_pending(struct arch_tlbflush_unmap_batch *batch,
 		struct mm_struct *mm, unsigned long start, unsigned long end)
 {
-	__flush_tlb_range_nosync(mm, start, end, PAGE_SIZE, true, 3);
+	__flush_tlb_range_nosync(mm, start, end, PAGE_SIZE, 3, TLBF_NOWALKCACHE);
 }
 
 static inline bool __pte_flags_need_flush(ptdesc_t oldval, ptdesc_t newval)

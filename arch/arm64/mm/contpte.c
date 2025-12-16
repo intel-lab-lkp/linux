@@ -205,7 +205,8 @@ static void contpte_convert(struct mm_struct *mm, unsigned long addr,
 	 */
 
 	if (!system_supports_bbml2_noabort())
-		__flush_tlb_range(&vma, start_addr, addr, PAGE_SIZE, true, 3);
+		__flush_tlb_range(&vma, start_addr, addr, PAGE_SIZE, 3,
+				  TLBF_NOWALKCACHE);
 
 	__set_ptes(mm, start_addr, start_ptep, pte, CONT_PTES);
 }
@@ -527,7 +528,7 @@ int contpte_ptep_clear_flush_young(struct vm_area_struct *vma,
 		 */
 		addr = ALIGN_DOWN(addr, CONT_PTE_SIZE);
 		__flush_tlb_range_nosync(vma->vm_mm, addr, addr + CONT_PTE_SIZE,
-					 PAGE_SIZE, true, 3);
+					 PAGE_SIZE, 3, TLBF_NOWALKCACHE);
 	}
 
 	return young;
