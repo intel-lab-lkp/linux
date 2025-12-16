@@ -3265,6 +3265,11 @@ static void intel_cx0pll_enable(struct intel_encoder *encoder,
 					  INTEL_CX0_LANE0;
 	struct ref_tracker *wakeref = intel_cx0_phy_transaction_begin(encoder);
 
+	if (pll_state->use_c10)
+		port_clock = intel_c10pll_calc_port_clock(&pll_state->c10);
+	else
+		port_clock = intel_c20pll_calc_port_clock(&pll_state->c20);
+
 	/*
 	 * Lane reversal is never used in DP-alt mode, in that case the
 	 * corresponding lane swapping (based on the TypeC cable flip state
@@ -3803,4 +3808,124 @@ void intel_cx0_pll_power_save_wa(struct intel_display *display)
 		intel_cx0pll_enable(encoder, &pll_state);
 		intel_cx0pll_disable(encoder);
 	}
+}
+
+static void intel_c10pll_verify_clock(struct intel_display *display,
+				      int precomputed_clock,
+				      const char *pll_params_name,
+				      const struct intel_c10pll_state *pll_state,
+				      bool pre_computed_params)
+{
+	struct drm_printer p;
+	int clock;
+
+	clock = intel_c10pll_calc_port_clock(pll_state);
+
+	if (intel_cx0pll_clock_matches(clock, precomputed_clock))
+		return;
+
+	drm_warn(display->drm,
+		 "%s (%s): clock difference too high: computed %d, pre-computed %d\n",
+		 pll_params_name,
+		 pre_computed_params ? "precomputed" : "computed",
+		 clock, precomputed_clock);
+
+	if (!drm_debug_enabled(DRM_UT_KMS))
+		return;
+
+	p = drm_dbg_printer(display->drm, DRM_UT_KMS, NULL);
+
+	drm_printf(&p, "PLL state (%s):\n",
+		   pre_computed_params ? "precomputed" : "computed");
+	intel_c10pll_dump_hw_state(&p, pll_state);
+}
+
+static void intel_c10pll_verify_params(struct intel_display *display,
+				       const struct intel_cx0pll_params *pll_params)
+{
+	struct intel_c10pll_state pll_state;
+
+	intel_c10pll_verify_clock(display, pll_params->clock_rate, pll_params->name, pll_params->c10, true);
+
+	if (!pll_params->is_hdmi)
+		return;
+
+	intel_snps_hdmi_pll_compute_c10pll(&pll_state, pll_params->clock_rate);
+
+	intel_c10pll_verify_clock(display, pll_params->clock_rate, pll_params->name, &pll_state, false);
+}
+
+static void intel_c20pll_verify_clock(struct intel_display *display,
+				      int precomputed_clock,
+				      const char *pll_params_name,
+				      const struct intel_c20pll_state *pll_state,
+				      bool pre_computed_params)
+{
+	struct drm_printer p;
+	int clock;
+
+	clock = intel_c20pll_calc_port_clock(pll_state);
+
+	if (intel_cx0pll_clock_matches(clock, precomputed_clock))
+		return;
+
+	drm_warn(display->drm,
+		 "%s (%s): clock difference too high: computed %d, pre-computed %d\n",
+		 pll_params_name,
+		 pre_computed_params ? "precomputed" : "computed",
+		 clock, precomputed_clock);
+
+	if (!drm_debug_enabled(DRM_UT_KMS))
+		return;
+
+	p = drm_dbg_printer(display->drm, DRM_UT_KMS, NULL);
+
+	drm_printf(&p, "PLL state (%s):\n",
+		   pre_computed_params ? "precomputed" : "computed");
+	intel_c20pll_dump_hw_state(&p, pll_state);
+}
+
+static void intel_c20pll_verify_params(struct intel_display *display,
+				       const struct intel_cx0pll_params *pll_params)
+{
+	struct intel_c20pll_state pll_state;
+
+	intel_c20pll_verify_clock(display, pll_params->clock_rate, pll_params->name, pll_params->c20, true);
+
+	if (!pll_params->is_hdmi)
+		return;
+
+	if (intel_c20_compute_hdmi_tmds_pll(display, pll_params->clock_rate, &pll_state) != 0)
+		return;
+
+	intel_c20pll_verify_clock(display, pll_params->clock_rate, pll_params->name, &pll_state, false);
+}
+
+static void intel_cx0pll_verify_tables(struct intel_display *display,
+				       const struct intel_cx0pll_params *tables,
+				       int size)
+{
+	int i;
+
+	for (i = 0; i < size; i++) {
+		if (tables[i].is_c10)
+			intel_c10pll_verify_params(display, &tables[i]);
+		else
+			intel_c20pll_verify_params(display, &tables[i]);
+	}
+}
+
+void intel_cx0pll_verify_plls(struct intel_display *display)
+{
+	/* C10 */
+	intel_cx0pll_verify_tables(display, mtl_c10_edp_tables, ARRAY_SIZE(mtl_c10_edp_tables));
+	intel_cx0pll_verify_tables(display, mtl_c10_dp_tables, ARRAY_SIZE(mtl_c10_dp_tables));
+	intel_cx0pll_verify_tables(display, mtl_c10_hdmi_tables, ARRAY_SIZE(mtl_c10_hdmi_tables));
+
+	/* C20 */
+	intel_cx0pll_verify_tables(display, xe2hpd_c20_edp_tables, ARRAY_SIZE(xe2hpd_c20_edp_tables));
+	intel_cx0pll_verify_tables(display, mtl_c20_dp_tables, ARRAY_SIZE(mtl_c20_dp_tables));
+	intel_cx0pll_verify_tables(display, xe2hpd_c20_dp_tables, ARRAY_SIZE(xe2hpd_c20_dp_tables));
+	intel_cx0pll_verify_tables(display, xe3lpd_c20_dp_edp_tables, ARRAY_SIZE(xe3lpd_c20_dp_edp_tables));
+	intel_cx0pll_verify_tables(display, mtl_c20_hdmi_tables, ARRAY_SIZE(mtl_c20_hdmi_tables));
 }
