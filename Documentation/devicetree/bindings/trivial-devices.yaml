@@ -417,6 +417,8 @@ properties:
             # SparkFun Qwiic Joystick (COM-15168) with i2c interface
           - sparkfun,qwiic-joystick
             # Sierra Wireless mangOH Green SPI IoT interface
+          - st,stef48h28
+            # STMicroelectronics Hot-swap controller stef48h28
           - swir,mangoh-iotport-spi
             # Synaptics I2C touchpad
           - synaptics,synaptics_i2c
