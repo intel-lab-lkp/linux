@@ -211,7 +211,7 @@ properties:
 
   vdda-pll-supply:
     description:
-      Phandle to 1.8V regulator supply to PHY refclk pll block.
+      1.2V regulator supply to CSIPHY IP blocks.
 
 required:
   - clock-names
