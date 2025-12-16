@@ -4,6 +4,7 @@
  */
 
 #include <drm/drm_drv.h>
+#include <drm/drm_managed.h>
 
 #include "xe_bo.h"
 #include "xe_exec_queue_types.h"
@@ -1473,6 +1474,10 @@ int xe_devm_add(struct xe_tile *tile, struct xe_vram_region *vr)
 	struct resource *res;
 	void *addr;
 	int ret;
+
+	ret = drmm_mutex_init(&tile->xe->drm, &vr->dpagemap.folio_split_lock);
+	if (ret)
+		return ret;
 
 	res = devm_request_free_mem_region(dev, &iomem_resource,
 					   vr->usable_size);

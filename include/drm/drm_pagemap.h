@@ -129,11 +129,14 @@ struct drm_pagemap_ops {
  * struct drm_pagemap: Additional information for a struct dev_pagemap
  * used for device p2p handshaking.
  * @ops: The struct drm_pagemap_ops.
- * @dev: The struct drevice owning the device-private memory.
+ * @dev: The struct device owning the device-private memory.
+ * @folio_split_lock: Lock to protect device folio splitting.
  */
 struct drm_pagemap {
 	const struct drm_pagemap_ops *ops;
 	struct device *dev;
+	/* Protect device folio splitting */
+	struct mutex folio_split_lock;
 };
 
 struct drm_pagemap_devmem;
