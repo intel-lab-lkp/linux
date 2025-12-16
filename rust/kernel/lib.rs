@@ -63,6 +63,7 @@ compile_error!("Missing kernel configuration for conditional compilation");
 extern crate self as kernel;
 
 pub use ffi;
+pub use ffi::transmute;
 
 pub mod acpi;
 pub mod alloc;
@@ -146,7 +147,6 @@ pub mod sync;
 pub mod task;
 pub mod time;
 pub mod tracepoint;
-pub mod transmute;
 pub mod types;
 pub mod uaccess;
 #[cfg(CONFIG_USB = "y")]

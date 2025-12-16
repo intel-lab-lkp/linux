@@ -10,6 +10,11 @@
 
 #![no_std]
 
+#[doc(hidden)]
+// This lives here to make it accessible to `bindings`, similar to the other `ffi` types.
+// User code should access it through `kernel::transmute`.
+pub mod transmute;
+
 macro_rules! alias {
     ($($name:ident = $ty:ty;)*) => {$(
         #[allow(non_camel_case_types, missing_docs)]
