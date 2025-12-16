@@ -531,6 +531,29 @@ static struct phylink_pcs *gsw1xx_phylink_mac_select_pcs(struct phylink_config *
 	}
 }
 
+static int gsw1xx_port_setup(struct dsa_switch *ds, int port)
+{
+	struct dsa_port *dp = dsa_to_port(ds, port);
+	struct gsw1xx_priv *gsw1xx_priv;
+	struct gswip_priv *gswip_priv;
+	int ret;
+
+	if (dp->index != GSW1XX_MII_PORT)
+		return 0;
+
+	gswip_priv = ds->priv;
+	gsw1xx_priv = container_of(gswip_priv, struct gsw1xx_priv, gswip);
+
+	if (of_property_read_bool(dp->dn, "maxlinear,mii-slew-rate-slow"))
+		ret = regmap_set_bits(gsw1xx_priv->shell, GSW1XX_SHELL_RGMII_SLEW_CFG,
+				      RGMII_SLEW_CFG_DRV_TXD | RGMII_SLEW_CFG_DRV_TXC);
+	else
+		ret = regmap_clear_bits(gsw1xx_priv->shell, GSW1XX_SHELL_RGMII_SLEW_CFG,
+					RGMII_SLEW_CFG_DRV_TXD | RGMII_SLEW_CFG_DRV_TXC);
+
+	return ret;
+}
+
 static struct regmap *gsw1xx_regmap_init(struct gsw1xx_priv *priv,
 					 const char *name,
 					 unsigned int reg_base,
@@ -674,6 +697,7 @@ static const struct gswip_hw_info gsw12x_data = {
 	.pce_microcode		= &gsw1xx_pce_microcode,
 	.pce_microcode_size	= ARRAY_SIZE(gsw1xx_pce_microcode),
 	.tag_protocol		= DSA_TAG_PROTO_MXL_GSW1XX,
+	.port_setup		= gsw1xx_port_setup,
 };
 
 static const struct gswip_hw_info gsw140_data = {
@@ -687,6 +711,7 @@ static const struct gswip_hw_info gsw140_data = {
 	.pce_microcode		= &gsw1xx_pce_microcode,
 	.pce_microcode_size	= ARRAY_SIZE(gsw1xx_pce_microcode),
 	.tag_protocol		= DSA_TAG_PROTO_MXL_GSW1XX,
+	.port_setup		= gsw1xx_port_setup,
 };
 
 static const struct gswip_hw_info gsw141_data = {
@@ -699,6 +724,7 @@ static const struct gswip_hw_info gsw141_data = {
 	.pce_microcode		= &gsw1xx_pce_microcode,
 	.pce_microcode_size	= ARRAY_SIZE(gsw1xx_pce_microcode),
 	.tag_protocol		= DSA_TAG_PROTO_MXL_GSW1XX,
+	.port_setup		= gsw1xx_port_setup,
 };
 
 /*
