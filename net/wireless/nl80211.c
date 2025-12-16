@@ -1947,6 +1947,7 @@ nl80211_send_iftype_data(struct sk_buff *msg,
 {
 	const struct ieee80211_sta_he_cap *he_cap = &iftdata->he_cap;
 	const struct ieee80211_sta_eht_cap *eht_cap = &iftdata->eht_cap;
+	const struct ieee80211_sta_uhr_cap *uhr_cap = &iftdata->uhr_cap;
 
 	if (nl80211_put_iftypes(msg, NL80211_BAND_IFTYPE_ATTR_IFTYPES,
 				iftdata->types_mask))
@@ -2003,6 +2004,16 @@ nl80211_send_iftype_data(struct sk_buff *msg,
 		    sizeof(iftdata->he_6ghz_capa),
 		    &iftdata->he_6ghz_capa))
 		return -ENOBUFS;
+
+	if (uhr_cap->has_uhr && eht_cap->has_eht && he_cap->has_he) {
+		if (nla_put(msg, NL80211_BAND_IFTYPE_ATTR_UHR_CAP_MAC,
+			    sizeof(uhr_cap->uhr_cap_elem.mac_cap_info),
+			    uhr_cap->uhr_cap_elem.mac_cap_info) ||
+		    nla_put(msg, NL80211_BAND_IFTYPE_ATTR_UHR_CAP_PHY,
+			    sizeof(uhr_cap->uhr_cap_elem.phy_cap_info),
+			    uhr_cap->uhr_cap_elem.phy_cap_info))
+			return -ENOBUFS;
+	}
 
 	if (iftdata->vendor_elems.data && iftdata->vendor_elems.len &&
 	    nla_put(msg, NL80211_BAND_IFTYPE_ATTR_VENDOR_ELEMS,
