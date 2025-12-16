@@ -3662,18 +3662,20 @@ static inline gfp_t vmalloc_gfp_adjust(gfp_t flags, const bool large)
 	return flags;
 }
 
-static inline unsigned int
-vm_area_alloc_pages(gfp_t gfp, int nid,
-		unsigned int order, unsigned int nr_pages, struct page **pages)
+static unsigned int
+vm_area_alloc_pages_large_order(gfp_t gfp, int nid, unsigned int order,
+		unsigned int nr_pages, struct page **pages)
 {
 	unsigned int nr_allocated = 0;
 	unsigned int nr_remaining = nr_pages;
 	unsigned int max_attempt_order = MAX_PAGE_ORDER;
 	struct page *page;
+	unsigned int large_order;
+	gfp_t large_gfp;
 	int i;
-	unsigned int large_order = ilog2(nr_remaining);
-	gfp_t large_gfp = vmalloc_gfp_adjust(gfp, large_order) & ~__GFP_DIRECT_RECLAIM;
 
+	large_order = ilog2(nr_remaining);
+	large_gfp = vmalloc_gfp_adjust(gfp, large_order) & ~__GFP_DIRECT_RECLAIM;
 	large_order = min(max_attempt_order, large_order);
 
 	/*
@@ -3703,6 +3705,20 @@ vm_area_alloc_pages(gfp_t gfp, int nid,
 		large_order = ilog2(nr_remaining);
 		large_order = min(max_attempt_order, large_order);
 	}
+
+	return nr_allocated;
+}
+
+static inline unsigned int
+vm_area_alloc_pages(gfp_t gfp, int nid,
+		unsigned int order, unsigned int nr_pages, struct page **pages)
+{
+	unsigned int nr_allocated = 0;
+	struct page *page;
+	int i;
+
+	nr_allocated = vm_area_alloc_pages_large_order(gfp, nid,
+		order, nr_pages, pages);
 
 	/*
 	 * For order-0 pages we make use of bulk allocator, if
