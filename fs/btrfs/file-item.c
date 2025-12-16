@@ -8,7 +8,6 @@
 #include <linux/pagemap.h>
 #include <linux/highmem.h>
 #include <linux/sched/mm.h>
-#include <crypto/hash.h>
 #include "messages.h"
 #include "ctree.h"
 #include "disk-io.h"
@@ -769,7 +768,6 @@ static void csum_one_bio(struct btrfs_bio *bbio, struct bvec_iter *src)
 {
 	struct btrfs_inode *inode = bbio->inode;
 	struct btrfs_fs_info *fs_info = inode->root->fs_info;
-	SHASH_DESC_ON_STACK(shash, fs_info->csum_shash);
 	struct bio *bio = &bbio->bio;
 	struct btrfs_ordered_sum *sums = bbio->sums;
 	struct bvec_iter iter = *src;
@@ -780,8 +778,6 @@ static void csum_one_bio(struct btrfs_bio *bbio, struct bvec_iter *src)
 	phys_addr_t paddrs[BTRFS_MAX_BLOCKSIZE / PAGE_SIZE];
 	u32 offset = 0;
 	int index = 0;
-
-	shash->tfm = fs_info->csum_shash;
 
 	btrfs_bio_for_each_block(paddr, bio, &iter, step) {
 		paddrs[(offset / step) % nr_steps] = paddr;
@@ -801,7 +797,6 @@ static void csum_one_bio_work(struct work_struct *work)
 	ASSERT(btrfs_op(&bbio->bio) == BTRFS_MAP_WRITE);
 	ASSERT(bbio->async_csum == true);
 	csum_one_bio(bbio, &bbio->csum_saved_iter);
-	complete(&bbio->csum_done);
 }
 
 /*
@@ -834,11 +829,10 @@ int btrfs_csum_one_bio(struct btrfs_bio *bbio, bool async)
 		csum_one_bio(bbio, &bbio->bio.bi_iter);
 		return 0;
 	}
-	init_completion(&bbio->csum_done);
 	bbio->async_csum = true;
 	bbio->csum_saved_iter = bbio->bio.bi_iter;
 	INIT_WORK(&bbio->csum_work, csum_one_bio_work);
-	schedule_work(&bbio->csum_work);
+	queue_work(fs_info->endio_workers, &bbio->csum_work);
 	return 0;
 }
 
