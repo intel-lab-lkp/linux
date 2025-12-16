@@ -178,6 +178,33 @@ static const struct attribute_group *isl68137_attribute_groups[] = {
 	NULL,
 };
 
+#define RAA_READ_DMA_DATA 0xc5
+#define RAA_WRITE_DMA_ADDRESS 0xc7
+
+/* DMA address for input current in PIN44 and output current in PIN45 */
+static const unsigned char dma_address_in[] = { 0xD3, 0xE0 };
+static const unsigned char dma_address_out[] = { 0x42, 0xEE };
+static int read_val_route_by_dma(struct i2c_client *client, const char *addr)
+{
+	int ret;
+	/* Set up DMA address */
+	ret = i2c_smbus_write_i2c_block_data(client, RAA_WRITE_DMA_ADDRESS, 2, addr);
+
+	if (ret < 0) {
+		dev_err(&client->dev,
+			"Set DMA address failed for address 0x%02x 0x%02x\n", addr[0], addr[1]);
+		return ret;
+	}
+	/* Read DMA data */
+	u8 buf[2];
+
+	ret = i2c_smbus_read_i2c_block_data(client, RAA_READ_DMA_DATA, 2, buf);
+	if (ret < 0)
+		return ret;
+	u16 value = ((u16)buf[1]<<8) | buf[0];
+	return value;
+};
+
 static int raa_dmpvr2_read_word_data(struct i2c_client *client, int page,
 				     int phase, int reg)
 {
@@ -206,6 +233,12 @@ static int raa_dmpvr2_read_word_data(struct i2c_client *client, int page,
 				data->channel[page].vout_voltage_divider[0]);
 			ret = clamp_val(temp, 0, 0xffff);
 		}
+		break;
+	case PMBUS_VIRT_READ_IIN:
+		ret = read_val_route_by_dma(client, dma_address_in);
+		break;
+	case PMBUS_VIRT_READ_IOUT:
+		ret = read_val_route_by_dma(client, dma_address_out);
 		break;
 	default:
 		ret = -ENODATA;
@@ -408,6 +441,18 @@ static int isl68137_probe(struct i2c_client *client)
 		info->format[PSC_CURRENT_OUT] = linear;
 		info->format[PSC_POWER] = linear;
 		info->format[PSC_TEMPERATURE] = linear;
+		info->format[PSC_VIRT_CURRENT_IN] = direct,
+		info->format[PSC_VIRT_CURRENT_OUT] = direct,
+		/* DIRECT read format 10mA/LSB */
+		info->m[PSC_VIRT_CURRENT_IN] = 1,
+		info->b[PSC_VIRT_CURRENT_IN] = 0,
+		info->R[PSC_VIRT_CURRENT_IN] = 2,
+		/* DIRECT read format 10mA/LSB */
+		info->m[PSC_VIRT_CURRENT_OUT] = 1,
+		info->b[PSC_VIRT_CURRENT_OUT] = 0,
+		info->R[PSC_VIRT_CURRENT_OUT] = 2,
+		info->func[0] |= PMBUS_HAVE_VIRT_IIN;
+		info->func[0] |= PMBUS_HAVE_VIRT_IOUT;
 		info->pages = 2;
 		info->read_word_data = raa_dmpvr2_read_word_data;
 		info->write_word_data = raa_dmpvr2_write_word_data;
