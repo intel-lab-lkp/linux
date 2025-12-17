@@ -26,6 +26,7 @@
 #include <acpi/ghes.h>
 #include <ras/ras_event.h>
 #include <cxl/event.h>
+#include <linux/estatus.h>
 
 /*
  * CPER record ID need to be unique even after reboot, because record
@@ -525,7 +526,7 @@ static void cper_print_fw_err(const char *pfx,
 			      struct acpi_hest_generic_data *gdata,
 			      const struct cper_sec_fw_err_rec_ref *fw_err)
 {
-	void *buf = acpi_hest_get_payload(gdata);
+	void *buf = estatus_get_payload(gdata);
 	u32 offset, length = gdata->error_data_length;
 
 	printk("%s""Firmware Error Record Type: %s\n", pfx,
@@ -607,7 +608,7 @@ cper_estatus_print_section(const char *pfx, struct acpi_hest_generic_data *gdata
 	__u16 severity;
 	char newpfx[64];
 
-	if (acpi_hest_get_version(gdata) >= 3)
+	if (estatus_get_version(gdata) >= 3)
 		cper_print_tstamp(pfx, (struct acpi_hest_generic_data_v300 *)gdata);
 
 	severity = gdata->error_severity;
@@ -628,7 +629,7 @@ cper_estatus_print_section(const char *pfx, struct acpi_hest_generic_data *gdata
 	}
 
 	if (guid_equal(sec_type, &CPER_SEC_PROC_GENERIC)) {
-		struct cper_sec_proc_generic *proc_err = acpi_hest_get_payload(gdata);
+		struct cper_sec_proc_generic *proc_err = estatus_get_payload(gdata);
 
 		printk("%s""section_type: general processor error\n", newpfx);
 		if (gdata->error_data_length >= sizeof(*proc_err))
@@ -636,7 +637,7 @@ cper_estatus_print_section(const char *pfx, struct acpi_hest_generic_data *gdata
 		else
 			goto err_section_too_small;
 	} else if (guid_equal(sec_type, &CPER_SEC_PLATFORM_MEM)) {
-		struct cper_sec_mem_err *mem_err = acpi_hest_get_payload(gdata);
+		struct cper_sec_mem_err *mem_err = estatus_get_payload(gdata);
 
 		printk("%s""section_type: memory error\n", newpfx);
 		if (gdata->error_data_length >=
@@ -646,7 +647,7 @@ cper_estatus_print_section(const char *pfx, struct acpi_hest_generic_data *gdata
 		else
 			goto err_section_too_small;
 	} else if (guid_equal(sec_type, &CPER_SEC_PCIE)) {
-		struct cper_sec_pcie *pcie = acpi_hest_get_payload(gdata);
+		struct cper_sec_pcie *pcie = estatus_get_payload(gdata);
 
 		printk("%s""section_type: PCIe error\n", newpfx);
 		if (gdata->error_data_length >= sizeof(*pcie))
@@ -655,7 +656,7 @@ cper_estatus_print_section(const char *pfx, struct acpi_hest_generic_data *gdata
 			goto err_section_too_small;
 #if defined(CONFIG_ARM64) || defined(CONFIG_ARM)
 	} else if (guid_equal(sec_type, &CPER_SEC_PROC_ARM)) {
-		struct cper_sec_proc_arm *arm_err = acpi_hest_get_payload(gdata);
+		struct cper_sec_proc_arm *arm_err = estatus_get_payload(gdata);
 
 		printk("%ssection_type: ARM processor error\n", newpfx);
 		if (gdata->error_data_length >= sizeof(*arm_err))
@@ -665,7 +666,7 @@ cper_estatus_print_section(const char *pfx, struct acpi_hest_generic_data *gdata
 #endif
 #if defined(CONFIG_UEFI_CPER_X86)
 	} else if (guid_equal(sec_type, &CPER_SEC_PROC_IA)) {
-		struct cper_sec_proc_ia *ia_err = acpi_hest_get_payload(gdata);
+		struct cper_sec_proc_ia *ia_err = estatus_get_payload(gdata);
 
 		printk("%ssection_type: IA32/X64 processor error\n", newpfx);
 		if (gdata->error_data_length >= sizeof(*ia_err))
@@ -674,7 +675,7 @@ cper_estatus_print_section(const char *pfx, struct acpi_hest_generic_data *gdata
 			goto err_section_too_small;
 #endif
 	} else if (guid_equal(sec_type, &CPER_SEC_FW_ERR_REC_REF)) {
-		struct cper_sec_fw_err_rec_ref *fw_err = acpi_hest_get_payload(gdata);
+		struct cper_sec_fw_err_rec_ref *fw_err = estatus_get_payload(gdata);
 
 		printk("%ssection_type: Firmware Error Record Reference\n",
 		       newpfx);
@@ -684,7 +685,7 @@ cper_estatus_print_section(const char *pfx, struct acpi_hest_generic_data *gdata
 		else
 			goto err_section_too_small;
 	} else if (guid_equal(sec_type, &CPER_SEC_CXL_PROT_ERR)) {
-		struct cxl_cper_sec_prot_err *prot_err = acpi_hest_get_payload(gdata);
+		struct cxl_cper_sec_prot_err *prot_err = estatus_get_payload(gdata);
 
 		printk("%ssection_type: CXL Protocol Error\n", newpfx);
 		if (gdata->error_data_length >= sizeof(*prot_err))
@@ -692,7 +693,7 @@ cper_estatus_print_section(const char *pfx, struct acpi_hest_generic_data *gdata
 		else
 			goto err_section_too_small;
 	} else {
-		const void *err = acpi_hest_get_payload(gdata);
+		const void *err = estatus_get_payload(gdata);
 
 		printk("%ssection type: unknown, %pUl\n", newpfx, sec_type);
 		printk("%ssection length: %#x\n", newpfx,
@@ -723,7 +724,7 @@ void cper_estatus_print(const char *pfx,
 	printk("%s""event severity: %s\n", pfx, cper_severity_str(severity));
 	snprintf(newpfx, sizeof(newpfx), "%s ", pfx);
 
-	apei_estatus_for_each_section(estatus, gdata) {
+	estatus_for_each_section(estatus, gdata) {
 		cper_estatus_print_section(newpfx, gdata, sec_no);
 		sec_no++;
 	}
@@ -755,11 +756,11 @@ int cper_estatus_check(const struct acpi_hest_generic_status *estatus)
 
 	data_len = estatus->data_length;
 
-	apei_estatus_for_each_section(estatus, gdata) {
-		if (acpi_hest_get_size(gdata) > data_len)
+	estatus_for_each_section(estatus, gdata) {
+		if (estatus_get_size(gdata) > data_len)
 			return -EINVAL;
 
-		record_size = acpi_hest_get_record_size(gdata);
+		record_size = estatus_get_record_size(gdata);
 		if (record_size > data_len)
 			return -EINVAL;
 
