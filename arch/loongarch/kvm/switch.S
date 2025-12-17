@@ -170,6 +170,7 @@ SYM_CODE_START(kvm_exc_entry)
 	/* restore per cpu register */
 	ld.d	u0, a2, KVM_ARCH_HPERCPU
 	addi.d	sp, sp, -PT_SIZE
+	UNWIND_HINT_REGS
 
 	/* Prepare handle exception */
 	or	a0, s0, zero
@@ -214,6 +215,7 @@ SYM_FUNC_START(kvm_enter_guest)
 	addi.d	a2, sp, -PT_SIZE
 	/* Save host GPRs */
 	kvm_save_host_gpr a2
+	st.d	ra, a2, PT_ERA
 
 	addi.d	a2, a1, KVM_VCPU_ARCH
 	st.d	sp, a2, KVM_ARCH_HSP
