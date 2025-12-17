@@ -17,6 +17,7 @@ struct mbox_chan;
  * @dev:		The client device
  * @tx_block:		If the mbox_send_message should block until data is
  *			transmitted.
+ * @msg_slot_ro:	msg slots remaining for this client's channel.
  * @tx_tout:		Max block period in ms before TX is assumed failure
  * @knows_txdone:	If the client could run the TX state machine. Usually
  *			if the client receives some ACK packet for transmission.
@@ -29,6 +30,7 @@ struct mbox_chan;
 struct mbox_client {
 	struct device *dev;
 	bool tx_block;
+	unsigned int msg_slot_ro;
 	unsigned long tx_tout;
 	bool knows_txdone;
 
