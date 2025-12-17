@@ -242,21 +242,21 @@ static void vdpasim_net_work(struct vdpasim *vdpasim)
 		if (err <= 0) {
 			++rx_overruns;
 			vdpasim_net_complete(txq, 0);
-			break;
+		} else {
+
+			write = vringh_iov_push_iotlb(&rxq->vring, &rxq->in_iov,
+						      net->buffer, read);
+			if (write <= 0) {
+				++rx_errors;
+				vdpasim_net_complete(txq, 0);
+				break;
+			}
+
+			++rx_pkts;
+			rx_bytes += write;
+			vdpasim_net_complete(txq, 0);
+			vdpasim_net_complete(rxq, write);
 		}
-
-		write = vringh_iov_push_iotlb(&rxq->vring, &rxq->in_iov,
-					      net->buffer, read);
-		if (write <= 0) {
-			++rx_errors;
-			break;
-		}
-
-		++rx_pkts;
-		rx_bytes += write;
-
-		vdpasim_net_complete(txq, 0);
-		vdpasim_net_complete(rxq, write);
 
 		if (tx_pkts > 4) {
 			vdpasim_schedule_work(vdpasim);
