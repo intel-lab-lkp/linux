@@ -1280,6 +1280,15 @@ static void update_curr_fair(struct rq *rq)
 }
 
 static inline void
+get_se_stats_and_task(struct sched_entity *se,
+		struct sched_statistics **stats,
+		struct task_struct **p)
+{
+	*stats = __schedstats_from_se(se);
+	*p = entity_is_task(se) ? task_of(se) : NULL;
+}
+
+static inline void
 update_stats_wait_start_fair(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
 	struct sched_statistics *stats;
@@ -1288,10 +1297,7 @@ update_stats_wait_start_fair(struct cfs_rq *cfs_rq, struct sched_entity *se)
 	if (!schedstat_enabled())
 		return;
 
-	stats = __schedstats_from_se(se);
-
-	if (entity_is_task(se))
-		p = task_of(se);
+	get_se_stats_and_task(se, &stats, &p);
 
 	__update_stats_wait_start(rq_of(cfs_rq), p, stats);
 }
@@ -1305,7 +1311,7 @@ update_stats_wait_end_fair(struct cfs_rq *cfs_rq, struct sched_entity *se)
 	if (!schedstat_enabled())
 		return;
 
-	stats = __schedstats_from_se(se);
+	get_se_stats_and_task(se, &stats, &p);
 
 	/*
 	 * When the sched_schedstat changes from 0 to 1, some sched se
@@ -1315,9 +1321,6 @@ update_stats_wait_end_fair(struct cfs_rq *cfs_rq, struct sched_entity *se)
 	 */
 	if (unlikely(!schedstat_val(stats->wait_start)))
 		return;
-
-	if (entity_is_task(se))
-		p = task_of(se);
 
 	__update_stats_wait_end(rq_of(cfs_rq), p, stats);
 }
@@ -1331,10 +1334,7 @@ update_stats_enqueue_sleeper_fair(struct cfs_rq *cfs_rq, struct sched_entity *se
 	if (!schedstat_enabled())
 		return;
 
-	stats = __schedstats_from_se(se);
-
-	if (entity_is_task(se))
-		tsk = task_of(se);
+	get_se_stats_and_task(se, &stats, &p);
 
 	__update_stats_enqueue_sleeper(rq_of(cfs_rq), tsk, stats);
 }
