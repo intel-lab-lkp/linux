@@ -1243,7 +1243,6 @@ static void rsi_disconnect(struct sdio_func *pfunction)
 
 }
 
-#ifdef CONFIG_PM
 static int rsi_set_sdio_pm_caps(struct rsi_hw *adapter)
 {
 	struct rsi_91x_sdiodev *dev = adapter->rsi_dev;
@@ -1499,7 +1498,6 @@ static const struct dev_pm_ops rsi_pm_ops = {
 	.thaw = rsi_thaw,
 	.restore = rsi_restore,
 };
-#endif
 
 static const struct sdio_device_id rsi_dev_table[] =  {
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_RSI, SDIO_DEVICE_ID_RSI_9113) },
@@ -1512,12 +1510,10 @@ static struct sdio_driver rsi_driver = {
 	.probe      = rsi_probe,
 	.remove     = rsi_disconnect,
 	.id_table   = rsi_dev_table,
-#ifdef CONFIG_PM
 	.drv = {
-		.pm = &rsi_pm_ops,
-		.shutdown   = rsi_shutdown,
+		.pm = pm_ptr(&rsi_pm_ops),
+		.shutdown = pm_ptr(rsi_shutdown),
 	}
-#endif
 };
 module_sdio_driver(rsi_driver);
 
