@@ -53,28 +53,28 @@ void kvm_deliver_exception(struct kvm_vcpu *vcpu);
 
 void kvm_own_fpu(struct kvm_vcpu *vcpu);
 void kvm_lose_fpu(struct kvm_vcpu *vcpu);
-void kvm_save_fpu(struct loongarch_fpu *fpu);
-void kvm_restore_fpu(struct loongarch_fpu *fpu);
+void kvm_save_fpu(void *fpu);
+void kvm_restore_fpu(void *fpu);
 void kvm_restore_fcsr(struct loongarch_fpu *fpu);
 
 #ifdef CONFIG_CPU_HAS_LSX
 int kvm_own_lsx(struct kvm_vcpu *vcpu);
-void kvm_save_lsx(struct loongarch_fpu *fpu);
-void kvm_restore_lsx(struct loongarch_fpu *fpu);
+void kvm_save_lsx(void *fpu);
+void kvm_restore_lsx(void *fpu);
 #else
 static inline int kvm_own_lsx(struct kvm_vcpu *vcpu) { return -EINVAL; }
-static inline void kvm_save_lsx(struct loongarch_fpu *fpu) { }
-static inline void kvm_restore_lsx(struct loongarch_fpu *fpu) { }
+static inline void kvm_save_lsx(void *fpu) { }
+static inline void kvm_restore_lsx(void *fpu) { }
 #endif
 
 #ifdef CONFIG_CPU_HAS_LASX
 int kvm_own_lasx(struct kvm_vcpu *vcpu);
-void kvm_save_lasx(struct loongarch_fpu *fpu);
-void kvm_restore_lasx(struct loongarch_fpu *fpu);
+void kvm_save_lasx(void *fpu);
+void kvm_restore_lasx(void *fpu);
 #else
 static inline int kvm_own_lasx(struct kvm_vcpu *vcpu) { return -EINVAL; }
-static inline void kvm_save_lasx(struct loongarch_fpu *fpu) { }
-static inline void kvm_restore_lasx(struct loongarch_fpu *fpu) { }
+static inline void kvm_save_lasx(void *fpu) { }
+static inline void kvm_restore_lasx(void *fpu) { }
 #endif
 
 #ifdef CONFIG_CPU_HAS_LBT

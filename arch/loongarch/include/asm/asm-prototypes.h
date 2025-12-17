@@ -20,3 +20,19 @@ asmlinkage void noinstr __no_stack_protector ret_from_kernel_thread(struct task_
 								    struct pt_regs *regs,
 								    int (*fn)(void *),
 								    void *fn_arg);
+
+void kvm_exc_entry(void);
+int  kvm_enter_guest(void *run, void *vcpu);
+
+#ifdef CONFIG_CPU_HAS_LSX
+void kvm_save_lsx(void *fpu);
+void kvm_restore_lsx(void *fpu);
+#endif
+
+#ifdef CONFIG_CPU_HAS_LASX
+void kvm_save_lasx(void *fpu);
+void kvm_restore_lasx(void *fpu);
+#endif
+
+void kvm_save_fpu(void *fpu);
+void kvm_restore_fpu(void *fpu);
