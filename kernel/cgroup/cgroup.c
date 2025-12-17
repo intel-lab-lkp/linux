@@ -2197,6 +2197,7 @@ int cgroup_setup_root(struct cgroup_root *root, u16 ss_mask)
 	}
 	root_cgrp->kn = kernfs_root_to_node(root->kf_root);
 	WARN_ON_ONCE(cgroup_ino(root_cgrp) != 1);
+	root_cgrp->nr_ancestors = 1; /* stored in _root_ancestor */
 	root_cgrp->ancestors[0] = root_cgrp;
 
 	ret = css_populate_dir(&root_cgrp->self);
@@ -5869,7 +5870,7 @@ static struct cgroup *cgroup_create(struct cgroup *parent, const char *name,
 
 	cgrp->self.parent = &parent->self;
 	cgrp->root = root;
-	cgrp->level = level;
+	cgrp->nr_ancestors = parent->nr_ancestors + 1;
 
 	/*
 	 * Now that init_cgroup_housekeeping() has been called and cgrp->self

@@ -475,14 +475,6 @@ struct cgroup {
 
 	unsigned long flags;		/* "unsigned long" so bitops work */
 
-	/*
-	 * The depth this cgroup is at.  The root is at depth zero and each
-	 * step down the hierarchy increments the level.  This along with
-	 * ancestors[] can determine whether a given cgroup is a
-	 * descendant of another without traversing the hierarchy.
-	 */
-	int level;
-
 	/* Maximum allowed descent tree depth */
 	int max_depth;
 
@@ -625,13 +617,18 @@ struct cgroup {
 	struct bpf_local_storage __rcu  *bpf_cgrp_storage;
 #endif
 
-	/* All ancestors including self */
 	union {
 		struct {
-			void *_sentinel[0]; /* XXX to avoid 'flexible array member in a struct with no named members' */
-			struct cgroup *ancestors[];
+			int nr_ancestors;	/* do not use directly but via cgroup_level() */
+			/*
+			 * All ancestors including self.
+			 * ancestors[] can determine whether a given cgroup is a
+			 * descendant of another without traversing the hierarchy.
+			 */
+			struct cgroup *ancestors[] __counted_by(nr_ancestors);
 		};
 		struct {
+			int _nr_ancestors;	/* auxiliary padding, see nr_ancestors above */
 			struct cgroup *_root_ancestor;
 			struct cgroup *_low_ancestors[];
 		};
