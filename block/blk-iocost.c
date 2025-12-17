@@ -545,7 +545,7 @@ struct ioc_gq {
 	u64				indebt_since;
 	u64				indelay_since;
 
-	/* this iocg's depth in the hierarchy and ancestors including self */
+	/* this iocg's depth in the hierarchy and ancestors excluding self */
 	int				level;
 	struct ioc_gq			*ancestors[];
 };
