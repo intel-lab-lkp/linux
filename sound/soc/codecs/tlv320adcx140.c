@@ -708,6 +708,16 @@ static const struct snd_kcontrol_new adcx140_snd_controls[] = {
 			0, 0xff, 0, dig_vol_tlv),
 	SOC_SINGLE_TLV("Digital CH8 Out Volume", ADCX140_CH8_CFG2,
 			0, 0xff, 0, dig_vol_tlv),
+
+	SOC_SINGLE("CH1_ASI_Slot", ADCX140_ASI_CH1, 0, 0x3f, 0),
+	SOC_SINGLE("CH2_ASI_Slot", ADCX140_ASI_CH2,	0, 0x3f, 0),
+	SOC_SINGLE("CH3_ASI_Slot", ADCX140_ASI_CH3,	0, 0x3f, 0),
+	SOC_SINGLE("CH4_ASI_Slot", ADCX140_ASI_CH4,	0, 0x3f, 0),
+	SOC_SINGLE("CH5_ASI_Slot", ADCX140_ASI_CH5,	0, 0x3f, 0),
+	SOC_SINGLE("CH6_ASI_Slot", ADCX140_ASI_CH6,	0, 0x3f, 0),
+	SOC_SINGLE("CH7_ASI_Slot", ADCX140_ASI_CH7,	0, 0x3f, 0),
+	SOC_SINGLE("CH8_ASI_Slot", ADCX140_ASI_CH8,	0, 0x3f, 0),
+
 	ADCX140_PHASE_CALIB_SWITCH("Phase Calibration Switch"),
 };
 
