@@ -195,6 +195,8 @@ static long ptp_clock_getcaps(struct ptp_clock *ptp, void __user *arg)
 	if (caps.adjust_phase)
 		caps.max_phase_adj = ptp->info->getmaxphase(ptp->info);
 
+	memset(caps.rsv, 0, sizeof(caps.rsv));
+
 	return copy_to_user(arg, &caps, sizeof(caps)) ? -EFAULT : 0;
 }
 
