@@ -401,6 +401,9 @@ static int link_validate(struct media_link *link)
 		link->sink->entity->name);
 
 	s_pad = media_pad_remote_pad_first(&av->pad);
+	if (!s_pad)
+		return -ENOTCONN;
+
 	s_stream = ipu6_isys_get_src_stream_by_src_pad(s_sd, s_pad->index);
 
 	v4l2_subdev_lock_state(s_state);
@@ -454,7 +457,6 @@ static int ipu6_isys_fw_pin_cfg(struct ipu6_isys_video *av,
 				struct ipu6_fw_isys_stream_cfg_data_abi *cfg)
 {
 	struct media_pad *src_pad = media_pad_remote_pad_first(&av->pad);
-	struct v4l2_subdev *sd = media_entity_to_v4l2_subdev(src_pad->entity);
 	struct ipu6_fw_isys_input_pin_info_abi *input_pin;
 	struct ipu6_fw_isys_output_pin_info_abi *output_pin;
 	struct ipu6_isys_stream *stream = av->stream;
@@ -466,9 +468,15 @@ static int ipu6_isys_fw_pin_cfg(struct ipu6_isys_video *av,
 	struct ipu6_isys *isys = av->isys;
 	struct device *dev = &isys->adev->auxdev.dev;
 	int input_pins = cfg->nof_input_pins++;
+	struct v4l2_subdev *sd;
 	int output_pins;
 	u32 src_stream;
 	int ret;
+
+	if (!src_pad)
+		return -ENOTCONN;
+
+	sd = media_entity_to_v4l2_subdev(src_pad->entity);
 
 	src_stream = ipu6_isys_get_src_stream_by_src_pad(sd, src_pad->index);
 	ret = ipu6_isys_get_stream_pad_fmt(sd, src_pad->index, src_stream,
@@ -1016,6 +1024,9 @@ int ipu6_isys_video_set_streaming(struct ipu6_isys_video *av, int state,
 
 	sd = &stream->asd->sd;
 	r_pad = media_pad_remote_pad_first(&av->pad);
+	if (!r_pad)
+		return -ENOTCONN;
+
 	r_stream = ipu6_isys_get_src_stream_by_src_pad(sd, r_pad->index);
 
 	subdev_state = v4l2_subdev_lock_and_get_active_state(sd);
