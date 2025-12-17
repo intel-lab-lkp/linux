@@ -152,6 +152,18 @@ config IRQ_KUNIT_TEST
 
 endmenu
 
+# Support platform wide software interrupt moderation
+config IRQ_SOFT_MODERATION
+	bool "Enable platform wide software interrupt moderation"
+	depends on PROC_FS=y
+	help
+	  Enable platform wide software interrupt moderation.
+	  Uses a local timer to delay interrupts in configurable ways
+	  and depending on various global system load indicators
+	  and targets.
+
+	  If you don't know what to do here, say N.
+
 config GENERIC_IRQ_MULTI_HANDLER
 	bool
 	help

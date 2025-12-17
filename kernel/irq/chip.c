@@ -18,6 +18,7 @@
 #include <trace/events/irq.h>
 
 #include "internals.h"
+#include "irq_moderation_hook.h"
 
 static irqreturn_t bad_chained_irq(int irq, void *dev_id)
 {
@@ -739,6 +740,13 @@ void handle_fasteoi_irq(struct irq_desc *desc)
 
 	guard(raw_spinlock)(&desc->lock);
 
+	if (irq_moderation_skip_moderated(desc)) {
+		mask_irq(desc);
+		desc->istate |= IRQS_PENDING;
+		cond_eoi_irq(chip, &desc->irq_data);
+		return;
+	}
+
 	/*
 	 * When an affinity change races with IRQ handling, the next interrupt
 	 * can arrive on the new CPU before the original CPU has completed
@@ -764,6 +772,9 @@ void handle_fasteoi_irq(struct irq_desc *desc)
 	handle_irq_event(desc);
 
 	cond_unmask_eoi_irq(desc, chip);
+
+	if (irq_moderation_hook(desc))
+		return;
 
 	/*
 	 * When the race described above happens this will resend the interrupt.
@@ -824,7 +835,7 @@ void handle_edge_irq(struct irq_desc *desc)
 {
 	guard(raw_spinlock)(&desc->lock);
 
-	if (!irq_can_handle(desc)) {
+	if (irq_moderation_skip_moderated(desc) || !irq_can_handle(desc)) {
 		desc->istate |= IRQS_PENDING;
 		mask_ack_irq(desc);
 		return;
@@ -853,6 +864,9 @@ void handle_edge_irq(struct irq_desc *desc)
 		}
 
 		handle_irq_event(desc);
+
+		if (irq_moderation_hook(desc))
+			break;
 
 	} while ((desc->istate & IRQS_PENDING) && !irqd_irq_disabled(&desc->irq_data));
 }
