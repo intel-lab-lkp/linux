@@ -553,8 +553,12 @@ int rpmsg_register_device_override(struct rpmsg_device *rpdev,
 	if (driver_override)
 		strscpy_pad(rpdev->id.name, driver_override, RPMSG_NAME_SIZE);
 
-	dev_set_name(dev, "%s.%s.%d.%d", dev_name(dev->parent),
-		     rpdev->id.name, rpdev->src, rpdev->dst);
+	ret = dev_set_name(dev, "%s.%s.%d.%d", dev_name(dev->parent),
+			   rpdev->id.name, rpdev->src, rpdev->dst);
+	if (ret) {
+		pr_err("failed to set device name\n");
+		return ret;
+	}
 
 	dev->bus = &rpmsg_bus;
 

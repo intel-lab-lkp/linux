@@ -165,7 +165,10 @@ static int rpmsg_ctrldev_probe(struct rpmsg_device *rpdev)
 	if (ret < 0)
 		goto free_minor_ida;
 	dev->id = ret;
-	dev_set_name(&ctrldev->dev, "rpmsg_ctrl%d", ret);
+
+	ret = dev_set_name(&ctrldev->dev, "rpmsg_ctrl%d", ret);
+	if (ret)
+		goto free_ctrl_ida;
 
 	ret = cdev_device_add(&ctrldev->cdev, &ctrldev->dev);
 	if (ret)

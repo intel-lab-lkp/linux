@@ -239,7 +239,13 @@ struct qcom_glink_smem *qcom_glink_smem_register(struct device *parent,
 	dev->parent = parent;
 	dev->of_node = node;
 	dev->release = qcom_glink_smem_release;
-	dev_set_name(dev, "%s:%pOFn", dev_name(parent->parent), node);
+	ret = dev_set_name(dev, "%s:%pOFn", dev_name(parent->parent), node);
+	if (ret) {
+		pr_err("failed to set device name\n");
+		put_device(dev);
+		return ERR_PTR(ret);
+	}
+
 	ret = device_register(dev);
 	if (ret) {
 		pr_err("failed to register glink edge\n");

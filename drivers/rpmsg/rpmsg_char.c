@@ -450,7 +450,10 @@ static int rpmsg_chrdev_eptdev_add(struct rpmsg_eptdev *eptdev, struct rpmsg_cha
 	if (ret < 0)
 		goto free_minor_ida;
 	dev->id = ret;
-	dev_set_name(dev, "rpmsg%d", ret);
+
+	ret = dev_set_name(dev, "rpmsg%d", ret);
+	if (ret)
+		goto free_ept_ida;
 
 	ret = cdev_device_add(&eptdev->cdev, &eptdev->dev);
 	if (ret)
