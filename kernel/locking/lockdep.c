@@ -58,6 +58,7 @@
 #include <linux/context_tracking.h>
 #include <linux/console.h>
 #include <linux/kasan.h>
+#include <linux/bug.h>
 
 #include <asm/sections.h>
 
@@ -109,6 +110,11 @@ static __init int kernel_lockdep_sysctls_init(void)
 }
 late_initcall(kernel_lockdep_sysctls_init);
 #endif /* CONFIG_SYSCTL */
+
+static void print_footer(void)
+{
+	pr_warn("---[ end trace ]---\n");
+}
 
 DEFINE_PER_CPU(unsigned int, lockdep_recursion);
 EXPORT_PER_CPU_SYMBOL_GPL(lockdep_recursion);
@@ -1958,6 +1964,7 @@ print_circular_bug_header(struct lock_list *entry, unsigned int depth,
 		return;
 
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("======================================================\n");
 	pr_warn("WARNING: possible circular locking dependency detected\n");
 	print_kernel_ident();
@@ -2041,6 +2048,7 @@ static noinline void print_circular_bug(struct lock_list *this,
 
 	printk("\nstack backtrace:\n");
 	dump_stack();
+	print_footer();
 
 	nbcon_cpu_emergency_exit();
 }
@@ -2561,6 +2569,7 @@ print_bad_irq_dependency(struct task_struct *curr,
 	nbcon_cpu_emergency_enter();
 
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("=====================================================\n");
 	pr_warn("WARNING: %s-safe -> %s-unsafe lock order detected\n",
 		irqclass, irqclass);
@@ -2614,6 +2623,7 @@ print_bad_irq_dependency(struct task_struct *curr,
 
 	pr_warn("\nstack backtrace:\n");
 	dump_stack();
+	print_footer();
 out:
 	nbcon_cpu_emergency_exit();
 }
@@ -3018,6 +3028,7 @@ print_deadlock_bug(struct task_struct *curr, struct held_lock *prev,
 	nbcon_cpu_emergency_enter();
 
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("============================================\n");
 	pr_warn("WARNING: possible recursive locking detected\n");
 	print_kernel_ident();
@@ -3039,6 +3050,7 @@ print_deadlock_bug(struct task_struct *curr, struct held_lock *prev,
 
 	pr_warn("\nstack backtrace:\n");
 	dump_stack();
+	print_footer();
 
 	nbcon_cpu_emergency_exit();
 }
@@ -3641,6 +3653,7 @@ static void print_collision(struct task_struct *curr,
 	nbcon_cpu_emergency_enter();
 
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("============================\n");
 	pr_warn("WARNING: chain_key collision\n");
 	print_kernel_ident();
@@ -3656,6 +3669,7 @@ static void print_collision(struct task_struct *curr,
 
 	pr_warn("\nstack backtrace:\n");
 	dump_stack();
+	print_footer();
 
 	nbcon_cpu_emergency_exit();
 }
@@ -4013,6 +4027,7 @@ print_usage_bug(struct task_struct *curr, struct held_lock *this,
 	nbcon_cpu_emergency_enter();
 
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("================================\n");
 	pr_warn("WARNING: inconsistent lock state\n");
 	print_kernel_ident();
@@ -4040,6 +4055,7 @@ print_usage_bug(struct task_struct *curr, struct held_lock *this,
 
 	pr_warn("\nstack backtrace:\n");
 	dump_stack();
+	print_footer();
 
 	nbcon_cpu_emergency_exit();
 }
@@ -4079,6 +4095,7 @@ print_irq_inversion_bug(struct task_struct *curr,
 	nbcon_cpu_emergency_enter();
 
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("========================================================\n");
 	pr_warn("WARNING: possible irq lock inversion dependency detected\n");
 	print_kernel_ident();
@@ -4123,6 +4140,7 @@ print_irq_inversion_bug(struct task_struct *curr,
 
 	pr_warn("\nstack backtrace:\n");
 	dump_stack();
+	print_footer();
 out:
 	nbcon_cpu_emergency_exit();
 }
@@ -4811,6 +4829,7 @@ print_lock_invalid_wait_context(struct task_struct *curr,
 	nbcon_cpu_emergency_enter();
 
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("=============================\n");
 	pr_warn("[ BUG: Invalid wait context ]\n");
 	print_kernel_ident();
@@ -4828,6 +4847,7 @@ print_lock_invalid_wait_context(struct task_struct *curr,
 
 	pr_warn("stack backtrace:\n");
 	dump_stack();
+	print_footer();
 
 	nbcon_cpu_emergency_exit();
 
@@ -5041,6 +5061,7 @@ print_lock_nested_lock_not_held(struct task_struct *curr,
 	nbcon_cpu_emergency_enter();
 
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("==================================\n");
 	pr_warn("WARNING: Nested lock was not taken\n");
 	print_kernel_ident();
@@ -5060,6 +5081,7 @@ print_lock_nested_lock_not_held(struct task_struct *curr,
 
 	pr_warn("\nstack backtrace:\n");
 	dump_stack();
+	print_footer();
 
 	nbcon_cpu_emergency_exit();
 }
@@ -5281,6 +5303,7 @@ static void print_unlock_imbalance_bug(struct task_struct *curr,
 	nbcon_cpu_emergency_enter();
 
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("=====================================\n");
 	pr_warn("WARNING: bad unlock balance detected!\n");
 	print_kernel_ident();
@@ -5296,6 +5319,7 @@ static void print_unlock_imbalance_bug(struct task_struct *curr,
 
 	pr_warn("\nstack backtrace:\n");
 	dump_stack();
+	print_footer();
 
 	nbcon_cpu_emergency_exit();
 }
@@ -6013,6 +6037,7 @@ static void print_lock_contention_bug(struct task_struct *curr,
 	nbcon_cpu_emergency_enter();
 
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("=================================\n");
 	pr_warn("WARNING: bad contention detected!\n");
 	print_kernel_ident();
@@ -6028,6 +6053,7 @@ static void print_lock_contention_bug(struct task_struct *curr,
 
 	pr_warn("\nstack backtrace:\n");
 	dump_stack();
+	print_footer();
 
 	nbcon_cpu_emergency_exit();
 }
@@ -6680,6 +6706,7 @@ print_freed_lock_bug(struct task_struct *curr, const void *mem_from,
 	nbcon_cpu_emergency_enter();
 
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("=========================\n");
 	pr_warn("WARNING: held lock freed!\n");
 	print_kernel_ident();
@@ -6691,6 +6718,7 @@ print_freed_lock_bug(struct task_struct *curr, const void *mem_from,
 
 	pr_warn("\nstack backtrace:\n");
 	dump_stack();
+	print_footer();
 
 	nbcon_cpu_emergency_exit();
 }
@@ -6742,6 +6770,7 @@ static void print_held_locks_bug(void)
 	nbcon_cpu_emergency_enter();
 
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("====================================\n");
 	pr_warn("WARNING: %s/%d still has locks held!\n",
 	       current->comm, task_pid_nr(current));
@@ -6750,6 +6779,7 @@ static void print_held_locks_bug(void)
 	lockdep_print_held_locks(current);
 	pr_warn("\nstack backtrace:\n");
 	dump_stack();
+	print_footer();
 
 	nbcon_cpu_emergency_exit();
 }
@@ -6811,6 +6841,7 @@ asmlinkage __visible void lockdep_sys_exit(void)
 			return;
 		nbcon_cpu_emergency_enter();
 		pr_warn("\n");
+		pr_warn(CUT_HERE);
 		pr_warn("================================================\n");
 		pr_warn("WARNING: lock held when returning to user space!\n");
 		print_kernel_ident();
@@ -6818,6 +6849,7 @@ asmlinkage __visible void lockdep_sys_exit(void)
 		pr_warn("%s/%d is leaving the kernel with locks still held!\n",
 				curr->comm, curr->pid);
 		lockdep_print_held_locks(curr);
+		print_footer();
 		nbcon_cpu_emergency_exit();
 	}
 
@@ -6837,6 +6869,7 @@ void lockdep_rcu_suspicious(const char *file, const int line, const char *s)
 	/* Note: the following can be executed concurrently, so be careful. */
 	nbcon_cpu_emergency_enter();
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("=============================\n");
 	pr_warn("WARNING: suspicious RCU usage\n");
 	print_kernel_ident();
@@ -6874,6 +6907,7 @@ void lockdep_rcu_suspicious(const char *file, const int line, const char *s)
 	lockdep_print_held_locks(curr);
 	pr_warn("\nstack backtrace:\n");
 	dump_stack();
+	print_footer();
 	nbcon_cpu_emergency_exit();
 	warn_rcu_exit(rcu);
 }
