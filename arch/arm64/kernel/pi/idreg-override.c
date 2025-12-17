@@ -248,7 +248,7 @@ static const struct {
 	{ "rodata=off",			"arm64_sw.rodataoff=1" },
 	{ "arm64.nolva",		"id_aa64mmfr2.varange=0" },
 	{ "arm64.no32bit_el0",		"id_aa64pfr0.el0=1" },
-	{ "arm64.nompam",		"id_aa64pfr0.mpam=0 id_aa64pfr1.mpam_frac=0" },
+	{ "arm64.mpam",			"id_aa64pfr0.mpam=1 id_aa64pfr1.mpam_frac=1" },
 };
 
 static int __init parse_hexdigit(const char *p, u64 *v)
@@ -408,6 +408,12 @@ void __init init_feature_override(u64 boot_status, const void *fdt,
 	}
 
 	__boot_status = boot_status;
+
+	/*
+	 * Set the boot parameter to disable the MPAM feature,
+	 * thus avoiding system boot failure.
+	 */
+	match_options("id_aa64pfr0.mpam=0 id_aa64pfr1.mpam_frac=0");
 
 	parse_cmdline(fdt, chosen);
 
