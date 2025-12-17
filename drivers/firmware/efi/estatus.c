@@ -654,9 +654,8 @@ static bool estatus_handle_arm_hw_error(estatus_generic_data *gdata, int sev, bo
 	int sec_sev, i;
 	char *p;
 
-	log_arm_hw_error(err);
-
 	sec_sev = estatus_severity(gdata->error_severity);
+	log_arm_hw_error(err, sec_sev);
 	if (sev != ESTATUS_SEV_RECOVERABLE || sec_sev != ESTATUS_SEV_RECOVERABLE)
 		return false;
 
