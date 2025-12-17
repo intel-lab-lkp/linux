@@ -43,6 +43,7 @@ void intel_mtl_tbt_pll_enable_clock(struct intel_encoder *encoder,
 				    int port_clock);
 void intel_mtl_tbt_pll_disable_clock(struct intel_encoder *encoder);
 
+bool intel_cx0pll_clock_matches(int clock1, int clock2);
 int intel_cx0pll_calc_state(const struct intel_crtc_state *crtc_state,
 			    struct intel_encoder *encoder,
 			    struct intel_dpll_hw_state *hw_state);
