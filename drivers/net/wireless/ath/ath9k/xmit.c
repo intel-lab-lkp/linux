@@ -2062,7 +2062,8 @@ static void ath_tx_txqaddbuf(struct ath_softc *sc, struct ath_txq *txq,
 	ath_dbg(common, QUEUE, "qnum: %d, txq depth: %d\n",
 		txq->axq_qnum, txq->axq_depth);
 
-	if (edma && list_empty(&txq->txq_fifo[txq->txq_headidx])) {
+	if (edma && list_empty(&txq->txq_fifo[txq->txq_headidx]) &&
+	    !ath9k_hw_numtxpending(ah, txq->axq_qnum)) {
 		list_splice_tail_init(head, &txq->txq_fifo[txq->txq_headidx]);
 		INCR(txq->txq_headidx, ATH_TXFIFO_DEPTH);
 		puttxbuf = true;
