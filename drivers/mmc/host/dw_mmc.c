@@ -594,7 +594,7 @@ static inline int dw_mci_prepare_desc(struct dw_mci *host, struct mmc_data *data
 
 		u64 mem_addr = sg_dma_address(&data->sg[i]);
 
-		for ( ; length ; desc++) {
+		while (length > 0) {
 			desc_len = (length <= DW_MCI_DESC_DATA_LENGTH) ?
 				   length : DW_MCI_DESC_DATA_LENGTH;
 
@@ -640,10 +640,13 @@ static inline int dw_mci_prepare_desc(struct dw_mci *host, struct mmc_data *data
 			mem_addr += desc_len;
 
 			/* Save pointer to the last descriptor */
-			if (is_64bit)
+			if (is_64bit) {
 				desc64_last = desc64;
-			else
+				desc64++;
+			} else {
 				desc_last = desc;
+				desc++;
+			}
 		}
 	}
 
