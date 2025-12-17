@@ -205,6 +205,30 @@ Architecture (MCA)\ [#f3]_.
 .. [#f3] For more details about the Machine Check Architecture (MCA),
   please read Documentation/arch/x86/x86_64/machinecheck.rst at the Kernel tree.
 
+Firmware-first CPER status providers
+------------------------------------
+
+Some systems expose Common Platform Error Record (CPER) data via firmware
+interfaces instead of relying on CPU machine-check banks. The kernel routes
+those records through the shared *estatus* core:
+
+* ``CONFIG_RAS_ESTATUS_CORE`` hosts the in-kernel data movers and notifiers.
+  It is selected automatically when ACPI/APEI GHES support is enabled or when
+  the DeviceTree provider below is built.
+* ``CONFIG_RAS_ESTATUS_DT`` adds the ``drivers/ras/estatus-dt.c`` provider that
+  maps a firmware-advertised CPER status block on non-ACPI platforms. The
+  DeviceTree binding is documented in
+  ``Documentation/devicetree/bindings/ras/arm,ras-ffh.yaml`` and describes the
+  status-buffer region and the notification signal (interrupt or polling) that
+  firmware uses to advertise new records.
+
+Once a platform describes a firmware-first provider, both ACPI GHES and the
+DeviceTree driver reuse the same code paths: CPER sections are iterated with
+``estatus_for_each_section()``, logged through ``cper_estatus_print()``, and
+handed to the RAS notifier chains that trigger memory-offline, PCIe AER, or
+vendor-specific handlers. This keeps the behaviour consistent regardless of
+whether the error source is described via ACPI tables or DeviceTree.
+
 EDAC - Error Detection And Correction
 *************************************
 
