@@ -104,7 +104,8 @@ static struct sk_buff *tcp4_gso_segment(struct sk_buff *skb,
 	if (!pskb_may_pull(skb, sizeof(struct tcphdr)))
 		return ERR_PTR(-EINVAL);
 
-	if (skb_shinfo(skb)->gso_type & SKB_GSO_FRAGLIST) {
+	if ((skb_shinfo(skb)->gso_type & SKB_GSO_FRAGLIST) && skb_has_frag_list(skb) &&
+	    (skb->protocol == skb_shinfo(skb)->frag_list->protocol)) {
 		struct tcphdr *th = tcp_hdr(skb);
 
 		if (skb_pagelen(skb) - th->doff * 4 == skb_shinfo(skb)->gso_size)
