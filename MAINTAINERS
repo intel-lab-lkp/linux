@@ -21760,6 +21760,7 @@ F:	drivers/rapidio/
 RAS ERROR STATUS
 M:	Ahmed Tiba <ahmed.tiba@arm.com>
 S:	Maintained
+F:	drivers/firmware/efi/estatus.c
 F:	include/linux/estatus.h
 
 RAS INFRASTRUCTURE
