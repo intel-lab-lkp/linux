@@ -32,6 +32,7 @@
 
 void estatus_pool_region_free(unsigned long addr, u32 size);
 
+/* Emit a printk at the exact level encoded in the HW_ERR tag we build. */
 static void estatus_log_hw_error(char level, const char *seq_tag,
 				 const char *name)
 {
@@ -704,7 +705,7 @@ static bool estatus_handle_arm_hw_error(estatus_generic_data *gdata, int sev, bo
  * ESTATUS_SEV_PANIC does not make it to this handling since the kernel must
  *     panic.
  */
-static void estatus_handle_aer(estatus_generic_data *gdata)
+static void estatus_handle_aer(struct acpi_hest_generic_data *gdata)
 {
 #ifdef CONFIG_ACPI_APEI_PCIEAER
 	struct cper_sec_pcie *pcie_err = estatus_get_payload(gdata);
@@ -759,7 +760,7 @@ EXPORT_SYMBOL_GPL(estatus_unregister_vendor_record_notifier);
 static void estatus_vendor_record_work_func(struct work_struct *work)
 {
 	struct estatus_vendor_record_entry *entry;
-	estatus_generic_data *gdata;
+	struct acpi_hest_generic_data *gdata;
 	u32 len;
 
 	entry = container_of(work, struct estatus_vendor_record_entry, work);
@@ -774,7 +775,7 @@ static void estatus_vendor_record_work_func(struct work_struct *work)
 
 static void estatus_defer_non_standard_event(estatus_generic_data *gdata, int sev)
 {
-	estatus_generic_data *copied_gdata;
+	struct acpi_hest_generic_data *copied_gdata;
 	struct estatus_vendor_record_entry *entry;
 	u32 len;
 
@@ -806,7 +807,7 @@ static inline bool estatus_is_sync_notify(struct estatus_source *source)
 static void estatus_do_proc(struct estatus_source *source, const estatus_generic_status *estatus)
 {
 	int sev, sec_sev;
-	estatus_generic_data *gdata;
+	struct acpi_hest_generic_data *gdata;
 	guid_t *sec_type;
 	const guid_t *fru_id = &guid_null;
 	char *fru_text = "";
@@ -871,7 +872,7 @@ static void __estatus_panic(struct estatus_source *source, estatus_generic_statu
 
 int estatus_proc(struct estatus_source *source)
 {
-	estatus_generic_status *estatus = source->estatus;
+	struct acpi_hest_generic_status *estatus = source->estatus;
 	phys_addr_t buf_paddr;
 	enum fixed_addresses fixmap_idx = estatus_source_fixmap(source);
 	int rc;
@@ -913,7 +914,7 @@ void estatus_proc_in_irq(struct irq_work *irq_work)
 {
 	struct llist_node *llnode, *next;
 	struct estatus_node *estatus_node;
-	struct estatus_source *source;
+	struct acpi_hest_generic_status *source;
 	estatus_generic_status *estatus;
 	u32 len, node_len;
 
@@ -927,7 +928,7 @@ void estatus_proc_in_irq(struct irq_work *irq_work)
 		next = llnode->next;
 		estatus_node = llist_entry(llnode, struct estatus_node,
 					   llnode);
-		source = estatus_node->source;
+		struct estatus_source *source = estatus_node->source;
 		estatus = ESTATUS_FROM_NODE(estatus_node);
 		len = estatus_len(estatus);
 		node_len = ESTATUS_NODE_LEN(len);
@@ -949,7 +950,7 @@ static void estatus_print_queued_estatus(void)
 	struct llist_node *llnode;
 	struct estatus_node *estatus_node;
 	struct estatus_source *source;
-	estatus_generic_status *estatus;
+	struct acpi_hest_generic_status *estatus;
 
 	llnode = llist_del_all(&estatus_llist);
 	/*
@@ -976,7 +977,7 @@ void estatus_report_mem_error(int sev, struct cper_sec_mem_err *mem_err)
 
 int estatus_in_nmi_queue_one_entry(struct estatus_source *source, enum fixed_addresses fixmap_idx)
 {
-	estatus_generic_status *estatus, tmp_header;
+	struct acpi_hest_generic_status *estatus, tmp_header;
 	struct estatus_node *estatus_node;
 	u32 len, node_len;
 	phys_addr_t buf_paddr;
