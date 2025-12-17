@@ -9,6 +9,7 @@
 #include <linux/firmware/xlnx-zynqmp.h>
 #include <linux/kernel.h>
 #include <linux/mailbox_client.h>
+#include <linux/mailbox_controller.h>
 #include <linux/mailbox/zynqmp-ipi-message.h>
 #include <linux/module.h>
 #include <linux/of_address.h>
@@ -74,7 +75,8 @@ struct zynqmp_sram_bank {
  * @tx_mc_buf: to copy data to mailbox tx channel
  * @r5_core: this mailbox's corresponding r5_core pointer
  * @mbox_work: schedule work after receiving data from mailbox
- * @mbox_cl: mailbox client
+ * @mbox_tx_cl: tx channel mailbox client
+ * @mbox_rx_cl: rx channel mailbox client
  * @tx_chan: mailbox tx channel
  * @rx_chan: mailbox rx channel
  */
@@ -83,7 +85,8 @@ struct mbox_info {
 	unsigned char tx_mc_buf[MBOX_CLIENT_BUF_MAX];
 	struct zynqmp_r5_core *r5_core;
 	struct work_struct mbox_work;
-	struct mbox_client mbox_cl;
+	struct mbox_client mbox_tx_cl;
+	struct mbox_client mbox_rx_cl;
 	struct mbox_chan *tx_chan;
 	struct mbox_chan *rx_chan;
 };
@@ -230,7 +233,7 @@ static void zynqmp_r5_mb_rx_cb(struct mbox_client *cl, void *msg)
 	struct mbox_info *ipi;
 	size_t len;
 
-	ipi = container_of(cl, struct mbox_info, mbox_cl);
+	ipi = container_of(cl, struct mbox_info, mbox_rx_cl);
 
 	/* copy data from ipi buffer to r5_core */
 	ipi_msg = (struct zynqmp_ipi_message *)msg;
@@ -269,8 +272,8 @@ static struct mbox_info *zynqmp_r5_setup_mbox(struct device *cdev)
 	if (!ipi)
 		return NULL;
 
-	mbox_cl = &ipi->mbox_cl;
-	mbox_cl->rx_callback = zynqmp_r5_mb_rx_cb;
+	mbox_cl = &ipi->mbox_tx_cl;
+	mbox_cl->rx_callback = NULL;
 	mbox_cl->tx_block = false;
 	mbox_cl->knows_txdone = false;
 	mbox_cl->tx_done = NULL;
@@ -284,6 +287,13 @@ static struct mbox_info *zynqmp_r5_setup_mbox(struct device *cdev)
 		dev_warn(cdev, "mbox tx channel request failed\n");
 		return NULL;
 	}
+
+	mbox_cl = &ipi->mbox_rx_cl;
+	mbox_cl->rx_callback = zynqmp_r5_mb_rx_cb;
+	mbox_cl->tx_block = false;
+	mbox_cl->knows_txdone = false;
+	mbox_cl->tx_done = NULL;
+	mbox_cl->dev = cdev;
 
 	ipi->rx_chan = mbox_request_channel_byname(mbox_cl, "rx");
 	if (IS_ERR(ipi->rx_chan)) {
@@ -333,6 +343,10 @@ static void zynqmp_r5_rproc_kick(struct rproc *rproc, int vqid)
 
 	ipi = r5_core->ipi;
 	if (!ipi)
+		return;
+
+	/* Do not need new kick as already many kicks are pending. */
+	if (ipi->tx_chan->cl->msg_slot_ro == 0)
 		return;
 
 	mb_msg = (struct zynqmp_ipi_message *)ipi->tx_mc_buf;
