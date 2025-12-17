@@ -557,9 +557,6 @@ static irqreturn_t ads1018_trigger_handler(int irq, void *p)
 	} scan = {};
 	int ret;
 
-	if (iio_device_claim_buffer_mode(indio_dev))
-		goto out_notify_done;
-
 	if (iio_trigger_using_own(indio_dev)) {
 		disable_irq(ads1018->drdy_irq);
 		ret = ads1018_spi_read_exclusive(ads1018, &scan.conv, true);
@@ -568,14 +565,11 @@ static irqreturn_t ads1018_trigger_handler(int irq, void *p)
 		ret = spi_read(ads1018->spi, ads1018->rx_buf, sizeof(ads1018->rx_buf));
 		scan.conv = ads1018->rx_buf[0];
 	}
-	if (ret)
-		goto out_release_buffer;
 
-	iio_push_to_buffers_with_ts(indio_dev, &scan, sizeof(scan), pf->timestamp);
+	if (!ret)
+		iio_push_to_buffers_with_ts(indio_dev, &scan, sizeof(scan),
+					    pf->timestamp);
 
-out_release_buffer:
-	iio_device_release_buffer_mode(indio_dev);
-out_notify_done:
 	iio_trigger_notify_done(indio_dev->trig);
 
 	return IRQ_HANDLED;
