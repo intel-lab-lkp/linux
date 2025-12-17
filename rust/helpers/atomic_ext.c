@@ -2,6 +2,7 @@
 
 #include <asm/barrier.h>
 #include <asm/rwonce.h>
+#include <linux/atomic.h>
 
 __rust_helper s8 rust_helper_atomic_i8_load(s8 *ptr)
 {
@@ -41,4 +42,14 @@ __rust_helper void rust_helper_atomic_i16_store(s16 *ptr, s16 val)
 __rust_helper void rust_helper_atomic_i16_store_release(s16 *ptr, s16 val)
 {
 	smp_store_release(ptr, val);
+}
+
+__rust_helper s8 rust_helper_atomic_i8_xchg(s8 *ptr, s8 new)
+{
+	return raw_xchg(ptr, new);
+}
+
+__rust_helper s16 rust_helper_atomic_i16_xchg(s16 *ptr, s16 new)
+{
+	return raw_xchg(ptr, new);
 }
