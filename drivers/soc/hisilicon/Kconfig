@@ -21,4 +21,14 @@ config KUNPENG_HCCS
 	  health status and port information of HCCS, or reducing system
 	  power consumption on Kunpeng SoC.
 
+config HISI_SOC_L3C
+	bool "HiSilicon L3 Cache device driver"
+	depends on ARM64 && ACPI || COMPILE_TEST
+	help
+	  This driver provides the functions to lock L3 cache entries from
+	  being evicted for better performance.
+
+	  This driver can be built as a module. If so, the module will be
+	  called hisi_soc_l3c.
+
 endmenu
