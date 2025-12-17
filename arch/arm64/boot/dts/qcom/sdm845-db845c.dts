@@ -877,28 +877,12 @@
 			drive-strength = <16>;
 			bias-disable;
 		};
-
-		mclk0-pins {
-			pins = "gpio13";
-			function = "cam_mclk";
-
-			drive-strength = <16>;
-			bias-disable;
-		};
 	};
 
 	cam3_default: cam3-default-state {
 		rst-pins {
 			function = "gpio";
 			pins = "gpio21";
-
-			drive-strength = <16>;
-			bias-disable;
-		};
-
-		mclk3-pins {
-			function = "cam_mclk";
-			pins = "gpio16";
 
 			drive-strength = <16>;
 			bias-disable;
