@@ -3002,4 +3002,11 @@ enum skl_power_gate {
 					      DEIER, \
 					      DEIIR)
 
+#define FW_BLC		_MMIO(0x20d8)
+#define FW_BLC2		_MMIO(0x20dc)
+#define FW_BLC_SELF	_MMIO(0x20e0) /* 915+ only */
+#define   FW_BLC_SELF_EN_MASK      REG_BIT(31)
+#define   FW_BLC_SELF_FIFO_MASK    REG_BIT(16) /* 945 only */
+#define   FW_BLC_SELF_EN           REG_BIT(15) /* 945 only */
+
 #endif /* __INTEL_DISPLAY_REGS_H__ */
