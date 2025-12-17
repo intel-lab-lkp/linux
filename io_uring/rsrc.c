@@ -1058,6 +1058,14 @@ static int io_import_kbuf(int ddir, struct iov_iter *iter,
 
 	if (count < imu->len) {
 		const struct bio_vec *bvec = iter->bvec;
+		size_t first_seg_len = bvec->bv_len - iter->iov_offset;
+
+		if (len <= first_seg_len) {
+			iter->nr_segs = 1;
+			return 0;
+		}
+		len -= first_seg_len;
+		bvec++;
 
 		while (len > bvec->bv_len) {
 			len -= bvec->bv_len;
