@@ -21,6 +21,20 @@
 #define PICO	1000000000000ULL
 #define FEMTO	1000000000000000ULL
 
+/*
+ * Percentage and basis point units
+ *
+ * Basis points are 1/100th of a percent (1/100), commonly used in finance,
+ * engineering or other applications that require precise percentage
+ * calculations.
+ *
+ * Examples:
+ *   100% = 10000 basis points = BASIS_POINTS
+ *   1%   = 100 basis points   = PERCENT
+ */
+#define PERCENT		100UL
+#define BASIS_POINTS	10000UL
+
 #define NANOHZ_PER_HZ		1000000000UL
 #define MICROHZ_PER_HZ		1000000UL
 #define MILLIHZ_PER_HZ		1000UL
