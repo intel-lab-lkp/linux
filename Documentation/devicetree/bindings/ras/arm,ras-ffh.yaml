@@ -1,0 +1,95 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/ras/arm,ras-ffh.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Arm Firmware-First Handler (FFH) CPER provider
+
+maintainers:
+  - Ahmed Tiba <ahmed.tiba@arm.com>
+
+description: |
+  Some Arm platforms describe a firmware-first error handler that exposes a
+  Common Platform Error Record (CPER) buffer directly via DeviceTree. The OS
+  maps the buffer to consume the error records, and firmware signals that a new
+  record is ready either by asserting an interrupt or by relying on a periodic
+  poll. This binding describes the buffer and the associated notification
+  signal. If firmware delivers the error via Synchronous External Abort (SEA),
+  the optional sea-notify flag marks the source accordingly.
+
+properties:
+  compatible:
+    const: arm,ras-ffh
+
+  reg:
+    minItems: 1
+    items:
+      - description: CPER status block exposed by firmware
+      - description:
+          Optional 32- or 64-bit acknowledgment register. Firmware watches this
+          register and expects bit 0 to be written to 1 once the OS consumes the
+          status buffer so it can reuse the record.
+
+  reg-names:
+    items:
+      - const: status
+      - const: ack
+
+  interrupts:
+    maxItems: 1
+    description:
+      Optional interrupt used to signal that a new status record is ready. If
+      omitted, the OS relies on the polling interval property.
+
+  poll-interval:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 1
+    description:
+      Optional polling interval, in milliseconds, for platforms that cannot
+      route an interrupt.
+
+  arm,sea-notify:
+    type: boolean
+    description:
+      Set if the platform delivers these errors as Synchronous External Aborts.
+
+required:
+  - compatible
+  - reg
+
+allOf:
+  - if:
+      properties:
+        poll-interval: false
+    then:
+      required:
+        - interrupts
+  - if:
+      properties:
+        interrupts: false
+    then:
+      required:
+        - poll-interval
+  - if:
+      properties:
+        reg:
+          minItems: 2
+    then:
+      required:
+        - reg-names
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    ras-ffh@fe800000 {
+        compatible = "arm,ras-ffh";
+        reg = <0xfe800000 0x1000>,
+              <0xfe810000 0x4>;
+        reg-names = "status", "ack";
+        interrupts = <0 32 IRQ_TYPE_LEVEL_HIGH>;
+    };
+...
