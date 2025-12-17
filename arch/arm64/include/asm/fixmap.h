@@ -64,6 +64,11 @@ enum fixed_addresses {
 #endif
 #endif /* CONFIG_ACPI_APEI_GHES */
 
+#ifdef CONFIG_RAS_ESTATUS_DT
+	/* Used for ESTATUS mapping from assorted contexts */
+	FIX_ESTATUS_IRQ,
+#endif /* CONFIG_RAS_ESTATUS_DT */
+
 #ifdef CONFIG_UNMAP_KERNEL_AT_EL0
 #ifdef CONFIG_RELOCATABLE
 	FIX_ENTRY_TRAMP_TEXT4,	/* one extra slot for the data page */

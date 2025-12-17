@@ -227,7 +227,8 @@ estatus_section_iter_next(struct estatus_section_iter *iter,
 
 #define estatus_for_each_section(_estatus, _section)				\
 	for (struct estatus_section_iter __estatus_iter = {0};		\
-	     ((_section) = estatus_section_iter_next(&__estatus_iter, (_estatus))); \
+	     ((_section) = estatus_section_iter_next(&__estatus_iter,		\
+				    (estatus_generic_status *)(_estatus)));	\
 	     )
 
 static inline int acpi_hest_get_version(struct acpi_hest_generic_data *gdata)

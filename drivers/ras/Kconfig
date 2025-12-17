@@ -34,6 +34,20 @@ if RAS
 source "arch/x86/ras/Kconfig"
 source "drivers/ras/amd/atl/Kconfig"
 
+config RAS_ESTATUS_DT
+	tristate "DeviceTree estatus provider"
+	depends on ARM64
+	depends on OF && HAS_IOMEM
+	select UEFI_CPER
+	select RAS_ESTATUS_CORE
+	help
+	  Enable support for firmware-first CPER providers that are described
+	  via DeviceTree.  The driver maps the firmware-provided CPER buffer
+	  and consumes records when firmware signals that new data is ready,
+	  either with an interrupt or via polling.  Select this when running on
+	  platforms that expose firmware-first error records without
+	  ACPI/APEI GHES.
+
 config RAS_FMPM
 	tristate "FRU Memory Poison Manager"
 	default m
