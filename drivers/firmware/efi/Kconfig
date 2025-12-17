@@ -329,6 +329,17 @@ config UEFI_CPER_X86
 	depends on UEFI_CPER && X86
 	default y
 
+config RAS_ESTATUS_CORE
+	bool "Firmware-first estatus processing core"
+	depends on UEFI_CPER
+	select GENERIC_ALLOCATOR
+	help
+	  Provide the shared Common Platform Error Record (CPER) handling core
+	  that firmware-first error sources reuse to read, cache, log, and
+	  dispatch Generic Hardware Error Status Blocks. This gets selected
+	  automatically by providers such as ACPI APEI GHES or the DeviceTree
+	  estatus driver.
+
 config TEE_STMM_EFI
 	tristate "TEE-based EFI runtime variable service driver"
 	depends on EFI && OPTEE
