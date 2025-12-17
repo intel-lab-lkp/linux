@@ -903,23 +903,20 @@ static int exynos5_i2c_probe(struct platform_device *pdev)
 	i2c->adap.retries = 3;
 
 	i2c->dev = &pdev->dev;
-	i2c->clk = devm_clk_get(&pdev->dev, "hsi2c");
-	if (IS_ERR(i2c->clk)) {
-		dev_err(&pdev->dev, "cannot get clock\n");
-		return -ENOENT;
-	}
+	i2c->clk = devm_clk_get_prepared(&pdev->dev, "hsi2c");
+	if (IS_ERR(i2c->clk))
+		return dev_err_probe(&pdev->dev, PTR_ERR(i2c->clk), "cannot get clock\n");
 
-	i2c->pclk = devm_clk_get_optional(&pdev->dev, "hsi2c_pclk");
-	if (IS_ERR(i2c->pclk)) {
+	i2c->pclk = devm_clk_get_optional_prepared(&pdev->dev, "hsi2c_pclk");
+	if (IS_ERR(i2c->pclk))
 		return dev_err_probe(&pdev->dev, PTR_ERR(i2c->pclk),
 				     "cannot get pclk");
-	}
 
-	ret = clk_prepare_enable(i2c->pclk);
+	ret = clk_enable(i2c->pclk);
 	if (ret)
 		return ret;
 
-	ret = clk_prepare_enable(i2c->clk);
+	ret = clk_enable(i2c->clk);
 	if (ret)
 		goto err_pclk;
 
@@ -958,33 +955,16 @@ static int exynos5_i2c_probe(struct platform_device *pdev)
 
 	exynos5_i2c_reset(i2c);
 
-	ret = i2c_add_adapter(&i2c->adap);
-	if (ret < 0)
-		goto err_clk;
+	ret = devm_i2c_add_adapter(&pdev->dev, &i2c->adap);
 
 	platform_set_drvdata(pdev, i2c);
 
-	clk_disable(i2c->clk);
-	clk_disable(i2c->pclk);
-
-	return 0;
-
  err_clk:
-	clk_disable_unprepare(i2c->clk);
+	clk_disable(i2c->clk);
 
  err_pclk:
-	clk_disable_unprepare(i2c->pclk);
+	clk_disable(i2c->pclk);
 	return ret;
-}
-
-static void exynos5_i2c_remove(struct platform_device *pdev)
-{
-	struct exynos5_i2c *i2c = platform_get_drvdata(pdev);
-
-	i2c_del_adapter(&i2c->adap);
-
-	clk_unprepare(i2c->clk);
-	clk_unprepare(i2c->pclk);
 }
 
 static int exynos5_i2c_suspend_noirq(struct device *dev)
@@ -1036,7 +1016,6 @@ static const struct dev_pm_ops exynos5_i2c_dev_pm_ops = {
 
 static struct platform_driver exynos5_i2c_driver = {
 	.probe		= exynos5_i2c_probe,
-	.remove		= exynos5_i2c_remove,
 	.driver		= {
 		.name	= "exynos5-hsi2c",
 		.pm	= pm_sleep_ptr(&exynos5_i2c_dev_pm_ops),
