@@ -774,6 +774,7 @@ static void drop_links(struct nameidata *nd)
 		do_delayed_call(&last->done);
 		clear_delayed_call(&last->done);
 	}
+	nd->depth = 0;
 }
 
 static void leave_rcu(struct nameidata *nd)
@@ -785,12 +786,13 @@ static void leave_rcu(struct nameidata *nd)
 
 static void terminate_walk(struct nameidata *nd)
 {
-	if (unlikely(nd->depth))
+	int depth = nd->depth;
+	if (unlikely(depth))
 		drop_links(nd);
 	if (!(nd->flags & LOOKUP_RCU)) {
 		int i;
 		path_put(&nd->path);
-		for (i = 0; i < nd->depth; i++)
+		for (i = 0; i < depth; i++)
 			path_put(&nd->stack[i].link);
 		if (nd->state & ND_ROOT_GRABBED) {
 			path_put(&nd->root);
@@ -799,7 +801,7 @@ static void terminate_walk(struct nameidata *nd)
 	} else {
 		leave_rcu(nd);
 	}
-	nd->depth = 0;
+	VFS_BUG_ON(nd->depth);
 	nd->path.mnt = NULL;
 	nd->path.dentry = NULL;
 }
@@ -830,11 +832,9 @@ static inline bool legitimize_path(struct nameidata *nd,
 static bool legitimize_links(struct nameidata *nd)
 {
 	int i;
-	if (unlikely(nd->flags & LOOKUP_CACHED)) {
-		drop_links(nd);
-		nd->depth = 0;
-		return false;
-	}
+
+	VFS_BUG_ON(nd->flags & LOOKUP_CACHED);
+
 	for (i = 0; i < nd->depth; i++) {
 		struct saved *last = nd->stack + i;
 		if (unlikely(!legitimize_path(nd, &last->link, last->seq))) {
@@ -883,6 +883,10 @@ static bool try_to_unlazy(struct nameidata *nd)
 
 	BUG_ON(!(nd->flags & LOOKUP_RCU));
 
+	if (unlikely(nd->flags & LOOKUP_CACHED)) {
+		drop_links(nd);
+		goto out1;
+	}
 	if (unlikely(nd->depth && !legitimize_links(nd)))
 		goto out1;
 	if (unlikely(!legitimize_path(nd, &nd->path, nd->seq)))
@@ -918,6 +922,10 @@ static bool try_to_unlazy_next(struct nameidata *nd, struct dentry *dentry)
 	int res;
 	BUG_ON(!(nd->flags & LOOKUP_RCU));
 
+	if (unlikely(nd->flags & LOOKUP_CACHED)) {
+		drop_links(nd);
+		goto out2;
+	}
 	if (unlikely(nd->depth && !legitimize_links(nd)))
 		goto out2;
 	res = __legitimize_mnt(nd->path.mnt, nd->m_seq);
