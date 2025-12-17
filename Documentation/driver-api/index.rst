@@ -95,6 +95,7 @@ Subsystem-specific APIs
    generic-counter
    generic_pt
    gpio/index
+   hisi-soc-cache
    hsi
    hte/index
    hw-recoverable-errors

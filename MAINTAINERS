@@ -11369,6 +11369,7 @@ F:	drivers/soc/hisilicon/kunpeng_hccs.h
 HISILICON SOC L3C DRIVER
 M:	Yushan Wang <wangyushan12@huawei.com>
 S:	Maintained
+F:	Documentation/driver-api/hisi-soc-cache.rst
 F:	drivers/soc/hisilicon/hisi_soc_l3c.c
 F:	include/uapi/misc/hisi_l3c.h
 
