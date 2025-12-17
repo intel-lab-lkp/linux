@@ -914,10 +914,8 @@ static void blk_complete_request(struct request *req)
 	 * can find how many bytes remain in the request
 	 * later.
 	 */
-	if (!req->end_io) {
-		req->bio = NULL;
-		req->__data_len = 0;
-	}
+	req->bio = NULL;
+	req->__data_len = 0;
 }
 
 /**
