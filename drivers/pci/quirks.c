@@ -4454,6 +4454,20 @@ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_BROADCOM, 0x9084,
 				quirk_bridge_cavm_thrx2_pcie_root);
 
 /*
+ * ASPEED AST1150 is a PCIe-to-PCI bridge that operates in PCI mode (not PCI-X).
+ * Although it reports as a PCIe-to-PCI bridge, the downstream PCI bus does not
+ * perform conventional Requester ID aliasing - each device behind the bridge
+ * generates its own distinct Requester ID. This quirk stops false alias
+ * detection at the bridge, fixing IOMMU StreamID conflicts that break DMA for
+ * devices like the USB controller behind this bridge.
+ */
+static void quirk_aspeed_ast1150_bridge(struct pci_dev *pdev)
+{
+	pdev->dev_flags |= PCI_DEV_FLAGS_BRIDGE_XLATE_ROOT;
+}
+DECLARE_PCI_FIXUP_HEADER(0x1a03, 0x1150, quirk_aspeed_ast1150_bridge);
+
+/*
  * Intersil/Techwell TW686[4589]-based video capture cards have an empty (zero)
  * class code.  Fix it.
  */
