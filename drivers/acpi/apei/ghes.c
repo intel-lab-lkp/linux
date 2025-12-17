@@ -53,6 +53,7 @@
 #include <asm/tlbflush.h>
 #include <cxl/event.h>
 #include <ras/ras_event.h>
+#include <linux/estatus.h>
 
 #include "apei-internal.h"
 
@@ -250,6 +251,8 @@ static void unmap_gen_v2(struct ghes *ghes)
 	apei_unmap_generic_address(&ghes->generic_v2->read_ack_register);
 }
 
+static const struct estatus_ops ghes_estatus_ops;
+
 static void ghes_ack_error(struct acpi_hest_generic_v2 *gv2)
 {
 	int rc;
@@ -276,6 +279,8 @@ static struct ghes *ghes_new(struct acpi_hest_generic *generic)
 		return ERR_PTR(-ENOMEM);
 
 	ghes->generic = generic;
+	scnprintf(ghes->name, sizeof(ghes->name), "GHES source %d",
+		  generic->header.source_id);
 	if (is_hest_type_generic_v2(ghes)) {
 		rc = map_gen_v2(ghes);
 		if (rc)
@@ -298,6 +303,12 @@ static struct ghes *ghes_new(struct acpi_hest_generic *generic)
 		rc = -ENOMEM;
 		goto err_unmap_status_addr;
 	}
+
+	ghes->estatus_src.ops = &ghes_estatus_ops;
+	ghes->estatus_src.priv = ghes;
+	ghes->estatus_src.estatus = ghes->estatus;
+	ghes->estatus_src.fixmap_idx = FIX_APEI_GHES_IRQ;
+	INIT_LIST_HEAD(&ghes->elist);
 
 	return ghes;
 
@@ -1844,3 +1855,149 @@ void ghes_unregister_report_chain(struct notifier_block *nb)
 	atomic_notifier_chain_unregister(&ghes_report_chain, nb);
 }
 EXPORT_SYMBOL_GPL(ghes_unregister_report_chain);
+
+#define GHES_ESTATUS_RW_FROM_PHYS	1
+#define GHES_ESTATUS_RW_TO_PHYS		0
+
+static void __iomem *ghes_estatus_map(struct ghes *ghes, u64 pfn,
+				      enum fixed_addresses fixmap_idx)
+{
+	phys_addr_t paddr = PFN_PHYS(pfn);
+	pgprot_t prot = arch_apei_get_mem_attribute(paddr);
+
+	__set_fixmap(fixmap_idx, paddr, prot);
+
+	return (void __iomem *)__fix_to_virt(fixmap_idx);
+}
+
+static void ghes_estatus_unmap(void __iomem *vaddr,
+			       enum fixed_addresses fixmap_idx)
+{
+	int _idx = virt_to_fix((unsigned long)vaddr);
+
+	WARN_ON_ONCE(fixmap_idx != _idx);
+	clear_fixmap(fixmap_idx);
+}
+
+static void ghes_estatus_copy_buffer(struct ghes *ghes, void *buffer,
+				     phys_addr_t paddr, size_t len,
+				     int from_phys,
+				     enum fixed_addresses fixmap_idx)
+{
+	void __iomem *vaddr;
+	u64 offset;
+	u32 chunk;
+
+	while (len > 0) {
+		offset = paddr - (paddr & PAGE_MASK);
+		vaddr = ghes_estatus_map(ghes, PHYS_PFN(paddr), fixmap_idx);
+		chunk = PAGE_SIZE - offset;
+		chunk = min_t(u32, chunk, len);
+		if (from_phys == GHES_ESTATUS_RW_FROM_PHYS)
+			memcpy_fromio(buffer, vaddr + offset, chunk);
+		else
+			memcpy_toio(vaddr + offset, buffer, chunk);
+
+		len -= chunk;
+		paddr += chunk;
+		buffer += chunk;
+		ghes_estatus_unmap(vaddr, fixmap_idx);
+	}
+}
+
+static int ghes_estatus_get_phys(struct estatus_source *source,
+				 phys_addr_t *addr)
+{
+	struct ghes *ghes = source->priv;
+	u64 value = 0;
+	int rc;
+
+	rc = apei_read(&value, &ghes->generic->error_status_address);
+	if (rc)
+		return rc;
+
+	*addr = value;
+	return 0;
+}
+
+static int ghes_estatus_read(struct estatus_source *source, phys_addr_t addr,
+			     void *buf, size_t len,
+			     enum fixed_addresses fixmap_idx)
+{
+	struct ghes *ghes = source->priv;
+
+	ghes_estatus_copy_buffer(ghes, buf, addr, len,
+				 GHES_ESTATUS_RW_FROM_PHYS, fixmap_idx);
+	return 0;
+}
+
+static int ghes_estatus_write(struct estatus_source *source, phys_addr_t addr,
+			      const void *buf, size_t len,
+			      enum fixed_addresses fixmap_idx)
+{
+	struct ghes *ghes = source->priv;
+
+	ghes_estatus_copy_buffer(ghes, (void *)buf, addr, len,
+				 GHES_ESTATUS_RW_TO_PHYS, fixmap_idx);
+	return 0;
+}
+
+static void ghes_estatus_ack(struct estatus_source *source)
+{
+	struct ghes *ghes = source->priv;
+	struct acpi_hest_generic_v2 *gv2;
+	u64 val = 0;
+	int rc;
+
+	if (ghes->generic->header.type != ACPI_HEST_TYPE_GENERIC_ERROR_V2)
+		return;
+
+	gv2 = ghes->generic_v2;
+	rc = apei_read(&val, &gv2->read_ack_register);
+	if (rc)
+		return;
+
+	val &= gv2->read_ack_preserve << gv2->read_ack_register.bit_offset;
+	val |= gv2->read_ack_write << gv2->read_ack_register.bit_offset;
+
+	apei_write(val, &gv2->read_ack_register);
+}
+
+static size_t ghes_estatus_get_max_len(struct estatus_source *source)
+{
+	struct ghes *ghes = source->priv;
+
+	return ghes->generic->error_block_length;
+}
+
+static enum estatus_notify_mode
+ghes_estatus_get_notify_mode(struct estatus_source *source)
+{
+	struct ghes *ghes = source->priv;
+	u8 notify_type = ghes->generic->notify.type;
+
+	if (notify_type == ACPI_HEST_NOTIFY_SEA)
+		return ESTATUS_NOTIFY_SEA;
+
+	return ESTATUS_NOTIFY_ASYNC;
+}
+
+static const char *ghes_estatus_get_name(struct estatus_source *source)
+{
+	struct ghes *ghes = source->priv;
+
+	if (ghes->dev)
+		return dev_name(ghes->dev);
+
+	return ghes->name;
+}
+
+static const struct estatus_ops ghes_estatus_ops = {
+	.get_phys	= ghes_estatus_get_phys,
+	.read		= ghes_estatus_read,
+	.write		= ghes_estatus_write,
+	.ack		= ghes_estatus_ack,
+	.get_max_len	= ghes_estatus_get_max_len,
+	.get_notify_mode = ghes_estatus_get_notify_mode,
+	.get_name	= ghes_estatus_get_name,
+};
