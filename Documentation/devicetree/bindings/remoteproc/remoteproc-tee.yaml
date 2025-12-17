@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/remoteproc/remoteproc-tee.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: TEE Remote Processor Control Service (UUID 80a4c275-0a47-4905-8285-1486a9771a08)
+
+maintainers:
+  - Arnaud Pouliquen <arnaud.pouliquen@foss.st.com>
+
+description: |
+  Node describing a TEE-based remote processor control service implemented as
+  a Trusted Application identified by UUID 80a4c275-0a47-4905-8285-1486a9771a08.
+
+  It is a child of the OP-TEE firmware node ("linaro,optee-tz") and acts as a
+  container for child remoteproc devices (for example, the STM32MP15 M4 core
+  described by "st,stm32mp1-tee").
+
+properties:
+  compatible:
+    const: rproc-service-80a4c275-0a47-4905-8285-1486a9771a08
+
+  reg:
+    description: |
+      Logical identifier of the TEE remoteproc service instance.
+    maxItems: 1
+
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 0
+
+patternProperties:
+  "^[a-zA-Z0-9,._-]+@[0-9a-fA-F]+$":
+    type: object
+
+
+required:
+  - compatible
+  - reg
+  - "#address-cells"
+  - "#size-cells"
+
+additionalProperties: false
+...
