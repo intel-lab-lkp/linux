@@ -82,20 +82,6 @@
 #define   DERRMR_PIPEC_VBLANK		(1 << 21)
 #define   DERRMR_PIPEC_HBLANK		(1 << 22)
 
-#define VLV_IRQ_REGS		I915_IRQ_REGS(VLV_IMR, \
-					      VLV_IER, \
-					      VLV_IIR)
-
-#define VLV_EIR		_MMIO(VLV_DISPLAY_BASE + 0x20b0)
-#define VLV_EMR		_MMIO(VLV_DISPLAY_BASE + 0x20b4)
-#define VLV_ESR		_MMIO(VLV_DISPLAY_BASE + 0x20b8)
-#define   VLV_ERROR_GUNIT_TLB_DATA			(1 << 6)
-#define   VLV_ERROR_GUNIT_TLB_PTE			(1 << 5)
-#define   VLV_ERROR_PAGE_TABLE				(1 << 4)
-#define   VLV_ERROR_CLAIM				(1 << 0)
-
-#define VLV_ERROR_REGS		I915_ERROR_REGS(VLV_EMR, VLV_EIR)
-
 #define _MBUS_ABOX0_CTL			0x45038
 #define _MBUS_ABOX1_CTL			0x45048
 #define _MBUS_ABOX2_CTL			0x4504C
@@ -3008,5 +2994,19 @@ enum skl_power_gate {
 #define   FW_BLC_SELF_EN_MASK      REG_BIT(31)
 #define   FW_BLC_SELF_FIFO_MASK    REG_BIT(16) /* 945 only */
 #define   FW_BLC_SELF_EN           REG_BIT(15) /* 945 only */
+
+#define VLV_IRQ_REGS		I915_IRQ_REGS(VLV_IMR, \
+					      VLV_IER, \
+					      VLV_IIR)
+
+#define VLV_EIR		_MMIO(VLV_DISPLAY_BASE + 0x20b0)
+#define VLV_EMR		_MMIO(VLV_DISPLAY_BASE + 0x20b4)
+#define VLV_ESR		_MMIO(VLV_DISPLAY_BASE + 0x20b8)
+#define   VLV_ERROR_GUNIT_TLB_DATA			(1 << 6)
+#define   VLV_ERROR_GUNIT_TLB_PTE			(1 << 5)
+#define   VLV_ERROR_PAGE_TABLE				(1 << 4)
+#define   VLV_ERROR_CLAIM				(1 << 0)
+
+#define VLV_ERROR_REGS		I915_ERROR_REGS(VLV_EMR, VLV_EIR)
 
 #endif /* __INTEL_DISPLAY_REGS_H__ */
