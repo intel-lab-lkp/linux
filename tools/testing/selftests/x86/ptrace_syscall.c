@@ -51,6 +51,18 @@ extern void sys32_helper(struct syscall_args32 *, void *);
 extern void int80_and_ret(void);
 #endif
 
+static bool is_32bit_syscall_supported(void)
+{
+#ifdef __x86_64__
+	return system("((zcat /proc/config.gz | grep CONFIG_IA32_EMULATION=y) &&"
+		"((test -z $(zcat /proc/config.gz | grep CONFIG_IA32_EMULATION_DEFAULT_DISABLED=y)) || (grep ia32_emulation=true /proc/cmdline)) &&"
+		"(test -z $(grep ia32_emulation=false /proc/cmdline))) >/dev/null 2>&1"
+	) == 0;
+#else
+	return true;
+#endif
+}
+
 /*
  * Helper to invoke int80 with controlled regs and capture the final regs.
  */
@@ -389,8 +401,12 @@ static void test_restart_under_ptrace(void)
 
 int main()
 {
-	printf("[RUN]\tCheck int80 return regs\n");
-	test_sys32_regs(do_full_int80);
+	if (is_32bit_syscall_supported()) {
+		printf("[RUN]\tCheck int80 return regs\n");
+		test_sys32_regs(do_full_int80);
+	} else {
+		printf("[SKIP]\t32bit syscall support is not available\n");
+	}
 
 #if defined(__i386__) && (!defined(__GLIBC__) || __GLIBC__ > 2 || __GLIBC_MINOR__ >= 16)
 	vsyscall32 = (void *)getauxval(AT_SYSINFO);
