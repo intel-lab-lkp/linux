@@ -3,9 +3,9 @@
  * Copyright © 2024 Intel Corporation
  */
 
-#include "i915_drv.h"
-#include "i915_reg.h"
+#include <drm/intel/intel_gmd_common_regs.h>
 
+#include "i915_drv.h"
 #include "intel_rom.h"
 #include "intel_uncore.h"
 
