@@ -504,7 +504,7 @@ static int rpmsg_chrdev_probe(struct rpmsg_device *rpdev)
 
 	/*
 	 * The rpmsg_ept_cb uses *priv parameter to get its rpmsg_eptdev context.
-	 * Storedit in default_ept *priv field.
+	 * Stored it in default_ept *priv field.
 	 */
 	eptdev->default_ept->priv = eptdev;
 
