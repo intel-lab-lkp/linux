@@ -1449,6 +1449,7 @@ static bool valid_percpu_irqaction(struct irqaction *old, struct irqaction *new)
 static int
 __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 {
+	bool use_moderation = irq_moderation_get_default(new);
 	struct irqaction *old, **old_ptr;
 	unsigned long flags, thread_mask = 0;
 	int ret, nested, shared = 0;
@@ -1760,6 +1761,9 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 	*old_ptr = new;
 
 	irq_pm_install_action(desc, new);
+
+	if (use_moderation)
+		irq_moderation_enable(desc);
 
 	/* Reset broken irq detection when installing new handler */
 	desc->irq_count = 0;

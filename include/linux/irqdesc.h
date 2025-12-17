@@ -16,6 +16,7 @@ struct module;
 struct irq_desc;
 struct irq_domain;
 struct pt_regs;
+struct irqaction;
 
 #ifdef CONFIG_IRQ_SOFT_MODERATION
 
@@ -30,11 +31,15 @@ struct irq_desc_mod {
 };
 
 void irq_moderation_init_fields(struct irq_desc_mod *mod);
+bool irq_moderation_get_default(const struct irqaction *action);
+void irq_moderation_enable(struct irq_desc *desc);
 
 #else
 
 struct irq_desc_mod {};
 static inline void irq_moderation_init_fields(struct irq_desc_mod *mod) {}
+static inline bool irq_moderation_get_default(const struct irqaction *action) { return false; }
+static inline void irq_moderation_enable(struct irq_desc *desc) {}
 
 #endif
 

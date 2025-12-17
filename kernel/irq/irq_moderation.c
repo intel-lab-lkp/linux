@@ -50,6 +50,11 @@
  *   update_ms (default 5, range 1-100)
  *       How often the load is measured and moderation delay updated.
  *
+ *   enable_list (comma-separated list of handlers or interrupt names)
+ *       Enable moderation at creation for interrupts whose name or handler
+ *       functions match patterns in this list. Example:
+ *       "nvme_irq(),eth*,vfio_msihandler()"
+ *
  * Moderation can be enabled/disabled dynamically for individual interrupts with
  *
  *     echo 1 > /proc/irq/NN/soft_moderation # use 0 to disable
@@ -142,6 +147,90 @@ void irq_moderation_init_fields(struct irq_desc_mod *mod)
 	mod->enable = false;
 }
 
+/*
+ * irq_moderation.enable_list is a comma-separated list of patterns to match
+ * against the name eg "eth*" or handler e.g "nvme_irq()" of the interrupt.
+ * There is one active buffer and one used for updates, so replacement just
+ * needs to swap the pointer.
+ */
+#define MAX_CONFIG_LEN 4096
+static struct enable_list {
+	char buf[MAX_CONFIG_LEN];
+	char buf2[MAX_CONFIG_LEN];
+	char *cur;
+	uint len;
+	struct rw_semaphore rwsem;
+} patterns = { .cur = patterns.buf, .rwsem = __RWSEM_INITIALIZER(patterns.rwsem) };
+
+static int set_enable_list(const char *val, const struct kernel_param *kp)
+{
+	uint i, len = strlen(val);
+	char *dst;
+
+	if (len >= MAX_CONFIG_LEN - 1)
+		return -E2BIG;
+	if (val[len - 1] == '\n')
+		len--;
+
+	/* Serialized by procfs. */
+	dst = patterns.cur == patterns.buf ? patterns.buf2 : patterns.buf;
+	/* Copy and split the string on commas. */
+	for (i = 0; i < len; i++)
+		dst[i] = val[i] == ',' ?  '\0' : val[i];
+	dst[i] = '\0';
+	guard(rwsem_write)(&patterns.rwsem);
+	patterns.cur = dst;
+	patterns.len = len;
+	return 0;
+}
+
+static int get_enable_list(char *buf, const struct kernel_param *kp)
+{
+	int i;
+
+	/* Join the patterns with commas. */
+	guard(rwsem_read)(&patterns.rwsem);
+	for (i = 0; i < patterns.len; i++)
+		buf[i] = patterns.cur[i] == '\0' ?  ',' : patterns.cur[i];
+	buf[i] = '\0';
+	return patterns.len;
+}
+
+static const struct kernel_param_ops enable_list_ops = {
+	.set = set_enable_list,
+	.get = get_enable_list,
+};
+
+module_param_cb(enable_list, &enable_list_ops, NULL, 0444);
+
+/* Called early in __setup_irq() without desc->lock. */
+bool irq_moderation_get_default(const struct irqaction *act)
+{
+	guard(rwsem_read)(&patterns.rwsem);
+	for (int arg = 0; arg < 3; arg++) {
+		/* buf includes room for "()". */
+		char buf[KSYM_SYMBOL_LEN + 3];
+		const char *name;
+
+		if (arg == 0) {
+			name = act->name;
+			if (!name)
+				continue;
+		} else {
+			irq_handler_t fn = arg == 1 ? act->handler : act->thread_fn;
+
+			if (lookup_symbol_name((ulong)fn, buf))
+				continue;
+			memcpy(buf + strlen(buf), "()", 3);
+			name = buf;
+		}
+		for (int i = 0; i < patterns.len; i += 1 + strlen(patterns.cur + i))
+			if (glob_match(patterns.cur + i, name))
+				return true;
+	}
+	return false;
+}
+
 static int set_mode(struct irq_desc *desc, bool enable)
 {
 	lockdep_assert_held(&desc->lock);
@@ -163,6 +252,12 @@ static int set_mode(struct irq_desc *desc, bool enable)
 	return 0;
 }
 
+/* Called with desc->lock held in __setup_irq(). */
+void irq_moderation_enable(struct irq_desc *desc)
+{
+	set_mode(desc, true);
+}
+
 #pragma clang diagnostic error "-Wformat"
 /* Print statistics */
 static int moderation_show(struct seq_file *p, void *v)
@@ -171,6 +266,7 @@ static int moderation_show(struct seq_file *p, void *v)
 	uint delay_us = irq_mod_info.delay_us;
 	u64 now = ktime_get_ns();
 	int j, active_cpus = 0;
+	char *buf;
 
 #define HEAD_FMT "%5s  %8s  %8s  %4s  %8s  %11s  %11s  %11s  %11s  %11s  %9s\n"
 #define BODY_FMT "%5u  %8u  %8u  %4u  %8u  %11u  %11u  %11u  %11u  %11u  %9u\n"
@@ -210,17 +306,24 @@ static int moderation_show(struct seq_file *p, void *v)
 			   ms->stray_irq);
 	}
 
+	buf = kmalloc(MAX_CONFIG_LEN, GFP_KERNEL);
+	if (buf)
+		get_enable_list(buf, NULL);
 	seq_printf(p, "\n"
 		   "enabled              %s\n"
+		   "enable_list          '%s'\n"
 		   "delay_us             %u\n"
 		   "target_intr_rate     %u\n"
 		   "hardirq_percent      %u\n"
 		   "update_ms            %u\n"
 		   "scale_cpus           %u\n",
 		   str_yes_no(delay_us > 0),
+		   buf ? : "",
 		   delay_us,
 		   irq_mod_info.target_intr_rate, irq_mod_info.hardirq_percent,
 		   irq_mod_info.update_ms, irq_mod_info.scale_cpus);
+	if (buf)
+		kfree(buf);
 
 	seq_printf(p,
 		   "intr_rate            %lu\n"
@@ -258,6 +361,8 @@ static struct param_names param_names[] = {
 	/* Entries with no name cannot be set at runtime. */
 	{ "", &irq_mod_info.increase_factor, MIN_SCALING_FACTOR, 128 },
 	{ "", &irq_mod_info.scale_cpus, 50, 1000 },
+	/* val = NULL indicates a special entry for enable_list. */
+	{ "enable_list", NULL },
 };
 
 static void update_enable_key(void)
@@ -268,6 +373,24 @@ static void update_enable_key(void)
 		static_branch_enable(key);
 	else
 		static_branch_disable(key);
+}
+
+static ssize_t set_enable_list_from_proc(const char __user *buf, int count, int ofs)
+{
+	char *cmd;
+
+	if (count >= MAX_CONFIG_LEN)
+		return -EINVAL;
+	cmd = kmalloc(count + 1, GFP_KERNEL);
+	if (!cmd)
+		return -ENOMEM;
+	if (copy_from_user(cmd, buf, count)) {
+		kfree(cmd);
+		return -EFAULT;
+	}
+	set_enable_list(cmd + ofs, NULL);
+	kfree(cmd);
+	return count;
 }
 
 static ssize_t moderation_write(struct file *f, const char __user *buf, size_t count, loff_t *ppos)
@@ -287,6 +410,8 @@ static ssize_t moderation_write(struct file *f, const char __user *buf, size_t c
 		if (name_len < 1 || copy_len < name_len + 2 || strncmp(cmd, n->name, name_len) ||
 		    cmd[name_len] != '=')
 			continue;
+		if (n->val == NULL)
+			return set_enable_list_from_proc(buf, count, name_len + 1);
 		if (kstrtouint(cmd + name_len + 1, 0, &val))
 			return -EINVAL;
 		WRITE_ONCE(*(n->val), clamp(val, n->min, n->max));
