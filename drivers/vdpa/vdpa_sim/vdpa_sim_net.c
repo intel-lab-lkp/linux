@@ -231,32 +231,33 @@ static void vdpasim_net_work(struct vdpasim *vdpasim)
 
 		tx_bytes += read;
 
+		vdpasim_net_complete(txq, 0);
 		if (!receive_filter(vdpasim, read)) {
 			++rx_drops;
-			vdpasim_net_complete(txq, 0);
 			continue;
 		}
 
 		err = vringh_getdesc_iotlb(&rxq->vring, NULL, &rxq->in_iov,
 					   &rxq->head, GFP_ATOMIC);
-		if (err <= 0) {
+		if (err == 0) {
+			/* rx has no available ring, no need to break */
 			++rx_overruns;
-			vdpasim_net_complete(txq, 0);
-			break;
-		}
-
-		write = vringh_iov_push_iotlb(&rxq->vring, &rxq->in_iov,
-					      net->buffer, read);
-		if (write <= 0) {
+		} else if (err < 0) {
 			++rx_errors;
 			break;
+		} else {
+
+			write = vringh_iov_push_iotlb(&rxq->vring, &rxq->in_iov,
+						      net->buffer, read);
+			if (write <= 0) {
+				++rx_errors;
+				break;
+			}
+
+			++rx_pkts;
+			rx_bytes += write;
+			vdpasim_net_complete(rxq, write);
 		}
-
-		++rx_pkts;
-		rx_bytes += write;
-
-		vdpasim_net_complete(txq, 0);
-		vdpasim_net_complete(rxq, write);
 
 		if (tx_pkts > 4) {
 			vdpasim_schedule_work(vdpasim);
