@@ -4346,6 +4346,7 @@ void *vmemmap_alloc_block_buf(unsigned long size, int node,
 void vmemmap_verify(pte_t *, int, unsigned long, unsigned long);
 void vmemmap_set_pmd(pmd_t *pmd, void *p, int node,
 		     unsigned long addr, unsigned long next);
+bool vmemmap_false_pmd(pmd_t *pmd, int node);
 int vmemmap_check_pmd(pmd_t *pmd, int node,
 		      unsigned long addr, unsigned long next);
 int vmemmap_populate_basepages(unsigned long start, unsigned long end,

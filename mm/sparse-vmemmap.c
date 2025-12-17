@@ -407,6 +407,11 @@ void __weak __meminit vmemmap_set_pmd(pmd_t *pmd, void *p, int node,
 {
 }
 
+bool __weak __meminit vmemmap_false_pmd(pmd_t *pmd, int node)
+{
+	return 0;
+}
+
 int __weak __meminit vmemmap_check_pmd(pmd_t *pmd, int node,
 				       unsigned long addr, unsigned long next)
 {
@@ -446,7 +451,7 @@ int __meminit vmemmap_populate_hugepages(unsigned long start, unsigned long end,
 			if (p) {
 				vmemmap_set_pmd(pmd, p, node, addr, next);
 				continue;
-			} else if (altmap) {
+			} else if (altmap || vmemmap_false_pmd(pmd, node)) {
 				/*
 				 * No fallback: In any case we care about, the
 				 * altmap should be reasonably sized and aligned
