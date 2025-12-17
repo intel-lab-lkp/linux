@@ -62,6 +62,18 @@ static struct user_desc *low_user_desc;
 static struct user_desc *low_user_desc_clear;  /* Use to delete GDT entry */
 static int gdt_entry_num;
 
+static bool is_32bit_syscall_supported(void)
+{
+#ifdef __x86_64__
+	return system("((zcat /proc/config.gz | grep CONFIG_IA32_EMULATION=y) &&"
+		"((test -z $(zcat /proc/config.gz | grep CONFIG_IA32_EMULATION_DEFAULT_DISABLED=y)) || (grep ia32_emulation=true /proc/cmdline)) &&"
+		"(test -z $(grep ia32_emulation=false /proc/cmdline))) >/dev/null 2>&1"
+	) == 0;
+#else
+	return true;
+#endif
+}
+
 static void check_invalid_segment(uint16_t index, int ldt)
 {
 	uint32_t has_limit = 0, has_ar = 0, limit, ar;
@@ -147,6 +159,7 @@ static bool install_valid_mode(const struct user_desc *d, uint32_t ar,
 	if (!ldt) {
 #ifndef __i386__
 		/* No point testing set_thread_area in a 64-bit build */
+		printf("[SKIP]\tNo point testing set_thread_area in a 64-bit build\n");
 		return false;
 #endif
 		if (!gdt_entry_num)
@@ -676,6 +689,10 @@ static void setup_counter_page(void)
 static int invoke_set_thread_area(void)
 {
 	int ret;
+	if (!is_32bit_syscall_supported()) {
+		printf("[SKIP]\tNo 32bit syscall support in a 64-bit build\n");
+		return -1;
+	}
 	asm volatile ("int $0x80"
 		      : "=a" (ret), "+m" (low_user_desc) :
 			"a" (243), "b" (low_user_desc)
@@ -716,8 +733,10 @@ static void setup_low_user_desc(void)
 
 static void test_gdt_invalidation(void)
 {
-	if (!gdt_entry_num)
+	if (!gdt_entry_num) {
+		printf("[SKIP]\tNo set_thread_area support in a 64-bit only system\n");
 		return;	/* 64-bit only system -- we can't use set_thread_area */
+	}
 
 	unsigned short prev_sel;
 	unsigned short sel;
