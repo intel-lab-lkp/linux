@@ -372,6 +372,22 @@ static const struct dmi_system_id gpiolib_acpi_quirks[] __initconst = {
 	},
 	{
 		/*
+		 * The ASUS ROG Strix G16 (2025) has a buggy ACPI GPIO configuration
+		 * causing acpi_gpio_handle_deferred_request_irqs() to stall for
+		 * ~36 seconds during boot.
+		 *
+		 * Found in BIOS G614PP.307.
+		 */
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "ROG Strix G16 G614PP_G614PP"),
+		},
+		.driver_data = &(struct acpi_gpiolib_dmi_quirk) {
+			.no_edge_events_on_boot = true,
+		},
+	},
+	{
+		/*
 		 * Spurious wakeups, likely from touchpad controller
 		 * Dell Precision 7780
 		 * Found in BIOS 1.24.1
