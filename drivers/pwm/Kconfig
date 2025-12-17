@@ -736,6 +736,18 @@ config PWM_SUN4I
 	  To compile this driver as a module, choose M here: the module
 	  will be called pwm-sun4i.
 
+config PWM_SUN50I_H616
+	tristate "Allwinner H616 PWM support"
+	depends on ARCH_SUNXI || COMPILE_TEST
+	depends on HAS_IOMEM && COMMON_CLK
+	help
+	  Generic PWM framework driver for Allwinner H616 SoCs.
+	  It supports generic PWM, but can also provides a plain clock.
+	  The AC300 PHY integrated in H616 SoC needs such a clock.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called pwm-h616.
+
 config PWM_SUNPLUS
 	tristate "Sunplus PWM support"
 	depends on ARCH_SUNPLUS || COMPILE_TEST
