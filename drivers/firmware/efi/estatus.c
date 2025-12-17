@@ -17,6 +17,7 @@
 #include <linux/aer.h>
 #include <linux/nmi.h>
 #include <linux/sched/clock.h>
+#include <linux/sched/signal.h>
 #include <linux/uuid.h>
 #include <linux/kconfig.h>
 #include <linux/ras.h>
@@ -118,6 +119,14 @@ static int estatus_panic_timeout __read_mostly = 30;
 
 static struct gen_pool *estatus_pool;
 static DEFINE_MUTEX(estatus_pool_mutex);
+
+static enum fixed_addresses estatus_source_fixmap(struct estatus_source *source)
+{
+	if (WARN_ON_ONCE(!source->fixmap_idx))
+		return FIX_HOLE;
+
+	return source->fixmap_idx;
+}
 
 static inline const char *estatus_source_name(struct estatus_source *source)
 {
@@ -557,4 +566,410 @@ static void estatus_cache_add(struct estatus_source *source,
 			call_rcu(&unrcu_pointer(victim)->rcu,
 				 estatus_cache_rcu_free);
 	}
+}
+
+struct estatus_task_work {
+	struct callback_head twork;
+	u64 pfn;
+	int flags;
+};
+
+static void estatus_memory_failure_cb(struct callback_head *twork)
+{
+	struct estatus_task_work *twcb = container_of(twork, struct estatus_task_work, twork);
+	int ret;
+
+	ret = memory_failure(twcb->pfn, twcb->flags);
+	gen_pool_free(estatus_pool, (unsigned long)twcb, sizeof(*twcb));
+
+	if (!ret || ret == -EHWPOISON || ret == -EOPNOTSUPP)
+		return;
+
+	pr_err(HW_ERR ESTATUS_PFX
+	       "%#llx: Sending SIGBUS to %s:%d due to hardware memory corruption\n",
+	       twcb->pfn, current->comm, task_pid_nr(current));
+	force_sig(SIGBUS);
+}
+
+static bool estatus_do_memory_failure(u64 physical_addr, int flags)
+{
+	struct estatus_task_work *twcb;
+	unsigned long pfn;
+
+	if (!IS_ENABLED(CONFIG_ACPI_APEI_MEMORY_FAILURE))
+		return false;
+
+	pfn = PHYS_PFN(physical_addr);
+	if (!pfn_valid(pfn) && !arch_is_platform_page(physical_addr)) {
+		pr_warn_ratelimited(FW_WARN ESTATUS_PFX
+		"Invalid address in generic error data: %#llx\n",
+		physical_addr);
+		return false;
+	}
+
+	if (flags == MF_ACTION_REQUIRED && current->mm) {
+		twcb = (void *)gen_pool_alloc(estatus_pool, sizeof(*twcb));
+		if (!twcb)
+			return false;
+
+		twcb->pfn = pfn;
+		twcb->flags = flags;
+		init_task_work(&twcb->twork, estatus_memory_failure_cb);
+		task_work_add(current, &twcb->twork, TWA_RESUME);
+		return true;
+	}
+
+	memory_failure_queue(pfn, flags);
+	return true;
+}
+
+static bool estatus_handle_memory_failure(estatus_generic_data *gdata, int sev, bool sync)
+{
+	int flags = -1;
+	int sec_sev = estatus_severity(gdata->error_severity);
+	struct cper_sec_mem_err *mem_err = estatus_get_payload(gdata);
+
+	if (!(mem_err->validation_bits & CPER_MEM_VALID_PA))
+		return false;
+
+	/* iff following two events can be handled properly by now */
+	if (sec_sev == ESTATUS_SEV_CORRECTED &&
+	    (gdata->flags & CPER_SEC_ERROR_THRESHOLD_EXCEEDED))
+		flags = MF_SOFT_OFFLINE;
+	if (sev == ESTATUS_SEV_RECOVERABLE && sec_sev == ESTATUS_SEV_RECOVERABLE)
+		flags = sync ? MF_ACTION_REQUIRED : 0;
+
+	if (flags != -1)
+		return estatus_do_memory_failure(mem_err->physical_addr, flags);
+
+	return false;
+}
+
+static bool estatus_handle_arm_hw_error(estatus_generic_data *gdata, int sev, bool sync)
+{
+	struct cper_sec_proc_arm *err = estatus_get_payload(gdata);
+	int flags = sync ? MF_ACTION_REQUIRED : 0;
+	bool queued = false;
+	int sec_sev, i;
+	char *p;
+
+	log_arm_hw_error(err);
+
+	sec_sev = estatus_severity(gdata->error_severity);
+	if (sev != ESTATUS_SEV_RECOVERABLE || sec_sev != ESTATUS_SEV_RECOVERABLE)
+		return false;
+
+	p = (char *)(err + 1);
+	for (i = 0; i < err->err_info_num; i++) {
+		struct cper_arm_err_info *err_info = (struct cper_arm_err_info *)p;
+		bool is_cache = (err_info->type == CPER_ARM_CACHE_ERROR);
+		bool has_pa = (err_info->validation_bits & CPER_ARM_INFO_VALID_PHYSICAL_ADDR);
+		const char *error_type = "unknown error";
+
+		/*
+		 * The field (err_info->error_info & BIT(26)) is fixed to set to
+		 * 1 in some old firmware of HiSilicon Kunpeng920. We assume that
+		 * firmware won't mix corrected errors in an uncorrected section,
+		 * and don't filter out 'corrected' error here.
+		 */
+		if (is_cache && has_pa) {
+			queued = estatus_do_memory_failure(err_info->physical_fault_addr, flags);
+			p += err_info->length;
+			continue;
+		}
+
+		if (err_info->type < ARRAY_SIZE(cper_proc_error_type_strs))
+			error_type = cper_proc_error_type_strs[err_info->type];
+
+		pr_warn_ratelimited(FW_WARN ESTATUS_PFX
+				    "Unhandled processor error type: %s\n",
+				    error_type);
+		p += err_info->length;
+	}
+
+	return queued;
+}
+
+/*
+ * PCIe AER errors need to be sent to the AER driver for reporting and
+ * recovery. The ESTATUS severities map to the following AER severities and
+ * require the following handling:
+ *
+ * ESTATUS_SEV_CORRECTABLE -> AER_CORRECTABLE
+ *     These need to be reported by the AER driver but no recovery is
+ *     necessary.
+ * ESTATUS_SEV_RECOVERABLE -> AER_NONFATAL
+ * ESTATUS_SEV_RECOVERABLE && CPER_SEC_RESET -> AER_FATAL
+ *     These both need to be reported and recovered from by the AER driver.
+ * ESTATUS_SEV_PANIC does not make it to this handling since the kernel must
+ *     panic.
+ */
+static void estatus_handle_aer(estatus_generic_data *gdata)
+{
+#ifdef CONFIG_ACPI_APEI_PCIEAER
+	struct cper_sec_pcie *pcie_err = estatus_get_payload(gdata);
+
+	if (pcie_err->validation_bits & CPER_PCIE_VALID_DEVICE_ID &&
+	    pcie_err->validation_bits & CPER_PCIE_VALID_AER_INFO) {
+		unsigned int devfn;
+		int aer_severity;
+		u8 *aer_info;
+
+		devfn = PCI_DEVFN(pcie_err->device_id.device,
+				  pcie_err->device_id.function);
+		aer_severity = cper_severity_to_aer(gdata->error_severity);
+
+		/*
+		 * If firmware reset the component to contain
+		 * the error, we must reinitialize it before
+		 * use, so treat it as a fatal AER error.
+		 */
+		if (gdata->flags & CPER_SEC_RESET)
+			aer_severity = AER_FATAL;
+
+		aer_info = (void *)gen_pool_alloc(estatus_pool,
+						  sizeof(struct aer_capability_regs));
+		if (!aer_info)
+			return;
+		memcpy(aer_info, pcie_err->aer_info, sizeof(struct aer_capability_regs));
+
+		aer_recover_queue(pcie_err->device_id.segment,
+				  pcie_err->device_id.bus,
+				  devfn, aer_severity,
+				  (struct aer_capability_regs *)
+				  aer_info);
+	}
+#endif
+}
+
+static BLOCKING_NOTIFIER_HEAD(vendor_record_notify_list);
+
+int estatus_register_vendor_record_notifier(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_register(&vendor_record_notify_list, nb);
+}
+EXPORT_SYMBOL_GPL(estatus_register_vendor_record_notifier);
+
+void estatus_unregister_vendor_record_notifier(struct notifier_block *nb)
+{
+	blocking_notifier_chain_unregister(&vendor_record_notify_list, nb);
+}
+EXPORT_SYMBOL_GPL(estatus_unregister_vendor_record_notifier);
+
+static void estatus_vendor_record_work_func(struct work_struct *work)
+{
+	struct estatus_vendor_record_entry *entry;
+	estatus_generic_data *gdata;
+	u32 len;
+
+	entry = container_of(work, struct estatus_vendor_record_entry, work);
+	gdata = ESTATUS_GDATA_FROM_VENDOR_ENTRY(entry);
+
+	blocking_notifier_call_chain(&vendor_record_notify_list,
+				     entry->error_severity, gdata);
+
+	len = ESTATUS_VENDOR_ENTRY_LEN(estatus_get_record_size(gdata));
+	gen_pool_free(estatus_pool, (unsigned long)entry, len);
+}
+
+static void estatus_defer_non_standard_event(estatus_generic_data *gdata, int sev)
+{
+	estatus_generic_data *copied_gdata;
+	struct estatus_vendor_record_entry *entry;
+	u32 len;
+
+	len = ESTATUS_VENDOR_ENTRY_LEN(estatus_get_record_size(gdata));
+	entry = (void *)gen_pool_alloc(estatus_pool, len);
+	if (!entry)
+		return;
+
+	copied_gdata = ESTATUS_GDATA_FROM_VENDOR_ENTRY(entry);
+	memcpy(copied_gdata, gdata, estatus_get_record_size(gdata));
+	entry->error_severity = sev;
+
+	INIT_WORK(&entry->work, estatus_vendor_record_work_func);
+	schedule_work(&entry->work);
+}
+
+/*
+ * A platform may describe one error source for the handling of synchronous
+ * errors (e.g. MCE or SEA), or for handling asynchronous errors (e.g. SCI
+ * or External Interrupt). On x86, the HEST notifications are always
+ * asynchronous, so only SEA on ARM is delivered as a synchronous
+ * notification.
+ */
+static inline bool estatus_is_sync_notify(struct estatus_source *source)
+{
+	return estatus_source_notify_mode(source) == ESTATUS_NOTIFY_SEA;
+}
+
+static void estatus_do_proc(struct estatus_source *source, const estatus_generic_status *estatus)
+{
+	int sev, sec_sev;
+	estatus_generic_data *gdata;
+	guid_t *sec_type;
+	const guid_t *fru_id = &guid_null;
+	char *fru_text = "";
+	bool queued = false;
+	bool sync = estatus_is_sync_notify(source);
+
+	sev = estatus_severity(estatus->error_severity);
+	estatus_for_each_section(estatus, gdata) {
+		sec_type = (guid_t *)gdata->section_type;
+		sec_sev = estatus_severity(gdata->error_severity);
+		if (gdata->validation_bits & CPER_SEC_VALID_FRU_ID)
+			fru_id = (guid_t *)gdata->fru_id;
+
+		if (gdata->validation_bits & CPER_SEC_VALID_FRU_TEXT)
+			fru_text = gdata->fru_text;
+
+		if (guid_equal(sec_type, &CPER_SEC_PLATFORM_MEM)) {
+			struct cper_sec_mem_err *mem_err = estatus_get_payload(gdata);
+
+			atomic_notifier_call_chain(&estatus_report_chain, sev, mem_err);
+
+			estatus_report_mem_error(sev, mem_err);
+			queued = estatus_handle_memory_failure(gdata, sev, sync);
+		} else if (guid_equal(sec_type, &CPER_SEC_PCIE)) {
+			estatus_handle_aer(gdata);
+		} else if (guid_equal(sec_type, &CPER_SEC_PROC_ARM)) {
+			queued = estatus_handle_arm_hw_error(gdata, sev, sync);
+		} else {
+			void *err = estatus_get_payload(gdata);
+
+			estatus_defer_non_standard_event(gdata, sev);
+			log_non_standard_event(sec_type, fru_id, fru_text,
+					       sec_sev, err,
+					       gdata->error_data_length);
+		}
+	}
+
+	if (sync && !queued) {
+		pr_err(HW_ERR ESTATUS_PFX
+		       "%s: synchronous unrecoverable error (SIGBUS)\n",
+		       estatus_source_name(source));
+		force_sig(SIGBUS);
+	}
+}
+
+static void __estatus_panic(struct estatus_source *source, estatus_generic_status *estatus,
+			    phys_addr_t buf_paddr, enum fixed_addresses fixmap_idx)
+{
+	const char *msg = ESTATUS_PFX "Fatal hardware error";
+
+	__estatus_print_estatus(KERN_EMERG, source, estatus);
+
+	add_taint(TAINT_MACHINE_CHECK, LOCKDEP_STILL_OK);
+
+	estatus_clear_estatus(source, estatus, buf_paddr, fixmap_idx);
+
+	if (!panic_timeout)
+		pr_emerg("%s but panic disabled\n", msg);
+
+	panic(msg);
+}
+
+int estatus_proc(struct estatus_source *source)
+{
+	estatus_generic_status *estatus = source->estatus;
+	phys_addr_t buf_paddr;
+	enum fixed_addresses fixmap_idx = estatus_source_fixmap(source);
+	int rc;
+
+	rc = estatus_read_estatus(source, estatus, &buf_paddr, fixmap_idx);
+	if (rc)
+		goto out;
+
+	if (estatus_severity(estatus->error_severity) >= ESTATUS_SEV_PANIC)
+		__estatus_panic(source, estatus, buf_paddr, fixmap_idx);
+
+	if (!estatus_cached(estatus)) {
+		if (estatus_print_estatus(NULL, source, estatus))
+			estatus_cache_add(source, estatus);
+	}
+	estatus_do_proc(source, estatus);
+
+out:
+	estatus_clear_estatus(source, estatus, buf_paddr, fixmap_idx);
+
+	return rc;
+}
+EXPORT_SYMBOL_GPL(estatus_proc);
+
+/*
+ * Handlers for CPER records may not be NMI safe. For example,
+ * memory_failure_queue() takes spinlocks and calls schedule_work_on().
+ * In any NMI-like handler, memory from estatus_pool is used to save
+ * estatus, and added to the estatus_llist. irq_work_queue() causes
+ * estatus_proc_in_irq() to run in IRQ context where each estatus in
+ * estatus_llist is processed.
+ *
+ * Memory from the estatus_pool is also used with the estatus_cache
+ * to suppress frequent messages.
+ */
+static struct llist_head estatus_llist;
+
+void estatus_proc_in_irq(struct irq_work *irq_work)
+{
+	struct llist_node *llnode, *next;
+	struct estatus_node *estatus_node;
+	struct estatus_source *source;
+	estatus_generic_status *estatus;
+	u32 len, node_len;
+
+	llnode = llist_del_all(&estatus_llist);
+	/*
+	 * Because the time order of estatus in list is reversed,
+	 * revert it back to proper order.
+	 */
+	llnode = llist_reverse_order(llnode);
+	while (llnode) {
+		next = llnode->next;
+		estatus_node = llist_entry(llnode, struct estatus_node,
+					   llnode);
+		source = estatus_node->source;
+		estatus = ESTATUS_FROM_NODE(estatus_node);
+		len = estatus_len(estatus);
+		node_len = ESTATUS_NODE_LEN(len);
+		estatus_do_proc(source, estatus);
+		if (!estatus_cached(estatus)) {
+			if (estatus_print_estatus(NULL, source, estatus))
+				estatus_cache_add(source, estatus);
+		}
+		gen_pool_free(estatus_pool,
+			      (unsigned long)estatus_node, node_len);
+
+		llnode = next;
+	}
+}
+EXPORT_SYMBOL_GPL(estatus_proc_in_irq);
+
+static void estatus_print_queued_estatus(void)
+{
+	struct llist_node *llnode;
+	struct estatus_node *estatus_node;
+	struct estatus_source *source;
+	estatus_generic_status *estatus;
+
+	llnode = llist_del_all(&estatus_llist);
+	/*
+	 * Because the time order of estatus in list is reversed,
+	 * revert it back to proper order.
+	 */
+	llnode = llist_reverse_order(llnode);
+	while (llnode) {
+		estatus_node = llist_entry(llnode, struct estatus_node,
+					   llnode);
+		estatus = ESTATUS_FROM_NODE(estatus_node);
+		source = estatus_node->source;
+		estatus_print_estatus(NULL, source, estatus);
+		llnode = llnode->next;
+	}
+}
+
+void estatus_report_mem_error(int sev, struct cper_sec_mem_err *mem_err)
+{
+#if IS_ENABLED(CONFIG_ACPI_APEI_GHES)
+	arch_apei_report_mem_error(sev, mem_err);
+#endif
 }
