@@ -14,14 +14,32 @@
 
 /**
  * struct irq_mod_info - global configuration parameters and state
+ * @total_intrs:	running count of total interrupts
+ * @total_cpus:		running count of total active CPUs
+ *			totals are updated every update_ms ("epoch")
  * @version:		increment on writes to /proc/irq/soft_moderation
- * @delay_us:		maximum delay
- * @update_ms:		how often to update delay (epoch duration)
+ * @delay_us:		fixed delay, or maximum for adaptive
+ * @target_intr_rate:	target maximum interrupt rate
+ * @hardirq_percent:	target maximum hardirq percentage
+ * @update_ms:		how often to update delay/rate/fraction (epoch duration)
+ * @increase_factor:	constant for exponential increase/decrease of delay
+ * @scale_cpus:		(percent) scale factor to estimate active CPUs
  */
 struct irq_mod_info {
+	/* These fields are written to by all CPUs every epoch. */
+	____cacheline_aligned
+	atomic_t	total_intrs;
+	atomic_t	total_cpus;
+
+	/* These are mostly read (frequently), so use a different cacheline. */
+	____cacheline_aligned
 	u32		version;
 	u32		delay_us;
+	u32		target_intr_rate;
+	u32		hardirq_percent;
 	u32		update_ms;
+	u32		increase_factor;
+	u32		scale_cpus;
 	u32		pad[];
 };
 
@@ -48,9 +66,20 @@ extern struct irq_mod_info irq_mod_info;
  *
  * Used once per epoch:
  * @version:		version fetched from irq_mod_info
+ * @delay_ns:		fetched from irq_mod_info
+ * @epoch_ns:		duration of last epoch
+ * @last_total_intrs:	from irq_mod_info
+ * @last_total_cpus:	from irq_mod_info
+ * @last_irqtime:	from cpustat[CPUTIME_IRQ]
  *
  * Statistics
+ * @intr_rate:		smoothed global interrupt rate
+ * @my_intr_rate:	smoothed interrupt rate for this CPU
  * @timer_set:		how many timer_set calls
+ * @scaled_cpu_count:	smoothed CPU count (scaled)
+ * @irq_high:		how many times global irq above threshold
+ * @my_irq_high:	how many times local irq above threshold
+ * @hardirq_high:	how many times local hardirq_percent above threshold
  */
 struct irq_mod_state {
 	/* Used on every interrupt. */
@@ -71,13 +100,26 @@ struct irq_mod_state {
 
 	/* Used once per epoch. */
 	u32			version;
+	u32			delay_ns;
+	u32			epoch_ns;
+	u32			last_total_intrs;
+	u32			last_total_cpus;
+	u64			last_irqtime;
 
 	/* Statistics */
+	u32			intr_rate;
+	u32			my_intr_rate;
 	u32			timer_set;
+	u32			timer_fire;
+	u32			scaled_cpu_count;
+	u32			irq_high;
+	u32			my_irq_high;
+	u32			hardirq_high;
 };
 
 DECLARE_PER_CPU_ALIGNED(struct irq_mod_state, irq_mod_state);
 
+#define MIN_SCALING_FACTOR 8u
 extern struct static_key_false irq_moderation_enabled_key;
 
 void irq_moderation_procfs_add(struct irq_desc *desc, umode_t umode);

@@ -14,22 +14,20 @@
 
 #ifdef CONFIG_IRQ_SOFT_MODERATION
 
+void irq_moderation_update_epoch(struct irq_mod_state *ms);
+
 static inline void __maybe_new_epoch(struct irq_mod_state *ms)
 {
 	const u64 now = ktime_get_ns(), epoch_ns = now - ms->epoch_start_ns;
 	const u32 slack_ns = 5000;
-	u32 version;
 
 	/* Run approximately every update_ns, a little bit early is ok. */
 	if (epoch_ns < ms->update_ns - slack_ns)
 		return;
+	ms->epoch_ns = min(epoch_ns, (u64)U32_MAX);
 	ms->epoch_start_ns = now;
-	/* Fetch updated parameters. */
-        while ((version = READ_ONCE(irq_mod_info.version)) != ms->version) {
-		ms->update_ns = READ_ONCE(irq_mod_info.update_ms) * NSEC_PER_MSEC;
-		ms->mod_ns = READ_ONCE(irq_mod_info.delay_us) * NSEC_PER_USEC;
-		ms->version = version;
-        }
+	/* Do the expensive processing */
+	irq_moderation_update_epoch(ms);
 }
 
 static inline bool irq_moderation_needed(struct irq_desc *desc, struct irq_mod_state *ms)

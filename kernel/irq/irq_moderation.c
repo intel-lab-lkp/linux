@@ -19,8 +19,9 @@
  *
  * Some platforms show reduced I/O performance when the total device interrupt
  * rate across the entire platform becomes too high. To address the problem,
- * GSIM uses a hook after running the handler to implement software interrupt
- * moderation with programmable delay.
+ * GSIM uses a hook after running the handler to measure global and per-CPU
+ * interrupt rates, compare them with configurable targets, and implements
+ * independent, per-CPU software moderation delays.
  *
  * Configuration is controlled at boot time via module parameters
  *
@@ -35,6 +36,19 @@
  *   delay_us (default 0, suggested 100, 0 off, range 0-500)
  *       Maximum moderation delay. A reasonable range is 20-100. Higher values
  *       can be useful if the hardirq handler has long runtimes.
+ *
+ *   target_intr_rate (default 0, suggested 1000000, 0 off, range 0-50000000)
+ *       The total interrupt rate above which moderation kicks in.
+ *       Not particularly critical, a value in the 500K-1M range is usually ok.
+ *
+ *   hardirq_percent (default 0, suggested 70, 0 off, range 0-100)
+ *       The hardirq percentage above which moderation kicks in.
+ *       50-90 is a reasonable range.
+ *
+ *       FIXED MODERATION mode requires target_intr_rate=0, hardirq_percent=0
+ *
+ *   update_ms (default 5, range 1-100)
+ *       How often the load is measured and moderation delay updated.
  *
  * Moderation can be enabled/disabled dynamically for individual interrupts with
  *
@@ -101,10 +115,21 @@
 /* Recommended values. */
 struct irq_mod_info irq_mod_info ____cacheline_aligned = {
 	.update_ms		= 5,
+	.increase_factor	= MIN_SCALING_FACTOR,
+	.scale_cpus		= 200,
 };
 
 module_param_named(delay_us, irq_mod_info.delay_us, uint, 0444);
 MODULE_PARM_DESC(delay_us, "Max moderation delay us, 0 = moderation off, range 0-500.");
+
+module_param_named(hardirq_percent, irq_mod_info.hardirq_percent, uint, 0444);
+MODULE_PARM_DESC(hardirq_percent, "Target max hardirq percentage, 0 off, range 0-100.");
+
+module_param_named(target_intr_rate, irq_mod_info.target_intr_rate, uint, 0444);
+MODULE_PARM_DESC(target_intr_rate, "Target max interrupt rate, 0 off, range 0-50000000.");
+
+module_param_named(update_ms, irq_mod_info.update_ms, uint, 0444);
+MODULE_PARM_DESC(update_ms, "Update interval in milliseconds, range 1-100");
 
 DEFINE_PER_CPU_ALIGNED(struct irq_mod_state, irq_mod_state);
 
@@ -142,27 +167,72 @@ static int set_mode(struct irq_desc *desc, bool enable)
 /* Print statistics */
 static int moderation_show(struct seq_file *p, void *v)
 {
+	ulong intr_rate = 0, irq_high = 0, my_irq_high = 0, hardirq_high = 0;
 	uint delay_us = irq_mod_info.delay_us;
-	int j;
+	u64 now = ktime_get_ns();
+	int j, active_cpus = 0;
 
-#define HEAD_FMT "%5s  %8s  %11s  %11s  %9s\n"
-#define BODY_FMT "%5u  %8u  %11u  %11u  %9u\n"
+#define HEAD_FMT "%5s  %8s  %8s  %4s  %8s  %11s  %11s  %11s  %11s  %11s  %9s\n"
+#define BODY_FMT "%5u  %8u  %8u  %4u  %8u  %11u  %11u  %11u  %11u  %11u  %9u\n"
 
 	seq_printf(p, HEAD_FMT,
-		   "# CPU", "delay_ns", "timer_set", "enqueue", "stray_irq");
+		   "# CPU", "irq/s", "my_irq/s", "cpus", "delay_ns",
+		   "irq_hi", "my_irq_hi", "hardirq_hi", "timer_set",
+		   "enqueue", "stray_irq");
 
 	for_each_possible_cpu(j) {
 		struct irq_mod_state *ms = per_cpu_ptr(&irq_mod_state, j);
+		/* Watch out, epoch start_ns is 64 bits. */
+		u64 epoch_start_ns = atomic64_read((atomic64_t *)&ms->epoch_start_ns);
+		s64 age_ms = min((now - epoch_start_ns) / NSEC_PER_MSEC, (u64)999999);
+
+		if (age_ms < 10000) {
+			/* Average intr_rate over recently active CPUs. */
+			active_cpus++;
+			intr_rate += ms->intr_rate;
+		} else {
+			age_ms = -1;
+			ms->intr_rate = 0;
+			ms->my_intr_rate = 0;
+			ms->scaled_cpu_count = 0;
+			ms->mod_ns = 0;
+		}
+
+		irq_high += ms->irq_high;
+		my_irq_high += ms->my_irq_high;
+		hardirq_high += ms->hardirq_high;
 
 		seq_printf(p, BODY_FMT,
-			   j, ms->mod_ns, ms->timer_set, ms->enqueue, ms->stray_irq);
+			   j, ms->intr_rate, ms->my_intr_rate,
+			   (ms->scaled_cpu_count + 128) / 256,
+			   ms->mod_ns, ms->irq_high, ms->my_irq_high,
+			   ms->hardirq_high, ms->timer_set, ms->enqueue,
+			   ms->stray_irq);
 	}
 
 	seq_printf(p, "\n"
 		   "enabled              %s\n"
-		   "delay_us             %u\n",
+		   "delay_us             %u\n"
+		   "target_intr_rate     %u\n"
+		   "hardirq_percent      %u\n"
+		   "update_ms            %u\n"
+		   "scale_cpus           %u\n",
 		   str_yes_no(delay_us > 0),
-		   delay_us);
+		   delay_us,
+		   irq_mod_info.target_intr_rate, irq_mod_info.hardirq_percent,
+		   irq_mod_info.update_ms, irq_mod_info.scale_cpus);
+
+	seq_printf(p,
+		   "intr_rate            %lu\n"
+		   "irq_high             %lu\n"
+		   "my_irq_high          %lu\n"
+		   "hardirq_percent_high %lu\n"
+		   "total_interrupts     %u\n"
+		   "total_cpus           %u\n",
+		   active_cpus ? intr_rate / active_cpus : 0,
+		   irq_high, my_irq_high, hardirq_high,
+		   READ_ONCE(*((u32 *)&irq_mod_info.total_intrs)),
+		   READ_ONCE(*((u32 *)&irq_mod_info.total_cpus)));
 
 	return 0;
 }
@@ -182,8 +252,12 @@ struct param_names {
 
 static struct param_names param_names[] = {
 	{ "delay_us", &irq_mod_info.delay_us, 0, 500 },
+	{ "target_intr_rate", &irq_mod_info.target_intr_rate, 0, 50000000 },
+	{ "hardirq_percent", &irq_mod_info.hardirq_percent, 0, 100 },
+	{ "update_ms", &irq_mod_info.update_ms, 1, 100 },
 	/* Entries with no name cannot be set at runtime. */
-	{ "", &irq_mod_info.update_ms, 1, 100 },
+	{ "", &irq_mod_info.increase_factor, MIN_SCALING_FACTOR, 128 },
+	{ "", &irq_mod_info.scale_cpus, 50, 1000 },
 };
 
 static void update_enable_key(void)
