@@ -238,22 +238,22 @@ static void unregister_all_irq_handlers(struct amdgpu_device *adev)
 }
 
 static bool
-validate_irq_registration_params(struct dc_interrupt_params *int_params,
+validate_irq_registration_params(struct drm_device *dev, struct dc_interrupt_params *int_params,
 				 void (*ih)(void *))
 {
 	if (NULL == int_params || NULL == ih) {
-		DRM_ERROR("DM_IRQ: invalid input!\n");
+		drm_err(dev, "DM_IRQ: invalid input!\n");
 		return false;
 	}
 
 	if (int_params->int_context >= INTERRUPT_CONTEXT_NUMBER) {
-		DRM_ERROR("DM_IRQ: invalid context: %d!\n",
+		drm_err(dev, "DM_IRQ: invalid context: %d!\n",
 				int_params->int_context);
 		return false;
 	}
 
 	if (!DAL_VALID_IRQ_SRC_NUM(int_params->irq_source)) {
-		DRM_ERROR("DM_IRQ: invalid irq_source: %d!\n",
+		drm_err(dev, "DM_IRQ: invalid irq_source: %d!\n",
 				int_params->irq_source);
 		return false;
 	}
@@ -261,16 +261,18 @@ validate_irq_registration_params(struct dc_interrupt_params *int_params,
 	return true;
 }
 
-static bool validate_irq_unregistration_params(enum dc_irq_source irq_source,
-					       irq_handler_idx handler_idx)
+static bool validate_irq_unregistration_params(
+	struct drm_device *dev,
+	enum dc_irq_source irq_source,
+	irq_handler_idx handler_idx)
 {
 	if (handler_idx == DAL_INVALID_IRQ_HANDLER_IDX) {
-		DRM_ERROR("DM_IRQ: invalid handler_idx==NULL!\n");
+		drm_err(dev, "DM_IRQ: invalid handler_idx==NULL!\n");
 		return false;
 	}
 
 	if (!DAL_VALID_IRQ_SRC_NUM(irq_source)) {
-		DRM_ERROR("DM_IRQ: invalid irq_source:%d!\n", irq_source);
+		drm_err(dev, "DM_IRQ: invalid irq_source:%d!\n", irq_source);
 		return false;
 	}
 
@@ -310,12 +312,12 @@ void *amdgpu_dm_irq_register_interrupt(struct amdgpu_device *adev,
 	unsigned long irq_table_flags;
 	enum dc_irq_source irq_source;
 
-	if (false == validate_irq_registration_params(int_params, ih))
+	if (false == validate_irq_registration_params(&adev->ddev, int_params, ih))
 		return DAL_INVALID_IRQ_HANDLER_IDX;
 
 	handler_data = kzalloc(sizeof(*handler_data), GFP_KERNEL);
 	if (!handler_data) {
-		DRM_ERROR("DM_IRQ: failed to allocate irq handler!\n");
+		drm_err(&adev->ddev, "DM_IRQ: failed to allocate irq handler!\n");
 		return DAL_INVALID_IRQ_HANDLER_IDX;
 	}
 
@@ -375,7 +377,7 @@ void amdgpu_dm_irq_unregister_interrupt(struct amdgpu_device *adev,
 	struct dc_interrupt_params int_params;
 	int i;
 
-	if (false == validate_irq_unregistration_params(irq_source, ih))
+	if (false == validate_irq_unregistration_params(&adev->ddev, irq_source, ih))
 		return;
 
 	memset(&int_params, 0, sizeof(int_params));
@@ -396,7 +398,7 @@ void amdgpu_dm_irq_unregister_interrupt(struct amdgpu_device *adev,
 		/* If we got here, it means we searched all irq contexts
 		 * for this irq source, but the handler was not found.
 		 */
-		DRM_ERROR(
+		drm_err(&adev->ddev,
 		"DM_IRQ: failed to find irq handler:%p for irq_source:%d!\n",
 			ih, irq_source);
 	}
@@ -588,7 +590,7 @@ static void amdgpu_dm_irq_schedule_work(struct amdgpu_device *adev,
 		/*allocate a new amdgpu_dm_irq_handler_data*/
 		handler_data_add = kzalloc(sizeof(*handler_data), GFP_ATOMIC);
 		if (!handler_data_add) {
-			DRM_ERROR("DM_IRQ: failed to allocate irq handler!\n");
+			drm_err(&adev->ddev, "DM_IRQ: failed to allocate irq handler!\n");
 			return;
 		}
 
@@ -603,11 +605,11 @@ static void amdgpu_dm_irq_schedule_work(struct amdgpu_device *adev,
 		INIT_WORK(&handler_data_add->work, dm_irq_work_func);
 
 		if (queue_work(system_highpri_wq, &handler_data_add->work))
-			DRM_DEBUG("Queued work for handling interrupt from "
+			drm_dbg(&adev->ddev, "Queued work for handling interrupt from "
 				  "display for IRQ source %d\n",
 				  irq_source);
 		else
-			DRM_ERROR("Failed to queue work for handling interrupt "
+			drm_err(&adev->ddev, "Failed to queue work for handling interrupt "
 				  "from display for IRQ source %d\n",
 				  irq_source);
 	}
@@ -712,7 +714,7 @@ static inline int dm_irq_state(struct amdgpu_device *adev,
 	struct amdgpu_crtc *acrtc = adev->mode_info.crtcs[crtc_id];
 
 	if (!acrtc) {
-		DRM_ERROR(
+		drm_err(&adev->ddev,
 			"%s: crtc is NULL at id :%d\n",
 			func,
 			crtc_id);
