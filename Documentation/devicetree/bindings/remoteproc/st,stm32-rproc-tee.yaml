@@ -1,0 +1,100 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/remoteproc/st,stm32-rproc-tee.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: STMicroelectronics STM32 remote processor controlled via TEE
+
+maintainers:
+  - Arnaud Pouliquen <arnaud.pouliquen@foss.st.com>
+
+description: |
+  STM32MP remote processor controlled by a Trusted Application
+  running in OP-TEE. This node is a child of the TEE remoteproc service
+  (UUID 80a4c275-0a47-4905-8285-1486a9771a08) and exposes a remoteproc
+  instance managed by the Linux remoteproc core via the TEE rproc service.
+
+  Firmware loading, authentication and remote processor start/stop are managed
+  by the TEE application. The STM32-specific driver handles platform resources
+  such as the mailboxes and reserved-memory.
+
+properties:
+  compatible:
+    const: st,stm32mp15-m4-tee
+
+  reg:
+    description: |
+      Remote processor identifier used by the TEE service. The <0> value
+      in the example denotes a single instance with ID 0.
+    maxItems: 1
+
+  mboxes:
+    description: |
+      Mailbox channels used for rpmsg/virtio functionality and processor
+      shutdown.
+    maxItems: 3
+
+  mbox-names:
+    items:
+      - const: vq0
+      - const: vq1
+      - const: shutdown
+
+  memory-region:
+    description: |
+      List of phandles to reserved-memory nodes describing the memory layout
+      for the interprocessors communication.
+
+  interrupts:
+    description: |
+      Optional watchdog / status interrupt line used to detect crashes
+      and optionally wake up the system.
+    maxItems: 1
+
+  st,auto-boot:
+    type: boolean
+    description: |
+      If present, the remote processor will be automatically started by
+      the remoteproc core at boot.
+
+  wakeup-source:
+    type: boolean
+    description: |
+      Indicates that the watchdog interrupt can be used as a wakeup source.
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    rproc_service: rproc-service@0 {
+      compatible = "rproc-service-80a4c275-0a47-4905-8285-1486a9771a08";
+      reg = <0 0>;
+      #address-cells = <1>;
+      #size-cells = <0>;
+      status = "okay";
+
+      m4: m4@0 {
+        compatible = "st,stm32mp15-m4-tee";
+        reg = <0>;
+
+        mboxes = <&ipcc 0>, <&ipcc 1>, <&ipcc 2>;
+        mbox-names = "vq0", "vq1", "shutdown";
+
+        memory-region = <&vdev0vring0>, <&m_ipc_shm>, <&mcuram2>,
+                        <&vdev0vring1>, <&vdev0buffer>, <&retram>;
+
+        interrupt-parent = <&exti>;
+        interrupts = <68 1>;
+
+        st,auto-boot;
+        wakeup-source;
+
+        status = "okay";
+      };
+    };
+...
