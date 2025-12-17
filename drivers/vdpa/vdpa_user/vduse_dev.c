@@ -924,16 +924,24 @@ static void *vduse_dev_alloc_coherent(union virtio_map token, size_t size,
 	if (!token.group)
 		return NULL;
 
+	addr = alloc_pages_exact(size, flag);
+	if (!addr)
+		return NULL;
+
 	vdev = token.group->dev;
 	domain = vdev->domain;
 	addr = vduse_domain_alloc_coherent(domain, size,
-					   (dma_addr_t *)&iova, flag);
+					   (dma_addr_t *)&iova, addr);
 	if (!addr)
-		return NULL;
+		goto err;
 
 	*dma_addr = (dma_addr_t)iova;
 
 	return addr;
+
+err:
+	free_pages_exact(addr, size);
+	return NULL;
 }
 
 static void vduse_dev_free_coherent(union virtio_map token, size_t size,
@@ -950,6 +958,7 @@ static void vduse_dev_free_coherent(union virtio_map token, size_t size,
 	domain = vdev->domain;
 
 	vduse_domain_free_coherent(domain, size, dma_addr, attrs);
+	free_pages_exact(vaddr, size);
 }
 
 static bool vduse_dev_need_sync(union virtio_map token, dma_addr_t dma_addr)

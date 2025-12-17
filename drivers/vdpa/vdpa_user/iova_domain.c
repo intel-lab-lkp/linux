@@ -495,14 +495,13 @@ void vduse_domain_unmap_page(struct vduse_iova_domain *domain,
 
 void *vduse_domain_alloc_coherent(struct vduse_iova_domain *domain,
 				  size_t size, dma_addr_t *dma_addr,
-				  gfp_t flag)
+				  void *orig)
 {
 	struct iova_domain *iovad = &domain->consistent_iovad;
 	unsigned long limit = domain->iova_limit;
 	dma_addr_t iova = vduse_domain_alloc_iova(iovad, size, limit);
-	void *orig = alloc_pages_exact(size, flag);
 
-	if (!iova || !orig)
+	if (!iova)
 		goto err;
 
 	spin_lock(&domain->iotlb_lock);
@@ -519,8 +518,6 @@ void *vduse_domain_alloc_coherent(struct vduse_iova_domain *domain,
 	return orig;
 err:
 	*dma_addr = DMA_MAPPING_ERROR;
-	if (orig)
-		free_pages_exact(orig, size);
 	if (iova)
 		vduse_domain_free_iova(iovad, iova, size);
 
