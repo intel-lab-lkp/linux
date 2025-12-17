@@ -70,16 +70,14 @@
 
 bool intel_hdmi_is_frl(u32 clock)
 {
-	switch (clock) {
-	case 300000: /* 3 Gbps */
-	case 600000: /* 6 Gbps */
-	case 800000: /* 8 Gbps */
-	case 1000000: /* 10 Gbps */
-	case 1200000: /* 12 Gbps */
-		return true;
-	default:
-		return false;
-	}
+	u32 rates[] = { 300000, 600000, 800000, 1000000, 1200000 };
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(rates); i++)
+		if (intel_cx0pll_clock_matches(clock, rates[i]))
+			return true;
+
+	return false;
 }
 
 static void
