@@ -988,8 +988,20 @@ int io_buffer_register_bvec(struct io_uring_cmd *cmd, struct request *rq,
 	imu->is_kbuf = true;
 	imu->dir = 1 << rq_data_dir(rq);
 
-	rq_for_each_bvec(bv, rq, rq_iter)
+	nr_bvecs = 0;
+	rq_for_each_bvec(bv, rq, rq_iter) {
+		if (nr_bvecs > 0) {
+			struct bio_vec *p = &imu->bvec[nr_bvecs - 1];
+
+			if (page_to_phys(p->bv_page) + p->bv_offset + p->bv_len ==
+			    page_to_phys(bv.bv_page) + bv.bv_offset &&
+			    p->bv_len + bv.bv_len >= p->bv_len) {
+				p->bv_len += bv.bv_len;
+				continue;
+			}
+		}
 		imu->bvec[nr_bvecs++] = bv;
+	}
 	imu->nr_bvecs = nr_bvecs;
 
 	node->buf = imu;
