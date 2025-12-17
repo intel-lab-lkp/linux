@@ -946,6 +946,7 @@ int io_buffer_register_bvec(struct io_uring_cmd *cmd, struct request *rq,
 	struct io_mapped_ubuf *imu;
 	struct io_rsrc_node *node;
 	struct bio_vec bv;
+	struct bio *bio;
 	unsigned int nr_bvecs = 0;
 	int ret = 0;
 
@@ -967,11 +968,10 @@ int io_buffer_register_bvec(struct io_uring_cmd *cmd, struct request *rq,
 		goto unlock;
 	}
 
-	/*
-	 * blk_rq_nr_phys_segments() may overestimate the number of bvecs
-	 * but avoids needing to iterate over the bvecs
-	 */
-	imu = io_alloc_imu(ctx, blk_rq_nr_phys_segments(rq));
+	__rq_for_each_bio(bio, rq)
+		nr_bvecs += bio->bi_vcnt;
+
+	imu = io_alloc_imu(ctx, nr_bvecs);
 	if (!imu) {
 		kfree(node);
 		ret = -ENOMEM;
@@ -988,6 +988,7 @@ int io_buffer_register_bvec(struct io_uring_cmd *cmd, struct request *rq,
 	imu->is_kbuf = true;
 	imu->dir = 1 << rq_data_dir(rq);
 
+	nr_bvecs = 0;
 	rq_for_each_bvec(bv, rq, rq_iter)
 		imu->bvec[nr_bvecs++] = bv;
 	imu->nr_bvecs = nr_bvecs;
