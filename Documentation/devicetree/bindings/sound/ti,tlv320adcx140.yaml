@@ -44,6 +44,16 @@ properties:
       Regulator with AVDD at 3.3V.  If not defined then the internal regulator
       is enabled.
 
+  avdd-supply:
+    description: |
+      Provide a handle to the regulator supplying AVDD. If not provided, a dummy
+      regulator will be used.
+
+  iovdd-supply:
+    description: |
+      Provide a handle to the regulator supplying IOVDD. If not provided, a
+      dummy regulator will be used.
+
   ti,mic-bias-source:
     description: |
       Indicates the source for MIC Bias.
