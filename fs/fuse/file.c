@@ -975,12 +975,18 @@ static void fuse_readahead(struct readahead_control *rac)
 		unsigned int pages = 0;
 
 		if (fc->num_background >= fc->congestion_threshold &&
-		    rac->ra->async_size >= readahead_count(rac))
+		    rac->ra->async_size >= readahead_count(rac)) {
 			/*
-			 * Congested and only async pages left, so skip the
-			 * rest.
+			 * Congested and only async pages left, wait
+			 * until congestion eases.
 			 */
-			break;
+			int err;
+
+			err = wait_event_killable(fc->bg_congestion_wait,
+					fc->num_background < fc->congestion_threshold);
+			if (err)
+				break;
+		}
 
 		ia = fuse_io_alloc(NULL, cur_pages);
 		if (!ia)

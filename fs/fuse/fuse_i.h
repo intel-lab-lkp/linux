@@ -722,6 +722,9 @@ struct fuse_conn {
 	/** waitq for blocked connection */
 	wait_queue_head_t blocked_waitq;
 
+	/** waitq for async readaheads until congestion eases */
+	wait_queue_head_t bg_congestion_wait;
+
 	/** Connection established, cleared on umount, connection
 	    abort and device release */
 	unsigned connected;
