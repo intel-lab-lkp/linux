@@ -82,7 +82,7 @@ static int rapl_cpu_online(unsigned int cpu)
 		if (IS_ERR(rp))
 			return PTR_ERR(rp);
 		if (rapl_msr_pmu)
-			rapl_package_add_pmu(rp);
+			rapl_package_add_pmu_locked(rp);
 	}
 	cpumask_set_cpu(cpu, &rp->cpumask);
 	return 0;

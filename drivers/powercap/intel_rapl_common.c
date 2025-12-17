@@ -2032,15 +2032,13 @@ end:
 	return ret;
 }
 
-int rapl_package_add_pmu(struct rapl_package *rp)
+int rapl_package_add_pmu_locked(struct rapl_package *rp)
 {
 	struct rapl_package_pmu_data *data = &rp->pmu_data;
 	int idx;
 
 	if (rp->has_pmu)
 		return -EEXIST;
-
-	guard(cpus_read_lock)();
 
 	for (idx = 0; idx < rp->nr_domains; idx++) {
 		struct rapl_domain *rd = &rp->domains[idx];
@@ -2090,6 +2088,17 @@ int rapl_package_add_pmu(struct rapl_package *rp)
 	hrtimer_setup(&data->hrtimer, rapl_hrtimer_handle, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 
 	return rapl_pmu_update(rp);
+}
+EXPORT_SYMBOL_GPL(rapl_package_add_pmu_locked);
+
+int rapl_package_add_pmu(struct rapl_package *rp)
+{
+	if (rp->has_pmu)
+		return -EEXIST;
+
+	guard(cpus_read_lock)();
+
+	return rapl_package_add_pmu_locked(rp);
 }
 EXPORT_SYMBOL_GPL(rapl_package_add_pmu);
 
