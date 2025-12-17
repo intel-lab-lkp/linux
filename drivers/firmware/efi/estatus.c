@@ -973,3 +973,81 @@ void estatus_report_mem_error(int sev, struct cper_sec_mem_err *mem_err)
 	arch_apei_report_mem_error(sev, mem_err);
 #endif
 }
+
+int estatus_in_nmi_queue_one_entry(struct estatus_source *source, enum fixed_addresses fixmap_idx)
+{
+	estatus_generic_status *estatus, tmp_header;
+	struct estatus_node *estatus_node;
+	u32 len, node_len;
+	phys_addr_t buf_paddr;
+	int sev, rc;
+
+	if (!IS_ENABLED(CONFIG_ARCH_HAVE_NMI_SAFE_CMPXCHG))
+		return -EOPNOTSUPP;
+
+	rc = __estatus_peek_estatus(source, &tmp_header, &buf_paddr,
+				    fixmap_idx);
+	if (rc) {
+		estatus_clear_estatus(source, &tmp_header, buf_paddr,
+				      fixmap_idx);
+		return rc;
+	}
+
+	rc = __estatus_check_estatus(source, &tmp_header);
+	if (rc) {
+		estatus_clear_estatus(source, &tmp_header, buf_paddr,
+				      fixmap_idx);
+		return rc;
+	}
+
+	len = estatus_len(&tmp_header);
+	node_len = ESTATUS_NODE_LEN(len);
+	estatus_node = (void *)gen_pool_alloc(estatus_pool, node_len);
+	if (!estatus_node)
+		return -ENOMEM;
+
+	estatus_node->source = source;
+	estatus = ESTATUS_FROM_NODE(estatus_node);
+
+	if (__estatus_read_estatus(source, estatus, buf_paddr, fixmap_idx,
+				   len)) {
+		estatus_clear_estatus(source, estatus, buf_paddr, fixmap_idx);
+		rc = -ENOENT;
+		goto no_work;
+	}
+
+	sev = estatus_severity(estatus->error_severity);
+	if (sev >= ESTATUS_SEV_PANIC) {
+		estatus_print_queued_estatus();
+		__estatus_panic(source, estatus, buf_paddr, fixmap_idx);
+	}
+
+	estatus_clear_estatus(source, &tmp_header, buf_paddr, fixmap_idx);
+
+	/* This error has been reported before, don't process it again. */
+	if (estatus_cached(estatus))
+		goto no_work;
+
+	llist_add(&estatus_node->llnode, &estatus_llist);
+
+	return rc;
+
+no_work:
+	gen_pool_free(estatus_pool, (unsigned long)estatus_node,
+		      node_len);
+
+	return rc;
+}
+EXPORT_SYMBOL_GPL(estatus_in_nmi_queue_one_entry);
+
+void estatus_register_report_chain(struct notifier_block *nb)
+{
+	atomic_notifier_chain_register(&estatus_report_chain, nb);
+}
+EXPORT_SYMBOL_GPL(estatus_register_report_chain);
+
+void estatus_unregister_report_chain(struct notifier_block *nb)
+{
+	atomic_notifier_chain_unregister(&estatus_report_chain, nb);
+}
+EXPORT_SYMBOL_GPL(estatus_unregister_report_chain);

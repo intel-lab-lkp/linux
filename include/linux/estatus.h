@@ -122,8 +122,7 @@ enum {
 };
 
 int estatus_proc(struct estatus_source *ghes);
-int estatus_in_nmi_queue_one_entry(struct estatus_source *ghes,
-				   enum fixed_addresses fixmap_idx);
+int estatus_in_nmi_queue_one_entry(struct estatus_source *ghes, enum fixed_addresses fixmap_idx);
 void estatus_proc_in_irq(struct irq_work *irq_work);
 
 /**
