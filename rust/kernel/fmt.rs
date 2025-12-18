@@ -28,7 +28,27 @@ macro_rules! impl_fmt_adapter_forward {
 }
 
 use core::fmt::{Binary, LowerExp, LowerHex, Octal, Pointer, UpperExp, UpperHex};
-impl_fmt_adapter_forward!(Debug, LowerHex, UpperHex, Octal, Binary, Pointer, LowerExp, UpperExp);
+impl_fmt_adapter_forward!(Debug, LowerHex, UpperHex, Octal, Binary, LowerExp, UpperExp);
+
+// Special handling for raw pointers: when Adapter wraps a reference to a raw pointer,
+// we want to print the pointer value itself, not the reference's address.
+// This fixes the issue where {:p} prints the stack address of the pointer variable
+// instead of the address the pointer points to.
+impl<T> Pointer for Adapter<&*mut T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        let Self(t) = self;
+        // Dereference the reference to get the raw pointer, then format it
+        Pointer::fmt(*t, f)
+    }
+}
+
+impl<T> Pointer for Adapter<&*const T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        let Self(t) = self;
+        // Dereference the reference to get the raw pointer, then format it
+        Pointer::fmt(*t, f)
+    }
+}
 
 /// A copy of [`core::fmt::Display`] that allows us to implement it for foreign types.
 ///
