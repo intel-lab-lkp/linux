@@ -479,6 +479,7 @@ static struct clk *aic32x4_register_clk(struct device *dev,
 int aic32x4_register_clocks(struct device *dev, const char *mclk_name)
 {
 	int i;
+	struct clk *clk;
 
 	/*
 	 * These lines are here to preserve the current functionality of
@@ -491,8 +492,11 @@ int aic32x4_register_clocks(struct device *dev, const char *mclk_name)
 	aic32x4_clkdesc_array[1].parent_names =
 			(const char *[]) { mclk_name, "bclk", "gpio", "pll" };
 
-	for (i = 0; i < ARRAY_SIZE(aic32x4_clkdesc_array); ++i)
-		aic32x4_register_clk(dev, &aic32x4_clkdesc_array[i]);
+	for (i = 0; i < ARRAY_SIZE(aic32x4_clkdesc_array); ++i) {
+		clk = aic32x4_register_clk(dev, &aic32x4_clkdesc_array[i]);
+		if (IS_ERR(clk))
+			return PTR_ERR(clk);
+	}
 
 	return 0;
 }
