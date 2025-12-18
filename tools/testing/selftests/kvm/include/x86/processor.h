@@ -36,7 +36,8 @@ extern uint64_t guest_tsc_khz;
 
 const char *ex_str(int vector);
 
-#define X86_EFLAGS_FIXED	 (1u << 1)
+#define X86_EFLAGS_FIXED	(1u << 1)
+#define X86_EFLAGS_TF		(1u << 8)
 
 #define X86_CR4_VME		(1ul << 0)
 #define X86_CR4_PVI		(1ul << 1)
