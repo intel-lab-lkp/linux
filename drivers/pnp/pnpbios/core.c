@@ -538,6 +538,7 @@ static int __init pnpbios_init(void)
 	/* register with the pnp layer */
 	ret = pnp_register_protocol(&pnpbios_protocol);
 	if (ret) {
+		put_device(&pnpbios_protocol.dev)
 		printk(KERN_ERR
 		       "PnPBIOS: Unable to register driver.  Aborting.\n");
 		return ret;
