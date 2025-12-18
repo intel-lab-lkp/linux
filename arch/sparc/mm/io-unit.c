@@ -4,7 +4,7 @@
  *
  * Copyright (C) 1997,1998 Jakub Jelinek    (jj@sunsite.mff.cuni.cz)
  */
- 
+
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/slab.h>
@@ -62,7 +62,7 @@ static void __init iounit_iommu_init(struct platform_device *op)
 		prom_printf("SUN4D: Cannot map External Page Table.");
 		prom_halt();
 	}
-	
+
 	op->dev.archdata.iommu = iounit;
 	iounit->page_table = xpt;
 	spin_lock_init(&iounit->lock);
@@ -109,9 +109,9 @@ static dma_addr_t iounit_get_area(struct iounit_struct *iounit,
 	case 2: i = 0x0132; break;
 	default: i = 0x0213; break;
 	}
-	
+
 	IOD(("%s(%pa,%d[%d])=", __func__, &phys, size, npages));
-	
+
 next:	j = (i & 15);
 	rotor = iounit->rotor[j - 1];
 	limit = iounit->limit[j];
@@ -150,7 +150,7 @@ static dma_addr_t iounit_map_phys(struct device *dev, phys_addr_t phys,
 	struct iounit_struct *iounit = dev->archdata.iommu;
 	unsigned long flags;
 	dma_addr_t ret;
-	
+
 	/* XXX So what is maxphys for us and how do drivers know it? */
 	if (!len || len > 256 * 1024)
 		return DMA_MAPPING_ERROR;
@@ -185,7 +185,7 @@ static void iounit_unmap_phys(struct device *dev, dma_addr_t vaddr, size_t len,
 {
 	struct iounit_struct *iounit = dev->archdata.iommu;
 	unsigned long flags;
-	
+
 	spin_lock_irqsave(&iounit->lock, flags);
 	len = ((vaddr & ~PAGE_MASK) + len + (PAGE_SIZE-1)) >> PAGE_SHIFT;
 	vaddr = (vaddr - IOUNIT_DMA_BASE) >> PAGE_SHIFT;
