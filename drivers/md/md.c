@@ -4402,12 +4402,13 @@ raid_disks_store(struct mddev *mddev, const char *buf, size_t len)
 {
 	unsigned int n;
 	int err;
+	bool need_suspend = (mddev->pers && mddev->level == 1);
 
 	err = kstrtouint(buf, 10, &n);
 	if (err < 0)
 		return err;
 
-	err = mddev_lock(mddev);
+	err = need_suspend ? mddev_suspend_and_lock(mddev) : mddev_lock(mddev);
 	if (err)
 		return err;
 	if (mddev->pers)
@@ -4432,7 +4433,7 @@ raid_disks_store(struct mddev *mddev, const char *buf, size_t len)
 	} else
 		mddev->raid_disks = n;
 out_unlock:
-	mddev_unlock(mddev);
+	need_suspend ? mddev_unlock_and_resume(mddev) : mddev_unlock(mddev);
 	return err ? err : len;
 }
 static struct md_sysfs_entry md_raid_disks =
