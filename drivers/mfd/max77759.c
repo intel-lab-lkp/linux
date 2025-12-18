@@ -415,7 +415,8 @@ static const struct mfd_cell max77759_maxq_cells[] = {
 };
 
 static const struct mfd_cell max77759_charger_cells[] = {
-	MFD_CELL_RES("max77759-charger", max77759_charger_resources),
+	MFD_CELL_OF("max77759-charger", max77759_charger_resources, NULL, 0, 0,
+		    "maxim,max77759-charger"),
 };
 
 int max77759_maxq_command(struct max77759 *max77759,
