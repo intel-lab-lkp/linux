@@ -3632,9 +3632,15 @@ int dw_mci_runtime_resume(struct device *dev)
 	if (host->slot &&
 	    (mmc_host_can_gpio_cd(host->slot->mmc) ||
 	     !mmc_card_is_removable(host->slot->mmc))) {
-		ret = clk_prepare_enable(host->biu_clk);
-		if (ret)
-			return ret;
+		if (IS_ERR(host->biu_clk)) {
+			dev_dbg(host->dev, "biu clock not available\n");
+		} else {
+			ret = clk_prepare_enable(host->biu_clk);
+			if (ret) {
+				dev_err(host->dev, "failed to enable biu clock\n");
+				goto err;
+			}
+		}
 	}
 
 	ret = clk_prepare_enable(host->ciu_clk);
@@ -3685,9 +3691,12 @@ int dw_mci_runtime_resume(struct device *dev)
 err:
 	if (host->slot &&
 	    (mmc_host_can_gpio_cd(host->slot->mmc) ||
-	     !mmc_card_is_removable(host->slot->mmc)))
-		clk_disable_unprepare(host->biu_clk);
-
+	     !mmc_card_is_removable(host->slot->mmc))) {
+		if (IS_ERR(host->biu_clk))
+			dev_dbg(host->dev, "biu clock not available\n");
+		else
+			clk_disable_unprepare(host->biu_clk);
+	}
 	return ret;
 }
 EXPORT_SYMBOL(dw_mci_runtime_resume);
