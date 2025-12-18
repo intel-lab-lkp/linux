@@ -18,6 +18,9 @@ pub(crate) struct Entry<'a> {
     _parent: Option<Arc<Entry<'static>>>,
     // If we were created with a non-owning parent, this prevents us from outliving it
     _phantom: PhantomData<&'a ()>,
+    // If true, this entry was obtained via debugfs_lookup and should be released
+    // with dput() instead of debugfs_remove().
+    is_lookup: bool,
 }
 
 // SAFETY: [`Entry`] is just a `dentry` under the hood, which the API promises can be transferred
@@ -43,7 +46,36 @@ impl Entry<'static> {
             entry,
             _parent: parent,
             _phantom: PhantomData,
+            is_lookup: false,
         }
+    }
+
+    /// Looks up an existing entry in debugfs.
+    ///
+    /// Returns [`Some(Entry)`] representing the looked-up dentry if the entry exists, or [`None`]
+    /// if the entry was not found. When dropped, the entry will release its reference via `dput()`
+    /// instead of removing the directory.
+    pub(crate) fn lookup(name: &CStr, parent: Option<Arc<Self>>) -> Option<Self> {
+        let parent_ptr = match &parent {
+            Some(entry) => entry.as_ptr(),
+            None => core::ptr::null_mut(),
+        };
+        // SAFETY: The invariants of this function's arguments ensure the safety of this call.
+        // * `name` is a valid C string by the invariants of `&CStr`.
+        // * `parent_ptr` is either `NULL` (if `parent` is `None`), or a pointer to a valid
+        //   `dentry` by our invariant. `debugfs_lookup` handles `NULL` pointers correctly.
+        let entry = unsafe { bindings::debugfs_lookup(name.as_char_ptr(), parent_ptr) };
+
+        if entry.is_null() {
+            return None;
+        }
+
+        Some(Entry {
+            entry,
+            _parent: parent,
+            _phantom: PhantomData,
+            is_lookup: true,
+        })
     }
 
     /// # Safety
@@ -76,6 +108,7 @@ impl Entry<'static> {
             entry,
             _parent: Some(parent),
             _phantom: PhantomData,
+            is_lookup: false,
         }
     }
 }
@@ -97,6 +130,7 @@ impl<'a> Entry<'a> {
             entry,
             _parent: None,
             _phantom: PhantomData,
+            is_lookup: false,
         }
     }
 
@@ -129,6 +163,7 @@ impl<'a> Entry<'a> {
             entry,
             _parent: None,
             _phantom: PhantomData,
+            is_lookup: false,
         }
     }
 }
@@ -140,6 +175,7 @@ impl Entry<'_> {
             entry: core::ptr::null_mut(),
             _parent: None,
             _phantom: PhantomData,
+            is_lookup: false,
         }
     }
 
@@ -157,8 +193,15 @@ impl Entry<'_> {
 
 impl Drop for Entry<'_> {
     fn drop(&mut self) {
-        // SAFETY: `debugfs_remove` can take `NULL`, error values, and legal DebugFS dentries.
-        // `as_ptr` guarantees that the pointer is of this form.
-        unsafe { bindings::debugfs_remove(self.as_ptr()) }
+        if self.is_lookup {
+            // SAFETY: `dput` can take `NULL` and legal dentries.
+            // `as_ptr` guarantees that the pointer is of this form.
+            // This entry was obtained via `debugfs_lookup`, so we release the reference.
+            unsafe { bindings::dput(self.as_ptr()) }
+        } else {
+            // SAFETY: `debugfs_remove` can take `NULL`, error values, and legal DebugFS dentries.
+            // `as_ptr` guarantees that the pointer is of this form.
+            unsafe { bindings::debugfs_remove(self.as_ptr()) }
+        }
     }
 }

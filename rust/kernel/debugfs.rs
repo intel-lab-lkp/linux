@@ -110,6 +110,49 @@ impl Dir {
         Dir::create(name, None)
     }
 
+    /// Looks up an existing directory in DebugFS.
+    ///
+    /// If `parent` is [`None`], the lookup is performed from the root of the debugfs filesystem.
+    ///
+    /// Returns [`Some(Dir)`] representing the looked-up directory if found, or [`None`] if the
+    /// directory does not exist or if debugfs is not enabled. When dropped, the [`Dir`] will
+    /// release its reference to the dentry without removing the directory from the filesystem.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use kernel::c_str;
+    /// # use kernel::debugfs::Dir;
+    /// // Look up a top-level directory
+    /// let nova_core = Dir::lookup(c_str!("nova_core"), None);
+    ///
+    /// // Look up a subdirectory within a parent
+    /// let parent = Dir::new(c_str!("parent"));
+    /// let child = parent.subdir(c_str!("child"));
+    /// let looked_up = Dir::lookup(c_str!("child"), Some(&parent));
+    /// // `looked_up` now refers to the same directory as `child`.
+    /// // Dropping `looked_up` will not remove the directory.
+    /// ```
+    pub fn lookup(name: &CStr, parent: Option<&Dir>) -> Option<Self> {
+        #[cfg(CONFIG_DEBUG_FS)]
+        {
+            let parent_entry = match parent {
+                // If the parent couldn't be allocated, just early-return
+                Some(Dir(None)) => return None,
+                Some(Dir(Some(entry))) => Some(entry.clone()),
+                None => None,
+            };
+            let entry = Entry::lookup(name, parent_entry)?;
+            Some(Self(
+                // If Arc creation fails, the `Entry` will be dropped, so the reference will be
+                // released.
+                Arc::new(entry, GFP_KERNEL).ok(),
+            ))
+        }
+        #[cfg(not(CONFIG_DEBUG_FS))]
+        None
+    }
+
     /// Creates a subdirectory within this directory.
     ///
     /// # Examples
