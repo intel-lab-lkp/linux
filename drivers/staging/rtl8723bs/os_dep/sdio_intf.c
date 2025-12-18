@@ -296,7 +296,8 @@ static struct adapter *rtw_sdio_if1_init(struct dvobj_priv *dvobj, const struct 
 	if (rtw_init_drv_sw(padapter) == _FAIL)
 		goto free_hal_data;
 
-	rtw_wdev_alloc(padapter, dvobj_to_dev(dvobj));
+	if (rtw_wdev_alloc(padapter, dvobj_to_dev(dvobj)))
+		goto free_hal_data;
 
 	/* 3 8. get WLan MAC address */
 	/*  set mac addr */
