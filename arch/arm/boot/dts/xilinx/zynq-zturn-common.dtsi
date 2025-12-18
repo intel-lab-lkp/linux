@@ -33,6 +33,7 @@
 
 	gpio-leds {
 		compatible = "gpio-leds";
+
 		usr-led1 {
 			label = "usr-led1";
 			gpios = <&gpio0 0x0 0x1>;
@@ -49,6 +50,7 @@
 	gpio-keys {
 		compatible = "gpio-keys";
 		autorepeat;
+
 		key {
 			label = "K1";
 			gpios = <&gpio0 0x32 0x1>;
@@ -73,8 +75,7 @@
 	phy-mode = "rgmii-id";
 	phy-handle = <&ethernet_phy>;
 
-	ethernet_phy: ethernet-phy@0 {
-	};
+	ethernet_phy: ethernet-phy@0 {};
 };
 
 &sdhci0 {
