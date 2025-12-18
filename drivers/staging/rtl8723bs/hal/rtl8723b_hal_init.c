@@ -2926,6 +2926,8 @@ void rtl8723b_start_thread(struct adapter *padapter)
 	struct xmit_priv *xmitpriv = &padapter->xmitpriv;
 
 	xmitpriv->SdioXmitThread = kthread_run(rtl8723bs_xmit_thread, padapter, "RTWHALXT");
+	if (IS_ERR(xmitpriv->SdioXmitThread))
+		xmitpriv->SdioXmitThread = NULL;
 }
 
 void rtl8723b_stop_thread(struct adapter *padapter)
