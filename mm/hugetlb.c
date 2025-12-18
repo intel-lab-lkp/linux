@@ -1342,7 +1342,7 @@ static struct folio *dequeue_hugetlb_folio_nodemask(struct hstate *h, gfp_t gfp_
 	struct zoneref *z;
 	int node = NUMA_NO_NODE;
 
-	/* 'nid' should not be NUMA_NO_NODE. Try to catch any misuse of it and rectifiy. */
+	/* 'nid' should not be NUMA_NO_NODE. Try to catch any misuse of it and rectify. */
 	if (nid == NUMA_NO_NODE)
 		nid = numa_node_id();
 

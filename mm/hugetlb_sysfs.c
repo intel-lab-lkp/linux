@@ -208,7 +208,7 @@ static ssize_t demote_store(struct kobject *kobj,
 		long rc;
 
 		/*
-		 * Check for available pages to demote each time thorough the
+		 * Check for available pages to demote each time through the
 		 * loop as demote_pool_huge_page will drop hugetlb_lock.
 		 */
 		if (nid != NUMA_NO_NODE)

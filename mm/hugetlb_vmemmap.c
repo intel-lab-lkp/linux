@@ -746,7 +746,7 @@ void hugetlb_vmemmap_optimize_bootmem_folios(struct hstate *h, struct list_head 
 
 #ifdef CONFIG_SPARSEMEM_VMEMMAP_PREINIT
 
-/* Return true of a bootmem allocated HugeTLB page should be pre-HVO-ed */
+/* Return true if a bootmem allocated HugeTLB page should be pre-HVO-ed */
 static bool vmemmap_should_optimize_bootmem_page(struct huge_bootmem_page *m)
 {
 	unsigned long section_size, psize, pmd_vmemmap_size;
@@ -795,7 +795,7 @@ void __init hugetlb_vmemmap_init_early(int nid)
 	void *map;
 
 	/*
-	 * Noting to do if bootmem pages were not allocated
+	 * Nothing to do if bootmem pages were not allocated
 	 * early in boot, or if HVO wasn't enabled in the
 	 * first place.
 	 */
