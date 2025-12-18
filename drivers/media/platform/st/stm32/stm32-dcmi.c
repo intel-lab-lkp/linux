@@ -2092,7 +2092,7 @@ static void dcmi_remove(struct platform_device *pdev)
 	dma_release_channel(dcmi->dma_chan);
 }
 
-static __maybe_unused int dcmi_runtime_suspend(struct device *dev)
+static int dcmi_runtime_suspend(struct device *dev)
 {
 	struct stm32_dcmi *dcmi = dev_get_drvdata(dev);
 
@@ -2101,7 +2101,7 @@ static __maybe_unused int dcmi_runtime_suspend(struct device *dev)
 	return 0;
 }
 
-static __maybe_unused int dcmi_runtime_resume(struct device *dev)
+static int dcmi_runtime_resume(struct device *dev)
 {
 	struct stm32_dcmi *dcmi = dev_get_drvdata(dev);
 	int ret;
@@ -2113,7 +2113,7 @@ static __maybe_unused int dcmi_runtime_resume(struct device *dev)
 	return ret;
 }
 
-static __maybe_unused int dcmi_suspend(struct device *dev)
+static int dcmi_suspend(struct device *dev)
 {
 	/* disable clock */
 	pm_runtime_force_suspend(dev);
@@ -2124,7 +2124,7 @@ static __maybe_unused int dcmi_suspend(struct device *dev)
 	return 0;
 }
 
-static __maybe_unused int dcmi_resume(struct device *dev)
+static int dcmi_resume(struct device *dev)
 {
 	/* restore pinctl default state */
 	pinctrl_pm_select_default_state(dev);
@@ -2147,7 +2147,7 @@ static struct platform_driver stm32_dcmi_driver = {
 	.driver		= {
 		.name = DRV_NAME,
 		.of_match_table = of_match_ptr(stm32_dcmi_of_match),
-		.pm = &dcmi_pm_ops,
+		.pm = pm_sleep_ptr(&dcmi_pm_ops),
 	},
 };
 
