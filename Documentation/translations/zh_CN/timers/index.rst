@@ -15,12 +15,12 @@
 .. toctree::
     :maxdepth: 1
 
+    hpet
     timekeeping
 
 TODOList:
 
 * highres
-* hpet
 * hrtimers
 * no_hz
 * delay_sleep_functions
