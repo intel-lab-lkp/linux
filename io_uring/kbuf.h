@@ -12,6 +12,11 @@ enum {
 	IOBL_INC		= 2,
 	/* buffers are kernel managed */
 	IOBL_KERNEL_MANAGED	= 4,
+	/*
+	 * buffer ring is pinned and cannot be unregistered by userspace until
+	 * it has been unpinned
+	 */
+	IOBL_PINNED		= 8,
 };
 
 struct io_buffer_list {
@@ -136,4 +141,9 @@ static inline unsigned int io_put_kbufs(struct io_kiocb *req, int len,
 		return 0;
 	return __io_put_kbufs(req, bl, len, nbufs);
 }
+
+int io_kbuf_ring_pin(struct io_kiocb *req, unsigned buf_group,
+		     unsigned issue_flags, struct io_buffer_list **bl);
+int io_kbuf_ring_unpin(struct io_kiocb *req, unsigned buf_group,
+		       unsigned issue_flags);
 #endif
