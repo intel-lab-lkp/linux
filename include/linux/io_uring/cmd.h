@@ -88,6 +88,11 @@ int io_uring_cmd_buf_ring_pin(struct io_uring_cmd *ioucmd, unsigned buf_group,
 			      unsigned issue_flags, struct io_buffer_list **bl);
 int io_uring_cmd_buf_ring_unpin(struct io_uring_cmd *ioucmd, unsigned buf_group,
 				unsigned issue_flags);
+
+int io_uring_cmd_kmbuffer_recycle(struct io_uring_cmd *cmd,
+				  unsigned int buf_group, u64 addr,
+				  unsigned int len, unsigned int bid,
+				  unsigned int issue_flags);
 #else
 static inline int
 io_uring_cmd_import_fixed(u64 ubuf, unsigned long len, int rw,
@@ -140,6 +145,14 @@ static inline int io_uring_cmd_buf_ring_pin(struct io_uring_cmd *ioucmd,
 static inline int io_uring_cmd_buf_ring_unpin(struct io_uring_cmd *ioucmd,
 					      unsigned buf_group,
 					      unsigned issue_flags)
+{
+	return -EOPNOTSUPP;
+}
+static inline int io_uring_cmd_kmbuffer_recycle(struct io_uring_cmd *cmd,
+						unsigned int buf_group,
+						u64 addr, unsigned int len,
+						unsigned int bid,
+						unsigned int issue_flags)
 {
 	return -EOPNOTSUPP;
 }

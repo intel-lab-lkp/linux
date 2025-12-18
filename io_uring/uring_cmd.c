@@ -416,3 +416,14 @@ int io_uring_cmd_buf_ring_unpin(struct io_uring_cmd *ioucmd, unsigned buf_group,
 	return io_kbuf_ring_unpin(req, buf_group, issue_flags);
 }
 EXPORT_SYMBOL_GPL(io_uring_cmd_buf_ring_unpin);
+
+int io_uring_cmd_kmbuffer_recycle(struct io_uring_cmd *ioucmd,
+				  unsigned int buf_group, u64 addr,
+				  unsigned int len, unsigned int bid,
+				  unsigned int issue_flags)
+{
+	struct io_kiocb *req = cmd_to_io_kiocb(ioucmd);
+
+	return io_kmbuf_recycle(req, buf_group, addr, len, bid, issue_flags);
+}
+EXPORT_SYMBOL_GPL(io_uring_cmd_kmbuffer_recycle);
