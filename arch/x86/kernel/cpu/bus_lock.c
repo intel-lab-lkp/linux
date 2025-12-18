@@ -169,6 +169,9 @@ static void sld_update_msr(bool on)
 
 void split_lock_init(void)
 {
+	if (!cpu_model_supports_sld)
+		return;
+
 	/*
 	 * #DB for bus lock handles ratelimit and #AC for split lock is
 	 * disabled.
@@ -178,8 +181,7 @@ void split_lock_init(void)
 		return;
 	}
 
-	if (cpu_model_supports_sld)
-		split_lock_verify_msr(sld_state != sld_off);
+	split_lock_verify_msr(sld_state != sld_off);
 }
 
 static void __split_lock_reenable_unlock(struct work_struct *work)
