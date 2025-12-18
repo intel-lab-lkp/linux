@@ -29,10 +29,7 @@
    power/index
    scheduler/index
    locking/index
-
-TODOList:
-
-* timers/index
+   timers/index
 
 人机接口
 --------
