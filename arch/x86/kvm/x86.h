@@ -617,6 +617,13 @@ static inline bool kvm_dr6_valid(u64 data)
 	return !(data >> 32);
 }
 
+static inline unsigned long kvm_get_eff_dr7(struct kvm_vcpu *vcpu)
+{
+	if (vcpu->guest_debug & KVM_GUESTDBG_USE_HW_BP)
+		return vcpu->arch.guest_debug_dr7;
+	return vcpu->arch.dr7;
+}
+
 /*
  * Trigger machine check on the host. We assume all the MSRs are already set up
  * by the CPU and that we still run on the same CPU as the MCE occurred on.
