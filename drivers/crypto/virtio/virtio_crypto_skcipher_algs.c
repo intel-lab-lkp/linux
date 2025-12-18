@@ -30,9 +30,9 @@ struct virtio_crypto_sym_request {
 
 	/* Cipher or aead */
 	uint32_t type;
-	uint8_t *iv;
 	/* Encryption? */
 	bool encrypt;
+	uint8_t iv[0];
 };
 
 struct virtio_crypto_algo {
@@ -402,12 +402,7 @@ __virtio_crypto_skcipher_do_req(struct virtio_crypto_sym_request *vc_sym_req,
 	 * Avoid to do DMA from the stack, switch to using
 	 * dynamically-allocated for the IV
 	 */
-	iv = kzalloc_node(ivsize, GFP_ATOMIC,
-				dev_to_node(&vcrypto->vdev->dev));
-	if (!iv) {
-		err = -ENOMEM;
-		goto free;
-	}
+	iv = vc_sym_req->iv;
 	memcpy(iv, req->iv, ivsize);
 	if (!vc_sym_req->encrypt)
 		scatterwalk_map_and_copy(req->iv, req->src,
@@ -416,7 +411,6 @@ __virtio_crypto_skcipher_do_req(struct virtio_crypto_sym_request *vc_sym_req,
 
 	sg_init_one(&iv_sg, iv, ivsize);
 	sgs[num_out++] = &iv_sg;
-	vc_sym_req->iv = iv;
 
 	/* Source data */
 	for (sg = req->src; src_nents; sg = sg_next(sg), src_nents--)
@@ -443,7 +437,7 @@ __virtio_crypto_skcipher_do_req(struct virtio_crypto_sym_request *vc_sym_req,
 	return 0;
 
 free_iv:
-	kfree_sensitive(iv);
+	memzero_explicit(iv, ivsize);
 free:
 	memzero_explicit(req_data, sizeof(*req_data));
 	kfree(sgs);
@@ -502,8 +496,10 @@ static int virtio_crypto_skcipher_init(struct crypto_skcipher *tfm)
 {
 	struct virtio_crypto_skcipher_ctx *ctx = crypto_skcipher_ctx(tfm);
 	struct skcipher_alg *alg = crypto_skcipher_alg(tfm);
+	int size;
 
-	crypto_skcipher_set_reqsize(tfm, sizeof(struct virtio_crypto_sym_request));
+	size = sizeof(struct virtio_crypto_sym_request) + crypto_skcipher_ivsize(tfm);
+	crypto_skcipher_set_reqsize(tfm, size);
 	ctx->alg = container_of(alg, struct virtio_crypto_algo, algo.base);
 
 	return 0;
@@ -551,7 +547,7 @@ static void virtio_crypto_skcipher_finalize_req(
 		scatterwalk_map_and_copy(req->iv, req->dst,
 					 req->cryptlen - ivsize,
 					 ivsize, 0);
-	kfree_sensitive(vc_sym_req->iv);
+	memzero_explicit(vc_sym_req->iv, ivsize);
 	virtcrypto_clear_request(&vc_sym_req->base);
 
 	crypto_finalize_skcipher_request(vc_sym_req->base.dataq->engine,
