@@ -342,7 +342,7 @@ static int _kstrtoul(const char *s, unsigned int base, unsigned long *res)
 }
 
 /**
- * boot_kstrtoul - convert a string to an unsigned long
+ * kstrtoul - convert a string to an unsigned long
  * @s: The start of the string. The string must be null-terminated, and may also
  *  include a single newline before its terminating null. The first character
  *  may also be a plus sign, but not a minus sign.
@@ -356,7 +356,7 @@ static int _kstrtoul(const char *s, unsigned int base, unsigned long *res)
  * Returns 0 on success, -ERANGE on overflow and -EINVAL on parsing error.
  * Used as a replacement for the simple_strtoull.
  */
-int boot_kstrtoul(const char *s, unsigned int base, unsigned long *res)
+int kstrtoul(const char *s, unsigned int base, unsigned long *res)
 {
 	/*
 	 * We want to shortcut function call, but

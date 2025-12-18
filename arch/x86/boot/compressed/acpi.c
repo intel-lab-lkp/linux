@@ -188,7 +188,7 @@ static unsigned long get_cmdline_acpi_rsdp(void)
 	if (ret < 0)
 		return 0;
 
-	if (boot_kstrtoul(val, 16, &addr))
+	if (kstrtoul(val, 16, &addr))
 		return 0;
 #endif
 	return addr;
