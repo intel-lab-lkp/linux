@@ -520,9 +520,14 @@ static int lp_open(struct inode *inode, struct file *file)
 	   should most likely only ever be used by the tunelp application. */
 	if ((LP_F(minor) & LP_ABORTOPEN) && !(file->f_flags & O_NONBLOCK)) {
 		int status;
+		if (mutex_lock_interruptible(&lp_table[minor].port_mutex)) {
+			ret = -EINTR;
+			goto out;
+		}
 		lp_claim_parport_or_block(&lp_table[minor]);
 		status = r_str(minor);
 		lp_release_parport(&lp_table[minor]);
+		mutex_unlock(&lp_table[minor].port_mutex);
 		if (status & LP_POUTPA) {
 			printk(KERN_INFO "lp%d out of paper\n", minor);
 			LP_F(minor) &= ~LP_BUSY;
@@ -547,6 +552,10 @@ static int lp_open(struct inode *inode, struct file *file)
 		goto out;
 	}
 	/* Determine if the peripheral supports ECP mode */
+	if (mutex_lock_interruptible(&lp_table[minor].port_mutex)) {
+		ret = -EINTR;
+		goto out;
+	}
 	lp_claim_parport_or_block(&lp_table[minor]);
 	if ((lp_table[minor].dev->port->modes & PARPORT_MODE_ECP) &&
 	     !parport_negotiate(lp_table[minor].dev->port,
@@ -559,6 +568,7 @@ static int lp_open(struct inode *inode, struct file *file)
 	/* Leave peripheral in compatibility mode */
 	parport_negotiate(lp_table[minor].dev->port, IEEE1284_MODE_COMPAT);
 	lp_release_parport(&lp_table[minor]);
+	mutex_unlock(&lp_table[minor].port_mutex);
 	lp_table[minor].current_mode = IEEE1284_MODE_COMPAT;
 out:
 	mutex_unlock(&lp_mutex);
@@ -569,10 +579,13 @@ static int lp_release(struct inode *inode, struct file *file)
 {
 	unsigned int minor = iminor(inode);
 
+	if (mutex_lock_interruptible(&lp_table[minor].port_mutex))
+		return -EINTR;
 	lp_claim_parport_or_block(&lp_table[minor]);
 	parport_negotiate(lp_table[minor].dev->port, IEEE1284_MODE_COMPAT);
 	lp_table[minor].current_mode = IEEE1284_MODE_COMPAT;
 	lp_release_parport(&lp_table[minor]);
+	mutex_unlock(&lp_table[minor].port_mutex);
 	kfree(lp_table[minor].lp_buffer);
 	lp_table[minor].lp_buffer = NULL;
 	LP_F(minor) &= ~LP_BUSY;
@@ -641,7 +654,10 @@ static int lp_do_ioctl(unsigned int minor, unsigned int cmd,
 				return -EFAULT;
 			break;
 		case LPRESET:
+			if (mutex_lock_interruptible(&lp_table[minor].port_mutex))
+				return -EINTR;
 			lp_reset(minor);
+			mutex_unlock(&lp_table[minor].port_mutex);
 			break;
 #ifdef LP_STATS
 		case LPGETSTATS:
