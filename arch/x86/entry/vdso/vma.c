@@ -278,8 +278,7 @@ bool arch_syscall_is_vdso_sigreturn(struct pt_regs *regs)
 #ifdef CONFIG_X86_64
 static __init int vdso_setup(char *s)
 {
-	vdso64_enabled = simple_strtoul(s, NULL, 0);
-	return 1;
+	return kstrtouint(s, 0, &vdso64_enabled) == 0;
 }
 __setup("vdso=", vdso_setup);
 #endif /* CONFIG_X86_64 */

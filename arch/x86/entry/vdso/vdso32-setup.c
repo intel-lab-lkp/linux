@@ -30,9 +30,7 @@ unsigned int __read_mostly vdso32_enabled = VDSO_DEFAULT;
 
 static int __init vdso32_setup(char *s)
 {
-	vdso32_enabled = simple_strtoul(s, NULL, 0);
-
-	if (vdso32_enabled > 1) {
+	if (kstrtouint(s, 0, &vdso32_enabled) || vdso32_enabled > 1) {
 		pr_warn("vdso32 values other than 0 and 1 are no longer allowed; vdso disabled\n");
 		vdso32_enabled = 0;
 	}
