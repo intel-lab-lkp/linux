@@ -28,13 +28,6 @@ enum split_lock_detect_state {
 static enum split_lock_detect_state sld_state __ro_after_init = sld_off;
 static u64 msr_test_ctrl_cache __ro_after_init;
 
-/*
- * With a name like MSR_TEST_CTL it should go without saying, but don't touch
- * MSR_TEST_CTL unless the CPU is one of the whitelisted models.  Writing it
- * on CPUs that do not support SLD can cause fireworks, even when writing '0'.
- */
-static bool cpu_model_supports_sld __ro_after_init;
-
 static const struct {
 	const char			*option;
 	enum split_lock_detect_state	state;
@@ -169,7 +162,7 @@ static void sld_update_msr(bool on)
 
 void split_lock_init(void)
 {
-	if (!cpu_model_supports_sld)
+	if (!boot_cpu_has(X86_FEATURE_SPLIT_LOCK_DETECT))
 		return;
 
 	/*
@@ -387,7 +380,6 @@ static void __init split_lock_setup(struct cpuinfo_x86 *c)
 	return;
 
 supported:
-	cpu_model_supports_sld = true;
 	__split_lock_setup();
 }
 
