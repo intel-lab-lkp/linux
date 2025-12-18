@@ -66,6 +66,14 @@
 #define INA3221_MASK_ENABLE_SCC_MASK	GENMASK(14, 12)
 
 #define SQ52210_ALERT_CONFIG_MASK	GENMASK(15, 4)
+#define SQ52210_MASK_ALERT_CHANNEL1 (BIT(15) | BIT(12) | BIT(9) | BIT(6))
+#define SQ52210_MASK_ALERT_CHANNEL2 (BIT(14) | BIT(11) | BIT(8) | BIT(5))
+#define SQ52210_MASK_ALERT_CHANNEL3 (BIT(13) | BIT(10) | BIT(7) | BIT(4))
+
+#define SQ52210_ALERT_ALL_SUL_MASK	(BIT(15) | BIT(14) | BIT(13))
+#define SQ52210_ALERT_ALL_BOL_MASK	(BIT(12) | BIT(11) | BIT(10))
+#define SQ52210_ALERT_ALL_BUL_MASK	(BIT(9) | BIT(8) | BIT(7))
+#define SQ52210_ALERT_ALL_POL_MASK	(BIT(6) | BIT(5) | BIT(4))
 
 #define INA3221_CONFIG_DEFAULT		0x7127
 #define INA3221_RSHUNT_DEFAULT		10000
@@ -106,6 +114,13 @@ enum ina3221_channels {
 	INA3221_CHANNEL2,
 	INA3221_CHANNEL3,
 	INA3221_NUM_CHANNELS
+};
+
+enum sq52210_alert_types {
+	SQ52210_ALERT_SUL,
+	SQ52210_ALERT_BOL,
+	SQ52210_ALERT_BUL,
+	SQ52210_ALERT_POL
 };
 
 /**
@@ -272,6 +287,18 @@ static inline int ina3221_wait_for_data(struct ina3221_data *ina)
 					      cvrf, cvrf, wait, wait * 2);
 }
 
+static const u32 alert_groups[] = {
+	SQ52210_MASK_ALERT_CHANNEL1,
+	SQ52210_MASK_ALERT_CHANNEL2,
+	SQ52210_MASK_ALERT_CHANNEL3,
+};
+
+static const u8 limit_regs[] = {
+	SQ52210_ALERT_LIMIT1,
+	SQ52210_ALERT_LIMIT2,
+	SQ52210_ALERT_LIMIT3,
+};
+
 static int ina3221_read_value(struct ina3221_data *ina, unsigned int reg,
 			      int *val)
 {
@@ -284,13 +311,55 @@ static int ina3221_read_value(struct ina3221_data *ina, unsigned int reg,
 
 	/*
 	 * Shunt Voltage Sum register has 14-bit value with 1-bit shift
+	 * Current registers have 15-bit value
+	 * Power registers have 16-bit value
+	 * ALERT_LIMIT registers have 16-bit value with 3-bit shift
 	 * Other Shunt Voltage registers have 12 bits with 3-bit shift
 	 */
-	if (reg == INA3221_SHUNT_SUM || reg == INA3221_CRIT_SUM)
+	switch (reg) {
+	case INA3221_SHUNT_SUM:
+	case INA3221_CRIT_SUM:
 		*val = sign_extend32(regval >> 1, 14);
-	else
+		break;
+	case SQ52210_CURRENT1:
+	case SQ52210_CURRENT2:
+	case SQ52210_CURRENT3:
+		*val = sign_extend32(regval, 15);
+		break;
+	case SQ52210_POWER1:
+	case SQ52210_POWER2:
+	case SQ52210_POWER3:
+		*val = regval;
+		break;
+	case INA3221_BUS1:
+	case INA3221_BUS2:
+	case INA3221_BUS3:
+	case INA3221_SHUNT1:
+	case INA3221_SHUNT2:
+	case INA3221_SHUNT3:
+	case INA3221_WARN1:
+	case INA3221_WARN2:
+	case INA3221_WARN3:
+	case INA3221_CRIT1:
+	case INA3221_CRIT2:
+	case INA3221_CRIT3:
 		*val = sign_extend32(regval >> 3, 12);
-
+		break;
+	case SQ52210_ALERT_LIMIT1:
+	case SQ52210_ALERT_LIMIT2:
+	case SQ52210_ALERT_LIMIT3:
+		if (ina->alert_type_select & SQ52210_ALERT_ALL_SUL_MASK)
+			*val = sign_extend32(regval, 15);
+		else if (ina->alert_type_select & (SQ52210_ALERT_ALL_BOL_MASK
+					| SQ52210_ALERT_ALL_BUL_MASK))
+			*val = regval >> 3;
+		else if (ina->alert_type_select & SQ52210_ALERT_ALL_POL_MASK)
+			*val = regval;
+		break;
+	default:
+		*val = 0;
+		return -EOPNOTSUPP;
+	};
 	return 0;
 }
 
@@ -441,6 +510,89 @@ static int ina3221_read_curr(struct device *dev, u32 attr,
 	default:
 		return -EOPNOTSUPP;
 	}
+}
+
+static int sq52210_alert_limit_write(struct ina3221_data *ina,
+			enum sq52210_alert_types type, int channel, long val)
+{
+	struct regmap *regmap = ina->regmap;
+	int item = channel % INA3221_NUM_CHANNELS;
+	u8 limit_reg;
+	u32 alert_group, alert_mask = 0;
+	int regval = 0;
+	int ret;
+
+	if (item >= ARRAY_SIZE(alert_groups) || val < 0)
+		return -EINVAL;
+
+	alert_group = alert_groups[item];
+	limit_reg = limit_regs[item];
+
+	/* Clear alerts for this channel group first */
+	ret = regmap_update_bits(regmap, SQ52210_ALERT_CONFIG, alert_group, 0);
+	if (ret)
+		return ret;
+
+	/* Determine alert type and calculate register value */
+	switch (type) {
+	/*
+	 * The alert warning logic is implemented by comparing the limit register values
+	 * with the corresponding alert source register values. Since the current register
+	 * is a 15-bit signed register and the power register is a 16-bit unsigned
+	 * register, but the lower 3 bits of the limit register default to 0, the lower
+	 * 3 bits will be forced to 0 when setting SUL and POL warning values.
+	 * Formula to convert register value:
+	 *     bus_voltage: (regval / 8mV) << 3
+	 *     current: (regval / current_lsb) & 0xfff8
+	 *     power: (regval / current_lsb) & 0xfff8
+	 */
+	case SQ52210_ALERT_SUL:
+		/* SUL: Shunt Under Limit - BIT(15), BIT(14), BIT(13) */
+		alert_mask = BIT(15 - item);
+		/* Current Register, signed register, result in mA */
+		regval = DIV_ROUND_CLOSEST(val * 1000, ina->current_lsb_uA) & 0xfff8;
+		regval = clamp_val(regval, -32760, 32760);
+		break;
+	case SQ52210_ALERT_BOL:
+		/* BOL: Bus Over Limit - BIT(12), BIT(11), BIT(10) */
+		alert_mask = BIT(12 - item);
+		/* Bus Register, signed register, result in mV */
+		regval = clamp_val(val, -32760, 32760);
+		break;
+	case SQ52210_ALERT_BUL:
+		/* BUL: Bus Under Limit - BIT(9), BIT(8), BIT(7) */
+		alert_mask = BIT(9 - item);
+		/* Bus Register, signed register, result in mV */
+		regval = clamp_val(val, -32760, 32760);
+		break;
+	case SQ52210_ALERT_POL:
+		/* POL: Power Over Limit - BIT(6), BIT(5), BIT(4) */
+		alert_mask = BIT(6 - item);
+		/* Power Register, unsigned register, result in mW */
+		regval = DIV_ROUND_CLOSEST(val * 1000, ina->power_lsb_uW) & 0xfff8;
+		regval = clamp_val(regval, 0, 65528);
+		break;
+	default:
+		/* For unsupported attributes, just clear the configuration */
+		ina->alert_type_select &= ~alert_group;
+		return -EOPNOTSUPP;
+	}
+
+	/* Write limit register value */
+	ret = regmap_write(regmap, limit_reg, regval);
+	if (ret)
+		return ret;
+
+	/* Update alert configuration if limit value is non-zero */
+	if (regval) {
+		ina->alert_type_select = (ina->alert_type_select & ~alert_group) | alert_mask;
+		ret = regmap_update_bits(regmap, SQ52210_ALERT_CONFIG,
+					alert_group, alert_mask);
+	} else {
+		ina->alert_type_select &= ~alert_group;
+	}
+
+	return ret;
 }
 
 static int ina3221_write_chip(struct device *dev, u32 attr, long val)
