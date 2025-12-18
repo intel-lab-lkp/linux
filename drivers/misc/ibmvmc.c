@@ -1654,6 +1654,12 @@ static int ibmvmc_recv_msg(struct crq_server_adapter *adapter,
 	}
 
 	/* RDMA the data into the partition. */
+	if (msg_len > buffer->size) {
+		dev_err(adapter->dev, "Recv_msg: msg_len 0x%x exceeds buffer size 0x%x\n",
+			(unsigned int)msg_len, (unsigned int)buffer->size);
+		spin_unlock_irqrestore(&hmc->lock, flags);
+		return -EINVAL;
+	}
 	rc = h_copy_rdma(msg_len,
 			 adapter->riobn,
 			 buffer->dma_addr_remote,
