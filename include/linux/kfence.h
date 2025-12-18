@@ -24,7 +24,10 @@ extern unsigned long kfence_sample_interval;
  * address to metadata indices; effectively, the very first page serves as an
  * extended guard page, but otherwise has no special purpose.
  */
-#define KFENCE_POOL_SIZE ((CONFIG_KFENCE_NUM_OBJECTS + 1) * 2 * PAGE_SIZE)
+extern unsigned int __kfence_pool_size;
+#define KFENCE_POOL_SIZE (__kfence_pool_size)
+extern unsigned int __kfence_num_objects;
+#define KFENCE_NUM_OBJECTS (__kfence_num_objects)
 extern char *__kfence_pool;
 
 DECLARE_STATIC_KEY_FALSE(kfence_allocation_key);
