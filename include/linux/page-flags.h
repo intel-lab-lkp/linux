@@ -201,17 +201,15 @@ enum pageflags {
 static __always_inline unsigned long _compound_head(const struct page *page)
 {
 	unsigned long info = READ_ONCE(page->compound_info);
+	unsigned long mask;
 
-	/* Bit 0 encodes PageTail() */
-	if (!(info & 1))
+	if (!is_power_of_2(sizeof(struct page))) {
+		/* Bit 0 encodes PageTail() */
+		if (info & 1)
+			return info - 1;
+
 		return (unsigned long)page;
-
-	/*
-	 * If the size of struct page is not power-of-2, the rest of
-	 * compound_info is the pointer to the head page.
-	 */
-	if (!is_power_of_2(sizeof(struct page)))
-		return info - 1;
+	}
 
 	/*
 	 * If the size of struct page is power-of-2 the rest of the info
@@ -219,8 +217,17 @@ static __always_inline unsigned long _compound_head(const struct page *page)
 	 * the head page.
 	 *
 	 * No need to clear bit 0 in the mask as 'page' always has it clear.
+	 *
+	 * Let's do it in a branchless manner.
 	 */
-	return (unsigned long)page & info;
+
+	/* Non-tail: -1UL, Tail: 0 */
+	mask = (info & 1) - 1;
+
+	/* Non-tail: -1UL, Tail: info */
+	mask |= info;
+
+	return (unsigned long)page & mask;
 }
 
 #define compound_head(page)	((typeof(page))_compound_head(page))
