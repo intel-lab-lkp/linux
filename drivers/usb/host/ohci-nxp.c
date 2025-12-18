@@ -198,7 +198,7 @@ static int ohci_hcd_nxp_probe(struct platform_device *pdev)
 	hcd->regs = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
 	if (IS_ERR(hcd->regs)) {
 		ret = PTR_ERR(hcd->regs);
-		goto fail_resource;
+		goto err_put_hcd;
 	}
 	hcd->rsrc_start = res->start;
 	hcd->rsrc_len = resource_size(res);
@@ -206,7 +206,7 @@ static int ohci_hcd_nxp_probe(struct platform_device *pdev)
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0) {
 		ret = -ENXIO;
-		goto fail_resource;
+		goto err_put_hcd;
 	}
 
 	ohci_nxp_start_hc();
@@ -220,7 +220,7 @@ static int ohci_hcd_nxp_probe(struct platform_device *pdev)
 	}
 
 	ohci_nxp_stop_hc();
-fail_resource:
+err_put_hcd:
 	usb_put_hcd(hcd);
 err_put_client:
 	put_device(&isp1301_i2c_client->dev);
