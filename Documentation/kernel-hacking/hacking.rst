@@ -459,6 +459,13 @@ to fail (unfortunately, this has no effect if the module is compiled
 into the kernel). This function is called in user context with
 interrupts enabled, so it can sleep.
 
+.. warning::
+
+    The error code ``-EEXIST`` is reserved by the module loader to
+    indicate a module is already loaded. kmod interprets this as success,
+    so ``module_init()`` must never return ``-EEXIST``. Use ``-EBUSY`` or
+    ``-EALREADY`` instead.
+
 :c:func:`module_exit()`
 -----------------------
 
