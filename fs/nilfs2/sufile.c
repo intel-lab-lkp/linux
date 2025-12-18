@@ -1095,6 +1095,8 @@ int nilfs_sufile_trim_fs(struct inode *sufile, struct fstrim_range *range)
 
 	segnum = nilfs_get_segnum_of_block(nilfs, start_block);
 	segnum_end = nilfs_get_segnum_of_block(nilfs, end_block);
+	if (!segnum_end)
+		return 0;
 
 	down_read(&NILFS_MDT(sufile)->mi_sem);
 
