@@ -47,7 +47,7 @@ static int mpr_spi_xfer(struct mpr_data *data, const u8 cmd, const u8 pkt_len)
 
 	buf->tx[0] = cmd;
 	xfer.tx_buf = buf->tx;
-	xfer.rx_buf = data->buffer;
+	xfer.rx_buf = data->rx_buf;
 	xfer.len = pkt_len;
 
 	return spi_sync_transfer(spi, &xfer, 1);

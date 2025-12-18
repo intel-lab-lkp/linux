@@ -59,7 +59,7 @@ enum mpr_func_id {
  * @chan: channel values for buffered mode
  * @chan.pres: pressure value
  * @chan.ts: timestamp
- * @buffer: raw conversion data
+ * @rx_buf: raw conversion data
  */
 struct mpr_data {
 	struct device		*dev;
@@ -80,7 +80,7 @@ struct mpr_data {
 		s32 pres;
 		aligned_s64 ts;
 	} chan;
-	u8	    buffer[MPR_MEASUREMENT_RD_SIZE] __aligned(IIO_DMA_MINALIGN);
+	u8 rx_buf[MPR_MEASUREMENT_RD_SIZE] __aligned(IIO_DMA_MINALIGN);
 };
 
 struct mpr_ops {
