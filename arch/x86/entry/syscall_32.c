@@ -41,7 +41,7 @@ const sys_call_ptr_t sys_call_table[] = {
 #endif
 
 #define __SYSCALL(nr, sym) case nr: return __ia32_##sym(regs);
-long ia32_sys_call(const struct pt_regs *regs, unsigned int nr)
+static __always_inline long ia32_sys_call(const struct pt_regs *regs, unsigned int nr)
 {
 	switch (nr) {
 	#include <asm/syscalls_32.h>
@@ -70,7 +70,7 @@ early_param("ia32_emulation", ia32_emulation_override_cmdline);
 /*
  * Invoke a 32-bit syscall.  Called with IRQs on in CT_STATE_KERNEL.
  */
-static __always_inline void do_syscall_32_irqs_on(struct pt_regs *regs, int nr)
+static noinstr void do_syscall_32_irqs_on(struct pt_regs *regs, int nr)
 {
 	/*
 	 * Convert negative numbers to very high and thus out of range
@@ -78,12 +78,14 @@ static __always_inline void do_syscall_32_irqs_on(struct pt_regs *regs, int nr)
 	 */
 	unsigned int unr = nr;
 
+	instrumentation_begin();
 	if (likely(unr < IA32_NR_syscalls)) {
 		unr = array_index_nospec(unr, IA32_NR_syscalls);
 		regs->ax = ia32_sys_call(regs, unr);
 	} else if (nr != -1) {
 		regs->ax = __ia32_sys_ni_syscall(regs);
 	}
+	instrumentation_end();
 }
 
 #ifdef CONFIG_IA32_EMULATION

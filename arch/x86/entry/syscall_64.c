@@ -32,7 +32,7 @@ const sys_call_ptr_t sys_call_table[] = {
 #undef  __SYSCALL
 
 #define __SYSCALL(nr, sym) case nr: return __x64_##sym(regs);
-long x64_sys_call(const struct pt_regs *regs, unsigned int nr)
+static __always_inline long x64_sys_call(const struct pt_regs *regs, unsigned int nr)
 {
 	switch (nr) {
 	#include <asm/syscalls_64.h>
@@ -40,15 +40,17 @@ long x64_sys_call(const struct pt_regs *regs, unsigned int nr)
 	}
 }
 
-#ifdef CONFIG_X86_X32_ABI
-long x32_sys_call(const struct pt_regs *regs, unsigned int nr)
+static __always_inline long x32_sys_call(const struct pt_regs *regs, unsigned int nr)
 {
+#ifdef CONFIG_X86_X32_ABI
 	switch (nr) {
 	#include <asm/syscalls_x32.h>
 	default: return __x64_sys_ni_syscall(regs);
 	}
-}
+#else
+	return __x64_sys_ni_syscall(regs);
 #endif
+}
 
 static __always_inline bool do_syscall_x64(struct pt_regs *regs, int nr)
 {
@@ -58,11 +60,13 @@ static __always_inline bool do_syscall_x64(struct pt_regs *regs, int nr)
 	 */
 	unsigned int unr = nr;
 
+	instrumentation_begin();
 	if (likely(unr < NR_syscalls)) {
 		unr = array_index_nospec(unr, NR_syscalls);
 		regs->ax = x64_sys_call(regs, unr);
 		return true;
 	}
+	instrumentation_end();
 	return false;
 }
 
