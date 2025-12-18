@@ -139,15 +139,80 @@ static void io_free_imu(struct io_ring_ctx *ctx, struct io_mapped_ubuf *imu)
 		kvfree(imu);
 }
 
+/*
+ * Calculate pages to unaccount when unmapping a buffer. Regular pages are
+ * always counted. Compound pages are only counted if no other registered
+ * buffer references them, ensuring accounting persists until the last user.
+ */
+static unsigned long io_buffer_calc_unaccount(struct io_ring_ctx *ctx,
+					      struct io_mapped_ubuf *imu)
+{
+	struct page *last_hpage = NULL;
+	unsigned long acct = 0;
+	unsigned int i;
+
+	for (i = 0; i < imu->nr_bvecs; i++) {
+		struct page *page = imu->bvec[i].bv_page;
+		struct page *hpage;
+		unsigned int j;
+
+		if (!PageCompound(page)) {
+			acct++;
+			continue;
+		}
+
+		hpage = compound_head(page);
+		if (hpage == last_hpage)
+			continue;
+		last_hpage = hpage;
+
+		/* Check if we already processed this hpage earlier in this buffer */
+		for (j = 0; j < i; j++) {
+			if (PageCompound(imu->bvec[j].bv_page) &&
+			    compound_head(imu->bvec[j].bv_page) == hpage)
+				goto next_hpage;
+		}
+
+		/* Only unaccount if no other buffer references this page */
+		for (j = 0; j < ctx->buf_table.nr; j++) {
+			struct io_rsrc_node *node = ctx->buf_table.nodes[j];
+			struct io_mapped_ubuf *other;
+			unsigned int k;
+
+			if (!node)
+				continue;
+			other = node->buf;
+			if (other == imu)
+				continue;
+
+			for (k = 0; k < other->nr_bvecs; k++) {
+				struct page *op = other->bvec[k].bv_page;
+
+				if (!PageCompound(op))
+					continue;
+				if (compound_head(op) == hpage)
+					goto next_hpage;
+			}
+		}
+		acct += page_size(hpage) >> PAGE_SHIFT;
+next_hpage:
+		;
+	}
+	return acct;
+}
+
 static void io_buffer_unmap(struct io_ring_ctx *ctx, struct io_mapped_ubuf *imu)
 {
+	unsigned long acct;
+
 	if (unlikely(refcount_read(&imu->refs) > 1)) {
 		if (!refcount_dec_and_test(&imu->refs))
 			return;
 	}
 
-	if (imu->acct_pages)
-		io_unaccount_mem(ctx->user, ctx->mm_account, imu->acct_pages);
+	acct = io_buffer_calc_unaccount(ctx, imu);
+	if (acct)
+		io_unaccount_mem(ctx->user, ctx->mm_account, acct);
 	imu->release(imu->priv);
 	io_free_imu(ctx, imu);
 }
