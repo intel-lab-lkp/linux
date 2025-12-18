@@ -37,7 +37,7 @@
 
 #define TLV_SET_U32(_param_code_, _param_name_) \
 	{ \
-		{ cpu_to_le32(_param_code_), sizeof(__u32) }, \
+		{ cpu_to_le16(_param_code_), sizeof(__u32) }, \
 		cpu_to_le32(hdev->_param_name_) \
 	}
 
