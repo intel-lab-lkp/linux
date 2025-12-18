@@ -44,6 +44,12 @@ int io_uring_cmd_import_fixed_vec(struct io_uring_cmd *ioucmd,
 				  size_t uvec_segs,
 				  int ddir, struct iov_iter *iter,
 				  unsigned issue_flags);
+int io_uring_cmd_fixed_index_get(struct io_uring_cmd *ioucmd, u16 buf_index,
+				 unsigned int off, size_t len, int ddir,
+				 struct iov_iter *iter,
+				 unsigned int issue_flags);
+int io_uring_cmd_fixed_index_put(struct io_uring_cmd *ioucmd, u16 buf_index,
+				 unsigned int issue_flags);
 
 /*
  * Completes the request, i.e. posts an io_uring CQE and deallocates @ioucmd
@@ -106,6 +112,20 @@ static inline int io_uring_cmd_import_fixed_vec(struct io_uring_cmd *ioucmd,
 						size_t uvec_segs,
 						int ddir, struct iov_iter *iter,
 						unsigned issue_flags)
+{
+	return -EOPNOTSUPP;
+}
+static inline int io_uring_cmd_fixed_index_get(struct io_uring_cmd *ioucmd,
+					       u16 buf_index, unsigned int off,
+					       size_t len, int ddir,
+					       struct iov_iter *iter,
+					       unsigned int issue_flags)
+{
+	return -EOPNOTSUPP;
+}
+static inline int io_uring_cmd_fixed_index_put(struct io_uring_cmd *ioucmd,
+					       u16 buf_index,
+					       unsigned int issue_flags)
 {
 	return -EOPNOTSUPP;
 }

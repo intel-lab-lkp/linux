@@ -64,6 +64,11 @@ struct io_rsrc_node *io_find_buf_node(struct io_kiocb *req,
 int io_import_reg_buf(struct io_kiocb *req, struct iov_iter *iter,
 			u64 buf_addr, size_t len, int ddir,
 			unsigned issue_flags);
+int io_reg_buf_index_get(struct io_kiocb *req, struct iov_iter *iter,
+			 u16 buf_index, unsigned int off, size_t len,
+			 int ddir, unsigned issue_flags);
+int io_reg_buf_index_put(struct io_kiocb *req, u16 buf_index,
+			 unsigned issue_flags);
 int io_import_reg_vec(int ddir, struct iov_iter *iter,
 			struct io_kiocb *req, struct iou_vec *vec,
 			unsigned nr_iovs, unsigned issue_flags);
