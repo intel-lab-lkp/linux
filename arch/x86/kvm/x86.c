@@ -9232,7 +9232,12 @@ static int kvm_vcpu_check_hw_bp(unsigned long addr, u32 type, u32 dr7,
 
 static int kvm_vcpu_do_singlestep(struct kvm_vcpu *vcpu)
 {
-	return kvm_inject_emulated_db(vcpu, DR6_BS);
+	int r;
+
+	r = kvm_inject_emulated_db(vcpu, DR6_BS);
+	if (r)
+		kvm_x86_call(refresh_pending_dbg_exceptions)(vcpu);
+	return r;
 }
 
 int kvm_skip_emulated_instruction(struct kvm_vcpu *vcpu)
