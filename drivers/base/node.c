@@ -170,14 +170,15 @@ static struct node_access_nodes *node_init_node_access(struct node *node,
 	if (dev_set_name(dev, "access%u", access))
 		goto free;
 
-	if (device_register(dev))
-		goto free_name;
+	if (device_register(dev)) {
+		put_device(dev);
+		return NULL;
+	}
 
 	pm_runtime_no_callbacks(dev);
 	list_add_tail(&access_node->list_node, &node->access_list);
 	return access_node;
-free_name:
-	kfree_const(dev->kobj.name);
+
 free:
 	kfree(access_node);
 	return NULL;
