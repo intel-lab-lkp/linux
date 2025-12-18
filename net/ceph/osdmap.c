@@ -363,13 +363,13 @@ static int decode_choose_args(void **p, void *end, struct crush_map *c)
 
 		ceph_decode_64_safe(p, end, arg_map->choose_args_index,
 				    e_inval);
-		arg_map->size = c->max_buckets;
 		arg_map->args = kcalloc(arg_map->size, sizeof(*arg_map->args),
 					GFP_NOIO);
 		if (!arg_map->args) {
 			ret = -ENOMEM;
 			goto fail;
 		}
+		arg_map->size = c->max_buckets;
 
 		ceph_decode_32_safe(p, end, num_buckets, e_inval);
 		while (num_buckets--) {
