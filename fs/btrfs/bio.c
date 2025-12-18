@@ -307,9 +307,6 @@ static void btrfs_check_read_bio(struct btrfs_bio *bbio, struct btrfs_device *de
 	phys_addr_t paddr;
 	u32 offset = 0;
 
-	/* Read-repair requires the inode field to be set by the submitter. */
-	ASSERT(inode);
-
 	/*
 	 * Hand off repair bios to the repair code as there is no upper level
 	 * submitter for them.
@@ -898,9 +895,6 @@ static void assert_bbio_alignment(struct btrfs_bio *bbio)
 
 void btrfs_submit_bbio(struct btrfs_bio *bbio, int mirror_num)
 {
-	/* If bbio->inode is not populated, its file_offset must be 0. */
-	ASSERT(bbio->inode || bbio->file_offset == 0);
-
 	assert_bbio_alignment(bbio);
 
 	while (!btrfs_submit_chunk(bbio, mirror_num))
