@@ -397,27 +397,6 @@ impl Dir {
         self.create_file(name, data, file_ops)
     }
 
-    // While this function is safe, it is intentionally not public because it's a bit of a
-    // footgun.
-    //
-    // Unless you also extract the `entry` later and schedule it for `Drop` at the appropriate
-    // time, a `ScopedDir` with a `Dir` parent will never be deleted.
-    fn scoped_dir<'data>(&self, name: &CStr) -> ScopedDir<'data, 'static> {
-        #[cfg(CONFIG_DEBUG_FS)]
-        {
-            let parent_entry = match &self.0 {
-                None => return ScopedDir::empty(),
-                Some(entry) => entry.clone(),
-            };
-            ScopedDir {
-                entry: ManuallyDrop::new(Entry::dynamic_dir(name, Some(parent_entry))),
-                _phantom: PhantomData,
-            }
-        }
-        #[cfg(not(CONFIG_DEBUG_FS))]
-        ScopedDir::empty()
-    }
-
     /// Creates a new scope, which is a directory associated with some data `T`.
     ///
     /// The created directory will be a subdirectory of `self`. The `init` closure is called to
@@ -427,7 +406,7 @@ impl Dir {
     /// The entire directory tree created within the scope will be removed when the returned
     /// `Scope` handle is dropped.
     pub fn scope<'a, T: 'a, E: 'a, F>(
-        &'a self,
+        &self,
         data: impl PinInit<T, E> + 'a,
         name: &'a CStr,
         init: F,
@@ -435,8 +414,22 @@ impl Dir {
     where
         F: for<'data, 'dir> FnOnce(&'data T, &'dir ScopedDir<'data, 'dir>) + 'a,
     {
-        Scope::new(data, |data| {
-            let scoped = self.scoped_dir(name);
+        // Clone the parent entry so the closure doesn't need to borrow `self`.
+        #[cfg(CONFIG_DEBUG_FS)]
+        let parent_entry = self.0.clone();
+
+        Scope::new(data, move |data| {
+            #[cfg(CONFIG_DEBUG_FS)]
+            let scoped = match parent_entry {
+                None => ScopedDir::empty(),
+                Some(entry) => ScopedDir {
+                    entry: ManuallyDrop::new(Entry::dynamic_dir(name, Some(entry))),
+                    _phantom: PhantomData,
+                },
+            };
+            #[cfg(not(CONFIG_DEBUG_FS))]
+            let scoped = ScopedDir::empty();
+
             init(data, &scoped);
             scoped.into_entry()
         })
