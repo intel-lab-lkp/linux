@@ -110,6 +110,30 @@ impl Dir {
         Dir::create(name, None)
     }
 
+    /// Creates an empty [`Dir`] that represents no directory.
+    ///
+    /// Operations on this directory (such as creating files or subdirectories) will be no-ops.
+    /// This is useful as a fallback when a directory lookup fails but you still need a [`Dir`]
+    /// value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use kernel::c_str;
+    /// # use kernel::debugfs::Dir;
+    /// let dir = Dir::lookup(c_str!("maybe_exists"), None)
+    ///     .unwrap_or_else(Dir::empty);
+    /// // If lookup failed, file creation becomes a no-op
+    /// ```
+    pub fn empty() -> Self {
+        #[cfg(CONFIG_DEBUG_FS)]
+        {
+            Self(None)
+        }
+        #[cfg(not(CONFIG_DEBUG_FS))]
+        Self()
+    }
+
     /// Looks up an existing directory in DebugFS.
     ///
     /// If `parent` is [`None`], the lookup is performed from the root of the debugfs filesystem.
