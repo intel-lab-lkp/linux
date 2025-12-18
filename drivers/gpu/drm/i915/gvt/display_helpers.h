@@ -17,8 +17,8 @@
 #ifdef INTEL_DISPLAY_DEVICE_PIPE_OFFSET
 #undef INTEL_DISPLAY_DEVICE_PIPE_OFFSET
 #endif
-#define INTEL_DISPLAY_DEVICE_PIPE_OFFSET(display, pipe) \
-	intel_display_device_pipe_offset((display), (pipe))
+#define INTEL_DISPLAY_DEVICE_PIPE_OFFSET(display, idx) \
+	intel_display_device_pipe_offset((display), (enum pipe)(idx))
 
 #ifdef INTEL_DISPLAY_DEVICE_TRANS_OFFSET
 #undef INTEL_DISPLAY_DEVICE_TRANS_OFFSET
