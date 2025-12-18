@@ -1229,8 +1229,11 @@ int fuse_copy_args(struct fuse_copy_state *cs, unsigned numargs,
 
 	for (i = 0; !err && i < numargs; i++)  {
 		struct fuse_arg *arg = &args[i];
-		if (i == numargs - 1 && argpages)
-			err = fuse_copy_folios(cs, arg->size, zeroing);
+		if (i == numargs - 1 && argpages) {
+			if (cs->skip_folio_copy)
+				return 0;
+			return fuse_copy_folios(cs, arg->size, zeroing);
+		}
 		else
 			err = fuse_copy_one(cs, arg->value, arg->size);
 	}

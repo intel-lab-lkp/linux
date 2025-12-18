@@ -242,7 +242,7 @@
  *  - add FUSE_NOTIFY_PRUNE
  *
  *  7.46
- *  - add fuse_uring_cmd_req use_bufring
+ *  - add fuse_uring_cmd_req use_bufring, zero_copy, and queue_depth
  */
 
 #ifndef _LINUX_FUSE_H
@@ -1312,10 +1312,12 @@ struct fuse_uring_cmd_req {
 	union {
 		struct {
 			bool use_bufring;
+			bool zero_copy;
+			uint16_t queue_depth;
 		} init;
 	};
 
-	uint8_t padding[5];
+	uint8_t padding[2];
 };
 
 #endif /* _LINUX_FUSE_H */
