@@ -160,6 +160,9 @@ struct task_struct init_task __aligned(L1_CACHE_BYTES) = {
 	.rcu_node_entry = LIST_HEAD_INIT(init_task.rcu_node_entry),
 	.rcu_blocked_node = NULL,
 #endif
+#ifdef CONFIG_PREEMPT_HAZPTR
+	.hazptr_ctx_list = LIST_HEAD_INIT(init_task.hazptr_ctx_list),
+#endif
 #ifdef CONFIG_TASKS_RCU
 	.rcu_tasks_holdout = false,
 	.rcu_tasks_holdout_list = LIST_HEAD_INIT(init_task.rcu_tasks_holdout_list),

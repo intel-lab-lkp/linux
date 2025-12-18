@@ -189,3 +189,13 @@ config SCHED_CLASS_EXT
 	  For more information:
 	    Documentation/scheduler/sched-ext.rst
 	    https://github.com/sched-ext/scx
+
+config PREEMPT_HAZPTR
+	bool "Move Hazard Pointers to Task Slots on Context Switch"
+	help
+	  Integrate hazard pointers with the scheduler so the active
+	  hazard pointers using preallocated per-CPU slots are moved to
+	  their context local slot on context switch. This prevents
+	  blocked or preempted tasks to hold on to per-CPU slots for
+	  a long time, which would cause higher overhead for short
+	  hazard pointer critical sections.
