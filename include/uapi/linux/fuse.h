@@ -240,6 +240,9 @@
  *  - add FUSE_COPY_FILE_RANGE_64
  *  - add struct fuse_copy_file_range_out
  *  - add FUSE_NOTIFY_PRUNE
+ *
+ *  7.46
+ *  - add fuse_uring_cmd_req use_bufring
  */
 
 #ifndef _LINUX_FUSE_H
@@ -1305,7 +1308,14 @@ struct fuse_uring_cmd_req {
 
 	/* queue the command is for (queue index) */
 	uint16_t qid;
-	uint8_t padding[6];
+
+	union {
+		struct {
+			bool use_bufring;
+		} init;
+	};
+
+	uint8_t padding[5];
 };
 
 #endif /* _LINUX_FUSE_H */
