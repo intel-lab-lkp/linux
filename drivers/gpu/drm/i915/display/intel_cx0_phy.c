@@ -2287,7 +2287,7 @@ static void intel_c10pll_readout_hw_state(struct intel_encoder *encoder,
 			    str_enabled_disabled(intel_c10pll_ssc_enabled(pll_state)));
 }
 
-static void intel_c10_pll_program(struct intel_display *display,
+static void intel_c10pll_program(struct intel_display *display,
 				  struct intel_encoder *encoder,
 				  const struct intel_c10pll_state *pll_state)
 {
@@ -2458,7 +2458,7 @@ static int intel_c20_compute_hdmi_tmds_pll(const struct intel_crtc_state *crtc_s
 }
 
 static const struct intel_c20pll_state * const *
-intel_c20_pll_tables_get(const struct intel_crtc_state *crtc_state,
+intel_c20pll_tables_get(const struct intel_crtc_state *crtc_state,
 			 struct intel_encoder *encoder)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
@@ -2626,13 +2626,13 @@ static void intel_c20_program_vdr_params(struct intel_encoder *encoder,
 }
 
 static const struct intel_c20pll_state *
-intel_c20_pll_find_table(const struct intel_crtc_state *crtc_state,
+intel_c20pll_find_table(const struct intel_crtc_state *crtc_state,
 			 struct intel_encoder *encoder)
 {
 	const struct intel_c20pll_state * const *tables;
 	int i;
 
-	tables = intel_c20_pll_tables_get(crtc_state, encoder);
+	tables = intel_c20pll_tables_get(crtc_state, encoder);
 	if (!tables)
 		return NULL;
 
@@ -2649,7 +2649,7 @@ static int intel_c20pll_calc_state_from_table(const struct intel_crtc_state *crt
 {
 	const struct intel_c20pll_state *table;
 
-	table = intel_c20_pll_find_table(crtc_state, encoder);
+	table = intel_c20pll_find_table(crtc_state, encoder);
 	if (!table)
 		return -EINVAL;
 
@@ -2880,7 +2880,7 @@ static bool intel_c20_protocol_switch_valid(struct intel_encoder *encoder)
 	return intel_tc_port_in_legacy_mode(intel_dig_port);
 }
 
-static void intel_c20_pll_program(struct intel_display *display,
+static void intel_c20pll_program(struct intel_display *display,
 				  struct intel_encoder *encoder,
 				  const struct intel_c20pll_state *pll_state)
 {
@@ -3260,9 +3260,9 @@ static void intel_cx0pll_enable(struct intel_encoder *encoder,
 
 	/* 5. Program PHY internal PLL internal registers. */
 	if (intel_encoder_is_c10phy(encoder))
-		intel_c10_pll_program(display, encoder, &pll_state->c10);
+		intel_c10pll_program(display, encoder, &pll_state->c10);
 	else
-		intel_c20_pll_program(display, encoder, &pll_state->c20);
+		intel_c20pll_program(display, encoder, &pll_state->c20);
 
 	/*
 	 * 6. Program the enabled and disabled owned PHY lane
@@ -3558,7 +3558,7 @@ static void intel_cx0pll_disable(struct intel_encoder *encoder)
 	intel_cx0_phy_transaction_end(encoder, wakeref);
 }
 
-static bool intel_cx0_pll_is_enabled(struct intel_encoder *encoder)
+static bool intel_cx0pll_is_enabled(struct intel_encoder *encoder)
 {
 	struct intel_display *display = to_intel_display(encoder);
 	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
@@ -3645,7 +3645,7 @@ bool intel_cx0pll_readout_hw_state(struct intel_encoder *encoder,
 {
 	memset(pll_state, 0, sizeof(*pll_state));
 
-	if (!intel_cx0_pll_is_enabled(encoder))
+	if (!intel_cx0pll_is_enabled(encoder))
 		return false;
 
 	if (intel_encoder_is_c10phy(encoder))
@@ -3730,7 +3730,7 @@ int intel_cx0pll_calc_port_clock(struct intel_encoder *encoder,
  *    to the Disable state.
  * 2. Follow PLL Disable Sequence. This moves powerdown to the Disable state and disables the PLL.
  */
-void intel_cx0_pll_power_save_wa(struct intel_display *display)
+void intel_cx0pll_power_save_wa(struct intel_display *display)
 {
 	struct intel_encoder *encoder;
 
@@ -3748,7 +3748,7 @@ void intel_cx0_pll_power_save_wa(struct intel_display *display)
 		if (!intel_encoder_is_c10phy(encoder))
 			continue;
 
-		if (intel_cx0_pll_is_enabled(encoder))
+		if (intel_cx0pll_is_enabled(encoder))
 			continue;
 
 		if (intel_c10pll_calc_state_from_table(encoder,

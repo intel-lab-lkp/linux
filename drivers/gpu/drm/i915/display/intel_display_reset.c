@@ -107,7 +107,7 @@ void intel_display_reset_finish(struct intel_display *display, bool test_only)
 		intel_pps_unlock_regs_wa(display);
 		intel_display_driver_init_hw(display);
 		intel_clock_gating_init(display->drm);
-		intel_cx0_pll_power_save_wa(display);
+		intel_cx0pll_power_save_wa(display);
 		intel_hpd_init(display);
 
 		ret = __intel_display_driver_resume(display, state, ctx);

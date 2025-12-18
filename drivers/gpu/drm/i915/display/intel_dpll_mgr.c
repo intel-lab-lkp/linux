@@ -4842,7 +4842,7 @@ void intel_dpll_sanitize_state(struct intel_display *display)
 	struct intel_dpll *pll;
 	int i;
 
-	intel_cx0_pll_power_save_wa(display);
+	intel_cx0pll_power_save_wa(display);
 
 	for_each_dpll(display, pll, i)
 		sanitize_dpll_state(display, pll);
