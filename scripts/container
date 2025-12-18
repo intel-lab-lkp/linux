@@ -1,0 +1,194 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2025 Guillaume Tucker
+
+"""Containerized builds"""
+
+import abc
+import argparse
+import logging
+import os
+import shutil
+import subprocess
+import sys
+import uuid
+
+
+class ContainerRuntime(abc.ABC):
+    """Base class for a container runtime implementation"""
+
+    name = None  # Property defined in each implementation class
+
+    def __init__(self, args, logger):
+        self._uid = args.uid or os.getuid()
+        self._gid = args.gid or args.uid or os.getgid()
+        self._env_file = args.env_file
+        self._logger = logger
+
+    @classmethod
+    def is_present(cls):
+        """Determine whether the runtime is present on the system"""
+        return shutil.which(cls.name) is not None
+
+    @abc.abstractmethod
+    def _do_run(self, image, cmd, container_name):
+        """Runtime-specific handler to run a command in a container"""
+
+    @abc.abstractmethod
+    def _do_abort(self, container_name):
+        """Runtime-specific handler to abort a command in running container"""
+
+    def run(self, image, cmd):
+        """Run a command in a runtime container"""
+        container_name = str(uuid.uuid4())
+        self._logger.debug("container: %s", container_name)
+        try:
+            return self._do_run(image, cmd, container_name)
+        except KeyboardInterrupt:
+            self._logger.error("user aborted")
+            self._do_abort(container_name)
+            return 1
+
+
+class DockerRuntime(ContainerRuntime):
+    """Run a command in a Docker container"""
+
+    name = 'docker'
+
+    def _do_run(self, image, cmd, container_name):
+        cmdline = [
+            'docker', 'run',
+            '--name', container_name,
+            '--rm',
+            '--tty',
+            '--volume', f'{os.getcwd()}:/src',
+            '--workdir', '/src',
+            '--user', f'{self._uid}:{self._gid}'
+        ]
+        if self._env_file:
+            cmdline += ['--env-file', self._env_file]
+        cmdline.append(image)
+        cmdline += cmd
+        return subprocess.call(cmdline)
+
+    def _do_abort(self, container_name):
+        subprocess.call(['docker', 'kill', container_name])
+
+
+class PodmanRuntime(ContainerRuntime):
+    """Run a command in a Podman container"""
+
+    name = 'podman'
+
+    def _do_run(self, image, cmd, container_name):
+        cmdline = [
+            'podman', 'run',
+            '--name', container_name,
+            '--rm',
+            '--tty',
+            '--interactive',
+            '--volume', f'{os.getcwd()}:/src',
+            '--workdir', '/src',
+            '--userns', f'keep-id:uid={self._uid},gid={self._gid}',
+        ]
+        if self._env_file:
+            cmdline += ['--env-file', self._env_file]
+        cmdline.append(image)
+        cmdline += cmd
+        return subprocess.call(cmdline)
+
+    def _do_abort(self, container_name):
+        pass  # Signals are handled by Podman in interactive mode
+
+
+class Runtimes:
+    """List of all supported runtimes"""
+
+    runtimes = [DockerRuntime, PodmanRuntime]
+
+    @classmethod
+    def get_names(cls):
+        """Get a list of all the runtime names"""
+        return list(runtime.name for runtime in cls.runtimes)
+
+    @classmethod
+    def get(cls, name):
+        """Get a single runtime class matching the given name"""
+        for runtime in cls.runtimes:
+            if runtime.name == name:
+                if not runtime.is_present():
+                    raise ValueError(f"runtime not found: {name}")
+                return runtime
+        raise ValueError(f"unknown runtime: {runtime}")
+
+    @classmethod
+    def find(cls):
+        """Find the first runtime present on the system"""
+        for runtime in cls.runtimes:
+            if runtime.is_present():
+                return runtime
+        raise ValueError("no runtime found")
+
+
+def _get_logger(verbose):
+    """Set up a logger with the appropriate level"""
+    logger = logging.getLogger('container')
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter(
+        fmt='[container {levelname}] {message}', style='{'
+    ))
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG if verbose is True else logging.INFO)
+    return logger
+
+
+def main(args):
+    """Main entry point for the container tool"""
+    logger = _get_logger(args.verbose)
+    try:
+        cls = Runtimes.get(args.runtime) if args.runtime else Runtimes.find()
+    except ValueError as ex:
+        logger.error(ex)
+        return 1
+    logger.debug("runtime: %s", cls.name)
+    logger.debug("image: %s", args.image)
+    return cls(args, logger).run(args.image, args.cmd)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        'container',
+        description="Containerized builds.  See the dev-tools/container "
+        "kernel documentation section for more details."
+    )
+    parser.add_argument(
+        '-e', '--env-file',
+        help="Path to an environment file to load in the container."
+    )
+    parser.add_argument(
+        '-g', '--gid',
+        help="Group ID to use inside the container."
+    )
+    parser.add_argument(
+        '-i', '--image', required=True,
+        help="Container image name."
+    )
+    parser.add_argument(
+        '-r', '--runtime', choices=Runtimes.get_names(),
+        help="Container runtime name.  If not specified, the first one found "
+        "on the system will be used i.e. Docker if present, otherwise Podman."
+    )
+    parser.add_argument(
+        '-u', '--uid',
+        help="User ID to use inside the container.  If the -g option is not "
+        "specified, the user ID will also be set as the group ID."
+    )
+    parser.add_argument(
+        '-v', '--verbose', action='store_true',
+        help="Enable verbose output."
+    )
+    parser.add_argument(
+        'cmd', nargs='+',
+        help="Command to run in the container"
+    )
+    sys.exit(main(parser.parse_args(sys.argv[1:])))
