@@ -37,6 +37,30 @@ properties:
   nvmem-0:
     $ref: /schemas/nvmem/maxim,max77759-nvmem.yaml
 
+  charger:
+    type: object
+    description: This is a dual input switch mode battery charger for portable
+      applications. It supports wired and wireless charging and can operate in
+      buck and boost mode.
+
+    allOf:
+      - $ref: /schemas/power/supply/power-supply.yaml#
+
+    properties:
+      compatible:
+        const: maxim,max77759-charger
+
+      chgin-otg-regulator:
+        type: object
+        description: Provides Boost for sourcing VBUS.
+        $ref: /schemas/regulator/regulator.yaml#
+        unevaluatedProperties: false
+
+    required:
+      - compatible
+
+    unevaluatedProperties: false
+
 required:
   - compatible
   - interrupts
@@ -93,6 +117,15 @@ examples:
                     rsoc@10 {
                         reg = <0xa 0x2>;
                     };
+                };
+            };
+
+            charger {
+                compatible = "maxim,max77759-charger";
+                power-supplies = <&maxtcpci>;
+
+                chgin-otg-regulator {
+                    regulator-name = "chgin-otg";
                 };
             };
         };
