@@ -345,14 +345,16 @@ s32 rtl8723b_FirmwareDownload(struct adapter *padapter, bool  bUsedWoWLANFw)
 	}
 
 	if (fw->size > FW_8723B_SIZE) {
+		pr_err("Firmware size exceed, max: %d, actual: %zu\n",
+		       FW_8723B_SIZE, fw->size);
 		rtStatus = _FAIL;
-		goto exit;
+		goto release_fw;
 	}
 
 	pFirmware->fw_buffer_sz = kmemdup(fw->data, fw->size, GFP_KERNEL);
 	if (!pFirmware->fw_buffer_sz) {
 		rtStatus = _FAIL;
-		goto exit;
+		goto release_fw;
 	}
 
 	pFirmware->fw_length = fw->size;
@@ -415,6 +417,10 @@ s32 rtl8723b_FirmwareDownload(struct adapter *padapter, bool  bUsedWoWLANFw)
 		goto fwdl_stat;
 
 fwdl_stat:
+	goto exit;
+
+release_fw:
+	release_firmware(fw);
 
 exit:
 	kfree(pFirmware->fw_buffer_sz);
