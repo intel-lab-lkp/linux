@@ -365,7 +365,7 @@ void set_huge_pte_at(struct mm_struct *mm, unsigned long addr, pte_t *ptep,
 
 	for (i = 0; i < sz / pdsize; i++, ptep++, addr += pdsize) {
 		__set_pte_at(mm, addr, ptep, pte, 0);
-		pte = __pte(pte_val(pte) + ((unsigned long long)pdsize / PAGE_SIZE << PFN_PTE_SHIFT));
+		pte = pte_advance_pfn(pte, pdsize / PAGE_SIZE);
 	}
 }
 #endif
