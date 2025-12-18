@@ -880,6 +880,7 @@ static int ibmvmc_close(struct inode *inode, struct file *file)
 			if (rc)
 				dev_warn(hmc->adapter->dev, "close: send_close failed.\n");
 		}
+		hmc->file_session = NULL;
 		spin_unlock_irqrestore(&hmc->lock, flags);
 	}
 
