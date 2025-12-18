@@ -15,23 +15,24 @@
 static struct io_wq *io_init_wq_offload(struct io_ring_ctx *ctx,
 					struct task_struct *task)
 {
+	struct io_ring_ctx_lock_state lock_state;
 	struct io_wq_hash *hash;
 	struct io_wq_data data;
 	unsigned int concurrency;
 
-	mutex_lock(&ctx->uring_lock);
+	io_ring_ctx_lock(ctx, &lock_state);
 	hash = ctx->hash_map;
 	if (!hash) {
 		hash = kzalloc(sizeof(*hash), GFP_KERNEL);
 		if (!hash) {
-			mutex_unlock(&ctx->uring_lock);
+			io_ring_ctx_unlock(ctx, &lock_state);
 			return ERR_PTR(-ENOMEM);
 		}
 		refcount_set(&hash->refs, 1);
 		init_waitqueue_head(&hash->wait);
 		ctx->hash_map = hash;
 	}
-	mutex_unlock(&ctx->uring_lock);
+	io_ring_ctx_unlock(ctx, &lock_state);
 
 	data.hash = hash;
 	data.task = task;
@@ -123,6 +124,8 @@ int __io_uring_add_tctx_node(struct io_ring_ctx *ctx)
 		}
 	}
 	if (!xa_load(&tctx->xa, (unsigned long)ctx)) {
+		struct io_ring_ctx_lock_state lock_state;
+
 		node = kmalloc(sizeof(*node), GFP_KERNEL);
 		if (!node)
 			return -ENOMEM;
@@ -136,9 +139,9 @@ int __io_uring_add_tctx_node(struct io_ring_ctx *ctx)
 			return ret;
 		}
 
-		mutex_lock(&ctx->uring_lock);
+		io_ring_ctx_lock(ctx, &lock_state);
 		list_add(&node->ctx_node, &ctx->tctx_list);
-		mutex_unlock(&ctx->uring_lock);
+		io_ring_ctx_unlock(ctx, &lock_state);
 	}
 	return 0;
 }
@@ -165,6 +168,7 @@ int __io_uring_add_tctx_node_from_submit(struct io_ring_ctx *ctx)
 __cold void io_uring_del_tctx_node(unsigned long index)
 {
 	struct io_uring_task *tctx = current->io_uring;
+	struct io_ring_ctx_lock_state lock_state;
 	struct io_tctx_node *node;
 
 	if (!tctx)
@@ -176,9 +180,9 @@ __cold void io_uring_del_tctx_node(unsigned long index)
 	WARN_ON_ONCE(current != node->task);
 	WARN_ON_ONCE(list_empty(&node->ctx_node));
 
-	mutex_lock(&node->ctx->uring_lock);
+	io_ring_ctx_lock(node->ctx, &lock_state);
 	list_del(&node->ctx_node);
-	mutex_unlock(&node->ctx->uring_lock);
+	io_ring_ctx_unlock(node->ctx, &lock_state);
 
 	if (tctx->last == node->ctx)
 		tctx->last = NULL;
@@ -198,7 +202,7 @@ __cold void io_uring_clean_tctx(struct io_uring_task *tctx)
 	if (wq) {
 		/*
 		 * Must be after io_uring_del_tctx_node() (removes nodes under
-		 * uring_lock) to avoid race with io_uring_try_cancel_iowq().
+		 * ctx uring lock) to avoid race with io_uring_try_cancel_iowq()
 		 */
 		io_wq_put_and_exit(wq);
 		tctx->io_wq = NULL;
@@ -261,7 +265,8 @@ static int io_ring_add_registered_fd(struct io_uring_task *tctx, int fd,
  * successfully processed, or < 0 on error if none were processed.
  */
 int io_ringfd_register(struct io_ring_ctx *ctx, void __user *__arg,
-		       unsigned nr_args)
+		       unsigned nr_args,
+		       struct io_ring_ctx_lock_state *lock_state)
 {
 	struct io_uring_rsrc_update __user *arg = __arg;
 	struct io_uring_rsrc_update reg;
@@ -271,9 +276,9 @@ int io_ringfd_register(struct io_ring_ctx *ctx, void __user *__arg,
 	if (!nr_args || nr_args > IO_RINGFD_REG_MAX)
 		return -EINVAL;
 
-	mutex_unlock(&ctx->uring_lock);
+	io_ring_ctx_unlock(ctx, lock_state);
 	ret = __io_uring_add_tctx_node(ctx);
-	mutex_lock(&ctx->uring_lock);
+	io_ring_ctx_lock(ctx, lock_state);
 	if (ret)
 		return ret;
 

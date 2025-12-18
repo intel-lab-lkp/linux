@@ -74,7 +74,7 @@ bool io_kbuf_commit(struct io_kiocb *req,
 static inline struct io_buffer_list *io_buffer_get_list(struct io_ring_ctx *ctx,
 							unsigned int bgid)
 {
-	lockdep_assert_held(&ctx->uring_lock);
+	io_ring_ctx_assert_locked(ctx);
 
 	return xa_load(&ctx->io_bl_xa, bgid);
 }
@@ -85,7 +85,7 @@ static int io_buffer_add_list(struct io_ring_ctx *ctx,
 	/*
 	 * Store buffer group ID and finally mark the list as visible.
 	 * The normal lookup doesn't care about the visibility as we're
-	 * always under the ->uring_lock, but lookups from mmap do.
+	 * always under the ctx uring lock, but lookups from mmap do.
 	 */
 	bl->bgid = bgid;
 	guard(mutex)(&ctx->mmap_lock);
@@ -103,11 +103,12 @@ void io_kbuf_drop_legacy(struct io_kiocb *req)
 
 bool io_kbuf_recycle_legacy(struct io_kiocb *req, unsigned issue_flags)
 {
+	struct io_ring_ctx_lock_state lock_state;
 	struct io_ring_ctx *ctx = req->ctx;
 	struct io_buffer_list *bl;
 	struct io_buffer *buf;
 
-	io_ring_submit_lock(ctx, issue_flags);
+	io_ring_submit_lock(ctx, issue_flags, &lock_state);
 
 	buf = req->kbuf;
 	bl = io_buffer_get_list(ctx, buf->bgid);
@@ -115,7 +116,7 @@ bool io_kbuf_recycle_legacy(struct io_kiocb *req, unsigned issue_flags)
 	bl->nbufs++;
 	req->flags &= ~REQ_F_BUFFER_SELECTED;
 
-	io_ring_submit_unlock(ctx, issue_flags);
+	io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 	return true;
 }
 
@@ -212,11 +213,12 @@ static struct io_br_sel io_ring_buffer_select(struct io_kiocb *req, size_t *len,
 struct io_br_sel io_buffer_select(struct io_kiocb *req, size_t *len,
 				  unsigned buf_group, unsigned int issue_flags)
 {
+	struct io_ring_ctx_lock_state lock_state;
 	struct io_ring_ctx *ctx = req->ctx;
 	struct io_br_sel sel = { };
 	struct io_buffer_list *bl;
 
-	io_ring_submit_lock(req->ctx, issue_flags);
+	io_ring_submit_lock(req->ctx, issue_flags, &lock_state);
 
 	bl = io_buffer_get_list(ctx, buf_group);
 	if (likely(bl)) {
@@ -225,7 +227,7 @@ struct io_br_sel io_buffer_select(struct io_kiocb *req, size_t *len,
 		else
 			sel.addr = io_provided_buffer_select(req, len, bl);
 	}
-	io_ring_submit_unlock(req->ctx, issue_flags);
+	io_ring_submit_unlock(req->ctx, issue_flags, &lock_state);
 	return sel;
 }
 
@@ -317,10 +319,11 @@ static int io_ring_buffers_peek(struct io_kiocb *req, struct buf_sel_arg *arg,
 int io_buffers_select(struct io_kiocb *req, struct buf_sel_arg *arg,
 		      struct io_br_sel *sel, unsigned int issue_flags)
 {
+	struct io_ring_ctx_lock_state lock_state;
 	struct io_ring_ctx *ctx = req->ctx;
 	int ret = -ENOENT;
 
-	io_ring_submit_lock(ctx, issue_flags);
+	io_ring_submit_lock(ctx, issue_flags, &lock_state);
 	sel->buf_list = io_buffer_get_list(ctx, arg->buf_group);
 	if (unlikely(!sel->buf_list))
 		goto out_unlock;
@@ -344,7 +347,7 @@ int io_buffers_select(struct io_kiocb *req, struct buf_sel_arg *arg,
 out_unlock:
 	if (issue_flags & IO_URING_F_UNLOCKED) {
 		sel->buf_list = NULL;
-		mutex_unlock(&ctx->uring_lock);
+		io_ring_ctx_unlock(ctx, &lock_state);
 	}
 	return ret;
 }
@@ -356,7 +359,7 @@ int io_buffers_peek(struct io_kiocb *req, struct buf_sel_arg *arg,
 	struct io_buffer_list *bl;
 	int ret;
 
-	lockdep_assert_held(&ctx->uring_lock);
+	io_ring_ctx_assert_locked(ctx);
 
 	bl = io_buffer_get_list(ctx, arg->buf_group);
 	if (unlikely(!bl))
@@ -412,7 +415,7 @@ static int io_remove_buffers_legacy(struct io_ring_ctx *ctx,
 	struct io_buffer *nxt;
 
 	/* protects io_buffers_cache */
-	lockdep_assert_held(&ctx->uring_lock);
+	io_ring_ctx_assert_locked(ctx);
 	WARN_ON_ONCE(bl->flags & IOBL_BUF_RING);
 
 	for (i = 0; i < nbufs && !list_empty(&bl->buf_list); i++) {
@@ -581,14 +584,15 @@ static int __io_manage_buffers_legacy(struct io_kiocb *req,
 int io_manage_buffers_legacy(struct io_kiocb *req, unsigned int issue_flags)
 {
 	struct io_provide_buf *p = io_kiocb_to_cmd(req, struct io_provide_buf);
+	struct io_ring_ctx_lock_state lock_state;
 	struct io_ring_ctx *ctx = req->ctx;
 	struct io_buffer_list *bl;
 	int ret;
 
-	io_ring_submit_lock(ctx, issue_flags);
+	io_ring_submit_lock(ctx, issue_flags, &lock_state);
 	bl = io_buffer_get_list(ctx, p->bgid);
 	ret = __io_manage_buffers_legacy(req, bl);
-	io_ring_submit_unlock(ctx, issue_flags);
+	io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 
 	if (ret < 0)
 		req_set_fail(req);
@@ -606,7 +610,7 @@ int io_register_pbuf_ring(struct io_ring_ctx *ctx, void __user *arg)
 	unsigned long ring_size;
 	int ret;
 
-	lockdep_assert_held(&ctx->uring_lock);
+	io_ring_ctx_assert_locked(ctx);
 
 	if (copy_from_user(&reg, arg, sizeof(reg)))
 		return -EFAULT;
@@ -682,7 +686,7 @@ int io_unregister_pbuf_ring(struct io_ring_ctx *ctx, void __user *arg)
 	struct io_uring_buf_reg reg;
 	struct io_buffer_list *bl;
 
-	lockdep_assert_held(&ctx->uring_lock);
+	io_ring_ctx_assert_locked(ctx);
 
 	if (copy_from_user(&reg, arg, sizeof(reg)))
 		return -EFAULT;

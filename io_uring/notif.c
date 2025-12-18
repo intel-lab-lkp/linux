@@ -17,7 +17,7 @@ static void io_notif_tw_complete(struct io_tw_req tw_req, io_tw_token_t tw)
 	struct io_notif_data *nd = io_notif_to_data(notif);
 	struct io_ring_ctx *ctx = notif->ctx;
 
-	lockdep_assert_held(&ctx->uring_lock);
+	io_ring_ctx_assert_locked(ctx);
 
 	do {
 		notif = cmd_to_io_kiocb(nd);
@@ -111,10 +111,11 @@ static const struct ubuf_info_ops io_ubuf_ops = {
 };
 
 struct io_kiocb *io_alloc_notif(struct io_ring_ctx *ctx)
-	__must_hold(&ctx->uring_lock)
 {
 	struct io_kiocb *notif;
 	struct io_notif_data *nd;
+
+	io_ring_ctx_assert_locked(ctx);
 
 	if (unlikely(!io_alloc_req(ctx, &notif)))
 		return NULL;

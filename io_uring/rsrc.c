@@ -351,7 +351,7 @@ static int __io_register_rsrc_update(struct io_ring_ctx *ctx, unsigned type,
 {
 	__u32 tmp;
 
-	lockdep_assert_held(&ctx->uring_lock);
+	io_ring_ctx_assert_locked(ctx);
 
 	if (check_add_overflow(up->offset, nr_args, &tmp))
 		return -EOVERFLOW;
@@ -499,10 +499,12 @@ int io_files_update(struct io_kiocb *req, unsigned int issue_flags)
 	if (up->offset == IORING_FILE_INDEX_ALLOC) {
 		ret = io_files_update_with_index_alloc(req, issue_flags);
 	} else {
-		io_ring_submit_lock(ctx, issue_flags);
+		struct io_ring_ctx_lock_state lock_state;
+
+		io_ring_submit_lock(ctx, issue_flags, &lock_state);
 		ret = __io_register_rsrc_update(ctx, IORING_RSRC_FILE,
 						&up2, up->nr_args);
-		io_ring_submit_unlock(ctx, issue_flags);
+		io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 	}
 
 	if (ret < 0)
@@ -942,6 +944,7 @@ int io_buffer_register_bvec(struct io_uring_cmd *cmd, struct request *rq,
 {
 	struct io_ring_ctx *ctx = cmd_to_io_kiocb(cmd)->ctx;
 	struct io_rsrc_data *data = &ctx->buf_table;
+	struct io_ring_ctx_lock_state lock_state;
 	struct req_iterator rq_iter;
 	struct io_mapped_ubuf *imu;
 	struct io_rsrc_node *node;
@@ -949,7 +952,7 @@ int io_buffer_register_bvec(struct io_uring_cmd *cmd, struct request *rq,
 	unsigned int nr_bvecs = 0;
 	int ret = 0;
 
-	io_ring_submit_lock(ctx, issue_flags);
+	io_ring_submit_lock(ctx, issue_flags, &lock_state);
 	if (index >= data->nr) {
 		ret = -EINVAL;
 		goto unlock;
@@ -995,7 +998,7 @@ int io_buffer_register_bvec(struct io_uring_cmd *cmd, struct request *rq,
 	node->buf = imu;
 	data->nodes[index] = node;
 unlock:
-	io_ring_submit_unlock(ctx, issue_flags);
+	io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(io_buffer_register_bvec);
@@ -1005,10 +1008,11 @@ int io_buffer_unregister_bvec(struct io_uring_cmd *cmd, unsigned int index,
 {
 	struct io_ring_ctx *ctx = cmd_to_io_kiocb(cmd)->ctx;
 	struct io_rsrc_data *data = &ctx->buf_table;
+	struct io_ring_ctx_lock_state lock_state;
 	struct io_rsrc_node *node;
 	int ret = 0;
 
-	io_ring_submit_lock(ctx, issue_flags);
+	io_ring_submit_lock(ctx, issue_flags, &lock_state);
 	if (index >= data->nr) {
 		ret = -EINVAL;
 		goto unlock;
@@ -1028,7 +1032,7 @@ int io_buffer_unregister_bvec(struct io_uring_cmd *cmd, unsigned int index,
 	io_put_rsrc_node(ctx, node);
 	data->nodes[index] = NULL;
 unlock:
-	io_ring_submit_unlock(ctx, issue_flags);
+	io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(io_buffer_unregister_bvec);
@@ -1120,6 +1124,7 @@ static int io_import_fixed(int ddir, struct iov_iter *iter,
 inline struct io_rsrc_node *io_find_buf_node(struct io_kiocb *req,
 					     unsigned issue_flags)
 {
+	struct io_ring_ctx_lock_state lock_state;
 	struct io_ring_ctx *ctx = req->ctx;
 	struct io_rsrc_node *node;
 
@@ -1127,16 +1132,16 @@ inline struct io_rsrc_node *io_find_buf_node(struct io_kiocb *req,
 		return req->buf_node;
 	req->flags |= REQ_F_BUF_NODE;
 
-	io_ring_submit_lock(ctx, issue_flags);
+	io_ring_submit_lock(ctx, issue_flags, &lock_state);
 	node = io_rsrc_node_lookup(&ctx->buf_table, req->buf_index);
 	if (node) {
 		node->refs++;
 		req->buf_node = node;
-		io_ring_submit_unlock(ctx, issue_flags);
+		io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 		return node;
 	}
 	req->flags &= ~REQ_F_BUF_NODE;
-	io_ring_submit_unlock(ctx, issue_flags);
+	io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 	return NULL;
 }
 
@@ -1153,12 +1158,16 @@ int io_import_reg_buf(struct io_kiocb *req, struct iov_iter *iter,
 }
 
 /* Lock two rings at once. The rings must be different! */
-static void lock_two_rings(struct io_ring_ctx *ctx1, struct io_ring_ctx *ctx2)
+static void lock_two_rings(struct io_ring_ctx *ctx1, struct io_ring_ctx *ctx2,
+			   struct io_ring_ctx_lock_state *lock_state1,
+			   struct io_ring_ctx_lock_state *lock_state2)
 {
-	if (ctx1 > ctx2)
+	if (ctx1 > ctx2) {
 		swap(ctx1, ctx2);
-	mutex_lock(&ctx1->uring_lock);
-	mutex_lock_nested(&ctx2->uring_lock, SINGLE_DEPTH_NESTING);
+		swap(lock_state1, lock_state2);
+	}
+	io_ring_ctx_lock(ctx1, lock_state1);
+	io_ring_ctx_lock_nested(ctx2, SINGLE_DEPTH_NESTING, lock_state2);
 }
 
 /* Both rings are locked by the caller. */
@@ -1169,8 +1178,8 @@ static int io_clone_buffers(struct io_ring_ctx *ctx, struct io_ring_ctx *src_ctx
 	int i, ret, off, nr;
 	unsigned int nbufs;
 
-	lockdep_assert_held(&ctx->uring_lock);
-	lockdep_assert_held(&src_ctx->uring_lock);
+	io_ring_ctx_assert_locked(ctx);
+	io_ring_ctx_assert_locked(src_ctx);
 
 	/*
 	 * Accounting state is shared between the two rings; that only works if
@@ -1274,8 +1283,10 @@ static int io_clone_buffers(struct io_ring_ctx *ctx, struct io_ring_ctx *src_ctx
  *
  * Since the memory is already accounted once, don't account it again.
  */
-int io_register_clone_buffers(struct io_ring_ctx *ctx, void __user *arg)
+int io_register_clone_buffers(struct io_ring_ctx *ctx, void __user *arg,
+			      struct io_ring_ctx_lock_state *lock_state)
 {
+	struct io_ring_ctx_lock_state lock_state2;
 	struct io_uring_clone_buffers buf;
 	struct io_ring_ctx *src_ctx;
 	bool registered_src;
@@ -1298,8 +1309,8 @@ int io_register_clone_buffers(struct io_ring_ctx *ctx, void __user *arg)
 
 	src_ctx = file->private_data;
 	if (src_ctx != ctx) {
-		mutex_unlock(&ctx->uring_lock);
-		lock_two_rings(ctx, src_ctx);
+		io_ring_ctx_unlock(ctx, lock_state);
+		lock_two_rings(ctx, src_ctx, lock_state, &lock_state2);
 
 		if (src_ctx->submitter_task &&
 		    src_ctx->submitter_task != current) {
@@ -1312,7 +1323,7 @@ int io_register_clone_buffers(struct io_ring_ctx *ctx, void __user *arg)
 
 out:
 	if (src_ctx != ctx)
-		mutex_unlock(&src_ctx->uring_lock);
+		io_ring_ctx_unlock(src_ctx, &lock_state2);
 
 	fput(file);
 	return ret;

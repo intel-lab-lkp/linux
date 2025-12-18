@@ -464,7 +464,7 @@ void io_readv_writev_cleanup(struct io_kiocb *req)
 {
 	struct io_async_rw *rw = req->async_data;
 
-	lockdep_assert_held(&req->ctx->uring_lock);
+	io_ring_ctx_assert_locked(req->ctx);
 	io_vec_free(&rw->vec);
 	io_rw_recycle(req, 0);
 }

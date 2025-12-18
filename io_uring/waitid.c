@@ -132,7 +132,7 @@ static void io_waitid_complete(struct io_kiocb *req, int ret)
 	/* anyone completing better be holding a reference */
 	WARN_ON_ONCE(!(atomic_read(&iw->refs) & IO_WAITID_REF_MASK));
 
-	lockdep_assert_held(&req->ctx->uring_lock);
+	io_ring_ctx_assert_locked(req->ctx);
 
 	hlist_del_init(&req->hash_node);
 	io_waitid_remove_wq(req);
@@ -147,7 +147,7 @@ static bool __io_waitid_cancel(struct io_kiocb *req)
 {
 	struct io_waitid *iw = io_kiocb_to_cmd(req, struct io_waitid);
 
-	lockdep_assert_held(&req->ctx->uring_lock);
+	io_ring_ctx_assert_locked(req->ctx);
 
 	/*
 	 * Mark us canceled regardless of ownership. This will prevent a
@@ -282,6 +282,7 @@ int io_waitid(struct io_kiocb *req, unsigned int issue_flags)
 {
 	struct io_waitid *iw = io_kiocb_to_cmd(req, struct io_waitid);
 	struct io_waitid_async *iwa = req->async_data;
+	struct io_ring_ctx_lock_state lock_state;
 	struct io_ring_ctx *ctx = req->ctx;
 	int ret;
 
@@ -303,7 +304,7 @@ int io_waitid(struct io_kiocb *req, unsigned int issue_flags)
 	 * dropped. We only need to worry about racing with the wakeup
 	 * callback.
 	 */
-	io_ring_submit_lock(ctx, issue_flags);
+	io_ring_submit_lock(ctx, issue_flags, &lock_state);
 
 	/*
 	 * iw->head is valid under the ring lock, and as long as the request
@@ -323,7 +324,7 @@ int io_waitid(struct io_kiocb *req, unsigned int issue_flags)
 		 * a waitqueue callback, or if someone cancels it.
 		 */
 		if (!io_waitid_drop_issue_ref(req)) {
-			io_ring_submit_unlock(ctx, issue_flags);
+			io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 			return IOU_ISSUE_SKIP_COMPLETE;
 		}
 
@@ -331,7 +332,7 @@ int io_waitid(struct io_kiocb *req, unsigned int issue_flags)
 		 * Wakeup triggered, racing with us. It was prevented from
 		 * completing because of that, queue up the tw to do that.
 		 */
-		io_ring_submit_unlock(ctx, issue_flags);
+		io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 		return IOU_ISSUE_SKIP_COMPLETE;
 	}
 
@@ -339,7 +340,7 @@ int io_waitid(struct io_kiocb *req, unsigned int issue_flags)
 	io_waitid_remove_wq(req);
 	ret = io_waitid_finish(req, ret);
 
-	io_ring_submit_unlock(ctx, issue_flags);
+	io_ring_submit_unlock(ctx, issue_flags, &lock_state);
 done:
 	if (ret < 0)
 		req_set_fail(req);
