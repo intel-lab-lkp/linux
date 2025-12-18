@@ -600,6 +600,9 @@ void __init sparse_init(void)
 	BUILD_BUG_ON(!is_power_of_2(sizeof(struct mem_section)));
 	memblocks_present();
 
+	WARN_ON(!IS_ALIGNED((unsigned long)pfn_to_page(0),
+			    MAX_FOLIO_SIZE / sizeof(struct page)));
+
 	pnum_begin = first_present_section_nr();
 	nid_begin = sparse_early_nid(__nr_to_section(pnum_begin));
 
