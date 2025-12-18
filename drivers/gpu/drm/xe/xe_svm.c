@@ -547,9 +547,10 @@ static int xe_svm_copy(struct page **pages,
 	bool sram = dir == XE_SVM_COPY_TO_SRAM;
 	ktime_t start = xe_gt_stats_ktime_get();
 
-	if (pre_migrate_fence && dma_fence_is_container(pre_migrate_fence)) {
+	if (pre_migrate_fence && (sram || dma_fence_is_container(pre_migrate_fence))) {
 		/*
-		 * This would typically be a composite fence operation on the destination memory.
+		 * This would typically be a composite fence operation on the destination memory,
+		 * or a p2p migration by the source GPU while the destination is being cleared.
 		 * Ensure that the other GPU operation on the destination is complete.
 		 */
 		err = dma_fence_wait(pre_migrate_fence, true);
@@ -701,7 +702,7 @@ err_out:
 	 * the pre_migrate_fence. Verify that this is indeed likely. If we
 	 * didn't perform any copying, just wait for the pre_migrate_fence.
 	 */
-	if (pre_migrate_fence && !dma_fence_is_signaled(pre_migrate_fence)) {
+	if (!sram && pre_migrate_fence && !dma_fence_is_signaled(pre_migrate_fence)) {
 		if (xe && fence &&
 		    (pre_migrate_fence->context != fence->context ||
 		     dma_fence_is_later(pre_migrate_fence, fence))) {
