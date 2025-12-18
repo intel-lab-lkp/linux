@@ -279,7 +279,7 @@ struct dvobj_priv {
 	u8 Queue2Pipe[HW_QUEUE_ENTRY];/* for out pipe mapping */
 
 	u8 irq_alloc;
-	atomic_t continual_io_error;
+	int continual_io_error;
 
 	atomic_t disable_func;
 

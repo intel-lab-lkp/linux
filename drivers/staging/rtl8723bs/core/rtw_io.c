@@ -139,16 +139,12 @@ int rtw_init_io_priv(struct adapter *padapter, void (*set_intf_ops)(struct adapt
  */
 int rtw_inc_and_chk_continual_io_error(struct dvobj_priv *dvobj)
 {
-	int error_count = atomic_inc_return(&dvobj->continual_io_error);
-
-	if (error_count > MAX_CONTINUAL_IO_ERR)
-		return true;
-
-	return false;
+	dvobj->continual_io_error++;
+	return (dvobj->continual_io_error > MAX_CONTINUAL_IO_ERR);
 }
 
 /* Set the continual_io_error of this @param dvobjprive to 0 */
 void rtw_reset_continual_io_error(struct dvobj_priv *dvobj)
 {
-	atomic_set(&dvobj->continual_io_error, 0);
+	dvobj->continual_io_error = 0;
 }
