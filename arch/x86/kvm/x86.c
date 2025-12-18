@@ -9593,10 +9593,10 @@ writeback:
 			if (ctxt->is_branch)
 				kvm_pmu_branch_retired(vcpu);
 			kvm_rip_write(vcpu, ctxt->eip);
+			__kvm_set_rflags(vcpu, ctxt->eflags);
 			if (r && (ctxt->tf || (vcpu->guest_debug & KVM_GUESTDBG_SINGLESTEP)))
 				r = kvm_vcpu_do_singlestep(vcpu);
 			kvm_x86_call(update_emulated_instruction)(vcpu);
-			__kvm_set_rflags(vcpu, ctxt->eflags);
 		}
 
 		/*
