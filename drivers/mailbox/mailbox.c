@@ -238,6 +238,15 @@ EXPORT_SYMBOL_GPL(mbox_client_peek_data);
  * This function could be called from atomic context as it simply
  * queues the data and returns a token against the request.
  *
+ * NOTE: If 'mssg' is NULL, the function has some rather different behavior.
+ *	 - The mailbox controller will be informed of the message but it
+ *	   won't be considered "busy". Future messages will continue to be
+ *	   passed onto the controller even if it never called mbox_chan_txdone()
+ *	 - The client's tx_done() callback will never be called.
+ *	 The above rules allow asserting an "edge-triggered" interrupt to the
+ *	 remote processor in a race-free way. Behavior is undefined if a given
+ *	 channel sometimes has NULL message and sometimes doesn't.
+ *
  * Return: Non-negative integer for successful submission (non-blocking mode)
  *	or transmission over chan (blocking mode).
  *	Negative value denotes failure.
