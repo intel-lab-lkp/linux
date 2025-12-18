@@ -942,10 +942,10 @@ static void ufs_mtk_init_clocks(struct ufs_hba *hba)
 
 static void ufs_mtk_setup_clk_gating(struct ufs_hba *hba)
 {
+	const u32 scale_us[] = {1, 10, 100, 1000, 10000, 100000};
 	unsigned long flags;
 	u32 ah_ms = 10;
 	u32 ah_scale, ah_timer;
-	u32 scale_us[] = {1, 10, 100, 1000, 10000, 100000};
 
 	if (ufshcd_is_clkgating_allowed(hba)) {
 		if (ufshcd_is_auto_hibern8_supported(hba) && hba->ahit) {
@@ -953,7 +953,7 @@ static void ufs_mtk_setup_clk_gating(struct ufs_hba *hba)
 					  hba->ahit);
 			ah_timer = FIELD_GET(UFSHCI_AHIBERN8_TIMER_MASK,
 					  hba->ahit);
-			if (ah_scale <= 5)
+			if (ah_scale < ARRAY_SIZE(scale_us))
 				ah_ms = ah_timer * scale_us[ah_scale] / 1000;
 		}
 
