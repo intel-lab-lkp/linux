@@ -3038,6 +3038,14 @@ static noinline int do_init_module(struct module *mod)
 	if (mod->init != NULL)
 		ret = do_one_initcall(mod->init);
 	if (ret < 0) {
+		/*
+		 * -EEXIST is reserved by the module loader to mean "already loaded". kmod
+		 * interprets this as success, hiding real module failures. Override with
+		 * -EBUSY and warn.
+		 *
+		 * Module authors: use -EBUSY or -EALREADY instead of -EEXIST.
+		 * See Documentation/kernel-hacking/hacking.rst
+		 */
 		if (ret == -EEXIST) {
 			pr_warn("%s: init suspiciously returned -EEXIST: Overriding with -EBUSY\n",
 				mod->name);
