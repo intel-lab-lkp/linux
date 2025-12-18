@@ -39,6 +39,11 @@
 
 #define MPR_ST_ERR_FLAG  (MPR_ST_BUSY | MPR_ST_MEMORY | MPR_ST_MATH)
 
+#define MPR_CMD_NOP      0xf0
+#define MPR_CMD_SYNC     0xaa
+#define MPR_PKT_NOP_LEN  MPR_MEASUREMENT_RD_SIZE
+#define MPR_PKT_SYNC_LEN 3
+
 /*
  * support _RAW sysfs interface:
  *

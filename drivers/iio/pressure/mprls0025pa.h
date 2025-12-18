@@ -20,10 +20,6 @@
 #include <linux/iio/iio.h>
 
 #define MPR_MEASUREMENT_RD_SIZE 4
-#define MPR_CMD_NOP      0xf0
-#define MPR_CMD_SYNC     0xaa
-#define MPR_PKT_NOP_LEN  MPR_MEASUREMENT_RD_SIZE
-#define MPR_PKT_SYNC_LEN 3
 
 struct device;
 

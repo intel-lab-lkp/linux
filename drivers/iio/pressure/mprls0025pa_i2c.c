@@ -34,16 +34,19 @@ static int mpr_i2c_read(struct mpr_data *data, const u8 unused, const u8 cnt)
 	return 0;
 }
 
-static int mpr_i2c_write(struct mpr_data *data, const u8 cmd, const u8 unused)
+static int mpr_i2c_write(struct mpr_data *data, const u8 cmd, const u8 cnt)
 {
 	int ret;
 	struct i2c_client *client = to_i2c_client(data->dev);
 
+	if (cnt > MPR_MEASUREMENT_RD_SIZE)
+		return -EOVERFLOW;
+
 	data->tx_buf[0] = cmd;
-	ret = i2c_master_send(client, data->tx_buf, MPR_PKT_SYNC_LEN);
+	ret = i2c_master_send(client, data->tx_buf, cnt);
 	if (ret < 0)
 		return ret;
-	else if (ret != MPR_PKT_SYNC_LEN)
+	else if (ret != cnt)
 		return -EIO;
 
 	return 0;
