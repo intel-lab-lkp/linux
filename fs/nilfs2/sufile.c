@@ -1175,7 +1175,7 @@ int nilfs_sufile_trim_fs(struct inode *sufile, struct fstrim_range *range)
 			nblocks -= start_block - start;
 			start = start_block;
 		}
-		if (start + nblocks > end_block + 1)
+		if (start + nblocks > end_block + 1 && end_block > start)
 			nblocks = end_block - start + 1;
 
 		if (nblocks >= minlen) {
