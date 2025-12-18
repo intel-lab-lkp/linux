@@ -983,8 +983,10 @@ static int __init isapnp_init(void)
 		return -EBUSY;
 	}
 
-	if (pnp_register_protocol(&isapnp_protocol) < 0)
+	if (pnp_register_protocol(&isapnp_protocol) < 0) {
+		put_device(&isapnp_protocol.dev);
 		return -EBUSY;
+	}
 
 	/*
 	 *      Print a message. The existing ISAPnP code is hanging machines
