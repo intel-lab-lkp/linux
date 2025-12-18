@@ -296,7 +296,7 @@ bool ksmbd_conn_alive(struct ksmbd_conn *conn)
 }
 
 #define SMB1_MIN_SUPPORTED_HEADER_SIZE (sizeof(struct smb_hdr))
-#define SMB2_MIN_SUPPORTED_HEADER_SIZE (sizeof(struct smb2_hdr) + 4)
+#define SMB2_MIN_SUPPORTED_HEADER_SIZE (sizeof(struct smb2_hdr))
 
 /**
  * ksmbd_conn_handler_loop() - session thread to listen on new smb requests
