@@ -304,7 +304,10 @@ static int __init pnpacpi_init(void)
 		return 0;
 	}
 	printk(KERN_INFO "pnp: PnP ACPI init\n");
-	pnp_register_protocol(&pnpacpi_protocol);
+	if (pnp_register_protocol(&pnpacpi_protocol)) {
+		put_device(&pnpacpi_protocol.dev);
+		return 0;
+	}
 	acpi_get_devices(NULL, pnpacpi_add_device_handler, NULL, NULL);
 	printk(KERN_INFO "pnp: PnP ACPI: found %d devices\n", num);
 	pnp_platform_devices = 1;
