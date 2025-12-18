@@ -60,7 +60,7 @@ config INTEGRITY_PLATFORM_KEYRING
 	help
 	  Provide a separate, distinct keyring for platform trusted keys, which
 	  the kernel automatically populates during initialization from values
-	  provided by the platform for verifying the kexec'ed kerned image
+	  provided by the platform for verifying the kexec'ed kernel image
 	  and, possibly, the initramfs signature.
 
 config INTEGRITY_MACHINE_KEYRING
