@@ -1672,11 +1672,9 @@ void io_req_task_complete(struct io_tw_req tw_req, io_tw_token_t tw)
 static void io_iopoll_req_issued(struct io_kiocb *req, unsigned int issue_flags)
 {
 	struct io_ring_ctx *ctx = req->ctx;
-	const bool needs_lock = issue_flags & IO_URING_F_UNLOCKED;
 
 	/* workqueue context doesn't hold uring_lock, grab it now */
-	if (unlikely(needs_lock))
-		mutex_lock(&ctx->uring_lock);
+	io_ring_submit_lock(ctx, issue_flags);
 
 	/*
 	 * Track whether we have multiple files in our lists. This will impact
@@ -1703,7 +1701,7 @@ static void io_iopoll_req_issued(struct io_kiocb *req, unsigned int issue_flags)
 	else
 		wq_list_add_tail(&req->comp_list, &ctx->iopoll_list);
 
-	if (unlikely(needs_lock)) {
+	if (unlikely(issue_flags & IO_URING_F_UNLOCKED)) {
 		/*
 		 * If IORING_SETUP_SQPOLL is enabled, sqes are either handle
 		 * in sq thread task context or in io worker task context. If
