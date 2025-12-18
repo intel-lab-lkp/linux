@@ -188,7 +188,6 @@ static void mpr_reset(struct mpr_data *data)
  * If there is an end of conversion (EOC) interrupt registered the function
  * waits for a maximum of one second for the interrupt.
  *
- * Context: The function can sleep and data->lock should be held when calling it
  * Return:
  * * 0		- OK, the pressure value could be read
  * * -ETIMEDOUT	- Timeout while waiting for the EOC interrupt or busy flag is
@@ -273,7 +272,6 @@ static irqreturn_t mpr_trigger_handler(int irq, void *p)
 	struct iio_dev *indio_dev = pf->indio_dev;
 	struct mpr_data *data = iio_priv(indio_dev);
 
-	mutex_lock(&data->lock);
 	ret = mpr_read_pressure(data, &data->chan.pres);
 	if (ret < 0)
 		goto err;
@@ -282,7 +280,6 @@ static irqreturn_t mpr_trigger_handler(int irq, void *p)
 					   iio_get_time_ns(indio_dev));
 
 err:
-	mutex_unlock(&data->lock);
 	iio_trigger_notify_done(indio_dev->trig);
 
 	return IRQ_HANDLED;
@@ -300,9 +297,7 @@ static int mpr_read_raw(struct iio_dev *indio_dev,
 
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
-		mutex_lock(&data->lock);
 		ret = mpr_read_pressure(data, &pressure);
-		mutex_unlock(&data->lock);
 		if (ret < 0)
 			return ret;
 		*val = pressure;
@@ -342,7 +337,6 @@ int mpr_common_probe(struct device *dev, const struct mpr_ops *ops, int irq)
 	data->ops = ops;
 	data->irq = irq;
 
-	mutex_init(&data->lock);
 	init_completion(&data->completion);
 
 	indio_dev->name = "mprls0025pa";

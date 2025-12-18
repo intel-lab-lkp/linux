@@ -14,7 +14,6 @@
 #include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/device.h>
-#include <linux/mutex.h>
 #include <linux/stddef.h>
 #include <linux/types.h>
 
@@ -44,7 +43,6 @@ enum mpr_func_id {
  * struct mpr_data
  * @dev: current device structure
  * @ops: functions that implement the sensor reads/writes, bus init
- * @lock: access to device during read
  * @pmin: minimal pressure in pascal
  * @pmax: maximal pressure in pascal
  * @function: transfer function
@@ -66,7 +64,6 @@ enum mpr_func_id {
 struct mpr_data {
 	struct device		*dev;
 	const struct mpr_ops	*ops;
-	struct mutex		lock;
 	u32			pmin;
 	u32			pmax;
 	enum mpr_func_id	function;
