@@ -75,6 +75,23 @@ static inline unsigned long __untagged_addr_remote(struct mm_struct *mm, unsigne
 	__builtin_choose_expr(sizeof(x) <= sizeof(type), (unsigned type)0, not)
 
 /*
+ * Sanitize a uaccess pointer such that it cannot reach any kernel address.
+ *
+ * On RISC-V, virtual addresses are sign-extended from the top implemented bit.
+ * User addresses have the MSB clear; kernel addresses have the MSB set.
+ * Clearing the MSB ensures any kernel pointer becomes non-canonical and will
+ * fault, while valid user pointers remain unchanged.
+ */
+#define uaccess_mask_ptr(ptr) ((__typeof__(ptr))__uaccess_mask_ptr(ptr))
+static inline void __user *__uaccess_mask_ptr(const void __user *ptr)
+{
+	unsigned long val = (unsigned long)ptr;
+
+	val = (val << 1) >> 1;
+	return (void __user *)val;
+}
+
+/*
  * The exception table consists of pairs of addresses: the first is the
  * address of an instruction that is allowed to fault, and the second is
  * the address at which the program should continue.  No registers are
@@ -235,7 +252,8 @@ __gu_failed:								\
  */
 #define __get_user(x, ptr)					\
 ({								\
-	const __typeof__(*(ptr)) __user *__gu_ptr = untagged_addr(ptr); \
+	const __typeof__(*(ptr)) __user *__gu_ptr =		\
+		uaccess_mask_ptr(untagged_addr(ptr));		\
 	long __gu_err = 0;					\
 	__typeof__(x) __gu_val;					\
 								\
@@ -366,7 +384,8 @@ err_label:							\
  */
 #define __put_user(x, ptr)					\
 ({								\
-	__typeof__(*(ptr)) __user *__gu_ptr = untagged_addr(ptr); \
+	__typeof__(*(ptr)) __user *__gu_ptr =			\
+		uaccess_mask_ptr(untagged_addr(ptr));		\
 	__typeof__(*__gu_ptr) __val = (x);			\
 	long __pu_err = 0;					\
 								\
@@ -413,13 +432,15 @@ unsigned long __must_check __asm_copy_from_user(void *to,
 static inline unsigned long
 raw_copy_from_user(void *to, const void __user *from, unsigned long n)
 {
-	return __asm_copy_from_user(to, untagged_addr(from), n);
+	return __asm_copy_from_user(to,
+		uaccess_mask_ptr(untagged_addr(from)), n);
 }
 
 static inline unsigned long
 raw_copy_to_user(void __user *to, const void *from, unsigned long n)
 {
-	return __asm_copy_to_user(untagged_addr(to), from, n);
+	return __asm_copy_to_user(
+		uaccess_mask_ptr(untagged_addr(to)), from, n);
 }
 
 extern long strncpy_from_user(char *dest, const char __user *src, long count);
@@ -434,7 +455,7 @@ unsigned long __must_check clear_user(void __user *to, unsigned long n)
 {
 	might_fault();
 	return access_ok(to, n) ?
-		__clear_user(untagged_addr(to), n) : n;
+		__clear_user(uaccess_mask_ptr(untagged_addr(to)), n) : n;
 }
 
 #define arch_get_kernel_nofault(dst, src, type, err_label)			\
@@ -461,20 +482,22 @@ static inline void user_access_restore(unsigned long enabled) { }
  * the error labels - thus the macro games.
  */
 #define arch_unsafe_put_user(x, ptr, label)				\
-	__put_user_nocheck(x, (ptr), label)
+	__put_user_nocheck(x, uaccess_mask_ptr(ptr), label)
 
 #define arch_unsafe_get_user(x, ptr, label)	do {			\
 	__inttype(*(ptr)) __gu_val;					\
-	__get_user_nocheck(__gu_val, (ptr), label);			\
+	__get_user_nocheck(__gu_val, uaccess_mask_ptr(ptr), label);	\
 	(x) = (__force __typeof__(*(ptr)))__gu_val;			\
 } while (0)
 
 #define unsafe_copy_to_user(_dst, _src, _len, label)			\
-	if (__asm_copy_to_user_sum_enabled(_dst, _src, _len))		\
+	if (__asm_copy_to_user_sum_enabled(				\
+		uaccess_mask_ptr(_dst), _src, _len))			\
 		goto label;
 
 #define unsafe_copy_from_user(_dst, _src, _len, label)			\
-	if (__asm_copy_from_user_sum_enabled(_dst, _src, _len))		\
+	if (__asm_copy_from_user_sum_enabled(				\
+		_dst, uaccess_mask_ptr(_src), _len))			\
 		goto label;
 
 #else /* CONFIG_MMU */
