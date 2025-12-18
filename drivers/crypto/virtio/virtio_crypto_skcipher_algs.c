@@ -416,8 +416,8 @@ __virtio_crypto_skcipher_do_req(struct virtio_crypto_sym_request *vc_sym_req,
 	memcpy(iv, req->iv, ivsize);
 	if (!vc_sym_req->encrypt)
 		scatterwalk_map_and_copy(req->iv, req->src,
-					 req->cryptlen - AES_BLOCK_SIZE,
-					 AES_BLOCK_SIZE, 0);
+					 req->cryptlen - ivsize,
+					 ivsize, 0);
 
 	sg_init_one(&iv_sg, iv, ivsize);
 	sgs[num_out++] = &iv_sg;
@@ -459,6 +459,7 @@ static int virtio_crypto_skcipher_encrypt(struct skcipher_request *req)
 {
 	struct crypto_skcipher *atfm = crypto_skcipher_reqtfm(req);
 	struct virtio_crypto_skcipher_ctx *ctx = crypto_skcipher_ctx(atfm);
+	unsigned int blocksize = crypto_skcipher_blocksize(atfm);
 	struct virtio_crypto_sym_request *vc_sym_req =
 				skcipher_request_ctx(req);
 	struct virtio_crypto_request *vc_req = &vc_sym_req->base;
@@ -468,7 +469,7 @@ static int virtio_crypto_skcipher_encrypt(struct skcipher_request *req)
 
 	if (!req->cryptlen)
 		return 0;
-	if (req->cryptlen % AES_BLOCK_SIZE)
+	if (req->cryptlen % blocksize)
 		return -EINVAL;
 
 	vc_req->dataq = data_vq;
@@ -482,6 +483,7 @@ static int virtio_crypto_skcipher_decrypt(struct skcipher_request *req)
 {
 	struct crypto_skcipher *atfm = crypto_skcipher_reqtfm(req);
 	struct virtio_crypto_skcipher_ctx *ctx = crypto_skcipher_ctx(atfm);
+	unsigned int blocksize = crypto_skcipher_blocksize(atfm);
 	struct virtio_crypto_sym_request *vc_sym_req =
 				skcipher_request_ctx(req);
 	struct virtio_crypto_request *vc_req = &vc_sym_req->base;
@@ -491,7 +493,7 @@ static int virtio_crypto_skcipher_decrypt(struct skcipher_request *req)
 
 	if (!req->cryptlen)
 		return 0;
-	if (req->cryptlen % AES_BLOCK_SIZE)
+	if (req->cryptlen % blocksize)
 		return -EINVAL;
 
 	vc_req->dataq = data_vq;
@@ -547,10 +549,13 @@ static void virtio_crypto_skcipher_finalize_req(
 	struct skcipher_request *req,
 	int err)
 {
+	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
+	unsigned int ivsize = crypto_skcipher_ivsize(tfm);
+
 	if (vc_sym_req->encrypt)
 		scatterwalk_map_and_copy(req->iv, req->dst,
-					 req->cryptlen - AES_BLOCK_SIZE,
-					 AES_BLOCK_SIZE, 0);
+					 req->cryptlen - ivsize,
+					 ivsize, 0);
 	kfree_sensitive(vc_sym_req->iv);
 	virtcrypto_clear_request(&vc_sym_req->base);
 
