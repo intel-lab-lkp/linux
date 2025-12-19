@@ -1711,6 +1711,12 @@ static void ibmvmc_process_capabilities(struct crq_server_adapter *adapter,
 		return;
 	}
 
+	if (crq->max_hmc == 0) {
+		dev_err(adapter->dev, "init failed, invalid max_hmc value of 0\n");
+		ibmvmc.state = ibmvmc_state_failed;
+		return;
+	}
+
 	ibmvmc.max_mtu = min_t(u32, ibmvmc_max_mtu, be32_to_cpu(crq->max_mtu));
 	ibmvmc.max_buffer_pool_size = min_t(u16, ibmvmc_max_buf_pool_size,
 					    be16_to_cpu(crq->pool_size));
