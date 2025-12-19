@@ -438,8 +438,13 @@ static int ipu6_isys_link_fmt_validate(struct ipu6_isys_queue *aq)
 	sd = media_entity_to_v4l2_subdev(remote_pad->entity);
 	r_stream = ipu6_isys_get_src_stream_by_src_pad(sd, remote_pad->index);
 
-	ret = ipu6_isys_get_stream_pad_fmt(sd, remote_pad->index, r_stream,
-					   &format);
+	struct v4l2_subdev_state *state =
+		v4l2_subdev_lock_and_get_active_state(sd);
+
+	format = *v4l2_subdev_state_get_format(state, remote_pad->index,
+					       r_stream);
+
+	v4l2_subdev_unlock_state(state);
 
 	if (ret) {
 		dev_dbg(dev, "failed to get %s: pad %d, stream:%d format\n",
