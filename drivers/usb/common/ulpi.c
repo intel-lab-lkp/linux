@@ -278,6 +278,7 @@ static int ulpi_register(struct device *dev, struct ulpi *ulpi)
 	int ret;
 	struct dentry *root;
 
+	device_initialize(&ulpi->dev);
 	ulpi->dev.parent = dev; /* needed early for ops */
 	ulpi->dev.bus = &ulpi_bus;
 	ulpi->dev.type = &ulpi_dev_type;
@@ -287,19 +288,15 @@ static int ulpi_register(struct device *dev, struct ulpi *ulpi)
 
 	ret = ulpi_of_register(ulpi);
 	if (ret)
-		return ret;
+		goto err_register;
 
 	ret = ulpi_read_id(ulpi);
-	if (ret) {
-		of_node_put(ulpi->dev.of_node);
-		return ret;
-	}
+	if (ret)
+		goto err_register;
 
-	ret = device_register(&ulpi->dev);
-	if (ret) {
-		put_device(&ulpi->dev);
-		return ret;
-	}
+	ret = device_add(&ulpi->dev);
+	if (ret)
+		goto err_register;
 
 	root = debugfs_create_dir(dev_name(&ulpi->dev), ulpi_root);
 	debugfs_create_file("regs", 0444, root, ulpi, &ulpi_regs_fops);
@@ -308,6 +305,10 @@ static int ulpi_register(struct device *dev, struct ulpi *ulpi)
 		ulpi->id.vendor, ulpi->id.product);
 
 	return 0;
+
+err_register:
+	put_device(&ulpi->dev);
+	return ret;
 }
 
 /**
@@ -331,10 +332,8 @@ struct ulpi *ulpi_register_interface(struct device *dev,
 	ulpi->ops = ops;
 
 	ret = ulpi_register(dev, ulpi);
-	if (ret) {
-		kfree(ulpi);
+	if (ret)
 		return ERR_PTR(ret);
-	}
 
 	return ulpi;
 }
