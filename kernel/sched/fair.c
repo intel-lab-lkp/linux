@@ -7855,7 +7855,7 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
 		 */
 		if (sd) {
 			i = select_idle_capacity(p, sd, target);
-			return ((unsigned)i < nr_cpumask_bits) ? i : target;
+			return ((unsigned int)i < nr_cpumask_bits) ? i : target;
 		}
 	}
 
@@ -7874,7 +7874,7 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
 	}
 
 	i = select_idle_cpu(p, sd, has_idle_core, target);
-	if ((unsigned)i < nr_cpumask_bits)
+	if ((unsigned int)i < nr_cpumask_bits)
 		return i;
 
 	/*
