@@ -280,6 +280,7 @@ const struct address_space_operations nilfs_aops = {
 	.direct_IO		= nilfs_direct_IO,
 	.migrate_folio		= buffer_migrate_folio_norefs,
 	.is_partially_uptodate  = block_is_partially_uptodate,
+	.release_folio		= block_release_folio,
 };
 
 const struct address_space_operations nilfs_buffer_cache_aops = {

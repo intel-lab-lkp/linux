@@ -2102,6 +2102,7 @@ const struct address_space_operations ntfs_aops = {
 	.dirty_folio	= block_dirty_folio,
 	.migrate_folio	= buffer_migrate_folio,
 	.invalidate_folio = block_invalidate_folio,
+	.release_folio	= block_release_folio,
 };
 
 const struct address_space_operations ntfs_aops_cmpr = {

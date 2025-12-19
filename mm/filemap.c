@@ -4490,9 +4490,9 @@ bool filemap_release_folio(struct folio *folio, gfp_t gfp)
 	if (folio_test_writeback(folio))
 		return false;
 
-	if (mapping && mapping->a_ops->release_folio)
+	if (mapping)
 		return mapping->a_ops->release_folio(folio, gfp);
-	return try_to_free_buffers(folio);
+	return true;
 }
 EXPORT_SYMBOL(filemap_release_folio);
 

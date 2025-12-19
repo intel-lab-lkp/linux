@@ -464,7 +464,8 @@ const struct address_space_operations affs_aops = {
 	.write_end = affs_write_end,
 	.direct_IO = affs_direct_IO,
 	.migrate_folio = buffer_migrate_folio,
-	.bmap = _affs_bmap
+	.bmap = _affs_bmap,
+	.release_folio = block_release_folio,
 };
 
 static inline struct buffer_head *

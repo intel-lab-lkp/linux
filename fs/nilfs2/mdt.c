@@ -443,6 +443,7 @@ static const struct address_space_operations def_mdt_aops = {
 	.invalidate_folio	= block_invalidate_folio,
 	.writepages		= nilfs_mdt_writeback,
 	.migrate_folio		= buffer_migrate_folio_norefs,
+	.release_folio		= block_release_folio,
 };
 
 static const struct inode_operations def_mdt_iops;

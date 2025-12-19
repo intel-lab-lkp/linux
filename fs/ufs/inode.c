@@ -514,7 +514,8 @@ const struct address_space_operations ufs_aops = {
 	.write_begin = ufs_write_begin,
 	.write_end = ufs_write_end,
 	.migrate_folio = buffer_migrate_folio,
-	.bmap = ufs_bmap
+	.bmap = ufs_bmap,
+	.release_folio = block_release_folio,
 };
 
 static void ufs_set_inode_ops(struct inode *inode)

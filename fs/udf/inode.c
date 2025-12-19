@@ -335,6 +335,7 @@ const struct address_space_operations udf_aops = {
 	.direct_IO	= udf_direct_IO,
 	.bmap		= udf_bmap,
 	.migrate_folio	= buffer_migrate_folio,
+	.release_folio	= block_release_folio,
 };
 
 /*

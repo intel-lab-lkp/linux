@@ -83,6 +83,7 @@ static const struct address_space_operations adfs_aops = {
 	.write_end	= generic_write_end,
 	.migrate_folio	= buffer_migrate_folio,
 	.bmap		= _adfs_bmap,
+	.release_folio	= block_release_folio,
 };
 
 /*

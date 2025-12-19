@@ -198,6 +198,7 @@ const struct address_space_operations bfs_aops = {
 	.write_end	= generic_write_end,
 	.migrate_folio	= buffer_migrate_folio,
 	.bmap		= bfs_bmap,
+	.release_folio	= block_release_folio,
 };
 
 const struct inode_operations bfs_file_inops;

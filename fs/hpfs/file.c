@@ -252,6 +252,7 @@ const struct address_space_operations hpfs_aops = {
 	.write_end = hpfs_write_end,
 	.bmap = _hpfs_bmap,
 	.migrate_folio = buffer_migrate_folio,
+	.release_folio = block_release_folio,
 };
 
 const struct file_operations hpfs_file_ops =

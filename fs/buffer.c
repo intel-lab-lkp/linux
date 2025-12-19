@@ -2915,6 +2915,23 @@ failed:
 }
 
 /**
+ * block_release_folio - Release buffers attached to a BH-based filesystems.
+ * @folio: The folio.
+ * @gfp: The gfp parameter.
+ *
+ * This is the default release_folio implementation for buffer_head based
+ * filesystems. Filesystems with special requirements
+ * should implement their own release_folio callback.
+ *
+ * Return: true if buffers were released, false otherwise.
+ */
+bool block_release_folio(struct folio *folio, gfp_t gfp)
+{
+	return try_to_free_buffers(folio);
+}
+EXPORT_SYMBOL(block_release_folio);
+
+/**
  * try_to_free_buffers - Release buffers attached to this folio.
  * @folio: The folio.
  *

@@ -486,7 +486,8 @@ static const struct address_space_operations minix_aops = {
 	.write_end = generic_write_end,
 	.migrate_folio = buffer_migrate_folio,
 	.bmap = minix_bmap,
-	.direct_IO = noop_direct_IO
+	.direct_IO = noop_direct_IO,
+	.release_folio = block_release_folio,
 };
 
 static const struct inode_operations minix_symlink_inode_operations = {

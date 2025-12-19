@@ -980,6 +980,7 @@ const struct address_space_operations ext2_aops = {
 	.migrate_folio		= buffer_migrate_folio,
 	.is_partially_uptodate	= block_is_partially_uptodate,
 	.error_remove_folio	= generic_error_remove_folio,
+	.release_folio = block_release_folio,
 };
 
 static const struct address_space_operations ext2_dax_aops = {

@@ -567,6 +567,7 @@ static const struct address_space_operations exfat_aops = {
 	.direct_IO	= exfat_direct_IO,
 	.bmap		= exfat_aop_bmap,
 	.migrate_folio	= buffer_migrate_folio,
+	.release_folio	= block_release_folio,
 };
 
 static inline unsigned long exfat_hash(loff_t i_pos)

@@ -1162,7 +1162,8 @@ static sector_t _isofs_bmap(struct address_space *mapping, sector_t block)
 static const struct address_space_operations isofs_aops = {
 	.read_folio = isofs_read_folio,
 	.readahead = isofs_readahead,
-	.bmap = _isofs_bmap
+	.bmap = _isofs_bmap,
+	.release_folio = block_release_folio,
 };
 
 static int isofs_read_level3_size(struct inode *inode)
