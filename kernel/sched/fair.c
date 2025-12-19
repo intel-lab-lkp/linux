@@ -9041,6 +9041,68 @@ static void put_prev_task_fair(struct rq *rq, struct task_struct *prev, struct t
 }
 
 /*
+ * Rate-limit yield deboost operations to prevent excessive overhead.
+ * Returns true if the operation should be skipped due to rate limiting.
+ *
+ * The 6ms threshold balances responsiveness with overhead reduction:
+ * - Short enough to allow timely yield boosting for lock contention
+ * - Long enough to prevent pathological high-frequency penalty application
+ *
+ * Called under rq->lock, so direct field access is safe.
+ */
+static bool yield_deboost_rate_limit(struct rq *rq)
+{
+	u64 now = rq_clock(rq);
+	u64 last = rq->yield_deboost_last_time_ns;
+
+	if (last && (now - last) <= 6 * NSEC_PER_MSEC)
+		return true;
+
+	rq->yield_deboost_last_time_ns = now;
+	return false;
+}
+
+/*
+ * Validate tasks for yield deboost operation.
+ * Returns the yielding task on success, NULL on validation failure.
+ *
+ * Checks: feature enabled, valid target, same runqueue, target is fair class,
+ * both on_rq. Called under rq->lock.
+ *
+ * Note: p_yielding (rq->donor) is guaranteed to be fair class by the caller
+ * (yield_to_task_fair is only called when curr->sched_class == p->sched_class).
+ */
+static struct task_struct __maybe_unused *
+yield_deboost_validate_tasks(struct rq *rq, struct task_struct *p_target)
+{
+	struct task_struct *p_yielding;
+
+	if (!sysctl_sched_vcpu_debooster_enabled)
+		return NULL;
+
+	if (!p_target)
+		return NULL;
+
+	if (yield_deboost_rate_limit(rq))
+		return NULL;
+
+	p_yielding = rq->donor;
+	if (!p_yielding || p_yielding == p_target)
+		return NULL;
+
+	if (p_target->sched_class != &fair_sched_class)
+		return NULL;
+
+	if (task_rq(p_target) != rq)
+		return NULL;
+
+	if (!p_target->se.on_rq || !p_yielding->se.on_rq)
+		return NULL;
+
+	return p_yielding;
+}
+
+/*
  * sched_yield() is very simple
  */
 static void yield_task_fair(struct rq *rq)
