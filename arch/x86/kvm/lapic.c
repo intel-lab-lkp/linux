@@ -1270,6 +1270,9 @@ bool kvm_irq_delivery_to_apic_fast(struct kvm *kvm, struct kvm_lapic *src,
 	struct kvm_lapic **dst = NULL;
 	int i;
 	bool ret;
+	int targets = 0;
+	int delivered;
+	struct kvm_vcpu *unique = NULL;
 
 	*r = -1;
 
@@ -1291,8 +1294,22 @@ bool kvm_irq_delivery_to_apic_fast(struct kvm *kvm, struct kvm_lapic *src,
 		for_each_set_bit(i, &bitmap, 16) {
 			if (!dst[i])
 				continue;
-			*r += kvm_apic_set_irq(dst[i]->vcpu, irq, dest_map);
+			delivered = kvm_apic_set_irq(dst[i]->vcpu, irq, dest_map);
+			*r += delivered;
+			if (delivered > 0) {
+				targets++;
+				unique = dst[i]->vcpu;
+			}
 		}
+
+		/*
+		 * Track IPI for directed yield: only for LAPIC-originated
+		 * APIC_DM_FIXED without shorthand, with exactly one recipient.
+		 */
+		if (src && irq->delivery_mode == APIC_DM_FIXED &&
+		    irq->shorthand == APIC_DEST_NOSHORT &&
+		    targets == 1 && unique && unique != src->vcpu)
+			kvm_track_ipi_communication(src->vcpu, unique);
 	}
 
 	rcu_read_unlock();
@@ -1377,6 +1394,9 @@ int kvm_irq_delivery_to_apic(struct kvm *kvm, struct kvm_lapic *src,
 	struct kvm_vcpu *vcpu, *lowest = NULL;
 	unsigned long i, dest_vcpu_bitmap[BITS_TO_LONGS(KVM_MAX_VCPUS)];
 	unsigned int dest_vcpus = 0;
+	int targets = 0;
+	int delivered;
+	struct kvm_vcpu *unique = NULL;
 
 	if (kvm_irq_delivery_to_apic_fast(kvm, src, irq, &r, dest_map))
 		return r;
@@ -1400,7 +1420,12 @@ int kvm_irq_delivery_to_apic(struct kvm *kvm, struct kvm_lapic *src,
 		if (!kvm_lowest_prio_delivery(irq)) {
 			if (r < 0)
 				r = 0;
-			r += kvm_apic_set_irq(vcpu, irq, dest_map);
+			delivered = kvm_apic_set_irq(vcpu, irq, dest_map);
+			r += delivered;
+			if (delivered > 0) {
+				targets++;
+				unique = vcpu;
+			}
 		} else if (kvm_apic_sw_enabled(vcpu->arch.apic)) {
 			if (!vector_hashing_enabled) {
 				if (!lowest)
@@ -1421,8 +1446,23 @@ int kvm_irq_delivery_to_apic(struct kvm *kvm, struct kvm_lapic *src,
 		lowest = kvm_get_vcpu(kvm, idx);
 	}
 
-	if (lowest)
-		r = kvm_apic_set_irq(lowest, irq, dest_map);
+	if (lowest) {
+		delivered = kvm_apic_set_irq(lowest, irq, dest_map);
+		r = delivered;
+		if (delivered > 0) {
+			targets = 1;
+			unique = lowest;
+		}
+	}
+
+	/*
+	 * Track IPI for directed yield: only for LAPIC-originated
+	 * APIC_DM_FIXED without shorthand, with exactly one recipient.
+	 */
+	if (src && irq->delivery_mode == APIC_DM_FIXED &&
+	    irq->shorthand == APIC_DEST_NOSHORT &&
+	    targets == 1 && unique && unique != src->vcpu)
+		kvm_track_ipi_communication(src->vcpu, unique);
 
 	return r;
 }
@@ -1608,6 +1648,45 @@ static void kvm_ioapic_send_eoi(struct kvm_lapic *apic, int vector)
 #endif
 }
 
+/*
+ * Clear IPI context on EOI to prevent stale boost decisions.
+ *
+ * Two-stage cleanup:
+ * 1. Always clear receiver's IPI context (it processed the interrupt)
+ * 2. Conditionally clear sender's pending flag only when:
+ *    - Sender vCPU exists and is valid
+ *    - Sender's last_ipi_receiver matches this receiver
+ *    - IPI was sent recently (within window)
+ */
+static void kvm_clear_ipi_on_eoi(struct kvm_lapic *apic)
+{
+	struct kvm_vcpu *receiver = apic->vcpu;
+	int sender_idx;
+	u64 then, now;
+
+	if (unlikely(!READ_ONCE(ipi_tracking_enabled)))
+		return;
+
+	sender_idx = READ_ONCE(receiver->arch.ipi_context.last_ipi_sender);
+
+	/* Step 1: Always clear receiver's IPI context */
+	kvm_vcpu_clear_ipi_context(receiver);
+
+	/* Step 2: Conditionally clear sender's pending flag */
+	if (sender_idx >= 0) {
+		struct kvm_vcpu *sender = kvm_get_vcpu(receiver->kvm, sender_idx);
+
+		if (sender &&
+		    READ_ONCE(sender->arch.ipi_context.last_ipi_receiver) ==
+		    receiver->vcpu_idx) {
+			then = READ_ONCE(sender->arch.ipi_context.ipi_time_ns);
+			now = ktime_get_mono_fast_ns();
+			if (now - then <= ipi_window_ns)
+				WRITE_ONCE(sender->arch.ipi_context.pending_ipi, false);
+		}
+	}
+}
+
 static int apic_set_eoi(struct kvm_lapic *apic)
 {
 	int vector = apic_find_highest_isr(apic);
@@ -1643,6 +1722,7 @@ void kvm_apic_set_eoi_accelerated(struct kvm_vcpu *vcpu, int vector)
 	trace_kvm_eoi(apic, vector);
 
 	kvm_ioapic_send_eoi(apic, vector);
+	kvm_clear_ipi_on_eoi(apic);
 	kvm_make_request(KVM_REQ_EVENT, apic->vcpu);
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_apic_set_eoi_accelerated);
@@ -2453,6 +2533,8 @@ static int kvm_lapic_reg_write(struct kvm_lapic *apic, u32 reg, u32 val)
 
 	case APIC_EOI:
 		apic_set_eoi(apic);
+		/* Precise cleanup for IPI-aware boost */
+		kvm_clear_ipi_on_eoi(apic);
 		break;
 
 	case APIC_LDR:
