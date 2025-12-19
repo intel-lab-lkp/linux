@@ -1,0 +1,77 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mux/adi,adg1736.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Analog Devices ADG1736 Dual SPDT Switch Multiplexer
+
+maintainers:
+  - Antoniu Miclaus <antoniu.miclaus@analog.com>
+
+description: |
+  Bindings for Analog Devices ADG1736 dual single-pole, double-throw (SPDT)
+  switch. The device features two independent SPDT switches, each functioning
+  as a 2:1 multiplexer. Each switch can connect its common drain terminal (D)
+  to one of two source terminals (SA or SB).
+
+  The device has two independent mux controllers (mux 0 and mux 1), each with
+  two states:
+    * 0: SxB to Dx (control GPIO low)
+    * 1: SxA to Dx (control GPIO high)
+
+  The EN pin is shared between both switches and can disable all channels when
+  set low (inactive).
+
+allOf:
+  - $ref: mux-controller.yaml#
+
+properties:
+  compatible:
+    const: adi,adg1736
+
+  ctrl-gpios:
+    description: |
+      GPIO pins connected to the control inputs IN1 and IN2. Index 0 controls
+      switch 1 (S1A/S1B to D1) and index 1 controls switch 2 (S2A/S2B to D2).
+    minItems: 2
+    maxItems: 2
+
+  en-gpios:
+    description: |
+      GPIO connected to the EN (enable) pin. When low, all switches are
+      disabled (high-impedance). When high, switches are controlled by
+      their respective ctrl-gpios.
+    maxItems: 1
+
+  '#mux-control-cells':
+    const: 1
+    description: |
+      Mux controller index (0 or 1) to select which SPDT switch to control.
+
+required:
+  - compatible
+  - ctrl-gpios
+  - en-gpios
+  - '#mux-control-cells'
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/mux/mux.h>
+
+    mux-controller {
+        compatible = "adi,adg1736";
+        #mux-control-cells = <1>;
+
+        ctrl-gpios = <&gpio 10 GPIO_ACTIVE_HIGH>,
+                     <&gpio 11 GPIO_ACTIVE_HIGH>;
+        en-gpios = <&gpio 12 GPIO_ACTIVE_HIGH>;
+
+        /* Disconnect both switches when idle */
+        idle-states = <MUX_IDLE_DISCONNECT MUX_IDLE_DISCONNECT>;
+    };
+
+...
