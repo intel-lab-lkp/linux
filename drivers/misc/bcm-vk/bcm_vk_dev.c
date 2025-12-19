@@ -439,6 +439,7 @@ static void bcm_vk_get_proc_mon_info(struct bcm_vk *vk)
 	struct device *dev = &vk->pdev->dev;
 	struct bcm_vk_proc_mon_info *mon = &vk->proc_mon_info;
 	u32 num, entry_size, offset, buf_size;
+	size_t max_bytes;
 	u8 *dst;
 
 	/* calculate offset which is based on peerlog offset */
@@ -456,6 +457,9 @@ static void bcm_vk_get_proc_mon_info(struct bcm_vk *vk)
 	if (num > BCM_VK_PROC_MON_MAX) {
 		dev_err(dev, "Processing monitoring entry %d exceeds max %d\n",
 			num, BCM_VK_PROC_MON_MAX);
+		return;
+	}
+	if (!entry_size || (size_t)num > max_bytes / entry_size) {
 		return;
 	}
 	mon->num = num;
