@@ -3985,6 +3985,41 @@ bool __weak kvm_vcpu_is_ipi_receiver(struct kvm_vcpu *sender,
 	return false;
 }
 
+/*
+ * IPI-aware candidate selection for directed yield.
+ *
+ * Priority order:
+ *  1) Confirmed IPI receiver of 'me' within recency window (always boost)
+ *  2) Arch-provided fast pending interrupt hint (user-mode boost)
+ *  3) Kernel-mode yield: preempted-in-kernel vCPU (traditional boost)
+ *  4) Otherwise, be conservative and skip
+ */
+static bool kvm_vcpu_is_good_yield_candidate(struct kvm_vcpu *me,
+					     struct kvm_vcpu *vcpu,
+					     bool yield_to_kernel_mode)
+{
+	/* Priority 1: recently targeted IPI receiver */
+	if (kvm_vcpu_is_ipi_receiver(me, vcpu))
+		return true;
+
+	/* Priority 2: fast pending-interrupt hint (arch-specific) */
+	if (kvm_arch_dy_has_pending_interrupt(vcpu))
+		return true;
+
+	/*
+	 * Minimal preempted gate for remaining cases:
+	 * Require that the target has been preempted, and if yielding to
+	 * kernel mode, additionally require preempted-in-kernel.
+	 */
+	if (!READ_ONCE(vcpu->preempted))
+		return false;
+
+	if (yield_to_kernel_mode && !kvm_arch_vcpu_preempted_in_kernel(vcpu))
+		return false;
+
+	return true;
+}
+
 void kvm_vcpu_on_spin(struct kvm_vcpu *me, bool yield_to_kernel_mode)
 {
 	int nr_vcpus, start, i, idx, yielded;
@@ -4032,15 +4067,8 @@ void kvm_vcpu_on_spin(struct kvm_vcpu *me, bool yield_to_kernel_mode)
 		if (kvm_vcpu_is_blocking(vcpu) && !vcpu_dy_runnable(vcpu))
 			continue;
 
-		/*
-		 * Treat the target vCPU as being in-kernel if it has a pending
-		 * interrupt, as the vCPU trying to yield may be spinning
-		 * waiting on IPI delivery, i.e. the target vCPU is in-kernel
-		 * for the purposes of directed yield.
-		 */
-		if (READ_ONCE(vcpu->preempted) && yield_to_kernel_mode &&
-		    !kvm_arch_dy_has_pending_interrupt(vcpu) &&
-		    !kvm_arch_vcpu_preempted_in_kernel(vcpu))
+		/* IPI-aware candidate selection */
+		if (!kvm_vcpu_is_good_yield_candidate(me, vcpu, yield_to_kernel_mode))
 			continue;
 
 		if (!kvm_vcpu_eligible_for_directed_yield(vcpu))
