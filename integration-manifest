@@ -1,0 +1,36 @@
+drm drm-fixes f66ac60dee28d092bc6a3af33a04147bfcb6ba30
+	Merge tag 'drm-xe-fixes-2025-12-19' of https://gitlab.freedesktop.org/drm/xe/kernel into drm-fixes
+drm-misc drm-misc-fixes 6b991ad8dc3abfe5720fc2e9ee96be63ae43e362
+	drm/imagination: Disallow exporting of PM/FW protected objects
+drm-rust drm-rust-fixes b58c87b0fde0ac06d550659a7e3ddbcd9183b7b9
+	gpu: nova-core: gsp: replace firmware version with "bindings" alias
+drm-intel drm-intel-fixes 8f0b4cce4481fb22653697cced8d0d04027cb1e8
+	Linux 6.19-rc1
+drm-xe drm-xe-fixes 80f9c601d9c4d26f00356c0a9c461650e7089273
+	drm/xe: Use usleep_range for accurate long-running workload timeslicing
+drm drm-next 8f0b4cce4481fb22653697cced8d0d04027cb1e8
+	Linux 6.19-rc1
+drm-misc drm-misc-next-fixes 308eeb8ca3fdee54bcd3ec7272c05688e178299a
+	drm/rcar-du: dsi: Handle both DRM_MODE_FLAG_N.SYNC and !DRM_MODE_FLAG_P.SYNC
+drm-intel drm-intel-next-fixes 8f0b4cce4481fb22653697cced8d0d04027cb1e8
+	Linux 6.19-rc1
+drm-xe drm-xe-next-fixes 3f1c07fc21c68bd3bd2df9d2c9441f6485e934d9
+	Merge drm/drm-next into drm-xe-next-fixes
+drm-misc drm-misc-next 565ed40b5fc1242f7538a016fce5a85f802d4fb5
+	drm/panthor: Evict groups before VM termination
+drm-rust drm-rust-next 97cf6bc0abd381fd84e5d8e978322a62a58fb00e
+	rust: drm: use `pin_init::zeroed()` for file operations initialization
+drm-intel drm-intel-next 6a3591522930897c3fdb326c5d48b906b5c30b71
+	drm/i915/colorop: do not include headers from headers
+drm-intel drm-intel-gt-next 18476087f1a18dc279d200d934ad94fba1fb51d5
+	drm/i915: Fix format string truncation warning
+drm-xe drm-xe-next 5add3c3c280a35f7e258e9cef7607db5a2e56fdc
+	Merge drm/drm-next into drm-xe-next
+drm-intel topic/core-for-CI 6e17f00d83c854235925eb01592665859953bdf7
+	powercap: intel_rapl: Fix possible recursive lock warning
+drm-xe topic/xe-for-CI 7f3219f02c00680d63c06e779926b1715c42b51d
+	topic/for-xe-CI: drm/xe/cri: Define GuC firmware for CRI
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
+drm-intel topic/drm-intel-plane-color-pipeline 860daa4b0d09a398a0ac9ae6fe67efd73a275968
+	drm/i915/color: Enable Plane Color Pipelines
