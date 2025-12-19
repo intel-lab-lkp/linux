@@ -21,6 +21,11 @@ properties:
           - const: radxa,orion-o6
           - const: cix,sky1
 
+      - description: OrangePi 6 Plus
+        items:
+          - const: OrangePi,6p
+          - const: cix,sky1
+
 additionalProperties: true
 
 ...
