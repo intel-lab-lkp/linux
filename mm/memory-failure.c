@@ -681,9 +681,11 @@ static void set_to_kill(struct to_kill *tk, unsigned long addr, short shift)
 }
 
 static int check_hwpoisoned_entry(pte_t pte, unsigned long addr, short shift,
-				unsigned long poisoned_pfn, struct to_kill *tk)
+				unsigned long poisoned_pfn, struct to_kill *tk,
+				int pte_nr)
 {
 	unsigned long pfn = 0;
+	unsigned long hwpoison_vaddr;
 
 	if (pte_present(pte)) {
 		pfn = pte_pfn(pte);
@@ -694,10 +696,11 @@ static int check_hwpoisoned_entry(pte_t pte, unsigned long addr, short shift,
 			pfn = swp_offset_pfn(swp);
 	}
 
-	if (!pfn || pfn != poisoned_pfn)
+	if (!pfn || (pfn > poisoned_pfn || (pfn + pte_nr - 1) < poisoned_pfn))
 		return 0;
 
-	set_to_kill(tk, addr, shift);
+	hwpoison_vaddr = addr + ((poisoned_pfn - pfn) << PAGE_SHIFT);
+	set_to_kill(tk, hwpoison_vaddr, shift);
 	return 1;
 }
 
@@ -749,7 +752,7 @@ static int hwpoison_pte_range(pmd_t *pmdp, unsigned long addr,
 
 	for (; addr != end; ptep++, addr += PAGE_SIZE) {
 		ret = check_hwpoisoned_entry(ptep_get(ptep), addr, PAGE_SHIFT,
-					     hwp->pfn, &hwp->tk);
+					     hwp->pfn, &hwp->tk, 1);
 		if (ret == 1)
 			break;
 	}
@@ -772,8 +775,8 @@ static int hwpoison_hugetlb_range(pte_t *ptep, unsigned long hmask,
 
 	ptl = huge_pte_lock(h, walk->mm, ptep);
 	pte = huge_ptep_get(walk->mm, addr, ptep);
-	ret = check_hwpoisoned_entry(pte, addr, huge_page_shift(h),
-					hwp->pfn, &hwp->tk);
+	ret = check_hwpoisoned_entry(pte, addr, huge_page_shift(h), hwp->pfn,
+				&hwp->tk, pages_per_huge_page(h));
 	spin_unlock(ptl);
 	return ret;
 }
@@ -2023,10 +2026,8 @@ retry:
 		*hugetlb = 0;
 		return 0;
 	} else if (res == -EHWPOISON) {
-		if (flags & MF_ACTION_REQUIRED) {
-			folio = page_folio(p);
-			res = kill_accessing_process(current, folio_pfn(folio), flags);
-		}
+		if (flags & MF_ACTION_REQUIRED)
+			res = kill_accessing_process(current, pfn, flags);
 		action_result(pfn, MF_MSG_ALREADY_POISONED, MF_FAILED);
 		return res;
 	} else if (res == -EBUSY) {
@@ -2036,6 +2037,7 @@ retry:
 		}
 		return action_result(pfn, MF_MSG_GET_HWPOISON, MF_IGNORED);
 	}
+
 
 	folio = page_folio(p);
 	folio_lock(folio);
