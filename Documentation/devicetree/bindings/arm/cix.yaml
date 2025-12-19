@@ -18,7 +18,9 @@ properties:
 
       - description: Radxa Orion O6
         items:
-          - const: radxa,orion-o6
+          - enum:
+              - radxa,orion-o6
+              - xunlong,orangepi-6-plus
           - const: cix,sky1
 
 additionalProperties: true
