@@ -271,7 +271,8 @@ libsha256-$(CONFIG_SPARC) += sparc/sha256_asm.o
 libsha256-$(CONFIG_X86) += x86/sha256-ssse3-asm.o \
 			   x86/sha256-avx-asm.o \
 			   x86/sha256-avx2-asm.o \
-			   x86/sha256-ni-asm.o
+			   x86/sha256-ni-asm.o \
+			   x86/sha256-phe-asm.o
 endif # CONFIG_CRYPTO_LIB_SHA256_ARCH
 
 ################################################################################
