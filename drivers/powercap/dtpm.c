@@ -406,7 +406,7 @@ int dtpm_register(const char *name, struct dtpm *dtpm, struct dtpm *parent)
 		dtpm->power_limit = dtpm->power_max;
 	}
 
-	pr_debug("Registered dtpm node '%s' / %llu-%llu uW, \n",
+	pr_debug("Registered dtpm node '%s' / %llu-%llu uW\n",
 		 dtpm->zone.name, dtpm->power_min, dtpm->power_max);
 
 	return 0;
@@ -582,7 +582,7 @@ int dtpm_create_hierarchy(struct of_device_id *dtpm_match_table)
 
 		ret = dtpm_subsys[i]->init();
 		if (ret)
-			pr_info("Failed to initialize '%s': %d",
+			pr_err("Failed to initialize '%s': %d\n",
 				dtpm_subsys[i]->name, ret);
 	}
 
