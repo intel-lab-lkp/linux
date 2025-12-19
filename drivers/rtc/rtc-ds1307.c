@@ -48,6 +48,7 @@ enum ds_type {
 	mcp794xx,
 	rx_8025,
 	rx_8130,
+	rx_8901,
 	last_ds_type /* always last */
 	/* rs5c372 too?  different address... */
 };
@@ -128,6 +129,12 @@ enum ds_type {
 #define RX8130_REG_CONTROL1		0x1f
 #define RX8130_REG_CONTROL1_INIEN	BIT(4)
 #define RX8130_REG_CONTROL1_CHGEN	BIT(5)
+
+#define RX8901_REG_INTF			0x0e
+#define RX8901_REG_INTF_VLF		BIT(1)
+#define RX8901_REG_PWSW_CFG		0x37
+#define RX8901_REG_PWSW_CFG_INIEN	BIT(6)
+#define RX8901_REG_PWSW_CFG_CHGEN	BIT(7)
 
 #define MCP794XX_REG_CONTROL		0x07
 #	define MCP794XX_BIT_ALM0_EN	0x10
@@ -226,6 +233,19 @@ static int ds1307_get_time(struct device *dev, struct rtc_time *t)
 			dev_warn_once(dev, "oscillator failed, set time!\n");
 			return -EINVAL;
 		}
+	} else if (ds1307->type == rx_8901) {
+		unsigned int regflag;
+
+		ret = regmap_read(ds1307->regmap, RX8901_REG_INTF, &regflag);
+		if (ret) {
+			dev_err(dev, "%s error %d\n", "read", ret);
+			return ret;
+		}
+
+		if (regflag & RX8901_REG_INTF_VLF) {
+			dev_warn_once(dev, "oscillator failed, set time!\n");
+			return -EINVAL;
+		}
 	}
 
 	/* read the RTC date and time registers all at once */
@@ -307,7 +327,7 @@ static int ds1307_get_time(struct device *dev, struct rtc_time *t)
 	tmp = regs[DS1307_REG_HOUR] & 0x3f;
 	t->tm_hour = bcd2bin(tmp);
 	/* rx8130 is bit position, not BCD */
-	if (ds1307->type == rx_8130)
+	if (ds1307->type == rx_8130 || ds1307->type == rx_8901)
 		t->tm_wday = fls(regs[DS1307_REG_WDAY] & 0x7f) - 1;
 	else
 		t->tm_wday = bcd2bin(regs[DS1307_REG_WDAY] & 0x07) - 1;
@@ -358,7 +378,7 @@ static int ds1307_set_time(struct device *dev, struct rtc_time *t)
 	regs[DS1307_REG_MIN] = bin2bcd(t->tm_min);
 	regs[DS1307_REG_HOUR] = bin2bcd(t->tm_hour);
 	/* rx8130 is bit position, not BCD */
-	if (ds1307->type == rx_8130)
+	if (ds1307->type == rx_8130 || ds1307->type == rx_8901)
 		regs[DS1307_REG_WDAY] = 1 << t->tm_wday;
 	else
 		regs[DS1307_REG_WDAY] = bin2bcd(t->tm_wday + 1);
@@ -418,6 +438,17 @@ static int ds1307_set_time(struct device *dev, struct rtc_time *t)
 		/* clear Voltage Loss Flag as data is available now */
 		result = regmap_write(ds1307->regmap, RX8130_REG_FLAG,
 				      ~(u8)RX8130_REG_FLAG_VLF);
+		if (result) {
+			dev_err(dev, "%s error %d\n", "write", result);
+			return result;
+		}
+	} else if (ds1307->type == rx_8901) {
+		/*
+		 * clear Voltage Loss Flag as data is available now (writing 1
+		 * to the other bits in the INTF register has no effect)
+		 */
+		result = regmap_write(ds1307->regmap, RX8901_REG_INTF,
+				      0xff ^ RX8901_REG_INTF_VLF);
 		if (result) {
 			dev_err(dev, "%s error %d\n", "write", result);
 			return result;
@@ -564,6 +595,17 @@ static u8 do_trickle_setup_rx8130(struct ds1307 *ds1307, u32 ohms, bool diode)
 	u8 setup = RX8130_REG_CONTROL1_INIEN;
 	if (diode)
 		setup |= RX8130_REG_CONTROL1_CHGEN;
+
+	return setup;
+}
+
+static u8 do_trickle_setup_rx8901(struct ds1307 *ds1307, u32 ohms, bool diode)
+{
+	/* make sure that the backup battery is enabled */
+	u8 setup = RX8901_REG_PWSW_CFG_INIEN;
+
+	if (diode)
+		setup |= RX8901_REG_PWSW_CFG_CHGEN;
 
 	return setup;
 }
@@ -960,6 +1002,11 @@ static const struct rtc_class_ops rx8130_rtc_ops = {
 	.alarm_irq_enable = rx8130_alarm_irq_enable,
 };
 
+static const struct rtc_class_ops rx8901_rtc_ops = {
+	.read_time      = ds1307_get_time,
+	.set_time       = ds1307_set_time,
+};
+
 static const struct rtc_class_ops mcp794xx_rtc_ops = {
 	.read_time      = ds1307_get_time,
 	.set_time       = ds1307_set_time,
@@ -1040,6 +1087,12 @@ static const struct chip_desc chips[last_ds_type] = {
 		.trickle_charger_reg = RX8130_REG_CONTROL1,
 		.do_trickle_setup = &do_trickle_setup_rx8130,
 	},
+	[rx_8901] = {
+		.offset		= 0x0,
+		.rtc_ops = &rx8901_rtc_ops,
+		.trickle_charger_reg = RX8901_REG_PWSW_CFG,
+		.do_trickle_setup = &do_trickle_setup_rx8901,
+	},
 	[m41t0] = {
 		.rtc_ops	= &m41txx_rtc_ops,
 	},
@@ -1081,6 +1134,7 @@ static const struct i2c_device_id ds1307_id[] = {
 	{ "rx8025", rx_8025 },
 	{ "isl12057", ds_1337 },
 	{ "rx8130", rx_8130 },
+	{ "rx8901", rx_8901 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, ds1307_id);
@@ -1157,6 +1211,10 @@ static const struct of_device_id ds1307_of_match[] = {
 	{
 		.compatible = "epson,rx8130",
 		.data = (void *)rx_8130
+	},
+	{
+		.compatible = "epson,rx8901",
+		.data = (void *)rx_8901
 	},
 	{ }
 };
