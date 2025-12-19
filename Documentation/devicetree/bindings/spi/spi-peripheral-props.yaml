@@ -75,6 +75,13 @@ properties:
       enum: [0, 1, 2, 4, 8]
     default: [1]
 
+  spi-rx-lane-map:
+    description: Mapping of peripheral RX lanes to controller RX lanes.
+      Each index in the array represents a peripheral RX lane, and the value
+      at that index represents the corresponding controller RX lane.
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    default: [0, 1, 2, 3, 4, 5, 6, 7]
+
   spi-rx-delay-us:
     description:
       Delay, in microseconds, after a read transfer.
@@ -98,6 +105,13 @@ properties:
     items:
       enum: [0, 1, 2, 4, 8]
     default: [1]
+
+  spi-tx-lane-map:
+    description: Mapping of peripheral TX lanes to controller TX lanes.
+      Each index in the array represents a peripheral TX lane, and the value
+      at that index represents the corresponding controller TX lane.
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    default: [0, 1, 2, 3, 4, 5, 6, 7]
 
   spi-tx-delay-us:
     description:
