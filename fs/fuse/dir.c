@@ -636,7 +636,7 @@ static struct dentry *fuse_lookup(struct inode *dir, struct dentry *entry,
 	newent = d_splice_alias(inode, entry);
 	err = PTR_ERR(newent);
 	if (IS_ERR(newent))
-		goto out_err;
+		goto out_iput;
 
 	entry = newent ? newent : entry;
 	entry->d_time = epoch;
@@ -649,9 +649,9 @@ static struct dentry *fuse_lookup(struct inode *dir, struct dentry *entry,
 		fuse_advise_use_readdirplus(dir);
 	return newent;
 
- out_iput:
+out_iput:
 	iput(inode);
- out_err:
+out_err:
 	return ERR_PTR(err);
 }
 
