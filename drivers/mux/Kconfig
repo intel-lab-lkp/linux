@@ -21,6 +21,18 @@ config MUX_ADG792A
 	  To compile the driver as a module, choose M here: the module will
 	  be called mux-adg792a.
 
+config MUX_ADG1736
+	tristate "Analog Devices ADG1736 Dual SPDT Switch Multiplexer"
+	depends on GPIOLIB || COMPILE_TEST
+	help
+	  ADG1736 Dual SPDT (single-pole, double-throw) Switch.
+
+	  The driver supports two independent 2:1 multiplexers, each
+	  controlled by a GPIO pin.
+
+	  To compile the driver as a module, choose M here: the module will
+	  be called mux-adg1736.
+
 config MUX_ADGS1408
 	tristate "Analog Devices ADGS1408/ADGS1409 Multiplexers"
 	depends on SPI
