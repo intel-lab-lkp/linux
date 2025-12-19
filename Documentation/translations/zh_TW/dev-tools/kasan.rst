@@ -79,7 +79,7 @@ KASAN只支持SLUB。
 	  CONFIG_KASAN=y
 
 同時在 ``CONFIG_KASAN_GENERIC`` (啓用通用KASAN模式)， ``CONFIG_KASAN_SW_TAGS``
-(啓用基於硬件標籤的KASAN模式)，和 ``CONFIG_KASAN_HW_TAGS`` (啓用基於硬件標籤
+(啓用基於軟件標籤的KASAN模式)，和 ``CONFIG_KASAN_HW_TAGS`` (啓用基於硬件標籤
 的KASAN模式)之間進行選擇。
 
 對於軟件模式，還可以在 ``CONFIG_KASAN_OUTLINE`` 和 ``CONFIG_KASAN_INLINE``
