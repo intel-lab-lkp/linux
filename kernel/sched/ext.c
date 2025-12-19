@@ -1371,6 +1371,9 @@ static void do_enqueue_task(struct rq *rq, struct task_struct *p, u64 enq_flags,
 	WARN_ON_ONCE(atomic_long_read(&p->scx.ops_state) != SCX_OPSS_NONE);
 	atomic_long_set(&p->scx.ops_state, SCX_OPSS_QUEUEING | qseq);
 
+	/* Mark that ops.enqueue() is being called for this task */
+	p->scx.flags |= SCX_TASK_OPS_ENQUEUED;
+
 	ddsp_taskp = this_cpu_ptr(&direct_dispatch_task);
 	WARN_ON_ONCE(*ddsp_taskp);
 	*ddsp_taskp = p;
@@ -1503,6 +1506,21 @@ static void ops_dequeue(struct rq *rq, struct task_struct *p, u64 deq_flags)
 
 	switch (opss & SCX_OPSS_STATE_MASK) {
 	case SCX_OPSS_NONE:
+		/*
+		 * Task is not currently being enqueued or queued on the BPF
+		 * scheduler. Check if ops.enqueue() was called for this task.
+		 */
+		if ((p->scx.flags & SCX_TASK_OPS_ENQUEUED) &&
+		    SCX_HAS_OP(sch, dequeue)) {
+			/*
+			 * ops.enqueue() was called and the task was dispatched.
+			 * Call ops.dequeue() to notify the BPF scheduler that
+			 * the task is leaving.
+			 */
+			SCX_CALL_OP_TASK(sch, SCX_KF_REST, dequeue, rq,
+					 p, deq_flags);
+			p->scx.flags &= ~SCX_TASK_OPS_ENQUEUED;
+		}
 		break;
 	case SCX_OPSS_QUEUEING:
 		/*
@@ -1511,9 +1529,16 @@ static void ops_dequeue(struct rq *rq, struct task_struct *p, u64 deq_flags)
 		 */
 		BUG();
 	case SCX_OPSS_QUEUED:
-		if (SCX_HAS_OP(sch, dequeue))
+		/*
+		 * Task is owned by the BPF scheduler. Call ops.dequeue()
+		 * to notify the BPF scheduler that the task is being
+		 * removed.
+		 */
+		if (SCX_HAS_OP(sch, dequeue)) {
 			SCX_CALL_OP_TASK(sch, SCX_KF_REST, dequeue, rq,
 					 p, deq_flags);
+			p->scx.flags &= ~SCX_TASK_OPS_ENQUEUED;
+		}
 
 		if (atomic_long_try_cmpxchg(&p->scx.ops_state, &opss,
 					    SCX_OPSS_NONE))

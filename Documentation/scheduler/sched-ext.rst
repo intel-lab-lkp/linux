@@ -252,6 +252,26 @@ The following briefly shows how a waking task is scheduled and executed.
 
    * Queue the task on the BPF side.
 
+   Once ``ops.enqueue()`` is called, the task is considered "enqueued" and
+   is owned by the BPF scheduler. Ownership is retained until the task is
+   either dispatched (moved to a local DSQ for execution) or dequeued
+   (removed from the scheduler due to a blocking event, or to modify a
+   property, like CPU affinity, priority, etc.). When the task leaves the
+   BPF scheduler ``ops.dequeue()`` is invoked.
+
+   **Important**: ``ops.dequeue()`` is called for *any* enqueued task,
+   regardless of whether the task is still on a BPF data structure, or it
+   is already dispatched to a DSQ (global, local, or user DSQ)
+
+   This guarantees that every ``ops.enqueue()`` will eventually be followed
+   by a ``ops.dequeue()``. This makes it reliable for BPF schedulers to
+   track task ownership and maintain accurate accounting, such as per-DSQ
+   queued runtime sums.
+
+   BPF schedulers can choose not to implement ``ops.dequeue()`` if they
+   don't need to track these transitions. The sched_ext core will safely
+   handle all dequeue operations regardless.
+
 3. When a CPU is ready to schedule, it first looks at its local DSQ. If
    empty, it then looks at the global DSQ. If there still isn't a task to
    run, ``ops.dispatch()`` is invoked which can use the following two
@@ -319,6 +339,8 @@ by a sched_ext scheduler:
                 /* Any usable CPU becomes available */
 
                 ops.dispatch(); /* Task is moved to a local DSQ */
+
+                ops.dequeue(); /* Exiting BPF scheduler */
             }
             ops.running();      /* Task starts running on its assigned CPU */
             while (task->scx.slice > 0 && task is runnable)
