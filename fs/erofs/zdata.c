@@ -1414,11 +1414,15 @@ static int z_erofs_decompress_queue(const struct z_erofs_decompressqueue *io,
 	};
 	struct z_erofs_pcluster *next;
 	int err = io->eio ? -EIO : 0;
+	int io_err = err;
 
 	for (; be.pcl != Z_EROFS_PCLUSTER_TAIL; be.pcl = next) {
+		int propagate_err;
+
 		DBG_BUGON(!be.pcl);
 		next = READ_ONCE(be.pcl->next);
-		err = z_erofs_decompress_pcluster(&be, err) ?: err;
+		propagate_err = READ_ONCE(be.pcl->besteffort) ? io_err : err;
+		err = z_erofs_decompress_pcluster(&be, propagate_err) ?: err;
 	}
 	return err;
 }
