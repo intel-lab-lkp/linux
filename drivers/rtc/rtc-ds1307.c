@@ -133,8 +133,11 @@ enum ds_type {
 #define RX8901_REG_INTF			0x0e
 #define RX8901_REG_INTF_VLF		BIT(1)
 #define RX8901_REG_PWSW_CFG		0x37
+#define RX8901_REG_PWSW_CFG_VBATLDETEN	BIT(4)
 #define RX8901_REG_PWSW_CFG_INIEN	BIT(6)
 #define RX8901_REG_PWSW_CFG_CHGEN	BIT(7)
+#define RX8901_REG_BUF_INTF		0x46
+#define RX8901_REG_BUF_INTF_VBATLF	BIT(3)
 
 #define MCP794XX_REG_CONTROL		0x07
 #	define MCP794XX_BIT_ALM0_EN	0x10
@@ -458,6 +461,39 @@ static int ds1307_set_time(struct device *dev, struct rtc_time *t)
 	return 0;
 }
 
+#ifdef CONFIG_RTC_INTF_DEV
+static int rx8901_ioctl(struct device *dev, unsigned int cmd, unsigned long arg)
+{
+	struct ds1307 *ds1307 = dev_get_drvdata(dev);
+	unsigned int regflag, tmp = 0;
+	int ret = 0;
+
+	switch (cmd) {
+	case RTC_VL_READ:
+		ret = regmap_read(ds1307->regmap, RX8901_REG_INTF, &regflag);
+		if (ret)
+			return ret;
+
+		if (regflag & RX8901_REG_INTF_VLF)
+			tmp |= RTC_VL_DATA_INVALID;
+
+		ret = regmap_read(ds1307->regmap, RX8901_REG_BUF_INTF, &regflag);
+		if (ret)
+			return ret;
+
+		if (regflag & RX8901_REG_BUF_INTF_VBATLF)
+			tmp |= RTC_VL_BACKUP_LOW;
+
+		return put_user(tmp, (unsigned int __user *)arg);
+	default:
+		return -ENOIOCTLCMD;
+	}
+	return ret;
+}
+#else
+#define rx8901_ioctl NULL
+#endif
+
 static int ds1337_read_alarm(struct device *dev, struct rtc_wkalrm *t)
 {
 	struct ds1307		*ds1307 = dev_get_drvdata(dev);
@@ -599,10 +635,13 @@ static u8 do_trickle_setup_rx8130(struct ds1307 *ds1307, u32 ohms, bool diode)
 	return setup;
 }
 
-static u8 do_trickle_setup_rx8901(struct ds1307 *ds1307, u32 ohms, bool diode)
+static u8 do_trickle_setup_rx8901(struct ds1307 *ds1307, u32 ohms __always_unused, bool diode)
 {
-	/* make sure that the backup battery is enabled */
-	u8 setup = RX8901_REG_PWSW_CFG_INIEN;
+	/*
+	 * make sure that the backup battery is enabled and that battery
+	 * voltage detection is performed
+	 */
+	u8 setup = RX8901_REG_PWSW_CFG_INIEN | RX8901_REG_PWSW_CFG_VBATLDETEN;
 
 	if (diode)
 		setup |= RX8901_REG_PWSW_CFG_CHGEN;
@@ -1005,6 +1044,7 @@ static const struct rtc_class_ops rx8130_rtc_ops = {
 static const struct rtc_class_ops rx8901_rtc_ops = {
 	.read_time      = ds1307_get_time,
 	.set_time       = ds1307_set_time,
+	.ioctl          = rx8901_ioctl,
 };
 
 static const struct rtc_class_ops mcp794xx_rtc_ops = {
