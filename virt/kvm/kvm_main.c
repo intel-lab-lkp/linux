@@ -102,6 +102,9 @@ EXPORT_SYMBOL_FOR_KVM_INTERNAL(halt_poll_ns_shrink);
 static bool allow_unsafe_mappings;
 module_param(allow_unsafe_mappings, bool, 0444);
 
+static bool enable_relaxed_boost = true;
+module_param(enable_relaxed_boost, bool, 0644);
+
 /*
  * Ordering of locks:
  *
@@ -4026,6 +4029,7 @@ void kvm_vcpu_on_spin(struct kvm_vcpu *me, bool yield_to_kernel_mode)
 	struct kvm *kvm = me->kvm;
 	struct kvm_vcpu *vcpu;
 	int try = 3;
+	bool first_round = true;
 
 	nr_vcpus = atomic_read(&kvm->online_vcpus);
 	if (nr_vcpus < 2)
@@ -4035,6 +4039,9 @@ void kvm_vcpu_on_spin(struct kvm_vcpu *me, bool yield_to_kernel_mode)
 	smp_rmb();
 
 	kvm_vcpu_set_in_spin_loop(me, true);
+
+retry:
+	yielded = 0;
 
 	/*
 	 * The current vCPU ("me") is spinning in kernel mode, i.e. is likely
@@ -4067,8 +4074,13 @@ void kvm_vcpu_on_spin(struct kvm_vcpu *me, bool yield_to_kernel_mode)
 		if (kvm_vcpu_is_blocking(vcpu) && !vcpu_dy_runnable(vcpu))
 			continue;
 
-		/* IPI-aware candidate selection */
-		if (!kvm_vcpu_is_good_yield_candidate(me, vcpu, yield_to_kernel_mode))
+		/* IPI-aware candidate selection in first round */
+		if (first_round &&
+		    !kvm_vcpu_is_good_yield_candidate(me, vcpu, yield_to_kernel_mode))
+			continue;
+
+		/* Minimal preempted gate for second round */
+		if (!first_round && !READ_ONCE(vcpu->preempted))
 			continue;
 
 		if (!kvm_vcpu_eligible_for_directed_yield(vcpu))
@@ -4082,6 +4094,16 @@ void kvm_vcpu_on_spin(struct kvm_vcpu *me, bool yield_to_kernel_mode)
 			break;
 		}
 	}
+
+	/*
+	 * Second round: relaxed boost as safety net, with preempted gate.
+	 * Only execute when enabled and when the first round yielded nothing.
+	 */
+	if (enable_relaxed_boost && first_round && yielded <= 0) {
+		first_round = false;
+		goto retry;
+	}
+
 	kvm_vcpu_set_in_spin_loop(me, false);
 
 	/* Ensure vcpu is not eligible during next spinloop */
