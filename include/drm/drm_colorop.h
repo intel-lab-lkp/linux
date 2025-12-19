@@ -441,6 +441,16 @@ void drm_colorop_atomic_destroy_state(struct drm_colorop *colorop,
 void drm_colorop_reset(struct drm_colorop *colorop);
 
 /**
+ * drm_colorop_destroy - destroy colorop
+ * @colorop: drm colorop
+ *
+ * Destroys @colorop by performing common DRM cleanup and freeing the
+ * colorop object. This can be used by drivers if they do not
+ * require any driver-specific teardown.
+ */
+void drm_colorop_destroy(struct drm_colorop *colorop);
+
+/**
  * drm_colorop_index - find the index of a registered colorop
  * @colorop: colorop to find index for
  *

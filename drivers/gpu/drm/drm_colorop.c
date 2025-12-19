@@ -181,6 +181,18 @@ void drm_colorop_cleanup(struct drm_colorop *colorop)
 EXPORT_SYMBOL(drm_colorop_cleanup);
 
 /**
+ * drm_colorop_destroy() - Helper for colorop destruction
+ *
+ * @colorop: colorop to destroy
+ */
+void drm_colorop_destroy(struct drm_colorop *colorop)
+{
+	drm_colorop_cleanup(colorop);
+	kfree(colorop);
+}
+EXPORT_SYMBOL(drm_colorop_destroy);
+
+/**
  * drm_colorop_pipeline_destroy - Helper for color pipeline destruction
  *
  * @dev: - The drm_device containing the drm_planes with the color_pipelines
