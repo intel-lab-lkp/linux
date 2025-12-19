@@ -807,21 +807,29 @@ static u64 intel_fbc_cfb_base_max(struct intel_display *display)
 		return BIT_ULL(32);
 }
 
+#define STOLEN_RESERVE_MAX	SZ_8M
 static u64 intel_fbc_stolen_end(struct intel_display *display)
 {
-	u64 end;
+	u64 end = intel_fbc_cfb_base_max(display);
 
 	/* The FBC hardware for BDW/SKL doesn't have access to the stolen
 	 * reserved range size, so it always assumes the maximum (8mb) is used.
 	 * If we enable FBC using a CFB on that memory range we'll get FIFO
 	 * underruns, even if that range is not reserved by the BIOS. */
 	if (display->platform.broadwell ||
-	    (DISPLAY_VER(display) == 9 && !display->platform.broxton))
-		end = intel_parent_stolen_area_size(display) - 8 * 1024 * 1024;
-	else
-		end = U64_MAX;
+	    (DISPLAY_VER(display) == 9 && !display->platform.broxton)) {
+		u64 stolen_area_size = intel_parent_stolen_area_size(display);
 
-	return min(end, intel_fbc_cfb_base_max(display));
+		/* If stolen_area_size is less than STOLEN_RESERVE_MAX,
+		 * use intel_fbc_cfb_base_max instead. */
+		if (stolen_area_size < STOLEN_RESERVE_MAX)
+			return end;
+
+		stolen_area_size -= STOLEN_RESERVE_MAX;
+		return min(end, stolen_area_size);
+	}
+
+	return end;
 }
 
 static int intel_fbc_min_limit(const struct intel_plane_state *plane_state)
