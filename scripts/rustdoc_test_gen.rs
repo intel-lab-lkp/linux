@@ -116,7 +116,19 @@ fn main() {
         .collect::<Vec<_>>();
 
     // Sort paths.
-    paths.sort();
+    paths.sort_by(|a, b|{
+        let a_name = a.file_name().unwrap().to_str().unwrap().to_string();
+        let (a_file, a_line) = a_name.rsplit_once('_').unwrap().0.rsplit_once('_').unwrap();
+        let a_line_no = a_line.parse::<u64>().unwrap();
+        let b_name = b.file_name().unwrap().to_str().unwrap().to_string();
+        let (b_file, b_line) = b_name.rsplit_once('_').unwrap().0.rsplit_once('_').unwrap();
+        let b_line_no = b_line.parse::<u64>().unwrap();
+
+        match a_file.cmp(b_file) {
+            std::cmp::Ordering::Equal => a_line_no.cmp(&b_line_no),
+            order => order,
+        }
+    });
 
     let mut rust_tests = String::new();
     let mut c_test_declarations = String::new();
