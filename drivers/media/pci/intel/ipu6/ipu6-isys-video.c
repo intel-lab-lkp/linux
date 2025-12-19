@@ -1217,11 +1217,7 @@ int ipu6_isys_setup_video(struct ipu6_isys_video *av,
 		return ret;
 	}
 
-	pipeline = media_entity_pipeline(&av->vdev.entity);
-	if (!pipeline)
-		ret = video_device_pipeline_alloc_start(&av->vdev);
-	else
-		ret = video_device_pipeline_start(&av->vdev, pipeline);
+	ret = video_device_pipeline_alloc_start(&av->vdev);
 	if (ret < 0) {
 		dev_dbg(dev, "media pipeline start failed\n");
 		return ret;
