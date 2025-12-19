@@ -53,4 +53,9 @@ typedef struct smb_negotiate_req {
 	unsigned char DialectsArray[];
 } __packed SMB_NEGOTIATE_REQ;
 
+struct smb_pdu {
+	struct smb_hdr;
+	__le16 ByteCount;
+} __packed;
+
 #endif /* _COMMON_SMB1_PDU_H */
