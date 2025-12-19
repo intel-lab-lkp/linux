@@ -129,7 +129,10 @@ static int apparmor_ptrace_access_check(struct task_struct *child,
 	int error;
 	bool needput;
 
-	cred = get_task_cred(child);
+	if (mode & PTRACE_MODE_BPRMCREDS)
+		cred = get_cred(child->signal->exec_bprm->cred);
+	else
+		cred = get_task_cred(child);
 	tracee = cred_label(cred);	/* ref count on cred */
 	tracer = __begin_current_label_crit_section(&needput);
 	error = aa_may_ptrace(current_cred(), tracer, cred, tracee,

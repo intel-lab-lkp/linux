@@ -2838,6 +2838,18 @@ static ssize_t proc_pid_attr_write(struct file * file, const char __user * buf,
 	if (rv < 0)
 		goto out_free;
 
+	/*
+	 * A fatal signal is guaranteed to be already pending in the
+	 * unlikely event, that current->signal->exec_bprm happens
+	 * to be non-zero here, so just release the mutex again
+	 * and continue as if mutex_lock_interruptible did fail.
+	 */
+	if (unlikely(current->signal->exec_bprm)) {
+		mutex_unlock(&current->signal->cred_guard_mutex);
+		rv = -ERESTARTNOINTR;
+		goto out_free;
+	}
+
 	rv = security_setprocattr(PROC_I(inode)->op.lsmid,
 				  file->f_path.dentry->d_name.name, page,
 				  count);

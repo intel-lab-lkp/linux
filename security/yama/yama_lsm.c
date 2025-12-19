@@ -11,6 +11,7 @@
 #include <linux/lsm_hooks.h>
 #include <linux/sysctl.h>
 #include <linux/ptrace.h>
+#include <linux/binfmts.h>
 #include <linux/prctl.h>
 #include <linux/ratelimit.h>
 #include <linux/workqueue.h>
@@ -363,13 +364,19 @@ static int yama_ptrace_access_check(struct task_struct *child,
 				rc = -EPERM;
 			if (!rc && !task_is_descendant(current, child) &&
 			    !ptracer_exception_found(current, child) &&
-			    !ns_capable(__task_cred(child)->user_ns, CAP_SYS_PTRACE))
+			    !ns_capable(mode & PTRACE_MODE_BPRMCREDS ?
+					child->signal->exec_bprm->cred->user_ns :
+					__task_cred(child)->user_ns,
+					CAP_SYS_PTRACE))
 				rc = -EPERM;
 			rcu_read_unlock();
 			break;
 		case YAMA_SCOPE_CAPABILITY:
 			rcu_read_lock();
-			if (!ns_capable(__task_cred(child)->user_ns, CAP_SYS_PTRACE))
+			if (!ns_capable(mode & PTRACE_MODE_BPRMCREDS ?
+					child->signal->exec_bprm->cred->user_ns :
+					__task_cred(child)->user_ns,
+					CAP_SYS_PTRACE))
 				rc = -EPERM;
 			rcu_read_unlock();
 			break;

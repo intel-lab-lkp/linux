@@ -169,7 +169,10 @@ int cap_ptrace_access_check(struct task_struct *child, unsigned int mode)
 
 	rcu_read_lock();
 	cred = current_cred();
-	child_cred = __task_cred(child);
+	if (mode & PTRACE_MODE_BPRMCREDS)
+		child_cred = child->signal->exec_bprm->cred;
+	else
+		child_cred = __task_cred(child);
 	if (mode & PTRACE_MODE_FSCREDS)
 		caller_caps = &cred->cap_effective;
 	else

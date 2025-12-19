@@ -17,6 +17,7 @@
 #include <linux/rcupdate.h>
 #include <linux/sched.h>
 #include <linux/sched/signal.h>
+#include <linux/binfmts.h>
 #include <net/af_unix.h>
 #include <net/sock.h>
 
@@ -96,7 +97,11 @@ static int hook_ptrace_access_check(struct task_struct *const child,
 
 	scoped_guard(rcu)
 	{
-		child_dom = landlock_get_task_domain(child);
+		if (mode & PTRACE_MODE_BPRMCREDS)
+			child_dom = landlock_cred(child->signal->
+						  exec_bprm->cred)->domain;
+		else
+			child_dom = landlock_get_task_domain(child);
 		err = domain_ptrace(parent_subject->domain, child_dom);
 	}
 

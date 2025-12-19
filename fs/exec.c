@@ -905,11 +905,13 @@ static int exec_mmap(struct mm_struct *mm)
 	return 0;
 }
 
-static int de_thread(struct task_struct *tsk)
+static int de_thread(struct task_struct *tsk, struct linux_binprm *bprm)
 {
 	struct signal_struct *sig = tsk->signal;
 	struct sighand_struct *oldsighand = tsk->sighand;
 	spinlock_t *lock = &oldsighand->siglock;
+	struct task_struct *t;
+	bool unsafe_execve_in_progress = false;
 
 	if (thread_group_empty(tsk))
 		goto no_thread_group;
@@ -931,6 +933,36 @@ static int de_thread(struct task_struct *tsk)
 	sig->notify_count = zap_other_threads(tsk);
 	if (!thread_group_leader(tsk))
 		sig->notify_count--;
+
+	for_other_threads(tsk, t) {
+		if (unlikely(t->ptrace) &&
+		    (t != tsk->group_leader || !t->exit_state)) {
+			unsafe_execve_in_progress = true;
+			break;
+		}
+	}
+
+	if (unlikely(unsafe_execve_in_progress)) {
+		/*
+		 * Since the spin lock was acquired while holding the
+		 * mutex, both should be unlocked in reverse sequence and
+		 * the spin lock re-acquired after releasing the mutex.
+		 */
+		spin_unlock_irq(lock);
+		/*
+		 * Sibling threads are notified by the non-zero exec_bprm,
+		 * that they have just been zapped, and the cred_guard_mutex
+		 * is to be released by them immediately.
+		 * The caller of ptrace_attach on the other hand is allowed
+		 * to ptrace any additional sibling threads that may not yet
+		 * have ben ptraced, but if the group_exec_task is being
+		 * ptraced, an additional check has to be performed, that the
+		 * tracer is allowed to ptrace the new exec credentials.
+		 */
+		sig->exec_bprm = bprm;
+		mutex_unlock(&sig->cred_guard_mutex);
+		spin_lock_irq(lock);
+	}
 
 	while (sig->notify_count) {
 		__set_current_state(TASK_KILLABLE);
@@ -1021,6 +1053,11 @@ static int de_thread(struct task_struct *tsk)
 		release_task(leader);
 	}
 
+	if (unlikely(unsafe_execve_in_progress)) {
+		mutex_lock(&sig->cred_guard_mutex);
+		sig->exec_bprm = NULL;
+	}
+
 	sig->group_exec_task = NULL;
 	sig->notify_count = 0;
 
@@ -1032,6 +1069,11 @@ no_thread_group:
 	return 0;
 
 killed:
+	if (unlikely(unsafe_execve_in_progress)) {
+		mutex_lock(&sig->cred_guard_mutex);
+		sig->exec_bprm = NULL;
+	}
+
 	/* protects against exit_notify() and __exit_signal() */
 	read_lock(&tasklist_lock);
 	sig->group_exec_task = NULL;
@@ -1114,13 +1156,31 @@ int begin_new_exec(struct linux_binprm * bprm)
 	 */
 	trace_sched_prepare_exec(current, bprm);
 
+	/* If the binary is not readable then enforce mm->dumpable=0 */
+	would_dump(bprm, bprm->file);
+	if (bprm->have_execfd)
+		would_dump(bprm, bprm->executable);
+
+	/*
+	 * Figure out dumpability. Note that this checking only of current
+	 * is wrong, but userspace depends on it. This should be testing
+	 * bprm->secureexec instead.
+	 */
+	if (bprm->interp_flags & BINPRM_FLAGS_ENFORCE_NONDUMP ||
+	    is_dumpability_changed(current_cred(), bprm->cred) ||
+	    !(uid_eq(current_euid(), current_uid()) &&
+	      gid_eq(current_egid(), current_gid())))
+		set_dumpable(bprm->mm, suid_dumpable);
+	else
+		set_dumpable(bprm->mm, SUID_DUMP_USER);
+
 	/*
 	 * Ensure all future errors are fatal.
 	 */
 	bprm->point_of_no_return = true;
 
 	/* Make this the only thread in the thread group */
-	retval = de_thread(me);
+	retval = de_thread(me, bprm);
 	if (retval)
 		goto out;
 	/* see the comment in check_unsafe_exec() */
@@ -1143,11 +1203,6 @@ int begin_new_exec(struct linux_binprm * bprm)
 	retval = set_mm_exe_file(bprm->mm, bprm->file);
 	if (retval)
 		goto out;
-
-	/* If the binary is not readable then enforce mm->dumpable=0 */
-	would_dump(bprm, bprm->file);
-	if (bprm->have_execfd)
-		would_dump(bprm, bprm->executable);
 
 	/*
 	 * Release all of the old mmap stuff
@@ -1210,18 +1265,6 @@ int begin_new_exec(struct linux_binprm * bprm)
 
 	me->sas_ss_sp = me->sas_ss_size = 0;
 
-	/*
-	 * Figure out dumpability. Note that this checking only of current
-	 * is wrong, but userspace depends on it. This should be testing
-	 * bprm->secureexec instead.
-	 */
-	if (bprm->interp_flags & BINPRM_FLAGS_ENFORCE_NONDUMP ||
-	    !(uid_eq(current_euid(), current_uid()) &&
-	      gid_eq(current_egid(), current_gid())))
-		set_dumpable(current->mm, suid_dumpable);
-	else
-		set_dumpable(current->mm, SUID_DUMP_USER);
-
 	perf_event_exec();
 
 	/*
@@ -1275,6 +1318,10 @@ int begin_new_exec(struct linux_binprm * bprm)
 	 * cred_guard_mutex must be held at least to this point to prevent
 	 * ptrace_attach() from altering our determination of the task's
 	 * credentials; any time after this it may be unlocked.
+	 * Note that de_thread() may temporarily release the cred_guard_mutex,
+	 * but the credentials are pre-determined in that case and the ptrace
+	 * access check guarantees, that the access permissions of the tracer
+	 * are sufficient to trace the task also with the new credentials.
 	 */
 	security_bprm_committed_creds(bprm);
 
@@ -1361,6 +1408,10 @@ static int prepare_bprm_creds(struct linux_binprm *bprm)
 	if (mutex_lock_interruptible(&current->signal->cred_guard_mutex))
 		return -ERESTARTNOINTR;
 
+	/*
+	 * It is not necessary to check current->signal->exec_bprm here,
+	 * because de_thread() has already an equivalent check.
+	 */
 	bprm->cred = prepare_exec_creds();
 	if (likely(bprm->cred))
 		return 0;
