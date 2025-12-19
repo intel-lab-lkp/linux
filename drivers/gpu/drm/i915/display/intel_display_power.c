@@ -1328,7 +1328,7 @@ static void hsw_disable_lcpll(struct intel_display *display,
  */
 static void hsw_restore_lcpll(struct intel_display *display)
 {
-	struct drm_i915_private __maybe_unused *dev_priv = to_i915(display->drm);
+	struct drm_i915_private *dev_priv = to_i915(display->drm);
 	u32 val;
 	int ret;
 

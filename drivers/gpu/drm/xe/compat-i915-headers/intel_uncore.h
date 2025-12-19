@@ -154,9 +154,20 @@ static inline void intel_uncore_write_notrace(struct intel_uncore *uncore,
 	xe_mmio_write32(__compat_uncore_to_mmio(uncore), reg, val);
 }
 
-#define intel_uncore_forcewake_get(x, y) do { } while (0)
-#define intel_uncore_forcewake_put(x, y) do { } while (0)
+static inline void intel_uncore_forcewake_get(struct intel_uncore *uncore,
+					      int fw_domains)
+{
+}
 
-#define intel_uncore_arm_unclaimed_mmio_detection(x) do { } while (0)
+static inline void intel_uncore_forcewake_put(struct intel_uncore *uncore,
+					      int fw_domains)
+{
+}
+
+static inline bool
+intel_uncore_arm_unclaimed_mmio_detection(struct intel_uncore *uncore)
+{
+	return false;
+}
 
 #endif /* __INTEL_UNCORE_H__ */
