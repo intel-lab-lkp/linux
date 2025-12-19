@@ -451,7 +451,8 @@ static void ims_pcu_process_data(struct ims_pcu *pcu, struct urb *urb)
 
 		if (pcu->have_dle) {
 			pcu->have_dle = false;
-			pcu->read_buf[pcu->read_pos++] = data;
+			if (pcu->read_pos < IMS_PCU_BUF_SIZE)
+				pcu->read_buf[pcu->read_pos++] = data;
 			pcu->check_sum += data;
 			continue;
 		}
@@ -491,7 +492,8 @@ static void ims_pcu_process_data(struct ims_pcu *pcu, struct urb *urb)
 			break;
 
 		default:
-			pcu->read_buf[pcu->read_pos++] = data;
+			if (pcu->read_pos < IMS_PCU_BUF_SIZE)
+				pcu->read_buf[pcu->read_pos++] = data;
 			pcu->check_sum += data;
 			break;
 		}
