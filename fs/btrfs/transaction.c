@@ -1623,7 +1623,7 @@ static int qgroup_account_snapshot(struct btrfs_trans_handle *trans,
 	ret = btrfs_write_and_wait_transaction(trans);
 	if (unlikely(ret))
 		btrfs_err(fs_info,
-"error while writing out transaction duing qgroup snapshot accounting: %d", ret);
+"error while writing out transaction during qgroup snapshot accounting: %d", ret);
 
 out:
 	/*
