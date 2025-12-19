@@ -188,6 +188,7 @@ static void hv_kmsg_dump(struct kmsg_dumper *dumper,
 {
 	struct kmsg_dump_iter iter;
 	size_t bytes_written;
+	bool ret;
 
 	/* We are only interested in panics. */
 	if (detail->reason != KMSG_DUMP_PANIC || !sysctl_record_panic_msg)
@@ -198,9 +199,9 @@ static void hv_kmsg_dump(struct kmsg_dumper *dumper,
 	 * be single-threaded.
 	 */
 	kmsg_dump_rewind(&iter);
-	kmsg_dump_get_buffer(&iter, false, hv_panic_page, HV_HYP_PAGE_SIZE,
-			     &bytes_written);
-	if (!bytes_written)
+	ret = kmsg_dump_get_buffer(&iter, false, hv_panic_page, HV_HYP_PAGE_SIZE,
+				   &bytes_written);
+	if (!ret || !bytes_written)
 		return;
 	/*
 	 * P3 to contain the physical address of the panic page & P4 to
