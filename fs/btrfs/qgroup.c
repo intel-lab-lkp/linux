@@ -4953,3 +4953,17 @@ out:
 	spin_unlock(&fs_info->qgroup_lock);
 	return ret;
 }
+
+void btrfs_qgroup_check_subvol_drop(struct btrfs_fs_info *fs_info, u8 level)
+{
+	u8 drop_subtree_thres;
+
+	if (!btrfs_qgroup_full_accounting(fs_info))
+		return;
+	spin_lock(&fs_info->qgroup_lock);
+	drop_subtree_thres = fs_info->qgroup_drop_subtree_thres;
+	spin_unlock(&fs_info->qgroup_lock);
+
+	if (level >= drop_subtree_thres)
+		qgroup_mark_inconsistent(fs_info, "subvolume level reached threshold");
+}

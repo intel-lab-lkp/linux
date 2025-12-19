@@ -6151,6 +6151,16 @@ int btrfs_drop_snapshot(struct btrfs_root *root, bool update_ref, bool for_reloc
 		}
 	}
 
+	/*
+	 * Not only high subtree can cause long qgroup workload,
+	 * a lot of level 0 drop in a single transaction can also lead
+	 * to a lot of qgroup load and freeze a transaction.
+	 *
+	 * So check the level and if it's too high just mark qgroup
+	 * inconsistent instead of a possible long transaction freeze.
+	 */
+	btrfs_qgroup_check_subvol_drop(fs_info, level);
+
 	wc->restarted = test_bit(BTRFS_ROOT_DEAD_TREE, &root->state);
 	wc->level = level;
 	wc->shared_level = -1;

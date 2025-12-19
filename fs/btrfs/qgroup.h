@@ -453,5 +453,6 @@ void btrfs_qgroup_destroy_extent_records(struct btrfs_transaction *trans);
 bool btrfs_check_quota_leak(const struct btrfs_fs_info *fs_info);
 int btrfs_record_squota_delta(struct btrfs_fs_info *fs_info,
 			      const struct btrfs_squota_delta *delta);
+void btrfs_qgroup_check_subvol_drop(struct btrfs_fs_info *fs_info, u8 level);
 
 #endif
