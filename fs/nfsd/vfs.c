@@ -51,6 +51,7 @@
 bool nfsd_disable_splice_read __read_mostly;
 u64 nfsd_io_cache_read __read_mostly = NFSD_IO_BUFFERED;
 u64 nfsd_io_cache_write __read_mostly = NFSD_IO_BUFFERED;
+bool nfsd_aggressive_write_throttle __read_mostly;
 
 /**
  * nfserrno - Map Linux errnos to NFS errnos
@@ -1420,6 +1421,8 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	unsigned int		pflags = current->flags;
 	bool			restore_flags = false;
 	unsigned int		nvecs;
+	int			saved_nr_dirtied_pause = 0;
+	bool			throttle_adjusted = false;
 
 	trace_nfsd_write_opened(rqstp, fhp, offset, *cnt);
 
@@ -1440,6 +1443,18 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	}
 
 	exp = fhp->fh_export;
+
+	/*
+	 * If aggressive write throttling is enabled, reduce the per-task
+	 * dirty page limit to throttle NFSD writes more aggressively.
+	 * This helps prevent memory exhaustion when fast network clients
+	 * overwhelm slow storage.
+	 */
+	if (nfsd_aggressive_write_throttle) {
+		saved_nr_dirtied_pause = current->nr_dirtied_pause;
+		current->nr_dirtied_pause = NFSD_AGGRESSIVE_DIRTY_LIMIT;
+		throttle_adjusted = true;
+	}
 
 	if (!EX_ISSYNC(exp))
 		stable = NFS_UNSTABLE;
@@ -1505,6 +1520,8 @@ out_nfserr:
 		trace_nfsd_write_err(rqstp, fhp, offset, host_err);
 		nfserr = nfserrno(host_err);
 	}
+	if (throttle_adjusted)
+		current->nr_dirtied_pause = saved_nr_dirtied_pause;
 	if (restore_flags)
 		current_restore_flags(pflags, PF_LOCAL_THROTTLE);
 	return nfserr;

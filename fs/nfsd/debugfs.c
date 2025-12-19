@@ -122,6 +122,36 @@ static int nfsd_io_cache_write_set(void *data, u64 val)
 DEFINE_DEBUGFS_ATTRIBUTE(nfsd_io_cache_write_fops, nfsd_io_cache_write_get,
 			 nfsd_io_cache_write_set, "%llu\n");
 
+/*
+ * /sys/kernel/debug/nfsd/write_throttle
+ *
+ * Contents:
+ *   %0: Normal throttling (default)
+ *   %1: Aggressive throttling for NFSD writes
+ *
+ * When set to 1, NFSD write operations are throttled more aggressively
+ * to prevent memory exhaustion when fast network clients overwhelm slow
+ * storage. This is useful when the server has limited memory or slow disks.
+ *
+ * This setting takes immediate effect for all NFS versions, all exports,
+ * and in all NFSD net namespaces.
+ */
+
+static int nfsd_write_throttle_get(void *data, u64 *val)
+{
+	*val = nfsd_aggressive_write_throttle ? 1 : 0;
+	return 0;
+}
+
+static int nfsd_write_throttle_set(void *data, u64 val)
+{
+	nfsd_aggressive_write_throttle = (val > 0);
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(nfsd_write_throttle_fops, nfsd_write_throttle_get,
+			 nfsd_write_throttle_set, "%llu\n");
+
 void nfsd_debugfs_exit(void)
 {
 	debugfs_remove_recursive(nfsd_top_dir);
@@ -140,4 +170,7 @@ void nfsd_debugfs_init(void)
 
 	debugfs_create_file("io_cache_write", 0644, nfsd_top_dir, NULL,
 			    &nfsd_io_cache_write_fops);
+
+	debugfs_create_file("write_throttle", 0644, nfsd_top_dir, NULL,
+			    &nfsd_write_throttle_fops);
 }

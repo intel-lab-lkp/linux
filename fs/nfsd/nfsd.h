@@ -165,6 +165,15 @@ enum {
 
 extern u64 nfsd_io_cache_read __read_mostly;
 extern u64 nfsd_io_cache_write __read_mostly;
+extern bool nfsd_aggressive_write_throttle __read_mostly;
+
+/*
+ * Aggressive write throttling reduces nr_dirtied_pause to force more
+ * frequent calls to balance_dirty_pages(). This uses the same page-size
+ * adjusted formula as balance_dirty_pages_ratelimited_flags() when
+ * wb->dirty_exceeded is true (see mm/page-writeback.c:2066).
+ */
+#define NFSD_AGGRESSIVE_DIRTY_LIMIT	(32 >> (PAGE_SHIFT - 10))
 
 extern int nfsd_max_blksize;
 
