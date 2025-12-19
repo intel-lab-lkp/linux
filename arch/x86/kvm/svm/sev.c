@@ -232,23 +232,19 @@ static int sev_asid_new(struct kvm_sev_info *sev, unsigned long vm_type)
 		return ret;
 	}
 
-	mutex_lock(&sev_bitmap_lock);
-
+	scoped_guard(mutex, &sev_bitmap_lock) {
 again:
-	asid = find_next_zero_bit(sev_asid_bitmap, max_asid + 1, min_asid);
-	if (asid > max_asid) {
-		if (retry && __sev_recycle_asids(min_asid, max_asid)) {
-			retry = false;
-			goto again;
+		asid = find_next_zero_bit(sev_asid_bitmap, max_asid + 1, min_asid);
+		if (asid > max_asid) {
+			if (retry && __sev_recycle_asids(min_asid, max_asid)) {
+				retry = false;
+				goto again;
+			}
+			ret = -EBUSY;
+			goto e_uncharge;
 		}
-		mutex_unlock(&sev_bitmap_lock);
-		ret = -EBUSY;
-		goto e_uncharge;
+		__set_bit(asid, sev_asid_bitmap);
 	}
-
-	__set_bit(asid, sev_asid_bitmap);
-
-	mutex_unlock(&sev_bitmap_lock);
 
 	sev->asid = asid;
 	return 0;
