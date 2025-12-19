@@ -2979,8 +2979,109 @@ static void __free_frozen_pages(struct page *page, unsigned int order,
 	}
 }
 
+static void prepare_compound_page_to_free(struct page *new_head,
+					  unsigned int order,
+					  unsigned long flags)
+{
+	new_head->flags.f = flags & (~PAGE_FLAGS_CHECK_AT_FREE);
+	new_head->mapping = NULL;
+	new_head->private = 0;
+
+	clear_compound_head(new_head);
+	if (order)
+		prep_compound_page(new_head, order);
+}
+
+/*
+ * Given a range of pages physically contiguous physical, efficiently
+ * free them in blocks that meet __free_frozen_pages's requirements.
+ */
+static void free_contiguous_pages(struct page *curr, struct page *next,
+				  unsigned long flags)
+{
+	unsigned int order;
+	unsigned int align_order;
+	unsigned int size_order;
+	unsigned long pfn;
+	unsigned long end_pfn = page_to_pfn(next);
+	unsigned long remaining;
+
+	/*
+	 * This decomposition algorithm at every iteration chooses the
+	 * order to be the minimum of two constraints:
+	 * - Alignment: the largest power-of-two that divides current pfn.
+	 * - Size: the largest power-of-two that fits in the
+	 *   current remaining number of pages.
+	 */
+	while (curr < next) {
+		pfn = page_to_pfn(curr);
+		remaining = end_pfn - pfn;
+
+		align_order = ffs(pfn) - 1;
+		size_order = fls_long(remaining) - 1;
+		order = min(align_order, size_order);
+
+		prepare_compound_page_to_free(curr, order, flags);
+		__free_frozen_pages(curr, order, FPI_NONE);
+		curr += (1UL << order);
+	}
+
+	VM_WARN_ON(curr != next);
+}
+
+/*
+ * Given a high-order compound page containing certain number of HWPoison
+ * pages, free only the healthy ones to buddy allocator.
+ *
+ * It calls __free_frozen_pages O(2^order) times and cause nontrivial
+ * overhead. So only use this when compound page really contains HWPoison.
+ *
+ * This implementation doesn't work in memdesc world.
+ */
+static void free_has_hwpoison_pages(struct page *page, unsigned int order)
+{
+	struct page *curr = page;
+	struct page *end = page + (1 << order);
+	struct page *next;
+	unsigned long flags = page->flags.f;
+	unsigned long nr_pages;
+	unsigned long total_freed = 0;
+	unsigned long total_hwp = 0;
+
+	VM_WARN_ON(flags & PAGE_FLAGS_CHECK_AT_FREE);
+
+	while (curr < end) {
+		next = curr;
+		nr_pages = 0;
+
+		while (next < end && !PageHWPoison(next)) {
+			++next;
+			++nr_pages;
+		}
+
+		if (PageHWPoison(next))
+			++total_hwp;
+
+		free_contiguous_pages(curr, next, flags);
+
+		total_freed += nr_pages;
+		curr = PageHWPoison(next) ? next + 1 : next;
+	}
+
+	pr_info("Excluded %lu hwpoison pages from folio\n", total_hwp);
+	pr_info("Freed %#lx pages from folio\n", total_freed);
+}
+
 void free_frozen_pages(struct page *page, unsigned int order)
 {
+	struct folio *folio = page_folio(page);
+
+	if (order > 0 && unlikely(folio_test_has_hwpoisoned(folio))) {
+		folio_clear_has_hwpoisoned(folio);
+		free_has_hwpoison_pages(page, order);
+		return;
+	}
+
 	__free_frozen_pages(page, order, FPI_NONE);
 }
 
