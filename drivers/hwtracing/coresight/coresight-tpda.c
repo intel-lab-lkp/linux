@@ -375,6 +375,45 @@ static ssize_t tpda_trig_sysfs_store(struct device *dev,
 	return ret;
 }
 
+static ssize_t port_flush_req_show(struct device *dev,
+				   struct device_attribute *attr,
+				   char *buf)
+{
+	struct tpda_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	unsigned long val;
+
+	if (!drvdata->csdev->refcnt)
+		return -EINVAL;
+
+	guard(spinlock)(&drvdata->spinlock);
+	val = readl_relaxed(drvdata->base + TPDA_FLUSH_CR);
+
+	return sysfs_emit(buf, "0x%lx\n", val);
+}
+
+static ssize_t port_flush_req_store(struct device *dev,
+				    struct device_attribute *attr,
+				    const char *buf,
+				    size_t size)
+{
+	struct tpda_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	u32 val;
+
+	if (kstrtou32(buf, 0, &val))
+		return -EINVAL;
+
+	if (!drvdata->csdev->refcnt || !val)
+		return -EINVAL;
+
+	guard(spinlock)(&drvdata->spinlock);
+	CS_UNLOCK(drvdata->base);
+	writel_relaxed(val, drvdata->base + TPDA_FLUSH_CR);
+	CS_LOCK(drvdata->base);
+
+	return size;
+}
+static DEVICE_ATTR_RW(port_flush_req);
+
 static struct attribute *tpda_global_cr_attrs[] = {
 	tpda_trig_sysfs_rw(global_flush_req, FLREQ),
 	tpda_trig_sysfs_rw(freq_ts_enable, FREQTS),
@@ -385,13 +424,23 @@ static struct attribute *tpda_global_cr_attrs[] = {
 	NULL,
 };
 
+static struct attribute *tpda_attrs[] = {
+	&dev_attr_port_flush_req.attr,
+	NULL,
+};
+
 static struct attribute_group tpda_global_cr_attr_grp = {
 	.attrs	= tpda_global_cr_attrs,
 	.name	= "global_cr",
 };
 
+static struct attribute_group tpda_attr_grp = {
+	.attrs	= tpda_attrs,
+};
+
 static const struct attribute_group *tpda_attr_grps[] = {
 	&tpda_global_cr_attr_grp,
+	&tpda_attr_grp,
 	NULL,
 };
 
