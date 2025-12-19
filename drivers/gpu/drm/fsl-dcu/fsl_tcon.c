@@ -86,7 +86,7 @@ struct fsl_tcon *fsl_tcon_init(struct device *dev)
 	ret = clk_prepare_enable(tcon->ipg_clk);
 	if (ret) {
 		dev_err(dev, "Couldn't enable the TCON clock\n");
-		goto err_node_put;
+		goto err_clk_put;
 	}
 
 	of_node_put(np);
@@ -94,6 +94,8 @@ struct fsl_tcon *fsl_tcon_init(struct device *dev)
 
 	return tcon;
 
+err_clk_put:
+	clk_put(tcon->ipg_clk);
 err_node_put:
 	of_node_put(np);
 	return NULL;
