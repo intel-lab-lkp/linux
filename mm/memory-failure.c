@@ -164,33 +164,12 @@ static DEFINE_MUTEX(pfn_space_lock);
 
 /*
  * Return values:
- *   1:   the page is dissolved (if needed) and taken off from buddy,
- *   0:   the page is dissolved (if needed) and not taken off from buddy,
+ *   = 0: the page is dissolved (if needed)
  *   < 0: failed to dissolve.
  */
 static int __page_handle_poison(struct page *page)
 {
-	int ret;
-
-	/*
-	 * zone_pcp_disable() can't be used here. It will
-	 * hold pcp_batch_high_lock and dissolve_free_hugetlb_folio() might hold
-	 * cpu_hotplug_lock via static_key_slow_dec() when hugetlb vmemmap
-	 * optimization is enabled. This will break current lock dependency
-	 * chain and leads to deadlock.
-	 * Disabling pcp before dissolving the page was a deterministic
-	 * approach because we made sure that those pages cannot end up in any
-	 * PCP list. Draining PCP lists expels those pages to the buddy system,
-	 * but nothing guarantees that those pages do not get back to a PCP
-	 * queue if we need to refill those.
-	 */
-	ret = dissolve_free_hugetlb_folio(page_folio(page));
-	if (!ret) {
-		drain_all_pages(page_zone(page));
-		ret = take_page_off_buddy(page);
-	}
-
-	return ret;
+	return dissolve_free_hugetlb_folio(page_folio(page));
 }
 
 static bool page_handle_poison(struct page *page, bool hugepage_or_freepage, bool release)
@@ -200,7 +179,7 @@ static bool page_handle_poison(struct page *page, bool hugepage_or_freepage, boo
 		 * Doing this check for free pages is also fine since
 		 * dissolve_free_hugetlb_folio() returns 0 for non-hugetlb folios as well.
 		 */
-		if (__page_handle_poison(page) <= 0)
+		if (__page_handle_poison(page) < 0)
 			/*
 			 * We could fail to take off the target page from buddy
 			 * for example due to racy page allocation, but that's
@@ -1174,7 +1153,7 @@ static int me_huge_page(struct page_state *ps, struct page *p)
 		 * subpages.
 		 */
 		folio_put(folio);
-		if (__page_handle_poison(p) > 0) {
+		if (!__page_handle_poison(p)) {
 			page_ref_inc(p);
 			res = MF_RECOVERED;
 		} else {
@@ -2067,7 +2046,7 @@ retry:
 	 */
 	if (res == 0) {
 		folio_unlock(folio);
-		if (__page_handle_poison(p) > 0) {
+		if (!__page_handle_poison(p)) {
 			page_ref_inc(p);
 			res = MF_RECOVERED;
 		} else {
