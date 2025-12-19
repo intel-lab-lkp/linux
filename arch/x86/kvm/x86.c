@@ -12735,6 +12735,7 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 		goto free_guest_fpu;
 
 	kvm_xen_init_vcpu(vcpu);
+	kvm_vcpu_reset_ipi_context(vcpu);
 	vcpu_load(vcpu);
 	kvm_vcpu_after_set_cpuid(vcpu);
 	kvm_set_tsc_khz(vcpu, vcpu->kvm->arch.default_tsc_khz);
@@ -12802,6 +12803,7 @@ void kvm_arch_vcpu_destroy(struct kvm_vcpu *vcpu)
 	kvm_mmu_destroy(vcpu);
 	srcu_read_unlock(&vcpu->kvm->srcu, idx);
 	free_page((unsigned long)vcpu->arch.pio_data);
+	kvm_vcpu_reset_ipi_context(vcpu);
 	kvfree(vcpu->arch.cpuid_entries);
 }
 
@@ -12878,6 +12880,7 @@ void kvm_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event)
 		kvm_leave_nested(vcpu);
 
 	kvm_lapic_reset(vcpu, init_event);
+	kvm_vcpu_clear_ipi_context(vcpu);
 
 	WARN_ON_ONCE(is_guest_mode(vcpu) || is_smm(vcpu));
 	vcpu->arch.hflags = 0;

@@ -466,6 +466,14 @@ fastpath_t handle_fastpath_wrmsr_imm(struct kvm_vcpu *vcpu, u32 msr, int reg);
 fastpath_t handle_fastpath_hlt(struct kvm_vcpu *vcpu);
 fastpath_t handle_fastpath_invd(struct kvm_vcpu *vcpu);
 
+/* IPI tracking helpers for directed yield */
+void kvm_track_ipi_communication(struct kvm_vcpu *sender,
+				 struct kvm_vcpu *receiver);
+bool kvm_vcpu_is_ipi_receiver(struct kvm_vcpu *sender,
+			      struct kvm_vcpu *receiver);
+void kvm_vcpu_clear_ipi_context(struct kvm_vcpu *vcpu);
+void kvm_vcpu_reset_ipi_context(struct kvm_vcpu *vcpu);
+
 extern struct kvm_caps kvm_caps;
 extern struct kvm_host_values kvm_host;
 
