@@ -2277,7 +2277,8 @@ unsigned long wait_task_inactive(struct task_struct *p, unsigned int match_state
 		running = task_on_cpu(rq, p);
 		queued = task_on_rq_queued(p);
 		ncsw = 0;
-		if ((match = __task_state_match(p, match_state))) {
+		match = __task_state_match(p, match_state);
+		if (match) {
 			/*
 			 * When matching on p->saved_state, consider this task
 			 * still queued so it will wait.
