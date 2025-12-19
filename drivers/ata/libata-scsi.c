@@ -1658,8 +1658,75 @@ static void ata_qc_done(struct ata_queued_cmd *qc)
 	done(cmd);
 }
 
+void ata_scsi_deferred_qc_work(struct work_struct *work)
+{
+	struct ata_port *ap =
+		container_of(work, struct ata_port, deferred_qc_work);
+	struct ata_queued_cmd *qc;
+	unsigned long flags;
+
+	spin_lock_irqsave(ap->lock, flags);
+
+	/*
+	 * If we still have a deferred QC and we are not in EH, issue it. In
+	 * such case, we should not need any more deferring the QC, so warn if
+	 * qc_defer() says otherwise.
+	 */
+	qc = ap->deferred_qc;
+	if (qc && !ata_port_eh_scheduled(ap)) {
+		WARN_ON_ONCE(ap->ops->qc_defer(qc));
+		ap->deferred_qc = NULL;
+		ata_qc_issue(qc);
+	}
+
+	spin_unlock_irqrestore(ap->lock, flags);
+}
+
+void ata_scsi_requeue_deferred_qc(struct ata_port *ap)
+{
+	struct ata_queued_cmd *qc = ap->deferred_qc;
+
+	lockdep_assert_held(ap->lock);
+
+	/*
+	 * If we have a differed QC when a reset occurs or NCQ commands fail, do
+	 * not try to be smart about what to do with this deferred command and
+	 * simply retry it by completing it with DID_SOFT_ERROR.
+	 */
+	if (qc) {
+		struct scsi_cmnd *scmd = qc->scsicmd;
+
+		ap->deferred_qc = NULL;
+		ata_qc_free(qc);
+		scmd->result = (DID_SOFT_ERROR << 16);
+		scsi_done(scmd);
+	}
+}
+
+static void ata_scsi_schedule_deferred_qc(struct ata_port *ap)
+{
+	struct ata_queued_cmd *qc = ap->deferred_qc;
+
+	lockdep_assert_held(ap->lock);
+
+	/*
+	 * If we have a differed QC, then qc_defer() is defined and we can use
+	 * this callback to determine if this QC is good to go, unless EH has
+	 * been scheduled.
+	 */
+	if (qc) {
+		if (ata_port_eh_scheduled(ap)) {
+			ata_scsi_requeue_deferred_qc(ap);
+			return;
+		}
+		if (!ap->ops->qc_defer(qc))
+			queue_work(system_highpri_wq, &ap->deferred_qc_work);
+	}
+}
+
 static void ata_scsi_qc_complete(struct ata_queued_cmd *qc)
 {
+	struct ata_port *ap = qc->ap;
 	struct scsi_cmnd *cmd = qc->scsicmd;
 	u8 *cdb = cmd->cmnd;
 	bool have_sense = qc->flags & ATA_QCFLAG_SENSE_VALID;
@@ -1689,11 +1756,23 @@ static void ata_scsi_qc_complete(struct ata_queued_cmd *qc)
 	}
 
 	ata_qc_done(qc);
+
+	ata_scsi_schedule_deferred_qc(ap);
 }
 
 static int ata_scsi_defer(struct ata_port *ap, struct ata_queued_cmd *qc)
 {
 	int ret;
+
+	/*
+	 * If we already have a deferred QC, then rely on the SCSI layer to
+	 * defer and requeue all incoming commands until the deferred QC is
+	 * processed, once all on-going commands are completed.
+	 */
+	if (ap->deferred_qc) {
+		ata_qc_free(qc);
+		return SCSI_MLQUEUE_DEVICE_BUSY;
+	}
 
 	if (!ap->ops->qc_defer)
 		return 0;
@@ -1702,6 +1781,17 @@ static int ata_scsi_defer(struct ata_port *ap, struct ata_queued_cmd *qc)
 	if (!ret)
 		return 0;
 
+	/*
+	 * We must defer this QC: if this is not an NCQ command, keep this QC
+	 * as a deferred one and wait for all on-going NCQ commands to complete
+	 * before issuing it with the deferred QC work.
+	 */
+	if (!ata_is_ncq(qc->tf.protocol)) {
+		ap->deferred_qc = qc;
+		return SCSI_MLQUEUE_DEVICE_BUSY;
+	}
+
+	/* Use the SCSI layer to defer and requeue the command. */
 	ata_qc_free(qc);
 
 	switch (ret) {
@@ -1777,8 +1867,11 @@ static int ata_scsi_translate(struct ata_device *dev, struct scsi_cmnd *cmd,
 		goto done;
 
 	rc = ata_scsi_defer(ap, qc);
-	if (rc)
+	if (rc) {
+		if (qc == ap->deferred_qc)
+			return 0;
 		return rc;
+	}
 
 	ata_qc_issue(qc);
 
