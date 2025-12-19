@@ -81,6 +81,36 @@ static int mipi_dsi_uevent(const struct device *dev, struct kobj_uevent_env *env
 	return 0;
 }
 
+
+static int mipi_dsi_probe(struct device *dev)
+{
+	struct mipi_dsi_driver *drv = to_mipi_dsi_driver(dev->driver);
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+
+	if (drv->probe)
+		return drv->probe(dsi);
+
+	return 0;
+}
+
+static void mipi_dsi_remove(struct device *dev)
+{
+	struct mipi_dsi_driver *drv = to_mipi_dsi_driver(dev->driver);
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+
+	if (drv->remove)
+		drv->remove(dsi);
+}
+
+static void mipi_dsi_shutdown(struct device *dev)
+{
+	struct mipi_dsi_driver *drv = to_mipi_dsi_driver(dev->driver);
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+
+	if (dev->driver && drv->shutdown)
+		drv->shutdown(dsi);
+}
+
 static const struct dev_pm_ops mipi_dsi_device_pm_ops = {
 	.runtime_suspend = pm_generic_runtime_suspend,
 	.runtime_resume = pm_generic_runtime_resume,
@@ -96,6 +126,9 @@ const struct bus_type mipi_dsi_bus_type = {
 	.name = "mipi-dsi",
 	.match = mipi_dsi_device_match,
 	.uevent = mipi_dsi_uevent,
+	.probe = mipi_dsi_probe,
+	.remove= mipi_dsi_remove,
+	.shutdown = mipi_dsi_shutdown,
 	.pm = &mipi_dsi_device_pm_ops,
 };
 EXPORT_SYMBOL_GPL(mipi_dsi_bus_type);
@@ -1980,32 +2013,6 @@ void mipi_dsi_dcs_set_tear_scanline_multi(struct mipi_dsi_multi_context *ctx,
 }
 EXPORT_SYMBOL(mipi_dsi_dcs_set_tear_scanline_multi);
 
-static int mipi_dsi_drv_probe(struct device *dev)
-{
-	struct mipi_dsi_driver *drv = to_mipi_dsi_driver(dev->driver);
-	struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
-
-	return drv->probe(dsi);
-}
-
-static int mipi_dsi_drv_remove(struct device *dev)
-{
-	struct mipi_dsi_driver *drv = to_mipi_dsi_driver(dev->driver);
-	struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
-
-	drv->remove(dsi);
-
-	return 0;
-}
-
-static void mipi_dsi_drv_shutdown(struct device *dev)
-{
-	struct mipi_dsi_driver *drv = to_mipi_dsi_driver(dev->driver);
-	struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
-
-	drv->shutdown(dsi);
-}
-
 /**
  * mipi_dsi_driver_register_full() - register a driver for DSI devices
  * @drv: DSI driver structure
@@ -2018,13 +2025,6 @@ int mipi_dsi_driver_register_full(struct mipi_dsi_driver *drv,
 {
 	drv->driver.bus = &mipi_dsi_bus_type;
 	drv->driver.owner = owner;
-
-	if (drv->probe)
-		drv->driver.probe = mipi_dsi_drv_probe;
-	if (drv->remove)
-		drv->driver.remove = mipi_dsi_drv_remove;
-	if (drv->shutdown)
-		drv->driver.shutdown = mipi_dsi_drv_shutdown;
 
 	return driver_register(&drv->driver);
 }
