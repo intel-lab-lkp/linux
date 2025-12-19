@@ -52,6 +52,7 @@ bool nfsd_disable_splice_read __read_mostly;
 u64 nfsd_io_cache_read __read_mostly = NFSD_IO_BUFFERED;
 u64 nfsd_io_cache_write __read_mostly = NFSD_IO_BUFFERED;
 bool nfsd_aggressive_write_throttle __read_mostly;
+bool nfsd_async_write_throttle __read_mostly;
 
 /**
  * nfserrno - Map Linux errnos to NFS errnos
@@ -1471,6 +1472,22 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 			kiocb.ki_flags |= IOCB_DSYNC;
 			break;
 		}
+	}
+
+	/*
+	 * If async throttling is enabled, check memory pressure
+	 * before attempting buffered writes. Return -EAGAIN if
+	 * the system is low on memory, allowing NFSD to return
+	 * an NFS error code asking the client to retry later.
+	 *
+	 * Skip this for NFSv2 since it lacks NFSERR_JUKEBOX.
+	 */
+	if (nfsd_async_write_throttle && rqstp->rq_vers >= 3) {
+		host_err =
+			balance_dirty_pages_ratelimited_flags(file->f_mapping,
+							      BDP_ASYNC);
+		if (host_err == -EAGAIN)
+			break;
 	}
 
 	nvecs = xdr_buf_to_bvec(rqstp->rq_bvec, rqstp->rq_maxpages, payload);

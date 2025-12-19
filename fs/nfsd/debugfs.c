@@ -152,6 +152,37 @@ static int nfsd_write_throttle_set(void *data, u64 val)
 DEFINE_DEBUGFS_ATTRIBUTE(nfsd_write_throttle_fops, nfsd_write_throttle_get,
 			 nfsd_write_throttle_set, "%llu\n");
 
+/*
+ * /sys/kernel/debug/nfsd/write_async_throttle
+ *
+ * Contents:
+ *   %0: Synchronous throttling (default) - writes sleep in balance_dirty_pages()
+ *   %1: Asynchronous throttling - return NFS4ERR_DELAY when memory is tight
+ *
+ * When set to 1, NFSD uses BDP_ASYNC mode which returns -EAGAIN from
+ * balance_dirty_pages_ratelimited_flags() instead of sleeping. This allows
+ * NFSD to return NFS4ERR_DELAY (or NFSERR_JUKEBOX for NFSv3), letting
+ * clients back off and retry rather than having NFSD threads blocked.
+ *
+ * This setting takes immediate effect for all NFS versions, all exports,
+ * and in all NFSD net namespaces.
+ */
+
+static int nfsd_async_throttle_get(void *data, u64 *val)
+{
+	*val = nfsd_async_write_throttle ? 1 : 0;
+	return 0;
+}
+
+static int nfsd_async_throttle_set(void *data, u64 val)
+{
+	nfsd_async_write_throttle = (val > 0);
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(nfsd_async_throttle_fops, nfsd_async_throttle_get,
+			 nfsd_async_throttle_set, "%llu\n");
+
 void nfsd_debugfs_exit(void)
 {
 	debugfs_remove_recursive(nfsd_top_dir);
@@ -173,4 +204,7 @@ void nfsd_debugfs_init(void)
 
 	debugfs_create_file("write_throttle", 0644, nfsd_top_dir, NULL,
 			    &nfsd_write_throttle_fops);
+
+	debugfs_create_file("write_async_throttle", 0644, nfsd_top_dir, NULL,
+			    &nfsd_async_throttle_fops);
 }

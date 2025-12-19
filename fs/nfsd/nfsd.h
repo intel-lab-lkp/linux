@@ -166,6 +166,7 @@ enum {
 extern u64 nfsd_io_cache_read __read_mostly;
 extern u64 nfsd_io_cache_write __read_mostly;
 extern bool nfsd_aggressive_write_throttle __read_mostly;
+extern bool nfsd_async_write_throttle __read_mostly;
 
 /*
  * Aggressive write throttling reduces nr_dirtied_pause to force more
