@@ -220,6 +220,7 @@ config DRM_GPUSVM
 config DRM_BUDDY
 	tristate
 	depends on DRM
+	select GPU_BUDDY
 	help
 	  A page based buddy allocator
 
