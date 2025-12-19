@@ -240,7 +240,8 @@ endif
 libsha1-$(CONFIG_SPARC) += sparc/sha1_asm.o
 libsha1-$(CONFIG_X86) += x86/sha1-ssse3-and-avx.o \
 			 x86/sha1-avx2-asm.o \
-			 x86/sha1-ni-asm.o
+			 x86/sha1-ni-asm.o \
+			 x86/sha1-phe-asm.o
 endif # CONFIG_CRYPTO_LIB_SHA1_ARCH
 
 ################################################################################

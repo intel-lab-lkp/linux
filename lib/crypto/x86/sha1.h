@@ -48,6 +48,23 @@ static void sha1_blocks_avx2(struct sha1_block_state *state,
 	}
 }
 
+#define PHE_ALIGNMENT 16
+asmlinkage void sha1_transform_phe(u8 *state, const u8 *data, size_t nblocks);
+static void sha1_blocks_phe(struct sha1_block_state *state,
+			     const u8 *data, size_t nblocks)
+{
+	/*
+	 * XSHA1 requires %edi to point to a 32-byte, 16-byte-aligned
+	 * buffer on Zhaoxin processors.
+	 */
+	u8 buf[32 + PHE_ALIGNMENT - 1];
+	u8 *dst = PTR_ALIGN(&buf[0], PHE_ALIGNMENT);
+
+	memcpy(dst, (u8 *)(state), SHA1_DIGEST_SIZE);
+	sha1_transform_phe(dst, data, nblocks);
+	memcpy((u8 *)(state), dst, SHA1_DIGEST_SIZE);
+}
+
 static void sha1_blocks(struct sha1_block_state *state,
 			const u8 *data, size_t nblocks)
 {
@@ -59,6 +76,9 @@ static void sha1_mod_init_arch(void)
 {
 	if (boot_cpu_has(X86_FEATURE_SHA_NI)) {
 		static_call_update(sha1_blocks_x86, sha1_blocks_ni);
+	} else if (boot_cpu_has(X86_FEATURE_PHE) && boot_cpu_has(X86_FEATURE_PHE_EN)) {
+		if (cpu_data(0).x86 >= 0x07)
+			static_call_update(sha1_blocks_x86, sha1_blocks_phe);
 	} else if (cpu_has_xfeatures(XFEATURE_MASK_SSE | XFEATURE_MASK_YMM,
 				     NULL) &&
 		   boot_cpu_has(X86_FEATURE_AVX)) {
