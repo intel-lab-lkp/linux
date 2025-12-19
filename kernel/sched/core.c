@@ -8606,9 +8606,14 @@ void __init sched_init(void)
 #endif /* CONFIG_CGROUP_SCHED */
 
 	for_each_possible_cpu(i) {
-		struct rq *rq;
+		struct rq *rq = cpu_rq(i);
 
-		rq = cpu_rq(i);
+		/* Initialize vCPU debooster per-rq state */
+		rq->yield_deboost_last_time_ns = 0;
+		rq->yield_deboost_last_src_pid = -1;
+		rq->yield_deboost_last_dst_pid = -1;
+		rq->yield_deboost_last_pair_time_ns = 0;
+
 		raw_spin_lock_init(&rq->__lock);
 		rq->nr_running = 0;
 		rq->calc_load_active = 0;

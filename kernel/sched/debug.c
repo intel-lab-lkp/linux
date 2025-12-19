@@ -508,6 +508,8 @@ static __init int sched_init_debug(void)
 	debugfs_create_file("tunable_scaling", 0644, debugfs_sched, NULL, &sched_scaling_fops);
 	debugfs_create_u32("migration_cost_ns", 0644, debugfs_sched, &sysctl_sched_migration_cost);
 	debugfs_create_u32("nr_migrate", 0644, debugfs_sched, &sysctl_sched_nr_migrate);
+	debugfs_create_u32("vcpu_debooster_enabled", 0644, debugfs_sched,
+			   &sysctl_sched_vcpu_debooster_enabled);
 
 	sched_domains_mutex_lock();
 	update_sched_domain_debugfs();

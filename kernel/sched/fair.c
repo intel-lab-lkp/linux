@@ -81,6 +81,13 @@ static unsigned int normalized_sysctl_sched_base_slice	= 700000ULL;
 
 __read_mostly unsigned int sysctl_sched_migration_cost	= 500000UL;
 
+/*
+ * vCPU debooster: runtime toggle for yield_to() vruntime penalty mechanism.
+ * When enabled (default), yield_to() applies bounded vruntime penalties to
+ * improve lock holder scheduling in virtualized environments.
+ */
+unsigned int sysctl_sched_vcpu_debooster_enabled __read_mostly = 1;
+
 static int __init setup_sched_thermal_decay_shift(char *str)
 {
 	pr_warn("Ignoring the deprecated sched_thermal_decay_shift= option\n");
