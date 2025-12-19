@@ -496,12 +496,14 @@ static void seq_stats(struct seq_file *m, struct lock_stat_data *data)
 
 	namelen = strlen(name);
 	if (class->name_version > 1) {
-		snprintf(name+namelen, 3, "#%d", class->name_version);
-		namelen += 2;
+		namelen += scnprintf(name + namelen,
+				sizeof(name) - namelen, "#%d",
+				class->name_version);
 	}
 	if (class->subclass) {
-		snprintf(name+namelen, 3, "/%d", class->subclass);
-		namelen += 2;
+		namelen += scnprintf(name + namelen,
+				sizeof(name) - namelen, "/%d",
+				class->subclass);
 	}
 
 	if (stats->write_holdtime.nr) {
