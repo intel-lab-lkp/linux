@@ -581,7 +581,7 @@
 			reg = <0xf8011100 0xc0>;
 		};
 
-		eccmgr {
+		eccmgreccmgr@ff8c0000 {
 			compatible = "altr,socfpga-s10-ecc-manager",
 				     "altr,socfpga-a10-ecc-manager";
 			altr,sysmgr-syscon = <&sysmgr>;
@@ -590,7 +590,7 @@
 			interrupts = <0 15 4>;
 			interrupt-controller;
 			#interrupt-cells = <2>;
-			ranges;
+			ranges = <0 0xff8c0000 0xc400>;
 
 			sdramedac {
 				compatible = "altr,sdram-edac-s10";
