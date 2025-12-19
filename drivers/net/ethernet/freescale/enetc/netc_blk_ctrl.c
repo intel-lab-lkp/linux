@@ -578,7 +578,9 @@ static int imx94_enetc_mdio_phyaddr_config(struct netc_blk_ctrl *priv,
 
 	addr = netc_get_phy_addr(np);
 	if (addr <= 0) {
-		dev_err(dev, "Failed to get PHY address\n");
+		if (addr)
+			dev_err(dev, "Failed to get PHY address\n");
+
 		return addr;
 	}
 
