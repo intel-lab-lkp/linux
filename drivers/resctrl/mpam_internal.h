@@ -200,8 +200,8 @@ struct mpam_props {
 } PACKED_FOR_KUNIT;
 
 #define mpam_has_feature(_feat, x)	test_bit(_feat, (x)->features)
-#define mpam_set_feature(_feat, x)	set_bit(_feat, (x)->features)
-#define mpam_clear_feature(_feat, x)	clear_bit(_feat, (x)->features)
+#define mpam_set_feature(_feat, x)	__set_bit(_feat, (x)->features)
+#define mpam_clear_feature(_feat, x)	__clear_bit(_feat, (x)->features)
 
 /* The values for MSMON_CFG_MBWU_FLT.RWBW */
 enum mon_filter_options {
