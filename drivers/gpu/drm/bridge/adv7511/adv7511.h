@@ -393,6 +393,7 @@ struct adv7511 {
 	bool cec_enabled_adap;
 	struct clk *cec_clk;
 	u32 cec_clk_freq;
+	bool suspended;
 };
 
 static inline struct adv7511 *bridge_to_adv7511(struct drm_bridge *bridge)
