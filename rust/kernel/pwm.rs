@@ -607,7 +607,12 @@ impl<T: PwmOps> Chip<T> {
         let drvdata_ptr = unsafe { bindings::pwmchip_get_drvdata(c_chip_ptr) };
 
         // SAFETY: We construct the `T` object in-place in the allocated private memory.
-        unsafe { data.__pinned_init(drvdata_ptr.cast())? };
+        if let Err(e) = unsafe { data.__pinned_init(drvdata_ptr.cast()) } {
+            // SAFETY: It is safe to call `pwmchip_put()` with a valid pointer
+            // obtained from `pwmchip_alloc()`.
+            unsafe { bindings::pwmchip_put(c_chip_ptr) };
+            return Err(e);
+        }
 
         // SAFETY: `c_chip_ptr` points to a valid chip.
         unsafe {
