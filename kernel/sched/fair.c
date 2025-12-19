@@ -9103,6 +9103,36 @@ yield_deboost_validate_tasks(struct rq *rq, struct task_struct *p_target)
 }
 
 /*
+ * Find the lowest common ancestor (LCA) in the cgroup hierarchy.
+ * Uses find_matching_se() to locate sibling entities at the same level,
+ * then returns their common cfs_rq for vruntime adjustments.
+ *
+ * Returns true if a valid LCA with meaningful contention (h_nr_queued > 1)
+ * is found, storing the LCA entities and common cfs_rq in output parameters.
+ */
+static bool __maybe_unused
+yield_deboost_find_lca(struct sched_entity *se_y, struct sched_entity *se_t,
+		       struct sched_entity **se_y_lca_out,
+		       struct sched_entity **se_t_lca_out,
+		       struct cfs_rq **cfs_rq_out)
+{
+	struct sched_entity *se_y_lca = se_y;
+	struct sched_entity *se_t_lca = se_t;
+	struct cfs_rq *cfs_rq;
+
+	find_matching_se(&se_y_lca, &se_t_lca);
+
+	cfs_rq = cfs_rq_of(se_y_lca);
+	if (cfs_rq->h_nr_queued <= 1)
+		return false;
+
+	*se_y_lca_out = se_y_lca;
+	*se_t_lca_out = se_t_lca;
+	*cfs_rq_out = cfs_rq;
+	return true;
+}
+
+/*
  * sched_yield() is very simple
  */
 static void yield_task_fair(struct rq *rq)
