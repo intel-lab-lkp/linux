@@ -107,10 +107,6 @@
  *
  */
 
-#define __SMB2_HEADER_STRUCTURE_SIZE	64
-#define SMB2_HEADER_STRUCTURE_SIZE				\
-	cpu_to_le16(__SMB2_HEADER_STRUCTURE_SIZE)
-
 #define SMB2_PROTO_NUMBER cpu_to_le32(0x424d53fe)
 #define SMB2_TRANSFORM_PROTO_NUM cpu_to_le32(0x424d53fd)
 #define SMB2_COMPRESSION_TRANSFORM_ID cpu_to_le32(0x424d53fc)
@@ -156,6 +152,10 @@ struct smb2_hdr {
 	__le64  SessionId;
 	__u8   Signature[16];
 } __packed;
+
+#define __SMB2_HEADER_STRUCTURE_SIZE	(sizeof(struct smb2_hdr))
+#define SMB2_HEADER_STRUCTURE_SIZE				\
+	cpu_to_le16(__SMB2_HEADER_STRUCTURE_SIZE)
 
 struct smb3_hdr_req {
 	__le32 ProtocolId;	/* 0xFE 'S' 'M' 'B' */
