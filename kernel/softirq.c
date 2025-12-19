@@ -341,15 +341,15 @@ static inline void invoke_softirq(void)
 		wakeup_softirqd();
 }
 
-#define SCHED_SOFTIRQ_MASK	BIT(SCHED_SOFTIRQ)
+#define SCHED_SOFTIRQ_MASK	(BIT(SCHED_SOFTIRQ) | BIT(NET_RX_SOFTIRQ))
 
 /*
  * flush_smp_call_function_queue() can raise a soft interrupt in a function
  * call. On RT kernels this is undesired and the only known functionalities
  * are in the block layer which is disabled on RT, and in the scheduler for
  * idle load balancing. If soft interrupts get raised which haven't been
- * raised before the flush, warn if it is not a SCHED_SOFTIRQ so it can be
- * investigated.
+ * raised before the flush, warn if it is not SCHED_SOFTIRQ or NET_RX_SOFTIRQ
+ * so it can be investigated.
  */
 void do_softirq_post_smp_call_flush(unsigned int was_pending)
 {
