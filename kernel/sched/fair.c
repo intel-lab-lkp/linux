@@ -9066,22 +9066,18 @@ static bool yield_deboost_rate_limit(struct rq *rq)
  * Validate tasks for yield deboost operation.
  * Returns the yielding task on success, NULL on validation failure.
  *
- * Checks: feature enabled, valid target, same runqueue, target is fair class,
- * both on_rq. Called under rq->lock.
+ * Checks: valid target, same runqueue, target is fair class,
+ * both on_rq, rate limiting. Called under rq->lock.
  *
  * Note: p_yielding (rq->donor) is guaranteed to be fair class by the caller
  * (yield_to_task_fair is only called when curr->sched_class == p->sched_class).
+ * Note: sysctl_sched_vcpu_debooster_enabled is checked by caller before
+ * update_rq_clock() to avoid unnecessary clock updates.
  */
 static struct task_struct __maybe_unused *
 yield_deboost_validate_tasks(struct rq *rq, struct task_struct *p_target)
 {
 	struct task_struct *p_yielding;
-
-	if (!sysctl_sched_vcpu_debooster_enabled)
-		return NULL;
-
-	if (!p_target)
-		return NULL;
 
 	if (yield_deboost_rate_limit(rq))
 		return NULL;
@@ -9288,6 +9284,57 @@ yield_deboost_apply_penalty(struct sched_entity *se_y_lca,
 }
 
 /*
+ * yield_to_deboost - Apply vruntime penalty to favor the target task
+ * @rq: runqueue containing both tasks (rq->lock must be held)
+ * @p_target: task to favor in scheduling
+ *
+ * Cooperates with yield_to_task_fair(): set_next_buddy() provides immediate
+ * preference; this routine applies a bounded vruntime penalty at the cgroup
+ * LCA so the target maintains scheduling advantage beyond the buddy effect.
+ *
+ * Only operates on tasks resident on the same rq. Penalty is bounded by
+ * granularity and queue-size caps to prevent starvation.
+ */
+static void yield_to_deboost(struct rq *rq, struct task_struct *p_target)
+{
+	struct task_struct *p_yielding;
+	struct sched_entity *se_y, *se_t, *se_y_lca, *se_t_lca;
+	struct cfs_rq *cfs_rq_common;
+	u64 penalty;
+
+	/* Quick validation before updating clock */
+	if (!sysctl_sched_vcpu_debooster_enabled)
+		return;
+
+	if (!p_target)
+		return;
+
+	/* Update clock - rate limiting and debounce use rq_clock() */
+	update_rq_clock(rq);
+
+	/* Full validation including rate limiting */
+	p_yielding = yield_deboost_validate_tasks(rq, p_target);
+	if (!p_yielding)
+		return;
+
+	se_y = &p_yielding->se;
+	se_t = &p_target->se;
+
+	/* Find LCA in cgroup hierarchy */
+	if (!yield_deboost_find_lca(se_y, se_t, &se_y_lca, &se_t_lca, &cfs_rq_common))
+		return;
+
+	/* Update current accounting before modifying vruntime */
+	if (se_y_lca != cfs_rq_common->curr)
+		update_curr(cfs_rq_common);
+
+	/* Calculate and apply penalty */
+	penalty = yield_deboost_calculate_penalty(rq, se_y_lca, se_t_lca,
+						  p_target, cfs_rq_common->h_nr_queued);
+	yield_deboost_apply_penalty(se_y_lca, cfs_rq_common, penalty);
+}
+
+/*
  * sched_yield() is very simple
  */
 static void yield_task_fair(struct rq *rq)
@@ -9341,6 +9388,10 @@ static bool yield_to_task_fair(struct rq *rq, struct task_struct *p)
 	/* Tell the scheduler that we'd really like se to run next. */
 	set_next_buddy(se);
 
+	/* Apply deboost BEFORE forfeit to preserve fairness gap calculation */
+	yield_to_deboost(rq, p);
+
+	/* Complete the standard yield path (includes forfeit in v6.19+) */
 	yield_task_fair(rq);
 
 	return true;
