@@ -29,6 +29,8 @@
 # include <asm/mmconfig.h>
 #endif
 
+#include <xen/xen.h>
+
 #include "cpu.h"
 
 u16 invlpgb_count_max __ro_after_init = 1;
@@ -1348,6 +1350,10 @@ static __init int print_s5_reset_status_mmio(void)
 	int i;
 
 	if (!cpu_feature_enabled(X86_FEATURE_ZEN))
+		return 0;
+
+	/* Xen PV domU cannot access hardware directly, so bail for domU case */
+	if (cpu_feature_enabled(X86_FEATURE_XENPV) && !xen_initial_domain())
 		return 0;
 
 	addr = ioremap(FCH_PM_BASE + FCH_PM_S5_RESET_STATUS, sizeof(value));
