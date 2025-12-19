@@ -32,6 +32,9 @@ properties:
       - const: func
       - const: bus
 
+  resets:
+    maxItems: 1
+
   clock-frequency:
     description: |
       K1 support three different modes which running different frequencies
