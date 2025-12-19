@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
 
-#![expect(unused)]
-
 //! Direct VRAM access through the PRAMIN aperture.
 //!
 //! PRAMIN provides a 1MB sliding window into VRAM through BAR0, allowing the CPU to access
@@ -55,6 +53,8 @@
 //!     Ok(())
 //! }
 //! ```
+
+#![allow(unused)]
 
 use crate::{
     driver::Bar0,
@@ -198,3 +198,101 @@ unsafe impl Send for Window<'_> {}
 
 // SAFETY: `Window` requires `&mut self` for all accessors.
 unsafe impl Sync for Window<'_> {}
+
+/// Run PRAMIN self-tests during probe.
+#[cfg(CONFIG_NOVA_PRAMIN_SELFTESTS)]
+pub(crate) fn run_self_test(dev: &kernel::device::Device, bar: &Bar0) -> Result {
+    dev_info!(dev, "PRAMIN: Starting self-test...\n");
+
+    let mut win = Window::new(bar);
+
+    // Use offset 0x1000 as test area.
+    let base: usize = 0x1000;
+
+    // Test 1: Read/write at odd-aligned locations.
+    dev_info!(dev, "PRAMIN: Test 1 - Odd-aligned u8 read/write\n");
+    for i in 0u8..4 {
+        let offset = base + 1 + i as usize; // Offsets 0x1001, 0x1002, 0x1003, 0x1004
+        let val = 0xA0 + i;
+        win.try_write8(offset, val)?;
+        let read_val = win.try_read8(offset)?;
+        if read_val != val {
+            dev_err!(
+                dev,
+                "PRAMIN: FAIL - offset {:#x}: wrote {:#x}, read {:#x}\n",
+                offset,
+                val,
+                read_val
+            );
+            return Err(EIO);
+        }
+    }
+    dev_info!(dev, "PRAMIN: Test 1 PASSED\n");
+
+    // Test 2: Write u32 and read back as u8s.
+    dev_info!(dev, "PRAMIN: Test 2 - Write u32, read as u8s\n");
+    let test2_offset = base + 0x10;
+    let test2_val: u32 = 0xDEADBEEF;
+    win.try_write32(test2_offset, test2_val)?;
+
+    // Read back as individual bytes (little-endian: EF BE AD DE).
+    let expected_bytes: [u8; 4] = [0xEF, 0xBE, 0xAD, 0xDE];
+    for (i, &expected) in expected_bytes.iter().enumerate() {
+        let read_val = win.try_read8(test2_offset + i)?;
+        if read_val != expected {
+            dev_err!(
+                dev,
+                "PRAMIN: FAIL - offset {:#x}: expected {:#x}, read {:#x}\n",
+                test2_offset + i,
+                expected,
+                read_val
+            );
+            return Err(EIO);
+        }
+    }
+    dev_info!(dev, "PRAMIN: Test 2 PASSED\n");
+
+    // Test 3: Window repositioning across 1MB boundaries.
+    // Write to offset > 1MB to trigger window slide, then verify.
+    dev_info!(dev, "PRAMIN: Test 4 - Window repositioning\n");
+    let test4_offset_a = base; // First 1MB region
+    let test4_offset_b = 0x200000 + base; // 2MB + base (different 1MB region)
+    let val_a: u32 = 0x11111111;
+    let val_b: u32 = 0x22222222;
+
+    // Write to first region.
+    win.try_write32(test4_offset_a, val_a)?;
+
+    // Write to second region (triggers window reposition).
+    win.try_write32(test4_offset_b, val_b)?;
+
+    // Read back from second region.
+    let read_b = win.try_read32(test4_offset_b)?;
+    if read_b != val_b {
+        dev_err!(
+            dev,
+            "PRAMIN: FAIL - offset {:#x}: expected {:#x}, read {:#x}\n",
+            test4_offset_b,
+            val_b,
+            read_b
+        );
+        return Err(EIO);
+    }
+
+    // Read back from first region (triggers window reposition again).
+    let read_a = win.try_read32(test4_offset_a)?;
+    if read_a != val_a {
+        dev_err!(
+            dev,
+            "PRAMIN: FAIL - offset {:#x}: expected {:#x}, read {:#x}\n",
+            test4_offset_a,
+            val_a,
+            read_a
+        );
+        return Err(EIO);
+    }
+    dev_info!(dev, "PRAMIN: Test 3 PASSED\n");
+
+    dev_info!(dev, "PRAMIN: All self-tests PASSED\n");
+    Ok(())
+}

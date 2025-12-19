@@ -14,3 +14,14 @@ config NOVA_CORE
 	  This driver is work in progress and may not be functional.
 
 	  If M is selected, the module will be called nova_core.
+
+config NOVA_PRAMIN_SELFTESTS
+	bool "PRAMIN self-tests"
+	depends on NOVA_CORE
+	default n
+	help
+	  Enable self-tests for the PRAMIN aperture mechanism. When enabled,
+	  basic tests are run during GPU probe after GSP boot to
+	  verify PRAMIN functionality.
+
+	  This is a testing option and should normally be disabled.

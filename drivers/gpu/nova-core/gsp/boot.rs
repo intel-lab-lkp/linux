@@ -239,6 +239,10 @@ impl super::Gsp {
         // Wait until GSP is fully initialized.
         commands::wait_gsp_init_done(&mut self.cmdq)?;
 
+        // Run PRAMIN aperture self-tests (disabled by default).
+        #[cfg(CONFIG_NOVA_PRAMIN_SELFTESTS)]
+        crate::mm::pramin::run_self_test(pdev.as_ref(), bar)?;
+
         // Obtain and display basic GPU information.
         let info = commands::get_gsp_info(&mut self.cmdq, bar)?;
         dev_info!(
