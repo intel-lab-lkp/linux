@@ -64,7 +64,12 @@ static inline void __page_ref_unfreeze(struct page *page, int v)
 
 static inline int page_ref_count(const struct page *page)
 {
-	return atomic_read(&page->_refcount);
+	int val = atomic_read(&page->_refcount);
+
+	if (unlikely(val & PAGEREF_LOCKED_BIT))
+		return 0;
+
+	return val;
 }
 
 /**
@@ -176,6 +181,9 @@ static inline int page_ref_sub_and_test(struct page *page, int nr)
 {
 	int ret = atomic_sub_and_test(nr, &page->_refcount);
 
+	if (ret)
+		ret = !atomic_cmpxchg_relaxed(&page->_refcount, 0, PAGEREF_LOCKED_BIT);
+
 	if (page_ref_tracepoint_active(page_ref_mod_and_test))
 		__page_ref_mod_and_test(page, -nr, ret);
 	return ret;
@@ -204,6 +212,9 @@ static inline int page_ref_dec_and_test(struct page *page)
 {
 	int ret = atomic_dec_and_test(&page->_refcount);
 
+	if (ret)
+		ret = !atomic_cmpxchg_relaxed(&page->_refcount, 0, PAGEREF_LOCKED_BIT);
+
 	if (page_ref_tracepoint_active(page_ref_mod_and_test))
 		__page_ref_mod_and_test(page, -1, ret);
 	return ret;
@@ -231,11 +242,17 @@ static inline int folio_ref_dec_return(struct folio *folio)
 static inline bool page_ref_add_unless_zero(struct page *page, int nr)
 {
 	bool ret = false;
+	int val;
 
 	rcu_read_lock();
 	/* avoid writing to the vmemmap area being remapped */
-	if (page_count_writable(page))
-		ret = atomic_add_unless(&page->_refcount, nr, 0);
+	if (page_count_writable(page)) {
+		val = atomic_add_return(nr, &page->_refcount);
+		ret = !(val & PAGEREF_LOCKED_BIT);
+
+		if (unlikely(!ret))
+			atomic_cmpxchg_relaxed(&page->_refcount, val, PAGEREF_LOCKED_BIT);
+	}
 	rcu_read_unlock();
 
 	if (page_ref_tracepoint_active(page_ref_mod_unless))
@@ -271,7 +288,7 @@ static inline bool folio_ref_try_add(struct folio *folio, int count)
 
 static inline int page_ref_freeze(struct page *page, int count)
 {
-	int ret = likely(atomic_cmpxchg(&page->_refcount, count, 0) == count);
+	int ret = likely(atomic_cmpxchg(&page->_refcount, count, PAGEREF_LOCKED_BIT) == count);
 
 	if (page_ref_tracepoint_active(page_ref_freeze))
 		__page_ref_freeze(page, count, ret);
