@@ -2089,7 +2089,6 @@ int rio_register_mport(struct rio_mport *port)
 		mutex_lock(&rio_mport_list_lock);
 		list_del(&port->node);
 		mutex_unlock(&rio_mport_list_lock);
-		put_device(&port->dev);
 	} else {
 		dev_dbg(&port->dev, "RIO: registered mport%d\n", port->id);
 	}

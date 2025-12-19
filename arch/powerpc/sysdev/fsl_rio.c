@@ -697,7 +697,7 @@ static int fsl_rio_setup(struct platform_device *dev)
 		if (rio_register_mport(port)) {
 			release_resource(&port->iores);
 			kfree(priv);
-			kfree(port);
+			put_device(&port->dev);
 			continue;
 		}
 		active_ports++;

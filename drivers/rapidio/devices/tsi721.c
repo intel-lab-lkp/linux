@@ -2758,6 +2758,7 @@ static int tsi721_setup_mport(struct tsi721_device *priv)
 	err = rio_register_mport(mport);
 	if (err) {
 		tsi721_unregister_dma(priv);
+		put_device(&mport->dev);
 		goto err_exit;
 	}
 
