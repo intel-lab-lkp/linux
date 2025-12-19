@@ -9133,6 +9133,161 @@ yield_deboost_find_lca(struct sched_entity *se_y, struct sched_entity *se_t,
 }
 
 /*
+ * Apply debounce for reverse yield pairs to reduce ping-pong effects.
+ * When A yields to B, then B yields back to A within ~600us, downscale
+ * the penalty to prevent oscillation.
+ *
+ * The 600us threshold is chosen to be:
+ * - Long enough to catch rapid back-and-forth yields
+ * - Short enough to not affect legitimate sequential yields
+ *
+ * Returns the (possibly reduced) penalty value.
+ */
+static u64 yield_deboost_apply_debounce(struct rq *rq, struct task_struct *p_target,
+					u64 penalty, u64 need, u64 gran)
+{
+	u64 now = rq_clock(rq);
+	struct task_struct *p_yielding = rq->donor;
+	pid_t src_pid, dst_pid;
+	pid_t last_src, last_dst;
+	u64 last_ns;
+
+	if (!p_yielding || !p_target)
+		return penalty;
+
+	src_pid = p_yielding->pid;
+	dst_pid = p_target->pid;
+	last_src = rq->yield_deboost_last_src_pid;
+	last_dst = rq->yield_deboost_last_dst_pid;
+	last_ns = rq->yield_deboost_last_pair_time_ns;
+
+	/* Detect reverse pair: previous was target->source */
+	if (last_src == dst_pid && last_dst == src_pid &&
+	    (now - last_ns) <= 600 * NSEC_PER_USEC) {
+		u64 alt = max(need, gran);
+
+		if (penalty > alt)
+			penalty = alt;
+	}
+
+	/* Update tracking state */
+	rq->yield_deboost_last_src_pid = src_pid;
+	rq->yield_deboost_last_dst_pid = dst_pid;
+	rq->yield_deboost_last_pair_time_ns = now;
+
+	return penalty;
+}
+
+/*
+ * Calculate vruntime penalty for yield deboost.
+ *
+ * The penalty is based on:
+ * - Fairness gap: vruntime difference between yielding and target tasks
+ * - Scheduling granularity: base unit for penalty calculation
+ * - Queue size: adaptive caps to prevent starvation in larger queues
+ *
+ * Queue-size-based caps (multiplier of granularity):
+ *   2 tasks:  6.0x - Strongest push for 2-task ping-pong scenarios
+ *   3 tasks:  4.0x
+ *   4-6:      2.5x
+ *   7-8:      2.0x
+ *   9-12:     1.5x
+ *   >12:      1.0x - Minimal push to avoid starvation
+ *
+ * Returns the calculated penalty value.
+ */
+static u64 __maybe_unused
+yield_deboost_calculate_penalty(struct rq *rq, struct sched_entity *se_y_lca,
+				struct sched_entity *se_t_lca,
+				struct task_struct *p_target, int h_nr_queued)
+{
+	u64 gran, need, penalty, maxp;
+	u64 weighted_need, base;
+
+	gran = calc_delta_fair(sysctl_sched_base_slice, se_y_lca);
+
+	/* Calculate fairness gap */
+	need = 0;
+	if (se_t_lca->vruntime > se_y_lca->vruntime)
+		need = se_t_lca->vruntime - se_y_lca->vruntime;
+
+	/* Base penalty is granularity plus 110% of fairness gap */
+	penalty = gran;
+	if (need) {
+		weighted_need = need + need / 10;
+		if (weighted_need > U64_MAX - penalty)
+			weighted_need = U64_MAX - penalty;
+		penalty += weighted_need;
+	}
+
+	/* Apply debounce to reduce ping-pong */
+	penalty = yield_deboost_apply_debounce(rq, p_target, penalty, need, gran);
+
+	/* Queue-size-based upper bound */
+	if (h_nr_queued == 2)
+		maxp = gran * 6;
+	else if (h_nr_queued == 3)
+		maxp = gran * 4;
+	else if (h_nr_queued <= 6)
+		maxp = (gran * 5) / 2;
+	else if (h_nr_queued <= 8)
+		maxp = gran * 2;
+	else if (h_nr_queued <= 12)
+		maxp = (gran * 3) / 2;
+	else
+		maxp = gran;
+
+	penalty = clamp(penalty, gran, maxp);
+
+	/* Baseline push when no fairness gap exists */
+	if (need == 0) {
+		if (h_nr_queued == 3)
+			base = (gran * 15) / 16;
+		else if (h_nr_queued >= 4 && h_nr_queued <= 6)
+			base = (gran * 5) / 8;
+		else if (h_nr_queued >= 7 && h_nr_queued <= 8)
+			base = gran / 2;
+		else if (h_nr_queued >= 9 && h_nr_queued <= 12)
+			base = (gran * 3) / 8;
+		else if (h_nr_queued > 12)
+			base = gran / 4;
+		else
+			base = gran;
+
+		if (penalty < base)
+			penalty = base;
+	}
+
+	return penalty;
+}
+
+/*
+ * Apply vruntime penalty and update EEVDF fields for consistency.
+ * Updates vruntime and deadline; vlag is not modified as it will be
+ * recalculated when the entity is dequeued/enqueued.
+ *
+ * Caller must call update_curr(cfs_rq) before invoking this function
+ * to ensure accounting is up-to-date before modifying vruntime.
+ */
+static void __maybe_unused
+yield_deboost_apply_penalty(struct sched_entity *se_y_lca,
+			    struct cfs_rq *cfs_rq, u64 penalty)
+{
+	u64 new_vruntime;
+
+	/* Overflow protection */
+	if (se_y_lca->vruntime > U64_MAX - penalty)
+		return;
+
+	new_vruntime = se_y_lca->vruntime + penalty;
+	if (new_vruntime <= se_y_lca->vruntime)
+		return;
+
+	se_y_lca->vruntime = new_vruntime;
+	se_y_lca->deadline = new_vruntime + calc_delta_fair(se_y_lca->slice, se_y_lca);
+}
+
+/*
  * sched_yield() is very simple
  */
 static void yield_task_fair(struct rq *rq)
