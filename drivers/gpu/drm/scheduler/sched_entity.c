@@ -60,6 +60,7 @@ static struct drm_sched_entity_stats *drm_sched_entity_stats_alloc(void)
 
 	kref_init(&stats->kref);
 	spin_lock_init(&stats->lock);
+	ewma_drm_sched_avgtime_init(&stats->avg_job_us);
 
 	return stats;
 }
