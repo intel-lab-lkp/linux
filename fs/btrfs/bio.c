@@ -29,7 +29,7 @@ struct btrfs_failed_bio {
 /* Is this a data path I/O that needs storage layer checksum and repair? */
 static inline bool is_data_bbio(const struct btrfs_bio *bbio)
 {
-	return bbio->inode && is_data_inode(bbio->inode);
+	return is_data_inode(bbio->inode);
 }
 
 static bool bbio_has_ordered_extent(const struct btrfs_bio *bbio)
