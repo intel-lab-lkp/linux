@@ -912,7 +912,7 @@ static struct file *mqueue_file_open(struct filename *name,
 static int do_mq_open(const char __user *u_name, int oflag, umode_t mode,
 		      struct mq_attr *attr)
 {
-	struct filename *name __free(putname) = NULL;;
+	struct filename *name __free(putname) = NULL;
 	struct vfsmount *mnt = current->nsproxy->ipc_ns->mq_mnt;
 	int fd, ro;
 
