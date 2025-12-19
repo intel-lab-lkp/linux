@@ -2014,8 +2014,14 @@ static int super_1_validate(struct mddev *mddev, struct md_rdev *freshest, struc
 
 		mddev->max_disks =  (4096-256)/2;
 
-		if (!mddev->logical_block_size)
+		if (!mddev->logical_block_size) {
 			mddev->logical_block_size = le32_to_cpu(sb->logical_block_size);
+			if (!mddev->logical_block_size)
+				pr_warn("%s: echo 'enable' to md/logical_block_size to prevent data loss issue from LBS changes.\n"
+					"    Note: After enable, array will not be assembled in old kernels (<= 6.18)\n",
+					mdname(mddev));
+		}
+
 
 		if ((le32_to_cpu(sb->feature_map) & MD_FEATURE_BITMAP_OFFSET) &&
 		    mddev->bitmap_info.file == NULL) {
@@ -5983,8 +5989,27 @@ lbs_store(struct mddev *mddev, const char *buf, size_t len)
 	if (mddev->major_version == 0)
 		return -EINVAL;
 
-	if (mddev->pers)
-		return -EBUSY;
+	if (mddev->pers) {
+		if (mddev->logical_block_size)
+			return -EBUSY;
+		/*
+		 * To fix forward compatibility issues, LBS is not
+		 * configured in old kernels array (<=6.18) by default.
+		 * If the user confirms no rollback to old kernels,
+		 * enable LBS by writing "enable" — to prevent data
+		 * loss from LBS changes.
+		 */
+		if (cmd_match(buf, "enable")) {
+			mddev->logical_block_size =
+				queue_logical_block_size(mddev->gendisk->queue);
+			set_bit(MD_SB_CHANGE_DEVS, &mddev->sb_flags);
+			pr_info("%s: config logical block size success, array will not be assembled in old kernels (<= 6.18)\n",
+				mdname(mddev));
+			return len;
+		} else {
+			return -EBUSY;
+		}
+	}
 
 	err = kstrtouint(buf, 10, &lbs);
 	if (err < 0)
@@ -6165,7 +6190,18 @@ int mddev_stack_rdev_limits(struct mddev *mddev, struct queue_limits *lim,
 			mdname(mddev));
 		return -EINVAL;
 	}
-	mddev->logical_block_size = lim->logical_block_size;
+
+	/*
+	 * Fix forward compatibility issue. Only set LBS by default for
+	 * new array, mddev->events == 0 indicates the array was just
+	 * created. When assembling an array, read LBS from the superblock
+	 * instead — LBS is 0 in superblocks created by old kernels.
+	 */
+	if (!mddev->events && mddev->major_version == 1) {
+		pr_info("%s: array will not be assembled in old kernels that lack configurable lbs support (<= 6.18)\n",
+			mdname(mddev));
+		mddev->logical_block_size = lim->logical_block_size;
+	}
 
 	return 0;
 }
