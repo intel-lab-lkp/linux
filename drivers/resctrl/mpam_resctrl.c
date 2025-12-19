@@ -1447,6 +1447,8 @@ int resctrl_arch_update_one(struct rdt_resource *r, struct rdt_ctrl_domain *d,
 		if (mpam_has_feature(mpam_feat_mbw_max, cprops)) {
 			cfg.mbw_max = percent_to_mbw_max(cfg_val, cprops);
 			mpam_set_feature(mpam_feat_mbw_max, &cfg);
+			/* Allow the min to be calculated from the max */
+			mpam_clear_feature(mpam_feat_mbw_min, &cfg);
 			break;
 		}
 		fallthrough;
