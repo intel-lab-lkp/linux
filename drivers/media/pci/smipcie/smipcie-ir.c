@@ -180,6 +180,7 @@ void smi_ir_exit(struct smi_dev *dev)
 	struct rc_dev *rc_dev = ir->rc_dev;
 
 	rc_unregister_device(rc_dev);
+	rc_free_device(rc_dev);
 	smi_ir_stop(ir);
 	ir->rc_dev = NULL;
 }

@@ -921,7 +921,6 @@ static int ati_remote_probe(struct usb_interface *interface,
 	input_free_device(input_dev);
  exit_unregister_device:
 	rc_unregister_device(rc_dev);
-	rc_dev = NULL;
  exit_kill_urbs:
 	usb_kill_urb(ati_remote->irq_urb);
 	usb_kill_urb(ati_remote->out_urb);
@@ -941,6 +940,7 @@ static void ati_remote_disconnect(struct usb_interface *interface)
 	struct ati_remote *ati_remote;
 
 	ati_remote = usb_get_intfdata(interface);
+	rc_unregister_device(ati_remote->rdev);
 	usb_set_intfdata(interface, NULL);
 	if (!ati_remote) {
 		dev_warn(&interface->dev, "%s - null device?\n", __func__);
@@ -951,8 +951,8 @@ static void ati_remote_disconnect(struct usb_interface *interface)
 	usb_kill_urb(ati_remote->out_urb);
 	if (ati_remote->idev)
 		input_unregister_device(ati_remote->idev);
-	rc_unregister_device(ati_remote->rdev);
 	ati_remote_free_buffers(ati_remote);
+	rc_free_device(ati_remote->rdev);
 	kfree(ati_remote);
 }
 

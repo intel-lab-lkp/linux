@@ -511,6 +511,7 @@ int cx88_ir_fini(struct cx88_core *core)
 
 	cx88_ir_stop(core);
 	rc_unregister_device(ir->dev);
+	rc_free_device(ir->dev);
 	kfree(ir);
 
 	/* done */
