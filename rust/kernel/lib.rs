@@ -136,6 +136,8 @@ pub mod revocable;
 pub mod scatterlist;
 pub mod security;
 pub mod seq_file;
+#[cfg(CONFIG_SERIAL_DEV_BUS)]
+pub mod serdev;
 pub mod sizes;
 pub mod slice;
 mod static_assert;
