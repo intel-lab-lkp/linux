@@ -768,6 +768,9 @@ static int intel_dg_mtd_probe(struct auxiliary_device *aux_dev,
 	if (!nvm)
 		return -ENOMEM;
 
+	/* Update nvm->nregions before first access to nvm->regions[] below. */
+	nvm->nregions = nregions;
+
 	kref_init(&nvm->refcnt);
 	mutex_init(&nvm->lock);
 
