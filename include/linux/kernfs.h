@@ -324,6 +324,9 @@ struct kernfs_ops {
 
 	int (*mmap)(struct kernfs_open_file *of, struct vm_area_struct *vma);
 	loff_t (*llseek)(struct kernfs_open_file *of, loff_t offset, int whence);
+	unsigned long (*get_unmapped_area)(struct kernfs_open_file *of, unsigned long uaddr,
+					   unsigned long len, unsigned long pgoff,
+					   unsigned long flags);
 };
 
 /*

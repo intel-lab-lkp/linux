@@ -454,6 +454,39 @@ static const struct vm_operations_struct kernfs_vm_ops = {
 	.access		= kernfs_vma_access,
 };
 
+static unsigned long kernfs_get_unmapped_area(struct file *file, unsigned long uaddr,
+					      unsigned long len, unsigned long pgoff,
+					      unsigned long flags)
+{
+	struct kernfs_open_file *of = kernfs_of(file);
+	const struct kernfs_ops *ops;
+	long addr;
+
+	if (!(of->kn->flags & KERNFS_HAS_MMAP))
+		return -ENODEV;
+
+	mutex_lock(&of->mutex);
+
+	addr = -ENODEV;
+	if (!kernfs_get_active_of(of))
+		goto out_unlock;
+
+	ops = kernfs_ops(of->kn);
+	if (ops->get_unmapped_area) {
+		addr = ops->get_unmapped_area(of, uaddr, len, pgoff, flags);
+		if (!IS_ERR_VALUE(addr) || addr != -EOPNOTSUPP)
+			goto out_put;
+	}
+	addr = mm_get_unmapped_area(file, uaddr, len, pgoff, flags);
+
+out_put:
+	kernfs_put_active_of(of);
+out_unlock:
+	mutex_unlock(&of->mutex);
+
+	return addr;
+}
+
 static int kernfs_fop_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct kernfs_open_file *of = kernfs_of(file);
@@ -1017,6 +1050,7 @@ const struct file_operations kernfs_file_fops = {
 	.write_iter	= kernfs_fop_write_iter,
 	.llseek		= kernfs_fop_llseek,
 	.mmap		= kernfs_fop_mmap,
+	.get_unmapped_area = kernfs_get_unmapped_area,
 	.open		= kernfs_fop_open,
 	.release	= kernfs_fop_release,
 	.poll		= kernfs_fop_poll,
@@ -1051,6 +1085,9 @@ struct kernfs_node *__kernfs_create_file(struct kernfs_node *parent,
 	struct kernfs_node *kn;
 	unsigned flags;
 	int rc;
+
+	if (ops->get_unmapped_area && !ops->mmap)
+		return ERR_PTR(-EINVAL);
 
 	flags = KERNFS_FILE;
 
