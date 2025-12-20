@@ -6152,6 +6152,19 @@ static void drm_parse_ycbcr420_deep_color_info(struct drm_connector *connector,
 	hdmi->y420_dc_modes = dc_mask;
 }
 
+static void drm_parse_vrr_info(struct drm_connector *connector, const u8 *db)
+{
+	struct drm_hdmi_vrr_cap *vrr = &connector->display_info.hdmi.vrr_cap;
+
+	vrr->supported = false;
+	if (!(cea_db_payload_len(db) >= 10) || !db[9] || !db[10])
+		return;
+
+	vrr->min_hz = db[9] & DRM_EDID_VRR_MIN_MASK;
+	vrr->max_hz = (db[9] & DRM_EDID_VRR_MAX_UPPER_MASK) << 2 | db[10];
+	vrr->supported = (vrr->min_hz > 0) && (vrr->max_hz - vrr->min_hz > 10);
+}
+
 static void drm_parse_dsc_info(struct drm_hdmi_dsc_cap *hdmi_dsc,
 			       const u8 *hf_scds)
 {
@@ -6280,6 +6293,7 @@ static void drm_parse_hdmi_forum_scds(struct drm_connector *connector,
 	if (cea_db_payload_len(hf_scds) >= 8 && hf_scds[8])
 		hdmi->allm_supported = hf_scds[8] & DRM_EDID_ALLM;
 
+	drm_parse_vrr_info(connector, hf_scds);
 	if (cea_db_payload_len(hf_scds) >= 11 && hf_scds[11]) {
 		drm_parse_dsc_info(hdmi_dsc, hf_scds);
 		dsc_support = true;
@@ -6290,8 +6304,9 @@ static void drm_parse_hdmi_forum_scds(struct drm_connector *connector,
 		    connector->base.id, connector->name,
 		    max_tmds_clock, str_yes_no(max_frl_rate), str_yes_no(dsc_support));
 	drm_dbg_kms(connector->dev,
-		"[CONNECTOR:%d:%s] ALLM support: %s\n",
-		connector->base.id, connector->name, str_yes_no(hdmi->allm_supported));
+		"[CONNECTOR:%d:%s] ALLM support: %s, VRR support: %s, VRR min Hz: %u, VRR max Hz: %u\n",
+		connector->base.id, connector->name, str_yes_no(hdmi->allm_supported),
+		str_yes_no(hdmi->vrr_cap.supported), hdmi->vrr_cap.min_hz, hdmi->vrr_cap.max_hz);
 }
 
 static void drm_parse_hdmi_deep_color_info(struct drm_connector *connector,

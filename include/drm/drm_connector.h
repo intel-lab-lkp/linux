@@ -255,6 +255,23 @@ struct drm_scdc {
 };
 
 /**
+ * struct drm_hdmi_vrr_cap - Information about VRR capabilities of a HDMI sink
+ *
+ * Describes the VRR support provided by HDMI 2.1 sink. The information is
+ * fetched fom additional HFVSDB blocks defined for HDMI 2.1.
+ */
+struct drm_hdmi_vrr_cap {
+	/** @supported: flag for vrr support by sink */
+	bool supported;
+
+	/** @min_hz : minimum supported variable refresh rate */
+	u16 min_hz;
+
+	/** @max_hz : maximum supported variable refresh rate */
+	u16 max_hz;
+};
+
+/**
  * struct drm_hdmi_dsc_cap - DSC capabilities of HDMI sink
  *
  * Describes the DSC support provided by HDMI 2.1 sink.
@@ -332,6 +349,9 @@ struct drm_hdmi_info {
 
 	/** @allm_supported: flag for auto low latency mode support by sink */
 	bool allm_supported;
+
+	/** @vrr_cap: VRR capabilities of the sink */
+	struct drm_hdmi_vrr_cap vrr_cap;
 
 	/** @dsc_cap: DSC capabilities of the sink */
 	struct drm_hdmi_dsc_cap dsc_cap;
