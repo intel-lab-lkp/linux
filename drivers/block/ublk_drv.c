@@ -73,7 +73,8 @@
 		| UBLK_F_AUTO_BUF_REG \
 		| UBLK_F_QUIESCE \
 		| UBLK_F_PER_IO_DAEMON \
-		| UBLK_F_BUF_REG_OFF_DAEMON)
+		| UBLK_F_BUF_REG_OFF_DAEMON \
+		| UBLK_F_NO_AUTO_PART_SCAN)
 
 #define UBLK_F_ALL_RECOVERY_FLAGS (UBLK_F_USER_RECOVERY \
 		| UBLK_F_USER_RECOVERY_REISSUE \
@@ -2931,8 +2932,13 @@ static int ublk_ctrl_start_dev(struct ublk_device *ub,
 
 	ublk_apply_params(ub);
 
-	/* don't probe partitions if any daemon task is un-trusted */
-	if (ub->unprivileged_daemons)
+	/*
+	 * Don't probe partitions if:
+	 * - any daemon task is un-trusted, or
+	 * - user explicitly requested to suppress partition scan
+	 */
+	if (ub->unprivileged_daemons ||
+	    (ub->dev_info.flags & UBLK_F_NO_AUTO_PART_SCAN))
 		set_bit(GD_SUPPRESS_PART_SCAN, &disk->state);
 
 	ublk_get_device(ub);
@@ -2948,6 +2954,10 @@ static int ublk_ctrl_start_dev(struct ublk_device *ub,
 	if (ret)
 		goto out_put_cdev;
 
+	/* allow user to probe partitions from userspace */
+	if (!ub->unprivileged_daemons &&
+	    (ub->dev_info.flags & UBLK_F_NO_AUTO_PART_SCAN))
+		clear_bit(GD_SUPPRESS_PART_SCAN, &disk->state);
 	set_bit(UB_STATE_USED, &ub->state);
 
 out_put_cdev:

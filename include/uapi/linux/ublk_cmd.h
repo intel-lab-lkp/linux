@@ -311,6 +311,14 @@
  */
 #define UBLK_F_BUF_REG_OFF_DAEMON (1ULL << 14)
 
+/*
+ * If this feature is set, the kernel will not automatically scan for partitions
+ * when the device is started. This is useful for network-backed devices where
+ * partition scanning can cause deadlocks if the userspace server crashes during
+ * the scan. Users can manually trigger partition scanning later when appropriate.
+ */
+#define UBLK_F_NO_AUTO_PART_SCAN (1ULL << 15)
+
 /* device state */
 #define UBLK_S_DEV_DEAD	0
 #define UBLK_S_DEV_LIVE	1
