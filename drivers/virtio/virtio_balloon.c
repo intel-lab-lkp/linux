@@ -1034,7 +1034,6 @@ static int virtballoon_probe(struct virtio_device *vdev)
 				 poison_val, &poison_val);
 	}
 
-	vb->pr_dev_info.report = virtballoon_free_page_report;
 	if (virtio_has_feature(vb->vdev, VIRTIO_BALLOON_F_REPORTING)) {
 		unsigned int capacity;
 
@@ -1043,6 +1042,8 @@ static int virtballoon_probe(struct virtio_device *vdev)
 			err = -ENOSPC;
 			goto out_unregister_oom;
 		}
+
+		vb->pr_dev_info.report = virtballoon_free_page_report;
 
 		/*
 		 * The default page reporting order is @pageblock_order, which
