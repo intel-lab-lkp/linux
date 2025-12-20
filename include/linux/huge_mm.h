@@ -45,6 +45,10 @@ vm_fault_t vmf_insert_folio_pmd(struct vm_fault *vmf, struct folio *folio,
 				bool write);
 vm_fault_t vmf_insert_folio_pud(struct vm_fault *vmf, struct folio *folio,
 				bool write);
+int vm_insert_folio_pmd(struct vm_area_struct *vma, unsigned long addr,
+			struct folio *folio);
+int vm_insert_folio_pud(struct vm_area_struct *vma, unsigned long addr,
+			struct folio *folio);
 
 enum transparent_hugepage_flag {
 	TRANSPARENT_HUGEPAGE_UNSUPPORTED,

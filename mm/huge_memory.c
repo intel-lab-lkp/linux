@@ -1644,6 +1644,41 @@ vm_fault_t vmf_insert_folio_pmd(struct vm_fault *vmf, struct folio *folio,
 }
 EXPORT_SYMBOL_GPL(vmf_insert_folio_pmd);
 
+int vm_insert_folio_pmd(struct vm_area_struct *vma, unsigned long addr,
+			struct folio *folio)
+{
+	struct mm_struct *mm = vma->vm_mm;
+	struct folio_or_pfn fop = {
+		.folio = folio,
+		.is_folio = true,
+	};
+	pgd_t *pgd;
+	p4d_t *p4d;
+	pud_t *pud;
+	pmd_t *pmd;
+	vm_fault_t fault_err;
+
+	mmap_assert_write_locked(mm);
+
+	pgd = pgd_offset(mm, addr);
+	p4d = p4d_alloc(mm, pgd, addr);
+	if (!p4d)
+		return -ENOMEM;
+	pud = pud_alloc(mm, p4d, addr);
+	if (!pud)
+		return -ENOMEM;
+	pmd = pmd_alloc(mm, pud, addr);
+	if (!pmd)
+		return -ENOMEM;
+
+	fault_err = insert_pmd(vma, addr, pmd, fop, vma->vm_page_prot,
+			       vma->vm_flags & VM_WRITE);
+	if (fault_err != VM_FAULT_NOPAGE)
+		return -EINVAL;
+
+	return 0;
+}
+
 #ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
 static pud_t maybe_pud_mkwrite(pud_t pud, struct vm_area_struct *vma)
 {
@@ -1759,6 +1794,37 @@ vm_fault_t vmf_insert_folio_pud(struct vm_fault *vmf, struct folio *folio,
 	return insert_pud(vma, addr, vmf->pud, fop, vma->vm_page_prot, write);
 }
 EXPORT_SYMBOL_GPL(vmf_insert_folio_pud);
+
+int vm_insert_folio_pud(struct vm_area_struct *vma, unsigned long addr,
+			struct folio *folio)
+{
+	struct mm_struct *mm = vma->vm_mm;
+	struct folio_or_pfn fop = {
+		.folio = folio,
+		.is_folio = true,
+	};
+	pgd_t *pgd;
+	p4d_t *p4d;
+	pud_t *pud;
+	vm_fault_t fault_err;
+
+	mmap_assert_write_locked(mm);
+
+	pgd = pgd_offset(mm, addr);
+	p4d = p4d_alloc(mm, pgd, addr);
+	if (!p4d)
+		return -ENOMEM;
+	pud = pud_alloc(mm, p4d, addr);
+	if (!pud)
+		return -ENOMEM;
+
+	fault_err = insert_pud(vma, addr, pud, fop, vma->vm_page_prot,
+			       vma->vm_flags & VM_WRITE);
+	if (fault_err != VM_FAULT_NOPAGE)
+		return -EINVAL;
+
+	return 0;
+}
 #endif /* CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD */
 
 /**
