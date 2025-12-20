@@ -754,7 +754,9 @@ USER_ACCESS_GUARD(rw, void)
 	with (typeof(uptr) _tmpptr = __scoped_user_access_begin(mode, uptr, size, elbl)) \
 		and_with (CLASS(user_##mode##_access, scope)(_tmpptr))			\
 		/* Force modified pointer usage within the scope */			\
-		and_with (const typeof(uptr) uptr = _tmpptr)
+		__diag_push() __diag_ignore_all("-Wshadow", "uptr is readonly copy")	\
+		and_with (const typeof(uptr) uptr = _tmpptr)				\
+		__diag_pop()
 
 /**
  * scoped_user_read_access_size - Start a scoped user read access with given size
