@@ -50,7 +50,7 @@ int transport_backend_register(const struct target_backend_ops *ops)
 			pr_err("backend %s already registered.\n", ops->name);
 			mutex_unlock(&backend_mutex);
 			kfree(tb);
-			return -EEXIST;
+			return -EBUSY;
 		}
 	}
 	target_setup_backend_cits(tb);
