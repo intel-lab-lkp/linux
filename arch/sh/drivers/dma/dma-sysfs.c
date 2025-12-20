@@ -134,8 +134,10 @@ int dma_create_sysfs_files(struct dma_channel *chan, struct dma_info *info)
 	dev->bus = &dma_subsys;
 
 	ret = device_register(dev);
-	if (ret)
+	if (ret) {
+		put_device(dev);
 		return ret;
+	}
 
 	ret |= device_create_file(dev, &dev_attr_dev_id);
 	ret |= device_create_file(dev, &dev_attr_count);
@@ -145,6 +147,7 @@ int dma_create_sysfs_files(struct dma_channel *chan, struct dma_info *info)
 
 	if (unlikely(ret)) {
 		dev_err(&info->pdev->dev, "Failed creating attrs\n");
+		device_unregister(dev);
 		return ret;
 	}
 
