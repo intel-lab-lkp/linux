@@ -671,6 +671,21 @@ static int ocfs2_block_group_alloc(struct ocfs2_super *osb,
 	BUG_ON(ocfs2_is_cluster_bitmap(alloc_inode));
 
 	cl = &fe->id2.i_chain;
+	unsigned int block_size = osb->sb->s_blocksize;
+	unsigned int max_cl_count =
+	(block_size - offsetof(struct ocfs2_chain_list, cl_recs)) /
+	sizeof(struct ocfs2_chain_rec);
+
+	if (!le16_to_cpu(cl->cl_count) ||
+	    le16_to_cpu(cl->cl_count) > max_cl_count) {
+		ocfs2_error(osb->sb,
+			    "Invalid chain list: cl_count %u "
+			    "exceeds max %u",
+			    le16_to_cpu(cl->cl_count), max_cl_count);
+		status = -EIO;
+		goto bail;
+	}
+
 	status = ocfs2_reserve_clusters_with_limit(osb,
 						   le16_to_cpu(cl->cl_cpg),
 						   max_block, flags, &ac);
