@@ -630,7 +630,7 @@ int kvm_riscv_aia_init(void)
 	 */
 	if (gc)
 		kvm_riscv_aia_nr_hgei = min((ulong)kvm_riscv_aia_nr_hgei,
-					    BIT(gc->guest_index_bits) - 1);
+					    BIT(gc->nr_guest_files) - 1);
 	else
 		kvm_riscv_aia_nr_hgei = 0;
 
