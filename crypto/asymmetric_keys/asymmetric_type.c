@@ -634,7 +634,7 @@ int register_asymmetric_key_parser(struct asymmetric_key_parser *parser)
 		if (strcmp(cursor->name, parser->name) == 0) {
 			pr_err("Asymmetric key parser '%s' already registered\n",
 			       parser->name);
-			ret = -EEXIST;
+			ret = -EBUSY;
 			goto out;
 		}
 	}

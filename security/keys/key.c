@@ -1219,7 +1219,7 @@ EXPORT_SYMBOL(generic_key_instantiate);
  *
  * Register a new key type.
  *
- * Returns 0 on success or -EEXIST if a type of this name already exists.
+ * Returns 0 on success or -EBUSY if a type of this name already exists.
  */
 int register_key_type(struct key_type *ktype)
 {
@@ -1228,7 +1228,7 @@ int register_key_type(struct key_type *ktype)
 
 	memset(&ktype->lock_class, 0, sizeof(ktype->lock_class));
 
-	ret = -EEXIST;
+	ret = -EBUSY;
 	down_write(&key_types_sem);
 
 	/* disallow key types with the same name */
