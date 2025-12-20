@@ -68,7 +68,7 @@ int main(int argc, char **argv)
 	int key = 0;
 	int *ptr = NULL;
 	int c = 0;
-	int size = 0;
+	size_t size = 0;
 	char path[256] = "";
 	enum method method = MAX_METHOD;
 	int want_sleep = 0, private = 0;
@@ -86,7 +86,20 @@ int main(int argc, char **argv)
 	while ((c = getopt(argc, argv, "s:p:m:owlrn")) != -1) {
 		switch (c) {
 		case 's':
-			size = atoi(optarg);
+			errno = 0;
+			char *end = NULL;
+			unsigned long long tmp = strtoull(optarg, &end, 10);
+			if (errno || end == optarg || *end != '\0') {
+				errno = EINVAL;
+				perror("Invalid -s size");
+				exit_usage();
+			}
+			if (tmp == 0) {
+				errno = EINVAL;
+				perror("size not found");
+				exit_usage();
+			}
+			size = (size_t)tmp;
 			break;
 		case 'p':
 			strncpy(path, optarg, sizeof(path) - 1);
@@ -131,7 +144,7 @@ int main(int argc, char **argv)
 	}
 
 	if (size != 0) {
-		printf("Writing this size: %d\n", size);
+		printf("Writing this size: %zu\n", size);
 	} else {
 		errno = EINVAL;
 		perror("size not found");
