@@ -341,22 +341,71 @@ static void flush_reclaim_state(struct scan_control *sc)
 	}
 }
 
+/*
+ * Returns a preferred demotion node and all allowed demotion @targets.
+ * Returns NUMA_NO_NODE and @targets is meaningless if no allowed nodes.
+ */
+static int get_demotion_targets(nodemask_t *targets, struct pglist_data *pgdat,
+				struct mem_cgroup *memcg)
+{
+	nodemask_t allowed_mask;
+	nodemask_t preferred_mask;
+	int preferred_node;
+
+	if (!pgdat)
+		return NUMA_NO_NODE;
+
+	preferred_node = next_demotion_node(pgdat->node_id, &preferred_mask);
+	if (preferred_node == NUMA_NO_NODE)
+		return NUMA_NO_NODE;
+
+	node_get_allowed_targets(pgdat, &allowed_mask);
+	mem_cgroup_node_allowed(memcg, &allowed_mask);
+	if (nodes_empty(allowed_mask))
+		return NUMA_NO_NODE;
+
+	if (targets)
+		nodes_copy(*targets, allowed_mask);
+
+	do {
+		if (node_isset(preferred_node, allowed_mask))
+			return preferred_node;
+
+		nodes_and(preferred_mask, preferred_mask, allowed_mask);
+		if (!nodes_empty(preferred_mask))
+			return node_random(&preferred_mask);
+
+		/*
+		 * Hop to the next tier of preferred nodes. Even if
+		 * preferred_node is not set in allowed_mask, still can use it
+		 * to query the nest-best demotion nodes.
+		 */
+		preferred_node = next_demotion_node(preferred_node,
+						    &preferred_mask);
+	} while (preferred_node != NUMA_NO_NODE);
+
+	/*
+	 * Should not reach here, as a non-empty allowed_mask ensures
+	 * there must have a target node for demotion.
+	 * Otherwise, it suggests something wrong in node_demotion[]->preferred,
+	 * where the same-tier nodes have different preferred targets.
+	 * E.g., if node 0 identifies both nodes 2 and 3 as preferred targets,
+	 * but nodes 2 and 3 themselves have different preferred nodes.
+	 */
+	WARN_ON_ONCE(1);
+	return node_random(&allowed_mask);
+}
+
 static bool can_demote(int nid, struct scan_control *sc,
 		       struct mem_cgroup *memcg)
 {
-	int demotion_nid;
-
 	if (!numa_demotion_enabled)
 		return false;
 	if (sc && sc->no_demotion)
 		return false;
 
-	demotion_nid = next_demotion_node(nid);
-	if (demotion_nid == NUMA_NO_NODE)
-		return false;
-
-	/* If demotion node isn't in the cgroup's mems_allowed, fall back */
-	return mem_cgroup_node_allowed(memcg, demotion_nid);
+	return get_demotion_targets(NULL, NODE_DATA(nid), memcg) !=
+	       NUMA_NO_NODE;
 }
 
 static inline bool can_reclaim_anon_pages(struct mem_cgroup *memcg,
@@ -1019,9 +1068,10 @@ static struct folio *alloc_demote_folio(struct folio *src,
  * Folios which are not demoted are left on @demote_folios.
  */
 static unsigned int demote_folio_list(struct list_head *demote_folios,
-				     struct pglist_data *pgdat)
+				      struct pglist_data *pgdat,
+				      struct mem_cgroup *memcg)
 {
-	int target_nid = next_demotion_node(pgdat->node_id);
+	int target_nid;
 	unsigned int nr_succeeded;
 	nodemask_t allowed_mask;
 
@@ -1033,7 +1083,6 @@ static unsigned int demote_folio_list(struct list_head *demote_folios,
 		 */
 		.gfp_mask = (GFP_HIGHUSER_MOVABLE & ~__GFP_RECLAIM) |
 			__GFP_NOMEMALLOC | GFP_NOWAIT,
-		.nid = target_nid,
 		.nmask = &allowed_mask,
 		.reason = MR_DEMOTION,
 	};
@@ -1041,10 +1090,10 @@ static unsigned int demote_folio_list(struct list_head *demote_folios,
 	if (list_empty(demote_folios))
 		return 0;
 
+	target_nid = get_demotion_targets(&allowed_mask, pgdat, memcg);
 	if (target_nid == NUMA_NO_NODE)
 		return 0;
-
-	node_get_allowed_targets(pgdat, &allowed_mask);
+	mtc.nid = target_nid;
 
 	/* Demotion ignores all cpuset and mempolicy settings */
 	migrate_pages(demote_folios, alloc_demote_folio, NULL,
@@ -1566,7 +1615,7 @@ keep:
 	/* 'folio_list' is always empty here */
 
 	/* Migrate folios selected for demotion */
-	nr_demoted = demote_folio_list(&demote_folios, pgdat);
+	nr_demoted = demote_folio_list(&demote_folios, pgdat, memcg);
 	nr_reclaimed += nr_demoted;
 	stat->nr_demoted += nr_demoted;
 	/* Folios that could not be demoted are still in @demote_folios */
