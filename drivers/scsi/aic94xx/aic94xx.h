@@ -20,16 +20,6 @@
 
 #define asd_printk(fmt, ...)	printk(KERN_NOTICE ASD_DRIVER_NAME ": " fmt, ## __VA_ARGS__)
 
-#ifdef ASD_ENTER_EXIT
-#define ENTER  printk(KERN_NOTICE "%s: ENTER %s\n", ASD_DRIVER_NAME, \
-		__func__)
-#define EXIT   printk(KERN_NOTICE "%s: --EXIT %s\n", ASD_DRIVER_NAME, \
-		__func__)
-#else
-#define ENTER
-#define EXIT
-#endif
-
 #ifdef ASD_DEBUG
 #define ASD_DPRINTK asd_printk
 #else
