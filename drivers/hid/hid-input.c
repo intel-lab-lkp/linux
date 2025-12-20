@@ -763,7 +763,13 @@ static void hidinput_configure_usage(struct hid_input *hidinput, struct hid_fiel
 				if (code <= 0xf)
 					code += BTN_JOYSTICK;
 				else
-					code += BTN_TRIGGER_HAPPY - 0x10;
+					if (field->maxusage <= 80)
+						code += BTN_TRIGGER_HAPPY - 0x10;
+					else
+						if (code <= 0x2f)
+							code += KEY_MACRO1 - 0x10;
+						else
+							code += BTN_TRIGGER_HAPPY - 0x30;
 				break;
 		case HID_GD_GAMEPAD:
 				if (code <= 0xf)
