@@ -452,7 +452,17 @@ static inline int pci_p2pdma_check_pagemap_align(struct pci_dev *pdev, int bar,
 						 u64 size, size_t align,
 						 u64 offset)
 {
+	if (has_transparent_pud_hugepage() && align == PUD_SIZE)
+		goto more_check;
+	if (has_transparent_hugepage() && align == PMD_SIZE)
+		goto more_check;
 	if (align == PAGE_SIZE)
+		return 0;
+	return -EINVAL;
+
+more_check:
+	if (IS_ALIGNED(pci_resource_start(pdev, bar), align) &&
+	    IS_ALIGNED(size, align) && IS_ALIGNED(offset, align))
 		return 0;
 	return -EINVAL;
 }
