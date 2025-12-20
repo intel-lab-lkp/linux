@@ -30,6 +30,8 @@ struct mac_partition {
 	/* there is more stuff after this that we don't need */
 };
 
+#define MAC_STATUS_VALID	1	/* partition is valid */
+#define MAC_STATUS_ALLOCATED	2	/* partition is allocated */
 #define MAC_STATUS_BOOTABLE	8	/* partition is bootable */
 
 #define MAC_DRIVER_MAGIC	0x4552

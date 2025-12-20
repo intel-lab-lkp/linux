@@ -96,9 +96,12 @@ int mac_partition(struct parsed_partitions *state)
 		part = (struct mac_partition *) (data + pos%512);
 		if (be16_to_cpu(part->signature) != MAC_PARTITION_MAGIC)
 			break;
+		if ((be32_to_cpu(part->status) & (MAC_STATUS_VALID | MAC_STATUS_ALLOCATED)) !=
+		    (MAC_STATUS_VALID | MAC_STATUS_ALLOCATED))
+			continue;
 		put_partition(state, slot,
-			be32_to_cpu(part->start_block) * (secsize/512),
-			be32_to_cpu(part->block_count) * (secsize/512));
+				be32_to_cpu(part->start_block) * (secsize/512),
+				be32_to_cpu(part->block_count) * (secsize/512));
 
 		if (!strncasecmp(part->type, "Linux_RAID", 10))
 			state->parts[slot].flags = ADDPART_FLAG_RAID;
@@ -112,7 +115,7 @@ int mac_partition(struct parsed_partitions *state)
 
 			mac_fix_string(part->processor, 16);
 			mac_fix_string(part->name, 32);
-			mac_fix_string(part->type, 32);					
+			mac_fix_string(part->type, 32);
 		    
 			if ((be32_to_cpu(part->status) & MAC_STATUS_BOOTABLE)
 			    && strcasecmp(part->processor, "powerpc") == 0)
