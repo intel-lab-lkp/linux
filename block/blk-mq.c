@@ -44,7 +44,7 @@
 
 static DEFINE_PER_CPU(struct llist_head, blk_cpu_done);
 static DEFINE_PER_CPU(call_single_data_t, blk_cpu_csd);
-static DEFINE_MUTEX(blk_mq_cpuhp_lock);
+static DEFINE_RAW_SPINLOCK(blk_mq_cpuhp_lock);
 
 static void blk_mq_insert_request(struct request *rq, blk_insert_t flags);
 static void blk_mq_request_bypass_insert(struct request *rq,
@@ -3840,9 +3840,9 @@ static void __blk_mq_remove_cpuhp(struct blk_mq_hw_ctx *hctx)
 
 static void blk_mq_remove_cpuhp(struct blk_mq_hw_ctx *hctx)
 {
-	mutex_lock(&blk_mq_cpuhp_lock);
+	raw_spin_lock(&blk_mq_cpuhp_lock);
 	__blk_mq_remove_cpuhp(hctx);
-	mutex_unlock(&blk_mq_cpuhp_lock);
+	raw_spin_unlock(&blk_mq_cpuhp_lock);
 }
 
 static void __blk_mq_add_cpuhp(struct blk_mq_hw_ctx *hctx)
@@ -3882,9 +3882,9 @@ static void blk_mq_remove_hw_queues_cpuhp(struct request_queue *q)
 	list_splice_init(&q->unused_hctx_list, &hctx_list);
 	spin_unlock(&q->unused_hctx_lock);
 
-	mutex_lock(&blk_mq_cpuhp_lock);
+	raw_spin_lock(&blk_mq_cpuhp_lock);
 	__blk_mq_remove_cpuhp_list(&hctx_list);
-	mutex_unlock(&blk_mq_cpuhp_lock);
+	raw_spin_unlock(&blk_mq_cpuhp_lock);
 
 	spin_lock(&q->unused_hctx_lock);
 	list_splice(&hctx_list, &q->unused_hctx_list);
@@ -3901,10 +3901,10 @@ static void blk_mq_add_hw_queues_cpuhp(struct request_queue *q)
 	struct blk_mq_hw_ctx *hctx;
 	unsigned long i;
 
-	mutex_lock(&blk_mq_cpuhp_lock);
+	raw_spin_lock(&blk_mq_cpuhp_lock);
 	queue_for_each_hw_ctx(q, hctx, i)
 		__blk_mq_add_cpuhp(hctx);
-	mutex_unlock(&blk_mq_cpuhp_lock);
+	raw_spin_unlock(&blk_mq_cpuhp_lock);
 }
 
 /*
