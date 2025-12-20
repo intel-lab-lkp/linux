@@ -44,6 +44,9 @@ struct virtio_pmem {
 	/* List to store deferred work if virtqueue is full */
 	struct list_head req_list;
 
+	/* Fail fast and wake waiters if the request virtqueue is broken. */
+	bool broken;
+
 	/* Synchronize virtqueue data */
 	spinlock_t pmem_lock;
 
@@ -53,5 +56,6 @@ struct virtio_pmem {
 };
 
 void virtio_pmem_host_ack(struct virtqueue *vq);
+void virtio_pmem_mark_broken_and_drain(struct virtio_pmem *vpmem);
 int async_pmem_flush(struct nd_region *nd_region, struct bio *bio);
 #endif
