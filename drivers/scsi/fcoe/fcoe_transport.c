@@ -533,7 +533,7 @@ int fcoe_transport_attach(struct fcoe_transport *ft)
 	if (ft->attached) {
 		LIBFCOE_TRANSPORT_DBG("transport %s already attached\n",
 				       ft->name);
-		rc = -EEXIST;
+		rc = -EBUSY;
 		goto out_attach;
 	}
 
