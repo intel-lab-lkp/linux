@@ -69,10 +69,11 @@ static const struct device_type serdev_device_type = {
 	.release	= serdev_device_release,
 };
 
-static bool is_serdev_device(const struct device *dev)
+bool is_serdev_device(const struct device *dev)
 {
 	return dev->type == &serdev_device_type;
 }
+EXPORT_SYMBOL_GPL(is_serdev_device);
 
 static void serdev_ctrl_release(struct device *dev)
 {
