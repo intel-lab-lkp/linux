@@ -210,4 +210,30 @@ pci_p2pdma_bus_addr_map(struct p2pdma_provider *provider, phys_addr_t paddr)
 	return paddr + provider->bus_offset;
 }
 
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+static inline size_t pci_p2pdma_max_pagemap_align(struct pci_dev *pdev, int bar,
+						  u64 size, u64 offset)
+{
+	resource_size_t start = pci_resource_start(pdev, bar);
+
+	if (has_transparent_pud_hugepage() &&
+	    IS_ALIGNED(start, PUD_SIZE) && IS_ALIGNED(size, PUD_SIZE) &&
+	    IS_ALIGNED(offset, PUD_SIZE))
+		return PUD_SIZE;
+
+	if (has_transparent_hugepage() &&
+	    IS_ALIGNED(start, PMD_SIZE) && IS_ALIGNED(size, PMD_SIZE) &&
+	    IS_ALIGNED(offset, PMD_SIZE))
+		return PMD_SIZE;
+
+	return PAGE_SIZE;
+}
+#else
+static inline size_t pci_p2pdma_max_pagemap_align(resource_size_t start,
+						  u64 size, u64 offset)
+{
+	return PAGE_SIZE;
+}
+#endif /* CONFIG_TRANSPARENT_HUGEPAGE */
+
 #endif /* _LINUX_PCI_P2P_H */
