@@ -175,7 +175,7 @@ static inline void set_mems_allowed(nodemask_t nodemask)
 	task_unlock(current);
 }
 
-extern bool cpuset_node_allowed(struct cgroup *cgroup, int nid);
+extern void cpuset_node_allowed(struct cgroup *cgroup, nodemask_t *nodes);
 #else /* !CONFIG_CPUSETS */
 
 static inline bool cpusets_enabled(void) { return false; }
@@ -303,9 +303,8 @@ static inline bool read_mems_allowed_retry(unsigned int seq)
 	return false;
 }
 
-static inline bool cpuset_node_allowed(struct cgroup *cgroup, int nid)
+static inline void cpuset_node_allowed(struct cgroup *cgroup, nodemask_t *nodes)
 {
-	return true;
 }
 #endif /* !CONFIG_CPUSETS */
 
