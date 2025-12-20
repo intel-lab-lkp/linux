@@ -6277,6 +6277,8 @@ static void drm_parse_hdmi_forum_scds(struct drm_connector *connector,
 	}
 
 	drm_parse_ycbcr420_deep_color_info(connector, hf_scds);
+	if (cea_db_payload_len(hf_scds) >= 8 && hf_scds[8])
+		hdmi->allm_supported = hf_scds[8] & DRM_EDID_ALLM;
 
 	if (cea_db_payload_len(hf_scds) >= 11 && hf_scds[11]) {
 		drm_parse_dsc_info(hdmi_dsc, hf_scds);
@@ -6287,6 +6289,9 @@ static void drm_parse_hdmi_forum_scds(struct drm_connector *connector,
 		    "[CONNECTOR:%d:%s] HF-VSDB: max TMDS clock: %d KHz, HDMI 2.1 support: %s, DSC 1.2 support: %s\n",
 		    connector->base.id, connector->name,
 		    max_tmds_clock, str_yes_no(max_frl_rate), str_yes_no(dsc_support));
+	drm_dbg_kms(connector->dev,
+		"[CONNECTOR:%d:%s] ALLM support: %s\n",
+		connector->base.id, connector->name, str_yes_no(hdmi->allm_supported));
 }
 
 static void drm_parse_hdmi_deep_color_info(struct drm_connector *connector,
