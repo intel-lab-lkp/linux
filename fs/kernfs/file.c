@@ -384,6 +384,46 @@ static void kernfs_vma_open(struct vm_area_struct *vma)
 	kernfs_put_active_of(of);
 }
 
+static int kernfs_vma_may_split(struct vm_area_struct *vma, unsigned long addr)
+{
+	struct file *file = vma->vm_file;
+	struct kernfs_open_file *of = kernfs_of(file);
+	int ret;
+
+	if (!of->vm_ops)
+		return 0;
+
+	if (!kernfs_get_active_of(of))
+		return -ENODEV;
+
+	ret = 0;
+	if (of->vm_ops->may_split)
+		ret = of->vm_ops->may_split(vma, addr);
+
+	kernfs_put_active_of(of);
+	return ret;
+}
+
+static unsigned long kernfs_vma_pagesize(struct vm_area_struct *vma)
+{
+	struct file *file = vma->vm_file;
+	struct kernfs_open_file *of = kernfs_of(file);
+	unsigned long size;
+
+	if (!of->vm_ops)
+		return PAGE_SIZE;
+
+	if (!kernfs_get_active_of(of))
+		return PAGE_SIZE;
+
+	size = PAGE_SIZE;
+	if (of->vm_ops->pagesize)
+		size = of->vm_ops->pagesize(vma);
+
+	kernfs_put_active_of(of);
+	return size;
+}
+
 static vm_fault_t kernfs_vma_fault(struct vm_fault *vmf)
 {
 	struct file *file = vmf->vma->vm_file;
@@ -449,9 +489,11 @@ static int kernfs_vma_access(struct vm_area_struct *vma, unsigned long addr,
 
 static const struct vm_operations_struct kernfs_vm_ops = {
 	.open		= kernfs_vma_open,
+	.may_split	= kernfs_vma_may_split,
 	.fault		= kernfs_vma_fault,
 	.page_mkwrite	= kernfs_vma_page_mkwrite,
 	.access		= kernfs_vma_access,
+	.pagesize	= kernfs_vma_pagesize,
 };
 
 static unsigned long kernfs_get_unmapped_area(struct file *file, unsigned long uaddr,
