@@ -164,6 +164,20 @@ static ssize_t sysfs_kf_bin_write(struct kernfs_open_file *of, char *buf,
 	return battr->write(of->file, kobj, battr, buf, pos, count);
 }
 
+static unsigned long sysfs_kf_bin_get_unmapped_area(struct kernfs_open_file *of,
+						    unsigned long uaddr, unsigned long len,
+						    unsigned long pgoff, unsigned long flags)
+{
+	const struct bin_attribute *battr = of->kn->priv;
+	struct kobject *kobj;
+
+	if (!battr->get_unmapped_area)
+		return -EOPNOTSUPP;
+
+	kobj = sysfs_file_kobj(of->kn);
+	return battr->get_unmapped_area(of->file, kobj, battr, uaddr, len, pgoff, flags);
+}
+
 static int sysfs_kf_bin_mmap(struct kernfs_open_file *of,
 			     struct vm_area_struct *vma)
 {
@@ -268,6 +282,7 @@ static const struct kernfs_ops sysfs_bin_kfops_mmap = {
 	.mmap		= sysfs_kf_bin_mmap,
 	.open		= sysfs_kf_bin_open,
 	.llseek		= sysfs_kf_bin_llseek,
+	.get_unmapped_area = sysfs_kf_bin_get_unmapped_area,
 };
 
 int sysfs_add_file_mode_ns(struct kernfs_node *parent,

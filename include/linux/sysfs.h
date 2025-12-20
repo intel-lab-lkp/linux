@@ -321,6 +321,10 @@ struct bin_attribute {
 			 loff_t, int);
 	int (*mmap)(struct file *, struct kobject *, const struct bin_attribute *attr,
 		    struct vm_area_struct *vma);
+	unsigned long (*get_unmapped_area)(struct file *, struct kobject *,
+					   const struct bin_attribute *attr,
+					   unsigned long uaddr, unsigned long len,
+					   unsigned long pgoff, unsigned long flags);
 };
 
 /**
