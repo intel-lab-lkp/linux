@@ -128,6 +128,25 @@ out:
 	return mm_get_unmapped_area(filp, uaddr, len, pgoff, flags);
 }
 
+static int p2pmem_may_split(struct vm_area_struct *vma, unsigned long addr)
+{
+	size_t align = (uintptr_t)vma->vm_private_data;
+
+	if (!IS_ALIGNED(addr, align))
+		return -EINVAL;
+	return 0;
+}
+
+static unsigned long p2pmem_pagesize(struct vm_area_struct *vma)
+{
+	return (uintptr_t)vma->vm_private_data;
+}
+
+static const struct vm_operations_struct p2pmem_vm_ops = {
+	.may_split = p2pmem_may_split,
+	.pagesize = p2pmem_pagesize,
+};
+
 static int p2pmem_alloc_mmap(struct file *filp, struct kobject *kobj,
 		const struct bin_attribute *attr, struct vm_area_struct *vma)
 {
@@ -136,6 +155,7 @@ static int p2pmem_alloc_mmap(struct file *filp, struct kobject *kobj,
 	struct pci_p2pdma *p2pdma;
 	struct percpu_ref *ref;
 	unsigned long vaddr;
+	size_t align;
 	void *kaddr;
 	int ret;
 
@@ -161,6 +181,16 @@ static int p2pmem_alloc_mmap(struct file *filp, struct kobject *kobj,
 		goto out;
 	}
 
+	align = p2pdma->align;
+	if (vma->vm_start & (align - 1) || vma->vm_end & (align - 1)) {
+		pci_info_ratelimited(pdev,
+				     "%s: unaligned vma (%#lx~%#lx, %#lx)\n",
+				     current->comm, vma->vm_start, vma->vm_end,
+				     align);
+		ret = -EINVAL;
+		goto out;
+	}
+
 	kaddr = (void *)gen_pool_alloc_owner(p2pdma->pool, len, (void **)&ref);
 	if (!kaddr) {
 		ret = -ENOMEM;
@@ -178,7 +208,7 @@ static int p2pmem_alloc_mmap(struct file *filp, struct kobject *kobj,
 	}
 	rcu_read_unlock();
 
-	for (vaddr = vma->vm_start; vaddr < vma->vm_end; vaddr += PAGE_SIZE) {
+	for (vaddr = vma->vm_start; vaddr < vma->vm_end; vaddr += align) {
 		struct page *page = virt_to_page(kaddr);
 
 		/*
@@ -188,7 +218,12 @@ static int p2pmem_alloc_mmap(struct file *filp, struct kobject *kobj,
 		 */
 		VM_WARN_ON_ONCE_PAGE(page_ref_count(page), page);
 		set_page_count(page, 1);
-		ret = vm_insert_page(vma, vaddr, page);
+		if (align == PUD_SIZE)
+			ret = vm_insert_folio_pud(vma, vaddr, page_folio(page));
+		else if (align == PMD_SIZE)
+			ret = vm_insert_folio_pmd(vma, vaddr, page_folio(page));
+		else
+			ret = vm_insert_page(vma, vaddr, page);
 		if (ret) {
 			gen_pool_free(p2pdma->pool, (uintptr_t)kaddr, len);
 			percpu_ref_put(ref);
@@ -196,9 +231,14 @@ static int p2pmem_alloc_mmap(struct file *filp, struct kobject *kobj,
 		}
 		percpu_ref_get(ref);
 		put_page(page);
-		kaddr += PAGE_SIZE;
-		len -= PAGE_SIZE;
+		kaddr += align;
+		len -= align;
 	}
+
+	/* Disable unaligned splitting due to vma merge */
+	vm_flags_set(vma, VM_DONTEXPAND);
+	vma->vm_ops = &p2pmem_vm_ops;
+	vma->vm_private_data = (void *)(uintptr_t)align;
 
 	percpu_ref_put(ref);
 
