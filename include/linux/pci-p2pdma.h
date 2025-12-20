@@ -69,7 +69,7 @@ enum pci_p2pdma_map_type {
 int pcim_p2pdma_init(struct pci_dev *pdev);
 struct p2pdma_provider *pcim_p2pdma_provider(struct pci_dev *pdev, int bar);
 int pci_p2pdma_add_resource(struct pci_dev *pdev, int bar, size_t size,
-		u64 offset);
+			    size_t align, u64 offset);
 int pci_p2pdma_distance_many(struct pci_dev *provider, struct device **clients,
 			     int num_clients, bool verbose);
 struct pci_dev *pci_p2pmem_find_many(struct device **clients, int num_clients);
@@ -97,7 +97,7 @@ static inline struct p2pdma_provider *pcim_p2pdma_provider(struct pci_dev *pdev,
 	return NULL;
 }
 static inline int pci_p2pdma_add_resource(struct pci_dev *pdev, int bar,
-		size_t size, u64 offset)
+		size_t size, size_t align, u64 offset)
 {
 	return -EOPNOTSUPP;
 }

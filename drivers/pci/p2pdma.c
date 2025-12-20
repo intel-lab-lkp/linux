@@ -23,6 +23,7 @@
 
 struct pci_p2pdma {
 	struct gen_pool *pool;
+	size_t align;
 	bool p2pmem_published;
 	struct xarray map_types;
 	struct p2pdma_provider mem[PCI_STD_NUM_BARS];
@@ -211,7 +212,7 @@ static void p2pdma_folio_free(struct folio *folio)
 	struct percpu_ref *ref;
 
 	gen_pool_free_owner(p2pdma->pool, (uintptr_t)page_to_virt(page),
-			    PAGE_SIZE, (void **)&ref);
+			    p2pdma->align, (void **)&ref);
 	percpu_ref_put(ref);
 }
 
@@ -323,17 +324,22 @@ struct p2pdma_provider *pcim_p2pdma_provider(struct pci_dev *pdev, int bar)
 }
 EXPORT_SYMBOL_GPL(pcim_p2pdma_provider);
 
-static int pci_p2pdma_setup_pool(struct pci_dev *pdev)
+static int pci_p2pdma_setup_pool(struct pci_dev *pdev, size_t align)
 {
 	struct pci_p2pdma *p2pdma;
 	int ret;
 
 	p2pdma = rcu_dereference_protected(pdev->p2pdma, 1);
-	if (p2pdma->pool)
+	if (p2pdma->pool) {
+		/* Two p2pdma BARs with different alignment ? */
+		if (p2pdma->align != align)
+			return -EINVAL;
 		/* We already setup pools, do nothing, */
 		return 0;
+	}
 
-	p2pdma->pool = gen_pool_create(PAGE_SHIFT, dev_to_node(&pdev->dev));
+	p2pdma->align = align;
+	p2pdma->pool = gen_pool_create(ilog2(p2pdma->align), dev_to_node(&pdev->dev));
 	if (!p2pdma->pool)
 		return -ENOMEM;
 
@@ -363,18 +369,31 @@ static void pci_p2pdma_unmap_mappings(void *data)
 				     p2pmem_group.name);
 }
 
+static inline int pci_p2pdma_check_pagemap_align(struct pci_dev *pdev, int bar,
+						 u64 size, size_t align,
+						 u64 offset)
+{
+	if (align == PAGE_SIZE)
+		return 0;
+	return -EINVAL;
+}
+
 /**
  * pci_p2pdma_add_resource - add memory for use as p2p memory
  * @pdev: the device to add the memory to
  * @bar: PCI BAR to add
  * @size: size of the memory to add, may be zero to use the whole BAR
+ * @align: dev memory mapping alignment of the memory to add. It is used
+ * to optimize the mappings both in userspace and kernel space when
+ * transparent huge page is supported. The possible values are
+ * PAGE_SIZE, PMD_SIZE, and PUD_SIZE.
  * @offset: offset into the PCI BAR
  *
  * The memory will be given ZONE_DEVICE struct pages so that it may
  * be used with any DMA request.
  */
 int pci_p2pdma_add_resource(struct pci_dev *pdev, int bar, size_t size,
-			    u64 offset)
+			    size_t align, u64 offset)
 {
 	struct pci_p2pdma_pagemap *p2p_pgmap;
 	struct p2pdma_provider *mem;
@@ -395,11 +414,18 @@ int pci_p2pdma_add_resource(struct pci_dev *pdev, int bar, size_t size,
 	if (size + offset > pci_resource_len(pdev, bar))
 		return -EINVAL;
 
+	error = pci_p2pdma_check_pagemap_align(pdev, bar, size, align, offset);
+	if (error) {
+		pci_info_ratelimited(pdev, "invalid align 0x%zx for bar %d\n",
+				     align, bar);
+		return error;
+	}
+
 	error = pcim_p2pdma_init(pdev);
 	if (error)
 		return error;
 
-	error = pci_p2pdma_setup_pool(pdev);
+	error = pci_p2pdma_setup_pool(pdev, align);
 	if (error)
 		return error;
 

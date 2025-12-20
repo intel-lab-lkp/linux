@@ -372,7 +372,8 @@ int hl_p2p_region_init(struct hl_device *hdev, struct hl_p2p_region *p2pr)
 	int rc, i;
 
 	/* Start by publishing our p2p memory */
-	rc = pci_p2pdma_add_resource(hdev->pdev, p2pr->bar, p2pr->size, p2pr->bar_offset);
+	rc = pci_p2pdma_add_resource(hdev->pdev, p2pr->bar, p2pr->size, PAGE_SIZE,
+				     p2pr->bar_offset);
 	if (rc) {
 		dev_err(hdev->dev, "error adding p2p resource: %d\n", rc);
 		goto err;
