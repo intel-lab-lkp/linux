@@ -90,6 +90,44 @@ static ssize_t published_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RO(published);
 
+static unsigned long p2pmem_get_unmapped_area(struct file *filp, struct kobject *kobj,
+					      const struct bin_attribute *attr,
+					      unsigned long uaddr, unsigned long len,
+					      unsigned long pgoff, unsigned long flags)
+{
+	struct pci_dev *pdev = to_pci_dev(kobj_to_dev(kobj));
+	struct pci_p2pdma *p2pdma;
+	unsigned long aligned_len;
+	unsigned long addr;
+	unsigned long align;
+
+	if (pgoff)
+		return -EINVAL;
+
+	rcu_read_lock();
+	p2pdma = rcu_dereference(pdev->p2pdma);
+	if (!p2pdma) {
+		rcu_read_unlock();
+		return -ENODEV;
+	}
+	align = p2pdma->align;
+	rcu_read_unlock();
+
+	/* Fixed address */
+	if (uaddr)
+		goto out;
+
+	aligned_len = len + align;
+	if (aligned_len < len)
+		goto out;
+
+	addr = mm_get_unmapped_area(filp, uaddr, aligned_len, pgoff, flags);
+	if (!IS_ERR_VALUE(addr))
+		return round_up(addr, align);
+out:
+	return mm_get_unmapped_area(filp, uaddr, len, pgoff, flags);
+}
+
 static int p2pmem_alloc_mmap(struct file *filp, struct kobject *kobj,
 		const struct bin_attribute *attr, struct vm_area_struct *vma)
 {
@@ -175,6 +213,7 @@ out:
 static const struct bin_attribute p2pmem_alloc_attr = {
 	.attr = { .name = "allocate", .mode = 0660 },
 	.mmap = p2pmem_alloc_mmap,
+	.get_unmapped_area = p2pmem_get_unmapped_area,
 	/*
 	 * Some places where we want to call mmap (ie. python) will check
 	 * that the file size is greater than the mmap size before allowing
