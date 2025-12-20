@@ -751,12 +751,10 @@ USER_ACCESS_GUARD(rw, void)
  * Don't use directly. Use scoped_masked_user_$MODE_access() instead.
  */
 #define __scoped_user_access(mode, uptr, size, elbl)					\
-for (bool done = false; !done; done = true)						\
-	for (typeof(uptr) _tmpptr = __scoped_user_access_begin(mode, uptr, size, elbl); \
-	     !done; done = true)							\
-		for (CLASS(user_##mode##_access, scope)(_tmpptr); !done; done = true)	\
-			/* Force modified pointer usage within the scope */		\
-			for (const typeof(uptr) uptr = _tmpptr; !done; done = true)
+	with (typeof(uptr) _tmpptr = __scoped_user_access_begin(mode, uptr, size, elbl)) \
+		and_with (CLASS(user_##mode##_access, scope)(_tmpptr))			\
+		/* Force modified pointer usage within the scope */			\
+		and_with (const typeof(uptr) uptr = _tmpptr)
 
 /**
  * scoped_user_read_access_size - Start a scoped user read access with given size
