@@ -919,7 +919,7 @@ int software_node_register(const struct software_node *node)
 	struct swnode *parent = software_node_to_swnode(node->parent);
 
 	if (software_node_to_swnode(node))
-		return -EEXIST;
+		return -EBUSY;
 
 	if (node->parent && !parent)
 		return -EINVAL;
