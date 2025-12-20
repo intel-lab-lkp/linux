@@ -1744,6 +1744,50 @@ size_t iommu_dma_max_mapping_size(struct device *dev)
 }
 
 /**
+ * dma_iova_set_resv_region - Set a reserved region in the IOVA space
+ * @dev: Device to set the reserved region for
+ * @start: Start of the reserved region
+ * @length: Length of the reserved region
+ *
+ * This function enables drivers to set device specific reservations at
+ * runtime, which is particularly useful for dynamically created child
+ * devices that requires distinct IOVA ranges than parent.
+ *
+ * Returns:
+ *  0        - Success
+ *  -ENODEV  - No valid IOMMU DMA domain for the device
+ *  -EINVAL  - Invalid domain or cookie type for this operation
+ *  -ENOMEM  - Failed to reserve the requested range
+ */
+int dma_iova_set_resv_region(struct device *dev, unsigned long start,
+			     unsigned long length)
+{
+	struct iommu_dma_cookie *cookie;
+	struct iommu_domain *domain;
+	struct iova_domain *iovad;
+	unsigned long lo, hi;
+
+	domain = iommu_get_dma_domain(dev);
+	if (!domain || domain->type != IOMMU_DOMAIN_DMA)
+		return -ENODEV;
+
+	cookie = domain->iova_cookie;
+	if (!cookie || domain->cookie_type != IOMMU_COOKIE_DMA_IOVA)
+		return -EINVAL;
+
+	iovad = &cookie->iovad;
+
+	lo = iova_pfn(iovad, start);
+	hi = iova_pfn(iovad, start + length - 1);
+
+	if (!reserve_iova(iovad, lo, hi))
+		return -ENOMEM;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(dma_iova_set_resv_region);
+
+/**
  * dma_iova_try_alloc - Try to allocate an IOVA space
  * @dev: Device to allocate the IOVA space for
  * @state: IOVA state

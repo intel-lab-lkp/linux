@@ -339,6 +339,8 @@ static inline bool dma_use_iova(struct dma_iova_state *state)
 	return state->__size != 0;
 }
 
+int dma_iova_set_resv_region(struct device *dev, unsigned long start,
+			     unsigned long length);
 bool dma_iova_try_alloc(struct device *dev, struct dma_iova_state *state,
 		phys_addr_t phys, size_t size);
 void dma_iova_free(struct device *dev, struct dma_iova_state *state);
@@ -357,6 +359,11 @@ void dma_iova_unlink(struct device *dev, struct dma_iova_state *state,
 static inline bool dma_use_iova(struct dma_iova_state *state)
 {
 	return false;
+}
+static inline int dma_iova_set_resv_region(struct device *dev, unsigned long start,
+					   unsigned long length)
+{
+	return -ENODEV;
 }
 static inline bool dma_iova_try_alloc(struct device *dev,
 		struct dma_iova_state *state, phys_addr_t phys, size_t size)
