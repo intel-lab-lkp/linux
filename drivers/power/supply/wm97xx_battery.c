@@ -223,7 +223,7 @@ static int wm97xx_bat_probe(struct platform_device *dev)
 	bat_psy_desc.properties = prop;
 	bat_psy_desc.num_properties = props;
 
-	bat_psy = power_supply_register(&dev->dev, &bat_psy_desc, &cfg);
+	bat_psy = devm_power_supply_register(&dev->dev, &bat_psy_desc, &cfg);
 	if (!IS_ERR(bat_psy)) {
 		schedule_work(&bat_work);
 	} else {
@@ -237,14 +237,11 @@ static int wm97xx_bat_probe(struct platform_device *dev)
 		if (ret) {
 			dev_err_probe(&dev->dev, ret,
 				      "failed to request GPIO irq\n");
-			goto unregister;
+			goto free;
 		}
 	}
 
 	return 0;
-
-unregister:
-	power_supply_unregister(bat_psy);
 
 free:
 	kfree(prop);
@@ -257,7 +254,6 @@ static void wm97xx_bat_remove(struct platform_device *dev)
 	if (charge_gpiod)
 		free_irq(gpiod_to_irq(charge_gpiod), dev);
 	cancel_work_sync(&bat_work);
-	power_supply_unregister(bat_psy);
 	kfree(prop);
 }
 
