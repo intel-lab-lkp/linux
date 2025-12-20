@@ -1402,7 +1402,7 @@ enum adaptive_sync_type dm_get_adaptive_sync_support_type(struct dc_link *link)
 		if (dpcd_caps->adaptive_sync_caps.dp_adap_sync_caps.bits.ADAPTIVE_SYNC_SDP_SUPPORT == true &&
 			dpcd_caps->allow_invalid_MSA_timing_param == true &&
 			dm_is_freesync_pcon_whitelist(dpcd_caps->branch_dev_id))
-			as_type = FREESYNC_TYPE_PCON_IN_WHITELIST;
+			as_type = ADAPTIVE_SYNC_TYPE_PCON_IN_WHITELIST;
 		break;
 	default:
 		break;
