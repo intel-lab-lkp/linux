@@ -41,12 +41,17 @@ static void __init memtest(u64 pattern, phys_addr_t start_phys, phys_addr_t size
 {
 	u64 *p, *start, *end;
 	phys_addr_t start_bad, last_bad;
-	phys_addr_t start_phys_aligned;
+	phys_addr_t start_phys_aligned, offset;
 	const size_t incr = sizeof(pattern);
 
 	start_phys_aligned = ALIGN(start_phys, incr);
 	start = __va(start_phys_aligned);
-	end = start + (size - (start_phys_aligned - start_phys)) / incr;
+	
+	offset = start_phys_aligned - start_phys;
+	if (size < offset)
+		return;
+
+	end = start + (size - offset) / incr;
 	start_bad = 0;
 	last_bad = 0;
 
