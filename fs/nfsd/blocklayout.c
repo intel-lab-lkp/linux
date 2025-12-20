@@ -357,6 +357,9 @@ nfsd4_block_get_device_info_scsi(struct super_block *sb,
 		goto out_free_dev;
 	}
 
+	/* create a record for this client with the fenced flag set to 0 */
+	xa_store(&clp->cl_fenced_devs, (unsigned long)sb->s_bdev->bd_dev,
+				xa_mk_value(0), GFP_KERNEL);
 	return 0;
 
 out_free_dev:
@@ -400,10 +403,31 @@ nfsd4_scsi_fence_client(struct nfs4_layout_stateid *ls, struct nfsd_file *file)
 	struct nfs4_client *clp = ls->ls_stid.sc_client;
 	struct block_device *bdev = file->nf_file->f_path.mnt->mnt_sb->s_bdev;
 	int status;
+	void *val;
 
+	spin_lock(&clp->cl_fence_lock);
+	val = xa_load(&clp->cl_fenced_devs, bdev->bd_dev);
+	if (xa_is_value(val) && xa_to_value(val)) {
+		/* device already fenced */
+		spin_unlock(&clp->cl_fence_lock);
+		return;
+	}
+	/*
+	 * Set the fenced flag for this device.
+	 *
+	 * A record for this device should already exist, so no memory
+	 * allocation is required. The GFP_ATOMIC flag is specified for
+	 * safety, as the spinlock cl_fence_lock is held.
+	 */
+	xa_store(&clp->cl_fenced_devs, (unsigned long)bdev->bd_dev,
+				xa_mk_value(1), GFP_ATOMIC);
+	spin_unlock(&clp->cl_fence_lock);
 	status = bdev->bd_disk->fops->pr_ops->pr_preempt(bdev, NFSD_MDS_PR_KEY,
 			nfsd4_scsi_pr_key(clp),
 			PR_EXCLUSIVE_ACCESS_REG_ONLY, true);
+	if (status)
+		xa_store(&clp->cl_fenced_devs, (unsigned long)bdev->bd_dev,
+				xa_mk_value(0), GFP_KERNEL);
 	trace_nfsd_pnfs_fence(clp, bdev->bd_disk->disk_name, status);
 }
 
@@ -426,4 +450,5 @@ const struct nfsd4_layout_ops scsi_layout_ops = {
 	.proc_layoutcommit	= nfsd4_scsi_proc_layoutcommit,
 	.fence_client		= nfsd4_scsi_fence_client,
 };
+
 #endif /* CONFIG_NFSD_SCSILAYOUT */
