@@ -169,6 +169,7 @@ TEST_GEN_PROGS := \
 	bind_wildcard \
 	epoll_busy_poll \
 	ipv6_fragmentation \
+	ndisc_send \
 	proc_net_pktgen \
 	reuseaddr_conflict \
 	reuseport_bpf \
