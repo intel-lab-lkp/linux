@@ -5040,6 +5040,11 @@ decode_onebyte:
 	if (ctxt->d & NoRex && ctxt->rex_prefix == REX2_PREFIX)
 		opcode.flags = Undefined;
 
+	/* EVEX-prefixed instructions are not implemented */
+	if (ctxt->opcode_len == 1 && ctxt->b == 0x62 &&
+	    (mode == X86EMUL_MODE_PROT64 || (ctxt->modrm & 0xc0) == 0xc0))
+		opcode.flags = NotImpl;
+
 	if (opcode.flags & ModRM)
 		ctxt->modrm = insn_fetch(u8, ctxt);
 
