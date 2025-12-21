@@ -36,12 +36,12 @@ static int cur_rng_set_by_user;
 static struct task_struct *hwrng_fill;
 /* list of registered rngs */
 static LIST_HEAD(rng_list);
-/* Protects rng_list and current_rng */
+/* Protects rng_list, current_rng and hwrng_fill */
 static DEFINE_MUTEX(rng_mutex);
-/* Protects rng read functions, data_avail, rng_buffer and rng_fillbuf */
+/* Protects rng read functions, data_avail and rng_buffer */
 static DEFINE_MUTEX(reading_mutex);
 static int data_avail;
-static u8 *rng_buffer, *rng_fillbuf;
+static u8 *rng_buffer;
 static unsigned short current_quality;
 static unsigned short default_quality = 1024; /* default to maximum */
 
@@ -484,16 +484,24 @@ static int hwrng_fillfn(void *unused)
 	size_t entropy, entropy_credit = 0; /* in 1/1024 of a bit */
 	long rc;
 
+	/* Use a private buffer to avoid races with dying threads */
+	u8 buffer[RNG_BUFFER_SIZE];
+
 	while (!kthread_should_stop()) {
 		unsigned short quality;
 		struct hwrng *rng;
 
 		rng = get_current_rng();
-		if (IS_ERR(rng) || !rng)
+		if (IS_ERR(rng) || !rng) {
+			/* Clear hwrng_fill on the error path */
+			mutex_lock(&rng_mutex);
+			if (hwrng_fill == current)
+				hwrng_fill = NULL;
+			mutex_unlock(&rng_mutex);
 			break;
+		}
 		mutex_lock(&reading_mutex);
-		rc = rng_get_data(rng, rng_fillbuf,
-				  rng_buffer_size(), 1);
+		rc = rng_get_data(rng, buffer, sizeof(buffer), 1);
 		if (current_quality != rng->quality)
 			rng->quality = current_quality; /* obsolete */
 		quality = rng->quality;
@@ -515,10 +523,9 @@ static int hwrng_fillfn(void *unused)
 			entropy_credit = entropy;
 
 		/* Outside lock, sure, but y'know: randomness. */
-		add_hwgenerator_randomness((void *)rng_fillbuf, rc,
+		add_hwgenerator_randomness((void *)buffer, rc,
 					   entropy >> 10, true);
 	}
-	hwrng_fill = NULL;
 	return 0;
 }
 
@@ -570,6 +577,7 @@ EXPORT_SYMBOL_GPL(hwrng_register);
 void hwrng_unregister(struct hwrng *rng)
 {
 	struct hwrng *new_rng;
+	struct task_struct *to_stop;
 	int err;
 
 	mutex_lock(&rng_mutex);
@@ -585,10 +593,11 @@ void hwrng_unregister(struct hwrng *rng)
 	}
 
 	new_rng = get_current_rng_nolock();
-	if (list_empty(&rng_list)) {
+	if (list_empty(&rng_list) && hwrng_fill) {
+		to_stop = hwrng_fill;
+		hwrng_fill = NULL;
 		mutex_unlock(&rng_mutex);
-		if (hwrng_fill)
-			kthread_stop(hwrng_fill);
+		kthread_stop(to_stop);
 	} else
 		mutex_unlock(&rng_mutex);
 
@@ -664,15 +673,8 @@ static int __init hwrng_modinit(void)
 	if (!rng_buffer)
 		return -ENOMEM;
 
-	rng_fillbuf = kmalloc(rng_buffer_size(), GFP_KERNEL);
-	if (!rng_fillbuf) {
-		kfree(rng_buffer);
-		return -ENOMEM;
-	}
-
 	ret = misc_register(&rng_miscdev);
 	if (ret) {
-		kfree(rng_fillbuf);
 		kfree(rng_buffer);
 	}
 
@@ -684,7 +686,6 @@ static void __exit hwrng_modexit(void)
 	mutex_lock(&rng_mutex);
 	BUG_ON(current_rng);
 	kfree(rng_buffer);
-	kfree(rng_fillbuf);
 	mutex_unlock(&rng_mutex);
 
 	misc_deregister(&rng_miscdev);
