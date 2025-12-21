@@ -8,6 +8,21 @@
 #include <drm/drm_edid.h>
 #include <drm/drm_utils.h>
 
+// The parameters use the type-specific max value as a flag for being unset.
+// The semantics of these quirk values are drivers and device-specific.
+
+u16 param_min_brightness = U16_MAX;
+MODULE_PARM_DESC(min_brightness, "minimum brightness override for all panel backlights. Value usage is driver-specific.");
+module_param_named(min_brightness, param_min_brightness, ushort, 0444);
+
+u32 param_brightness_mask = U32_MAX;
+MODULE_PARM_DESC(brightness_mask, "integer mask to bitwise OR with set brightness values for panel-specific fixes. Value usage is driver-specific.");
+module_param_named(brightness_mask, param_brightness_mask, uint, 0444);
+
+bool param_disable_custom_brightness_curve = false;
+MODULE_PARM_DESC(disable_custom_brightness_curve, "when true, custom brightness curve support is disabled in the driver. Value usage is driver-specific.");
+module_param_named(disable_custom_brightness_curve, param_disable_custom_brightness_curve, bool, 0444);
+
 struct drm_panel_match {
 	enum dmi_field field;
 	const char * const value;
@@ -98,6 +113,8 @@ static const struct drm_get_panel_backlight_quirk drm_panel_min_backlight_quirks
 	},
 };
 
+static struct drm_panel_backlight_quirk quirk_from_param = { };
+
 static bool drm_panel_min_backlight_quirk_matches(
 	const struct drm_get_panel_backlight_quirk *quirk,
 	const struct drm_edid *edid)
@@ -132,23 +149,65 @@ static bool drm_panel_min_backlight_quirk_matches(
 const struct drm_panel_backlight_quirk *
 drm_get_panel_backlight_quirk(const struct drm_edid *edid)
 {
-	const struct drm_get_panel_backlight_quirk *quirk;
+	const struct drm_get_panel_backlight_quirk *quirk = NULL;
 	size_t i;
+	bool parameters_given = false;
 
-	if (!IS_ENABLED(CONFIG_DMI))
-		return ERR_PTR(-ENODATA);
+	if (param_min_brightness < U16_MAX)
+		parameters_given = true;
 
-	if (!edid)
-		return ERR_PTR(-EINVAL);
+	if (param_brightness_mask < U32_MAX)
+		parameters_given = true;
 
-	for (i = 0; i < ARRAY_SIZE(drm_panel_min_backlight_quirks); i++) {
-		quirk = &drm_panel_min_backlight_quirks[i];
+	if (param_disable_custom_brightness_curve)
+		parameters_given = true;
 
-		if (drm_panel_min_backlight_quirk_matches(quirk, edid))
-			return &quirk->quirk;
+	if (IS_ENABLED(CONFIG_DMI) && edid) {
+		for (i = 0; i < ARRAY_SIZE(drm_panel_min_backlight_quirks); i++) {
+			quirk = &drm_panel_min_backlight_quirks[i];
+
+			if (drm_panel_min_backlight_quirk_matches(quirk, edid))
+				break;
+		}
 	}
 
-	return ERR_PTR(-ENODATA);
+	if (i == ARRAY_SIZE(drm_panel_min_backlight_quirks)) {
+		// Found no quirk.
+		quirk = NULL;
+	}
+
+	if (!parameters_given && !quirk) {
+		if (!edid)
+			return ERR_PTR(-EINVAL);
+
+		return ERR_PTR(-ENODATA);
+	}
+
+	// We are returning from quirk_from_param only when parameters are given.
+	// This assumes that the return value's data can be kept by the driver,
+	// and that the driver supports more than one match at a time.
+	// (Think multiple-display devices.)
+	// When using a module parameter, only one set of values is supported.
+	if (parameters_given) {
+		// First copy the matched data, when found.
+		if (quirk)
+			memcpy(&quirk_from_param, &quirk->quirk, sizeof(quirk_from_param));
+
+		// Apply module parameters to the found quirk.
+		if (param_min_brightness < U16_MAX)
+			quirk_from_param.min_brightness = param_min_brightness;
+		if (param_brightness_mask < U32_MAX)
+			quirk_from_param.brightness_mask = param_brightness_mask;
+
+		// We force the disable_custom_brightness_curve value when any parameter is given.
+		// This ensures users can override the quirk-defined value.
+		// This comes at the cost of requiring any other value to be specified to work.
+		quirk_from_param.disable_custom_brightness_curve = param_disable_custom_brightness_curve;
+
+		return &quirk_from_param;
+	}
+
+	return &quirk->quirk;
 }
 EXPORT_SYMBOL(drm_get_panel_backlight_quirk);
 
