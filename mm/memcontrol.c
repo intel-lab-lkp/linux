@@ -5597,11 +5597,6 @@ subsys_initcall(mem_cgroup_swap_init);
 
 #endif /* CONFIG_SWAP */
 
-bool mem_cgroup_node_allowed(struct mem_cgroup *memcg, int nid)
-{
-	return memcg ? cpuset_node_allowed(memcg->css.cgroup, nid) : true;
-}
-
 void mem_cgroup_filter_mems_allowed(struct mem_cgroup *memcg, nodemask_t *mask)
 {
 	if (memcg)
