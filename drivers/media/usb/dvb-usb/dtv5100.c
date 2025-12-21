@@ -62,8 +62,8 @@ static int dtv5100_i2c_msg(struct dvb_usb_device *d, u8 addr,
 
 	memcpy(st->data, rbuf, rlen);
 	msleep(1); /* avoid I2C errors */
-	return usb_control_msg(d->udev, pipe, request,
-			       type, value, index, st->data, rlen,
+	return usb_control_msg(d->udev, rlen ? pipe : usb_sndctrlpipe(d->udev, 0),
+			       request, type, value, index, st->data, rlen,
 			       DTV5100_USB_TIMEOUT);
 }
 
