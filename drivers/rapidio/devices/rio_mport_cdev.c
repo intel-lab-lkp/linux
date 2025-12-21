@@ -1789,6 +1789,7 @@ static int rio_mport_add_riodev(struct mport_cdev_priv *priv,
 	err = rio_add_device(rdev);
 	if (err) {
 		put_device(&rdev->dev);
+		rio_free_net(net);
 		return err;
 	}
 
