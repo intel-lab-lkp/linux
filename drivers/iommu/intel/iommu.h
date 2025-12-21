@@ -869,7 +869,7 @@ static inline bool dma_pte_superpage(struct dma_pte *pte)
 
 static inline bool context_present(struct context_entry *context)
 {
-	return (context->lo & 1);
+	return READ_ONCE(context->lo) & 1;
 }
 
 #define LEVEL_STRIDE		(9)
@@ -897,46 +897,51 @@ static inline int pfn_level_offset(u64 pfn, int level)
 	return (pfn >> level_to_offset_bits(level)) & LEVEL_MASK;
 }
 
+static inline void context_set_bits(u64 *ptr, u64 mask, u64 bits)
+{
+	u64 old;
+
+	old = READ_ONCE(*ptr);
+	WRITE_ONCE(*ptr, (old & ~mask) | bits);
+}
 
 static inline void context_set_present(struct context_entry *context)
 {
-	context->lo |= 1;
+	context_set_bits(&context->lo, 1 << 0, 1);
 }
 
 static inline void context_set_fault_enable(struct context_entry *context)
 {
-	context->lo &= (((u64)-1) << 2) | 1;
+	context_set_bits(&context->lo, 1 << 1, 0);
 }
 
 static inline void context_set_translation_type(struct context_entry *context,
 						unsigned long value)
 {
-	context->lo &= (((u64)-1) << 4) | 3;
-	context->lo |= (value & 3) << 2;
+	context_set_bits(&context->lo, GENMASK_ULL(3, 2), value << 2);
 }
 
 static inline void context_set_address_root(struct context_entry *context,
 					    unsigned long value)
 {
-	context->lo &= ~VTD_PAGE_MASK;
-	context->lo |= value & VTD_PAGE_MASK;
+	context_set_bits(&context->lo, VTD_PAGE_MASK, value);
 }
 
 static inline void context_set_address_width(struct context_entry *context,
 					     unsigned long value)
 {
-	context->hi |= value & 7;
+	context_set_bits(&context->hi, GENMASK_ULL(2, 0), value);
 }
 
 static inline void context_set_domain_id(struct context_entry *context,
 					 unsigned long value)
 {
-	context->hi |= (value & ((1 << 16) - 1)) << 8;
+	context_set_bits(&context->hi, GENMASK_ULL(23, 8), value << 8);
 }
 
 static inline void context_set_pasid(struct context_entry *context)
 {
-	context->lo |= CONTEXT_PASIDE;
+	context_set_bits(&context->lo, CONTEXT_PASIDE, CONTEXT_PASIDE);
 }
 
 static inline int context_domain_id(struct context_entry *c)
@@ -946,8 +951,8 @@ static inline int context_domain_id(struct context_entry *c)
 
 static inline void context_clear_entry(struct context_entry *context)
 {
-	context->lo = 0;
-	context->hi = 0;
+	WRITE_ONCE(context->lo, 0);
+	WRITE_ONCE(context->hi, 0);
 }
 
 #ifdef CONFIG_INTEL_IOMMU
@@ -980,7 +985,7 @@ clear_context_copied(struct intel_iommu *iommu, u8 bus, u8 devfn)
 static inline void
 context_set_sm_rid2pasid(struct context_entry *context, unsigned long pasid)
 {
-	context->hi |= pasid & ((1 << 20) - 1);
+	context_set_bits(&context->hi, GENMASK_ULL(19, 0), pasid);
 }
 
 /*
@@ -989,7 +994,7 @@ context_set_sm_rid2pasid(struct context_entry *context, unsigned long pasid)
  */
 static inline void context_set_sm_dte(struct context_entry *context)
 {
-	context->lo |= BIT_ULL(2);
+	context_set_bits(&context->lo, BIT_ULL(2), BIT_ULL(2));
 }
 
 /*
@@ -998,7 +1003,7 @@ static inline void context_set_sm_dte(struct context_entry *context)
  */
 static inline void context_set_sm_pre(struct context_entry *context)
 {
-	context->lo |= BIT_ULL(4);
+	context_set_bits(&context->lo, BIT_ULL(4), BIT_ULL(4));
 }
 
 /*
@@ -1007,7 +1012,7 @@ static inline void context_set_sm_pre(struct context_entry *context)
  */
 static inline void context_clear_sm_pre(struct context_entry *context)
 {
-	context->lo &= ~BIT_ULL(4);
+	context_set_bits(&context->lo, BIT_ULL(4), 0);
 }
 
 /* Returns a number of VTD pages, but aligned to MM page size */

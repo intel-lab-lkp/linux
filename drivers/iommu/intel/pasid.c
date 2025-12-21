@@ -983,7 +983,8 @@ static int context_entry_set_pasid_table(struct context_entry *context,
 	context_clear_entry(context);
 
 	pds = context_get_sm_pds(table);
-	context->lo = (u64)virt_to_phys(table->table) | context_pdts(pds);
+	WRITE_ONCE(context->lo,
+		   (u64)virt_to_phys(table->table) | context_pdts(pds));
 	context_set_sm_rid2pasid(context, IOMMU_NO_PASID);
 
 	if (info->ats_supported)
