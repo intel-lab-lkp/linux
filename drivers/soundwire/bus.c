@@ -62,18 +62,20 @@ int sdw_bus_master_add(struct sdw_bus *bus, struct device *parent,
 	if (ret < 0) {
 		dev_err(parent, "Failed to add master device at link %d\n",
 			bus->link_id);
-		return ret;
+		goto free_ida;
 	}
 
 	if (!bus->ops) {
 		dev_err(bus->dev, "SoundWire Bus ops are not set\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto del_master_dev;
 	}
 
 	if (!bus->compute_params) {
 		dev_err(bus->dev,
 			"Bandwidth allocation not configured, compute_params no set\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto del_master_dev;
 	}
 
 	/*
@@ -99,7 +101,7 @@ int sdw_bus_master_add(struct sdw_bus *bus, struct device *parent,
 		if (ret < 0) {
 			dev_err(bus->dev,
 				"Bus read properties failed:%d\n", ret);
-			return ret;
+			goto unregister_key;
 		}
 	}
 
@@ -126,7 +128,7 @@ int sdw_bus_master_add(struct sdw_bus *bus, struct device *parent,
 
 	ret = sdw_irq_create(bus, fwnode);
 	if (ret)
-		return ret;
+		goto exit_debugfs;
 
 	/*
 	 * SDW is an enumerable bus, but devices can be powered off. So,
@@ -144,8 +146,7 @@ int sdw_bus_master_add(struct sdw_bus *bus, struct device *parent,
 
 	if (ret < 0) {
 		dev_err(bus->dev, "Finding slaves failed:%d\n", ret);
-		sdw_irq_delete(bus);
-		return ret;
+		goto delete_irq;
 	}
 
 	/*
@@ -164,6 +165,19 @@ int sdw_bus_master_add(struct sdw_bus *bus, struct device *parent,
 	bus->params.next_bank = SDW_BANK1;
 
 	return 0;
+
+delete_irq:
+	sdw_irq_delete(bus);
+exit_debugfs:
+	sdw_bus_debugfs_exit(bus);
+unregister_key:
+	lockdep_unregister_key(&bus->bus_lock_key);
+	lockdep_unregister_key(&bus->msg_lock_key);
+del_master_dev:
+	sdw_master_device_del(bus);
+free_ida:
+	ida_free(&sdw_bus_ida, bus->id);
+	return ret;
 }
 EXPORT_SYMBOL(sdw_bus_master_add);
 
