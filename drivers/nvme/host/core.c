@@ -33,21 +33,6 @@
 
 #define NVME_MINORS		(1U << MINORBITS)
 
-struct nvme_ns_info {
-	struct nvme_ns_ids ids;
-	u32 nsid;
-	__le32 anagrpid;
-	u8 pi_offset;
-	u16 endgid;
-	u64 runs;
-	bool is_shared;
-	bool is_readonly;
-	bool is_ready;
-	bool is_removed;
-	bool is_rotational;
-	bool no_vwc;
-};
-
 unsigned int admin_timeout = 60;
 module_param(admin_timeout, uint, 0644);
 MODULE_PARM_DESC(admin_timeout, "timeout in seconds for admin commands");

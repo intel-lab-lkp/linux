@@ -525,6 +525,21 @@ enum nvme_ns_features {
 	NVME_NS_DEAC = 1 << 2,		/* DEAC bit in Write Zeroes supported */
 };
 
+struct nvme_ns_info {
+	struct nvme_ns_ids ids;
+	u32 nsid;
+	__le32 anagrpid;
+	u8 pi_offset;
+	u16 endgid;
+	u64 runs;
+	bool is_shared;
+	bool is_readonly;
+	bool is_ready;
+	bool is_removed;
+	bool is_rotational;
+	bool no_vwc;
+};
+
 struct nvme_ns {
 	struct list_head list;
 
