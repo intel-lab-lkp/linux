@@ -202,6 +202,16 @@ config HID_ASUS
 	- GL553V series
 	- GL753V series
 
+config HID_ASUS_EC
+	tristate "ASUS EC HID support (Zenbook A14 UX3407QA)"
+	depends on HID && I2C_HID
+	help
+	  Say Y here if you have an ASUS Zenbook A14 (UX3407QA) and want
+	  support for its EC-controlled keyboard backlight and Fn hotkeys
+
+	  This driver is currently only tested on the ASUS Zenbook A14
+	  UX3407QA; behaviour on other models is unknown.
+
 config HID_AUREAL
 	tristate "Aureal"
 	help
