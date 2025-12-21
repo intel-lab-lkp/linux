@@ -799,6 +799,15 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 		goto out_free_skb;
 
 /*
+ *	For Ethernet devices, Broadcast/Multicast and zero MAC addresses should
+ *	never be announced and accepted as sender HW address (prevent BCAST MAC
+ *	and NULL ARP poisoning attack).
+ */
+	if (dev->addr_len == ETH_ALEN &&
+	    (is_broadcast_ether_addr(sha) || is_zero_ether_addr(sha)))
+		goto out_free_skb;
+
+ /*
  *     Special case: We must set Frame Relay source Q.922 address
  */
 	if (dev_type == ARPHRD_DLCI)
