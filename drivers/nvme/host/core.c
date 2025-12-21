@@ -139,6 +139,7 @@ static void nvme_update_keep_alive(struct nvme_ctrl *ctrl,
 				   struct nvme_command *cmd);
 static int nvme_get_log_lsi(struct nvme_ctrl *ctrl, u32 nsid, u8 log_page,
 		u8 lsp, u8 csi, void *log, size_t size, u64 offset, u16 lsi);
+static void nvme_validate_ns_work(struct work_struct *work);
 
 void nvme_queue_scan(struct nvme_ctrl *ctrl)
 {
@@ -4118,6 +4119,8 @@ static void nvme_alloc_ns(struct nvme_ctrl *ctrl, struct nvme_ns_info *info)
 	ns->ctrl = ctrl;
 	kref_init(&ns->kref);
 
+	INIT_DELAYED_WORK(&ns->validate_work, nvme_validate_ns_work);
+
 	if (nvme_init_ns_head(ns, info))
 		goto out_cleanup_disk;
 
@@ -4215,6 +4218,8 @@ static void nvme_ns_remove(struct nvme_ns *ns)
 {
 	bool last_path = false;
 
+	cancel_delayed_work_sync(&ns->validate_work);
+
 	if (test_and_set_bit(NVME_NS_REMOVING, &ns->flags))
 		return;
 
@@ -4285,12 +4290,42 @@ static void nvme_validate_ns(struct nvme_ns *ns, struct nvme_ns_info *info)
 out:
 	/*
 	 * Only remove the namespace if we got a fatal error back from the
-	 * device, otherwise ignore the error and just move on.
-	 *
-	 * TODO: we should probably schedule a delayed retry here.
+	 * device, otherwise delayed retries are performed.
 	 */
-	if (ret > 0 && (ret & NVME_STATUS_DNR))
+	if (ret > 0 && (ret & NVME_STATUS_DNR)) {
 		nvme_ns_remove(ns);
+	} else if (ret > 0) {
+		if (ns->validate_retries < NVME_NS_VALIDATION_MAX_RETRIES) {
+			ns->validate_retries++;
+
+			if (!nvme_get_ns(ns))
+				return;
+
+			dev_warn(
+				ns->ctrl->device,
+				"validation failed for nsid %d, retry %d/%d in %ds\n",
+				ns->head->ns_id, ns->validate_retries,
+				NVME_NS_VALIDATION_MAX_RETRIES,
+				NVME_NS_VALIDATION_RETRY_INTERVAL);
+			memcpy(&ns->pending_info, info, sizeof(*info));
+			schedule_delayed_work(
+				&ns->validate_work,
+				NVME_NS_VALIDATION_RETRY_INTERVAL * HZ);
+		} else {
+			dev_err(ns->ctrl->device,
+				"validation failed for nsid %d after %d retries\n",
+				ns->head->ns_id,
+				NVME_NS_VALIDATION_MAX_RETRIES);
+		}
+	}
+}
+
+static void nvme_validate_ns_work(struct work_struct *work)
+{
+	struct nvme_ns *ns = container_of(to_delayed_work(work), struct nvme_ns,
+					  validate_work);
+	nvme_validate_ns(ns, &ns->pending_info);
+	nvme_put_ns(ns);
 }
 
 static void nvme_scan_ns(struct nvme_ctrl *ctrl, unsigned nsid)

@@ -46,6 +46,12 @@ extern unsigned int admin_timeout;
 #define NVME_CTRL_PAGE_SHIFT	12
 #define NVME_CTRL_PAGE_SIZE	(1 << NVME_CTRL_PAGE_SHIFT)
 
+/*
+ * Default to 3 retries in intervals of 3 seconds for namespace validation
+ */
+#define NVME_NS_VALIDATION_MAX_RETRIES 3
+#define NVME_NS_VALIDATION_RETRY_INTERVAL 3
+
 extern struct workqueue_struct *nvme_wq;
 extern struct workqueue_struct *nvme_reset_wq;
 extern struct workqueue_struct *nvme_delete_wq;
@@ -565,6 +571,9 @@ struct nvme_ns {
 	struct device		cdev_device;
 
 	struct nvme_fault_inject fault_inject;
+	struct delayed_work validate_work;
+	struct nvme_ns_info pending_info;
+	unsigned int validate_retries;
 };
 
 /* NVMe ns supports metadata actions by the controller (generate/strip) */
