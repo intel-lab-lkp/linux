@@ -44,6 +44,9 @@ obj-$(CONFIG_DVB_USB_DVBSKY) += dvb-usb-dvbsky.o
 dvb-usb-zd1301-objs := zd1301.o
 obj-$(CONFIG_DVB_USB_ZD1301) += zd1301.o
 
+dvb-usb-jorebo-objs := jorebo.o
+obj-$(CONFIG_DVB_USB_JOREBO) += jorebo.o
+
 ccflags-y += -I$(srctree)/drivers/media/dvb-frontends
 ccflags-y += -I$(srctree)/drivers/media/tuners
 ccflags-y += -I$(srctree)/drivers/media/common

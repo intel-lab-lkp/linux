@@ -175,4 +175,15 @@ config DVB_USB_ZD1301
 	help
 	  Say Y here to support the ZyDAS ZD1301 DVB USB receiver.
 
+config DVB_USB_JOREBO
+	tristate "Johann's Receiver Board"
+	depends on DVB_USB_V2
+	select DVB_M88DS3103 if MEDIA_SUBDRV_AUTOSELECT
+	select DVB_TS2020 if MEDIA_SUBDRV_AUTOSELECT
+	help
+	  Say Y here to support the Johann's Receiver Board DVB-S2 USB receiver.
+	  This board is open hardware with the CAD files available at
+	  https://codeberg.org/jonnyh/jorebo. The firmware is open source and
+	  available at https://codeberg.org/jonnyh/jorebo-firmware.
+
 endif
