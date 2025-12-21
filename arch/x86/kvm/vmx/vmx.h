@@ -372,12 +372,26 @@ struct vmx_insn_info {
 	union insn_info info;
 };
 
-static inline struct vmx_insn_info vmx_get_insn_info(struct kvm_vcpu *vcpu __maybe_unused)
+/*
+ * The APX enumeration guarantees the presence of the extended fields.
+ * The host CPUID bit alone is sufficient to rely on it.
+ */
+static inline bool vmx_insn_info_extended(void)
+{
+	return static_cpu_has(X86_FEATURE_APX);
+}
+
+static inline struct vmx_insn_info vmx_get_insn_info(struct kvm_vcpu *vcpu)
 {
 	struct vmx_insn_info insn;
 
-	insn.extended  = false;
-	insn.info.word = vmcs_read32(VMX_INSTRUCTION_INFO);
+	if (vmx_insn_info_extended()) {
+		insn.extended   = true;
+		insn.info.dword = vmcs_read64(EXTENDED_INSTRUCTION_INFO);
+	} else {
+		insn.extended  = false;
+		insn.info.word = vmcs_read32(VMX_INSTRUCTION_INFO);
+	}
 
 	return insn;
 }
@@ -413,7 +427,10 @@ static __always_inline unsigned long vmx_get_exit_qual(struct kvm_vcpu *vcpu)
 
 static inline int vmx_get_exit_qual_gpr(struct kvm_vcpu *vcpu)
 {
-	return (vmx_get_exit_qual(vcpu) >> 8) & 0xf;
+	if (vmx_insn_info_extended())
+		return (vmx_get_exit_qual(vcpu) >> 8) & 0x1f;
+	else
+		return (vmx_get_exit_qual(vcpu) >> 8) & 0xf;
 }
 
 static __always_inline u32 vmx_get_intr_info(struct kvm_vcpu *vcpu)
