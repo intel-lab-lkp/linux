@@ -546,6 +546,15 @@ static const struct dmi_system_id asus_quirks[] = {
 	},
 	{
 		.callback = dmi_matched,
+		.ident = "ASUS Zenbook 14 UX3405MA",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "UX3405MA"),
+		},
+		.driver_data = &quirk_asus_ignore_fan,
+	},
+	{
+		.callback = dmi_matched,
 		.ident = "ASUS ROG Z13",
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
