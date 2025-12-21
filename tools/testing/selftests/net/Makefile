@@ -164,12 +164,10 @@ TEST_GEN_FILES := \
 # end of TEST_GEN_FILES
 
 TEST_GEN_PROGS := \
-	arp_send \
 	bind_timewait \
 	bind_wildcard \
 	epoll_busy_poll \
 	ipv6_fragmentation \
-	ndisc_send \
 	proc_net_pktgen \
 	reuseaddr_conflict \
 	reuseport_bpf \

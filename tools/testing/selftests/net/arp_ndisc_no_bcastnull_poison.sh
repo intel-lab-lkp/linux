@@ -75,7 +75,7 @@ run_no_arp_poisoning() {
 	ip netns exec ${PEER_NS} ping -c 1 ${V4_ADDR0} >/dev/null 2>&1
 
 	# Poison with a valid MAC to ensure injection is working
-	./arp_send ${veth0_ifindex} ${BCAST_MAC} ${VALID_MAC} ${op} \
+	python3 ./arp_send.py "veth0" ${BCAST_MAC} ${VALID_MAC} ${op} \
 		${V4_ADDR0} ${VALID_MAC} ${V4_ADDR0} ${VALID_MAC}
 
 	neigh=$(ip netns exec ${PEER_NS} ip neigh show ${V4_ADDR0} | \
@@ -88,7 +88,7 @@ run_no_arp_poisoning() {
 	fi
 
 	# Poison with tmac
-	./arp_send ${veth0_ifindex} ${l2_dmac} ${VALID_MAC} ${op} \
+	python3 ./arp_send.py "veth0" ${BCAST_MAC} ${VALID_MAC} ${op} \
 		${V4_ADDR0} ${tmac} ${V4_ADDR0} ${tmac}
 
 	neigh=$(ip netns exec ${PEER_NS} ip neigh show ${V4_ADDR0} | \
@@ -119,8 +119,8 @@ run_no_ndp_poisoning() {
 	ip netns exec ${PEER_NS} ping -c 1 ${V6_ADDR0} >/dev/null 2>&1
 
 	# Poison with a valid MAC to ensure injection is working
-	./ndisc_send ${veth0_ifindex} ${l2_dmac} ${VALID_MAC} ${dst_ip} \
-		${V6_ADDR0} ${tip} ${op} ${VALID_MAC}
+	python3 ./ndisc_send.py "veth0" ${l2_dmac} ${VALID_MAC} \
+		${dst_ip} ${V6_ADDR0} ${tip} ${op} ${VALID_MAC}
 	neigh=$(ip netns exec ${PEER_NS} ip neigh show ${V6_ADDR0} | \
 		grep ${VALID_MAC})
 	if [ "${neigh}" == "" ]; then
@@ -131,8 +131,8 @@ run_no_ndp_poisoning() {
 	fi
 
 	# Poison with tmac
-	./ndisc_send ${veth0_ifindex} ${l2_dmac} ${VALID_MAC} ${dst_ip} \
-		${V6_ADDR0} ${tip} ${op} ${tmac}
+	python3 ./ndisc_send.py "veth0" ${l2_dmac} ${VALID_MAC} \
+		${dst_ip} ${V6_ADDR0} ${tip} ${op} ${tmac}
 	neigh=$(ip netns exec ${PEER_NS} ip neigh show ${V6_ADDR0} | \
 		grep ${tmac})
 	if [ "${neigh}" != "" ]; then
