@@ -8198,6 +8198,7 @@ DRM DRIVER FOR SAMSUNG SOFEF01 DDIC
 M:	Marijn Suijten <marijn.suijten@somainline.org>
 S:	Maintained
 F:	Documentation/devicetree/bindings/display/panel/samsung,sofef01-m.yaml
+F:	drivers/gpu/drm/panel/panel-samsung-sofef01.c
 
 DRM DRIVER FOR SHARP MEMORY LCD
 M:	Alex Lanzano <lanzano.alex@gmail.com>

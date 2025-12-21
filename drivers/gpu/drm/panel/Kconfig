@@ -935,6 +935,24 @@ config DRM_PANEL_SAMSUNG_SOFEF00
 
 	    Samsung AMS628NW01 (found in OnePlus 6, 1080x2280@60Hz)
 
+config DRM_PANEL_SAMSUNG_SOFEF01
+	tristate "Samsung SOFEF01-M DSI cmd mode panels"
+	depends on GPIOLIB
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+	  Say Y or M here if you want to enable support for the Samsung 6.0"/6.1"
+	  AMOLED DSI command mode panels found in multiple Sony smartphones:
+	  - Sony Xperia 5 (kumano bahamut): amb609tc01
+	  - Sony Xperia 10 II (seine pdx201): ams597ut01
+	  - Sony Xperia 10 III (lena pdx213): ams597ut04
+	  - Sony Xperia 10 IV (murray pdx225): ams597ut05
+	  - Sony Xperia 10 V (zambezi pdx235): ams605dk01
+	  - Sony Xperia 10 VI (columbia pdx246): ams605dk01
+
+	  This Display-IC features a fixed 1080x2520@60 mode.
+
 config DRM_PANEL_SEIKO_43WVF1G
 	tristate "Seiko 43WVF1G panel"
 	depends on OF
