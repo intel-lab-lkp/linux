@@ -341,7 +341,7 @@ int copy_data(
 	enum rxe_mr_copy_dir	dir)
 {
 	int			bytes;
-	struct rxe_sge		*sge	= &dma->sge[dma->cur_sge];
+	struct	ib_sge *sge	= &dma->sge[dma->cur_sge];
 	int			offset	= dma->sge_offset;
 	int			resid	= dma->resid;
 	struct rxe_mr		*mr	= NULL;
@@ -580,7 +580,7 @@ enum resp_states rxe_mr_do_atomic_write(struct rxe_mr *mr, u64 iova, u64 value)
 
 int advance_dma_data(struct rxe_dma_info *dma, unsigned int length)
 {
-	struct rxe_sge		*sge	= &dma->sge[dma->cur_sge];
+	struct	ib_sge *sge	= &dma->sge[dma->cur_sge];
 	int			offset	= dma->sge_offset;
 	int			resid	= dma->resid;
 

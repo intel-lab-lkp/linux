@@ -132,12 +132,6 @@ struct rxe_send_wr {
 	} wr;
 };
 
-struct rxe_sge {
-	__aligned_u64 addr;
-	__u32	length;
-	__u32	lkey;
-};
-
 struct mminfo {
 	__aligned_u64		offset;
 	__u32			size;
@@ -154,7 +148,7 @@ struct rxe_dma_info {
 	union {
 		__DECLARE_FLEX_ARRAY(__u8, inline_data);
 		__DECLARE_FLEX_ARRAY(__u8, atomic_wr);
-		__DECLARE_FLEX_ARRAY(struct rxe_sge, sge);
+		__DECLARE_FLEX_ARRAY(struct ib_sge, sge);
 	};
 };
 
