@@ -53,8 +53,10 @@ TEST_GEN_PROGS_EXTENDED = kublk
 
 include ../lib.mk
 
-$(TEST_GEN_PROGS_EXTENDED): kublk.c null.c file_backed.c common.c stripe.c \
-	fault_inject.c
+LOCAL_HDRS += kublk.h ublk_dep.h utils.h
+
+$(TEST_GEN_PROGS_EXTENDED): $(LOCAL_HDRS) \
+	kublk.c null.c file_backed.c common.c stripe.c fault_inject.c
 
 check:
 	shellcheck -x -f gcc *.sh
