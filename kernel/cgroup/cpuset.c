@@ -4175,11 +4175,10 @@ bool cpuset_current_node_allowed(int node, gfp_t gfp_mask)
 	return allowed;
 }
 
-bool cpuset_node_allowed(struct cgroup *cgroup, int nid)
+void cpuset_node_filter_allowed(struct cgroup *cgroup, nodemask_t *mask)
 {
 	struct cgroup_subsys_state *css;
 	struct cpuset *cs;
-	bool allowed;
 
 	/*
 	 * In v1, mem_cgroup and cpuset are unlikely in the same hierarchy
@@ -4187,15 +4186,15 @@ bool cpuset_node_allowed(struct cgroup *cgroup, int nid)
 	 * so return true to avoid taking a global lock on the empty check.
 	 */
 	if (!cpuset_v2())
-		return true;
+		return;
 
 	css = cgroup_get_e_css(cgroup, &cpuset_cgrp_subsys);
 	if (!css)
-		return true;
+		return;
 
 	/*
 	 * Normally, accessing effective_mems would require the cpuset_mutex
-	 * or callback_lock - but node_isset is atomic and the reference
+	 * or callback_lock - but it is acceptable and the reference
 	 * taken via cgroup_get_e_css is sufficient to protect css.
 	 *
 	 * Since this interface is intended for use by migration paths, we
@@ -4205,25 +4204,6 @@ bool cpuset_node_allowed(struct cgroup *cgroup, int nid)
 	 * Reclaim and migration are subject to these same race conditions, and
 	 * cannot make strong isolation guarantees, so this is acceptable.
 	 */
-	cs = container_of(css, struct cpuset, css);
-	allowed = node_isset(nid, cs->effective_mems);
-	css_put(css);
-	return allowed;
-}
-
-void cpuset_node_filter_allowed(struct cgroup *cgroup, nodemask_t *mask)
-{
-	struct cgroup_subsys_state *css;
-	struct cpuset *cs;
-
-	if (!cpuset_v2())
-		return;
-
-	css = cgroup_get_e_css(cgroup, &cpuset_cgrp_subsys);
-	if (!css)
-		return;
-
-	/* Follows the same assumption in cpuset_node_allowed() */
 	cs = container_of(css, struct cpuset, css);
 	nodes_and(*mask, *mask, cs->effective_mems);
 	css_put(css);
