@@ -1746,6 +1746,8 @@ static inline void count_objcg_events(struct obj_cgroup *objcg,
 
 bool mem_cgroup_node_allowed(struct mem_cgroup *memcg, int nid);
 
+void mem_cgroup_filter_mems_allowed(struct mem_cgroup *memcg, nodemask_t *mask);
+
 void mem_cgroup_show_protected_memory(struct mem_cgroup *memcg);
 
 static inline bool memcg_is_dying(struct mem_cgroup *memcg)
@@ -1818,6 +1820,11 @@ static inline ino_t page_cgroup_ino(struct page *page)
 static inline bool mem_cgroup_node_allowed(struct mem_cgroup *memcg, int nid)
 {
 	return true;
+}
+
+static inline bool mem_cgroup_filter_mems_allowed(struct mem_cgroup *memcg,
+						  nodemask_t *mask)
+{
 }
 
 static inline void mem_cgroup_show_protected_memory(struct mem_cgroup *memcg)
