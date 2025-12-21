@@ -1255,6 +1255,38 @@ static inline u64 kvm_guest_supported_xfd(struct kvm_vcpu *vcpu)
 }
 #endif
 
+#ifdef CONFIG_KVM_APX
+unsigned long kvm_gpr_read_raw(struct kvm_vcpu *vcpu, int reg)
+{
+	switch (reg) {
+	case VCPU_REGS_RAX ... VCPU_REGS_R15:
+		return kvm_register_read_raw(vcpu, reg);
+	case VCPU_XREG_R16 ... VCPU_XREG_R31:
+		return kvm_read_egpr(reg);
+	default:
+		WARN_ON_ONCE(1);
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_gpr_read_raw);
+
+void kvm_gpr_write_raw(struct kvm_vcpu *vcpu, int reg, unsigned long val)
+{
+	switch (reg) {
+	case VCPU_REGS_RAX ... VCPU_REGS_R15:
+		kvm_register_write_raw(vcpu, reg, val);
+		break;
+	case VCPU_XREG_R16 ... VCPU_XREG_R31:
+		kvm_write_egpr(reg, val);
+		break;
+	default:
+		WARN_ON_ONCE(1);
+	}
+}
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_gpr_write_raw);
+#endif
+
 int __kvm_set_xcr(struct kvm_vcpu *vcpu, u32 index, u64 xcr)
 {
 	u64 xcr0 = xcr;

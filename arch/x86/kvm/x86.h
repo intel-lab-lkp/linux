@@ -400,9 +400,24 @@ static inline bool vcpu_match_mmio_gpa(struct kvm_vcpu *vcpu, gpa_t gpa)
 	return false;
 }
 
+#ifdef CONFIG_KVM_APX
+unsigned long kvm_gpr_read_raw(struct kvm_vcpu *vcpu, int reg);
+void kvm_gpr_write_raw(struct kvm_vcpu *vcpu, int reg, unsigned long val);
+#else
+static inline unsigned long kvm_gpr_read_raw(struct kvm_vcpu *vcpu, int reg)
+{
+	return kvm_register_read_raw(vcpu, reg);
+}
+
+static inline void kvm_gpr_write_raw(struct kvm_vcpu *vcpu, int reg, unsigned long val)
+{
+	kvm_register_write_raw(vcpu, reg, val);
+}
+#endif
+
 static inline unsigned long kvm_gpr_read(struct kvm_vcpu *vcpu, int reg)
 {
-	unsigned long val = kvm_register_read_raw(vcpu, reg);
+	unsigned long val = kvm_gpr_read_raw(vcpu, reg);
 
 	return is_64_bit_mode(vcpu) ? val : (u32)val;
 }
@@ -411,7 +426,7 @@ static inline void kvm_gpr_write(struct kvm_vcpu *vcpu, int reg, unsigned long v
 {
 	if (!is_64_bit_mode(vcpu))
 		val = (u32)val;
-	return kvm_register_write_raw(vcpu, reg, val);
+	kvm_gpr_write_raw(vcpu, reg, val);
 }
 
 static inline bool kvm_check_has_quirk(struct kvm *kvm, u64 quirk)
