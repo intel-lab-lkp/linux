@@ -5602,6 +5602,12 @@ bool mem_cgroup_node_allowed(struct mem_cgroup *memcg, int nid)
 	return memcg ? cpuset_node_allowed(memcg->css.cgroup, nid) : true;
 }
 
+void mem_cgroup_filter_mems_allowed(struct mem_cgroup *memcg, nodemask_t *mask)
+{
+	if (memcg)
+		cpuset_node_filter_allowed(memcg->css.cgroup, mask);
+}
+
 void mem_cgroup_show_protected_memory(struct mem_cgroup *memcg)
 {
 	if (mem_cgroup_disabled() || !cgroup_subsys_on_dfl(memory_cgrp_subsys))

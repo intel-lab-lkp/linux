@@ -4452,6 +4452,24 @@ bool cpuset_node_allowed(struct cgroup *cgroup, int nid)
 	return allowed;
 }
 
+void cpuset_node_filter_allowed(struct cgroup *cgroup, nodemask_t *mask)
+{
+	struct cgroup_subsys_state *css;
+	struct cpuset *cs;
+
+	if (!cpuset_v2())
+		return;
+
+	css = cgroup_get_e_css(cgroup, &cpuset_cgrp_subsys);
+	if (!css)
+		return;
+
+	/* Follows the same assumption in cpuset_node_allowed() */
+	cs = container_of(css, struct cpuset, css);
+	nodes_and(*mask, *mask, cs->effective_mems);
+	css_put(css);
+}
+
 /**
  * cpuset_spread_node() - On which node to begin search for a page
  * @rotor: round robin rotor
