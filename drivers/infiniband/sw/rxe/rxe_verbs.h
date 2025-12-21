@@ -219,12 +219,6 @@ struct rxe_resp_info {
 	u32			rkey;
 	u32			length;
 
-	/* SRQ only */
-	struct {
-		struct rxe_recv_wqe	wqe;
-		struct ib_sge		sge[RXE_MAX_SGE];
-	} srq_wqe;
-
 	/* Responder resources. It's a circular list where the oldest
 	 * resource is dropped first.
 	 */
@@ -232,7 +226,15 @@ struct rxe_resp_info {
 	unsigned int		res_head;
 	unsigned int		res_tail;
 	struct resp_res		*res;
+
+	/* SRQ only */
+	/* Must be last as it ends in a flexible-array member. */
+	TRAILING_OVERLAP(struct rxe_recv_wqe, wqe, dma.sge,
+		struct ib_sge		sge[RXE_MAX_SGE];
+	) srq_wqe;
 };
+static_assert(offsetof(struct rxe_resp_info, srq_wqe.wqe.dma.sge) ==
+	      offsetof(struct rxe_resp_info, srq_wqe.sge));
 
 struct rxe_qp {
 	struct ib_qp		ibqp;
@@ -269,7 +271,6 @@ struct rxe_qp {
 
 	struct rxe_req_info	req;
 	struct rxe_comp_info	comp;
-	struct rxe_resp_info	resp;
 
 	atomic_t		ssn;
 	atomic_t		skb_out;
@@ -289,6 +290,9 @@ struct rxe_qp {
 	spinlock_t		state_lock; /* guard requester and completer */
 
 	struct execute_work	cleanup_work;
+
+	/* Must be last as it ends in a flexible-array member. */
+	struct rxe_resp_info	resp;
 };
 
 enum {
