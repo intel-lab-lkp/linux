@@ -953,6 +953,22 @@ config DRM_PANEL_SAMSUNG_SOFEF01
 
 	  This Display-IC features a fixed 1080x2520@60 mode.
 
+config DRM_PANEL_SAMSUNG_SOFEF03
+	tristate "Samsung SOFEF03-M DSI cmd mode panels"
+	depends on GPIOLIB
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	select DRM_DISPLAY_DSC_HELPER
+	select DRM_DISPLAY_HELPER
+	help
+	  Say Y or M here if you want to enable support for the Samsung 6.1" AMOLED
+	  DSI command mode panel found in the Sony Xperia 5 II and Sony Xperia 5 III
+	  smartphones (both amb609vp01 panel).
+
+	  This Display-IC uses Display Stream Compression 1.1 and features a
+	  1080x2520@60 and 1080x2520@120 mode.
+
 config DRM_PANEL_SEIKO_43WVF1G
 	tristate "Seiko 43WVF1G panel"
 	depends on OF
