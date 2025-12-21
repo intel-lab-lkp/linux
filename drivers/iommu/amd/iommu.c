@@ -2426,7 +2426,7 @@ static struct iommu_device *amd_iommu_probe_device(struct device *dev)
 		dev_err(dev, "Failed to initialize - trying to proceed anyway\n");
 		iommu_dev = ERR_PTR(ret);
 		iommu_ignore_device(iommu, dev);
-		goto out_err;
+		return iommu_dev;
 	}
 
 	amd_iommu_set_pci_msi_domain(dev, iommu);
