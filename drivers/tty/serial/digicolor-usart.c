@@ -397,6 +397,9 @@ static void digicolor_uart_console_write(struct console *co, const char *c,
 	unsigned long flags;
 	int locked = 1;
 
+	if (!port)
+		return;
+
 	if (oops_in_progress)
 		locked = uart_port_trylock_irqsave(port, &flags);
 	else
@@ -508,6 +511,7 @@ static void digicolor_uart_remove(struct platform_device *pdev)
 	struct uart_port *port = platform_get_drvdata(pdev);
 
 	uart_remove_one_port(&digicolor_uart, port);
+	digicolor_ports[port->line] = NULL;
 }
 
 static const struct of_device_id digicolor_uart_dt_ids[] = {
