@@ -419,8 +419,9 @@ static int cmm_sysfs_register(struct device *dev)
 fail:
 	while (--i >= 0)
 		device_remove_file(dev, cmm_attrs[i]);
-	device_unregister(dev);
+	device_del(dev);
 subsys_unregister:
+	put_device(dev);
 	bus_unregister(&cmm_subsys);
 	return rc;
 }
