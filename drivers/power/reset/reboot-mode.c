@@ -19,6 +19,39 @@ struct mode_info {
 	struct list_head list;
 };
 
+static ssize_t reboot_modes_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct reboot_mode_driver *reboot;
+	struct mode_info *info;
+	ssize_t size = 0;
+
+	reboot = dev_get_drvdata(dev);
+	if (!reboot)
+		return -ENODATA;
+
+	scoped_guard(mutex, &reboot->reboot_mode_mutex) {
+		list_for_each_entry(info, &reboot->head, list)
+			size += sysfs_emit_at(buf, size, "%s ", info->mode);
+	}
+
+	if (!size)
+		return -ENODATA;
+
+	return size + sysfs_emit_at(buf, size - 1, "\n");
+}
+static DEVICE_ATTR_RO(reboot_modes);
+
+static struct attribute *reboot_mode_attrs[] = {
+	&dev_attr_reboot_modes.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(reboot_mode);
+
+static const struct class reboot_mode_class = {
+	.name = "reboot-mode",
+	.dev_groups = reboot_mode_groups,
+};
+
 static unsigned int get_reboot_mode_magic(struct reboot_mode_driver *reboot,
 					  const char *cmd)
 {
@@ -76,6 +109,15 @@ int reboot_mode_register(struct reboot_mode_driver *reboot)
 	size_t len = strlen(PREFIX);
 	int ret;
 
+	reboot->reboot_mode_device = device_create(&reboot_mode_class, NULL, 0,
+						   (void *)reboot, reboot->driver_name);
+	if (IS_ERR(reboot->reboot_mode_device)) {
+		ret = PTR_ERR(reboot->reboot_mode_device);
+		reboot->reboot_mode_device = NULL;
+		return ret;
+	}
+
+	mutex_init(&reboot->reboot_mode_mutex);
 	INIT_LIST_HEAD(&reboot->head);
 
 	for_each_property_of_node(np, prop) {
@@ -107,7 +149,9 @@ int reboot_mode_register(struct reboot_mode_driver *reboot)
 			goto error;
 		}
 
-		list_add_tail(&info->list, &reboot->head);
+		scoped_guard(mutex, &reboot->reboot_mode_mutex) {
+			list_add_tail(&info->list, &reboot->head);
+		}
 	}
 
 	reboot->reboot_notifier.notifier_call = reboot_mode_notify;
@@ -116,9 +160,7 @@ int reboot_mode_register(struct reboot_mode_driver *reboot)
 	return 0;
 
 error:
-	list_for_each_entry(info, &reboot->head, list)
-		kfree_const(info->mode);
-
+	reboot_mode_unregister(reboot);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(reboot_mode_register);
@@ -131,10 +173,17 @@ int reboot_mode_unregister(struct reboot_mode_driver *reboot)
 {
 	struct mode_info *info;
 
+	if (!reboot->reboot_mode_device)
+		return -ENODEV;
+
 	unregister_reboot_notifier(&reboot->reboot_notifier);
 
-	list_for_each_entry(info, &reboot->head, list)
-		kfree_const(info->mode);
+	scoped_guard(mutex, &reboot->reboot_mode_mutex) {
+		list_for_each_entry(info, &reboot->head, list)
+			kfree_const(info->mode);
+	}
+	device_unregister(reboot->reboot_mode_device);
+	reboot->reboot_mode_device = NULL;
 
 	return 0;
 }
@@ -162,6 +211,7 @@ int devm_reboot_mode_register(struct device *dev,
 	if (!dr)
 		return -ENOMEM;
 
+	reboot->driver_name = reboot->dev->driver->name;
 	rc = reboot_mode_register(reboot);
 	if (rc) {
 		devres_free(dr);
@@ -198,6 +248,19 @@ void devm_reboot_mode_unregister(struct device *dev,
 			       devm_reboot_mode_match, reboot));
 }
 EXPORT_SYMBOL_GPL(devm_reboot_mode_unregister);
+
+static int __init reboot_mode_init(void)
+{
+	return class_register(&reboot_mode_class);
+}
+
+static void __exit reboot_mode_exit(void)
+{
+	class_unregister(&reboot_mode_class);
+}
+
+subsys_initcall(reboot_mode_init);
+module_exit(reboot_mode_exit);
 
 MODULE_AUTHOR("Andy Yan <andy.yan@rock-chips.com>");
 MODULE_DESCRIPTION("System reboot mode core library");
