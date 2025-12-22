@@ -735,9 +735,8 @@ static int ntfs_read_folio(struct file *file, struct folio *folio)
 	}
 
 	if (is_compressed(ni)) {
-		ni_lock(ni);
+		/* ni_lock is taken inside ni_readpage_cmpr after page locks */
 		err = ni_readpage_cmpr(ni, folio);
-		ni_unlock(ni);
 		return err;
 	}
 
