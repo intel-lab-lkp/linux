@@ -106,6 +106,12 @@ properties:
         description:
           For this device it is strongly suggested to include
           arasan,soc-ctl-syscon.
+      - items:
+          - const: axiado,ax3000-sdhci-5.1-emmc
+          - const: arasan,sdhci-5.1
+        description:
+          For this device it is strongly suggested to include
+          clock-output-names and '#clock-cells'.
 
   reg:
     maxItems: 1
@@ -333,4 +339,16 @@ examples:
           clocks = <&scmi_clk KEEM_BAY_PSS_AUX_SD0>,
                    <&scmi_clk KEEM_BAY_PSS_SD0>;
           arasan,soc-ctl-syscon = <&sd0_phy_syscon>;
+    };
+
+  - |
+    mmc@86000000 {
+          compatible = "axiado,ax3000-sdhci-5.1-emmc", "arasan,sdhci-5.1";
+          reg = <0x86000000 0x1000>;
+          clock-names = "clk_xin", "clk_ahb";
+          clocks = <&clk_xin &clk_ahb>;
+          interrupt-parent = <&gic500>;
+          interrupts = <0 123 4>;
+          phys = <&emmc_phy>;
+          phy-names = "phy_arasan";
     };
