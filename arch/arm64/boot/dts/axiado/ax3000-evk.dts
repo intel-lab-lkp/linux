@@ -80,3 +80,11 @@
 &uart3 {
 	status = "okay";
 };
+
+&emmc_phy {
+	status = "okay";
+};
+
+&sdhci0 {
+	status = "okay";
+};
