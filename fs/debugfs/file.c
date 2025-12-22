@@ -1026,6 +1026,9 @@ ssize_t debugfs_read_file_str(struct file *file, char __user *user_buf,
 		return ret;
 
 	str = *(char **)file->private_data;
+	if (!str)
+		return -EINVAL;
+
 	len = strlen(str) + 1;
 	copy = kmalloc(len, GFP_KERNEL);
 	if (!copy) {
