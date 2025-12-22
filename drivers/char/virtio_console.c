@@ -971,10 +971,17 @@ static __poll_t port_fops_poll(struct file *filp, poll_table *wait)
 		return EPOLLHUP;
 	}
 	ret = 0;
-	if (!will_read_block(port))
+
+	spin_lock(&port->inbuf_lock);
+	if (port->inbuf)
 		ret |= EPOLLIN | EPOLLRDNORM;
-	if (!will_write_block(port))
+	spin_unlock(&port->inbuf_lock);
+
+	spin_lock(&port->outvq_lock);
+	if (!port->outvq_full)
 		ret |= EPOLLOUT;
+	spin_unlock(&port->outvq_lock);
+
 	if (!port->host_connected)
 		ret |= EPOLLHUP;
 
@@ -1698,12 +1705,17 @@ static void flush_bufs(struct virtqueue *vq, bool can_sleep)
 static void out_intr(struct virtqueue *vq)
 {
 	struct port *port;
+	unsigned long flags;
 
 	port = find_port_by_vq(vq->vdev->priv, vq);
 	if (!port) {
 		flush_bufs(vq, false);
 		return;
 	}
+
+	spin_lock_irqsave(&port->outvq_lock, flags);
+	reclaim_consumed_buffers(port);
+	spin_unlock_irqrestore(&port->outvq_lock, flags);
 
 	wake_up_interruptible(&port->waitqueue);
 }
