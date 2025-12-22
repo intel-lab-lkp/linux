@@ -10,5 +10,6 @@
 #include <linux/kconfig.h>
 #include <linux/string.h>
 #include <linux/ctype.h>
+#include <linux/sizes.h>
 
 #endif
