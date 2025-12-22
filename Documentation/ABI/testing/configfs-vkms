@@ -62,6 +62,20 @@ Description:
         Content of the EDID for this connector. Ignored if
         edid_enabled is not set.
 
+What:		/sys/kernel/config/vkms/<device>/connectors/<connector>/dynamic
+Date:		Nov 2025
+Contact:	dri-devel@lists.freedesktop.org
+Description:
+        Set to 1 to create a dynamic connector (emulates DP MST).
+        Value: 1 - dynamic, 0 - static.
+
+What:		/sys/kernel/config/vkms/<device>/connectors/<connector>/enabled
+Date:		Nov 2025
+Contact:	dri-devel@lists.freedesktop.org
+Description:
+        For dynamic connectors, set to 1 to create the connector,
+        0 to remove it. Value: 1 - enabled, 0 - disabled.
+
 What:		/sys/kernel/config/vkms/<device>/connectors/<connector>/possible_encoders
 Date:		Nov 2025
 Contact:	dri-devel@lists.freedesktop.org
