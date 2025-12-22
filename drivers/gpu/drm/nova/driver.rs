@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
-use kernel::{
-    auxiliary, c_str, device::Core, drm, drm::gem, drm::ioctl, prelude::*, sync::aref::ARef,
-};
+use kernel::{auxiliary, device::Core, drm, drm::gem, drm::ioctl, prelude::*, sync::aref::ARef};
 
 use crate::file::File;
 use crate::gem::NovaObject;
@@ -24,12 +22,12 @@ const INFO: drm::DriverInfo = drm::DriverInfo {
     major: 0,
     minor: 0,
     patchlevel: 0,
-    name: c_str!("nova"),
-    desc: c_str!("Nvidia Graphics"),
+    name: c"nova",
+    desc: c"Nvidia Graphics",
 };
 
-const NOVA_CORE_MODULE_NAME: &CStr = c_str!("NovaCore");
-const AUXILIARY_NAME: &CStr = c_str!("nova-drm");
+const NOVA_CORE_MODULE_NAME: &CStr = c"NovaCore";
+const AUXILIARY_NAME: &CStr = c"nova-drm";
 
 kernel::auxiliary_device_table!(
     AUX_TABLE,
