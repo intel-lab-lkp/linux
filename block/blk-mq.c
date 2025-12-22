@@ -171,7 +171,7 @@ bool __blk_freeze_queue_start(struct request_queue *q,
 		percpu_ref_kill(&q->q_usage_counter);
 		mutex_unlock(&q->mq_freeze_lock);
 		if (queue_is_mq(q))
-			blk_mq_run_hw_queues(q, false);
+			blk_mq_run_hw_queues(q, true);
 	} else {
 		mutex_unlock(&q->mq_freeze_lock);
 	}
