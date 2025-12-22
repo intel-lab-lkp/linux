@@ -340,7 +340,9 @@ struct acpi_table_agdi {
 
 /* Mask for Flags field above */
 
-#define ACPI_AGDI_SIGNALING_MODE (1)
+#define ACPI_AGDI_SIGNALING_MODE_MASK (3)
+#define ACPI_AGDI_SIGNALING_MODE_SDEI (0)
+#define ACPI_AGDI_SIGNALING_MODE_INTERRUPT (1)
 
 /*******************************************************************************
  *
