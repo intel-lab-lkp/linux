@@ -507,6 +507,13 @@
 			clocks = <&refclk &refclk>;
 			status = "disabled";
 		};
+
+		emmc_phy: emmc-phy@80801C00 {
+			compatible = "axiado,ax3000-emmc-phy";
+			reg = <0x00 0x80801C00 0x00 0x1000>;
+			#phy-cells = <0>;
+			status = "disabled";
+		};
 	};
 
 	timer {
