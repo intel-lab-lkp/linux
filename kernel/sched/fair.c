@@ -593,7 +593,160 @@ static inline s64 entity_key(struct cfs_rq *cfs_rq, struct sched_entity *se)
  *
  *	      V +-= lag_i / W
  *
- *	    Also see the comment in place_entity() that deals with this. ]]
+ * If a joining or leaving task j has non-zero lag, V will change. We define
+ * sum_jlag as the sum of lag compensations at task joins/leaves, and J as the
+ * weighted average:
+ *
+ *     J = sum_jlag / W
+ *
+ * By construction, we choose jlag at joins/leaves so that V + J is invariant
+ * when there are tasks in the queue.
+ *
+ * --------------------------------------------------------------------
+ * 1) Task l leaving
+ *
+ * Before task l leaves we use the suffix "_l"; after it leaves we use a
+ * prime ('). Given v_l or lag_l, we can compute jlag_l.
+ *
+ *   W' = W_l - w_l
+ *   V' = (V_l * W_l - v_l * w_l) / W'
+ *      = (V_l * W' + V_l * w_l - v_l * w_l) / W'
+ *      = V_l + (V_l - v_l) * w_l / W'
+ *      = V_l + lag_l / W'                  // lag_l = (V_l - v_l) * w_l
+ *
+ * For J:
+ *
+ *   sum_jlag' = sum_jlag_l - jlag_l = J_l * W_l - jlag_l
+ *   J' = sum_jlag' / W'
+ *      = (J_l * W_l - jlag_l) / W'
+ *      = (J_l * W' + J_l * w_l - jlag_l) / W'
+ *      = J_l + (J_l * w_l - jlag_l) / W'
+ *
+ * Enforcing V' + J' = V_l + J_l gives:
+ *
+ *   jlag_l = (J_l + V_l - v_l) * w_l = J_l * w_l + lag_l
+ *
+ * --------------------------------------------------------------------
+ * 2) Task j joining
+ *
+ * Before task j joins we use V, W, J; after joining we use the suffix "_j":
+ *
+ *   W_j = W + w_j
+ *   V_j = (V * W + v_j * w_j) / W_j
+ *       = (V * W_j - V * w_j + v_j * w_j) / W_j
+ *       = V - (V - v_j) * w_j / W_j
+ *
+ * For J:
+ *
+ *   sum_jlag_j = sum_jlag + jlag_j = J * W + jlag_j
+ *   J_j = sum_jlag_j / W_j
+ *       = (J * W + jlag_j) / W_j
+ *       = (J * W_j - J * w_j + jlag_j) / W_j
+ *       = J - (J * w_j - jlag_j) / W_j
+ *
+ * Enforcing V_j + J_j = V + J gives:
+ *
+ *   jlag_j = (J + V - v_j) * w_j
+ *
+ * When task j joins, v_j, lag_j and jlag_j are not yet defined.
+ * Given V, J and last_leave_lag_j for j, if we set
+ *
+ *   jlag_j = last_leave_lag_j
+ *
+ * then
+ *
+ *   v_j = J + V - jlag_j / w_j
+ *       = V - (last_leave_lag_j / w_j - J)
+ *
+ * We only use jlag_j to compute v_j; it does not affect EEVDF's
+ * eligibility decision. Therefore we can also choose jlag_j to be
+ * last_leave_lag_j / 2, 2 * last_leave_lag_j, or any value with a
+ * uniform constant bound.
+ *
+ * --------------------------------------------------------------------
+ * 3) Meaning of sum_jlag and J
+ *
+ * sum_jlag tracks aggregate join/leave service lag ("jlag") relative to the
+ * EEVDF fluid schedule: service that future scheduling must preferentially
+ * repay or reclaim:
+ *   - sum_jlag > 0: positive jlag (we owe service; joined behind fluid);
+ *   - sum_jlag = 0: no outstanding jlag;
+ *   - sum_jlag < 0: negative jlag (we gave extra service; joined ahead).
+ *
+ * sum_jlag is the outstanding join/leave lag repaid when tasks leave,
+ * keeping V + J aligned with the fluid schedule.
+ *
+ * --------------------------------------------------------------------
+ * 4) Recursive relations for sum_jlag
+ *
+ *   sum_jlag(nj + 1, nl) = sum_jlag(nj, nl) + last_leave_lag_j
+ *   sum_jlag(nj, nl + 1) = sum_jlag(nj, nl) * (1 - w_l / W) - lag_l
+ *   J(nj, nl) = sum_jlag(nj, nl) / W
+ *
+ * Here nj is the number of joins and nl is the number of leaves, and
+ *
+ *   nj >= nl
+ *   sum_jlag(0, 0) = 0
+ *
+ * --------------------------------------------------------------------
+ * 5) Boundedness of J
+ *
+ * Let nr = nj - nl be the number of tasks currently in the queue. If nr = 1,
+ * the only task l leaves with lag_l = 0 and w_l = W, so sum_jlag becomes 0
+ * and J = 0.
+ *
+ * For nr > 1, assume for all tasks i in the queue:
+ *
+ *   1 < W_MIN <= w_i < W <= W_MAX
+ *   nr * W_MIN <= W <= W_MAX
+ *   0 < W_MIN / W_MAX <= 1 - w_i / W <= a < 1.
+ *
+ * and lag bounds
+ *
+ *   |last_leave_lag_j| <= q, |lag_l| <= q
+ *
+ * for some global constant q. Then nj-increase (task joins) gives
+ *
+ *   |sum_jlag| <= nr * q,  W >= nr * W_MIN  =>  |J| <= q / W_MIN
+ *
+ * For nl-increase (task leaves), the recurrence
+ *
+ *   sum_jlag(nj, nl + 1) = sum_jlag(nj, nl) * (1 - w_l / W) - lag_l
+ *
+ * has the standard form
+ *
+ *   x_{k+1} = a_k * x_k + d_k
+ *
+ * with
+ *
+ *   a_k = 1 - w_l / W in (0, 1),  |d_k| <= q.
+ *
+ * In such a system with contraction factor |a_k| < 1 and bounded
+ * disturbance (BIBS/ISS-type), x_k and J = x_k / W remain uniformly
+ * bounded. In particular, there exists a constant C1, independent of
+ * nj, nl and nr, such that
+ *
+ *   |sum_jlag(nj, nl)| = |sum_jlag(nl0 + nr, nl0 + k)|
+ *                     <= a^k * nr * q + (1 - a^k) * q / (1 - a)
+ *
+ * The number of remaining tasks is nr - k, so
+ *
+ *   W >= (nr - k) * W_MIN
+ *
+ * Therefore
+ *
+ *   |J| = |sum_jlag(nj, nl) / W|
+ *      <= q * (nr * a^k + (1 - a^k) / (1 - a)) / ((nr - k) * W_MIN)
+ *
+ * Hence
+ *
+ *   |J| <= (q / W_MIN) * C1
+ *
+ * where C1 can be chosen as
+ *
+ *   C1 = 1 + 1 / (1 - a) + 1 / (e * ln(1 / a)).
+ *
+ * Thus J has a uniform constant upper bound. ]]
  *
  * However, since v_i is u64, and the multiplication could easily overflow
  * transform it into a relative form that uses smaller quantities:
@@ -636,6 +789,36 @@ avg_vruntime_sub(struct cfs_rq *cfs_rq, struct sched_entity *se)
 
 	cfs_rq->avg_vruntime -= key * weight;
 	cfs_rq->avg_load -= weight;
+}
+
+/* Average join/leave lag debt J = sum_jlag / W for this cfs_rq. */
+s64 avg_vjlag(struct cfs_rq *cfs_rq)
+{
+	struct sched_entity *curr = cfs_rq->curr;
+	long load = cfs_rq->avg_load;
+
+	if (curr && curr->on_rq)
+		load += scale_load_down(curr->load.weight);
+
+	return load ? div_s64(cfs_rq->sum_jlag, load) : 0;
+}
+
+/* Account the join lag contribution of a newly enqueued entity. */
+static void sum_jlag_add(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	unsigned long weight = scale_load_down(se->load.weight);
+	s64 jlag_join = se->vlag * weight; /* preserve vlag: vlag - J_j */
+
+	cfs_rq->sum_jlag += jlag_join;
+}
+
+/* Account the leave lag correction when an entity dequeues. */
+static void sum_jlag_sub(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	unsigned long weight = scale_load_down(se->load.weight);
+	s64 jlag_leave = (se->vlag + avg_vjlag(cfs_rq)) * weight;
+
+	cfs_rq->sum_jlag -= jlag_leave;
 }
 
 static inline
@@ -5116,8 +5299,13 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	 * other tasks.
 	 *
 	 * EEVDF: placement strategy #1 / #2
+	 *
+	 * FAIR_PLACE_LAG uses avg_vjlag to keep placement fair and stable
+	 * even when tasks that join or leave have non-zero lag.
 	 */
-	if (sched_feat(PLACE_LAG) && cfs_rq->nr_queued && se->vlag) {
+	if (sched_feat(FAIR_PLACE_LAG))
+		lag = se->vlag - avg_vjlag(cfs_rq);
+	else if (sched_feat(PLACE_LAG) && cfs_rq->nr_queued && se->vlag) {
 		struct sched_entity *curr = cfs_rq->curr;
 		unsigned long load;
 
@@ -5260,6 +5448,7 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 
 	check_schedstat_required();
 	update_stats_enqueue_fair(cfs_rq, se, flags);
+	sum_jlag_add(cfs_rq, se);
 	if (!curr)
 		__enqueue_entity(cfs_rq, se);
 	se->on_rq = 1;
@@ -5397,6 +5586,7 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 		se->rel_deadline = 1;
 	}
 
+	sum_jlag_sub(cfs_rq, se);
 	if (se != cfs_rq->curr)
 		__dequeue_entity(cfs_rq, se);
 	se->on_rq = 0;

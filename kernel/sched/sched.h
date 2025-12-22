@@ -680,6 +680,7 @@ struct cfs_rq {
 
 	s64			avg_vruntime;
 	u64			avg_load;
+	s64			sum_jlag;
 
 	u64			zero_vruntime;
 #ifdef CONFIG_SCHED_CORE
@@ -3891,6 +3892,7 @@ static inline void mm_cid_switch_to(struct task_struct *prev, struct task_struct
 #endif /* !CONFIG_SCHED_MM_CID */
 
 extern u64 avg_vruntime(struct cfs_rq *cfs_rq);
+extern s64 avg_vjlag(struct cfs_rq *cfs_rq);
 extern int entity_eligible(struct cfs_rq *cfs_rq, struct sched_entity *se);
 static inline
 void move_queued_task_locked(struct rq *src_rq, struct rq *dst_rq, struct task_struct *task)

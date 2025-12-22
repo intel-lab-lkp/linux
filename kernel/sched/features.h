@@ -6,6 +6,11 @@
  */
 SCHED_FEAT(PLACE_LAG, true)
 /*
+ * Adjust EEVDF placement strategy #1 using avg_vjlag to keep scheduling
+ * fair and stable even when tasks that join or leave have non-zero lag.
+ */
+SCHED_FEAT(FAIR_PLACE_LAG, false)
+/*
  * Give new tasks half a slice to ease into the competition.
  */
 SCHED_FEAT(PLACE_DEADLINE_INITIAL, true)
