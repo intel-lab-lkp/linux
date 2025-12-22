@@ -4430,7 +4430,7 @@ F:	lib/bitmap_benchmark.c
 F:	lib/cpumask.c
 F:	lib/find_bit.c
 F:	lib/find_bit_benchmark.c
-F:	lib/test_bitmap.c
+F:	lib/tests/bitmap_kunit.c
 F:	lib/tests/cpumask_kunit.c
 F:	tools/include/linux/bitfield.h
 F:	tools/include/linux/bitmap.h

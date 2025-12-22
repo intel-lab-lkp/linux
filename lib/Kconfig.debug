@@ -2438,6 +2438,15 @@ config ASYNC_RAID6_TEST
 config TEST_HEXDUMP
 	tristate "Test functions located in the hexdump module at runtime"
 
+config BITMAP_KUNIT_TEST
+	tristate "KUnit test bitmap_*() family of functions at runtime" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  Enable this option to test the bitmap functions at runtime.
+
+	  If unsure, say N.
+
 config PRINTF_KUNIT_TEST
 	tristate "KUnit test printf() family of functions at runtime" if !KUNIT_ALL_TESTS
 	depends on KUNIT
@@ -2497,13 +2506,6 @@ config BITMAP_BENCHMARK
 	help
 	  This builds the "bitmap_benchmark_test" module that measure bitmap_*()
 	  family of functions performance.
-
-	  If unsure, say N.
-
-config TEST_BITMAP
-	tristate "Test bitmap_*() family of functions at runtime"
-	help
-	  Enable this option to test the bitmap functions at boot.
 
 	  If unsure, say N.
 

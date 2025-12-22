@@ -84,10 +84,10 @@ obj-$(CONFIG_TEST_STATIC_KEYS) += test_static_keys.o
 obj-$(CONFIG_TEST_STATIC_KEYS) += test_static_key_base.o
 obj-$(CONFIG_TEST_DYNAMIC_DEBUG) += test_dynamic_debug.o
 
-obj-$(CONFIG_TEST_BITMAP) += test_bitmap.o
+obj-$(CONFIG_BITMAP_KUNIT_TEST) += bitmap_kunit.o
 ifeq ($(CONFIG_CC_IS_CLANG)$(CONFIG_KASAN),yy)
 # FIXME: Clang breaks test_bitmap_const_eval when KASAN and GCOV are enabled
-GCOV_PROFILE_test_bitmap.o := n
+GCOV_PROFILE_bitmap_kunit.o := n
 endif
 
 obj-$(CONFIG_TEST_UUID) += test_uuid.o
