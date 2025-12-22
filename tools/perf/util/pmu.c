@@ -1404,8 +1404,7 @@ int perf_pmu__format_type(struct perf_pmu *pmu, const char *name)
  * Sets value based on the format definition (format parameter)
  * and unformatted value (value parameter).
  */
-static void pmu_format_value(unsigned long *format, __u64 value, __u64 *v,
-			     bool zero)
+void pmu_format_value(unsigned long *format, __u64 value, __u64 *v, bool zero)
 {
 	unsigned long fbit, vbit;
 
