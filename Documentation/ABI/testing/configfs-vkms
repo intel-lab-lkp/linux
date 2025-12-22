@@ -48,6 +48,20 @@ Description:
         Value is a bitfield, where 0x1 = NO_DATA, 0x2 = SMPTE_170M_YCC,
         etc. See enum drm_colorspace for full list.
 
+What:		/sys/kernel/config/vkms/<device>/connectors/<connector>/edid_enabled
+Date:		Nov 2025
+Contact:	dri-devel@lists.freedesktop.org
+Description:
+        Enable or disable EDID for this connector. Value:
+        1 - enabled, 0 - disabled.
+
+What:		/sys/kernel/config/vkms/<device>/connectors/<connector>/edid
+Date:		Nov 2025
+Contact:	dri-devel@lists.freedesktop.org
+Description:
+        Content of the EDID for this connector. Ignored if
+        edid_enabled is not set.
+
 What:		/sys/kernel/config/vkms/<device>/connectors/<connector>/possible_encoders
 Date:		Nov 2025
 Contact:	dri-devel@lists.freedesktop.org
