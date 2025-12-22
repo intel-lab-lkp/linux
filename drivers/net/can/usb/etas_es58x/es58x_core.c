@@ -1784,7 +1784,7 @@ static int es58x_open(struct net_device *netdev)
 	if (!es58x_dev->opened_channel_cnt) {
 		ret = es58x_alloc_rx_urbs(es58x_dev);
 		if (ret)
-			return ret;
+			goto free_urbs;
 
 		ret = es58x_set_realtime_diff_ns(es58x_dev);
 		if (ret)
