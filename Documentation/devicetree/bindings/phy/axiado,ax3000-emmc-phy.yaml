@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/phy/axiado,ax3000-emmc-phy.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Axiado AX3000 Arasan eMMC PHY
+
+maintainers:
+  - SriNavmani A <srinavmani@axiado.com>
+  - Tzu-Hao Wei <twei@axiado.com>
+  - Prasad Bolisetty <pbolisetty@axiado.com>
+
+description: |+
+  Bindings for eMMC PHY on Axiado AX3000 SoC.
+
+  - compatible:         Should be one of the following:
+                        "axiado,ax3000-emmc-phy"
+  - reg:
+      maxItems: 1
+
+properties:
+  compatible:
+    enum:
+      - axiado,ax3000-emmc-phy
+
+  "#phy-cells":
+    const: 0
+
+  reg:
+    maxItems: 1
+
+required:
+  - "#phy-cells"
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    emmc_phy: emmc-phy@80801C00 {
+        compatible = "axiado,ax3000-emmc-phy";
+        reg = <0x80801C00 0x1000>;
+        #phy-cells = <0>;
+    };
