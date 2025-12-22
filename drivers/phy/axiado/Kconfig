@@ -1,0 +1,15 @@
+#
+# PHY drivers for Axiado platforms
+#
+
+config PHY_AX3000_EMMC
+	tristate "Axiado eMMC PHY driver"
+	select GENERIC_PHY
+	help
+	  This enables support for the eMMC PHY block found on the
+	  Axiado AX3000 SoCs. The PHY provides the physical layer
+	  interface used by the Arasan SDHCI host controller for emmc
+	  signaling and timing adjustment.
+
+	  If you are building a kernel for AX3000 platform with
+	  eMMC storage, say Y or N.
