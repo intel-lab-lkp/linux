@@ -40,6 +40,14 @@ Description:
         Type of the connector. Possible values match those
         exposed by the "type" field in drm_connector.
 
+What:		/sys/kernel/config/vkms/<device>/connectors/<connector>/supported_colorspaces
+Date:		Nov 2025
+Contact:	dri-devel@lists.freedesktop.org
+Description:
+        Supported colorspaces for HDMI, DP, and eDP connectors.
+        Value is a bitfield, where 0x1 = NO_DATA, 0x2 = SMPTE_170M_YCC,
+        etc. See enum drm_colorspace for full list.
+
 What:		/sys/kernel/config/vkms/<device>/connectors/<connector>/possible_encoders
 Date:		Nov 2025
 Contact:	dri-devel@lists.freedesktop.org
