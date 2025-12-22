@@ -1071,6 +1071,7 @@ static int __dma_async_device_channel_register(struct dma_device *device,
 					       const char *name)
 {
 	int rc;
+	bool dev_registered = false;
 
 	chan->local = alloc_percpu(typeof(*chan->local));
 	if (!chan->local)
@@ -1102,6 +1103,7 @@ static int __dma_async_device_channel_register(struct dma_device *device,
 	else
 		dev_set_name(&chan->dev->device, "%s", name);
 	rc = device_register(&chan->dev->device);
+	dev_registered = true;
 	if (rc)
 		goto err_out_ida;
 	chan->client_count = 0;
@@ -1112,7 +1114,10 @@ static int __dma_async_device_channel_register(struct dma_device *device,
  err_out_ida:
 	ida_free(&device->chan_ida, chan->chan_id);
  err_free_dev:
-	kfree(chan->dev);
+	if (dev_registered)
+		put_device(&chan->dev->device);
+	else
+		kfree(chan->dev);
  err_free_local:
 	free_percpu(chan->local);
 	chan->local = NULL;
