@@ -514,6 +514,19 @@
 			#phy-cells = <0>;
 			status = "disabled";
 		};
+
+		sdhci0: mmc@86000000 {
+			compatible = "axiado,ax3000-sdhci-5.1-emmc", "arasan,sdhci-5.1";
+			reg = <0x0 0x86000000 0x00 0x1000>;
+			clock-names = "clk_xin", "clk_ahb";
+			clocks = <&clk_xin &clk_xin>;
+			interrupt-parent = <&gic500>;
+			interrupts = <0 123 4>;
+			bus-width = <8>;
+			phys = <&emmc_phy>;
+			phy-names = "phy_arasan";
+			status = "disabled";
+		};
 	};
 
 	timer {
