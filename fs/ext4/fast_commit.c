@@ -244,23 +244,26 @@ void ext4_fc_del(struct inode *inode)
 		return;
 	}
 
-	/*
-	 * Since ext4_fc_del is called from ext4_evict_inode while having a
-	 * handle open, there is no need for us to wait here even if a fast
-	 * commit is going on. That is because, if this inode is being
-	 * committed, ext4_mark_inode_dirty would have waited for inode commit
-	 * operation to finish before we come here. So, by the time we come
-	 * here, inode's EXT4_STATE_FC_COMMITTING would have been cleared. So,
-	 * we shouldn't see EXT4_STATE_FC_COMMITTING to be set on this inode
-	 * here.
-	 *
-	 * We may come here without any handles open in the "no_delete" case of
-	 * ext4_evict_inode as well. However, if that happens, we first mark the
-	 * file system as fast commit ineligible anyway. So, even in that case,
-	 * it is okay to remove the inode from the fc list.
-	 */
-	WARN_ON(ext4_test_inode_state(inode, EXT4_STATE_FC_COMMITTING)
-		&& !ext4_test_mount_flag(inode->i_sb, EXT4_MF_FC_INELIGIBLE));
+	/* Don't race with fast commit processing of this inode. */
+	while (ext4_test_inode_state(inode, EXT4_STATE_FC_COMMITTING)) {
+#if (BITS_PER_LONG < 64)
+		DEFINE_WAIT_BIT(wait, &ei->i_state_flags,
+				EXT4_STATE_FC_COMMITTING);
+		wq = bit_waitqueue(&ei->i_state_flags,
+				   EXT4_STATE_FC_COMMITTING);
+#else
+		DEFINE_WAIT_BIT(wait, &ei->i_flags,
+				EXT4_STATE_FC_COMMITTING);
+		wq = bit_waitqueue(&ei->i_flags, EXT4_STATE_FC_COMMITTING);
+#endif
+		prepare_to_wait(wq, &wait.wq_entry, TASK_UNINTERRUPTIBLE);
+		if (ext4_test_inode_state(inode, EXT4_STATE_FC_COMMITTING)) {
+			mutex_unlock(&sbi->s_fc_lock);
+			schedule();
+			mutex_lock(&sbi->s_fc_lock);
+		}
+		finish_wait(wq, &wait.wq_entry);
+	}
 	while (ext4_test_inode_state(inode, EXT4_STATE_FC_FLUSHING_DATA)) {
 #if (BITS_PER_LONG < 64)
 		DEFINE_WAIT_BIT(wait, &ei->i_state_flags,
@@ -1107,6 +1110,27 @@ static int ext4_fc_perform_commit(journal_t *journal)
 		ext4_set_inode_state(&iter->vfs_inode,
 				     EXT4_STATE_FC_COMMITTING);
 	}
+	/*
+	 * Also mark inodes referenced by create dentry updates. These inodes are
+	 * tracked via i_fc_dilist and might not be on s_fc_q[MAIN].
+	 */
+	{
+		struct ext4_fc_dentry_update *fc_dentry;
+		struct ext4_inode_info *ei;
+
+		list_for_each_entry(fc_dentry, &sbi->s_fc_dentry_q[FC_Q_MAIN],
+				    fcd_list) {
+			if (fc_dentry->fcd_op != EXT4_FC_TAG_CREAT)
+				continue;
+			if (list_empty(&fc_dentry->fcd_dilist))
+				continue;
+			ei = list_first_entry(&fc_dentry->fcd_dilist,
+					      struct ext4_inode_info,
+					      i_fc_dilist);
+			ext4_set_inode_state(&ei->vfs_inode,
+					     EXT4_STATE_FC_COMMITTING);
+		}
+	}
 	mutex_unlock(&sbi->s_fc_lock);
 	jbd2_journal_unlock_updates(journal);
 
@@ -1135,7 +1159,6 @@ static int ext4_fc_perform_commit(journal_t *journal)
 	}
 
 	/* Step 6.2: Now write all the dentry updates. */
-	mutex_lock(&sbi->s_fc_lock);
 	ret = ext4_fc_commit_dentry_updates(journal, &crc);
 	if (ret)
 		goto out;
@@ -1157,7 +1180,6 @@ static int ext4_fc_perform_commit(journal_t *journal)
 	ret = ext4_fc_write_tail(sb, crc);
 
 out:
-	mutex_unlock(&sbi->s_fc_lock);
 	blk_finish_plug(&plug);
 	return ret;
 }
@@ -1339,6 +1361,25 @@ static void ext4_fc_cleanup(journal_t *journal, int full, tid_t tid)
 					     struct ext4_fc_dentry_update,
 					     fcd_list);
 		list_del_init(&fc_dentry->fcd_list);
+		if (fc_dentry->fcd_op == EXT4_FC_TAG_CREAT &&
+		    !list_empty(&fc_dentry->fcd_dilist)) {
+			ei = list_first_entry(&fc_dentry->fcd_dilist,
+					      struct ext4_inode_info,
+					      i_fc_dilist);
+			ext4_clear_inode_state(&ei->vfs_inode,
+					       EXT4_STATE_FC_COMMITTING);
+			/*
+			 * Make sure clearing of EXT4_STATE_FC_COMMITTING is
+			 * visible before we send the wakeup. Pairs with implicit
+			 * barrier in prepare_to_wait() in ext4_fc_track_inode().
+			 */
+			smp_mb();
+#if (BITS_PER_LONG < 64)
+			wake_up_bit(&ei->i_state_flags, EXT4_STATE_FC_COMMITTING);
+#else
+			wake_up_bit(&ei->i_flags, EXT4_STATE_FC_COMMITTING);
+#endif
+		}
 		list_del_init(&fc_dentry->fcd_dilist);
 
 		release_dentry_name_snapshot(&fc_dentry->fcd_name);
