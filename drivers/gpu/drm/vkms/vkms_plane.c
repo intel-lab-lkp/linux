@@ -214,6 +214,16 @@ struct vkms_plane *vkms_plane_init(struct vkms_device *vkmsdev,
 
 	if (vkms_config_plane_get_default_pipeline(plane_cfg))
 		vkms_initialize_colorops(&plane->base);
+	if (vkms_config_plane_get_zpos_enabled(plane_cfg)) {
+		if (vkms_config_plane_get_zpos_mutable(plane_cfg))
+			drm_plane_create_zpos_property(&plane->base,
+						       vkms_config_plane_get_zpos_initial(plane_cfg),
+						       vkms_config_plane_get_zpos_min(plane_cfg),
+						       vkms_config_plane_get_zpos_max(plane_cfg));
+		else
+			drm_plane_create_zpos_immutable_property(&plane->base,
+								 vkms_config_plane_get_zpos_initial(plane_cfg));
+	}
 
 	return plane;
 }
