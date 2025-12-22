@@ -611,25 +611,9 @@ void qlogicfas408_disable_ints(struct qlogicfas408_priv *priv)
 	outb(0, qbase + 0xb);	/* disable ints */
 }
 
-/*
- *	Init and exit functions
- */
-
-static int __init qlogicfas408_init(void)
-{
-	return 0;
-}
-
-static void __exit qlogicfas408_exit(void)
-{
-
-}
-
 MODULE_AUTHOR("Tom Zerucha, Michael Griffith");
 MODULE_DESCRIPTION("Driver for the Qlogic FAS SCSI controllers");
 MODULE_LICENSE("GPL");
-module_init(qlogicfas408_init);
-module_exit(qlogicfas408_exit);
 
 EXPORT_SYMBOL(qlogicfas408_info);
 EXPORT_SYMBOL(qlogicfas408_queuecommand);
@@ -641,4 +625,3 @@ EXPORT_SYMBOL(qlogicfas408_get_chip_type);
 EXPORT_SYMBOL(qlogicfas408_setup);
 EXPORT_SYMBOL(qlogicfas408_detect);
 EXPORT_SYMBOL(qlogicfas408_disable_ints);
-

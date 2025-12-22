@@ -1679,16 +1679,3 @@ mISDNisar_init(struct isar_hw *isar, void *hw)
 	return ret;
 }
 EXPORT_SYMBOL(mISDNisar_init);
-
-static int __init isar_mod_init(void)
-{
-	pr_notice("mISDN: ISAR driver Rev. %s\n", ISAR_REV);
-	return 0;
-}
-
-static void __exit isar_mod_cleanup(void)
-{
-	pr_notice("mISDN: ISAR module unloaded\n");
-}
-module_init(isar_mod_init);
-module_exit(isar_mod_cleanup);

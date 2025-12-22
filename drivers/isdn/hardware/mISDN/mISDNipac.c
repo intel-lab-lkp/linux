@@ -1619,18 +1619,3 @@ mISDNipac_init(struct ipac_hw *ipac, void *hw)
 	return ret;
 }
 EXPORT_SYMBOL(mISDNipac_init);
-
-static int __init
-isac_mod_init(void)
-{
-	pr_notice("mISDNipac module version %s\n", ISAC_REV);
-	return 0;
-}
-
-static void __exit
-isac_mod_cleanup(void)
-{
-	pr_notice("mISDNipac module unloaded\n");
-}
-module_init(isac_mod_init);
-module_exit(isac_mod_cleanup);
