@@ -1,0 +1,11 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ */
+
+#include "purwa.dtsi"
+#include "iq-x-iot-som.dtsi"
+
+&gpu_zap_shader {
+	firmware-name = "qcom/x1e80100/gen71500_zap.mbn";
+};
