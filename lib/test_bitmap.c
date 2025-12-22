@@ -1372,54 +1372,6 @@ static void __init test_bitmap_read_write(void)
 		test_bitmap_write_helper(pattern[pi]);
 }
 
-static void __init test_bitmap_read_perf(void)
-{
-	DECLARE_BITMAP(bitmap, TEST_BIT_LEN);
-	unsigned int cnt, nbits, i;
-	unsigned long val;
-	ktime_t time;
-
-	bitmap_fill(bitmap, TEST_BIT_LEN);
-	time = ktime_get();
-	for (cnt = 0; cnt < 5; cnt++) {
-		for (nbits = 1; nbits <= BITS_PER_LONG; nbits++) {
-			for (i = 0; i < TEST_BIT_LEN; i++) {
-				if (i + nbits > TEST_BIT_LEN)
-					break;
-				/*
-				 * Prevent the compiler from optimizing away the
-				 * bitmap_read() by using its value.
-				 */
-				WRITE_ONCE(val, bitmap_read(bitmap, i, nbits));
-			}
-		}
-	}
-	time = ktime_get() - time;
-	pr_info("Time spent in %s:\t%llu\n", __func__, time);
-}
-
-static void __init test_bitmap_write_perf(void)
-{
-	DECLARE_BITMAP(bitmap, TEST_BIT_LEN);
-	unsigned int cnt, nbits, i;
-	unsigned long val = 0xfeedface;
-	ktime_t time;
-
-	bitmap_zero(bitmap, TEST_BIT_LEN);
-	time = ktime_get();
-	for (cnt = 0; cnt < 5; cnt++) {
-		for (nbits = 1; nbits <= BITS_PER_LONG; nbits++) {
-			for (i = 0; i < TEST_BIT_LEN; i++) {
-				if (i + nbits > TEST_BIT_LEN)
-					break;
-				bitmap_write(bitmap, val, i, nbits);
-			}
-		}
-	}
-	time = ktime_get() - time;
-	pr_info("Time spent in %s:\t%llu\n", __func__, time);
-}
-
 #undef TEST_BIT_LEN
 
 static void __init selftest(void)
@@ -1440,8 +1392,6 @@ static void __init selftest(void)
 	test_bitmap_print_buf();
 	test_bitmap_const_eval();
 	test_bitmap_read_write();
-	test_bitmap_read_perf();
-	test_bitmap_write_perf();
 
 	test_find_nth_bit();
 	test_for_each_set_bit();

@@ -2492,6 +2492,14 @@ config FFS_KUNIT_TEST
 config TEST_KSTRTOX
 	tristate "Test kstrto*() family of functions at runtime"
 
+config BITMAP_BENCHMARK
+	tristate "Benchmark bitmap_*() family of functions"
+	help
+	  This builds the "bitmap_benchmark_test" module that measure bitmap_*()
+	  family of functions performance.
+
+	  If unsure, say N.
+
 config TEST_BITMAP
 	tristate "Test bitmap_*() family of functions at runtime"
 	help
