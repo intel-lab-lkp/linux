@@ -109,6 +109,21 @@ Contact:	dri-devel@lists.freedesktop.org
 Description:
         Name of the plane.
 
+What:		/sys/kernel/config/vkms/<device>/planes/<plane>/possible_rotations
+Date:		Nov 2025
+Contact:	dri-devel@lists.freedesktop.org
+Description:
+        Available rotations for the plane, as a bitmask:
+        0x01 - no rotation, 0x02 - rotate 90°, 0x04 - rotate 180°,
+        0x08 - rotate 270°, 0x10 - reflect x, 0x20 - reflect y.
+
+What:		/sys/kernel/config/vkms/<device>/planes/<plane>/default_rotation
+Date:		Nov 2025
+Contact:	dri-devel@lists.freedesktop.org
+Description:
+        Default rotation presented to userspace, same values as
+        possible_rotations.
+
 What:		/sys/kernel/config/vkms/<device>/planes/<plane>/possible_crtcs
 Date:		Nov 2025
 Contact:	dri-devel@lists.freedesktop.org
