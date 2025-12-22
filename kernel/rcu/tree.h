@@ -175,11 +175,11 @@ struct rcu_snap_record {
 };
 
 /*
- * An IRQ work (deferred_qs_iw) is used by RCU to get the scheduler's attention.
+ * An IRQ work or softirq (deferred_qs) is used by RCU to get the scheduler's attention.
  * to report quiescent states at the soonest possible time.
  * The request can be in one of the following states:
- * - DEFER_QS_IDLE: An IRQ work is yet to be scheduled.
- * - DEFER_QS_PENDING: An IRQ work was scheduled but either not yet run, or it
+ * - DEFER_QS_IDLE: An IRQ work or softirq is yet to be scheduled.
+ * - DEFER_QS_PENDING: An IRQ work or softirq was scheduled but either not yet run, or it
  *                     ran and we still haven't reported a quiescent state.
  */
 #define DEFER_QS_IDLE		0
@@ -203,7 +203,7 @@ struct rcu_data {
 					/*  during and after the last grace */
 					/* period it is aware of. */
 	struct irq_work defer_qs_iw;	/* Obtain later scheduler attention. */
-	int defer_qs_iw_pending;	/* Scheduler attention pending? */
+	int defer_qs_pending;		/* irqwork or softirq pending? */
 	struct work_struct strict_work;	/* Schedule readers for strict GPs. */
 
 	/* 2) batch handling */
