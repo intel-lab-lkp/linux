@@ -165,6 +165,12 @@ allOf:
         reg-names: false
 
     else:
+      description:
+        For Versal IPI mailboxes, the "msg" register region is optional.
+        However, for successful message passing via mailbox, both the host IPI
+        agent and the remote IPI agent must have the "msg" register region
+        defined. If either agent lacks the "msg" field, only notification-based
+        communication (without message buffers) will work.
       properties:
         reg:
           items:
