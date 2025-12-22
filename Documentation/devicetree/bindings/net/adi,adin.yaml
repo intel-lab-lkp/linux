@@ -52,6 +52,12 @@ properties:
     description: Enable 25MHz reference clock output on CLK25_REF pin.
     type: boolean
 
+  adi,low-cmode-impedance:
+    description: |
+      Ability to configure for the lowest common-mode impedance on the
+      receive pair for 100BASE-TX.
+    type: boolean
+
 unevaluatedProperties: false
 
 examples:
