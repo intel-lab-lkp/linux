@@ -153,6 +153,15 @@ Description:
         Default color range presented to userspace, same
         values as supported_color_ranges.
 
+What:		/sys/kernel/config/vkms/<device>/planes/<plane>/supported_formats
+Date:		Nov 2025
+Contact:	dri-devel@lists.freedesktop.org
+Description:
+        List of supported formats for this plane. To add a new
+        item, write its fourcc code prefixed with '+'. To remove,
+        use '-' prefix. Use '+*' to add all formats, '-*' to
+        remove all.
+
 What:		/sys/kernel/config/vkms/<device>/planes/<plane>/possible_crtcs
 Date:		Nov 2025
 Contact:	dri-devel@lists.freedesktop.org
