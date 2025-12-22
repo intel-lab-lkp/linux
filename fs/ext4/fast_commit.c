@@ -571,8 +571,6 @@ void ext4_fc_track_inode(handle_t *handle, struct inode *inode)
 	 * commit. We shouldn't be holding i_data_sem when we go to sleep since
 	 * the commit path needs to grab the lock while committing the inode.
 	 */
-	lockdep_assert_not_held(&ei->i_data_sem);
-
 	while (ext4_test_inode_state(inode, EXT4_STATE_FC_COMMITTING)) {
 #if (BITS_PER_LONG < 64)
 		DEFINE_WAIT_BIT(wait, &ei->i_state_flags,
@@ -586,8 +584,10 @@ void ext4_fc_track_inode(handle_t *handle, struct inode *inode)
 				   EXT4_STATE_FC_COMMITTING);
 #endif
 		prepare_to_wait(wq, &wait.wq_entry, TASK_UNINTERRUPTIBLE);
-		if (ext4_test_inode_state(inode, EXT4_STATE_FC_COMMITTING))
+		if (ext4_test_inode_state(inode, EXT4_STATE_FC_COMMITTING)) {
+			lockdep_assert_not_held(&ei->i_data_sem);
 			schedule();
+		}
 		finish_wait(wq, &wait.wq_entry);
 	}
 
