@@ -2648,6 +2648,15 @@ static bool can_age_anon_pages(struct lruvec *lruvec,
 			  lruvec_memcg(lruvec));
 }
 
+static bool pgdat_balanced(pg_data_t *pgdat, int order, int highest_zoneidx);
+static inline void reset_kswapd_failures(struct pglist_data *pgdat,
+					 struct scan_control *sc)
+{
+	if (!current_is_kswapd() &&
+	    pgdat_balanced(pgdat, sc->order, sc->reclaim_idx))
+		atomic_set(&pgdat->kswapd_failures, 0);
+}
+
 #ifdef CONFIG_LRU_GEN
 
 #ifdef CONFIG_LRU_GEN_ENABLED
@@ -5065,7 +5074,7 @@ static void lru_gen_shrink_node(struct pglist_data *pgdat, struct scan_control *
 	blk_finish_plug(&plug);
 done:
 	if (sc->nr_reclaimed > reclaimed)
-		atomic_set(&pgdat->kswapd_failures, 0);
+		reset_kswapd_failures(pgdat, sc);
 }
 
 /******************************************************************************
@@ -6139,7 +6148,7 @@ again:
 	 * successful direct reclaim run will revive a dormant kswapd.
 	 */
 	if (reclaimable)
-		atomic_set(&pgdat->kswapd_failures, 0);
+		reset_kswapd_failures(pgdat, sc);
 	else if (sc->cache_trim_mode)
 		sc->cache_trim_mode_failed = 1;
 }
