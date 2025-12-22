@@ -1910,13 +1910,13 @@ static int pcs_probe(struct platform_device *pdev)
 
 	pcs->res = devm_request_mem_region(pcs->dev, res->start,
 			resource_size(res), DRIVER_NAME);
-	if (!pcs->res) {
-		dev_err(pcs->dev, "could not get mem_region\n");
-		return -EBUSY;
-	}
+	if (!pcs->res)
+		dev_warn(pcs->dev, "mem_region busy, continuing without reservation\n");
+	else
+		res = pcs->res;
 
-	pcs->size = resource_size(pcs->res);
-	pcs->base = devm_ioremap(pcs->dev, pcs->res->start, pcs->size);
+	pcs->size = resource_size(res);
+	pcs->base = devm_ioremap(pcs->dev, res->start, pcs->size);
 	if (!pcs->base) {
 		dev_err(pcs->dev, "could not ioremap\n");
 		return -ENODEV;
