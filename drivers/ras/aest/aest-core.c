@@ -235,6 +235,9 @@ static void aest_node_pool_process(struct work_struct *work)
 		    (status & (ERR_STATUS_UE | ERR_STATUS_DE))) {
 			if (event->addressing_mode == AEST_ADDREESS_SPA)
 				addr = event->regs.err_addr & PHYS_MASK;
+			else
+				addr = convert_ras_la_to_spa(event);
+
 			aest_handle_memory_failure(addr);
 		}
 
