@@ -267,6 +267,12 @@ properties:
             ratified in RISC-V Profiles Version 1.0, with commit b1d806605f87
             ("Updated to ratified state.")
 
+        - const: supm
+          description: |
+            The standard Supm extension for pointer masking support in user
+            mode as ratified at commit d70011dde6c2 ("Update to ratified state")
+            of riscv-j-extension.
+
         - const: svade
           description: |
             The standard Svade supervisor-level extension for SW-managed PTE A/D
@@ -892,6 +898,16 @@ properties:
                 const: shvstvecd
             - contains:
                 const: ssstateen
+      # Supm depends on either Smnpm or Ssnpm
+      - if:
+          contains:
+            const: supm
+        then:
+          anyOf:
+            - contains:
+                const: smnpm
+            - contains:
+                const: ssnpm
       # Zcb depends on Zca
       - if:
           contains:
