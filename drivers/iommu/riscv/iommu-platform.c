@@ -68,8 +68,13 @@ static int riscv_iommu_platform_probe(struct platform_device *pdev)
 	iommu->caps = riscv_iommu_readq(iommu, RISCV_IOMMU_REG_CAPABILITIES);
 	iommu->fctl = riscv_iommu_readl(iommu, RISCV_IOMMU_REG_FCTL);
 
-	iommu->irqs_count = platform_irq_count(pdev);
-	if (iommu->irqs_count <= 0)
+	ret = platform_irq_count(pdev);
+	if (ret < 0)
+		return ret;
+
+	iommu->irqs_count = ret;
+
+	if (!iommu->irqs_count)
 		return dev_err_probe(dev, -ENODEV,
 				     "no IRQ resources provided\n");
 	if (iommu->irqs_count > RISCV_IOMMU_INTR_COUNT)
