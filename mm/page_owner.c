@@ -375,24 +375,25 @@ void __split_page_owner(struct page *page, int old_order, int new_order)
 void __folio_copy_owner(struct folio *newfolio, struct folio *old)
 {
 	struct page_ext *page_ext;
+	struct page_ext *old_page_ext, *new_page_ext;
 	struct page_ext_iter iter;
 	struct page_owner *old_page_owner;
 	struct page_owner *new_page_owner;
 	depot_stack_handle_t migrate_handle;
 
-	page_ext = page_ext_get(&old->page);
-	if (unlikely(!page_ext))
+	old_page_ext = page_ext_get(&old->page);
+	if (unlikely(!old_page_ext))
 		return;
 
-	old_page_owner = get_page_owner(page_ext);
-	page_ext_put(page_ext);
+	old_page_owner = get_page_owner(old_page_ext);
 
-	page_ext = page_ext_get(&newfolio->page);
-	if (unlikely(!page_ext))
+	new_page_ext = page_ext_get(&newfolio->page);
+	if (unlikely(!new_page_ext)) {
+		page_ext_put(old_page_ext);
 		return;
+	}
 
-	new_page_owner = get_page_owner(page_ext);
-	page_ext_put(page_ext);
+	new_page_owner = get_page_owner(new_page_ext);
 
 	migrate_handle = new_page_owner->handle;
 	__update_page_owner_handle(&newfolio->page, old_page_owner->handle,
@@ -414,12 +415,12 @@ void __folio_copy_owner(struct folio *newfolio, struct folio *old)
 	 * for the new one and the old folio otherwise there will be an imbalance
 	 * when subtracting those pages from the stack.
 	 */
-	rcu_read_lock();
 	for_each_page_ext(&old->page, 1 << new_page_owner->order, page_ext, iter) {
 		old_page_owner = get_page_owner(page_ext);
 		old_page_owner->handle = migrate_handle;
 	}
-	rcu_read_unlock();
+	page_ext_put(new_page_ext);
+	page_ext_put(old_page_ext);
 }
 
 void pagetypeinfo_showmixedcount_print(struct seq_file *m,
