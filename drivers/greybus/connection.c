@@ -407,6 +407,8 @@ gb_connection_svc_connection_create(struct gb_connection *connection)
 		return 0;
 
 	intf = connection->intf;
+	if (intf->type == GB_INTERFACE_TYPE_P2P)
+		return 0;
 
 	/*
 	 * Enable either E2EFC or CSD, unless no flow control is requested.
@@ -439,6 +441,9 @@ static void
 gb_connection_svc_connection_destroy(struct gb_connection *connection)
 {
 	if (gb_connection_is_static(connection))
+		return;
+
+	if (connection->intf->type == GB_INTERFACE_TYPE_P2P)
 		return;
 
 	gb_svc_connection_destroy(connection->hd->svc,

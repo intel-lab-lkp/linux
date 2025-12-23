@@ -711,6 +711,9 @@ static int gb_interface_suspend(struct device *dev)
 	if (ret)
 		goto err_hibernate_abort;
 
+	if (intf->type == GB_INTERFACE_TYPE_P2P)
+		return 0;
+
 	ret = gb_interface_hibernate_link(intf);
 	if (ret)
 		return ret;
@@ -733,16 +736,19 @@ err_hibernate_abort:
 static int gb_interface_resume(struct device *dev)
 {
 	struct gb_interface *intf = to_gb_interface(dev);
-	struct gb_svc *svc = intf->hd->svc;
 	int ret;
 
-	ret = gb_interface_refclk_set(intf, true);
-	if (ret)
-		return ret;
+	if (intf->type != GB_INTERFACE_TYPE_P2P) {
+		struct gb_svc *svc = intf->hd->svc;
 
-	ret = gb_svc_intf_resume(svc, intf->interface_id);
-	if (ret)
-		return ret;
+		ret = gb_interface_refclk_set(intf, true);
+		if (ret)
+			return ret;
+
+		ret = gb_svc_intf_resume(svc, intf->interface_id);
+		if (ret)
+			return ret;
+	}
 
 	ret = gb_control_resume(intf->control);
 	if (ret)
@@ -924,6 +930,11 @@ static int _gb_interface_activate(struct gb_interface *intf,
 	if (intf->ejected || intf->removed)
 		return -ENODEV;
 
+	if (intf->type == GB_INTERFACE_TYPE_P2P) {
+		*type = GB_INTERFACE_TYPE_P2P;
+		goto make_active;
+	}
+
 	ret = gb_interface_vsys_set(intf, true);
 	if (ret)
 		return ret;
@@ -955,6 +966,7 @@ static int _gb_interface_activate(struct gb_interface *intf,
 	if (ret)
 		goto err_hibernate_link;
 
+make_active:
 	intf->active = true;
 
 	trace_gb_interface_activate(intf);
@@ -1012,6 +1024,7 @@ int gb_interface_activate(struct gb_interface *intf)
 	case GB_INTERFACE_TYPE_GREYBUS:
 		ret = _gb_interface_activate_es3_hack(intf, &type);
 		break;
+	case GB_INTERFACE_TYPE_P2P:
 	default:
 		ret = _gb_interface_activate(intf, &type);
 	}
@@ -1049,11 +1062,13 @@ void gb_interface_deactivate(struct gb_interface *intf)
 	if (intf->mode_switch)
 		complete(&intf->mode_switch_completion);
 
-	gb_interface_route_destroy(intf);
-	gb_interface_hibernate_link(intf);
-	gb_interface_unipro_set(intf, false);
-	gb_interface_refclk_set(intf, false);
-	gb_interface_vsys_set(intf, false);
+	if (intf->type != GB_INTERFACE_TYPE_P2P) {
+		gb_interface_route_destroy(intf);
+		gb_interface_hibernate_link(intf);
+		gb_interface_unipro_set(intf, false);
+		gb_interface_refclk_set(intf, false);
+		gb_interface_vsys_set(intf, false);
+	}
 
 	intf->active = false;
 }
@@ -1072,10 +1087,12 @@ int gb_interface_enable(struct gb_interface *intf)
 	int ret, size;
 	void *manifest;
 
-	ret = gb_interface_read_and_clear_init_status(intf);
-	if (ret) {
-		dev_err(&intf->dev, "failed to clear init status: %d\n", ret);
-		return ret;
+	if (intf->type != GB_INTERFACE_TYPE_P2P) {
+		ret = gb_interface_read_and_clear_init_status(intf);
+		if (ret) {
+			dev_err(&intf->dev, "failed to clear init status: %d\n", ret);
+			return ret;
+		}
 	}
 
 	/* Establish control connection */
@@ -1230,6 +1247,9 @@ int gb_interface_add(struct gb_interface *intf)
 		 gb_interface_type_string(intf));
 
 	switch (intf->type) {
+	case GB_INTERFACE_TYPE_P2P:
+		dev_info(&intf->dev, "Added P2P interface\n");
+		break;
 	case GB_INTERFACE_TYPE_GREYBUS:
 		dev_info(&intf->dev, "GMP VID=0x%08x, PID=0x%08x\n",
 			 intf->vendor_id, intf->product_id);
