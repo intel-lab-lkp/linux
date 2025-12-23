@@ -254,12 +254,20 @@ struct renesas_i3c {
 	enum i3c_internal_state internal_state;
 	u16 maxdevs;
 	u32 free_pos;
+	u32 dyn_addr;
 	u32 i2c_STDBR;
 	u32 i3c_STDBR;
+	unsigned long rate;
 	u8 addrs[RENESAS_I3C_MAX_DEVS];
 	struct renesas_i3c_xferqueue xferqueue;
 	void __iomem *regs;
+	u32 *DATBASn;
 	struct clk *tclk;
+	struct clk *pclk;
+	struct clk *pclkrw;
+	struct reset_control *presetn;
+	struct reset_control *tresetn;
+	u8 refclk_div;
 };
 
 struct renesas_i3c_i2c_dev_data {
@@ -477,92 +485,16 @@ static int renesas_i3c_reset(struct renesas_i3c *i3c)
 				 0, 1000, false, i3c->regs, RSTCTL);
 }
 
-static int renesas_i3c_bus_init(struct i3c_master_controller *m)
+static void renesas_i3c_hw_init(struct renesas_i3c *i3c)
 {
-	struct renesas_i3c *i3c = to_renesas_i3c(m);
-	struct i3c_bus *bus = i3c_master_get_bus(m);
-	struct i3c_device_info info = {};
-	struct i2c_timings t;
-	unsigned long rate;
-	u32 double_SBR, val;
-	int cks, pp_high_ticks, pp_low_ticks, i3c_total_ticks;
-	int od_high_ticks, od_low_ticks, i2c_total_ticks;
-	int ret;
-
-	rate = clk_get_rate(i3c->tclk);
-	if (!rate)
-		return -EINVAL;
-
-	ret = renesas_i3c_reset(i3c);
-	if (ret)
-		return ret;
-
-	i2c_total_ticks = DIV_ROUND_UP(rate, bus->scl_rate.i2c);
-	i3c_total_ticks = DIV_ROUND_UP(rate, bus->scl_rate.i3c);
-
-	i2c_parse_fw_timings(&m->dev, &t, true);
-
-	for (cks = 0; cks < 7; cks++) {
-		/* SCL low-period calculation in Open-drain mode */
-		od_low_ticks = ((i2c_total_ticks * 6) / 10);
-
-		/* SCL clock calculation in Push-Pull mode */
-		if (bus->mode == I3C_BUS_MODE_PURE)
-			pp_high_ticks = ((i3c_total_ticks * 5) / 10);
-		else
-			pp_high_ticks = DIV_ROUND_UP(I3C_BUS_THIGH_MIXED_MAX_NS,
-						     NSEC_PER_SEC / rate);
-		pp_low_ticks = i3c_total_ticks - pp_high_ticks;
-
-		if ((od_low_ticks / 2) <= 0xFF && pp_low_ticks < 0x3F)
-			break;
-
-		i2c_total_ticks /= 2;
-		i3c_total_ticks /= 2;
-		rate /= 2;
-	}
-
-	/* SCL clock period calculation in Open-drain mode */
-	if ((od_low_ticks / 2) > 0xFF || pp_low_ticks > 0x3F) {
-		dev_err(&m->dev, "invalid speed (i2c-scl = %lu Hz, i3c-scl = %lu Hz). Too slow.\n",
-			(unsigned long)bus->scl_rate.i2c, (unsigned long)bus->scl_rate.i3c);
-		return -EINVAL;
-	}
-
-	/* SCL high-period calculation in Open-drain mode */
-	od_high_ticks = i2c_total_ticks - od_low_ticks;
-
-	/* Standard Bit Rate setting */
-	double_SBR = od_low_ticks > 0xFF ? 1 : 0;
-	i3c->i3c_STDBR = (double_SBR ? STDBR_DSBRPO : 0) |
-			STDBR_SBRLO(double_SBR, od_low_ticks) |
-			STDBR_SBRHO(double_SBR, od_high_ticks) |
-			STDBR_SBRLP(pp_low_ticks) |
-			STDBR_SBRHP(pp_high_ticks);
-
-	od_low_ticks -= t.scl_fall_ns / (NSEC_PER_SEC / rate) + 1;
-	od_high_ticks -= t.scl_rise_ns / (NSEC_PER_SEC / rate) + 1;
-	i3c->i2c_STDBR = (double_SBR ? STDBR_DSBRPO : 0) |
-			STDBR_SBRLO(double_SBR, od_low_ticks) |
-			STDBR_SBRHO(double_SBR, od_high_ticks) |
-			STDBR_SBRLP(pp_low_ticks) |
-			STDBR_SBRHP(pp_high_ticks);
-	renesas_writel(i3c->regs, STDBR, i3c->i3c_STDBR);
-
-	/* Extended Bit Rate setting */
-	renesas_writel(i3c->regs, EXTBR, EXTBR_EBRLO(od_low_ticks) |
-					   EXTBR_EBRHO(od_high_ticks) |
-					   EXTBR_EBRLP(pp_low_ticks) |
-					   EXTBR_EBRHP(pp_high_ticks));
-
-	renesas_writel(i3c->regs, REFCKCTL, REFCKCTL_IREFCKS(cks));
+	u32 val;
 
 	/* Disable Slave Mode */
 	renesas_writel(i3c->regs, SVCTL, 0);
 
 	/* Initialize Queue/Buffer threshold */
 	renesas_writel(i3c->regs, NQTHCTL, NQTHCTL_IBIDSSZ(6) |
-					     NQTHCTL_CMDQTH(1));
+		       NQTHCTL_CMDQTH(1));
 
 	/* The only supported configuration is two entries*/
 	renesas_writel(i3c->regs, NTBTHCTL0, 0);
@@ -586,25 +518,113 @@ static int renesas_i3c_bus_init(struct i3c_master_controller *m)
 	renesas_set_bit(i3c->regs, BCTL, BCTL_HJACKCTL);
 
 	renesas_writel(i3c->regs, IBINCTL, IBINCTL_NRHJCTL | IBINCTL_NRMRCTL |
-					     IBINCTL_NRSIRCTL);
+		       IBINCTL_NRSIRCTL);
 
 	renesas_writel(i3c->regs, SCSTLCTL, 0);
 	renesas_set_bit(i3c->regs, SCSTRCTL, SCSTRCTL_ACKTWE);
 
 	/* Bus condition timing */
-	val = DIV_ROUND_UP(I3C_BUS_TBUF_MIXED_FM_MIN_NS, NSEC_PER_SEC / rate);
+	val = DIV_ROUND_UP(I3C_BUS_TBUF_MIXED_FM_MIN_NS,
+			   NSEC_PER_SEC / i3c->rate);
 	renesas_writel(i3c->regs, BFRECDT, BFRECDT_FRECYC(val));
 
-	val = DIV_ROUND_UP(I3C_BUS_TAVAL_MIN_NS, NSEC_PER_SEC / rate);
+	val = DIV_ROUND_UP(I3C_BUS_TAVAL_MIN_NS,
+			   NSEC_PER_SEC / i3c->rate);
 	renesas_writel(i3c->regs, BAVLCDT, BAVLCDT_AVLCYC(val));
 
-	val = DIV_ROUND_UP(I3C_BUS_TIDLE_MIN_NS, NSEC_PER_SEC / rate);
+	val = DIV_ROUND_UP(I3C_BUS_TIDLE_MIN_NS,
+			   NSEC_PER_SEC / i3c->rate);
 	renesas_writel(i3c->regs, BIDLCDT, BIDLCDT_IDLCYC(val));
+}
+
+static int renesas_i3c_bus_init(struct i3c_master_controller *m)
+{
+	struct renesas_i3c *i3c = to_renesas_i3c(m);
+	struct i3c_bus *bus = i3c_master_get_bus(m);
+	struct i3c_device_info info = {};
+	struct i2c_timings t;
+	u32 double_SBR;
+	int cks, pp_high_ticks, pp_low_ticks, i3c_total_ticks;
+	int od_high_ticks, od_low_ticks, i2c_total_ticks;
+	int ret;
+
+	i3c->rate = clk_get_rate(i3c->tclk);
+	if (!i3c->rate)
+		return -EINVAL;
+
+	ret = renesas_i3c_reset(i3c);
+	if (ret)
+		return ret;
+
+	i2c_total_ticks = DIV_ROUND_UP(i3c->rate, bus->scl_rate.i2c);
+	i3c_total_ticks = DIV_ROUND_UP(i3c->rate, bus->scl_rate.i3c);
+
+	i2c_parse_fw_timings(&m->dev, &t, true);
+
+	for (cks = 0; cks < 7; cks++) {
+		/* SCL low-period calculation in Open-drain mode */
+		od_low_ticks = ((i2c_total_ticks * 6) / 10);
+
+		/* SCL clock calculation in Push-Pull mode */
+		if (bus->mode == I3C_BUS_MODE_PURE)
+			pp_high_ticks = ((i3c_total_ticks * 5) / 10);
+		else
+			pp_high_ticks = DIV_ROUND_UP(I3C_BUS_THIGH_MIXED_MAX_NS,
+						     NSEC_PER_SEC / i3c->rate);
+		pp_low_ticks = i3c_total_ticks - pp_high_ticks;
+
+		if ((od_low_ticks / 2) <= 0xFF && pp_low_ticks < 0x3F)
+			break;
+
+		i2c_total_ticks /= 2;
+		i3c_total_ticks /= 2;
+		i3c->rate /= 2;
+	}
+
+	/* SCL clock period calculation in Open-drain mode */
+	if ((od_low_ticks / 2) > 0xFF || pp_low_ticks > 0x3F) {
+		dev_err(&m->dev, "invalid speed (i2c-scl = %lu Hz, i3c-scl = %lu Hz). Too slow.\n",
+			(unsigned long)bus->scl_rate.i2c, (unsigned long)bus->scl_rate.i3c);
+		return -EINVAL;
+	}
+
+	/* SCL high-period calculation in Open-drain mode */
+	od_high_ticks = i2c_total_ticks - od_low_ticks;
+
+	/* Standard Bit Rate setting */
+	double_SBR = od_low_ticks > 0xFF ? 1 : 0;
+	i3c->i3c_STDBR = (double_SBR ? STDBR_DSBRPO : 0) |
+			STDBR_SBRLO(double_SBR, od_low_ticks) |
+			STDBR_SBRHO(double_SBR, od_high_ticks) |
+			STDBR_SBRLP(pp_low_ticks) |
+			STDBR_SBRHP(pp_high_ticks);
+
+	od_low_ticks -= t.scl_fall_ns / (NSEC_PER_SEC / i3c->rate) + 1;
+	od_high_ticks -= t.scl_rise_ns / (NSEC_PER_SEC / i3c->rate) + 1;
+	i3c->i2c_STDBR = (double_SBR ? STDBR_DSBRPO : 0) |
+			STDBR_SBRLO(double_SBR, od_low_ticks) |
+			STDBR_SBRHO(double_SBR, od_high_ticks) |
+			STDBR_SBRLP(pp_low_ticks) |
+			STDBR_SBRHP(pp_high_ticks);
+	renesas_writel(i3c->regs, STDBR, i3c->i3c_STDBR);
+
+	/* Extended Bit Rate setting */
+	renesas_writel(i3c->regs, EXTBR, EXTBR_EBRLO(od_low_ticks) |
+					   EXTBR_EBRHO(od_high_ticks) |
+					   EXTBR_EBRLP(pp_low_ticks) |
+					   EXTBR_EBRHP(pp_high_ticks));
+
+	renesas_writel(i3c->regs, REFCKCTL, REFCKCTL_IREFCKS(cks));
+	i3c->refclk_div = cks;
+
+	/* I3C hw init*/
+	renesas_i3c_hw_init(i3c);
 
 	ret = i3c_master_get_free_addr(m, 0);
 	if (ret < 0)
 		return ret;
 
+	i3c->dyn_addr = ret;
 	renesas_writel(i3c->regs, MSDVAD, MSDVAD_MDYAD(ret) | MSDVAD_MDYADV);
 
 	memset(&info, 0, sizeof(info));
@@ -1301,8 +1321,6 @@ static const struct renesas_i3c_irq_desc renesas_i3c_irqs[] = {
 static int renesas_i3c_probe(struct platform_device *pdev)
 {
 	struct renesas_i3c *i3c;
-	struct reset_control *reset;
-	struct clk *clk;
 	const struct renesas_i3c_config *config = of_device_get_match_data(&pdev->dev);
 	int ret, i;
 
@@ -1317,28 +1335,28 @@ static int renesas_i3c_probe(struct platform_device *pdev)
 	if (IS_ERR(i3c->regs))
 		return PTR_ERR(i3c->regs);
 
-	clk = devm_clk_get_enabled(&pdev->dev, "pclk");
-	if (IS_ERR(clk))
-		return PTR_ERR(clk);
+	i3c->pclk = devm_clk_get_enabled(&pdev->dev, "pclk");
+	if (IS_ERR(i3c->pclk))
+		return PTR_ERR(i3c->pclk);
 
 	if (config->has_pclkrw) {
-		clk = devm_clk_get_enabled(&pdev->dev, "pclkrw");
-		if (IS_ERR(clk))
-			return PTR_ERR(clk);
+		i3c->pclkrw = devm_clk_get_enabled(&pdev->dev, "pclkrw");
+		if (IS_ERR(i3c->pclkrw))
+			return PTR_ERR(i3c->pclkrw);
 	}
 
 	i3c->tclk = devm_clk_get_enabled(&pdev->dev, "tclk");
 	if (IS_ERR(i3c->tclk))
 		return PTR_ERR(i3c->tclk);
 
-	reset = devm_reset_control_get_optional_exclusive_deasserted(&pdev->dev, "tresetn");
-	if (IS_ERR(reset))
-		return dev_err_probe(&pdev->dev, PTR_ERR(reset),
+	i3c->tresetn = devm_reset_control_get_optional_exclusive_deasserted(&pdev->dev, "tresetn");
+	if (IS_ERR(i3c->tresetn))
+		return dev_err_probe(&pdev->dev, PTR_ERR(i3c->tresetn),
 				     "Error: missing tresetn ctrl\n");
 
-	reset = devm_reset_control_get_optional_exclusive_deasserted(&pdev->dev, "presetn");
-	if (IS_ERR(reset))
-		return dev_err_probe(&pdev->dev, PTR_ERR(reset),
+	i3c->presetn = devm_reset_control_get_optional_exclusive_deasserted(&pdev->dev, "presetn");
+	if (IS_ERR(i3c->presetn))
+		return dev_err_probe(&pdev->dev, PTR_ERR(i3c->presetn),
 				     "Error: missing presetn ctrl\n");
 
 	spin_lock_init(&i3c->xferqueue.lock);
@@ -1364,6 +1382,13 @@ static int renesas_i3c_probe(struct platform_device *pdev)
 	i3c->maxdevs = RENESAS_I3C_MAX_DEVS;
 	i3c->free_pos = GENMASK(i3c->maxdevs - 1, 0);
 
+	/* Allocate dynamic Device Address Table backup. */
+	i3c->DATBASn = devm_kzalloc(&pdev->dev,
+				    sizeof(u32) * i3c->maxdevs,
+				    GFP_KERNEL);
+	if (!i3c->DATBASn)
+		return -ENOMEM;
+
 	return i3c_master_register(&i3c->base, &pdev->dev, &renesas_i3c_ops, false);
 }
 
@@ -1373,6 +1398,92 @@ static void renesas_i3c_remove(struct platform_device *pdev)
 
 	i3c_master_unregister(&i3c->base);
 }
+
+static int renesas_i3c_suspend_noirq(struct device *dev)
+{
+	struct renesas_i3c *i3c = dev_get_drvdata(dev);
+	int i, ret;
+
+	i2c_mark_adapter_suspended(&i3c->base.i2c);
+
+	/* Store Device Address Table values. */
+	for (i = 0; i < i3c->maxdevs; i++)
+		i3c->DATBASn[i] = renesas_readl(i3c->regs, DATBAS(i));
+
+	ret = reset_control_assert(i3c->presetn);
+	if (ret)
+		return ret;
+
+	ret = reset_control_assert(i3c->tresetn);
+	if (ret) {
+		reset_control_deassert(i3c->presetn);
+		return ret;
+	}
+
+	clk_disable_unprepare(i3c->pclk);
+	clk_disable_unprepare(i3c->tclk);
+	clk_disable_unprepare(i3c->pclkrw);
+
+	return 0;
+}
+
+static int renesas_i3c_resume_noirq(struct device *dev)
+{
+	struct renesas_i3c *i3c = dev_get_drvdata(dev);
+	int i, ret;
+
+	ret = reset_control_deassert(i3c->presetn);
+	if (ret)
+		return ret;
+
+	ret = reset_control_deassert(i3c->tresetn);
+	if (ret)
+		goto err_presetn;
+
+	ret = clk_prepare_enable(i3c->pclkrw);
+	if (ret)
+		goto err_tresetn;
+
+	ret = clk_prepare_enable(i3c->pclk);
+	if (ret)
+		goto err_pclkrw;
+
+	ret = clk_prepare_enable(i3c->tclk);
+	if (ret)
+		goto err_pclk;
+
+	/* Re-store I3C registers value. */
+	renesas_writel(i3c->regs, REFCKCTL,
+		       REFCKCTL_IREFCKS(i3c->refclk_div));
+	renesas_writel(i3c->regs, MSDVAD, MSDVAD_MDYADV |
+		       MSDVAD_MDYAD(i3c->dyn_addr));
+
+	/* Restore Device Address Table values. */
+	for (i = 0; i < i3c->maxdevs; i++)
+		renesas_writel(i3c->regs, DATBAS(i), i3c->DATBASn[i]);
+
+	/* I3C hw init. */
+	renesas_i3c_hw_init(i3c);
+
+	i2c_mark_adapter_resumed(&i3c->base.i2c);
+
+	return 0;
+
+err_pclk:
+	clk_disable_unprepare(i3c->pclk);
+err_pclkrw:
+	clk_disable_unprepare(i3c->pclkrw);
+err_tresetn:
+	reset_control_assert(i3c->tresetn);
+err_presetn:
+	reset_control_assert(i3c->presetn);
+	return ret;
+}
+
+static const struct dev_pm_ops renesas_i3c_pm_ops = {
+	NOIRQ_SYSTEM_SLEEP_PM_OPS(renesas_i3c_suspend_noirq,
+				  renesas_i3c_resume_noirq)
+};
 
 static const struct renesas_i3c_config empty_i3c_config = {
 };
@@ -1394,6 +1505,7 @@ static struct platform_driver renesas_i3c = {
 	.driver = {
 		.name = "renesas-i3c",
 		.of_match_table = renesas_i3c_of_ids,
+		.pm = pm_sleep_ptr(&renesas_i3c_pm_ops),
 	},
 };
 module_platform_driver(renesas_i3c);
