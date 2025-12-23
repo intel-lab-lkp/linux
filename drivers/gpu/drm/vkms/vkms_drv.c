@@ -55,6 +55,10 @@ static bool enable_plane_pipeline;
 module_param_named(enable_plane_pipeline, enable_plane_pipeline, bool, 0444);
 MODULE_PARM_DESC(enable_plane_pipeline, "Enable/Disable plane pipeline support");
 
+static bool enable_crtc_pipeline;
+module_param_named(enable_crtc_pipeline, enable_crtc_pipeline, bool, 0444);
+MODULE_PARM_DESC(enable_crtc_pipeline, "Enable/Disable CRTC pipeline support");
+
 static bool create_default_dev = true;
 module_param_named(create_default_dev, create_default_dev, bool, 0444);
 MODULE_PARM_DESC(create_default_dev, "Create or not the default VKMS device");
@@ -232,7 +236,8 @@ static int __init vkms_init(void)
 		return 0;
 
 	config = vkms_config_default_create(enable_cursor, enable_writeback,
-					    enable_overlay, enable_plane_pipeline);
+					    enable_overlay, enable_plane_pipeline,
+					    enable_crtc_pipeline);
 	if (IS_ERR(config))
 		return PTR_ERR(config);
 

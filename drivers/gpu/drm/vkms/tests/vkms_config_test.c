@@ -84,6 +84,7 @@ struct default_config_case {
 	bool enable_writeback;
 	bool enable_overlay;
 	bool enable_plane_pipeline;
+	bool enable_crtc_pipeline;
 };
 
 static void vkms_config_test_empty_config(struct kunit *test)
@@ -109,22 +110,38 @@ static void vkms_config_test_empty_config(struct kunit *test)
 }
 
 static struct default_config_case default_config_cases[] = {
-	{ false, false, false, false },
-	{ true, false, false, false },
-	{ true, true, false, false },
-	{ true, false, true, false },
-	{ false, true, false, false },
-	{ false, true, true, false },
-	{ false, false, true, false },
-	{ true, true, true, false },
-	{ false, false, false, true },
-	{ true, false, false, true },
-	{ true, true, false, true },
-	{ true, false, true, true },
-	{ false, true, false, true },
-	{ false, true, true, true },
-	{ false, false, true, true },
-	{ true, true, true, true },
+	{ false, false, false, false, false },
+	{ true, false, false, false, false },
+	{ true, true, false, false, false },
+	{ true, false, true, false, false },
+	{ false, true, false, false, false },
+	{ false, true, true, false, false },
+	{ false, false, true, false, false },
+	{ true, true, true, false, false },
+	{ false, false, false, true, false },
+	{ true, false, false, true, false },
+	{ true, true, false, true, false },
+	{ true, false, true, true, false },
+	{ false, true, false, true, false },
+	{ false, true, true, true, false },
+	{ false, false, true, true, false },
+	{ true, true, true, true, false },
+	{ false, false, false, false, true },
+	{ true, false, false, false, true },
+	{ true, true, false, false, true },
+	{ true, false, true, false, true },
+	{ false, true, false, false, true },
+	{ false, true, true, false, true },
+	{ false, false, true, false, true },
+	{ true, true, true, false, true },
+	{ false, false, false, true, true },
+	{ true, false, false, true, true },
+	{ true, true, false, true, true },
+	{ true, false, true, true, true },
+	{ false, true, false, true, true },
+	{ false, true, true, true, true },
+	{ false, false, true, true, true },
+	{ true, true, true, true, true },
 };
 
 KUNIT_ARRAY_PARAM(default_config, default_config_cases, NULL);
@@ -142,7 +159,8 @@ static void vkms_config_test_default_config(struct kunit *test)
 	config = vkms_config_default_create(params->enable_cursor,
 					    params->enable_writeback,
 					    params->enable_overlay,
-					    params->enable_plane_pipeline);
+					    params->enable_plane_pipeline,
+					    params->enable_crtc_pipeline);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, config);
 
 	/* Planes */
@@ -174,6 +192,8 @@ static void vkms_config_test_default_config(struct kunit *test)
 	crtc_cfg = get_first_crtc(config);
 	KUNIT_EXPECT_EQ(test, vkms_config_crtc_get_writeback(crtc_cfg),
 			params->enable_writeback);
+	KUNIT_EXPECT_EQ(test, vkms_config_crtc_get_default_pipeline(crtc_cfg),
+			params->enable_crtc_pipeline);
 
 	vkms_config_for_each_plane(config, plane_cfg) {
 		struct vkms_config_crtc *possible_crtc;
@@ -381,7 +401,7 @@ static void vkms_config_test_invalid_plane_number(struct kunit *test)
 	struct vkms_config_plane *plane_cfg;
 	int n;
 
-	config = vkms_config_default_create(false, false, false, false);
+	config = vkms_config_default_create(false, false, false, false, false);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, config);
 
 	/* Invalid: No planes */
@@ -406,7 +426,7 @@ static void vkms_config_test_valid_plane_type(struct kunit *test)
 	struct vkms_config_encoder *encoder_cfg;
 	int err;
 
-	config = vkms_config_default_create(false, false, false, false);
+	config = vkms_config_default_create(false, false, false, false, false);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, config);
 
 	plane_cfg = get_first_plane(config);
@@ -487,7 +507,7 @@ static void vkms_config_test_valid_plane_possible_crtcs(struct kunit *test)
 	struct vkms_config_plane *plane_cfg;
 	struct vkms_config_crtc *crtc_cfg;
 
-	config = vkms_config_default_create(false, false, false, false);
+	config = vkms_config_default_create(false, false, false, false, false);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, config);
 
 	plane_cfg = get_first_plane(config);
@@ -506,7 +526,7 @@ static void vkms_config_test_invalid_crtc_number(struct kunit *test)
 	struct vkms_config_crtc *crtc_cfg;
 	int n;
 
-	config = vkms_config_default_create(false, false, false, false);
+	config = vkms_config_default_create(false, false, false, false, false);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, config);
 
 	/* Invalid: No CRTCs */
@@ -529,7 +549,7 @@ static void vkms_config_test_invalid_encoder_number(struct kunit *test)
 	struct vkms_config_encoder *encoder_cfg;
 	int n;
 
-	config = vkms_config_default_create(false, false, false, false);
+	config = vkms_config_default_create(false, false, false, false, false);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, config);
 
 	/* Invalid: No encoders */
@@ -554,7 +574,7 @@ static void vkms_config_test_valid_encoder_possible_crtcs(struct kunit *test)
 	struct vkms_config_encoder *encoder_cfg;
 	int err;
 
-	config = vkms_config_default_create(false, false, false, false);
+	config = vkms_config_default_create(false, false, false, false, false);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, config);
 
 	crtc_cfg1 = get_first_crtc(config);
@@ -600,7 +620,7 @@ static void vkms_config_test_invalid_connector_number(struct kunit *test)
 	struct vkms_config_connector *connector_cfg;
 	int n;
 
-	config = vkms_config_default_create(false, false, false, false);
+	config = vkms_config_default_create(false, false, false, false, false);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, config);
 
 	/* Invalid: No connectors */
@@ -623,7 +643,7 @@ static void vkms_config_test_valid_connector_possible_encoders(struct kunit *tes
 	struct vkms_config_encoder *encoder_cfg;
 	struct vkms_config_connector *connector_cfg;
 
-	config = vkms_config_default_create(false, false, false, false);
+	config = vkms_config_default_create(false, false, false, false, false);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, config);
 
 	encoder_cfg = get_first_encoder(config);

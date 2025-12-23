@@ -495,7 +495,10 @@ static void blend(struct vkms_writeback_job *wb,
 			blend_line(plane[i], y, crtc_x_limit, stage_buffer, output_buffer);
 		}
 
-		apply_lut(crtc_state, output_buffer);
+		if (crtc_state->base.color_pipeline_enabled)
+			color_transform(crtc_state->base.color_pipeline, output_buffer);
+		else
+			apply_lut(crtc_state, output_buffer);
 
 		*crc32 = crc32_le(*crc32, (void *)output_buffer->pixels, row_size);
 

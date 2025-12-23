@@ -10,6 +10,7 @@
 #include <drm/drm_vblank.h>
 #include <drm/drm_vblank_helper.h>
 
+#include "vkms_config.h"
 #include "vkms_drv.h"
 
 static bool vkms_crtc_handle_vblank_timeout(struct drm_crtc *crtc)
@@ -202,7 +203,7 @@ static const struct drm_crtc_helper_funcs vkms_crtc_helper_funcs = {
 };
 
 struct vkms_output *vkms_crtc_init(struct drm_device *dev, struct drm_plane *primary,
-				   struct drm_plane *cursor)
+				   struct drm_plane *cursor, struct vkms_config_crtc *crtc_cfg)
 {
 	struct vkms_output *vkms_out;
 	struct drm_crtc *crtc;
@@ -227,6 +228,9 @@ struct vkms_output *vkms_crtc_init(struct drm_device *dev, struct drm_plane *pri
 	}
 
 	drm_crtc_enable_color_mgmt(crtc, 0, false, VKMS_LUT_SIZE);
+
+	if (vkms_config_crtc_get_default_pipeline(crtc_cfg))
+		vkms_initialize_crtc_colorops(crtc);
 
 	spin_lock_init(&vkms_out->lock);
 	spin_lock_init(&vkms_out->composer_lock);

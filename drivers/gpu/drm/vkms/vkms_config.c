@@ -34,7 +34,8 @@ EXPORT_SYMBOL_IF_KUNIT(vkms_config_create);
 struct vkms_config *vkms_config_default_create(bool enable_cursor,
 					       bool enable_writeback,
 					       bool enable_overlay,
-					       bool enable_plane_pipeline)
+					       bool enable_plane_pipeline,
+					       bool enable_crtc_pipeline)
 {
 	struct vkms_config *config;
 	struct vkms_config_plane *plane_cfg;
@@ -56,6 +57,7 @@ struct vkms_config *vkms_config_default_create(bool enable_cursor,
 	if (IS_ERR(crtc_cfg))
 		goto err_alloc;
 	vkms_config_crtc_set_writeback(crtc_cfg, enable_writeback);
+	vkms_config_crtc_set_default_pipeline(crtc_cfg, enable_crtc_pipeline);
 
 	if (vkms_config_plane_attach_crtc(plane_cfg, crtc_cfg))
 		goto err_alloc;
@@ -454,6 +456,7 @@ struct vkms_config_crtc *vkms_config_create_crtc(struct vkms_config *config)
 
 	crtc_cfg->config = config;
 	vkms_config_crtc_set_writeback(crtc_cfg, false);
+	vkms_config_crtc_set_default_pipeline(crtc_cfg, false);
 
 	list_add_tail(&crtc_cfg->link, &config->crtcs);
 

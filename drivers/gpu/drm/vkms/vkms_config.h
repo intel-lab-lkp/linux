@@ -61,6 +61,7 @@ struct vkms_config_plane {
  * @link: Link to the others CRTCs in vkms_config
  * @config: The vkms_config this CRTC belongs to
  * @writeback: If true, a writeback buffer can be attached to the CRTC
+ * @default_pipeline: If true, CRTC will be created with the default pipeline.
  * @crtc: Internal usage. This pointer should never be considered as valid.
  *        It can be used to store a temporary reference to a VKMS CRTC during
  *        device creation. This pointer is not managed by the configuration and
@@ -71,6 +72,7 @@ struct vkms_config_crtc {
 	struct vkms_config *config;
 
 	bool writeback;
+	bool default_pipeline;
 
 	/* Internal usage */
 	struct vkms_output *crtc;
@@ -205,7 +207,8 @@ struct vkms_config *vkms_config_create(const char *dev_name);
 struct vkms_config *vkms_config_default_create(bool enable_cursor,
 					       bool enable_writeback,
 					       bool enable_overlay,
-					       bool enable_plane_pipeline);
+					       bool enable_plane_pipeline,
+					       bool enable_crtc_pipeline);
 
 /**
  * vkms_config_destroy() - Free a VKMS configuration
@@ -312,6 +315,30 @@ vkms_config_plane_set_default_pipeline(struct vkms_config_plane *plane_cfg,
 				       bool default_pipeline)
 {
 	plane_cfg->default_pipeline = default_pipeline;
+}
+
+/**
+ * vkms_config_crtc_get_default_pipeline() - Return if the CRTC will
+ * be created with the default pipeline
+ * @crtc_cfg: CRTC to get the information from
+ */
+static inline bool
+vkms_config_crtc_get_default_pipeline(struct vkms_config_crtc *crtc_cfg)
+{
+	return crtc_cfg->default_pipeline;
+}
+
+/**
+ * vkms_config_crtc_set_default_pipeline() - Set if the CRTC will
+ * be created with the default pipeline
+ * @crtc_cfg: CRTC to configure the pipeline
+ * @default_pipeline: New default pipeline value
+ */
+static inline void
+vkms_config_crtc_set_default_pipeline(struct vkms_config_crtc *crtc_cfg,
+				      bool default_pipeline)
+{
+	crtc_cfg->default_pipeline = default_pipeline;
 }
 
 /**

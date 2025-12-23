@@ -229,6 +229,7 @@ struct vkms_output {
 };
 
 struct vkms_config;
+struct vkms_config_crtc;
 struct vkms_config_plane;
 
 /**
@@ -287,10 +288,12 @@ void vkms_destroy(struct vkms_config *config);
  * @crtc: uninitialized CRTC device
  * @primary: primary plane to attach to the CRTC
  * @cursor: plane to attach to the CRTC
+ * @crtc_cfg: CRTC configuration
  */
 struct vkms_output *vkms_crtc_init(struct drm_device *dev,
 				   struct drm_plane *primary,
-				   struct drm_plane *cursor);
+				   struct drm_plane *cursor,
+				   struct vkms_config_crtc *crtc_cfg);
 
 /**
  * vkms_output_init() - Initialize all sub-components needed for a VKMS device.
@@ -325,5 +328,6 @@ int vkms_enable_writeback_connector(struct vkms_device *vkmsdev, struct vkms_out
 
 /* Colorops */
 int vkms_initialize_plane_colorops(struct drm_plane *plane);
+int vkms_initialize_crtc_colorops(struct drm_crtc *crtc);
 
 #endif /* _VKMS_DRV_H_ */

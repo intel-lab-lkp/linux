@@ -34,7 +34,8 @@ int vkms_output_init(struct vkms_device *vkmsdev)
 		cursor = vkms_config_crtc_cursor_plane(vkmsdev->config, crtc_cfg);
 
 		crtc_cfg->crtc = vkms_crtc_init(dev, &primary->plane->base,
-						cursor ? &cursor->plane->base : NULL);
+						cursor ? &cursor->plane->base : NULL,
+						crtc_cfg);
 		if (IS_ERR(crtc_cfg->crtc)) {
 			DRM_ERROR("Failed to allocate CRTC\n");
 			return PTR_ERR(crtc_cfg->crtc);
