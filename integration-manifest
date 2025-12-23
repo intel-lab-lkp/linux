@@ -1,0 +1,36 @@
+drm drm-fixes 9448598b22c50c8a5bb77a9103e2d49f134c9578
+	Linux 6.19-rc2
+drm-misc drm-misc-fixes 3fbd97618f49e07e05aad96510e5f2ed22d68809
+	drm/gem-shmem: Fix the MODULE_LICENSE() string
+drm-rust drm-rust-fixes b58c87b0fde0ac06d550659a7e3ddbcd9183b7b9
+	gpu: nova-core: gsp: replace firmware version with "bindings" alias
+drm-intel drm-intel-fixes 8f0b4cce4481fb22653697cced8d0d04027cb1e8
+	Linux 6.19-rc1
+drm-xe drm-xe-fixes 754c23238438600e9236719f7e67aff2c4d02093
+	drm/pagemap, drm/xe: Ensure that the devmem allocation is idle before use
+drm drm-next 9448598b22c50c8a5bb77a9103e2d49f134c9578
+	Linux 6.19-rc2
+drm-misc drm-misc-next-fixes 308eeb8ca3fdee54bcd3ec7272c05688e178299a
+	drm/rcar-du: dsi: Handle both DRM_MODE_FLAG_N.SYNC and !DRM_MODE_FLAG_P.SYNC
+drm-intel drm-intel-next-fixes 8f0b4cce4481fb22653697cced8d0d04027cb1e8
+	Linux 6.19-rc1
+drm-xe drm-xe-next-fixes 3f1c07fc21c68bd3bd2df9d2c9441f6485e934d9
+	Merge drm/drm-next into drm-xe-next-fixes
+drm-misc drm-misc-next e05b08d7d0162cf77fff119367fb1a2d5ab3e669
+	drm/atomic: convert drm_atomic_get_{old, new}_colorop_state() into proper functions
+drm-rust drm-rust-next 51293e589bafb4281a597986b3416471f67a79c2
+	drm: tyr: replace `kernel::c_str!` with C-Strings
+drm-intel drm-intel-next 7394321a06638bf5132fec8d817cdfedc26057c2
+	drm/xe/display: drop i915_utils.h
+drm-intel drm-intel-gt-next 18476087f1a18dc279d200d934ad94fba1fb51d5
+	drm/i915: Fix format string truncation warning
+drm-xe drm-xe-next e67870321a6af82c66fc41422d5c7af49e8a0234
+	drm/xe: Don't use absolute path in generated header comment
+drm-intel topic/core-for-CI 6e17f00d83c854235925eb01592665859953bdf7
+	powercap: intel_rapl: Fix possible recursive lock warning
+drm-xe topic/xe-for-CI 7f3219f02c00680d63c06e779926b1715c42b51d
+	topic/for-xe-CI: drm/xe/cri: Define GuC firmware for CRI
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
+drm-intel topic/drm-intel-plane-color-pipeline 860daa4b0d09a398a0ac9ae6fe67efd73a275968
+	drm/i915/color: Enable Plane Color Pipelines
