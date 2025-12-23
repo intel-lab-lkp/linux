@@ -70,7 +70,8 @@ struct gb_interface {
 #define to_gb_interface(d) container_of(d, struct gb_interface, dev)
 
 struct gb_interface *gb_interface_create(struct gb_module *module,
-					 u8 interface_id);
+					 u8 interface_id,
+					 bool p2p);
 int gb_interface_activate(struct gb_interface *intf);
 void gb_interface_deactivate(struct gb_interface *intf);
 int gb_interface_enable(struct gb_interface *intf);

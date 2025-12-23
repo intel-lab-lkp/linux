@@ -687,6 +687,12 @@ static const struct attribute_group *interface_groups[] = {
 	NULL
 };
 
+static const struct attribute_group *interface_groups_p2p[] = {
+	&interface_greybus_group,
+	&interface_common_group,
+	NULL
+};
+
 static void gb_interface_release(struct device *dev)
 {
 	struct gb_interface *intf = to_gb_interface(dev);
@@ -790,7 +796,8 @@ const struct device_type greybus_interface_type = {
  * failure occurs due to memory exhaustion.
  */
 struct gb_interface *gb_interface_create(struct gb_module *module,
-					 u8 interface_id)
+					 u8 interface_id,
+					 bool p2p)
 {
 	struct gb_host_device *hd = module->hd;
 	struct gb_interface *intf;
@@ -808,13 +815,18 @@ struct gb_interface *gb_interface_create(struct gb_module *module,
 	INIT_WORK(&intf->mode_switch_work, gb_interface_mode_switch_work);
 	init_completion(&intf->mode_switch_completion);
 
-	/* Invalid device id to start with */
-	intf->device_id = GB_INTERFACE_DEVICE_ID_BAD;
+	if (p2p) {
+		intf->device_id = GB_SVC_DEVICE_ID_MIN;
+		intf->type = GB_INTERFACE_TYPE_P2P;
+	} else {
+		/* Invalid device id to start with */
+		intf->device_id = GB_INTERFACE_DEVICE_ID_BAD;
+	}
 
 	intf->dev.parent = &module->dev;
 	intf->dev.bus = &greybus_bus_type;
 	intf->dev.type = &greybus_interface_type;
-	intf->dev.groups = interface_groups;
+	intf->dev.groups = p2p ? interface_groups_p2p : interface_groups;
 	intf->dev.dma_mask = module->dev.dma_mask;
 	device_initialize(&intf->dev);
 	dev_set_name(&intf->dev, "%s.%u", dev_name(&module->dev),

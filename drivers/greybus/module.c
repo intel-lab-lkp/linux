@@ -113,7 +113,7 @@ struct gb_module *gb_module_create(struct gb_host_device *hd, u8 module_id,
 	trace_gb_module_create(module);
 
 	for (i = 0; i < num_interfaces; ++i) {
-		intf = gb_interface_create(module, module_id + i);
+		intf = gb_interface_create(module, module_id + i, false);
 		if (!intf) {
 			dev_err(&module->dev, "failed to create interface %u\n",
 				module_id + i);
