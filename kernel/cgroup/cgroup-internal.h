@@ -284,6 +284,11 @@ void cgroup_base_stat_cputime_show(struct seq_file *seq);
 extern const struct proc_ns_operations cgroupns_operations;
 
 /*
+ * freezer.c
+ */
+void check_freeze_timeout(struct cgroup *cgrp);
+
+/*
  * cgroup-v1.c
  */
 extern struct cftype cgroup1_base_files[];
