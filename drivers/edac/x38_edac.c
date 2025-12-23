@@ -342,8 +342,10 @@ static int x38_probe1(struct pci_dev *pdev, int dev_idx)
 	layers[1].size = x38_channel_num;
 	layers[1].is_virt_csrow = false;
 	mci = edac_mc_alloc(0, ARRAY_SIZE(layers), layers, 0);
-	if (!mci)
-		return -ENOMEM;
+	if (!mci) {
+		rc = -ENOMEM;
+		goto fail;
+	}
 
 	edac_dbg(3, "MC: init mci\n");
 
