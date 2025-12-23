@@ -991,15 +991,6 @@ static bool audio_disabling(const struct intel_crtc_state *old_crtc_state,
 		 memcmp(old_crtc_state->eld, new_crtc_state->eld, MAX_ELD_BYTES) != 0);
 }
 
-static bool intel_casf_enabling(const struct intel_crtc_state *new_crtc_state,
-				const struct intel_crtc_state *old_crtc_state)
-{
-	if (!new_crtc_state->hw.active)
-		return false;
-
-	return is_enabling(hw.casf_params.casf_enable, old_crtc_state, new_crtc_state);
-}
-
 static bool intel_casf_disabling(const struct intel_crtc_state *old_crtc_state,
 				 const struct intel_crtc_state *new_crtc_state)
 {
@@ -1679,7 +1670,7 @@ static void hsw_crtc_enable(struct intel_atomic_state *state,
 			glk_pipe_scaler_clock_gating_wa(pipe_crtc, true);
 
 		if (DISPLAY_VER(display) >= 9)
-			skl_pfit_enable(pipe_crtc_state);
+			skl_scaler_enable(state, crtc);
 		else
 			ilk_pfit_enable(pipe_crtc_state);
 
@@ -6627,7 +6618,8 @@ void intel_crtc_arm_fifo_underrun(struct intel_crtc *crtc,
 	}
 }
 
-static void intel_pipe_fastset(const struct intel_crtc_state *old_crtc_state,
+static void intel_pipe_fastset(struct intel_atomic_state *state,
+		const struct intel_crtc_state *old_crtc_state,
 			       const struct intel_crtc_state *new_crtc_state)
 {
 	struct intel_display *display = to_intel_display(new_crtc_state);
@@ -6645,8 +6637,7 @@ static void intel_pipe_fastset(const struct intel_crtc_state *old_crtc_state,
 
 	/* on skylake this is done by detaching scalers */
 	if (DISPLAY_VER(display) >= 9) {
-		if (new_crtc_state->pch_pfit.enabled)
-			skl_pfit_enable(new_crtc_state);
+			skl_scaler_enable(state, crtc);
 	} else if (HAS_PCH_SPLIT(display)) {
 		if (new_crtc_state->pch_pfit.enabled)
 			ilk_pfit_enable(new_crtc_state);
@@ -6698,7 +6689,7 @@ static void commit_pipe_pre_planes(struct intel_atomic_state *state,
 			bdw_set_pipe_misc(NULL, new_crtc_state);
 
 		if (intel_crtc_needs_fastset(new_crtc_state))
-			intel_pipe_fastset(old_crtc_state, new_crtc_state);
+			intel_pipe_fastset(state, old_crtc_state, new_crtc_state);
 	}
 
 	intel_psr2_program_trans_man_trk_ctl(NULL, new_crtc_state);
@@ -6796,11 +6787,6 @@ static void intel_pre_update_crtc(struct intel_atomic_state *state,
 		    cmrr_params_changed(old_crtc_state, new_crtc_state))
 			intel_vrr_set_transcoder_timings(new_crtc_state);
 	}
-
-	if (intel_casf_enabling(new_crtc_state, old_crtc_state))
-		intel_casf_enable(new_crtc_state);
-	else if (new_crtc_state->hw.casf_params.strength != old_crtc_state->hw.casf_params.strength)
-		intel_casf_update_strength(new_crtc_state);
 
 	intel_fbc_update(state, crtc);
 

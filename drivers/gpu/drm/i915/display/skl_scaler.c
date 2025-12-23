@@ -752,6 +752,19 @@ static void skl_scaler_setup_filter(struct intel_display *display,
 	}
 }
 
+#define is_enabling(feature, old_crtc_state, new_crtc_state) \
+        ((!(old_crtc_state)->feature || intel_crtc_needs_modeset(new_crtc_state)) && \
+         (new_crtc_state)->feature)
+
+static bool intel_casf_enabling(const struct intel_crtc_state *new_crtc_state,
+                                const struct intel_crtc_state *old_crtc_state)
+{
+        if (!new_crtc_state->hw.active)
+                return false;
+
+        return is_enabling(hw.casf_params.casf_enable, old_crtc_state, new_crtc_state);
+}
+
 #define CASF_SCALER_FILTER_SELECT \
 	(PS_FILTER_PROGRAMMED | \
 	PS_Y_VERT_FILTER_SELECT(0) | \
@@ -857,6 +870,22 @@ void skl_pipe_scaler_setup(const struct intel_crtc_state *crtc_state,
 
 	intel_de_write_fw(display, SKL_PS_WIN_POS(pipe, id),
 			  PS_WIN_XPOS(x) | PS_WIN_YPOS(y));
+}
+
+void skl_scaler_enable(struct intel_atomic_state *state,
+                       struct intel_crtc *crtc)
+{
+        struct intel_crtc_state *new_crtc_state =
+                intel_atomic_get_new_crtc_state(state, crtc);
+        struct intel_crtc_state *old_crtc_state =
+                intel_atomic_get_old_crtc_state(state, crtc);
+
+       if (new_crtc_state->pch_pfit.enabled)
+               skl_pfit_enable(new_crtc_state);
+       else if (intel_casf_enabling(new_crtc_state, old_crtc_state))
+                intel_casf_enable(new_crtc_state);
+       else if (new_crtc_state->hw.casf_params.strength != old_crtc_state->hw.casf_params.strength)
+                intel_casf_update_strength(new_crtc_state);
 }
 
 void
