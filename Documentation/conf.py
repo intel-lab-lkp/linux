@@ -572,9 +572,8 @@ epub_exclude_files = ["search.html"]
 #
 # See the Sphinx chapter of https://ralsina.me/static/manual.pdf
 #
-# FIXME: Do not add the index file here; the result will be too big. Adding
-# multiple PDF files here actually tries to get the cross-referencing right
-# *between* PDF files.
+# Do not add the index file here; the result would be too big. Adding multiple
+# PDF files here tries to keep cross-referencing correct *between* PDF files.
 pdf_documents = [
     ("kernel-documentation", "Kernel", "Kernel", "J. Random Bozo"),
 ]
