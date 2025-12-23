@@ -30,6 +30,9 @@ static struct cpufreq_driver cppc_cpufreq_driver;
 
 static DEFINE_MUTEX(cppc_cpufreq_update_autosel_config_lock);
 
+/* Autonomous Selection boot parameter */
+static bool auto_sel_mode;
+
 #ifdef CONFIG_ACPI_CPPC_CPUFREQ_FIE
 static enum {
 	FIE_UNSET = -1,
@@ -643,11 +646,16 @@ static int cppc_cpufreq_set_mperf_limit(struct cpufreq_policy *policy, u64 val,
  * cppc_cpufreq_update_autosel_config - Update autonomous selection config
  * @policy: cpufreq policy
  * @is_auto_sel: enable/disable autonomous selection
+ * @epp_val: EPP value (used only if update_epp true)
+ * @update_epp: whether to update EPP register
+ * @update_policy: whether to update policy constraints
  *
  * Return: 0 on success, negative error code on failure
  */
 static int cppc_cpufreq_update_autosel_config(struct cpufreq_policy *policy,
-					      bool is_auto_sel)
+					      bool is_auto_sel, u32 epp_val,
+					      bool update_epp,
+					      bool update_policy)
 {
 	struct cppc_cpudata *cpu_data = policy->driver_data;
 	struct cppc_perf_caps *caps = &cpu_data->perf_caps;
@@ -655,7 +663,6 @@ static int cppc_cpufreq_update_autosel_config(struct cpufreq_policy *policy,
 	u64 max_perf = caps->nominal_perf;
 	unsigned int cpu = policy->cpu;
 	bool update_reg = is_auto_sel;
-	bool update_policy = true;
 	int ret;
 
 	guard(mutex)(&cppc_cpufreq_update_autosel_config_lock);
@@ -684,6 +691,17 @@ static int cppc_cpufreq_update_autosel_config(struct cpufreq_policy *policy,
 					update_policy);
 	if (ret && ret != -EOPNOTSUPP)
 		return ret;
+
+	/* Update EPP register */
+	if (update_epp) {
+		ret = cppc_set_epp(cpu, epp_val);
+		if (ret && ret != -EOPNOTSUPP) {
+			pr_warn("Failed to set EPP for CPU%d (%d)\n", cpu, ret);
+			return ret;
+		}
+		if (!ret)
+			cpu_data->perf_ctrls.energy_perf = epp_val;
+	}
 
 	/* Update auto_sel register */
 	ret = cppc_set_auto_sel(cpu, is_auto_sel);
@@ -816,11 +834,54 @@ static int cppc_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	policy->cur = cppc_perf_to_khz(caps, caps->highest_perf);
 	cpu_data->perf_ctrls.desired_perf =  caps->highest_perf;
 
-	ret = cppc_set_perf(cpu, &cpu_data->perf_ctrls);
-	if (ret) {
-		pr_debug("Err setting perf value:%d on CPU:%d. ret:%d\n",
-			 caps->highest_perf, cpu, ret);
-		goto out;
+	/*
+	 * Enable autonomous mode on first init if boot param is set.
+	 * Check last_governor to detect first init and skip if auto_sel
+	 * is already enabled.
+	 */
+	if (auto_sel_mode && policy->last_governor[0] == '\0' &&
+	    !cpu_data->perf_ctrls.auto_sel) {
+		/* Enable CPPC - optional register, some platforms need it */
+		ret = cppc_set_enable(cpu, true);
+		if (ret) {
+			if (ret == -EOPNOTSUPP)
+				pr_debug("CPPC enable not supported CPU%d\n",
+					 cpu);
+			else
+				pr_warn("Failed enable CPPC CPU%d (%d)\n",
+					cpu, ret);
+		}
+
+		/*
+		 * Enable autonomous mode; Pass false for update_policy to avoid
+		 * updating policy limits prematurely as they are not yet fully setup.
+		 */
+		ret = cppc_cpufreq_update_autosel_config(policy,
+							 true,  /* is_auto_sel */
+							 CPPC_EPP_PERFORMANCE_PREF,
+							 true,  /* update_epp */
+							 false); /* update_policy */
+		if (ret)
+			pr_warn("Failed autonomous config CPU%d (%d)\n",
+				cpu, ret);
+	}
+
+	/* If auto mode is enabled, sync policy limits with HW registers */
+	if (cpu_data->perf_ctrls.auto_sel) {
+		policy->min = cppc_perf_to_khz(caps,
+					       cpu_data->perf_ctrls.min_perf ?:
+					       caps->lowest_nonlinear_perf);
+		policy->max = cppc_perf_to_khz(caps,
+					       cpu_data->perf_ctrls.max_perf ?:
+					       caps->nominal_perf);
+	} else {
+		/* Standard mode: governors control frequency */
+		ret = cppc_set_perf(cpu, &cpu_data->perf_ctrls);
+		if (ret) {
+			pr_debug("Err setting perf value:%d CPU:%d ret:%d\n",
+				 caps->highest_perf, cpu, ret);
+			goto out;
+		}
 	}
 
 	cppc_cpufreq_cpu_fie_init(policy);
@@ -991,7 +1052,7 @@ static ssize_t store_auto_select(struct cpufreq_policy *policy,
 	if (ret)
 		return ret;
 
-	ret = cppc_cpufreq_update_autosel_config(policy, val);
+	ret = cppc_cpufreq_update_autosel_config(policy, val, 0, false, true);
 	if (ret)
 		return ret;
 
@@ -1253,9 +1314,17 @@ static int __init cppc_cpufreq_init(void)
 
 static void __exit cppc_cpufreq_exit(void)
 {
+	unsigned int cpu;
+
+	for_each_present_cpu(cpu)
+		cppc_set_auto_sel(cpu, false);
+
 	cpufreq_unregister_driver(&cppc_cpufreq_driver);
 	cppc_freq_invariance_exit();
 }
+
+module_param(auto_sel_mode, bool, 0000);
+MODULE_PARM_DESC(auto_sel_mode, "Enable Autonomous Performance Level Selection");
 
 module_exit(cppc_cpufreq_exit);
 MODULE_AUTHOR("Ashwin Chaugule");
