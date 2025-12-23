@@ -30,6 +30,9 @@
 MODULE_ALIAS_MISCDEV(FUSE_MINOR);
 MODULE_ALIAS("devname:fuse");
 
+static unsigned long hang_complain_secs = 60;
+module_param(hang_complain_secs, ulong, 0644);
+
 static struct kmem_cache *fuse_req_cachep;
 
 const unsigned long fuse_timeout_timer_freq =
@@ -545,14 +548,24 @@ static void request_wait_answer(struct fuse_req *req)
 {
 	struct fuse_conn *fc = req->fm->fc;
 	struct fuse_iqueue *fiq = &fc->iq;
+	unsigned int hang_check_time = 0;
 	int err;
 
 	if (!fc->no_interrupt) {
-		/* Any signal may interrupt this */
-		err = wait_event_interruptible(req->waitq,
-					test_bit(FR_FINISHED, &req->flags));
-		if (!err)
-			return;
+		while (true) {
+			/* Any signal may interrupt this */
+			err = wait_event_interruptible_timeout(
+				req->waitq, test_bit(FR_FINISHED, &req->flags),
+				READ_ONCE(hang_complain_secs) * HZ);
+			if (err > 0)
+				goto out;
+			if (err == -ERESTARTSYS)
+				break;
+			if (hang_check_time++ == 0) {
+				pr_debug("fuse conn %u req %llu (opcode %u) may hang.\n",
+					fc->dev, req->in.h.unique, req->args->opcode);
+			}
+		}
 
 		set_bit(FR_INTERRUPTED, &req->flags);
 		/* matches barrier in fuse_dev_do_read() */
@@ -568,21 +581,38 @@ static void request_wait_answer(struct fuse_req *req)
 		err = wait_event_killable(req->waitq,
 					test_bit(FR_FINISHED, &req->flags));
 		if (!err)
-			return;
+			goto out;
 
 		if (test_bit(FR_URING, &req->flags))
 			removed = fuse_uring_remove_pending_req(req);
 		else
 			removed = fuse_remove_pending_req(req, &fiq->lock);
 		if (removed)
-			return;
+			goto out;
 	}
 
 	/*
 	 * Either request is already in userspace, or it was forced.
 	 * Wait it out.
 	 */
-	wait_event(req->waitq, test_bit(FR_FINISHED, &req->flags));
+	while (true) {
+		err = wait_event_timeout(req->waitq, test_bit(FR_FINISHED, &req->flags),
+				 READ_ONCE(hang_complain_secs) * HZ);
+		if (err > 0)
+			goto out;
+		if (err == -ERESTARTSYS)
+			break;
+		if (hang_check_time++ == 0) {
+			pr_debug("fuse conn %u req %llu (opcode %u) may hang.\n",
+				fc->dev, req->in.h.unique, req->args->opcode);
+		}
+	}
+out:
+	if (hang_check_time) {
+		pr_debug("fuse conn %u req %llu (opcode %u) recovery after %lu seconds\n",
+			fc->dev, req->in.h.unique, req->args->opcode,
+			hang_check_time * READ_ONCE(hang_complain_secs));
+	}
 }
 
 static void __fuse_request_send(struct fuse_req *req)
