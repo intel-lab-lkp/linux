@@ -2398,7 +2398,7 @@ static inline void super_set_sysfs_name_generic(struct super_block *sb, const ch
 extern void ihold(struct inode * inode);
 extern void iput(struct inode *);
 void iput_not_last(struct inode *);
-int inode_update_timestamps(struct inode *inode, int flags);
+int inode_update_timestamps(struct inode *inode, int flags, int *dirty_flags);
 int generic_update_time(struct inode *inode, int flags);
 
 /* /sys/fs */

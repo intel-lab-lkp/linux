@@ -2081,10 +2081,18 @@ static bool relatime_need_update(struct vfsmount *mnt, struct inode *inode,
 	return false;
 }
 
+static inline int timestamp_dirty_flag(struct super_block *sb)
+{
+	if (sb->s_flags & SB_LAZYTIME)
+		return I_DIRTY_TIME;
+	return I_DIRTY_SYNC;
+}
+
 /**
  * inode_update_timestamps - update the timestamps on the inode
  * @inode: inode to be updated
  * @flags: S_* flags that needed to be updated
+ * @dirty_flags: returns the I_DIRTY_* flags for the modification
  *
  * The update_time function is called when an inode's timestamps need to be
  * updated for a read or write operation. This function handles updating the
@@ -2095,14 +2103,18 @@ static bool relatime_need_update(struct vfsmount *mnt, struct inode *inode,
  * attempt to update all three of them. S_ATIME updates can be handled
  * independently of the rest.
  *
- * Returns a set of S_* flags indicating which values changed.
+ * Sets @dirty_flags to contain the I_DIRTY_FLAG_* flags for the actual changes.
+ *
+ * Returns 0 or a negative errno.
  */
-int inode_update_timestamps(struct inode *inode, int flags)
+int inode_update_timestamps(struct inode *inode, int flags, int *dirty_flags)
 {
-	int updated = 0;
 	struct timespec64 now;
+	int updated = 0;
 
-	if (flags & (S_MTIME|S_CTIME|S_VERSION)) {
+	*dirty_flags = 0;
+
+	if (flags & (S_MTIME | S_CTIME | S_VERSION)) {
 		struct timespec64 ctime = inode_get_ctime(inode);
 		struct timespec64 mtime = inode_get_mtime(inode);
 
@@ -2124,11 +2136,17 @@ int inode_update_timestamps(struct inode *inode, int flags)
 			updated |= S_ATIME;
 	}
 
+	if (updated & (S_MTIME | S_CTIME | S_MTIME))
+		*dirty_flags |= timestamp_dirty_flag(inode->i_sb);
+	if (updated & S_VERSION)
+		*dirty_flags |= I_DIRTY_SYNC;
+
 	if (updated & S_MTIME)
 		inode_set_mtime_to_ts(inode, now);
 	if (updated & S_ATIME)
 		inode_set_atime_to_ts(inode, now);
-	return updated;
+
+	return 0;
 }
 EXPORT_SYMBOL(inode_update_timestamps);
 
@@ -2146,18 +2164,12 @@ EXPORT_SYMBOL(inode_update_timestamps);
  */
 int generic_update_time(struct inode *inode, int flags)
 {
-	int updated = inode_update_timestamps(inode, flags);
-	int dirty_flags = 0;
+	int dirty_flags, error;
 
-	if (!updated)
-		return 0;
-
-	if (updated & (S_ATIME|S_MTIME|S_CTIME))
-		dirty_flags = inode->i_sb->s_flags & SB_LAZYTIME ? I_DIRTY_TIME : I_DIRTY_SYNC;
-	if (updated & S_VERSION)
-		dirty_flags |= I_DIRTY_SYNC;
-	__mark_inode_dirty(inode, dirty_flags);
-	return 0;
+	error = inode_update_timestamps(inode, flags, &dirty_flags);
+	if (!error && dirty_flags)
+		__mark_inode_dirty(inode, dirty_flags);
+	return error;
 }
 EXPORT_SYMBOL(generic_update_time);
 
