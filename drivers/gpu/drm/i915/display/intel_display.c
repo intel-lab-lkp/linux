@@ -2494,6 +2494,10 @@ static int intel_crtc_compute_config(struct intel_atomic_state *state,
 
 	intel_vrr_compute_guardband(crtc_state);
 
+	ret = intel_casf_compute_config(crtc_state);
+	if (ret)
+		return ret;
+
 	return 0;
 }
 
@@ -4285,10 +4289,6 @@ static int intel_crtc_atomic_check(struct intel_atomic_state *state,
 			    crtc->base.base.id, crtc->base.name);
 		return ret;
 	}
-
-	ret = intel_casf_compute_config(crtc_state);
-	if (ret)
-		return ret;
 
 	if (DISPLAY_VER(display) >= 9) {
 		if (intel_crtc_needs_modeset(crtc_state) ||
@@ -6423,6 +6423,10 @@ int intel_atomic_check(struct drm_device *dev,
 		if (new_crtc_state->uapi.scaling_filter !=
 		    old_crtc_state->uapi.scaling_filter)
 			new_crtc_state->uapi.mode_changed = true;
+
+		if (new_crtc_state->uapi.sharpness_strength !=
+                    old_crtc_state->uapi.sharpness_strength)
+                        new_crtc_state->uapi.mode_changed = true;
 	}
 
 	intel_vrr_check_modeset(state);
