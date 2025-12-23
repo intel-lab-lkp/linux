@@ -5454,6 +5454,7 @@ static void kill_f2fs_super(struct super_block *sb)
 	kill_block_super(sb);
 	/* Release block devices last, after fscrypt_destroy_keyring(). */
 	if (sbi) {
+		f2fs_wait_on_all_pages(sbi, F2FS_WB_CP_DATA);
 		destroy_device_list(sbi);
 		kfree(sbi);
 		sb->s_fs_info = NULL;
