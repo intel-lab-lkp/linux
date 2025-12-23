@@ -2111,6 +2111,13 @@ int inode_update_timestamps(struct inode *inode, int flags, int *dirty_flags)
 
 	*dirty_flags = 0;
 
+	/*
+	 * Non-blocking timestamp updates require an explicit opt-in from the
+	 * file system.
+	 */
+	if ((flags & S_NOWAIT) && !(flags & S_CAN_NOWAIT_LAZYTIME))
+		return -EAGAIN;
+
 	if (flags & (S_MTIME | S_CTIME | S_VERSION)) {
 		struct timespec64 ctime = inode_get_ctime(inode);
 		struct timespec64 mtime = inode_get_mtime(inode);
@@ -2120,8 +2127,24 @@ int inode_update_timestamps(struct inode *inode, int flags, int *dirty_flags)
 			updated |= S_CTIME;
 		if (!timespec64_equal(&now, &mtime))
 			updated |= S_MTIME;
-		if (IS_I_VERSION(inode) && inode_maybe_inc_iversion(inode, updated))
-			updated |= S_VERSION;
+
+		/*
+		 * Pure timestamp updates can be recorded in the inode without
+		 * blocking by not dirtying the inode.  But when the file system
+		 * requires i_version updates, actual i_version update may block
+		 * despite that.  Error out if we'd actually have to update
+		 * i_version or don't support lazytime.
+		 */
+		if (IS_I_VERSION(inode)) {
+			if (flags & S_NOWAIT) {
+				if (!(inode->i_sb->s_flags & SB_LAZYTIME) ||
+				    inode_iversion_need_inc(inode))
+					return -EAGAIN;
+			} else {
+				if (inode_maybe_inc_iversion(inode, updated))
+					updated |= S_NOWAIT;
+			}
+		}
 	} else {
 		now = current_time(inode);
 	}
@@ -2391,7 +2414,7 @@ static int file_update_time_flags(struct file *file, unsigned int flags)
 		return 0;
 
 	if (flags & IOCB_NOWAIT)
-		return -EAGAIN;
+		sync_mode |= S_NOWAIT;
 
 	if (mnt_get_write_access_file(file))
 		return 0;

@@ -565,6 +565,8 @@ int ovl_update_time(struct inode *inode, int flags)
 		};
 
 		if (upperpath.dentry) {
+			if (flags & S_NOWAIT)
+				return -EAGAIN;
 			touch_atime(&upperpath);
 			inode_set_atime_to_ts(inode,
 					      inode_get_atime(d_inode(upperpath.dentry)));

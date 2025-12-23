@@ -2239,10 +2239,23 @@ static inline void inode_dec_link_count(struct inode *inode)
 }
 
 enum file_time_flags {
-	S_ATIME = 1,
-	S_MTIME = 2,
-	S_CTIME = 4,
-	S_VERSION = 8,
+	/* update atime: */
+	S_ATIME			= 1U << 0,
+
+	/* update mtime */
+	S_MTIME			= 1U << 1,
+
+	/* update ctime */
+	S_CTIME			= 1U << 2,
+
+	/* force update i_version even if no timestamp changes */
+	S_VERSION		= 1U << 3,
+
+	/* only update timestamps or i_version if it doesn't require blocking */
+	S_NOWAIT		= 1U << 14,
+
+	/* support S_NOWAIT for SB_LAZYTIME mounts in inode_update_timestamps */
+	S_CAN_NOWAIT_LAZYTIME	= 1U << 15,
 };
 
 extern bool atime_needs_update(const struct path *, struct inode *);
