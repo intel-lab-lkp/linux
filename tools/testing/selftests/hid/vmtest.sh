@@ -349,7 +349,7 @@ test_vm_pytest() {
 
 	shift
 
-	vm_ssh -- pytest ${SCRIPT_DIR}/tests --color=yes "$@" \
+	vm_ssh -- pytest ${SCRIPT_DIR}/tests -v --color=yes "$@" \
 		2>&1 | log_guest "${testname}"
 
 	return ${PIPESTATUS[0]}
