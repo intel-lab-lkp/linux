@@ -36,6 +36,23 @@ pub(crate) fn fmt(input: TokenStream) -> TokenStream {
             }
             if let Some((name, rest)) = first_str.split_once('}') {
                 first_str = rest;
+                // Check for {:p} format specifier and emit compile error
+                if name.contains(':') {
+                    let (_, format_spec) = name.split_once(':').unwrap_or(("", name));
+                    if format_spec.trim() == "p" {
+                        let error_msg = "{:p} formatting for raw pointers is not supported!";
+                        // Generate compile_error! that returns a format_args! placeholder
+                        // This ensures the macro expansion produces a valid expression
+                        // Use raw string literal for format! to avoid manual escaping
+                        // error_msg already contains escaped quotes, so regular string literal is sufficient
+                        return format!(
+                            r##"{{ ::core::compile_error!("{}"); ::core::format_args!("") }}"##,
+                            error_msg
+                        )
+                        .parse::<TokenStream>()
+                        .unwrap();
+                    }
+                }
                 let name = name.split_once(':').map_or(name, |(name, _)| name);
                 if !name.is_empty() && !name.chars().all(|c| c.is_ascii_digit()) {
                     names.insert(name);
