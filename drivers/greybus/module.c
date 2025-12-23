@@ -72,6 +72,13 @@ static struct attribute *module_attrs[] = {
 };
 ATTRIBUTE_GROUPS(module);
 
+static struct attribute *module_p2p_attrs[] = {
+	&dev_attr_module_id.attr,
+	&dev_attr_num_interfaces.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(module_p2p);
+
 static void gb_module_release(struct device *dev)
 {
 	struct gb_module *module = to_gb_module(dev);
@@ -112,6 +119,29 @@ static struct gb_module *__gb_module_create(struct gb_host_device *hd,
 
 	trace_gb_module_create(module);
 
+	return module;
+}
+
+struct gb_module *gb_module_create_p2p(struct gb_host_device *hd)
+{
+	struct gb_module *module = __gb_module_create(hd, module_p2p_groups, 0, 1);
+	struct gb_interface *intf;
+
+	if (!module)
+		return NULL;
+
+	intf = gb_interface_create(module, 0, true);
+	if (!intf) {
+		dev_err(&module->dev, "failed to create P2P interface\n");
+		put_device(&module->dev);
+
+		module = NULL;
+		goto exit;
+	}
+
+	module->interfaces[0] = intf;
+
+exit:
 	return module;
 }
 

@@ -27,6 +27,7 @@ struct gb_module {
 };
 #define to_gb_module(d) container_of(d, struct gb_module, dev)
 
+struct gb_module *gb_module_create_p2p(struct gb_host_device *hd);
 struct gb_module *gb_module_create(struct gb_host_device *hd, u8 module_id,
 				   size_t num_interfaces);
 int gb_module_add(struct gb_module *module);
