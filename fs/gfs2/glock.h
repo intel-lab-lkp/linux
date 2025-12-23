@@ -305,4 +305,34 @@ static inline bool glock_needs_demote(struct gfs2_glock *gl)
 		test_bit(GLF_PENDING_DEMOTE, &gl->gl_flags));
 }
 
+/*
+ * gfs2_glock_not_evictable - check if a glock is not evictable
+ * @gl:	The glock to check
+ *
+ * Glocks which do not represent normal filesystem inodes (e.g. statfs, quota, rindex)
+ * may have associated address spaces used as metadata caches. These glocks must not
+ * be reclaimed under memory pressure while their mappings are still populated or their
+ * state is not unlocked.
+ */
+
+static inline bool gfs2_glock_not_evictable(struct gfs2_glock *gl)
+{
+	if (gl->gl_name.ln_type == LM_TYPE_INODE)
+		return false;
+
+	if (gl->gl_ops->go_flags & GLOF_ASPACE) {
+		struct gfs2_glock_aspace *gla;
+
+		gla = container_of(gl, struct gfs2_glock_aspace, glock);
+
+		if (!mapping_empty(&gla->mapping))
+			return true;
+	}
+
+	if (gl->gl_state != LM_ST_UNLOCKED)
+		return true;
+
+	return false;
+}
+
 #endif /* __GLOCK_DOT_H__ */
