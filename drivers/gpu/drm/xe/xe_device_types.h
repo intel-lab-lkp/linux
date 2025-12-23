@@ -17,6 +17,7 @@
 #include "xe_late_bind_fw_types.h"
 #include "xe_lmtt_types.h"
 #include "xe_memirq_types.h"
+#include "xe_mert.h"
 #include "xe_oa_types.h"
 #include "xe_pagefault_types.h"
 #include "xe_platform_types.h"
@@ -35,6 +36,8 @@
 #define TEST_VM_OPS_ERROR
 #endif
 
+struct dram_info;
+struct drm_pagemap_shrinker;
 struct intel_display;
 struct intel_dg_nvm_dev;
 struct xe_ggtt;
@@ -183,6 +186,13 @@ struct xe_tile {
 		 * Media GT shares a pool with its primary GT.
 		 */
 		struct xe_sa_manager *kernel_bb_pool;
+
+		/**
+		 * @mem.reclaim_pool: Pool for PRLs allocated.
+		 *
+		 * Only main GT has page reclaim list allocations.
+		 */
+		struct xe_sa_manager *reclaim_pool;
 	} mem;
 
 	/** @sriov: tile level virtualization data */
@@ -219,6 +229,9 @@ struct xe_tile {
 
 	/** @debugfs: debugfs directory associated with this tile */
 	struct dentry *debugfs;
+
+	/** @mert: MERT-related data */
+	struct xe_mert mert;
 };
 
 /**
@@ -285,6 +298,8 @@ struct xe_device {
 		u8 has_asid:1;
 		/** @info.has_atomic_enable_pte_bit: Device has atomic enable PTE bit */
 		u8 has_atomic_enable_pte_bit:1;
+		/** @info.has_cached_pt: Supports caching pagetable */
+		u8 has_cached_pt:1;
 		/** @info.has_device_atomics_on_smem: Supports device atomics on SMEM */
 		u8 has_device_atomics_on_smem:1;
 		/** @info.has_fan_control: Device supports fan control */
@@ -297,6 +312,8 @@ struct xe_device {
 		u8 has_heci_cscfi:1;
 		/** @info.has_heci_gscfi: device has heci gscfi */
 		u8 has_heci_gscfi:1;
+		/** @info.has_i2c: Device has I2C controller */
+		u8 has_i2c:1;
 		/** @info.has_late_bind: Device has firmware late binding support */
 		u8 has_late_bind:1;
 		/** @info.has_llc: Device has a shared CPU+GPU last level cache */
@@ -307,6 +324,12 @@ struct xe_device {
 		u8 has_mbx_power_limits:1;
 		/** @info.has_mem_copy_instr: Device supports MEM_COPY instruction */
 		u8 has_mem_copy_instr:1;
+		/** @info.has_mert: Device has standalone MERT */
+		u8 has_mert:1;
+		/** @info.has_page_reclaim_hw_assist: Device supports page reclamation feature */
+		u8 has_page_reclaim_hw_assist:1;
+		/** @info.has_pre_prod_wa: Pre-production workarounds still present in driver */
+		u8 has_pre_prod_wa:1;
 		/** @info.has_pxp: Device has PXP support */
 		u8 has_pxp:1;
 		/** @info.has_range_tlb_inval: Has range based TLB invalidations */
@@ -428,6 +451,10 @@ struct xe_device {
 #define XE_PAGEFAULT_QUEUE_COUNT	4
 		/** @usm.pf_queue: Page fault queues */
 		struct xe_pagefault_queue pf_queue[XE_PAGEFAULT_QUEUE_COUNT];
+#if IS_ENABLED(CONFIG_DRM_XE_PAGEMAP)
+		/** @usm.pagemap_shrinker: Shrinker for unused pagemaps */
+		struct drm_pagemap_shrinker *dpagemap_shrinker;
+#endif
 	} usm;
 
 	/** @pinned: pinned BO state */
@@ -604,6 +631,12 @@ struct xe_device {
 
 	/** @atomic_svm_timeslice_ms: Atomic SVM fault timeslice MS */
 	u32 atomic_svm_timeslice_ms;
+
+	/** @min_run_period_lr_ms: LR VM (preempt fence mode) timeslice */
+	u32 min_run_period_lr_ms;
+
+	/** @min_run_period_pf_ms: LR VM (page fault mode) timeslice */
+	u32 min_run_period_pf_ms;
 
 #ifdef TEST_VM_OPS_ERROR
 	/**
