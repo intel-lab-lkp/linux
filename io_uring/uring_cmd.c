@@ -314,6 +314,27 @@ int io_uring_cmd_import_fixed_vec(struct io_uring_cmd *ioucmd,
 }
 EXPORT_SYMBOL_GPL(io_uring_cmd_import_fixed_vec);
 
+int io_uring_cmd_fixed_index_get(struct io_uring_cmd *ioucmd, u16 buf_index,
+				 unsigned int off, size_t len, int ddir,
+				 struct iov_iter *iter,
+				 unsigned int issue_flags)
+{
+	struct io_kiocb *req = cmd_to_io_kiocb(ioucmd);
+
+	return io_reg_buf_index_get(req, iter, buf_index, off, len, ddir,
+				    issue_flags);
+}
+EXPORT_SYMBOL_GPL(io_uring_cmd_fixed_index_get);
+
+int io_uring_cmd_fixed_index_put(struct io_uring_cmd *ioucmd, u16 buf_index,
+				 unsigned int issue_flags)
+{
+	struct io_kiocb *req = cmd_to_io_kiocb(ioucmd);
+
+	return io_reg_buf_index_put(req, buf_index, issue_flags);
+}
+EXPORT_SYMBOL_GPL(io_uring_cmd_fixed_index_put);
+
 void io_uring_cmd_issue_blocking(struct io_uring_cmd *ioucmd)
 {
 	struct io_kiocb *req = cmd_to_io_kiocb(ioucmd);
