@@ -57,6 +57,9 @@ struct fuse_ring_ent {
 			 */
 			unsigned int ringbuf_buf_id;
 			unsigned int fixed_buf_id;
+
+			/* True if the request's pages are being zero-copied */
+			bool zero_copied;
 		};
 	};
 
@@ -123,6 +126,14 @@ struct fuse_ring_queue {
 
 	/* synchronized by the queue lock */
 	struct io_buffer_list *bufring;
+
+	/*
+	 * True if zero copy should be used for payloads. This is only enabled
+	 * on privileged servers. Kernel-managed ring buffers must be enabled
+	 * in order to use zero copy.
+	 */
+	bool use_zero_copy : 1;
+	unsigned int zero_copy_depth;
 };
 
 /**
