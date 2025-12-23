@@ -247,7 +247,7 @@ struct vkms_plane *vkms_plane_init(struct vkms_device *vkmsdev,
 					  DRM_COLOR_YCBCR_FULL_RANGE);
 
 	if (vkms_config_plane_get_default_pipeline(plane_cfg))
-		vkms_initialize_colorops(&plane->base);
+		vkms_initialize_plane_colorops(&plane->base);
 
 	return plane;
 }
