@@ -782,7 +782,8 @@ static inline struct folio *write_begin_get_folio(const struct kiocb *iocb,
                 fgp_flags |= FGP_DONTCACHE;
 
         return __filemap_get_folio(mapping, index, fgp_flags,
-                                   mapping_gfp_mask(mapping));
+				mapping_gfp_mask(mapping)|
+				__GFP_ZERO);
 }
 
 /**
