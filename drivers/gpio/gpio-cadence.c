@@ -6,6 +6,9 @@
  * Authors:
  *  Jan Kotas <jank@cadence.com>
  *  Boris Brezillon <boris.brezillon@free-electrons.com>
+ *
+ * Copyright (C) 2025 Axiado Corporation.
+ *
  */
 
 #include <linux/cleanup.h>
@@ -31,10 +34,16 @@
 #define CDNS_GPIO_IRQ_VALUE		0x28
 #define CDNS_GPIO_IRQ_ANY_EDGE		0x2c
 
+#define CDNS_GPIO_QUIRKS_SKIP_PINMUX_CFG	BIT(1)
+
 struct cdns_gpio_chip {
 	struct gpio_generic_chip gen_gc;
 	void __iomem *regs;
 	u32 bypass_orig;
+};
+
+struct cdns_platform_data {
+	u32 quirks;
 };
 
 static int cdns_gpio_request(struct gpio_chip *chip, unsigned int offset)
@@ -141,6 +150,16 @@ static const struct irq_chip cdns_gpio_irqchip = {
 	GPIOCHIP_IRQ_RESOURCE_HELPERS,
 };
 
+static const struct cdns_platform_data ax3000_gpio_def = {
+	.quirks = CDNS_GPIO_QUIRKS_SKIP_PINMUX_CFG, };
+
+static const struct of_device_id cdns_of_ids[] = {
+	{ .compatible = "axiado,ax3000-gpio", .data = &ax3000_gpio_def },
+	{ .compatible = "cdns,gpio-r1p02" },
+	{ /* sentinel */ },
+};
+MODULE_DEVICE_TABLE(of, cdns_of_ids);
+
 static int cdns_gpio_probe(struct platform_device *pdev)
 {
 	struct gpio_generic_chip_config config = { };
@@ -148,6 +167,8 @@ static int cdns_gpio_probe(struct platform_device *pdev)
 	int ret, irq;
 	u32 dir_prev;
 	u32 num_gpios = 32;
+	bool skip_pinmux_cfg = false;
+	const struct of_device_id *match;
 	struct clk *clk;
 
 	cgpio = devm_kzalloc(&pdev->dev, sizeof(*cgpio), GFP_KERNEL);
@@ -165,6 +186,13 @@ static int cdns_gpio_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
+	match = of_match_node(cdns_of_ids, pdev->dev.of_node);
+	if (match && match->data) {
+		const struct cdns_platform_data *data = match->data;
+
+		skip_pinmux_cfg = data->quirks & CDNS_GPIO_QUIRKS_SKIP_PINMUX_CFG;
+	}
+
 	/*
 	 * Set all pins as inputs by default, otherwise:
 	 * gpiochip_lock_as_irq:
@@ -173,8 +201,15 @@ static int cdns_gpio_probe(struct platform_device *pdev)
 	 * so it needs to be changed before gpio_generic_chip_init() is called.
 	 */
 	dir_prev = ioread32(cgpio->regs + CDNS_GPIO_DIRECTION_MODE);
-	iowrite32(GENMASK(num_gpios - 1, 0),
-		  cgpio->regs + CDNS_GPIO_DIRECTION_MODE);
+
+	/*
+	 * The AX3000 platform performs the required configuration at boot time
+	 * before Linux boots, so this quirk disables pinmux initialization.
+	 */
+	if (!skip_pinmux_cfg) {
+		iowrite32(GENMASK(num_gpios - 1, 0),
+			  cgpio->regs + CDNS_GPIO_DIRECTION_MODE);
+	}
 
 	config.dev = &pdev->dev;
 	config.sz = 4;
@@ -240,9 +275,11 @@ static int cdns_gpio_probe(struct platform_device *pdev)
 	/*
 	 * Enable gpio outputs, ignored for input direction
 	 */
-	iowrite32(GENMASK(num_gpios - 1, 0),
-		  cgpio->regs + CDNS_GPIO_OUTPUT_EN);
-	iowrite32(0, cgpio->regs + CDNS_GPIO_BYPASS_MODE);
+	if (!skip_pinmux_cfg) {
+		iowrite32(GENMASK(num_gpios - 1, 0),
+			  cgpio->regs + CDNS_GPIO_OUTPUT_EN);
+		iowrite32(0, cgpio->regs + CDNS_GPIO_BYPASS_MODE);
+	}
 
 	platform_set_drvdata(pdev, cgpio);
 	return 0;
@@ -259,12 +296,6 @@ static void cdns_gpio_remove(struct platform_device *pdev)
 
 	iowrite32(cgpio->bypass_orig, cgpio->regs + CDNS_GPIO_BYPASS_MODE);
 }
-
-static const struct of_device_id cdns_of_ids[] = {
-	{ .compatible = "cdns,gpio-r1p02" },
-	{ /* sentinel */ },
-};
-MODULE_DEVICE_TABLE(of, cdns_of_ids);
 
 static struct platform_driver cdns_gpio_driver = {
 	.driver = {
