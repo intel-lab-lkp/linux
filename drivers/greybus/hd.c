@@ -132,6 +132,36 @@ const struct device_type greybus_hd_type = {
 	.release	= gb_hd_release,
 };
 
+int gb_hd_p2p_probe_module(struct gb_host_device *hd)
+{
+	struct gb_module *module;
+	int ret;
+
+	if (!gb_hd_is_p2p(hd))
+		return -EOPNOTSUPP;
+
+	/* In P2P mode, only one module is supported. */
+	if (!list_empty(&hd->modules))
+		return -EBUSY;
+
+	module = gb_module_create_p2p(hd);
+	if (!module) {
+		dev_err(&hd->dev, "failed to create module\n");
+		return -ENOMEM;
+	}
+
+	ret = gb_module_add(module);
+	if (ret) {
+		gb_module_put(module);
+		return ret;
+	}
+
+	list_add(&module->hd_node, &hd->modules);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(gb_hd_p2p_probe_module);
+
 struct gb_host_device *gb_hd_create_p2p(struct gb_hd_driver *driver,
 					struct device *parent,
 					size_t buffer_size_max,

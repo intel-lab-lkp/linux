@@ -83,6 +83,8 @@ void gb_hd_put(struct gb_host_device *hd);
 int gb_hd_output(struct gb_host_device *hd, void *req, u16 size, u8 cmd,
 		 bool in_irq);
 
+int gb_hd_p2p_probe_module(struct gb_host_device *hd);
+
 int gb_hd_init(void);
 void gb_hd_exit(void);
 
