@@ -29,7 +29,7 @@ int kunit_attach_mm(void)
 	arch_pick_mmap_layout(mm, &current->signal->rlim[RLIMIT_STACK]);
 
 	/* Attach the mm. It will be cleaned up when the process dies. */
-	kthread_use_mm(mm);
+	kthread_take_mm(mm);
 
 	return 0;
 }
