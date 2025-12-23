@@ -305,7 +305,37 @@ static unsigned int cppc_cpufreq_fast_switch(struct cpufreq_policy *policy,
 
 static int cppc_verify_policy(struct cpufreq_policy_data *policy)
 {
-	cpufreq_verify_within_cpu_limits(policy);
+	unsigned int min_freq = policy->cpuinfo.min_freq;
+	unsigned int max_freq = policy->cpuinfo.max_freq;
+	struct cpufreq_policy *cpu_policy;
+	struct cppc_cpudata *cpu_data;
+	struct cppc_perf_caps *caps;
+
+	cpu_policy = cpufreq_cpu_get(policy->cpu);
+	if (!cpu_policy)
+		return -ENODEV;
+
+	cpu_data = cpu_policy->driver_data;
+	caps = &cpu_data->perf_caps;
+
+	if (cpu_data->perf_ctrls.auto_sel) {
+		u32 min_perf, max_perf;
+
+		/*
+		 * Set policy limits to HW min/max_perf bounds. In autonomous
+		 * mode, scaling_min/max_freq is effectively read-only.
+		 */
+		min_perf = cpu_data->perf_ctrls.min_perf ?:
+			   caps->lowest_nonlinear_perf;
+		max_perf = cpu_data->perf_ctrls.max_perf ?: caps->nominal_perf;
+
+		policy->min = cppc_perf_to_khz(caps, min_perf);
+		policy->max = cppc_perf_to_khz(caps, max_perf);
+	} else {
+		cpufreq_verify_within_limits(policy, min_freq, max_freq);
+	}
+
+	cpufreq_cpu_put(cpu_policy);
 	return 0;
 }
 
