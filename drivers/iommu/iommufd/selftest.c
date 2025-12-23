@@ -479,6 +479,11 @@ mock_domain_alloc_pgtable(struct device *dev,
 	}
 
 	case MOCK_IOMMUPT_AMDV1: {
+		if (!IS_ENABLED(CONFIG_AMD_IOMMU)) {
+			rc = -EOPNOTSUPP;
+			goto err_free;
+		}
+
 		struct pt_iommu_amdv1_cfg cfg = {};
 
 		cfg.common.hw_max_vasz_lg2 = 64;
