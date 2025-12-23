@@ -399,7 +399,7 @@ free_item:
 	kfree(to_mdev_link(item));
 }
 
-static struct configfs_item_operations mdev_link_item_ops = {
+static const struct configfs_item_operations mdev_link_item_ops = {
 	.release		= mdev_link_release,
 };
 
@@ -454,7 +454,7 @@ static void most_common_release(struct config_item *item)
 	kfree(to_most_common(group->cg_subsys));
 }
 
-static struct configfs_item_operations most_common_item_ops = {
+static const struct configfs_item_operations most_common_item_ops = {
 	.release	= most_common_release,
 };
 
@@ -466,7 +466,7 @@ static void most_common_disconnect(struct config_group *group,
 	module_put(mc->mod);
 }
 
-static struct configfs_group_operations most_common_group_ops = {
+static const struct configfs_group_operations most_common_group_ops = {
 	.make_item	= most_common_make_item,
 	.disconnect_notify = most_common_disconnect,
 };
@@ -571,11 +571,11 @@ static void most_snd_grp_release(struct config_item *item)
 	kfree(group);
 }
 
-static struct configfs_item_operations most_snd_grp_item_ops = {
+static const struct configfs_item_operations most_snd_grp_item_ops = {
 	.release	= most_snd_grp_release,
 };
 
-static struct configfs_group_operations most_snd_grp_group_ops = {
+static const struct configfs_group_operations most_snd_grp_group_ops = {
 	.make_item	= most_snd_grp_make_item,
 };
 
@@ -625,7 +625,7 @@ static void most_sound_disconnect(struct config_group *group,
 	module_put(ms->mod);
 }
 
-static struct configfs_group_operations most_sound_group_ops = {
+static const struct configfs_group_operations most_sound_group_ops = {
 	.make_group	= most_sound_make_group,
 	.disconnect_notify = most_sound_disconnect,
 };
