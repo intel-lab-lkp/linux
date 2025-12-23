@@ -240,6 +240,9 @@
  *  - add FUSE_COPY_FILE_RANGE_64
  *  - add struct fuse_copy_file_range_out
  *  - add FUSE_NOTIFY_PRUNE
+ *
+ *  7.46
+ *  - add fuse_uring_cmd_req init flags
  */
 
 #ifndef _LINUX_FUSE_H
@@ -1294,6 +1297,9 @@ enum fuse_uring_cmd {
 	FUSE_IO_URING_CMD_COMMIT_AND_FETCH = 2,
 };
 
+/* fuse_uring_cmd_req init flags */
+#define FUSE_URING_BUF_RING	(1 << 0)
+
 /**
  * In the 80B command area of the SQE.
  */
@@ -1305,7 +1311,14 @@ struct fuse_uring_cmd_req {
 
 	/* queue the command is for (queue index) */
 	uint16_t qid;
-	uint8_t padding[6];
+
+	union {
+		struct {
+			uint16_t flags;
+		} init;
+	};
+
+	uint8_t padding[4];
 };
 
 #endif /* _LINUX_FUSE_H */
