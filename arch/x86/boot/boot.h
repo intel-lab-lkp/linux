@@ -53,7 +53,7 @@ static inline u16 ds(void)
 
 static inline void set_fs(u16 seg)
 {
-	asm volatile("movw %0,%%fs" : : "rm" (seg));
+	asm volatile("movw %0,%%fs" : : "rm" (seg) : "memory");
 }
 static inline u16 fs(void)
 {
@@ -64,7 +64,7 @@ static inline u16 fs(void)
 
 static inline void set_gs(u16 seg)
 {
-	asm volatile("movw %0,%%gs" : : "rm" (seg));
+	asm volatile("movw %0,%%gs" : : "rm" (seg) : "memory");
 }
 static inline u16 gs(void)
 {
@@ -77,78 +77,54 @@ typedef unsigned int addr_t;
 
 static inline u8 rdfs8(addr_t addr)
 {
-	u8 *ptr = (u8 *)absolute_pointer(addr);
-	u8 v;
-	asm volatile("movb %%fs:%1,%0" : "=q" (v) : "m" (*ptr));
-	return v;
+	return *(__seg_fs u8 *)(__force addr_t)absolute_pointer(addr);
 }
 static inline u16 rdfs16(addr_t addr)
 {
-	u16 *ptr = (u16 *)absolute_pointer(addr);
-	u16 v;
-	asm volatile("movw %%fs:%1,%0" : "=r" (v) : "m" (*ptr));
-	return v;
+	return *(__seg_fs u16 *)(__force addr_t)absolute_pointer(addr);
 }
 static inline u32 rdfs32(addr_t addr)
 {
-	u32 *ptr = (u32 *)absolute_pointer(addr);
-	u32 v;
-	asm volatile("movl %%fs:%1,%0" : "=r" (v) : "m" (*ptr));
-	return v;
+	return *(__seg_fs u32 *)(__force addr_t)absolute_pointer(addr);
 }
 
 static inline void wrfs8(u8 v, addr_t addr)
 {
-	u8 *ptr = (u8 *)absolute_pointer(addr);
-	asm volatile("movb %1,%%fs:%0" : "+m" (*ptr) : "qi" (v));
+	*(__seg_fs u8 *)(__force addr_t)absolute_pointer(addr) = v;
 }
 static inline void wrfs16(u16 v, addr_t addr)
 {
-	u16 *ptr = (u16 *)absolute_pointer(addr);
-	asm volatile("movw %1,%%fs:%0" : "+m" (*ptr) : "ri" (v));
+	*(__seg_fs u16 *)(__force addr_t)absolute_pointer(addr) = v;
 }
 static inline void wrfs32(u32 v, addr_t addr)
 {
-	u32 *ptr = (u32 *)absolute_pointer(addr);
-	asm volatile("movl %1,%%fs:%0" : "+m" (*ptr) : "ri" (v));
+	*(__seg_fs u32 *)(__force addr_t)absolute_pointer(addr) = v;
 }
 
 static inline u8 rdgs8(addr_t addr)
 {
-	u8 *ptr = (u8 *)absolute_pointer(addr);
-	u8 v;
-	asm volatile("movb %%gs:%1,%0" : "=q" (v) : "m" (*ptr));
-	return v;
+	return *(__seg_gs u8 *)(__force addr_t)absolute_pointer(addr);
 }
 static inline u16 rdgs16(addr_t addr)
 {
-	u16 *ptr = (u16 *)absolute_pointer(addr);
-	u16 v;
-	asm volatile("movw %%gs:%1,%0" : "=r" (v) : "m" (*ptr));
-	return v;
+	return *(__seg_gs u16 *)(__force addr_t)absolute_pointer(addr);
 }
 static inline u32 rdgs32(addr_t addr)
 {
-	u32 *ptr = (u32 *)absolute_pointer(addr);
-	u32 v;
-	asm volatile("movl %%gs:%1,%0" : "=r" (v) : "m" (*ptr));
-	return v;
+	return *(__seg_gs u32 *)(__force addr_t)absolute_pointer(addr);
 }
 
 static inline void wrgs8(u8 v, addr_t addr)
 {
-	u8 *ptr = (u8 *)absolute_pointer(addr);
-	asm volatile("movb %1,%%gs:%0" : "+m" (*ptr) : "qi" (v));
+	*(__seg_gs u8 *)(__force addr_t)absolute_pointer(addr) = v;
 }
 static inline void wrgs16(u16 v, addr_t addr)
 {
-	u16 *ptr = (u16 *)absolute_pointer(addr);
-	asm volatile("movw %1,%%gs:%0" : "+m" (*ptr) : "ri" (v));
+	*(__seg_gs u16 *)(__force addr_t)absolute_pointer(addr) = v;
 }
 static inline void wrgs32(u32 v, addr_t addr)
 {
-	u32 *ptr = (u32 *)absolute_pointer(addr);
-	asm volatile("movl %1,%%gs:%0" : "+m" (*ptr) : "ri" (v));
+	*(__seg_gs u32 *)(__force addr_t)absolute_pointer(addr) = v;
 }
 
 /* Note: these only return true/false, not a signed return value! */
@@ -156,14 +132,16 @@ static inline bool memcmp_fs(const void *s1, addr_t s2, size_t len)
 {
 	bool diff;
 	asm volatile("fs repe cmpsb"
-		     : "=@ccnz" (diff), "+D" (s1), "+S" (s2), "+c" (len));
+		     : "=@ccnz" (diff), "+D" (s1), "+S" (s2), "+c" (len)
+		     : : "memory");
 	return diff;
 }
 static inline bool memcmp_gs(const void *s1, addr_t s2, size_t len)
 {
 	bool diff;
 	asm volatile("gs repe cmpsb"
-		     : "=@ccnz" (diff), "+D" (s1), "+S" (s2), "+c" (len));
+		     : "=@ccnz" (diff), "+D" (s1), "+S" (s2), "+c" (len)
+		     : : "memory");
 	return diff;
 }
 
