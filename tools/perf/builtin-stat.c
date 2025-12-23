@@ -1235,6 +1235,28 @@ static int parse_cputype(const struct option *opt,
 	return 0;
 }
 
+static int parse_uncorepmu(const struct option *opt,
+			   const char *str,
+			   int unset __maybe_unused)
+{
+	const struct perf_pmu *pmu;
+	struct evlist *evlist = *(struct evlist **)opt->value;
+
+	if (!list_empty(&evlist->core.entries)) {
+		fprintf(stderr, "Must define uncorepmu before events/metrics\n");
+		return -1;
+	}
+
+	pmu = perf_pmus__pmu_for_pmu_filter(str);
+	if (!pmu || pmu->is_core) {
+		fprintf(stderr, "--uncorepmu %s is not supported!\n", str);
+		return -1;
+	}
+	parse_events_option_args.pmu_filter = pmu->name;
+
+	return 0;
+}
+
 static int parse_cache_level(const struct option *opt,
 			     const char *str,
 			     int unset __maybe_unused)
@@ -2579,6 +2601,10 @@ int cmd_stat(int argc, const char **argv)
 			"Only enable events on applying cpu with this type "
 			"for hybrid platform (e.g. core or atom)",
 			parse_cputype),
+		OPT_CALLBACK(0, "uncorepmu", &evsel_list, "uncore pmu",
+			"Only enable events on applying uncore pmu with specified "
+			"for multiple uncore pmus with same type(e.g. hisi_sccl1_ddrc0_0 or hisi_sccl1_ddrc0_1)",
+			parse_uncorepmu),
 #ifdef HAVE_LIBPFM
 		OPT_CALLBACK(0, "pfm-events", &evsel_list, "event",
 			"libpfm4 event selector. use 'perf list' to list available events",

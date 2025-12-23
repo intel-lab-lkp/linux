@@ -573,6 +573,10 @@ $ perf config stat.no-csv-summary=true
 Only enable events on applying cpu with this type for hybrid platform
 (e.g. core or atom)"
 
+--uncorepmu::
+Only enable events on applying uncore pmu with specified for multiple
+uncore pmus with same type (e.g. hisi_sccl1_ddrc0_0 or hisi_sccl1_ddrc0_1)
+
 EXAMPLES
 --------
 
