@@ -8,7 +8,7 @@ Description:
 		link encryption and other device-security features coordinated
 		through a platform tsm.
 
-What:		/sys/class/tsm/tsmN/streamH.R.E
+What:		/sys/class/tsm/tsmN/pciDDDD:BB:streamH.R.E
 Contact:	linux-pci@vger.kernel.org
 Description:
 		(RO) When a host bridge has established a secure connection via
