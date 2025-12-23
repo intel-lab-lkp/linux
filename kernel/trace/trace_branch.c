@@ -215,10 +215,11 @@ void ftrace_likely_update(struct ftrace_likely_data *f, int val,
 	trace_likely_condition(f, val, expect);
 
 	/* FIXME: Make this atomic! */
-	if (val == expect)
-		f->data.correct++;
-	else
-		f->data.incorrect++;
+	if (val == expect) {
+		atomic_long_inc(&f->data.correct);
+	} else {
+	atomic_long_inc(&f->data.incorrect);
+	}
 
 	user_access_restore(flags);
 }
