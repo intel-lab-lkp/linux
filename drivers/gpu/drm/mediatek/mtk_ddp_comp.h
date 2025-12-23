@@ -75,10 +75,12 @@ struct mtk_ddp_comp_funcs {
 	unsigned int (*gamma_get_lut_size)(struct device *dev);
 	void (*gamma_set)(struct device *dev,
 			  struct drm_crtc_state *state);
+	void (*gamma_set_color_pipeline)(struct device *dev, struct drm_color_lut32 *lut);
 	void (*bgclr_in_on)(struct device *dev);
 	void (*bgclr_in_off)(struct device *dev);
 	void (*ctm_set)(struct device *dev,
 			struct drm_crtc_state *state);
+	void (*ctm_set_color_pipeline)(struct device *dev, struct drm_color_ctm_3x4 *ctm);
 	struct device * (*dma_dev_get)(struct device *dev);
 	u32 (*get_blend_modes)(struct device *dev);
 	const u32 *(*get_formats)(struct device *dev);
