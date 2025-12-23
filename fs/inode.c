@@ -2109,10 +2109,8 @@ int inode_update_timestamps(struct inode *inode, int flags)
 		now = inode_set_ctime_current(inode);
 		if (!timespec64_equal(&now, &ctime))
 			updated |= S_CTIME;
-		if (!timespec64_equal(&now, &mtime)) {
-			inode_set_mtime_to_ts(inode, now);
+		if (!timespec64_equal(&now, &mtime))
 			updated |= S_MTIME;
-		}
 		if (IS_I_VERSION(inode) && inode_maybe_inc_iversion(inode, updated))
 			updated |= S_VERSION;
 	} else {
@@ -2122,11 +2120,14 @@ int inode_update_timestamps(struct inode *inode, int flags)
 	if (flags & S_ATIME) {
 		struct timespec64 atime = inode_get_atime(inode);
 
-		if (!timespec64_equal(&now, &atime)) {
-			inode_set_atime_to_ts(inode, now);
+		if (!timespec64_equal(&now, &atime))
 			updated |= S_ATIME;
-		}
 	}
+
+	if (updated & S_MTIME)
+		inode_set_mtime_to_ts(inode, now);
+	if (updated & S_ATIME)
+		inode_set_atime_to_ts(inode, now);
 	return updated;
 }
 EXPORT_SYMBOL(inode_update_timestamps);
