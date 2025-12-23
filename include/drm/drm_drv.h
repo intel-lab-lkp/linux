@@ -122,6 +122,12 @@ enum drm_driver_feature {
 	 * the cursor planes to work correctly).
 	 */
 	DRIVER_CURSOR_HOTSPOT           = BIT(9),
+	/**
+	 * @DRIVER_CRTC_COLOR_PIPELINE:
+	 *
+	 * Driver supports CRTC (post-blend) color pipeline.
+	 */
+	DRIVER_CRTC_COLOR_PIPELINE	= BIT(10),
 
 	/* IMPORTANT: Below are all the legacy flags, add new ones above. */
 
