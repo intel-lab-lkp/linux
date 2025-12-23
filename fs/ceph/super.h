@@ -104,18 +104,44 @@ struct ceph_mount_options {
 	struct fscrypt_dummy_policy dummy_enc_policy;
 };
 
+#define CEPH_NAMESPACE_WILDCARD		"*"
+
+static inline bool __namespace_equals(const char *name1, const char *name2,
+					size_t max_len)
+{
+	size_t len1, len2;
+
+	if (!name1 || !name2)
+		return true;
+
+	len1 = strnlen(name1, max_len);
+	len2 = strnlen(name2, max_len);
+
+	return !(len1 != len2 || strncmp(name1, name2, len1));
+}
+
 /*
  * Check if the mds namespace in ceph_mount_options matches
  * the passed in namespace string. First time match (when
  * ->mds_namespace is NULL) is treated specially, since
  * ->mds_namespace needs to be initialized by the caller.
  */
-static inline int namespace_equals(struct ceph_mount_options *fsopt,
-				   const char *namespace, size_t len)
+static inline bool namespace_equals(struct ceph_mount_options *fsopt,
+				    const char *namespace, size_t len)
 {
-	return !(fsopt->mds_namespace &&
-		 (strlen(fsopt->mds_namespace) != len ||
-		  strncmp(fsopt->mds_namespace, namespace, len)));
+	if (!fsopt->mds_namespace && !namespace)
+		return true;
+
+	if (!fsopt->mds_namespace)
+		return true;
+
+	if (strcmp(fsopt->mds_namespace, CEPH_NAMESPACE_WILDCARD) == 0)
+		return true;
+
+	if (!namespace)
+		return false;
+
+	return __namespace_equals(fsopt->mds_namespace, namespace, len);
 }
 
 /* mount state */
