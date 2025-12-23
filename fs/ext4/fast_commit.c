@@ -1044,6 +1044,7 @@ static int ext4_fc_perform_commit(journal_t *journal)
 	struct ext4_fc_head head;
 	struct inode *inode;
 	struct blk_plug plug;
+	unsigned int nofs;
 	int ret = 0;
 	u32 crc = 0;
 
@@ -1117,6 +1118,7 @@ static int ext4_fc_perform_commit(journal_t *journal)
 		blkdev_issue_flush(journal->j_fs_dev);
 
 	blk_start_plug(&plug);
+	nofs = memalloc_nofs_save();
 	/* Step 6: Write fast commit blocks to disk. */
 	if (sbi->s_fc_bytes == 0) {
 		/*
@@ -1157,6 +1159,7 @@ static int ext4_fc_perform_commit(journal_t *journal)
 
 out:
 	mutex_unlock(&sbi->s_fc_lock);
+	memalloc_nofs_restore(nofs);
 	blk_finish_plug(&plug);
 	return ret;
 }
