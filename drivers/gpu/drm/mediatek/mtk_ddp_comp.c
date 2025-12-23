@@ -284,7 +284,8 @@ static const struct mtk_ddp_comp_funcs ddp_ccorr = {
 	.config = mtk_ccorr_config,
 	.start = mtk_ccorr_start,
 	.stop = mtk_ccorr_stop,
-	.ctm_set = mtk_ccorr_ctm_set,
+	.ctm_set = mtk_ccorr_ctm_set_legacy,
+	.ctm_set_color_pipeline = mtk_ccorr_ctm_set_color_pipeline,
 };
 
 static const struct mtk_ddp_comp_funcs ddp_color = {

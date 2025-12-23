@@ -28,6 +28,11 @@
 #define DISP_CCORR_COEF_2			0x0088
 #define DISP_CCORR_COEF_3			0x008C
 #define DISP_CCORR_COEF_4			0x0090
+#define DISP_CCORR_OFFSET_0			0x0100
+#define CCORR_OFFSET_EN					BIT(31)
+#define DISP_CCORR_OFFSET_1			0x0104
+#define DISP_CCORR_OFFSET_2			0x0108
+#define DISP_CCORR_OFFSET_MASK				GENMASK(26, 14)
 
 struct mtk_disp_ccorr_data {
 	u32 matrix_bits;
@@ -80,36 +85,81 @@ void mtk_ccorr_stop(struct device *dev)
 	writel_relaxed(0x0, ccorr->regs + DISP_CCORR_EN);
 }
 
-void mtk_ccorr_ctm_set(struct device *dev, struct drm_crtc_state *state)
+static void mtk_ccorr_ctm_set(struct device *dev, struct cmdq_pkt *cmdq_pkt,
+			      void *ctm, bool ctm_3x4)
 {
 	struct mtk_disp_ccorr *ccorr = dev_get_drvdata(dev);
-	struct drm_property_blob *blob = state->ctm;
-	struct drm_color_ctm *ctm;
-	const u64 *input;
-	uint16_t coeffs[9] = { 0 };
-	int i;
-	struct cmdq_pkt *cmdq_pkt = NULL;
 	u32 matrix_bits = ccorr->data->matrix_bits;
+	struct drm_color_ctm_3x4 coeffs;
+	u32 val;
+	int i;
+
+	drm_color_ctm_to_ctm_3x4(&coeffs, ctm, ctm_3x4);
+
+	for (i = 0; i < ARRAY_SIZE(coeffs.matrix); i++)
+		coeffs.matrix[i] =
+			drm_color_ctm_s31_32_to_qm_n(coeffs.matrix[i], 2, matrix_bits);
+
+	mtk_ddp_write(cmdq_pkt, coeffs.matrix[0] << 16 | coeffs.matrix[1],
+		      &ccorr->cmdq_reg, ccorr->regs, DISP_CCORR_COEF_0);
+	mtk_ddp_write(cmdq_pkt, coeffs.matrix[2] << 16 | coeffs.matrix[4],
+		      &ccorr->cmdq_reg, ccorr->regs, DISP_CCORR_COEF_1);
+	mtk_ddp_write(cmdq_pkt, coeffs.matrix[5] << 16 | coeffs.matrix[6],
+		      &ccorr->cmdq_reg, ccorr->regs, DISP_CCORR_COEF_2);
+	mtk_ddp_write(cmdq_pkt, coeffs.matrix[8] << 16 | coeffs.matrix[9],
+		      &ccorr->cmdq_reg, ccorr->regs, DISP_CCORR_COEF_3);
+	mtk_ddp_write(cmdq_pkt, coeffs.matrix[10] << 16,
+		      &ccorr->cmdq_reg, ccorr->regs, DISP_CCORR_COEF_4);
+
+	if (ctm_3x4) {
+		val = CCORR_OFFSET_EN;
+		val |= FIELD_PREP(DISP_CCORR_OFFSET_MASK, coeffs.matrix[3]);
+		mtk_ddp_write(cmdq_pkt, val, &ccorr->cmdq_reg,
+			      ccorr->regs, DISP_CCORR_OFFSET_0);
+		val = FIELD_PREP(DISP_CCORR_OFFSET_MASK, coeffs.matrix[7]);
+		mtk_ddp_write(cmdq_pkt, val, &ccorr->cmdq_reg,
+			      ccorr->regs, DISP_CCORR_OFFSET_1);
+		val = FIELD_PREP(DISP_CCORR_OFFSET_MASK, coeffs.matrix[11]);
+		mtk_ddp_write(cmdq_pkt, val, &ccorr->cmdq_reg,
+			      ccorr->regs, DISP_CCORR_OFFSET_2);
+	} else {
+		mtk_ddp_write_mask(cmdq_pkt, 0, &ccorr->cmdq_reg,
+				   ccorr->regs, DISP_CCORR_OFFSET_0,
+				   CCORR_OFFSET_EN);
+	}
+
+	mtk_ddp_write(cmdq_pkt, CCORR_ENGINE_EN, &ccorr->cmdq_reg,
+		      ccorr->regs, DISP_CCORR_CFG);
+}
+
+void mtk_ccorr_ctm_set_legacy(struct device *dev, struct drm_crtc_state *state)
+{
+	struct drm_property_blob *blob = state->ctm;
+	struct cmdq_pkt *cmdq_pkt = NULL;
+	struct drm_color_ctm *ctm;
 
 	if (!blob)
 		return;
 
 	ctm = (struct drm_color_ctm *)blob->data;
-	input = ctm->matrix;
 
-	for (i = 0; i < ARRAY_SIZE(coeffs); i++)
-		coeffs[i] = drm_color_ctm_s31_32_to_qm_n(input[i], 2, matrix_bits);
+	mtk_ccorr_ctm_set(dev, cmdq_pkt, ctm, false);
+}
 
-	mtk_ddp_write(cmdq_pkt, coeffs[0] << 16 | coeffs[1],
-		      &ccorr->cmdq_reg, ccorr->regs, DISP_CCORR_COEF_0);
-	mtk_ddp_write(cmdq_pkt, coeffs[2] << 16 | coeffs[3],
-		      &ccorr->cmdq_reg, ccorr->regs, DISP_CCORR_COEF_1);
-	mtk_ddp_write(cmdq_pkt, coeffs[4] << 16 | coeffs[5],
-		      &ccorr->cmdq_reg, ccorr->regs, DISP_CCORR_COEF_2);
-	mtk_ddp_write(cmdq_pkt, coeffs[6] << 16 | coeffs[7],
-		      &ccorr->cmdq_reg, ccorr->regs, DISP_CCORR_COEF_3);
-	mtk_ddp_write(cmdq_pkt, coeffs[8] << 16,
-		      &ccorr->cmdq_reg, ccorr->regs, DISP_CCORR_COEF_4);
+void mtk_ccorr_ctm_set_color_pipeline(struct device *dev, struct drm_color_ctm_3x4 *ctm)
+{
+	struct mtk_disp_ccorr *ccorr = dev_get_drvdata(dev);
+	struct cmdq_pkt *cmdq_pkt = NULL;
+
+	/* Configure block to be bypassed */
+	if (!ctm) {
+		mtk_ddp_write_mask(cmdq_pkt, CCORR_RELAY_MODE, &ccorr->cmdq_reg,
+				   ccorr->regs, DISP_CCORR_CFG,
+				   CCORR_RELAY_MODE | CCORR_ENGINE_EN);
+		return;
+	}
+
+	mtk_ccorr_ctm_set(dev, cmdq_pkt, ctm, true);
 }
 
 static int mtk_disp_ccorr_bind(struct device *dev, struct device *master,
