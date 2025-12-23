@@ -1352,8 +1352,8 @@ int amdgpu_vm_bo_update(struct amdgpu_device *adev, struct amdgpu_bo_va *bo_va,
 	list_for_each_entry(mapping, &bo_va->invalids, list) {
 		uint64_t update_flags = flags;
 
-		/* normally,bo_va->flags only contians READABLE and WIRTEABLE bit go here
-		 * but in case of something, we filter the flags in first place
+		/* Normally,bo_va->flags only contains READABLE and WRITEABLE bits here.
+		 * But in case of something, we filter the flags in first place.
 		 */
 		if (!(mapping->flags & AMDGPU_VM_PAGE_READABLE))
 			update_flags &= ~AMDGPU_PTE_READABLE;
