@@ -1100,6 +1100,7 @@ config HID_SONY
 	  * Logitech Harmony adapter for Sony Playstation 3 (Bluetooth)
 	  * Guitar Hero Live PS3, Wii U and PS4 guitar dongles
 	  * Guitar Hero PS3 and PC guitar dongles
+	  * Rock Band 4 PS4 guitar dongles
 
 config SONY_FF
 	bool "Sony PS2/3/4 accessories force feedback support"
