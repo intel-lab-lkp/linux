@@ -1052,12 +1052,42 @@ static ssize_t store_max_perf(struct cpufreq_policy *policy, const char *buf,
 	return count;
 }
 
+/**
+ * show_perf_limited - Show Performance Limited register status
+ * @policy: cpufreq policy
+ * @buf: buffer to write the value to
+ *
+ * Read the Performance Limited register to check if platform throttling
+ * (thermal/power/current limits) occurred.
+ */
+static ssize_t show_perf_limited(struct cpufreq_policy *policy, char *buf)
+{
+	return cppc_cpufreq_sysfs_show_u64(policy->cpu,
+					   cppc_get_perf_limited, buf);
+}
+
+/**
+ * store_perf_limited - Clear Performance Limited register bits
+ * @policy: cpufreq policy
+ * @buf: buffer containing the bitmask of bits to clear
+ * @count: number of bytes in buf
+ *
+ * Write 1 to clear bit 0, 2 to clear bit 1, or 3 to clear both.
+ */
+static ssize_t store_perf_limited(struct cpufreq_policy *policy,
+				  const char *buf, size_t count)
+{
+	return cppc_cpufreq_sysfs_store_u64(policy->cpu,
+					    cppc_set_perf_limited, buf, count);
+}
+
 cpufreq_freq_attr_ro(freqdomain_cpus);
 cpufreq_freq_attr_rw(auto_select);
 cpufreq_freq_attr_rw(auto_act_window);
 cpufreq_freq_attr_rw(energy_performance_preference_val);
 cpufreq_freq_attr_rw(min_perf);
 cpufreq_freq_attr_rw(max_perf);
+cpufreq_freq_attr_rw(perf_limited);
 
 static struct freq_attr *cppc_cpufreq_attr[] = {
 	&freqdomain_cpus,
@@ -1066,6 +1096,7 @@ static struct freq_attr *cppc_cpufreq_attr[] = {
 	&energy_performance_preference_val,
 	&min_perf,
 	&max_perf,
+	&perf_limited,
 	NULL,
 };
 
