@@ -146,4 +146,7 @@ int io_kbuf_ring_pin(struct io_kiocb *req, unsigned buf_group,
 		     unsigned issue_flags, struct io_buffer_list **bl);
 int io_kbuf_ring_unpin(struct io_kiocb *req, unsigned buf_group,
 		       unsigned issue_flags);
+int io_kmbuf_recycle(struct io_kiocb *req, unsigned int bgid, u64 addr,
+		     unsigned int len, unsigned int bid,
+		     unsigned int issue_flags);
 #endif
