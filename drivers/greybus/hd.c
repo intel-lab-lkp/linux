@@ -45,10 +45,18 @@ static struct attribute *bus_attrs[] = {
 };
 ATTRIBUTE_GROUPS(bus);
 
+static bool gb_hd_is_p2p(struct gb_host_device *hd)
+{
+	return !hd->svc;
+}
+
 int gb_hd_cport_reserve(struct gb_host_device *hd, u16 cport_id)
 {
 	struct ida *id_map = &hd->cport_id_map;
 	int ret;
+
+	if (gb_hd_is_p2p(hd))
+		return -EPERM;
 
 	ret = ida_alloc_range(id_map, cport_id, cport_id, GFP_KERNEL);
 	if (ret < 0) {
@@ -63,6 +71,9 @@ EXPORT_SYMBOL_GPL(gb_hd_cport_reserve);
 void gb_hd_cport_release_reserved(struct gb_host_device *hd, u16 cport_id)
 {
 	struct ida *id_map = &hd->cport_id_map;
+
+	if (gb_hd_is_p2p(hd))
+		return;
 
 	ida_free(id_map, cport_id);
 }
@@ -205,10 +216,12 @@ int gb_hd_add(struct gb_host_device *hd)
 	if (ret)
 		return ret;
 
-	ret = gb_svc_add(hd->svc);
-	if (ret) {
-		device_del(&hd->dev);
-		return ret;
+	if (!gb_hd_is_p2p(hd)) {
+		ret = gb_svc_add(hd->svc);
+		if (ret) {
+			device_del(&hd->dev);
+			return ret;
+		}
 	}
 
 	trace_gb_hd_add(hd);
@@ -225,7 +238,8 @@ void gb_hd_del(struct gb_host_device *hd)
 	 * Tear down the svc and flush any on-going hotplug processing before
 	 * removing the remaining interfaces.
 	 */
-	gb_svc_del(hd->svc);
+	if (!gb_hd_is_p2p(hd))
+		gb_svc_del(hd->svc);
 
 	device_del(&hd->dev);
 }
@@ -233,7 +247,8 @@ EXPORT_SYMBOL_GPL(gb_hd_del);
 
 void gb_hd_shutdown(struct gb_host_device *hd)
 {
-	gb_svc_del(hd->svc);
+	if (!gb_hd_is_p2p(hd))
+		gb_svc_del(hd->svc);
 }
 EXPORT_SYMBOL_GPL(gb_hd_shutdown);
 
