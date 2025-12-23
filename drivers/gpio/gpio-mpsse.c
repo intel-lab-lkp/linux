@@ -596,24 +596,26 @@ static int gpio_mpsse_probe(struct usb_interface *interface,
 	priv->intf_id = interface->cur_altsetting->desc.bInterfaceNumber;
 
 	priv->id = ida_alloc(&gpio_mpsse_ida, GFP_KERNEL);
-	if (priv->id < 0)
-		return priv->id;
+	if (priv->id < 0) {
+		err = priv->id;
+		goto error;
+	}
 
 	err = devm_add_action_or_reset(dev, gpio_mpsse_ida_remove, priv);
 	if (err)
-		return err;
+		goto error;
 
 	err = devm_mutex_init(dev, &priv->io_mutex);
 	if (err)
-		return err;
+		goto error;
 
 	err = devm_mutex_init(dev, &priv->irq_mutex);
 	if (err)
-		return err;
+		goto error;
 
 	err = devm_mutex_init(dev, &priv->irq_race);
 	if (err)
-		return err;
+		goto error;
 
 	raw_spin_lock_init(&priv->irq_spin);
 
@@ -626,8 +628,10 @@ static int gpio_mpsse_probe(struct usb_interface *interface,
 					  id->idVendor, id->idProduct,
 					  priv->intf_id, priv->id,
 					  serial);
-	if (!priv->gpio.label)
-		return -ENOMEM;
+	if (!priv->gpio.label) {
+		err = -ENOMEM;
+		goto error;
+	}
 
 	priv->gpio.owner = THIS_MODULE;
 	priv->gpio.parent = interface->usb_dev;
@@ -657,12 +661,14 @@ static int gpio_mpsse_probe(struct usb_interface *interface,
 					&priv->bulk_in, &priv->bulk_out,
 					NULL, NULL);
 	if (err)
-		return err;
+		goto error;
 
 	priv->bulk_in_buf = devm_kmalloc(dev, usb_endpoint_maxp(priv->bulk_in),
 					 GFP_KERNEL);
-	if (!priv->bulk_in_buf)
-		return -ENOMEM;
+	if (!priv->bulk_in_buf) {
+		err = -ENOMEM;
+		goto error;
+	}
 
 	usb_set_intfdata(interface, priv);
 
@@ -673,7 +679,7 @@ static int gpio_mpsse_probe(struct usb_interface *interface,
 			      MODE_RESET, priv->intf_id + 1, NULL, 0,
 			      USB_CTRL_SET_TIMEOUT);
 	if (err)
-		return err;
+		goto error;
 
 	/* Enter MPSSE mode */
 	err = usb_control_msg(priv->udev, usb_sndctrlpipe(priv->udev, 0),
@@ -682,7 +688,7 @@ static int gpio_mpsse_probe(struct usb_interface *interface,
 			      MODE_MPSSE, priv->intf_id + 1, NULL, 0,
 			      USB_CTRL_SET_TIMEOUT);
 	if (err)
-		return err;
+		goto error;
 
 	gpio_irq_chip_set_chip(&priv->gpio.irq, &gpio_mpsse_irq_chip);
 
@@ -695,9 +701,12 @@ static int gpio_mpsse_probe(struct usb_interface *interface,
 
 	err = devm_gpiochip_add_data(dev, &priv->gpio, priv);
 	if (err)
-		return err;
+		goto error;
 
 	return 0;
+error:
+	usb_put_dev(priv->udev);
+	return err;
 }
 
 static void gpio_mpsse_disconnect(struct usb_interface *intf)
