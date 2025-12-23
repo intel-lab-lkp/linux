@@ -239,17 +239,16 @@ impl Page {
         len: usize,
         f: impl FnOnce(*mut u8) -> Result<T>,
     ) -> Result<T> {
-        let bounds_ok = off <= PAGE_SIZE && len <= PAGE_SIZE && (off + len) <= PAGE_SIZE;
-
-        if bounds_ok {
-            self.with_page_mapped(move |page_addr| {
-                // SAFETY: The `off` integer is at most `PAGE_SIZE`, so this pointer offset will
-                // result in a pointer that is in bounds or one off the end of the page.
-                f(unsafe { page_addr.add(off) })
-            })
-        } else {
-            Err(EINVAL)
+        // TODO: Replace `map_or` with `is_none_or` once the MSRV is >= 1.82.
+        if off.checked_add(len).map_or(true, |end| end > PAGE_SIZE) {
+            return Err(EINVAL);
         }
+
+        self.with_page_mapped(move |page_addr| {
+            // SAFETY: The `off` integer is at most `PAGE_SIZE`, so this pointer offset will
+            // result in a pointer that is in bounds or one off the end of the page.
+            f(unsafe { page_addr.add(off) })
+        })
     }
 
     /// Maps the page and reads from it into the given buffer.
