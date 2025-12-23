@@ -1147,7 +1147,8 @@ fail_mm_init:
 }
 
 /*
- * Allocate and initialize an mm_struct.
+ * Allocate and initialize an mm_struct. The caller gets a single reference to
+ * the mm's address space, which should be released with a call to mmput().
  */
 struct mm_struct *mm_alloc(void)
 {

@@ -1589,23 +1589,22 @@ void kthread_destroy_worker(struct kthread_worker *worker)
 EXPORT_SYMBOL(kthread_destroy_worker);
 
 /**
- * kthread_use_mm - make the calling kthread operate on an address space
+ * kthread_take_mm - make the calling kthread own an address space.
+ *
+ * Unlike kthread_use_mm(), this doesn't have a cleanup, instead that happens
+ * automatically on kthread exit. Correspondingly, it does not take any
+ * references, by calling this function you donate your reference to the address
+ * space (from mmget()/mm_users).
+ *
  * @mm: address space to operate on
  */
-void kthread_use_mm(struct mm_struct *mm)
+void kthread_take_mm(struct mm_struct *mm)
 {
 	struct mm_struct *active_mm;
 	struct task_struct *tsk = current;
 
 	WARN_ON_ONCE(!(tsk->flags & PF_KTHREAD));
 	WARN_ON_ONCE(tsk->mm);
-
-	/*
-	 * It is possible for mm to be the same as tsk->active_mm, but
-	 * we must still mmgrab(mm) and mmdrop_lazy_tlb(active_mm),
-	 * because these references are not equivalent.
-	 */
-	mmgrab(mm);
 
 	task_lock(tsk);
 	/* Hold off tlb flush IPIs while switching mm's */
@@ -1631,6 +1630,25 @@ void kthread_use_mm(struct mm_struct *mm)
 	 * mmdrop_lazy_tlb().
 	 */
 	mmdrop_lazy_tlb(active_mm);
+}
+EXPORT_SYMBOL_GPL(kthread_take_mm);
+
+/**
+ * kthread_use_mm - make the calling kthread operate on an address space.
+ *
+ * This must be paired with a call to kthread_unuse_mm().
+ *
+ * @mm: address space to operate on
+ */
+void kthread_use_mm(struct mm_struct *mm)
+{
+	/*
+	 * It is possible for mm to be the same as tsk->active_mm, but we must
+	 * still mmgrab(mm) and mmdrop_lazy_tlb(active_mm) (in
+	 * kthread_take_mm()), because these references are not equivalent.
+	 */
+	mmgrab(mm);
+	kthread_take_mm(mm);
 }
 EXPORT_SYMBOL_GPL(kthread_use_mm);
 
