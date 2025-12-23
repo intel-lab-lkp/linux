@@ -86,12 +86,12 @@ const struct device_type greybus_module_type = {
 	.release	= gb_module_release,
 };
 
-struct gb_module *gb_module_create(struct gb_host_device *hd, u8 module_id,
-				   size_t num_interfaces)
+static struct gb_module *__gb_module_create(struct gb_host_device *hd,
+					    const struct attribute_group **groups,
+					    u8 module_id,
+					    size_t num_interfaces)
 {
-	struct gb_interface *intf;
 	struct gb_module *module;
-	int i;
 
 	module = kzalloc(struct_size(module, interfaces, num_interfaces),
 			 GFP_KERNEL);
@@ -105,12 +105,25 @@ struct gb_module *gb_module_create(struct gb_host_device *hd, u8 module_id,
 	module->dev.parent = &hd->dev;
 	module->dev.bus = &greybus_bus_type;
 	module->dev.type = &greybus_module_type;
-	module->dev.groups = module_groups;
+	module->dev.groups = groups;
 	module->dev.dma_mask = hd->dev.dma_mask;
 	device_initialize(&module->dev);
 	dev_set_name(&module->dev, "%d-%u", hd->bus_id, module_id);
 
 	trace_gb_module_create(module);
+
+	return module;
+}
+
+struct gb_module *gb_module_create(struct gb_host_device *hd, u8 module_id,
+				   size_t num_interfaces)
+{
+	struct gb_module *module = __gb_module_create(hd, module_groups, module_id, num_interfaces);
+	struct gb_interface *intf;
+	int i;
+
+	if (!module)
+		return NULL;
 
 	for (i = 0; i < num_interfaces; ++i) {
 		intf = gb_interface_create(module, module_id + i, false);
