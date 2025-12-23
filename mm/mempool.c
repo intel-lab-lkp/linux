@@ -674,7 +674,8 @@ unsigned int mempool_free_bulk(struct mempool *pool, void **elems,
 	if (unlikely(READ_ONCE(pool->curr_nr) < pool->min_nr)) {
 		spin_lock_irqsave(&pool->lock, flags);
 		while (pool->curr_nr < pool->min_nr && freed < count) {
-			add_element(pool, elems[freed++]);
+			add_element(pool, elems[freed]);
+			elems[freed++] = NULL;
 			added = true;
 		}
 		spin_unlock_irqrestore(&pool->lock, flags);
@@ -683,7 +684,8 @@ unsigned int mempool_free_bulk(struct mempool *pool, void **elems,
 		/* Handle the min_nr = 0 edge case: */
 		spin_lock_irqsave(&pool->lock, flags);
 		if (likely(pool->curr_nr == 0)) {
-			add_element(pool, elems[freed++]);
+			add_element(pool, elems[freed]);
+			elems[freed++] = NULL;
 			added = true;
 		}
 		spin_unlock_irqrestore(&pool->lock, flags);
