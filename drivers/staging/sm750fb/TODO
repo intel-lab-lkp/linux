@@ -1,8 +1,8 @@
 TODO:
-- lots of checkpatch cleanup
+- lots of checkpatch.pl cleanup
 - use kernel coding style
 - refine the code and remove unused code
-- Implement hardware acceleration for imageblit if image->depth > 1
+- Implement hardware acceleration for imageblit when image->depth > 1
 - must be ported to the atomic kms framework in the drm subsystem (which will
   give you a basic fbdev driver for free)
 
