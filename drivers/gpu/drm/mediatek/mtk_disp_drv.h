@@ -58,7 +58,8 @@ void mtk_gamma_config(struct device *dev, unsigned int w,
 		      unsigned int h, unsigned int vrefresh,
 		      unsigned int bpc, struct cmdq_pkt *cmdq_pkt);
 unsigned int mtk_gamma_get_lut_size(struct device *dev);
-void mtk_gamma_set(struct device *dev, struct drm_crtc_state *state);
+void mtk_gamma_set_legacy(struct device *dev, struct drm_crtc_state *state);
+void mtk_gamma_set_color_pipeline(struct device *dev, struct drm_color_lut32 *lut);
 void mtk_gamma_start(struct device *dev);
 void mtk_gamma_stop(struct device *dev);
 

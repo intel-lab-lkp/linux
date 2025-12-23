@@ -87,13 +87,17 @@ unsigned int mtk_gamma_get_lut_size(struct device *dev)
 	return 0;
 }
 
-static bool mtk_gamma_lut_is_descending(struct drm_color_lut *lut, u32 lut_size)
+static bool mtk_gamma_lut_is_descending(void *lut, bool bits32, u32 lut_size)
 {
 	u64 first, last;
 	int last_entry = lut_size - 1;
+	struct drm_color_lut32 lut_first, lut_last;
 
-	first = lut[0].red + lut[0].green + lut[0].blue;
-	last = lut[last_entry].red + lut[last_entry].green + lut[last_entry].blue;
+	drm_color_lut_to_lut32(&lut_first, lut, 0, bits32);
+	drm_color_lut_to_lut32(&lut_last, lut, last_entry, bits32);
+
+	first = lut_first.red + lut_first.green + lut_first.blue;
+	last = lut_last.red + lut_last.green + lut_last.blue;
 
 	return !!(first > last);
 }
@@ -113,7 +117,7 @@ static bool mtk_gamma_lut_is_descending(struct drm_color_lut *lut, u32 lut_size)
  *     - 12-bits LUT supported
  *     - 10-its LUT not supported
  */
-void mtk_gamma_set(struct device *dev, struct drm_crtc_state *state)
+static void mtk_gamma_set(struct device *dev, void *lut, bool bits32)
 {
 	struct mtk_disp_gamma *gamma = dev_get_drvdata(dev);
 	void __iomem *lut0_base = gamma->regs + DISP_GAMMA_LUT;
@@ -121,15 +125,9 @@ void mtk_gamma_set(struct device *dev, struct drm_crtc_state *state)
 	u32 cfg_val, data_mode, lbank_val, word[2];
 	u8 lut_bits = gamma->data->lut_bits;
 	int cur_bank, num_lut_banks;
-	struct drm_color_lut *lut;
 	unsigned int i;
 
-	/* If there's no gamma lut there's nothing to do here. */
-	if (!state->gamma_lut)
-		return;
-
 	num_lut_banks = gamma->data->lut_size / gamma->data->lut_bank_size;
-	lut = (struct drm_color_lut *)state->gamma_lut->data;
 
 	/* Switch to 12 bits data mode if supported */
 	data_mode = FIELD_PREP(DISP_GAMMA_BANK_DATA_MODE, !!(lut_bits == 12));
@@ -145,11 +143,13 @@ void mtk_gamma_set(struct device *dev, struct drm_crtc_state *state)
 
 		for (i = 0; i < gamma->data->lut_bank_size; i++) {
 			int n = cur_bank * gamma->data->lut_bank_size + i;
-			struct drm_color_lut diff, hwlut;
+			struct drm_color_lut32 diff, hwlut, lut32;
 
-			hwlut.red = drm_color_lut_extract(lut[n].red, lut_bits);
-			hwlut.green = drm_color_lut_extract(lut[n].green, lut_bits);
-			hwlut.blue = drm_color_lut_extract(lut[n].blue, lut_bits);
+			drm_color_lut_to_lut32(&lut32, lut, n, bits32);
+
+			hwlut.red = drm_color_lut_extract(lut32.red, lut_bits);
+			hwlut.green = drm_color_lut_extract(lut32.green, lut_bits);
+			hwlut.blue = drm_color_lut_extract(lut32.blue, lut_bits);
 
 			if (!gamma->data->lut_diff || (i % 2 == 0)) {
 				if (lut_bits == 12) {
@@ -162,13 +162,17 @@ void mtk_gamma_set(struct device *dev, struct drm_crtc_state *state)
 					word[0] |= FIELD_PREP(DISP_GAMMA_LUT_10BIT_B, hwlut.blue);
 				}
 			} else {
-				diff.red = lut[n].red - lut[n - 1].red;
+				struct drm_color_lut32 lut_prev;
+
+				drm_color_lut_to_lut32(&lut_prev, lut, n-1, bits32);
+
+				diff.red = lut32.red - lut_prev.red;
 				diff.red = drm_color_lut_extract(diff.red, lut_bits);
 
-				diff.green = lut[n].green - lut[n - 1].green;
+				diff.green = lut32.green - lut_prev.green;
 				diff.green = drm_color_lut_extract(diff.green, lut_bits);
 
-				diff.blue = lut[n].blue - lut[n - 1].blue;
+				diff.blue = lut32.blue - lut_prev.blue;
 				diff.blue = drm_color_lut_extract(diff.blue, lut_bits);
 
 				if (lut_bits == 12) {
@@ -191,7 +195,7 @@ void mtk_gamma_set(struct device *dev, struct drm_crtc_state *state)
 
 	if (!gamma->data->has_dither) {
 		/* Descending or Rising LUT */
-		if (mtk_gamma_lut_is_descending(lut, gamma->data->lut_size - 1))
+		if (mtk_gamma_lut_is_descending(lut, bits32, gamma->data->lut_size - 1))
 			cfg_val |= FIELD_PREP(GAMMA_LUT_TYPE, 1);
 		else
 			cfg_val &= ~GAMMA_LUT_TYPE;
@@ -204,6 +208,34 @@ void mtk_gamma_set(struct device *dev, struct drm_crtc_state *state)
 	cfg_val &= ~GAMMA_RELAY_MODE;
 
 	writel(cfg_val, gamma->regs + DISP_GAMMA_CFG);
+}
+
+void mtk_gamma_set_legacy(struct device *dev, struct drm_crtc_state *state)
+{
+	struct drm_color_lut *lut = (struct drm_color_lut *)state->gamma_lut->data;
+
+	/* If there's no gamma lut there's nothing to do here. */
+	if (!state->gamma_lut)
+		return;
+
+	mtk_gamma_set(dev, lut, false);
+}
+
+void mtk_gamma_set_color_pipeline(struct device *dev, struct drm_color_lut32 *lut)
+{
+	struct mtk_disp_gamma *gamma = dev_get_drvdata(dev);
+	u32 cfg_val;
+
+	/* Configure block to be bypassed */
+	if (!lut) {
+		cfg_val = readl(gamma->regs + DISP_GAMMA_CFG);
+		cfg_val &= ~GAMMA_LUT_EN;
+		cfg_val |= GAMMA_RELAY_MODE;
+		writel(cfg_val, gamma->regs + DISP_GAMMA_CFG);
+		return;
+	}
+
+	mtk_gamma_set(dev, lut, true);
 }
 
 void mtk_gamma_config(struct device *dev, unsigned int w,
