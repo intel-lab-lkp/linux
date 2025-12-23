@@ -1775,7 +1775,8 @@ int vfs_unlink(struct mnt_idmap *, struct inode *, struct dentry *,
 
 /**
  * struct renamedata - contains all information required for renaming
- * @mnt_idmap:     idmap of the mount in which the rename is happening.
+ * @old_mnt_idmap:     idmap of the source mount
+ * @new_mnt_idmap:     idmap of the destination mount
  * @old_parent:        parent of source
  * @old_dentry:                source
  * @new_parent:        parent of destination
@@ -1784,7 +1785,8 @@ int vfs_unlink(struct mnt_idmap *, struct inode *, struct dentry *,
  * @flags:             rename flags
  */
 struct renamedata {
-	struct mnt_idmap *mnt_idmap;
+	struct mnt_idmap *old_mnt_idmap;
+	struct mnt_idmap *new_mnt_idmap;
 	struct dentry *old_parent;
 	struct dentry *old_dentry;
 	struct dentry *new_parent;

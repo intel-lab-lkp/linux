@@ -374,7 +374,8 @@ static inline int ovl_do_rename(struct ovl_fs *ofs, struct dentry *olddir,
 				struct dentry *newdentry, unsigned int flags)
 {
 	struct renamedata rd = {
-		.mnt_idmap	= ovl_upper_mnt_idmap(ofs),
+		.old_mnt_idmap	= ovl_upper_mnt_idmap(ofs),
+		.new_mnt_idmap	= ovl_upper_mnt_idmap(ofs),
 		.old_parent	= olddir,
 		.old_dentry	= olddentry,
 		.new_parent	= newdir,

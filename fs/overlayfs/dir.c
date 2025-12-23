@@ -135,7 +135,8 @@ int ovl_cleanup_and_whiteout(struct ovl_fs *ofs, struct dentry *dir,
 	if (d_is_dir(dentry))
 		flags = RENAME_EXCHANGE;
 
-	rd.mnt_idmap = ovl_upper_mnt_idmap(ofs);
+	rd.old_mnt_idmap = ovl_upper_mnt_idmap(ofs);
+	rd.new_mnt_idmap = ovl_upper_mnt_idmap(ofs);
 	rd.old_parent = ofs->workdir;
 	rd.new_parent = dir;
 	rd.flags = flags;
@@ -413,7 +414,8 @@ static struct dentry *ovl_clear_empty(struct dentry *dentry,
 	if (IS_ERR(opaquedir))
 		goto out;
 
-	rd.mnt_idmap = ovl_upper_mnt_idmap(ofs);
+	rd.old_mnt_idmap = ovl_upper_mnt_idmap(ofs);
+	rd.new_mnt_idmap = ovl_upper_mnt_idmap(ofs);
 	rd.old_parent = workdir;
 	rd.new_parent = upperdir;
 	rd.flags = RENAME_EXCHANGE;
@@ -504,7 +506,8 @@ static int ovl_create_over_whiteout(struct dentry *dentry, struct inode *inode,
 	if (IS_ERR(newdentry))
 		goto out_dput;
 
-	rd.mnt_idmap = ovl_upper_mnt_idmap(ofs);
+	rd.old_mnt_idmap = ovl_upper_mnt_idmap(ofs);
+	rd.new_mnt_idmap = ovl_upper_mnt_idmap(ofs);
 	rd.old_parent = workdir;
 	rd.new_parent = upperdir;
 	rd.flags = 0;
@@ -1230,7 +1233,8 @@ static int ovl_rename_upper(struct ovl_renamedata *ovlrd, struct list_head *list
 		}
 	}
 
-	rd.mnt_idmap = ovl_upper_mnt_idmap(ofs);
+	rd.old_mnt_idmap = ovl_upper_mnt_idmap(ofs);
+	rd.new_mnt_idmap = ovl_upper_mnt_idmap(ofs);
 	rd.old_parent = old_upperdir;
 	rd.new_parent = new_upperdir;
 	rd.flags = ovlrd->flags;

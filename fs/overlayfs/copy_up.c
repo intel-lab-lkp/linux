@@ -556,7 +556,8 @@ static int ovl_create_index(struct dentry *dentry, const struct ovl_fh *fh,
 	if (err)
 		goto out;
 
-	rd.mnt_idmap = ovl_upper_mnt_idmap(ofs);
+	rd.old_mnt_idmap = ovl_upper_mnt_idmap(ofs);
+	rd.new_mnt_idmap = ovl_upper_mnt_idmap(ofs);
 	rd.old_parent = indexdir;
 	rd.new_parent = indexdir;
 	err = start_renaming_dentry(&rd, 0, temp, &name);
@@ -804,7 +805,8 @@ static int ovl_copy_up_workdir(struct ovl_copy_up_ctx *c)
 	 * ovl_copy_up_data(), so lock workdir and destdir and make sure that
 	 * temp wasn't moved before copy up completion or cleanup.
 	 */
-	rd.mnt_idmap = ovl_upper_mnt_idmap(ofs);
+	rd.old_mnt_idmap = ovl_upper_mnt_idmap(ofs);
+	rd.new_mnt_idmap = ovl_upper_mnt_idmap(ofs);
 	rd.old_parent = c->workdir;
 	rd.new_parent = c->destdir;
 	rd.flags = 0;

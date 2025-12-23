@@ -2154,7 +2154,8 @@ retry:
 		goto out;
 	}
 
-	rd.mnt_idmap	= &nop_mnt_idmap;
+	rd.old_mnt_idmap = &nop_mnt_idmap;
+	rd.new_mnt_idmap = &nop_mnt_idmap;
 	rd.old_parent	= fdentry;
 	rd.new_parent	= tdentry;
 

@@ -698,7 +698,8 @@ retry:
 	if (err)
 		goto out2;
 
-	rd.mnt_idmap		= mnt_idmap(old_path->mnt);
+	rd.old_mnt_idmap	= mnt_idmap(old_path->mnt);
+	rd.new_mnt_idmap	= mnt_idmap(new_path.mnt);
 	rd.old_parent		= NULL;
 	rd.new_parent		= new_path.dentry;
 	rd.flags		= flags;

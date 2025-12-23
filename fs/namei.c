@@ -3867,7 +3867,8 @@ out_unlock:
  * These references and the lock are dropped by end_renaming().
  *
  * The passed in qstrs need not have the hash calculated, and basic
- * eXecute permission checking is performed against @rd.mnt_idmap.
+ * eXecute permission checking is performed against @rd.old_mnt_idmap
+ * and @rd.new_mnt_idmap respectively.
  *
  * Returns: zero or an error.
  */
@@ -3876,10 +3877,10 @@ int start_renaming(struct renamedata *rd, int lookup_flags,
 {
 	int err;
 
-	err = lookup_one_common(rd->mnt_idmap, old_last, rd->old_parent);
+	err = lookup_one_common(rd->old_mnt_idmap, old_last, rd->old_parent);
 	if (err)
 		return err;
-	err = lookup_one_common(rd->mnt_idmap, new_last, rd->new_parent);
+	err = lookup_one_common(rd->new_mnt_idmap, new_last, rd->new_parent);
 	if (err)
 		return err;
 	return __start_renaming(rd, lookup_flags, old_last, new_last);
@@ -3964,7 +3965,7 @@ out_unlock:
  * References and the lock can be dropped with end_renaming()
  *
  * The passed in qstr need not have the hash calculated, and basic
- * eXecute permission checking is performed against @rd.mnt_idmap.
+ * eXecute permission checking is performed against @rd.new_mnt_idmap.
  *
  * Returns: zero or an error.
  */
@@ -3973,7 +3974,7 @@ int start_renaming_dentry(struct renamedata *rd, int lookup_flags,
 {
 	int err;
 
-	err = lookup_one_common(rd->mnt_idmap, new_last, rd->new_parent);
+	err = lookup_one_common(rd->new_mnt_idmap, new_last, rd->new_parent);
 	if (err)
 		return err;
 	return __start_renaming_dentry(rd, lookup_flags, old_dentry, new_last);
@@ -5882,20 +5883,20 @@ int vfs_rename(struct renamedata *rd)
 	if (source == target)
 		return 0;
 
-	error = may_delete(rd->mnt_idmap, old_dir, old_dentry, is_dir);
+	error = may_delete(rd->old_mnt_idmap, old_dir, old_dentry, is_dir);
 	if (error)
 		return error;
 
 	if (!target) {
-		error = may_create(rd->mnt_idmap, new_dir, new_dentry);
+		error = may_create(rd->new_mnt_idmap, new_dir, new_dentry);
 	} else {
 		new_is_dir = d_is_dir(new_dentry);
 
 		if (!(flags & RENAME_EXCHANGE))
-			error = may_delete(rd->mnt_idmap, new_dir,
+			error = may_delete(rd->new_mnt_idmap, new_dir,
 					   new_dentry, is_dir);
 		else
-			error = may_delete(rd->mnt_idmap, new_dir,
+			error = may_delete(rd->new_mnt_idmap, new_dir,
 					   new_dentry, new_is_dir);
 	}
 	if (error)
@@ -5910,13 +5911,13 @@ int vfs_rename(struct renamedata *rd)
 	 */
 	if (new_dir != old_dir) {
 		if (is_dir) {
-			error = inode_permission(rd->mnt_idmap, source,
+			error = inode_permission(rd->old_mnt_idmap, source,
 						 MAY_WRITE);
 			if (error)
 				return error;
 		}
 		if ((flags & RENAME_EXCHANGE) && new_is_dir) {
-			error = inode_permission(rd->mnt_idmap, target,
+			error = inode_permission(rd->new_mnt_idmap, target,
 						 MAY_WRITE);
 			if (error)
 				return error;
@@ -5992,7 +5993,7 @@ int vfs_rename(struct renamedata *rd)
 		if (error)
 			goto out;
 	}
-	error = old_dir->i_op->rename(rd->mnt_idmap, old_dir, old_dentry,
+	error = old_dir->i_op->rename(rd->old_mnt_idmap, old_dir, old_dentry,
 				      new_dir, new_dentry, flags);
 	if (error)
 		goto out;
@@ -6062,7 +6063,7 @@ retry:
 		goto exit1;
 
 	error = -EXDEV;
-	if (old_path.mnt != new_path.mnt)
+	if (old_path.mnt->mnt_sb != new_path.mnt->mnt_sb)
 		goto exit2;
 
 	error = -EBUSY;
@@ -6078,9 +6079,16 @@ retry:
 	if (error)
 		goto exit2;
 
+	if (old_path.mnt != new_path.mnt) {
+		error = mnt_want_write(new_path.mnt);
+		if (error)
+			goto exit3;
+	}
+
 retry_deleg:
 	rd.old_parent	   = old_path.dentry;
-	rd.mnt_idmap	   = mnt_idmap(old_path.mnt);
+	rd.old_mnt_idmap   = mnt_idmap(old_path.mnt);
+	rd.new_mnt_idmap   = mnt_idmap(new_path.mnt);
 	rd.new_parent	   = new_path.dentry;
 	rd.delegated_inode = &delegated_inode;
 	rd.flags	   = flags;
@@ -6119,6 +6127,9 @@ exit_lock_rename:
 		if (!error)
 			goto retry_deleg;
 	}
+	if (old_path.mnt != new_path.mnt)
+		mnt_drop_write(new_path.mnt);
+exit3:
 	mnt_drop_write(old_path.mnt);
 exit2:
 	if (retry_estale(error, lookup_flags))

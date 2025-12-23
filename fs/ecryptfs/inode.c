@@ -614,7 +614,8 @@ ecryptfs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 
 	target_inode = d_inode(new_dentry);
 
-	rd.mnt_idmap  = &nop_mnt_idmap;
+	rd.old_mnt_idmap = &nop_mnt_idmap;
+	rd.new_mnt_idmap = &nop_mnt_idmap;
 	rd.old_parent = lower_old_dir_dentry;
 	rd.new_parent = lower_new_dir_dentry;
 	rc = start_renaming_two_dentries(&rd, lower_old_dentry, lower_new_dentry);
