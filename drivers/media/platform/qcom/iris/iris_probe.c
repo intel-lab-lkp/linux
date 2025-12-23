@@ -202,8 +202,6 @@ static void iris_remove(struct platform_device *pdev)
 	video_unregister_device(core->vdev_enc);
 
 	v4l2_device_unregister(&core->v4l2_dev);
-
-	mutex_destroy(&core->lock);
 }
 
 static void iris_sys_error_handler(struct work_struct *work)
@@ -228,8 +226,11 @@ static int iris_probe(struct platform_device *pdev)
 	core->dev = dev;
 
 	core->state = IRIS_CORE_DEINIT;
-	mutex_init(&core->lock);
 	init_completion(&core->core_init_done);
+
+	ret = devm_mutex_init(core->dev, &core->lock);
+	if (ret)
+		return ret;
 
 	core->response_packet = devm_kzalloc(core->dev, IFACEQ_CORE_PKT_SIZE, GFP_KERNEL);
 	if (!core->response_packet)
