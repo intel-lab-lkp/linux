@@ -126,8 +126,84 @@ static void fuse_file_put(struct fuse_file *ff, bool sync)
 	}
 }
 
+static int fuse_compound_open_getattr(struct fuse_mount *fm, u64 nodeid,
+				int flags, int opcode,
+				struct fuse_file *ff,
+				struct fuse_attr_out *outattrp,
+				struct fuse_open_out *outopenp)
+{
+	struct fuse_compound_req *compound;
+	struct fuse_args open_args = {}, getattr_args = {};
+	struct fuse_open_in open_in = {};
+	struct fuse_getattr_in getattr_in = {};
+	int err;
+
+	/* Build compound request with flag to execute in the given order */
+	compound = fuse_compound_alloc(fm, 0);
+	if (IS_ERR(compound))
+		return PTR_ERR(compound);
+
+	/* Add OPEN */
+	open_in.flags = flags & ~(O_CREAT | O_EXCL | O_NOCTTY);
+	if (!fm->fc->atomic_o_trunc)
+		open_in.flags &= ~O_TRUNC;
+
+	if (fm->fc->handle_killpriv_v2 &&
+	    (open_in.flags & O_TRUNC) && !capable(CAP_FSETID)) {
+		open_in.open_flags |= FUSE_OPEN_KILL_SUIDGID;
+	}
+	open_args.opcode = opcode;
+	open_args.nodeid = nodeid;
+	open_args.in_numargs = 1;
+	open_args.in_args[0].size = sizeof(open_in);
+	open_args.in_args[0].value = &open_in;
+	open_args.out_numargs = 1;
+	open_args.out_args[0].size = sizeof(struct fuse_open_out);
+	open_args.out_args[0].value = outopenp;
+
+	err = fuse_compound_add(compound, &open_args);
+	if (err)
+		goto out;
+
+	/* Add GETATTR */
+	getattr_args.opcode = FUSE_GETATTR;
+	getattr_args.nodeid = nodeid;
+	getattr_args.in_numargs = 1;
+	getattr_args.in_args[0].size = sizeof(getattr_in);
+	getattr_args.in_args[0].value = &getattr_in;
+	getattr_args.out_numargs = 1;
+	getattr_args.out_args[0].size = sizeof(struct fuse_attr_out);
+	getattr_args.out_args[0].value = outattrp;
+
+	err = fuse_compound_add(compound, &getattr_args);
+	if (err)
+		goto out;
+
+	err = fuse_compound_send(compound);
+	if (err)
+		goto out;
+
+	/* Check if the OPEN operation succeeded */
+	err = fuse_compound_get_error(compound, 0);
+	if (err)
+		goto out;
+
+	/* Check if the GETATTR operation succeeded */
+	err = fuse_compound_get_error(compound, 1);
+	if (err)
+		goto out;
+
+	ff->fh = outopenp->fh;
+	ff->open_flags = outopenp->open_flags;
+
+out:
+	fuse_compound_free(compound);
+	return err;
+}
+
 struct fuse_file *fuse_file_open(struct fuse_mount *fm, u64 nodeid,
-				 unsigned int open_flags, bool isdir)
+				struct inode *inode,
+				unsigned int open_flags, bool isdir)
 {
 	struct fuse_conn *fc = fm->fc;
 	struct fuse_file *ff;
@@ -153,23 +229,41 @@ struct fuse_file *fuse_file_open(struct fuse_mount *fm, u64 nodeid,
 	if (open) {
 		/* Store outarg for fuse_finish_open() */
 		struct fuse_open_out *outargp = &ff->args->open_outarg;
-		int err;
+		int err = -ENOSYS;
 
-		err = fuse_send_open(fm, nodeid, open_flags, opcode, outargp);
-		if (!err) {
-			ff->fh = outargp->fh;
-			ff->open_flags = outargp->open_flags;
-		} else if (err != -ENOSYS) {
-			fuse_file_free(ff);
-			return ERR_PTR(err);
-		} else {
-			if (isdir) {
+		if (inode && fc->compound_open_getattr) {
+			struct fuse_attr_out attr_outarg;
+			err = fuse_compound_open_getattr(fm, nodeid, open_flags,
+							opcode, ff, &attr_outarg, outargp);
+			if (!err)
+				fuse_change_attributes(inode, &attr_outarg.attr, NULL,
+						       ATTR_TIMEOUT(&attr_outarg),
+						       fuse_get_attr_version(fc));
+		}
+		if (err == -ENOSYS) {
+			err = fuse_send_open(fm, nodeid, open_flags, opcode, outargp);
+
+			if (!err) {
+				ff->fh = outargp->fh;
+				ff->open_flags = outargp->open_flags;
+			}
+		}
+
+		if (err) {
+			if (err != -ENOSYS) {
+				/* err is not ENOSYS */
+				fuse_file_free(ff);
+				return ERR_PTR(err);
+			} else {
 				/* No release needed */
 				kfree(ff->args);
 				ff->args = NULL;
-				fc->no_opendir = 1;
-			} else {
-				fc->no_open = 1;
+
+				/* we don't have open */
+				if (isdir)
+					fc->no_opendir = 1;
+				else
+					fc->no_open = 1;
 			}
 		}
 	}
@@ -185,11 +279,10 @@ struct fuse_file *fuse_file_open(struct fuse_mount *fm, u64 nodeid,
 int fuse_do_open(struct fuse_mount *fm, u64 nodeid, struct file *file,
 		 bool isdir)
 {
-	struct fuse_file *ff = fuse_file_open(fm, nodeid, file->f_flags, isdir);
+	struct fuse_file *ff = fuse_file_open(fm, nodeid, file_inode(file), file->f_flags, isdir);
 
 	if (!IS_ERR(ff))
 		file->private_data = ff;
-
 	return PTR_ERR_OR_ZERO(ff);
 }
 EXPORT_SYMBOL_GPL(fuse_do_open);
