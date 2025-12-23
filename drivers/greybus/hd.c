@@ -132,10 +132,10 @@ const struct device_type greybus_hd_type = {
 	.release	= gb_hd_release,
 };
 
-struct gb_host_device *gb_hd_create(struct gb_hd_driver *driver,
-				    struct device *parent,
-				    size_t buffer_size_max,
-				    size_t num_cports)
+struct gb_host_device *gb_hd_create_p2p(struct gb_hd_driver *driver,
+					struct device *parent,
+					size_t buffer_size_max,
+					size_t num_cports)
 {
 	struct gb_host_device *hd;
 	int ret;
@@ -196,6 +196,21 @@ struct gb_host_device *gb_hd_create(struct gb_hd_driver *driver,
 	dev_set_name(&hd->dev, "greybus%d", hd->bus_id);
 
 	trace_gb_hd_create(hd);
+
+	return hd;
+}
+EXPORT_SYMBOL_GPL(gb_hd_create_p2p);
+
+struct gb_host_device *gb_hd_create(struct gb_hd_driver *driver,
+				    struct device *parent,
+				    size_t buffer_size_max,
+				    size_t num_cports)
+{
+	struct gb_host_device *hd;
+
+	hd = gb_hd_create_p2p(driver, parent, buffer_size_max, num_cports);
+	if (IS_ERR(hd))
+		return hd;
 
 	hd->svc = gb_svc_create(hd);
 	if (!hd->svc) {
