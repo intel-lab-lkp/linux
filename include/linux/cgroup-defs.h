@@ -451,6 +451,11 @@ struct cgroup_freezer_state {
 	 */
 	int nr_frozen_tasks;
 
+	/*
+	 * Number of kernel threads to ignore while freezing
+	 */
+	int nr_kthreads_ignore;
+
 	/* Freeze time data consistency protection */
 	seqcount_spinlock_t freeze_seq;
 

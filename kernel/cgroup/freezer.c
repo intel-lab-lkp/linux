@@ -73,7 +73,8 @@ void cgroup_update_frozen(struct cgroup *cgrp)
 	 * the cgroup frozen. Otherwise it's not frozen.
 	 */
 	frozen = test_bit(CGRP_FREEZE, &cgrp->flags) &&
-		cgrp->freezer.nr_frozen_tasks == __cgroup_task_count(cgrp);
+		 (cgrp->freezer.nr_frozen_tasks +
+		  cgrp->freezer.nr_kthreads_ignore == __cgroup_task_count(cgrp));
 
 	/* If flags is updated, update the state of ancestor cgroups. */
 	if (cgroup_update_frozen_flag(cgrp, frozen))
@@ -145,6 +146,17 @@ void cgroup_leave_frozen(bool always_leave)
 	spin_unlock_irq(&css_set_lock);
 }
 
+static inline void cgroup_inc_kthread_ignore_cnt(struct cgroup *cgrp)
+{
+	cgrp->freezer.nr_kthreads_ignore++;
+}
+
+static inline void cgroup_dec_kthread_ignore_cnt(struct cgroup *cgrp)
+{
+	cgrp->freezer.nr_kthreads_ignore--;
+	WARN_ON_ONCE(cgrp->freezer.nr_kthreads_ignore < 0);
+}
+
 /*
  * Freeze or unfreeze the task by setting or clearing the JOBCTL_TRAP_FREEZE
  * jobctl bit.
@@ -199,11 +211,15 @@ static void cgroup_do_freeze(struct cgroup *cgrp, bool freeze, u64 ts_nsec)
 	css_task_iter_start(&cgrp->self, 0, &it);
 	while ((task = css_task_iter_next(&it))) {
 		/*
-		 * Ignore kernel threads here. Freezing cgroups containing
-		 * kthreads isn't supported.
+		 * Count kernel threads to ignore them during freezing.
 		 */
-		if (task->flags & PF_KTHREAD)
+		if (task->flags & PF_KTHREAD) {
+			if (freeze)
+				cgroup_inc_kthread_ignore_cnt(cgrp);
+			else
+				cgroup_dec_kthread_ignore_cnt(cgrp);
 			continue;
+		}
 		cgroup_freeze_task(task, freeze);
 	}
 	css_task_iter_end(&it);
@@ -228,10 +244,19 @@ void cgroup_freezer_migrate_task(struct task_struct *task,
 	lockdep_assert_held(&css_set_lock);
 
 	/*
-	 * Kernel threads are not supposed to be frozen at all.
+	 * Kernel threads are not supposed to be frozen at all, but we need to
+	 * count them in order to properly ignore.
 	 */
-	if (task->flags & PF_KTHREAD)
+	if (task->flags & PF_KTHREAD) {
+		if (test_bit(CGRP_FREEZE, &dst->flags))
+			cgroup_inc_kthread_ignore_cnt(dst);
+		if (test_bit(CGRP_FREEZE, &src->flags))
+			cgroup_dec_kthread_ignore_cnt(src);
+
+		cgroup_update_frozen(dst);
+		cgroup_update_frozen(src);
 		return;
+	}
 
 	/*
 	 * It's not necessary to do changes if both of the src and dst cgroups
