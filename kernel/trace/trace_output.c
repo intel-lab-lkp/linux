@@ -199,8 +199,12 @@ trace_print_bitmask_seq(struct trace_seq *p, void *bitmask_ptr,
 			unsigned int bitmask_size)
 {
 	const char *ret = trace_seq_buffer_ptr(p);
+	const struct trace_array *tr = trace_get_global_array();
+	bool show_bitmask_list = tr->trace_flags &
+				 TRACE_ITER(BITMASK_LIST);
 
-	trace_seq_bitmask(p, bitmask_ptr, bitmask_size * 8);
+	trace_seq_bitmask(p, bitmask_ptr, bitmask_size * 8,
+			  show_bitmask_list);
 	trace_seq_putc(p, 0);
 
 	return ret;
