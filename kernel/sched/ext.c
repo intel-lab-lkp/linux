@@ -4677,7 +4677,8 @@ static bool scx_vexit(struct scx_sched *sch,
 
 	ei->exit_code = exit_code;
 #ifdef CONFIG_STACKTRACE
-	if (kind >= SCX_EXIT_ERROR)
+	/* Skip stack trace capture in NMI context as its unsafe. */
+	if (kind >= SCX_EXIT_ERROR && !in_nmi())
 		ei->bt_len = stack_trace_save(ei->bt, SCX_EXIT_BT_LEN, 1);
 #endif
 	vscnprintf(ei->msg, SCX_EXIT_MSG_LEN, fmt, args);
