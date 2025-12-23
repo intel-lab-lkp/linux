@@ -292,6 +292,12 @@
 	status = "okay";
 };
 
+&gpu {
+	/* The VCORE is 0.85V, thus we can use a faster GPU clock. */
+	assigned-clocks = <&k3_clks 237 3>;
+	assigned-clock-rates = <800000000>;
+};
+
 &main_gpio0 {
 	gpio-line-names =
 		"", "", "", "", "", "", "", "SOC_SDIO_PWR_EN", "VSD_SEL",
