@@ -84,6 +84,10 @@ struct io_br_sel io_uring_cmd_buffer_select(struct io_uring_cmd *ioucmd,
 bool io_uring_mshot_cmd_post_cqe(struct io_uring_cmd *ioucmd,
 				 struct io_br_sel *sel, unsigned int issue_flags);
 
+int io_uring_cmd_buf_ring_pin(struct io_uring_cmd *ioucmd, unsigned buf_group,
+			      unsigned issue_flags, struct io_buffer_list **bl);
+int io_uring_cmd_buf_ring_unpin(struct io_uring_cmd *ioucmd, unsigned buf_group,
+				unsigned issue_flags);
 #else
 static inline int
 io_uring_cmd_import_fixed(u64 ubuf, unsigned long len, int rw,
@@ -125,6 +129,19 @@ static inline bool io_uring_mshot_cmd_post_cqe(struct io_uring_cmd *ioucmd,
 				struct io_br_sel *sel, unsigned int issue_flags)
 {
 	return true;
+}
+static inline int io_uring_cmd_buf_ring_pin(struct io_uring_cmd *ioucmd,
+					    unsigned buf_group,
+					    unsigned issue_flags,
+					    struct io_buffer_list **bl)
+{
+	return -EOPNOTSUPP;
+}
+static inline int io_uring_cmd_buf_ring_unpin(struct io_uring_cmd *ioucmd,
+					      unsigned buf_group,
+					      unsigned issue_flags)
+{
+	return -EOPNOTSUPP;
 }
 #endif
 
