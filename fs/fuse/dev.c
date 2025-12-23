@@ -660,6 +660,31 @@ static void fuse_args_to_req(struct fuse_req *req, struct fuse_args *args)
 		__set_bit(FR_ASYNC, &req->flags);
 }
 
+ssize_t fuse_compound_request(
+				struct fuse_mount *fm, struct fuse_args *args)
+{
+	struct fuse_req *req;
+	ssize_t ret;
+
+	req = fuse_get_req(&invalid_mnt_idmap, fm, false);
+	if (IS_ERR(req))
+		return PTR_ERR(req);
+
+	fuse_args_to_req(req, args);
+
+	if (!args->noreply)
+		__set_bit(FR_ISREPLY, &req->flags);
+
+	__fuse_request_send(req);
+	ret = req->out.h.error;
+	if (!ret && args->out_argvar) {
+		BUG_ON(args->out_numargs == 0);
+		ret = args->out_args[args->out_numargs - 1].size;
+	}
+	fuse_put_request(req);
+	return ret;
+}
+
 ssize_t __fuse_simple_request(struct mnt_idmap *idmap,
 			      struct fuse_mount *fm,
 			      struct fuse_args *args)

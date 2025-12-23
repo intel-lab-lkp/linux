@@ -1274,6 +1274,20 @@ int fuse_simple_background(struct fuse_mount *fm, struct fuse_args *args,
 			   gfp_t gfp_flags);
 
 /**
+ * Compound request API
+ */
+struct fuse_compound_req;
+ssize_t fuse_compound_request(struct fuse_mount *fm, struct fuse_args *args);
+ssize_t fuse_compound_send(struct fuse_compound_req *compound);
+
+struct fuse_compound_req *fuse_compound_alloc(struct fuse_mount *fm, uint32_t flags);
+int fuse_compound_add(struct fuse_compound_req *compound,
+		    struct fuse_args *args);
+int fuse_compound_get_error(struct fuse_compound_req *compound,
+			int op_idx);
+void fuse_compound_free(struct fuse_compound_req *compound);
+
+/**
  * Assign a unique id to a fuse request
  */
 void fuse_request_assign_unique(struct fuse_iqueue *fiq, struct fuse_req *req);
