@@ -941,6 +941,7 @@ static const struct proc_ops traceSMB_proc_ops;
 static const struct proc_ops cifs_security_flags_proc_ops;
 static const struct proc_ops cifs_linux_ext_proc_ops;
 static const struct proc_ops cifs_mount_params_proc_ops;
+static const struct proc_ops close_all_deferred_close_ops;
 
 void
 cifs_proc_init(void)
@@ -969,6 +970,8 @@ cifs_proc_init(void)
 		    &cifs_lookup_cache_proc_ops);
 
 	proc_create("mount_params", 0444, proc_fs_cifs, &cifs_mount_params_proc_ops);
+
+	proc_create("close_deferred_closes", 0644, proc_fs_cifs, &close_all_deferred_close_ops);
 
 #ifdef CONFIG_CIFS_DFS_UPCALL
 	proc_create("dfscache", 0644, proc_fs_cifs, &dfscache_proc_ops);
@@ -1010,6 +1013,7 @@ cifs_proc_clean(void)
 	remove_proc_entry("LinuxExtensionsEnabled", proc_fs_cifs);
 	remove_proc_entry("LookupCacheEnabled", proc_fs_cifs);
 	remove_proc_entry("mount_params", proc_fs_cifs);
+	remove_proc_entry("close_deferred_closes", proc_fs_cifs);
 
 #ifdef CONFIG_CIFS_DFS_UPCALL
 	remove_proc_entry("dfscache", proc_fs_cifs);
@@ -1304,6 +1308,139 @@ static const struct proc_ops cifs_mount_params_proc_ops = {
 	.proc_release	= single_release,
 	/* No need for write for now */
 	/* .proc_write	= cifs_mount_params_proc_write, */
+};
+
+static struct list_head *get_all_tcons(void)
+{
+	struct TCP_Server_Info *server;
+	struct cifs_ses *ses;
+	struct cifs_tcon *tcon;
+	struct global_tcon_list *tree_con_list, *tmp_tree_con_list;
+	struct list_head *tcon_head;
+
+	tcon_head = kmalloc(sizeof(struct list_head), GFP_KERNEL);
+	if (tcon_head == NULL)
+		return NULL;
+
+	INIT_LIST_HEAD(tcon_head);
+	spin_lock(&cifs_tcp_ses_lock);
+	list_for_each_entry(server, &cifs_tcp_ses_list, tcp_ses_list) {
+		list_for_each_entry(ses, &server->smb_ses_list, smb_ses_list) {
+			if (cifs_ses_exiting(ses))
+				continue;
+			list_for_each_entry(tcon, &ses->tcon_list, tcon_list) {
+				tree_con_list =
+					kmalloc(sizeof(struct global_tcon_list),
+						GFP_ATOMIC);
+				if (tree_con_list == NULL)
+					goto tcon_alloc_fail;
+				tree_con_list->tcon = tcon;
+				list_add_tail(&tree_con_list->list, tcon_head);
+			}
+		}
+	}
+	spin_unlock(&cifs_tcp_ses_lock);
+	return tcon_head;
+
+tcon_alloc_fail:
+	spin_unlock(&cifs_tcp_ses_lock);
+	list_for_each_entry_safe(tree_con_list, tmp_tree_con_list, tcon_head,
+				 list) {
+		list_del(&tree_con_list->list);
+		kfree(tree_con_list);
+	}
+	kfree(tcon_head);
+	return NULL;
+}
+
+static ssize_t close_all_deferred_close_files(struct file *file,
+					  const char __user *buffer,
+					  size_t count, loff_t *ppos)
+{
+	char c;
+	int rc;
+	struct global_tcon_list *tmp_list, *tmp_next_list;
+	struct list_head *tcon_head;
+
+	rc = get_user(c, buffer);
+	if (rc)
+		return rc;
+	if (c == '0')
+		return -EINVAL;
+
+	tcon_head = get_all_tcons();
+	if (tcon_head == NULL)
+		return count;
+
+	list_for_each_entry_safe(tmp_list, tmp_next_list, tcon_head, list) {
+		cifs_close_all_deferred_files(tmp_list->tcon);
+		list_del(&tmp_list->list);
+		kfree(tmp_list);
+	}
+
+	kfree(tcon_head);
+	return count;
+}
+
+static int show_all_deferred_close_files(struct seq_file *m, void *v)
+{
+	struct global_tcon_list *tmp_list, *tmp_next_list;
+	struct list_head *tcon_head;
+	struct cifs_tcon *tcon;
+	struct cifsFileInfo *cfile;
+
+	seq_puts(m, "# Version:1\n");
+	seq_puts(m, "# Format:\n");
+	seq_puts(m, "# <tree id> <ses id> <persistent fid> <flags> <count> <pid> <uid>");
+#ifdef CONFIG_CIFS_DEBUG2
+	seq_puts(m, " <filename> <mid>\n");
+#else
+	seq_puts(m, " <filename>\n");
+#endif /* CIFS_DEBUG2 */
+
+	tcon_head = get_all_tcons();
+	if (tcon_head == NULL)
+		return 0;
+
+	list_for_each_entry_safe(tmp_list, tmp_next_list, tcon_head, list) {
+		tcon = tmp_list->tcon;
+		spin_lock(&tcon->open_file_lock);
+		list_for_each_entry(cfile, &tcon->openFileList, tlist) {
+			if (delayed_work_pending(&cfile->deferred)) {
+				seq_printf(
+					m,
+					"0x%x 0x%llx 0x%llx 0x%x %d %d %d %pd",
+					tcon->tid, tcon->ses->Suid,
+					cfile->fid.persistent_fid,
+					cfile->f_flags, cfile->count,
+					cfile->pid,
+					from_kuid(&init_user_ns, cfile->uid),
+					cfile->dentry);
+			}
+		}
+		spin_unlock(&tcon->open_file_lock);
+		list_del(&tmp_list->list);
+		kfree(tmp_list);
+	}
+
+	kfree(tcon_head);
+	seq_putc(m, '\n');
+
+	return 0;
+}
+
+static int show_all_deferred_close_proc_open(struct inode *inode,
+					      struct file *file)
+{
+	return single_open(file, show_all_deferred_close_files, NULL);
+}
+
+static const struct proc_ops close_all_deferred_close_ops = {
+	.proc_open = show_all_deferred_close_proc_open,
+	.proc_read = seq_read,
+	.proc_lseek = seq_lseek,
+	.proc_release = single_release,
+	.proc_write = close_all_deferred_close_files,
 };
 
 #else

@@ -1806,6 +1806,11 @@ struct dfs_info3_param {
 	int ttl;
 };
 
+struct global_tcon_list {
+	struct list_head list;
+	struct cifs_tcon *tcon;
+};
+
 struct file_list {
 	struct list_head list;
 	struct cifsFileInfo *cfile;
