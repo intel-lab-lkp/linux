@@ -7,21 +7,6 @@
 #include <linux/kthread.h>
 #include <linux/mm.h>
 
-struct kunit_vm_mmap_resource {
-	unsigned long addr;
-	size_t size;
-};
-
-/* vm_mmap() arguments */
-struct kunit_vm_mmap_params {
-	struct file *file;
-	unsigned long addr;
-	unsigned long len;
-	unsigned long prot;
-	unsigned long flag;
-	unsigned long offset;
-};
-
 int kunit_attach_mm(void)
 {
 	struct mm_struct *mm;
@@ -50,67 +35,18 @@ int kunit_attach_mm(void)
 }
 EXPORT_SYMBOL_GPL(kunit_attach_mm);
 
-static int kunit_vm_mmap_init(struct kunit_resource *res, void *context)
-{
-	struct kunit_vm_mmap_params *p = context;
-	struct kunit_vm_mmap_resource vres;
-	int ret;
-
-	ret = kunit_attach_mm();
-	if (ret)
-		return ret;
-
-	vres.size = p->len;
-	vres.addr = vm_mmap(p->file, p->addr, p->len, p->prot, p->flag, p->offset);
-	if (!vres.addr)
-		return -ENOMEM;
-	res->data = kmemdup(&vres, sizeof(vres), GFP_KERNEL);
-	if (!res->data) {
-		vm_munmap(vres.addr, vres.size);
-		return -ENOMEM;
-	}
-
-	return 0;
-}
-
-static void kunit_vm_mmap_free(struct kunit_resource *res)
-{
-	struct kunit_vm_mmap_resource *vres = res->data;
-
-	/*
-	 * Since this is executed from the test monitoring process,
-	 * the test's mm has already been torn down. We don't need
-	 * to run vm_munmap(vres->addr, vres->size), only clean up
-	 * the vres.
-	 */
-
-	kfree(vres);
-	res->data = NULL;
-}
-
 unsigned long kunit_vm_mmap(struct kunit *test, struct file *file,
 			    unsigned long addr, unsigned long len,
 			    unsigned long prot, unsigned long flag,
 			    unsigned long offset)
 {
-	struct kunit_vm_mmap_params params = {
-		.file = file,
-		.addr = addr,
-		.len = len,
-		.prot = prot,
-		.flag = flag,
-		.offset = offset,
-	};
-	struct kunit_vm_mmap_resource *vres;
+	int err;
 
-	vres = kunit_alloc_resource(test,
-				    kunit_vm_mmap_init,
-				    kunit_vm_mmap_free,
-				    GFP_KERNEL,
-				    &params);
-	if (vres)
-		return vres->addr;
-	return 0;
+	err = kunit_attach_mm();
+	if (err)
+		return err;
+
+	return vm_mmap(file, addr, len, prot, flag, offset);
 }
 EXPORT_SYMBOL_GPL(kunit_vm_mmap);
 
