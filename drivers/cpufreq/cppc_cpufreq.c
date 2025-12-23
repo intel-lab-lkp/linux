@@ -544,14 +544,20 @@ static void populate_efficiency_class(void)
  * cppc_cpufreq_set_mperf_limit - Set min/max performance limit
  * @policy: cpufreq policy
  * @val: performance value to set
+ * @update_policy: whether to update policy constraints
  * @is_min: true for min_perf, false for max_perf
+ *
+ * When @update_policy is true, updates cpufreq policy frequency limits.
+ * @update_policy is false during cpu_init when policy isn't fully set up.
  */
 static int cppc_cpufreq_set_mperf_limit(struct cpufreq_policy *policy, u64 val,
-					bool is_min)
+					bool update_policy, bool is_min)
 {
 	struct cppc_cpudata *cpu_data = policy->driver_data;
 	struct cppc_perf_caps *caps = &cpu_data->perf_caps;
 	unsigned int cpu = policy->cpu;
+	struct freq_qos_request *req;
+	unsigned int freq;
 	u32 perf;
 	int ret;
 
@@ -571,15 +577,26 @@ static int cppc_cpufreq_set_mperf_limit(struct cpufreq_policy *policy, u64 val,
 	else
 		cpu_data->perf_ctrls.max_perf = perf;
 
+	if (update_policy) {
+		freq = cppc_perf_to_khz(caps, perf);
+		req = is_min ? policy->min_freq_req : policy->max_freq_req;
+
+		ret = freq_qos_update_request(req, freq);
+		if (ret < 0) {
+			pr_warn("Failed to update %s_freq constraint for CPU%d: %d\n",
+				is_min ? "min" : "max", cpu, ret);
+			return ret;
+		}
+	}
+
 	return 0;
 }
 
-#define cppc_cpufreq_set_min_perf(policy, val) \
-	cppc_cpufreq_set_mperf_limit(policy, val, true)
+#define cppc_cpufreq_set_min_perf(policy, val, update_policy) \
+	cppc_cpufreq_set_mperf_limit(policy, val, update_policy, true)
 
-#define cppc_cpufreq_set_max_perf(policy, val) \
-	cppc_cpufreq_set_mperf_limit(policy, val, false)
-
+#define cppc_cpufreq_set_max_perf(policy, val, update_policy) \
+	cppc_cpufreq_set_mperf_limit(policy, val, update_policy, false)
 static struct cppc_cpudata *cppc_cpufreq_get_cpu_data(unsigned int cpu)
 {
 	struct cppc_cpudata *cpu_data;
@@ -988,7 +1005,8 @@ static ssize_t store_min_perf(struct cpufreq_policy *policy, const char *buf,
 	perf = cppc_khz_to_perf(&cpu_data->perf_caps, freq_khz);
 
 	guard(mutex)(&cppc_cpufreq_update_autosel_config_lock);
-	ret = cppc_cpufreq_set_min_perf(policy, perf);
+	ret = cppc_cpufreq_set_min_perf(policy, perf,
+					cpu_data->perf_ctrls.auto_sel);
 	if (ret)
 		return ret;
 
@@ -1045,7 +1063,8 @@ static ssize_t store_max_perf(struct cpufreq_policy *policy, const char *buf,
 	perf = cppc_khz_to_perf(&cpu_data->perf_caps, freq_khz);
 
 	guard(mutex)(&cppc_cpufreq_update_autosel_config_lock);
-	ret = cppc_cpufreq_set_max_perf(policy, perf);
+	ret = cppc_cpufreq_set_max_perf(policy, perf,
+					cpu_data->perf_ctrls.auto_sel);
 	if (ret)
 		return ret;
 
