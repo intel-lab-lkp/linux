@@ -235,7 +235,9 @@ gb_connection_create_static(struct gb_host_device *hd, u16 hd_cport_id,
 struct gb_connection *
 gb_connection_create_control(struct gb_interface *intf)
 {
-	return _gb_connection_create(intf->hd, -1, intf, NULL, 0, NULL,
+	int hd_cport_id = intf->type == GB_INTERFACE_TYPE_P2P ? 0 : -1;
+
+	return _gb_connection_create(intf->hd, hd_cport_id, intf, NULL, 0, NULL,
 				     GB_CONNECTION_FLAG_CONTROL |
 				     GB_CONNECTION_FLAG_HIGH_PRIO);
 }
@@ -245,8 +247,9 @@ gb_connection_create(struct gb_bundle *bundle, u16 cport_id,
 		     gb_request_handler_t handler)
 {
 	struct gb_interface *intf = bundle->intf;
+	int hd_cport_id = intf->type == GB_INTERFACE_TYPE_P2P ? cport_id : -1;
 
-	return _gb_connection_create(intf->hd, -1, intf, bundle, cport_id,
+	return _gb_connection_create(intf->hd, hd_cport_id, intf, bundle, cport_id,
 				     handler, 0);
 }
 EXPORT_SYMBOL_GPL(gb_connection_create);
@@ -257,11 +260,12 @@ gb_connection_create_flags(struct gb_bundle *bundle, u16 cport_id,
 			   unsigned long flags)
 {
 	struct gb_interface *intf = bundle->intf;
+	int hd_cport_id = intf->type == GB_INTERFACE_TYPE_P2P ? cport_id : -1;
 
 	if (WARN_ON_ONCE(flags & GB_CONNECTION_FLAG_CORE_MASK))
 		flags &= ~GB_CONNECTION_FLAG_CORE_MASK;
 
-	return _gb_connection_create(intf->hd, -1, intf, bundle, cport_id,
+	return _gb_connection_create(intf->hd, hd_cport_id, intf, bundle, cport_id,
 				     handler, flags);
 }
 EXPORT_SYMBOL_GPL(gb_connection_create_flags);
