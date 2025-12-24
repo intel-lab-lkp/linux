@@ -355,7 +355,7 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved __maybe_unused)
 	ret = (*jvm)->GetEnv(jvm, (void *)&jvmti, JVMTI_VERSION_1);
 	if (ret != JNI_OK) {
 		warnx("jvmti: jvmti version 1 not supported");
-		return -1;
+		goto close_agent;
 	}
 
 	/*
@@ -368,7 +368,7 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved __maybe_unused)
 	ret = (*jvmti)->AddCapabilities(jvmti, &caps1);
 	if (ret != JVMTI_ERROR_NONE) {
 		print_error(jvmti, "AddCapabilities", ret);
-		return -1;
+		goto close_agent;
 	}
 	ret = (*jvmti)->GetJLocationFormat(jvmti, &format);
         if (ret == JVMTI_ERROR_NONE && format == JVMTI_JLOCATION_JVMBCI) {
@@ -390,23 +390,27 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved __maybe_unused)
 	ret = (*jvmti)->SetEventCallbacks(jvmti, &cb, sizeof(cb));
 	if (ret != JVMTI_ERROR_NONE) {
 		print_error(jvmti, "SetEventCallbacks", ret);
-		return -1;
+		goto close_agent;
 	}
 
 	ret = (*jvmti)->SetEventNotificationMode(jvmti, JVMTI_ENABLE,
 			JVMTI_EVENT_COMPILED_METHOD_LOAD, NULL);
 	if (ret != JVMTI_ERROR_NONE) {
 		print_error(jvmti, "SetEventNotificationMode(METHOD_LOAD)", ret);
-		return -1;
+		goto close_agent;
 	}
 
 	ret = (*jvmti)->SetEventNotificationMode(jvmti, JVMTI_ENABLE,
 			JVMTI_EVENT_DYNAMIC_CODE_GENERATED, NULL);
 	if (ret != JVMTI_ERROR_NONE) {
 		print_error(jvmti, "SetEventNotificationMode(CODE_GENERATED)", ret);
-		return -1;
+		goto close_agent;
 	}
 	return 0;
+
+close_agent:
+	jvmti_close(jvmti_agent);
+	return -1;
 }
 
 JNIEXPORT void JNICALL
