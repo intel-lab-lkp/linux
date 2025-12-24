@@ -971,10 +971,17 @@ static __poll_t port_fops_poll(struct file *filp, poll_table *wait)
 		return EPOLLHUP;
 	}
 	ret = 0;
-	if (!will_read_block(port))
+
+	spin_lock_irq(&port->inbuf_lock);
+	if (port->inbuf)
 		ret |= EPOLLIN | EPOLLRDNORM;
-	if (!will_write_block(port))
+	spin_unlock_irq(&port->inbuf_lock);
+
+	spin_lock_irq(&port->outvq_lock);
+	if (!port->outvq_full)
 		ret |= EPOLLOUT;
+	spin_unlock_irq(&port->outvq_lock);
+
 	if (!port->host_connected)
 		ret |= EPOLLHUP;
 
@@ -1704,6 +1711,10 @@ static void out_intr(struct virtqueue *vq)
 		flush_bufs(vq, false);
 		return;
 	}
+
+	spin_lock(&port->outvq_lock);
+	reclaim_consumed_buffers(port);
+	spin_unlock(&port->outvq_lock);
 
 	wake_up_interruptible(&port->waitqueue);
 }
