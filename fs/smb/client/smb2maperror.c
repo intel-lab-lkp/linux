@@ -27,6 +27,8 @@ static const struct status_to_posix_error smb2_error_map_table[] = {
 #include "smb2_mapping_table.c"
 };
 
+static unsigned int err_map_num = ARRAY_SIZE(smb2_error_map_table);
+
 int
 map_smb2_to_linux_error(char *buf, bool log_err)
 {
@@ -71,4 +73,21 @@ map_smb2_to_linux_error(char *buf, bool log_err)
 	if (rc == -EIO)
 		smb_EIO1(smb_eio_trace_smb2_received_error, le32_to_cpu(smb2err));
 	return rc;
+}
+
+int smb2_init_maperror(void)
+{
+	unsigned int i;
+
+	/* Check whether the array is sorted in ascending order */
+	for (i = 1; i < err_map_num; i++) {
+		if (smb2_error_map_table[i].smb2_status >=
+		    smb2_error_map_table[i - 1].smb2_status)
+			continue;
+
+		pr_err("smb2_error_map_table array order is incorrect\n");
+		return -EINVAL;
+	}
+
+	return 0;
 }
