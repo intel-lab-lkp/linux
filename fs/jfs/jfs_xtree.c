@@ -642,7 +642,8 @@ int xtInsert(tid_t tid,		/* transaction id */
 
 	/* Don't log it if there are no links to the file */
 	if (!test_cflag(COMMIT_Nolink, ip)) {
-		tlck = txLock(tid, ip, mp, tlckXTREE | tlckGROW);
+		tlck = txLock(tid, ip, mp, tlckXTREE | tlckGROW |
+			      (BT_IS_ROOT(mp) ? tlckBTROOT : 0));
 		xtlck = (struct xtlock *) & tlck->lock;
 		xtlck->lwm.offset =
 		    (xtlck->lwm.offset) ? min(index,
@@ -733,7 +734,8 @@ xtSplitUp(tid_t tid,
 
 		/* Don't log it if there are no links to the file */
 		if (!test_cflag(COMMIT_Nolink, ip)) {
-			tlck = txLock(tid, ip, smp, tlckXTREE | tlckGROW);
+			tlck = txLock(tid, ip, smp, tlckXTREE | tlckGROW |
+				      tlckBTROOT);
 			xtlck = (struct xtlock *) & tlck->lock;
 			xtlck->lwm.offset = (xtlck->lwm.offset) ?
 			    min(skip, (int)xtlck->lwm.offset) : skip;
@@ -903,7 +905,8 @@ xtSplitUp(tid_t tid,
 			/* Don't log it if there are no links to the file */
 			if (!test_cflag(COMMIT_Nolink, ip)) {
 				tlck = txLock(tid, ip, smp,
-					      tlckXTREE | tlckGROW);
+					      tlckXTREE | tlckGROW |
+					      (BT_IS_ROOT(smp) ? tlckBTROOT : 0));
 				xtlck = (struct xtlock *) & tlck->lock;
 				xtlck->lwm.offset = (xtlck->lwm.offset) ?
 				    min(skip, (int)xtlck->lwm.offset) : skip;
