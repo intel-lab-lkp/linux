@@ -278,7 +278,7 @@ struct ceph_osd_request {
 	ktime_t r_end_latency;                /* ktime_t */
 	int r_attempts;
 	u32 r_map_dne_bound;
-
+	int32_t  write_hint;
 	struct ceph_osd_req_op r_ops[] __counted_by(r_num_ops);
 };
 

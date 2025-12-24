@@ -778,6 +778,7 @@ static int write_folio_nounlock(struct folio *folio,
 	    CONGESTION_ON_THRESH(fsc->mount_options->congestion_kb))
 		fsc->write_congested = true;
 
+	ci->i_layout.write_hint = inode->i_write_hint;
 	req = ceph_osdc_new_request(osdc, &ci->i_layout, ceph_vino(inode),
 				    page_off, &wlen, 0, 1, CEPH_OSD_OP_WRITE,
 				    CEPH_OSD_FLAG_WRITE, snapc,
@@ -1428,6 +1429,7 @@ int ceph_submit_write(struct address_space *mapping,
 new_request:
 	offset = ceph_fscrypt_page_offset(ceph_wbc->pages[0]);
 	len = ceph_wbc->wsize;
+	ci->i_layout.write_hint = inode->i_write_hint;
 
 	req = ceph_osdc_new_request(&fsc->client->osdc,
 				    &ci->i_layout, vino,

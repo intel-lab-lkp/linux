@@ -605,7 +605,7 @@ static int __ceph_osdc_alloc_messages(struct ceph_osd_request *req, gfp_t gfp,
 	msg_size += 8; /* snapid */
 	msg_size += 8; /* snap_seq */
 	msg_size += 4 + 8 * (req->r_snapc ? req->r_snapc->num_snaps : 0);
-	msg_size += 4 + 8; /* retry_attempt, features */
+	msg_size += 4 + 4 + 8; /* retry_attempt, write_hint, features */
 
 	if (req->r_mempool)
 		msg = ceph_msgpool_get(&osdc->msgpool_op, msg_size,
@@ -1081,6 +1081,7 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 		goto fail;
 	}
 
+	req->write_hint = layout->write_hint;
 	/* calculate max write size */
 	r = calc_layout(layout, off, plen, &objnum, &objoff, &objlen);
 	if (r)
@@ -2194,6 +2195,8 @@ static void encode_request_partial(struct ceph_osd_request *req,
 	}
 
 	ceph_encode_32(&p, req->r_attempts); /* retry_attempt */
+	ceph_encode_32(&p, req->write_hint);
+
 	BUG_ON(p > end - 8); /* space for features */
 
 	msg->hdr.version = cpu_to_le16(8); /* MOSDOp v8 */

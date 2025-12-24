@@ -65,6 +65,7 @@ struct ceph_file_layout {
 	u32 object_size;   /* until objects are this big */
 	s64 pool_id;        /* rados pool id */
 	struct ceph_string __rcu *pool_ns; /* rados pool namespace */
+	int32_t  write_hint;
 };
 
 extern int ceph_file_layout_is_valid(const struct ceph_file_layout *layout);

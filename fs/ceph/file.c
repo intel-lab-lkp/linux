@@ -1518,6 +1518,7 @@ ceph_direct_read_write(struct kiocb *iocb, struct iov_iter *iter,
 	} else {
 		flags = CEPH_OSD_FLAG_READ;
 	}
+	ci->i_layout.write_hint = inode->i_write_hint;
 
 	while (iov_iter_count(iter) > 0) {
 		u64 size = iov_iter_count(iter);
@@ -1675,6 +1676,7 @@ ceph_direct_read_write(struct kiocb *iocb, struct iov_iter *iter,
 			req = list_first_entry(&osd_reqs,
 					       struct ceph_osd_request,
 					       r_private_item);
+			req->write_hint = inode->i_write_hint;
 			list_del_init(&req->r_private_item);
 			if (ret >= 0)
 				ceph_osdc_start_request(req->r_osdc, req);
@@ -1732,7 +1734,7 @@ ceph_sync_write(struct kiocb *iocb, struct iov_iter *from, loff_t pos,
 		return ret;
 
 	ceph_fscache_invalidate(inode, false);
-
+	ci->i_layout.write_hint = inode->i_write_hint;
 	while ((len = iov_iter_count(from)) > 0) {
 		size_t left;
 		int n;
