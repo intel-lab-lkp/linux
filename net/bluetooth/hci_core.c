@@ -4149,7 +4149,10 @@ static void hci_cmd_work(struct work_struct *work)
 		if (!skb)
 			return;
 
+		skb_get(skb);
 		err = hci_send_cmd_sync(hdev, skb);
+		kfree_skb(skb);
+
 		if (err)
 			return;
 
