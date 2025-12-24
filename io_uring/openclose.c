@@ -75,8 +75,11 @@ static int __io_openat_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe
 	}
 
 	open->file_slot = READ_ONCE(sqe->file_index);
-	if (open->file_slot && (open->how.flags & O_CLOEXEC))
+	if (open->file_slot && (open->how.flags & O_CLOEXEC)) {
+		putname(open->filename);
+		open->filename = NULL;
 		return -EINVAL;
+	}
 
 	open->nofile = rlimit(RLIMIT_NOFILE);
 	req->flags |= REQ_F_NEED_CLEANUP;
