@@ -89,7 +89,7 @@ static void aplic_save_states(struct aplic_priv *priv)
 	}
 }
 
-static int aplic_syscore_suspend(void)
+static int aplic_syscore_suspend(void *data)
 {
 	struct aplic_priv *priv;
 
@@ -99,7 +99,7 @@ static int aplic_syscore_suspend(void)
 	return 0;
 }
 
-static void aplic_syscore_resume(void)
+static void aplic_syscore_resume(void *data)
 {
 	struct aplic_priv *priv;
 
@@ -107,9 +107,13 @@ static void aplic_syscore_resume(void)
 		aplic_restore_states(priv);
 }
 
-static struct syscore_ops aplic_syscore_ops = {
+static const struct syscore_ops aplic_syscore_ops = {
 	.suspend = aplic_syscore_suspend,
 	.resume = aplic_syscore_resume,
+};
+
+static struct syscore aplic_syscore = {
+	.ops = &aplic_syscore_ops,
 };
 
 static int aplic_pm_notifier(struct notifier_block *nb, unsigned long action, void *data)
@@ -372,7 +376,7 @@ static int aplic_probe(struct platform_device *pdev)
 		dev_err_probe(dev, rc, "failed to setup APLIC in %s mode\n",
 			      msi_mode ? "MSI" : "direct");
 	else
-		register_syscore_ops(&aplic_syscore_ops);
+		register_syscore(&aplic_syscore);
 
 #ifdef CONFIG_ACPI
 	if (!acpi_disabled)
