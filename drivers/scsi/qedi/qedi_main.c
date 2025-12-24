@@ -2754,7 +2754,7 @@ retry_probe:
 		if (rc) {
 			QEDI_ERR(&qedi->dbg_ctx,
 				 "Could not alloc itt memory\n");
-			goto free_cid_que;
+			goto free_cm_mem;
 		}
 
 		sprintf(host_buf, "host_%d", qedi->shost->host_no);
@@ -2764,7 +2764,7 @@ retry_probe:
 			QEDI_ERR(&qedi->dbg_ctx,
 				 "Unable to start tmf thread!\n");
 			rc = -ENODEV;
-			goto free_cid_que;
+			goto free_itt_mem;
 		}
 
 		qedi->offload_thread = alloc_workqueue("qedi_ofld%d",
@@ -2800,6 +2800,10 @@ retry_probe:
 
 free_tmf_thread:
 	destroy_workqueue(qedi->tmf_thread);
+free_itt_mem:
+	qedi_free_itt(qedi);
+free_cm_mem:
+	qedi_cm_free_mem(qedi);
 free_cid_que:
 	qedi_release_cid_que(qedi);
 free_uio:
