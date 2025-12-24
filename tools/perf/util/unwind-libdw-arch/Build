@@ -1,0 +1,8 @@
+perf-util-$(CONFIG_LIBDW_DWARF_UNWIND) += unwind-libdw-x86.o
+perf-util-$(CONFIG_LIBDW_DWARF_UNWIND) += unwind-libdw-arm.o
+perf-util-$(CONFIG_LIBDW_DWARF_UNWIND) += unwind-libdw-arm64.o
+perf-util-$(CONFIG_LIBDW_DWARF_UNWIND) += unwind-libdw-csky.o
+perf-util-$(CONFIG_LIBDW_DWARF_UNWIND) += unwind-libdw-loongarch.o
+perf-util-$(CONFIG_LIBDW_DWARF_UNWIND) += unwind-libdw-powerpc.o
+perf-util-$(CONFIG_LIBDW_DWARF_UNWIND) += unwind-libdw-riscv.o
+perf-util-$(CONFIG_LIBDW_DWARF_UNWIND) += unwind-libdw-s390.o
