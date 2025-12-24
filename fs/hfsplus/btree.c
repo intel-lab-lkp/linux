@@ -411,6 +411,9 @@ struct hfs_bnode *hfs_bmap_alloc(struct hfs_btree *tree)
 			if (byte != 0xff) {
 				for (m = 0x80, i = 0; i < 8; m >>= 1, i++) {
 					if (!(byte & m)) {
+						/* Skip node 0 (header node, always allocated) */
+						if (idx == 0 && i == 0)
+							continue;
 						idx += i;
 						data[off] |= m;
 						set_page_dirty(*pagep);
