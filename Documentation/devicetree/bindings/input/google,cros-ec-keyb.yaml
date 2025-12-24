@@ -44,6 +44,14 @@ properties:
       where the lower 16 bits are reserved. This property is specified only
       when the keyboard has a custom design for the top row keys.
 
+  google,use-fn-overlay:
+    description: |
+      Use a function key overlay. This allows defining an extra set of codes
+      that are sent if a key is pressed while the KEY_FN is held pressed as
+      well. The function codes have to be defined in the linux,keymap property
+      with an offset of keypad,num-rows from the normal ones.
+    type: boolean
+
 dependencies:
   function-row-physmap: [ 'linux,keymap' ]
   google,needs-ghost-filter: [ 'linux,keymap' ]
@@ -131,6 +139,23 @@ examples:
             0x07060016 0x07070036 0x07080019 0x07090018
             /* UP      LEFT    */
             0x070b0067 0x070c0069>;
+    };
+  - |
+    /* With function keys */
+    #include <dt-bindings/input/input.h>
+    keyboard-controller {
+        compatible = "google,cros-ec-keyb";
+        keypad,num-rows = <8>;
+        keypad,num-columns = <18>;
+        google,use-fn-overlay;
+        linux,keymap = <
+            MATRIX_KEY(0x00, 0x00, KEY_FN)
+            MATRIX_KEY(0x01, 0x00, KEY_1)
+            MATRIX_KEY(0x02, 0x00, KEY_2)
+
+            MATRIX_KEY(8 + 0x01, 0x00, KEY_F1)
+            MATRIX_KEY(8 + 0x02, 0x00, KEY_F2)
+        >;
     };
   - |
     /* No matrix keyboard, just buttons/switches */
