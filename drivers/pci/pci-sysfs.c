@@ -1166,12 +1166,20 @@ static ssize_t pci_resource_io(struct file *filp, struct kobject *kobj,
 			*(u8 *)buf = inb(port);
 		return 1;
 	case 2:
+#if !defined(CONFIG_X86)
+		if (!IS_ALIGNED(port, count))
+			return -EFAULT;
+#endif
 		if (write)
 			outw(*(u16 *)buf, port);
 		else
 			*(u16 *)buf = inw(port);
 		return 2;
 	case 4:
+#if !defined(CONFIG_X86)
+		if (!IS_ALIGNED(port, count))
+			return -EFAULT;
+#endif
 		if (write)
 			outl(*(u32 *)buf, port);
 		else
