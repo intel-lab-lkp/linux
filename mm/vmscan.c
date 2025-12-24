@@ -5822,6 +5822,8 @@ static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 				   sc->nr_scanned - scanned,
 				   sc->nr_reclaimed - reclaimed);
 
+		flush_reclaim_state(sc);
+
 		/* If partial walks are allowed, bail once goal is reached */
 		if (partial && sc->nr_reclaimed >= sc->nr_to_reclaim) {
 			mem_cgroup_iter_break(target_memcg, memcg);
@@ -5853,8 +5855,6 @@ again:
 	prepare_scan_control(pgdat, sc);
 
 	shrink_node_memcgs(pgdat, sc);
-
-	flush_reclaim_state(sc);
 
 	nr_node_reclaimed = sc->nr_reclaimed - nr_reclaimed;
 
