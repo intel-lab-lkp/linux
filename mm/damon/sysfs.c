@@ -1686,7 +1686,7 @@ static int damon_sysfs_damon_call(int (*fn)(void *data),
 	struct damon_call_control call_control = {};
 	int err;
 
-	if (!kdamond->damon_ctx)
+	if (!damon_sysfs_kdamond_running(kdamond))
 		return -EINVAL;
 	call_control.fn = fn;
 	call_control.data = kdamond;
