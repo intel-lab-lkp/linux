@@ -2544,42 +2544,43 @@ static void kdamond_usleep(unsigned long usecs)
  */
 static void kdamond_call(struct damon_ctx *ctx, bool cancel)
 {
-	struct damon_call_control *control;
-	LIST_HEAD(repeat_controls);
-	int ret = 0;
+	struct damon_call_control *control, *first = NULL;
+	unsigned int idx = 0;
 
 	while (true) {
 		mutex_lock(&ctx->call_controls_lock);
 		control = list_first_entry_or_null(&ctx->call_controls,
 				struct damon_call_control, list);
 		mutex_unlock(&ctx->call_controls_lock);
-		if (!control)
+
+		/* check control empty or 1st rotation */
+		if (!control || control == first)
 			break;
-		if (cancel) {
+
+		if (++idx == 1)
+			first = control;
+
+		if (cancel)
 			control->canceled = true;
-		} else {
-			ret = control->fn(control->data);
-			control->return_code = ret;
-		}
+		else
+			control->return_code = control->fn(control->data);
+
 		mutex_lock(&ctx->call_controls_lock);
 		list_del(&control->list);
 		mutex_unlock(&ctx->call_controls_lock);
+
 		if (!control->repeat) {
+			/* run control->fn() one time */
 			complete(&control->completion);
 		} else if (control->canceled && control->dealloc_on_cancel) {
 			kfree(control);
-			continue;
 		} else {
-			list_add(&control->list, &repeat_controls);
+			/* to repeat next time */
+			mutex_lock(&ctx->call_controls_lock);
+			list_add_tail(&control->list, &ctx->call_controls);
+			mutex_unlock(&ctx->call_controls_lock);
 		}
 	}
-	control = list_first_entry_or_null(&repeat_controls,
-			struct damon_call_control, list);
-	if (!control || cancel)
-		return;
-	mutex_lock(&ctx->call_controls_lock);
-	list_add_tail(&control->list, &ctx->call_controls);
-	mutex_unlock(&ctx->call_controls_lock);
 }
 
 /* Returns negative error code if it's not activated but should return */
