@@ -1,9 +1,9 @@
 ASPEED AST2400/AST2500 PWM and Fan Tacho controller device driver
 
-The ASPEED PWM controller can support upto 8 PWM outputs. The ASPEED Fan Tacho
-controller can support upto 16 Fan tachometer inputs.
+The ASPEED PWM controller can support up to 8 PWM outputs. The ASPEED Fan Tacho
+controller can support up to 16 Fan tachometer inputs.
 
-There can be upto 8 fans supported. Each fan can have one PWM output and
+There can be up to 8 fans supported. Each fan can have one PWM output and
 one/two Fan tach inputs.
 
 Required properties for pwm-tacho node:
@@ -28,7 +28,7 @@ Required properties for pwm-tacho node:
 
 fan subnode format:
 ===================
-Under fan subnode there can upto 8 child nodes, with each child node
+Under fan subnode there can be up to 8 child nodes, with each child node
 representing a fan. If there are 8 fans each fan can have one PWM port and
 one/two Fan tach inputs.
 For PWM port can be configured cooling-levels to create cooling device.
