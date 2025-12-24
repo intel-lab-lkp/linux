@@ -298,6 +298,9 @@ static int erofs_read_superblock(struct super_block *sb)
 		if (ret)
 			goto out;
 	}
+	if (erofs_sb_has_ishare_xattrs(sbi))
+		sbi->ishare_xattr_pfx =
+			dsb->ishare_xattr_prefix_id & EROFS_XATTR_LONG_PREFIX_MASK;
 
 	ret = -EINVAL;
 	sbi->feature_incompat = le32_to_cpu(dsb->feature_incompat);
