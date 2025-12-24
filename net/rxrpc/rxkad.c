@@ -1184,7 +1184,7 @@ static int rxkad_verify_response(struct rxrpc_connection *conn,
 			  ticket, ticket_len) < 0) {
 		rxrpc_abort_conn(conn, skb, RXKADPACKETSHORT, -EPROTO,
 				 rxkad_abort_resp_short_tkt);
-		goto protocol_error;
+		goto protocol_error_free;
 	}
 
 	ret = rxkad_decrypt_ticket(conn, server_key, skb, ticket, ticket_len,
