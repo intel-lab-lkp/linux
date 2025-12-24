@@ -367,10 +367,20 @@ int dw_pcie_msi_host_init(struct dw_pcie_rp *pp)
 	 * order not to miss MSI TLPs from those devices the MSI target
 	 * address has to be within the lowest 4GB.
 	 *
-	 * Note until there is a better alternative found the reservation is
-	 * done by allocating from the artificially limited DMA-coherent
-	 * memory.
+	 * Per DWC databook r6.21a, section 3.10.2.3, the incoming MWr TLP
+	 * targeting the MSI_CTRL_ADDR is terminated by the iMSI-RX and
+	 * never appears on the AXI bus. Since iMSI-RX monitors a virtual
+	 * address space that doesn't require physical memory mapping, and
+	 * most of the platforms provide 32-bit config space address, we
+	 * use cfg0_base as the first option for the MSI target address if
+	 * it's a 32-bit address. Otherwise, try 32-bit and 64-bit coherent
+	 * memory allocation one by one.
 	 */
+	if (!(pp->cfg0_base & GENMASK_ULL(63, 32))) {
+		pp->msi_data = pp->cfg0_base;
+		return 0;
+	}
+
 	ret = dma_set_coherent_mask(dev, DMA_BIT_MASK(32));
 	if (!ret)
 		msi_vaddr = dmam_alloc_coherent(dev, sizeof(u64), &pp->msi_data,
