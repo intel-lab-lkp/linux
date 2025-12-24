@@ -188,3 +188,16 @@ int hci_le_conn_update_sync(struct hci_dev *hdev, struct hci_conn *conn,
 
 int hci_connect_pa_sync(struct hci_dev *hdev, struct hci_conn *conn);
 int hci_connect_big_sync(struct hci_dev *hdev, struct hci_conn *conn);
+
+struct esco_params {
+	u16 pkt_type;
+	u16 max_latency;
+	u8  retrans_effort;
+};
+
+static const struct esco_params esco_params_msbc[] = {
+	{ EDR_ESCO_MASK & ~ESCO_2EV3, 0x000d,   0x02 }, /* T2 */
+	{ EDR_ESCO_MASK | ESCO_EV3,   0x0008,   0x02 }, /* T1 */
+};
+void hci_cmd_accept_sync_conn_req(struct hci_conn *conn, u16 setting);
+void hci_cmd_enhanced_accept_sync_conn_req(struct hci_conn *conn);
