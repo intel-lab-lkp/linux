@@ -1725,6 +1725,8 @@ static int cdns2_gadget_ep_queue(struct usb_ep *ep, struct usb_request *request,
 		struct cdns2_request *preq;
 
 		zlp_request = cdns2_gadget_ep_alloc_request(ep, GFP_ATOMIC);
+		if (!zlp_request)
+			return -ENOMEM;
 		zlp_request->buf = pdev->zlp_buf;
 		zlp_request->length = 0;
 
