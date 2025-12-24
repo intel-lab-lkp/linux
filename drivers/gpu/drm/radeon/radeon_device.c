@@ -337,6 +337,8 @@ void radeon_scratch_free(struct radeon_device *rdev, uint32_t reg)
  */
 static int radeon_doorbell_init(struct radeon_device *rdev)
 {
+	struct drm_device *ddev = rdev_to_drm(rdev);
+
 	/* doorbell bar mapping */
 	rdev->doorbell.base = pci_resource_start(rdev->pdev, 2);
 	rdev->doorbell.size = pci_resource_len(rdev->pdev, 2);
@@ -349,8 +351,8 @@ static int radeon_doorbell_init(struct radeon_device *rdev)
 	if (rdev->doorbell.ptr == NULL) {
 		return -ENOMEM;
 	}
-	DRM_INFO("doorbell mmio base: 0x%08X\n", (uint32_t)rdev->doorbell.base);
-	DRM_INFO("doorbell mmio size: %u\n", (unsigned)rdev->doorbell.size);
+	drm_info(ddev, "doorbell mmio base: 0x%08X\n", (uint32_t)rdev->doorbell.base);
+	drm_info(ddev, "doorbell mmio size: %pa\n", &rdev->doorbell.size);
 
 	memset(&rdev->doorbell.used, 0, sizeof(rdev->doorbell.used));
 
@@ -752,11 +754,13 @@ void radeon_update_bandwidth_info(struct radeon_device *rdev)
  */
 bool radeon_boot_test_post_card(struct radeon_device *rdev)
 {
+	struct drm_device *ddev = rdev_to_drm(rdev);
+
 	if (radeon_card_posted(rdev))
 		return true;
 
 	if (rdev->bios) {
-		DRM_INFO("GPU not posted. posting now...\n");
+		drm_info(ddev, "GPU not posted. posting now...\n");
 		if (rdev->is_atom_bios)
 			atom_asic_init(rdev->mode_info.atom_context);
 		else
@@ -975,6 +979,7 @@ int radeon_atombios_init(struct radeon_device *rdev)
 {
 	struct card_info *atom_card_info =
 	    kzalloc(sizeof(struct card_info), GFP_KERNEL);
+	struct drm_device *ddev = rdev_to_drm(rdev);
 
 	if (!atom_card_info)
 		return -ENOMEM;
@@ -988,7 +993,7 @@ int radeon_atombios_init(struct radeon_device *rdev)
 		atom_card_info->ioreg_read = cail_ioreg_read;
 		atom_card_info->ioreg_write = cail_ioreg_write;
 	} else {
-		DRM_ERROR("Unable to find PCI I/O BAR; using MMIO for ATOM IIO\n");
+		drm_err(ddev, "Unable to find PCI I/O BAR; using MMIO for ATOM IIO\n");
 		atom_card_info->ioreg_read = cail_reg_read;
 		atom_card_info->ioreg_write = cail_reg_write;
 	}
@@ -1297,7 +1302,7 @@ int radeon_device_init(struct radeon_device *rdev,
 	}
 	rdev->fence_context = dma_fence_context_alloc(RADEON_NUM_RINGS);
 
-	DRM_INFO("initializing kernel modesetting (%s 0x%04X:0x%04X 0x%04X:0x%04X 0x%02X).\n",
+	drm_info(ddev, "initializing kernel modesetting (%s 0x%04X:0x%04X 0x%04X:0x%04X 0x%02X).\n",
 		 radeon_family_name[rdev->family], pdev->vendor, pdev->device,
 		 pdev->subsystem_vendor, pdev->subsystem_device, pdev->revision);
 
@@ -1414,7 +1419,7 @@ int radeon_device_init(struct radeon_device *rdev,
 		}
 	}
 	if (rdev->rio_mem == NULL)
-		DRM_ERROR("Unable to find PCI I/O BAR\n");
+		drm_err(ddev, "Unable to find PCI I/O BAR\n");
 
 	if (rdev->flags & RADEON_IS_PX)
 		radeon_device_handle_px_quirks(rdev);
@@ -1454,7 +1459,7 @@ int radeon_device_init(struct radeon_device *rdev,
 
 	r = radeon_ib_ring_tests(rdev);
 	if (r)
-		DRM_ERROR("ib ring test failed (%d).\n", r);
+		drm_err(ddev, "ib ring test failed (%d).\n", r);
 
 	/*
 	 * Turks/Thames GPU will freeze whole laptop if DPM is not restarted
@@ -1475,19 +1480,19 @@ int radeon_device_init(struct radeon_device *rdev,
 		if (rdev->accel_working)
 			radeon_test_moves(rdev);
 		else
-			DRM_INFO("radeon: acceleration disabled, skipping move tests\n");
+			drm_info(ddev, "radeon: acceleration disabled, skipping move tests\n");
 	}
 	if ((radeon_testing & 2)) {
 		if (rdev->accel_working)
 			radeon_test_syncing(rdev);
 		else
-			DRM_INFO("radeon: acceleration disabled, skipping sync tests\n");
+			drm_info(ddev, "radeon: acceleration disabled, skipping sync tests\n");
 	}
 	if (radeon_benchmarking) {
 		if (rdev->accel_working)
 			radeon_benchmark(rdev, radeon_benchmarking);
 		else
-			DRM_INFO("radeon: acceleration disabled, skipping benchmarks\n");
+			drm_info(ddev, "radeon: acceleration disabled, skipping benchmarks\n");
 	}
 	return 0;
 
@@ -1510,7 +1515,9 @@ failed:
  */
 void radeon_device_fini(struct radeon_device *rdev)
 {
-	DRM_INFO("radeon: finishing device.\n");
+	struct drm_device *ddev = rdev_to_drm(rdev);
+
+	drm_info(ddev, "radeon: finishing device.\n");
 	rdev->shutdown = true;
 	/* evict vram memory */
 	radeon_bo_evict_vram(rdev);
@@ -1670,14 +1677,14 @@ int radeon_resume_kms(struct drm_device *dev, bool resume, bool notify_clients)
 
 	r = radeon_ib_ring_tests(rdev);
 	if (r)
-		DRM_ERROR("ib ring test failed (%d).\n", r);
+		drm_err(dev, "ib ring test failed (%d).\n", r);
 
 	if ((rdev->pm.pm_method == PM_METHOD_DPM) && rdev->pm.dpm_enabled) {
 		/* do dpm late init */
 		r = radeon_pm_late_init(rdev);
 		if (r) {
 			rdev->pm.dpm_enabled = false;
-			DRM_ERROR("radeon_pm_late_init failed, disabling dpm\n");
+			drm_err(dev, "radeon_pm_late_init failed, disabling dpm\n");
 		}
 	} else {
 		/* resume old pm late */
@@ -1701,7 +1708,7 @@ int radeon_resume_kms(struct drm_device *dev, bool resume, bool notify_clients)
 							     0 : 1 << 27,
 							     &radeon_crtc->cursor_addr);
 				if (r != 0)
-					DRM_ERROR("Failed to pin cursor BO (%d)\n", r);
+					drm_err(dev, "Failed to pin cursor BO (%d)\n", r);
 				radeon_bo_unreserve(robj);
 			}
 		}
@@ -1756,6 +1763,7 @@ int radeon_gpu_reset(struct radeon_device *rdev)
 {
 	unsigned ring_sizes[RADEON_NUM_RINGS];
 	uint32_t *ring_data[RADEON_NUM_RINGS];
+	struct drm_device *ddev = rdev_to_drm(rdev);
 
 	bool saved = false;
 
@@ -1807,7 +1815,7 @@ int radeon_gpu_reset(struct radeon_device *rdev)
 		r = radeon_pm_late_init(rdev);
 		if (r) {
 			rdev->pm.dpm_enabled = false;
-			DRM_ERROR("radeon_pm_late_init failed, disabling dpm\n");
+			drm_err(ddev, "radeon_pm_late_init failed, disabling dpm\n");
 		}
 	} else {
 		/* resume old pm late */
