@@ -251,8 +251,8 @@ static bool radeon_msi_ok(struct radeon_device *rdev)
 	 * IBM POWER servers, so we limit them
 	 */
 	if (rdev->family < CHIP_BONAIRE) {
-		dev_info(rdev->dev, "radeon: MSI limited to 32-bit\n");
-		rdev->pdev->msi_addr_mask = DMA_BIT_MASK(32);
+		dev_info(rdev->dev, "radeon: MSI limited to 40-bit\n");
+		rdev->pdev->msi_addr_mask = DMA_BIT_MASK(40);
 	}
 
 	/* force MSI on */
