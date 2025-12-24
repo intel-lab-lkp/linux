@@ -334,6 +334,12 @@ int cqhci_resume(struct mmc_host *mmc)
 }
 EXPORT_SYMBOL(cqhci_resume);
 
+static int cqhci_host_disable(struct mmc_host *mmc, struct mmc_card *card)
+{
+	pr_info("%s: Host does not want to use CMDQ\n", mmc_hostname(mmc));
+	return -EINVAL;
+}
+
 static int cqhci_enable(struct mmc_host *mmc, struct mmc_card *card)
 {
 	struct cqhci_host *cq_host = mmc->cqe_private;
@@ -1135,6 +1141,18 @@ static const struct mmc_cqe_ops cqhci_cqe_ops = {
 	.cqe_recovery_finish = cqhci_recovery_finish,
 };
 
+static const struct mmc_cqe_ops cqhci_disable_ops = {
+	.cqe_enable = cqhci_host_disable,
+	.cqe_disable = NULL,
+	.cqe_request = NULL,
+	.cqe_post_req = NULL,
+	.cqe_off = NULL,
+	.cqe_wait_for_idle = NULL,
+	.cqe_timeout = NULL,
+	.cqe_recovery_start = NULL,
+	.cqe_recovery_finish = NULL,
+};
+
 struct cqhci_host *cqhci_pltfm_init(struct platform_device *pdev)
 {
 	struct cqhci_host *cq_host;
@@ -1188,7 +1206,15 @@ int cqhci_init(struct cqhci_host *cq_host, struct mmc_host *mmc,
 	cq_host->num_slots = NUM_SLOTS;
 	cq_host->dcmd_slot = DCMD_SLOT;
 
-	mmc->cqe_ops = &cqhci_cqe_ops;
+	/*
+	 * Some platforms may not support CQE reliably.
+	 * Use host_disable_cqe to force fallback to
+	 * legacy request path.
+	 */
+	if (mmc->host_disable_cqe)
+		mmc->cqe_ops = &cqhci_disable_ops;
+	else
+		mmc->cqe_ops = &cqhci_cqe_ops;
 
 	mmc->cqe_qdepth = NUM_SLOTS;
 	if (mmc->caps2 & MMC_CAP2_CQE_DCMD)
