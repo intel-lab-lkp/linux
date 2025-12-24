@@ -25,6 +25,9 @@ struct erofs_xattr_iter {
 	struct dentry *dentry;
 };
 
+static int erofs_getxattr(struct inode *inode, int index, const char *name,
+			void *buffer, size_t buffer_size);
+
 static int erofs_init_inode_xattrs(struct inode *inode)
 {
 	struct erofs_inode *const vi = EROFS_I(inode);
@@ -391,7 +394,7 @@ static int erofs_xattr_iter_shared(struct erofs_xattr_iter *it,
 	return i ? ret : -ENODATA;
 }
 
-int erofs_getxattr(struct inode *inode, int index, const char *name,
+static int erofs_getxattr(struct inode *inode, int index, const char *name,
 		   void *buffer, size_t buffer_size)
 {
 	int ret;
@@ -575,5 +578,40 @@ struct posix_acl *erofs_get_acl(struct inode *inode, int type, bool rcu)
 		acl = posix_acl_from_xattr(&init_user_ns, value, rc);
 	kfree(value);
 	return acl;
+}
+#endif
+
+#ifdef CONFIG_EROFS_FS_PAGE_CACHE_SHARE
+struct erofs_inode_fingerprint erofs_xattr_get_ishare_fp(struct inode *inode,
+							const char *domain_id)
+{
+	struct erofs_sb_info *sbi = EROFS_SB(inode->i_sb);
+	struct erofs_inode_fingerprint fp = {};
+	struct erofs_xattr_prefix_item *prefix;
+	const char *infix;
+	int valuelen, base_index, domainlen;
+
+	if (!erofs_sb_has_ishare_xattrs(sbi))
+		goto out;
+	prefix = sbi->xattr_prefixes + sbi->ishare_xattr_pfx;
+	infix = prefix->prefix->infix;
+	base_index = prefix->prefix->base_index;
+	valuelen = erofs_getxattr(inode, base_index, infix, NULL, 0);
+	if (valuelen <= 0 || valuelen > (1 << sbi->blkszbits))
+		goto out;
+	domainlen = domain_id ? strlen(domain_id) : 0;
+	fp.opaque = kmalloc(valuelen + domainlen, GFP_KERNEL);
+	if (!fp.opaque)
+		goto out;
+	if (valuelen != erofs_getxattr(inode, base_index, infix,
+				       fp.opaque, valuelen)) {
+		kfree(fp.opaque);
+		fp.opaque = NULL;
+		goto out;
+	}
+	memcpy(fp.opaque + valuelen, domain_id, domainlen);
+	fp.size = valuelen + domainlen;
+out:
+	return fp;
 }
 #endif
