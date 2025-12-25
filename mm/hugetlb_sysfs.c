@@ -341,6 +341,8 @@ static bool hugetlb_sysfs_initialized __ro_after_init;
 struct node_hstate_item {
 	struct kobject *hstate_kobj;
 	struct work_struct notify_work;
+	unsigned long notified_at;
+	spinlock_t notify_lock;
 };
 
 /*
@@ -364,11 +366,30 @@ static void pre_zero_notify_fun(struct work_struct *work)
 	sysfs_notify(item->hstate_kobj, NULL, "zeroable_hugepages");
 }
 
+static void __do_zero_free_notify(struct node_hstate_item *item)
+{
+	unsigned long last;
+	unsigned long next;
+
+#define PRE_ZERO_NOTIFY_MIN_INTV       DIV_ROUND_UP(HZ, 100)
+	spin_lock(&item->notify_lock);
+	last = item->notified_at;
+	next = last + PRE_ZERO_NOTIFY_MIN_INTV;
+	if (time_in_range(jiffies, last, next)) {
+		spin_unlock(&item->notify_lock);
+		return;
+	}
+	item->notified_at = jiffies;
+	spin_unlock(&item->notify_lock);
+
+	schedule_work(&item->notify_work);
+}
+
 void do_zero_free_notify(struct hstate *h, int nid)
 {
 	struct node_hstate *nhs = &node_hstates[nid];
 
-	schedule_work(&nhs->items[hstate_index(h)].notify_work);
+	__do_zero_free_notify(&nhs->items[hstate_index(h)]);
 }
 
 static ssize_t zeroable_hugepages_show(struct kobject *kobj,
@@ -593,6 +614,8 @@ void hugetlb_register_node(struct node *node)
 			break;
 		}
 		INIT_WORK(&item->notify_work, pre_zero_notify_fun);
+		item->notified_at = jiffies;
+		spin_lock_init(&item->notify_lock);
 	}
 }
 
