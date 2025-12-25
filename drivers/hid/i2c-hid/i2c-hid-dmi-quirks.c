@@ -290,6 +290,260 @@ static const struct i2c_hid_desc_override sipodev_desc = {
 	.i2c_name = "SYNA3602:00"
 };
 
+static const struct i2c_hid_desc_override hantick5288_desc = {
+	.i2c_hid_desc_buffer = (uint8_t [])
+	{0x1e, 0x00,             /* Length of descriptor          */
+	 0x00, 0x01,             /* Version of descriptor         */
+	 0xe2, 0x01,             /* Length of report descriptor   */
+	 0x21, 0x00,             /* Location of report descriptor */
+	 0x24, 0x00,             /* Location of input report      */
+	 0x1f, 0x00,             /* Max input report length       */
+	 0x25, 0x00,             /* Location of output report     */
+	 0x11, 0x00,             /* Max output report length      */
+	 0x22, 0x00,             /* Location of command register  */
+	 0x23, 0x00,             /* Location of data register     */
+	 0x11, 0x09,             /* Vendor ID                     */
+	 0x88, 0x52,             /* Product ID                    */
+	 0x06, 0x00,             /* Version ID                    */
+	 0x00, 0x00, 0x00, 0x00, /* Reserved                      */
+	},
+	.hid_report_desc = (uint8_t [])
+	{0x05, 0x01,                   /* Usage Page (Generic Desktop Ctrls)                                                       */
+	 0x09, 0x02,                   /* Usage (Mouse)                                                                            */
+	 0xA1, 0x01,                   /* Collection (Application)                                                                 */
+	 0x85, 0x01,                   /*   Report ID (1)                                                                          */
+	 0x09, 0x01,                   /*   Usage (Pointer)                                                                        */
+	 0xA1, 0x00,                   /*   Collection (Physical)                                                                  */
+	 0x05, 0x09,                   /*     Usage Page (Button)                                                                  */
+	 0x19, 0x01,                   /*     Usage Minimum (0x01)                                                                 */
+	 0x29, 0x02,                   /*     Usage Maximum (0x02)                                                                 */
+	 0x25, 0x01,                   /*     Logical Maximum (1)                                                                  */
+	 0x75, 0x01,                   /*     Report Size (1)                                                                      */
+	 0x95, 0x02,                   /*     Report Count (2)                                                                     */
+	 0x81, 0x02,                   /*     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                 */
+	 0x95, 0x06,                   /*     Report Count (6)                                                                     */
+	 0x81, 0x01,                   /*     Input (Const,Array,Abs,No Wrap,Linear,Preferred State,No Null Position)              */
+	 0x05, 0x01,                   /*     Usage Page (Generic Desktop Ctrls)                                                   */
+	 0x09, 0x30,                   /*     Usage (X)                                                                            */
+	 0x09, 0x31,                   /*     Usage (Y)                                                                            */
+	 0x15, 0x81,                   /*     Logical Minimum (-127)                                                               */
+	 0x25, 0x7F,                   /*     Logical Maximum (127)                                                                */
+	 0x75, 0x08,                   /*     Report Size (8)                                                                      */
+	 0x95, 0x02,                   /*     Report Count (2)                                                                     */
+	 0x81, 0x06,                   /*     Input (Data,Var,Rel,No Wrap,Linear,Preferred State,No Null Position)                 */
+	 0xC0,                         /*   End Collection                                                                         */
+	 0xC0,                         /* End Collection                                                                           */
+	 0x05, 0x0D,                   /* Usage Page (Digitizer)                                                                   */
+	 0x09, 0x05,                   /* Usage (Touch Pad)                                                                        */
+	 0xA1, 0x01,                   /* Collection (Application)                                                                 */
+	 0x95, 0x01,                   /*   Report Count (1)                                                                       */
+	 0x55, 0x0E,                   /*   Unit Exponent (-2)                                                                     */
+	 0x65, 0x11,                   /*   Unit (System: SI Linear, Length: Centimeter)                                           */
+	 0x15, 0x00,                   /*   Logical Minimum (0)                                                                    */
+	 0x85, 0x04,                   /*   Report ID (4)                                                                          */
+	 0x05, 0x0D,                   /*   Usage Page (Digitizer)                                                                 */
+	 0x09, 0x22,                   /*   Usage (Finger)                                                                         */
+	 0xA1, 0x02,                   /*   Collection (Logical)                                                                   */
+	 0x25, 0x01,                   /*     Logical Maximum (1)                                                                  */
+	 0x75, 0x01,                   /*     Report Size (1)                                                                      */
+	 0x09, 0x47,                   /*     Usage (0x47)                                                                         */
+	 0x81, 0x02,                   /*     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                 */
+	 0x09, 0x42,                   /*     Usage (Tip Switch)                                                                   */
+	 0x81, 0x02,                   /*     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                 */
+	 0x75, 0x06,                   /*     Report Size (6)                                                                      */
+	 0x25, 0x05,                   /*     Logical Maximum (5)                                                                  */
+	 0x09, 0x51,                   /*     Usage (0x51)                                                                         */
+	 0x81, 0x02,                   /*     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                 */
+	 0x05, 0x01,                   /*     Usage Page (Generic Desktop Ctrls)                                                   */
+	 0x75, 0x10,                   /*     Report Size (16)                                                                     */
+	 0x26, 0x44, 0x0A,             /*     Logical Maximum (2628)                                                               */
+	 0x46, 0xB0, 0x04,             /*     Physical Maximum (1200)                                                              */
+	 0x09, 0x30,                   /*     Usage (X)                                                                            */
+	 0x81, 0x02,                   /*     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                 */
+	 0x26, 0x34, 0x05,             /*     Logical Maximum (1332)                                                               */
+	 0x46, 0x38, 0x03,             /*     Physical Maximum (824)                                                               */
+	 0x09, 0x31,                   /*     Usage (Y)                                                                            */
+	 0x81, 0x02,                   /*     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                 */
+	 0xC0,                         /*   End Collection                                                                         */
+	 0x05, 0x0D,                   /*   Usage Page (Digitizer)                                                                 */
+	 0x09, 0x22,                   /*   Usage (Finger)                                                                         */
+	 0xA1, 0x02,                   /*   Collection (Logical)                                                                   */
+	 0x25, 0x01,                   /*     Logical Maximum (1)                                                                  */
+	 0x75, 0x01,                   /*     Report Size (1)                                                                      */
+	 0x09, 0x47,                   /*     Usage (0x47)                                                                         */
+	 0x81, 0x02,                   /*     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                 */
+	 0x09, 0x42,                   /*     Usage (Tip Switch)                                                                   */
+	 0x81, 0x02,                   /*     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                 */
+	 0x75, 0x06,                   /*     Report Size (6)                                                                      */
+	 0x25, 0x05,                   /*     Logical Maximum (5)                                                                  */
+	 0x09, 0x51,                   /*     Usage (0x51)                                                                         */
+	 0x81, 0x02,                   /*     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                 */
+	 0x05, 0x01,                   /*     Usage Page (Generic Desktop Ctrls)                                                   */
+	 0x75, 0x10,                   /*     Report Size (16)                                                                     */
+	 0x26, 0x44, 0x0A,             /*     Logical Maximum (2628)                                                               */
+	 0x46, 0xB0, 0x04,             /*     Physical Maximum (1200)                                                              */
+	 0x09, 0x30,                   /*     Usage (X)                                                                            */
+	 0x81, 0x02,                   /*     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                 */
+	 0x26, 0x34, 0x05,             /*     Logical Maximum (1332)                                                               */
+	 0x46, 0x38, 0x03,             /*     Physical Maximum (824)                                                               */
+	 0x09, 0x31,                   /*     Usage (Y)                                                                            */
+	 0x81, 0x02,                   /*     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                 */
+	 0xC0,                         /*   End Collection                                                                         */
+	 0x05, 0x0D,                   /*   Usage Page (Digitizer)                                                                 */
+	 0x09, 0x22,                   /*   Usage (Finger)                                                                         */
+	 0xA1, 0x02,                   /*   Collection (Logical)                                                                   */
+	 0x25, 0x01,                   /*     Logical Maximum (1)                                                                  */
+	 0x75, 0x01,                   /*     Report Size (1)                                                                      */
+	 0x09, 0x47,                   /*     Usage (0x47)                                                                         */
+	 0x81, 0x02,                   /*     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                 */
+	 0x09, 0x42,                   /*     Usage (Tip Switch)                                                                   */
+	 0x81, 0x02,                   /*     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                 */
+	 0x75, 0x06,                   /*     Report Size (6)                                                                      */
+	 0x25, 0x05,                   /*     Logical Maximum (5)                                                                  */
+	 0x09, 0x51,                   /*     Usage (0x51)                                                                         */
+	 0x81, 0x02,                   /*     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                 */
+	 0x05, 0x01,                   /*     Usage Page (Generic Desktop Ctrls)                                                   */
+	 0x75, 0x10,                   /*     Report Size (16)                                                                     */
+	 0x26, 0x44, 0x0A,             /*     Logical Maximum (2628)                                                               */
+	 0x46, 0xB0, 0x04,             /*     Physical Maximum (1200)                                                              */
+	 0x09, 0x30,                   /*     Usage (X)                                                                            */
+	 0x81, 0x02,                   /*     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                 */
+	 0x26, 0x34, 0x05,             /*     Logical Maximum (1332)                                                               */
+	 0x46, 0x38, 0x03,             /*     Physical Maximum (824)                                                               */
+	 0x09, 0x31,                   /*     Usage (Y)                                                                            */
+	 0x81, 0x02,                   /*     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                 */
+	 0xC0,                         /*   End Collection                                                                         */
+	 0x05, 0x0D,                   /*   Usage Page (Digitizer)                                                                 */
+	 0x09, 0x22,                   /*   Usage (Finger)                                                                         */
+	 0xA1, 0x02,                   /*   Collection (Logical)                                                                   */
+	 0x25, 0x01,                   /*     Logical Maximum (1)                                                                  */
+	 0x75, 0x01,                   /*     Report Size (1)                                                                      */
+	 0x09, 0x47,                   /*     Usage (0x47)                                                                         */
+	 0x81, 0x02,                   /*     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                 */
+	 0x09, 0x42,                   /*     Usage (Tip Switch)                                                                   */
+	 0x81, 0x02,                   /*     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                 */
+	 0x75, 0x06,                   /*     Report Size (6)                                                                      */
+	 0x25, 0x05,                   /*     Logical Maximum (5)                                                                  */
+	 0x09, 0x51,                   /*     Usage (0x51)                                                                         */
+	 0x81, 0x02,                   /*     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                 */
+	 0x05, 0x01,                   /*     Usage Page (Generic Desktop Ctrls)                                                   */
+	 0x75, 0x10,                   /*     Report Size (16)                                                                     */
+	 0x26, 0x44, 0x0A,             /*     Logical Maximum (2628)                                                               */
+	 0x46, 0xB0, 0x04,             /*     Physical Maximum (1200)                                                              */
+	 0x09, 0x30,                   /*     Usage (X)                                                                            */
+	 0x81, 0x02,                   /*     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                 */
+	 0x26, 0x34, 0x05,             /*     Logical Maximum (1332)                                                               */
+	 0x46, 0x38, 0x03,             /*     Physical Maximum (824)                                                               */
+	 0x09, 0x31,                   /*     Usage (Y)                                                                            */
+	 0x81, 0x02,                   /*     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                 */
+	 0xC0,                         /*   End Collection                                                                         */
+	 0x05, 0x0D,                   /*   Usage Page (Digitizer)                                                                 */
+	 0x55, 0x0C,                   /*   Unit Exponent (-4)                                                                     */
+	 0x66, 0x01, 0x10,             /*   Unit (System: SI Linear, Time: Seconds)                                                */
+	 0x47, 0xFF, 0xFF, 0x00, 0x00, /*   Physical Maximum (65534)                                                               */
+	 0x27, 0xFF, 0xFF, 0x00, 0x00, /*   Logical Maximum (65534)                                                                */
+	 0x09, 0x56,                   /*   Usage (0x56)                                                                           */
+	 0x81, 0x02,                   /*   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                   */
+	 0x25, 0x05,                   /*   Logical Maximum (5)                                                                    */
+	 0x09, 0x54,                   /*   Usage (0x54)                                                                           */
+	 0x75, 0x04,                   /*   Report Size (4)                                                                        */
+	 0x81, 0x02,                   /*   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                   */
+	 0x05, 0x09,                   /*   Usage Page (Button)                                                                    */
+	 0x09, 0x01,                   /*   Usage (0x01)                                                                           */
+	 0x25, 0x01,                   /*   Logical Maximum (1)                                                                    */
+	 0x25, 0x01,                   /*   Logical Maximum (1)                                                                    */
+	 0x75, 0x01,                   /*   Report Size (1)                                                                        */
+	 0x95, 0x01,                   /*   Report Count (1)                                                                       */
+	 0x81, 0x02,                   /*   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                   */
+	 0x06, 0x01, 0xFF,             /*   Usage Page (Vendor Defined 0xFF01)                                                     */
+	 0x95, 0x01,                   /*   Report Count (1)                                                                       */
+	 0x75, 0x03,                   /*   Report Size (3)                                                                        */
+	 0x09, 0x41,                   /*   Usage (0x41)                                                                           */
+	 0x81, 0x02,                   /*   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                   */
+	 0x09, 0x42,                   /*   Usage (0x42)                                                                           */
+	 0x81, 0x02,                   /*   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                   */
+	 0x75, 0x01,                   /*   Report Size (1)                                                                        */
+	 0x09, 0x40,                   /*   Usage (0x40)                                                                           */
+	 0x81, 0x02,                   /*   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                   */
+	 0x75, 0x24,                   /*   Report Size (36)                                                                       */
+	 0x81, 0x03,                   /*   Input (Const,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                  */
+	 0x05, 0x0D,                   /*   Usage Page (Digitizer)                                                                 */
+	 0x85, 0x02,                   /*   Report ID (2)                                                                          */
+	 0x25, 0x0F,                   /*   Logical Maximum (15)                                                                   */
+	 0x75, 0x04,                   /*   Report Size (4)                                                                        */
+	 0x09, 0x55,                   /*   Usage (0x55)                                                                           */
+	 0xB1, 0x02,                   /*   Feature (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)    */
+	 0x09, 0x59,                   /*   Usage (0x59)                                                                           */
+	 0xB1, 0x02,                   /*   Feature (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)    */
+	 0x85, 0x06,                   /*   Report ID (6)                                                                          */
+	 0x06, 0x00, 0xFF,             /*   Usage Page (Vendor Defined 0xFF00)                                                     */
+	 0x09, 0xC5,                   /*   Usage (0xC5)                                                                           */
+	 0x26, 0xFF, 0x00,             /*   Logical Maximum (255)                                                                  */
+	 0x75, 0x08,                   /*   Report Size (8)                                                                        */
+	 0x96, 0x00, 0x01,             /*   Report Count (256)                                                                     */
+	 0xB1, 0x02,                   /*   Feature (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)    */
+	 0xC0,                         /* End Collection                                                                           */
+	 0x05, 0x0D,                   /* Usage Page (Digitizer)                                                                   */
+	 0x09, 0x0E,                   /* Usage (0x0E)                                                                             */
+	 0xA1, 0x01,                   /* Collection (Application)                                                                 */
+	 0x85, 0x03,                   /*   Report ID (3)                                                                          */
+	 0x09, 0x22,                   /*   Usage (Finger)                                                                         */
+	 0xA1, 0x02,                   /*   Collection (Logical)                                                                   */
+	 0x09, 0x52,                   /*     Usage (0x52)                                                                         */
+	 0x25, 0x0A,                   /*     Logical Maximum (10)                                                                 */
+	 0x95, 0x01,                   /*     Report Count (1)                                                                     */
+	 0xB1, 0x02,                   /*     Feature (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)  */
+	 0xC0,                         /*   End Collection                                                                         */
+	 0x09, 0x22,                   /*   Usage (Finger)                                                                         */
+	 0xA1, 0x00,                   /*   Collection (Physical)                                                                  */
+	 0x85, 0x05,                   /*     Report ID (5)                                                                        */
+	 0x25, 0x01,                   /*     Logical Maximum (1)                                                                  */
+	 0x75, 0x01,                   /*     Report Size (1)                                                                      */
+	 0x09, 0x57,                   /*     Usage (0x57)                                                                         */
+	 0xB1, 0x02,                   /*     Feature (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)  */
+	 0x09, 0x58,                   /*     Usage (0x58)                                                                         */
+	 0xB1, 0x02,                   /*     Feature (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)  */
+	 0x75, 0x06,                   /*     Report Size (6)                                                                      */
+	 0xB1, 0x03,                   /*     Feature (Const,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile) */
+	 0xC0,                         /*   End Collection                                                                         */
+	 0xC0,                         /* End Collection                                                                           */
+	 0x06, 0x01, 0xFF,             /* Usage Page (Vendor Defined 0xFF01)                                                       */
+	 0x09, 0x02,                   /* Usage (0x02)                                                                             */
+	 0xA1, 0x01,                   /* Collection (Application)                                                                 */
+	 0x75, 0x08,                   /*   Report Size (8)                                                                        */
+	 0x85, 0x0D,                   /*   Report ID (13)                                                                         */
+	 0x09, 0xD5,                   /*   Usage (0xD5)                                                                           */
+	 0x95, 0x18,                   /*   Report Count (24)                                                                      */
+	 0xB1, 0x02,                   /*   Feature (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)    */
+	 0x85, 0x0C,                   /*   Report ID (12)                                                                         */
+	 0x09, 0xD6,                   /*   Usage (0xD6)                                                                           */
+	 0x96, 0x91, 0x00,             /*   Report Count (145)                                                                     */
+	 0xB1, 0x02,                   /*   Feature (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)    */
+	 0x09, 0x30,                   /*   Usage (0x30)                                                                           */
+	 0x85, 0x07,                   /*   Report ID (7)                                                                          */
+	 0x95, 0x07,                   /*   Report Count (7)                                                                       */
+	 0x81, 0x02,                   /*   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                   */
+	 0x09, 0x70,                   /*   Usage (0x70)                                                                           */
+	 0x85, 0x0E,                   /*   Report ID (14)                                                                         */
+	 0x95, 0xC9,                   /*   Report Count (-55)                                                                     */
+	 0x81, 0x02,                   /*   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                   */
+	 0x09, 0x71,                   /*   Usage (0x71)                                                                           */
+	 0x85, 0x08,                   /*   Report ID (8)                                                                          */
+	 0x95, 0x97,                   /*   Report Count (-105)                                                                    */
+	 0x81, 0x02,                   /*   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                   */
+	 0x09, 0x72,                   /*   Usage (0x72)                                                                           */
+	 0x85, 0x09,                   /*   Report ID (9)                                                                          */
+	 0x95, 0xFD,                   /*   Report Count (-3)                                                                      */
+	 0x81, 0x02,                   /*   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)                   */
+	 0x09, 0x73,                   /*   Usage (0x73)                                                                           */
+	 0x85, 0x0A,                   /*   Report ID (10)                                                                         */
+	 0x95, 0x20,                   /*   Report Count (32)                                                                      */
+	 0x91, 0x02,                   /*   Output (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)     */
+	 0xC0,                         /* End Collection                                                                           */
+	},
+	.hid_report_desc_size = 482,
+	.i2c_name = "SPPT2600:00"
+};
 
 static const struct dmi_system_id i2c_hid_dmi_desc_override_table[] = {
 	{
@@ -414,6 +668,14 @@ static const struct dmi_system_id i2c_hid_dmi_desc_override_table[] = {
 			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "K147"),
 		},
 		.driver_data = (void *)&sipodev_desc
+	},
+	{
+		.ident = "Samsung 750XFG",
+		.matches = {
+			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "SAMSUNG ELECTRONICS CO., LTD."),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "750XFG"),
+		},
+		.driver_data = (void *)&hantick5288_desc
 	},
 	{ }	/* Terminate list */
 };
