@@ -2057,6 +2057,7 @@ static void update_cpumasks_hier(struct cpuset *cs, struct tmpmasks *tmp,
 		struct cpuset *parent = parent_cs(cp);
 		bool remote = is_remote_partition(cp);
 		bool update_parent = false;
+		bool empty_xcpus;
 
 		old_prs = new_prs = cp->partition_root_state;
 
@@ -2167,20 +2168,14 @@ get_css:
 			new_prs = cp->partition_root_state;
 		}
 
+		empty_xcpus = cpumask_empty(cp->exclusive_cpus);
 		spin_lock_irq(&callback_lock);
 		cpumask_copy(cp->effective_cpus, tmp->new_cpus);
 		cp->partition_root_state = new_prs;
-		if (!cpumask_empty(cp->exclusive_cpus) && (cp != cs))
+		if (((new_prs > 0) && empty_xcpus) ||
+		    ((cp != cs) && !empty_xcpus))
 			compute_excpus(cp, cp->effective_xcpus);
-
-		/*
-		 * Make sure effective_xcpus is properly set for a valid
-		 * partition root.
-		 */
-		if ((new_prs > 0) && cpumask_empty(cp->exclusive_cpus))
-			cpumask_and(cp->effective_xcpus,
-				    cp->cpus_allowed, parent->effective_xcpus);
-		else if (new_prs < 0)
+		if (new_prs < 0)
 			reset_partition_data(cp);
 		spin_unlock_irq(&callback_lock);
 
