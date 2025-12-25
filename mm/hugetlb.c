@@ -93,6 +93,8 @@ static int hugetlb_param_index __initdata;
 static __init int hugetlb_add_param(char *s, int (*setup)(char *val));
 static __init void hugetlb_parse_params(void);
 
+static void hpage_wait_zeroing(struct hstate *h, struct folio *folio);
+
 #define hugetlb_early_param(str, func) \
 static __init int func##args(char *s) \
 { \
@@ -1292,21 +1294,33 @@ void clear_vma_resv_huge_pages(struct vm_area_struct *vma)
 	hugetlb_dup_vma_private(vma);
 }
 
+/*
+ * Clear flags for either a fresh page or one that is being
+ * added to the free list.
+ */
+static inline void prep_clear_zeroed(struct folio *folio)
+{
+	folio_clear_hugetlb_zeroed(folio);
+	folio_clear_hugetlb_zeroing(folio);
+}
+
 static void enqueue_hugetlb_folio(struct hstate *h, struct folio *folio)
 {
 	int nid = folio_nid(folio);
 
 	lockdep_assert_held(&hugetlb_lock);
 	VM_BUG_ON_FOLIO(folio_ref_count(folio), folio);
+	VM_WARN_ON_FOLIO(folio_test_hugetlb_zeroing(folio), folio);
 
 	list_move(&folio->lru, &h->hugepage_freelists[nid]);
 	h->free_huge_pages++;
 	h->free_huge_pages_node[nid]++;
+	prep_clear_zeroed(folio);
 	folio_set_hugetlb_freed(folio);
 }
 
-static struct folio *dequeue_hugetlb_folio_node_exact(struct hstate *h,
-								int nid)
+static struct folio *dequeue_hugetlb_folio_node_exact(struct hstate *h, int nid,
+		gfp_t gfp_mask)
 {
 	struct folio *folio;
 	bool pin = !!(current->flags & PF_MEMALLOC_PIN);
@@ -1314,6 +1328,16 @@ static struct folio *dequeue_hugetlb_folio_node_exact(struct hstate *h,
 	lockdep_assert_held(&hugetlb_lock);
 	list_for_each_entry(folio, &h->hugepage_freelists[nid], lru) {
 		if (pin && !folio_is_longterm_pinnable(folio))
+			continue;
+
+		/*
+		 * This shouldn't happen, as hugetlb pages are never allocated
+		 * with GFP_ATOMIC. But be paranoid and check for it, as
+		 * a zero_busy page might cause a sleep later in
+		 * hpage_wait_zeroing().
+		 */
+		if (WARN_ON_ONCE(folio_test_hugetlb_zeroing(folio) &&
+					!gfpflags_allow_blocking(gfp_mask)))
 			continue;
 
 		if (folio_test_hwpoison(folio))
@@ -1327,6 +1351,10 @@ static struct folio *dequeue_hugetlb_folio_node_exact(struct hstate *h,
 		folio_clear_hugetlb_freed(folio);
 		h->free_huge_pages--;
 		h->free_huge_pages_node[nid]--;
+		if (folio_test_hugetlb_zeroed(folio) ||
+		    folio_test_hugetlb_zeroing(folio))
+			h->free_huge_pages_zero_node[nid]--;
+
 		return folio;
 	}
 
@@ -1363,7 +1391,7 @@ retry_cpuset:
 			continue;
 		node = zone_to_nid(zone);
 
-		folio = dequeue_hugetlb_folio_node_exact(h, node);
+		folio = dequeue_hugetlb_folio_node_exact(h, node, gfp_mask);
 		if (folio)
 			return folio;
 	}
@@ -1490,7 +1518,16 @@ void remove_hugetlb_folio(struct hstate *h, struct folio *folio,
 		folio_clear_hugetlb_freed(folio);
 		h->free_huge_pages--;
 		h->free_huge_pages_node[nid]--;
+		folio_clear_hugetlb_freed(folio);
 	}
+	/*
+	 * Adjust the zero page counters now. Note that
+	 * if a page is currently being zeroed, that
+	 * will be waited for in update_and_free_page()
+	 */
+	if (folio_test_hugetlb_zeroed(folio) ||
+	    folio_test_hugetlb_zeroing(folio))
+		h->free_huge_pages_zero_node[nid]--;
 	if (adjust_surplus) {
 		h->surplus_huge_pages--;
 		h->surplus_huge_pages_node[nid]--;
@@ -1542,6 +1579,8 @@ static void __update_and_free_hugetlb_folio(struct hstate *h,
 						struct folio *folio)
 {
 	bool clear_flag = folio_test_hugetlb_vmemmap_optimized(folio);
+
+	VM_WARN_ON_FOLIO(folio_test_hugetlb_zeroing(folio), folio);
 
 	if (hstate_is_gigantic_no_runtime(h))
 		return;
@@ -1627,6 +1666,7 @@ static void free_hpage_workfn(struct work_struct *work)
 		 */
 		h = size_to_hstate(folio_size(folio));
 
+		hpage_wait_zeroing(h, folio);
 		__update_and_free_hugetlb_folio(h, folio);
 
 		cond_resched();
@@ -1643,7 +1683,8 @@ static inline void flush_free_hpage_work(struct hstate *h)
 static void update_and_free_hugetlb_folio(struct hstate *h, struct folio *folio,
 				 bool atomic)
 {
-	if (!folio_test_hugetlb_vmemmap_optimized(folio) || !atomic) {
+	if ((!folio_test_hugetlb_zeroing(folio) &&
+	     !folio_test_hugetlb_vmemmap_optimized(folio)) || !atomic) {
 		__update_and_free_hugetlb_folio(h, folio);
 		return;
 	}
@@ -1840,6 +1881,13 @@ static void account_new_hugetlb_folio(struct hstate *h, struct folio *folio)
 	h->nr_huge_pages_node[folio_nid(folio)]++;
 }
 
+static void prep_new_hugetlb_folio(struct folio *folio)
+{
+	lockdep_assert_held(&hugetlb_lock);
+	folio_clear_hugetlb_freed(folio);
+	prep_clear_zeroed(folio);
+}
+
 void init_new_hugetlb_folio(struct folio *folio)
 {
 	__folio_set_hugetlb(folio);
@@ -1964,6 +2012,7 @@ void prep_and_add_allocated_folios(struct hstate *h,
 	/* Add all new pool pages to free lists in one lock cycle */
 	spin_lock_irqsave(&hugetlb_lock, flags);
 	list_for_each_entry_safe(folio, tmp_f, folio_list, lru) {
+		prep_new_hugetlb_folio(folio);
 		account_new_hugetlb_folio(h, folio);
 		enqueue_hugetlb_folio(h, folio);
 	}
@@ -2171,6 +2220,7 @@ static struct folio *alloc_surplus_hugetlb_folio(struct hstate *h,
 		return NULL;
 
 	spin_lock_irq(&hugetlb_lock);
+	prep_new_hugetlb_folio(folio);
 	/*
 	 * nr_huge_pages needs to be adjusted within the same lock cycle
 	 * as surplus_pages, otherwise it might confuse
@@ -2214,6 +2264,7 @@ static struct folio *alloc_migrate_hugetlb_folio(struct hstate *h, gfp_t gfp_mas
 		return NULL;
 
 	spin_lock_irq(&hugetlb_lock);
+	prep_new_hugetlb_folio(folio);
 	account_new_hugetlb_folio(h, folio);
 	spin_unlock_irq(&hugetlb_lock);
 
@@ -2289,6 +2340,13 @@ struct folio *alloc_hugetlb_folio_nodemask(struct hstate *h, int preferred_nid,
 						preferred_nid, nmask);
 		if (folio) {
 			spin_unlock_irq(&hugetlb_lock);
+			/*
+			 * The contents of this page will be completely
+			 * overwritten immediately, as its a migration
+			 * target, so no clearing is needed. Do wait in
+			 * case pre-zero thread was working on it, though.
+			 */
+			hpage_wait_zeroing(h, folio);
 			return folio;
 		}
 	}
@@ -2779,6 +2837,7 @@ retry:
 		 */
 		remove_hugetlb_folio(h, old_folio, false);
 
+		prep_new_hugetlb_folio(new_folio);
 		/*
 		 * Ref count on new_folio is already zero as it was dropped
 		 * earlier.  It can be directly added to the pool free list.
@@ -2998,6 +3057,8 @@ struct folio *alloc_hugetlb_folio(struct vm_area_struct *vma,
 	}
 
 	spin_unlock_irq(&hugetlb_lock);
+
+	hpage_wait_zeroing(h, folio);
 
 	hugetlb_set_folio_subpool(folio, spool);
 
@@ -3257,6 +3318,7 @@ static void __init prep_and_add_bootmem_folios(struct hstate *h,
 		hugetlb_bootmem_init_migratetype(folio, h);
 		/* Subdivide locks to achieve better parallel performance */
 		spin_lock_irqsave(&hugetlb_lock, flags);
+		prep_new_hugetlb_folio(folio);
 		account_new_hugetlb_folio(h, folio);
 		enqueue_hugetlb_folio(h, folio);
 		spin_unlock_irqrestore(&hugetlb_lock, flags);
@@ -4190,6 +4252,42 @@ bool __init __attribute((weak)) arch_hugetlb_valid_size(unsigned long size)
 	return size == HPAGE_SIZE;
 }
 
+/*
+ * Zero a hugetlb page.
+ *
+ * The caller has already made sure that the page is not
+ * being actively zeroed out in the background.
+ *
+ * If it wasn't zeroed out, do it ourselves.
+ */
+void hugetlb_zero_folio(struct folio *folio, unsigned long address)
+{
+	if (!folio_test_hugetlb_zeroed(folio))
+		folio_zero_user(folio, address);
+
+	__folio_mark_uptodate(folio);
+}
+
+/*
+ * Once a page has been taken off the freelist, the new page owner
+ * must wait for the pre-zero thread to finish if it happens
+ * to be working on this page (which should be rare).
+ */
+static void hpage_wait_zeroing(struct hstate *h, struct folio *folio)
+{
+	if (!folio_test_hugetlb_zeroing(folio))
+		return;
+
+	spin_lock_irq(&hugetlb_lock);
+
+	wait_event_cmd(h->dqzero_wait[folio_nid(folio)],
+		       !folio_test_hugetlb_zeroing(folio),
+		       spin_unlock_irq(&hugetlb_lock),
+		       spin_lock_irq(&hugetlb_lock));
+
+	spin_unlock_irq(&hugetlb_lock);
+}
+
 void __init hugetlb_add_hstate(unsigned int order)
 {
 	struct hstate *h;
@@ -4205,8 +4303,10 @@ void __init hugetlb_add_hstate(unsigned int order)
 	__mutex_init(&h->resize_lock, "resize mutex", &h->resize_key);
 	h->order = order;
 	h->mask = ~(huge_page_size(h) - 1);
-	for (i = 0; i < MAX_NUMNODES; ++i)
+	for (i = 0; i < MAX_NUMNODES; ++i) {
 		INIT_LIST_HEAD(&h->hugepage_freelists[i]);
+		init_waitqueue_head(&h->dqzero_wait[i]);
+	}
 	INIT_LIST_HEAD(&h->hugepage_activelist);
 	snprintf(h->name, HSTATE_NAME_LEN, "hugepages-%lukB",
 					huge_page_size(h)/SZ_1K);
@@ -5788,8 +5888,7 @@ static vm_fault_t hugetlb_no_page(struct address_space *mapping,
 				ret = 0;
 			goto out;
 		}
-		folio_zero_user(folio, vmf->real_address);
-		__folio_mark_uptodate(folio);
+		hugetlb_zero_folio(folio, vmf->address);
 		new_folio = true;
 
 		if (vma->vm_flags & VM_MAYSHARE) {

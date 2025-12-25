@@ -590,6 +590,17 @@ hugetlb_get_unmapped_area(struct file *file, unsigned long addr,
  * HPG_vmemmap_optimized - Set when the vmemmap pages of the page are freed.
  * HPG_raw_hwp_unreliable - Set when the hugetlb page has a hwpoison sub-page
  *     that is not tracked by raw_hwp_page list.
+ * HPG_zeroed - page was pre-zeroed.
+ *	Synchronization: hugetlb_lock held when set by pre-zero thread.
+ *	Only valid to read outside hugetlb_lock once the page is off
+ *	the freelist, and HPG_zeroing is clear. Always cleared when a
+ *	page is put (back) on the freelist.
+ * HPG_zeroing - page is being zeroed by the pre-zero thread.
+ *	Synchronization: set and cleared by the pre-zero thread with
+ *	hugetlb_lock held. Access by others is read-only. Once the page
+ *	is off the freelist, this can only change from set -> clear,
+ *	which the new page owner must wait for. Always cleared
+ *	when a page is put (back) on the freelist.
  */
 enum hugetlb_page_flags {
 	HPG_restore_reserve = 0,
@@ -599,6 +610,8 @@ enum hugetlb_page_flags {
 	HPG_vmemmap_optimized,
 	HPG_raw_hwp_unreliable,
 	HPG_cma,
+	HPG_zeroed,
+	HPG_zeroing,
 	__NR_HPAGEFLAGS,
 };
 
@@ -659,6 +672,8 @@ HPAGEFLAG(Freed, freed)
 HPAGEFLAG(VmemmapOptimized, vmemmap_optimized)
 HPAGEFLAG(RawHwpUnreliable, raw_hwp_unreliable)
 HPAGEFLAG(Cma, cma)
+HPAGEFLAG(Zeroed, zeroed)
+HPAGEFLAG(Zeroing, zeroing)
 
 #ifdef CONFIG_HUGETLB_PAGE
 
@@ -684,6 +699,12 @@ struct hstate {
 	unsigned int nr_huge_pages_node[MAX_NUMNODES];
 	unsigned int free_huge_pages_node[MAX_NUMNODES];
 	unsigned int surplus_huge_pages_node[MAX_NUMNODES];
+
+	unsigned int free_huge_pages_zero_node[MAX_NUMNODES];
+
+	/* Queue to wait for a hugetlb folio that is being prezeroed */
+	wait_queue_head_t dqzero_wait[MAX_NUMNODES];
+
 	char name[HSTATE_NAME_LEN];
 };
 
@@ -717,6 +738,7 @@ int hugetlb_add_to_page_cache(struct folio *folio, struct address_space *mapping
 			pgoff_t idx);
 void restore_reserve_on_error(struct hstate *h, struct vm_area_struct *vma,
 				unsigned long address, struct folio *folio);
+void hugetlb_zero_folio(struct folio *folio, unsigned long address);
 
 /* arch callback */
 int __init __alloc_bootmem_huge_page(struct hstate *h, int nid);
@@ -1308,6 +1330,10 @@ static inline void hugetlb_bootmem_alloc(void)
 static inline bool hugetlb_bootmem_allocated(void)
 {
 	return false;
+}
+
+static inline void hugetlb_zero_folio(struct folio *folio, unsigned long address)
+{
 }
 #endif	/* CONFIG_HUGETLB_PAGE */
 
