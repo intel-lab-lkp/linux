@@ -410,7 +410,7 @@ static int tc3589x_probe(struct i2c_client *i2c)
 	if (ret)
 		return ret;
 
-	ret = request_threaded_irq(tc3589x->i2c->irq, NULL, tc3589x_irq,
+	ret = devm_request_threaded_irq(tc3589x->dev, tc3589x->i2c->irq, NULL, tc3589x_irq,
 				   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 				   "tc3589x", tc3589x);
 	if (ret) {
