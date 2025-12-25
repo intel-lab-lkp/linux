@@ -1396,7 +1396,7 @@ xfs_fs_parse_param(
 		return 0;
 	case Opt_allocsize:
 		v = memparse(param->string, &end);
-		if (*end != 0)
+		if (*end != 0 || !is_power_of_2(v))
 			return -EINVAL;
 		if (v > INT_MAX)
 			return -ERANGE;
