@@ -165,8 +165,8 @@ struct linelock {
 	u8 l2linesize;		/* 1: log2 of linesize */
 	/* (8) */
 
-	struct lv lv[20];	/* 40: */
-};				/* (48) */
+	struct lv lv[TLOCKLONG];	/* 56: */
+};				/* (64) */
 
 #define dt_lock	linelock
 
