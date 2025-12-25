@@ -775,6 +775,7 @@ EXPORT_SYMBOL_GPL(wbt_enable_default);
 void wbt_init_enable_default(struct gendisk *disk)
 {
 	struct request_queue *q = disk->queue;
+	unsigned int memflags;
 	struct rq_wb *rwb;
 
 	if (!__wbt_enable_default(disk))
@@ -784,10 +785,13 @@ void wbt_init_enable_default(struct gendisk *disk)
 	if (WARN_ON_ONCE(!rwb))
 		return;
 
+	memflags = blk_mq_freeze_queue(q);
 	if (WARN_ON_ONCE(wbt_init(disk, rwb))) {
+		blk_mq_unfreeze_queue(q, memflags);
 		wbt_free(rwb);
 		return;
 	}
+	blk_mq_unfreeze_queue(q, memflags);
 
 	mutex_lock(&q->debugfs_mutex);
 	blk_mq_debugfs_register_rq_qos(q);
@@ -962,7 +966,7 @@ static int wbt_init(struct gendisk *disk, struct rq_wb *rwb)
 	 * Assign rwb and add the stats callback.
 	 */
 	mutex_lock(&q->rq_qos_mutex);
-	ret = rq_qos_add(&rwb->rqos, disk, RQ_QOS_WBT, &wbt_rqos_ops);
+	ret = rq_qos_add_frozen(&rwb->rqos, disk, RQ_QOS_WBT, &wbt_rqos_ops);
 	mutex_unlock(&q->rq_qos_mutex);
 	if (ret)
 		return ret;
