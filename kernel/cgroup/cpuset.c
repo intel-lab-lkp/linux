@@ -2311,15 +2311,8 @@ static int cpus_allowed_validate_change(struct cpuset *cs, struct cpuset *trialc
 static void partition_cpus_change(struct cpuset *cs, struct cpuset *trialcs,
 					struct tmpmasks *tmp)
 {
-	enum prs_errcode prs_err;
-
 	if (cs_is_member(cs))
 		return;
-
-	prs_err = validate_partition(cs, trialcs->partition_root_state,
-			trialcs->effective_xcpus, trialcs->effective_xcpus, NULL);
-	if (prs_err)
-		trialcs->prs_err = prs_err;
 
 	if (is_remote_partition(cs)) {
 		if (trialcs->prs_err)
