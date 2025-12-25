@@ -1797,16 +1797,6 @@ static int local_partition_enable(struct cpuset *cs,
 	WARN_ON_ONCE(is_remote_partition(cs));	/* For local partition only */
 
 	/*
-	 * The parent must be a partition root.
-	 * The new cpumask, if present, or the current cpus_allowed must
-	 * not be empty.
-	 */
-	if (!is_partition_valid(parent)) {
-		return is_partition_invalid(parent)
-			? PERR_INVPARENT : PERR_NOTPART;
-	}
-
-	/*
 	 * Need to call compute_excpus() in case
 	 * exclusive_cpus not set. Sibling conflict should only happen
 	 * if exclusive_cpus isn't set.
@@ -1814,7 +1804,7 @@ static int local_partition_enable(struct cpuset *cs,
 	if (compute_excpus(cs, tmp->new_cpus))
 		WARN_ON_ONCE(!cpumask_empty(cs->exclusive_cpus));
 
-	err = validate_partition(cs, new_prs, tmp->new_cpus, tmp->new_cpus, NULL);
+	err = validate_local_partition(cs, new_prs, tmp->new_cpus, false, NULL);
 	if (err)
 		return err;
 
