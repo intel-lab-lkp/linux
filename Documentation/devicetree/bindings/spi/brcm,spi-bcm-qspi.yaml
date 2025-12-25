@@ -57,7 +57,7 @@ properties:
   reg-names:
     minItems: 1
     items:
-      - const: mspi
+      - enum: [ hif_mspi, mspi ]
       - const: bspi
       - enum: [ intr_regs, intr_status_reg, cs_reg ]
       - enum: [ intr_regs, intr_status_reg, cs_reg ]
