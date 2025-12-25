@@ -175,15 +175,6 @@ static inline bool cs_is_member(const struct cpuset *cs)
 }
 
 /*
- * Callers should hold callback_lock to modify partition_root_state.
- */
-static inline void make_partition_invalid(struct cpuset *cs)
-{
-	if (cs->partition_root_state > 0)
-		cs->partition_root_state = -cs->partition_root_state;
-}
-
-/*
  * Send notification event of whenever partition_root_state changes.
  */
 static inline void notify_partition_change(struct cpuset *cs, int old_prs)
@@ -1960,6 +1951,7 @@ static void compute_partition_effective_cpumask(struct cpuset *cs,
 	struct cgroup_subsys_state *css;
 	struct cpuset *child;
 	bool populated = partition_is_populated(cs, NULL);
+	enum prs_errcode prs_err;
 
 	/*
 	 * Check child partition roots to see if they should be
@@ -1982,24 +1974,17 @@ static void compute_partition_effective_cpumask(struct cpuset *cs,
 		 * partition root.
 		 */
 		WARN_ON_ONCE(is_remote_partition(child));
-		child->prs_err = 0;
+		prs_err = 0;
 		if (!cpumask_subset(child->effective_xcpus,
 				    cs->effective_xcpus))
-			child->prs_err = PERR_INVCPUS;
+			prs_err = PERR_INVCPUS;
 		else if (populated &&
 			 cpumask_subset(new_ecpus, child->effective_xcpus))
-			child->prs_err = PERR_NOCPUS;
+			prs_err = PERR_NOCPUS;
 
-		if (child->prs_err) {
-			int old_prs = child->partition_root_state;
-
-			/*
-			 * Invalidate child partition
-			 */
-			spin_lock_irq(&callback_lock);
-			make_partition_invalid(child);
-			spin_unlock_irq(&callback_lock);
-			notify_partition_change(child, old_prs);
+		if (prs_err) {
+			partition_disable(child, cs, -child->partition_root_state,
+					  prs_err);
 			continue;
 		}
 		cpumask_andnot(new_ecpus, new_ecpus,
