@@ -74,13 +74,20 @@ static int vhci_flush(struct hci_dev *hdev)
 static int vhci_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 {
 	struct vhci_data *data = hci_get_drvdata(hdev);
+	struct sk_buff *nskb;
 
-	memcpy(skb_push(skb, 1), &hci_skb_pkt_type(skb), 1);
+	nskb = skb_clone(skb, GFP_ATOMIC);
+	if (!nskb)
+		return -ENOMEM;
 
-	skb_queue_tail(&data->readq, skb);
+	memcpy(skb_push(nskb, 1), &hci_skb_pkt_type(skb), 1);
+
+	skb_queue_tail(&data->readq, nskb);
 
 	if (atomic_read(&data->initialized))
 		wake_up_interruptible(&data->read_wait);
+
+	dev_consume_skb_any(skb);
 	return 0;
 }
 
