@@ -91,6 +91,8 @@ class JobserverExec:
             while True:
                 try:
                     slot = os.read(self.reader, 8)
+                    if not slot or any(c != b'+'[0] for c in slot):
+                        raise ValueError("empty or unexpected token from jobserver")
                     self.jobs += slot
                 except (OSError, IOError) as e:
                     if e.errno == errno.EWOULDBLOCK:
