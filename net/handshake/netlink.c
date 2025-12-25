@@ -124,6 +124,8 @@ int handshake_nl_accept_doit(struct sk_buff *skb, struct genl_info *info)
 		fd_publish(fdf);
 		return 0;
 	}
+	else
+		goto out_status;
 
 out_complete:
 	handshake_complete(req, -EIO, NULL);
