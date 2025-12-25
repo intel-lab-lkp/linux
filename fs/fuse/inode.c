@@ -937,6 +937,11 @@ static int fuse_show_options(struct seq_file *m, struct dentry *root)
 		seq_puts(m, ",dax=inode");
 #endif
 
+#ifdef CONFIG_FUSE_IO_URING
+	if (fc->io_uring)
+		seq_puts(m, ",io_uring");
+#endif
+
 	return 0;
 }
 
