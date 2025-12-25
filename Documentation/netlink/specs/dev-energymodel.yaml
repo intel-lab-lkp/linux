@@ -48,6 +48,11 @@ attribute-sets:
       Information on all the performance domains.
     attributes:
       -
+        name: perf-domain-id
+        type: u32
+        doc: >-
+          A unique ID number for each performance domain.
+      -
         name: perf-domain
         type: nest
         nested-attributes: perf-domain
@@ -136,6 +141,13 @@ operations:
       attribute-set: perf-domains
       doc: Get the list of information for all performance domains.
       do:
+        request:
+          attributes:
+            - perf-domain-id
+        reply:
+          attributes:
+            - perf-domain
+      dump:
         reply:
           attributes:
             - perf-domain

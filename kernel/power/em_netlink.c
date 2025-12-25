@@ -18,6 +18,13 @@
 #include "em_netlink_autogen.h"
 
 /*************************** Command encoding ********************************/
+struct dump_ctx {
+	int idx;
+	int start;
+	struct sk_buff *skb;
+	struct netlink_callback *cb;
+};
+
 static int __em_nl_get_pd_size(struct em_perf_domain *pd, void *data)
 {
 	int nr_cpus, msg_sz, cpus_sz;
@@ -76,16 +83,44 @@ out_cancel_nest:
 	return -EMSGSIZE;
 }
 
+static int __em_nl_get_pd_for_dump(struct em_perf_domain *pd, void *data)
+{
+	const struct genl_info *info;
+	struct dump_ctx *ctx = data;
+	void *hdr;
+	int ret;
+
+	if (ctx->idx++ < ctx->start)
+		return 0;
+
+	info = genl_info_dump(ctx->cb);
+	hdr = genlmsg_iput(ctx->skb, info);
+	if (!hdr) {
+		genlmsg_cancel(ctx->skb, hdr);
+		return -EMSGSIZE;
+	}
+
+	ret = __em_nl_get_pd(pd, ctx->skb);
+	genlmsg_end(ctx->skb, hdr);
+	return ret;
+}
+
 int dev_energymodel_nl_get_perf_domains_doit(struct sk_buff *skb,
 					      struct genl_info *info)
 {
+	int id, ret = -EMSGSIZE, msg_sz = 0;
+	int cmd = info->genlhdr->cmd;
+	struct em_perf_domain *pd;
 	struct sk_buff *msg;
 	void *hdr;
-	int cmd = info->genlhdr->cmd;
-	int ret = -EMSGSIZE, msg_sz = 0;
 
-	for_each_em_perf_domain(__em_nl_get_pd_size, &msg_sz);
+	if (!info->attrs[DEV_ENERGYMODEL_A_PERF_DOMAINS_PERF_DOMAIN_ID])
+		return -EINVAL;
 
+	id = nla_get_u32(info->attrs[DEV_ENERGYMODEL_A_PERF_DOMAINS_PERF_DOMAIN_ID]);
+	pd = em_perf_domain_get_by_id(id);
+
+	__em_nl_get_pd_size(pd, &msg_sz);
 	msg = genlmsg_new(msg_sz, GFP_KERNEL);
 	if (!msg)
 		return -ENOMEM;
@@ -94,10 +129,9 @@ int dev_energymodel_nl_get_perf_domains_doit(struct sk_buff *skb,
 	if (!hdr)
 		goto out_free_msg;
 
-	ret = for_each_em_perf_domain(__em_nl_get_pd, msg);
+	ret = __em_nl_get_pd(pd, msg);
 	if (ret)
 		goto out_cancel_msg;
-
 	genlmsg_end(msg, hdr);
 
 	return genlmsg_reply(msg, info);
@@ -106,8 +140,20 @@ out_cancel_msg:
 	genlmsg_cancel(msg, hdr);
 out_free_msg:
 	nlmsg_free(msg);
-
 	return ret;
+}
+
+int dev_energymodel_nl_get_perf_domains_dumpit(struct sk_buff *skb,
+						struct netlink_callback *cb)
+{
+	struct dump_ctx ctx = {
+		.idx = 0,
+		.start = cb->args[0],
+		.skb = skb,
+		.cb = cb,
+	};
+
+	return for_each_em_perf_domain(__em_nl_get_pd_for_dump, &ctx);
 }
 
 static struct em_perf_domain *__em_nl_get_pd_table_id(struct nlattr **attrs)
