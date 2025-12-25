@@ -368,13 +368,14 @@ static int pruss_clk_mux_setup(struct pruss *pruss, struct clk *clk_mux,
 				       clk_mux_np);
 	if (ret) {
 		dev_err(dev, "failed to add clkmux free action %d", ret);
-		goto put_clk_mux_np;
+		goto ret_error;
 	}
 
 	return 0;
 
 put_clk_mux_np:
 	of_node_put(clk_mux_np);
+ret_error:
 	return ret;
 }
 
