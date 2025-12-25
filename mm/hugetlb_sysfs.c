@@ -352,6 +352,125 @@ struct node_hstate {
 };
 static struct node_hstate node_hstates[MAX_NUMNODES];
 
+static ssize_t zeroable_hugepages_show(struct kobject *kobj,
+					struct kobj_attribute *attr, char *buf)
+{
+	struct hstate *h;
+	unsigned long free_huge_pages_zero;
+	int nid;
+
+	h = kobj_to_hstate(kobj, &nid);
+	if (WARN_ON(nid == NUMA_NO_NODE))
+		return -EPERM;
+
+	free_huge_pages_zero = h->free_huge_pages_node[nid] -
+			       h->free_huge_pages_zero_node[nid];
+
+	return sprintf(buf, "%lu\n", free_huge_pages_zero);
+}
+
+static inline bool zero_should_abort(struct hstate *h, int nid)
+{
+	return (h->free_huge_pages_zero_node[nid] ==
+		h->free_huge_pages_node[nid]) ||
+		list_empty(&h->hugepage_freelists[nid]);
+}
+
+static void zero_free_hugepages_nid(struct hstate *h,
+				   int nid, unsigned int nr_zero)
+{
+	struct list_head *freelist = &h->hugepage_freelists[nid];
+	unsigned int nr_zerod = 0;
+	struct folio *folio;
+
+	if (zero_should_abort(h, nid))
+		return;
+
+	spin_lock_irq(&hugetlb_lock);
+
+	while (nr_zerod < nr_zero) {
+
+		if (zero_should_abort(h, nid) || fatal_signal_pending(current))
+			break;
+
+		freelist = freelist->prev;
+		if (unlikely(list_is_head(freelist, &h->hugepage_freelists[nid])))
+			break;
+		folio = list_entry(freelist, struct folio, lru);
+
+		if (folio_test_hugetlb_zeroed(folio) ||
+		    folio_test_hugetlb_zeroing(folio))
+			continue;
+
+		folio_set_hugetlb_zeroing(folio);
+
+		/*
+		 * Incrementing this here is a bit of a fib, since
+		 * the page hasn't been cleared yet (it will be done
+		 * immediately after dropping the lock below). But
+		 * it keeps the count consistent with the overall
+		 * free count in case the page gets taken off the
+		 * freelist while we're working on it.
+		 */
+		h->free_huge_pages_zero_node[nid]++;
+		spin_unlock_irq(&hugetlb_lock);
+
+		/*
+		 * HWPoison pages may show up on the freelist.
+		 * Don't try to zero it out, but do set the flag
+		 * and counts, so that we don't consider it again.
+		 */
+		if (!folio_test_hwpoison(folio))
+			folio_zero_user(folio, 0);
+
+		cond_resched();
+
+		spin_lock_irq(&hugetlb_lock);
+		folio_set_hugetlb_zeroed(folio);
+		folio_clear_hugetlb_zeroing(folio);
+
+		/*
+		 * If the page is still on the free list, move
+		 * it to the head.
+		 */
+		if (folio_test_hugetlb_freed(folio))
+			list_move(&folio->lru, &h->hugepage_freelists[nid]);
+
+		/*
+		 * If someone was waiting for the zero to
+		 * finish, wake them up.
+		 */
+		if (waitqueue_active(&h->dqzero_wait[nid]))
+			wake_up(&h->dqzero_wait[nid]);
+		nr_zerod++;
+		freelist = &h->hugepage_freelists[nid];
+	}
+	spin_unlock_irq(&hugetlb_lock);
+}
+
+static ssize_t zeroable_hugepages_store(struct kobject *kobj,
+	       struct kobj_attribute *attr, const char *buf, size_t len)
+{
+	unsigned int nr_zero;
+	struct hstate *h;
+	int err;
+	int nid;
+
+	if (!strcmp(buf, "max") || !strcmp(buf, "max\n")) {
+		nr_zero = UINT_MAX;
+	} else {
+		err = kstrtouint(buf, 10, &nr_zero);
+		if (err)
+			return err;
+	}
+	h = kobj_to_hstate(kobj, &nid);
+
+	zero_free_hugepages_nid(h, nid, nr_zero);
+
+	return len;
+}
+HSTATE_ATTR(zeroable_hugepages);
+
 /*
  * A subset of global hstate attributes for node devices
  */
@@ -359,6 +478,7 @@ static struct attribute *per_node_hstate_attrs[] = {
 	&nr_hugepages_attr.attr,
 	&free_hugepages_attr.attr,
 	&surplus_hugepages_attr.attr,
+	&zeroable_hugepages_attr.attr,
 	NULL,
 };
 
