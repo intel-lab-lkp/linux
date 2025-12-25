@@ -338,6 +338,10 @@ static int hugetlb_sysfs_add_hstate(struct hstate *h, struct kobject *parent,
 #ifdef CONFIG_NUMA
 static bool hugetlb_sysfs_initialized __ro_after_init;
 
+struct node_hstate_item {
+	struct kobject *hstate_kobj;
+};
+
 /*
  * node_hstate/s - associate per node hstate attributes, via their kobjects,
  * with node devices in node_devices[] using a parallel array.  The array
@@ -347,7 +351,7 @@ static bool hugetlb_sysfs_initialized __ro_after_init;
  */
 struct node_hstate {
 	struct kobject		*hugepages_kobj;
-	struct kobject		*hstate_kobjs[HUGE_MAX_HSTATE];
+	struct node_hstate_item items[HUGE_MAX_HSTATE];
 };
 static struct node_hstate node_hstates[MAX_NUMNODES];
 
@@ -497,7 +501,7 @@ static struct hstate *kobj_to_node_hstate(struct kobject *kobj, int *nidp)
 		struct node_hstate *nhs = &node_hstates[nid];
 		int i;
 		for (i = 0; i < HUGE_MAX_HSTATE; i++)
-			if (nhs->hstate_kobjs[i] == kobj) {
+			if (nhs->items[i].hstate_kobj == kobj) {
 				if (nidp)
 					*nidp = nid;
 				return &hstates[i];
@@ -522,7 +526,7 @@ void hugetlb_unregister_node(struct node *node)
 
 	for_each_hstate(h) {
 		int idx = hstate_index(h);
-		struct kobject *hstate_kobj = nhs->hstate_kobjs[idx];
+		struct kobject *hstate_kobj = nhs->items[idx].hstate_kobj;
 
 		if (!hstate_kobj)
 			continue;
@@ -530,7 +534,7 @@ void hugetlb_unregister_node(struct node *node)
 			sysfs_remove_group(hstate_kobj, &hstate_demote_attr_group);
 		sysfs_remove_group(hstate_kobj, &per_node_hstate_attr_group);
 		kobject_put(hstate_kobj);
-		nhs->hstate_kobjs[idx] = NULL;
+		nhs->items[idx].hstate_kobj = NULL;
 	}
 
 	kobject_put(nhs->hugepages_kobj);
@@ -561,7 +565,7 @@ void hugetlb_register_node(struct node *node)
 
 	for_each_hstate(h) {
 		err = hugetlb_sysfs_add_hstate(h, nhs->hugepages_kobj,
-				&nhs->hstate_kobjs[hstate_index(h)],
+				&nhs->items[hstate_index(h)].hstate_kobj,
 				&per_node_hstate_attr_group);
 		if (err) {
 			pr_err("HugeTLB: Unable to add hstate %s for node %d\n",
