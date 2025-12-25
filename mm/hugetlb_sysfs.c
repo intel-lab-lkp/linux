@@ -304,31 +304,30 @@ static const struct attribute_group hstate_demote_attr_group = {
 };
 
 static int hugetlb_sysfs_add_hstate(struct hstate *h, struct kobject *parent,
-				    struct kobject **hstate_kobjs,
+				    struct kobject **hstate_kobj,
 				    const struct attribute_group *hstate_attr_group)
 {
 	int retval;
-	int hi = hstate_index(h);
 
-	hstate_kobjs[hi] = kobject_create_and_add(h->name, parent);
-	if (!hstate_kobjs[hi])
+	*hstate_kobj = kobject_create_and_add(h->name, parent);
+	if (!*hstate_kobj)
 		return -ENOMEM;
 
-	retval = sysfs_create_group(hstate_kobjs[hi], hstate_attr_group);
+	retval = sysfs_create_group(*hstate_kobj, hstate_attr_group);
 	if (retval) {
-		kobject_put(hstate_kobjs[hi]);
-		hstate_kobjs[hi] = NULL;
+		kobject_put(*hstate_kobj);
+		*hstate_kobj = NULL;
 		return retval;
 	}
 
 	if (h->demote_order) {
-		retval = sysfs_create_group(hstate_kobjs[hi],
+		retval = sysfs_create_group(*hstate_kobj,
 					    &hstate_demote_attr_group);
 		if (retval) {
 			pr_warn("HugeTLB unable to create demote interfaces for %s\n", h->name);
-			sysfs_remove_group(hstate_kobjs[hi], hstate_attr_group);
-			kobject_put(hstate_kobjs[hi]);
-			hstate_kobjs[hi] = NULL;
+			sysfs_remove_group(*hstate_kobj, hstate_attr_group);
+			kobject_put(*hstate_kobj);
+			*hstate_kobj = NULL;
 			return retval;
 		}
 	}
@@ -562,8 +561,8 @@ void hugetlb_register_node(struct node *node)
 
 	for_each_hstate(h) {
 		err = hugetlb_sysfs_add_hstate(h, nhs->hugepages_kobj,
-						nhs->hstate_kobjs,
-						&per_node_hstate_attr_group);
+				&nhs->hstate_kobjs[hstate_index(h)],
+				&per_node_hstate_attr_group);
 		if (err) {
 			pr_err("HugeTLB: Unable to add hstate %s for node %d\n",
 				h->name, node->dev.id);
@@ -610,7 +609,7 @@ void __init hugetlb_sysfs_init(void)
 
 	for_each_hstate(h) {
 		err = hugetlb_sysfs_add_hstate(h, hugepages_kobj,
-					 hstate_kobjs, &hstate_attr_group);
+			&hstate_kobjs[hstate_index(h)], &hstate_attr_group);
 		if (err)
 			pr_err("HugeTLB: Unable to add hstate %s\n", h->name);
 	}
