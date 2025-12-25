@@ -2681,10 +2681,11 @@ __poll_t fuse_file_poll(struct file *file, poll_table *wait)
 	FUSE_ARGS(args);
 	int err;
 
-	if (fm->fc->no_poll)
-		return DEFAULT_POLLMASK;
-
 	poll_wait(file, &ff->poll_wait, wait);
+
+	if (fm->fc->no_poll)
+		goto no_poll;
+
 	inarg.events = mangle_poll(poll_requested_events(wait));
 
 	/*
@@ -2710,9 +2711,13 @@ __poll_t fuse_file_poll(struct file *file, poll_table *wait)
 		return demangle_poll(outarg.revents);
 	if (err == -ENOSYS) {
 		fm->fc->no_poll = 1;
-		return DEFAULT_POLLMASK;
+		goto no_poll;
 	}
 	return EPOLLERR;
+
+no_poll:
+	wake_up_interruptible_sync(&ff->poll_wait);
+	return DEFAULT_POLLMASK;
 }
 EXPORT_SYMBOL_GPL(fuse_file_poll);
 
