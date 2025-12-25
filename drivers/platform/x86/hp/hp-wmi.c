@@ -31,6 +31,7 @@
 #include <linux/string.h>
 #include <linux/dmi.h>
 #include <linux/fixp-arith.h>
+#include <linux/workqueue.h>
 
 MODULE_AUTHOR("Matthew Garrett <mjg59@srcf.ucam.org>");
 MODULE_DESCRIPTION("HP laptop WMI driver");
@@ -365,7 +366,14 @@ struct hp_wmi_hwmon_priv {
 	u8 gpu_delta;
 	u8 mode;
 	u8 pwm;
+	struct delayed_work keep_alive_dwork;
 };
+
+/*
+ * 90s delay to prevent the firmware from resetting fan mode after fixed
+ * 120s timeout
+ */
+#define KEEP_ALIVE_DELAY	90
 
 #define RPM_TO_PWM(rpm, ctx) fixp_linear_interpolate(0, 0, \
 						(ctx)->max_rpm, U8_MAX, \
@@ -2073,6 +2081,7 @@ static int __init hp_wmi_bios_setup(struct platform_device *device)
 static void __exit hp_wmi_bios_remove(struct platform_device *device)
 {
 	int i;
+	struct hp_wmi_hwmon_priv *ctx;
 
 	for (i = 0; i < rfkill2_count; i++) {
 		rfkill_unregister(rfkill2[i].rfkill);
@@ -2091,6 +2100,10 @@ static void __exit hp_wmi_bios_remove(struct platform_device *device)
 		rfkill_unregister(wwan_rfkill);
 		rfkill_destroy(wwan_rfkill);
 	}
+
+	ctx = platform_get_drvdata(device);
+	if (ctx)
+		cancel_delayed_work_sync(&ctx->keep_alive_dwork);
 }
 
 static int hp_wmi_resume_handler(struct device *device)
@@ -2152,6 +2165,8 @@ static struct platform_driver hp_wmi_driver __refdata = {
 
 static int hp_wmi_hwmon_enforce_ctx(struct hp_wmi_hwmon_priv *ctx)
 {
+	int ret;
+
 	if (!ctx)
 		return -ENODEV;
 
@@ -2159,22 +2174,35 @@ static int hp_wmi_hwmon_enforce_ctx(struct hp_wmi_hwmon_priv *ctx)
 	case PWM_MODE_MAX:
 		if (is_victus_s_thermal_profile())
 			hp_wmi_get_fan_count_userdefine_trigger();
-		return hp_wmi_fan_speed_max_set(1);
+		ret = hp_wmi_fan_speed_max_set(1);
+		break;
 	case PWM_MODE_MANUAL:
 		if (!is_victus_s_thermal_profile())
 			return -EOPNOTSUPP;
-		return hp_wmi_fan_speed_set(ctx, PWM_TO_RPM(ctx->pwm, ctx));
+		ret = hp_wmi_fan_speed_set(ctx, PWM_TO_RPM(ctx->pwm, ctx));
+		break;
 	case PWM_MODE_AUTO:
 		if (is_victus_s_thermal_profile()) {
 			hp_wmi_get_fan_count_userdefine_trigger();
-			return hp_wmi_fan_speed_max_reset(ctx);
+			ret = hp_wmi_fan_speed_max_reset(ctx);
 		} else {
-			return hp_wmi_fan_speed_max_set(0);
+			ret = hp_wmi_fan_speed_max_set(0);
 		}
+		break;
 	default:
 		/* shouldn't happen */
 		return -EINVAL;
 	}
+
+	if (ret < 0)
+		return ret;
+
+	/* Reschedule keep-alive work based on the new state */
+	if (ctx->mode == PWM_MODE_MAX || ctx->mode == PWM_MODE_MANUAL)
+		schedule_delayed_work(&ctx->keep_alive_dwork,
+				      secs_to_jiffies(KEEP_ALIVE_DELAY));
+	else
+		cancel_delayed_work_sync(&ctx->keep_alive_dwork);
 
 	return 0;
 }
@@ -2321,6 +2349,20 @@ static const struct hwmon_chip_info chip_info = {
 	.info = info,
 };
 
+static void hp_wmi_hwmon_keep_alive_handler(struct work_struct *work)
+{
+	struct delayed_work *dwork;
+	struct hp_wmi_hwmon_priv *ctx;
+
+	dwork = to_delayed_work(work);
+	ctx = container_of(dwork, struct hp_wmi_hwmon_priv, keep_alive_dwork);
+	/*
+	 * Re-apply the current hwmon context settings.
+	 * NOTE: hp_wmi_hwmon_enforce_ctx will handle the re-scheduling.
+	 */
+	hp_wmi_hwmon_enforce_ctx(ctx);
+}
+
 static int hp_wmi_hwmon_setup_ctx(struct hp_wmi_hwmon_priv *ctx)
 {
 	u8 fan_data[128];
@@ -2377,6 +2419,8 @@ static int hp_wmi_hwmon_init(void)
 		return PTR_ERR(hwmon);
 	}
 
+	INIT_DELAYED_WORK(&ctx->keep_alive_dwork, hp_wmi_hwmon_keep_alive_handler);
+	platform_set_drvdata(hp_wmi_platform_dev, ctx);
 	hp_wmi_hwmon_enforce_ctx(ctx);
 
 	return 0;
