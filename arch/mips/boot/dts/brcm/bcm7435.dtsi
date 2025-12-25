@@ -503,15 +503,15 @@
 			clocks = <&upg_clk>;
 			reg = <0x41a920 0x4 0x41d400 0x188 0x41d200 0x50>;
 			reg-names = "cs_reg", "hif_mspi", "bspi";
-			interrupts = <0x0 0x1 0x2 0x3 0x4 0x5 0x6>;
+			interrupts = <0x5 0x6 0x0 0x1 0x2 0x3 0x4>;
 			interrupt-parent = <&spi_l2_intc>;
-			interrupt-names = "spi_lr_fullness_reached",
+			interrupt-names = "mspi_done",
+					  "mspi_halted",
+					  "spi_lr_fullness_reached",
 					  "spi_lr_session_aborted",
 					  "spi_lr_impatient",
 					  "spi_lr_session_done",
-					  "spi_lr_overread",
-					  "mspi_done",
-					  "mspi_halted";
+					  "spi_lr_overread";
 			status = "disabled";
 		};
 
