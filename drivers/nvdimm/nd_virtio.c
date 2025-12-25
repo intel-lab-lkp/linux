@@ -76,6 +76,7 @@ void virtio_pmem_mark_broken_and_drain(struct virtio_pmem *vpmem)
 		kref_put(&req->kref, virtio_pmem_req_release);
 	}
 }
+EXPORT_SYMBOL_GPL(virtio_pmem_mark_broken_and_drain);
 
  /* The interrupt handler */
 void virtio_pmem_host_ack(struct virtqueue *vq)
