@@ -17,6 +17,18 @@ static void virtio_pmem_req_release(struct kref *kref)
 	kfree(req);
 }
 
+static void virtio_pmem_signal_done(struct virtio_pmem_request *req)
+{
+	WRITE_ONCE(req->done, true);
+	wake_up(&req->host_acked);
+}
+
+static void virtio_pmem_complete_err(struct virtio_pmem_request *req)
+{
+	req->resp.ret = cpu_to_le32(1);
+	virtio_pmem_signal_done(req);
+}
+
 static void virtio_pmem_wake_one_waiter(struct virtio_pmem *vpmem)
 {
 	struct virtio_pmem_request *req_buf;
@@ -31,6 +43,40 @@ static void virtio_pmem_wake_one_waiter(struct virtio_pmem *vpmem)
 	wake_up(&req_buf->wq_buf);
 }
 
+static void virtio_pmem_wake_all_waiters(struct virtio_pmem *vpmem)
+{
+	struct virtio_pmem_request *req, *tmp;
+
+	list_for_each_entry_safe(req, tmp, &vpmem->req_list, list) {
+		WRITE_ONCE(req->wq_buf_avail, true);
+		wake_up(&req->wq_buf);
+		list_del_init(&req->list);
+	}
+}
+
+void virtio_pmem_mark_broken_and_drain(struct virtio_pmem *vpmem)
+{
+	struct virtio_pmem_request *req;
+	unsigned int len;
+
+	if (READ_ONCE(vpmem->broken))
+		return;
+
+	WRITE_ONCE(vpmem->broken, true);
+	dev_err_once(&vpmem->vdev->dev, "virtqueue is broken\n");
+	virtio_pmem_wake_all_waiters(vpmem);
+
+	while ((req = virtqueue_get_buf(vpmem->req_vq, &len)) != NULL) {
+		virtio_pmem_complete_err(req);
+		kref_put(&req->kref, virtio_pmem_req_release);
+	}
+
+	while ((req = virtqueue_detach_unused_buf(vpmem->req_vq)) != NULL) {
+		virtio_pmem_complete_err(req);
+		kref_put(&req->kref, virtio_pmem_req_release);
+	}
+}
+
  /* The interrupt handler */
 void virtio_pmem_host_ack(struct virtqueue *vq)
 {
@@ -42,8 +88,7 @@ void virtio_pmem_host_ack(struct virtqueue *vq)
 	spin_lock_irqsave(&vpmem->pmem_lock, flags);
 	while ((req_data = virtqueue_get_buf(vq, &len)) != NULL) {
 		virtio_pmem_wake_one_waiter(vpmem);
-		WRITE_ONCE(req_data->done, true);
-		wake_up(&req_data->host_acked);
+		virtio_pmem_signal_done(req_data);
 		kref_put(&req_data->kref, virtio_pmem_req_release);
 	}
 	spin_unlock_irqrestore(&vpmem->pmem_lock, flags);
@@ -68,6 +113,9 @@ static int virtio_pmem_flush(struct nd_region *nd_region)
 		dev_info(&vdev->dev, "virtio pmem device needs a reset\n");
 		return -EIO;
 	}
+
+	if (READ_ONCE(vpmem->broken))
+		return -EIO;
 
 	might_sleep();
 	req_data = kmalloc(sizeof(*req_data), GFP_KERNEL);
@@ -114,22 +162,35 @@ static int virtio_pmem_flush(struct nd_region *nd_region)
 		spin_unlock_irqrestore(&vpmem->pmem_lock, flags);
 
 		/* A host response results in "host_ack" getting called */
-		wait_event(req_data->wq_buf, READ_ONCE(req_data->wq_buf_avail));
+		wait_event(req_data->wq_buf, READ_ONCE(req_data->wq_buf_avail) ||
+					    READ_ONCE(vpmem->broken));
 		spin_lock_irqsave(&vpmem->pmem_lock, flags);
+
+		if (READ_ONCE(vpmem->broken))
+			break;
 	}
 
-	err1 = virtqueue_kick(vpmem->req_vq);
+	if (err == -EIO || virtqueue_is_broken(vpmem->req_vq))
+		virtio_pmem_mark_broken_and_drain(vpmem);
+
+	err1 = true;
+	if (!err && !READ_ONCE(vpmem->broken)) {
+		err1 = virtqueue_kick(vpmem->req_vq);
+		if (!err1)
+			virtio_pmem_mark_broken_and_drain(vpmem);
+	}
 	spin_unlock_irqrestore(&vpmem->pmem_lock, flags);
 	/*
 	 * virtqueue_add_sgs failed with error different than -ENOSPC, we can't
 	 * do anything about that.
 	 */
-	if (err || !err1) {
+	if (READ_ONCE(vpmem->broken) || err || !err1) {
 		dev_info(&vdev->dev, "failed to send command to virtio pmem device\n");
 		err = -EIO;
 	} else {
 		/* A host response results in "host_ack" getting called */
-		wait_event(req_data->host_acked, READ_ONCE(req_data->done));
+		wait_event(req_data->host_acked, READ_ONCE(req_data->done) ||
+					    READ_ONCE(vpmem->broken));
 		err = le32_to_cpu(req_data->resp.ret);
 	}
 
