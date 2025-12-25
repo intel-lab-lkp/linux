@@ -106,6 +106,12 @@ extern ssize_t __nr_hugepages_store_common(bool obey_mempolicy,
 					   struct hstate *h, int nid,
 					   unsigned long count, size_t len);
 
+#ifdef CONFIG_NUMA
+extern void do_zero_free_notify(struct hstate *h, int nid);
+#else
+static inline void do_zero_free_notify(struct hstate *h, int nid) {}
+#endif
+
 extern void hugetlb_sysfs_init(void) __init;
 
 #ifdef CONFIG_SYSCTL

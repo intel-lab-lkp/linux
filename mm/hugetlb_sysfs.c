@@ -340,6 +340,7 @@ static bool hugetlb_sysfs_initialized __ro_after_init;
 
 struct node_hstate_item {
 	struct kobject *hstate_kobj;
+	struct work_struct notify_work;
 };
 
 /*
@@ -354,6 +355,21 @@ struct node_hstate {
 	struct node_hstate_item items[HUGE_MAX_HSTATE];
 };
 static struct node_hstate node_hstates[MAX_NUMNODES];
+
+static void pre_zero_notify_fun(struct work_struct *work)
+{
+	struct node_hstate_item *item =
+		container_of(work, struct node_hstate_item, notify_work);
+
+	sysfs_notify(item->hstate_kobj, NULL, "zeroable_hugepages");
+}
+
+void do_zero_free_notify(struct hstate *h, int nid)
+{
+	struct node_hstate *nhs = &node_hstates[nid];
+
+	schedule_work(&nhs->items[hstate_index(h)].notify_work);
+}
 
 static ssize_t zeroable_hugepages_show(struct kobject *kobj,
 					struct kobj_attribute *attr, char *buf)
@@ -564,8 +580,11 @@ void hugetlb_register_node(struct node *node)
 		return;
 
 	for_each_hstate(h) {
+		int index = hstate_index(h);
+		struct node_hstate_item *item = &nhs->items[index];
+
 		err = hugetlb_sysfs_add_hstate(h, nhs->hugepages_kobj,
-				&nhs->items[hstate_index(h)].hstate_kobj,
+				&item->hstate_kobj,
 				&per_node_hstate_attr_group);
 		if (err) {
 			pr_err("HugeTLB: Unable to add hstate %s for node %d\n",
@@ -573,6 +592,7 @@ void hugetlb_register_node(struct node *node)
 			hugetlb_unregister_node(node);
 			break;
 		}
+		INIT_WORK(&item->notify_work, pre_zero_notify_fun);
 	}
 }
 

@@ -1868,6 +1868,7 @@ void free_huge_folio(struct folio *folio)
 		arch_clear_hugetlb_flags(folio);
 		enqueue_hugetlb_folio(h, folio);
 		spin_unlock_irqrestore(&hugetlb_lock, flags);
+		do_zero_free_notify(h, folio_nid(folio));
 	}
 }
 
@@ -1999,8 +2000,10 @@ static struct folio *alloc_fresh_hugetlb_folio(struct hstate *h,
 void prep_and_add_allocated_folios(struct hstate *h,
 				   struct list_head *folio_list)
 {
+	nodemask_t allocated_mask = NODE_MASK_NONE;
 	unsigned long flags;
 	struct folio *folio, *tmp_f;
+	int nid;
 
 	/* Send list for bulk vmemmap optimization processing */
 	hugetlb_vmemmap_optimize_folios(h, folio_list);
@@ -2010,8 +2013,12 @@ void prep_and_add_allocated_folios(struct hstate *h,
 	list_for_each_entry_safe(folio, tmp_f, folio_list, lru) {
 		prep_account_new_hugetlb_folio(h, folio);
 		enqueue_hugetlb_folio(h, folio);
+		node_set(folio_nid(folio), allocated_mask);
 	}
 	spin_unlock_irqrestore(&hugetlb_lock, flags);
+
+	for_each_node_mask(nid, allocated_mask)
+		do_zero_free_notify(h, nid);
 }
 
 /*
@@ -2383,6 +2390,8 @@ static int gather_surplus_pages(struct hstate *h, long delta)
 	long needed, allocated;
 	bool alloc_ok = true;
 	nodemask_t *mbind_nodemask, alloc_nodemask;
+	nodemask_t allocated_mask = NODE_MASK_NONE;
+	int nid;
 
 	mbind_nodemask = policy_mbind_nodemask(htlb_alloc_mask(h));
 	if (mbind_nodemask)
@@ -2455,9 +2464,12 @@ retry:
 			break;
 		/* Add the page to the hugetlb allocator */
 		enqueue_hugetlb_folio(h, folio);
+		node_set(folio_nid(folio), allocated_mask);
 	}
 free:
 	spin_unlock_irq(&hugetlb_lock);
+	for_each_node_mask(nid, allocated_mask)
+		do_zero_free_notify(h, nid);
 
 	/*
 	 * Free unnecessary surplus pages to the buddy allocator.
@@ -2841,6 +2853,7 @@ retry:
 		 * Folio has been replaced, we can safely free the old one.
 		 */
 		spin_unlock_irq(&hugetlb_lock);
+		do_zero_free_notify(h, folio_nid(new_folio));
 		update_and_free_hugetlb_folio(h, old_folio, false);
 	}
 
