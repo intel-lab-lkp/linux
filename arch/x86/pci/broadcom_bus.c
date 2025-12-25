@@ -27,6 +27,8 @@ static void __init cnb20le_res(u8 bus, u8 slot, u8 func)
 	fbus = read_pci_config_byte(bus, slot, func, 0x44);
 	lbus = read_pci_config_byte(bus, slot, func, 0x45);
 	info = alloc_pci_root_info(fbus, lbus, 0, 0);
+	if (!info)
+		return;
 
 	/*
 	 * Add the legacy IDE ports on bus 0
