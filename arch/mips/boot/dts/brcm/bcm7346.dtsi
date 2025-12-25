@@ -474,8 +474,8 @@
 			compatible = "brcm,spi-brcmstb-qspi",
 				     "brcm,spi-bcm-qspi";
 			clocks = <&upg_clk>;
-			reg = <0x410920 0x4 0x413200 0x188 0x413000 0x50>;
-			reg-names = "cs_reg", "hif_mspi", "bspi";
+			reg = <0x413200 0x188 0x413000 0x50 0x410920 0x4>;
+			reg-names = "hif_mspi", "bspi", "cs_reg";
 			interrupts = <0x5 0x6 0x0 0x1 0x2 0x3 0x4>;
 			interrupt-parent = <&spi_l2_intc>;
 			interrupt-names = "mspi_done",
