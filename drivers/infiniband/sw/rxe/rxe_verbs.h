@@ -222,7 +222,7 @@ struct rxe_resp_info {
 	/* SRQ only */
 	struct {
 		struct rxe_recv_wqe	wqe;
-		struct ib_sge		sge[RXE_MAX_SGE];
+		struct rxe_sge		sge[RXE_MAX_SGE];
 	} srq_wqe;
 
 	/* Responder resources. It's a circular list where the oldest
