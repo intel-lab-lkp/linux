@@ -390,8 +390,8 @@
 		qspi: spi@413000 {
 			#address-cells = <0x1>;
 			#size-cells = <0x0>;
-			compatible = "brcm,spi-bcm-qspi",
-				     "brcm,spi-brcmstb-qspi";
+			compatible = "brcm,spi-brcmstb-qspi",
+				     "brcm,spi-bcm-qspi";
 			clocks = <&upg_clk>;
 			reg = <0x410920 0x4 0x413200 0x188 0x413000 0x50>;
 			reg-names = "cs_reg", "hif_mspi", "bspi";
@@ -410,8 +410,8 @@
 		mspi: spi@408a00 {
 			#address-cells = <1>;
 			#size-cells = <0>;
-			compatible = "brcm,spi-bcm-qspi",
-				     "brcm,spi-brcmstb-mspi";
+			compatible = "brcm,spi-brcmstb-mspi",
+				     "brcm,spi-bcm-qspi";
 			clocks = <&upg_clk>;
 			reg = <0x408a00 0x180>;
 			reg-names = "mspi";
