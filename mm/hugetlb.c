@@ -1312,7 +1312,7 @@ static void enqueue_hugetlb_folio(struct hstate *h, struct folio *folio)
 	VM_BUG_ON_FOLIO(folio_ref_count(folio), folio);
 	VM_WARN_ON_FOLIO(folio_test_hugetlb_zeroing(folio), folio);
 
-	list_move(&folio->lru, &h->hugepage_freelists[nid]);
+	list_move_tail(&folio->lru, &h->hugepage_freelists[nid]);
 	h->free_huge_pages++;
 	h->free_huge_pages_node[nid]++;
 	prep_clear_zeroed(folio);
