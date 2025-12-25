@@ -324,7 +324,7 @@ static int autofs_fill_super(struct super_block *s, struct fs_context *fc)
 
 	root_inode = autofs_get_inode(s, S_IFDIR | 0755);
 	if (!root_inode)
-		return -ENOMEM;
+		goto nomem;
 
 	root_inode->i_uid = ctx->uid;
 	root_inode->i_gid = ctx->gid;
@@ -332,10 +332,9 @@ static int autofs_fill_super(struct super_block *s, struct fs_context *fc)
 	root_inode->i_op = &autofs_dir_inode_operations;
 
 	s->s_root = d_make_root(root_inode);
-	if (unlikely(!s->s_root)) {
-		autofs_free_ino(ino);
-		return -ENOMEM;
-	}
+	if (unlikely(!s->s_root))
+		goto nomem;
+
 	s->s_root->d_fsdata = ino;
 
 	if (ctx->pgrp_set) {
@@ -358,6 +357,10 @@ static int autofs_fill_super(struct super_block *s, struct fs_context *fc)
 
 	sbi->flags &= ~AUTOFS_SBI_CATATONIC;
 	return 0;
+
+nomem:
+	autofs_free_ino(ino);
+	return -ENOMEM;
 }
 
 /*
