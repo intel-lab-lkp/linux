@@ -787,7 +787,11 @@ static int load_image_and_restore(void)
  */
 int hibernate(void)
 {
+#ifdef CONFIG_SUSPEND
+	standby_state_t previous_standby;
+#endif
 	bool snapshot_test = false;
+	bool powered_down = false;
 	unsigned int sleep_flags;
 	int error;
 
@@ -815,6 +819,13 @@ int hibernate(void)
 	}
 
 	pr_info("hibernation entry\n");
+
+#if CONFIG_SUSPEND
+	/* Enter the standby screen off state in case userspace has not. */
+	previous_standby = pm_standby_get_state();
+	pm_standby_transition(PM_STANDBY_INACTIVE);
+#endif
+
 	pm_prepare_console();
 	error = pm_notifier_call_chain_robust(PM_HIBERNATION_PREPARE, PM_POST_HIBERNATION);
 	if (error)
@@ -867,10 +878,12 @@ int hibernate(void)
 		error = swsusp_write(flags);
 		swsusp_free();
 		if (!error) {
-			if (hibernation_mode == HIBERNATION_TEST_RESUME)
+			if (hibernation_mode == HIBERNATION_TEST_RESUME) {
 				snapshot_test = true;
-			else
+			} else {
+				powered_down = true;
 				power_down();
+			}
 		}
 		in_suspend = 0;
 		pm_restore_gfp_mask();
@@ -897,6 +910,18 @@ int hibernate(void)
  Notify:
 	pm_notifier_call_chain(PM_POST_HIBERNATION);
  Restore:
+#if CONFIG_SUSPEND
+	/*
+	 * If we resumed from S5, we are in the active standby state. However,
+	 * the kernel restored a stale value. Sync it. Otherwise, in e.g., the
+	 * case of a failed hibernation, transition to the previous value.
+	 */
+	if (powered_down)
+		pm_standby_set_state(PM_STANDBY_ACTIVE);
+	else
+		pm_standby_transition(previous_standby);
+#endif
+
 	pm_restore_console();
 	hibernate_release();
  Unlock:
