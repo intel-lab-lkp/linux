@@ -969,16 +969,21 @@ static int ext4_fc_flush_data(journal_t *journal)
 	struct super_block *sb = journal->j_private;
 	struct ext4_sb_info *sbi = EXT4_SB(sb);
 	struct ext4_inode_info *ei;
+	struct jbd2_inode *jinode;
 	int ret = 0;
 
 	list_for_each_entry(ei, &sbi->s_fc_q[FC_Q_MAIN], i_fc_list) {
-		ret = jbd2_submit_inode_data(journal, ei->jinode);
+		/* Pairs with smp_store_release() in ext4_inode_attach_jinode(). */
+		jinode = smp_load_acquire(&ei->jinode);
+		ret = jbd2_submit_inode_data(journal, jinode);
 		if (ret)
 			return ret;
 	}
 
 	list_for_each_entry(ei, &sbi->s_fc_q[FC_Q_MAIN], i_fc_list) {
-		ret = jbd2_wait_inode_data(journal, ei->jinode);
+		/* Pairs with smp_store_release() in ext4_inode_attach_jinode(). */
+		jinode = smp_load_acquire(&ei->jinode);
+		ret = jbd2_wait_inode_data(journal, jinode);
 		if (ret)
 			return ret;
 	}

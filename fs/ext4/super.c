@@ -1514,16 +1514,20 @@ static void destroy_inodecache(void)
 
 void ext4_clear_inode(struct inode *inode)
 {
+	struct jbd2_inode *jinode;
+
 	ext4_fc_del(inode);
 	invalidate_inode_buffers(inode);
 	clear_inode(inode);
 	ext4_discard_preallocations(inode);
 	ext4_es_remove_extent(inode, 0, EXT_MAX_BLOCKS);
 	dquot_drop(inode);
-	if (EXT4_I(inode)->jinode) {
+	/* Pairs with smp_store_release() in ext4_inode_attach_jinode(). */
+	jinode = smp_load_acquire(&EXT4_I(inode)->jinode);
+	if (jinode) {
 		jbd2_journal_release_jbd_inode(EXT4_JOURNAL(inode),
-					       EXT4_I(inode)->jinode);
-		jbd2_free_inode(EXT4_I(inode)->jinode);
+					       jinode);
+		jbd2_free_inode(jinode);
 		EXT4_I(inode)->jinode = NULL;
 	}
 	fscrypt_put_encryption_info(inode);
