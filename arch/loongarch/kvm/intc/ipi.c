@@ -459,6 +459,8 @@ static void kvm_ipi_destroy(struct kvm_device *dev)
 	ipi = kvm->arch.ipi;
 	kvm_io_bus_unregister_dev(kvm, KVM_IOCSR_BUS, &ipi->device);
 	kfree(ipi);
+	/* alloc by kvm_ioctl_create_device, free by .destroy */
+	kfree(dev);
 }
 
 static struct kvm_device_ops kvm_ipi_dev_ops = {
