@@ -98,7 +98,7 @@ out_clear_bit:
 		ret = ucsi->ops->read_cci(ucsi, cci);
 
 	if (!ret && ucsi->message_in_size > 0 &&
-	    (*cci & UCSI_CCI_COMMAND_COMPLETE))
+	    cci && (*cci & UCSI_CCI_COMMAND_COMPLETE))
 		ret = ucsi->ops->read_message_in(ucsi, ucsi->message_in,
 						 ucsi->message_in_size);
 
