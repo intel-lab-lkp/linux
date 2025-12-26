@@ -20,9 +20,14 @@ mod helpers;
 mod kunit;
 mod module;
 mod paste;
+mod transmute;
 mod vtable;
 
 use proc_macro::TokenStream;
+use syn::{
+    parse_macro_input,
+    DeriveInput, //
+};
 
 /// Declares a kernel module.
 ///
@@ -474,4 +479,62 @@ pub fn paste(input: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn kunit_tests(attr: TokenStream, ts: TokenStream) -> TokenStream {
     kunit::kunit_tests(attr, ts)
+}
+
+/// Implements `FromBytes` for a struct.
+///
+/// It will fail compilation if the struct you are deriving on cannot be determined to implement
+/// `FromBytes` safely. It may still fail for some types which would be safe to implement
+/// `FromBytes` for, in which case you will need to write the implementation and justification
+/// yourself.
+///
+/// Main reasons your type may be rejected:
+/// * Not a `struct`
+/// * One of the fields is not `FromBytes`
+///
+/// # Examples
+///
+/// ```
+/// #[derive(FromBytes)]
+/// #[repr(C)]
+/// struct Foo {
+///   x: u32,
+///   y: u16,
+///   z: u16,
+/// }
+/// ```
+#[proc_macro_derive(FromBytes)]
+pub fn derive_from_bytes(tokens: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(tokens as DeriveInput);
+    transmute::from_bytes(input).into()
+}
+
+/// Implements `AsBytes` for a struct.
+///
+/// It will fail compilation if the struct you are deriving on cannot be determined to implement
+/// `AsBytes` safely. It may still fail for some structures which would be safe to implement
+/// `AsBytes`, in which case you will need to write the implementation and justification
+/// yourself.
+///
+/// Main reasons your type may be rejected:
+/// * Not a `struct`
+/// * One of the fields is not `AsBytes`
+/// * Your struct has generic parameters
+/// * There is padding somewhere in your struct
+///
+/// # Examples
+///
+/// ```
+/// #[derive(AsBytes)]
+/// #[repr(C)]
+/// struct Foo {
+///   x: u32,
+///   y: u16,
+///   z: u16,
+/// }
+/// ```
+#[proc_macro_derive(AsBytes)]
+pub fn derive_as_bytes(tokens: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(tokens as DeriveInput);
+    transmute::as_bytes(input).into()
 }
