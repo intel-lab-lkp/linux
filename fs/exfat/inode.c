@@ -157,28 +157,26 @@ static int exfat_map_cluster(struct inode *inode, unsigned int clu_offset,
 				*clu += clu_offset;
 		}
 	} else if (ei->type == TYPE_FILE) {
-		unsigned int fclus = 0;
 		int err = exfat_get_cluster(inode, clu_offset,
-				&fclus, clu, &last_clu, 1);
+				clu, &last_clu);
 		if (err)
 			return -EIO;
-
-		clu_offset -= fclus;
 	} else {
+		unsigned int fclus = 0;
 		/* hint information */
 		if (clu_offset > 0 && ei->hint_bmap.off != EXFAT_EOF_CLUSTER &&
 		    ei->hint_bmap.off > 0 && clu_offset >= ei->hint_bmap.off) {
-			clu_offset -= ei->hint_bmap.off;
 			/* hint_bmap.clu should be valid */
 			WARN_ON(ei->hint_bmap.clu < 2);
+			fclus = ei->hint_bmap.off;
 			*clu = ei->hint_bmap.clu;
 		}
 
-		while (clu_offset > 0 && *clu != EXFAT_EOF_CLUSTER) {
+		while (fclus < clu_offset && *clu != EXFAT_EOF_CLUSTER) {
 			last_clu = *clu;
 			if (exfat_get_next_cluster(sb, clu))
 				return -EIO;
-			clu_offset--;
+			fclus++;
 		}
 	}
 

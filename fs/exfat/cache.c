@@ -234,8 +234,7 @@ static inline void cache_init(struct exfat_cache_id *cid,
 }
 
 int exfat_get_cluster(struct inode *inode, unsigned int cluster,
-		unsigned int *fclus, unsigned int *dclus,
-		unsigned int *last_dclus, int allow_eof)
+		unsigned int *dclus, unsigned int *last_dclus)
 {
 	struct super_block *sb = inode->i_sb;
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
@@ -243,7 +242,7 @@ int exfat_get_cluster(struct inode *inode, unsigned int cluster,
 	struct exfat_inode_info *ei = EXFAT_I(inode);
 	struct buffer_head *bh = NULL;
 	struct exfat_cache_id cid;
-	unsigned int content;
+	unsigned int content, fclus;
 
 	if (ei->start_clu == EXFAT_FREE_CLUSTER) {
 		exfat_fs_error(sb,
@@ -252,7 +251,7 @@ int exfat_get_cluster(struct inode *inode, unsigned int cluster,
 		return -EIO;
 	}
 
-	*fclus = 0;
+	fclus = 0;
 	*dclus = ei->start_clu;
 	*last_dclus = *dclus;
 
@@ -264,7 +263,7 @@ int exfat_get_cluster(struct inode *inode, unsigned int cluster,
 
 	cache_init(&cid, EXFAT_EOF_CLUSTER, EXFAT_EOF_CLUSTER);
 
-	if (exfat_cache_lookup(inode, cluster, &cid, fclus, dclus) ==
+	if (exfat_cache_lookup(inode, cluster, &cid, &fclus, dclus) ==
 			EXFAT_EOF_CLUSTER) {
 		/*
 		 * dummy, always not contiguous
@@ -276,15 +275,15 @@ int exfat_get_cluster(struct inode *inode, unsigned int cluster,
 			cid.nr_contig != 0);
 	}
 
-	if (*fclus == cluster)
+	if (fclus == cluster)
 		return 0;
 
-	while (*fclus < cluster) {
+	while (fclus < cluster) {
 		/* prevent the infinite loop of cluster chain */
-		if (*fclus > limit) {
+		if (fclus > limit) {
 			exfat_fs_error(sb,
 				"detected the cluster chain loop (i_pos %u)",
-				(*fclus));
+				fclus);
 			goto err;
 		}
 
@@ -293,21 +292,13 @@ int exfat_get_cluster(struct inode *inode, unsigned int cluster,
 
 		*last_dclus = *dclus;
 		*dclus = content;
-		(*fclus)++;
+		fclus++;
 
-		if (content == EXFAT_EOF_CLUSTER) {
-			if (!allow_eof) {
-				exfat_fs_error(sb,
-				       "invalid cluster chain (i_pos %u, last_clus 0x%08x is EOF)",
-				       *fclus, (*last_dclus));
-				goto err;
-			}
-
+		if (content == EXFAT_EOF_CLUSTER)
 			break;
-		}
 
 		if (!cache_contiguous(&cid, *dclus))
-			cache_init(&cid, *fclus, *dclus);
+			cache_init(&cid, fclus, *dclus);
 	}
 
 	brelse(bh);
