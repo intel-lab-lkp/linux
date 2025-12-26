@@ -513,6 +513,40 @@ static struct acpi_scan_handler lps0_handler = {
 	.attach = lps0_device_attach,
 };
 
+static u8 acpi_s2idle_get_standby_states(void)
+{
+	u8 states = 0;
+
+	if (!lps0_device_handle || sleep_no_lps0)
+		return 0;
+
+	if (lps0_dsm_func_mask_microsoft > 0) {
+		states |= BIT(PM_STANDBY_ACTIVE);
+		if (lps0_dsm_func_mask_microsoft &
+		    (1 << ACPI_LPS0_DISPLAY_OFF | 1 << ACPI_LPS0_DISPLAY_ON))
+			states |= BIT(PM_STANDBY_INACTIVE);
+		if (lps0_dsm_func_mask_microsoft &
+		    (1 << ACPI_LPS0_SLEEP_ENTRY | 1 << ACPI_LPS0_SLEEP_EXIT))
+			states |= BIT(PM_STANDBY_SLEEP);
+	}
+
+	if (lps0_dsm_func_mask > 0) {
+		states |= BIT(PM_STANDBY_ACTIVE);
+		if (acpi_s2idle_vendor_amd()) {
+			if (lps0_dsm_func_mask &
+			    (1 << ACPI_LPS0_DISPLAY_OFF_AMD |
+			     1 << ACPI_LPS0_DISPLAY_ON_AMD))
+				states |= BIT(PM_STANDBY_INACTIVE);
+		} else {
+			if (lps0_dsm_func_mask & (1 << ACPI_LPS0_DISPLAY_OFF |
+						  1 << ACPI_LPS0_DISPLAY_ON))
+				states |= BIT(PM_STANDBY_INACTIVE);
+		}
+	}
+
+	return states;
+}
+
 static int acpi_s2idle_begin_lps0(void)
 {
 	if (pm_debug_messages_on && !lpi_constraints_table) {
@@ -629,6 +663,7 @@ static void acpi_s2idle_restore_early_lps0(void)
 }
 
 static const struct platform_s2idle_ops acpi_s2idle_ops_lps0 = {
+	.get_standby_states = acpi_s2idle_get_standby_states,
 	.begin = acpi_s2idle_begin_lps0,
 	.prepare = acpi_s2idle_prepare,
 	.prepare_late = acpi_s2idle_prepare_late_lps0,
