@@ -72,14 +72,40 @@ void rxe_mr_init_dma(int access, struct rxe_mr *mr)
 	mr->ibmr.type = IB_MR_TYPE_DMA;
 }
 
+/*
+ * Convert iova to page_list index. The page_list stores pages of size
+ * PAGE_SIZE, but MRs can have different page sizes. This function
+ * handles the conversion for all cases:
+ *
+ * 1. mr->page_size > PAGE_SIZE:
+ *    The MR's iova may not be aligned to mr->page_size. We use the
+ *    aligned base (iova & page_mask) as reference, then calculate
+ *    which PAGE_SIZE sub-page the iova falls into.
+ *
+ * 2. mr->page_size <= PAGE_SIZE:
+ *    Use simple shift arithmetic since each page_list entry corresponds
+ *    to one or more MR pages.
+ *
+ * Example for mr->page_size=64K, PAGE_SIZE=4K, iova=0x11034:
+ *   base = iova & ~(64K-1) = 0x10000
+ *   index = (0x11034 - 0x10000) / 4K = 0x1034 / 0x1000 = 4
+ */
 static unsigned long rxe_mr_iova_to_index(struct rxe_mr *mr, u64 iova)
 {
-	return (iova >> mr->page_shift) - (mr->ibmr.iova >> mr->page_shift);
+	if (mr_page_size(mr) > PAGE_SIZE)
+		return (iova - (mr->ibmr.iova & mr->page_mask)) / PAGE_SIZE;
+	else
+		return (iova >> mr->page_shift) - (mr->ibmr.iova >> mr->page_shift);
 }
 
+/*
+ * Always return offset within a PAGE_SIZE page since page_list
+ * stores individual struct page pointers, each representing
+ * PAGE_SIZE of memory.
+ */
 static unsigned long rxe_mr_iova_to_page_offset(struct rxe_mr *mr, u64 iova)
 {
-	return iova & (mr_page_size(mr) - 1);
+	return iova & (PAGE_SIZE - 1);
 }
 
 static bool is_pmem_page(struct page *pg)
@@ -205,11 +231,40 @@ err1:
 	return err;
 }
 
+/*
+ * Split a large MR page (mr->page_size) into multiple PAGE_SIZE
+ * sub-pages and store them in page_list.
+ *
+ * Called when mr->page_size > PAGE_SIZE. Each call to rxe_set_page()
+ * represents one mr->page_size region, which we must split into
+ * (mr->page_size / PAGE_SIZE) individual pages.
+ */
+static int set_pages_per_mr(struct ib_mr *ibmr, u64 dma_addr)
+{
+	struct rxe_mr *mr = to_rmr(ibmr);
+	u32 page_size = mr_page_size(mr);
+	u64 addr = dma_addr & ~(u64)(page_size - 1);
+	u32 i, pages_per_mr = page_size / PAGE_SIZE;
+
+	for (i = 0; i < pages_per_mr; i++) {
+		struct page *sub_page =
+			ib_virt_dma_to_page(addr + i * PAGE_SIZE);
+		int err = xa_err(xa_store(&mr->page_list, mr->nbuf, sub_page,
+					  GFP_KERNEL));
+		if (err)
+			return err;
+
+		mr->nbuf++;
+	}
+	return 0;
+}
+
 static int rxe_set_page(struct ib_mr *ibmr, u64 dma_addr)
 {
 	struct rxe_mr *mr = to_rmr(ibmr);
 	struct page *page = ib_virt_dma_to_page(dma_addr);
 	bool persistent = !!(mr->access & IB_ACCESS_FLUSH_PERSISTENT);
+	u32 page_size = mr_page_size(mr);
 	int err;
 
 	if (persistent && !is_pmem_page(page)) {
@@ -217,9 +272,13 @@ static int rxe_set_page(struct ib_mr *ibmr, u64 dma_addr)
 		return -EINVAL;
 	}
 
-	if (unlikely(mr->nbuf == mr->num_buf))
+	if (unlikely(mr->nbuf >= mr->num_buf))
 		return -ENOMEM;
 
+	if (page_size > PAGE_SIZE)
+		return set_pages_per_mr(ibmr, dma_addr);
+
+	/* page_size <= PAGE_SIZE */
 	err = xa_err(xa_store(&mr->page_list, mr->nbuf, page, GFP_KERNEL));
 	if (err)
 		return err;
@@ -233,6 +292,18 @@ int rxe_map_mr_sg(struct ib_mr *ibmr, struct scatterlist *sgl,
 {
 	struct rxe_mr *mr = to_rmr(ibmr);
 	unsigned int page_size = mr_page_size(mr);
+
+	/*
+	 * Ensure page_size and PAGE_SIZE are compatible for mapping.
+	 * We require one to be a multiple of the other for correct
+	 * iova-to-page conversion.
+	 */
+	if (!IS_ALIGNED(page_size, PAGE_SIZE) &&
+	    !IS_ALIGNED(PAGE_SIZE, page_size)) {
+		rxe_err_mr(mr, "MR page size %u must be compatible with PAGE_SIZE %lu\n",
+			   page_size, PAGE_SIZE);
+		return -EINVAL;
+	}
 
 	mr->nbuf = 0;
 	mr->page_shift = ilog2(page_size);
@@ -256,8 +327,7 @@ static int rxe_mr_copy_xarray(struct rxe_mr *mr, u64 iova, void *addr,
 		if (!page)
 			return -EFAULT;
 
-		bytes = min_t(unsigned int, length,
-				mr_page_size(mr) - page_offset);
+		bytes = min_t(unsigned int, length, PAGE_SIZE - page_offset);
 		va = kmap_local_page(page);
 		if (dir == RXE_FROM_MR_OBJ)
 			memcpy(addr, va + page_offset, bytes);
@@ -443,8 +513,7 @@ static int rxe_mr_flush_pmem_iova(struct rxe_mr *mr, u64 iova, unsigned int leng
 		page_offset = rxe_mr_iova_to_page_offset(mr, iova);
 		if (!page)
 			return -EFAULT;
-		bytes = min_t(unsigned int, length,
-			      mr_page_size(mr) - page_offset);
+		bytes = min_t(unsigned int, length, PAGE_SIZE - page_offset);
 
 		va = kmap_local_page(page);
 		arch_wb_cache_pmem(va + page_offset, bytes);
