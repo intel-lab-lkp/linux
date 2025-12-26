@@ -241,6 +241,7 @@ int exfat_get_cluster(struct inode *inode, unsigned int cluster,
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
 	unsigned int limit = sbi->num_clusters;
 	struct exfat_inode_info *ei = EXFAT_I(inode);
+	struct buffer_head *bh = NULL;
 	struct exfat_cache_id cid;
 	unsigned int content;
 
@@ -284,11 +285,11 @@ int exfat_get_cluster(struct inode *inode, unsigned int cluster,
 			exfat_fs_error(sb,
 				"detected the cluster chain loop (i_pos %u)",
 				(*fclus));
-			return -EIO;
+			goto err;
 		}
 
-		if (exfat_ent_get(sb, *dclus, &content, NULL))
-			return -EIO;
+		if (exfat_ent_get(sb, *dclus, &content, &bh))
+			goto err;
 
 		*last_dclus = *dclus;
 		*dclus = content;
@@ -299,7 +300,7 @@ int exfat_get_cluster(struct inode *inode, unsigned int cluster,
 				exfat_fs_error(sb,
 				       "invalid cluster chain (i_pos %u, last_clus 0x%08x is EOF)",
 				       *fclus, (*last_dclus));
-				return -EIO;
+				goto err;
 			}
 
 			break;
@@ -309,6 +310,10 @@ int exfat_get_cluster(struct inode *inode, unsigned int cluster,
 			cache_init(&cid, *fclus, *dclus);
 	}
 
+	brelse(bh);
 	exfat_cache_add(inode, &cid);
 	return 0;
+err:
+	brelse(bh);
+	return -EIO;
 }
