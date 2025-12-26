@@ -340,9 +340,12 @@ static void f2fs_write_end_io(struct bio *bio)
 {
 	struct f2fs_sb_info *sbi;
 	struct folio_iter fi;
+	bool is_close;
 
 	iostat_update_and_unbind_ctx(bio);
 	sbi = bio->bi_private;
+
+	is_close = is_sbi_flag_set(sbi, SBI_IS_CLOSE);
 
 	if (time_to_inject(sbi, FAULT_WRITE_IO))
 		bio->bi_status = BLK_STS_IOERR;
@@ -382,10 +385,12 @@ static void f2fs_write_end_io(struct bio *bio)
 			f2fs_del_fsync_node_entry(sbi, folio);
 		folio_clear_f2fs_gcing(folio);
 		folio_end_writeback(folio);
-	}
-	if (!get_pages(sbi, F2FS_WB_CP_DATA) &&
+
+		if (!is_close && type == F2FS_WB_CP_DATA &&
+				!get_pages(sbi, F2FS_WB_CP_DATA) &&
 				wq_has_sleeper(&sbi->cp_wait))
-		wake_up(&sbi->cp_wait);
+			wake_up(&sbi->cp_wait);
+	}
 
 	bio_put(bio);
 }
