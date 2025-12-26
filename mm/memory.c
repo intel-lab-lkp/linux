@@ -6106,6 +6106,7 @@ static inline vm_fault_t create_huge_pmd(struct vm_fault *vmf)
 static inline vm_fault_t wp_huge_pmd(struct vm_fault *vmf)
 {
 	struct vm_area_struct *vma = vmf->vma;
+	const vm_flags_t vm_flags = vma->vm_flags;
 	const bool unshare = vmf->flags & FAULT_FLAG_UNSHARE;
 	vm_fault_t ret;
 
@@ -6125,6 +6126,13 @@ static inline vm_fault_t wp_huge_pmd(struct vm_fault *vmf)
 			if (!(ret & VM_FAULT_FALLBACK))
 				return ret;
 		}
+	}
+
+	if (is_exec_mapping(vm_flags) &&
+	    is_cow_mapping(vm_flags)) {
+		ret = do_huge_pmd_exec_cow(vmf);
+		if (!(ret & VM_FAULT_FALLBACK))
+			return ret;
 	}
 
 split:

@@ -2148,6 +2148,97 @@ fallback:
 	return VM_FAULT_FALLBACK;
 }
 
+vm_fault_t do_huge_pmd_exec_cow(struct vm_fault *vmf)
+{
+	vm_fault_t ret;
+	struct vm_area_struct *vma = vmf->vma;
+	struct folio *folio, *src_folio;
+	pmd_t orig_pmd = vmf->orig_pmd;
+	unsigned long haddr = vmf->address & PMD_MASK;
+	struct mmu_notifier_range range;
+	pgtable_t pgtable = NULL;
+
+	/* Skip special and shmem */
+	if (vma_is_special_huge(vma) || vma_is_shmem(vma))
+		return VM_FAULT_FALLBACK;
+
+	ret = vmf_anon_prepare(vmf);
+	if (ret)
+		return ret;
+
+	folio = vma_alloc_anon_folio_pmd(vma, haddr);
+	if (!folio)
+		return VM_FAULT_FALLBACK;
+
+	if (!arch_needs_pgtable_deposit()) {
+		pgtable = pte_alloc_one(vma->vm_mm);
+		if (!pgtable) {
+			ret = VM_FAULT_OOM;
+			goto release;
+		}
+	}
+
+	mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, vma->vm_mm,
+				haddr, haddr + HPAGE_PMD_SIZE);
+	mmu_notifier_invalidate_range_start(&range);
+	vmf->ptl = pmd_lock(vma->vm_mm, vmf->pmd);
+	if (unlikely(!pmd_same(pmdp_get(vmf->pmd), orig_pmd)))
+		goto unlock_ptl;
+
+	ret = check_stable_address_space(vma->vm_mm);
+	if (ret)
+		goto unlock_ptl;
+
+	src_folio = pmd_folio(orig_pmd);
+	if (!folio_trylock(src_folio)) {
+		ret = VM_FAULT_FALLBACK;
+		goto unlock_ptl;
+	}
+
+	/*
+	 * If uptodate bit is not set, it means this source folio is
+	 * stale or invalid now, this memory data in it is not
+	 * untrustworthy. So we just avoid copying it and fallback.
+	 */
+	if (!folio_test_uptodate(src_folio)) {
+		ret = VM_FAULT_FALLBACK;
+		goto unlock_folio;
+	}
+
+	if (copy_user_large_folio(folio, src_folio, haddr, vma)) {
+		ret = VM_FAULT_HWPOISON;
+		goto unlock_folio;
+	}
+	folio_mark_uptodate(folio);
+
+	folio_unlock(src_folio);
+	pmdp_huge_clear_flush(vma, haddr, vmf->pmd);
+	folio_remove_rmap_pmd(src_folio, folio_page(src_folio, 0), vma);
+	add_mm_counter(vma->vm_mm, mm_counter_file(src_folio), -HPAGE_PMD_NR);
+	folio_put(src_folio);
+
+	map_anon_folio_pmd_pf(folio, vmf->pmd, vma, haddr);
+	if (pgtable)
+		pgtable_trans_huge_deposit(vma->vm_mm, vmf->pmd, pgtable);
+	mm_inc_nr_ptes(vma->vm_mm);
+	spin_unlock(vmf->ptl);
+	mmu_notifier_invalidate_range_end(&range);
+
+	return ret;
+
+unlock_folio:
+	folio_unlock(src_folio);
+unlock_ptl:
+	spin_unlock(vmf->ptl);
+	mmu_notifier_invalidate_range_end(&range);
+release:
+	if (pgtable)
+		pte_free(vma->vm_mm, pgtable);
+	folio_put(folio);
+
+	return ret;
+}
+
 static inline bool can_change_pmd_writable(struct vm_area_struct *vma,
 					   unsigned long addr, pmd_t pmd)
 {
