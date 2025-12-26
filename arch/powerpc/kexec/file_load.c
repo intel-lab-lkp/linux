@@ -23,38 +23,41 @@
 #define SLAVE_CODE_SIZE		256	/* First 0x100 bytes */
 
 /**
- * setup_kdump_cmdline - Prepend "elfcorehdr=<addr> " to command line
+ * setup_kdump_cmdline - Prepend "<name>=<addr> " to command line
  *                       of kdump kernel for exporting the core.
  * @image:               Kexec image
  * @cmdline:             Command line parameters to update.
  * @cmdline_len:         Length of the cmdline parameters.
+ * @name:                Name e.g elfcorehdr.
+ * @addr:                Memory address.
  *
  * kdump segment must be setup before calling this function.
  *
  * Returns new cmdline buffer for kdump kernel on success, NULL otherwise.
  */
 char *setup_kdump_cmdline(struct kimage *image, char *cmdline,
-			  unsigned long cmdline_len)
+			  unsigned long cmdline_len,
+			  char *name, unsigned long addr)
 {
-	int elfcorehdr_strlen;
+	unsigned long parameter_len;
 	char *cmdline_ptr;
 
 	cmdline_ptr = kzalloc(COMMAND_LINE_SIZE, GFP_KERNEL);
 	if (!cmdline_ptr)
 		return NULL;
 
-	elfcorehdr_strlen = sprintf(cmdline_ptr, "elfcorehdr=0x%lx ",
-				    image->elf_load_addr);
+	parameter_len = sprintf(cmdline_ptr, "%s=0x%lx ", name, addr);
 
-	if (elfcorehdr_strlen + cmdline_len > COMMAND_LINE_SIZE) {
-		pr_err("Appending elfcorehdr=<addr> exceeds cmdline size\n");
+	if (parameter_len + cmdline_len > COMMAND_LINE_SIZE) {
+		pr_err("Appending %s=<addr> exceeds cmdline size\n", name);
 		kfree(cmdline_ptr);
 		return NULL;
 	}
 
-	memcpy(cmdline_ptr + elfcorehdr_strlen, cmdline, cmdline_len);
+	memcpy(cmdline_ptr + parameter_len, cmdline, cmdline_len);
 	// Ensure it's nul terminated
 	cmdline_ptr[COMMAND_LINE_SIZE - 1] = '\0';
+	kfree(cmdline);
 	return cmdline_ptr;
 }
 
