@@ -14,6 +14,7 @@
 #include <linux/acpi.h>
 #include <linux/reset.h>
 #include <linux/suspend.h>
+#include <linux/irq.h>
 
 #include "xhci.h"
 #include "xhci-trace.h"
@@ -130,13 +131,65 @@ static void xhci_cleanup_msix(struct xhci_hcd *xhci)
 {
 	struct usb_hcd *hcd = xhci_to_hcd(xhci);
 	struct pci_dev *pdev = to_pci_dev(hcd->self.controller);
+	int i;
 
 	if (hcd->irq > 0)
 		return;
 
+	irq_set_handler_data(pci_irq_vector(pdev, 0), NULL);
+	irq_set_affinity_hint(pci_irq_vector(pdev, 0), NULL);
 	free_irq(pci_irq_vector(pdev, 0), xhci_to_hcd(xhci));
+
+	for (i = 0; i < xhci->secondary_irqs_enabled; i++) {
+		irq_set_handler_data(pci_irq_vector(pdev, i + 1), NULL);
+		irq_set_affinity_hint(pci_irq_vector(pdev, i + 1), NULL);
+		free_irq(pci_irq_vector(pdev, i + 1), xhci_to_hcd(xhci));
+	}
+	xhci->secondary_irqs_enabled = 0;
+
 	pci_free_irq_vectors(pdev);
 	hcd->msix_enabled = 0;
+}
+
+static void xhci_msix_set_affinity_hint(struct xhci_hcd *xhci)
+{
+	struct usb_hcd *hcd = xhci_to_hcd(xhci);
+	struct pci_dev *pdev;
+	cpumask_var_t mask;
+	int node, i;
+
+	/* Nothing to do without MSI-X or without enabled secondary vectors. */
+	if (!hcd->msix_enabled || !xhci->secondary_irqs_enabled)
+		return;
+
+	pdev = to_pci_dev(hcd->self.controller);
+	node = dev_to_node(&pdev->dev);
+
+	/* Off-stack cpumasks must be freed (CONFIG_CPUMASK_OFFSTACK). */
+	if (!zalloc_cpumask_var(&mask, GFP_KERNEL))
+		return;
+
+	for (i = 0; i < xhci->secondary_irqs_enabled; i++) {
+		struct xhci_interrupter *ir = xhci->interrupters[i + 1];
+		int irq;
+		int cpu;
+
+		irq = pci_irq_vector(pdev, ir->intr_num);
+		if (irq < 0)
+			continue;
+
+		cpu = cpumask_local_spread(i, node);
+		if (cpu < 0 || cpu >= nr_cpu_ids || !cpu_online(cpu)) {
+			irq_set_affinity_hint(irq, NULL);
+			continue;
+		}
+
+		cpumask_clear(mask);
+		cpumask_set_cpu(cpu, mask);
+		irq_set_affinity_hint(irq, mask);
+	}
+
+	free_cpumask_var(mask);
 }
 
 /* Try enabling MSI-X with MSI and legacy IRQ as fallback */
@@ -145,6 +198,8 @@ static int xhci_try_enable_msi(struct usb_hcd *hcd)
 	struct pci_dev *pdev = to_pci_dev(hcd->self.controller);
 	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
 	int ret;
+	int i;
+	unsigned int request_secondary_intrs;
 
 	/*
 	 * Some Fresco Logic host controllers advertise MSI, but fail to
@@ -179,13 +234,60 @@ static int xhci_try_enable_msi(struct usb_hcd *hcd)
 	if (ret)
 		goto free_irq_vectors;
 
+	/*
+	 * Store a stable token (intr_num + 1) as handler_data.
+	 * +1 keeps token 0 meaning "unset" so ISR can reliably default to 0.
+	 */
+	irq_set_handler_data(pci_irq_vector(pdev, 0),
+			(void *)(unsigned long)(xhci->interrupters[0]->intr_num + 1));
+
 	hcd->msi_enabled = 1;
 	hcd->msix_enabled = pdev->msix_enabled;
+
+	if (xhci->nvecs <= 1)
+		request_secondary_intrs = 0;
+	else
+		request_secondary_intrs = min_t(unsigned int,
+					(unsigned int)(xhci->nvecs - 1),
+					xhci->secondary_irqs_alloc);
+
+	/* Secondary transfer interrupters */
+	xhci->secondary_irqs_enabled = 0;
+	for (i = 0; i < request_secondary_intrs; i++) {
+		struct xhci_interrupter *ir;
+
+		ir = xhci->interrupters[i + 1];
+		ret = request_irq(pci_irq_vector(pdev, ir->intr_num),
+				xhci_msi_irq, 0, "xhci_hcd", xhci_to_hcd(xhci));
+		if (ret)
+			break;
+
+		/* Store intr_num + 1 so 0 remains reserved for "no handler_data"*/
+		irq_set_handler_data(pci_irq_vector(pdev, ir->intr_num),
+						(void *)(unsigned long)(ir->intr_num + 1));
+		xhci->secondary_irqs_enabled++;
+	}
+
+	if (i != 0 && i < request_secondary_intrs) {
+		struct xhci_interrupter *ir;
+
+		while (--i >= 0) {
+			ir = xhci->interrupters[i + 1];
+			irq_set_handler_data(pci_irq_vector(pdev, ir->intr_num), NULL);
+			free_irq(pci_irq_vector(pdev, ir->intr_num), xhci_to_hcd(xhci));
+		}
+		xhci->secondary_irqs_enabled = 0;
+	}
+
+	 /* Spread secondary MSI-X vectors */
+	xhci_msix_set_affinity_hint(xhci);
+
 	return 0;
 
 free_irq_vectors:
 	xhci_dbg_trace(xhci, trace_xhci_dbg_init, "disable %s interrupt",
 		       pdev->msix_enabled ? "MSI-X" : "MSI");
+	irq_set_handler_data(pci_irq_vector(pdev, 0), NULL);
 	pci_free_irq_vectors(pdev);
 
 legacy_irq:
@@ -843,6 +945,7 @@ static int xhci_pci_resume(struct usb_hcd *hcd, pm_message_t msg)
 	struct pci_dev *pdev = to_pci_dev(hcd->self.controller);
 	bool power_lost = msg.event == PM_EVENT_RESTORE;
 	bool is_auto_resume = msg.event == PM_EVENT_AUTO_RESUME;
+	int ret;
 
 	reset_control_reset(xhci->reset);
 
@@ -873,7 +976,11 @@ static int xhci_pci_resume(struct usb_hcd *hcd, pm_message_t msg)
 	if (xhci->quirks & XHCI_PME_STUCK_QUIRK)
 		xhci_pme_quirk(hcd);
 
-	return xhci_resume(xhci, power_lost, is_auto_resume);
+	ret = xhci_resume(xhci, power_lost, is_auto_resume);
+	if (!ret)
+		xhci_msix_set_affinity_hint(xhci);
+
+	return ret;
 }
 
 static int xhci_pci_poweroff_late(struct usb_hcd *hcd, bool do_wakeup)
