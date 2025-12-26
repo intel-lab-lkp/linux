@@ -4289,23 +4289,44 @@ static void nvme_ns_remove_by_nsid(struct nvme_ctrl *ctrl, u32 nsid)
 static void nvme_validate_ns(struct nvme_ns *ns, struct nvme_ns_info *info)
 {
 	int ret = NVME_SC_INVALID_NS | NVME_STATUS_DNR;
+	unsigned int i;
 
 	if (!nvme_ns_ids_equal(&ns->head->ids, &info->ids)) {
-		dev_err(ns->ctrl->device,
-			"identifiers changed for nsid %d\n", ns->head->ns_id);
+		dev_err(ns->ctrl->device, "identifiers changed for nsid %d\n",
+			ns->head->ns_id);
 		goto out;
 	}
 
-	ret = nvme_update_ns_info(ns, info);
+	for (i = 0; i <= NVME_NS_VALIDATION_MAX_RETRIES; i++) {
+		ret = nvme_update_ns_info(ns, info);
+		if (ret == 0)
+			return;
+
+		if (ret > 0 && (ret & NVME_STATUS_DNR))
+			goto out;
+
+		if (i == NVME_NS_VALIDATION_MAX_RETRIES) {
+			dev_err(ns->ctrl->device,
+				"validation failed for nsid %d after %d retries\n",
+				ns->head->ns_id,
+				NVME_NS_VALIDATION_MAX_RETRIES);
+			return;
+		}
+
+		dev_warn(ns->ctrl->device,
+			 "validation failed for nsid %d, retry %d/%d in %dms\n",
+			 ns->head->ns_id, i + 1, NVME_NS_VALIDATION_MAX_RETRIES,
+			 NVME_NS_VALIDATION_RETRY_INTERVAL);
+
+		msleep(NVME_NS_VALIDATION_RETRY_INTERVAL);
+	}
+
 out:
 	/*
 	 * Only remove the namespace if we got a fatal error back from the
-	 * device, otherwise ignore the error and just move on.
-	 *
-	 * TODO: we should probably schedule a delayed retry here.
+	 * device.
 	 */
-	if (ret > 0 && (ret & NVME_STATUS_DNR))
-		nvme_ns_remove(ns);
+	nvme_ns_remove(ns);
 }
 
 static void nvme_scan_ns(struct nvme_ctrl *ctrl, unsigned nsid)
