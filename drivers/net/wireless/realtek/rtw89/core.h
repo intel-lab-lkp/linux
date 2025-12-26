@@ -159,6 +159,17 @@ enum rtw89_core_chip_id {
 	RTL8922D,
 };
 
+enum rtw89_core_chip_cid {
+	RTL8922D_CID7025 = 0x74,
+	RTL8922D_CID7090 = 0x79,
+};
+
+enum rtw89_core_chip_aid {
+	RTL8922D_AID1348 = 0x1348,
+	RTL8922D_AID7060 = 0x7060,
+	RTL8922D_AID7102 = 0x7102,
+};
+
 enum rtw89_chip_gen {
 	RTW89_CHIP_AX,
 	RTW89_CHIP_BE,
@@ -5030,7 +5041,9 @@ enum rtw89_dm_type {
 struct rtw89_hal {
 	u32 rx_fltr;
 	u8 cv;
+	u8 cid;
 	u8 acv;
+	u16 aid;
 	u32 antenna_tx;
 	u32 antenna_rx;
 	u8 tx_nss;
