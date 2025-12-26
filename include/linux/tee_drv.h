@@ -322,4 +322,7 @@ struct tee_client_driver {
 #define to_tee_client_driver(d) \
 		container_of_const(d, struct tee_client_driver, driver)
 
+/* Size for TEE revision string buffer used by get_tee_revision(). */
+#define TEE_REVISION_STR_SIZE	128
+
 #endif /*__TEE_DRV_H*/
