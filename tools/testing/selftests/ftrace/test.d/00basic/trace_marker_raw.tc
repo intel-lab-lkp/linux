@@ -58,7 +58,7 @@ test_multiple_writes() {
 	echo stop > trace_marker
 
 	# Check to make sure the number of entries is the id (rounded up by 4)
-	awk '/.*: # [0-9a-f]* / {
+	awk -v ORIG="${ORIG}" '/.*: # [0-9a-f]* / {
 			print;
 			cnt = -1;
 			for (i = 0; i < NF; i++) {
@@ -70,6 +70,7 @@ test_multiple_writes() {
 					# The number of items is always rounded up by 4
 					cnt2 = int((cnt + 3) / 4) * 4;
 					if (cnt2 != num) {
+						system("echo \""ORIG"\" > buffer_size_kb");
 						exit 1;
 					}
 					break;
@@ -89,6 +90,7 @@ test_buffer() {
 	# The id must be four bytes, test that 3 bytes fails a write
 	if echo -n abc > ./trace_marker_raw ; then
 		echo "Too small of write expected to fail but did not"
+		echo $ORIG > buffer_size_kb
 		exit_fail
 	fi
 
@@ -99,9 +101,21 @@ test_buffer() {
 
 	if write_buffer 0xdeadbeef $size ; then
 		echo "Too big of write expected to fail but did not"
+		echo $ORIG > buffer_size_kb
 		exit_fail
 	fi
 }
 
+ORIG=`cat buffer_size_kb`
+
+# test_multiple_writes test needs at least 12KB buffer
+NEW_SIZE=12
+
+if [ ${ORIG} -lt ${NEW_SIZE} ]; then
+	echo ${NEW_SIZE} > buffer_size_kb
+fi
+
 test_buffer
 test_multiple_writes
+
+echo $ORIG > buffer_size_kb
