@@ -290,12 +290,17 @@ static void lru_gen_refault(struct folio *folio, void *shadow)
 	struct lru_gen_folio *lrugen;
 	int type = folio_is_file_lru(folio);
 	int delta = folio_nr_pages(folio);
+	struct mem_cgroup *memcg;
 
 	rcu_read_lock();
 
 	recent = lru_gen_test_recent(shadow, &lruvec, &token, &workingset);
 	if (lruvec != folio_lruvec(folio))
 		goto unlock;
+
+	memcg = folio_memcg(folio);
+	if (memcg)
+		WRITE_ONCE(memcg->last_refault, jiffies);
 
 	mod_lruvec_state(lruvec, WORKINGSET_REFAULT_BASE + type, delta);
 
@@ -560,6 +565,9 @@ void workingset_refault(struct folio *folio, void *shadow)
 	memcg = folio_memcg(folio);
 	pgdat = folio_pgdat(folio);
 	lruvec = mem_cgroup_lruvec(memcg, pgdat);
+
+	if (memcg)
+		WRITE_ONCE(memcg->last_refault, jiffies);
 
 	mod_lruvec_state(lruvec, WORKINGSET_REFAULT_BASE + file, nr);
 

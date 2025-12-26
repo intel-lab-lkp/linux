@@ -321,6 +321,9 @@ struct mem_cgroup {
 	spinlock_t event_list_lock;
 #endif /* CONFIG_MEMCG_V1 */
 
+	/* Timestamp of most recent refault, for thrashing detection */
+	u64 last_refault;
+
 	struct mem_cgroup_per_node *nodeinfo[];
 };
 

@@ -2227,12 +2227,45 @@ static unsigned long calculate_high_delay(struct mem_cgroup *memcg,
 }
 
 /*
+ * Check if a refault occurred recently, indicating active thrashing.
+ * Returns additional penalty jiffies based on refault recency.
+ *
+ * We use timestamp rather than refault counters because:
+ * 1. Counter aggregation is periodic and expensive to flush
+ * 2. Readahead makes counter-to-IO correlation unreliable
+ * 3. Timestamp gives us recency which directly reflects thrashing intensity
+ */
+static unsigned long calculate_refault(struct mem_cgroup *memcg)
+{
+	unsigned long last_refault = READ_ONCE(memcg->last_refault);
+	unsigned long now = jiffies;
+	long diff;
+
+	/*
+	 * Only care about refaults within the last second. The closer
+	 * the refault is to now, the higher the penalty:
+	 *
+	 *   diff = 1 tick   -> penalty = HZ      (capped to HZ/10 = 100ms)
+	 *   diff = HZ/10    -> penalty = 10 ticks = 10ms
+	 *   diff = HZ/2     -> penalty = 2 ticks  = 2ms
+	 *   diff >= HZ      -> penalty = 0        (too old, not thrashing)
+	 */
+	if (last_refault && time_before(now, last_refault + HZ)) {
+		diff = max((long)now - (long)last_refault, 1L);
+		/* Cap at 100ms to avoid excessive delays */
+		return min(HZ / diff, HZ / 10);
+	}
+	return 0;
+}
+
+/*
  * Reclaims memory over the high limit. Called directly from
  * try_charge() (context permitting), as well as from the userland
  * return path where reclaim is always able to block.
  */
 void __mem_cgroup_handle_over_high(gfp_t gfp_mask)
 {
+	unsigned long refault_penalty;
 	unsigned long penalty_jiffies;
 	unsigned long pflags;
 	unsigned long nr_reclaimed;
@@ -2279,12 +2312,14 @@ retry_reclaim:
 	penalty_jiffies += calculate_high_delay(memcg, nr_pages,
 						swap_find_max_overage(memcg));
 
+	refault_penalty = calculate_refault(memcg);
+
 	/*
 	 * Clamp the max delay per usermode return so as to still keep the
 	 * application moving forwards and also permit diagnostics, albeit
 	 * extremely slowly.
 	 */
-	penalty_jiffies = min(penalty_jiffies, MEMCG_MAX_HIGH_DELAY_JIFFIES);
+	penalty_jiffies = min(penalty_jiffies + refault_penalty, MEMCG_MAX_HIGH_DELAY_JIFFIES);
 
 	/*
 	 * Don't sleep if the amount of jiffies this memcg owes us is so low
@@ -2292,7 +2327,7 @@ retry_reclaim:
 	 * go only a small amount over their memory.high value and maybe haven't
 	 * been aggressively reclaimed enough yet.
 	 */
-	if (penalty_jiffies <= HZ / 100)
+	if (!refault_penalty && penalty_jiffies <= HZ / 100)
 		goto out;
 
 	/*
@@ -2300,7 +2335,7 @@ retry_reclaim:
 	 * memory.high, we want to encourage that rather than doing allocator
 	 * throttling.
 	 */
-	if (nr_reclaimed || nr_retries--) {
+	if (!refault_penalty && (nr_reclaimed || nr_retries--)) {
 		in_retry = true;
 		goto retry_reclaim;
 	}
