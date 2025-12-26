@@ -692,6 +692,7 @@ struct kvm_kernel_irq_routing_entry {
 struct kvm_irq_routing_table {
 	int chip[KVM_NR_IRQCHIPS][KVM_IRQCHIP_NUM_PINS];
 	u32 nr_rt_entries;
+	struct kvm_kernel_irq_routing_entry *entries_addr;
 	/*
 	 * Array indexed by gsi. Each entry contains list of irq chips
 	 * the gsi is connected to.

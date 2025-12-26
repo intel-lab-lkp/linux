@@ -98,21 +98,10 @@ int kvm_set_irq(struct kvm *kvm, int irq_source_id, u32 irq, int level,
 
 static void free_irq_routing_table(struct kvm_irq_routing_table *rt)
 {
-	int i;
-
 	if (!rt)
 		return;
 
-	for (i = 0; i < rt->nr_rt_entries; ++i) {
-		struct kvm_kernel_irq_routing_entry *e;
-		struct hlist_node *n;
-
-		hlist_for_each_entry_safe(e, n, &rt->map[i], link) {
-			hlist_del(&e->link);
-			kfree(e);
-		}
-	}
-
+	kfree(rt->entries_addr);
 	kfree(rt);
 }
 
@@ -186,6 +175,12 @@ int kvm_set_irq_routing(struct kvm *kvm,
 	new = kzalloc(struct_size(new, map, nr_rt_entries), GFP_KERNEL_ACCOUNT);
 	if (!new)
 		return -ENOMEM;
+	e = kcalloc(nr, sizeof(*e), GFP_KERNEL_ACCOUNT);
+	if (!e) {
+		r = -ENOMEM;
+		goto out;
+	}
+	new->entries_addr = e;
 
 	new->nr_rt_entries = nr_rt_entries;
 	for (i = 0; i < KVM_NR_IRQCHIPS; i++)
@@ -193,25 +188,20 @@ int kvm_set_irq_routing(struct kvm *kvm,
 			new->chip[i][j] = -1;
 
 	for (i = 0; i < nr; ++i) {
-		r = -ENOMEM;
-		e = kzalloc(sizeof(*e), GFP_KERNEL_ACCOUNT);
-		if (!e)
-			goto out;
-
 		r = -EINVAL;
 		switch (ue->type) {
 		case KVM_IRQ_ROUTING_MSI:
 			if (ue->flags & ~KVM_MSI_VALID_DEVID)
-				goto free_entry;
+				goto out;
 			break;
 		default:
 			if (ue->flags)
-				goto free_entry;
+				goto out;
 			break;
 		}
-		r = setup_routing_entry(kvm, new, e, ue);
+		r = setup_routing_entry(kvm, new, e + i, ue);
 		if (r)
-			goto free_entry;
+			goto out;
 		++ue;
 	}
 
@@ -228,8 +218,6 @@ int kvm_set_irq_routing(struct kvm *kvm,
 	r = 0;
 	goto out;
 
-free_entry:
-	kfree(e);
 out:
 	free_irq_routing_table(new);
 
