@@ -11,7 +11,7 @@
 void io_alloc_cache_free(struct io_alloc_cache *cache,
 			 void (*free)(const void *));
 bool io_alloc_cache_init(struct io_alloc_cache *cache,
-			 unsigned max_nr, unsigned int size,
+			 unsigned int max_nr, unsigned int size,
 			 unsigned int init_bytes);
 
 void *io_cache_alloc_new(struct io_alloc_cache *cache, gfp_t gfp);

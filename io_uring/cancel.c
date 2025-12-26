@@ -104,7 +104,7 @@ static int io_async_cancel_one(struct io_uring_task *tctx,
 }
 
 int io_try_cancel(struct io_uring_task *tctx, struct io_cancel_data *cd,
-		  unsigned issue_flags)
+		  unsigned int issue_flags)
 {
 	struct io_ring_ctx *ctx = cd->ctx;
 	int ret;

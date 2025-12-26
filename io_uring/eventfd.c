@@ -15,7 +15,7 @@ struct io_ev_fd {
 	struct eventfd_ctx	*cq_ev_fd;
 	unsigned int		eventfd_async;
 	/* protected by ->completion_lock */
-	unsigned		last_cq_tail;
+	unsigned int		last_cq_tail;
 	refcount_t		refs;
 	atomic_t		ops;
 	struct rcu_head		rcu;

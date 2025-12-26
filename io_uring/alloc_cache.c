@@ -19,7 +19,7 @@ void io_alloc_cache_free(struct io_alloc_cache *cache,
 
 /* returns false if the cache was initialized properly */
 bool io_alloc_cache_init(struct io_alloc_cache *cache,
-			 unsigned max_nr, unsigned int size,
+			 unsigned int max_nr, unsigned int size,
 			 unsigned int init_bytes)
 {
 	cache->entries = kvmalloc_array(max_nr, sizeof(void *), GFP_KERNEL);
