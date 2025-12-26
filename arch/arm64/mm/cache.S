@@ -143,9 +143,14 @@ SYM_FUNC_END(dcache_clean_pou)
  *	- end     - kernel end address of region
  */
 SYM_FUNC_START(__pi_dcache_inval_poc)
+alternative_if ARM64_WORKAROUND_4311569
+	mov	x4, x0
+	mov	x5, x1
+	mov	x6, #1
+alternative_else_nop_endif
 	dcache_line_size x2, x3
 	sub	x3, x2, #1
-	tst	x1, x3				// end cache line aligned?
+again:	tst	x1, x3				// end cache line aligned?
 	bic	x1, x1, x3
 	b.eq	1f
 	dc	civac, x1			// clean & invalidate D / U line
@@ -158,6 +163,12 @@ SYM_FUNC_START(__pi_dcache_inval_poc)
 3:	add	x0, x0, x2
 	cmp	x0, x1
 	b.lo	2b
+alternative_if ARM64_WORKAROUND_4311569
+	mov	x0, x4
+	mov	x1, x5
+	sub	x6, x6, #1
+	cbz	x6, again
+alternative_else_nop_endif
 	dsb	sy
 	ret
 SYM_FUNC_END(__pi_dcache_inval_poc)
