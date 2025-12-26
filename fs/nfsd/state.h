@@ -527,6 +527,8 @@ struct nfs4_client {
 
 	struct nfsd4_cb_recall_any	*cl_ra;
 	time64_t		cl_ra_time;
+
+	struct xarray		cl_dev_fences;
 };
 
 /* struct nfs4_client_reset

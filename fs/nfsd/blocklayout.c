@@ -318,6 +318,7 @@ nfsd4_block_get_device_info_scsi(struct super_block *sb,
 	struct pnfs_block_volume *b;
 	const struct pr_ops *ops;
 	int ret;
+	void *entry;
 
 	dev = kzalloc(struct_size(dev, volumes, 1), GFP_KERNEL);
 	if (!dev)
@@ -357,6 +358,20 @@ nfsd4_block_get_device_info_scsi(struct super_block *sb,
 		goto out_free_dev;
 	}
 
+	/*
+	 * Create an entry for this client with the fenced flag set to 0.
+	 *
+	 * The atomicity of xa_store ensures that only a single entry
+	 * is created for each device. The maximun number of entries
+	 * in this array is determined by the number of pNFS exports
+	 * accessed by this client that use the SCSI layout type.
+	 */
+	entry = xa_store(&clp->cl_dev_fences, (unsigned long)sb->s_bdev->bd_dev,
+				xa_mk_value(0), GFP_KERNEL);
+	if (xa_is_err(entry)) {
+		ret = xa_err(entry);
+		goto out_free_dev;
+	}
 	return 0;
 
 out_free_dev:
@@ -400,10 +415,28 @@ nfsd4_scsi_fence_client(struct nfs4_layout_stateid *ls, struct nfsd_file *file)
 	struct nfs4_client *clp = ls->ls_stid.sc_client;
 	struct block_device *bdev = file->nf_file->f_path.mnt->mnt_sb->s_bdev;
 	int status;
+	void *entry;
+	XA_STATE(xas, &clp->cl_dev_fences, bdev->bd_dev);
+
+	xa_lock(&clp->cl_dev_fences);
+	entry = xas_load(&xas);
+	if (entry && xas_get_mark(&xas, XA_MARK_0)) {
+		/* device already fenced */
+		xa_unlock(&clp->cl_dev_fences);
+		return;
+	}
+	/* Set the fenced flag for this device. */
+	xas_set_mark(&xas, XA_MARK_0);
+	xa_unlock(&clp->cl_dev_fences);
 
 	status = bdev->bd_disk->fops->pr_ops->pr_preempt(bdev, NFSD_MDS_PR_KEY,
 			nfsd4_scsi_pr_key(clp),
 			PR_EXCLUSIVE_ACCESS_REG_ONLY, true);
+	if (status) {
+		xa_lock(&clp->cl_dev_fences);
+		xas_clear_mark(&xas, XA_MARK_0);
+		xa_unlock(&clp->cl_dev_fences);
+	}
 	trace_nfsd_pnfs_fence(clp, bdev->bd_disk->disk_name, status);
 }
 
