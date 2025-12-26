@@ -80,19 +80,19 @@ static inline void exfat_cache_update_lru(struct inode *inode,
 		list_move(&cache->cache_list, &ei->cache_lru);
 }
 
-static unsigned int exfat_cache_lookup(struct inode *inode,
+static bool exfat_cache_lookup(struct inode *inode,
 		unsigned int fclus, struct exfat_cache_id *cid,
 		unsigned int *cached_fclus, unsigned int *cached_dclus)
 {
 	struct exfat_inode_info *ei = EXFAT_I(inode);
 	static struct exfat_cache nohit = { .fcluster = 0, };
 	struct exfat_cache *hit = &nohit, *p;
-	unsigned int offset = EXFAT_EOF_CLUSTER;
+	unsigned int offset;
 
 	spin_lock(&ei->cache_lru_lock);
 	list_for_each_entry(p, &ei->cache_lru, cache_list) {
 		/* Find the cache of "fclus" or nearest cache. */
-		if (p->fcluster <= fclus && hit->fcluster < p->fcluster) {
+		if (p->fcluster <= fclus && hit->fcluster <= p->fcluster) {
 			hit = p;
 			if (hit->fcluster + hit->nr_contig < fclus) {
 				offset = hit->nr_contig;
@@ -114,7 +114,7 @@ static unsigned int exfat_cache_lookup(struct inode *inode,
 	}
 	spin_unlock(&ei->cache_lru_lock);
 
-	return offset;
+	return hit != &nohit;
 }
 
 static struct exfat_cache *exfat_cache_merge(struct inode *inode,
@@ -261,19 +261,8 @@ int exfat_get_cluster(struct inode *inode, unsigned int cluster,
 	if (cluster == 0 || *dclus == EXFAT_EOF_CLUSTER)
 		return 0;
 
-	cache_init(&cid, EXFAT_EOF_CLUSTER, EXFAT_EOF_CLUSTER);
-
-	if (exfat_cache_lookup(inode, cluster, &cid, &fclus, dclus) ==
-			EXFAT_EOF_CLUSTER) {
-		/*
-		 * dummy, always not contiguous
-		 * This is reinitialized by cache_init(), later.
-		 */
-		WARN_ON(cid.id != EXFAT_CACHE_VALID ||
-			cid.fcluster != EXFAT_EOF_CLUSTER ||
-			cid.dcluster != EXFAT_EOF_CLUSTER ||
-			cid.nr_contig != 0);
-	}
+	cache_init(&cid, fclus, *dclus);
+	exfat_cache_lookup(inode, cluster, &cid, &fclus, dclus);
 
 	if (fclus == cluster)
 		return 0;
