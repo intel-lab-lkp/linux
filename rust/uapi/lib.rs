@@ -34,6 +34,10 @@ type __kernel_size_t = usize;
 type __kernel_ssize_t = isize;
 type __kernel_ptrdiff_t = isize;
 
+use macros::{
+    AsBytesFfi,
+    FromBytesFfi, //
+};
 use pin_init::MaybeZeroable;
 
 include!(concat!(env!("OBJTREE"), "/rust/uapi/uapi_generated.rs"));

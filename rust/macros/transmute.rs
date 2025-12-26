@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
-use proc_macro2::TokenStream;
+use proc_macro2::{Span, TokenStream};
 use syn::{parse_quote, DeriveInput, Fields, Ident, ItemConst, Path, WhereClause};
 
 fn all_fields_impl(fields: &Fields, trait_: &Path) -> WhereClause {
@@ -26,7 +26,8 @@ fn struct_padding_check(fields: &Fields, name: &Ident) -> ItemConst {
     }
 }
 
-pub(crate) fn as_bytes(input: DeriveInput) -> TokenStream {
+pub(crate) fn as_bytes(crate_: &str, input: DeriveInput) -> TokenStream {
+    let crate_ = Ident::new(crate_, Span::call_site());
     if !input.generics.params.is_empty() {
         return quote::quote! { compile_error!("#[derive(AsBytes)] does not support generics") };
     }
@@ -34,7 +35,7 @@ pub(crate) fn as_bytes(input: DeriveInput) -> TokenStream {
         return quote::quote! { compile_error!("#[derive(AsBytes)] only supports structs") };
     };
     let name = input.ident;
-    let trait_ = parse_quote! { ::kernel::transmute::AsBytes };
+    let trait_ = parse_quote! { ::#crate_::transmute::AsBytes };
     let where_clause = all_fields_impl(&ds.fields, &trait_);
     let padding_check = struct_padding_check(&ds.fields, &name);
     quote::quote! {
@@ -44,13 +45,14 @@ pub(crate) fn as_bytes(input: DeriveInput) -> TokenStream {
     }
 }
 
-pub(crate) fn from_bytes(input: DeriveInput) -> TokenStream {
+pub(crate) fn from_bytes(crate_: &str, input: DeriveInput) -> TokenStream {
+    let crate_ = Ident::new(crate_, Span::call_site());
     let syn::Data::Struct(ref ds) = &input.data else {
         return quote::quote! { compile_error!("#[derive(FromBytes)] only supports structs") };
     };
     let (impl_generics, ty_generics, base_where_clause) = input.generics.split_for_impl();
     let name = input.ident;
-    let trait_ = parse_quote! { ::kernel::transmute::FromBytes };
+    let trait_ = parse_quote! { ::#crate_::transmute::FromBytes };
     let mut where_clause = all_fields_impl(&ds.fields, &trait_);
     if let Some(base_clause) = base_where_clause {
         where_clause

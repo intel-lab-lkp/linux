@@ -64,3 +64,11 @@
 # Structs should implement `Zeroable` when all of their fields do.
 --with-derive-custom-struct .*=MaybeZeroable
 --with-derive-custom-union .*=MaybeZeroable
+
+# Every C struct can try to derive FromBytes. If they have unmet requirements,
+# the impl will just be a no-op due to the where clause.
+--with-derive-custom-struct .*=FromBytesFfi
+
+# We can't auto-derive AsBytes, as we need a const-time check to see if there
+# is padding involved. Add it explicitly when you expect no padding.
+--with-derive-custom-struct cpumask=AsBytesFfi
