@@ -1491,7 +1491,7 @@ next_child:
 						rphy);
 		if (ret) {
 			dev_err_probe(rphy->dev, ret, "failed to request usb2phy irq handle\n");
-			goto put_child;
+			goto ret_error;
 		}
 	}
 
@@ -1499,6 +1499,7 @@ next_child:
 
 put_child:
 	of_node_put(child_np);
+ret_error:
 	return ret;
 }
 
