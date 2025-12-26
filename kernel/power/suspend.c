@@ -46,11 +46,20 @@ static const char * const mem_sleep_labels[] = {
 	[PM_SUSPEND_MEM] = "deep",
 };
 const char *mem_sleep_states[PM_SUSPEND_MAX];
+static const char * const standby_labels[] = {
+	[PM_STANDBY_ACTIVE] = "active",
+	[PM_STANDBY_INACTIVE] = "inactive",
+	[PM_STANDBY_SLEEP] = "sleep",
+	[PM_STANDBY_RESUME] = "resume",
+};
+const char *standby_states[PM_STANDBY_MAX];
 
 suspend_state_t mem_sleep_current = PM_SUSPEND_TO_IDLE;
 suspend_state_t mem_sleep_default = PM_SUSPEND_MAX;
 suspend_state_t pm_suspend_target_state;
 EXPORT_SYMBOL_GPL(pm_suspend_target_state);
+
+standby_state_t standby_current = PM_STANDBY_ACTIVE;
 
 unsigned int pm_suspend_global_flags;
 EXPORT_SYMBOL_GPL(pm_suspend_global_flags);
@@ -195,6 +204,9 @@ void __init pm_states_init(void)
 	 * initialize mem_sleep_states[] accordingly here.
 	 */
 	mem_sleep_states[PM_SUSPEND_TO_IDLE] = mem_sleep_labels[PM_SUSPEND_TO_IDLE];
+
+	/* Always support the active runtime standby state. */
+	standby_states[PM_STANDBY_ACTIVE] = standby_labels[PM_STANDBY_ACTIVE];
 }
 
 static int __init mem_sleep_default_setup(char *str)
@@ -333,6 +345,141 @@ static bool platform_suspend_again(suspend_state_t state)
 	return state != PM_SUSPEND_TO_IDLE && suspend_ops->suspend_again ?
 		suspend_ops->suspend_again() : false;
 }
+
+static int platform_standby_notify(standby_notification_t state)
+{
+	return s2idle_ops && s2idle_ops->do_notification ?
+		       s2idle_ops->do_notification(state) :
+		       0;
+}
+
+/**
+ * pm_standby_refresh_states - Refresh the supported runtime standby states
+ */
+void pm_standby_refresh_states(void)
+{
+	u8 standby_support = s2idle_ops && s2idle_ops->get_standby_states ?
+				     s2idle_ops->get_standby_states() :
+				     0;
+
+	standby_states[PM_STANDBY_INACTIVE] =
+		standby_support & BIT(PM_STANDBY_INACTIVE) ?
+			standby_labels[PM_STANDBY_INACTIVE] :
+			NULL;
+	standby_states[PM_STANDBY_SLEEP] =
+		standby_support & BIT(PM_STANDBY_SLEEP) ?
+			standby_labels[PM_STANDBY_SLEEP] :
+			NULL;
+	standby_states[PM_STANDBY_RESUME] =
+		standby_support & BIT(PM_STANDBY_RESUME) ?
+			standby_labels[PM_STANDBY_RESUME] :
+			NULL;
+}
+EXPORT_SYMBOL_GPL(pm_standby_refresh_states);
+
+/**
+ * pm_standby_transition - Transition between standby states
+ *
+ * Configure the runtime standby state of the system. Entering these states
+ * may change the appearance of the system (e.g., keyboard backlight) or limit
+ * the thermal envelope of the system (e.g., PLx to 5W).
+ *
+ * Returns an error if the transition fails. The function does not rollback.
+ */
+int pm_standby_transition(standby_state_t state)
+{
+	int error;
+
+	if (state == standby_current)
+		return 0;
+	if (state > PM_STANDBY_MAX)
+		return -EINVAL;
+
+	pm_standby_refresh_states();
+
+	pm_pr_dbg("Transitioning from standby state %s to %s\n",
+		  standby_states[standby_current], standby_states[state]);
+
+	/* Resume can only be entered if we are on the sleep state. */
+	if (state == PM_STANDBY_RESUME) {
+		if (standby_current != PM_STANDBY_SLEEP)
+			return -EINVAL;
+		standby_current = PM_STANDBY_RESUME;
+		return platform_standby_notify(PM_SN_RESUME);
+	}
+
+	/*
+	 * The system should not be able to re-enter Sleep from resume as it
+	 * is undefined behavior. As part of setting the state to "Resume",
+	 * userspace promised a transition to "Inactive" or "Active".
+	 */
+	if (standby_current == PM_STANDBY_RESUME && state == PM_STANDBY_SLEEP)
+		return -EINVAL;
+
+	/* Resume is the Sleep state logic-wise. */
+	if (standby_current == PM_STANDBY_RESUME)
+		standby_current = PM_STANDBY_SLEEP;
+
+	if (standby_current < state) {
+		for (; standby_current < state; standby_current++) {
+			switch (standby_current + 1) {
+			case PM_STANDBY_INACTIVE:
+				error = platform_standby_notify(PM_SN_INACTIVE_ENTRY);
+				break;
+			case PM_STANDBY_SLEEP:
+				error = platform_standby_notify(PM_SN_SLEEP_ENTRY);
+				break;
+			}
+
+			if (error) {
+				/* Rollback to previous valid state */
+				while (standby_current > PM_STANDBY_ACTIVE &&
+				       !standby_states[standby_current])
+					standby_current--;
+				return error;
+			}
+		}
+	} else if (standby_current > state) {
+		for (; standby_current > state; standby_current--) {
+			switch (standby_current) {
+			case PM_STANDBY_SLEEP:
+				error = platform_standby_notify(PM_SN_SLEEP_EXIT);
+				break;
+			case PM_STANDBY_INACTIVE:
+				error = platform_standby_notify(PM_SN_INACTIVE_EXIT);
+				break;
+			}
+
+			if (error) {
+				/* Rollback to previous valid state */
+				while (standby_current < PM_STANDBY_SLEEP &&
+				       !standby_states[standby_current])
+					standby_current++;
+				return error;
+			}
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * pm_standby_set_state - Set the current standby state and skip the transition
+ */
+void pm_standby_set_state(standby_state_t state)
+{
+	standby_current = state;
+}
+EXPORT_SYMBOL_GPL(pm_standby_set_state);
+
+/**
+ * pm_standby_get_state - Returns the current standby state
+ */
+int pm_standby_get_state(void)
+{
+	return standby_current;
+}
+EXPORT_SYMBOL_GPL(pm_standby_get_state);
 
 #ifdef CONFIG_PM_DEBUG
 static unsigned int pm_test_delay = 5;
@@ -572,6 +719,7 @@ static void suspend_finish(void)
  */
 static int enter_state(suspend_state_t state)
 {
+	standby_state_t standby_prior;
 	int error;
 
 	trace_suspend_resume(TPS("suspend_enter"), state, true);
@@ -587,6 +735,9 @@ static int enter_state(suspend_state_t state)
 	}
 	if (!mutex_trylock(&system_transition_mutex))
 		return -EBUSY;
+
+	standby_prior = standby_current;
+	pm_standby_transition(PM_STANDBY_SLEEP);
 
 	if (state == PM_SUSPEND_TO_IDLE)
 		s2idle_begin();
@@ -619,6 +770,8 @@ static int enter_state(suspend_state_t state)
 	pm_pr_dbg("Finishing wakeup.\n");
 	suspend_finish();
  Unlock:
+	pm_standby_transition(standby_prior);
+
 	mutex_unlock(&system_transition_mutex);
 	return error;
 }

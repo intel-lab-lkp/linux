@@ -40,6 +40,25 @@ typedef int __bitwise suspend_state_t;
 #define PM_SUSPEND_MIN		PM_SUSPEND_TO_IDLE
 #define PM_SUSPEND_MAX		((__force suspend_state_t) 4)
 
+typedef int __bitwise standby_state_t;
+
+#define PM_STANDBY_ACTIVE	((__force standby_state_t) 0)
+#define PM_STANDBY_INACTIVE	((__force standby_state_t) 1)
+#define PM_STANDBY_SLEEP	((__force standby_state_t) 2)
+#define PM_STANDBY_RESUME	((__force standby_state_t) 3)
+#define PM_STANDBY_MIN		PM_STANDBY_ACTIVE
+#define PM_STANDBY_MAX		((__force standby_state_t) 4)
+
+typedef int __bitwise standby_notification_t;
+
+#define PM_SN_INACTIVE_ENTRY	((__force standby_notification_t) 0)
+#define PM_SN_INACTIVE_EXIT	((__force standby_notification_t) 1)
+#define PM_SN_SLEEP_ENTRY	((__force standby_notification_t) 2)
+#define PM_SN_SLEEP_EXIT	((__force standby_notification_t) 3)
+#define PM_SN_RESUME		((__force standby_notification_t) 4)
+#define PM_SN_MIN		PM_STANDBY_DISPLAY_OFF
+#define PM_SN_MAX		((__force standby_notification_t) 5)
+
 /**
  * struct platform_suspend_ops - Callbacks for managing platform dependent
  *	system sleep states.
@@ -132,6 +151,8 @@ struct platform_suspend_ops {
 };
 
 struct platform_s2idle_ops {
+	u8 (*get_standby_states)(void);
+	int (*do_notification)(standby_notification_t state);
 	int (*begin)(void);
 	int (*prepare)(void);
 	int (*prepare_late)(void);
@@ -276,6 +297,11 @@ extern void arch_suspend_enable_irqs(void);
 
 extern int pm_suspend(suspend_state_t state);
 extern bool sync_on_suspend_enabled;
+
+extern void pm_standby_refresh_states(void);
+extern int pm_standby_transition(standby_state_t state);
+extern void pm_standby_set_state(standby_state_t state);
+extern int pm_standby_get_state(void);
 #else /* !CONFIG_SUSPEND */
 #define suspend_valid_only_mem	NULL
 
