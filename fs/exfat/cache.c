@@ -234,7 +234,8 @@ static inline void cache_init(struct exfat_cache_id *cid,
 }
 
 int exfat_get_cluster(struct inode *inode, unsigned int cluster,
-		unsigned int *dclus, unsigned int *last_dclus)
+		unsigned int *dclus, unsigned int *count,
+		unsigned int *last_dclus)
 {
 	struct super_block *sb = inode->i_sb;
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
@@ -243,6 +244,7 @@ int exfat_get_cluster(struct inode *inode, unsigned int cluster,
 	struct buffer_head *bh = NULL;
 	struct exfat_cache_id cid;
 	unsigned int content, fclus;
+	unsigned int end = (*count <= 1) ? cluster : cluster + *count - 1;
 
 	if (ei->start_clu == EXFAT_FREE_CLUSTER) {
 		exfat_fs_error(sb,
@@ -256,17 +258,33 @@ int exfat_get_cluster(struct inode *inode, unsigned int cluster,
 	*last_dclus = *dclus;
 
 	/*
-	 * Don`t use exfat_cache if zero offset or non-cluster allocation
+	 * This case should not exist, as exfat_map_cluster function doesn't
+	 * call this routine when start_clu == EXFAT_EOF_CLUSTER.
+	 * This case is retained here for routine completeness.
 	 */
-	if (cluster == 0 || *dclus == EXFAT_EOF_CLUSTER)
+	if (*dclus == EXFAT_EOF_CLUSTER) {
+		*count = 0;
+		return 0;
+	}
+
+	/* If only the first cluster is needed, return now. */
+	if (fclus == cluster && *count == 1)
 		return 0;
 
 	cache_init(&cid, fclus, *dclus);
 	exfat_cache_lookup(inode, cluster, &cid, &fclus, dclus);
 
-	if (fclus == cluster)
+	/*
+	 * Return on cache hit to keep the code simple.
+	 */
+	if (fclus == cluster) {
+		*count = cid.fcluster + cid.nr_contig - fclus + 1;
 		return 0;
+	}
 
+	/*
+	 * Find the first cluster we need.
+	 */
 	while (fclus < cluster) {
 		/* prevent the infinite loop of cluster chain */
 		if (fclus > limit) {
@@ -290,6 +308,31 @@ int exfat_get_cluster(struct inode *inode, unsigned int cluster,
 			cache_init(&cid, fclus, *dclus);
 	}
 
+	/*
+	 * Collect the remaining clusters of this contiguous extent.
+	 */
+	if (*dclus != EXFAT_EOF_CLUSTER) {
+		unsigned int clu = *dclus;
+
+		/*
+		 * Now the cid cache contains the first cluster requested,
+		 * Advance the fclus to the last cluster of contiguous
+		 * extent, then update the count and cid cache accordingly.
+		 */
+		while (fclus < end) {
+			if (exfat_ent_get(sb, clu, &content, &bh))
+				goto err;
+			if (++clu != content) {
+				/* TODO: read ahead if content valid */
+				break;
+			}
+			fclus++;
+		}
+		cid.nr_contig = fclus - cid.fcluster;
+		*count = fclus - cluster + 1;
+	} else {
+		*count = 0;
+	}
 	brelse(bh);
 	exfat_cache_add(inode, &cid);
 	return 0;
