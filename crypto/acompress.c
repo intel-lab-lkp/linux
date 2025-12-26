@@ -170,8 +170,13 @@ static void acomp_save_req(struct acomp_req *req, crypto_completion_t cplt)
 
 	state->compl = req->base.complete;
 	state->data = req->base.data;
+	state->unit_size = req->unit_size;
+	state->flags = req->base.flags & (CRYPTO_ACOMP_REQ_SRC_VIRT |
+					  CRYPTO_ACOMP_REQ_DST_VIRT);
+
 	req->base.complete = cplt;
 	req->base.data = state;
+	req->unit_size = 0;
 }
 
 static void acomp_restore_req(struct acomp_req *req)
@@ -180,6 +185,7 @@ static void acomp_restore_req(struct acomp_req *req)
 
 	req->base.complete = state->compl;
 	req->base.data = state->data;
+	req->unit_size = state->unit_size;
 }
 
 static void acomp_reqchain_virt(struct acomp_req *req)
@@ -197,9 +203,6 @@ static void acomp_reqchain_virt(struct acomp_req *req)
 static void acomp_virt_to_sg(struct acomp_req *req)
 {
 	struct acomp_req_chain *state = &req->chain;
-
-	state->flags = req->base.flags & (CRYPTO_ACOMP_REQ_SRC_VIRT |
-					  CRYPTO_ACOMP_REQ_DST_VIRT);
 
 	if (acomp_request_src_isvirt(req)) {
 		unsigned int slen = req->slen;
@@ -248,6 +251,10 @@ static int acomp_reqchain_finish(struct acomp_req *req, int err)
 {
 	acomp_reqchain_virt(req);
 	acomp_restore_req(req);
+
+	if (req->unit_size)
+		req->dst->length = err ?: req->dlen;
+
 	return err;
 }
 
@@ -272,6 +279,9 @@ static int acomp_do_req_chain(struct acomp_req *req, bool comp)
 {
 	int err;
 
+	if (req->unit_size && req->slen > req->unit_size)
+		return -ENOSYS;
+
 	acomp_save_req(req, acomp_reqchain_done);
 
 	err = acomp_do_one_req(req, comp);
@@ -287,6 +297,13 @@ int crypto_acomp_compress(struct acomp_req *req)
 
 	if (acomp_req_on_stack(req) && acomp_is_async(tfm))
 		return -EAGAIN;
+	if (req->unit_size) {
+		if (!acomp_request_issg(req))
+			return -EINVAL;
+		if (crypto_acomp_req_seg(tfm))
+			return crypto_acomp_reqtfm(req)->compress(req);
+		return acomp_do_req_chain(req, true);
+	}
 	if (crypto_acomp_req_virt(tfm) || acomp_request_issg(req))
 		return crypto_acomp_reqtfm(req)->compress(req);
 	return acomp_do_req_chain(req, true);
@@ -299,6 +316,8 @@ int crypto_acomp_decompress(struct acomp_req *req)
 
 	if (acomp_req_on_stack(req) && acomp_is_async(tfm))
 		return -EAGAIN;
+	if (req->unit_size)
+		return -ENOSYS;
 	if (crypto_acomp_req_virt(tfm) || acomp_request_issg(req))
 		return crypto_acomp_reqtfm(req)->decompress(req);
 	return acomp_do_req_chain(req, false);
