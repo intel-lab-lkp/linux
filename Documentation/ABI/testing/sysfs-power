@@ -39,6 +39,26 @@ Description:
 		See Documentation/admin-guide/pm/sleep-states.rst for more
 		information.
 
+What:		/sys/power/standby
+Date:		February 2026
+Contact:	Antheas Kapenekakis <lkml@antheas.dev>
+Description:
+		The /sys/power/standby file allows userspace to inform the
+		kernel of the current runtime standby mode depending on user
+		activity. The options are "active", "inactive", "sleep",
+		and "resume". Only the ones supported by the platform will be
+		available. Depending on the mode, the appearance of the device
+		will change (e.g., keyboard backlight will turn off as part of
+		"inactive"), and its thermal envelope might be affected.
+
+		Reading from this file returns the available standby modes,
+		with the current one enclosed in square brackets. Writing one
+		of the above strings to this file causes the kernel to
+		transition to it.
+
+		See Documentation/admin-guide/pm/standby-states.rst for more
+		information.
+
 What:		/sys/power/disk
 Date:		September 2006
 Contact:	Rafael J. Wysocki <rafael@kernel.org>
