@@ -213,6 +213,7 @@ static int tpm2_load_space(struct tpm_chip *chip)
 		if (rc == -ENOENT) {
 			/* load failed, just forget session */
 			space->session_tbl[i] = 0;
+			continue;
 		} else if (rc) {
 			tpm2_flush_space(chip);
 			return rc;
