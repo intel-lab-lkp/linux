@@ -90,3 +90,13 @@ __rust_helper s16 rust_helper_atomic_i16_xchg_relaxed(s16 *ptr, s16 new)
 {
 	return raw_xchg_relaxed(ptr, new);
 }
+
+__rust_helper bool rust_helper_atomic_i8_try_cmpxchg(s8 *ptr, s8 *old, s8 new)
+{
+	return raw_try_cmpxchg(ptr, old, new);
+}
+
+__rust_helper bool rust_helper_atomic_i16_try_cmpxchg(s16 *ptr, s16 *old, s16 new)
+{
+	return raw_try_cmpxchg(ptr, old, new);
+}
