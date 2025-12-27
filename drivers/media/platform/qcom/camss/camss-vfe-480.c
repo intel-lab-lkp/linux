@@ -237,6 +237,9 @@ static void vfe_isr_reg_update(struct vfe_device *vfe, enum vfe_line_id line_id)
 	struct vfe_output *output;
 	unsigned long flags;
 
+	if (line_id >= VFE_LINE_NUM_MAX)
+		return;
+
 	spin_lock_irqsave(&vfe->output_lock, flags);
 	vfe_reg_update_clear(vfe, line_id);
 
