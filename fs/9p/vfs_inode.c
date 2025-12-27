@@ -977,7 +977,7 @@ v9fs_vfs_getattr(struct mnt_idmap *idmap, const struct path *path,
 		return 0;
 	} else if (v9ses->cache & CACHE_WRITEBACK) {
 		if (S_ISREG(inode->i_mode)) {
-			int retval = filemap_fdatawrite(inode->i_mapping);
+			int retval = filemap_write_and_wait(inode->i_mapping);
 
 			if (retval)
 				p9_debug(P9_DEBUG_ERROR,
@@ -993,7 +993,12 @@ v9fs_vfs_getattr(struct mnt_idmap *idmap, const struct path *path,
 	if (IS_ERR(st))
 		return PTR_ERR(st);
 
-	v9fs_stat2inode(st, d_inode(dentry), dentry->d_sb, 0);
+	/*
+	 * With writeback caching, the client is authoritative for i_size.
+	 * Don't let the server overwrite it with a potentially stale value.
+	 */
+	v9fs_stat2inode(st, d_inode(dentry), dentry->d_sb,
+		(v9ses->cache & CACHE_WRITEBACK) ? V9FS_STAT2INODE_KEEP_ISIZE : 0);
 	generic_fillattr(&nop_mnt_idmap, request_mask, d_inode(dentry), stat);
 
 	p9stat_free(st);
@@ -1058,7 +1063,7 @@ static int v9fs_vfs_setattr(struct mnt_idmap *idmap,
 
 	/* Write all dirty data */
 	if (d_is_reg(dentry)) {
-		retval = filemap_fdatawrite(inode->i_mapping);
+		retval = filemap_write_and_wait(inode->i_mapping);
 		if (retval)
 			p9_debug(P9_DEBUG_ERROR,
 			    "flushing writeback during setattr returned %d\n", retval);

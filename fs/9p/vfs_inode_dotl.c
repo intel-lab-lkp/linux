@@ -431,9 +431,9 @@ v9fs_vfs_getattr_dotl(struct mnt_idmap *idmap,
 	if (v9ses->cache & (CACHE_META|CACHE_LOOSE)) {
 		generic_fillattr(&nop_mnt_idmap, request_mask, inode, stat);
 		return 0;
-	} else if (v9ses->cache) {
+	} else if (v9ses->cache & CACHE_WRITEBACK) {
 		if (S_ISREG(inode->i_mode)) {
-			int retval = filemap_fdatawrite(inode->i_mapping);
+			int retval = filemap_write_and_wait(inode->i_mapping);
 
 			if (retval)
 				p9_debug(P9_DEBUG_ERROR,
@@ -453,7 +453,12 @@ v9fs_vfs_getattr_dotl(struct mnt_idmap *idmap,
 	if (IS_ERR(st))
 		return PTR_ERR(st);
 
-	v9fs_stat2inode_dotl(st, d_inode(dentry), 0);
+	/*
+	 * With writeback caching, the client is authoritative for i_size.
+	 * Don't let the server overwrite it with a potentially stale value.
+	 */
+	v9fs_stat2inode_dotl(st, d_inode(dentry),
+		(v9ses->cache & CACHE_WRITEBACK) ? V9FS_STAT2INODE_KEEP_ISIZE : 0);
 	generic_fillattr(&nop_mnt_idmap, request_mask, d_inode(dentry), stat);
 	/* Change block size to what the server returned */
 	stat->blksize = st->st_blksize;
@@ -561,7 +566,7 @@ int v9fs_vfs_setattr_dotl(struct mnt_idmap *idmap,
 
 	/* Write all dirty data */
 	if (S_ISREG(inode->i_mode)) {
-		retval = filemap_fdatawrite(inode->i_mapping);
+		retval = filemap_write_and_wait(inode->i_mapping);
 		if (retval < 0)
 			p9_debug(P9_DEBUG_ERROR,
 			    "Flushing file prior to setattr failed: %d\n", retval);
