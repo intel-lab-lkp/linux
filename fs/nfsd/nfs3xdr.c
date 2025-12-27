@@ -90,7 +90,7 @@ svcxdr_decode_nfs_fh3(struct xdr_stream *xdr, struct svc_fh *fhp)
 	p = xdr_inline_decode(xdr, size);
 	if (!p)
 		return false;
-	fh_init(fhp, NFS3_FHSIZE);
+	fh_init(fhp, NFS3_FHSIZE, ARGSTRM_RQST(xdr));
 	fhp->fh_handle.fh_size = size;
 	memcpy(&fhp->fh_handle.fh_raw, p, size);
 
@@ -1111,7 +1111,7 @@ svcxdr_encode_entry3_plus(struct nfsd3_readdirres *resp, const char *name,
 	bool result;
 
 	result = false;
-	fh_init(fhp, NFS3_FHSIZE);
+	fh_init(fhp, NFS3_FHSIZE, resp->rqstp);
 	if (compose_entry_fh(resp, fhp, name, namlen, ino) != nfs_ok)
 		goto out_noattrs;
 

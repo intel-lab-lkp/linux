@@ -123,7 +123,7 @@ nfsd3_proc_lookup(struct svc_rqst *rqstp)
 				argp->name);
 
 	fh_copy(&resp->dirfh, &argp->fh);
-	fh_init(&resp->fh, NFS3_FHSIZE);
+	fh_init(&resp->fh, NFS3_FHSIZE, rqstp);
 
 	resp->status = nfsd_lookup(rqstp, &resp->dirfh,
 				   argp->name, argp->len,
@@ -378,7 +378,7 @@ nfsd3_proc_create(struct svc_rqst *rqstp)
 	svc_fh *dirfhp, *newfhp;
 
 	dirfhp = fh_copy(&resp->dirfh, &argp->fh);
-	newfhp = fh_init(&resp->fh, NFS3_FHSIZE);
+	newfhp = fh_init(&resp->fh, NFS3_FHSIZE, rqstp);
 
 	resp->status = nfsd3_create_file(rqstp, dirfhp, newfhp, argp);
 	resp->status = nfsd3_map_status(resp->status);
@@ -399,7 +399,7 @@ nfsd3_proc_mkdir(struct svc_rqst *rqstp)
 
 	argp->attrs.ia_valid &= ~ATTR_SIZE;
 	fh_copy(&resp->dirfh, &argp->fh);
-	fh_init(&resp->fh, NFS3_FHSIZE);
+	fh_init(&resp->fh, NFS3_FHSIZE, rqstp);
 	resp->status = nfsd_create(rqstp, &resp->dirfh, argp->name, argp->len,
 				   &attrs, S_IFDIR, 0, &resp->fh);
 	resp->status = nfsd3_map_status(resp->status);
@@ -433,7 +433,7 @@ nfsd3_proc_symlink(struct svc_rqst *rqstp)
 	}
 
 	fh_copy(&resp->dirfh, &argp->ffh);
-	fh_init(&resp->fh, NFS3_FHSIZE);
+	fh_init(&resp->fh, NFS3_FHSIZE, rqstp);
 	resp->status = nfsd_symlink(rqstp, &resp->dirfh, argp->fname,
 				    argp->flen, argp->tname, &attrs, &resp->fh);
 	kfree(argp->tname);
@@ -457,7 +457,7 @@ nfsd3_proc_mknod(struct svc_rqst *rqstp)
 	dev_t	rdev = 0;
 
 	fh_copy(&resp->dirfh, &argp->fh);
-	fh_init(&resp->fh, NFS3_FHSIZE);
+	fh_init(&resp->fh, NFS3_FHSIZE, rqstp);
 
 	if (argp->ftype == NF3CHR || argp->ftype == NF3BLK) {
 		rdev = MKDEV(argp->major, argp->minor);

@@ -264,6 +264,9 @@ enum {
 
 #define SVC_NET(rqst) (rqst->rq_xprt ? rqst->rq_xprt->xpt_net : rqst->rq_bc_net)
 
+#define ARGSTRM_RQST(xdr_stream) (container_of(xdr_stream, struct svc_rqst, rq_arg_stream))
+#define RESSTRM_RQST(xdr_stream) (container_of(xdr_stream, struct svc_rqst, rq_res_stream))
+
 /*
  * Rigorous type checking on sockaddr type conversions
  */

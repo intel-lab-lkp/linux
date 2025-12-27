@@ -1050,7 +1050,7 @@ exp_rootfh(struct net *net, struct auth_domain *clp, char *name,
 	/*
 	 * fh must be initialized before calling fh_compose
 	 */
-	fh_init(&fh, maxsize);
+	fh_init(&fh, maxsize, NULL);
 	if (fh_compose(&fh, exp, path.dentry, NULL))
 		err = -EINVAL;
 	else

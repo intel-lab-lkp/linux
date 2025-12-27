@@ -430,7 +430,7 @@ do_open_lookup(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate, stru
 	*resfh = kmalloc(sizeof(struct svc_fh), GFP_KERNEL);
 	if (!*resfh)
 		return nfserr_jukebox;
-	fh_init(*resfh, NFS4_FHSIZE);
+	fh_init(*resfh, NFS4_FHSIZE, rqstp);
 	open->op_truncate = false;
 
 	if (open->op_create) {
@@ -790,7 +790,7 @@ nfsd4_create(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	__be32 status;
 	dev_t rdev;
 
-	fh_init(&resfh, NFS4_FHSIZE);
+	fh_init(&resfh, NFS4_FHSIZE, rqstp);
 
 	status = fh_verify(rqstp, &cstate->current_fh, S_IFDIR, NFSD_MAY_NOP);
 	if (status)
@@ -915,7 +915,7 @@ static __be32 nfsd4_do_lookupp(struct svc_rqst *rqstp, struct svc_fh *fh)
 	struct svc_fh tmp_fh;
 	__be32 ret;
 
-	fh_init(&tmp_fh, NFS4_FHSIZE);
+	fh_init(&tmp_fh, NFS4_FHSIZE, rqstp);
 	ret = exp_pseudoroot(rqstp, &tmp_fh);
 	if (ret)
 		return ret;
@@ -2888,8 +2888,8 @@ nfsd4_proc_compound(struct svc_rqst *rqstp)
 	resp->tag = args->tag;
 	resp->rqstp = rqstp;
 	cstate->minorversion = args->minorversion;
-	fh_init(current_fh, NFS4_FHSIZE);
-	fh_init(save_fh, NFS4_FHSIZE);
+	fh_init(current_fh, NFS4_FHSIZE, rqstp);
+	fh_init(save_fh, NFS4_FHSIZE, rqstp);
 	/*
 	 * Don't use the deferral mechanism for NFSv4; compounds make it
 	 * too hard to avoid non-idempotency problems.

@@ -33,7 +33,7 @@ nlm_fopen(struct svc_rqst *rqstp, struct nfs_fh *f, struct file **filp,
 	struct svc_fh	fh;
 
 	/* must initialize before using! but maxsize doesn't matter */
-	fh_init(&fh,0);
+	fh_init(&fh, 0, NULL);
 	fh.fh_handle.fh_size = f->size;
 	memcpy(&fh.fh_handle.fh_raw, f->data, f->size);
 	fh.fh_export = NULL;

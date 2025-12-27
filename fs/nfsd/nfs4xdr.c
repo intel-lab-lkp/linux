@@ -3675,7 +3675,7 @@ nfsd4_encode_fattr4(struct svc_rqst *rqstp, struct xdr_stream *xdr,
 		status = nfserr_jukebox;
 		if (!tempfh)
 			goto out;
-		fh_init(tempfh, NFS4_FHSIZE);
+		fh_init(tempfh, NFS4_FHSIZE, rqstp);
 		status = fh_compose(tempfh, exp, dentry, NULL);
 		if (status)
 			goto out;

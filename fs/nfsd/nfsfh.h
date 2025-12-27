@@ -13,6 +13,7 @@
 #include <linux/iversion.h>
 #include <linux/exportfs.h>
 #include <linux/nfs4.h>
+#include <crypto/skcipher.h>
 
 #include "export.h"
 
@@ -74,6 +75,13 @@ static inline ino_t u32_to_ino_t(__u32 uino)
 	return (ino_t) uino;
 }
 
+/* filehandle crypto buckets allocated per-knfsd */
+struct encfh_buf {
+	u8 a_buf[NFS4_FHSIZE];
+	u8 b_buf[NFS4_FHSIZE];
+	struct skcipher_request req;
+};
+
 /*
  * This is the internal representation of an NFS handle used in knfsd.
  * pre_mtime/post_version will be used to support wcc_attr's in NFSv3.
@@ -83,6 +91,7 @@ typedef struct svc_fh {
 	int			fh_maxsize;	/* max size for fh_handle */
 	struct dentry *		fh_dentry;	/* validated dentry */
 	struct svc_export *	fh_export;	/* export pointer */
+	struct svc_rqst	*	fh_rqstp;	/* access per-knfsd buffer for encfh_buf */
 
 	bool			fh_want_write;	/* remount protection taken */
 	bool			fh_no_wcc;	/* no wcc data needed */
@@ -244,10 +253,11 @@ fh_copy_shallow(struct knfsd_fh *dst, const struct knfsd_fh *src)
 }
 
 static __inline__ struct svc_fh *
-fh_init(struct svc_fh *fhp, int maxsize)
+fh_init(struct svc_fh *fhp, int maxsize, struct svc_rqst *rqstp)
 {
 	memset(fhp, 0, sizeof(*fhp));
 	fhp->fh_maxsize = maxsize;
+	fhp->fh_rqstp = rqstp;
 	return fhp;
 }
 

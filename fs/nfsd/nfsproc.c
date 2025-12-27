@@ -162,7 +162,7 @@ nfsd_proc_lookup(struct svc_rqst *rqstp)
 	dprintk("nfsd: LOOKUP   %s %.*s\n",
 		SVCFH_fmt(&argp->fh), argp->len, argp->name);
 
-	fh_init(&resp->fh, NFS_FHSIZE);
+	fh_init(&resp->fh, NFS_FHSIZE, rqstp);
 	resp->status = nfsd_lookup(rqstp, &argp->fh, argp->name, argp->len,
 				   &resp->fh);
 	fh_put(&argp->fh);
@@ -312,7 +312,7 @@ nfsd_proc_create(struct svc_rqst *rqstp)
 		resp->status = nfserrno(PTR_ERR(dchild));
 		goto out_write;
 	}
-	fh_init(newfhp, NFS_FHSIZE);
+	fh_init(newfhp, NFS_FHSIZE, rqstp);
 	resp->status = fh_compose(newfhp, dirfhp->fh_export, dchild, dirfhp);
 	if (!resp->status && d_really_is_negative(dchild))
 		resp->status = nfserr_noent;
@@ -502,7 +502,7 @@ nfsd_proc_symlink(struct svc_rqst *rqstp)
 		goto out;
 	}
 
-	fh_init(&newfh, NFS_FHSIZE);
+	fh_init(&newfh, NFS_FHSIZE, rqstp);
 	resp->status = nfsd_symlink(rqstp, &argp->ffh, argp->fname, argp->flen,
 				    argp->tname, &attrs, &newfh);
 
@@ -533,7 +533,7 @@ nfsd_proc_mkdir(struct svc_rqst *rqstp)
 	}
 
 	argp->attrs.ia_valid &= ~ATTR_SIZE;
-	fh_init(&resp->fh, NFS_FHSIZE);
+	fh_init(&resp->fh, NFS_FHSIZE, rqstp);
 	resp->status = nfsd_create(rqstp, &argp->fh, argp->name, argp->len,
 				   &attrs, S_IFDIR, 0, &resp->fh);
 	fh_put(&argp->fh);

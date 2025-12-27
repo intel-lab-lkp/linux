@@ -68,7 +68,7 @@ nfsd_open_local_fh(struct net *net, struct auth_domain *dom,
 		return localio;
 
 	/* nfs_fh -> svc_fh */
-	fh_init(&fh, NFS4_FHSIZE);
+	fh_init(&fh, NFS4_FHSIZE, NULL);
 	fh.fh_handle.fh_size = nfs_fh->size;
 	memcpy(fh.fh_handle.fh_raw, nfs_fh->data, nfs_fh->size);
 
