@@ -34,7 +34,7 @@
 #define NFSEXP_GATHERED_WRITES	BIT(5)
 #define NFSEXP_NOREADDIRPLUS    BIT(6)
 #define NFSEXP_SECURITY_LABEL	BIT(7)
-/* BIT(8) currently unused */
+#define NFSEXP_ENCRYPT_FH		BIT(8)
 #define NFSEXP_NOHIDE			BIT(9)
 #define NFSEXP_NOSUBTREECHECK	BIT(10)
 #define NFSEXP_NOAUTHNLM		BIT(11)	/* Don't authenticate NLM requests - just trust */
