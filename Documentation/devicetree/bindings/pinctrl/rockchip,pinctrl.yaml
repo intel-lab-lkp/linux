@@ -67,6 +67,13 @@ properties:
       Required for at least rk3188 and rk3288. On the rk3368 this should
       point to the PMUGRF syscon.
 
+  rockchip,rmio:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      The phandle of the syscon node for the RMIO registers, used by
+      some SoCs (e.g. rk3506) to configure the secondary block-level
+      pinmux functions.
+
   "#address-cells":
     enum: [1, 2]
 
@@ -144,6 +151,23 @@ additionalProperties:
             - description:
                 The phandle of a node contains the generic pinconfig options
                 to use as described in pinctrl-bindings.txt.
+
+      rockchip,rmio-pins:
+        $ref: /schemas/types.yaml#/definitions/uint32-matrix
+        minItems: 1
+        items:
+          items:
+            - minimum: 0
+              description: RMIO ID (Controller index)
+            - minimum: 0
+              description: Pin index within the RMIO controller
+            - minimum: 0
+              description: Function Mux ID
+        description:
+          Configuration for the Rockchip Matrix I/O (RMIO) block. The format
+          is <rmio_id pin_id function_id>. This acts as a secondary muxing
+          layer when the primary 'rockchip,pins' mux is set to the RMIO
+          function.
 
 examples:
   - |
