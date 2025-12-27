@@ -1268,6 +1268,13 @@ static int drm_syncobj_array_find(struct drm_file *file_private,
 	uint32_t i, *handles;
 	struct drm_syncobj **syncobjs;
 	int ret;
+	size_t size;
+
+	if (check_mul_overflow(count_handles, sizeof(*handles), &size))
+		return -EOVERFLOW;
+
+	if (size > KMALLOC_MAX_SIZE)
+		return -ERANGE;
 
 	handles = kmalloc_array(count_handles, sizeof(*handles), GFP_KERNEL);
 	if (handles == NULL)
