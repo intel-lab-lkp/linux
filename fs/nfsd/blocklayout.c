@@ -317,6 +317,7 @@ nfsd4_block_get_device_info_scsi(struct super_block *sb,
 	struct pnfs_block_deviceaddr *dev;
 	struct pnfs_block_volume *b;
 	const struct pr_ops *ops;
+	void *entry;
 	int ret;
 
 	dev = kzalloc(struct_size(dev, volumes, 1), GFP_KERNEL);
@@ -339,6 +340,20 @@ nfsd4_block_get_device_info_scsi(struct super_block *sb,
 	if (!ops) {
 		pr_err("pNFS: device %s does not support PRs.\n",
 			sb->s_id);
+		goto out_free_dev;
+	}
+
+	/*
+	 * xa_store() is idempotent -- the device is added exactly once
+	 * to a client's cl_dev_fences no matter how many times
+	 * nfsd4_block_get_device_info_scsi() is invoked. This prevents
+	 * adding more entries to cl_dev_fences than there are devices on
+	 * the server. XA_MARK_0 tracks whether the device has been fenced.
+	 */
+	entry = xa_store(&clp->cl_dev_fences, sb->s_bdev->bd_dev,
+			 XA_ZERO_ENTRY, GFP_KERNEL);
+	if (xa_is_err(entry)) {
+		ret = xa_err(entry);
 		goto out_free_dev;
 	}
 
@@ -399,11 +414,39 @@ nfsd4_scsi_fence_client(struct nfs4_layout_stateid *ls, struct nfsd_file *file)
 {
 	struct nfs4_client *clp = ls->ls_stid.sc_client;
 	struct block_device *bdev = file->nf_file->f_path.mnt->mnt_sb->s_bdev;
+	struct xarray *xa = &clp->cl_dev_fences;
 	int status;
+	bool skip;
+
+	xa_lock(xa);
+	skip = xa_get_mark(xa, bdev->bd_dev, XA_MARK_0);
+	if (!skip)
+		__xa_set_mark(xa, bdev->bd_dev, XA_MARK_0);
+	xa_unlock(xa);
+	if (skip)
+		return;
 
 	status = bdev->bd_disk->fops->pr_ops->pr_preempt(bdev, NFSD_MDS_PR_KEY,
 			nfsd4_scsi_pr_key(clp),
 			PR_EXCLUSIVE_ACCESS_REG_ONLY, true);
+	/*
+	 * Reset to allow retry only when the command could not have
+	 * reached the device. Negative status means a local error
+	 * (e.g., -ENOMEM) prevented the command from being sent.
+	 * PR_STS_PATH_FAILED and PR_STS_PATH_FAST_FAILED indicate
+	 * transport path failures before device delivery.
+	 *
+	 * For all other errors, the command may have reached the device
+	 * and the preempt may have succeeded. Avoid resetting, since
+	 * retrying a successful preempt returns PR_STS_IOERR or
+	 * PR_STS_RESERVATION_CONFLICT, which would cause an infinite
+	 * retry loop.
+	 */
+	if (status < 0 ||
+	    status == PR_STS_PATH_FAILED ||
+	    status == PR_STS_PATH_FAST_FAILED)
+		xa_clear_mark(xa, bdev->bd_dev, XA_MARK_0);
+
 	trace_nfsd_pnfs_fence(clp, bdev->bd_disk->disk_name, status);
 }
 
