@@ -390,9 +390,18 @@ struct rockchip_mux_route_data {
 	u32 route_val;
 };
 
+struct rockchip_rmio_data {
+	struct regmap			*regmap;
+	u32				nr_pins;
+	u32				width;
+	u32				offset;
+};
+
 struct rockchip_pin_ctrl {
 	struct rockchip_pin_bank	*pin_banks;
 	u32				nr_banks;
+	struct rockchip_rmio_data	*rmios;
+	u32				nr_rmios;
 	u32				nr_pins;
 	char				*label;
 	enum rockchip_pinctrl_type	type;
@@ -416,6 +425,12 @@ struct rockchip_pin_ctrl {
 				    int *reg, u8 *bit);
 };
 
+struct rockchip_rmio_config {
+	u32			id;
+	u32			pin;
+	u32			func;
+};
+
 struct rockchip_pin_config {
 	unsigned int		func;
 	unsigned long		*configs;
@@ -437,12 +452,16 @@ struct rockchip_pin_deferred {
  * @pins: the pins included in this group.
  * @npins: number of pins included in this group.
  * @data: local pin configuration
+ * @nrmios: number of RMIO configurations in this group.
+ * @rmios: list of RMIO configurations for this group.
  */
 struct rockchip_pin_group {
 	const char			*name;
 	unsigned int			npins;
 	unsigned int			*pins;
 	struct rockchip_pin_config	*data;
+	unsigned int			nrmios;
+	struct rockchip_rmio_config	*rmios;
 };
 
 /**

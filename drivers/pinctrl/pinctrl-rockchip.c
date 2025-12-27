@@ -1414,6 +1414,33 @@ static int rockchip_set_mux(struct rockchip_pin_bank *bank, int pin, int mux)
 	return ret;
 }
 
+static int rockchip_set_rmio(struct rockchip_pinctrl *info, u32 id, u32 pin, u32 func)
+{
+	struct rockchip_pin_ctrl *ctrl = info->ctrl;
+	struct rockchip_rmio_data *rmio;
+	u32 mask, data, offset;
+	int ret;
+
+	if (id >= ctrl->nr_rmios)
+		return -EINVAL;
+
+	rmio = &ctrl->rmios[id];
+	if (pin >= rmio->nr_pins)
+		return -EINVAL;
+
+	dev_dbg(info->dev, "setting func of rmio%u-%u to %u\n", id, pin, func);
+
+	mask = (1 << rmio->width) - 1;
+	data = (mask << 16) | func;
+	offset = rmio->offset + 4 * pin;
+
+	ret = regmap_write(rmio->regmap, offset, data);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
 #define PX30_PULL_PMU_OFFSET		0x10
 #define PX30_PULL_GRF_OFFSET		0x60
 #define PX30_PULL_BITS_PER_PIN		2
@@ -3660,9 +3687,10 @@ static int rockchip_pmx_set(struct pinctrl_dev *pctldev, unsigned selector,
 	struct rockchip_pinctrl *info = pinctrl_dev_get_drvdata(pctldev);
 	const unsigned int *pins = info->groups[group].pins;
 	const struct rockchip_pin_config *data = info->groups[group].data;
+	const struct rockchip_rmio_config *rmio;
 	struct device *dev = info->dev;
 	struct rockchip_pin_bank *bank;
-	int cnt, ret = 0;
+	int cnt, cnt_rmio = 0, ret = 0;
 
 	dev_dbg(dev, "enable function %s group %s\n",
 		info->functions[selector].name, info->groups[group].name);
@@ -3679,11 +3707,32 @@ static int rockchip_pmx_set(struct pinctrl_dev *pctldev, unsigned selector,
 			break;
 	}
 
+	if (cnt != info->groups[group].npins)
+		goto revert_setting;
+
+	for (cnt_rmio = 0; cnt_rmio < info->groups[group].nrmios; cnt_rmio++) {
+		rmio = &info->groups[group].rmios[cnt_rmio];
+		ret = rockchip_set_rmio(info, rmio->id, rmio->pin, rmio->func);
+		if (ret)
+			break;
+	}
+
+revert_setting:
 	if (ret) {
 		/* revert the already done pin settings */
 		for (cnt--; cnt >= 0; cnt--) {
 			bank = pin_to_bank(info, pins[cnt]);
 			rockchip_set_mux(bank, pins[cnt] - bank->pin_base, 0);
+		}
+
+		return ret;
+	}
+
+	if (ret && cnt_rmio) {
+		/* revert the already done pin settings */
+		for (cnt_rmio--; cnt_rmio >= 0; cnt_rmio--) {
+			rmio = &info->groups[group].rmios[cnt_rmio];
+			rockchip_set_rmio(info, rmio->id, rmio->pin, 0);
 		}
 
 		return ret;
@@ -4036,6 +4085,32 @@ static int rockchip_pinctrl_parse_groups(struct device_node *np,
 			return ret;
 	}
 
+	/*
+	 * the binding format is rockchip,rmio-pins = <id pin func>,
+	 * do sanity check and calculate pins number
+	 */
+	size = 0;
+	list = of_get_property(np, "rockchip,rmio-pins", &size);
+	if (list && size) {
+		size /= sizeof(*list);
+		if (size % 3)
+			return dev_err_probe(dev, -EINVAL,
+					     "%pOF: rockchip,rmio-pins: expected one or more of <id pin func>, got %d args instead\n",
+					     np, size);
+
+		grp->nrmios = size / 3;
+
+		grp->rmios = devm_kcalloc(dev, grp->nrmios, sizeof(*grp->rmios), GFP_KERNEL);
+		if (!grp->rmios)
+			return -ENOMEM;
+
+		for (i = 0, j = 0; i < size; i += 3, j++) {
+			grp->rmios[j].id = be32_to_cpu(*list++);
+			grp->rmios[j].pin = be32_to_cpu(*list++);
+			grp->rmios[j].func = be32_to_cpu(*list++);
+		}
+	}
+
 	return 0;
 }
 
@@ -4173,10 +4248,11 @@ static struct rockchip_pin_ctrl *rockchip_pinctrl_get_soc_data(
 						struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct device_node *node = dev->of_node;
+	struct device_node *node = dev->of_node, *syscon_np;
 	const struct of_device_id *match;
 	struct rockchip_pin_ctrl *ctrl;
 	struct rockchip_pin_bank *bank;
+	struct rockchip_rmio_data *rmio;
 	int grf_offs, pmu_offs, drv_grf_offs, drv_pmu_offs, i, j;
 
 	match = of_match_node(rockchip_pinctrl_dt_match, node);
@@ -4282,6 +4358,19 @@ static struct rockchip_pin_ctrl *rockchip_pinctrl_get_soc_data(
 		}
 	}
 
+	rmio = ctrl->rmios;
+	for (i = 0; i < ctrl->nr_rmios; ++i, ++rmio) {
+		syscon_np = of_parse_phandle(node, "rockchip,rmio", i);
+		if (syscon_np) {
+			rmio->regmap = syscon_node_to_regmap(syscon_np);
+			of_node_put(syscon_np);
+			if (IS_ERR(rmio->regmap))
+				return ERR_CAST(rmio->regmap);
+		} else {
+			return ERR_PTR(-EINVAL);
+		}
+	}
+
 	return ctrl;
 }
 
@@ -4353,7 +4442,7 @@ static int rockchip_pinctrl_probe(struct platform_device *pdev)
 	info->dev = dev;
 
 	ctrl = rockchip_pinctrl_get_soc_data(info, pdev);
-	if (!ctrl)
+	if (IS_ERR_OR_NULL(ctrl))
 		return dev_err_probe(dev, -EINVAL, "driver data not available\n");
 	info->ctrl = ctrl;
 
@@ -4941,9 +5030,15 @@ static struct rockchip_pin_bank rk3506_pin_banks[] = {
 				    1, 1, 1, 1),
 };
 
+static struct rockchip_rmio_data rk3506_rmios[] = {
+	{ .nr_pins = 32, .width = 7, .offset = 0x80 },
+};
+
 static struct rockchip_pin_ctrl rk3506_pin_ctrl __maybe_unused = {
 	.pin_banks		= rk3506_pin_banks,
 	.nr_banks		= ARRAY_SIZE(rk3506_pin_banks),
+	.rmios			= rk3506_rmios,
+	.nr_rmios		= ARRAY_SIZE(rk3506_rmios),
 	.label			= "RK3506-GPIO",
 	.type			= RK3506,
 	.pull_calc_reg		= rk3506_calc_pull_reg_and_bit,
