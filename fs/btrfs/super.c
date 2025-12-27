@@ -1013,6 +1013,9 @@ int btrfs_sync_fs(struct super_block *sb, int wait)
 	struct btrfs_fs_info *fs_info = btrfs_sb(sb);
 	struct btrfs_root *root = fs_info->tree_root;
 
+	if (unlikely(!test_bit(BTRFS_FS_OPEN, &fs_info->flags)))
+		return 0;
+
 	trace_btrfs_sync_fs(fs_info, wait);
 
 	if (!wait) {
