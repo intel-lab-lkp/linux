@@ -366,9 +366,11 @@ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 	/*
 	 * Prevent nesting work_on_cpu() for the case where a Virtual Function
 	 * device is probed from work_on_cpu() of the Physical device.
+	 * Check PF_WQ_WORKER to prevent invoking work_on_cpu() in an asynchronous
+	 * probe worker when the driver allows asynchronous probing.
 	 */
 	if (node < 0 || node >= MAX_NUMNODES || !node_online(node) ||
-	    pci_physfn_is_probed(dev)) {
+	    pci_physfn_is_probed(dev) || (current->flags & PF_WQ_WORKER)) {
 		cpu = nr_cpu_ids;
 	} else {
 		cpumask_var_t wq_domain_mask;
