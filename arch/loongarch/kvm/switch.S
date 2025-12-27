@@ -10,6 +10,7 @@
 #include <asm/loongarch.h>
 #include <asm/regdef.h>
 #include <asm/unwind_hints.h>
+#include <linux/kvm_types.h>
 
 #define HGPR_OFFSET(x)		(PT_R0 + 8*x)
 #define GGPR_OFFSET(x)		(KVM_ARCH_GGPR + 8*x)
@@ -110,9 +111,9 @@
 	 * need to copy world switch code to DMW area.
 	 */
 	.text
+	.p2align PAGE_SHIFT
 	.cfi_sections	.debug_frame
 SYM_CODE_START(kvm_exc_entry)
-	.p2align PAGE_SHIFT
 	UNWIND_HINT_UNDEFINED
 	csrwr	a2,   KVM_TEMP_KS
 	csrrd	a2,   KVM_VCPU_KS
@@ -170,6 +171,7 @@ SYM_CODE_START(kvm_exc_entry)
 	/* restore per cpu register */
 	ld.d	u0, a2, KVM_ARCH_HPERCPU
 	addi.d	sp, sp, -PT_SIZE
+	UNWIND_HINT_REGS
 
 	/* Prepare handle exception */
 	or	a0, s0, zero
@@ -200,7 +202,7 @@ ret_to_host:
 	jr      ra
 
 SYM_CODE_END(kvm_exc_entry)
-EXPORT_SYMBOL(kvm_exc_entry)
+EXPORT_SYMBOL_FOR_KVM(kvm_exc_entry)
 
 /*
  * int kvm_enter_guest(struct kvm_run *run, struct kvm_vcpu *vcpu)
@@ -215,6 +217,14 @@ SYM_FUNC_START(kvm_enter_guest)
 	/* Save host GPRs */
 	kvm_save_host_gpr a2
 
+	/*
+	 * The csr_era member variable of the pt_regs structure is required
+	 * for unwinding orc to perform stack traceback, so we need to put
+	 * pc into csr_era member variable here.
+	 */
+	pcaddi	t0, 0
+	st.d	t0, a2, PT_ERA
+
 	addi.d	a2, a1, KVM_VCPU_ARCH
 	st.d	sp, a2, KVM_ARCH_HSP
 	st.d	tp, a2, KVM_ARCH_HTP
@@ -225,7 +235,7 @@ SYM_FUNC_START(kvm_enter_guest)
 	csrwr	a1, KVM_VCPU_KS
 	kvm_switch_to_guest
 SYM_FUNC_END(kvm_enter_guest)
-EXPORT_SYMBOL(kvm_enter_guest)
+EXPORT_SYMBOL_FOR_KVM(kvm_enter_guest)
 
 SYM_FUNC_START(kvm_save_fpu)
 	fpu_save_csr	a0 t1
@@ -233,7 +243,7 @@ SYM_FUNC_START(kvm_save_fpu)
 	fpu_save_cc	a0 t1 t2
 	jr              ra
 SYM_FUNC_END(kvm_save_fpu)
-EXPORT_SYMBOL(kvm_save_fpu)
+EXPORT_SYMBOL_FOR_KVM(kvm_save_fpu)
 
 SYM_FUNC_START(kvm_restore_fpu)
 	fpu_restore_double a0 t1
@@ -241,7 +251,7 @@ SYM_FUNC_START(kvm_restore_fpu)
 	fpu_restore_cc	   a0 t1 t2
 	jr                 ra
 SYM_FUNC_END(kvm_restore_fpu)
-EXPORT_SYMBOL(kvm_restore_fpu)
+EXPORT_SYMBOL_FOR_KVM(kvm_restore_fpu)
 
 #ifdef CONFIG_CPU_HAS_LSX
 SYM_FUNC_START(kvm_save_lsx)
@@ -250,7 +260,7 @@ SYM_FUNC_START(kvm_save_lsx)
 	lsx_save_data   a0 t1
 	jr              ra
 SYM_FUNC_END(kvm_save_lsx)
-EXPORT_SYMBOL(kvm_save_lsx)
+EXPORT_SYMBOL_FOR_KVM(kvm_save_lsx)
 
 SYM_FUNC_START(kvm_restore_lsx)
 	lsx_restore_data a0 t1
@@ -258,7 +268,7 @@ SYM_FUNC_START(kvm_restore_lsx)
 	fpu_restore_csr  a0 t1 t2
 	jr               ra
 SYM_FUNC_END(kvm_restore_lsx)
-EXPORT_SYMBOL(kvm_restore_lsx)
+EXPORT_SYMBOL_FOR_KVM(kvm_restore_lsx)
 #endif
 
 #ifdef CONFIG_CPU_HAS_LASX
@@ -268,7 +278,7 @@ SYM_FUNC_START(kvm_save_lasx)
 	lasx_save_data  a0 t1
 	jr              ra
 SYM_FUNC_END(kvm_save_lasx)
-EXPORT_SYMBOL(kvm_save_lasx)
+EXPORT_SYMBOL_FOR_KVM(kvm_save_lasx)
 
 SYM_FUNC_START(kvm_restore_lasx)
 	lasx_restore_data a0 t1
@@ -276,7 +286,7 @@ SYM_FUNC_START(kvm_restore_lasx)
 	fpu_restore_csr   a0 t1 t2
 	jr                ra
 SYM_FUNC_END(kvm_restore_lasx)
-EXPORT_SYMBOL(kvm_restore_lasx)
+EXPORT_SYMBOL_FOR_KVM(kvm_restore_lasx)
 #endif
 
 #ifdef CONFIG_CPU_HAS_LBT
