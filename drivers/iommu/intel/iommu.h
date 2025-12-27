@@ -897,6 +897,15 @@ static inline int pfn_level_offset(u64 pfn, int level)
 	return (pfn >> level_to_offset_bits(level)) & LEVEL_MASK;
 }
 
+static inline void entry_set_bits(u64 *ptr, u64 mask, u64 bits)
+{
+	u64 old;
+
+	WARN_ON_ONCE(bits & ~mask);
+
+	old = READ_ONCE(*ptr);
+	WRITE_ONCE(*ptr, (old & ~mask) | (bits & mask));
+}
 
 static inline void context_set_present(struct context_entry *context)
 {

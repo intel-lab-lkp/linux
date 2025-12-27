@@ -10,6 +10,8 @@
 #ifndef __INTEL_PASID_H
 #define __INTEL_PASID_H
 
+#include "iommu.h"
+
 #define PASID_MAX			0x100000
 #define PASID_PTE_MASK			0x3F
 #define PASID_PTE_PRESENT		1
@@ -109,16 +111,6 @@ static inline void pasid_clear_entry_with_fpd(struct pasid_entry *pe)
 	WRITE_ONCE(pe->val[7], 0);
 }
 
-static inline void pasid_set_bits(u64 *ptr, u64 mask, u64 bits)
-{
-	u64 old;
-
-	WARN_ON_ONCE(bits & ~mask);
-
-	old = READ_ONCE(*ptr);
-	WRITE_ONCE(*ptr, (old & ~mask) | (bits & mask));
-}
-
 static inline u64 pasid_get_bits(u64 *ptr)
 {
 	return READ_ONCE(*ptr);
@@ -131,7 +123,7 @@ static inline u64 pasid_get_bits(u64 *ptr)
 static inline void
 pasid_set_domain_id(struct pasid_entry *pe, u64 value)
 {
-	pasid_set_bits(&pe->val[1], GENMASK_ULL(15, 0), value);
+	entry_set_bits(&pe->val[1], GENMASK_ULL(15, 0), value);
 }
 
 /*
@@ -150,7 +142,7 @@ pasid_get_domain_id(struct pasid_entry *pe)
 static inline void
 pasid_set_slptr(struct pasid_entry *pe, u64 value)
 {
-	pasid_set_bits(&pe->val[0], VTD_PAGE_MASK, value);
+	entry_set_bits(&pe->val[0], VTD_PAGE_MASK, value);
 }
 
 /*
@@ -160,7 +152,7 @@ pasid_set_slptr(struct pasid_entry *pe, u64 value)
 static inline void
 pasid_set_address_width(struct pasid_entry *pe, u64 value)
 {
-	pasid_set_bits(&pe->val[0], GENMASK_ULL(4, 2), value << 2);
+	entry_set_bits(&pe->val[0], GENMASK_ULL(4, 2), value << 2);
 }
 
 /*
@@ -170,7 +162,7 @@ pasid_set_address_width(struct pasid_entry *pe, u64 value)
 static inline void
 pasid_set_translation_type(struct pasid_entry *pe, u64 value)
 {
-	pasid_set_bits(&pe->val[0], GENMASK_ULL(8, 6), value << 6);
+	entry_set_bits(&pe->val[0], GENMASK_ULL(8, 6), value << 6);
 }
 
 /*
@@ -179,7 +171,7 @@ pasid_set_translation_type(struct pasid_entry *pe, u64 value)
  */
 static inline void pasid_set_fault_enable(struct pasid_entry *pe)
 {
-	pasid_set_bits(&pe->val[0], 1 << 1, 0);
+	entry_set_bits(&pe->val[0], 1 << 1, 0);
 }
 
 /*
@@ -189,7 +181,7 @@ static inline void pasid_set_fault_enable(struct pasid_entry *pe)
  */
 static inline void pasid_set_ssade(struct pasid_entry *pe)
 {
-	pasid_set_bits(&pe->val[0], 1 << 9, 1 << 9);
+	entry_set_bits(&pe->val[0], 1 << 9, 1 << 9);
 }
 
 /*
@@ -199,7 +191,7 @@ static inline void pasid_set_ssade(struct pasid_entry *pe)
  */
 static inline void pasid_clear_ssade(struct pasid_entry *pe)
 {
-	pasid_set_bits(&pe->val[0], 1 << 9, 0);
+	entry_set_bits(&pe->val[0], 1 << 9, 0);
 }
 
 /*
@@ -218,7 +210,7 @@ static inline bool pasid_get_ssade(struct pasid_entry *pe)
  */
 static inline void pasid_set_sre(struct pasid_entry *pe)
 {
-	pasid_set_bits(&pe->val[2], 1 << 0, 1);
+	entry_set_bits(&pe->val[2], 1 << 0, 1);
 }
 
 /*
@@ -227,7 +219,7 @@ static inline void pasid_set_sre(struct pasid_entry *pe)
  */
 static inline void pasid_set_wpe(struct pasid_entry *pe)
 {
-	pasid_set_bits(&pe->val[2], 1 << 4, 1 << 4);
+	entry_set_bits(&pe->val[2], 1 << 4, 1 << 4);
 }
 
 /*
@@ -236,7 +228,7 @@ static inline void pasid_set_wpe(struct pasid_entry *pe)
  */
 static inline void pasid_set_present(struct pasid_entry *pe)
 {
-	pasid_set_bits(&pe->val[0], 1 << 0, 1);
+	entry_set_bits(&pe->val[0], 1 << 0, 1);
 }
 
 /*
@@ -245,7 +237,7 @@ static inline void pasid_set_present(struct pasid_entry *pe)
  */
 static inline void pasid_set_page_snoop(struct pasid_entry *pe, bool value)
 {
-	pasid_set_bits(&pe->val[1], 1 << 23, value << 23);
+	entry_set_bits(&pe->val[1], 1 << 23, value << 23);
 }
 
 /*
@@ -255,7 +247,7 @@ static inline void pasid_set_page_snoop(struct pasid_entry *pe, bool value)
 static inline void
 pasid_set_pgsnp(struct pasid_entry *pe)
 {
-	pasid_set_bits(&pe->val[1], 1ULL << 24, 1ULL << 24);
+	entry_set_bits(&pe->val[1], 1ULL << 24, 1ULL << 24);
 }
 
 /*
@@ -265,7 +257,7 @@ pasid_set_pgsnp(struct pasid_entry *pe)
 static inline void
 pasid_set_flptr(struct pasid_entry *pe, u64 value)
 {
-	pasid_set_bits(&pe->val[2], VTD_PAGE_MASK, value);
+	entry_set_bits(&pe->val[2], VTD_PAGE_MASK, value);
 }
 
 /*
@@ -275,7 +267,7 @@ pasid_set_flptr(struct pasid_entry *pe, u64 value)
 static inline void
 pasid_set_flpm(struct pasid_entry *pe, u64 value)
 {
-	pasid_set_bits(&pe->val[2], GENMASK_ULL(3, 2), value << 2);
+	entry_set_bits(&pe->val[2], GENMASK_ULL(3, 2), value << 2);
 }
 
 /*
@@ -284,7 +276,7 @@ pasid_set_flpm(struct pasid_entry *pe, u64 value)
  */
 static inline void pasid_set_eafe(struct pasid_entry *pe)
 {
-	pasid_set_bits(&pe->val[2], 1 << 7, 1 << 7);
+	entry_set_bits(&pe->val[2], 1 << 7, 1 << 7);
 }
 
 extern unsigned int intel_pasid_max_id;
