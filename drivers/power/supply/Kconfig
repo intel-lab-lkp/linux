@@ -1132,4 +1132,13 @@ config FUEL_GAUGE_MM8013
 	  the state of charge, temperature, cycle count, actual and design
 	  capacity, etc.
 
+config BATTERY_NTXEC
+	tristate "Battery driver for Netronix embedded controller"
+	depends on MFD_NTXEC
+	help
+	  Say yes here to enable netronix ec battery monitoring driver.
+	  It enables the monitoring battery voltage on certain e-book readers
+	  using an embedded controller by ODM Netronix. Battery design
+	  characteristics are read from Firmware Tables if available.
+
 endif # POWER_SUPPLY
