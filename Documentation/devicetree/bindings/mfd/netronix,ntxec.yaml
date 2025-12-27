@@ -13,13 +13,15 @@ description: |
   This EC is found in e-book readers of multiple brands (e.g. Kobo, Tolino), and
   is typically implemented as a TI MSP430 microcontroller.
 
+allOf:
+  - $ref: /schemas/power/supply/power-supply.yaml
+
 properties:
   compatible:
     const: netronix,ntxec
 
   reg:
-    items:
-      - description: The I2C address of the EC
+    maxItems: 1
 
   system-power-controller:
     type: boolean
@@ -42,7 +44,7 @@ required:
   - compatible
   - reg
 
-additionalProperties: false
+unevaluatedProperties: false
 
 examples:
   - |
@@ -61,5 +63,6 @@ examples:
                 interrupt-parent = <&gpio4>;
                 interrupts = <11 IRQ_TYPE_EDGE_FALLING>;
                 #pwm-cells = <2>;
+                monitored-battery = <&battery>;
         };
     };
