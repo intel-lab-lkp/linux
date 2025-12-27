@@ -319,7 +319,7 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct net *net,
 	struct dentry *dentry;
 	int fileid_type;
 	int data_left = fh->fh_size/4;
-	int len;
+	int len, ret;
 	__be32 error;
 
 	error = nfserr_badhandle;
@@ -331,8 +331,18 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct net *net,
 
 	if (--data_left < 0)
 		return error;
-	if (fh->fh_auth_type != 0)
+
+	/* either FH_AT_PLAIN or FH_AT_ENCRYPTED: */
+	if (fh->fh_auth_type > 1)
 		return error;
+
+	ret = fh_decrypt(fhp);
+	if (ret) {
+		/* probably should modify this tracepoint */
+		trace_nfsd_set_fh_dentry_badhandle(rqstp, fhp, ret);;
+		return error;
+	}
+
 	len = key_len(fh->fh_fsid_type) / 4;
 	if (len == 0)
 		return error;

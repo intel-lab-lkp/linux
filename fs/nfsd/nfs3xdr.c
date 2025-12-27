@@ -120,10 +120,14 @@ svcxdr_encode_nfsstat3(struct xdr_stream *xdr, __be32 status)
 }
 
 static bool
-svcxdr_encode_nfs_fh3(struct xdr_stream *xdr, const struct svc_fh *fhp)
+svcxdr_encode_nfs_fh3(struct xdr_stream *xdr, struct svc_fh *fhp)
 {
-	u32 size = fhp->fh_handle.fh_size;
+	u32 size;
 	__be32 *p;
+
+	if (fh_encrypt(fhp))
+		return false;
+	size = fhp->fh_handle.fh_size;
 
 	p = xdr_reserve_space(xdr, XDR_UNIT + size);
 	if (!p)
@@ -137,7 +141,7 @@ svcxdr_encode_nfs_fh3(struct xdr_stream *xdr, const struct svc_fh *fhp)
 }
 
 static bool
-svcxdr_encode_post_op_fh3(struct xdr_stream *xdr, const struct svc_fh *fhp)
+svcxdr_encode_post_op_fh3(struct xdr_stream *xdr, struct svc_fh *fhp)
 {
 	if (xdr_stream_encode_item_present(xdr) < 0)
 		return false;
