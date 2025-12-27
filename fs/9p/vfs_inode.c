@@ -993,7 +993,12 @@ v9fs_vfs_getattr(struct mnt_idmap *idmap, const struct path *path,
 	if (IS_ERR(st))
 		return PTR_ERR(st);
 
-	v9fs_stat2inode(st, d_inode(dentry), dentry->d_sb, 0);
+	/*
+	 * With writeback caching, the client is authoritative for i_size.
+	 * Don't let the server overwrite it with a potentially stale value.
+	 */
+	v9fs_stat2inode(st, d_inode(dentry), dentry->d_sb,
+		(v9ses->cache & CACHE_WRITEBACK) ? V9FS_STAT2INODE_KEEP_ISIZE : 0);
 	generic_fillattr(&nop_mnt_idmap, request_mask, d_inode(dentry), stat);
 
 	p9stat_free(st);

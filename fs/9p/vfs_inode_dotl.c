@@ -453,7 +453,12 @@ v9fs_vfs_getattr_dotl(struct mnt_idmap *idmap,
 	if (IS_ERR(st))
 		return PTR_ERR(st);
 
-	v9fs_stat2inode_dotl(st, d_inode(dentry), 0);
+	/*
+	 * With writeback caching, the client is authoritative for i_size.
+	 * Don't let the server overwrite it with a potentially stale value.
+	 */
+	v9fs_stat2inode_dotl(st, d_inode(dentry),
+		(v9ses->cache & CACHE_WRITEBACK) ? V9FS_STAT2INODE_KEEP_ISIZE : 0);
 	generic_fillattr(&nop_mnt_idmap, request_mask, d_inode(dentry), stat);
 	/* Change block size to what the server returned */
 	stat->blksize = st->st_blksize;
