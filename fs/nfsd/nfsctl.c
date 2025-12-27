@@ -166,7 +166,7 @@ static const struct file_operations exports_nfsd_operations = {
 
 static int export_features_show(struct seq_file *m, void *v)
 {
-	seq_printf(m, "0x%x 0x%x\n", NFSEXP_ALLFLAGS, NFSEXP_SECINFO_FLAGS);
+	seq_printf(m, "0x%x 0x%lx\n", NFSEXP_ALLFLAGS, NFSEXP_SECINFO_FLAGS);
 	return 0;
 }
 
