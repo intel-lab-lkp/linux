@@ -1571,6 +1571,7 @@ int ipmr_sk_ioctl(struct sock *sk, unsigned int cmd, void __user *arg)
 	/* These userspace buffers will be consumed by ipmr_ioctl() */
 	case SIOCGETVIFCNT: {
 		struct sioc_vif_req buffer;
+		memset(&buffer, 0, sizeof(buffer));
 
 		return sock_ioctl_inout(sk, cmd, arg, &buffer,
 				      sizeof(buffer));
