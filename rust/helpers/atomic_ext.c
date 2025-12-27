@@ -120,3 +120,13 @@ __rust_helper bool rust_helper_atomic_i16_try_cmpxchg_release(s16 *ptr, s16 *old
 {
 	return raw_try_cmpxchg_release(ptr, old, new);
 }
+
+__rust_helper bool rust_helper_atomic_i8_try_cmpxchg_relaxed(s8 *ptr, s8 *old, s8 new)
+{
+	return raw_try_cmpxchg_relaxed(ptr, old, new);
+}
+
+__rust_helper bool rust_helper_atomic_i16_try_cmpxchg_relaxed(s16 *ptr, s16 *old, s16 new)
+{
+	return raw_try_cmpxchg_relaxed(ptr, old, new);
+}
