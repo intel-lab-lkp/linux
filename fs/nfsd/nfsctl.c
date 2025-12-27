@@ -19,6 +19,7 @@
 #include <linux/module.h>
 #include <linux/fsnotify.h>
 #include <linux/nfslocalio.h>
+#include <crypto/skcipher.h>
 
 #include "idmap.h"
 #include "nfsd.h"
@@ -2129,6 +2130,33 @@ err_free_msg:
 	return err;
 }
 
+int nfsd_nl_fh_key_set_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	struct crypto_sync_skcipher *encfh_tfm;
+	struct nfsd_net *nn;
+	int fh_key_len;
+	u8 fh_key[16];
+	int ret;
+
+	if (GENL_REQ_ATTR_CHECK(info, NFSD_A_SERVER_FH_KEY))
+		return -EINVAL;
+
+	fh_key_len = nla_len(info->attrs[NFSD_A_SERVER_FH_KEY]);
+
+	if (fh_key_len != 16)
+		return -EINVAL;
+
+	memcpy(fh_key, nla_data(info->attrs[NFSD_A_SERVER_FH_KEY]), 16);
+	nn = net_generic(genl_info_net(info), nfsd_net_id);
+	encfh_tfm = nn->encfh_tfm;
+	ret = crypto_sync_skcipher_setkey(encfh_tfm, fh_key, 16);
+
+	trace_nfsd_ctl_fh_key_set(fh_key, ret);
+	return ret;
+}
+
+
+
 /**
  * nfsd_net_init - Prepare the nfsd_net portion of a new net namespace
  * @net: a freshly-created network namespace
@@ -2171,6 +2199,13 @@ static __net_init int nfsd_net_init(struct net *net)
 	nn->nfsd_serv = NULL;
 	nfsd4_init_leases_net(nn);
 	get_random_bytes(&nn->siphash_key, sizeof(nn->siphash_key));
+
+	nn->encfh_tfm = crypto_alloc_sync_skcipher("cbc(aes)", 0, 0);
+	if (IS_ERR(nn->encfh_tfm)) {
+		retval = PTR_ERR(nn->encfh_tfm);
+		goto out_encfh_error;
+	}
+
 	seqlock_init(&nn->writeverf_lock);
 #if IS_ENABLED(CONFIG_NFS_LOCALIO)
 	spin_lock_init(&nn->local_clients_lock);
@@ -2178,6 +2213,8 @@ static __net_init int nfsd_net_init(struct net *net)
 #endif
 	return 0;
 
+out_encfh_error:
+	nfsd_proc_stat_shutdown(net);
 out_proc_error:
 	percpu_counter_destroy_many(nn->counter, NFSD_STATS_COUNTERS_NUM);
 out_repcache_error:
@@ -2214,6 +2251,7 @@ static __net_exit void nfsd_net_exit(struct net *net)
 {
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
 
+	crypto_free_sync_skcipher(nn->encfh_tfm);
 	nfsd_proc_stat_shutdown(net);
 	percpu_counter_destroy_many(nn->counter, NFSD_STATS_COUNTERS_NUM);
 	nfsd_idmap_shutdown(net);

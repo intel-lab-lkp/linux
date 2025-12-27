@@ -78,6 +78,9 @@ attribute-sets:
       -
         name: scope
         type: string
+      -
+        name: fh-key
+        type: u64
   -
     name: version
     attributes:
@@ -222,3 +225,12 @@ operations:
           attributes:
             - mode
             - npools
+    -
+      name: fh-key-set
+      doc: set encryption key for filehandles
+      attribute-set: server
+      flags: [admin-perm]
+      do:
+        request:
+          attributes:
+            - fh-key

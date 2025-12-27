@@ -46,6 +46,14 @@ static const struct nla_policy nfsd_pool_mode_set_nl_policy[NFSD_A_POOL_MODE_MOD
 	[NFSD_A_POOL_MODE_MODE] = { .type = NLA_NUL_STRING, },
 };
 
+/* NFSD_CMD_FH_KEY_SET - do */
+static const struct nla_policy nfsd_fh_key_set_nl_policy[NFSD_A_SERVER_FH_KEY + 1] = {
+	[NFSD_A_SERVER_FH_KEY] = {
+		.type = NLA_BINARY,
+		.len = 16
+	},
+};
+
 /* Ops table for nfsd */
 static const struct genl_split_ops nfsd_nl_ops[] = {
 	{
@@ -100,6 +108,13 @@ static const struct genl_split_ops nfsd_nl_ops[] = {
 		.cmd	= NFSD_CMD_POOL_MODE_GET,
 		.doit	= nfsd_nl_pool_mode_get_doit,
 		.flags	= GENL_CMD_CAP_DO,
+	},
+	{
+		.cmd		= NFSD_CMD_FH_KEY_SET,
+		.doit		= nfsd_nl_fh_key_set_doit,
+		.policy		= nfsd_fh_key_set_nl_policy,
+		.maxattr	= NFSD_A_SERVER_FH_KEY,
+		.flags		= GENL_ADMIN_PERM | GENL_CMD_CAP_DO,
 	},
 };
 
