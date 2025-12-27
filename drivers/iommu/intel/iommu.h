@@ -909,6 +909,16 @@ static inline void entry_set_bits(u64 *ptr, u64 mask, u64 bits)
 
 static inline void context_set_present(struct context_entry *context)
 {
+	/*
+	 * Make sure to not set the present bit earlier than updating other
+	 * bits.
+	 *
+	 * This barrier may be redundant, but only as long as any context
+	 * entry modifications use WRITE_ONCE(), which is enough to ensure
+	 * ordering between them on x86 hardware.
+	 */
+	smp_wmb();
+
 	entry_set_bits(&context->lo, 1ULL << 0, 1ULL);
 }
 

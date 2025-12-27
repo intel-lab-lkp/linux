@@ -228,6 +228,12 @@ static inline void pasid_set_wpe(struct pasid_entry *pe)
  */
 static inline void pasid_set_present(struct pasid_entry *pe)
 {
+	/*
+	 * Make sure to not set the present bit earlier than updating other
+	 * bits. See also the comment in context_set_present().
+	 */
+	smp_wmb();
+
 	entry_set_bits(&pe->val[0], 1 << 0, 1);
 }
 
