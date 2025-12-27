@@ -60,6 +60,9 @@ struct knfsd_fh {
 #define fh_fsid_type		fh_raw[2]
 #define fh_fileid_type		fh_raw[3]
 
+#define FH_AT_PLAIN		0
+#define FH_AT_ENCRYPTED	1
+
 static inline u32 *fh_fsid(const struct knfsd_fh *fh)
 {
 	return (u32 *)&fh->fh_raw[4];
@@ -282,6 +285,16 @@ static inline bool fh_fsid_match(const struct knfsd_fh *fh1,
 	if (memcmp(fsid1, fsid2, key_len(fh1->fh_fsid_type)) != 0)
 		return false;
 	return true;
+}
+
+static inline size_t fh_fileid_offset(const struct knfsd_fh *fh)
+{
+	return key_len(fh->fh_fsid_type) + 4;
+}
+
+static inline size_t fh_fileid_len(const struct knfsd_fh *fh)
+{
+	return fh->fh_size - fh_fileid_offset(fh);
 }
 
 /**

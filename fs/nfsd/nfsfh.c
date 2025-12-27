@@ -11,6 +11,7 @@
 #include <linux/exportfs.h>
 
 #include <linux/sunrpc/svcauth_gss.h>
+#include <crypto/skcipher.h>
 #include "nfsd.h"
 #include "vfs.h"
 #include "auth.h"
@@ -135,6 +136,170 @@ static inline __be32 check_pseudo_root(struct dentry *dentry,
 	if (unlikely(dentry != exp->ex_path.dentry))
 		return nfserr_stale;
 	return nfs_ok;
+}
+
+static int fh_crypto_init(struct svc_rqst *rqstp)
+{
+	struct encfh_buf *fh_encfh = (struct encfh_buf *)rqstp->rq_crypto;
+
+	/* This knfsd has not allocated buffers and reqest yet: */
+	if (!fh_encfh) {
+		struct nfsd_net *nn = net_generic(SVC_NET(rqstp), nfsd_net_id);
+
+		fh_encfh = kmalloc(sizeof(struct encfh_buf), GFP_KERNEL);
+		if (!fh_encfh)
+			return -ENOMEM;
+
+		skcipher_request_set_sync_tfm(&fh_encfh->req, nn->encfh_tfm);
+		rqstp->rq_crypto = fh_encfh;
+	}
+	memset(fh_encfh->a_buf, 0, NFS4_FHSIZE);
+	memset(fh_encfh->b_buf, 0, NFS4_FHSIZE);
+	return 0;
+}
+
+static int fh_crypto(struct svc_fh *fhp, bool encrypting)
+{
+	struct encfh_buf *encfh = (struct encfh_buf *)fhp->fh_rqstp->rq_crypto;
+	int err, pad, hash_size, fileid_offset;
+	struct knfsd_fh *fh = &fhp->fh_handle;
+	struct scatterlist fh_sgl[2];
+	struct scatterlist hash_sg;
+	u8 *a_buf = encfh->a_buf;
+	u8 *b_buf = encfh->b_buf;
+	u8 iv[16];
+
+	/* blocksize */
+	int bs = crypto_sync_skcipher_blocksize(
+				crypto_sync_skcipher_reqtfm(&encfh->req));
+
+	/* always renew as it gets transformed: */
+	memset(iv, 0, sizeof(iv));
+
+	fileid_offset = fh_fileid_offset(fh);
+	sg_init_table(fh_sgl, 2);
+
+	if (encrypting) {
+		/* encryption */
+		memcpy(&a_buf[fileid_offset], &fh->fh_raw[fileid_offset],
+				fh->fh_size - fileid_offset);
+		memcpy(b_buf, fh->fh_raw, fileid_offset);
+
+		/* encrypt the fileid using the fsid as iv: */
+		memcpy(iv, fh_fsid(fh), min(sizeof(iv), key_len(fh->fh_fsid_type)));
+
+		/* pad out the fileid to block size */
+		hash_size = fh_fileid_len(fh);
+		pad = (bs - (hash_size & (bs - 1))) & (bs - 1);
+		hash_size += pad;
+
+		sg_set_buf(&fh_sgl[0], &a_buf[fileid_offset], hash_size);
+		sg_mark_end(&fh_sgl[1]);  /* don't need sg1 yet */
+		sg_init_one(&hash_sg, &b_buf[fileid_offset], hash_size);
+
+		skcipher_request_set_crypt(&encfh->req, fh_sgl, &hash_sg, hash_size, iv);
+		err = crypto_skcipher_encrypt(&encfh->req);
+		if (err)
+			goto out;
+
+		/* encrypt the fsid + fileid with zero iv, starting with the last
+		 * block of the hashed fileid */
+		memset(iv, 0, sizeof(iv));
+
+		/* calculate the new padding: */
+		hash_size += key_len(fh->fh_fsid_type) + 4;
+		pad = (bs - (hash_size & (bs - 1))) & (bs - 1);
+		hash_size += pad;
+
+		sg_unmark_end(&fh_sgl[1]); /* now we use it */
+		sg_set_buf(&fh_sgl[0], &b_buf[hash_size-bs], bs);
+		sg_set_buf(&fh_sgl[1], b_buf, hash_size-bs);
+		sg_init_one(&hash_sg, a_buf, hash_size);
+
+		skcipher_request_set_crypt(&encfh->req, fh_sgl, &hash_sg, hash_size, iv);
+		err = crypto_skcipher_encrypt(&encfh->req);
+
+		if (!err) {
+			memcpy(&fh->fh_raw[4], a_buf, hash_size);
+			fh->fh_auth_type = FH_AT_ENCRYPTED;
+			fh->fh_fileid_type = fh->fh_size; /* we'll use this in decryption */
+			fh->fh_size = hash_size + 4;
+		}
+	} else {
+		/* decryption */
+		int fh_size = fh->fh_size - 4;
+		memcpy(b_buf, &fh->fh_raw[4], fh_size);
+
+		/* first, we decode starting with the last hashed block and zero iv */
+		hash_size = fh_size;
+		sg_set_buf(&fh_sgl[0], &a_buf[fh_size - bs], bs);
+		sg_set_buf(&fh_sgl[1], a_buf, fh_size - bs);
+		sg_init_one(&hash_sg, b_buf, fh_size);
+
+		skcipher_request_set_crypt(&encfh->req, &hash_sg, fh_sgl, hash_size, iv);
+		err = crypto_skcipher_decrypt(&encfh->req);
+		if (err)
+			goto out;
+
+		/* Now we're dealing with the original fh_size: */
+		fh_size = fh->fh_fileid_type;
+
+		/* a_buf now has the decrypted fsid and header: */
+		memcpy(fh->fh_raw, a_buf, fileid_offset);
+
+		/* now we set the iv to the decrypted fsid value */
+		memset(iv, 0, sizeof(iv));;
+		memcpy(iv, &a_buf[4], min(sizeof(iv), key_len(fh->fh_fsid_type)));
+
+		/* align to block size */
+		hash_size = fh_size - fileid_offset;
+		pad = (bs - (hash_size & (bs - 1))) & (bs - 1);
+		hash_size += pad;
+
+		/* decrypt only the fileid: */
+		sg_set_buf(&fh_sgl[0], &b_buf[fileid_offset], hash_size);
+		sg_mark_end(&fh_sgl[1]);
+		sg_init_one(&hash_sg, &a_buf[fileid_offset], hash_size);
+
+		skcipher_request_set_crypt(&encfh->req, &hash_sg, fh_sgl, hash_size, iv);
+		err = crypto_skcipher_decrypt(&encfh->req);
+
+		if (!err) {
+			fh->fh_size = fh_size;
+			/* copy in the fileid */
+			memcpy(&fh->fh_raw[fileid_offset], &b_buf[fileid_offset], hash_size);
+			/* trim the leftover hash padding */
+			memset(&fh->fh_raw[fh->fh_size], 0, NFS4_FHSIZE - fh->fh_size);
+		}
+	}
+	// add a tracepoint to show the error;
+	// if decrypting, we want nfserr_badhandle
+out:
+	return err;
+}
+
+/* we should never get here without calling fh_init first */
+int fh_encrypt(struct svc_fh *fhp)
+{
+	if (!(fhp->fh_export->ex_flags & NFSEXP_ENCRYPT_FH))
+		return 0;
+
+	if (fh_crypto_init(fhp->fh_rqstp))
+		return -ENOMEM;
+
+	return fh_crypto(fhp, true);
+}
+
+/* Lets try to decrypt, no matter the export setting */
+static int fh_decrypt(struct svc_fh *fhp)
+{
+	if (fhp->fh_handle.fh_auth_type != FH_AT_ENCRYPTED)
+		return 0;
+
+	if (fh_crypto_init(fhp->fh_rqstp))
+		return -ENOMEM;
+
+	return fh_crypto(fhp, false);
 }
 
 /*
