@@ -228,6 +228,10 @@ struct svc_rqst {
 	int			rq_reserved;	/* space on socket outq
 						 * reserved for this request
 						 */
+	int			rq_err;		/* Thread sets this to inidicate
+						 * initialisation success.
+						 */
+
 	ktime_t			rq_stime;	/* start time */
 
 	struct cache_req	rq_chandle;	/* handle passed to caches for 
@@ -241,14 +245,11 @@ struct svc_rqst {
 						 * net namespace
 						 */
 
-	int			rq_err;		/* Thread sets this to inidicate
-						 * initialisation success.
-						 */
-
 	unsigned long		bc_to_initval;
 	unsigned int		bc_to_retries;
 	unsigned int		rq_status_counter; /* RPC processing counter */
 	void			**rq_lease_breaker; /* The v4 client breaking a lease */
+	void *			rq_crypto; /* handle for per-thread cryptography context */
 };
 
 /* bits for rq_flags */
