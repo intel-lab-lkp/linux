@@ -374,7 +374,7 @@ struct context_entry *iommu_context_addr(struct intel_iommu *iommu, u8 bus,
 
 		__iommu_flush_cache(iommu, (void *)context, CONTEXT_SIZE);
 		phy_addr = virt_to_phys((void *)context);
-		*entry = phy_addr | 1;
+		WRITE_ONCE(*entry, phy_addr | 1);
 		__iommu_flush_cache(iommu, entry, sizeof(*entry));
 	}
 	return &context[devfn];
