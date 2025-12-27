@@ -3748,6 +3748,8 @@ static void rcu_barrier_entrain(struct rcu_data *rdp)
 		debug_rcu_head_unqueue(&rdp->barrier_head);
 		rcu_barrier_trace(TPS("IRQNQ"), -1, rcu_state.barrier_sequence);
 	}
+	if (wake_nocb)
+		rdp->nocb_gp_wake_attempt = true;
 	rcu_nocb_unlock(rdp);
 	if (wake_nocb)
 		wake_nocb_gp(rdp, false);
