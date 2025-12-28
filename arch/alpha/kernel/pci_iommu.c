@@ -55,7 +55,7 @@ size_for_memory(unsigned long max)
 		max = roundup_pow_of_two(mem);
 	return max;
 }
-
+
 struct pci_iommu_arena * __init
 iommu_arena_new_node(int nid, struct pci_controller *hose, dma_addr_t base,
 		     unsigned long window_size, unsigned long align)
@@ -810,7 +810,7 @@ static int alpha_pci_supported(struct device *dev, u64 mask)
 	return 0;
 }
 
-
+
 /*
  * AGP GART extensions to the IOMMU
  */
