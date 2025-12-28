@@ -1897,6 +1897,8 @@ static void __init free_area_init(void)
 	unsigned long start_pfn, end_pfn;
 	int i, nid;
 
+	sparse_init();
+
 	/*
 	 * Initialize the subsection-map relative to active online memory
 	 * ranges to enable future "sub-section" extensions of the memory map.
