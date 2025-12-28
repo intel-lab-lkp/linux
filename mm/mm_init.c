@@ -1805,30 +1805,14 @@ static void __init set_high_memory(void)
 	high_memory = phys_to_virt(highmem - 1) + 1;
 }
 
-/**
- * free_area_init - Initialise all pg_data_t and zone data
- * @max_zone_pfn: an array of max PFNs for each zone
- *
- * This will call free_area_init_node() for each active node in the system.
- * Using the page ranges provided by memblock_set_node(), the size of each
- * zone in each node and their holes is calculated. If the maximum PFN
- * between two adjacent zones match, it is assumed that the zone is empty.
- * For example, if arch_max_dma_pfn == arch_max_dma32_pfn, it is assumed
- * that arch_max_dma32_pfn has no pages. It is also assumed that a zone
- * starts where the previous one ended. For example, ZONE_DMA32 starts
- * at arch_max_dma_pfn.
- */
-void __init free_area_init(unsigned long *max_zone_pfn)
+static void __init zone_limits_init(void)
 {
+	unsigned long max_zone_pfn[MAX_NR_ZONES] = { 0 };
 	unsigned long start_pfn, end_pfn;
-	int i, nid, zone;
+	int i, zone, nid;
 	bool descending;
 
-	/* Record where the zone boundaries are */
-	memset(arch_zone_lowest_possible_pfn, 0,
-				sizeof(arch_zone_lowest_possible_pfn));
-	memset(arch_zone_highest_possible_pfn, 0,
-				sizeof(arch_zone_highest_possible_pfn));
+	arch_zone_limits_init(max_zone_pfn);
 
 	start_pfn = PHYS_PFN(memblock_start_of_DRAM());
 	descending = arch_has_descending_max_zone_pfns();
@@ -1879,15 +1863,45 @@ void __init free_area_init(unsigned long *max_zone_pfn)
 	}
 
 	/*
-	 * Print out the early node map, and initialize the
-	 * subsection-map relative to active online memory ranges to
-	 * enable future "sub-section" extensions of the memory map.
+	 * Print out the early node map, and initialize the N_MEMORY nodes
+	 * bitmask.
 	 */
 	pr_info("Early memory node ranges\n");
 	for_each_mem_pfn_range(i, MAX_NUMNODES, &start_pfn, &end_pfn, &nid) {
 		pr_info("  node %3d: [mem %#018Lx-%#018Lx]\n", nid,
 			(u64)start_pfn << PAGE_SHIFT,
 			((u64)end_pfn << PAGE_SHIFT) - 1);
+		node_set_state(nid, N_MEMORY);
+	}
+
+	calc_nr_kernel_pages();
+	/* disable hash distribution for systems with a single node */
+	fixup_hashdist();
+	set_high_memory();
+}
+
+/**
+ * free_area_init - Initialise all pg_data_t and zone data
+ *
+ * This will call free_area_init_node() for each active node in the system.
+ * Using the page ranges provided by memblock_set_node(), the size of each
+ * zone in each node and their holes is calculated. If the maximum PFN
+ * between two adjacent zones match, it is assumed that the zone is empty.
+ * For example, if arch_max_dma_pfn == arch_max_dma32_pfn, it is assumed
+ * that arch_max_dma32_pfn has no pages. It is also assumed that a zone
+ * starts where the previous one ended. For example, ZONE_DMA32 starts
+ * at arch_max_dma_pfn.
+ */
+static void __init free_area_init(void)
+{
+	unsigned long start_pfn, end_pfn;
+	int i, nid;
+
+	/*
+	 * Initialize the subsection-map relative to active online memory
+	 * ranges to enable future "sub-section" extensions of the memory map.
+	 */
+	for_each_mem_pfn_range(i, MAX_NUMNODES, &start_pfn, &end_pfn, &nid) {
 		subsection_map_init(start_pfn, end_pfn - start_pfn);
 	}
 
@@ -1906,29 +1920,22 @@ void __init free_area_init(unsigned long *max_zone_pfn)
 		free_area_init_node(nid);
 
 		/*
-		 * No sysfs hierarchy will be created via register_node()
-		 *for memory-less node because here it's not marked as N_MEMORY
-		 *and won't be set online later. The benefit is userspace
-		 *program won't be confused by sysfs files/directories of
-		 *memory-less node. The pgdat will get fully initialized by
-		 *hotadd_init_pgdat() when memory is hotplugged into this node.
+		 * No sysfs hierarchy will be created via register_node() for
+		 * memory-less node because here it's not marked as N_MEMORY
+		 * and won't be set online later. The benefit is userspace
+		 * program won't be confused by sysfs files/directories of
+		 * memory-less node. The pgdat will get fully initialized by
+		 * hotadd_init_pgdat() when memory is hotplugged into this
+		 * node.
 		 */
-		if (pgdat->node_present_pages) {
-			node_set_state(nid, N_MEMORY);
+		if (pgdat->node_present_pages)
 			check_for_memory(pgdat);
-		}
 	}
 
 	for_each_node_state(nid, N_MEMORY)
 		sparse_vmemmap_init_nid_late(nid);
 
-	calc_nr_kernel_pages();
 	memmap_init();
-
-	/* disable hash distribution for systems with a single node */
-	fixup_hashdist();
-
-	set_high_memory();
 }
 
 /**
@@ -2678,6 +2685,11 @@ void __init __weak mem_init(void)
 {
 }
 
+void __init mm_core_init_early(void)
+{
+	zone_limits_init();
+}
+
 /*
  * Set up kernel memory allocators
  */
@@ -2685,6 +2697,8 @@ void __init mm_core_init(void)
 {
 	arch_mm_preinit();
 	hugetlb_bootmem_alloc();
+
+	free_area_init();
 
 	/* Initializations relying on SMP setup */
 	BUILD_BUG_ON(MAX_ZONELISTS > 2);
