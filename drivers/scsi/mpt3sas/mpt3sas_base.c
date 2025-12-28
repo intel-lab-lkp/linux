@@ -3507,6 +3507,7 @@ _base_enable_msix(struct MPT3SAS_ADAPTER *ioc)
 	r = _base_alloc_irq_vectors(ioc);
 	if (r < 0) {
 		ioc_info(ioc, "pci_alloc_irq_vectors failed (r=%d) !!!\n", r);
+		kfree(ioc->io_uring_poll_queues);
 		goto try_ioapic;
 	}
 
