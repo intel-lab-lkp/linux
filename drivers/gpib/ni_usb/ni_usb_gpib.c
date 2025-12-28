@@ -1802,7 +1802,7 @@ static int ni_usb_init(struct gpib_board *board)
 	if (writes_len)
 		retval = ni_usb_write_registers(ni_priv, writes, writes_len, &ibsta);
 	else
-		return -EFAULT;
+		goto out;
 	kfree(writes);
 	if (retval) {
 		dev_err(&usb_dev->dev, "register write failed, retval=%i\n", retval);
@@ -1810,6 +1810,10 @@ static int ni_usb_init(struct gpib_board *board)
 	}
 	ni_usb_soft_update_status(board, ibsta, 0);
 	return 0;
+
+out:
+	kfree(writes);
+	return -EFAULT;
 }
 
 static void ni_usb_interrupt_complete(struct urb *urb)
