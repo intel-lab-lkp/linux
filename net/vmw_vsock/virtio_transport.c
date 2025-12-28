@@ -26,6 +26,8 @@ static struct virtio_vsock __rcu *the_virtio_vsock;
 static DEFINE_MUTEX(the_virtio_vsock_mutex); /* protects the_virtio_vsock */
 static struct virtio_transport virtio_transport; /* forward declaration */
 
+#define VIRTIO_VSOCK_EVENT_BUFS	8
+
 struct virtio_vsock {
 	struct virtio_device *vdev;
 	struct virtqueue *vqs[VSOCK_VQ_MAX];
@@ -59,7 +61,8 @@ struct virtio_vsock {
 	 */
 	struct mutex event_lock;
 	bool event_run;
-	struct virtio_vsock_event event_list[8];
+	struct virtio_vsock_event *event_list;	/* DMA coherent memory */
+	dma_addr_t event_list_dma;
 
 	u32 guest_cid;
 	bool seqpacket_allow;
@@ -381,16 +384,19 @@ static bool virtio_transport_more_replies(struct virtio_vsock *vsock)
 
 /* event_lock must be held */
 static int virtio_vsock_event_fill_one(struct virtio_vsock *vsock,
-				       struct virtio_vsock_event *event)
+				       struct virtio_vsock_event *event,
+				       dma_addr_t dma_addr)
 {
 	struct scatterlist sg;
 	struct virtqueue *vq;
 
 	vq = vsock->vqs[VSOCK_VQ_EVENT];
 
-	sg_init_one(&sg, event, sizeof(*event));
+	sg_init_table(&sg, 1);
+	sg_dma_address(&sg) = dma_addr;
+	sg_dma_len(&sg) = sizeof(*event);
 
-	return virtqueue_add_inbuf(vq, &sg, 1, event, GFP_KERNEL);
+	return virtqueue_add_inbuf_premapped(vq, &sg, 1, event, NULL, GFP_KERNEL);
 }
 
 /* event_lock must be held */
@@ -398,10 +404,12 @@ static void virtio_vsock_event_fill(struct virtio_vsock *vsock)
 {
 	size_t i;
 
-	for (i = 0; i < ARRAY_SIZE(vsock->event_list); i++) {
+	for (i = 0; i < VIRTIO_VSOCK_EVENT_BUFS; i++) {
 		struct virtio_vsock_event *event = &vsock->event_list[i];
+		dma_addr_t dma_addr = vsock->event_list_dma +
+				      i * sizeof(*event);
 
-		virtio_vsock_event_fill_one(vsock, event);
+		virtio_vsock_event_fill_one(vsock, event, dma_addr);
 	}
 
 	virtqueue_kick(vsock->vqs[VSOCK_VQ_EVENT]);
@@ -461,10 +469,14 @@ static void virtio_transport_event_work(struct work_struct *work)
 
 		virtqueue_disable_cb(vq);
 		while ((event = virtqueue_get_buf(vq, &len)) != NULL) {
+			size_t idx = event - vsock->event_list;
+			dma_addr_t dma_addr = vsock->event_list_dma +
+					      idx * sizeof(*event);
+
 			if (len == sizeof(*event))
 				virtio_vsock_event_handle(vsock, event);
 
-			virtio_vsock_event_fill_one(vsock, event);
+			virtio_vsock_event_fill_one(vsock, event, dma_addr);
 		}
 	} while (!virtqueue_enable_cb(vq));
 
@@ -796,6 +808,15 @@ static int virtio_vsock_probe(struct virtio_device *vdev)
 
 	vsock->vdev = vdev;
 
+	vsock->event_list = dma_alloc_coherent(vdev->dev.parent,
+					       VIRTIO_VSOCK_EVENT_BUFS *
+					       sizeof(*vsock->event_list),
+					       &vsock->event_list_dma,
+					       GFP_KERNEL);
+	if (!vsock->event_list) {
+		ret = -ENOMEM;
+		goto out_free_vsock;
+	}
 
 	mutex_init(&vsock->tx_lock);
 	mutex_init(&vsock->rx_lock);
@@ -813,7 +834,7 @@ static int virtio_vsock_probe(struct virtio_device *vdev)
 
 	ret = virtio_vsock_vqs_init(vsock);
 	if (ret < 0)
-		goto out;
+		goto out_free_event_list;
 
 	for (i = 0; i < ARRAY_SIZE(vsock->out_sgs); i++)
 		vsock->out_sgs[i] = &vsock->out_bufs[i];
@@ -825,8 +846,13 @@ static int virtio_vsock_probe(struct virtio_device *vdev)
 
 	return 0;
 
-out:
+out_free_event_list:
+	dma_free_coherent(vdev->dev.parent,
+			  VIRTIO_VSOCK_EVENT_BUFS * sizeof(*vsock->event_list),
+			  vsock->event_list, vsock->event_list_dma);
+out_free_vsock:
 	kfree(vsock);
+out:
 	mutex_unlock(&the_virtio_vsock_mutex);
 	return ret;
 }
@@ -853,6 +879,9 @@ static void virtio_vsock_remove(struct virtio_device *vdev)
 
 	mutex_unlock(&the_virtio_vsock_mutex);
 
+	dma_free_coherent(vdev->dev.parent,
+			  VIRTIO_VSOCK_EVENT_BUFS * sizeof(*vsock->event_list),
+			  vsock->event_list, vsock->event_list_dma);
 	kfree(vsock);
 }
 
