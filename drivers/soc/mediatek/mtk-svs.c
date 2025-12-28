@@ -799,8 +799,10 @@ static ssize_t svs_enable_debug_write(struct file *filp,
 		return PTR_ERR(buf);
 
 	ret = kstrtoint(buf, 10, &enabled);
-	if (ret)
+	if (ret) {
+		kfree(buf);
 		return ret;
+	}
 
 	if (!enabled) {
 		svs_bank_disable_and_restore_default_volts(svsp, svsb);
