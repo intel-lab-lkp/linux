@@ -24,7 +24,7 @@
  * 11/05/2008	MHC		Add API for tw power setting.
  *
  *
-******************************************************************************/
+ ******************************************************************************/
 
 #include <rtl8723b_hal.h>
 
@@ -40,7 +40,7 @@
 /*  2008/11/20 MH For Debug only, RF */
 /*------------------------Define local variable------------------------------*/
 
-/*-----------------------------------------------------------------------------
+/*
  * Function:    PHY_RF6052SetBandwidth()
  *
  * Overview:    This function is called by SetBWModeCallback8190Pci() only
@@ -53,7 +53,7 @@
  * Return:      NONE
  *
  * Note:		For RF type 0222D
- *---------------------------------------------------------------------------*/
+ */
 void PHY_RF6052SetBandwidth8723B(
 	struct adapter *Adapter, enum channel_width Bandwidth
 ) /* 20M or 40M */
