@@ -153,6 +153,21 @@
 /* TUF laptop RGB power/state */
 #define ASUS_WMI_DEVID_TUF_RGB_STATE	0x00100057
 
+/*
+ * Flags for TUF RGB state to be used with
+ * ASUS_WMI_DEVID_TUF_RGB_STATE:
+ * 0xBD | BIT(1) << 8 | flags
+ *
+ * where 0xBD is required for the method call
+ * to not be discarded, BIT(2)<<8 specified
+ * this is a command and flags is a combination
+ * of one or more of the following flags.
+ */
+#define ASUS_WMI_DEVID_TUF_RGB_STATE_BOOT (BIT(1) << 16u)
+#define ASUS_WMI_DEVID_TUF_RGB_STATE_AWAKE (BIT(3) << 16u)
+#define ASUS_WMI_DEVID_TUF_RGB_STATE_SLEEP (BIT(5) << 16u)
+#define ASUS_WMI_DEVID_TUF_RGB_STATE_SHUTDOWN (BIT(7) << 16u)
+
 /* Bootup sound control */
 #define ASUS_WMI_DEVID_BOOT_SOUND	0x00130022
 
