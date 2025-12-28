@@ -17,6 +17,7 @@ description: |
 properties:
   compatible:
     enum:
+      - qcom,ipq9574-wifi
       - qcom,ipq8074-wifi
       - qcom,ipq6018-wifi
       - qcom,wcn6750-wifi
@@ -102,6 +103,7 @@ allOf:
         compatible:
           contains:
             enum:
+              - qcom,ipq9574-wifi
               - qcom,ipq8074-wifi
               - qcom,ipq6018-wifi
     then:
@@ -220,6 +222,7 @@ allOf:
         compatible:
           contains:
             enum:
+              - qcom,ipq9574-wifi
               - qcom,ipq8074-wifi
               - qcom,ipq6018-wifi
     then:
