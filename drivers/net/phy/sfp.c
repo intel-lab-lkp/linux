@@ -744,6 +744,35 @@ static int sfp_smbus_byte_read(struct sfp *sfp, bool a2, u8 dev_addr,
 	return data - (u8 *)buf;
 }
 
+static int sfp_smbus_block_read(struct sfp *sfp, bool a2, u8 dev_addr,
+				void *buf, size_t len)
+{
+	size_t block_size = sfp->i2c_block_size;
+	union i2c_smbus_data smbus_data;
+	u8 bus_addr = a2 ? 0x51 : 0x50;
+	u8 *data = buf;
+	u8 this_len;
+	int ret;
+
+	while (len) {
+		this_len = min(len, block_size);
+
+		smbus_data.block[0] = this_len;
+		ret = i2c_smbus_xfer(sfp->i2c, bus_addr, 0,
+				     I2C_SMBUS_READ, dev_addr,
+				     I2C_SMBUS_I2C_BLOCK_DATA, &smbus_data);
+		if (ret < 0)
+			return ret;
+
+		memcpy(data, &smbus_data.block[1], this_len);
+		len -= this_len;
+		data += this_len;
+		dev_addr += this_len;
+	}
+
+	return data - (u8 *)buf;
+}
+
 static int sfp_smbus_byte_write(struct sfp *sfp, bool a2, u8 dev_addr,
 				void *buf, size_t len)
 {
@@ -768,23 +797,67 @@ static int sfp_smbus_byte_write(struct sfp *sfp, bool a2, u8 dev_addr,
 	return 0;
 }
 
+static int sfp_smbus_block_write(struct sfp *sfp, bool a2, u8 dev_addr,
+				 void *buf, size_t len)
+{
+	size_t block_size = sfp->i2c_block_size;
+	union i2c_smbus_data smbus_data;
+	u8 bus_addr = a2 ? 0x51 : 0x50;
+	u8 *data = buf;
+	u8 this_len;
+	int ret;
+
+	while (len) {
+		this_len = min(len, block_size);
+
+		smbus_data.block[0] = this_len;
+		memcpy(&smbus_data.block[1], data, this_len);
+		ret = i2c_smbus_xfer(sfp->i2c, bus_addr, 0,
+				     I2C_SMBUS_WRITE, dev_addr,
+				     I2C_SMBUS_I2C_BLOCK_DATA, &smbus_data);
+		if (ret)
+			return ret;
+
+		len -= this_len;
+		data += this_len;
+		dev_addr += this_len;
+	}
+
+	return 0;
+}
+
 static int sfp_i2c_configure(struct sfp *sfp, struct i2c_adapter *i2c)
 {
+	size_t max_block_size;
+
 	sfp->i2c = i2c;
 
 	if (i2c_check_functionality(i2c, I2C_FUNC_I2C)) {
 		sfp->read = sfp_i2c_read;
 		sfp->write = sfp_i2c_write;
-		sfp->i2c_max_block_size = SFP_EEPROM_BLOCK_SIZE;
+		max_block_size = SFP_EEPROM_BLOCK_SIZE;
+	} else if (i2c_check_functionality(i2c, I2C_FUNC_SMBUS_I2C_BLOCK)) {
+		sfp->read = sfp_smbus_block_read;
+		sfp->write = sfp_smbus_block_write;
+
+		max_block_size = SFP_EEPROM_BLOCK_SIZE;
+		if (i2c->quirks && i2c->quirks->max_read_len)
+			max_block_size = min(max_block_size,
+					     i2c->quirks->max_read_len);
+		if (i2c->quirks && i2c->quirks->max_write_len)
+			max_block_size = min(max_block_size,
+					     i2c->quirks->max_write_len);
+
 	} else if (i2c_check_functionality(i2c, I2C_FUNC_SMBUS_BYTE_DATA)) {
 		sfp->read = sfp_smbus_byte_read;
 		sfp->write = sfp_smbus_byte_write;
-		sfp->i2c_max_block_size = 1;
+		max_block_size = 1;
 	} else {
 		sfp->i2c = NULL;
 		return -EINVAL;
 	}
 
+	sfp->i2c_max_block_size = max_block_size;
 	return 0;
 }
 
