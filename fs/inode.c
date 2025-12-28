@@ -1278,7 +1278,6 @@ EXPORT_SYMBOL(unlock_two_nondirectories);
  * @test:	callback used for comparisons between inodes
  * @set:	callback used to initialize a new struct inode
  * @data:	opaque data pointer to pass to @test and @set
- * @isnew:	pointer to a bool which will indicate whether I_NEW is set
  *
  * Search for the inode specified by @hashval and @data in the inode cache,
  * and if present return it with an increased reference count. This is a
@@ -1593,6 +1592,7 @@ EXPORT_SYMBOL(igrab);
  * @hashval:	hash value (usually inode number) to search for
  * @test:	callback used for comparisons between inodes
  * @data:	opaque data pointer to pass to @test
+ * @isnew:	pointer to a bool which will indicate whether I_NEW is set
  *
  * Search for the inode specified by @hashval and @data in the inode cache.
  * If the inode is in the cache, the inode is returned with an incremented
