@@ -27,6 +27,19 @@
  */
 #include "../wl12xx/reg.h"
 
+/* mapping tid to AC queue
+ */
+static const int ieee802_tid_to_ac[8] = {
+	CONF_TX_AC_BE,
+	CONF_TX_AC_BK,
+	CONF_TX_AC_BK,
+	CONF_TX_AC_BE,
+	CONF_TX_AC_VI,
+	CONF_TX_AC_VI,
+	CONF_TX_AC_VO,
+	CONF_TX_AC_VO
+};
+
 static int wl1271_set_default_wep_key(struct wl1271 *wl,
 				      struct wl12xx_vif *wlvif, u8 id)
 {
@@ -282,6 +295,18 @@ static void wl1271_tx_fill_hdr(struct wl1271 *wl, struct wl12xx_vif *wlvif,
 	/* queue */
 	ac = wl1271_tx_get_queue(skb_get_queue_mapping(skb));
 	desc->tid = skb->priority;
+	
+	/* check that tid is aligned with ac, if not, align with ac */
+	if ( (desc->tid >= 0) && (desc->tid <= 7) && (ieee802_tid_to_ac[desc->tid] != ac) )
+	{
+		/* decrement the wrong allocated ac and increment according to tid */
+		wl->tx_allocated_pkts[ac]--;
+		wl->tx_allocated_pkts[ieee802_tid_to_ac[desc->tid]]++;
+		
+		wl1271_debug(DEBUG_TX,
+			     "tx_fill_hdr: tid: %d. ac: %d",
+			     desc->tid, ac);
+	}
 
 	if (is_dummy) {
 		/*
