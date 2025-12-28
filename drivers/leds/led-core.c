@@ -475,7 +475,8 @@ EXPORT_SYMBOL_GPL(led_sysfs_enable);
 
 static void led_parse_fwnode_props(struct device *dev,
 				   struct fwnode_handle *fwnode,
-				   struct led_properties *props)
+				   struct led_properties *props,
+				   const char **instance)
 {
 	int ret;
 
@@ -501,7 +502,7 @@ static void led_parse_fwnode_props(struct device *dev,
 
 
 	if (!fwnode_property_present(fwnode, "function"))
-		return;
+		goto parse_instance;
 
 	ret = fwnode_property_read_string(fwnode, "function", &props->function);
 	if (ret) {
@@ -511,7 +512,7 @@ static void led_parse_fwnode_props(struct device *dev,
 	}
 
 	if (!fwnode_property_present(fwnode, "function-enumerator"))
-		return;
+		goto parse_instance;
 
 	ret = fwnode_property_read_u32(fwnode, "function-enumerator",
 				       &props->func_enum);
@@ -522,6 +523,14 @@ static void led_parse_fwnode_props(struct device *dev,
 	} else {
 		props->func_enum_present = true;
 	}
+
+parse_instance:
+	/* Parse optional instance identifier */
+	if (fwnode_property_present(fwnode, "led-instance")) {
+		ret = fwnode_property_read_string(fwnode, "led-instance", instance);
+		if (ret)
+			dev_err(dev, "Error parsing 'led-instance' property (%d)\n", ret);
+	}
 }
 
 int led_compose_name(struct device *dev, struct led_init_data *init_data,
@@ -530,12 +539,13 @@ int led_compose_name(struct device *dev, struct led_init_data *init_data,
 	struct led_properties props = {};
 	struct fwnode_handle *fwnode = init_data->fwnode;
 	const char *devicename = init_data->devicename;
+	const char *instance = NULL;
 	int n;
 
 	if (!led_classdev_name)
 		return -EINVAL;
 
-	led_parse_fwnode_props(dev, fwnode, &props);
+	led_parse_fwnode_props(dev, fwnode, &props, &instance);
 
 	if (props.label) {
 		/*
@@ -554,13 +564,26 @@ int led_compose_name(struct device *dev, struct led_init_data *init_data,
 		char tmp_buf[LED_MAX_NAME_SIZE];
 
 		if (props.func_enum_present) {
-			n = snprintf(tmp_buf, LED_MAX_NAME_SIZE, "%s:%s-%d",
-				     props.color_present ? led_colors[props.color] : "",
-				     props.function ?: "", props.func_enum);
+			if (instance) {
+				n = snprintf(tmp_buf, LED_MAX_NAME_SIZE, "%s:%s-%d:%s",
+					     props.color_present ? led_colors[props.color] : "",
+					     props.function ?: "", props.func_enum,
+					     instance);
+			} else {
+				n = snprintf(tmp_buf, LED_MAX_NAME_SIZE, "%s:%s-%d",
+					     props.color_present ? led_colors[props.color] : "",
+					     props.function ?: "", props.func_enum);
+			}
 		} else {
-			n = snprintf(tmp_buf, LED_MAX_NAME_SIZE, "%s:%s",
-				     props.color_present ? led_colors[props.color] : "",
-				     props.function ?: "");
+			if (instance) {
+				n = snprintf(tmp_buf, LED_MAX_NAME_SIZE, "%s:%s:%s",
+					     props.color_present ? led_colors[props.color] : "",
+					     props.function ?: "", instance);
+			} else {
+				n = snprintf(tmp_buf, LED_MAX_NAME_SIZE, "%s:%s",
+					     props.color_present ? led_colors[props.color] : "",
+					     props.function ?: "");
+			}
 		}
 		if (n >= LED_MAX_NAME_SIZE)
 			return -E2BIG;
