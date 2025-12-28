@@ -1020,7 +1020,7 @@ static int rio_chk_dev_access(struct rio_dev *rdev)
 /**
  * rio_get_input_status - Sends a Link-Request/Input-Status control symbol and
  *                        returns link-response (if requested).
- * @rdev: RIO devive to issue Input-status command
+ * @rdev: RIO device to issue Input-status command
  * @pnum: Device port number to issue the command
  * @lnkresp: Response from a link partner
  */
