@@ -51,6 +51,33 @@ properties:
       needed, differing only with an ordinal number.
     $ref: /schemas/types.yaml#/definitions/uint32
 
+  led-instance:
+    description:
+      Optional instance identifier for deterministic LED naming when multiple
+      LEDs share the same function and color. Without this property, the LED
+      core appends numerical suffixes (_1, _2) based on registration order,
+      which is non-deterministic and breaks userspace automation.
+
+      The instance identifier becomes the third component in the LED name
+      using the format "function:color:instance" (or "color:function-N:instance"
+      when function-enumerator is present).
+
+      This property is only used with the modern function and color based naming
+      scheme. It is ignored when the deprecated "label" property is present, as
+      "label" already provides full control over the LED name.
+
+      Common use cases include multi-port network devices ("port0", "port1"),
+      multi-domain power indicators ("battery", "ac", "usb"), and system state
+      LEDs ("boot", "upgrade", "panic").
+
+      The identifier should be semantic (describes purpose), deterministic
+      (fixed in hardware description), and concise (under 32 characters).
+      Only alphanumeric characters, dashes, and underscores are allowed, and
+      the identifier must start with an alphanumeric character.
+    $ref: /schemas/types.yaml#/definitions/string
+    maxLength: 31
+    pattern: "^[a-zA-Z0-9][a-zA-Z0-9_-]*$"
+
   label:
     description:
       The label for this LED. If omitted, the label is taken from the node name
@@ -317,6 +344,72 @@ examples:
                 function = LED_FUNCTION_INDICATOR;
                 function-enumerator = <3>;
             };
+        };
+    };
+
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/leds/common.h>
+
+    /* Example: 48-port network switch with deterministic port LEDs */
+    ethernet-leds {
+        compatible = "gpio-leds";
+
+        led-port0 {
+            function = LED_FUNCTION_LAN;
+            color = <LED_COLOR_ID_GREEN>;
+            led-instance = "port0";
+            gpios = <&gpio0 0 GPIO_ACTIVE_HIGH>;
+            /* Result: /sys/class/leds/green:lan:port0 */
+        };
+
+        led-port1 {
+            function = LED_FUNCTION_LAN;
+            color = <LED_COLOR_ID_GREEN>;
+            led-instance = "port1";
+            gpios = <&gpio0 1 GPIO_ACTIVE_HIGH>;
+            /* Result: /sys/class/leds/green:lan:port1 */
+        };
+
+        led-port47 {
+            function = LED_FUNCTION_LAN;
+            color = <LED_COLOR_ID_GREEN>;
+            led-instance = "port47";
+            gpios = <&gpio0 47 GPIO_ACTIVE_HIGH>;
+            /* Result: /sys/class/leds/green:lan:port47 */
+        };
+    };
+
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/leds/common.h>
+
+    /* Example: Multiple power domain LEDs */
+    power-leds {
+        compatible = "gpio-leds";
+
+        led-ac-power {
+            function = LED_FUNCTION_POWER;
+            color = <LED_COLOR_ID_GREEN>;
+            led-instance = "ac";
+            gpios = <&gpio1 10 GPIO_ACTIVE_HIGH>;
+            /* Result: /sys/class/leds/green:power:ac */
+        };
+
+        led-battery-power {
+            function = LED_FUNCTION_POWER;
+            color = <LED_COLOR_ID_GREEN>;
+            led-instance = "battery";
+            gpios = <&gpio1 11 GPIO_ACTIVE_HIGH>;
+            /* Result: /sys/class/leds/green:power:battery */
+        };
+
+        led-usbc-power {
+            function = LED_FUNCTION_POWER;
+            color = <LED_COLOR_ID_GREEN>;
+            led-instance = "usbc";
+            gpios = <&gpio1 12 GPIO_ACTIVE_HIGH>;
+            /* Result: /sys/class/leds/green:power:usbc */
         };
     };
 
