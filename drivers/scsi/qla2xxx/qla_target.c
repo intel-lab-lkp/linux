@@ -7210,7 +7210,7 @@ static fc_port_t *qlt_get_port_database(struct scsi_qla_host *vha,
 		    "qla_target(%d): Failed to retrieve fcport "
 		    "information -- get_port_database() returned %x "
 		    "(loop_id=0x%04x)", vha->vp_idx, rc, loop_id);
-		kfree(fcport);
+		qla2x00_free_fcport(fcport);
 		return NULL;
 	}
 
