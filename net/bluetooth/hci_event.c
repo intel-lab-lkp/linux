@@ -3347,20 +3347,25 @@ static void hci_conn_request_evt(struct hci_dev *hdev, void *data,
 
 		hci_send_cmd(hdev, HCI_OP_ACCEPT_CONN_REQ, sizeof(cp), &cp);
 	} else if (!(flags & HCI_PROTO_DEFER)) {
-		struct hci_cp_accept_sync_conn_req cp;
-		conn->state = BT_CONNECT;
+		if (!enhanced_sync_conn_capable(hdev)) {
+			struct hci_cp_accept_sync_conn_req cp;
 
-		bacpy(&cp.bdaddr, &ev->bdaddr);
-		cp.pkt_type = cpu_to_le16(conn->pkt_type);
+			conn->state = BT_CONNECT;
 
-		cp.tx_bandwidth   = cpu_to_le32(0x00001f40);
-		cp.rx_bandwidth   = cpu_to_le32(0x00001f40);
-		cp.max_latency    = cpu_to_le16(0xffff);
-		cp.content_format = cpu_to_le16(hdev->voice_setting);
-		cp.retrans_effort = 0xff;
+			bacpy(&cp.bdaddr, &ev->bdaddr);
+			cp.pkt_type = cpu_to_le16(conn->pkt_type);
 
-		hci_send_cmd(hdev, HCI_OP_ACCEPT_SYNC_CONN_REQ, sizeof(cp),
-			     &cp);
+			cp.tx_bandwidth   = cpu_to_le32(0x00001f40);
+			cp.rx_bandwidth   = cpu_to_le32(0x00001f40);
+			cp.max_latency    = cpu_to_le16(0xffff);
+			cp.content_format = cpu_to_le16(hdev->voice_setting);
+			cp.retrans_effort = 0xff;
+
+			hci_send_cmd(hdev, HCI_OP_ACCEPT_SYNC_CONN_REQ, sizeof(cp), &cp);
+		} else {
+			conn->state = BT_CONNECT;
+			hci_cmd_enhanced_accept_sync_conn_req(conn);
+		}
 	} else {
 		conn->state = BT_CONNECT2;
 		hci_connect_cfm(conn, 0);

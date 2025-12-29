@@ -7519,3 +7519,81 @@ int hci_le_set_phy(struct hci_conn *conn, u8 tx_phys, u8 rx_phys)
 	return hci_cmd_sync_queue_once(hdev, hci_le_set_phy_sync, cp,
 				       le_phy_update_complete);
 }
+
+void hci_cmd_accept_sync_conn_req(struct hci_conn *conn, u16 setting)
+{
+	struct hci_dev *hdev = conn->hdev;
+	struct hci_cp_accept_sync_conn_req cp;
+
+	bacpy(&cp.bdaddr, &conn->dst);
+	cp.pkt_type = cpu_to_le16(conn->pkt_type);
+
+	cp.tx_bandwidth   = cpu_to_le32(0x00001f40);
+	cp.rx_bandwidth   = cpu_to_le32(0x00001f40);
+	cp.content_format = cpu_to_le16(setting);
+
+	switch (setting & SCO_AIRMODE_MASK) {
+	case SCO_AIRMODE_TRANSP:
+		if (conn->pkt_type & ESCO_2EV3)
+			cp.max_latency = cpu_to_le16(0x0008);
+		else
+			cp.max_latency = cpu_to_le16(0x000D);
+		cp.retrans_effort = 0x02;
+		break;
+	case SCO_AIRMODE_CVSD:
+		cp.max_latency = cpu_to_le16(0xffff);
+		cp.retrans_effort = 0xff;
+		break;
+	default:
+		/* use CVSD settings as fallback */
+		cp.max_latency = cpu_to_le16(0xffff);
+		cp.retrans_effort = 0xff;
+		break;
+	}
+
+	hci_send_cmd(hdev, HCI_OP_ACCEPT_SYNC_CONN_REQ, sizeof(cp), &cp);
+}
+
+static const struct esco_params esco_params_msbc[] = {
+	{ EDR_ESCO_MASK & ~ESCO_2EV3, 0x000d,   0x02 }, /* T2 */
+	{ EDR_ESCO_MASK | ESCO_EV3,   0x0008,   0x02 }, /* T1 */
+};
+
+void hci_cmd_enhanced_accept_sync_conn_req(struct hci_conn *conn)
+{
+	struct hci_dev *hdev = conn->hdev;
+	struct hci_cp_enhanced_accept_sync_conn_req cp;
+	const struct esco_params *param;
+
+	memset(&cp, 0x00, sizeof(cp));
+
+	bacpy(&cp.bdaddr, &conn->dst);
+	cp.tx_bandwidth   = cpu_to_le32(0x00001f40);
+	cp.rx_bandwidth   = cpu_to_le32(0x00001f40);
+	cp.tx_coding_format.id = 0x05;
+	cp.rx_coding_format.id = 0x05;
+	cp.tx_codec_frame_size = __cpu_to_le16(60);
+	cp.rx_codec_frame_size = __cpu_to_le16(60);
+	cp.in_bandwidth = __cpu_to_le32(32000);
+	cp.out_bandwidth = __cpu_to_le32(32000);
+	cp.in_coding_format.id = 0x04;
+	cp.out_coding_format.id = 0x04;
+	cp.in_coded_data_size = __cpu_to_le16(16);
+	cp.out_coded_data_size = __cpu_to_le16(16);
+	cp.in_pcm_data_format = 2;
+	cp.out_pcm_data_format = 2;
+	cp.in_pcm_sample_payload_msb_pos = 0;
+	cp.out_pcm_sample_payload_msb_pos = 0;
+	cp.in_data_path = conn->codec.data_path;
+	cp.out_data_path = conn->codec.data_path;
+	cp.in_transport_unit_size = 1;
+	cp.out_transport_unit_size = 1;
+
+	param = &esco_params_msbc[conn->attempt];
+
+	cp.max_latency = __cpu_to_le16(param->max_latency);
+	cp.pkt_type = __cpu_to_le16(param->pkt_type);
+	cp.retrans_effort = param->retrans_effort;
+
+	hci_send_cmd(hdev, HCI_OP_ENHANCED_ACCEPT_SYNC_CONN_REQ, sizeof(cp), &cp);
+}
