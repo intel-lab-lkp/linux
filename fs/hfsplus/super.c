@@ -52,6 +52,7 @@ static int hfsplus_system_read_inode(struct inode *inode)
 	default:
 		return -EIO;
 	}
+	inode->i_mode = S_IFREG;
 
 	return 0;
 }
