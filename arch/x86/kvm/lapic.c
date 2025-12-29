@@ -107,21 +107,31 @@ bool kvm_apic_pending_eoi(struct kvm_vcpu *vcpu, int vector)
 
 bool kvm_lapic_advertise_suppress_eoi_broadcast(struct kvm *kvm)
 {
-	/*
-	 * The default in-kernel I/O APIC emulates the 82093AA and does not
-	 * implement an EOI register. Some guests (e.g. Windows with the
-	 * Hyper-V role enabled) disable LAPIC EOI broadcast without checking
-	 * the I/O APIC version, which can cause level-triggered interrupts to
-	 * never be EOI'd.
-	 *
-	 * To avoid this, KVM must not advertise Suppress EOI Broadcast support
-	 * when using the default in-kernel I/O APIC.
-	 *
-	 * Historically, in split IRQCHIP mode, KVM always advertised Suppress
-	 * EOI Broadcast support but did not actually suppress EOIs, resulting
-	 * in quirky behavior.
-	 */
-	return !ioapic_in_kernel(kvm);
+	switch (kvm->arch.suppress_eoi_broadcast_mode) {
+	case KVM_SUPPRESS_EOI_BROADCAST_ENABLED:
+		return true;
+	case KVM_SUPPRESS_EOI_BROADCAST_DISABLED:
+		return false;
+	case KVM_SUPPRESS_EOI_BROADCAST_QUIRKED:
+		/*
+		 * The default in-kernel I/O APIC emulates the 82093AA and does not
+		 * implement an EOI register. Some guests (e.g. Windows with the
+		 * Hyper-V role enabled) disable LAPIC EOI broadcast without
+		 * checking the I/O APIC version, which can cause level-triggered
+		 * interrupts to never be EOI'd.
+		 *
+		 * To avoid this, KVM must not advertise Suppress EOI Broadcast
+		 * support when using the default in-kernel I/O APIC.
+		 *
+		 * Historically, in split IRQCHIP mode, KVM always advertised
+		 * Suppress EOI Broadcast support but did not actually suppress
+		 * EOIs, resulting in quirky behavior.
+		 */
+		return !ioapic_in_kernel(kvm);
+	default:
+		WARN_ON_ONCE(1);
+		return false;
+	}
 }
 
 bool kvm_lapic_respect_suppress_eoi_broadcast(struct kvm *kvm)
@@ -129,13 +139,25 @@ bool kvm_lapic_respect_suppress_eoi_broadcast(struct kvm *kvm)
 	/*
 	 * Returns true if KVM should honor the guest's request to suppress EOI
 	 * broadcasts, i.e. actually implement Suppress EOI Broadcast.
-	 *
-	 * Historically, in split IRQCHIP mode, KVM ignored the suppress EOI
-	 * broadcast bit set by the guest and broadcasts EOIs to the userspace
-	 * I/O APIC. For In-kernel I/O APIC, the support itself is not
-	 * advertised, but if bit was set by the guest, it was respected.
 	 */
-	return ioapic_in_kernel(kvm);
+	switch (kvm->arch.suppress_eoi_broadcast_mode) {
+	case KVM_SUPPRESS_EOI_BROADCAST_ENABLED:
+		return true;
+	case KVM_SUPPRESS_EOI_BROADCAST_DISABLED:
+		return false;
+	case KVM_SUPPRESS_EOI_BROADCAST_QUIRKED:
+		/*
+		 * Historically, in split IRQCHIP mode, KVM ignored the suppress
+		 * EOI broadcast bit set by the guest and broadcasts EOIs to the
+		 * userspace I/O APIC. For In-kernel I/O APIC, the support itself
+		 * is not advertised, but if bit was set by the guest, it was
+		 * respected.
+		 */
+		return ioapic_in_kernel(kvm);
+	default:
+		WARN_ON_ONCE(1);
+		return false;
+	}
 }
 
 __read_mostly DEFINE_STATIC_KEY_FALSE(kvm_has_noapic_vcpu);
