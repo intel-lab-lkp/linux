@@ -315,6 +315,23 @@ TRACE_EVENT(kvm_ioapic_delayed_eoi_inj,
 		  (__entry->e & (1<<15)) ? "level" : "edge",
 		  (__entry->e & (1<<16)) ? "|masked" : "")
 );
+
+TRACE_EVENT(kvm_ioapic_directed_eoi,
+	    TP_PROTO(struct kvm_vcpu *vcpu, u8 vector),
+	    TP_ARGS(vcpu, vector),
+
+	TP_STRUCT__entry(
+		__field(	__u32,		apicid		)
+		__field(	__u8,		vector		)
+	),
+
+	TP_fast_assign(
+		__entry->apicid		= vcpu->vcpu_id;
+		__entry->vector		= vector;
+	),
+
+	TP_printk("apicid %x vector %u", __entry->apicid, __entry->vector)
+);
 #endif
 
 TRACE_EVENT(kvm_msi_set_irq,

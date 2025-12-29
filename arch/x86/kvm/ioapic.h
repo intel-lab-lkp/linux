@@ -11,7 +11,8 @@ struct kvm_vcpu;
 
 #define IOAPIC_NUM_PINS  KVM_IOAPIC_NUM_PINS
 #define MAX_NR_RESERVED_IOAPIC_PINS KVM_MAX_IRQ_ROUTES
-#define IOAPIC_VERSION_ID 0x11	/* IOAPIC version */
+#define IOAPIC_VERSION_ID	0x11	/* Default IOAPIC version */
+#define IOAPIC_VERSION_ID_EOIR	0x20	/* IOAPIC version with EOIR support */
 #define IOAPIC_EDGE_TRIG  0
 #define IOAPIC_LEVEL_TRIG 1
 
@@ -19,13 +20,15 @@ struct kvm_vcpu;
 #define IOAPIC_MEM_LENGTH            0x100
 
 /* Direct registers. */
-#define IOAPIC_REG_SELECT  0x00
-#define IOAPIC_REG_WINDOW  0x10
+#define IOAPIC_REG_SELECT	0x00
+#define IOAPIC_REG_WINDOW	0x10
+#define IOAPIC_REG_EOIR	0x40	/* version 0x20+ only */
 
-/* Indirect registers. */
-#define IOAPIC_REG_APIC_ID 0x00	/* x86 IOAPIC only */
-#define IOAPIC_REG_VERSION 0x01
-#define IOAPIC_REG_ARB_ID  0x02	/* x86 IOAPIC only */
+/* INDIRECT registers. */
+#define IOAPIC_REG_APIC_ID	0x00	/* x86 IOAPIC only */
+#define IOAPIC_REG_VERSION	0x01
+#define IOAPIC_REG_ARB_ID	0x02	/* x86 IOAPIC only */
+#define IOAPIC_REG_BOOT_CONFIG	0x03	/* x86 IOAPIC only */
 
 /*ioapic delivery mode*/
 #define	IOAPIC_FIXED			0x0

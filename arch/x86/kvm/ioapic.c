@@ -48,13 +48,20 @@ static unsigned long ioapic_read_indirect(struct kvm_ioapic *ioapic)
 
 	switch (ioapic->ioregsel) {
 	case IOAPIC_REG_VERSION:
-		result = ((((IOAPIC_NUM_PINS - 1) & 0xff) << 16)
-			  | (IOAPIC_VERSION_ID & 0xff));
+		if (kvm_lapic_advertise_suppress_eoi_broadcast(ioapic->kvm))
+			result = IOAPIC_VERSION_ID_EOIR;
+		else
+			result = IOAPIC_VERSION_ID;
+		result |= ((IOAPIC_NUM_PINS - 1) & 0xff) << 16;
 		break;
 
 	case IOAPIC_REG_APIC_ID:
 	case IOAPIC_REG_ARB_ID:
 		result = ((ioapic->id & 0xf) << 24);
+		break;
+
+	case IOAPIC_REG_BOOT_CONFIG:
+		result = 0x01; /* Processor bus */
 		break;
 
 	default:
@@ -701,6 +708,26 @@ static int ioapic_mmio_write(struct kvm_vcpu *vcpu, struct kvm_io_device *this,
 		ioapic_write_indirect(ioapic, data);
 		break;
 
+	case IOAPIC_REG_EOIR:
+		/*
+		 * The EOI register is supported (and version 0x20 advertised)
+		 * when userspace explicitly enables suppress EOI broadcast.
+		 */
+		if (kvm_lapic_advertise_suppress_eoi_broadcast(vcpu->kvm)) {
+			u8 vector = data & 0xff;
+			int i;
+
+			trace_kvm_ioapic_directed_eoi(vcpu, vector);
+			rtc_irq_eoi(ioapic, vcpu, vector);
+			for (i = 0; i < IOAPIC_NUM_PINS; i++) {
+				union kvm_ioapic_redirect_entry *ent = &ioapic->redirtbl[i];
+
+				if (ent->fields.vector != vector)
+					continue;
+				kvm_ioapic_update_eoi_one(vcpu, ioapic, ent->fields.trig_mode, i);
+			}
+		}
+		break;
 	default:
 		break;
 	}
