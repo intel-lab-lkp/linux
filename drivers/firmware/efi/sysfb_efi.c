@@ -365,7 +365,7 @@ __init void sysfb_apply_efi_quirks(void)
 	}
 }
 
-__init void sysfb_set_efifb_fwnode(struct platform_device *pd)
+void sysfb_set_efifb_fwnode(struct platform_device *pd)
 {
 	if (screen_info.orig_video_isVGA == VIDEO_TYPE_EFI && IS_ENABLED(CONFIG_PCI)) {
 		fwnode_init(&efifb_fwnode, &efifb_fwnode_ops);

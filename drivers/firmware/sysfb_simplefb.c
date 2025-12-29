@@ -24,8 +24,8 @@ static const char simplefb_resname[] = "BOOTFB";
 static const struct simplefb_format formats[] = SIMPLEFB_FORMATS;
 
 /* try parsing screen_info into a simple-framebuffer mode struct */
-__init bool sysfb_parse_mode(const struct screen_info *si,
-			     struct simplefb_platform_data *mode)
+bool sysfb_parse_mode(const struct screen_info *si,
+		      struct simplefb_platform_data *mode)
 {
 	__u8 type;
 	u32 bits_per_pixel;
@@ -61,9 +61,9 @@ __init bool sysfb_parse_mode(const struct screen_info *si,
 	return false;
 }
 
-__init struct platform_device *sysfb_create_simplefb(const struct screen_info *si,
-						     const struct simplefb_platform_data *mode,
-						     struct device *parent)
+struct platform_device *sysfb_create_simplefb(const struct screen_info *si,
+					      const struct simplefb_platform_data *mode,
+					      struct device *parent)
 {
 	struct platform_device *pd;
 	struct resource res;

@@ -372,3 +372,57 @@ int aperture_remove_conflicting_pci_devices(struct pci_dev *pdev, const char *na
 
 }
 EXPORT_SYMBOL(aperture_remove_conflicting_pci_devices);
+
+static void devm_aperture_restore_sysfb(void *unused)
+{
+	sysfb_restore();
+}
+
+/**
+ * devm_aperture_remove_conflicting_pci_devices - remove existing framebuffers
+ *                                                with sysfb restore on failure
+ * @pdev: PCI device
+ * @name: a descriptive name of the requesting driver
+ *
+ * This function removes devices that own apertures within any of @pdev's
+ * memory bars, similar to aperture_remove_conflicting_pci_devices().
+ *
+ * Additionally, it registers a devm action that will restore the system
+ * framebuffer if the driver's probe fails or the driver is unloaded. This
+ * ensures the user doesn't lose display output if the DRM driver probe fails
+ * after removing the firmware framebuffer.
+ *
+ * This function should be called early in the driver's probe function. The
+ * driver must call devm_aperture_remove_conflicting_pci_devices_done() after
+ * successfully completing probe to cancel the automatic restore.
+ *
+ * Returns:
+ * 0 on success, or a negative errno code otherwise
+ */
+int devm_aperture_remove_conflicting_pci_devices(struct pci_dev *pdev,
+						 const char *name)
+{
+	int ret;
+
+	ret = aperture_remove_conflicting_pci_devices(pdev, name);
+	if (ret)
+		return ret;
+
+	return devm_add_action_or_reset(&pdev->dev, devm_aperture_restore_sysfb,
+					NULL);
+}
+EXPORT_SYMBOL(devm_aperture_remove_conflicting_pci_devices);
+
+/**
+ * devm_aperture_remove_conflicting_pci_devices_done - cancel sysfb restore
+ * @pdev: PCI device
+ *
+ * Cancels the automatic sysfb restore action registered by
+ * devm_aperture_remove_conflicting_pci_devices(). Call this after the
+ * driver has successfully completed probe and registered its display.
+ */
+void devm_aperture_remove_conflicting_pci_devices_done(struct pci_dev *pdev)
+{
+	devm_remove_action(&pdev->dev, devm_aperture_restore_sysfb, NULL);
+}
+EXPORT_SYMBOL(devm_aperture_remove_conflicting_pci_devices_done);

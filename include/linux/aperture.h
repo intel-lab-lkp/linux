@@ -19,6 +19,10 @@ int aperture_remove_conflicting_devices(resource_size_t base, resource_size_t si
 int __aperture_remove_legacy_vga_devices(struct pci_dev *pdev);
 
 int aperture_remove_conflicting_pci_devices(struct pci_dev *pdev, const char *name);
+
+int devm_aperture_remove_conflicting_pci_devices(struct pci_dev *pdev,
+						 const char *name);
+void devm_aperture_remove_conflicting_pci_devices_done(struct pci_dev *pdev);
 #else
 static inline int devm_aperture_acquire_for_platform_device(struct platform_device *pdev,
 							    resource_size_t base,
@@ -41,6 +45,16 @@ static inline int __aperture_remove_legacy_vga_devices(struct pci_dev *pdev)
 static inline int aperture_remove_conflicting_pci_devices(struct pci_dev *pdev, const char *name)
 {
 	return 0;
+}
+
+static inline int devm_aperture_remove_conflicting_pci_devices(struct pci_dev *pdev,
+							       const char *name)
+{
+	return 0;
+}
+
+static inline void devm_aperture_remove_conflicting_pci_devices_done(struct pci_dev *pdev)
+{
 }
 #endif
 

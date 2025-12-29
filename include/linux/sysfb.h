@@ -63,6 +63,7 @@ struct efifb_dmi_info {
 #ifdef CONFIG_SYSFB
 
 void sysfb_disable(struct device *dev);
+int sysfb_restore(void);
 
 bool sysfb_handles_screen_info(void);
 
@@ -70,6 +71,11 @@ bool sysfb_handles_screen_info(void);
 
 static inline void sysfb_disable(struct device *dev)
 {
+}
+
+static inline int sysfb_restore(void)
+{
+	return -ENODEV;
 }
 
 static inline bool sysfb_handles_screen_info(void)

@@ -38,6 +38,7 @@
 static struct platform_device *pd;
 static DEFINE_MUTEX(disable_lock);
 static bool disabled;
+static bool quirks_applied;
 
 static struct device *sysfb_parent_dev(const struct screen_info *si);
 
@@ -78,6 +79,121 @@ void sysfb_disable(struct device *dev)
 	mutex_unlock(&disable_lock);
 }
 EXPORT_SYMBOL_GPL(sysfb_disable);
+
+/* Caller must hold disable_lock */
+static int __sysfb_create_device(bool restore)
+{
+	struct screen_info *si = &screen_info;
+	struct device *parent;
+	unsigned int type;
+	struct simplefb_platform_data mode;
+	const char *name;
+	bool compatible;
+	int ret = 0;
+
+	if (!IS_ERR_OR_NULL(pd))
+		return 0;
+
+	/*
+	 * If quirks haven't been applied yet, sysfb_init() hasn't run.
+	 * Don't create the device now - let sysfb_init() do it after
+	 * applying the necessary fixups and quirks. We can't call
+	 * sysfb_apply_efi_quirks() here because it's __init.
+	 */
+	if (!quirks_applied)
+		return 0;
+
+	parent = sysfb_parent_dev(si);
+	if (IS_ERR(parent))
+		return PTR_ERR(parent);
+
+	type = screen_info_video_type(si);
+
+	/* try to create a simple-framebuffer device */
+	compatible = sysfb_parse_mode(si, &mode);
+	if (compatible) {
+		pd = sysfb_create_simplefb(si, &mode, parent);
+		if (!IS_ERR(pd)) {
+			if (restore)
+				pr_info("sysfb: restored simple-framebuffer device\n");
+			goto put_device;
+		}
+	}
+
+	/* if the FB is incompatible, create a legacy framebuffer device */
+	switch (type) {
+	case VIDEO_TYPE_EGAC:
+		name = "ega-framebuffer";
+		break;
+	case VIDEO_TYPE_VGAC:
+		name = "vga-framebuffer";
+		break;
+	case VIDEO_TYPE_VLFB:
+		name = "vesa-framebuffer";
+		break;
+	case VIDEO_TYPE_EFI:
+		name = "efi-framebuffer";
+		break;
+	default:
+		name = "platform-framebuffer";
+		break;
+	}
+
+	pd = platform_device_alloc(name, 0);
+	if (!pd) {
+		ret = -ENOMEM;
+		goto put_device;
+	}
+
+	pd->dev.parent = parent;
+
+	sysfb_set_efifb_fwnode(pd);
+
+	ret = platform_device_add_data(pd, si, sizeof(*si));
+	if (ret)
+		goto err;
+
+	ret = platform_device_add(pd);
+	if (ret)
+		goto err;
+
+	if (restore)
+		pr_info("sysfb: restored %s device\n", name);
+	goto put_device;
+err:
+	platform_device_put(pd);
+	pd = NULL;
+put_device:
+	put_device(parent);
+	return ret;
+}
+
+/**
+ * sysfb_restore() - restore the Generic System Framebuffer
+ *
+ * This function re-enables the Generic System Framebuffers support and
+ * re-creates the platform device that was previously unregistered by
+ * sysfb_disable(). This is intended for use by DRM drivers that need to
+ * restore the fallback framebuffer when their probe fails after having
+ * called aperture_remove_conflicting_devices() or similar.
+ *
+ * Context: The function can sleep. A @disable_lock mutex is acquired.
+ *
+ * Returns:
+ * 0 on success, or a negative errno value otherwise.
+ */
+int sysfb_restore(void)
+{
+	int ret;
+
+	mutex_lock(&disable_lock);
+	disabled = false;
+	ret = __sysfb_create_device(true);
+	mutex_unlock(&disable_lock);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(sysfb_restore);
 
 /**
  * sysfb_handles_screen_info() - reports if sysfb handles the global screen_info
@@ -141,82 +257,17 @@ static struct device *sysfb_parent_dev(const struct screen_info *si)
 
 static __init int sysfb_init(void)
 {
-	struct screen_info *si = &screen_info;
-	struct device *parent;
-	unsigned int type;
-	struct simplefb_platform_data mode;
-	const char *name;
-	bool compatible;
 	int ret = 0;
 
 	screen_info_apply_fixups();
-
-	mutex_lock(&disable_lock);
-	if (disabled)
-		goto unlock_mutex;
-
 	sysfb_apply_efi_quirks();
 
-	parent = sysfb_parent_dev(si);
-	if (IS_ERR(parent)) {
-		ret = PTR_ERR(parent);
-		goto unlock_mutex;
-	}
-
-	/* try to create a simple-framebuffer device */
-	compatible = sysfb_parse_mode(si, &mode);
-	if (compatible) {
-		pd = sysfb_create_simplefb(si, &mode, parent);
-		if (!IS_ERR(pd))
-			goto put_device;
-	}
-
-	type = screen_info_video_type(si);
-
-	/* if the FB is incompatible, create a legacy framebuffer device */
-	switch (type) {
-	case VIDEO_TYPE_EGAC:
-		name = "ega-framebuffer";
-		break;
-	case VIDEO_TYPE_VGAC:
-		name = "vga-framebuffer";
-		break;
-	case VIDEO_TYPE_VLFB:
-		name = "vesa-framebuffer";
-		break;
-	case VIDEO_TYPE_EFI:
-		name = "efi-framebuffer";
-		break;
-	default:
-		name = "platform-framebuffer";
-		break;
-	}
-
-	pd = platform_device_alloc(name, 0);
-	if (!pd) {
-		ret = -ENOMEM;
-		goto put_device;
-	}
-
-	pd->dev.parent = parent;
-
-	sysfb_set_efifb_fwnode(pd);
-
-	ret = platform_device_add_data(pd, si, sizeof(*si));
-	if (ret)
-		goto err;
-
-	ret = platform_device_add(pd);
-	if (ret)
-		goto err;
-
-	goto put_device;
-err:
-	platform_device_put(pd);
-put_device:
-	put_device(parent);
-unlock_mutex:
+	mutex_lock(&disable_lock);
+	quirks_applied = true;
+	if (!disabled)
+		ret = __sysfb_create_device(false);
 	mutex_unlock(&disable_lock);
+
 	return ret;
 }
 
