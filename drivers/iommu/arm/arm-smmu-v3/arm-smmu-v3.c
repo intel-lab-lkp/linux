@@ -265,8 +265,14 @@ static int queue_remove_raw(struct arm_smmu_queue *q, u64 *ent)
 	return 0;
 }
 
+static __always_inline bool smmu_coherent(struct arm_smmu_device *smmu)
+{
+	return !!(smmu->features & ARM_SMMU_FEAT_COHERENCY);
+}
+
 /* High-level queue accessors */
-static int arm_smmu_cmdq_build_cmd(u64 *cmd, struct arm_smmu_cmdq_ent *ent)
+static int arm_smmu_cmdq_build_cmd(u64 *cmd, struct arm_smmu_cmdq_ent *ent,
+				   struct arm_smmu_device *smmu)
 {
 	memset(cmd, 0, 1 << CMDQ_ENT_SZ_SHIFT);
 	cmd[0] |= FIELD_PREP(CMDQ_0_OP, ent->opcode);
@@ -358,8 +364,13 @@ static int arm_smmu_cmdq_build_cmd(u64 *cmd, struct arm_smmu_cmdq_ent *ent)
 		} else {
 			cmd[0] |= FIELD_PREP(CMDQ_SYNC_0_CS, CMDQ_SYNC_0_CS_SEV);
 		}
-		cmd[0] |= FIELD_PREP(CMDQ_SYNC_0_MSH, ARM_SMMU_SH_ISH);
-		cmd[0] |= FIELD_PREP(CMDQ_SYNC_0_MSIATTR, ARM_SMMU_MEMATTR_OIWB);
+		if (smmu_coherent(smmu)) {
+			cmd[0] |= FIELD_PREP(CMDQ_SYNC_0_MSH, ARM_SMMU_SH_ISH);
+			cmd[0] |= FIELD_PREP(CMDQ_SYNC_0_MSIATTR, ARM_SMMU_MEMATTR_OIWB);
+		} else {
+			cmd[0] |= FIELD_PREP(CMDQ_SYNC_0_MSH, ARM_SMMU_SH_OSH);
+			cmd[0] |= FIELD_PREP(CMDQ_SYNC_0_MSIATTR, ARM_SMMU_MEMATTR_OINC);
+		}
 		break;
 	default:
 		return -ENOENT;
@@ -405,7 +416,7 @@ static void arm_smmu_cmdq_build_sync_cmd(u64 *cmd, struct arm_smmu_device *smmu,
 				   q->ent_dwords * 8;
 	}
 
-	arm_smmu_cmdq_build_cmd(cmd, &ent);
+	arm_smmu_cmdq_build_cmd(cmd, &ent, smmu);
 	if (arm_smmu_cmdq_needs_busy_polling(smmu, cmdq))
 		u64p_replace_bits(cmd, CMDQ_SYNC_0_CS_NONE, CMDQ_SYNC_0_CS);
 }
@@ -461,7 +472,7 @@ void __arm_smmu_cmdq_skip_err(struct arm_smmu_device *smmu,
 		dev_err(smmu->dev, "\t0x%016llx\n", (unsigned long long)cmd[i]);
 
 	/* Convert the erroneous command into a CMD_SYNC */
-	arm_smmu_cmdq_build_cmd(cmd, &cmd_sync);
+	arm_smmu_cmdq_build_cmd(cmd, &cmd_sync, smmu);
 	if (arm_smmu_cmdq_needs_busy_polling(smmu, cmdq))
 		u64p_replace_bits(cmd, CMDQ_SYNC_0_CS_NONE, CMDQ_SYNC_0_CS);
 
@@ -913,7 +924,7 @@ static int __arm_smmu_cmdq_issue_cmd(struct arm_smmu_device *smmu,
 {
 	u64 cmd[CMDQ_ENT_DWORDS];
 
-	if (unlikely(arm_smmu_cmdq_build_cmd(cmd, ent))) {
+	if (unlikely(arm_smmu_cmdq_build_cmd(cmd, ent, smmu))) {
 		dev_warn(smmu->dev, "ignoring unknown CMDQ opcode 0x%x\n",
 			 ent->opcode);
 		return -EINVAL;
@@ -965,7 +976,7 @@ static void arm_smmu_cmdq_batch_add(struct arm_smmu_device *smmu,
 	}
 
 	index = cmds->num * CMDQ_ENT_DWORDS;
-	if (unlikely(arm_smmu_cmdq_build_cmd(&cmds->cmds[index], cmd))) {
+	if (unlikely(arm_smmu_cmdq_build_cmd(&cmds->cmds[index], cmd, smmu))) {
 		dev_warn(smmu->dev, "ignoring unknown CMDQ opcode 0x%x\n",
 			 cmd->opcode);
 		return;
@@ -1603,6 +1614,7 @@ void arm_smmu_make_cdtable_ste(struct arm_smmu_ste *target,
 {
 	struct arm_smmu_ctx_desc_cfg *cd_table = &master->cd_table;
 	struct arm_smmu_device *smmu = master->smmu;
+	u64 val;
 
 	memset(target, 0, sizeof(*target));
 	target->data[0] = cpu_to_le64(
@@ -1612,11 +1624,18 @@ void arm_smmu_make_cdtable_ste(struct arm_smmu_ste *target,
 		(cd_table->cdtab_dma & STRTAB_STE_0_S1CTXPTR_MASK) |
 		FIELD_PREP(STRTAB_STE_0_S1CDMAX, cd_table->s1cdmax));
 
+	if (smmu_coherent(smmu)) {
+		val = FIELD_PREP(STRTAB_STE_1_S1CIR, STRTAB_STE_1_S1C_CACHE_WBRA) |
+		      FIELD_PREP(STRTAB_STE_1_S1COR, STRTAB_STE_1_S1C_CACHE_WBRA) |
+		      FIELD_PREP(STRTAB_STE_1_S1CSH, ARM_SMMU_SH_ISH);
+	} else {
+		val = FIELD_PREP(STRTAB_STE_1_S1CIR, STRTAB_STE_1_S1C_CACHE_NC) |
+		      FIELD_PREP(STRTAB_STE_1_S1COR, STRTAB_STE_1_S1C_CACHE_NC) |
+		      FIELD_PREP(STRTAB_STE_1_S1CSH, ARM_SMMU_SH_OSH);
+	}
+
 	target->data[1] = cpu_to_le64(
-		FIELD_PREP(STRTAB_STE_1_S1DSS, s1dss) |
-		FIELD_PREP(STRTAB_STE_1_S1CIR, STRTAB_STE_1_S1C_CACHE_WBRA) |
-		FIELD_PREP(STRTAB_STE_1_S1COR, STRTAB_STE_1_S1C_CACHE_WBRA) |
-		FIELD_PREP(STRTAB_STE_1_S1CSH, ARM_SMMU_SH_ISH) |
+		FIELD_PREP(STRTAB_STE_1_S1DSS, s1dss) | val |
 		((smmu->features & ARM_SMMU_FEAT_STALLS &&
 		  !master->stall_enabled) ?
 			 STRTAB_STE_1_S1STALLD :
@@ -3745,7 +3764,7 @@ int arm_smmu_init_one_queue(struct arm_smmu_device *smmu,
 	q->cons_reg	= page + cons_off;
 	q->ent_dwords	= dwords;
 
-	q->q_base  = Q_BASE_RWA;
+	q->q_base  = smmu_coherent(smmu) ? Q_BASE_RWA : 0;
 	q->q_base |= q->base_dma & Q_BASE_ADDR_MASK;
 	q->q_base |= FIELD_PREP(Q_BASE_LOG2SIZE, q->llq.max_n_shift);
 
@@ -4092,6 +4111,7 @@ static void arm_smmu_write_strtab(struct arm_smmu_device *smmu)
 	struct arm_smmu_strtab_cfg *cfg = &smmu->strtab_cfg;
 	dma_addr_t dma;
 	u32 reg;
+	u64 val;
 
 	if (smmu->features & ARM_SMMU_FEAT_2_LVL_STRTAB) {
 		reg = FIELD_PREP(STRTAB_BASE_CFG_FMT,
@@ -4106,8 +4126,12 @@ static void arm_smmu_write_strtab(struct arm_smmu_device *smmu)
 		      FIELD_PREP(STRTAB_BASE_CFG_LOG2SIZE, smmu->sid_bits);
 		dma = cfg->linear.ste_dma;
 	}
-	writeq_relaxed((dma & STRTAB_BASE_ADDR_MASK) | STRTAB_BASE_RA,
-		       smmu->base + ARM_SMMU_STRTAB_BASE);
+
+	val = dma & STRTAB_BASE_ADDR_MASK;
+	if (smmu_coherent(smmu))
+		val |= STRTAB_BASE_RA;
+
+	writeq_relaxed(val, smmu->base + ARM_SMMU_STRTAB_BASE);
 	writel_relaxed(reg, smmu->base + ARM_SMMU_STRTAB_BASE_CFG);
 }
 
@@ -4129,12 +4153,21 @@ static int arm_smmu_device_reset(struct arm_smmu_device *smmu)
 		return ret;
 
 	/* CR1 (table and queue memory attributes) */
-	reg = FIELD_PREP(CR1_TABLE_SH, ARM_SMMU_SH_ISH) |
-	      FIELD_PREP(CR1_TABLE_OC, CR1_CACHE_WB) |
-	      FIELD_PREP(CR1_TABLE_IC, CR1_CACHE_WB) |
-	      FIELD_PREP(CR1_QUEUE_SH, ARM_SMMU_SH_ISH) |
-	      FIELD_PREP(CR1_QUEUE_OC, CR1_CACHE_WB) |
-	      FIELD_PREP(CR1_QUEUE_IC, CR1_CACHE_WB);
+	if (smmu_coherent(smmu)) {
+		reg = FIELD_PREP(CR1_TABLE_SH, ARM_SMMU_SH_ISH) |
+		      FIELD_PREP(CR1_TABLE_OC, CR1_CACHE_WB) |
+		      FIELD_PREP(CR1_TABLE_IC, CR1_CACHE_WB) |
+		      FIELD_PREP(CR1_QUEUE_SH, ARM_SMMU_SH_ISH) |
+		      FIELD_PREP(CR1_QUEUE_OC, CR1_CACHE_WB) |
+		      FIELD_PREP(CR1_QUEUE_IC, CR1_CACHE_WB);
+	} else {
+		reg = FIELD_PREP(CR1_TABLE_SH, ARM_SMMU_SH_OSH) |
+		      FIELD_PREP(CR1_TABLE_OC, CR1_CACHE_NC) |
+		      FIELD_PREP(CR1_TABLE_IC, CR1_CACHE_NC) |
+		      FIELD_PREP(CR1_QUEUE_SH, ARM_SMMU_SH_OSH) |
+		      FIELD_PREP(CR1_QUEUE_OC, CR1_CACHE_NC) |
+		      FIELD_PREP(CR1_QUEUE_IC, CR1_CACHE_NC);
+	}
 	writel_relaxed(reg, smmu->base + ARM_SMMU_CR1);
 
 	/* CR2 (random crap) */

@@ -183,6 +183,7 @@ struct arm_vsmmu;
 #define ARM_SMMU_SH_ISH			3
 #define ARM_SMMU_MEMATTR_DEVICE_nGnRE	0x1
 #define ARM_SMMU_MEMATTR_OIWB		0xf
+#define ARM_SMMU_MEMATTR_OINC		0x5
 
 #define Q_IDX(llq, p)			((p) & ((1 << (llq)->max_n_shift) - 1))
 #define Q_WRP(llq, p)			((p) & (1 << (llq)->max_n_shift))
