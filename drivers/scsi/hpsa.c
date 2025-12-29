@@ -8212,6 +8212,8 @@ static void hpsa_undo_allocations_after_kdump_soft_reset(struct ctlr_info *h)
 		h->monitor_ctlr_wq = NULL;
 	}
 
+	kfree(h->reply_map);		/* init_one 1 */
+	h->reply_map = NULL;		/* init_one 1 */
 	kfree(h);				/* init_one 1 */
 }
 
