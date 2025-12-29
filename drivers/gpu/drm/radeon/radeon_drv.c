@@ -324,8 +324,13 @@ static int radeon_pci_probe(struct pci_dev *pdev,
 	if (vga_switcheroo_client_probe_defer(pdev))
 		return -EPROBE_DEFER;
 
-	/* Get rid of things like offb */
-	ret = aperture_remove_conflicting_pci_devices(pdev, kms_driver.name);
+	/*
+	 * Get rid of things like offb. Use devm variant to automatically
+	 * restore sysfb if probe fails. This ensures the user doesn't lose
+	 * display if our probe fails after removing the firmware framebuffer
+	 * (efifb/simpledrm).
+	 */
+	ret = devm_aperture_remove_conflicting_pci_devices(pdev, kms_driver.name);
 	if (ret)
 		return ret;
 
@@ -360,6 +365,12 @@ static int radeon_pci_probe(struct pci_dev *pdev,
 		format = NULL;
 
 	drm_client_setup(ddev, format);
+
+	/*
+	 * Probe succeeded - cancel the automatic sysfb restore action.
+	 * We're now responsible for display output.
+	 */
+	devm_aperture_remove_conflicting_pci_devices_done(pdev);
 
 	return 0;
 
