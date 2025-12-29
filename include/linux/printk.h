@@ -386,6 +386,16 @@ extern void __printk_cpu_sync_put(void);
 extern int kptr_restrict;
 
 /**
+ * kptr_restrict_value - Determine what pointer value should be used for %pK
+ * @pptr: Pointer to the pointer value (may be modified)
+ *
+ * Returns:
+ *   - 0, 1, or 2: The kptr_restrict value if pointer should be used
+ *   - -1: Error case (IRQ context with kptr_restrict==1), *pptr unchanged
+ */
+int kptr_restrict_value(const void **pptr);
+
+/**
  * pr_fmt - used by the pr_*() macros to generate the printk format string
  * @fmt: format string passed from a pr_*() macro
  *

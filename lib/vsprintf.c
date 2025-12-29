@@ -811,6 +811,7 @@ int ptr_to_hashval(const void *ptr, unsigned long *hashval_out)
 {
 	return __ptr_to_hashval(ptr, hashval_out);
 }
+EXPORT_SYMBOL_GPL(ptr_to_hashval);
 
 static char *ptr_to_id(char *buf, char *end, const void *ptr,
 		       struct printf_spec spec)
@@ -857,14 +858,28 @@ static char *default_pointer(char *buf, char *end, const void *ptr,
 
 int kptr_restrict __read_mostly;
 
-static noinline_for_stack
-char *restricted_pointer(char *buf, char *end, const void *ptr,
-			 struct printf_spec spec)
+/**
+ * kptr_restrict_value - Determine what pointer value should be used for %pK
+ * @pptr: Pointer to the pointer value (may be modified)
+ *
+ * This function determines what pointer value should be printed based on the
+ * kptr_restrict sysctl setting:
+ *
+ * - kptr_restrict == 0: Return 0 (use original pointer, will be hashed)
+ * - kptr_restrict == 1: Return 1 if current process has CAP_SYSLOG and same
+ *                       euid/egid, otherwise set *pptr to NULL and return 1
+ * - kptr_restrict >= 2: Set *pptr to NULL and return 2
+ *
+ * Returns:
+ *   - 0, 1, or 2: The kptr_restrict value if pointer should be used
+ *   - -1: Error case (IRQ context with kptr_restrict==1), *pptr unchanged
+ */
+int kptr_restrict_value(const void **pptr)
 {
 	switch (kptr_restrict) {
 	case 0:
 		/* Handle as %p, hash and do _not_ leak addresses. */
-		return default_pointer(buf, end, ptr, spec);
+		return 0;
 	case 1: {
 		const struct cred *cred;
 
@@ -872,11 +887,8 @@ char *restricted_pointer(char *buf, char *end, const void *ptr,
 		 * kptr_restrict==1 cannot be used in IRQ context
 		 * because its test for CAP_SYSLOG would be meaningless.
 		 */
-		if (in_hardirq() || in_serving_softirq() || in_nmi()) {
-			if (spec.field_width == -1)
-				spec.field_width = 2 * sizeof(ptr);
-			return error_string(buf, end, "pK-error", spec);
-		}
+		if (in_hardirq() || in_serving_softirq() || in_nmi())
+			return -1;
 
 		/*
 		 * Only print the real pointer value if the current
@@ -891,15 +903,32 @@ char *restricted_pointer(char *buf, char *end, const void *ptr,
 		if (!has_capability_noaudit(current, CAP_SYSLOG) ||
 		    !uid_eq(cred->euid, cred->uid) ||
 		    !gid_eq(cred->egid, cred->gid))
-			ptr = NULL;
-		break;
+			*pptr = NULL;
+		return 1;
 	}
 	case 2:
 	default:
 		/* Always print 0's for %pK */
-		ptr = NULL;
-		break;
+		*pptr = NULL;
+		return 2;
 	}
+}
+EXPORT_SYMBOL_GPL(kptr_restrict_value);
+
+static noinline_for_stack
+char *restricted_pointer(char *buf, char *end, const void *ptr,
+			 struct printf_spec spec)
+{
+	int ret = kptr_restrict_value(&ptr);
+
+	if (ret < 0) {
+		if (spec.field_width == -1)
+			spec.field_width = 2 * sizeof(ptr);
+		return error_string(buf, end, "pK-error", spec);
+	}
+
+	if (ret == 0)
+		return default_pointer(buf, end, ptr, spec);
 
 	return pointer_string(buf, end, ptr, spec);
 }
