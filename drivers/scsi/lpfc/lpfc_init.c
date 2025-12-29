@@ -8297,6 +8297,7 @@ lpfc_sli4_driver_resource_setup(struct lpfc_hba *phba)
 					i, 0);
 	if (!phba->lpfc_sg_dma_buf_pool) {
 		rc = -ENOMEM;
+		mempool_free(mboxq, phba->mbox_mem_pool);
 		goto out_free_bsmbx;
 	}
 
@@ -8308,6 +8309,7 @@ lpfc_sli4_driver_resource_setup(struct lpfc_hba *phba)
 					i, 0);
 	if (!phba->lpfc_cmd_rsp_buf_pool) {
 		rc = -ENOMEM;
+		mempool_free(mboxq, phba->mbox_mem_pool);
 		goto out_free_sg_dma_buf;
 	}
 
