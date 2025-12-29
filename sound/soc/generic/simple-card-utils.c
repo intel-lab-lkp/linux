@@ -779,6 +779,24 @@ int simple_util_parse_pin_switches(struct snd_soc_card *card,
 }
 EXPORT_SYMBOL_GPL(simple_util_parse_pin_switches);
 
+static const char *simple_util_parse_hp_pin_name(struct snd_soc_card *card,
+						 char *prefix, char *pin)
+{
+	struct device_node *node = card->dev->of_node;
+	const char *str = NULL;
+	char prop[128];
+
+	if (!prefix)
+		prefix = "";
+
+	snprintf(prop, sizeof(prop), "%s%s", prefix, "hp-pin-name-headphone");
+
+	if (of_property_present(node, prop))
+		str = "Headphone";
+
+	return pin ? pin : (str ? str : "Headphones");
+}
+
 int simple_util_init_jack(struct snd_soc_card *card,
 			  struct simple_util_jack *sjack,
 			  int is_hp, char *prefix,
@@ -787,7 +805,7 @@ int simple_util_init_jack(struct snd_soc_card *card,
 	struct device *dev = card->dev;
 	struct gpio_desc *desc;
 	char prop[128];
-	char *pin_name;
+	const char *pin_name;
 	char *gpio_name;
 	int mask;
 	int error;
@@ -797,7 +815,7 @@ int simple_util_init_jack(struct snd_soc_card *card,
 
 	if (is_hp) {
 		snprintf(prop, sizeof(prop), "%shp-det", prefix);
-		pin_name	= pin ? pin : "Headphones";
+		pin_name = simple_util_parse_hp_pin_name(card, prefix, pin);
 		gpio_name	= "Headphone detection";
 		mask		= SND_JACK_HEADPHONE;
 	} else {
