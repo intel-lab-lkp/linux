@@ -1799,10 +1799,12 @@ static int ni_usb_init(struct gpib_board *board)
 		return -ENOMEM;
 
 	writes_len = ni_usb_setup_init(board, writes);
-	if (writes_len)
-		retval = ni_usb_write_registers(ni_priv, writes, writes_len, &ibsta);
-	else
+	if (!writes_len) {
+		kfree(writes);
 		return -EFAULT;
+	}
+
+	retval = ni_usb_write_registers(ni_priv, writes, writes_len, &ibsta);
 	kfree(writes);
 	if (retval) {
 		dev_err(&usb_dev->dev, "register write failed, retval=%i\n", retval);
