@@ -26,6 +26,7 @@
 #include <linux/mmc/mmc.h>
 #include <linux/mmc/slot-gpio.h>
 #include <linux/module.h>
+#include <linux/mux/consumer.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/pinctrl/pinctrl-state.h>
 #include <linux/platform_data/tmio.h>
@@ -1116,9 +1117,15 @@ int renesas_sdhi_probe(struct platform_device *pdev,
 						"state_uhs");
 	}
 
+	priv->mux_state = devm_mux_state_get_optional_selected(&pdev->dev, NULL);
+	if (IS_ERR(priv->mux_state))
+		return PTR_ERR(priv->mux_state);
+
 	host = tmio_mmc_host_alloc(pdev, mmc_data);
-	if (IS_ERR(host))
-		return PTR_ERR(host);
+	if (IS_ERR(host)) {
+		ret = PTR_ERR(host);
+		goto edselmux;
+	}
 
 	priv->host = host;
 
@@ -1201,7 +1208,7 @@ int renesas_sdhi_probe(struct platform_device *pdev,
 
 	ret = renesas_sdhi_clk_enable(host);
 	if (ret)
-		return ret;
+		goto edselmux;
 
 	rcfg.of_node = of_get_available_child_by_name(dev->of_node, "vqmmc-regulator");
 	if (rcfg.of_node) {
@@ -1305,6 +1312,9 @@ int renesas_sdhi_probe(struct platform_device *pdev,
 
 edisclk:
 	renesas_sdhi_clk_disable(host);
+edselmux:
+	if (priv->mux_state)
+		mux_state_deselect(priv->mux_state);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(renesas_sdhi_probe);
