@@ -321,6 +321,9 @@ struct mem_cgroup {
 	spinlock_t event_list_lock;
 #endif /* CONFIG_MEMCG_V1 */
 
+	/* Timestamp of most recent refault, for thrashing detection */
+	u64 last_refault;
+
 	struct mem_cgroup_per_node *nodeinfo[];
 };
 
@@ -1038,6 +1041,20 @@ static inline u64 cgroup_id_from_mm(struct mm_struct *mm)
 }
 
 extern int mem_cgroup_init(void);
+
+static inline void mem_cgroup_update_last_refault(struct mem_cgroup *memcg)
+{
+	if (memcg)
+		WRITE_ONCE(memcg->last_refault, jiffies);
+}
+
+static inline unsigned long mem_cgroup_get_last_refault(struct mem_cgroup *memcg)
+{
+	if (memcg)
+		return READ_ONCE(memcg->last_refault);
+
+	return 0;
+}
 #else /* CONFIG_MEMCG */
 
 #define MEM_CGROUP_ID_SHIFT	0
@@ -1433,6 +1450,15 @@ static inline u64 cgroup_id_from_mm(struct mm_struct *mm)
 }
 
 static inline int mem_cgroup_init(void) { return 0; }
+
+static inline void mem_cgroup_update_last_refault(struct mem_cgroup *memcg)
+{
+}
+
+static inline unsigned long mem_cgroup_get_last_refault(struct mem_cgroup *memcg)
+{
+	return 0;
+}
 #endif /* CONFIG_MEMCG */
 
 /*

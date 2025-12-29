@@ -297,6 +297,8 @@ static void lru_gen_refault(struct folio *folio, void *shadow)
 	if (lruvec != folio_lruvec(folio))
 		goto unlock;
 
+	mem_cgroup_update_last_refault(folio_memcg(folio));
+
 	mod_lruvec_state(lruvec, WORKINGSET_REFAULT_BASE + type, delta);
 
 	if (!recent)
@@ -560,6 +562,8 @@ void workingset_refault(struct folio *folio, void *shadow)
 	memcg = folio_memcg(folio);
 	pgdat = folio_pgdat(folio);
 	lruvec = mem_cgroup_lruvec(memcg, pgdat);
+
+	mem_cgroup_update_last_refault(memcg);
 
 	mod_lruvec_state(lruvec, WORKINGSET_REFAULT_BASE + file, nr);
 
