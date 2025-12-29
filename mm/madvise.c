@@ -1360,11 +1360,8 @@ static int madvise_vma_behavior(struct madvise_behavior *madv_behavior)
 		return madvise_remove(madv_behavior);
 	case MADV_WILLNEED:
 		return madvise_willneed(madv_behavior);
-	case MADV_COLD:
-		return madvise_cold(madv_behavior);
 	case MADV_PAGEOUT:
 		return madvise_pageout(madv_behavior);
-	case MADV_FREE:
 	case MADV_DONTNEED:
 	case MADV_DONTNEED_LOCKED:
 		return madvise_dontneed_free(madv_behavior);
@@ -1378,6 +1375,18 @@ static int madvise_vma_behavior(struct madvise_behavior *madv_behavior)
 
 	/* The below behaviours update VMAs via madvise_update_vma(). */
 
+	case MADV_COLD:
+		error = madvise_cold(madv_behavior);
+		if (error)
+			goto out;
+		new_flags = (new_flags & ~VM_HUGEPAGE) | VM_NOHUGEPAGE;
+		break;
+	case MADV_FREE:
+		error = madvise_dontneed_free(madv_behavior);
+		if (error)
+			goto out;
+		new_flags = (new_flags & ~VM_HUGEPAGE) | VM_NOHUGEPAGE;
+		break;
 	case MADV_NORMAL:
 		new_flags = new_flags & ~VM_RAND_READ & ~VM_SEQ_READ;
 		break;
@@ -1756,7 +1765,6 @@ static enum madvise_lock_mode get_lock_mode(struct madvise_behavior *madv_behavi
 	switch (madv_behavior->behavior) {
 	case MADV_REMOVE:
 	case MADV_WILLNEED:
-	case MADV_COLD:
 	case MADV_PAGEOUT:
 	case MADV_POPULATE_READ:
 	case MADV_POPULATE_WRITE:
@@ -1766,7 +1774,6 @@ static enum madvise_lock_mode get_lock_mode(struct madvise_behavior *madv_behavi
 	case MADV_GUARD_REMOVE:
 	case MADV_DONTNEED:
 	case MADV_DONTNEED_LOCKED:
-	case MADV_FREE:
 		return MADVISE_VMA_READ_LOCK;
 	default:
 		return MADVISE_MMAP_WRITE_LOCK;
