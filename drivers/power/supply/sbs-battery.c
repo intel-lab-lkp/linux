@@ -214,6 +214,7 @@ struct sbs_info {
 	u32				poll_retry_count;
 	struct delayed_work		work;
 	struct mutex			mode_lock;
+	u32				monitoring_interval_ms;
 	u32				flags;
 	int				technology;
 	char				strings[NR_STRING_BUFFERS][I2C_SMBUS_BLOCK_MAX + 1];
@@ -1089,21 +1090,27 @@ static void sbs_delayed_work(struct work_struct *work)
 	/* if the read failed, give up on this work */
 	if (ret < 0) {
 		chip->poll_time = 0;
-		return;
+		if (!chip->monitoring_interval_ms)
+			return;
+	} else {
+		if (ret & BATTERY_FULL_CHARGED)
+			ret = POWER_SUPPLY_STATUS_FULL;
+		else if (ret & BATTERY_DISCHARGING)
+			ret = POWER_SUPPLY_STATUS_DISCHARGING;
+		else
+			ret = POWER_SUPPLY_STATUS_CHARGING;
+
+		sbs_status_correct(chip->client, &ret);
+
+		if (chip->last_state != ret) {
+			chip->poll_time = 0;
+			power_supply_changed(chip->power_supply);
+		}
 	}
-
-	if (ret & BATTERY_FULL_CHARGED)
-		ret = POWER_SUPPLY_STATUS_FULL;
-	else if (ret & BATTERY_DISCHARGING)
-		ret = POWER_SUPPLY_STATUS_DISCHARGING;
-	else
-		ret = POWER_SUPPLY_STATUS_CHARGING;
-
-	sbs_status_correct(chip->client, &ret);
-
-	if (chip->last_state != ret) {
-		chip->poll_time = 0;
-		power_supply_changed(chip->power_supply);
+	if (chip->monitoring_interval_ms) {
+		schedule_delayed_work(
+			&chip->work,
+			msecs_to_jiffies(chip->monitoring_interval_ms));
 		return;
 	}
 	if (chip->poll_time > 0) {
@@ -1171,6 +1178,13 @@ static int sbs_probe(struct i2c_client *client)
 	}
 	chip->i2c_retry_count = chip->i2c_retry_count + 1;
 
+	rc = device_property_read_u32(&client->dev, "sbs,monitoring-interval-ms",
+				      &chip->monitoring_interval_ms);
+	if (rc)
+		chip->monitoring_interval_ms = 0;
+	if (chip->monitoring_interval_ms)
+		force_load = true;
+
 	chip->charger_broadcasts = !device_property_read_bool(&client->dev,
 					"sbs,disable-charger-broadcasts");
 
@@ -1197,6 +1211,11 @@ static int sbs_probe(struct i2c_client *client)
 	if (rc) {
 		dev_warn(&client->dev, "Failed to request irq: %d\n", rc);
 		goto skip_gpio;
+	}
+	if (chip->monitoring_interval_ms) {
+		dev_info(&client->dev,
+			 "GPIO IRQ registered, monitoring disabled\n");
+		chip->monitoring_interval_ms = 0;
 	}
 
 skip_gpio:
@@ -1227,6 +1246,11 @@ skip_gpio:
 
 	dev_info(&client->dev,
 		"%s: battery gas gauge device registered\n", client->name);
+
+	if (chip->monitoring_interval_ms > 0)
+		schedule_delayed_work(
+			&chip->work,
+			msecs_to_jiffies(chip->monitoring_interval_ms));
 
 	return 0;
 }
