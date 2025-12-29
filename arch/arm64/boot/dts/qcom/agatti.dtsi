@@ -298,8 +298,8 @@
 		#size-cells = <2>;
 		ranges;
 
-		hyp_mem: hyp@45700000 {
-			reg = <0x0 0x45700000 0x0 0x600000>;
+		hyp_mem: hyp@45600000 {
+			reg = <0x0 0x45600000 0x0 0x700000>;
 			no-map;
 		};
 
