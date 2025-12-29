@@ -428,7 +428,12 @@ struct xe_device *xe_device_create(struct pci_dev *pdev,
 
 	xe_display_driver_set_hooks(&driver);
 
-	err = aperture_remove_conflicting_pci_devices(pdev, driver.name);
+	/*
+	 * Use devm variant to automatically restore sysfb if probe fails.
+	 * This ensures the user doesn't lose display if our probe fails
+	 * after removing the firmware framebuffer (efifb/simpledrm).
+	 */
+	err = devm_aperture_remove_conflicting_pci_devices(pdev, driver.name);
 	if (err)
 		return ERR_PTR(err);
 
