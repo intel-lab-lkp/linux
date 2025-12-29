@@ -72,6 +72,7 @@
 #include "raid-stripe-tree.h"
 #include "fiemap.h"
 #include "delayed-inode.h"
+#include "print-tree.h"
 
 #define COW_FILE_RANGE_KEEP_LOCKED	(1UL << 0)
 #define COW_FILE_RANGE_NO_INLINE	(1UL << 1)
@@ -4364,6 +4365,36 @@ static void update_time_after_link_or_unlink(struct btrfs_inode *dir)
 	inode_set_mtime_to_ts(&dir->vfs_inode, now);
 }
 
+static __cold void dump_tree_for_inode_ref(struct btrfs_root *root,
+					   const struct fscrypt_str *name,
+					   u64 ino, u64 dir_ino)
+{
+	BTRFS_PATH_AUTO_RELEASE(path);
+	struct btrfs_key key;
+	int ret;
+
+	/*
+	 * We're here because we failed to find the inode ref, meaning neither
+	 * a matching INODE_REF nor INODE_EXTREF is found.
+	 * So we can directly go searching INODE_EXTREF.
+	 */
+	key.objectid = ino;
+	key.type = BTRFS_INODE_EXTREF_KEY;
+	key.offset = btrfs_extref_hash(dir_ino, name->name, name->len);
+	ret = btrfs_search_slot(NULL, root, &key, &path, 0, 0);
+	if (ret < 0)
+		return;
+
+	/*
+	 * We're at the slot where INODE_EXTREF should be inserted.
+	 * For an inode with tons of hard links it may not cover what we want
+	 * (e.g. a regular INODE_REF item).
+	 * But it should be good enough for most inodes which have very few
+	 * hard links.
+	 */
+	btrfs_print_leaf(path.nodes[0]);
+}
+
 /*
  * unlink helper that gets used here in inode.c and in the tree logging
  * recovery code.  It remove a link in a directory with a given name, and
@@ -4425,6 +4456,7 @@ static int __btrfs_unlink_inode(struct btrfs_trans_handle *trans,
 		btrfs_crit(fs_info,
 	   "failed to delete reference to %.*s, root %llu inode %llu parent %llu",
 			   name->len, name->name, btrfs_root_id(root), ino, dir_ino);
+		dump_tree_for_inode_ref(root, name, ino, dir_ino);
 		btrfs_abort_transaction(trans, ret);
 		return ret;
 	}
