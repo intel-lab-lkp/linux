@@ -31,7 +31,11 @@ select:
 
 properties:
   compatible:
-    items:
+    oneOf:
+      - items:
+          - enum:
+              - qcom,hamoa-ufshc
+          - const: qcom,sm8550-ufshc
       - enum:
           - qcom,msm8998-ufshc
           - qcom,qcs8300-ufshc
