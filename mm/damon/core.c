@@ -539,7 +539,6 @@ struct damon_ctx *damon_new_ctx(void)
 
 	mutex_init(&ctx->kdamond_lock);
 	INIT_LIST_HEAD(&ctx->call_controls);
-	mutex_init(&ctx->call_controls_lock);
 	mutex_init(&ctx->walk_control_lock);
 
 	ctx->attrs.min_nr_regions = 10;
@@ -1457,9 +1456,9 @@ int damon_call(struct damon_ctx *ctx, struct damon_call_control *control)
 	control->canceled = false;
 	INIT_LIST_HEAD(&control->list);
 
-	mutex_lock(&ctx->call_controls_lock);
+	spin_lock(&ctx->call_controls_lock);
 	list_add_tail(&control->list, &ctx->call_controls);
-	mutex_unlock(&ctx->call_controls_lock);
+	spin_unlock(&ctx->call_controls_lock);
 	if (!damon_is_running(ctx))
 		return -EINVAL;
 	if (control->repeat)
@@ -2549,10 +2548,10 @@ static void kdamond_call(struct damon_ctx *ctx, bool cancel)
 	int ret = 0;
 
 	while (true) {
-		mutex_lock(&ctx->call_controls_lock);
+		spin_lock(&ctx->call_controls_lock);
 		control = list_first_entry_or_null(&ctx->call_controls,
 				struct damon_call_control, list);
-		mutex_unlock(&ctx->call_controls_lock);
+		spin_unlock(&ctx->call_controls_lock);
 		if (!control)
 			break;
 		if (cancel) {
@@ -2561,9 +2560,9 @@ static void kdamond_call(struct damon_ctx *ctx, bool cancel)
 			ret = control->fn(control->data);
 			control->return_code = ret;
 		}
-		mutex_lock(&ctx->call_controls_lock);
+		spin_lock(&ctx->call_controls_lock);
 		list_del(&control->list);
-		mutex_unlock(&ctx->call_controls_lock);
+		spin_unlock(&ctx->call_controls_lock);
 		if (!control->repeat) {
 			complete(&control->completion);
 		} else if (control->canceled && control->dealloc_on_cancel) {
@@ -2577,9 +2576,9 @@ static void kdamond_call(struct damon_ctx *ctx, bool cancel)
 			struct damon_call_control, list);
 	if (!control || cancel)
 		return;
-	mutex_lock(&ctx->call_controls_lock);
+	spin_lock(&ctx->call_controls_lock);
 	list_add_tail(&control->list, &ctx->call_controls);
-	mutex_unlock(&ctx->call_controls_lock);
+	spin_unlock(&ctx->call_controls_lock);
 }
 
 /* Returns negative error code if it's not activated but should return */
