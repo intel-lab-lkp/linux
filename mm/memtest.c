@@ -46,6 +46,7 @@ static void __init memtest(u64 pattern, phys_addr_t start_phys, phys_addr_t size
 
 	start_phys_aligned = ALIGN(start_phys, incr);
 	start = __va(start_phys_aligned);
+	VM_WARN_ON_ONCE(size < start_phys_aligned - start_phys);
 	end = start + (size - (start_phys_aligned - start_phys)) / incr;
 	start_bad = 0;
 	last_bad = 0;
