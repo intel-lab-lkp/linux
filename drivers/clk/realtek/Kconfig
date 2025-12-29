@@ -24,4 +24,8 @@ config RTK_CLK_COMMON
 	  This provides utility functions and data structures used by
 	  multiple Realtek clock implementations, and include integration
 	  with reset controllers where required.
+
+config RTK_CLK_PLL_MMC
+	bool
+
 endif
