@@ -76,7 +76,7 @@ echo "$NSIM_SV_FD:$NSIM_SV_IFIDX $NSIM_CL_FD:$NSIM_CL_IFIDX" > \
 if [ $? -ne 0 ]; then
 	echo "linking netdevsim1 with netdevsim2 should succeed"
 	cleanup_ns
-	exit 1
+	exit "$ksft_fail"
 fi
 
 out_file=$(mktemp)
@@ -85,12 +85,15 @@ timeout -k 1s 30s ip netns exec nssv ./tfo        \
 				-s                \
 				-p ${SERVER_PORT} \
 				-o ${out_file}&
+server_pid="$!"
 
 wait_local_port_listen nssv ${SERVER_PORT} tcp
 
 ip netns exec nscl ./tfo -c -h ${SERVER_IP} -p ${SERVER_PORT}
+client_exit_status="$?"
 
-wait
+wait "$server_pid"
+server_exit_status="$?"
 
 res=$(cat $out_file)
 rm $out_file
@@ -99,6 +102,14 @@ if [ "$res" = "0" ]; then
 	echo "got invalid NAPI ID from passive TFO socket"
 	cleanup_ns
 	exit 1
+fi
+
+if [ "$client_exit_status" -ne 0 ] || [ "$server_exit_status" -ne 0 ]; then
+	# Note: timeout(1) exits with 124 if it timed out
+	echo "client exited with ${client_exit_status}"
+	echo "server exited with ${server_exit_status}"
+	cleanup_ns
+	exit "$ksft_skip"
 fi
 
 echo "$NSIM_SV_FD:$NSIM_SV_IFIDX" > $NSIM_DEV_SYS_UNLINK
