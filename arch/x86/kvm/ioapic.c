@@ -545,7 +545,6 @@ static void kvm_ioapic_update_eoi_one(struct kvm_vcpu *vcpu,
 				      int trigger_mode,
 				      int pin)
 {
-	struct kvm_lapic *apic = vcpu->arch.apic;
 	union kvm_ioapic_redirect_entry *ent = &ioapic->redirtbl[pin];
 
 	/*
@@ -560,8 +559,7 @@ static void kvm_ioapic_update_eoi_one(struct kvm_vcpu *vcpu,
 	kvm_notify_acked_irq(ioapic->kvm, KVM_IRQCHIP_IOAPIC, pin);
 	spin_lock(&ioapic->lock);
 
-	if (trigger_mode != IOAPIC_LEVEL_TRIG ||
-	    kvm_lapic_get_reg(apic, APIC_SPIV) & APIC_SPIV_DIRECTED_EOI)
+	if (trigger_mode != IOAPIC_LEVEL_TRIG)
 		return;
 
 	ASSERT(ent->fields.trig_mode == IOAPIC_LEVEL_TRIG);
@@ -591,10 +589,16 @@ static void kvm_ioapic_update_eoi_one(struct kvm_vcpu *vcpu,
 void kvm_ioapic_update_eoi(struct kvm_vcpu *vcpu, int vector, int trigger_mode)
 {
 	int i;
+	struct kvm_lapic *apic = vcpu->arch.apic;
 	struct kvm_ioapic *ioapic = vcpu->kvm->arch.vioapic;
 
 	spin_lock(&ioapic->lock);
 	rtc_irq_eoi(ioapic, vcpu, vector);
+
+	if ((kvm_lapic_get_reg(apic, APIC_SPIV) & APIC_SPIV_DIRECTED_EOI) &&
+	    kvm_lapic_respect_suppress_eoi_broadcast(ioapic->kvm))
+		goto out;
+
 	for (i = 0; i < IOAPIC_NUM_PINS; i++) {
 		union kvm_ioapic_redirect_entry *ent = &ioapic->redirtbl[i];
 
@@ -602,6 +606,8 @@ void kvm_ioapic_update_eoi(struct kvm_vcpu *vcpu, int vector, int trigger_mode)
 			continue;
 		kvm_ioapic_update_eoi_one(vcpu, ioapic, trigger_mode, i);
 	}
+
+out:
 	spin_unlock(&ioapic->lock);
 }
 

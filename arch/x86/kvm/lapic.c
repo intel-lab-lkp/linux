@@ -105,6 +105,39 @@ bool kvm_apic_pending_eoi(struct kvm_vcpu *vcpu, int vector)
 		apic_test_vector(vector, apic->regs + APIC_IRR);
 }
 
+bool kvm_lapic_advertise_suppress_eoi_broadcast(struct kvm *kvm)
+{
+	/*
+	 * The default in-kernel I/O APIC emulates the 82093AA and does not
+	 * implement an EOI register. Some guests (e.g. Windows with the
+	 * Hyper-V role enabled) disable LAPIC EOI broadcast without checking
+	 * the I/O APIC version, which can cause level-triggered interrupts to
+	 * never be EOI'd.
+	 *
+	 * To avoid this, KVM must not advertise Suppress EOI Broadcast support
+	 * when using the default in-kernel I/O APIC.
+	 *
+	 * Historically, in split IRQCHIP mode, KVM always advertised Suppress
+	 * EOI Broadcast support but did not actually suppress EOIs, resulting
+	 * in quirky behavior.
+	 */
+	return !ioapic_in_kernel(kvm);
+}
+
+bool kvm_lapic_respect_suppress_eoi_broadcast(struct kvm *kvm)
+{
+	/*
+	 * Returns true if KVM should honor the guest's request to suppress EOI
+	 * broadcasts, i.e. actually implement Suppress EOI Broadcast.
+	 *
+	 * Historically, in split IRQCHIP mode, KVM ignored the suppress EOI
+	 * broadcast bit set by the guest and broadcasts EOIs to the userspace
+	 * I/O APIC. For In-kernel I/O APIC, the support itself is not
+	 * advertised, but if bit was set by the guest, it was respected.
+	 */
+	return ioapic_in_kernel(kvm);
+}
+
 __read_mostly DEFINE_STATIC_KEY_FALSE(kvm_has_noapic_vcpu);
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_has_noapic_vcpu);
 
@@ -554,15 +587,9 @@ void kvm_apic_set_version(struct kvm_vcpu *vcpu)
 
 	v = APIC_VERSION | ((apic->nr_lvt_entries - 1) << 16);
 
-	/*
-	 * KVM emulates 82093AA datasheet (with in-kernel IOAPIC implementation)
-	 * which doesn't have EOI register; Some buggy OSes (e.g. Windows with
-	 * Hyper-V role) disable EOI broadcast in lapic not checking for IOAPIC
-	 * version first and level-triggered interrupts never get EOIed in
-	 * IOAPIC.
-	 */
+
 	if (guest_cpu_cap_has(vcpu, X86_FEATURE_X2APIC) &&
-	    !ioapic_in_kernel(vcpu->kvm))
+	    kvm_lapic_advertise_suppress_eoi_broadcast(vcpu->kvm))
 		v |= APIC_LVR_DIRECTED_EOI;
 	kvm_lapic_set_reg(apic, APIC_LVR, v);
 }
@@ -1517,6 +1544,16 @@ static void kvm_ioapic_send_eoi(struct kvm_lapic *apic, int vector)
 
 	/* Request a KVM exit to inform the userspace IOAPIC. */
 	if (irqchip_split(apic->vcpu->kvm)) {
+		/*
+		 * Don't exit to userspace if the guest has enabled Directed
+		 * EOI, a.k.a. Suppress EOI Broadcasts, in which case the local
+		 * APIC doesn't broadcast EOIs (the guest must EOI the target
+		 * I/O APIC(s) directly).
+		 */
+		if ((kvm_lapic_get_reg(apic, APIC_SPIV) & APIC_SPIV_DIRECTED_EOI) &&
+		     kvm_lapic_respect_suppress_eoi_broadcast(apic->vcpu->kvm))
+			return;
+
 		apic->vcpu->arch.pending_ioapic_eoi = vector;
 		kvm_make_request(KVM_REQ_IOAPIC_EOI_EXIT, apic->vcpu);
 		return;

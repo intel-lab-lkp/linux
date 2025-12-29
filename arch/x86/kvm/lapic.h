@@ -231,6 +231,9 @@ static inline int kvm_lapic_latched_init(struct kvm_vcpu *vcpu)
 
 bool kvm_apic_pending_eoi(struct kvm_vcpu *vcpu, int vector);
 
+bool kvm_lapic_advertise_suppress_eoi_broadcast(struct kvm *kvm);
+bool kvm_lapic_respect_suppress_eoi_broadcast(struct kvm *kvm);
+
 void kvm_wait_lapic_expire(struct kvm_vcpu *vcpu);
 
 void kvm_bitmap_or_dest_vcpus(struct kvm *kvm, struct kvm_lapic_irq *irq,
