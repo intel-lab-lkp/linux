@@ -942,7 +942,7 @@ static int dw_pcie_iatu_setup(struct dw_pcie_rp *pp)
 		dev_warn(pci->dev, "Ranges exceed outbound iATU size (%d)\n",
 			 pci->num_ob_windows);
 
-	pp->msg_atu_index = i;
+	pp->msg_atu_index = ++i;
 
 	i = 0;
 	resource_list_for_each_entry(entry, &pp->bridge->dma_ranges) {
@@ -1113,11 +1113,15 @@ static int dw_pcie_pme_turn_off(struct dw_pcie *pci)
 	void __iomem *mem;
 	int ret;
 
-	if (pci->num_ob_windows <= pci->pp.msg_atu_index)
+	if (pci->num_ob_windows <= pci->pp.msg_atu_index) {
+		dev_err(pci->dev, "No available iATU enteries\n");
 		return -ENOSPC;
+	}
 
-	if (!pci->pp.msg_res)
+	if (!pci->pp.msg_res) {
+		dev_err(pci->dev, "Msg resource is not allocated\n");
 		return -ENOSPC;
+	}
 
 	atu.code = PCIE_MSG_CODE_PME_TURN_OFF;
 	atu.routing = PCIE_MSG_TYPE_R_BC;
