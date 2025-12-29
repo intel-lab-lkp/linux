@@ -300,7 +300,7 @@ static int evm_calc_hmac_or_hash(struct dentry *dentry,
 		if (IS_I_VERSION(inode))
 			i_version = inode_query_iversion(inode);
 		integrity_inode_attrs_store(&iint->metadata_inode, i_version,
-					    inode);
+					    0, inode);
 	}
 
 	/* Portable EVM signatures must include an IMA hash */

@@ -31,10 +31,16 @@ static inline void integrity_load_keys(void)
 
 /* An inode's attributes for detection of changes */
 struct integrity_inode_attributes {
+	u64 ctime_guard;
 	u64 version;		/* track inode changes */
 	unsigned long ino;
 	dev_t dev;
 };
+
+static inline u64 integrity_ctime_guard(struct kstat stat)
+{
+	return stat.ctime.tv_sec ^ stat.ctime.tv_nsec;
+}
 
 /*
  * On stacked filesystems the i_version alone is not enough to detect file data
@@ -42,8 +48,10 @@ struct integrity_inode_attributes {
  */
 static inline void
 integrity_inode_attrs_store(struct integrity_inode_attributes *attrs,
-			    u64 i_version, const struct inode *inode)
+			    u64 i_version, u64 ctime_guard,
+			    const struct inode *inode)
 {
+	attrs->ctime_guard = ctime_guard;
 	attrs->version = i_version;
 	attrs->dev = inode->i_sb->s_dev;
 	attrs->ino = inode->i_ino;
@@ -54,11 +62,22 @@ integrity_inode_attrs_store(struct integrity_inode_attributes *attrs,
  */
 static inline bool
 integrity_inode_attrs_changed(const struct integrity_inode_attributes *attrs,
-			      const struct inode *inode)
+			      struct file *file, struct inode *inode)
 {
-	return (inode->i_sb->s_dev != attrs->dev ||
-		inode->i_ino != attrs->ino ||
-		!inode_eq_iversion(inode, attrs->version));
+	struct kstat stat;
+
+	if (inode->i_sb->s_dev != attrs->dev ||
+	    inode->i_ino != attrs->ino)
+		return true;
+
+	if (inode_eq_iversion(inode, attrs->version))
+		return false;
+
+	if (!file || vfs_getattr_nosec(&file->f_path, &stat, STATX_CTIME,
+				       AT_STATX_SYNC_AS_STAT))
+		return true;
+
+	return attrs->ctime_guard != integrity_ctime_guard(stat);
 }
 
 

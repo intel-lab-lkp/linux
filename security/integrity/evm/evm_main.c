@@ -754,7 +754,7 @@ bool evm_metadata_changed(struct inode *inode, struct inode *metadata_inode)
 	if (iint) {
 		ret = (!IS_I_VERSION(metadata_inode) ||
 		       integrity_inode_attrs_changed(&iint->metadata_inode,
-						     metadata_inode));
+			       NULL, metadata_inode));
 		if (ret)
 			iint->evm_status = INTEGRITY_UNKNOWN;
 	}

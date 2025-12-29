@@ -254,6 +254,7 @@ int ima_collect_measurement(struct ima_iint_cache *iint, struct file *file,
 	int length;
 	void *tmpbuf;
 	u64 i_version = 0;
+	u64 ctime_guard = 0;
 
 	/*
 	 * Always collect the modsig, because IMA might have already collected
@@ -272,10 +273,16 @@ int ima_collect_measurement(struct ima_iint_cache *iint, struct file *file,
 	 * to an initial measurement/appraisal/audit, but was modified to
 	 * assume the file changed.
 	 */
-	result = vfs_getattr_nosec(&file->f_path, &stat, STATX_CHANGE_COOKIE,
+	result = vfs_getattr_nosec(&file->f_path, &stat,
+				   STATX_CHANGE_COOKIE | STATX_CTIME,
 				   AT_STATX_SYNC_AS_STAT);
-	if (!result && (stat.result_mask & STATX_CHANGE_COOKIE))
-		i_version = stat.change_cookie;
+	if (!result) {
+		if (stat.result_mask & STATX_CHANGE_COOKIE)
+			i_version = stat.change_cookie;
+
+		if (stat.result_mask & STATX_CTIME)
+			ctime_guard = integrity_ctime_guard(stat);
+	}
 	hash.hdr.algo = algo;
 	hash.hdr.length = hash_digest_size[algo];
 
@@ -305,11 +312,13 @@ int ima_collect_measurement(struct ima_iint_cache *iint, struct file *file,
 
 	iint->ima_hash = tmpbuf;
 	memcpy(iint->ima_hash, &hash, length);
-	if (real_inode == inode)
+	if (real_inode == inode) {
 		iint->real_inode.version = i_version;
-	else
+		iint->real_inode.ctime_guard = ctime_guard;
+	} else {
 		integrity_inode_attrs_store(&iint->real_inode, i_version,
-					    real_inode);
+				ctime_guard, real_inode);
+	}
 
 	/* Possibly temporary failure due to type of read (eg. O_DIRECT) */
 	if (!result)

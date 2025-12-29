@@ -22,6 +22,7 @@
 #include <linux/mount.h>
 #include <linux/mman.h>
 #include <linux/slab.h>
+#include <linux/stat.h>
 #include <linux/xattr.h>
 #include <linux/ima.h>
 #include <linux/fs.h>
@@ -185,6 +186,7 @@ static void ima_check_last_writer(struct ima_iint_cache *iint,
 {
 	fmode_t mode = file->f_mode;
 	bool update;
+	int ret;
 
 	if (!(mode & FMODE_WRITE))
 		return;
@@ -197,12 +199,13 @@ static void ima_check_last_writer(struct ima_iint_cache *iint,
 
 		update = test_and_clear_bit(IMA_UPDATE_XATTR,
 					    &iint->atomic_flags);
-		if ((iint->flags & IMA_NEW_FILE) ||
-		    vfs_getattr_nosec(&file->f_path, &stat,
-				      STATX_CHANGE_COOKIE,
-				      AT_STATX_SYNC_AS_STAT) ||
-		    !(stat.result_mask & STATX_CHANGE_COOKIE) ||
-		    stat.change_cookie != iint->real_inode.version) {
+		ret = vfs_getattr_nosec(&file->f_path, &stat,
+					STATX_CHANGE_COOKIE | STATX_CTIME,
+					AT_STATX_SYNC_AS_STAT);
+		if ((iint->flags & IMA_NEW_FILE) || ret ||
+		    (!ret && stat.change_cookie != iint->real_inode.version) ||
+		    (!ret && integrity_ctime_guard(stat) !=
+		     iint->real_inode.ctime_guard)) {
 			iint->flags &= ~(IMA_DONE_MASK | IMA_NEW_FILE);
 			iint->measured_pcrs = 0;
 			if (update)
@@ -330,7 +333,7 @@ static int process_measurement(struct file *file, const struct cred *cred,
 	    (action & IMA_DO_MASK) && (iint->flags & IMA_DONE_MASK)) {
 		if (!IS_I_VERSION(real_inode) ||
 		    integrity_inode_attrs_changed(&iint->real_inode,
-						  real_inode)) {
+						  file, real_inode)) {
 			iint->flags &= ~IMA_DONE_MASK;
 			iint->measured_pcrs = 0;
 		}
