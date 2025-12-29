@@ -76,6 +76,7 @@ NSIM_DEV_2_FD=$((256 + RANDOM % 256))
 exec {NSIM_DEV_2_FD}</var/run/netns/nscl
 NSIM_DEV_2_IFIDX=$(ip netns exec nscl cat /sys/class/net/$NSIM_DEV_2_NAME/ifindex)
 
+# argument error checking
 echo "$NSIM_DEV_1_FD:$NSIM_DEV_1_IFIDX $NSIM_DEV_2_FD:2000" > $NSIM_DEV_SYS_LINK 2>/dev/null
 if [ $? -eq 0 ]; then
 	echo "linking with non-existent netdevsim should fail"
@@ -97,6 +98,14 @@ if [ $? -eq 0 ]; then
 	exit 1
 fi
 
+echo "$NSIM_DEV_1_FD:$NSIM_DEV_1_IFIDX $NSIM_DEV_2_FD:a" > $NSIM_DEV_SYS_LINK 2>/dev/null
+if [ $? -eq 0 ]; then
+	echo "linking with invalid ifidx should fail"
+	cleanup_ns
+	exit 1
+fi
+
+# link two netdevsim interfaces
 echo "$NSIM_DEV_1_FD:$NSIM_DEV_1_IFIDX $NSIM_DEV_2_FD:$NSIM_DEV_2_IFIDX" > $NSIM_DEV_SYS_LINK
 if [ $? -ne 0 ]; then
 	echo "linking netdevsim1 with netdevsim2 should succeed"
@@ -104,11 +113,10 @@ if [ $? -ne 0 ]; then
 	exit 1
 fi
 
-# argument error checking
-
-echo "$NSIM_DEV_1_FD:$NSIM_DEV_1_IFIDX $NSIM_DEV_2_FD:a" > $NSIM_DEV_SYS_LINK 2>/dev/null
+# semantic error checking
+echo "$NSIM_DEV_1_FD:$NSIM_DEV_1_IFIDX $NSIM_DEV_2_FD:$NSIM_DEV_2_IFIDX" > $NSIM_DEV_SYS_LINK 2>/dev/null
 if [ $? -eq 0 ]; then
-	echo "invalid arg should fail"
+	echo "linking already-connected netdevsim should fail"
 	cleanup_ns
 	exit 1
 fi
