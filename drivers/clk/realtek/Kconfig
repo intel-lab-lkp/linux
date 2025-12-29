@@ -28,4 +28,17 @@ config RTK_CLK_COMMON
 config RTK_CLK_PLL_MMC
 	bool
 
+config COMMON_CLK_RTD1625
+        tristate "RTD1625 Clock Controller"
+        select RTK_CLK_COMMON
+        select RTK_CLK_PLL_MMC
+        default y
+	help
+	  Support for the clock controller on Realtek RTD1625 SoCs.
+
+	  This driver provides clock sources, gating, multiplexing, and
+	  reset control for peripherals on the RTD1625 platform.
+
+	  Say Y here if your system is based on the RTD1625 and you need
+	  its peripheral devices to function.
 endif
