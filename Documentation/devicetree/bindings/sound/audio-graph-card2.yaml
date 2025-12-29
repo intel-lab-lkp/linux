@@ -39,6 +39,9 @@ properties:
     $ref: audio-graph.yaml#/properties/mic-det-gpios
   widgets:
     $ref: audio-graph.yaml#/properties/widgets
+  hp-pin-name-headphone:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description: Specify 'Headphone' as headphone pin name.
 
 required:
   - compatible

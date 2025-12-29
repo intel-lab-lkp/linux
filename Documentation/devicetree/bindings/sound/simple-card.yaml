@@ -271,6 +271,9 @@ patternProperties:
         maxItems: 1
       mic-det-gpios:
         maxItems: 1
+      hp-pin-name-headphone:
+        $ref: /schemas/types.yaml#/definitions/flag
+        description: Specify 'Headphone' as headphone pin name.
 
     patternProperties:
       "^cpu(-[0-9]+)?$":
