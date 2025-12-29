@@ -323,8 +323,7 @@ struct ptp_clock *ptp_clock_register(struct ptp_clock_info *info,
 	size_t size;
 
 	if (WARN_ON_ONCE(info->n_alarm > PTP_MAX_ALARMS ||
-			 (!info->gettimex64 && !info->gettime64) ||
-			 !info->settime64))
+			 (!info->gettimex64 && !info->gettime64)))
 		return ERR_PTR(-EINVAL);
 
 	/* Initialize a clock structure. */
