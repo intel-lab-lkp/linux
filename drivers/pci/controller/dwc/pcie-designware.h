@@ -424,7 +424,6 @@ struct dw_pcie_rp {
 	raw_spinlock_t		lock;
 	DECLARE_BITMAP(msi_irq_in_use, MAX_MSI_IRQS);
 	bool			use_atu_msg;
-	int			msg_atu_index;
 	struct resource		*msg_res;
 	bool			use_linkup_irq;
 	struct pci_eq_presets	presets;
@@ -502,6 +501,7 @@ struct dw_pcie {
 	resource_size_t		atu_phys_addr;
 	size_t			atu_size;
 	resource_size_t		parent_bus_offset;
+	int			ob_atu_index;
 	u32			num_ib_windows;
 	u32			num_ob_windows;
 	u32			region_align;

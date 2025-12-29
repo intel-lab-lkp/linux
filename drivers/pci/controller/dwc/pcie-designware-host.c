@@ -430,10 +430,10 @@ static int dw_pcie_config_ecam_iatu(struct dw_pcie_rp *pp)
 	/*
 	 * Root bus under the host bridge doesn't require any iATU configuration
 	 * as DBI region will be used to access root bus config space.
-	 * Immediate bus under Root Bus, needs type 0 iATU configuration and
+	 * Immediate bus under Root Bus needs type 0 iATU configuration and
 	 * remaining buses need type 1 iATU configuration.
 	 */
-	atu.index = 0;
+	atu.index = pci->ob_atu_index;
 	atu.type = PCIE_ATU_TYPE_CFG0;
 	atu.parent_bus_addr = pp->cfg0_base + SZ_1M;
 	/* 1MiB is to cover 1 (bus) * 32 (devices) * 8 (functions) */
@@ -442,6 +442,8 @@ static int dw_pcie_config_ecam_iatu(struct dw_pcie_rp *pp)
 	ret = dw_pcie_prog_outbound_atu(pci, &atu);
 	if (ret)
 		return ret;
+
+	pci->ob_atu_index++;
 
 	bus_range_max = resource_size(bus->res);
 
@@ -455,7 +457,13 @@ static int dw_pcie_config_ecam_iatu(struct dw_pcie_rp *pp)
 	atu.size = (SZ_1M * bus_range_max) - SZ_2M;
 	atu.ctrl2 = PCIE_ATU_CFG_SHIFT_MODE_ENABLE;
 
-	return dw_pcie_prog_outbound_atu(pci, &atu);
+	ret = dw_pcie_prog_outbound_atu(pci, &atu);
+	if (ret)
+		return ret;
+
+	pci->ob_atu_index++;
+
+	return 0;
 }
 
 static int dw_pcie_create_ecam_window(struct dw_pcie_rp *pp, struct resource *res)
@@ -629,14 +637,6 @@ int dw_pcie_host_init(struct dw_pcie_rp *pp)
 	ret = of_pci_get_equalization_presets(dev, &pp->presets, pci->num_lanes);
 	if (ret)
 		goto err_free_msi;
-
-	if (pp->ecam_enabled) {
-		ret = dw_pcie_config_ecam_iatu(pp);
-		if (ret) {
-			dev_err(dev, "Failed to configure iATU in ECAM mode\n");
-			goto err_free_msi;
-		}
-	}
 
 	/*
 	 * Allocate the resource for MSG TLP before programming the iATU
@@ -942,7 +942,7 @@ static int dw_pcie_iatu_setup(struct dw_pcie_rp *pp)
 		dev_warn(pci->dev, "Ranges exceed outbound iATU size (%d)\n",
 			 pci->num_ob_windows);
 
-	pp->msg_atu_index = ++i;
+	pci->ob_atu_index = ++i;
 
 	i = 0;
 	resource_list_for_each_entry(entry, &pp->bridge->dma_ranges) {
@@ -1084,12 +1084,21 @@ int dw_pcie_setup_rc(struct dw_pcie_rp *pp)
 	/*
 	 * If the platform provides its own child bus config accesses, it means
 	 * the platform uses its own address translation component rather than
-	 * ATU, so we should not program the ATU here.
+	 * ATU, so we should not program the ATU here. If ECAM is enabled,
+	 * config space access goes through ATU, so set up ATU here.
 	 */
-	if (pp->bridge->child_ops == &dw_child_pcie_ops) {
+	if (pp->bridge->child_ops == &dw_child_pcie_ops || pp->ecam_enabled) {
 		ret = dw_pcie_iatu_setup(pp);
 		if (ret)
 			return ret;
+	}
+
+	if (pp->ecam_enabled) {
+		ret = dw_pcie_config_ecam_iatu(pp);
+		if (ret) {
+			dev_err(pci->dev, "Failed to configure iATU in ECAM mode\n");
+			return ret;
+		}
 	}
 
 	dw_pcie_writel_dbi(pci, PCI_BASE_ADDRESS_0, 0);
@@ -1113,7 +1122,7 @@ static int dw_pcie_pme_turn_off(struct dw_pcie *pci)
 	void __iomem *mem;
 	int ret;
 
-	if (pci->num_ob_windows <= pci->pp.msg_atu_index) {
+	if (pci->num_ob_windows <= pci->ob_atu_index) {
 		dev_err(pci->dev, "No available iATU enteries\n");
 		return -ENOSPC;
 	}
@@ -1127,7 +1136,7 @@ static int dw_pcie_pme_turn_off(struct dw_pcie *pci)
 	atu.routing = PCIE_MSG_TYPE_R_BC;
 	atu.type = PCIE_ATU_TYPE_MSG;
 	atu.size = resource_size(pci->pp.msg_res);
-	atu.index = pci->pp.msg_atu_index;
+	atu.index = pci->ob_atu_index;
 
 	atu.parent_bus_addr = pci->pp.msg_res->start - pci->parent_bus_offset;
 
