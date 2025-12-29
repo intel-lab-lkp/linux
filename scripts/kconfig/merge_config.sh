@@ -16,8 +16,8 @@
 set -e
 
 clean_up() {
-	rm -f $TMP_FILE
-	rm -f $MERGE_FILE
+	rm -f "${TMP_FILE}"
+	rm -f "${TMP_FILE}.new"
 }
 
 usage() {
@@ -121,7 +121,6 @@ SED_CONFIG_EXP1="s/^\(${CONFIG_PREFIX}[a-zA-Z0-9_]*\)=.*/\1/p"
 SED_CONFIG_EXP2="s/^# \(${CONFIG_PREFIX}[a-zA-Z0-9_]*\) is not set$/\1/p"
 
 TMP_FILE=$(mktemp ./.tmp.config.XXXXXXXXXX)
-MERGE_FILE=$(mktemp ./.merge_tmp.config.XXXXXXXXXX)
 
 echo "Using $INITFILE as base"
 
@@ -136,42 +135,128 @@ for ORIG_MERGE_FILE in $MERGE_LIST ; do
 		echo "The merge file '$ORIG_MERGE_FILE' does not exist.  Exit." >&2
 		exit 1
 	fi
-	cat $ORIG_MERGE_FILE > $MERGE_FILE
-	CFG_LIST=$(sed -n -e "$SED_CONFIG_EXP1" -e "$SED_CONFIG_EXP2" $MERGE_FILE)
+	# Use awk for single-pass processing instead of per-symbol grep/sed
+	if ! awk -v prefix="$CONFIG_PREFIX" \
+		-v warnoverride="$WARNOVERRIDE" \
+		-v strict="$STRICT" \
+		-v builtin="$BUILTIN" \
+		-v warnredun="$WARNREDUN" '
+	BEGIN {
+		strict_violated = 0
+		cfg_regex = "^" prefix "[a-zA-Z0-9_]+"
+		notset_regex = "^# " prefix "[a-zA-Z0-9_]+ is not set$"
+	}
 
-	for CFG in $CFG_LIST ; do
-		grep -q -w $CFG $TMP_FILE || continue
-		PREV_VAL=$(grep -w $CFG $TMP_FILE)
-		NEW_VAL=$(grep -w $CFG $MERGE_FILE)
-		BUILTIN_FLAG=false
-		if [ "$BUILTIN" = "true" ] && [ "${NEW_VAL#CONFIG_*=}" = "m" ] && [ "${PREV_VAL#CONFIG_*=}" = "y" ]; then
-			${WARNOVERRIDE} Previous  value: $PREV_VAL
-			${WARNOVERRIDE} New value:       $NEW_VAL
-			${WARNOVERRIDE} -y passed, will not demote y to m
-			${WARNOVERRIDE}
-			BUILTIN_FLAG=true
-		elif [ "x$PREV_VAL" != "x$NEW_VAL" ] ; then
-			${WARNOVERRIDE} Value of $CFG is redefined by fragment $ORIG_MERGE_FILE:
-			${WARNOVERRIDE} Previous  value: $PREV_VAL
-			${WARNOVERRIDE} New value:       $NEW_VAL
-			${WARNOVERRIDE}
-			if [ "$STRICT" = "true" ]; then
-				STRICT_MODE_VIOLATED=true
-			fi
-		elif [ "$WARNREDUN" = "true" ]; then
-			${WARNOVERRIDE} Value of $CFG is redundant by fragment $ORIG_MERGE_FILE:
-		fi
-		if [ "$BUILTIN_FLAG" = "false" ]; then
-			sed -i "/$CFG[ =]/d" $TMP_FILE
-		else
-			sed -i "/$CFG[ =]/d" $MERGE_FILE
-		fi
-	done
-	# In case the previous file lacks a new line at the end
-	echo >> $TMP_FILE
-	cat $MERGE_FILE >> $TMP_FILE
+	# Extract config name from a line, returns "" if not a config line
+	function get_cfg(line) {
+		if (match(line, cfg_regex)) {
+			return substr(line, RSTART, RLENGTH)
+		} else if (match(line, notset_regex)) {
+			# Extract CONFIG_FOO from "# CONFIG_FOO is not set"
+			sub(/^# /, "", line)
+			sub(/ is not set$/, "", line)
+			return line
+		}
+		return ""
+	}
+
+	# Normalize: strip trailing comments, convert "is not set" to "=n"
+	function normalize(line) {
+		if (line == "") return ""
+		sub(/[[:space:]]+#.*/, "", line)
+		if (line ~ / is not set$/) {
+			sub(/^# /, "", line)
+			sub(/ is not set$/, "=n", line)
+		}
+		return line
+	}
+
+	function warn_builtin(cfg, prev, new) {
+		if (warnoverride == "true") return
+		print cfg ": -y passed, will not demote y to m" > "/dev/stderr"
+		print "  Previous value: " prev > "/dev/stderr"
+		print "  New value:	 " new > "/dev/stderr"
+		print "" > "/dev/stderr"
+	}
+
+	function warn_redefined(cfg, prev, new) {
+		if (warnoverride == "true") return
+		print "Value of " cfg " is redefined by fragment " mergefile ":" > "/dev/stderr"
+		print "  Previous value: " prev > "/dev/stderr"
+		print "  New value:	 " new > "/dev/stderr"
+		print "" > "/dev/stderr"
+	}
+
+	function warn_redundant(cfg) {
+		if (warnredun != "true" || warnoverride == "true") return
+		print "Value of " cfg " is redundant by fragment " mergefile ":" > "/dev/stderr"
+	}
+
+	# First pass: read merge file, store all lines and index
+	FILENAME == ARGV[1] {
+	        mergefile = FILENAME
+		merge_lines[FNR] = $0
+		merge_total = FNR
+		cfg = get_cfg($0)
+		if (cfg != "") {
+			merge_cfg[cfg] = $0
+			merge_cfg_line[cfg] = FNR
+		}
+		next
+	}
+
+	# Second pass: process base file (TMP_FILE)
+		cfg = get_cfg($0)
+
+		# Not a config or not in merge file - keep it
+		if (cfg == "" || !(cfg in merge_cfg)) {
+			print $0
+			next
+		}
+
+		prev_val = normalize($0)
+		new_val = normalize(merge_cfg[cfg])
+
+		# BUILTIN: do not demote y to m
+		if (builtin == "true" && new_val ~ /=m$/ && prev_val ~ /=y$/) {
+			warn_builtin(cfg, prev_val, new_val)
+			print $0
+			skip_merge[merge_cfg_line[cfg]] = 1
+			next
+		}
+
+		# Values equal - redundant
+		if (prev_val == new_val) {
+			warn_redundant(cfg)
+			next
+		}
+
+		# Values differ - redefined
+		warn_redefined(cfg, prev_val, new_val)
+		if (strict == "true") {
+			strict_violated = 1
+		}
+	}
+
+	END {
+		# Newline in case base file lacks trailing newline
+		print ""
+		# Append merge file, skipping lines marked for builtin preservation
+		for (i = 1; i <= merge_total; i++) {
+			if (!(i in skip_merge)) {
+				print merge_lines[i]
+			}
+		}
+		if (strict_violated) {
+			exit 1
+		}
+	}' \
+	"$ORIG_MERGE_FILE" "$TMP_FILE" > "${TMP_FILE}.new"; then
+		# awk exited non-zero, strict mode was violated
+		STRICT_MODE_VIOLATED=true
+	fi
+	mv "${TMP_FILE}.new" "$TMP_FILE"
 done
-
 if [ "$STRICT_MODE_VIOLATED" = "true" ]; then
 	echo "The fragment redefined a value and strict mode had been passed."
 	exit 1
