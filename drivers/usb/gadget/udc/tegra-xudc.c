@@ -904,7 +904,7 @@ static dma_addr_t trb_virt_to_phys(struct tegra_xudc_ep *ep,
 	index = trb - ep->transfer_ring;
 
 	if (WARN_ON(index >= XUDC_TRANSFER_RING_SIZE))
-		return 0;
+		return DMA_MAPPING_ERROR;
 
 	return (ep->transfer_ring_phys + index * sizeof(*trb));
 }
@@ -1484,7 +1484,7 @@ __tegra_xudc_ep_dequeue(struct tegra_xudc_ep *ep,
 			deq_ptr = trb_virt_to_phys(ep,
 					&ep->transfer_ring[ep->enq_ptr]);
 
-			if (dma_mapping_error(xudc->dev, deq_ptr)) {
+			if (deq_ptr == DMA_MAPPING_ERROR) {
 				ret = -EINVAL;
 			} else {
 				ep_ctx_write_deq_ptr(ep->context, deq_ptr);
@@ -2840,7 +2840,7 @@ static void tegra_xudc_reset(struct tegra_xudc *xudc)
 
 	deq_ptr = trb_virt_to_phys(ep0, &ep0->transfer_ring[ep0->deq_ptr]);
 
-	if (!dma_mapping_error(xudc->dev, deq_ptr)) {
+	if (deq_ptr != DMA_MAPPING_ERROR) {
 		ep_ctx_write_deq_ptr(ep0->context, deq_ptr);
 		ep_ctx_write_dcs(ep0->context, ep0->pcs);
 	}
