@@ -558,7 +558,7 @@ void ct_user_enter(enum ctx_state state)
 	unsigned long flags;
 
 	/*
-	 * Some contexts may involve an exception occuring in an irq,
+	 * Some contexts may involve an exception occurring in an irq,
 	 * leading to that nesting:
 	 * ct_irq_enter() rcu_eqs_exit(true) rcu_eqs_enter(true) ct_irq_exit()
 	 * This would mess up the dyntick_nesting count though. And rcu_irq_*()
