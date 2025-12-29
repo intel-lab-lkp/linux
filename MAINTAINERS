@@ -21969,6 +21969,15 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/net/dsa/realtek.yaml
 F:	drivers/net/dsa/realtek/*
 
+REALTEK SOC CLOCK AND RESET BINDINGS
+M:	Cheng-Yu Lee <cylee12@realtek.com>
+M:	Yu-Chun Lin <eleanor.lin@realtek.com>
+L:	devicetree@vger.kernel.org
+L:	linux-clk@vger.kernel.org
+S:	Supported
+F:	Documentation/devicetree/bindings/clock/realtek*
+F:	include/dt-bindings/clock/realtek*
+
 REALTEK SPI-NAND
 M:	Chris Packham <chris.packham@alliedtelesis.co.nz>
 S:	Maintained
