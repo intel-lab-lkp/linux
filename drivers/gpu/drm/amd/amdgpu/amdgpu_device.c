@@ -4737,8 +4737,13 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 	 */
 	if ((pdev->class >> 8) == PCI_CLASS_DISPLAY_VGA ||
 	    (pdev->class >> 8) == PCI_CLASS_DISPLAY_OTHER) {
-		/* Get rid of things like offb */
-		r = aperture_remove_conflicting_pci_devices(adev->pdev, amdgpu_kms_driver.name);
+		/*
+		 * Get rid of things like offb. Use devm variant to
+		 * automatically restore sysfb if probe fails. This ensures
+		 * the user doesn't lose display if our probe fails after
+		 * removing the firmware framebuffer (efifb/simpledrm).
+		 */
+		r = devm_aperture_remove_conflicting_pci_devices(adev->pdev, amdgpu_kms_driver.name);
 		if (r)
 			return r;
 	}

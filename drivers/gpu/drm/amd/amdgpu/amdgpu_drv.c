@@ -32,6 +32,7 @@
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
 
+#include <linux/aperture.h>
 #include <linux/cc_platform.h>
 #include <linux/dynamic_debug.h>
 #include <linux/module.h>
@@ -2527,6 +2528,12 @@ retry_init:
 		    adev->asic_type >= CHIP_NAVI10)
 			amdgpu_get_secondary_funcs(adev);
 	}
+
+	/*
+	 * Probe succeeded - cancel the automatic sysfb restore action.
+	 * We're now responsible for display output.
+	 */
+	devm_aperture_remove_conflicting_pci_devices_done(pdev);
 
 	return 0;
 
