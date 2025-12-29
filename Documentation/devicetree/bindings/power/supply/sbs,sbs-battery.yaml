@@ -59,6 +59,15 @@ properties:
       master implementation.
     type: boolean
 
+  sbs,monitoring-interval-ms:
+    description:
+      Polling interval in milliseconds for battery status monitoring on
+      systems without interrupt support. The driver periodically checks
+      the battery status and notifies userspace of changes. Ignored when
+      GPIO interrupt is available.
+    default: 0
+    $ref: /schemas/types.yaml#/definitions/uint32
+
 required:
   - compatible
   - reg
