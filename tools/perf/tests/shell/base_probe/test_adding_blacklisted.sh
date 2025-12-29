@@ -17,6 +17,7 @@ DIR_PATH="$(dirname $0)"
 TEST_RESULT=0
 
 # include working environment
+# shellcheck source=tests/shell/common/init.sh
 . "$DIR_PATH/../common/init.sh"
 
 # skip if not supported
