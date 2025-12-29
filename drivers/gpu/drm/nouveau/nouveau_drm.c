@@ -871,8 +871,13 @@ static int nouveau_drm_probe(struct pci_dev *pdev,
 	if (ret)
 		return ret;
 
-	/* Remove conflicting drivers (vesafb, efifb etc). */
-	ret = aperture_remove_conflicting_pci_devices(pdev, driver_pci.name);
+	/*
+	 * Remove conflicting drivers (vesafb, efifb etc). Use devm variant
+	 * to automatically restore sysfb if probe fails. This ensures the
+	 * user doesn't lose display if our probe fails after removing the
+	 * firmware framebuffer (efifb/simpledrm).
+	 */
+	ret = devm_aperture_remove_conflicting_pci_devices(pdev, driver_pci.name);
 	if (ret)
 		return ret;
 
@@ -903,6 +908,13 @@ static int nouveau_drm_probe(struct pci_dev *pdev,
 	drm_client_setup(drm->dev, format);
 
 	quirk_broken_nv_runpm(pdev);
+
+	/*
+	 * Probe succeeded - cancel the automatic sysfb restore action.
+	 * We're now responsible for display output.
+	 */
+	devm_aperture_remove_conflicting_pci_devices_done(pdev);
+
 	return 0;
 
 fail_pci:
