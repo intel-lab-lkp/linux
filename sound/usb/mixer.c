@@ -615,6 +615,7 @@ static struct iterm_name_combo {
 	{ 0x0305, "Room Speaker" },
 	{ 0x0306, "Com Speaker" },
 	{ 0x0307, "LFE" },
+	{ 0x0308, "Line Out" },
 	{ 0x0600, "External In" },
 	{ 0x0601, "Analog In" },
 	{ 0x0602, "Digital In" },
