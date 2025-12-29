@@ -66,7 +66,10 @@ enum scan_result {
 static struct task_struct *khugepaged_thread __read_mostly;
 static DEFINE_MUTEX(khugepaged_mutex);
 
-/* default scan 8*HPAGE_PMD_NR ptes (or vmas) every 10 second */
+/*
+ * default scan 8*HPAGE_PMD_NR ptes, pmd_mapped, no_pte_table or vmas
+ * every 10 second.
+ */
 static unsigned int khugepaged_pages_to_scan __read_mostly;
 static unsigned int khugepaged_pages_collapsed;
 static unsigned int khugepaged_full_scans;
@@ -2487,12 +2490,22 @@ skip:
 					khugepaged_scan.address, &mmap_locked, cc);
 			}
 
-			if (*result == SCAN_SUCCEED)
-				++khugepaged_pages_collapsed;
-
 			/* move to next address */
 			khugepaged_scan.address += HPAGE_PMD_SIZE;
-			progress += HPAGE_PMD_NR;
+
+			switch (*result) {
+			case SCAN_NO_PTE_TABLE:
+			case SCAN_PMD_MAPPED:
+			case SCAN_PTE_MAPPED_HUGEPAGE:
+				progress++;
+				break;
+			case SCAN_SUCCEED:
+				++khugepaged_pages_collapsed;
+				fallthrough;
+			default:
+				progress += HPAGE_PMD_NR;
+			}
+
 			if (!mmap_locked)
 				/*
 				 * We released mmap_lock so break loop.  Note
