@@ -30,6 +30,7 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/poll.h>
+#include <linux/sysfb.h>
 #include <linux/vgaarb.h>
 #include <linux/wait.h>
 
@@ -51,6 +52,11 @@ static int virtio_gpu_modeset = -1;
 
 MODULE_PARM_DESC(modeset, "Disable/Enable modesetting");
 module_param_named(modeset, virtio_gpu_modeset, int, 0400);
+
+static void virtio_gpu_restore_sysfb(void *unused)
+{
+	sysfb_restore();
+}
 
 static int virtio_gpu_pci_quirk(struct drm_device *dev)
 {
@@ -75,6 +81,7 @@ static int virtio_gpu_probe(struct virtio_device *vdev)
 {
 	struct drm_device *dev;
 	int ret;
+	bool sysfb_restore_registered = false;
 
 	if (drm_firmware_drivers_only() && virtio_gpu_modeset == -1)
 		return -EINVAL;
@@ -97,6 +104,21 @@ static int virtio_gpu_probe(struct virtio_device *vdev)
 		ret = virtio_gpu_pci_quirk(dev);
 		if (ret)
 			goto err_free;
+
+		/*
+		 * For VGA devices, register sysfb restore on the virtio device.
+		 * We can't use devm_aperture_remove_conflicting_pci_devices()
+		 * because the PCI device is managed by virtio-pci, not us.
+		 * Register on &vdev->dev so it fires if our probe fails.
+		 */
+		if (pci_is_vga(to_pci_dev(vdev->dev.parent))) {
+			ret = devm_add_action_or_reset(&vdev->dev,
+						       virtio_gpu_restore_sysfb,
+						       NULL);
+			if (ret)
+				goto err_free;
+			sysfb_restore_registered = true;
+		}
 	}
 
 	dma_set_max_seg_size(dev->dev, dma_max_mapping_size(dev->dev) ?: UINT_MAX);
@@ -109,6 +131,13 @@ static int virtio_gpu_probe(struct virtio_device *vdev)
 		goto err_deinit;
 
 	drm_client_setup(vdev->priv, NULL);
+
+	/*
+	 * Probe succeeded - cancel sysfb restore. We're now responsible
+	 * for display output.
+	 */
+	if (sysfb_restore_registered)
+		devm_remove_action(&vdev->dev, virtio_gpu_restore_sysfb, NULL);
 
 	return 0;
 
