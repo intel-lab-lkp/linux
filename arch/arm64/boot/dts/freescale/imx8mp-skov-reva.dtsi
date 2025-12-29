@@ -373,8 +373,8 @@
 
 	switch: switch@5f {
 		compatible = "microchip,ksz9893";
-		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_switch>;
+		pinctrl-names = "default", "reset";
+		pinctrl-0 = <&pinctrl_switch>, <&pinctrl_switch>;
 		reset-gpios = <&gpio5 1 GPIO_ACTIVE_LOW>;
 		reg = <0x5f>;
 
