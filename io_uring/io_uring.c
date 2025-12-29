@@ -545,29 +545,10 @@ void __io_commit_cqring_flush(struct io_ring_ctx *ctx)
 		io_eventfd_signal(ctx, true);
 }
 
-static inline void __io_cq_lock(struct io_ring_ctx *ctx)
-{
-	if (!ctx->lockless_cq)
-		spin_lock(&ctx->completion_lock);
-}
-
 static inline void io_cq_lock(struct io_ring_ctx *ctx)
 	__acquires(ctx->completion_lock)
 {
 	spin_lock(&ctx->completion_lock);
-}
-
-static inline void __io_cq_unlock_post(struct io_ring_ctx *ctx)
-{
-	io_commit_cqring(ctx);
-	if (!ctx->task_complete) {
-		if (!ctx->lockless_cq)
-			spin_unlock(&ctx->completion_lock);
-		/* IOPOLL rings only need to wake up if it's also SQPOLL */
-		if (!ctx->syscall_iopoll)
-			io_cqring_wake(ctx);
-	}
-	io_commit_cqring_flush(ctx);
 }
 
 static void io_cq_unlock_post(struct io_ring_ctx *ctx)
@@ -1513,7 +1494,6 @@ void __io_submit_flush_completions(struct io_ring_ctx *ctx)
 	struct io_submit_state *state = &ctx->submit_state;
 	struct io_wq_work_node *node;
 
-	__io_cq_lock(ctx);
 	__wq_list_for_each(node, &state->compl_reqs) {
 		struct io_kiocb *req = container_of(node, struct io_kiocb,
 					    comp_list);
@@ -1525,13 +1505,17 @@ void __io_submit_flush_completions(struct io_ring_ctx *ctx)
 		 */
 		if (!(req->flags & (REQ_F_CQE_SKIP | REQ_F_REISSUE)) &&
 		    unlikely(!io_fill_cqe_req(ctx, req))) {
-			if (ctx->lockless_cq)
-				io_cqe_overflow(ctx, &req->cqe, &req->big_cqe);
-			else
-				io_cqe_overflow_locked(ctx, &req->cqe, &req->big_cqe);
+			io_cqe_overflow(ctx, &req->cqe, &req->big_cqe);
 		}
 	}
-	__io_cq_unlock_post(ctx);
+
+	io_commit_cqring(ctx);
+	if (!ctx->task_complete) {
+		/* IOPOLL rings only need to wake up if it's also SQPOLL */
+		if (!ctx->syscall_iopoll)
+			io_cqring_wake(ctx);
+	}
+	io_commit_cqring_flush(ctx);
 
 	if (!wq_list_empty(&state->compl_reqs)) {
 		io_free_batch_list(ctx, state->compl_reqs.first);
