@@ -102,6 +102,12 @@ static atomic_t pm_fs_sync_count = ATOMIC_INIT(0);
 static struct workqueue_struct *pm_fs_sync_wq;
 static DECLARE_WAIT_QUEUE_HEAD(pm_fs_sync_wait);
 
+/* Timeout for file system sync during suspend/hibernate (in seconds) */
+static unsigned int fs_sync_timeout_secs;
+
+/* File system sync mode: 0 = interrupt mode, 1 = timeout mode */
+static unsigned int fs_sync_mode;
+
 static bool pm_fs_sync_completed(void)
 {
 	return atomic_read(&pm_fs_sync_count) == 0;
@@ -119,11 +125,15 @@ static DECLARE_WORK(pm_fs_sync_work, pm_fs_sync_work_fn);
 /**
  * pm_sleep_fs_sync() - Sync file systems in an interruptible way
  *
- * Return: 0 on successful file system sync, or -EBUSY if the file system sync
- * was aborted.
+ * Return: 0 on successful file system sync,
+ *         -EBUSY if the file system sync was aborted by wakeup event,
+ *         -ETIME if the file system sync timed out.
  */
 int pm_sleep_fs_sync(void)
 {
+	unsigned long timeout_jiffies = 0;
+	unsigned long start_time;
+
 	pm_wakeup_clear(0);
 
 	/*
@@ -137,9 +147,22 @@ int pm_sleep_fs_sync(void)
 		queue_work(pm_fs_sync_wq, &pm_fs_sync_work);
 	}
 
+	/* Setup timeout only in timeout mode (mode 1) */
+	if (fs_sync_mode && fs_sync_timeout_secs > 0) {
+		timeout_jiffies = msecs_to_jiffies(fs_sync_timeout_secs * 1000);
+		start_time = jiffies;
+	}
+
 	while (!pm_fs_sync_completed()) {
-		if (pm_wakeup_pending())
+		if (!fs_sync_mode && pm_wakeup_pending())
 			return -EBUSY;
+
+		if (fs_sync_mode && timeout_jiffies > 0 &&
+		    time_after(jiffies, start_time + timeout_jiffies)) {
+			pr_warn("PM: File system sync timed out after %u seconds, proceeding with suspend\n",
+				fs_sync_timeout_secs);
+			return -ETIME;
+		}
 
 		wait_event_timeout(pm_fs_sync_wait, pm_fs_sync_completed(),
 				   PM_FS_SYNC_WAKEUP_RESOLUTION);
@@ -147,6 +170,67 @@ int pm_sleep_fs_sync(void)
 
 	return 0;
 }
+
+/*
+ * fs_sync_timeout: Control file system sync timeout during suspend/hibernate.
+ *
+ * show() returns the timeout value in seconds.
+ * store() accepts a value in seconds. 0 means no timeout (only interrupted by wakeup events).
+ * Non-zero values will cause the sync to be interrupted after the specified time.
+ */
+static ssize_t fs_sync_timeout_show(struct kobject *kobj,
+				    struct kobj_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%u\n", fs_sync_timeout_secs);
+}
+
+static ssize_t fs_sync_timeout_store(struct kobject *kobj,
+				     struct kobj_attribute *attr,
+				     const char *buf, size_t n)
+{
+	unsigned long val;
+
+	if (kstrtoul(buf, 10, &val))
+		return -EINVAL;
+
+	/* Allow values from 0 to 300 seconds (5 minutes) */
+	if (val > 300)
+		return -EINVAL;
+
+	fs_sync_timeout_secs = val;
+	return n;
+}
+
+power_attr(fs_sync_timeout);
+
+/*
+ * fs_sync_mode: Control file system sync behavior mode
+ *
+ * 0 = interrupt mode (default): check wakeup events during sync, can abort suspend/hibernate
+ * 1 = timeout mode: ignore wakeup events during sync, only use timeout
+ */
+static ssize_t fs_sync_mode_show(struct kobject *kobj,
+				  struct kobj_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%u\n", fs_sync_mode);
+}
+
+static ssize_t fs_sync_mode_store(struct kobject *kobj,
+				   struct kobj_attribute *attr,
+				   const char *buf, size_t n)
+{
+	unsigned long val;
+
+	if (kstrtoul(buf, 10, &val))
+		return -EINVAL;
+
+	if (val > 1)
+		return -EINVAL;
+
+	fs_sync_mode = val;
+	return n;
+}
+power_attr(fs_sync_mode);
 #endif /* CONFIG_SUSPEND || CONFIG_HIBERNATION */
 
 /* Routines for PM-transition notifications */
@@ -1084,6 +1168,10 @@ static struct attribute * g[] = {
 #ifdef CONFIG_SUSPEND
 	&mem_sleep_attr.attr,
 	&sync_on_suspend_attr.attr,
+#endif
+#if defined(CONFIG_SUSPEND) || defined(CONFIG_HIBERNATION)
+	&fs_sync_timeout_attr.attr,
+	&fs_sync_mode_attr.attr,
 #endif
 #ifdef CONFIG_PM_AUTOSLEEP
 	&autosleep_attr.attr,
