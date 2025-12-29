@@ -1622,7 +1622,12 @@ static int vmw_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	struct vmw_private *vmw;
 	int ret;
 
-	ret = aperture_remove_conflicting_pci_devices(pdev, driver.name);
+	/*
+	 * Use devm variant to automatically restore sysfb if probe fails.
+	 * This ensures the user doesn't lose display if our probe fails
+	 * after removing the firmware framebuffer (efifb/simpledrm).
+	 */
+	ret = devm_aperture_remove_conflicting_pci_devices(pdev, driver.name);
 	if (ret)
 		goto out_error;
 
@@ -1646,6 +1651,12 @@ static int vmw_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	ret = drm_dev_register(&vmw->drm, 0);
 	if (ret)
 		goto out_unload;
+
+	/*
+	 * Probe succeeded - cancel the automatic sysfb restore action.
+	 * We're now responsible for display output.
+	 */
+	devm_aperture_remove_conflicting_pci_devices_done(pdev);
 
 	vmw_fifo_resource_inc(vmw);
 	vmw_svga_enable(vmw);
