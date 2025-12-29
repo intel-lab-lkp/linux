@@ -283,16 +283,93 @@ fi
 # allnoconfig: Fills in any missing symbols with # CONFIG_* is not set
 make KCONFIG_ALLCONFIG=$TMP_FILE $OUTPUT_ARG $ALLTARGET
 
+# Check all specified config values took effect (might have missed-dependency issues)
+if ! awk -v prefix="$CONFIG_PREFIX" \
+	-v warnoverride="$WARNOVERRIDE" \
+	-v strict="$STRICT" \
+	-v warnredun="$WARNREDUN" '
+BEGIN {
+	strict_violated = 0
+	cfg_regex = "^" prefix "[a-zA-Z0-9_]+"
+	notset_regex = "^# " prefix "[a-zA-Z0-9_]+ is not set$"
+}
 
-# Check all specified config values took (might have missed-dependency issues)
-for CFG in $(sed -n -e "$SED_CONFIG_EXP1" -e "$SED_CONFIG_EXP2" $TMP_FILE); do
+# Extract config name from a line, returns "" if not a config line
+function get_cfg(line) {
+	if (match(line, cfg_regex)) {
+		return substr(line, RSTART, RLENGTH)
+	} else if (match(line, notset_regex)) {
+		# Extract CONFIG_FOO from "# CONFIG_FOO is not set"
+		sub(/^# /, "", line)
+		sub(/ is not set$/, "", line)
+		return line
+	}
+	return ""
+}
 
-	REQUESTED_VAL=$(grep -w -e "$CFG" $TMP_FILE)
-	ACTUAL_VAL=$(grep -w -e "$CFG" "$KCONFIG_CONFIG" || true)
-	if [ "x$REQUESTED_VAL" != "x$ACTUAL_VAL" ] ; then
-		echo "Value requested for $CFG not in final .config"
-		echo "Requested value:  $REQUESTED_VAL"
-		echo "Actual value:     $ACTUAL_VAL"
-		echo ""
-	fi
-done
+# Normalize: strip trailing comments, convert "is not set" to "=n"
+function normalize(line) {
+	if (line == "") return ""
+	sub(/[[:space:]]+#.*/, "", line)
+	if (line ~ / is not set$/) {
+		sub(/^# /, "", line)
+		sub(/ is not set$/, "=n", line)
+	}
+	return line
+}
+
+function warn_mismatch(cfg, merged, final) {
+	if (warnredun == "true") return
+	if (final == "" && !(merged ~ /=n$/)) {
+		print "WARNING: " cfg " not in final config but set in merged config to: " merged > "/dev/stderr"
+	} else if (final == "" && merged ~ /=n$/) {
+		# not set is the same as =n, pass
+	} else if (merged == "" && final != "") {
+		print "WARNING: " cfg " not in merged config but added in final config: " final > "/dev/stderr"
+	} else {
+		print "WARNING: " cfg " differs:" > "/dev/stderr"
+		print "Merged value: " merged > "/dev/stderr"
+		print "Final  value: " final > "/dev/stderr"
+	}
+}
+
+# First pass: read effective config file, store all lines
+FILENAME == ARGV[1] {
+	cfg = get_cfg($0)
+	if (cfg != "") {
+		config_cfg[cfg] = $0
+	}
+	next
+}
+
+# Second pass: process merged config and compare against effective config
+{
+	cfg = get_cfg($0)
+	if (cfg == "") next
+
+	merged_val = normalize($0)
+	final_val = normalize(config_cfg[cfg])
+
+	if (merged_val == final_val) next
+
+	warn_mismatch(cfg, merged_val, final_val)
+
+	if (strict == "true") {
+		strict_violated = 1
+	}
+}
+
+END {
+	if (strict_violated) {
+		exit 1
+	}
+}' \
+"$KCONFIG_CONFIG" "$TMP_FILE"; then
+	# awk exited non-zero, strict mode was violated
+	STRICT_MODE_VIOLATED=true
+fi
+
+if [ "$STRICT" == "true" ] && [ "$STRICT_MODE_VIOLATED" == "true" ]; then
+	echo "Requested and effective config differ"
+	exit 1
+fi
