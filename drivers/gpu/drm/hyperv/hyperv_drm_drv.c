@@ -8,6 +8,7 @@
 #include <linux/hyperv.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/sysfb.h>
 
 #include <drm/clients/drm_client_setup.h>
 #include <drm/drm_atomic_helper.h>
@@ -102,6 +103,11 @@ error:
 	return ret;
 }
 
+static void hyperv_restore_sysfb(void *unused)
+{
+	sysfb_restore();
+}
+
 static int hyperv_vmbus_probe(struct hv_device *hdev,
 			      const struct hv_vmbus_device_id *dev_id)
 {
@@ -127,6 +133,17 @@ static int hyperv_vmbus_probe(struct hv_device *hdev,
 
 	aperture_remove_all_conflicting_devices(hyperv_driver.name);
 
+	/*
+	 * Register sysfb restore on the hv device. We can't use
+	 * devm_aperture_remove_conflicting_pci_devices() because this
+	 * is a vmbus device, not a PCI device. Register on &hdev->device
+	 * so it fires if our probe fails after removing firmware FB.
+	 */
+	ret = devm_add_action_or_reset(&hdev->device, hyperv_restore_sysfb,
+				       NULL);
+	if (ret)
+		goto err_vmbus_close;
+
 	ret = hyperv_setup_vram(hv, hdev);
 	if (ret)
 		goto err_vmbus_close;
@@ -151,6 +168,12 @@ static int hyperv_vmbus_probe(struct hv_device *hdev,
 	}
 
 	drm_client_setup(dev, NULL);
+
+	/*
+	 * Probe succeeded - cancel sysfb restore. We're now responsible
+	 * for display output.
+	 */
+	devm_remove_action(&hdev->device, hyperv_restore_sysfb, NULL);
 
 	return 0;
 
