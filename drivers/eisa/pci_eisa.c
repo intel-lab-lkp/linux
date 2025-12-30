@@ -80,8 +80,10 @@ static int __init pci_eisa_init_early(void)
 	for_each_pci_dev(dev)
 		if ((dev->class >> 8) == PCI_CLASS_BRIDGE_EISA) {
 			ret = pci_eisa_init(dev);
-			if (ret)
+			if (ret) {
+				pci_dev_put(dev);
 				return ret;
+			}
 		}
 
 	return 0;
