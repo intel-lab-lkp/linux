@@ -573,7 +573,8 @@ int phys_to_target_node(u64 start)
 	 * Prefer online nodes, but if reserved memory might be
 	 * hot-added continue the search with reserved ranges.
 	 */
-	if (nid != NUMA_NO_NODE)
+	if (nid != NUMA_NO_NODE &&
+		meminfo_to_nid(&numa_reserved_meminfo, start) == NUMA_NO_NODE)
 		return nid;
 
 	return meminfo_to_nid(&numa_reserved_meminfo, start);
