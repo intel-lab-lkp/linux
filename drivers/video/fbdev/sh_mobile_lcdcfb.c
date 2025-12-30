@@ -1350,7 +1350,17 @@ static struct attribute *overlay_sysfs_attrs[] = {
 	&dev_attr_overlay_rop3.attr,
 	NULL,
 };
-ATTRIBUTE_GROUPS(overlay_sysfs);
+
+#ifdef CONFIG_FB_DEVICE
+static const struct attribute_group overlay_sysfs_group = {
+	.attrs = overlay_sysfs_attrs,
+};
+#endif
+
+static const struct attribute_group *overlay_sysfs_groups[] = {
+	PTR_IF(IS_ENABLED(CONFIG_FB_DEVICE), &overlay_sysfs_group),
+	NULL,
+};
 
 static const struct fb_fix_screeninfo sh_mobile_lcdc_overlay_fix  = {
 	.id =		"SH Mobile LCDC",
