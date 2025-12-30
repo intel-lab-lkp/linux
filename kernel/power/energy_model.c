@@ -333,25 +333,21 @@ int em_dev_update_perf_domain(struct device *dev,
 		return -EINVAL;
 
 	/* Serialize update/unregister or concurrent updates */
-	mutex_lock(&em_pd_mutex);
+	scoped_guard(mutex, &em_pd_mutex) {
+		if (!dev->em_pd)
+			return -EINVAL;
+		pd = dev->em_pd;
 
-	if (!dev->em_pd) {
-		mutex_unlock(&em_pd_mutex);
-		return -EINVAL;
+		kref_get(&new_table->kref);
+
+		old_table = rcu_dereference_protected(pd->em_table,
+							lockdep_is_held(&em_pd_mutex));
+		rcu_assign_pointer(pd->em_table, new_table);
+
+		em_cpufreq_update_efficiencies(dev, new_table->state);
+
+		em_table_free(old_table);
 	}
-	pd = dev->em_pd;
-
-	kref_get(&new_table->kref);
-
-	old_table = rcu_dereference_protected(pd->em_table,
-					      lockdep_is_held(&em_pd_mutex));
-	rcu_assign_pointer(pd->em_table, new_table);
-
-	em_cpufreq_update_efficiencies(dev, new_table->state);
-
-	em_table_free(old_table);
-
-	mutex_unlock(&em_pd_mutex);
 
 	em_notify_pd_updated(pd);
 	return 0;
@@ -623,82 +619,70 @@ int em_dev_register_pd_no_update(struct device *dev, unsigned int nr_states,
 	 * Use a mutex to serialize the registration of performance domains and
 	 * let the driver-defined callback functions sleep.
 	 */
-	mutex_lock(&em_pd_mutex);
+	scoped_guard(mutex, &em_pd_mutex) {
+		if (dev->em_pd)
+			return -EEXIST;
 
-	if (dev->em_pd) {
-		ret = -EEXIST;
-		goto unlock;
-	}
+		if (_is_cpu_device(dev)) {
+			if (!cpus) {
+				dev_err(dev, "EM: invalid CPU mask\n");
+				return -EINVAL;
+			}
 
-	if (_is_cpu_device(dev)) {
-		if (!cpus) {
-			dev_err(dev, "EM: invalid CPU mask\n");
-			ret = -EINVAL;
-			goto unlock;
+			for_each_cpu(cpu, cpus) {
+				if (em_cpu_get(cpu)) {
+					dev_err(dev, "EM: exists for CPU%d\n", cpu);
+					return -EEXIST;
+				}
+				/*
+				 * All CPUs of a domain must have the same
+				 * micro-architecture since they all share the same
+				 * table.
+				 */
+				cap = arch_scale_cpu_capacity(cpu);
+				if (prev_cap && prev_cap != cap) {
+					dev_err(dev, "EM: CPUs of %*pbl must have the same capacity\n",
+						cpumask_pr_args(cpus));
+
+					return -EINVAL;
+				}
+				prev_cap = cap;
+			}
 		}
 
-		for_each_cpu(cpu, cpus) {
-			if (em_cpu_get(cpu)) {
-				dev_err(dev, "EM: exists for CPU%d\n", cpu);
-				ret = -EEXIST;
-				goto unlock;
-			}
-			/*
-			 * All CPUs of a domain must have the same
-			 * micro-architecture since they all share the same
-			 * table.
-			 */
-			cap = arch_scale_cpu_capacity(cpu);
-			if (prev_cap && prev_cap != cap) {
-				dev_err(dev, "EM: CPUs of %*pbl must have the same capacity\n",
-					cpumask_pr_args(cpus));
+		if (microwatts)
+			flags |= EM_PERF_DOMAIN_MICROWATTS;
+		else if (cb->get_cost)
+			flags |= EM_PERF_DOMAIN_ARTIFICIAL;
 
-				ret = -EINVAL;
-				goto unlock;
-			}
-			prev_cap = cap;
+		/*
+		 * EM only supports uW (exception is artificial EM).
+		 * Therefore, check and force the drivers to provide
+		 * power in uW.
+		 */
+		if (!microwatts && !(flags & EM_PERF_DOMAIN_ARTIFICIAL)) {
+			dev_err(dev, "EM: only supports uW power values\n");
+			return -EINVAL;
 		}
+
+		ret = em_create_pd(dev, nr_states, cb, cpus, flags);
+		if (ret)
+			return ret;
+
+		dev->em_pd->flags |= flags;
+		dev->em_pd->min_perf_state = 0;
+		dev->em_pd->max_perf_state = nr_states - 1;
+
+		em_table = rcu_dereference_protected(dev->em_pd->em_table,
+							lockdep_is_held(&em_pd_mutex));
+		em_cpufreq_update_efficiencies(dev, em_table->state);
+
+		em_debug_create_pd(dev);
+		dev_info(dev, "EM: created perf domain\n");
 	}
 
-	if (microwatts)
-		flags |= EM_PERF_DOMAIN_MICROWATTS;
-	else if (cb->get_cost)
-		flags |= EM_PERF_DOMAIN_ARTIFICIAL;
-
-	/*
-	 * EM only supports uW (exception is artificial EM).
-	 * Therefore, check and force the drivers to provide
-	 * power in uW.
-	 */
-	if (!microwatts && !(flags & EM_PERF_DOMAIN_ARTIFICIAL)) {
-		dev_err(dev, "EM: only supports uW power values\n");
-		ret = -EINVAL;
-		goto unlock;
-	}
-
-	ret = em_create_pd(dev, nr_states, cb, cpus, flags);
-	if (ret)
-		goto unlock;
-
-	dev->em_pd->flags |= flags;
-	dev->em_pd->min_perf_state = 0;
-	dev->em_pd->max_perf_state = nr_states - 1;
-
-	em_table = rcu_dereference_protected(dev->em_pd->em_table,
-					     lockdep_is_held(&em_pd_mutex));
-	em_cpufreq_update_efficiencies(dev, em_table->state);
-
-	em_debug_create_pd(dev);
-	dev_info(dev, "EM: created perf domain\n");
-
-unlock:
-	mutex_unlock(&em_pd_mutex);
-	if (ret)
-		return ret;
-
-	mutex_lock(&em_pd_list_mutex);
-	list_add_tail(&dev->em_pd->node, &em_pd_list);
-	mutex_unlock(&em_pd_list_mutex);
+	scoped_guard(mutex, &em_pd_list_mutex)
+		list_add_tail(&dev->em_pd->node, &em_pd_list);
 
 	em_notify_pd_created(dev->em_pd);
 
@@ -720,9 +704,8 @@ void em_dev_unregister_perf_domain(struct device *dev)
 	if (_is_cpu_device(dev))
 		return;
 
-	mutex_lock(&em_pd_list_mutex);
-	list_del_init(&dev->em_pd->node);
-	mutex_unlock(&em_pd_list_mutex);
+	scoped_guard(mutex, &em_pd_list_mutex)
+		list_del_init(&dev->em_pd->node);
 
 	em_notify_pd_deleted(dev->em_pd);
 
@@ -731,17 +714,17 @@ void em_dev_unregister_perf_domain(struct device *dev)
 	 * from potential clean-up/setup issues in the debugfs directories.
 	 * The debugfs directory name is the same as device's name.
 	 */
-	mutex_lock(&em_pd_mutex);
-	em_debug_remove_pd(dev);
+	scoped_guard(mutex, &em_pd_mutex) {
+		em_debug_remove_pd(dev);
 
-	em_table_free(rcu_dereference_protected(dev->em_pd->em_table,
-						lockdep_is_held(&em_pd_mutex)));
+		em_table_free(rcu_dereference_protected(dev->em_pd->em_table,
+							lockdep_is_held(&em_pd_mutex)));
 
-	ida_free(&em_pd_ida, dev->em_pd->id);
+		ida_free(&em_pd_ida, dev->em_pd->id);
 
-	kfree(dev->em_pd);
-	dev->em_pd = NULL;
-	mutex_unlock(&em_pd_mutex);
+		kfree(dev->em_pd);
+		dev->em_pd = NULL;
+	}
 }
 EXPORT_SYMBOL_GPL(em_dev_unregister_perf_domain);
 
@@ -983,10 +966,10 @@ int em_update_performance_limits(struct em_perf_domain *pd,
 
 
 	/* Guard simultaneous updates and make them atomic */
-	mutex_lock(&em_pd_mutex);
-	pd->min_perf_state = min_ps;
-	pd->max_perf_state = max_ps;
-	mutex_unlock(&em_pd_mutex);
+	scoped_guard(mutex, &em_pd_mutex) {
+		pd->min_perf_state = min_ps;
+		pd->max_perf_state = max_ps;
+	}
 
 	return 0;
 }
