@@ -25,8 +25,6 @@
 static DEFINE_MUTEX(leds_lookup_lock);
 static LIST_HEAD(leds_lookup_list);
 
-static struct workqueue_struct *leds_wq;
-
 static ssize_t brightness_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -38,7 +36,7 @@ static ssize_t brightness_show(struct device *dev,
 	brightness = led_cdev->brightness;
 	mutex_unlock(&led_cdev->led_access);
 
-	return sysfs_emit(buf, "%u\n", brightness);
+	return sprintf(buf, "%u\n", brightness);
 }
 
 static ssize_t brightness_store(struct device *dev,
@@ -62,6 +60,7 @@ static ssize_t brightness_store(struct device *dev,
 	if (state == LED_OFF)
 		led_trigger_remove(led_cdev);
 	led_set_brightness(led_cdev, state);
+	flush_work(&led_cdev->set_brightness_work);
 
 	ret = size;
 unlock:
@@ -80,13 +79,13 @@ static ssize_t max_brightness_show(struct device *dev,
 	max_brightness = led_cdev->max_brightness;
 	mutex_unlock(&led_cdev->led_access);
 
-	return sysfs_emit(buf, "%u\n", max_brightness);
+	return sprintf(buf, "%u\n", max_brightness);
 }
 static DEVICE_ATTR_RO(max_brightness);
 
 #ifdef CONFIG_LEDS_TRIGGERS
-static const BIN_ATTR(trigger, 0644, led_trigger_read, led_trigger_write, 0);
-static const struct bin_attribute *const led_trigger_bin_attrs[] = {
+static BIN_ATTR(trigger, 0644, led_trigger_read, led_trigger_write, 0);
+static struct bin_attribute *led_trigger_bin_attrs[] = {
 	&bin_attr_trigger,
 	NULL,
 };
@@ -122,7 +121,7 @@ static ssize_t brightness_hw_changed_show(struct device *dev,
 	if (led_cdev->brightness_hw_changed == -1)
 		return -ENODATA;
 
-	return sysfs_emit(buf, "%u\n", led_cdev->brightness_hw_changed);
+	return sprintf(buf, "%u\n", led_cdev->brightness_hw_changed);
 }
 
 static DEVICE_ATTR_RO(brightness_hw_changed);
@@ -252,23 +251,15 @@ static const struct class leds_class = {
  * of_led_get() - request a LED device via the LED framework
  * @np: device node to get the LED device from
  * @index: the index of the LED
- * @name: the name of the LED used to map it to its function, if present
  *
  * Returns the LED device parsed from the phandle specified in the "leds"
  * property of a device tree node or a negative error-code on failure.
  */
-static struct led_classdev *of_led_get(struct device_node *np, int index,
-				       const char *name)
+struct led_classdev *of_led_get(struct device_node *np, int index)
 {
 	struct device *led_dev;
 	struct device_node *led_node;
 
-	/*
-	 * For named LEDs, first look up the name in the "led-names" property.
-	 * If it cannot be found, then of_parse_phandle() will propagate the error.
-	 */
-	if (name)
-		index = of_property_match_string(np, "led-names", name);
 	led_node = of_parse_phandle(np, "leds", index);
 	if (!led_node)
 		return ERR_PTR(-ENOENT);
@@ -278,6 +269,103 @@ static struct led_classdev *of_led_get(struct device_node *np, int index,
 
 	return led_module_get(led_dev);
 }
+EXPORT_SYMBOL_GPL(of_led_get);
+
+
+/**
+ * fwnode_led_get() - Get LED class device from firmware node reference
+ * @fwnode: Firmware node containing LED phandle array property
+ * @index: Index within the LED array property
+ * @out_dev: Optional output for the LED's parent device (may be NULL)
+ *
+ * This function resolves LED class devices from firmware node references,
+ * providing a firmware-agnostic alternative to of_led_get(). It supports
+ * both Device Tree and ACPI systems.
+ *
+ * The function handles:
+ * - GPIO LEDs (which don't have struct device)
+ * - Platform LED controllers
+ * - Deferred probing via -EPROBE_DEFER
+ * - Reference counting via led_module_get()
+ *
+ * If @out_dev is non-NULL and the LED has a parent device, a reference
+ * to that device is returned via get_device(). The caller is responsible
+ * for calling put_device() when done. GPIO LEDs may not have a parent
+ * device, in which case @out_dev will be set to NULL.
+ *
+ * The caller must call led_put() on the returned LED class device when done.
+ *
+ * Return: LED class device pointer on success, ERR_PTR on error:
+ *         -EPROBE_DEFER if LED provider is not yet available
+ *         -EINVAL for invalid arguments or missing LED
+ *         -ENODEV if LED provider returned NULL
+ */
+struct led_classdev *fwnode_led_get(const struct fwnode_handle *fwnode,
+				    int index,
+				    struct device **out_dev)
+{
+	struct fwnode_reference_args args;
+	struct led_classdev *cdev;
+	struct device *led_dev = NULL;
+	int ret;
+
+	if (out_dev)
+		*out_dev = NULL;
+
+	if (!fwnode)
+		return ERR_PTR(-EINVAL);
+
+	/* Get the LED reference from the firmware node */
+	ret = fwnode_property_get_reference_args(fwnode, "leds", NULL, 0,
+						 index, &args);
+	if (ret)
+		return ERR_PTR(ret);
+
+	/*
+	 * Try Device Tree path first if this is an OF node.
+	 * This handles GPIO LEDs and other DT-specific LED providers.
+	 */
+	if (is_of_node(args.fwnode)) {
+		struct device_node *np = to_of_node(args.fwnode);
+
+		cdev = of_led_get(np, 0);
+		fwnode_handle_put(args.fwnode);
+
+		if (IS_ERR(cdev))
+			return cdev;
+
+		/* Get parent device if it exists */
+		if (out_dev && cdev->dev)
+			*out_dev = get_device(cdev->dev);
+
+		return cdev;
+	}
+
+	/*
+	 * ACPI or generic fwnode path.
+	 * Try to find the LED class device by matching the fwnode.
+	 */
+	led_dev = fwnode_get_next_parent_dev((struct fwnode_handle *)args.fwnode);
+	fwnode_handle_put(args.fwnode);
+
+	if (!led_dev)
+		return ERR_PTR(-EPROBE_DEFER);
+
+	/* Find the LED class device associated with this device */
+	cdev = led_module_get(led_dev);
+	if (!cdev) {
+		put_device(led_dev);
+		return ERR_PTR(-EPROBE_DEFER);
+	}
+
+	if (out_dev)
+		*out_dev = led_dev;
+	else
+		put_device(led_dev);
+
+	return cdev;
+}
+EXPORT_SYMBOL_GPL(fwnode_led_get);
 
 /**
  * led_put() - release a LED device
@@ -332,7 +420,7 @@ struct led_classdev *__must_check devm_of_led_get(struct device *dev,
 	if (!dev)
 		return ERR_PTR(-EINVAL);
 
-	led = of_led_get(dev->of_node, index, NULL);
+	led = of_led_get(dev->of_node, index);
 	if (IS_ERR(led))
 		return led;
 
@@ -350,13 +438,8 @@ EXPORT_SYMBOL_GPL(devm_of_led_get);
 struct led_classdev *led_get(struct device *dev, char *con_id)
 {
 	struct led_lookup_data *lookup;
-	struct led_classdev *led_cdev;
 	const char *provider = NULL;
 	struct device *led_dev;
-
-	led_cdev = of_led_get(dev->of_node, -1, con_id);
-	if (!IS_ERR(led_cdev) || PTR_ERR(led_cdev) != -ENOENT)
-		return led_cdev;
 
 	mutex_lock(&leds_lookup_lock);
 	list_for_each_entry(lookup, &leds_lookup_list, list) {
@@ -570,8 +653,6 @@ int led_classdev_register_ext(struct device *parent,
 
 	led_update_brightness(led_cdev);
 
-	led_cdev->wq = leds_wq;
-
 	led_init_core(led_cdev);
 
 #ifdef CONFIG_LEDS_TRIGGERS
@@ -690,19 +771,12 @@ EXPORT_SYMBOL_GPL(devm_led_classdev_unregister);
 
 static int __init leds_init(void)
 {
-	leds_wq = alloc_ordered_workqueue("leds", 0);
-	if (!leds_wq) {
-		pr_err("Failed to create LEDs ordered workqueue\n");
-		return -ENOMEM;
-	}
-
 	return class_register(&leds_class);
 }
 
 static void __exit leds_exit(void)
 {
 	class_unregister(&leds_class);
-	destroy_workqueue(leds_wq);
 }
 
 subsys_initcall(leds_init);
