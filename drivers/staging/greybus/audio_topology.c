@@ -1009,6 +1009,19 @@ static const struct snd_soc_dapm_widget gbaudio_widgets[] = {
 					SND_SOC_DAPM_POST_PMD),
 };
 
+/* Limit %s length to avoid -Wformat-truncation with snprintf() */
+#define GB_NAME_TMP_LEN 32
+
+static void gbaudio_prefix_dev_id(char *name, size_t name_len,
+				  unsigned int dev_id)
+{
+	char temp_name[GB_NAME_TMP_LEN], *cp = temp_name;
+
+	strscpy(temp_name, name, sizeof(temp_name));
+	OPTIMIZER_HIDE_VAR(cp);
+	snprintf(name, name_len, "GB %u %s", dev_id, cp);
+}
+
 static int gbaudio_tplg_create_widget(struct gbaudio_module_info *module,
 				      struct snd_soc_dapm_widget *dw,
 				      struct gb_audio_widget *w, int *w_size)
@@ -1018,7 +1031,6 @@ static int gbaudio_tplg_create_widget(struct gbaudio_module_info *module,
 	struct gb_audio_control *curr;
 	struct gbaudio_control *control, *_control;
 	size_t size;
-	char temp_name[NAME_SIZE];
 
 	ret = gbaudio_validate_kcontrol_count(w);
 	if (ret) {
@@ -1086,8 +1098,7 @@ static int gbaudio_tplg_create_widget(struct gbaudio_module_info *module,
 	}
 
 	/* Prefix dev_id to widget control_name */
-	strscpy(temp_name, w->name, sizeof(temp_name));
-	snprintf(w->name, sizeof(w->name), "GB %d %s", module->dev_id, temp_name);
+	gbaudio_prefix_dev_id(w->name, sizeof(w->name), module->dev_id);
 
 	switch (w->type) {
 	case snd_soc_dapm_spk:
@@ -1143,7 +1154,6 @@ static int gbaudio_tplg_process_kcontrols(struct gbaudio_module_info *module,
 	struct gb_audio_control *curr;
 	struct gbaudio_control *control, *_control;
 	size_t size;
-	char temp_name[NAME_SIZE];
 
 	size = sizeof(struct snd_kcontrol_new) * module->num_controls;
 	dapm_kctls = devm_kzalloc(module->dev, size, GFP_KERNEL);
@@ -1168,9 +1178,7 @@ static int gbaudio_tplg_process_kcontrols(struct gbaudio_module_info *module,
 		}
 		control->id = curr->id;
 		/* Prefix dev_id to widget_name */
-		strscpy(temp_name, curr->name, sizeof(temp_name));
-		snprintf(curr->name, sizeof(curr->name), "GB %d %s", module->dev_id,
-			 temp_name);
+		gbaudio_prefix_dev_id(curr->name, sizeof(curr->name), module->dev_id);
 		control->name = curr->name;
 		if (curr->info.type == GB_AUDIO_CTL_ELEM_TYPE_ENUMERATED) {
 			struct gb_audio_enumerated *gbenum =
