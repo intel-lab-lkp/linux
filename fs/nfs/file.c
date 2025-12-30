@@ -489,7 +489,7 @@ static void nfs_invalidate_folio(struct folio *folio, size_t offset,
 
 	/* Cancel any unstarted writes on this page */
 	if (offset != 0 || length < folio_size(folio))
-		nfs_wb_folio(inode, folio);
+		nfs_wb_folio(inode, folio, true);
 	else
 		nfs_wb_folio_cancel(inode, folio);
 	folio_wait_private_2(folio); /* [DEPRECATED] */
@@ -511,7 +511,7 @@ static bool nfs_release_folio(struct folio *folio, gfp_t gfp)
 		if ((current_gfp_context(gfp) & GFP_KERNEL) != GFP_KERNEL ||
 		    current_is_kswapd() || current_is_kcompactd())
 			return false;
-		if (nfs_wb_folio(folio->mapping->host, folio) < 0)
+		if (nfs_wb_folio(folio->mapping->host, folio, false) < 0)
 			return false;
 	}
 	return nfs_fscache_release_folio(folio, gfp);
@@ -560,7 +560,7 @@ static int nfs_launder_folio(struct folio *folio)
 		inode->i_ino, folio_pos(folio));
 
 	folio_wait_private_2(folio); /* [DEPRECATED] */
-	ret = nfs_wb_folio(inode, folio);
+	ret = nfs_wb_folio(inode, folio, true);
 	trace_nfs_launder_folio_done(inode, folio_pos(folio),
 			folio_size(folio), ret);
 	return ret;

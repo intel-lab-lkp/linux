@@ -1061,7 +1061,7 @@ out_flushme:
 	 */
 	nfs_mark_request_dirty(req);
 	nfs_unlock_and_release_request(req);
-	error = nfs_wb_folio(folio->mapping->host, folio);
+	error = nfs_wb_folio(folio->mapping->host, folio, true);
 	trace_nfs_try_to_update_request_done(folio_inode(folio), offset, bytes, error);
 	return (error < 0) ? ERR_PTR(error) : NULL;
 }
@@ -1139,7 +1139,7 @@ int nfs_flush_incompatible(struct file *file, struct folio *folio)
 		nfs_release_request(req);
 		if (!do_flush)
 			return 0;
-		status = nfs_wb_folio(folio->mapping->host, folio);
+		status = nfs_wb_folio(folio->mapping->host, folio, true);
 	} while (status == 0);
 	return status;
 }
@@ -2032,7 +2032,7 @@ int nfs_wb_folio_cancel(struct inode *inode, struct folio *folio)
  * Assumes that the folio has been locked by the caller, and will
  * not unlock it.
  */
-int nfs_wb_folio(struct inode *inode, struct folio *folio)
+int nfs_wb_folio(struct inode *inode, struct folio *folio, bool sync)
 {
 	loff_t range_start = folio_pos(folio);
 	size_t len = folio_size(folio);
@@ -2057,7 +2057,7 @@ int nfs_wb_folio(struct inode *inode, struct folio *folio)
 		ret = 0;
 		if (!folio_test_private(folio))
 			break;
-		ret = nfs_commit_inode(inode, FLUSH_SYNC);
+		ret = nfs_commit_inode(inode, sync ? FLUSH_SYNC: 0);
 		if (ret < 0)
 			goto out_error;
 	}
@@ -2080,7 +2080,7 @@ int nfs_migrate_folio(struct address_space *mapping, struct folio *dst,
 	 */
 	if (folio_test_private(src)) {
 		if (mode == MIGRATE_SYNC)
-			nfs_wb_folio(src->mapping->host, src);
+			nfs_wb_folio(src->mapping->host, src, true);
 		if (folio_test_private(src))
 			return -EBUSY;
 	}
