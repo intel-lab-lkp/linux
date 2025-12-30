@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mtd/nand-macronix.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Macronix NAND Randomizer OTP Enable Property
+
+maintainers:
+  - Miquel Raynal <miquel.raynal@bootlin.com>
+  - Richard Weinberger <richard@nod.at>
+
+description:
+  Macronix NAND chips support an optional one-time programmable (OTP)
+  data randomizer that scrambles user data to improve reliability.
+  Enabling it is irreversible, prohibits subpage accesses, and slightly
+  increases program time. This property requests the driver to enable
+  the randomizer if not already set.
+
+properties:
+  mxic,enable-randomizer-otp:
+    type: boolean
+    description:
+      Presence of this property indicates that the data randomizer should
+      be enabled in OTP mode on the NAND chip.
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    nand-controller {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        nand@0 {
+            reg = <0>;
+            mxic,enable-randomizer-otp;
+        };
+    };
+
+...
