@@ -4641,6 +4641,7 @@ struct sk_buff *skb_segment_list(struct sk_buff *skb,
 	struct sk_buff *tail = NULL;
 	struct sk_buff *nskb, *tmp;
 	int len_diff, err;
+	bool is_flist = !!(skb_shinfo(skb)->gso_type & SKB_GSO_FRAGLIST);
 
 	skb_push(skb, -skb_network_offset(skb) + offset);
 
@@ -4656,7 +4657,15 @@ struct sk_buff *skb_segment_list(struct sk_buff *skb,
 		list_skb = list_skb->next;
 
 		err = 0;
-		delta_truesize += nskb->truesize;
+
+		/* Only track truesize delta if the fragment is being orphaned.
+		 * In the GRO path, fragments don't have a socket owner (sk=NULL),
+		 * so the parent must maintain the total truesize to prevent
+		 * memory accounting leaks.
+		 */
+		if (!is_flist || nskb->sk)
+			delta_truesize += nskb->truesize;
+
 		if (skb_shared(nskb)) {
 			tmp = skb_clone(nskb, GFP_ATOMIC);
 			if (tmp) {
@@ -4684,7 +4693,12 @@ struct sk_buff *skb_segment_list(struct sk_buff *skb,
 
 		skb_push(nskb, -skb_network_offset(nskb) + offset);
 
-		skb_release_head_state(nskb);
+		/* For GRO-forwarded packets, fragments have no head state
+		 * (no sk/destructor) to release. Skip this.
+		 */
+		if (!is_flist || nskb->sk)
+			skb_release_head_state(nskb);
+
 		len_diff = skb_network_header_len(nskb) - skb_network_header_len(skb);
 		__copy_skb_header(nskb, skb);
 
