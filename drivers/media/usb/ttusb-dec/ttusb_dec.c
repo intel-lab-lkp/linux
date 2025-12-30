@@ -703,10 +703,19 @@ static void ttusb_dec_process_urb_frame(struct ttusb_dec *dec, u8 *b,
 
 			if (dec->packet_type == TTUSB_DEC_PACKET_PVA &&
 			    dec->packet_length == 8) {
-				dec->packet_state++;
-				dec->packet_payload_length = 8 +
+				int len = 8 +
 					(dec->packet[6] << 8) +
 					dec->packet[7];
+
+				if (len > MAX_PVA_LENGTH + 4) {
+					dev_warn(&dec->udev->dev,
+						 "%s: packet too long - discarding\n",
+						 __func__);
+					dec->packet_state = 0;
+				} else {
+					dec->packet_state++;
+					dec->packet_payload_length = len;
+				}
 			} else if (dec->packet_type ==
 					TTUSB_DEC_PACKET_SECTION &&
 				   dec->packet_length == 5) {
