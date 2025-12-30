@@ -1780,7 +1780,6 @@
 					reg = <0>;
 
 					camss_endpoint0: endpoint {
-						status = "disabled";
 					};
 				};
 
@@ -1788,7 +1787,6 @@
 					reg = <1>;
 
 					camss_endpoint1: endpoint {
-						status = "disabled";
 					};
 				};
 
@@ -1796,7 +1794,6 @@
 					reg = <2>;
 
 					camss_endpoint2: endpoint {
-						status = "disabled";
 					};
 				};
 			};
