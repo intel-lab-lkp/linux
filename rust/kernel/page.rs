@@ -45,9 +45,10 @@ pub const PAGE_MASK: usize = !(PAGE_SIZE - 1);
 /// assert_eq!(page_align(0x1), Some(PAGE_SIZE));
 /// assert_eq!(page_align(PAGE_SIZE + 1), Some(2 * PAGE_SIZE));
 ///
-/// // Requested address causes overflow (returns `None`).
-/// let overflow_addr = usize::MAX - (PAGE_SIZE / 2);
-/// assert_eq!(page_align(overflow_addr), None);
+/// // Requested address causes overflow.
+/// assert_eq!(page_align(usize::MAX - PAGE_SIZE + 1), Some(usize::MAX - PAGE_SIZE + 1));
+/// assert_eq!(page_align(usize::MAX - PAGE_SIZE + 2), None);
+/// assert_eq!(page_align(usize::MAX), None);
 /// ```
 #[inline(always)]
 pub const fn page_align(addr: usize) -> Option<usize> {
