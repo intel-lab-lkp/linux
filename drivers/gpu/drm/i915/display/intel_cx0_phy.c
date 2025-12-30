@@ -3281,21 +3281,6 @@ static void intel_cx0pll_enable(struct intel_encoder *encoder,
 	 */
 	intel_de_write(display, DDI_CLK_VALFREQ(encoder->port), port_clock);
 
-	/*
-	 * 12. Toggle powerdown if HDMI is enabled on C10 PHY.
-	 *
-	 * Wa_13013502646:
-	 * Fixes: HDMI lane to lane skew violations on C10 display PHYs.
-	 * Workaround: Toggle powerdown value by setting first to P0 and then to P2, for both
-	 * PHY lanes.
-	 */
-	if (!cx0pll_state_is_dp(pll_state) && pll_state->use_c10) {
-		intel_cx0_powerdown_change_sequence(encoder, INTEL_CX0_BOTH_LANES,
-						    XELPDP_P0_STATE_ACTIVE);
-		intel_cx0_powerdown_change_sequence(encoder, INTEL_CX0_BOTH_LANES,
-						    XELPDP_P2_STATE_READY);
-	}
-
 	intel_cx0_phy_transaction_end(encoder, wakeref);
 }
 
@@ -3379,7 +3364,8 @@ static int intel_mtl_tbt_clock_select(struct intel_display *display,
 	}
 }
 
-static void intel_cx0pll_enable_clock(struct intel_encoder *encoder)
+static void intel_cx0pll_enable_clock(struct intel_encoder *encoder,
+				      const struct intel_cx0pll_state *pll_state)
 {
 	struct intel_display *display = to_intel_display(encoder);
 	enum phy phy = intel_encoder_to_phy(encoder);
@@ -3411,6 +3397,21 @@ static void intel_cx0pll_enable_clock(struct intel_encoder *encoder)
 	 * 11. Follow the Display Voltage Frequency Switching Sequence After
 	 * Frequency Change. We handle this step in bxt_set_cdclk().
 	 */
+
+	/*
+	 * 12. Toggle powerdown if HDMI is enabled on C10 PHY.
+	 *
+	 * Wa_13013502646:
+	 * Fixes: HDMI lane to lane skew violations on C10 display PHYs.
+	 * Workaround: Toggle powerdown value by setting first to P0 and then to P2, for both
+	 * PHY lanes.
+	 */
+	if (!cx0pll_state_is_dp(pll_state) && pll_state->use_c10) {
+		intel_cx0_powerdown_change_sequence(encoder, INTEL_CX0_BOTH_LANES,
+						    XELPDP_P0_STATE_ACTIVE);
+		intel_cx0_powerdown_change_sequence(encoder, INTEL_CX0_BOTH_LANES,
+						    XELPDP_P2_STATE_READY);
+	}
 
 	intel_cx0_phy_transaction_end(encoder, wakeref);
 }
@@ -3485,7 +3486,7 @@ void intel_mtl_pll_enable_clock(struct intel_encoder *encoder,
 	if (intel_tc_port_in_tbt_alt_mode(dig_port))
 		intel_mtl_tbt_pll_enable_clock(encoder, crtc_state->port_clock);
 	else
-		intel_cx0pll_enable_clock(encoder);
+		intel_cx0pll_enable_clock(encoder, &crtc_state->dpll_hw_state.cx0pll);
 }
 
 /*
@@ -3808,7 +3809,7 @@ void intel_cx0_pll_power_save_wa(struct intel_display *display)
 			    encoder->base.base.id, encoder->base.name);
 
 		intel_cx0pll_enable(encoder, &pll_state);
-		intel_cx0pll_enable_clock(encoder);
+		intel_cx0pll_enable_clock(encoder, &pll_state);
 		intel_cx0pll_disable(encoder);
 		intel_cx0pll_disable_clock(encoder);
 	}
