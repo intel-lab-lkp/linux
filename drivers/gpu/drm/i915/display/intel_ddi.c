@@ -3417,6 +3417,10 @@ static void intel_ddi_enable_hdmi(struct intel_atomic_state *state,
 	enum port port = encoder->port;
 	u32 buf_ctl = 0;
 
+	/* Give monitor time to be ready before SCDC configuration */
+	if (crtc_state->hdmi_scrambling)
+		msleep(100);
+
 	if (!intel_hdmi_handle_sink_scrambling(encoder, connector,
 					       crtc_state->hdmi_high_tmds_clock_ratio,
 					       crtc_state->hdmi_scrambling))
@@ -3506,6 +3510,10 @@ static void intel_ddi_enable_hdmi(struct intel_atomic_state *state,
 	}
 
 	intel_ddi_buf_enable(encoder, buf_ctl);
+
+	/* Give monitor time to lock onto scrambled signal after DDI enable */
+	if (crtc_state->hdmi_scrambling)
+		msleep(150);
 }
 
 static void intel_ddi_enable(struct intel_atomic_state *state,
