@@ -18,11 +18,11 @@
     highres
     hpet
     hrtimers
+    no_hz
     timekeeping
 
 TODOList:
 
-* no_hz
 * delay_sleep_functions
 
 .. only::  subproject and html
