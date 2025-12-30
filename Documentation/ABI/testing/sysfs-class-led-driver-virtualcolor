@@ -1,0 +1,168 @@
+What:		/sys/class/leds/<led>/mc/multi_intensity
+Date:		December 2024
+KernelVersion:	6.x
+Contact:	Jonathan Brophy <professor_jonny@hotmail.com>
+Description:
+		Control the intensity values for each color channel in a
+		virtual multicolor LED.
+
+		Reading returns space-separated intensity values (0-255) for
+		each configured color channel. Channel order is deterministic,
+		sorted by ascending LED_COLOR_ID value. Use multi_index to
+		determine which color corresponds to each position.
+
+		Writing accepts space-separated intensity values to set the
+		per-channel intensities. The number of values must match the
+		number of channels. Values must be ordered to match multi_index.
+
+		Channel ordering examples:
+		  RGB LED (no white):
+		    multi_index shows "1 2 3"
+		    Order is: red (ID 1), green (ID 2), blue (ID 3)
+
+		  RGBW LED (with white):
+		    multi_index shows "0 1 2 3"
+		    Order is: white (ID 0), red (ID 1), green (ID 2), blue (ID 3)
+		    Note: White comes FIRST because LED_COLOR_ID_WHITE = 0
+
+		Example (RGB LED with 3 channels):
+		  $ cat /sys/class/leds/myled/mc/multi_index
+		  1 2 3
+		  $ cat /sys/class/leds/myled/mc/multi_intensity
+		  255 128 0
+		  $ echo "128 64 200" > /sys/class/leds/myled/mc/multi_intensity
+
+		Note: In standard mode (led-mode = "standard"), intensity
+		changes are rejected with -EPERM and the color is fixed by the
+		channel multipliers defined in the device tree. In multicolor
+		mode (led-mode = "multicolor", default), intensity can be
+		freely modified.
+
+		This attribute is rate-limited to prevent system overload
+		(default: 100 updates/second per virtual LED). Excessive
+		updates will be silently dropped with incremented rate limit
+		counters (visible in debugfs when CONFIG_DEBUG_FS enabled).
+
+What:		/sys/class/leds/<led>/mc/multi_index
+Date:		December 2024
+KernelVersion:	6.x
+Contact:	Jonathan Brophy <professor_jonny@hotmail.com>
+Description:
+		Read-only attribute showing the LED color IDs for each channel
+		in the virtual LED.
+
+		Returns space-separated LED_COLOR_ID_* values (integers)
+		corresponding to each channel. Channels are ordered by
+		ascending color ID value (0, 1, 2, 3, ...).
+
+		See include/dt-bindings/leds/common.h for color ID definitions.
+
+		Common color ID values:
+		  - 0: LED_COLOR_ID_WHITE
+		  - 1: LED_COLOR_ID_RED
+		  - 2: LED_COLOR_ID_GREEN
+		  - 3: LED_COLOR_ID_BLUE
+		  - 4: LED_COLOR_ID_AMBER
+		  - 5: LED_COLOR_ID_VIOLET
+		  - 6: LED_COLOR_ID_YELLOW
+		  - 7: LED_COLOR_ID_IR
+		  - 8: LED_COLOR_ID_MULTI
+		  - 9: LED_COLOR_ID_RGB
+		  - 10: LED_COLOR_ID_UV
+
+		Example (RGB LED):
+		  $ cat /sys/class/leds/myled/mc/multi_index
+		  1 2 3
+		  (Shows: red=1, green=2, blue=3)
+
+		Example (RGBW LED):
+		  $ cat /sys/class/leds/myled/mc/multi_index
+		  0 1 2 3
+		  (Shows: white=0, red=1, green=2, blue=3)
+
+		This attribute is essential for correctly indexing the
+		multi_intensity and mc-channel-multipliers arrays, especially
+		when white LEDs are present (which come first due to ID=0).
+
+What:		/sys/class/leds/<led>/mc/multi_multipliers
+Date:		December 2024
+KernelVersion:	6.x
+Contact:	Jonathan Brophy <professor_jonny@hotmail.com>
+Description:
+		Read-only attribute showing the scale/multiplier values (0-255)
+		for each color channel.
+
+		Multipliers are defined in device tree via the
+		"mc-channel-multipliers" property and must be ordered to match
+		the channel order (sorted by LED_COLOR_ID).
+
+		In multicolor mode, these scale the intensity values:
+		  final = (intensity * multiplier / 255) * brightness / max_brightness
+
+		In standard mode, these define the fixed color mix:
+		  final = multiplier * brightness / max_brightness
+
+		Returns space-separated values (0-255), one per channel, in the
+		same order as multi_index.
+
+		Example (RGB LED):
+		  $ cat /sys/class/leds/myled/mc/multi_index
+		  1 2 3
+		  $ cat /sys/class/leds/myled/mc/multi_multipliers
+		  255 200 150
+		  (Shows: red=255, green=200, blue=150)
+
+		Example (RGBW warm white):
+		  $ cat /sys/class/leds/myled/mc/multi_index
+		  0 1 2 3
+		  $ cat /sys/class/leds/myled/mc/multi_multipliers
+		  180 255 200 100
+		  (Shows: white=180, red=255, green=200, blue=100)
+
+What:		/sys/class/leds/<led>/brightness
+Date:		December 2024
+KernelVersion:	6.x
+Contact:	Jonathan Brophy <professor_jonny@hotmail.com>
+Description:
+		Control the overall brightness of the virtual LED.
+
+		This is the standard LED class attribute. For virtual grouped
+		LEDs, this controls the master brightness that scales all
+		physical LEDs assigned to this virtual LED after per-channel
+		intensity and multipliers are applied.
+
+		Writing brightness triggers the winner-takes-all arbitration
+		engine which determines which virtual LED controls the hardware
+		based on:
+		  1. Priority (higher wins)
+		  2. Sequence number (most recent wins on tie)
+		  3. Only virtual LEDs with brightness > 0 participate
+
+		The winner controls ALL physical LEDs. Physical LEDs not used
+		by the winner are turned off.
+
+		Range: 0 to max_brightness (typically 0-255)
+
+		Reading returns the current brightness setting.
+
+		Example:
+		  $ echo 128 > /sys/class/leds/myled/brightness
+		  $ cat /sys/class/leds/myled/brightness
+		  128
+
+What:		/sys/class/leds/<led>/max_brightness
+Date:		December 2024
+KernelVersion:	6.x
+Contact:	Jonathan Brophy <professor_jonny@hotmail.com>
+Description:
+		Read-only attribute showing the maximum brightness value.
+
+		For multicolor mode virtual LEDs, this is always 255 to provide
+		full 8-bit resolution for color mixing.
+
+		For standard mode virtual LEDs, this is the minimum max_brightness
+		among all physical LEDs referenced by the virtual LED.
+
+		Example:
+		  $ cat /sys/class/leds/myled/max_brightness
+		  255
