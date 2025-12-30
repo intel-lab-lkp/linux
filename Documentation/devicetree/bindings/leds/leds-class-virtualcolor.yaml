@@ -1,0 +1,197 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/leds/leds-class-virtualcolor.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Virtual LED class device with priority-based arbitration
+
+maintainers:
+  - Jonathan Brophy <professor_jonny@hotmail.com>
+
+description: |
+  Represents a single virtual LED that combines one or more physical monochromatic
+  LEDs. Multiple virtual LEDs can share the same physical LEDs, with priority-based
+  arbitration determining which virtual LED's state is displayed.
+
+  The driver implements winner-takes-all arbitration:
+  - Only virtual LEDs with brightness > 0 participate in arbitration
+  - Highest priority wins (ties broken by sequence number - most recent wins)
+  - Winner controls ALL physical LEDs
+  - Physical LEDs not used by winner are turned off
+
+  Two operating modes are supported:
+
+  1. Multicolor mode (default):
+     - Full multicolor LED ABI support
+     - Exposes multi_intensity, multi_index, multi_multipliers in sysfs
+     - Per-channel intensity control (0-255)
+     - Channel multipliers for color temperature adjustment
+     - Master brightness scales all channels proportionally
+
+  2. Standard mode:
+     - Fixed color ratios via mc-channel-multipliers
+     - Only brightness control available (no intensity changes)
+     - Useful for fixed-color LEDs (e.g., warm white, amber)
+
+  Sysfs interface (multicolor mode):
+  - /sys/class/leds/<led>/brightness - Master brightness (0-max_brightness)
+  - /sys/class/leds/<led>/mc/multi_intensity - Per-channel intensities (space-separated)
+  - /sys/class/leds/<led>/mc/multi_index - Color IDs per channel (read-only)
+  - /sys/class/leds/<led>/mc/multi_multipliers - Channel multipliers (read-only)
+
+properties:
+  $nodename:
+    pattern: "^virtual-led(@[0-9a-f])?$"
+
+  reg:
+    maxItems: 1
+    description: |
+      Unique index of this virtual LED within the controller. Used for node addressing.
+
+  function:
+    description: |
+      LED function identifier. recommended to use: LED_FUNCTION_VIRTUAL_STATUS,
+      See include/dt-bindings/leds/common.h
+
+  priority:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 0
+    minimum: 0
+    maximum: 2147483647
+    description: |
+      Arbitration priority for this virtual LED (signed 32-bit integer).
+      When multiple virtual LEDs sharing physical LEDs are active (brightness > 0),
+      only the highest-priority LED's state is displayed.
+
+      Tie-breaking: If priorities are equal, the most recently updated virtual LED wins.
+
+      Suggested priority ranges:
+        0-99:   Normal operation indicators
+        100-499: System state indicators (boot, shutdown)
+        500-999: Warning/error indicators
+        1000+:   Critical alerts and emergency overrides
+
+  led-mode:
+    $ref: /schemas/types.yaml#/definitions/string
+    enum: [multicolor, standard]
+    default: multicolor
+    description: |
+      Operating mode for this virtual LED:
+
+      - "multicolor": (default) Full multicolor ABI with dynamic intensity control
+        * Exposes multi_intensity sysfs attribute for per-channel control
+        * Channels can be adjusted independently at runtime
+        * Suitable for RGB LEDs, color-changing indicators
+
+      - "standard": Fixed color ratios, brightness-only control
+        * Channel intensities fixed by mc-channel-multipliers
+        * Only brightness sysfs attribute available (no multi_intensity)
+        * Suitable for warm white, amber, or other fixed-color LEDs
+
+  leds:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    minItems: 1
+    maxItems: 255
+    description: |
+      Array of phandles to physical LED devices that compose this virtual LED.
+      LEDs are automatically grouped by their 'color' property into channels.
+
+      Channel ordering: Channels are ordered by ascending LED_COLOR_ID value.
+      Only colors present in the LED list are included (no sparse indices).
+
+      Color ID values (from include/dt-bindings/leds/common.h):
+        LED_COLOR_ID_WHITE = 0
+        LED_COLOR_ID_RED = 1
+        LED_COLOR_ID_GREEN = 2
+        LED_COLOR_ID_BLUE = 3
+        LED_COLOR_ID_AMBER = 4
+        LED_COLOR_ID_VIOLET = 5
+        LED_COLOR_ID_YELLOW = 6
+        LED_COLOR_ID_IR = 7
+        ... (see header for complete list)
+
+      The /sys/class/leds/<led>/mc/multi_index file reports the color ID for
+      each channel, allowing userspace to verify the ordering.
+
+      Supported LED types:
+      - GPIO LEDs (gpio-leds compatible)
+      - PWM LEDs (pwm-leds compatible)
+      - I2C/SPI LED controllers (any with brightness_set or brightness_set_blocking)
+
+      Example 1 - RGB LED:
+        leds = <&led_red>, <&led_green>, <&led_blue>;
+        Results in 3 channels: [0]=red (ID 1), [1]=green (ID 2), [2]=blue (ID 3)
+
+      Example 2 - RGBW LED:
+        leds = <&led_red>, <&led_green>, <&led_blue>, <&led_white>;
+        Results in 4 channels: [0]=white (ID 0), [1]=red (ID 1), [2]=green (ID 2), [3]=blue (ID 3)
+        Note: White comes first because LED_COLOR_ID_WHITE = 0
+
+      Example 3 - Non-contiguous IDs:
+        leds = <&led_amber>, <&led_red>;
+        Results in 2 channels: [0]=red (ID 1), [1]=amber (ID 4)
+
+      Userspace verification:
+        $ cat /sys/class/leds/status:multi/mc/multi_index
+        1 2 3
+        # Confirms: [0]=red, [1]=green, [2]=blue
+
+  mc-channel-multipliers:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 1
+    maxItems: 255
+    description: |
+      Per-channel brightness multipliers (0-255) for color temperature adjustment
+      and normalization. Array must have one entry per channel.
+
+      Channel ordering: Array indices must match the channel order, which is
+      determined by ascending LED_COLOR_ID value. Only colors present in the
+      'leds' property are included.
+
+      For predictable DT configuration, list multipliers in ascending color ID order.
+      The /sys/class/leds/<led>/mc/multi_index file can verify the ordering at runtime.
+
+      In multicolor mode:
+        - Scales the intensity value before applying brightness
+        - Formula: final = (intensity * multiplier / 255) * brightness / max_brightness
+        - Useful for: Color temperature control, vendor normalization, power limiting
+        - Default: 255 (no scaling) for all channels if omitted
+
+      In standard mode:
+        - Defines the FIXED color ratios (intensity changes not allowed)
+        - Formula: final = multiplier * brightness / max_brightness
+        - Useful for: Fixed-color LEDs (warm white, amber)
+        - REQUIRED in standard mode
+
+      Example 1 - RGB with equal scaling:
+        leds = <&red>, <&green>, <&blue>;
+        mc-channel-multipliers = <255 255 255>;
+        # Channels: [0]=red, [1]=green, [2]=blue - all at full scale
+
+      Example 2 - RGBW warm white (standard mode):
+        leds = <&red>, <&green>, <&blue>, <&white>;
+        mc-channel-multipliers = <180 255 200 100>;
+        # Channels: [0]=white:180, [1]=red:255, [2]=green:200, [3]=blue:100
+        # Note: White (ID=0) comes first, then red (ID=1), green (ID=2), blue (ID=3)
+
+      Example 3 - Color temperature adjustment:
+        leds = <&red>, <&green>, <&blue>;
+        mc-channel-multipliers = <255 180 100>;
+        # Creates warm white by reducing green/blue relative to red
+
+required:
+  - reg
+  - leds
+
+allOf:
+  - $ref: common.yaml#
+  - if:
+      properties:
+        led-mode:
+          const: standard
+    then:
+      required:
+        - mc-channel-multipliers
+
+unevaluatedProperties: false
