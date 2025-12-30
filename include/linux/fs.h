@@ -2280,7 +2280,7 @@ struct file_system_type {
 	struct file_system_type * next;
 	struct hlist_head fs_supers;
 
-	struct lock_class_key s_lock_key;
+	struct lock_class_key s_lock_key ____cacheline_aligned;
 	struct lock_class_key s_umount_key;
 	struct lock_class_key s_vfs_rename_key;
 	struct lock_class_key s_writers_key[SB_FREEZE_LEVELS];
