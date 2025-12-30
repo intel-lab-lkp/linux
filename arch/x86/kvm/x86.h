@@ -172,9 +172,9 @@ static inline void kvm_nested_vmexit_handle_ibrs(struct kvm_vcpu *vcpu)
 		indirect_branch_prediction_barrier();
 }
 
-static inline bool kvm_vcpu_has_run(struct kvm_vcpu *vcpu)
+static inline bool kvm_can_set_cpuid_and_feature_msrs(struct kvm_vcpu *vcpu)
 {
-	return vcpu->arch.last_vmentry_cpu != -1;
+	return vcpu->arch.last_vmentry_cpu == -1 && !is_guest_mode(vcpu);
 }
 
 static inline void kvm_set_mp_state(struct kvm_vcpu *vcpu, int mp_state)
