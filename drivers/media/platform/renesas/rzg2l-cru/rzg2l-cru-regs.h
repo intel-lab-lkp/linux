@@ -19,6 +19,7 @@
 
 #define CRUnINTS_SFS			BIT(16)
 
+#define CRUnINTS2_FExS(x)		BIT(((x) * 3) + 1)
 #define CRUnINTS2_FSxS(x)		BIT(((x) * 3))
 
 #define CRUnRST_VRESETN			BIT(0)
