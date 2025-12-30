@@ -6784,6 +6784,12 @@ static inline bool cpu_overutilized(int cpu)
 	if (!sched_energy_enabled())
 		return false;
 
+	/* Single task on max-cap CPU isn't misfit so no reason to trigger OU */
+	if (arch_scale_cpu_capacity(cpu) == SCHED_CAPACITY_SCALE &&
+	    cpu_rq(cpu)->nr_running <= 1 &&
+	    !capacity_greater(SCHED_CAPACITY_SCALE, capacity_of(cpu)))
+		return false;
+
 	rq_util_min = uclamp_rq_get(cpu_rq(cpu), UCLAMP_MIN);
 	rq_util_max = uclamp_rq_get(cpu_rq(cpu), UCLAMP_MAX);
 
