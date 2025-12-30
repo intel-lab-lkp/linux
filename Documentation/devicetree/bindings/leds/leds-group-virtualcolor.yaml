@@ -1,0 +1,170 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/leds/leds-group-virtualcolor.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Virtual LED Group Controller with Multicolor Support
+
+maintainers:
+  - Jonathan Brophy <professor_jonny@hotmail.com>
+
+description: |
+  The virtual LED group controller provides priority-based arbitration for
+  shared physical LEDs across multiple virtual LED instances. Each virtual LED
+  combines physical monochromatic LEDs into logical units with:
+
+  - Priority-based arbitration: Higher priority virtual LEDs take precedence
+    when multiple virtual LEDs compete for the same physical LEDs
+  - Sequence-based tie-breaking: Among equal priorities, most recent update wins
+  - Winner-takes-all: Only ONE virtual LED controls ALL physical LEDs at any time
+  - Color channel grouping: Organize LEDs by color for multicolor control
+  - Full multicolor ABI support: multi_intensity, multi_index, multi_multipliers
+  - Two operating modes:
+    * Multicolor mode: Dynamic per-channel intensity control (default)
+    * Standard mode: Fixed color ratios via multipliers (brightness only)
+  - Brightness scaling: Master brightness control with per-channel intensity
+  - Global ownership: Physical LEDs claimed exclusively per controller instance
+  - Update batching: Optional coalescing of rapid brightness changes
+
+  Key features:
+  - Supports GPIO, PWM, I2C, and SPI LED devices
+  - Automatic physical LED discovery and claiming
+  - Lock-free arbitration with atomic sequence numbers
+  - Suspend/resume with state preservation
+  - Comprehensive debugfs telemetry (when CONFIG_DEBUG_FS enabled)
+
+  Typical use cases:
+  - System status indicators with boot/update/error priority levels
+  - RGB lighting with priority-based overrides
+  - Multi-element LED arrays unified into single logical controls
+  - LED rings or strips with coordinated color control
+
+properties:
+  compatible:
+    const: leds-group-virtualcolor
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 0
+
+patternProperties:
+  "^virtual-led@[0-9a-f]+$":
+    type: object
+    $ref: leds-class-virtualcolor.yaml#
+
+required:
+  - compatible
+  - '#address-cells'
+  - '#size-cells'
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/leds/common.h>
+    #include <dt-bindings/gpio/gpio.h>
+
+    /* Physical LED definitions */
+    led-controller {
+        compatible = "gpio-leds";
+
+        led_red: led-red {
+            color = <LED_COLOR_ID_RED>;
+            function = LED_FUNCTION_STATUS;
+            gpios = <&gpio0 10 GPIO_ACTIVE_HIGH>;
+            default-state = "off";
+        };
+
+        led_green: led-green {
+            color = <LED_COLOR_ID_GREEN>;
+            function = LED_FUNCTION_STATUS;
+            gpios = <&gpio0 11 GPIO_ACTIVE_HIGH>;
+            default-state = "off";
+        };
+
+        led_blue: led-blue {
+            color = <LED_COLOR_ID_BLUE>;
+            function = LED_FUNCTION_STATUS;
+            gpios = <&gpio0 12 GPIO_ACTIVE_HIGH>;
+            default-state = "off";
+        };
+
+        led_white: led-white {
+            color = <LED_COLOR_ID_WHITE>;
+            function = LED_FUNCTION_STATUS;
+            gpios = <&gpio0 13 GPIO_ACTIVE_HIGH>;
+            default-state = "off";
+        };
+    };
+
+    pwm-led-controller {
+        compatible = "pwm-leds";
+
+        pwm_red: led-1 {
+            color = <LED_COLOR_ID_RED>;
+            function = LED_FUNCTION_STATUS;
+            pwms = <&pwm 0 7812500>;
+            max-brightness = <255>;
+        };
+
+        pwm_green: led-2 {
+            color = <LED_COLOR_ID_GREEN>;
+            function = LED_FUNCTION_STATUS;
+            pwms = <&pwm 1 7812500>;
+            max-brightness = <255>;
+        };
+
+        pwm_blue: led-3 {
+            color = <LED_COLOR_ID_BLUE>;
+            function = LED_FUNCTION_STATUS;
+            pwms = <&pwm 2 7812500>;
+            max-brightness = <255>;
+        };
+    };
+
+    /* virtual LED definitions */
+    virtual-led-controller {
+        compatible = "leds-group-virtualcolor";
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        /* High-priority RGB virtual LED (emergency/error indicator) */
+        virtual-led@0 {
+            reg = <0>;
+            color = <LED_COLOR_ID_MULTI>;
+            function = LED_FUNCTION_STATUS;
+            priority = <1000>;
+            led-mode = "multicolor";
+            leds = <&led_red>, <&led_green>, <&led_blue>;
+            /* Channels ordered by color ID: [0]=red, [1]=green, [2]=blue */
+        };
+
+        /* Medium-priority RGBW indicator (system state) */
+        virtual-led@1 {
+            reg = <1>;
+            color = <LED_COLOR_ID_MULTI>;
+            function = LED_FUNCTION_STATUS;
+            priority = <500>;
+            led-mode = "multicolor";
+            leds = <&pwm_red>, <&pwm_green>, <&pwm_blue>, <&led_white>;
+            /* Channels: [0]=white (ID=0), [1]=red, [2]=green, [3]=blue */
+        };
+
+        /* Low-priority warm white (fixed color ratios, standard mode) */
+        virtual-led@2 {
+            reg = <2>;
+            color = <LED_COLOR_ID_MULTI>;
+            function = LED_FUNCTION_STATUS;
+            priority = <10>;
+            led-mode = "standard";
+            leds = <&led_red>, <&led_green>, <&led_blue>;
+            /* Channels: [0]=red, [1]=green, [2]=blue */
+            mc-channel-multipliers = <255 180 100>;
+            /* Creates warm white: full red, 70% green, 40% blue */
+        };
+    };
+
+...
