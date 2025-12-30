@@ -104,8 +104,10 @@ static int wbrf_record(struct acpi_device *adev, uint8_t action, struct wbrf_ran
 	obj = acpi_evaluate_dsm(adev->handle, &wifi_acpi_dsm_guid,
 				WBRF_REVISION, WBRF_RECORD, &argv4);
 
-	if (!obj)
-		return -EINVAL;
+	if (!obj) {
+		ret = -EINVAL;
+		goto free_tmp;
+	}
 
 	if (obj->type != ACPI_TYPE_INTEGER) {
 		ret = -EINVAL;
@@ -118,6 +120,7 @@ static int wbrf_record(struct acpi_device *adev, uint8_t action, struct wbrf_ran
 
 out:
 	ACPI_FREE(obj);
+free_tmp:
 	kfree(tmp);
 
 	return ret;
