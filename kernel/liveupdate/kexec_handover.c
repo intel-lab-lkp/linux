@@ -18,9 +18,14 @@
 #include <linux/libfdt.h>
 #include <linux/list.h>
 #include <linux/memblock.h>
+#include <linux/math64.h>
+#include <linux/mmzone.h>
 #include <linux/page-isolation.h>
+#include <linux/slab.h>
+#include <linux/sort.h>
 #include <linux/unaligned.h>
 #include <linux/vmalloc.h>
+#include <linux/workqueue.h>
 
 #include <asm/early_ioremap.h>
 
@@ -503,6 +508,353 @@ static bool __init kho_mem_deserialize(const void *fdt)
  */
 struct kho_scratch *kho_scratch;
 unsigned int kho_scratch_cnt;
+
+#ifdef CONFIG_SPARSEMEM
+/*
+ * These are half-open physical ranges: [start, end).
+ */
+struct kho_phys_range {
+	phys_addr_t start;
+	phys_addr_t end;
+};
+
+static u64 kho_section_map_size_bytes(void)
+{
+	u64 size;
+
+	size = (u64)sizeof(struct page) * PAGES_PER_SECTION;
+	if (IS_ENABLED(CONFIG_SPARSEMEM_VMEMMAP)) {
+#ifdef PMD_SIZE
+		return ALIGN(size, PMD_SIZE);
+#else
+		return PAGE_ALIGN(size);
+#endif
+	}
+
+	return PAGE_ALIGN(size);
+}
+
+static u64 kho_phys_range_aligned_usable(phys_addr_t start, phys_addr_t end, u64 align)
+{
+	phys_addr_t aligned_start;
+
+	if (end <= start)
+		return 0;
+
+	if (!align)
+		return end - start;
+
+	aligned_start = (phys_addr_t)(DIV64_U64_ROUND_UP((u64)start, align) * align);
+	if (aligned_start >= end)
+		return 0;
+
+	return end - aligned_start;
+}
+
+static int kho_phys_range_cmp(const void *a, const void *b)
+{
+	const struct kho_phys_range *ra = a;
+	const struct kho_phys_range *rb = b;
+
+	if (ra->start < rb->start)
+		return -1;
+	if (ra->start > rb->start)
+		return 1;
+
+	if (ra->end < rb->end)
+		return -1;
+	if (ra->end > rb->end)
+		return 1;
+
+	return 0;
+}
+
+static unsigned int kho_scratch_count_pieces_in_nid(phys_addr_t start, phys_addr_t end, int nid)
+{
+	unsigned long start_sec;
+	unsigned long end_sec;
+	unsigned long sec;
+	unsigned int pieces = 0;
+	phys_addr_t piece_start = start;
+	int piece_nid = pfn_to_nid(PFN_DOWN(start));
+
+	if (end <= start)
+		return 0;
+
+	start_sec = pfn_to_section_nr(PFN_DOWN(start));
+	end_sec = pfn_to_section_nr(PFN_DOWN(end - 1));
+
+	/*
+	 * Split at sparsemem section boundaries and classify pieces by nid.
+	 * This assumes nid ownership is section-granular, consistent with
+	 * SPARSEMEM grouping and sparse_init() run detection.
+	 */
+	for (sec = start_sec + 1; sec <= end_sec; sec++) {
+		phys_addr_t boundary = PFN_PHYS(section_nr_to_pfn(sec));
+		int this_nid = pfn_to_nid(section_nr_to_pfn(sec));
+
+		if (this_nid != piece_nid) {
+			if (piece_nid == nid && piece_start < boundary)
+				pieces++;
+			piece_start = boundary;
+			piece_nid = this_nid;
+		}
+	}
+
+	if (piece_nid == nid && piece_start < end)
+		pieces++;
+
+	return pieces;
+}
+
+static void kho_scratch_add_pieces_in_nid(struct kho_phys_range *ranges,
+					  unsigned int *nr, phys_addr_t start,
+					  phys_addr_t end, int nid)
+{
+	unsigned long start_sec;
+	unsigned long end_sec;
+	unsigned long sec;
+	phys_addr_t piece_start = start;
+	int piece_nid = pfn_to_nid(PFN_DOWN(start));
+
+	if (end <= start)
+		return;
+
+	start_sec = pfn_to_section_nr(PFN_DOWN(start));
+	end_sec = pfn_to_section_nr(PFN_DOWN(end - 1));
+
+	/* See comment in kho_scratch_count_pieces_in_nid(). */
+	for (sec = start_sec + 1; sec <= end_sec; sec++) {
+		phys_addr_t boundary = PFN_PHYS(section_nr_to_pfn(sec));
+		int this_nid = pfn_to_nid(section_nr_to_pfn(sec));
+
+		if (this_nid != piece_nid) {
+			if (piece_nid == nid && piece_start < boundary)
+				ranges[(*nr)++] = (struct kho_phys_range){
+					.start = piece_start,
+					.end = boundary,
+				};
+			piece_start = boundary;
+			piece_nid = this_nid;
+		}
+	}
+
+	if (piece_nid == nid && piece_start < end)
+		ranges[(*nr)++] = (struct kho_phys_range){
+			.start = piece_start,
+			.end = end,
+		};
+}
+
+static u64 kho_scratch_max_usable_for_nid(int nid, u64 align, bool *skipped)
+{
+	struct kho_phys_range *ranges;
+	unsigned int nr_ranges = 0;
+	unsigned int i;
+	u64 max_usable = 0;
+
+	if (!kho_scratch || !kho_scratch_cnt)
+		return 0;
+
+	/*
+	 * All scratch regions (lowmem/global/per-node) are represented in
+	 * kho_scratch[]. For @nid, split each region into per-nid pieces,
+	 * then:
+	 *   - sort pieces by start address
+	 *   - merge overlapping/adjacent pieces into contiguous ranges
+	 *   - apply @align to compute the maximum usable contiguous bytes
+	 */
+	for (i = 0; i < kho_scratch_cnt; i++) {
+		phys_addr_t start;
+		phys_addr_t end;
+
+		if (!kho_scratch[i].size)
+			continue;
+
+		start = kho_scratch[i].addr;
+		end = start + kho_scratch[i].size;
+		nr_ranges += kho_scratch_count_pieces_in_nid(start, end, nid);
+	}
+
+	if (!nr_ranges)
+		return 0;
+
+	ranges = kvcalloc(nr_ranges, sizeof(*ranges), GFP_KERNEL);
+	if (!ranges) {
+		*skipped = true;
+		return 0;
+	}
+
+	nr_ranges = 0;
+	for (i = 0; i < kho_scratch_cnt; i++) {
+		phys_addr_t start;
+		phys_addr_t end;
+
+		if (!kho_scratch[i].size)
+			continue;
+
+		start = kho_scratch[i].addr;
+		end = start + kho_scratch[i].size;
+		kho_scratch_add_pieces_in_nid(ranges, &nr_ranges, start, end, nid);
+	}
+
+	/* ranges[] is half-open [start, end). */
+	sort(ranges, nr_ranges, sizeof(*ranges), kho_phys_range_cmp, NULL);
+
+	if (nr_ranges) {
+		phys_addr_t cur_start = ranges[0].start;
+		phys_addr_t cur_end = ranges[0].end;
+
+		for (i = 1; i < nr_ranges; i++) {
+			if (ranges[i].start <= cur_end) {
+				cur_end = max(cur_end, ranges[i].end);
+				continue;
+			}
+
+			/* Finalize a merged range and start a new one. */
+			max_usable = max(max_usable,
+					 kho_phys_range_aligned_usable(cur_start, cur_end, align));
+			cur_start = ranges[i].start;
+			cur_end = ranges[i].end;
+		}
+
+		/* Finalize last merged range. */
+		max_usable = max(max_usable,
+				 kho_phys_range_aligned_usable(cur_start, cur_end, align));
+	}
+
+	kvfree(ranges);
+	return max_usable;
+}
+
+static int kho_check_scratch_for_sparse(int *bad_nid, u64 *required_bytes,
+					u64 *max_usable_bytes, u64 *map_count,
+					u64 *section_map_size_bytes, bool *skipped)
+{
+	unsigned long sec_nr;
+	u64 section_map_size;
+	u64 *max_run_sections;
+	int prev_nid = NUMA_NO_NODE;
+	int nid;
+	u64 run_sections = 0;
+	u64 worst_required = 0;
+	u64 worst_deficit = 0;
+	int ret = 0;
+
+	*skipped = false;
+
+	section_map_size = kho_section_map_size_bytes();
+	if (!section_map_size)
+		return 0;
+
+	*bad_nid = NUMA_NO_NODE;
+	*required_bytes = 0;
+	*max_usable_bytes = 0;
+	*map_count = 0;
+	*section_map_size_bytes = section_map_size;
+
+	max_run_sections = kvcalloc(nr_node_ids, sizeof(*max_run_sections),
+				    GFP_KERNEL);
+	if (!max_run_sections) {
+		*skipped = true;
+		return 0;
+	}
+
+	/*
+	 * Keep the run detection consistent with sparse_init(): it walks present
+	 * sections and breaks runs on nid changes only.
+	 */
+	for_each_present_section_nr(0, sec_nr) {
+		unsigned long pfn = section_nr_to_pfn(sec_nr);
+
+		nid = pfn_to_nid(pfn);
+		if (nid != prev_nid) {
+			if (prev_nid != NUMA_NO_NODE)
+				max_run_sections[prev_nid] = max(max_run_sections[prev_nid],
+								 run_sections);
+			prev_nid = nid;
+			run_sections = 0;
+		}
+
+		run_sections++;
+	}
+
+	if (prev_nid != NUMA_NO_NODE)
+		max_run_sections[prev_nid] = max(max_run_sections[prev_nid],
+						 run_sections);
+
+	for_each_online_node(nid) {
+		u64 max_run = max_run_sections[nid];
+		u64 required;
+		u64 max_usable;
+		u64 deficit;
+
+		required = max_run * section_map_size;
+		if (!required)
+			continue;
+
+		max_usable = kho_scratch_max_usable_for_nid(nid, section_map_size,
+							    skipped);
+		if (*skipped)
+			break;
+		if (max_usable >= required)
+			continue;
+
+		/*
+		 * Pick the "worst" node by deficit ratio using MiB units to
+		 * avoid overflow; this is a warning-only heuristic.
+		 */
+		deficit = required - max_usable;
+		if (ret) {
+			u64 required_mib = max_t(u64, 1, required >> 20);
+			u64 deficit_mib = max_t(u64, 1, deficit >> 20);
+			u64 worst_required_mib = max_t(u64, 1, worst_required >> 20);
+			u64 worst_deficit_mib = max_t(u64, 1, worst_deficit >> 20);
+
+			if (deficit_mib * worst_required_mib <
+			    worst_deficit_mib * required_mib)
+				continue;
+			if (deficit_mib * worst_required_mib ==
+			    worst_deficit_mib * required_mib &&
+			    deficit < worst_deficit)
+				continue;
+		}
+
+		worst_required = required;
+		worst_deficit = deficit;
+		*bad_nid = nid;
+		*required_bytes = required;
+		*max_usable_bytes = max_usable;
+		*map_count = max_run;
+		*section_map_size_bytes = section_map_size;
+		ret = -ENOMEM;
+	}
+
+	kvfree(max_run_sections);
+	return ret;
+}
+
+#else /* CONFIG_SPARSEMEM */
+
+static u64 kho_section_map_size_bytes(void)
+{
+	return 0;
+}
+
+static int kho_check_scratch_for_sparse(int *bad_nid, u64 *required_bytes,
+					u64 *max_usable_bytes, u64 *map_count,
+					u64 *section_map_size_bytes, bool *skipped)
+{
+	(void)bad_nid;
+	(void)required_bytes;
+	(void)max_usable_bytes;
+	(void)map_count;
+	(void)section_map_size_bytes;
+	(void)skipped;
+	return 0;
+}
+
+#endif /* CONFIG_SPARSEMEM */
 
 /*
  * The scratch areas are scaled by default as percent of memory allocated from
@@ -1258,6 +1610,50 @@ struct kho_in {
 
 static struct kho_in kho_in = {
 };
+
+static void kho_scratch_sanity_workfn(struct work_struct *work)
+{
+	int bad_nid;
+	u64 required_bytes;
+	u64 section_map_size;
+	u64 map_count;
+	u64 max_usable_bytes;
+	bool skipped;
+	int err;
+
+	if (!kho_enable || kho_in.scratch_phys)
+		return;
+
+	err = kho_check_scratch_for_sparse(&bad_nid, &required_bytes,
+					   &max_usable_bytes, &map_count,
+					   &section_map_size, &skipped);
+	if (skipped) {
+		pr_warn_once("scratch: sparsemem sanity skipped (temp alloc unavailable)\n");
+		return;
+	}
+
+	if (err != -ENOMEM)
+		return;
+
+	pr_warn_once("scratch: node%d max=%lluMiB need=%lluMiB for sparse_buffer_init(map_count=%llu section_map_size=%lluKiB); kexec may fail\n",
+		     bad_nid,
+		     (unsigned long long)(max_usable_bytes >> 20),
+		     (unsigned long long)(required_bytes >> 20),
+		     (unsigned long long)map_count,
+		     (unsigned long long)(section_map_size >> 10));
+}
+
+static DECLARE_WORK(kho_scratch_sanity_work, kho_scratch_sanity_workfn);
+
+static int __init kho_scratch_sanity_init(void)
+{
+	if (!kho_enable || kho_in.scratch_phys)
+		return 0;
+
+	queue_work(system_long_wq, &kho_scratch_sanity_work);
+	return 0;
+}
+late_initcall(kho_scratch_sanity_init);
 
 static const void *kho_get_fdt(void)
 {
