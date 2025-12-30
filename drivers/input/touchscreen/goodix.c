@@ -160,6 +160,22 @@ static const struct dmi_system_id inverted_x_screen[] = {
 	{}
 };
 
+/*
+ * Those tablets have their y coordinate inverted
+ */
+static const struct dmi_system_id inverted_y_screen[] = {
+#if defined(CONFIG_DMI) && defined(CONFIG_X86)
+	{
+		.ident = "SUPI S10",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "SUPI"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "S10")
+		},
+	},
+#endif
+	{}
+};
+
 /**
  * goodix_i2c_read - read data from a register of the i2c slave device.
  *
@@ -1210,6 +1226,12 @@ retry_read_config:
 		ts->prop.invert_x = true;
 		dev_dbg(&ts->client->dev,
 			"Applying 'inverted x screen' quirk\n");
+	}
+
+	if (dmi_check_system(inverted_y_screen)) {
+		ts->prop.invert_y = true;
+		dev_dbg(&ts->client->dev,
+			"Applying 'inverted y screen' quirk\n");
 	}
 
 	error = input_mt_init_slots(ts->input_dev, ts->max_touch_num,
