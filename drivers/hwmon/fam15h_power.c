@@ -241,7 +241,7 @@ static ssize_t power1_average_show(struct device *dev,
 		}
 		tdelta = data->cpu_sw_pwr_ptsc[cu] - prev_ptsc[cu];
 		jdelta[cu] *= data->cpu_pwr_sample_ratio * 1000;
-		do_div(jdelta[cu], tdelta);
+		jdelta[cu] = div64_u64(jdelta[cu], tdelta);
 
 		/* the unit is microWatt */
 		avg_acc += jdelta[cu];
