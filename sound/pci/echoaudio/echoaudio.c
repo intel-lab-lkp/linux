@@ -2155,7 +2155,7 @@ static int snd_echo_resume(struct device *dev)
 	}
 
 	/* Temporarily set chip->pipe_alloc_mask=0 otherwise
-	 * restore_dsp_settings() fails.
+	 * restore_dsp_rettings() fails.
 	 */
 	pipe_alloc_mask = chip->pipe_alloc_mask;
 	chip->pipe_alloc_mask = 0;
