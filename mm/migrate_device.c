@@ -195,8 +195,8 @@ static int migrate_vma_collect_huge_pmd(pmd_t *pmdp, unsigned long start,
 		return migrate_vma_collect_skip(start, end, walk);
 	}
 
-	if (thp_migration_supported() &&
-		(migrate->flags & MIGRATE_VMA_SELECT_COMPOUND) &&
+#ifdef CONFIG_ARCH_ENABLE_THP_MIGRATION
+	if ((migrate->flags & MIGRATE_VMA_SELECT_COMPOUND) &&
 		(IS_ALIGNED(start, HPAGE_PMD_SIZE) &&
 		 IS_ALIGNED(end, HPAGE_PMD_SIZE))) {
 
@@ -228,6 +228,7 @@ static int migrate_vma_collect_huge_pmd(pmd_t *pmdp, unsigned long start,
 	}
 
 fallback:
+#endif
 	spin_unlock(ptl);
 	if (!folio_test_large(folio))
 		goto done;

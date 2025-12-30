@@ -339,18 +339,6 @@ static inline pmd_t swp_entry_to_pmd(swp_entry_t entry)
 }
 
 #else  /* CONFIG_ARCH_ENABLE_THP_MIGRATION */
-static inline int set_pmd_migration_entry(struct page_vma_mapped_walk *pvmw,
-		struct page *page)
-{
-	BUILD_BUG();
-}
-
-static inline void remove_migration_pmd(struct page_vma_mapped_walk *pvmw,
-		struct page *new)
-{
-	BUILD_BUG();
-}
-
 static inline void pmd_migration_entry_wait(struct mm_struct *m, pmd_t *p) { }
 
 static inline pmd_t swp_entry_to_pmd(swp_entry_t entry)

@@ -354,33 +354,24 @@ static inline void folio_add_large_mapcount(struct folio *folio,
 	atomic_add(diff, &folio->_large_mapcount);
 }
 
-static inline int folio_add_return_large_mapcount(struct folio *folio,
-		int diff, struct vm_area_struct *vma)
-{
-	BUILD_BUG();
-}
-
 static inline void folio_sub_large_mapcount(struct folio *folio,
 		int diff, struct vm_area_struct *vma)
 {
 	atomic_sub(diff, &folio->_large_mapcount);
 }
 
-static inline int folio_sub_return_large_mapcount(struct folio *folio,
-		int diff, struct vm_area_struct *vma)
-{
-	BUILD_BUG();
-}
 #endif /* CONFIG_MM_ID */
 
 #define folio_inc_large_mapcount(folio, vma) \
 	folio_add_large_mapcount(folio, 1, vma)
-#define folio_inc_return_large_mapcount(folio, vma) \
-	folio_add_return_large_mapcount(folio, 1, vma)
 #define folio_dec_large_mapcount(folio, vma) \
 	folio_sub_large_mapcount(folio, 1, vma)
+#ifdef CONFIG_NO_PAGE_MAPCOUNT
+#define folio_inc_return_large_mapcount(folio, vma) \
+	folio_add_return_large_mapcount(folio, 1, vma)
 #define folio_dec_return_large_mapcount(folio, vma) \
 	folio_sub_return_large_mapcount(folio, 1, vma)
+#endif
 
 /* RMAP flags, currently only relevant for some anon rmap operations. */
 typedef int __bitwise rmap_t;
