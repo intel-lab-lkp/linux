@@ -3225,11 +3225,8 @@ static void intel_cx0pll_enable(struct intel_encoder *encoder,
 {
 	int port_clock = pll_state->use_c10 ? pll_state->c10.clock : pll_state->c20.clock;
 	struct intel_display *display = to_intel_display(encoder);
-	enum phy phy = intel_encoder_to_phy(encoder);
 	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
 	bool lane_reversal = dig_port->lane_reversal;
-	u8 maxpclk_lane = lane_reversal ? INTEL_CX0_LANE1 :
-					  INTEL_CX0_LANE0;
 	struct ref_tracker *wakeref = intel_cx0_phy_transaction_begin(encoder);
 
 	/*
@@ -3283,27 +3280,6 @@ static void intel_cx0pll_enable(struct intel_encoder *encoder,
 	 * clock frequency.
 	 */
 	intel_de_write(display, DDI_CLK_VALFREQ(encoder->port), port_clock);
-
-	/*
-	 * 9. Set PORT_CLOCK_CTL register PCLK PLL Request
-	 * LN<Lane for maxPCLK> to "1" to enable PLL.
-	 */
-	intel_de_rmw(display, XELPDP_PORT_CLOCK_CTL(display, encoder->port),
-		     intel_cx0_get_pclk_pll_request(INTEL_CX0_BOTH_LANES),
-		     intel_cx0_get_pclk_pll_request(maxpclk_lane));
-
-	/* 10. Poll on PORT_CLOCK_CTL PCLK PLL Ack LN<Lane for maxPCLK> == "1". */
-	if (intel_de_wait_us(display, XELPDP_PORT_CLOCK_CTL(display, encoder->port),
-			     intel_cx0_get_pclk_pll_ack(INTEL_CX0_BOTH_LANES),
-			     intel_cx0_get_pclk_pll_ack(maxpclk_lane),
-			     XELPDP_PCLK_PLL_ENABLE_TIMEOUT_US, NULL))
-		drm_warn(display->drm, "Port %c PLL not locked\n",
-			 phy_name(phy));
-
-	/*
-	 * 11. Follow the Display Voltage Frequency Switching Sequence After
-	 * Frequency Change. We handle this step in bxt_set_cdclk().
-	 */
 
 	/*
 	 * 12. Toggle powerdown if HDMI is enabled on C10 PHY.
@@ -3403,6 +3379,42 @@ static int intel_mtl_tbt_clock_select(struct intel_display *display,
 	}
 }
 
+static void intel_cx0pll_enable_clock(struct intel_encoder *encoder)
+{
+	struct intel_display *display = to_intel_display(encoder);
+	enum phy phy = intel_encoder_to_phy(encoder);
+	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
+	bool lane_reversal = dig_port->lane_reversal;
+					  INTEL_CX0_LANE0;
+	u8 maxpclk_lane = lane_reversal ? INTEL_CX0_LANE1 :
+					INTEL_CX0_LANE0;
+
+	struct ref_tracker *wakeref = intel_cx0_phy_transaction_begin(encoder);
+
+	/*
+	 * 9. Set PORT_CLOCK_CTL register PCLK PLL Request
+	 * LN<Lane for maxPCLK> to "1" to enable PLL.
+	 */
+	intel_de_rmw(display, XELPDP_PORT_CLOCK_CTL(display, encoder->port),
+		     intel_cx0_get_pclk_pll_request(INTEL_CX0_BOTH_LANES),
+		     intel_cx0_get_pclk_pll_request(maxpclk_lane));
+
+	/* 10. Poll on PORT_CLOCK_CTL PCLK PLL Ack LN<Lane for maxPCLK> == "1". */
+	if (intel_de_wait_us(display, XELPDP_PORT_CLOCK_CTL(display, encoder->port),
+			     intel_cx0_get_pclk_pll_ack(INTEL_CX0_BOTH_LANES),
+			     intel_cx0_get_pclk_pll_ack(maxpclk_lane),
+			     XELPDP_PCLK_PLL_ENABLE_TIMEOUT_US, NULL))
+		drm_warn(display->drm, "Port %c PLL not locked\n",
+			 phy_name(phy));
+
+	/*
+	 * 11. Follow the Display Voltage Frequency Switching Sequence After
+	 * Frequency Change. We handle this step in bxt_set_cdclk().
+	 */
+
+	intel_cx0_phy_transaction_end(encoder, wakeref);
+}
+
 void intel_mtl_tbt_pll_enable_clock(struct intel_encoder *encoder, int port_clock)
 {
 	struct intel_display *display = to_intel_display(encoder);
@@ -3472,6 +3484,8 @@ void intel_mtl_pll_enable_clock(struct intel_encoder *encoder,
 
 	if (intel_tc_port_in_tbt_alt_mode(dig_port))
 		intel_mtl_tbt_pll_enable_clock(encoder, crtc_state->port_clock);
+	else
+		intel_cx0pll_enable_clock(encoder);
 }
 
 /*
@@ -3567,12 +3581,6 @@ static void intel_cx0pll_disable(struct intel_encoder *encoder)
 	 * Frequency Change. We handle this step in bxt_set_cdclk().
 	 */
 
-	/* 7. Program PORT_CLOCK_CTL register to disable and gate clocks. */
-	intel_de_rmw(display, XELPDP_PORT_CLOCK_CTL(display, encoder->port),
-		     XELPDP_DDI_CLOCK_SELECT_MASK(display), 0);
-	intel_de_rmw(display, XELPDP_PORT_CLOCK_CTL(display, encoder->port),
-		     XELPDP_FORWARD_CLOCK_UNGATE, 0);
-
 	intel_cx0_phy_transaction_end(encoder, wakeref);
 }
 
@@ -3584,6 +3592,20 @@ static bool intel_cx0_pll_is_enabled(struct intel_encoder *encoder)
 
 	return intel_de_read(display, XELPDP_PORT_CLOCK_CTL(display, encoder->port)) &
 			     intel_cx0_get_pclk_pll_request(lane);
+}
+
+static void intel_cx0pll_disable_clock(struct intel_encoder *encoder)
+{
+	struct intel_display *display = to_intel_display(encoder);
+	struct ref_tracker *wakeref = intel_cx0_phy_transaction_begin(encoder);
+
+	/* 7. Program PORT_CLOCK_CTL register to disable and gate clocks. */
+	intel_de_rmw(display, XELPDP_PORT_CLOCK_CTL(display, encoder->port),
+		     XELPDP_DDI_CLOCK_SELECT_MASK(display), 0);
+	intel_de_rmw(display, XELPDP_PORT_CLOCK_CTL(display, encoder->port),
+		     XELPDP_FORWARD_CLOCK_UNGATE, 0);
+
+	intel_cx0_phy_transaction_end(encoder, wakeref);
 }
 
 void intel_mtl_tbt_pll_disable_clock(struct intel_encoder *encoder)
@@ -3635,6 +3657,9 @@ void intel_mtl_pll_disable_clock(struct intel_encoder *encoder)
 
 	if (intel_tc_port_in_tbt_alt_mode(dig_port))
 		intel_mtl_tbt_pll_disable_clock(encoder);
+	else
+		intel_cx0pll_disable_clock(encoder);
+
 }
 
 enum icl_port_dpll_id
@@ -3783,6 +3808,8 @@ void intel_cx0_pll_power_save_wa(struct intel_display *display)
 			    encoder->base.base.id, encoder->base.name);
 
 		intel_cx0pll_enable(encoder, &pll_state);
+		intel_cx0pll_enable_clock(encoder);
 		intel_cx0pll_disable(encoder);
+		intel_cx0pll_disable_clock(encoder);
 	}
 }

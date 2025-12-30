@@ -186,11 +186,13 @@ void assert_dpll(struct intel_display *display,
 		     "asserting DPLL %s with no DPLL\n", str_on_off(state)))
 		return;
 
-	cur_state = intel_dpll_get_hw_state(display, pll, &hw_state);
-	INTEL_DISPLAY_STATE_WARN(display, cur_state != state,
-				 "%s assertion failure (expected %s, current %s)\n",
-				 pll->info->name, str_on_off(state),
-				 str_on_off(cur_state));
+	if (DISPLAY_VER(display) < 14) {
+		cur_state = intel_dpll_get_hw_state(display, pll, &hw_state);
+		INTEL_DISPLAY_STATE_WARN(display, cur_state != state,
+					 "%s assertion failure (expected %s, current %s)\n",
+					 pll->info->name, str_on_off(state),
+					 str_on_off(cur_state));
+	}
 }
 
 static enum tc_port icl_pll_id_to_tc_port(enum intel_dpll_id id)
