@@ -1847,7 +1847,8 @@ int amdgpu_display_resume_helper(struct amdgpu_device *adev)
 	return 0;
 }
 
-/* panic_bo is set in amdgpu_dm_plane_get_scanout_buffer() and only used in amdgpu_dm_set_pixel()
+/* panic_abo is set in amdgpu_display_get_scanout_buffer() and only
+ * used in amdgpu_display_set_pixel()
  * they are called from the panic handler, and protected by the drm_panic spinlock.
  */
 static struct amdgpu_bo *panic_abo;
