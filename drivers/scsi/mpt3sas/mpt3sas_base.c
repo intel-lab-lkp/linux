@@ -3238,7 +3238,11 @@ _base_assign_reply_queues(struct MPT3SAS_ADAPTER *ioc)
 		 * corresponding to high iops queues.
 		 */
 		if (ioc->high_iops_queues) {
-			mask = cpumask_of_node(dev_to_node(&ioc->pdev->dev));
+			int nid = dev_to_node(&ioc->pdev->dev);
+
+			if (nid == NUMA_NO_NODE)
+				nid = 0;
+			mask = cpumask_of_node(nid);
 			for (index = 0; index < ioc->high_iops_queues;
 			    index++) {
 				irq = pci_irq_vector(ioc->pdev, index);
