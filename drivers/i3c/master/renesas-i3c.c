@@ -259,7 +259,8 @@ struct renesas_i3c {
 	u8 addrs[RENESAS_I3C_MAX_DEVS];
 	struct renesas_i3c_xferqueue xferqueue;
 	void __iomem *regs;
-	struct clk *tclk;
+	struct clk_bulk_data clks[3];
+	u8 num_clks;
 };
 
 struct renesas_i3c_i2c_dev_data {
@@ -274,6 +275,10 @@ struct renesas_i3c_irq_desc {
 
 struct renesas_i3c_config {
 	unsigned int has_pclkrw:1;
+};
+
+static const char * const renesas_i3c_clks[] = {
+	"pclk", "tclk", "pclkrw"
 };
 
 static inline void renesas_i3c_reg_update(void __iomem *reg, u32 mask, u32 val)
@@ -489,7 +494,7 @@ static int renesas_i3c_bus_init(struct i3c_master_controller *m)
 	int od_high_ticks, od_low_ticks, i2c_total_ticks;
 	int ret;
 
-	rate = clk_get_rate(i3c->tclk);
+	rate = clk_get_rate(i3c->clks[1].clk);
 	if (!rate)
 		return -EINVAL;
 
@@ -1298,11 +1303,17 @@ static const struct renesas_i3c_irq_desc renesas_i3c_irqs[] = {
 	{ .name = "nack", .isr = renesas_i3c_tend_isr, .desc = "i3c-nack" },
 };
 
+static void renesas_i3c_clk_bulk_disable_unprepare(void *data)
+{
+	struct renesas_i3c *i3c = data;
+
+	clk_bulk_disable_unprepare(i3c->num_clks, i3c->clks);
+}
+
 static int renesas_i3c_probe(struct platform_device *pdev)
 {
 	struct renesas_i3c *i3c;
 	struct reset_control *reset;
-	struct clk *clk;
 	const struct renesas_i3c_config *config = of_device_get_match_data(&pdev->dev);
 	int ret, i;
 
@@ -1317,19 +1328,22 @@ static int renesas_i3c_probe(struct platform_device *pdev)
 	if (IS_ERR(i3c->regs))
 		return PTR_ERR(i3c->regs);
 
-	clk = devm_clk_get_enabled(&pdev->dev, "pclk");
-	if (IS_ERR(clk))
-		return PTR_ERR(clk);
+	i3c->num_clks = config->has_pclkrw ? 3 : 2;
 
-	if (config->has_pclkrw) {
-		clk = devm_clk_get_enabled(&pdev->dev, "pclkrw");
-		if (IS_ERR(clk))
-			return PTR_ERR(clk);
-	}
+	for (i = 0; i < i3c->num_clks; i++)
+		i3c->clks[i].id = renesas_i3c_clks[i];
 
-	i3c->tclk = devm_clk_get_enabled(&pdev->dev, "tclk");
-	if (IS_ERR(i3c->tclk))
-		return PTR_ERR(i3c->tclk);
+	ret = devm_clk_bulk_get(&pdev->dev, i3c->num_clks, i3c->clks);
+	if (ret)
+		return ret;
+
+	ret = clk_bulk_prepare_enable(i3c->num_clks, i3c->clks);
+	if (ret)
+		return ret;
+
+	ret = devm_add_action_or_reset(&pdev->dev, renesas_i3c_clk_bulk_disable_unprepare, i3c);
+	if (ret)
+		return ret;
 
 	reset = devm_reset_control_get_optional_exclusive_deasserted(&pdev->dev, "tresetn");
 	if (IS_ERR(reset))
