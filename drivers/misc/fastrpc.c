@@ -1830,13 +1830,13 @@ static int fastrpc_req_munmap_impl(struct fastrpc_user *fl, struct fastrpc_buf *
 	err = fastrpc_internal_invoke(fl, true, FASTRPC_INIT_HANDLE, sc,
 				      &args[0]);
 	if (!err) {
-		dev_dbg(dev, "unmmap\tpt 0x%09lx OK\n", buf->raddr);
+		dev_dbg(dev, "unmap OK: raddr=%p\n", (void *)(unsigned long)buf->raddr);
 		spin_lock(&fl->lock);
 		list_del(&buf->node);
 		spin_unlock(&fl->lock);
 		fastrpc_buf_free(buf);
 	} else {
-		dev_err(dev, "unmmap\tpt 0x%09lx ERROR\n", buf->raddr);
+		dev_err(dev, "unmap error: raddr=%p\n", (void *)(unsigned long)buf->raddr);
 	}
 
 	return err;
@@ -1861,8 +1861,8 @@ static int fastrpc_req_munmap(struct fastrpc_user *fl, char __user *argp)
 	spin_unlock(&fl->lock);
 
 	if (!buf) {
-		dev_err(dev, "mmap\t\tpt 0x%09llx [len 0x%08llx] not in list\n",
-			req.vaddrout, req.size);
+		dev_err(dev, "buffer not found: addr=%p [len=0x%08llx]\n",
+			(void *)(unsigned long)req.vaddrout, req.size);
 		return -EINVAL;
 	}
 
@@ -1959,8 +1959,8 @@ static int fastrpc_req_mmap(struct fastrpc_user *fl, char __user *argp)
 		goto err_assign;
 	}
 
-	dev_dbg(dev, "mmap\t\tpt 0x%09lx OK [len 0x%08llx]\n",
-		buf->raddr, buf->size);
+	dev_dbg(dev, "mmap OK: raddr=%p [len=0x%08llx]\n",
+		(void *)(unsigned long)buf->raddr, buf->size);
 
 	return 0;
 
@@ -2006,7 +2006,8 @@ static int fastrpc_req_mem_unmap_impl(struct fastrpc_user *fl, struct fastrpc_me
 	err = fastrpc_internal_invoke(fl, true, FASTRPC_INIT_HANDLE, sc,
 				      &args[0]);
 	if (err) {
-		dev_err(dev, "unmmap\tpt fd = %d, 0x%09llx error\n",  map->fd, map->raddr);
+		dev_err(dev, "unmap error: fd=%d, raddr=%p\n",
+			map->fd, (void *)(unsigned long)map->raddr);
 		return err;
 	}
 	fastrpc_map_put(map);
@@ -2074,8 +2075,8 @@ static int fastrpc_req_mem_map(struct fastrpc_user *fl, char __user *argp)
 	sc = FASTRPC_SCALARS(FASTRPC_RMID_INIT_MEM_MAP, 3, 1);
 	err = fastrpc_internal_invoke(fl, true, FASTRPC_INIT_HANDLE, sc, &args[0]);
 	if (err) {
-		dev_err(dev, "mem mmap error, fd %d, vaddr %llx, size %lld\n",
-			req.fd, req.vaddrin, map->len);
+		dev_err(dev, "mem mmap error: fd=%d, vaddrin=%p, size=%lld\n",
+			req.fd, (void *)(unsigned long)req.vaddrin, map->len);
 		goto err_invoke;
 	}
 
