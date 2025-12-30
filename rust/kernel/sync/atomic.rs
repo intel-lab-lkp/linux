@@ -158,6 +158,7 @@ impl<T: AtomicType> Atomic<T> {
     ///
     /// - `ptr` is aligned to `align_of::<T>()`.
     /// - `ptr` is valid for reads and writes for `'a`.
+    /// - If `T` is `bool`, only the bit patterns 0 (`false`) and 1 (`true`) are valid.
     /// - For the duration of `'a`, other accesses to `*ptr` must not cause data races (defined
     ///   by [`LKMM`]) against atomic operations on the returned reference. Note that if all other
     ///   accesses are atomic, then this safety requirement is trivially fulfilled.

@@ -16,6 +16,7 @@ mod private {
 // The C side supports atomic primitives only for `i32` and `i64` (`atomic_t` and `atomic64_t`),
 // while the Rust side also layers provides atomic support for `i8` and `i16`
 // on top of lower-level C primitives.
+impl private::Sealed for bool {}
 impl private::Sealed for i8 {}
 impl private::Sealed for i16 {}
 impl private::Sealed for i32 {}
@@ -35,6 +36,13 @@ pub trait AtomicImpl: Sized + Send + Copy + private::Sealed {
     /// For example, in `atomic_add(ptr, v)`, it's the type of `v`. Usually it's the same type of
     /// [`Self`], but it may be different for the atomic pointer type.
     type Delta;
+}
+
+// The current helpers of load/store uses `{WRITE,READ}_ONCE()` hence the atomicity is only
+// guaranteed against read-modify-write operations if the architecture supports native atomic RmW.
+#[cfg(CONFIG_ARCH_SUPPORTS_ATOMIC_RMW)]
+impl AtomicImpl for bool {
+    type Delta = Self;
 }
 
 // The current helpers of load/store uses `{WRITE,READ}_ONCE()` hence the atomicity is only
