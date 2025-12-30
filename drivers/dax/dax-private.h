@@ -129,4 +129,30 @@ static inline bool dax_align_valid(unsigned long align)
 	return align == PAGE_SIZE;
 }
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
+
+#ifndef copy_mc_to_kernel
+static inline int dax_test_page_mc(const struct page *page)
+{
+	return 0;
+}
+static inline int dax_test_folio_mc(const struct folio *page)
+{
+	return 0;
+}
+#else
+#include <linux/uaccess.h>
+static inline int dax_test_page_mc(const struct page *page)
+{
+	struct page _p;
+
+	return copy_mc_to_kernel(&_p, page, sizeof(struct page));
+}
+static inline int dax_test_folio_mc(const struct folio *folio)
+{
+	struct folio _f;
+
+	return copy_mc_to_kernel(&_f, folio, sizeof(struct folio));
+}
+#endif
+#endif
 #endif
