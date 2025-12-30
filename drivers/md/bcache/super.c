@@ -41,7 +41,7 @@ static const char invalid_uuid[] = {
 
 static struct kobject *bcache_kobj;
 struct mutex bch_register_lock;
-bool bcache_is_reboot;
+atomic_t bcache_is_reboot = ATOMIC_INIT(0);
 LIST_HEAD(bch_cache_sets);
 static LIST_HEAD(uncached_devices);
 
@@ -2561,10 +2561,8 @@ static ssize_t register_bcache(struct kobject *k, struct kobj_attribute *attr,
 	if (!try_module_get(THIS_MODULE))
 		goto out;
 
-	/* For latest state of bcache_is_reboot */
-	smp_mb();
 	err = "bcache is in reboot";
-	if (bcache_is_reboot)
+	if (atomic_read(&bcache_is_reboot))
 		goto out_module_put;
 
 	ret = -ENOMEM;
@@ -2735,7 +2733,7 @@ static ssize_t bch_pending_bdevs_cleanup(struct kobject *k,
 
 static int bcache_reboot(struct notifier_block *n, unsigned long code, void *x)
 {
-	if (bcache_is_reboot)
+	if (atomic_read(&bcache_is_reboot))
 		return NOTIFY_DONE;
 
 	if (code == SYS_DOWN ||
@@ -2750,16 +2748,11 @@ static int bcache_reboot(struct notifier_block *n, unsigned long code, void *x)
 
 		mutex_lock(&bch_register_lock);
 
-		if (bcache_is_reboot)
+		if (atomic_read(&bcache_is_reboot))
 			goto out;
 
 		/* New registration is rejected since now */
-		bcache_is_reboot = true;
-		/*
-		 * Make registering caller (if there is) on other CPU
-		 * core know bcache_is_reboot set to true earlier
-		 */
-		smp_mb();
+		atomic_set(&bcache_is_reboot, 1);
 
 		if (list_empty(&bch_cache_sets) &&
 		    list_empty(&uncached_devices))
@@ -2935,7 +2928,7 @@ static int __init bcache_init(void)
 
 	bch_debug_init();
 
-	bcache_is_reboot = false;
+	atomic_set(&bcache_is_reboot, 0);
 
 	return 0;
 err:
