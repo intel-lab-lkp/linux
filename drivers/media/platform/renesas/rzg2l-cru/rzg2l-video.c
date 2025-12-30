@@ -709,7 +709,6 @@ irqreturn_t rzg3e_cru_irq(int irq, void *data)
 			return IRQ_HANDLED;
 
 		dev_dbg(cru->dev, "Current written slot: %d\n", slot);
-		cru->buf_addr[slot] = 0;
 
 		/*
 		 * To hand buffers back in a known order to userspace start
