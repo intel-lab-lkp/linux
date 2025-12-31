@@ -1325,6 +1325,7 @@ static struct pci_driver iwl_pci_driver = {
 	.id_table = iwl_hw_card_ids,
 	.probe = iwl_pci_probe,
 	.remove = iwl_pci_remove,
+	.shutdown = iwl_pci_remove,
 	.driver.pm = IWL_PM_OPS,
 	.driver.coredump = iwl_pci_dump,
 };
