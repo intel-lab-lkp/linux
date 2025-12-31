@@ -132,15 +132,15 @@ struct btrfs_space_info {
 	/* Chunk size in bytes */
 	u64 chunk_size;
 
+	int clamp;		/* Used to scale our threshold for preemptive
+				   flushing. The value is >> clamp, so turns
+				   out to be a 2^clamp divisor. */
+
 	/*
 	 * Once a block group drops below this threshold (percents) we'll
 	 * schedule it for reclaim.
 	 */
-	int bg_reclaim_threshold;
-
-	int clamp;		/* Used to scale our threshold for preemptive
-				   flushing. The value is >> clamp, so turns
-				   out to be a 2^clamp divisor. */
+	u8 bg_reclaim_threshold;
 
 	bool full;		/* indicates that we cannot allocate any more
 				   chunks for this space */
@@ -303,7 +303,7 @@ u64 btrfs_account_ro_block_groups_free_space(struct btrfs_space_info *sinfo);
 
 void btrfs_space_info_update_reclaimable(struct btrfs_space_info *space_info, s64 bytes);
 void btrfs_set_periodic_reclaim_ready(struct btrfs_space_info *space_info, bool ready);
-int btrfs_calc_reclaim_threshold(const struct btrfs_space_info *space_info);
+u8 btrfs_calc_reclaim_threshold(const struct btrfs_space_info *space_info);
 void btrfs_reclaim_sweep(const struct btrfs_fs_info *fs_info);
 void btrfs_return_free_space(struct btrfs_space_info *space_info, u64 len);
 
