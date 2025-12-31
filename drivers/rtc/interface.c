@@ -964,6 +964,7 @@ again:
 			timer->enabled = 1;
 			timerqueue_add(&rtc->timerqueue, &timer->node);
 			trace_rtc_timer_enqueue(timer);
+			cond_resched();
 		}
 	}
 
