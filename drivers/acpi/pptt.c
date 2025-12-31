@@ -529,6 +529,79 @@ static void acpi_pptt_warn_missing(void)
 	pr_warn_once("No PPTT table found, CPU and cache topology may be inaccurate\n");
 }
 
+static void acpi_dump_pptt_table(struct acpi_table_header *table_hdr)
+{
+	struct acpi_subtable_header *entry, *entry_start;
+	unsigned long end;
+	struct acpi_pptt_processor *cpu;
+	struct acpi_pptt_cache *cache;
+	u32 entry_sz, i;
+	u8 len;
+	static bool dumped;
+
+	/* PPTT table could be pretty big, no need to dump it twice */
+	if (dumped)
+		return;
+	dumped = true;
+
+	end = (unsigned long)table_hdr + table_hdr->length;
+	entry_start = ACPI_ADD_PTR(struct acpi_subtable_header, table_hdr,
+			     sizeof(struct acpi_table_pptt));
+
+	pr_info("Processors:\n");
+	entry_sz = sizeof(struct acpi_pptt_processor);
+	entry = entry_start;
+	i = 0;
+	while ((unsigned long)entry + entry_sz <= end) {
+		len = entry->length;
+		if (!len) {
+			pr_warn("Invalid zero length subtable\n");
+			return;
+		}
+
+		cpu = (struct acpi_pptt_processor *)entry;
+		entry = ACPI_ADD_PTR(struct acpi_subtable_header, entry, len);
+
+		if (cpu->header.type != ACPI_PPTT_TYPE_PROCESSOR)
+			continue;
+
+		printk(KERN_INFO "P[%3d][0x%04lx]: parent=0x%04x acpi_proc_id=%3d num_res=%d flags=0x%02x(%s%s%s)\n",
+			i++, (unsigned long)cpu - (unsigned long)table_hdr,
+			cpu->parent, cpu->acpi_processor_id,
+			cpu->number_of_priv_resources, cpu->flags,
+			cpu->flags & ACPI_PPTT_PHYSICAL_PACKAGE ? "package" : "",
+			cpu->flags & ACPI_PPTT_ACPI_LEAF_NODE ? "leaf" : "",
+			cpu->flags & ACPI_PPTT_ACPI_PROCESSOR_IS_THREAD ? ", thread" : ""
+			);
+
+	}
+
+	pr_info("Caches:\n");
+	entry_sz = sizeof(struct acpi_pptt_cache);
+	entry = entry_start;
+	i = 0;
+	while ((unsigned long)entry + entry_sz <= end) {
+		len = entry->length;
+		if (!len) {
+			pr_warn("Invalid zero length subtable\n");
+			return;
+		}
+
+		cache = (struct acpi_pptt_cache *)entry;
+		entry = ACPI_ADD_PTR(struct acpi_subtable_header, entry, len);
+
+		if (cache->header.type != ACPI_PPTT_TYPE_CACHE)
+			continue;
+
+		printk(KERN_INFO "C[%4d][0x%04lx]: flags=0x%02x next_level=0x%04x size=0x%-8x sets=%-6d way=%-2d attribute=0x%-2x line_size=%d\n",
+			i++, (unsigned long)cache - (unsigned long)table_hdr,
+			cache->flags, cache->next_level_of_cache, cache->size,
+			cache->number_of_sets, cache->associativity,
+			cache->attributes, cache->line_size
+			);
+	}
+}
+
 /**
  * topology_get_acpi_cpu_tag() - Find a unique topology value for a feature
  * @table: Pointer to the head of the PPTT table
@@ -565,6 +638,8 @@ static int topology_get_acpi_cpu_tag(struct acpi_table_header *table,
 	}
 	pr_warn_once("PPTT table found, but unable to locate core %d (%d)\n",
 		    cpu, acpi_cpu_id);
+
+	acpi_dump_pptt_table(table);
 	return -ENOENT;
 }
 
