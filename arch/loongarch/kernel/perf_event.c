@@ -633,15 +633,24 @@ static int validate_group(struct perf_event *event)
 
 	memset(&fake_cpuc, 0, sizeof(fake_cpuc));
 
-	if (loongarch_pmu_alloc_counter(&fake_cpuc, &leader->hw) < 0)
+	if ((PERF_TYPE_HARDWARE == leader->attr.type ||
+	     PERF_TYPE_HW_CACHE == leader->attr.type ||
+	     PERF_TYPE_RAW == leader->attr.type) &&
+	    loongarch_pmu_alloc_counter(&fake_cpuc, &leader->hw) < 0)
 		return -EINVAL;
 
 	for_each_sibling_event(sibling, leader) {
-		if (loongarch_pmu_alloc_counter(&fake_cpuc, &sibling->hw) < 0)
+		if ((PERF_TYPE_HARDWARE == sibling->attr.type ||
+		     PERF_TYPE_HW_CACHE == sibling->attr.type ||
+		     PERF_TYPE_RAW == sibling->attr.type) &&
+		    loongarch_pmu_alloc_counter(&fake_cpuc, &sibling->hw) < 0)
 			return -EINVAL;
 	}
 
-	if (loongarch_pmu_alloc_counter(&fake_cpuc, &event->hw) < 0)
+	if ((PERF_TYPE_HARDWARE == event->attr.type ||
+	     PERF_TYPE_HW_CACHE == event->attr.type ||
+	     PERF_TYPE_RAW == event->attr.type) &&
+	    loongarch_pmu_alloc_counter(&fake_cpuc, &event->hw) < 0)
 		return -EINVAL;
 
 	return 0;
