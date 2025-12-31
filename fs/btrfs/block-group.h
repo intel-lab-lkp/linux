@@ -162,10 +162,10 @@ struct btrfs_block_group {
 
 	unsigned int ro;
 
-	int disk_cache_state;
+	enum btrfs_disk_cache_state disk_cache_state;
 
 	/* Cache tracking stuff */
-	int cached;
+	enum btrfs_caching_type cached;
 	struct btrfs_caching_control *caching_ctl;
 
 	struct btrfs_space_info *space_info;
@@ -383,7 +383,7 @@ static inline u64 btrfs_system_alloc_profile(struct btrfs_fs_info *fs_info)
 	return btrfs_get_alloc_profile(fs_info, BTRFS_BLOCK_GROUP_SYSTEM);
 }
 
-static inline int btrfs_block_group_done(const struct btrfs_block_group *cache)
+static inline bool btrfs_block_group_done(const struct btrfs_block_group *cache)
 {
 	smp_mb();
 	return cache->cached == BTRFS_CACHE_FINISHED ||
