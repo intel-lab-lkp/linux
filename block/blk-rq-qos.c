@@ -347,11 +347,10 @@ void rq_qos_del(struct rq_qos *rqos)
 {
 	struct request_queue *q = rqos->disk->queue;
 	struct rq_qos **cur;
-	unsigned int memflags;
 
+	WARN_ON_ONCE(q->mq_freeze_depth == 0);
 	lockdep_assert_held(&q->rq_qos_mutex);
 
-	memflags = blk_mq_freeze_queue(q);
 	for (cur = &q->rq_qos; *cur; cur = &(*cur)->next) {
 		if (*cur == rqos) {
 			*cur = rqos->next;
@@ -360,5 +359,4 @@ void rq_qos_del(struct rq_qos *rqos)
 	}
 	if (!q->rq_qos)
 		blk_queue_flag_clear(QUEUE_FLAG_QOS_ENABLED, q);
-	blk_mq_unfreeze_queue(q, memflags);
 }
