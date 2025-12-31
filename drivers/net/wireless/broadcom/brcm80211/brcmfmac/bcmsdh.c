@@ -954,6 +954,7 @@ int brcmf_sdiod_probe(struct brcmf_sdio_dev *sdiodev)
 	sdiodev->bus = brcmf_sdio_probe(sdiodev);
 	if (IS_ERR(sdiodev->bus)) {
 		ret = PTR_ERR(sdiodev->bus);
+		sdiodev->bus = NULL;
 		goto out;
 	}
 	brcmf_sdiod_host_fixup(sdiodev->func2->card->host);
