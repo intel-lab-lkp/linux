@@ -1011,7 +1011,9 @@ static int cfg80211_rtw_get_station(struct wiphy *wiphy,
 	     check_fwstate(pmlmepriv, WIFI_ADHOC_MASTER_STATE) ||
 	     check_fwstate(pmlmepriv, WIFI_AP_STATE)) &&
 	    check_fwstate(pmlmepriv, _FW_LINKED)) {
-		/* TODO: should acquire station info... */
+		ret = -ENOENT;
+		goto exit;
+
 	}
 
 exit:
