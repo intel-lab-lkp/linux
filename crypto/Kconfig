@@ -1000,6 +1000,13 @@ config CRYPTO_SHA3
 	help
 	  SHA-3 secure hash algorithms (FIPS 202, ISO/IEC 10118-3)
 
+config CRYPTO_ASCON_HASH
+	tristate "Ascon-Hash"
+	select CRYPTO_HASH
+	select CRYPTO_LIB_ASCON_HASH
+	help
+	  Ascon-Hash secure hash algorithms (NIST SP 800-232)
+
 config CRYPTO_SM3_GENERIC
 	tristate "SM3 (ShangMi 3)"
 	select CRYPTO_HASH
