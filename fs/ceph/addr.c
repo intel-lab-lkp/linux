@@ -1681,7 +1681,9 @@ retry:
 		tag_pages_for_writeback(mapping, ceph_wbc.index, ceph_wbc.end);
 
 	while (!has_writeback_done(&ceph_wbc)) {
-		ceph_wbc.locked_pages = 0;
+		BUG_ON(ceph_wbc.locked_pages);
+		BUG_ON(ceph_wbc.pages);
+
 		ceph_wbc.max_pages = ceph_wbc.wsize >> PAGE_SHIFT;
 
 get_more_pages:
@@ -1715,11 +1717,10 @@ process_folio_batch:
 		}
 
 		rc = ceph_submit_write(mapping, wbc, &ceph_wbc);
-		if (rc)
-			goto release_folios;
-
 		ceph_wbc.locked_pages = 0;
 		ceph_wbc.strip_unit_end = 0;
+		if (rc)
+			goto release_folios;
 
 		if (folio_batch_count(&ceph_wbc.fbatch) > 0) {
 			ceph_wbc.nr_folios =
