@@ -511,8 +511,7 @@ lpfc_config_port_post(struct lpfc_hba *phba)
 				"READ_CONFIG, mbxStatus x%x\n",
 				mb->mbxCommand, mb->mbxStatus);
 		phba->link_state = LPFC_HBA_ERROR;
-		mempool_free( pmb, phba->mbox_mem_pool);
-		return -EIO;
+		goto out_free;
 	}
 
 	/* Check if the port is disabled */
@@ -549,10 +548,9 @@ lpfc_config_port_post(struct lpfc_hba *phba)
 	 */
 	if (phba->intr_type == MSIX) {
 		rc = lpfc_config_msi(phba, pmb);
-		if (rc) {
-			mempool_free(pmb, phba->mbox_mem_pool);
-			return -EIO;
-		}
+		if (rc)
+			goto out_free;
+
 		rc = lpfc_sli_issue_mbox(phba, pmb, MBX_POLL);
 		if (rc != MBX_SUCCESS) {
 			lpfc_printf_log(phba, KERN_ERR, LOG_TRACE_EVENT,
@@ -560,8 +558,7 @@ lpfc_config_port_post(struct lpfc_hba *phba)
 					"failed, mbxCmd x%x, mbxStatus x%x\n",
 					pmb->u.mb.mbxCommand,
 					pmb->u.mb.mbxStatus);
-			mempool_free(pmb, phba->mbox_mem_pool);
-			return -EIO;
+			goto out_free;
 		}
 	}
 
@@ -572,7 +569,7 @@ lpfc_config_port_post(struct lpfc_hba *phba)
 	/* Enable appropriate host interrupts */
 	if (lpfc_readl(phba->HCregaddr, &status)) {
 		spin_unlock_irq(&phba->hbalock);
-		return -EIO;
+		goto out_free;
 	}
 	status |= HC_MBINT_ENA | HC_ERINT_ENA | HC_LAINT_ENA;
 	if (psli->num_rings > 0)
@@ -616,9 +613,7 @@ lpfc_config_port_post(struct lpfc_hba *phba)
 			lpfc_printf_log(phba, KERN_ERR, LOG_TRACE_EVENT,
 					"2599 Adapter failed to issue DOWN_LINK"
 					" mbox command rc 0x%x\n", rc);
-
-			mempool_free(pmb, phba->mbox_mem_pool);
-			return -EIO;
+			goto out_free;
 		}
 	} else if (phba->cfg_suppress_link_up == LPFC_INITIALIZE_LINK) {
 		mempool_free(pmb, phba->mbox_mem_pool);
@@ -666,6 +661,10 @@ lpfc_config_port_post(struct lpfc_hba *phba)
 	}
 
 	return 0;
+
+out_free:
+	mempool_free(pmb, phba->mbox_mem_pool);
+	return -EIO;
 }
 
 /**
