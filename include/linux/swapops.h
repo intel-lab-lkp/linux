@@ -140,7 +140,7 @@ static inline swp_entry_t make_readable_device_private_entry(pgoff_t offset)
 
 static inline swp_entry_t make_readable_device_private_entry_from_page(struct page *page)
 {
-	return swp_entry(SWP_DEVICE_READ, page_to_pfn(page));
+	return swp_entry(SWP_DEVICE_READ, device_private_page_to_offset(page));
 }
 
 static inline swp_entry_t make_writable_device_private_entry(pgoff_t offset)
@@ -150,7 +150,7 @@ static inline swp_entry_t make_writable_device_private_entry(pgoff_t offset)
 
 static inline swp_entry_t make_writable_device_private_entry_from_page(struct page *page)
 {
-	return swp_entry(SWP_DEVICE_WRITE, page_to_pfn(page));
+	return swp_entry(SWP_DEVICE_WRITE, device_private_page_to_offset(page));
 }
 
 static inline swp_entry_t make_device_exclusive_entry(pgoff_t offset)
@@ -263,7 +263,8 @@ static inline swp_entry_t make_readable_migration_entry(pgoff_t offset)
 static inline swp_entry_t make_readable_migration_entry_from_page(struct page *page)
 {
 	if (is_device_private_page(page))
-		return make_readable_migration_device_private_entry(page_to_pfn(page));
+		return make_readable_migration_device_private_entry(
+				device_private_page_to_offset(page));
 
 	return swp_entry(SWP_MIGRATION_READ, page_to_pfn(page));
 }
@@ -276,7 +277,8 @@ static inline swp_entry_t make_readable_exclusive_migration_entry(pgoff_t offset
 static inline swp_entry_t make_readable_exclusive_migration_entry_from_page(struct page *page)
 {
 	if (is_device_private_page(page))
-		return make_readable_exclusive_migration_device_private_entry(page_to_pfn(page));
+		return make_readable_exclusive_migration_device_private_entry(
+				device_private_page_to_offset(page));
 
 	return swp_entry(SWP_MIGRATION_READ_EXCLUSIVE, page_to_pfn(page));
 }
@@ -289,7 +291,8 @@ static inline swp_entry_t make_writable_migration_entry(pgoff_t offset)
 static inline swp_entry_t make_writable_migration_entry_from_page(struct page *page)
 {
 	if (is_device_private_page(page))
-		return make_writable_migration_device_private_entry(page_to_pfn(page));
+		return make_writable_migration_device_private_entry(
+				device_private_page_to_offset(page));
 
 	return swp_entry(SWP_MIGRATION_WRITE, page_to_pfn(page));
 }

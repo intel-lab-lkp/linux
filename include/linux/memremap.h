@@ -37,6 +37,7 @@ struct vmem_altmap {
  * backing the device memory. Doing so simplifies the implementation, but it is
  * important to remember that there are certain points at which the struct page
  * must be treated as an opaque object, rather than a "normal" struct page.
+ * Unlike "normal" struct pages, the page_to_pfn() is invalid.
  *
  * A more complete discussion of unaddressable memory may be found in
  * include/linux/hmm.h and Documentation/mm/hmm.rst.
@@ -126,9 +127,13 @@ struct dev_pagemap_ops {
  * @owner: an opaque pointer identifying the entity that manages this
  *	instance.  Used by various helpers to make sure that no
  *	foreign ZONE_DEVICE memory is accessed.
- * @nr_range: number of ranges to be mapped
- * @range: range to be mapped when nr_range == 1
+ * @nr_range: number of ranges to be mapped. Always == 1 for
+ *	MEMORY_DEVICE_PRIVATE.
+ * @range: range to be mapped when nr_range == 1. Used as an output param for
+ *	MEMORY_DEVICE_PRIVATE.
  * @ranges: array of ranges to be mapped when nr_range > 1
+ * @nr_pages: number of pages requested to be mapped for MEMORY_DEVICE_PRIVATE.
+ * @pages: array of nr_pages initialized for MEMORY_DEVICE_PRIVATE.
  */
 struct dev_pagemap {
 	struct vmem_altmap altmap;
@@ -144,6 +149,8 @@ struct dev_pagemap {
 		struct range range;
 		DECLARE_FLEX_ARRAY(struct range, ranges);
 	};
+	unsigned long nr_pages;
+	struct page *pages;
 };
 
 static inline bool pgmap_has_memory_failure(struct dev_pagemap *pgmap)
@@ -224,7 +231,14 @@ static inline bool is_fsdax_page(const struct page *page)
 }
 
 #ifdef CONFIG_ZONE_DEVICE
+void __init_zone_device_page(struct page *page, unsigned long pfn,
+	unsigned long zone_idx, int nid,
+	struct dev_pagemap *pgmap);
 void zone_device_page_init(struct page *page, unsigned int order);
+unsigned long memremap_device_private_pagemap(struct dev_pagemap *pgmap, int nid);
+void memunmap_device_private_pagemap(struct dev_pagemap *pgmap);
+int devm_memremap_device_private_pagemap(struct device *dev, struct dev_pagemap *pgmap);
+void devm_memunmap_device_private_pagemap(struct device *dev, struct dev_pagemap *pgmap);
 void *memremap_pages(struct dev_pagemap *pgmap, int nid);
 void memunmap_pages(struct dev_pagemap *pgmap);
 void *devm_memremap_pages(struct device *dev, struct dev_pagemap *pgmap);
@@ -233,6 +247,15 @@ struct dev_pagemap *get_dev_pagemap(unsigned long pfn);
 bool pgmap_pfn_valid(struct dev_pagemap *pgmap, unsigned long pfn);
 
 unsigned long memremap_compat_align(void);
+
+struct page *device_private_offset_to_page(unsigned long offset);
+struct page *device_private_entry_to_page(softleaf_t entry);
+pgoff_t device_private_page_to_offset(const struct page *page);
+
+static inline pgoff_t device_private_folio_to_offset(const struct folio *folio)
+{
+	return device_private_page_to_offset((const struct page *)&folio->page);
+}
 
 static inline void zone_device_folio_init(struct folio *folio, unsigned int order)
 {
@@ -276,6 +299,23 @@ static inline void devm_memunmap_pages(struct device *dev,
 {
 }
 
+static inline int devm_memremap_device_private_pagemap(struct device *dev,
+		struct dev_pagemap *pgmap)
+{
+	/*
+	 * Fail attempts to call devm_memremap_device_private_pagemap() without
+	 * ZONE_DEVICE support enabled, this requires callers to fall
+	 * back to plain devm_memremap() based on config
+	 */
+	WARN_ON_ONCE(1);
+	return -ENXIO;
+}
+
+static inline void devm_memunmap_device_private_pagemap(struct device *dev,
+		struct dev_pagemap *pgmap)
+{
+}
+
 static inline struct dev_pagemap *get_dev_pagemap(unsigned long pfn)
 {
 	return NULL;
@@ -295,6 +335,26 @@ static inline unsigned long memremap_compat_align(void)
 static inline void zone_device_private_split_cb(struct folio *original_folio,
 						struct folio *new_folio)
 {
+}
+
+static inline struct page *device_private_offset_to_page(unsigned long offset)
+{
+	return NULL;
+}
+
+static inline struct page *device_private_entry_to_page(softleaf_t entry)
+{
+	return NULL;
+}
+
+static inline pgoff_t device_private_page_to_offset(const struct page *page)
+{
+	return 0;
+}
+
+static inline pgoff_t device_private_folio_to_offset(const struct folio *folio)
+{
+	return 0;
 }
 #endif /* CONFIG_ZONE_DEVICE */
 

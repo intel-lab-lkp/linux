@@ -109,7 +109,7 @@ static struct nouveau_drm *page_to_drm(struct page *page)
 unsigned long nouveau_dmem_page_addr(struct page *page)
 {
 	struct nouveau_dmem_chunk *chunk = nouveau_page_to_chunk(page);
-	unsigned long off = (page_to_pfn(page) << PAGE_SHIFT) -
+	unsigned long off = (device_private_page_to_offset(page) << PAGE_SHIFT) -
 				chunk->pagemap.range.start;
 
 	return chunk->bo->offset + off;
@@ -297,9 +297,7 @@ nouveau_dmem_chunk_alloc(struct nouveau_drm *drm, struct page **ppage,
 			 bool is_large)
 {
 	struct nouveau_dmem_chunk *chunk;
-	struct resource *res;
 	struct page *page;
-	void *ptr;
 	unsigned long i, pfn_first, pfn;
 	int ret;
 
@@ -309,39 +307,28 @@ nouveau_dmem_chunk_alloc(struct nouveau_drm *drm, struct page **ppage,
 		goto out;
 	}
 
-	/* Allocate unused physical address space for device private pages. */
-	res = request_free_mem_region(&iomem_resource, DMEM_CHUNK_SIZE * NR_CHUNKS,
-				      "nouveau_dmem");
-	if (IS_ERR(res)) {
-		ret = PTR_ERR(res);
-		goto out_free;
-	}
-
 	chunk->drm = drm;
 	chunk->pagemap.type = MEMORY_DEVICE_PRIVATE;
-	chunk->pagemap.range.start = res->start;
-	chunk->pagemap.range.end = res->end;
 	chunk->pagemap.nr_range = 1;
+	chunk->pagemap.nr_pages = DMEM_CHUNK_SIZE * NR_CHUNKS / PAGE_SIZE;
 	chunk->pagemap.ops = &nouveau_dmem_pagemap_ops;
 	chunk->pagemap.owner = drm->dev;
 
 	ret = nouveau_bo_new_pin(&drm->client, NOUVEAU_GEM_DOMAIN_VRAM, DMEM_CHUNK_SIZE,
 				 &chunk->bo);
 	if (ret)
-		goto out_release;
+		goto out_free;
 
-	ptr = memremap_pages(&chunk->pagemap, numa_node_id());
-	if (IS_ERR(ptr)) {
-		ret = PTR_ERR(ptr);
+	ret = memremap_device_private_pagemap(&chunk->pagemap, numa_node_id());
+	if (ret)
 		goto out_bo_free;
-	}
 
 	mutex_lock(&drm->dmem->mutex);
 	list_add(&chunk->list, &drm->dmem->chunks);
 	mutex_unlock(&drm->dmem->mutex);
 
 	pfn_first = chunk->pagemap.range.start >> PAGE_SHIFT;
-	page = pfn_to_page(pfn_first);
+	page = device_private_offset_to_page(pfn_first);
 	spin_lock(&drm->dmem->lock);
 
 	pfn = pfn_first;
@@ -350,12 +337,12 @@ nouveau_dmem_chunk_alloc(struct nouveau_drm *drm, struct page **ppage,
 
 		if (!IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) || !is_large) {
 			for (j = 0; j < DMEM_CHUNK_NPAGES - 1; j++, pfn++) {
-				page = pfn_to_page(pfn);
+				page = device_private_offset_to_page(pfn);
 				page->zone_device_data = drm->dmem->free_pages;
 				drm->dmem->free_pages = page;
 			}
 		} else {
-			page = pfn_to_page(pfn);
+			page = device_private_offset_to_page(pfn);
 			page->zone_device_data = drm->dmem->free_folios;
 			drm->dmem->free_folios = page_folio(page);
 			pfn += DMEM_CHUNK_NPAGES;
@@ -382,8 +369,6 @@ nouveau_dmem_chunk_alloc(struct nouveau_drm *drm, struct page **ppage,
 
 out_bo_free:
 	nouveau_bo_unpin_del(&chunk->bo);
-out_release:
-	release_mem_region(chunk->pagemap.range.start, range_len(&chunk->pagemap.range));
 out_free:
 	kfree(chunk);
 out:
@@ -541,9 +526,7 @@ nouveau_dmem_fini(struct nouveau_drm *drm)
 		nouveau_bo_unpin_del(&chunk->bo);
 		WARN_ON(chunk->callocated);
 		list_del(&chunk->list);
-		memunmap_pages(&chunk->pagemap);
-		release_mem_region(chunk->pagemap.range.start,
-				   range_len(&chunk->pagemap.range));
+		memunmap_device_private_pagemap(&chunk->pagemap);
 		kfree(chunk);
 	}
 
@@ -766,7 +749,7 @@ static unsigned long nouveau_dmem_migrate_copy_one(struct nouveau_drm *drm,
 		((paddr >> PAGE_SHIFT) << NVIF_VMM_PFNMAP_V0_ADDR_SHIFT);
 	if (src & MIGRATE_PFN_WRITE)
 		*pfn |= NVIF_VMM_PFNMAP_V0_W;
-	mpfn = migrate_pfn(page_to_pfn(dpage)) | MIGRATE_PFN_DEVICE;
+	mpfn = migrate_pfn(device_private_page_to_offset(dpage)) | MIGRATE_PFN_DEVICE;
 	if (folio_order(page_folio(dpage)))
 		mpfn |= MIGRATE_PFN_COMPOUND;
 	return mpfn;

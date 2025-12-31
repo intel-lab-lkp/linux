@@ -403,7 +403,7 @@ static u64 xe_vram_region_page_to_dpa(struct xe_vram_region *vr,
 				      struct page *page)
 {
 	u64 dpa;
-	u64 pfn = page_to_pfn(page);
+	u64 pfn = device_private_page_to_offset(page);
 	u64 offset;
 
 	xe_assert(vr->xe, is_device_private_page(page));
@@ -1470,39 +1470,27 @@ int xe_devm_add(struct xe_tile *tile, struct xe_vram_region *vr)
 {
 	struct xe_device *xe = tile_to_xe(tile);
 	struct device *dev = &to_pci_dev(xe->drm.dev)->dev;
-	struct resource *res;
-	void *addr;
 	int ret;
 
-	res = devm_request_free_mem_region(dev, &iomem_resource,
-					   vr->usable_size);
-	if (IS_ERR(res)) {
-		ret = PTR_ERR(res);
-		return ret;
-	}
-
 	vr->pagemap.type = MEMORY_DEVICE_PRIVATE;
-	vr->pagemap.range.start = res->start;
-	vr->pagemap.range.end = res->end;
 	vr->pagemap.nr_range = 1;
+	vr->pagemap.nr_pages = vr->usable_size / PAGE_SIZE;
 	vr->pagemap.ops = drm_pagemap_pagemap_ops_get();
 	vr->pagemap.owner = xe_svm_devm_owner(xe);
-	addr = devm_memremap_pages(dev, &vr->pagemap);
+	ret = devm_memremap_device_private_pagemap(dev, &vr->pagemap);
 
 	vr->dpagemap.dev = dev;
 	vr->dpagemap.ops = &xe_drm_pagemap_ops;
 
-	if (IS_ERR(addr)) {
-		devm_release_mem_region(dev, res->start, resource_size(res));
-		ret = PTR_ERR(addr);
-		drm_err(&xe->drm, "Failed to remap tile %d memory, errno %pe\n",
-			tile->id, ERR_PTR(ret));
+	if (ret) {
+		drm_err(&xe->drm, "Failed to remap tile %d memory, errno %d\n",
+			tile->id, ret);
 		return ret;
 	}
-	vr->hpa_base = res->start;
+	vr->hpa_base = vr->pagemap.range.start;
 
 	drm_dbg(&xe->drm, "Added tile %d memory [%llx-%llx] to devm, remapped to %pr\n",
-		tile->id, vr->io_start, vr->io_start + vr->usable_size, res);
+		tile->id, vr->io_start, vr->io_start + vr->usable_size, &vr->pagemap.range);
 	return 0;
 }
 #else

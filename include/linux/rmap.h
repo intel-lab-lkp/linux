@@ -951,7 +951,7 @@ static inline unsigned long page_vma_walk_pfn(unsigned long pfn)
 static inline unsigned long folio_page_vma_walk_pfn(const struct folio *folio)
 {
 	if (folio_is_device_private(folio))
-		return page_vma_walk_pfn(folio_pfn(folio)) |
+		return page_vma_walk_pfn(device_private_folio_to_offset(folio)) |
 		       PVMW_PFN_DEVICE_PRIVATE;
 
 	return page_vma_walk_pfn(folio_pfn(folio));
@@ -959,6 +959,9 @@ static inline unsigned long folio_page_vma_walk_pfn(const struct folio *folio)
 
 static inline struct page *page_vma_walk_pfn_to_page(unsigned long pvmw_pfn)
 {
+	if (pvmw_pfn & PVMW_PFN_DEVICE_PRIVATE)
+		return device_private_offset_to_page(pvmw_pfn >> PVMW_PFN_SHIFT);
+
 	return pfn_to_page(pvmw_pfn >> PVMW_PFN_SHIFT);
 }
 
