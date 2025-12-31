@@ -86,6 +86,11 @@ static const struct can_pwm_const dummy_can_pwm_const = {
 	.pwmo_max = 16,
 };
 
+static const u16 dummy_can_termination_const[] = {
+	CAN_TERMINATION_DISABLED,	/* 0 = off */
+	120,				/* 120 Ohms */
+};
+
 static void dummy_can_print_bittiming(struct net_device *dev,
 				      struct can_bittiming *bt)
 {
@@ -179,6 +184,16 @@ static void dummy_can_print_bittiming_info(struct net_device *dev)
 	netdev_dbg(dev, "\n");
 }
 
+static int dummy_can_set_termination(struct net_device *dev, u16 term)
+{
+	struct dummy_can *priv = netdev_priv(dev);
+
+	netdev_dbg(dev, "set termination to %u Ohms\n", term);
+	priv->can.termination = term;
+
+	return 0;
+}
+
 static int dummy_can_netdev_open(struct net_device *dev)
 {
 	int ret;
@@ -243,17 +258,23 @@ static int __init dummy_can_init(void)
 	dev->ethtool_ops = &dummy_can_ethtool_ops;
 	priv = netdev_priv(dev);
 	priv->can.bittiming_const = &dummy_can_bittiming_const;
-	priv->can.bitrate_max = 20 * MEGA /* BPS */;
-	priv->can.clock.freq = 160 * MEGA /* Hz */;
 	priv->can.fd.data_bittiming_const = &dummy_can_fd_databittiming_const;
 	priv->can.fd.tdc_const = &dummy_can_fd_tdc_const;
 	priv->can.xl.data_bittiming_const = &dummy_can_xl_databittiming_const;
 	priv->can.xl.tdc_const = &dummy_can_xl_tdc_const;
 	priv->can.xl.pwm_const = &dummy_can_pwm_const;
+	priv->can.bitrate_max = 20 * MEGA /* BPS */;
+	priv->can.clock.freq = 160 * MEGA /* Hz */;
+	priv->can.termination_const_cnt = ARRAY_SIZE(dummy_can_termination_const);
+	priv->can.termination_const = dummy_can_termination_const;
+
 	priv->can.ctrlmode_supported = CAN_CTRLMODE_LISTENONLY |
 		CAN_CTRLMODE_FD | CAN_CTRLMODE_TDC_AUTO |
 		CAN_CTRLMODE_RESTRICTED | CAN_CTRLMODE_XL |
 		CAN_CTRLMODE_XL_TDC_AUTO | CAN_CTRLMODE_XL_TMS;
+
+	priv->can.do_set_termination = dummy_can_set_termination;
+
 	priv->dev = dev;
 
 	ret = register_candev(priv->dev);
