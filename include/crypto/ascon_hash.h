@@ -16,7 +16,6 @@
 #define ASCON_HASH256_RATE		8
 #define ASCON_HASH256_IV		0x0000080100CC0002ULL
 
-
 /*
  * State for Ascon-p[320] permutation: 5 64-bit words
  */

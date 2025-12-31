@@ -13,6 +13,7 @@
 #include <crypto/sha3.h>
 #include <crypto/md5.h>
 #include <crypto/streebog.h>
+#include <crypto/ascon_hash.h>
 
 #include <uapi/linux/hash_info.h>
 
