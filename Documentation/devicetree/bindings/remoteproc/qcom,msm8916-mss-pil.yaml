@@ -23,6 +23,7 @@ properties:
           - qcom,msm8916-mss-pil
           - qcom,msm8917-mss-pil
           - qcom,msm8926-mss-pil
+          - qcom,msm8937-mss-pil
           - qcom,msm8953-mss-pil
           - qcom,msm8974-mss-pil
 
@@ -232,6 +233,7 @@ allOf:
               - qcom,msm8909-mss-pil
               - qcom,msm8916-mss-pil
               - qcom,msm8917-mss-pil
+              - qcom,msm8937-mss-pil
     then:
       properties:
         power-domains:
@@ -276,6 +278,7 @@ allOf:
             enum:
               - qcom,msm8926-mss-pil
               - qcom,msm8917-mss-pil
+              - qcom,msm8937-mss-pil
               - qcom,msm8974-mss-pil
     then:
       required:
