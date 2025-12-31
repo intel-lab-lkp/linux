@@ -186,8 +186,6 @@ required:
   - reg
 
 patternProperties:
-  "^gic-its@": false
-  "^interrupt-controller@[0-9a-f]+$": false
   # msi-controller is preferred, but allow other names
   "^(msi-controller|gic-its|interrupt-controller)@[0-9a-f]+$":
     type: object
