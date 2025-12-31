@@ -873,41 +873,45 @@ static int resctrl_io_alloc_parse_line(char *line,  struct rdt_resource *r,
 	struct rdt_ctrl_domain *d;
 	char *dom = NULL, *id;
 	unsigned long dom_id;
+	bool update_all;
 
-next:
-	if (!line || line[0] == '\0')
-		return 0;
+	while (line && line[0] != '\0') {
+		update_all = false;
+		dom = strsep(&line, ";");
+		id = strsep(&dom, "=");
 
-	dom = strsep(&line, ";");
-	id = strsep(&dom, "=");
-	if (!dom || kstrtoul(id, 10, &dom_id)) {
-		rdt_last_cmd_puts("Missing '=' or non-numeric domain\n");
-		return -EINVAL;
-	}
+		if (id && !strcmp(id, "*")) {
+			update_all = true;
+		} else if (!dom || kstrtoul(id, 10, &dom_id)) {
+			rdt_last_cmd_puts("Missing '=' or non-numeric domain\n");
+			return -EINVAL;
+		}
 
-	dom = strim(dom);
-	list_for_each_entry(d, &r->ctrl_domains, hdr.list) {
-		if (d->hdr.id == dom_id) {
-			data.buf = dom;
-			data.mode = RDT_MODE_SHAREABLE;
-			data.closid = closid;
-			if (parse_cbm(&data, s, d))
-				return -EINVAL;
-			/*
-			 * Keep io_alloc CLOSID's CBM of CDP_CODE and CDP_DATA
-			 * in sync.
-			 */
-			if (resctrl_arch_get_cdp_enabled(r->rid)) {
-				peer_type = resctrl_peer_type(s->conf_type);
-				memcpy(&d->staged_config[peer_type],
-				       &d->staged_config[s->conf_type],
-				       sizeof(d->staged_config[0]));
+		dom = strim(dom);
+		list_for_each_entry(d, &r->ctrl_domains, hdr.list) {
+			if (update_all || d->hdr.id == dom_id) {
+				data.buf = dom;
+				data.mode = RDT_MODE_SHAREABLE;
+				data.closid = closid;
+				if (parse_cbm(&data, s, d))
+					return -EINVAL;
+				/*
+				 * Keep io_alloc CLOSID's CBM of CDP_CODE and CDP_DATA
+				 * in sync.
+				 */
+				if (resctrl_arch_get_cdp_enabled(r->rid)) {
+					peer_type = resctrl_peer_type(s->conf_type);
+					d->staged_config[peer_type] =
+						d->staged_config[s->conf_type];
+				}
+
+				if (!update_all)
+					break;
 			}
-			goto next;
 		}
 	}
 
-	return -EINVAL;
+	return 0;
 }
 
 ssize_t resctrl_io_alloc_cbm_write(struct kernfs_open_file *of, char *buf,
