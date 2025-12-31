@@ -963,8 +963,14 @@ copy_nonpresent_pte(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 			 * to be set to read. A previously exclusive entry is
 			 * now shared.
 			 */
-			entry = make_readable_migration_entry(
-							swp_offset(entry));
+
+			if (softleaf_is_migration_device_private(entry))
+				entry = make_readable_migration_device_private_entry(
+								swp_offset(entry));
+			else
+				entry = make_readable_migration_entry(
+								swp_offset(entry));
+
 			pte = softleaf_to_pte(entry);
 			if (pte_swp_soft_dirty(orig_pte))
 				pte = pte_swp_mksoft_dirty(pte);

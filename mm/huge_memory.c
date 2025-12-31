@@ -1800,7 +1800,11 @@ static void copy_huge_non_present_pmd(
 
 	if (softleaf_is_migration_write(entry) ||
 	    softleaf_is_migration_read_exclusive(entry)) {
-		entry = make_readable_migration_entry(swp_offset(entry));
+		if (softleaf_is_migration_device_private_write(entry) ||
+		    softleaf_is_migration_device_private_read_exclusive(entry))
+			entry = make_readable_migration_device_private_entry(swp_offset(entry));
+		else
+			entry = make_readable_migration_entry(swp_offset(entry));
 		pmd = swp_entry_to_pmd(entry);
 		if (pmd_swp_soft_dirty(*src_pmd))
 			pmd = pmd_swp_mksoft_dirty(pmd);
@@ -2523,10 +2527,17 @@ static void change_non_present_huge_pmd(struct mm_struct *mm,
 		 * A protection check is difficult so
 		 * just be safe and disable write
 		 */
-		if (folio_test_anon(folio))
-			entry = make_readable_exclusive_migration_entry(swp_offset(entry));
-		else
-			entry = make_readable_migration_entry(swp_offset(entry));
+		if (folio_test_anon(folio)) {
+			if (folio_is_device_private(folio))
+				entry = make_readable_exclusive_migration_device_private_entry(swp_offset(entry));
+			else
+				entry = make_readable_exclusive_migration_entry(swp_offset(entry));
+		} else {
+			if (folio_is_device_private(folio))
+				entry = make_readable_migration_device_private_entry(swp_offset(entry));
+			else
+				entry = make_readable_migration_entry(swp_offset(entry));
+		}
 		newpmd = swp_entry_to_pmd(entry);
 		if (pmd_swp_soft_dirty(*pmd))
 			newpmd = pmd_swp_mksoft_dirty(newpmd);

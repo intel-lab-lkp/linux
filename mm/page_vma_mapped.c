@@ -255,7 +255,8 @@ restart:
 
 				if (!softleaf_is_migration(entry) ||
 				    !check_pmd(softleaf_to_pfn(entry),
-					       softleaf_is_device_private(entry),
+					       softleaf_is_device_private(entry) ||
+					       softleaf_is_migration_device_private(entry),
 					       pvmw))
 					return not_found(pvmw);
 				return true;

@@ -327,11 +327,22 @@ static long change_pte_range(struct mmu_gather *tlb,
 				 * A protection check is difficult so
 				 * just be safe and disable write
 				 */
-				if (folio_test_anon(folio))
-					entry = make_readable_exclusive_migration_entry(
-							     swp_offset(entry));
-				else
-					entry = make_readable_migration_entry(swp_offset(entry));
+				if (!is_writable_device_migration_private_entry(entry)) {
+					if (folio_test_anon(folio))
+						entry = make_readable_exclusive_migration_entry(
+								swp_offset(entry));
+					else
+						entry = make_readable_migration_entry(
+								swp_offset(entry));
+				} else {
+					if (folio_test_anon(folio))
+						entry = make_readable_exclusive_migration_device_private_entry(
+								swp_offset(entry));
+					else
+						entry = make_readable_migration_device_private_entry(
+								swp_offset(entry));
+				}
+
 				newpte = swp_entry_to_pte(entry);
 				if (pte_swp_soft_dirty(oldpte))
 					newpte = pte_swp_mksoft_dirty(newpte);
