@@ -44,6 +44,14 @@ properties:
       where the lower 16 bits are reserved. This property is specified only
       when the keyboard has a custom design for the top row keys.
 
+  google,has-fn-map:
+    description: |
+      The keymap has function key layer. This allows defining an extra set of
+      codes that are sent if a key is pressed while the KEY_FN is held pressed
+      as well. The function codes have to be defined in the linux,keymap
+      property with an offset of keypad,num-rows from the normal ones.
+    type: boolean
+
 dependencies:
   function-row-physmap: [ 'linux,keymap' ]
   google,needs-ghost-filter: [ 'linux,keymap' ]
