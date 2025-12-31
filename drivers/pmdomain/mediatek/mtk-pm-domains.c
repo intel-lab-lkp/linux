@@ -318,12 +318,12 @@ static int scpsys_hwv_power_on(struct generic_pm_domain *genpd)
 	if (ret)
 		goto err_infra;
 
-	ret = clk_bulk_prepare_enable(pd->num_clks, pd->clks);
+	ret = clk_bulk_enable(pd->num_clks, pd->clks);
 	if (ret)
 		goto err_reg;
 
 	/* For HWV the subsys clocks refer to the HWV low power subsystem */
-	ret = clk_bulk_prepare_enable(pd->num_subsys_clks, pd->subsys_clks);
+	ret = clk_bulk_enable(pd->num_subsys_clks, pd->subsys_clks);
 	if (ret)
 		goto err_disable_clks;
 
@@ -365,7 +365,7 @@ static int scpsys_hwv_power_on(struct generic_pm_domain *genpd)
 	}
 
 	/* It's done! Disable the HWV low power subsystem clocks */
-	clk_bulk_disable_unprepare(pd->num_subsys_clks, pd->subsys_clks);
+	clk_bulk_disable(pd->num_subsys_clks, pd->subsys_clks);
 
 	if (MTK_SCPD_CAPS(pd, MTK_SCPD_INFRA_PWR_CTL))
 		scpsys_sec_infra_power_on(false);
@@ -373,9 +373,9 @@ static int scpsys_hwv_power_on(struct generic_pm_domain *genpd)
 	return 0;
 
 err_disable_subsys_clks:
-	clk_bulk_disable_unprepare(pd->num_subsys_clks, pd->subsys_clks);
+	clk_bulk_disable(pd->num_subsys_clks, pd->subsys_clks);
 err_disable_clks:
-	clk_bulk_disable_unprepare(pd->num_clks, pd->clks);
+	clk_bulk_disable(pd->num_clks, pd->clks);
 err_reg:
 	scpsys_regulator_disable(pd->supply);
 err_infra:
@@ -398,7 +398,7 @@ static int scpsys_hwv_power_off(struct generic_pm_domain *genpd)
 			return ret;
 	}
 
-	ret = clk_bulk_prepare_enable(pd->num_subsys_clks, pd->subsys_clks);
+	ret = clk_bulk_enable(pd->num_subsys_clks, pd->subsys_clks);
 	if (ret)
 		goto err_infra;
 
@@ -437,8 +437,8 @@ static int scpsys_hwv_power_off(struct generic_pm_domain *genpd)
 	if (ret)
 		goto err_disable_subsys_clks;
 
-	clk_bulk_disable_unprepare(pd->num_subsys_clks, pd->subsys_clks);
-	clk_bulk_disable_unprepare(pd->num_clks, pd->clks);
+	clk_bulk_disable(pd->num_subsys_clks, pd->subsys_clks);
+	clk_bulk_disable(pd->num_clks, pd->clks);
 
 	scpsys_regulator_disable(pd->supply);
 
@@ -448,7 +448,7 @@ static int scpsys_hwv_power_off(struct generic_pm_domain *genpd)
 	return 0;
 
 err_disable_subsys_clks:
-	clk_bulk_disable_unprepare(pd->num_subsys_clks, pd->subsys_clks);
+	clk_bulk_disable(pd->num_subsys_clks, pd->subsys_clks);
 err_infra:
 	if (MTK_SCPD_CAPS(pd, MTK_SCPD_INFRA_PWR_CTL))
 		scpsys_sec_infra_power_on(false);
@@ -616,7 +616,7 @@ static int scpsys_power_on(struct generic_pm_domain *genpd)
 	if (ret)
 		return ret;
 
-	ret = clk_bulk_prepare_enable(pd->num_clks, pd->clks);
+	ret = clk_bulk_enable(pd->num_clks, pd->clks);
 	if (ret)
 		goto err_reg;
 
@@ -638,8 +638,7 @@ static int scpsys_power_on(struct generic_pm_domain *genpd)
 	 * access.
 	 */
 	if (!MTK_SCPD_CAPS(pd, MTK_SCPD_STRICT_BUS_PROTECTION)) {
-		ret = clk_bulk_prepare_enable(pd->num_subsys_clks,
-					      pd->subsys_clks);
+		ret = clk_bulk_enable(pd->num_subsys_clks, pd->subsys_clks);
 		if (ret)
 			goto err_pwr_ack;
 	}
@@ -653,8 +652,7 @@ static int scpsys_power_on(struct generic_pm_domain *genpd)
 		goto err_disable_sram;
 
 	if (MTK_SCPD_CAPS(pd, MTK_SCPD_STRICT_BUS_PROTECTION)) {
-		ret = clk_bulk_prepare_enable(pd->num_subsys_clks,
-					      pd->subsys_clks);
+		ret = clk_bulk_enable(pd->num_subsys_clks, pd->subsys_clks);
 		if (ret)
 			goto err_enable_bus_protect;
 	}
@@ -667,10 +665,9 @@ err_disable_sram:
 	scpsys_sram_disable(pd);
 err_disable_subsys_clks:
 	if (!MTK_SCPD_CAPS(pd, MTK_SCPD_STRICT_BUS_PROTECTION))
-		clk_bulk_disable_unprepare(pd->num_subsys_clks,
-					   pd->subsys_clks);
+		clk_bulk_disable(pd->num_subsys_clks, pd->subsys_clks);
 err_pwr_ack:
-	clk_bulk_disable_unprepare(pd->num_clks, pd->clks);
+	clk_bulk_disable(pd->num_clks, pd->clks);
 err_reg:
 	scpsys_regulator_disable(pd->supply);
 	return ret;
@@ -695,7 +692,7 @@ static int scpsys_power_off(struct generic_pm_domain *genpd)
 		regmap_set_bits(scpsys->base, pd->data->ext_buck_iso_offs,
 				pd->data->ext_buck_iso_mask);
 
-	clk_bulk_disable_unprepare(pd->num_subsys_clks, pd->subsys_clks);
+	clk_bulk_disable(pd->num_subsys_clks, pd->subsys_clks);
 
 	if (MTK_SCPD_CAPS(pd, MTK_SCPD_MODEM_PWRSEQ))
 		scpsys_modem_pwrseq_off(pd);
@@ -708,7 +705,7 @@ static int scpsys_power_off(struct generic_pm_domain *genpd)
 	if (ret < 0)
 		return ret;
 
-	clk_bulk_disable_unprepare(pd->num_clks, pd->clks);
+	clk_bulk_disable(pd->num_clks, pd->clks);
 
 	scpsys_regulator_disable(pd->supply);
 
@@ -855,6 +852,14 @@ generic_pm_domain *scpsys_add_one_domain(struct scpsys *scpsys, struct device_no
 		pd->genpd.flags |= GENPD_FLAG_IRQ_SAFE;
 	}
 
+	ret = clk_bulk_prepare(pd->num_clks, pd->clks);
+	if (ret)
+		goto err_put_subsys_clocks;
+
+	ret = clk_bulk_prepare(pd->num_subsys_clks, pd->subsys_clks);
+	if (ret)
+		goto err_unprepare_clocks;
+
 	/*
 	 * Initially turn on all domains to make the domains usable
 	 * with !CONFIG_PM and to get the hardware in sync with the
@@ -869,7 +874,7 @@ generic_pm_domain *scpsys_add_one_domain(struct scpsys *scpsys, struct device_no
 		ret = pd->genpd.power_on(&pd->genpd);
 		if (ret < 0) {
 			dev_err(scpsys->dev, "%pOF: failed to power on domain: %d\n", node, ret);
-			goto err_put_subsys_clocks;
+			goto err_unprepare_subsys_clocks;
 		}
 
 		if (MTK_SCPD_CAPS(pd, MTK_SCPD_ALWAYS_ON))
@@ -888,6 +893,10 @@ generic_pm_domain *scpsys_add_one_domain(struct scpsys *scpsys, struct device_no
 
 	return scpsys->pd_data.domains[id];
 
+err_unprepare_subsys_clocks:
+	clk_bulk_unprepare(pd->num_subsys_clks, pd->subsys_clks);
+err_unprepare_clocks:
+	clk_bulk_unprepare(pd->num_clks, pd->clks);
 err_put_subsys_clocks:
 	clk_bulk_put(pd->num_subsys_clks, pd->subsys_clks);
 err_put_clocks:
@@ -965,6 +974,8 @@ static void scpsys_remove_one_domain(struct scpsys_domain *pd)
 	if (scpsys_domain_is_on(pd))
 		scpsys_power_off(&pd->genpd);
 
+	clk_bulk_unprepare(pd->num_clks, pd->clks);
+	clk_bulk_unprepare(pd->num_subsys_clks, pd->subsys_clks);
 	clk_bulk_put(pd->num_clks, pd->clks);
 	clk_bulk_put(pd->num_subsys_clks, pd->subsys_clks);
 }
@@ -1208,6 +1219,7 @@ static int scpsys_probe(struct platform_device *pdev)
 	if (!scpsys)
 		return -ENOMEM;
 
+	platform_set_drvdata(pdev, scpsys);
 	scpsys->dev = dev;
 	scpsys->soc_data = soc;
 
@@ -1270,12 +1282,61 @@ err_cleanup_domains:
 	return ret;
 }
 
+#ifdef CONFIG_PM_SLEEP
+static int scpsys_suspend(struct device *dev)
+{
+	struct scpsys *scpsys = dev_get_drvdata(dev);
+	struct generic_pm_domain *genpd;
+	struct scpsys_domain *pd;
+	int i;
+
+	for (i = 0; i < scpsys->pd_data.num_domains; i++) {
+		genpd = scpsys->pd_data.domains[i];
+		if (!genpd)
+			continue;
+
+		pd = to_scpsys_domain(genpd);
+		clk_bulk_unprepare(pd->num_clks, pd->clks);
+		clk_bulk_unprepare(pd->num_subsys_clks, pd->subsys_clks);
+	}
+	return 0;
+}
+
+static int scpsys_resume(struct device *dev)
+{
+	struct scpsys *scpsys = dev_get_drvdata(dev);
+	struct generic_pm_domain *genpd;
+	struct scpsys_domain *pd;
+	int i, ret;
+
+	for (i = 0; i < scpsys->pd_data.num_domains; i++) {
+		genpd = scpsys->pd_data.domains[i];
+		if (!genpd)
+			continue;
+
+		pd = to_scpsys_domain(genpd);
+		ret = clk_bulk_prepare(pd->num_clks, pd->clks);
+		if (ret)
+			return ret;
+		ret = clk_bulk_prepare(pd->num_subsys_clks, pd->subsys_clks);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+#endif
+
+static const struct dev_pm_ops scpsys_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(scpsys_suspend, scpsys_resume)
+};
+
 static struct platform_driver scpsys_pm_domain_driver = {
 	.probe = scpsys_probe,
 	.driver = {
 		.name = "mtk-power-controller",
 		.suppress_bind_attrs = true,
 		.of_match_table = scpsys_of_match,
+		.pm = &scpsys_pm_ops,
 	},
 };
 builtin_platform_driver(scpsys_pm_domain_driver);
