@@ -690,6 +690,11 @@ static int ocfs2_move_extent(struct ocfs2_move_extents_context *context,
 		goto out_commit;
 	}
 
+	if (le16_to_cpu(gd->bg_free_bits_count) < len) {
+		ret = -ENOSPC;
+		goto out_commit;
+	}
+
 	ret = ocfs2_block_group_set_bits(handle, gb_inode, gd, gd_bh,
 					 goal_bit, len, 0, 0);
 	if (ret) {
