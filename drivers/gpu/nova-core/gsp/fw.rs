@@ -772,9 +772,10 @@ impl MsgHeaderVersion {
     const MINOR_TOT: u8 = 0;
 
     fn new() -> Self {
-        Self::default()
-            .set_major(Self::MAJOR_TOT)
-            .set_minor(Self::MINOR_TOT)
+        let mut v = Self::default();
+        v.set_major(Self::MAJOR_TOT);
+        v.set_minor(Self::MINOR_TOT);
+        v
     }
 }
 

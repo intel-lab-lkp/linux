@@ -284,13 +284,11 @@ macro_rules! bitfield {
         #[doc=$comment]
         )?
         #[inline(always)]
-        $vis fn [<set_ $field>](mut self, value: $to_type) -> Self {
+        $vis fn [<set_ $field>](&mut self, value: $to_type) {
             const MASK: $storage = $name::[<$field:upper _MASK>];
             const SHIFT: u32 = $name::[<$field:upper _SHIFT>];
             let value = ($storage::from($prim_type::from(value)) << SHIFT) & MASK;
             self.0 = (self.0 & !MASK) | value;
-
-            self
         }
         );
     };

@@ -49,10 +49,15 @@ pub(crate) trait RegisterBase<T> {
 /// let chipset = boot0.chipset()?;
 ///
 /// // Update some fields and write the value back.
-/// boot0.set_major_revision(3).set_minor_revision(10).write(&bar);
+/// boot0.set_major_revision(3);
+/// boot0.set_minor_revision(10);
+/// boot0.write(&bar);
 ///
 /// // Or, just read and update the register in a single step:
-/// BOOT_0::update(&bar, |r| r.set_major_revision(3).set_minor_revision(10));
+/// BOOT_0::update(&bar, |r| {
+///     r.set_major_revision(3);
+///     r.set_minor_revision(10);
+/// });
 /// ```
 ///
 /// The documentation strings are optional. If present, they will be added to the type's
@@ -388,12 +393,13 @@ macro_rules! register {
             #[inline(always)]
             pub(crate) fn update<const SIZE: usize, T, F>(
                 io: &T,
-                f: F,
+                mut f: F,
             ) where
                 T: ::core::ops::Deref<Target = ::kernel::io::Io<SIZE>>,
-                F: ::core::ops::FnOnce(Self) -> Self,
+                F: ::core::ops::FnMut(&mut Self),
             {
-                let reg = f(Self::read(io));
+                let mut reg = Self::read(io);
+                f(&mut reg);
                 reg.write(io);
             }
         }
@@ -452,13 +458,14 @@ macro_rules! register {
             pub(crate) fn update<const SIZE: usize, T, B, F>(
                 io: &T,
                 base: &B,
-                f: F,
+                mut f: F,
             ) where
                 T: ::core::ops::Deref<Target = ::kernel::io::Io<SIZE>>,
                 B: crate::regs::macros::RegisterBase<$base>,
-                F: ::core::ops::FnOnce(Self) -> Self,
+                F: ::core::ops::FnMut(&mut Self),
             {
-                let reg = f(Self::read(io, base));
+                let mut reg = Self::read(io, base);
+                f(&mut reg);
                 reg.write(io, base);
             }
         }
@@ -510,12 +517,13 @@ macro_rules! register {
             pub(crate) fn update<const SIZE: usize, T, F>(
                 io: &T,
                 idx: usize,
-                f: F,
+                mut f: F,
             ) where
                 T: ::core::ops::Deref<Target = ::kernel::io::Io<SIZE>>,
-                F: ::core::ops::FnOnce(Self) -> Self,
+                F: ::core::ops::FnMut(&mut Self),
             {
-                let reg = f(Self::read(io, idx));
+                let mut reg = Self::read(io, idx);
+                f(&mut reg);
                 reg.write(io, idx);
             }
 
@@ -568,7 +576,7 @@ macro_rules! register {
                 f: F,
             ) -> ::kernel::error::Result where
                 T: ::core::ops::Deref<Target = ::kernel::io::Io<SIZE>>,
-                F: ::core::ops::FnOnce(Self) -> Self,
+                F: ::core::ops::FnMut(&mut Self),
             {
                 if idx < Self::SIZE {
                     Ok(Self::update(io, idx, f))
@@ -640,13 +648,14 @@ macro_rules! register {
                 io: &T,
                 base: &B,
                 idx: usize,
-                f: F,
+                mut f: F,
             ) where
                 T: ::core::ops::Deref<Target = ::kernel::io::Io<SIZE>>,
                 B: crate::regs::macros::RegisterBase<$base>,
-                F: ::core::ops::FnOnce(Self) -> Self,
+                F: ::core::ops::FnMut(&mut Self),
             {
-                let reg = f(Self::read(io, base, idx));
+                let mut reg = Self::read(io, base, idx);
+                f(&mut reg);
                 reg.write(io, base, idx);
             }
 
@@ -708,7 +717,7 @@ macro_rules! register {
             ) -> ::kernel::error::Result where
                 T: ::core::ops::Deref<Target = ::kernel::io::Io<SIZE>>,
                 B: crate::regs::macros::RegisterBase<$base>,
-                F: ::core::ops::FnOnce(Self) -> Self,
+                F: ::core::ops::FnMut(&mut Self),
             {
                 if idx < Self::SIZE {
                     Ok(Self::update(io, base, idx, f))

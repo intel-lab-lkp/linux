@@ -39,9 +39,9 @@ impl Falcon<Gsp> {
     /// Clears the SWGEN0 bit in the Falcon's IRQ status clear register to
     /// allow GSP to signal CPU for processing new messages in message queue.
     pub(crate) fn clear_swgen0_intr(&self, bar: &Bar0) {
-        regs::NV_PFALCON_FALCON_IRQSCLR::default()
-            .set_swgen0(true)
-            .write(bar, &Gsp::ID);
+        let mut reg = regs::NV_PFALCON_FALCON_IRQSCLR::default();
+        reg.set_swgen0(true);
+        reg.write(bar, &Gsp::ID);
     }
 
     /// Checks if GSP reload/resume has completed during the boot process.

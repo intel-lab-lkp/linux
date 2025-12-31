@@ -413,12 +413,12 @@ impl<E: FalconEngine + 'static> Falcon<E> {
             Delta::from_micros(150),
         );
 
-        regs::NV_PFALCON_FALCON_ENGINE::update(bar, &E::ID, |v| v.set_reset(true));
+        regs::NV_PFALCON_FALCON_ENGINE::update(bar, &E::ID, |v| { v.set_reset(true); });
 
         // TIMEOUT: falcon engine should not take more than 10us to reset.
         fsleep(Delta::from_micros(10));
 
-        regs::NV_PFALCON_FALCON_ENGINE::update(bar, &E::ID, |v| v.set_reset(false));
+        regs::NV_PFALCON_FALCON_ENGINE::update(bar, &E::ID, |v| { v.set_reset(false); });
 
         self.reset_wait_mem_scrubbing(bar)?;
 
@@ -431,9 +431,9 @@ impl<E: FalconEngine + 'static> Falcon<E> {
         self.hal.select_core(self, bar)?;
         self.reset_wait_mem_scrubbing(bar)?;
 
-        regs::NV_PFALCON_FALCON_RM::default()
-            .set_value(regs::NV_PMC_BOOT_0::read(bar).into())
-            .write(bar, &E::ID);
+        let mut reg = regs::NV_PFALCON_FALCON_RM::default();
+        reg.set_value(regs::NV_PMC_BOOT_0::read(bar).into());
+        reg.write(bar, &E::ID);
 
         Ok(())
     }
@@ -495,30 +495,32 @@ impl<E: FalconEngine + 'static> Falcon<E> {
 
         // Set up the base source DMA address.
 
-        regs::NV_PFALCON_FALCON_DMATRFBASE::default()
-            // CAST: `as u32` is used on purpose since we do want to strip the upper bits, which
-            // will be written to `NV_PFALCON_FALCON_DMATRFBASE1`.
-            .set_base((dma_start >> 8) as u32)
-            .write(bar, &E::ID);
-        regs::NV_PFALCON_FALCON_DMATRFBASE1::default()
-            // CAST: `as u16` is used on purpose since the remaining bits are guaranteed to fit
-            // within a `u16`.
-            .set_base((dma_start >> 40) as u16)
-            .write(bar, &E::ID);
+        // CAST: `as u32` is used on purpose since we do want to strip the upper bits, which
+        // will be written to `NV_PFALCON_FALCON_DMATRFBASE1`.
+        let mut reg = regs::NV_PFALCON_FALCON_DMATRFBASE::default();
+        reg.set_base((dma_start >> 8) as u32);
+        reg.write(bar, &E::ID);
 
-        let cmd = regs::NV_PFALCON_FALCON_DMATRFCMD::default()
-            .set_size(DmaTrfCmdSize::Size256B)
-            .set_imem(target_mem == FalconMem::Imem)
-            .set_sec(if sec { 1 } else { 0 });
+        // CAST: `as u16` is used on purpose since the remaining bits are guaranteed to fit
+        // within a `u16`.
+        let mut reg = regs::NV_PFALCON_FALCON_DMATRFBASE1::default();
+        reg.set_base((dma_start >> 40) as u16);
+        reg.write(bar, &E::ID);
+
+        let mut cmd = regs::NV_PFALCON_FALCON_DMATRFCMD::default();
+        cmd.set_size(DmaTrfCmdSize::Size256B);
+        cmd.set_imem(target_mem == FalconMem::Imem);
+        cmd.set_sec(if sec { 1 } else { 0 });
 
         for pos in (0..num_transfers).map(|i| i * DMA_LEN) {
             // Perform a transfer of size `DMA_LEN`.
-            regs::NV_PFALCON_FALCON_DMATRFMOFFS::default()
-                .set_offs(load_offsets.dst_start + pos)
-                .write(bar, &E::ID);
-            regs::NV_PFALCON_FALCON_DMATRFFBOFFS::default()
-                .set_offs(src_start + pos)
-                .write(bar, &E::ID);
+            let mut reg = regs::NV_PFALCON_FALCON_DMATRFMOFFS::default();
+            reg.set_offs(load_offsets.dst_start + pos);
+            reg.write(bar, &E::ID);
+
+            let mut reg = regs::NV_PFALCON_FALCON_DMATRFFBOFFS::default();
+            reg.set_offs(src_start + pos);
+            reg.write(bar, &E::ID);
             cmd.write(bar, &E::ID);
 
             // Wait for the transfer to complete.
@@ -539,8 +541,8 @@ impl<E: FalconEngine + 'static> Falcon<E> {
     pub(crate) fn dma_load<F: FalconFirmware<Target = E>>(&self, bar: &Bar0, fw: &F) -> Result {
         self.dma_reset(bar);
         regs::NV_PFALCON_FBIF_TRANSCFG::update(bar, &E::ID, 0, |v| {
-            v.set_target(FalconFbifTarget::CoherentSysmem)
-                .set_mem_type(FalconFbifMemType::Physical)
+            v.set_target(FalconFbifTarget::CoherentSysmem);
+            v.set_mem_type(FalconFbifMemType::Physical);
         });
 
         self.dma_wr(bar, fw, FalconMem::Imem, fw.imem_load_params(), true)?;
@@ -549,9 +551,9 @@ impl<E: FalconEngine + 'static> Falcon<E> {
         self.hal.program_brom(self, bar, &fw.brom_params())?;
 
         // Set `BootVec` to start of non-secure code.
-        regs::NV_PFALCON_FALCON_BOOTVEC::default()
-            .set_value(fw.boot_addr())
-            .write(bar, &E::ID);
+        let mut reg = regs::NV_PFALCON_FALCON_BOOTVEC::default();
+        reg.set_value(fw.boot_addr());
+        reg.write(bar, &E::ID);
 
         Ok(())
     }
@@ -572,12 +574,16 @@ impl<E: FalconEngine + 'static> Falcon<E> {
     /// Start the falcon CPU.
     pub(crate) fn start(&self, bar: &Bar0) -> Result<()> {
         match regs::NV_PFALCON_FALCON_CPUCTL::read(bar, &E::ID).alias_en() {
-            true => regs::NV_PFALCON_FALCON_CPUCTL_ALIAS::default()
-                .set_startcpu(true)
-                .write(bar, &E::ID),
-            false => regs::NV_PFALCON_FALCON_CPUCTL::default()
-                .set_startcpu(true)
-                .write(bar, &E::ID),
+            true => {
+                let mut reg = regs::NV_PFALCON_FALCON_CPUCTL_ALIAS::default();
+                reg.set_startcpu(true);
+                reg.write(bar, &E::ID);
+            }
+            false => {
+                let mut reg = regs::NV_PFALCON_FALCON_CPUCTL::default();
+                reg.set_startcpu(true);
+                reg.write(bar, &E::ID);
+            }
         }
 
         Ok(())
@@ -586,15 +592,15 @@ impl<E: FalconEngine + 'static> Falcon<E> {
     /// Writes values to the mailbox registers if provided.
     pub(crate) fn write_mailboxes(&self, bar: &Bar0, mbox0: Option<u32>, mbox1: Option<u32>) {
         if let Some(mbox0) = mbox0 {
-            regs::NV_PFALCON_FALCON_MAILBOX0::default()
-                .set_value(mbox0)
-                .write(bar, &E::ID);
+            let mut reg = regs::NV_PFALCON_FALCON_MAILBOX0::default();
+            reg.set_value(mbox0);
+            reg.write(bar, &E::ID);
         }
 
         if let Some(mbox1) = mbox1 {
-            regs::NV_PFALCON_FALCON_MAILBOX1::default()
-                .set_value(mbox1)
-                .write(bar, &E::ID);
+            let mut reg = regs::NV_PFALCON_FALCON_MAILBOX1::default();
+            reg.set_value(mbox1);
+            reg.write(bar, &E::ID);
         }
     }
 
@@ -657,8 +663,8 @@ impl<E: FalconEngine + 'static> Falcon<E> {
 
     /// Write the application version to the OS register.
     pub(crate) fn write_os_version(&self, bar: &Bar0, app_version: u32) {
-        regs::NV_PFALCON_FALCON_OS::default()
-            .set_value(app_version)
-            .write(bar, &E::ID);
+        let mut reg = regs::NV_PFALCON_FALCON_OS::default();
+        reg.set_value(app_version);
+        reg.write(bar, &E::ID);
     }
 }

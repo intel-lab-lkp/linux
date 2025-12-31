@@ -26,9 +26,9 @@ use super::FalconHal;
 fn select_core_ga102<E: FalconEngine>(bar: &Bar0) -> Result {
     let bcr_ctrl = regs::NV_PRISCV_RISCV_BCR_CTRL::read(bar, &E::ID);
     if bcr_ctrl.core_select() != PeregrineCoreSelect::Falcon {
-        regs::NV_PRISCV_RISCV_BCR_CTRL::default()
-            .set_core_select(PeregrineCoreSelect::Falcon)
-            .write(bar, &E::ID);
+        let mut reg = regs::NV_PRISCV_RISCV_BCR_CTRL::default();
+        reg.set_core_select(PeregrineCoreSelect::Falcon);
+        reg.write(bar, &E::ID);
 
         // TIMEOUT: falcon core should take less than 10ms to report being enabled.
         read_poll_timeout(
@@ -75,18 +75,21 @@ fn signature_reg_fuse_version_ga102(
 }
 
 fn program_brom_ga102<E: FalconEngine>(bar: &Bar0, params: &FalconBromParams) -> Result {
-    regs::NV_PFALCON2_FALCON_BROM_PARAADDR::default()
-        .set_value(params.pkc_data_offset)
-        .write(bar, &E::ID, 0);
-    regs::NV_PFALCON2_FALCON_BROM_ENGIDMASK::default()
-        .set_value(u32::from(params.engine_id_mask))
-        .write(bar, &E::ID);
-    regs::NV_PFALCON2_FALCON_BROM_CURR_UCODE_ID::default()
-        .set_ucode_id(params.ucode_id)
-        .write(bar, &E::ID);
-    regs::NV_PFALCON2_FALCON_MOD_SEL::default()
-        .set_algo(FalconModSelAlgo::Rsa3k)
-        .write(bar, &E::ID);
+    let mut reg = regs::NV_PFALCON2_FALCON_BROM_PARAADDR::default();
+    reg.set_value(params.pkc_data_offset);
+    reg.write(bar, &E::ID, 0);
+
+    let mut reg = regs::NV_PFALCON2_FALCON_BROM_ENGIDMASK::default();
+    reg.set_value(u32::from(params.engine_id_mask));
+    reg.write(bar, &E::ID);
+
+    let mut reg = regs::NV_PFALCON2_FALCON_BROM_CURR_UCODE_ID::default();
+    reg.set_ucode_id(params.ucode_id);
+    reg.write(bar, &E::ID);
+
+    let mut reg = regs::NV_PFALCON2_FALCON_MOD_SEL::default();
+    reg.set_algo(FalconModSelAlgo::Rsa3k);
+    reg.write(bar, &E::ID);
 
     Ok(())
 }

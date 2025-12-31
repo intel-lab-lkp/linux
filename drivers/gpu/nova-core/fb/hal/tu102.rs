@@ -21,9 +21,9 @@ pub(super) fn write_sysmem_flush_page_gm107(bar: &Bar0, addr: u64) -> Result {
     u32::try_from(addr >> FLUSH_SYSMEM_ADDR_SHIFT)
         .map_err(|_| EINVAL)
         .map(|addr| {
-            regs::NV_PFB_NISO_FLUSH_SYSMEM_ADDR::default()
-                .set_adr_39_08(addr)
-                .write(bar)
+            let mut reg = regs::NV_PFB_NISO_FLUSH_SYSMEM_ADDR::default();
+            reg.set_adr_39_08(addr);
+            reg.write(bar);
         })
 }
 

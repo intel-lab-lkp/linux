@@ -475,9 +475,9 @@ impl Cmdq {
 
     /// Notifies the GSP that we have updated the command queue pointers.
     fn notify_gsp(bar: &Bar0) {
-        regs::NV_PGSP_QUEUE_HEAD::default()
-            .set_address(0)
-            .write(bar);
+        let mut reg = regs::NV_PGSP_QUEUE_HEAD::default();
+        reg.set_address(0);
+        reg.write(bar);
     }
 
     /// Sends `command` to the GSP.
