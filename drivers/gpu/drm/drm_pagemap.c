@@ -404,7 +404,7 @@ int drm_pagemap_migrate_to_devmem(struct drm_pagemap_devmem *devmem_allocation,
 		struct page *page = pfn_to_page(migrate.dst[i]);
 
 		pages[i] = page;
-		migrate.dst[i] = migrate_pfn(migrate.dst[i]);
+		migrate.dst[i] = migrate_pfn(migrate.dst[i]) | MIGRATE_PFN_DEVICE;
 		drm_pagemap_get_devmem_page(page, zdd);
 	}
 

@@ -199,6 +199,7 @@ static int migrate_vma_collect_huge_pmd(pmd_t *pmdp, unsigned long start,
 		(migrate->flags & MIGRATE_VMA_SELECT_COMPOUND) &&
 		(IS_ALIGNED(start, HPAGE_PMD_SIZE) &&
 		 IS_ALIGNED(end, HPAGE_PMD_SIZE))) {
+		unsigned long device_private = 0;
 
 		struct page_vma_mapped_walk pvmw = {
 			.ptl = ptl,
@@ -208,10 +209,13 @@ static int migrate_vma_collect_huge_pmd(pmd_t *pmdp, unsigned long start,
 		};
 
 		unsigned long pfn = page_to_pfn(folio_page(folio, 0));
+		if (folio_is_device_private(folio))
+			device_private = MIGRATE_PFN_DEVICE;
 
 		migrate->src[migrate->npages] = migrate_pfn(pfn) | write
 						| MIGRATE_PFN_MIGRATE
-						| MIGRATE_PFN_COMPOUND;
+						| MIGRATE_PFN_COMPOUND
+						| device_private;
 		migrate->dst[migrate->npages++] = 0;
 		migrate->cpages++;
 		ret = set_pmd_migration_entry(&pvmw, folio_page(folio, 0));
@@ -329,7 +333,8 @@ again:
 			}
 
 			mpfn = migrate_pfn(page_to_pfn(page)) |
-					MIGRATE_PFN_MIGRATE;
+					MIGRATE_PFN_MIGRATE |
+					MIGRATE_PFN_DEVICE;
 			if (softleaf_is_device_private_write(entry))
 				mpfn |= MIGRATE_PFN_WRITE;
 		} else {
@@ -1368,7 +1373,7 @@ static unsigned long migrate_device_pfn_lock(unsigned long pfn)
 		return 0;
 	}
 
-	return migrate_pfn(pfn) | MIGRATE_PFN_MIGRATE;
+	return migrate_pfn(pfn) | MIGRATE_PFN_MIGRATE | MIGRATE_PFN_DEVICE;
 }
 
 /**
