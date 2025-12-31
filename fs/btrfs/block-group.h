@@ -118,7 +118,6 @@ struct btrfs_caching_control {
 struct btrfs_block_group {
 	struct btrfs_fs_info *fs_info;
 	struct btrfs_inode *inode;
-	spinlock_t lock;
 	u64 start;
 	u64 length;
 	u64 pinned;
@@ -159,6 +158,8 @@ struct btrfs_block_group {
 	unsigned long full_stripe_len;
 	unsigned long runtime_flags;
 
+	spinlock_t lock;
+
 	unsigned int ro;
 
 	int disk_cache_state;
@@ -177,8 +178,6 @@ struct btrfs_block_group {
 
 	/* For block groups in the same raid type */
 	struct list_head list;
-
-	refcount_t refs;
 
 	/*
 	 * List of struct btrfs_free_clusters for this block group.
@@ -199,6 +198,8 @@ struct btrfs_block_group {
 	/* For read-only block groups */
 	struct list_head ro_list;
 
+	refcount_t refs;
+
 	/*
 	 * When non-zero it means the block group's logical address and its
 	 * device extents can not be reused for future block group allocations
@@ -211,10 +212,10 @@ struct btrfs_block_group {
 
 	/* For discard operations */
 	struct list_head discard_list;
+	enum btrfs_discard_state discard_state;
 	int discard_index;
 	u64 discard_eligible_time;
 	u64 discard_cursor;
-	enum btrfs_discard_state discard_state;
 
 	/* For dirty block groups */
 	struct list_head dirty_list;
