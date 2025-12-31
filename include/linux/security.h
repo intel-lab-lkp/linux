@@ -1638,6 +1638,7 @@ static inline int security_watch_key(struct key *key)
 
 #ifdef CONFIG_SECURITY_NETWORK
 
+int security_unix_path_connect(const struct path *path);
 int security_netlink_send(struct sock *sk, struct sk_buff *skb);
 int security_unix_stream_connect(struct sock *sock, struct sock *other, struct sock *newsk);
 int security_unix_may_send(struct socket *sock,  struct socket *other);
@@ -1695,6 +1696,11 @@ int security_mptcp_add_subflow(struct sock *sk, struct sock *ssk);
 
 #else	/* CONFIG_SECURITY_NETWORK */
 static inline int security_netlink_send(struct sock *sk, struct sk_buff *skb)
+{
+	return 0;
+}
+
+static inline int security_unix_path_connect(const struct path *path)
 {
 	return 0;
 }

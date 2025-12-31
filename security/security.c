@@ -4047,6 +4047,22 @@ int security_unix_stream_connect(struct sock *sock, struct sock *other,
 }
 EXPORT_SYMBOL(security_unix_stream_connect);
 
+/*
+ * security_unix_path_connect() - Check if a named AF_UNIX socket can connect
+ * @path: Path of the socket being connected to
+ *
+ * This hook is called to check permissions before connecting to a named
+ * AF_UNIX socket. This is necessary because it was not possible to check the
+ * VFS inode of the target socket before the connection is made.
+ *
+ * Return: Returns 0 if permission is granted.
+ */
+int security_unix_path_connect(const struct path *path)
+{
+	return call_int_hook(unix_path_connect, path);
+}
+EXPORT_SYMBOL(security_unix_path_connect);
+
 /**
  * security_unix_may_send() - Check if AF_UNIX socket can send datagrams
  * @sock: originating sock
