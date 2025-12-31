@@ -4656,7 +4656,14 @@ struct sk_buff *skb_segment_list(struct sk_buff *skb,
 		list_skb = list_skb->next;
 
 		err = 0;
-		delta_truesize += nskb->truesize;
+
+		/* Only track truesize delta and release head state for fragments
+		 * that own a socket. GRO-forwarded fragments (sk == NULL) rely on
+		 * the parent SKB for memory accounting.
+		 */
+		if (nskb->sk)
+			delta_truesize += nskb->truesize;
+
 		if (skb_shared(nskb)) {
 			tmp = skb_clone(nskb, GFP_ATOMIC);
 			if (tmp) {
@@ -4684,7 +4691,12 @@ struct sk_buff *skb_segment_list(struct sk_buff *skb,
 
 		skb_push(nskb, -skb_network_offset(nskb) + offset);
 
-		skb_release_head_state(nskb);
+		/* For GRO-forwarded packets, fragments have no head state
+		 * (no sk/destructor) to release. Skip this.
+		 */
+		if (nskb->sk)
+			skb_release_head_state(nskb);
+
 		len_diff = skb_network_header_len(nskb) - skb_network_header_len(skb);
 		__copy_skb_header(nskb, skb);
 
