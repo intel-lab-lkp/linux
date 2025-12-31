@@ -2124,43 +2124,39 @@ again:
 	}
 
 	up_read(&space_info->groups_sem);
-}
 
-void btrfs_space_info_update_reclaimable(struct btrfs_space_info *space_info, s64 bytes)
-{
-	u64 chunk_sz = calc_effective_data_chunk_size(space_info->fs_info);
-
-	lockdep_assert_held(&space_info->lock);
-	space_info->reclaimable_bytes += bytes;
-
-	if (space_info->reclaimable_bytes >= chunk_sz)
-		btrfs_set_periodic_reclaim_ready(space_info, true);
-}
-
-void btrfs_set_periodic_reclaim_ready(struct btrfs_space_info *space_info, bool ready)
-{
-	lockdep_assert_held(&space_info->lock);
-	if (!READ_ONCE(space_info->periodic_reclaim))
-		return;
-	if (ready != space_info->periodic_reclaim_ready) {
-		space_info->periodic_reclaim_ready = ready;
-		if (!ready)
-			space_info->reclaimable_bytes = 0;
+	/*
+	 * Temporary pause periodic reclaim until reclaim make some progress.
+	 * This can prevent periodic reclaim keep happening but make no progress.
+	 */
+	if (will_reclaim) {
+		spin_lock(&space_info->lock);
+		btrfs_pause_periodic_reclaim(space_info);
+		spin_unlock(&space_info->lock);
 	}
 }
 
 static bool btrfs_should_periodic_reclaim(struct btrfs_space_info *space_info)
 {
 	bool ret;
+	u64 chunk_sz;
+	u64 unused;
 
 	if (space_info->flags & BTRFS_BLOCK_GROUP_SYSTEM)
 		return false;
 	if (!READ_ONCE(space_info->periodic_reclaim))
 		return false;
+	if (!READ_ONCE(space_info->periodic_reclaim_paused))
+		return true;
+
+	chunk_sz = calc_effective_data_chunk_size(space_info->fs_info);
 
 	spin_lock(&space_info->lock);
-	ret = space_info->periodic_reclaim_ready;
-	btrfs_set_periodic_reclaim_ready(space_info, false);
+	unused = space_info->total_bytes - space_info->bytes_used;
+	ret = (unused >= space_info->last_reclaim_unused + chunk_sz ||
+	       btrfs_calc_reclaim_threshold(space_info) != space_info->last_reclaim_threshold);
+	if (ret)
+		btrfs_resume_periodic_reclaim(space_info);
 	spin_unlock(&space_info->lock);
 
 	return ret;

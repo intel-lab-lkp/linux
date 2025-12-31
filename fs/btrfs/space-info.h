@@ -216,12 +216,9 @@ struct btrfs_space_info {
 	 * Periodic reclaim should be a no-op if a space_info hasn't
 	 * freed any space since the last time we tried.
 	 */
-	bool periodic_reclaim_ready;
-
-	/*
-	 * Net bytes freed or allocated since the last reclaim pass.
-	 */
-	s64 reclaimable_bytes;
+	bool periodic_reclaim_paused;
+	u8 last_reclaim_threshold;
+	u64 last_reclaim_unused;
 };
 
 static inline bool btrfs_mixed_space_info(const struct btrfs_space_info *space_info)
@@ -301,9 +298,22 @@ void btrfs_dump_space_info_for_trans_abort(struct btrfs_fs_info *fs_info);
 void btrfs_init_async_reclaim_work(struct btrfs_fs_info *fs_info);
 u64 btrfs_account_ro_block_groups_free_space(struct btrfs_space_info *sinfo);
 
-void btrfs_space_info_update_reclaimable(struct btrfs_space_info *space_info, s64 bytes);
-void btrfs_set_periodic_reclaim_ready(struct btrfs_space_info *space_info, bool ready);
 u8 btrfs_calc_reclaim_threshold(const struct btrfs_space_info *space_info);
+static inline void btrfs_resume_periodic_reclaim(struct btrfs_space_info *space_info)
+{
+	lockdep_assert_held(&space_info->lock);
+	if (space_info->periodic_reclaim_paused)
+		space_info->periodic_reclaim_paused = false;
+}
+static inline void btrfs_pause_periodic_reclaim(struct btrfs_space_info *space_info)
+{
+	lockdep_assert_held(&space_info->lock);
+	if (!space_info->periodic_reclaim_paused) {
+		space_info->periodic_reclaim_paused = true;
+		space_info->last_reclaim_threshold = btrfs_calc_reclaim_threshold(space_info);
+		space_info->last_reclaim_unused = space_info->total_bytes - space_info->bytes_used;
+	}
+}
 void btrfs_reclaim_sweep(const struct btrfs_fs_info *fs_info);
 void btrfs_return_free_space(struct btrfs_space_info *space_info, u64 len);
 
