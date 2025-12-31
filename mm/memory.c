@@ -1005,8 +1005,8 @@ copy_nonpresent_pte(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 		 */
 		if (softleaf_is_device_private_write(entry) &&
 		    is_cow_mapping(vm_flags)) {
-			entry = make_readable_device_private_entry(
-							swp_offset(entry));
+			entry = make_readable_device_private_entry
+							(swp_offset(entry));
 			pte = swp_entry_to_pte(entry);
 			if (pte_swp_uffd_wp(orig_pte))
 				pte = pte_swp_mkuffd_wp(pte);
