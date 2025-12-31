@@ -2044,6 +2044,14 @@ static int diAllocBit(struct inomap * imap, struct iag * iagp, int ino)
 	 * the extent.
 	 */
 	agno = BLKTOAG(le64_to_cpu(iagp->agstart), JFS_SBI(imap->im_ipimap->i_sb));
+	if (agno >= MAXAG || agno < 0) {
+		if (amp)
+			release_metapage(amp);
+		if (bmp)
+			release_metapage(bmp);
+		return -EIO;
+	}
+
 	extno = ino >> L2INOSPEREXT;
 	bitno = ino & (INOSPEREXT - 1);
 
