@@ -741,10 +741,7 @@ enum atomisp_burst_capture_options {
 	_IOW('v', BASE_VIDIOC_PRIVATE + 15, struct atomisp_ctc_table)
 
 /* white balance Correction */
-#define ATOMISP_IOC_G_ISP_WHITE_BALANCE \
-	_IOR('v', BASE_VIDIOC_PRIVATE + 16, struct atomisp_wb_config)
-#define ATOMISP_IOC_S_ISP_WHITE_BALANCE \
-	_IOW('v', BASE_VIDIOC_PRIVATE + 16, struct atomisp_wb_config)
+
 
 /* fpn table loading */
 #define ATOMISP_IOC_S_ISP_FPN_TABLE \

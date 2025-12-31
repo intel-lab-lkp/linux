@@ -1083,6 +1083,38 @@ static int atomisp_g_ctrl(struct file *file, void *fh,
  * applications initialize the id and value fields of a struct v4l2_control
  * and call this ioctl.
  */
+static int atomisp_v4l2_set_wb(struct atomisp_sub_device *asd, int id,
+			       int value)
+{
+	struct atomisp_device *isp = asd->isp;
+	struct atomisp_wb_config config;
+	int ret;
+
+	if (atomisp_css_get_wb_config(asd, &config)) {
+		dev_err(isp->dev, "%s: can't get wb config\n", __func__);
+		return -EINVAL;
+	}
+
+	switch (id) {
+	case V4L2_CID_BLUE_BALANCE:
+		config.b = value << (16 - 8 - config.integer_bits + 1);
+		break;
+	case V4L2_CID_RED_BALANCE:
+		config.r = value << (16 - 8 - config.integer_bits + 1);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	ret = atomisp_white_balance_param(asd, 1, &config);
+	if (ret) {
+		dev_err(isp->dev, "%s: set wb config failed\n", __func__);
+		return ret;
+	}
+
+	return 0;
+}
+
 static int atomisp_s_ctrl(struct file *file, void *fh,
 			  struct v4l2_control *control)
 {
@@ -1121,6 +1153,17 @@ static int atomisp_s_ctrl(struct file *file, void *fh,
 		break;
 	case V4L2_CID_ATOMISP_LOW_LIGHT:
 		ret = atomisp_low_light(asd, 1, &control->value);
+		break;
+	case V4L2_CID_AUTO_WHITE_BALANCE:
+		/*
+		 * TODO: Auto White Balance is not supported yet.
+		 * It is currently handled by the ISP.
+		 */
+		ret = 0;
+		break;
+	case V4L2_CID_RED_BALANCE:
+	case V4L2_CID_BLUE_BALANCE:
+		ret = atomisp_v4l2_set_wb(asd, control->id, control->value);
 		break;
 	default:
 		ret = -EINVAL;
@@ -1484,13 +1527,7 @@ static long atomisp_vidioc_default(struct file *file, void *fh,
 		err = atomisp_ctc(asd, 1, arg);
 		break;
 
-	case ATOMISP_IOC_G_ISP_WHITE_BALANCE:
-		err = atomisp_white_balance_param(asd, 0, arg);
-		break;
 
-	case ATOMISP_IOC_S_ISP_WHITE_BALANCE:
-		err = atomisp_white_balance_param(asd, 1, arg);
-		break;
 
 	case ATOMISP_IOC_G_3A_CONFIG:
 		err = atomisp_3a_config_param(asd, 0, arg);
