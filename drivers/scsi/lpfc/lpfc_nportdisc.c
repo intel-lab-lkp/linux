@@ -1505,8 +1505,10 @@ lpfc_cmpl_plogi_plogi_issue(struct lpfc_vport *vport,
 		}
 
 		mbox->ctx_ndlp = lpfc_nlp_get(ndlp);
-		if (!mbox->ctx_ndlp)
+		if (!mbox->ctx_ndlp) {
+			lpfc_mbox_rsrc_cleanup(phba, mbox, MBOX_THD_UNLOCKED);
 			goto out;
+		}
 
 		mbox->vport = vport;
 		if (lpfc_sli_issue_mbox(phba, mbox, MBX_NOWAIT)
