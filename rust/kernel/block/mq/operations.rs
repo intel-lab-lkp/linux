@@ -31,6 +31,8 @@ pub trait Operations: Sized {
     /// Data associated with the `struct request_queue` that is allocated for
     /// the `GenDisk` associated with this `Operations` implementation.
     type QueueData: ForeignOwnable;
+    /// TODO Doc
+    type ThisModule: ThisModule;
 
     /// Called by the kernel to queue a request with the driver. If `is_last` is
     /// `false`, the driver is allowed to defer committing the request.
@@ -282,5 +284,15 @@ impl<T: Operations> OperationsVTable<T> {
 
     pub(crate) const fn build() -> &'static bindings::blk_mq_ops {
         &Self::VTABLE
+    }
+
+    const BLOCK_OPS: bindings::block_device_operations = bindings::block_device_operations {
+        owner: T::ThisModule::OWNER.as_ptr(),
+        ..pin_init::zeroed()
+    };
+
+    pub(crate) const fn build_block_device_operations() -> &'static bindings::block_device_operations
+    {
+        &Self::BLOCK_OPS
     }
 }
