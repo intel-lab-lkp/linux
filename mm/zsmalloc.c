@@ -2000,22 +2000,45 @@ static int zs_register_shrinker(struct zs_pool *pool)
 static int calculate_zspage_chain_size(int class_size)
 {
 	int i, min_waste = INT_MAX;
-	int chain_size = 1;
+	int best_chain_size = 1;
 
 	if (is_power_of_2(class_size))
-		return chain_size;
+		return best_chain_size;
 
 	for (i = 1; i <= ZS_MAX_PAGES_PER_ZSPAGE; i++) {
-		int waste;
+		int curr_waste = (i * PAGE_SIZE) % class_size;
 
-		waste = (i * PAGE_SIZE) % class_size;
-		if (waste < min_waste) {
-			min_waste = waste;
-			chain_size = i;
+		if (curr_waste == 0)
+			return i;
+
+		/*
+		 * Accept the new chain size if:
+		 * 1. The current best is wasteful (> 10% of zspage size),
+		 *    accept anything that is better.
+		 * 2. The current best is efficient, accept only significant
+		 *    (25%) improvement.
+		 */
+		if (min_waste * 10 > best_chain_size * PAGE_SIZE) {
+			if (curr_waste < min_waste) {
+				min_waste = curr_waste;
+				best_chain_size = i;
+			}
+		} else {
+			if (curr_waste * 4 < min_waste * 3) {
+				min_waste = curr_waste;
+				best_chain_size = i;
+			}
 		}
+
+		/*
+		 * If the current best chain has low waste (approx < 1.5%
+		 * relative to zspage size) then accept it right away.
+		 */
+		if (min_waste * 64 <= best_chain_size * PAGE_SIZE)
+			break;
 	}
 
-	return chain_size;
+	return best_chain_size;
 }
 
 /**
