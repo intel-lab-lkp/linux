@@ -371,20 +371,28 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
             /// Used by the printing macros, e.g. [`info!`].
             const __LOG_PREFIX: &[u8] = b\"{name}\\0\";
 
-            // SAFETY: `__this_module` is constructed by the kernel at load time and will not be
-            // freed until the module is unloaded.
-            #[cfg(MODULE)]
-            static THIS_MODULE: ::kernel::ThisModule = unsafe {{
-                extern \"C\" {{
-                    static __this_module: ::kernel::types::Opaque<::kernel::bindings::module>;
-                }}
+            /// THIS_MODULE for \"{name}\". See more at [`kernel::this_module`].
+            #[allow(non_camel_case_types)]
+            pub struct THIS_MODULE;
 
-                ::kernel::ThisModule::from_ptr(__this_module.get())
-            }};
-            #[cfg(not(MODULE))]
-            static THIS_MODULE: ::kernel::ThisModule = unsafe {{
-                ::kernel::ThisModule::from_ptr(::core::ptr::null_mut())
-            }};
+            impl ::kernel::prelude::ThisModule for THIS_MODULE {{
+                #[cfg(not(MODULE))] 
+                const OWNER: ::kernel::this_module::ModuleWrapper = unsafe {{
+                    ::kernel::this_module::ModuleWrapper::from_ptr(::core::ptr::null_mut())
+                }};
+
+                #[cfg(MODULE)]
+                // SAFETY:
+                // - `__this_module` is constructed by the kernel at module load time.
+                // - We use check that we are module so we can create non-null ModuleWrapper.
+                const OWNER: ::kernel::this_module::ModuleWrapper = unsafe {{
+                    extern \"C\" {{
+                        static __this_module: ::kernel::types::Opaque<::kernel::bindings::module>;
+                    }}
+                    
+                    ::kernel::this_module::ModuleWrapper::from_ptr(__this_module.get())
+                }};
+            }}
 
             /// The `LocalModule` type is the type of the module created by `module!`,
             /// `module_pci_driver!`, `module_platform_driver!`, etc.
@@ -502,7 +510,7 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
                     /// This function must only be called once.
                     unsafe fn __init() -> ::kernel::ffi::c_int {{
                         let initer =
-                            <{type_} as ::kernel::InPlaceModule>::init(&super::super::THIS_MODULE);
+                            <{type_} as ::kernel::InPlaceModule>::init::<super::super::THIS_MODULE>();
                         // SAFETY: No data race, since `__MOD` can only be accessed by this module
                         // and there only `__init` and `__exit` access it. These functions are only
                         // called once and `__exit` cannot be called before or during `__init`.

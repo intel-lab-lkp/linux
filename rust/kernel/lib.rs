@@ -205,31 +205,54 @@ pub trait ModuleMetadata {
     const NAME: &'static crate::str::CStr;
 }
 
-/// Equivalent to `THIS_MODULE` in the C API.
-///
-/// C header: [`include/linux/init.h`](srctree/include/linux/init.h)
-pub struct ThisModule(*mut bindings::module);
+pub mod this_module {
+    //! TODO
+    //!
+    //! # For driver cretors
+    //!
+    //! For each module we define own custom THIS_MODULE in
+    //! [`macros::module::module`]. Mechanism is equivalent to `THIS_MODULE` in
+    //! the [C API](srctree/include/linux/init.h).
+    //!
+    //! TODO
+    //!
+    //! # For abstraction creators
+    //!
+    //! TODO
 
-// SAFETY: `THIS_MODULE` may be used from all threads within a module.
-unsafe impl Sync for ThisModule {}
-
-impl ThisModule {
-    /// Creates a [`ThisModule`] given the `THIS_MODULE` pointer.
-    ///
-    /// # Safety
-    ///
-    /// The pointer must be equal to the right `THIS_MODULE`.
-    pub const unsafe fn from_ptr(ptr: *mut bindings::module) -> ThisModule {
-        ThisModule(ptr)
+    /// See [`this_module`]
+    pub trait ThisModule {
+        /// TODO Doc
+        const OWNER: ModuleWrapper;
     }
 
-    /// Access the raw pointer for this module.
-    ///
-    /// It is up to the user to use it correctly.
-    pub const fn as_ptr(&self) -> *mut bindings::module {
-        self.0
+    /// See [`this_module`]
+    pub struct ModuleWrapper {
+        ptr: *mut bindings::module,
+    }
+
+    impl ModuleWrapper {
+        /// Get the raw pointer to the underlying `struct module`.
+        ///
+        /// TODO: Should be only available for kernel create.
+        pub const fn as_ptr(&self) -> *mut bindings::module {
+            self.ptr
+        }
+
+        /// Only meant to use in [`macros::module::module`].
+        ///
+        /// # Safety
+        ///
+        /// - Only modules are allowed to create non null `ModuleWrapper`s.
+        /// - The pointer must point to a valid `struct module` provided by the
+        ///   kernel.
+        #[doc(hidden)]
+        pub const unsafe fn from_ptr(ptr: *mut bindings::module) -> Self {
+            ModuleWrapper { ptr }
+        }
     }
 }
+pub use this_module::*;
 
 #[cfg(not(testlib))]
 #[panic_handler]
