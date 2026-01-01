@@ -36,7 +36,7 @@ struct NullBlkModule {
 }
 
 impl kernel::InPlaceModule for NullBlkModule {
-    fn init(_module: &'static ThisModule) -> impl PinInit<Self, Error> {
+    fn init<M: ThisModule>() -> impl PinInit<Self, Error> {
         pr_info!("Rust null_blk loaded\n");
 
         try_pin_init!(Self {

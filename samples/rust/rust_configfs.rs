@@ -42,7 +42,7 @@ impl Configuration {
 }
 
 impl kernel::InPlaceModule for RustConfigfs {
-    fn init(_module: &'static ThisModule) -> impl PinInit<Self, Error> {
+    fn init<M: ThisModule>() -> impl PinInit<Self, Error> {
         pr_info!("Rust configfs sample (init)\n");
 
         // Define a subsystem with the data type `Configuration`, two

@@ -118,11 +118,7 @@ pub unsafe trait RegistrationOps {
     ///
     /// On success, `reg` must remain pinned and valid until the matching call to
     /// [`RegistrationOps::unregister`].
-    unsafe fn register(
-        reg: &Opaque<Self::RegType>,
-        name: &'static CStr,
-        module: &'static ThisModule,
-    ) -> Result;
+    unsafe fn register<M: ThisModule>(reg: &Opaque<Self::RegType>, name: &'static CStr) -> Result;
 
     /// Unregisters a driver previously registered with [`RegistrationOps::register`].
     ///
@@ -155,7 +151,7 @@ unsafe impl<T: RegistrationOps> Send for Registration<T> {}
 
 impl<T: RegistrationOps> Registration<T> {
     /// Creates a new instance of the registration object.
-    pub fn new(name: &'static CStr, module: &'static ThisModule) -> impl PinInit<Self, Error> {
+    pub fn new<M: ThisModule>(name: &'static CStr) -> impl PinInit<Self, Error> {
         try_pin_init!(Self {
             reg <- Opaque::try_ffi_init(|ptr: *mut T::RegType| {
                 // SAFETY: `try_ffi_init` guarantees that `ptr` is valid for write.
@@ -166,7 +162,7 @@ impl<T: RegistrationOps> Registration<T> {
                 let drv = unsafe { &*(ptr as *const Opaque<T::RegType>) };
 
                 // SAFETY: `drv` is guaranteed to be pinned until `T::unregister`.
-                unsafe { T::register(drv, name, module) }
+                unsafe { T::register::<M>(drv, name) }
             }),
         })
     }
@@ -197,13 +193,10 @@ macro_rules! module_driver {
         }
 
         impl $crate::InPlaceModule for DriverModule {
-            fn init(
-                module: &'static $crate::ThisModule
-            ) -> impl ::pin_init::PinInit<Self, $crate::error::Error> {
+            fn init<M: ::kernel::ThisModule>() -> impl ::pin_init::PinInit<Self, $crate::error::Error> {
                 $crate::try_pin_init!(Self {
-                    _driver <- $crate::driver::Registration::new(
+                    _driver <- $crate::driver::Registration::new::<M>(
                         <Self as $crate::ModuleMetadata>::NAME,
-                        module,
                     ),
                 })
             }

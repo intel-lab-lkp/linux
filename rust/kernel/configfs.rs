@@ -744,17 +744,17 @@ macro_rules! impl_item_type {
     ($tpe:ty) => {
         impl<Data> ItemType<$tpe, Data> {
             #[doc(hidden)]
-            pub const fn new_with_child_ctor<const N: usize, Child>(
-                owner: &'static ThisModule,
+            pub const fn new_with_child_ctor<const N: usize, Child, M>(
                 attributes: &'static AttributeList<N, Data>,
             ) -> Self
             where
                 Data: GroupOperations<Child = Child>,
                 Child: 'static,
+                M: ThisModule,
             {
                 Self {
                     item_type: Opaque::new(bindings::config_item_type {
-                        ct_owner: owner.as_ptr(),
+                        ct_owner: M::OWNER.as_ptr(),
                         ct_group_ops: GroupOperationsVTable::<Data, Child>::vtable_ptr().cast_mut(),
                         ct_item_ops: ItemOperationsVTable::<$tpe, Data>::vtable_ptr().cast_mut(),
                         ct_attrs: core::ptr::from_ref(attributes).cast_mut().cast(),
@@ -765,13 +765,12 @@ macro_rules! impl_item_type {
             }
 
             #[doc(hidden)]
-            pub const fn new<const N: usize>(
-                owner: &'static ThisModule,
+            pub const fn new<const N: usize, M: ThisModule>(
                 attributes: &'static AttributeList<N, Data>,
             ) -> Self {
                 Self {
                     item_type: Opaque::new(bindings::config_item_type {
-                        ct_owner: owner.as_ptr(),
+                        ct_owner: M::OWNER.as_ptr(),
                         ct_group_ops: core::ptr::null_mut(),
                         ct_item_ops: ItemOperationsVTable::<$tpe, Data>::vtable_ptr().cast_mut(),
                         ct_attrs: core::ptr::from_ref(attributes).cast_mut().cast(),
@@ -1019,8 +1018,8 @@ macro_rules! configfs_attrs {
                     const [<$no_child:upper>]: bool = true;
 
                     static [< $data:upper _TPE >] : $crate::configfs::ItemType<$container, $data>  =
-                        $crate::configfs::ItemType::<$container, $data>::new::<N>(
-                            &THIS_MODULE, &[<$ data:upper _ATTRS >]
+                        $crate::configfs::ItemType::<$container, $data>::new::<N, crate::THIS_MODULE>(
+                            &[<$ data:upper _ATTRS >]
                         );
                 )?
 
@@ -1028,8 +1027,8 @@ macro_rules! configfs_attrs {
                     static [< $data:upper _TPE >]:
                         $crate::configfs::ItemType<$container, $data>  =
                             $crate::configfs::ItemType::<$container, $data>::
-                            new_with_child_ctor::<N, $child>(
-                                &THIS_MODULE, &[<$ data:upper _ATTRS >]
+                            new_with_child_ctor::<N, $child, crate::THIS_MODULE>(
+                                &[<$ data:upper _ATTRS >]
                             );
                 )?
 

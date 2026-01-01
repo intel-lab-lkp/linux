@@ -17,7 +17,7 @@ struct SampleModule {
 }
 
 impl Module for SampleModule {
-    fn init(_module: &'static ThisModule) -> Result<Self> {
+    fn init<M: kernel::ThisModule>() -> Result<Self> {
         pr_info!("Initialising Rust Faux Device Sample\n");
 
         let reg = faux::Registration::new(c_str!("rust-faux-sample-device"), None)?;

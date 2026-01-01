@@ -14,7 +14,6 @@ use crate::{
     of,
     prelude::*,
     types::Opaque,
-    ThisModule,
 };
 
 use core::{
@@ -31,11 +30,7 @@ pub struct Adapter<T: Driver>(T);
 unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
     type RegType = bindings::platform_driver;
 
-    unsafe fn register(
-        pdrv: &Opaque<Self::RegType>,
-        name: &'static CStr,
-        module: &'static ThisModule,
-    ) -> Result {
+    unsafe fn register<M: ThisModule>(pdrv: &Opaque<Self::RegType>, name: &'static CStr) -> Result {
         let of_table = match T::OF_ID_TABLE {
             Some(table) => table.as_ptr(),
             None => core::ptr::null(),
@@ -56,7 +51,7 @@ unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
         }
 
         // SAFETY: `pdrv` is guaranteed to be a valid `RegType`.
-        to_result(unsafe { bindings::__platform_driver_register(pdrv.get(), module.0) })
+        to_result(unsafe { bindings::__platform_driver_register(pdrv.get(), M::OWNER.as_ptr()) })
     }
 
     unsafe fn unregister(pdrv: &Opaque<Self::RegType>) {
