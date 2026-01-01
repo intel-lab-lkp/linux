@@ -300,6 +300,65 @@ void __weak crash_smp_send_stop(void)
 
 atomic_t panic_cpu = ATOMIC_INIT(PANIC_CPU_INVALID);
 
+#ifdef CONFIG_PANIC_FORCE_CPU
+static void do_panic_on_target_cpu(void *info)
+{
+	panic("%s", (char *)info);
+}
+
+/**
+ * panic_force_target_cpu - Redirect panic to a specific CPU for crash kernel
+ * @fmt: panic message format string
+ * @args: arguments for format string
+ *
+ * Some platforms require panic handling to occur on a specific CPU
+ * for the crash kernel to function correctly. This function redirects
+ * panic handling to CONFIG_PANIC_FORCE_CPU_ID before kexec.
+ *
+ * Returns true if panic should proceed on current CPU.
+ * Returns false (never returns) if panic was redirected.
+ */
+static bool panic_force_target_cpu(const char *fmt, va_list args)
+{
+	static char panic_redirect_msg[1024];
+	int cpu = raw_smp_processor_id();
+	int target_cpu = CONFIG_PANIC_FORCE_CPU_ID;
+
+	/* Already on target CPU - proceed normally */
+	if (cpu == target_cpu)
+		return true;
+
+	/* Target CPU is offline, can't redirect */
+	if (!cpu_online(target_cpu)) {
+		pr_warn("panic: CPU %d is offline, cannot redirect panic. "
+			"Crash kernel interrupts may be unavailable.\n", target_cpu);
+		return true;
+	}
+
+	/* Another panic already in progress */
+	if (panic_in_progress()) {
+		pr_warn("panic: Another panic in progress on CPU %d, cannot redirect to CPU %d. "
+			"Crash kernel interrupts may be unavailable.\n",
+			atomic_read(&panic_cpu), target_cpu);
+		return true;
+	}
+
+	pr_info("panic: Redirecting from CPU %d to CPU %d for crash kernel\n",
+		cpu, target_cpu);
+
+	vsnprintf(panic_redirect_msg, sizeof(panic_redirect_msg), fmt, args);
+
+	smp_call_function_single(target_cpu, do_panic_on_target_cpu, panic_redirect_msg, false);
+
+	return false;
+}
+#else
+static inline bool panic_force_target_cpu(const char *fmt, va_list args)
+{
+	return true;
+}
+#endif /* CONFIG_PANIC_FORCE_CPU */
+
 bool panic_try_start(void)
 {
 	int old_cpu, this_cpu;
@@ -450,6 +509,13 @@ void vpanic(const char *fmt, va_list args)
 	 */
 	local_irq_disable();
 	preempt_disable_notrace();
+
+	/*
+	 * Redirect panic to target CPU if configured (CONFIG_PANIC_FORCE_CPU).
+	 * Returns false and never returns if panic was redirected.
+	 */
+	if (!panic_force_target_cpu(fmt, args))
+		panic_smp_self_stop();
 
 	/*
 	 * It's possible to come here directly from a panic-assertion and

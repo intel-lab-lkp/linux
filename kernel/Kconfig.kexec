@@ -179,4 +179,21 @@ config CRASH_MAX_MEMORY_RANGES
 	  the computation behind the value provided through the
 	  /sys/kernel/crash_elfcorehdr_size attribute.
 
+config PANIC_FORCE_CPU
+	bool "Force panic to execute on a specific CPU"
+	depends on SMP && CRASH_DUMP
+	help
+	  Some platforms require panic handling to occur on a specific CPU
+	  for the crash kernel to function correctly. This option forces
+	  panic handling to be redirected to the specified CPU before kexec
+	  into the crash kernel.
+
+config PANIC_FORCE_CPU_ID
+	int "CPU number for panic execution"
+	depends on PANIC_FORCE_CPU
+	default 0
+	help
+	  The CPU number that should handle panic when PANIC_FORCE_CPU is
+	  enabled.
+
 endmenu
