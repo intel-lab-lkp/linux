@@ -31,10 +31,10 @@ pub struct Adapter<T: Driver>(T);
 unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
     type RegType = bindings::usb_driver;
 
-    unsafe fn register<M: ThisModule>(udrv: &Opaque<Self::RegType>, name: &'static CStr) -> Result {
+    unsafe fn register<M: ThisModule>(udrv: &Opaque<Self::RegType>) -> Result {
         // SAFETY: It's safe to set the fields of `struct usb_driver` on initialization.
         unsafe {
-            (*udrv.get()).name = name.as_char_ptr();
+            (*udrv.get()).name = M::NAME.as_char_ptr();
             (*udrv.get()).probe = Some(Self::probe_callback);
             (*udrv.get()).disconnect = Some(Self::disconnect_callback);
             (*udrv.get()).id_table = T::ID_TABLE.as_ptr();
@@ -42,7 +42,7 @@ unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
 
         // SAFETY: `udrv` is guaranteed to be a valid `RegType`.
         to_result(unsafe {
-            bindings::usb_register_driver(udrv.get(), M::OWNER.as_ptr(), name.as_char_ptr())
+            bindings::usb_register_driver(udrv.get(), M::OWNER.as_ptr(), M::NAME.as_char_ptr())
         })
     }
 

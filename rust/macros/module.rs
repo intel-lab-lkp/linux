@@ -375,6 +375,13 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
             #[allow(non_camel_case_types)]
             pub struct THIS_MODULE;
 
+            impl THIS_MODULE {{
+                /// Returns the name of this module.
+                pub const fn name() -> &'static ::kernel::str::CStr {{
+                    c\"{name}\"
+                }}
+            }}
+
             impl ::kernel::prelude::ThisModule for THIS_MODULE {{
                 #[cfg(not(MODULE))] 
                 const OWNER: ::kernel::this_module::ModuleWrapper = unsafe {{
@@ -392,13 +399,7 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
                     
                     ::kernel::this_module::ModuleWrapper::from_ptr(__this_module.get())
                 }};
-            }}
 
-            /// The `LocalModule` type is the type of the module created by `module!`,
-            /// `module_pci_driver!`, `module_platform_driver!`, etc.
-            type LocalModule = {type_};
-
-            impl ::kernel::ModuleMetadata for {type_} {{
                 const NAME: &'static ::kernel::str::CStr = c\"{name}\";
             }}
 

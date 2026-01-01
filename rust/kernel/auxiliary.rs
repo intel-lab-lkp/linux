@@ -27,10 +27,10 @@ pub struct Adapter<T: Driver>(T);
 unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
     type RegType = bindings::auxiliary_driver;
 
-    unsafe fn register<M: ThisModule>(adrv: &Opaque<Self::RegType>, name: &'static CStr) -> Result {
+    unsafe fn register<M: ThisModule>(adrv: &Opaque<Self::RegType>) -> Result {
         // SAFETY: It's safe to set the fields of `struct auxiliary_driver` on initialization.
         unsafe {
-            (*adrv.get()).name = name.as_char_ptr();
+            (*adrv.get()).name = M::NAME.as_char_ptr();
             (*adrv.get()).probe = Some(Self::probe_callback);
             (*adrv.get()).remove = Some(Self::remove_callback);
             (*adrv.get()).id_table = T::ID_TABLE.as_ptr();
@@ -38,7 +38,11 @@ unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
 
         // SAFETY: `adrv` is guaranteed to be a valid `RegType`.
         to_result(unsafe {
-            bindings::__auxiliary_driver_register(adrv.get(), M::OWNER.as_ptr(), name.as_char_ptr())
+            bindings::__auxiliary_driver_register(
+                adrv.get(),
+                M::OWNER.as_ptr(),
+                M::NAME.as_char_ptr(),
+            )
         })
     }
 

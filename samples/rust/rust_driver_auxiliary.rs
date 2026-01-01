@@ -18,7 +18,7 @@ use kernel::{
 use core::any::TypeId;
 use pin_init::PinInit;
 
-const MODULE_NAME: &CStr = <LocalModule as kernel::ModuleMetadata>::NAME;
+const MODULE_NAME: &CStr = THIS_MODULE::name();
 const AUXILIARY_NAME: &CStr = c_str!("auxiliary");
 
 struct AuxiliaryDriver;
@@ -113,8 +113,8 @@ struct SampleModule {
 impl InPlaceModule for SampleModule {
     fn init<M: ThisModule>() -> impl PinInit<Self, Error> {
         try_pin_init!(Self {
-            _pci_driver <- driver::Registration::new::<M>(MODULE_NAME),
-            _aux_driver <- driver::Registration::new::<M>(MODULE_NAME),
+            _pci_driver <- driver::Registration::new::<M>(),
+            _aux_driver <- driver::Registration::new::<M>(),
         })
     }
 }
