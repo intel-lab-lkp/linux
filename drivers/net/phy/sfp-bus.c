@@ -247,6 +247,8 @@ static void sfp_module_parse_support(struct sfp_bus *bus,
 	case SFF8024_ECC_100GBASE_LR4_25GBASE_LR:
 	case SFF8024_ECC_100GBASE_ER4_25GBASE_ER:
 		phylink_set(modes, 100000baseLR4_ER4_Full);
+		/* should be 25000baseLR_Full (not defined in ethtool.h) */
+		phylink_set(modes, 25000baseSR_Full);
 		break;
 	case SFF8024_ECC_100GBASE_CR4:
 		phylink_set(modes, 100000baseCR4_Full);
