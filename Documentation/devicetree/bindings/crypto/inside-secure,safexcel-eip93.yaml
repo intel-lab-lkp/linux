@@ -34,6 +34,9 @@ properties:
           - const: airoha,en7581-eip93
           - const: inside-secure,safexcel-eip93ies
       - items:
+          - const: mediatek,mt7621-eip93
+          - const: inside-secure,safexcel-eip93ies
+      - items:
           - not: {}
             description: Need a SoC specific compatible
           - enum:
