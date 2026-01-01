@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/i2c.h>
 #include <linux/delay.h>
+#include <linux/iopoll.h>
 
 #include <linux/iio/iio.h>
 
@@ -113,7 +114,6 @@ static int rfd77402_set_state(struct i2c_client *client, u8 state, u16 check)
 static int rfd77402_measure(struct i2c_client *client)
 {
 	int ret;
-	int tries = 10;
 
 	ret = rfd77402_set_state(client, RFD77402_CMD_MCPU_ON,
 				 RFD77402_STATUS_MCPU_ON);
@@ -126,19 +126,15 @@ static int rfd77402_measure(struct i2c_client *client)
 	if (ret < 0)
 		goto err;
 
-	while (tries-- > 0) {
-		ret = i2c_smbus_read_byte_data(client, RFD77402_ICSR);
-		if (ret < 0)
-			goto err;
-		if (ret & RFD77402_ICSR_RESULT)
-			break;
-		msleep(20);
-	}
-
-	if (tries < 0) {
-		ret = -ETIMEDOUT;
+	/* Poll ICSR until RESULT bit is set */
+	ret = read_poll_timeout(i2c_smbus_read_byte_data, ret,
+				ret & RFD77402_ICSR_RESULT,
+				10000,    /* sleep: 10ms */
+				100000,   /* timeout: 100ms */
+				false,
+				client, RFD77402_ICSR);
+	if (ret < 0)
 		goto err;
-	}
 
 	ret = i2c_smbus_read_word_data(client, RFD77402_RESULT_R);
 	if (ret < 0)
