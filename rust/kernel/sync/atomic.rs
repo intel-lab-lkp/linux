@@ -560,3 +560,38 @@ where
         unsafe { from_repr(ret) }
     }
 }
+
+/// An atomic flag type backed by `i32`.
+///
+/// `Atomic<Flag>` is generally preferable when you need an atomic boolean and you may use
+/// read-modify-write operations (e.g. `xchg()`/`cmpxchg()`), and when minimizing memory usage is
+/// not the top priority.
+///
+/// `Atomic<bool>` is backed by `u8`. On some architectures that do not support byte-sized RMW
+/// instructions, this can make RMW operations slower.
+///
+/// If you only use `load()`/`store()`, either `Atomic<bool>` or `Atomic<Flag>` is fine.
+///
+/// ## Examples
+///
+/// ```
+/// use kernel::sync::atomic::{Atomic, Flag, Relaxed};
+/// let flag = Atomic::new(Flag::Clear);
+/// assert_eq!(Flag::Clear, flag.load(Relaxed));
+/// flag.store(Flag::Set, Relaxed);
+/// assert_eq!(Flag::Set, flag.load(Relaxed));
+/// ```
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum Flag {
+    /// The flag is clear.
+    Clear = 0,
+    /// The flag is set.
+    Set = 1,
+}
+
+// SAFETY: `Flag` and `i32` has the same size and alignment, and it's round-trip
+// transmutable to `i32`.
+unsafe impl AtomicType for Flag {
+    type Repr = i32;
+}
