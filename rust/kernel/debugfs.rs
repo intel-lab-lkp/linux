@@ -6,7 +6,8 @@
 //! C header: [`include/linux/debugfs.h`](srctree/include/linux/debugfs.h)
 
 // When DebugFS is disabled, many parameters are dead. Linting for this isn't helpful.
-#![cfg_attr(not(CONFIG_DEBUG_FS), allow(unused_variables))]
+// #![cfg_attr(not(CONFIG_DEBUG_FS), allow(unused_variables))]
+#![allow(unused_variables)]
 
 use crate::fmt;
 use crate::prelude::*;
@@ -46,27 +47,31 @@ use entry::Entry;
 // able to refer to us. In this case, we need to silently fail. All future child directories/files
 // will silently fail as well.
 #[derive(Clone)]
-pub struct Dir(#[cfg(CONFIG_DEBUG_FS)] Option<Arc<Entry<'static>>>);
+pub struct Dir<M: ThisModule>(
+    #[cfg(CONFIG_DEBUG_FS)] Option<Arc<Entry<'static>>>,
+    PhantomData<M>,
+);
 
-impl Dir {
+impl<M: ThisModule> Dir<M> {
     /// Create a new directory in DebugFS. If `parent` is [`None`], it will be created at the root.
-    fn create(name: &CStr, parent: Option<&Dir>) -> Self {
+    fn create(name: &CStr, parent: Option<&Self>) -> Self {
         #[cfg(CONFIG_DEBUG_FS)]
         {
             let parent_entry = match parent {
                 // If the parent couldn't be allocated, just early-return
-                Some(Dir(None)) => return Self(None),
-                Some(Dir(Some(entry))) => Some(entry.clone()),
+                Some(Self(None, _)) => return Self(None, PhantomData),
+                Some(Self(Some(entry), _)) => Some(entry.clone()),
                 None => None,
             };
             Self(
                 // If Arc creation fails, the `Entry` will be dropped, so the directory will be
                 // cleaned up.
                 Arc::new(Entry::dynamic_dir(name, parent_entry), GFP_KERNEL).ok(),
+                PhantomData,
             )
         }
         #[cfg(not(CONFIG_DEBUG_FS))]
-        Self()
+        Self(PhantomData)
     }
 
     /// Creates a DebugFS file which will own the data produced by the initializer provided in
@@ -107,7 +112,7 @@ impl Dir {
     /// let debugfs = Dir::new(c_str!("parent"));
     /// ```
     pub fn new(name: &CStr) -> Self {
-        Dir::create(name, None)
+        Self::create(name, None)
     }
 
     /// Creates a subdirectory within this directory.
@@ -121,7 +126,7 @@ impl Dir {
     /// let child = parent.subdir(c_str!("child"));
     /// ```
     pub fn subdir(&self, name: &CStr) -> Self {
-        Dir::create(name, Some(self))
+        Self::create(name, Some(self))
     }
 
     /// Creates a read-only file in this directory.
@@ -149,7 +154,7 @@ impl Dir {
     where
         T: Writer + Send + Sync + 'static,
     {
-        let file_ops = &<T as ReadFile<_>>::FILE_OPS;
+        let file_ops = &<T as ReadFile<M, _>>::FILE_OPS;
         self.create_file(name, data, file_ops)
     }
 
@@ -176,7 +181,7 @@ impl Dir {
     where
         T: BinaryWriter + Send + Sync + 'static,
     {
-        self.create_file(name, data, &T::FILE_OPS)
+        self.create_file(name, data, &<T as BinaryReadFile<M, _>>::FILE_OPS)
     }
 
     /// Creates a read-only file in this directory, with contents from a callback.
@@ -215,7 +220,7 @@ impl Dir {
         T: Send + Sync + 'static,
         F: Fn(&T, &mut fmt::Formatter<'_>) -> fmt::Result + Send + Sync,
     {
-        let file_ops = <FormatAdapter<T, F>>::FILE_OPS.adapt();
+        let file_ops = <FormatAdapter<T, F> as ReadFile<M, FormatAdapter<T, F>>>::FILE_OPS.adapt();
         self.create_file(name, data, file_ops)
     }
 
@@ -231,7 +236,7 @@ impl Dir {
     where
         T: Writer + Reader + Send + Sync + 'static,
     {
-        let file_ops = &<T as ReadWriteFile<_>>::FILE_OPS;
+        let file_ops = &<T as ReadWriteFile<M, _>>::FILE_OPS;
         self.create_file(name, data, file_ops)
     }
 
@@ -247,7 +252,7 @@ impl Dir {
     where
         T: BinaryWriter + BinaryReader + Send + Sync + 'static,
     {
-        let file_ops = &<T as BinaryReadWriteFile<_>>::FILE_OPS;
+        let file_ops = &<T as BinaryReadWriteFile<M, _>>::FILE_OPS;
         self.create_file(name, data, file_ops)
     }
 
@@ -270,7 +275,7 @@ impl Dir {
         W: Fn(&T, &mut UserSliceReader) -> Result + Send + Sync,
     {
         let file_ops =
-            <WritableAdapter<FormatAdapter<T, F>, W> as file_ops::ReadWriteFile<_>>::FILE_OPS
+            <WritableAdapter<FormatAdapter<T, F>, W> as file_ops::ReadWriteFile<M, _>>::FILE_OPS
                 .adapt()
                 .adapt();
         self.create_file(name, data, file_ops)
@@ -290,7 +295,7 @@ impl Dir {
     where
         T: Reader + Send + Sync + 'static,
     {
-        self.create_file(name, data, &T::FILE_OPS)
+        self.create_file(name, data, &<T as WriteFile<M, _>>::FILE_OPS)
     }
 
     /// Creates a write-only binary file in this directory.
@@ -307,7 +312,7 @@ impl Dir {
     where
         T: BinaryReader + Send + Sync + 'static,
     {
-        self.create_file(name, data, &T::FILE_OPS)
+        self.create_file(name, data, &<T as BinaryWriteFile<M, _>>::FILE_OPS)
     }
 
     /// Creates a write-only file in this directory, with write logic from a callback.
@@ -324,7 +329,7 @@ impl Dir {
         T: Send + Sync + 'static,
         W: Fn(&T, &mut UserSliceReader) -> Result + Send + Sync,
     {
-        let file_ops = <WritableAdapter<NoWriter<T>, W> as WriteFile<_>>::FILE_OPS
+        let file_ops = <WritableAdapter<NoWriter<T>, W> as WriteFile<M, _>>::FILE_OPS
             .adapt()
             .adapt();
         self.create_file(name, data, file_ops)
@@ -527,7 +532,7 @@ impl<'data, 'dir> ScopedDir<'data, 'dir> {
     /// file is removed when the [`Scope`] that this directory belongs
     /// to is dropped.
     pub fn read_only_file<T: Writer + Send + Sync + 'static>(&self, name: &CStr, data: &'data T) {
-        self.create_file(name, data, &T::FILE_OPS)
+        // self.create_file(name, data, &<T as ReadFile<M, T>>::FILE_OPS)
     }
 
     /// Creates a read-only binary file in this directory.
@@ -541,7 +546,7 @@ impl<'data, 'dir> ScopedDir<'data, 'dir> {
         name: &CStr,
         data: &'data T,
     ) {
-        self.create_file(name, data, &T::FILE_OPS)
+        // self.create_file(name, data, &<T as ReadFile<M, T>>::FILE_OPS)
     }
 
     /// Creates a read-only file in this directory, with contents from a callback.
@@ -560,8 +565,8 @@ impl<'data, 'dir> ScopedDir<'data, 'dir> {
         T: Send + Sync + 'static,
         F: Fn(&T, &mut fmt::Formatter<'_>) -> fmt::Result + Send + Sync,
     {
-        let vtable = <FormatAdapter<T, F> as ReadFile<_>>::FILE_OPS.adapt();
-        self.create_file(name, data, vtable)
+        // let vtable = <FormatAdapter<T, F> as ReadFile<M, _>>::FILE_OPS.adapt();
+        // self.create_file(name, data, vtable)
     }
 
     /// Creates a read-write file in this directory.
@@ -577,8 +582,8 @@ impl<'data, 'dir> ScopedDir<'data, 'dir> {
         name: &CStr,
         data: &'data T,
     ) {
-        let vtable = &<T as ReadWriteFile<_>>::FILE_OPS;
-        self.create_file(name, data, vtable)
+        // let vtable = &<T as ReadWriteFile<_>>::FILE_OPS;
+        // self.create_file(name, data, vtable)
     }
 
     /// Creates a read-write binary file in this directory.
@@ -593,8 +598,8 @@ impl<'data, 'dir> ScopedDir<'data, 'dir> {
         name: &CStr,
         data: &'data T,
     ) {
-        let vtable = &<T as BinaryReadWriteFile<_>>::FILE_OPS;
-        self.create_file(name, data, vtable)
+        // let vtable = &<T as BinaryReadWriteFile<_>>::FILE_OPS;
+        // self.create_file(name, data, vtable)
     }
 
     /// Creates a read-write file in this directory, with logic from callbacks.
@@ -618,10 +623,10 @@ impl<'data, 'dir> ScopedDir<'data, 'dir> {
         F: Fn(&T, &mut fmt::Formatter<'_>) -> fmt::Result + Send + Sync,
         W: Fn(&T, &mut UserSliceReader) -> Result + Send + Sync,
     {
-        let vtable = <WritableAdapter<FormatAdapter<T, F>, W> as ReadWriteFile<_>>::FILE_OPS
-            .adapt()
-            .adapt();
-        self.create_file(name, data, vtable)
+        // let vtable = <WritableAdapter<FormatAdapter<T, F>, W> as ReadWriteFile<_>>::FILE_OPS
+        //     .adapt()
+        //     .adapt();
+        // self.create_file(name, data, vtable)
     }
 
     /// Creates a write-only file in this directory.
@@ -632,8 +637,8 @@ impl<'data, 'dir> ScopedDir<'data, 'dir> {
     /// file is removed when the [`Scope`] that this directory belongs
     /// to is dropped.
     pub fn write_only_file<T: Reader + Send + Sync + 'static>(&self, name: &CStr, data: &'data T) {
-        let vtable = &<T as WriteFile<_>>::FILE_OPS;
-        self.create_file(name, data, vtable)
+        // let vtable = &<T as WriteFile<_>>::FILE_OPS;
+        // self.create_file(name, data, vtable)
     }
 
     /// Creates a write-only binary file in this directory.
@@ -647,7 +652,7 @@ impl<'data, 'dir> ScopedDir<'data, 'dir> {
         name: &CStr,
         data: &'data T,
     ) {
-        self.create_file(name, data, &T::FILE_OPS)
+        // self.create_file(name, data, &<T as ReadFile<M, T>>::FILE_OPS)
     }
 
     /// Creates a write-only file in this directory, with write logic from a callback.
@@ -665,10 +670,10 @@ impl<'data, 'dir> ScopedDir<'data, 'dir> {
         T: Send + Sync + 'static,
         W: Fn(&T, &mut UserSliceReader) -> Result + Send + Sync,
     {
-        let vtable = &<WritableAdapter<NoWriter<T>, W> as WriteFile<_>>::FILE_OPS
-            .adapt()
-            .adapt();
-        self.create_file(name, data, vtable)
+        // let vtable = &<WritableAdapter<NoWriter<T>, W> as WriteFile<_>>::FILE_OPS
+        //     .adapt()
+        //     .adapt();
+        // self.create_file(name, data, vtable)
     }
 
     fn empty() -> Self {
