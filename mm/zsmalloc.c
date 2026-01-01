@@ -92,7 +92,7 @@
 
 #define HUGE_BITS	1
 #define FULLNESS_BITS	4
-#define CLASS_BITS	8
+#define CLASS_BITS	12
 #define MAGIC_VAL_BITS	8
 
 #define ZS_MAX_PAGES_PER_ZSPAGE	(_AC(CONFIG_ZSMALLOC_CHAIN_SIZE, UL))
@@ -115,8 +115,13 @@
  *
  *  ZS_MIN_ALLOC_SIZE and ZS_SIZE_CLASS_DELTA must be multiple of ZS_ALIGN
  *  (reason above)
+ *
+ * We set ZS_SIZE_CLASS_DELTA to 16 bytes to maintain high granularity
+ * even on systems with large PAGE_SIZE (e.g. 16K, 64K). This prevents
+ * internal fragmentation. CLASS_BITS is increased to 12 to address the
+ * larger number of size classes on such systems (up to 4096 classes on 64K).
  */
-#define ZS_SIZE_CLASS_DELTA	(PAGE_SIZE >> CLASS_BITS)
+#define ZS_SIZE_CLASS_DELTA	16
 #define ZS_SIZE_CLASSES	(DIV_ROUND_UP(ZS_MAX_ALLOC_SIZE - ZS_MIN_ALLOC_SIZE, \
 				      ZS_SIZE_CLASS_DELTA) + 1)
 
