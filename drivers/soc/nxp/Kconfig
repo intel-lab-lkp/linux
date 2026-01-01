@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+if ARCH_LPC32XX || COMPILE_TEST
+
+menu "NXP LPC32xx SoC drivers"
+
+config LPC32XX_SOCINFO
+	tristate "NXP LPC32xx SoC information driver"
+	default ARCH_LPC32XX
+	select SOC_BUS
+	help
+	  NXP LPC32xx specific driver to get unique SoC ID from SCB registers.
+
+endmenu
+
+endif
