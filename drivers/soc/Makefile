@@ -3,6 +3,7 @@
 # Makefile for the Linux Kernel SOC specific device drivers.
 #
 
+obj-y				+= amlogic/
 obj-y				+= apple/
 obj-y				+= aspeed/
 obj-$(CONFIG_ARCH_AT91)		+= atmel/
@@ -24,7 +25,6 @@ obj-y				+= mediatek/
 obj-y				+= microchip/
 obj-y				+= nuvoton/
 obj-y				+= pxa/
-obj-y				+= amlogic/
 obj-y				+= qcom/
 obj-y				+= renesas/
 obj-y				+= rockchip/
