@@ -684,6 +684,12 @@ of ftrace. Here is a list of some of the key files:
 
 	See events.rst for more information.
 
+  show_event_filters:
+
+	A list of events that are enabled and have a filter applied.
+
+	See events.rst for more information.
+
   available_events:
 
 	A list of events that can be enabled in tracing.

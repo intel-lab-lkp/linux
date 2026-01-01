@@ -1661,6 +1661,34 @@ static void t_stop(struct seq_file *m, void *p)
 	mutex_unlock(&event_mutex);
 }
 
+/**
+ * t_show_filters - seq_file callback to display active event filters
+ * @m: The seq_file instance
+ * @v: The current trace_event_file being iterated
+ *
+ * Traverses the trace_array event list and prints the system, name,
+ * and filter string for any event with an active filter.
+ * Uses RCU to safely dereference the volatile filter pointer.
+ */
+static int t_show_filters(struct seq_file *m, void *v)
+{
+	struct trace_event_file *file = v;
+	struct trace_event_call *call = file->event_call;
+	struct event_filter *filter;
+
+	rcu_read_lock();
+	filter = rcu_dereference(file->filter);
+	if (filter && filter->filter_string) {
+		seq_printf(m, "%s:%s\t%s\n",
+			   call->class->system,
+			   trace_event_name(call),
+			   filter->filter_string);
+	}
+	rcu_read_unlock();
+
+	return 0;
+}
+
 #ifdef CONFIG_MODULES
 static int s_show(struct seq_file *m, void *v)
 {
@@ -2488,6 +2516,7 @@ ftrace_event_npid_write(struct file *filp, const char __user *ubuf,
 
 static int ftrace_event_avail_open(struct inode *inode, struct file *file);
 static int ftrace_event_set_open(struct inode *inode, struct file *file);
+static int ftrace_event_show_filters_open(struct inode *inode, struct file *file);
 static int ftrace_event_set_pid_open(struct inode *inode, struct file *file);
 static int ftrace_event_set_npid_open(struct inode *inode, struct file *file);
 static int ftrace_event_release(struct inode *inode, struct file *file);
@@ -2504,6 +2533,13 @@ static const struct seq_operations show_set_event_seq_ops = {
 	.next = s_next,
 	.show = s_show,
 	.stop = s_stop,
+};
+
+static const struct seq_operations show_show_event_filters_seq_ops = {
+	.start = t_start,
+	.next = t_next,
+	.show = t_show_filters,
+	.stop = t_stop,
 };
 
 static const struct seq_operations show_set_pid_seq_ops = {
@@ -2533,6 +2569,13 @@ static const struct file_operations ftrace_set_event_fops = {
 	.write = ftrace_event_write,
 	.llseek = seq_lseek,
 	.release = ftrace_event_release,
+};
+
+static const struct file_operations ftrace_show_event_filters_fops = {
+	.open = ftrace_event_show_filters_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release,
 };
 
 static const struct file_operations ftrace_set_event_pid_fops = {
@@ -2677,6 +2720,22 @@ ftrace_event_set_open(struct inode *inode, struct file *file)
 	if (ret < 0)
 		trace_array_put(tr);
 	return ret;
+}
+
+/**
+ * ftrace_event_show_filters_open - open interface for set_event_filters
+ * @inode: the inode of the file
+ * @file: the file being opened
+ *
+ * Connects the set_event_filters file to the sequence operations
+ * required to iterate over and display active event filters.
+ */
+static int
+ftrace_event_show_filters_open(struct inode *inode, struct file *file)
+{
+	const struct seq_operations *seq_ops = &show_show_event_filters_seq_ops;
+
+	return ftrace_event_open(inode, file, seq_ops);
 }
 
 static int
@@ -4398,6 +4457,9 @@ create_event_toplevel_files(struct dentry *parent, struct trace_array *tr)
 				  tr, &ftrace_set_event_fops);
 	if (!entry)
 		return -ENOMEM;
+
+	trace_create_file("show_event_filters", TRACE_MODE_READ, parent, tr,
+			  &ftrace_show_event_filters_fops);
 
 	nr_entries = ARRAY_SIZE(events_entries);
 
