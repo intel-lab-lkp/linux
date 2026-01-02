@@ -361,6 +361,19 @@
 		reg = <0x1fbf8000 0x8000>;
 	};
 
+	crypto@1e004000 {
+		compatible = "mediatek,mt7621-eip93",
+			     "inside-secure,safexcel-eip93ies";
+		reg = <0x1e004000 0x1000>;
+
+		clocks = <&sysc MT7621_CLK_CRYPTO>;
+
+		interrupt-parent = <&gic>;
+		interrupts = <GIC_SHARED 19 IRQ_TYPE_LEVEL_HIGH>;
+
+		resets = <&sysc MT7621_RST_CRYPTO>;
+	};
+
 	ethernet: ethernet@1e100000 {
 		compatible = "mediatek,mt7621-eth";
 		reg = <0x1e100000 0x10000>;
