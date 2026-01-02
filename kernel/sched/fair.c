@@ -12456,10 +12456,10 @@ static void nohz_balancer_kick(struct rq *rq)
 
 	/*
 	 * None are in tickless mode and hence no need for NOHZ idle load
-	 * balancing:
+	 * balancing, do stats update if its due
 	 */
-	if (likely(!atomic_read(&nohz.nr_cpus)))
-		return;
+	if (unlikely(!atomic_read(&nohz.nr_cpus)))
+		goto out;
 
 	if (rq->nr_running >= 2) {
 		flags = NOHZ_STATS_KICK | NOHZ_BALANCE_KICK;
