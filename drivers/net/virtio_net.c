@@ -3035,7 +3035,7 @@ static int virtnet_receive_packets(struct virtnet_info *vi,
 }
 
 static int virtnet_receive(struct receive_queue *rq, int budget,
-			   unsigned int *xdp_xmit)
+			   unsigned int *xdp_xmit, bool *retry_refill)
 {
 	struct virtnet_info *vi = rq->vq->vdev->priv;
 	struct virtnet_rq_stats stats = {};
@@ -3047,12 +3047,8 @@ static int virtnet_receive(struct receive_queue *rq, int budget,
 		packets = virtnet_receive_packets(vi, rq, budget, xdp_xmit, &stats);
 
 	if (rq->vq->num_free > min((unsigned int)budget, virtqueue_get_vring_size(rq->vq)) / 2) {
-		if (!try_fill_recv(vi, rq, GFP_ATOMIC)) {
-			spin_lock(&vi->refill_lock);
-			if (vi->refill_enabled)
-				schedule_delayed_work(&vi->refill, 0);
-			spin_unlock(&vi->refill_lock);
-		}
+		if (!try_fill_recv(vi, rq, GFP_ATOMIC))
+			*retry_refill = true;
 	}
 
 	u64_stats_set(&stats.packets, packets);
@@ -3129,18 +3125,18 @@ static int virtnet_poll(struct napi_struct *napi, int budget)
 	struct send_queue *sq;
 	unsigned int received;
 	unsigned int xdp_xmit = 0;
-	bool napi_complete;
+	bool napi_complete, retry_refill = false;
 
 	virtnet_poll_cleantx(rq, budget);
 
-	received = virtnet_receive(rq, budget, &xdp_xmit);
+	received = virtnet_receive(rq, budget, &xdp_xmit, &retry_refill);
 	rq->packets_in_napi += received;
 
 	if (xdp_xmit & VIRTIO_XDP_REDIR)
 		xdp_do_flush();
 
 	/* Out of packets? */
-	if (received < budget) {
+	if (received < budget && !retry_refill) {
 		napi_complete = virtqueue_napi_complete(napi, rq->vq, received);
 		/* Intentionally not taking dim_lock here. This may result in a
 		 * spurious net_dim call. But if that happens virtnet_rx_dim_work
@@ -3160,7 +3156,7 @@ static int virtnet_poll(struct napi_struct *napi, int budget)
 		virtnet_xdp_put_sq(vi, sq);
 	}
 
-	return received;
+	return retry_refill ? budget : received;
 }
 
 static void virtnet_disable_queue_pair(struct virtnet_info *vi, int qp_index)
@@ -3230,9 +3226,11 @@ static int virtnet_open(struct net_device *dev)
 
 	for (i = 0; i < vi->max_queue_pairs; i++) {
 		if (i < vi->curr_queue_pairs)
-			/* Make sure we have some buffers: if oom use wq. */
-			if (!try_fill_recv(vi, &vi->rq[i], GFP_KERNEL))
-				schedule_delayed_work(&vi->refill, 0);
+			/* If this fails, we will retry later in
+			 * NAPI poll, which is scheduled in the below
+			 * virtnet_enable_queue_pair
+			 */
+			try_fill_recv(vi, &vi->rq[i], GFP_KERNEL);
 
 		err = virtnet_enable_queue_pair(vi, i);
 		if (err < 0)
@@ -3473,15 +3471,15 @@ static void __virtnet_rx_resume(struct virtnet_info *vi,
 				bool refill)
 {
 	bool running = netif_running(vi->dev);
-	bool schedule_refill = false;
 
-	if (refill && !try_fill_recv(vi, rq, GFP_KERNEL))
-		schedule_refill = true;
+	if (refill)
+		/* If this fails, we will retry later in NAPI poll, which is
+		 * scheduled in the below virtnet_napi_enable
+		 */
+		try_fill_recv(vi, rq, GFP_KERNEL);
+
 	if (running)
 		virtnet_napi_enable(rq);
-
-	if (schedule_refill)
-		schedule_delayed_work(&vi->refill, 0);
 }
 
 static void virtnet_rx_resume_all(struct virtnet_info *vi)
@@ -3777,6 +3775,7 @@ static int virtnet_set_queues(struct virtnet_info *vi, u16 queue_pairs)
 	struct virtio_net_rss_config_trailer old_rss_trailer;
 	struct net_device *dev = vi->dev;
 	struct scatterlist sg;
+	int i;
 
 	if (!vi->has_cvq || !virtio_has_feature(vi->vdev, VIRTIO_NET_F_MQ))
 		return 0;
@@ -3829,11 +3828,17 @@ static int virtnet_set_queues(struct virtnet_info *vi, u16 queue_pairs)
 	}
 succ:
 	vi->curr_queue_pairs = queue_pairs;
-	/* virtnet_open() will refill when device is going to up. */
-	spin_lock_bh(&vi->refill_lock);
-	if (dev->flags & IFF_UP && vi->refill_enabled)
-		schedule_delayed_work(&vi->refill, 0);
-	spin_unlock_bh(&vi->refill_lock);
+	if (dev->flags & IFF_UP) {
+		/* Let the NAPI poll refill the receive buffer for us. We can't
+		 * safely call try_fill_recv() here because the NAPI might be
+		 * enabled already.
+		 */
+		local_bh_disable();
+		for (i = 0; i < vi->curr_queue_pairs; i++)
+			virtqueue_napi_schedule(&vi->rq[i].napi, vi->rq[i].vq);
+
+		local_bh_enable();
+	}
 
 	return 0;
 }
