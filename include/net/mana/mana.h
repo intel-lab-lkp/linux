@@ -556,6 +556,8 @@ struct mana_port_context {
 	bool port_is_up;
 	bool port_st_save; /* Saved port state */
 
+	u8 cqe_coalescing_enable;
+
 	struct mana_ethtool_stats eth_stats;
 
 	struct mana_ethtool_phy_stats phy_stats;

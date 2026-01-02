@@ -397,6 +397,58 @@ static void mana_get_channels(struct net_device *ndev,
 	channel->combined_count = apc->num_queues;
 }
 
+static int mana_get_coalesce(struct net_device *ndev,
+			     struct ethtool_coalesce *ec,
+			     struct kernel_ethtool_coalesce *kernel_coal,
+			     struct netlink_ext_ack *extack)
+{
+	struct mana_port_context *apc = netdev_priv(ndev);
+
+	ec->rx_max_coalesced_frames =
+		apc->cqe_coalescing_enable ? MANA_RXCOMP_OOB_NUM_PPI : 1;
+
+	return 0;
+}
+
+static int mana_set_coalesce(struct net_device *ndev,
+			     struct ethtool_coalesce *ec,
+			     struct kernel_ethtool_coalesce *kernel_coal,
+			     struct netlink_ext_ack *extack)
+{
+	struct mana_port_context *apc = netdev_priv(ndev);
+	u8 saved_cqe_coalescing_enable;
+	int err;
+
+	if (ec->rx_max_coalesced_frames != 1 &&
+	    ec->rx_max_coalesced_frames != MANA_RXCOMP_OOB_NUM_PPI) {
+		NL_SET_ERR_MSG_FMT(extack,
+				   "rx-frames must be 1 or %u, got %u",
+				   MANA_RXCOMP_OOB_NUM_PPI,
+				   ec->rx_max_coalesced_frames);
+		return -EINVAL;
+	}
+
+	saved_cqe_coalescing_enable = apc->cqe_coalescing_enable;
+	apc->cqe_coalescing_enable =
+		ec->rx_max_coalesced_frames == MANA_RXCOMP_OOB_NUM_PPI;
+
+	if (!apc->port_is_up)
+		return 0;
+
+	err = mana_config_rss(apc, TRI_STATE_TRUE, false, false);
+
+	if (err) {
+		netdev_err(ndev, "Set rx-frames to %u failed:%d\n",
+			   ec->rx_max_coalesced_frames, err);
+		NL_SET_ERR_MSG_FMT(extack, "Set rx-frames to %u failed:%d\n",
+				   ec->rx_max_coalesced_frames, err);
+
+		apc->cqe_coalescing_enable = saved_cqe_coalescing_enable;
+	}
+
+	return err;
+}
+
 static int mana_set_channels(struct net_device *ndev,
 			     struct ethtool_channels *channels)
 {
@@ -517,6 +569,7 @@ static int mana_get_link_ksettings(struct net_device *ndev,
 }
 
 const struct ethtool_ops mana_ethtool_ops = {
+	.supported_coalesce_params = ETHTOOL_COALESCE_RX_MAX_FRAMES,
 	.get_ethtool_stats	= mana_get_ethtool_stats,
 	.get_sset_count		= mana_get_sset_count,
 	.get_strings		= mana_get_strings,
@@ -527,6 +580,8 @@ const struct ethtool_ops mana_ethtool_ops = {
 	.set_rxfh		= mana_set_rxfh,
 	.get_channels		= mana_get_channels,
 	.set_channels		= mana_set_channels,
+	.get_coalesce		= mana_get_coalesce,
+	.set_coalesce		= mana_set_coalesce,
 	.get_ringparam          = mana_get_ringparam,
 	.set_ringparam          = mana_set_ringparam,
 	.get_link_ksettings	= mana_get_link_ksettings,
