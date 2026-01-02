@@ -724,7 +724,7 @@ void afs_dump_edestaddrreq(const struct afs_operation *op)
 	rcu_read_lock();
 
 	pr_notice("EDESTADDR occurred\n");
-	pr_notice("OP: cbb=%x cbb2=%x fl=%x err=%hd\n",
+	pr_notice("OP: cbb=%x cbb2=%x fl=%x err=%d\n",
 		  op->file[0].cb_break_before,
 		  op->file[1].cb_break_before, op->flags, op->cumul_error.error);
 	pr_notice("OP: ut=%lx ix=%d ni=%u\n",
@@ -735,7 +735,7 @@ void afs_dump_edestaddrreq(const struct afs_operation *op)
 	if (op->server_list) {
 		const struct afs_server_list *sl = op->server_list;
 
-		pr_notice("FC: SL nr=%u vnov=%hx\n",
+		pr_notice("FC: SL nr=%u vnov=%x\n",
 			  sl->nr_servers, sl->vnovol_mask);
 		for (i = 0; i < sl->nr_servers; i++) {
 			const struct afs_server *s = sl->servers[i].server;

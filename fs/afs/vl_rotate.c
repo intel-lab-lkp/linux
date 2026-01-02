@@ -336,7 +336,7 @@ static void afs_vl_dump_edestaddrreq(const struct afs_vl_cursor *vc)
 	pr_notice("CELL: %s err=%d\n", cell->name, cell->error);
 	pr_notice("DNS: src=%u st=%u lc=%x\n",
 		  cell->dns_source, cell->dns_status, cell->dns_lookup_count);
-	pr_notice("VC: ut=%lx ix=%u ni=%hu fl=%hx err=%hd\n",
+	pr_notice("VC: ut=%lx ix=%u ni=%u fl=%x err=%d\n",
 		  vc->untried_servers, vc->server_index, vc->nr_iterations,
 		  vc->flags, vc->cumul_error.error);
 	pr_notice("VC: call  er=%d ac=%d r=%u\n",
@@ -348,7 +348,7 @@ static void afs_vl_dump_edestaddrreq(const struct afs_vl_cursor *vc)
 			  sl->nr_servers, sl->index);
 		for (i = 0; i < sl->nr_servers; i++) {
 			const struct afs_vlserver *s = sl->servers[i].server;
-			pr_notice("VC: server %s+%hu fl=%lx E=%hd\n",
+			pr_notice("VC: server %s+%u fl=%lx E=%d\n",
 				  s->name, s->port, s->flags, s->probe.error);
 			if (s->addresses) {
 				const struct afs_addr_list *a =
