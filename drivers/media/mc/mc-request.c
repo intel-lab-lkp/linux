@@ -282,7 +282,7 @@ EXPORT_SYMBOL_GPL(media_request_get_by_fd);
 int media_request_alloc(struct media_device *mdev, int *alloc_fd)
 {
 	struct media_request *req;
-	int ret;
+	int ret = 0;
 
 	/* Either both are NULL or both are non-NULL */
 	if (WARN_ON(!mdev->ops->req_alloc ^ !mdev->ops->req_free))
@@ -305,12 +305,13 @@ int media_request_alloc(struct media_device *mdev, int *alloc_fd)
 	req->updating_count = 0;
 	req->access_count = 0;
 
+	media_request_get(req);
 	FD_PREPARE(fdf, O_CLOEXEC,
 		   anon_inode_getfile("request", &request_fops, NULL,
 				      O_CLOEXEC));
 	if (fdf.err) {
 		ret = fdf.err;
-		goto err_free_req;
+		goto out;
 	}
 
 	fd_prepare_file(fdf)->private_data = req;
@@ -321,14 +322,8 @@ int media_request_alloc(struct media_device *mdev, int *alloc_fd)
 		 atomic_inc_return(&mdev->request_id), *alloc_fd);
 	dev_dbg(mdev->dev, "request: allocated %s\n", req->debug_str);
 
-	return 0;
-
-err_free_req:
-	if (mdev->ops->req_free)
-		mdev->ops->req_free(req);
-	else
-		kfree(req);
-
+out:
+	media_request_put(req);
 	return ret;
 }
 
