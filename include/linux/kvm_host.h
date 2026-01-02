@@ -1541,6 +1541,11 @@ static inline bool kvm_gpc_is_hva_active(struct gfn_to_pfn_cache *gpc)
 	return gpc->active && kvm_is_error_gpa(gpc->gpa);
 }
 
+static inline bool kvm_gpc_invalid(struct gfn_to_pfn_cache *gpc)
+{
+	return gpc->active && !gpc->valid;
+}
+
 void kvm_sigset_activate(struct kvm_vcpu *vcpu);
 void kvm_sigset_deactivate(struct kvm_vcpu *vcpu);
 
