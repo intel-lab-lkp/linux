@@ -5793,7 +5793,8 @@ DECLARE_PCI_FIXUP_CLASS_RESUME_EARLY(PCI_VENDOR_ID_NVIDIA, PCI_ANY_ID,
  */
 void pci_disable_broken_acs_cap(struct pci_dev *pdev)
 {
-	if (pdev->vendor == PCI_VENDOR_ID_IDT && pdev->device == 0x80b5) {
+	if (pdev->vendor == PCI_VENDOR_ID_IDT && (pdev->device == 0x80b5 ||
+	    pdev->device == 0x8090)) {
 		pci_info(pdev, "Disabling broken ACS SV\n");
 		pdev->acs_capabilities &= ~PCI_ACS_SV;
 	}
