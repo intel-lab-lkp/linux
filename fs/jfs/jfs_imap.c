@@ -902,6 +902,25 @@ int diFree(struct inode *ip)
 	}
 	iagp = (struct iag *) mp->data;
 
+	/* We will deadlock if due to inconsistency
+	 * the iag has no free inodes/extents but is
+	 * head of the respective free list
+	 */
+	if (iagp->nfreeinos == 0 && imap->im_agctl[agno].inofree == iagno) {
+		IREAD_UNLOCK(ipimap);
+		AG_UNLOCK(imap, agno);
+		release_metapage(mp);
+		jfs_error(ip->i_sb, "nfreeinos = 0, but iag is head of freelist\n");
+		return -EIO;
+	}
+	if (iagp->nfreeexts == 0 && imap->im_agctl[agno].extfree == iagno) {
+		IREAD_UNLOCK(ipimap);
+		AG_UNLOCK(imap, agno);
+		release_metapage(mp);
+		jfs_error(ip->i_sb, "nfreeexts = 0, but iag is head of freelist\n");
+		return -EIO;
+	}
+
 	/* get the inode number and extent number of the inode within
 	 * the iag and the inode number within the extent.
 	 */
