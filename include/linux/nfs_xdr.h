@@ -832,6 +832,8 @@ enum nfs4_acl_type {
 	NFS4ACL_ACL,
 	NFS4ACL_DACL,
 	NFS4ACL_SACL,
+	NFS4ACL_POSIXDEFAULT,
+	NFS4ACL_POSIXACCESS,
 };
 
 struct nfs_setaclargs {
