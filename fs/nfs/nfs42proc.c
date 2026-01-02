@@ -11,10 +11,12 @@
 #include <linux/nfs_xdr.h>
 #include <linux/nfs_fs.h>
 #include "nfs4_fs.h"
+#include "nfs.h"
 #include "nfs42.h"
 #include "iostat.h"
 #include "pnfs.h"
 #include "nfs4session.h"
+#include "nfs4idmap.h"
 #include "internal.h"
 #include "delegation.h"
 #include "nfs4trace.h"
@@ -1636,6 +1638,308 @@ ssize_t nfs42_proc_listxattrs(struct inode *inode, void *buf,
 	} while (exception.retry);
 
 	return err;
+}
+
+static int _nfs4_proc_getposixacl(struct nfs42_getposixaclargs *arg,
+				struct nfs42_getposixaclres *res,
+				struct rpc_message *msg,
+				struct nfs_server *server,
+				struct inode *inode)
+{
+	struct nfs4_exception exception = {
+		.interruptible = true,
+	};
+	int err;
+	do {
+		err = nfs4_call_sync(server->client, server, msg,
+					&arg->seq_args, &res->seq_res, 0);
+		err = nfs4_handle_exception(server, err,
+				&exception);
+	} while (exception.retry);
+	return err;
+}
+
+struct posix_acl *nfs4_get_posixacl(struct inode *inode, int type, bool rcu)
+{
+	struct nfs_server *server = NFS_SERVER(inode);
+	struct page *pages[NFS4_ACL_MAXPAGES] = { };
+	struct nfs42_getposixaclargs args = {
+		.fh = NFS_FH(inode),
+		/* The xdr layer may allocate pages here. */
+		.pages = pages,
+	};
+	struct nfs42_getposixaclres res = {
+		.server = server,
+	};
+	struct rpc_message msg = {
+		.rpc_proc = &nfs4_procedures[NFSPROC4_CLNT_GETPOSIXACL],
+		.rpc_argp = &args,
+		.rpc_resp = &res,
+	};
+	int status, count;
+
+	if (rcu)
+		return ERR_PTR(-ECHILD);
+
+	/*
+	 * Check that NFS4ACL_POSIXDEFAULT and NFS4ACL_POSIXACCESS
+	 * attributes are supported by the server.
+	 * We get acl_trueform and return EOPNOTSUPP if the acl_trueform
+	 * is not POSIX_DRAFT_ACL.  This allows the case where the
+	 * acl_trueform's scope is file object to work when the acl_trueform
+	 * is not POSIX_DRAFT_ACL.
+	 */
+	if (!nfs4_server_supports_acls(server, NFS4ACL_POSIXDEFAULT) ||
+	    !nfs4_server_supports_acls(server, NFS4ACL_POSIXACCESS))
+		return ERR_PTR(-EOPNOTSUPP);
+
+	status = nfs_revalidate_inode(inode, NFS_INO_INVALID_CHANGE);
+	if (status < 0)
+		return ERR_PTR(status);
+
+	/*
+	 * Only get the access acl when explicitly requested: We don't
+	 * need it for access decisions, and only some applications use
+	 * it. Applications which request the access acl first are not
+	 * penalized from this optimization.
+	 */
+	if (type == ACL_TYPE_ACCESS)
+		args.mask |= NFS_ACLCNT|NFS_ACL;
+	if (S_ISDIR(inode->i_mode))
+		args.mask |= NFS_DFACLCNT|NFS_DFACL;
+	if (args.mask == 0)
+		return NULL;
+
+	if (args.mask & NFS_ACL)
+		nfs34_prepare_get_acl(&inode->i_acl);
+	if (args.mask & NFS_DFACL)
+		nfs34_prepare_get_acl(&inode->i_default_acl);
+
+	status = _nfs4_proc_getposixacl(&args, &res, &msg, server, inode);
+
+	/* pages may have been allocated at the xdr layer. */
+	for (count = 0; count < NFS4_ACL_MAXPAGES && args.pages[count]; count++)
+		__free_page(args.pages[count]);
+
+	switch (status) {
+		case 0:
+			break;
+		case -EPFNOSUPPORT:
+		case -EPROTONOSUPPORT:
+			fallthrough;
+		case -ENOTSUPP:
+			status = -EOPNOTSUPP;
+			goto getout;
+		default:
+			goto getout;
+	}
+	if ((args.mask & res.mask) != args.mask) {
+		status = -EIO;
+		goto getout;
+	}
+
+	if (res.acl_access != NULL) {
+		if ((posix_acl_equiv_mode(res.acl_access, NULL) == 0) ||
+		    res.acl_access->a_count == 0) {
+			posix_acl_release(res.acl_access);
+			res.acl_access = NULL;
+		}
+	}
+
+	if (res.mask & NFS_ACL)
+		nfs34_complete_get_acl(&inode->i_acl, res.acl_access);
+	else
+		forget_cached_acl(inode, ACL_TYPE_ACCESS);
+
+	if (res.mask & NFS_DFACL)
+		nfs34_complete_get_acl(&inode->i_default_acl, res.acl_default);
+	else
+		forget_cached_acl(inode, ACL_TYPE_DEFAULT);
+
+	if (type == ACL_TYPE_ACCESS) {
+		posix_acl_release(res.acl_default);
+		return res.acl_access;
+	} else {
+		posix_acl_release(res.acl_access);
+		return res.acl_default;
+	}
+
+getout:
+	nfs34_abort_get_acl(&inode->i_acl);
+	nfs34_abort_get_acl(&inode->i_default_acl);
+	posix_acl_release(res.acl_access);
+	posix_acl_release(res.acl_default);
+	return ERR_PTR(status);
+}
+
+static int _nfs4_set_posixacl(struct inode *inode, struct posix_acl *acl,
+			struct posix_acl *dfacl)
+{
+	struct nfs_server *server = NFS_SERVER(inode);
+	struct page *pages[NFS4_ACL_MAXPAGES];
+	struct nfs42_setposixaclargs args = {
+		.server = NFS_SERVER(inode),
+		.fh = NFS_FH(inode),
+		.inode = inode,
+		.mask = NFS_ACL,
+		.acl_access = acl,
+	};
+	struct nfs42_setposixaclres res = {
+		.server = server,
+	};
+	struct rpc_message msg = {
+		.rpc_proc = &nfs4_procedures[NFSPROC4_CLNT_SETPOSIXACL],
+		.rpc_argp = &args,
+		.rpc_resp = &res,
+	};
+	struct nfs4_exception exception = {
+		.interruptible = true,
+	};
+	struct nfs_xdr_putpage_desc desc = {
+		.pages = pages,
+		.max_npages = NFS4_ACL_MAXPAGES,
+	};
+	size_t argslen;
+	int idmax, status = 0;
+
+	if (acl == NULL && (!S_ISDIR(inode->i_mode) || dfacl == NULL))
+		goto out;
+
+	status = -EOPNOTSUPP;
+	/*
+	 * Check that NFS4ACL_POSIXDEFAULT and NFS4ACL_POSIXACCESS
+	 * attributes are supported by the server.
+	 * We get acl_trueform and return EOPNOTSUPP if the acl_trueform
+	 * is not POSIX_DRAFT_ACL.  This allows the case where the
+	 * acl_trueform's scope is file object to work when the acl_trueform
+	 * is not POSIX_DRAFT_ACL.
+	 */
+	if (!nfs4_server_supports_acls(server, NFS4ACL_POSIXDEFAULT) ||
+	    !nfs4_server_supports_acls(server, NFS4ACL_POSIXACCESS))
+		goto out;
+
+	idmax = (XDR_QUADLEN(IDMAP_NAMESZ) << 2);
+	argslen = 0;
+	status = -ENOSPC;
+	if (acl != NULL) {
+		if (acl->a_count > NFS_ACL_MAX_ENTRIES)
+			goto out;
+		argslen += ((1 + (3 * acl->a_count)) << 2);
+		if (acl->a_count > 4)
+			argslen += (acl->a_count - 4) * idmax;
+	}
+	if (dfacl != NULL && dfacl->a_count > NFS_ACL_MAX_ENTRIES)
+		goto out;
+	if (S_ISDIR(inode->i_mode)) {
+		args.mask |= NFS_DFACL;
+		args.acl_default = dfacl;
+		if (dfacl != NULL) {
+			argslen += ((1 + (3 * dfacl->a_count)) << 2);
+			if (dfacl->a_count > 4)
+				argslen += (dfacl->a_count - 4) * idmax;
+		} else {
+			argslen += 4;
+		}
+	}
+
+	do {
+		/*
+		 * We do not know how many pages will be needed for a large ACL,
+		 * so additional pages are allocated, as required.
+		 */
+		if (argslen > NFS4_ACL_INLINE_BUFSIZE) {
+			ssize_t ret, size;
+
+			status = -ENOMEM;
+			size = 0;
+			if (args.mask & NFS_DFACL)
+				size = nfs42_encode_posixacl(server, &desc,
+							dfacl);
+			if (size < 0)
+				goto out_freepages;
+			if ((args.mask & NFS_ACL) && size >= 0) {
+				ret = nfs42_encode_posixacl(server, &desc, acl);
+				if (ret < 0)
+					goto out_freepages;
+				size += ret;
+			}
+			args.len = size;
+			args.pages = desc.pages;
+		}
+
+		status = nfs4_call_sync(server->client, server, &msg,
+					&args.seq_args, &res.seq_res, 0);
+		status = nfs4_handle_exception(server, status, &exception);
+		if (exception.retry) {
+			/* Reset to beginning of page array. */
+			desc.page_pos = 0;
+			desc.p = NULL;
+			desc.endp = NULL;
+		}
+	} while (exception.retry);
+	nfs_access_zap_cache(inode);
+	nfs_zap_acl_cache(inode);
+
+	switch (status) {
+		case 0:
+			break;
+		case -EPFNOSUPPORT:
+		case -EPROTONOSUPPORT:
+			dprintk("NFS_V4_ACL SETACL RPC not supported"
+					"(will not retry)\n");
+			server->caps &= ~NFS_CAP_ACLS;
+			fallthrough;
+		case -ENOTSUPP:
+			status = -EOPNOTSUPP;
+	}
+out_freepages:
+	if (desc.npages > 0)
+		nfs_xdr_putpage_cleanup(&desc);
+out:
+	return status;
+}
+
+int nfs4_set_posixacl(struct mnt_idmap *idmap, struct dentry *dentry,
+		 struct posix_acl *acl, int type)
+{
+	struct posix_acl *orig = acl, *dfacl = NULL, *alloc;
+	struct inode *inode = d_inode(dentry);
+	int status;
+
+	if (S_ISDIR(inode->i_mode)) {
+		switch(type) {
+		case ACL_TYPE_ACCESS:
+			alloc = get_inode_acl(inode, ACL_TYPE_DEFAULT);
+			if (IS_ERR(alloc))
+				goto fail;
+			dfacl = alloc;
+			break;
+		case ACL_TYPE_DEFAULT:
+			alloc = get_inode_acl(inode, ACL_TYPE_ACCESS);
+			if (IS_ERR(alloc))
+				goto fail;
+			dfacl = acl;
+			acl = alloc;
+		}
+	}
+
+	if (acl == NULL) {
+		alloc = posix_acl_from_mode(inode->i_mode, GFP_KERNEL);
+		if (IS_ERR(alloc))
+			goto fail;
+		acl = alloc;
+	}
+	status = _nfs4_set_posixacl(inode, acl, dfacl);
+out:
+	if (acl != orig)
+		posix_acl_release(acl);
+	if (dfacl != orig)
+		posix_acl_release(dfacl);
+	return status;
+
+fail:
+	status = PTR_ERR(alloc);
+	goto out;
 }
 
 int nfs42_proc_removexattr(struct inode *inode, const char *name)

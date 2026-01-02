@@ -660,6 +660,13 @@ extern void nfs4_xattr_cache_set_list(struct inode *inode, const char *buf,
 extern ssize_t nfs4_xattr_cache_list(struct inode *inode, char *buf,
 				     ssize_t buflen);
 extern void nfs4_xattr_cache_zap(struct inode *inode);
+extern struct posix_acl *nfs4_get_posixacl(struct inode *inode, int type,
+					bool rcu);
+extern int nfs4_set_posixacl(struct mnt_idmap *idmap, struct dentry *dentry,
+				struct posix_acl *acl, int type);
+extern ssize_t nfs42_encode_posixacl(const struct nfs_server *server,
+		struct nfs_xdr_putpage_desc *desc, struct posix_acl *acl);
+extern void nfs_xdr_putpage_cleanup(struct nfs_xdr_putpage_desc *desc);
 #else
 static inline void nfs4_xattr_cache_zap(struct inode *inode)
 {

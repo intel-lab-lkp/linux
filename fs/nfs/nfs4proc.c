@@ -3955,7 +3955,7 @@ static void nfs4_close_context(struct nfs_open_context *ctx, int is_sync)
 
 #define FATTR4_WORD1_NFS40_MASK (2*FATTR4_WORD1_MOUNTED_ON_FILEID - 1UL)
 #define FATTR4_WORD2_NFS41_MASK (2*FATTR4_WORD2_SUPPATTR_EXCLCREAT - 1UL)
-#define FATTR4_WORD2_NFS42_MASK (2*FATTR4_WORD2_OPEN_ARGUMENTS - 1UL)
+#define FATTR4_WORD2_NFS42_MASK (2*FATTR4_WORD2_POSIX_ACCESS_ACL - 1UL)
 
 #define FATTR4_WORD2_NFS42_TIME_DELEG_MASK \
 	(FATTR4_WORD2_TIME_DELEG_MODIFY|FATTR4_WORD2_TIME_DELEG_ACCESS)
@@ -4024,7 +4024,10 @@ static int _nfs4_server_capabilities(struct nfs_server *server, struct nfs_fh *f
 		case 2:
 			res.attr_bitmask[2] &= FATTR4_WORD2_NFS42_MASK;
 			bitmask[2] = (FATTR4_WORD2_SUPPATTR_EXCLCREAT |
-				      FATTR4_WORD2_OPEN_ARGUMENTS) &
+				      FATTR4_WORD2_OPEN_ARGUMENTS |
+				      FATTR4_WORD2_ACL_TRUEFORM |
+				      FATTR4_WORD2_POSIX_DEFAULT_ACL |
+				      FATTR4_WORD2_POSIX_ACCESS_ACL) &
 				     res.attr_bitmask[2];
 		}
 		memcpy(server->attr_bitmask, res.attr_bitmask, sizeof(server->attr_bitmask));
@@ -6141,6 +6144,7 @@ static void nfs4_set_cached_acl(struct inode *inode, struct nfs4_cached_acl *acl
 static void nfs4_zap_acl_attr(struct inode *inode)
 {
 	nfs4_set_cached_acl(inode, NULL);
+	forget_all_cached_acls(inode);
 }
 
 static ssize_t nfs4_read_cached_acl(struct inode *inode, char *buf,
@@ -11045,6 +11049,8 @@ static const struct inode_operations nfs4_dir_inode_operations = {
 	.getattr	= nfs_getattr,
 	.setattr	= nfs_setattr,
 	.listxattr	= nfs4_listxattr,
+	.get_inode_acl	= nfs4_get_posixacl,
+	.set_acl	= nfs4_set_posixacl,
 };
 
 static const struct inode_operations nfs4_file_inode_operations = {
@@ -11052,6 +11058,8 @@ static const struct inode_operations nfs4_file_inode_operations = {
 	.getattr	= nfs_getattr,
 	.setattr	= nfs_setattr,
 	.listxattr	= nfs4_listxattr,
+	.get_inode_acl	= nfs4_get_posixacl,
+	.set_acl	= nfs4_set_posixacl,
 };
 
 static struct nfs_server *nfs4_clone_server(struct nfs_server *source,
