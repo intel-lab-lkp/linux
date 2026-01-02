@@ -228,33 +228,33 @@ config PCIE_TEGRA194
 
 config PCIE_TEGRA194_HOST
 	tristate "NVIDIA Tegra194 (and later) PCIe controller (host mode)"
-	depends on ARCH_TEGRA_194_SOC || COMPILE_TEST
+	depends on ARCH_TEGRA_194_SOC || ARCH_TEGRA_234_SOC || COMPILE_TEST
 	depends on PCI_MSI
 	select PCIE_DW_HOST
 	select PHY_TEGRA194_P2U
 	select PCIE_TEGRA194
 	help
-	  Enables support for the PCIe controller in the NVIDIA Tegra194 SoC to
-	  work in host mode. There are two instances of PCIe controllers in
-	  Tegra194. This controller can work either as EP or RC. In order to
-	  enable host-specific features PCIE_TEGRA194_HOST must be selected and
-	  in order to enable device-specific features PCIE_TEGRA194_EP must be
-	  selected. This uses the DesignWare core.
+	  Enables support for the PCIe controller in the NVIDIA Tegra194 and
+	  later SoCs to work in host mode. This controller can work either as
+	  EP or RC. In order to enable host-specific features
+	  PCIE_TEGRA194_HOST must be selected and in order to enable
+	  device-specific features PCIE_TEGRA194_EP must be selected. This uses
+	  the DesignWare core.
 
 config PCIE_TEGRA194_EP
 	tristate "NVIDIA Tegra194 (and later) PCIe controller (endpoint mode)"
-	depends on ARCH_TEGRA_194_SOC || COMPILE_TEST
+	depends on ARCH_TEGRA_194_SOC || ARCH_TEGRA_234_SOC || COMPILE_TEST
 	depends on PCI_ENDPOINT
 	select PCIE_DW_EP
 	select PHY_TEGRA194_P2U
 	select PCIE_TEGRA194
 	help
-	  Enables support for the PCIe controller in the NVIDIA Tegra194 SoC to
-	  work in endpoint mode. There are two instances of PCIe controllers in
-	  Tegra194. This controller can work either as EP or RC. In order to
-	  enable host-specific features PCIE_TEGRA194_HOST must be selected and
-	  in order to enable device-specific features PCIE_TEGRA194_EP must be
-	  selected. This uses the DesignWare core.
+	  Enables support for the PCIe controller in the NVIDIA Tegra194 and
+	  later SoCs to work in endpoint mode. This controller can work either
+	  as EP or RC. In order to enable host-specific features
+	  PCIE_TEGRA194_HOST must be selected and in order to enable
+	  device-specific features PCIE_TEGRA194_EP must be selected. This uses
+	  the DesignWare core.
 
 config PCIE_NXP_S32G
 	bool "NXP S32G PCIe controller (host mode)"
