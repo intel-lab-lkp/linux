@@ -21751,6 +21751,7 @@ F:	drivers/char/random.c
 F:	include/linux/random.h
 F:	include/uapi/linux/random.h
 F:	drivers/virt/vmgenid.c
+F:	rust/kernel/random.rs
 N:	^.*/vdso/[^/]*getrandom[^/]+$
 
 RAPIDIO SUBSYSTEM
