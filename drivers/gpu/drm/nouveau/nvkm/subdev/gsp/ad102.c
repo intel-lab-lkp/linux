@@ -29,6 +29,9 @@ ad102_gsp = {
 	.sig_section = ".fwsignature_ad10x",
 
 	.booter.ctor = ga102_gsp_booter_ctor,
+	
+	.fwsec_sb.ctor = tu102_gsp_fwsec_sb_ctor,
+	.fwsec_sb.dtor = tu102_gsp_fwsec_sb_dtor,
 
 	.dtor = r535_gsp_dtor,
 	.oneinit = tu102_gsp_oneinit,
