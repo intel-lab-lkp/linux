@@ -1352,6 +1352,11 @@ int nfs_get_tree_common(struct fs_context *fc)
 		goto error_splat_super;
 	}
 
+	/* Set SB_POSIXACL if the server supports the NFSv4.2 extension. */
+	if ((server->attr_bitmask[2] & FATTR4_WORD2_POSIX_DEFAULT_ACL) &&
+	    (server->attr_bitmask[2] & FATTR4_WORD2_POSIX_ACCESS_ACL))
+		s->s_flags |= SB_POSIXACL;
+
 	s->s_flags |= SB_ACTIVE;
 	error = 0;
 
