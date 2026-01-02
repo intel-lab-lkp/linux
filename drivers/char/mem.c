@@ -76,7 +76,7 @@ static inline bool should_stop_iteration(void)
 }
 
 /*
- * This funcion reads the *physical* memory. The f_pos points directly to the
+ * This function reads the *physical* memory. The f_pos points directly to the
  * memory location.
  */
 static ssize_t read_mem(struct file *file, char __user *buf,
@@ -765,7 +765,7 @@ static int __init chr_dev_init(void)
 	int minor;
 
 	if (register_chrdev(MEM_MAJOR, "mem", &memory_fops))
-		printk("unable to get major %d for memory devs\n", MEM_MAJOR);
+		pr_err("unable to get major %d for memory devs\n", MEM_MAJOR);
 
 	retval = class_register(&mem_class);
 	if (retval)
