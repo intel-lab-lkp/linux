@@ -803,3 +803,98 @@ void brbe_read_filtered_entries(struct perf_branch_stack *branch_stack,
 done:
 	branch_stack->nr = nr_filtered;
 }
+
+/*
+ * ARM-specific callback invoked through perf_snapshot_branch_stack static
+ * call, defined in include/linux/perf_event.h. See its definition for API
+ * details. It's up to caller to provide enough space in *entries* to fit all
+ * branch records, otherwise returned result will be truncated to *cnt* entries.
+ *
+ * This is similar to brbe_read_filtered_entries but optimized for snapshot mode:
+ * - No filtering based on event attributes (captures everything)
+ * - Minimal branches to avoid polluting the branch buffer
+ * - Direct register reads without event-specific processing
+ */
+int arm_brbe_snapshot_branch_stack(struct perf_branch_entry *entries, unsigned int cnt)
+{
+	unsigned long flags;
+	int nr_hw, nr_banks, nr_copied = 0;
+	u64 brbidr, brbfcr, brbcr;
+
+	/*
+	 * The sequence of steps to freeze BRBE should be completely inlined
+	 * and contain no branches to minimize contamination of branch snapshot.
+	 */
+	local_irq_save(flags);
+
+	/* Save current BRBE configuration */
+	brbfcr = read_sysreg_s(SYS_BRBFCR_EL1);
+	brbcr = read_sysreg_s(SYS_BRBCR_EL1);
+
+	/* Pause BRBE to freeze the buffer */
+	write_sysreg_s(brbfcr | BRBFCR_EL1_PAUSED, SYS_BRBFCR_EL1);
+	isb();
+
+	/* Read BRBIDR to determine number of records */
+	brbidr = read_sysreg_s(SYS_BRBIDR0_EL1);
+	if (!valid_brbidr(brbidr))
+		goto out_restore;
+
+	nr_hw = FIELD_GET(BRBIDR0_EL1_NUMREC_MASK, brbidr);
+	nr_banks = DIV_ROUND_UP(nr_hw, BRBE_BANK_MAX_ENTRIES);
+
+	/* Read branch records from BRBE banks */
+	for (int bank = 0; bank < nr_banks; bank++) {
+		int nr_remaining = nr_hw - (bank * BRBE_BANK_MAX_ENTRIES);
+		int nr_this_bank = min(nr_remaining, BRBE_BANK_MAX_ENTRIES);
+
+		select_brbe_bank(bank);
+
+		for (int i = 0; i < nr_this_bank; i++) {
+			struct brbe_regset bregs;
+			struct perf_branch_entry *entry;
+
+			if (nr_copied >= cnt)
+				goto out_restore;
+
+			if (!__read_brbe_regset(&bregs, i))
+				goto out_restore;
+
+			entry = &entries[nr_copied];
+			perf_clear_branch_entry_bitfields(entry);
+
+			/* Simple conversion without filtering */
+			if (brbe_record_is_complete(bregs.brbinf)) {
+				entry->from = bregs.brbsrc;
+				entry->to = bregs.brbtgt;
+			} else if (brbe_record_is_source_only(bregs.brbinf)) {
+				entry->from = bregs.brbsrc;
+				entry->to = 0;
+			} else if (brbe_record_is_target_only(bregs.brbinf)) {
+				entry->from = 0;
+				entry->to = bregs.brbtgt;
+			}
+
+			brbe_set_perf_entry_type(entry, bregs.brbinf);
+			entry->cycles = brbinf_get_cycles(bregs.brbinf);
+
+			if (!brbe_record_is_target_only(bregs.brbinf)) {
+				entry->mispred = brbinf_get_mispredict(bregs.brbinf);
+				entry->predicted = !entry->mispred;
+			}
+
+			if (!brbe_record_is_source_only(bregs.brbinf))
+				entry->priv = brbinf_get_perf_priv(bregs.brbinf);
+
+			nr_copied++;
+		}
+	}
+
+out_restore:
+	/* Restore BRBE to its previous state */
+	write_sysreg_s(brbcr, SYS_BRBCR_EL1);
+	isb();
+	write_sysreg_s(brbfcr, SYS_BRBFCR_EL1);
+	local_irq_restore(flags);
+	return nr_copied;
+}
