@@ -139,6 +139,7 @@ static const struct regmap_config regmap_config = {
 static const struct mfd_cell ntxec_subdev[] = {
 	{ .name = "ntxec-rtc" },
 	{ .name = "ntxec-pwm" },
+	{ .name = "ntxec-battery" },
 };
 
 static const struct mfd_cell ntxec_subdev_pwm[] = {
