@@ -272,7 +272,8 @@ void *dma_direct_alloc(struct device *dev, size_t size,
 			prot = pgprot_decrypted(prot);
 
 		/* remove any dirty cache lines on the kernel alias */
-		arch_dma_prep_coherent(page, size);
+		if (!PageHighMem(page))
+			arch_dma_prep_coherent(page, size);
 
 		/* create a coherent mapping */
 		ret = dma_common_contiguous_remap(page, size, prot,
