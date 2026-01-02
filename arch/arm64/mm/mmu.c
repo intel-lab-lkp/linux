@@ -529,18 +529,14 @@ static void early_create_pgd_mapping(pgd_t *pgdir, phys_addr_t phys,
 		panic("Failed to create page tables\n");
 }
 
-static phys_addr_t __pgd_pgtable_alloc(struct mm_struct *mm, gfp_t gfp,
-				       enum pgtable_type pgtable_type)
+static struct ptdesc **split_pgtables;
+static unsigned long split_pgtables_count;
+static unsigned long split_pgtables_idx;
+
+static __always_inline void __pgd_pgtable_init(struct mm_struct *mm,
+					       struct ptdesc *ptdesc,
+					       enum pgtable_type pgtable_type)
 {
-	/* Page is zeroed by init_clear_pgtable() so don't duplicate effort. */
-	struct ptdesc *ptdesc = pagetable_alloc(gfp & ~__GFP_ZERO, 0);
-	phys_addr_t pa;
-
-	if (!ptdesc)
-		return INVALID_PHYS_ADDR;
-
-	pa = page_to_phys(ptdesc_page(ptdesc));
-
 	switch (pgtable_type) {
 	case TABLE_PTE:
 		BUG_ON(!pagetable_pte_ctor(mm, ptdesc));
@@ -555,26 +551,49 @@ static phys_addr_t __pgd_pgtable_alloc(struct mm_struct *mm, gfp_t gfp,
 		pagetable_p4d_ctor(ptdesc);
 		break;
 	}
+}
 
-	return pa;
+static phys_addr_t __pgd_pgtable_alloc(struct mm_struct *mm,
+				       enum pgtable_type pgtable_type)
+{
+	/* Page is zeroed by init_clear_pgtable() so don't duplicate effort. */
+	struct ptdesc *ptdesc = pagetable_alloc(GFP_PGTABLE_KERNEL & ~__GFP_ZERO, 0);
+
+	if (!ptdesc)
+		return INVALID_PHYS_ADDR;
+
+	__pgd_pgtable_init(mm, ptdesc, pgtable_type);
+
+	return page_to_phys(ptdesc_page(ptdesc));
 }
 
 static phys_addr_t
-pgd_pgtable_alloc_init_mm_gfp(enum pgtable_type pgtable_type, gfp_t gfp)
-{
-	return __pgd_pgtable_alloc(&init_mm, gfp, pgtable_type);
-}
-
-static phys_addr_t __maybe_unused
 pgd_pgtable_alloc_init_mm(enum pgtable_type pgtable_type)
 {
-	return pgd_pgtable_alloc_init_mm_gfp(pgtable_type, GFP_PGTABLE_KERNEL);
+	return __pgd_pgtable_alloc(&init_mm, pgtable_type);
 }
 
 static phys_addr_t
 pgd_pgtable_alloc_special_mm(enum pgtable_type pgtable_type)
 {
-	return  __pgd_pgtable_alloc(NULL, GFP_PGTABLE_KERNEL, pgtable_type);
+	return  __pgd_pgtable_alloc(NULL, pgtable_type);
+}
+
+static phys_addr_t
+pgd_pgtable_get_preallocated(enum pgtable_type pgtable_type)
+{
+	struct ptdesc *ptdesc;
+
+	if (WARN_ON(split_pgtables_idx >= split_pgtables_count))
+		return INVALID_PHYS_ADDR;
+
+	ptdesc = split_pgtables[split_pgtables_idx++];
+	if (!ptdesc)
+		return INVALID_PHYS_ADDR;
+
+	__pgd_pgtable_init(&init_mm, ptdesc, pgtable_type);
+
+	return page_to_phys(ptdesc_page(ptdesc));
 }
 
 static void split_contpte(pte_t *ptep)
@@ -586,7 +605,9 @@ static void split_contpte(pte_t *ptep)
 		__set_pte(ptep, pte_mknoncont(__ptep_get(ptep)));
 }
 
-static int split_pmd(pmd_t *pmdp, pmd_t pmd, gfp_t gfp, bool to_cont)
+static int split_pmd(pmd_t *pmdp, pmd_t pmd,
+		     pgtable_alloc_t pgtable_alloc,
+		     bool to_cont)
 {
 	pmdval_t tableprot = PMD_TYPE_TABLE | PMD_TABLE_UXN | PMD_TABLE_AF;
 	unsigned long pfn = pmd_pfn(pmd);
@@ -595,7 +616,7 @@ static int split_pmd(pmd_t *pmdp, pmd_t pmd, gfp_t gfp, bool to_cont)
 	pte_t *ptep;
 	int i;
 
-	pte_phys = pgd_pgtable_alloc_init_mm_gfp(TABLE_PTE, gfp);
+	pte_phys = pgtable_alloc(TABLE_PTE);
 	if (pte_phys == INVALID_PHYS_ADDR)
 		return -ENOMEM;
 	ptep = (pte_t *)phys_to_virt(pte_phys);
@@ -630,7 +651,9 @@ static void split_contpmd(pmd_t *pmdp)
 		set_pmd(pmdp, pmd_mknoncont(pmdp_get(pmdp)));
 }
 
-static int split_pud(pud_t *pudp, pud_t pud, gfp_t gfp, bool to_cont)
+static int split_pud(pud_t *pudp, pud_t pud,
+		     pgtable_alloc_t pgtable_alloc,
+		     bool to_cont)
 {
 	pudval_t tableprot = PUD_TYPE_TABLE | PUD_TABLE_UXN | PUD_TABLE_AF;
 	unsigned int step = PMD_SIZE >> PAGE_SHIFT;
@@ -640,7 +663,7 @@ static int split_pud(pud_t *pudp, pud_t pud, gfp_t gfp, bool to_cont)
 	pmd_t *pmdp;
 	int i;
 
-	pmd_phys = pgd_pgtable_alloc_init_mm_gfp(TABLE_PMD, gfp);
+	pmd_phys = pgtable_alloc(TABLE_PMD);
 	if (pmd_phys == INVALID_PHYS_ADDR)
 		return -ENOMEM;
 	pmdp = (pmd_t *)phys_to_virt(pmd_phys);
@@ -709,7 +732,7 @@ static int split_kernel_leaf_mapping_locked(unsigned long addr)
 	if (!pud_present(pud))
 		goto out;
 	if (pud_leaf(pud)) {
-		ret = split_pud(pudp, pud, GFP_PGTABLE_KERNEL, true);
+		ret = split_pud(pudp, pud, pgd_pgtable_alloc_init_mm, true);
 		if (ret)
 			goto out;
 	}
@@ -734,7 +757,7 @@ static int split_kernel_leaf_mapping_locked(unsigned long addr)
 		 */
 		if (ALIGN_DOWN(addr, PMD_SIZE) == addr)
 			goto out;
-		ret = split_pmd(pmdp, pmd, GFP_PGTABLE_KERNEL, true);
+		ret = split_pmd(pmdp, pmd, pgd_pgtable_alloc_init_mm, true);
 		if (ret)
 			goto out;
 	}
@@ -832,12 +855,12 @@ int split_kernel_leaf_mapping(unsigned long start, unsigned long end)
 static int split_to_ptes_pud_entry(pud_t *pudp, unsigned long addr,
 				   unsigned long next, struct mm_walk *walk)
 {
-	gfp_t gfp = *(gfp_t *)walk->private;
+	pgtable_alloc_t *pgtable_alloc = walk->private;
 	pud_t pud = pudp_get(pudp);
 	int ret = 0;
 
 	if (pud_leaf(pud))
-		ret = split_pud(pudp, pud, gfp, false);
+		ret = split_pud(pudp, pud, pgtable_alloc, false);
 
 	return ret;
 }
@@ -845,14 +868,14 @@ static int split_to_ptes_pud_entry(pud_t *pudp, unsigned long addr,
 static int split_to_ptes_pmd_entry(pmd_t *pmdp, unsigned long addr,
 				   unsigned long next, struct mm_walk *walk)
 {
-	gfp_t gfp = *(gfp_t *)walk->private;
+	pgtable_alloc_t *pgtable_alloc = walk->private;
 	pmd_t pmd = pmdp_get(pmdp);
 	int ret = 0;
 
 	if (pmd_leaf(pmd)) {
 		if (pmd_cont(pmd))
 			split_contpmd(pmdp);
-		ret = split_pmd(pmdp, pmd, gfp, false);
+		ret = split_pmd(pmdp, pmd, pgtable_alloc, false);
 
 		/*
 		 * We have split the pmd directly to ptes so there is no need to
@@ -881,13 +904,15 @@ static const struct mm_walk_ops split_to_ptes_ops = {
 	.pte_entry	= split_to_ptes_pte_entry,
 };
 
-static int range_split_to_ptes(unsigned long start, unsigned long end, gfp_t gfp)
+static int range_split_to_ptes(unsigned long start, unsigned long end,
+			       pgtable_alloc_t pgtable_alloc)
 {
 	int ret;
 
 	arch_enter_lazy_mmu_mode();
 	ret = walk_kernel_page_table_range_lockless(start, end,
-					&split_to_ptes_ops, NULL, &gfp);
+						    &split_to_ptes_ops, NULL,
+						    pgtable_alloc);
 	arch_leave_lazy_mmu_mode();
 
 	return ret;
@@ -902,6 +927,103 @@ static void __init init_idmap_kpti_bbml2_flag(void)
 	WRITE_ONCE(idmap_kpti_bbml2_flag, 1);
 	/* Must be visible to other CPUs before stop_machine() is called. */
 	smp_mb();
+}
+
+static int __init
+collect_to_split_pud_entry(pud_t *pudp, unsigned long addr,
+			   unsigned long next, struct mm_walk *walk)
+{
+	pud_t pud = pudp_get(pudp);
+
+	if (pud_leaf(pud)) {
+		split_pgtables_count += 1 + PTRS_PER_PMD;
+		walk->action = ACTION_CONTINUE;
+	}
+
+	return 0;
+}
+
+static int __init
+collect_to_split_pmd_entry(pmd_t *pmdp, unsigned long addr,
+			   unsigned long next, struct mm_walk *walk)
+{
+	pmd_t pmd = pmdp_get(pmdp);
+
+	if (pmd_leaf(pmd))
+		split_pgtables_count++;
+
+	walk->action = ACTION_CONTINUE;
+
+	return 0;
+}
+
+static void __init linear_map_free_split_pgtables(void)
+{
+	int i;
+
+	if (!split_pgtables_count || !split_pgtables)
+		goto skip_free;
+
+	for (i = split_pgtables_idx; i < split_pgtables_count; i++) {
+		if (split_pgtables[i])
+			pagetable_free(split_pgtables[i]);
+	}
+
+	kvfree(split_pgtables);
+
+skip_free:
+	split_pgtables = NULL;
+	split_pgtables_count = 0;
+	split_pgtables_idx = 0;
+}
+
+static int __init linear_map_prealloc_split_pgtables(void)
+{
+	int ret, i;
+	unsigned long lstart = _PAGE_OFFSET(vabits_actual);
+	unsigned long lend = PAGE_END;
+	unsigned long kstart = (unsigned long)lm_alias(_stext);
+	unsigned long kend = (unsigned long)lm_alias(__init_begin);
+
+	const struct mm_walk_ops collect_to_split_ops = {
+		.pud_entry	= collect_to_split_pud_entry,
+		.pmd_entry	= collect_to_split_pmd_entry
+	};
+
+	split_pgtables_idx = 0;
+	split_pgtables_count = 0;
+
+	ret = walk_kernel_page_table_range_lockless(lstart, kstart,
+						    &collect_to_split_ops,
+						    NULL, NULL);
+	if (!ret)
+		ret = walk_kernel_page_table_range_lockless(kend, lend,
+							    &collect_to_split_ops,
+							    NULL, NULL);
+	if (ret || !split_pgtables_count)
+		goto error;
+
+	ret = -ENOMEM;
+
+	split_pgtables = kvmalloc(split_pgtables_count * sizeof(struct ptdesc *),
+				  GFP_KERNEL | __GFP_ZERO);
+	if (!split_pgtables)
+		goto error;
+
+	for (i = 0; i < split_pgtables_count; i++) {
+		/* The page table will be filled during splitting, so zeroing it is unnecessary. */
+		split_pgtables[i] = pagetable_alloc(GFP_PGTABLE_KERNEL & ~__GFP_ZERO, 0);
+		if (!split_pgtables[i])
+			goto error;
+	}
+
+	ret = 0;
+
+error:
+	if (ret)
+		linear_map_free_split_pgtables();
+
+	return ret;
 }
 
 static int __init linear_map_split_to_ptes(void *__unused)
@@ -929,9 +1051,9 @@ static int __init linear_map_split_to_ptes(void *__unused)
 		 * PTE. The kernel alias remains static throughout runtime so
 		 * can continue to be safely mapped with large mappings.
 		 */
-		ret = range_split_to_ptes(lstart, kstart, GFP_ATOMIC);
+		ret = range_split_to_ptes(lstart, kstart, pgd_pgtable_get_preallocated);
 		if (!ret)
-			ret = range_split_to_ptes(kend, lend, GFP_ATOMIC);
+			ret = range_split_to_ptes(kend, lend, pgd_pgtable_get_preallocated);
 		if (ret)
 			panic("Failed to split linear map\n");
 		flush_tlb_kernel_range(lstart, lend);
@@ -964,10 +1086,16 @@ static int __init linear_map_split_to_ptes(void *__unused)
 
 void __init linear_map_maybe_split_to_ptes(void)
 {
-	if (linear_map_requires_bbml2 && !system_supports_bbml2_noabort()) {
-		init_idmap_kpti_bbml2_flag();
-		stop_machine(linear_map_split_to_ptes, NULL, cpu_online_mask);
-	}
+	if (!linear_map_requires_bbml2 || system_supports_bbml2_noabort())
+		return;
+
+	if (linear_map_prealloc_split_pgtables())
+		panic("Failed to split linear map\n");
+
+	init_idmap_kpti_bbml2_flag();
+	stop_machine(linear_map_split_to_ptes, NULL, cpu_online_mask);
+
+	linear_map_free_split_pgtables();
 }
 
 /*
@@ -1098,7 +1226,7 @@ bool arch_kfence_init_pool(void)
 		return true;
 
 	mutex_lock(&pgtable_split_lock);
-	ret = range_split_to_ptes(start, end, GFP_PGTABLE_KERNEL);
+	ret = range_split_to_ptes(start, end, pgd_pgtable_alloc_init_mm);
 	mutex_unlock(&pgtable_split_lock);
 
 	/*
