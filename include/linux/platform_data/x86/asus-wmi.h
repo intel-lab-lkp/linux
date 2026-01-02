@@ -2,6 +2,7 @@
 #ifndef __PLATFORM_DATA_X86_ASUS_WMI_H
 #define __PLATFORM_DATA_X86_ASUS_WMI_H
 
+#include <linux/bitfield.h>
 #include <linux/errno.h>
 #include <linux/types.h>
 
@@ -152,6 +153,23 @@
 
 /* TUF laptop RGB power/state */
 #define ASUS_WMI_DEVID_TUF_RGB_STATE	0x00100057
+
+#define ASUS_WMI_DEVID_TUF_RGB_STATE_EN 0xBD
+
+#define ASUS_WMI_DEVID_TUF_RGB_STATE_CMD BIT(10)
+
+/*
+ * Flags for TUF RGB state to be used with ASUS_WMI_DEVID_TUF_RGB_STATE:
+ * flags | ASUS_WMI_DEVID_TUF_RGB_STATE_CMD | ASUS_WMI_DEVID_TUF_RGB_STATE_EN
+ *
+ * where ASUS_WMI_DEVID_TUF_RGB_STATE_EN is required for the method call
+ * to not be discarded, ASUS_WMI_DEVID_TUF_RGB_STATE_EN specifies this is
+ * a command and flags is a combination of one or more of the following flags.
+ */
+#define ASUS_WMI_DEVID_TUF_RGB_STATE_BOOT		GENMASK(17, 17)
+#define ASUS_WMI_DEVID_TUF_RGB_STATE_AWAKE		GENMASK(19, 19)
+#define ASUS_WMI_DEVID_TUF_RGB_STATE_SLEEP		GENMASK(21, 21)
+#define ASUS_WMI_DEVID_TUF_RGB_STATE_SHUTDOWN	GENMASK(23, 23)
 
 /* Bootup sound control */
 #define ASUS_WMI_DEVID_BOOT_SOUND	0x00130022
