@@ -75,6 +75,17 @@ static int __init initramfs_options_setup(char *str)
 
 __setup("initramfs_options=", initramfs_options_setup);
 
+bool immutable_rootfs = false;
+
+static int __init immutable_rootfs_setup(char *str)
+{
+	if (*str)
+		return 0;
+	immutable_rootfs = true;
+	return 1;
+}
+__setup("immutable_rootfs", immutable_rootfs_setup);
+
 static u64 event;
 static DEFINE_XARRAY_FLAGS(mnt_id_xa, XA_FLAGS_ALLOC);
 static DEFINE_IDA(mnt_group_ida);
@@ -5976,24 +5987,73 @@ struct mnt_namespace init_mnt_ns = {
 
 static void __init init_mount_tree(void)
 {
-	struct vfsmount *mnt;
-	struct mount *m;
+	struct vfsmount *mnt, *immutable_mnt;
+	struct mount *mnt_root;
 	struct path root;
+
+	/*
+	 * When the immutable rootfs is used, we create two mounts:
+	 *
+	 * (1) immutable rootfs with mount id 1
+	 * (2) mutable rootfs with mount id 2
+	 *
+	 * with (2) mounted on top of (1).
+	 */
+	if (immutable_rootfs) {
+		immutable_mnt = vfs_kern_mount(&immutable_rootfs_fs_type, 0,
+					       "rootfs", NULL);
+		if (IS_ERR(immutable_mnt))
+			panic("VFS: Failed to create immutable rootfs");
+	}
 
 	mnt = vfs_kern_mount(&rootfs_fs_type, 0, "rootfs", initramfs_options);
 	if (IS_ERR(mnt))
 		panic("Can't create rootfs");
 
-	m = real_mount(mnt);
-	init_mnt_ns.root = m;
-	init_mnt_ns.nr_mounts = 1;
-	mnt_add_to_ns(&init_mnt_ns, m);
+	if (immutable_rootfs) {
+		VFS_WARN_ON_ONCE(real_mount(immutable_mnt)->mnt_id != 1);
+		VFS_WARN_ON_ONCE(real_mount(mnt)->mnt_id != 2);
+
+		/* The namespace root is the immutable rootfs. */
+		mnt_root		= real_mount(immutable_mnt);
+		init_mnt_ns.root	= mnt_root;
+
+		/* Mount mutable rootfs on top of the immutable rootfs. */
+		root.mnt		= immutable_mnt;
+		root.dentry		= immutable_mnt->mnt_root;
+
+		LOCK_MOUNT_EXACT(mp, &root);
+		if (unlikely(IS_ERR(mp.parent)))
+			panic("VFS: Failed to setup immutable rootfs");
+		scoped_guard(mount_writer)
+			attach_mnt(real_mount(mnt), mp.parent, mp.mp);
+
+		pr_info("VFS: Finished setting up immutable rootfs\n");
+	} else {
+		VFS_WARN_ON_ONCE(real_mount(mnt)->mnt_id != 1);
+
+		/* The namespace root is the mutable rootfs. */
+		mnt_root		= real_mount(mnt);
+		init_mnt_ns.root	= mnt_root;
+	}
+
+	/*
+	 * We've dropped all locks here but that's fine. Not just are we
+	 * the only task that's running, there's no other mount
+	 * namespace in existence and the initial mount namespace is
+	 * completely empty until we add the mounts we just created.
+	 */
+	for (struct mount *p = mnt_root; p; p = next_mnt(p, mnt_root)) {
+		mnt_add_to_ns(&init_mnt_ns, p);
+		init_mnt_ns.nr_mounts++;
+	}
+
 	init_task.nsproxy->mnt_ns = &init_mnt_ns;
 	get_mnt_ns(&init_mnt_ns);
 
-	root.mnt = mnt;
-	root.dentry = mnt->mnt_root;
-
+	/* The root and pwd always point to the mutable rootfs. */
+	root.mnt	= mnt;
+	root.dentry	= mnt->mnt_root;
 	set_fs_pwd(current->fs, &root);
 	set_fs_root(current->fs, &root);
 

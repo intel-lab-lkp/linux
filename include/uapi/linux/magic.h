@@ -104,5 +104,6 @@
 #define SECRETMEM_MAGIC		0x5345434d	/* "SECM" */
 #define PID_FS_MAGIC		0x50494446	/* "PIDF" */
 #define GUEST_MEMFD_MAGIC	0x474d454d	/* "GMEM" */
+#define ROOT_FS_MAGIC		0x524F4F54	/* "ROOT" */
 
 #endif /* __LINUX_MAGIC_H__ */
