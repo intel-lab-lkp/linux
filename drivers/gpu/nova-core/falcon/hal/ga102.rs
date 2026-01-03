@@ -158,4 +158,8 @@ impl<E: FalconEngine> FalconHal<E> for Ga102<E> {
 
         Ok(())
     }
+
+    fn supports_dma(&self) -> bool {
+        true
+    }
 }
