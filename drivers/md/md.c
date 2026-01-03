@@ -6192,11 +6192,17 @@ static const struct kobj_type md_ktype = {
 
 int mdp_major = 0;
 
+static bool rdev_is_mddev(struct md_rdev *rdev)
+{
+	return rdev->bdev->bd_disk->fops == &md_fops;
+}
+
 /* stack the limit for all rdevs into lim */
 int mddev_stack_rdev_limits(struct mddev *mddev, struct queue_limits *lim,
 		unsigned int flags)
 {
 	struct md_rdev *rdev;
+	unsigned int io_opt = lim->io_opt;
 
 	rdev_for_each(rdev, mddev) {
 		queue_limits_stack_bdev(lim, rdev->bdev, rdev->data_offset,
@@ -6204,6 +6210,9 @@ int mddev_stack_rdev_limits(struct mddev *mddev, struct queue_limits *lim,
 		if ((flags & MDDEV_STACK_INTEGRITY) &&
 		    !queue_limits_stack_integrity_bdev(lim, rdev->bdev))
 			return -EINVAL;
+
+		if (rdev_is_mddev(rdev))
+			set_bit(MD_STACK_IO_OPT, &mddev->flags);
 	}
 
 	/*
@@ -6217,14 +6226,24 @@ int mddev_stack_rdev_limits(struct mddev *mddev, struct queue_limits *lim,
 	}
 	mddev->logical_block_size = lim->logical_block_size;
 
+	/*
+	 * If all member disks are not mdraid array, and the personality
+	 * already configures io_opt, keep this io_opt and ignore io_opt from
+	 * member disks.
+	 */
+	if (!test_bit(MD_STACK_IO_OPT, &mddev->flags) && io_opt)
+		lim->io_opt = io_opt;
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(mddev_stack_rdev_limits);
 
 /* apply the extra stacking limits from a new rdev into mddev */
-int mddev_stack_new_rdev(struct mddev *mddev, struct md_rdev *rdev)
+int mddev_stack_new_rdev(struct mddev *mddev, struct md_rdev *rdev,
+			 bool io_opt_configured)
 {
 	struct queue_limits lim;
+	unsigned int io_opt = 0;
 
 	if (mddev_is_dm(mddev))
 		return 0;
@@ -6237,6 +6256,18 @@ int mddev_stack_new_rdev(struct mddev *mddev, struct md_rdev *rdev)
 	}
 
 	lim = queue_limits_start_update(mddev->gendisk->queue);
+
+	/*
+	 * Keep the old io_opt if no member disks are from md array, and
+	 * the personality configure it's own io_opt.
+	 */
+	if (!test_bit(MD_STACK_IO_OPT, &mddev->flags)) {
+		if (rdev_is_mddev(rdev))
+			set_bit(MD_STACK_IO_OPT, &mddev->flags);
+		else if (io_opt_configured)
+			io_opt = lim.io_opt;
+	}
+
 	queue_limits_stack_bdev(&lim, rdev->bdev, rdev->data_offset,
 				mddev->gendisk->disk_name);
 
@@ -6247,6 +6278,8 @@ int mddev_stack_new_rdev(struct mddev *mddev, struct md_rdev *rdev)
 		return -ENXIO;
 	}
 
+	if (io_opt)
+		lim.io_opt = io_opt;
 	return queue_limits_commit_update(mddev->gendisk->queue, &lim);
 }
 EXPORT_SYMBOL_GPL(mddev_stack_new_rdev);
