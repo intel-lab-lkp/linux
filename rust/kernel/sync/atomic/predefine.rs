@@ -4,6 +4,7 @@
 
 use crate::static_assert;
 use core::mem::{align_of, size_of};
+use ffi::c_void;
 
 // Ensure size and alignment requirements are checked.
 static_assert!(size_of::<bool>() == size_of::<i8>());
@@ -26,6 +27,15 @@ unsafe impl super::AtomicType for i8 {
 // itself.
 unsafe impl super::AtomicType for i16 {
     type Repr = i16;
+}
+
+// SAFETY:
+//
+// - `*mut T` has the same size and alignment with `*const c_void`, and is round-trip
+//   transmutable to `*const c_void`.
+// - `*mut T` is safe to transfer between execution contexts.
+unsafe impl<T: Sized> super::AtomicType for *mut T {
+    type Repr = *const c_void;
 }
 
 // SAFETY: `i32` has the same size and alignment with itself, and is round-trip transmutable to
@@ -214,5 +224,17 @@ mod tests {
         assert_eq!(Err(false), x.cmpxchg(true, true, Relaxed));
         assert_eq!(false, x.load(Relaxed));
         assert_eq!(Ok(false), x.cmpxchg(false, true, Full));
+    }
+
+    #[test]
+    fn atomic_ptr_tests() {
+        let mut v = 42;
+        let mut u = 43;
+        let x = Atomic::new(&raw mut v);
+
+        assert_eq!(x.load(Acquire), &raw mut v);
+        assert_eq!(x.cmpxchg(&raw mut u, &raw mut u, Relaxed), Err(&raw mut v));
+        assert_eq!(x.cmpxchg(&raw mut v, &raw mut u, Relaxed), Ok(&raw mut v));
+        assert_eq!(x.load(Relaxed), &raw mut u);
     }
 }

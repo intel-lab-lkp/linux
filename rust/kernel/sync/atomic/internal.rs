@@ -7,6 +7,7 @@
 use crate::bindings;
 use crate::macros::paste;
 use core::cell::UnsafeCell;
+use ffi::c_void;
 
 mod private {
     /// Sealed trait marker to disable customized impls on atomic implementation traits.
@@ -14,10 +15,11 @@ mod private {
 }
 
 // The C side supports atomic primitives only for `i32` and `i64` (`atomic_t` and `atomic64_t`),
-// while the Rust side also layers provides atomic support for `i8` and `i16`
-// on top of lower-level C primitives.
+// while the Rust side also provides atomic support for `i8`, `i16` and `*const c_void` on top of
+// lower-level C primitives.
 impl private::Sealed for i8 {}
 impl private::Sealed for i16 {}
+impl private::Sealed for *const c_void {}
 impl private::Sealed for i32 {}
 impl private::Sealed for i64 {}
 
@@ -26,10 +28,10 @@ impl private::Sealed for i64 {}
 /// This trait is sealed, and only types that map directly to the C side atomics
 /// or can be implemented with lower-level C primitives are allowed to implement this:
 ///
-/// - `i8` and `i16` are implemented with lower-level C primitives.
+/// - `i8`, `i16` and `*const c_void` are implemented with lower-level C primitives.
 /// - `i32` map to `atomic_t`
 /// - `i64` map to `atomic64_t`
-pub trait AtomicImpl: Sized + Send + Copy + private::Sealed {
+pub trait AtomicImpl: Sized + Copy + private::Sealed {
     /// The type of the delta in arithmetic or logical operations.
     ///
     /// For example, in `atomic_add(ptr, v)`, it's the type of `v`. Usually it's the same type of
@@ -49,6 +51,13 @@ impl AtomicImpl for i8 {
 #[cfg(CONFIG_ARCH_SUPPORTS_ATOMIC_RMW)]
 impl AtomicImpl for i16 {
     type Delta = Self;
+}
+
+// The current helpers of load/store uses `{WRITE,READ}_ONCE()` hence the atomicity is only
+// guaranteed against read-modify-write operations if the architecture supports native atomic RmW.
+#[cfg(CONFIG_ARCH_SUPPORTS_ATOMIC_RMW)]
+impl AtomicImpl for *const c_void {
+    type Delta = isize;
 }
 
 // `atomic_t` implements atomic operations on `i32`.
@@ -262,7 +271,7 @@ macro_rules! declare_and_impl_atomic_methods {
 }
 
 declare_and_impl_atomic_methods!(
-    [ i8 => atomic_i8, i16 => atomic_i16, i32 => atomic, i64 => atomic64 ]
+    [ i8 => atomic_i8, i16 => atomic_i16, *const c_void => atomic_ptr, i32 => atomic, i64 => atomic64 ]
     /// Basic atomic operations
     pub trait AtomicBasicOps {
         /// Atomic read (load).
@@ -280,7 +289,7 @@ declare_and_impl_atomic_methods!(
 );
 
 declare_and_impl_atomic_methods!(
-    [ i8 => atomic_i8, i16 => atomic_i16, i32 => atomic, i64 => atomic64 ]
+    [ i8 => atomic_i8, i16 => atomic_i16, *const c_void => atomic_ptr, i32 => atomic, i64 => atomic64 ]
     /// Exchange and compare-and-exchange atomic operations
     pub trait AtomicExchangeOps {
         /// Atomic exchange.
