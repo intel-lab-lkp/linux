@@ -6251,6 +6251,11 @@ static inline void mas_dup_alloc(struct ma_state *mas, struct ma_state *new_mas,
 	/* Allocate memory for child nodes. */
 	type = mte_node_type(mas->node);
 	new_slots = ma_slots(new_node, type);
+	if (unlikely(ma_dead_node(node))) {
+		mas_set_err(mas, -EBUSY);
+		return;
+	}
+
 	count = mas->node_request = mas_data_end(mas) + 1;
 	mas_alloc_nodes(mas, gfp);
 	if (unlikely(mas_is_err(mas)))
