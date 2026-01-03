@@ -337,6 +337,8 @@ extern void nfs4_update_changeattr(struct inode *dir,
 				   struct nfs4_change_info *cinfo,
 				   unsigned long timestamp,
 				   unsigned long cache_validity);
+extern bool nfs4_server_supports_acls(const struct nfs_server *server,
+				      enum nfs4_acl_type type);
 extern int nfs4_buf_to_pages_noslab(const void *buf, size_t buflen,
 				    struct page **pages);
 

@@ -6069,7 +6069,7 @@ static int nfs4_proc_renew(struct nfs_client *clp, const struct cred *cred)
 	return 0;
 }
 
-static bool nfs4_server_supports_acls(const struct nfs_server *server,
+bool nfs4_server_supports_acls(const struct nfs_server *server,
 				      enum nfs4_acl_type type)
 {
 	switch (type) {
@@ -6079,6 +6079,10 @@ static bool nfs4_server_supports_acls(const struct nfs_server *server,
 		return server->attr_bitmask[1] & FATTR4_WORD1_DACL;
 	case NFS4ACL_SACL:
 		return server->attr_bitmask[1] & FATTR4_WORD1_SACL;
+	case NFS4ACL_POSIXDEFAULT:
+		return server->attr_bitmask[2] & FATTR4_WORD2_POSIX_DEFAULT_ACL;
+	case NFS4ACL_POSIXACCESS:
+		return server->attr_bitmask[2] & FATTR4_WORD2_POSIX_ACCESS_ACL;
 	}
 }
 
