@@ -294,6 +294,12 @@ struct rcu_data {
 
 	long lazy_len;			/* Length of buffered lazy callbacks. */
 	int cpu;
+
+#ifdef CONFIG_RCU_PER_CPU_BLOCKED_LISTS
+	/* 8) Per-CPU blocked task tracking. */
+	raw_spinlock_t blkd_lock;	/* Protects blkd_list. */
+	struct list_head blkd_list;	/* Tasks blocked on this CPU. */
+#endif
 };
 
 /* Values for nocb_defer_wakeup field in struct rcu_data. */

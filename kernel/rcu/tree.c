@@ -1809,6 +1809,14 @@ static noinline_for_stack bool rcu_gp_init(void)
 	struct rcu_node *rnp = rcu_get_root();
 	bool start_new_poll;
 	unsigned long old_gp_seq;
+#ifdef CONFIG_RCU_PER_CPU_BLOCKED_LISTS
+	struct task_struct *t_verify;
+	int cpu_verify;
+	int rnp_count;
+	int rdp_total;
+	struct rcu_data *rdp_cpu;
+	struct task_struct *t_rdp;
+#endif
 
 	WRITE_ONCE(rcu_state.gp_activity, jiffies);
 	raw_spin_lock_irq_rcu_node(rnp);
@@ -1891,6 +1899,26 @@ static noinline_for_stack bool rcu_gp_init(void)
 		 */
 		arch_spin_lock(&rcu_state.ofl_lock);
 		raw_spin_lock_rcu_node(rnp);
+#ifdef CONFIG_RCU_PER_CPU_BLOCKED_LISTS
+		/*
+		 * Verify rdp lists consistent with rnp list. Since the unlock
+		 * path removes from rdp before rnp, we can have tasks that are
+		 * on rnp but not on rdp (in the middle of being removed).
+		 * Therefore rnp_count >= rdp_total is the expected invariant.
+		 */
+		rnp_count = 0;
+		rdp_total = 0;
+		list_for_each_entry(t_verify, &rnp->blkd_tasks, rcu_node_entry)
+			rnp_count++;
+		for (cpu_verify = rnp->grplo; cpu_verify <= rnp->grphi; cpu_verify++) {
+			rdp_cpu = per_cpu_ptr(&rcu_data, cpu_verify);
+			raw_spin_lock(&rdp_cpu->blkd_lock);
+			list_for_each_entry(t_rdp, &rdp_cpu->blkd_list, rcu_rdp_entry)
+				rdp_total++;
+			raw_spin_unlock(&rdp_cpu->blkd_lock);
+		}
+		WARN_ON_ONCE(rnp_count < rdp_total);
+#endif
 		if (rnp->qsmaskinit == rnp->qsmaskinitnext &&
 		    !rnp->wait_blkd_tasks) {
 			/* Nothing to do on this leaf rcu_node structure. */
@@ -4143,6 +4171,10 @@ rcu_boot_init_percpu_data(int cpu)
 	rdp->rcu_onl_gp_state = RCU_GP_CLEANED;
 	rdp->last_sched_clock = jiffies;
 	rdp->cpu = cpu;
+#ifdef CONFIG_RCU_PER_CPU_BLOCKED_LISTS
+	raw_spin_lock_init(&rdp->blkd_lock);
+	INIT_LIST_HEAD(&rdp->blkd_list);
+#endif
 	rcu_boot_init_nocb_percpu_data(rdp);
 }
 
