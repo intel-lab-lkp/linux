@@ -978,8 +978,15 @@ static void rcu_flavor_sched_clock_irq(int user)
 void exit_rcu(void)
 {
 	struct task_struct *t = current;
+	bool on_list;
 
-	if (unlikely(!list_empty(&current->rcu_node_entry))) {
+	/* Check if task is on any blocked list (rnp or per-CPU). */
+	on_list = !list_empty(&current->rcu_node_entry);
+#ifdef CONFIG_RCU_PER_CPU_BLOCKED_LISTS
+	on_list = on_list || !list_empty(&current->rcu_rdp_entry);
+#endif
+
+	if (unlikely(on_list)) {
 		rcu_preempt_depth_set(1);
 		barrier();
 		WARN_ON_ONCE(!t->rcu_read_unlock_special.b.blocked);
