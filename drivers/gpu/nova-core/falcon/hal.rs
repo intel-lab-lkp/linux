@@ -15,6 +15,11 @@ use crate::{
 mod ga102;
 mod tu102;
 
+pub(crate) enum LoadMethod {
+    Pio,
+    Dma,
+}
+
 /// Hardware Abstraction Layer for Falcon cores.
 ///
 /// Implements chipset-specific low-level operations. The trait is generic against [`FalconEngine`]
@@ -49,8 +54,8 @@ pub(crate) trait FalconHal<E: FalconEngine>: Send + Sync {
     /// Reset the falcon engine.
     fn reset_eng(&self, bar: &Bar0) -> Result;
 
-    /// Returns true of this Falcon supports DMA transfer from system memory to Falcon memory
-    fn supports_dma(&self) -> bool;
+    /// returns the method needed to load data into Falcon memory
+    fn load_method(&self) -> LoadMethod;
 }
 
 /// Returns a boxed falcon HAL adequate for `chipset`.

@@ -14,7 +14,8 @@ use crate::{
     falcon::{
         Falcon,
         FalconBromParams,
-        FalconEngine, //
+        FalconEngine,
+        hal::LoadMethod, //
     },
     regs, //
 };
@@ -77,7 +78,7 @@ impl<E: FalconEngine> FalconHal<E> for Tu102<E> {
         Ok(())
     }
 
-    fn supports_dma(&self) -> bool {
-        false
+    fn load_method(&self) -> LoadMethod {
+        LoadMethod::Pio
     }
 }
