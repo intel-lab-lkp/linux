@@ -619,7 +619,6 @@ static void nfs_local_call_read(struct work_struct *work)
 		container_of(work, struct nfs_local_kiocb, work);
 	struct file *filp = iocb->kiocb.ki_filp;
 	const struct cred *save_cred;
-	bool force_done = false;
 	ssize_t status;
 	int n_iters;
 
@@ -638,13 +637,13 @@ static void nfs_local_call_read(struct work_struct *work)
 			iocb->kiocb.ki_flags &= ~IOCB_DIRECT;
 
 		status = filp->f_op->read_iter(&iocb->kiocb, &iocb->iters[i]);
-		if (status != -EIOCBQUEUED) {
-			if (unlikely(status >= 0 && status < iocb->iters[i].count))
-				force_done = true; /* Partial read */
-			if (nfs_local_pgio_done(iocb, status, force_done)) {
-				nfs_local_read_iocb_done(iocb);
-				break;
-			}
+		if (status == -EIOCBQUEUED)
+			continue;
+		/* Break on completion, errors, or short reads */
+		if (nfs_local_pgio_done(iocb, status, false) || status < 0 ||
+		    (size_t)status < iov_iter_count(&iocb->iters[i])) {
+			nfs_local_read_iocb_done(iocb);
+			break;
 		}
 	}
 
@@ -825,7 +824,6 @@ static void nfs_local_call_write(struct work_struct *work)
 	struct file *filp = iocb->kiocb.ki_filp;
 	unsigned long old_flags = current->flags;
 	const struct cred *save_cred;
-	bool force_done = false;
 	ssize_t status;
 	int n_iters;
 
@@ -846,13 +844,13 @@ static void nfs_local_call_write(struct work_struct *work)
 			iocb->kiocb.ki_flags &= ~IOCB_DIRECT;
 
 		status = filp->f_op->write_iter(&iocb->kiocb, &iocb->iters[i]);
-		if (status != -EIOCBQUEUED) {
-			if (unlikely(status >= 0 && status < iocb->iters[i].count))
-				force_done = true; /* Partial write */
-			if (nfs_local_pgio_done(iocb, status, force_done)) {
-				nfs_local_write_iocb_done(iocb);
-				break;
-			}
+		if (status == -EIOCBQUEUED)
+			continue;
+		/* Break on completion, errors, or short writes */
+		if (nfs_local_pgio_done(iocb, status, false) || status < 0 ||
+		    (size_t)status < iov_iter_count(&iocb->iters[i])) {
+			nfs_local_write_iocb_done(iocb);
+			break;
 		}
 	}
 	file_end_write(filp);
