@@ -1899,6 +1899,7 @@ static noinline_for_stack bool rcu_gp_init(void)
 		 */
 		arch_spin_lock(&rcu_state.ofl_lock);
 		raw_spin_lock_rcu_node(rnp);
+		rcu_promote_blocked_tasks(rnp);
 #ifdef CONFIG_RCU_PER_CPU_BLOCKED_LISTS
 		/*
 		 * Verify rdp lists consistent with rnp list. Since the unlock
@@ -1982,6 +1983,7 @@ static noinline_for_stack bool rcu_gp_init(void)
 		rcu_gp_slow(gp_init_delay);
 		raw_spin_lock_irqsave_rcu_node(rnp, flags);
 		rdp = this_cpu_ptr(&rcu_data);
+		rcu_promote_blocked_tasks(rnp);
 		rcu_preempt_check_blocked_tasks(rnp);
 		rnp->qsmask = rnp->qsmaskinit;
 		WRITE_ONCE(rnp->gp_seq, rcu_state.gp_seq);

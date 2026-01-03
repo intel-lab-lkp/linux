@@ -806,6 +806,84 @@ static void rcu_read_unlock_special(struct task_struct *t)
 	rcu_preempt_deferred_qs_irqrestore(t, flags);
 }
 
+#ifdef CONFIG_RCU_PER_CPU_BLOCKED_LISTS
+/*
+ * Promote blocked tasks from a single CPU's per-CPU list to the rnp list.
+ *
+ * If there are no tracked blockers (gp_tasks NULL) and this CPU
+ * is still blocking the corresponding GP (bit set in qsmask), set
+ * the pointer to ensure the GP machinery knows about the blocking task.
+ * This handles late promotion during QS reporting, where tasks may have
+ * blocked after rcu_gp_init() or sync_exp_reset_tree() ran their scans.
+ */
+static void rcu_promote_blocked_tasks_rdp(struct rcu_data *rdp,
+					  struct rcu_node *rnp)
+{
+	struct task_struct *t, *tmp;
+
+	raw_lockdep_assert_held_rcu_node(rnp);
+
+	raw_spin_lock(&rdp->blkd_lock);
+	list_for_each_entry_safe(t, tmp, &rdp->blkd_list, rcu_rdp_entry) {
+		/*
+		 * Skip tasks already on rnp list. A non-NULL
+		 * rcu_blocked_node indicates the task was already
+		 * promoted or added directly during blocking.
+		 * TODO: Should be WARN_ON_ONCE() after the last patch?
+		 */
+		if (t->rcu_blocked_node != NULL)
+			continue;
+
+		/*
+		 * Add to rnp list and remove from per-CPU list. We must add to
+		 * TAIL so that the task blocks any ongoing GPs.
+		 */
+		list_add_tail(&t->rcu_node_entry, &rnp->blkd_tasks);
+		t->rcu_blocked_node = rnp;
+		list_del_init(&t->rcu_rdp_entry);
+		t->rcu_blocked_cpu = -1;
+
+		/*
+		 * Set gp_tasks if this is the first blocker and
+		 * this CPU is still blocking the corresponding GP.
+		 */
+		if (!rnp->gp_tasks && (rnp->qsmask & rdp->grpmask))
+			WRITE_ONCE(rnp->gp_tasks, &t->rcu_node_entry);
+	}
+	raw_spin_unlock(&rdp->blkd_lock);
+}
+
+/*
+ * Promote blocked tasks from per-CPU lists to the rcu_node's blkd_tasks list.
+ * This is called during grace period initialization to move tasks that were
+ * blocked on per-CPU lists to the rnp list where they will block the new GP.
+ * rnp->lock must be held by the caller.
+ */
+static void rcu_promote_blocked_tasks(struct rcu_node *rnp)
+{
+	int cpu;
+	struct rcu_data *rdp_cpu;
+
+	raw_lockdep_assert_held_rcu_node(rnp);
+
+	/*
+	 * Only leaf nodes have per-CPU blocked task lists.
+	 * TODO: Should be WARN_ON_ONCE()?
+	 */
+	if (!rcu_is_leaf_node(rnp))
+		return;
+
+	for (cpu = rnp->grplo; cpu <= rnp->grphi; cpu++) {
+		rdp_cpu = per_cpu_ptr(&rcu_data, cpu);
+		rcu_promote_blocked_tasks_rdp(rdp_cpu, rnp);
+	}
+}
+#else /* #ifdef CONFIG_RCU_PER_CPU_BLOCKED_LISTS */
+static inline void rcu_promote_blocked_tasks_rdp(struct rcu_data *rdp,
+						 struct rcu_node *rnp) { }
+static void rcu_promote_blocked_tasks(struct rcu_node *rnp) { }
+#endif /* #else #ifdef CONFIG_RCU_PER_CPU_BLOCKED_LISTS */
+
 /*
  * Check that the list of blocked tasks for the newly completed grace
  * period is in fact empty.  It is a serious bug to complete a grace
@@ -1138,6 +1216,8 @@ dump_blkd_tasks(struct rcu_node *rnp, int ncheck)
 }
 
 static void rcu_preempt_deferred_qs_init(struct rcu_data *rdp) { }
+
+static void rcu_promote_blocked_tasks(struct rcu_node *rnp) { }
 
 #endif /* #else #ifdef CONFIG_PREEMPT_RCU */
 
