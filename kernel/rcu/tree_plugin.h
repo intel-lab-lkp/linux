@@ -810,8 +810,8 @@ static void rcu_read_unlock_special(struct task_struct *t)
 /*
  * Promote blocked tasks from a single CPU's per-CPU list to the rnp list.
  *
- * If there are no tracked blockers (gp_tasks NULL) and this CPU
- * is still blocking the corresponding GP (bit set in qsmask), set
+ * If there are no tracked blockers (gp_tasks/exp_tasks NULL) and this CPU
+ * is still blocking the corresponding GP (bit set in qsmask/expmask), set
  * the pointer to ensure the GP machinery knows about the blocking task.
  * This handles late promotion during QS reporting, where tasks may have
  * blocked after rcu_gp_init() or sync_exp_reset_tree() ran their scans.
@@ -844,11 +844,13 @@ static void rcu_promote_blocked_tasks_rdp(struct rcu_data *rdp,
 		t->rcu_blocked_cpu = -1;
 
 		/*
-		 * Set gp_tasks if this is the first blocker and
+		 * Set gp_tasks/exp_tasks if this is the first blocker and
 		 * this CPU is still blocking the corresponding GP.
 		 */
 		if (!rnp->gp_tasks && (rnp->qsmask & rdp->grpmask))
 			WRITE_ONCE(rnp->gp_tasks, &t->rcu_node_entry);
+		if (!rnp->exp_tasks && (rnp->expmask & rdp->grpmask))
+			WRITE_ONCE(rnp->exp_tasks, &t->rcu_node_entry);
 	}
 	raw_spin_unlock(&rdp->blkd_lock);
 }
