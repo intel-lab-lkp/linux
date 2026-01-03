@@ -289,7 +289,7 @@ cmp_acl_entry(const void *x, const void *y)
 /*
  * Convert from a Solaris ACL to a POSIX 1003.1e draft 17 ACL.
  */
-static int
+int
 posix_acl_from_nfsacl(struct posix_acl *acl)
 {
 	struct posix_acl_entry *pa, *pe,
@@ -325,6 +325,7 @@ posix_acl_from_nfsacl(struct posix_acl *acl)
 	}
 	return 0;
 }
+EXPORT_SYMBOL_GPL(posix_acl_from_nfsacl);
 
 /**
  * nfsacl_decode - Decode an NFSv3 ACL
