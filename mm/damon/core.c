@@ -2541,6 +2541,21 @@ static void damon_merge_two_regions(struct damon_target *t,
 	damon_destroy_region(r, t);
 }
 
+#ifdef CONFIG_DAMON_DEBUG_SANITY
+static void damon_verify_merge_regions_of(struct damon_region *r)
+{
+	if (r->nr_accesses == r->nr_accesses_bp / 10000)
+		return;
+	WARN_ONCE(true, "nr_accesses (%u) != nr_accesses_bp (%u)\n",
+			r->nr_accesses, r->nr_accesses_bp);
+}
+#else
+static void damon_verify_merge_regions_of(struct damon_region *r)
+{
+}
+#endif
+
+
 /*
  * Merge adjacent regions having similar access frequencies
  *
@@ -2560,6 +2575,8 @@ static void damon_merge_regions_of(struct damon_target *t, unsigned int thres,
 			r->age = 0;
 		else
 			r->age++;
+
+		damon_verify_merge_regions_of(r);
 
 		if (prev && prev->ar.end == r->ar.start &&
 		    abs(prev->nr_accesses - r->nr_accesses) <= thres &&
