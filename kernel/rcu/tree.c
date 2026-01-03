@@ -2001,8 +2001,21 @@ static noinline_for_stack bool rcu_gp_init(void)
 		 */
 		mask = rnp->qsmask & ~rnp->qsmaskinitnext;
 		rnp->rcu_gp_init_mask = mask;
-		if ((mask || rnp->wait_blkd_tasks) && rcu_is_leaf_node(rnp))
+		if ((mask || rnp->wait_blkd_tasks) && rcu_is_leaf_node(rnp)) {
+			int cpu;
+
+			/*
+			 * Promote blocked tasks from offline CPUs before
+			 * reporting QS, so they properly block the GP.
+			 */
+			for_each_leaf_node_cpu_mask(rnp, cpu, mask) {
+				struct rcu_data *rdp_cpu;
+
+				rdp_cpu = per_cpu_ptr(&rcu_data, cpu);
+				rcu_promote_blocked_tasks_rdp(rdp_cpu, rnp);
+			}
 			rcu_report_qs_rnp(mask, rnp, rnp->gp_seq, flags);
+		}
 		else
 			raw_spin_unlock_irq_rcu_node(rnp);
 		cond_resched_tasks_rcu_qs();
