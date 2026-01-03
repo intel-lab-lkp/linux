@@ -517,6 +517,39 @@ enum {
 };
 
 /*
+ * Symbol names and values are from draft-rmacklem-nfsv4-posix-acls
+ * "POSIX Draft ACL support for Network File System Version 4, Minor version 2"
+ * Section 10.
+ */
+enum {
+	ACL_MODEL_NFS4			= 1,
+	ACL_MODEL_POSIX_DRAFT		= 2,
+	ACL_MODEL_NONE			= 3,
+};
+
+enum {
+	ACL_SCOPE_FILE_OBJECT		= 1,
+	ACL_SCOPE_FILE_SYSTEM		= 2,
+	ACL_SCOPE_SERVER		= 3,
+};
+
+enum {
+	POSIXACE4_TAG_USER_OBJ		= 1,
+	POSIXACE4_TAG_USER		= 2,
+	POSIXACE4_TAG_GROUP_OBJ		= 3,
+	POSIXACE4_TAG_GROUP		= 4,
+	POSIXACE4_TAG_MASK		= 5,
+	POSIXACE4_TAG_OTHER		= 6,
+};
+
+enum {
+	FATTR4_ACL_TRUEFORM		= 89,
+	FATTR4_ACL_TRUEFORM_SCOPE	= 90,
+	FATTR4_POSIX_DEFAULT_ACL	= 91,
+	FATTR4_POSIX_ACCESS_ACL		= 92,
+};
+
+/*
  * The following internal definitions enable processing the above
  * attribute bits within 32-bit word boundaries.
  */
@@ -598,6 +631,10 @@ enum {
 #define FATTR4_WORD2_TIME_DELEG_ACCESS	BIT(FATTR4_TIME_DELEG_ACCESS - 64)
 #define FATTR4_WORD2_TIME_DELEG_MODIFY	BIT(FATTR4_TIME_DELEG_MODIFY - 64)
 #define FATTR4_WORD2_OPEN_ARGUMENTS	BIT(FATTR4_OPEN_ARGUMENTS - 64)
+#define FATTR4_WORD2_ACL_TRUEFORM	BIT(FATTR4_ACL_TRUEFORM - 64)
+#define FATTR4_WORD2_ACL_TRUEFORM_SCOPE	BIT(FATTR4_ACL_TRUEFORM_SCOPE - 64)
+#define FATTR4_WORD2_POSIX_DEFAULT_ACL	BIT(FATTR4_POSIX_DEFAULT_ACL - 64)
+#define FATTR4_WORD2_POSIX_ACCESS_ACL	BIT(FATTR4_POSIX_ACCESS_ACL - 64)
 
 /* MDS threshold bitmap bits */
 #define THRESHOLD_RD                    (1UL << 0)
