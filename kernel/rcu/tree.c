@@ -2500,6 +2500,13 @@ rcu_report_qs_rdp(struct rcu_data *rdp)
 			WARN_ON_ONCE(rcu_accelerate_cbs(rnp, rdp));
 		}
 
+		/*
+		 * Promote any late-arriving blocked tasks before reporting QS.
+		 * This handles the case where a task blocks just as a GP is
+		 * starting, missing the initial promotion in rcu_gp_init().
+		 */
+		rcu_promote_blocked_tasks_rdp(rdp, rnp);
+
 		rcu_disable_urgency_upon_qs(rdp);
 		rcu_report_qs_rnp(mask, rnp, rnp->gp_seq, flags);
 		/* ^^^ Released rnp->lock */
