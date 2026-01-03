@@ -269,6 +269,33 @@
 					 decode_putfh_maxsz + \
 					 decode_removexattr_maxsz)
 
+#define encode_getposixacl_maxsz (encode_getattr_maxsz)
+#define decode_getposixacl_maxsz (op_decode_hdr_maxsz + \
+				 nfs4_fattr_bitmap_maxsz + \
+				 XDR_QUADLEN(NFS4_ACL_INLINE_BUFSIZE) + \
+				 pagepad_maxsz)
+#define encode_setposixacl_maxsz (op_encode_hdr_maxsz + \
+				 encode_stateid_maxsz + \
+				 nfs4_fattr_bitmap_maxsz + 1 + \
+				 XDR_QUADLEN(NFS4_ACL_INLINE_BUFSIZE))
+#define decode_setposixacl_maxsz (decode_setattr_maxsz)
+#define NFS4_enc_getposixacl_sz	(compound_encode_hdr_maxsz + \
+				encode_sequence_maxsz + \
+				encode_putfh_maxsz + \
+				encode_getposixacl_maxsz)
+#define NFS4_dec_getposixacl_sz	(compound_decode_hdr_maxsz + \
+				decode_sequence_maxsz + \
+				decode_putfh_maxsz + \
+				decode_getposixacl_maxsz)
+#define NFS4_enc_setposixacl_sz	(compound_encode_hdr_maxsz + \
+				encode_sequence_maxsz + \
+				encode_putfh_maxsz + \
+				encode_setposixacl_maxsz)
+#define NFS4_dec_setposixacl_sz	(compound_decode_hdr_maxsz + \
+				decode_sequence_maxsz + \
+				decode_putfh_maxsz + \
+				decode_setposixacl_maxsz)
+
 /*
  * These values specify the maximum amount of data that is not
  * associated with the extended attribute name or extended
@@ -1796,6 +1823,621 @@ static int nfs4_xdr_dec_listxattrs(struct rpc_rqst *rqstp,
 out:
 	return status;
 }
+
+static int
+nfsacl4_posix_tagtotype(u32 tag)
+{
+	int type;
+
+	switch(tag) {
+	case ACL_USER_OBJ:
+		type = POSIXACE4_TAG_USER_OBJ;
+		break;
+	case ACL_GROUP_OBJ:
+		type = POSIXACE4_TAG_GROUP_OBJ;
+		break;
+	case ACL_USER:
+		type = POSIXACE4_TAG_USER;
+		break;
+	case ACL_GROUP:
+		type = POSIXACE4_TAG_GROUP;
+		break;
+	case ACL_MASK:
+		type = POSIXACE4_TAG_MASK;
+		break;
+	case ACL_OTHER:
+		type = POSIXACE4_TAG_OTHER;
+		break;
+	default:
+		return -EINVAL;
+	}
+	return type;
+}
+
+static int xdr_nfs4ace_stream_encode(struct xdr_stream *xdr,
+				     const struct nfs_server *server,
+				     struct posix_acl_entry *acep)
+{
+	char owner[IDMAP_NAMESZ];
+	int len, size, type;
+
+	type = nfsacl4_posix_tagtotype(acep->e_tag);
+	if (type < 0)
+		return -EINVAL;
+	if (xdr_stream_encode_u32(xdr, type) < 0)
+		return -EINVAL;
+	if (xdr_stream_encode_u32(xdr, acep->e_perm) < 0)
+		return -EINVAL;
+	size = 2 * XDR_UNIT;
+	switch(acep->e_tag) {
+	case ACL_USER_OBJ:
+	case ACL_GROUP_OBJ:
+	case ACL_MASK:
+	case ACL_OTHER:
+		if (xdr_stream_encode_u32(xdr, 0) < 0)
+			return -EINVAL;
+		size += XDR_UNIT;
+		break;
+	case ACL_USER:
+		len = nfs_map_uid_to_name(server, acep->e_uid, owner,
+					  IDMAP_NAMESZ);
+		if (len < 0) {
+			dprintk("nfs: couldn't resolve uid %d to str\n",
+				from_kuid(&init_user_ns, acep->e_uid));
+			return -EINVAL;
+		}
+		if (xdr_stream_encode_opaque(xdr, owner, len) < 0)
+			return -EINVAL;
+		size += XDR_UNIT + (XDR_QUADLEN(len) << 2);
+		break;
+	case ACL_GROUP:
+		len = nfs_map_gid_to_group(server, acep->e_gid, owner,
+					 IDMAP_NAMESZ);
+		if (len < 0) {
+			dprintk("nfs: couldn't resolve gid %d to str\n",
+				from_kgid(&init_user_ns, acep->e_gid));
+			return -EINVAL;
+		}
+		if (xdr_stream_encode_opaque(xdr, owner, len) < 0)
+			return -EINVAL;
+		size += XDR_UNIT + (XDR_QUADLEN(len) << 2);
+		break;
+	default:
+		return -EINVAL;
+	}
+	return size;
+}
+
+static int encode_stream_posixacl(struct xdr_stream *xdr, struct posix_acl *acl,
+				const struct nfs_server *server)
+{
+	unsigned int cnt;
+	int ret, size;
+
+	if (acl == NULL) {
+		if (xdr_stream_encode_u32(xdr, 0) < 0)
+			return -EINVAL;
+		return XDR_UNIT;
+	}
+	if (acl->a_count > NFS_ACL_MAX_ENTRIES)
+		return -EINVAL;
+	if (xdr_stream_encode_u32(xdr, acl->a_count) < 0)
+		return -EINVAL;
+	size = XDR_UNIT;
+
+	for (cnt = 0; cnt < acl->a_count; cnt++) {
+		ret = xdr_nfs4ace_stream_encode(xdr, server,
+						&acl->a_entries[cnt]);
+		if (ret < 0)
+			return ret;
+		size += ret;
+	}
+
+	return size;
+}
+
+static bool nfs_xdr_putpage_bytes(struct nfs_xdr_putpage_desc *desc,
+		void *bytes, size_t len)
+{
+	size_t tmp, xfer;
+
+	while (len > 0) {
+		if (desc->p == desc->endp) {
+			/* Need to move on to the next page. */
+			if (desc->page_pos == desc->npages) {
+				/* Needs a new page. */
+				if (desc->npages == desc->max_npages)
+					return false;
+				desc->pages[desc->npages] =
+						alloc_page(GFP_KERNEL);
+				if (desc->pages[desc->npages] == NULL)
+					return false;
+				desc->npages++;
+			}
+			desc->p = page_address(desc->pages[desc->page_pos]);
+			desc->endp = desc->p + PAGE_SIZE;
+			desc->page_pos++;
+		}
+		tmp = desc->endp - desc->p;
+		xfer = (tmp < len) ? tmp : len;
+		memcpy(desc->p, bytes, xfer);
+		bytes += xfer;
+		desc->p += xfer;
+		len -= xfer;
+	}
+	return true;
+}
+
+static bool nfs_xdr_putpage_word(struct nfs_xdr_putpage_desc *desc, u32 val)
+{
+	__be32 beval;
+
+	beval = cpu_to_be32(val);
+	return nfs_xdr_putpage_bytes(desc, &beval, sizeof(beval));
+}
+
+void nfs_xdr_putpage_cleanup(struct nfs_xdr_putpage_desc *desc)
+{
+
+	while (desc->npages != 0) {
+		desc->npages--;
+		__free_page(desc->pages[desc->npages]);
+	}
+}
+
+static ssize_t xdr_nfs4ace_encode(const struct nfs_server *server,
+		struct nfs_xdr_putpage_desc *desc, struct posix_acl_entry *acep)
+{
+	char owner[IDMAP_NAMESZ];
+	ssize_t len, size;
+	int type;
+
+	type = nfsacl4_posix_tagtotype(acep->e_tag);
+	if (type < 0)
+		return -EINVAL;
+	if (!nfs_xdr_putpage_word(desc, type))
+		return -EINVAL;
+	if (!nfs_xdr_putpage_word(desc, acep->e_perm))
+		return -EINVAL;
+	size = 2 * XDR_UNIT;
+	switch(acep->e_tag) {
+	case ACL_USER_OBJ:
+	case ACL_GROUP_OBJ:
+	case ACL_MASK:
+	case ACL_OTHER:
+		if (!nfs_xdr_putpage_word(desc, 0))
+			return -EINVAL;
+		size += XDR_UNIT;
+		break;
+	case ACL_USER:
+		len = nfs_map_uid_to_name(server, acep->e_uid, owner,
+					IDMAP_NAMESZ);
+		if (len < 0) {
+			dprintk("nfs: couldn't resolve uid %d to string\n",
+				from_kuid(&init_user_ns, acep->e_uid));
+			return -EINVAL;
+		}
+		if (!nfs_xdr_putpage_word(desc, len))
+			return -EINVAL;
+		size += XDR_UNIT;
+		while (len & 3)
+			owner[len++] = '\0';
+		if (!nfs_xdr_putpage_bytes(desc, owner, len))
+			return -EINVAL;
+		size += len;
+		break;
+	case ACL_GROUP:
+		len = nfs_map_gid_to_group(server, acep->e_gid, owner,
+					IDMAP_NAMESZ);
+		if (len < 0) {
+			dprintk("nfs: couldn't resolve gid %d to string\n",
+				from_kgid(&init_user_ns, acep->e_gid));
+			return -EINVAL;
+		}
+		if (!nfs_xdr_putpage_word(desc, len))
+			return -EINVAL;
+		size += XDR_UNIT;
+		while (len & 3)
+			owner[len++] = '\0';
+		if (!nfs_xdr_putpage_bytes(desc, owner, len))
+			return -EINVAL;
+		size += len;
+		break;
+	default:
+		return -EINVAL;
+	}
+	return size;
+}
+
+ssize_t nfs42_encode_posixacl(const struct nfs_server *server,
+		struct nfs_xdr_putpage_desc *desc, struct posix_acl *acl)
+{
+	unsigned int cnt;
+	ssize_t ret, size;
+
+	if (acl == NULL) {
+		if (!nfs_xdr_putpage_word(desc, 0))
+			return -EINVAL;
+		return XDR_UNIT;
+	}
+	if (acl->a_count > NFS_ACL_MAX_ENTRIES)
+		return -EINVAL;
+	if (!nfs_xdr_putpage_word(desc, acl->a_count))
+		return -EINVAL;
+	size = XDR_UNIT;
+
+	for (cnt = 0; cnt < acl->a_count; cnt++) {
+		ret = xdr_nfs4ace_encode(server, desc, &acl->a_entries[cnt]);
+		if (ret < 0)
+			return ret;
+		size += ret;
+	}
+
+	return size;
+}
+
+static void encode_setposixacl(struct rpc_rqst *req, struct xdr_stream *xdr,
+			const struct nfs42_setposixaclargs *arg,
+			const struct nfs_server *server,
+			struct compound_hdr *hdr)
+{
+	uint32_t bitmap[3];
+	__be32 *sizep;
+	ssize_t ret, size;
+
+	bitmap[0] = 0;
+	bitmap[1] = 0;
+	bitmap[2] = 0;
+	if (arg->mask & NFS_ACL)
+		bitmap[2] |= FATTR4_WORD2_POSIX_ACCESS_ACL;
+	if (arg->mask & NFS_DFACL)
+		bitmap[2] |= FATTR4_WORD2_POSIX_DEFAULT_ACL;
+
+	encode_op_hdr(xdr, OP_SETATTR, decode_setposixacl_maxsz, hdr);
+	encode_nfs4_stateid(xdr, &zero_stateid);
+	xdr_encode_bitmap4(xdr, bitmap, ARRAY_SIZE(bitmap));
+	sizep = reserve_space(xdr, 4);
+	if (sizep != NULL) {
+		size = 0;
+		if (arg->len > 0) {
+			xdr_write_pages(xdr, arg->pages, 0, arg->len);
+			size = arg->len;
+		} else {
+			if (arg->mask & NFS_DFACL)
+				size = encode_stream_posixacl(xdr,
+						arg->acl_default, server);
+			if ((arg->mask & NFS_ACL) && size >= 0) {
+				ret = encode_stream_posixacl(xdr,
+						arg->acl_access, server);
+				if (ret > 0)
+					size += ret;
+			}
+		}
+		if (size >= 0)
+			*sizep = cpu_to_be32(size);
+	}
+}
+
+/*
+ * Encode a GETPOSIXACL request
+ */
+static void nfs4_xdr_enc_getposixacl(struct rpc_rqst *req,
+				struct xdr_stream *xdr, const void *data)
+{
+	const struct nfs42_getposixaclargs *args = data;
+	struct compound_hdr hdr = {
+		.minorversion = nfs4_xdr_minorversion(&args->seq_args),
+	};
+	uint32_t bitmask[3];
+	int getacl_cnt;
+
+	bitmask[0] = 0;
+	bitmask[1] = 0;
+	bitmask[2] = FATTR4_WORD2_ACL_TRUEFORM;
+	getacl_cnt = 0;
+	if (args->mask & (NFS_ACLCNT|NFS_ACL)) {
+		bitmask[2] |= FATTR4_WORD2_POSIX_ACCESS_ACL;
+		getacl_cnt++;
+	}
+	if (args->mask & (NFS_DFACLCNT|NFS_DFACL)) {
+		bitmask[2] |= FATTR4_WORD2_POSIX_DEFAULT_ACL;
+		getacl_cnt++;
+	}
+	encode_compound_hdr(xdr, req, &hdr);
+	encode_sequence(xdr, &args->seq_args, &hdr);
+	encode_putfh(xdr, args->fh, &hdr);
+	encode_getattr(xdr, bitmask, NULL, 3, &hdr);
+
+	if (getacl_cnt > 0) {
+		rpc_prepare_reply_pages(req, args->pages, 0,
+					(NFS4_ACL_MAXPAGES * getacl_cnt) <<
+					PAGE_SHIFT, NFS4_dec_getposixacl_sz -
+					pagepad_maxsz);
+		req->rq_rcv_buf.flags |= XDRBUF_SPARSE_PAGES;
+	}
+	encode_nops(&hdr);
+}
+
+/*
+ * Encode a SETPOSIXACL request
+ */
+static void nfs4_xdr_enc_setposixacl(struct rpc_rqst *req,
+				struct xdr_stream *xdr, const void *data)
+{
+	const struct nfs42_setposixaclargs *args = data;
+	struct compound_hdr hdr = {
+		.minorversion = nfs4_xdr_minorversion(&args->seq_args),
+	};
+
+	encode_compound_hdr(xdr, req, &hdr);
+	encode_sequence(xdr, &args->seq_args, &hdr);
+	encode_putfh(xdr, args->fh, &hdr);
+	encode_setposixacl(req, xdr, args, args->server, &hdr);
+	encode_nops(&hdr);
+}
+
+static bool
+nfsacl4_posix_xdrtotag(struct xdr_stream *xdr, u32 *tag)
+{
+	u32 type;
+	int ret;
+
+	ret = xdr_stream_decode_u32(xdr, &type);
+	if (ret < 0)
+		return false;
+	switch(type) {
+	case POSIXACE4_TAG_USER_OBJ:
+		*tag = ACL_USER_OBJ;
+		break;
+	case POSIXACE4_TAG_GROUP_OBJ:
+		*tag = ACL_GROUP_OBJ;
+		break;
+	case POSIXACE4_TAG_USER:
+		*tag = ACL_USER;
+		break;
+	case POSIXACE4_TAG_GROUP:
+		*tag = ACL_GROUP;
+		break;
+	case POSIXACE4_TAG_MASK:
+		*tag = ACL_MASK;
+		break;
+	case POSIXACE4_TAG_OTHER:
+		*tag = ACL_OTHER;
+		break;
+	default:
+		return false;
+	}
+	return true;
+}
+
+struct nfsacl4_decode_desc {
+	unsigned int array_len;
+	unsigned int count;
+	struct posix_acl *acl;
+};
+
+static ssize_t
+xdr_nfs4ace_decode(struct xdr_stream *xdr, const struct nfs_server *server,
+		struct nfsacl4_decode_desc *desc)
+{
+	struct posix_acl_entry *entry;
+	char *owner;
+	kuid_t uid;
+	kgid_t gid;
+	u32 val;
+	ssize_t ret;
+
+	if (!desc->acl) {
+		desc->acl = posix_acl_alloc(desc->array_len, GFP_KERNEL);
+		if (!desc->acl)
+			return -ENOMEM;
+		desc->count = 0;
+	}
+
+	entry = &desc->acl->a_entries[desc->count++];
+	if (!nfsacl4_posix_xdrtotag(xdr, &val))
+		return -EBADMSG;
+	entry->e_tag = val;
+	ret = xdr_stream_decode_u32(xdr, &val);
+	if (ret < 0)
+		return -EBADMSG;
+	if (val & ~S_IRWXO)
+		return -EINVAL;
+	entry->e_perm = val;
+	ret = xdr_stream_decode_opaque_inline(xdr, (void **)&owner,
+				IDMAP_NAMESZ);
+	if (ret < 0)
+		return -EBADMSG;
+
+	switch(entry->e_tag) {
+	case ACL_USER:
+		if (ret == 0)
+			return -EBADMSG;
+		if (nfs_map_name_to_uid(server, owner, ret, &uid) == 0)
+			entry->e_uid = uid;
+		else
+			return -EINVAL;
+		break;
+	case ACL_GROUP:
+		if (ret == 0)
+			return -EBADMSG;
+		if (nfs_map_group_to_gid(server, owner, ret, &gid) == 0)
+			entry->e_gid = gid;
+		else
+			return -EINVAL;
+	}
+
+	return (XDR_QUADLEN(ret) << 2) + 3 * XDR_UNIT;
+}
+
+static ssize_t nfs_stream_decode_acl4(struct xdr_stream *xdr,
+		const struct nfs_server *server, unsigned int *aclcnt,
+		struct posix_acl **pacl)
+{
+	struct nfsacl4_decode_desc nfsacl_desc;
+	u32 entries, i;
+	ssize_t ret, retlen;
+
+	ret = xdr_stream_decode_u32(xdr, &entries);
+	if (ret < 0)
+		return -EBADMSG;
+	if (entries > NFS_ACL_MAX_ENTRIES)
+		return -EINVAL;
+	retlen = XDR_UNIT;
+
+	nfsacl_desc.array_len = entries;
+	nfsacl_desc.count = 0;
+	nfsacl_desc.acl = NULL;
+	for (i = 0; i < entries; i++) {
+		ret = xdr_nfs4ace_decode(xdr, server, &nfsacl_desc);
+		if (ret < 0)
+			return ret;
+		retlen += ret;
+	}
+
+	if (pacl) {
+		if (posix_acl_from_nfsacl(nfsacl_desc.acl) != 0) {
+			posix_acl_release(nfsacl_desc.acl);
+			return -EINVAL;
+		}
+		*pacl = nfsacl_desc.acl;
+	}
+	if (aclcnt)
+		*aclcnt = entries;
+	return retlen;
+}
+
+static int decode_getposixacl(struct xdr_stream *xdr,
+		struct nfs42_getposixaclres *res,
+		const struct nfs_server *server)
+{
+	uint32_t bitmap[3] = {0};
+	u32 attrlen, attrsize, trueform;
+	char scratch_buf[IDMAP_NAMESZ];
+	int status;
+
+	status = decode_op_hdr(xdr, OP_GETATTR);
+	if (status < 0)
+		goto xdr_error;
+
+	status = decode_attr_bitmap(xdr, bitmap);
+	if (status < 0)
+		goto xdr_error;
+
+	if (bitmap[0] || bitmap[1] ||
+	    (bitmap[2] & ~(FATTR4_WORD2_POSIX_ACCESS_ACL |
+	     FATTR4_WORD2_POSIX_DEFAULT_ACL |
+	     FATTR4_WORD2_ACL_TRUEFORM))) {
+		status = -EBADMSG;
+		goto xdr_error;
+	}
+
+	status = xdr_stream_decode_u32(xdr, &attrlen);
+	if (status < 0)
+		goto xdr_error;
+
+	trueform = ACL_MODEL_NFS4;
+	if (bitmap[2] & FATTR4_WORD2_ACL_TRUEFORM) {
+		status = xdr_stream_decode_u32(xdr, &trueform);
+		if (status < 0)
+			goto xdr_error;
+		attrsize = XDR_UNIT;
+	}
+
+	/*
+	 * For a ACL_MODEL_NFS4 true form, return EOPNOTSUPP.
+	 * Hopefully this error can be used by getfacl(1) to indicate
+	 * that nfs4_getfacl(1) should be used.
+	 */
+	if (trueform == ACL_MODEL_NFS4) {
+		status = -EOPNOTSUPP;
+		goto xdr_error;
+	}
+
+	xdr_set_scratch_buffer(xdr, &scratch_buf, sizeof(scratch_buf));
+	res->mask = 0;
+	if (bitmap[2] & FATTR4_WORD2_POSIX_DEFAULT_ACL) {
+		status = nfs_stream_decode_acl4(xdr, server,
+						&res->acl_default_count,
+						&res->acl_default);
+		if (status < 0)
+			goto xdr_error2;
+		attrsize += status;
+		res->mask |= NFS_DFACL|NFS_DFACLCNT;
+	}
+	if (bitmap[2] & FATTR4_WORD2_POSIX_ACCESS_ACL) {
+		status = nfs_stream_decode_acl4(xdr, server,
+						&res->acl_access_count,
+						&res->acl_access);
+		if (status < 0)
+			goto xdr_error2;
+		attrsize += status;
+		res->mask |= NFS_ACL|NFS_ACLCNT;
+	}
+	status = 0;
+
+	if (attrlen != attrsize)
+		status = -EBADMSG;
+xdr_error2:
+	xdr_reset_scratch_buffer(xdr);
+xdr_error:
+	dprintk("%s: xdr returned %d\n", __func__, -status);
+	return status;
+}
+
+/*
+ * Decode GETPOSIXACL response
+ */
+static int
+nfs4_xdr_dec_getposixacl(struct rpc_rqst *rqstp, struct xdr_stream *xdr,
+		    void *data)
+{
+	struct nfs42_getposixaclres *res = data;
+	struct compound_hdr hdr;
+	int status;
+
+	status = decode_compound_hdr(xdr, &hdr);
+	if (status)
+		goto out;
+	status = decode_sequence(xdr, &res->seq_res, rqstp);
+	if (status)
+		goto out;
+	status = decode_putfh(xdr);
+	if (status)
+		goto out;
+	status = decode_getposixacl(xdr, res, res->server);
+
+out:
+	return status;
+}
+
+/*
+ * Decode SETPOSIXACL response
+ */
+static int nfs4_xdr_dec_setposixacl(struct rpc_rqst *rqstp,
+				struct xdr_stream *xdr,
+				void *data)
+{
+	struct nfs42_setposixaclres *res = data;
+	struct compound_hdr hdr;
+	int status;
+
+	status = decode_compound_hdr(xdr, &hdr);
+	if (status)
+		goto out;
+	status = decode_sequence(xdr, &res->seq_res, rqstp);
+	if (status)
+		goto out;
+	status = decode_putfh(xdr);
+	if (status)
+		goto out;
+	status = decode_setattr(xdr);
+	if (status)
+		goto out;
+out:
+	return status;
+}
+
 
 /*
  * Decode REMOVEXATTR request
