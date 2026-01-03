@@ -549,6 +549,22 @@ rcu_preempt_deferred_qs_irqrestore(struct task_struct *t, unsigned long flags)
 			list_del_init(&t->rcu_rdp_entry);
 			t->rcu_blocked_cpu = -1;
 			raw_spin_unlock(&blocked_rdp->blkd_lock);
+			/*
+			 * TODO: This should just be "WARN_ON_ONCE(rnp); return;" since after
+			 * the last patches, the task can only be in either the rdp or the rnp
+			 * list, not both. Since blocked_cpu != -1, it is clearly not in the rnp
+			 * so we activate the benefits of this patchset by removing the task
+			 * from the rdp blocked list and early returning.
+			 */
+			if (!rnp) {
+				/*
+				 * Task was only on per-CPU list, not on rnp list.
+				 * This can happen in future when tasks are added
+				 * only to rdp initially and promoted to rnp later.
+				 */
+				local_irq_restore(flags);
+				return;
+			}
 		}
 #endif
 		raw_spin_lock_rcu_node(rnp); /* irqs already disabled. */
