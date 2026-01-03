@@ -433,7 +433,7 @@ impl FwsecFirmware {
         };
 
         Ok(FwsecFirmware {
-            desc: desc,
+            desc,
             ucode: ucode_signed,
         })
     }
