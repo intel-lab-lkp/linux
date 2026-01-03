@@ -846,6 +846,7 @@ void exit_rcu(void)
 	if (unlikely(!list_empty(&current->rcu_node_entry))) {
 		rcu_preempt_depth_set(1);
 		barrier();
+		WARN_ON_ONCE(!t->rcu_read_unlock_special.b.blocked);
 		WRITE_ONCE(t->rcu_read_unlock_special.b.blocked, true);
 	} else if (unlikely(rcu_preempt_depth())) {
 		rcu_preempt_depth_set(1);
