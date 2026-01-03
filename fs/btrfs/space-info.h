@@ -132,15 +132,15 @@ struct btrfs_space_info {
 	/* Chunk size in bytes */
 	u64 chunk_size;
 
+	int clamp;		/* Used to scale our threshold for preemptive
+				   flushing. The value is >> clamp, so turns
+				   out to be a 2^clamp divisor. */
+
 	/*
 	 * Once a block group drops below this threshold (percents) we'll
 	 * schedule it for reclaim.
 	 */
-	int bg_reclaim_threshold;
-
-	int clamp;		/* Used to scale our threshold for preemptive
-				   flushing. The value is >> clamp, so turns
-				   out to be a 2^clamp divisor. */
+	u8 bg_reclaim_threshold;
 
 	bool full;		/* indicates that we cannot allocate any more
 				   chunks for this space */
@@ -217,7 +217,7 @@ struct btrfs_space_info {
 	 * freed any space since the last time we made no progress.
 	 */
 	bool periodic_reclaim_paused;
-	int last_reclaim_threshold;
+	u8 last_reclaim_threshold;
 	u64 last_reclaim_unused;
 };
 
@@ -298,7 +298,7 @@ void btrfs_dump_space_info_for_trans_abort(struct btrfs_fs_info *fs_info);
 void btrfs_init_async_reclaim_work(struct btrfs_fs_info *fs_info);
 u64 btrfs_account_ro_block_groups_free_space(struct btrfs_space_info *sinfo);
 
-int btrfs_calc_reclaim_threshold(const struct btrfs_space_info *space_info);
+u8 btrfs_calc_reclaim_threshold(const struct btrfs_space_info *space_info);
 static inline void btrfs_resume_periodic_reclaim(struct btrfs_space_info *space_info)
 {
 	lockdep_assert_held(&space_info->lock);

@@ -2037,7 +2037,7 @@ static u64 calc_unalloc_target(struct btrfs_fs_info *fs_info)
  * Typically with 10 block groups as the target, the discrete values this comes
  * out to are 0, 10, 20, ... , 80, 90, and 99.
  */
-static int calc_dynamic_reclaim_threshold(const struct btrfs_space_info *space_info)
+static u8 calc_dynamic_reclaim_threshold(const struct btrfs_space_info *space_info)
 {
 	struct btrfs_fs_info *fs_info = space_info->fs_info;
 	u64 unalloc = atomic64_read(&fs_info->free_chunk_space);
@@ -2052,11 +2052,11 @@ static int calc_dynamic_reclaim_threshold(const struct btrfs_space_info *space_i
 	if (unused < data_chunk_size)
 		return 0;
 
-	/* Cast to int is OK because want <= target. */
+	/* Cast to u8 is OK because want <= target. */
 	return calc_pct_ratio(want, target);
 }
 
-int btrfs_calc_reclaim_threshold(const struct btrfs_space_info *space_info)
+u8 btrfs_calc_reclaim_threshold(const struct btrfs_space_info *space_info)
 {
 	lockdep_assert_held(&space_info->lock);
 

@@ -937,7 +937,8 @@ static ssize_t btrfs_sinfo_bg_reclaim_threshold_store(struct kobject *kobj,
 	if (thresh < 0 || thresh > 100)
 		return -EINVAL;
 
-	WRITE_ONCE(space_info->bg_reclaim_threshold, thresh);
+	/* Safe to case to u8 after checking thresh's range is between 0 and 100 */
+	WRITE_ONCE(space_info->bg_reclaim_threshold, (u8)thresh);
 
 	return len;
 }
