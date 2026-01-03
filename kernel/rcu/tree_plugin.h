@@ -383,9 +383,28 @@ EXPORT_SYMBOL_GPL(rcu_note_context_switch);
  * Check for preempted RCU readers blocking the current grace period
  * for the specified rcu_node structure.  If the caller needs a reliable
  * answer, it must hold the rcu_node's ->lock.
+ *
+ * If @promote is true and CONFIG_RCU_PER_CPU_BLOCKED_LISTS is enabled,
+ * this function first promotes any tasks from per-CPU blocked lists to
+ * the rcu_node's blkd_tasks list before checking.  This ensures that
+ * late-arriving tasks (blocked after GP init's promotion scan) are
+ * visible for priority boosting and other operations.  When promoting,
+ * the caller must hold rnp->lock.
  */
-static int rcu_preempt_blocked_readers_cgp(struct rcu_node *rnp)
+static int rcu_preempt_blocked_readers_cgp(struct rcu_node *rnp, bool promote)
 {
+#ifdef CONFIG_RCU_PER_CPU_BLOCKED_LISTS
+	if (promote && rcu_is_leaf_node(rnp)) {
+		int cpu;
+		struct rcu_data *rdp;
+
+		raw_lockdep_assert_held_rcu_node(rnp);
+		for (cpu = rnp->grplo; cpu <= rnp->grphi; cpu++) {
+			rdp = per_cpu_ptr(&rcu_data, cpu);
+			rcu_promote_blocked_tasks_rdp(rdp, rnp);
+		}
+	}
+#endif
 	return READ_ONCE(rnp->gp_tasks) != NULL;
 }
 
@@ -570,7 +589,7 @@ rcu_preempt_deferred_qs_irqrestore(struct task_struct *t, unsigned long flags)
 		raw_spin_lock_rcu_node(rnp); /* irqs already disabled. */
 		WARN_ON_ONCE(rnp != t->rcu_blocked_node);
 		WARN_ON_ONCE(!rcu_is_leaf_node(rnp));
-		empty_norm = !rcu_preempt_blocked_readers_cgp(rnp);
+		empty_norm = !rcu_preempt_blocked_readers_cgp(rnp, true);
 		WARN_ON_ONCE(rnp->completedqs == rnp->gp_seq &&
 			     (!empty_norm || rnp->qsmask));
 		empty_exp = sync_rcu_exp_done(rnp);
@@ -597,7 +616,7 @@ rcu_preempt_deferred_qs_irqrestore(struct task_struct *t, unsigned long flags)
 		 * so we must take a snapshot of the expedited state.
 		 */
 		empty_exp_now = sync_rcu_exp_done(rnp);
-		if (!empty_norm && !rcu_preempt_blocked_readers_cgp(rnp)) {
+		if (!empty_norm && !rcu_preempt_blocked_readers_cgp(rnp, true)) {
 			trace_rcu_quiescent_state_report(TPS("preempt_rcu"),
 							 rnp->gp_seq,
 							 0, rnp->qsmask,
@@ -901,7 +920,7 @@ static void rcu_preempt_check_blocked_tasks(struct rcu_node *rnp)
 
 	RCU_LOCKDEP_WARN(preemptible(), "rcu_preempt_check_blocked_tasks() invoked with preemption enabled!!!\n");
 	raw_lockdep_assert_held_rcu_node(rnp);
-	if (WARN_ON_ONCE(rcu_preempt_blocked_readers_cgp(rnp)))
+	if (WARN_ON_ONCE(rcu_preempt_blocked_readers_cgp(rnp, true)))
 		dump_blkd_tasks(rnp, 10);
 	if (rcu_preempt_has_tasks(rnp) &&
 	    (rnp->qsmaskinit || rnp->wait_blkd_tasks)) {
@@ -1127,7 +1146,7 @@ EXPORT_SYMBOL_GPL(rcu_note_context_switch);
  * Because preemptible RCU does not exist, there are never any preempted
  * RCU readers.
  */
-static int rcu_preempt_blocked_readers_cgp(struct rcu_node *rnp)
+static int rcu_preempt_blocked_readers_cgp(struct rcu_node *rnp, bool promote)
 {
 	return 0;
 }
@@ -1220,6 +1239,9 @@ dump_blkd_tasks(struct rcu_node *rnp, int ncheck)
 static void rcu_preempt_deferred_qs_init(struct rcu_data *rdp) { }
 
 static void rcu_promote_blocked_tasks(struct rcu_node *rnp) { }
+
+static void rcu_promote_blocked_tasks_rdp(struct rcu_data *rdp,
+					  struct rcu_node *rnp) { }
 
 #endif /* #else #ifdef CONFIG_PREEMPT_RCU */
 
@@ -1378,7 +1400,7 @@ static void rcu_initiate_boost(struct rcu_node *rnp, unsigned long flags)
 {
 	raw_lockdep_assert_held_rcu_node(rnp);
 	if (!rnp->boost_kthread_task ||
-	    (!rcu_preempt_blocked_readers_cgp(rnp) && !rnp->exp_tasks)) {
+	    (!rcu_preempt_blocked_readers_cgp(rnp, true) && !rnp->exp_tasks)) {
 		raw_spin_unlock_irqrestore_rcu_node(rnp, flags);
 		return;
 	}

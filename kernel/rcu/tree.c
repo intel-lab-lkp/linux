@@ -2034,7 +2034,7 @@ static bool rcu_gp_fqs_check_wake(int *gfp)
 		return true;
 
 	// The current grace period has completed.
-	if (!READ_ONCE(rnp->qsmask) && !rcu_preempt_blocked_readers_cgp(rnp))
+	if (!READ_ONCE(rnp->qsmask) && !rcu_preempt_blocked_readers_cgp(rnp, false))
 		return true;
 
 	return false;
@@ -2125,7 +2125,7 @@ static noinline_for_stack void rcu_gp_fqs_loop(void)
 		 * the corresponding leaf nodes have passed through their quiescent state.
 		 */
 		if (!READ_ONCE(rnp->qsmask) &&
-		    !rcu_preempt_blocked_readers_cgp(rnp))
+		    !rcu_preempt_blocked_readers_cgp(rnp, false))
 			break;
 		/* If time for quiescent-state forcing, do it. */
 		if (!time_after(rcu_state.jiffies_force_qs, jiffies) ||
@@ -2207,7 +2207,7 @@ static noinline void rcu_gp_cleanup(void)
 	rcu_seq_end(&new_gp_seq);
 	rcu_for_each_node_breadth_first(rnp) {
 		raw_spin_lock_irq_rcu_node(rnp);
-		if (WARN_ON_ONCE(rcu_preempt_blocked_readers_cgp(rnp)))
+		if (WARN_ON_ONCE(rcu_preempt_blocked_readers_cgp(rnp, true)))
 			dump_blkd_tasks(rnp, 10);
 		WARN_ON_ONCE(rnp->qsmask);
 		WRITE_ONCE(rnp->gp_seq, new_gp_seq);
@@ -2376,13 +2376,13 @@ static void rcu_report_qs_rnp(unsigned long mask, struct rcu_node *rnp,
 		}
 		WARN_ON_ONCE(oldmask); /* Any child must be all zeroed! */
 		WARN_ON_ONCE(!rcu_is_leaf_node(rnp) &&
-			     rcu_preempt_blocked_readers_cgp(rnp));
+			     rcu_preempt_blocked_readers_cgp(rnp, true));
 		WRITE_ONCE(rnp->qsmask, rnp->qsmask & ~mask);
 		trace_rcu_quiescent_state_report(rcu_state.name, rnp->gp_seq,
 						 mask, rnp->qsmask, rnp->level,
 						 rnp->grplo, rnp->grphi,
 						 !!rnp->gp_tasks);
-		if (rnp->qsmask != 0 || rcu_preempt_blocked_readers_cgp(rnp)) {
+		if (rnp->qsmask != 0 || rcu_preempt_blocked_readers_cgp(rnp, true)) {
 
 			/* Other bits still set at this level, so done. */
 			raw_spin_unlock_irqrestore_rcu_node(rnp, flags);
@@ -2428,7 +2428,7 @@ rcu_report_unblock_qs_rnp(struct rcu_node *rnp, unsigned long flags)
 
 	raw_lockdep_assert_held_rcu_node(rnp);
 	if (WARN_ON_ONCE(!IS_ENABLED(CONFIG_PREEMPT_RCU)) ||
-	    WARN_ON_ONCE(rcu_preempt_blocked_readers_cgp(rnp)) ||
+	    WARN_ON_ONCE(rcu_preempt_blocked_readers_cgp(rnp, true)) ||
 	    rnp->qsmask != 0) {
 		raw_spin_unlock_irqrestore_rcu_node(rnp, flags);
 		return;  /* Still need more quiescent states! */
@@ -2763,7 +2763,7 @@ static void force_qs_rnp(int (*f)(struct rcu_data *rdp))
 		raw_spin_lock_irqsave_rcu_node(rnp, flags);
 		rcu_state.cbovldnext |= !!rnp->cbovldmask;
 		if (rnp->qsmask == 0) {
-			if (rcu_preempt_blocked_readers_cgp(rnp)) {
+			if (rcu_preempt_blocked_readers_cgp(rnp, true)) {
 				/*
 				 * No point in scanning bits because they
 				 * are all zero.  But we might need to
