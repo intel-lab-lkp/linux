@@ -4460,6 +4460,11 @@ void rcutree_report_cpu_dead(void)
 	rdp->rcu_ofl_gp_seq = READ_ONCE(rcu_state.gp_seq);
 	rdp->rcu_ofl_gp_state = READ_ONCE(rcu_state.gp_state);
 	if (rnp->qsmask & mask) { /* RCU waiting on outgoing CPU? */
+		/*
+		 * Promote blocked tasks from dying CPU's per-CPU list before
+		 * reporting QS. Otherwise those tasks won't block the GP.
+		 */
+		rcu_promote_blocked_tasks_rdp(rdp, rnp);
 		/* Report quiescent state -before- changing ->qsmaskinitnext! */
 		rcu_disable_urgency_upon_qs(rdp);
 		rcu_report_qs_rnp(mask, rnp, rnp->gp_seq, flags);
