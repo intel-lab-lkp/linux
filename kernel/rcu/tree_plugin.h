@@ -339,10 +339,18 @@ void rcu_note_context_switch(bool preempt)
 		t->rcu_read_unlock_special.b.blocked = true;
 		t->rcu_blocked_node = rnp;
 #ifdef CONFIG_RCU_PER_CPU_BLOCKED_LISTS
-		t->rcu_blocked_cpu = rdp->cpu;
-		raw_spin_lock(&rdp->blkd_lock);
-		list_add(&t->rcu_rdp_entry, &rdp->blkd_list);
-		raw_spin_unlock(&rdp->blkd_lock);
+		/*
+		 * If no GP is waiting on this CPU, add to per-CPU list as well
+		 * so promotion can find it if a GP starts later. If GP waiting,
+		 * skip per-CPU list - task goes only to rnp->blkd_tasks (same
+		 * behavior as before per-CPU lists were added).
+		 */
+		if (!rcu_gp_in_progress() && !rdp->cpu_no_qs.b.norm && !rdp->cpu_no_qs.b.exp) {
+			t->rcu_blocked_cpu = rdp->cpu;
+			raw_spin_lock(&rdp->blkd_lock);
+			list_add(&t->rcu_rdp_entry, &rdp->blkd_list);
+			raw_spin_unlock(&rdp->blkd_lock);
+		}
 #endif
 
 		/*
