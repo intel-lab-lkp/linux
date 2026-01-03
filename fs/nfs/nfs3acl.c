@@ -8,40 +8,10 @@
 #include <linux/nfsacl.h>
 
 #include "internal.h"
+#include "nfs.h"
 #include "nfs3_fs.h"
 
 #define NFSDBG_FACILITY	NFSDBG_PROC
-
-/*
- * nfs3_prepare_get_acl, nfs3_complete_get_acl, nfs3_abort_get_acl: Helpers for
- * caching get_acl results in a race-free way.  See fs/posix_acl.c:get_acl()
- * for explanations.
- */
-static void nfs3_prepare_get_acl(struct posix_acl **p)
-{
-	struct posix_acl *sentinel = uncached_acl_sentinel(current);
-
-	/* If the ACL isn't being read yet, set our sentinel. */
-	cmpxchg(p, ACL_NOT_CACHED, sentinel);
-}
-
-static void nfs3_complete_get_acl(struct posix_acl **p, struct posix_acl *acl)
-{
-	struct posix_acl *sentinel = uncached_acl_sentinel(current);
-
-	/* Only cache the ACL if our sentinel is still in place. */
-	posix_acl_dup(acl);
-	if (cmpxchg(p, sentinel, acl) != sentinel)
-		posix_acl_release(acl);
-}
-
-static void nfs3_abort_get_acl(struct posix_acl **p)
-{
-	struct posix_acl *sentinel = uncached_acl_sentinel(current);
-
-	/* Remove our sentinel upon failure. */
-	cmpxchg(p, sentinel, ACL_NOT_CACHED);
-}
 
 struct posix_acl *nfs3_get_acl(struct inode *inode, int type, bool rcu)
 {
@@ -91,9 +61,9 @@ struct posix_acl *nfs3_get_acl(struct inode *inode, int type, bool rcu)
 		return ERR_PTR(-ENOMEM);
 
 	if (args.mask & NFS_ACL)
-		nfs3_prepare_get_acl(&inode->i_acl);
+		nfs34_prepare_get_acl(&inode->i_acl);
 	if (args.mask & NFS_DFACL)
-		nfs3_prepare_get_acl(&inode->i_default_acl);
+		nfs34_prepare_get_acl(&inode->i_default_acl);
 
 	status = rpc_call_sync(server->client_acl, &msg, 0);
 	dprintk("NFS reply getacl: %d\n", status);
@@ -131,12 +101,12 @@ struct posix_acl *nfs3_get_acl(struct inode *inode, int type, bool rcu)
 	}
 
 	if (res.mask & NFS_ACL)
-		nfs3_complete_get_acl(&inode->i_acl, res.acl_access);
+		nfs34_complete_get_acl(&inode->i_acl, res.acl_access);
 	else
 		forget_cached_acl(inode, ACL_TYPE_ACCESS);
 
 	if (res.mask & NFS_DFACL)
-		nfs3_complete_get_acl(&inode->i_default_acl, res.acl_default);
+		nfs34_complete_get_acl(&inode->i_default_acl, res.acl_default);
 	else
 		forget_cached_acl(inode, ACL_TYPE_DEFAULT);
 
@@ -150,8 +120,8 @@ struct posix_acl *nfs3_get_acl(struct inode *inode, int type, bool rcu)
 	}
 
 getout:
-	nfs3_abort_get_acl(&inode->i_acl);
-	nfs3_abort_get_acl(&inode->i_default_acl);
+	nfs34_abort_get_acl(&inode->i_acl);
+	nfs34_abort_get_acl(&inode->i_default_acl);
 	posix_acl_release(res.acl_access);
 	posix_acl_release(res.acl_default);
 	nfs_free_fattr(res.fattr);
