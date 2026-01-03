@@ -87,7 +87,7 @@ impl<const SIZE: usize> IoRaw<SIZE> {
 /// };
 /// use core::ops::Deref;
 ///
-/// // See also [`pci::Bar`] for a real example.
+/// // See also [`pci::io::Bar`] for a real example.
 /// struct IoMem<const SIZE: usize>(IoRaw<SIZE>);
 ///
 /// impl<const SIZE: usize> IoMem<SIZE> {
