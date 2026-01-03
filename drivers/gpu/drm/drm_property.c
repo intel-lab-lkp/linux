@@ -618,6 +618,7 @@ void drm_property_destroy_user_blobs(struct drm_device *dev,
 	 */
 	list_for_each_entry_safe(blob, bt, &file_priv->blobs, head_file) {
 		list_del_init(&blob->head_file);
+		file_priv->blob_count--;
 		drm_property_blob_put(blob);
 	}
 }
@@ -864,8 +865,14 @@ int drm_mode_createblob_ioctl(struct drm_device *dev,
 	 * as only the same file_priv can remove the blob; at this point, it is
 	 * not associated with any file_priv. */
 	mutex_lock(&dev->mode_config.blob_lock);
+	if (file_priv->blob_count >= DRM_FILE_MAX_PROPBLOBS) {
+		mutex_unlock(&dev->mode_config.blob_lock);
+		drm_property_blob_put(blob);
+		return -ENOSPC;
+	}
 	out_resp->blob_id = blob->base.id;
 	list_add_tail(&blob->head_file, &file_priv->blobs);
+	file_priv->blob_count++;
 	mutex_unlock(&dev->mode_config.blob_lock);
 
 	return 0;
@@ -907,6 +914,7 @@ int drm_mode_destroyblob_ioctl(struct drm_device *dev,
 	/* We must drop head_file here, because we may not be the last
 	 * reference on the blob. */
 	list_del_init(&blob->head_file);
+	file_priv->blob_count--;
 	mutex_unlock(&dev->mode_config.blob_lock);
 
 	/* One reference from lookup, and one from the filp. */
