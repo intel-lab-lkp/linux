@@ -31,10 +31,12 @@ use core::{
     },
 };
 
+mod header;
 mod id;
 mod io;
 mod irq;
 
+pub use self::header::HeaderType;
 pub use self::id::{
     Class,
     ClassMask,
@@ -371,6 +373,14 @@ impl Device {
         // SAFETY: By its type invariant `self.as_raw` is always a valid pointer to a
         // `struct pci_dev`.
         unsafe { (*self.as_raw()).revision }
+    }
+
+    /// Returns the PCI header type.
+    #[inline]
+    pub fn header_type(&self) -> HeaderType {
+        // SAFETY: By its type invariant `self.as_raw` is always a valid pointer to a
+        // `struct pci_dev`.
+        HeaderType::from(unsafe { (*self.as_raw()).hdr_type })
     }
 
     /// Returns the PCI bus device/function.
