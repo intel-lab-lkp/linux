@@ -39,6 +39,9 @@
 
 #include <drm/drm_prime.h>
 
+/* Maximum number of user-created property blobs per drm_file */
+#define DRM_FILE_MAX_PROPBLOBS 256
+
 struct dma_fence;
 struct drm_file;
 struct drm_device;
@@ -354,6 +357,9 @@ struct drm_file {
 	 * Protected by @drm_mode_config.blob_lock;
 	 */
 	struct list_head blobs;
+
+	/* Number of property blobs owned by this file */
+	unsigned int blob_count;
 
 	/** @event_wait: Waitqueue for new events added to @event_list. */
 	wait_queue_head_t event_wait;
