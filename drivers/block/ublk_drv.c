@@ -318,6 +318,32 @@ static inline bool ublk_queue_is_zoned(const struct ublk_queue *ubq)
 	return ubq->flags & UBLK_F_ZONED;
 }
 
+static void ublk_setup_iod_buf(const struct ublk_queue *ubq,
+			       const struct request *req,
+			       struct ublksrv_io_desc *iod)
+{
+#ifdef CONFIG_BLK_DEV_INTEGRITY
+	if (ubq->flags & UBLK_F_INTEGRITY) {
+		struct bio_integrity_payload *bip;
+		sector_t ref_tag_seed;
+
+		if (!blk_integrity_rq(req))
+			return;
+
+		bip = bio_integrity(req->bio);
+		ref_tag_seed = bip_get_seed(bip);
+		iod->integrity.ref_tag_lo = ref_tag_seed;
+		iod->integrity.ref_tag_hi = ref_tag_seed >> 32;
+		iod->integrity.app_tag = bip->app_tag;
+	} else
+#endif /* #ifdef CONFIG_BLK_DEV_INTEGRITY */
+	{
+		const struct ublk_io *io = &ubq->ios[req->tag];
+
+		iod->addr = io->buf.addr;
+	}
+}
+
 #ifdef CONFIG_BLK_DEV_ZONED
 
 struct ublk_zoned_report_desc {
@@ -500,7 +526,6 @@ static blk_status_t ublk_setup_iod_zoned(struct ublk_queue *ubq,
 					 struct request *req)
 {
 	struct ublksrv_io_desc *iod = ublk_get_iod(ubq, req->tag);
-	struct ublk_io *io = &ubq->ios[req->tag];
 	struct ublk_zoned_report_desc *desc;
 	u32 ublk_op;
 
@@ -547,7 +572,7 @@ static blk_status_t ublk_setup_iod_zoned(struct ublk_queue *ubq,
 	iod->op_flags = ublk_op | ublk_req_build_flags(req);
 	iod->nr_sectors = blk_rq_sectors(req);
 	iod->start_sector = blk_rq_pos(req);
-	iod->addr = io->buf.addr;
+	ublk_setup_iod_buf(ubq, req, iod);
 
 	return BLK_STS_OK;
 }
@@ -1122,13 +1147,23 @@ static inline unsigned int ublk_req_build_flags(struct request *req)
 	if (req->cmd_flags & REQ_SWAP)
 		flags |= UBLK_IO_F_SWAP;
 
+	if (blk_integrity_rq(req)) {
+		flags |= UBLK_IO_F_INTEGRITY;
+
+		if (bio_integrity_flagged(req->bio, BIP_CHECK_GUARD))
+			flags |= UBLK_IO_F_CHECK_GUARD;
+		if (bio_integrity_flagged(req->bio, BIP_CHECK_REFTAG))
+			flags |= UBLK_IO_F_CHECK_REFTAG;
+		if (bio_integrity_flagged(req->bio, BIP_CHECK_APPTAG))
+			flags |= UBLK_IO_F_CHECK_APPTAG;
+	}
+
 	return flags;
 }
 
 static blk_status_t ublk_setup_iod(struct ublk_queue *ubq, struct request *req)
 {
 	struct ublksrv_io_desc *iod = ublk_get_iod(ubq, req->tag);
-	struct ublk_io *io = &ubq->ios[req->tag];
 	u32 ublk_op;
 
 	switch (req_op(req)) {
@@ -1157,7 +1192,7 @@ static blk_status_t ublk_setup_iod(struct ublk_queue *ubq, struct request *req)
 	iod->op_flags = ublk_op | ublk_req_build_flags(req);
 	iod->nr_sectors = blk_rq_sectors(req);
 	iod->start_sector = blk_rq_pos(req);
-	iod->addr = io->buf.addr;
+	ublk_setup_iod_buf(ubq, req, iod);
 
 	return BLK_STS_OK;
 }

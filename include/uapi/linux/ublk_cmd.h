@@ -414,6 +414,21 @@ struct ublksrv_ctrl_dev_info {
  * passed in.
  */
 #define		UBLK_IO_F_NEED_REG_BUF		(1U << 17)
+/* Request has an integrity data buffer */
+#define		UBLK_IO_F_INTEGRITY		(1UL << 18)
+/* Guard tag verification requested */
+#define		UBLK_IO_F_CHECK_GUARD		(1UL << 19)
+/* Reference tag verification requested */
+#define		UBLK_IO_F_CHECK_REFTAG		(1UL << 20)
+/* Application tag verification requested */
+#define		UBLK_IO_F_CHECK_APPTAG		(1UL << 21)
+
+struct ublksrv_io_integrity
+{
+	__u32 ref_tag_lo; /* low 32 bits of reference tag seed */
+	__u16 ref_tag_hi; /* high 16 bits of reference tag seed */
+	__u16 app_tag;
+};
 
 /*
  * io cmd is described by this structure, and stored in share memory, indexed
@@ -434,8 +449,16 @@ struct ublksrv_io_desc {
 	/* start sector for this io */
 	__u64		start_sector;
 
-	/* buffer address in ublksrv daemon vm space, from ublk driver */
-	__u64		addr;
+	union {
+		/*
+		 * buffer address in ublksrv daemon vm space, from ublk driver.
+		 * Unused for UBLK_F_SUPPORT_ZERO_COPY, UBLK_F_USER_COPY, or
+		 * UBLK_F_AUTO_BUF_REG.
+		 */
+		__u64		addr;
+		/* Integrity options, for UBLK_F_INTEGRITY */
+		struct ublksrv_io_integrity integrity;
+	};
 };
 
 static inline __u8 ublksrv_get_op(const struct ublksrv_io_desc *iod)
