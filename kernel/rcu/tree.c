@@ -2790,6 +2790,11 @@ static void force_qs_rnp(int (*f)(struct rcu_data *rdp))
 			rdp = per_cpu_ptr(&rcu_data, cpu);
 			ret = f(rdp);
 			if (ret > 0) {
+				/*
+				 * Promote blocked tasks before reporting QS.
+				 * Otherwise tasks on per-CPU list aren't tracked.
+				 */
+				rcu_promote_blocked_tasks_rdp(rdp, rnp);
 				mask |= rdp->grpmask;
 				rcu_disable_urgency_upon_qs(rdp);
 			}
