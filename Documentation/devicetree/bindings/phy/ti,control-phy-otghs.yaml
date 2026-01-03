@@ -1,0 +1,206 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/phy/ti,control-phy-otghs.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: TI PHYs for TI Platforms (OMAP Control PHY and PIPE3 PHY)
+
+maintainers:
+  - Vinod Koul <vkoul@kernel.org>
+
+description:
+  This device tree binding describes the TI PHYs used in TI platforms.
+  Two types of PHYs are supported.
+  1. OMAP Control PHY - Simple control PHYs for power control
+  2. PIPE3 PHY - High-speed PIPE3 PHYs for USB3, SATA, PCIe
+
+properties:
+  $nodename:
+    pattern: "^(pciephy|control-phy|usb3phy|phy)(@[0-9a-fA-F]+)?$"
+
+  compatible:
+    oneOf:
+      - description: OMAP Control PHY compatibles
+        items:
+          enum:
+            - ti,control-phy-otghs
+            - ti,control-phy-usb2
+            - ti,control-phy-pipe3
+            - ti,control-phy-pcie
+            - ti,control-phy-usb2-dra7
+            - ti,control-phy-usb2-am437
+      - description: PIPE3 high-speed PHY compatibles
+        items:
+          enum:
+            - ti,phy-usb3
+            - ti,phy-pipe3-sata
+            - ti,phy-pipe3-pcie
+            - ti,omap-usb3
+
+  reg:
+    minItems: 1
+    maxItems: 4
+
+  reg-names:
+    oneOf:
+      - description: OMAP Control PHY
+        items:
+          enum: [otghs_control, power, pcie_pcs, control_sma]
+      - description: PIPE3 high-speed PHY
+        items:
+          enum: [phy_rx, phy_tx, pll_ctrl]
+
+  "#phy-cells":
+    const: 0
+
+  clocks:
+    minItems: 2
+    maxItems: 7
+
+  clock-names:
+    minItems: 2
+    maxItems: 7
+    items:
+      enum: [wkupclk, sysclk, refclk, dpll_ref,
+             dpll_ref_m2, phy-div, div-clk]
+
+# Optional Properties
+  id:
+    description:
+      Instance ID for multiple instances of same PHY type.
+      Used for multi-lane PCIe PHYs.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 1
+
+  syscon-phy-power:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description:
+      Phandle/offset pair to system control module register for PHY
+      power on/off.
+
+  syscon-pllreset:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description:
+      Phandle/offset pair to CTRL_CORE_SMA_SW_0 register containing
+      SATA_PLL_SOFT_RESET bit (SATA PHY only).
+
+  syscon-pcs:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description:
+      Phandle/offset pair to system control module for writing PCS delay value.
+
+  ctrl-module:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      Phandle of control module for PHY power on.
+    deprecated: true
+
+dependencies:
+  syscon-pllreset:
+    properties:
+      compatible:
+        contains:
+          const: ti,phy-pipe3-sata
+
+allOf:
+  # OMAP Control PHY validation
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - ti,control-phy-otghs
+    then:
+      properties:
+        reg-names:
+          const: otghs_control
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - ti,control-phy-pcie
+    then:
+      properties:
+        reg-names:
+          items:
+            - enum: [power, pcie_pcs, control_sma]
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - ti,control-phy-usb2
+              - ti,control-phy-usb2-dra7
+              - ti,control-phy-usb2-am437
+              - ti,control-phy-pipe3
+    then:
+      properties:
+        reg-names:
+          const: power
+
+  # PIPE3 PHY validation
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - ti,phy-usb3
+              - ti,phy-pipe3-sata
+              - ti,phy-pipe3-pcie
+              - ti,omap-usb3
+    then:
+      required:
+        - "#phy-cells"
+        - clocks
+        - clock-names
+
+required:
+  - reg
+  - compatible
+  - reg-names
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    /* OMAP Control PHY (USB OTG HS) */
+    control-phy@4a00233c {
+        compatible = "ti,control-phy-otghs";
+        reg = <0x4a00233c 0x4>;
+        reg-names = "otghs_control";
+    };
+
+  - |
+    /* TI PIPE3 USB3 PHY */
+    usb3phy@4a084400 {
+        compatible = "ti,phy-usb3";
+        reg = <0x4a084400 0x80>,
+              <0x4a084800 0x64>,
+              <0x4a084c00 0x40>;
+        reg-names = "phy_rx", "phy_tx", "pll_ctrl";
+        #phy-cells = <0>;
+        clocks = <&usb_phy_cm_clk32k>,
+                 <&sys_clkin>,
+                 <&usb_otg_ss_refclk960m>;
+        clock-names = "wkupclk", "sysclk", "refclk";
+        ctrl-module = <&omap_control_usb>;
+    };
+
+  - |
+    /* TI PIPE3 SATA PHY */
+    phy@4a096000 {
+        compatible = "ti,phy-pipe3-sata";
+        reg = <0x4A096000 0x80>,  /* phy_rx */
+              <0x4A096400 0x64>,  /* phy_tx */
+              <0x4A096800 0x40>;  /* pll_ctrl */
+        reg-names = "phy_rx", "phy_tx", "pll_ctrl";
+        clocks = <&sys_clkin1>, <&sata_ref_clk>;
+        clock-names = "sysclk", "refclk";
+        syscon-pllreset = <&scm_conf 0x3fc>;
+        #phy-cells = <0>;
+    };
+...
