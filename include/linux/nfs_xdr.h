@@ -1622,6 +1622,54 @@ struct nfs42_removexattrres {
 	struct nfs4_change_info		cinfo;
 };
 
+struct nfs42_getposixaclargs {
+	struct nfs4_sequence_args 	seq_args;
+	struct nfs_fh *			fh;
+	int				mask;
+	struct page **			pages;
+};
+
+struct nfs42_getposixaclres {
+	struct nfs4_sequence_res	seq_res;
+	const struct nfs_server *	server;
+	int				mask;
+	unsigned int			acl_access_count;
+	unsigned int			acl_default_count;
+	struct posix_acl *		acl_access;
+	struct posix_acl *		acl_default;
+};
+
+struct nfs42_setposixaclargs {
+	struct nfs4_sequence_args 	seq_args;
+	struct nfs_fh *			fh;
+	const struct nfs_server *	server;
+	struct inode *			inode;
+	int				mask;
+	struct posix_acl *		acl_access;
+	struct posix_acl *		acl_default;
+	size_t				len;
+	struct page **			pages;
+};
+
+struct nfs42_setposixaclres {
+	struct nfs4_sequence_res	seq_res;
+	const struct nfs_server *	server;
+};
+
+/*
+ * An NFSv4.2 POSIX draft ACL consists of:
+ * - an ACE cnt
+ * - 4 basic ACEs, which usually have a who string of 0 length
+ * - additional ACEs with who strings of up to IDMAP_NAMESZ
+ * - the above are 4byte quantities.
+ * All of the above is multiplied by 2, for the case where a directory
+ * has both a default and access ACL.
+ */
+#define	NFS4_ACL_INLINE_BUFSIZE	(2*(((1+NFS_ACL_MAX_ENTRIES_INLINE*3)*4)+	\
+				 (NFS_ACL_MAX_ENTRIES_INLINE-4)*IDMAP_NAMESZ))
+#define NFS4_ACL_MAXPAGES	(((2*(4+(3*4+IDMAP_NAMESZ)*			\
+				 NFS_ACL_MAX_ENTRIES))+PAGE_SIZE-1)>>PAGE_SHIFT)
+
 #endif /* CONFIG_NFS_V4_2 */
 
 struct nfs_page;
@@ -1763,6 +1811,15 @@ struct nfs_renamedata {
 	void (*complete)(struct rpc_task *, struct nfs_renamedata *);
 	long timeout;
 	bool cancelled;
+};
+
+struct nfs_xdr_putpage_desc {
+	struct page	**pages;
+	void		*p;
+	void		*endp;
+	size_t		npages;
+	size_t		page_pos;
+	size_t		max_npages;
 };
 
 struct nfs_access_entry;
