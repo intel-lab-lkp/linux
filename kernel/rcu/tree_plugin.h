@@ -335,37 +335,43 @@ void rcu_note_context_switch(bool preempt)
 
 		/* Possibly blocking in an RCU read-side critical section. */
 		rnp = rdp->mynode;
-		raw_spin_lock_rcu_node(rnp);
 		t->rcu_read_unlock_special.b.blocked = true;
-		t->rcu_blocked_node = rnp;
 #ifdef CONFIG_RCU_PER_CPU_BLOCKED_LISTS
 		/*
-		 * If no GP is waiting on this CPU, add to per-CPU list as well
-		 * so promotion can find it if a GP starts later. If GP waiting,
-		 * skip per-CPU list - task goes only to rnp->blkd_tasks (same
-		 * behavior as before per-CPU lists were added).
+		 * Check if a GP is in progress.
 		 */
 		if (!rcu_gp_in_progress() && !rdp->cpu_no_qs.b.norm && !rdp->cpu_no_qs.b.exp) {
+			/*
+			 * No GP waiting on this CPU. Add to per-CPU list only,
+			 * skipping rnp->lock for better scalability.
+			 */
+			t->rcu_blocked_node = NULL;
 			t->rcu_blocked_cpu = rdp->cpu;
 			raw_spin_lock(&rdp->blkd_lock);
 			list_add(&t->rcu_rdp_entry, &rdp->blkd_list);
 			raw_spin_unlock(&rdp->blkd_lock);
-		}
+			trace_rcu_preempt_task(rcu_state.name, t->pid,
+					       rcu_seq_snap(&rnp->gp_seq));
+		} else
 #endif
+		/* GP waiting (or per-CPU lists disabled) - add to rnp. */
+		{
+			raw_spin_lock_rcu_node(rnp);
+			t->rcu_blocked_node = rnp;
 
-		/*
-		 * Verify the CPU's sanity, trace the preemption, and
-		 * then queue the task as required based on the states
-		 * of any ongoing and expedited grace periods.
-		 */
-		WARN_ON_ONCE(!rcu_rdp_cpu_online(rdp));
-		WARN_ON_ONCE(!list_empty(&t->rcu_node_entry));
-		trace_rcu_preempt_task(rcu_state.name,
-				       t->pid,
-				       (rnp->qsmask & rdp->grpmask)
-				       ? rnp->gp_seq
-				       : rcu_seq_snap(&rnp->gp_seq));
-		rcu_preempt_ctxt_queue(rnp, rdp);
+			/*
+			 * Verify the CPU's sanity, trace the preemption, and
+			 * then queue the task as required based on the states
+			 * of any ongoing and expedited grace periods.
+			 */
+			WARN_ON_ONCE(!rcu_rdp_cpu_online(rdp));
+			WARN_ON_ONCE(!list_empty(&t->rcu_node_entry));
+			trace_rcu_preempt_task(rcu_state.name, t->pid,
+					       (rnp->qsmask & rdp->grpmask)
+					       ? rnp->gp_seq
+					       : rcu_seq_snap(&rnp->gp_seq));
+			rcu_preempt_ctxt_queue(rnp, rdp);
+		}
 	} else {
 		rcu_preempt_deferred_qs(t);
 	}
@@ -568,13 +574,22 @@ rcu_preempt_deferred_qs_irqrestore(struct task_struct *t, unsigned long flags)
 		 */
 		rnp = t->rcu_blocked_node;
 #ifdef CONFIG_RCU_PER_CPU_BLOCKED_LISTS
-		/* Remove from per-CPU list if task was added to it. */
 		blocked_cpu = t->rcu_blocked_cpu;
 		if (blocked_cpu != -1) {
+			/*
+			 * Task is on per-CPU list. Remove it and check if
+			 * it was promoted to rnp->blkd_tasks.
+			 */
 			blocked_rdp = per_cpu_ptr(&rcu_data, blocked_cpu);
 			raw_spin_lock(&blocked_rdp->blkd_lock);
 			list_del_init(&t->rcu_rdp_entry);
 			t->rcu_blocked_cpu = -1;
+
+			/*
+			 * Read rcu_blocked_node while holding blkd_lock to
+			 * serialize with rcu_promote_blocked_tasks().
+			 */
+			rnp = t->rcu_blocked_node;
 			raw_spin_unlock(&blocked_rdp->blkd_lock);
 			/*
 			 * TODO: This should just be "WARN_ON_ONCE(rnp); return;" since after
@@ -584,15 +599,12 @@ rcu_preempt_deferred_qs_irqrestore(struct task_struct *t, unsigned long flags)
 			 * from the rdp blocked list and early returning.
 			 */
 			if (!rnp) {
-				/*
-				 * Task was only on per-CPU list, not on rnp list.
-				 * This can happen in future when tasks are added
-				 * only to rdp initially and promoted to rnp later.
-				 */
+				/* Not promoted - no GP waiting for this task. */
 				local_irq_restore(flags);
 				return;
 			}
 		}
+		/* else: Task went directly to rnp->blkd_tasks. */
 #endif
 		raw_spin_lock_rcu_node(rnp); /* irqs already disabled. */
 		WARN_ON_ONCE(rnp != t->rcu_blocked_node);
