@@ -214,6 +214,8 @@ struct input_dev {
 };
 #define to_input_dev(d) container_of(d, struct input_dev, dev)
 
+#define INPUT_MAX_BUTTONS 2048 /* A sane limit of supported device buttons */
+
 /*
  * Verify that we are in sync with input_device_id mod_devicetable.h #defines
  */
