@@ -14,6 +14,7 @@
 #[macro_use]
 mod quote;
 mod concat_idents;
+mod display;
 mod export;
 mod fmt;
 mod helpers;
@@ -474,4 +475,45 @@ pub fn paste(input: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn kunit_tests(attr: TokenStream, ts: TokenStream) -> TokenStream {
     kunit::kunit_tests(attr, ts)
+}
+
+/// Derives the [`Display`] trait for enums.
+///
+/// This macro generates an implementation of [`kernel::fmt::Display`] for enums
+/// that outputs the exact variant name as written (case-preserved).
+///
+/// # Requirements
+///
+/// - Can only be applied to enums (not structs or unions).
+/// - Supports unit variants, tuple variants, and struct variants.
+/// - For variants with data, only the variant name is displayed.
+///
+/// # Examples
+///
+/// ```
+/// use kernel::fmt::Adapter;
+/// use kernel::macros::Display;
+///
+/// #[allow(non_camel_case_types)]
+/// #[derive(Display)]
+/// enum TestEnum {
+///     Foo,
+///     bAr(u8),
+///     baZ { value: u8 },
+/// }
+///
+/// let foo = TestEnum::Foo;
+/// let bar = TestEnum::bAr(42);
+/// let baz = TestEnum::baZ { value: 0 };
+///
+/// assert!(format!("{}", Adapter(&foo)) == "Foo");
+/// assert!(format!("{}", Adapter(&bar)) == "bAr");
+/// assert!(format!("{}", Adapter(&baz)) == "baZ");
+/// ```
+///
+/// [`Display`]: ../kernel/fmt/trait.Display.html
+/// [`kernel::fmt::Display`]: ../kernel/fmt/trait.Display.html
+#[proc_macro_derive(Display)]
+pub fn derive_display(input: TokenStream) -> TokenStream {
+    display::derive_display(input)
 }
