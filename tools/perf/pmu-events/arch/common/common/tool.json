@@ -250,5 +250,101 @@
     "EventName": "memory_uss",
     "BriefDescription": "Unique Set Size (USS) in bytes",
     "ConfigCode": "42"
-  }
+  },
+  {
+    "Unit": "tool",
+    "EventName": "net_rx_bytes",
+    "BriefDescription": "Network received bytes",
+    "ConfigCode": "43"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "net_rx_packets",
+    "BriefDescription": "Network received packets",
+    "ConfigCode": "44"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "net_rx_errors",
+    "BriefDescription": "Network received errors",
+    "ConfigCode": "45"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "net_rx_drop",
+    "BriefDescription": "Network received dropped packets",
+    "ConfigCode": "46"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "net_rx_fifo",
+    "BriefDescription": "Network received fifo overruns",
+    "ConfigCode": "47"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "net_rx_frame",
+    "BriefDescription": "Network received framing errors",
+    "ConfigCode": "48"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "net_rx_compressed",
+    "BriefDescription": "Network received compressed packets",
+    "ConfigCode": "49"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "net_rx_multicast",
+    "BriefDescription": "Network received multicast packets",
+    "ConfigCode": "50"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "net_tx_bytes",
+    "BriefDescription": "Network transmitted bytes",
+    "ConfigCode": "51"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "net_tx_packets",
+    "BriefDescription": "Network transmitted packets",
+    "ConfigCode": "52"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "net_tx_errors",
+    "BriefDescription": "Network transmitted errors",
+    "ConfigCode": "53"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "net_tx_drop",
+    "BriefDescription": "Network transmitted dropped packets",
+    "ConfigCode": "54"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "net_tx_fifo",
+    "BriefDescription": "Network transmitted fifo overruns",
+    "ConfigCode": "55"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "net_tx_colls",
+    "BriefDescription": "Network transmitted collisions",
+    "ConfigCode": "56"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "net_tx_carrier",
+    "BriefDescription": "Network transmitted carrier losses",
+    "ConfigCode": "57"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "net_tx_compressed",
+    "BriefDescription": "Network transmitted compressed packets",
+    "ConfigCode": "58"
+   }
 ]

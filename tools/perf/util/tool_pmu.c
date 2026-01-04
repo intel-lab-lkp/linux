@@ -66,6 +66,22 @@ static const char *const tool_pmu__event_names[TOOL_PMU__EVENT_MAX] = {
 	"memory_swap_pss",
 	"memory_text",
 	"memory_uss",
+	"net_rx_bytes",
+	"net_rx_packets",
+	"net_rx_errors",
+	"net_rx_drop",
+	"net_rx_fifo",
+	"net_rx_frame",
+	"net_rx_compressed",
+	"net_rx_multicast",
+	"net_tx_bytes",
+	"net_tx_packets",
+	"net_tx_errors",
+	"net_tx_drop",
+	"net_tx_fifo",
+	"net_tx_colls",
+	"net_tx_carrier",
+	"net_tx_compressed",
 };
 
 bool tool_pmu__skip_event(const char *name __maybe_unused)
@@ -297,6 +313,22 @@ static const char *tool_pmu__memory_event_to_key(enum tool_pmu_event ev)
 	case TOOL_PMU__EVENT_MEMORY_SIZE:
 	case TOOL_PMU__EVENT_MEMORY_TEXT:
 	case TOOL_PMU__EVENT_MEMORY_USS:
+	case TOOL_PMU__EVENT_NET_RX_BYTES:
+	case TOOL_PMU__EVENT_NET_RX_PACKETS:
+	case TOOL_PMU__EVENT_NET_RX_ERRORS:
+	case TOOL_PMU__EVENT_NET_RX_DROP:
+	case TOOL_PMU__EVENT_NET_RX_FIFO:
+	case TOOL_PMU__EVENT_NET_RX_FRAME:
+	case TOOL_PMU__EVENT_NET_RX_COMPRESSED:
+	case TOOL_PMU__EVENT_NET_RX_MULTICAST:
+	case TOOL_PMU__EVENT_NET_TX_BYTES:
+	case TOOL_PMU__EVENT_NET_TX_PACKETS:
+	case TOOL_PMU__EVENT_NET_TX_ERRORS:
+	case TOOL_PMU__EVENT_NET_TX_DROP:
+	case TOOL_PMU__EVENT_NET_TX_FIFO:
+	case TOOL_PMU__EVENT_NET_TX_COLLS:
+	case TOOL_PMU__EVENT_NET_TX_CARRIER:
+	case TOOL_PMU__EVENT_NET_TX_COMPRESSED:
 	case TOOL_PMU__EVENT_DURATION_TIME:
 	case TOOL_PMU__EVENT_USER_TIME:
 	case TOOL_PMU__EVENT_SYSTEM_TIME:
@@ -435,6 +467,68 @@ static int read_statm(int fd, enum tool_pmu_event ev, u64 *val)
 	return -EINVAL;
 }
 
+static bool tool_pmu__is_net_event(enum tool_pmu_event ev)
+{
+	return ev >= TOOL_PMU__EVENT_NET_RX_BYTES &&
+	       ev <= TOOL_PMU__EVENT_NET_TX_COMPRESSED;
+}
+
+static int read_net_dev(int fd, enum tool_pmu_event ev, u64 *val)
+{
+	struct io io;
+	char buf[4096];
+	int i;
+	int index = ev - TOOL_PMU__EVENT_NET_RX_BYTES;
+
+	io__init(&io, fd, buf, sizeof(buf));
+	lseek(fd, 0, SEEK_SET);
+
+	/*
+	 * Drop first two lines of:
+	 * Inter-|   Receive                                                |  Transmit
+	 *  face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+	 */
+	if (!read_until_char(&io, '\n'))
+		return -EINVAL;
+	if (!read_until_char(&io, '\n'))
+		return -EINVAL;
+
+	*val = 0;
+	while (true) {
+		int ch = io__get_char(&io);
+		__u64 read_val;
+
+		/* First read interface name, such as "    lo:" */
+		if (ch == -1)
+			break;
+		while (ch == ' ')
+			ch = io__get_char(&io);
+		if (ch == -1)
+			break;
+		while (ch != ':' && ch != -1 && ch != '\n')
+			ch = io__get_char(&io);
+		if (ch != ':') {
+			if (ch == '\n')
+				continue;
+			if (ch == -1)
+				return 0; /* Assume EOF. */
+			read_until_char(&io, '\n');
+			continue;
+		}
+		/* Ignore columns before one being read. */
+		for (i = 0; i < index; i++) {
+			if (io__get_dec(&io, &read_val) == -1)
+				return 0; /* Assume EOF. */
+		}
+		/* Read actually value. */
+		if (io__get_dec(&io, &read_val) != -1)
+			*val += read_val;
+		/* Move to the next line. */
+		read_until_char(&io, '\n');
+	}
+	return 0;
+}
+
 int evsel__tool_pmu_prepare_open(struct evsel *evsel,
 				 struct perf_cpu_map *cpus,
 				 int nthreads)
@@ -517,14 +611,17 @@ int evsel__tool_pmu_open(struct evsel *evsel,
 				}
 				if (err)
 					goto out_close;
-			} else if (tool_pmu__is_memory_event(ev)) {
+			} else if (tool_pmu__is_memory_event(ev) ||
+				   tool_pmu__is_net_event(ev)) {
+				char buf[PATH_MAX];
 				int fd = -1;
 
 				if (pid > -1) {
-					char buf[PATH_MAX];
-
 					if (tool_pmu__is_memory_statm_event(ev)) {
 						snprintf(buf, sizeof(buf), "%s/%d/statm",
+							 procfs__mountpoint(), pid);
+					} else if (tool_pmu__is_net_event(ev)) {
+						snprintf(buf, sizeof(buf), "%s/%d/net/dev",
 							 procfs__mountpoint(), pid);
 					} else {
 						snprintf(buf, sizeof(buf), "%s/%d/smaps_rollup",
@@ -532,11 +629,18 @@ int evsel__tool_pmu_open(struct evsel *evsel,
 					}
 					fd = open(buf, O_RDONLY);
 				}
+				if (pid == -1 && tool_pmu__is_net_event(ev)) {
+					/* Read /proc/net/dev that already aggregates the counts. */
+					snprintf(buf, sizeof(buf), "%s/net/dev",
+						 procfs__mountpoint());
+					fd = open(buf, O_RDONLY);
+				}
 				/*
-				 * For system-wide (pid == -1), we don't open a file here.
-				 * We will aggregate in read().
+				 * For memory event system-wide (pid == -1), we
+				 * don't open a file here.  We will aggregate in
+				 * read().
 				 */
-				if (pid > -1 && fd < 0) {
+				if ((pid > -1 || tool_pmu__is_net_event(ev)) && fd < 0) {
 					err = -errno;
 					goto out_close;
 				}
@@ -723,6 +827,22 @@ bool tool_pmu__read_event(enum tool_pmu_event ev,
 	case TOOL_PMU__EVENT_MEMORY_LOCKED:
 	case TOOL_PMU__EVENT_MEMORY_DATA:
 	case TOOL_PMU__EVENT_MEMORY_TEXT:
+	case TOOL_PMU__EVENT_NET_RX_BYTES:
+	case TOOL_PMU__EVENT_NET_RX_PACKETS:
+	case TOOL_PMU__EVENT_NET_RX_ERRORS:
+	case TOOL_PMU__EVENT_NET_RX_DROP:
+	case TOOL_PMU__EVENT_NET_RX_FIFO:
+	case TOOL_PMU__EVENT_NET_RX_FRAME:
+	case TOOL_PMU__EVENT_NET_RX_COMPRESSED:
+	case TOOL_PMU__EVENT_NET_RX_MULTICAST:
+	case TOOL_PMU__EVENT_NET_TX_BYTES:
+	case TOOL_PMU__EVENT_NET_TX_PACKETS:
+	case TOOL_PMU__EVENT_NET_TX_ERRORS:
+	case TOOL_PMU__EVENT_NET_TX_DROP:
+	case TOOL_PMU__EVENT_NET_TX_FIFO:
+	case TOOL_PMU__EVENT_NET_TX_COLLS:
+	case TOOL_PMU__EVENT_NET_TX_CARRIER:
+	case TOOL_PMU__EVENT_NET_TX_COMPRESSED:
 	case TOOL_PMU__EVENT_NONE:
 	case TOOL_PMU__EVENT_DURATION_TIME:
 	case TOOL_PMU__EVENT_USER_TIME:
@@ -905,16 +1025,34 @@ int evsel__tool_pmu_read(struct evsel *evsel, int cpu_map_idx, int thread)
 	case TOOL_PMU__EVENT_MEMORY_PRIVATE_HUGETLB:
 	case TOOL_PMU__EVENT_MEMORY_LOCKED:
 	case TOOL_PMU__EVENT_MEMORY_DATA:
-	case TOOL_PMU__EVENT_MEMORY_TEXT: {
+	case TOOL_PMU__EVENT_MEMORY_TEXT:
+	case TOOL_PMU__EVENT_NET_RX_BYTES:
+	case TOOL_PMU__EVENT_NET_RX_PACKETS:
+	case TOOL_PMU__EVENT_NET_RX_ERRORS:
+	case TOOL_PMU__EVENT_NET_RX_DROP:
+	case TOOL_PMU__EVENT_NET_RX_FIFO:
+	case TOOL_PMU__EVENT_NET_RX_FRAME:
+	case TOOL_PMU__EVENT_NET_RX_COMPRESSED:
+	case TOOL_PMU__EVENT_NET_RX_MULTICAST:
+	case TOOL_PMU__EVENT_NET_TX_BYTES:
+	case TOOL_PMU__EVENT_NET_TX_PACKETS:
+	case TOOL_PMU__EVENT_NET_TX_ERRORS:
+	case TOOL_PMU__EVENT_NET_TX_DROP:
+	case TOOL_PMU__EVENT_NET_TX_FIFO:
+	case TOOL_PMU__EVENT_NET_TX_COLLS:
+	case TOOL_PMU__EVENT_NET_TX_CARRIER:
+	case TOOL_PMU__EVENT_NET_TX_COMPRESSED: {
 		int fd = FD(evsel, cpu_map_idx, thread);
 		u64 val = 0;
 
 		if (fd >= 0) {
-			/* Per-process */
+			/* Per-process or system-wide net. */
 			int ret;
 
 			if (tool_pmu__is_memory_statm_event(ev))
 				ret = read_statm(fd, ev, &val);
+			else if (tool_pmu__is_net_event(ev))
+				ret = read_net_dev(fd, ev, &val);
 			else
 				ret = read_smaps_rollup(fd, ev, &val);
 
@@ -923,6 +1061,7 @@ int evsel__tool_pmu_read(struct evsel *evsel, int cpu_map_idx, int thread)
 		} else {
 			/* System-wide aggregation */
 			if (cpu_map_idx == 0 && thread == 0) {
+				assert(tool_pmu__is_memory_event(ev));
 				tool_pmu__aggregate_memory_event(ev, &val);
 			}
 		}
