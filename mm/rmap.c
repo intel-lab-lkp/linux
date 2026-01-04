@@ -1838,7 +1838,7 @@ static inline unsigned int folio_unmap_pte_batch(struct folio *folio,
 	max_nr = (end_addr - addr) >> PAGE_SHIFT;
 
 	/* We only support lazyfree batching for now ... */
-	if (!folio_test_anon(folio) || folio_test_swapbacked(folio))
+	if (!folio_is_lazyfree(folio))
 		return 1;
 	if (pte_unused(pte))
 		return 1;
@@ -1934,7 +1934,7 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 		}
 
 		if (!pvmw.pte) {
-			if (folio_test_anon(folio) && !folio_test_swapbacked(folio)) {
+			if (folio_is_lazyfree(folio)) {
 				if (unmap_huge_pmd_locked(vma, pvmw.address, pvmw.pmd, folio))
 					goto walk_done;
 				/*
