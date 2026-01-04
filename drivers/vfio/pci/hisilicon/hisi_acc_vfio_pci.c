@@ -406,7 +406,7 @@ static int vf_qm_check_match(struct hisi_acc_vf_core_device *hisi_acc_vdev,
 	struct hisi_qm *pf_qm = hisi_acc_vdev->pf_qm;
 	struct device *dev = &vf_qm->pdev->dev;
 	u32 que_iso_state;
-	int ret;
+	int qp_num, ret;
 
 	if (migf->total_length < QM_MATCH_SIZE || hisi_acc_vdev->match_done)
 		return 0;
@@ -423,18 +423,18 @@ static int vf_qm_check_match(struct hisi_acc_vf_core_device *hisi_acc_vdev,
 	}
 
 	/* VF qp num check */
-	ret = qm_get_vft(vf_qm, &vf_qm->qp_base);
-	if (ret <= 0) {
+	qp_num = qm_get_vft(vf_qm, &vf_qm->qp_base);
+	if (qp_num <= 0) {
 		dev_err(dev, "failed to get vft qp nums\n");
-		return ret;
+		return -EINVAL;
 	}
 
-	if (ret != vf_data->qp_num) {
+	if (qp_num != vf_data->qp_num) {
 		dev_err(dev, "failed to match VF qp num\n");
 		return -EINVAL;
 	}
 
-	vf_qm->qp_num = ret;
+	vf_qm->qp_num = qp_num;
 
 	/* VF isolation state check */
 	ret = qm_read_regs(pf_qm, QM_QUE_ISO_CFG_V, &que_iso_state, 1);
