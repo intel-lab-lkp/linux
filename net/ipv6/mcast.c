@@ -1377,10 +1377,12 @@ static int mld_process_v1(struct inet6_dev *idev, struct mld_msg *mld,
 	if (v1_query)
 		mld_set_v1_mode(idev);
 
+	mutex_lock(&idev->mc_lock);
 	/* cancel MLDv2 report work */
 	mld_gq_stop_work(idev);
 	/* cancel the interface change work */
 	mld_ifc_stop_work(idev);
+	mutex_unlock(&idev->mc_lock);
 	/* clear deleted report items */
 	mld_clear_delrec(idev);
 
