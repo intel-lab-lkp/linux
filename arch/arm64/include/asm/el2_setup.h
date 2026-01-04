@@ -475,7 +475,9 @@
 #endif
 
 .macro finalise_el2_state
-	check_override id_aa64pfr0, ID_AA64PFR0_EL1_MPAM_SHIFT, .Linit_mpam_\@, .Lskip_mpam_\@, x1, x2
+	check_override id_aa64pfr0, ID_AA64PFR0_EL1_MPAM_SHIFT, .Linit_mpam_\@, .Lmpam_minor_\@, x1, x2
+.Lmpam_minor_\@:
+	check_override id_aa64pfr1, ID_AA64PFR1_EL1_MPAM_frac_SHIFT, .Linit_mpam_\@, .Lskip_mpam_\@, x1, x2
 
 .Linit_mpam_\@:
 	msr_s	SYS_MPAM2_EL2, xzr		// use the default partition
