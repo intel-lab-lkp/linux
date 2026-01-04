@@ -107,6 +107,7 @@
 struct rusage_stats {
 	struct stats ru_utime_usec_stat;
 	struct stats ru_stime_usec_stat;
+	struct stats ru_maxrss_stat;
 };
 
 static void print_counters(struct timespec *ts, int argc, const char **argv);
@@ -288,7 +289,9 @@ static int read_single_counter(struct evsel *counter, int cpu_map_idx, int threa
 	 */
 	if (err && cpu_map_idx == 0 &&
 	    (evsel__tool_event(counter) == TOOL_PMU__EVENT_USER_TIME ||
-	     evsel__tool_event(counter) == TOOL_PMU__EVENT_SYSTEM_TIME)) {
+	     evsel__tool_event(counter) == TOOL_PMU__EVENT_SYSTEM_TIME ||
+	     evsel__tool_event(counter) == TOOL_PMU__EVENT_MEMORY_RESIDENT ||
+	     evsel__tool_event(counter) == TOOL_PMU__EVENT_MEMORY_RSS)) {
 		struct perf_counts_values *count =
 			perf_counts(counter->counts, cpu_map_idx, thread);
 		struct perf_counts_values *old_count = NULL;
@@ -299,8 +302,10 @@ static int read_single_counter(struct evsel *counter, int cpu_map_idx, int threa
 
 		if (evsel__tool_event(counter) == TOOL_PMU__EVENT_USER_TIME)
 			val = ru_stats.ru_utime_usec_stat.mean;
-		else
+		else if (evsel__tool_event(counter) == TOOL_PMU__EVENT_SYSTEM_TIME)
 			val = ru_stats.ru_stime_usec_stat.mean;
+		else
+			val = ru_stats.ru_maxrss_stat.mean;
 
 		count->val = val;
 		if (old_count) {
@@ -778,6 +783,7 @@ static void update_rusage_stats(const struct rusage *rusage)
 		(rusage->ru_utime.tv_usec * us_to_ns + rusage->ru_utime.tv_sec * s_to_ns));
 	update_stats(&ru_stats.ru_stime_usec_stat,
 		(rusage->ru_stime.tv_usec * us_to_ns + rusage->ru_stime.tv_sec * s_to_ns));
+	update_stats(&ru_stats.ru_maxrss_stat, rusage->ru_maxrss * 1024);
 }
 
 static int __run_perf_stat(int argc, const char **argv, int run_idx)

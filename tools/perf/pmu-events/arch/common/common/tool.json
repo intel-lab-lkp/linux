@@ -82,5 +82,173 @@
     "EventName": "target_cpu",
     "BriefDescription": "1 if CPUs being analyzed, 0 if threads/processes",
     "ConfigCode": "14"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_anon_huge_pages",
+    "BriefDescription": "Memory backed by anonymous huge pages in bytes",
+    "ConfigCode": "15"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_anonymous",
+    "BriefDescription": "Memory not mapped to a file (anonymous) in bytes",
+    "ConfigCode": "16"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_data",
+    "BriefDescription": "Memory dedicated to data and stack in bytes",
+    "ConfigCode": "17"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_file_pmd_mapped",
+    "BriefDescription": "Memory backed by file and mapped with Page Middle Directory (PMD) in bytes",
+    "ConfigCode": "18"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_ksm",
+    "BriefDescription": "Memory shared via Kernel Samepage Merging (KSM) in bytes",
+    "ConfigCode": "19"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_lazyfree",
+    "BriefDescription": "Memory marked as LazyFree in bytes",
+    "ConfigCode": "20"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_locked",
+    "BriefDescription": "Memory locked in RAM in bytes",
+    "ConfigCode": "21"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_private_clean",
+    "BriefDescription": "Private clean memory (not shared, not modified) in bytes",
+    "ConfigCode": "22"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_private_dirty",
+    "BriefDescription": "Private dirty memory (not shared, modified) in bytes",
+    "ConfigCode": "23"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_private_hugetlb",
+    "BriefDescription": "Private memory backed by huge pages in bytes",
+    "ConfigCode": "24"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_pss",
+    "BriefDescription": "Proportional Share Size (PSS) in bytes",
+    "ConfigCode": "25"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_pss_anon",
+    "BriefDescription": "Proportional Share Size (PSS) for anonymous memory in bytes",
+    "ConfigCode": "26"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_pss_dirty",
+    "BriefDescription": "Proportional Share Size (PSS) for dirty memory in bytes",
+    "ConfigCode": "27"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_pss_file",
+    "BriefDescription": "Proportional Share Size (PSS) for file-backed memory in bytes",
+    "ConfigCode": "28"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_pss_shmem",
+    "BriefDescription": "Proportional Share Size (PSS) for shared memory in bytes",
+    "ConfigCode": "29"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_referenced",
+    "BriefDescription": "Memory marked as referenced/accessed in bytes",
+    "ConfigCode": "30"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_resident",
+    "BriefDescription": "Resident Set Size (RSS) in bytes (from /proc/pid/statm). The sum of anonymous, file and shared memory.",
+    "ConfigCode": "31"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_rss",
+    "BriefDescription": "Resident Set Size (RSS) in bytes (from /proc/pid/smaps_rollup). The sum of anonymous, file and shared memory.",
+    "ConfigCode": "32"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_shared",
+    "BriefDescription": "Shared memory (shared with other processes via files/shmem) in bytes",
+    "ConfigCode": "33"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_shared_clean",
+    "BriefDescription": "Shared clean memory (shared with other processes, not modified) in bytes",
+    "ConfigCode": "34"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_shared_dirty",
+    "BriefDescription": "Shared dirty memory (shared with other processes, modified) in bytes",
+    "ConfigCode": "35"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_shared_hugetlb",
+    "BriefDescription": "Shared memory backed by huge pages in bytes",
+    "ConfigCode": "36"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_shmem_pmd_mapped",
+    "BriefDescription": "Shared memory mapped with Page Middle Directory (PMD) in bytes",
+    "ConfigCode": "37"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_size",
+    "BriefDescription": "Virtual memory size in bytes",
+    "ConfigCode": "38"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_swap",
+    "BriefDescription": "Memory swapped out to disk in bytes",
+    "ConfigCode": "39"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_swap_pss",
+    "BriefDescription": "Proportional Share Size (PSS) for swap memory in bytes",
+    "ConfigCode": "40"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_text",
+    "BriefDescription": "Memory dedicated to code (text segment) in bytes",
+    "ConfigCode": "41"
+  },
+  {
+    "Unit": "tool",
+    "EventName": "memory_uss",
+    "BriefDescription": "Unique Set Size (USS) in bytes",
+    "ConfigCode": "42"
   }
 ]

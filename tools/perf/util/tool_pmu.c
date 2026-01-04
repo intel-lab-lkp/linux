@@ -13,11 +13,14 @@
 #include "tsc.h"
 #include <api/fs/fs.h>
 #include <api/io.h>
+#include <internal/lib.h> // page_size
 #include <internal/threadmap.h>
 #include <perf/cpumap.h>
 #include <perf/threadmap.h>
 #include <fcntl.h>
 #include <strings.h>
+#include <api/io_dir.h>
+#include <ctype.h>
 
 static const char *const tool_pmu__event_names[TOOL_PMU__EVENT_MAX] = {
 	NULL,
@@ -35,6 +38,34 @@ static const char *const tool_pmu__event_names[TOOL_PMU__EVENT_MAX] = {
 	"system_tsc_freq",
 	"core_wide",
 	"target_cpu",
+	"memory_anon_huge_pages",
+	"memory_anonymous",
+	"memory_data",
+	"memory_file_pmd_mapped",
+	"memory_ksm",
+	"memory_lazyfree",
+	"memory_locked",
+	"memory_private_clean",
+	"memory_private_dirty",
+	"memory_private_hugetlb",
+	"memory_pss",
+	"memory_pss_anon",
+	"memory_pss_dirty",
+	"memory_pss_file",
+	"memory_pss_shmem",
+	"memory_referenced",
+	"memory_resident",
+	"memory_rss",
+	"memory_shared",
+	"memory_shared_clean",
+	"memory_shared_dirty",
+	"memory_shared_hugetlb",
+	"memory_shmem_pmd_mapped",
+	"memory_size",
+	"memory_swap",
+	"memory_swap_pss",
+	"memory_text",
+	"memory_uss",
 };
 
 bool tool_pmu__skip_event(const char *name __maybe_unused)
@@ -220,6 +251,190 @@ static int read_pid_stat_field(int fd, int field, __u64 *val)
 	return -EINVAL;
 }
 
+static bool tool_pmu__is_memory_event(enum tool_pmu_event ev)
+{
+	return ev >= TOOL_PMU__EVENT_MEMORY_ANON_HUGE_PAGES &&
+	       ev <= TOOL_PMU__EVENT_MEMORY_USS;
+}
+
+static bool tool_pmu__is_memory_statm_event(enum tool_pmu_event ev)
+{
+	return ev == TOOL_PMU__EVENT_MEMORY_SIZE ||
+	       ev == TOOL_PMU__EVENT_MEMORY_RESIDENT ||
+	       ev == TOOL_PMU__EVENT_MEMORY_SHARED ||
+	       ev == TOOL_PMU__EVENT_MEMORY_TEXT ||
+	       ev == TOOL_PMU__EVENT_MEMORY_DATA;
+}
+
+static const char *tool_pmu__memory_event_to_key(enum tool_pmu_event ev)
+{
+	switch (ev) {
+	case TOOL_PMU__EVENT_MEMORY_ANON_HUGE_PAGES: return "AnonHugePages:";
+	case TOOL_PMU__EVENT_MEMORY_ANONYMOUS: return "Anonymous:";
+	case TOOL_PMU__EVENT_MEMORY_FILE_PMD_MAPPED: return "FilePmdMapped:";
+	case TOOL_PMU__EVENT_MEMORY_KSM: return "KSM:";
+	case TOOL_PMU__EVENT_MEMORY_LAZYFREE: return "LazyFree:";
+	case TOOL_PMU__EVENT_MEMORY_LOCKED: return "Locked:";
+	case TOOL_PMU__EVENT_MEMORY_PRIVATE_CLEAN: return "Private_Clean:";
+	case TOOL_PMU__EVENT_MEMORY_PRIVATE_DIRTY: return "Private_Dirty:";
+	case TOOL_PMU__EVENT_MEMORY_PRIVATE_HUGETLB: return "Private_Hugetlb:";
+	case TOOL_PMU__EVENT_MEMORY_PSS: return "Pss:";
+	case TOOL_PMU__EVENT_MEMORY_PSS_ANON: return "Pss_Anon:";
+	case TOOL_PMU__EVENT_MEMORY_PSS_DIRTY: return "Pss_Dirty:";
+	case TOOL_PMU__EVENT_MEMORY_PSS_FILE: return "Pss_File:";
+	case TOOL_PMU__EVENT_MEMORY_PSS_SHMEM: return "Pss_Shmem:";
+	case TOOL_PMU__EVENT_MEMORY_REFERENCED: return "Referenced:";
+	case TOOL_PMU__EVENT_MEMORY_RSS: return "Rss:";
+	case TOOL_PMU__EVENT_MEMORY_SHARED_CLEAN: return "Shared_Clean:";
+	case TOOL_PMU__EVENT_MEMORY_SHARED_DIRTY: return "Shared_Dirty:";
+	case TOOL_PMU__EVENT_MEMORY_SHARED_HUGETLB: return "Shared_Hugetlb:";
+	case TOOL_PMU__EVENT_MEMORY_SHMEM_PMD_MAPPED: return "ShmemPmdMapped:";
+	case TOOL_PMU__EVENT_MEMORY_SWAP: return "Swap:";
+	case TOOL_PMU__EVENT_MEMORY_SWAP_PSS: return "SwapPss:";
+	case TOOL_PMU__EVENT_MEMORY_DATA:
+	case TOOL_PMU__EVENT_MEMORY_RESIDENT:
+	case TOOL_PMU__EVENT_MEMORY_SHARED:
+	case TOOL_PMU__EVENT_MEMORY_SIZE:
+	case TOOL_PMU__EVENT_MEMORY_TEXT:
+	case TOOL_PMU__EVENT_MEMORY_USS:
+	case TOOL_PMU__EVENT_DURATION_TIME:
+	case TOOL_PMU__EVENT_USER_TIME:
+	case TOOL_PMU__EVENT_SYSTEM_TIME:
+	case TOOL_PMU__EVENT_HAS_PMEM:
+	case TOOL_PMU__EVENT_NUM_CORES:
+	case TOOL_PMU__EVENT_NUM_CPUS:
+	case TOOL_PMU__EVENT_NUM_CPUS_ONLINE:
+	case TOOL_PMU__EVENT_NUM_DIES:
+	case TOOL_PMU__EVENT_NUM_PACKAGES:
+	case TOOL_PMU__EVENT_SLOTS:
+	case TOOL_PMU__EVENT_SMT_ON:
+	case TOOL_PMU__EVENT_SYSTEM_TSC_FREQ:
+	case TOOL_PMU__EVENT_CORE_WIDE:
+	case TOOL_PMU__EVENT_TARGET_CPU:
+	case TOOL_PMU__EVENT_NONE:
+	case TOOL_PMU__EVENT_MAX:
+	default: return NULL;
+	}
+}
+
+static int read_smaps_rollup_field(int fd, const char *key, u64 *val)
+{
+	char buf[4096];
+	struct io io;
+	int ch;
+
+	io__init(&io, fd, buf, sizeof(buf));
+
+	while ((ch = io__get_char(&io)) != -1) {
+		/* Check if line starts with key */
+		if (ch == key[0]) {
+			const char *k = key + 1;
+
+			while (*k && (ch = io__get_char(&io)) == *k)
+				k++;
+
+			if (!*k) {
+				/* Found key, skip whitespace */
+				while ((ch = io__get_char(&io)) == ' ' || ch == '\t')
+					;
+				/* Read value */
+				if (ch >= '0' && ch <= '9') {
+					*val = ch - '0';
+					while ((ch = io__get_char(&io)) >= '0' && ch <= '9') {
+						*val = *val * 10 + (ch - '0');
+					}
+					/* Convert kB to bytes */
+					*val *= 1024;
+					return 0;
+				}
+			}
+		}
+		/* Skip rest of line */
+		if (ch != '\n')
+			read_until_char(&io, '\n');
+	}
+	return -EINVAL;
+}
+
+static int read_smaps_rollup(int fd, enum tool_pmu_event ev, u64 *val)
+{
+	int ret;
+
+	if (ev == TOOL_PMU__EVENT_MEMORY_USS) {
+		u64 pc, pd;
+
+		lseek(fd, 0, SEEK_SET);
+		ret = read_smaps_rollup_field(fd, "Private_Clean:", &pc);
+		if (ret)
+			return ret;
+		lseek(fd, 0, SEEK_SET);
+		ret = read_smaps_rollup_field(fd, "Private_Dirty:", &pd);
+		if (ret)
+			return ret;
+		*val = pc + pd;
+		return 0;
+	}
+
+	lseek(fd, 0, SEEK_SET);
+	return read_smaps_rollup_field(fd, tool_pmu__memory_event_to_key(ev), val);
+}
+
+static int read_statm(int fd, enum tool_pmu_event ev, u64 *val)
+{
+	char buf[128];
+	struct io io;
+	u64 v;
+
+	io__init(&io, fd, buf, sizeof(buf));
+	lseek(fd, 0, SEEK_SET);
+
+	/* Size */
+	if (io__get_dec(&io, (__u64 *)&v) == -1)
+		return -EINVAL;
+	if (ev == TOOL_PMU__EVENT_MEMORY_SIZE) {
+		*val = v * page_size;
+		return 0;
+	}
+
+	/* Resident */
+	if (io__get_dec(&io, (__u64 *)&v) == -1) /* Skip */
+		return -EINVAL;
+	if (ev == TOOL_PMU__EVENT_MEMORY_RESIDENT) {
+		*val = v * page_size;
+		return 0;
+	}
+
+	/* Shared */
+	if (io__get_dec(&io, (__u64 *)&v) == -1) /* Skip */
+		return -EINVAL;
+	if (ev == TOOL_PMU__EVENT_MEMORY_SHARED) {
+		*val = v * page_size;
+		return 0;
+	}
+
+	/* Text */
+	if (io__get_dec(&io, (__u64 *)&v) == -1)
+		return -EINVAL;
+	if (ev == TOOL_PMU__EVENT_MEMORY_TEXT) {
+		*val = v * page_size;
+		return 0;
+	}
+
+	/* Lib */
+	if (io__get_dec(&io, (__u64 *)&v) == -1) /* Skip */
+		return -EINVAL;
+
+	/* Data */
+	if (io__get_dec(&io, (__u64 *)&v) == -1)
+		return -EINVAL;
+	if (ev == TOOL_PMU__EVENT_MEMORY_DATA) {
+		*val = v * page_size;
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
 int evsel__tool_pmu_prepare_open(struct evsel *evsel,
 				 struct perf_cpu_map *cpus,
 				 int nthreads)
@@ -267,6 +482,7 @@ int evsel__tool_pmu_open(struct evsel *evsel,
 			if (ev == TOOL_PMU__EVENT_USER_TIME || ev == TOOL_PMU__EVENT_SYSTEM_TIME) {
 				bool system = ev == TOOL_PMU__EVENT_SYSTEM_TIME;
 				__u64 *start_time = NULL;
+				char buf[PATH_MAX];
 				int fd;
 
 				if (evsel->core.attr.sample_period) {
@@ -275,14 +491,14 @@ int evsel__tool_pmu_open(struct evsel *evsel,
 					goto out_close;
 				}
 				if (pid > -1) {
-					char buf[64];
-
-					snprintf(buf, sizeof(buf), "/proc/%d/stat", pid);
-					fd = open(buf, O_RDONLY);
+					snprintf(buf, sizeof(buf), "%s/%d/stat",
+						 procfs__mountpoint(), pid);
 					evsel->pid_stat = true;
 				} else {
-					fd = open("/proc/stat", O_RDONLY);
+					snprintf(buf, sizeof(buf), "%s/stat",
+						 procfs__mountpoint());
 				}
+				fd = open(buf, O_RDONLY);
 				FD(evsel, idx, thread) = fd;
 				if (fd < 0) {
 					err = -errno;
@@ -301,6 +517,30 @@ int evsel__tool_pmu_open(struct evsel *evsel,
 				}
 				if (err)
 					goto out_close;
+			} else if (tool_pmu__is_memory_event(ev)) {
+				int fd = -1;
+
+				if (pid > -1) {
+					char buf[PATH_MAX];
+
+					if (tool_pmu__is_memory_statm_event(ev)) {
+						snprintf(buf, sizeof(buf), "%s/%d/statm",
+							 procfs__mountpoint(), pid);
+					} else {
+						snprintf(buf, sizeof(buf), "%s/%d/smaps_rollup",
+							 procfs__mountpoint(), pid);
+					}
+					fd = open(buf, O_RDONLY);
+				}
+				/*
+				 * For system-wide (pid == -1), we don't open a file here.
+				 * We will aggregate in read().
+				 */
+				if (pid > -1 && fd < 0) {
+					err = -errno;
+					goto out_close;
+				}
+				FD(evsel, idx, thread) = fd;
 			}
 
 		}
@@ -455,6 +695,34 @@ bool tool_pmu__read_event(enum tool_pmu_event ev,
 		*result = system_wide || (user_requested_cpu_list != NULL) ? 1 : 0;
 		return true;
 
+	case TOOL_PMU__EVENT_MEMORY_SIZE:
+	case TOOL_PMU__EVENT_MEMORY_RSS:
+	case TOOL_PMU__EVENT_MEMORY_PSS:
+	case TOOL_PMU__EVENT_MEMORY_SHARED:
+	case TOOL_PMU__EVENT_MEMORY_SHARED_CLEAN:
+	case TOOL_PMU__EVENT_MEMORY_SHARED_DIRTY:
+	case TOOL_PMU__EVENT_MEMORY_PRIVATE_CLEAN:
+	case TOOL_PMU__EVENT_MEMORY_PRIVATE_DIRTY:
+	case TOOL_PMU__EVENT_MEMORY_USS:
+	case TOOL_PMU__EVENT_MEMORY_SWAP:
+	case TOOL_PMU__EVENT_MEMORY_SWAP_PSS:
+	case TOOL_PMU__EVENT_MEMORY_PSS_DIRTY:
+	case TOOL_PMU__EVENT_MEMORY_PSS_ANON:
+	case TOOL_PMU__EVENT_MEMORY_PSS_FILE:
+	case TOOL_PMU__EVENT_MEMORY_PSS_SHMEM:
+	case TOOL_PMU__EVENT_MEMORY_RESIDENT:
+	case TOOL_PMU__EVENT_MEMORY_REFERENCED:
+	case TOOL_PMU__EVENT_MEMORY_ANONYMOUS:
+	case TOOL_PMU__EVENT_MEMORY_KSM:
+	case TOOL_PMU__EVENT_MEMORY_LAZYFREE:
+	case TOOL_PMU__EVENT_MEMORY_ANON_HUGE_PAGES:
+	case TOOL_PMU__EVENT_MEMORY_SHMEM_PMD_MAPPED:
+	case TOOL_PMU__EVENT_MEMORY_FILE_PMD_MAPPED:
+	case TOOL_PMU__EVENT_MEMORY_SHARED_HUGETLB:
+	case TOOL_PMU__EVENT_MEMORY_PRIVATE_HUGETLB:
+	case TOOL_PMU__EVENT_MEMORY_LOCKED:
+	case TOOL_PMU__EVENT_MEMORY_DATA:
+	case TOOL_PMU__EVENT_MEMORY_TEXT:
 	case TOOL_PMU__EVENT_NONE:
 	case TOOL_PMU__EVENT_DURATION_TIME:
 	case TOOL_PMU__EVENT_USER_TIME:
@@ -485,6 +753,52 @@ static void perf_counts__update(struct perf_counts_values *count,
 		count->ena++;
 		count->lost = 0;
 	}
+}
+
+static int tool_pmu__aggregate_memory_event(enum tool_pmu_event ev, u64 *val)
+{
+	struct io_dir iod;
+	struct io_dirent64 *ent;
+	int proc_fd;
+
+	*val = 0;
+	proc_fd = open(procfs__mountpoint(), O_DIRECTORY | O_RDONLY);
+	if (proc_fd < 0)
+		return -errno;
+
+	io_dir__init(&iod, proc_fd);
+
+	while ((ent = io_dir__readdir(&iod)) != NULL) {
+		char buf[PATH_MAX];
+		u64 pid_val;
+		int fd;
+
+		if (!io_dir__is_dir(&iod, ent))
+			continue;
+
+		if (!isdigit(ent->d_name[0]))
+			continue;
+
+		if (tool_pmu__is_memory_statm_event(ev))
+			snprintf(buf, sizeof(buf), "%s/statm", ent->d_name);
+		else
+			snprintf(buf, sizeof(buf), "%s/smaps_rollup", ent->d_name);
+
+		fd = openat(proc_fd, buf, O_RDONLY);
+		if (fd < 0)
+			continue;
+
+		if (tool_pmu__is_memory_statm_event(ev)) {
+			if (!read_statm(fd, ev, &pid_val))
+				*val += pid_val;
+		} else {
+			if (!read_smaps_rollup(fd, ev, &pid_val))
+				*val += pid_val;
+		}
+		close(fd);
+	}
+	close(proc_fd);
+	return 0;
 }
 
 int evsel__tool_pmu_read(struct evsel *evsel, int cpu_map_idx, int thread)
@@ -563,6 +877,57 @@ int evsel__tool_pmu_read(struct evsel *evsel, int cpu_map_idx, int thread)
 		}
 		adjust = true;
 		break;
+	}
+	case TOOL_PMU__EVENT_MEMORY_SIZE:
+	case TOOL_PMU__EVENT_MEMORY_RSS:
+	case TOOL_PMU__EVENT_MEMORY_PSS:
+	case TOOL_PMU__EVENT_MEMORY_SHARED:
+	case TOOL_PMU__EVENT_MEMORY_SHARED_CLEAN:
+	case TOOL_PMU__EVENT_MEMORY_SHARED_DIRTY:
+	case TOOL_PMU__EVENT_MEMORY_PRIVATE_CLEAN:
+	case TOOL_PMU__EVENT_MEMORY_PRIVATE_DIRTY:
+	case TOOL_PMU__EVENT_MEMORY_USS:
+	case TOOL_PMU__EVENT_MEMORY_SWAP:
+	case TOOL_PMU__EVENT_MEMORY_SWAP_PSS:
+	case TOOL_PMU__EVENT_MEMORY_PSS_DIRTY:
+	case TOOL_PMU__EVENT_MEMORY_PSS_ANON:
+	case TOOL_PMU__EVENT_MEMORY_PSS_FILE:
+	case TOOL_PMU__EVENT_MEMORY_PSS_SHMEM:
+	case TOOL_PMU__EVENT_MEMORY_REFERENCED:
+	case TOOL_PMU__EVENT_MEMORY_RESIDENT:
+	case TOOL_PMU__EVENT_MEMORY_ANONYMOUS:
+	case TOOL_PMU__EVENT_MEMORY_KSM:
+	case TOOL_PMU__EVENT_MEMORY_LAZYFREE:
+	case TOOL_PMU__EVENT_MEMORY_ANON_HUGE_PAGES:
+	case TOOL_PMU__EVENT_MEMORY_SHMEM_PMD_MAPPED:
+	case TOOL_PMU__EVENT_MEMORY_FILE_PMD_MAPPED:
+	case TOOL_PMU__EVENT_MEMORY_SHARED_HUGETLB:
+	case TOOL_PMU__EVENT_MEMORY_PRIVATE_HUGETLB:
+	case TOOL_PMU__EVENT_MEMORY_LOCKED:
+	case TOOL_PMU__EVENT_MEMORY_DATA:
+	case TOOL_PMU__EVENT_MEMORY_TEXT: {
+		int fd = FD(evsel, cpu_map_idx, thread);
+		u64 val = 0;
+
+		if (fd >= 0) {
+			/* Per-process */
+			int ret;
+
+			if (tool_pmu__is_memory_statm_event(ev))
+				ret = read_statm(fd, ev, &val);
+			else
+				ret = read_smaps_rollup(fd, ev, &val);
+
+			if (ret)
+				return ret;
+		} else {
+			/* System-wide aggregation */
+			if (cpu_map_idx == 0 && thread == 0) {
+				tool_pmu__aggregate_memory_event(ev, &val);
+			}
+		}
+		perf_counts__update(count, old_count, /*raw=*/false, val);
+		return 0;
 	}
 	case TOOL_PMU__EVENT_NONE:
 	case TOOL_PMU__EVENT_MAX:
