@@ -1709,6 +1709,13 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 	int dropcount;
 	int nb = 0;
 
+	struct {
+		int rcvbuf4;
+		int rcvbuf6;
+		int mem4;
+		int mem6;
+	} err_count = {0, 0, 0, 0};
+
 	rmem = atomic_read(&sk->sk_rmem_alloc);
 	rcvbuf = READ_ONCE(sk->sk_rcvbuf);
 	size = skb->truesize;
@@ -1760,6 +1767,17 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 		total_size += size;
 		err = udp_rmem_schedule(sk, size);
 		if (unlikely(err)) {
+			if (err == -ENOMEM) {
+				if (skb->protocol == htons(ETH_P_IP))
+					err_count.rcvbuf4++;
+				else
+					err_count.rcvbuf6++;
+			} else {
+				if (skb->protocol == htons(ETH_P_IP))
+					err_count.mem4++;
+				else
+					err_count.mem6++;
+			}
 			/*  Free the skbs outside of locked section. */
 			skb->next = to_drop;
 			to_drop = skb;
@@ -1797,10 +1815,22 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 			skb = to_drop;
 			to_drop = skb->next;
 			skb_mark_not_on_list(skb);
-			/* TODO: update SNMP values. */
 			sk_skb_reason_drop(sk, skb, SKB_DROP_REASON_PROTO_MEM);
 		}
 		numa_drop_add(&udp_sk(sk)->drop_counters, nb);
+
+		SNMP_ADD_STATS(__UDPX_MIB(sk, true), UDP_MIB_RCVBUFERRORS,
+			       err_count.rcvbuf4);
+		SNMP_ADD_STATS(__UDPX_MIB(sk, true), UDP_MIB_MEMERRORS,
+			       err_count.mem4);
+		SNMP_ADD_STATS(__UDPX_MIB(sk, true), UDP_MIB_INERRORS,
+			       err_count.mem4 + err_count.rcvbuf4);
+		SNMP_ADD_STATS(__UDPX_MIB(sk, false), UDP_MIB_RCVBUFERRORS,
+			       err_count.rcvbuf6);
+		SNMP_ADD_STATS(__UDPX_MIB(sk, false), UDP_MIB_MEMERRORS,
+			       err_count.mem6);
+		SNMP_ADD_STATS(__UDPX_MIB(sk, false), UDP_MIB_INERRORS,
+			       err_count.mem6 + err_count.rcvbuf6);
 	}
 
 	atomic_sub(total_size, &udp_prod_queue->rmem_alloc);
