@@ -300,6 +300,92 @@ void __weak crash_smp_send_stop(void)
 
 atomic_t panic_cpu = ATOMIC_INIT(PANIC_CPU_INVALID);
 
+#ifdef CONFIG_SMP
+/* CPU to redirect panic to, -1 means feature is disabled */
+static int panic_force_cpu = -1;
+
+static int __init panic_force_cpu_setup(char *str)
+{
+	int cpu;
+
+	if (!str)
+		return -EINVAL;
+
+	if (kstrtoint(str, 0, &cpu) || cpu < 0) {
+		pr_warn("panic_force_cpu: invalid value '%s'\n", str);
+		return -EINVAL;
+	}
+
+	panic_force_cpu = cpu;
+	pr_info("panic_force_cpu: panic will execute on CPU %d\n", cpu);
+	return 0;
+}
+early_param("panic_force_cpu", panic_force_cpu_setup);
+
+static void do_panic_on_target_cpu(void *info)
+{
+	panic("%s", (char *)info);
+}
+
+/**
+ * panic_force_target_cpu - Redirect panic to a specific CPU for crash kernel
+ * @fmt: panic message format string
+ * @args: arguments for format string
+ *
+ * Some platforms require panic handling to occur on a specific CPU
+ * for the crash kernel to function correctly. This function redirects
+ * panic handling to the CPU specified via the panic_redirect_cpu= boot parameter.
+ *
+ * Returns true if panic should proceed on current CPU.
+ * Returns false (never returns) if panic was redirected.
+ */
+__printf(1, 0)
+static bool panic_force_target_cpu(const char *fmt, va_list args)
+{
+	static char panic_redirect_msg[1024];
+	int cpu = raw_smp_processor_id();
+	int target_cpu = panic_force_cpu;
+
+	/* Feature not enabled via boot parameter */
+	if (target_cpu < 0)
+		return true;
+
+	/* Already on target CPU - proceed normally */
+	if (cpu == target_cpu)
+		return true;
+
+	/* Target CPU is offline, can't redirect */
+	if (!cpu_online(target_cpu)) {
+		pr_warn("panic: target CPU %d is offline, proceeding on CPU %d.\n"
+			"Crash kernel console output may be unavailable.\n", target_cpu, cpu);
+		return true;
+	}
+
+	/* Another panic already in progress */
+	if (panic_in_progress()) {
+		pr_warn("panic: Another panic in progress on CPU %d, cannot redirect to CPU %d.\n"
+			"Crash kernel console output may be unavailable.\n",
+			atomic_read(&panic_cpu), target_cpu);
+		return true;
+	}
+
+	pr_info("panic: Redirecting from CPU %d to CPU %d for crash kernel\n",
+		cpu, target_cpu);
+
+	vsnprintf(panic_redirect_msg, sizeof(panic_redirect_msg), fmt, args);
+
+	smp_call_function_single(target_cpu, do_panic_on_target_cpu, panic_redirect_msg, false);
+
+	return false;
+}
+#else
+__printf(1, 0)
+static inline bool panic_force_target_cpu(const char *fmt, va_list args)
+{
+	return true;
+}
+#endif /* CONFIG_SMP */
+
 bool panic_try_start(void)
 {
 	int old_cpu, this_cpu;
@@ -450,6 +536,13 @@ void vpanic(const char *fmt, va_list args)
 	 */
 	local_irq_disable();
 	preempt_disable_notrace();
+
+	/*
+	 * Redirect panic to target CPU if configured via panic_force_cpu=.
+	 * Returns false and never returns if panic was redirected.
+	 */
+	if (!panic_force_target_cpu(fmt, args))
+		panic_smp_self_stop();
 
 	/*
 	 * It's possible to come here directly from a panic-assertion and
