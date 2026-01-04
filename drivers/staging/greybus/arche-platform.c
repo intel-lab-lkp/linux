@@ -155,6 +155,7 @@ static irqreturn_t arche_platform_wd_irq(int irq, void *devid)
 {
 	struct arche_platform_drvdata *arche_pdata = devid;
 	unsigned long flags;
+	int state;
 
 	spin_lock_irqsave(&arche_pdata->wake_lock, flags);
 
@@ -179,8 +180,8 @@ static irqreturn_t arche_platform_wd_irq(int irq, void *devid)
 				 */
 				if (arche_pdata->wake_detect_state !=
 						WD_STATE_COLDBOOT_START) {
-					arche_platform_set_wake_detect_state(arche_pdata,
-									     WD_STATE_COLDBOOT_TRIG);
+					state = WD_STATE_COLDBOOT_TRIG;
+					arche_platform_set_wake_detect_state(arche_pdata, state);
 					spin_unlock_irqrestore(&arche_pdata->wake_lock,
 							       flags);
 					return IRQ_WAKE_THREAD;
