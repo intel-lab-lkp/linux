@@ -16,9 +16,16 @@ properties:
   compatible:
     oneOf:
 
-      - description: Radxa Orion O6
+      - description: Radxa Orion O6 board
         items:
-          - const: radxa,orion-o6
+          - enum:
+              - radxa,orion-o6
+          - const: cix,sky1
+
+      - description: Xunlong orangepi 6 plus board
+        items:
+          - enum:
+              - xunlong,orangepi-6-plus
           - const: cix,sky1
 
 additionalProperties: true
