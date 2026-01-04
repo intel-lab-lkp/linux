@@ -291,7 +291,7 @@ static int uvc_get_video_ctrl(struct uvc_streaming *stream,
 	struct uvc_streaming_control *ctrl, int probe, u8 query)
 {
 	u16 size = uvc_video_ctrl_size(stream);
-	u8 *data;
+	u8 *data __free(kfree) = NULL;
 	int ret;
 
 	if ((stream->dev->quirks & UVC_QUIRK_PROBE_DEF) &&
@@ -317,8 +317,7 @@ static int uvc_get_video_ctrl(struct uvc_streaming *stream,
 			"supported. Enabling workaround.\n");
 		memset(ctrl, 0, sizeof(*ctrl));
 		ctrl->wCompQuality = le16_to_cpup((__le16 *)data);
-		ret = 0;
-		goto out;
+		return 0
 	} else if (query == UVC_GET_DEF && probe == 1 && ret != size) {
 		/*
 		 * Many cameras don't support the GET_DEF request on their
@@ -328,15 +327,13 @@ static int uvc_get_video_ctrl(struct uvc_streaming *stream,
 		uvc_warn_once(stream->dev, UVC_WARN_PROBE_DEF, "UVC non "
 			"compliance - GET_DEF(PROBE) not supported. "
 			"Enabling workaround.\n");
-		ret = -EIO;
-		goto out;
+		return -EIO;
 	} else if (ret != size) {
 		dev_err(&stream->intf->dev,
 			"Failed to query (%s) UVC %s control : %d (exp. %u).\n",
 			uvc_query_name(query), probe ? "probe" : "commit",
 			ret, size);
-		ret = (ret == -EPROTO) ? -EPROTO : -EIO;
-		goto out;
+		return (ret == -EPROTO) ? -EPROTO : -EIO;
 	}
 
 	ctrl->bmHint = le16_to_cpup((__le16 *)&data[0]);
@@ -371,18 +368,15 @@ static int uvc_get_video_ctrl(struct uvc_streaming *stream,
 	 * format and frame descriptors.
 	 */
 	uvc_fixup_video_ctrl(stream, ctrl);
-	ret = 0;
 
-out:
-	kfree(data);
-	return ret;
+	return 0;
 }
 
 static int uvc_set_video_ctrl(struct uvc_streaming *stream,
 	struct uvc_streaming_control *ctrl, int probe)
 {
 	u16 size = uvc_video_ctrl_size(stream);
-	u8 *data;
+	u8 *data __free(kfree) = NULL;
 	int ret;
 
 	data = kzalloc(size, GFP_KERNEL);
@@ -419,7 +413,6 @@ static int uvc_set_video_ctrl(struct uvc_streaming *stream,
 		ret = -EIO;
 	}
 
-	kfree(data);
 	return ret;
 }
 
