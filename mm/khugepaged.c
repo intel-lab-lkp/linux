@@ -1247,7 +1247,7 @@ out_nolock:
 static int hpage_collapse_scan_pmd(struct mm_struct *mm,
 				   struct vm_area_struct *vma,
 				   unsigned long start_addr, bool *mmap_locked,
-				   struct collapse_control *cc)
+				   int *progress, struct collapse_control *cc)
 {
 	pmd_t *pmd;
 	pte_t *pte, *_pte;
@@ -1258,23 +1258,28 @@ static int hpage_collapse_scan_pmd(struct mm_struct *mm,
 	unsigned long addr;
 	spinlock_t *ptl;
 	int node = NUMA_NO_NODE, unmapped = 0;
+	int _progress = 0;
 
 	VM_BUG_ON(start_addr & ~HPAGE_PMD_MASK);
 
 	result = find_pmd_or_thp_or_none(mm, start_addr, &pmd);
-	if (result != SCAN_SUCCEED)
+	if (result != SCAN_SUCCEED) {
+		_progress = HPAGE_PMD_NR;
 		goto out;
+	}
 
 	memset(cc->node_load, 0, sizeof(cc->node_load));
 	nodes_clear(cc->alloc_nmask);
 	pte = pte_offset_map_lock(mm, pmd, start_addr, &ptl);
 	if (!pte) {
+		_progress = HPAGE_PMD_NR;
 		result = SCAN_NO_PTE_TABLE;
 		goto out;
 	}
 
 	for (addr = start_addr, _pte = pte; _pte < pte + HPAGE_PMD_NR;
 	     _pte++, addr += PAGE_SIZE) {
+		_progress++;
 		pte_t pteval = ptep_get(_pte);
 		if (pte_none_or_zero(pteval)) {
 			++none_or_zero;
@@ -1410,6 +1415,9 @@ out_unmap:
 		*mmap_locked = false;
 	}
 out:
+	if (progress)
+		*progress += _progress;
+
 	trace_mm_khugepaged_scan_pmd(mm, folio, referenced,
 				     none_or_zero, result, unmapped);
 	return result;
@@ -2287,7 +2295,7 @@ out:
 
 static int hpage_collapse_scan_file(struct mm_struct *mm, unsigned long addr,
 				    struct file *file, pgoff_t start,
-				    struct collapse_control *cc)
+				    int *progress, struct collapse_control *cc)
 {
 	struct folio *folio = NULL;
 	struct address_space *mapping = file->f_mapping;
@@ -2295,6 +2303,7 @@ static int hpage_collapse_scan_file(struct mm_struct *mm, unsigned long addr,
 	int present, swap;
 	int node = NUMA_NO_NODE;
 	int result = SCAN_SUCCEED;
+	int _progress = 0;
 
 	present = 0;
 	swap = 0;
@@ -2326,6 +2335,8 @@ static int hpage_collapse_scan_file(struct mm_struct *mm, unsigned long addr,
 			xas_reset(&xas);
 			continue;
 		}
+
+		_progress += folio_nr_pages(folio);
 
 		if (folio_order(folio) == HPAGE_PMD_ORDER &&
 		    folio->index == start) {
@@ -2387,6 +2398,9 @@ static int hpage_collapse_scan_file(struct mm_struct *mm, unsigned long addr,
 			result = collapse_file(mm, addr, file, start, cc);
 		}
 	}
+
+	if (progress)
+		*progress += _progress;
 
 	trace_mm_khugepaged_scan_file(mm, folio, file, present, swap, result);
 	return result;
@@ -2470,7 +2484,8 @@ skip:
 				mmap_read_unlock(mm);
 				mmap_locked = false;
 				*result = hpage_collapse_scan_file(mm,
-					khugepaged_scan.address, file, pgoff, cc);
+					khugepaged_scan.address, file, pgoff,
+					&progress, cc);
 				fput(file);
 				if (*result == SCAN_PTE_MAPPED_HUGEPAGE) {
 					mmap_read_lock(mm);
@@ -2484,7 +2499,8 @@ skip:
 				}
 			} else {
 				*result = hpage_collapse_scan_pmd(mm, vma,
-					khugepaged_scan.address, &mmap_locked, cc);
+					khugepaged_scan.address, &mmap_locked,
+					&progress, cc);
 			}
 
 			if (*result == SCAN_SUCCEED)
@@ -2492,7 +2508,6 @@ skip:
 
 			/* move to next address */
 			khugepaged_scan.address += HPAGE_PMD_SIZE;
-			progress += HPAGE_PMD_NR;
 			if (!mmap_locked)
 				/*
 				 * We released mmap_lock so break loop.  Note
@@ -2810,11 +2825,11 @@ int madvise_collapse(struct vm_area_struct *vma, unsigned long start,
 			mmap_read_unlock(mm);
 			mmap_locked = false;
 			result = hpage_collapse_scan_file(mm, addr, file, pgoff,
-							  cc);
+							  NULL, cc);
 			fput(file);
 		} else {
 			result = hpage_collapse_scan_pmd(mm, vma, addr,
-							 &mmap_locked, cc);
+							 &mmap_locked, NULL, cc);
 		}
 		if (!mmap_locked)
 			*lock_dropped = true;
