@@ -846,7 +846,8 @@ EXPORT_SYMBOL(fbtft_unregister_framebuffer);
 static int fbtft_init_display_from_property(struct fbtft_par *par)
 {
 	struct device *dev = par->info->device;
-	int buf[64], count, index, i, j, ret;
+	u8 buf[64];
+	int count, index, i, j, ret;
 	u32 *values;
 	u32 val;
 
@@ -881,7 +882,7 @@ static int fbtft_init_display_from_property(struct fbtft_par *par)
 					ret = -EINVAL;
 					goto out_free;
 				}
-				buf[i++] = val;
+				buf[i++] = val & 0xFF;
 				val = values[++index];
 			}
 			/* make debug message */
@@ -891,23 +892,16 @@ static int fbtft_init_display_from_property(struct fbtft_par *par)
 				fbtft_par_dbg(DEBUG_INIT_DISPLAY, par,
 					      "buf[%d] = %02X\n", j, buf[j]);
 
-			par->fbtftops.write_register(par, i,
-				buf[0], buf[1], buf[2], buf[3],
-				buf[4], buf[5], buf[6], buf[7],
-				buf[8], buf[9], buf[10], buf[11],
-				buf[12], buf[13], buf[14], buf[15],
-				buf[16], buf[17], buf[18], buf[19],
-				buf[20], buf[21], buf[22], buf[23],
-				buf[24], buf[25], buf[26], buf[27],
-				buf[28], buf[29], buf[30], buf[31],
-				buf[32], buf[33], buf[34], buf[35],
-				buf[36], buf[37], buf[38], buf[39],
-				buf[40], buf[41], buf[42], buf[43],
-				buf[44], buf[45], buf[46], buf[47],
-				buf[48], buf[49], buf[50], buf[51],
-				buf[52], buf[53], buf[54], buf[55],
-				buf[56], buf[57], buf[58], buf[59],
-				buf[60], buf[61], buf[62], buf[63]);
+			/* buf[0] is command, buf[1..i-1] is data */
+			ret = fbtft_write_buf_dc(par, &buf[0], 1, 0);
+			if (ret < 0)
+				goto out_free;
+
+			if (i > 1) {
+				ret = fbtft_write_buf_dc(par, &buf[1], i - 1, 1);
+				if (ret < 0)
+					goto out_free;
+			}
 		} else if (val & FBTFT_OF_INIT_DELAY) {
 			fbtft_par_dbg(DEBUG_INIT_DISPLAY, par,
 				      "init: msleep(%u)\n", val & 0xFFFF);
