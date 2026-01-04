@@ -5597,9 +5597,10 @@ subsys_initcall(mem_cgroup_swap_init);
 
 #endif /* CONFIG_SWAP */
 
-bool mem_cgroup_node_allowed(struct mem_cgroup *memcg, int nid)
+void mem_cgroup_node_filter_allowed(struct mem_cgroup *memcg, nodemask_t *mask)
 {
-	return memcg ? cpuset_node_allowed(memcg->css.cgroup, nid) : true;
+	if (memcg)
+		cpuset_nodes_filter_allowed(memcg->css.cgroup, mask);
 }
 
 void mem_cgroup_show_protected_memory(struct mem_cgroup *memcg)
