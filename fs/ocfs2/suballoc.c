@@ -813,6 +813,26 @@ static int ocfs2_reserve_suballoc_bits(struct ocfs2_super *osb,
 		goto bail;
 	}
 
+	/*
+	 * Validate allocator type matches expected bitmap type.
+	 * Global bitmap must have BITMAP flag, other allocators must not.
+	 * This prevents a corrupted filesystem from triggering BUG_ON
+	 * in ocfs2_block_group_search() or ocfs2_cluster_group_search().
+	 */
+	if (type == GLOBAL_BITMAP_SYSTEM_INODE) {
+		if (!ocfs2_is_cluster_bitmap(alloc_inode)) {
+			status = ocfs2_error(alloc_inode->i_sb,
+					     "Global bitmap %llu missing bitmap flag\n",
+					     (unsigned long long)le64_to_cpu(fe->i_blkno));
+			goto bail;
+		}
+	} else if (ocfs2_is_cluster_bitmap(alloc_inode)) {
+		status = ocfs2_error(alloc_inode->i_sb,
+				     "Allocator %llu has invalid bitmap flag\n",
+				     (unsigned long long)le64_to_cpu(fe->i_blkno));
+		goto bail;
+	}
+
 	free_bits = le32_to_cpu(fe->id1.bitmap1.i_total) -
 		le32_to_cpu(fe->id1.bitmap1.i_used);
 
