@@ -258,6 +258,10 @@ static int input_get_disposition(struct input_dev *dev,
 		}
 		break;
 
+	case EV_BTN:
+		disposition = INPUT_PASS_TO_HANDLERS;
+		break;
+
 	case EV_ABS:
 		if (is_event_supported(code, dev->absbit, ABS_MAX))
 			disposition = input_handle_abs_event(dev, code, &value);
@@ -1124,6 +1128,8 @@ static int input_devices_seq_show(struct seq_file *seq, void *v)
 		input_seq_print_bitmap(seq, "FF", dev->ffbit, FF_MAX);
 	if (test_bit(EV_SW, dev->evbit))
 		input_seq_print_bitmap(seq, "SW", dev->swbit, SW_MAX);
+	if (test_bit(EV_BTN, dev->evbit))
+		seq_printf(seq, "I: BTN=%u\n", dev->button_count);
 
 	seq_putc(seq, '\n');
 
@@ -1347,6 +1353,7 @@ static int input_print_modalias_parts(char *buf, int size, int full_len,
 				'f', id->ffbit, 0, FF_MAX);
 	len += input_print_modalias_bits(buf + len, size - len,
 				'w', id->swbit, 0, SW_MAX);
+	len += snprintf(buf + len, size - len, "t%u", id->button_count);
 
 	return len;
 }
@@ -1679,6 +1686,8 @@ static int input_dev_uevent(const struct device *device, struct kobj_uevent_env 
 		INPUT_ADD_HOTPLUG_BM_VAR("FF=", dev->ffbit, FF_MAX);
 	if (test_bit(EV_SW, dev->evbit))
 		INPUT_ADD_HOTPLUG_BM_VAR("SW=", dev->swbit, SW_MAX);
+	if (test_bit(EV_BTN, dev->evbit))
+		INPUT_ADD_HOTPLUG_VAR("BTN=%u", dev->button_count);
 
 	INPUT_ADD_HOTPLUG_MODALIAS_VAR(dev);
 
@@ -2113,6 +2122,7 @@ void input_set_capability(struct input_dev *dev, unsigned int type, unsigned int
 		break;
 
 	case EV_PWR:
+	case EV_BTN:
 		/* do nothing */
 		break;
 
