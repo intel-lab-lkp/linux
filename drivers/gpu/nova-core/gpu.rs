@@ -4,6 +4,7 @@ use kernel::{
     device,
     devres::Devres,
     fmt,
+    macros,
     pci,
     prelude::*,
     sync::Arc, //
@@ -26,7 +27,7 @@ macro_rules! define_chipset {
     ({ $($variant:ident = $value:expr),* $(,)* }) =>
     {
         /// Enum representation of the GPU chipset.
-        #[derive(fmt::Debug, Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]
+        #[derive(macros::Display, fmt::Debug, Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]
         pub(crate) enum Chipset {
             $($variant = $value),*,
         }
@@ -104,20 +105,6 @@ impl Chipset {
                 Architecture::Ada
             }
         }
-    }
-}
-
-// TODO
-//
-// The resulting strings are used to generate firmware paths, hence the
-// generated strings have to be stable.
-//
-// Hence, replace with something like strum_macros derive(Display).
-//
-// For now, redirect to fmt::Debug for convenience.
-impl fmt::Display for Chipset {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{self:?}")
     }
 }
 
