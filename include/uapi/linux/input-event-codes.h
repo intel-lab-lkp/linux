@@ -42,6 +42,7 @@
 #define EV_ABS			0x03
 #define EV_MSC			0x04
 #define EV_SW			0x05
+#define EV_BTN			0x06
 #define EV_LED			0x11
 #define EV_SND			0x12
 #define EV_REP			0x14

@@ -59,6 +59,11 @@ Codes section for details on valid codes for each type.
 
   - Used to describe binary state input switches.
 
+* EV_BTN:
+
+  - Used to describe state changes generic, numbered buttons without defined
+    usages.
+
 * EV_LED:
 
   - Used to turn LEDs on devices on and off.
