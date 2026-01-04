@@ -11596,7 +11596,15 @@ static inline int vcpu_block(struct kvm_vcpu *vcpu)
 	if (is_guest_mode(vcpu)) {
 		int r = kvm_check_nested_events(vcpu);
 
-		WARN_ON_ONCE(r == -EBUSY);
+		/*
+		 * -EBUSY indicates a nested event is pending but cannot be
+		 * injected immediately (e.g., event delivery is temporarily
+		 * blocked). Return to the vCPU run loop to retry guest entry
+		 * instead of blocking, which would lose the pending event.
+		 */
+		if (r == -EBUSY)
+			return 1;
+
 		if (r < 0)
 			return 0;
 	}
