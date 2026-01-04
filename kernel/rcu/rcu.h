@@ -288,6 +288,7 @@ extern int rcu_cpu_stall_cputime;
 extern bool rcu_exp_stall_task_details __read_mostly;
 int rcu_jiffies_till_stall_check(void);
 int rcu_exp_jiffies_till_stall_check(void);
+void rcu_cpu_stall_reset(void);
 
 static inline bool rcu_stall_is_suppressed(void)
 {
@@ -302,8 +303,10 @@ do { \
 
 #define rcu_ftrace_dump_stall_unsuppress() \
 do { \
-	if (rcu_cpu_stall_suppress == 3) \
+	if (rcu_cpu_stall_suppress == 3) { \
 		rcu_cpu_stall_suppress = 0; \
+		rcu_cpu_stall_reset(); \
+	} \
 } while (0)
 
 #else /* #endif #ifdef CONFIG_RCU_STALL_COMMON */

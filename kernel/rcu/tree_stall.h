@@ -156,6 +156,7 @@ void rcu_cpu_stall_reset(void)
 	WRITE_ONCE(rcu_state.nr_fqs_jiffies_stall, 3);
 	WRITE_ONCE(rcu_state.jiffies_stall, ULONG_MAX);
 }
+EXPORT_SYMBOL_GPL(rcu_cpu_stall_reset);
 
 //////////////////////////////////////////////////////////////////////////////
 //
