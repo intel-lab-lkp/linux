@@ -1673,7 +1673,8 @@ void hidinput_hid_event(struct hid_device *hid, struct hid_field *field, struct 
 
 	switch (usage->type) {
 	case EV_KEY:
-		if (usage->code == 0) /* Key 0 is "unassigned", not KEY_UNKNOWN */
+		/* Key 0 is "unassigned", not KEY_UNKNOWN */
+		if (usage->code == 0 && !test_bit(EV_BTN, input->evbit))
 			return;
 		break;
 
@@ -1723,10 +1724,19 @@ void hidinput_hid_event(struct hid_device *hid, struct hid_field *field, struct 
 	    value == field->value[usage->usage_index])
 		return;
 
-	/* report the usage code as scancode if the key status has changed */
-	if (usage->type == EV_KEY &&
-	    (!test_bit(usage->code, input->key)) == value)
-		input_event(input, EV_MSC, MSC_SCAN, usage->hid);
+
+	if (usage->type == EV_KEY) {
+		/* Send out EV_BTN with button number (starts at 1) */
+		if (test_bit(EV_BTN, input->evbit))
+			input_event(input, EV_BTN, usage->hid & HID_USAGE, value);
+
+		if (usage->code == 0)
+			return;
+
+		/* report usage code as scancode if the status has changed */
+		if ((!test_bit(usage->code, input->key)) == value)
+			input_event(input, EV_MSC, MSC_SCAN, usage->hid);
+	}
 
 	input_event(input, usage->type, usage->code, value);
 
