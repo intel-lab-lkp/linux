@@ -1134,6 +1134,11 @@ static long evdev_do_ioctl(struct file *file, unsigned int cmd,
 
 	case EVIOCSKEYCODE_V2:
 		return evdev_handle_set_keycode_v2(dev, p);
+
+	case EVIOCGBTNCNT:
+		if (copy_to_user(p, &dev->button_count, sizeof(unsigned int)))
+			return -EFAULT;
+		return 0;
 	}
 
 	size = _IOC_SIZE(cmd);
