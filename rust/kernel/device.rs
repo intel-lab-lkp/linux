@@ -325,6 +325,41 @@ impl Device<Bound> {
         // - We've just checked that the type of the driver's private data is in fact `T`.
         Ok(unsafe { self.drvdata_unchecked() })
     }
+
+    /// Initialize device wakeup capability.
+    ///
+    /// Marks the device as wakeup-capable and enables wakeup. The wakeup capability is
+    /// automatically disabled when the device is removed (resource-managed).
+    ///
+    /// Returns `Ok(())` on success, or an error code on failure.
+    pub fn init_wakeup(&self) -> Result {
+        // SAFETY: `self.as_raw()` is a valid pointer to a `struct device`.
+        // The function is exported from bindings_helper module via pub use.
+        let ret = unsafe { bindings::devm_device_init_wakeup(self.as_raw()) };
+        if ret != 0 {
+            return Err(Error::from_errno(ret));
+        }
+        Ok(())
+    }
+
+    /// Set a device interrupt as a wake IRQ.
+    ///
+    /// Attaches the interrupt `irq` as a wake IRQ for this device. The wake IRQ is
+    /// automatically configured for wake-up from suspend. Must be called after
+    /// [`Device::init_wakeup`].
+    ///
+    /// Returns `Ok(())` on success, or an error code on failure.
+    pub fn set_wake_irq(&self, irq: i32) -> Result {
+        if irq < 0 {
+            return Err(crate::error::code::EINVAL);
+        }
+        // SAFETY: `self.as_raw()` is a valid pointer to a `struct device`.
+        let ret = unsafe { bindings::dev_pm_set_wake_irq(self.as_raw(), irq) };
+        if ret != 0 {
+            return Err(Error::from_errno(ret));
+        }
+        Ok(())
+    }
 }
 
 impl<Ctx: DeviceContext> Device<Ctx> {
