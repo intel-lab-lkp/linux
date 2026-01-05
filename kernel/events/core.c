@@ -7279,7 +7279,8 @@ static int perf_mmap_rb(struct vm_area_struct *vma, struct perf_event *event,
 			 * multiple times.
 			 */
 			perf_mmap_account(vma, user_extra, extra);
-			refcount_inc(&event->mmap_count);
+			if (!refcount_inc_not_zero(&event->mmap_count))
+				refcount_set(&event->mmap_count, 1);
 			return 0;
 		}
 
