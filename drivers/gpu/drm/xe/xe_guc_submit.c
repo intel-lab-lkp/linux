@@ -2312,10 +2312,10 @@ static int guc_exec_queue_suspend(struct xe_exec_queue *q)
 	if (exec_queue_killed_or_banned_or_wedged(q))
 		return -EINVAL;
 
-	xe_sched_msg_lock(sched);
-	if (guc_exec_queue_try_add_msg(q, msg, SUSPEND))
-		q->guc->suspend_pending = true;
-	xe_sched_msg_unlock(sched);
+	xe_sched_msg_scoped_guard(sched) {
+		if (guc_exec_queue_try_add_msg(q, msg, SUSPEND))
+			q->guc->suspend_pending = true;
+	}
 
 	return 0;
 }
@@ -2371,9 +2371,8 @@ static void guc_exec_queue_resume(struct xe_exec_queue *q)
 
 	xe_gt_assert(guc_to_gt(guc), !q->guc->suspend_pending);
 
-	xe_sched_msg_lock(sched);
-	guc_exec_queue_try_add_msg(q, msg, RESUME);
-	xe_sched_msg_unlock(sched);
+	xe_sched_msg_scoped_guard(sched)
+		guc_exec_queue_try_add_msg(q, msg, RESUME);
 }
 
 static bool guc_exec_queue_reset_status(struct xe_exec_queue *q)
@@ -2793,9 +2792,8 @@ static void guc_exec_queue_replay_pending_state_change(struct xe_exec_queue *q)
 	if (q->guc->needs_suspend) {
 		msg = q->guc->static_msgs + STATIC_MSG_SUSPEND;
 
-		xe_sched_msg_lock(sched);
-		guc_exec_queue_try_add_msg_head(q, msg, SUSPEND);
-		xe_sched_msg_unlock(sched);
+		xe_sched_msg_scoped_guard(sched)
+			guc_exec_queue_try_add_msg_head(q, msg, SUSPEND);
 
 		q->guc->needs_suspend = false;
 	}
@@ -2808,9 +2806,8 @@ static void guc_exec_queue_replay_pending_state_change(struct xe_exec_queue *q)
 	if (q->guc->needs_resume) {
 		msg = q->guc->static_msgs + STATIC_MSG_RESUME;
 
-		xe_sched_msg_lock(sched);
-		guc_exec_queue_try_add_msg_head(q, msg, RESUME);
-		xe_sched_msg_unlock(sched);
+		xe_sched_msg_scoped_guard(sched)
+			guc_exec_queue_try_add_msg_head(q, msg, RESUME);
 
 		q->guc->needs_resume = false;
 	}
