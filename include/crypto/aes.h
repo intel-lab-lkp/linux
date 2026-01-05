@@ -295,22 +295,6 @@ int aes_preparekey(struct aes_key *key, const u8 *in_key, size_t key_len);
 int aes_prepareenckey(struct aes_enckey *enc_key,
 		      const u8 *in_key, size_t key_len);
 
-/**
- * aes_encrypt - Encrypt a single AES block
- * @ctx:	Context struct containing the key schedule
- * @out:	Buffer to store the ciphertext
- * @in:		Buffer containing the plaintext
- */
-void aes_encrypt(const struct crypto_aes_ctx *ctx, u8 *out, const u8 *in);
-
-/**
- * aes_decrypt - Decrypt a single AES block
- * @ctx:	Context struct containing the key schedule
- * @out:	Buffer to store the plaintext
- * @in:		Buffer containing the ciphertext
- */
-void aes_decrypt(const struct crypto_aes_ctx *ctx, u8 *out, const u8 *in);
-
 typedef union {
 	const struct aes_enckey *enc_key;
 	const struct aes_key *full_key;
