@@ -2918,7 +2918,6 @@ static void raid5_error(struct mddev *mddev, struct md_rdev *rdev)
 
 	if (has_failed(conf)) {
 		set_bit(MD_BROKEN, &conf->mddev->flags);
-		conf->recovery_disabled = mddev->recovery_disabled;
 
 		pr_crit("md/raid:%s: Cannot continue operation (%d/%d failed).\n",
 			mdname(mddev), mddev->degraded, conf->raid_disks);
@@ -3723,10 +3722,8 @@ handle_failed_sync(struct r5conf *conf, struct stripe_head *sh,
 	}
 	md_done_sync(conf->mddev, RAID5_STRIPE_SECTORS(conf));
 
-	if (abort) {
-		conf->recovery_disabled = conf->mddev->recovery_disabled;
+	if (abort)
 		md_sync_error(conf->mddev);
-	}
 }
 
 static int want_replace(struct stripe_head *sh, int disk_idx)
@@ -7534,8 +7531,6 @@ static struct r5conf *setup_conf(struct mddev *mddev)
 	}
 
 	conf->bypass_threshold = BYPASS_THRESHOLD;
-	conf->recovery_disabled = mddev->recovery_disabled - 1;
-
 	conf->raid_disks = mddev->raid_disks;
 	if (mddev->reshape_position == MaxSector)
 		conf->previous_raid_disks = mddev->raid_disks;
@@ -8209,7 +8204,6 @@ static int raid5_remove_disk(struct mddev *mddev, struct md_rdev *rdev)
 	 * isn't possible.
 	 */
 	if (!test_bit(Faulty, &rdev->flags) &&
-	    mddev->recovery_disabled != conf->recovery_disabled &&
 	    !has_failed(conf) &&
 	    (!p->replacement || p->replacement == rdev) &&
 	    number < conf->raid_disks) {
@@ -8270,8 +8264,6 @@ static int raid5_add_disk(struct mddev *mddev, struct md_rdev *rdev)
 
 		return 0;
 	}
-	if (mddev->recovery_disabled == conf->recovery_disabled)
-		return -EBUSY;
 
 	if (rdev->saved_raid_disk < 0 && has_failed(conf))
 		/* no point adding a device */
