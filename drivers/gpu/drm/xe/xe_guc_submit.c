@@ -2277,14 +2277,19 @@ static bool guc_exec_queue_try_add_msg(struct xe_exec_queue *q,
 	return true;
 }
 
-#define STATIC_MSG_CLEANUP		0
-#define STATIC_MSG_SUSPEND		1
-#define STATIC_MSG_RESUME		2
-#define STATIC_MSG_SET_DEADLINE_STATE	3
+enum {
+	STATIC_MSG_CLEANUP = 0,
+	STATIC_MSG_SUSPEND,
+	STATIC_MSG_RESUME,
+	STATIC_MSG_SET_DEADLINE_STATE,
+	STATIC_MSG_COUNT,
+};
 
 static void guc_exec_queue_destroy(struct xe_exec_queue *q)
 {
 	struct xe_sched_msg *msg = q->guc->static_msgs + STATIC_MSG_CLEANUP;
+
+	BUILD_BUG_ON(STATIC_MSG_COUNT != MAX_STATIC_MSG_TYPE);
 
 	if (!(q->flags & EXEC_QUEUE_FLAG_PERMANENT) && !exec_queue_wedged(q))
 		guc_exec_queue_add_msg(q, msg, CLEANUP);
