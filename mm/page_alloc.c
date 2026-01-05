@@ -91,6 +91,9 @@ typedef int __bitwise fpi_t;
 /* Free the page without taking locks. Rely on trylock only. */
 #define FPI_TRYLOCK		((__force fpi_t)BIT(2))
 
+/* free_pages_prepare() has already been called for page(s) being freed. */
+#define FPI_PREPARED		((__force fpi_t)BIT(3))
+
 /* prevent >1 _updater_ of zone percpu pageset ->high and ->batch fields */
 static DEFINE_MUTEX(pcp_batch_high_lock);
 #define MIN_PERCPU_PAGELIST_HIGH_FRACTION (8)
@@ -1579,8 +1582,12 @@ static void __free_pages_ok(struct page *page, unsigned int order,
 	unsigned long pfn = page_to_pfn(page);
 	struct zone *zone = page_zone(page);
 
-	if (free_pages_prepare(page, order))
-		free_one_page(zone, page, pfn, order, fpi_flags);
+	if (!(fpi_flags & FPI_PREPARED)) {
+		if (!free_pages_prepare(page, order))
+			return;
+	}
+
+	free_one_page(zone, page, pfn, order, fpi_flags);
 }
 
 void __meminit __free_pages_core(struct page *page, unsigned int order,
@@ -2940,8 +2947,10 @@ static void __free_frozen_pages(struct page *page, unsigned int order,
 		return;
 	}
 
-	if (!free_pages_prepare(page, order))
-		return;
+	if (!(fpi_flags & FPI_PREPARED)) {
+		if (!free_pages_prepare(page, order))
+			return;
+	}
 
 	/*
 	 * We only track unmovable, reclaimable and movable on pcp lists.
@@ -7174,9 +7183,99 @@ struct page *alloc_contig_pages_noprof(unsigned long nr_pages, gfp_t gfp_mask,
 }
 #endif /* CONFIG_CONTIG_ALLOC */
 
+static void free_prepared_contig_range(struct page *page,
+				       unsigned long nr_pages)
+{
+	while (nr_pages) {
+		unsigned int fit_order, align_order, order;
+		unsigned long pfn;
+
+		/*
+		 * Find the largest aligned power-of-2 number of pages that
+		 * starts at the current page, does not exceed nr_pages and is
+		 * less than or equal to pageblock_order.
+		 */
+		pfn = page_to_pfn(page);
+		fit_order = ilog2(nr_pages);
+		align_order = pfn ? __ffs(pfn) : fit_order;
+		order = min3(fit_order, align_order, pageblock_order);
+
+		/*
+		 * Free the chunk as a single block. Our caller has already
+		 * called free_pages_prepare() for each order-0 page.
+		 */
+		__free_frozen_pages(page, order, FPI_PREPARED);
+
+		page += 1UL << order;
+		nr_pages -= 1UL << order;
+	}
+}
+
+/**
+ * __free_contig_range - Free contiguous range of order-0 pages.
+ * @pfn: Page frame number of the first page in the range.
+ * @nr_pages: Number of pages to free.
+ *
+ * For each order-0 struct page in the physically contiguous range, put a
+ * reference. Free any page who's reference count falls to zero. The
+ * implementation is functionally equivalent to, but significantly faster than
+ * calling __free_page() for each struct page in a loop.
+ *
+ * Memory allocated with alloc_pages(order>=1) then subsequently split to
+ * order-0 with split_page() is an example of appropriate contiguous pages that
+ * can be freed with this API.
+ *
+ * Returns the number of pages which were not freed, because their reference
+ * count did not fall to zero.
+ *
+ * Context: May be called in interrupt context or while holding a normal
+ * spinlock, but not in NMI context or while holding a raw spinlock.
+ */
+unsigned long __free_contig_range(unsigned long pfn, unsigned long nr_pages)
+{
+	struct page *page = pfn_to_page(pfn);
+	unsigned long not_freed = 0;
+	struct page *start = NULL;
+	unsigned long i;
+	bool can_free;
+
+	/*
+	 * Chunk the range into contiguous runs of pages for which the refcount
+	 * went to zero and for which free_pages_prepare() succeeded. If
+	 * free_pages_prepare() fails we consider the page to have been freed
+	 * deliberately leak it.
+	 *
+	 * Code assumes contiguous PFNs have contiguous struct pages, but not
+	 * vice versa.
+	 */
+	for (i = 0; i < nr_pages; i++, page++) {
+		VM_BUG_ON_PAGE(PageHead(page), page);
+		VM_BUG_ON_PAGE(PageTail(page), page);
+
+		can_free = put_page_testzero(page);
+		if (!can_free)
+			not_freed++;
+		else if (!free_pages_prepare(page, 0))
+			can_free = false;
+
+		if (!can_free && start) {
+			free_prepared_contig_range(start, page - start);
+			start = NULL;
+		} else if (can_free && !start) {
+			start = page;
+		}
+	}
+
+	if (start)
+		free_prepared_contig_range(start, page - start);
+
+	return not_freed;
+}
+EXPORT_SYMBOL(__free_contig_range);
+
 void free_contig_range(unsigned long pfn, unsigned long nr_pages)
 {
-	unsigned long count = 0;
+	unsigned long count;
 	struct folio *folio = pfn_folio(pfn);
 
 	if (folio_test_large(folio)) {
@@ -7190,12 +7289,7 @@ void free_contig_range(unsigned long pfn, unsigned long nr_pages)
 		return;
 	}
 
-	for (; nr_pages--; pfn++) {
-		struct page *page = pfn_to_page(pfn);
-
-		count += page_count(page) != 1;
-		__free_page(page);
-	}
+	count = __free_contig_range(pfn, nr_pages);
 	WARN(count != 0, "%lu pages are still in use!\n", count);
 }
 EXPORT_SYMBOL(free_contig_range);
