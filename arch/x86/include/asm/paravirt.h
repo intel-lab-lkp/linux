@@ -151,7 +151,7 @@ static inline void write_cr0(unsigned long x)
 static __always_inline unsigned long read_cr2(void)
 {
 	return PVOP_ALT_CALLEE0(unsigned long, mmu.read_cr2,
-				"mov %%cr2, %%rax;", ALT_NOT_XEN);
+				"mov %%cr2, %%rax", ALT_NOT_XEN);
 }
 
 static __always_inline void write_cr2(unsigned long x)
@@ -162,7 +162,7 @@ static __always_inline void write_cr2(unsigned long x)
 static inline unsigned long __read_cr3(void)
 {
 	return PVOP_ALT_CALL0(unsigned long, mmu.read_cr3,
-			      "mov %%cr3, %%rax;", ALT_NOT_XEN);
+			      "mov %%cr3, %%rax", ALT_NOT_XEN);
 }
 
 static inline void write_cr3(unsigned long x)
@@ -560,7 +560,7 @@ static __always_inline void pv_queued_spin_lock_slowpath(struct qspinlock *lock,
 static __always_inline void pv_queued_spin_unlock(struct qspinlock *lock)
 {
 	PVOP_ALT_VCALLEE1(lock.queued_spin_unlock, lock,
-			  "movb $0, (%%" _ASM_ARG1 ");",
+			  "movb $0, (%%" _ASM_ARG1 ")",
 			  ALT_NOT(X86_FEATURE_PVUNLOCK));
 }
 
@@ -577,7 +577,7 @@ static __always_inline void pv_kick(int cpu)
 static __always_inline bool pv_vcpu_is_preempted(long cpu)
 {
 	return PVOP_ALT_CALLEE1(bool, lock.vcpu_is_preempted, cpu,
-				"xor %%" _ASM_AX ", %%" _ASM_AX ";",
+				"xor %%" _ASM_AX ", %%" _ASM_AX,
 				ALT_NOT(X86_FEATURE_VCPUPREEMPT));
 }
 
@@ -657,18 +657,18 @@ bool __raw_callee_save___native_vcpu_is_preempted(long cpu);
 #ifdef CONFIG_PARAVIRT_XXL
 static __always_inline unsigned long arch_local_save_flags(void)
 {
-	return PVOP_ALT_CALLEE0(unsigned long, irq.save_fl, "pushf; pop %%rax;",
+	return PVOP_ALT_CALLEE0(unsigned long, irq.save_fl, "pushf; pop %%rax",
 				ALT_NOT_XEN);
 }
 
 static __always_inline void arch_local_irq_disable(void)
 {
-	PVOP_ALT_VCALLEE0(irq.irq_disable, "cli;", ALT_NOT_XEN);
+	PVOP_ALT_VCALLEE0(irq.irq_disable, "cli", ALT_NOT_XEN);
 }
 
 static __always_inline void arch_local_irq_enable(void)
 {
-	PVOP_ALT_VCALLEE0(irq.irq_enable, "sti;", ALT_NOT_XEN);
+	PVOP_ALT_VCALLEE0(irq.irq_enable, "sti", ALT_NOT_XEN);
 }
 
 static __always_inline unsigned long arch_local_irq_save(void)
@@ -713,9 +713,9 @@ void native_pv_lock_init(void) __init;
 	call PARA_INDIRECT(pv_ops+PV_IRQ_save_fl);
 .endm
 
-#define SAVE_FLAGS ALTERNATIVE_2 "PARA_IRQ_save_fl;",			\
-				 "ALT_CALL_INSTR;", ALT_CALL_ALWAYS,	\
-				 "pushf; pop %rax;", ALT_NOT_XEN
+#define SAVE_FLAGS ALTERNATIVE_2 "PARA_IRQ_save_fl",			\
+				 "ALT_CALL_INSTR", ALT_CALL_ALWAYS,	\
+				 "pushf; pop %rax", ALT_NOT_XEN
 #endif
 #endif /* CONFIG_PARAVIRT_XXL */
 #endif	/* CONFIG_X86_64 */
