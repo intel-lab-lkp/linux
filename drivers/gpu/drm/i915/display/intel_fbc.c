@@ -913,6 +913,15 @@ static void intel_fbc_program_cfb(struct intel_fbc *fbc)
 	fbc->funcs->program_cfb(fbc);
 }
 
+static void fbc_slb_invalidation_wa(struct intel_fbc *fbc,
+				    bool force_invalidation)
+{
+	u32 set = force_invalidation ? DPFC_CHICKEN_FORCE_SLB_INVALIDATION : 0;
+	u32 clear = force_invalidation ? 0 : DPFC_CHICKEN_FORCE_SLB_INVALIDATION;
+
+	intel_de_rmw(fbc->display, ILK_DPFC_CHICKEN(fbc->id), clear, set);
+}
+
 static void intel_fbc_program_workarounds(struct intel_fbc *fbc)
 {
 	struct intel_display *display = fbc->display;
@@ -944,10 +953,13 @@ static void intel_fbc_program_workarounds(struct intel_fbc *fbc)
 	 * Wa_22014263786
 	 * Fixes: Screen flicker with FBC and Package C state enabled
 	 * Workaround: Forced SLB invalidation before start of new frame.
+	 *             For DG2, wa is applied only if the number of planes in
+	 *             PIPE A and PIPE B is > 1. This wa criteria is assessed
+	 *             seprately on every post plane update call to check if
+	 *             the number of active planes condition is met.
 	 */
-	if (intel_display_wa(display, 22014263786))
-		intel_de_rmw(display, ILK_DPFC_CHICKEN(fbc->id),
-			     0, DPFC_CHICKEN_FORCE_SLB_INVALIDATION);
+	if (intel_display_wa(display, 22014263786) && !display->platform.dg2)
+		fbc_slb_invalidation_wa(fbc, true);
 
 	/* wa_18038517565 Disable DPFC clock gating before FBC enable */
 	if (display->platform.dg2 || DISPLAY_VER(display) >= 14)
@@ -1888,12 +1900,56 @@ static void __intel_fbc_post_update(struct intel_fbc *fbc)
 	intel_fbc_activate(fbc);
 }
 
+static void
+dg2_fbc_update_slb_invalidation(const struct intel_atomic_state *state)
+{
+	struct intel_display *display = to_intel_display(state);
+	int i, num_active_planes = 0;
+	struct intel_crtc_state *crtc_state;
+	struct intel_crtc *crtc;
+	enum intel_fbc_id fbc_id;
+
+	for_each_new_intel_crtc_in_state(state, crtc, crtc_state, i) {
+		u8 active_planes;
+
+		if (crtc->pipe != PIPE_A && crtc->pipe != PIPE_B)
+			continue;
+
+		active_planes = crtc_state->active_planes & ~BIT(PLANE_CURSOR);
+		num_active_planes += hweight8(active_planes);
+	}
+
+	for_each_fbc_id(display, fbc_id) {
+		struct intel_fbc *fbc = display->fbc.instances[fbc_id];
+
+		mutex_lock(&fbc->lock);
+
+		if (fbc->state.plane)
+			fbc_slb_invalidation_wa(fbc, num_active_planes > 1);
+
+		mutex_unlock(&fbc->lock);
+	}
+}
+
 void intel_fbc_post_update(struct intel_atomic_state *state,
 			   struct intel_crtc *crtc)
 {
+	struct intel_display *display = to_intel_display(state);
 	const struct intel_plane_state __maybe_unused *plane_state;
 	struct intel_plane *plane;
 	int i;
+
+	/*
+	 * Wa_22014263786
+	 * Fixes: Screen flicker with FBC and Package C state enabled
+	 * Workaround: Forced SLB invalidation before start of new frame.
+	 *             For DG2, wa is applied only if the number of planes in
+	 *             PIPE A and PIPE B is > 1. This wa criteria is assessed
+	 *             seprately on every post plane update call to check if
+	 *             the number of active planes condition is met.
+	 */
+	if (display->platform.dg2)
+		dg2_fbc_update_slb_invalidation(state);
 
 	for_each_new_intel_plane_in_state(state, plane, plane_state, i) {
 		struct intel_fbc *fbc = plane->fbc;
