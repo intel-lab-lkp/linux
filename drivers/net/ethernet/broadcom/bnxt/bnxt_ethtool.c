@@ -3432,6 +3432,26 @@ static u32 bnxt_get_link(struct net_device *dev)
 	return BNXT_LINK_IS_UP(bp);
 }
 
+static int bnxt_get_link_ext_state(struct net_device *dev,
+				   struct ethtool_link_ext_state_info *info)
+{
+	struct bnxt *bp = netdev_priv(dev);
+	u8 reason;
+
+	if (BNXT_LINK_IS_UP(bp))
+		return -ENODATA;
+
+	reason = bp->link_info.link_down_reason;
+	if (reason & PORT_PHY_QCFG_RESP_LINK_DOWN_REASON_CABLE_REMOVED) {
+		info->link_ext_state = ETHTOOL_LINK_EXT_STATE_NO_CABLE;
+		return 0;
+	} else if (reason & PORT_PHY_QCFG_RESP_LINK_DOWN_REASON_MODULE_FAULT) {
+		info->link_ext_state = ETHTOOL_LINK_EXT_STATE_MODULE;
+		return 0;
+	}
+	return -ENODATA;
+}
+
 int bnxt_hwrm_nvm_get_dev_info(struct bnxt *bp,
 			       struct hwrm_nvm_get_dev_info_output *nvm_dev_info)
 {
@@ -5711,6 +5731,7 @@ const struct ethtool_ops bnxt_ethtool_ops = {
 	.get_eeprom             = bnxt_get_eeprom,
 	.set_eeprom		= bnxt_set_eeprom,
 	.get_link		= bnxt_get_link,
+	.get_link_ext_state	= bnxt_get_link_ext_state,
 	.get_link_ext_stats	= bnxt_get_link_ext_stats,
 	.get_eee		= bnxt_get_eee,
 	.set_eee		= bnxt_set_eee,
