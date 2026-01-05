@@ -2071,12 +2071,16 @@ __guc_exec_queue_process_msg_set_deadline_state(struct xe_sched_msg *msg,
 	struct xe_guc *guc = exec_queue_to_guc(q);
 	enum xe_deadline_mgr_state state;
 
-	if (opcode == EXIT_DEADLINE)
+	if (opcode == EXIT_DEADLINE) {
 		state = XE_DEADLINE_MGR_STATE_NO_BOOST;
-	else if (opcode == ENTER_DEADLINE_FREQ)
+		trace_xe_exec_queue_exit_deadline(q);
+	} else if (opcode == ENTER_DEADLINE_FREQ) {
 		state = XE_DEADLINE_MGR_STATE_FREQ_BOOST;
-	else
+		trace_xe_exec_queue_enter_deadline_freq(q);
+	} else {
 		state = XE_DEADLINE_MGR_STATE_PRIO_BOOST;
+		trace_xe_exec_queue_enter_deadline_prio(q);
+	}
 
 	if (guc_exec_queue_allowed_to_change_state(q))
 		deadline_policies(guc, q, state);

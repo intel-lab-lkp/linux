@@ -69,8 +69,10 @@ static bool __xe_deadline_mgr_enter_deadline(struct xe_deadline_mgr *mgr,
 	lockdep_assert_held(&mgr->lock);
 
 	if (XE_DEADLINE_EXIT_DELAY_MS &&
-	    mgr->state != XE_DEADLINE_MGR_STATE_NO_BOOST)
+	    mgr->state != XE_DEADLINE_MGR_STATE_NO_BOOST) {
 		cancel_delayed_work(&mgr->exit_delay);
+		trace_xe_exec_queue_cancel_deadline_exit(mgr->q);
+	}
 
 	if (mgr->state != state && !__xe_deadline_mgr_deadline_signaled(mgr)) {
 		mgr->state = state;

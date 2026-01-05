@@ -233,6 +233,26 @@ DEFINE_EVENT(xe_exec_queue, xe_exec_queue_lr_cleanup,
 	     TP_ARGS(q)
 );
 
+DEFINE_EVENT(xe_exec_queue, xe_exec_queue_enter_deadline_freq,
+	     TP_PROTO(struct xe_exec_queue *q),
+	     TP_ARGS(q)
+);
+
+DEFINE_EVENT(xe_exec_queue, xe_exec_queue_enter_deadline_prio,
+	     TP_PROTO(struct xe_exec_queue *q),
+	     TP_ARGS(q)
+);
+
+DEFINE_EVENT(xe_exec_queue, xe_exec_queue_exit_deadline,
+	     TP_PROTO(struct xe_exec_queue *q),
+	     TP_ARGS(q)
+);
+
+DEFINE_EVENT(xe_exec_queue, xe_exec_queue_cancel_deadline_exit,
+	     TP_PROTO(struct xe_exec_queue *q),
+	     TP_ARGS(q)
+);
+
 DECLARE_EVENT_CLASS(xe_sched_job,
 		    TP_PROTO(struct xe_sched_job *job),
 		    TP_ARGS(job),
