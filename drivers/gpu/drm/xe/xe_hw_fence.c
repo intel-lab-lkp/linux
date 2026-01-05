@@ -66,6 +66,7 @@ static void hw_fence_irq_run_cb(struct irq_work *work)
 			if (dma_fence_is_signaled_locked(dma_fence)) {
 				trace_xe_hw_fence_signal(fence);
 				list_del_init(&fence->irq_link);
+				fence->q = NULL;
 				dma_fence_put(dma_fence);
 			}
 		}
@@ -93,6 +94,7 @@ void xe_hw_fence_irq_finish(struct xe_hw_fence_irq *irq)
 		spin_lock_irqsave(&irq->lock, flags);
 		list_for_each_entry_safe(fence, next, &irq->pending, irq_link) {
 			list_del_init(&fence->irq_link);
+			fence->q = NULL;
 			XE_WARN_ON(dma_fence_check_and_signal_locked(&fence->dma));
 			dma_fence_put(&fence->dma);
 		}
@@ -197,12 +199,23 @@ static void xe_hw_fence_release(struct dma_fence *dma_fence)
 	call_rcu(&dma_fence->rcu, fence_free);
 }
 
+static void xe_hw_fence_set_deadline(struct dma_fence *dma_fence,
+				     ktime_t deadline)
+{
+	struct xe_hw_fence *fence = to_xe_hw_fence(dma_fence);
+
+	guard(spinlock_irqsave)(dma_fence->lock);
+	if (fence->q)
+		fence->q->ops->set_deadline(fence->q, dma_fence, deadline);
+}
+
 static const struct dma_fence_ops xe_hw_fence_ops = {
 	.get_driver_name = xe_hw_fence_get_driver_name,
 	.get_timeline_name = xe_hw_fence_get_timeline_name,
 	.enable_signaling = xe_hw_fence_enable_signaling,
 	.signaled = xe_hw_fence_signaled,
 	.release = xe_hw_fence_release,
+	.set_deadline = xe_hw_fence_set_deadline,
 };
 
 /**
