@@ -6682,7 +6682,6 @@ qlt_alloc_qfull_cmd(struct scsi_qla_host *vha,
 	cmd->tgt = vha->vha_tgt.qla_tgt;
 	cmd->vha = vha;
 	cmd->reset_count = ha->base_qpair->chip_reset;
-	cmd->q_full = 1;
 	cmd->qpair = ha->base_qpair;
 	cmd->cdb = &cmd->atio.u.isp24.fcp_cmnd.cdb[0];
 	cmd->cdb_len = 16;
@@ -6691,8 +6690,10 @@ qlt_alloc_qfull_cmd(struct scsi_qla_host *vha,
 		cmd->q_full = 1;
 		/* NOTE: borrowing the state field to carry the status */
 		cmd->state = status;
-	} else
+	} else {
+		cmd->q_full = 0;
 		cmd->term_exchg = 1;
+	}
 
 	spin_lock_irqsave(&vha->hw->tgt.q_full_lock, flags);
 	list_add_tail(&cmd->cmd_list, &vha->hw->tgt.q_full_list);
