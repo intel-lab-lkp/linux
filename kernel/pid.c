@@ -329,9 +329,9 @@ EXPORT_SYMBOL_GPL(find_vpid);
 
 static struct pid **task_pid_ptr(struct task_struct *task, enum pid_type type)
 {
-	return (type == PIDTYPE_PID) ?
-		&task->thread_pid :
-		&task->signal->pids[type];
+	if (type == PIDTYPE_PID)
+		return &task->thread_pid;
+	return task->signal ? &task->signal->pids[type] : NULL;
 }
 
 /*
