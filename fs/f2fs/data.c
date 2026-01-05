@@ -2446,7 +2446,7 @@ next_folio:
 	if (!folio)
 		goto out;
 
-	folio_in_bio = false
+	folio_in_bio = false;
 	index = folio->index;
 	offset = 0;
 	ffs = NULL;
@@ -2483,6 +2483,8 @@ got_it:
 				ret = -EIO;
 				goto err_out;
 			}
+			index++;
+			offset++;
 			continue;
 		} else if((map.m_flags & F2FS_MAP_MAPPED)) {
 			block_nr = map.m_pblk + index - map.m_lblk;
