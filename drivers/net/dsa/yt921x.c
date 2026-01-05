@@ -39,60 +39,55 @@ struct yt921x_mib_desc {
  * to perform 32bit MIB overflow wraparound.
  */
 static const struct yt921x_mib_desc yt921x_mib_descs[] = {
-	MIB_DESC(1, 0x00, NULL),	/* RxBroadcast */
-	MIB_DESC(1, 0x04, NULL),	/* RxPause */
-	MIB_DESC(1, 0x08, NULL),	/* RxMulticast */
-	MIB_DESC(1, 0x0c, NULL),	/* RxCrcErr */
+	MIB_DESC(1, YT921X_MIB_DATA_RX_BROADCAST, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_RX_PAUSE, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_RX_MULTICAST, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_RX_CRC_ERR, NULL),
 
-	MIB_DESC(1, 0x10, NULL),	/* RxAlignErr */
-	MIB_DESC(1, 0x14, NULL),	/* RxUnderSizeErr */
-	MIB_DESC(1, 0x18, NULL),	/* RxFragErr */
-	MIB_DESC(1, 0x1c, NULL),	/* RxPktSz64 */
+	MIB_DESC(1, YT921X_MIB_DATA_RX_ALIGN_ERR, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_RX_UNDERSIZE_ERR, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_RX_FRAG_ERR, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_RX_PKT_SZ_64, NULL),
 
-	MIB_DESC(1, 0x20, NULL),	/* RxPktSz65To127 */
-	MIB_DESC(1, 0x24, NULL),	/* RxPktSz128To255 */
-	MIB_DESC(1, 0x28, NULL),	/* RxPktSz256To511 */
-	MIB_DESC(1, 0x2c, NULL),	/* RxPktSz512To1023 */
+	MIB_DESC(1, YT921X_MIB_DATA_RX_PKT_SZ_65_TO_127, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_RX_PKT_SZ_128_TO_255, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_RX_PKT_SZ_256_TO_511, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_RX_PKT_SZ_512_TO_1023, NULL),
 
-	MIB_DESC(1, 0x30, NULL),	/* RxPktSz1024To1518 */
-	MIB_DESC(1, 0x34, NULL),	/* RxPktSz1519ToMax */
-	MIB_DESC(2, 0x38, NULL),	/* RxGoodBytes */
-	/* 0x3c */
+	MIB_DESC(1, YT921X_MIB_DATA_RX_PKT_SZ_1024_TO_1518, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_RX_PKT_SZ_1519_TO_MAX, NULL),
+	MIB_DESC(2, YT921X_MIB_DATA_RX_GOOD_BYTES, NULL),
 
-	MIB_DESC(2, 0x40, "RxBadBytes"),
-	/* 0x44 */
-	MIB_DESC(2, 0x48, NULL),	/* RxOverSzErr */
-	/* 0x4c */
+	MIB_DESC(2, YT921X_MIB_DATA_RX_BAD_BYTES, "RxBadBytes"),
+	MIB_DESC(1, YT921X_MIB_DATA_RX_OVERSIZE_ERR, NULL),
 
-	MIB_DESC(1, 0x50, NULL),	/* RxDropped */
-	MIB_DESC(1, 0x54, NULL),	/* TxBroadcast */
-	MIB_DESC(1, 0x58, NULL),	/* TxPause */
-	MIB_DESC(1, 0x5c, NULL),	/* TxMulticast */
+	MIB_DESC(1, YT921X_MIB_DATA_RX_DROPPED, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_TX_BROADCAST, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_TX_PAUSE, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_TX_MULTICAST, NULL),
 
-	MIB_DESC(1, 0x60, NULL),	/* TxUnderSizeErr */
-	MIB_DESC(1, 0x64, NULL),	/* TxPktSz64 */
-	MIB_DESC(1, 0x68, NULL),	/* TxPktSz65To127 */
-	MIB_DESC(1, 0x6c, NULL),	/* TxPktSz128To255 */
+	MIB_DESC(1, YT921X_MIB_DATA_TX_UNDERSIZE_ERR, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_TX_PKT_SZ_64, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_TX_PKT_SZ_65_TO_127, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_TX_PKT_SZ_128_TO_255, NULL),
 
-	MIB_DESC(1, 0x70, NULL),	/* TxPktSz256To511 */
-	MIB_DESC(1, 0x74, NULL),	/* TxPktSz512To1023 */
-	MIB_DESC(1, 0x78, NULL),	/* TxPktSz1024To1518 */
-	MIB_DESC(1, 0x7c, NULL),	/* TxPktSz1519ToMax */
+	MIB_DESC(1, YT921X_MIB_DATA_TX_PKT_SZ_256_TO_511, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_TX_PKT_SZ_512_TO_1023, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_TX_PKT_SZ_1024_TO_1518, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_TX_PKT_SZ_1519_TO_MAX, NULL),
 
-	MIB_DESC(2, 0x80, NULL),	/* TxGoodBytes */
-	/* 0x84 */
-	MIB_DESC(2, 0x88, NULL),	/* TxCollision */
-	/* 0x8c */
+	MIB_DESC(2, YT921X_MIB_DATA_TX_GOOD_BYTES, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_TX_COLLISION, NULL),
 
-	MIB_DESC(1, 0x90, NULL),	/* TxExcessiveCollistion */
-	MIB_DESC(1, 0x94, NULL),	/* TxMultipleCollision */
-	MIB_DESC(1, 0x98, NULL),	/* TxSingleCollision */
-	MIB_DESC(1, 0x9c, NULL),	/* TxPkt */
+	MIB_DESC(1, YT921X_MIB_DATA_TX_EXCESSIVE_COLLISION, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_TX_MULTIPLE_COLLISION, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_TX_SINGLE_COLLISION, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_TX_PKT, NULL),
 
-	MIB_DESC(1, 0xa0, NULL),	/* TxDeferred */
-	MIB_DESC(1, 0xa4, NULL),	/* TxLateCollision */
-	MIB_DESC(1, 0xa8, "RxOAM"),
-	MIB_DESC(1, 0xac, "TxOAM"),
+	MIB_DESC(1, YT921X_MIB_DATA_TX_DEFERRED, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_TX_LATE_COLLISION, NULL),
+	MIB_DESC(1, YT921X_MIB_DATA_RX_OAM, "RxOAM"),
+	MIB_DESC(1, YT921X_MIB_DATA_TX_OAM, "TxOAM"),
 };
 
 struct yt921x_info {
@@ -705,7 +700,7 @@ static int yt921x_read_mib(struct yt921x_priv *priv, int port)
 			res = yt921x_reg_read(priv, reg + 4, &val1);
 			if (res)
 				break;
-			val = ((u64)val0 << 32) | val1;
+			val = ((u64)val1 << 32) | val0;
 		}
 
 		WRITE_ONCE(*valp, val);
@@ -2103,6 +2098,117 @@ yt921x_dsa_port_bridge_join(struct dsa_switch *ds, int port,
 	return res;
 }
 
+static int
+yt921x_dsa_port_mst_state_set(struct dsa_switch *ds, int port,
+			      const struct switchdev_mst_state *st)
+{
+	struct yt921x_priv *priv = to_yt921x_priv(ds);
+	u32 mask;
+	u32 ctrl;
+	int res;
+
+	mask = YT921X_STP_PORTn_M(port);
+	switch (st->state) {
+	case BR_STATE_DISABLED:
+		ctrl = YT921X_STP_PORTn_DISABLED(port);
+		break;
+	case BR_STATE_LISTENING:
+	case BR_STATE_LEARNING:
+		ctrl = YT921X_STP_PORTn_LEARNING(port);
+		break;
+	case BR_STATE_FORWARDING:
+	default:
+		ctrl = YT921X_STP_PORTn_FORWARD(port);
+		break;
+	case BR_STATE_BLOCKING:
+		ctrl = YT921X_STP_PORTn_BLOCKING(port);
+		break;
+	}
+
+	mutex_lock(&priv->reg_lock);
+	res = yt921x_reg_update_bits(priv, YT921X_STPn(st->msti), mask, ctrl);
+	mutex_unlock(&priv->reg_lock);
+
+	return res;
+}
+
+static int
+yt921x_dsa_vlan_msti_set(struct dsa_switch *ds, struct dsa_bridge bridge,
+			 const struct switchdev_vlan_msti *msti)
+{
+	struct yt921x_priv *priv = to_yt921x_priv(ds);
+	u64 mask64;
+	u64 ctrl64;
+	int res;
+
+	if (!msti->vid)
+		return -EINVAL;
+	if (!msti->msti || msti->msti >= YT921X_MSTI_NUM)
+		return -EINVAL;
+
+	mask64 = YT921X_VLAN_CTRL_STP_ID_M;
+	ctrl64 = YT921X_VLAN_CTRL_STP_ID(msti->msti);
+
+	mutex_lock(&priv->reg_lock);
+	res = yt921x_reg64_update_bits(priv, YT921X_VLANn_CTRL(msti->vid),
+				       mask64, ctrl64);
+	mutex_unlock(&priv->reg_lock);
+
+	return res;
+}
+
+static void
+yt921x_dsa_port_stp_state_set(struct dsa_switch *ds, int port, u8 state)
+{
+	struct yt921x_priv *priv = to_yt921x_priv(ds);
+	struct dsa_port *dp = dsa_to_port(ds, port);
+	struct device *dev = to_device(priv);
+	bool learning;
+	u32 mask;
+	u32 ctrl;
+	int res;
+
+	mask = YT921X_STP_PORTn_M(port);
+	learning = false;
+	switch (state) {
+	case BR_STATE_DISABLED:
+		ctrl = YT921X_STP_PORTn_DISABLED(port);
+		break;
+	case BR_STATE_LISTENING:
+		ctrl = YT921X_STP_PORTn_LEARNING(port);
+		break;
+	case BR_STATE_LEARNING:
+		ctrl = YT921X_STP_PORTn_LEARNING(port);
+		learning = dp->learning;
+		break;
+	case BR_STATE_FORWARDING:
+	default:
+		ctrl = YT921X_STP_PORTn_FORWARD(port);
+		learning = dp->learning;
+		break;
+	case BR_STATE_BLOCKING:
+		ctrl = YT921X_STP_PORTn_BLOCKING(port);
+		break;
+	}
+
+	mutex_lock(&priv->reg_lock);
+	do {
+		res = yt921x_reg_update_bits(priv, YT921X_STPn(0), mask, ctrl);
+		if (res)
+			break;
+
+		mask = YT921X_PORT_LEARN_DIS;
+		ctrl = !learning ? YT921X_PORT_LEARN_DIS : 0;
+		res = yt921x_reg_update_bits(priv, YT921X_PORTn_LEARN(port),
+					     mask, ctrl);
+	} while (0);
+	mutex_unlock(&priv->reg_lock);
+
+	if (res)
+		dev_err(dev, "Failed to %s port %d: %i\n", "set STP state for",
+			port, res);
+}
+
 static int yt921x_port_down(struct yt921x_priv *priv, int port)
 {
 	u32 mask;
@@ -2768,6 +2874,9 @@ static const struct dsa_switch_ops yt921x_dsa_switch_ops = {
 	/* mtu */
 	.port_change_mtu	= yt921x_dsa_port_change_mtu,
 	.port_max_mtu		= yt921x_dsa_port_max_mtu,
+	/* hsr */
+	.port_hsr_leave		= dsa_port_simple_hsr_leave,
+	.port_hsr_join		= dsa_port_simple_hsr_join,
 	/* mirror */
 	.port_mirror_del	= yt921x_dsa_port_mirror_del,
 	.port_mirror_add	= yt921x_dsa_port_mirror_add,
@@ -2788,6 +2897,10 @@ static const struct dsa_switch_ops yt921x_dsa_switch_ops = {
 	.port_bridge_flags	= yt921x_dsa_port_bridge_flags,
 	.port_bridge_leave	= yt921x_dsa_port_bridge_leave,
 	.port_bridge_join	= yt921x_dsa_port_bridge_join,
+	/* mst */
+	.port_mst_state_set	= yt921x_dsa_port_mst_state_set,
+	.vlan_msti_set		= yt921x_dsa_vlan_msti_set,
+	.port_stp_state_set	= yt921x_dsa_port_stp_state_set,
 	/* port */
 	.get_tag_protocol	= yt921x_dsa_get_tag_protocol,
 	.phylink_get_caps	= yt921x_dsa_phylink_get_caps,
@@ -2860,6 +2973,8 @@ static int yt921x_mdio_probe(struct mdio_device *mdiodev)
 	ds->assisted_learning_on_cpu_port = true;
 	ds->priv = priv;
 	ds->ops = &yt921x_dsa_switch_ops;
+	ds->ageing_time_min = 1 * 5000;
+	ds->ageing_time_max = U16_MAX * 5000;
 	ds->phylink_mac_ops = &yt921x_phylink_mac_ops;
 	ds->num_ports = YT921X_PORT_NUM;
 

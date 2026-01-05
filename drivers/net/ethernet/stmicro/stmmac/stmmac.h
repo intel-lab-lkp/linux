@@ -254,8 +254,8 @@ struct stmmac_priv {
 	int hwts_tx_en;
 	bool tx_path_in_lpi_mode;
 	bool tso;
-	int sph;
-	int sph_cap;
+	bool sph_active;
+	bool sph_capable;
 	u32 sarc_type;
 	u32 rx_riwt[MTL_MAX_RX_QUEUES];
 	int hwts_rx_en;
@@ -407,6 +407,8 @@ int stmmac_reinit_queues(struct net_device *dev, u32 rx_cnt, u32 tx_cnt);
 int stmmac_reinit_ringparam(struct net_device *dev, u32 rx_size, u32 tx_size);
 int stmmac_set_clk_tx_rate(void *bsp_priv, struct clk *clk_tx_i,
 			   phy_interface_t interface, int speed);
+
+struct plat_stmmacenet_data *stmmac_plat_dat_alloc(struct device *dev);
 
 static inline bool stmmac_xdp_is_enabled(struct stmmac_priv *priv)
 {

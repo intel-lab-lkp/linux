@@ -223,9 +223,9 @@ static void skb_under_panic(struct sk_buff *skb, unsigned int sz, void *addr)
 	skb_panic(skb, sz, addr, __func__);
 }
 
-#define NAPI_SKB_CACHE_SIZE	64
-#define NAPI_SKB_CACHE_BULK	16
-#define NAPI_SKB_CACHE_HALF	(NAPI_SKB_CACHE_SIZE / 2)
+#define NAPI_SKB_CACHE_SIZE	128
+#define NAPI_SKB_CACHE_BULK	32
+#define NAPI_SKB_CACHE_FREE	32
 
 struct napi_alloc_cache {
 	local_lock_t bh_lock;
@@ -280,17 +280,18 @@ EXPORT_SYMBOL(__netdev_alloc_frag_align);
  */
 static u32 skbuff_cache_size __read_mostly;
 
-static struct sk_buff *napi_skb_cache_get(void)
+static struct sk_buff *napi_skb_cache_get(bool alloc)
 {
 	struct napi_alloc_cache *nc = this_cpu_ptr(&napi_alloc_cache);
 	struct sk_buff *skb;
 
 	local_lock_nested_bh(&napi_alloc_cache.bh_lock);
 	if (unlikely(!nc->skb_count)) {
-		nc->skb_count = kmem_cache_alloc_bulk(net_hotdata.skbuff_cache,
-						      GFP_ATOMIC | __GFP_NOWARN,
-						      NAPI_SKB_CACHE_BULK,
-						      nc->skb_cache);
+		if (alloc)
+			nc->skb_count = kmem_cache_alloc_bulk(net_hotdata.skbuff_cache,
+						GFP_ATOMIC | __GFP_NOWARN,
+						NAPI_SKB_CACHE_BULK,
+						nc->skb_cache);
 		if (unlikely(!nc->skb_count)) {
 			local_unlock_nested_bh(&napi_alloc_cache.bh_lock);
 			return NULL;
@@ -298,6 +299,8 @@ static struct sk_buff *napi_skb_cache_get(void)
 	}
 
 	skb = nc->skb_cache[--nc->skb_count];
+	if (nc->skb_count)
+		prefetch(nc->skb_cache[nc->skb_count - 1]);
 	local_unlock_nested_bh(&napi_alloc_cache.bh_lock);
 	kasan_mempool_unpoison_object(skb, skbuff_cache_size);
 
@@ -530,7 +533,7 @@ static struct sk_buff *__napi_build_skb(void *data, unsigned int frag_size)
 {
 	struct sk_buff *skb;
 
-	skb = napi_skb_cache_get();
+	skb = napi_skb_cache_get(true);
 	if (unlikely(!skb))
 		return NULL;
 
@@ -645,25 +648,38 @@ out:
 struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 			    int flags, int node)
 {
+	struct sk_buff *skb = NULL;
 	struct kmem_cache *cache;
-	struct sk_buff *skb;
 	bool pfmemalloc;
 	u8 *data;
-
-	cache = (flags & SKB_ALLOC_FCLONE)
-		? net_hotdata.skbuff_fclone_cache : net_hotdata.skbuff_cache;
 
 	if (sk_memalloc_socks() && (flags & SKB_ALLOC_RX))
 		gfp_mask |= __GFP_MEMALLOC;
 
-	/* Get the HEAD */
-	if ((flags & (SKB_ALLOC_FCLONE | SKB_ALLOC_NAPI)) == SKB_ALLOC_NAPI &&
-	    likely(node == NUMA_NO_NODE || node == numa_mem_id()))
-		skb = napi_skb_cache_get();
-	else
+	if (flags & SKB_ALLOC_FCLONE) {
+		cache = net_hotdata.skbuff_fclone_cache;
+		goto fallback;
+	}
+	cache = net_hotdata.skbuff_cache;
+	if (unlikely(node != NUMA_NO_NODE && node != numa_mem_id()))
+		goto fallback;
+
+	if (flags & SKB_ALLOC_NAPI) {
+		skb = napi_skb_cache_get(true);
+		if (unlikely(!skb))
+			return NULL;
+	} else if (!in_hardirq() && !irqs_disabled()) {
+		local_bh_disable();
+		skb = napi_skb_cache_get(false);
+		local_bh_enable();
+	}
+
+	if (!skb) {
+fallback:
 		skb = kmem_cache_alloc_node(cache, gfp_mask & ~GFP_DMA, node);
-	if (unlikely(!skb))
-		return NULL;
+		if (unlikely(!skb))
+			return NULL;
+	}
 	prefetchw(skb);
 
 	/* We do our best to align skb_shared_info on a separate cache
@@ -1431,7 +1447,6 @@ void __consume_stateless_skb(struct sk_buff *skb)
 static void napi_skb_cache_put(struct sk_buff *skb)
 {
 	struct napi_alloc_cache *nc = this_cpu_ptr(&napi_alloc_cache);
-	u32 i;
 
 	if (!kasan_mempool_poison_object(skb))
 		return;
@@ -1440,13 +1455,16 @@ static void napi_skb_cache_put(struct sk_buff *skb)
 	nc->skb_cache[nc->skb_count++] = skb;
 
 	if (unlikely(nc->skb_count == NAPI_SKB_CACHE_SIZE)) {
-		for (i = NAPI_SKB_CACHE_HALF; i < NAPI_SKB_CACHE_SIZE; i++)
+		u32 i, remaining = NAPI_SKB_CACHE_SIZE - NAPI_SKB_CACHE_FREE;
+
+		for (i = remaining; i < NAPI_SKB_CACHE_SIZE; i++)
 			kasan_mempool_unpoison_object(nc->skb_cache[i],
 						skbuff_cache_size);
 
-		kmem_cache_free_bulk(net_hotdata.skbuff_cache, NAPI_SKB_CACHE_HALF,
-				     nc->skb_cache + NAPI_SKB_CACHE_HALF);
-		nc->skb_count = NAPI_SKB_CACHE_HALF;
+		kmem_cache_free_bulk(net_hotdata.skbuff_cache,
+				     NAPI_SKB_CACHE_FREE,
+				     nc->skb_cache + remaining);
+		nc->skb_count = remaining;
 	}
 	local_unlock_nested_bh(&napi_alloc_cache.bh_lock);
 }
@@ -1472,7 +1490,7 @@ void napi_skb_free_stolen_head(struct sk_buff *skb)
 void napi_consume_skb(struct sk_buff *skb, int budget)
 {
 	/* Zero budget indicate non-NAPI context called us, like netpoll */
-	if (unlikely(!budget)) {
+	if (unlikely(!budget || !skb)) {
 		dev_consume_skb_any(skb);
 		return;
 	}

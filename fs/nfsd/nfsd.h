@@ -160,6 +160,7 @@ enum {
 	/* Any new NFSD_IO enum value must be added at the end */
 	NFSD_IO_BUFFERED,
 	NFSD_IO_DONTCACHE,
+	NFSD_IO_DIRECT,
 };
 
 extern u64 nfsd_io_cache_read __read_mostly;
@@ -397,14 +398,13 @@ enum {
 #define	NFSD_CB_GETATTR_TIMEOUT		NFSD_DELEGRETURN_TIMEOUT
 
 /*
- * The following attributes are currently not supported by the NFSv4 server:
+ * The following attributes are not implemented by NFSD:
  *    ARCHIVE       (deprecated anyway)
  *    HIDDEN        (unlikely to be supported any time soon)
  *    MIMETYPE      (unlikely to be supported any time soon)
  *    QUOTA_*       (will be supported in a forthcoming patch)
  *    SYSTEM        (unlikely to be supported any time soon)
  *    TIME_BACKUP   (unlikely to be supported any time soon)
- *    TIME_CREATE   (unlikely to be supported any time soon)
  */
 #define NFSD4_SUPPORTED_ATTRS_WORD0                                                         \
 (FATTR4_WORD0_SUPPORTED_ATTRS   | FATTR4_WORD0_TYPE         | FATTR4_WORD0_FH_EXPIRE_TYPE   \
@@ -547,8 +547,14 @@ static inline bool nfsd_attrs_supported(u32 minorversion, const u32 *bmval)
 #define NFSD_SUPPATTR_EXCLCREAT_WORD1 \
 	(NFSD_WRITEABLE_ATTRS_WORD1 & \
 	 ~(FATTR4_WORD1_TIME_ACCESS_SET | FATTR4_WORD1_TIME_MODIFY_SET))
+/*
+ * The FATTR4_WORD2_TIME_DELEG attributes are not to be allowed for
+ * OPEN(create) with EXCLUSIVE4_1. It doesn't make sense to set a
+ * delegated timestamp on a new file.
+ */
 #define NFSD_SUPPATTR_EXCLCREAT_WORD2 \
-	NFSD_WRITEABLE_ATTRS_WORD2
+	(NFSD_WRITEABLE_ATTRS_WORD2 & \
+	~(FATTR4_WORD2_TIME_DELEG_ACCESS | FATTR4_WORD2_TIME_DELEG_MODIFY))
 
 extern int nfsd4_is_junction(struct dentry *dentry);
 extern int register_cld_notifier(void);

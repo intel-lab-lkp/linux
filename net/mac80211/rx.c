@@ -2215,10 +2215,12 @@ ieee80211_rx_h_decrypt(struct ieee80211_rx_data *rx)
 			rx, IEEE80211_CCMP_256_MIC_LEN);
 		break;
 	case WLAN_CIPHER_SUITE_AES_CMAC:
-		result = ieee80211_crypto_aes_cmac_decrypt(rx);
+		result = ieee80211_crypto_aes_cmac_decrypt(
+			rx, IEEE80211_CMAC_128_MIC_LEN);
 		break;
 	case WLAN_CIPHER_SUITE_BIP_CMAC_256:
-		result = ieee80211_crypto_aes_cmac_256_decrypt(rx);
+		result = ieee80211_crypto_aes_cmac_decrypt(
+			rx, IEEE80211_CMAC_256_MIC_LEN);
 		break;
 	case WLAN_CIPHER_SUITE_BIP_GMAC_128:
 	case WLAN_CIPHER_SUITE_BIP_GMAC_256:
@@ -3508,6 +3510,11 @@ ieee80211_rx_h_mgmt_check(struct ieee80211_rx_data *rx)
 	if (ieee80211_is_action(mgmt->frame_control) &&
 	    rx->skb->len < IEEE80211_MIN_ACTION_SIZE)
 		return RX_DROP_U_RUNT_ACTION;
+
+	/* Drop non-broadcast Beacon frames */
+	if (ieee80211_is_beacon(mgmt->frame_control) &&
+	    !is_broadcast_ether_addr(mgmt->da))
+		return RX_DROP;
 
 	if (rx->sdata->vif.type == NL80211_IFTYPE_AP &&
 	    ieee80211_is_beacon(mgmt->frame_control) &&

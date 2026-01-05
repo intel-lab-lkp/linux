@@ -673,6 +673,16 @@ tcp_moderate_rcvbuf - BOOLEAN
 
 	Default: 1 (enabled)
 
+tcp_rcvbuf_low_rtt - INTEGER
+	rcvbuf autotuning can over estimate final socket rcvbuf, which
+	can lead to cache trashing for high throughput flows.
+
+	For small RTT flows (below tcp_rcvbuf_low_rtt usecs), we can relax
+	rcvbuf growth: Few additional ms to reach the final (and smaller)
+	rcvbuf is a good tradeoff.
+
+	Default : 1000 (1 ms)
+
 tcp_mtu_probing - INTEGER
 	Controls TCP Packetization-Layer Path MTU Discovery.  Takes three
 	values:
@@ -875,8 +885,9 @@ tcp_comp_sack_slack_ns - LONG INTEGER
 	timer used by SACK compression. This gives extra time
 	for small RTT flows, and reduces system overhead by allowing
 	opportunistic reduction of timer interrupts.
+	Too big values might reduce goodput.
 
-	Default : 100,000 ns (100 us)
+	Default : 10,000 ns (10 us)
 
 tcp_comp_sack_nr - INTEGER
 	Max number of SACK that can be compressed.

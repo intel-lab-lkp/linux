@@ -1126,7 +1126,10 @@ again:
 
 	while (!ieee80211_chandef_usable(sdata, &chanreq->oper,
 					 IEEE80211_CHAN_DISABLED)) {
-		if (WARN_ON(chanreq->oper.width == NL80211_CHAN_WIDTH_20_NOHT)) {
+		if (chanreq->oper.width == NL80211_CHAN_WIDTH_20_NOHT) {
+			link_id_info(sdata, link_id,
+				     "unusable channel (%d MHz) for connection\n",
+				     chanreq->oper.chan->center_freq);
 			ret = -EINVAL;
 			goto free;
 		}
@@ -6108,9 +6111,10 @@ static int ieee80211_prep_channel(struct ieee80211_sub_if_data *sdata,
 	ret = ieee80211_link_use_channel(link, &chanreq,
 					 IEEE80211_CHANCTX_SHARED);
 
-	/* don't downgrade for 5 and 10 MHz channels, though. */
+	/* don't downgrade for 5/10/S1G MHz channels, though. */
 	if (chanreq.oper.width == NL80211_CHAN_WIDTH_5 ||
-	    chanreq.oper.width == NL80211_CHAN_WIDTH_10)
+	    chanreq.oper.width == NL80211_CHAN_WIDTH_10 ||
+	    cfg80211_chandef_is_s1g(&chanreq.oper))
 		return ret;
 
 	while (ret && chanreq.oper.width != NL80211_CHAN_WIDTH_20_NOHT) {

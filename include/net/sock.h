@@ -305,6 +305,8 @@ struct sk_filter;
   *	@sk_txrehash: enable TX hash rethink
   *	@sk_filter: socket filtering instructions
   *	@sk_timer: sock cleanup timer
+  *	@tcp_retransmit_timer: tcp retransmit timer
+  *	@mptcp_retransmit_timer: mptcp retransmit timer
   *	@sk_stamp: time stamp of last packet received
   *	@sk_stamp_seq: lock for accessing sk_stamp on 32 bit architectures only
   *	@sk_tsflags: SO_TIMESTAMPING flags
@@ -481,11 +483,12 @@ struct sock {
 		struct rb_root	tcp_rtx_queue;
 	};
 	struct sk_buff_head	sk_write_queue;
-	u32			sk_dst_pending_confirm;
-	u32			sk_pacing_status; /* see enum sk_pacing */
 	struct page_frag	sk_frag;
-	struct timer_list	sk_timer;
-
+	union {
+		struct timer_list	sk_timer;
+		struct timer_list	tcp_retransmit_timer;
+		struct timer_list	mptcp_retransmit_timer;
+	};
 	unsigned long		sk_pacing_rate; /* bytes per second */
 	atomic_t		sk_zckey;
 	atomic_t		sk_tskey;
@@ -493,6 +496,8 @@ struct sock {
 	__cacheline_group_end(sock_write_tx);
 
 	__cacheline_group_begin(sock_read_tx);
+	u32			sk_dst_pending_confirm;
+	u32			sk_pacing_status; /* see enum sk_pacing */
 	unsigned long		sk_max_pacing_rate;
 	long			sk_sndtimeo;
 	u32			sk_priority;
@@ -1631,6 +1636,8 @@ static inline void sk_mem_uncharge(struct sock *sk, int size)
 	sk_mem_reclaim(sk);
 }
 
+void __sk_charge(struct sock *sk, gfp_t gfp);
+
 #if IS_ENABLED(CONFIG_PROVE_LOCKING) && IS_ENABLED(CONFIG_MODULES)
 static inline void sk_owner_set(struct sock *sk, struct module *owner)
 {
@@ -2655,8 +2662,12 @@ static inline bool mem_cgroup_sk_under_memory_pressure(const struct sock *sk)
 #endif /* CONFIG_MEMCG_V1 */
 
 	do {
-		if (time_before64(get_jiffies_64(), mem_cgroup_get_socket_pressure(memcg)))
+		if (time_before64(get_jiffies_64(),
+				  mem_cgroup_get_socket_pressure(memcg))) {
+			memcg_memory_event(mem_cgroup_from_sk(sk),
+					   MEMCG_SOCK_THROTTLED);
 			return true;
+		}
 	} while ((memcg = parent_mem_cgroup(memcg)));
 
 	return false;

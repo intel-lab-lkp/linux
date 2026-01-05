@@ -12,9 +12,9 @@
  * Copyright (c) 2024 Cryolitia PukNgae
  */
 
-#include <linux/acpi.h>
 #include <linux/dmi.h>
 #include <linux/hwmon.h>
+#include <linux/io.h>
 #include <linux/ioport.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -25,9 +25,6 @@
 
 static char *gpd_fan_board = "";
 module_param(gpd_fan_board, charp, 0444);
-
-// EC read/write locker, protecting a sequence of EC operations
-static DEFINE_MUTEX(gpd_fan_sequence_lock);
 
 enum gpd_board {
 	win_mini,
@@ -276,31 +273,6 @@ static int gpd_generic_read_rpm(void)
 	return (u16)high << 8 | low;
 }
 
-static void gpd_win4_init_ec(void)
-{
-	u8 chip_id, chip_ver;
-
-	gpd_ecram_read(0x2000, &chip_id);
-
-	if (chip_id == 0x55) {
-		gpd_ecram_read(0x1060, &chip_ver);
-		gpd_ecram_write(0x1060, chip_ver | 0x80);
-	}
-}
-
-static int gpd_win4_read_rpm(void)
-{
-	int ret;
-
-	ret = gpd_generic_read_rpm();
-
-	if (ret == 0)
-		// Re-init EC when speed is 0
-		gpd_win4_init_ec();
-
-	return ret;
-}
-
 static int gpd_wm2_read_rpm(void)
 {
 	for (u16 pwm_ctr_offset = GPD_PWM_CTR_OFFSET;
@@ -320,11 +292,10 @@ static int gpd_wm2_read_rpm(void)
 static int gpd_read_rpm(void)
 {
 	switch (gpd_driver_priv.drvdata->board) {
+	case win4_6800u:
 	case win_mini:
 	case duo:
 		return gpd_generic_read_rpm();
-	case win4_6800u:
-		return gpd_win4_read_rpm();
 	case win_max_2:
 		return gpd_wm2_read_rpm();
 	}
@@ -507,87 +478,60 @@ static int gpd_fan_hwmon_read(__always_unused struct device *dev,
 {
 	int ret;
 
-	ret = mutex_lock_interruptible(&gpd_fan_sequence_lock);
-	if (ret)
-		return ret;
-
 	if (type == hwmon_fan) {
 		if (attr == hwmon_fan_input) {
 			ret = gpd_read_rpm();
 
 			if (ret < 0)
-				goto OUT;
+				return ret;
 
 			*val = ret;
-			ret = 0;
-			goto OUT;
+			return 0;
 		}
 	} else if (type == hwmon_pwm) {
 		switch (attr) {
 		case hwmon_pwm_enable:
 			*val = gpd_driver_priv.pwm_enable;
-			ret = 0;
-			goto OUT;
+			return 0;
 		case hwmon_pwm_input:
 			ret = gpd_read_pwm();
 
 			if (ret < 0)
-				goto OUT;
+				return ret;
 
 			*val = ret;
-			ret = 0;
-			goto OUT;
+			return 0;
 		}
 	}
 
-	ret = -EOPNOTSUPP;
-
-OUT:
-	mutex_unlock(&gpd_fan_sequence_lock);
-	return ret;
+	return -EOPNOTSUPP;
 }
 
 static int gpd_fan_hwmon_write(__always_unused struct device *dev,
 			       enum hwmon_sensor_types type, u32 attr,
 			       __always_unused int channel, long val)
 {
-	int ret;
-
-	ret = mutex_lock_interruptible(&gpd_fan_sequence_lock);
-	if (ret)
-		return ret;
-
 	if (type == hwmon_pwm) {
 		switch (attr) {
 		case hwmon_pwm_enable:
-			if (!in_range(val, 0, 3)) {
-				ret = -EINVAL;
-				goto OUT;
-			}
+			if (!in_range(val, 0, 3))
+				return -EINVAL;
 
 			gpd_driver_priv.pwm_enable = val;
 
 			gpd_set_pwm_enable(gpd_driver_priv.pwm_enable);
-			ret = 0;
-			goto OUT;
+			return 0;
 		case hwmon_pwm_input:
-			if (!in_range(val, 0, 256)) {
-				ret = -ERANGE;
-				goto OUT;
-			}
+			if (!in_range(val, 0, 256))
+				return -EINVAL;
 
 			gpd_driver_priv.pwm_value = val;
 
-			ret = gpd_write_pwm(val);
-			goto OUT;
+			return gpd_write_pwm(val);
 		}
 	}
 
-	ret = -EOPNOTSUPP;
-
-OUT:
-	mutex_unlock(&gpd_fan_sequence_lock);
-	return ret;
+	return -EOPNOTSUPP;
 }
 
 static const struct hwmon_ops gpd_fan_ops = {
@@ -606,6 +550,28 @@ static struct hwmon_chip_info gpd_fan_chip_info = {
 	.ops = &gpd_fan_ops,
 	.info = gpd_fan_hwmon_channel_info
 };
+
+static void gpd_win4_init_ec(void)
+{
+	u8 chip_id, chip_ver;
+
+	gpd_ecram_read(0x2000, &chip_id);
+
+	if (chip_id == 0x55) {
+		gpd_ecram_read(0x1060, &chip_ver);
+		gpd_ecram_write(0x1060, chip_ver | 0x80);
+	}
+}
+
+static void gpd_init_ec(void)
+{
+	// The buggy firmware won't initialize EC properly on boot.
+	// Before its initialization, reading RPM will always return 0,
+	// and writing PWM will have no effect.
+	// Initialize it manually on driver load.
+	if (gpd_driver_priv.drvdata->board == win4_6800u)
+		gpd_win4_init_ec();
+}
 
 static int gpd_fan_probe(struct platform_device *pdev)
 {
@@ -633,6 +599,8 @@ static int gpd_fan_probe(struct platform_device *pdev)
 	if (IS_ERR(hwdev))
 		return dev_err_probe(dev, PTR_ERR(hwdev),
 				     "Failed to register hwmon device\n");
+
+	gpd_init_ec();
 
 	return 0;
 }
