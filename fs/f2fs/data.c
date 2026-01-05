@@ -2413,6 +2413,11 @@ static void ffs_detach_free(struct folio *folio)
 	kmem_cache_free(ffs_entry_slab, ffs);
 }
 
+static inline bool f2fs_block_needs_zeroing(const struct f2fs_map_blocks *map)
+{
+	return map->m_pblk == NULL_ADDR || map->m_pblk == NEW_ADDR;
+}
+
 static int f2fs_read_data_large_folio(struct inode *inode,
 		struct readahead_control *rac, struct folio *folio)
 {
@@ -2468,14 +2473,7 @@ next_folio:
 		if (ret)
 			goto err_out;
 got_it:
-		if ((map.m_flags & F2FS_MAP_MAPPED)) {
-			block_nr = map.m_pblk + index - map.m_lblk;
-			if (!f2fs_is_valid_blkaddr(F2FS_I_SB(inode), block_nr,
-						DATA_GENERIC_ENHANCE_READ)) {
-				ret = -EFSCORRUPTED;
-				goto err_out;
-			}
-		} else {
+		if ((f2fs_block_needs_zeroing(&map))) {
 			folio_zero_range(folio, offset << PAGE_SHIFT, PAGE_SIZE);
 			if (f2fs_need_verity(inode, index) &&
 			    !fsverity_verify_page(folio_file_page(folio,
@@ -2484,6 +2482,13 @@ got_it:
 				goto err_out;
 			}
 			continue;
+		} else if((map.m_flags & F2FS_MAP_MAPPED)) {
+			block_nr = map.m_pblk + index - map.m_lblk;
+			if (!f2fs_is_valid_blkaddr(F2FS_I_SB(inode), block_nr,
+						DATA_GENERIC_ENHANCE_READ)) {
+				ret = -EFSCORRUPTED;
+				goto err_out;
+			}
 		}
 
 		/* We must increment read_pages_pending before possible BIOs submitting
