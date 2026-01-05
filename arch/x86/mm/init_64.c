@@ -1554,7 +1554,7 @@ int __meminit vmemmap_check_pmd(pmd_t *pmd, int node,
 {
 	int large = pmd_leaf(*pmd);
 
-	if (pmd_leaf(*pmd)) {
+	if (large) {
 		vmemmap_verify((pte_t *)pmd, node, addr, next);
 		vmemmap_use_sub_pmd(addr, next);
 	}
