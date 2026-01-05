@@ -2958,6 +2958,7 @@ static int xhci_configure_endpoint(struct xhci_hcd *xhci,
 	struct xhci_input_control_ctx *ctrl_ctx;
 	struct xhci_virt_device *virt_dev;
 	struct xhci_slot_ctx *slot_ctx;
+	u32 add_flags, drop_flags;
 
 	if (!command)
 		return -EINVAL;
@@ -2977,6 +2978,19 @@ static int xhci_configure_endpoint(struct xhci_hcd *xhci,
 		xhci_warn(xhci, "%s: Could not get input context, bad type.\n",
 				__func__);
 		return -ENOMEM;
+	}
+
+	/*
+	 * For drop-only Configure Endpoint (add_flags == SLOT_FLAG
+	 * and drop_flags != 0), if vdev is already gone, there is no hardware
+	 * to configure. Return success early to avoid issuing pointless commands.
+	 */
+	add_flags = le32_to_cpu(ctrl_ctx->add_flags);
+	drop_flags = le32_to_cpu(ctrl_ctx->drop_flags);
+	if (!ctx_change && add_flags == SLOT_FLAG && drop_flags != 0 && !virt_dev) {
+		spin_unlock_irqrestore(&xhci->lock, flags);
+		xhci_dbg(xhci, "skip drop-only Configure EP; vdev already freed\n");
+		return 0;
 	}
 
 	if ((xhci->quirks & XHCI_EP_LIMIT_QUIRK) &&
@@ -3082,12 +3096,27 @@ int xhci_check_bandwidth(struct usb_hcd *hcd, struct usb_device *udev)
 	if (ret <= 0)
 		return ret;
 	xhci = hcd_to_xhci(hcd);
+
+	/*
+	 * If the slot is already disabled (slot_id == 0) or the vdev is gone,
+	 * we're in teardown. There's nothing to update in HW. Treat as success
+	 * and skip issuing Configure Endpoint command.
+	 */
+	if (!udev->slot_id) {
+		xhci_dbg(xhci, "Slot already disabled for udev %p\n", udev);
+		return 0;
+	}
+
+	virt_dev = xhci->devs[udev->slot_id];
+	if (!virt_dev) {
+		xhci_dbg(xhci, "virt_dev already freed for slot %d\n", udev->slot_id);
+		return 0;
+	}
 	if ((xhci->xhc_state & XHCI_STATE_DYING) ||
 		(xhci->xhc_state & XHCI_STATE_REMOVING))
 		return -ENODEV;
 
 	xhci_dbg(xhci, "%s called for udev %p\n", __func__, udev);
-	virt_dev = xhci->devs[udev->slot_id];
 
 	command = xhci_alloc_command(xhci, true, GFP_KERNEL);
 	if (!command)
