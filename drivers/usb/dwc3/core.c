@@ -158,7 +158,7 @@ void dwc3_set_prtcap(struct dwc3 *dwc, u32 mode, bool ignore_susphy)
 	dwc3_writel(dwc, DWC3_GCTL, reg);
 
 	dwc->current_dr_role = mode;
-	trace_dwc3_set_prtcap(mode);
+	trace_dwc3_set_prtcap(dwc, mode);
 }
 EXPORT_SYMBOL_GPL(dwc3_set_prtcap);
 
@@ -2192,6 +2192,10 @@ int dwc3_core_probe(const struct dwc3_probe_data *data)
 	 */
 	dwc_res = *res;
 	dwc_res.start += DWC3_GLOBALS_REGS_START;
+
+	/* Store the physical base address for logging in trace */
+	snprintf(dwc->base_addr, sizeof(dwc->base_addr), "%08llx",
+		 (unsigned long long)res->start);
 
 	if (dev->of_node) {
 		struct device_node *parent = of_get_parent(dev->of_node);
