@@ -105,6 +105,13 @@ struct npc_subbank {
 	u8 key_type;	//NPC_MCAM_KEY_X4 or NPC_MCAM_KEY_X2
 };
 
+struct npc_defrag_show_node {
+	u16 old_midx;
+	u16 new_midx;
+	u16 vidx;
+	struct list_head list;
+};
+
 struct npc_priv_t {
 	int bank_depth;
 	const int num_banks;
@@ -118,6 +125,10 @@ struct npc_priv_t {
 	struct xarray xa_idx2pf_map;	// Mcam idxes to pf map.
 	struct xarray xa_pf_map;	// pcifunc to index map.
 	struct xarray xa_pf2dfl_rmap;	// pcifunc to default rule index
+	struct xarray xa_idx2vidx_map;	// mcam idx to virtual index map.
+	struct xarray xa_vidx2idx_map;	// mcam vidx to index map.
+	struct list_head defrag_lh;	// defrag list head for debugfs
+	struct mutex lock;		// lock
 	int pf_cnt;
 	bool init_done;
 };
@@ -212,7 +223,7 @@ void npc_cn20k_subbank_calc_free(struct rvu *rvu, int *x2_free,
 
 int npc_cn20k_ref_idx_alloc(struct rvu *rvu, int pcifunc, int key_type,
 			    int prio, u16 *mcam_idx, int ref, int limit,
-			    bool contig, int count);
+			    bool contig, int count, bool virt);
 int npc_cn20k_idx_free(struct rvu *rvu, u16 *mcam_idx, int count);
 int npc_cn20k_search_order_set(struct rvu *rvu, int (*arr)[2], int cnt);
 const int *npc_cn20k_search_order_get(bool *restricted_order);
@@ -245,5 +256,8 @@ void npc_cn20k_read_mcam_entry(struct rvu *rvu, int blkaddr, u16 index,
 void npc_cn20k_clear_mcam_entry(struct rvu *rvu, int blkaddr,
 				int bank, int index);
 int npc_mcam_idx_2_key_type(struct rvu *rvu, u16 mcam_idx, u8 *key_type);
+u16 npc_cn20k_vidx2idx(u16 index);
+u16 npc_cn20k_idx2vidx(u16 idx);
+int npc_cn20k_defrag(struct rvu *rvu);
 
 #endif /* NPC_CN20K_H */

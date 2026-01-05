@@ -2454,7 +2454,7 @@ static void npc_unmap_mcam_entry_and_cntr(struct rvu *rvu,
  * reverse bitmap too. Should be called with
  * 'mcam->lock' held.
  */
-static void npc_mcam_set_bit(struct npc_mcam *mcam, u16 index)
+void npc_mcam_set_bit(struct npc_mcam *mcam, u16 index)
 {
 	u16 entry, rentry;
 
@@ -2470,7 +2470,7 @@ static void npc_mcam_set_bit(struct npc_mcam *mcam, u16 index)
  * reverse bitmap too. Should be called with
  * 'mcam->lock' held.
  */
-static void npc_mcam_clear_bit(struct npc_mcam *mcam, u16 index)
+void npc_mcam_clear_bit(struct npc_mcam *mcam, u16 index)
 {
 	u16 entry, rentry;
 
@@ -2689,7 +2689,7 @@ static int npc_mcam_alloc_entries(struct npc_mcam *mcam, u16 pcifunc,
 	ret = npc_cn20k_ref_idx_alloc(rvu, pcifunc, req->kw_type,
 				      req->ref_prio, rsp->entry_list,
 				      req->ref_entry, limit,
-				      req->contig, req->count);
+				      req->contig, req->count, !!req->virt);
 
 	if (ret) {
 		rsp->count = 0;
@@ -2709,7 +2709,7 @@ static int npc_mcam_alloc_entries(struct npc_mcam *mcam, u16 pcifunc,
 	mutex_lock(&mcam->lock);
 	/* Mark the allocated entries as used and set nixlf mapping */
 	for (entry = 0; entry < rsp->count; entry++) {
-		index = rsp->entry_list[entry];
+		index = npc_cn20k_vidx2idx(rsp->entry_list[entry]);
 		npc_mcam_set_bit(mcam, index);
 		mcam->entry2pfvf_map[index] = pcifunc;
 		mcam->entry2cntr_map[index] = NPC_MCAM_INVALID_MAP;
@@ -3021,6 +3021,8 @@ int rvu_mbox_handler_npc_mcam_free_entry(struct rvu *rvu,
 	int blkaddr, rc = 0;
 	u16 cntr;
 
+	req->entry = npc_cn20k_vidx2idx(req->entry);
+
 	blkaddr = rvu_get_blkaddr(rvu, BLKTYPE_NPC, 0);
 	if (blkaddr < 0)
 		return NPC_MCAM_INVALID_REQ;
@@ -3151,6 +3153,8 @@ int rvu_mbox_handler_npc_mcam_ena_entry(struct rvu *rvu,
 	u16 pcifunc = req->hdr.pcifunc;
 	int blkaddr, rc;
 
+	req->entry = npc_cn20k_vidx2idx(req->entry);
+
 	blkaddr = rvu_get_blkaddr(rvu, BLKTYPE_NPC, 0);
 	if (blkaddr < 0)
 		return NPC_MCAM_INVALID_REQ;
@@ -3173,6 +3177,8 @@ int rvu_mbox_handler_npc_mcam_dis_entry(struct rvu *rvu,
 	struct npc_mcam *mcam = &rvu->hw->mcam;
 	u16 pcifunc = req->hdr.pcifunc;
 	int blkaddr, rc;
+
+	req->entry = npc_cn20k_vidx2idx(req->entry);
 
 	blkaddr = rvu_get_blkaddr(rvu, BLKTYPE_NPC, 0);
 	if (blkaddr < 0)
@@ -3208,8 +3214,8 @@ int rvu_mbox_handler_npc_mcam_shift_entry(struct rvu *rvu,
 
 	mutex_lock(&mcam->lock);
 	for (index = 0; index < req->shift_count; index++) {
-		old_entry = req->curr_entry[index];
-		new_entry = req->new_entry[index];
+		old_entry = npc_cn20k_vidx2idx(req->curr_entry[index]);
+		new_entry = npc_cn20k_vidx2idx(req->new_entry[index]);
 
 		/* Check if both old and new entries are valid and
 		 * does belong to this PFFUNC or not.
@@ -3251,7 +3257,7 @@ int rvu_mbox_handler_npc_mcam_shift_entry(struct rvu *rvu,
 	/* If shift has failed then report the failed index */
 	if (index != req->shift_count) {
 		rc = NPC_MCAM_PERM_DENIED;
-		rsp->failed_entry_idx = index;
+		rsp->failed_entry_idx = npc_cn20k_idx2vidx(index);
 	}
 
 	mutex_unlock(&mcam->lock);
@@ -3830,6 +3836,8 @@ int rvu_mbox_handler_npc_mcam_entry_stats(struct rvu *rvu,
 	blkaddr = rvu_get_blkaddr(rvu, BLKTYPE_NPC, 0);
 	if (blkaddr < 0)
 		return NPC_MCAM_INVALID_REQ;
+
+	req->entry = npc_cn20k_vidx2idx(req->entry);
 
 	index = req->entry & (mcam->banksize - 1);
 	bank = npc_get_bank(mcam, req->entry);
