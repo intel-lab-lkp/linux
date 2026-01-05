@@ -10,6 +10,7 @@
 
 #include <drm/gpu_scheduler.h>
 
+#include "xe_deadline_mgr_types.h"
 #include "xe_gpu_scheduler_types.h"
 #include "xe_hw_engine_types.h"
 #include "xe_hw_fence_types.h"
@@ -219,6 +220,9 @@ struct xe_exec_queue {
 		/** @pxp.link: link into the list of PXP exec queues */
 		struct list_head link;
 	} pxp;
+
+	/** @deadline_mgr: Deadline manager */
+	struct xe_deadline_mgr deadline_mgr;
 
 	/** @ufence_syncobj: User fence syncobj */
 	struct drm_syncobj *ufence_syncobj;

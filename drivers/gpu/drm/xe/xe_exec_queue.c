@@ -14,6 +14,7 @@
 #include <uapi/drm/xe_drm.h>
 
 #include "xe_bo.h"
+#include "xe_deadline_mgr.h"
 #include "xe_dep_scheduler.h"
 #include "xe_device.h"
 #include "xe_gt.h"
@@ -265,6 +266,12 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
 		}
 	}
 
+	/*
+	 * Must be done after extension processing so the deadline manager can
+	 * detect whether the queue is supported.
+	 */
+	xe_deadline_mgr_init(&q->deadline_mgr, q);
+
 	return q;
 }
 
@@ -331,6 +338,7 @@ static void __xe_exec_queue_fini(struct xe_exec_queue *q)
 {
 	int i;
 
+	xe_deadline_mgr_fini(&q->deadline_mgr);
 	q->ops->fini(q);
 
 	for (i = 0; i < q->width; ++i)
