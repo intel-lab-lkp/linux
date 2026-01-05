@@ -322,6 +322,8 @@ struct dma_router {
  * @slave: ptr to the device using this channel
  * @cookie: last cookie value returned to client
  * @completed_cookie: last completed cookie for this channel
+ * @lock: protect between config and prepare transfer when driver have not
+ *	  implemented callback device_prep_config_sg().
  * @chan_id: channel ID for sysfs
  * @dev: class device for sysfs
  * @name: backlink name for sysfs
@@ -340,6 +342,7 @@ struct dma_chan {
 	struct device *slave;
 	dma_cookie_t cookie;
 	dma_cookie_t completed_cookie;
+	struct mutex lock; /* protect between config and prepare transfer */
 
 	/* sysfs */
 	int chan_id;
@@ -1066,6 +1069,56 @@ dmaengine_prep_slave_sg(struct dma_chan *chan, struct scatterlist *sgl,
 			unsigned long flags)
 {
 	return dmaengine_prep_config_sg(chan, sgl, sg_len, dir, flags, NULL);
+}
+
+/*
+ * dmaengine_prep_config_single(sg)_safe() is re-entrant version.
+ *
+ * The unsafe variant (without the _safe suffix) falls back to calling
+ * dmaengine_slave_config() and dmaengine_prep_slave_sg() separately.
+ * In this case, additional locking may be required, depending on the
+ * DMA consumer's usage.
+ *
+ * If dmaengine driver have not implemented call back device_prep_config_sg()
+ * safe version use per-channel mutex to protect call dmaengine_slave_config()
+ * and dmaengine_prep_slave_sg().
+ */
+static inline struct dma_async_tx_descriptor *
+dmaengine_prep_config_sg_safe(struct dma_chan *chan, struct scatterlist *sgl,
+			      unsigned int sg_len,
+			      enum dma_transfer_direction dir,
+			      unsigned long flags,
+			      struct dma_slave_config *config)
+{
+	struct dma_async_tx_descriptor *tx;
+
+	if (!chan || !chan->device)
+		return NULL;
+
+	if (!chan->device->device_prep_config_sg)
+		mutex_lock(&chan->lock);
+
+	tx = dmaengine_prep_config_sg(chan, sgl, sg_len, dir, flags, config);
+
+	if (!chan->device->device_prep_config_sg)
+		mutex_unlock(&chan->lock);
+
+	return tx;
+}
+
+static inline struct dma_async_tx_descriptor *
+dmaengine_prep_config_single_safe(struct dma_chan *chan, dma_addr_t buf,
+				  size_t len, enum dma_transfer_direction dir,
+				  unsigned long flags,
+				  struct dma_slave_config *config)
+{
+	struct scatterlist sg;
+
+	sg_init_table(&sg, 1);
+	sg_dma_address(&sg) = buf;
+	sg_dma_len(&sg) = len;
+
+	return dmaengine_prep_config_sg_safe(chan, &sg, 1, dir, flags, config);
 }
 
 #ifdef CONFIG_RAPIDIO_DMA_ENGINE
