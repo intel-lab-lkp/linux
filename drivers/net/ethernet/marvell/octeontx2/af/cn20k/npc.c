@@ -14,6 +14,7 @@
 #include "rvu_npc.h"
 #include "cn20k/npc.h"
 #include "cn20k/reg.h"
+#include "rvu_npc_fs.h"
 
 static struct npc_priv_t npc_priv = {
 	.num_banks = MAX_NUM_BANKS,
@@ -757,7 +758,7 @@ npc_cn20k_enable_mcam_entry(struct rvu *rvu, int blkaddr,
 	if (kw_type == NPC_MCAM_KEY_X2) {
 		cfg = rvu_read64(rvu, blkaddr,
 				 NPC_AF_CN20K_MCAMEX_BANKX_CFG_EXT(mcam_idx, bank));
-		hw_prio = cfg & GENMASK_ULL(14, 8);
+		hw_prio = cfg & GENMASK_ULL(30, 24);
 		cfg = enable ? 1 : 0;
 		cfg |= hw_prio;
 		rvu_write64(rvu, blkaddr,
@@ -772,7 +773,7 @@ npc_cn20k_enable_mcam_entry(struct rvu *rvu, int blkaddr,
 	for (bank = 0; bank < mcam->banks_per_entry; bank++) {
 		cfg = rvu_read64(rvu, blkaddr,
 				 NPC_AF_CN20K_MCAMEX_BANKX_CFG_EXT(mcam_idx, bank));
-		hw_prio = cfg & GENMASK_ULL(14, 8);
+		hw_prio = cfg & GENMASK_ULL(30, 24);
 		cfg = enable ? 1 : 0;
 		cfg |= hw_prio;
 		rvu_write64(rvu, blkaddr,
@@ -842,7 +843,8 @@ static void npc_cn20k_get_keyword(struct cn20k_mcam_entry *entry, int idx,
 static void npc_cn20k_config_kw_x2(struct rvu *rvu, struct npc_mcam *mcam,
 				   int blkaddr, int index, u8 intf,
 				   struct cn20k_mcam_entry *entry,
-				   int bank, u8 kw_type, int kw)
+				   int bank, u8 kw_type, int kw,
+				   u8 req_kw_type)
 {
 	u64 intf_ext = 0, intf_ext_mask = 0;
 	u8 tx_intf_mask = ~intf & 0x3;
@@ -861,23 +863,38 @@ static void npc_cn20k_config_kw_x2(struct rvu *rvu, struct npc_mcam *mcam,
 
 	kex_cfg = rvu_read64(rvu, blkaddr, NPC_AF_INTFX_KEX_CFG(intf));
 	kex_type = (kex_cfg & GENMASK_ULL(34, 32)) >> 32;
-	/*-------------------------------------------------------------------------------------|
-	 *	Kex type    |  mcam entry   |  cam1	   |	cam 0	|| <----- output ----> |
-	 *	in profile  |  len	    | (key type)   | (key type)	|| len	  |   type     |
-	 *-------------------------------------------------------------------------------------|
-	 *	X2	    |  256 (X2)	    |  001b	   |	110b	|| X2	  |    X2      |
-	 *-------------------------------------------------------------------------------------|
-	 *	X4	    |  256 (X2)	    |  000b	   |	000b	|| X2	  |  DYNAMIC   |
-	 *-------------------------------------------------------------------------------------|
-	 *	X4	    |  512 (X4)	    |  010b	   |	101b	|| X4	  |    X4      |
-	 *-------------------------------------------------------------------------------------|
-	 *    DYNAMIC	    |  256 (X2)	    |  000b	   |	000b	|| X2	  |  DYNAMIC   |
-	 *-------------------------------------------------------------------------------------|
-	 *    DYNAMIC	    |  512 (X4)	    |  010b	   |	101b	|| X4	  |    X4      |
-	 *-------------------------------------------------------------------------------------|
+	/*-------------------------------------------------------------------------------------------------------
+	 *Kex type		|  mcam entry	|  cam1		|	cam 0| req_kw_type	||<----- output > |
+	 *in profile		|  len		| (key type)	| (key type) |			||len	| type    |
+	 *---------------------------------------------------------------------------------------------------------
+	 *X2			|  256 (X2)	|  001b		|	110b |	   0		||X2	| X2      |
+	 *--------------------------------------------------------------------------------------------------------|
+	 *X4			|  256 (X2)	|  000b		|	000b |	   0		||X2	| DYN     |
+	 *--------------------------------------------------------------------------------------------------------|
+	 *X4			|  512 (X4)	|  010b		|	101b |	   0		||X4	| X4      |
+	 *--------------------------------------------------------------------------------------------------------|
+	 *DYNAMIC		|  256 (X2)	|  000b		|	000b |	   0		||X2	| DYN     |
+	 *--------------------------------------------------------------------------------------------------------|
+	 *DYNAMIC		|  512 (X4)	|  010b		|	101b |	   0		||X4	| X4      |
+	 *--------------------------------------------------------------------------------------------------------|
+	 *X4			|  256 (X2)	|  000b		|	000b |	   X2		||DYN	| DYN     |
+	 *--------------------------------------------------------------------------------------------------------|
+	 *DYNAMIC		|  256 (X2)	|  000b		|	000b |	   X2		||DYN	| DYN     |
+	 *--------------------------------------------------------------------------------------------------------|
+	 * X2			|  512 (X4)	|  xxxb		|	xxxb |	   X4		||INVAL	| INVAL   |
+	 *--------------------------------------------------------------------------------------------------------|
 	 */
+
 	if ((kex_type == NPC_MCAM_KEY_DYN || kex_type == NPC_MCAM_KEY_X4) &&
 	    kw_type == NPC_MCAM_KEY_X2) {
+		kw_type = 0;
+		kw_type_mask = 0;
+	}
+
+	/* Say, we need to write x2 keyword in an x4 subbank. req_kw_type will be x2,
+	 * and kw_type will be x4. So in the case ignore kw bits in mcam.
+	 */
+	if (kw_type == NPC_MCAM_KEY_X4 && req_kw_type == NPC_MCAM_KEY_X2) {
 		kw_type = 0;
 		kw_type_mask = 0;
 	}
@@ -929,14 +946,15 @@ static void npc_cn20k_config_kw_x2(struct rvu *rvu, struct npc_mcam *mcam,
 static void npc_cn20k_config_kw_x4(struct rvu *rvu, struct npc_mcam *mcam,
 				   int blkaddr, int index, u8 intf,
 				   struct cn20k_mcam_entry *entry,
-				   u8 kw_type)
+				   u8 kw_type, u8 req_kw_type)
 {
 	int kw = 0, bank;
 
 	for (bank = 0; bank < mcam->banks_per_entry; bank++, kw = kw + 4)
 		npc_cn20k_config_kw_x2(rvu, mcam, blkaddr,
 				       index, intf,
-				       entry, bank, kw_type, kw);
+				       entry, bank, kw_type,
+				       kw, req_kw_type);
 }
 
 static void
@@ -946,7 +964,7 @@ npc_cn20k_set_mcam_bank_cfg(struct rvu *rvu, int blkaddr, int mcam_idx,
 	struct npc_mcam *mcam = &rvu->hw->mcam;
 	u64 bank_cfg;
 
-	bank_cfg = (u64)hw_prio << 8;
+	bank_cfg = (u64)hw_prio << 24;
 	if (enable)
 		bank_cfg |= 0x1;
 
@@ -969,7 +987,7 @@ npc_cn20k_set_mcam_bank_cfg(struct rvu *rvu, int blkaddr, int mcam_idx,
 
 void npc_cn20k_config_mcam_entry(struct rvu *rvu, int blkaddr, int index,
 				 u8 intf, struct cn20k_mcam_entry *entry,
-				 bool enable, u8 hw_prio)
+				 bool enable, u8 hw_prio, u8 req_kw_type)
 {
 	struct npc_mcam *mcam = &rvu->hw->mcam;
 	int mcam_idx = index % mcam->banksize;
@@ -992,11 +1010,16 @@ void npc_cn20k_config_mcam_entry(struct rvu *rvu, int blkaddr, int index,
 		npc_cn20k_clear_mcam_entry(rvu, blkaddr, bank, mcam_idx);
 		npc_cn20k_config_kw_x2(rvu, mcam, blkaddr,
 				       mcam_idx, intf, entry,
-				       bank, kw_type, kw);
+				       bank, kw_type, kw, req_kw_type);
 		/* Set 'action' */
 		rvu_write64(rvu, blkaddr,
 			    NPC_AF_CN20K_MCAMEX_BANKX_ACTIONX_EXT(mcam_idx, bank, 0),
 			    entry->action);
+
+		/* Set 'action2' for inline receive */
+		rvu_write64(rvu, blkaddr,
+			    NPC_AF_CN20K_MCAMEX_BANKX_ACTIONX_EXT(mcam_idx, bank, 2),
+			    entry->action2);
 
 		/* Set TAG 'action' */
 		rvu_write64(rvu, blkaddr,
@@ -1008,7 +1031,8 @@ void npc_cn20k_config_mcam_entry(struct rvu *rvu, int blkaddr, int index,
 		npc_cn20k_clear_mcam_entry(rvu, blkaddr, 1, mcam_idx);
 
 		npc_cn20k_config_kw_x4(rvu, mcam, blkaddr,
-				       mcam_idx, intf, entry, kw_type);
+				       mcam_idx, intf, entry,
+				       kw_type, req_kw_type);
 		for (bank = 0; bank < mcam->banks_per_entry; bank++) {
 			/* Set 'action' */
 			rvu_write64(rvu, blkaddr,
@@ -1019,6 +1043,12 @@ void npc_cn20k_config_mcam_entry(struct rvu *rvu, int blkaddr, int index,
 			rvu_write64(rvu, blkaddr,
 				    NPC_AF_CN20K_MCAMEX_BANKX_ACTIONX_EXT(mcam_idx, bank, 1),
 				    entry->vtag_action);
+
+			/* Set 'action2' for inline receive */
+			rvu_write64(rvu, blkaddr,
+				    NPC_AF_CN20K_MCAMEX_BANKX_ACTIONX_EXT(mcam_idx, bank, 2),
+				    entry->action2);
+
 		}
 	}
 
@@ -1102,7 +1132,7 @@ void npc_cn20k_read_mcam_entry(struct rvu *rvu, int blkaddr, u16 index,
 	bank_cfg = rvu_read64(rvu, blkaddr,
 			      NPC_AF_CN20K_MCAMEX_BANKX_CFG_EXT(index, bank));
 	*ena = bank_cfg & 0x1;
-	*hw_prio = (bank_cfg & GENMASK_ULL(14, 8)) >> 8;
+	*hw_prio = (bank_cfg & GENMASK_ULL(30, 24)) >> 24;
 	if (kw_type == NPC_MCAM_KEY_X2) {
 		cam1 = rvu_read64(rvu, blkaddr,
 				  NPC_AF_CN20K_MCAMEX_BANKX_CAMX_W0_EXT(index, bank, 1));
@@ -1203,7 +1233,7 @@ int rvu_mbox_handler_npc_cn20k_mcam_write_entry(struct rvu *rvu,
 
 	npc_cn20k_config_mcam_entry(rvu, blkaddr, req->entry, nix_intf,
 				    &req->entry_data, req->enable_entry,
-				    req->hw_prio);
+				    req->hw_prio, req->req_kw_type);
 
 	rc = 0;
 exit:
@@ -1281,12 +1311,20 @@ int rvu_mbox_handler_npc_cn20k_mcam_alloc_and_write_entry(struct rvu *rvu,
 
 	npc_cn20k_config_mcam_entry(rvu, blkaddr, entry, nix_intf,
 				    &req->entry_data, req->enable_entry,
-				    req->hw_prio);
+				    req->hw_prio, req->req_kw_type);
 
 	mutex_unlock(&mcam->lock);
 
 	rsp->entry = entry_rsp.entry;
 	return 0;
+}
+
+static int rvu_npc_get_base_steer_rule_type(struct rvu *rvu, u16 pcifunc)
+{
+	if (is_lbk_vf(rvu, pcifunc))
+		return NIXLF_PROMISC_ENTRY;
+
+	return NIXLF_UCAST_ENTRY;
 }
 
 int rvu_mbox_handler_npc_cn20k_read_base_steer_rule(struct rvu *rvu,
@@ -1298,6 +1336,7 @@ int rvu_mbox_handler_npc_cn20k_read_base_steer_rule(struct rvu *rvu,
 	u16 pcifunc = req->hdr.pcifunc;
 	u8 intf, enable, hw_prio;
 	struct rvu_pfvf *pfvf;
+	int rl_type;
 
 	blkaddr = rvu_get_blkaddr(rvu, BLKTYPE_NPC, 0);
 	if (blkaddr < 0)
@@ -1323,9 +1362,11 @@ int rvu_mbox_handler_npc_cn20k_read_base_steer_rule(struct rvu *rvu,
 		mutex_unlock(&mcam->lock);
 		goto out;
 	}
+
+	rl_type = rvu_npc_get_base_steer_rule_type(rvu, pcifunc);
+
 	/* Read the default ucast entry if there is no pkt steering rule */
-	index = npc_get_nixlf_mcam_index(mcam, pcifunc, nixlf,
-					 NIXLF_UCAST_ENTRY);
+	index = npc_get_nixlf_mcam_index(mcam, pcifunc, nixlf, rl_type);
 read_entry:
 	/* Read the mcam entry */
 	npc_cn20k_read_mcam_entry(rvu, blkaddr, index,
@@ -3843,6 +3884,89 @@ int npc_cn20k_dft_rules_idx_get(struct rvu *rvu, u16 pcifunc, u16 *bcast,
 	}
 
 	return  set ? 0 : -ESRCH;
+}
+
+int rvu_mbox_handler_npc_get_pfl_info(struct rvu *rvu, struct msg_req *req,
+				      struct npc_get_pfl_info_rsp *rsp)
+{
+	if (!is_cn20k(rvu->pdev)) {
+		dev_err(rvu->dev, "Mbox support is only for cn20k\n");
+		return -EOPNOTSUPP;
+	}
+
+	rsp->kw_type = npc_priv.kw;
+	rsp->x4_slots = npc_priv.bank_depth;
+	return 0;
+}
+
+int rvu_mbox_handler_npc_get_num_kws(struct rvu *rvu,
+				     struct npc_get_num_kws_req *req,
+				     struct npc_get_num_kws_rsp *rsp)
+{
+	struct rvu_npc_mcam_rule dummy = { 0 };
+	struct cn20k_mcam_entry cn20k_entry = { 0 };
+	struct mcam_entry_mdata mdata = { };
+	struct mcam_entry entry = { 0 };
+	struct npc_install_flow_req *fl;
+	int i, cnt = 0, blkaddr;
+
+	if (!is_cn20k(rvu->pdev)) {
+		dev_err(rvu->dev, "Mbox support is only for cn20k\n");
+		return -EOPNOTSUPP;
+	}
+
+	fl = &req->fl;
+
+	blkaddr = rvu_get_blkaddr(rvu, BLKTYPE_NPC, 0);
+	if (blkaddr < 0) {
+		dev_err(rvu->dev, "%s: NPC block not implemented\n", __func__);
+		return NPC_MCAM_INVALID_REQ;
+	}
+
+	npc_populate_mcam_mdata(rvu, &mdata, &cn20k_entry, &entry);
+
+	npc_update_flow(rvu, &mdata, fl->features, &fl->packet,
+			&fl->mask, &dummy, fl->intf, blkaddr);
+
+	/* Find the most significant word valid. Traverse from
+	 * MSB to LSB, check if cam0 or cam1 is set
+	 */
+	for (i = NPC_CN20K_MAX_KWS_IN_KEY - 1; i >= 0; i--) {
+		if (cn20k_entry.kw[i] || cn20k_entry.kw_mask[i]) {
+			cnt = i + 1;
+			break;
+		}
+	}
+
+	rsp->kws = cnt;
+
+	return 0;
+}
+
+int rvu_mbox_handler_npc_get_dft_rl_idxs(struct rvu *rvu, struct msg_req *req,
+					 struct npc_get_dft_rl_idxs_rsp *rsp)
+{
+	u16 bcast, mcast, promisc, ucast;
+	u16 pcifunc;
+	int rc;
+
+	if (!is_cn20k(rvu->pdev)) {
+		dev_err(rvu->dev, "Mbox support is only for cn20k\n");
+		return -EOPNOTSUPP;
+	}
+
+	pcifunc = req->hdr.pcifunc;
+
+	rc = npc_cn20k_dft_rules_idx_get(rvu, pcifunc, &bcast, &mcast,
+					 &promisc, &ucast);
+	if (rc)
+		return rc;
+
+	rsp->bcast = bcast;
+	rsp->mcast = mcast;
+	rsp->promisc = promisc;
+	rsp->ucast = ucast;
+	return 0;
 }
 
 static bool npc_is_cgx_or_lbk(struct rvu *rvu, u16 pcifunc)
