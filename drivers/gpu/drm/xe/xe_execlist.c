@@ -469,6 +469,19 @@ static bool execlist_exec_queue_reset_status(struct xe_exec_queue *q)
 	return false;
 }
 
+static void execlist_exec_queue_set_deadline(struct xe_exec_queue *q,
+					     struct dma_fence *fence,
+					     ktime_t deadline)
+{
+	/* NIY */
+}
+
+static void execlist_exec_queue_set_deadline_state(struct xe_exec_queue *q,
+						   enum xe_deadline_mgr_state state)
+{
+	/* NIY */
+}
+
 static const struct xe_exec_queue_ops execlist_exec_queue_ops = {
 	.init = execlist_exec_queue_init,
 	.kill = execlist_exec_queue_kill,
@@ -481,6 +494,8 @@ static const struct xe_exec_queue_ops execlist_exec_queue_ops = {
 	.suspend_wait = execlist_exec_queue_suspend_wait,
 	.resume = execlist_exec_queue_resume,
 	.reset_status = execlist_exec_queue_reset_status,
+	.set_deadline = execlist_exec_queue_set_deadline,
+	.set_deadline_state = execlist_exec_queue_set_deadline_state,
 };
 
 int xe_execlist_init(struct xe_gt *gt)
