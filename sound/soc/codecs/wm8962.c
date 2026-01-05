@@ -793,7 +793,6 @@ static bool wm8962_volatile_register(struct device *dev, unsigned int reg)
 	case WM8962_CLOCKING1:
 	case WM8962_SOFTWARE_RESET:
 	case WM8962_THERMAL_SHUTDOWN_STATUS:
-	case WM8962_ADDITIONAL_CONTROL_4:
 	case WM8962_DC_SERVO_6:
 	case WM8962_INTERRUPT_STATUS_1:
 	case WM8962_INTERRUPT_STATUS_2:
@@ -3074,7 +3073,9 @@ static void wm8962_mic_work(struct work_struct *work)
 	int irq_pol = 0;
 	int reg;
 
+	regcache_cache_bypass(wm8962->regmap, true);
 	reg = snd_soc_component_read(component, WM8962_ADDITIONAL_CONTROL_4);
+	regcache_cache_bypass(wm8962->regmap, false);
 
 	if (reg & WM8962_MICDET_STS) {
 		status |= SND_JACK_MICROPHONE;
