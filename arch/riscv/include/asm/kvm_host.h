@@ -103,6 +103,10 @@ struct kvm_arch {
 
 	/* KVM_CAP_RISCV_MP_STATE_RESET */
 	bool mp_state_reset;
+
+	unsigned long kvm_riscv_gstage_mode;
+	unsigned long kvm_riscv_gstage_pgd_levels;
+	bool gstage_mode_initialized;
 };
 
 struct kvm_cpu_trap {
