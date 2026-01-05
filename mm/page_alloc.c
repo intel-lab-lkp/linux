@@ -3985,6 +3985,10 @@ static void warn_alloc_show_mem(gfp_t gfp_mask, nodemask_t *nodemask)
 	mem_cgroup_show_protected_memory(NULL);
 }
 
+/* Auto-tuning watermarks on atomic allocation failures */
+static unsigned long last_boost_jiffies = 0;
+#define BOOST_DEBOUNCE_MS 10000  /* 10 seconds debounce */
+
 void warn_alloc(gfp_t gfp_mask, nodemask_t *nodemask, const char *fmt, ...)
 {
 	struct va_format vaf;
@@ -4971,6 +4975,22 @@ nopage:
 		goto retry;
 	}
 fail:
+	/* Auto-tuning: boost watermarks if atomic allocation fails */
+	if ((gfp_mask & GFP_ATOMIC) && order == 0) {
+		unsigned long now = jiffies;
+
+		if (time_after(now, last_boost_jiffies + msecs_to_jiffies(BOOST_DEBOUNCE_MS))) {
+			struct zoneref *z;
+			struct zone *zone;
+
+			last_boost_jiffies = now;
+			for_each_zone_zonelist(zone, z, ac->zonelist, ac->highest_zoneidx) {
+				if (boost_watermark(zone))
+					wakeup_kswapd(zone, gfp_mask, 0, ac->highest_zoneidx);
+			}
+		}
+	}
+
 	warn_alloc(gfp_mask, ac->nodemask,
 			"page allocation failure: order:%u", order);
 got_pg:
