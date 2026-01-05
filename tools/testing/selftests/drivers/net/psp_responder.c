@@ -430,12 +430,8 @@ int main(int argc, char **argv)
 	}
 
 	dev_list = psp_dev_get_dump(ys);
-	if (ynl_dump_empty(dev_list)) {
-		if (ys->err.code)
-			goto err_close;
-		fprintf(stderr, "No PSP devices\n");
-		goto err_close_silent;
-	}
+	if (ynl_dump_empty(dev_list) && ys->err.code)
+		goto err_close;
 
 	ynl_dump_foreach(dev_list, d) {
 		if (opts.devid) {
@@ -464,7 +460,7 @@ int main(int argc, char **argv)
 		opts.devid = first_id;
 	}
 
-	if (ver_ena != ver_cap) {
+	if (opts.devid && ver_ena != ver_cap) {
 		ret = psp_dev_set_ena(ys, opts.devid, ver_cap);
 		if (ret)
 			goto err_close;
@@ -472,7 +468,8 @@ int main(int argc, char **argv)
 
 	ret = run_responder(ys, &opts);
 
-	if (ver_ena != ver_cap && psp_dev_set_ena(ys, opts.devid, ver_ena))
+	if (opts.devid && ver_ena != ver_cap &&
+	    psp_dev_set_ena(ys, opts.devid, ver_ena))
 		fprintf(stderr, "WARN: failed to set the PSP versions back\n");
 
 	ynl_sock_destroy(ys);
