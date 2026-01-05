@@ -533,9 +533,14 @@ struct yt921x_port {
 	bool isolated;
 
 	struct delayed_work mib_read;
+	/* protect the access to mib, rx_frames and tx_frames */
+	spinlock_t stats_lock;
 	struct yt921x_mib mib;
 	u64 rx_frames;
 	u64 tx_frames;
+
+	/* only used by read routine to avoid huge allocations on the stack */
+	struct yt921x_mib mib_new;
 };
 
 struct yt921x_reg_ops {
