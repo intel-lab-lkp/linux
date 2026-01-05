@@ -15,6 +15,7 @@
 #include "xe_hw_fence_types.h"
 #include "xe_lrc_types.h"
 
+enum xe_deadline_mgr_state;
 struct drm_syncobj;
 struct xe_execlist_exec_queue;
 struct xe_gt;
@@ -301,6 +302,14 @@ struct xe_exec_queue_ops {
 	void (*resume)(struct xe_exec_queue *q);
 	/** @reset_status: check exec queue reset status */
 	bool (*reset_status)(struct xe_exec_queue *q);
+	/**
+	 * @set_deadline: Set deadline for on a queue for a fence.
+	 */
+	void (*set_deadline)(struct xe_exec_queue *q, struct dma_fence *fence,
+			     ktime_t deadline);
+	/** @set_deadline_state: Set deadline state for a queue */
+	void (*set_deadline_state)(struct xe_exec_queue *q,
+				   enum xe_deadline_mgr_state state);
 };
 
 #endif
