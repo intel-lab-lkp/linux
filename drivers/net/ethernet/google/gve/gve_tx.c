@@ -739,12 +739,18 @@ drop:
 netdev_tx_t gve_tx(struct sk_buff *skb, struct net_device *dev)
 {
 	struct gve_priv *priv = netdev_priv(dev);
+	u16 qid = skb_get_queue_mapping(skb);
 	struct gve_tx_ring *tx;
 	int nsegs;
 
-	WARN(skb_get_queue_mapping(skb) >= priv->tx_cfg.num_queues,
-	     "skb queue index out of range");
-	tx = &priv->tx[skb_get_queue_mapping(skb)];
+	if (unlikely(qid >= priv->tx_cfg.num_queues)) {
+		net_warn_ratelimited("%s: skb qid %d out of range, num tx queue %d. dropping packet",
+				     dev->name, qid, priv->tx_cfg.num_queues);
+		dev_kfree_skb_any(skb);
+		return NETDEV_TX_OK;
+	}
+
+	tx = &priv->tx[qid];
 	if (unlikely(gve_maybe_stop_tx(priv, tx, skb))) {
 		/* We need to ring the txq doorbell -- we have stopped the Tx
 		 * queue for want of resources, but prior calls to gve_tx()
