@@ -243,6 +243,8 @@ struct bnge_net {
 
 	unsigned long		state;
 #define BNGE_STATE_NAPI_DISABLED	0
+
+	u32			msg_enable;
 };
 
 #define BNGE_DEFAULT_RX_RING_SIZE	511
@@ -431,6 +433,7 @@ struct bnge_napi {
 #define BNGE_TX_EVENT			4
 #define BNGE_REDIRECT_EVENT		8
 #define BNGE_TX_CMP_EVENT		0x10
+	u8				tx_fault:1;
 };
 
 #define INVALID_STATS_CTX_ID	-1
