@@ -3429,7 +3429,8 @@ void vfree_atomic(const void *addr)
 void vfree(const void *addr)
 {
 	struct vm_struct *vm;
-	int i;
+	unsigned long start_pfn;
+	int i, nr;
 
 	if (unlikely(in_interrupt())) {
 		vfree_atomic(addr);
@@ -3455,17 +3456,25 @@ void vfree(const void *addr)
 	/* All pages of vm should be charged to same memcg, so use first one. */
 	if (vm->nr_pages && !(vm->flags & VM_MAP_PUT_PAGES))
 		mod_memcg_page_state(vm->pages[0], MEMCG_VMALLOC, -vm->nr_pages);
-	for (i = 0; i < vm->nr_pages; i++) {
-		struct page *page = vm->pages[i];
 
-		BUG_ON(!page);
-		/*
-		 * High-order allocs for huge vmallocs are split, so
-		 * can be freed as an array of order-0 allocations
-		 */
-		__free_page(page);
-		cond_resched();
+	if (vm->nr_pages) {
+		start_pfn = page_to_pfn(vm->pages[0]);
+		nr = 1;
+		for (i = 1; i < vm->nr_pages; i++) {
+			unsigned long pfn = page_to_pfn(vm->pages[i]);
+
+			if (start_pfn + nr != pfn) {
+				__free_contig_range(start_pfn, nr);
+				start_pfn = pfn;
+				nr = 1;
+				cond_resched();
+			} else {
+				nr++;
+			}
+		}
+		__free_contig_range(start_pfn, nr);
 	}
+
 	if (!(vm->flags & VM_MAP_PUT_PAGES))
 		atomic_long_sub(vm->nr_pages, &nr_vmalloc_pages);
 	kvfree(vm->pages);
