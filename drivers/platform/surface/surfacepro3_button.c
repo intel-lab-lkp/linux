@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/string.h>
 #include <linux/types.h>
 #include <linux/input.h>
 #include <linux/acpi.h>
@@ -211,7 +212,7 @@ static int surface_button_add(struct acpi_device *device)
 	}
 
 	name = acpi_device_name(device);
-	strcpy(name, SURFACE_BUTTON_DEVICE_NAME);
+	strscpy(acpi_device_name(device), SURFACE_BUTTON_DEVICE_NAME);
 	snprintf(button->phys, sizeof(button->phys), "%s/buttons", hid);
 
 	input->name = name;
