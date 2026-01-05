@@ -548,7 +548,11 @@ static void max3420_getstatus(struct max3420_udc *udc)
 			goto stall;
 		break;
 	case USB_RECIP_ENDPOINT:
-		ep = &udc->ep[udc->setup.wIndex & USB_ENDPOINT_NUMBER_MASK];
+		u8 epnum = udc->setup.wIndex & USB_ENDPOINT_NUMBER_MASK;
+
+		if (epnum >= MAX3420_MAX_EPS)
+			goto stall;
+		ep = &udc->ep[epnum];
 		if (udc->setup.wIndex & USB_DIR_IN) {
 			if (!ep->ep_usb.caps.dir_in)
 				goto stall;
