@@ -53,8 +53,12 @@ void snp_vm_launch_start(struct kvm_vm *vm, uint64_t policy);
 void snp_vm_launch_update(struct kvm_vm *vm);
 void snp_vm_launch_finish(struct kvm_vm *vm);
 
+struct kvm_vm *_vm_sev_create_with_one_vcpu(uint32_t type, void *guest_code,
+					   struct kvm_vcpu **cpu, uint64_t npages);
 struct kvm_vm *vm_sev_create_with_one_vcpu(uint32_t type, void *guest_code,
 					   struct kvm_vcpu **cpu);
+struct kvm_vm *vm_sev_create_with_one_vcpu_extramem(uint32_t type, void *guest_code,
+					   struct kvm_vcpu **cpu, uint64_t npages);
 void vm_sev_launch(struct kvm_vm *vm, uint64_t policy, uint8_t *measurement);
 
 kvm_static_assert(SEV_RET_SUCCESS == 0);

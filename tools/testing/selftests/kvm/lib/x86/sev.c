@@ -158,8 +158,8 @@ void snp_vm_launch_finish(struct kvm_vm *vm)
 	vm_sev_ioctl(vm, KVM_SEV_SNP_LAUNCH_FINISH, &launch_finish);
 }
 
-struct kvm_vm *vm_sev_create_with_one_vcpu(uint32_t type, void *guest_code,
-					   struct kvm_vcpu **cpu)
+struct kvm_vm *_vm_sev_create_with_one_vcpu(uint32_t type, void *guest_code,
+					   struct kvm_vcpu **cpu, uint64_t npages)
 {
 	struct vm_shape shape = {
 		.mode = VM_MODE_DEFAULT,
@@ -168,10 +168,22 @@ struct kvm_vm *vm_sev_create_with_one_vcpu(uint32_t type, void *guest_code,
 	struct kvm_vm *vm;
 	struct kvm_vcpu *cpus[1];
 
-	vm = __vm_create_with_vcpus(shape, 1, 0, guest_code, cpus);
+	vm = __vm_create_with_vcpus(shape, 1, npages, guest_code, cpus);
 	*cpu = cpus[0];
 
 	return vm;
+}
+
+struct kvm_vm *vm_sev_create_with_one_vcpu(uint32_t type, void *guest_code,
+					   struct kvm_vcpu **cpu)
+{
+	return _vm_sev_create_with_one_vcpu(type, guest_code, cpu, 0);
+}
+
+struct kvm_vm *vm_sev_create_with_one_vcpu_extramem(uint32_t type, void *guest_code,
+						    struct kvm_vcpu **cpu, uint64_t npages)
+{
+	return _vm_sev_create_with_one_vcpu(type, guest_code, cpu, npages);
 }
 
 void vm_sev_launch(struct kvm_vm *vm, uint64_t policy, uint8_t *measurement)
