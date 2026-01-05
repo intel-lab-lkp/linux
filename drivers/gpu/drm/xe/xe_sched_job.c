@@ -9,6 +9,7 @@
 #include <linux/dma-fence-chain.h>
 #include <linux/slab.h>
 
+#include "xe_deadline_mgr.h"
 #include "xe_device.h"
 #include "xe_exec_queue.h"
 #include "xe_gt.h"
@@ -174,6 +175,8 @@ void xe_sched_job_destroy(struct kref *ref)
 	struct xe_device *xe = job_to_xe(job);
 	struct xe_exec_queue *q = job->q;
 
+	if (job->fence)
+		xe_deadline_mgr_remove_deadline(&q->deadline_mgr, job->fence);
 	xe_sched_job_free_fences(job);
 	dma_fence_put(job->fence);
 	drm_sched_job_cleanup(&job->drm);

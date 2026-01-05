@@ -20,6 +20,8 @@
 #include "regs/xe_lrc_layout.h"
 #include "xe_assert.h"
 #include "xe_bo.h"
+#include "xe_deadline_mgr.h"
+#include "xe_deadline_mgr_types.h"
 #include "xe_devcoredump.h"
 #include "xe_device.h"
 #include "xe_exec_queue.h"
@@ -551,6 +553,35 @@ static const int xe_exec_queue_prio_to_guc[] = {
 	[XE_EXEC_QUEUE_PRIORITY_HIGH] = GUC_CLIENT_PRIORITY_HIGH,
 	[XE_EXEC_QUEUE_PRIORITY_KERNEL] = GUC_CLIENT_PRIORITY_KMD_HIGH,
 };
+
+static void deadline_policies(struct xe_guc *guc, struct xe_exec_queue *q,
+			      enum xe_deadline_mgr_state state)
+{
+	struct exec_queue_policy policy;
+	enum xe_exec_queue_priority prio = q->sched_props.priority;
+	u32 slpc_exec_queue_freq_req = 0;
+
+	xe_gt_assert(guc_to_gt(guc), exec_queue_registered(q) &&
+		     !xe_exec_queue_is_multi_queue_secondary(q));
+	xe_gt_assert(guc_to_gt(guc), state !=
+		     XE_DEADLINE_MGR_STATE_UNSUPPORTED);
+
+	if (state == XE_DEADLINE_MGR_STATE_PRIO_BOOST &&
+	    (q->flags & EXEC_QUEUE_FLAG_CAP_SYS_NICE))
+		prio = XE_EXEC_QUEUE_PRIORITY_HIGH;
+
+	if (state != XE_DEADLINE_MGR_STATE_NO_BOOST ||
+	    (q->flags & EXEC_QUEUE_FLAG_LOW_LATENCY))
+		slpc_exec_queue_freq_req |= SLPC_CTX_FREQ_REQ_IS_COMPUTE;
+
+	__guc_exec_queue_policy_start_klv(&policy, q->guc->id);
+	__guc_exec_queue_policy_add_priority(&policy, xe_exec_queue_prio_to_guc[prio]);
+	__guc_exec_queue_policy_add_slpc_exec_queue_freq_req(&policy,
+							     slpc_exec_queue_freq_req);
+
+	xe_guc_ct_send(&guc->ct, (u32 *)&policy.h2g,
+		       __guc_exec_queue_policy_action_size(&policy), 0, 0);
+}
 
 static void init_policies(struct xe_guc *guc, struct xe_exec_queue *q)
 {
@@ -1846,6 +1877,18 @@ static void __guc_exec_queue_destroy(struct xe_guc *guc, struct xe_exec_queue *q
 	guc_exec_queue_destroy_async(q);
 }
 
+#define CLEANUP				1	/* Non-zero values to catch uninitialized msg */
+#define SET_SCHED_PROPS			2
+#define SUSPEND				3
+#define RESUME				4
+#define SET_MULTI_QUEUE_PRIORITY	5
+#define ENTER_DEADLINE_FREQ		6
+#define ENTER_DEADLINE_PRIO		7
+#define EXIT_DEADLINE			8
+#define OPCODE_MASK	0xf
+#define MSG_LOCKED	BIT(8)
+#define MSG_HEAD	BIT(9)
+
 static void __guc_exec_queue_process_msg_cleanup(struct xe_sched_msg *msg)
 {
 	struct xe_exec_queue *q = msg->private_data;
@@ -2020,14 +2063,24 @@ static void __guc_exec_queue_process_msg_set_multi_queue_priority(struct xe_sche
 	kfree(msg);
 }
 
-#define CLEANUP				1	/* Non-zero values to catch uninitialized msg */
-#define SET_SCHED_PROPS			2
-#define SUSPEND				3
-#define RESUME				4
-#define SET_MULTI_QUEUE_PRIORITY	5
-#define OPCODE_MASK	0xf
-#define MSG_LOCKED	BIT(8)
-#define MSG_HEAD	BIT(9)
+static void
+__guc_exec_queue_process_msg_set_deadline_state(struct xe_sched_msg *msg,
+						unsigned int opcode)
+{
+	struct xe_exec_queue *q = msg->private_data;
+	struct xe_guc *guc = exec_queue_to_guc(q);
+	enum xe_deadline_mgr_state state;
+
+	if (opcode == EXIT_DEADLINE)
+		state = XE_DEADLINE_MGR_STATE_NO_BOOST;
+	else if (opcode == ENTER_DEADLINE_FREQ)
+		state = XE_DEADLINE_MGR_STATE_FREQ_BOOST;
+	else
+		state = XE_DEADLINE_MGR_STATE_PRIO_BOOST;
+
+	if (guc_exec_queue_allowed_to_change_state(q))
+		deadline_policies(guc, q, state);
+}
 
 static void guc_exec_queue_process_msg(struct xe_sched_msg *msg,
 				       unsigned int opcode)
@@ -2051,6 +2104,11 @@ static void guc_exec_queue_process_msg(struct xe_sched_msg *msg,
 		break;
 	case SET_MULTI_QUEUE_PRIORITY:
 		__guc_exec_queue_process_msg_set_multi_queue_priority(msg);
+		break;
+	case ENTER_DEADLINE_FREQ:
+	case ENTER_DEADLINE_PRIO:
+	case EXIT_DEADLINE:
+		__guc_exec_queue_process_msg_set_deadline_state(msg, opcode);
 		break;
 	default:
 		XE_WARN_ON("Unknown message type");
@@ -2215,9 +2273,11 @@ static bool guc_exec_queue_try_add_msg(struct xe_exec_queue *q,
 	return true;
 }
 
-#define STATIC_MSG_CLEANUP	0
-#define STATIC_MSG_SUSPEND	1
-#define STATIC_MSG_RESUME	2
+#define STATIC_MSG_CLEANUP		0
+#define STATIC_MSG_SUSPEND		1
+#define STATIC_MSG_RESUME		2
+#define STATIC_MSG_SET_DEADLINE_STATE	3
+
 static void guc_exec_queue_destroy(struct xe_exec_queue *q)
 {
 	struct xe_sched_msg *msg = q->guc->static_msgs + STATIC_MSG_CLEANUP;
@@ -2385,6 +2445,55 @@ static bool guc_exec_queue_reset_status(struct xe_exec_queue *q)
 	return exec_queue_reset(q) || exec_queue_killed_or_banned_or_wedged(q);
 }
 
+static void guc_exec_queue_set_deadline(struct xe_exec_queue *q,
+					struct dma_fence *fence,
+					ktime_t deadline)
+{
+	xe_deadline_mgr_add_deadline(&q->deadline_mgr, fence, deadline);
+}
+
+static void guc_exec_queue_set_deadline_state(struct xe_exec_queue *q,
+					      enum xe_deadline_mgr_state state)
+{
+	struct xe_gpu_scheduler *sched = &q->guc->sched;
+	struct xe_sched_msg *msg = q->guc->static_msgs +
+		STATIC_MSG_SET_DEADLINE_STATE;
+	struct xe_guc *guc = exec_queue_to_guc(q);
+	unsigned int opcode;
+
+	xe_gt_assert(guc_to_gt(guc), state !=
+		     XE_DEADLINE_MGR_STATE_UNSUPPORTED);
+
+	switch (state) {
+	case XE_DEADLINE_MGR_STATE_NO_BOOST:
+		opcode = EXIT_DEADLINE;
+		break;
+	case XE_DEADLINE_MGR_STATE_FREQ_BOOST:
+		opcode = ENTER_DEADLINE_FREQ;
+		break;
+	case XE_DEADLINE_MGR_STATE_PRIO_BOOST:
+		opcode = ENTER_DEADLINE_PRIO;
+		break;
+	default:
+		drm_warn(&guc_to_xe(guc)->drm, "NOT POSSIBLE");
+	}
+
+	xe_sched_msg_scoped_guard(sched) {
+		if (!guc_exec_queue_try_add_msg(q, msg, opcode)) {
+			bool added;
+
+			/*
+			 * A deadline state change has yet to be processed,
+			 * removed it.
+			 */
+			list_del_init(&msg->link);
+
+			added = guc_exec_queue_try_add_msg(q, msg, opcode);
+			xe_gt_assert(guc_to_gt(guc), added);
+		}
+	}
+}
+
 /*
  * All of these functions are an abstraction layer which other parts of Xe can
  * use to trap into the GuC backend. All of these functions, aside from init,
@@ -2404,6 +2513,8 @@ static const struct xe_exec_queue_ops guc_exec_queue_ops = {
 	.suspend_wait = guc_exec_queue_suspend_wait,
 	.resume = guc_exec_queue_resume,
 	.reset_status = guc_exec_queue_reset_status,
+	.set_deadline = guc_exec_queue_set_deadline,
+	.set_deadline_state = guc_exec_queue_set_deadline_state,
 };
 
 static void guc_exec_queue_stop(struct xe_guc *guc, struct xe_exec_queue *q)
