@@ -801,6 +801,9 @@ static struct pnv_php_slot *pnv_php_alloc_slot(struct device_node *dn)
 		return NULL;
 	}
 
+	php_slot->bus	                = bus;
+	php_slot->pdev	                = bus->self;
+
 	/* Allocate workqueue for this slot's interrupt handling */
 	php_slot->wq = alloc_workqueue("pciehp-%s", 0, 0, php_slot->name);
 	if (!php_slot->wq) {
@@ -818,8 +821,6 @@ static struct pnv_php_slot *pnv_php_alloc_slot(struct device_node *dn)
 	kref_init(&php_slot->kref);
 	php_slot->state	                = PNV_PHP_STATE_INITIALIZED;
 	php_slot->dn	                = dn;
-	php_slot->pdev	                = bus->self;
-	php_slot->bus	                = bus;
 	php_slot->id	                = id;
 	php_slot->power_state_check     = false;
 	php_slot->slot.ops              = &php_slot_ops;
