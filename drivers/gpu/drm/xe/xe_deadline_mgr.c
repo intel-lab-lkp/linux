@@ -10,6 +10,7 @@
 #include "xe_exec_queue.h"
 #include "xe_gt.h"
 #include "xe_hw_fence.h"
+#include "xe_trace.h"
 
 #ifdef CONFIG_DRM_XE_DEADLINE_WINDOW_US
 #define XE_DEADLINE_WINDOW_US	CONFIG_DRM_XE_DEADLINE_WINDOW_US
@@ -345,6 +346,8 @@ void xe_deadline_mgr_add_deadline(struct xe_deadline_mgr *mgr,
 	__xe_deadline_mgr_remove_deadline(mgr, hw_fence);
 	__xe_deadline_mgr_add_deadline(mgr, hw_fence, deadline);
 	__xe_deadline_mgr_update_deadline(mgr);
+
+	trace_xe_hw_fence_add_deadline(hw_fence);
 }
 
 /**
@@ -359,15 +362,22 @@ void xe_deadline_mgr_add_deadline(struct xe_deadline_mgr *mgr,
 void xe_deadline_mgr_remove_deadline(struct xe_deadline_mgr *mgr,
 				     struct dma_fence *fence)
 {
+	struct xe_hw_fence *hw_fence;
+
 	if (mgr->state == XE_DEADLINE_MGR_STATE_UNSUPPORTED)
 		return;
 
 	guard(spinlock_irqsave)(&mgr->lock);
 
+	hw_fence = to_xe_hw_fence(fence);
+
 	xe_assert(gt_to_xe(mgr->q->gt), !dma_fence_is_container(fence));
 	xe_assert(gt_to_xe(mgr->q->gt), dma_fence_is_signaled(fence));
 	xe_assert(gt_to_xe(mgr->q->gt),
-		  to_xe_hw_fence(fence)->deadline.time != XE_DEADLINE_DONE);
+		  hw_fence->deadline.time != XE_DEADLINE_DONE);
 
-	__xe_deadline_mgr_remove_deadline(mgr, to_xe_hw_fence(fence));
+	if (hw_fence->deadline.time != XE_DEADLINE_NONE)
+		trace_xe_hw_fence_remove_deadline(hw_fence);
+
+	__xe_deadline_mgr_remove_deadline(mgr, hw_fence);
 }

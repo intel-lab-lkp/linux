@@ -369,6 +369,8 @@ DECLARE_EVENT_CLASS(xe_hw_fence,
 			     __field(u64, ctx)
 			     __field(u32, seqno)
 			     __field(struct xe_hw_fence *, fence)
+			     __field(s64, delta_ns)
+			     __field(bool, missed)
 			     ),
 
 		    TP_fast_assign(
@@ -376,10 +378,16 @@ DECLARE_EVENT_CLASS(xe_hw_fence,
 			   __entry->ctx = fence->dma.context;
 			   __entry->seqno = fence->dma.seqno;
 			   __entry->fence = fence;
+			   __entry->delta_ns =
+			   ktime_to_ns(ktime_sub(fence->deadline.time, ktime_get()));
+			   __entry->missed = (__entry->delta_ns < 0 &&
+			    fence->deadline.time != XE_DEADLINE_NONE);
 			   ),
 
-		    TP_printk("dev=%s, ctx=0x%016llx, fence=%p, seqno=%u",
-			      __get_str(dev), __entry->ctx, __entry->fence, __entry->seqno)
+		    TP_printk("dev=%s, ctx=0x%llx, fence=%p, seqno=%u, missed=%d, delta_ns=0x%llx",
+			      __get_str(dev), __entry->ctx, __entry->fence,
+			      __entry->seqno, __entry->missed ? 1 : 0,
+			      (u64)__entry->delta_ns)
 );
 
 DEFINE_EVENT(xe_hw_fence, xe_hw_fence_create,
@@ -393,6 +401,16 @@ DEFINE_EVENT(xe_hw_fence, xe_hw_fence_signal,
 );
 
 DEFINE_EVENT(xe_hw_fence, xe_hw_fence_try_signal,
+	     TP_PROTO(struct xe_hw_fence *fence),
+	     TP_ARGS(fence)
+);
+
+DEFINE_EVENT(xe_hw_fence, xe_hw_fence_add_deadline,
+	     TP_PROTO(struct xe_hw_fence *fence),
+	     TP_ARGS(fence)
+);
+
+DEFINE_EVENT(xe_hw_fence, xe_hw_fence_remove_deadline,
 	     TP_PROTO(struct xe_hw_fence *fence),
 	     TP_ARGS(fence)
 );
