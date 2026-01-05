@@ -9,6 +9,7 @@
 #include <linux/slab.h>
 
 #include "xe_bo.h"
+#include "xe_deadline_mgr_types.h"
 #include "xe_device.h"
 #include "xe_gt.h"
 #include "xe_hw_engine.h"
@@ -267,6 +268,8 @@ void xe_hw_fence_init(struct dma_fence *fence, struct xe_hw_fence_ctx *ctx,
 
 	hw_fence->xe = gt_to_xe(ctx->gt);
 	hw_fence->q = q;
+	hw_fence->deadline.time = XE_DEADLINE_NONE;
+	INIT_LIST_HEAD(&hw_fence->deadline.link);
 	snprintf(hw_fence->name, sizeof(hw_fence->name), "%s", ctx->name);
 	hw_fence->seqno_map = seqno_map;
 	INIT_LIST_HEAD(&hw_fence->irq_link);

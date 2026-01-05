@@ -76,6 +76,19 @@ struct xe_hw_fence {
 	struct iosys_map seqno_map;
 	/** @irq_link: Link in struct xe_hw_fence_irq.pending */
 	struct list_head irq_link;
+	/** @deadline: Deadline info */
+	struct {
+		/**
+		 * @deadline.time: Deadline time, protected by deadline manager
+		 * lock
+		 */
+		ktime_t time;
+		/**
+		 * @deadline.link: Deadline link, protected by deadline manager
+		 * lock
+		 */
+		struct list_head link;
+	} deadline;
 };
 
 #endif
