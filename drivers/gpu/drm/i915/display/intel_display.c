@@ -7723,6 +7723,8 @@ int intel_atomic_commit(struct drm_device *dev, struct drm_atomic_state *_state,
 	drm_atomic_state_get(&state->base);
 	INIT_WORK(&state->base.commit_work, intel_atomic_commit_work);
 
+	drm_atomic_helper_set_fence_deadline(dev, _state);
+
 	if (nonblock && state->modeset) {
 		queue_work(display->wq.modeset, &state->base.commit_work);
 	} else if (nonblock) {
