@@ -425,6 +425,7 @@ int pci_ide_stream_register(struct pci_ide *ide)
 	struct pci_host_bridge *hb = pci_find_host_bridge(pdev->bus);
 	struct pci_ide_stream_id __sid;
 	u8 ep_stream, rp_stream;
+	const char *short_name;
 	int rc;
 
 	if (ide->stream_id < 0 || ide->stream_id > U8_MAX) {
@@ -441,13 +442,16 @@ int pci_ide_stream_register(struct pci_ide *ide)
 
 	ep_stream = ide->partner[PCI_IDE_EP].stream_index;
 	rp_stream = ide->partner[PCI_IDE_RP].stream_index;
-	const char *name __free(kfree) = kasprintf(GFP_KERNEL, "stream%d.%d.%d",
+	const char *name __free(kfree) = kasprintf(GFP_KERNEL, "%s:stream%d.%d.%d",
+						   dev_name(&hb->dev),
 						   ide->host_bridge_stream,
 						   rp_stream, ep_stream);
 	if (!name)
 		return -ENOMEM;
 
-	rc = sysfs_create_link(&hb->dev.kobj, &pdev->dev.kobj, name);
+	/* Strip host bridge name in the host bridge context */
+	short_name = name + strlen(dev_name(&hb->dev)) + 1;
+	rc = sysfs_create_link(&hb->dev.kobj, &pdev->dev.kobj, short_name);
 	if (rc)
 		return rc;
 
@@ -471,8 +475,10 @@ void pci_ide_stream_unregister(struct pci_ide *ide)
 {
 	struct pci_dev *pdev = ide->pdev;
 	struct pci_host_bridge *hb = pci_find_host_bridge(pdev->bus);
+	const char *short_name;
 
-	sysfs_remove_link(&hb->dev.kobj, ide->name);
+	short_name = ide->name + strlen(dev_name(&hb->dev)) + 1;
+	sysfs_remove_link(&hb->dev.kobj, short_name);
 	kfree(ide->name);
 	ida_free(&hb->ide_stream_ids_ida, ide->stream_id);
 	ide->name = NULL;
