@@ -151,6 +151,8 @@ static struct cpufreq_driver omap_driver = {
 
 static int omap_cpufreq_probe(struct platform_device *pdev)
 {
+	int ret;
+
 	mpu_dev = get_cpu_device(0);
 	if (!mpu_dev) {
 		pr_warn("%s: unable to get the MPU device\n", __func__);
@@ -174,12 +176,23 @@ static int omap_cpufreq_probe(struct platform_device *pdev)
 		}
 	}
 
-	return cpufreq_register_driver(&omap_driver);
+	ret = cpufreq_register_driver(&omap_driver);
+	if (ret) {
+		if (mpu_reg) {
+			regulator_put(mpu_reg);
+			mpu_reg = NULL;
+		}
+	}
+	return ret;
 }
 
 static void omap_cpufreq_remove(struct platform_device *pdev)
 {
 	cpufreq_unregister_driver(&omap_driver);
+	if (mpu_reg) {
+		regulator_put(mpu_reg);
+		mpu_reg = NULL;
+	}
 }
 
 static struct platform_driver omap_cpufreq_platdrv = {
