@@ -12,6 +12,86 @@
 #include "xe_hw_fence.h"
 #include "xe_trace.h"
 
+/**
+ * DOC: Xe deadline manager
+ *
+ * The Xe deadline manager provides per-exec-queue deadline boosting to help
+ * latency-sensitive workloads (e.g. compositors) avoid missing presentation
+ * deadlines.
+ *
+ * Overview
+ * ========
+ * Userspace may associate an absolute deadline (ktime_t) with the hardware
+ * fence of a submitted job. The manager tracks deadlines for in-flight jobs on
+ * a queue and programs a single hrtimer based on the earliest outstanding
+ * deadline.
+ *
+ * When the earliest deadline approaches, the manager transitions the queue into
+ * a boosted state via @q->ops->set_deadline_state(). Boosting is intended to be
+ * minimal and time-bounded:
+ *
+ *   - Frequency boost begins when the current time is within
+ *     %XE_DEADLINE_WINDOW_US of the deadline.
+ *
+ *   - Optionally, the final portion of the window additionally boosts
+ *     priority. The length of this priority-boost sub-window is controlled by
+ *     %XE_DEADLINE_PRIO_BOOST_WINDOW_PERCENT.
+ *
+ * State machine
+ * =============
+ * The manager maintains a current deadline state:
+ *
+ *   - %XE_DEADLINE_MGR_STATE_NO_BOOST   - normal execution.
+ *   - %XE_DEADLINE_MGR_STATE_FREQ_BOOST - frequency boost active.
+ *   - %XE_DEADLINE_MGR_STATE_PRIO_BOOST - priority + frequency boost active.
+ *
+ * For a non-empty deadline list, the manager schedules an hrtimer to fire at:
+ *
+ *     earliest_deadline - %XE_DEADLINE_WINDOW_US
+ *
+ * When the timer fires and the earliest deadline is still pending, the manager
+ * transitions to %XE_DEADLINE_MGR_STATE_FREQ_BOOST or directly to
+ * %XE_DEADLINE_MGR_STATE_PRIO_BOOST depending on
+ * %XE_DEADLINE_PRIO_BOOST_WINDOW_PERCENT. If a priority-boost sub-window is
+ * configured, the timer is re-armed to transition from frequency-only to
+ * priority boost at:
+ *
+ *     earliest_deadline - prio_boost_window
+ *
+ * If the earliest deadline changes (add/remove), the timer is canceled and
+ * reprogrammed. If the deadline is already within the configured window when
+ * updated, the appropriate boost state is entered immediately.
+ *
+ * Deadline lifecycle
+ * ==================
+ * Deadlines are tracked per struct xe_hw_fence and stored on
+ * @mgr->deadlines sorted by deadline time (earliest first). Adding a deadline
+ * may be called multiple times for the same fence; upper layers are expected
+ * to only reduce deadlines. Removing a deadline must be done exactly once after
+ * the fence is signaled. After removal, future add attempts for that fence are
+ * treated as NOPs.
+ *
+ * Concurrency and limitations
+ * ===========================
+ * The manager is protected by @mgr->lock (spinlock) and uses an hrtimer in
+ * %CLOCK_MONOTONIC absolute mode.
+ *
+ * Parallel queues are not supported because their job fence is a dma-fence
+ * chain and individual hardware fences may be freed while still referenced by
+ * the manager. Multi-queue is not supported because deadline boosting requires
+ * per-queue control of priority and frequency. The deadline logic is also
+ * disabled when the feature is disabled via Kconfig or when the queue is
+ * created in a boosted state.
+ *
+ * Tuning
+ * ======
+ * %XE_DEADLINE_WINDOW_US controls how early boosting begins relative to the
+ * deadline (default 3000 us). %XE_DEADLINE_PRIO_BOOST_WINDOW_PERCENT controls
+ * what fraction of that window uses priority boosting in addition to frequency
+ * boosting (default 60%). %XE_DEADLINE_EXIT_DELAY_MS controls delay after
+ * deadline is done until boosting mode exits (default 100 ms).
+ */
+
 #ifdef CONFIG_DRM_XE_DEADLINE_WINDOW_US
 #define XE_DEADLINE_WINDOW_US	CONFIG_DRM_XE_DEADLINE_WINDOW_US
 #else
