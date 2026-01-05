@@ -159,10 +159,9 @@ enum {
 #define MAX_TPA_MASK	(MAX_TPA - 1)
 #define MAX_TPA_SEGS	0x3f
 
-#define BNGE_AGG_IDX_BMAP_SIZE	(MAX_TPA / BITS_PER_LONG)
 struct bnge_tpa_idx_map {
 	u16		agg_id_tbl[1024];
-	unsigned long	agg_idx_bmap[BNGE_AGG_IDX_BMAP_SIZE];
+	DECLARE_BITMAP(agg_idx_bmap, MAX_TPA);
 };
 
 struct bnge_tpa_info {
