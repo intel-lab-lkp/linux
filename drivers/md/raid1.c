@@ -1745,6 +1745,10 @@ static void raid1_status(struct seq_file *seq, struct mddev *mddev)
  *	- recovery is interrupted.
  *	- &mddev->degraded is bumped.
  *
+ * If the following conditions are met, @mddev never fails:
+ *	- The last In_sync @rdev has the &FailFast flag set.
+ *	- &mddev->fail_last_dev is off.
+ *
  * @rdev is marked as &Faulty excluding case when array is failed and
  * &mddev->fail_last_dev is off.
  */
@@ -1757,7 +1761,9 @@ static void raid1_error(struct mddev *mddev, struct md_rdev *rdev)
 
 	if (test_bit(In_sync, &rdev->flags) &&
 	    (conf->raid_disks - mddev->degraded) == 1) {
-		set_bit(MD_BROKEN, &mddev->flags);
+		if (!test_bit(FailFast, &rdev->flags) ||
+		    mddev->fail_last_dev)
+			set_bit(MD_BROKEN, &mddev->flags);
 
 		if (!mddev->fail_last_dev) {
 			conf->recovery_disabled = mddev->recovery_disabled;

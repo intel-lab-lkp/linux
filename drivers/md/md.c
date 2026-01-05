@@ -3089,7 +3089,8 @@ state_store(struct md_rdev *rdev, const char *buf, size_t len)
 	if (cmd_match(buf, "faulty") && rdev->mddev->pers) {
 		md_error(rdev->mddev, rdev);
 
-		if (test_bit(MD_BROKEN, &rdev->mddev->flags))
+		if (test_bit(MD_BROKEN, &rdev->mddev->flags) ||
+		    !test_bit(Faulty, &rdev->flags))
 			err = -EBUSY;
 		else
 			err = 0;
@@ -8046,7 +8047,8 @@ static int set_disk_faulty(struct mddev *mddev, dev_t dev)
 		err =  -ENODEV;
 	else {
 		md_error(mddev, rdev);
-		if (test_bit(MD_BROKEN, &mddev->flags))
+		if (test_bit(MD_BROKEN, &mddev->flags) ||
+		    !test_bit(Faulty, &rdev->flags))
 			err = -EBUSY;
 	}
 	rcu_read_unlock();
