@@ -501,7 +501,7 @@ static int crypto4xx_compute_gcm_hash_key_sw(__le32 *hash_start, const u8 *key,
 		return rc;
 	}
 
-	aes_encrypt_new(&aes, src, src);
+	aes_encrypt(&aes, src, src);
 	crypto4xx_memcpy_to_le32(hash_start, src, 16);
 	memzero_explicit(&aes, sizeof(aes));
 	return 0;

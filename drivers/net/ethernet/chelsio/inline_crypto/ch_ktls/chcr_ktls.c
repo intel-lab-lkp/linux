@@ -143,7 +143,7 @@ static int chcr_ktls_save_keys(struct chcr_ktls_info *tx_info,
 		goto out;
 
 	memset(ghash_h, 0, ghash_size);
-	aes_encrypt_new(&aes, ghash_h, ghash_h);
+	aes_encrypt(&aes, ghash_h, ghash_h);
 	memzero_explicit(&aes, sizeof(aes));
 
 	/* fill the Key context */

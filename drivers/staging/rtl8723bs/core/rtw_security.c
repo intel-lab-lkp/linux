@@ -640,7 +640,7 @@ static void aes128k128d(u8 *key, u8 *data, u8 *ciphertext)
 	struct aes_enckey aes;
 
 	aes_prepareenckey(&aes, key, 16);
-	aes_encrypt_new(&aes, ciphertext, data);
+	aes_encrypt(&aes, ciphertext, data);
 	memzero_explicit(&aes, sizeof(aes));
 }
 
@@ -1436,12 +1436,12 @@ static int omac1_aes_128_vector(u8 *key, size_t num_elem,
 			}
 		}
 		if (left > AES_BLOCK_SIZE)
-			aes_encrypt_new(&aes, cbc, cbc);
+			aes_encrypt(&aes, cbc, cbc);
 		left -= AES_BLOCK_SIZE;
 	}
 
 	memset(pad, 0, AES_BLOCK_SIZE);
-	aes_encrypt_new(&aes, pad, pad);
+	aes_encrypt(&aes, pad, pad);
 	gf_mulx(pad);
 
 	if (left || total_len == 0) {
@@ -1459,7 +1459,7 @@ static int omac1_aes_128_vector(u8 *key, size_t num_elem,
 
 	for (i = 0; i < AES_BLOCK_SIZE; i++)
 		pad[i] ^= cbc[i];
-	aes_encrypt_new(&aes, pad, mac);
+	aes_encrypt(&aes, pad, mac);
 	memzero_explicit(&aes, sizeof(aes));
 	return 0;
 }

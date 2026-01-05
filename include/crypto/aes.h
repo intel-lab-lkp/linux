@@ -301,7 +301,7 @@ typedef union {
 } aes_encrypt_arg __attribute__ ((__transparent_union__));
 
 /**
- * aes_encrypt_new() - Encrypt a single AES block
+ * aes_encrypt() - Encrypt a single AES block
  * @key: The AES key, as a pointer to either an encryption-only key
  *	 (struct aes_enckey) or a full, bidirectional key (struct aes_key).
  * @out: Buffer to store the ciphertext block
@@ -309,19 +309,19 @@ typedef union {
  *
  * Context: Any context.
  */
-void aes_encrypt_new(aes_encrypt_arg key, u8 out[at_least AES_BLOCK_SIZE],
-		     const u8 in[at_least AES_BLOCK_SIZE]);
+void aes_encrypt(aes_encrypt_arg key, u8 out[at_least AES_BLOCK_SIZE],
+		 const u8 in[at_least AES_BLOCK_SIZE]);
 
 /**
- * aes_decrypt_new() - Decrypt a single AES block
+ * aes_decrypt() - Decrypt a single AES block
  * @key: The AES key, previously initialized by aes_preparekey()
  * @out: Buffer to store the plaintext block
  * @in: Buffer containing the ciphertext block
  *
  * Context: Any context.
  */
-void aes_decrypt_new(const struct aes_key *key, u8 out[at_least AES_BLOCK_SIZE],
-		     const u8 in[at_least AES_BLOCK_SIZE]);
+void aes_decrypt(const struct aes_key *key, u8 out[at_least AES_BLOCK_SIZE],
+		 const u8 in[at_least AES_BLOCK_SIZE]);
 
 extern const u8 crypto_aes_sbox[];
 extern const u8 crypto_aes_inv_sbox[];

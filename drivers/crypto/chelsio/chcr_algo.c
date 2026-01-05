@@ -1049,7 +1049,7 @@ static int chcr_update_tweak(struct skcipher_request *req, u8 *iv,
 		ret = aes_preparekey(&aes, key, keylen);
 	if (ret)
 		return ret;
-	aes_encrypt_new(&aes, iv, iv);
+	aes_encrypt(&aes, iv, iv);
 	for (i = 0; i < round8; i++)
 		gf128mul_x8_ble((le128 *)iv, (le128 *)iv);
 
@@ -1057,7 +1057,7 @@ static int chcr_update_tweak(struct skcipher_request *req, u8 *iv,
 		gf128mul_x_ble((le128 *)iv, (le128 *)iv);
 
 	if (!isfinal)
-		aes_decrypt_new(&aes, iv, iv);
+		aes_decrypt(&aes, iv, iv);
 
 	memzero_explicit(&aes, sizeof(aes));
 	return 0;
@@ -3450,7 +3450,7 @@ static int chcr_gcm_setkey(struct crypto_aead *aead, const u8 *key,
 		goto out;
 	}
 	memset(gctx->ghash_h, 0, AEAD_H_SIZE);
-	aes_encrypt_new(&aes, gctx->ghash_h, gctx->ghash_h);
+	aes_encrypt(&aes, gctx->ghash_h, gctx->ghash_h);
 	memzero_explicit(&aes, sizeof(aes));
 
 out:

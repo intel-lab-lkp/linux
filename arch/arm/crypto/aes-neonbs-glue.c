@@ -156,7 +156,7 @@ static int cbc_encrypt(struct skcipher_request *req)
 
 		do {
 			crypto_xor_cpy(dst, src, prev, AES_BLOCK_SIZE);
-			aes_encrypt_new(&ctx->fallback, dst, dst);
+			aes_encrypt(&ctx->fallback, dst, dst);
 			prev = dst;
 			src += AES_BLOCK_SIZE;
 			dst += AES_BLOCK_SIZE;
@@ -282,7 +282,7 @@ static int __xts_crypt(struct skcipher_request *req, bool encrypt,
 	if (err)
 		return err;
 
-	aes_encrypt_new(&ctx->tweak_key, walk.iv, walk.iv);
+	aes_encrypt(&ctx->tweak_key, walk.iv, walk.iv);
 
 	while (walk.nbytes >= AES_BLOCK_SIZE) {
 		unsigned int blocks = walk.nbytes / AES_BLOCK_SIZE;
@@ -314,9 +314,9 @@ static int __xts_crypt(struct skcipher_request *req, bool encrypt,
 	crypto_xor(buf, req->iv, AES_BLOCK_SIZE);
 
 	if (encrypt)
-		aes_encrypt_new(&ctx->fallback, buf, buf);
+		aes_encrypt(&ctx->fallback, buf, buf);
 	else
-		aes_decrypt_new(&ctx->fallback, buf, buf);
+		aes_decrypt(&ctx->fallback, buf, buf);
 
 	crypto_xor(buf, req->iv, AES_BLOCK_SIZE);
 

@@ -1213,7 +1213,7 @@ static int gcm_setkey(struct crypto_aead *tfm, const u8 *raw_key,
 		int i;
 
 		/* Encrypt the all-zeroes block to get the hash key H^1 */
-		aes_encrypt_new(&key->aes_key, (u8 *)&h1, (u8 *)&h1);
+		aes_encrypt(&key->aes_key, (u8 *)&h1, (u8 *)&h1);
 
 		/* Compute H^1 * x^-1 */
 		h = h1;

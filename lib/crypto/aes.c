@@ -502,19 +502,19 @@ int aes_prepareenckey(struct aes_enckey *key, const u8 *in_key, size_t key_len)
 }
 EXPORT_SYMBOL(aes_prepareenckey);
 
-void aes_encrypt_new(aes_encrypt_arg key, u8 out[AES_BLOCK_SIZE],
-		     const u8 in[AES_BLOCK_SIZE])
+void aes_encrypt(aes_encrypt_arg key, u8 out[AES_BLOCK_SIZE],
+		 const u8 in[AES_BLOCK_SIZE])
 {
 	aes_encrypt_arch(key.enc_key, out, in);
 }
-EXPORT_SYMBOL(aes_encrypt_new);
+EXPORT_SYMBOL(aes_encrypt);
 
-void aes_decrypt_new(const struct aes_key *key, u8 out[AES_BLOCK_SIZE],
-		     const u8 in[AES_BLOCK_SIZE])
+void aes_decrypt(const struct aes_key *key, u8 out[AES_BLOCK_SIZE],
+		 const u8 in[AES_BLOCK_SIZE])
 {
 	aes_decrypt_arch(key, out, in);
 }
-EXPORT_SYMBOL(aes_decrypt_new);
+EXPORT_SYMBOL(aes_decrypt);
 
 #ifdef aes_mod_init_arch
 static int __init aes_mod_init(void)

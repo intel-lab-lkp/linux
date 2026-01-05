@@ -19,7 +19,7 @@ static void drbg_kcapi_sym(struct aes_enckey *aeskey, unsigned char *outval,
 {
 	/* there is only component in *in */
 	BUG_ON(in->len < blocklen_bytes);
-	aes_encrypt_new(aeskey, outval, in->buf);
+	aes_encrypt(aeskey, outval, in->buf);
 }
 
 /* BCC function for CTR DRBG as defined in 10.4.3 */

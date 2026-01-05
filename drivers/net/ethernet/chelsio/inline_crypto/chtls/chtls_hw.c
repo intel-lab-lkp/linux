@@ -296,7 +296,7 @@ static int chtls_key_info(struct chtls_sock *csk,
 		return ret;
 
 	memset(ghash_h, 0, AEAD_H_SIZE);
-	aes_encrypt_new(&aes, ghash_h, ghash_h);
+	aes_encrypt(&aes, ghash_h, ghash_h);
 	memzero_explicit(&aes, sizeof(aes));
 	csk->tlshws.keylen = key_ctx_size;
 

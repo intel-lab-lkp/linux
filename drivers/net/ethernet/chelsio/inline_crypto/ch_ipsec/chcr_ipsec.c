@@ -210,7 +210,7 @@ static int ch_ipsec_setkey(struct xfrm_state *x,
 		goto out;
 	}
 	memset(ghash_h, 0, AEAD_H_SIZE);
-	aes_encrypt_new(&aes, ghash_h, ghash_h);
+	aes_encrypt(&aes, ghash_h, ghash_h);
 	memzero_explicit(&aes, sizeof(aes));
 
 	memcpy(sa_entry->key + (DIV_ROUND_UP(sa_entry->enckey_len, 16) *

@@ -23,14 +23,14 @@ static void crypto_aes_encrypt(struct crypto_tfm *tfm, u8 *out, const u8 *in)
 {
 	const struct aes_key *key = crypto_tfm_ctx(tfm);
 
-	aes_encrypt_new(key, out, in);
+	aes_encrypt(key, out, in);
 }
 
 static void crypto_aes_decrypt(struct crypto_tfm *tfm, u8 *out, const u8 *in)
 {
 	const struct aes_key *key = crypto_tfm_ctx(tfm);
 
-	aes_decrypt_new(key, out, in);
+	aes_decrypt(key, out, in);
 }
 
 static struct crypto_alg alg = {

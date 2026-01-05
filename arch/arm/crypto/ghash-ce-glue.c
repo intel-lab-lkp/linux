@@ -212,7 +212,7 @@ static int gcm_aes_setkey(struct crypto_aead *tfm, const u8 *inkey,
 	if (ret)
 		return -EINVAL;
 
-	aes_encrypt_new(&aes_key, (u8 *)&k, (u8[AES_BLOCK_SIZE]){});
+	aes_encrypt(&aes_key, (u8 *)&k, (u8[AES_BLOCK_SIZE]){});
 
 	/*
 	 * Note: this assumes that the arm implementation of the AES library

@@ -322,7 +322,7 @@ static int riscv64_aes_xts_crypt(struct skcipher_request *req, bool enc)
 		return -EINVAL;
 
 	/* Encrypt the IV with the tweak key to get the first tweak. */
-	aes_encrypt_new(&ctx->tweak_key, req->iv, req->iv);
+	aes_encrypt(&ctx->tweak_key, req->iv, req->iv);
 
 	err = skcipher_walk_virt(&walk, req, false);
 

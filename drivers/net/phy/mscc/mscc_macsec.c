@@ -511,7 +511,7 @@ static int vsc8584_macsec_derive_key(const u8 *key, u16 key_len, u8 hkey[16])
 	if (ret)
 		return ret;
 
-	aes_encrypt_new(&aes, hkey, input);
+	aes_encrypt(&aes, hkey, input);
 	memzero_explicit(&aes, sizeof(aes));
 	return 0;
 }

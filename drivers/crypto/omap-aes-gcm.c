@@ -177,7 +177,7 @@ static int do_encrypt_iv(struct aead_request *req, u32 *tag, u32 *iv)
 {
 	struct omap_aes_gcm_ctx *ctx = crypto_aead_ctx(crypto_aead_reqtfm(req));
 
-	aes_encrypt_new(&ctx->akey, (u8 *)tag, (const u8 *)iv);
+	aes_encrypt(&ctx->akey, (u8 *)tag, (const u8 *)iv);
 	return 0;
 }
 

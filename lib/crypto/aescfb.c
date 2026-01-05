@@ -25,7 +25,7 @@ static void aescfb_encrypt_block(const struct aes_enckey *key, void *dst,
 	 * interrupts disabled.
 	 */
 	local_irq_save(flags);
-	aes_encrypt_new(key, dst, src);
+	aes_encrypt(key, dst, src);
 	local_irq_restore(flags);
 }
 
