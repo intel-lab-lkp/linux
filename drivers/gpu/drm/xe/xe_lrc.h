@@ -39,6 +39,7 @@ struct xe_lrc_snapshot {
 	u32 seqno;
 	u32 ctx_timestamp;
 	u32 ctx_job_timestamp;
+	u64 ctx_timestamp_ms;
 };
 
 #define LRC_PPHWSP_FLUSH_INVAL_SCRATCH_ADDR (0x34 * 4)
