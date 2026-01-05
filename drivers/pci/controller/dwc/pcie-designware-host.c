@@ -456,11 +456,86 @@ static int dw_pcie_host_get_resources(struct dw_pcie_rp *pp)
 	return 0;
 }
 
+static int dw_pcie_parse_root_ports(struct dw_pcie_rp *pp)
+{
+	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
+	struct dw_pcie_port *port, *tmp;
+	struct device *dev = pci->dev;
+	int max_link_speed;
+	u32 num_lanes;
+	int ret;
+
+	if (!of_get_available_child_count(dev->of_node)) {
+		port = devm_kzalloc(dev, sizeof(*port), GFP_KERNEL);
+		if (!port)
+			return -ENOMEM;
+
+		port->dev_node = dev->of_node;
+		list_add_tail(&port->list, &pp->ports);
+
+		return 0;
+	}
+
+	for_each_available_child_of_node_scoped(dev->of_node, of_port) {
+		num_lanes = 0;
+		max_link_speed = 0;
+		of_property_read_u32(of_port, "num-lanes", &num_lanes);
+		max_link_speed = of_pci_get_max_link_speed(of_port);
+
+		port = devm_kzalloc(dev, sizeof(*port), GFP_KERNEL);
+		if (!port) {
+			ret = -ENOMEM;
+			goto err_port_del;
+		}
+
+		port->dev_node = of_port;
+		port->num_lanes = num_lanes;
+		port->max_link_speed = max_link_speed;
+		list_add_tail(&port->list, &pp->ports);
+	}
+
+	return 0;
+
+err_port_del:
+	list_for_each_entry_safe(port, tmp, &pp->ports, list)
+		list_del(&port->list);
+
+	return ret;
+}
+
+static int dw_pcie_parse_legacy_binding(struct dw_pcie_rp *pp)
+{
+	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
+	struct device *dev = pci->dev;
+	struct dw_pcie_port *port;
+	int max_link_speed;
+	u32 num_lanes;
+	int ret;
+
+	ret = of_property_read_u32(dev->of_node, "num-lanes", &num_lanes);
+	max_link_speed = of_pci_get_max_link_speed(dev->of_node);
+
+	if (ret && max_link_speed <= 0)
+		return -ENOENT;
+
+	port = devm_kzalloc(dev, sizeof(*port), GFP_KERNEL);
+	if (!port)
+		return -ENOMEM;
+
+	port->dev_node = dev->of_node;
+	port->num_lanes = num_lanes;
+	port->max_link_speed = max_link_speed;
+	list_add_tail(&port->list, &pp->ports);
+
+	return 0;
+}
+
 int dw_pcie_host_init(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
 	struct device *dev = pci->dev;
 	struct device_node *np = dev->of_node;
+	struct dw_pcie_port *port, *tmp;
 	struct pci_host_bridge *bridge;
 	int ret;
 
@@ -472,6 +547,8 @@ int dw_pcie_host_init(struct dw_pcie_rp *pp)
 
 	pp->bridge = bridge;
 
+	INIT_LIST_HEAD(&pp->ports);
+
 	ret = dw_pcie_host_get_resources(pp);
 	if (ret)
 		return ret;
@@ -480,10 +557,25 @@ int dw_pcie_host_init(struct dw_pcie_rp *pp)
 	bridge->ops = &dw_pcie_ops;
 	bridge->child_ops = &dw_child_pcie_ops;
 
+	/*
+	 * Try to parse legacy binding first (properties in Host Bridge node).
+	 * If not found, try parsing Root Port child nodes.
+	 */
+	ret = dw_pcie_parse_legacy_binding(pp);
+	if (ret == -ENOENT) {
+		ret = dw_pcie_parse_root_ports(pp);
+		if (ret && ret != -ENOENT) {
+			dev_err(dev, "Failed to parse Root Port: %d\n", ret);
+			return ret;
+		}
+	} else if (ret) {
+		return ret;
+	}
+
 	if (pp->ops->init) {
 		ret = pp->ops->init(pp);
 		if (ret)
-			return ret;
+			goto err_cleanup_ports;
 	}
 
 	if (pci_msi_enabled()) {
@@ -518,12 +610,15 @@ int dw_pcie_host_init(struct dw_pcie_rp *pp)
 
 	dw_pcie_iatu_detect(pci);
 
-	if (pci->num_lanes < 1)
-		pci->num_lanes = dw_pcie_link_get_max_link_width(pci);
+	list_for_each_entry(port, &pp->ports, list) {
+		if (port->num_lanes < 1)
+			port->num_lanes = dw_pcie_link_get_max_link_width(pci, port);
 
-	ret = of_pci_get_equalization_presets(dev, &pp->presets, pci->num_lanes);
-	if (ret)
-		goto err_free_msi;
+		ret = of_pci_get_equalization_presets(dev, port->dev_node,
+						      &port->presets, port->num_lanes);
+		if (ret)
+			goto err_free_msi;
+	}
 
 	/*
 	 * Allocate the resource for MSG TLP before programming the iATU
@@ -557,8 +652,8 @@ int dw_pcie_host_init(struct dw_pcie_rp *pp)
 	 * because that would require users to manually rescan for devices.
 	 */
 	if (!pp->use_linkup_irq)
-		/* Ignore errors, the link may come up later */
-		dw_pcie_wait_for_link(pci);
+		list_for_each_entry(port, &pp->ports, list)
+			dw_pcie_wait_for_link(pci, port);
 
 	bridge->sysdata = pp;
 
@@ -586,6 +681,9 @@ err_free_msi:
 err_deinit_host:
 	if (pp->ops->deinit)
 		pp->ops->deinit(pp);
+err_cleanup_ports:
+	list_for_each_entry_safe(port, tmp, &pp->ports, list)
+		list_del(&port->list);
 
 	return ret;
 }
@@ -594,6 +692,7 @@ EXPORT_SYMBOL_GPL(dw_pcie_host_init);
 void dw_pcie_host_deinit(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
+	struct dw_pcie_port *port, *tmp;
 
 	dwc_pcie_debugfs_deinit(pci);
 
@@ -606,6 +705,9 @@ void dw_pcie_host_deinit(struct dw_pcie_rp *pp)
 
 	if (pp->has_msi_ctrl)
 		dw_pcie_free_msi(pp);
+
+	list_for_each_entry_safe(port, tmp, &pp->ports, list)
+		list_del(&port->list);
 
 	if (pp->ops->deinit)
 		pp->ops->deinit(pp);
@@ -830,7 +932,9 @@ static int dw_pcie_iatu_setup(struct dw_pcie_rp *pp)
 	return 0;
 }
 
-static void dw_pcie_program_presets(struct dw_pcie_rp *pp, enum pci_bus_speed speed)
+/*TODO: Handling preset values according to dbi space of each port */
+static void dw_pcie_program_presets(struct dw_pcie_rp *pp, struct dw_pcie_port *port,
+				    enum pci_bus_speed speed)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
 	u8 lane_eq_offset, lane_reg_size, cap_id;
@@ -839,23 +943,23 @@ static void dw_pcie_program_presets(struct dw_pcie_rp *pp, enum pci_bus_speed sp
 	int i;
 
 	if (speed == PCIE_SPEED_8_0GT) {
-		presets = (u8 *)pp->presets.eq_presets_8gts;
+		presets = (u8 *)port->presets.eq_presets_8gts;
 		lane_eq_offset =  PCI_SECPCI_LE_CTRL;
 		cap_id = PCI_EXT_CAP_ID_SECPCI;
 		/* For data rate of 8 GT/S each lane equalization control is 16bits wide*/
 		lane_reg_size = 0x2;
 	} else if (speed == PCIE_SPEED_16_0GT) {
-		presets = pp->presets.eq_presets_Ngts[EQ_PRESET_TYPE_16GTS - 1];
+		presets = port->presets.eq_presets_Ngts[EQ_PRESET_TYPE_16GTS - 1];
 		lane_eq_offset = PCI_PL_16GT_LE_CTRL;
 		cap_id = PCI_EXT_CAP_ID_PL_16GT;
 		lane_reg_size = 0x1;
 	} else if (speed == PCIE_SPEED_32_0GT) {
-		presets =  pp->presets.eq_presets_Ngts[EQ_PRESET_TYPE_32GTS - 1];
+		presets =  port->presets.eq_presets_Ngts[EQ_PRESET_TYPE_32GTS - 1];
 		lane_eq_offset = PCI_PL_32GT_LE_CTRL;
 		cap_id = PCI_EXT_CAP_ID_PL_32GT;
 		lane_reg_size = 0x1;
 	} else if (speed == PCIE_SPEED_64_0GT) {
-		presets =  pp->presets.eq_presets_Ngts[EQ_PRESET_TYPE_64GTS - 1];
+		presets =  port->presets.eq_presets_Ngts[EQ_PRESET_TYPE_64GTS - 1];
 		lane_eq_offset = PCI_PL_64GT_LE_CTRL;
 		cap_id = PCI_EXT_CAP_ID_PL_64GT;
 		lane_reg_size = 0x1;
@@ -874,31 +978,38 @@ static void dw_pcie_program_presets(struct dw_pcie_rp *pp, enum pci_bus_speed sp
 	 * Write preset values to the registers byte-by-byte for the given
 	 * number of lanes and register size.
 	 */
-	for (i = 0; i < pci->num_lanes * lane_reg_size; i++)
+	for (i = 0; i < port->num_lanes * lane_reg_size; i++)
 		dw_pcie_writeb_dbi(pci, cap + lane_eq_offset + i, presets[i]);
 }
 
 static void dw_pcie_config_presets(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
-	enum pci_bus_speed speed = pcie_link_speed[pci->max_link_speed];
+	enum pci_bus_speed port_speed;
+	struct dw_pcie_port *port;
 
 	/*
-	 * Lane equalization settings need to be applied for all data rates the
-	 * controller supports and for all supported lanes.
+	 * Lane equalization settings need to be applied for all data rates each
+	 * port supports and for all supported lanes per port.
 	 */
+	list_for_each_entry(port, &pp->ports, list) {
+		if (port->max_link_speed > 0)
+			port_speed = pcie_link_speed[port->max_link_speed];
+		else
+			port_speed = PCIE_SPEED_2_5GT;
 
-	if (speed >= PCIE_SPEED_8_0GT)
-		dw_pcie_program_presets(pp, PCIE_SPEED_8_0GT);
+		if (port_speed >= PCIE_SPEED_8_0GT)
+			dw_pcie_program_presets(pp, port, PCIE_SPEED_8_0GT);
 
-	if (speed >= PCIE_SPEED_16_0GT)
-		dw_pcie_program_presets(pp, PCIE_SPEED_16_0GT);
+		if (port_speed >= PCIE_SPEED_16_0GT)
+			dw_pcie_program_presets(pp, port, PCIE_SPEED_16_0GT);
 
-	if (speed >= PCIE_SPEED_32_0GT)
-		dw_pcie_program_presets(pp, PCIE_SPEED_32_0GT);
+		if (port_speed >= PCIE_SPEED_32_0GT)
+			dw_pcie_program_presets(pp, port, PCIE_SPEED_32_0GT);
 
-	if (speed >= PCIE_SPEED_64_0GT)
-		dw_pcie_program_presets(pp, PCIE_SPEED_64_0GT);
+		if (port_speed >= PCIE_SPEED_64_0GT)
+			dw_pcie_program_presets(pp, port, PCIE_SPEED_64_0GT);
+	}
 }
 
 int dw_pcie_setup_rc(struct dw_pcie_rp *pp)
@@ -1054,6 +1165,7 @@ EXPORT_SYMBOL_GPL(dw_pcie_suspend_noirq);
 
 int dw_pcie_resume_noirq(struct dw_pcie *pci)
 {
+	struct dw_pcie_port *port;
 	int ret;
 
 	if (!pci->suspended)
@@ -1075,9 +1187,9 @@ int dw_pcie_resume_noirq(struct dw_pcie *pci)
 	if (ret)
 		return ret;
 
-	ret = dw_pcie_wait_for_link(pci);
-	if (ret)
-		return ret;
+	list_for_each_entry(port, &pci->pp.ports, list)
+		if (dw_pcie_wait_for_link(pci, port))
+			return -ETIMEDOUT;
 
 	return ret;
 }

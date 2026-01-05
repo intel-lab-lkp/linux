@@ -131,7 +131,10 @@ static void intel_pcie_link_setup(struct intel_pcie *pcie)
 
 static void intel_pcie_init_n_fts(struct dw_pcie *pci)
 {
-	switch (pci->max_link_speed) {
+	struct dw_pcie_port *port = list_first_entry(&pci->pp.ports,
+							struct dw_pcie_port, list);
+
+	switch (port->max_link_speed) {
 	case 3:
 		pci->n_fts[1] = PORT_AFR_N_FTS_GEN3;
 		break;
@@ -250,8 +253,10 @@ static int intel_pcie_wait_l2(struct intel_pcie *pcie)
 	u32 value;
 	int ret;
 	struct dw_pcie *pci = &pcie->pci;
+	struct dw_pcie_port *port = list_first_entry(&pci->pp.ports,
+						      struct dw_pcie_port, list);
 
-	if (pci->max_link_speed < 3)
+	if (port->max_link_speed < 3)
 		return 0;
 
 	/* Send PME_TURN_OFF message */
@@ -282,6 +287,8 @@ static int intel_pcie_host_setup(struct intel_pcie *pcie)
 {
 	int ret;
 	struct dw_pcie *pci = &pcie->pci;
+	struct dw_pcie_port *port = list_first_entry(&pci->pp.ports,
+						struct dw_pcie_port, list);
 
 	intel_pcie_core_rst_assert(pcie);
 	intel_pcie_device_rst_assert(pcie);
@@ -313,7 +320,7 @@ static int intel_pcie_host_setup(struct intel_pcie *pcie)
 	intel_pcie_device_rst_deassert(pcie);
 	intel_pcie_ltssm_enable(pcie);
 
-	ret = dw_pcie_wait_for_link(pci);
+	ret = dw_pcie_wait_for_link(pci, port);
 	if (ret)
 		goto app_init_err;
 
