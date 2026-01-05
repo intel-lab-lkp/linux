@@ -25,3 +25,8 @@ config VDSO_GETRANDOM
 	  Selected by architectures that support vDSO getrandom().
 
 endif
+
+config DEBUG_VDSO
+	def_bool y
+	select DEBUG_KERNEL
+	select DEBUG_VM
