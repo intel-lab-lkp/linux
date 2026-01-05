@@ -1783,15 +1783,17 @@ void xe_lrc_free_seqno_fence(struct dma_fence *fence)
 /**
  * xe_lrc_init_seqno_fence() - Initialize an lrc seqno fence.
  * @lrc: Pointer to the lrc.
+ * @q: Pointner to exec queue.
  * @fence: Pointer to the fence to initialize.
  *
  * Initializes a pre-allocated lrc seqno fence.
  * After initialization, the fence is subject to normal
  * dma-fence refcounting.
  */
-void xe_lrc_init_seqno_fence(struct xe_lrc *lrc, struct dma_fence *fence)
+void xe_lrc_init_seqno_fence(struct xe_lrc *lrc, struct xe_exec_queue *q,
+			     struct dma_fence *fence)
 {
-	xe_hw_fence_init(fence, &lrc->fence_ctx, __xe_lrc_seqno_map(lrc));
+	xe_hw_fence_init(fence, &lrc->fence_ctx, q, __xe_lrc_seqno_map(lrc));
 }
 
 s32 xe_lrc_seqno(struct xe_lrc *lrc)

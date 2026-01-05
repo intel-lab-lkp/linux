@@ -118,7 +118,8 @@ u64 xe_lrc_descriptor(struct xe_lrc *lrc);
 u32 xe_lrc_seqno_ggtt_addr(struct xe_lrc *lrc);
 struct dma_fence *xe_lrc_alloc_seqno_fence(void);
 void xe_lrc_free_seqno_fence(struct dma_fence *fence);
-void xe_lrc_init_seqno_fence(struct xe_lrc *lrc, struct dma_fence *fence);
+void xe_lrc_init_seqno_fence(struct xe_lrc *lrc, struct xe_exec_queue *q,
+			     struct dma_fence *fence);
 s32 xe_lrc_seqno(struct xe_lrc *lrc);
 
 u32 xe_lrc_start_seqno_ggtt_addr(struct xe_lrc *lrc);

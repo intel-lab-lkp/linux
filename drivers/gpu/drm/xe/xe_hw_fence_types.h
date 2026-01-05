@@ -13,6 +13,7 @@
 #include <linux/spinlock.h>
 
 struct xe_device;
+struct xe_exec_queue;
 struct xe_gt;
 
 /**
@@ -64,6 +65,11 @@ struct xe_hw_fence {
 	struct dma_fence dma;
 	/** @xe: Xe device for hw fence driver name */
 	struct xe_device *xe;
+	/**
+	 * @q: Exec queue which fence is tied too, not ref counted, lookup
+	 * protected by fence lock.
+	 */
+	struct xe_exec_queue *q;
 	/** @name: name of hardware fence context */
 	char name[MAX_FENCE_NAME_LEN];
 	/** @seqno_map: I/O map for seqno */

@@ -242,6 +242,7 @@ void xe_hw_fence_free(struct dma_fence *fence)
  * xe_hw_fence_init() - Initialize an hw fence.
  * @fence: Pointer to the fence to initialize.
  * @ctx: Pointer to the struct xe_hw_fence_ctx fence context.
+ * @q: Pointer to exec queue tied to the fence.
  * @seqno_map: Pointer to the map into where the seqno is blitted.
  *
  * Initializes a pre-allocated hw fence.
@@ -249,12 +250,13 @@ void xe_hw_fence_free(struct dma_fence *fence)
  * dma-fence refcounting.
  */
 void xe_hw_fence_init(struct dma_fence *fence, struct xe_hw_fence_ctx *ctx,
-		      struct iosys_map seqno_map)
+		      struct xe_exec_queue *q, struct iosys_map seqno_map)
 {
 	struct  xe_hw_fence *hw_fence =
 		container_of(fence, typeof(*hw_fence), dma);
 
 	hw_fence->xe = gt_to_xe(ctx->gt);
+	hw_fence->q = q;
 	snprintf(hw_fence->name, sizeof(hw_fence->name), "%s", ctx->name);
 	hw_fence->seqno_map = seqno_map;
 	INIT_LIST_HEAD(&hw_fence->irq_link);

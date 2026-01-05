@@ -270,7 +270,7 @@ void xe_sched_job_arm(struct xe_sched_job *job)
 		struct dma_fence_chain *chain;
 
 		fence = job->ptrs[i].lrc_fence;
-		xe_lrc_init_seqno_fence(q->lrc[i], fence);
+		xe_lrc_init_seqno_fence(q->lrc[i], q, fence);
 		job->ptrs[i].lrc_fence = NULL;
 		if (!i) {
 			job->lrc_seqno = fence->seqno;
