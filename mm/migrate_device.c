@@ -776,6 +776,49 @@ EXPORT_SYMBOL(migrate_vma_setup);
 
 #ifdef CONFIG_ARCH_ENABLE_THP_MIGRATION
 /**
+ * migrate_device_split_page() - Split device page
+ * @page: Device page to split
+ *
+ * Splits a device page into smaller pages. Typically called when reallocating a
+ * folio to a smaller size. Inherently racy—only safe if the caller ensures
+ * mutual exclusion within the page's folio (i.e., no other threads are using
+ * pages within the folio). Expected to be called a free device page and
+ * restores all split out pages to a free state.
+ */
+int migrate_device_split_page(struct page *page)
+{
+	struct folio *folio = page_folio(page);
+	struct dev_pagemap *pgmap = folio->pgmap;
+	struct page *unlock_page = folio_page(folio, 0);
+	unsigned int order = folio_order(folio), i;
+	int ret = 0;
+
+	VM_BUG_ON_FOLIO(!order, folio);
+	VM_BUG_ON_FOLIO(!folio_is_device_private(folio), folio);
+	VM_BUG_ON_FOLIO(folio_ref_count(folio), folio);
+
+	folio_lock(folio);
+
+	ret = __split_unmapped_folio(folio, 0, page, NULL, NULL, SPLIT_TYPE_UNIFORM);
+	if (ret) {
+	       /*
+		* We can't fail here unless the caller doesn't know what they
+		* are doing.
+		*/
+		VM_BUG_ON_FOLIO(ret, folio);
+
+		return ret;
+	}
+
+	for (i = 0; i < 0x1 << order; ++i, ++unlock_page) {
+		page_folio(unlock_page)->pgmap = pgmap;
+		folio_unlock(page_folio(unlock_page));
+	}
+
+	return 0;
+}
+
+/**
  * migrate_vma_insert_huge_pmd_page: Insert a huge folio into @migrate->vma->vm_mm
  * at @addr. folio is already allocated as a part of the migration process with
  * large page.
@@ -927,6 +970,11 @@ static int migrate_vma_split_unmapped_folio(struct migrate_vma *migrate,
 	return ret;
 }
 #else /* !CONFIG_ARCH_ENABLE_THP_MIGRATION */
+int migrate_device_split_page(struct page *page)
+{
+	return 0;
+}
+
 static int migrate_vma_insert_huge_pmd_page(struct migrate_vma *migrate,
 					 unsigned long addr,
 					 struct page *page,
@@ -943,6 +991,7 @@ static int migrate_vma_split_unmapped_folio(struct migrate_vma *migrate,
 	return 0;
 }
 #endif
+EXPORT_SYMBOL(migrate_device_split_page);
 
 static unsigned long migrate_vma_nr_pages(unsigned long *src)
 {
