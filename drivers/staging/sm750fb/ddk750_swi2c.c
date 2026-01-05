@@ -92,12 +92,11 @@ static void sw_i2c_wait(void)
      * it's more reliable than counter loop ..
      * write 0x61 to 0x3ce and read from 0x3cf
      */
-	int i, tmp;
+	int i;
 
-	for (i = 0; i < 600; i++) {
-		tmp = i;
-		tmp += i;
-	}
+	for (i = 0; i < 600; i++)
+		cpu_relax();
+
 }
 
 /*
