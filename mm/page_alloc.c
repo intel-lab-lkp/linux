@@ -30,6 +30,7 @@
 #include <linux/oom.h>
 #include <linux/topology.h>
 #include <linux/sysctl.h>
+#include <linux/workqueue.h>
 #include <linux/cpu.h>
 #include <linux/cpuset.h>
 #include <linux/pagevec.h>
@@ -3985,6 +3986,16 @@ static void warn_alloc_show_mem(gfp_t gfp_mask, nodemask_t *nodemask)
 	mem_cgroup_show_protected_memory(NULL);
 }
 
+/* Auto-tuning min_free_kbytes on atomic allocation failures (v2) */
+static void decay_min_free_kbytes_workfn(struct work_struct *work);
+static void boost_min_free_kbytes_workfn(struct work_struct *work);
+static DECLARE_WORK(boost_min_free_kbytes_work, boost_min_free_kbytes_workfn);
+static DECLARE_DELAYED_WORK(decay_min_free_kbytes_work, decay_min_free_kbytes_workfn);
+static unsigned long last_boost_jiffies = 0;
+static int initial_min_free_kbytes = 0;
+#define BOOST_DEBOUNCE_MS 10000  /* 10 seconds debounce */
+
+
 void warn_alloc(gfp_t gfp_mask, nodemask_t *nodemask, const char *fmt, ...)
 {
 	struct va_format vaf;
@@ -4971,6 +4982,17 @@ nopage:
 		goto retry;
 	}
 fail:
+	/* Auto-tuning: trigger boost if atomic allocation fails */
+	if ((gfp_mask & GFP_ATOMIC) && order == 0) {
+		unsigned long now = jiffies;
+		
+		/* Debounce: only boost once every 10 seconds */
+		if (time_after(now, last_boost_jiffies + msecs_to_jiffies(BOOST_DEBOUNCE_MS))) {
+			last_boost_jiffies = now;
+			schedule_work(&boost_min_free_kbytes_work);
+		}
+	}
+
 	warn_alloc(gfp_mask, ac->nodemask,
 			"page allocation failure: order:%u", order);
 got_pg:
@@ -6548,6 +6570,10 @@ int __meminit init_per_zone_wmark_min(void)
 	refresh_zone_stat_thresholds();
 	setup_per_zone_lowmem_reserve();
 
+	/* Save initial value for auto-tuning decay mechanism */
+	if (initial_min_free_kbytes == 0)
+		initial_min_free_kbytes = min_free_kbytes;
+
 #ifdef CONFIG_NUMA
 	setup_min_unmapped_ratio();
 	setup_min_slab_ratio();
@@ -7849,3 +7875,62 @@ struct page *alloc_pages_nolock_noprof(gfp_t gfp_flags, int nid, unsigned int or
 	return page;
 }
 EXPORT_SYMBOL_GPL(alloc_pages_nolock_noprof);
+
+static void boost_min_free_kbytes_workfn(struct work_struct *work)
+{
+	int new_min;
+
+	/* Cap at 1% of total RAM for safety */
+	unsigned long total_kbytes = totalram_pages() << (PAGE_SHIFT - 10);
+	int max_limit = total_kbytes / 100;
+
+	/* Responsive increase: 50% instead of doubling */
+	new_min = min_free_kbytes + (min_free_kbytes / 2);
+
+	if (new_min > max_limit)
+		new_min = max_limit;
+
+	if (new_min > min_free_kbytes) {
+		min_free_kbytes = new_min;
+		/* Update user_min_free_kbytes so it persists through recalculations */
+		if (new_min > user_min_free_kbytes)
+			user_min_free_kbytes = new_min;
+		
+		setup_per_zone_wmarks();
+		
+		/* Schedule decay after 5 minutes */
+		schedule_delayed_work(&decay_min_free_kbytes_work, 
+				      msecs_to_jiffies(300000));
+		
+		pr_info("Auto-tuning: atomic failure, increasing min_free_kbytes to %d\n", 
+			min_free_kbytes);
+	}
+}
+
+static void decay_min_free_kbytes_workfn(struct work_struct *work)
+{
+	int new_min;
+	int decay_floor;
+	
+	/* Decay by 5% */
+	new_min = min_free_kbytes - (min_free_kbytes / 20);
+	
+	/* Don't go below 1.2x initial value (preserve learning effect) */
+	decay_floor = initial_min_free_kbytes + (initial_min_free_kbytes / 5);
+	if (new_min < decay_floor)
+		new_min = decay_floor;
+	
+	if (new_min < min_free_kbytes) {
+		min_free_kbytes = new_min;
+		user_min_free_kbytes = new_min;
+		setup_per_zone_wmarks();
+		
+		/* Schedule next decay if still above floor */
+		if (new_min > decay_floor) {
+			schedule_delayed_work(&decay_min_free_kbytes_work,
+					      msecs_to_jiffies(300000));
+		}
+		
+		pr_info("Auto-tuning: decaying min_free_kbytes to %d\n", min_free_kbytes);
+	}
+}
