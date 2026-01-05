@@ -366,7 +366,15 @@ uvc_video_complete(struct usb_ep *ep, struct usb_request *req)
 
 	case -ESHUTDOWN:	/* disconnect from host. */
 		uvcg_dbg(&video->uvc->func, "VS request cancelled.\n");
+		if (!(queue->flags & UVC_QUEUE_DISCONNECTED))
+			delay = 1;
 		uvcg_queue_cancel(queue, 1);
+		if (delay) {
+			if (in_interrupt() || irqs_disabled() || in_atomic())
+				 mdelay(1);
+			else
+				msleep(50);
+		}
 		break;
 
 	default:
