@@ -15306,7 +15306,7 @@ M:	Subbaraya Sundeep <sbhatta@marvell.com>
 L:	netdev@vger.kernel.org
 S:	Maintained
 F:	Documentation/networking/device_drivers/ethernet/marvell/octeontx2.rst
-F:	drivers/net/ethernet/marvell/octeontx2/af/
+F:	drivers/net/ethernet/marvell/octeontx2/af/*
 
 MARVELL PEM PMU DRIVER
 M:	Linu Cherian <lcherian@marvell.com>
