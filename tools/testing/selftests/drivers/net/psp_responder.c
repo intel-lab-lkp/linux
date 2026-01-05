@@ -410,6 +410,7 @@ static int psp_dev_set_ena(struct ynl_sock *ys, __u32 dev_id, __u32 versions)
 int main(int argc, char **argv)
 {
 	struct psp_dev_get_list *dev_list;
+	bool multiple_devs = false;
 	bool devid_found = false;
 	__u32 ver_ena, ver_cap;
 	struct opts opts = {};
@@ -446,8 +447,7 @@ int main(int argc, char **argv)
 			ver_ena = d->psp_versions_ena;
 			ver_cap = d->psp_versions_cap;
 		} else {
-			fprintf(stderr, "Multiple PSP devices found\n");
-			goto err_close_silent;
+			multiple_devs = true;
 		}
 	}
 	psp_dev_get_list_free(dev_list);
@@ -457,6 +457,10 @@ int main(int argc, char **argv)
 			opts.devid);
 		goto err_close_silent;
 	} else if (!opts.devid) {
+		if (multiple_devs)
+			fprintf(stderr,
+				"Multiple PSP devices found, choosing first one with devid %d\n",
+				first_id);
 		opts.devid = first_id;
 	}
 
