@@ -1187,7 +1187,8 @@ static int otx2_add_flow_msg(struct otx2_nic *pfvf, struct otx2_flow *flow)
 		}
 
 		if (!is_x2) {
-			err = otx2_prepare_flow_request(&flow->flow_spec, &treq);
+			err = otx2_prepare_flow_request(&flow->flow_spec,
+							&treq);
 			if (err)
 				return err;
 
