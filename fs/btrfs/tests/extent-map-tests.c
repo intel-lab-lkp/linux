@@ -1057,6 +1057,8 @@ static int test_rmap_block(struct btrfs_fs_info *fs_info,
 		goto out;
 	}
 
+	ret = -EINVAL;
+
 	if (out_stripe_len != BTRFS_STRIPE_LEN) {
 		test_err("calculated stripe length doesn't match");
 		goto out;
