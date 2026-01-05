@@ -60,3 +60,25 @@ config DRM_XE_ENABLE_SCHEDTIMEOUT_LIMIT
 	  to apply to applicable user. For elevated user, all above MIN
 	  and MAX values will apply when this configuration is enable to
 	  apply limitation. By default limitation is applied.
+
+config DRM_XE_DEADLINE_WINDOW_US
+	int "Default deadline window (us)"
+	default 3000
+	help
+	  Specifies the deadline window in microseconds. If a fence has not
+	  been signaled when the current time is within this window of its
+	  programmed deadline, deadline boosting is enabled.
+
+config DRM_XE_DEADLINE_PRIO_BOOST_WINDOW_PERCENT
+	int "Percent of deadline window with priority boost"
+	default 60
+	range 0 100
+	help
+	  Specifies the percentage of the deadline window during which
+	  priority boosting is applied in addition to frequency boosting.
+
+config DRM_XE_DEADLINE_EXIT_DELAY_MS
+	int "Default deadline exit delay (ms)"
+	default 100
+	help
+	  Specifies the deadline exit delay in milliseconds.
