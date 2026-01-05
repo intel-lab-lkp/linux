@@ -175,7 +175,7 @@ unreg_clk:
  * perspective since voltage is kept at a nominal level during suspend anyways.
  */
 static const struct dev_pm_ops tegra_clock_pm = {
-	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_resume_and_get, pm_runtime_put)
+	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_resume, NULL)
 };
 
 static const struct of_device_id tegra_clock_match[] = {
