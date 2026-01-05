@@ -748,11 +748,18 @@ static void nested_vmcb02_prepare_control(struct vcpu_svm *svm,
 						V_NMI_BLOCKING_MASK);
 	}
 
-	/* Copied from vmcb01.  msrpm_base can be overwritten later.  */
+	/* Copied from vmcb01. msrpm_base/nested_ctl can be overwritten later. */
 	vmcb02->control.nested_ctl = vmcb01->control.nested_ctl;
 	vmcb02->control.iopm_base_pa = vmcb01->control.iopm_base_pa;
 	vmcb02->control.msrpm_base_pa = vmcb01->control.msrpm_base_pa;
 	vmcb_mark_dirty(vmcb02, VMCB_PERM_MAP);
+
+	/* Disable PML for nested guest as the A/D update is emulated by MMU */
+	if (pml) {
+		vmcb02->control.nested_ctl &= ~SVM_NESTED_CTL_PML_ENABLE;
+		vmcb02->control.pml_addr = 0;
+		vmcb02->control.pml_index = -1;
+	}
 
 	/*
 	 * Stash vmcb02's counter if the guest hasn't moved past the guilty
