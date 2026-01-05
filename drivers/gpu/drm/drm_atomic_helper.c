@@ -1693,11 +1693,15 @@ void drm_atomic_helper_commit_modeset_enables(struct drm_device *dev,
 EXPORT_SYMBOL(drm_atomic_helper_commit_modeset_enables);
 
 /*
+ * drm_atomic_helper_set_fence_deadline() - set fence deadlines
+ * @dev: DRM device
+ * @state: atomic state object being committed
+ *
  * For atomic updates which touch just a single CRTC, calculate the time of the
  * next vblank, and inform all the fences of the deadline.
  */
-static void set_fence_deadline(struct drm_device *dev,
-			       struct drm_atomic_state *state)
+void drm_atomic_helper_set_fence_deadline(struct drm_device *dev,
+					  struct drm_atomic_state *state)
 {
 	struct drm_crtc *crtc;
 	struct drm_crtc_state *new_crtc_state;
@@ -1732,6 +1736,7 @@ static void set_fence_deadline(struct drm_device *dev,
 		dma_fence_set_deadline(new_plane_state->fence, vbltime);
 	}
 }
+EXPORT_SYMBOL(drm_atomic_helper_set_fence_deadline);
 
 /**
  * drm_atomic_helper_wait_for_fences - wait for fences stashed in plane state
@@ -1762,7 +1767,7 @@ int drm_atomic_helper_wait_for_fences(struct drm_device *dev,
 	struct drm_plane_state *new_plane_state;
 	int i, ret;
 
-	set_fence_deadline(dev, state);
+	drm_atomic_helper_set_fence_deadline(dev, state);
 
 	for_each_new_plane_in_state(state, plane, new_plane_state, i) {
 		if (!new_plane_state->fence)

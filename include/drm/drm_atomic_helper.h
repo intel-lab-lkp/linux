@@ -164,6 +164,9 @@ int drm_atomic_helper_page_flip_target(
 				uint32_t target,
 				struct drm_modeset_acquire_ctx *ctx);
 
+void drm_atomic_helper_set_fence_deadline(struct drm_device *dev,
+					  struct drm_atomic_state *state);
+
 /**
  * drm_atomic_crtc_for_each_plane - iterate over planes currently attached to CRTC
  * @plane: the loop cursor
