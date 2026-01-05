@@ -33,4 +33,6 @@ void xe_hw_fence_init(struct dma_fence *fence, struct xe_hw_fence_ctx *ctx,
 
 struct xe_hw_fence *to_xe_hw_fence(struct dma_fence *fence);
 
+bool xe_hw_fence_signaled(struct dma_fence *dma_fence);
+
 #endif

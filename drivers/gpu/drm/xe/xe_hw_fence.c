@@ -157,7 +157,13 @@ static const char *xe_hw_fence_get_timeline_name(struct dma_fence *dma_fence)
 	return fence->name;
 }
 
-static bool xe_hw_fence_signaled(struct dma_fence *dma_fence)
+/**
+ * xe_hw_fence_signaled() - Xe hardware fence is signaled
+ * @dma_fence: dma-fence object
+ *
+ * Return: True if Xe hardware fence is signaled, False otherwise
+ */
+bool xe_hw_fence_signaled(struct dma_fence *dma_fence)
 {
 	struct xe_hw_fence *fence = to_xe_hw_fence(dma_fence);
 	struct xe_device *xe = fence->xe;
