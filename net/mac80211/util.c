@@ -1103,6 +1103,9 @@ void ieee80211_send_auth(struct ieee80211_sub_if_data *sdata,
 		   !cfg80211_find_ext_elem(WLAN_EID_EXT_EHT_MULTI_LINK,
 					   extra, extra_len));
 
+	if (auth_alg == WLAN_AUTH_EPPKE && add_mle)
+		return;
+
 	/* 24 + 6 = header + auth_algo + auth_transaction + status_code */
 	skb = dev_alloc_skb(local->hw.extra_tx_headroom + IEEE80211_WEP_IV_LEN +
 			    24 + 6 + extra_len + IEEE80211_WEP_ICV_LEN +
