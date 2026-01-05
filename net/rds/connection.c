@@ -269,7 +269,11 @@ static struct rds_connection *__rds_conn_create(struct net *net,
 		__rds_conn_path_init(conn, &conn->c_path[i],
 				     is_outgoing);
 		conn->c_path[i].cp_index = i;
-		conn->c_path[i].cp_wq = rds_wq;
+		conn->c_path[i].cp_wq =
+			alloc_ordered_workqueue("krds_cp_wq#%lu/%d", 0,
+						rds_conn_count, i);
+		if (!conn->c_path[i].cp_wq)
+			conn->c_path[i].cp_wq = rds_wq;
 	}
 	rcu_read_lock();
 	if (rds_destroy_pending(conn))
@@ -278,6 +282,9 @@ static struct rds_connection *__rds_conn_create(struct net *net,
 		ret = trans->conn_alloc(conn, GFP_ATOMIC);
 	if (ret) {
 		rcu_read_unlock();
+		for (i = 0; i < npaths; i++)
+			if (conn->c_path[i].cp_wq != rds_wq)
+				destroy_workqueue(conn->c_path[i].cp_wq);
 		kfree(conn->c_path);
 		kmem_cache_free(rds_conn_slab, conn);
 		conn = ERR_PTR(ret);
@@ -471,6 +478,11 @@ static void rds_conn_path_destroy(struct rds_conn_path *cp)
 	WARN_ON(work_pending(&cp->cp_down_w));
 
 	cp->cp_conn->c_trans->conn_free(cp->cp_transport_data);
+
+	if (cp->cp_wq != rds_wq) {
+		destroy_workqueue(cp->cp_wq);
+		cp->cp_wq = NULL;
+	}
 }
 
 /*
