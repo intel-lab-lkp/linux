@@ -839,6 +839,28 @@ static inline void dw_edma_add_irq_mask(u32 *mask, u32 alloc, u16 cnt)
 		(*mask)++;
 }
 
+static void dw_edma_compose_msi(struct device *dev, int irq, struct msi_msg *out)
+{
+	struct msi_desc *desc = irq_get_msi_desc(irq);
+	struct msi_msg msg;
+	unsigned int base;
+
+	if (!desc)
+		return;
+
+	get_cached_msi_msg(irq, &msg);
+	if (!desc->pci.msi_attrib.is_msix) {
+		/*
+		 * For multi-vector MSI, the cached message corresponds to
+		 * vector 0. Adjust msg.data by the IRQ index so that each
+		 * vector gets a unique MSI data value for IMWr Data Register.
+		 */
+		base = msi_get_virq(dev, 0);
+		msg.data |= (irq - base);
+	}
+	*out = msg;
+}
+
 static int dw_edma_irq_request(struct dw_edma *dw,
 			       u32 *wr_alloc, u32 *rd_alloc)
 {
@@ -869,8 +891,7 @@ static int dw_edma_irq_request(struct dw_edma *dw,
 			return err;
 		}
 
-		if (irq_get_msi_desc(irq))
-			get_cached_msi_msg(irq, &dw->irq[0].msi);
+		dw_edma_compose_msi(dev, irq, &dw->irq[0].msi);
 
 		dw->nr_irqs = 1;
 	} else {
@@ -896,8 +917,7 @@ static int dw_edma_irq_request(struct dw_edma *dw,
 			if (err)
 				goto err_irq_free;
 
-			if (irq_get_msi_desc(irq))
-				get_cached_msi_msg(irq, &dw->irq[i].msi);
+			dw_edma_compose_msi(dev, irq, &dw->irq[i].msi);
 		}
 
 		dw->nr_irqs = i;
