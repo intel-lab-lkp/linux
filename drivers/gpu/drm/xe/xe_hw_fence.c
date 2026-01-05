@@ -138,8 +138,6 @@ void xe_hw_fence_ctx_finish(struct xe_hw_fence_ctx *ctx)
 {
 }
 
-static struct xe_hw_fence *to_xe_hw_fence(struct dma_fence *fence);
-
 static struct xe_hw_fence_irq *xe_hw_fence_irq(struct xe_hw_fence *fence)
 {
 	return container_of(fence->dma.lock, struct xe_hw_fence_irq, lock);
@@ -200,7 +198,13 @@ static const struct dma_fence_ops xe_hw_fence_ops = {
 	.release = xe_hw_fence_release,
 };
 
-static struct xe_hw_fence *to_xe_hw_fence(struct dma_fence *fence)
+/**
+ * to_xe_hw_fence() - Convert dma-fence to Xe hardware fence
+ * @fence: dma-fence object
+ *
+ * Return: struct xe_hw_fence or NULL
+ */
+struct xe_hw_fence *to_xe_hw_fence(struct dma_fence *fence)
 {
 	if (XE_WARN_ON(fence->ops != &xe_hw_fence_ops))
 		return NULL;

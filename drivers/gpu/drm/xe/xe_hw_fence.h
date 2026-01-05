@@ -30,4 +30,7 @@ void xe_hw_fence_free(struct dma_fence *fence);
 
 void xe_hw_fence_init(struct dma_fence *fence, struct xe_hw_fence_ctx *ctx,
 		      struct xe_exec_queue *q, struct iosys_map seqno_map);
+
+struct xe_hw_fence *to_xe_hw_fence(struct dma_fence *fence);
+
 #endif
