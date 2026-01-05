@@ -111,6 +111,13 @@ patternProperties:
             description:
               Configure the RMII reference clock to be a clock output
               rather than an input. Only applicable for RMII mode.
+          slew-rate:
+            $ref: /schemas/types.yaml#/definitions/uint32
+            enum: [0, 1]
+            description: |
+              Configure R(G)MII TXD/TXC pads' slew rate:
+              0: "normal"
+              1: "slow"
           tx-internal-delay-ps:
             enum: [0, 500, 1000, 1500, 2000, 2500, 3000, 3500]
             description:
