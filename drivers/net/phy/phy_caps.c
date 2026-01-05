@@ -70,7 +70,7 @@ static int speed_duplex_to_capa(int speed, unsigned int duplex)
  *	    unexpected linkmode setting that requires LINK_CAPS update.
  *
  */
-int phy_caps_init(void)
+int __init phy_caps_init(void)
 {
 	const struct link_mode_info *linkmode;
 	int i, capa;
@@ -314,6 +314,10 @@ unsigned long phy_caps_from_interface(phy_interface_t interface)
 
 	case PHY_INTERFACE_MODE_100BASEX:
 		link_caps |= BIT(LINK_CAPA_100HD) | BIT(LINK_CAPA_100FD);
+		break;
+
+	case PHY_INTERFACE_MODE_MIILITE:
+		link_caps |= BIT(LINK_CAPA_10FD) | BIT(LINK_CAPA_100FD);
 		break;
 
 	case PHY_INTERFACE_MODE_TBI:

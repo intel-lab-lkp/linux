@@ -65,6 +65,8 @@ enum TRI_STATE {
 #define MANA_STATS_RX_COUNT 5
 #define MANA_STATS_TX_COUNT 11
 
+#define MANA_RX_FRAG_ALIGNMENT 64
+
 struct mana_stats_rx {
 	u64 packets;
 	u64 bytes;
@@ -328,6 +330,7 @@ struct mana_rxq {
 	u32 datasize;
 	u32 alloc_size;
 	u32 headroom;
+	u32 frag_count;
 
 	mana_handle_t rxobj;
 
@@ -474,6 +477,10 @@ struct mana_context {
 	struct dentry *mana_eqs_debugfs;
 
 	struct net_device *ports[MAX_PORTS_IN_MANA_DEV];
+
+	/* Link state change work */
+	struct work_struct link_change_work;
+	u32 link_event;
 };
 
 struct mana_port_context {
@@ -510,6 +517,7 @@ struct mana_port_context {
 	u32 rxbpre_datasize;
 	u32 rxbpre_alloc_size;
 	u32 rxbpre_headroom;
+	u32 rxbpre_frag_count;
 
 	struct bpf_prog *bpf_prog;
 

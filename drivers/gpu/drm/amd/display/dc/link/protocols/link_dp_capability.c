@@ -1388,6 +1388,21 @@ void dpcd_set_source_specific_data(struct dc_link *link)
 		struct dpcd_amd_signature amd_signature = {0};
 		struct dpcd_amd_device_id amd_device_id = {0};
 
+		if (link->is_dds) {
+			uint8_t dpcd_dp_edp_backlight_mode = 0;
+
+			/*
+			 * Write 0 to bits 0:1 for dp_edp_backlight_mode_set register
+			 * if platform is DDS
+			 */
+			core_link_read_dpcd(link, DP_EDP_BACKLIGHT_MODE_SET_REGISTER,
+				&dpcd_dp_edp_backlight_mode, sizeof(uint8_t));
+			dpcd_dp_edp_backlight_mode &= ~0x3;
+
+			core_link_write_dpcd(link, DP_EDP_BACKLIGHT_MODE_SET_REGISTER,
+				&dpcd_dp_edp_backlight_mode, sizeof(uint8_t));
+		}
+
 		amd_device_id.device_id_byte1 =
 				(uint8_t)(link->ctx->asic_id.chip_id);
 		amd_device_id.device_id_byte2 =
@@ -1510,8 +1525,8 @@ bool read_is_mst_supported(struct dc_link *link)
 		return false;
 	}
 
-	rev.raw  = 0;
-	cap.raw  = 0;
+	rev.raw = 0;
+	cap.raw = 0;
 
 	st = core_link_read_dpcd(link, DP_DPCD_REV, &rev.raw,
 			sizeof(rev));
@@ -1543,6 +1558,10 @@ static bool dpcd_read_sink_ext_caps(struct dc_link *link)
 		return false;
 
 	link->dpcd_sink_ext_caps.raw = dpcd_data;
+	if (link->is_dds && !link->dpcd_sink_ext_caps.bits.oled) {
+		link->dpcd_sink_ext_caps.raw = 0;
+		return false;
+	}
 
 	if (core_link_read_dpcd(link, DP_EDP_GENERAL_CAP_2, &edp_general_cap2, 1) != DC_OK)
 		return false;
@@ -2106,13 +2125,13 @@ void detect_edp_sink_caps(struct dc_link *link)
 						&backlight_adj_cap, sizeof(backlight_adj_cap));
 
 	link->dpcd_caps.dynamic_backlight_capable_edp =
-				(backlight_adj_cap & DP_EDP_DYNAMIC_BACKLIGHT_CAP) ? true:false;
+				(backlight_adj_cap & DP_EDP_DYNAMIC_BACKLIGHT_CAP) ? true : false;
 
 	core_link_read_dpcd(link, DP_EDP_GENERAL_CAP_1,
 						&general_edp_cap, sizeof(general_edp_cap));
 
 	link->dpcd_caps.set_power_state_capable_edp =
-				(general_edp_cap & DP_EDP_SET_POWER_CAP) ? true:false;
+				(general_edp_cap & DP_EDP_SET_POWER_CAP) ? true : false;
 
 	set_default_brightness_aux(link);
 
@@ -2176,6 +2195,12 @@ void detect_edp_sink_caps(struct dc_link *link)
 			DP_EDP_MSO_LINK_CAPABILITIES,
 			(uint8_t *)&link->dpcd_caps.mso_cap_sst_links_supported,
 			sizeof(link->dpcd_caps.mso_cap_sst_links_supported));
+	/*
+	 * Read eDP general capability 2
+	 */
+	core_link_read_dpcd(link, DP_EDP_GENERAL_CAP_2,
+			(uint8_t *)&link->dpcd_caps.dp_edp_general_cap_2,
+			sizeof(link->dpcd_caps.dp_edp_general_cap_2));
 }
 
 bool dp_get_max_link_enc_cap(const struct dc_link *link, struct dc_link_settings *max_link_enc_cap)
@@ -2486,4 +2511,41 @@ bool dp_is_sink_present(struct dc_link *link)
 	dal_ddc_close(ddc);
 
 	return present;
+}
+
+uint8_t dp_get_lttpr_count(struct dc_link *link)
+{
+	if (dp_is_lttpr_present(link))
+		return dp_parse_lttpr_repeater_count(link->dpcd_caps.lttpr_caps.phy_repeater_cnt);
+
+	return 0;
+}
+
+void edp_get_alpm_support(struct dc_link *link,
+	bool *auxless_support,
+	bool *auxwake_support)
+{
+	bool lttpr_present = dp_is_lttpr_present(link);
+
+	if (auxless_support == NULL || auxwake_support == NULL)
+		return;
+
+	*auxless_support = false;
+	*auxwake_support = false;
+
+	if (!dc_is_embedded_signal(link->connector_signal))
+		return;
+
+	if (link->dpcd_caps.alpm_caps.bits.AUX_LESS_ALPM_CAP) {
+		if (lttpr_present) {
+			if (link->dpcd_caps.lttpr_caps.alpm.bits.AUX_LESS_ALPM_SUPPORTED)
+				*auxless_support = true;
+		} else
+			*auxless_support = true;
+	}
+
+	if (link->dpcd_caps.alpm_caps.bits.AUX_WAKE_ALPM_CAP) {
+		if (!lttpr_present)
+			*auxwake_support = true;
+	}
 }

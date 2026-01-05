@@ -668,7 +668,7 @@ static int xgbe_phy_mii_read_c45(struct mii_bus *mii, int addr, int devad,
 	else if (phy_data->conn_type & XGBE_CONN_TYPE_MDIO)
 		ret = xgbe_phy_mdio_mii_read_c45(pdata, addr, devad, reg);
 	else
-		ret = -ENOTSUPP;
+		ret = -EOPNOTSUPP;
 
 	xgbe_phy_put_comm_ownership(pdata);
 
@@ -2902,7 +2902,7 @@ static void xgbe_phy_sfp_setup(struct xgbe_prv_data *pdata)
 static int xgbe_phy_int_mdio_reset(struct xgbe_prv_data *pdata)
 {
 	struct xgbe_phy_data *phy_data = pdata->phy_data;
-	unsigned int ret;
+	int ret;
 
 	ret = pdata->hw_if.set_gpio(pdata, phy_data->mdio_reset_gpio);
 	if (ret)

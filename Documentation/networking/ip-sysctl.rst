@@ -209,7 +209,7 @@ neigh/default/unres_qlen_bytes - INTEGER
 
 	Setting negative value is meaningless and will return error.
 
-	Default: SK_WMEM_MAX, (same as net.core.wmem_default).
+	Default: SK_WMEM_DEFAULT, (same as net.core.wmem_default).
 
 		Exact value depends on architecture and kernel options,
 		but should be enough to allow queuing 256 packets
@@ -431,7 +431,7 @@ tcp_dsack - BOOLEAN
 
 tcp_early_retrans - INTEGER
 	Tail loss probe (TLP) converts RTOs occurring due to tail
-	losses into fast recovery (draft-ietf-tcpm-rack). Note that
+	losses into fast recovery (RFC8985). Note that
 	TLP requires RACK to function properly (see tcp_recovery below)
 
 	Possible values:
@@ -443,22 +443,55 @@ tcp_early_retrans - INTEGER
 
 tcp_ecn - INTEGER
 	Control use of Explicit Congestion Notification (ECN) by TCP.
-	ECN is used only when both ends of the TCP connection indicate
-	support for it.  This feature is useful in avoiding losses due
-	to congestion by allowing supporting routers to signal
-	congestion before having to drop packets.
+	ECN is used only when both ends of the TCP connection indicate support
+	for it. This feature is useful in avoiding losses due to congestion by
+	allowing supporting routers to signal congestion before having to drop
+	packets. A host that supports ECN both sends ECN at the IP layer and
+	feeds back ECN at the TCP layer. The highest variant of ECN feedback
+	that both peers support is chosen by the ECN negotiation (Accurate ECN,
+	ECN, or no ECN).
+
+	The highest negotiated variant for incoming connection requests
+	and the highest variant requested by outgoing connection
+	attempts:
+
+	===== ==================== ====================
+	Value Incoming connections Outgoing connections
+	===== ==================== ====================
+	0     No ECN               No ECN
+	1     ECN                  ECN
+	2     ECN                  No ECN
+	3     AccECN               AccECN
+	4     AccECN               ECN
+	5     AccECN               No ECN
+	===== ==================== ====================
+
+	Default: 2
+
+tcp_ecn_option - INTEGER
+	Control Accurate ECN (AccECN) option sending when AccECN has been
+	successfully negotiated during handshake. Send logic inhibits
+	sending AccECN options regarless of this setting when no AccECN
+	option has been seen for the reverse direction.
 
 	Possible values are:
 
-		=  =====================================================
-		0  Disable ECN.  Neither initiate nor accept ECN.
-		1  Enable ECN when requested by incoming connections and
-		   also request ECN on outgoing connection attempts.
-		2  Enable ECN when requested by incoming connections
-		   but do not request ECN on outgoing connections.
-		=  =====================================================
+	= ============================================================
+	0 Never send AccECN option. This also disables sending AccECN
+	  option in SYN/ACK during handshake.
+	1 Send AccECN option sparingly according to the minimum option
+	  rules outlined in draft-ietf-tcpm-accurate-ecn.
+	2 Send AccECN option on every packet whenever it fits into TCP
+	  option space.
+	= ============================================================
 
 	Default: 2
+
+tcp_ecn_option_beacon - INTEGER
+	Control Accurate ECN (AccECN) option sending frequency per RTT and it
+	takes effect only when tcp_ecn_option is set to 2.
+
+	Default: 3 (AccECN will be send at least 3 times per RTT)
 
 tcp_ecn_fallback - BOOLEAN
 	If the kernel detects that ECN connection misbehaves, enable fall
@@ -805,8 +838,8 @@ tcp_rmem - vector of 3 INTEGERs: min, default, max
 	This value results in initial window of 65535.
 
 	max: maximal size of receive buffer allowed for automatically
-	selected receiver buffers for TCP socket. This value does not override
-	net.core.rmem_max.  Calling setsockopt() with SO_RCVBUF disables
+	selected receiver buffers for TCP socket.
+	Calling setsockopt() with SO_RCVBUF disables
 	automatic tuning of that socket's receive buffer size, in which
 	case this value is ignored.
 	Default: between 131072 and 32MB, depending on RAM size.
@@ -821,9 +854,18 @@ tcp_sack - BOOLEAN
 
 	Default: 1 (enabled)
 
+tcp_comp_sack_rtt_percent - INTEGER
+	Percentage of SRTT used for the compressed SACK feature.
+	See tcp_comp_sack_nr, tcp_comp_sack_delay_ns, tcp_comp_sack_slack_ns.
+
+	Possible values : 1 - 1000
+
+	Default : 33 %
+
 tcp_comp_sack_delay_ns - LONG INTEGER
-	TCP tries to reduce number of SACK sent, using a timer
-	based on 5% of SRTT, capped by this sysctl, in nano seconds.
+	TCP tries to reduce number of SACK sent, using a timer based
+	on tcp_comp_sack_rtt_percent of SRTT, capped by this sysctl
+	in nano seconds.
 	The default is 1ms, based on TSO autosizing period.
 
 	Default : 1,000,000 ns (1 ms)
@@ -1420,7 +1462,7 @@ udp_hash_entries - INTEGER
 	A negative value means the networking namespace does not own its
 	hash buckets and shares the initial networking namespace's one.
 
-udp_child_ehash_entries - INTEGER
+udp_child_hash_entries - INTEGER
 	Control the number of hash buckets for UDP sockets in the child
 	networking namespace, which must be set before clone() or unshare().
 
@@ -1762,6 +1804,23 @@ icmp_errors_use_inbound_ifaddr - BOOLEAN
 	- 1 (enabled)
 
 	Default: 0 (disabled)
+
+icmp_errors_extension_mask - UNSIGNED INTEGER
+	Bitmask of ICMP extensions to append to ICMPv4 error messages
+	("Destination Unreachable", "Time Exceeded" and "Parameter Problem").
+	The original datagram is trimmed / padded to 128 bytes in order to be
+	compatible with applications that do not comply with RFC 4884.
+
+	Possible extensions are:
+
+	==== ==============================================================
+	0x01 Incoming IP interface information according to RFC 5837.
+	     Extension will include the index, IPv4 address (if present),
+	     name and MTU of the IP interface that received the datagram
+	     which elicited the ICMP error.
+	==== ==============================================================
+
+	Default: 0x00 (no extensions)
 
 igmp_max_memberships - INTEGER
 	Change the maximum number of multicast groups we can subscribe to.
@@ -2543,8 +2602,8 @@ conf/all/disable_ipv6 - BOOLEAN
 conf/all/forwarding - BOOLEAN
 	Enable global IPv6 forwarding between all interfaces.
 
-	IPv4 and IPv6 work differently here; e.g. netfilter must be used
-	to control which interfaces may forward packets and which not.
+	IPv4 and IPv6 work differently here; the ``force_forwarding`` flag must
+	be used to control which interfaces may forward packets.
 
 	This also sets all interfaces' Host/Router setting
 	'forwarding' to the specified value.  See below for details.
@@ -2561,6 +2620,10 @@ proxy_ndp - BOOLEAN
 
 	Default: 0 (disabled)
 
+force_forwarding - BOOLEAN
+	Enable forwarding on this interface only -- regardless of the setting on
+	``conf/all/forwarding``. When setting ``conf.all.forwarding`` to 0,
+	the ``force_forwarding`` flag will be reset on all interfaces.
 
 fwmark_reflect - BOOLEAN
 	Controls the fwmark of kernel-generated IPv6 reply packets that are not
@@ -3225,6 +3288,23 @@ error_anycast_as_unicast - BOOLEAN
 
 	Default: 0 (disabled)
 
+errors_extension_mask - UNSIGNED INTEGER
+	Bitmask of ICMP extensions to append to ICMPv6 error messages
+	("Destination Unreachable" and "Time Exceeded"). The original datagram
+	is trimmed / padded to 128 bytes in order to be compatible with
+	applications that do not comply with RFC 4884.
+
+	Possible extensions are:
+
+	==== ==============================================================
+	0x01 Incoming IP interface information according to RFC 5837.
+	     Extension will include the index, IPv6 address (if present),
+	     name and MTU of the IP interface that received the datagram
+	     which elicited the ICMP error.
+	==== ==============================================================
+
+	Default: 0x00 (no extensions)
+
 xfrm6_gc_thresh - INTEGER
 	(Obsolete since linux-4.14)
 	The threshold at which we will start garbage collecting for IPv6
@@ -3504,16 +3584,10 @@ cookie_hmac_alg - STRING
 	a listening sctp socket to a connecting client in the INIT-ACK chunk.
 	Valid values are:
 
-	* md5
-	* sha1
+	* sha256
 	* none
 
-	Ability to assign md5 or sha1 as the selected alg is predicated on the
-	configuration of those algorithms at build time (CONFIG_CRYPTO_MD5 and
-	CONFIG_CRYPTO_SHA1).
-
-	Default: Dependent on configuration.  MD5 if available, else SHA1 if
-	available, else none.
+	Default: sha256
 
 rcvbuf_policy - INTEGER
 	Determines if the receive buffer is attributed to the socket or to
