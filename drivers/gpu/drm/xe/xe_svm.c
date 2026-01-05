@@ -1760,6 +1760,10 @@ static struct xe_pagemap *xe_pagemap_create(struct xe_device *xe, struct xe_vram
 	if (err)
 		goto out_no_dpagemap;
 
+	err = drmm_mutex_init(&xe->drm, &dpagemap->folio_split_lock);
+	if (err)
+		goto out_err;
+
 	res = devm_request_free_mem_region(dev, &iomem_resource,
 					   vr->usable_size);
 	if (IS_ERR(res)) {

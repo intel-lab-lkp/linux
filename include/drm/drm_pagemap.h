@@ -161,6 +161,7 @@ struct drm_pagemap_ops {
  * &struct drm_pagemap. May be NULL if no cache is used.
  * @shrink_link: Link into the shrinker's list of drm_pagemaps. Only
  * used if also using a pagemap cache.
+ * @folio_split_lock: Lock to protect device folio splitting.
  */
 struct drm_pagemap {
 	const struct drm_pagemap_ops *ops;
@@ -170,6 +171,8 @@ struct drm_pagemap {
 	struct drm_pagemap_dev_hold *dev_hold;
 	struct drm_pagemap_cache *cache;
 	struct list_head shrink_link;
+	/* Protect device folio splitting */
+	struct mutex folio_split_lock;
 };
 
 struct drm_pagemap_devmem;
