@@ -456,7 +456,7 @@ static int __wwan_port_dev_assign_name(struct wwan_port *port, const char *fmt)
 }
 
 /* Register a regular WWAN port device (e.g. AT, MBIM, etc.) */
-static int wwan_port_register_wwan(struct wwan_port *port)
+static int wwan_port_register_wwan(struct wwan_port *port, bool cdev)
 {
 	struct wwan_device *wwandev = to_wwan_dev(port->dev.parent);
 	char namefmt[0x20];
@@ -468,7 +468,8 @@ static int wwan_port_register_wwan(struct wwan_port *port)
 		return minor;
 
 	port->dev.class = &wwan_class;
-	port->dev.devt = MKDEV(wwan_major, minor);
+	if (cdev)
+		port->dev.devt = MKDEV(wwan_major, minor);
 
 	/* allocate unique name based on wwan device id, port type and number */
 	snprintf(namefmt, sizeof(namefmt), "wwan%u%s%%d", wwandev->id,
@@ -626,6 +627,7 @@ struct wwan_port *wwan_create_port(struct device *parent,
 				   struct wwan_port_caps *caps,
 				   void *drvdata)
 {
+	bool cdev = (type == WWAN_PORT_NMEA) ? false : true;
 	struct wwan_device *wwandev;
 	struct wwan_port *port;
 	int err;
@@ -660,16 +662,20 @@ struct wwan_port *wwan_create_port(struct device *parent,
 	dev_set_drvdata(&port->dev, drvdata);
 	device_initialize(&port->dev);
 
-	if (port->type == WWAN_PORT_NMEA)
-		err = wwan_port_register_gnss(port);
-	else
-		err = wwan_port_register_wwan(port);
-
+	err = wwan_port_register_wwan(port, cdev);
 	if (err)
 		goto error_put_device;
 
+	if (type == WWAN_PORT_NMEA) {
+		err = wwan_port_register_gnss(port);
+		if (err)
+			goto error_port_unregister;
+	}
+
 	return port;
 
+error_port_unregister:
+	wwan_port_unregister_wwan(port);
 error_put_device:
 	put_device(&port->dev);
 error_wwandev_remove:
@@ -696,8 +702,8 @@ void wwan_remove_port(struct wwan_port *port)
 
 	if (port->type == WWAN_PORT_NMEA)
 		wwan_port_unregister_gnss(port);
-	else
-		wwan_port_unregister_wwan(port);
+
+	wwan_port_unregister_wwan(port);
 
 	put_device(&port->dev);
 
