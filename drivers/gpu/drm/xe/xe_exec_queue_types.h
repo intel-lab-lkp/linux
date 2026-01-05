@@ -128,6 +128,8 @@ struct xe_exec_queue {
 #define EXEC_QUEUE_FLAG_LOW_LATENCY		BIT(5)
 /* for migration (kernel copy, clear, bind) jobs */
 #define EXEC_QUEUE_FLAG_MIGRATE			BIT(6)
+/* for user queues, created in CAP_SYS_NICE context */
+#define EXEC_QUEUE_FLAG_CAP_SYS_NICE		BIT(7)
 
 	/**
 	 * @flags: flags for this exec queue, should statically setup aside from ban

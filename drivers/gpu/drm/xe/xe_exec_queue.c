@@ -1146,6 +1146,9 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
 	if (args->flags & DRM_XE_EXEC_QUEUE_LOW_LATENCY_HINT)
 		flags |= EXEC_QUEUE_FLAG_LOW_LATENCY;
 
+	if (capable(CAP_SYS_NICE))
+		flags |= EXEC_QUEUE_FLAG_CAP_SYS_NICE;
+
 	if (eci[0].engine_class == DRM_XE_ENGINE_CLASS_VM_BIND) {
 		if (XE_IOCTL_DBG(xe, args->width != 1) ||
 		    XE_IOCTL_DBG(xe, args->num_placements != 1) ||
