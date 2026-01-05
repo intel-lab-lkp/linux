@@ -862,6 +862,7 @@ struct kvm_vcpu_arch {
 	struct kvm_mmu_memory_cache mmu_external_spt_cache;
 
 	struct page *pml_page;
+	bool update_cpu_dirty_logging_pending;
 
 	/*
 	 * QEMU userspace and the guest each have their own FPU state.
@@ -1879,7 +1880,7 @@ struct kvm_x86_ops {
 			       struct x86_exception *exception);
 	void (*handle_exit_irqoff)(struct kvm_vcpu *vcpu);
 
-	void (*update_cpu_dirty_logging)(struct kvm_vcpu *vcpu);
+	void (*update_cpu_dirty_logging)(struct kvm_vcpu *vcpu, bool enable);
 
 	const struct kvm_x86_nested_ops *nested_ops;
 

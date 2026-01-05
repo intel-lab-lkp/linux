@@ -8238,27 +8238,12 @@ void vmx_cancel_hv_timer(struct kvm_vcpu *vcpu)
 }
 #endif
 
-void vmx_update_cpu_dirty_logging(struct kvm_vcpu *vcpu)
+void vmx_update_cpu_dirty_logging(struct kvm_vcpu *vcpu, bool enable)
 {
-	struct vcpu_vmx *vmx = to_vmx(vcpu);
-
-	if (WARN_ON_ONCE(!vcpu->kvm->arch.cpu_dirty_log_size))
-		return;
-
-	if (is_guest_mode(vcpu)) {
-		vmx->nested.update_vmcs01_cpu_dirty_logging = true;
-		return;
-	}
-
-	/*
-	 * Note, nr_memslots_dirty_logging can be changed concurrent with this
-	 * code, but in that case another update request will be made and so
-	 * the guest will never run with a stale PML value.
-	 */
-	if (atomic_read(&vcpu->kvm->nr_memslots_dirty_logging))
-		secondary_exec_controls_setbit(vmx, SECONDARY_EXEC_ENABLE_PML);
+	if (enable)
+		secondary_exec_controls_setbit(to_vmx(vcpu), SECONDARY_EXEC_ENABLE_PML);
 	else
-		secondary_exec_controls_clearbit(vmx, SECONDARY_EXEC_ENABLE_PML);
+		secondary_exec_controls_clearbit(to_vmx(vcpu), SECONDARY_EXEC_ENABLE_PML);
 }
 
 void vmx_setup_mce(struct kvm_vcpu *vcpu)
