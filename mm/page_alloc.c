@@ -6837,8 +6837,6 @@ static int __alloc_contig_migrate_range(struct compact_control *cc,
 		.reason = MR_CONTIG_RANGE,
 	};
 
-	lru_cache_disable();
-
 	while (pfn < end || !list_empty(&cc->migratepages)) {
 		if (fatal_signal_pending(current)) {
 			ret = -EINTR;
@@ -6872,7 +6870,6 @@ static int __alloc_contig_migrate_range(struct compact_control *cc,
 			break;
 	}
 
-	lru_cache_enable();
 	if (ret < 0) {
 		if (!(cc->gfp_mask & __GFP_NOWARN) && ret == -EBUSY)
 			alloc_contig_dump_pages(&cc->migratepages);
@@ -7003,6 +7000,9 @@ int alloc_contig_frozen_range_noprof(unsigned long start, unsigned long end,
 	if (__alloc_contig_verify_gfp_mask(gfp_mask, (gfp_t *)&cc.gfp_mask))
 		return -EINVAL;
 
+	zone_pcp_disable(cc.zone);
+	lru_cache_disable();
+
 	/*
 	 * What we do here is we mark all pageblocks in range as
 	 * MIGRATE_ISOLATE.  Because pageblock and max order pages may
@@ -7027,8 +7027,6 @@ int alloc_contig_frozen_range_noprof(unsigned long start, unsigned long end,
 	ret = start_isolate_page_range(start, end, mode);
 	if (ret)
 		goto done;
-
-	drain_all_pages(cc.zone);
 
 	/*
 	 * In case of -EBUSY, we'd like to know which page causes problem.
@@ -7105,6 +7103,8 @@ int alloc_contig_frozen_range_noprof(unsigned long start, unsigned long end,
 		     start, end, outer_start, outer_end);
 	}
 done:
+	lru_cache_enable();
+	zone_pcp_enable(cc.zone);
 	undo_isolate_page_range(start, end);
 	return ret;
 }
