@@ -359,3 +359,7 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&usb1_default_pins>;
 };
+
+&wkup_uart0_interconnect {
+	status = "okay";
+};
