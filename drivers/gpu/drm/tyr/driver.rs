@@ -25,6 +25,7 @@ use crate::gem::TyrObject;
 use crate::gpu;
 use crate::gpu::GpuInfo;
 use crate::regs;
+use crate::THIS_MODULE;
 
 pub(crate) type IoMem = kernel::io::mem::IoMem<SZ_2M>;
 
@@ -179,6 +180,7 @@ const INFO: drm::DriverInfo = drm::DriverInfo {
 
 #[vtable]
 impl drm::Driver for TyrDriver {
+    type ThisModule = THIS_MODULE;
     type Data = TyrData;
     type File = File;
     type Object = drm::gem::Object<TyrObject>;
