@@ -15,13 +15,14 @@
 .. toctree::
     :maxdepth: 1
 
+    timekeeping
+
 TODOList:
 
 * highres
 * hpet
 * hrtimers
 * no_hz
-* timekeeping
 * delay_sleep_functions
 
 .. only::  subproject and html
