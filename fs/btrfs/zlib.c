@@ -158,8 +158,7 @@ int zlib_compress_folios(struct list_head *ws, struct btrfs_inode *inode,
 	struct folio *in_folio = NULL;
 	struct folio *out_folio = NULL;
 	unsigned long len = *total_out;
-	unsigned long nr_dest_folios = *out_folios;
-	const unsigned long max_out = nr_dest_folios << min_folio_shift;
+	const unsigned long max_out = *out_folios << min_folio_shift;
 	const u64 orig_end = start + len;
 
 	*out_folios = 0;
@@ -257,7 +256,7 @@ int zlib_compress_folios(struct list_head *ws, struct btrfs_inode *inode,
 		 * the stream end if required
 		 */
 		if (workspace->strm.avail_out == 0) {
-			if (nr_folios == nr_dest_folios) {
+			if (nr_folios == *out_folios) {
 				ret = -E2BIG;
 				goto out;
 			}
@@ -292,7 +291,7 @@ int zlib_compress_folios(struct list_head *ws, struct btrfs_inode *inode,
 			goto out;
 		} else if (workspace->strm.avail_out == 0) {
 			/* Get another folio for the stream end. */
-			if (nr_folios == nr_dest_folios) {
+			if (nr_folios == *out_folios) {
 				ret = -E2BIG;
 				goto out;
 			}
