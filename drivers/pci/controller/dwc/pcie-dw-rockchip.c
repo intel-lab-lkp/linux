@@ -73,6 +73,17 @@
 #define  PCIE_CLIENT_CDM_RASDES_TBA_L1_1	BIT(4)
 #define  PCIE_CLIENT_CDM_RASDES_TBA_L1_2	BIT(5)
 
+/* Debug FIFO information */
+#define PCIE_CLIENT_DBG_FIFO_MODE_CON	0x310
+#define  PCIE_CLIENT_DBG_EN		0xffff0007
+#define PCIE_CLIENT_DBG_FIFO_PTN_HIT_D0	0x320
+#define PCIE_CLIENT_DBG_FIFO_PTN_HIT_D1	0x324
+#define PCIE_CLIENT_DBG_FIFO_TRN_HIT_D0	0x328
+#define PCIE_CLIENT_DBG_FIFO_TRN_HIT_D1	0x32c
+#define  PCIE_CLIENT_DBG_TRANSITION_DATA 0xffff0000
+#define PCIE_CLIENT_DBG_FIFO_STATUS	0x350
+#define PCIE_DBG_LTSSM_HISTORY_CNT	64
+
 /* Hot Reset Control Register */
 #define PCIE_CLIENT_HOT_RESET_CTRL	0x180
 #define  PCIE_LTSSM_APP_DLY2_EN		BIT(1)
@@ -96,6 +107,7 @@ struct rockchip_pcie {
 	struct irq_domain *irq_domain;
 	const struct rockchip_pcie_of_data *data;
 	bool supports_clkreq;
+	struct dw_pcie_ltssm_history ltssm_history;
 };
 
 struct rockchip_pcie_of_data {
@@ -206,6 +218,34 @@ static enum dw_pcie_ltssm rockchip_pcie_get_ltssm(struct dw_pcie *pci)
 	return rockchip_pcie_get_ltssm_reg(rockchip) & PCIE_LTSSM_STATUS_MASK;
 }
 
+static void rockchip_pcie_enable_ltssm_trace(struct rockchip_pcie *rockchip)
+{
+        rockchip_pcie_writel_apb(rockchip, PCIE_CLIENT_DBG_TRANSITION_DATA,
+				 PCIE_CLIENT_DBG_FIFO_PTN_HIT_D0);
+        rockchip_pcie_writel_apb(rockchip, PCIE_CLIENT_DBG_TRANSITION_DATA,
+				 PCIE_CLIENT_DBG_FIFO_PTN_HIT_D1);
+        rockchip_pcie_writel_apb(rockchip, PCIE_CLIENT_DBG_TRANSITION_DATA,
+				 PCIE_CLIENT_DBG_FIFO_TRN_HIT_D0);
+        rockchip_pcie_writel_apb(rockchip, PCIE_CLIENT_DBG_TRANSITION_DATA,
+				 PCIE_CLIENT_DBG_FIFO_TRN_HIT_D1);
+        rockchip_pcie_writel_apb(rockchip, PCIE_CLIENT_DBG_EN,
+				 PCIE_CLIENT_DBG_FIFO_MODE_CON);
+}
+
+static struct dw_pcie_ltssm_history* rockchip_pcie_ltssm_trace(struct dw_pcie *pci)
+{
+	struct rockchip_pcie *rockchip = to_rockchip_pcie(pci);
+	u32 loop, val;
+
+	for (loop = 0; loop < PCIE_DBG_LTSSM_HISTORY_CNT; loop++) {
+		val = rockchip_pcie_readl_apb(rockchip, PCIE_CLIENT_DBG_FIFO_STATUS) &
+					PCIE_LTSSM_STATUS_MASK;
+		rockchip->ltssm_history.states[loop] = val;
+	}
+
+	return &rockchip->ltssm_history;
+}
+
 static void rockchip_pcie_enable_ltssm(struct rockchip_pcie *rockchip)
 {
 	rockchip_pcie_writel_apb(rockchip, PCIE_CLIENT_ENABLE_LTSSM,
@@ -276,6 +316,8 @@ static int rockchip_pcie_start_link(struct dw_pcie *pci)
 
 	/* Reset device */
 	gpiod_set_value_cansleep(rockchip->rst_gpio, 0);
+
+	rockchip_pcie_enable_ltssm_trace(rockchip);
 
 	rockchip_pcie_enable_ltssm(rockchip);
 
@@ -506,6 +548,7 @@ static const struct dw_pcie_ops dw_pcie_ops = {
 	.start_link = rockchip_pcie_start_link,
 	.stop_link = rockchip_pcie_stop_link,
 	.get_ltssm = rockchip_pcie_get_ltssm,
+	.ltssm_trace = rockchip_pcie_ltssm_trace,
 };
 
 static irqreturn_t rockchip_pcie_ep_sys_irq_thread(int irq, void *arg)
@@ -644,6 +687,12 @@ static int rockchip_pcie_probe(struct platform_device *pdev)
 	rockchip->pci.dev = dev;
 	rockchip->pci.ops = &dw_pcie_ops;
 	rockchip->data = data;
+
+	rockchip->ltssm_history.count = PCIE_DBG_LTSSM_HISTORY_CNT;
+	rockchip->ltssm_history.states = devm_kzalloc(dev,
+			PCIE_DBG_LTSSM_HISTORY_CNT * sizeof(u32), GFP_KERNEL);
+	if (!rockchip->ltssm_history.states)
+		return -ENOMEM;
 
 	/* Default N_FTS value (210) is broken, override it to 255 */
 	rockchip->pci.n_fts[0] = 255; /* Gen1 */
