@@ -6,6 +6,7 @@
 ALL_TESTS="
 	initial_ping_test
 	f_mac_test
+	buffer_circulation_test
 "
 
 source virtio_net_common.sh
@@ -15,6 +16,8 @@ source "$lib_dir"/../../../net/forwarding/lib.sh
 
 h1=${NETIFS[p1]}
 h2=${NETIFS[p2]}
+
+require_command iperf3
 
 h1_create()
 {
@@ -79,6 +82,73 @@ f_mac_test()
 
 	ping_do $h1 $H2_IPV4
 	check_err $? "Ping failed"
+
+	log_test "$test_name"
+}
+
+buffer_circulation_test()
+{
+	RET=0
+	local test_name="buffer circulation"
+	local tracefs="/sys/kernel/tracing"
+
+	setup_cleanup
+	setup_prepare
+
+	ping -c 1 -I $h1 $H2_IPV4 >/dev/null
+	if [ $? -ne 0 ]; then
+		check_err 1 "Ping failed"
+		log_test "$test_name"
+		return
+	fi
+
+	local rx_start=$(cat /sys/class/net/$h2/statistics/rx_packets)
+	local tx_start=$(cat /sys/class/net/$h1/statistics/tx_packets)
+
+	if [ -d "$tracefs/events/page_pool" ]; then
+		echo > "$tracefs/trace"
+		echo 1 > "$tracefs/events/page_pool/enable"
+	fi
+
+	iperf3 -s --bind-dev $h2 -p 5201 &>/dev/null &
+	local server_pid=$!
+	sleep 1
+
+	if ! kill -0 $server_pid 2>/dev/null; then
+		if [ -d "$tracefs/events/page_pool" ]; then
+			echo 0 > "$tracefs/events/page_pool/enable"
+		fi
+		check_err 1 "iperf3 server died"
+		log_test "$test_name"
+		return
+	fi
+
+	iperf3 -c $H2_IPV4 --bind-dev $h1 -p 5201 -t 5 >/dev/null 2>&1
+	local iperf_ret=$?
+
+	kill $server_pid 2>/dev/null || true
+	wait $server_pid 2>/dev/null || true
+
+	if [ -d "$tracefs/events/page_pool" ]; then
+		echo 0 > "$tracefs/events/page_pool/enable"
+		local trace="$tracefs/trace"
+		local hold=$(grep -c "page_pool_state_hold" "$trace" 2>/dev/null)
+		local release=$(grep -c "page_pool_state_release" "$trace" 2>/dev/null)
+		log_info "page_pool events: hold=${hold:-0}, release=${release:-0}"
+	fi
+
+	local rx_end=$(cat /sys/class/net/$h2/statistics/rx_packets)
+	local tx_end=$(cat /sys/class/net/$h1/statistics/tx_packets)
+	local rx_delta=$((rx_end - rx_start))
+	local tx_delta=$((tx_end - tx_start))
+
+	log_info "Circulated TX:$tx_delta RX:$rx_delta"
+
+	if [ $iperf_ret -ne 0 ]; then
+		check_err 1 "iperf3 failed"
+	elif [ "$rx_delta" -lt 10000 ]; then
+		check_err 1 "Too few packets: $rx_delta"
+	fi
 
 	log_test "$test_name"
 }
