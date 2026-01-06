@@ -74,6 +74,7 @@ struct QueueData {
 
 #[vtable]
 impl Operations for NullBlkDevice {
+    type ThisModule = THIS_MODULE;
     type QueueData = KBox<QueueData>;
 
     #[inline(always)]

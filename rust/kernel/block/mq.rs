@@ -68,6 +68,7 @@
 //!
 //! #[vtable]
 //! impl Operations for MyBlkDevice {
+//!     type ThisModule = THIS_MODULE;
 //!     type QueueData = ();
 //!
 //!     fn queue_rq(_queue_data: (), rq: ARef<Request<Self>>, _is_last: bool) -> Result {

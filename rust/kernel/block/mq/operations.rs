@@ -10,6 +10,7 @@ use crate::{
     error::{from_result, Result},
     prelude::*,
     sync::{aref::ARef, Refcount},
+    this_module::ThisModule,
     types::ForeignOwnable,
 };
 use core::marker::PhantomData;
@@ -28,6 +29,9 @@ type ForeignBorrowed<'a, T> = <T as ForeignOwnable>::Borrowed<'a>;
 /// [module level documentation]: kernel::block::mq
 #[macros::vtable]
 pub trait Operations: Sized {
+    /// Module ownership for this device, provided via `THIS_MODULE`.
+    type ThisModule: ThisModule;
+
     /// Data associated with the `struct request_queue` that is allocated for
     /// the `GenDisk` associated with this `Operations` implementation.
     type QueueData: ForeignOwnable;
@@ -280,7 +284,33 @@ impl<T: Operations> OperationsVTable<T> {
         show_rq: None,
     };
 
+    const BLOCK_OPS: bindings::block_device_operations = bindings::block_device_operations {
+        submit_bio: None,
+        open: None,
+        release: None,
+        ioctl: None,
+        compat_ioctl: None,
+        check_events: None,
+        unlock_native_capacity: None,
+        getgeo: None,
+        set_read_only: None,
+        swap_slot_free_notify: None,
+        report_zones: None,
+        devnode: None,
+        alternative_gpt_sector: None,
+        get_unique_id: None,
+        owner: T::ThisModule::OWNER.as_ptr(),
+        pr_ops: core::ptr::null_mut(),
+        free_disk: None,
+        poll_bio: None,
+    };
+
     pub(crate) const fn build() -> &'static bindings::blk_mq_ops {
         &Self::VTABLE
+    }
+
+    pub(crate) const fn build_block_device_operations() -> &'static bindings::block_device_operations
+    {
+        &Self::BLOCK_OPS
     }
 }
