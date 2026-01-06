@@ -3960,7 +3960,7 @@ void read_extent_buffer(const struct extent_buffer *eb, void *dstv,
 	size_t cur;
 	size_t offset;
 	char *dst = (char *)dstv;
-	unsigned long i = get_eb_folio_index(eb, start);
+	unsigned long i;
 
 	if (check_eb_range(eb, start, len)) {
 		/*
@@ -3977,7 +3977,7 @@ void read_extent_buffer(const struct extent_buffer *eb, void *dstv,
 	}
 
 	offset = get_eb_offset_in_folio(eb, start);
-
+	i = get_eb_folio_index(eb, start);
 	while (len > 0) {
 		char *kaddr;
 
@@ -4000,7 +4000,7 @@ int read_extent_buffer_to_user_nofault(const struct extent_buffer *eb,
 	size_t cur;
 	size_t offset;
 	char __user *dst = (char __user *)dstv;
-	unsigned long i = get_eb_folio_index(eb, start);
+	unsigned long i;
 	int ret = 0;
 
 	WARN_ON(start > eb->len);
@@ -4013,7 +4013,7 @@ int read_extent_buffer_to_user_nofault(const struct extent_buffer *eb,
 	}
 
 	offset = get_eb_offset_in_folio(eb, start);
-
+	i = get_eb_folio_index(eb, start);
 	while (len > 0) {
 		char *kaddr;
 
@@ -4041,7 +4041,7 @@ int memcmp_extent_buffer(const struct extent_buffer *eb, const void *ptrv,
 	size_t offset;
 	char *kaddr;
 	char *ptr = (char *)ptrv;
-	unsigned long i = get_eb_folio_index(eb, start);
+	unsigned long i;
 	int ret = 0;
 
 	if (check_eb_range(eb, start, len))
@@ -4051,7 +4051,7 @@ int memcmp_extent_buffer(const struct extent_buffer *eb, const void *ptrv,
 		return memcmp(ptrv, eb->addr + start, len);
 
 	offset = get_eb_offset_in_folio(eb, start);
-
+	i = get_eb_folio_index(eb, start);
 	while (len > 0) {
 		cur = min(len, unit_size - offset);
 		kaddr = folio_address(eb->folios[i]);
@@ -4111,7 +4111,7 @@ static void __write_extent_buffer(const struct extent_buffer *eb,
 	size_t offset;
 	char *kaddr;
 	const char *src = (const char *)srcv;
-	unsigned long i = get_eb_folio_index(eb, start);
+	unsigned long i;
 	/* For unmapped (dummy) ebs, no need to check their uptodate status. */
 	const bool check_uptodate = !test_bit(EXTENT_BUFFER_UNMAPPED, &eb->bflags);
 
@@ -4127,7 +4127,7 @@ static void __write_extent_buffer(const struct extent_buffer *eb,
 	}
 
 	offset = get_eb_offset_in_folio(eb, start);
-
+	i = get_eb_folio_index(eb, start);
 	while (len > 0) {
 		if (check_uptodate)
 			assert_eb_folio_uptodate(eb, i);
@@ -4213,7 +4213,7 @@ void copy_extent_buffer(const struct extent_buffer *dst,
 	size_t cur;
 	size_t offset;
 	char *kaddr;
-	unsigned long i = get_eb_folio_index(dst, dst_offset);
+	unsigned long i;
 
 	if (check_eb_range(dst, dst_offset, len) ||
 	    check_eb_range(src, src_offset, len))
@@ -4223,6 +4223,7 @@ void copy_extent_buffer(const struct extent_buffer *dst,
 
 	offset = get_eb_offset_in_folio(dst, dst_offset);
 
+	i = get_eb_folio_index(dst, dst_offset);
 	while (len > 0) {
 		assert_eb_folio_uptodate(dst, i);
 
