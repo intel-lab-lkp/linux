@@ -2199,6 +2199,12 @@ static int sta_apply_parameters(struct ieee80211_local *local,
 	mask = params->sta_flags_mask;
 	set = params->sta_flags_set;
 
+	if (params->epp_peer)
+		sta->sta.epp_peer = true;
+
+	if (sta->sta.epp_peer)
+		sta->sta.epp_flags = params->epp_flags;
+
 	if (ieee80211_vif_is_mesh(&sdata->vif)) {
 		/*
 		 * In mesh mode, ASSOCIATED isn't part of the nl80211
