@@ -108,6 +108,15 @@ SCHED_FEAT(RT_PUSH_IPI, true)
 #endif
 
 SCHED_FEAT(RT_RUNTIME_SHARE, false)
+#ifdef CONFIG_NO_HZ_FULL
+/*
+ * Suppress Fair Server activation for SCHED_FIFO/RR tasks on
+ * NOHZ_FULL CPUs. This prevents the tick from being restarted for
+ * background CFS maintenance, prioritising deterministic RT
+ * execution over CFS fairness.
+ */
+SCHED_FEAT(RT_SUPPRESS_FAIR_SERVER, false)
+#endif
 SCHED_FEAT(LB_MIN, false)
 SCHED_FEAT(ATTACH_AGE_LOAD, true)
 

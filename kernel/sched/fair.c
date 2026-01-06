@@ -6956,8 +6956,25 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 			h_nr_idle = 1;
 	}
 
-	if (!rq_h_nr_queued && rq->cfs.h_nr_queued)
+	if (!rq_h_nr_queued && rq->cfs.h_nr_queued) {
+#ifdef CONFIG_NO_HZ_FULL
+		/*
+		 * Normally, we start the Fair Server to ensure CFS
+		 * bandwidth enforcement. However, if the
+		 * RT_SUPPRESS_FAIR_SERVER feature is enabled and RT
+		 * bandwidth throttling is disabled, we skip starting the
+		 * server when an RT task is running. This prevents the
+		 * server (a Deadline entity) from forcing the tick active,
+		 * thereby preserving NOHZ_FULL isolation.
+		 */
+		if (likely(!sched_feat(RT_SUPPRESS_FAIR_SERVER) ||
+					rt_bandwidth_enabled() ||
+					!rt_task(rq->curr)))
+			dl_server_start(&rq->fair_server);
+#else
 		dl_server_start(&rq->fair_server);
+#endif
+	}
 
 	/* At this point se is NULL and we are at root level*/
 	add_nr_running(rq, 1);
