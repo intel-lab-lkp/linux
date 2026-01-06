@@ -270,6 +270,29 @@ static bool can_stop_full_tick(int cpu, struct tick_sched *ts)
 {
 	lockdep_assert_irqs_disabled();
 
+	/*
+	 * Prefetch dependency structures for better cache locality
+	 */
+	prefetch(&tick_dep_mask);
+	prefetch(&ts->tick_dep_mask);
+	prefetch(&current->tick_dep_mask);
+	prefetch(&current->signal->tick_dep_mask);
+
+	/*
+	 * Fast path for idle isolated cores: if this is an isolated CPU
+	 * running the idle task with no dependencies, we can skip expensive
+	 * checks and immediately allow tick to stop. This significantly
+	 * reduces timer interrupts on properly isolated cores.
+	 */
+	if (tick_nohz_full_cpu(cpu) &&
+	    is_idle_task(current) &&
+	    !atomic_read(&tick_dep_mask) &&
+	    !atomic_read(&ts->tick_dep_mask) &&
+	    !atomic_read(&current->tick_dep_mask) &&
+	    !atomic_read(&current->signal->tick_dep_mask)) {
+		return true;
+	}
+
 	if (unlikely(!cpu_online(cpu)))
 		return false;
 
