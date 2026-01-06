@@ -1226,6 +1226,7 @@ static const struct counter_desc pport_phy_layer_cntrs_stats_desc[] = {
 	MLX5_BYTE_OFF(ppcnt_reg, \
 		      counter_set.phys_layer_statistical_cntrs.c##_high)
 static const struct counter_desc pport_phy_statistical_stats_desc[] = {
+	{ "rx_bits_phy", PPORT_PHY_STATISTICAL_OFF(phy_received_bits) },
 	{ "rx_pcs_symbol_err_phy", PPORT_PHY_STATISTICAL_OFF(phy_symbol_errors) },
 	{ "rx_corrected_bits_phy", PPORT_PHY_STATISTICAL_OFF(phy_corrected_bits) },
 };
