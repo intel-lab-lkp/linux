@@ -763,6 +763,7 @@ extern const struct device_type tb_domain_type;
 extern const struct device_type tb_retimer_type;
 extern const struct device_type tb_switch_type;
 extern const struct device_type usb4_port_device_type;
+extern bool host_reset;
 
 int tb_domain_init(void);
 void tb_domain_exit(void);

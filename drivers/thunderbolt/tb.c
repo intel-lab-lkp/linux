@@ -3115,7 +3115,6 @@ static int tb_resume_noirq(struct tb *tb)
 	struct tb_cm *tcm = tb_priv(tb);
 	struct tb_tunnel *tunnel, *n;
 	unsigned int usb3_delay = 0;
-	LIST_HEAD(tunnels);
 
 	tb_dbg(tb, "resuming...\n");
 
@@ -3131,18 +3130,22 @@ static int tb_resume_noirq(struct tb *tb)
 	tb_free_unplugged_children(tb->root_switch);
 	tb_restore_children(tb->root_switch);
 
-	/*
-	 * If we get here from suspend to disk the boot firmware or the
-	 * restore kernel might have created tunnels of its own. Since
-	 * we cannot be sure they are usable for us we find and tear
-	 * them down.
-	 */
-	tb_switch_discover_tunnels(tb->root_switch, &tunnels, false);
-	list_for_each_entry_safe_reverse(tunnel, n, &tunnels, list) {
-		if (tb_tunnel_is_usb3(tunnel))
-			usb3_delay = 500;
-		tb_tunnel_deactivate(tunnel);
-		tb_tunnel_put(tunnel);
+	if (!host_reset) {
+		/*
+		 * If we get here from suspend to disk the boot firmware or the
+		 * restore kernel might have created tunnels of its own. Since
+		 * we cannot be sure they are usable for us we find and tear
+		 * them down.
+		 */
+		LIST_HEAD(tunnels);
+
+		tb_switch_discover_tunnels(tb->root_switch, &tunnels, false);
+		list_for_each_entry_safe_reverse(tunnel, n, &tunnels, list) {
+			if (tb_tunnel_is_usb3(tunnel))
+				usb3_delay = 500;
+			tb_tunnel_deactivate(tunnel);
+			tb_tunnel_put(tunnel);
+		}
 	}
 
 	/* Re-create our tunnels now */

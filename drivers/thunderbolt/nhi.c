@@ -47,7 +47,7 @@
 #define QUIRK_AUTO_CLEAR_INT	BIT(0)
 #define QUIRK_E2E		BIT(1)
 
-static bool host_reset = true;
+bool host_reset = true;
 module_param(host_reset, bool, 0444);
 MODULE_PARM_DESC(host_reset, "reset USB4 host router (default: true)");
 
@@ -1108,6 +1108,17 @@ static int nhi_resume_noirq(struct device *dev)
 	return tb_domain_resume_noirq(tb);
 }
 
+static int nhi_restore_noirq(struct device *dev)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct tb *tb = pci_get_drvdata(pdev);
+	struct tb_nhi *nhi = tb->nhi;
+
+	nhi_reset(nhi);
+
+	return nhi_resume_noirq(dev);
+}
+
 static int nhi_suspend(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
@@ -1449,7 +1460,7 @@ static const struct dev_pm_ops nhi_pm_ops = {
 					    * pci-tunnels stay alive.
 					    */
 	.thaw_noirq = nhi_thaw_noirq,
-	.restore_noirq = nhi_resume_noirq,
+	.restore_noirq = nhi_restore_noirq,
 	.suspend = nhi_suspend,
 	.poweroff_noirq = nhi_poweroff_noirq,
 	.poweroff = nhi_suspend,
