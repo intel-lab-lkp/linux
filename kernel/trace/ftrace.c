@@ -3831,7 +3831,7 @@ static int ftrace_allocate_records(struct ftrace_page *pg, int count)
 		return -EINVAL;
 
 	/* We want to fill as much as possible, with no empty pages */
-	pages = DIV_ROUND_UP(count, ENTRIES_PER_PAGE);
+	pages = DIV_ROUND_UP(count * ENTRY_SIZE, PAGE_SIZE);
 	order = fls(pages) - 1;
 
  again:
@@ -7260,24 +7260,33 @@ static int ftrace_process_locs(struct module *mod,
 		unsigned long skip;
 
 		/* Count the number of entries unused and compare it to skipped. */
-		pg_remaining = (ENTRIES_PER_PAGE << pg->order) - pg->index;
+		pg_remaining = (PAGE_SIZE << pg->order) / ENTRY_SIZE - pg->index;
 
 		if (!WARN(skipped < pg_remaining, "Extra allocated pages for ftrace")) {
+			unsigned long space = 0;
 
 			skip = skipped - pg_remaining;
 
-			for (pg = pg_unuse; pg; pg = pg->next)
+			for (pg = pg_unuse; pg; pg = pg->next) {
 				remaining += 1 << pg->order;
+				/*
+				 * The capacity of a page group is
+				 *     (PAGE_SIZE << order) / ENTRY_SIZE
+				 * Accumulate the total capacity of unused pages.
+				 */
+				space += (PAGE_SIZE << pg->order) / ENTRY_SIZE;
+			}
 
 			pages -= remaining;
 
-			skip = DIV_ROUND_UP(skip, ENTRIES_PER_PAGE);
-
 			/*
-			 * Check to see if the number of pages remaining would
-			 * just fit the number of entries skipped.
+			 * Check to see if extra pages have been allocated.
+			 * Only warn if the number of unused entries is larger
+			 * than the number of entries per page to avoid false
+			 * positives due to rounding.
 			 */
-			WARN(skip != remaining, "Extra allocated pages for ftrace: %lu with %lu skipped",
+			WARN(space - skip > ENTRIES_PER_PAGE,
+			     "Extra allocated pages for ftrace: %lu with %lu skipped",
 			     remaining, skipped);
 		}
 		/* Need to synchronize with ftrace_location_range() */
