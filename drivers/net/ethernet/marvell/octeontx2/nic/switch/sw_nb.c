@@ -21,6 +21,7 @@
 #include "sw_fdb.h"
 #include "sw_fib.h"
 #include "sw_fl.h"
+#include "sw_nb.h"
 
 static const char *sw_nb_cmd2str[OTX2_CMD_MAX] = {
 	[OTX2_DEV_UP]  = "OTX2_DEV_UP",
@@ -59,7 +60,6 @@ static int sw_nb_check_slaves(struct net_device *dev,
 			      struct netdev_nested_priv *priv)
 {
 	int *cnt;
-
 	if (!priv->flags)
 		return 0;
 
@@ -103,6 +103,7 @@ static int sw_nb_fdb_event(struct notifier_block *unused,
 {
 	struct net_device *dev = switchdev_notifier_info_to_dev(ptr);
 	struct switchdev_notifier_fdb_info *fdb_info = ptr;
+	int rc;
 
 	if (!sw_nb_is_valid_dev(dev))
 		return NOTIFY_DONE;
@@ -111,11 +112,13 @@ static int sw_nb_fdb_event(struct notifier_block *unused,
 	case SWITCHDEV_FDB_ADD_TO_DEVICE:
 		if (fdb_info->is_local)
 			break;
+		rc = sw_fdb_add_to_list(dev, (u8 *)fdb_info->addr, true);
 		break;
 
 	case SWITCHDEV_FDB_DEL_TO_DEVICE:
 		if (fdb_info->is_local)
 			break;
+		rc = sw_fdb_add_to_list(dev, (u8 *)fdb_info->addr, false);
 		break;
 
 	default:
@@ -304,7 +307,6 @@ static int sw_nb_fib_event(struct notifier_block *nb,
 	entries = kcalloc(hcnt, sizeof(*entries), GFP_ATOMIC);
 	if (!entries)
 		return NOTIFY_DONE;
-
 	iter = entries;
 
 	for (i = 0; i < hcnt; i++, iter++) {
@@ -536,10 +538,6 @@ int sw_nb_unregister(void)
 {
 	int err;
 
-	sw_fl_deinit();
-	sw_fib_deinit();
-	sw_fdb_deinit();
-
 	err = unregister_switchdev_notifier(&sw_nb_fdb);
 
 	if (err)
@@ -560,6 +558,11 @@ int sw_nb_unregister(void)
 	err = unregister_netdevice_notifier(&sw_nb_netdev);
 	if (err)
 		pr_err("Failed to unregister netdev notifier\n");
+
+	sw_fl_deinit();
+	sw_fib_deinit();
+	sw_fdb_deinit();
+
 	return 0;
 }
 EXPORT_SYMBOL(sw_nb_unregister);
