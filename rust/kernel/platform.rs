@@ -13,8 +13,8 @@ use crate::{
     irq::{self, IrqRequest},
     of,
     prelude::*,
+    this_module::ThisModule,
     types::Opaque,
-    ThisModule,
 };
 
 use core::{
@@ -31,11 +31,7 @@ pub struct Adapter<T: Driver>(T);
 unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
     type RegType = bindings::platform_driver;
 
-    unsafe fn register(
-        pdrv: &Opaque<Self::RegType>,
-        name: &'static CStr,
-        module: &'static ThisModule,
-    ) -> Result {
+    unsafe fn register<TM: ThisModule>(pdrv: &Opaque<Self::RegType>) -> Result {
         let of_table = match T::OF_ID_TABLE {
             Some(table) => table.as_ptr(),
             None => core::ptr::null(),
@@ -48,7 +44,7 @@ unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
 
         // SAFETY: It's safe to set the fields of `struct platform_driver` on initialization.
         unsafe {
-            (*pdrv.get()).driver.name = name.as_char_ptr();
+            (*pdrv.get()).driver.name = TM::NAME.as_char_ptr();
             (*pdrv.get()).probe = Some(Self::probe_callback);
             (*pdrv.get()).remove = Some(Self::remove_callback);
             (*pdrv.get()).driver.of_match_table = of_table;
@@ -56,7 +52,7 @@ unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
         }
 
         // SAFETY: `pdrv` is guaranteed to be a valid `RegType`.
-        to_result(unsafe { bindings::__platform_driver_register(pdrv.get(), module.0) })
+        to_result(unsafe { bindings::__platform_driver_register(pdrv.get(), TM::OWNER.as_ptr()) })
     }
 
     unsafe fn unregister(pdrv: &Opaque<Self::RegType>) {

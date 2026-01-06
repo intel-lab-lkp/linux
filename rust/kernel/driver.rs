@@ -94,10 +94,14 @@
 //! [`device_id`]: kernel::device_id
 //! [`module_driver`]: kernel::module_driver
 
-use crate::error::{Error, Result};
-use crate::{acpi, device, of, str::CStr, try_pin_init, types::Opaque, ThisModule};
-use core::pin::Pin;
-use pin_init::{pin_data, pinned_drop, PinInit};
+use crate::{
+    acpi,
+    device,
+    of,
+    prelude::*,
+    this_module::ThisModule,
+    types::Opaque, //
+};
 
 /// The [`RegistrationOps`] trait serves as generic interface for subsystems (e.g., PCI, Platform,
 /// Amba, etc.) to provide the corresponding subsystem specific implementation to register /
@@ -122,11 +126,7 @@ pub unsafe trait RegistrationOps {
     ///
     /// On success, `reg` must remain pinned and valid until the matching call to
     /// [`RegistrationOps::unregister`].
-    unsafe fn register(
-        reg: &Opaque<Self::RegType>,
-        name: &'static CStr,
-        module: &'static ThisModule,
-    ) -> Result;
+    unsafe fn register<TM: ThisModule>(reg: &Opaque<Self::RegType>) -> Result;
 
     /// Unregisters a driver previously registered with [`RegistrationOps::register`].
     ///
@@ -159,7 +159,7 @@ unsafe impl<T: RegistrationOps> Send for Registration<T> {}
 
 impl<T: RegistrationOps> Registration<T> {
     /// Creates a new instance of the registration object.
-    pub fn new(name: &'static CStr, module: &'static ThisModule) -> impl PinInit<Self, Error> {
+    pub fn new<TM: ThisModule>() -> impl PinInit<Self, Error> {
         try_pin_init!(Self {
             reg <- Opaque::try_ffi_init(|ptr: *mut T::RegType| {
                 // SAFETY: `try_ffi_init` guarantees that `ptr` is valid for write.
@@ -170,7 +170,7 @@ impl<T: RegistrationOps> Registration<T> {
                 let drv = unsafe { &*(ptr as *const Opaque<T::RegType>) };
 
                 // SAFETY: `drv` is guaranteed to be pinned until `T::unregister`.
-                unsafe { T::register(drv, name, module) }
+                unsafe { T::register::<TM>(drv) }
             }),
         })
     }
@@ -202,13 +202,10 @@ macro_rules! module_driver {
 
         impl $crate::InPlaceModule for DriverModule {
             fn init(
-                module: &'static $crate::ThisModule
+                _module: &'static $crate::ThisModule
             ) -> impl ::pin_init::PinInit<Self, $crate::error::Error> {
                 $crate::try_pin_init!(Self {
-                    _driver <- $crate::driver::Registration::new(
-                        <Self as $crate::ModuleMetadata>::NAME,
-                        module,
-                    ),
+                    _driver <- $crate::driver::Registration::new::<crate::THIS_MODULE>(),
                 })
             }
         }
