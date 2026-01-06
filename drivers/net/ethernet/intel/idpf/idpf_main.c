@@ -125,7 +125,6 @@ static void idpf_remove(struct pci_dev *pdev)
 
 	/* Be a good citizen and leave the device clean on exit */
 	adapter->dev_ops.reg_ops.trigger_reset(adapter, IDPF_HR_FUNC_RESET);
-	idpf_deinit_dflt_mbx(adapter);
 
 	if (!adapter->netdevs)
 		goto destroy_wqs;
@@ -162,8 +161,6 @@ destroy_wqs:
 	adapter->vport_config = NULL;
 	kfree(adapter->netdevs);
 	adapter->netdevs = NULL;
-	kfree(adapter->vcxn_mngr);
-	adapter->vcxn_mngr = NULL;
 
 	mutex_destroy(&adapter->vport_ctrl_lock);
 	mutex_destroy(&adapter->vector_lock);
@@ -186,7 +183,6 @@ static void idpf_shutdown(struct pci_dev *pdev)
 	cancel_delayed_work_sync(&adapter->serv_task);
 	cancel_delayed_work_sync(&adapter->vc_event_task);
 	idpf_vc_core_deinit(adapter);
-	idpf_deinit_dflt_mbx(adapter);
 
 	if (system_state == SYSTEM_POWER_OFF)
 		pci_set_power_state(pdev, PCI_D3hot);
@@ -238,7 +234,6 @@ static int idpf_cfg_device(struct idpf_adapter *adapter)
 		pci_dbg(pdev, "PCIe PTM is not supported by PCIe bus/controller\n");
 
 	pci_set_drvdata(pdev, adapter);
-	adapter->hw.back = adapter;
 
 	return 0;
 }
