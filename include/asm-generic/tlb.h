@@ -249,6 +249,7 @@ static inline void tlb_remove_table(struct mmu_gather *tlb, void *table)
 #define tlb_needs_table_invalidate() (true)
 #endif
 
+void tlb_gather_remove_table_sync_one(struct mmu_gather *tlb);
 void tlb_remove_table_sync_one(void);
 
 #else
@@ -257,6 +258,7 @@ void tlb_remove_table_sync_one(void);
 #error tlb_needs_table_invalidate() requires MMU_GATHER_RCU_TABLE_FREE
 #endif
 
+static inline void tlb_gather_remove_table_sync_one(struct mmu_gather *tlb) { }
 static inline void tlb_remove_table_sync_one(void) { }
 
 #endif /* CONFIG_MMU_GATHER_RCU_TABLE_FREE */
@@ -377,6 +379,12 @@ struct mmu_gather {
 	 * for hugetlb PMD table sharing.
 	 */
 	unsigned int		fully_unshared_tables : 1;
+
+	/*
+	 * Did the TLB flush for freed/unshared tables send IPIs to all CPUs?
+	 * If true, we can skip the redundant IPI in tlb_remove_table_sync_one().
+	 */
+	unsigned int		tlb_flush_sent_ipi : 1;
 
 	unsigned int		batch_count;
 
@@ -833,13 +841,9 @@ static inline void tlb_flush_unshared_tables(struct mmu_gather *tlb)
 	 *
 	 * We only perform this when we are the last sharer of a page table,
 	 * as the IPI will reach all CPUs: any GUP-fast.
-	 *
-	 * Note that on configs where tlb_remove_table_sync_one() is a NOP,
-	 * the expectation is that the tlb_flush_mmu_tlbonly() would have issued
-	 * required IPIs already for us.
 	 */
 	if (tlb->fully_unshared_tables) {
-		tlb_remove_table_sync_one();
+		tlb_gather_remove_table_sync_one(tlb);
 		tlb->fully_unshared_tables = false;
 	}
 }
