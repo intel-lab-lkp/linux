@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+#include <linux/if_vlan.h>
 #include <linux/skbuff.h>
 #include <linux/sctp.h>
 #include <net/gso.h>
@@ -177,8 +178,13 @@ static unsigned int skb_gso_transport_seglen(const struct sk_buff *skb)
  */
 static unsigned int skb_gso_network_seglen(const struct sk_buff *skb)
 {
-	unsigned int hdr_len = skb_transport_header(skb) -
-			       skb_network_header(skb);
+	unsigned int off = skb_network_offset(skb) + sizeof(struct ipv6hdr);
+	unsigned int hdr_len = skb_network_header_len(skb);
+
+	/* Jumbogram HBH header is removed upon segmentation. */
+	if (skb_protocol(skb, true) == htons(ETH_P_IPV6) &&
+	    skb->len - off > IPV6_MAXPLEN)
+		hdr_len -= sizeof(struct hop_jumbo_hdr);
 
 	return hdr_len + skb_gso_transport_seglen(skb);
 }
@@ -194,9 +200,7 @@ static unsigned int skb_gso_network_seglen(const struct sk_buff *skb)
  */
 static unsigned int skb_gso_mac_seglen(const struct sk_buff *skb)
 {
-	unsigned int hdr_len = skb_transport_header(skb) - skb_mac_header(skb);
-
-	return hdr_len + skb_gso_transport_seglen(skb);
+	return skb_mac_header_len(skb) + skb_gso_network_seglen(skb);
 }
 
 /**
