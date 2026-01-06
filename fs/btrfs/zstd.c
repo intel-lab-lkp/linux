@@ -370,7 +370,6 @@ void zstd_free_workspace(struct list_head *ws)
 
 struct list_head *zstd_alloc_workspace(struct btrfs_fs_info *fs_info, int level)
 {
-	const u32 blocksize = fs_info->sectorsize;
 	struct workspace *workspace;
 
 	workspace = kzalloc(sizeof(*workspace), GFP_KERNEL);
@@ -383,7 +382,7 @@ struct list_head *zstd_alloc_workspace(struct btrfs_fs_info *fs_info, int level)
 	workspace->req_level = level;
 	workspace->last_used = jiffies;
 	workspace->mem = kvmalloc(workspace->size, GFP_KERNEL | __GFP_NOWARN);
-	workspace->buf = kmalloc(blocksize, GFP_KERNEL);
+	workspace->buf = kmalloc(fs_info->sectorsize, GFP_KERNEL);
 	if (!workspace->mem || !workspace->buf)
 		goto fail;
 
@@ -411,7 +410,6 @@ int zstd_compress_folios(struct list_head *ws, struct btrfs_inode *inode,
 	unsigned long len = *total_out;
 	const unsigned long nr_dest_folios = *out_folios;
 	const u64 orig_end = start + len;
-	const u32 blocksize = fs_info->sectorsize;
 	const u32 min_folio_size = btrfs_min_folio_size(fs_info);
 	unsigned long max_out = nr_dest_folios * min_folio_size;
 	unsigned int cur_len;
@@ -469,7 +467,7 @@ int zstd_compress_folios(struct list_head *ws, struct btrfs_inode *inode,
 		}
 
 		/* Check to see if we are making it bigger */
-		if (*total_in + workspace->in_buf.pos > blocksize * 2 &&
+		if (*total_in + workspace->in_buf.pos > fs_info->sectorsize * 2 &&
 				*total_in + workspace->in_buf.pos <
 				*total_out + workspace->out_buf.pos) {
 			ret = -E2BIG;
@@ -589,7 +587,6 @@ int zstd_decompress_bio(struct list_head *ws, struct compressed_bio *cb)
 	size_t srclen = cb->compressed_len;
 	zstd_dstream *stream;
 	int ret = 0;
-	const u32 blocksize = fs_info->sectorsize;
 	const unsigned int min_folio_size = btrfs_min_folio_size(fs_info);
 	unsigned long folio_in_index = 0;
 	unsigned long total_folios_in = DIV_ROUND_UP(srclen, min_folio_size);
@@ -614,7 +611,7 @@ int zstd_decompress_bio(struct list_head *ws, struct compressed_bio *cb)
 
 	workspace->out_buf.dst = workspace->buf;
 	workspace->out_buf.pos = 0;
-	workspace->out_buf.size = blocksize;
+	workspace->out_buf.size = fs_info->sectorsize;
 
 	while (1) {
 		size_t ret2;
@@ -675,7 +672,6 @@ int zstd_decompress(struct list_head *ws, const u8 *data_in,
 {
 	struct workspace *workspace = list_entry(ws, struct workspace, list);
 	struct btrfs_fs_info *fs_info = btrfs_sb(folio_inode(dest_folio)->i_sb);
-	const u32 sectorsize = fs_info->sectorsize;
 	zstd_dstream *stream;
 	int ret = 0;
 	unsigned long to_copy = 0;
@@ -699,7 +695,7 @@ int zstd_decompress(struct list_head *ws, const u8 *data_in,
 
 	workspace->out_buf.dst = workspace->buf;
 	workspace->out_buf.pos = 0;
-	workspace->out_buf.size = sectorsize;
+	workspace->out_buf.size = fs_info->sectorsize;
 
 	/*
 	 * Since both input and output buffers should not exceed one sector,
