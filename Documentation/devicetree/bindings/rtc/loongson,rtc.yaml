@@ -42,6 +42,18 @@ required:
 
 unevaluatedProperties: false
 
+if:
+  properties:
+    compatible:
+      not:
+        contains:
+          enum:
+            - loongson,ls1c-rtc
+
+then:
+  required:
+    - interrupts
+
 examples:
   - |
     #include <dt-bindings/interrupt-controller/irq.h>
