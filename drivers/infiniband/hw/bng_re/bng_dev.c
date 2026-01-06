@@ -118,7 +118,7 @@ static void bng_re_fill_fw_msg(struct bnge_fw_msg *fw_msg, void *msg,
 static int bng_re_net_ring_free(struct bng_re_dev *rdev,
 				u16 fw_ring_id, int type)
 {
-	struct bnge_auxr_dev *aux_dev = rdev->aux_dev;
+	struct bnge_auxr_dev *aux_dev;
 	struct hwrm_ring_free_input req = {};
 	struct hwrm_ring_free_output resp;
 	struct bnge_fw_msg fw_msg = {};
@@ -127,6 +127,7 @@ static int bng_re_net_ring_free(struct bng_re_dev *rdev,
 	if (!rdev)
 		return rc;
 
+	aux_dev = rdev->aux_dev;
 	if (!aux_dev)
 		return rc;
 
