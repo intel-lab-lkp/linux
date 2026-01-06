@@ -8,7 +8,7 @@
 #include "common.h"
 
 struct trace_instance *trace_inst;
-int stop_tracing;
+volatile int stop_tracing;
 
 static void stop_trace(int sig)
 {
