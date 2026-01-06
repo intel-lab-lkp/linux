@@ -27,6 +27,7 @@ struct ghes {
 		struct timer_list timer;
 		unsigned int irq;
 	};
+	unsigned int error_block_length;
 	struct device *dev;
 	struct list_head elist;
 };
