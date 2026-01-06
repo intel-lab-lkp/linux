@@ -18,6 +18,7 @@
 #include "timerlat.h"
 #include "timerlat_aa.h"
 #include "timerlat_bpf.h"
+#include "common.h"
 
 struct timerlat_top_cpu {
 	unsigned long long	irq_count;
@@ -869,18 +870,19 @@ timerlat_top_bpf_main_loop(struct osnoise_tool *tool)
 
 		if (wait_retval != 0) {
 			/* Stopping requested by tracer */
-			actions_perform(&params->common.threshold_actions);
+			enum restart_result result;
 
-			if (!params->common.threshold_actions.continue_flag)
-				/* continue flag not set, break */
+			result = common_restart(tool, &params->common);
+			if (result == RESTART_STOP)
 				break;
 
-			/* continue action reached, re-enable tracing */
-			if (tool->record)
-				trace_instance_start(&tool->record->trace);
-			if (tool->aa)
-				trace_instance_start(&tool->aa->trace);
-			timerlat_bpf_restart_tracing();
+			if (result == RESTART_ERROR)
+				return -1;
+
+			if (timerlat_bpf_restart_tracing()) {
+				err_msg("Error restarting BPF trace\n");
+				return -1;
+			}
 		}
 
 		/* is there still any user-threads ? */

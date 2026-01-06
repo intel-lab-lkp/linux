@@ -143,6 +143,15 @@ struct tool_ops {
 	void (*free)(struct osnoise_tool *tool);
 };
 
+enum restart_result {
+	RESTART_OK,
+	RESTART_STOP,
+	RESTART_ERROR = -1,
+};
+
+enum restart_result
+common_restart(const struct osnoise_tool *tool, struct common_params *params);
+
 int osnoise_set_cpus(struct osnoise_context *context, char *cpus);
 void osnoise_restore_cpus(struct osnoise_context *context);
 

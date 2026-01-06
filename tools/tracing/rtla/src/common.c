@@ -95,6 +95,37 @@ out_err:
 }
 
 
+/**
+ * common_restart - handle threshold actions and optionally restart tracing
+ * @tool: pointer to the osnoise_tool instance containing trace contexts
+ * @params: timerlat parameters with threshold action configuration
+ *
+ * Return:
+ *   RESTART_OK - Actions executed successfully and tracing restarted
+ *   RESTART_STOP - Actions executed but 'continue' flag not set, stop tracing
+ *   RESTART_ERROR - Failed to restart tracing after executing actions
+ */
+enum restart_result
+common_restart(const struct osnoise_tool *tool, struct common_params *params)
+{
+	actions_perform(&params->threshold_actions);
+
+	if (!params->threshold_actions.continue_flag)
+		/* continue flag not set, break */
+		return RESTART_STOP;
+
+	/* continue action reached, re-enable tracing */
+	if (tool->record && trace_instance_start(&tool->record->trace))
+		goto err;
+	if (tool->aa && trace_instance_start(&tool->aa->trace))
+		goto err;
+	return RESTART_OK;
+
+err:
+	err_msg("Error restarting trace\n");
+	return RESTART_ERROR;
+}
+
 int run_tool(struct tool_ops *ops, int argc, char *argv[])
 {
 	struct common_params *params;
@@ -272,17 +303,16 @@ int top_main_loop(struct osnoise_tool *tool)
 				/* stop tracing requested, do not perform actions */
 				return 0;
 
-			actions_perform(&params->threshold_actions);
+			enum restart_result result;
 
-			if (!params->threshold_actions.continue_flag)
-				/* continue flag not set, break */
+			result = common_restart(tool, params);
+
+			if (result == RESTART_STOP)
 				return 0;
 
-			/* continue action reached, re-enable tracing */
-			if (record)
-				trace_instance_start(&record->trace);
-			if (tool->aa)
-				trace_instance_start(&tool->aa->trace);
+			if (result == RESTART_ERROR)
+				return -1;
+
 			trace_instance_start(trace);
 		}
 
@@ -323,18 +353,17 @@ int hist_main_loop(struct osnoise_tool *tool)
 				/* stop tracing requested, do not perform actions */
 				break;
 
-			actions_perform(&params->threshold_actions);
+			enum restart_result result;
 
-			if (!params->threshold_actions.continue_flag)
-				/* continue flag not set, break */
-				break;
+			result = common_restart(tool, params);
 
-			/* continue action reached, re-enable tracing */
-			if (tool->record)
-				trace_instance_start(&tool->record->trace);
-			if (tool->aa)
-				trace_instance_start(&tool->aa->trace);
-			trace_instance_start(&tool->trace);
+			if (result == RESTART_STOP)
+				return 0;
+
+			if (result == RESTART_ERROR)
+				return -1;
+
+			trace_instance_start(trace);
 		}
 
 		/* is there still any user-threads ? */
