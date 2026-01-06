@@ -408,8 +408,6 @@ int zstd_compress_folios(struct list_head *ws, struct btrfs_inode *inode,
 	int nr_folios = 0;
 	struct folio *in_folio = NULL;  /* The current folio to read. */
 	struct folio *out_folio = NULL; /* The current folio to write to. */
-	unsigned long tot_in = 0;
-	unsigned long tot_out = 0;
 	unsigned long len = *total_out;
 	const unsigned long nr_dest_folios = *out_folios;
 	const u64 orig_end = start + len;
@@ -471,23 +469,23 @@ int zstd_compress_folios(struct list_head *ws, struct btrfs_inode *inode,
 		}
 
 		/* Check to see if we are making it bigger */
-		if (tot_in + workspace->in_buf.pos > blocksize * 2 &&
-				tot_in + workspace->in_buf.pos <
-				tot_out + workspace->out_buf.pos) {
+		if (*total_in + workspace->in_buf.pos > blocksize * 2 &&
+				*total_in + workspace->in_buf.pos <
+				*total_out + workspace->out_buf.pos) {
 			ret = -E2BIG;
 			goto out;
 		}
 
 		/* We've reached the end of our output range */
 		if (workspace->out_buf.pos >= max_out) {
-			tot_out += workspace->out_buf.pos;
+			*total_out += workspace->out_buf.pos;
 			ret = -E2BIG;
 			goto out;
 		}
 
 		/* Check if we need more output space */
 		if (workspace->out_buf.pos == workspace->out_buf.size) {
-			tot_out += min_folio_size;
+			*total_out += min_folio_size;
 			max_out -= min_folio_size;
 			if (nr_folios == nr_dest_folios) {
 				ret = -E2BIG;
@@ -506,13 +504,13 @@ int zstd_compress_folios(struct list_head *ws, struct btrfs_inode *inode,
 
 		/* We've reached the end of the input */
 		if (workspace->in_buf.pos >= len) {
-			tot_in += workspace->in_buf.pos;
+			*total_in += workspace->in_buf.pos;
 			break;
 		}
 
 		/* Check if we need more input */
 		if (workspace->in_buf.pos == workspace->in_buf.size) {
-			tot_in += workspace->in_buf.size;
+			*total_in += workspace->in_buf.size;
 			kunmap_local(workspace->in_buf.src);
 			workspace->in_buf.src = NULL;
 			folio_put(in_folio);
@@ -542,16 +540,16 @@ int zstd_compress_folios(struct list_head *ws, struct btrfs_inode *inode,
 			goto out;
 		}
 		if (ret2 == 0) {
-			tot_out += workspace->out_buf.pos;
+			*total_out += workspace->out_buf.pos;
 			break;
 		}
 		if (workspace->out_buf.pos >= max_out) {
-			tot_out += workspace->out_buf.pos;
+			*total_out += workspace->out_buf.pos;
 			ret = -E2BIG;
 			goto out;
 		}
 
-		tot_out += min_folio_size;
+		*total_out += min_folio_size;
 		max_out -= min_folio_size;
 		if (nr_folios == nr_dest_folios) {
 			ret = -E2BIG;
@@ -568,14 +566,12 @@ int zstd_compress_folios(struct list_head *ws, struct btrfs_inode *inode,
 		workspace->out_buf.size = min_t(size_t, max_out, min_folio_size);
 	}
 
-	if (tot_out >= tot_in) {
+	if (*total_out >= *total_in) {
 		ret = -E2BIG;
 		goto out;
 	}
 
 	ret = 0;
-	*total_in = tot_in;
-	*total_out = tot_out;
 out:
 	*out_folios = nr_folios;
 	if (workspace->in_buf.src) {
