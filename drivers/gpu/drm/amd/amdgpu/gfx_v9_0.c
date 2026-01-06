@@ -3985,6 +3985,16 @@ static int gfx_v9_0_cp_resume(struct amdgpu_device *adev)
 		amdgpu_ring_test_helper(ring);
 	}
 
+	/*
+	 * After successful ring tests, mark GPU as stable for resume.
+	 * This allows KIQ-based TLB invalidation to be used instead of
+	 * slower direct MMIO path.
+	 */
+	if (!adev->resume_gpu_stable) {
+		adev->resume_gpu_stable = true;
+		dev_info(adev->dev, "GPU rings verified, enabling KIQ path\n");
+	}
+
 	gfx_v9_0_enable_gui_idle_interrupt(adev, true);
 
 	return 0;

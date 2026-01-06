@@ -5457,6 +5457,12 @@ int amdgpu_device_resume(struct drm_device *dev, bool notify_clients)
 		goto exit;
 	}
 
+	/*
+	 * Set resume_gpu_stable to false BEFORE KFD resume to ensure
+	 * extended timeouts are used for TLB flushes during hibernation recovery
+	 */
+	adev->resume_gpu_stable = false;
+
 	r = amdgpu_amdkfd_resume(adev, !amdgpu_sriov_vf(adev) && !adev->in_runpm);
 	if (r)
 		goto exit;

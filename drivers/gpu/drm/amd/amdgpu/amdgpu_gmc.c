@@ -731,7 +731,12 @@ int amdgpu_gmc_flush_gpu_tlb_pasid(struct amdgpu_device *adev, uint16_t pasid,
 	if (!down_read_trylock(&adev->reset_domain->sem))
 		return 0;
 
-	if (!adev->gmc.flush_pasid_uses_kiq || !ring->sched.ready) {
+	/*
+	 * After hibernation resume, KIQ may report as ready but not be fully
+	 * functional. Use direct MMIO path until GPU is confirmed stable.
+	 */
+	if (!adev->gmc.flush_pasid_uses_kiq || !ring->sched.ready ||
+	    !adev->resume_gpu_stable) {
 		if (adev->gmc.flush_tlb_needs_extra_type_2)
 			adev->gmc.gmc_funcs->flush_gpu_tlb_pasid(adev, pasid,
 								 2, all_hub,
@@ -835,9 +840,9 @@ void amdgpu_gmc_fw_reg_write_reg_wait(struct amdgpu_device *adev,
 		goto failed_kiq;
 
 	might_sleep();
+
 	while (r < 1 && cnt++ < MAX_KIQ_REG_TRY &&
 	       !amdgpu_reset_pending(adev->reset_domain)) {
-
 		msleep(MAX_KIQ_REG_BAILOUT_INTERVAL);
 		r = amdgpu_fence_wait_polling(ring, seq, MAX_KIQ_REG_WAIT);
 	}
