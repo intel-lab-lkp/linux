@@ -162,8 +162,8 @@ static int zynqmp_dpsub_create_planes(struct zynqmp_dpsub *dpsub)
 		if (!formats)
 			return -ENOMEM;
 
-		/* Graphics layer is primary, and video layer is overlay. */
-		type = i == ZYNQMP_DPSUB_LAYER_VID
+		/* Graphics layer is overlay, and video layer is primary. */
+		type = i == ZYNQMP_DPSUB_LAYER_GFX
 		     ? DRM_PLANE_TYPE_OVERLAY : DRM_PLANE_TYPE_PRIMARY;
 		ret = drm_universal_plane_init(&dpsub->drm->dev, plane, 0,
 					       &zynqmp_dpsub_plane_funcs,
@@ -323,7 +323,7 @@ static const struct drm_crtc_funcs zynqmp_dpsub_crtc_funcs = {
 
 static int zynqmp_dpsub_create_crtc(struct zynqmp_dpsub *dpsub)
 {
-	struct drm_plane *plane = &dpsub->drm->planes[ZYNQMP_DPSUB_LAYER_GFX];
+	struct drm_plane *plane = &dpsub->drm->planes[ZYNQMP_DPSUB_LAYER_VID];
 	struct drm_crtc *crtc = &dpsub->drm->crtc;
 	int ret;
 
