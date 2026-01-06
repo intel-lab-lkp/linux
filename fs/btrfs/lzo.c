@@ -106,22 +106,6 @@ fail:
 	return ERR_PTR(-ENOMEM);
 }
 
-static inline void write_compress_length(char *buf, size_t len)
-{
-	__le32 dlen;
-
-	dlen = cpu_to_le32(len);
-	memcpy(buf, &dlen, LZO_LEN);
-}
-
-static inline size_t read_compress_length(const char *buf)
-{
-	__le32 dlen;
-
-	memcpy(&dlen, buf, LZO_LEN);
-	return le32_to_cpu(dlen);
-}
-
 /*
  * Will do:
  *
@@ -165,7 +149,7 @@ static int copy_compressed_data_to_page(struct btrfs_fs_info *fs_info,
 	}
 
 	kaddr = kmap_local_folio(cur_folio, offset_in_folio(cur_folio, *cur_out));
-	write_compress_length(kaddr, compressed_size);
+	put_unaligned_le32(compressed_size, kaddr);
 	*cur_out += LZO_LEN;
 
 	orig_out = *cur_out;
@@ -297,7 +281,7 @@ int lzo_compress_folios(struct list_head *ws, struct btrfs_inode *inode,
 
 	/* Store the size of all chunks of compressed data */
 	sizes_ptr = kmap_local_folio(folios[0], 0);
-	write_compress_length(sizes_ptr, cur_out);
+	put_unaligned_le32(cur_out, sizes_ptr);
 	kunmap_local(sizes_ptr);
 
 	ret = 0;
@@ -352,7 +336,7 @@ int lzo_decompress_bio(struct list_head *ws, struct compressed_bio *cb)
 	u32 cur_out = 0;
 
 	kaddr = kmap_local_folio(cb->compressed_folios[0], 0);
-	len_in = read_compress_length(kaddr);
+	len_in = get_unaligned_le32(kaddr);
 	kunmap_local(kaddr);
 	cur_in += LZO_LEN;
 
@@ -391,7 +375,7 @@ int lzo_decompress_bio(struct list_head *ws, struct compressed_bio *cb)
 		cur_folio = cb->compressed_folios[cur_in >> min_folio_shift];
 		ASSERT(cur_folio);
 		kaddr = kmap_local_folio(cur_folio, 0);
-		seg_len = read_compress_length(kaddr + offset_in_folio(cur_folio, cur_in));
+		seg_len = get_unaligned_le32(kaddr + offset_in_folio(cur_folio, cur_in));
 		kunmap_local(kaddr);
 		cur_in += LZO_LEN;
 
@@ -461,12 +445,12 @@ int lzo_decompress(struct list_head *ws, const u8 *data_in,
 	if (unlikely(srclen < LZO_LEN || srclen > max_segment_len + LZO_LEN * 2))
 		return -EUCLEAN;
 
-	in_len = read_compress_length(data_in);
+	in_len = get_unaligned_le32(data_in);
 	if (unlikely(in_len != srclen))
 		return -EUCLEAN;
 	data_in += LZO_LEN;
 
-	in_len = read_compress_length(data_in);
+	in_len = get_unaligned_le32(data_in);
 	if (unlikely(in_len != srclen - LZO_LEN * 2)) {
 		ret = -EUCLEAN;
 		goto out;
