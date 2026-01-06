@@ -546,12 +546,10 @@ int drm_atomic_normalize_zpos(struct drm_device *dev,
 EXPORT_SYMBOL(drm_atomic_normalize_zpos);
 
 /**
- * drm_plane_create_blend_mode_property - create a new blend mode property
+ * drm_plane_create_blend_mode_default - create a new blend mode property
  * @plane: drm plane
- * @supported_modes: bitmask of supported modes, must include
- *		     BIT(DRM_MODE_BLEND_PREMULTI). Current DRM assumption is
- *		     that alpha is premultiplied, and old userspace can break if
- *		     the property defaults to anything else.
+ * @supported_modes: bitmask of supported modes, must include BIT(@def)
+ * @def: Default blend mode
  *
  * This creates a new property describing the blend mode.
  *
@@ -571,11 +569,11 @@ EXPORT_SYMBOL(drm_atomic_normalize_zpos);
  *	pre-multiplied and will do so when blending them to the background color
  *	values.
  *
- * RETURNS:
- * Zero for success or -errno
+ * Return: Zero for success or -errno
  */
-int drm_plane_create_blend_mode_property(struct drm_plane *plane,
-					 unsigned int supported_modes)
+int drm_plane_create_blend_mode_default(struct drm_plane *plane,
+					unsigned int supported_modes,
+					unsigned int def)
 {
 	struct drm_device *dev = plane->dev;
 	struct drm_property *prop;
@@ -590,7 +588,7 @@ int drm_plane_create_blend_mode_property(struct drm_plane *plane,
 	int i;
 
 	if (WARN_ON((supported_modes & ~valid_mode_mask) ||
-		    ((supported_modes & BIT(DRM_MODE_BLEND_PREMULTI)) == 0)))
+		    !(supported_modes & BIT(def))))
 		return -EINVAL;
 
 	prop = drm_property_create(dev, DRM_MODE_PROP_ENUM,
@@ -615,9 +613,9 @@ int drm_plane_create_blend_mode_property(struct drm_plane *plane,
 		}
 	}
 
-	drm_object_attach_property(&plane->base, prop, DRM_MODE_BLEND_PREMULTI);
+	drm_object_attach_property(&plane->base, prop, def);
 	plane->blend_mode_property = prop;
 
 	return 0;
 }
-EXPORT_SYMBOL(drm_plane_create_blend_mode_property);
+EXPORT_SYMBOL(drm_plane_create_blend_mode_default);

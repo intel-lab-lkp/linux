@@ -56,6 +56,28 @@ int drm_plane_create_zpos_immutable_property(struct drm_plane *plane,
 					     unsigned int zpos);
 int drm_atomic_normalize_zpos(struct drm_device *dev,
 			      struct drm_atomic_state *state);
-int drm_plane_create_blend_mode_property(struct drm_plane *plane,
-					 unsigned int supported_modes);
+int drm_plane_create_blend_mode_default(struct drm_plane *plane,
+					unsigned int supported_modes,
+					unsigned int def);
+
+/**
+ * drm_plane_create_blend_mode_property - create a new blend mode property
+ * @plane: drm plane
+ * @supported_modes: bitmask of supported modes, must include
+ *		     BIT(DRM_MODE_BLEND_PREMULTI). Current DRM assumption is
+ *		     that alpha is premultiplied, and old userspace can break if
+ *		     the property defaults to anything else.
+ *
+ * This creates a new property describing the blend mode. See
+ * drm_plane_create_blend_mode_default() for details.
+ *
+ * Return: Zero for success or -errno
+ */
+static inline int
+drm_plane_create_blend_mode_property(struct drm_plane *plane,
+				     unsigned int supported_modes)
+{
+	return drm_plane_create_blend_mode_default(plane, supported_modes,
+						   DRM_MODE_BLEND_PREMULTI);
+}
 #endif
