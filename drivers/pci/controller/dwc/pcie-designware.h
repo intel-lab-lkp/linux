@@ -395,6 +395,11 @@ enum dw_pcie_ltssm {
 	DW_PCIE_LTSSM_UNKNOWN = 0xFFFFFFFF,
 };
 
+struct dw_pcie_ltssm_history {
+    enum dw_pcie_ltssm *states;
+    u32 count;
+};
+
 struct dw_pcie_ob_atu_cfg {
 	int index;
 	int type;
@@ -499,6 +504,7 @@ struct dw_pcie_ops {
 			      size_t size, u32 val);
 	bool	(*link_up)(struct dw_pcie *pcie);
 	enum dw_pcie_ltssm (*get_ltssm)(struct dw_pcie *pcie);
+	struct dw_pcie_ltssm_history * (*ltssm_trace)(struct dw_pcie *pcie);
 	int	(*start_link)(struct dw_pcie *pcie);
 	void	(*stop_link)(struct dw_pcie *pcie);
 	int	(*assert_perst)(struct dw_pcie *pcie, bool assert);

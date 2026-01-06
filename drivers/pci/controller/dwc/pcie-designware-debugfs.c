@@ -511,6 +511,38 @@ static int ltssm_status_open(struct inode *inode, struct file *file)
 	return single_open(file, ltssm_status_show, inode->i_private);
 }
 
+static struct dw_pcie_ltssm_history *dw_pcie_ltssm_trace(struct dw_pcie *pci)
+{
+	if (pci->ops && pci->ops->ltssm_trace)
+		return pci->ops->ltssm_trace(pci);
+
+	return NULL;
+}
+
+static int ltssm_trace_show(struct seq_file *s, void *v)
+{
+	struct dw_pcie *pci = s->private;
+	struct dw_pcie_ltssm_history *history;
+	enum dw_pcie_ltssm val;
+	u32 loop;
+
+	history = dw_pcie_ltssm_trace(pci);
+	if (!history)
+		return 0;
+
+	for (loop = 0; loop < history->count; loop++) {
+		val = history->states[loop];
+		seq_printf(s, "%s (0x%02x)\n", ltssm_status_string(val), val);
+	}
+
+	return 0;
+}
+
+static int ltssm_trace_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, ltssm_trace_show, inode->i_private);
+}
+
 #define dwc_debugfs_create(name)			\
 debugfs_create_file(#name, 0644, rasdes_debug, pci,	\
 			&dbg_ ## name ## _fops)
@@ -549,6 +581,11 @@ static const struct file_operations dwc_pcie_counter_value_ops = {
 
 static const struct file_operations dwc_pcie_ltssm_status_ops = {
 	.open = ltssm_status_open,
+	.read = seq_read,
+};
+
+static const struct file_operations dwc_pcie_ltssm_trace_ops = {
+	.open = ltssm_trace_open,
 	.read = seq_read,
 };
 
@@ -642,6 +679,12 @@ static void dwc_pcie_ltssm_debugfs_init(struct dw_pcie *pci, struct dentry *dir)
 {
 	debugfs_create_file("ltssm_status", 0444, dir, pci,
 			    &dwc_pcie_ltssm_status_ops);
+}
+
+static void dwc_pcie_ltssm_trace_debugfs_init(struct dw_pcie *pci, struct dentry *dir)
+{
+	debugfs_create_file("ltssm_trace", 0444, dir, pci,
+			    &dwc_pcie_ltssm_trace_ops);
 }
 
 static int dw_pcie_ptm_check_capability(void *drvdata)
@@ -922,6 +965,7 @@ void dwc_pcie_debugfs_init(struct dw_pcie *pci, enum dw_pcie_device_mode mode)
 			err);
 
 	dwc_pcie_ltssm_debugfs_init(pci, dir);
+	dwc_pcie_ltssm_trace_debugfs_init(pci, dir);
 
 	pci->mode = mode;
 	pci->ptm_debugfs = pcie_ptm_create_debugfs(pci->dev, pci,
