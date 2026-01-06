@@ -228,6 +228,14 @@ int svm_set_efer(struct kvm_vcpu *vcpu, u64 efer)
 			if (!is_smm(vcpu))
 				svm_free_nested(svm);
 
+			/*
+			 * If EFER.SVME is being cleared, we must intercept these
+			 * instructions to ensure #UD is generated.
+			 */
+			svm_set_intercept(svm, INTERCEPT_CLGI);
+			svm_set_intercept(svm, INTERCEPT_VMSAVE);
+			svm_set_intercept(svm, INTERCEPT_VMLOAD);
+			svm->vmcb->control.virt_ext &= ~VIRTUAL_VMLOAD_VMSAVE_ENABLE_MASK;
 		} else {
 			int ret = svm_allocate_nested(svm);
 
@@ -242,6 +250,15 @@ int svm_set_efer(struct kvm_vcpu *vcpu, u64 efer)
 			 */
 			if (svm_gp_erratum_intercept && !sev_guest(vcpu->kvm))
 				set_exception_intercept(svm, GP_VECTOR);
+
+			if (vgif)
+				svm_clr_intercept(svm, INTERCEPT_CLGI);
+
+			if (vls) {
+				svm_clr_intercept(svm, INTERCEPT_VMSAVE);
+				svm_clr_intercept(svm, INTERCEPT_VMLOAD);
+				svm->vmcb->control.virt_ext |= VIRTUAL_VMLOAD_VMSAVE_ENABLE_MASK;
+			}
 		}
 	}
 
@@ -2291,8 +2308,14 @@ static int clgi_interception(struct kvm_vcpu *vcpu)
 
 static int invlpga_interception(struct kvm_vcpu *vcpu)
 {
-	gva_t gva = kvm_rax_read(vcpu);
-	u32 asid = kvm_rcx_read(vcpu);
+	gva_t gva;
+	u32 asid;
+
+	if (nested_svm_check_permissions(vcpu))
+		return 1;
+
+	gva = kvm_rax_read(vcpu);
+	asid = kvm_rcx_read(vcpu);
 
 	/* FIXME: Handle an address size prefix. */
 	if (!is_long_mode(vcpu))
