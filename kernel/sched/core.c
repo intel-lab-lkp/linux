@@ -10791,20 +10791,19 @@ struct sched_change_ctx *sched_change_begin(struct task_struct *p, unsigned int 
 		.running = task_current_donor(rq, p),
 	};
 
-	if (!(flags & DEQUEUE_CLASS)) {
-		if (p->sched_class->get_prio)
-			ctx->prio = p->sched_class->get_prio(rq, p);
-		else
-			ctx->prio = p->prio;
-	}
-
 	if (ctx->queued)
 		dequeue_task(rq, p, flags);
 	if (ctx->running)
 		put_prev_task(rq, p);
 
-	if ((flags & DEQUEUE_CLASS) && p->sched_class->switched_from)
+	if (!(flags & DEQUEUE_CLASS)) {
+		if (p->sched_class->get_prio)
+			ctx->prio = p->sched_class->get_prio(rq, p);
+		else
+			ctx->prio = p->prio;
+	} else if (p->sched_class->switched_from) {
 		p->sched_class->switched_from(rq, p);
+	}
 
 	return ctx;
 }
