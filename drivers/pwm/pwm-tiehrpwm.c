@@ -237,7 +237,6 @@ static int ehrpwm_pwm_config(struct pwm_chip *chip, struct pwm_device *pwm,
 	if (period_cycles < 1)
 		period_cycles = 1;
 
-	pm_runtime_get_sync(pwmchip_parent(chip));
 
 	/* Update clock prescaler values */
 	ehrpwm_modify(pc->mmio_base, TBCTL, TBCTL_CLKDIV_MASK, tb_divval);
@@ -290,12 +289,11 @@ static int ehrpwm_pwm_config(struct pwm_chip *chip, struct pwm_device *pwm,
 	if (!(duty_cycles > period_cycles))
 		ehrpwm_write(pc->mmio_base, cmp_reg, duty_cycles);
 
-	pm_runtime_put_sync(pwmchip_parent(chip));
-
 	return 0;
 }
 
-static int ehrpwm_pwm_enable(struct pwm_chip *chip, struct pwm_device *pwm)
+static int ehrpwm_pwm_enable(struct pwm_chip *chip, struct pwm_device *pwm,
+				const struct pwm_state *state)
 {
 	struct ehrpwm_pwm_chip *pc = to_ehrpwm_pwm_chip(chip);
 	u16 aqcsfrc_val, aqcsfrc_mask;
@@ -303,6 +301,13 @@ static int ehrpwm_pwm_enable(struct pwm_chip *chip, struct pwm_device *pwm)
 
 	/* Leave clock enabled on enabling PWM */
 	pm_runtime_get_sync(pwmchip_parent(chip));
+
+	ret = ehrpwm_pwm_config(chip, pwm, state->duty_cycle, state->period, state->polarity);
+
+	if (ret) {
+		pm_runtime_put_sync(pwmchip_parent(chip));
+		return ret;
+	}
 
 	/* Disabling Action Qualifier on PWM output */
 	if (pwm->hwpwm) {
@@ -391,12 +396,11 @@ static int ehrpwm_pwm_apply(struct pwm_chip *chip, struct pwm_device *pwm,
 		return 0;
 	}
 
-	err = ehrpwm_pwm_config(chip, pwm, state->duty_cycle, state->period, state->polarity);
-	if (err)
-		return err;
-
 	if (!enabled)
-		err = ehrpwm_pwm_enable(chip, pwm);
+		err = ehrpwm_pwm_enable(chip, pwm, state);
+	else
+		err = ehrpwm_pwm_config(chip, pwm, state->duty_cycle,
+					state->period, state->polarity);
 
 	return err;
 }
