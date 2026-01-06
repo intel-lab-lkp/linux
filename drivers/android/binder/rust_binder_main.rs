@@ -21,6 +21,7 @@ use kernel::{
     sync::poll::PollTable,
     sync::Arc,
     task::Pid,
+    this_module::ThisModule,
     transmute::AsBytes,
     types::ForeignOwnable,
     uaccess::UserSliceWriter,
@@ -319,7 +320,7 @@ pub static rust_binder_fops: AssertSync<kernel::bindings::file_operations> = {
     let zeroed_ops = unsafe { core::mem::MaybeUninit::zeroed().assume_init() };
 
     let ops = kernel::bindings::file_operations {
-        owner: THIS_MODULE.as_ptr(),
+        owner: <THIS_MODULE as ThisModule>::OWNER.as_ptr(),
         poll: Some(rust_binder_poll),
         unlocked_ioctl: Some(rust_binder_ioctl),
         #[cfg(CONFIG_COMPAT)]
