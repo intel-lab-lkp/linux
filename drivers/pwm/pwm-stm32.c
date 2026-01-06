@@ -452,14 +452,22 @@ static int stm32_pwm_apply(struct pwm_chip *chip, struct pwm_device *pwm,
 
 	enabled = pwm->state.enabled;
 
+	if (state->polarity != pwm->state.polarity) {
+		if (enabled) {
+			stm32_pwm_disable(priv, pwm->hwpwm);
+			enabled = false;
+		}
+
+		ret = stm32_pwm_set_polarity(priv, pwm->hwpwm, state->polarity);
+		if (ret)
+			return ret;
+	}
+
 	if (!state->enabled) {
 		if (enabled)
 			stm32_pwm_disable(priv, pwm->hwpwm);
 		return 0;
 	}
-
-	if (state->polarity != pwm->state.polarity)
-		stm32_pwm_set_polarity(priv, pwm->hwpwm, state->polarity);
 
 	ret = stm32_pwm_config(priv, pwm->hwpwm,
 			       state->duty_cycle, state->period);
