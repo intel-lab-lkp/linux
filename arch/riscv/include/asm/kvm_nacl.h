@@ -58,11 +58,11 @@ void kvm_riscv_nacl_exit(void);
 int kvm_riscv_nacl_init(void);
 
 #ifdef CONFIG_32BIT
-#define lelong_to_cpu(__x)	le32_to_cpu(__x)
-#define cpu_to_lelong(__x)	cpu_to_le32(__x)
+#define lelong_to_cpu(__x)	le32_to_cpu((__force __le32)__x)
+#define cpu_to_lelong(__x)	(__force unsigned long)cpu_to_le32(__x)
 #else
-#define lelong_to_cpu(__x)	le64_to_cpu(__x)
-#define cpu_to_lelong(__x)	cpu_to_le64(__x)
+#define lelong_to_cpu(__x)	le64_to_cpu((__force __le64)__x)
+#define cpu_to_lelong(__x)	(__force unsigned long)cpu_to_le64(__x)
 #endif
 
 #define nacl_shmem()							\
