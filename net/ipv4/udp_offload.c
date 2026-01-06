@@ -535,6 +535,12 @@ struct sk_buff *__udp_gso_segment(struct sk_buff *gso_skb,
 			uh->check = ~udp_v4_check(gso_skb->len,
 						  ip_hdr(gso_skb)->saddr,
 						  ip_hdr(gso_skb)->daddr, 0);
+	} else if (skb_shinfo(gso_skb)->frag_list && gso_skb->head_frag == 0) {
+		if (skb_pagelen(gso_skb) - sizeof(*uh) != skb_shinfo(gso_skb)->gso_size) {
+			ret = __skb_linearize(gso_skb);
+			if (ret)
+				return ERR_PTR(ret);
+		}
 	}
 
 	skb_pull(gso_skb, sizeof(*uh));
