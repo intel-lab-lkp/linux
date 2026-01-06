@@ -26,6 +26,8 @@
 #include <linux/dmi.h>
 #include <linux/hid.h>
 #include <linux/module.h>
+
+#include <linux/acpi.h>
 #include <linux/platform_data/x86/asus-wmi.h>
 #include <linux/platform_data/x86/asus-wmi-leds-ids.h>
 #include <linux/input/mt.h>
@@ -314,10 +316,33 @@ static int asus_e1239t_event(struct asus_drvdata *drvdat, u8 *data, int size)
 	return 0;
 }
 
+/*
+ * This enables triggering events in asus-wmi
+ */
+static int asus_wmi_send_event(struct asus_drvdata *drvdat, u8 code)
+{
+	int err;
+	u32 retval;
+
+	err = asus_wmi_evaluate_method(ASUS_WMI_METHODID_DEVS,
+		ASUS_WMI_METHODID_NOTIF, code, &retval);
+	if (err) {
+		pr_warn("Failed to notify asus-wmi: %d\n", err);
+		return err;
+	}
+
+	if (retval != 0) {
+		pr_warn("Failed to notify asus-wmi (retval): 0x%x\n", retval);
+		return -EIO;
+	}
+
+	return 0;
+}
+
 static int asus_event(struct hid_device *hdev, struct hid_field *field,
 		      struct hid_usage *usage, __s32 value)
 {
-	if ((usage->hid & HID_USAGE_PAGE) == 0xff310000 &&
+	if ((usage->hid & HID_USAGE_PAGE) == HID_UP_ASUSVENDOR &&
 	    (usage->hid & HID_USAGE) != 0x00 &&
 	    (usage->hid & HID_USAGE) != 0xff && !usage->type) {
 		hid_warn(hdev, "Unmapped Asus vendor usagepage code 0x%02x\n",
@@ -330,6 +355,7 @@ static int asus_event(struct hid_device *hdev, struct hid_field *field,
 static int asus_raw_event(struct hid_device *hdev,
 		struct hid_report *report, u8 *data, int size)
 {
+	int ret;
 	struct asus_drvdata *drvdata = hid_get_drvdata(hdev);
 
 	if (drvdata->battery && data[0] == BATTERY_REPORT_ID)
@@ -348,6 +374,26 @@ static int asus_raw_event(struct hid_device *hdev,
 	if (report->id == FEATURE_KBD_LED_REPORT_ID1 || report->id == FEATURE_KBD_LED_REPORT_ID2)
 		return -1;
 	if (drvdata->quirks & QUIRK_ROG_NKEY_KEYBOARD) {
+		/* Additional report filtering */
+		if (report->id == FEATURE_KBD_REPORT_ID) {
+			/* Fn+F5 "fan" symbol, trigger WMI event to toggle next mode */
+			if (data[1] == 0xae) {
+				ret = asus_wmi_send_event(drvdata, 0xae);
+				if (ret < 0) {
+					hid_warn(hdev, "Asus failed to trigger fan control event");
+				}
+				return -1;
+			/*
+			 * G14 and G15 send these codes on some keypresses with no
+			 * discernable reason for doing so. We'll filter them out to avoid
+			 * unmapped warning messages later
+			 */
+			} else if (data[1] == 0xea || data[1] == 0xec || data[1] == 0x02 ||
+					data[1] == 0x8a || data[1] == 0x9e) {
+				return -1;
+			}
+		}
+
 		/*
 		 * G713 and G733 send these codes on some keypresses, depending on
 		 * the key pressed it can trigger a shutdown event if not caught.
