@@ -27,7 +27,6 @@
 //! use kernel::new_mutex;
 //! use kernel::page::PAGE_SIZE;
 //! use kernel::sync::Mutex;
-//! use kernel::ThisModule;
 //!
 //! #[pin_data]
 //! struct RustConfigfs {
@@ -36,7 +35,7 @@
 //! }
 //!
 //! impl kernel::InPlaceModule for RustConfigfs {
-//!     fn init(_module: &'static ThisModule) -> impl PinInit<Self, Error> {
+//!     fn init() -> impl PinInit<Self, Error> {
 //!         pr_info!("Rust configfs sample (init)\n");
 //!
 //!         let item_type = configfs_attrs! {

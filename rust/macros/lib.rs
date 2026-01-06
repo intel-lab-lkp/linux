@@ -80,7 +80,7 @@ use proc_macro::TokenStream;
 /// struct MyModule(i32);
 ///
 /// impl kernel::Module for MyModule {
-///     fn init(_module: &'static ThisModule) -> Result<Self> {
+///     fn init() -> Result<Self> {
 ///         let foo: i32 = 42;
 ///         pr_info!("I contain:  {}\n", foo);
 ///         pr_info!("i32 param is:  {}\n", module_parameters::my_parameter.read());
@@ -114,7 +114,7 @@ use proc_macro::TokenStream;
 /// struct MyDeviceDriverModule;
 ///
 /// impl kernel::Module for MyDeviceDriverModule {
-///     fn init(_module: &'static ThisModule) -> Result<Self> {
+///     fn init() -> Result<Self> {
 ///         Ok(Self)
 ///     }
 /// }

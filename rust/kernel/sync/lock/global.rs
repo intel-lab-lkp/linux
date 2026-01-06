@@ -203,7 +203,7 @@ impl<T: ?Sized, B: GlobalLockBackend> GlobalLockedBy<T, B> {
 /// }
 ///
 /// impl kernel::Module for MyModule {
-///     fn init(_module: &'static ThisModule) -> Result<Self> {
+///     fn init() -> Result<Self> {
 ///         // SAFETY: Called exactly once.
 ///         unsafe { MY_COUNTER.init() };
 ///
@@ -243,7 +243,7 @@ impl<T: ?Sized, B: GlobalLockBackend> GlobalLockedBy<T, B> {
 /// }
 ///
 /// impl kernel::Module for MyModule {
-///     fn init(_module: &'static ThisModule) -> Result<Self> {
+///     fn init() -> Result<Self> {
 ///         // SAFETY: Called exactly once.
 ///         unsafe { MY_MUTEX.init() };
 ///

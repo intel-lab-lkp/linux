@@ -201,9 +201,7 @@ macro_rules! module_driver {
         }
 
         impl $crate::InPlaceModule for DriverModule {
-            fn init(
-                _module: &'static $crate::ThisModule
-            ) -> impl ::pin_init::PinInit<Self, $crate::error::Error> {
+            fn init() -> impl ::pin_init::PinInit<Self, $crate::error::Error> {
                 $crate::try_pin_init!(Self {
                     _driver <- $crate::driver::Registration::new::<crate::THIS_MODULE>(),
                 })

@@ -111,7 +111,7 @@ struct SampleModule {
 }
 
 impl InPlaceModule for SampleModule {
-    fn init(_module: &'static kernel::ThisModule) -> impl PinInit<Self, Error> {
+    fn init() -> impl PinInit<Self, Error> {
         try_pin_init!(Self {
             _pci_driver <- driver::Registration::new::<THIS_MODULE>(),
             _aux_driver <- driver::Registration::new::<THIS_MODULE>(),
