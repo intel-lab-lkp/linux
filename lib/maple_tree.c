@@ -6248,6 +6248,8 @@ static inline void mas_dup_alloc(struct ma_state *mas, struct ma_state *new_mas,
 	void __rcu **new_slots;
 	unsigned long val;
 
+	lockdep_assert(mt_write_locked(mas->tree));
+
 	/* Allocate memory for child nodes. */
 	type = mte_node_type(mas->node);
 	new_slots = ma_slots(new_node, type);
