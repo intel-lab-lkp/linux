@@ -16,12 +16,12 @@
     :maxdepth: 1
 
     hpet
+    hrtimers
     timekeeping
 
 TODOList:
 
 * highres
-* hrtimers
 * no_hz
 * delay_sleep_functions
 
