@@ -12,6 +12,7 @@ config DRM_CLIENT_LIB
 config DRM_CLIENT_SELECTION
 	tristate
 	depends on DRM
+	select DRM_CLIENT_LIB if DRM_CLIENT_SPLASH
 	select DRM_CLIENT_LIB if DRM_CLIENT_LOG
 	select DRM_CLIENT_LIB if DRM_FBDEV_EMULATION
 	help
@@ -85,10 +86,79 @@ config DRM_CLIENT_LOG
 	  If you only need logs, but no terminal, or if you prefer userspace
 	  terminal, say "Y".
 
+config DRM_CLIENT_SPLASH
+	bool "Display graphic splash"
+	depends on DRM_CLIENT_SELECTION
+	select DRM_CLIENT
+	select DRM_CLIENT_SETUP
+	select DRM_DRAW
+	help
+	  This enables a splash drm client, able to display either a plain
+	  color or a static image until the userspace is ready to take over.
+	  The splash will be displayed on all screens available at boot, if
+	  any, or on the ones part of the first hotplug event.
+
+config DRM_CLIENT_SPLASH_BACKGROUND_COLOR
+	hex "Splash background color"
+	depends on DRM_CLIENT_SPLASH
+	default 0x000000
+	help
+	  The default splash background color, in RGB888 format.
+
+	  The color can be overridden through the drm_client_lib.splash_color
+	  kernel command line parameter.
+
+config DRM_CLIENT_SPLASH_BMP_SUPPORT
+	bool
+
+choice
+	prompt "Splash source"
+	depends on DRM_CLIENT_SPLASH
+	default DRM_CLIENT_SPLASH_SRC_COLOR
+	help
+	  Selects the source for the splash graphic.
+
+config DRM_CLIENT_SPLASH_SRC_COLOR
+	bool "Solid color"
+	help
+	  Use a solid color as splash. The color is selected through the
+	  DRM_CLIENT_SPLASH_BACKGROUND_COLOR config option.
+
+	  The image will be loaded using the firmware loading facility the
+	  kernel provides.
+
+config DRM_CLIENT_SPLASH_SRC_BMP
+	bool "BMP image"
+	select DRM_CLIENT_SPLASH_BMP_SUPPORT
+	select FW_LOADER
+	help
+	  Use a BMP (bitmap) image as splash. If the image is smaller than the
+	  display(s), it will be centered and the color specified through the
+	  DRM_CLIENT_SPLASH_BACKGROUND_COLOR config option will be used as
+	  background.
+
+	  The image will be loaded using the firmware loading facility the
+	  kernel provides; it shall use 24 bits per pixel and shall not be
+	  compressed. The name of the file can be set through the
+	  drm_client_lib.splash_bmp command line parameter, with the default
+	  being 'drm_splash.bmp'.
+
+config DRM_CLIENT_SPLASH_SRC_BGRT
+	bool "EFI BGRT"
+	select DRM_CLIENT_SPLASH_BMP_SUPPORT
+	depends on EFI
+	help
+	  Use the BGRT image provided by the EFI bootloader. If the image is
+	  smaller than the display(s), it will be centered and the color
+	  specified through the DRM_CLIENT_SPLASH_BACKGROUND_COLOR config
+	  option will be used as background.
+
+endchoice
+
 choice
 	prompt "Default DRM Client"
 	depends on DRM_CLIENT_SELECTION
-	depends on DRM_FBDEV_EMULATION || DRM_CLIENT_LOG
+	depends on DRM_FBDEV_EMULATION || DRM_CLIENT_LOG || DRM_CLIENT_SPLASH
 	default DRM_CLIENT_DEFAULT_FBDEV
 	help
 	  Selects the default drm client.
@@ -111,6 +181,12 @@ config DRM_CLIENT_DEFAULT_LOG
 	  screen, but doesn't implement a full terminal. For that you will need
 	  a userspace terminal using drm/kms.
 
+config DRM_CLIENT_DEFAULT_SPLASH
+	bool "splash"
+	depends on DRM_CLIENT_SPLASH
+	help
+	  Use splash as default drm client.
+
 endchoice
 
 config DRM_CLIENT_DEFAULT
@@ -118,6 +194,7 @@ config DRM_CLIENT_DEFAULT
        depends on DRM_CLIENT
        default "fbdev" if DRM_CLIENT_DEFAULT_FBDEV
        default "log" if DRM_CLIENT_DEFAULT_LOG
+       default "splash" if DRM_CLIENT_DEFAULT_SPLASH
        default ""
 
 endmenu
