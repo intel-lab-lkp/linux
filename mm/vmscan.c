@@ -7153,6 +7153,7 @@ out:
 	/* If reclaim was boosted, account for the reclaim done in this pass */
 	if (boosted) {
 		unsigned long flags;
+		bool scale_decayed = false;
 
 		for (i = 0; i <= highest_zoneidx; i++) {
 			if (!zone_boosts[i])
@@ -7162,8 +7163,17 @@ out:
 			zone = pgdat->node_zones + i;
 			spin_lock_irqsave(&zone->lock, flags);
 			zone->watermark_boost -= min(zone->watermark_boost, zone_boosts[i]);
+			/* Decay scale boost gradually after kswapd completes work */
+			if (zone->watermark_scale_boost) {
+				zone->watermark_scale_boost = (zone->watermark_scale_boost > 5) ?
+								(zone->watermark_scale_boost - 5) : 0;
+				scale_decayed = true;
+			}
 			spin_unlock_irqrestore(&zone->lock, flags);
 		}
+
+		if (scale_decayed)
+			setup_per_zone_wmarks();
 
 		/*
 		 * As there is now likely space, wakeup kcompact to defragment

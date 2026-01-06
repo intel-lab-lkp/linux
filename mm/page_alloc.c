@@ -242,6 +242,7 @@ unsigned int pageblock_order __read_mostly;
 
 static void __free_pages_ok(struct page *page, unsigned int order,
 			    fpi_t fpi_flags);
+static void __setup_per_zone_wmarks(void);
 
 /*
  * results with 256, 32 in the lowmem_reserve sysctl:
@@ -2217,7 +2218,7 @@ static inline bool boost_watermark(struct zone *zone)
 
 	max_boost = max(pageblock_nr_pages, max_boost);
 
-	zone->watermark_boost = min(zone->watermark_boost + pageblock_nr_pages,
+	zone->watermark_boost = min(zone->watermark_boost + max(pageblock_nr_pages, zone_managed_pages(zone) >> 10),
 		max_boost);
 
 	return true;
@@ -4013,6 +4014,9 @@ static void warn_alloc_show_mem(gfp_t gfp_mask, nodemask_t *nodemask)
 	mem_cgroup_show_protected_memory(NULL);
 }
 
+/* Auto-tuning watermarks on atomic allocation failures */
+#define BOOST_DEBOUNCE_MS 10000  /* 10 seconds debounce */
+
 void warn_alloc(gfp_t gfp_mask, nodemask_t *nodemask, const char *fmt, ...)
 {
 	struct va_format vaf;
@@ -4780,6 +4784,27 @@ restart:
 	if (page)
 		goto got_pg;
 
+	/* Proactively boost watermarks when atomic request enters slowpath */
+	if (((gfp_mask & GFP_ATOMIC) == GFP_ATOMIC) && order == 0) {
+		struct zoneref *z;
+		struct zone *zone;
+
+		for_each_zone_zonelist(zone, z, ac->zonelist, ac->highest_zoneidx) {
+			if (time_after(jiffies, zone->last_boost_jiffies + msecs_to_jiffies(BOOST_DEBOUNCE_MS))) {
+				zone->last_boost_jiffies = jiffies;
+				/* Smaller boost than the failure path */
+				zone->watermark_boost = min(zone->watermark_boost + (pageblock_nr_pages >> 1),
+					high_wmark_pages(zone) >> 1);
+				wakeup_kswapd(zone, gfp_mask, 0, ac->highest_zoneidx);
+				/*
+				 * Precision: only boost the preferred zone(s) to avoid 
+				 * overallocation across all nodes if one is sufficient.
+				 */
+				break;
+			}
+		}
+	}
+
 	/*
 	 * For costly allocations, try direct compaction first, as it's likely
 	 * that we have enough base pages and don't need to reclaim. For non-
@@ -4999,6 +5024,30 @@ nopage:
 		goto retry;
 	}
 fail:
+	/* Auto-tuning: boost watermarks on atomic allocation failure */
+	if (((gfp_mask & GFP_ATOMIC) == GFP_ATOMIC) && order == 0) {
+		unsigned long now = jiffies;
+		struct zoneref *z;
+		struct zone *zone;
+
+		for_each_zone_zonelist(zone, z, ac->zonelist, ac->highest_zoneidx) {
+			if (time_after(now, zone->last_boost_jiffies + msecs_to_jiffies(BOOST_DEBOUNCE_MS))) {
+				zone->last_boost_jiffies = now;
+				if (boost_watermark(zone)) {
+					/* Temporarily increase scale factor to accelerate reclaim */
+					zone->watermark_scale_boost = min(zone->watermark_scale_boost + 5, 100U);
+					__setup_per_zone_wmarks();
+					wakeup_kswapd(zone, gfp_mask, 0, ac->highest_zoneidx);
+				}
+				/*
+				 * Precision: only boost the preferred zone(s) to avoid 
+				 * overallocation across all nodes if one is sufficient.
+				 */
+				break; 
+			}
+		}
+	}
+
 	warn_alloc(gfp_mask, ac->nodemask,
 			"page allocation failure: order:%u", order);
 got_pg:
@@ -6347,6 +6396,7 @@ void __init page_alloc_init_cpuhp(void)
  * calculate_totalreserve_pages - called when sysctl_lowmem_reserve_ratio
  *	or min_free_kbytes changes.
  */
+static void __setup_per_zone_wmarks(void);
 static void calculate_totalreserve_pages(void)
 {
 	struct pglist_data *pgdat;
@@ -6491,9 +6541,8 @@ static void __setup_per_zone_wmarks(void)
 		 */
 		tmp = max_t(u64, tmp >> 2,
 			    mult_frac(zone_managed_pages(zone),
-				      watermark_scale_factor, 10000));
+				      watermark_scale_factor + zone->watermark_scale_boost, 10000));
 
-		zone->watermark_boost = 0;
 		zone->_watermark[WMARK_LOW]  = min_wmark_pages(zone) + tmp;
 		zone->_watermark[WMARK_HIGH] = low_wmark_pages(zone) + tmp;
 		zone->_watermark[WMARK_PROMO] = high_wmark_pages(zone) + tmp;
