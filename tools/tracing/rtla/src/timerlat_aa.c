@@ -47,7 +47,7 @@ struct timerlat_aa_data {
 	 * note: "unsigned long long" because they are fetch using tep_get_field_val();
 	 */
 	unsigned long long	run_thread_pid;
-	char			run_thread_comm[MAX_COMM];
+	char			run_thread_comm[MAX_COMM+1];
 	unsigned long long	thread_blocking_duration;
 	unsigned long long	max_exit_idle_latency;
 
@@ -88,7 +88,7 @@ struct timerlat_aa_data {
 	/*
 	 * Current thread.
 	 */
-	char			current_comm[MAX_COMM];
+	char			current_comm[MAX_COMM+1];
 	unsigned long long	current_pid;
 
 	/*
