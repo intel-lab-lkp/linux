@@ -3,8 +3,9 @@
 
 config RISCV_IOMMU
 	bool "RISC-V IOMMU Support"
-	depends on RISCV && 64BIT
-	default y
+	default RISCV
+	depends on (RISCV || COMPILE_TEST) && 64BIT
+	depends on GENERIC_MSI_IRQ
 	select IOMMU_API
 	select GENERIC_PT
 	select IOMMU_PT
