@@ -733,6 +733,7 @@ start_xmit (struct sk_buff *skb, struct net_device *dev)
 	u64 tfc_vlan_tag = 0;
 
 	if (np->link_status == 0) {	/* Link Down */
+		dev->stats.tx_dropped++;
 		dev_kfree_skb_any(skb);
 		return NETDEV_TX_OK;
 	}
