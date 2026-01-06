@@ -233,6 +233,40 @@ pmd_t pmdp_collapse_flush(struct vm_area_struct *vma, unsigned long address,
 	flush_tlb_range(vma, address, address + HPAGE_PMD_SIZE);
 	return pmd;
 }
+
+pmd_t pmdp_collapse_flush_sync(struct vm_area_struct *vma, unsigned long address,
+			       pmd_t *pmdp)
+{
+	struct mmu_gather tlb;
+	pmd_t pmd;
+
+	VM_BUG_ON(address & ~HPAGE_PMD_MASK);
+	VM_BUG_ON(pmd_trans_huge(*pmdp));
+
+	tlb_gather_mmu(&tlb, vma->vm_mm);
+	pmd = pmdp_huge_get_and_clear(vma->vm_mm, address, pmdp);
+
+	flush_tlb_mm_range(vma->vm_mm, address, address + HPAGE_PMD_SIZE,
+			   PAGE_SHIFT, true, &tlb);
+
+	/*
+	 * Synchronize with GUP-fast. If the flush sent IPIs, skip the
+	 * redundant sync IPI.
+	 */
+	tlb_gather_remove_table_sync_one(&tlb);
+	tlb_finish_mmu(&tlb);
+	return pmd;
+}
+#else
+pmd_t pmdp_collapse_flush_sync(struct vm_area_struct *vma, unsigned long address,
+			       pmd_t *pmdp)
+{
+	pmd_t pmd;
+
+	pmd = pmdp_collapse_flush(vma, address, pmdp);
+	tlb_remove_table_sync_one();
+	return pmd;
+}
 #endif
 
 /* arch define pte_free_defer in asm/pgalloc.h for its own implementation */
