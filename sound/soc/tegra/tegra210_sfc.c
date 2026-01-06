@@ -3570,6 +3570,7 @@ static const struct regmap_config tegra210_sfc_regmap_config = {
 	.reg_defaults		= tegra210_sfc_reg_defaults,
 	.num_reg_defaults	= ARRAY_SIZE(tegra210_sfc_reg_defaults),
 	.cache_type		= REGCACHE_FLAT,
+	.cache_default_is_zero	= true,
 };
 
 static const struct of_device_id tegra210_sfc_of_match[] = {

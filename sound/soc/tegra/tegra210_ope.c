@@ -298,6 +298,7 @@ static const struct regmap_config tegra210_ope_regmap_config = {
 	.reg_defaults		= tegra210_ope_reg_defaults,
 	.num_reg_defaults	= ARRAY_SIZE(tegra210_ope_reg_defaults),
 	.cache_type		= REGCACHE_FLAT,
+	.cache_default_is_zero	= true,
 };
 
 static int tegra210_ope_probe(struct platform_device *pdev)

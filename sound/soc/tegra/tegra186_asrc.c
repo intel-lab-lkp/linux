@@ -951,6 +951,7 @@ static const struct regmap_config tegra186_asrc_regmap_config = {
 	.reg_defaults		= tegra186_asrc_reg_defaults,
 	.num_reg_defaults	= ARRAY_SIZE(tegra186_asrc_reg_defaults),
 	.cache_type		= REGCACHE_FLAT,
+	.cache_default_is_zero	= true,
 };
 
 static const struct tegra_asrc_soc_data soc_data_tegra186 = {

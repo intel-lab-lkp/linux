@@ -468,6 +468,7 @@ static const struct regmap_config tegra186_dspk_regmap = {
 	.reg_defaults		= tegra186_dspk_reg_defaults,
 	.num_reg_defaults	= ARRAY_SIZE(tegra186_dspk_reg_defaults),
 	.cache_type		= REGCACHE_FLAT,
+	.cache_default_is_zero	= true,
 };
 
 static const struct of_device_id tegra186_dspk_of_match[] = {

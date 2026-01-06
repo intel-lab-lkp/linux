@@ -242,6 +242,7 @@ static const struct regmap_config tegra210_admaif_regmap_config = {
 	.reg_defaults		= tegra210_admaif_reg_defaults,
 	.num_reg_defaults	= TEGRA210_ADMAIF_CHANNEL_COUNT * 6 + 1,
 	.cache_type		= REGCACHE_FLAT,
+	.cache_default_is_zero	= true,
 };
 
 static const struct regmap_config tegra186_admaif_regmap_config = {
@@ -255,6 +256,7 @@ static const struct regmap_config tegra186_admaif_regmap_config = {
 	.reg_defaults		= tegra186_admaif_reg_defaults,
 	.num_reg_defaults	= TEGRA186_ADMAIF_CHANNEL_COUNT * 6 + 1,
 	.cache_type		= REGCACHE_FLAT,
+	.cache_default_is_zero	= true,
 };
 
 static const struct regmap_config tegra264_admaif_regmap_config = {
@@ -268,6 +270,7 @@ static const struct regmap_config tegra264_admaif_regmap_config = {
 	.reg_defaults		= tegra264_admaif_reg_defaults,
 	.num_reg_defaults	= TEGRA264_ADMAIF_CHANNEL_COUNT * 6 + 1,
 	.cache_type		= REGCACHE_FLAT,
+	.cache_default_is_zero	= true,
 };
 
 static int tegra_admaif_runtime_suspend(struct device *dev)

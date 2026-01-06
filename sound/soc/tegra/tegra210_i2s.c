@@ -998,6 +998,7 @@ static const struct regmap_config tegra210_regmap_conf = {
 	.reg_defaults		= tegra210_i2s_reg_defaults,
 	.num_reg_defaults	= ARRAY_SIZE(tegra210_i2s_reg_defaults),
 	.cache_type		= REGCACHE_FLAT,
+	.cache_default_is_zero	= true,
 };
 
 /*
@@ -1045,6 +1046,7 @@ static const struct regmap_config tegra264_regmap_conf = {
 	.reg_defaults		= tegra264_i2s_reg_defaults,
 	.num_reg_defaults	= ARRAY_SIZE(tegra264_i2s_reg_defaults),
 	.cache_type		= REGCACHE_FLAT,
+	.cache_default_is_zero	= true,
 };
 
 static int tegra210_i2s_probe(struct platform_device *pdev)

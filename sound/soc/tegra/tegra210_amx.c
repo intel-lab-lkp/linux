@@ -655,6 +655,7 @@ static const struct regmap_config tegra210_amx_regmap_config = {
 	.reg_defaults		= tegra210_amx_reg_defaults,
 	.num_reg_defaults	= ARRAY_SIZE(tegra210_amx_reg_defaults),
 	.cache_type		= REGCACHE_FLAT,
+	.cache_default_is_zero	= true,
 };
 
 static const struct regmap_config tegra194_amx_regmap_config = {
@@ -668,6 +669,7 @@ static const struct regmap_config tegra194_amx_regmap_config = {
 	.reg_defaults		= tegra210_amx_reg_defaults,
 	.num_reg_defaults	= ARRAY_SIZE(tegra210_amx_reg_defaults),
 	.cache_type		= REGCACHE_FLAT,
+	.cache_default_is_zero	= true,
 };
 
 static const struct regmap_config tegra264_amx_regmap_config = {
@@ -681,6 +683,7 @@ static const struct regmap_config tegra264_amx_regmap_config = {
 	.reg_defaults		= tegra264_amx_reg_defaults,
 	.num_reg_defaults	= ARRAY_SIZE(tegra264_amx_reg_defaults),
 	.cache_type		= REGCACHE_FLAT,
+	.cache_default_is_zero	= true,
 };
 
 static const struct tegra210_amx_soc_data soc_data_tegra210 = {
