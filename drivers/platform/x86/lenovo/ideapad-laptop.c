@@ -43,6 +43,7 @@
 #include <dt-bindings/leds/common.h>
 
 #define IDEAPAD_RFKILL_DEV_NUM	3
+#define IDEAPAD_EC_UPHK_PATH "\\_SB.PC00.LPCB.EC0.UPHK"
 
 enum {
 	CFG_CAP_BT_BIT       = 16,
@@ -103,6 +104,10 @@ enum {
 	SALS_USB_CHARGING_OFF = 0xb,
 	SALS_FNLOCK_ON        = 0xe,
 	SALS_FNLOCK_OFF       = 0xf,
+};
+
+enum {
+	UPHK_FAN_RESUME = 0x9,
 };
 
 enum {
@@ -198,6 +203,7 @@ struct ideapad_private {
 		bool ctrl_ps2_aux_port    : 1;
 		bool usb_charging         : 1;
 		bool ymc_ec_trigger       : 1;
+		bool fan_mode_fix         : 1;
 	} features;
 	struct {
 		bool initialized;
@@ -245,6 +251,12 @@ module_param(touchpad_ctrl_via_ec, bool, 0444);
 MODULE_PARM_DESC(touchpad_ctrl_via_ec,
 	"Enable registering a 'touchpad' sysfs-attribute which can be used to manually "
 	"tell the EC to enable/disable the touchpad. This may not work on all models.");
+
+static bool fan_mode_fix;
+module_param(fan_mode_fix, bool, 0444);
+MODULE_PARM_DESC(fan_mode_fix,
+	"Enable fan-mode resume fix for laptops that stop cooling after sleep. "
+	"If you need this please report this to: platform-driver-x86@vger.kernel.org");
 
 static bool ymc_ec_trigger __read_mostly;
 module_param(ymc_ec_trigger, bool, 0444);
@@ -2023,6 +2035,24 @@ static const struct dmi_system_id hw_rfkill_list[] = {
 };
 
 /*
+ * On the Lenovo Yoga Slim 15ILL9, the EC fails to restore the fan control profile after
+ * resuming from suspend, causing the fans to stop working.
+ * On this model, the driver needs to explicitly reset the fan mode
+ * on resume.
+ * See https://bugzilla.kernel.org/show_bug.cgi?id=220505
+ */
+static const struct dmi_system_id fan_mode_fix_list[] = {
+	{
+	/* Lenovo Yoga Slim 7 15ILL9 */
+	.matches = {
+		DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+		DMI_MATCH(DMI_PRODUCT_NAME, "83HM"),
+	},
+	},
+	{}
+};
+
+/*
  * On some models the EC toggles the touchpad muted LED on touchpad toggle
  * hotkey presses, but the EC does not actually disable the touchpad itself.
  * On these models the driver needs to explicitly enable/disable the i8042
@@ -2185,6 +2215,8 @@ static int ideapad_check_features(struct ideapad_private *priv)
 	priv->features.touchpad_ctrl_via_ec = touchpad_ctrl_via_ec;
 	priv->features.ymc_ec_trigger =
 		ymc_ec_trigger || dmi_check_system(ymc_ec_trigger_quirk_dmi_table);
+	priv->features.fan_mode_fix =
+		fan_mode_fix || dmi_check_system(fan_mode_fix_list);
 
 	if (!read_ec_data(handle, VPCCMD_R_FAN, &val))
 		priv->features.fan_mode = true;
@@ -2517,6 +2549,28 @@ static void ideapad_acpi_remove(struct platform_device *pdev)
 	ideapad_debugfs_exit(priv);
 }
 
+static void ideapad_fan_mode_fix(struct ideapad_private *priv)
+{
+	acpi_handle handle;
+	acpi_status status;
+
+	if (!priv->features.fan_mode_fix)
+		return;
+
+	status = acpi_get_handle(NULL, IDEAPAD_EC_UPHK_PATH, &handle);
+	if (ACPI_FAILURE(status)) {
+		dev_warn(&priv->platform_device->dev, "Could not find UPHK method for fan fix\n");
+		return;
+	}
+
+	status = acpi_execute_simple_method(handle, NULL, UPHK_FAN_RESUME);
+	if (ACPI_FAILURE(status)) {
+		dev_warn(&priv->platform_device->dev, "Failed to execute UPHK fix: %s\n",
+			acpi_format_exception(status));
+		return;
+	}
+}
+
 #ifdef CONFIG_PM_SLEEP
 static int ideapad_acpi_resume(struct device *dev)
 {
@@ -2527,6 +2581,8 @@ static int ideapad_acpi_resume(struct device *dev)
 
 	if (priv->dytc)
 		dytc_profile_refresh(priv);
+
+	ideapad_fan_mode_fix(priv);
 
 	return 0;
 }
