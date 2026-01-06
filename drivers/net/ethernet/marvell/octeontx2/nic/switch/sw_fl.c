@@ -18,6 +18,7 @@
 #include "../otx2_struct.h"
 #include "../cn10k.h"
 #include "sw_nb.h"
+#include "sw_trace.h"
 #include "sw_fl.h"
 
 #if !IS_ENABLED(CONFIG_OCTEONTX_SWITCH)
@@ -137,6 +138,7 @@ static int sw_fl_parse_actions(struct otx2_nic *nic,
 
 		switch (act->id) {
 		case FLOW_ACTION_REDIRECT:
+			trace_sw_act_dump(__func__, __LINE__, act->id);
 			tuple->in_pf = nic->pcifunc;
 			out_nic = netdev_priv(act->dev);
 			tuple->xmit_pf = out_nic->pcifunc;
@@ -144,6 +146,7 @@ static int sw_fl_parse_actions(struct otx2_nic *nic,
 			break;
 
 		case FLOW_ACTION_CT:
+			trace_sw_act_dump(__func__, __LINE__, act->id);
 			err = nf_flow_table_offload_add_cb(act->ct.flow_table,
 							   sw_fl_setup_ft_block_ingress_cb,
 							   nic);
@@ -157,6 +160,7 @@ static int sw_fl_parse_actions(struct otx2_nic *nic,
 			break;
 
 		case FLOW_ACTION_MANGLE:
+			trace_sw_act_dump(__func__, __LINE__, act->id);
 			tuple->mangle[used].type = act->mangle.htype;
 			tuple->mangle[used].val = act->mangle.val;
 			tuple->mangle[used].mask = act->mangle.mask;
@@ -166,6 +170,7 @@ static int sw_fl_parse_actions(struct otx2_nic *nic,
 			break;
 
 		default:
+			trace_sw_act_dump(__func__, __LINE__, act->id);
 			break;
 		}
 	}
@@ -429,19 +434,26 @@ static int sw_fl_add(struct otx2_nic *nic, struct flow_cls_offload *f)
 		return 0;
 
 	rc  = sw_fl_parse_flow(nic, f, &tuple, &features);
-	if (rc)
+	if (rc) {
+		trace_sw_fl_dump(__func__, __LINE__, &tuple);
 		return -EFAULT;
+	}
 
 	if (!netif_is_ovs_port(nic->netdev)) {
 		rc = sw_fl_get_pcifunc(tuple.ip4src, &tuple.in_pf, &tuple, true);
-		if (rc)
+		if (rc) {
+			trace_sw_fl_dump(__func__, __LINE__, &tuple);
 			return rc;
+		}
 
 		rc = sw_fl_get_pcifunc(tuple.ip4dst, &tuple.xmit_pf, &tuple, false);
-		if (rc)
+		if (rc) {
+			trace_sw_fl_dump(__func__, __LINE__, &tuple);
 			return rc;
+		}
 	}
 
+	trace_sw_fl_dump(__func__, __LINE__, &tuple);
 	sw_fl_add_to_list(nic, &tuple, f->cookie, true);
 	return 0;
 }
