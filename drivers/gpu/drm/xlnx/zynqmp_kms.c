@@ -62,6 +62,13 @@ static int zynqmp_dpsub_plane_atomic_check(struct drm_plane *plane,
 	if (!new_plane_state->crtc)
 		return 0;
 
+	if (new_plane_state->pixel_blend_mode != DRM_MODE_BLEND_PIXEL_NONE &&
+	    new_plane_state->alpha >> 8 != 0xff) {
+		drm_dbg_kms(plane->dev,
+			    "Plane alpha must be 1.0 when using pixel alpha\n");
+		return -EINVAL;
+	}
+
 	crtc_state = drm_atomic_get_crtc_state(state, new_plane_state->crtc);
 	if (IS_ERR(crtc_state))
 		return PTR_ERR(crtc_state);
@@ -118,9 +125,13 @@ static void zynqmp_dpsub_plane_atomic_update(struct drm_plane *plane,
 
 	zynqmp_disp_layer_update(layer, new_state);
 
-	if (plane->index == ZYNQMP_DPSUB_LAYER_GFX)
-		zynqmp_disp_blend_set_global_alpha(dpsub->disp, true,
+	if (plane->index == ZYNQMP_DPSUB_LAYER_GFX) {
+		bool blend = plane->state->pixel_blend_mode ==
+			     DRM_MODE_BLEND_PIXEL_NONE;
+
+		zynqmp_disp_blend_set_global_alpha(dpsub->disp, blend,
 						   plane->state->alpha >> 8);
+	}
 
 	/*
 	 * Unconditionally enable the layer, as it may have been disabled
@@ -137,11 +148,18 @@ static const struct drm_plane_helper_funcs zynqmp_dpsub_plane_helper_funcs = {
 	.atomic_disable		= zynqmp_dpsub_plane_atomic_disable,
 };
 
+void zynqmp_dpsub_plane_atomic_reset(struct drm_plane *plane)
+{
+	drm_atomic_helper_plane_reset(plane);
+	if (plane->state)
+		plane->state->pixel_blend_mode = DRM_MODE_BLEND_PIXEL_NONE;
+}
+
 static const struct drm_plane_funcs zynqmp_dpsub_plane_funcs = {
 	.update_plane		= drm_atomic_helper_update_plane,
 	.disable_plane		= drm_atomic_helper_disable_plane,
 	.destroy		= drm_plane_cleanup,
-	.reset			= drm_atomic_helper_plane_reset,
+	.reset			= zynqmp_dpsub_plane_atomic_reset,
 	.atomic_duplicate_state	= drm_atomic_helper_plane_duplicate_state,
 	.atomic_destroy_state	= drm_atomic_helper_plane_destroy_state,
 };
@@ -180,7 +198,18 @@ static int zynqmp_dpsub_create_planes(struct zynqmp_dpsub *dpsub)
 			return ret;
 
 		if (i == ZYNQMP_DPSUB_LAYER_GFX) {
+			unsigned int blend_modes =
+				BIT(DRM_MODE_BLEND_PIXEL_NONE) |
+				BIT(DRM_MODE_BLEND_COVERAGE);
+			unsigned int def = DRM_MODE_BLEND_COVERAGE;
+
 			ret = drm_plane_create_alpha_property(plane);
+			if (ret)
+				return ret;
+
+			ret = drm_plane_create_blend_mode_default(plane,
+								  blend_modes,
+								  def);
 			if (ret)
 				return ret;
 		}
