@@ -870,6 +870,7 @@ int set_comm_cgroup(const char *comm_prefix, const char *cgroup)
 	DIR *procfs;
 	int retval;
 	int cg_fd;
+	size_t cg_path_len;
 
 	if (strlen(comm_prefix) >= MAX_PATH) {
 		err_msg("Command prefix is too long: %d < strlen(%s)\n",
@@ -883,16 +884,18 @@ int set_comm_cgroup(const char *comm_prefix, const char *cgroup)
 		return 0;
 	}
 
+	cg_path_len = strlen(cgroup_path);
+
 	if (!cgroup) {
-		retval = get_self_cgroup(&cgroup_path[strlen(cgroup_path)],
-				sizeof(cgroup_path) - strlen(cgroup_path));
+		retval = get_self_cgroup(&cgroup_path[cg_path_len],
+				sizeof(cgroup_path) - cg_path_len);
 		if (!retval) {
 			err_msg("Did not find self cgroup\n");
 			return 0;
 		}
 	} else {
-		snprintf(&cgroup_path[strlen(cgroup_path)],
-				sizeof(cgroup_path) - strlen(cgroup_path), "%s/", cgroup);
+		snprintf(&cgroup_path[cg_path_len],
+				sizeof(cgroup_path) - cg_path_len, "%s/", cgroup);
 	}
 
 	snprintf(cgroup_procs, MAX_PATH, "%s/cgroup.procs", cgroup_path);
