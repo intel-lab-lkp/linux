@@ -33,15 +33,9 @@ use crate::{
     }, //
 };
 
-/// The led class device representation.
-///
-/// This structure represents the Rust abstraction for a C `struct led_classdev`.
-#[pin_data(PinnedDrop)]
-pub struct Device<T: LedOps> {
-    ops: T,
-    #[pin]
-    classdev: Opaque<bindings::led_classdev>,
-}
+mod normal;
+
+pub use normal::{Device, Normal};
 
 /// The led init data representation.
 ///
@@ -134,6 +128,7 @@ impl<'a> InitData<'a> {
 /// #[vtable]
 /// impl led::LedOps for MyLedOps {
 ///     type Bus = platform::Device<device::Bound>;
+///     type Mode = led::Normal;
 ///     const BLOCKING: bool = false;
 ///     const MAX_BRIGHTNESS: u32 = 255;
 ///
@@ -164,6 +159,12 @@ pub trait LedOps: Send + 'static + Sized {
     /// The bus device required by the implementation.
     #[allow(private_bounds)]
     type Bus: AsBusDevice<Bound>;
+
+    /// The led mode to use.
+    ///
+    /// See [`Mode`].
+    type Mode: Mode;
+
     /// If set true, [`LedOps::brightness_set`] and [`LedOps::blink_set`] must perform the
     /// operation immediately. If set false, they must not sleep.
     const BLOCKING: bool;
@@ -176,12 +177,17 @@ pub trait LedOps: Send + 'static + Sized {
     fn brightness_set(
         &self,
         dev: &Self::Bus,
-        classdev: &Device<Self>,
+        classdev: &<Self::Mode as Mode>::Device<Self>,
         brightness: u32,
     ) -> Result<()>;
 
     /// Gets the current brightness level.
-    fn brightness_get(&self, _dev: &Self::Bus, _classdev: &Device<Self>) -> u32 {
+    fn brightness_get(
+        &self,
+        dev: &Self::Bus,
+        classdev: &<Self::Mode as Mode>::Device<Self>,
+    ) -> u32 {
+        let _ = (dev, classdev);
         build_error!(VTABLE_DEFAULT_ERROR)
     }
 
@@ -195,11 +201,12 @@ pub trait LedOps: Send + 'static + Sized {
     /// See also [`LedOps::BLOCKING`].
     fn blink_set(
         &self,
-        _dev: &Self::Bus,
-        _classdev: &Device<Self>,
-        _delay_on: &mut usize,
-        _delay_off: &mut usize,
+        dev: &Self::Bus,
+        classdev: &<Self::Mode as Mode>::Device<Self>,
+        delay_on: &mut usize,
+        delay_off: &mut usize,
     ) -> Result<()> {
+        let _ = (dev, classdev, delay_on, delay_off);
         build_error!(VTABLE_DEFAULT_ERROR)
     }
 }
@@ -250,201 +257,16 @@ impl TryFrom<u32> for Color {
     }
 }
 
-// SAFETY: A `led::Device` can be unregistered from any thread.
-unsafe impl<T: LedOps + Send> Send for Device<T> {}
-
-// SAFETY: `led::Device` can be shared among threads because all methods of `led::Device`
-// are thread safe.
-unsafe impl<T: LedOps + Sync> Sync for Device<T> {}
-
-impl<T: LedOps> Device<T> {
-    /// Registers a new led classdev.
-    ///
-    /// The [`Device`] will be unregistered on drop.
-    pub fn new<'a>(
-        parent: &'a T::Bus,
-        init_data: InitData<'a>,
-        ops: T,
-    ) -> impl PinInit<Devres<Self>, Error> + 'a {
-        Devres::new(
-            parent.as_ref(),
-            try_pin_init!(Self {
-                ops,
-                classdev <- Opaque::try_ffi_init(|ptr: *mut bindings::led_classdev| {
-                    // SAFETY: `try_ffi_init` guarantees that `ptr` is valid for write.
-                    // `led_classdev` gets fully initialized in-place by
-                    // `led_classdev_register_ext` including `mutex` and `list_head`.
-                    unsafe {
-                        ptr.write(bindings::led_classdev {
-                            brightness_set: (!T::BLOCKING)
-                                .then_some(Adapter::<T>::brightness_set_callback),
-                            brightness_set_blocking: T::BLOCKING
-                                .then_some(Adapter::<T>::brightness_set_blocking_callback),
-                            brightness_get: T::HAS_BRIGHTNESS_GET
-                                .then_some(Adapter::<T>::brightness_get_callback),
-                            blink_set: T::HAS_BLINK_SET.then_some(Adapter::<T>::blink_set_callback),
-                            max_brightness: T::MAX_BRIGHTNESS,
-                            brightness: init_data.initial_brightness,
-                            default_trigger: init_data.default_trigger
-                                .map_or(core::ptr::null(), CStrExt::as_char_ptr),
-                            color: init_data.color as u32,
-                            ..bindings::led_classdev::default()
-                        })
-                    };
-
-                    let mut init_data_raw = bindings::led_init_data {
-                        fwnode: init_data.fwnode
-                            .as_ref()
-                            .map_or(core::ptr::null_mut(), |fwnode| fwnode.as_raw()),
-                        default_label: core::ptr::null(),
-                        devicename: init_data
-                            .devicename
-                            .map_or(core::ptr::null(), CStrExt::as_char_ptr),
-                        devname_mandatory: init_data.devname_mandatory,
-                    };
-
-                    // SAFETY:
-                    // - `parent.as_raw()` is guaranteed to be a pointer to a valid `device`
-                    //    or a null pointer.
-                    // - `ptr` is guaranteed to be a pointer to an initialized `led_classdev`.
-                    to_result(unsafe {
-                        bindings::led_classdev_register_ext(
-                            parent.as_ref().as_raw(),
-                            ptr,
-                            &raw mut init_data_raw,
-                        )
-                    })?;
-
-                    core::mem::forget(init_data.fwnode); // keep the reference count incremented
-
-                    Ok::<_, Error>(())
-                }),
-            }),
-        )
-    }
-
-    /// # Safety
-    /// `led_cdev` must be a valid pointer to a `led_classdev` embedded within a
-    /// `led::Device`.
-    unsafe fn from_raw<'a>(led_cdev: *mut bindings::led_classdev) -> &'a Self {
-        // SAFETY: The function's contract guarantees that `led_cdev` points to a `led_classdev`
-        // field embedded within a valid `led::Device`. `container_of!` can therefore
-        // safely calculate the address of the containing struct.
-        unsafe { &*container_of!(Opaque::cast_from(led_cdev), Self, classdev) }
-    }
-
-    fn parent(&self) -> &device::Device<Bound> {
-        // SAFETY:
-        // - `self.classdev.get()` is guaranteed to be a valid pointer to `led_classdev`.
-        unsafe { device::Device::from_raw((*(*self.classdev.get()).dev).parent) }
-    }
+/// The led mode.
+///
+/// Each led mode has its own led class device type with different capabilities.
+///
+/// See [`Normal`].
+pub trait Mode: private::Sealed {
+    /// The class device for the led mode.
+    type Device<T: LedOps<Mode = Self>>;
 }
 
-struct Adapter<T: LedOps> {
-    _p: PhantomData<T>,
-}
-
-impl<T: LedOps> Adapter<T> {
-    /// # Safety
-    /// `led_cdev` must be a valid pointer to a `led_classdev` embedded within a
-    /// `led::Device`.
-    /// This function is called on setting the brightness of a led.
-    unsafe extern "C" fn brightness_set_callback(
-        led_cdev: *mut bindings::led_classdev,
-        brightness: u32,
-    ) {
-        // SAFETY: The function's contract guarantees that `led_cdev` is a valid pointer to a
-        // `led_classdev` embedded within a `led::Device`.
-        let classdev = unsafe { Device::<T>::from_raw(led_cdev) };
-        // SAFETY: `classdev.parent()` is guaranteed to be contained in `T::Bus`.
-        let parent = unsafe { T::Bus::from_device(classdev.parent()) };
-
-        let _ = classdev.ops.brightness_set(parent, classdev, brightness);
-    }
-
-    /// # Safety
-    /// `led_cdev` must be a valid pointer to a `led_classdev` embedded within a
-    /// `led::Device`.
-    /// This function is called on setting the brightness of a led immediately.
-    unsafe extern "C" fn brightness_set_blocking_callback(
-        led_cdev: *mut bindings::led_classdev,
-        brightness: u32,
-    ) -> i32 {
-        from_result(|| {
-            // SAFETY: The function's contract guarantees that `led_cdev` is a valid pointer to a
-            // `led_classdev` embedded within a `led::Device`.
-            let classdev = unsafe { Device::<T>::from_raw(led_cdev) };
-            // SAFETY: `classdev.parent()` is guaranteed to be contained in `T::Bus`.
-            let parent = unsafe { T::Bus::from_device(classdev.parent()) };
-
-            classdev.ops.brightness_set(parent, classdev, brightness)?;
-            Ok(0)
-        })
-    }
-
-    /// # Safety
-    /// `led_cdev` must be a valid pointer to a `led_classdev` embedded within a
-    /// `led::Device`.
-    /// This function is called on getting the brightness of a led.
-    unsafe extern "C" fn brightness_get_callback(led_cdev: *mut bindings::led_classdev) -> u32 {
-        // SAFETY: The function's contract guarantees that `led_cdev` is a valid pointer to a
-        // `led_classdev` embedded within a `led::Device`.
-        let classdev = unsafe { Device::<T>::from_raw(led_cdev) };
-        // SAFETY: `classdev.parent()` is guaranteed to be contained in `T::Bus`.
-        let parent = unsafe { T::Bus::from_device(classdev.parent()) };
-
-        classdev.ops.brightness_get(parent, classdev)
-    }
-
-    /// # Safety
-    /// `led_cdev` must be a valid pointer to a `led_classdev` embedded within a
-    /// `led::Device`.
-    /// `delay_on` and `delay_off` must be valid pointers to `usize` and have
-    /// exclusive access for the period of this function.
-    /// This function is called on enabling hardware accelerated blinking.
-    unsafe extern "C" fn blink_set_callback(
-        led_cdev: *mut bindings::led_classdev,
-        delay_on: *mut usize,
-        delay_off: *mut usize,
-    ) -> i32 {
-        from_result(|| {
-            // SAFETY: The function's contract guarantees that `led_cdev` is a valid pointer to a
-            // `led_classdev` embedded within a `led::Device`.
-            let classdev = unsafe { Device::<T>::from_raw(led_cdev) };
-            // SAFETY: `classdev.parent()` is guaranteed to be contained in `T::Bus`.
-            let parent = unsafe { T::Bus::from_device(classdev.parent()) };
-
-            classdev.ops.blink_set(
-                parent,
-                classdev,
-                // SAFETY: The function's contract guarantees that `delay_on` points to a `usize`
-                // and is exclusive for the period of this function.
-                unsafe { &mut *delay_on },
-                // SAFETY: The function's contract guarantees that `delay_off` points to a `usize`
-                // and is exclusive for the period of this function.
-                unsafe { &mut *delay_off },
-            )?;
-            Ok(0)
-        })
-    }
-}
-
-#[pinned_drop]
-impl<T: LedOps> PinnedDrop for Device<T> {
-    fn drop(self: Pin<&mut Self>) {
-        let raw = self.classdev.get();
-        // SAFETY: The existence of `self` guarantees that `self.classdev.get()` is a pointer to a
-        // valid `struct led_classdev`.
-        let dev: &device::Device = unsafe { device::Device::from_raw((*raw).dev) };
-
-        let _fwnode = dev
-            .fwnode()
-            // SAFETY: the reference count of `fwnode` has previously been
-            // incremented in `led::Device::new`.
-            .map(|fwnode| unsafe { ARef::from_raw(NonNull::from(fwnode)) });
-
-        // SAFETY: The existence of `self` guarantees that `self.classdev` has previously been
-        // successfully registered with `led_classdev_register_ext`.
-        unsafe { bindings::led_classdev_unregister(self.classdev.get()) };
-    }
+mod private {
+    pub trait Sealed {}
 }
