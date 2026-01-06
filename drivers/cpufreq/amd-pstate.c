@@ -1333,6 +1333,7 @@ ssize_t store_energy_performance_preference(struct cpufreq_policy *policy,
 {
 	struct amd_cpudata *cpudata = policy->driver_data;
 	ssize_t ret;
+	bool raw_epp = FALSE;
 	u8 epp;
 
 	if (cpudata->dynamic_epp) {
@@ -1345,6 +1346,7 @@ ssize_t store_energy_performance_preference(struct cpufreq_policy *policy,
 	 * matches an index in the energy_perf_strings array
 	 */
 	ret = kstrtou8(buf, 0, &epp);
+	raw_epp = !ret;
 	if (ret) {
 		ret = sysfs_match_string(energy_perf_strings, buf);
 		if (ret < 0 || ret == EPP_INDEX_CUSTOM)
@@ -1364,7 +1366,9 @@ ssize_t store_energy_performance_preference(struct cpufreq_policy *policy,
 	if (ret)
 		return ret;
 
-	return ret ? ret : count;
+	cpudata->raw_epp = raw_epp;
+
+	return count;
 }
 EXPORT_SYMBOL_GPL(store_energy_performance_preference);
 
@@ -1374,6 +1378,9 @@ ssize_t show_energy_performance_preference(struct cpufreq_policy *policy, char *
 	u8 preference, epp;
 
 	epp = FIELD_GET(AMD_CPPC_EPP_PERF_MASK, cpudata->cppc_req_cached);
+
+	if (cpudata->raw_epp)
+		return sysfs_emit(buf, "%u\n", epp);
 
 	switch (epp) {
 	case AMD_CPPC_EPP_PERFORMANCE:
@@ -1389,7 +1396,7 @@ ssize_t show_energy_performance_preference(struct cpufreq_policy *policy, char *
 		preference = EPP_INDEX_POWERSAVE;
 		break;
 	default:
-		return sysfs_emit(buf, "%u\n", epp);
+		return -EINVAL;
 	}
 
 	return sysfs_emit(buf, "%s\n", energy_perf_strings[preference]);
