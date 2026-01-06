@@ -175,9 +175,15 @@ static int zynqmp_dpsub_create_planes(struct zynqmp_dpsub *dpsub)
 
 		drm_plane_helper_add(plane, &zynqmp_dpsub_plane_helper_funcs);
 
-		drm_plane_create_zpos_immutable_property(plane, i);
-		if (i == ZYNQMP_DPSUB_LAYER_GFX)
-			drm_plane_create_alpha_property(plane);
+		ret = drm_plane_create_zpos_immutable_property(plane, i);
+		if (ret)
+			return ret;
+
+		if (i == ZYNQMP_DPSUB_LAYER_GFX) {
+			ret = drm_plane_create_alpha_property(plane);
+			if (ret)
+				return ret;
+		}
 	}
 
 	return 0;
