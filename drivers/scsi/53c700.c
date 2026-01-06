@@ -152,8 +152,8 @@ MODULE_LICENSE("GPL");
 /* This is the script */
 #include "53c700_d.h"
 
-
-STATIC int NCR_700_queuecommand(struct Scsi_Host *h, struct scsi_cmnd *);
+STATIC enum scsi_qc_status NCR_700_queuecommand(struct Scsi_Host *h,
+						struct scsi_cmnd *);
 STATIC int NCR_700_abort(struct scsi_cmnd * SCpnt);
 STATIC int NCR_700_host_reset(struct scsi_cmnd * SCpnt);
 STATIC void NCR_700_chip_setup(struct Scsi_Host *host);

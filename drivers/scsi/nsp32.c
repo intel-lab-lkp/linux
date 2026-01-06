@@ -185,7 +185,8 @@ static void __exit exit_nsp32  (void);
 static int	   nsp32_show_info   (struct seq_file *, struct Scsi_Host *);
 
 static int	   nsp32_detect      (struct pci_dev *pdev);
-static int	   nsp32_queuecommand(struct Scsi_Host *, struct scsi_cmnd *);
+static enum scsi_qc_status nsp32_queuecommand(struct Scsi_Host *,
+					      struct scsi_cmnd *);
 static const char *nsp32_info	     (struct Scsi_Host *);
 static int	   nsp32_release     (struct Scsi_Host *);
 

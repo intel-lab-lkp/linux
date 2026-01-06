@@ -113,7 +113,8 @@ static int arcmsr_abort(struct scsi_cmnd *);
 static int arcmsr_bus_reset(struct scsi_cmnd *);
 static int arcmsr_bios_param(struct scsi_device *sdev,
 		struct gendisk *disk, sector_t capacity, int *info);
-static int arcmsr_queue_command(struct Scsi_Host *h, struct scsi_cmnd *cmd);
+static enum scsi_qc_status arcmsr_queue_command(struct Scsi_Host *h,
+						struct scsi_cmnd *cmd);
 static int arcmsr_probe(struct pci_dev *pdev,
 				const struct pci_device_id *id);
 static int __maybe_unused arcmsr_suspend(struct device *dev);
