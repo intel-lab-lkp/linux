@@ -699,6 +699,9 @@ static int mtk_mac_finish(struct phylink_config *config, unsigned int mode,
 	struct mtk_eth *eth = mac->hw;
 	u32 mcr_cur, mcr_new;
 
+	if (MTK_HAS_CAPS(eth->soc->caps, MTK_SOC_MT7628))
+		return 0;
+
 	/* Enable SGMII */
 	if (interface == PHY_INTERFACE_MODE_SGMII ||
 	    phy_interface_mode_is_8023z(interface))
@@ -723,6 +726,9 @@ static void mtk_mac_link_down(struct phylink_config *config, unsigned int mode,
 {
 	struct mtk_mac *mac = container_of(config, struct mtk_mac,
 					   phylink_config);
+
+	if (MTK_HAS_CAPS(mac->hw->soc->caps, MTK_SOC_MT7628))
+		return;
 
 	if (!mtk_interface_mode_is_xgmii(mac->hw, interface)) {
 		/* GMAC modes */
@@ -814,6 +820,9 @@ static void mtk_gdm_mac_link_up(struct mtk_mac *mac,
 				bool rx_pause)
 {
 	u32 mcr;
+
+	if (MTK_HAS_CAPS(mac->hw->soc->caps, MTK_SOC_MT7628))
+		return;
 
 	mcr = mtk_r32(mac->hw, MTK_MAC_MCR(mac->id));
 	mcr &= ~(MAC_MCR_SPEED_100 | MAC_MCR_SPEED_1000 |
@@ -4357,9 +4366,11 @@ static void mtk_prepare_for_reset(struct mtk_eth *eth)
 	mtk_w32(eth, 0, MTK_FE_INT_ENABLE);
 
 	/* force link down GMAC */
-	for (i = 0; i < 2; i++) {
-		val = mtk_r32(eth, MTK_MAC_MCR(i)) & ~MAC_MCR_FORCE_LINK;
-		mtk_w32(eth, val, MTK_MAC_MCR(i));
+	if (!MTK_HAS_CAPS(eth->soc->caps, MTK_SOC_MT7628)) {
+		for (i = 0; i < 2; i++) {
+			val = mtk_r32(eth, MTK_MAC_MCR(i)) & ~MAC_MCR_FORCE_LINK;
+			mtk_w32(eth, val, MTK_MAC_MCR(i));
+		}
 	}
 }
 
