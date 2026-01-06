@@ -1164,6 +1164,9 @@ static int gfs2_show_options(struct seq_file *s, struct dentry *root)
 
 static void gfs2_glock_put_eventually(struct gfs2_glock *gl)
 {
+	if (gfs2_glock_not_evictable(gl))
+		return;
+
 	if (current->flags & PF_MEMALLOC)
 		gfs2_glock_put_async(gl);
 	else
