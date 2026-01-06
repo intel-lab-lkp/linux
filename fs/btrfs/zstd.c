@@ -408,10 +408,9 @@ int zstd_compress_folios(struct list_head *ws, struct btrfs_inode *inode,
 	struct folio *in_folio = NULL;  /* The current folio to read. */
 	struct folio *out_folio = NULL; /* The current folio to write to. */
 	unsigned long len = *total_out;
-	const unsigned long nr_dest_folios = *out_folios;
 	const u64 orig_end = start + len;
 	const u32 min_folio_size = btrfs_min_folio_size(fs_info);
-	unsigned long max_out = nr_dest_folios * min_folio_size;
+	unsigned long max_out = *out_folios * min_folio_size;
 	unsigned int cur_len;
 
 	workspace->params = zstd_get_btrfs_parameters(workspace->req_level, len);
@@ -485,7 +484,7 @@ int zstd_compress_folios(struct list_head *ws, struct btrfs_inode *inode,
 		if (workspace->out_buf.pos == workspace->out_buf.size) {
 			*total_out += min_folio_size;
 			max_out -= min_folio_size;
-			if (nr_folios == nr_dest_folios) {
+			if (nr_folios == *out_folios) {
 				ret = -E2BIG;
 				goto out;
 			}
@@ -549,7 +548,7 @@ int zstd_compress_folios(struct list_head *ws, struct btrfs_inode *inode,
 
 		*total_out += min_folio_size;
 		max_out -= min_folio_size;
-		if (nr_folios == nr_dest_folios) {
+		if (nr_folios == *out_folios) {
 			ret = -E2BIG;
 			goto out;
 		}
