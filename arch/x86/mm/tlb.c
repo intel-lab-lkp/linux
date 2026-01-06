@@ -1374,6 +1374,9 @@ STATIC_NOPV void native_flush_tlb_multi(const struct cpumask *cpumask,
 	else
 		on_each_cpu_cond_mask(should_flush_tlb, flush_tlb_func,
 				(void *)info, 1, cpumask);
+
+	if (info->freed_tables && info->tlb)
+		info->tlb->tlb_flush_sent_ipi = true;
 }
 
 void flush_tlb_multi(const struct cpumask *cpumask,
@@ -1403,7 +1406,7 @@ static DEFINE_PER_CPU(unsigned int, flush_tlb_info_idx);
 static struct flush_tlb_info *get_flush_tlb_info(struct mm_struct *mm,
 			unsigned long start, unsigned long end,
 			unsigned int stride_shift, bool freed_tables,
-			u64 new_tlb_gen)
+			u64 new_tlb_gen, struct mmu_gather *tlb)
 {
 	struct flush_tlb_info *info = this_cpu_ptr(&flush_tlb_info);
 
@@ -1433,6 +1436,7 @@ static struct flush_tlb_info *get_flush_tlb_info(struct mm_struct *mm,
 	info->new_tlb_gen	= new_tlb_gen;
 	info->initiating_cpu	= smp_processor_id();
 	info->trim_cpumask	= 0;
+	info->tlb		= tlb;
 
 	return info;
 }
@@ -1447,8 +1451,8 @@ static void put_flush_tlb_info(void)
 }
 
 void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
-				unsigned long end, unsigned int stride_shift,
-				bool freed_tables)
+			unsigned long end, unsigned int stride_shift,
+			bool freed_tables, struct mmu_gather *tlb)
 {
 	struct flush_tlb_info *info;
 	int cpu = get_cpu();
@@ -1458,7 +1462,7 @@ void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
 	new_tlb_gen = inc_mm_tlb_gen(mm);
 
 	info = get_flush_tlb_info(mm, start, end, stride_shift, freed_tables,
-				  new_tlb_gen);
+				  new_tlb_gen, tlb);
 
 	/*
 	 * flush_tlb_multi() is not optimized for the common case in which only
@@ -1476,6 +1480,12 @@ void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
 		local_irq_disable();
 		flush_tlb_func(info);
 		local_irq_enable();
+		/*
+		 * Only current CPU uses this mm, so we can treat this as
+		 * having synchronized with GUP-fast. No sync IPI needed.
+		 */
+		if (tlb && freed_tables)
+			tlb->tlb_flush_sent_ipi = true;
 	}
 
 	put_flush_tlb_info();
@@ -1553,7 +1563,7 @@ void flush_tlb_kernel_range(unsigned long start, unsigned long end)
 	guard(preempt)();
 
 	info = get_flush_tlb_info(NULL, start, end, PAGE_SHIFT, false,
-				  TLB_GENERATION_INVALID);
+				  TLB_GENERATION_INVALID, NULL);
 
 	if (info->end == TLB_FLUSH_ALL)
 		kernel_tlb_flush_all(info);
@@ -1733,7 +1743,7 @@ void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 	int cpu = get_cpu();
 
 	info = get_flush_tlb_info(NULL, 0, TLB_FLUSH_ALL, 0, false,
-				  TLB_GENERATION_INVALID);
+				  TLB_GENERATION_INVALID, NULL);
 	/*
 	 * flush_tlb_multi() is not optimized for the common case in which only
 	 * a local TLB flush is needed. Optimize this use-case by calling

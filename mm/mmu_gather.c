@@ -273,8 +273,14 @@ static void tlb_remove_table_smp_sync(void *arg)
 	/* Simply deliver the interrupt */
 }
 
-void tlb_remove_table_sync_one(void)
+void tlb_gather_remove_table_sync_one(struct mmu_gather *tlb)
 {
+	/* Skip the IPI if the TLB flush already synchronized with other CPUs */
+	if (tlb && tlb->tlb_flush_sent_ipi) {
+		tlb->tlb_flush_sent_ipi = false;
+		return;
+	}
+
 	/*
 	 * This isn't an RCU grace period and hence the page-tables cannot be
 	 * assumed to be actually RCU-freed.
@@ -283,6 +289,11 @@ void tlb_remove_table_sync_one(void)
 	 * IRQ disabling.
 	 */
 	smp_call_function(tlb_remove_table_smp_sync, NULL, 1);
+}
+
+void tlb_remove_table_sync_one(void)
+{
+	tlb_gather_remove_table_sync_one(NULL);
 }
 
 static void tlb_remove_table_rcu(struct rcu_head *head)
@@ -328,7 +339,7 @@ static inline void __tlb_remove_table_one_rcu(struct rcu_head *head)
 	__tlb_remove_table(ptdesc);
 }
 
-static inline void __tlb_remove_table_one(void *table)
+static inline void __tlb_remove_table_one(void *table, struct mmu_gather *tlb)
 {
 	struct ptdesc *ptdesc;
 
@@ -336,16 +347,16 @@ static inline void __tlb_remove_table_one(void *table)
 	call_rcu(&ptdesc->pt_rcu_head, __tlb_remove_table_one_rcu);
 }
 #else
-static inline void __tlb_remove_table_one(void *table)
+static inline void __tlb_remove_table_one(void *table, struct mmu_gather *tlb)
 {
-	tlb_remove_table_sync_one();
+	tlb_gather_remove_table_sync_one(tlb);
 	__tlb_remove_table(table);
 }
 #endif /* CONFIG_PT_RECLAIM */
 
-static void tlb_remove_table_one(void *table)
+static void tlb_remove_table_one(void *table, struct mmu_gather *tlb)
 {
-	__tlb_remove_table_one(table);
+	__tlb_remove_table_one(table, tlb);
 }
 
 static void tlb_table_flush(struct mmu_gather *tlb)
@@ -367,7 +378,7 @@ void tlb_remove_table(struct mmu_gather *tlb, void *table)
 		*batch = (struct mmu_table_batch *)__get_free_page(GFP_NOWAIT);
 		if (*batch == NULL) {
 			tlb_table_invalidate(tlb);
-			tlb_remove_table_one(table);
+			tlb_remove_table_one(table, tlb);
 			return;
 		}
 		(*batch)->nr = 0;
@@ -427,6 +438,7 @@ static void __tlb_gather_mmu(struct mmu_gather *tlb, struct mm_struct *mm,
 	tlb->vma_pfn = 0;
 
 	tlb->fully_unshared_tables = 0;
+	tlb->tlb_flush_sent_ipi = 0;
 	__tlb_reset_range(tlb);
 	inc_tlb_flush_pending(tlb->mm);
 }
