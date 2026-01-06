@@ -971,6 +971,37 @@ static irqreturn_t nhi_msi(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static void nhi_reset(struct tb_nhi *nhi)
+{
+	ktime_t timeout;
+	u32 val;
+
+	val = ioread32(nhi->iobase + REG_CAPS);
+	/* Reset only v2 and later routers */
+	if (FIELD_GET(REG_CAPS_VERSION_MASK, val) < REG_CAPS_VERSION_2)
+		return;
+
+	if (!host_reset) {
+		dev_dbg(&nhi->pdev->dev, "skipping host router reset\n");
+		return;
+	}
+
+	iowrite32(REG_RESET_HRR, nhi->iobase + REG_RESET);
+	msleep(100);
+
+	timeout = ktime_add_ms(ktime_get(), 500);
+	do {
+		val = ioread32(nhi->iobase + REG_RESET);
+		if (!(val & REG_RESET_HRR)) {
+			dev_warn(&nhi->pdev->dev, "host router reset successful\n");
+			return;
+		}
+		usleep_range(10, 20);
+	} while (ktime_before(ktime_get(), timeout));
+
+	dev_warn(&nhi->pdev->dev, "timeout resetting host router\n");
+}
+
 static int __nhi_suspend_noirq(struct device *dev, bool wakeup)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
@@ -1229,37 +1260,6 @@ static void nhi_check_iommu(struct tb_nhi *nhi)
 	nhi->iommu_dma_protection = port_ok;
 	dev_dbg(&nhi->pdev->dev, "IOMMU DMA protection is %s\n",
 		str_enabled_disabled(port_ok));
-}
-
-static void nhi_reset(struct tb_nhi *nhi)
-{
-	ktime_t timeout;
-	u32 val;
-
-	val = ioread32(nhi->iobase + REG_CAPS);
-	/* Reset only v2 and later routers */
-	if (FIELD_GET(REG_CAPS_VERSION_MASK, val) < REG_CAPS_VERSION_2)
-		return;
-
-	if (!host_reset) {
-		dev_dbg(&nhi->pdev->dev, "skipping host router reset\n");
-		return;
-	}
-
-	iowrite32(REG_RESET_HRR, nhi->iobase + REG_RESET);
-	msleep(100);
-
-	timeout = ktime_add_ms(ktime_get(), 500);
-	do {
-		val = ioread32(nhi->iobase + REG_RESET);
-		if (!(val & REG_RESET_HRR)) {
-			dev_warn(&nhi->pdev->dev, "host router reset successful\n");
-			return;
-		}
-		usleep_range(10, 20);
-	} while (ktime_before(ktime_get(), timeout));
-
-	dev_warn(&nhi->pdev->dev, "timeout resetting host router\n");
 }
 
 static int nhi_init_msi(struct tb_nhi *nhi)
