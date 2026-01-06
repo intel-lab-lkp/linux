@@ -509,16 +509,22 @@ static int erofs_fc_parse_param(struct fs_context *fc,
 		break;
 #ifdef CONFIG_EROFS_FS_ONDEMAND
 	case Opt_fsid:
-		kfree(sbi->fsid);
-		sbi->fsid = kstrdup(param->string, GFP_KERNEL);
-		if (!sbi->fsid)
+		char *new_fsid;
+
+		new_fsid = kstrdup(param->string, GFP_KERNEL);
+		if (!new_fsid)
 			return -ENOMEM;
+		kfree(sbi->fsid);
+		sbi->fsid = new_fsid;
 		break;
 	case Opt_domain_id:
-		kfree(sbi->domain_id);
-		sbi->domain_id = kstrdup(param->string, GFP_KERNEL);
-		if (!sbi->domain_id)
+		char *new_domain_id;
+
+		new_domain_id = kstrdup(param->string, GFP_KERNEL);
+		if (!new_domain_id)
 			return -ENOMEM;
+		kfree(sbi->domain_id);
+		sbi->domain_id = new_domain_id;
 		break;
 #else
 	case Opt_fsid:
