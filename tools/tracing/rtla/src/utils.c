@@ -1000,3 +1000,38 @@ char *parse_optional_arg(int argc, char **argv)
 		return NULL;
 	}
 }
+
+static inline void fatal_alloc(void)
+{
+	fatal("Error allocating memory\n");
+}
+
+void *calloc_fatal(size_t n, size_t size)
+{
+	void *p = calloc(n, size);
+
+	if (!p)
+		fatal_alloc();
+
+	return p;
+}
+
+void *reallocarray_fatal(void *p, size_t n, size_t size)
+{
+	p = reallocarray(p, n, size);
+
+	if (!p)
+		fatal_alloc();
+
+	return p;
+}
+
+char *strdup_fatal(const char *s)
+{
+	char *p = strdup(s);
+
+	if (!p)
+		fatal_alloc();
+
+	return p;
+}
