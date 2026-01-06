@@ -451,6 +451,7 @@ extern const struct device_type fsl_mc_bus_dpdcei_type;
 extern const struct device_type fsl_mc_bus_dpaiop_type;
 extern const struct device_type fsl_mc_bus_dpci_type;
 extern const struct device_type fsl_mc_bus_dpdmai_type;
+extern const struct device_type fsl_mc_bus_dpdbg_type;
 
 static inline bool is_fsl_mc_bus_dprc(const struct fsl_mc_device *mc_dev)
 {
