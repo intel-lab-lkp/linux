@@ -155,7 +155,6 @@ int zlib_compress_folios(struct list_head *ws, struct btrfs_inode *inode,
 	const u32 min_folio_size = btrfs_min_folio_size(fs_info);
 	int ret;
 	char *data_in = NULL;
-	char *cfolio_out;
 	int nr_folios = 0;
 	struct folio *in_folio = NULL;
 	struct folio *out_folio = NULL;
@@ -186,13 +185,12 @@ int zlib_compress_folios(struct list_head *ws, struct btrfs_inode *inode,
 		ret = -ENOMEM;
 		goto out;
 	}
-	cfolio_out = folio_address(out_folio);
 	folios[0] = out_folio;
 	nr_folios = 1;
 
 	workspace->strm.next_in = workspace->buf;
 	workspace->strm.avail_in = 0;
-	workspace->strm.next_out = cfolio_out;
+	workspace->strm.next_out = folio_address(out_folio);
 	workspace->strm.avail_out = min_folio_size;
 
 	while (workspace->strm.total_in < len) {
@@ -270,11 +268,10 @@ int zlib_compress_folios(struct list_head *ws, struct btrfs_inode *inode,
 				ret = -ENOMEM;
 				goto out;
 			}
-			cfolio_out = folio_address(out_folio);
 			folios[nr_folios] = out_folio;
 			nr_folios++;
 			workspace->strm.avail_out = min_folio_size;
-			workspace->strm.next_out = cfolio_out;
+			workspace->strm.next_out = folio_address(out_folio);
 		}
 		/* we're all done */
 		if (workspace->strm.total_in >= len)
@@ -306,11 +303,10 @@ int zlib_compress_folios(struct list_head *ws, struct btrfs_inode *inode,
 				ret = -ENOMEM;
 				goto out;
 			}
-			cfolio_out = folio_address(out_folio);
 			folios[nr_folios] = out_folio;
 			nr_folios++;
 			workspace->strm.avail_out = min_folio_size;
-			workspace->strm.next_out = cfolio_out;
+			workspace->strm.next_out = folio_address(out_folio);
 		}
 	}
 	zlib_deflateEnd(&workspace->strm);
