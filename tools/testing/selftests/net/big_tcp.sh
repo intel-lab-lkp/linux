@@ -32,7 +32,6 @@ setup() {
 	ip -net $ROUTER_NS link add link2 type veth peer name link3 netns $SERVER_NS
 
 	ip -net $CLIENT_NS link set link0 up
-	ip -net $CLIENT_NS link set link0 mtu 1442
 	ip -net $CLIENT_NS addr add $CLIENT_IP4/24 dev link0
 	ip -net $CLIENT_NS addr add $CLIENT_IP6/64 dev link0 nodad
 	ip -net $CLIENT_NS route add $SERVER_IP4 dev link0 via $CLIENT_GW4
