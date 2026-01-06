@@ -80,7 +80,8 @@ struct kimage_arch {
 };
 
 char *setup_kdump_cmdline(struct kimage *image, char *cmdline,
-			  unsigned long cmdline_len);
+			  unsigned long cmdline_len,
+			  char *name, unsigned long addr);
 int setup_purgatory(struct kimage *image, const void *slave_code,
 		    const void *fdt, unsigned long kernel_load_addr,
 		    unsigned long fdt_load_addr);
