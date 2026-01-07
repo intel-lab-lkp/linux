@@ -415,6 +415,7 @@ static int tcm_qla2xxx_write_pending(struct se_cmd *se_cmd)
 
 	cmd->sg_cnt = se_cmd->t_data_nents;
 	cmd->sg = se_cmd->t_data_sg;
+	cmd->offset = 0;
 
 	cmd->prot_sg_cnt = se_cmd->t_prot_nents;
 	cmd->prot_sg = se_cmd->t_prot_sg;
