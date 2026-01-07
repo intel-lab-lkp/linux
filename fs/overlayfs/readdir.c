@@ -246,6 +246,9 @@ static int ovl_fill_lowest(struct ovl_readdir_data *rdd,
 {
 	struct ovl_cache_entry *p;
 
+	/* Mask out high bits that may be used (e.g., fuse) */
+	d_type &= S_DT_MASK;
+
 	p = ovl_cache_entry_find(rdd->root, c_name, c_len);
 	if (p) {
 		list_move_tail(&p->l_node, &rdd->middle);
@@ -315,6 +318,9 @@ static bool ovl_fill_merge(struct dir_context *ctx, const char *name,
 	const char *c_name = NULL;
 	char *cf_name = NULL;
 	int c_len = 0, ret;
+
+	/* Mask out high bits that may be used (e.g., fuse) */
+	d_type &= S_DT_MASK;
 
 	if (ofs->casefold)
 		c_len = ovl_casefold(rdd, name, namelen, &cf_name);
@@ -632,6 +638,9 @@ static bool ovl_fill_plain(struct dir_context *ctx, const char *name,
 	struct ovl_readdir_data *rdd =
 		container_of(ctx, struct ovl_readdir_data, ctx);
 
+	/* Mask out high bits that may be used (e.g., fuse) */
+	d_type &= S_DT_MASK;
+
 	rdd->count++;
 	p = ovl_cache_entry_new(rdd, name, namelen, NULL, 0, ino, d_type);
 	if (p == NULL) {
@@ -754,6 +763,9 @@ static bool ovl_fill_real(struct dir_context *ctx, const char *name,
 		container_of(ctx, struct ovl_readdir_translate, ctx);
 	struct dir_context *orig_ctx = rdt->orig_ctx;
 	bool res;
+
+	/* Mask out high bits that may be used (e.g., fuse) */
+	d_type &= S_DT_MASK;
 
 	if (rdt->parent_ino && strcmp(name, "..") == 0) {
 		ino = rdt->parent_ino;
@@ -1143,6 +1155,9 @@ static bool ovl_check_d_type(struct dir_context *ctx, const char *name,
 {
 	struct ovl_readdir_data *rdd =
 		container_of(ctx, struct ovl_readdir_data, ctx);
+
+	/* Mask out high bits that may be used (e.g., fuse) */
+	d_type &= S_DT_MASK;
 
 	/* Even if d_type is not supported, DT_DIR is returned for . and .. */
 	if (!strncmp(name, ".", namelen) || !strncmp(name, "..", namelen))
