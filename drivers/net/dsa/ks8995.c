@@ -3,7 +3,7 @@
  * SPI driver for Micrel/Kendin KS8995M and KSZ8864RMN ethernet switches
  *
  * Copyright (C) 2008 Gabor Juhos <juhosg at openwrt.org>
- * Copyright (C) 2025 Linus Walleij <linus.walleij@linaro.org>
+ * Copyright (C) 2025-2026 Linus Walleij <linusw@kernel.org>
  *
  * This file was based on: drivers/spi/at25.c
  *     Copyright (C) 2006 David Brownell
@@ -338,6 +338,12 @@ static int ks8995_reset(struct ks8995_switch *ks)
 	return ks8995_start(ks);
 }
 
+static bool ks8995_is_ks8995(struct ks8995_switch *ks)
+{
+	return ((ks->chip->family_id == FAMILY_KS8995) &&
+		(ks->chip->chip_id == KS8995_CHIP_ID));
+}
+
 /* ks8995_get_revision - get chip revision
  * @ks: pointer to switch instance
  *
@@ -532,12 +538,89 @@ dsa_tag_protocol ks8995_get_tag_protocol(struct dsa_switch *ds,
 					 int port,
 					 enum dsa_tag_protocol mp)
 {
-	/* This switch actually uses the 6 byte KS8995 protocol */
+	struct ks8995_switch *ks = ds->priv;
+
+	if (ks8995_is_ks8995(ks))
+		/* This switch uses the KS8995 protocol */
+		return DSA_TAG_PROTO_KS8995;
+
 	return DSA_TAG_PROTO_NONE;
+}
+
+/* Only the KS8995 supports special (DSA) tagging with special bits
+ * set for the ingress and egress ports. The "special tag" register bit
+ * in the other versions is used for clock edge setting so make sure
+ * to only enable this on the KS8995.
+ */
+static int ks8995_special_tags_setup(struct ks8995_switch *ks)
+{
+	int ret;
+	u8 val;
+	int i;
+
+	ret = ks8995_read_reg(ks, KS8995_REG_GC9, &val);
+	if (ret) {
+		dev_err(ks->dev, "failed to read KS8995_REG_GC9\n");
+		return ret;
+	}
+
+	/* Enable the "special tag" (the DSA port tagging) */
+	val |= KS8995_GC9_SPECIAL;
+
+	ret = ks8995_write_reg(ks, KS8995_REG_GC9, val);
+	if (ret)
+		dev_err(ks->dev, "failed to set KS8995_REG_GC11\n");
+
+	ret = ks8995_read_reg(ks, KS8995_REG_PC(KS8995_CPU_PORT, KS8995_REG_PC0), &val);
+	if (ret) {
+		dev_err(ks->dev, "failed to read KS8995_REG_PC0 on CPU port\n");
+		return ret;
+	}
+
+	/* Enable tag INSERTION on the CPU port, this will add the special KS8995 DSA tag
+	 * to packets entering from the chip, indicating the source port.
+	 */
+	val &= ~KS8995_PC0_TAG_REM;
+	val |= KS8995_PC0_TAG_INS;
+
+	ret = ks8995_write_reg(ks, KS8995_REG_PC(KS8995_CPU_PORT, KS8995_REG_PC0), val);
+	if (ret) {
+		dev_err(ks->dev, "failed to write KS8995_REG_PC0 on CPU port\n");
+		return ret;
+	}
+
+	/* Enable tag REMOVAL on all the LAN-facing ports: this will strip the special
+	 * DSA tag that we add during transmission of the egress packets before they exit
+	 * the router chip.
+	 */
+	for (i = 0; i < KS8995_CPU_PORT; i++) {
+		ret = ks8995_read_reg(ks, KS8995_REG_PC(i, KS8995_REG_PC0), &val);
+		if (ret) {
+			dev_err(ks->dev, "failed to read KS8995_REG_PC0 on port %d\n", i);
+			return ret;
+		}
+
+		val |= KS8995_PC0_TAG_REM;
+		val &= ~KS8995_PC0_TAG_INS;
+
+		ret = ks8995_write_reg(ks, KS8995_REG_PC(i, KS8995_REG_PC0), val);
+		if (ret) {
+			dev_err(ks->dev, "failed to write KS8995_REG_PC0 on port %d\n", i);
+			return ret;
+		}
+	}
+
+	return 0;
 }
 
 static int ks8995_setup(struct dsa_switch *ds)
 {
+	struct ks8995_switch *ks = ds->priv;
+
+	if (ks8995_is_ks8995(ks))
+		/* This switch uses the KS8995 protocol */
+		return ks8995_special_tags_setup(ks);
+
 	return 0;
 }
 

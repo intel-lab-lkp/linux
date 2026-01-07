@@ -16942,6 +16942,14 @@ F:	drivers/bus/mhi/
 F:	drivers/pci/endpoint/functions/pci-epf-mhi.c
 F:	include/linux/mhi.h
 
+MICREL KS8995 DSA SWITCH
+M:	Linus Walleij <linusw@kernel.org>
+S:	Supported
+S:	Maintained
+F:	Documentation/devicetree/bindings/net/dsa/micrel,ks8995.yaml
+F:	drivers/net/dsa/ks8995.c
+F:	net/dsa/tag_ks8995.c
+
 MICROBLAZE ARCHITECTURE
 M:	Michal Simek <monstr@monstr.eu>
 S:	Supported
