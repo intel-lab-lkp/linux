@@ -230,7 +230,8 @@ static void ci_otg_work(struct work_struct *work)
 		ci_handle_vbus_change(ci);
 	}
 
-	pm_runtime_put_sync(ci->dev);
+	pm_runtime_mark_last_busy(ci->dev);
+	pm_runtime_put_sync_autosuspend(ci->dev);
 
 	enable_irq(ci->irq);
 }
