@@ -20,6 +20,7 @@
 #include <linux/platform_device.h>
 
 #include "../../pci.h"
+#include "../pci-host-common.h"
 #include "pcie-designware.h"
 
 static struct pci_ops dw_pcie_ops;
@@ -1227,6 +1228,7 @@ EXPORT_SYMBOL_GPL(dw_pcie_suspend_noirq);
 
 int dw_pcie_resume_noirq(struct dw_pcie *pci)
 {
+	struct dw_pcie_rp *pp = &pci->pp;
 	int ret;
 
 	if (!pci->suspended)
@@ -1234,23 +1236,28 @@ int dw_pcie_resume_noirq(struct dw_pcie *pci)
 
 	pci->suspended = false;
 
-	if (pci->pp.ops->init) {
-		ret = pci->pp.ops->init(&pci->pp);
+	if (pp->ops->init) {
+		ret = pp->ops->init(pp);
 		if (ret) {
 			dev_err(pci->dev, "Host init failed: %d\n", ret);
 			return ret;
 		}
 	}
 
-	dw_pcie_setup_rc(&pci->pp);
+	dw_pcie_setup_rc(pp);
 
 	ret = dw_pcie_start_link(pci);
 	if (ret)
 		return ret;
 
 	ret = dw_pcie_wait_for_link(pci);
-	if (ret)
-		return ret;
+	/*
+	 * Skip failure if there is no device attached to the bus now and before
+	 * suspend. But the error should be returned if a device was attached
+	 * before suspend and not available now.
+	 */
+	if (ret == -ENODEV && !pci_root_ports_have_device(pp->bridge->bus))
+		return 0;
 
 	return ret;
 }
