@@ -6075,6 +6075,9 @@ void qla24xx_process_purex_rdp(struct scsi_qla_host *vha,
 	uint rsp_payload_length = sizeof(*rsp_payload);
 	int rval;
 
+	if (item->size < sizeof(*purex))
+		return;
+
 	ql_dbg(ql_dbg_init + ql_dbg_verbose, vha, 0x0180,
 	    "%s: Enter\n", __func__);
 
