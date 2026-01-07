@@ -620,8 +620,10 @@ struct fuse_fs_context {
 	unsigned int blksize;
 	const char *subtype;
 
-	/* DAX device, may be NULL */
+	/* DAX device for virtiofs, may be NULL */
 	struct dax_device *dax_dev;
+
+	const char *shadow; /* famfs - null if not famfs */
 
 	/* fuse_dev pointer to fill in, should contain NULL on entry */
 	void **fudptr;
@@ -998,6 +1000,18 @@ struct fuse_conn {
 		/* Request timeout (in jiffies). 0 = no timeout */
 		unsigned int req_timeout;
 	} timeout;
+
+	/*
+	 * This is a workaround until fuse uses iomap for reads.
+	 * For fuseblk servers, this represents the blocksize passed in at
+	 * mount time and for regular fuse servers, this is equivalent to
+	 * inode->i_blkbits.
+	 */
+	u8 blkbits;
+
+#if IS_ENABLED(CONFIG_FUSE_FAMFS_DAX)
+	char *shadow;
+#endif
 };
 
 /*
@@ -1630,5 +1644,14 @@ extern void fuse_sysctl_unregister(void);
 #define fuse_sysctl_register()		(0)
 #define fuse_sysctl_unregister()	do { } while (0)
 #endif /* CONFIG_SYSCTL */
+
+/* famfs.c */
+
+static inline void famfs_teardown(struct fuse_conn *fc)
+{
+#if IS_ENABLED(CONFIG_FUSE_FAMFS_DAX)
+	kfree(fc->shadow);
+#endif
+}
 
 #endif /* _FS_FUSE_I_H */
