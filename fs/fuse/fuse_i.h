@@ -1018,6 +1018,8 @@ struct fuse_conn {
 	u8 blkbits;
 
 #if IS_ENABLED(CONFIG_FUSE_FAMFS_DAX)
+	struct rw_semaphore famfs_devlist_sem;
+	struct famfs_dax_devlist *dax_devlist;
 	char *shadow;
 #endif
 };
@@ -1663,13 +1665,15 @@ int famfs_file_init_dax(struct fuse_mount *fm,
 			     struct inode *inode, void *fmap_buf,
 			     size_t fmap_size);
 void __famfs_meta_free(void *map);
-#endif
+void famfs_teardown(struct fuse_conn *fc);
+#else
 static inline void famfs_teardown(struct fuse_conn *fc)
 {
 #if IS_ENABLED(CONFIG_FUSE_FAMFS_DAX)
 	kfree(fc->shadow);
 #endif
 }
+#endif
 
 static inline void famfs_meta_init(struct fuse_inode *fi)
 {
@@ -1685,6 +1689,13 @@ static inline struct fuse_backing *famfs_meta_set(struct fuse_inode *fi,
 	return cmpxchg(&fi->famfs_meta, NULL, meta);
 #else
 	return NULL;
+#endif
+}
+
+static inline void famfs_init_devlist_sem(struct fuse_conn *fc)
+{
+#if IS_ENABLED(CONFIG_FUSE_FAMFS_DAX)
+	init_rwsem(&fc->famfs_devlist_sem);
 #endif
 }
 
