@@ -2388,6 +2388,17 @@ config MFD_QCOM_PM8008
 	  under it in the device tree. Additional drivers must be enabled in
 	  order to use the functionality of the device.
 
+config MFD_SONY_CRONOS_SMC
+	tristate "Sony Cronos System Management Controller"
+	select MFD_CORE
+	select REGMAP_I2C
+	depends on I2C && OF
+	help
+      Support for the Sony Cronos system controller. Additional drivers must
+      be enabled in order to use the functionality of the device, including LED
+      control and the system watchdog. The controller itself is a custom design
+      tailored to the specific needs of the Sony Cronos hardware platform.
+
 menu "Multimedia Capabilities Port drivers"
 	depends on ARCH_SA1100
 
