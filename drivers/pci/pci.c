@@ -5108,6 +5108,7 @@ EXPORT_SYMBOL_GPL(pci_dev_unlock);
 
 static void pci_dev_save_and_disable(struct pci_dev *dev)
 {
+	u32 val;
 	const struct pci_error_handlers *err_handler =
 			dev->driver ? dev->driver->err_handler : NULL;
 
@@ -5127,6 +5128,12 @@ static void pci_dev_save_and_disable(struct pci_dev *dev)
 	 * to a non-D0 state anyway.
 	 */
 	pci_set_power_state(dev, PCI_D0);
+
+	pci_read_config_dword(dev, PCI_COMMAND, &val);
+	if (PCI_POSSIBLE_ERROR(val)) {
+		pci_warn(dev, "Device config space inaccessible\n");
+		return;
+	}
 
 	pci_save_state(dev);
 	/*
