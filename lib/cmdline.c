@@ -191,6 +191,27 @@ unsigned long long memparse(const char *ptr, char **retptr)
 EXPORT_SYMBOL(memparse);
 
 /**
+ *	memvalue -  Wrap memparse() with simple error detection
+ *	@ptr: Where parse begins
+ *
+ *	Unconditionally returns ULLONG_MAX for a presumably negative value.
+ *	Otherwise uses memparse() to parse a string into a number and returns
+ *	this number or ULLONG_MAX if an unrecognized character was encountered.
+ */
+
+unsigned long long memvalue(const char *ptr)
+{
+	unsigned long long ret;
+	char *end;
+
+	if (*ptr == '-')
+		return ULLONG_MAX;
+	ret = memparse(ptr, &end);
+	return *end ? ULLONG_MAX : ret;
+}
+EXPORT_SYMBOL(memvalue);
+
+/**
  *	parse_option_str - Parse a string and check an option is set or not
  *	@str: String to be parsed
  *	@option: option name
