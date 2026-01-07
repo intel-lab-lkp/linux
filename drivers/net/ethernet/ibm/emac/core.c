@@ -1277,39 +1277,6 @@ static int emac_open(struct net_device *ndev)
 	return -ENOMEM;
 }
 
-/* BHs disabled */
-#if 0
-static int emac_link_differs(struct emac_instance *dev)
-{
-	u32 r = in_be32(&dev->emacp->mr1);
-
-	int duplex = r & EMAC_MR1_FDE ? DUPLEX_FULL : DUPLEX_HALF;
-	int speed, pause, asym_pause;
-
-	if (r & EMAC_MR1_MF_1000)
-		speed = SPEED_1000;
-	else if (r & EMAC_MR1_MF_100)
-		speed = SPEED_100;
-	else
-		speed = SPEED_10;
-
-	switch (r & (EMAC_MR1_EIFC | EMAC_MR1_APP)) {
-	case (EMAC_MR1_EIFC | EMAC_MR1_APP):
-		pause = 1;
-		asym_pause = 0;
-		break;
-	case EMAC_MR1_APP:
-		pause = 0;
-		asym_pause = 1;
-		break;
-	default:
-		pause = asym_pause = 0;
-	}
-	return speed != dev->phy.speed || duplex != dev->phy.duplex ||
-	    pause != dev->phy.pause || asym_pause != dev->phy.asym_pause;
-}
-#endif
-
 static void emac_link_timer(struct work_struct *work)
 {
 	struct emac_instance *dev =
