@@ -2896,6 +2896,30 @@ static bool allocate_vpe_l2_table(int cpu, u32 id)
 	return true;
 }
 
+static void *vpe_alloc_cpumask(void)
+{
+	/*
+	 * With PREEMPT_RT kernel, we can't call any k*alloc() APIs as they
+	 * may acquire a sleeping rt_spin_lock in an atomic context. So use
+	 * a pre-allocated buffer instead.
+	 */
+	if (IS_ENABLED(CONFIG_PREEMPT_RT)) {
+		static unsigned long mask_buf[512];
+		static atomic_t	alloc_idx;
+		int idx, mask_size = cpumask_size();
+		int nr_cpumasks = sizeof(mask_buf)/mask_size;
+
+		/*
+		 * Fetch an allocation index and if it points to a buffer within
+		 * mask_buf[], return that. Fall back to kzalloc() otherwise.
+		 */
+		idx = atomic_fetch_inc(&alloc_idx);
+		if (idx < nr_cpumasks)
+			return &mask_buf[idx * mask_size/sizeof(long)];
+	}
+	return kzalloc(sizeof(cpumask_t), GFP_ATOMIC);
+}
+
 static int allocate_vpe_l1_table(void)
 {
 	void __iomem *vlpi_base = gic_data_rdist_vlpi_base();
@@ -2927,7 +2951,7 @@ static int allocate_vpe_l1_table(void)
 	if (val & GICR_VPROPBASER_4_1_VALID)
 		goto out;
 
-	gic_data_rdist()->vpe_table_mask = kzalloc(sizeof(cpumask_t), GFP_ATOMIC);
+	gic_data_rdist()->vpe_table_mask = vpe_alloc_cpumask();
 	if (!gic_data_rdist()->vpe_table_mask)
 		return -ENOMEM;
 
