@@ -414,6 +414,8 @@ static int snd_rk_mc_probe(struct platform_device *pdev)
 		card->dai_link[0].platforms->of_node = np_cpu;
 	} else {
 		dev_err(dev, "At least one of codecs should be specified\n");
+		if (np_cpu)
+			of_node_put(np_cpu);
 		return -EINVAL;
 	}
 
@@ -423,7 +425,7 @@ static int snd_rk_mc_probe(struct platform_device *pdev)
 	if (np_audio) {
 		ret = rk_parse_headset_from_of(dev, np);
 		if (ret)
-			return ret;
+			goto err_put_nodes;
 	}
 
 	/* Parse card name. */
@@ -431,7 +433,7 @@ static int snd_rk_mc_probe(struct platform_device *pdev)
 	if (ret) {
 		dev_err(&pdev->dev,
 			"Soc parse card name failed %d\n", ret);
-		return ret;
+		goto err_put_nodes;
 	}
 
 	/* register the soc card */
@@ -439,8 +441,27 @@ static int snd_rk_mc_probe(struct platform_device *pdev)
 	if (ret) {
 		dev_err(&pdev->dev,
 			"Soc register card failed %d\n", ret);
-		return ret;
+		goto err_put_nodes;
 	}
+
+	return ret;
+
+err_put_nodes:
+	for (int i = 0; i < card->num_links; i++) {
+		if (card->dai_link[i].codecs->of_node)
+			card->dai_link[i].codecs->of_node = NULL;
+		if (card->dai_link[i].cpus->of_node)
+			card->dai_link[i].cpus->of_node = NULL;
+		if (card->dai_link[i].platforms->of_node)
+			card->dai_link[i].platforms->of_node = NULL;
+	}
+
+	if (np_audio)
+		of_node_put(np_audio);
+	if (np_hdmi)
+		of_node_put(np_hdmi);
+	if (np_cpu)
+		of_node_put(np_cpu);
 
 	return ret;
 }
