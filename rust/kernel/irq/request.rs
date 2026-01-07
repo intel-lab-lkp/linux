@@ -120,6 +120,13 @@ impl<'a> IrqRequest<'a> {
     pub fn irq(&self) -> u32 {
         self.irq
     }
+
+    /// Set the IRQ as a wake IRQ.
+    pub fn set_wake_irq(&self) -> Result {
+        // SAFETY: `self.as_raw()` is a valid pointer to a `struct device`.
+        let ret = unsafe { bindings::dev_pm_set_wake_irq(self.dev.as_raw(), self.irq as i32) };
+        to_result(ret)
+    }
 }
 
 /// A registration of an IRQ handler for a given IRQ line.
