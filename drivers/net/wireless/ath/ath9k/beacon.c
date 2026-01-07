@@ -236,7 +236,8 @@ void ath9k_beacon_remove_slot(struct ath_softc *sc, struct ieee80211_vif *vif)
 
 	avp->av_bcbuf = NULL;
 	sc->beacon.bslot[avp->av_bslot] = NULL;
-	list_add_tail(&bf->list, &sc->beacon.bbuf);
+	if (bf)
+		list_add_tail(&bf->list, &sc->beacon.bbuf);
 
 	tasklet_enable(&sc->bcon_tasklet);
 }
