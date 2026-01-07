@@ -23,7 +23,6 @@
 
 #define BITMASK(bits)		(BIT(bits) - 1)
 
-#define ALE_VERSION_1R3		0x0103
 #define ALE_VERSION_1R4		0x0104
 
 /* ALE Registers */
