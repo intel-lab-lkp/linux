@@ -45,6 +45,11 @@ static int idpf_get_rxnfc(struct net_device *netdev, struct ethtool_rxnfc *cmd,
 
 	idpf_vport_ctrl_lock(netdev);
 	vport = idpf_netdev_to_vport(netdev);
+	if (!vport) {
+		netdev_err(netdev, "failed to get rules due to no vport in netdev\n");
+		err = -EFAULT;
+		goto unlock;
+	}
 	vport_config = np->adapter->vport_config[np->vport_idx];
 	user_config = &vport_config->user_config;
 
@@ -85,6 +90,7 @@ static int idpf_get_rxnfc(struct net_device *netdev, struct ethtool_rxnfc *cmd,
 		break;
 	}
 
+unlock:
 	idpf_vport_ctrl_unlock(netdev);
 
 	return err;
