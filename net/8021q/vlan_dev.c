@@ -519,6 +519,19 @@ static const struct device_type vlan_type = {
 
 static const struct net_device_ops vlan_netdev_ops;
 
+void vlan_dev_set_header_attributes(struct net_device *dev,
+				    struct net_device *vlan_dev,
+				    __be16 proto)
+{
+	if (vlan_hw_offload_capable(dev->features, proto)) {
+		vlan_dev->header_ops      = &vlan_passthru_header_ops;
+		vlan_dev->hard_header_len = dev->hard_header_len;
+	} else {
+		vlan_dev->header_ops      = &vlan_header_ops;
+		vlan_dev->hard_header_len = dev->hard_header_len + VLAN_HLEN;
+	}
+}
+
 static int vlan_dev_init(struct net_device *dev)
 {
 	struct vlan_dev_priv *vlan = vlan_dev_priv(dev);
@@ -572,14 +585,7 @@ static int vlan_dev_init(struct net_device *dev)
 #endif
 
 	dev->needed_headroom = real_dev->needed_headroom;
-	if (vlan_hw_offload_capable(real_dev->features, vlan->vlan_proto)) {
-		dev->header_ops      = &vlan_passthru_header_ops;
-		dev->hard_header_len = real_dev->hard_header_len;
-	} else {
-		dev->header_ops      = &vlan_header_ops;
-		dev->hard_header_len = real_dev->hard_header_len + VLAN_HLEN;
-	}
-
+	vlan_dev_set_header_attributes(real_dev, dev, vlan->vlan_proto);
 	dev->netdev_ops = &vlan_netdev_ops;
 
 	SET_NETDEV_DEVTYPE(dev, &vlan_type);
