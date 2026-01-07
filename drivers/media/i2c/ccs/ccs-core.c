@@ -642,13 +642,18 @@ static const struct ccs_csi_data_format ccs_csi_data_formats[] = {
 	{ MEDIA_BUS_FMT_SRGGB8_1X8, 8, 8, CCS_PIXEL_ORDER_RGGB, },
 	{ MEDIA_BUS_FMT_SBGGR8_1X8, 8, 8, CCS_PIXEL_ORDER_BGGR, },
 	{ MEDIA_BUS_FMT_SGBRG8_1X8, 8, 8, CCS_PIXEL_ORDER_GBRG, },
+	/* Generic formats are placed below. */
+	{ MEDIA_BUS_FMT_RAW_8, 8, 8, 0, true },
+	{ MEDIA_BUS_FMT_RAW_10, 10, 10, 0, true },
+	{ MEDIA_BUS_FMT_RAW_12, 12, 12, 0, true },
+	{ MEDIA_BUS_FMT_RAW_14, 14, 14, 0, true },
 };
 
 static const char *pixel_order_str[] = { "GRBG", "RGGB", "BGGR", "GBRG" };
 
-#define to_csi_format_idx(fmt) (((unsigned long)(fmt)			\
-				 - (unsigned long)ccs_csi_data_formats) \
-				/ sizeof(*ccs_csi_data_formats))
+#define to_csi_format_idx(fmt)						\
+	(((unsigned long)(fmt) - (unsigned long)ccs_csi_data_formats)	\
+	 / sizeof(*ccs_csi_data_formats))
 
 static u32 ccs_pixel_order(struct ccs_sensor *sensor)
 {
@@ -669,27 +674,25 @@ static u32 ccs_pixel_order(struct ccs_sensor *sensor)
 
 static void ccs_update_mbus_formats(struct ccs_sensor *sensor)
 {
-	struct i2c_client *client = v4l2_get_subdevdata(&sensor->src->sd);
+	unsigned int mask = sensor->csi_format->is_generic ? ~0 : ~3;
 	unsigned int csi_format_idx =
-		to_csi_format_idx(sensor->csi_format) & ~3;
+		to_csi_format_idx(sensor->csi_format) & mask;
 	unsigned int internal_csi_format_idx =
-		to_csi_format_idx(sensor->internal_csi_format) & ~3;
-	unsigned int pixel_order = ccs_pixel_order(sensor);
+		to_csi_format_idx(sensor->internal_csi_format) & mask;
+	unsigned int pixel_order = sensor->csi_format->is_generic ?
+		0 : ccs_pixel_order(sensor);
 
 	if (WARN_ON_ONCE(max(internal_csi_format_idx, csi_format_idx) +
 			 pixel_order >= ARRAY_SIZE(ccs_csi_data_formats)))
 		return;
 
 	sensor->mbus_frame_fmts =
-		sensor->default_mbus_frame_fmts << pixel_order;
+		(sensor->default_mbus_frame_fmts << pixel_order) |
+		sensor->default_generic_mbus_frame_fmts;
 	sensor->csi_format =
 		&ccs_csi_data_formats[csi_format_idx + pixel_order];
 	sensor->internal_csi_format =
-		&ccs_csi_data_formats[internal_csi_format_idx
-					 + pixel_order];
-
-	dev_dbg(&client->dev, "new pixel order %s\n",
-		pixel_order_str[pixel_order]);
+		&ccs_csi_data_formats[internal_csi_format_idx + pixel_order];
 }
 
 static const char * const ccs_test_patterns[] = {
@@ -896,7 +899,7 @@ static int ccs_init_controls(struct ccs_sensor *sensor)
 	struct v4l2_fwnode_device_properties props;
 	int rval;
 
-	rval = v4l2_ctrl_handler_init(&sensor->pixel_array->ctrl_handler, 19);
+	rval = v4l2_ctrl_handler_init(&sensor->pixel_array->ctrl_handler, 21);
 	if (rval)
 		return rval;
 
@@ -1091,6 +1094,17 @@ static int ccs_init_controls(struct ccs_sensor *sensor)
 
 	v4l2_ctrl_cluster(2, &sensor->hflip);
 
+	v4l2_ctrl_new_std(&sensor->pixel_array->ctrl_handler, NULL,
+			  V4L2_CID_CFA_PATTERN, sensor->default_pixel_order,
+			  sensor->default_pixel_order, 1,
+			  sensor->default_pixel_order);
+
+	v4l2_ctrl_new_std(&sensor->pixel_array->ctrl_handler, NULL,
+			  V4L2_CID_CFA_PATTERN_FLIP,
+			  V4L2_CFA_PATTERN_FLIP_BOTH,
+			  V4L2_CFA_PATTERN_FLIP_BOTH, 1,
+			  V4L2_CFA_PATTERN_FLIP_BOTH);
+
 	rval = v4l2_ctrl_handler_init(&sensor->src->ctrl_handler, 0);
 	if (rval)
 		return rval;
@@ -1199,13 +1213,19 @@ static int ccs_get_mbus_formats(struct ccs_sensor *sensor)
 			const struct ccs_csi_data_format *f =
 				&ccs_csi_data_formats[j];
 
-			if (f->pixel_order != CCS_PIXEL_ORDER_GRBG)
-				continue;
-
 			if (f->width != fmt >>
 			    CCS_DATA_FORMAT_DESCRIPTOR_UNCOMPRESSED_SHIFT ||
 			    f->compressed !=
 			    (fmt & CCS_DATA_FORMAT_DESCRIPTOR_COMPRESSED_MASK))
+				continue;
+
+			if (f->is_generic) {
+				sensor->default_generic_mbus_frame_fmts |=
+					BIT_U64(j);
+				continue;
+			}
+
+			if (f->pixel_order != CCS_PIXEL_ORDER_GRBG)
 				continue;
 
 			dev_dbg(&client->dev, "jolly good! %u\n", j);

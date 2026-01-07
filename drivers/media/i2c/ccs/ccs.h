@@ -170,6 +170,7 @@ struct ccs_csi_data_format {
 	u8 width;
 	u8 compressed;
 	u8 pixel_order;
+	bool is_generic;
 };
 
 #define CCS_SUBDEVS			3
@@ -226,6 +227,7 @@ struct ccs_sensor {
 	const struct ccs_csi_data_format *csi_format;
 	const struct ccs_csi_data_format *internal_csi_format;
 	u64 default_mbus_frame_fmts;
+	u64 default_generic_mbus_frame_fmts;
 	int default_pixel_order;
 	struct ccs_data_container sdata, mdata;
 
