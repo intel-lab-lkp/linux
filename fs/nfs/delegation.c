@@ -308,8 +308,6 @@ static struct inode *nfs_delegation_grab_inode(struct nfs_delegation *delegation
 	spin_lock(&delegation->lock);
 	if (delegation->inode != NULL)
 		inode = igrab(delegation->inode);
-	if (!inode)
-		set_bit(NFS_DELEGATION_INODE_FREEING, &delegation->flags);
 	spin_unlock(&delegation->lock);
 	return inode;
 }
@@ -638,8 +636,6 @@ restart:
 	list_for_each_entry_from_rcu(delegation, &server->delegations, super_list) {
 		struct inode *to_put = NULL;
 
-		if (test_bit(NFS_DELEGATION_INODE_FREEING, &delegation->flags))
-			continue;
 		if (!nfs_delegation_need_return(delegation)) {
 			if (nfs4_is_valid_delegation(delegation, 0))
 				prev = delegation;
@@ -760,7 +756,6 @@ void nfs_inode_evict_delegation(struct inode *inode)
 		return;
 
 	set_bit(NFS_DELEGATION_RETURNING, &delegation->flags);
-	set_bit(NFS_DELEGATION_INODE_FREEING, &delegation->flags);
 	nfs_do_return_delegation(inode, delegation, 1);
 	nfs_free_delegation(server, delegation);
 }
@@ -1248,9 +1243,7 @@ static int nfs_server_reap_unclaimed_delegations(struct nfs_server *server,
 restart:
 	rcu_read_lock();
 	list_for_each_entry_rcu(delegation, &server->delegations, super_list) {
-		if (test_bit(NFS_DELEGATION_INODE_FREEING,
-					&delegation->flags) ||
-		    test_bit(NFS_DELEGATION_RETURNING,
+		if (test_bit(NFS_DELEGATION_RETURNING,
 					&delegation->flags) ||
 		    test_bit(NFS_DELEGATION_NEED_RECLAIM,
 					&delegation->flags) == 0)
@@ -1385,9 +1378,7 @@ static int nfs_server_reap_expired_delegations(struct nfs_server *server,
 restart:
 	rcu_read_lock();
 	list_for_each_entry_rcu(delegation, &server->delegations, super_list) {
-		if (test_bit(NFS_DELEGATION_INODE_FREEING,
-					&delegation->flags) ||
-		    test_bit(NFS_DELEGATION_RETURNING,
+		if (test_bit(NFS_DELEGATION_RETURNING,
 					&delegation->flags) ||
 		    test_bit(NFS_DELEGATION_TEST_EXPIRED,
 					&delegation->flags) == 0 ||
