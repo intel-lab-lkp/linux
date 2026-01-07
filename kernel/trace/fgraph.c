@@ -837,7 +837,8 @@ __ftrace_return_to_handler(struct ftrace_regs *fregs, unsigned long frame_pointe
 		goto out;
 
 #ifdef CONFIG_FUNCTION_GRAPH_RETVAL
-	trace.retval = ftrace_regs_get_return_value(fregs);
+	if (fregs)
+		trace.retval = ftrace_regs_get_return_value(fregs);
 #endif
 
 	bitmap = get_bitmap_bits(current, offset);
