@@ -12,10 +12,13 @@
 #include <sys/mman.h>
 
 #include <uapi/linux/types.h>
+#include <linux/align.h>
 #include <linux/iommufd.h>
+#include <linux/kernel.h>
 #include <linux/limits.h>
 #include <linux/mman.h>
 #include <linux/overflow.h>
+#include <linux/sizes.h>
 #include <linux/types.h>
 #include <linux/vfio.h>
 
@@ -124,20 +127,43 @@ static void vfio_pci_region_get(struct vfio_pci_device *device, int index,
 static void vfio_pci_bar_map(struct vfio_pci_device *device, int index)
 {
 	struct vfio_pci_bar *bar = &device->bars[index];
+	size_t align, size;
+	void *map_base, *map_align;
 	int prot = 0;
 
 	VFIO_ASSERT_LT(index, PCI_STD_NUM_BARS);
 	VFIO_ASSERT_NULL(bar->vaddr);
 	VFIO_ASSERT_TRUE(bar->info.flags & VFIO_REGION_INFO_FLAG_MMAP);
+	VFIO_ASSERT_GT(bar->info.size, 0);
 
 	if (bar->info.flags & VFIO_REGION_INFO_FLAG_READ)
 		prot |= PROT_READ;
 	if (bar->info.flags & VFIO_REGION_INFO_FLAG_WRITE)
 		prot |= PROT_WRITE;
 
-	bar->vaddr = mmap(NULL, bar->info.size, prot, MAP_FILE | MAP_SHARED,
+	/*
+	 * Align the mmap for more efficient IOMMU mapping.
+	 * The largest PUD size supporting huge pfnmap is 1GiB.
+	 */
+	size = bar->info.size;
+	align = min_t(u64, 1ULL << __builtin_ctzll(size), SZ_1G);
+
+	map_base = mmap(NULL, size + align, PROT_NONE,
+			MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	VFIO_ASSERT_NE(map_base, MAP_FAILED);
+
+	map_align = (void *)ALIGN((uintptr_t)map_base, align);
+
+	if (map_align > map_base)
+		munmap(map_base, map_align - map_base);
+	if (align > (size_t)(map_align - map_base))
+		munmap(map_align + size, align - (map_align - map_base));
+
+	bar->vaddr = mmap(map_align, size, prot, MAP_SHARED | MAP_FIXED,
 			  device->fd, bar->info.offset);
 	VFIO_ASSERT_NE(bar->vaddr, MAP_FAILED);
+
+	madvise(bar->vaddr, size, MADV_HUGEPAGE);
 }
 
 static void vfio_pci_bar_unmap(struct vfio_pci_device *device, int index)
