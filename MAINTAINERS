@@ -25017,6 +25017,9 @@ F:	include/linux/jump_label*.h
 F:	include/linux/static_call*.h
 F:	kernel/jump_label.c
 F:	kernel/static_call*.c
+F:	rust/helpers/jump_label.c
+F:	rust/kernel/generated_arch_static_branch_asm.rs.S
+F:	rust/kernel/jump_label.rs
 
 STI AUDIO (ASoC) DRIVERS
 M:	Arnaud Pouliquen <arnaud.pouliquen@foss.st.com>
@@ -26470,6 +26473,7 @@ F:	include/linux/trace*.h
 F:	include/trace/
 F:	kernel/trace/
 F:	kernel/tracepoint.c
+F:	rust/kernel/tracepoint.rs
 F:	scripts/tracing/
 F:	scripts/tracepoint-update.c
 F:	tools/testing/selftests/ftrace/
