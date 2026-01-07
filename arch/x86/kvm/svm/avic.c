@@ -1224,7 +1224,7 @@ static bool __init avic_want_avic_enabled(void)
 	 * In "auto" mode, enable AVIC by default for Zen4+ if x2AVIC is
 	 * supported (to avoid enabling partial support by default, and because
 	 * x2AVIC should be supported by all Zen4+ CPUs).  Explicitly check for
-	 * family 0x19 and later (Zen5+), as the kernel's synthetic ZenX flags
+	 * family 0x1A and later (Zen5+), as the kernel's synthetic ZenX flags
 	 * aren't inclusive of previous generations, i.e. the kernel will set
 	 * at most one ZenX feature flag.
 	 */
