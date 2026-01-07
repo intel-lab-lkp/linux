@@ -23,6 +23,7 @@
 /*
  */
 
+#include <linux/acpi.h>
 #include <linux/dmi.h>
 #include <linux/hid.h>
 #include <linux/module.h>
@@ -319,6 +320,36 @@ static int asus_e1239t_event(struct asus_drvdata *drvdat, u8 *data, int size)
 
 	return 0;
 }
+
+/*
+ * Send events to asus-wmi driver for handling special keys
+ */
+#if IS_REACHABLE(CONFIG_ASUS_WMI)
+static int asus_wmi_send_event(struct asus_drvdata *drvdata, u8 code)
+{
+	int err;
+	u32 retval;
+
+	err = asus_wmi_evaluate_method(ASUS_WMI_METHODID_DEVS,
+				       ASUS_WMI_METHODID_NOTIF, code, &retval);
+	if (err) {
+		pr_warn("Failed to notify asus-wmi: %d\n", err);
+		return err;
+	}
+
+	if (retval != 0) {
+		pr_warn("Failed to notify asus-wmi (retval): 0x%x\n", retval);
+		return -EIO;
+	}
+
+	return 0;
+}
+#else
+static inline int asus_wmi_send_event(struct asus_drvdata *drvdata, u8 code)
+{
+	return -ENODEV;
+}
+#endif
 
 static int asus_event(struct hid_device *hdev, struct hid_field *field,
 		      struct hid_usage *usage, __s32 value)
