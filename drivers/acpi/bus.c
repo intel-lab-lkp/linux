@@ -1458,6 +1458,9 @@ static int __init acpi_bus_init(void)
 	/* Initialize sleep structures */
 	acpi_sleep_init();
 
+	/* Initialize default acpi s2idle ops */
+	acpi_s2idle_init();
+
 	/*
 	 * Get the system interrupt model and evaluate \_PIC.
 	 */
