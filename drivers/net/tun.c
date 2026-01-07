@@ -3736,6 +3736,29 @@ struct socket *tun_get_socket(struct file *file)
 }
 EXPORT_SYMBOL_GPL(tun_get_socket);
 
+int tun_ring_consume_batched(struct file *file, void **array, int n)
+{
+	struct tun_file *tfile = file->private_data;
+	struct ptr_ring *ring = &tfile->tx_ring;
+	struct net_device *dev;
+	int i;
+
+	spin_lock(&ring->consumer_lock);
+
+	i = __ptr_ring_consume_batched(ring, array, n);
+	if (__ptr_ring_consume_created_space(ring, i)) {
+		rcu_read_lock();
+		dev = rcu_dereference(tfile->tun)->dev;
+		netif_wake_subqueue(dev, tfile->queue_index);
+		rcu_read_unlock();
+	}
+
+	spin_unlock(&ring->consumer_lock);
+
+	return i;
+}
+EXPORT_SYMBOL_GPL(tun_ring_consume_batched);
+
 struct ptr_ring *tun_get_tx_ring(struct file *file)
 {
 	struct tun_file *tfile;

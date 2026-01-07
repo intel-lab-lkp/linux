@@ -774,6 +774,29 @@ static void *tap_ring_consume(struct tap_queue *q)
 	return ptr;
 }
 
+int tap_ring_consume_batched(struct file *file, void **array, int n)
+{
+	struct tap_queue *q = file->private_data;
+	struct ptr_ring *ring = &q->ring;
+	struct net_device *dev;
+	int i;
+
+	spin_lock(&ring->consumer_lock);
+
+	i = __ptr_ring_consume_batched(ring, array, n);
+	if (__ptr_ring_consume_created_space(ring, i)) {
+		rcu_read_lock();
+		dev = rcu_dereference(q->tap)->dev;
+		netif_wake_subqueue(dev, q->queue_index);
+		rcu_read_unlock();
+	}
+
+	spin_unlock(&ring->consumer_lock);
+
+	return i;
+}
+EXPORT_SYMBOL_GPL(tap_ring_consume_batched);
+
 static ssize_t tap_do_read(struct tap_queue *q,
 			   struct iov_iter *to,
 			   int noblock, struct sk_buff *skb)
