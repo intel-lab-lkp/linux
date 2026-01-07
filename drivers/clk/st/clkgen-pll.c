@@ -777,7 +777,7 @@ static void __init clkgen_c32_pll_setup(struct device_node *np,
 	clk = clkgen_pll_register(parent_name, datac->data, pll_base, pll_flags,
 				  np->name, datac->data->lock);
 	if (IS_ERR(clk))
-		return;
+		goto err_unmap;
 
 	pll_name = __clk_get_name(clk);
 
@@ -785,7 +785,7 @@ static void __init clkgen_c32_pll_setup(struct device_node *np,
 
 	clk_data = kzalloc(sizeof(*clk_data), GFP_KERNEL);
 	if (!clk_data)
-		return;
+		goto err_unmap;
 
 	clk_data->clk_num = num_odfs;
 	clk_data->clks = kcalloc(clk_data->clk_num, sizeof(struct clk *),
@@ -827,6 +827,9 @@ err:
 	kfree(pll_name);
 	kfree(clk_data->clks);
 	kfree(clk_data);
+err_unmap:
+	if (pll_base)
+		iounmap(pll_base);
 }
 static void __init clkgen_c32_pll0_setup(struct device_node *np)
 {
