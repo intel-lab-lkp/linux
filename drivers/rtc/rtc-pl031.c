@@ -284,10 +284,6 @@ static int pl031_set_alarm(struct device *dev, struct rtc_wkalrm *alarm)
 
 static void pl031_remove(struct amba_device *adev)
 {
-	struct pl031_local *ldata = dev_get_drvdata(&adev->dev);
-
-	if (adev->irq[0])
-		free_irq(adev->irq[0], ldata);
 	amba_release_regions(adev);
 }
 
@@ -319,8 +315,6 @@ static int pl031_probe(struct amba_device *adev, const struct amba_id *id)
 		ret = -ENOMEM;
 		goto out;
 	}
-
-	amba_set_drvdata(adev, ldata);
 
 	dev_dbg(&adev->dev, "designer ID = 0x%02x\n", amba_manf(adev));
 	dev_dbg(&adev->dev, "revision = 0x%01x\n", amba_rev(adev));
@@ -356,6 +350,7 @@ static int pl031_probe(struct amba_device *adev, const struct amba_id *id)
 		ret = PTR_ERR(ldata->rtc);
 		goto out;
 	}
+	dev_set_drvdata(&ldata->rtc->dev, ldata);
 
 	if (!adev->irq[0])
 		clear_bit(RTC_FEATURE_ALARM, ldata->rtc->features);
@@ -369,7 +364,7 @@ static int pl031_probe(struct amba_device *adev, const struct amba_id *id)
 		goto out;
 
 	if (adev->irq[0]) {
-		ret = request_irq(adev->irq[0], pl031_interrupt,
+		ret = devm_request_irq(&adev->dev, adev->irq[0], pl031_interrupt,
 				  vendor->irqflags, "rtc-pl031", ldata);
 		if (ret)
 			goto out;
