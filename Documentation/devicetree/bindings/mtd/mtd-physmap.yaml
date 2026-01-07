@@ -13,10 +13,6 @@ description: |
   Flash chips (Memory Technology Devices) are often used for solid state
   file systems on embedded devices.
 
-allOf:
-  - $ref: mtd.yaml#
-  - $ref: /schemas/memory-controllers/mc-peripheral-props.yaml#
-
 properties:
   compatible:
     oneOf:
@@ -61,6 +57,8 @@ properties:
           - jedec-flash
           - mtd-ram
           - mtd-rom
+          - mtd-mem
+          - mtd-memro
 
   reg:
     description: |
@@ -141,19 +139,37 @@ required:
   - compatible
   - reg
 
-if:
-  properties:
-    compatible:
-      contains:
-        const: cortina,gemini-flash
-then:
-  properties:
-    syscon:
-      $ref: /schemas/types.yaml#/definitions/phandle
-      description:
-        Phandle to the syscon controller
-  required:
-    - syscon
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: cortina,gemini-flash
+    then:
+      properties:
+        syscon:
+          $ref: /schemas/types.yaml#/definitions/phandle
+          description:
+            Phandle to the syscon controller
+          required:
+            - syscon
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - mtd-mem
+              - mtd-memro
+    then:
+      $ref: /schemas/reserved-memory/reserved-memory.yaml
+      required:
+        - no-map
+      properties:
+        addr-gpios: false
+    else:
+      allOf:
+        - $ref: /schemas/mtd/mtd.yaml
+        - $ref: /schemas/memory-controllers/mc-peripheral-props.yaml#
 
 unevaluatedProperties: false
 
@@ -231,6 +247,25 @@ examples:
         partition@0 {
             label = "test-part1";
             reg = <0 0x04000000>;
+        };
+    };
+
+  - |
+    /* An example using mtd-mem/mtd-memro */
+    reserved-memory {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        bm_logs_reserved: bm_logs_reserved@10000800 {
+            compatible = "mtd-mem";
+            reg = <0x1 0x0000800 0x0 0x0010000>;
+            no-map;
+        };
+
+        sys_logs_reserved: sys_logs_reserved@100120000  {
+            compatible = "mtd-memro";
+            reg = <0x1 0x00120000 0x0 0x0010000>;
+            no-map;
         };
     };
 ...
