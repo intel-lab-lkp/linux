@@ -1052,8 +1052,18 @@ static unsigned int demote_folio_list(struct list_head *demote_folios,
 	if (nodes_empty(allowed_mask))
 		return false;
 
-	if (!node_isset(target_nid, allowed_mask))
-		target_nid = node_random(&allowed_mask);
+	while (target_nid != NUMA_NO_NODE &&
+	       !node_isset(target_nid, allowed_mask)) {
+		/* Get the preferred demotion target from the next tier. */
+		target_nid = next_demotion_node(target_nid);
+	}
+
+	/*
+	 * The perferred node query is subject to race conditions such as
+	 * nodes in the next tier are hot-unplugged.
+	 */
+	if (target_nid == NUMA_NO_NODE)
+		return 0;
 	mtc.nid = target_nid;
 
 	/* Demotion ignores all cpuset and mempolicy settings */
