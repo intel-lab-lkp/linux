@@ -151,9 +151,61 @@ static ssize_t remove_id_store(struct device_driver *drv, const char *buf,
 }
 static DRIVER_ATTR_WO(remove_id);
 
+static const struct bus_type dax_bus_type;
+
+/*
+ * Custom bind/unbind handlers for dax bus.
+ * The unbind handler checks if a filesystem holds the dax device and
+ * returns -EBUSY if so, preventing driver unbind while in use.
+ */
+static ssize_t unbind_store(struct device_driver *drv, const char *buf,
+		size_t count)
+{
+	struct device *dev;
+	int rc = -ENODEV;
+
+	dev = bus_find_device_by_name(&dax_bus_type, NULL, buf);
+	if (dev && dev->driver == drv) {
+		struct dev_dax *dev_dax = to_dev_dax(dev);
+
+		if (dax_holder(dev_dax->dax_dev)) {
+			dev_dbg(dev,
+				"%s: blocking unbind due to active holder\n",
+				__func__);
+			rc = -EBUSY;
+			goto out;
+		}
+		device_release_driver(dev);
+		rc = count;
+	}
+out:
+	put_device(dev);
+	return rc;
+}
+static DRIVER_ATTR_WO(unbind);
+
+static ssize_t bind_store(struct device_driver *drv, const char *buf,
+		size_t count)
+{
+	struct device *dev;
+	int rc = -ENODEV;
+
+	dev = bus_find_device_by_name(&dax_bus_type, NULL, buf);
+	if (dev) {
+		rc = device_driver_attach(drv, dev);
+		if (!rc)
+			rc = count;
+	}
+	put_device(dev);
+	return rc;
+}
+static DRIVER_ATTR_WO(bind);
+
 static struct attribute *dax_drv_attrs[] = {
 	&driver_attr_new_id.attr,
 	&driver_attr_remove_id.attr,
+	&driver_attr_bind.attr,
+	&driver_attr_unbind.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(dax_drv);
@@ -1591,6 +1643,7 @@ int __dax_driver_register(struct dax_device_driver *dax_drv,
 	drv->name = mod_name;
 	drv->mod_name = mod_name;
 	drv->bus = &dax_bus_type;
+	drv->suppress_bind_attrs = true;
 
 	return driver_register(drv);
 }
