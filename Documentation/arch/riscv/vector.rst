@@ -13,13 +13,14 @@ order to support the use of the RISC-V Vector Extension.
 Two new prctl() calls are added to allow programs to manage the enablement
 status for the use of Vector in userspace. The intended usage guideline for
 these interfaces is to give init systems a way to modify the availability of V
-for processes running under its domain. Calling these interfaces is not
-recommended in libraries routines because libraries should not override policies
-configured from the parent process. Also, users must note that these interfaces
-are not portable to non-Linux, nor non-RISC-V environments, so it is discourage
-to use in a portable code. To get the availability of V in an ELF program,
-please read :c:macro:`COMPAT_HWCAP_ISA_V` bit of :c:macro:`ELF_HWCAP` in the
-auxiliary vector.
+for processes running under its domain. Changing Vector policy by calling
+:c:macro:`PR_RISCV_V_SET_CONTROL` is not recommended in library routines
+because libraries should not override policies configured by the parent process.
+Also, users must note that these interfaces are not portable to non-Linux,
+nor non-RISC-V environments, so their use is discouraged in portable code.
+To get the availability of V in an ELF program, user code may read the result of
+:c:macro:`PR_RISCV_V_GET_CONTROL`, or the :c:macro:`COMPAT_HWCAP_ISA_V` bit
+of :c:macro:`ELF_HWCAP` in the auxiliary vector.
 
 * prctl(PR_RISCV_V_SET_CONTROL, unsigned long arg)
 
@@ -91,9 +92,9 @@ auxiliary vector.
     Gets the same Vector enablement status for the calling thread. Setting for
     next execve() call and the inheritance bit are all OR-ed together.
 
-    Note that ELF programs are able to get the availability of V for itself by
-    reading :c:macro:`COMPAT_HWCAP_ISA_V` bit of :c:macro:`ELF_HWCAP` in the
-    auxiliary vector.
+    Note that ELF programs are able to get the availability of the standard V
+    extension for itself by reading :c:macro:`COMPAT_HWCAP_ISA_V` bit of
+    :c:macro:`ELF_HWCAP` in the auxiliary vector.
 
     Return value:
         * a nonnegative value on success;
@@ -138,3 +139,31 @@ As indicated by version 1.0 of the V extension [1], vector registers are
 clobbered by system calls.
 
 1: https://github.com/riscv/riscv-v-spec/blob/master/calling-convention.adoc
+
+4.  Vector Extensions Discovery
+-------------------------------
+
+Existing kernel supports running Vector code in the user space on hardware
+that only implements zve32x subextension, or 0.7 version of the spec when
+compiled with c:macro:`RISCV_ISA_V && RISCV_ISA_XTHEADVECTOR`. When the kernel
+recognizes and supports an extension on a hardware implementation, the
+kernel indicates its existence on /proc/cpuinfo, and the corresponding bits
+obtained from riscv_hwprobe(2) is also set.
+
+The existence of an extension does not necessary guarantee its availibility to
+any given process. Traditionally, :c:macro:`ELF_HWCAP` is used for such
+availibility check. This remains useful for checking the availabilty for standard
+Vector extension, by referencing the :c:macro:`COMPAT_HWCAP_ISA_V` bit.
+
+However, though the kernel provides compatibility for flexible hardware
+configurations, the kernel does not report the availability of subextension, nor
+pre-standarized Vector in :c:macro:`ELF_HWCAP` to prevent exagerating the
+limited bit space.
+
+c:macro:`HWCAP` is designed to serve as a quick check to see if the standard
+Vector is both *pressence* and *available* to the process. For any non-standard
+Vector extensions, the ABI guaranteed way to identify their existence is by
+going through the hwprobe(2) interface. Then, the
+:c:macro:`prctl(PR_RISCV_V_GET_CONTROL)` serves as the availibility
+check to see if executing any Vector instructions is allowed by the runtime
+environment.
