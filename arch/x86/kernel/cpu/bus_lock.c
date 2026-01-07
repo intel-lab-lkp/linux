@@ -316,9 +316,25 @@ void bus_lock_init(void)
 	wrmsrq(MSR_IA32_DEBUGCTLMSR, val);
 }
 
+static bool split_lock_fatal(void)
+{
+	/*
+	 * If #AC occurs on split lock without X86_FEATURE_SPLIT_LOCK_DETECT
+	 * the kernel cannot handle it by disabling the detection. Treat it as
+	 * fatal regardless of the sld_state.
+	 */
+	if (!cpu_feature_enabled(X86_FEATURE_SPLIT_LOCK_DETECT))
+		return true;
+
+	if (sld_state == sld_fatal)
+		return true;
+
+	return false;
+}
+
 bool handle_user_split_lock(struct pt_regs *regs, long error_code)
 {
-	if ((regs->flags & X86_EFLAGS_AC) || sld_state == sld_fatal)
+	if ((regs->flags & X86_EFLAGS_AC) || split_lock_fatal())
 		return false;
 	split_lock_warn(regs->ip);
 	return true;
