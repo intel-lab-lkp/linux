@@ -17,10 +17,10 @@
 #include "asm/kvm.h"
 #include "linux/kvm.h"
 
-void test_vcpu_creation(int first_vcpu_id, int num_vcpus)
+void test_vcpu_creation(int first_vcpu_id, int num_vcpus, int kvm_max_vcpu_id)
 {
 	struct kvm_vm *vm;
-	int i;
+	int i, fd;
 
 	pr_info("Testing creating %d vCPUs, with IDs %d...%d.\n",
 		num_vcpus, first_vcpu_id, first_vcpu_id + num_vcpus - 1);
@@ -30,6 +30,14 @@ void test_vcpu_creation(int first_vcpu_id, int num_vcpus)
 	for (i = first_vcpu_id; i < first_vcpu_id + num_vcpus; i++)
 		/* This asserts that the vCPU was created. */
 		__vm_vcpu_add(vm, i);
+
+	fd = __vm_ioctl(vm, KVM_CREATE_VCPU, (void *)(unsigned long)(first_vcpu_id + num_vcpus));
+	TEST_ASSERT(fd < 0,
+		"Expected failure when exceeding KVM_MAX_VCPUS, but got fd=%d", fd);
+
+	fd = __vm_ioctl(vm, KVM_CREATE_VCPU, (void *)(unsigned long)kvm_max_vcpu_id);
+	TEST_ASSERT(fd < 0,
+		"Expected failure when exceeding KVM_MAX_VCPU_ID, but got fd=%d", fd);
 
 	kvm_vm_free(vm);
 }
@@ -56,11 +64,11 @@ int main(int argc, char *argv[])
 		    "KVM_MAX_VCPU_IDS (%d) must be at least as large as KVM_MAX_VCPUS (%d).",
 		    kvm_max_vcpu_id, kvm_max_vcpus);
 
-	test_vcpu_creation(0, kvm_max_vcpus);
+	test_vcpu_creation(0, kvm_max_vcpus, kvm_max_vcpu_id);
 
 	if (kvm_max_vcpu_id > kvm_max_vcpus)
 		test_vcpu_creation(
-			kvm_max_vcpu_id - kvm_max_vcpus, kvm_max_vcpus);
+			kvm_max_vcpu_id - kvm_max_vcpus, kvm_max_vcpus, kvm_max_vcpu_id);
 
 	return 0;
 }
