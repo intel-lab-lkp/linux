@@ -188,7 +188,7 @@ function array_size(arr,   i,c) {
 
 function print_table(tbl,name,fmt,n)
 {
-	print "const insn_attr_t " name " = {"
+	print "static const insn_attr_t " name " = {"
 	for (i = 0; i < n; i++) {
 		id = sprintf(fmt, i)
 		if (tbl[id])
