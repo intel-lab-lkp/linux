@@ -4469,10 +4469,13 @@ static int btusb_suspend(struct usb_interface *intf, pm_message_t message)
 
 	BT_DBG("intf %p", intf);
 
-	/* Don't auto-suspend if there are connections; external suspend calls
-	 * shall never fail.
+	/* Don't auto-suspend if there are connections or HCI operations in
+	 * progress; external suspend calls shall never fail.
 	 */
-	if (PMSG_IS_AUTO(message) && hci_conn_count(data->hdev))
+	if (PMSG_IS_AUTO(message) &&
+	    (hci_conn_count(data->hdev) ||
+	    test_bit(HCI_INQUIRY, &data->hdev->flags) ||
+	    hci_dev_test_flag(data->hdev, HCI_LE_SCAN)))
 		return -EBUSY;
 
 	if (data->suspend_count++)
