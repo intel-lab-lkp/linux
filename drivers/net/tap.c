@@ -753,6 +753,27 @@ done:
 	return ret ? ret : total;
 }
 
+static void *tap_ring_consume(struct tap_queue *q)
+{
+	struct ptr_ring *ring = &q->ring;
+	struct net_device *dev;
+	void *ptr;
+
+	spin_lock(&ring->consumer_lock);
+
+	ptr = __ptr_ring_consume(ring);
+	if (unlikely(ptr && __ptr_ring_consume_created_space(ring, 1))) {
+		rcu_read_lock();
+		dev = rcu_dereference(q->tap)->dev;
+		netif_wake_subqueue(dev, q->queue_index);
+		rcu_read_unlock();
+	}
+
+	spin_unlock(&ring->consumer_lock);
+
+	return ptr;
+}
+
 static ssize_t tap_do_read(struct tap_queue *q,
 			   struct iov_iter *to,
 			   int noblock, struct sk_buff *skb)
@@ -774,7 +795,7 @@ static ssize_t tap_do_read(struct tap_queue *q,
 					TASK_INTERRUPTIBLE);
 
 		/* Read frames from the queue */
-		skb = ptr_ring_consume(&q->ring);
+		skb = tap_ring_consume(q);
 		if (skb)
 			break;
 		if (noblock) {

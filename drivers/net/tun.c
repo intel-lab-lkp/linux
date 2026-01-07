@@ -2113,13 +2113,34 @@ done:
 	return total;
 }
 
+static void *tun_ring_consume(struct tun_file *tfile)
+{
+	struct ptr_ring *ring = &tfile->tx_ring;
+	struct net_device *dev;
+	void *ptr;
+
+	spin_lock(&ring->consumer_lock);
+
+	ptr = __ptr_ring_consume(ring);
+	if (unlikely(ptr && __ptr_ring_consume_created_space(ring, 1))) {
+		rcu_read_lock();
+		dev = rcu_dereference(tfile->tun)->dev;
+		netif_wake_subqueue(dev, tfile->queue_index);
+		rcu_read_unlock();
+	}
+
+	spin_unlock(&ring->consumer_lock);
+
+	return ptr;
+}
+
 static void *tun_ring_recv(struct tun_file *tfile, int noblock, int *err)
 {
 	DECLARE_WAITQUEUE(wait, current);
 	void *ptr = NULL;
 	int error = 0;
 
-	ptr = ptr_ring_consume(&tfile->tx_ring);
+	ptr = tun_ring_consume(tfile);
 	if (ptr)
 		goto out;
 	if (noblock) {
@@ -2131,7 +2152,7 @@ static void *tun_ring_recv(struct tun_file *tfile, int noblock, int *err)
 
 	while (1) {
 		set_current_state(TASK_INTERRUPTIBLE);
-		ptr = ptr_ring_consume(&tfile->tx_ring);
+		ptr = tun_ring_consume(tfile);
 		if (ptr)
 			break;
 		if (signal_pending(current)) {
