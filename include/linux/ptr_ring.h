@@ -438,6 +438,19 @@ static inline int ptr_ring_consume_batched_bh(struct ptr_ring *r,
 	return ret;
 }
 
+/* Returns true if the consume of the last n elements has created space
+ * in the ring buffer (i.e., a new element can be produced).
+ *
+ * Note: Because of batching, a successful call to __ptr_ring_consume() /
+ * __ptr_ring_consume_batched() does not guarantee that the next call to
+ * __ptr_ring_produce() will succeed.
+ */
+static inline bool __ptr_ring_consume_created_space(struct ptr_ring *r,
+						    int n)
+{
+	return r->consumer_head - r->consumer_tail < n;
+}
+
 /* Cast to structure type and call a function without discarding from FIFO.
  * Function must return a value.
  * Callers must take consumer_lock.
