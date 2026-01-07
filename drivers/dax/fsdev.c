@@ -330,12 +330,24 @@ static int fsdev_dax_probe(struct dev_dax *dev_dax)
 	if (rc)
 		return rc;
 
+	/* Set the dax operations for fs-dax access path */
+	rc = dax_set_ops(dax_dev, &dev_dax_ops);
+	if (rc)
+		return rc;
+
 	run_dax(dax_dev);
 	return devm_add_action_or_reset(dev, fsdev_kill, dev_dax);
 }
 
+static void fsdev_dax_remove(struct dev_dax *dev_dax)
+{
+	/* Clear ops on unbind so they aren't used with a different driver */
+	dax_set_ops(dev_dax->dax_dev, NULL);
+}
+
 static struct dax_device_driver fsdev_dax_driver = {
 	.probe = fsdev_dax_probe,
+	.remove = fsdev_dax_remove,
 	.type = DAXDRV_FSDEV_TYPE,
 };
 
