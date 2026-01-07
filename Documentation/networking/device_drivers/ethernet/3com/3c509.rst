@@ -177,12 +177,6 @@ While the updated driver works with most PnP BIOS programs, it does not work
 with all. This can be fixed by disabling PnP support using the 3Com-supplied
 setup program.
 
-3c509 card is not detected on overclocked machines
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Increase the delay time in id_read_eeprom() from the current value, 500,
-to an absurdly high value, such as 5000.
-
 
 Decoding Status and Error Messages
 ----------------------------------
