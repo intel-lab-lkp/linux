@@ -30,7 +30,6 @@
 #include <linux/device.h>
 #include <linux/nospec.h>
 #include <linux/static_call.h>
-#include <linux/kvm_types.h>
 
 #include <asm/apic.h>
 #include <asm/stacktrace.h>
