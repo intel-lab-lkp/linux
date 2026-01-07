@@ -36,6 +36,7 @@
 #![feature(const_option)]
 #![feature(const_ptr_write)]
 #![feature(const_refs_to_cell)]
+#![feature(const_intrinsic_copy)]
 //
 // Expected to become stable.
 #![feature(arbitrary_self_types)]
