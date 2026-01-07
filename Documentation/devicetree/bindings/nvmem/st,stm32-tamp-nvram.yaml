@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/nvmem/st,stm32-tamp-nvram.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: STMicroelectronics STM32 TAMP's NVRAM
+
+description: |
+  The TAMP peripheral integrates, amongst others, Non Volatile RAM
+  (NVRAM) with 32/128 32-bit backup registers which can be used by
+  software to store information or communicate with a boot loader.
+
+maintainers:
+  - Dario Binacchi <dario.binacchi@amarulasolutions.com>
+
+allOf:
+  - $ref: nvmem.yaml#
+
+properties:
+  compatible:
+    enum:
+      - st,stm32mp15-tamp-nvram
+      - st,stm32mp25-tamp-nvram
+
+  reg:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    nvram: nvram@46010100 {
+        compatible = "st,stm32mp25-tamp-nvram";
+        reg = <0x46010100 0x200>;
+
+        nvmem-layout {
+            compatible = "fixed-layout";
+            #address-cells = <1>;
+            #size-cells = <1>;
+
+            fwu_info: tamp-bkp@c0 {
+                reg = <0xc0 0x4>;
+            };
+
+            boot_mode: tamp-bkp@180 {
+                reg = <0x180 0x4>;
+            };
+        };
+    };
+...
