@@ -47,6 +47,7 @@ TEST_PROGS := \
 	ip_local_port_range.sh \
 	ipv6_flowlabel.sh \
 	ipv6_force_forwarding.sh \
+	ipv6_icmp.sh \
 	ipv6_route_update_soft_lockup.sh \
 	l2_tos_ttl_inherit.sh \
 	l2tp.sh \
