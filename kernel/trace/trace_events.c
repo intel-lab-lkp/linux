@@ -1379,6 +1379,9 @@ static int __ftrace_set_clr_event(struct trace_array *tr, const char *match,
 {
 	int ret;
 
+	if (trace_array_is_readonly(tr))
+		return -EPERM;
+
 	mutex_lock(&event_mutex);
 	ret = __ftrace_set_clr_event_nolock(tr, match, sub, event, set, mod);
 	mutex_unlock(&event_mutex);
@@ -4376,6 +4379,7 @@ static int events_callback(const char *name, umode_t *mode, void **data,
 static int
 create_event_toplevel_files(struct dentry *parent, struct trace_array *tr)
 {
+	umode_t writable_mode = TRACE_MODE_WRITE;
 	struct eventfs_inode *e_events;
 	struct dentry *entry;
 	int nr_entries;
@@ -4393,9 +4397,11 @@ create_event_toplevel_files(struct dentry *parent, struct trace_array *tr)
 			.callback	= events_callback,
 		},
 	};
+	if (trace_array_is_readonly(tr))
+		writable_mode = TRACE_MODE_READ;
 
-	entry = trace_create_file("set_event", TRACE_MODE_WRITE, parent,
-				  tr, &ftrace_set_event_fops);
+	entry = trace_create_file("set_event", writable_mode, parent,
+				tr, &ftrace_set_event_fops);
 	if (!entry)
 		return -ENOMEM;
 
@@ -4410,11 +4416,11 @@ create_event_toplevel_files(struct dentry *parent, struct trace_array *tr)
 
 	/* There are not as crucial, just warn if they are not created */
 
-	trace_create_file("set_event_pid", TRACE_MODE_WRITE, parent,
+	trace_create_file("set_event_pid", writable_mode, parent,
 			  tr, &ftrace_set_event_pid_fops);
 
 	trace_create_file("set_event_notrace_pid",
-			  TRACE_MODE_WRITE, parent, tr,
+			  writable_mode, parent, tr,
 			  &ftrace_set_event_notrace_pid_fops);
 
 	tr->event_dir = e_events;

@@ -4888,6 +4888,9 @@ static int tracing_open(struct inode *inode, struct file *file)
 		int cpu = tracing_get_cpu(inode);
 		struct array_buffer *trace_buf = &tr->array_buffer;
 
+		if (trace_array_is_readonly(tr))
+			return -EPERM;
+
 #ifdef CONFIG_TRACER_MAX_TRACE
 		if (tr->current_trace->print_max)
 			trace_buf = &tr->max_buffer;
@@ -6077,6 +6080,9 @@ static int __tracing_resize_ring_buffer(struct trace_array *tr,
 ssize_t tracing_resize_ring_buffer(struct trace_array *tr,
 				  unsigned long size, int cpu_id)
 {
+	if (trace_array_is_readonly(tr))
+		return -EPERM;
+
 	guard(mutex)(&trace_types_lock);
 
 	if (cpu_id != RING_BUFFER_ALL_CPUS) {
@@ -6298,6 +6304,10 @@ int tracing_set_tracer(struct trace_array *tr, const char *buf)
 
 	guard(mutex)(&trace_types_lock);
 
+	/* Not allowed to set new tracer on readonly instance. */
+	if (trace_array_is_readonly(tr))
+		return -EPERM;
+
 	update_last_data(tr);
 
 	if (!tr->ring_buffer_expanded) {
@@ -6413,6 +6423,9 @@ tracing_set_trace_write(struct file *filp, const char __user *ubuf,
 	size_t ret;
 	int err;
 
+	if (trace_array_is_readonly(tr))
+		return -EPERM;
+
 	ret = cnt;
 
 	if (cnt > MAX_TRACER_SIZE)
@@ -6477,6 +6490,9 @@ tracing_thresh_write(struct file *filp, const char __user *ubuf,
 {
 	struct trace_array *tr = filp->private_data;
 	int ret;
+
+	if (trace_array_is_readonly(tr))
+		return -EPERM;
 
 	guard(mutex)(&trace_types_lock);
 	ret = tracing_nsecs_write(&tracing_thresh, ubuf, cnt, ppos);
@@ -7047,6 +7063,9 @@ tracing_entries_write(struct file *filp, const char __user *ubuf,
 	unsigned long val;
 	int ret;
 
+	if (trace_array_is_readonly(tr))
+		return -EPERM;
+
 	ret = kstrtoul_from_user(ubuf, cnt, 10, &val);
 	if (ret)
 		return ret;
@@ -7595,6 +7614,9 @@ tracing_mark_write(struct file *filp, const char __user *ubuf,
 	unsigned long ip;
 	char *buf;
 
+	if (trace_array_is_readonly(tr))
+		return -EPERM;
+
 	if (tracing_disabled)
 		return -EINVAL;
 
@@ -7674,6 +7696,9 @@ tracing_mark_raw_write(struct file *filp, const char __user *ubuf,
 	struct trace_array *tr = filp->private_data;
 	ssize_t written = -ENODEV;
 	char *buf;
+
+	if (trace_array_is_readonly(tr))
+		return -EPERM;
 
 	if (tracing_disabled)
 		return -EINVAL;
@@ -7756,6 +7781,9 @@ static int tracing_clock_show(struct seq_file *m, void *v)
 int tracing_set_clock(struct trace_array *tr, const char *clockstr)
 {
 	int i;
+
+	if (trace_array_is_readonly(tr))
+		return -EPERM;
 
 	for (i = 0; i < ARRAY_SIZE(trace_clocks); i++) {
 		if (strcmp(trace_clocks[i].name, clockstr) == 0)
@@ -9353,11 +9381,15 @@ static void
 tracing_init_tracefs_percpu(struct trace_array *tr, long cpu)
 {
 	struct dentry *d_percpu = tracing_dentry_percpu(tr, cpu);
+	umode_t writable_mode = TRACE_MODE_WRITE;
 	struct dentry *d_cpu;
 	char cpu_dir[30]; /* 30 characters should be more than enough */
 
 	if (!d_percpu)
 		return;
+
+	if (trace_array_is_readonly(tr))
+		writable_mode = TRACE_MODE_READ;
 
 	snprintf(cpu_dir, 30, "cpu%ld", cpu);
 	d_cpu = tracefs_create_dir(cpu_dir, d_percpu);
@@ -9371,7 +9403,7 @@ tracing_init_tracefs_percpu(struct trace_array *tr, long cpu)
 				tr, cpu, &tracing_pipe_fops);
 
 	/* per cpu trace */
-	trace_create_cpu_file("trace", TRACE_MODE_WRITE, d_cpu,
+	trace_create_cpu_file("trace", writable_mode, d_cpu,
 				tr, cpu, &tracing_fops);
 
 	trace_create_cpu_file("trace_pipe_raw", TRACE_MODE_READ, d_cpu,
@@ -9810,6 +9842,9 @@ rb_simple_write(struct file *filp, const char __user *ubuf,
 	struct trace_buffer *buffer = tr->array_buffer.buffer;
 	unsigned long val;
 	int ret;
+
+	if (trace_array_is_readonly(tr))
+		return -EPERM;
 
 	ret = kstrtoul_from_user(ubuf, cnt, 10, &val);
 	if (ret)
@@ -10597,47 +10632,54 @@ static __init void create_trace_instances(struct dentry *d_tracer)
 static void
 init_tracer_tracefs(struct trace_array *tr, struct dentry *d_tracer)
 {
+	umode_t writable_mode = TRACE_MODE_WRITE;
+	bool readonly = trace_array_is_readonly(tr);
 	int cpu;
+
+	if (readonly)
+		writable_mode = TRACE_MODE_READ;
 
 	trace_create_file("available_tracers", TRACE_MODE_READ, d_tracer,
 			tr, &show_traces_fops);
 
-	trace_create_file("current_tracer", TRACE_MODE_WRITE, d_tracer,
+	trace_create_file("current_tracer", writable_mode, d_tracer,
 			tr, &set_tracer_fops);
 
-	trace_create_file("tracing_cpumask", TRACE_MODE_WRITE, d_tracer,
+	trace_create_file("tracing_cpumask", writable_mode, d_tracer,
 			  tr, &tracing_cpumask_fops);
 
-	trace_create_file("trace_options", TRACE_MODE_WRITE, d_tracer,
+	trace_create_file("trace_options", writable_mode, d_tracer,
 			  tr, &tracing_iter_fops);
 
-	trace_create_file("trace", TRACE_MODE_WRITE, d_tracer,
+	trace_create_file("trace", writable_mode, d_tracer,
 			  tr, &tracing_fops);
 
 	trace_create_file("trace_pipe", TRACE_MODE_READ, d_tracer,
 			  tr, &tracing_pipe_fops);
 
-	trace_create_file("buffer_size_kb", TRACE_MODE_WRITE, d_tracer,
+	trace_create_file("buffer_size_kb", writable_mode, d_tracer,
 			  tr, &tracing_entries_fops);
 
 	trace_create_file("buffer_total_size_kb", TRACE_MODE_READ, d_tracer,
 			  tr, &tracing_total_entries_fops);
 
-	trace_create_file("free_buffer", 0200, d_tracer,
-			  tr, &tracing_free_buffer_fops);
+	if (!readonly) {
+		trace_create_file("free_buffer", 0200, d_tracer,
+				tr, &tracing_free_buffer_fops);
 
-	trace_create_file("trace_marker", 0220, d_tracer,
-			  tr, &tracing_mark_fops);
+		trace_create_file("trace_marker", 0220, d_tracer,
+				tr, &tracing_mark_fops);
 
-	tr->trace_marker_file = __find_event_file(tr, "ftrace", "print");
+		tr->trace_marker_file = __find_event_file(tr, "ftrace", "print");
 
-	trace_create_file("trace_marker_raw", 0220, d_tracer,
-			  tr, &tracing_mark_raw_fops);
+		trace_create_file("trace_marker_raw", 0220, d_tracer,
+				tr, &tracing_mark_raw_fops);
+	}
 
-	trace_create_file("trace_clock", TRACE_MODE_WRITE, d_tracer, tr,
+	trace_create_file("trace_clock", writable_mode, d_tracer, tr,
 			  &trace_clock_fops);
 
-	trace_create_file("tracing_on", TRACE_MODE_WRITE, d_tracer,
+	trace_create_file("tracing_on", writable_mode, d_tracer,
 			  tr, &rb_simple_fops);
 
 	trace_create_file("timestamp_mode", TRACE_MODE_READ, d_tracer, tr,
@@ -10645,22 +10687,23 @@ init_tracer_tracefs(struct trace_array *tr, struct dentry *d_tracer)
 
 	tr->buffer_percent = 50;
 
-	trace_create_file("buffer_percent", TRACE_MODE_WRITE, d_tracer,
+	trace_create_file("buffer_percent", writable_mode, d_tracer,
 			tr, &buffer_percent_fops);
 
-	trace_create_file("buffer_subbuf_size_kb", TRACE_MODE_WRITE, d_tracer,
+	trace_create_file("buffer_subbuf_size_kb", writable_mode, d_tracer,
 			  tr, &buffer_subbuf_size_fops);
 
-	trace_create_file("syscall_user_buf_size", TRACE_MODE_WRITE, d_tracer,
+	trace_create_file("syscall_user_buf_size", writable_mode, d_tracer,
 			 tr, &tracing_syscall_buf_fops);
 
 	create_trace_options_dir(tr);
 
 #ifdef CONFIG_TRACER_MAX_TRACE
-	trace_create_maxlat_file(tr, d_tracer);
+	if (!readonly)
+		trace_create_maxlat_file(tr, d_tracer);
 #endif
 
-	if (ftrace_create_function_files(tr, d_tracer))
+	if (!readonly && ftrace_create_function_files(tr, d_tracer))
 		MEM_FAIL(1, "Could not allocate function filter files");
 
 	if (tr->range_addr_start) {
@@ -10673,13 +10716,15 @@ init_tracer_tracefs(struct trace_array *tr, struct dentry *d_tracer)
 #endif
 	}
 
-	trace_create_file("error_log", TRACE_MODE_WRITE, d_tracer,
-			  tr, &tracing_err_log_fops);
+	if (!readonly)
+		trace_create_file("error_log", TRACE_MODE_WRITE, d_tracer,
+				  tr, &tracing_err_log_fops);
 
 	for_each_tracing_cpu(cpu)
 		tracing_init_tracefs_percpu(tr, cpu);
 
-	ftrace_init_tracefs(tr, d_tracer);
+	if (!readonly)
+		ftrace_init_tracefs(tr, d_tracer);
 }
 
 #ifdef CONFIG_TRACEFS_AUTOMOUNT_DEPRECATED
