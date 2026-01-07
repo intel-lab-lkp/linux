@@ -2355,11 +2355,17 @@ static int idpf_change_mtu(struct net_device *netdev, int new_mtu)
 
 	idpf_vport_ctrl_lock(netdev);
 	vport = idpf_netdev_to_vport(netdev);
+	if (!vport) {
+		netdev_err(netdev, "mtu not changed due to no vport in netdev\n");
+		err = -EFAULT;
+		goto unlock;
+	}
 
 	WRITE_ONCE(netdev->mtu, new_mtu);
 
 	err = idpf_initiate_soft_reset(vport, IDPF_SR_MTU_CHANGE);
 
+unlock:
 	idpf_vport_ctrl_unlock(netdev);
 
 	return err;
