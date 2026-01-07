@@ -64,6 +64,9 @@ MODULE_DESCRIPTION("Asus HID Keyboard and TouchPad");
 #define ASUS_SPURIOUS_CODE_0X8A 0x8a
 #define ASUS_SPURIOUS_CODE_0X9E 0x9e
 
+/* Special key codes */
+#define ASUS_FAN_CTRL_KEY_CODE 0xae
+
 #define SUPPORT_KBD_BACKLIGHT BIT(0)
 
 #define MAX_TOUCH_MAJOR 8
@@ -378,12 +381,21 @@ static int asus_raw_event(struct hid_device *hdev,
 	if (report->id == FEATURE_KBD_LED_REPORT_ID1 || report->id == FEATURE_KBD_LED_REPORT_ID2)
 		return -1;
 	if (drvdata->quirks & QUIRK_ROG_NKEY_KEYBOARD) {
-		/*
-		 * G14 and G15 send these codes on some keypresses with no
-		 * discernable reason for doing so. Filter them out to avoid
-		 * unmapped warning messages.
-		 */
 		if (report->id == FEATURE_KBD_REPORT_ID) {
+			/* Fn+F5 fan control key, send WMI event to toggle fan mode */
+			if (data[1] == ASUS_FAN_CTRL_KEY_CODE) {
+				int ret = asus_wmi_send_event(drvdata, ASUS_FAN_CTRL_KEY_CODE);
+
+				if (ret < 0)
+					hid_warn(hdev, "Failed to trigger fan control event\n");
+				return -1;
+			}
+
+			/*
+			 * G14 and G15 send these codes on some keypresses with no
+			 * discernable reason for doing so. Filter them out to avoid
+			 * unmapped warning messages.
+			 */
 			if (data[1] == ASUS_SPURIOUS_CODE_0XEA ||
 			    data[1] == ASUS_SPURIOUS_CODE_0XEC ||
 			    data[1] == ASUS_SPURIOUS_CODE_0X02 ||
