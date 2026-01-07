@@ -149,6 +149,41 @@ impl<'a> IoRequest<'a> {
     pub fn iomap_exclusive(self) -> impl PinInit<Devres<ExclusiveIoMem<0>>, Error> + 'a {
         Self::iomap_exclusive_sized::<0>(self)
     }
+
+    /// Maps an [`IoRequest`] with write-combining cache policy where the size
+    /// is known at compile time.
+    ///
+    /// This uses the [`ioremap_wc()`] C API, which provides write-combining
+    /// semantics. This is useful for framebuffer memory and other memory
+    /// regions that benefit from write-combining, where multiple writes can
+    /// be combined and reordered for better performance.
+    ///
+    /// Unlike [`Self::iomap`], this method explicitly uses write-combining
+    /// mapping, which is typically needed for video framebuffers.
+    ///
+    /// [`ioremap_wc()`]: https://docs.kernel.org/driver-api/device-io.html#getting-access-to-the-device
+    pub fn iomap_wc_sized<const SIZE: usize>(
+        self,
+    ) -> impl PinInit<Devres<IoMem<SIZE>>, Error> + 'a {
+        IoMem::new_wc(self)
+    }
+
+    /// Maps an [`IoRequest`] with write-combining cache policy where the size
+    /// is not known at compile time.
+    ///
+    /// This uses the [`ioremap_wc()`] C API, which provides write-combining
+    /// semantics. This is useful for framebuffer memory and other memory
+    /// regions that benefit from write-combining.
+    ///
+    /// Unlike [`Self::iomap_wc_sized`], here the size of the memory region
+    /// is not known at compile time, so only the `try_read*` and `try_write*`
+    /// family of functions should be used, leading to runtime checks on every
+    /// access.
+    ///
+    /// [`ioremap_wc()`]: https://docs.kernel.org/driver-api/device-io.html#getting-access-to-the-device
+    pub fn iomap_wc(self) -> impl PinInit<Devres<IoMem<0>>, Error> + 'a {
+        Self::iomap_wc_sized::<0>(self)
+    }
 }
 
 /// An exclusive memory-mapped IO region.
@@ -261,12 +296,48 @@ impl<const SIZE: usize> IoMem<SIZE> {
         Ok(io)
     }
 
+    fn ioremap_wc(resource: &Resource) -> Result<Self> {
+        // Note: Some ioremap() implementations use types that depend on the CPU
+        // word width rather than the bus address width.
+        //
+        // TODO: Properly address this in the C code to avoid this `try_into`.
+        let size = resource.size().try_into()?;
+        if size == 0 {
+            return Err(EINVAL);
+        }
+
+        let res_start = resource.start();
+
+        // SAFETY:
+        // - `res_start` and `size` are read from a presumably valid `struct resource`.
+        // - `size` is known not to be zero at this point.
+        let addr = unsafe { bindings::ioremap_wc(res_start, size) };
+
+        if addr.is_null() {
+            return Err(ENOMEM);
+        }
+
+        let io = IoRaw::new(addr as usize, size)?;
+        let io = IoMem { io };
+
+        Ok(io)
+    }
+
     /// Creates a new `IoMem` instance from a previously acquired [`IoRequest`].
     pub fn new<'a>(io_request: IoRequest<'a>) -> impl PinInit<Devres<Self>, Error> + 'a {
         let dev = io_request.device;
         let res = io_request.resource;
 
         Devres::new(dev, Self::ioremap(res))
+    }
+
+    /// Creates a new `IoMem` instance with write-combining cache policy from
+    /// a previously acquired [`IoRequest`].
+    pub fn new_wc<'a>(io_request: IoRequest<'a>) -> impl PinInit<Devres<Self>, Error> + 'a {
+        let dev = io_request.device;
+        let res = io_request.resource;
+
+        Devres::new(dev, Self::ioremap_wc(res))
     }
 }
 
