@@ -4584,7 +4584,6 @@ out:
 
 static void perf_remove_from_owner(struct perf_event *event);
 static void perf_event_exit_event(struct perf_event *event,
-				  struct perf_event_context *ctx,
 				  struct task_struct *task,
 				  bool revoke);
 
@@ -4613,7 +4612,7 @@ static void perf_event_remove_on_exec(struct perf_event_context *ctx)
 
 		modified = true;
 
-		perf_event_exit_event(event, ctx, ctx->task, false);
+		perf_event_exit_event(event, ctx->task, false);
 	}
 
 	raw_spin_lock_irqsave(&ctx->lock, flags);
@@ -12511,12 +12510,12 @@ int perf_pmu_register(struct pmu *_pmu, const char *name, int type)
 EXPORT_SYMBOL_GPL(perf_pmu_register);
 
 static void __pmu_detach_event(struct pmu *pmu, struct perf_event *event,
-			       struct perf_event_context *ctx)
+			       struct task_struct *task)
 {
 	/*
 	 * De-schedule the event and mark it REVOKED.
 	 */
-	perf_event_exit_event(event, ctx, ctx->task, true);
+	perf_event_exit_event(event, task, true);
 
 	/*
 	 * All _free_event() bits that rely on event->pmu:
@@ -12555,7 +12554,7 @@ static void pmu_detach_event(struct pmu *pmu, struct perf_event *event)
 	struct perf_event_context *ctx;
 
 	ctx = perf_event_ctx_lock(event);
-	__pmu_detach_event(pmu, event, ctx);
+	__pmu_detach_event(pmu, event, ctx->task);
 	perf_event_ctx_unlock(event, ctx);
 
 	scoped_guard (spinlock, &pmu->events_lock)
@@ -14096,11 +14095,9 @@ static void sync_child_event(struct perf_event *child_event,
 		     &parent_event->child_total_time_running);
 }
 
-static void
-perf_event_exit_event(struct perf_event *event,
-		      struct perf_event_context *ctx,
-		      struct task_struct *task,
-		      bool revoke)
+static void perf_event_exit_event(struct perf_event *event,
+				  struct task_struct *task,
+				  bool revoke)
 {
 	struct perf_event *parent_event = event->parent;
 	unsigned long detach_flags = DETACH_EXIT;
@@ -14217,7 +14214,7 @@ static void perf_event_exit_task_context(struct task_struct *task, bool exit)
 		perf_event_task(task, ctx, 0);
 
 	list_for_each_entry_safe(child_event, next, &ctx->event_list, event_entry)
-		perf_event_exit_event(child_event, ctx, exit ? task : NULL, false);
+		perf_event_exit_event(child_event, exit ? task : NULL, false);
 
 	mutex_unlock(&ctx->mutex);
 
