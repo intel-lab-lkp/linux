@@ -42,7 +42,7 @@ scripts/unifdef -U__KERNEL__ -D__EXPORTED_HEADERS__ $TMPFILE > $OUTFILE
 [ $? -gt 1 ] && exit 1
 
 # Remove /* ... */ style comments, and find CONFIG_ references in code
-configs=$(sed -e '
+sed -e '
 :comment
 	s:/\*[^*][^*]*:/*:
 	s:/\*\*\**\([^/]\):/*\1:
@@ -53,48 +53,31 @@ configs=$(sed -e '
 	N
 	b comment
 :print
+	# The entries in the following list do not result in an error.
+	# Please do not add a new entry. This list is only for existing ones.
+	# The list will be reduced gradually, and deleted eventually.
+	#
+	# The format is s@<file-name>:<CONFIG-option>\n@@ in each line.
+	s@arch/arc/include/uapi/asm/swab.h:CONFIG_ARC_HAS_SWAPE\n@@
+	s@arch/arm/include/uapi/asm/ptrace.h:CONFIG_CPU_ENDIAN_BE8\n@@
+	s@arch/nios2/include/uapi/asm/swab.h:CONFIG_NIOS2_CI_SWAB_NO\n@@
+	s@arch/nios2/include/uapi/asm/swab.h:CONFIG_NIOS2_CI_SWAB_SUPPORT\n@@
+	s@arch/x86/include/uapi/asm/auxvec.h:CONFIG_IA32_EMULATION\n@@
+	s@arch/x86/include/uapi/asm/auxvec.h:CONFIG_X86_64\n@@
+
+	# Jump if any of the above filters applied, otherwise error out.
+	t check
+	s@^\(.*\)\n.*@error: \1 leak to user-space@
 	P
-	D
+	Q2
 :check
-	s:^\(CONFIG_[[:alnum:]_]*\):\1\n:
+	s@^\(CONFIG_[[:alnum:]_]*\)@'"$INFILE"':\1\n@
 	t print
 	s:^[[:alnum:]_][[:alnum:]_]*::
 	s:^[^[:alnum:]_][^[:alnum:]_]*::
 	t check
 	d
-' $OUTFILE)
-
-# The entries in the following list do not result in an error.
-# Please do not add a new entry. This list is only for existing ones.
-# The list will be reduced gradually, and deleted eventually. (hopefully)
-#
-# The format is <file-name>:<CONFIG-option> in each line.
-config_leak_ignores="
-arch/arc/include/uapi/asm/swab.h:CONFIG_ARC_HAS_SWAPE
-arch/arm/include/uapi/asm/ptrace.h:CONFIG_CPU_ENDIAN_BE8
-arch/nios2/include/uapi/asm/swab.h:CONFIG_NIOS2_CI_SWAB_NO
-arch/nios2/include/uapi/asm/swab.h:CONFIG_NIOS2_CI_SWAB_SUPPORT
-arch/x86/include/uapi/asm/auxvec.h:CONFIG_IA32_EMULATION
-arch/x86/include/uapi/asm/auxvec.h:CONFIG_X86_64
-"
-
-for c in $configs
-do
-	leak_error=1
-
-	for ignore in $config_leak_ignores
-	do
-		if echo "$INFILE:$c" | grep -q "$ignore$"; then
-			leak_error=
-			break
-		fi
-	done
-
-	if [ "$leak_error" = 1 ]; then
-		echo "error: $INFILE: leak $c to user-space" >&2
-		exit 1
-	fi
-done
+' $OUTFILE >&2 || exit 1
 
 rm -f $TMPFILE
 trap - EXIT
