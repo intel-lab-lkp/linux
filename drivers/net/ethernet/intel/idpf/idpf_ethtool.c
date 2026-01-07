@@ -577,6 +577,11 @@ static int idpf_set_channels(struct net_device *netdev,
 
 	idpf_vport_ctrl_lock(netdev);
 	vport = idpf_netdev_to_vport(netdev);
+	if (!vport) {
+		netdev_err(netdev, "channels not changed due to no vport in netdev\n");
+		err = -EFAULT;
+		goto unlock_mutex;
+	}
 
 	idx = vport->idx;
 	vport_config = vport->adapter->vport_config[idx];
