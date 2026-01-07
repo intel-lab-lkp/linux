@@ -6519,6 +6519,9 @@ static void hci_le_ext_adv_report_evt(struct hci_dev *hdev, void *data,
 					   info->rssi, info->data, info->length,
 					   !(evt_type & LE_EXT_ADV_LEGACY_PDU),
 					   false, instant);
+			mgmt_ext_adv_sid_changed(hdev, &info->bdaddr,
+						      info->bdaddr_type,
+						      info->sid);
 		}
 	}
 

@@ -208,6 +208,7 @@ static const u16 mgmt_untrusted_events[] = {
 	MGMT_EV_EXT_INDEX_REMOVED,
 	MGMT_EV_EXT_INFO_CHANGED,
 	MGMT_EV_EXP_FEATURE_CHANGED,
+	MGMT_EV_EXT_ADV_SID_CHANGED,
 };
 
 #define CACHE_TIMEOUT	secs_to_jiffies(2)
@@ -10514,6 +10515,18 @@ void mgmt_device_found(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 link_type,
 	ev->eir_len = cpu_to_le16(eir_len + scan_rsp_len);
 
 	mgmt_adv_monitor_device_found(hdev, bdaddr, report_device, skb, NULL);
+}
+
+void mgmt_ext_adv_sid_changed(struct hci_dev *hdev, bdaddr_t *bdaddr,
+				     u8 addr_type, u8 sid)
+{
+	struct mgmt_ev_ext_adv_sid_changed ev;
+
+	bacpy(&ev.addr.bdaddr, bdaddr);
+	ev.addr.type = link_to_bdaddr(LE_LINK, addr_type);
+	ev.sid = sid;
+
+	mgmt_event(MGMT_EV_EXT_ADV_SID_CHANGED, hdev, &ev, sizeof(ev), NULL);
 }
 
 void mgmt_remote_name(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 link_type,
