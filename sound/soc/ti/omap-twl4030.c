@@ -285,8 +285,15 @@ static int omap_twl4030_probe(struct platform_device *pdev)
 		if (prop) {
 			ret = snd_soc_of_parse_audio_routing(card,
 							    "ti,audio-routing");
-			if (ret)
+			if (ret) {
+				omap_twl4030_dai_links[0].cpus->of_node = NULL;
+				omap_twl4030_dai_links[0].platforms->of_node = NULL;
+				omap_twl4030_dai_links[1].cpus->of_node = NULL;
+				omap_twl4030_dai_links[1].platforms->of_node = NULL;
+				if (dai_node)
+					of_node_put(dai_node);
 				return ret;
+			}
 
 			card->fully_routed = 1;
 		}
@@ -310,6 +317,12 @@ static int omap_twl4030_probe(struct platform_device *pdev)
 	if (ret) {
 		dev_err(&pdev->dev, "devm_snd_soc_register_card() failed: %d\n",
 			ret);
+		omap_twl4030_dai_links[0].cpus->of_node = NULL;
+		omap_twl4030_dai_links[0].platforms->of_node = NULL;
+		omap_twl4030_dai_links[1].cpus->of_node = NULL;
+		omap_twl4030_dai_links[1].platforms->of_node = NULL;
+		if (dai_node)
+			of_node_put(dai_node);
 		return ret;
 	}
 
