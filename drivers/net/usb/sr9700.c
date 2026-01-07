@@ -243,13 +243,6 @@ static u32 sr9700_get_link(struct net_device *netdev)
 	return rc;
 }
 
-static int sr9700_ioctl(struct net_device *netdev, struct ifreq *rq, int cmd)
-{
-	struct usbnet *dev = netdev_priv(netdev);
-
-	return generic_mii_ioctl(&dev->mii, if_mii(rq), cmd, NULL);
-}
-
 static const struct ethtool_ops sr9700_ethtool_ops = {
 	.get_drvinfo	= usbnet_get_drvinfo,
 	.get_link	= sr9700_get_link,
@@ -318,7 +311,7 @@ static const struct net_device_ops sr9700_netdev_ops = {
 	.ndo_change_mtu		= usbnet_change_mtu,
 	.ndo_get_stats64	= dev_get_tstats64,
 	.ndo_validate_addr	= eth_validate_addr,
-	.ndo_eth_ioctl		= sr9700_ioctl,
+	.ndo_eth_ioctl		= usbnet_mii_ioctl,
 	.ndo_set_rx_mode	= sr9700_set_multicast,
 	.ndo_set_mac_address	= sr9700_set_mac_address,
 };
