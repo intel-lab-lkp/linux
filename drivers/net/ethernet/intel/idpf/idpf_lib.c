@@ -1035,6 +1035,8 @@ static void idpf_vport_stop(struct idpf_vport *vport, bool rtnl)
  */
 static int idpf_stop(struct net_device *netdev)
 {
+	if (!netdev)
+		return 0;
 	struct idpf_netdev_priv *np = netdev_priv(netdev);
 	struct idpf_vport *vport;
 
@@ -1043,9 +1045,14 @@ static int idpf_stop(struct net_device *netdev)
 
 	idpf_vport_ctrl_lock(netdev);
 	vport = idpf_netdev_to_vport(netdev);
+	if (!vport) {
+		netdev_err(netdev, "not stopping vport because it is NULL");
+		goto unlock;
+	}
 
 	idpf_vport_stop(vport, false);
 
+unlock:
 	idpf_vport_ctrl_unlock(netdev);
 
 	return 0;
@@ -2328,6 +2335,11 @@ static int idpf_open(struct net_device *netdev)
 
 	idpf_vport_ctrl_lock(netdev);
 	vport = idpf_netdev_to_vport(netdev);
+	if (!vport) {
+		netdev_err(netdev, "not opening vport because it is NULL");
+		err = -EFAULT;
+		goto unlock;
+	}
 
 	err = idpf_set_real_num_queues(vport);
 	if (err)
