@@ -1793,11 +1793,16 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 	}
 
 	if (unlikely(to_drop)) {
+		const bool is_udplite = IS_UDPLITE(sk);
+
 		for (nb = 0; to_drop != NULL; nb++) {
 			skb = to_drop;
 			to_drop = skb->next;
 			skb_mark_not_on_list(skb);
-			/* TODO: update SNMP values. */
+
+			UDP_INC_STATS(sock_net(sk), UDP_MIB_MEMERRORS, is_udplite);
+			UDP_INC_STATS(sock_net(sk), UDP_MIB_INERRORS, is_udplite);
+
 			sk_skb_reason_drop(sk, skb, SKB_DROP_REASON_PROTO_MEM);
 		}
 		numa_drop_add(&udp_sk(sk)->drop_counters, nb);
