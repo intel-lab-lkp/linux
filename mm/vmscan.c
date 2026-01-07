@@ -1009,6 +1009,11 @@ static struct folio *alloc_demote_folio(struct folio *src,
 	if (dst)
 		return dst;
 
+	/* Randomly select a node from fallback nodes for balanced allocation */
+	if (allowed_mask) {
+		mtc->nid = node_random(allowed_mask);
+		node_clear(mtc->nid, *allowed_mask);
+	}
 	mtc->gfp_mask &= ~__GFP_THISNODE;
 	mtc->nmask = allowed_mask;
 
