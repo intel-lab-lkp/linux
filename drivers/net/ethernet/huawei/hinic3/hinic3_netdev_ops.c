@@ -2,6 +2,7 @@
 // Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
 
 #include <linux/etherdevice.h>
+#include <linux/if_vlan.h>
 #include <linux/netdevice.h>
 
 #include "hinic3_hwif.h"
@@ -14,6 +15,10 @@
 
 #define HINIC3_LRO_DEFAULT_COAL_PKT_SIZE  32
 #define HINIC3_LRO_DEFAULT_TIME_LIMIT     16
+
+#define HINIC3_VLAN_CLEAR_OFFLOAD \
+	(NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM | \
+	 NETIF_F_SCTP_CRC | NETIF_F_RXCSUM | NETIF_F_ALL_TSO)
 
 /* try to modify the number of irq to the target number,
  * and return the actual number of irq.
@@ -624,6 +629,16 @@ static netdev_features_t hinic3_fix_features(struct net_device *netdev,
 	return features_tmp;
 }
 
+static netdev_features_t hinic3_features_check(struct sk_buff *skb,
+					       struct net_device *dev,
+					       netdev_features_t features)
+{
+	if (unlikely(skb_vlan_tagged_multi(skb)))
+		features &= ~HINIC3_VLAN_CLEAR_OFFLOAD;
+
+	return features;
+}
+
 int hinic3_set_hw_features(struct net_device *netdev)
 {
 	netdev_features_t wanted, curr;
@@ -756,6 +771,7 @@ static const struct net_device_ops hinic3_netdev_ops = {
 	.ndo_stop             = hinic3_close,
 	.ndo_set_features     = hinic3_ndo_set_features,
 	.ndo_fix_features     = hinic3_fix_features,
+	.ndo_features_check   = hinic3_features_check,
 	.ndo_change_mtu       = hinic3_change_mtu,
 	.ndo_set_mac_address  = hinic3_set_mac_addr,
 	.ndo_tx_timeout       = hinic3_tx_timeout,
