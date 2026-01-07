@@ -91,10 +91,6 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#define DRV_NAME	"8139too"
-#define DRV_VERSION	"0.9.28"
-
-
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/compiler.h>
@@ -114,8 +110,6 @@
 #include <linux/gfp.h>
 #include <linux/if_vlan.h>
 #include <asm/irq.h>
-
-#define RTL8139_DRIVER_NAME   DRV_NAME " Fast Ethernet driver " DRV_VERSION
 
 /* Default Message level */
 #define RTL8139_DEF_MSG_ENABLE   (NETIF_MSG_DRV   | \
@@ -623,7 +617,6 @@ struct rtl8139_private {
 MODULE_AUTHOR ("Jeff Garzik <jgarzik@pobox.com>");
 MODULE_DESCRIPTION ("RealTek RTL-8139 Fast Ethernet driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);
 
 module_param(use_io, bool, 0);
 MODULE_PARM_DESC(use_io, "Force use of I/O access mode. 0=MMIO 1=PIO");
@@ -788,7 +781,7 @@ static struct net_device *rtl8139_init_board(struct pci_dev *pdev)
 		goto err_out;
 
 	disable_dev_on_err = 1;
-	rc = pci_request_regions (pdev, DRV_NAME);
+	rc = pci_request_regions (pdev, KBUILD_MODNAME);
 	if (rc)
 		goto err_out;
 
@@ -954,17 +947,6 @@ static int rtl8139_init_one(struct pci_dev *pdev,
 	assert (ent != NULL);
 
 	board_idx++;
-
-	/* when we're built into the kernel, the driver version message
-	 * is only printed if at least one 8139 board has been found
-	 */
-#ifndef MODULE
-	{
-		static int printed_version;
-		if (!printed_version++)
-			pr_info(RTL8139_DRIVER_NAME "\n");
-	}
-#endif
 
 	if (pdev->vendor == PCI_VENDOR_ID_REALTEK &&
 	    pdev->device == PCI_DEVICE_ID_REALTEK_8139 && pdev->revision >= 0x20) {
@@ -2382,8 +2364,7 @@ static int rtl8139_set_wol(struct net_device *dev, struct ethtool_wolinfo *wol)
 static void rtl8139_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *info)
 {
 	struct rtl8139_private *tp = netdev_priv(dev);
-	strscpy(info->driver, DRV_NAME, sizeof(info->driver));
-	strscpy(info->version, DRV_VERSION, sizeof(info->version));
+	strscpy(info->driver, KBUILD_MODNAME, sizeof(info->driver));
 	strscpy(info->bus_info, pci_name(tp->pci_dev), sizeof(info->bus_info));
 }
 
@@ -2649,32 +2630,11 @@ static int __maybe_unused rtl8139_resume(struct device *device)
 static SIMPLE_DEV_PM_OPS(rtl8139_pm_ops, rtl8139_suspend, rtl8139_resume);
 
 static struct pci_driver rtl8139_pci_driver = {
-	.name		= DRV_NAME,
+	.name		= KBUILD_MODNAME,
 	.id_table	= rtl8139_pci_tbl,
 	.probe		= rtl8139_init_one,
 	.remove		= rtl8139_remove_one,
 	.driver.pm	= &rtl8139_pm_ops,
 };
 
-
-static int __init rtl8139_init_module (void)
-{
-	/* when we're a module, we always print a version message,
-	 * even if no 8139 board is found.
-	 */
-#ifdef MODULE
-	pr_info(RTL8139_DRIVER_NAME "\n");
-#endif
-
-	return pci_register_driver(&rtl8139_pci_driver);
-}
-
-
-static void __exit rtl8139_cleanup_module (void)
-{
-	pci_unregister_driver (&rtl8139_pci_driver);
-}
-
-
-module_init(rtl8139_init_module);
-module_exit(rtl8139_cleanup_module);
+module_pci_driver(rtl8139_pci_driver);
