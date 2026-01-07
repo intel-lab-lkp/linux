@@ -611,6 +611,22 @@ config SENSORS_TDA38640_REGULATOR
 	  If you say yes here you get regulator support for Infineon
 	  TDA38640 as regulator.
 
+config SENSORS_TDA38740A
+	tristate "Infineon TDA38740A"
+	help
+	  If you say yes here you get hardware monitoring support for Infineon
+	  TDA38740A/25A.
+
+	  This driver can also be built as a module. If so, the module will
+	  be called tda38740a.
+
+config SENSORS_TDA38740A_REGULATOR
+	bool "Regulator support for TDA38740A and compatibles"
+	depends on SENSORS_TDA38740A && REGULATOR
+	help
+	  If you say yes here you get regulator support for Infineon
+	  TDA38740A/25A as regulator.
+
 config SENSORS_TPS25990
 	tristate "TI TPS25990"
 	help
