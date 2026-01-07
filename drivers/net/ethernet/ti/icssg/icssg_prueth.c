@@ -378,6 +378,12 @@ static void emac_adjust_link(struct net_device *ndev)
 		} else {
 			icssg_set_port_state(emac, ICSSG_EMAC_PORT_DISABLE);
 		}
+
+		if (emac->link) {
+			icssg_qos_link_up(ndev);
+		} else {
+			icssg_qos_link_down(ndev);
+		}
 	}
 
 	if (emac->link) {
@@ -967,6 +973,8 @@ static int emac_ndo_open(struct net_device *ndev)
 	if (ret)
 		goto destroy_rxq;
 
+	icssg_qos_init(ndev);
+
 	/* start PHY */
 	phy_start(ndev->phydev);
 
@@ -1421,6 +1429,7 @@ static const struct net_device_ops emac_netdev_ops = {
 	.ndo_hwtstamp_get = icssg_ndo_get_ts_config,
 	.ndo_hwtstamp_set = icssg_ndo_set_ts_config,
 	.ndo_xsk_wakeup = prueth_xsk_wakeup,
+	.ndo_setup_tc = icssg_qos_ndo_setup_tc,
 };
 
 static int prueth_netdev_init(struct prueth *prueth,
