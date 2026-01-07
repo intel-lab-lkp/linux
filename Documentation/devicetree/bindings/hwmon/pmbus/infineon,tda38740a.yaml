@@ -1,0 +1,81 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+
+$id: http://devicetree.org/schemas/hwmon/pmbus/infineon,tda38740a.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Infineon TDA38740A and TDA38725A Synchronous Buck Regulator with I2C
+
+maintainers:
+  - ASHISH YADAV <Ashish.Yadav@infineon.com>
+
+description: |
+  The Infineon TDA38740A/TDA38725A is a 40A/25A Single-voltage Synchronous
+  Buck Regulator with I2C designed for Industrial use.
+
+  Datasheet:
+  https://www.infineon.com/assets/row/public/documents/24/49/infineon-tda38740a-tda38725a-datasheet-en.pdf
+
+properties:
+  compatible:
+    enum:
+      - infineon,tda38725a
+      - infineon,tda38740a
+
+  reg:
+    maxItems: 1
+
+  infineon,vout-voltage-multiplier:
+    description: |
+      TDA38740/25 pin strap parts are available in two flavors of 1:1 & 1:2
+      vout scale loop.
+      For the 1:1 vout_scale_loop version, there is no need for any resistor
+      divider as output voltage sense pins are directly connected to
+      the output.
+
+      For a 1:2 scale loop version, it is recommended to use 499 ohms each for
+      top and bottom across the feedback path.
+      However, in some applications customers tend to use an intentional
+      resistor divider across the output with a different divider ratio other
+      than 1:1 or 1:2 to alter the actual output voltage.
+
+      For example, if pin strap part is set to Vboot of 0.7V,they use a
+      resistor divider to generate 0.75V using the equation provided in
+      Section 13.3 of the datasheet.In this case, as there are only two
+      vout_scale_loop options of 1:1 and 1:2 that the IC can identify,
+      Read_Vout would still read as 0.7V in the telemetry and the baseboard
+      management controllers would use this telemetry data to monitor the
+      rail parameters leading to false tripping of the system.
+      This multiplier is used to offset the telemetry output voltage Read_Vout
+      so that the telemetry data is reported correctly to the monitoring
+      controller,in this example the multiplier would be 0.75/0.7 = 1.071.
+
+      This multiplier is required only for any external monitoring of the rail
+      output voltage. All the other Vout related parameters are used
+      internally by the IC and there is only a slight impact on the fault
+      thresholds.The impact can be calculated using equations in Section 13.3
+      of the datasheet.
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 2
+    maxItems: 2
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        hwmon@40 {
+            compatible = "infineon,tda38740a";
+            reg = <0x40>;
+            infineon,vout-voltage-multiplier = <75 70>;
+        };
+    };
