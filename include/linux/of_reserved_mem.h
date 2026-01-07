@@ -40,11 +40,15 @@ int of_reserved_mem_device_init_by_name(struct device *dev,
 void of_reserved_mem_device_release(struct device *dev);
 
 struct reserved_mem *of_reserved_mem_lookup(struct device_node *np);
+int of_reserved_mem_array_lookup(struct device_node *np, struct reserved_mem **rmem);
 int of_reserved_mem_region_to_resource(const struct device_node *np,
 				       unsigned int idx, struct resource *res);
+int of_reserved_mem_region_to_resource_array(struct device *dev, const struct device_node *np,
+					     unsigned int idx, struct resource **res);
 int of_reserved_mem_region_to_resource_byname(const struct device_node *np,
 					      const char *name, struct resource *res);
 int of_reserved_mem_region_count(const struct device_node *np);
+int of_reserved_mem_region_total_count(const struct device_node *np);
 
 #else
 
