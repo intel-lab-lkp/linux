@@ -534,22 +534,9 @@ struct txd_desc {
 
 #ifdef DEBUG
 
-#define ENTER						\
-do {							\
-	pr_err("%s:%-5d: ENTER\n", __func__, __LINE__); \
-} while (0)
-
-#define RET(args...)					 \
-do {							 \
-	pr_err("%s:%-5d: RETURN\n", __func__, __LINE__); \
-	return args;					 \
-} while (0)
-
 #define DBG(fmt, args...)					\
 	pr_err("%s:%-5d: " fmt, __func__, __LINE__, ## args)
 #else
-#define ENTER do {  } while (0)
-#define RET(args...)   return args
 #define DBG(fmt, args...)			\
 do {						\
 	if (0)					\
