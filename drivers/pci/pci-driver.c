@@ -296,18 +296,9 @@ static struct attribute *pci_drv_attrs[] = {
 };
 ATTRIBUTE_GROUPS(pci_drv);
 
-struct drv_dev_and_id {
-	struct pci_driver *drv;
-	struct pci_dev *dev;
-	const struct pci_device_id *id;
-};
-
-static long local_pci_probe(void *_ddi)
+static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
+			  const struct pci_device_id *id)
 {
-	struct drv_dev_and_id *ddi = _ddi;
-	struct pci_dev *pci_dev = ddi->dev;
-	struct pci_driver *pci_drv = ddi->drv;
-	struct device *dev = &pci_dev->dev;
 	int rc;
 
 	/*
@@ -319,81 +310,23 @@ static long local_pci_probe(void *_ddi)
 	 * count, in its probe routine and pm_runtime_get_noresume() in
 	 * its remove routine.
 	 */
-	pm_runtime_get_sync(dev);
-	pci_dev->driver = pci_drv;
-	rc = pci_drv->probe(pci_dev, ddi->id);
+	pm_runtime_get_sync(&dev->dev);
+	dev->driver = drv;
+	rc = drv->probe(dev, id);
 	if (!rc)
 		return rc;
 	if (rc < 0) {
-		pci_dev->driver = NULL;
-		pm_runtime_put_sync(dev);
+		dev->driver = NULL;
+		pm_runtime_put_sync(&dev->dev);
 		return rc;
 	}
 	/*
 	 * Probe function should return < 0 for failure, 0 for success
 	 * Treat values > 0 as success, but warn.
 	 */
-	pci_warn(pci_dev, "Driver probe function unexpectedly returned %d\n",
+	pci_warn(dev, "Driver probe function unexpectedly returned %d\n",
 		 rc);
 	return 0;
-}
-
-static bool pci_physfn_is_probed(struct pci_dev *dev)
-{
-#ifdef CONFIG_PCI_IOV
-	return dev->is_virtfn && dev->physfn->is_probed;
-#else
-	return false;
-#endif
-}
-
-static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
-			  const struct pci_device_id *id)
-{
-	int error, node, cpu;
-	struct drv_dev_and_id ddi = { drv, dev, id };
-
-	/*
-	 * Execute driver initialization on node where the device is
-	 * attached.  This way the driver likely allocates its local memory
-	 * on the right node.
-	 */
-	node = dev_to_node(&dev->dev);
-	dev->is_probed = 1;
-
-	cpu_hotplug_disable();
-
-	/*
-	 * Prevent nesting work_on_cpu() for the case where a Virtual Function
-	 * device is probed from work_on_cpu() of the Physical device.
-	 */
-	if (node < 0 || node >= MAX_NUMNODES || !node_online(node) ||
-	    pci_physfn_is_probed(dev)) {
-		cpu = nr_cpu_ids;
-	} else {
-		cpumask_var_t wq_domain_mask;
-
-		if (!zalloc_cpumask_var(&wq_domain_mask, GFP_KERNEL)) {
-			error = -ENOMEM;
-			goto out;
-		}
-		cpumask_and(wq_domain_mask,
-			    housekeeping_cpumask(HK_TYPE_WQ),
-			    housekeeping_cpumask(HK_TYPE_DOMAIN));
-
-		cpu = cpumask_any_and(cpumask_of_node(node),
-				      wq_domain_mask);
-		free_cpumask_var(wq_domain_mask);
-	}
-
-	if (cpu < nr_cpu_ids)
-		error = work_on_cpu(cpu, local_pci_probe, &ddi);
-	else
-		error = local_pci_probe(&ddi);
-out:
-	dev->is_probed = 0;
-	cpu_hotplug_enable();
-	return error;
 }
 
 /**
