@@ -381,6 +381,92 @@ static void __exit deferred_probe_exit(void)
 }
 __exitcall(deferred_probe_exit);
 
+/*
+ * NUMA-node-aware synchronous probing:
+ * drivers can initialize and allocate memory on the device’s local
+ * node without scattering kmalloc_node() calls throughout the code.
+ */
+
+/* Generic function pointer type */
+typedef int (*numa_func_t)(void *arg1, void *arg2);
+
+/* Context for NUMA execution */
+struct numa_work_ctx {
+	struct work_struct work;
+	numa_func_t func;
+	void *arg1;
+	void *arg2;
+	int result;
+};
+
+/* Worker function running on the target node */
+static void numa_work_func(struct work_struct *work)
+{
+	struct numa_work_ctx *ctx = container_of(work, struct numa_work_ctx, work);
+
+	ctx->result = ctx->func(ctx->arg1, ctx->arg2);
+}
+
+/*
+ * __exec_on_numa_node - Execute a function on a specific NUMA node synchronously
+ * @node: Target NUMA node ID
+ * @func: The wrapper function to execute
+ * @arg1: First argument (void *)
+ * @arg2: Second argument (void *)
+ *
+ * Returns the result of the function execution, or -ENODEV if initialization fails.
+ * If the node is invalid or offline, it falls back to local execution.
+ */
+static int __exec_on_numa_node(int node, numa_func_t func, void *arg1, void *arg2)
+{
+	struct numa_work_ctx ctx;
+
+	/* Fallback to local execution if the node is invalid or offline */
+	if (node < 0 || node >= MAX_NUMNODES || !node_online(node))
+		return func(arg1, arg2);
+
+	ctx.func = func;
+	ctx.arg1 = arg1;
+	ctx.arg2 = arg2;
+	ctx.result = -ENODEV;
+	INIT_WORK_ONSTACK(&ctx.work, numa_work_func);
+
+	/* Use system_dfl_wq to allow execution on the specific node. */
+	queue_work_node(node, system_dfl_wq, &ctx.work);
+	flush_work(&ctx.work);
+	destroy_work_on_stack(&ctx.work);
+
+	return ctx.result;
+}
+
+/*
+ * DEFINE_NUMA_WRAPPER - Generate a type-safe wrapper for a function
+ * @func_name: The name of the target function
+ * @type1: The type of the first argument
+ * @type2: The type of the second argument
+ *
+ * This macro generates a static function named __wrapper_<func_name> that
+ * casts void pointers back to their original types and calls the target function.
+ */
+#define DEFINE_NUMA_WRAPPER(func_name, type1, type2)			\
+	static int __wrapper_##func_name(void *arg1, void *arg2)	\
+	{								\
+		return func_name((type1)arg1, (type2)arg2);		\
+	}
+
+/*
+ * EXEC_ON_NUMA_NODE - Execute a registered function on a NUMA node
+ * @node: Target NUMA node ID
+ * @func_name: The name of the target function (must be registered via DEFINE_NUMA_WRAPPER)
+ * @arg1: First argument
+ * @arg2: Second argument
+ *
+ * This macro invokes the internal execution helper using the generated wrapper.
+ */
+#define EXEC_ON_NUMA_NODE(node, func_name, arg1, arg2)		\
+	__exec_on_numa_node(node, __wrapper_##func_name,	\
+			(void *)(arg1), (void *)(arg2))
+
 /**
  * device_is_bound() - Check if device is bound to a driver
  * @dev: device to check
@@ -808,6 +894,8 @@ static int __driver_probe_device(const struct device_driver *drv, struct device 
 	return ret;
 }
 
+DEFINE_NUMA_WRAPPER(__driver_probe_device, const struct device_driver *, struct device *)
+
 /**
  * driver_probe_device - attempt to bind device & driver together
  * @drv: driver to bind a device to
@@ -843,6 +931,8 @@ static int driver_probe_device(const struct device_driver *drv, struct device *d
 	wake_up_all(&probe_waitqueue);
 	return ret;
 }
+
+DEFINE_NUMA_WRAPPER(driver_probe_device, const struct device_driver *, struct device *)
 
 static inline bool cmdline_requested_async_probing(const char *drv_name)
 {
@@ -1000,6 +1090,8 @@ static int __device_attach_driver_scan(struct device_attach_data *data,
 	return ret;
 }
 
+DEFINE_NUMA_WRAPPER(__device_attach_driver_scan, struct device_attach_data *, bool *)
+
 static void __device_attach_async_helper(void *_dev, async_cookie_t cookie)
 {
 	struct device *dev = _dev;
@@ -1055,7 +1147,9 @@ static int __device_attach(struct device *dev, bool allow_async)
 			.want_async = false,
 		};
 
-		ret = __device_attach_driver_scan(&data, &async);
+		ret = EXEC_ON_NUMA_NODE(dev_to_node(dev),
+					__device_attach_driver_scan,
+					&data, &async);
 	}
 out_unlock:
 	device_unlock(dev);
@@ -1142,7 +1236,9 @@ int device_driver_attach(const struct device_driver *drv, struct device *dev)
 	int ret;
 
 	__device_driver_lock(dev, dev->parent);
-	ret = __driver_probe_device(drv, dev);
+	ret = EXEC_ON_NUMA_NODE(dev_to_node(dev),
+				__driver_probe_device,
+				drv, dev);
 	__device_driver_unlock(dev, dev->parent);
 
 	/* also return probe errors as normal negative errnos */
@@ -1231,7 +1327,9 @@ static int __driver_attach(struct device *dev, void *data)
 	}
 
 	__device_driver_lock(dev, dev->parent);
-	driver_probe_device(drv, dev);
+	EXEC_ON_NUMA_NODE(dev_to_node(dev),
+			  driver_probe_device,
+			  drv, dev);
 	__device_driver_unlock(dev, dev->parent);
 
 	return 0;
