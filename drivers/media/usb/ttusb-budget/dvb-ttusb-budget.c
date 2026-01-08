@@ -149,7 +149,7 @@ static int ttusb_cmd(struct ttusb *ttusb, u8 *data, int len, int len_result)
 	if (debug >= 3)
 		dprintk("> %*ph\n", len, data);
 
-	memcpy(data, ttusb->send_buf, len);
+	memcpy(ttusb->send_buf, data, len);
 
 	err = usb_bulk_msg(ttusb->dev, ttusb->bulk_out_pipe,
 			   ttusb->send_buf, len, &actual_len, 1000);
@@ -178,7 +178,7 @@ static int ttusb_cmd(struct ttusb *ttusb, u8 *data, int len, int len_result)
 	}
 
 	if (len_result)
-		memcpy(ttusb->send_buf, ttusb->last_result, len_result);
+		memcpy(data, ttusb->last_result, len_result);
 
 err:
 	mutex_unlock(&ttusb->semusb);
