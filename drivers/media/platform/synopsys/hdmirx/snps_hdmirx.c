@@ -717,7 +717,7 @@ static int hdmirx_get_edid(struct file *file, void *fh, struct v4l2_edid *edid)
 	if (edid->start_block >= hdmirx_dev->edid_blocks_written || !edid->blocks)
 		return -EINVAL;
 
-	if (edid->start_block + edid->blocks > hdmirx_dev->edid_blocks_written)
+	if (size_add(edid->start_block, edid->blocks) > hdmirx_dev->edid_blocks_written)
 		edid->blocks = hdmirx_dev->edid_blocks_written - edid->start_block;
 
 	memcpy(edid->edid, hdmirx_dev->edid, edid->blocks * EDID_BLOCK_SIZE);
