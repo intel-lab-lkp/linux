@@ -2348,19 +2348,21 @@ void usb_disconnect(struct usb_device **pdev)
 	if (udev->parent) {
 		port1 = udev->portnum;
 		hub = usb_hub_to_struct_hub(udev->parent);
-		port_dev = hub->ports[port1 - 1];
+		if (hub) {
+			port_dev = hub->ports[port1 - 1];
 
-		sysfs_remove_link(&udev->dev.kobj, "port");
-		sysfs_remove_link(&port_dev->dev.kobj, "device");
+			sysfs_remove_link(&udev->dev.kobj, "port");
+			sysfs_remove_link(&port_dev->dev.kobj, "device");
 
-		/*
-		 * As usb_port_runtime_resume() de-references udev, make
-		 * sure no resumes occur during removal
-		 */
-		if (!test_and_set_bit(port1, hub->child_usage_bits))
-			pm_runtime_get_sync(&port_dev->dev);
+			/*
+			 * As usb_port_runtime_resume() de-references udev, make
+			 * sure no resumes occur during removal
+			 */
+			if (!test_and_set_bit(port1, hub->child_usage_bits))
+				pm_runtime_get_sync(&port_dev->dev);
 
-		typec_deattach(port_dev->connector, &udev->dev);
+			typec_deattach(port_dev->connector, &udev->dev);
+		}
 	}
 
 	usb_remove_ep_devs(&udev->ep0);
@@ -2385,8 +2387,9 @@ void usb_disconnect(struct usb_device **pdev)
 	*pdev = NULL;
 	spin_unlock_irq(&device_state_lock);
 
-	if (port_dev && test_and_clear_bit(port1, hub->child_usage_bits))
-		pm_runtime_put(&port_dev->dev);
+	if (hub)
+		if (port_dev && test_and_clear_bit(port1, hub->child_usage_bits))
+			pm_runtime_put(&port_dev->dev);
 
 	hub_free_dev(udev);
 
