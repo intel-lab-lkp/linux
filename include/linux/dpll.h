@@ -11,6 +11,7 @@
 #include <linux/device.h>
 #include <linux/netlink.h>
 #include <linux/netdevice.h>
+#include <linux/property.h>
 #include <linux/rtnetlink.h>
 
 struct dpll_device;
@@ -176,6 +177,8 @@ int dpll_netdev_add_pin_handle(struct sk_buff *msg,
 			       const struct net_device *dev);
 
 struct dpll_pin *fwnode_dpll_pin_find(struct fwnode_handle *fwnode);
+struct fwnode_handle *fwnode_dpll_pin_node_get(struct fwnode_handle *fwnode,
+					       const char *name);
 #else
 static inline void
 dpll_netdev_pin_set(struct net_device *dev, struct dpll_pin *dpll_pin) { }
@@ -197,7 +200,19 @@ fwnode_dpll_pin_find(struct fwnode_handle *fwnode)
 {
 	return NULL;
 }
+
+static inline struct fwnode_handle *
+fwnode_dpll_pin_node_get(struct fwnode_handle *fwnode, const char *name)
+{
+	return NULL;
+}
 #endif
+
+static inline struct fwnode_handle *
+device_dpll_pin_node_get(struct device *dev, const char *name)
+{
+	return fwnode_dpll_pin_node_get(dev_fwnode(dev), name);
+}
 
 struct dpll_device *
 dpll_device_get(u64 clock_id, u32 dev_driver_id, struct module *module);
