@@ -179,7 +179,7 @@ static void dmub_abm_set_backlight(struct dc_context *dc, uint32_t backlight_pwm
 void dcn21_set_abm_immediate_disable(struct pipe_ctx *pipe_ctx)
 {
 	struct abm *abm = pipe_ctx->stream_res.abm;
-	uint32_t otg_inst = pipe_ctx->stream_res.tg->inst;
+	struct timing_generator *tg = pipe_ctx->stream_res.tg;
 	struct panel_cntl *panel_cntl = pipe_ctx->stream->link->panel_cntl;
 	struct dmcu *dmcu = pipe_ctx->stream->ctx->dc->res_pool->dmcu;
 
@@ -189,24 +189,29 @@ void dcn21_set_abm_immediate_disable(struct pipe_ctx *pipe_ctx)
 		return;
 	}
 
+	uint32_t otg_inst;
+
+	if (!abm || !tg || !panel_cntl)
+		return;
+
+	otg_inst = tg->inst;
+
 	if (dmcu) {
 		dce110_set_abm_immediate_disable(pipe_ctx);
 		return;
 	}
 
-	if (abm && panel_cntl) {
-		if (abm->funcs && abm->funcs->set_pipe_ex) {
-			abm->funcs->set_pipe_ex(abm, otg_inst, SET_ABM_PIPE_IMMEDIATELY_DISABLE,
-					panel_cntl->inst, panel_cntl->pwrseq_inst);
-		} else {
-			dcn21_dmub_abm_set_pipe(abm,
-						otg_inst,
-						SET_ABM_PIPE_IMMEDIATELY_DISABLE,
-						panel_cntl->inst,
-						panel_cntl->pwrseq_inst);
-		}
-		panel_cntl->funcs->store_backlight_level(panel_cntl);
+	if (abm->funcs && abm->funcs->set_pipe_ex) {
+		abm->funcs->set_pipe_ex(abm, otg_inst, SET_ABM_PIPE_IMMEDIATELY_DISABLE,
+				panel_cntl->inst, panel_cntl->pwrseq_inst);
+	} else {
+		dcn21_dmub_abm_set_pipe(abm,
+					otg_inst,
+					SET_ABM_PIPE_IMMEDIATELY_DISABLE,
+					panel_cntl->inst,
+					panel_cntl->pwrseq_inst);
 	}
+	panel_cntl->funcs->store_backlight_level(panel_cntl);
 }
 
 void dcn21_set_pipe(struct pipe_ctx *pipe_ctx)
