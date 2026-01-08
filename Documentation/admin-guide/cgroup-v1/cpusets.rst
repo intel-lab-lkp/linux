@@ -158,14 +158,18 @@ new system calls are added for cpusets - all support for querying and
 modifying cpusets is via this cpuset file system.
 
 The /proc/<pid>/status file for each task has four added lines,
-displaying the task's cpus_allowed (on which CPUs it may be scheduled)
-and mems_allowed (on which Memory Nodes it may obtain memory),
-in the two formats seen in the following example::
+displaying the task's cpus_allowed (on which CPUs it may be scheduled),
+and mems_allowed (on which SystemRAM nodes it may obtain memory),
+in the formats seen in the following example::
 
   Cpus_allowed:   ffffffff,ffffffff,ffffffff,ffffffff
   Cpus_allowed_list:      0-127
   Mems_allowed:   ffffffff,ffffffff
   Mems_allowed_list:      0-63
+
+Note that Mems_allowed only shows SystemRAM nodes (N_MEMORY), not
+Private Nodes.  Private Nodes may be accessible via __GFP_THISNODE
+allocations if they appear in the task's cpuset.effective_mems.
 
 Each cpuset is represented by a directory in the cgroup file system
 containing (on top of the standard cgroup files) the following
@@ -173,6 +177,7 @@ files describing that cpuset:
 
  - cpuset.cpus: list of CPUs in that cpuset
  - cpuset.mems: list of Memory Nodes in that cpuset
+ - cpuset.mems.sysram: read-only list of SystemRAM nodes (excludes Private Nodes)
  - cpuset.memory_migrate flag: if set, move pages to cpusets nodes
  - cpuset.cpu_exclusive flag: is cpu placement exclusive?
  - cpuset.mem_exclusive flag: is memory placement exclusive?
@@ -227,7 +232,9 @@ nodes with memory--using the cpuset_track_online_nodes() hook.
 
 The cpuset.effective_cpus and cpuset.effective_mems files are
 normally read-only copies of cpuset.cpus and cpuset.mems files
-respectively.  If the cpuset cgroup filesystem is mounted with the
+respectively.  The cpuset.effective_mems file may include both
+regular SystemRAM nodes (N_MEMORY) and Private Nodes (N_PRIVATE).
+If the cpuset cgroup filesystem is mounted with the
 special "cpuset_v2_mode" option, the behavior of these files will become
 similar to the corresponding files in cpuset v2.  In other words, hotplug
 events will not change cpuset.cpus and cpuset.mems.  Those events will
@@ -235,6 +242,10 @@ only affect cpuset.effective_cpus and cpuset.effective_mems which show
 the actual cpus and memory nodes that are currently used by this cpuset.
 See Documentation/admin-guide/cgroup-v2.rst for more information about
 cpuset v2 behavior.
+
+The cpuset.mems.sysram file shows only the SystemRAM nodes (N_MEMORY)
+from cpuset.effective_mems, excluding any Private Nodes. This
+represents the nodes available for general memory allocation.
 
 
 1.4 What are exclusive cpusets ?

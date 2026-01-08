@@ -294,7 +294,7 @@ It's slow but very precise.
  Cpus_active_mm              mask of CPUs on which this process has an active
                              memory context
  Cpus_active_mm_list         Same as previous, but in "list format"
- Mems_allowed                mask of memory nodes allowed to this process
+ Mems_allowed                mask of SystemRAM nodes for general allocations
  Mems_allowed_list           Same as previous, but in "list format"
  voluntary_ctxt_switches     number of voluntary context switches
  nonvoluntary_ctxt_switches  number of non voluntary context switches

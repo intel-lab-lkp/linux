@@ -2530,14 +2530,36 @@ Cpuset Interface Files
 	cpuset-enabled cgroups.
 
 	It lists the onlined memory nodes that are actually granted to
-	this cgroup by its parent. These memory nodes are allowed to
-	be used by tasks within the current cgroup.
+	this cgroup by its parent.  This includes both regular SystemRAM
+	nodes (N_MEMORY) and Private Nodes (N_PRIVATE) that provide
+	device-specific memory not intended for general consumption.
+	Tasks within this cgroup may access Private Nodes using explicit
+	__GFP_THISNODE allocations if the node is in this mask.
 
 	If "cpuset.mems" is empty, it shows all the memory nodes from the
 	parent cgroup that will be available to be used by this cgroup.
 	Otherwise, it should be a subset of "cpuset.mems" unless none of
 	the memory nodes listed in "cpuset.mems" can be granted.  In this
 	case, it will be treated just like an empty "cpuset.mems".
+
+	Its value will be affected by memory nodes hotplug events.
+
+  cpuset.mems.sysram
+	A read-only multiple values file which exists on all
+	cpuset-enabled cgroups.
+
+	It lists the SystemRAM nodes (N_MEMORY) that are available for
+	general memory allocation by tasks within this cgroup.  This is
+	a subset of "cpuset.mems.effective" that excludes Private Nodes.
+
+	Normal page allocations are restricted to nodes in this mask.
+	The kernel page allocator, slab allocator, and compaction only
+	consider SystemRAM nodes when allocating memory for tasks.
+
+	Private Nodes are excluded from this mask because their memory
+	is managed by device drivers for specific purposes (e.g., CXL
+	compressed memory, accelerator memory) and should not be used
+	for general allocations.
 
 	Its value will be affected by memory nodes hotplug events.
 
