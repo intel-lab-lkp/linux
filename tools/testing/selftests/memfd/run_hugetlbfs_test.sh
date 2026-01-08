@@ -4,11 +4,20 @@
 # Kselftest framework requirement - SKIP code is 4.
 ksft_skip=4
 
+ret=0
 #
 # To test memfd_create with hugetlbfs, there needs to be hpages_test
 # huge pages free.  Attempt to allocate enough pages to test.
 #
 hpages_test=8
+
+# set global exit status, but never reset nonzero one.
+check_err()
+{
+	if [ $ret -eq 0 ]; then
+		ret=$1
+	fi
+}
 
 #
 # Get count of free huge pages from /proc/meminfo
@@ -58,7 +67,9 @@ fi
 # Run the hugetlbfs test
 #
 ./memfd_test hugetlbfs
+check_err $?
 ./run_fuse_test.sh hugetlbfs
+check_err $?
 
 #
 # Give back any huge pages allocated for the test
@@ -66,3 +77,4 @@ fi
 if [ -n "$nr_hugepgs" ]; then
 	echo $nr_hugepgs > /proc/sys/vm/nr_hugepages
 fi
+exit $ret
