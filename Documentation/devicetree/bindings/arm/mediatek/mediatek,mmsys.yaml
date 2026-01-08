@@ -100,11 +100,12 @@ properties:
       the first component of one display pipeline, for example one of
       the available OVL or RDMA blocks.
       Some MediaTek SoCs support multiple display outputs per MMSYS.
-    properties:
-      endpoint@0:
+    patternProperties:
+      "^endpoint(@0)?$":
         $ref: /schemas/graph.yaml#/properties/endpoint
         description: Output to the primary display pipeline
 
+    properties:
       endpoint@1:
         $ref: /schemas/graph.yaml#/properties/endpoint
         description: Output to the secondary display pipeline
@@ -114,8 +115,11 @@ properties:
         description: Output to the tertiary display pipeline
 
     anyOf:
-      - required:
-          - endpoint@0
+      - oneOf:
+          - required:
+              - endpoint
+          - required:
+              - endpoint@0
       - required:
           - endpoint@1
       - required:
