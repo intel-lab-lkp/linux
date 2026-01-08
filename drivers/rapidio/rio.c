@@ -23,6 +23,8 @@
 #include <linux/spinlock.h>
 #include <linux/slab.h>
 #include <linux/interrupt.h>
+#include <linux/workqueue.h>
+
 
 #include "rio.h"
 
@@ -1062,6 +1064,62 @@ rio_get_input_status(struct rio_dev *rdev, int pnum, u32 *lnkresp)
 
 	return -EIO;
 }
+/**
+ * rio_restart_discovery_all - Restart discovery on all RapidIO networks
+ *
+ * Iterates through all registered RapidIO networks and restarts topology
+ * discovery process from each network's host port. Intended to be used
+ * after a system-wide error or configuration change.
+ */
+void rio_restart_discovery_all(void)
+{
+	struct rio_net *net;
+
+	spin_lock(&rio_global_list_lock);
+	list_for_each_entry(net, &rio_nets, node) {
+		if (net->hport)
+			rio_scan_mport(net->hport);
+	}
+	spin_unlock(&rio_global_list_lock);
+}
+EXPORT_SYMBOL_GPL(rio_restart_discovery_all);
+/**
+ * rio_maybe_restart_discovery - Restart discovery if device requires rediscovery
+ * @rdev: Pointer to RIO device control structure
+ *
+ * If the given device is associated with a RapidIO network,
+ * attempts to restart topology discovery from the network's host port.
+ * Intended to be called if an error condition is detected that may
+ * require rediscovery to restore normal operation.
+ */
+static void rio_maybe_restart_discovery(struct rio_dev *rdev)
+{
+	struct rio_net *net;
+
+	if (!rdev || !rdev->net)
+		return;
+
+	net = rdev->net;
+
+	/* Only restart if there is a valid host port */
+	if (net->hport) {
+		msleep(100); /* Brief delay for safety */
+		pr_info("RIO: Discovery restart triggered for device %s (net '%s')\n",
+			dev_name(&rdev->dev), dev_name(&net->dev));
+		rio_scan_mport(net->hport);
+	}
+}
+
+static void rio_restart_discovery(struct rio_net *net)
+{
+	if (net && net->hport) {
+		/* Delay briefly to avoid hammering after repeated errors */
+		msleep(100);
+		pr_info("RIO: Restarting discovery process on network '%s'\n", dev_name(&net->dev));
+		rio_scan_mport(net->hport);
+	}
+}
+
 
 /**
  * rio_clr_err_stopped - Clears port Error-stopped states.
