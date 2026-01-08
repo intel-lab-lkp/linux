@@ -5,6 +5,11 @@ ATOMICDIR=$(dirname $0)
 
 . ${ATOMICDIR}/atomic-tbl.sh
 
+if [ -z "$1" ]; then
+	echo "call scripts/atomic/gen-atomics.sh instead" >&2
+	exit 1
+fi
+
 #gen_proto_order_variant(meta, pfx, name, sfx, order, atomic, int, arg...)
 gen_proto_order_variant()
 {
