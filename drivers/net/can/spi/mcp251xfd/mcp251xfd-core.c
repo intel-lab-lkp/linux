@@ -1661,6 +1661,8 @@ out_free_irq:
 	free_irq(spi->irq, priv);
 out_destroy_workqueue:
 	destroy_workqueue(priv->wq);
+	if (priv->wq)
+		priv->wq = NULL;
 out_can_rx_offload_disable:
 	can_rx_offload_disable(&priv->offload);
 	set_bit(MCP251XFD_FLAGS_DOWN, priv->flags);
