@@ -79,6 +79,17 @@
 	};
 };
 
+&i2c4 {
+	bootph-all;
+};
+
+&i2c4_pins_a {
+	bootph-all;
+	pins {
+		bootph-all;
+	};
+};
+
 &ltdc {
 	status = "okay";
 
@@ -93,6 +104,10 @@
 	};
 };
 
+&pmic {
+	bootph-all;
+};
+
 &rtc {
 	pinctrl-names = "default";
 	pinctrl-0 = <&rtc_rsvd_pins_a>;
@@ -100,6 +115,20 @@
 	rtc_lsco_pins_a: rtc-lsco-0 {
 		pins = "out2_rmp";
 		function = "lsco";
+	};
+};
+
+&sdmmc1 {
+	bootph-pre-ram;
+};
+
+&sdmmc1_b4_pins_a {
+	bootph-pre-ram;
+	pins1 {
+		bootph-pre-ram;
+	};
+	pins2 {
+		bootph-pre-ram;
 	};
 };
 
@@ -124,6 +153,20 @@
 		compatible = "brcm,bcm4329-fmac";
 		pinctrl-names = "default";
 		pinctrl-0 = <&rtc_lsco_pins_a>;
+	};
+};
+
+&uart4 {
+	bootph-all;
+};
+
+&uart4_pins_a {
+	bootph-all;
+	pins1 {
+		bootph-all;
+	};
+	pins2 {
+		bootph-all;
 	};
 };
 
