@@ -2474,20 +2474,36 @@ mld_qrv - INTEGER
 	Minimum: 1 (as specified by RFC6636 4.5)
 
 max_dst_opts_number - INTEGER
-	Maximum number of non-padding TLVs allowed in a Destination
-	options extension header. If this value is less than zero
-	then unknown options are disallowed and the number of known
-	TLVs allowed is the absolute value of this number.
+        Maximum number of non-padding TLVs allowed in a Destination
+        options extension header. If this value is zero then receive
+        Destination Options processing is disabled in which case packets
+        with the Destination Options extension header are dropped. If
+        this value is less than zero then unknown options are disallowed
+        and the number of known TLVs allowed is the absolute value of
+        this number.
 
-	Default: 8
+        The default is zero which means the all received packets with
+        Destination Options extension header are dropped. The rationale is that
+        for the vast majority of hosts, Destination Options serve no purpose.
+        In the thirty years of IPv6 no broadly useful IPv6 Destination options
+        have been defined, they have no security or even checksum protection,
+        latest data shows the Destination have drop rates on the Internet
+        from ten percent to more than thirty percent (depending on the size of
+        the extension header). They also have the potential to be used as a
+        Denial of Service attack.
+
+        Default: 0
 
 max_hbh_opts_number - INTEGER
 	Maximum number of non-padding TLVs allowed in a Hop-by-Hop
-	options extension header. If this value is less than zero
-	then unknown options are disallowed and the number of known
-	TLVs allowed is the absolute value of this number.
+	options extension header. If this value is zero then receive
+        Hop-by-Hop Options processing is disabled in which case packets
+        with the Hop-by-Hop Options extension header are dropped.
+        If this value is less than zero then unknown options are disallowed
+        and the number of known TLVs allowed is the absolute value of this
+        number.
 
-	Default: 8
+        Default: 1
 
 max_dst_opts_length - INTEGER
 	Maximum length allowed for a Destination options extension
