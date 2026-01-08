@@ -104,18 +104,62 @@ struct ceph_mount_options {
 	struct fscrypt_dummy_policy dummy_enc_policy;
 };
 
+#define CEPH_NAMESPACE_WILDCARD		"*"
+
+typedef bool (*wildcard_check_fn)(const char *name);
+
+static inline bool is_wildcard_requested(const char *name)
+{
+	if (!name)
+		return false;
+
+	return strcmp(name, CEPH_NAMESPACE_WILDCARD) == 0;
+}
+
+static inline bool __namespace_equals(const char *name1,
+				      wildcard_check_fn is_wildcard_requested1,
+				      const char *name2,
+				      wildcard_check_fn is_wildcard_requested2,
+				      size_t max_len)
+{
+	size_t len1, len2;
+
+	if (!name1 && !name2)
+		return true;
+
+	if (name1) {
+		if (is_wildcard_requested1 && is_wildcard_requested1(name1))
+			return true;
+		else if (!name2)
+			return false;
+	}
+
+	if (name2) {
+		if (is_wildcard_requested2 && is_wildcard_requested2(name2))
+			return true;
+		else if (!name1)
+			return true;
+	}
+
+	WARN_ON_ONCE(!name1 || !name2);
+
+	len1 = strnlen(name1, max_len);
+	len2 = strnlen(name2, max_len);
+
+	return !(len1 != len2 || strncmp(name1, name2, len1));
+}
+
 /*
  * Check if the mds namespace in ceph_mount_options matches
  * the passed in namespace string. First time match (when
  * ->mds_namespace is NULL) is treated specially, since
  * ->mds_namespace needs to be initialized by the caller.
  */
-static inline int namespace_equals(struct ceph_mount_options *fsopt,
-				   const char *namespace, size_t len)
+static inline bool namespace_equals(struct ceph_mount_options *fsopt,
+				    const char *namespace, size_t len)
 {
-	return !(fsopt->mds_namespace &&
-		 (strlen(fsopt->mds_namespace) != len ||
-		  strncmp(fsopt->mds_namespace, namespace, len)));
+	return __namespace_equals(fsopt->mds_namespace, is_wildcard_requested,
+				  namespace, NULL, len);
 }
 
 /* mount state */
