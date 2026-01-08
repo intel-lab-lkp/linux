@@ -861,6 +861,193 @@ void register_memory_blocks_under_node_hotplug(int nid, unsigned long start_pfn,
 			   (void *)&nid, register_mem_block_under_node_hotplug);
 	return;
 }
+
+static enum private_memtype *private_nodes;
+/* Per-node list of private node operations callbacks */
+static struct list_head private_node_ops_list[MAX_NUMNODES];
+static DEFINE_MUTEX(private_node_ops_lock);
+static bool private_node_ops_initialized;
+
+/*
+ * Note: private_node_ops_list is initialized in node_dev_init() before
+ * any calls to node_register_private() can occur.
+ */
+
+/**
+ * node_register_private - Mark a node as private and register ops
+ * @nid: Node identifier
+ * @ops: Callback operations structure (required, but callbacks may be NULL)
+ *
+ * Mark a node as private and register the given ops structure. The ops
+ * structure must have res_start and res_end set to the physical address
+ * range covered by this registration, and memtype set to the private
+ * memory type. Multiple registrations for the same node are allowed as
+ * long as they have the same memtype.
+ *
+ * Returns 0 on success, negative error code on failure.
+ */
+int node_register_private(int nid, struct private_node_ops *ops)
+{
+	int rc = 0;
+	enum private_memtype ctype;
+	enum private_memtype type;
+
+	if (!ops)
+		return -EINVAL;
+
+	type = ops->memtype;
+
+	if (!node_possible(nid) || !private_nodes || type >= NODE_MAX_MEMTYPE)
+		return -EINVAL;
+
+	/* Validate resource bounds */
+	if (ops->res_start > ops->res_end)
+		return -EINVAL;
+
+	mutex_lock(&private_node_ops_lock);
+
+	/* hotplug lock must be held while checking online/node state */
+	mem_hotplug_begin();
+
+	/*
+	 * N_PRIVATE and N_MEMORY are mutually exclusive. Fail if the node
+	 * already has N_MEMORY set, regardless of online state.
+	 */
+	if (node_state(nid, N_MEMORY)) {
+		rc = -EBUSY;
+		goto out;
+	}
+
+	ctype = private_nodes[nid];
+	if (ctype > NODE_MEM_NOTYPE && ctype != type) {
+		rc = -EINVAL;
+		goto out;
+	}
+
+	/* Initialize the ops list entry and add to the node's list */
+	INIT_LIST_HEAD(&ops->list);
+	list_add_tail_rcu(&ops->list, &private_node_ops_list[nid]);
+
+	private_nodes[nid] = type;
+	node_set_state(nid, N_PRIVATE);
+out:
+	mem_hotplug_done();
+	mutex_unlock(&private_node_ops_lock);
+	return rc;
+}
+EXPORT_SYMBOL_GPL(node_register_private);
+
+/**
+ * node_unregister_private - Unregister ops and potentially unmark node as private
+ * @nid: Node identifier
+ * @ops: Callback operations structure to remove
+ *
+ * Remove the given ops structure from the node's ops list. If this is
+ * the last ops structure for the node and the node is offline, the
+ * node is unmarked as private.
+ */
+void node_unregister_private(int nid, struct private_node_ops *ops)
+{
+	if (!node_possible(nid) || !private_nodes || !ops)
+		return;
+
+	mutex_lock(&private_node_ops_lock);
+	mem_hotplug_begin();
+
+	list_del_rcu(&ops->list);
+	/* If list is now empty, clear private state */
+	if (list_empty(&private_node_ops_list[nid])) {
+		private_nodes[nid] = NODE_MEM_NOTYPE;
+		node_clear_state(nid, N_PRIVATE);
+	}
+
+	mem_hotplug_done();
+	mutex_unlock(&private_node_ops_lock);
+	synchronize_rcu();
+}
+EXPORT_SYMBOL_GPL(node_unregister_private);
+
+/**
+ * node_private_allocated - Validate a page allocation from a private node
+ * @page: The allocated page
+ *
+ * Find the ops structure whose region contains the page's physical address
+ * and call its page_allocated callback if one is registered.
+ *
+ * Returns:
+ *   0 if the callback succeeds or no callback is registered for this region
+ *   -ENXIO if the page is not found in any registered region
+ *   Other negative error code if the callback indicates the page is not safe
+ */
+int node_private_allocated(struct page *page)
+{
+	struct private_node_ops *ops;
+	phys_addr_t page_phys;
+	int nid = page_to_nid(page);
+	int ret = -ENXIO;
+
+	if (!node_possible(nid) || nid >= MAX_NUMNODES)
+		return -ENXIO;
+
+	if (!private_node_ops_initialized)
+		return -ENXIO;
+
+	page_phys = page_to_phys(page);
+
+	/*
+	 * Use RCU to safely traverse the list without holding locks.
+	 * Writers use list_add_tail_rcu/list_del_rcu with synchronize_rcu()
+	 * to ensure safe concurrent access.
+	 */
+	rcu_read_lock();
+	list_for_each_entry_rcu(ops, &private_node_ops_list[nid], list) {
+		if (page_phys >= ops->res_start && page_phys <= ops->res_end) {
+			if (ops->page_allocated)
+				ret = ops->page_allocated(page, ops->data);
+			else
+				ret = 0;
+			break;
+		}
+	}
+	rcu_read_unlock();
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(node_private_allocated);
+
+/**
+ * node_private_freed - Notify that a page from a private node is being freed
+ * @page: The page being freed
+ *
+ * Find the ops structure whose region contains the page's physical address
+ * and call its page_freed callback if one is registered.
+ */
+void node_private_freed(struct page *page)
+{
+	struct private_node_ops *ops;
+	phys_addr_t page_phys;
+	int nid = page_to_nid(page);
+
+	if (!node_possible(nid) || nid >= MAX_NUMNODES)
+		return;
+
+	if (!private_node_ops_initialized)
+		return;
+
+	page_phys = page_to_phys(page);
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(ops, &private_node_ops_list[nid], list) {
+		if (page_phys >= ops->res_start && page_phys <= ops->res_end) {
+			if (ops->page_freed)
+				ops->page_freed(page, ops->data);
+			break;
+		}
+	}
+	rcu_read_unlock();
+}
+EXPORT_SYMBOL_GPL(node_private_freed);
+
 #endif /* CONFIG_MEMORY_HOTPLUG */
 
 /**
@@ -959,6 +1146,7 @@ static struct node_attr node_state_attr[] = {
 	[N_HIGH_MEMORY] = _NODE_ATTR(has_high_memory, N_HIGH_MEMORY),
 #endif
 	[N_MEMORY] = _NODE_ATTR(has_memory, N_MEMORY),
+	[N_PRIVATE] = _NODE_ATTR(has_private_memory, N_PRIVATE),
 	[N_CPU] = _NODE_ATTR(has_cpu, N_CPU),
 	[N_GENERIC_INITIATOR] = _NODE_ATTR(has_generic_initiator,
 					   N_GENERIC_INITIATOR),
@@ -972,6 +1160,7 @@ static struct attribute *node_state_attrs[] = {
 	&node_state_attr[N_HIGH_MEMORY].attr.attr,
 #endif
 	&node_state_attr[N_MEMORY].attr.attr,
+	&node_state_attr[N_PRIVATE].attr.attr,
 	&node_state_attr[N_CPU].attr.attr,
 	&node_state_attr[N_GENERIC_INITIATOR].attr.attr,
 	NULL
@@ -1006,6 +1195,16 @@ void __init node_dev_init(void)
 		if (ret)
 			panic("%s() failed to add node: %d\n", __func__, ret);
 	}
+
+	private_nodes = kzalloc(sizeof(enum private_memtype) * MAX_NUMNODES,
+				GFP_KERNEL);
+	if (!private_nodes)
+		pr_warn("Failed to allocate private_nodes, private node support disabled\n");
+
+	/* Initialize private node ops lists */
+	for (i = 0; i < MAX_NUMNODES; i++)
+		INIT_LIST_HEAD(&private_node_ops_list[i]);
+	private_node_ops_initialized = true;
 
 	register_memory_blocks_under_nodes();
 }
