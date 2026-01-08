@@ -1693,9 +1693,11 @@ out:
 
 enomem:
 	/* alloc failed, take down everything */
+	mutex_lock(&q->blkcg_mutex);
 	spin_lock_irq(&q->queue_lock);
 	blkcg_policy_teardown_pds(q, pol);
 	spin_unlock_irq(&q->queue_lock);
+	mutex_unlock(&q->blkcg_mutex);
 	ret = -ENOMEM;
 	goto out;
 }
