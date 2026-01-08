@@ -1645,9 +1645,10 @@ retry:
 			 * GFP_NOWAIT failed.  Free the existing one and
 			 * prealloc for @blkg w/ GFP_KERNEL.
 			 */
+			if (!blkg_tryget(blkg))
+				continue;
 			if (pinned_blkg)
 				blkg_put(pinned_blkg);
-			blkg_get(blkg);
 			pinned_blkg = blkg;
 
 			spin_unlock_irq(&q->queue_lock);
