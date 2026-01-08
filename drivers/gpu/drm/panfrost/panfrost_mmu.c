@@ -595,6 +595,7 @@ static int panfrost_mmu_map_fault_addr(struct panfrost_device *pfdev, int as,
 	pgoff_t page_offset;
 	struct sg_table *sgt;
 	struct page **pages;
+	u32 nr_pages;
 
 	bomapping = addr_to_mapping(pfdev, as, addr);
 	if (!bomapping)
@@ -613,6 +614,7 @@ static int panfrost_mmu_map_fault_addr(struct panfrost_device *pfdev, int as,
 	addr &= ~((u64)SZ_2M - 1);
 	page_offset = addr >> PAGE_SHIFT;
 	page_offset -= bomapping->mmnode.start;
+	nr_pages = bo->base.base.size >> PAGE_SHIFT;
 
 	obj = &bo->base.base;
 
@@ -626,8 +628,7 @@ static int panfrost_mmu_map_fault_addr(struct panfrost_device *pfdev, int as,
 			goto err_unlock;
 		}
 
-		pages = kvmalloc_array(bo->base.base.size >> PAGE_SHIFT,
-				       sizeof(struct page *), GFP_KERNEL | __GFP_ZERO);
+		pages = kvmalloc_array(nr_pages, sizeof(struct page *), GFP_KERNEL | __GFP_ZERO);
 		if (!pages) {
 			kvfree(bo->sgts);
 			bo->sgts = NULL;
@@ -650,6 +651,8 @@ static int panfrost_mmu_map_fault_addr(struct panfrost_device *pfdev, int as,
 	mapping_set_unevictable(mapping);
 
 	for (i = page_offset; i < page_offset + NUM_FAULT_PAGES; i++) {
+		struct folio *folio;
+
 		/* Can happen if the last fault only partially filled this
 		 * section of the pages array before failing. In that case
 		 * we skip already filled pages.
@@ -657,12 +660,34 @@ static int panfrost_mmu_map_fault_addr(struct panfrost_device *pfdev, int as,
 		if (pages[i])
 			continue;
 
-		pages[i] = shmem_read_mapping_page(mapping, i);
-		if (IS_ERR(pages[i])) {
-			ret = PTR_ERR(pages[i]);
-			pages[i] = NULL;
+		folio = shmem_read_folio(mapping, i);
+		if (IS_ERR(folio)) {
+			ret = PTR_ERR(folio);
 			goto err_unlock;
 		}
+
+		/* We always fill the page array at a folio granularity so
+		 * there's no reason for a missing page to not be the first
+		 * in the folio. We want to ensure that's the case to avoid
+		 * unbalanced folio_{get,put}() leading to leaks, because
+		 * drm_gem_put_pages() assumes per-folio refcounting not
+		 * per-page.
+		 */
+		if (WARN_ON(folio_file_page(folio, i) != folio_page(folio, 0))) {
+			folio_put(folio);
+			ret = -EINVAL;
+			goto err_unlock;
+		}
+
+		/* Fill a folio worth of pages, even if it goes beyond
+		 * NUM_FAULT_PAGES, otherwise we'll end up with unbalanced
+		 * refcounting next time we hit an unmapped section crossing
+		 * this folio.
+		 */
+		for (u32 j = 0; j < folio_nr_pages(folio) && i < nr_pages; j++)
+			pages[i + j] = folio_page(folio, j);
+
+		i += folio_nr_pages(folio) - 1;
 	}
 
 	ret = sg_alloc_table_from_pages(sgt, pages + page_offset,
