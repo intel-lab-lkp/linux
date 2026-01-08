@@ -9,11 +9,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <unistd.h>
 #include <poll.h>
 #include <linux/errqueue.h>
 #include <linux/kernel.h>
+#include <linux/sockios.h>
 #include <errno.h>
 
 #include "control.h"
@@ -354,5 +356,70 @@ void test_stream_msgzcopy_empty_errq_server(const struct test_opts *opts)
 	}
 
 	control_expectln("DONE");
+	close(fd);
+}
+
+#define GOOD_COPY_LEN	128	/* net/vmw_vsock/virtio_transport_common.c */
+
+void test_stream_msgzcopy_mangle_client(const struct test_opts *opts)
+{
+	char sbuf1[PAGE_SIZE + 1], sbuf2[GOOD_COPY_LEN];
+	struct pollfd fds;
+	int fd;
+
+	fd = vsock_stream_connect(opts->peer_cid, opts->peer_port);
+	if (fd < 0) {
+		perror("connect");
+		exit(EXIT_FAILURE);
+	}
+
+	enable_so_zerocopy_check(fd);
+
+	memset(sbuf1, '1', sizeof(sbuf1));
+	memset(sbuf2, '2', sizeof(sbuf2));
+
+	send_buf(fd, sbuf1, sizeof(sbuf1), 0, sizeof(sbuf1));
+	send_buf(fd, sbuf2, sizeof(sbuf2), MSG_ZEROCOPY, sizeof(sbuf2));
+
+	fds.fd = fd;
+	fds.events = 0;
+
+	if (poll(&fds, 1, -1) != 1 || !(fds.revents & POLLERR)) {
+		perror("poll");
+		exit(EXIT_FAILURE);
+	}
+
+	close(fd);
+}
+
+static void recv_verify(int fd, char *buf, unsigned int len, char pattern)
+{
+	recv_buf(fd, buf, len, 0, len);
+
+	while (len--) {
+		if (*buf++ != pattern) {
+			fprintf(stderr, "Incorrect data received\n");
+			exit(EXIT_FAILURE);
+		}
+	}
+}
+
+void test_stream_msgzcopy_mangle_server(const struct test_opts *opts)
+{
+	char rbuf[PAGE_SIZE + 1];
+	int fd;
+
+	fd = vsock_stream_accept(VMADDR_CID_ANY, opts->peer_port, NULL);
+	if (fd < 0) {
+		perror("accept");
+		exit(EXIT_FAILURE);
+	}
+
+	/* Wait, don't race the (buggy) skbs coalescence. */
+	vsock_ioctl_int(fd, SIOCINQ, PAGE_SIZE + 1 + GOOD_COPY_LEN);
+
+	recv_verify(fd, rbuf, PAGE_SIZE + 1, '1');
+	recv_verify(fd, rbuf, GOOD_COPY_LEN, '2');
+
 	close(fd);
 }
