@@ -27,6 +27,17 @@ config WWAN_DEBUGFS
 	  elements for each WWAN device in a directory that is corresponding to
 	  the device name: debugfs/wwan/wwanX.
 
+config WWAN_DEBUG_PORTS
+	bool "WWAN devices ADB debug port" if EXPERT
+	depends on DEBUG_FS
+	default n
+	help
+	  Enables ADB (Android Debug Bridge) debug port support for WWAN devices.
+
+	  If this option is selected, then the ADB debug port functionality in
+	  WWAN device drivers is enabled, allowing for Android Debug Bridge
+	  connections through WWAN modems that support this feature.
+
 config WWAN_HWSIM
 	tristate "Simulated WWAN device"
 	help

@@ -102,6 +102,7 @@ static const struct t7xx_port_conf t7xx_port_conf[] = {
 		.ops = &ctl_port_ops,
 		.name = "t7xx_ap_ctrl",
 	}, {
+#ifdef CONFIG_WWAN_DEBUG_PORTS
 		.tx_ch = PORT_CH_AP_ADB_TX,
 		.rx_ch = PORT_CH_AP_ADB_RX,
 		.txq_index = Q_IDX_ADB,
@@ -112,6 +113,7 @@ static const struct t7xx_port_conf t7xx_port_conf[] = {
 		.port_type = WWAN_PORT_ADB,
 		.debug = true,
 	}, {
+#endif
 		.tx_ch = PORT_CH_MIPC_TX,
 		.rx_ch = PORT_CH_MIPC_RX,
 		.txq_index = Q_IDX_MBIM_MIPC,
