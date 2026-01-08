@@ -689,8 +689,6 @@ static int dln2_spi_probe(struct platform_device *pdev)
 	if (!host)
 		return -ENOMEM;
 
-	device_set_node(&host->dev, dev_fwnode(dev));
-
 	platform_set_drvdata(pdev, host);
 
 	dln2 = spi_controller_get_devdata(host);
