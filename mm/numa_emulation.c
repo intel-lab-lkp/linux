@@ -9,6 +9,7 @@
 #include <linux/memory-tiers.h>
 #include <linux/module.h>
 #include <linux/node.h>
+#include <linux/notifier.h>
 #include <linux/numa_memblks.h>
 #include <asm/numa.h>
 #include <acpi/acpi_numa.h>
