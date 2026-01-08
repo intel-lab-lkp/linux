@@ -14,6 +14,29 @@ selected, **gendwarfksyms** is used instead to calculate symbol versions
 from the DWARF debugging information, which contains the necessary
 details about the final module ABI.
 
+Dependencies
+-----
+
+libelf, libdw and zlib are dependencies of gendwarfksyms.
+
+Here are a few examples for installing these dependencies:
+
+* Arch Linux and derivatives::
+
+    sudo pacman --needed -S zlib libelf
+
+* Debian, Ubuntu, and derivatives::
+
+    sudo apt install libelf-dev libdw-dev zlib1g-dev
+
+* Fedora and derivatives::
+
+    sudo dnf install elfutils-libelf-devel elfutils-devel zlib-devel
+
+* openSUSE and derivatives::
+
+    sudo zypper install libelf-devel libdw-devel zlib-devel
+
 Usage
 -----
 
