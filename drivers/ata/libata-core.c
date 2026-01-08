@@ -3111,11 +3111,13 @@ int ata_dev_configure(struct ata_device *dev)
 		/* print device info to dmesg */
 		if (print_info)
 			ata_dev_info(dev,
-				     "ATAPI: %s, %s, max %s%s%s%s\n",
+				     "ATAPI: %s, %s, max %s%s%s%s%s%s\n",
 				     modelbuf, fwrevbuf,
 				     ata_mode_string(xfer_mask),
 				     cdb_intr_string, atapi_an_string,
-				     dma_dir_string);
+				     dma_dir_string,
+				     ata_id_has_hipm(dev->id) ? " HIPM" : "",
+				     ata_id_has_dipm(dev->id) ? " DIPM" : "");
 	}
 
 	/* determine max_sectors */
