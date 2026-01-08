@@ -24,5 +24,10 @@ properties:
           - const: lge,lg1313-ref
           - const: lge,lg1313
 
+      - description: Boards with LG1215 SoC
+        items:
+          - const: lge,lg1215-ref
+          - const: lge,lg1215
+
 additionalProperties: true
 ...
