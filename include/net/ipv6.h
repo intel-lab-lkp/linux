@@ -91,7 +91,7 @@ struct ip_tunnel_info;
  * Denial of Service attacks (see sysctl documention)
  */
 #define IP6_DEFAULT_MAX_DST_OPTS_CNT	 0
-#define IP6_DEFAULT_MAX_HBH_OPTS_CNT	 8
+#define IP6_DEFAULT_MAX_HBH_OPTS_CNT	 1
 #define IP6_DEFAULT_MAX_DST_OPTS_LEN	 INT_MAX /* No limit */
 #define IP6_DEFAULT_MAX_HBH_OPTS_LEN	 INT_MAX /* No limit */
 
