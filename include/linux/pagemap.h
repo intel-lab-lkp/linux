@@ -836,6 +836,12 @@ static inline struct folio *filemap_lock_folio(struct address_space *mapping,
 	return __filemap_get_folio(mapping, index, FGP_LOCK, 0);
 }
 
+static inline struct folio *filemap_lock_folio_nowait(struct address_space *mapping,
+						      pgoff_t index)
+{
+	return __filemap_get_folio(mapping, index, FGP_LOCK | FGP_NOWAIT, 0);
+}
+
 /**
  * filemap_grab_folio - grab a folio from the page cache
  * @mapping: The address space to search
