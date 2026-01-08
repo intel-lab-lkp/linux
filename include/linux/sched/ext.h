@@ -13,6 +13,7 @@
 
 #include <linux/llist.h>
 #include <linux/rhashtable-types.h>
+#include <linux/atomic.h>
 
 enum scx_public_consts {
 	SCX_OPS_NAME_LEN	= 128,
@@ -79,6 +80,11 @@ struct scx_dispatch_q {
 	struct rhash_head	hash_node;
 	struct llist_node	free_node;
 	struct rcu_head		rcu;
+
+	/* Statistics fields */
+	atomic64_t		enqueue_count;
+	atomic64_t		dequeue_count;
+	atomic_t		peak_nr;
 };
 
 /* scx_entity.flags */

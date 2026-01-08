@@ -376,6 +376,23 @@ static inline void scx_bpf_reenqueue_local(void)
 }
 
 /*
+ * v6.20: Add DSQ statistics functions.
+ *
+ * Preserve the following macros until v6.22.
+ */
+#define __COMPAT_scx_bpf_dsq_enqueue_count(dsq_id)		\
+	(bpf_ksym_exists(scx_bpf_dsq_enqueue_count) ?		\
+	 scx_bpf_dsq_enqueue_count(dsq_id) : -ENOENT)
+
+#define __COMPAT_scx_bpf_dsq_dequeue_count(dsq_id)		\
+	(bpf_ksym_exists(scx_bpf_dsq_dequeue_count) ?		\
+	 scx_bpf_dsq_dequeue_count(dsq_id) : -ENOENT)
+
+#define __COMPAT_scx_bpf_dsq_peak_nr(dsq_id)			\
+	(bpf_ksym_exists(scx_bpf_dsq_peak_nr) ?			\
+	 scx_bpf_dsq_peak_nr(dsq_id) : -ENOENT)
+
+/*
  * Define sched_ext_ops. This may be expanded to define multiple variants for
  * backward compatibility. See compat.h::SCX_OPS_LOAD/ATTACH().
  */

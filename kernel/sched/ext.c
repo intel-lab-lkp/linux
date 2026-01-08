@@ -965,8 +965,20 @@ static bool scx_dsq_priq_less(struct rb_node *node_a,
 
 static void dsq_mod_nr(struct scx_dispatch_q *dsq, s32 delta)
 {
+	u32 new_nr;
+
 	/* scx_bpf_dsq_nr_queued() reads ->nr without locking, use WRITE_ONCE() */
-	WRITE_ONCE(dsq->nr, dsq->nr + delta);
+	new_nr = dsq->nr + delta;
+	WRITE_ONCE(dsq->nr, new_nr);
+
+	/* Update peak queue length */
+	if (delta > 0) {
+
+		u32 peak = atomic_read(&dsq->peak_nr);
+
+		if (new_nr > peak)
+			atomic_set(&dsq->peak_nr, new_nr);
+	}
 }
 
 static void refill_task_slice_dfl(struct scx_sched *sch, struct task_struct *p)
@@ -1068,6 +1080,7 @@ static void dispatch_enqueue(struct scx_sched *sch, struct scx_dispatch_q *dsq,
 	p->scx.dsq_seq = dsq->seq;
 
 	dsq_mod_nr(dsq, 1);
+	atomic64_inc(&dsq->enqueue_count);  /* Increment enqueue count */
 	p->scx.dsq = dsq;
 
 	/*
@@ -1117,6 +1130,7 @@ static void task_unlink_from_dsq(struct task_struct *p,
 
 	list_del_init(&p->scx.dsq_list.node);
 	dsq_mod_nr(dsq, -1);
+	atomic64_inc(&dsq->dequeue_count);  /* Increment dequeue count */
 
 	if (!(dsq->id & SCX_DSQ_FLAG_BUILTIN) && dsq->first_task == p) {
 		struct task_struct *first_task;
@@ -3379,6 +3393,11 @@ static void init_dsq(struct scx_dispatch_q *dsq, u64 dsq_id)
 	raw_spin_lock_init(&dsq->lock);
 	INIT_LIST_HEAD(&dsq->list);
 	dsq->id = dsq_id;
+
+	/* Initialize statistics */
+	atomic64_set(&dsq->enqueue_count, 0);
+	atomic64_set(&dsq->dequeue_count, 0);
+	atomic_set(&dsq->peak_nr, 0);
 }
 
 static void free_dsq_irq_workfn(struct irq_work *irq_work)
@@ -6456,6 +6475,138 @@ out:
 }
 
 /**
+ * scx_bpf_dsq_enqueue_count - Return the total number of enqueued tasks
+ * @dsq_id: id of the DSQ
+ *
+ * Return the total number of tasks that have been enqueued to the DSQ
+ * matching @dsq_id. If not found, -%ENOENT is returned.
+ */
+__bpf_kfunc s64 scx_bpf_dsq_enqueue_count(u64 dsq_id)
+{
+	struct scx_sched *sch;
+	struct scx_dispatch_q *dsq;
+	s64 ret;
+
+	preempt_disable();
+
+	sch = rcu_dereference_sched(scx_root);
+	if (unlikely(!sch)) {
+		ret = -ENODEV;
+		goto out;
+	}
+
+	if (dsq_id == SCX_DSQ_LOCAL) {
+		ret = atomic64_read(&this_rq()->scx.local_dsq.enqueue_count);
+		goto out;
+	} else if ((dsq_id & SCX_DSQ_LOCAL_ON) == SCX_DSQ_LOCAL_ON) {
+		s32 cpu = dsq_id & SCX_DSQ_LOCAL_CPU_MASK;
+
+		if (ops_cpu_valid(sch, cpu, NULL)) {
+			ret = atomic64_read(&cpu_rq(cpu)->scx.local_dsq.enqueue_count);
+			goto out;
+		}
+	} else {
+		dsq = find_user_dsq(sch, dsq_id);
+		if (dsq) {
+			ret = atomic64_read(&dsq->enqueue_count);
+			goto out;
+		}
+	}
+	ret = -ENOENT;
+out:
+	preempt_enable();
+	return ret;
+}
+
+/**
+ * scx_bpf_dsq_dequeue_count - Return the total number of dequeued tasks
+ * @dsq_id: id of the DSQ
+ *
+ * Return the total number of tasks that have been dequeued from the DSQ
+ * matching @dsq_id. If not found, -%ENOENT is returned.
+ */
+__bpf_kfunc s64 scx_bpf_dsq_dequeue_count(u64 dsq_id)
+{
+	struct scx_sched *sch;
+	struct scx_dispatch_q *dsq;
+	s64 ret;
+
+	preempt_disable();
+
+	sch = rcu_dereference_sched(scx_root);
+	if (unlikely(!sch)) {
+		ret = -ENODEV;
+		goto out;
+	}
+
+	if (dsq_id == SCX_DSQ_LOCAL) {
+		ret = atomic64_read(&this_rq()->scx.local_dsq.dequeue_count);
+		goto out;
+	} else if ((dsq_id & SCX_DSQ_LOCAL_ON) == SCX_DSQ_LOCAL_ON) {
+		s32 cpu = dsq_id & SCX_DSQ_LOCAL_CPU_MASK;
+
+		if (ops_cpu_valid(sch, cpu, NULL)) {
+			ret = atomic64_read(&cpu_rq(cpu)->scx.local_dsq.dequeue_count);
+			goto out;
+		}
+	} else {
+		dsq = find_user_dsq(sch, dsq_id);
+		if (dsq) {
+			ret = atomic64_read(&dsq->dequeue_count);
+			goto out;
+		}
+	}
+	ret = -ENOENT;
+out:
+	preempt_enable();
+	return ret;
+}
+
+/**
+ * scx_bpf_dsq_peak_nr - Return the peak number of queued tasks
+ * @dsq_id: id of the DSQ
+ *
+ * Return the peak number of tasks that have been simultaneously queued in
+ * the DSQ matching @dsq_id. If not found, -%ENOENT is returned.
+ */
+__bpf_kfunc s32 scx_bpf_dsq_peak_nr(u64 dsq_id)
+{
+	struct scx_sched *sch;
+	struct scx_dispatch_q *dsq;
+	s32 ret;
+
+	preempt_disable();
+
+	sch = rcu_dereference_sched(scx_root);
+	if (unlikely(!sch)) {
+		ret = -ENODEV;
+		goto out;
+	}
+
+	if (dsq_id == SCX_DSQ_LOCAL) {
+		ret = atomic_read(&this_rq()->scx.local_dsq.peak_nr);
+		goto out;
+	} else if ((dsq_id & SCX_DSQ_LOCAL_ON) == SCX_DSQ_LOCAL_ON) {
+		s32 cpu = dsq_id & SCX_DSQ_LOCAL_CPU_MASK;
+
+		if (ops_cpu_valid(sch, cpu, NULL)) {
+			ret = atomic_read(&cpu_rq(cpu)->scx.local_dsq.peak_nr);
+			goto out;
+		}
+	} else {
+		dsq = find_user_dsq(sch, dsq_id);
+		if (dsq) {
+			ret = atomic_read(&dsq->peak_nr);
+			goto out;
+		}
+	}
+	ret = -ENOENT;
+out:
+	preempt_enable();
+	return ret;
+}
+
+/**
  * scx_bpf_destroy_dsq - Destroy a custom DSQ
  * @dsq_id: DSQ to destroy
  *
@@ -7200,6 +7351,9 @@ BTF_ID_FLAGS(func, scx_bpf_task_set_slice, KF_RCU);
 BTF_ID_FLAGS(func, scx_bpf_task_set_dsq_vtime, KF_RCU);
 BTF_ID_FLAGS(func, scx_bpf_kick_cpu)
 BTF_ID_FLAGS(func, scx_bpf_dsq_nr_queued)
+BTF_ID_FLAGS(func, scx_bpf_dsq_enqueue_count)
+BTF_ID_FLAGS(func, scx_bpf_dsq_dequeue_count)
+BTF_ID_FLAGS(func, scx_bpf_dsq_peak_nr)
 BTF_ID_FLAGS(func, scx_bpf_destroy_dsq)
 BTF_ID_FLAGS(func, scx_bpf_dsq_peek, KF_RCU_PROTECTED | KF_RET_NULL)
 BTF_ID_FLAGS(func, bpf_iter_scx_dsq_new, KF_ITER_NEW | KF_RCU_PROTECTED)
