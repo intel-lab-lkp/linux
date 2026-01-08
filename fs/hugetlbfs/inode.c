@@ -653,17 +653,16 @@ static void hugetlb_vmtruncate(struct inode *inode, loff_t offset)
 	remove_inode_hugepages(inode, offset, LLONG_MAX);
 }
 
-static void hugetlbfs_zero_partial_page(struct hstate *h,
-					struct address_space *mapping,
-					loff_t start,
-					loff_t end)
+static int hugetlbfs_zero_partial_page(struct hstate *h,
+				       struct address_space *mapping,
+				       loff_t start, loff_t end)
 {
 	pgoff_t idx = start >> huge_page_shift(h);
 	struct folio *folio;
 
 	folio = filemap_lock_hugetlb_folio(h, mapping, idx);
 	if (IS_ERR(folio))
-		return;
+		return PTR_ERR(folio);
 
 	start = start & ~huge_page_mask(h);
 	end = end & ~huge_page_mask(h);
@@ -674,6 +673,7 @@ static void hugetlbfs_zero_partial_page(struct hstate *h,
 
 	folio_unlock(folio);
 	folio_put(folio);
+	return 0;
 }
 
 static long hugetlbfs_punch_hole(struct inode *inode, loff_t offset, loff_t len)
@@ -683,6 +683,7 @@ static long hugetlbfs_punch_hole(struct inode *inode, loff_t offset, loff_t len)
 	struct hstate *h = hstate_inode(inode);
 	loff_t hpage_size = huge_page_size(h);
 	loff_t hole_start, hole_end;
+	int rc;
 
 	/*
 	 * hole_start and hole_end indicate the full pages within the hole.
@@ -698,12 +699,18 @@ static long hugetlbfs_punch_hole(struct inode *inode, loff_t offset, loff_t len)
 		return -EPERM;
 	}
 
+repeat:
 	i_mmap_lock_write(mapping);
 
 	/* If range starts before first full page, zero partial page. */
-	if (offset < hole_start)
-		hugetlbfs_zero_partial_page(h, mapping,
-				offset, min(offset + len, hole_start));
+	if (offset < hole_start) {
+		rc = hugetlbfs_zero_partial_page(h, mapping, offset,
+						 min(offset + len, hole_start));
+		if (rc == -EAGAIN) {
+			i_mmap_unlock_write(mapping);
+			goto repeat;
+		}
+	}
 
 	/* Unmap users of full pages in the hole. */
 	if (hole_end > hole_start) {
@@ -714,9 +721,14 @@ static long hugetlbfs_punch_hole(struct inode *inode, loff_t offset, loff_t len)
 	}
 
 	/* If range extends beyond last full page, zero partial page. */
-	if ((offset + len) > hole_end && (offset + len) > hole_start)
-		hugetlbfs_zero_partial_page(h, mapping,
-				hole_end, offset + len);
+	if ((offset + len) > hole_end && (offset + len) > hole_start) {
+		rc = hugetlbfs_zero_partial_page(h, mapping, hole_end,
+						 offset + len);
+		if (rc == -EAGAIN) {
+			i_mmap_unlock_write(mapping);
+			goto repeat;
+		}
+	}
 
 	i_mmap_unlock_write(mapping);
 

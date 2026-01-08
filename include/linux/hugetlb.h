@@ -821,7 +821,7 @@ static inline unsigned int blocks_per_huge_page(struct hstate *h)
 static inline struct folio *filemap_lock_hugetlb_folio(struct hstate *h,
 				struct address_space *mapping, pgoff_t idx)
 {
-	return filemap_lock_folio(mapping, idx << huge_page_order(h));
+	return filemap_lock_folio_nowait(mapping, idx << huge_page_order(h));
 }
 
 #include <asm/hugetlb.h>
