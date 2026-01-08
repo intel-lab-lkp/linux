@@ -1,0 +1,304 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * dts file for lg1215 SoC
+ *
+ * Copyright (C) 2026, LG Electronics
+ */
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+
+/ {
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	interrupt-parent = <&gic>;
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu0: cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a78";
+			reg = <0x00000000>;
+			enable-method = "psci";
+			operating-points-v2 = <&cpu0_opp_table>;
+			d-cache-line-size = <64>;
+			d-cache-sets = <256>;
+			d-cache-size = <0x00010000>;
+			i-cache-line-size = <64>;
+			i-cache-sets = <256>;
+			i-cache-size = <0x00010000>;
+			next-level-cache = <&L2_0>;
+			L2_0: l2-cache@0 {
+				compatible = "cache";
+				cache-level = <2>;
+				cache-line-size = <64>;
+				cache-sets = <512>;
+				cache-size = <0x00040000>;
+				cache-unified;
+				next-level-cache = <&L3>;
+			};
+		};
+		cpu1: cpu@100 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a78";
+			reg = <0x00000100>;
+			enable-method = "psci";
+			operating-points-v2 = <&cpu0_opp_table>;
+			d-cache-line-size = <64>;
+			d-cache-sets = <256>;
+			d-cache-size = <0x00010000>;
+			i-cache-line-size = <64>;
+			i-cache-sets = <256>;
+			i-cache-size = <0x00010000>;
+			next-level-cache = <&L2_1>;
+			L2_1: l2-cache@100 {
+				compatible = "cache";
+				cache-level = <2>;
+				cache-line-size = <64>;
+				cache-sets = <512>;
+				cache-size = <0x00040000>;
+				cache-unified;
+				next-level-cache = <&L3>;
+			};
+		};
+		cpu2: cpu@200 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a78";
+			reg = <0x00000200>;
+			enable-method = "psci";
+			operating-points-v2 = <&cpu0_opp_table>;
+			d-cache-line-size = <64>;
+			d-cache-sets = <256>;
+			d-cache-size = <0x00010000>;
+			i-cache-line-size = <64>;
+			i-cache-sets = <256>;
+			i-cache-size = <0x00010000>;
+			next-level-cache = <&L2_2>;
+			L2_2: l2-cache@200 {
+				compatible = "cache";
+				cache-level = <2>;
+				cache-line-size = <64>;
+				cache-sets = <512>;
+				cache-size = <0x00040000>;
+				cache-unified;
+				next-level-cache = <&L3>;
+			};
+		};
+		cpu3: cpu@300 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a78";
+			reg = <0x00000300>;
+			enable-method = "psci";
+			operating-points-v2 = <&cpu0_opp_table>;
+			d-cache-line-size = <64>;
+			d-cache-sets = <256>;
+			d-cache-size = <0x00010000>;
+			i-cache-line-size = <64>;
+			i-cache-sets = <256>;
+			i-cache-size = <0x00010000>;
+			next-level-cache = <&L2_3>;
+			L2_3: l2-cache@300 {
+				compatible = "cache";
+				cache-level = <2>;
+				cache-line-size = <64>;
+				cache-sets = <512>;
+				cache-size = <0x00040000>;
+				cache-unified;
+				next-level-cache = <&L3>;
+			};
+		};
+		L3: l3-cache {
+			compatible = "cache";
+			cache-level = <3>;
+			cache-line-size = <64>;
+			cache-sets = <512>;
+			cache-size = <0x00100000>;
+			cache-unified;
+		};
+	};
+
+	psci {
+		compatible = "arm,psci";
+		method = "smc";
+		cpu_suspend = <0xc4000001>;
+		cpu_off = <0xc4000002>;
+		cpu_on = <0xc4000003>;
+	};
+
+	cpu0_opp_table: opp_table@0 {
+		compatible = "operating-points-v2";
+		opp-shared;
+
+		opp-default {
+			opp-hz = /bits/ 64 <1600000000>;
+		};
+	};
+
+	gic: interrupt-controller@c0000000 {
+		compatible = "arm,gic-400";
+		reg = <0x0 0xc0001000 0x0 0x1000>, /* GICD */
+		      <0x0 0xc0002000 0x0 0x2000>, /* GICC */
+		      <0x0 0xc0004000 0x0 0x2000>, /* GICH */
+		      <0x0 0xc0006000 0x0 0x2000>; /* GICV */
+		#interrupt-cells = <3>;
+		#address-cells = <0>;
+		interrupts = <GIC_PPI 9 (GIC_CPU_MASK_RAW(0x0f) |
+					IRQ_TYPE_LEVEL_LOW)>;
+
+		interrupt-controller;
+	};
+
+	pmu {
+		compatible = "arm,armv8-pmuv3";
+		interrupts = <GIC_SPI 184 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 185 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 186 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 187 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-affinity = <&cpu0>,
+				     <&cpu1>,
+				     <&cpu2>,
+				     <&cpu3>;
+	};
+
+	timer {
+		compatible = "arm,armv8-timer";
+		interrupts = <GIC_PPI 13 (GIC_CPU_MASK_RAW(0x0f) |
+			      IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 14 (GIC_CPU_MASK_RAW(0x0f) |
+			      IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 11 (GIC_CPU_MASK_RAW(0x0f) |
+			      IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 10 (GIC_CPU_MASK_RAW(0x0f) |
+			      IRQ_TYPE_LEVEL_LOW)>;
+	};
+
+	clks {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		clk_xtal: clk-xtal {
+			compatible = "fixed-clock";
+			clock-output-names = "xtal";
+			clock-frequency = <50000000>;
+
+			#clock-cells = <0>;
+		};
+
+		clk_bus: clk-bus {
+			compatible = "fixed-factor-clock";
+			clocks = <&clk_xtal>;
+			clock-names = "xtal";
+			clock-output-names = "busclk";
+			clock-div = <1>;
+			clock-mult = <4>;
+
+			#clock-cells = <0>;
+		};
+	};
+
+	soc {
+		compatible = "simple-bus";
+
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		interrupt-parent = <&gic>;
+
+		dwmac_axi_config: dwmac-axi-config {
+			snps,rd_osr_lmt = <0x07>;
+			snps,wr_osr_lmt = <0x07>;
+			snps,blen = <0 0 16 0 0 0 0>;
+		};
+		ethernet@ca370000 {
+			compatible = "snps,dwmac";
+			reg = <0x0 0xca370000 0x0 0x2000>;
+			interrupts = <GIC_SPI 65 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "macirq";
+			clocks = <&clk_bus>, <&clk_bus>;
+			clock-names = "stmmaceth", "pclk";
+			max-frame-size = <1500>;
+			phy-mode = "mii";
+			snps,pbl = <2>;
+			snps,fixed-burst;
+			snps,multicast-filter-bins = <64>;
+			snps,perfect-filter-entries = <32>;
+			snps,axi-config = <&dwmac_axi_config>;
+			mac-address = [ 00 00 00 00 00 00 ];
+
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			ethernet-phy@1c {
+				compatible = "ethernet-phy-id001c.c800";
+				reg = <0x1c>;
+				interrupts = <GIC_SPI 66 IRQ_TYPE_LEVEL_HIGH>;
+			};
+		};
+
+	};
+
+	amba {
+		#address-cells = <2>;
+		#size-cells = <2>;
+
+		compatible = "simple-bus";
+		interrupt-parent = <&gic>;
+		ranges;
+
+		timers0: timer@fd100000 {
+			compatible = "arm,sp804", "arm,primecell";
+			reg = <0x0 0xfd100000 0x0 0x1000>;
+			interrupts = <GIC_SPI 6 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&clk_bus>, <&clk_bus>, <&clk_bus>;
+			clock-names = "timer0clk", "timer1clk", "apb_pclk";
+		};
+		timers1: timer@fd110000 {
+			compatible = "arm,sp804", "arm,primecell";
+			reg = <0x0 0xfd110000 0x0 0x1000>;
+			interrupts = <GIC_SPI 38 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&clk_bus>, <&clk_bus>, <&clk_bus>;
+			clock-names = "timer0clk", "timer1clk", "apb_pclk";
+			status = "disabled";
+		};
+		wdog: watchdog@fd200000 {
+			compatible = "arm,sp805", "arm,primecell";
+			reg = <0x0 0xfd200000 0x0 0x1000>;
+			interrupts = <GIC_SPI 7 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&clk_bus>;
+			clock-names = "apb_pclk";
+		};
+		uart0: serial@fe000000 {
+			compatible = "arm,pl011", "arm,primecell";
+			reg = <0x0 0xfe000000 0x0 0x1000>;
+			interrupts = <GIC_SPI 0 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&clk_bus>, <&clk_bus>;
+			clock-names = "uartclk", "apb_pclk";
+		};
+		uart1: serial@fe100000 {
+			compatible = "arm,pl011", "arm,primecell";
+			reg = <0x0 0xfe100000 0x0 0x1000>;
+			interrupts = <GIC_SPI 1 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&clk_bus>, <&clk_bus>;
+			clock-names = "uartclk", "apb_pclk";
+		};
+		uart2: serial@fe200000 {
+			compatible = "arm,pl011", "arm,primecell";
+			reg = <0x0 0xfe200000 0x0 0x1000>;
+			interrupts = <GIC_SPI 2 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&clk_bus>, <&clk_bus>;
+			clock-names = "uartclk", "apb_pclk";
+		};
+		dma: dma@ff200000 {
+			compatible = "arm,pl080", "arm,primecell";
+			reg = <0x0 0xff200000 0x0 0x1000>;
+			interrupts = <GIC_SPI 36 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&clk_bus>;
+			clock-names = "apb_pclk";
+		};
+	};
+};

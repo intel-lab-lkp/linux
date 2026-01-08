@@ -1,0 +1,34 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * dts file for lg1215 Reference Board.
+ *
+ * Copyright (C) 2026, LG Electronics
+ */
+
+/dts-v1/;
+
+#include "lg1215.dtsi"
+
+/ {
+	model = "LG Electronics, TV SoC LG1215 Reference Board";
+	compatible = "lge,lg1215-ref", "lge,lg1215";
+
+	aliases {
+		serial0 = &uart0;
+		serial1 = &uart1;
+		serial2 = &uart2;
+	};
+
+	memory@0 {
+		device_type = "memory";
+		reg = <0x0 0x00000000 0x0 0xbc400000>;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+};
+
+&uart0 {
+	status = "okay";
+};
