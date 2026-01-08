@@ -109,7 +109,7 @@ bool bio_integrity_prep(struct bio *bio)
 	struct blk_integrity *bi = blk_get_integrity(bio->bi_bdev->bd_disk);
 	struct bio_integrity_data *bid;
 	bool set_flags = true;
-	gfp_t gfp = GFP_NOIO;
+	bool zero_buffer = false;
 
 	if (!bi)
 		return true;
@@ -139,9 +139,10 @@ bool bio_integrity_prep(struct bio *bio)
 			if (bi_offload_capable(bi))
 				return true;
 			set_flags = false;
-			gfp |= __GFP_ZERO;
-		} else if (bi->metadata_size > bi->pi_tuple_size)
-			gfp |= __GFP_ZERO;
+			zero_buffer = true;
+		} else {
+			zero_buffer = bi->metadata_size > bi->pi_tuple_size;
+		}
 		break;
 	default:
 		return true;
@@ -154,7 +155,7 @@ bool bio_integrity_prep(struct bio *bio)
 	bio_integrity_init(bio, &bid->bip, &bid->bvec, 1);
 	bid->bio = bio;
 	bid->bip.bip_flags |= BIP_BLOCK_INTEGRITY;
-	bio_integrity_alloc_buf(bio, gfp & __GFP_ZERO);
+	bio_integrity_alloc_buf(bio, zero_buffer);
 
 	bip_set_seed(&bid->bip, bio->bi_iter.bi_sector);
 
