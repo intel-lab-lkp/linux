@@ -25,6 +25,7 @@ static int mwifiex_11n_dispatch_amsdu_pkt(struct mwifiex_private *priv,
 
 	if (le16_to_cpu(local_rx_pd->rx_pkt_type) == PKT_TYPE_AMSDU) {
 		struct sk_buff_head list;
+		int skb_len = skb->len;
 		struct sk_buff *rx_skb;
 
 		__skb_queue_head_init(&list);
@@ -44,7 +45,7 @@ static int mwifiex_11n_dispatch_amsdu_pkt(struct mwifiex_private *priv,
 			    ntohs(rx_hdr->eth803_hdr.h_proto) == ETH_P_TDLS) {
 				mwifiex_process_tdls_action_frame(priv,
 								  (u8 *)rx_hdr,
-								  skb->len);
+								  skb_len);
 			}
 
 			if (priv->bss_role == MWIFIEX_BSS_ROLE_UAP)
