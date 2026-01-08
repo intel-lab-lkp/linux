@@ -7,6 +7,7 @@
  * Copyright 2017 Google Inc.
  */
 
+#include <linux/coreboot.h>
 #include <linux/ctype.h>
 #include <linux/init.h>
 #include <linux/io.h>
@@ -20,7 +21,6 @@
 #include <linux/slab.h>
 #include <linux/sysfs.h>
 
-#include "coreboot_table.h"
 #include "vpd_decode.h"
 
 #define CB_TAG_VPD      0x2c

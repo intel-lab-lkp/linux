@@ -1,32 +1,26 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * coreboot_table.h
+ * coreboot.h
  *
- * Internal header for coreboot table access.
+ * Coreboot device and driver interfaces.
  *
  * Copyright 2014 Gerd Hoffmann <kraxel@redhat.com>
  * Copyright 2017 Google Inc.
  * Copyright 2017 Samuel Holland <samuel@sholland.org>
  */
 
-#ifndef __COREBOOT_TABLE_H
-#define __COREBOOT_TABLE_H
+#ifndef _LINUX_COREBOOT_H
+#define _LINUX_COREBOOT_H
 
 #include <linux/device.h>
 
 struct coreboot_device_id;
 
-/* Coreboot table header structure */
-struct coreboot_table_header {
-	char signature[4];
-	u32 header_bytes;
-	u32 header_checksum;
-	u32 table_bytes;
-	u32 table_checksum;
-	u32 table_entries;
-};
-
 /* List of coreboot entry structures that is used */
+
+#define CB_TAG_FRAMEBUFFER 0x12
+#define LB_TAG_CBMEM_ENTRY 0x31
+
 /* Generic */
 struct coreboot_table_entry {
 	u32 tag;
@@ -40,9 +34,6 @@ struct lb_cbmem_ref {
 
 	u64 cbmem_addr;
 };
-
-#define CB_TAG_FRAMEBUFFER 0x12
-#define LB_TAG_CBMEM_ENTRY 0x31
 
 /* Corresponds to LB_TAG_CBMEM_ENTRY */
 struct lb_cbmem_entry {
@@ -118,4 +109,4 @@ void coreboot_driver_unregister(struct coreboot_driver *driver);
 	module_driver(__coreboot_driver, coreboot_driver_register, \
 			coreboot_driver_unregister)
 
-#endif /* __COREBOOT_TABLE_H */
+#endif /* _LINUX_COREBOOT_H */

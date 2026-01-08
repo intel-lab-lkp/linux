@@ -7,6 +7,7 @@
  * Copyright 2017 Google Inc.
  */
 
+#include <linux/coreboot.h>
 #include <linux/device.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
@@ -14,7 +15,6 @@
 #include <linux/module.h>
 
 #include "memconsole.h"
-#include "coreboot_table.h"
 
 #define CB_TAG_CBMEM_CONSOLE	0x17
 
