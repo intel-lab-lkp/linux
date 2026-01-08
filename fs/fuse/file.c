@@ -73,14 +73,7 @@ static int fuse_send_open(struct fuse_mount *fm, u64 nodeid,
 		inarg.open_flags |= FUSE_OPEN_KILL_SUIDGID;
 	}
 
-	args.opcode = opcode;
-	args.nodeid = nodeid;
-	args.in_numargs = 1;
-	args.in_args[0].size = sizeof(inarg);
-	args.in_args[0].value = &inarg;
-	args.out_numargs = 1;
-	args.out_args[0].size = sizeof(*outargp);
-	args.out_args[0].value = outargp;
+	fuse_open_args_fill(&args, nodeid, opcode, &inarg, outargp);
 
 	return fuse_simple_request(fm, &args);
 }
