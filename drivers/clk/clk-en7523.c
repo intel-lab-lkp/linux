@@ -23,6 +23,7 @@
 #define REG_GSW_CLK_DIV_SEL		0x1b4
 #define REG_EMI_CLK_DIV_SEL		0x1b8
 #define REG_BUS_CLK_DIV_SEL		0x1bc
+#define REG_FE_CLK_DIV_SEL		0x1c0
 #define REG_SPI_CLK_DIV_SEL		0x1c4
 #define REG_SPI_CLK_FREQ_SEL		0x1c8
 #define REG_NPU_CLK_DIV_SEL		0x1fc
@@ -93,6 +94,11 @@ static const u32 bus7581_base[] = { 600000000, 540000000 };
 static const u32 npu7581_base[] = { 800000000, 750000000, 720000000, 600000000 };
 static const u32 crypto_base[] = { 540000000, 480000000 };
 static const u32 emmc7581_base[] = { 200000000, 150000000 };
+static const u32 tod_soe7581_base[] = { 540000000, 480000000, 400000000, 400000000 };
+static const u32 tod_gen7581_base[] = { 400000000, 200000000, 150000000, 400000000 };
+static const u32 efuse7581_base[] = { 200000000, 100000000 };
+static const u32 aes_xpon7581_base[] = { 400000000, 200000000 };
+static const u32 fe7581_base[] = { 600000000, 540000000, 480000000, 400000000 };
 
 static const struct en_clk_desc en7523_base_clks[] = {
 	{
@@ -292,6 +298,56 @@ static const struct en_clk_desc en7581_base_clks[] = {
 		.base_shift = 12,
 		.base_values = emmc7581_base,
 		.n_base_values = ARRAY_SIZE(emmc7581_base),
+	}, {
+		.id = EN7581_CLK_TOD_SOE,
+		.name = "tod_soe",
+
+		.base_reg = REG_CRYPTO_CLKSRC2,
+		.base_bits = 2,
+		.base_shift = 6,
+		.base_values = tod_soe7581_base,
+		.n_base_values = ARRAY_SIZE(tod_soe7581_base),
+	}, {
+		.id = EN7581_CLK_TOD_GEN,
+		.name = "tod_gen",
+
+		.base_reg = REG_CRYPTO_CLKSRC2,
+		.base_bits = 2,
+		.base_shift = 4,
+		.base_values = tod_gen7581_base,
+		.n_base_values = ARRAY_SIZE(tod_gen7581_base),
+	}, {
+		.id = EN7581_CLK_EFUSE,
+		.name = "efuse",
+
+		.base_reg = REG_CRYPTO_CLKSRC2,
+		.base_bits = 1,
+		.base_shift = 3,
+		.base_values = efuse7581_base,
+		.n_base_values = ARRAY_SIZE(efuse7581_base),
+	}, {
+		.id = EN7581_CLK_AES_XPON,
+		.name = "aes_xpon",
+
+		.base_reg = REG_CRYPTO_CLKSRC2,
+		.base_bits = 1,
+		.base_shift = 1,
+		.base_values = aes_xpon7581_base,
+		.n_base_values = ARRAY_SIZE(aes_xpon7581_base),
+	}, {
+		.id = EN7581_CLK_FE,
+		.name = "fe",
+
+		.base_reg = REG_FE_CLK_DIV_SEL,
+		.base_bits = 2,
+		.base_shift = 8,
+		.base_values = fe7581_base,
+		.n_base_values = ARRAY_SIZE(fe7581_base),
+
+		.div_bits = 3,
+		.div_shift = 0,
+		.div_step = 1,
+		.div_offset = 1,
 	}
 };
 
