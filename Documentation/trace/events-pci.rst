@@ -33,7 +33,7 @@ state changes.
 * ``CARD_PRESENT`` - Card detected in slot
 * ``CARD_NOT_PRESENT`` - Card removed from slot
 
-**Example Usage**:
+**Example Usage**::
 
     # Enable the tracepoint
     echo 1 > /sys/kernel/debug/tracing/events/pci/pci_hp_event/enable
@@ -64,7 +64,7 @@ Monitors PCIe link speed changes and provides detailed link status information.
   - ``4`` - Hotplug event
 
 
-**Example Usage**:
+**Example Usage**::
 
     # Enable the tracepoint
     echo 1 > /sys/kernel/debug/tracing/events/pci/pcie_link_event/enable
