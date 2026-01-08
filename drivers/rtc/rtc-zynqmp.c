@@ -178,21 +178,28 @@ static void xlnx_init_rtc(struct xlnx_rtc_dev *xrtcdev)
 static int xlnx_rtc_read_offset(struct device *dev, long *offset)
 {
 	struct xlnx_rtc_dev *xrtcdev = dev_get_drvdata(dev);
-	unsigned long long rtc_ppb = RTC_PPB;
-	unsigned int tick_mult = do_div(rtc_ppb, xrtcdev->freq);
-	unsigned int calibval;
+	unsigned int calibval, fract_data, fract_part;
+	int freq = xrtcdev->freq;
+	int max_tick, tick_mult;
 	long offset_val;
+
+	/* Tick to offset multiplier */
+	tick_mult = DIV_ROUND_CLOSEST(RTC_PPB, freq);
 
 	calibval = readl(xrtcdev->reg_base + RTC_CALIB_RD);
 	/* Offset with seconds ticks */
-	offset_val = calibval & RTC_TICK_MASK;
-	offset_val = offset_val - RTC_CALIB_DEF;
-	offset_val = offset_val * tick_mult;
+	max_tick = calibval & RTC_TICK_MASK;
+	offset_val = max_tick - freq;
+	/* Convert to ppb */
+	offset_val *= tick_mult;
 
 	/* Offset with fractional ticks */
-	if (calibval & RTC_FR_EN)
-		offset_val += ((calibval & RTC_FR_MASK) >> RTC_FR_DATSHIFT)
-			* (tick_mult / RTC_FR_MAX_TICKS);
+	if (calibval & RTC_FR_EN) {
+		fract_data = (calibval & RTC_FR_MASK) >> RTC_FR_DATSHIFT;
+		fract_part = DIV_ROUND_UP(tick_mult, RTC_FR_MAX_TICKS);
+		offset_val += (fract_part * fract_data);
+	}
+
 	*offset = offset_val;
 
 	return 0;
