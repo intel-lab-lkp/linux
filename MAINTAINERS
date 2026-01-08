@@ -6632,7 +6632,9 @@ M:	Anup Patel <anup@brainfault.org>
 L:	linux-pm@vger.kernel.org
 L:	linux-riscv@lists.infradead.org
 S:	Maintained
+F:	drivers/cpuidle/cpuidle-riscv-sbi-domain.c
 F:	drivers/cpuidle/cpuidle-riscv-sbi.c
+F:	drivers/cpuidle/cpuidle-riscv-sbi.h
 
 CPUMASK API [RUST]
 M:	Viresh Kumar <viresh.kumar@linaro.org>

@@ -8,8 +8,17 @@ config RISCV_SBI_CPUIDLE
 	depends on RISCV_SBI
 	select DT_IDLE_STATES
 	select CPU_IDLE_MULTIPLE_DRIVERS
-	select DT_IDLE_GENPD if PM_GENERIC_DOMAINS_OF
 	help
 	  Select this option to enable RISC-V SBI firmware based CPU idle
-	  driver for RISC-V systems. This drivers also supports hierarchical
+	  driver for RISC-V systems.
+
+config RISCV_SBI_CPUIDLE_DOMAIN
+	bool "RISC-V SBI CPU idle Domain"
+	depends on RISCV_SBI_CPUIDLE
+	depends on PM_GENERIC_DOMAINS_OF
+	select DT_IDLE_GENPD
+	default y
+	help
+	  Select this option to enable RISC-V SBI firmware based CPU idle
+	  driver to use PM domains, which is needed to support the hierarchical
 	  DT based layout of the idle state.
