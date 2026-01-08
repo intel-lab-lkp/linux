@@ -534,9 +534,11 @@ enum cxl_partition_mode {
 /**
  * enum cxl_private_region_type - CXL private region types
  * @CXL_PRIVATE_NONE: No private region type set
+ * @CXL_PRIVATE_ZSWAP: Region used for zswap compressed memory
  */
 enum cxl_private_region_type {
 	CXL_PRIVATE_NONE,
+	CXL_PRIVATE_ZSWAP,
 };
 
 /**

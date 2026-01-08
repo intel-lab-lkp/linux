@@ -16,6 +16,8 @@
 static const char *private_type_to_string(enum cxl_private_region_type type)
 {
 	switch (type) {
+	case CXL_PRIVATE_ZSWAP:
+		return "zswap";
 	default:
 		return "";
 	}
@@ -23,6 +25,8 @@ static const char *private_type_to_string(enum cxl_private_region_type type)
 
 static enum cxl_private_region_type string_to_private_type(const char *str)
 {
+	if (sysfs_streq(str, "zswap"))
+		return CXL_PRIVATE_ZSWAP;
 	return CXL_PRIVATE_NONE;
 }
 
@@ -88,6 +92,9 @@ int cxl_register_private_region(struct cxl_region *cxlr)
 
 	/* Call type-specific registration which sets memtype and callbacks */
 	switch (cxlr->private_type) {
+	case CXL_PRIVATE_ZSWAP:
+		rc = cxl_register_zswap_region(cxlr);
+		break;
 	default:
 		dev_dbg(&cxlr->dev, "unsupported private_type: %d\n",
 			cxlr->private_type);
@@ -113,6 +120,9 @@ void cxl_unregister_private_region(struct cxl_region *cxlr)
 
 	/* Dispatch to type-specific cleanup */
 	switch (cxlr->private_type) {
+	case CXL_PRIVATE_ZSWAP:
+		cxl_unregister_zswap_region(cxlr);
+		break;
 	default:
 		break;
 	}

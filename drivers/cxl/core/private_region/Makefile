@@ -7,3 +7,6 @@ ccflags-y += -I$(srctree)/drivers/cxl
 
 # Core dispatch and sysfs
 obj-$(CONFIG_CXL_REGION) += private_region.o
+
+# Type-specific implementations
+obj-$(CONFIG_CXL_REGION) += zswap.o
