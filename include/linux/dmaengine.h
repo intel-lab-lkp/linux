@@ -12,6 +12,7 @@
 #include <linux/scatterlist.h>
 #include <linux/bitmap.h>
 #include <linux/types.h>
+#include <linux/workqueue.h>
 #include <asm/page.h>
 
 /**
@@ -295,6 +296,10 @@ enum dma_desc_metadata_mode {
 	DESC_METADATA_ENGINE = BIT(1),
 };
 
+struct dma_chan;
+
+typedef void (*dma_chan_bh_work_fn)(struct dma_chan *chan);
+
 /**
  * struct dma_chan_percpu - the per-CPU part of struct dma_chan
  * @memcpy_count: transaction counter
@@ -334,6 +339,9 @@ struct dma_router {
  * @router: pointer to the DMA router structure
  * @route_data: channel specific data for the router
  * @private: private data for certain client-channel associations
+ * @bh_work: bottom-half work item stored per-channel
+ * @bh_work_fn: callback executed when @bh_work runs
+ * @bh_work_initialized: indicates whether @bh_work has been initialized
  */
 struct dma_chan {
 	struct dma_device *device;
@@ -359,6 +367,9 @@ struct dma_chan {
 	void *route_data;
 
 	void *private;
+	struct work_struct bh_work;
+	dma_chan_bh_work_fn bh_work_fn;
+	bool bh_work_initialized;
 };
 
 /**
@@ -1528,6 +1539,14 @@ struct dma_chan *devm_dma_request_chan(struct device *dev, const char *name);
 
 void dma_release_channel(struct dma_chan *chan);
 int dma_get_slave_caps(struct dma_chan *chan, struct dma_slave_caps *caps);
+bool dmaengine_queue_bh_work(struct work_struct *work);
+void dmaengine_flush_bh_work(struct work_struct *work);
+void dmaengine_cancel_bh_work_sync(struct work_struct *work);
+
+void dma_chan_init_bh(struct dma_chan *chan, dma_chan_bh_work_fn fn);
+bool dma_chan_schedule_bh(struct dma_chan *chan);
+void dma_chan_flush_bh(struct dma_chan *chan);
+void dma_chan_kill_bh(struct dma_chan *chan);
 #else
 static inline struct dma_chan *dma_find_channel(enum dma_transaction_type tx_type)
 {
@@ -1574,6 +1593,37 @@ static inline int dma_get_slave_caps(struct dma_chan *chan,
 				     struct dma_slave_caps *caps)
 {
 	return -ENXIO;
+}
+
+static inline bool dmaengine_queue_bh_work(struct work_struct *work)
+{
+	return false;
+}
+
+static inline void dmaengine_flush_bh_work(struct work_struct *work)
+{
+}
+
+static inline void dmaengine_cancel_bh_work_sync(struct work_struct *work)
+{
+}
+
+static inline void dma_chan_init_bh(struct dma_chan *chan,
+				    dma_chan_bh_work_fn fn)
+{
+}
+
+static inline bool dma_chan_schedule_bh(struct dma_chan *chan)
+{
+	return false;
+}
+
+static inline void dma_chan_flush_bh(struct dma_chan *chan)
+{
+}
+
+static inline void dma_chan_kill_bh(struct dma_chan *chan)
+{
 }
 #endif
 

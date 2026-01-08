@@ -54,6 +54,7 @@
 #include <linux/of_dma.h>
 #include <linux/mempool.h>
 #include <linux/numa.h>
+#include <linux/workqueue.h>
 
 #include "dmaengine.h"
 
@@ -61,6 +62,7 @@ static DEFINE_MUTEX(dma_list_mutex);
 static DEFINE_IDA(dma_ida);
 static LIST_HEAD(dma_device_list);
 static long dmaengine_ref_count;
+static struct workqueue_struct *dmaengine_bh_wq;
 
 /* --- debugfs implementation --- */
 #ifdef CONFIG_DEBUG_FS
@@ -1425,6 +1427,92 @@ static void dmaengine_destroy_unmap_pool(void)
 	}
 }
 
+static void dmaengine_destroy_bh_wq(void)
+{
+	if (!dmaengine_bh_wq)
+		return;
+
+	destroy_workqueue(dmaengine_bh_wq);
+	dmaengine_bh_wq = NULL;
+}
+
+bool dmaengine_queue_bh_work(struct work_struct *work)
+{
+	if (WARN_ON(!dmaengine_bh_wq))
+		return false;
+
+	return queue_work(dmaengine_bh_wq, work);
+}
+EXPORT_SYMBOL_GPL(dmaengine_queue_bh_work);
+
+void dmaengine_flush_bh_work(struct work_struct *work)
+{
+	if (!work)
+		return;
+
+	flush_work(work);
+}
+EXPORT_SYMBOL_GPL(dmaengine_flush_bh_work);
+
+void dmaengine_cancel_bh_work_sync(struct work_struct *work)
+{
+	if (!work)
+		return;
+
+	cancel_work_sync(work);
+}
+EXPORT_SYMBOL_GPL(dmaengine_cancel_bh_work_sync);
+
+static void dma_chan_bh_entry(struct work_struct *work)
+{
+	struct dma_chan *chan = container_of(work, struct dma_chan, bh_work);
+	dma_chan_bh_work_fn fn = READ_ONCE(chan->bh_work_fn);
+
+	if (fn)
+		fn(chan);
+}
+
+void dma_chan_init_bh(struct dma_chan *chan, dma_chan_bh_work_fn fn)
+{
+	if (WARN_ON(!fn))
+		return;
+
+	if (WARN_ON(chan->bh_work_initialized))
+		return;
+
+	chan->bh_work_fn = fn;
+	INIT_WORK(&chan->bh_work, dma_chan_bh_entry);
+	chan->bh_work_initialized = true;
+}
+EXPORT_SYMBOL_GPL(dma_chan_init_bh);
+
+bool dma_chan_schedule_bh(struct dma_chan *chan)
+{
+	if (WARN_ON(!chan->bh_work_initialized))
+		return false;
+
+	return dmaengine_queue_bh_work(&chan->bh_work);
+}
+EXPORT_SYMBOL_GPL(dma_chan_schedule_bh);
+
+void dma_chan_flush_bh(struct dma_chan *chan)
+{
+	if (!chan->bh_work_initialized)
+		return;
+
+	dmaengine_flush_bh_work(&chan->bh_work);
+}
+EXPORT_SYMBOL_GPL(dma_chan_flush_bh);
+
+void dma_chan_kill_bh(struct dma_chan *chan)
+{
+	if (!chan->bh_work_initialized)
+		return;
+
+	dmaengine_cancel_bh_work_sync(&chan->bh_work);
+}
+EXPORT_SYMBOL_GPL(dma_chan_kill_bh);
+
 static int __init dmaengine_init_unmap_pool(void)
 {
 	int i;
@@ -1621,15 +1709,28 @@ EXPORT_SYMBOL_GPL(dma_run_dependencies);
 
 static int __init dma_bus_init(void)
 {
-	int err = dmaengine_init_unmap_pool();
+	int err;
 
+	dmaengine_bh_wq = alloc_workqueue("dmaengine_bh",
+					  WQ_BH | WQ_PERCPU, 0);
+	if (!dmaengine_bh_wq)
+		return -ENOMEM;
+
+	err = dmaengine_init_unmap_pool();
 	if (err)
-		return err;
+		goto err_destroy_wq;
 
 	err = class_register(&dma_devclass);
-	if (!err)
-		dmaengine_debugfs_init();
+	if (err)
+		goto err_destroy_pool;
 
+	dmaengine_debugfs_init();
+	return 0;
+
+err_destroy_pool:
+	dmaengine_destroy_unmap_pool();
+err_destroy_wq:
+	dmaengine_destroy_bh_wq();
 	return err;
 }
 arch_initcall(dma_bus_init);

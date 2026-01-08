@@ -919,7 +919,7 @@ static void adm_dma_remove(struct platform_device *pdev)
 		/* mask IRQs for this channel/EE pair */
 		writel(0, adev->regs + ADM_CH_RSLT_CONF(achan->id, adev->ee));
 
-		tasklet_kill(&adev->channels[i].vc.task);
+		dma_chan_kill_bh(&adev->channels[i].vc.chan);
 		adm_terminate_all(&adev->channels[i].vc.chan);
 	}
 

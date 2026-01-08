@@ -13,6 +13,7 @@
 #include <linux/platform_device.h>
 #include <linux/platform_data/amd_qdma.h>
 #include <linux/regmap.h>
+#include <linux/interrupt.h>
 
 #include "qdma.h"
 
