@@ -21,7 +21,7 @@ void serial_test_wq(void)
 
 	err = wq__attach(wq_skel);
 	if (!ASSERT_OK(err, "wq_attach"))
-		return;
+		goto clean_up
 
 	prog_fd = bpf_program__fd(wq_skel->progs.test_syscall_array_sleepable);
 	err = bpf_prog_test_run_opts(prog_fd, &topts);
@@ -31,7 +31,10 @@ void serial_test_wq(void)
 	usleep(50); /* 10 usecs should be enough, but give it extra */
 
 	ASSERT_EQ(wq_skel->bss->ok_sleepable, (1 << 1), "ok_sleepable");
-	wq__destroy(wq_skel);
+
+clean_up:
+	if (wq_skel)
+		wq__destroy(wq_skel);
 }
 
 void serial_test_failures_wq(void)
