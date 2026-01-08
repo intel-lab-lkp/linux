@@ -314,8 +314,10 @@ struct cfg80211_bss *rtw_cfg80211_inform_bss(struct adapter *padapter, struct wl
 	bss = cfg80211_inform_bss_frame(wiphy, notify_channel, (struct ieee80211_mgmt *)buf,
 					len, notify_signal, GFP_ATOMIC);
 
-	if (unlikely(!bss))
+	if (unlikely(!bss)) {
+		kfree(buf);
 		goto exit;
+	}
 
 	cfg80211_put_bss(wiphy, bss);
 	kfree(buf);
