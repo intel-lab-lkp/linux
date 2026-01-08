@@ -525,6 +525,20 @@ enum cxl_partition_mode {
  */
 #define CXL_REGION_F_LOCK 2
 
+/*
+ * Indicate that this region has been registered as a private region.
+ * Used to track lifecycle and prevent double-unregistration.
+ */
+#define CXL_REGION_F_PRIVATE_REGISTERED 3
+
+/**
+ * enum cxl_private_region_type - CXL private region types
+ * @CXL_PRIVATE_NONE: No private region type set
+ */
+enum cxl_private_region_type {
+	CXL_PRIVATE_NONE,
+};
+
 /**
  * struct cxl_region - CXL region
  * @dev: This region's device
@@ -534,10 +548,13 @@ enum cxl_partition_mode {
  * @cxl_nvb: nvdimm bridge for coordinating @cxlr_pmem setup / shutdown
  * @cxlr_pmem: (for pmem regions) cached copy of the nvdimm bridge
  * @flags: Region state flags
+ * @private: Region is private (not exposed to system memory)
  * @params: active + config params for the region
  * @coord: QoS access coordinates for the region
  * @node_notifier: notifier for setting the access coordinates to node
  * @adist_notifier: notifier for calculating the abstract distance of node
+ * @private_type: CXL private region type for dispatch (set via sysfs)
+ * @private_ops: private node operations for callbacks (if mode is PRIVATE)
  */
 struct cxl_region {
 	struct device dev;
@@ -547,10 +564,13 @@ struct cxl_region {
 	struct cxl_nvdimm_bridge *cxl_nvb;
 	struct cxl_pmem_region *cxlr_pmem;
 	unsigned long flags;
+	bool private;
 	struct cxl_region_params params;
 	struct access_coordinate coord[ACCESS_COORDINATE_MAX];
 	struct notifier_block node_notifier;
 	struct notifier_block adist_notifier;
+	enum cxl_private_region_type private_type;
+	struct private_node_ops private_ops;
 };
 
 struct cxl_nvdimm_bridge {

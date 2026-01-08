@@ -21,6 +21,7 @@ enum cxl_detach_mode {
 #ifdef CONFIG_CXL_REGION
 extern struct device_attribute dev_attr_create_pmem_region;
 extern struct device_attribute dev_attr_create_ram_region;
+extern struct device_attribute dev_attr_create_private_region;
 extern struct device_attribute dev_attr_delete_region;
 extern struct device_attribute dev_attr_region;
 extern const struct device_type cxl_pmem_region_type;
@@ -30,6 +31,9 @@ extern const struct device_type cxl_region_type;
 int cxl_decoder_detach(struct cxl_region *cxlr,
 		       struct cxl_endpoint_decoder *cxled, int pos,
 		       enum cxl_detach_mode mode);
+int devm_cxl_add_dax_region(struct cxl_region *cxlr);
+struct cxl_region *to_cxl_region(struct device *dev);
+extern struct device_attribute dev_attr_private_type;
 
 #define CXL_REGION_ATTR(x) (&dev_attr_##x.attr)
 #define CXL_REGION_TYPE(x) (&cxl_region_type)
