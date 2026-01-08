@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 #include <linux/aperture.h>
+#include <linux/coreboot.h>
 #include <linux/device.h>
 #include <linux/list.h>
 #include <linux/mutex.h>
@@ -197,22 +198,47 @@ static int devm_aperture_acquire(struct device *dev,
 	return devm_add_action_or_reset(dev, devm_aperture_acquire_release, ap);
 }
 
+#if defined(CONFIG_GOOGLE_COREBOOT_TABLE)
+static void aperture_detach_coreboot_device(struct device *dev)
+{
+	struct coreboot_device *cbdev = dev_to_coreboot_device(dev);
+
+	device_unregister(&cbdev->dev);
+}
+
+/**
+ * devm_aperture_acquire_for_coreboot_device - Acquires ownership of an aperture
+ *                                             on behalf of a coreboot device.
+ * @cbdev:	the coreboot device to own the aperture
+ * @base:	the aperture's byte offset in physical memory
+ * @size:	the aperture size in bytes
+ *
+ * Installs the given device as the new owner of the aperture. The function
+ * expects the aperture to be provided by a coreboot device. If another
+ * driver takes over ownership of the aperture, aperture helpers will then
+ * unregister the coreboot device automatically. All acquired apertures are
+ * released automatically when the underlying device goes away.
+ *
+ * The function fails if the aperture, or parts of it, is currently
+ * owned by another device. To evict current owners, callers should use
+ * remove_conflicting_devices() et al. before calling this function.
+ *
+ * Returns:
+ * 0 on success, or a negative errno value otherwise.
+ */
+int devm_aperture_acquire_for_coreboot_device(struct coreboot_device *cbdev,
+					      resource_size_t base,
+					      resource_size_t size)
+{
+	return devm_aperture_acquire(&cbdev->dev, base, size, aperture_detach_coreboot_device);
+}
+EXPORT_SYMBOL(devm_aperture_acquire_for_coreboot_device);
+#endif
+
 static void aperture_detach_platform_device(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 
-	/*
-	 * Remove the device from the device hierarchy. This is the right thing
-	 * to do for firmware-based fb drivers, such as EFI, VESA or VGA. After
-	 * the new driver takes over the hardware, the firmware device's state
-	 * will be lost.
-	 *
-	 * For non-platform devices, a new callback would be required.
-	 *
-	 * If the aperture helpers ever need to handle native drivers, this call
-	 * would only have to unplug the DRM device, so that the hardware device
-	 * stays around after detachment.
-	 */
 	platform_device_unregister(pdev);
 }
 
@@ -264,6 +290,16 @@ static void aperture_detach_devices(resource_size_t base, resource_size_t size)
 		ap->dev = NULL; /* detach from device */
 		list_del(&ap->lh);
 
+		/*
+		 * Remove the device from the device hierarchy. This is the right thing
+		 * to do for firmware-based fb drivers, such as EFI, VESA or VGA. After
+		 * the new driver takes over the hardware, the firmware device's state
+		 * will be lost.
+		 *
+		 * If the aperture helpers ever need to handle native drivers, this call
+		 * would only have to unplug the DRM device, so that the hardware device
+		 * stays around after detachment.
+		 */
 		ap->detach(dev);
 	}
 

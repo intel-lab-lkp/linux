@@ -5,10 +5,17 @@
 
 #include <linux/types.h>
 
+struct coreboot_device;
 struct pci_dev;
 struct platform_device;
 
 #if defined(CONFIG_APERTURE_HELPERS)
+#if defined(CONFIG_GOOGLE_COREBOOT_TABLE)
+int devm_aperture_acquire_for_coreboot_device(struct coreboot_device *cbdev,
+					      resource_size_t base,
+					      resource_size_t size);
+#endif
+
 int devm_aperture_acquire_for_platform_device(struct platform_device *pdev,
 					      resource_size_t base,
 					      resource_size_t size);
@@ -20,6 +27,15 @@ int __aperture_remove_legacy_vga_devices(struct pci_dev *pdev);
 
 int aperture_remove_conflicting_pci_devices(struct pci_dev *pdev, const char *name);
 #else
+#if defined(CONFIG_GOOGLE_COREBOOT_TABLE)
+static inline int devm_aperture_acquire_for_coreboot_device(struct coreboot_device *cbdev,
+							    resource_size_t base,
+							    resource_size_t size)
+{
+	return 0;
+}
+#endif
+
 static inline int devm_aperture_acquire_for_platform_device(struct platform_device *pdev,
 							    resource_size_t base,
 							    resource_size_t size)
