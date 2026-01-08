@@ -33,6 +33,7 @@
 
 #define TRACE_MODE_WRITE	0640
 #define TRACE_MODE_READ		0440
+#define TRACE_MODE_WRITE_MASK	(TRACE_MODE_WRITE & ~TRACE_MODE_READ)
 
 enum trace_type {
 	__TRACE_FIRST_TYPE = 0,
@@ -483,6 +484,12 @@ extern bool trace_clock_in_ns(struct trace_array *tr);
 
 extern unsigned long trace_adjust_address(struct trace_array *tr, unsigned long addr);
 
+static inline bool trace_array_is_readonly(struct trace_array *tr)
+{
+	/* backup instance is read only. */
+	return tr->flags & TRACE_ARRAY_FL_VMALLOC;
+}
+
 /*
  * The global tracer (top) should be the first trace array added,
  * but we check the flag anyway.
@@ -680,7 +687,12 @@ struct dentry *trace_create_file(const char *name,
 				 struct dentry *parent,
 				 void *data,
 				 const struct file_operations *fops);
-
+struct dentry *__trace_create_file(const char *name,
+				   umode_t mode,
+				   struct dentry *parent,
+				   void *data,
+				   const struct file_operations *fops,
+				   const struct file_operations *ro_fops);
 
 /**
  * tracer_tracing_is_on_cpu - show real state of ring buffer enabled on for a cpu
