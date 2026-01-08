@@ -1901,14 +1901,14 @@ static int kernel_migrate_pages(pid_t pid, unsigned long maxnode,
 	}
 	rcu_read_unlock();
 
-	task_nodes = cpuset_mems_allowed(task);
+	task_nodes = cpuset_sysram_nodemask(task);
 	/* Is the user allowed to access the target nodes? */
 	if (!nodes_subset(*new, task_nodes) && !capable(CAP_SYS_NICE)) {
 		err = -EPERM;
 		goto out_put;
 	}
 
-	task_nodes = cpuset_mems_allowed(current);
+	task_nodes = cpuset_sysram_nodemask(current);
 	nodes_and(*new, *new, task_nodes);
 	if (nodes_empty(*new))
 		goto out_put;
@@ -2833,7 +2833,7 @@ struct mempolicy *__mpol_dup(struct mempolicy *old)
 		*new = *old;
 
 	if (current_cpuset_is_being_rebound()) {
-		nodemask_t mems = cpuset_mems_allowed(current);
+		nodemask_t mems = cpuset_sysram_nodemask(current);
 		mpol_rebind_policy(new, &mems);
 	}
 	atomic_set(&new->refcnt, 1);

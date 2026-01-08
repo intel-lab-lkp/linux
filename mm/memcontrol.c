@@ -5610,7 +5610,7 @@ void mem_cgroup_node_filter_allowed(struct mem_cgroup *memcg, nodemask_t *mask)
 	 * in effective_mems and hot-unpluging of nodes, inaccurate allowed
 	 * mask is acceptable.
 	 */
-	cpuset_nodes_allowed(memcg->css.cgroup, &allowed);
+	cpuset_sysram_nodes_allowed(memcg->css.cgroup, &allowed);
 	nodes_and(*mask, *mask, allowed);
 }
 
