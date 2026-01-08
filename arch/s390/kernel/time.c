@@ -787,7 +787,8 @@ static ssize_t online_store(struct device *dev,
 {
 	unsigned int value;
 
-	value = simple_strtoul(buf, NULL, 0);
+	if (kstrtouint(buf, 0, &value))
+		return -EINVAL;
 	if (value != 0 && value != 1)
 		return -EINVAL;
 	if (!test_bit(CLOCK_SYNC_HAS_STP, &clock_sync_flags))
