@@ -3208,8 +3208,8 @@ static void phy_leds_unregister(struct phy_device *phydev)
 	}
 }
 
-static int of_phy_led(struct phy_device *phydev,
-		      struct device_node *led)
+static int fwnode_phy_led(struct phy_device *phydev,
+			  struct fwnode_handle *led)
 {
 	struct device *dev = &phydev->mdio.dev;
 	struct led_init_data init_data = {};
@@ -3226,17 +3226,17 @@ static int of_phy_led(struct phy_device *phydev,
 	cdev = &phyled->led_cdev;
 	phyled->phydev = phydev;
 
-	err = of_property_read_u32(led, "reg", &index);
+	err = fwnode_property_read_u32(led, "reg", &index);
 	if (err)
 		return err;
 	if (index > U8_MAX)
 		return -EINVAL;
 
-	if (of_property_read_bool(led, "active-high"))
+	if (fwnode_property_read_bool(led, "active-high"))
 		set_bit(PHY_LED_ACTIVE_HIGH, &modes);
-	if (of_property_read_bool(led, "active-low"))
+	if (fwnode_property_read_bool(led, "active-low"))
 		set_bit(PHY_LED_ACTIVE_LOW, &modes);
-	if (of_property_read_bool(led, "inactive-high-impedance"))
+	if (fwnode_property_read_bool(led, "inactive-high-impedance"))
 		set_bit(PHY_LED_INACTIVE_HIGH_IMPEDANCE, &modes);
 
 	if (WARN_ON(modes & BIT(PHY_LED_ACTIVE_LOW) &&
@@ -3273,7 +3273,7 @@ static int of_phy_led(struct phy_device *phydev,
 #endif
 	cdev->max_brightness = 1;
 	init_data.devicename = dev_name(&phydev->mdio.dev);
-	init_data.fwnode = of_fwnode_handle(led);
+	init_data.fwnode = led;
 	init_data.devname_mandatory = true;
 
 	err = led_classdev_register_ext(dev, cdev, &init_data);
@@ -3285,19 +3285,16 @@ static int of_phy_led(struct phy_device *phydev,
 	return 0;
 }
 
-static int of_phy_leds(struct phy_device *phydev)
+static int fwnode_phy_leds(struct phy_device *phydev)
 {
-	struct device_node *node = phydev->mdio.dev.of_node;
-	struct device_node *leds;
+	struct fwnode_handle *fwnode = dev_fwnode(&phydev->mdio.dev);
+	struct fwnode_handle *leds, *led;
 	int err;
 
-	if (!IS_ENABLED(CONFIG_OF_MDIO))
+	if (!fwnode)
 		return 0;
 
-	if (!node)
-		return 0;
-
-	leds = of_get_child_by_name(node, "leds");
+	leds = fwnode_get_named_child_node(fwnode, "leds");
 	if (!leds)
 		return 0;
 
@@ -3311,17 +3308,17 @@ static int of_phy_leds(struct phy_device *phydev)
 		goto exit;
 	}
 
-	for_each_available_child_of_node_scoped(leds, led) {
-		err = of_phy_led(phydev, led);
+	fwnode_for_each_available_child_node_scoped(leds, led) {
+		err = fwnode_phy_led(phydev, led);
 		if (err) {
-			of_node_put(leds);
+			fwnode_handle_put(leds);
 			phy_leds_unregister(phydev);
 			return err;
 		}
 	}
 
 exit:
-	of_node_put(leds);
+	fwnode_handle_put(leds);
 	return 0;
 }
 
@@ -3516,7 +3513,7 @@ static int phy_probe(struct device *dev)
 	 * LEDs for them.
 	 */
 	if (IS_ENABLED(CONFIG_PHYLIB_LEDS) && !phy_driver_is_genphy(phydev))
-		err = of_phy_leds(phydev);
+		err = fwnode_phy_leds(phydev);
 
 out:
 	/* Re-assert the reset signal on error */
