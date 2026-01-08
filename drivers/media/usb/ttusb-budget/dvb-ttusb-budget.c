@@ -456,7 +456,9 @@ static int ttusb_send_diseqc(struct dvb_frontend* fe,
 	b[4] = 0xFF;		/* send diseqc master, not burst */
 	b[5] = cmd->msg_len;
 
-	memcpy(b + 5, cmd->msg, cmd->msg_len);
+	if (cmd->msg_len > sizeof(b) - 6)
+		return -EINVAL;
+	memcpy(b + 6, cmd->msg, cmd->msg_len);
 
 	/* Diseqc */
 	if ((err = ttusb_cmd(ttusb, b, 4 + b[3], 0))) {
