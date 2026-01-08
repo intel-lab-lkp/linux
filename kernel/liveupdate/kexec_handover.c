@@ -22,6 +22,7 @@
 #include <linux/page-isolation.h>
 #include <linux/unaligned.h>
 #include <linux/vmalloc.h>
+#include <linux/utsname.h>
 
 #include <asm/early_ioremap.h>
 
@@ -1245,6 +1246,7 @@ struct kho_in {
 	phys_addr_t fdt_phys;
 	phys_addr_t scratch_phys;
 	phys_addr_t mem_map_phys;
+	char previous_release[__NEW_UTS_LEN + 1];
 	struct kho_debugfs dbg;
 };
 
@@ -1324,6 +1326,8 @@ static __init int kho_out_fdt_setup(void)
 	err |= fdt_property_string(root, "compatible", KHO_FDT_COMPATIBLE);
 	err |= fdt_property(root, KHO_FDT_MEMORY_MAP_PROP_NAME, &empty_mem_map,
 			    sizeof(empty_mem_map));
+	err |= fdt_property_string(root, KHO_PROP_PREVIOUS_RELEASE,
+				   init_uts_ns.name.release);
 	err |= fdt_end_node(root);
 	err |= fdt_finish(root);
 
@@ -1435,6 +1439,22 @@ void __init kho_memory_init(void)
 	}
 }
 
+static int __init kho_print_previous_kernel(const void *fdt)
+{
+	const char *prev_release;
+	int len;
+
+	prev_release = fdt_getprop(fdt, 0, KHO_PROP_PREVIOUS_RELEASE, &len);
+	if (!prev_release || len <= 0)
+		return -ENOENT;
+
+	strscpy(kho_in.previous_release, prev_release,
+		sizeof(kho_in.previous_release));
+	pr_info("exec from: %s\n", kho_in.previous_release);
+
+	return 0;
+}
+
 void __init kho_populate(phys_addr_t fdt_phys, u64 fdt_len,
 			 phys_addr_t scratch_phys, u64 scratch_len)
 {
@@ -1514,7 +1534,10 @@ void __init kho_populate(phys_addr_t fdt_phys, u64 fdt_len,
 	kho_in.scratch_phys = scratch_phys;
 	kho_in.mem_map_phys = mem_map_phys;
 	kho_scratch_cnt = scratch_cnt;
-	pr_info("found kexec handover data.\n");
+
+	if (kho_print_previous_kernel(fdt))
+		/* Fallback message when previous kernel info unavailable */
+		pr_info("found kexec handover data.\n");
 
 out:
 	if (fdt)

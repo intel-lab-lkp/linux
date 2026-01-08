@@ -84,6 +84,9 @@
 /* The FDT property for sub-FDTs. */
 #define KHO_FDT_SUB_TREE_PROP_NAME "fdt"
 
+/* The FDT property to track previous kernel (kexec caller) */
+#define KHO_PROP_PREVIOUS_RELEASE "previous-release"
+
 /**
  * DOC: Kexec Handover ABI for vmalloc Preservation
  *
