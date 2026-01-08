@@ -1706,6 +1706,10 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 	unsigned int rmem, rcvbuf;
 	int size, err = -ENOMEM;
 	int total_size = 0;
+	struct {
+		int ipv4;
+		int ipv6;
+	} mem_err_count;
 	int q_size = 0;
 	int dropcount;
 	int nb = 0;
@@ -1794,14 +1798,28 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 	}
 
 	if (unlikely(to_drop)) {
+		mem_err_count.ipv4 = 0;
+		mem_err_count.ipv6 = 0;
 		for (nb = 0; to_drop != NULL; nb++) {
 			skb = to_drop;
+			if (skb->protocol == htons(ETH_P_IP))
+				mem_err_count.ipv4++;
+			else
+				mem_err_count.ipv6++;
 			to_drop = skb->next;
 			skb_mark_not_on_list(skb);
-			/* TODO: update SNMP values. */
 			sk_skb_reason_drop(sk, skb, SKB_DROP_REASON_PROTO_MEM);
 		}
 		numa_drop_add(&udp_sk(sk)->drop_counters, nb);
+
+		SNMP_ADD_STATS(__UDPX_MIB(sk, true), UDP_MIB_MEMERRORS,
+			       mem_err_count.ipv4);
+		SNMP_ADD_STATS(__UDPX_MIB(sk, true), UDP_MIB_INERRORS,
+			       mem_err_count.ipv4);
+		SNMP_ADD_STATS(__UDPX_MIB(sk, false), UDP_MIB_MEMERRORS,
+			       mem_err_count.ipv6);
+		SNMP_ADD_STATS(__UDPX_MIB(sk, false), UDP_MIB_INERRORS,
+			       mem_err_count.ipv6);
 	}
 
 	atomic_sub(total_size, &udp_prod_queue->rmem_alloc);
