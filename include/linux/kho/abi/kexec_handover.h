@@ -87,6 +87,9 @@
 /* The FDT property to track previous kernel (kexec caller) */
 #define KHO_PROP_PREVIOUS_RELEASE "previous-release"
 
+/* The FDT property to track number of kexec counts so far */
+#define KHO_PROP_KEXEC_COUNT "kexec-count"
+
 /**
  * DOC: Kexec Handover ABI for vmalloc Preservation
  *

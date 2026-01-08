@@ -1247,6 +1247,7 @@ struct kho_in {
 	phys_addr_t scratch_phys;
 	phys_addr_t mem_map_phys;
 	char previous_release[__NEW_UTS_LEN + 1];
+	u32 kexec_count;
 	struct kho_debugfs dbg;
 };
 
@@ -1318,6 +1319,7 @@ static __init int kho_out_fdt_setup(void)
 {
 	void *root = kho_out.fdt;
 	u64 empty_mem_map = 0;
+	u32 kexec_count;
 	int err;
 
 	err = fdt_create(root, PAGE_SIZE);
@@ -1328,6 +1330,10 @@ static __init int kho_out_fdt_setup(void)
 			    sizeof(empty_mem_map));
 	err |= fdt_property_string(root, KHO_PROP_PREVIOUS_RELEASE,
 				   init_uts_ns.name.release);
+	/* kho_in.kexec_count is set to 0 on cold boot */
+	kexec_count = kho_in.kexec_count + 1;
+	err |= fdt_property(root, KHO_PROP_KEXEC_COUNT, &kexec_count,
+			    sizeof(kexec_count));
 	err |= fdt_end_node(root);
 	err |= fdt_finish(root);
 
@@ -1442,15 +1448,23 @@ void __init kho_memory_init(void)
 static int __init kho_print_previous_kernel(const void *fdt)
 {
 	const char *prev_release;
+	const u32 *count_ptr;
 	int len;
 
 	prev_release = fdt_getprop(fdt, 0, KHO_PROP_PREVIOUS_RELEASE, &len);
 	if (!prev_release || len <= 0)
 		return -ENOENT;
 
+	/* Read the kexec count from the previous kernel */
+	count_ptr = fdt_getprop(fdt, 0, KHO_PROP_KEXEC_COUNT, &len);
+	if (WARN_ON(!count_ptr || len != sizeof(u32)))
+		return -ENOENT;
+	kho_in.kexec_count = *count_ptr;
+
 	strscpy(kho_in.previous_release, prev_release,
 		sizeof(kho_in.previous_release));
-	pr_info("exec from: %s\n", kho_in.previous_release);
+	pr_info("exec from: %s (count %u)\n", kho_in.previous_release,
+					      kho_in.kexec_count);
 
 	return 0;
 }
