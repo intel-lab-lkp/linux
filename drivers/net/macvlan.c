@@ -47,6 +47,7 @@ struct macvlan_port {
 	struct list_head	vlans;
 	struct sk_buff_head	bc_queue;
 	struct work_struct	bc_work;
+	struct rcu_head		rcu;
 	u32			bc_queue_len_used;
 	int			bc_cutoff;
 	u32			flags;
@@ -1302,7 +1303,7 @@ static void macvlan_port_destroy(struct net_device *dev)
 		dev_set_mac_address(port->dev, &ss, NULL);
 	}
 
-	kfree(port);
+	kfree_rcu(port, rcu);
 }
 
 static int macvlan_validate(struct nlattr *tb[], struct nlattr *data[],
