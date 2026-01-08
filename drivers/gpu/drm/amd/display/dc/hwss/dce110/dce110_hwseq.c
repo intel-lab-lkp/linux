@@ -3263,10 +3263,15 @@ bool dce110_set_backlight_level(struct pipe_ctx *pipe_ctx,
 	struct panel_cntl *panel_cntl = link->panel_cntl;
 	struct dmcu *dmcu = dc->res_pool->dmcu;
 	bool fw_set_brightness = true;
+	struct timing_generator *tg = pipe_ctx->stream_res.tg;
+
+	if (!tg)
+		return false;
+
 	/* DMCU -1 for all controller id values,
 	 * therefore +1 here
 	 */
-	uint32_t controller_id = pipe_ctx->stream_res.tg->inst + 1;
+	uint32_t controller_id = tg->inst + 1;
 
 	if (abm == NULL || panel_cntl == NULL || (abm->funcs->set_backlight_level_pwm == NULL))
 		return false;
