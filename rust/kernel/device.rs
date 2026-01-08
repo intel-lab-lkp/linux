@@ -331,6 +331,31 @@ impl Device<Bound> {
         // - We've just checked that the type of the driver's private data is in fact `T`.
         Ok(unsafe { self.drvdata_unchecked() })
     }
+
+    /// Access the platform data for this device.
+    ///
+    /// The lifetime of the platform data is tied to the device's lifetime.
+    /// Returns a reference to the platform data of type `T`, or [`ENOENT`] if no platform data
+    /// is set.
+    ///
+    /// # Type Safety
+    ///
+    /// This function does not perform runtime type checking. The caller must ensure that the
+    /// platform data structure actually matches the type `T` for the specific platform device.
+    /// Incorrect type usage will result in undefined behavior.
+    pub fn platdata<T>(&self) -> Result<&T> {
+        // SAFETY: By the type invariants, `self.as_raw()` is a valid pointer to a `struct device`.
+        let ptr = unsafe { (*self.as_raw()).platform_data };
+
+        if ptr.is_null() {
+            return Err(ENOENT);
+        }
+
+        // SAFETY:
+        // - `ptr` is not null, so it points to valid memory.
+        // - The caller must ensure that the platform data structure matches type `T`.
+        Ok(unsafe { &*ptr.cast::<T>() })
+    }
 }
 
 impl<Ctx: DeviceContext> Device<Ctx> {
