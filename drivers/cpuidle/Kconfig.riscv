@@ -22,3 +22,15 @@ config RISCV_SBI_CPUIDLE_DOMAIN
 	  Select this option to enable RISC-V SBI firmware based CPU idle
 	  driver to use PM domains, which is needed to support the hierarchical
 	  DT based layout of the idle state.
+
+config SIFIVE_DMC_CPUIDLE_DOMAIN
+	bool "SiFive DMC CPU idle Domain"
+	depends on ARCH_SIFIVE
+	depends on RISCV_SBI_CPUIDLE
+	depends on PM_GENERIC_DOMAINS_OF
+	select DT_IDLE_GENPD
+	default y
+	help
+	  Select this option to enable RISC-V SBI firmware based CPU idle
+	  driver to use PM domains on SiFive Platforms, which is needed to
+	  support the hierarchical DT based layout of the idle state.

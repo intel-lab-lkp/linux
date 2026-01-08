@@ -43,3 +43,4 @@ obj-$(CONFIG_POWERNV_CPUIDLE)		+= cpuidle-powernv.o
 # RISC-V drivers
 obj-$(CONFIG_RISCV_SBI_CPUIDLE)		+= cpuidle-riscv-sbi.o
 obj-$(CONFIG_RISCV_SBI_CPUIDLE_DOMAIN)	+= cpuidle-riscv-sbi-domain.o
+obj-$(CONFIG_SIFIVE_DMC_CPUIDLE_DOMAIN)	+= cpuidle-sifive-dmc-domain.o
