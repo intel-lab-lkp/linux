@@ -35,6 +35,8 @@ void zswap_lruvec_state_init(struct lruvec *lruvec);
 void zswap_folio_swapin(struct folio *folio);
 bool zswap_is_enabled(void);
 bool zswap_never_enabled(void);
+void zswap_add_direct_node(int nid);
+void zswap_remove_direct_node(int nid);
 #else
 
 struct zswap_lruvec_state {};
@@ -68,6 +70,9 @@ static inline bool zswap_never_enabled(void)
 {
 	return true;
 }
+
+static inline void zswap_add_direct_node(int nid) {}
+static inline void zswap_remove_direct_node(int nid) {}
 
 #endif
 

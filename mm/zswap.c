@@ -35,6 +35,7 @@
 #include <linux/workqueue.h>
 #include <linux/list_lru.h>
 #include <linux/zsmalloc.h>
+#include <linux/node.h>
 
 #include "swap.h"
 #include "internal.h"
@@ -190,6 +191,7 @@ struct zswap_entry {
 	swp_entry_t swpentry;
 	unsigned int length;
 	bool referenced;
+	bool direct;
 	struct zswap_pool *pool;
 	unsigned long handle;
 	struct obj_cgroup *objcg;
@@ -198,6 +200,20 @@ struct zswap_entry {
 
 static struct xarray *zswap_trees[MAX_SWAPFILES];
 static unsigned int nr_zswap_trees[MAX_SWAPFILES];
+
+/* Nodemask for compressed RAM nodes used by zswap_compress_direct */
+static nodemask_t zswap_direct_nodes = NODE_MASK_NONE;
+
+void zswap_add_direct_node(int nid)
+{
+	node_set(nid, zswap_direct_nodes);
+}
+
+void zswap_remove_direct_node(int nid)
+{
+	if (!node_online(nid))
+		node_clear(nid, zswap_direct_nodes);
+}
 
 /* RCU-protected iteration */
 static LIST_HEAD(zswap_pools);
@@ -716,7 +732,13 @@ static void zswap_entry_cache_free(struct zswap_entry *entry)
 static void zswap_entry_free(struct zswap_entry *entry)
 {
 	zswap_lru_del(&zswap_list_lru, entry);
-	zs_free(entry->pool->zs_pool, entry->handle);
+	if (entry->direct) {
+		struct page *page = (struct page *)entry->handle;
+
+		node_private_freed(page);
+		__free_page(page);
+	} else
+		zs_free(entry->pool->zs_pool, entry->handle);
 	zswap_pool_put(entry->pool);
 	if (entry->objcg) {
 		obj_cgroup_uncharge_zswap(entry->objcg, entry->length);
@@ -849,6 +871,58 @@ static void acomp_ctx_put_unlock(struct crypto_acomp_ctx *acomp_ctx)
 	mutex_unlock(&acomp_ctx->mutex);
 }
 
+static struct page *zswap_compress_direct(struct page *src,
+					  struct zswap_entry *entry)
+{
+	int nid;
+	struct page *dst;
+	gfp_t gfp;
+	nodemask_t tried_nodes = NODE_MASK_NONE;
+
+	if (nodes_empty(zswap_direct_nodes))
+		return NULL;
+
+	gfp = GFP_NOWAIT | __GFP_NORETRY | __GFP_HIGHMEM | __GFP_MOVABLE |
+	      __GFP_THISNODE;
+
+	for_each_node_mask(nid, zswap_direct_nodes) {
+		int ret;
+
+		/* Skip nodes we've already tried and failed */
+		if (node_isset(nid, tried_nodes))
+			continue;
+
+		dst = __alloc_pages(gfp, 0, nid, &zswap_direct_nodes);
+		if (!dst)
+			continue;
+
+		/*
+		 * Check with the device driver that this page is safe to use.
+		 * If the device reports an error (e.g., compression ratio is
+		 * too low and the page can't safely store data), free the page
+		 * and try another node.
+		 */
+		ret = node_private_allocated(dst);
+		if (ret) {
+			__free_page(dst);
+			node_set(nid, tried_nodes);
+			continue;
+		}
+
+		goto found;
+	}
+
+	return NULL;
+
+found:
+	/* If we fail to copy at this point just fallback */
+	if (copy_mc_highpage(dst, src)) {
+		__free_page(dst);
+		dst = NULL;
+	}
+	return dst;
+}
+
 static bool zswap_compress(struct page *page, struct zswap_entry *entry,
 			   struct zswap_pool *pool)
 {
@@ -860,6 +934,17 @@ static bool zswap_compress(struct page *page, struct zswap_entry *entry,
 	gfp_t gfp;
 	u8 *dst;
 	bool mapped = false;
+	struct page *zpage;
+
+	/* Try to shunt directly to compressed ram */
+	zpage = zswap_compress_direct(page, entry);
+	if (zpage) {
+		entry->handle = (unsigned long)zpage;
+		entry->length = PAGE_SIZE;
+		entry->direct = true;
+		return true;
+	}
+	/* otherwise fallback to normal zswap */
 
 	acomp_ctx = acomp_ctx_get_cpu_lock(pool);
 	dst = acomp_ctx->buffer;
@@ -913,6 +998,7 @@ static bool zswap_compress(struct page *page, struct zswap_entry *entry,
 	zs_obj_write(pool->zs_pool, handle, dst, dlen);
 	entry->handle = handle;
 	entry->length = dlen;
+	entry->direct = false;
 
 unlock:
 	if (mapped)
@@ -935,6 +1021,15 @@ static bool zswap_decompress(struct zswap_entry *entry, struct folio *folio)
 	struct crypto_acomp_ctx *acomp_ctx;
 	int decomp_ret = 0, dlen = PAGE_SIZE;
 	u8 *src, *obj;
+
+	/* compressed ram page */
+	if (entry->direct) {
+		struct page *src = (struct page *)entry->handle;
+		struct folio *zfolio = page_folio(src);
+
+		memcpy_folio(folio, 0, zfolio, 0, PAGE_SIZE);
+		goto direct_done;
+	}
 
 	acomp_ctx = acomp_ctx_get_cpu_lock(pool);
 	obj = zs_obj_read_begin(pool->zs_pool, entry->handle, acomp_ctx->buffer);
@@ -969,6 +1064,7 @@ read_done:
 	zs_obj_read_end(pool->zs_pool, entry->handle, obj);
 	acomp_ctx_put_unlock(acomp_ctx);
 
+direct_done:
 	if (!decomp_ret && dlen == PAGE_SIZE)
 		return true;
 
@@ -1483,7 +1579,13 @@ static bool zswap_store_page(struct page *page,
 	return true;
 
 store_failed:
-	zs_free(pool->zs_pool, entry->handle);
+	if (entry->direct) {
+		struct page *freepage = (struct page *)entry->handle;
+
+		node_private_freed(freepage);
+		__free_page(freepage);
+	} else
+		zs_free(pool->zs_pool, entry->handle);
 compress_failed:
 	zswap_entry_cache_free(entry);
 	return false;
