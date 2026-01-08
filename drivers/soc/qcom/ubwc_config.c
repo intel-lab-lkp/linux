@@ -11,12 +11,13 @@
 #include <linux/platform_device.h>
 
 #include <linux/soc/qcom/ubwc.h>
+#include <linux/soc/qcom/smem.h>
 
-static const struct qcom_ubwc_cfg_data no_ubwc_data = {
+static struct qcom_ubwc_cfg_data no_ubwc_data = {
 	/* no UBWC, no HBB */
 };
 
-static const struct qcom_ubwc_cfg_data kaanapali_data = {
+static struct qcom_ubwc_cfg_data kaanapali_data = {
 	.ubwc_enc_version = UBWC_6_0,
 	.ubwc_dec_version = UBWC_6_0,
 	.ubwc_swizzle = UBWC_SWIZZLE_ENABLE_LVL2 |
@@ -26,7 +27,7 @@ static const struct qcom_ubwc_cfg_data kaanapali_data = {
 	.macrotile_mode = true,
 };
 
-static const struct qcom_ubwc_cfg_data msm8937_data = {
+static struct qcom_ubwc_cfg_data msm8937_data = {
 	.ubwc_enc_version = UBWC_1_0,
 	.ubwc_dec_version = UBWC_1_0,
 	.ubwc_swizzle = UBWC_SWIZZLE_ENABLE_LVL1 |
@@ -35,7 +36,7 @@ static const struct qcom_ubwc_cfg_data msm8937_data = {
 	.highest_bank_bit = 14,
 };
 
-static const struct qcom_ubwc_cfg_data msm8998_data = {
+static struct qcom_ubwc_cfg_data msm8998_data = {
 	.ubwc_enc_version = UBWC_1_0,
 	.ubwc_dec_version = UBWC_1_0,
 	.ubwc_swizzle = UBWC_SWIZZLE_ENABLE_LVL1 |
@@ -44,12 +45,12 @@ static const struct qcom_ubwc_cfg_data msm8998_data = {
 	.highest_bank_bit = 15,
 };
 
-static const struct qcom_ubwc_cfg_data qcm2290_data = {
+static struct qcom_ubwc_cfg_data qcm2290_data = {
 	/* no UBWC */
 	.highest_bank_bit = 15,
 };
 
-static const struct qcom_ubwc_cfg_data sa8775p_data = {
+static struct qcom_ubwc_cfg_data sa8775p_data = {
 	.ubwc_enc_version = UBWC_4_0,
 	.ubwc_dec_version = UBWC_4_0,
 	.ubwc_swizzle = UBWC_SWIZZLE_ENABLE_LVL3,
@@ -58,7 +59,7 @@ static const struct qcom_ubwc_cfg_data sa8775p_data = {
 	.macrotile_mode = true,
 };
 
-static const struct qcom_ubwc_cfg_data sar2130p_data = {
+static struct qcom_ubwc_cfg_data sar2130p_data = {
 	.ubwc_enc_version = UBWC_3_0, /* 4.0.2 in hw */
 	.ubwc_dec_version = UBWC_4_3,
 	.ubwc_swizzle = UBWC_SWIZZLE_ENABLE_LVL2 |
@@ -68,7 +69,7 @@ static const struct qcom_ubwc_cfg_data sar2130p_data = {
 	.macrotile_mode = true,
 };
 
-static const struct qcom_ubwc_cfg_data sc7180_data = {
+static struct qcom_ubwc_cfg_data sc7180_data = {
 	.ubwc_enc_version = UBWC_2_0,
 	.ubwc_dec_version = UBWC_2_0,
 	.ubwc_swizzle = UBWC_SWIZZLE_ENABLE_LVL2 |
@@ -77,7 +78,7 @@ static const struct qcom_ubwc_cfg_data sc7180_data = {
 	.highest_bank_bit = 14,
 };
 
-static const struct qcom_ubwc_cfg_data sc7280_data = {
+static struct qcom_ubwc_cfg_data sc7280_data = {
 	.ubwc_enc_version = UBWC_3_0,
 	.ubwc_dec_version = UBWC_4_0,
 	.ubwc_swizzle = UBWC_SWIZZLE_ENABLE_LVL2 |
@@ -87,7 +88,7 @@ static const struct qcom_ubwc_cfg_data sc7280_data = {
 	.macrotile_mode = true,
 };
 
-static const struct qcom_ubwc_cfg_data sc8180x_data = {
+static struct qcom_ubwc_cfg_data sc8180x_data = {
 	.ubwc_enc_version = UBWC_3_0,
 	.ubwc_dec_version = UBWC_3_0,
 	.ubwc_swizzle = UBWC_SWIZZLE_ENABLE_LVL2 |
@@ -96,7 +97,7 @@ static const struct qcom_ubwc_cfg_data sc8180x_data = {
 	.macrotile_mode = true,
 };
 
-static const struct qcom_ubwc_cfg_data sc8280xp_data = {
+static struct qcom_ubwc_cfg_data sc8280xp_data = {
 	.ubwc_enc_version = UBWC_4_0,
 	.ubwc_dec_version = UBWC_4_0,
 	.ubwc_swizzle = UBWC_SWIZZLE_ENABLE_LVL2 |
@@ -106,7 +107,7 @@ static const struct qcom_ubwc_cfg_data sc8280xp_data = {
 	.macrotile_mode = true,
 };
 
-static const struct qcom_ubwc_cfg_data sdm670_data = {
+static struct qcom_ubwc_cfg_data sdm670_data = {
 	.ubwc_enc_version = UBWC_2_0,
 	.ubwc_dec_version = UBWC_2_0,
 	.ubwc_swizzle = UBWC_SWIZZLE_ENABLE_LVL2 |
@@ -114,7 +115,7 @@ static const struct qcom_ubwc_cfg_data sdm670_data = {
 	.highest_bank_bit = 14,
 };
 
-static const struct qcom_ubwc_cfg_data sdm845_data = {
+static struct qcom_ubwc_cfg_data sdm845_data = {
 	.ubwc_enc_version = UBWC_2_0,
 	.ubwc_dec_version = UBWC_2_0,
 	.ubwc_swizzle = UBWC_SWIZZLE_ENABLE_LVL2 |
@@ -122,7 +123,7 @@ static const struct qcom_ubwc_cfg_data sdm845_data = {
 	.highest_bank_bit = 15,
 };
 
-static const struct qcom_ubwc_cfg_data sm6115_data = {
+static struct qcom_ubwc_cfg_data sm6115_data = {
 	.ubwc_enc_version = UBWC_1_0,
 	.ubwc_dec_version = UBWC_2_0,
 	.ubwc_swizzle = UBWC_SWIZZLE_ENABLE_LVL1 |
@@ -132,7 +133,7 @@ static const struct qcom_ubwc_cfg_data sm6115_data = {
 	.highest_bank_bit = 14,
 };
 
-static const struct qcom_ubwc_cfg_data sm6125_data = {
+static struct qcom_ubwc_cfg_data sm6125_data = {
 	.ubwc_enc_version = UBWC_1_0,
 	.ubwc_dec_version = UBWC_3_0,
 	.ubwc_swizzle = UBWC_SWIZZLE_ENABLE_LVL1 |
@@ -141,7 +142,7 @@ static const struct qcom_ubwc_cfg_data sm6125_data = {
 	.highest_bank_bit = 14,
 };
 
-static const struct qcom_ubwc_cfg_data sm6150_data = {
+static struct qcom_ubwc_cfg_data sm6150_data = {
 	.ubwc_enc_version = UBWC_2_0,
 	.ubwc_dec_version = UBWC_2_0,
 	.ubwc_swizzle = UBWC_SWIZZLE_ENABLE_LVL2 |
@@ -149,7 +150,7 @@ static const struct qcom_ubwc_cfg_data sm6150_data = {
 	.highest_bank_bit = 14,
 };
 
-static const struct qcom_ubwc_cfg_data sm6350_data = {
+static struct qcom_ubwc_cfg_data sm6350_data = {
 	.ubwc_enc_version = UBWC_2_0,
 	.ubwc_dec_version = UBWC_2_0,
 	.ubwc_swizzle = UBWC_SWIZZLE_ENABLE_LVL2 |
@@ -158,7 +159,7 @@ static const struct qcom_ubwc_cfg_data sm6350_data = {
 	.highest_bank_bit = 14,
 };
 
-static const struct qcom_ubwc_cfg_data sm7150_data = {
+static struct qcom_ubwc_cfg_data sm7150_data = {
 	.ubwc_enc_version = UBWC_2_0,
 	.ubwc_dec_version = UBWC_2_0,
 	.ubwc_swizzle = UBWC_SWIZZLE_ENABLE_LVL2 |
@@ -166,7 +167,7 @@ static const struct qcom_ubwc_cfg_data sm7150_data = {
 	.highest_bank_bit = 14,
 };
 
-static const struct qcom_ubwc_cfg_data sm8150_data = {
+static struct qcom_ubwc_cfg_data sm8150_data = {
 	.ubwc_enc_version = UBWC_3_0,
 	.ubwc_dec_version = UBWC_3_0,
 	.ubwc_swizzle = UBWC_SWIZZLE_ENABLE_LVL2 |
@@ -174,7 +175,7 @@ static const struct qcom_ubwc_cfg_data sm8150_data = {
 	.highest_bank_bit = 15,
 };
 
-static const struct qcom_ubwc_cfg_data sm8250_data = {
+static struct qcom_ubwc_cfg_data sm8250_data = {
 	.ubwc_enc_version = UBWC_4_0,
 	.ubwc_dec_version = UBWC_4_0,
 	.ubwc_swizzle = UBWC_SWIZZLE_ENABLE_LVL2 |
@@ -185,7 +186,7 @@ static const struct qcom_ubwc_cfg_data sm8250_data = {
 	.macrotile_mode = true,
 };
 
-static const struct qcom_ubwc_cfg_data sm8350_data = {
+static struct qcom_ubwc_cfg_data sm8350_data = {
 	.ubwc_enc_version = UBWC_4_0,
 	.ubwc_dec_version = UBWC_4_0,
 	.ubwc_swizzle = UBWC_SWIZZLE_ENABLE_LVL2 |
@@ -196,7 +197,7 @@ static const struct qcom_ubwc_cfg_data sm8350_data = {
 	.macrotile_mode = true,
 };
 
-static const struct qcom_ubwc_cfg_data sm8550_data = {
+static struct qcom_ubwc_cfg_data sm8550_data = {
 	.ubwc_enc_version = UBWC_4_0,
 	.ubwc_dec_version = UBWC_4_3,
 	.ubwc_swizzle = UBWC_SWIZZLE_ENABLE_LVL2 |
@@ -207,7 +208,7 @@ static const struct qcom_ubwc_cfg_data sm8550_data = {
 	.macrotile_mode = true,
 };
 
-static const struct qcom_ubwc_cfg_data sm8750_data = {
+static struct qcom_ubwc_cfg_data sm8750_data = {
 	.ubwc_enc_version = UBWC_5_0,
 	.ubwc_dec_version = UBWC_5_0,
 	.ubwc_swizzle = 6,
@@ -217,7 +218,7 @@ static const struct qcom_ubwc_cfg_data sm8750_data = {
 	.macrotile_mode = true,
 };
 
-static const struct qcom_ubwc_cfg_data x1e80100_data = {
+static struct qcom_ubwc_cfg_data x1e80100_data = {
 	.ubwc_enc_version = UBWC_4_0,
 	.ubwc_dec_version = UBWC_4_3,
 	.ubwc_swizzle = UBWC_SWIZZLE_ENABLE_LVL2 |
@@ -301,13 +302,29 @@ static const struct of_device_id qcom_ubwc_configs[] __maybe_unused = {
 
 const struct qcom_ubwc_cfg_data *qcom_ubwc_config_get_data(void)
 {
-	const struct qcom_ubwc_cfg_data *data;
+	struct qcom_ubwc_cfg_data *data;
+	int hbb;
 
-	data = of_machine_get_match_data(qcom_ubwc_configs);
+	if (!qcom_smem_is_available())
+		return ERR_PTR(-EPROBE_DEFER);
+
+	/* Discard the const qualifier, but still return a const pointer to consumers */
+	data = (struct qcom_ubwc_cfg_data *)of_machine_get_match_data(qcom_ubwc_configs);
 	if (!data) {
 		pr_err("Couldn't find UBWC config data for this platform!\n");
 		return ERR_PTR(-EINVAL);
 	}
+
+	hbb = qcom_smem_dram_get_hbb();
+	if (hbb == -ENODATA) {
+		/* Lack of HBB data is OK - it was only introduced later */
+		return data;
+	} else if (hbb < 0) {
+		pr_err("Couldn't get HBB data from SMEM: %d\n", hbb);
+		return ERR_PTR(hbb);
+	}
+
+	data->highest_bank_bit = hbb;
 
 	return data;
 }
