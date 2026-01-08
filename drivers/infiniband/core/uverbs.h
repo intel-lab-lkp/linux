@@ -133,6 +133,16 @@ struct ib_uverbs_completion_event_file {
 	struct ib_uverbs_event_queue		ev_queue;
 };
 
+struct ib_uverbs_dmabuf_file {
+	struct ib_uobject uobj;
+	struct dma_buf *dmabuf;
+	struct list_head dmabufs_elm;
+	struct rdma_user_mmap_entry *mmap_entry;
+	struct dma_buf_phys_vec phys_vec;
+	struct p2pdma_provider *provider;
+	u8 revoked :1;
+};
+
 struct ib_uverbs_event {
 	union {
 		struct ib_uverbs_async_event_desc	async;
