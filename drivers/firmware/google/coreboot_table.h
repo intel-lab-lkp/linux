@@ -40,6 +40,7 @@ struct lb_cbmem_ref {
 	u64 cbmem_addr;
 };
 
+#define CB_TAG_FRAMEBUFFER 0x12
 #define LB_TAG_CBMEM_ENTRY 0x31
 
 /* Corresponds to LB_TAG_CBMEM_ENTRY */

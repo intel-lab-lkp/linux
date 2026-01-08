@@ -18,6 +18,7 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/sysfb.h>
 
 #include "coreboot_table.h"
 
@@ -116,6 +117,22 @@ static int coreboot_table_populate(struct device *dev, void *ptr)
 		if (entry->size < sizeof(*entry)) {
 			dev_warn(dev, "coreboot table entry too small!\n");
 			return -EINVAL;
+		}
+
+		switch (entry->tag) {
+		case CB_TAG_FRAMEBUFFER:
+			/*
+			 * On coreboot systems, the advertised CB_TAG_FRAMEBUFFER entry
+			 * in the coreboot table should only be used if the payload did
+			 * not pass a framebuffer information to the Linux kernel.
+			 *
+			 * If the global screen_info data has been filled, the generic
+			 * system framebuffers (sysfb) will already register a platform
+			 * device and pass that screen_info as platform_data to a driver
+			 * that can scan-out using the system-provided framebuffer.
+			 */
+			if (sysfb_handles_screen_info())
+				continue;
 		}
 
 		device = kzalloc(sizeof(device->dev) + entry->size, GFP_KERNEL);
