@@ -7159,7 +7159,7 @@ static int hci_le_pa_create_sync(struct hci_dev *hdev, void *data)
 	if (conn->sid == HCI_SID_INVALID) {
 		err = __hci_cmd_sync_status_sk(hdev, HCI_OP_NOP, 0, NULL,
 					       HCI_EV_LE_EXT_ADV_REPORT,
-					       conn->conn_timeout, NULL);
+					       HCI_CMD_TIMEOUT, NULL);
 		if (err == -ETIMEDOUT)
 			goto done;
 	}
@@ -7187,7 +7187,7 @@ static int hci_le_pa_create_sync(struct hci_dev *hdev, void *data)
 	err = __hci_cmd_sync_status_sk(hdev, HCI_OP_LE_PA_CREATE_SYNC,
 				       sizeof(cp), &cp,
 				       HCI_EV_LE_PA_SYNC_ESTABLISHED,
-				       conn->conn_timeout, NULL);
+				       HCI_CMD_TIMEOUT, NULL);
 	if (err == -ETIMEDOUT)
 		__hci_cmd_sync_status(hdev, HCI_OP_LE_PA_CREATE_SYNC_CANCEL,
 				      0, NULL, HCI_CMD_TIMEOUT);
