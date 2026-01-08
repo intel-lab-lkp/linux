@@ -463,9 +463,6 @@ struct btrfs_fs_devices {
 
 	/* Device to be used for reading in case of RAID1. */
 	u64 read_devid;
-
-	/* Checksum mode - offload it or do it synchronously. */
-	enum btrfs_offload_csum_mode offload_csum_mode;
 #endif
 };
 
