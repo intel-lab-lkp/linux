@@ -903,11 +903,11 @@ static void ave_rxfifo_reset(struct net_device *ndev)
 
 	/* assert reset */
 	writel(AVE_GRR_RXFFR, priv->base + AVE_GRR);
-	udelay(50);
+	usleep_range(50, 100);
 
 	/* negate reset */
 	writel(0, priv->base + AVE_GRR);
-	udelay(20);
+	usleep_range(20, 40);
 
 	/* negate interrupt status */
 	writel(AVE_GI_RXOVF, priv->base + AVE_GISR);
