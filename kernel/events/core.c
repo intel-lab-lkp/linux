@@ -12167,7 +12167,7 @@ static ssize_t nr_addr_filters_show(struct device *dev,
 
 	return sysfs_emit(page, "%d\n", pmu->nr_addr_filters);
 }
-DEVICE_ATTR_RO(nr_addr_filters);
+static DEVICE_ATTR_RO(nr_addr_filters);
 
 static struct idr pmu_idr;
 
