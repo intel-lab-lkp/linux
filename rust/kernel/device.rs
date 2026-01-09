@@ -489,6 +489,37 @@ impl<Ctx: DeviceContext> Device<Ctx> {
         // defined as a `#[repr(transparent)]` wrapper around `fwnode_handle`.
         Some(unsafe { &*fwnode_handle.cast() })
     }
+
+    /// Access the platform data for this device.
+    ///
+    /// Platform data is typically set by platform code when creating the device and is expected
+    /// to remain valid while the device is alive.
+    ///
+    /// Returns a reference to the opaque platform data, or [`ENOENT`] if no platform data
+    /// is set.
+    ///
+    /// # Safety
+    ///
+    /// Callers must ensure that:
+    /// - If platform data is set (i.e., `platform_data` is not null), the pointer points to valid,
+    ///   properly aligned storage for `T` and remains valid for the lifetime of the returned
+    ///   reference.
+    /// - The type `T` matches the type of the platform data structure set by platform code.
+    pub unsafe fn platdata<T>(&self) -> Result<&Opaque<T>> {
+        // SAFETY: By the type invariants, `self.as_raw()` is a valid pointer to a `struct device`.
+        let ptr = unsafe { (*self.as_raw()).platform_data };
+
+        if ptr.is_null() {
+            return Err(ENOENT);
+        }
+
+        // SAFETY:
+        // - `ptr` is not null (checked above).
+        // - By the safety requirements of this function, `ptr` points to valid, properly aligned
+        //   storage for `T` and remains valid for the lifetime of the returned reference.
+        // - `Opaque<T>` allows any bit pattern, so we can safely create a reference to it.
+        Ok(unsafe { &*ptr.cast::<Opaque<T>>() })
+    }
 }
 
 // SAFETY: `Device` is a transparent wrapper of a type that doesn't depend on `Device`'s generic
