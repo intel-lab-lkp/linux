@@ -909,7 +909,7 @@ static void ftrace_syscall_enter(void *data, struct pt_regs *regs, long id)
 
 	size += sizeof(*entry) + sizeof(unsigned long) * sys_data->nb_args;
 
-	entry = trace_event_buffer_reserve(&fbuffer, trace_file, size);
+	entry = trace_event_buffer_reserve_syscall(&fbuffer, trace_file, size);
 	if (!entry)
 		return;
 
@@ -955,7 +955,7 @@ static void ftrace_syscall_exit(void *data, struct pt_regs *regs, long ret)
 	if (!sys_data)
 		return;
 
-	entry = trace_event_buffer_reserve(&fbuffer, trace_file, sizeof(*entry));
+	entry = trace_event_buffer_reserve_syscall(&fbuffer, trace_file, sizeof(*entry));
 	if (!entry)
 		return;
 

@@ -34,8 +34,31 @@ enum tp_transition_sync {
 
 struct tp_transition_snapshot {
 	unsigned long rcu;
+	unsigned long srcu_gp;
 	bool ongoing;
 };
+
+/* In PREEMPT_RT, SRCU is used to protect the tracepoint callbacks */
+#ifdef CONFIG_PREEMPT_RT
+DEFINE_SRCU_FAST(tracepoint_srcu);
+EXPORT_SYMBOL_GPL(tracepoint_srcu);
+static inline void start_rt_synchronize(struct tp_transition_snapshot *snapshot)
+{
+	snapshot->srcu_gp = start_poll_synchronize_srcu(&tracepoint_srcu);
+}
+static inline void poll_rt_synchronize(struct tp_transition_snapshot *snapshot)
+{
+	if (!poll_state_synchronize_srcu(&tracepoint_srcu, snapshot->srcu_gp))
+		synchronize_srcu(&tracepoint_srcu);
+}
+#else
+static inline void start_rt_synchronize(struct tp_transition_snapshot *snapshot)
+{
+}
+static inline void poll_rt_synchronize(struct tp_transition_snapshot *snapshot)
+{
+}
+#endif
 
 /* Protected by tracepoints_mutex */
 static struct tp_transition_snapshot tp_transition_snapshot[_NR_TP_TRANSITION_SYNC];
@@ -46,6 +69,7 @@ static void tp_rcu_get_state(enum tp_transition_sync sync)
 
 	/* Keep the latest get_state snapshot. */
 	snapshot->rcu = get_state_synchronize_rcu();
+	start_rt_synchronize(snapshot);
 	snapshot->ongoing = true;
 }
 
@@ -56,6 +80,7 @@ static void tp_rcu_cond_sync(enum tp_transition_sync sync)
 	if (!snapshot->ongoing)
 		return;
 	cond_synchronize_rcu(snapshot->rcu);
+	poll_rt_synchronize(snapshot);
 	snapshot->ongoing = false;
 }
 
@@ -101,10 +126,22 @@ static inline void *allocate_probes(int count)
 	return p == NULL ? NULL : p->probes;
 }
 
+#ifdef CONFIG_PREEMPT_RT
+static void srcu_free_old_probes(struct rcu_head *head)
+{
+	kfree(container_of(head, struct tp_probes, rcu));
+}
+
+static void rcu_free_old_probes(struct rcu_head *head)
+{
+	call_srcu(&tracepoint_srcu, head, srcu_free_old_probes);
+}
+#else
 static void rcu_free_old_probes(struct rcu_head *head)
 {
 	kfree(container_of(head, struct tp_probes, rcu));
 }
+#endif
 
 static inline void release_probes(struct tracepoint *tp, struct tracepoint_func *old)
 {
@@ -112,6 +149,13 @@ static inline void release_probes(struct tracepoint *tp, struct tracepoint_func 
 		struct tp_probes *tp_probes = container_of(old,
 			struct tp_probes, probes[0]);
 
+		/*
+		 * Tracepoint probes are protected by either RCU or
+		 * Tasks Trace RCU and also by SRCU.  By calling the SRCU
+		 * callback in the [Tasks Trace] RCU callback we cover
+		 * both cases. So let us chain the SRCU and [Tasks Trace]
+		 * RCU callbacks to wait for both grace periods.
+		 */
 		if (tracepoint_is_faultable(tp))
 			call_rcu_tasks_trace(&tp_probes->rcu, rcu_free_old_probes);
 		else
