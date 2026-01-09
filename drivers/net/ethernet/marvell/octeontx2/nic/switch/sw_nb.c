@@ -307,6 +307,12 @@ static int sw_nb_fib_event(struct notifier_block *nb,
 		return NOTIFY_DONE;
 	}
 
+	if (sw_fib_add_to_list(pf_dev, entries, cnt)) {
+		kfree(entries);
+		kfree(haddr);
+		return NOTIFY_DONE;
+	}
+
 	if (!hcnt) {
 		kfree(haddr);
 		return NOTIFY_DONE;
@@ -336,6 +342,7 @@ static int sw_nb_fib_event(struct notifier_block *nb,
 			   iter->cmd, iter->dst, iter->dst_len, iter->gw, dev->name);
 	}
 
+	sw_fib_add_to_list(pf_dev, entries, hcnt);
 	kfree(haddr);
 	return NOTIFY_DONE;
 }
@@ -390,6 +397,9 @@ static int sw_nb_net_event(struct notifier_block *nb,
 
 		pf = netdev_priv(pf_dev);
 		entry->port_id = pf->pcifunc;
+		if (sw_fib_add_to_list(pf_dev, entry, 1))
+			kfree(entry);
+
 		break;
 	}
 
@@ -469,6 +479,11 @@ static int sw_nb_inetaddr_event(struct notifier_block *nb,
 		break;
 	}
 
+	if (sw_fib_add_to_list(pf_dev, entry, 1)) {
+		kfree(entry);
+		return NOTIFY_DONE;
+	}
+
 	netdev_dbg(dev,
 		   "%s:%d pushing inetaddr event from HOST interface address %#x, %pM, %s\n",
 		   __func__, __LINE__,  entry->dst, entry->mac, dev->name);
@@ -534,6 +549,11 @@ static int sw_nb_netdev_event(struct notifier_block *unused,
 	for_each_dev_addr(dev, dev_addr) {
 		ether_addr_copy(entry->mac, dev_addr->addr);
 		break;
+	}
+
+	if (sw_fib_add_to_list(pf_dev, entry, 1)) {
+		kfree(entry);
+		return NOTIFY_DONE;
 	}
 
 	netdev_dbg(dev,
