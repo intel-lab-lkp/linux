@@ -234,13 +234,16 @@ class RaVersion(enum.Enum):
 
     # v0.3.1940, released on 2024-04-29; bundled with the rustup 1.78 toolchain.
     V20240429 = 0
+    # v0.3.2727, released on 2025-12-22.
+    V20251222 = 1
 
     @staticmethod
     def baselines():
-        assert len(RaVersion) == 1, "Exhaustiveness check: update baseline list!"
+        assert len(RaVersion) == 2, "Exhaustiveness check: update checkpoint list!"
 
         return [
             (datetime.strptime("2024-04-29", "%Y-%m-%d"), (0, 3, 1940), RaVersion.V20240429),
+            (datetime.strptime("2025-12-22", "%Y-%m-%d"), (0, 3, 2727), RaVersion.V20251222),
         ]
 
     @staticmethod
@@ -249,10 +252,12 @@ class RaVersion(enum.Enum):
         return RaVersion.V20240429
 
     def __str__(self):
-        assert len(RaVersion) == 1, "Exhaustiveness check: update if branches!"
+        assert len(RaVersion) == 2, "Exhaustiveness check: update if branches!"
 
         if self == RaVersion.V20240429:
             return "v0.3.1940 (2024-04-29)"
+        elif self == RaVersion.V20251222:
+            return "v0.3.2727 (2025-12-22)"
         else:
             assert False, "Unreachable"
 
@@ -266,7 +271,7 @@ def generate_rust_project(
     cfgs,
     core_edition
 ):
-    assert len(RaVersion) == 1, "Exhaustiveness check: update if branches!"
+    assert len(RaVersion) == 2, "Exhaustiveness check: update if branches!"
 
     if ra_version == RaVersion.V20240429:
         ctx = {
@@ -276,6 +281,16 @@ def generate_rust_project(
         return {
             "crates": generate_crates(ctx, srctree, objtree, sysroot_src, external_src, cfgs, core_edition),
             "sysroot": str(sysroot),
+        }
+    elif ra_version == RaVersion.V20251222:
+        ctx = {
+            "use_crate_attrs": True,
+            "add_sysroot_crates": False,
+        }
+        return {
+            "crates": generate_crates(ctx, srctree, objtree, sysroot_src, external_src, cfgs, core_edition),
+            "sysroot": str(sysroot),
+            "sysroot_src": str(sysroot_src),
         }
     else:
         assert False, "Unreachable"
