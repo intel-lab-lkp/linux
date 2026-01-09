@@ -4,6 +4,7 @@
 #include <nvif/object.h>
 #include <nvif/event.h>
 #include <nvif/chan.h>
+#include <nvif/class.h>
 struct nvif_device;
 
 struct nouveau_channel {
@@ -64,6 +65,17 @@ int  nouveau_channel_new(struct nouveau_cli *, bool priv, u64 runm,
 void nouveau_channel_del(struct nouveau_channel **);
 int  nouveau_channel_idle(struct nouveau_channel *);
 void nouveau_channel_kill(struct nouveau_channel *);
+
+/* Maximum GPFIFO entries per channel. */
+#define NV50_CHANNEL_GPFIFO_ENTRIES_MAX_COUNT (0x02000 / 8)
+
+static inline u32 nouveau_channel_get_gpfifo_entries_count(u32 oclass)
+{
+	if (oclass < NV50_CHANNEL_GPFIFO)
+		return 0;
+
+	return NV50_CHANNEL_GPFIFO_ENTRIES_MAX_COUNT;
+}
 
 extern int nouveau_vram_pushbuf;
 

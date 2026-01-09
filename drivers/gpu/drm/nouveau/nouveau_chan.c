@@ -274,7 +274,7 @@ nouveau_channel_ctor(struct nouveau_cli *cli, bool priv, u64 runm,
 	struct nouveau_channel *chan;
 	const u64 plength = 0x10000;
 	const u64 ioffset = plength;
-	const u64 ilength = 0x02000;
+	u64 ilength;
 	int cid, ret;
 	u64 size;
 
@@ -282,6 +282,7 @@ nouveau_channel_ctor(struct nouveau_cli *cli, bool priv, u64 runm,
 	if (cid < 0)
 		return cid;
 
+	ilength = nouveau_channel_get_gpfifo_entries_count(hosts[cid].oclass) * 8;
 	if (hosts[cid].oclass < NV50_CHANNEL_GPFIFO)
 		size = plength;
 	else

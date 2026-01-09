@@ -232,15 +232,26 @@ nouveau_abi16_fini(struct nouveau_abi16 *abi16)
 static inline int
 getparam_dma_ib_max(struct nvif_device *device)
 {
-	const struct nvif_mclass dmas[] = {
+	const struct nvif_mclass hosts[] = {
 		{ NV03_CHANNEL_DMA, 0 },
 		{ NV10_CHANNEL_DMA, 0 },
 		{ NV17_CHANNEL_DMA, 0 },
 		{ NV40_CHANNEL_DMA, 0 },
 		{}
 	};
+	int cid;
+	u32 res;
 
-	return nvif_mclass(&device->object, dmas) < 0 ? NV50_DMA_IB_MAX : 0;
+	cid = nvif_mclass(&device->object, hosts);
+	if (cid < 0)
+		res = NV50_CHANNEL_GPFIFO_ENTRIES_MAX_COUNT;
+	else
+		res = nouveau_channel_get_gpfifo_entries_count(hosts[cid].oclass);
+
+	if (res == 0)
+		return 0;
+
+	return res - 1;
 }
 
 int
