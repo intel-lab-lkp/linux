@@ -4,6 +4,7 @@
 
 #include <asm/types.h>
 #include <linux/bits.h>
+#include <linux/ffs_val.h>
 #include <linux/typecheck.h>
 
 #include <uapi/linux/kernel.h>
