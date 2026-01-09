@@ -76,7 +76,7 @@ v3d_lookup_bos(struct drm_device *dev,
 		/* See comment on bo_index for why we have to check
 		 * this.
 		 */
-		DRM_DEBUG("Rendering requires BOs\n");
+		drm_warn(dev, "Rendering requires BOs\n");
 		return -EINVAL;
 	}
 
@@ -138,11 +138,11 @@ void v3d_job_put(struct v3d_job *job)
 }
 
 static int
-v3d_job_allocate(void **container, size_t size)
+v3d_job_allocate(struct v3d_dev *v3d, void **container, size_t size)
 {
 	*container = kcalloc(1, size, GFP_KERNEL);
 	if (!*container) {
-		DRM_ERROR("Cannot allocate memory for V3D job.\n");
+		drm_err(&v3d->drm, "Cannot allocate memory for V3D job.\n");
 		return -ENOMEM;
 	}
 
@@ -183,7 +183,7 @@ v3d_job_init(struct v3d_dev *v3d, struct drm_file *file_priv,
 
 				if (copy_from_user(&in, handle++, sizeof(in))) {
 					ret = -EFAULT;
-					DRM_DEBUG("Failed to copy wait dep handle.\n");
+					drm_dbg(&v3d->drm, "Failed to copy wait dep handle.\n");
 					goto fail_deps;
 				}
 				ret = drm_sched_job_add_syncobj_dependency(&job->base, file_priv, in.handle, 0);
@@ -276,7 +276,7 @@ v3d_setup_csd_jobs_and_bos(struct drm_file *file_priv,
 {
 	int ret;
 
-	ret = v3d_job_allocate((void *)job, sizeof(**job));
+	ret = v3d_job_allocate(v3d, (void *)job, sizeof(**job));
 	if (ret)
 		return ret;
 
@@ -287,7 +287,7 @@ v3d_setup_csd_jobs_and_bos(struct drm_file *file_priv,
 		return ret;
 	}
 
-	ret = v3d_job_allocate((void *)clean_job, sizeof(**clean_job));
+	ret = v3d_job_allocate(v3d, (void *)clean_job, sizeof(**clean_job));
 	if (ret)
 		return ret;
 
@@ -322,7 +322,8 @@ v3d_put_multisync_post_deps(struct v3d_submit_ext *se)
 }
 
 static int
-v3d_get_multisync_post_deps(struct drm_file *file_priv,
+v3d_get_multisync_post_deps(struct v3d_dev *v3d,
+			    struct drm_file *file_priv,
 			    struct v3d_submit_ext *se,
 			    u32 count, u64 handles)
 {
@@ -346,7 +347,7 @@ v3d_get_multisync_post_deps(struct drm_file *file_priv,
 
 		if (copy_from_user(&out, post_deps++, sizeof(out))) {
 			ret = -EFAULT;
-			DRM_DEBUG("Failed to copy post dep handles\n");
+			drm_dbg(&v3d->drm, "Failed to copy post dep handles\n");
 			goto fail;
 		}
 
@@ -373,7 +374,8 @@ fail:
  * to be signaled when job completes (out_sync).
  */
 static int
-v3d_get_multisync_submit_deps(struct drm_file *file_priv,
+v3d_get_multisync_submit_deps(struct v3d_dev *v3d,
+			      struct drm_file *file_priv,
 			      struct drm_v3d_extension __user *ext,
 			      struct v3d_submit_ext *se)
 {
@@ -381,7 +383,7 @@ v3d_get_multisync_submit_deps(struct drm_file *file_priv,
 	int ret;
 
 	if (se->in_sync_count || se->out_sync_count) {
-		DRM_DEBUG("Two multisync extensions were added to the same job.");
+		drm_dbg(&v3d->drm, "Two multisync extensions were added to the same job.");
 		return -EINVAL;
 	}
 
@@ -391,7 +393,7 @@ v3d_get_multisync_submit_deps(struct drm_file *file_priv,
 	if (multisync.pad)
 		return -EINVAL;
 
-	ret = v3d_get_multisync_post_deps(file_priv, se, multisync.out_sync_count,
+	ret = v3d_get_multisync_post_deps(v3d, file_priv, se, multisync.out_sync_count,
 					  multisync.out_syncs);
 	if (ret)
 		return ret;
@@ -438,7 +440,7 @@ v3d_get_cpu_indirect_csd_params(struct v3d_dev *v3d,
 		return -EFAULT;
 
 	if (!v3d_has_csd(v3d)) {
-		DRM_DEBUG("Attempting CSD submit on non-CSD hardware.\n");
+		drm_warn(&v3d->drm, "Attempting CSD submit on non-CSD hardware.\n");
 		return -EINVAL;
 	}
 
@@ -815,13 +817,13 @@ v3d_get_extensions(struct drm_file *file_priv,
 		struct drm_v3d_extension ext;
 
 		if (copy_from_user(&ext, user_ext, sizeof(ext))) {
-			DRM_DEBUG("Failed to copy submit extension\n");
+			drm_dbg(&v3d->drm, "Failed to copy submit extension\n");
 			return -EFAULT;
 		}
 
 		switch (ext.id) {
 		case DRM_V3D_EXT_ID_MULTI_SYNC:
-			ret = v3d_get_multisync_submit_deps(file_priv, user_ext, se);
+			ret = v3d_get_multisync_submit_deps(v3d, file_priv, user_ext, se);
 			break;
 		case DRM_V3D_EXT_ID_CPU_INDIRECT_CSD:
 			ret = v3d_get_cpu_indirect_csd_params(v3d, file_priv, user_ext, job);
@@ -842,7 +844,7 @@ v3d_get_extensions(struct drm_file *file_priv,
 			ret = v3d_get_cpu_copy_performance_query_params(v3d, file_priv, user_ext, job);
 			break;
 		default:
-			DRM_DEBUG_DRIVER("Unknown extension id: %d\n", ext.id);
+			drm_dbg(&v3d->drm, "Unknown V3D extension ID: %d\n", ext.id);
 			return -EINVAL;
 		}
 
@@ -890,19 +892,19 @@ v3d_submit_cl_ioctl(struct drm_device *dev, void *data,
 	if (args->flags &&
 	    args->flags & ~(DRM_V3D_SUBMIT_CL_FLUSH_CACHE |
 			    DRM_V3D_SUBMIT_EXTENSION)) {
-		DRM_INFO("invalid flags: %d\n", args->flags);
+		drm_dbg(dev, "invalid flags: %d\n", args->flags);
 		return -EINVAL;
 	}
 
 	if (args->flags & DRM_V3D_SUBMIT_EXTENSION) {
 		ret = v3d_get_extensions(file_priv, args->extensions, &se, NULL);
 		if (ret) {
-			DRM_DEBUG("Failed to get extensions.\n");
+			drm_dbg(dev, "Failed to get extensions.\n");
 			return ret;
 		}
 	}
 
-	ret = v3d_job_allocate((void *)&render, sizeof(*render));
+	ret = v3d_job_allocate(v3d, (void *)&render, sizeof(*render));
 	if (ret)
 		return ret;
 
@@ -918,7 +920,7 @@ v3d_submit_cl_ioctl(struct drm_device *dev, void *data,
 	INIT_LIST_HEAD(&render->unref_list);
 
 	if (args->bcl_start != args->bcl_end) {
-		ret = v3d_job_allocate((void *)&bin, sizeof(*bin));
+		ret = v3d_job_allocate(v3d, (void *)&bin, sizeof(*bin));
 		if (ret)
 			goto fail;
 
@@ -938,7 +940,7 @@ v3d_submit_cl_ioctl(struct drm_device *dev, void *data,
 	}
 
 	if (args->flags & DRM_V3D_SUBMIT_CL_FLUSH_CACHE) {
-		ret = v3d_job_allocate((void *)&clean_job, sizeof(*clean_job));
+		ret = v3d_job_allocate(v3d, (void *)&clean_job, sizeof(*clean_job));
 		if (ret)
 			goto fail;
 
@@ -1056,19 +1058,19 @@ v3d_submit_tfu_ioctl(struct drm_device *dev, void *data,
 	trace_v3d_submit_tfu_ioctl(&v3d->drm, args->iia);
 
 	if (args->flags && !(args->flags & DRM_V3D_SUBMIT_EXTENSION)) {
-		DRM_DEBUG("invalid flags: %d\n", args->flags);
+		drm_dbg(dev, "invalid flags: %d\n", args->flags);
 		return -EINVAL;
 	}
 
 	if (args->flags & DRM_V3D_SUBMIT_EXTENSION) {
 		ret = v3d_get_extensions(file_priv, args->extensions, &se, NULL);
 		if (ret) {
-			DRM_DEBUG("Failed to get extensions.\n");
+			drm_dbg(dev, "Failed to get extensions.\n");
 			return ret;
 		}
 	}
 
-	ret = v3d_job_allocate((void *)&job, sizeof(*job));
+	ret = v3d_job_allocate(v3d, (void *)&job, sizeof(*job));
 	if (ret)
 		return ret;
 
@@ -1098,9 +1100,9 @@ v3d_submit_tfu_ioctl(struct drm_device *dev, void *data,
 
 		bo = drm_gem_object_lookup(file_priv, args->bo_handles[job->base.bo_count]);
 		if (!bo) {
-			DRM_DEBUG("Failed to look up GEM BO %d: %d\n",
-				  job->base.bo_count,
-				  args->bo_handles[job->base.bo_count]);
+			drm_dbg(dev, "Failed to look up GEM BO %d: %d\n",
+				job->base.bo_count,
+				args->bo_handles[job->base.bo_count]);
 			ret = -ENOENT;
 			goto fail;
 		}
@@ -1160,19 +1162,19 @@ v3d_submit_csd_ioctl(struct drm_device *dev, void *data,
 		return -EINVAL;
 
 	if (!v3d_has_csd(v3d)) {
-		DRM_DEBUG("Attempting CSD submit on non-CSD hardware\n");
+		drm_warn(dev, "Attempting CSD submit on non-CSD hardware\n");
 		return -EINVAL;
 	}
 
 	if (args->flags && !(args->flags & DRM_V3D_SUBMIT_EXTENSION)) {
-		DRM_INFO("invalid flags: %d\n", args->flags);
+		drm_dbg(dev, "invalid flags: %d\n", args->flags);
 		return -EINVAL;
 	}
 
 	if (args->flags & DRM_V3D_SUBMIT_EXTENSION) {
 		ret = v3d_get_extensions(file_priv, args->extensions, &se, NULL);
 		if (ret) {
-			DRM_DEBUG("Failed to get extensions.\n");
+			drm_dbg(dev, "Failed to get extensions.\n");
 			return ret;
 		}
 	}
@@ -1266,31 +1268,31 @@ v3d_submit_cpu_ioctl(struct drm_device *dev, void *data,
 	int ret;
 
 	if (args->flags && !(args->flags & DRM_V3D_SUBMIT_EXTENSION)) {
-		DRM_INFO("Invalid flags: %d\n", args->flags);
+		drm_dbg(dev, "Invalid flags: %d\n", args->flags);
 		return -EINVAL;
 	}
 
-	ret = v3d_job_allocate((void *)&cpu_job, sizeof(*cpu_job));
+	ret = v3d_job_allocate(v3d, (void *)&cpu_job, sizeof(*cpu_job));
 	if (ret)
 		return ret;
 
 	if (args->flags & DRM_V3D_SUBMIT_EXTENSION) {
 		ret = v3d_get_extensions(file_priv, args->extensions, &se, cpu_job);
 		if (ret) {
-			DRM_DEBUG("Failed to get extensions.\n");
+			drm_dbg(dev, "Failed to get extensions.\n");
 			goto fail;
 		}
 	}
 
 	/* Every CPU job must have a CPU job user extension */
 	if (!cpu_job->job_type) {
-		DRM_DEBUG("CPU job must have a CPU job user extension.\n");
+		drm_dbg(dev, "CPU job must have a CPU job user extension.\n");
 		ret = -EINVAL;
 		goto fail;
 	}
 
 	if (args->bo_handle_count != cpu_job_bo_handle_count[cpu_job->job_type]) {
-		DRM_DEBUG("This CPU job was not submitted with the proper number of BOs.\n");
+		drm_dbg(dev, "This CPU job was not submitted with the proper number of BOs.\n");
 		ret = -EINVAL;
 		goto fail;
 	}
