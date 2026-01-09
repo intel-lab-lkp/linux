@@ -788,7 +788,6 @@ struct kvm_host_data {
 
 		/* The saved state of the regs when leaving the guest */
 		u64 activer_exit[2];
-		u64 enabler_exit[2];
 	} vgic_v5_ppi_state;
 };
 
