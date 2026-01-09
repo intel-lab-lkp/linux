@@ -92,6 +92,9 @@ struct dpu_kms {
 	struct clk_bulk_data *clocks;
 	size_t num_clocks;
 
+	unsigned long max_freq;
+	unsigned long min_freq;
+
 	/* reference count bandwidth requests, so we know when we can
 	 * release bandwidth.  Each atomic update increments, and frame-
 	 * done event decrements.  Additionally, for video mode, the

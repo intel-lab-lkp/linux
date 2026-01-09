@@ -1306,9 +1306,14 @@ static int dpu_kms_init(struct drm_device *ddev)
 	struct dpu_kms *dpu_kms = to_dpu_kms(priv->kms);
 	struct dev_pm_opp *opp;
 	int ret = 0;
-	unsigned long max_freq = ULONG_MAX;
+	dpu_kms->max_freq = ULONG_MAX;
+	dpu_kms->min_freq = 0;
 
-	opp = dev_pm_opp_find_freq_floor(dev, &max_freq);
+	opp = dev_pm_opp_find_freq_floor(dev, &dpu_kms->max_freq);
+	if (!IS_ERR(opp))
+		dev_pm_opp_put(opp);
+
+	opp = dev_pm_opp_find_freq_ceil(dev, &dpu_kms->min_freq);
 	if (!IS_ERR(opp))
 		dev_pm_opp_put(opp);
 
@@ -1461,8 +1466,8 @@ static int __maybe_unused dpu_runtime_suspend(struct device *dev)
 	struct msm_drm_private *priv = platform_get_drvdata(pdev);
 	struct dpu_kms *dpu_kms = to_dpu_kms(priv->kms);
 
-	/* Drop the performance state vote */
-	dev_pm_opp_set_rate(dev, 0);
+	/* adjust the performance state vote to low performance state */
+	dev_pm_opp_set_rate(dev, dpu_kms->min_freq);
 	clk_bulk_disable_unprepare(dpu_kms->num_clocks, dpu_kms->clocks);
 
 	for (i = 0; i < dpu_kms->num_paths; i++)
@@ -1481,6 +1486,9 @@ static int __maybe_unused dpu_runtime_resume(struct device *dev)
 	struct drm_device *ddev;
 
 	ddev = dpu_kms->dev;
+	/* adjust the performance state vote to high performance state */
+	if (dpu_kms->max_freq != ULONG_MAX)
+		dev_pm_opp_set_rate(dev, dpu_kms->max_freq);
 
 	rc = clk_bulk_prepare_enable(dpu_kms->num_clocks, dpu_kms->clocks);
 	if (rc) {
