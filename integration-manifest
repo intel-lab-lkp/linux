@@ -1,0 +1,36 @@
+drm drm-fixes f6eac56d6bf2026437b606a69aff903941282f9a
+	Merge tag 'amd-drm-fixes-6.19-2026-01-06' of https://gitlab.freedesktop.org/agd5f/linux into drm-fixes
+drm-misc drm-misc-fixes 9ce4aef9a5b1b76207152ba019f838f62dff97b8
+	drm/gpuvm: take GEM lock inside drm_gpuvm_bo_obtain_prealloc()
+drm-rust drm-rust-fixes 97872fa28b33a1ca6acc0a7b260750c9a123b193
+	MAINTAINERS: exclude the tyr driver from DRM MISC
+drm-intel drm-intel-fixes 9ace4753a5202b02191d54e9fdf7f9e3d02b85eb
+	Linux 6.19-rc4
+drm-xe drm-xe-fixes bed2a6bd20681aacfb063015c1edfab6f58a333e
+	drm/xe/guc: READ/WRITE_ONCE g2h_fence->done
+drm drm-next a87fef0880c4f52769b5a3c2fc1b2d73aaa04eb3
+	Merge tag 'drm-misc-next-2026-01-08' of https://gitlab.freedesktop.org/drm/misc/kernel into drm-next
+drm-misc drm-misc-next-fixes 308eeb8ca3fdee54bcd3ec7272c05688e178299a
+	drm/rcar-du: dsi: Handle both DRM_MODE_FLAG_N.SYNC and !DRM_MODE_FLAG_P.SYNC
+drm-intel drm-intel-next-fixes 8f0b4cce4481fb22653697cced8d0d04027cb1e8
+	Linux 6.19-rc1
+drm-xe drm-xe-next-fixes 3f1c07fc21c68bd3bd2df9d2c9441f6485e934d9
+	Merge drm/drm-next into drm-xe-next-fixes
+drm-misc drm-misc-next 6abb6a0e1104279763d1561b8110c1db442c5fac
+	drm/panic: Fix expected string for QR_CODE in drm_panic_type_map
+drm-rust drm-rust-next 2d7b4a44fb768e1887e7e4cdd8b86817ccd9c3bf
+	gpu: nova-core: use CStr::from_bytes_until_nul() in elf64_section()
+drm-intel drm-intel-next 936cae9254e55a39aeaa0c156a764d22f319338b
+	mei: late_bind: fix struct intel_lb_component_ops kernel-doc
+drm-intel drm-intel-gt-next 043fc9e961ef088aafc0f545c1efd8620d616c9f
+	drm/i915/selftest: Add throttle reason diagnostics to RPS selftests
+drm-xe drm-xe-next 2e08feebe0353320651013c5bdab58c2a19a716b
+	drm/xe: Add page reclamation related stats
+drm-intel topic/core-for-CI 48d4f6a6eb3f8c89f9d5b82dbd68a40a70668494
+	Revert "lockdep: Enable PROVE_RAW_LOCK_NESTING with PROVE_LOCKING."
+drm-xe topic/xe-for-CI 912b9b537ae6e75c352d42f7ac40b50f9aa3d2ce
+	topic/for-xe-CI: drm/xe/cri: Define GuC firmware for CRI
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
+drm-intel topic/drm-intel-plane-color-pipeline 860daa4b0d09a398a0ac9ae6fe67efd73a275968
+	drm/i915/color: Enable Plane Color Pipelines
