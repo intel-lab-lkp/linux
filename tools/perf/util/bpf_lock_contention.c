@@ -34,7 +34,7 @@ static bool slab_cache_equal(long key1, long key2, void *ctx __maybe_unused)
 	return key1 == key2;
 }
 
-static void check_slab_cache_iter(struct lock_contention *con)
+static int check_slab_cache_iter(struct lock_contention *con)
 {
 	s32 ret;
 
@@ -43,19 +43,20 @@ static void check_slab_cache_iter(struct lock_contention *con)
 	con->btf = btf__load_vmlinux_btf();
 	if (con->btf == NULL) {
 		pr_debug("BTF loading failed: %s\n", strerror(errno));
-		return;
+		return -errno;
 	}
 
 	ret = btf__find_by_name_kind(con->btf, "bpf_iter__kmem_cache", BTF_KIND_STRUCT);
 	if (ret < 0) {
 		bpf_program__set_autoload(skel->progs.slab_cache_iter, false);
 		pr_debug("slab cache iterator is not available: %d\n", ret);
-		return;
+		return ret;
 	}
 
 	has_slab_iter = true;
 
 	bpf_map__set_max_entries(skel->maps.slab_caches, con->map_nr_entries);
+	return 0;
 }
 
 static void run_slab_cache_iter(void)
@@ -301,7 +302,8 @@ int lock_contention_prepare(struct lock_contention *con)
 			skel->rodata->use_cgroup_v2 = 1;
 	}
 
-	check_slab_cache_iter(con);
+	if (check_slab_cache_iter(con) < 0)
+		return -1;
 
 	if (con->filters->nr_slabs && has_slab_iter) {
 		skel->rodata->has_slab = 1;
