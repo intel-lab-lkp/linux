@@ -4125,20 +4125,6 @@ static int sanity_check_raw_super(struct f2fs_sb_info *sbi,
 	if (sanity_check_area_boundary(sbi, folio, index))
 		return -EFSCORRUPTED;
 
-	/*
-	 * Check for legacy summary layout on 16KB+ block devices.
-	 * Modern f2fs-tools packs multiple 4KB summary areas into one block,
-	 * whereas legacy versions used one block per summary, leading
-	 * to a much larger SSA.
-	 */
-	if (SUMS_PER_BLOCK > 1 &&
-		    !(__F2FS_HAS_FEATURE(raw_super, F2FS_FEATURE_PACKED_SSA))) {
-		f2fs_info(sbi, "Error: Device formatted with a legacy version. "
-			"Please reformat with a tool supporting the packed ssa "
-			"feature for block sizes larger than 4kb.");
-		return -EOPNOTSUPP;
-	}
-
 	return 0;
 }
 
@@ -4322,6 +4308,8 @@ static void init_sb_info(struct f2fs_sb_info *sbi)
 		le32_to_cpu(raw_super->log_sectors_per_block);
 	sbi->log_blocksize = le32_to_cpu(raw_super->log_blocksize);
 	sbi->blocksize = BIT(sbi->log_blocksize);
+	sbi->sum_blocksize = f2fs_sb_has_packed_ssa(sbi) ?
+		4096 : sbi->blocksize;
 	sbi->log_blocks_per_seg = le32_to_cpu(raw_super->log_blocks_per_seg);
 	sbi->blocks_per_seg = BIT(sbi->log_blocks_per_seg);
 	sbi->segs_per_sec = le32_to_cpu(raw_super->segs_per_sec);

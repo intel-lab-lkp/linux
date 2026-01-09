@@ -545,13 +545,34 @@ struct fsync_inode_entry {
 #define nats_in_cursum(jnl)		(le16_to_cpu((jnl)->n_nats))
 #define sits_in_cursum(jnl)		(le16_to_cpu((jnl)->n_sits))
 
-#define nat_in_journal(jnl, i)		((jnl)->nat_j.entries[i].ne)
-#define nid_in_journal(jnl, i)		((jnl)->nat_j.entries[i].nid)
-#define sit_in_journal(jnl, i)		((jnl)->sit_j.entries[i].se)
-#define segno_in_journal(jnl, i)	((jnl)->sit_j.entries[i].segno)
+#define nat_in_journal(jnl, i) \
+	(((struct nat_journal_entry *)(jnl)->nat_j.entries)[i].ne)
+#define nid_in_journal(jnl, i) \
+	(((struct nat_journal_entry *)(jnl)->nat_j.entries)[i].nid)
+#define sit_in_journal(jnl, i) \
+	(((struct sit_journal_entry *)(jnl)->sit_j.entries)[i].se)
+#define segno_in_journal(jnl, i) \
+	(((struct sit_journal_entry *)(jnl)->sit_j.entries)[i].segno)
 
-#define MAX_NAT_JENTRIES(jnl)	(NAT_JOURNAL_ENTRIES - nats_in_cursum(jnl))
-#define MAX_SIT_JENTRIES(jnl)	(SIT_JOURNAL_ENTRIES - sits_in_cursum(jnl))
+#define ENTRIES_IN_SUM(sbi)	((sbi)->sum_blocksize / 8)
+#define SUM_ENTRY_SIZE(sbi)	(SUMMARY_SIZE * ENTRIES_IN_SUM(sbi))
+#define SUM_JOURNAL_SIZE(sbi)	((sbi)->sum_blocksize - SUM_FOOTER_SIZE - \
+				SUM_ENTRY_SIZE(sbi))
+#define NAT_JOURNAL_ENTRIES(sbi)	((SUM_JOURNAL_SIZE(sbi) - 2) / \
+					sizeof(struct nat_journal_entry))
+#define SIT_JOURNAL_ENTRIES(sbi)	((SUM_JOURNAL_SIZE(sbi) - 2) / \
+					sizeof(struct sit_journal_entry))
+
+#define sum_entries(sum)	((struct f2fs_summary *)(sum))
+#define sum_journal(sbi, sum) \
+	((struct f2fs_journal *)((char *)(sum) + \
+	(ENTRIES_IN_SUM(sbi) * sizeof(struct f2fs_summary))))
+#define sum_footer(sbi, sum) \
+	((struct summary_footer *)((char *)(sum) + (sbi)->sum_blocksize - \
+	sizeof(struct summary_footer)))
+
+#define MAX_NAT_JENTRIES(sbi, jnl)	(NAT_JOURNAL_ENTRIES(sbi) - nats_in_cursum(jnl))
+#define MAX_SIT_JENTRIES(sbi, jnl)	(SIT_JOURNAL_ENTRIES(sbi) - sits_in_cursum(jnl))
 
 static inline int update_nats_in_cursum(struct f2fs_journal *journal, int i)
 {
@@ -567,14 +588,6 @@ static inline int update_sits_in_cursum(struct f2fs_journal *journal, int i)
 
 	journal->n_sits = cpu_to_le16(before + i);
 	return before;
-}
-
-static inline bool __has_cursum_space(struct f2fs_journal *journal,
-							int size, int type)
-{
-	if (type == NAT_JOURNAL)
-		return size <= MAX_NAT_JENTRIES(journal);
-	return size <= MAX_SIT_JENTRIES(journal);
 }
 
 /* for inline stuff */
@@ -1796,6 +1809,7 @@ struct f2fs_sb_info {
 	unsigned int log_sectors_per_block;	/* log2 sectors per block */
 	unsigned int log_blocksize;		/* log2 block size */
 	unsigned int blocksize;			/* block size */
+	unsigned int sum_blocksize;		/* summary block size */
 	unsigned int root_ino_num;		/* root inode number*/
 	unsigned int node_ino_num;		/* node inode number*/
 	unsigned int meta_ino_num;		/* meta inode number*/
@@ -2849,6 +2863,14 @@ static inline void __set_cp_next_pack(struct f2fs_sb_info *sbi)
 static inline block_t __start_sum_addr(struct f2fs_sb_info *sbi)
 {
 	return le32_to_cpu(F2FS_CKPT(sbi)->cp_pack_start_sum);
+}
+
+static inline bool __has_cursum_space(struct f2fs_sb_info *sbi,
+			struct f2fs_journal *journal, int size, int type)
+{
+	if (type == NAT_JOURNAL)
+		return size <= MAX_NAT_JENTRIES(sbi, journal);
+	return size <= MAX_SIT_JENTRIES(sbi, journal);
 }
 
 extern void f2fs_mark_inode_dirty_sync(struct inode *inode, bool sync);
@@ -3994,7 +4016,8 @@ void f2fs_wait_on_block_writeback_range(struct inode *inode, block_t blkaddr,
 								block_t len);
 void f2fs_write_data_summaries(struct f2fs_sb_info *sbi, block_t start_blk);
 void f2fs_write_node_summaries(struct f2fs_sb_info *sbi, block_t start_blk);
-int f2fs_lookup_journal_in_cursum(struct f2fs_journal *journal, int type,
+int f2fs_lookup_journal_in_cursum(struct f2fs_sb_info *sbi,
+			struct f2fs_journal *journal, int type,
 			unsigned int val, int alloc);
 void f2fs_flush_sit_entries(struct f2fs_sb_info *sbi, struct cp_control *cpc);
 int f2fs_check_and_fix_write_pointer(struct f2fs_sb_info *sbi);
