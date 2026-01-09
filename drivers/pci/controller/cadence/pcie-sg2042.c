@@ -32,6 +32,15 @@ static struct pci_ops sg2042_pcie_child_ops = {
 	.write		= pci_generic_config_write,
 };
 
+static void sg2042_pcie_disable_l0s_l1(struct cdns_pcie *pcie)
+{
+	u32 val;
+
+	val = cdns_pcie_rp_readw(pcie, CDNS_PCIE_RP_CAP_OFFSET + PCI_EXP_LNKCTL);
+	val &= ~PCI_EXP_LNKCTL_ASPMC;
+	cdns_pcie_rp_writew(pcie, CDNS_PCIE_RP_CAP_OFFSET + PCI_EXP_LNKCTL, val);
+}
+
 static int sg2042_pcie_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -67,6 +76,8 @@ static int sg2042_pcie_probe(struct platform_device *pdev)
 		cdns_pcie_disable_phy(pcie);
 		return ret;
 	}
+
+	sg2042_pcie_disable_l0s_l1(pcie);
 
 	return 0;
 }
