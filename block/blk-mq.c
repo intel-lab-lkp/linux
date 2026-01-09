@@ -1068,11 +1068,14 @@ static inline void blk_account_io_done(struct request *req, u64 now)
 	 */
 	if ((req->rq_flags & (RQF_IO_STAT|RQF_FLUSH_SEQ)) == RQF_IO_STAT) {
 		const int sgrp = op_stat_group(req_op(req));
+		u64 latency_ns = now - req->start_time_ns;
+		unsigned int bucket = diskstat_latency_bucket(latency_ns);
 
 		part_stat_lock();
 		update_io_ticks(req->part, jiffies, true);
 		part_stat_inc(req->part, ios[sgrp]);
-		part_stat_add(req->part, nsecs[sgrp], now - req->start_time_ns);
+		part_stat_add(req->part, nsecs[sgrp], latency_ns);
+		part_stat_latency_record(req->part, sgrp, jiffies, bucket);
 		part_stat_local_dec(req->part,
 				    in_flight[op_is_write(req_op(req))]);
 		part_stat_unlock();

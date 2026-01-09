@@ -108,21 +108,58 @@ static void part_stat_read_all(struct block_device *part,
 		struct disk_stats *stat)
 {
 	int cpu;
+	u32 now_epoch = (u32)(jiffies / HZ);
 
 	memset(stat, 0, sizeof(struct disk_stats));
 	for_each_possible_cpu(cpu) {
 		struct disk_stats *ptr = per_cpu_ptr(part->bd_stats, cpu);
 		int group;
+		int slice;
+		int bucket;
 
 		for (group = 0; group < NR_STAT_GROUPS; group++) {
 			stat->nsecs[group] += ptr->nsecs[group];
 			stat->sectors[group] += ptr->sectors[group];
 			stat->ios[group] += ptr->ios[group];
 			stat->merges[group] += ptr->merges[group];
+
+			for (slice = 0; slice < NR_STAT_SLICES; slice++) {
+				u32 slice_epoch = READ_ONCE(ptr->latency_epoch[slice]);
+				s32 age = (s32)(now_epoch - slice_epoch);
+
+				if (age < 0 || age >= NR_STAT_SLICES)
+					continue;
+
+				for (bucket = 0; bucket < NR_STAT_BUCKETS; bucket++)
+					stat->latency[group][0][bucket] +=
+						ptr->latency[group][slice][bucket];
+			}
 		}
 
 		stat->io_ticks += ptr->io_ticks;
 	}
+}
+
+static u32 diskstat_p99_us(u32 buckets[NR_STAT_BUCKETS])
+{
+	u32 total = 0;
+	u32 accum = 0;
+	u32 target;
+	int bucket;
+
+	for (bucket = 0; bucket < NR_STAT_BUCKETS; bucket++)
+		total += buckets[bucket];
+	if (!total)
+		return 0;
+
+	target = total - div_u64((u64)total, 100);
+	for (bucket = 0; bucket < NR_STAT_BUCKETS; bucket++) {
+		accum += buckets[bucket];
+		if (accum >= target)
+			return diskstat_latency_bucket_us(bucket);
+	}
+
+	return diskstat_latency_bucket_us(NR_STAT_BUCKETS - 1);
 }
 
 static void bdev_count_inflight_rw(struct block_device *part,
@@ -1078,7 +1115,8 @@ ssize_t part_stat_show(struct device *dev,
 		"%8lu %8lu %8llu %8u "
 		"%8u %8u %8u "
 		"%8lu %8lu %8llu %8u "
-		"%8lu %8u"
+		"%8lu %8u "
+		"%8u %8u %8u %8u"
 		"\n",
 		stat.ios[STAT_READ],
 		stat.merges[STAT_READ],
@@ -1100,7 +1138,11 @@ ssize_t part_stat_show(struct device *dev,
 		(unsigned long long)stat.sectors[STAT_DISCARD],
 		(unsigned int)div_u64(stat.nsecs[STAT_DISCARD], NSEC_PER_MSEC),
 		stat.ios[STAT_FLUSH],
-		(unsigned int)div_u64(stat.nsecs[STAT_FLUSH], NSEC_PER_MSEC));
+		(unsigned int)div_u64(stat.nsecs[STAT_FLUSH], NSEC_PER_MSEC),
+		diskstat_p99_us(stat.latency[STAT_READ][0]),
+		diskstat_p99_us(stat.latency[STAT_WRITE][0]),
+		diskstat_p99_us(stat.latency[STAT_DISCARD][0]),
+		diskstat_p99_us(stat.latency[STAT_FLUSH][0]));
 }
 
 /*
@@ -1406,6 +1448,10 @@ static int diskstats_show(struct seq_file *seqf, void *v)
 		seq_put_decimal_ull(seqf, " ", stat.ios[STAT_FLUSH]);
 		seq_put_decimal_ull(seqf, " ", (unsigned int)div_u64(stat.nsecs[STAT_FLUSH],
 								     NSEC_PER_MSEC));
+		seq_put_decimal_ull(seqf, " ", diskstat_p99_us(stat.latency[STAT_READ][0]));
+		seq_put_decimal_ull(seqf, " ", diskstat_p99_us(stat.latency[STAT_WRITE][0]));
+		seq_put_decimal_ull(seqf, " ", diskstat_p99_us(stat.latency[STAT_DISCARD][0]));
+		seq_put_decimal_ull(seqf, " ", diskstat_p99_us(stat.latency[STAT_FLUSH][0]));
 		seq_putc(seqf, '\n');
 	}
 	rcu_read_unlock();
