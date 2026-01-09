@@ -9681,7 +9681,8 @@ static void update_stream_irq_parameters(
 	spin_unlock_irqrestore(&adev_to_drm(adev)->event_lock, flags);
 }
 
-static void amdgpu_dm_handle_vrr_transition(struct dm_crtc_state *old_state,
+static void amdgpu_dm_handle_vrr_transition(struct amdgpu_display_manager *dm,
+					    struct dm_crtc_state *old_state,
 					    struct dm_crtc_state *new_state)
 {
 	bool old_vrr_active = amdgpu_dm_crtc_vrr_active(old_state);
@@ -9696,8 +9697,11 @@ static void amdgpu_dm_handle_vrr_transition(struct dm_crtc_state *old_state,
 		 * We also need vupdate irq for the actual core vblank handling
 		 * at end of vblank.
 		 */
-		WARN_ON(amdgpu_dm_crtc_set_vupdate_irq(new_state->base.crtc, true) != 0);
-		WARN_ON(drm_crtc_vblank_get(new_state->base.crtc) != 0);
+		scoped_guard(mutex, &dm->dc_lock) {
+			dc_exit_ips_for_hw_access(dm->dc);
+			WARN_ON(amdgpu_dm_crtc_set_vupdate_irq(new_state->base.crtc, true) != 0);
+			WARN_ON(drm_crtc_vblank_get(new_state->base.crtc) != 0);
+		}
 		drm_dbg_driver(new_state->base.crtc->dev, "%s: crtc=%u VRR off->on: Get vblank ref\n",
 				 __func__, new_state->base.crtc->base.id);
 	} else if (old_vrr_active && !new_vrr_active) {
@@ -10122,7 +10126,11 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 		 */
 		if (acrtc_attach->base.state->event &&
 		    acrtc_state->active_planes > 0) {
-			drm_crtc_vblank_get(pcrtc);
+
+			scoped_guard(mutex, &dm->dc_lock) {
+				dc_exit_ips_for_hw_access(dm->dc);
+				drm_crtc_vblank_get(pcrtc);
+			}
 
 			spin_lock_irqsave(&pcrtc->dev->event_lock, flags);
 
@@ -10138,13 +10146,19 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 					&acrtc_state->stream->vrr_infopacket;
 		}
 	} else if (cursor_update && acrtc_state->active_planes > 0) {
-		spin_lock_irqsave(&pcrtc->dev->event_lock, flags);
-		if (acrtc_attach->base.state->event) {
-			drm_crtc_vblank_get(pcrtc);
-			acrtc_attach->event = acrtc_attach->base.state->event;
-			acrtc_attach->base.state->event = NULL;
+
+		scoped_guard(mutex, &dm->dc_lock) {
+			dc_exit_ips_for_hw_access(dm->dc);
+
+			spin_lock_irqsave(&pcrtc->dev->event_lock, flags);
+			if (acrtc_attach->base.state->event) {
+				drm_crtc_vblank_get(pcrtc);
+				acrtc_attach->event =
+					acrtc_attach->base.state->event;
+				acrtc_attach->base.state->event = NULL;
+			}
+			spin_unlock_irqrestore(&pcrtc->dev->event_lock, flags);
 		}
-		spin_unlock_irqrestore(&pcrtc->dev->event_lock, flags);
 	}
 
 	/* Update the planes if changed or disable if we don't have any. */
@@ -10976,7 +10990,8 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_state *state)
 			manage_dm_interrupts(adev, acrtc, dm_new_crtc_state);
 		}
 		/* Handle vrr on->off / off->on transitions */
-		amdgpu_dm_handle_vrr_transition(dm_old_crtc_state, dm_new_crtc_state);
+		amdgpu_dm_handle_vrr_transition(dm, dm_old_crtc_state,
+						dm_new_crtc_state);
 
 #ifdef CONFIG_DEBUG_FS
 		if (new_crtc_state->active &&
