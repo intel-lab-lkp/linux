@@ -4317,6 +4317,9 @@ static int hidpp_get_report_length(struct hid_device *hdev, int id)
 	if (!report)
 		return 0;
 
+	if (!report->maxfield)
+		return 0;
+
 	return report->field[0]->report_count + 1;
 }
 
