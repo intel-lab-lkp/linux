@@ -1867,6 +1867,7 @@ int dl_server_apply_params(struct sched_dl_entity *dl_se, u64 runtime, u64 perio
 	u64 old_bw = init ? 0 : to_ratio(dl_se->dl_period, dl_se->dl_runtime);
 	u64 new_bw = to_ratio(period, runtime);
 	struct rq *rq = dl_se->rq;
+	bool fair_server = dl_se == &rq->fair_server;
 	int cpu = cpu_of(rq);
 	struct dl_bw *dl_b;
 	unsigned long cap;
@@ -1875,6 +1876,11 @@ int dl_server_apply_params(struct sched_dl_entity *dl_se, u64 runtime, u64 perio
 
 	dl_b = dl_bw_of(cpu);
 	guard(raw_spinlock)(&dl_b->lock);
+
+	/* Symmetric to disable message in sched_fair_server_write() */
+	if (!init && fair_server && !old_bw && new_bw)
+		printk_deferred("Fair server re-enabled on CPU %d.\n",
+				cpu);
 
 	cpus = dl_bw_cpus(cpu);
 	cap = dl_bw_capacity(cpu);
