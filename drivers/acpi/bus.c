@@ -1030,9 +1030,13 @@ static const void *acpi_of_device_get_match_data(const struct device *dev)
 const void *acpi_device_get_match_data(const struct device *dev)
 {
 	const struct acpi_device_id *acpi_ids = dev->driver->acpi_match_table;
+	struct acpi_device *adev = ACPI_COMPANION(dev);
 	const struct acpi_device_id *match;
 
-	if (!acpi_ids)
+	if (!adev)
+		return NULL;
+
+	if (!strcmp(acpi_device_hid(adev), ACPI_DT_NAMESPACE_HID))
 		return acpi_of_device_get_match_data(dev);
 
 	match = acpi_match_device(acpi_ids, dev);
