@@ -577,12 +577,22 @@ static int kvm_vgic_map_irq(struct kvm_vcpu *vcpu, struct vgic_irq *irq,
 	irq->host_irq = host_irq;
 	irq->hwintid = data->hwirq;
 	irq->ops = ops;
+
+	if (vgic_is_v5(vcpu->kvm) &&
+	    __irq_is_ppi(KVM_DEV_TYPE_ARM_VGIC_V5, irq->intid))
+		irq->directly_injected = !vgic_v5_set_ppi_dvi(vcpu, irq->hwintid,
+							      true);
+
 	return 0;
 }
 
 /* @irq->irq_lock must be held */
 static inline void kvm_vgic_unmap_irq(struct vgic_irq *irq)
 {
+	if (irq->directly_injected && vgic_is_v5(irq->target_vcpu->kvm))
+		WARN_ON(vgic_v5_set_ppi_dvi(irq->target_vcpu, irq->hwintid, false));
+
+	irq->directly_injected = false;
 	irq->hw = false;
 	irq->hwintid = 0;
 	irq->ops = NULL;
