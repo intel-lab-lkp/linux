@@ -3581,6 +3581,45 @@ static void __split_folio_to_order(struct folio *folio, int old_order,
 }
 
 /**
+ * folio_split_unref() - split an unreferenced folio (refcount == 0)
+ * @folio: the to-be-split folio
+ *
+ * Split an unreferenced folio (refcount == 0) into individual pages.
+ * Intended to be called on special pages (e.g., device-private, DAX, etc.)
+ * when returning the folio to the free page pool.
+ */
+void folio_split_unref(struct folio *folio)
+{
+	struct dev_pagemap *pgmap = page_pgmap(&folio->page);
+	int order, i;
+
+	folio->mapping = NULL;
+	order = folio_order(folio);
+	if (!order)
+		return;
+
+	folio_reset_order(folio);
+
+	for (i = 0; i < (1UL << order); i++) {
+		struct page *page = folio_page(folio, i);
+		struct folio *new_folio = (struct folio *)page;
+
+		ClearPageHead(page);
+		clear_compound_head(page);
+
+		new_folio->mapping = NULL;
+		/*
+		 * Reset pgmap which was over-written by
+		 * prep_compound_page().
+		 */
+		new_folio->pgmap = pgmap;
+		new_folio->share = 0;	/* fsdax only, unused for device private */
+		VM_WARN_ON_FOLIO(folio_ref_count(new_folio), new_folio);
+	}
+}
+EXPORT_SYMBOL_GPL(folio_split_unref);
+
+/**
  * __split_unmapped_folio() - splits an unmapped @folio to lower order folios in
  * two ways: uniform split or non-uniform split.
  * @folio: the to-be-split folio

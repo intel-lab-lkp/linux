@@ -369,6 +369,7 @@ enum split_type {
 	SPLIT_TYPE_NON_UNIFORM,
 };
 
+void folio_split_unref(struct folio *folio);
 int __split_huge_page_to_list_to_order(struct page *page, struct list_head *list,
 		unsigned int new_order);
 int folio_split_unmapped(struct folio *folio, unsigned int new_order);
