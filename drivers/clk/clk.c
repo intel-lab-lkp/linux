@@ -2710,13 +2710,17 @@ static int clk_set_rate_range_nolock(struct clk *clk,
 	 */
 	rate = clamp(rate, min, max);
 	ret = clk_core_set_rate_nolock(clk->core, rate);
+
+out:
 	if (ret) {
-		/* rollback the changes */
+		/*
+		 * Rollback the consumer’s old boundaries if check_boundaries or
+		 * set_rate fails.
+		 */
 		clk->min_rate = old_min;
 		clk->max_rate = old_max;
 	}
 
-out:
 	if (clk->exclusive_count)
 		clk_core_rate_protect(clk->core);
 
