@@ -153,7 +153,7 @@ static int dec_ecc_be_backend(struct pt_regs *regs, int is_fixup, int invoker)
 			/* Ack now, now we've rewritten (or not). */
 			dec_ecc_be_ack();
 
-			if (syn && syn == (syn & -syn)) {
+			if (syn && syn == ffs_val(syn)) {
 				if (syn == 0x01) {
 					fmt = KERN_ALERT "%s"
 					      "%#04x -- %s bit error "

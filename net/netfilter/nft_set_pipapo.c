@@ -370,7 +370,7 @@ int pipapo_refill(unsigned long *map, unsigned int len, unsigned int rules,
 	for (k = 0; k < len; k++) {
 		bitset = map[k];
 		while (bitset) {
-			unsigned long t = bitset & -bitset;
+			unsigned long t = ffs_val(bitset);
 			int r = __builtin_ctzl(bitset);
 			int i = k * BITS_PER_LONG + r;
 

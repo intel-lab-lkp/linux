@@ -205,7 +205,7 @@ void inval_gtlbe_on_host(struct kvmppc_vcpu_e500 *vcpu_e500, int tlbsel,
 
 		local_irq_save(flags);
 		while (tmp) {
-			hw_tlb_indx = __ilog2_u64(tmp & -tmp);
+			hw_tlb_indx = __ilog2_u64(ffs_val(tmp));
 			mtspr(SPRN_MAS0,
 			      MAS0_TLBSEL(1) |
 			      MAS0_ESEL(to_htlb1_esel(hw_tlb_indx)));

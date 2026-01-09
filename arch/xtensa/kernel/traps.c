@@ -309,7 +309,7 @@ static void do_interrupt(struct pt_regs *regs)
 			break;
 
 		/* clear lowest pending irq in the unhandled mask */
-		unhandled ^= (int_at_level & -int_at_level);
+		unhandled ^= ffs_val(int_at_level);
 		do_IRQ(__ffs(int_at_level), regs);
 	}
 

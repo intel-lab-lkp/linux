@@ -1565,7 +1565,7 @@ static int wrp_div_imm(struct nfp_prog *nfp_prog, u8 dst, u64 imm)
 	rvalue = reciprocal_value_adv(imm, 32);
 	exp = rvalue.exp;
 	if (rvalue.is_wide_m && !(imm & 1)) {
-		pre_shift = fls(imm & -imm) - 1;
+		pre_shift = fls(ffs_val(imm)) - 1;
 		rvalue = reciprocal_value_adv(imm >> pre_shift, 32 - pre_shift);
 	} else {
 		pre_shift = 0;

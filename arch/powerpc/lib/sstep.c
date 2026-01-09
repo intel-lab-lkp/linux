@@ -236,7 +236,7 @@ static nokprobe_inline unsigned long mlsd_8lsd_ea(unsigned int instr,
 static nokprobe_inline unsigned long max_align(unsigned long x)
 {
 	x |= sizeof(unsigned long);
-	return x & -x;		/* isolates rightmost bit */
+	return ffs_val(x);		/* isolates rightmost bit */
 }
 
 static nokprobe_inline unsigned long byterev_2(unsigned long x)

@@ -9,6 +9,7 @@ This file is part of GDB, GAS, and the GNU binutils.
 
 #include <asm/cputable.h>
 #include <asm/cpu_has_feature.h>
+#include <linux/ffs_val.h>
 #include "nonstdio.h"
 #include "ansidecl.h"
 #include "ppc.h"
@@ -44,7 +45,7 @@ operand_value_powerpc (const struct powerpc_operand *operand,
 	  unsigned long top = operand->bitm;
 	  /* top & -top gives the rightmost 1 bit, so this
 	     fills in any trailing zeros.  */
-	  top |= (top & -top) - 1;
+	  top |= ffs_val(top) - 1;
 	  top &= ~(top >> 1);
 	  value = (value ^ top) - top;
 	}

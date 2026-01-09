@@ -117,7 +117,7 @@ void __init mips_pcibios_init(void)
 		mask = ~(start ^ end);
 		/* We don't support remapping with a discontiguous mask.  */
 		BUG_ON((start & GT_PCI_HD_MSK) != (map & GT_PCI_HD_MSK) &&
-		       mask != ~((mask & -mask) - 1));
+		       mask != ~(ffs_val(mask) - 1));
 		gt64120_mem_resource.start = start;
 		gt64120_mem_resource.end = end;
 		gt64120_controller.mem_offset = (start & mask) - (map & mask);
@@ -134,7 +134,7 @@ void __init mips_pcibios_init(void)
 		mask = ~(start ^ end);
 		/* We don't support remapping with a discontiguous mask.  */
 		BUG_ON((start & GT_PCI_HD_MSK) != (map & GT_PCI_HD_MSK) &&
-		       mask != ~((mask & -mask) - 1));
+		       mask != ~(ffs_val(mask) - 1));
 		gt64120_io_resource.start = map & mask;
 		gt64120_io_resource.end = (map & mask) | ~mask;
 		gt64120_controller.io_offset = 0;

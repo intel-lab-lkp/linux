@@ -8,6 +8,7 @@
 #define _LINUX_BITFIELD_H
 
 #include <linux/build_bug.h>
+#include <linux/ffs_val.h>
 #include <linux/typecheck.h>
 #include <asm/byteorder.h>
 
@@ -202,7 +203,7 @@ static __always_inline u64 field_multiplier(u64 field)
 {
 	if ((field | (field - 1)) & ((field | (field - 1)) + 1))
 		__bad_mask();
-	return field & -field;
+	return ffs_val(field);
 }
 static __always_inline u64 field_mask(u64 field)
 {

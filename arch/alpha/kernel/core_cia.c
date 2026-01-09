@@ -1035,7 +1035,7 @@ cia_decode_ecc_error(struct el_CIA_sysdata_mcheck *cia, const char *msg)
 	cia_decode_mem_error(cia, msg);
 
 	syn = cia->cia_syn & 0xff;
-	if (syn == (syn & -syn)) {
+	if (syn == ffs_val(syn)) {
 		fmt = KERN_CRIT "  ECC syndrome %#x -- check bit %d\n";
 		i = ffs(syn) - 1;
 	} else {

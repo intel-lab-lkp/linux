@@ -94,7 +94,7 @@ static inline __attribute__ ((const)) unsigned long __fls(unsigned long x)
  * ffs = Find First Set in word (LSB to MSB)
  * @result: [1-32], 0 if all 0's
  */
-#define ffs(x)	({ unsigned long __t = (x); fls(__t & -__t); })
+#define ffs(x)	({ unsigned long __t = (x); fls(ffs_val(__t)); })
 
 /*
  * __ffs: Similar to ffs, but zero based (0-31)

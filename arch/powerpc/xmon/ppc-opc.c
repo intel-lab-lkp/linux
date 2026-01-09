@@ -1417,7 +1417,7 @@ insert_fxm (unsigned long insn,
      one bit of the mask field is set.  */
   if ((insn & (1 << 20)) != 0)
     {
-      if (value == 0 || (value & -value) != value)
+      if (value == 0 || ffs_val(value) != value)
 	{
 	  *errmsg = _("invalid mask field");
 	  value = 0;
@@ -1430,7 +1430,7 @@ insert_fxm (unsigned long insn,
      new form unless -mpower4 has been given, or -many and the two
      operand form of mfcr was used.  */
   else if (value > 0
-	   && (value & -value) == value
+	   && ffs_val(value) == value
 	   && ((dialect & PPC_OPCODE_POWER4) != 0
 	       || ((dialect & PPC_OPCODE_ANY) != 0
 		   && (insn & (0x3ff << 1)) == 19 << 1)))
@@ -1460,7 +1460,7 @@ extract_fxm (unsigned long insn,
   if ((insn & (1 << 20)) != 0)
     {
       /* Exactly one bit of MASK should be set.  */
-      if (mask == 0 || (mask & -mask) != mask)
+      if (mask == 0 || ffs_val(mask) != mask)
 	*invalid = 1;
     }
 

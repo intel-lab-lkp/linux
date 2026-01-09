@@ -668,7 +668,7 @@ static void cdc_ncm_fix_modulus(struct usbnet *dev)
 	val = ctx->tx_ndp_modulus;
 
 	if ((val < USB_CDC_NCM_NDP_ALIGN_MIN_SIZE) ||
-	    (val != ((-val) & val)) || (val >= ctx->tx_max)) {
+	    (val != ffs_val(val)) || (val >= ctx->tx_max)) {
 		dev_dbg(&dev->intf->dev, "Using default alignment: 4 bytes\n");
 		ctx->tx_ndp_modulus = USB_CDC_NCM_NDP_ALIGN_MIN_SIZE;
 	}
@@ -682,7 +682,7 @@ static void cdc_ncm_fix_modulus(struct usbnet *dev)
 	val = ctx->tx_modulus;
 
 	if ((val < USB_CDC_NCM_NDP_ALIGN_MIN_SIZE) ||
-	    (val != ((-val) & val)) || (val >= ctx->tx_max)) {
+	    (val != ffs_val(val)) || (val >= ctx->tx_max)) {
 		dev_dbg(&dev->intf->dev, "Using default transmit modulus: 4 bytes\n");
 		ctx->tx_modulus = USB_CDC_NCM_NDP_ALIGN_MIN_SIZE;
 	}

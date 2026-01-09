@@ -111,8 +111,8 @@
 	}								\
 									\
 	/* Reduce m / p to help avoid overflow handling later. */	\
-	___p /= (___m & -___m);						\
-	___m /= (___m & -___m);						\
+	___p /= ffs_val(___m);						\
+	___m /= ffs_val(___m);						\
 									\
 	/*								\
 	 * Perform (m_bias + m * n) / (1 << 64).			\

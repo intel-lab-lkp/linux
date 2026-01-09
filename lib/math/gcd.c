@@ -23,12 +23,12 @@ static unsigned long binary_gcd(unsigned long a, unsigned long b)
 
 	b >>= __ffs(b);
 	if (b == 1)
-		return r & -r;
+		return ffs_val(r);
 
 	for (;;) {
 		a >>= __ffs(a);
 		if (a == 1)
-			return r & -r;
+			return ffs_val(r);
 		if (a == b)
 			return a << __ffs(r);
 

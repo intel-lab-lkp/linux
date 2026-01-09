@@ -1226,7 +1226,7 @@ psb_intel_sdvo_multifunc_encoder(struct psb_intel_sdvo *psb_intel_sdvo)
 {
 	/* Is there more than one type of output? */
 	int caps = psb_intel_sdvo->caps.output_flags & 0xf;
-	return caps & -caps;
+	return ffs_val(caps);
 }
 
 static struct edid *

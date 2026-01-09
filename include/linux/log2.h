@@ -266,7 +266,7 @@ int __bits_per(unsigned long n)
 static inline __attribute__((const))
 unsigned int max_pow_of_two_factor(unsigned int n)
 {
-	return n & -n;
+	return ffs_val(n);
 }
 
 #endif /* _LINUX_LOG2_H */

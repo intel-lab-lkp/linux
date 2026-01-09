@@ -12,6 +12,7 @@
 
 #include <linux/types.h>
 #include <linux/export.h>
+#include <linux/ffs_val.h>
 #include <linux/sort.h>
 
 /**
@@ -196,7 +197,7 @@ static void __sort_r(void *base, size_t num, size_t size,
 {
 	/* pre-scale counters for performance */
 	size_t n = num * size, a = (num/2) * size;
-	const unsigned int lsbit = size & -size;  /* Used to find parent */
+	const unsigned int lsbit = ffs_val(size);  /* Used to find parent */
 	size_t shift = 0;
 
 	if (!a)		/* num < 2 || size == 0 */

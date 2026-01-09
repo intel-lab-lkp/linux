@@ -3,6 +3,7 @@
 #define _LINUX_MIN_HEAP_H
 
 #include <linux/bug.h>
+#include <linux/ffs_val.h>
 #include <linux/string.h>
 #include <linux/types.h>
 
@@ -257,7 +258,7 @@ static __always_inline
 void __min_heap_sift_down_inline(min_heap_char *heap, size_t pos, size_t elem_size,
 				 const struct min_heap_callbacks *func, void *args)
 {
-	const unsigned long lsbit = elem_size & -elem_size;
+	const unsigned long lsbit = ffs_val(elem_size);
 	void *data = heap->data;
 	void (*swp)(void *lhs, void *rhs, void *args) = func->swp;
 	/* pre-scale counters for performance */
@@ -297,7 +298,7 @@ static __always_inline
 void __min_heap_sift_up_inline(min_heap_char *heap, size_t elem_size, size_t idx,
 			       const struct min_heap_callbacks *func, void *args)
 {
-	const unsigned long lsbit = elem_size & -elem_size;
+	const unsigned long lsbit = ffs_val(elem_size);
 	void *data = heap->data;
 	void (*swp)(void *lhs, void *rhs, void *args) = func->swp;
 	/* pre-scale counters for performance */

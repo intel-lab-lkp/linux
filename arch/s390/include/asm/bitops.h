@@ -193,7 +193,7 @@ static __always_inline __flatten __attribute_const__ int ffs(int word)
 {
 	unsigned int val = (unsigned int)word;
 
-	return BITS_PER_LONG - __flogr(-val & val);
+	return BITS_PER_LONG - __flogr(ffs_val(val));
 }
 
 #else /* CONFIG_CC_HAS_BUILTIN_FFS */

@@ -943,7 +943,7 @@ static struct page **__iommu_dma_alloc_noncontiguous(struct device *dev,
 	    iommu_deferred_attach(dev, domain))
 		return NULL;
 
-	min_size = alloc_sizes & -alloc_sizes;
+	min_size = ffs_val(alloc_sizes);
 	if (min_size < PAGE_SIZE) {
 		min_size = PAGE_SIZE;
 		alloc_sizes |= PAGE_SIZE;

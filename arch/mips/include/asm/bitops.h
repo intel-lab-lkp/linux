@@ -395,7 +395,7 @@ static __always_inline __attribute_const__ unsigned long __fls(unsigned long wor
  */
 static __always_inline __attribute_const__ unsigned long __ffs(unsigned long word)
 {
-	return __fls(word & -word);
+	return __fls(ffs_val(word));
 }
 
 /*
@@ -463,7 +463,7 @@ static inline __attribute_const__ int ffs(int word)
 	if (!word)
 		return 0;
 
-	return fls(word & -word);
+	return fls(ffs_val(word));
 }
 
 #include <asm-generic/bitops/ffz.h>

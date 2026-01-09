@@ -8664,7 +8664,7 @@ static bool requested_adv_flags_are_valid(struct hci_dev *hdev, u32 adv_flags)
 	supported_flags = get_supported_adv_flags(hdev);
 	phy_flags = adv_flags & MGMT_ADV_FLAG_SEC_MASK;
 	if (adv_flags & ~supported_flags ||
-	    ((phy_flags && (phy_flags ^ (phy_flags & -phy_flags)))))
+	    ((phy_flags && (phy_flags ^ ffs_val(phy_flags)))))
 		return false;
 
 	return true;

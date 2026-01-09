@@ -87,8 +87,8 @@ static __always_inline bool is_rlwinm_mask_valid(unsigned long x)
 	if (!x)
 		return false;
 	if (x & 1)
-		x = ~x;	// make the mask non-wrapping
-	x += x & -x;	// adding the low set bit results in at most one bit set
+		x = ~x;		// make the mask non-wrapping
+	x += ffs_val(x);	// adding the low set bit results in at most one bit set
 
 	return !(x & (x - 1));
 }

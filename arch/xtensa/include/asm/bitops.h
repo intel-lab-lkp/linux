@@ -39,7 +39,7 @@ static inline unsigned long __cntlz (unsigned long x)
 
 static inline int __attribute_const__ ffz(unsigned long x)
 {
-	return 31 - __cntlz(~x & -~x);
+	return 31 - __cntlz(ffs_val(~x));
 }
 
 /*
@@ -48,7 +48,7 @@ static inline int __attribute_const__ ffz(unsigned long x)
 
 static inline __attribute_const__ unsigned long __ffs(unsigned long x)
 {
-	return 31 - __cntlz(x & -x);
+	return 31 - __cntlz(ffs_val(x));
 }
 
 /*
@@ -59,7 +59,7 @@ static inline __attribute_const__ unsigned long __ffs(unsigned long x)
 
 static inline __attribute_const__ int ffs(unsigned long x)
 {
-	return 32 - __cntlz(x & -x);
+	return 32 - __cntlz(ffs_val(x));
 }
 
 /*

@@ -525,7 +525,7 @@ handle_ipi(struct pt_regs *regs)
 	  do {
 		unsigned long which;
 
-		which = ops & -ops;
+		which = ffs_val(ops);
 		ops &= ~which;
 		which = __ffs(which);
 

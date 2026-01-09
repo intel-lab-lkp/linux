@@ -368,7 +368,7 @@ static inline unsigned long find_first_zero_bit(const unsigned long *vaddr,
 	}
 
 	__asm__ __volatile__ ("bfffo %1{#0,#0},%0"
-			      : "=d" (res) : "d" (num & -num));
+			      : "=d" (res) : "d" (ffs_val(num)));
 	res ^= 31;
 out:
 	res += ((long)p - (long)vaddr - 4) * 8;
@@ -392,7 +392,7 @@ static inline unsigned long find_next_zero_bit(const unsigned long *vaddr,
 
 		/* Look for zero in first longword */
 		__asm__ __volatile__ ("bfffo %1{#0,#0},%0"
-				      : "=d" (res) : "d" (num & -num));
+				      : "=d" (res) : "d" (ffs_val(num)));
 		if (res < 32) {
 			offset += res ^ 31;
 			return offset < size ? offset : size;
@@ -425,7 +425,7 @@ static inline unsigned long find_first_bit(const unsigned long *vaddr,
 	}
 
 	__asm__ __volatile__ ("bfffo %1{#0,#0},%0"
-			      : "=d" (res) : "d" (num & -num));
+			      : "=d" (res) : "d" (ffs_val(num)));
 	res ^= 31;
 out:
 	res += ((long)p - (long)vaddr - 4) * 8;
@@ -449,7 +449,7 @@ static inline unsigned long find_next_bit(const unsigned long *vaddr,
 
 		/* Look for one in first longword */
 		__asm__ __volatile__ ("bfffo %1{#0,#0},%0"
-				      : "=d" (res) : "d" (num & -num));
+				      : "=d" (res) : "d" (ffs_val(num)));
 		if (res < 32) {
 			offset += res ^ 31;
 			return offset < size ? offset : size;
@@ -473,7 +473,7 @@ static inline unsigned long __attribute_const__ ffz(unsigned long word)
 	int res;
 
 	__asm__ __volatile__ ("bfffo %1{#0,#0},%0"
-			      : "=d" (res) : "d" (~word & -~word));
+			      : "=d" (res) : "d" (ffs_val(~word)));
 	return res ^ 31;
 }
 
@@ -527,7 +527,7 @@ static inline __attribute_const__ int ffs(int x)
 
 	__asm__ ("bfffo %1{#0:#0},%0"
 		: "=d" (cnt)
-		: "dm" (x & -x));
+		: "dm" (ffs_val(x)));
 	return 32 - cnt;
 }
 

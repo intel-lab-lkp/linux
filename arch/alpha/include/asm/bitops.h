@@ -317,7 +317,7 @@ static inline unsigned long ffz_b(unsigned long x)
 {
 	unsigned long sum, x1, x2, x4;
 
-	x = ~x & -~x;		/* set first 0 bit, clear others */
+	x = ffs_val(~x);	/* set first 0 bit, clear others */
 	x1 = x & 0xAA;
 	x2 = x & 0xCC;
 	x4 = x & 0xF0;
