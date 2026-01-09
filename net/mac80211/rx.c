@@ -1856,7 +1856,9 @@ ieee80211_rx_h_sta_process(struct ieee80211_rx_data *rx)
 	if (rx->sdata->vif.type == NL80211_IFTYPE_ADHOC) {
 		u8 *bssid = ieee80211_get_bssid(hdr, rx->skb->len,
 						NL80211_IFTYPE_ADHOC);
-		if (ether_addr_equal(bssid, rx->sdata->u.ibss.bssid) &&
+
+		if (bssid &&
+		    ether_addr_equal(bssid, rx->sdata->u.ibss.bssid) &&
 		    test_sta_flag(sta, WLAN_STA_AUTHORIZED)) {
 			link_sta->rx_stats.last_rx = jiffies;
 			if (ieee80211_is_data_present(hdr->frame_control) &&
