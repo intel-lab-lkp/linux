@@ -109,6 +109,8 @@ struct xe_tlb_inval {
 	struct workqueue_struct *job_wq;
 	/** @tlb_inval.lock: protects TLB invalidation fences */
 	spinlock_t lock;
+	/** @fence_signal_wq: schedule fence signaling path jobs  */
+	struct workqueue_struct *fence_signal_wq;
 };
 
 /**
