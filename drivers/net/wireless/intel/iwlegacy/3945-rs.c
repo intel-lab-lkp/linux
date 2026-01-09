@@ -626,6 +626,9 @@ il3945_rs_get_rate(void *il_r, struct ieee80211_sta *sta, void *il_sta,
 
 	D_RATE("enter\n");
 
+	if (WARN_ON_ONCE(!il_sta))
+		return;
+
 	/* Treat uninitialized rate scaling data same as non-existing. */
 	if (rs_sta && !rs_sta->il) {
 		D_RATE("Rate scaling information not initialized yet.\n");
