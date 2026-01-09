@@ -555,6 +555,7 @@ void intel_alpm_disable(struct intel_dp *intel_dp)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 	enum transcoder cpu_transcoder = intel_dp->alpm.transcoder;
+	enum port port = dp_to_dig_port(intel_dp)->base.port;
 
 	if (DISPLAY_VER(display) < 20 || !intel_dp->alpm_dpcd)
 		return;
@@ -566,7 +567,7 @@ void intel_alpm_disable(struct intel_dp *intel_dp)
 		     ALPM_CTL_ALPM_AUX_LESS_ENABLE, 0);
 
 	intel_de_rmw(display,
-		     PORT_ALPM_CTL(cpu_transcoder),
+		     PORT_ALPM_CTL(port),
 		     PORT_ALPM_CTL_ALPM_AUX_LESS_ENABLE, 0);
 
 	drm_dbg_kms(display->drm, "Disabling ALPM\n");
