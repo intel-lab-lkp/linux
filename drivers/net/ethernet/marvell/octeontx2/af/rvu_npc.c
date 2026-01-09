@@ -2815,6 +2815,42 @@ exit:
 	return rc;
 }
 
+int rvu_mbox_handler_npc_flow_del_n_free(struct rvu *rvu,
+					 struct npc_flow_del_n_free_req *mreq,
+					 struct msg_rsp *rsp)
+{
+	struct npc_mcam_free_entry_req sreq = { 0 };
+	struct npc_delete_flow_req dreq = { 0 };
+	struct npc_delete_flow_rsp drsp = { 0 };
+	int err, ret = 0;
+
+	sreq.hdr.pcifunc = mreq->hdr.pcifunc;
+	dreq.hdr.pcifunc = mreq->hdr.pcifunc;
+
+	if (!mreq->cnt || mreq->cnt > 256) {
+		dev_err(rvu->dev, "Invalid cnt=%d\n", mreq->cnt);
+		return -EINVAL;
+	}
+
+	for (int i = 0; i < mreq->cnt; i++) {
+		dreq.entry = mreq->entry[i];
+		err = rvu_mbox_handler_npc_delete_flow(rvu, &dreq, &drsp);
+		if (err)
+			dev_err(rvu->dev, "delete flow error for i=%d entry=%d\n",
+				i, mreq->entry[i]);
+		ret |= err;
+
+		sreq.entry = mreq->entry[i];
+		err = rvu_mbox_handler_npc_mcam_free_entry(rvu, &sreq, rsp);
+		if (err)
+			dev_err(rvu->dev, "free entry error for i=%d entry=%d\n",
+				i, mreq->entry[i]);
+		ret |= err;
+	}
+
+	return ret;
+}
+
 int rvu_mbox_handler_npc_mcam_read_entry(struct rvu *rvu,
 					 struct npc_mcam_read_entry_req *req,
 					 struct npc_mcam_read_entry_rsp *rsp)
@@ -3028,7 +3064,6 @@ static int __npc_mcam_alloc_counter(struct rvu *rvu,
 	 */
 	if (!req->contig && req->count > NPC_MAX_NONCONTIG_COUNTERS)
 		return NPC_MCAM_INVALID_REQ;
-
 
 	/* Check if unused counters are available or not */
 	if (!rvu_rsrc_free_count(&mcam->counters)) {
@@ -3574,6 +3609,46 @@ int rvu_mbox_handler_npc_mcam_entry_stats(struct rvu *rvu,
 
 	mutex_unlock(&mcam->lock);
 
+	return 0;
+}
+
+int rvu_mbox_handler_npc_mcam_mul_stats(struct rvu *rvu,
+					struct npc_mcam_get_mul_stats_req *req,
+					struct npc_mcam_get_mul_stats_rsp *rsp)
+{
+	struct npc_mcam *mcam = &rvu->hw->mcam;
+	u16 index, cntr;
+	int blkaddr;
+	u64 regval;
+	u32 bank;
+
+	if (!req->cnt || req->cnt > 256) {
+		dev_err(rvu->dev, "%s invalid request cnt=%d\n",
+			__func__, req->cnt);
+		return -EINVAL;
+	}
+
+	blkaddr = rvu_get_blkaddr(rvu, BLKTYPE_NPC, 0);
+	if (blkaddr < 0)
+		return NPC_MCAM_INVALID_REQ;
+
+	mutex_lock(&mcam->lock);
+
+	for (int i = 0; i < req->cnt; i++) {
+		index = req->entry[i] & (mcam->banksize - 1);
+		bank = npc_get_bank(mcam, req->entry[i]);
+
+		/* read MCAM entry STAT_ACT register */
+		regval = rvu_read64(rvu, blkaddr, NPC_AF_MCAMEX_BANKX_STAT_ACT(index, bank));
+		cntr = regval & 0x1FF;
+
+		rsp->stat[i] = rvu_read64(rvu, blkaddr, NPC_AF_MATCH_STATX(cntr));
+		rsp->stat[i] &= BIT_ULL(48) - 1;
+	}
+
+	rsp->cnt = req->cnt;
+
+	mutex_unlock(&mcam->lock);
 	return 0;
 }
 
