@@ -4,6 +4,7 @@
  * Author: Clément Le Goffic <clement.legoffic@foss.st.com> for STMicroelectronics.
  */
 #include <linux/bits.h>
+#include <linux/bus/stm32_firewall_device.h>
 #include <linux/clk.h>
 #include <linux/gpio/driver.h>
 #include <linux/gpio/generic.h>
@@ -605,10 +606,50 @@ MODULE_DEVICE_TABLE(of, stm32_hdp_of_match);
 static int stm32_hdp_probe(struct platform_device *pdev)
 {
 	struct gpio_generic_chip_config config;
+	struct stm32_firewall *firewall = NULL;
 	struct device *dev = &pdev->dev;
 	struct stm32_hdp *hdp;
+	int nb_firewall;
 	u8 version;
 	int err;
+	int i;
+
+	nb_firewall = of_count_phandle_with_args(pdev->dev.of_node, "access-controllers",
+						 "#access-controller-cells");
+	if (IS_ENABLED(CONFIG_STM32_FIREWALL) && nb_firewall != -ENOENT) {
+		if (nb_firewall <= 0)
+			return -EINVAL;
+
+		firewall = devm_kcalloc(dev, nb_firewall, sizeof(*firewall), GFP_KERNEL);
+		if (!firewall)
+			return -ENOMEM;
+
+		/* Get stm32 firewall information */
+		err = stm32_firewall_get_firewall(dev->of_node, firewall, nb_firewall);
+		if (err)
+			return dev_err_probe(dev, err, "Failed to get firewall controller\n");
+
+		for (i = 0; i < nb_firewall; i++) {
+			err = stm32_firewall_grant_access_by_id(firewall + i,
+								firewall[i].firewall_id);
+			if (err) {
+				while (i) {
+					u32 id;
+
+					i--;
+					id = firewall[i].firewall_id;
+					stm32_firewall_release_access_by_id(firewall + i, id);
+				}
+				if (err == -EACCES) {
+					dev_info(dev, "No firewall access\n");
+					return -ENODEV;
+				}
+
+				return dev_err_probe(dev, err, "Error checking firewall access\n");
+			}
+		}
+	}
+
 
 	hdp = devm_kzalloc(dev, sizeof(*hdp), GFP_KERNEL);
 	if (!hdp)
