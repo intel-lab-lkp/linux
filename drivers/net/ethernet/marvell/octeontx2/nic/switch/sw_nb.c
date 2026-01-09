@@ -21,7 +21,6 @@
 #include "sw_fdb.h"
 #include "sw_fib.h"
 #include "sw_fl.h"
-#include "sw_nb.h"
 
 static const char *sw_nb_cmd2str[OTX2_CMD_MAX] = {
 	[OTX2_DEV_UP]  = "OTX2_DEV_UP",
