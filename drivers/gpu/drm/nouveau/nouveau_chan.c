@@ -293,6 +293,10 @@ nouveau_channel_ctor(struct nouveau_cli *cli, bool priv, u64 runm,
 	if (ret)
 		return ret;
 
+	chan->push.plength = plength;
+	chan->push.ioffset = ioffset;
+	chan->push.ilength = ilength;
+
 	/* create channel object */
 	args->version = 0;
 	args->namelen = __member_size(args->name);
@@ -311,8 +315,8 @@ nouveau_channel_ctor(struct nouveau_cli *cli, bool priv, u64 runm,
 			args->ctxdma = nvif_handle(&chan->push.ctxdma);
 		else
 			args->ctxdma = 0;
-		args->offset = ioffset + chan->push.addr;
-		args->length = ilength;
+		args->offset = chan->push.addr + chan->push.ioffset;
+		args->length = chan->push.ilength;
 	}
 	args->huserd = 0;
 	args->ouserd = 0;
@@ -437,22 +441,22 @@ nouveau_channel_init(struct nouveau_channel *chan, u32 vram, u32 gart)
 	} else
 	if (chan->user.oclass < FERMI_CHANNEL_GPFIFO) {
 		ret = nvif_chan506f_ctor(&chan->chan, chan->userd->map.ptr,
-					 (u8*)chan->push.buffer->kmap.virtual + 0x10000, 0x2000,
-					 chan->push.buffer->kmap.virtual, chan->push.addr, 0x10000);
+					 (u8 *)chan->push.buffer->kmap.virtual + chan->push.ioffset, chan->push.ilength,
+					 chan->push.buffer->kmap.virtual, chan->push.addr, chan->push.plength);
 		if (ret)
 			return ret;
 	} else
 	if (chan->user.oclass < VOLTA_CHANNEL_GPFIFO_A) {
 		ret = nvif_chan906f_ctor(&chan->chan, chan->userd->map.ptr,
-					 (u8*)chan->push.buffer->kmap.virtual + 0x10000, 0x2000,
-					 chan->push.buffer->kmap.virtual, chan->push.addr, 0x10000,
+					 (u8 *)chan->push.buffer->kmap.virtual + chan->push.ioffset, chan->push.ilength,
+					 chan->push.buffer->kmap.virtual, chan->push.addr, chan->push.plength,
 					 chan->sema.bo->kmap.virtual, chan->sema.vma->addr);
 		if (ret)
 			return ret;
 	} else {
 		ret = nvif_chanc36f_ctor(&chan->chan, chan->userd->map.ptr,
-					 (u8*)chan->push.buffer->kmap.virtual + 0x10000, 0x2000,
-					 chan->push.buffer->kmap.virtual, chan->push.addr, 0x10000,
+					 (u8 *)chan->push.buffer->kmap.virtual + chan->push.ioffset, chan->push.ilength,
+					 chan->push.buffer->kmap.virtual, chan->push.addr, chan->push.plength,
 					 chan->sema.bo->kmap.virtual, chan->sema.vma->addr,
 					 &drm->client.device.user, chan->token);
 		if (ret)

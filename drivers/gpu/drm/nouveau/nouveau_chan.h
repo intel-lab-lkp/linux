@@ -29,6 +29,9 @@ struct nouveau_channel {
 		struct nouveau_vma *vma;
 		struct nvif_object ctxdma;
 		u64 addr;
+		u64 plength;
+		u64 ioffset;
+		u64 ilength;
 	} push;
 
 	void *fence;
