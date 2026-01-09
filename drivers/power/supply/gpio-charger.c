@@ -32,6 +32,7 @@ struct gpio_charger {
 	struct power_supply_desc charger_desc;
 	struct gpio_desc *gpiod;
 	struct gpio_desc *charge_status;
+	struct gpio_desc *timer;
 
 	struct gpio_descs *current_limit_gpios;
 	struct gpio_mapping *current_limit_map;
@@ -259,6 +260,36 @@ static int init_charge_current_limit(struct device *dev,
 	return 0;
 }
 
+static ssize_t fast_charge_timer_store(struct device *dev,
+				       struct device_attribute *attr,
+				       const char *buf, size_t count)
+{
+	struct power_supply *psy = dev_get_drvdata(dev);
+	struct gpio_charger *gpio_charger = power_supply_get_drvdata(psy);
+	int ret;
+	bool en;
+
+	if (kstrtobool(buf, &en))
+		return -EINVAL;
+
+	if (!gpio_charger->timer)
+		return -ENODEV;
+
+	ret = gpiod_set_value_cansleep(gpio_charger->timer, en);
+	if (ret)
+		return ret;
+
+	return count;
+}
+
+static DEVICE_ATTR_WO(fast_charge_timer);
+
+static struct attribute *gpio_charger_attrs[] = {
+	&dev_attr_fast_charge_timer.attr,
+	NULL
+};
+ATTRIBUTE_GROUPS(gpio_charger);
+
 /*
  * The entries will be overwritten by driver's probe routine depending
  * on the available features. This list ensures, that the array is big
@@ -308,6 +339,13 @@ static int gpio_charger_probe(struct platform_device *pdev)
 		num_props++;
 	}
 
+	gpio_charger->timer = devm_gpiod_get_optional(dev, "fast-charge-timer",
+						      GPIOD_OUT_HIGH);
+	if (IS_ERR(gpio_charger->timer)) {
+		return dev_err_probe(dev, PTR_ERR(gpio_charger->timer),
+				     "error getting fast-charge timer GPIO descriptor\n");
+	}
+
 	charge_status = devm_gpiod_get_optional(dev, "charge-status", GPIOD_IN);
 	if (IS_ERR(charge_status))
 		return PTR_ERR(charge_status);
@@ -336,6 +374,7 @@ static int gpio_charger_probe(struct platform_device *pdev)
 
 	psy_cfg.fwnode = dev_fwnode(dev);
 	psy_cfg.drv_data = gpio_charger;
+	psy_cfg.attr_grp = gpio_charger_groups;
 
 	if (pdata) {
 		charger_desc->name = pdata->name;
