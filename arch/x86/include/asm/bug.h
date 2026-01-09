@@ -153,6 +153,7 @@ struct arch_va_list {
 	struct sysv_va_list args;
 };
 extern void *__warn_args(struct arch_va_list *args, struct pt_regs *regs);
+extern noinstr bool handle_bug(struct pt_regs *regs);
 #endif /* __ASSEMBLY__ */
 
 #define __WARN_bug_entry(flags, format) ({				\
