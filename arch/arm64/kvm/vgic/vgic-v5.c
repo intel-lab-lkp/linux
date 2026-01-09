@@ -139,6 +139,166 @@ void vgic_v5_get_implemented_ppis(void)
 		ppi_caps->impl_ppi_mask[0] |= BIT_ULL(GICV5_ARCH_PPI_PMUIRQ);
 }
 
+static bool vgic_v5_ppi_set_pending_state(struct kvm_vcpu *vcpu,
+					  struct vgic_irq *irq)
+{
+	struct vgic_v5_cpu_if *cpu_if;
+	const u32 id = FIELD_GET(GICV5_HWIRQ_ID, irq->intid);
+	unsigned long *p;
+
+	if (!vcpu || !irq)
+		return false;
+
+	/*
+	 * For DVI'd interrupts, the state is directly driven by the host
+	 * hardware connected to the interrupt line. There is nothing for us to
+	 * do here. Moreover, this is just broken!
+	 */
+	if (WARN_ON(irq->directly_injected))
+		return true;
+
+	cpu_if = &vcpu->arch.vgic_cpu.vgic_v5;
+
+	p = (unsigned long *)&cpu_if->vgic_ppi_pendr[id / 64];
+	__assign_bit(id % 64, p, irq_is_pending(irq));
+
+	return true;
+}
+
+/*
+ * For GICv5, the PPIs are mostly directly managed by the hardware. We (the
+ * hypervisor) handle the pending, active, enable state save/restore, but don't
+ * need the PPIs to be queued on a per-VCPU AP list. Therefore, sanity check the
+ * state, unlock, and return.
+ */
+static bool vgic_v5_ppi_queue_irq_unlock(struct kvm *kvm, struct vgic_irq *irq,
+					 unsigned long flags)
+	__releases(&irq->irq_lock)
+{
+	struct kvm_vcpu *vcpu;
+
+	lockdep_assert_held(&irq->irq_lock);
+
+	if (WARN_ON_ONCE(!__irq_is_ppi(KVM_DEV_TYPE_ARM_VGIC_V5, irq->intid)))
+		goto out_unlock_fail;
+
+	vcpu = irq->target_vcpu;
+	if (WARN_ON_ONCE(!vcpu))
+		goto out_unlock_fail;
+
+	raw_spin_unlock_irqrestore(&irq->irq_lock, flags);
+
+	/* Directly kick the target VCPU to make sure it sees the IRQ */
+	kvm_make_request(KVM_REQ_IRQ_PENDING, vcpu);
+	kvm_vcpu_kick(vcpu);
+
+	return true;
+
+out_unlock_fail:
+	raw_spin_unlock_irqrestore(&irq->irq_lock, flags);
+
+	return false;
+}
+
+static struct irq_ops vgic_v5_ppi_irq_ops = {
+	.set_pending_state = vgic_v5_ppi_set_pending_state,
+	.queue_irq_unlock = vgic_v5_ppi_queue_irq_unlock,
+};
+
+void vgic_v5_set_ppi_ops(struct vgic_irq *irq)
+{
+	if (WARN_ON(!irq))
+		return;
+
+	guard(raw_spinlock_irqsave)(&irq->irq_lock);
+
+	if (!WARN_ON(irq->ops))
+		irq->ops = &vgic_v5_ppi_irq_ops;
+}
+
+/*
+ * Detect any PPIs state changes, and propagate the state with KVM's
+ * shadow structures.
+ */
+void vgic_v5_fold_ppi_state(struct kvm_vcpu *vcpu)
+{
+	struct vgic_v5_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v5;
+
+	for (int reg = 0; reg < 2; reg++) {
+		const u64 activer = host_data_ptr(vgic_v5_ppi_state)->activer_exit[reg];
+		const u64 pendr = host_data_ptr(vgic_v5_ppi_state)->pendr_exit[reg];
+		unsigned long changed_bits;
+		int i;
+
+		/*
+		 * Track what changed across activer, pendr, but mask with
+		 * ~DVI.
+		 */
+		changed_bits = cpu_if->vgic_ppi_activer[reg] ^ activer;
+		changed_bits |= host_data_ptr(vgic_v5_ppi_state)->pendr_entry[reg] ^ pendr;
+		changed_bits &= ~cpu_if->vgic_ppi_dvir[reg];
+
+		for_each_set_bit(i, &changed_bits, 64) {
+			struct vgic_irq *irq;
+			u32 intid;
+
+			intid = FIELD_PREP(GICV5_HWIRQ_TYPE, GICV5_HWIRQ_TYPE_PPI);
+			intid |= FIELD_PREP(GICV5_HWIRQ_ID, reg * 64 + i);
+
+			irq = vgic_get_vcpu_irq(vcpu, intid);
+
+			scoped_guard(raw_spinlock_irqsave, &irq->irq_lock) {
+				irq->active = !!(activer & BIT(i));
+
+				/*
+				 * This is an OR to avoid losing incoming
+				 * edges!
+				 */
+				if (irq->config == VGIC_CONFIG_EDGE)
+					irq->pending_latch |= !!(pendr & BIT(i));
+			}
+
+			vgic_put_irq(vcpu->kvm, irq);
+		}
+
+		/* Re-inject the exit state as entry state next time! */
+		cpu_if->vgic_ppi_activer[reg] = activer;
+
+		/*
+		 * Pending state is a bit different. We only propagate back
+		 * pending state for Edge interrupts. Moreover, this is OR'd
+		 * with the incoming state to make sure we don't lose incoming
+		 * edges. Use the (inverse) HMR to mask off all Level bits, and
+		 * OR.
+		 */
+		cpu_if->vgic_ppi_pendr[reg] |=
+			pendr & ~vcpu->kvm->arch.vgic.gicv5_vm.vgic_ppi_hmr[reg];
+	}
+}
+
+void vgic_v5_flush_ppi_state(struct kvm_vcpu *vcpu)
+{
+	struct vgic_v5_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v5;
+
+	/*
+	 * We're about to enter the guest. Copy the shadow state to the pending
+	 * reg that will be written to the ICH_PPI_PENDRx_EL2 regs. While the
+	 * guest is running we track any incoming changes to the pending state in
+	 * vgic_ppi_pendr. The incoming changes are merged with the outgoing
+	 * changes on the return path.
+	 */
+	host_data_ptr(vgic_v5_ppi_state)->pendr_entry[0] = cpu_if->vgic_ppi_pendr[0];
+	host_data_ptr(vgic_v5_ppi_state)->pendr_entry[1] = cpu_if->vgic_ppi_pendr[1];
+
+	/*
+	 * Make sure that we can correctly detect "edges" in the PPI
+	 * state. There's a path where we never actually enter the guest, and
+	 * failure to do this risks losing pending state
+	 */
+	host_data_ptr(vgic_v5_ppi_state)->pendr_exit[0] = cpu_if->vgic_ppi_pendr[0];
+	host_data_ptr(vgic_v5_ppi_state)->pendr_exit[1] = cpu_if->vgic_ppi_pendr[1];
+}
+
 /*
  * Sets/clears the corresponding bit in the ICH_PPI_DVIR register.
  */
