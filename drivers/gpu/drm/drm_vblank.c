@@ -1208,6 +1208,32 @@ static int drm_vblank_enable(struct drm_device *dev, unsigned int pipe)
 	return ret;
 }
 
+/**
+ * drm_crtc_vblank_prepare - prepare to enable vblank interrupts
+ *
+ * @crtc: which CRTC to prepare
+ *
+ * Some drivers may need to spin-up hardware from a low power state before
+ * enabling vblank interrupts. This function calls the prepare_enable_vblank
+ * callback, if available, to allow drivers to do that.
+ *
+ * This is a DRM-internal function, and is a thin wrapper around a driver
+ * callback. Drivers are expected to sequence their own prepare work internally.
+ *
+ * The spin-up may call sleeping functions, such as mutex_lock(). Therefore,
+ * this must be called from process context, where sleeping is allowed.
+ */
+int drm_crtc_vblank_prepare(struct drm_crtc *crtc)
+{
+	if (!drm_dev_has_vblank(crtc->dev))
+		return -EINVAL;
+
+	if (crtc->funcs->prepare_enable_vblank)
+		return crtc->funcs->prepare_enable_vblank(crtc);
+
+	return 0;
+}
+
 int drm_vblank_get(struct drm_device *dev, unsigned int pipe)
 {
 	struct drm_vblank_crtc *vblank = drm_vblank_crtc(dev, pipe);
@@ -1305,6 +1331,10 @@ int drm_crtc_wait_one_vblank(struct drm_crtc *crtc)
 	struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(crtc);
 	int ret;
 	u64 last;
+
+	ret = drm_crtc_vblank_prepare(crtc);
+	if (ret)
+		return ret;
 
 	ret = drm_vblank_get(dev, pipe);
 	if (drm_WARN(dev, ret, "vblank not available on crtc %i, ret=%i\n",
@@ -1487,6 +1517,9 @@ void drm_crtc_vblank_on_config(struct drm_crtc *crtc,
 	struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(crtc);
 
 	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
+		return;
+
+	if (drm_crtc_vblank_prepare(crtc))
 		return;
 
 	spin_lock_irq(&dev->vbl_lock);
@@ -1796,6 +1829,13 @@ int drm_wait_vblank_ioctl(struct drm_device *dev, void *data,
 		return 0;
 	}
 
+	crtc = drm_crtc_from_index(dev, vblank->pipe);
+	if (crtc) {
+		ret = drm_crtc_vblank_prepare(crtc);
+		if (ret)
+			return ret;
+	}
+
 	ret = drm_vblank_get(dev, pipe);
 	if (ret) {
 		drm_dbg_core(dev,
@@ -2031,6 +2071,10 @@ int drm_crtc_get_sequence_ioctl(struct drm_device *dev, void *data,
 		READ_ONCE(vblank->enabled);
 
 	if (!vblank_enabled) {
+		ret = drm_crtc_vblank_prepare(crtc);
+		if (ret)
+			return ret;
+
 		ret = drm_crtc_vblank_get(crtc);
 		if (ret) {
 			drm_dbg_core(dev,
@@ -2097,6 +2141,10 @@ int drm_crtc_queue_sequence_ioctl(struct drm_device *dev, void *data,
 	e = kzalloc(sizeof(*e), GFP_KERNEL);
 	if (e == NULL)
 		return -ENOMEM;
+
+	ret = drm_crtc_vblank_prepare(crtc);
+	if (ret)
+		return ret;
 
 	ret = drm_crtc_vblank_get(crtc);
 	if (ret) {
