@@ -456,8 +456,16 @@ void vgic_v3_nested_update_mi(struct kvm_vcpu *vcpu);
 
 static inline bool vgic_is_v3_compat(struct kvm *kvm)
 {
+	/*
+	 * We need to be careful here. This could be called early,
+	 * which means that there is no vgic_model set. For the time
+	 * being, fall back to assuming that we're trying run a legacy
+	 * VM in that case, which keeps existing software happy. Long
+	 * term, this will need to be revisited a little.
+	 */
 	return cpus_have_final_cap(ARM64_HAS_GICV5_CPUIF) &&
-		kvm_vgic_global_state.has_gcie_v3_compat;
+		kvm_vgic_global_state.has_gcie_v3_compat &&
+		kvm->arch.vgic.vgic_model != KVM_DEV_TYPE_ARM_VGIC_V5;
 }
 
 static inline bool vgic_is_v3(struct kvm *kvm)
