@@ -10,7 +10,7 @@
 #include <linux/hardirq.h>
 #include <asm/switch_to.h>
 
-int enter_vmx_usercopy(void)
+notrace int enter_vmx_usercopy(void)
 {
 	if (in_interrupt())
 		return 0;
@@ -32,7 +32,7 @@ int enter_vmx_usercopy(void)
  * This function must return 0 because we tail call optimise when calling
  * from __copy_tofrom_user_power7 which returns 0 on success.
  */
-int exit_vmx_usercopy(void)
+notrace int exit_vmx_usercopy(void)
 {
 	disable_kernel_altivec();
 	pagefault_enable();

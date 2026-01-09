@@ -80,7 +80,7 @@
  */
 bool tm_suspend_disabled __ro_after_init = false;
 
-static void check_if_tm_restore_required(struct task_struct *tsk)
+notrace static void check_if_tm_restore_required(struct task_struct *tsk)
 {
 	/*
 	 * If we are saving the current thread's registers, and the
@@ -98,7 +98,7 @@ static void check_if_tm_restore_required(struct task_struct *tsk)
 }
 
 #else
-static inline void check_if_tm_restore_required(struct task_struct *tsk) { }
+static __always_inline void check_if_tm_restore_required(struct task_struct *tsk) { }
 #endif /* CONFIG_PPC_TRANSACTIONAL_MEM */
 
 bool strict_msr_control;
@@ -231,7 +231,7 @@ static inline void __giveup_fpu(struct task_struct *tsk) { }
 #endif /* CONFIG_PPC_FPU */
 
 #ifdef CONFIG_ALTIVEC
-static void __giveup_altivec(struct task_struct *tsk)
+notrace static void __giveup_altivec(struct task_struct *tsk)
 {
 	unsigned long msr;
 
@@ -243,7 +243,7 @@ static void __giveup_altivec(struct task_struct *tsk)
 	regs_set_return_msr(tsk->thread.regs, msr);
 }
 
-void giveup_altivec(struct task_struct *tsk)
+notrace void giveup_altivec(struct task_struct *tsk)
 {
 	check_if_tm_restore_required(tsk);
 
@@ -253,7 +253,7 @@ void giveup_altivec(struct task_struct *tsk)
 }
 EXPORT_SYMBOL(giveup_altivec);
 
-void enable_kernel_altivec(void)
+notrace void enable_kernel_altivec(void)
 {
 	unsigned long cpumsr;
 
