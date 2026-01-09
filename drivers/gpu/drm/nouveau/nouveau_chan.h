@@ -67,12 +67,16 @@ int  nouveau_channel_idle(struct nouveau_channel *);
 void nouveau_channel_kill(struct nouveau_channel *);
 
 /* Maximum GPFIFO entries per channel. */
-#define NV50_CHANNEL_GPFIFO_ENTRIES_MAX_COUNT (0x02000 / 8)
+#define NV50_CHANNEL_GPFIFO_ENTRIES_MAX_COUNT		(0x02000 / 8)
+#define MAXWELL_CHANNEL_GPFIFO_ENTRIES_MAX_COUNT	(0x40000 / 8)
 
 static inline u32 nouveau_channel_get_gpfifo_entries_count(u32 oclass)
 {
 	if (oclass < NV50_CHANNEL_GPFIFO)
 		return 0;
+
+	if (oclass >= MAXWELL_CHANNEL_GPFIFO_A)
+		return MAXWELL_CHANNEL_GPFIFO_ENTRIES_MAX_COUNT;
 
 	return NV50_CHANNEL_GPFIFO_ENTRIES_MAX_COUNT;
 }

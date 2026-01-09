@@ -233,10 +233,24 @@ static inline int
 getparam_dma_ib_max(struct nvif_device *device)
 {
 	const struct nvif_mclass hosts[] = {
-		{ NV03_CHANNEL_DMA, 0 },
-		{ NV10_CHANNEL_DMA, 0 },
-		{ NV17_CHANNEL_DMA, 0 },
-		{ NV40_CHANNEL_DMA, 0 },
+		{ BLACKWELL_CHANNEL_GPFIFO_B, 0 },
+		{ BLACKWELL_CHANNEL_GPFIFO_A, 0 },
+		{    HOPPER_CHANNEL_GPFIFO_A, 0 },
+		{    AMPERE_CHANNEL_GPFIFO_B, 0 },
+		{    AMPERE_CHANNEL_GPFIFO_A, 0 },
+		{    TURING_CHANNEL_GPFIFO_A, 0 },
+		{     VOLTA_CHANNEL_GPFIFO_A, 0 },
+		{    PASCAL_CHANNEL_GPFIFO_A, 0 },
+		{   MAXWELL_CHANNEL_GPFIFO_A, 0 },
+		{    KEPLER_CHANNEL_GPFIFO_B, 0 },
+		{    KEPLER_CHANNEL_GPFIFO_A, 0 },
+		{     FERMI_CHANNEL_GPFIFO  , 0 },
+		{       G82_CHANNEL_GPFIFO  , 0 },
+		{      NV50_CHANNEL_GPFIFO  , 0 },
+		{      NV40_CHANNEL_DMA     , 0 },
+		{      NV17_CHANNEL_DMA     , 0 },
+		{      NV10_CHANNEL_DMA     , 0 },
+		{      NV03_CHANNEL_DMA     , 0 },
 		{}
 	};
 	int cid;
