@@ -52,19 +52,7 @@ static bool bip_should_check(struct bio_integrity_payload *bip)
 
 static bool bi_offload_capable(struct blk_integrity *bi)
 {
-	switch (bi->csum_type) {
-	case BLK_INTEGRITY_CSUM_CRC64:
-		return bi->metadata_size == sizeof(struct crc64_pi_tuple);
-	case BLK_INTEGRITY_CSUM_CRC:
-	case BLK_INTEGRITY_CSUM_IP:
-		return bi->metadata_size == sizeof(struct t10_pi_tuple);
-	default:
-		pr_warn_once("%s: unknown integrity checksum type:%d\n",
-			__func__, bi->csum_type);
-		fallthrough;
-	case BLK_INTEGRITY_CSUM_NONE:
-		return false;
-	}
+	return bi->metadata_size == bi->pi_tuple_size;
 }
 
 /**
@@ -109,7 +97,7 @@ bool bio_integrity_prep(struct bio *bio)
 	struct blk_integrity *bi = blk_get_integrity(bio->bi_bdev->bd_disk);
 	struct bio_integrity_data *bid;
 	bool set_flags = true;
-	gfp_t gfp = GFP_NOIO;
+	bool zero_buffer = false;
 
 	if (!bi)
 		return true;
@@ -139,9 +127,10 @@ bool bio_integrity_prep(struct bio *bio)
 			if (bi_offload_capable(bi))
 				return true;
 			set_flags = false;
-			gfp |= __GFP_ZERO;
-		} else if (bi->csum_type == BLK_INTEGRITY_CSUM_NONE)
-			gfp |= __GFP_ZERO;
+			zero_buffer = true;
+		} else {
+			zero_buffer = bi->metadata_size > bi->pi_tuple_size;
+		}
 		break;
 	default:
 		return true;
@@ -154,7 +143,7 @@ bool bio_integrity_prep(struct bio *bio)
 	bio_integrity_init(bio, &bid->bip, &bid->bvec, 1);
 	bid->bio = bio;
 	bid->bip.bip_flags |= BIP_BLOCK_INTEGRITY;
-	bio_integrity_alloc_buf(bio, gfp & __GFP_ZERO);
+	bio_integrity_alloc_buf(bio, zero_buffer);
 
 	bip_set_seed(&bid->bip, bio->bi_iter.bi_sector);
 
