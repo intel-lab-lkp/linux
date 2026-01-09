@@ -1339,6 +1339,7 @@ struct btrfs_super_block *btrfs_read_disk_super(struct block_device *bdev,
 	struct page *page;
 	u64 bytenr, bytenr_orig;
 	struct address_space *mapping = bdev->bd_mapping;
+	struct inode *inode = mapping->host;
 	int ret;
 
 	bytenr_orig = btrfs_sb_offset(copy_num);
@@ -1364,7 +1365,9 @@ struct btrfs_super_block *btrfs_read_disk_super(struct block_device *bdev,
 				      (bytenr + BTRFS_SUPER_INFO_SIZE) >> PAGE_SHIFT);
 	}
 
+	inode_lock(inode);
 	page = read_cache_page_gfp(mapping, bytenr >> PAGE_SHIFT, GFP_NOFS);
+	inode_unlock(inode);
 	if (IS_ERR(page))
 		return ERR_CAST(page);
 
