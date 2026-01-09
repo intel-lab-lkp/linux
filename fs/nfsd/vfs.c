@@ -1458,6 +1458,30 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		}
 	}
 
+	/*
+	 * Throttle buffered writes under memory pressure. When dirty
+	 * page limits are exceeded, BDP_ASYNC causes -EAGAIN to be
+	 * returned rather than blocking the thread. This -EAGAIN
+	 * maps to nfserr_jukebox, signaling the client to back off
+	 * and retry rather than tying up a server thread during
+	 * writeback.
+	 *
+	 * NFSv2 writes commit to stable storage before reply; no
+	 * dirty pages accumulate, so throttling is unnecessary.
+	 * FILE_SYNC and DATA_SYNC writes flush immediately and do
+	 * not leave uncommitted dirty pages behind.
+	 * Direct I/O and DONTCACHE bypass the page cache entirely.
+	 */
+	if (rqstp->rq_vers > 2 &&
+	    stable == NFS_UNSTABLE &&
+	    nfsd_io_cache_write == NFSD_IO_BUFFERED) {
+		host_err =
+			balance_dirty_pages_ratelimited_flags(file->f_mapping,
+							      BDP_ASYNC);
+		if (host_err == -EAGAIN)
+			goto out_nfserr;
+	}
+
 	nvecs = xdr_buf_to_bvec(rqstp->rq_bvec, rqstp->rq_maxpages, payload);
 
 	since = READ_ONCE(file->f_wb_err);
