@@ -10,7 +10,6 @@ This file is part of GDB, GAS, and the GNU binutils.
 #include <asm/cputable.h>
 #include <asm/cpu_has_feature.h>
 #include "nonstdio.h"
-#include "ansidecl.h"
 #include "ppc.h"
 #include "dis-asm.h"
 
