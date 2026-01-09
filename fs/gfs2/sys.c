@@ -720,6 +720,21 @@ int gfs2_sys_fs_add(struct gfs2_sbd *sdp)
 	sprintf(ro, "RDONLY=%d", sb_rdonly(sb));
 	sprintf(spectator, "SPECTATOR=%d", sdp->sd_args.ar_spectator ? 1 : 0);
 
+	/*
+	 * Check for existence because kobject_init_and_add() warns
+	 * with a dump_stack() if the name exists
+	 */
+	if (gfs2_kset) {
+		struct kobject *existing = kset_find_obj(gfs2_kset, sdp->sd_table_name);
+
+		if (existing) {
+			kobject_put(existing);
+			fs_err(sdp, "fsid %s: sysfs entry already exists\n",
+			       sdp->sd_table_name);
+				return -EBUSY;
+			}
+	}
+
 	init_completion(&sdp->sd_kobj_unregister);
 	sdp->sd_kobj.kset = gfs2_kset;
 	error = kobject_init_and_add(&sdp->sd_kobj, &gfs2_ktype, NULL,
