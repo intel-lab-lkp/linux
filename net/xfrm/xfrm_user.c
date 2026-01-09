@@ -3104,6 +3104,7 @@ static int copy_from_user_migrate(struct xfrm_migrate *ma,
 		ma->proto = um->proto;
 		ma->mode = um->mode;
 		ma->old_reqid = um->reqid;
+		ma->new_reqid = um->reqid; /* reqid is invariant in XFRM_MSG_MIGRATE */
 
 		ma->old_family = um->old_family;
 		ma->new_family = um->new_family;
