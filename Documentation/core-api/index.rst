@@ -24,6 +24,7 @@ it.
    printk-index
    symbol-namespaces
    asm-annotations
+   real-time/index
 
 Data structures and low-level utilities
 =======================================
@@ -54,6 +55,7 @@ Library functionality that is used throughout the kernel.
    union_find
    min_heap
    parser
+   list
 
 Low level entry and exit
 ========================
@@ -136,6 +138,7 @@ Documents that don't fit elsewhere or which have yet to be categorized.
    :maxdepth: 1
 
    librs
+   liveupdate
    netlink
 
 .. only:: subproject and html

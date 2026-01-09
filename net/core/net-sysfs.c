@@ -256,7 +256,7 @@ static ssize_t name_assign_type_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(name_assign_type);
 
-/* use same locking rules as GIFHWADDR ioctl's (dev_get_mac_address()) */
+/* use same locking rules as GIFHWADDR ioctl's (netif_get_mac_address()) */
 static ssize_t address_show(struct device *dev, struct device_attribute *attr,
 			    char *buf)
 {
@@ -687,7 +687,7 @@ static ssize_t phys_switch_id_show(struct device *dev,
 	if (ret)
 		return ret;
 
-	ret = dev_get_port_parent_id(netdev, &ppid, false);
+	ret = netif_get_port_parent_id(netdev, &ppid, false);
 	if (!ret)
 		ret = sysfs_emit(buf, "%*phN\n", ppid.id_len, ppid.id);
 
@@ -757,7 +757,7 @@ static int modify_napi_threaded(struct net_device *dev, unsigned long val)
 	if (val != 0 && val != 1)
 		return -EOPNOTSUPP;
 
-	ret = dev_set_threaded(dev, val);
+	ret = netif_set_threaded(dev, val);
 
 	return ret;
 }
@@ -1120,8 +1120,10 @@ static ssize_t store_rps_dev_flow_table_cnt(struct netdev_rx_queue *queue,
 			return -ENOMEM;
 
 		table->log = ilog2(mask) + 1;
-		for (count = 0; count <= mask; count++)
+		for (count = 0; count <= mask; count++) {
 			table->flows[count].cpu = RPS_NO_CPU;
+			table->flows[count].filter = RPS_NO_FILTER;
+		}
 	} else {
 		table = NULL;
 	}
@@ -1210,12 +1212,21 @@ static int rx_queue_default_mask(struct net_device *dev,
 				 struct netdev_rx_queue *queue)
 {
 #if IS_ENABLED(CONFIG_RPS) && IS_ENABLED(CONFIG_SYSCTL)
-	struct cpumask *rps_default_mask = READ_ONCE(dev_net(dev)->core.rps_default_mask);
+	struct cpumask *rps_default_mask;
+	int res = 0;
 
+	mutex_lock(&rps_default_mask_mutex);
+
+	rps_default_mask = dev_net(dev)->core.rps_default_mask;
 	if (rps_default_mask && !cpumask_empty(rps_default_mask))
-		return netdev_rx_queue_set_rps_mask(queue, rps_default_mask);
-#endif
+		res = netdev_rx_queue_set_rps_mask(queue, rps_default_mask);
+
+	mutex_unlock(&rps_default_mask_mutex);
+
+	return res;
+#else
 	return 0;
+#endif
 }
 
 static int rx_queue_add_kobject(struct net_device *dev, int index)
@@ -1319,7 +1330,7 @@ net_rx_queue_update_kobjects(struct net_device *dev, int old_num, int new_num)
 		struct netdev_rx_queue *queue = &dev->_rx[i];
 		struct kobject *kobj = &queue->kobj;
 
-		if (!refcount_read(&dev_net(dev)->ns.count))
+		if (!check_net(dev_net(dev)))
 			kobj->uevent_suppress = 1;
 		if (dev->sysfs_rx_queue_group)
 			sysfs_remove_group(kobj, dev->sysfs_rx_queue_group);
@@ -2052,7 +2063,7 @@ netdev_queue_update_kobjects(struct net_device *dev, int old_num, int new_num)
 	while (--i >= new_num) {
 		struct netdev_queue *queue = dev->_tx + i;
 
-		if (!refcount_read(&dev_net(dev)->ns.count))
+		if (!check_net(dev_net(dev)))
 			queue->kobj.uevent_suppress = 1;
 
 		if (netdev_uses_bql(dev))
@@ -2306,7 +2317,7 @@ void netdev_unregister_kobject(struct net_device *ndev)
 {
 	struct device *dev = &ndev->dev;
 
-	if (!refcount_read(&dev_net(ndev)->ns.count))
+	if (!check_net(dev_net(ndev)))
 		dev_set_uevent_suppress(dev, 1);
 
 	kobject_get(&dev->kobj);

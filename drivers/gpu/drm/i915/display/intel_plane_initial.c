@@ -3,15 +3,18 @@
  * Copyright © 2021 Intel Corporation
  */
 
+#include <drm/drm_print.h>
+
 #include "gem/i915_gem_lmem.h"
 #include "gem/i915_gem_region.h"
 #include "i915_drv.h"
-#include "intel_atomic_plane.h"
 #include "intel_crtc.h"
 #include "intel_display.h"
+#include "intel_display_core.h"
 #include "intel_display_types.h"
 #include "intel_fb.h"
 #include "intel_frontbuffer.h"
+#include "intel_plane.h"
 #include "intel_plane_initial.h"
 
 void intel_plane_initial_vblank_wait(struct intel_crtc *crtc)
@@ -130,6 +133,7 @@ initial_plane_vma(struct intel_display *display,
 	struct drm_mm_node orig_mm = {};
 	struct i915_vma *vma;
 	resource_size_t phys_base;
+	unsigned int tiling;
 	u32 base, size;
 	u64 pinctl;
 
@@ -176,17 +180,19 @@ initial_plane_vma(struct intel_display *display,
 	i915_gem_object_set_cache_coherency(obj, HAS_WT(i915) ?
 					    I915_CACHE_WT : I915_CACHE_NONE);
 
-	switch (plane_config->tiling) {
+	tiling = intel_fb_modifier_to_tiling(plane_config->fb->base.modifier);
+
+	switch (tiling) {
 	case I915_TILING_NONE:
 		break;
 	case I915_TILING_X:
 	case I915_TILING_Y:
 		obj->tiling_and_stride =
 			plane_config->fb->base.pitches[0] |
-			plane_config->tiling;
+			tiling;
 		break;
 	default:
-		MISSING_CASE(plane_config->tiling);
+		MISSING_CASE(tiling);
 		goto err_obj;
 	}
 
@@ -288,7 +294,8 @@ intel_alloc_initial_plane_obj(struct intel_crtc *crtc,
 	mode_cmd.flags = DRM_MODE_FB_MODIFIERS;
 
 	if (intel_framebuffer_init(to_intel_framebuffer(fb),
-				   intel_bo_to_drm_bo(vma->obj), &mode_cmd)) {
+				   intel_bo_to_drm_bo(vma->obj),
+				   fb->format, &mode_cmd)) {
 		drm_dbg_kms(display->drm, "intel fb init failed\n");
 		goto err_vma;
 	}
@@ -358,6 +365,8 @@ valid_fb:
 	    i915_vma_pin_fence(vma) == 0 && vma->fence)
 		plane_state->flags |= PLANE_HAS_FENCE;
 
+	plane_state->surf = i915_ggtt_offset(plane_state->ggtt_vma);
+
 	plane_state->uapi.src_x = 0;
 	plane_state->uapi.src_y = 0;
 	plane_state->uapi.src_w = fb->width << 16;
@@ -368,7 +377,7 @@ valid_fb:
 	plane_state->uapi.crtc_w = fb->width;
 	plane_state->uapi.crtc_h = fb->height;
 
-	if (plane_config->tiling)
+	if (fb->modifier != DRM_FORMAT_MOD_LINEAR)
 		dev_priv->preserve_bios_swizzle = true;
 
 	plane_state->uapi.fb = fb;

@@ -57,8 +57,8 @@ static const DECLARE_TLV_DB_SCALE(alc_max_level, -3200, 200, 0);
 static int es8389_dmic_set(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *component = snd_soc_dapm_kcontrol_component(kcontrol);
-	struct snd_soc_dapm_context *dapm = snd_soc_dapm_kcontrol_dapm(kcontrol);
+	struct snd_soc_component *component = snd_soc_dapm_kcontrol_to_component(kcontrol);
+	struct snd_soc_dapm_context *dapm = snd_soc_dapm_kcontrol_to_dapm(kcontrol);
 	struct es8389_private *es8389 = snd_soc_component_get_drvdata(component);
 	struct soc_enum *e = (struct soc_enum *)kcontrol->private_value;
 	unsigned int val;
@@ -636,7 +636,7 @@ static int es8389_set_bias_level(struct snd_soc_component *component,
 		regmap_write(es8389->regmap, ES8389_ANA_CTL1, 0x59);
 		regmap_write(es8389->regmap, ES8389_ADC_EN, 0x00);
 		regmap_write(es8389->regmap, ES8389_CLK_OFF1, 0x00);
-		regmap_write(es8389->regmap, ES8389_RESET, 0x7E);
+		regmap_write(es8389->regmap, ES8389_RESET, 0x3E);
 		regmap_update_bits(es8389->regmap, ES8389_DAC_INV, 0x80, 0x80);
 		usleep_range(8000, 8500);
 		regmap_update_bits(es8389->regmap, ES8389_DAC_INV, 0x80, 0x00);
