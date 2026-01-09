@@ -798,6 +798,9 @@ static int imx412_start_streaming(struct imx412 *imx412)
 	const struct imx412_reg_list *reg_list;
 	int ret;
 
+	/* Wait T7 (≤8ms) so NVM read finishes; avoid I2C NACK when writing mode regs */
+	usleep_range(7400, 8000);
+
 	/* Write sensor mode registers */
 	reg_list = &imx412->cur_mode->reg_list;
 	ret = imx412_write_regs(imx412, reg_list->regs,
@@ -813,9 +816,6 @@ static int imx412_start_streaming(struct imx412 *imx412)
 		dev_err(imx412->dev, "fail to setup handler\n");
 		return ret;
 	}
-
-	/* Delay is required before streaming*/
-	usleep_range(7400, 8000);
 
 	/* Start streaming */
 	ret = imx412_write_reg(imx412, IMX412_REG_MODE_SELECT,
