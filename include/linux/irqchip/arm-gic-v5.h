@@ -369,6 +369,23 @@ struct gicv5_vpe {
 	bool			resident;
 };
 
+struct gicv5_vm {
+	/*
+	 * We only expose a subset of PPIs to the guest. This subset
+	 * is a combination of the PPIs that are actually implemented
+	 * and what we actually choose to expose.
+	 */
+	u64			vgic_ppi_mask[2];
+
+	/*
+	 * The HMR itself is handled by the hardware, but we still need to have
+	 * a mask that we can use when merging in pending state (only the state
+	 * of Edge PPIs is merged back in from the guest an the HMR provides a
+	 * convenient way to do that).
+	 */
+	u64			vgic_ppi_hmr[2];
+};
+
 struct gicv5_its_devtab_cfg {
 	union {
 		struct {

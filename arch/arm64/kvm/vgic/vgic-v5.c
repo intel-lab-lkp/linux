@@ -56,6 +56,55 @@ int vgic_v5_probe(const struct gic_kvm_info *info)
 	return 0;
 }
 
+int vgic_v5_finalize_ppi_state(struct kvm *kvm)
+{
+	struct kvm_vcpu *vcpu;
+
+	if (!vgic_is_v5(kvm))
+		return 0;
+
+	if (!ppi_caps)
+		return -ENXIO;
+
+	/* The PPI state for all VCPUs should be the same. Pick the first. */
+	vcpu = kvm_get_vcpu(kvm, 0);
+
+	vcpu->kvm->arch.vgic.gicv5_vm.vgic_ppi_mask[0] = 0;
+	vcpu->kvm->arch.vgic.gicv5_vm.vgic_ppi_mask[1] = 0;
+	vcpu->kvm->arch.vgic.gicv5_vm.vgic_ppi_hmr[0] = 0;
+	vcpu->kvm->arch.vgic.gicv5_vm.vgic_ppi_hmr[1] = 0;
+
+	for (int i = 0; i < VGIC_V5_NR_PRIVATE_IRQS; i++) {
+		int reg = i / 64;
+		u64 bit = BIT_ULL(i % 64);
+		struct vgic_irq *irq = &vcpu->arch.vgic_cpu.private_irqs[i];
+
+		guard(raw_spinlock_irqsave)(&irq->irq_lock);
+
+		/*
+		 * We only expose PPIs with an owner or the SW_PPI to the
+		 * guest.
+		 */
+		if (!irq->owner &&
+		    FIELD_GET(GICV5_HWIRQ_ID, irq->intid) != GICV5_ARCH_PPI_SW_PPI)
+			continue;
+
+		/*
+		 * If the PPI isn't implemented, we can't pass it through to a
+		 * guest anyhow.
+		 */
+		if (!(ppi_caps->impl_ppi_mask[reg] & bit))
+			continue;
+
+		vcpu->kvm->arch.vgic.gicv5_vm.vgic_ppi_mask[reg] |= bit;
+
+		if (irq->config == VGIC_CONFIG_LEVEL)
+			vcpu->kvm->arch.vgic.gicv5_vm.vgic_ppi_hmr[reg] |= bit;
+	}
+
+	return 0;
+}
+
 /*
  * Not all PPIs are guaranteed to be implemented for GICv5. Deterermine which
  * ones are, and generate a mask.

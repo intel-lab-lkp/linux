@@ -32,6 +32,8 @@
 #define VGIC_MIN_LPI		8192
 #define KVM_IRQCHIP_NUM_PINS	(1020 - 32)
 
+#define VGIC_V5_NR_PRIVATE_IRQS	128
+
 #define is_v5_type(t, i)	(FIELD_GET(GICV5_HWIRQ_TYPE, (i)) == (t))
 
 #define __irq_is_sgi(t, i)						\
@@ -385,6 +387,11 @@ struct vgic_dist {
 	 * else.
 	 */
 	struct its_vm		its_vm;
+
+	/*
+	 * GICv5 per-VM data.
+	 */
+	struct gicv5_vm		gicv5_vm;
 };
 
 struct vgic_v2_cpu_if {
@@ -570,6 +577,8 @@ void kvm_vgic_v4_unset_forwarding(struct kvm *kvm, int host_irq);
 int vgic_v4_load(struct kvm_vcpu *vcpu);
 void vgic_v4_commit(struct kvm_vcpu *vcpu);
 int vgic_v4_put(struct kvm_vcpu *vcpu);
+
+int vgic_v5_finalize_ppi_state(struct kvm *kvm);
 
 bool vgic_state_is_nested(struct kvm_vcpu *vcpu);
 
