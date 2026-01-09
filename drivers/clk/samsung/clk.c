@@ -9,11 +9,13 @@
  */
 
 #include <linux/slab.h>
+#include <linux/clk.h>
 #include <linux/clkdev.h>
 #include <linux/clk-provider.h>
 #include <linux/io.h>
 #include <linux/mfd/syscon.h>
 #include <linux/mod_devicetable.h>
+#include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/regmap.h>
 #include <linux/syscore_ops.h>
@@ -489,6 +491,50 @@ void __init samsung_cmu_register_clocks(struct samsung_clk_provider *ctx,
 		samsung_clk_register_cpu(ctx, cmu->cpu_clks, cmu->nr_cpu_clks);
 }
 
+static int samsung_get_sysreg_regmap(struct device_node *np,
+				     struct samsung_clk_provider *ctx)
+{
+	struct device_node *sysreg_np;
+	struct clk *sysreg_clk;
+	struct regmap *regmap;
+	int ret;
+
+	sysreg_np = of_parse_phandle(np, "samsung,sysreg", 0);
+	if (!sysreg_np)
+		return -ENODEV;
+
+	sysreg_clk = of_clk_get(sysreg_np, 0);
+	if (IS_ERR(sysreg_clk)) {
+		ret = PTR_ERR(sysreg_clk);
+		/* clock is optional */
+		if (ret != -ENOENT) {
+			pr_warn("%pOF: Unable to get sysreg clock: %d\n", np,
+				ret);
+			goto put_sysreg_np;
+		}
+		sysreg_clk = NULL;
+	}
+
+	regmap = device_node_to_regmap(sysreg_np);
+	if (IS_ERR(regmap)) {
+		ret = PTR_ERR(regmap);
+		pr_warn("%pOF: Unable to get CMU sysreg: %d\n", np, ret);
+		goto put_clk;
+	}
+
+	ctx->sysreg_clk = sysreg_clk;
+	ctx->sysreg = regmap;
+
+	of_node_put(sysreg_np);
+	return 0;
+
+put_clk:
+	clk_put(sysreg_clk);
+put_sysreg_np:
+	of_node_put(sysreg_np);
+	return ret;
+}
+
 /* Each bit enable/disables DRCG of a bus component */
 #define DRCG_EN_MSK	GENMASK(31, 0)
 #define MEMCLK_EN	BIT(0)
@@ -499,32 +545,32 @@ void samsung_en_dyn_root_clk_gating(struct device_node *np,
 				    const struct samsung_cmu_info *cmu,
 				    bool cmu_has_pm)
 {
+	int ret;
+
 	if (!ctx->auto_clock_gate)
 		return;
 
-	ctx->sysreg = syscon_regmap_lookup_by_phandle(np, "samsung,sysreg");
-	if (IS_ERR(ctx->sysreg)) {
-		pr_warn("%pOF: Unable to get CMU sysreg\n", np);
-		ctx->sysreg = NULL;
-	} else {
-		/* Enable DRCG for all bus components */
-		regmap_write(ctx->sysreg, ctx->drcg_offset, DRCG_EN_MSK);
-		/* Enable memclk gate (not present on all sysreg) */
-		if (ctx->memclk_offset)
-			regmap_write_bits(ctx->sysreg, ctx->memclk_offset,
-					  MEMCLK_EN, 0x0);
+	ret = samsung_get_sysreg_regmap(np, ctx);
+	if (ret)
+		return;
 
-		if (!cmu_has_pm)
-			/*
-			 * When a CMU has PM support, clocks are saved/restored
-			 * via its PM handlers, so only register them with the
-			 * syscore suspend / resume paths if PM is not in use.
-			 */
-			samsung_clk_extended_sleep_init(NULL, ctx->sysreg,
-							cmu->sysreg_clk_regs,
-							cmu->nr_sysreg_clk_regs,
-							NULL, 0);
-	}
+	/* Enable DRCG for all bus components */
+	regmap_write(ctx->sysreg, ctx->drcg_offset, DRCG_EN_MSK);
+	/* Enable memclk gate (not present on all sysreg) */
+	if (ctx->memclk_offset)
+		regmap_write_bits(ctx->sysreg, ctx->memclk_offset,
+				  MEMCLK_EN, 0x0);
+
+	if (!cmu_has_pm)
+		/*
+		 * When a CMU has PM support, clocks are saved/restored via its
+		 * PM handlers, so only register them with the syscore
+		 * suspend / resume paths if PM is not in use.
+		 */
+		samsung_clk_extended_sleep_init(NULL, ctx->sysreg,
+						cmu->sysreg_clk_regs,
+						cmu->nr_sysreg_clk_regs,
+						NULL, 0);
 }
 
 /*

@@ -21,6 +21,7 @@
  * @reg_base: virtual address for the register base
  * @dev: clock provider device needed for runtime PM
  * @sysreg: syscon regmap for clock-provider sysreg controller
+ * @sysreg_clk: clock for sysreg access, if required
  * @lock: maintains exclusion between callbacks for a given clock-provider
  * @auto_clock_gate: enable auto clk mode for all clocks in clock-provider
  * @gate_dbg_offset: gate debug reg offset. Used for all gates in auto clk mode
@@ -33,6 +34,7 @@ struct samsung_clk_provider {
 	void __iomem *reg_base;
 	struct device *dev;
 	struct regmap *sysreg;
+	struct clk *sysreg_clk;
 	spinlock_t lock;
 	bool auto_clock_gate;
 	u32 gate_dbg_offset;
