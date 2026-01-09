@@ -18,7 +18,7 @@ kconfig options:
   missing annotation
 
 Boot parameter:
-  sysctl.vm.mem_profiling={0|1|never}[,compressed]
+  mem_profiling={0|1|never}[,compressed]
 
   When set to "never", memory allocation profiling overhead is minimized and it
   cannot be enabled at runtime (sysctl becomes read-only).

@@ -747,7 +747,7 @@ static int __init setup_early_mem_profiling(char *str)
 
 	return 0;
 }
-early_param("sysctl.vm.mem_profiling", setup_early_mem_profiling);
+early_param("mem_profiling", setup_early_mem_profiling);
 
 static __init bool need_page_alloc_tagging(void)
 {
