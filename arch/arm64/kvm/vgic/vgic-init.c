@@ -750,5 +750,9 @@ int kvm_vgic_hyp_init(void)
 	}
 
 	kvm_info("vgic interrupt IRQ%d\n", kvm_vgic_global_state.maint_irq);
+
+	/* Always safe to call */
+	vgic_v5_get_implemented_ppis();
+
 	return 0;
 }

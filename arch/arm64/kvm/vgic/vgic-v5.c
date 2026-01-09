@@ -8,6 +8,8 @@
 
 #include "vgic.h"
 
+static struct vgic_v5_ppi_caps *ppi_caps;
+
 /*
  * Probe for a vGICv5 compatible interrupt controller, returning 0 on success.
  * Currently only supports GICv3-based VMs on a GICv5 host, and hence only
@@ -52,4 +54,38 @@ int vgic_v5_probe(const struct gic_kvm_info *info)
 	kvm_info("GCIE legacy system register CPU interface\n");
 
 	return 0;
+}
+
+/*
+ * Not all PPIs are guaranteed to be implemented for GICv5. Deterermine which
+ * ones are, and generate a mask.
+ */
+void vgic_v5_get_implemented_ppis(void)
+{
+	if (!cpus_have_final_cap(ARM64_HAS_GICV5_CPUIF))
+		return;
+
+	/* Never freed again */
+	ppi_caps = kzalloc(sizeof(*ppi_caps), GFP_KERNEL);
+	if (!ppi_caps)
+		return;
+
+	ppi_caps->impl_ppi_mask[0] = 0;
+	ppi_caps->impl_ppi_mask[1] = 0;
+
+	/*
+	 * If we have KVM, we have EL2, which means that we have support for the
+	 * EL1 and EL2 P & V timers.
+	 */
+	ppi_caps->impl_ppi_mask[0] |= BIT_ULL(GICV5_ARCH_PPI_CNTHP);
+	ppi_caps->impl_ppi_mask[0] |= BIT_ULL(GICV5_ARCH_PPI_CNTV);
+	ppi_caps->impl_ppi_mask[0] |= BIT_ULL(GICV5_ARCH_PPI_CNTHV);
+	ppi_caps->impl_ppi_mask[0] |= BIT_ULL(GICV5_ARCH_PPI_CNTP);
+
+	/* The SW_PPI should be available */
+	ppi_caps->impl_ppi_mask[0] |= BIT_ULL(GICV5_ARCH_PPI_SW_PPI);
+
+	/* The PMUIRQ is available if we have the PMU */
+	if (system_supports_pmuv3())
+		ppi_caps->impl_ppi_mask[0] |= BIT_ULL(GICV5_ARCH_PPI_PMUIRQ);
 }

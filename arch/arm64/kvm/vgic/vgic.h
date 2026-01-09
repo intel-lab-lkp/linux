@@ -362,6 +362,7 @@ void vgic_debug_init(struct kvm *kvm);
 void vgic_debug_destroy(struct kvm *kvm);
 
 int vgic_v5_probe(const struct gic_kvm_info *info);
+void vgic_v5_get_implemented_ppis(void);
 
 static inline int vgic_v3_max_apr_idx(struct kvm_vcpu *vcpu)
 {

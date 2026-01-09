@@ -414,6 +414,11 @@ struct vgic_v3_cpu_if {
 	unsigned int used_lrs;
 };
 
+/* What PPI capabilities does a GICv5 host have */
+struct vgic_v5_ppi_caps {
+	u64	impl_ppi_mask[2];
+};
+
 struct vgic_cpu {
 	/* CPU vif control registers for world switch */
 	union {
