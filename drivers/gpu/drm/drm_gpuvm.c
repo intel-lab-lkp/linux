@@ -1505,6 +1505,22 @@ drm_gpuvm_validate_locked(struct drm_gpuvm *gpuvm, struct drm_exec *exec)
 			drm_gpuvm_bo_list_del_init(vm_bo, evict, false);
 	}
 
+	if (READ_ONCE(gpuvm->extobj.check_evicted)) {
+		list_for_each_entry_safe(vm_bo, next, &gpuvm->extobj.list,
+					 list.entry.extobj) {
+			dma_resv_assert_held(vm_bo->obj->resv);
+
+			if (!vm_bo->evicted)
+				continue;
+
+			ret = ops->vm_bo_validate(vm_bo, exec);
+			if (ret)
+				break;
+		}
+
+		WRITE_ONCE(gpuvm->extobj.check_evicted, false);
+	}
+
 	return ret;
 }
 
@@ -1940,9 +1956,14 @@ drm_gpuvm_bo_evict(struct drm_gpuvm_bo *vm_bo, bool evict)
 	/* Can't add external objects to the evicted list directly if not using
 	 * internal spinlocks, since in this case the evicted list is protected
 	 * with the VM's common dma-resv lock.
+	 * In that case, we flag the extobj list has containing evicted objects,
+	 * which will force a scan on the next drm_gpuvm_validate_locked()
+	 * call.
 	 */
-	if (drm_gpuvm_is_extobj(gpuvm, obj) && !lock)
+	if (drm_gpuvm_is_extobj(gpuvm, obj) && !lock) {
+		WRITE_ONCE(gpuvm->extobj.check_evicted, true);
 		return;
+	}
 
 	if (evict)
 		drm_gpuvm_bo_list_add(vm_bo, evict, lock);

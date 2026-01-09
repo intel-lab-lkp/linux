@@ -310,6 +310,12 @@ struct drm_gpuvm {
 		 * @extobj.lock: spinlock to protect the extobj list
 		 */
 		spinlock_t lock;
+
+		/**
+		 * @extobj.check_evicted: true if the list contains evicted BOs
+		 * that are not already in the evict list
+		 */
+		bool check_evicted;
 	} extobj;
 
 	/**
