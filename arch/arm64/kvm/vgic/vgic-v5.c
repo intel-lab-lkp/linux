@@ -218,8 +218,8 @@ static u32 vgic_v5_get_effective_priority_mask(struct kvm_vcpu *vcpu)
 	return min(highest_ap, priority_mask + 1);
 }
 
-static bool vgic_v5_ppi_set_pending_state(struct kvm_vcpu *vcpu,
-					  struct vgic_irq *irq)
+bool vgic_v5_ppi_set_pending_state(struct kvm_vcpu *vcpu,
+				   struct vgic_irq *irq)
 {
 	struct vgic_v5_cpu_if *cpu_if;
 	const u32 id = FIELD_GET(GICV5_HWIRQ_ID, irq->intid);
@@ -250,8 +250,8 @@ static bool vgic_v5_ppi_set_pending_state(struct kvm_vcpu *vcpu,
  * need the PPIs to be queued on a per-VCPU AP list. Therefore, sanity check the
  * state, unlock, and return.
  */
-static bool vgic_v5_ppi_queue_irq_unlock(struct kvm *kvm, struct vgic_irq *irq,
-					 unsigned long flags)
+bool vgic_v5_ppi_queue_irq_unlock(struct kvm *kvm, struct vgic_irq *irq,
+				  unsigned long flags)
 	__releases(&irq->irq_lock)
 {
 	struct kvm_vcpu *vcpu;
