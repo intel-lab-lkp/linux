@@ -9,8 +9,9 @@ Kexec Handover Subsystem
 Overview
 ========
 
-Kexec HandOver (KHO) is a mechanism that allows Linux to preserve memory
-regions, which could contain serialized system states, across kexec.
+Kexec HandOver (KHO) is a mechanism that allows Linux to preserve
+memory regions, containing kernel data structures in their live,
+in-memory format, across kexec.
 
 KHO uses :ref:`flattened device tree (FDT) <kho_fdt>` to pass information about
 the preserved state from pre-exec kernel to post-kexec kernel and :ref:`scratch
@@ -70,18 +71,6 @@ us to recursively execute any amount of KHO kexecs. Because we used this region
 for boot memory allocations and as target memory for kexec blobs, some parts
 of that memory region may be reserved. These reservations are irrelevant for
 the next KHO, because kexec can overwrite even the original kernel.
-
-KHO finalization phase
-======================
-
-.. _kho-finalization-phase:
-
-To enable user space based kexec file loader, the kernel needs to be able to
-provide the FDT that describes the current kernel's state before
-performing the actual kexec. The process of generating that FDT is
-called serialization. When the FDT is generated, some properties
-of the system may become immutable because they are already written down
-in the FDT. That state is called the KHO finalization phase.
 
 Kexec Handover Radix Tree
 =========================
