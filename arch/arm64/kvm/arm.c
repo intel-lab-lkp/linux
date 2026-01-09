@@ -1437,6 +1437,14 @@ int kvm_vm_ioctl_irq_line(struct kvm *kvm, struct kvm_irq_level *irq_level,
 			if (irq_num >= VGIC_V5_NR_PRIVATE_IRQS)
 				return -EINVAL;
 
+			/*
+			 * Only allow PPIs that are explicitly exposed to
+			 * usespace to be driven via KVM_IRQ_LINE
+			 */
+			u64 mask = kvm->arch.vgic.gicv5_vm.userspace_ppis[irq_num / 64];
+			if (!(mask & BIT_ULL(irq_num % 64)))
+				return -EINVAL;
+
 			/* Build a GICv5-style IntID here */
 			irq_num |= FIELD_PREP(GICV5_HWIRQ_TYPE, GICV5_HWIRQ_TYPE_PPI);
 		} else if (irq_num < VGIC_NR_SGIS ||
