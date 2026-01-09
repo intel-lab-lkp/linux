@@ -766,6 +766,11 @@ int main(int argc, char *argv[])
 	bool merge_across_nodes = KSM_MERGE_ACROSS_NODES_DEFAULT;
 	long size_MB = 0;
 
+	if (geteuid() != 0) {
+		printf("# SKIP ksm_tests requires root privileges\n");
+		return KSFT_SKIP;
+	}
+
 	while ((opt = getopt(argc, argv, "dha:p:l:z:m:s:t:MUZNPCHD")) != -1) {
 		switch (opt) {
 		case 'a':
