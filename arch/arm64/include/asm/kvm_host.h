@@ -774,6 +774,22 @@ struct kvm_host_data {
 	/* Number of debug breakpoints/watchpoints for this CPU (minus 1) */
 	unsigned int debug_brps;
 	unsigned int debug_wrps;
+
+	/* PPI state tracking for GICv5-based guests */
+	struct {
+		/*
+		 * For tracking the PPI pending state, we need both
+		 * the entry state and exit state to correctly detect
+		 * edges as it is possible that an interrupt has been
+		 * injected in software in the interim.
+		 */
+		u64 pendr_entry[2];
+		u64 pendr_exit[2];
+
+		/* The saved state of the regs when leaving the guest */
+		u64 activer_exit[2];
+		u64 enabler_exit[2];
+	} vgic_v5_ppi_state;
 };
 
 struct kvm_host_psci_config {
