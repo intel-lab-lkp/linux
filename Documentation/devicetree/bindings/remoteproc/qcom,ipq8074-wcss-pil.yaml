@@ -1,0 +1,157 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/remoteproc/qcom,ipq8074-wcss-pil.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm IPQ WCSS Peripheral Image Loader
+
+maintainers:
+  - Bjorn Andersson <andersson@kernel.org>
+  - Alexandru Gagniuc <mr.nuke.me@gmail.com>
+
+description:
+  The IPQ WCSS peripheral image loader is used to load firmware on the Qualcomm
+  Q6 processor that exposes WiFi-6 devices to the OS via the AHB bus. It is
+  generally used by ath11k to start up the wireless firmware.
+
+properties:
+  compatible:
+    enum:
+      - qcom,ipq8074-wcss-pil
+      - qcom,qcs404-wcss-pil
+
+  reg:
+    maxItems: 2
+
+  reg-names:
+    items:
+      - const: qdsp6
+      - const: rmb
+
+  interrupts:
+    maxItems: 5
+
+  interrupt-names:
+    items:
+      - const: wdog
+      - const: fatal
+      - const: ready
+      - const: handover
+      - const: stop-ack
+
+  resets:
+    maxItems: 3
+
+  reset-names:
+    items:
+      - const: wcss_aon_reset
+      - const: wcss_reset
+      - const: wcss_q6_reset
+
+  clocks:
+    maxItems: 10
+
+  clock-names:
+    maxItems: 10
+
+  cx-supply:
+    description:
+      reference to the regulators used for the booting of the Hexagon core
+
+  memory-region:
+    maxItems: 1
+
+  qcom,halt-regs:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description:
+      A phandle reference to a syscon representing TCSR followed by the three
+      offsets within syscon for q6, wcss and nc halt registers.
+    items:
+      - items:
+          - description: phandle to TCSR_MUTEX registers
+          - description: offset to the Q6 halt register
+          - description: offset to the wcss halt register
+          - description: offset to the nc halt register
+
+  qcom,smem-states:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    maxItems: 2
+    description: States used by the AP to signal the remote processor
+
+  qcom,smem-state-names:
+    maxItems: 2
+    description:
+      Names of the states used by the AP to signal the remote processor
+
+  glink-edge:
+    $ref: /schemas/remoteproc/qcom,glink-edge.yaml#
+    description:
+      Qualcomm G-Link subnode which represents communication edge, channels
+      and devices related to the Modem.
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - interrupts-extended
+  - interrupt-names
+  - memory-region
+  - qcom,halt-regs
+  - qcom,smem-states
+  - qcom,smem-state-names
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - qcom,ipq8074-wcss-pil
+    then:
+      properties:
+        qcom,smem-states:
+          items:
+            - description: Shutdown Q6
+            - description: Stop Q6
+        qcom,smem-state-names:
+          items:
+            - const: shutdown
+            - const: stop
+        clock-names: false
+        clocks: false
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - qcom,qcs404-wcss-pil
+    then:
+      properties:
+        qcom,smem-states:
+          maxItems: 1
+        qcom,smem-state-names:
+          items:
+            - const: stop
+        clocks:
+          minItems: 10
+          maxItems: 10
+        clock-names:
+          items:
+            - const: xo
+            - const: gcc_abhs_cbcr
+            - const: gcc_axim_cbcr
+            - const: lcc_ahbfabric_cbc
+            - const: tcsr_lcc_cbc
+            - const: lcc_abhs_cbc
+            - const: lcc_tcm_slave_cbc
+            - const: lcc_abhm_cbc
+            - const: lcc_axim_cbc
+            - const: lcc_bcr_sleep
+      required:
+        - clocks
+        - clock-names
+        - cx-supply
+
+additionalProperties: false
