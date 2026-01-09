@@ -69,6 +69,7 @@
 #define TOUCH_EVENT_RESERVED		0x03
 
 #define EDT_NAME_LEN			23
+#define EDT_POLL_INTERVAL_MS		17 /* msec */
 #define EDT_SWITCH_MODE_RETRIES		10
 #define EDT_SWITCH_MODE_DELAY		5 /* msec */
 #define EDT_RAW_DATA_RETRIES		100
@@ -295,9 +296,9 @@ static const struct regmap_config edt_M06_i2c_regmap_config = {
 	.write = edt_M06_i2c_write,
 };
 
-static irqreturn_t edt_ft5x06_ts_isr(int irq, void *dev_id)
+static void edt_ft5x06_ts_process_events(struct edt_ft5x06_ts_data *tsdata,
+					 bool poll)
 {
-	struct edt_ft5x06_ts_data *tsdata = dev_id;
 	struct device *dev = &tsdata->client->dev;
 	u8 rdbuf[63];
 	int i, type, x, y, id;
@@ -307,9 +308,13 @@ static irqreturn_t edt_ft5x06_ts_isr(int irq, void *dev_id)
 	error = regmap_bulk_read(tsdata->regmap, tsdata->tdata_cmd, rdbuf,
 				 tsdata->tdata_len);
 	if (error) {
-		dev_err_ratelimited(dev, "Unable to fetch data, error: %d\n",
-				    error);
-		goto out;
+		if (!poll) {
+			/* Polling may result in no data. */
+			dev_err_ratelimited(dev,
+					    "Unable to fetch data, error: %d\n",
+					    error);
+		}
+		return;
 	}
 
 	for (i = 0; i < tsdata->max_support_points; i++) {
@@ -341,9 +346,22 @@ static irqreturn_t edt_ft5x06_ts_isr(int irq, void *dev_id)
 
 	input_mt_report_pointer_emulation(tsdata->input, true);
 	input_sync(tsdata->input);
+}
 
-out:
+static irqreturn_t edt_ft5x06_ts_isr(int irq, void *dev_id)
+{
+	struct edt_ft5x06_ts_data *tsdata = dev_id;
+
+	edt_ft5x06_ts_process_events(tsdata, false);
+
 	return IRQ_HANDLED;
+}
+
+static void edt_ft5x06_work_i2c_poll(struct input_dev *input)
+{
+	struct edt_ft5x06_ts_data *tsdata = input_get_drvdata(input);
+
+	edt_ft5x06_ts_process_events(tsdata, true);
 }
 
 struct edt_ft5x06_attribute {
@@ -613,7 +631,8 @@ static int edt_ft5x06_factory_mode(struct edt_ft5x06_ts_data *tsdata)
 		return -EINVAL;
 	}
 
-	disable_irq(client->irq);
+	if (client->irq)
+		disable_irq(client->irq);
 
 	if (!tsdata->raw_buffer) {
 		tsdata->raw_bufsize = tsdata->num_x * tsdata->num_y *
@@ -656,7 +675,8 @@ err_out:
 	kfree(tsdata->raw_buffer);
 	tsdata->raw_buffer = NULL;
 	tsdata->factory_mode = false;
-	enable_irq(client->irq);
+	if (client->irq)
+		enable_irq(client->irq);
 
 	return error;
 }
@@ -697,7 +717,8 @@ static int edt_ft5x06_work_mode(struct edt_ft5x06_ts_data *tsdata)
 	tsdata->raw_buffer = NULL;
 
 	edt_ft5x06_restore_reg_parameters(tsdata);
-	enable_irq(client->irq);
+	if (client->irq)
+		enable_irq(client->irq);
 
 	return 0;
 }
@@ -1328,17 +1349,26 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client)
 		return error;
 	}
 
-	irq_flags = irq_get_trigger_type(client->irq);
-	if (irq_flags == IRQF_TRIGGER_NONE)
-		irq_flags = IRQF_TRIGGER_FALLING;
-	irq_flags |= IRQF_ONESHOT;
+	input_set_drvdata(input, tsdata);
 
-	error = devm_request_threaded_irq(&client->dev, client->irq,
-					  NULL, edt_ft5x06_ts_isr, irq_flags,
-					  client->name, tsdata);
-	if (error) {
-		dev_err(&client->dev, "Unable to request touchscreen IRQ.\n");
-		return error;
+	if (client->irq) {
+		irq_flags = irq_get_trigger_type(client->irq);
+		if (irq_flags == IRQF_TRIGGER_NONE)
+			irq_flags = IRQF_TRIGGER_FALLING;
+		irq_flags |= IRQF_ONESHOT;
+
+		error = devm_request_threaded_irq(&client->dev, client->irq,
+						  NULL, edt_ft5x06_ts_isr, irq_flags,
+						  client->name, tsdata);
+		if (error) {
+			dev_err(&client->dev, "Unable to request touchscreen IRQ.\n");
+			return error;
+		}
+	} else {
+		error = input_setup_polling(input, edt_ft5x06_work_i2c_poll);
+		if (error)
+			return dev_err_probe(&client->dev, error, "Unable to set up polling.\n");
+		input_set_poll_interval(input, EDT_POLL_INTERVAL_MS);
 	}
 
 	error = input_register_device(input);
@@ -1391,7 +1421,8 @@ static int edt_ft5x06_ts_suspend(struct device *dev)
 	 * settings. Disable the irq to avoid adjusting each host till the
 	 * device is back in a full functional state.
 	 */
-	disable_irq(tsdata->client->irq);
+	if (tsdata->client->irq)
+		disable_irq(tsdata->client->irq);
 
 	gpiod_set_value_cansleep(reset_gpio, 1);
 	usleep_range(1000, 2000);
@@ -1453,7 +1484,8 @@ static int edt_ft5x06_ts_resume(struct device *dev)
 		msleep(300);
 
 		edt_ft5x06_restore_reg_parameters(tsdata);
-		enable_irq(tsdata->client->irq);
+		if (tsdata->client->irq)
+			enable_irq(tsdata->client->irq);
 
 		if (tsdata->factory_mode)
 			ret = edt_ft5x06_factory_mode(tsdata);
