@@ -1259,7 +1259,7 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr_unsized *addr,
 			}
 		}
 
-		if (capable(CAP_NET_ADMIN))
+		if (sk_capable(CAP_NET_ADMIN))
 			hci_sock_set_flag(sk, HCI_SOCK_TRUSTED);
 
 		hci_pi(sk)->hdev = hdev;
@@ -1427,7 +1427,7 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr_unsized *addr,
 		 * untrusted users the interface is restricted and
 		 * also only untrusted events are sent.
 		 */
-		if (capable(CAP_NET_ADMIN))
+		if (sk_capable(CAP_NET_ADMIN))
 			hci_sock_set_flag(sk, HCI_SOCK_TRUSTED);
 
 		hci_pi(sk)->channel = haddr.hci_channel;
