@@ -4,6 +4,8 @@
 Kexec Handover Subsystem
 ========================
 
+.. _kho-concepts:
+
 Overview
 ========
 
@@ -72,12 +74,26 @@ the next KHO, because kexec can overwrite even the original kernel.
 KHO finalization phase
 ======================
 
+.. _kho-finalization-phase:
+
 To enable user space based kexec file loader, the kernel needs to be able to
 provide the FDT that describes the current kernel's state before
 performing the actual kexec. The process of generating that FDT is
 called serialization. When the FDT is generated, some properties
 of the system may become immutable because they are already written down
 in the FDT. That state is called the KHO finalization phase.
+
+Kexec Handover Radix Tree
+=========================
+
+.. kernel-doc:: include/linux/kho_radix_tree.h
+  :doc: Kexec Handover Radix Tree
+
+Public API
+==========
+
+.. kernel-doc:: kernel/liveupdate/kexec_handover.c
+  :export:
 
 See Also
 ========
