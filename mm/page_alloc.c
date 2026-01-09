@@ -812,6 +812,16 @@ compaction_capture(struct capture_control *capc, struct page *page,
 }
 #endif /* CONFIG_COMPACTION */
 
+static inline void account_specific_freepages(struct zone *zone, int nr_pages,
+					      int migratetype)
+{
+	if (is_migrate_cma(migratetype))
+		__mod_zone_page_state(zone, NR_FREE_CMA_PAGES, nr_pages);
+	else if (migratetype == MIGRATE_HIGHATOMIC)
+		WRITE_ONCE(zone->nr_free_highatomic,
+			   zone->nr_free_highatomic + nr_pages);
+}
+
 static inline void account_freepages(struct zone *zone, int nr_pages,
 				     int migratetype)
 {
@@ -822,11 +832,25 @@ static inline void account_freepages(struct zone *zone, int nr_pages,
 
 	__mod_zone_page_state(zone, NR_FREE_PAGES, nr_pages);
 
-	if (is_migrate_cma(migratetype))
-		__mod_zone_page_state(zone, NR_FREE_CMA_PAGES, nr_pages);
-	else if (migratetype == MIGRATE_HIGHATOMIC)
-		WRITE_ONCE(zone->nr_free_highatomic,
-			   zone->nr_free_highatomic + nr_pages);
+	account_specific_freepages(zone, nr_pages, migratetype);
+}
+
+static inline void account_freepages_both(struct zone *zone, int nr_pages,
+					  int old_mt, int new_mt)
+{
+	lockdep_assert_held(&zone->lock);
+
+	bool old_isolated = is_migrate_isolate(old_mt);
+	bool new_isolated = is_migrate_isolate(new_mt);
+
+	if (old_isolated != new_isolated)
+		__mod_zone_page_state(zone, NR_FREE_PAGES,
+				      old_isolated ? nr_pages : -nr_pages);
+
+	if (!old_isolated)
+		account_specific_freepages(zone, -nr_pages, old_mt);
+	if (!new_isolated)
+		account_specific_freepages(zone, nr_pages, new_mt);
 }
 
 /* Used for pages not on another list */
@@ -869,8 +893,7 @@ static inline void move_to_free_list(struct page *page, struct zone *zone,
 
 	list_move_tail(&page->buddy_list, &area->free_list[new_mt]);
 
-	account_freepages(zone, -nr_pages, old_mt);
-	account_freepages(zone, nr_pages, new_mt);
+	account_freepages_both(zone, nr_pages, old_mt, new_mt);
 
 	if (order >= pageblock_order &&
 	    is_migrate_isolate(old_mt) != is_migrate_isolate(new_mt)) {
