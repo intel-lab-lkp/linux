@@ -174,6 +174,7 @@ static ssize_t devid_write(struct file *filp, const char __user *ubuf,
 			kfree(srcid_ptr);
 			return -EINVAL;
 		}
+		devid = array_index_nospec(devid, (u32)pci_seg->last_bdf + 1);
 		iommu = pci_seg->rlookup_table[devid];
 		if (!iommu) {
 			kfree(srcid_ptr);
