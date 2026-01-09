@@ -21,6 +21,7 @@
 #include "sw_fdb.h"
 #include "sw_fib.h"
 #include "sw_fl.h"
+#include "sw_nb.h"
 
 static const char *sw_nb_cmd2str[OTX2_CMD_MAX] = {
 	[OTX2_DEV_UP]  = "OTX2_DEV_UP",
@@ -59,7 +60,6 @@ static int sw_nb_check_slaves(struct net_device *dev,
 			      struct netdev_nested_priv *priv)
 {
 	int *cnt;
-
 	if (!priv->flags)
 		return 0;
 
@@ -115,11 +115,13 @@ static int sw_nb_fdb_event(struct notifier_block *unused,
 	case SWITCHDEV_FDB_ADD_TO_DEVICE:
 		if (fdb_info->is_local)
 			break;
+		sw_fdb_add_to_list(dev, (u8 *)fdb_info->addr, true);
 		break;
 
 	case SWITCHDEV_FDB_DEL_TO_DEVICE:
 		if (fdb_info->is_local)
 			break;
+		sw_fdb_add_to_list(dev, (u8 *)fdb_info->addr, false);
 		break;
 
 	default:
@@ -313,7 +315,6 @@ static int sw_nb_fib_event(struct notifier_block *nb,
 	entries = kcalloc(hcnt, sizeof(*entries), GFP_ATOMIC);
 	if (!entries)
 		return NOTIFY_DONE;
-
 	iter = entries;
 
 	for (i = 0; i < hcnt; i++, iter++) {
