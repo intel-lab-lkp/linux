@@ -404,26 +404,35 @@ v3d_get_multisync_submit_deps(struct drm_file *file_priv,
 	return 0;
 }
 
-/* Get data for the indirect CSD job submission. */
-static int
-v3d_get_cpu_indirect_csd_params(struct drm_file *file_priv,
-				struct drm_v3d_extension __user *ext,
-				struct v3d_cpu_job *job)
+/* Returns false if the CPU job has an invalid configuration. */
+static bool
+v3d_validate_cpu_job(struct v3d_dev *v3d, struct v3d_cpu_job *job)
 {
-	struct v3d_file_priv *v3d_priv = file_priv->driver_priv;
-	struct v3d_dev *v3d = v3d_priv->v3d;
-	struct drm_v3d_indirect_csd indirect_csd;
-	struct v3d_indirect_csd_info *info = &job->indirect_csd;
-
 	if (!job) {
-		DRM_DEBUG("CPU job extension was attached to a GPU job.\n");
-		return -EINVAL;
+		drm_dbg(&v3d->drm, "CPU job extension was attached to a GPU job.\n");
+		return false;
 	}
 
 	if (job->job_type) {
-		DRM_DEBUG("Two CPU job extensions were added to the same CPU job.\n");
-		return -EINVAL;
+		drm_dbg(&v3d->drm, "Two CPU job extensions were added to the same CPU job.\n");
+		return false;
 	}
+
+	return true;
+}
+
+/* Get data for the indirect CSD job submission. */
+static int
+v3d_get_cpu_indirect_csd_params(struct v3d_dev *v3d,
+				struct drm_file *file_priv,
+				struct drm_v3d_extension __user *ext,
+				struct v3d_cpu_job *job)
+{
+	struct drm_v3d_indirect_csd indirect_csd;
+	struct v3d_indirect_csd_info *info = &job->indirect_csd;
+
+	if (!v3d_validate_cpu_job(v3d, job))
+		return -EINVAL;
 
 	if (copy_from_user(&indirect_csd, ext, sizeof(indirect_csd)))
 		return -EFAULT;
@@ -448,7 +457,8 @@ v3d_get_cpu_indirect_csd_params(struct drm_file *file_priv,
 
 /* Get data for the query timestamp job submission. */
 static int
-v3d_get_cpu_timestamp_query_params(struct drm_file *file_priv,
+v3d_get_cpu_timestamp_query_params(struct v3d_dev *v3d,
+				   struct drm_file *file_priv,
 				   struct drm_v3d_extension __user *ext,
 				   struct v3d_cpu_job *job)
 {
@@ -458,15 +468,8 @@ v3d_get_cpu_timestamp_query_params(struct drm_file *file_priv,
 	unsigned int i;
 	int err;
 
-	if (!job) {
-		DRM_DEBUG("CPU job extension was attached to a GPU job.\n");
+	if (!v3d_validate_cpu_job(v3d, job))
 		return -EINVAL;
-	}
-
-	if (job->job_type) {
-		DRM_DEBUG("Two CPU job extensions were added to the same CPU job.\n");
-		return -EINVAL;
-	}
 
 	if (copy_from_user(&timestamp, ext, sizeof(timestamp)))
 		return -EFAULT;
@@ -517,7 +520,8 @@ error:
 }
 
 static int
-v3d_get_cpu_reset_timestamp_params(struct drm_file *file_priv,
+v3d_get_cpu_reset_timestamp_params(struct v3d_dev *v3d,
+				   struct drm_file *file_priv,
 				   struct drm_v3d_extension __user *ext,
 				   struct v3d_cpu_job *job)
 {
@@ -527,15 +531,8 @@ v3d_get_cpu_reset_timestamp_params(struct drm_file *file_priv,
 	unsigned int i;
 	int err;
 
-	if (!job) {
-		DRM_DEBUG("CPU job extension was attached to a GPU job.\n");
+	if (!v3d_validate_cpu_job(v3d, job))
 		return -EINVAL;
-	}
-
-	if (job->job_type) {
-		DRM_DEBUG("Two CPU job extensions were added to the same CPU job.\n");
-		return -EINVAL;
-	}
 
 	if (copy_from_user(&reset, ext, sizeof(reset)))
 		return -EFAULT;
@@ -578,7 +575,8 @@ error:
 
 /* Get data for the copy timestamp query results job submission. */
 static int
-v3d_get_cpu_copy_query_results_params(struct drm_file *file_priv,
+v3d_get_cpu_copy_query_results_params(struct v3d_dev *v3d,
+				      struct drm_file *file_priv,
 				      struct drm_v3d_extension __user *ext,
 				      struct v3d_cpu_job *job)
 {
@@ -588,15 +586,8 @@ v3d_get_cpu_copy_query_results_params(struct drm_file *file_priv,
 	unsigned int i;
 	int err;
 
-	if (!job) {
-		DRM_DEBUG("CPU job extension was attached to a GPU job.\n");
+	if (!v3d_validate_cpu_job(v3d, job))
 		return -EINVAL;
-	}
-
-	if (job->job_type) {
-		DRM_DEBUG("Two CPU job extensions were added to the same CPU job.\n");
-		return -EINVAL;
-	}
 
 	if (copy_from_user(&copy, ext, sizeof(copy)))
 		return -EFAULT;
@@ -716,7 +707,8 @@ error:
 }
 
 static int
-v3d_get_cpu_reset_performance_params(struct drm_file *file_priv,
+v3d_get_cpu_reset_performance_params(struct v3d_dev *v3d,
+				     struct drm_file *file_priv,
 				     struct drm_v3d_extension __user *ext,
 				     struct v3d_cpu_job *job)
 {
@@ -724,15 +716,8 @@ v3d_get_cpu_reset_performance_params(struct drm_file *file_priv,
 	struct drm_v3d_reset_performance_query reset;
 	int err;
 
-	if (!job) {
-		DRM_DEBUG("CPU job extension was attached to a GPU job.\n");
+	if (!v3d_validate_cpu_job(v3d, job))
 		return -EINVAL;
-	}
-
-	if (job->job_type) {
-		DRM_DEBUG("Two CPU job extensions were added to the same CPU job.\n");
-		return -EINVAL;
-	}
 
 	if (copy_from_user(&reset, ext, sizeof(reset)))
 		return -EFAULT;
@@ -762,7 +747,8 @@ v3d_get_cpu_reset_performance_params(struct drm_file *file_priv,
 }
 
 static int
-v3d_get_cpu_copy_performance_query_params(struct drm_file *file_priv,
+v3d_get_cpu_copy_performance_query_params(struct v3d_dev *v3d,
+					  struct drm_file *file_priv,
 					  struct drm_v3d_extension __user *ext,
 					  struct v3d_cpu_job *job)
 {
@@ -770,15 +756,8 @@ v3d_get_cpu_copy_performance_query_params(struct drm_file *file_priv,
 	struct drm_v3d_copy_performance_query copy;
 	int err;
 
-	if (!job) {
-		DRM_DEBUG("CPU job extension was attached to a GPU job.\n");
+	if (!v3d_validate_cpu_job(v3d, job))
 		return -EINVAL;
-	}
-
-	if (job->job_type) {
-		DRM_DEBUG("Two CPU job extensions were added to the same CPU job.\n");
-		return -EINVAL;
-	}
 
 	if (copy_from_user(&copy, ext, sizeof(copy)))
 		return -EFAULT;
@@ -826,6 +805,8 @@ v3d_get_extensions(struct drm_file *file_priv,
 		   struct v3d_submit_ext *se,
 		   struct v3d_cpu_job *job)
 {
+	struct v3d_file_priv *v3d_priv = file_priv->driver_priv;
+	struct v3d_dev *v3d = v3d_priv->v3d;
 	struct drm_v3d_extension __user *user_ext;
 	int ret;
 
@@ -843,22 +824,22 @@ v3d_get_extensions(struct drm_file *file_priv,
 			ret = v3d_get_multisync_submit_deps(file_priv, user_ext, se);
 			break;
 		case DRM_V3D_EXT_ID_CPU_INDIRECT_CSD:
-			ret = v3d_get_cpu_indirect_csd_params(file_priv, user_ext, job);
+			ret = v3d_get_cpu_indirect_csd_params(v3d, file_priv, user_ext, job);
 			break;
 		case DRM_V3D_EXT_ID_CPU_TIMESTAMP_QUERY:
-			ret = v3d_get_cpu_timestamp_query_params(file_priv, user_ext, job);
+			ret = v3d_get_cpu_timestamp_query_params(v3d, file_priv, user_ext, job);
 			break;
 		case DRM_V3D_EXT_ID_CPU_RESET_TIMESTAMP_QUERY:
-			ret = v3d_get_cpu_reset_timestamp_params(file_priv, user_ext, job);
+			ret = v3d_get_cpu_reset_timestamp_params(v3d, file_priv, user_ext, job);
 			break;
 		case DRM_V3D_EXT_ID_CPU_COPY_TIMESTAMP_QUERY:
-			ret = v3d_get_cpu_copy_query_results_params(file_priv, user_ext, job);
+			ret = v3d_get_cpu_copy_query_results_params(v3d, file_priv, user_ext, job);
 			break;
 		case DRM_V3D_EXT_ID_CPU_RESET_PERFORMANCE_QUERY:
-			ret = v3d_get_cpu_reset_performance_params(file_priv, user_ext, job);
+			ret = v3d_get_cpu_reset_performance_params(v3d, file_priv, user_ext, job);
 			break;
 		case DRM_V3D_EXT_ID_CPU_COPY_PERFORMANCE_QUERY:
-			ret = v3d_get_cpu_copy_performance_query_params(file_priv, user_ext, job);
+			ret = v3d_get_cpu_copy_performance_query_params(v3d, file_priv, user_ext, job);
 			break;
 		default:
 			DRM_DEBUG_DRIVER("Unknown extension id: %d\n", ext.id);
