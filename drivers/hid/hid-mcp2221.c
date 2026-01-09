@@ -274,8 +274,11 @@ static int mcp_i2c_write(struct mcp2221 *mcp,
 		memcpy(&mcp->txbuf[4], &msg->buf[idx], len);
 
 		ret = mcp_send_data_req_status(mcp, mcp->txbuf, len + 4);
-		if (ret)
+		if (ret) {
+			if (ret != -EAGAIN)
+				mcp_cancel_last_cmd(mcp);
 			return ret;
+		}
 
 		usleep_range(980, 1000);
 
@@ -332,8 +335,11 @@ static int mcp_i2c_smbus_read(struct mcp2221 *mcp,
 	}
 
 	ret = mcp_send_data_req_status(mcp, mcp->txbuf, 4);
-	if (ret)
+	if (ret) {
+		if (ret != -EAGAIN)
+			mcp_cancel_last_cmd(mcp);
 		return ret;
+	}
 
 	mcp->rxbuf_idx = 0;
 
@@ -353,6 +359,10 @@ static int mcp_i2c_smbus_read(struct mcp2221 *mcp,
 				usleep_range(90, 100);
 				retries++;
 			} else {
+				/* Too many retries.
+				 * Give up and free the bus.
+				 */
+				mcp_cancel_last_cmd(mcp);
 				return ret;
 			}
 		} else {
@@ -454,8 +464,11 @@ static int mcp_smbus_write(struct mcp2221 *mcp, u16 addr,
 	}
 
 	ret = mcp_send_data_req_status(mcp, mcp->txbuf, data_len);
-	if (ret)
+	if (ret) {
+		if (ret != -EAGAIN)
+			mcp_cancel_last_cmd(mcp);
 		return ret;
+	}
 
 	if (last_status) {
 		usleep_range(980, 1000);
