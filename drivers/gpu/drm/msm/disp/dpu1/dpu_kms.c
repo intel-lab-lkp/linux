@@ -1233,9 +1233,9 @@ static int dpu_kms_hw_init(struct msm_kms *kms)
 		dpu_kms->hw_vbif[vbif->id] = hw;
 	}
 
-	/* TODO: use the same max_freq as in dpu_kms_hw_init */
-	max_core_clk_rate = dpu_kms_get_clk_rate(dpu_kms, "core");
-	if (!max_core_clk_rate) {
+	if (dpu_kms->max_freq != ULONG_MAX) {
+		max_core_clk_rate = dpu_kms->max_freq;
+	} else {
 		DPU_DEBUG("max core clk rate not determined, using default\n");
 		max_core_clk_rate = DPU_PERF_DEFAULT_MAX_CORE_CLK_RATE;
 	}
@@ -1316,8 +1316,6 @@ static int dpu_kms_init(struct drm_device *ddev)
 	opp = dev_pm_opp_find_freq_ceil(dev, &dpu_kms->min_freq);
 	if (!IS_ERR(opp))
 		dev_pm_opp_put(opp);
-
-	dev_pm_opp_set_rate(dev, max_freq);
 
 	ret = msm_kms_init(&dpu_kms->base, &kms_funcs);
 	if (ret) {
