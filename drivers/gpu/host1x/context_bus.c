@@ -6,6 +6,8 @@
 #include <linux/device.h>
 #include <linux/of.h>
 
+#include "context.h"
+
 const struct bus_type host1x_context_device_bus_type = {
 	.name = "host1x-context",
 };
