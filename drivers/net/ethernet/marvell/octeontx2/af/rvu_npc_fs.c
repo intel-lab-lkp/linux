@@ -1469,7 +1469,7 @@ process_flow:
 	}
 
 	/* ignore chan_mask in case pf func is not AF, revisit later */
-	if (!is_pffunc_af(req->hdr.pcifunc))
+	if (!req->set_chanmask && !is_pffunc_af(req->hdr.pcifunc))
 		req->chan_mask = 0xFFF;
 
 	err = npc_check_unsupported_flows(rvu, req->features, req->intf);
