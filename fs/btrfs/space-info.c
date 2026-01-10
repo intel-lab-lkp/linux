@@ -1173,6 +1173,14 @@ static void do_async_reclaim_metadata_space(struct btrfs_space_info *space_info)
 			spin_unlock(&space_info->lock);
 			return;
 		}
+
+		if (unlikely(BTRFS_FS_ERROR(fs_info))) {
+			maybe_fail_all_tickets(space_info);
+			space_info->flush = false;
+			spin_unlock(&space_info->lock);
+			return;
+		}
+
 		to_reclaim = btrfs_calc_reclaim_metadata_size(space_info);
 		if (last_tickets_id == space_info->tickets_id) {
 			flush_state++;
