@@ -1628,15 +1628,18 @@ static int xhci_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_flag
 	unsigned int *ep_state;
 	struct urb_priv	*urb_priv;
 	int num_tds;
+	int maxp;
 
 	ep_index = xhci_get_endpoint_index(&urb->ep->desc);
+	maxp = usb_endpoint_maxp(&urb->ep->desc);
 
 	if (usb_endpoint_xfer_isoc(&urb->ep->desc))
 		num_tds = urb->number_of_packets;
 	else if (usb_endpoint_is_bulk_out(&urb->ep->desc) &&
 	    urb->transfer_buffer_length > 0 &&
 	    urb->transfer_flags & URB_ZERO_PACKET &&
-	    !(urb->transfer_buffer_length % usb_endpoint_maxp(&urb->ep->desc)))
+		maxp > 0 &&
+	    !(urb->transfer_buffer_length % maxp))
 		num_tds = 2;
 	else
 		num_tds = 1;
