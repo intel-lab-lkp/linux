@@ -24,6 +24,7 @@ enum dmi_device_type {
 	DMI_DEV_TYPE_OEM_STRING = -2,
 	DMI_DEV_TYPE_DEV_ONBOARD = -3,
 	DMI_DEV_TYPE_DEV_SLOT = -4,
+	DMI_DEV_TYPE_ADDITIONAL = -5,
 };
 
 enum dmi_entry_type {
@@ -90,6 +91,12 @@ struct dmi_device {
 	const char *name;
 	void *device_data;	/* Type specific data */
 };
+
+struct dmi_additional_info {
+	struct dmi_header header;
+	u8 count;
+	u8 entries[];
+} __packed;
 
 #ifdef CONFIG_DMI
 
