@@ -3269,7 +3269,7 @@ int __cold open_ctree(struct super_block *sb, struct btrfs_fs_devices *fs_device
 	/*
 	 * Read super block and check the signature bytes only
 	 */
-	disk_super = btrfs_read_disk_super(fs_devices->latest_dev->bdev, 0, false);
+	disk_super = btrfs_read_disk_super(fs_devices->latest_dev->bdev, 0);
 	if (IS_ERR(disk_super)) {
 		ret = PTR_ERR(disk_super);
 		goto fail_alloc;
@@ -3285,7 +3285,7 @@ int __cold open_ctree(struct super_block *sb, struct btrfs_fs_devices *fs_device
 		btrfs_err(fs_info, "unsupported checksum algorithm: %u",
 			  csum_type);
 		ret = -EINVAL;
-		btrfs_release_disk_super(disk_super);
+		kfree(disk_super);
 		goto fail_alloc;
 	}
 
@@ -3301,7 +3301,7 @@ int __cold open_ctree(struct super_block *sb, struct btrfs_fs_devices *fs_device
 	if (btrfs_check_super_csum(fs_info, disk_super)) {
 		btrfs_err(fs_info, "superblock checksum mismatch");
 		ret = -EINVAL;
-		btrfs_release_disk_super(disk_super);
+		kfree(disk_super);
 		goto fail_alloc;
 	}
 
@@ -3311,7 +3311,7 @@ int __cold open_ctree(struct super_block *sb, struct btrfs_fs_devices *fs_device
 	 * the whole block of INFO_SIZE
 	 */
 	memcpy(fs_info->super_copy, disk_super, sizeof(*fs_info->super_copy));
-	btrfs_release_disk_super(disk_super);
+	kfree(disk_super);
 
 	disk_super = fs_info->super_copy;
 

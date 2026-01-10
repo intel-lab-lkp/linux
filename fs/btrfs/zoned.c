@@ -122,23 +122,27 @@ static int sb_write_pointer(struct block_device *bdev, struct blk_zone *zones,
 		return -ENOENT;
 	} else if (full[0] && full[1]) {
 		/* Compare two super blocks */
-		struct address_space *mapping = bdev->bd_mapping;
-		struct page *page[BTRFS_NR_SB_LOG_ZONES];
-		struct btrfs_super_block *super[BTRFS_NR_SB_LOG_ZONES];
+		struct btrfs_super_block *super[BTRFS_NR_SB_LOG_ZONES] = { 0 };
 
 		for (int i = 0; i < BTRFS_NR_SB_LOG_ZONES; i++) {
 			u64 zone_end = (zones[i].start + zones[i].capacity) << SECTOR_SHIFT;
 			u64 bytenr = ALIGN_DOWN(zone_end, BTRFS_SUPER_INFO_SIZE) -
 						BTRFS_SUPER_INFO_SIZE;
+			int ret;
 
-			page[i] = read_cache_page_gfp(mapping,
-					bytenr >> PAGE_SHIFT, GFP_NOFS);
-			if (IS_ERR(page[i])) {
-				if (i == 1)
-					btrfs_release_disk_super(super[0]);
-				return PTR_ERR(page[i]);
+			super[i] = kmalloc(BTRFS_SUPER_INFO_SIZE, GFP_NOFS);
+			if (!super[i]) {
+				kfree(super[0]);
+				kfree(super[1]);
+				return -ENOMEM;
 			}
-			super[i] = page_address(page[i]);
+			ret = bdev_rw_virt(bdev, bytenr >> SECTOR_SHIFT, super[i],
+					   BTRFS_SUPER_INFO_SIZE, REQ_OP_READ);
+			if (ret < 0) {
+				kfree(super[0]);
+				kfree(super[1]);
+				return ret;
+			}
 		}
 
 		if (btrfs_super_generation(super[0]) >
@@ -148,7 +152,7 @@ static int sb_write_pointer(struct block_device *bdev, struct blk_zone *zones,
 			sector = zones[0].start;
 
 		for (int i = 0; i < BTRFS_NR_SB_LOG_ZONES; i++)
-			btrfs_release_disk_super(super[i]);
+			kfree(super[i]);
 	} else if (!full[0] && (empty[1] || full[1])) {
 		sector = zones[0].wp;
 	} else if (full[0]) {

@@ -495,7 +495,7 @@ btrfs_get_bdev_and_sb(const char *device_path, blk_mode_t flags, void *holder,
 		}
 	}
 	invalidate_bdev(bdev);
-	*disk_super = btrfs_read_disk_super(bdev, 0, false);
+	*disk_super = btrfs_read_disk_super(bdev, 0);
 	if (IS_ERR(*disk_super)) {
 		ret = PTR_ERR(*disk_super);
 		bdev_fput(*bdev_file);
@@ -716,12 +716,12 @@ static int btrfs_open_one_device(struct btrfs_fs_devices *fs_devices,
 		fs_devices->rw_devices++;
 		list_add_tail(&device->dev_alloc_list, &fs_devices->alloc_list);
 	}
-	btrfs_release_disk_super(disk_super);
+	kfree(disk_super);
 
 	return 0;
 
 error_free_page:
-	btrfs_release_disk_super(disk_super);
+	kfree(disk_super);
 	bdev_fput(bdev_file);
 
 	return -EINVAL;
@@ -1325,20 +1325,11 @@ int btrfs_open_devices(struct btrfs_fs_devices *fs_devices,
 	return ret;
 }
 
-void btrfs_release_disk_super(struct btrfs_super_block *super)
-{
-	struct page *page = virt_to_page(super);
-
-	put_page(page);
-}
-
 struct btrfs_super_block *btrfs_read_disk_super(struct block_device *bdev,
-						int copy_num, bool drop_cache)
+						int copy_num)
 {
 	struct btrfs_super_block *super;
-	struct page *page;
 	u64 bytenr, bytenr_orig;
-	struct address_space *mapping = bdev->bd_mapping;
 	int ret;
 
 	bytenr_orig = btrfs_sb_offset(copy_num);
@@ -1352,28 +1343,19 @@ struct btrfs_super_block *btrfs_read_disk_super(struct block_device *bdev,
 	if (bytenr + BTRFS_SUPER_INFO_SIZE >= bdev_nr_bytes(bdev))
 		return ERR_PTR(-EINVAL);
 
-	if (drop_cache) {
-		/* This should only be called with the primary sb. */
-		ASSERT(copy_num == 0);
-
-		/*
-		 * Drop the page of the primary superblock, so later read will
-		 * always read from the device.
-		 */
-		invalidate_inode_pages2_range(mapping, bytenr >> PAGE_SHIFT,
-				      (bytenr + BTRFS_SUPER_INFO_SIZE) >> PAGE_SHIFT);
+	super = kmalloc(BTRFS_SUPER_INFO_SIZE, GFP_NOFS);
+	if (!super)
+		return ERR_PTR(-ENOMEM);
+	ret = bdev_rw_virt(bdev, bytenr >> SECTOR_SHIFT, super, BTRFS_SUPER_INFO_SIZE,
+			   REQ_OP_READ);
+	if (ret < 0) {
+		kfree(super);
+		return ERR_PTR(ret);
 	}
 
-	filemap_invalidate_lock(mapping);
-	page = read_cache_page_gfp(mapping, bytenr >> PAGE_SHIFT, GFP_NOFS);
-	filemap_invalidate_unlock(mapping);
-	if (IS_ERR(page))
-		return ERR_CAST(page);
-
-	super = page_address(page);
 	if (btrfs_super_magic(super) != BTRFS_MAGIC ||
 	    btrfs_super_bytenr(super) != bytenr_orig) {
-		btrfs_release_disk_super(super);
+		kfree(super);
 		return ERR_PTR(-EINVAL);
 	}
 
@@ -1474,7 +1456,7 @@ struct btrfs_device *btrfs_scan_one_device(const char *path,
 	if (IS_ERR(bdev_file))
 		return ERR_CAST(bdev_file);
 
-	disk_super = btrfs_read_disk_super(file_bdev(bdev_file), 0, false);
+	disk_super = btrfs_read_disk_super(file_bdev(bdev_file), 0);
 	if (IS_ERR(disk_super)) {
 		device = ERR_CAST(disk_super);
 		goto error_bdev_put;
@@ -1496,7 +1478,7 @@ struct btrfs_device *btrfs_scan_one_device(const char *path,
 		btrfs_free_stale_devices(device->devt, device);
 
 free_disk_super:
-	btrfs_release_disk_super(disk_super);
+	kfree(disk_super);
 
 error_bdev_put:
 	bdev_fput(bdev_file);
@@ -2119,20 +2101,22 @@ static void btrfs_scratch_superblock(struct btrfs_fs_info *fs_info,
 				     struct block_device *bdev, int copy_num)
 {
 	struct btrfs_super_block *disk_super;
-	const size_t len = sizeof(disk_super->magic);
 	const u64 bytenr = btrfs_sb_offset(copy_num);
 	int ret;
 
-	disk_super = btrfs_read_disk_super(bdev, copy_num, false);
-	if (IS_ERR(disk_super))
-		return;
-
-	memset(&disk_super->magic, 0, len);
-	folio_mark_dirty(virt_to_folio(disk_super));
-	btrfs_release_disk_super(disk_super);
-
-	ret = sync_blockdev_range(bdev, bytenr, bytenr + len - 1);
-	if (ret)
+	disk_super = btrfs_read_disk_super(bdev, copy_num);
+	if (IS_ERR(disk_super)) {
+		ret = PTR_ERR(disk_super);
+		goto out;
+	}
+	btrfs_set_super_magic(disk_super, 0);
+	ret = bdev_rw_virt(bdev, bytenr >> SECTOR_SHIFT, disk_super,
+			   BTRFS_SUPER_INFO_SIZE, REQ_OP_WRITE);
+	kfree(disk_super);
+out:
+	/* Make sure userspace won't see some out-of-date cached super block. */
+	invalidate_bdev(bdev);
+	if (ret < 0)
 		btrfs_warn(fs_info, "error clearing superblock number %d (%d)",
 			copy_num, ret);
 }
@@ -2462,7 +2446,7 @@ int btrfs_get_dev_args_from_path(struct btrfs_fs_info *fs_info,
 		memcpy(args->fsid, disk_super->metadata_uuid, BTRFS_FSID_SIZE);
 	else
 		memcpy(args->fsid, disk_super->fsid, BTRFS_FSID_SIZE);
-	btrfs_release_disk_super(disk_super);
+	kfree(disk_super);
 	bdev_fput(bdev_file);
 	return 0;
 }
