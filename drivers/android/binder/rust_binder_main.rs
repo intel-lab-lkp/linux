@@ -291,7 +291,7 @@ static BINDER_SHRINKER: Shrinker = unsafe { Shrinker::new() };
 struct BinderModule {}
 
 impl kernel::Module for BinderModule {
-    fn init(_module: &'static kernel::ThisModule) -> Result<Self> {
+    fn init() -> Result<Self> {
         // SAFETY: The module initializer never runs twice, so we only call this once.
         unsafe { crate::context::CONTEXTS.init() };
 

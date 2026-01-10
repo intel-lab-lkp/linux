@@ -157,7 +157,7 @@ unsafe impl Sync for Firmware {}
 /// # struct MyModule;
 /// #
 /// # impl kernel::Module for MyModule {
-/// #     fn init(_module: &'static ThisModule) -> Result<Self> {
+/// #     fn init() -> Result<Self> {
 /// #         Ok(Self)
 /// #     }
 /// # }

@@ -134,7 +134,7 @@ fn init_control(base_dir: &Dir, dyn_dirs: Dir) -> impl PinInit<Scope<ModuleData>
 }
 
 impl kernel::Module for RustScopedDebugFs {
-    fn init(_module: &'static kernel::ThisModule) -> Result<Self> {
+    fn init() -> Result<Self> {
         let base_dir = Dir::new(c"rust_scoped_debugfs");
         let dyn_dirs = base_dir.subdir(c"dynamic");
         Ok(Self {

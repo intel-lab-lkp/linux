@@ -7,7 +7,6 @@ use kernel::bitmap::BitmapVec;
 use kernel::error::{code, Result};
 use kernel::prelude::module;
 use kernel::time::{Instant, Monotonic};
-use kernel::ThisModule;
 use kernel::{pr_cont, pr_err};
 
 const BITMAP_LEN: usize = 4096 * 8 * 10;
@@ -88,7 +87,7 @@ fn find_bit_test() {
 }
 
 impl kernel::Module for Benchmark {
-    fn init(_module: &'static ThisModule) -> Result<Self> {
+    fn init() -> Result<Self> {
         find_bit_test();
         // Return error so test module can be inserted again without rmmod.
         Err(code::EINVAL)

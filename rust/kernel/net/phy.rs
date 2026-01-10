@@ -899,7 +899,7 @@ macro_rules! module_phy_driver {
                 [$($crate::net::phy::create_phy_driver::<$driver>()),+];
 
             impl $crate::Module for Module {
-                fn init(_module: &'static $crate::ThisModule) -> Result<Self> {
+                fn init() -> Result<Self> {
                     // SAFETY: The anonymous constant guarantees that nobody else can access
                     // the `DRIVERS` static. The array is used only in the C side.
                     let drivers = unsafe { &mut DRIVERS };
