@@ -3650,24 +3650,24 @@ static void btrfs_end_super_write(struct bio *bio)
 	struct folio_iter fi;
 
 	bio_for_each_folio_all(fi, bio) {
-		if (bio->bi_status) {
-			btrfs_warn_rl(device->fs_info,
-				"lost super block write due to IO error on %s (%d)",
-				btrfs_dev_name(device),
-				blk_status_to_errno(bio->bi_status));
-			btrfs_dev_stat_inc_and_print(device,
-						     BTRFS_DEV_STAT_WRITE_ERRS);
-			/* Ensure failure if the primary sb fails. */
-			if (bio->bi_opf & REQ_FUA)
-				atomic_add(BTRFS_SUPER_PRIMARY_WRITE_ERROR,
-					   &device->sb_write_errors);
-			else
-				atomic_inc(&device->sb_write_errors);
-		}
 		folio_unlock(fi.folio);
 		folio_put(fi.folio);
 	}
 
+	if (bio->bi_status) {
+		btrfs_warn_rl(device->fs_info,
+			"lost super block write due to IO error on %s (%d)",
+			btrfs_dev_name(device),
+			blk_status_to_errno(bio->bi_status));
+		btrfs_dev_stat_inc_and_print(device,
+					     BTRFS_DEV_STAT_WRITE_ERRS);
+		/* Ensure failure if the primary sb fails. */
+		if (bio->bi_opf & REQ_FUA)
+			atomic_add(BTRFS_SUPER_PRIMARY_WRITE_ERROR,
+				   &device->sb_write_errors);
+		else
+			atomic_inc(&device->sb_write_errors);
+	}
 	bio_put(bio);
 }
 
@@ -3721,6 +3721,15 @@ static int write_dev_supers(struct btrfs_device *device,
 		btrfs_csum(fs_info->csum_type, (const u8 *)sb + BTRFS_CSUM_SIZE,
 			   BTRFS_SUPER_INFO_SIZE - BTRFS_CSUM_SIZE, sb->csum);
 
+		/*
+		 * Lock the folio containing the super block.
+		 *
+		 * This will prevent user space dev scan from getting half-backed
+		 * super block.
+		 *
+		 * Also keep the folio locked until write finished, as a way to
+		 * track if the write has finished.
+		 */
 		folio = __filemap_get_folio(mapping, bytenr >> PAGE_SHIFT,
 					    FGP_LOCK | FGP_ACCESSED | FGP_CREAT,
 					    GFP_NOFS);
