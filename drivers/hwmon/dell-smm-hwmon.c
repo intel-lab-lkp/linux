@@ -74,7 +74,7 @@
 #define DELL_SMM_LEGACY_EXECUTE	0x1
 
 #define DELL_SMM_NO_TEMP	10
-#define DELL_SMM_NO_FANS	4
+#define DELL_SMM_NO_FANS	5
 
 /* limit fan multiplier to avoid overflow */
 #define DELL_SMM_MAX_FAN_MULT (INT_MAX / U16_MAX)
@@ -173,6 +173,14 @@ static const char * const docking_labels[] = {
 	"Docking Power Supply Fan",
 	"Docking Chipset Fan",
 	"Docking Other Fan",
+};
+
+static const char * const precision_tower_5810_labels[] = {
+	"CPU Fan",
+	"CPU Fan 2",
+	"Right DIMM Fan",
+	"Left DIMM Fan",
+	"PCIe Fan",
 };
 
 static inline const char __init *i8k_get_dmi_data(int field)
@@ -991,6 +999,12 @@ static const char *dell_smm_fan_label(struct dell_smm_data *data, int channel)
 	if (type < 0)
 		return ERR_PTR(type);
 
+	if (dmi_match(DMI_PRODUCT_NAME, "Precision Tower 5810")) {
+		if (channel < ARRAY_SIZE(precision_tower_5810_labels))
+			return precision_tower_5810_labels[channel];
+		return "Unknown Fan";
+	}
+
 	if (type & 0x10) {
 		dock = true;
 		type &= 0x0F;
@@ -1129,9 +1143,12 @@ static const struct hwmon_channel_info * const dell_smm_info[] = {
 			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX |
 			   HWMON_F_TARGET,
 			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX |
+			   HWMON_F_TARGET,
+			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX |
 			   HWMON_F_TARGET
 			   ),
 	HWMON_CHANNEL_INFO(pwm,
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE,
 			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE,
 			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE,
 			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE,
