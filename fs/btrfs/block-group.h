@@ -395,5 +395,6 @@ int btrfs_use_block_group_size_class(struct btrfs_block_group *bg,
 				     enum btrfs_block_group_size_class size_class,
 				     bool force_wrong_size_class);
 bool btrfs_block_group_should_use_size_class(const struct btrfs_block_group *bg);
+void btrfs_maybe_reset_size_class(struct btrfs_block_group *bg);
 
 #endif /* BTRFS_BLOCK_GROUP_H */

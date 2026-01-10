@@ -3864,6 +3864,10 @@ void btrfs_free_reserved_bytes(struct btrfs_block_group *cache, u64 num_bytes,
 
 	spin_lock(&space_info->lock);
 	spin_lock(&cache->lock);
+
+	if (btrfs_block_group_should_use_size_class(cache))
+		btrfs_maybe_reset_size_class(cache);
+
 	bg_ro = cache->ro;
 	cache->reserved -= num_bytes;
 	if (is_delalloc)
@@ -4715,4 +4719,11 @@ bool btrfs_block_group_should_use_size_class(const struct btrfs_block_group *bg)
 	if (!btrfs_is_block_group_data_only(bg))
 		return false;
 	return true;
+}
+
+void btrfs_maybe_reset_size_class(struct btrfs_block_group *bg)
+{
+	lockdep_assert_held(&bg->lock);
+	if (bg->used == 0 && bg->reserved == 0)
+		bg->size_class = BTRFS_BG_SZ_NONE;
 }
