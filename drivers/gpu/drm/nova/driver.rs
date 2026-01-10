@@ -14,6 +14,7 @@ use kernel::{
 
 use crate::file::File;
 use crate::gem::NovaObject;
+use crate::THIS_MODULE;
 
 pub(crate) struct NovaDriver {
     #[expect(unused)]
@@ -65,6 +66,7 @@ impl auxiliary::Driver for NovaDriver {
 
 #[vtable]
 impl drm::Driver for NovaDriver {
+    type ThisModule = THIS_MODULE;
     type Data = NovaData;
     type File = File;
     type Object = gem::Object<NovaObject>;

@@ -9,6 +9,7 @@ use crate::{
     error::{to_result, Result},
     prelude::*,
     sync::aref::ARef,
+    this_module::ThisModule,
 };
 use macros::vtable;
 
@@ -99,6 +100,9 @@ pub trait AllocImpl: super::private::Sealed + drm::gem::IntoGEMObject {
 /// drm_driver` to be registered in the DRM subsystem.
 #[vtable]
 pub trait Driver {
+    /// Module ownership for this device, provided via `THIS_MODULE`.
+    type ThisModule: ThisModule;
+
     /// Context data associated with the DRM driver
     type Data: Sync + Send;
 
