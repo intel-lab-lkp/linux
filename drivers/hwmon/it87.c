@@ -35,6 +35,7 @@
  *            IT8790E  Super I/O chip w/LPC interface
  *            IT8792E  Super I/O chip w/LPC interface
  *            IT87952E  Super I/O chip w/LPC interface
+ *            IT8613E  Super I/O chip w/LPC interface
  *            Sis950   A clone of the IT8705F
  *
  *  Copyright (C) 2001 Chris Gauthron
@@ -65,7 +66,7 @@
 
 enum chips { it87, it8712, it8716, it8718, it8720, it8721, it8728, it8732,
 	     it8771, it8772, it8781, it8782, it8783, it8786, it8790,
-	     it8792, it8603, it8620, it8622, it8628, it87952 };
+	     it8792, it8603, it8613, it8620, it8622, it8628, it87952 };
 
 static struct platform_device *it87_pdev[2];
 
@@ -159,6 +160,7 @@ static inline void superio_exit(int ioreg, bool noexit)
 #define IT8786E_DEVID 0x8786
 #define IT8790E_DEVID 0x8790
 #define IT8603E_DEVID 0x8603
+#define IT8613E_DEVID 0x8613
 #define IT8620E_DEVID 0x8620
 #define IT8622E_DEVID 0x8622
 #define IT8623E_DEVID 0x8623
@@ -481,6 +483,10 @@ static const struct it87_devices it87_devices[] = {
 		  | FEAT_TEMP_OFFSET | FEAT_TEMP_PECI | FEAT_IN7_INTERNAL
 		  | FEAT_AVCC3 | FEAT_PWM_FREQ2,
 		.peci_mask = 0x07,
+	},
+	[it8613] = {
+		.name = "it8613",
+		.model = "IT8613E",
 	},
 	[it8620] = {
 		.name = "it8620",
@@ -2911,6 +2917,9 @@ static int __init it87_find(int sioaddr, unsigned short *address,
 	case IT8603E_DEVID:
 	case IT8623E_DEVID:
 		sio_data->type = it8603;
+		break;
+	case IT8613E_DEVID:
+		sio_data->type = it8613;
 		break;
 	case IT8620E_DEVID:
 		sio_data->type = it8620;
