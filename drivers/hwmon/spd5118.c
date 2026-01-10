@@ -101,6 +101,7 @@ static int spd5118_read_temp(struct regmap *regmap, u32 attr, long *val)
 	int reg, err;
 	u8 regval[2];
 	u16 temp;
+	bool retried = false;
 
 	switch (attr) {
 	case hwmon_temp_input:
@@ -122,9 +123,17 @@ static int spd5118_read_temp(struct regmap *regmap, u32 attr, long *val)
 		return -EOPNOTSUPP;
 	}
 
+retry:
 	err = regmap_bulk_read(regmap, reg, regval, 2);
-	if (err)
+	if (err) {
+		if (!retried && (err == -ENXIO || err == -EIO)) {
+			retried = true;
+			regcache_mark_dirty(regmap);
+			if (!regcache_sync(regmap))
+				goto retry;
+		}
 		return err;
+	}
 
 	temp = (regval[1] << 8) | regval[0];
 
