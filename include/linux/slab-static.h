@@ -2,10 +2,7 @@
 #ifndef _LINUX_SLAB_STATIC_H
 #define _LINUX_SLAB_STATIC_H
 
-#ifdef MODULE
-#error "can't use that in modules"
-#endif
-
+#include <linux/init.h>
 #include <generated/kmem_cache_size.h>
 
 /* same size and alignment as struct kmem_cache: */
@@ -13,9 +10,16 @@ struct kmem_cache_opaque {
 	unsigned char opaque[KMEM_CACHE_SIZE];
 } __aligned(KMEM_CACHE_ALIGN);
 
+#ifdef MODULE
+#define THIS_MODULE_KOBJ &THIS_MODULE->mkobj.kobj
+#else
+#define THIS_MODULE_KOBJ NULL
+#endif
+
 #define __KMEM_CACHE_SETUP(cache, name, size, flags, ...)	\
 		__kmem_cache_create_args((name), (size),	\
 			&(struct kmem_cache_args) {		\
+				.owner = THIS_MODULE_KOBJ,	\
 				.preallocated = (cache),	\
 				__VA_ARGS__}, (flags))
 
