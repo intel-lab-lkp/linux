@@ -110,16 +110,21 @@
 //! [C documentation]: srctree/Documentation/filesystems/configfs.rst
 //! [`rust_configfs.rs`]: srctree/samples/rust/rust_configfs.rs
 
-use crate::alloc::flags;
-use crate::container_of;
-use crate::page::PAGE_SIZE;
-use crate::prelude::*;
-use crate::str::CString;
-use crate::sync::Arc;
-use crate::sync::ArcBorrow;
-use crate::types::Opaque;
-use core::cell::UnsafeCell;
-use core::marker::PhantomData;
+use crate::{
+    alloc::flags,
+    container_of,
+    page::PAGE_SIZE,
+    prelude::*,
+    str::CString,
+    sync::Arc,
+    sync::ArcBorrow,
+    this_module::ThisModule,
+    types::Opaque, //
+};
+use core::{
+    cell::UnsafeCell,
+    marker::PhantomData, //
+};
 
 /// A configfs subsystem.
 ///
@@ -744,8 +749,7 @@ macro_rules! impl_item_type {
     ($tpe:ty) => {
         impl<Data> ItemType<$tpe, Data> {
             #[doc(hidden)]
-            pub const fn new_with_child_ctor<const N: usize, Child>(
-                owner: &'static ThisModule,
+            pub const fn new_with_child_ctor<const N: usize, Child, TM: ThisModule>(
                 attributes: &'static AttributeList<N, Data>,
             ) -> Self
             where
@@ -754,7 +758,7 @@ macro_rules! impl_item_type {
             {
                 Self {
                     item_type: Opaque::new(bindings::config_item_type {
-                        ct_owner: owner.as_ptr(),
+                        ct_owner: TM::OWNER.as_ptr(),
                         ct_group_ops: GroupOperationsVTable::<Data, Child>::vtable_ptr().cast_mut(),
                         ct_item_ops: ItemOperationsVTable::<$tpe, Data>::vtable_ptr().cast_mut(),
                         ct_attrs: core::ptr::from_ref(attributes).cast_mut().cast(),
@@ -765,13 +769,12 @@ macro_rules! impl_item_type {
             }
 
             #[doc(hidden)]
-            pub const fn new<const N: usize>(
-                owner: &'static ThisModule,
+            pub const fn new<const N: usize, TM: ThisModule>(
                 attributes: &'static AttributeList<N, Data>,
             ) -> Self {
                 Self {
                     item_type: Opaque::new(bindings::config_item_type {
-                        ct_owner: owner.as_ptr(),
+                        ct_owner: TM::OWNER.as_ptr(),
                         ct_group_ops: core::ptr::null_mut(),
                         ct_item_ops: ItemOperationsVTable::<$tpe, Data>::vtable_ptr().cast_mut(),
                         ct_attrs: core::ptr::from_ref(attributes).cast_mut().cast(),
@@ -875,8 +878,7 @@ impl<Container, Data> ItemType<Container, Data> {
 ///         = kernel::configfs::ItemType::<
 ///                 configfs::Subsystem<Configuration>,
 ///                 Configuration
-///                 >::new_with_child_ctor::<N,Child>(
-///             THIS_MODULE.as_ref(),
+///                 >::new_with_child_ctor::<N, Child, crate::THIS_MODULE>(
 ///             &CONFIGURATION_ATTRS
 ///         );
 ///
@@ -1019,8 +1021,8 @@ macro_rules! configfs_attrs {
                     const [<$no_child:upper>]: bool = true;
 
                     static [< $data:upper _TPE >] : $crate::configfs::ItemType<$container, $data>  =
-                        $crate::configfs::ItemType::<$container, $data>::new::<N>(
-                            THIS_MODULE.as_ref(), &[<$ data:upper _ATTRS >]
+                        $crate::configfs::ItemType::<$container, $data>::new::<N, crate::THIS_MODULE>(
+                            &[<$ data:upper _ATTRS >]
                         );
                 )?
 
@@ -1028,8 +1030,8 @@ macro_rules! configfs_attrs {
                     static [< $data:upper _TPE >]:
                         $crate::configfs::ItemType<$container, $data>  =
                             $crate::configfs::ItemType::<$container, $data>::
-                            new_with_child_ctor::<N, $child>(
-                                THIS_MODULE.as_ref(), &[<$ data:upper _ATTRS >]
+                            new_with_child_ctor::<N, $child, crate::THIS_MODULE>(
+                                &[<$ data:upper _ATTRS >]
                             );
                 )?
 
