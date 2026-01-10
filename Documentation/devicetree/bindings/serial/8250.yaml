@@ -108,7 +108,6 @@ properties:
       - const: nuvoton,wpcm450-uart
       - const: nuvoton,npcm750-uart
       - const: nvidia,tegra20-uart
-      - const: nxp,lpc3220-uart
       - items:
           - enum:
               - exar,xr16l2552
@@ -123,6 +122,7 @@ properties:
               - fsl,16550-FIFO64
               - andestech,uart16550
               - nxp,lpc1850-uart
+              - nxp,lpc3220-uart
               - opencores,uart16550-rtlsvn105
               - ti,da830-uart
               - loongson,ls2k0500-uart
