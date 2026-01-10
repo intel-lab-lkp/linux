@@ -1097,7 +1097,7 @@ static void prepare_packet_read(struct r8a66597 *r8a66597,
 		pipe_start(r8a66597, td->pipe);
 		pipe_irq_enable(r8a66597, urb, td->pipenum);
 	} else {
-		if (urb->actual_length == 0) {
+		if (urb->actual_length == 0 && td->maxpacket > 0) {
 			pipe_irq_disable(r8a66597, td->pipenum);
 			pipe_setting(r8a66597, td);
 			pipe_stop(r8a66597, td->pipe);
