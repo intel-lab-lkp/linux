@@ -548,15 +548,21 @@ static void dcn315_clk_mgr_helper_populate_bw_params(
 {
 	int i;
 	struct clk_bw_params *bw_params = clk_mgr->base.bw_params;
-	uint32_t max_pstate = clock_table->NumDfPstatesEnabled - 1;
 	struct clk_limit_table_entry def_max = bw_params->clk_table.entries[bw_params->clk_table.num_entries - 1];
+	/* Clamp NumDfPstatesEnabled to avoid out-of-bounds access */
+	uint8_t num_memps = clock_table->NumDfPstatesEnabled;
+	uint32_t max_pstate;
+
+	if (num_memps > NUM_DF_PSTATE_LEVELS)
+		num_memps = NUM_DF_PSTATE_LEVELS;
+	max_pstate = num_memps - 1;
 
 	/* For 315 we want to base clock table on dcfclk, need at least one entry regardless of pmfw table */
 	for (i = 0; i < clock_table->NumDcfClkLevelsEnabled; i++) {
 		int j;
 
 		/* DF table is sorted with clocks decreasing */
-		for (j = clock_table->NumDfPstatesEnabled - 2; j >= 0; j--) {
+		for (j = num_memps - 2; j >= 0; j--) {
 			if (clock_table->DfPstateTable[j].Voltage <= clock_table->SocVoltage[i])
 				max_pstate = j;
 		}
