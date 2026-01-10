@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
+
+#define pr_fmt(fmt) "DMI: " fmt
+
 #include <linux/types.h>
 #include <linux/string.h>
 #include <linux/init.h>
@@ -634,7 +637,7 @@ static int __init dmi_present(const u8 *buf)
 					dmi_ver >> 16, (dmi_ver >> 8) & 0xFF);
 			}
 			dmi_format_ids(dmi_ids_string, sizeof(dmi_ids_string));
-			pr_info("DMI: %s\n", dmi_ids_string);
+			pr_info("%s\n", dmi_ids_string);
 			return 0;
 		}
 	}
@@ -663,7 +666,7 @@ static int __init dmi_smbios3_present(const u8 *buf)
 				dmi_ver >> 16, (dmi_ver >> 8) & 0xFF,
 				dmi_ver & 0xFF);
 			dmi_format_ids(dmi_ids_string, sizeof(dmi_ids_string));
-			pr_info("DMI: %s\n", dmi_ids_string);
+			pr_info("%s\n", dmi_ids_string);
 			return 0;
 		}
 	}
@@ -810,7 +813,7 @@ static int __init dmi_init(void)
 	kobject_del(tables_kobj);
 	kobject_put(tables_kobj);
  err:
-	pr_err("dmi: Firmware registration failed.\n");
+	pr_err("Firmware registration failed.\n");
 
 	return ret;
 }
@@ -831,7 +834,7 @@ void __init dmi_setup(void)
 		return;
 
 	dmi_memdev_walk();
-	pr_info("DMI: Memory slots populated: %d/%d\n",
+	pr_info("Memory slots populated: %d/%d\n",
 		dmi_memdev_populated_nr, dmi_memdev_nr);
 	dump_stack_set_arch_desc("%s", dmi_ids_string);
 }
