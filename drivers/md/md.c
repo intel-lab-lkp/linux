@@ -8512,8 +8512,10 @@ static void md_wakeup_thread_directly(struct md_thread __rcu **thread)
 
 	rcu_read_lock();
 	t = rcu_dereference(*thread);
-	if (t)
+	if (t) {
+		set_bit(THREAD_WAKEUP, &t->flags);
 		wake_up_process(t->tsk);
+	}
 	rcu_read_unlock();
 }
 
