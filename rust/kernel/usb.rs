@@ -11,9 +11,8 @@ use crate::{
     driver,
     error::{from_result, to_result, Result},
     prelude::*,
-    str::CStr,
+    this_module::ThisModule,
     types::{AlwaysRefCounted, Opaque},
-    ThisModule,
 };
 use core::{
     marker::PhantomData,
@@ -32,14 +31,10 @@ pub struct Adapter<T: Driver>(T);
 unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
     type RegType = bindings::usb_driver;
 
-    unsafe fn register(
-        udrv: &Opaque<Self::RegType>,
-        name: &'static CStr,
-        module: &'static ThisModule,
-    ) -> Result {
+    unsafe fn register<TM: ThisModule>(udrv: &Opaque<Self::RegType>) -> Result {
         // SAFETY: It's safe to set the fields of `struct usb_driver` on initialization.
         unsafe {
-            (*udrv.get()).name = name.as_char_ptr();
+            (*udrv.get()).name = TM::NAME.as_char_ptr();
             (*udrv.get()).probe = Some(Self::probe_callback);
             (*udrv.get()).disconnect = Some(Self::disconnect_callback);
             (*udrv.get()).id_table = T::ID_TABLE.as_ptr();
@@ -47,7 +42,7 @@ unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
 
         // SAFETY: `udrv` is guaranteed to be a valid `RegType`.
         to_result(unsafe {
-            bindings::usb_register_driver(udrv.get(), module.0, name.as_char_ptr())
+            bindings::usb_register_driver(udrv.get(), TM::OWNER.as_ptr(), TM::NAME.as_char_ptr())
         })
     }
 

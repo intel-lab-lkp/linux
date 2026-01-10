@@ -18,9 +18,8 @@ use crate::{
         to_result, //
     },
     prelude::*,
-    str::CStr,
-    types::Opaque,
-    ThisModule, //
+    this_module::ThisModule,
+    types::Opaque, //
 };
 use core::{
     marker::PhantomData,
@@ -55,14 +54,10 @@ pub struct Adapter<T: Driver>(T);
 unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
     type RegType = bindings::pci_driver;
 
-    unsafe fn register(
-        pdrv: &Opaque<Self::RegType>,
-        name: &'static CStr,
-        module: &'static ThisModule,
-    ) -> Result {
+    unsafe fn register<TM: ThisModule>(pdrv: &Opaque<Self::RegType>) -> Result {
         // SAFETY: It's safe to set the fields of `struct pci_driver` on initialization.
         unsafe {
-            (*pdrv.get()).name = name.as_char_ptr();
+            (*pdrv.get()).name = TM::NAME.as_char_ptr();
             (*pdrv.get()).probe = Some(Self::probe_callback);
             (*pdrv.get()).remove = Some(Self::remove_callback);
             (*pdrv.get()).id_table = T::ID_TABLE.as_ptr();
@@ -70,7 +65,7 @@ unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
 
         // SAFETY: `pdrv` is guaranteed to be a valid `RegType`.
         to_result(unsafe {
-            bindings::__pci_register_driver(pdrv.get(), module.0, name.as_char_ptr())
+            bindings::__pci_register_driver(pdrv.get(), TM::OWNER.as_ptr(), TM::NAME.as_char_ptr())
         })
     }
 
