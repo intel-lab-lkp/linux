@@ -538,6 +538,7 @@ static int dw_mci_rockchip_probe(struct platform_device *pdev)
 {
 	const struct dw_mci_drv_data *drv_data;
 	const struct of_device_id *match;
+	bool disable_rpm = of_property_read_bool(pdev->dev.of_node, "rockchip,disable-runtime-pm");
 	int ret;
 
 	if (!pdev->dev.of_node)
@@ -549,8 +550,13 @@ static int dw_mci_rockchip_probe(struct platform_device *pdev)
 	pm_runtime_get_noresume(&pdev->dev);
 	pm_runtime_set_active(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
-	pm_runtime_set_autosuspend_delay(&pdev->dev, 50);
-	pm_runtime_use_autosuspend(&pdev->dev);
+
+	/* Only setup autosuspend if the DTS hasn't prohibited it */
+	if (!disable_rpm) {
+		pm_runtime_set_autosuspend_delay(&pdev->dev, 50);
+		pm_runtime_use_autosuspend(&pdev->dev);
+	}
+
 
 	ret = dw_mci_pltfm_register(pdev, drv_data);
 	if (ret) {
@@ -560,7 +566,20 @@ static int dw_mci_rockchip_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	pm_runtime_put_autosuspend(&pdev->dev);
+	/*
+	 * For boards with sensitive signaling like the RK3576-based NanoPi R76S,
+	 * we inhibit runtime PM to prevent bus resets during idle transitions.
+	 */
+	if (disable_rpm) {
+		/*
+		 * Instead of nuclear option (pm_runtime_forbid), we use
+		 * the "soft" way by incrementing the usage count to
+		 * prevent the controller from ever hitting runtime_suspend.
+		 */
+		pm_runtime_get_noresume(&pdev->dev);
+	} else {
+		pm_runtime_put_autosuspend(&pdev->dev);
+	}
 
 	return 0;
 }
