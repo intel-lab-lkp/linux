@@ -512,9 +512,15 @@ static int spd5118_resume(struct device *dev)
 {
 	struct spd5118_data *data = dev_get_drvdata(dev);
 	struct regmap *regmap = data->regmap;
+	int ret;
 
 	regcache_cache_only(regmap, false);
-	return regcache_sync(regmap);
+	ret = regcache_sync(regmap);
+	if(ret == -ENXIO || ret == -EIO) {
+		dev_warn(dev, "SPD hub not responding on resume (%d), deferring init\n", ret);
+		return 0;
+	}
+	return ret;
 }
 
 static DEFINE_SIMPLE_DEV_PM_OPS(spd5118_pm_ops, spd5118_suspend, spd5118_resume);
