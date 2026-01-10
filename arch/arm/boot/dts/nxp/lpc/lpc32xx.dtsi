@@ -243,8 +243,7 @@
 
 			/* UART5 first since it is the default console, ttyS0 */
 			uart5: serial@40090000 {
-				/* actually, ns16550a w/ 64 byte fifos! */
-				compatible = "nxp,lpc3220-uart";
+				compatible = "nxp,lpc3220-uart", "ns16550a";
 				reg = <0x40090000 0x1000>;
 				interrupts = <9 IRQ_TYPE_LEVEL_HIGH>;
 				reg-shift = <2>;
@@ -253,7 +252,7 @@
 			};
 
 			uart3: serial@40080000 {
-				compatible = "nxp,lpc3220-uart";
+				compatible = "nxp,lpc3220-uart", "ns16550a";
 				reg = <0x40080000 0x1000>;
 				interrupts = <7 IRQ_TYPE_LEVEL_HIGH>;
 				reg-shift = <2>;
@@ -262,7 +261,7 @@
 			};
 
 			uart4: serial@40088000 {
-				compatible = "nxp,lpc3220-uart";
+				compatible = "nxp,lpc3220-uart", "ns16550a";
 				reg = <0x40088000 0x1000>;
 				interrupts = <8 IRQ_TYPE_LEVEL_HIGH>;
 				reg-shift = <2>;
@@ -271,7 +270,7 @@
 			};
 
 			uart6: serial@40098000 {
-				compatible = "nxp,lpc3220-uart";
+				compatible = "nxp,lpc3220-uart", "ns16550a";
 				reg = <0x40098000 0x1000>;
 				interrupts = <10 IRQ_TYPE_LEVEL_HIGH>;
 				reg-shift = <2>;
