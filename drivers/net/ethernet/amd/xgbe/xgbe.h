@@ -675,6 +675,8 @@ struct xgbe_ext_stats {
 	u64 rx_vxlan_packets;
 	u64 rx_csum_errors;
 	u64 rx_vxlan_csum_errors;
+	u64 rx_buffer_overflow;
+	u64 rx_pkt_errors;
 };
 
 struct xgbe_pps_config {

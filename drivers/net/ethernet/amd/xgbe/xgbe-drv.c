@@ -2292,9 +2292,9 @@ read_again:
 			goto read_again;
 
 		if (error || packet->errors) {
-			if (packet->errors)
-				netif_err(pdata, rx_err, netdev,
-					  "error in received packet\n");
+			/* packet->errors may indicate RX FIFO overflow;
+			 * drop without per-packet log
+			 */
 			dev_kfree_skb(skb);
 			goto next_packet;
 		}

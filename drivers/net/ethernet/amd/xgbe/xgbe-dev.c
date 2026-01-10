@@ -1968,9 +1968,14 @@ static int xgbe_dev_read(struct xgbe_channel *channel)
 			XGMAC_SET_BITS(packet->attributes, RX_PACKET_ATTRIBUTES,
 				       TNPCSUM_DONE, 0);
 			pdata->ext_stats.rx_vxlan_csum_errors++;
+		} else if (etlt == RX_NORMAL_DESC3_ETLT_FIFO_OVERFLOW) {
+			XGMAC_SET_BITS(packet->errors, RX_PACKET_ERRORS,
+				       OVERRUN, 1);
+			pdata->ext_stats.rx_buffer_overflow++;
 		} else {
 			XGMAC_SET_BITS(packet->errors, RX_PACKET_ERRORS,
 				       FRAME, 1);
+			pdata->ext_stats.rx_pkt_errors++;
 		}
 	}
 

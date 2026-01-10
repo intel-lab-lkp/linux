@@ -75,6 +75,8 @@ static const struct xgbe_stats xgbe_gstring_stats[] = {
 	XGMAC_MMC_STAT("rx_pause_frames", rxpauseframes),
 	XGMAC_EXT_STAT("rx_split_header_packets", rx_split_header_packets),
 	XGMAC_EXT_STAT("rx_buffer_unavailable", rx_buffer_unavailable),
+	XGMAC_EXT_STAT("rx_buffer_overflow", rx_buffer_overflow),
+	XGMAC_EXT_STAT("rx_pkt_errors", rx_pkt_errors),
 };
 
 #define XGBE_STATS_COUNT	ARRAY_SIZE(xgbe_gstring_stats)
