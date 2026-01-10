@@ -2652,6 +2652,20 @@ config TEST_SYSCTL
 
 	  If unsure, say N.
 
+config BITOPS_KUNIT
+	tristate "KUnit test for bitops" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  This option enables the KUnit test suite for the bitops library
+	  which provides functions for bit operations.
+	  The test suite checks the functionality of the bitops library.
+
+	  Note that this is a partial copy of the original test_bitops module.
+	  For the full coverage, enable TEST_BITOPS.
+
+	  If unsure, say N.
+
 config BITFIELD_KUNIT
 	tristate "KUnit test bitfield functions at runtime" if !KUNIT_ALL_TESTS
 	depends on KUNIT
