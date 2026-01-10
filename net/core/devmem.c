@@ -11,6 +11,7 @@
 #include <linux/genalloc.h>
 #include <linux/mm.h>
 #include <linux/netdevice.h>
+#include <linux/skbuff_ref.h>
 #include <linux/types.h>
 #include <net/netdev_queues.h>
 #include <net/netdev_rx_queue.h>
@@ -27,6 +28,19 @@
 /* Device memory support */
 
 static DEFINE_XARRAY_FLAGS(net_devmem_dmabuf_bindings, XA_FLAGS_ALLOC1);
+
+/* If the user unbinds before releasing all tokens, the static key must not
+ * change until all tokens have been released (to avoid calling the wrong
+ * SO_DEVMEM_DONTNEED handler). We prevent this by making static key changes
+ * and binding alloc/free atomic with regards to each other, using the
+ * devmem_ar_lock. This works because binding free does not occur until all of
+ * the outstanding token's references on the binding are dropped.
+ */
+static DEFINE_MUTEX(devmem_ar_lock);
+
+DEFINE_STATIC_KEY_FALSE(tcp_devmem_ar_key);
+EXPORT_SYMBOL(tcp_devmem_ar_key);
+static int net_devmem_dmabuf_rx_bindings_count;
 
 static const struct memory_provider_ops dmabuf_devmem_ops;
 
@@ -59,6 +73,14 @@ void __net_devmem_dmabuf_binding_free(struct work_struct *wq)
 	struct net_devmem_dmabuf_binding *binding = container_of(wq, typeof(*binding), unbind_w);
 
 	size_t size, avail;
+
+	if (binding->direction == DMA_FROM_DEVICE) {
+		mutex_lock(&devmem_ar_lock);
+		net_devmem_dmabuf_rx_bindings_count--;
+		if (net_devmem_dmabuf_rx_bindings_count == 0)
+			static_branch_disable(&tcp_devmem_ar_key);
+		mutex_unlock(&devmem_ar_lock);
+	}
 
 	gen_pool_for_each_chunk(binding->chunk_pool,
 				net_devmem_dmabuf_free_chunk_owner, NULL);
@@ -116,6 +138,24 @@ void net_devmem_free_dmabuf(struct net_iov *niov)
 	gen_pool_free(binding->chunk_pool, dma_addr, PAGE_SIZE);
 }
 
+static void
+net_devmem_dmabuf_binding_put_urefs(struct net_devmem_dmabuf_binding *binding)
+{
+	int i;
+
+	for (i = 0; i < binding->dmabuf->size / PAGE_SIZE; i++) {
+		struct net_iov *niov;
+		netmem_ref netmem;
+
+		niov = binding->vec[i];
+		netmem = net_iov_to_netmem(niov);
+
+		/* Multiple urefs map to only a single netmem ref. */
+		if (atomic_xchg(&niov->uref, 0) > 0)
+			WARN_ON_ONCE(!napi_pp_put_page(netmem));
+	}
+}
+
 void net_devmem_unbind_dmabuf(struct net_devmem_dmabuf_binding *binding)
 {
 	struct netdev_rx_queue *rxq;
@@ -143,6 +183,7 @@ void net_devmem_unbind_dmabuf(struct net_devmem_dmabuf_binding *binding)
 		__net_mp_close_rxq(binding->dev, rxq_idx, &mp_params);
 	}
 
+	net_devmem_dmabuf_binding_put_urefs(binding);
 	net_devmem_dmabuf_binding_put(binding);
 }
 
@@ -179,8 +220,10 @@ struct net_devmem_dmabuf_binding *
 net_devmem_bind_dmabuf(struct net_device *dev,
 		       struct device *dma_dev,
 		       enum dma_data_direction direction,
-		       unsigned int dmabuf_fd, struct netdev_nl_sock *priv,
-		       struct netlink_ext_ack *extack)
+		       unsigned int dmabuf_fd,
+		       struct netdev_nl_sock *priv,
+		       struct netlink_ext_ack *extack,
+		       bool autorelease)
 {
 	struct net_devmem_dmabuf_binding *binding;
 	static u32 id_alloc_next;
@@ -231,14 +274,12 @@ net_devmem_bind_dmabuf(struct net_device *dev,
 		goto err_detach;
 	}
 
-	if (direction == DMA_TO_DEVICE) {
-		binding->vec = kvmalloc_array(dmabuf->size / PAGE_SIZE,
-					      sizeof(struct net_iov *),
-					      GFP_KERNEL);
-		if (!binding->vec) {
-			err = -ENOMEM;
-			goto err_unmap;
-		}
+	binding->vec = kvmalloc_array(dmabuf->size / PAGE_SIZE,
+				      sizeof(struct net_iov *),
+				      GFP_KERNEL | __GFP_ZERO);
+	if (!binding->vec) {
+		err = -ENOMEM;
+		goto err_unmap;
 	}
 
 	/* For simplicity we expect to make PAGE_SIZE allocations, but the
@@ -292,25 +333,62 @@ net_devmem_bind_dmabuf(struct net_device *dev,
 			niov = &owner->area.niovs[i];
 			niov->type = NET_IOV_DMABUF;
 			niov->owner = &owner->area;
+			atomic_set(&niov->uref, 0);
 			page_pool_set_dma_addr_netmem(net_iov_to_netmem(niov),
 						      net_devmem_get_dma_addr(niov));
-			if (direction == DMA_TO_DEVICE)
-				binding->vec[owner->area.base_virtual / PAGE_SIZE + i] = niov;
+			binding->vec[owner->area.base_virtual / PAGE_SIZE + i] = niov;
 		}
 
 		virtual += len;
+	}
+
+	mutex_lock(&devmem_ar_lock);
+
+	if (direction == DMA_FROM_DEVICE) {
+		if (net_devmem_dmabuf_rx_bindings_count > 0) {
+			bool mode;
+
+			mode = static_key_enabled(&tcp_devmem_ar_key);
+
+			/* When bindings exist, enforce that the mode does not
+			 * change.
+			 */
+			if (mode != autorelease) {
+				NL_SET_ERR_MSG_FMT(extack,
+						   "System already configured with autorelease=%d",
+						   mode);
+				err = -EINVAL;
+				goto err_unlock_mutex;
+			}
+		} else if (autorelease) {
+			/* First binding with autorelease enabled sets the
+			 * mode.  If autorelease is false, the key is already
+			 * disabled by default so no action is needed.
+			 */
+			static_branch_enable(&tcp_devmem_ar_key);
+		}
+
+		net_devmem_dmabuf_rx_bindings_count++;
 	}
 
 	err = xa_alloc_cyclic(&net_devmem_dmabuf_bindings, &binding->id,
 			      binding, xa_limit_32b, &id_alloc_next,
 			      GFP_KERNEL);
 	if (err < 0)
-		goto err_free_chunks;
+		goto err_dec_binding_count;
+
+	mutex_unlock(&devmem_ar_lock);
 
 	list_add(&binding->list, &priv->bindings);
 
 	return binding;
 
+err_dec_binding_count:
+	if (direction == DMA_FROM_DEVICE)
+		net_devmem_dmabuf_rx_bindings_count--;
+
+err_unlock_mutex:
+	mutex_unlock(&devmem_ar_lock);
 err_free_chunks:
 	gen_pool_for_each_chunk(binding->chunk_pool,
 				net_devmem_dmabuf_free_chunk_owner, NULL);
