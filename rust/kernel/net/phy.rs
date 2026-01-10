@@ -6,8 +6,17 @@
 //!
 //! C headers: [`include/linux/phy.h`](srctree/include/linux/phy.h).
 
-use crate::{device_id::RawDeviceId, error::*, prelude::*, types::Opaque};
-use core::{marker::PhantomData, ptr::addr_of_mut};
+use crate::{
+    device_id::RawDeviceId,
+    error::*,
+    prelude::*,
+    this_module::ThisModule,
+    types::Opaque, //
+};
+use core::{
+    marker::PhantomData,
+    ptr::addr_of_mut, //
+};
 
 pub mod reg;
 
@@ -648,10 +657,7 @@ unsafe impl Send for Registration {}
 
 impl Registration {
     /// Registers a PHY driver.
-    pub fn register(
-        module: &'static crate::ThisModule,
-        drivers: Pin<&'static mut [DriverVTable]>,
-    ) -> Result<Self> {
+    pub fn register<TM: ThisModule>(drivers: Pin<&'static mut [DriverVTable]>) -> Result<Self> {
         if drivers.is_empty() {
             return Err(code::EINVAL);
         }
@@ -659,7 +665,11 @@ impl Registration {
         // the `drivers` slice are initialized properly. `drivers` will not be moved.
         // So it's just an FFI call.
         to_result(unsafe {
-            bindings::phy_drivers_register(drivers[0].0.get(), drivers.len().try_into()?, module.0)
+            bindings::phy_drivers_register(
+                drivers[0].0.get(),
+                drivers.len().try_into()?,
+                TM::OWNER.as_ptr(),
+            )
         })?;
         // INVARIANT: The `drivers` slice is successfully registered to the kernel via `phy_drivers_register`.
         Ok(Registration { drivers })
@@ -889,12 +899,11 @@ macro_rules! module_phy_driver {
                 [$($crate::net::phy::create_phy_driver::<$driver>()),+];
 
             impl $crate::Module for Module {
-                fn init(module: &'static $crate::ThisModule) -> Result<Self> {
+                fn init(_module: &'static $crate::ThisModule) -> Result<Self> {
                     // SAFETY: The anonymous constant guarantees that nobody else can access
                     // the `DRIVERS` static. The array is used only in the C side.
                     let drivers = unsafe { &mut DRIVERS };
-                    let mut reg = $crate::net::phy::Registration::register(
-                        module,
+                    let mut reg = $crate::net::phy::Registration::register::<crate::THIS_MODULE>(
                         ::core::pin::Pin::static_mut(drivers),
                     )?;
                     Ok(Module { _reg: reg })
