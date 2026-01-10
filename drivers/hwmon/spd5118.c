@@ -494,25 +494,12 @@ static const struct regmap_config spd5118_regmap16_config = {
 static int spd5118_suspend(struct device *dev)
 {
 	struct spd5118_data *data = dev_get_drvdata(dev);
-	struct regmap *regmap = data->regmap;
-	u32 regval;
-	int err;
 
 	/*
-	 * Make sure the configuration register in the regmap cache is current
-	 * before bypassing it.
+	 * The SPD5118 hub may be inaccessible; avoid hardware access.
 	 */
-	err = regmap_read(regmap, SPD5118_REG_TEMP_CONFIG, &regval);
-	if (err < 0)
-		return err;
-
-	regcache_cache_bypass(regmap, true);
-	regmap_update_bits(regmap, SPD5118_REG_TEMP_CONFIG, SPD5118_TS_DISABLE,
-			   SPD5118_TS_DISABLE);
-	regcache_cache_bypass(regmap, false);
-
-	regcache_cache_only(regmap, true);
-	regcache_mark_dirty(regmap);
+	regcache_cache_only(data->regmap, true);
+	regcache_mark_dirty(data->regmap);
 
 	return 0;
 }
@@ -520,16 +507,13 @@ static int spd5118_suspend(struct device *dev)
 static int spd5118_resume(struct device *dev)
 {
 	struct spd5118_data *data = dev_get_drvdata(dev);
-	struct regmap *regmap = data->regmap;
-	int ret;
-
-	regcache_cache_only(regmap, false);
-	ret = regcache_sync(regmap);
-	if(ret == -ENXIO || ret == -EIO) {
-		dev_warn(dev, "SPD hub not responding on resume (%d), deferring init\n", ret);
-		return 0;
-	}
-	return ret;
+	
+	/* 
+	 * Re-enable hardware access; sync is deferred until first read.
+	 */
+	regcache_cache_only(data->regmap, false);
+	
+	return 0;
 }
 
 static DEFINE_SIMPLE_DEV_PM_OPS(spd5118_pm_ops, spd5118_suspend, spd5118_resume);
