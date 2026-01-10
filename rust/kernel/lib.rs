@@ -201,32 +201,6 @@ impl<T: Module> InPlaceModule for T {
     }
 }
 
-/// Equivalent to `THIS_MODULE` in the C API.
-///
-/// C header: [`include/linux/init.h`](srctree/include/linux/init.h)
-pub struct ThisModule(*mut bindings::module);
-
-// SAFETY: `THIS_MODULE` may be used from all threads within a module.
-unsafe impl Sync for ThisModule {}
-
-impl ThisModule {
-    /// Creates a [`ThisModule`] given the `THIS_MODULE` pointer.
-    ///
-    /// # Safety
-    ///
-    /// The pointer must be equal to the right `THIS_MODULE`.
-    pub const unsafe fn from_ptr(ptr: *mut bindings::module) -> ThisModule {
-        ThisModule(ptr)
-    }
-
-    /// Access the raw pointer for this module.
-    ///
-    /// It is up to the user to use it correctly.
-    pub const fn as_ptr(&self) -> *mut bindings::module {
-        self.0
-    }
-}
-
 pub mod this_module {
     //! Access to the module identity and ownership information.
     //!
@@ -360,27 +334,6 @@ pub mod this_module {
                 pub const fn name() -> &'static ::kernel::str::CStr {
                     $crate::c_str!($name)
                 }
-
-                // TODO: Temporary to provide functionality old `THIS_MODULE` provided.
-                // SAFETY: `__this_module` is constructed by the kernel at load time and
-                // will not be freed until the module is unloaded.
-                const ThisModule: ::kernel::ThisModule = unsafe {{
-                    ::kernel::ThisModule::from_ptr(
-                        <Self as ::kernel::this_module::ThisModule>::OWNER.as_ptr()
-                    )
-                }};
-
-                /// Gets a pointer to the underlying `struct module`.
-                // TODO: Temporary to provide functionality old `THIS_MODULE` provided.
-                pub const fn as_ptr(&self) -> *mut ::kernel::bindings::module {{
-                    Self::ThisModule.as_ptr()
-                }}
-
-                /// Gets a reference to the underlying `ThisModule`.
-                /// TODO: Temporary to provide functionality old `THIS_MODULE` provided.
-                pub const fn as_ref(&self) -> &'static ::kernel::ThisModule {{
-                    &Self::ThisModule
-                }}
             }
         };
     }

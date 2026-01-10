@@ -43,7 +43,7 @@ pub use super::static_assert;
 
 pub use super::error::{code::*, Error, Result};
 
-pub use super::{str::CStrExt as _, ThisModule};
+pub use super::str::CStrExt as _;
 
 pub use super::init::InPlaceInit;
 
