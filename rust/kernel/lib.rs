@@ -233,6 +233,165 @@ impl ThisModule {
     }
 }
 
+pub mod this_module {
+    //! Access to the module identity and ownership information.
+    //!
+    //! This module provides the Rust equivalent of the kernel’s `THIS_MODULE`
+    //! symbol from the [C API](srctree/include/linux/init.h).
+    //!
+    //! # For driver creators
+    //!
+    //! If you see ThisModule you need to pass THIS_NODULE for it so it can
+    //! track module ownership.
+    //!
+    //! Each Rust module defines its own `THIS_MODULE` using the
+    //! [`create_this_module`] macro. The generated `THIS_MODULE` identifies the
+    //! owning kernel module and expose some metadata about it.
+    //!
+    //! # For abstraction creators
+    //!
+    //! Many times C-apis expect a `struct module *` pointer so they can
+    //! increase the module reference count. This is because module could be
+    //! unloaded while example file operations are in progress. Many times
+    //! structs which needs owner fields should also be const. For this reason
+    //! ThisModule is usually passes as a type parameter `TM` to abstractions
+    //! which need to know the module owner. In vtables ThisModule is usually
+    //! used as name.
+    //!
+    //! ## Example
+    //!
+    //! ```
+    //! # use kernel::{bindings, this_module::ThisModule};
+    //! # use core::marker::PhantomData;
+    //!
+    //! // Example function signature which needs ThisModule.
+    //! pub fn create_device<TM: ThisModule>() {}
+    //!
+    //! // Example of a vtable which uses ThisModule.
+    //! #[vtable]
+    //! pub trait MyStruct {
+    //!     type ThisModule: ThisModule;
+    //! }
+    //!
+    //! pub(crate) struct MyStructVTable<T: MyStruct>(PhantomData<T>);
+    //!
+    //! impl<T: MyStruct> MyStructVTable<T> {
+    //!     const FOPS: bindings::file_operations = bindings::file_operations {
+    //!         owner: T::ThisModule::OWNER.as_ptr(),
+    //!         ..pin_init::zeroed()
+    //!     };
+    //! }
+    //! ```
+
+    /// See [`this_module`]
+    pub trait ThisModule {
+        /// Wrapper around the owning `struct module` pointer.
+        ///
+        /// This is null for built-in code and non-null for loadable modules.
+        const OWNER: ModuleWrapper;
+        /// Name of the module.
+        const NAME: &'static kernel::str::CStr;
+    }
+
+    /// Wrapper around a pointer to `struct module`.
+    ///
+    /// This type exists as a workaround for the lack of `const fn` methods in
+    /// traits. It allows the module pointer to be stored as an associated
+    /// constant while still providing a `const` accessor.
+    pub struct ModuleWrapper {
+        ptr: *mut bindings::module,
+    }
+
+    impl ModuleWrapper {
+        /// Get the raw pointer to the underlying `struct module`.
+        ///
+        /// TODO: Should be only available for kernel create.
+        pub const fn as_ptr(&self) -> *mut bindings::module {
+            self.ptr
+        }
+
+        /// Only meant to be used from [`create_this_module`].
+        ///
+        /// # Safety
+        ///
+        /// - Only modules are allowed to create non null `ModuleWrapper`s.
+        /// - The non null pointer must point to a valid `struct module`
+        ///   provided by the kernel.
+        #[doc(hidden)]
+        pub const unsafe fn from_ptr(ptr: *mut bindings::module) -> Self {
+            ModuleWrapper { ptr }
+        }
+    }
+
+    /// Creates the `THIS_MODULE` definition for a Rust module.
+    ///
+    /// This macro is an internal building block and is not intended to be used
+    /// directly by module authors. It is invoked by [`macros::module::module`]
+    /// and by kernel doctests.
+    ///
+    /// A macro is required so that `cfg(MODULE)` is evaluated in the context of
+    /// the consuming crate, and to prevent accidental use of THIS_MODULE from
+    /// within the kernel crate itself.
+    #[macro_export]
+    #[doc(hidden)]
+    macro_rules! create_this_module {
+        ($name:literal) => {
+            /// THIS_MODULE for module `{name}`. See [`kernel::this_module`].
+            #[allow(non_camel_case_types)]
+            pub struct THIS_MODULE;
+
+            impl ::kernel::this_module::ThisModule for THIS_MODULE {
+                #[cfg(not(MODULE))]
+                /// SAFETY: TODO
+                const OWNER: ::kernel::this_module::ModuleWrapper = unsafe {
+                    ::kernel::this_module::ModuleWrapper::from_ptr(::core::ptr::null_mut())
+                };
+
+                #[cfg(MODULE)]
+                // SAFETY:
+                // - `__this_module` is constructed by the kernel at module load time.
+                const OWNER: ::kernel::this_module::ModuleWrapper = unsafe {
+                    extern "C" {
+                        static __this_module: ::kernel::types::Opaque<::kernel::bindings::module>;
+                    }
+
+                    ::kernel::this_module::ModuleWrapper::from_ptr(__this_module.get())
+                };
+
+                const NAME: &'static ::kernel::str::CStr = $crate::c_str!($name);
+            }
+
+            impl THIS_MODULE {
+                /// Returns the name of this module.
+                pub const fn name() -> &'static ::kernel::str::CStr {
+                    $crate::c_str!($name)
+                }
+
+                // TODO: Temporary to provide functionality old `THIS_MODULE` provided.
+                // SAFETY: `__this_module` is constructed by the kernel at load time and
+                // will not be freed until the module is unloaded.
+                const ThisModule: ::kernel::ThisModule = unsafe {{
+                    ::kernel::ThisModule::from_ptr(
+                        <Self as ::kernel::this_module::ThisModule>::OWNER.as_ptr()
+                    )
+                }};
+
+                /// Gets a pointer to the underlying `struct module`.
+                // TODO: Temporary to provide functionality old `THIS_MODULE` provided.
+                pub const fn as_ptr(&self) -> *mut ::kernel::bindings::module {{
+                    Self::ThisModule.as_ptr()
+                }}
+
+                /// Gets a reference to the underlying `ThisModule`.
+                /// TODO: Temporary to provide functionality old `THIS_MODULE` provided.
+                pub const fn as_ref(&self) -> &'static ::kernel::ThisModule {{
+                    &Self::ThisModule
+                }}
+            }
+        };
+    }
+}
+
 #[cfg(not(testlib))]
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo<'_>) -> ! {

@@ -876,7 +876,7 @@ impl<Container, Data> ItemType<Container, Data> {
 ///                 configfs::Subsystem<Configuration>,
 ///                 Configuration
 ///                 >::new_with_child_ctor::<N,Child>(
-///             &THIS_MODULE,
+///             THIS_MODULE.as_ref(),
 ///             &CONFIGURATION_ATTRS
 ///         );
 ///
@@ -1020,7 +1020,7 @@ macro_rules! configfs_attrs {
 
                     static [< $data:upper _TPE >] : $crate::configfs::ItemType<$container, $data>  =
                         $crate::configfs::ItemType::<$container, $data>::new::<N>(
-                            &THIS_MODULE, &[<$ data:upper _ATTRS >]
+                            THIS_MODULE.as_ref(), &[<$ data:upper _ATTRS >]
                         );
                 )?
 
@@ -1029,7 +1029,7 @@ macro_rules! configfs_attrs {
                         $crate::configfs::ItemType<$container, $data>  =
                             $crate::configfs::ItemType::<$container, $data>::
                             new_with_child_ctor::<N, $child>(
-                                &THIS_MODULE, &[<$ data:upper _ATTRS >]
+                                THIS_MODULE.as_ref(), &[<$ data:upper _ATTRS >]
                             );
                 )?
 
