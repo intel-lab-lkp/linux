@@ -754,9 +754,15 @@ static void dcn314_clk_mgr_helper_populate_bw_params(struct clk_mgr_internal *cl
 	struct clk_limit_table_entry def_max = bw_params->clk_table.entries[bw_params->clk_table.num_entries - 1];
 	uint32_t max_pstate = 0,  max_fclk = 0,  min_pstate = 0, max_dispclk = 0, max_dppclk = 0;
 	int i;
+	/* Clamp NumDfPstatesEnabled to avoid out-of-bounds access */
+	uint8_t num_memps = clock_table->NumDfPstatesEnabled;
+
+	if (num_memps > NUM_DF_PSTATE_LEVELS) {
+		num_memps = NUM_DF_PSTATE_LEVELS;
+	}
 
 	/* Find highest valid fclk pstate */
-	for (i = 0; i < clock_table->NumDfPstatesEnabled; i++) {
+	for (i = 0; i < num_memps; i++) {
 		if (is_valid_clock_value(clock_table->DfPstateTable[i].FClk) &&
 		    clock_table->DfPstateTable[i].FClk > max_fclk) {
 			max_fclk = clock_table->DfPstateTable[i].FClk;
@@ -782,7 +788,7 @@ static void dcn314_clk_mgr_helper_populate_bw_params(struct clk_mgr_internal *cl
 		uint32_t min_fclk = clock_table->DfPstateTable[0].FClk;
 		int j;
 
-		for (j = 1; j < clock_table->NumDfPstatesEnabled; j++) {
+		for (j = 1; j < num_memps; j++) {
 			if (is_valid_clock_value(clock_table->DfPstateTable[j].FClk) &&
 			    clock_table->DfPstateTable[j].FClk < min_fclk &&
 			    clock_table->DfPstateTable[j].Voltage <= clock_table->SocVoltage[i]) {
