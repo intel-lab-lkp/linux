@@ -46,6 +46,7 @@ enum scan_result {
 	SCAN_PAGE_LRU,
 	SCAN_PAGE_LOCK,
 	SCAN_PAGE_ANON,
+	SCAN_PAGE_LAZYFREE,
 	SCAN_PAGE_COMPOUND,
 	SCAN_ANY_PROCESS,
 	SCAN_VMA_NULL,
@@ -1258,6 +1259,7 @@ static enum scan_result hpage_collapse_scan_pmd(struct mm_struct *mm,
 	pmd_t *pmd;
 	pte_t *pte, *_pte;
 	int none_or_zero = 0, shared = 0, referenced = 0;
+	int lazyfree = 0;
 	enum scan_result result = SCAN_FAIL;
 	struct page *page = NULL;
 	struct folio *folio = NULL;
@@ -1342,6 +1344,21 @@ static enum scan_result hpage_collapse_scan_pmd(struct mm_struct *mm,
 			goto out_unmap;
 		}
 		folio = page_folio(page);
+
+		if (cc->is_khugepaged && !pte_dirty(pteval) &&
+		    folio_is_lazyfree(folio)) {
+			++lazyfree;
+
+			/*
+			 * The lazyfree folios are reclaimed and become pte_none.
+			 * Ensure they do not continue to be collapsed when
+			 * skipped ahead.
+			 */
+			if ((lazyfree + none_or_zero) > khugepaged_max_ptes_none) {
+				result = SCAN_PAGE_LAZYFREE;
+				goto out_unmap;
+			}
+		}
 
 		if (!folio_test_anon(folio)) {
 			result = SCAN_PAGE_ANON;
