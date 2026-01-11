@@ -1958,7 +1958,6 @@ void iommufd_selftest_destroy(struct iommufd_object *obj)
 struct iommufd_test_dma_buf {
 	void *memory;
 	size_t length;
-	bool revoked;
 };
 
 static int iommufd_test_dma_buf_attach(struct dma_buf *dmabuf,
@@ -2011,9 +2010,6 @@ int iommufd_test_dma_buf_iommufd_map(struct dma_buf_attachment *attachment,
 	if (attachment->dmabuf->ops != &iommufd_test_dmabuf_ops)
 		return -EOPNOTSUPP;
 
-	if (priv->revoked)
-		return -ENODEV;
-
 	phys->paddr = virt_to_phys(priv->memory);
 	phys->len = priv->length;
 	return 0;
@@ -2065,7 +2061,6 @@ err_free:
 static int iommufd_test_dmabuf_revoke(struct iommufd_ucmd *ucmd, int fd,
 				      bool revoked)
 {
-	struct iommufd_test_dma_buf *priv;
 	struct dma_buf *dmabuf;
 	int rc = 0;
 
@@ -2078,10 +2073,11 @@ static int iommufd_test_dmabuf_revoke(struct iommufd_ucmd *ucmd, int fd,
 		goto err_put;
 	}
 
-	priv = dmabuf->priv;
 	dma_resv_lock(dmabuf->resv, NULL);
-	priv->revoked = revoked;
-	dma_buf_move_notify(dmabuf);
+	if (revoked)
+		dma_buf_move_notify(dmabuf);
+	else
+		dma_buf_mark_valid(dmabuf);
 	dma_resv_unlock(dmabuf->resv);
 
 err_put:
