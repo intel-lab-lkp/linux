@@ -276,7 +276,8 @@ struct page *dma_alloc_from_pool(struct device *dev, size_t size,
 			return page;
 	}
 
-	WARN(1, "Failed to get suitable pool for %s\n", dev_name(dev));
+	if (!(gfp & __GFP_NOWARN))
+		WARN(1, "Failed to get suitable pool for %s\n", dev_name(dev));
 	return NULL;
 }
 
