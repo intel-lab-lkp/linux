@@ -1141,7 +1141,7 @@ int rtw_check_bcn_info(struct adapter *Adapter, u8 *pframe, u32 packet_len)
 		pmlmepriv->NumOfBcnInfoChkFail = 0;
 	}
 
-	subtype = GetFrameSubType(pframe) >> 4;
+	subtype = get_frame_sub_type(pframe) >> 4;
 
 	if (subtype == WIFI_BEACON)
 		bssid->reserved[0] = 1;

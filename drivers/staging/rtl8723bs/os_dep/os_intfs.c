@@ -525,13 +525,13 @@ static void rtw_init_default_value(struct adapter *padapter)
 	psecuritypriv->sw_encrypt = pregistrypriv->software_encrypt;
 	psecuritypriv->sw_decrypt = pregistrypriv->software_decrypt;
 
-	psecuritypriv->dot11AuthAlgrthm = dot11AuthAlgrthm_Open; /* open system */
-	psecuritypriv->dot11PrivacyAlgrthm = _NO_PRIVACY_;
+	psecuritypriv->dot11_auth_algrthm = dot11_auth_algrthm_open; /* open system */
+	psecuritypriv->dot11_privacy_algrthm = _NO_PRIVACY_;
 
-	psecuritypriv->dot11PrivacyKeyIndex = 0;
+	psecuritypriv->dot11_privacy_key_index = 0;
 
-	psecuritypriv->dot118021XGrpPrivacy = _NO_PRIVACY_;
-	psecuritypriv->dot118021XGrpKeyid = 1;
+	psecuritypriv->dot11_8021x_grp_privacy = _NO_PRIVACY_;
+	psecuritypriv->dot11_8021x_grp_key_id = 1;
 
 	psecuritypriv->ndisauthtype = Ndis802_11AuthModeOpen;
 	psecuritypriv->ndisencryptstatus = Ndis802_11WEPDisabled;
@@ -610,11 +610,11 @@ void rtw_reset_drv_sw(struct adapter *padapter)
 	padapter->xmitpriv.tx_pkts = 0;
 	padapter->recvpriv.rx_pkts = 0;
 
-	pmlmepriv->LinkDetectInfo.bBusyTraffic = false;
+	pmlmepriv->link_detect_info.bBusyTraffic = false;
 
-	/* pmlmepriv->LinkDetectInfo.TrafficBusyState = false; */
-	pmlmepriv->LinkDetectInfo.TrafficTransitionCount = 0;
-	pmlmepriv->LinkDetectInfo.LowPowerTransitionCount = 0;
+	/* pmlmepriv->link_detect_info.TrafficBusyState = false; */
+	pmlmepriv->link_detect_info.TrafficTransitionCount = 0;
+	pmlmepriv->link_detect_info.LowPowerTransitionCount = 0;
 
 	_clr_fwstate_(pmlmepriv, _FW_UNDER_SURVEY | _FW_UNDER_LINKING);
 

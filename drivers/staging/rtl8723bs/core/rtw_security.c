@@ -57,12 +57,12 @@ void rtw_wep_encrypt(struct adapter *padapter, u8 *pxmitframe)
 
 	/* start to encrypt each fragment */
 	if ((pattrib->encrypt == _WEP40_) || (pattrib->encrypt == _WEP104_)) {
-		keylength = psecuritypriv->dot11DefKeylen[psecuritypriv->dot11PrivacyKeyIndex];
+		keylength = psecuritypriv->dot11DefKeylen[psecuritypriv->dot11_privacy_key_index];
 
 		for (curfragnum = 0; curfragnum < pattrib->nr_frags; curfragnum++) {
 			iv = pframe + pattrib->hdrlen;
 			memcpy(&wepkey[0], iv, 3);
-			memcpy(&wepkey[3], &psecuritypriv->dot11DefKey[psecuritypriv->dot11PrivacyKeyIndex].skey[0], keylength);
+			memcpy(&wepkey[3], &psecuritypriv->dot11DefKey[psecuritypriv->dot11_privacy_key_index].skey[0], keylength);
 			payload = pframe + pattrib->iv_len + pattrib->hdrlen;
 
 			if ((curfragnum + 1) == pattrib->nr_frags) {	/* the last fragment */
@@ -110,7 +110,7 @@ void rtw_wep_decrypt(struct adapter  *padapter, u8 *precvframe)
 		keyindex = prxattrib->key_index;
 		keylength = psecuritypriv->dot11DefKeylen[keyindex];
 		memcpy(&wepkey[0], iv, 3);
-		/* memcpy(&wepkey[3], &psecuritypriv->dot11DefKey[psecuritypriv->dot11PrivacyKeyIndex].skey[0], keylength); */
+		/* memcpy(&wepkey[3], &psecuritypriv->dot11DefKey[psecuritypriv->dot11_privacy_key_index].skey[0], keylength); */
 		memcpy(&wepkey[3], &psecuritypriv->dot11DefKey[keyindex].skey[0], keylength);
 		length = ((union recv_frame *)precvframe)->u.hdr.len - prxattrib->hdrlen - prxattrib->iv_len;
 
@@ -479,9 +479,9 @@ u32 rtw_tkip_encrypt(struct adapter *padapter, u8 *pxmitframe)
 
 		{
 			if (is_multicast_ether_addr(pattrib->ra))
-				prwskey = psecuritypriv->dot118021XGrpKey[psecuritypriv->dot118021XGrpKeyid].skey;
+				prwskey = psecuritypriv->dot118021XGrpKey[psecuritypriv->dot11_8021x_grp_key_id].skey;
 			else
-				prwskey = pattrib->dot118021x_UncstKey.skey;
+				prwskey = pattrib->dot11_8021x_uncst_key.skey;
 
 			for (curfragnum = 0; curfragnum < pattrib->nr_frags; curfragnum++) {
 				iv = pframe + pattrib->hdrlen;
@@ -590,7 +590,7 @@ u32 rtw_tkip_decrypt(struct adapter *padapter, u8 *precvframe)
 
 				prwskey = psecuritypriv->dot118021XGrpKey[prxattrib->key_index].skey;
 			} else {
-				prwskey = &stainfo->dot118021x_UncstKey.skey[0];
+				prwskey = &stainfo->dot11_8021x_uncst_key.skey[0];
 			}
 
 			iv = pframe + prxattrib->hdrlen;
@@ -829,7 +829,7 @@ static signed int aes_cipher(u8 *key, uint	hdrlen,
 	u8 padded_buffer[16] = {};
 	u8 mic[8];
 	uint	frtype  = GetFrameType(pframe);
-	uint	frsubtype  = GetFrameSubType(pframe);
+	uint	frsubtype  = get_frame_sub_type(pframe);
 
 	frsubtype = frsubtype >> 4;
 
@@ -993,9 +993,9 @@ u32 rtw_aes_encrypt(struct adapter *padapter, u8 *pxmitframe)
 	/* 4 start to encrypt each fragment */
 	if (pattrib->encrypt == _AES_) {
 		if (is_multicast_ether_addr(pattrib->ra))
-			prwskey = psecuritypriv->dot118021XGrpKey[psecuritypriv->dot118021XGrpKeyid].skey;
+			prwskey = psecuritypriv->dot118021XGrpKey[psecuritypriv->dot11_8021x_grp_key_id].skey;
 		else
-			prwskey = pattrib->dot118021x_UncstKey.skey;
+			prwskey = pattrib->dot11_8021x_uncst_key.skey;
 
 		for (curfragnum = 0; curfragnum < pattrib->nr_frags; curfragnum++) {
 			if ((curfragnum + 1) == pattrib->nr_frags) {	/* 4 the last fragment */
@@ -1034,7 +1034,7 @@ static signed int aes_decipher(u8 *key, uint	hdrlen,
 	u8 mic[8];
 
 	uint frtype  = GetFrameType(pframe);
-	uint frsubtype  = GetFrameSubType(pframe);
+	uint frsubtype  = get_frame_sub_type(pframe);
 
 	frsubtype = frsubtype >> 4;
 
@@ -1282,12 +1282,12 @@ u32 rtw_aes_decrypt(struct adapter *padapter, u8 *precvframe)
 				no_gkey_mc_cnt = 0;
 
 				prwskey = psecuritypriv->dot118021XGrpKey[prxattrib->key_index].skey;
-				if (psecuritypriv->dot118021XGrpKeyid != prxattrib->key_index) {
+				if (psecuritypriv->dot11_8021x_grp_key_id != prxattrib->key_index) {
 					res = _FAIL;
 					goto exit;
 				}
 			} else {
-				prwskey = &stainfo->dot118021x_UncstKey.skey[0];
+				prwskey = &stainfo->dot11_8021x_uncst_key.skey[0];
 			}
 
 			length = ((union recv_frame *)precvframe)->u.hdr.len - prxattrib->hdrlen - prxattrib->iv_len;
@@ -1343,7 +1343,7 @@ u32 rtw_BIP_verify(struct adapter *padapter, u8 *precvframe)
 		/* copy key index */
 		memcpy(&le_tmp, p + 2, 2);
 		keyid = le16_to_cpu(le_tmp);
-		if (keyid != padapter->securitypriv.dot11wBIPKeyid)
+		if (keyid != padapter->securitypriv.dot11w_bip_key_id)
 			goto BIP_exit;
 
 		/* clear the MIC field of MME to zero */
@@ -1351,13 +1351,13 @@ u32 rtw_BIP_verify(struct adapter *padapter, u8 *precvframe)
 
 		/* conscruct AAD, copy frame control field */
 		memcpy(BIP_AAD, &pwlanhdr->frame_control, 2);
-		ClearRetry(BIP_AAD);
-		ClearPwrMgt(BIP_AAD);
-		ClearMData(BIP_AAD);
+		clear_retry(BIP_AAD);
+		clear_pwr_mgt(BIP_AAD);
+		clear_m_data(BIP_AAD);
 		/* conscruct AAD, copy address 1 to address 3 */
 		memcpy(BIP_AAD + 2, &pwlanhdr->addrs, sizeof(pwlanhdr->addrs));
 
-		if (omac1_aes_128(padapter->securitypriv.dot11wBIPKey[padapter->securitypriv.dot11wBIPKeyid].skey
+		if (omac1_aes_128(padapter->securitypriv.dot11w_bip_key[padapter->securitypriv.dot11w_bip_key_id].skey
 			, BIP_AAD, ori_len, mic))
 			goto BIP_exit;
 
@@ -1488,10 +1488,10 @@ void rtw_sec_restore_wep_key(struct adapter *adapter)
 	struct security_priv *securitypriv = &(adapter->securitypriv);
 	signed int keyid;
 
-	if ((_WEP40_ == securitypriv->dot11PrivacyAlgrthm) || (_WEP104_ == securitypriv->dot11PrivacyAlgrthm)) {
+	if ((_WEP40_ == securitypriv->dot11_privacy_algrthm) || (_WEP104_ == securitypriv->dot11_privacy_algrthm)) {
 		for (keyid = 0; keyid < 4; keyid++) {
 			if (securitypriv->key_mask & BIT(keyid)) {
-				if (keyid == securitypriv->dot11PrivacyKeyIndex)
+				if (keyid == securitypriv->dot11_privacy_key_index)
 					rtw_set_key(adapter, securitypriv, keyid, 1, false);
 				else
 					rtw_set_key(adapter, securitypriv, keyid, 0, false);

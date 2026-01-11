@@ -380,7 +380,7 @@ static signed int recvframe_chkmic(struct adapter *adapter,  union recv_frame *p
 				/* rxdata_key_idx =(((iv[3])>>6)&0x3) ; */
 				mickey = &psecuritypriv->dot118021XGrprxmickey[prxattrib->key_index].skey[0];
 
-				/* psecuritypriv->dot118021XGrpKeyid, pmlmeinfo->key_index, rxdata_key_idx); */
+				/* psecuritypriv->dot11_8021x_grp_key_id, pmlmeinfo->key_index, rxdata_key_idx); */
 
 				if (psecuritypriv->binstallGrpkey == false) {
 					res = _FAIL;
@@ -408,7 +408,7 @@ static signed int recvframe_chkmic(struct adapter *adapter,  union recv_frame *p
 
 			if (bmic_err == true) {
 				/*  double check key_index for some timing issue , */
-				/*  cannot compare with psecuritypriv->dot118021XGrpKeyid also cause timing issue */
+				/*  cannot compare with psecuritypriv->dot11_8021x_grp_key_id also cause timing issue */
 				if ((is_multicast_ether_addr(prxattrib->ra) == true)  && (prxattrib->key_index != pmlmeinfo->key_index))
 					brpt_micerror = false;
 
@@ -452,12 +452,12 @@ static union recv_frame *decryptor(struct adapter *padapter, union recv_frame *p
 			switch (prxattrib->encrypt) {
 			case _WEP40_:
 			case _WEP104_:
-				prxattrib->key_index = psecuritypriv->dot11PrivacyKeyIndex;
+				prxattrib->key_index = psecuritypriv->dot11_privacy_key_index;
 				break;
 			case _TKIP_:
 			case _AES_:
 			default:
-				prxattrib->key_index = psecuritypriv->dot118021XGrpKeyid;
+				prxattrib->key_index = psecuritypriv->dot11_8021x_grp_key_id;
 				break;
 			}
 		}
@@ -512,7 +512,7 @@ static union recv_frame *portctrl(struct adapter *adapter, union recv_frame *pre
 
 	pstapriv = &adapter->stapriv;
 
-	auth_alg = adapter->securitypriv.dot11AuthAlgrthm;
+	auth_alg = adapter->securitypriv.dot11_auth_algrthm;
 
 	ptr = precv_frame->u.hdr.rx_data;
 	pfhdr = &precv_frame->u.hdr;
@@ -680,10 +680,10 @@ static void count_rx_stats(struct adapter *padapter, union recv_frame *prframe, 
 	sz = get_recvframe_len(prframe);
 	precvpriv->rx_bytes += sz;
 
-	padapter->mlmepriv.LinkDetectInfo.NumRxOkInPeriod++;
+	padapter->mlmepriv.link_detect_info.NumRxOkInPeriod++;
 
 	if ((!is_broadcast_ether_addr(pattrib->dst)) && (!is_multicast_ether_addr(pattrib->dst)))
-		padapter->mlmepriv.LinkDetectInfo.NumRxUnicastOkInPeriod++;
+		padapter->mlmepriv.link_detect_info.NumRxUnicastOkInPeriod++;
 
 	if (sta)
 		psta = sta;
@@ -840,7 +840,7 @@ static signed int ap2sta_data_frame(struct adapter *adapter, union recv_frame *p
 			goto exit;
 		}
 
-		if (GetFrameSubType(ptr) & BIT(6)) {
+		if (get_frame_sub_type(ptr) & BIT(6)) {
 			/* No data, will not indicate to upper layer, temporily count it here */
 			count_rx_stats(adapter, precv_frame, *psta);
 			ret = RTW_RX_HANDLED;
@@ -920,10 +920,10 @@ static signed int sta2ap_data_frame(struct adapter *adapter, union recv_frame *p
 
 		process_pwrbit_data(adapter, precv_frame);
 
-		if ((GetFrameSubType(ptr) & WIFI_QOS_DATA_TYPE) == WIFI_QOS_DATA_TYPE)
+		if ((get_frame_sub_type(ptr) & WIFI_QOS_DATA_TYPE) == WIFI_QOS_DATA_TYPE)
 			process_wmmps_data(adapter, precv_frame);
 
-		if (GetFrameSubType(ptr) & BIT(6)) {
+		if (get_frame_sub_type(ptr) & BIT(6)) {
 			/* No data, will not indicate to upper layer, temporily count it here */
 			count_rx_stats(adapter, precv_frame, *psta);
 			ret = RTW_RX_HANDLED;
@@ -968,7 +968,7 @@ static signed int validate_recv_ctrl_frame(struct adapter *padapter, union recv_
 	psta->sta_stats.rx_ctrl_pkts++;
 
 	/* only handle ps-poll */
-	if (GetFrameSubType(pframe) == WIFI_PSPOLL) {
+	if (get_frame_sub_type(pframe) == WIFI_PSPOLL) {
 		u16 aid;
 		u8 wmmps_ac = 0;
 
@@ -1261,11 +1261,11 @@ static signed int validate_recv_mgnt_frame(struct adapter *padapter, union recv_
 
 		if (psta) {
 			psta->sta_stats.rx_mgnt_pkts++;
-			if (GetFrameSubType(precv_frame->u.hdr.rx_data) == WIFI_BEACON)
+			if (get_frame_sub_type(precv_frame->u.hdr.rx_data) == WIFI_BEACON)
 				psta->sta_stats.rx_beacon_pkts++;
-			else if (GetFrameSubType(precv_frame->u.hdr.rx_data) == WIFI_PROBEREQ)
+			else if (get_frame_sub_type(precv_frame->u.hdr.rx_data) == WIFI_PROBEREQ)
 				psta->sta_stats.rx_probereq_pkts++;
-			else if (GetFrameSubType(precv_frame->u.hdr.rx_data) == WIFI_PROBERSP) {
+			else if (get_frame_sub_type(precv_frame->u.hdr.rx_data) == WIFI_PROBERSP) {
 				if (!memcmp(padapter->eeprompriv.mac_addr, GetAddr1Ptr(precv_frame->u.hdr.rx_data), ETH_ALEN))
 					psta->sta_stats.rx_probersp_pkts++;
 				else if (is_broadcast_mac_addr(GetAddr1Ptr(precv_frame->u.hdr.rx_data)) ||
@@ -1405,11 +1405,11 @@ static signed int validate_80211w_mgmt(struct adapter *adapter, union recv_frame
 	u8 *ptr = precv_frame->u.hdr.rx_data;
 	u8 subtype;
 
-	subtype = GetFrameSubType(ptr); /* bit(7)~bit(2) */
+	subtype = get_frame_sub_type(ptr); /* bit(7)~bit(2) */
 
 	/* only support station mode */
 	if (check_fwstate(pmlmepriv, WIFI_STATION_STATE) && check_fwstate(pmlmepriv, _FW_LINKED) &&
-	    adapter->securitypriv.binstallBIPkey == true) {
+	    adapter->securitypriv.b_install_bip_key == true) {
 		/* unicast management frame decrypt */
 		if (pattrib->privacy && !(is_multicast_ether_addr(GetAddr1Ptr(ptr))) &&
 			(subtype == WIFI_DEAUTH || subtype == WIFI_DISASSOC || subtype == WIFI_ACTION)) {
@@ -1497,7 +1497,7 @@ static signed int validate_recv_frame(struct adapter *adapter, union recv_frame 
 	}
 
 	type =  GetFrameType(ptr);
-	subtype = GetFrameSubType(ptr); /* bit(7)~bit(2) */
+	subtype = get_frame_sub_type(ptr); /* bit(7)~bit(2) */
 
 	pattrib->to_fr_ds = get_tofr_ds(ptr);
 

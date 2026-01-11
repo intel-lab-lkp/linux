@@ -121,9 +121,9 @@ static void ConstructBeacon(struct adapter *padapter, u8 *pframe, u32 *pLength)
 	ether_addr_copy(pwlanhdr->addr2, myid(&(padapter->eeprompriv)));
 	ether_addr_copy(pwlanhdr->addr3, get_my_bssid(cur_network));
 
-	SetSeqNum(pwlanhdr, 0/*pmlmeext->mgnt_seq*/);
+	set_seq_num(pwlanhdr, 0/*pmlmeext->mgnt_seq*/);
 	/* pmlmeext->mgnt_seq++; */
-	SetFrameSubType(pframe, WIFI_BEACON);
+	set_frame_sub_type(pframe, WIFI_BEACON);
 
 	pframe += sizeof(struct ieee80211_hdr_3addr);
 	pktlen = sizeof(struct ieee80211_hdr_3addr);
@@ -204,7 +204,7 @@ static void ConstructPSPoll(struct adapter *padapter, u8 *pframe, u32 *pLength)
 	fctrl = &(pwlanhdr->frame_control);
 	*(fctrl) = 0;
 	SetPwrMgt(fctrl);
-	SetFrameSubType(pframe, WIFI_PSPOLL);
+	set_frame_sub_type(pframe, WIFI_PSPOLL);
 
 	/*  AID. */
 	SetDuration(pframe, (pmlmeinfo->aid | 0xc000));
@@ -246,13 +246,13 @@ static void ConstructNullFunctionData(
 
 	switch (cur_network->network.infrastructure_mode) {
 	case Ndis802_11Infrastructure:
-		SetToDs(fctrl);
+		set_to_ds(fctrl);
 		ether_addr_copy(pwlanhdr->addr1, get_my_bssid(&(pmlmeinfo->network)));
 		ether_addr_copy(pwlanhdr->addr2, myid(&(padapter->eeprompriv)));
 		ether_addr_copy(pwlanhdr->addr3, StaAddr);
 		break;
 	case Ndis802_11APMode:
-		SetFrDs(fctrl);
+		set_fr_ds(fctrl);
 		ether_addr_copy(pwlanhdr->addr1, StaAddr);
 		ether_addr_copy(pwlanhdr->addr2, get_my_bssid(&(pmlmeinfo->network)));
 		ether_addr_copy(pwlanhdr->addr3, myid(&(padapter->eeprompriv)));
@@ -265,20 +265,20 @@ static void ConstructNullFunctionData(
 		break;
 	}
 
-	SetSeqNum(pwlanhdr, 0);
+	set_seq_num(pwlanhdr, 0);
 
 	if (bQoS) {
 		struct ieee80211_qos_hdr *pwlanqoshdr;
 
-		SetFrameSubType(pframe, WIFI_QOS_DATA_NULL);
+		set_frame_sub_type(pframe, WIFI_QOS_DATA_NULL);
 
 		pwlanqoshdr = (struct ieee80211_qos_hdr *)pframe;
-		SetPriority(&pwlanqoshdr->qos_ctrl, AC);
-		SetEOSP(&pwlanqoshdr->qos_ctrl, bEosp);
+		set_priority(&pwlanqoshdr->qos_ctrl, AC);
+		set_eosp(&pwlanqoshdr->qos_ctrl, bEosp);
 
 		pktlen = sizeof(struct ieee80211_qos_hdr);
 	} else {
-		SetFrameSubType(pframe, WIFI_DATA_NULL);
+		set_frame_sub_type(pframe, WIFI_DATA_NULL);
 
 		pktlen = sizeof(struct ieee80211_hdr_3addr);
 	}
@@ -765,26 +765,26 @@ static void ConstructBtNullFunctionData(
 	if (bForcePowerSave)
 		SetPwrMgt(fctrl);
 
-	SetFrDs(fctrl);
+	set_fr_ds(fctrl);
 	ether_addr_copy(pwlanhdr->addr1, StaAddr);
 	ether_addr_copy(pwlanhdr->addr2, myid(&padapter->eeprompriv));
 	ether_addr_copy(pwlanhdr->addr3, myid(&padapter->eeprompriv));
 
 	SetDuration(pwlanhdr, 0);
-	SetSeqNum(pwlanhdr, 0);
+	set_seq_num(pwlanhdr, 0);
 
 	if (bQoS) {
 		struct ieee80211_qos_hdr *pwlanqoshdr;
 
-		SetFrameSubType(pframe, WIFI_QOS_DATA_NULL);
+		set_frame_sub_type(pframe, WIFI_QOS_DATA_NULL);
 
 		pwlanqoshdr = (struct ieee80211_qos_hdr *)pframe;
-		SetPriority(&pwlanqoshdr->qos_ctrl, AC);
-		SetEOSP(&pwlanqoshdr->qos_ctrl, bEosp);
+		set_priority(&pwlanqoshdr->qos_ctrl, AC);
+		set_eosp(&pwlanqoshdr->qos_ctrl, bEosp);
 
 		pktlen = sizeof(struct ieee80211_qos_hdr);
 	} else {
-		SetFrameSubType(pframe, WIFI_DATA_NULL);
+		set_frame_sub_type(pframe, WIFI_DATA_NULL);
 
 		pktlen = sizeof(struct ieee80211_hdr_3addr);
 	}

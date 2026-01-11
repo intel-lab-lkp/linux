@@ -112,7 +112,7 @@ static void update_recvframe_phyinfo(union recv_frame *precvframe,
 
 
 	pkt_info.is_beacon = pkt_info.bssid_match &&
-		(GetFrameSubType(wlanhdr) == WIFI_BEACON);
+		(get_frame_sub_type(wlanhdr) == WIFI_BEACON);
 
 	sa = get_ta(wlanhdr);
 

@@ -70,29 +70,29 @@ enum {
 #define _PRIVACY_	BIT(14)
 #define _ORDER_			BIT(15)
 
-#define SetToDs(pbuf)	\
+#define set_to_ds(pbuf)	\
 	(*(__le16 *)(pbuf) |= cpu_to_le16(_TO_DS_))
 
 #define GetToDs(pbuf)	(((*(__le16 *)(pbuf)) & cpu_to_le16(_TO_DS_)) != 0)
 
-#define SetFrDs(pbuf)	\
+#define set_fr_ds(pbuf)	\
 	(*(__le16 *)(pbuf) |= cpu_to_le16(_FROM_DS_))
 
 #define GetFrDs(pbuf)	(((*(__le16 *)(pbuf)) & cpu_to_le16(_FROM_DS_)) != 0)
 
 #define get_tofr_ds(pframe)	((GetToDs(pframe) << 1) | GetFrDs(pframe))
 
-#define SetMFrag(pbuf)	\
+#define set_m_frag(pbuf)	\
 	(*(__le16 *)(pbuf) |= cpu_to_le16(_MORE_FRAG_))
 
 #define GetMFrag(pbuf)	(((*(__le16 *)(pbuf)) & cpu_to_le16(_MORE_FRAG_)) != 0)
 
-#define ClearMFrag(pbuf)	\
+#define clear_m_frag(pbuf)	\
 	(*(__le16 *)(pbuf) &= (~cpu_to_le16(_MORE_FRAG_)))
 
 #define GetRetry(pbuf)	(((*(__le16 *)(pbuf)) & cpu_to_le16(_RETRY_)) != 0)
 
-#define ClearRetry(pbuf)	\
+#define clear_retry(pbuf)	\
 	(*(__le16 *)(pbuf) &= (~cpu_to_le16(_RETRY_)))
 
 #define SetPwrMgt(pbuf)	\
@@ -100,18 +100,18 @@ enum {
 
 #define GetPwrMgt(pbuf)	(((*(__le16 *)(pbuf)) & cpu_to_le16(_PWRMGT_)) != 0)
 
-#define ClearPwrMgt(pbuf)	\
+#define clear_pwr_mgt(pbuf)	\
 	(*(__le16 *)(pbuf) &= (~cpu_to_le16(_PWRMGT_)))
 
-#define SetMData(pbuf)	\
+#define set_m_data(pbuf)	\
 	(*(__le16 *)(pbuf) |= cpu_to_le16(_MORE_DATA_))
 
 #define GetMData(pbuf)	(((*(__le16 *)(pbuf)) & cpu_to_le16(_MORE_DATA_)) != 0)
 
-#define ClearMData(pbuf)	\
+#define clear_m_data(pbuf)	\
 	(*(__le16 *)(pbuf) &= (~cpu_to_le16(_MORE_DATA_)))
 
-#define SetPrivacy(pbuf)	\
+#define set_privacy(pbuf)	\
 	(*(__le16 *)(pbuf) |= cpu_to_le16(_PRIVACY_))
 
 #define GetPrivacy(pbuf)					\
@@ -129,10 +129,10 @@ enum {
 		*(unsigned short *)(pbuf) |= cpu_to_le16(type); \
 	} while (0)
 
-#define GetFrameSubType(pbuf)	(le16_to_cpu(*(__le16 *)(pbuf)) & (BIT(7) |\
+#define get_frame_sub_type(pbuf)	(le16_to_cpu(*(__le16 *)(pbuf)) & (BIT(7) |\
 	 BIT(6) | BIT(5) | BIT(4) | BIT(3) | BIT(2)))
 
-#define SetFrameSubType(pbuf, type) \
+#define set_frame_sub_type(pbuf, type) \
 	do {    \
 		*(__le16 *)(pbuf) &= cpu_to_le16(~(BIT(7) | BIT(6) |	\
 		 BIT(5) | BIT(4) | BIT(3) | BIT(2))); \
@@ -153,7 +153,7 @@ enum {
 			cpu_to_le16(0x0f & (num));     \
 	} while (0)
 
-#define SetSeqNum(pbuf, num) \
+#define set_seq_num(pbuf, num) \
 	do {    \
 		*(__le16 *)((size_t)(pbuf) + 22) = \
 			((*(__le16 *)((size_t)(pbuf) + 22)) & cpu_to_le16((unsigned short)0x000f)) | \
@@ -164,15 +164,15 @@ enum {
 	(*(__le16 *)((size_t)(pbuf) + 2) = cpu_to_le16(0xffff & (dur)))
 
 
-#define SetPriority(pbuf, tid)	\
+#define set_priority(pbuf, tid)	\
 	(*(__le16 *)(pbuf) |= cpu_to_le16(tid & 0xf))
 
 #define GetPriority(pbuf)	((le16_to_cpu(*(__le16 *)(pbuf))) & 0xf)
 
-#define SetEOSP(pbuf, eosp)	\
+#define set_eosp(pbuf, eosp)	\
 		(*(__le16 *)(pbuf) |= cpu_to_le16((eosp & 1) << 4))
 
-#define SetAckpolicy(pbuf, ack)	\
+#define set_ack_policy(pbuf, ack)	\
 	(*(__le16 *)(pbuf) |= cpu_to_le16((ack & 3) << 5))
 
 #define GetAckpolicy(pbuf) (((le16_to_cpu(*(__le16 *)pbuf)) >> 5) & 0x3)
