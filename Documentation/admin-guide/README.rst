@@ -53,7 +53,7 @@ Documentation
    these typically contain kernel-specific installation notes for some
    drivers for example. Please read the
    :ref:`Documentation/process/changes.rst <changes>` file, as it
-   contains information about the problems, which may result by upgrading
+   contains information about the problems which may result from upgrading
    your kernel.
 
 Installing the kernel source
@@ -264,7 +264,7 @@ Compiling the kernel
 
  - Do a ``make`` to create a compressed kernel image. It is also possible to do
    ``make install`` if you have lilo installed or if your distribution has an
-   install script recognised by the kernel's installer. Most popular
+   install script recognized by the kernel's installer. Most popular
    distributions will have a recognized install script. You may want to
    check your distribution's setup first.
 
