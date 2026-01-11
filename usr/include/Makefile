@@ -52,6 +52,12 @@ ifeq ($(SRCARCH),arc)
 no-header-test += linux/bpf_perf_event.h
 endif
 
+ifeq ($(SRCARCH)_$(CONFIG_CC_IS_CLANG),arm_y)
+no-header-test += linux/hyperv.h
+no-header-test += linux/vboxguest.h
+no-header-test += linux/vbox_vmmdev_types.h
+endif
+
 ifeq ($(SRCARCH),openrisc)
 no-header-test += linux/bpf_perf_event.h
 endif
