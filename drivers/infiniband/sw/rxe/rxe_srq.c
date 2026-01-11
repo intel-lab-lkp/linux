@@ -84,6 +84,7 @@ int rxe_srq_from_init(struct rxe_dev *rxe, struct rxe_srq *srq,
 		if (copy_to_user(&uresp->srq_num, &srq->srq_num,
 				 sizeof(uresp->srq_num))) {
 			rxe_queue_cleanup(q);
+			srq->rq.queue = NULL;
 			return -EFAULT;
 		}
 	}
