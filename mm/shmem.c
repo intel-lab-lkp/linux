@@ -961,18 +961,28 @@ static void shmem_delete_from_page_cache(struct folio *folio, void *radswap)
  * the number of pages being freed. 0 means entry not found in XArray (0 pages
  * being freed).
  */
-static long shmem_free_swap(struct address_space *mapping,
-			    pgoff_t index, void *radswap)
+static long shmem_free_swap(struct address_space *mapping, pgoff_t index,
+			    unsigned int max_nr, void *radswap)
 {
-	int order = xa_get_order(&mapping->i_pages, index);
-	void *old;
+	XA_STATE(xas, &mapping->i_pages, index);
+	unsigned int nr_pages = 0;
+	void *entry;
 
-	old = xa_cmpxchg_irq(&mapping->i_pages, index, radswap, NULL, 0);
-	if (old != radswap)
-		return 0;
-	swap_put_entries_direct(radix_to_swp_entry(radswap), 1 << order);
+	xas_lock_irq(&xas);
+	entry = xas_load(&xas);
+	if (entry == radswap) {
+		nr_pages = 1 << xas_get_order(&xas);
+		if (index == round_down(xas.xa_index, nr_pages) && nr_pages < max_nr)
+			xas_store(&xas, NULL);
+		else
+			nr_pages = 0;
+	}
+	xas_unlock_irq(&xas);
 
-	return 1 << order;
+	if (nr_pages)
+		swap_put_entries_direct(radix_to_swp_entry(radswap), nr_pages);
+
+	return nr_pages;
 }
 
 /*
@@ -1124,8 +1134,8 @@ static void shmem_undo_range(struct inode *inode, loff_t lstart, uoff_t lend,
 			if (xa_is_value(folio)) {
 				if (unfalloc)
 					continue;
-				nr_swaps_freed += shmem_free_swap(mapping,
-							indices[i], folio);
+				nr_swaps_freed += shmem_free_swap(mapping, indices[i],
+								  end - indices[i], folio);
 				continue;
 			}
 
@@ -1195,7 +1205,8 @@ whole_folios:
 
 				if (unfalloc)
 					continue;
-				swaps_freed = shmem_free_swap(mapping, indices[i], folio);
+				swaps_freed = shmem_free_swap(mapping, indices[i],
+							      end - indices[i], folio);
 				if (!swaps_freed) {
 					/* Swap was replaced by page: retry */
 					index = indices[i];
