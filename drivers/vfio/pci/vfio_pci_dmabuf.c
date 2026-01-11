@@ -17,19 +17,13 @@ struct vfio_pci_dma_buf {
 	struct dma_buf_phys_vec *phys_vec;
 	struct p2pdma_provider *provider;
 	u32 nr_ranges;
-	u8 revoked : 1;
 };
 
 static int vfio_pci_dma_buf_attach(struct dma_buf *dmabuf,
 				   struct dma_buf_attachment *attachment)
 {
-	struct vfio_pci_dma_buf *priv = dmabuf->priv;
-
 	if (!attachment->peer2peer)
 		return -EOPNOTSUPP;
-
-	if (priv->revoked)
-		return -ENODEV;
 
 	return 0;
 }
@@ -41,9 +35,6 @@ vfio_pci_dma_buf_map(struct dma_buf_attachment *attachment,
 	struct vfio_pci_dma_buf *priv = attachment->dmabuf->priv;
 
 	dma_resv_assert_held(priv->dmabuf->resv);
-
-	if (priv->revoked)
-		return ERR_PTR(-ENODEV);
 
 	return dma_buf_phys_vec_to_sgt(attachment, priv->provider,
 				       priv->phys_vec, priv->nr_ranges,
@@ -90,8 +81,6 @@ static const struct dma_buf_ops vfio_pci_dmabuf_ops = {
  *
  * If this function succeeds the following are true:
  *  - There is one physical range and it is pointing to MMIO
- *  - When move_notify is called it means revoke, not move, vfio_dma_buf_map
- *    will fail if it is currently revoked
  */
 int vfio_pci_dma_buf_iommufd_map(struct dma_buf_attachment *attachment,
 				 struct dma_buf_phys_vec *phys)
@@ -104,9 +93,6 @@ int vfio_pci_dma_buf_iommufd_map(struct dma_buf_attachment *attachment,
 		return -EOPNOTSUPP;
 
 	priv = attachment->dmabuf->priv;
-	if (priv->revoked)
-		return -ENODEV;
-
 	/* More than one range to iommufd will require proper DMABUF support */
 	if (priv->nr_ranges != 1)
 		return -EOPNOTSUPP;
@@ -268,6 +254,7 @@ int vfio_pci_core_feature_dma_buf(struct vfio_pci_core_device *vdev, u32 flags,
 	exp_info.size = priv->size;
 	exp_info.flags = get_dma_buf.open_flags;
 	exp_info.priv = priv;
+	exp_info.revoke_semantics = true;
 
 	priv->dmabuf = dma_buf_export(&exp_info);
 	if (IS_ERR(priv->dmabuf)) {
@@ -279,7 +266,6 @@ int vfio_pci_core_feature_dma_buf(struct vfio_pci_core_device *vdev, u32 flags,
 	INIT_LIST_HEAD(&priv->dmabufs_elm);
 	down_write(&vdev->memory_lock);
 	dma_resv_lock(priv->dmabuf->resv, NULL);
-	priv->revoked = !__vfio_pci_memory_enabled(vdev);
 	list_add_tail(&priv->dmabufs_elm, &vdev->dmabufs);
 	dma_resv_unlock(priv->dmabuf->resv);
 	up_write(&vdev->memory_lock);
@@ -317,12 +303,12 @@ void vfio_pci_dma_buf_move(struct vfio_pci_core_device *vdev, bool revoked)
 		if (!get_file_active(&priv->dmabuf->file))
 			continue;
 
-		if (priv->revoked != revoked) {
-			dma_resv_lock(priv->dmabuf->resv, NULL);
-			priv->revoked = revoked;
+		dma_resv_lock(priv->dmabuf->resv, NULL);
+		if (revoked)
 			dma_buf_move_notify(priv->dmabuf);
-			dma_resv_unlock(priv->dmabuf->resv);
-		}
+		else
+			dma_buf_mark_valid(priv->dmabuf);
+		dma_resv_unlock(priv->dmabuf->resv);
 		fput(priv->dmabuf->file);
 	}
 }
@@ -340,7 +326,6 @@ void vfio_pci_dma_buf_cleanup(struct vfio_pci_core_device *vdev)
 		dma_resv_lock(priv->dmabuf->resv, NULL);
 		list_del_init(&priv->dmabufs_elm);
 		priv->vdev = NULL;
-		priv->revoked = true;
 		dma_buf_move_notify(priv->dmabuf);
 		dma_resv_unlock(priv->dmabuf->resv);
 		vfio_device_put_registration(&vdev->vdev);
