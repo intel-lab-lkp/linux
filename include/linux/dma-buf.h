@@ -23,6 +23,7 @@
 #include <linux/dma-fence.h>
 #include <linux/wait.h>
 #include <linux/pci-p2pdma.h>
+#include <linux/dma-resv.h>
 
 struct device;
 struct dma_buf;
@@ -441,6 +442,15 @@ struct dma_buf {
 		struct dma_buf *dmabuf;
 	} *sysfs_entry;
 #endif
+	/**
+	 * @revoke_semantics:
+	 *
+	 * This exporter implements revoke semantics.
+	 */
+	bool revoke_semantics;
+
+	/** @invalidate: this buffer was revoked and invalidated */
+	bool invalidate;
 };
 
 /**
@@ -476,6 +486,18 @@ struct dma_buf_attach_ops {
 	 * point to the new location of the DMA-buf.
 	 */
 	void (*move_notify)(struct dma_buf_attachment *attach);
+
+	/**
+	 * @revoke_notify: [optional] notification that the DMA-buf is revoking
+	 *
+	 * If this callback is provided the importer will invildate the mappings.
+	 *
+	 * This callback is called with the lock of the reservation object
+	 * associated with the dma_buf held.
+	 *
+	 * New mappings shouldn't be created after this callback returns.
+	 */
+	void (*revoke_notify)(struct dma_buf_attachment *attach);
 };
 
 /**
@@ -516,6 +538,7 @@ struct dma_buf_attachment {
  * @size:	Size of the buffer - invariant over the lifetime of the buffer
  * @flags:	mode flags for the file
  * @resv:	reservation-object, NULL to allocate default one
+ * @revoke_semantics: support revoke semantics
  * @priv:	Attach private data of allocator to this buffer
  *
  * This structure holds the information required to export the buffer. Used
@@ -528,6 +551,7 @@ struct dma_buf_export_info {
 	size_t size;
 	int flags;
 	struct dma_resv *resv;
+	bool revoke_semantics;
 	void *priv;
 };
 
@@ -620,4 +644,11 @@ int dma_buf_vmap_unlocked(struct dma_buf *dmabuf, struct iosys_map *map);
 void dma_buf_vunmap_unlocked(struct dma_buf *dmabuf, struct iosys_map *map);
 struct dma_buf *dma_buf_iter_begin(void);
 struct dma_buf *dma_buf_iter_next(struct dma_buf *dmbuf);
+
+static inline void dma_buf_mark_valid(struct dma_buf *dma_buf)
+{
+	dma_resv_assert_held(dma_buf->resv);
+
+	dma_buf->invalidate = false;
+}
 #endif /* __DMA_BUF_H__ */

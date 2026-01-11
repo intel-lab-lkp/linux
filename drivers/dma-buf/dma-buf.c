@@ -697,6 +697,9 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 	if (WARN_ON(!exp_info->ops->pin != !exp_info->ops->unpin))
 		return ERR_PTR(-EINVAL);
 
+	if (WARN_ON(exp_info->revoke_semantics && exp_info->ops->pin))
+		return ERR_PTR(-EINVAL);
+
 	if (!try_module_get(exp_info->owner))
 		return ERR_PTR(-ENOENT);
 
@@ -727,6 +730,7 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 	dmabuf->cb_in.poll = dmabuf->cb_out.poll = &dmabuf->poll;
 	dmabuf->cb_in.active = dmabuf->cb_out.active = 0;
 	INIT_LIST_HEAD(&dmabuf->attachments);
+	dmabuf->revoke_semantics = exp_info->revoke_semantics;
 
 	if (!resv) {
 		dmabuf->resv = (struct dma_resv *)&dmabuf[1];
@@ -948,8 +952,21 @@ dma_buf_dynamic_attach(struct dma_buf *dmabuf, struct device *dev,
 	if (WARN_ON(!dmabuf || !dev))
 		return ERR_PTR(-EINVAL);
 
-	if (WARN_ON(importer_ops && !importer_ops->move_notify))
-		return ERR_PTR(-EINVAL);
+	if (dmabuf->invalidate)
+		return ERR_PTR(-ENODEV);
+
+	if (importer_ops) {
+		if (WARN_ON(!importer_ops->move_notify &&
+			    !importer_ops->revoke_notify))
+			return ERR_PTR(-EINVAL);
+
+		if (WARN_ON(importer_ops->move_notify &&
+			    importer_ops->revoke_notify))
+			return ERR_PTR(-EINVAL);
+
+		if (!dmabuf->revoke_semantics && importer_ops->revoke_notify)
+			return ERR_PTR(-EINVAL);
+	}
 
 	attach = kzalloc(sizeof(*attach), GFP_KERNEL);
 	if (!attach)
@@ -1101,6 +1118,9 @@ struct sg_table *dma_buf_map_attachment(struct dma_buf_attachment *attach,
 
 	if (WARN_ON(!attach || !attach->dmabuf))
 		return ERR_PTR(-EINVAL);
+
+	if (attach->dmabuf->invalidate)
+		return ERR_PTR(-ENODEV);
 
 	dma_resv_assert_held(attach->dmabuf->resv);
 
@@ -1261,8 +1281,16 @@ void dma_buf_move_notify(struct dma_buf *dmabuf)
 	dma_resv_assert_held(dmabuf->resv);
 
 	list_for_each_entry(attach, &dmabuf->attachments, node)
-		if (attach->importer_ops)
-			attach->importer_ops->move_notify(attach);
+		if (attach->importer_ops) {
+			if (attach->importer_ops->move_notify)
+				attach->importer_ops->move_notify(attach);
+
+			if (attach->importer_ops->revoke_notify)
+				attach->importer_ops->revoke_notify(attach);
+		}
+
+	if (dmabuf->revoke_semantics)
+		dmabuf->invalidate = true;
 }
 EXPORT_SYMBOL_NS_GPL(dma_buf_move_notify, "DMA_BUF");
 
