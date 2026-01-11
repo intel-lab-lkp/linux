@@ -33,7 +33,7 @@
 # error NR_IRQS < MARVEL_NR_IRQS !!!
 #endif
 
-
+
 /*
  * Interrupt handling.
  */
@@ -432,7 +432,7 @@ marvel_smp_callin(void)
 	for (i = 0; i < 16; ++i)
 		io7_redirect_one_msi(io7, i, cpuid);
 }
-
+
 /*
  * System Vectors
  */

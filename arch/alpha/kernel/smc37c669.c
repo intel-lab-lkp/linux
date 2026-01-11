@@ -1093,7 +1093,7 @@ static int SMC37c669_xlate_drq(
 );
 
 static  __cacheline_aligned DEFINE_SPINLOCK(smc_lock);
-
+
 /*
 **++
 **  FUNCTIONAL DESCRIPTION:
@@ -1189,7 +1189,7 @@ SMC37c669_CONFIG_REGS * __init SMC37c669_detect( int index )
     return SMC37c669;
 }
 
-
+
 /*
 **++
 **  FUNCTIONAL DESCRIPTION:
@@ -1421,7 +1421,7 @@ unsigned int __init SMC37c669_enable_device ( unsigned int func )
     return ret_val;
 }
 
-
+
 /*
 **++
 **  FUNCTIONAL DESCRIPTION:
@@ -1625,7 +1625,7 @@ unsigned int __init SMC37c669_disable_device ( unsigned int func )
     return ret_val;
 }
 
-
+
 /*
 **++
 **  FUNCTIONAL DESCRIPTION:
@@ -1702,7 +1702,7 @@ unsigned int __init SMC37c669_configure_device (
     return FALSE;
 }
 
-
+
 /*
 **++
 **  FUNCTIONAL DESCRIPTION:
@@ -1789,7 +1789,7 @@ static unsigned int __init SMC37c669_is_device_enabled ( unsigned int func )
     return ret_val;
 }
 
-
+
 #if 0
 /*
 **++
@@ -1861,7 +1861,7 @@ static unsigned int __init SMC37c669_get_device_config (
 }
 #endif
 
-
+
 /*
 **++
 **  FUNCTIONAL DESCRIPTION:
@@ -1938,7 +1938,7 @@ void __init SMC37c669_display_device_info ( void )
     }
 }
 
-
+
 /*
 **++
 **  FUNCTIONAL DESCRIPTION:
@@ -1981,7 +1981,7 @@ static void __init SMC37c669_config_mode(
     	wb( &SMC37c669->index_port, SMC37c669_CONFIG_OFF_KEY );
     }
 }
-
+
 /*
 **++
 **  FUNCTIONAL DESCRIPTION:
@@ -2011,7 +2011,7 @@ static unsigned char __init SMC37c669_read_config(
 	wb(&SMC37c669->index_port, index);
 	return rb(&SMC37c669->data_port);
 }
-
+
 /*
 **++
 **  FUNCTIONAL DESCRIPTION:
@@ -2046,7 +2046,7 @@ static void __init SMC37c669_write_config(
     wb( &SMC37c669->data_port, data );
 }
 
-
+
 /*
 **++
 **  FUNCTIONAL DESCRIPTION:
@@ -2175,7 +2175,7 @@ static void __init SMC37c669_init_local_config ( void )
     local_config[IDE_0].irq = 14;
 }
 
-
+
 /*
 **++
 **  FUNCTIONAL DESCRIPTION:
@@ -2222,7 +2222,7 @@ static struct DEVICE_CONFIG * __init SMC37c669_get_config( unsigned int func )
     }
     return cp;
 }
-
+
 /*
 **++
 **  FUNCTIONAL DESCRIPTION:
@@ -2274,7 +2274,7 @@ static int __init SMC37c669_xlate_irq ( int irq )
     return translated_irq;
 }
 
-
+
 /*
 **++
 **  FUNCTIONAL DESCRIPTION:
@@ -2325,7 +2325,7 @@ static int __init SMC37c669_xlate_drq ( int drq )
     }
     return translated_drq;
 }
-
+
 #if 0
 int __init smcc669_init ( void )
 {
@@ -2340,7 +2340,7 @@ int __init smcc669_init ( void )
 
     return msg_success;
 }
-
+
 int __init smcc669_open( struct FILE *fp, char *info, char *next, char *mode )
 {
     struct INODE *ip;
@@ -2365,7 +2365,7 @@ int __init smcc669_open( struct FILE *fp, char *info, char *next, char *mode )
 
     return msg_success;
 }
-
+
 int __init smcc669_close( struct FILE *fp )
 {
     struct INODE *ip;
@@ -2378,7 +2378,7 @@ int __init smcc669_close( struct FILE *fp )
     }
     return msg_success;
 }
-
+
 int __init smcc669_read( struct FILE *fp, int size, int number, unsigned char *buf )
 {
     int i;
@@ -2404,7 +2404,7 @@ int __init smcc669_read( struct FILE *fp, int size, int number, unsigned char *b
     SMC37c669_config_mode( FALSE );
     return nbytes;
 }
-
+
 int __init smcc669_write( struct FILE *fp, int size, int number, unsigned char *buf )
 {
     int i;

@@ -581,7 +581,7 @@ titan_register_error_handlers(void)
 	ev6_register_error_handlers();
 }
 
-
+
 /*
  * Privateer
  */
