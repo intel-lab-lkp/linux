@@ -1326,6 +1326,7 @@ int ecryptfs_read_metadata(struct dentry *ecryptfs_dentry)
 			       "file xattr region either, inode %lu\n",
 				ecryptfs_inode->i_ino);
 			rc = -EINVAL;
+			goto out;
 		}
 		if (crypt_stat->mount_crypt_stat->flags
 		    & ECRYPTFS_XATTR_METADATA_ENABLED) {
@@ -1338,6 +1339,7 @@ int ecryptfs_read_metadata(struct dentry *ecryptfs_dentry)
 			       "this like an encrypted file, inode %lu\n",
 				ecryptfs_inode->i_ino);
 			rc = -EINVAL;
+			goto out;
 		}
 	}
 out:
