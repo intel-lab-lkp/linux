@@ -413,6 +413,60 @@ struct dev_pagemap *get_dev_pagemap(unsigned long pfn)
 }
 EXPORT_SYMBOL_GPL(get_dev_pagemap);
 
+/**
+ * free_zone_device_folio_prepare() - Prepare a ZONE_DEVICE folio for freeing.
+ * @folio: ZONE_DEVICE folio to prepare for release.
+ *
+ * ZONE_DEVICE pages/folios (e.g., device-private memory or fsdax-backed pages)
+ * can be compound. When freeing a compound ZONE_DEVICE folio, the tail pages
+ * must be restored to a sane ZONE_DEVICE state before they are released.
+ *
+ * This helper:
+ *   - Clears @folio->mapping and, for compound folios, clears each page's
+ *     compound-head state (ClearPageHead()/clear_compound_head()).
+ *   - Resets the compound order metadata (folio_reset_order()) and then
+ *     initializes each constituent page as a standalone ZONE_DEVICE folio:
+ *       * clears ->mapping
+ *       * restores ->pgmap (prep_compound_page() overwrites it)
+ *       * clears ->share (only relevant for fsdax; unused for device-private)
+ *
+ * If @folio is order-0, only the mapping is cleared and no further work is
+ * required.
+ */
+void free_zone_device_folio_prepare(struct folio *folio)
+{
+	struct dev_pagemap *pgmap = page_pgmap(&folio->page);
+	int order, i;
+
+	VM_WARN_ON_FOLIO(!folio_is_zone_device(folio), folio);
+
+	folio->mapping = NULL;
+	order = folio_order(folio);
+	if (!order)
+		return;
+
+	folio_reset_order(folio);
+
+	for (i = 0; i < (1UL << order); i++) {
+		struct page *page = folio_page(folio, i);
+		struct folio *new_folio = (struct folio *)page;
+
+		ClearPageHead(page);
+		clear_compound_head(page);
+
+		new_folio->mapping = NULL;
+		/*
+		 * Reset pgmap which was over-written by
+		 * prep_compound_page().
+		 */
+		new_folio->pgmap = pgmap;
+		new_folio->share = 0;	/* fsdax only, unused for device private */
+		VM_WARN_ON_FOLIO(folio_ref_count(new_folio), new_folio);
+		VM_WARN_ON_FOLIO(!folio_is_zone_device(new_folio), new_folio);
+	}
+}
+EXPORT_SYMBOL_GPL(free_zone_device_folio_prepare);
+
 void free_zone_device_folio(struct folio *folio)
 {
 	struct dev_pagemap *pgmap = folio->pgmap;
@@ -454,6 +508,7 @@ void free_zone_device_folio(struct folio *folio)
 	case MEMORY_DEVICE_COHERENT:
 		if (WARN_ON_ONCE(!pgmap->ops || !pgmap->ops->folio_free))
 			break;
+		free_zone_device_folio_prepare(folio);
 		pgmap->ops->folio_free(folio, order);
 		percpu_ref_put_many(&folio->pgmap->ref, nr);
 		break;

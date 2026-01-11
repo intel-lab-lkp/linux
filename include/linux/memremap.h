@@ -230,6 +230,7 @@ static inline bool is_fsdax_page(const struct page *page)
 
 #ifdef CONFIG_ZONE_DEVICE
 void zone_device_page_init(struct page *page, unsigned int order);
+void free_zone_device_folio_prepare(struct folio *folio);
 void *memremap_pages(struct dev_pagemap *pgmap, int nid);
 void memunmap_pages(struct dev_pagemap *pgmap);
 void *devm_memremap_pages(struct device *dev, struct dev_pagemap *pgmap);
