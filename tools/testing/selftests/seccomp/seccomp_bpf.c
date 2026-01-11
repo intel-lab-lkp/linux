@@ -622,6 +622,64 @@ TEST(log_all)
 	EXPECT_EQ(parent, syscall(__NR_getppid));
 }
 
+static bool kmsg_has_seccomp_log(int fd, pid_t pid)
+{
+	char buf[4096];
+	char pid_pat[32];
+	ssize_t ret;
+	int retries = 10;
+
+	snprintf(pid_pat, sizeof(pid_pat), "pid=%d", pid);
+
+	while (retries--) {
+		while ((ret = read(fd, buf, sizeof(buf) - 1)) > 0) {
+			buf[ret] = '\0';
+			if (strstr(buf, "seccomp") && strstr(buf, pid_pat))
+				return true;
+		}
+		usleep(10000); /* 10ms */
+	}
+	return false;
+}
+
+TEST(ret_log_semantics)
+{
+	struct sock_filter filter[] = {
+		BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_LOG),
+	};
+	struct sock_fprog prog = {
+		.len = (unsigned short)ARRAY_SIZE(filter),
+		.filter = filter,
+	};
+	long ret;
+	pid_t self;
+	int kmsg_fd;
+
+	/* move the file pointer to the end */
+	kmsg_fd = open("/dev/kmsg", O_RDONLY | O_NONBLOCK);
+	if (kmsg_fd >= 0)
+		lseek(kmsg_fd, 0, SEEK_END);
+
+	ret = prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+	ASSERT_EQ(0, ret);
+
+	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog);
+	ASSERT_EQ(0, ret);
+
+	self = getpid();
+	EXPECT_EQ(self, syscall(__NR_getpid));
+
+	/*
+	 * - only if /dev/kmsg was accessible
+	 * - skip silently otherwise
+	 */
+	if (kmsg_fd >= 0) {
+		if (!kmsg_has_seccomp_log(kmsg_fd, self))
+			SKIP(return, "seccomp log not observed (logging disabled or restricted)");
+		close(kmsg_fd);
+	}
+}
+
 TEST_SIGNAL(unknown_ret_is_kill_inside, SIGSYS)
 {
 	struct sock_filter filter[] = {
@@ -5294,7 +5352,6 @@ TEST_F(UPROBE, uprobe_default_block_with_syscall)
  * - 64-bit arg prodding
  * - arch value testing (x86 modes especially)
  * - verify that FILTER_FLAG_LOG filters generate log messages
- * - verify that RET_LOG generates log messages
  */
 
 TEST_HARNESS_MAIN
