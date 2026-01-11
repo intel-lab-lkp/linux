@@ -68,7 +68,10 @@ enum scan_result {
 static struct task_struct *khugepaged_thread __read_mostly;
 static DEFINE_MUTEX(khugepaged_mutex);
 
-/* default scan 8*HPAGE_PMD_NR ptes (or vmas) every 10 second */
+/*
+ * default scan 8*HPAGE_PMD_NR ptes, pmd_mapped, no_pte_table or vmas
+ * every 10 second.
+ */
 static unsigned int khugepaged_pages_to_scan __read_mostly;
 static unsigned int khugepaged_pages_collapsed;
 static unsigned int khugepaged_full_scans;
@@ -1267,7 +1270,7 @@ static enum scan_result hpage_collapse_scan_pmd(struct mm_struct *mm,
 	result = find_pmd_or_thp_or_none(mm, start_addr, &pmd);
 	if (result != SCAN_SUCCEED) {
 		if (cur_progress)
-			*cur_progress = HPAGE_PMD_NR;
+			*cur_progress = 1;
 		goto out;
 	}
 
@@ -1276,7 +1279,7 @@ static enum scan_result hpage_collapse_scan_pmd(struct mm_struct *mm,
 	pte = pte_offset_map_lock(mm, pmd, start_addr, &ptl);
 	if (!pte) {
 		if (cur_progress)
-			*cur_progress = HPAGE_PMD_NR;
+			*cur_progress = 1;
 		result = SCAN_NO_PTE_TABLE;
 		goto out;
 	}
@@ -2347,9 +2350,6 @@ static enum scan_result hpage_collapse_scan_file(struct mm_struct *mm, unsigned 
 			continue;
 		}
 
-		if (cur_progress)
-			*cur_progress += folio_nr_pages(folio);
-
 		if (folio_order(folio) == HPAGE_PMD_ORDER &&
 		    folio->index == start) {
 			/* Maybe PMD-mapped */
@@ -2361,8 +2361,13 @@ static enum scan_result hpage_collapse_scan_file(struct mm_struct *mm, unsigned 
 			 * returning.
 			 */
 			folio_put(folio);
+			if (cur_progress)
+				*cur_progress += 1;
 			break;
 		}
+
+		if (cur_progress)
+			*cur_progress += folio_nr_pages(folio);
 
 		node = folio_nid(folio);
 		if (hpage_collapse_scan_abort(node, cc)) {
