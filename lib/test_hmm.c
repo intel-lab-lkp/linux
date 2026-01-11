@@ -1580,13 +1580,11 @@ static const struct file_operations dmirror_fops = {
 	.owner		= THIS_MODULE,
 };
 
-static void dmirror_devmem_free(struct folio *folio)
+static void dmirror_devmem_free(struct folio *folio, unsigned int order)
 {
 	struct page *page = &folio->page;
 	struct page *rpage = BACKING_PAGE(page);
 	struct dmirror_device *mdevice;
-	struct folio *rfolio = page_folio(rpage);
-	unsigned int order = folio_order(rfolio);
 
 	if (rpage != page) {
 		if (order)

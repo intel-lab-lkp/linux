@@ -417,6 +417,7 @@ void free_zone_device_folio(struct folio *folio)
 {
 	struct dev_pagemap *pgmap = folio->pgmap;
 	unsigned long nr = folio_nr_pages(folio);
+	unsigned int order = folio_order(folio);
 	int i;
 
 	if (WARN_ON_ONCE(!pgmap))
@@ -453,7 +454,7 @@ void free_zone_device_folio(struct folio *folio)
 	case MEMORY_DEVICE_COHERENT:
 		if (WARN_ON_ONCE(!pgmap->ops || !pgmap->ops->folio_free))
 			break;
-		pgmap->ops->folio_free(folio);
+		pgmap->ops->folio_free(folio, order);
 		percpu_ref_put_many(&folio->pgmap->ref, nr);
 		break;
 
@@ -472,7 +473,7 @@ void free_zone_device_folio(struct folio *folio)
 	case MEMORY_DEVICE_PCI_P2PDMA:
 		if (WARN_ON_ONCE(!pgmap->ops || !pgmap->ops->folio_free))
 			break;
-		pgmap->ops->folio_free(folio);
+		pgmap->ops->folio_free(folio, order);
 		break;
 	}
 }

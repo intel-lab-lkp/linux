@@ -200,7 +200,7 @@ static const struct attribute_group p2pmem_group = {
 	.name = "p2pmem",
 };
 
-static void p2pdma_folio_free(struct folio *folio)
+static void p2pdma_folio_free(struct folio *folio, unsigned int order)
 {
 	struct page *page = &folio->page;
 	struct pci_p2pdma_pagemap *pgmap = to_p2p_pgmap(page_pgmap(page));

@@ -79,8 +79,13 @@ struct dev_pagemap_ops {
 	 * Called once the folio refcount reaches 0.  The reference count will be
 	 * reset to one by the core code after the method is called to prepare
 	 * for handing out the folio again.
+	 *
+	 * The core MM splits the folio before calling folio_free, restoring the
+	 * zone pages associated with the folio to an initialized state (e.g.,
+	 * non-compound, pgmap valid, etc...). The order argument represents the
+	 * folio’s order prior to the split.
 	 */
-	void (*folio_free)(struct folio *folio);
+	void (*folio_free)(struct folio *folio, unsigned int order);
 
 	/*
 	 * Used for private (un-addressable) device memory only.  Must migrate

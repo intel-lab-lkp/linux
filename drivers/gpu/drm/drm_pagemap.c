@@ -1144,11 +1144,12 @@ err_out:
 /**
  * drm_pagemap_folio_free() - Put GPU SVM zone device data associated with a folio
  * @folio: Pointer to the folio
+ * @order: Order of the folio prior to being split by core MM
  *
  * This function is a callback used to put the GPU SVM zone device data
  * associated with a page when it is being released.
  */
-static void drm_pagemap_folio_free(struct folio *folio)
+static void drm_pagemap_folio_free(struct folio *folio, unsigned int order)
 {
 	drm_pagemap_zdd_put(folio->page.zone_device_data);
 }

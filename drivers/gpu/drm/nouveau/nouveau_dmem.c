@@ -115,14 +115,14 @@ unsigned long nouveau_dmem_page_addr(struct page *page)
 	return chunk->bo->offset + off;
 }
 
-static void nouveau_dmem_folio_free(struct folio *folio)
+static void nouveau_dmem_folio_free(struct folio *folio, unsigned int order)
 {
 	struct page *page = &folio->page;
 	struct nouveau_dmem_chunk *chunk = nouveau_page_to_chunk(page);
 	struct nouveau_dmem *dmem = chunk->drm->dmem;
 
 	spin_lock(&dmem->lock);
-	if (folio_order(folio)) {
+	if (order) {
 		page->zone_device_data = dmem->free_folios;
 		dmem->free_folios = folio;
 	} else {

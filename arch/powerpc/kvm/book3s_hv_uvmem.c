@@ -1014,7 +1014,7 @@ static vm_fault_t kvmppc_uvmem_migrate_to_ram(struct vm_fault *vmf)
  * to a normal PFN during H_SVM_PAGE_OUT.
  * Gets called with kvm->arch.uvmem_lock held.
  */
-static void kvmppc_uvmem_folio_free(struct folio *folio)
+static void kvmppc_uvmem_folio_free(struct folio *folio, unsigned int order)
 {
 	struct page *page = &folio->page;
 	unsigned long pfn = page_to_pfn(page) -
