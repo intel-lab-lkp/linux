@@ -277,6 +277,15 @@ struct mtk_pinctrl_devdata {
 	unsigned int mode_mask;
 	unsigned int mode_per_reg;
 	unsigned int mode_shf;
+	bool dir_multibase;
+	bool ies_multibase;
+	bool smt_multibase;
+	bool pullen_multibase;
+	bool pullsel_multibase;
+	bool drv_multibase;
+	bool dout_multibase;
+	bool din_multibase;
+	bool pinmux_multibase;
 };
 
 struct mtk_pinctrl {

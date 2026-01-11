@@ -42,14 +42,15 @@ static const char * const mtk_gpio_functions[] = {
 };
 
 /*
- * There are two base address for pull related configuration
- * in mt8135, and different GPIO pins use different base address.
- * When pin number greater than type1_start and less than type1_end,
- * should use the second base address.
+ * Some chips (e.g., mt8135) have multiple base addresses for pin configuration.
+ * When multibase is true and the pin number falls within the specified range
+ * [type1_start, type1_end), the second base address should be used.
  */
 static struct regmap *mtk_get_regmap(struct mtk_pinctrl *pctl,
-		unsigned long pin)
+		unsigned long pin, bool multibase)
 {
+	if (!multibase)
+		return pctl->regmap1;
 	if (pin >= pctl->devdata->type1_start && pin < pctl->devdata->type1_end)
 		return pctl->regmap2;
 	return pctl->regmap1;
@@ -82,7 +83,8 @@ static int mtk_pmx_gpio_set_direction(struct pinctrl_dev *pctldev,
 	else
 		reg_addr = SET_ADDR(reg_addr, pctl);
 
-	regmap_write(mtk_get_regmap(pctl, offset), reg_addr, bit);
+	regmap_write(mtk_get_regmap(pctl, offset, pctl->devdata->dir_multibase),
+		     reg_addr, bit);
 	return 0;
 }
 
@@ -100,7 +102,8 @@ static int mtk_gpio_set(struct gpio_chip *chip, unsigned int offset, int value)
 	else
 		reg_addr = CLR_ADDR(reg_addr, pctl);
 
-	return regmap_write(mtk_get_regmap(pctl, offset), reg_addr, bit);
+	return regmap_write(mtk_get_regmap(pctl, offset, pctl->devdata->dout_multibase),
+			    reg_addr, bit);
 }
 
 static int mtk_pconf_set_ies_smt(struct mtk_pinctrl *pctl, unsigned pin,
@@ -108,6 +111,7 @@ static int mtk_pconf_set_ies_smt(struct mtk_pinctrl *pctl, unsigned pin,
 {
 	unsigned int reg_addr, offset;
 	unsigned int bit;
+	bool multibase;
 
 	/**
 	 * Due to some soc are not support ies/smt config, add this special
@@ -123,12 +127,18 @@ static int mtk_pconf_set_ies_smt(struct mtk_pinctrl *pctl, unsigned pin,
 			arg == PIN_CONFIG_INPUT_SCHMITT_ENABLE)
 		return -EINVAL;
 
+	if (arg == PIN_CONFIG_INPUT_ENABLE)
+		multibase = pctl->devdata->ies_multibase;
+	else
+		multibase = pctl->devdata->smt_multibase;
+
 	/*
 	 * Due to some pins are irregular, their input enable and smt
 	 * control register are discontinuous, so we need this special handle.
 	 */
 	if (pctl->devdata->spec_ies_smt_set) {
-		return pctl->devdata->spec_ies_smt_set(mtk_get_regmap(pctl, pin),
+		return pctl->devdata->spec_ies_smt_set(
+			mtk_get_regmap(pctl, pin, multibase),
 			pctl->devdata, pin, value, arg);
 	}
 
@@ -144,7 +154,7 @@ static int mtk_pconf_set_ies_smt(struct mtk_pinctrl *pctl, unsigned pin,
 	else
 		reg_addr = CLR_ADDR(mtk_get_port(pctl, pin) + offset, pctl);
 
-	regmap_write(mtk_get_regmap(pctl, pin), reg_addr, bit);
+	regmap_write(mtk_get_regmap(pctl, pin, multibase), reg_addr, bit);
 	return 0;
 }
 
@@ -229,7 +239,8 @@ static int mtk_pconf_set_driving(struct mtk_pinctrl *pctl,
 		shift = pin_drv->bit + drv_grp->low_bit;
 		mask <<= shift;
 		val <<= shift;
-		return regmap_update_bits(mtk_get_regmap(pctl, pin),
+		return regmap_update_bits(
+				mtk_get_regmap(pctl, pin, pctl->devdata->drv_multibase),
 				pin_drv->offset, mask, val);
 	}
 
@@ -314,9 +325,9 @@ static int mtk_pconf_set_pull_select(struct mtk_pinctrl *pctl,
 		 * the parameter should be "MTK_PUPD_SET_R1R0_00".
 		 */
 		r1r0 = enable ? arg : MTK_PUPD_SET_R1R0_00;
-		ret = pctl->devdata->spec_pull_set(mtk_get_regmap(pctl, pin),
-						   pctl->devdata, pin, isup,
-						   r1r0);
+		ret = pctl->devdata->spec_pull_set(
+			mtk_get_regmap(pctl, pin, pctl->devdata->pullsel_multibase),
+			pctl->devdata, pin, isup, r1r0);
 		if (!ret)
 			return 0;
 	}
@@ -334,7 +345,8 @@ static int mtk_pconf_set_pull_select(struct mtk_pinctrl *pctl,
 			pctl->devdata->pullen_offset;
 		reg_pullsel = mtk_get_port(pctl, pin) +
 			pctl->devdata->pullsel_offset;
-		ret = pctl->devdata->mt8365_set_clr_mode(mtk_get_regmap(pctl, pin),
+		/* MT8365 do not use multibase. */
+		ret = pctl->devdata->mt8365_set_clr_mode(pctl->regmap1,
 			bit, reg_pullen, reg_pullsel,
 			enable, isup);
 		if (ret)
@@ -358,8 +370,10 @@ static int mtk_pconf_set_pull_select(struct mtk_pinctrl *pctl,
 		reg_pullsel = CLR_ADDR(mtk_get_port(pctl, pin) +
 			pctl->devdata->pullsel_offset, pctl);
 
-	regmap_write(mtk_get_regmap(pctl, pin), reg_pullen, bit);
-	regmap_write(mtk_get_regmap(pctl, pin), reg_pullsel, bit);
+	regmap_write(mtk_get_regmap(pctl, pin, pctl->devdata->pullen_multibase),
+		     reg_pullen, bit);
+	regmap_write(mtk_get_regmap(pctl, pin, pctl->devdata->pullsel_multibase),
+		     reg_pullsel, bit);
 	return 0;
 }
 
@@ -710,8 +724,9 @@ static int mtk_pmx_set_mode(struct pinctrl_dev *pctldev,
 	struct mtk_pinctrl *pctl = pinctrl_dev_get_drvdata(pctldev);
 
 	if (pctl->devdata->spec_pinmux_set)
-		pctl->devdata->spec_pinmux_set(mtk_get_regmap(pctl, pin),
-					pin, mode);
+		pctl->devdata->spec_pinmux_set(
+			mtk_get_regmap(pctl, pin, pctl->devdata->pinmux_multibase),
+			pin, mode);
 
 	reg_addr = ((pin / pctl->devdata->mode_per_reg) << pctl->devdata->port_shf)
 			+ pctl->devdata->pinmux_offset;
@@ -720,8 +735,9 @@ static int mtk_pmx_set_mode(struct pinctrl_dev *pctldev,
 	bit = pin % pctl->devdata->mode_per_reg;
 	mask <<= (GPIO_MODE_BITS * bit);
 	val = (mode << (GPIO_MODE_BITS * bit));
-	return regmap_update_bits(mtk_get_regmap(pctl, pin),
-			reg_addr, mask, val);
+	return regmap_update_bits(
+		mtk_get_regmap(pctl, pin, pctl->devdata->pinmux_multibase),
+		reg_addr, mask, val);
 }
 
 static const struct mtk_desc_pin *
@@ -832,7 +848,8 @@ static int mtk_gpio_get_direction(struct gpio_chip *chip, unsigned offset)
 	if (pctl->devdata->spec_dir_set)
 		pctl->devdata->spec_dir_set(&reg_addr, offset);
 
-	regmap_read(pctl->regmap1, reg_addr, &read_val);
+	regmap_read(mtk_get_regmap(pctl, offset, pctl->devdata->dir_multibase),
+		    reg_addr, &read_val);
 	if (read_val & bit)
 		return GPIO_LINE_DIRECTION_OUT;
 
@@ -850,7 +867,8 @@ static int mtk_gpio_get(struct gpio_chip *chip, unsigned offset)
 		pctl->devdata->din_offset;
 
 	bit = BIT(offset & pctl->devdata->mode_mask);
-	regmap_read(pctl->regmap1, reg_addr, &read_val);
+	regmap_read(mtk_get_regmap(pctl, offset, pctl->devdata->din_multibase),
+		    reg_addr, &read_val);
 	return !!(read_val & bit);
 }
 
