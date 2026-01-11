@@ -94,14 +94,17 @@ def _configure_rps(cfg, rps_cpus):
     mask = 0
     for cpu in rps_cpus:
         mask |= (1 << cpu)
-    mask = hex(mask)[2:]
+
+    # sysfs expect hex without '0x' prefix, toeplitz.c needs the prefix
+    mask_sysfs = format(mask, 'x')
+    mask_cmdline = hex(mask)
 
     # Set RPS bitmap for all rx queues
     for rps_file in glob.glob(f"/sys/class/net/{cfg.ifname}/queues/rx-*/rps_cpus"):
         with open(rps_file, "w", encoding="utf-8") as fp:
-            fp.write(mask)
+            fp.write(mask_sysfs)
 
-    return mask
+    return mask_cmdline
 
 
 def _send_traffic(cfg, proto_flag, ipver, port):
