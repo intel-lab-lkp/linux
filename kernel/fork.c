@@ -632,7 +632,7 @@ static void check_mm(struct mm_struct *mm)
 
 	for (i = 0; i < NR_MM_COUNTERS; i++) {
 		if (unlikely(percpu_counter_tree_precise_compare_value(&mm->rss_stat[i], 0) != 0))
-			pr_alert("BUG: Bad rss-counter state mm:%p type:%s val:%d Comm:%s Pid:%d\n",
+			pr_alert("BUG: Bad rss-counter state mm:%p type:%s val:%ld Comm:%s Pid:%d\n",
 				 mm, resident_page_types[i],
 				 percpu_counter_tree_precise_sum(&mm->rss_stat[i]),
 				 current->comm,
