@@ -352,6 +352,12 @@ static inline unsigned long bt_address(unsigned long ra)
 {
 	extern unsigned long eentry;
 
+	if (__kernel_text_address(ra))
+		return ra;
+
+	if (__module_text_address(ra))
+		return ra;
+
 	if (ra >= eentry && ra < eentry +  EXCCODE_INT_END * VECSIZE) {
 		unsigned long func;
 		unsigned long type = (ra - eentry) / VECSIZE;
@@ -369,13 +375,10 @@ static inline unsigned long bt_address(unsigned long ra)
 			break;
 		}
 
-		ra = func + offset;
+		return func + offset;
 	}
 
-	if (__kernel_text_address(ra))
-		return ra;
-
-	return 0;
+	return ra;
 }
 
 bool unwind_next_frame(struct unwind_state *state)
@@ -497,6 +500,9 @@ bool unwind_next_frame(struct unwind_state *state)
 		pr_err("cannot find unwind pc at %p\n", (void *)pc);
 		goto err;
 	}
+
+	if (!__kernel_text_address(state->pc))
+		goto err;
 
 	return true;
 
