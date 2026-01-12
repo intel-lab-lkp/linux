@@ -219,13 +219,13 @@ static int btrfs_add_block_group_cache(struct btrfs_block_group *block_group)
 
 	ASSERT(block_group->length != 0);
 
-	write_lock(&fs_info->block_group_cache_lock);
+	percpu_down_write(&fs_info->block_group_cache_lock);
 
 	exist = rb_find_add_cached(&block_group->cache_node,
 			&fs_info->block_group_cache_tree, btrfs_bg_start_cmp);
 	if (exist)
 		ret = -EEXIST;
-	write_unlock(&fs_info->block_group_cache_lock);
+	percpu_up_write(&fs_info->block_group_cache_lock);
 
 	return ret;
 }
@@ -241,7 +241,7 @@ static struct btrfs_block_group *block_group_cache_tree_search(
 	struct rb_node *n;
 	u64 end, start;
 
-	read_lock(&info->block_group_cache_lock);
+	percpu_down_read(&info->block_group_cache_lock);
 	n = info->block_group_cache_tree.rb_root.rb_node;
 
 	while (n) {
@@ -266,7 +266,7 @@ static struct btrfs_block_group *block_group_cache_tree_search(
 	}
 	if (ret)
 		btrfs_get_block_group(ret);
-	read_unlock(&info->block_group_cache_lock);
+	percpu_up_read(&info->block_group_cache_lock);
 
 	return ret;
 }
@@ -295,13 +295,13 @@ struct btrfs_block_group *btrfs_next_block_group(
 	struct btrfs_fs_info *fs_info = cache->fs_info;
 	struct rb_node *node;
 
-	read_lock(&fs_info->block_group_cache_lock);
+	percpu_down_read(&fs_info->block_group_cache_lock);
 
 	/* If our block group was removed, we need a full search. */
 	if (RB_EMPTY_NODE(&cache->cache_node)) {
 		const u64 next_bytenr = cache->start + cache->length;
 
-		read_unlock(&fs_info->block_group_cache_lock);
+		percpu_up_read(&fs_info->block_group_cache_lock);
 		btrfs_put_block_group(cache);
 		return btrfs_lookup_first_block_group(fs_info, next_bytenr);
 	}
@@ -312,7 +312,7 @@ struct btrfs_block_group *btrfs_next_block_group(
 		btrfs_get_block_group(cache);
 	} else
 		cache = NULL;
-	read_unlock(&fs_info->block_group_cache_lock);
+	percpu_up_read(&fs_info->block_group_cache_lock);
 	return cache;
 }
 
@@ -967,10 +967,10 @@ int btrfs_cache_block_group(struct btrfs_block_group *cache, bool wait)
 	cache->cached = BTRFS_CACHE_STARTED;
 	spin_unlock(&cache->lock);
 
-	write_lock(&fs_info->block_group_cache_lock);
+	percpu_down_write(&fs_info->block_group_cache_lock);
 	refcount_inc(&caching_ctl->count);
 	list_add_tail(&caching_ctl->list, &fs_info->caching_block_groups);
-	write_unlock(&fs_info->block_group_cache_lock);
+	percpu_up_write(&fs_info->block_group_cache_lock);
 
 	btrfs_get_block_group(cache);
 
@@ -1160,7 +1160,7 @@ int btrfs_remove_block_group(struct btrfs_trans_handle *trans,
 	if (ret)
 		goto out;
 
-	write_lock(&fs_info->block_group_cache_lock);
+	percpu_down_write(&fs_info->block_group_cache_lock);
 	rb_erase_cached(&block_group->cache_node,
 			&fs_info->block_group_cache_tree);
 	RB_CLEAR_NODE(&block_group->cache_node);
@@ -1168,7 +1168,7 @@ int btrfs_remove_block_group(struct btrfs_trans_handle *trans,
 	/* Once for the block groups rbtree */
 	percpu_ref_kill(&block_group->refs);
 
-	write_unlock(&fs_info->block_group_cache_lock);
+	percpu_up_write(&fs_info->block_group_cache_lock);
 
 	percpu_down_write(&block_group->space_info->groups_sem);
 	/*
@@ -1191,7 +1191,7 @@ int btrfs_remove_block_group(struct btrfs_trans_handle *trans,
 	if (block_group->cached == BTRFS_CACHE_STARTED)
 		btrfs_wait_block_group_cache_done(block_group);
 
-	write_lock(&fs_info->block_group_cache_lock);
+	percpu_down_write(&fs_info->block_group_cache_lock);
 	caching_ctl = btrfs_get_caching_control(block_group);
 	if (!caching_ctl) {
 		struct btrfs_caching_control *ctl;
@@ -1206,7 +1206,7 @@ int btrfs_remove_block_group(struct btrfs_trans_handle *trans,
 	}
 	if (caching_ctl)
 		list_del_init(&caching_ctl->list);
-	write_unlock(&fs_info->block_group_cache_lock);
+	percpu_up_write(&fs_info->block_group_cache_lock);
 
 	if (caching_ctl) {
 		/* Once for the caching bgs list and once for us. */
@@ -4519,14 +4519,14 @@ int btrfs_free_block_groups(struct btrfs_fs_info *info)
 		}
 	}
 
-	write_lock(&info->block_group_cache_lock);
+	percpu_down_write(&info->block_group_cache_lock);
 	while (!list_empty(&info->caching_block_groups)) {
 		caching_ctl = list_first_entry(&info->caching_block_groups,
 					       struct btrfs_caching_control, list);
 		list_del(&caching_ctl->list);
 		btrfs_put_caching_control(caching_ctl);
 	}
-	write_unlock(&info->block_group_cache_lock);
+	percpu_up_write(&info->block_group_cache_lock);
 
 	spin_lock(&info->unused_bgs_lock);
 	while (!list_empty(&info->unused_bgs)) {
@@ -4556,14 +4556,14 @@ int btrfs_free_block_groups(struct btrfs_fs_info *info)
 	}
 	spin_unlock(&info->zone_active_bgs_lock);
 
-	write_lock(&info->block_group_cache_lock);
+	percpu_down_write(&info->block_group_cache_lock);
 	while ((n = rb_last(&info->block_group_cache_tree.rb_root)) != NULL) {
 		block_group = rb_entry(n, struct btrfs_block_group,
 				       cache_node);
 		rb_erase_cached(&block_group->cache_node,
 				&info->block_group_cache_tree);
 		RB_CLEAR_NODE(&block_group->cache_node);
-		write_unlock(&info->block_group_cache_lock);
+		percpu_up_write(&info->block_group_cache_lock);
 
 		percpu_down_write(&block_group->space_info->groups_sem);
 		list_del(&block_group->list);
@@ -4587,9 +4587,9 @@ int btrfs_free_block_groups(struct btrfs_fs_info *info)
 		percpu_ref_kill(&block_group->refs);
 		ASSERT(percpu_ref_is_zero(&block_group->refs));
 
-		write_lock(&info->block_group_cache_lock);
+		percpu_down_write(&info->block_group_cache_lock);
 	}
-	write_unlock(&info->block_group_cache_lock);
+	percpu_up_write(&info->block_group_cache_lock);
 
 	btrfs_release_global_block_rsv(info);
 
