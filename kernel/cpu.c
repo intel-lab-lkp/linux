@@ -505,12 +505,14 @@ EXPORT_SYMBOL_GPL(cpus_read_unlock);
 
 void cpus_write_lock(void)
 {
+	rcu_expedite_gp();
 	percpu_down_write(&cpu_hotplug_lock);
 }
 
 void cpus_write_unlock(void)
 {
 	percpu_up_write(&cpu_hotplug_lock);
+	rcu_unexpedite_gp();
 }
 
 void lockdep_assert_cpus_held(void)
