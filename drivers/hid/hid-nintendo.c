@@ -2827,11 +2827,8 @@ static struct hid_driver nintendo_hid_driver = {
 	.probe		= nintendo_hid_probe,
 	.remove		= nintendo_hid_remove,
 	.raw_event	= nintendo_hid_event,
-
-#ifdef CONFIG_PM
-	.resume		= nintendo_hid_resume,
-	.suspend	= nintendo_hid_suspend,
-#endif
+	.resume		= pm_ptr(nintendo_hid_resume),
+	.suspend	= pm_ptr(nintendo_hid_suspend),
 };
 static int __init nintendo_init(void)
 {
