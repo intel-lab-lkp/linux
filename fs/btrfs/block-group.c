@@ -3866,6 +3866,12 @@ void btrfs_free_reserved_bytes(struct btrfs_block_group *cache, u64 num_bytes,
 	spin_lock(&cache->lock);
 	bg_ro = cache->ro;
 	cache->reserved -= num_bytes;
+
+	if (btrfs_block_group_should_use_size_class(cache)) {
+		if (cache->used == 0 && cache->reserved == 0)
+			cache->size_class = BTRFS_BG_SZ_NONE;
+	}
+
 	if (is_delalloc)
 		cache->delalloc_bytes -= num_bytes;
 	spin_unlock(&cache->lock);
