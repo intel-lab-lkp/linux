@@ -8,6 +8,7 @@
 
 import unittest
 from unittest import mock
+import io
 
 import tempfile, shutil # Handling test_tmpdir
 
@@ -701,8 +702,9 @@ class KUnitMainTest(unittest.TestCase):
 
 	def test_run_raw_output_invalid(self):
 		self.linux_source_mock.run_kernel = mock.Mock(return_value=[])
-		with self.assertRaises(SystemExit) as e:
-			kunit.main(['run', '--raw_output=invalid'])
+		with mock.patch('sys.stderr', new=io.StringIO()):
+			with self.assertRaises(SystemExit) as e:
+				kunit.main(['run', '--raw_output=invalid'])
 		self.assertNotEqual(e.exception.code, 0)
 
 	def test_run_raw_output_does_not_take_positional_args(self):
