@@ -2953,8 +2953,10 @@ static int ublk_ctrl_start_dev(struct ublk_device *ub,
 	if (wait_for_completion_interruptible(&ub->completion) != 0)
 		return -EINTR;
 
-	if (ub->ublksrv_tgid != ublksrv_pid)
-		return -EINVAL;
+	if (ub->ublksrv_tgid != ublksrv_pid) {
+		ret = -EINVAL;
+		goto out;
+	}
 
 	mutex_lock(&ub->mutex);
 	if (ub->dev_info.state == UBLK_S_DEV_LIVE ||
@@ -3017,6 +3019,9 @@ out_put_cdev:
 		put_disk(disk);
 out_unlock:
 	mutex_unlock(&ub->mutex);
+out:
+	if (ret)
+		ublk_cancel_dev(ub);
 	return ret;
 }
 
