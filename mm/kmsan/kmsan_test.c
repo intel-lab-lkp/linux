@@ -361,7 +361,7 @@ static void test_init_vmalloc(struct kunit *test)
 	KUNIT_EXPECT_TRUE(test, report_matches(&expect));
 }
 
-/* Test case: ensure that use-after-free reporting works. */
+/* Test case: ensure that use-after-free reporting works for kmalloc. */
 static void test_uaf(struct kunit *test)
 {
 	EXPECTATION_USE_AFTER_FREE(expect);
@@ -372,6 +372,50 @@ static void test_uaf(struct kunit *test)
 	var = kmalloc(80, GFP_KERNEL);
 	var[3] = 0xfeedface;
 	kfree((int *)var);
+	/* Copy the invalid value before checking it. */
+	value = var[3];
+	USE(value);
+	KUNIT_EXPECT_TRUE(test, report_matches(&expect));
+}
+
+/* Test case: ensure that use-after-free reporting works for freed pages. */
+static void test_uaf_pages(struct kunit *test)
+{
+	EXPECTATION_USE_AFTER_FREE(expect);
+	const int order = 0;
+	volatile char value;
+	struct page *page;
+	volatile char *var;
+
+	kunit_info(test, "use-after-free on a freed page (UMR report)\n");
+
+	/* Memory is initialized up until __free_pages() thanks to __GFP_ZERO. */
+	page = alloc_pages(GFP_KERNEL | __GFP_ZERO, order);
+	var = page_address(page);
+	__free_pages(page, order);
+
+	/* Copy the invalid value before checking it. */
+	value = var[3];
+	USE(value);
+	KUNIT_EXPECT_TRUE(test, report_matches(&expect));
+}
+
+/* Test case: ensure that use-after-free reporting works for alloc_pages. */
+static void test_uaf_high_order_pages(struct kunit *test)
+{
+	EXPECTATION_USE_AFTER_FREE(expect);
+	const int order = 1;
+	volatile char value;
+	struct page *page;
+	volatile char *var;
+
+	kunit_info(test,
+		   "use-after-free on a freed high-order page (UMR report)\n");
+
+	page = alloc_pages(GFP_KERNEL | __GFP_ZERO, order);
+	var = page_address(page) + PAGE_SIZE;
+	__free_pages(page, order);
+
 	/* Copy the invalid value before checking it. */
 	value = var[3];
 	USE(value);
@@ -683,6 +727,8 @@ static struct kunit_case kmsan_test_cases[] = {
 	KUNIT_CASE(test_init_kmsan_vmap_vunmap),
 	KUNIT_CASE(test_init_vmalloc),
 	KUNIT_CASE(test_uaf),
+	KUNIT_CASE(test_uaf_pages),
+	KUNIT_CASE(test_uaf_high_order_pages),
 	KUNIT_CASE(test_percpu_propagate),
 	KUNIT_CASE(test_printk),
 	KUNIT_CASE(test_init_memcpy),
