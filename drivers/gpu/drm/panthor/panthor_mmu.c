@@ -656,125 +656,6 @@ static void panthor_vm_release_as_locked(struct panthor_vm *vm)
 }
 
 /**
- * panthor_vm_active() - Flag a VM as active
- * @vm: VM to flag as active.
- *
- * Assigns an address space to a VM so it can be used by the GPU/MCU.
- *
- * Return: 0 on success, a negative error code otherwise.
- */
-int panthor_vm_active(struct panthor_vm *vm)
-{
-	struct panthor_device *ptdev = vm->ptdev;
-	u32 va_bits = GPU_MMU_FEATURES_VA_BITS(ptdev->gpu_info.mmu_features);
-	struct io_pgtable_cfg *cfg = &io_pgtable_ops_to_pgtable(vm->pgtbl_ops)->cfg;
-	int ret = 0, as, cookie;
-	u64 transtab, transcfg;
-
-	if (!drm_dev_enter(&ptdev->base, &cookie))
-		return -ENODEV;
-
-	if (refcount_inc_not_zero(&vm->as.active_cnt))
-		goto out_dev_exit;
-
-	/* Make sure we don't race with lock/unlock_region() calls
-	 * happening around VM bind operations.
-	 */
-	mutex_lock(&vm->op_lock);
-	mutex_lock(&ptdev->mmu->as.slots_lock);
-
-	if (refcount_inc_not_zero(&vm->as.active_cnt))
-		goto out_unlock;
-
-	as = vm->as.id;
-	if (as >= 0) {
-		/* Unhandled pagefault on this AS, the MMU was disabled. We need to
-		 * re-enable the MMU after clearing+unmasking the AS interrupts.
-		 */
-		if (ptdev->mmu->as.faulty_mask & panthor_mmu_as_fault_mask(ptdev, as))
-			goto out_enable_as;
-
-		goto out_make_active;
-	}
-
-	/* Check for a free AS */
-	if (vm->for_mcu) {
-		drm_WARN_ON(&ptdev->base, ptdev->mmu->as.alloc_mask & BIT(0));
-		as = 0;
-	} else {
-		as = ffz(ptdev->mmu->as.alloc_mask | BIT(0));
-	}
-
-	if (!(BIT(as) & ptdev->gpu_info.as_present)) {
-		struct panthor_vm *lru_vm;
-
-		lru_vm = list_first_entry_or_null(&ptdev->mmu->as.lru_list,
-						  struct panthor_vm,
-						  as.lru_node);
-		if (drm_WARN_ON(&ptdev->base, !lru_vm)) {
-			ret = -EBUSY;
-			goto out_unlock;
-		}
-
-		drm_WARN_ON(&ptdev->base, refcount_read(&lru_vm->as.active_cnt));
-		as = lru_vm->as.id;
-
-		ret = panthor_mmu_as_disable(ptdev, as, true);
-		if (ret)
-			goto out_unlock;
-
-		panthor_vm_release_as_locked(lru_vm);
-	}
-
-	/* Assign the free or reclaimed AS to the FD */
-	vm->as.id = as;
-	set_bit(as, &ptdev->mmu->as.alloc_mask);
-	ptdev->mmu->as.slots[as].vm = vm;
-
-out_enable_as:
-	transtab = cfg->arm_lpae_s1_cfg.ttbr;
-	transcfg = AS_TRANSCFG_PTW_MEMATTR_WB |
-		   AS_TRANSCFG_PTW_RA |
-		   AS_TRANSCFG_ADRMODE_AARCH64_4K |
-		   AS_TRANSCFG_INA_BITS(55 - va_bits);
-	if (ptdev->coherent)
-		transcfg |= AS_TRANSCFG_PTW_SH_OS;
-
-	/* If the VM is re-activated, we clear the fault. */
-	vm->unhandled_fault = false;
-
-	/* Unhandled pagefault on this AS, clear the fault and re-enable interrupts
-	 * before enabling the AS.
-	 */
-	if (ptdev->mmu->as.faulty_mask & panthor_mmu_as_fault_mask(ptdev, as)) {
-		gpu_write(ptdev, MMU_INT_CLEAR, panthor_mmu_as_fault_mask(ptdev, as));
-		ptdev->mmu->as.faulty_mask &= ~panthor_mmu_as_fault_mask(ptdev, as);
-		ptdev->mmu->irq.mask |= panthor_mmu_as_fault_mask(ptdev, as);
-		gpu_write(ptdev, MMU_INT_MASK, ~ptdev->mmu->as.faulty_mask);
-	}
-
-	/* The VM update is guarded by ::op_lock, which we take at the beginning
-	 * of this function, so we don't expect any locked region here.
-	 */
-	drm_WARN_ON(&vm->ptdev->base, vm->locked_region.size > 0);
-	ret = panthor_mmu_as_enable(vm->ptdev, vm->as.id, transtab, transcfg, vm->memattr);
-
-out_make_active:
-	if (!ret) {
-		refcount_set(&vm->as.active_cnt, 1);
-		list_del_init(&vm->as.lru_node);
-	}
-
-out_unlock:
-	mutex_unlock(&ptdev->mmu->as.slots_lock);
-	mutex_unlock(&vm->op_lock);
-
-out_dev_exit:
-	drm_dev_exit(cookie);
-	return ret;
-}
-
-/**
  * panthor_vm_idle() - Flag a VM idle
  * @vm: VM to flag as idle.
  *
@@ -1763,6 +1644,128 @@ static void panthor_mmu_irq_handler(struct panthor_device *ptdev, u32 status)
 PANTHOR_IRQ_HANDLER(mmu, MMU, panthor_mmu_irq_handler);
 
 /**
+ * panthor_vm_active() - Flag a VM as active
+ * @vm: VM to flag as active.
+ *
+ * Assigns an address space to a VM so it can be used by the GPU/MCU.
+ *
+ * Return: 0 on success, a negative error code otherwise.
+ */
+int panthor_vm_active(struct panthor_vm *vm)
+{
+	struct panthor_device *ptdev = vm->ptdev;
+	u32 va_bits = GPU_MMU_FEATURES_VA_BITS(ptdev->gpu_info.mmu_features);
+	struct io_pgtable_cfg *cfg = &io_pgtable_ops_to_pgtable(vm->pgtbl_ops)->cfg;
+	int ret = 0, as, cookie;
+	u64 transtab, transcfg;
+	u32 fault_mask;
+
+	if (!drm_dev_enter(&ptdev->base, &cookie))
+		return -ENODEV;
+
+	if (refcount_inc_not_zero(&vm->as.active_cnt))
+		goto out_dev_exit;
+
+	/* Make sure we don't race with lock/unlock_region() calls
+	 * happening around VM bind operations.
+	 */
+	mutex_lock(&vm->op_lock);
+	mutex_lock(&ptdev->mmu->as.slots_lock);
+
+	if (refcount_inc_not_zero(&vm->as.active_cnt))
+		goto out_unlock;
+
+	as = vm->as.id;
+	if (as >= 0) {
+		/* Unhandled pagefault on this AS, the MMU was disabled. We need to
+		 * re-enable the MMU after clearing+unmasking the AS interrupts.
+		 */
+		if (ptdev->mmu->as.faulty_mask & panthor_mmu_as_fault_mask(ptdev, as))
+			goto out_enable_as;
+
+		goto out_make_active;
+	}
+
+	/* Check for a free AS */
+	if (vm->for_mcu) {
+		drm_WARN_ON(&ptdev->base, ptdev->mmu->as.alloc_mask & BIT(0));
+		as = 0;
+	} else {
+		as = ffz(ptdev->mmu->as.alloc_mask | BIT(0));
+	}
+
+	if (!(BIT(as) & ptdev->gpu_info.as_present)) {
+		struct panthor_vm *lru_vm;
+
+		lru_vm = list_first_entry_or_null(&ptdev->mmu->as.lru_list,
+						  struct panthor_vm,
+						  as.lru_node);
+		if (drm_WARN_ON(&ptdev->base, !lru_vm)) {
+			ret = -EBUSY;
+			goto out_unlock;
+		}
+
+		drm_WARN_ON(&ptdev->base, refcount_read(&lru_vm->as.active_cnt));
+		as = lru_vm->as.id;
+
+		ret = panthor_mmu_as_disable(ptdev, as, true);
+		if (ret)
+			goto out_unlock;
+
+		panthor_vm_release_as_locked(lru_vm);
+	}
+
+	/* Assign the free or reclaimed AS to the FD */
+	vm->as.id = as;
+	set_bit(as, &ptdev->mmu->as.alloc_mask);
+	ptdev->mmu->as.slots[as].vm = vm;
+
+out_enable_as:
+	transtab = cfg->arm_lpae_s1_cfg.ttbr;
+	transcfg = AS_TRANSCFG_PTW_MEMATTR_WB |
+		   AS_TRANSCFG_PTW_RA |
+		   AS_TRANSCFG_ADRMODE_AARCH64_4K |
+		   AS_TRANSCFG_INA_BITS(55 - va_bits);
+	if (ptdev->coherent)
+		transcfg |= AS_TRANSCFG_PTW_SH_OS;
+
+	/* If the VM is re-activated, we clear the fault. */
+	vm->unhandled_fault = false;
+
+	/* Unhandled pagefault on this AS, clear the fault and re-enable interrupts
+	 * before enabling the AS.
+	 */
+	fault_mask = panthor_mmu_as_fault_mask(ptdev, as);
+	if (ptdev->mmu->as.faulty_mask & fault_mask) {
+		gpu_write(ptdev, MMU_INT_CLEAR, fault_mask);
+		ptdev->mmu->as.faulty_mask &= ~fault_mask;
+		panthor_mmu_irq_enable_events(&ptdev->mmu->irq, fault_mask);
+		panthor_mmu_irq_disable_events(&ptdev->mmu->irq, ptdev->mmu->as.faulty_mask);
+	}
+
+	/* The VM update is guarded by ::op_lock, which we take at the beginning
+	 * of this function, so we don't expect any locked region here.
+	 */
+	drm_WARN_ON(&vm->ptdev->base, vm->locked_region.size > 0);
+	ret = panthor_mmu_as_enable(vm->ptdev, vm->as.id, transtab, transcfg, vm->memattr);
+
+out_make_active:
+	if (!ret) {
+		refcount_set(&vm->as.active_cnt, 1);
+		list_del_init(&vm->as.lru_node);
+	}
+
+out_unlock:
+	mutex_unlock(&ptdev->mmu->as.slots_lock);
+	mutex_unlock(&vm->op_lock);
+
+out_dev_exit:
+	drm_dev_exit(cookie);
+	return ret;
+}
+
+
+/**
  * panthor_mmu_suspend() - Suspend the MMU logic
  * @ptdev: Device.
  *
@@ -1805,7 +1808,8 @@ void panthor_mmu_resume(struct panthor_device *ptdev)
 	ptdev->mmu->as.faulty_mask = 0;
 	mutex_unlock(&ptdev->mmu->as.slots_lock);
 
-	panthor_mmu_irq_resume(&ptdev->mmu->irq, panthor_mmu_fault_mask(ptdev, ~0));
+	panthor_mmu_irq_enable_events(&ptdev->mmu->irq, panthor_mmu_fault_mask(ptdev, ~0));
+	panthor_mmu_irq_resume(&ptdev->mmu->irq);
 }
 
 /**
@@ -1859,7 +1863,8 @@ void panthor_mmu_post_reset(struct panthor_device *ptdev)
 
 	mutex_unlock(&ptdev->mmu->as.slots_lock);
 
-	panthor_mmu_irq_resume(&ptdev->mmu->irq, panthor_mmu_fault_mask(ptdev, ~0));
+	panthor_mmu_irq_enable_events(&ptdev->mmu->irq, panthor_mmu_fault_mask(ptdev, ~0));
+	panthor_mmu_irq_resume(&ptdev->mmu->irq);
 
 	/* Restart the VM_BIND queues. */
 	mutex_lock(&ptdev->mmu->vm.lock);
