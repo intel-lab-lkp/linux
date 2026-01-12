@@ -213,6 +213,25 @@ copy_from_user(void *to, const void __user *from, unsigned long n)
 #endif
 }
 
+/*
+ * copy_from_user_nul - Copy a block of data from user space and NUL-terminate
+ *
+ * @to:   Destination address, in kernel space. This buffer must be at least
+ *        @n+1 bytes long!
+ * @from: Source address, in user space.
+ * @n:    Number of bytes to copy.
+ *
+ * Return: 0 on success, -EFAULT on failure.
+ */
+static __always_inline int __must_check
+copy_from_user_nul(void *to, const void __user *from, unsigned long n)
+{
+	if (copy_from_user(to, from, n))
+		return -EFAULT;
+	((char *)to)[n] = '\0';
+	return 0;
+}
+
 static __always_inline unsigned long __must_check
 copy_to_user(void __user *to, const void *from, unsigned long n)
 {
