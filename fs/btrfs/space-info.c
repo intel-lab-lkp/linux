@@ -234,13 +234,14 @@ void btrfs_update_space_info_chunk_size(struct btrfs_space_info *space_info,
 	WRITE_ONCE(space_info->chunk_size, chunk_size);
 }
 
-static void init_space_info(struct btrfs_fs_info *info,
+static int init_space_info(struct btrfs_fs_info *info,
 			    struct btrfs_space_info *space_info, u64 flags)
 {
 	space_info->fs_info = info;
 	for (int i = 0; i < BTRFS_NR_RAID_TYPES; i++)
 		INIT_LIST_HEAD(&space_info->block_groups[i]);
-	init_rwsem(&space_info->groups_sem);
+	if (!percpu_init_rwsem(&space_info->groups_sem))
+		return -ENOMEM;
 	spin_lock_init(&space_info->lock);
 	space_info->flags = flags & BTRFS_BLOCK_GROUP_TYPE_MASK;
 	space_info->force_alloc = CHUNK_ALLOC_NO_FORCE;
@@ -253,6 +254,8 @@ static void init_space_info(struct btrfs_fs_info *info,
 
 	if (btrfs_is_zoned(info))
 		space_info->bg_reclaim_threshold = BTRFS_DEFAULT_ZONED_RECLAIM_THRESH;
+
+	return 0;
 }
 
 static int create_space_info_sub_group(struct btrfs_space_info *parent, u64 flags,
@@ -270,7 +273,10 @@ static int create_space_info_sub_group(struct btrfs_space_info *parent, u64 flag
 	if (!sub_group)
 		return -ENOMEM;
 
-	init_space_info(fs_info, sub_group, flags);
+	if (init_space_info(fs_info, sub_group, flags)) {
+		kfree(sub_group);
+		return -ENOMEM;
+	}
 	parent->sub_group[index] = sub_group;
 	sub_group->parent = parent;
 	sub_group->subgroup_id = id;
@@ -293,7 +299,10 @@ static int create_space_info(struct btrfs_fs_info *info, u64 flags)
 	if (!space_info)
 		return -ENOMEM;
 
-	init_space_info(info, space_info, flags);
+	if (init_space_info(info, space_info, flags)) {
+		kfree(space_info);
+		return -ENOMEM;
+	}
 
 	if (btrfs_is_zoned(info)) {
 		if (flags & BTRFS_BLOCK_GROUP_DATA)
@@ -384,9 +393,9 @@ void btrfs_add_bg_to_space_info(struct btrfs_fs_info *info,
 	block_group->space_info = space_info;
 
 	index = btrfs_bg_flags_to_raid_index(block_group->flags);
-	down_write(&space_info->groups_sem);
+	percpu_down_write(&space_info->groups_sem);
 	list_add_tail(&block_group->list, &space_info->block_groups[index]);
-	up_write(&space_info->groups_sem);
+	percpu_up_write(&space_info->groups_sem);
 }
 
 struct btrfs_space_info *btrfs_find_space_info(struct btrfs_fs_info *info,
@@ -650,7 +659,7 @@ void btrfs_dump_space_info(struct btrfs_space_info *info, u64 bytes,
 	if (!dump_block_groups)
 		return;
 
-	down_read(&info->groups_sem);
+	percpu_down_read(&info->groups_sem);
 again:
 	list_for_each_entry(cache, &info->block_groups[index], list) {
 		u64 avail;
@@ -670,7 +679,7 @@ again:
 	}
 	if (++index < BTRFS_NR_RAID_TYPES)
 		goto again;
-	up_read(&info->groups_sem);
+	percpu_up_read(&info->groups_sem);
 
 	btrfs_info(fs_info, "%llu bytes available across all block groups", total_avail);
 }
@@ -2095,7 +2104,7 @@ static void do_reclaim_sweep(struct btrfs_space_info *space_info, int raid)
 	thresh_pct = btrfs_calc_reclaim_threshold(space_info);
 	spin_unlock(&space_info->lock);
 
-	down_read(&space_info->groups_sem);
+	percpu_down_read(&space_info->groups_sem);
 again:
 	list_for_each_entry(bg, &space_info->block_groups[raid], list) {
 		u64 thresh;
@@ -2127,7 +2136,7 @@ again:
 		goto again;
 	}
 
-	up_read(&space_info->groups_sem);
+	percpu_up_read(&space_info->groups_sem);
 }
 
 void btrfs_space_info_update_reclaimable(struct btrfs_space_info *space_info, s64 bytes)

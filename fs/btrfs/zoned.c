@@ -2588,12 +2588,11 @@ again:
 			       "reloc_sinfo->subgroup_id=%d", reloc_sinfo->subgroup_id);
 			factor = btrfs_bg_type_to_factor(bg->flags);
 
-			down_write(&space_info->groups_sem);
+			percpu_down_write(&space_info->groups_sem);
 			list_del_init(&bg->list);
 			/* We can assume this as we choose the second empty one. */
 			ASSERT(!list_empty(&space_info->block_groups[index]));
-			up_write(&space_info->groups_sem);
-
+			percpu_up_write(&space_info->groups_sem);
 			spin_lock(&space_info->lock);
 			space_info->total_bytes -= bg->length;
 			space_info->disk_total -= bg->length * factor;
@@ -2771,7 +2770,7 @@ int btrfs_zoned_activate_one_bg(struct btrfs_space_info *space_info, bool do_fin
 		int ret;
 		bool need_finish = false;
 
-		down_read(&space_info->groups_sem);
+		percpu_down_read(&space_info->groups_sem);
 		for (index = 0; index < BTRFS_NR_RAID_TYPES; index++) {
 			list_for_each_entry(bg, &space_info->block_groups[index],
 					    list) {
@@ -2786,14 +2785,14 @@ int btrfs_zoned_activate_one_bg(struct btrfs_space_info *space_info, bool do_fin
 				spin_unlock(&bg->lock);
 
 				if (btrfs_zone_activate(bg)) {
-					up_read(&space_info->groups_sem);
+					percpu_up_read(&space_info->groups_sem);
 					return 1;
 				}
 
 				need_finish = true;
 			}
 		}
-		up_read(&space_info->groups_sem);
+		percpu_up_read(&space_info->groups_sem);
 
 		if (!do_finish || !need_finish)
 			break;
