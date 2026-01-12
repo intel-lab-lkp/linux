@@ -2183,6 +2183,8 @@ struct rogue_fwif_hwrtdata {
 #define PVR_SYNC_CHECKPOINT_SIGNALED 0x519   /* Checkpoint has signaled. */
 #define PVR_SYNC_CHECKPOINT_ERRORED 0xeff    /* Checkpoint has been errored. */
 
+#ifndef __CHECKER__
 #include "pvr_rogue_fwif_check.h"
+#endif
 
 #endif /* PVR_ROGUE_FWIF_H */
