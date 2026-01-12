@@ -2491,6 +2491,8 @@ cpu_enable_mpam(const struct arm64_cpu_capabilities *entry)
 		regval = READ_ONCE(per_cpu(arm64_mpam_current, cpu));
 
 	write_sysreg_s(regval, SYS_MPAM1_EL1);
+	if (system_supports_sme())
+		write_sysreg_s(regval & (MPAMSM_EL1_PARTID_D | MPAMSM_EL1_PMG_D), SYS_MPAMSM_EL1);
 	isb();
 
 	/* Synchronising the EL0 write is left until the ERET to EL0 */
