@@ -10928,10 +10928,9 @@ ssize_t trace_parse_run_command(struct file *file, const char __user *buffer,
 		if (size >= WRITE_BUFSIZE)
 			size = WRITE_BUFSIZE - 1;
 
-		if (copy_from_user(kbuf, buffer + done, size))
+		if (copy_from_user_nul(kbuf, buffer + done, size))
 			return -EFAULT;
 
-		kbuf[size] = '\0';
 		buf = kbuf;
 		do {
 			tmp = strchr(buf, '\n');
