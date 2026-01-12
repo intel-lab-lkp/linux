@@ -125,8 +125,7 @@ static bool nested_vmcb_needs_vls_intercept(struct vcpu_svm *svm)
 
 void recalc_intercepts(struct vcpu_svm *svm)
 {
-	struct vmcb_control_area *c, *h;
-	struct vmcb_ctrl_area_cached *g;
+	struct vmcb *vmcb01, *vmcb02;
 	unsigned int i;
 
 	vmcb_mark_dirty(svm->vmcb, VMCB_INTERCEPTS);
@@ -134,14 +133,14 @@ void recalc_intercepts(struct vcpu_svm *svm)
 	if (!is_guest_mode(&svm->vcpu))
 		return;
 
-	c = &svm->vmcb->control;
-	h = &svm->vmcb01.ptr->control;
-	g = &svm->nested.ctl;
+	vmcb01 = svm->vmcb01.ptr;
+	vmcb02 = svm->nested.vmcb02.ptr;
+	WARN_ON_ONCE(svm->vmcb != vmcb02);
 
 	for (i = 0; i < MAX_INTERCEPT; i++)
-		c->intercepts[i] = h->intercepts[i];
+		vmcb02->control.intercepts[i] = vmcb01->control.intercepts[i];
 
-	if (g->int_ctl & V_INTR_MASKING_MASK) {
+	if (svm->nested.ctl.int_ctl & V_INTR_MASKING_MASK) {
 		/*
 		 * If L2 is active and V_INTR_MASKING is enabled in vmcb12,
 		 * disable intercept of CR8 writes as L2's CR8 does not affect
@@ -152,9 +151,9 @@ void recalc_intercepts(struct vcpu_svm *svm)
 		 * the effective RFLAGS.IF for L1 interrupts will never be set
 		 * while L2 is running (L2's RFLAGS.IF doesn't affect L1 IRQs).
 		 */
-		vmcb_clr_intercept(c, INTERCEPT_CR8_WRITE);
-		if (!(svm->vmcb01.ptr->save.rflags & X86_EFLAGS_IF))
-			vmcb_clr_intercept(c, INTERCEPT_VINTR);
+		vmcb_clr_intercept(&vmcb02->control, INTERCEPT_CR8_WRITE);
+		if (!(vmcb01->save.rflags & X86_EFLAGS_IF))
+			vmcb_clr_intercept(&vmcb02->control, INTERCEPT_VINTR);
 	}
 
 	/*
@@ -162,14 +161,14 @@ void recalc_intercepts(struct vcpu_svm *svm)
 	 * flush feature is enabled.
 	 */
 	if (!nested_svm_l2_tlb_flush_enabled(&svm->vcpu))
-		vmcb_clr_intercept(c, INTERCEPT_VMMCALL);
+		vmcb_clr_intercept(&vmcb02->control, INTERCEPT_VMMCALL);
 
 	for (i = 0; i < MAX_INTERCEPT; i++)
-		c->intercepts[i] |= g->intercepts[i];
+		vmcb02->control.intercepts[i] |= svm->nested.ctl.intercepts[i];
 
 	/* If SMI is not intercepted, ignore guest SMI intercept as well  */
 	if (!intercept_smi)
-		vmcb_clr_intercept(c, INTERCEPT_SMI);
+		vmcb_clr_intercept(&vmcb02->control, INTERCEPT_SMI);
 
 	if (nested_vmcb_needs_vls_intercept(svm)) {
 		/*
@@ -177,10 +176,10 @@ void recalc_intercepts(struct vcpu_svm *svm)
 		 * we must intercept these instructions to correctly
 		 * emulate them in case L1 doesn't intercept them.
 		 */
-		vmcb_set_intercept(c, INTERCEPT_VMLOAD);
-		vmcb_set_intercept(c, INTERCEPT_VMSAVE);
+		vmcb_set_intercept(&vmcb02->control, INTERCEPT_VMLOAD);
+		vmcb_set_intercept(&vmcb02->control, INTERCEPT_VMSAVE);
 	} else {
-		WARN_ON(!(c->virt_ext & VIRTUAL_VMLOAD_VMSAVE_ENABLE_MASK));
+		WARN_ON(!(vmcb02->control.virt_ext & VIRTUAL_VMLOAD_VMSAVE_ENABLE_MASK));
 	}
 }
 
