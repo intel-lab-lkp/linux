@@ -36,10 +36,14 @@
 #ifdef CONFIG_KASAN
 #define KASAN_SHADOW_OFFSET	_AC(CONFIG_KASAN_SHADOW_OFFSET, UL)
 
+#define is_kasan_addr(addr) (addr >= KASAN_SHADOW_START && addr < KASAN_SHADOW_END)
+
 void kasan_init(void);
 asmlinkage void kasan_early_init(void);
 void kasan_swapper_init(void);
-
+#else
+#define is_kasan_addr(addr) (0)
 #endif
+
 #endif
 #endif /* __ASM_KASAN_H */

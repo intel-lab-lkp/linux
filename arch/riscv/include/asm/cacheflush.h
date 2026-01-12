@@ -7,6 +7,7 @@
 #define _ASM_RISCV_CACHEFLUSH_H
 
 #include <linux/mm.h>
+#include <asm/kasan.h>
 
 static inline void local_flush_icache_all(void)
 {
@@ -46,7 +47,8 @@ extern char _end[];
 #define flush_cache_vmap flush_cache_vmap
 static inline void flush_cache_vmap(unsigned long start, unsigned long end)
 {
-	if (is_vmalloc_or_module_addr((void *)start)) {
+	if (is_vmalloc_or_module_addr((void *)start) ||
+	    is_kasan_addr(start)) {
 		int i;
 
 		/*
