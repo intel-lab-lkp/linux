@@ -7,6 +7,7 @@
 #include "sm6125-xiaomi-ginkgo-common.dtsi"
 
 / {
-	model = "Xiaomi Redmi Note 8";
-	compatible = "xiaomi,ginkgo", "qcom,sm6125";
+	model = "Xiaomi Redmi Note 8T";
+	compatible = "xiaomi,willow", "qcom,sm6125";
+
 };
