@@ -3,6 +3,8 @@
  * The Kernel Fuzz Testing Framework (KFuzzTest) API for defining fuzz targets
  * for internal kernel functions.
  *
+ * For more information please see Documentation/dev-tools/kfuzztest.rst.
+ *
  * Copyright 2025 Google LLC
  */
 #ifndef KFUZZTEST_H
