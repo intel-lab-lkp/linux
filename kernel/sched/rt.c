@@ -2857,10 +2857,6 @@ static int sched_rt_global_validate(void)
 	return 0;
 }
 
-static void sched_rt_do_global(void)
-{
-}
-
 static int sched_rt_handler(const struct ctl_table *table, int write, void *buffer,
 		size_t *lenp, loff_t *ppos)
 {
@@ -2888,7 +2884,6 @@ static int sched_rt_handler(const struct ctl_table *table, int write, void *buff
 		if (ret)
 			goto undo;
 
-		sched_rt_do_global();
 		sched_dl_do_global();
 	}
 	if (0) {
