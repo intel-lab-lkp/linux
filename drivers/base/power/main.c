@@ -35,6 +35,8 @@
 #include <linux/devfreq.h>
 #include <linux/timer.h>
 #include <linux/nmi.h>
+#include <linux/delay.h>
+#include <vdso/time64.h>
 
 #include "../base.h"
 #include "power.h"
@@ -320,6 +322,64 @@ static bool dpm_wait_for_superior(struct device *dev, bool async)
 	 * it would be invalid, so avoid doing that then.
 	 */
 	return device_pm_initialized(dev);
+}
+
+/**
+ * dpm_finish - Test a PM operation have finished.
+ * @dev: Device to test.
+ */
+static bool dpm_finish(struct device *dev)
+{
+	if (!dev)
+		return true;
+
+	return completion_done(&dev->power.completion);
+}
+
+/**
+ * dpm_test_suppliers_finish - test suppliers of the device have finished
+ * @dev: Device to handle.
+ */
+static bool dpm_test_suppliers_finish(struct device *dev)
+{
+	struct device_link *link;
+	int idx;
+
+	idx = device_links_read_lock();
+
+	dev_for_each_link_to_supplier(link, dev)
+		if (READ_ONCE(link->status) != DL_STATE_DORMANT &&
+		    !device_link_flag_is_sync_state_only(link->flags))
+			if (!dpm_finish(link->supplier)) {
+				device_links_read_unlock(idx);
+				return false;
+			}
+
+	device_links_read_unlock(idx);
+
+	return true;
+}
+
+/**
+ * dpm_test_superior_finish - test superior of the device have finished
+ * @dev: Device to handle.
+ */
+static bool dpm_test_superior_finish(struct device *dev)
+{
+	struct device *parent;
+
+	if (!device_pm_initialized(dev))
+		return true;
+
+	parent = get_device(dev->parent);
+
+	if (!dpm_finish(parent)) {
+		put_device(parent);
+		return false;
+	}
+	put_device(parent);
+
+	return dpm_test_suppliers_finish(dev);
 }
 
 static void dpm_wait_for_consumers(struct device *dev, bool async)
@@ -826,6 +886,8 @@ static void dpm_noirq_resume_devices(pm_message_t state)
 {
 	struct device *dev;
 	ktime_t starttime = ktime_get();
+	int resume_num = 0;
+	LIST_HEAD(dpm_noirq_wait_list);
 
 	trace_suspend_resume(TPS("dpm_resume_noirq"), state.event, true);
 
@@ -844,8 +906,32 @@ static void dpm_noirq_resume_devices(pm_message_t state)
 			dpm_async_with_cleanup(dev, async_resume_noirq);
 	}
 
-	while (!list_empty(&dpm_noirq_list)) {
+	while (!list_empty(&dpm_noirq_list) || !list_empty(&dpm_noirq_wait_list)) {
+		if (list_empty(&dpm_noirq_list)) {
+			list_splice_init(&dpm_noirq_wait_list, &dpm_noirq_list);
+			/*
+			 * sleep 1 millisecond avoid CPU busy loops
+			 */
+			if (!resume_num) {
+				mutex_unlock(&dpm_list_mtx);
+				fsleep(USEC_PER_MSEC);
+				mutex_lock(&dpm_list_mtx);
+			}
+			resume_num = 0;
+		}
+
 		dev = to_device(dpm_noirq_list.next);
+
+		/*
+		 * Skip devices that are still pending completion of dependent devices
+		 */
+		if (!dev->power.syscore && !dev->power.direct_complete &&
+			dev->power.is_noirq_suspended && !dpm_test_superior_finish(dev)) {
+			list_move_tail(&dev->power.entry, &dpm_noirq_wait_list);
+			continue;
+		}
+		++resume_num;
+
 		list_move_tail(&dev->power.entry, &dpm_late_early_list);
 
 		if (!dpm_async_fn(dev, async_resume_noirq)) {
@@ -976,6 +1062,8 @@ void dpm_resume_early(pm_message_t state)
 {
 	struct device *dev;
 	ktime_t starttime = ktime_get();
+	int resume_num = 0;
+	LIST_HEAD(dpm_late_early_wait_list);
 
 	trace_suspend_resume(TPS("dpm_resume_early"), state.event, true);
 
@@ -994,8 +1082,32 @@ void dpm_resume_early(pm_message_t state)
 			dpm_async_with_cleanup(dev, async_resume_early);
 	}
 
-	while (!list_empty(&dpm_late_early_list)) {
+	while (!list_empty(&dpm_late_early_list) || !list_empty(&dpm_late_early_wait_list)) {
+		if (list_empty(&dpm_late_early_list)) {
+			list_splice_init(&dpm_late_early_wait_list, &dpm_late_early_list);
+			/*
+			 * sleep 1 millisecond avoid CPU busy loops
+			 */
+			if (!resume_num) {
+				mutex_unlock(&dpm_list_mtx);
+				fsleep(USEC_PER_MSEC);
+				mutex_lock(&dpm_list_mtx);
+			}
+			resume_num = 0;
+		}
+
 		dev = to_device(dpm_late_early_list.next);
+
+		/*
+		 * Skip devices that are still pending completion of dependent devices
+		 */
+		if (!dev->power.syscore && !dev->power.direct_complete &&
+			dev->power.is_late_suspended && !dpm_test_superior_finish(dev)) {
+			list_move_tail(&dev->power.entry, &dpm_late_early_wait_list);
+			continue;
+		}
+		++resume_num;
+
 		list_move_tail(&dev->power.entry, &dpm_suspended_list);
 
 		if (!dpm_async_fn(dev, async_resume_early)) {
@@ -1155,6 +1267,8 @@ void dpm_resume(pm_message_t state)
 {
 	struct device *dev;
 	ktime_t starttime = ktime_get();
+	int resume_num = 0;
+	LIST_HEAD(dpm_suspended_wait_list);
 
 	trace_suspend_resume(TPS("dpm_resume"), state.event, true);
 
@@ -1173,8 +1287,32 @@ void dpm_resume(pm_message_t state)
 			dpm_async_with_cleanup(dev, async_resume);
 	}
 
-	while (!list_empty(&dpm_suspended_list)) {
+	while (!list_empty(&dpm_suspended_list) || !list_empty(&dpm_suspended_wait_list)) {
+		if (list_empty(&dpm_suspended_list)) {
+			list_splice_init(&dpm_suspended_wait_list, &dpm_suspended_list);
+			/*
+			 * sleep 1 millisecond avoid CPU busy loops
+			 */
+			if (!resume_num) {
+				mutex_unlock(&dpm_list_mtx);
+				fsleep(USEC_PER_MSEC);
+				mutex_lock(&dpm_list_mtx);
+			}
+			resume_num = 0;
+		}
+
 		dev = to_device(dpm_suspended_list.next);
+
+		/*
+		 * Skip devices that are still pending completion of dependent devices
+		 */
+		if (!dev->power.syscore && !dev->power.direct_complete &&
+			dev->power.is_suspended && !dpm_test_superior_finish(dev)) {
+			list_move_tail(&dev->power.entry, &dpm_suspended_wait_list);
+			continue;
+		}
+		++resume_num;
+
 		list_move_tail(&dev->power.entry, &dpm_prepared_list);
 
 		if (!dpm_async_fn(dev, async_resume)) {
