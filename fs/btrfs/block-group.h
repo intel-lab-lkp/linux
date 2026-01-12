@@ -120,6 +120,12 @@ struct btrfs_block_group {
 	struct btrfs_fs_info *fs_info;
 	struct btrfs_inode *inode;
 	spinlock_t lock;
+
+	/* Frequently accessed by find_free_extent members */
+	unsigned int ro;
+	int cached;
+	enum btrfs_block_group_size_class size_class;
+
 	u64 start;
 	u64 length;
 	u64 pinned;
@@ -160,12 +166,9 @@ struct btrfs_block_group {
 	unsigned long full_stripe_len;
 	unsigned long runtime_flags;
 
-	unsigned int ro;
-
 	int disk_cache_state;
 
 	/* Cache tracking stuff */
-	int cached;
 	struct btrfs_caching_control *caching_ctl;
 
 	struct btrfs_space_info *space_info;
@@ -270,7 +273,6 @@ struct btrfs_block_group {
 	struct list_head active_bg_list;
 	struct work_struct zone_finish_work;
 	struct extent_buffer *last_eb;
-	enum btrfs_block_group_size_class size_class;
 	u64 reclaim_mark;
 };
 
