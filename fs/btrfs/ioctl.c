@@ -2940,12 +2940,12 @@ static long btrfs_ioctl_space_info(struct btrfs_fs_info *fs_info,
 		if (!info)
 			continue;
 
-		down_read(&info->groups_sem);
+		percpu_down_read(&info->groups_sem);
 		for (c = 0; c < BTRFS_NR_RAID_TYPES; c++) {
 			if (!list_empty(&info->block_groups[c]))
 				slot_count++;
 		}
-		up_read(&info->groups_sem);
+		percpu_up_read(&info->groups_sem);
 	}
 
 	/*
@@ -2992,7 +2992,7 @@ static long btrfs_ioctl_space_info(struct btrfs_fs_info *fs_info,
 
 		if (!info)
 			continue;
-		down_read(&info->groups_sem);
+		percpu_down_read(&info->groups_sem);
 		for (c = 0; c < BTRFS_NR_RAID_TYPES; c++) {
 			if (!list_empty(&info->block_groups[c])) {
 				get_block_group_info(&info->block_groups[c],
@@ -3005,7 +3005,7 @@ static long btrfs_ioctl_space_info(struct btrfs_fs_info *fs_info,
 			if (!slot_count)
 				break;
 		}
-		up_read(&info->groups_sem);
+		percpu_up_read(&info->groups_sem);
 	}
 
 	/*

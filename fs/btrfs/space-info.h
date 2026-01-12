@@ -175,7 +175,7 @@ struct btrfs_space_info {
 	 */
 	u64 tickets_id;
 
-	struct rw_semaphore groups_sem;
+	struct percpu_rw_semaphore groups_sem;
 	/* for block groups in our same type */
 	struct list_head block_groups[BTRFS_NR_RAID_TYPES];
 

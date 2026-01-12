@@ -701,14 +701,14 @@ static ssize_t raid_bytes_show(struct kobject *kobj,
 	int index = btrfs_bg_flags_to_raid_index(to_raid_kobj(kobj)->flags);
 	u64 val = 0;
 
-	down_read(&sinfo->groups_sem);
+	percpu_down_read(&sinfo->groups_sem);
 	list_for_each_entry(block_group, &sinfo->block_groups[index], list) {
 		if (&attr->attr == BTRFS_ATTR_PTR(raid, total_bytes))
 			val += block_group->length;
 		else
 			val += block_group->used;
 	}
-	up_read(&sinfo->groups_sem);
+	percpu_up_read(&sinfo->groups_sem);
 	return sysfs_emit(buf, "%llu\n", val);
 }
 
@@ -816,7 +816,7 @@ static ssize_t btrfs_size_classes_show(struct kobject *kobj,
 	u32 large = 0;
 
 	for (int i = 0; i < BTRFS_NR_RAID_TYPES; ++i) {
-		down_read(&sinfo->groups_sem);
+		percpu_down_read(&sinfo->groups_sem);
 		list_for_each_entry(bg, &sinfo->block_groups[i], list) {
 			if (!btrfs_block_group_should_use_size_class(bg))
 				continue;
@@ -835,7 +835,7 @@ static ssize_t btrfs_size_classes_show(struct kobject *kobj,
 				break;
 			}
 		}
-		up_read(&sinfo->groups_sem);
+		percpu_up_read(&sinfo->groups_sem);
 	}
 	return sysfs_emit(buf, "none %u\n"
 			       "small %u\n"
@@ -1046,6 +1046,7 @@ ATTRIBUTE_GROUPS(space_info);
 static void space_info_release(struct kobject *kobj)
 {
 	struct btrfs_space_info *sinfo = to_space_info(kobj);
+	percpu_free_rwsem(&sinfo->groups_sem);
 	kfree(sinfo);
 }
 

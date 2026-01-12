@@ -4442,7 +4442,7 @@ static noinline int find_free_extent(struct btrfs_root *root,
 		if (block_group && block_group_bits(block_group, ffe_ctl->flags) &&
 		    block_group->space_info == space_info &&
 		    block_group->cached != BTRFS_CACHE_NO) {
-			down_read(&space_info->groups_sem);
+			percpu_down_read(&space_info->groups_sem);
 			if (list_empty(&block_group->list) ||
 			    block_group->ro) {
 				/*
@@ -4452,7 +4452,7 @@ static noinline int find_free_extent(struct btrfs_root *root,
 				 * valid
 				 */
 				btrfs_put_block_group(block_group);
-				up_read(&space_info->groups_sem);
+				percpu_up_read(&space_info->groups_sem);
 			} else {
 				ffe_ctl->index = btrfs_bg_flags_to_raid_index(
 							block_group->flags);
@@ -4471,7 +4471,7 @@ search:
 	if (ffe_ctl->index == btrfs_bg_flags_to_raid_index(ffe_ctl->flags) ||
 	    ffe_ctl->index == 0)
 		full_search = true;
-	down_read(&space_info->groups_sem);
+	percpu_down_read(&space_info->groups_sem);
 	list_for_each_entry(block_group,
 			    &space_info->block_groups[ffe_ctl->index], list) {
 		struct btrfs_block_group *bg_ret;
@@ -4609,7 +4609,7 @@ loop:
 		release_block_group(block_group, ffe_ctl, ffe_ctl->delalloc);
 		cond_resched();
 	}
-	up_read(&space_info->groups_sem);
+	percpu_up_read(&space_info->groups_sem);
 
 	ret = find_free_extent_update_loop(fs_info, ins, ffe_ctl, space_info,
 					   full_search);
