@@ -27,13 +27,13 @@ description: |
 properties:
   compatible:
     enum:
-      - google,gs101-cmu-top
       - google,gs101-cmu-apm
-      - google,gs101-cmu-misc
       - google,gs101-cmu-hsi0
       - google,gs101-cmu-hsi2
+      - google,gs101-cmu-misc
       - google,gs101-cmu-peric0
       - google,gs101-cmu-peric1
+      - google,gs101-cmu-top
 
   clocks:
     minItems: 1
@@ -70,8 +70,8 @@ allOf:
         compatible:
           contains:
             enum:
-              - google,gs101-cmu-top
               - google,gs101-cmu-apm
+              - google,gs101-cmu-top
     then:
       properties:
         clocks:
