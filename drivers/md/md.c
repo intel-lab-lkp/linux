@@ -6219,18 +6219,33 @@ static const struct kobj_type md_ktype = {
 
 int mdp_major = 0;
 
+static bool rdev_is_mddev(struct md_rdev *rdev)
+{
+	return rdev->bdev->bd_disk->fops == &md_fops;
+}
+
 /* stack the limit for all rdevs into lim */
 int mddev_stack_rdev_limits(struct mddev *mddev, struct queue_limits *lim,
 		unsigned int flags)
 {
 	struct md_rdev *rdev;
+	bool io_opt_configured = lim->io_opt;
 
 	rdev_for_each(rdev, mddev) {
+		unsigned int io_opt = lim->io_opt;
+
 		queue_limits_stack_bdev(lim, rdev->bdev, rdev->data_offset,
 					mddev->gendisk->disk_name);
 		if ((flags & MDDEV_STACK_INTEGRITY) &&
 		    !queue_limits_stack_integrity_bdev(lim, rdev->bdev))
 			return -EINVAL;
+
+		/*
+		 * If member disk is not mdraid array, keep the io_opt
+		 * from personality and ignore io_opt from member disk.
+		 */
+		if (!rdev_is_mddev(rdev) && io_opt_configured)
+			lim->io_opt = io_opt;
 	}
 
 	/*
@@ -6269,9 +6284,11 @@ int mddev_stack_rdev_limits(struct mddev *mddev, struct queue_limits *lim,
 EXPORT_SYMBOL_GPL(mddev_stack_rdev_limits);
 
 /* apply the extra stacking limits from a new rdev into mddev */
-int mddev_stack_new_rdev(struct mddev *mddev, struct md_rdev *rdev)
+int mddev_stack_new_rdev(struct mddev *mddev, struct md_rdev *rdev,
+			 bool io_opt_configured)
 {
 	struct queue_limits lim;
+	unsigned int io_opt;
 
 	if (mddev_is_dm(mddev))
 		return 0;
@@ -6284,6 +6301,8 @@ int mddev_stack_new_rdev(struct mddev *mddev, struct md_rdev *rdev)
 	}
 
 	lim = queue_limits_start_update(mddev->gendisk->queue);
+	io_opt = lim.io_opt;
+
 	queue_limits_stack_bdev(&lim, rdev->bdev, rdev->data_offset,
 				mddev->gendisk->disk_name);
 
@@ -6293,6 +6312,13 @@ int mddev_stack_new_rdev(struct mddev *mddev, struct md_rdev *rdev)
 		queue_limits_cancel_update(mddev->gendisk->queue);
 		return -ENXIO;
 	}
+
+	/*
+	 * If member disk is not mdraid array, keep the io_opt from
+	 * personality and ignore io_opt from member disk.
+	 */
+	if (!rdev_is_mddev(rdev) && io_opt_configured)
+		lim.io_opt = io_opt;
 
 	return queue_limits_commit_update(mddev->gendisk->queue, &lim);
 }
