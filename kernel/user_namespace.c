@@ -1239,9 +1239,8 @@ ssize_t proc_setgroups_write(struct file *file, const char __user *buf,
 
 	/* What was written? */
 	ret = -EFAULT;
-	if (copy_from_user(kbuf, buf, count))
+	if (copy_from_user_nul(kbuf, buf, count))
 		goto out;
-	kbuf[count] = '\0';
 	pos = kbuf;
 
 	/* What is being requested? */
