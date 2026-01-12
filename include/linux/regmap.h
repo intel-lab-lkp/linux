@@ -452,6 +452,7 @@ struct regmap_config {
 	enum regcache_type cache_type;
 	const void *reg_defaults_raw;
 	unsigned int num_reg_defaults_raw;
+	bool flat_cache_default_is_zero;
 
 	unsigned long read_flag_mask;
 	unsigned long write_flag_mask;

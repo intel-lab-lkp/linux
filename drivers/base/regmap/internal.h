@@ -157,6 +157,8 @@ struct regmap {
 	bool cache_dirty;
 	/* if set, the HW registers are known to match map->reg_defaults */
 	bool no_sync_defaults;
+	/* if set, zero is a valid default for REGCACHE_FLAT cache type registers not in reg_defaults */
+	bool flat_cache_default_is_zero;
 
 	struct reg_sequence *patch;
 	int patch_regs;

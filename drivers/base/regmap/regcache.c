@@ -177,6 +177,7 @@ int regcache_init(struct regmap *map, const struct regmap_config *config)
 	map->reg_defaults_raw = config->reg_defaults_raw;
 	map->cache_word_size = BITS_TO_BYTES(config->val_bits);
 	map->cache_size_raw = map->cache_word_size * config->num_reg_defaults_raw;
+	map->flat_cache_default_is_zero = config->flat_cache_default_is_zero;
 
 	map->cache = NULL;
 	map->cache_ops = cache_types[i];
