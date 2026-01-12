@@ -71,6 +71,12 @@ static bool cacheinfo_ready;
 static DECLARE_WAIT_QUEUE_HEAD(wait_cacheinfo_ready);
 
 /*
+ * If resctrl_init() succeeded, resctrl_exit() can be used to remove support
+ * for the filesystem in the event of an error.
+ */
+static bool resctrl_enabled;
+
+/*
  * L3 local/total may come from different classes - what is the number of MBWU
  * 'on L3'?
  */
@@ -316,6 +322,9 @@ static int resctrl_arch_mon_ctx_alloc_no_wait(enum resctrl_event_id evtid)
 {
 	struct mpam_resctrl_mon *mon = &mpam_resctrl_counters[evtid];
 
+	if (!mpam_is_enabled())
+		return -EINVAL;
+
 	if (!mon->class)
 		return -EINVAL;
 
@@ -357,6 +366,9 @@ static void resctrl_arch_mon_ctx_free_no_wait(enum resctrl_event_id evtid,
 					      u32 mon_idx)
 {
 	struct mpam_resctrl_mon *mon = &mpam_resctrl_counters[evtid];
+
+	if (!mpam_is_enabled())
+		return;
 
 	if (!mon->class)
 		return;
@@ -457,6 +469,9 @@ int resctrl_arch_rmid_read(struct rdt_resource *r, struct rdt_mon_domain *d,
 	struct mpam_resctrl_mon *mon = &mpam_resctrl_counters[eventid];
 
 	resctrl_arch_rmid_read_context_check();
+
+	if (!mpam_is_enabled())
+		return -EINVAL;
 
 	if (eventid >= QOS_NUM_EVENTS || !mon->class)
 		return -EINVAL;
@@ -1398,6 +1413,9 @@ int resctrl_arch_update_one(struct rdt_resource *r, struct rdt_ctrl_domain *d,
 	lockdep_assert_cpus_held();
 	lockdep_assert_irqs_enabled();
 
+	if (!mpam_is_enabled())
+		return -EINVAL;
+
 	/*
 	 * No need to check the CPU as mpam_apply_config() doesn't care, and
 	 * resctrl_arch_update_domains() relies on this.
@@ -1459,6 +1477,9 @@ int resctrl_arch_update_domains(struct rdt_resource *r, u32 closid)
 
 	lockdep_assert_cpus_held();
 	lockdep_assert_irqs_enabled();
+
+	if (!mpam_is_enabled())
+		return -EINVAL;
 
 	list_for_each_entry_rcu(d, &r->ctrl_domains, hdr.list) {
 		for (enum resctrl_conf_type t = 0; t < CDP_NUM_TYPES; t++) {
@@ -1824,7 +1845,11 @@ int mpam_resctrl_setup(void)
 		return -EOPNOTSUPP;
 	}
 
-	/* TODO: call resctrl_init() */
+	err = resctrl_init();
+	if (err)
+		return err;
+
+	WRITE_ONCE(resctrl_enabled, true);
 
 	return 0;
 
@@ -1832,6 +1857,61 @@ internal_error:
 	cpus_read_unlock();
 	pr_debug("Internal error %d - resctrl not supported\n", err);
 	return err;
+}
+
+void mpam_resctrl_exit(void)
+{
+	if (!READ_ONCE(resctrl_enabled))
+		return;
+
+	WRITE_ONCE(resctrl_enabled, false);
+	resctrl_exit();
+}
+
+static void mpam_resctrl_teardown_mon(struct mpam_resctrl_mon *mon, struct mpam_class *class)
+{
+	u32 num_mbwu_mon = l3_num_allocated_mbwu;
+
+	if (!mon->mbwu_idx_to_mon)
+		return;
+
+	if (mon->assigned_counters) {
+		__free_mbwu_mon(class, mon->assigned_counters, num_mbwu_mon);
+		mon->assigned_counters = NULL;
+		kfree(mon->mbwu_idx_to_mon);
+	} else {
+		__free_mbwu_mon(class, mon->mbwu_idx_to_mon, num_mbwu_mon);
+	}
+	mon->mbwu_idx_to_mon = NULL;
+}
+
+/*
+ * The driver is detaching an MSC from this class, if resctrl was using it,
+ * pull on resctrl_exit().
+ */
+void mpam_resctrl_teardown_class(struct mpam_class *class)
+{
+	struct mpam_resctrl_res *res;
+	enum resctrl_res_level rid;
+	struct mpam_resctrl_mon *mon;
+	enum resctrl_event_id eventid;
+
+	might_sleep();
+
+	for_each_mpam_resctrl_control(res, rid) {
+		if (res->class == class) {
+			res->class = NULL;
+			break;
+		}
+	}
+	for_each_mpam_resctrl_mon(mon, eventid) {
+		if (mon->class == class) {
+			mon->class = NULL;
+
+			mpam_resctrl_teardown_mon(mon, class);
+			break;
+		}
+	}
 }
 
 static int __init __cacheinfo_ready(void)
