@@ -118,6 +118,15 @@ static const struct regmap_test_param real_cache_types_only_list[] = {
 
 KUNIT_ARRAY_PARAM(real_cache_types_only, real_cache_types_only_list, param_to_desc);
 
+static const struct regmap_test_param flat_cache_types_list[] = {
+	{ .cache = REGCACHE_FLAT, .from_reg = 0 },
+	{ .cache = REGCACHE_FLAT, .from_reg = 0, .fast_io = true },
+	{ .cache = REGCACHE_FLAT, .from_reg = 0x2001 },
+	{ .cache = REGCACHE_FLAT, .from_reg = 0x2002 },
+};
+
+KUNIT_ARRAY_PARAM(flat_cache_types, flat_cache_types_list, param_to_desc);
+
 static const struct regmap_test_param real_cache_types_list[] = {
 	{ .cache = REGCACHE_FLAT,   .from_reg = 0 },
 	{ .cache = REGCACHE_FLAT,   .from_reg = 0, .fast_io = true },
@@ -1517,6 +1526,83 @@ static void cache_present(struct kunit *test)
 		KUNIT_ASSERT_TRUE(test, regcache_reg_cached(map, param->from_reg + i));
 }
 
+/*
+ * Test flat_cache_default_is_zero flag behavior.
+ *
+ * When this flag is set on REGCACHE_FLAT, registers not in reg_defaults
+ * are treated as having a default value of zero. This allows drivers to
+ * avoid maintaining large reg_defaults arrays for hardware with zero
+ * power-on-reset values.
+ */
+static void flat_cache_default_is_zero_flag(struct kunit *test)
+{
+	const struct regmap_test_param *param = test->param_value;
+	struct regmap *map;
+	struct regmap_config config;
+	struct regmap_ram_data *data;
+	unsigned int val;
+	int i;
+
+	config = test_regmap_config;
+	config.flat_cache_default_is_zero = true;
+
+	map = gen_regmap(test, &config, &data);
+	KUNIT_ASSERT_FALSE(test, IS_ERR(map));
+	if (IS_ERR(map))
+		return;
+
+	for (i = 0; i < BLOCK_TEST_SIZE; i++) {
+		data->read[param->from_reg + i] = false;
+		data->written[param->from_reg + i] = false;
+	}
+
+	/* Write in cache_only mode before registers are marked valid */
+	regcache_cache_only(map, true);
+	for (i = 0; i < BLOCK_TEST_SIZE; i++)
+		KUNIT_EXPECT_EQ(test, 0, regmap_write(map, param->from_reg + i, i + 0x100));
+
+	for (i = 0; i < BLOCK_TEST_SIZE; i++)
+		KUNIT_ASSERT_FALSE(test, data->written[param->from_reg + i]);
+
+	regcache_cache_only(map, false);
+	regcache_mark_dirty(map);
+	KUNIT_EXPECT_EQ(test, 0, regcache_sync(map));
+
+	for (i = 0; i < BLOCK_TEST_SIZE; i++)
+		KUNIT_ASSERT_TRUE(test, data->written[param->from_reg + i]);
+
+	for (i = 0; i < BLOCK_TEST_SIZE; i++)
+		KUNIT_EXPECT_EQ(test, i + 0x100, data->vals[param->from_reg + i]);
+
+	/* Verify reads return cached values */
+	for (i = 0; i < BLOCK_TEST_SIZE; i++) {
+		KUNIT_EXPECT_EQ(test, 0, regmap_read(map, param->from_reg + i, &val));
+		KUNIT_EXPECT_EQ(test, i + 0x100, val);
+	}
+
+	for (i = 0; i < BLOCK_TEST_SIZE; i++)
+		data->written[param->from_reg + i] = false;
+
+	/* Write in cache_only mode after registers are already valid */
+	regcache_cache_only(map, true);
+
+	for (i = 0; i < BLOCK_TEST_SIZE; i++)
+		KUNIT_EXPECT_EQ(test, 0, regmap_write(map, param->from_reg + i, i + 0x200));
+
+	for (i = 0; i < BLOCK_TEST_SIZE; i++)
+		KUNIT_ASSERT_FALSE(test, data->written[param->from_reg + i]);
+
+	regcache_cache_only(map, false);
+	regcache_mark_dirty(map);
+	KUNIT_EXPECT_EQ(test, 0, regcache_sync(map));
+
+	for (i = 0; i < BLOCK_TEST_SIZE; i++)
+		KUNIT_ASSERT_TRUE(test, data->written[param->from_reg + i]);
+
+	for (i = 0; i < BLOCK_TEST_SIZE; i++)
+		KUNIT_EXPECT_EQ(test, i + 0x200, data->vals[param->from_reg + i]);
+}
+
 static void cache_write_zero(struct kunit *test)
 {
 	const struct regmap_test_param *param = test->param_value;
@@ -2078,6 +2164,7 @@ static struct kunit_case regmap_test_cases[] = {
 	KUNIT_CASE_PARAM(cache_present, sparse_cache_types_gen_params),
 	KUNIT_CASE_PARAM(cache_write_zero, sparse_cache_types_gen_params),
 	KUNIT_CASE_PARAM(cache_range_window_reg, real_cache_types_only_gen_params),
+	KUNIT_CASE_PARAM(flat_cache_default_is_zero_flag, flat_cache_types_gen_params),
 
 	KUNIT_CASE_PARAM(raw_read_defaults_single, raw_test_types_gen_params),
 	KUNIT_CASE_PARAM(raw_read_defaults, raw_test_types_gen_params),
