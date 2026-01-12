@@ -402,9 +402,8 @@ int kstrtobool_from_user(const char __user *s, size_t count, bool *res)
 	char buf[4];
 
 	count = min(count, sizeof(buf) - 1);
-	if (copy_from_user(buf, s, count))
+	if (copy_from_user_nul(buf, s, count))
 		return -EFAULT;
-	buf[count] = '\0';
 	return kstrtobool(buf, res);
 }
 EXPORT_SYMBOL(kstrtobool_from_user);
@@ -416,9 +415,8 @@ int f(const char __user *s, size_t count, unsigned int base, type *res)	\
 	char buf[1 + sizeof(type) * 8 + 1 + 1];				\
 									\
 	count = min(count, sizeof(buf) - 1);				\
-	if (copy_from_user(buf, s, count))				\
+	if (copy_from_user_nul(buf, s, count))				\
 		return -EFAULT;						\
-	buf[count] = '\0';						\
 	return g(buf, base, res);					\
 }									\
 EXPORT_SYMBOL(f)
