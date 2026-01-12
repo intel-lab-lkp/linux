@@ -212,7 +212,7 @@ void ODM_ReadAndConfig_MP_8723B_RadioA(struct dm_odm_t *pDM_Odm)
 
 	for (i = 0; i < ArrayLen; i += 2) {
 		u32 v1 = Array[i];
-		u32 v2 = Array[i+1];
+		u32 v2 = Array[i + 1];
 
 		/*  This (offset, data) pair doesn't care the condition. */
 		if (v1 < 0x40000000) {
@@ -221,7 +221,7 @@ void ODM_ReadAndConfig_MP_8723B_RadioA(struct dm_odm_t *pDM_Odm)
 		} else {
 			/*  This line is the beginning of branch. */
 			bool bMatched = true;
-			u8  cCond  = (u8)((v1 & (BIT29|BIT28)) >> 28);
+			u8  cCond  = (u8)((v1 & (BIT29 | BIT28)) >> 28);
 
 			if (cCond == COND_ELSE) { /*  ELSE, ENDIF */
 				bMatched = true;
@@ -241,22 +241,22 @@ void ODM_ReadAndConfig_MP_8723B_RadioA(struct dm_odm_t *pDM_Odm)
 				 *  Condition isn't matched.
 				 *  Discard the following (offset, data) pairs.
 				 */
-				while (v1 < 0x40000000 && i < ArrayLen-2)
+				while (v1 < 0x40000000 && i < ArrayLen - 2)
 					READ_NEXT_PAIR(v1, v2, i);
 
 				i -= 2; /*  prevent from for-loop += 2 */
 			} else {
 				/*  Configure matched pairs and skip to end of if-else. */
-				while (v1 < 0x40000000 && i < ArrayLen-2) {
+				while (v1 < 0x40000000 && i < ArrayLen - 2) {
 					odm_ConfigRF_RadioA_8723B(pDM_Odm, v1, v2);
 					READ_NEXT_PAIR(v1, v2, i);
 				}
 
 				/*  Keeps reading until ENDIF. */
-				cCond = (u8)((v1 & (BIT29|BIT28)) >> 28);
-				while (cCond != COND_ENDIF && i < ArrayLen-2) {
+				cCond = (u8)((v1 & (BIT29 | BIT28)) >> 28);
+				while (cCond != COND_ENDIF && i < ArrayLen - 2) {
 					READ_NEXT_PAIR(v1, v2, i);
-					cCond = (u8)((v1 & (BIT29|BIT28)) >> 28);
+					cCond = (u8)((v1 & (BIT29 | BIT28)) >> 28);
 				}
 			}
 		}
@@ -513,11 +513,11 @@ void ODM_ReadAndConfig_MP_8723B_TXPWR_LMT(struct dm_odm_t *pDM_Odm)
 
 	for (i = 0; i < ARRAY_SIZE(Array_MP_8723B_TXPWR_LMT); i += 6) {
 		u8 *regulation = Array[i];
-		u8 *bandwidth = Array[i+1];
-		u8 *rate = Array[i+2];
-		u8 *rfPath = Array[i+3];
-		u8 *chnl = Array[i+4];
-		u8 *val = Array[i+5];
+		u8 *bandwidth = Array[i + 1];
+		u8 *rate = Array[i + 2];
+		u8 *rfPath = Array[i + 3];
+		u8 *chnl = Array[i + 4];
+		u8 *val = Array[i + 5];
 
 		odm_ConfigBB_TXPWR_LMT_8723B(pDM_Odm,
 					     regulation,
