@@ -153,11 +153,10 @@ static int ublk_ctrl_add_dev(struct ublk_dev *dev)
 	return __ublk_ctrl_cmd(dev, &data);
 }
 
-static int ublk_ctrl_del_dev(struct ublk_dev *dev)
+static int ublk_ctrl_del_dev(struct ublk_dev *dev, bool async)
 {
 	struct ublk_ctrl_cmd_data data = {
-		.cmd_op = UBLK_U_CMD_DEL_DEV,
-		.flags = 0,
+		.cmd_op = async ? UBLK_U_CMD_DEL_DEV_ASYNC: UBLK_U_CMD_DEL_DEV,
 	};
 
 	return __ublk_ctrl_cmd(dev, &data);
@@ -1063,11 +1062,11 @@ static int ublk_start_daemon(const struct dev_ctx *ctx, struct ublk_dev *dev)
 	else
 		ublk_send_dev_event(ctx, dev, dev->dev_info.dev_id);
 
+ fail:
 	/* wait until we are terminated */
 	for (i = 0; i < dev->nthreads; i++)
 		pthread_join(tinfo[i].thread, &thread_ret);
 	free(tinfo);
- fail:
 	for (i = 0; i < dinfo->nr_hw_queues; i++)
 		ublk_queue_deinit(&dev->q[i]);
 	ublk_dev_unprep(dev);
@@ -1272,9 +1271,9 @@ static int __cmd_dev_add(const struct dev_ctx *ctx)
 	}
 
 	ret = ublk_start_daemon(ctx, dev);
-	ublk_dbg(UBLK_DBG_DEV, "%s: daemon exit %d\b", ret);
+	ublk_dbg(UBLK_DBG_DEV, "%s: daemon exit %d\n", __func__, ret);
 	if (ret < 0)
-		ublk_ctrl_del_dev(dev);
+		ublk_ctrl_del_dev(dev, true);
 
 fail:
 	if (ret < 0)
@@ -1371,7 +1370,7 @@ static int __cmd_dev_del(struct dev_ctx *ctx)
 	if (ret < 0)
 		ublk_err("%s: stop daemon id %d dev %d, ret %d\n",
 				__func__, dev->dev_info.ublksrv_pid, number, ret);
-	ublk_ctrl_del_dev(dev);
+	ublk_ctrl_del_dev(dev, false);
 fail:
 	ublk_ctrl_deinit(dev);
 
@@ -1622,6 +1621,7 @@ int main(int argc, char *argv[])
 		.nr_hw_queues	=	2,
 		.dev_id		=	-1,
 		.tgt_type	=	"unknown",
+		._evtfd		=	-1,
 	};
 	int ret = -EINVAL, i;
 	int tgt_argc = 1;
