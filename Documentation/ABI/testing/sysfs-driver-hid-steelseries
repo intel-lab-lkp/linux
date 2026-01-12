@@ -1,0 +1,131 @@
+What:		/sys/class/leds/SRWS1::<serial>::RPM1
+What:		/sys/class/leds/SRWS1::<serial>::RPM2
+What:		/sys/class/leds/SRWS1::<serial>::RPM3
+What:		/sys/class/leds/SRWS1::<serial>::RPM4
+What:		/sys/class/leds/SRWS1::<serial>::RPM5
+What:		/sys/class/leds/SRWS1::<serial>::RPM6
+What:		/sys/class/leds/SRWS1::<serial>::RPM7
+What:		/sys/class/leds/SRWS1::<serial>::RPM8
+What:		/sys/class/leds/SRWS1::<serial>::RPM9
+What:		/sys/class/leds/SRWS1::<serial>::RPM10
+What:		/sys/class/leds/SRWS1::<serial>::RPM11
+What:		/sys/class/leds/SRWS1::<serial>::RPM12
+What:		/sys/class/leds/SRWS1::<serial>::RPM13
+What:		/sys/class/leds/SRWS1::<serial>::RPM14
+What:		/sys/class/leds/SRWS1::<serial>::RPM15
+What:		/sys/class/leds/SRWS1::<serial>::RPMALL
+Date:		Jan 2013
+KernelVersion:	3.9
+Contact:	Simon Wood <simon@mungewell.org>
+Description:	Provides a control for turning on/off the LEDs which form
+		an RPM meter on the front of the controller
+
+What:		/sys/class/hid/drivers/steelseries/<dev>/sidetone_level
+Date:		January 2025
+KernelVersion:	6.19
+Contact:	Sriman Achanta <srimanachanta@gmail.com>
+Description:
+		Controls the sidetone (microphone monitoring) volume level.
+		This determines how much of the microphone input is fed back into
+		the headset speakers.
+
+		Range: 0-128 (mapped internally to device-specific values).
+
+		Access: Write
+
+What:		/sys/class/hid/drivers/steelseries/<dev>/inactive_time
+Date:		January 2025
+KernelVersion:	6.19
+Contact:	Sriman Achanta <srimanachanta@gmail.com>
+Description:
+		Sets the time in minutes before the headset automatically enters
+		standby/sleep mode when no audio is playing.
+
+		Range: 0-90 (minutes).
+		       Some devices (e.g., Arctis 1/7X) map this to specific presets.
+
+		Access: Write
+
+What:		/sys/class/hid/drivers/steelseries/<dev>/chatmix_level
+Date:		January 2025
+KernelVersion:	6.19
+Contact:	Sriman Achanta <srimanachanta@gmail.com>
+Description:
+		Reports the current balance between Game and Chat audio channels
+		(ChatMix). This value changes when the physical ChatMix dial
+		on the headset is adjusted.
+
+		Range: 0-128
+		       0   = 100% Chat / 0% Game
+		       64  = 50% Chat / 50% Game (Balanced)
+		       128 = 0% Chat / 100% Game
+
+		Access: Read
+
+What:		/sys/class/hid/drivers/steelseries/<dev>/mic_mute_led_brightness
+Date:		January 2025
+KernelVersion:	6.19
+Contact:	Sriman Achanta <srimanachanta@gmail.com>
+Description:
+		Controls the brightness of the LED on the microphone boom that
+		indicates when the microphone is muted.
+
+		Range: 0-3 (off, low, medium, high) for most devices.
+		       0-10 for newer Nova series devices.
+
+		Access: Write
+
+What:		/sys/class/hid/drivers/steelseries/<dev>/mic_volume
+Date:		January 2025
+KernelVersion:	6.19
+Contact:	Sriman Achanta <srimanachanta@gmail.com>
+Description:
+		Controls the internal microphone gain/volume of the headset.
+		This is distinct from the OS input volume.
+
+		Range: 0-128 (mapped internally to device-specific values).
+
+		Access: Write
+
+What:		/sys/class/hid/drivers/steelseries/<dev>/volume_limiter
+Date:		January 2025
+KernelVersion:	6.19
+Contact:	Sriman Achanta <srimanachanta@gmail.com>
+Description:
+		Enables or disables the EU volume limiter (hearing protection).
+		When enabled, the maximum output volume is capped.
+
+		Values:
+		0 = Disabled
+		1 = Enabled
+
+		Access: Write
+
+What:		/sys/class/hid/drivers/steelseries/<dev>/bluetooth_on_power
+Date:		January 2025
+KernelVersion:	6.19
+Contact:	Sriman Achanta <srimanachanta@gmail.com>
+Description:
+		Configures whether the Bluetooth radio automatically turns on
+		when the headset is powered on.
+
+		Values:
+		0 = Bluetooth must be turned on manually
+		1 = Bluetooth turns on automatically with headset
+
+		Access: Write
+
+What:		/sys/class/hid/drivers/steelseries/<dev>/bluetooth_call_vol
+Date:		January 2025
+KernelVersion:	6.19
+Contact:	Sriman Achanta <srimanachanta@gmail.com>
+Description:
+		Configures how the 2.4GHz Game/Chat audio is attenuated when
+		a Bluetooth call is active.
+
+		Values:
+		0 = No attenuation (mix both equally)
+		1 = Attenuate Game audio by -12dB
+		2 = Mute Game audio completely
+
+		Access: Write
