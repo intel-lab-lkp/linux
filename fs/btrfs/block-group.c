@@ -2315,6 +2315,9 @@ static struct btrfs_block_group *btrfs_create_block_group(
 	atomic_set(&cache->frozen, 0);
 	mutex_init(&cache->free_space_lock);
 
+	if (!btrfs_test_opt(fs_info, SPACE_CACHE))
+		cache->disk_cache_state = BTRFS_DC_DISABLED;
+
 	return cache;
 }
 

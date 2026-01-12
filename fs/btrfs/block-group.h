@@ -22,9 +22,10 @@ struct btrfs_trans_handle;
 
 enum btrfs_disk_cache_state {
 	BTRFS_DC_WRITTEN,
+	BTRFS_DC_DISABLED,
 	BTRFS_DC_ERROR,
 	BTRFS_DC_CLEAR,
-	BTRFS_DC_SETUP,
+	BTRFS_DC_SETUP
 };
 
 enum btrfs_block_group_size_class {
