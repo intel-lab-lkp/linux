@@ -325,7 +325,7 @@ static inline void check_insane_mems_config(nodemask_t *nodes)
  */
 static inline void dec_attach_in_progress_locked(struct cpuset *cs)
 {
-	lockdep_assert_held(&cpuset_mutex);
+	lockdep_assert_cpuset_lock_held();
 
 	cs->attach_in_progress--;
 	if (!cs->attach_in_progress)
@@ -361,7 +361,7 @@ static inline bool is_in_v2_mode(void)
 
 static inline bool cpuset_is_populated(struct cpuset *cs)
 {
-	lockdep_assert_held(&cpuset_mutex);
+	lockdep_assert_cpuset_lock_held();
 
 	/* Cpusets in the process of attaching should be considered as populated */
 	return cgroup_is_populated(cs->css.cgroup) ||
@@ -913,7 +913,7 @@ void dl_rebuild_rd_accounting(void)
 	int cpu;
 	u64 cookie = ++dl_cookie;
 
-	lockdep_assert_held(&cpuset_mutex);
+	lockdep_assert_cpuset_lock_held();
 	lockdep_assert_cpus_held();
 	lockdep_assert_held(&sched_domains_mutex);
 
@@ -964,7 +964,7 @@ void rebuild_sched_domains_locked(void)
 	int i;
 
 	lockdep_assert_cpus_held();
-	lockdep_assert_held(&cpuset_mutex);
+	lockdep_assert_cpuset_lock_held();
 	force_sd_rebuild = false;
 
 	/* Generate domain masks and attrs */
@@ -1660,7 +1660,7 @@ static int update_parent_effective_cpumask(struct cpuset *cs, int cmd,
 	int parent_prs = parent->partition_root_state;
 	bool nocpu;
 
-	lockdep_assert_held(&cpuset_mutex);
+	lockdep_assert_cpuset_lock_held();
 	WARN_ON_ONCE(is_remote_partition(cs));	/* For local partition only */
 
 	/*
@@ -2232,7 +2232,7 @@ static void update_sibling_cpumasks(struct cpuset *parent, struct cpuset *cs,
 	struct cpuset *sibling;
 	struct cgroup_subsys_state *pos_css;
 
-	lockdep_assert_held(&cpuset_mutex);
+	lockdep_assert_cpuset_lock_held();
 
 	/*
 	 * Check all its siblings and call update_cpumasks_hier()
@@ -3103,7 +3103,7 @@ static nodemask_t cpuset_attach_nodemask_to;
 
 static void cpuset_attach_task(struct cpuset *cs, struct task_struct *task)
 {
-	lockdep_assert_held(&cpuset_mutex);
+	lockdep_assert_cpuset_lock_held();
 
 	if (cs != &top_cpuset)
 		guarantee_active_cpus(task, cpus_attach);
@@ -4029,7 +4029,7 @@ static void __cpuset_cpus_allowed_locked(struct task_struct *tsk, struct cpumask
  */
 void cpuset_cpus_allowed_locked(struct task_struct *tsk, struct cpumask *pmask)
 {
-	lockdep_assert_held(&cpuset_mutex);
+	lockdep_assert_cpuset_lock_held();
 	__cpuset_cpus_allowed_locked(tsk, pmask);
 }
 
