@@ -690,16 +690,17 @@ static bool tegra210_mvc_volatile_reg(struct device *dev, unsigned int reg)
 }
 
 static const struct regmap_config tegra210_mvc_regmap_config = {
-	.reg_bits		= 32,
-	.reg_stride		= 4,
-	.val_bits		= 32,
-	.max_register		= TEGRA210_MVC_CONFIG_ERR_TYPE,
-	.writeable_reg		= tegra210_mvc_wr_reg,
-	.readable_reg		= tegra210_mvc_rd_reg,
-	.volatile_reg		= tegra210_mvc_volatile_reg,
-	.reg_defaults		= tegra210_mvc_reg_defaults,
-	.num_reg_defaults	= ARRAY_SIZE(tegra210_mvc_reg_defaults),
-	.cache_type		= REGCACHE_FLAT,
+	.reg_bits			= 32,
+	.reg_stride			= 4,
+	.val_bits			= 32,
+	.max_register			= TEGRA210_MVC_CONFIG_ERR_TYPE,
+	.writeable_reg			= tegra210_mvc_wr_reg,
+	.readable_reg			= tegra210_mvc_rd_reg,
+	.volatile_reg			= tegra210_mvc_volatile_reg,
+	.reg_defaults			= tegra210_mvc_reg_defaults,
+	.num_reg_defaults		= ARRAY_SIZE(tegra210_mvc_reg_defaults),
+	.cache_type			= REGCACHE_FLAT,
+	.flat_cache_default_is_zero	= true,
 };
 
 static const struct of_device_id tegra210_mvc_of_match[] = {

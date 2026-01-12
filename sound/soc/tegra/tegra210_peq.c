@@ -295,18 +295,19 @@ static bool tegra210_peq_precious_reg(struct device *dev, unsigned int reg)
 }
 
 static const struct regmap_config tegra210_peq_regmap_config = {
-	.name			= "peq",
-	.reg_bits		= 32,
-	.reg_stride		= 4,
-	.val_bits		= 32,
-	.max_register		= TEGRA210_PEQ_CFG_RAM_SHIFT_DATA,
-	.writeable_reg		= tegra210_peq_wr_reg,
-	.readable_reg		= tegra210_peq_rd_reg,
-	.volatile_reg		= tegra210_peq_volatile_reg,
-	.precious_reg		= tegra210_peq_precious_reg,
-	.reg_defaults		= tegra210_peq_reg_defaults,
-	.num_reg_defaults	= ARRAY_SIZE(tegra210_peq_reg_defaults),
-	.cache_type		= REGCACHE_FLAT,
+	.name				= "peq",
+	.reg_bits			= 32,
+	.reg_stride			= 4,
+	.val_bits			= 32,
+	.max_register			= TEGRA210_PEQ_CFG_RAM_SHIFT_DATA,
+	.writeable_reg			= tegra210_peq_wr_reg,
+	.readable_reg			= tegra210_peq_rd_reg,
+	.volatile_reg			= tegra210_peq_volatile_reg,
+	.precious_reg			= tegra210_peq_precious_reg,
+	.reg_defaults			= tegra210_peq_reg_defaults,
+	.num_reg_defaults		= ARRAY_SIZE(tegra210_peq_reg_defaults),
+	.cache_type			= REGCACHE_FLAT,
+	.flat_cache_default_is_zero	= true,
 };
 
 void tegra210_peq_restore(struct regmap *regmap, u32 *biquad_gains,

@@ -941,16 +941,17 @@ static bool tegra186_asrc_volatile_reg(struct device *dev, unsigned int reg)
 }
 
 static const struct regmap_config tegra186_asrc_regmap_config = {
-	.reg_bits		= 32,
-	.reg_stride		= 4,
-	.val_bits		= 32,
-	.max_register		= TEGRA186_ASRC_CYA,
-	.writeable_reg		= tegra186_asrc_wr_reg,
-	.readable_reg		= tegra186_asrc_rd_reg,
-	.volatile_reg		= tegra186_asrc_volatile_reg,
-	.reg_defaults		= tegra186_asrc_reg_defaults,
-	.num_reg_defaults	= ARRAY_SIZE(tegra186_asrc_reg_defaults),
-	.cache_type		= REGCACHE_FLAT,
+	.reg_bits			= 32,
+	.reg_stride			= 4,
+	.val_bits			= 32,
+	.max_register			= TEGRA186_ASRC_CYA,
+	.writeable_reg			= tegra186_asrc_wr_reg,
+	.readable_reg			= tegra186_asrc_rd_reg,
+	.volatile_reg			= tegra186_asrc_volatile_reg,
+	.reg_defaults			= tegra186_asrc_reg_defaults,
+	.num_reg_defaults		= ARRAY_SIZE(tegra186_asrc_reg_defaults),
+	.cache_type			= REGCACHE_FLAT,
+	.flat_cache_default_is_zero	= true,
 };
 
 static const struct tegra_asrc_soc_data soc_data_tegra186 = {

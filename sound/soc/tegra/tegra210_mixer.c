@@ -598,17 +598,18 @@ static bool tegra210_mixer_precious_reg(struct device *dev,
 }
 
 static const struct regmap_config tegra210_mixer_regmap_config = {
-	.reg_bits		= 32,
-	.reg_stride		= 4,
-	.val_bits		= 32,
-	.max_register		= TEGRA210_MIXER_CTRL,
-	.writeable_reg		= tegra210_mixer_wr_reg,
-	.readable_reg		= tegra210_mixer_rd_reg,
-	.volatile_reg		= tegra210_mixer_volatile_reg,
-	.precious_reg		= tegra210_mixer_precious_reg,
-	.reg_defaults		= tegra210_mixer_reg_defaults,
-	.num_reg_defaults	= ARRAY_SIZE(tegra210_mixer_reg_defaults),
-	.cache_type		= REGCACHE_FLAT,
+	.reg_bits			= 32,
+	.reg_stride			= 4,
+	.val_bits			= 32,
+	.max_register			= TEGRA210_MIXER_CTRL,
+	.writeable_reg			= tegra210_mixer_wr_reg,
+	.readable_reg			= tegra210_mixer_rd_reg,
+	.volatile_reg			= tegra210_mixer_volatile_reg,
+	.precious_reg			= tegra210_mixer_precious_reg,
+	.reg_defaults			= tegra210_mixer_reg_defaults,
+	.num_reg_defaults		= ARRAY_SIZE(tegra210_mixer_reg_defaults),
+	.cache_type			= REGCACHE_FLAT,
+	.flat_cache_default_is_zero	= true,
 };
 
 static const struct of_device_id tegra210_mixer_of_match[] = {

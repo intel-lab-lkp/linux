@@ -3559,17 +3559,18 @@ static bool tegra210_sfc_precious_reg(struct device *dev, unsigned int reg)
 }
 
 static const struct regmap_config tegra210_sfc_regmap_config = {
-	.reg_bits		= 32,
-	.reg_stride		= 4,
-	.val_bits		= 32,
-	.max_register		= TEGRA210_SFC_CFG_RAM_DATA,
-	.writeable_reg		= tegra210_sfc_wr_reg,
-	.readable_reg		= tegra210_sfc_rd_reg,
-	.volatile_reg		= tegra210_sfc_volatile_reg,
-	.precious_reg		= tegra210_sfc_precious_reg,
-	.reg_defaults		= tegra210_sfc_reg_defaults,
-	.num_reg_defaults	= ARRAY_SIZE(tegra210_sfc_reg_defaults),
-	.cache_type		= REGCACHE_FLAT,
+	.reg_bits			= 32,
+	.reg_stride			= 4,
+	.val_bits			= 32,
+	.max_register			= TEGRA210_SFC_CFG_RAM_DATA,
+	.writeable_reg			= tegra210_sfc_wr_reg,
+	.readable_reg			= tegra210_sfc_rd_reg,
+	.volatile_reg			= tegra210_sfc_volatile_reg,
+	.precious_reg			= tegra210_sfc_precious_reg,
+	.reg_defaults			= tegra210_sfc_reg_defaults,
+	.num_reg_defaults		= ARRAY_SIZE(tegra210_sfc_reg_defaults),
+	.cache_type			= REGCACHE_FLAT,
+	.flat_cache_default_is_zero	= true,
 };
 
 static const struct of_device_id tegra210_sfc_of_match[] = {

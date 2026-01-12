@@ -988,16 +988,17 @@ static bool tegra264_i2s_volatile_reg(struct device *dev, unsigned int reg)
 }
 
 static const struct regmap_config tegra210_regmap_conf = {
-	.reg_bits		= 32,
-	.reg_stride		= 4,
-	.val_bits		= 32,
-	.max_register		= TEGRA210_I2S_CYA,
-	.writeable_reg		= tegra210_i2s_wr_reg,
-	.readable_reg		= tegra210_i2s_rd_reg,
-	.volatile_reg		= tegra210_i2s_volatile_reg,
-	.reg_defaults		= tegra210_i2s_reg_defaults,
-	.num_reg_defaults	= ARRAY_SIZE(tegra210_i2s_reg_defaults),
-	.cache_type		= REGCACHE_FLAT,
+	.reg_bits			= 32,
+	.reg_stride			= 4,
+	.val_bits			= 32,
+	.max_register			= TEGRA210_I2S_CYA,
+	.writeable_reg			= tegra210_i2s_wr_reg,
+	.readable_reg			= tegra210_i2s_rd_reg,
+	.volatile_reg			= tegra210_i2s_volatile_reg,
+	.reg_defaults			= tegra210_i2s_reg_defaults,
+	.num_reg_defaults		= ARRAY_SIZE(tegra210_i2s_reg_defaults),
+	.cache_type			= REGCACHE_FLAT,
+	.flat_cache_default_is_zero	= true,
 };
 
 /*
@@ -1035,16 +1036,17 @@ static void tegra210_parse_client_convert(struct device *dev)
 }
 
 static const struct regmap_config tegra264_regmap_conf = {
-	.reg_bits		= 32,
-	.reg_stride		= 4,
-	.val_bits		= 32,
-	.max_register		= TEGRA264_I2S_PAD_MACRO_STATUS,
-	.writeable_reg		= tegra264_i2s_wr_reg,
-	.readable_reg		= tegra264_i2s_rd_reg,
-	.volatile_reg		= tegra264_i2s_volatile_reg,
-	.reg_defaults		= tegra264_i2s_reg_defaults,
-	.num_reg_defaults	= ARRAY_SIZE(tegra264_i2s_reg_defaults),
-	.cache_type		= REGCACHE_FLAT,
+	.reg_bits			= 32,
+	.reg_stride			= 4,
+	.val_bits			= 32,
+	.max_register			= TEGRA264_I2S_PAD_MACRO_STATUS,
+	.writeable_reg			= tegra264_i2s_wr_reg,
+	.readable_reg			= tegra264_i2s_rd_reg,
+	.volatile_reg			= tegra264_i2s_volatile_reg,
+	.reg_defaults			= tegra264_i2s_reg_defaults,
+	.num_reg_defaults		= ARRAY_SIZE(tegra264_i2s_reg_defaults),
+	.cache_type			= REGCACHE_FLAT,
+	.flat_cache_default_is_zero	= true,
 };
 
 static int tegra210_i2s_probe(struct platform_device *pdev)

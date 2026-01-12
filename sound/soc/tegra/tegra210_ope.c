@@ -288,16 +288,17 @@ static bool tegra210_ope_volatile_reg(struct device *dev, unsigned int reg)
 }
 
 static const struct regmap_config tegra210_ope_regmap_config = {
-	.reg_bits		= 32,
-	.reg_stride		= 4,
-	.val_bits		= 32,
-	.max_register		= TEGRA210_OPE_DIR,
-	.writeable_reg		= tegra210_ope_wr_reg,
-	.readable_reg		= tegra210_ope_rd_reg,
-	.volatile_reg		= tegra210_ope_volatile_reg,
-	.reg_defaults		= tegra210_ope_reg_defaults,
-	.num_reg_defaults	= ARRAY_SIZE(tegra210_ope_reg_defaults),
-	.cache_type		= REGCACHE_FLAT,
+	.reg_bits			= 32,
+	.reg_stride			= 4,
+	.val_bits			= 32,
+	.max_register			= TEGRA210_OPE_DIR,
+	.writeable_reg			= tegra210_ope_wr_reg,
+	.readable_reg			= tegra210_ope_rd_reg,
+	.volatile_reg			= tegra210_ope_volatile_reg,
+	.reg_defaults			= tegra210_ope_reg_defaults,
+	.num_reg_defaults		= ARRAY_SIZE(tegra210_ope_reg_defaults),
+	.cache_type			= REGCACHE_FLAT,
+	.flat_cache_default_is_zero	= true,
 };
 
 static int tegra210_ope_probe(struct platform_device *pdev)

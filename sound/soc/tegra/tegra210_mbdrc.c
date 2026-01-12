@@ -752,18 +752,19 @@ static bool tegra210_mbdrc_precious_reg(struct device *dev, unsigned int reg)
 }
 
 static const struct regmap_config tegra210_mbdrc_regmap_cfg = {
-	.name			= "mbdrc",
-	.reg_bits		= 32,
-	.reg_stride		= 4,
-	.val_bits		= 32,
-	.max_register		= TEGRA210_MBDRC_MAX_REG,
-	.writeable_reg		= tegra210_mbdrc_wr_reg,
-	.readable_reg		= tegra210_mbdrc_rd_reg,
-	.volatile_reg		= tegra210_mbdrc_volatile_reg,
-	.precious_reg		= tegra210_mbdrc_precious_reg,
-	.reg_defaults		= tegra210_mbdrc_reg_defaults,
-	.num_reg_defaults	= ARRAY_SIZE(tegra210_mbdrc_reg_defaults),
-	.cache_type		= REGCACHE_FLAT,
+	.name				= "mbdrc",
+	.reg_bits			= 32,
+	.reg_stride			= 4,
+	.val_bits			= 32,
+	.max_register			= TEGRA210_MBDRC_MAX_REG,
+	.writeable_reg			= tegra210_mbdrc_wr_reg,
+	.readable_reg			= tegra210_mbdrc_rd_reg,
+	.volatile_reg			= tegra210_mbdrc_volatile_reg,
+	.precious_reg			= tegra210_mbdrc_precious_reg,
+	.reg_defaults			= tegra210_mbdrc_reg_defaults,
+	.num_reg_defaults		= ARRAY_SIZE(tegra210_mbdrc_reg_defaults),
+	.cache_type			= REGCACHE_FLAT,
+	.flat_cache_default_is_zero	= true,
 };
 
 int tegra210_mbdrc_hw_params(struct snd_soc_component *cmpnt)
