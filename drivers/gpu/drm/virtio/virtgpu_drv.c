@@ -178,6 +178,9 @@ static int virtgpu_freeze(struct virtio_device *vdev)
 		return error;
 	}
 
+	if (vgdev->hibernation)
+		virtio_gpu_object_unref_all(vgdev);
+
 	flush_work(&vgdev->obj_free_work);
 	flush_work(&vgdev->ctrlq.dequeue_work);
 	flush_work(&vgdev->cursorq.dequeue_work);
@@ -209,6 +212,15 @@ static int virtgpu_restore(struct virtio_device *vdev)
 	}
 
 	virtio_device_ready(vdev);
+
+	if (vgdev->hibernation) {
+		vgdev->hibernation = false;
+		error = virtio_gpu_object_restore_all(vgdev);
+		if (error) {
+			DRM_ERROR("Failed to recover virtio-gpu objects\n");
+			return error;
+		}
+	}
 
 	error = drm_mode_config_helper_resume(dev);
 	if (error) {
