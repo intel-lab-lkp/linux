@@ -806,6 +806,8 @@ SYSCALL_DEFINE4(listns, const struct ns_id_req __user *, req,
 	if (ret)
 		return ret;
 
+	return -ENOSYS;
+
 	if (kreq.user_ns_id)
 		return do_listns_userns(&klns);
 
