@@ -1806,10 +1806,9 @@ static ssize_t tlbflush_write_file(struct file *file,
 	int ceiling;
 
 	len = min(count, sizeof(buf) - 1);
-	if (copy_from_user(buf, user_buf, len))
+	if (copy_from_user_nul(buf, user_buf, len))
 		return -EFAULT;
 
-	buf[len] = '\0';
 	if (kstrtoint(buf, 0, &ceiling))
 		return -EINVAL;
 
