@@ -3349,6 +3349,10 @@ N: Anil Ravindranath
 E: anil_ravindranath@pmc-sierra.com
 D: PMC-Sierra MaxRAID driver
 
+N: Dwaipayan Ray
+E: dwaipayanray1@gmail.com
+D: checkpatch.pl maintainer
+
 N: Eric S. Raymond
 E: esr@thyrsus.com
 W: http://www.tuxedo.org/~esr/
@@ -4276,6 +4280,10 @@ S: Roger Maris Cancer Center
 S: 820 4th St. N.
 S: Fargo, North Dakota 58122
 S: USA
+
+N: Andy Whitcroft
+E: apw@canonical.com
+D: checkpatch.pl maintainer
 
 N: Steven Whitehouse
 E: steve@chygwyn.com

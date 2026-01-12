@@ -5869,15 +5869,12 @@ F:	Documentation/hwmon/powerz.rst
 F:	drivers/hwmon/powerz.c
 
 CHECKPATCH
-M:	Andy Whitcroft <apw@canonical.com>
 M:	Joe Perches <joe@perches.com>
-R:	Dwaipayan Ray <dwaipayanray1@gmail.com>
 R:	Lukas Bulwahn <lukas.bulwahn@gmail.com>
 S:	Maintained
 F:	scripts/checkpatch.pl
 
 CHECKPATCH DOCUMENTATION
-M:	Dwaipayan Ray <dwaipayanray1@gmail.com>
 M:	Lukas Bulwahn <lukas.bulwahn@gmail.com>
 R:	Joe Perches <joe@perches.com>
 S:	Maintained
