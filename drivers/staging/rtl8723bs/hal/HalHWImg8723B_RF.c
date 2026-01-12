@@ -8,9 +8,7 @@
 #include <linux/kernel.h>
 #include "odm_precomp.h"
 
-static bool CheckPositive(
-	struct dm_odm_t *pDM_Odm, const u32 Condition1, const u32 Condition2
-)
+static bool CheckPositive(struct dm_odm_t *pDM_Odm, const u32 Condition1, const u32 Condition2)
 {
 	u8 _BoardType =
 			((pDM_Odm->BoardType & BIT4) >> 4) << 0 | /*  _GLNA */
@@ -36,16 +34,12 @@ static bool CheckPositive(
 	/*  Value Defined Check =============== */
 	/* QFN Type [15:12] and Cut Version [27:24] need to do value check */
 
-	if (
-		((cond1 & 0x0000F000) != 0) &&
-		((cond1 & 0x0000F000) != (driver1 & 0x0000F000))
-	)
+	if (((cond1 & 0x0000F000) != 0) &&
+	    ((cond1 & 0x0000F000) != (driver1 & 0x0000F000)))
 		return false;
 
-	if (
-		((cond1 & 0x0F000000) != 0) &&
-		((cond1 & 0x0F000000) != (driver1 & 0x0F000000))
-	)
+	if (((cond1 & 0x0F000000) != 0) &&
+	    ((cond1 & 0x0F000000) != (driver1 & 0x0F000000)))
 		return false;
 
 	/*  Bit Defined Check ================ */
@@ -311,47 +305,30 @@ void ODM_ReadAndConfig_MP_8723B_TxPowerTrack_SDIO(struct dm_odm_t *pDM_Odm)
 	struct odm_rf_cal_t *pRFCalibrateInfo = &pDM_Odm->RFCalibrateInfo;
 
 
-	memcpy(
-		pRFCalibrateInfo->DeltaSwingTableIdx_2GA_P,
-		gDeltaSwingTableIdx_MP_2GA_P_TxPowerTrack_SDIO_8723B,
-		DELTA_SWINGIDX_SIZE
-	);
-	memcpy(
-		pRFCalibrateInfo->DeltaSwingTableIdx_2GA_N,
-		gDeltaSwingTableIdx_MP_2GA_N_TxPowerTrack_SDIO_8723B,
-		DELTA_SWINGIDX_SIZE
-	);
-	memcpy(
-		pRFCalibrateInfo->DeltaSwingTableIdx_2GB_P,
-		gDeltaSwingTableIdx_MP_2GB_P_TxPowerTrack_SDIO_8723B,
-		DELTA_SWINGIDX_SIZE
-	);
-	memcpy(
-		pRFCalibrateInfo->DeltaSwingTableIdx_2GB_N,
-		gDeltaSwingTableIdx_MP_2GB_N_TxPowerTrack_SDIO_8723B,
-		DELTA_SWINGIDX_SIZE
-	);
-
-	memcpy(
-		pRFCalibrateInfo->DeltaSwingTableIdx_2GCCKA_P,
-		gDeltaSwingTableIdx_MP_2GCCKA_P_TxPowerTrack_SDIO_8723B,
-		DELTA_SWINGIDX_SIZE
-	);
-	memcpy(
-		pRFCalibrateInfo->DeltaSwingTableIdx_2GCCKA_N,
-		gDeltaSwingTableIdx_MP_2GCCKA_N_TxPowerTrack_SDIO_8723B,
-		DELTA_SWINGIDX_SIZE
-	);
-	memcpy(
-		pRFCalibrateInfo->DeltaSwingTableIdx_2GCCKB_P,
-		gDeltaSwingTableIdx_MP_2GCCKB_P_TxPowerTrack_SDIO_8723B,
-		DELTA_SWINGIDX_SIZE
-	);
-	memcpy(
-		pRFCalibrateInfo->DeltaSwingTableIdx_2GCCKB_N,
-		gDeltaSwingTableIdx_MP_2GCCKB_N_TxPowerTrack_SDIO_8723B,
-		DELTA_SWINGIDX_SIZE
-	);
+	memcpy(pRFCalibrateInfo->DeltaSwingTableIdx_2GA_P,
+	       gDeltaSwingTableIdx_MP_2GA_P_TxPowerTrack_SDIO_8723B,
+	       DELTA_SWINGIDX_SIZE);
+	memcpy(pRFCalibrateInfo->DeltaSwingTableIdx_2GA_N,
+	       gDeltaSwingTableIdx_MP_2GA_N_TxPowerTrack_SDIO_8723B,
+	       DELTA_SWINGIDX_SIZE);
+	memcpy(pRFCalibrateInfo->DeltaSwingTableIdx_2GB_P,
+	       gDeltaSwingTableIdx_MP_2GB_P_TxPowerTrack_SDIO_8723B,
+	       DELTA_SWINGIDX_SIZE);
+	memcpy(pRFCalibrateInfo->DeltaSwingTableIdx_2GB_N,
+	       gDeltaSwingTableIdx_MP_2GB_N_TxPowerTrack_SDIO_8723B,
+	       DELTA_SWINGIDX_SIZE);
+	memcpy(pRFCalibrateInfo->DeltaSwingTableIdx_2GCCKA_P,
+	       gDeltaSwingTableIdx_MP_2GCCKA_P_TxPowerTrack_SDIO_8723B,
+	       DELTA_SWINGIDX_SIZE);
+	memcpy(pRFCalibrateInfo->DeltaSwingTableIdx_2GCCKA_N,
+	       gDeltaSwingTableIdx_MP_2GCCKA_N_TxPowerTrack_SDIO_8723B,
+	       DELTA_SWINGIDX_SIZE);
+	memcpy(pRFCalibrateInfo->DeltaSwingTableIdx_2GCCKB_P,
+	       gDeltaSwingTableIdx_MP_2GCCKB_P_TxPowerTrack_SDIO_8723B,
+	       DELTA_SWINGIDX_SIZE);
+	memcpy(pRFCalibrateInfo->DeltaSwingTableIdx_2GCCKB_N,
+	       gDeltaSwingTableIdx_MP_2GCCKB_N_TxPowerTrack_SDIO_8723B,
+	       DELTA_SWINGIDX_SIZE);
 }
 
 /******************************************************************************
@@ -542,14 +519,12 @@ void ODM_ReadAndConfig_MP_8723B_TXPWR_LMT(struct dm_odm_t *pDM_Odm)
 		u8 *chnl = Array[i+4];
 		u8 *val = Array[i+5];
 
-		odm_ConfigBB_TXPWR_LMT_8723B(
-			pDM_Odm,
-			regulation,
-			bandwidth,
-			rate,
-			rfPath,
-			chnl,
-			val
-		);
+		odm_ConfigBB_TXPWR_LMT_8723B(pDM_Odm,
+					     regulation,
+					     bandwidth,
+					     rate,
+					     rfPath,
+					     chnl,
+					     val);
 	}
 }
