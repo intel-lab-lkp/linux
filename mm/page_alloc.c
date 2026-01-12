@@ -812,6 +812,16 @@ compaction_capture(struct capture_control *capc, struct page *page,
 }
 #endif /* CONFIG_COMPACTION */
 
+static inline void account_specific_freepages(struct zone *zone, int nr_pages,
+					      int migratetype)
+{
+	if (is_migrate_cma(migratetype))
+		__mod_zone_page_state(zone, NR_FREE_CMA_PAGES, nr_pages);
+	else if (migratetype == MIGRATE_HIGHATOMIC)
+		WRITE_ONCE(zone->nr_free_highatomic,
+			   zone->nr_free_highatomic + nr_pages);
+}
+
 static inline void account_freepages(struct zone *zone, int nr_pages,
 				     int migratetype)
 {
@@ -822,11 +832,7 @@ static inline void account_freepages(struct zone *zone, int nr_pages,
 
 	__mod_zone_page_state(zone, NR_FREE_PAGES, nr_pages);
 
-	if (is_migrate_cma(migratetype))
-		__mod_zone_page_state(zone, NR_FREE_CMA_PAGES, nr_pages);
-	else if (migratetype == MIGRATE_HIGHATOMIC)
-		WRITE_ONCE(zone->nr_free_highatomic,
-			   zone->nr_free_highatomic + nr_pages);
+	account_specific_freepages(zone, nr_pages, migratetype);
 }
 
 /* Used for pages not on another list */
@@ -861,6 +867,8 @@ static inline void move_to_free_list(struct page *page, struct zone *zone,
 {
 	struct free_area *area = &zone->free_area[order];
 	int nr_pages = 1 << order;
+	bool old_isolated = is_migrate_isolate(old_mt);
+	bool new_isolated = is_migrate_isolate(new_mt);
 
 	/* Free page moving can fail, so it happens before the type update */
 	VM_WARN_ONCE(get_pageblock_migratetype(page) != old_mt,
@@ -869,14 +877,18 @@ static inline void move_to_free_list(struct page *page, struct zone *zone,
 
 	list_move_tail(&page->buddy_list, &area->free_list[new_mt]);
 
-	account_freepages(zone, -nr_pages, old_mt);
-	account_freepages(zone, nr_pages, new_mt);
+	if (!old_isolated)
+		account_specific_freepages(zone, -nr_pages, old_mt);
+	if (!new_isolated)
+		account_specific_freepages(zone, nr_pages, new_mt);
 
-	if (order >= pageblock_order &&
-	    is_migrate_isolate(old_mt) != is_migrate_isolate(new_mt)) {
-		if (!is_migrate_isolate(old_mt))
-			nr_pages = -nr_pages;
-		__mod_zone_page_state(zone, NR_FREE_PAGES_BLOCKS, nr_pages);
+	/* Only update NR_FREE_PAGES if one of them is isolate type */
+	if (old_isolated != new_isolated) {
+		nr_pages = old_isolated ? nr_pages : -nr_pages;
+		__mod_zone_page_state(zone, NR_FREE_PAGES, nr_pages);
+		if (order >= pageblock_order)
+			__mod_zone_page_state(zone, NR_FREE_PAGES_BLOCKS,
+					      nr_pages);
 	}
 }
 
