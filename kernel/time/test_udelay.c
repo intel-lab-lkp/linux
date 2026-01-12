@@ -107,9 +107,8 @@ static ssize_t udelay_test_write(struct file *file, const char __user *buf,
 	if (count >= sizeof(lbuf))
 		return -EINVAL;
 
-	if (copy_from_user(lbuf, buf, count))
+	if (copy_from_user_nul(lbuf, buf, count))
 		return -EFAULT;
-	lbuf[count] = '\0';
 
 	ret = sscanf(lbuf, "%d %d", &usecs, &iters);
 	if (ret < 1)
