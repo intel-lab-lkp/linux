@@ -364,8 +364,9 @@ static int fbtft_fb_setcolreg(unsigned int regno, unsigned int red,
 {
 	unsigned int val;
 	int ret = 1;
+	struct device *dev = dev_of_fbinfo(info);
 
-	dev_dbg(info->dev,
+	dev_dbg(dev,
 		"%s(regno=%u, red=0x%X, green=0x%X, blue=0x%X, trans=0x%X)\n",
 		__func__, regno, red, green, blue, transp);
 
@@ -389,9 +390,10 @@ static int fbtft_fb_setcolreg(unsigned int regno, unsigned int red,
 static int fbtft_fb_blank(int blank, struct fb_info *info)
 {
 	struct fbtft_par *par = info->par;
+	struct device *dev = dev_of_fbinfo(info);
 	int ret = -EINVAL;
 
-	dev_dbg(info->dev, "%s(blank=%d)\n",
+	dev_dbg(dev, "%s(blank=%d)\n",
 		__func__, blank);
 
 	if (!par->fbtftops.blank)
@@ -739,6 +741,7 @@ int fbtft_register_framebuffer(struct fb_info *fb_info)
 	char text2[50] = "";
 	struct fbtft_par *par = fb_info->par;
 	struct spi_device *spi = par->spi;
+	struct device *dev = dev_of_fbinfo(fb_info);
 
 	/* sanity checks */
 	if (!par->fbtftops.init_display) {
@@ -793,7 +796,7 @@ int fbtft_register_framebuffer(struct fb_info *fb_info)
 	if (spi)
 		sprintf(text2, ", spi%d.%d at %d MHz", spi->controller->bus_num,
 			spi_get_chipselect(spi, 0), spi->max_speed_hz / 1000000);
-	dev_info(fb_info->dev,
+	dev_info(dev,
 		 "%s frame buffer, %dx%d, %d KiB video memory%s, fps=%lu%s\n",
 		 fb_info->fix.id, fb_info->var.xres, fb_info->var.yres,
 		 fb_info->fix.smem_len >> 10, text1,
