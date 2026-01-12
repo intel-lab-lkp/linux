@@ -459,7 +459,7 @@ class KernelDoc:
         #
         if self.entry and self.entry not in self.entries:
             for log_msg in self.entry.warnings:
-                self.config.log.warning(log_msg)
+                self.config.warning(log_msg)
 
         self.entry = KernelEntry(self.config, self.fname, ln)
 
@@ -1740,6 +1740,10 @@ class KernelDoc:
                        not self.process_export(export_table, line):
                         # Hand this line to the appropriate state handler
                         self.state_actions[self.state](self, ln, line)
+
+            if self.entry and self.entry not in self.entries:
+                for log_msg in self.entry.warnings:
+                    self.config.warning(log_msg)
 
         except OSError:
             self.config.log.error(f"Error: Cannot open file {self.fname}")
