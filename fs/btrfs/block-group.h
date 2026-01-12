@@ -380,6 +380,9 @@ static inline u64 btrfs_system_alloc_profile(struct btrfs_fs_info *fs_info)
 
 static inline int btrfs_block_group_done(const struct btrfs_block_group *cache)
 {
+	if (likely(cache->cached == BTRFS_CACHE_FINISHED))
+		return 1;
+
 	smp_mb();
 	return cache->cached == BTRFS_CACHE_FINISHED ||
 		cache->cached == BTRFS_CACHE_ERROR;
