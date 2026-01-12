@@ -176,7 +176,14 @@ class MsgFormatter(logging.Formatter):
         return logging.Formatter.format(self, record)
 
 def main():
-    """Main program"""
+    """
+    Main program
+    By default, the return value is zero on parsing errors or when the
+    Python version is not compatible with kernel-doc. The rationale is
+    to not break Linux compilation on such cases.
+    If -Werror is used, it will return the number of parse errors, up to
+    255 errors, as this is the maximum value allowed by glibc.
+    """
 
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter,
                                      description=DESC)
@@ -321,18 +328,23 @@ def main():
     if not error_count:
         sys.exit(0)
 
-    if args.werror:
-        print("%s warnings as errors" % error_count)    # pylint: disable=C0209
-        sys.exit(error_count)
-
     if args.verbose:
         print("%s errors" % error_count)                # pylint: disable=C0209
 
-    if args.none:
-        sys.exit(0)
 
-    sys.exit(error_count)
+    if args.werror:
+        print("%s warnings as errors" % error_count)    # pylint: disable=C0209
 
+        #
+        # Return code is 8-bits, as seen at:
+        #   https://www.gnu.org/software/libc/manual/html_node/Exit-Status.html
+        # Truncate to avoid overflow
+        #
+        if error_count > 255:
+            error_count = 255
+
+        sys.exit(error_count)
+    sys.exit(0)
 
 # Call main method
 if __name__ == "__main__":
