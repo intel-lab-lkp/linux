@@ -178,7 +178,7 @@ struct btrfs_block_group {
 	/* For block groups in the same raid type */
 	struct list_head list;
 
-	refcount_t refs;
+	struct percpu_ref refs;
 
 	/*
 	 * List of struct btrfs_free_clusters for this block group.

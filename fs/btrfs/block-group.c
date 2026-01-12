@@ -153,37 +153,44 @@ u64 btrfs_get_alloc_profile(struct btrfs_fs_info *fs_info, u64 orig_flags)
 
 void btrfs_get_block_group(struct btrfs_block_group *cache)
 {
-	refcount_inc(&cache->refs);
+	percpu_ref_get(&cache->refs);
+}
+
+static void btrfs_free_block_group(struct percpu_ref *ref)
+{
+	struct btrfs_block_group *cache =
+		container_of(ref, struct btrfs_block_group, refs);
+
+	WARN_ON(cache->pinned > 0);
+	/*
+	* If there was a failure to cleanup a log tree, very likely due
+	* to an IO failure on a writeback attempt of one or more of its
+	* extent buffers, we could not do proper (and cheap) unaccounting
+	* of their reserved space, so don't warn on reserved > 0 in that
+	* case.
+	*/
+	if (!(cache->flags & BTRFS_BLOCK_GROUP_METADATA) ||
+		!BTRFS_FS_LOG_CLEANUP_ERROR(cache->fs_info))
+		WARN_ON(cache->reserved > 0);
+
+	/*
+	* A block_group shouldn't be on the discard_list anymore.
+	* Remove the block_group from the discard_list to prevent us
+	* from causing a panic due to NULL pointer dereference.
+	*/
+	if (WARN_ON(!list_empty(&cache->discard_list)))
+		btrfs_discard_cancel_work(&cache->fs_info->discard_ctl,
+						cache);
+
+	percpu_ref_exit(&cache->refs);
+	kfree(cache->free_space_ctl);
+	btrfs_free_chunk_map(cache->physical_map);
+	kfree(cache);
 }
 
 void btrfs_put_block_group(struct btrfs_block_group *cache)
 {
-	if (refcount_dec_and_test(&cache->refs)) {
-		WARN_ON(cache->pinned > 0);
-		/*
-		 * If there was a failure to cleanup a log tree, very likely due
-		 * to an IO failure on a writeback attempt of one or more of its
-		 * extent buffers, we could not do proper (and cheap) unaccounting
-		 * of their reserved space, so don't warn on reserved > 0 in that
-		 * case.
-		 */
-		if (!(cache->flags & BTRFS_BLOCK_GROUP_METADATA) ||
-		    !BTRFS_FS_LOG_CLEANUP_ERROR(cache->fs_info))
-			WARN_ON(cache->reserved > 0);
-
-		/*
-		 * A block_group shouldn't be on the discard_list anymore.
-		 * Remove the block_group from the discard_list to prevent us
-		 * from causing a panic due to NULL pointer dereference.
-		 */
-		if (WARN_ON(!list_empty(&cache->discard_list)))
-			btrfs_discard_cancel_work(&cache->fs_info->discard_ctl,
-						  cache);
-
-		kfree(cache->free_space_ctl);
-		btrfs_free_chunk_map(cache->physical_map);
-		kfree(cache);
-	}
+	percpu_ref_put(&cache->refs);
 }
 
 static int btrfs_bg_start_cmp(const struct rb_node *new,
@@ -406,8 +413,8 @@ void btrfs_wait_block_group_reservations(struct btrfs_block_group *bg)
 	 * on the groups' semaphore is held and decremented after releasing
 	 * the read access on that semaphore and creating the ordered extent.
 	 */
-	down_write(&space_info->groups_sem);
-	up_write(&space_info->groups_sem);
+	percpu_down_write(&space_info->groups_sem);
+	percpu_up_write(&space_info->groups_sem);
 
 	wait_var_event(&bg->reservations, !atomic_read(&bg->reservations));
 }
@@ -1012,7 +1019,7 @@ static void clear_incompat_bg_bits(struct btrfs_fs_info *fs_info, u64 flags)
 		struct btrfs_space_info *sinfo;
 
 		list_for_each_entry_rcu(sinfo, head, list) {
-			down_read(&sinfo->groups_sem);
+			percpu_down_read(&sinfo->groups_sem);
 			if (!list_empty(&sinfo->block_groups[BTRFS_RAID_RAID5]))
 				found_raid56 = true;
 			if (!list_empty(&sinfo->block_groups[BTRFS_RAID_RAID6]))
@@ -1021,7 +1028,7 @@ static void clear_incompat_bg_bits(struct btrfs_fs_info *fs_info, u64 flags)
 				found_raid1c34 = true;
 			if (!list_empty(&sinfo->block_groups[BTRFS_RAID_RAID1C4]))
 				found_raid1c34 = true;
-			up_read(&sinfo->groups_sem);
+			percpu_up_read(&sinfo->groups_sem);
 		}
 		if (!found_raid56)
 			btrfs_clear_fs_incompat(fs_info, RAID56);
@@ -1159,11 +1166,11 @@ int btrfs_remove_block_group(struct btrfs_trans_handle *trans,
 	RB_CLEAR_NODE(&block_group->cache_node);
 
 	/* Once for the block groups rbtree */
-	btrfs_put_block_group(block_group);
+	percpu_ref_kill(&block_group->refs);
 
 	write_unlock(&fs_info->block_group_cache_lock);
 
-	down_write(&block_group->space_info->groups_sem);
+	percpu_down_write(&block_group->space_info->groups_sem);
 	/*
 	 * we must use list_del_init so people can check to see if they
 	 * are still on the list after taking the semaphore
@@ -1174,7 +1181,7 @@ int btrfs_remove_block_group(struct btrfs_trans_handle *trans,
 		block_group->space_info->block_group_kobjs[index] = NULL;
 		clear_avail_alloc_bits(fs_info, block_group->flags);
 	}
-	up_write(&block_group->space_info->groups_sem);
+	percpu_up_write(&block_group->space_info->groups_sem);
 	clear_incompat_bg_bits(fs_info, block_group->flags);
 	if (kobj) {
 		kobject_del(kobj);
@@ -1544,7 +1551,7 @@ void btrfs_delete_unused_bgs(struct btrfs_fs_info *fs_info)
 		btrfs_discard_cancel_work(&fs_info->discard_ctl, block_group);
 
 		/* Don't want to race with allocators so take the groups_sem */
-		down_write(&space_info->groups_sem);
+		percpu_down_write(&space_info->groups_sem);
 
 		/*
 		 * Async discard moves the final block group discard to be prior
@@ -1554,7 +1561,7 @@ void btrfs_delete_unused_bgs(struct btrfs_fs_info *fs_info)
 		if (btrfs_test_opt(fs_info, DISCARD_ASYNC) &&
 		    !btrfs_is_free_space_trimmed(block_group)) {
 			trace_btrfs_skip_unused_block_group(block_group);
-			up_write(&space_info->groups_sem);
+			percpu_up_write(&space_info->groups_sem);
 			/* Requeue if we failed because of async discard */
 			btrfs_discard_queue_work(&fs_info->discard_ctl,
 						 block_group);
@@ -1581,7 +1588,7 @@ void btrfs_delete_unused_bgs(struct btrfs_fs_info *fs_info)
 			trace_btrfs_skip_unused_block_group(block_group);
 			spin_unlock(&block_group->lock);
 			spin_unlock(&space_info->lock);
-			up_write(&space_info->groups_sem);
+			percpu_up_write(&space_info->groups_sem);
 			goto next;
 		}
 
@@ -1618,7 +1625,7 @@ void btrfs_delete_unused_bgs(struct btrfs_fs_info *fs_info)
 			trace_btrfs_skip_unused_block_group(block_group);
 			spin_unlock(&block_group->lock);
 			spin_unlock(&space_info->lock);
-			up_write(&space_info->groups_sem);
+			percpu_up_write(&space_info->groups_sem);
 			goto next;
 		}
 
@@ -1627,7 +1634,7 @@ void btrfs_delete_unused_bgs(struct btrfs_fs_info *fs_info)
 
 		/* We don't want to force the issue, only flip if it's ok. */
 		ret = inc_block_group_ro(block_group, 0);
-		up_write(&space_info->groups_sem);
+		percpu_up_write(&space_info->groups_sem);
 		if (ret < 0) {
 			ret = 0;
 			goto next;
@@ -1882,7 +1889,7 @@ void btrfs_reclaim_bgs_work(struct work_struct *work)
 		spin_unlock(&fs_info->unused_bgs_lock);
 
 		/* Don't race with allocators so take the groups_sem */
-		down_write(&space_info->groups_sem);
+		percpu_down_write(&space_info->groups_sem);
 
 		spin_lock(&space_info->lock);
 		spin_lock(&bg->lock);
@@ -1895,7 +1902,7 @@ void btrfs_reclaim_bgs_work(struct work_struct *work)
 			 */
 			spin_unlock(&bg->lock);
 			spin_unlock(&space_info->lock);
-			up_write(&space_info->groups_sem);
+			percpu_up_write(&space_info->groups_sem);
 			goto next;
 		}
 		if (bg->used == 0) {
@@ -1914,7 +1921,7 @@ void btrfs_reclaim_bgs_work(struct work_struct *work)
 				btrfs_mark_bg_unused(bg);
 			spin_unlock(&bg->lock);
 			spin_unlock(&space_info->lock);
-			up_write(&space_info->groups_sem);
+			percpu_up_write(&space_info->groups_sem);
 			goto next;
 
 		}
@@ -1931,7 +1938,7 @@ void btrfs_reclaim_bgs_work(struct work_struct *work)
 		if (!should_reclaim_block_group(bg, bg->length)) {
 			spin_unlock(&bg->lock);
 			spin_unlock(&space_info->lock);
-			up_write(&space_info->groups_sem);
+			percpu_up_write(&space_info->groups_sem);
 			goto next;
 		}
 
@@ -1947,12 +1954,12 @@ void btrfs_reclaim_bgs_work(struct work_struct *work)
 		 * never gets back to read-write to let us reclaim again.
 		 */
 		if (btrfs_need_cleaner_sleep(fs_info)) {
-			up_write(&space_info->groups_sem);
+			percpu_up_write(&space_info->groups_sem);
 			goto next;
 		}
 
 		ret = inc_block_group_ro(bg, 0);
-		up_write(&space_info->groups_sem);
+		percpu_up_write(&space_info->groups_sem);
 		if (ret < 0)
 			goto next;
 
@@ -2288,7 +2295,12 @@ static struct btrfs_block_group *btrfs_create_block_group(
 
 	cache->discard_index = BTRFS_DISCARD_INDEX_UNUSED;
 
-	refcount_set(&cache->refs, 1);
+	if (percpu_ref_init(&cache->refs, btrfs_free_block_group,
+			  0, GFP_NOFS)) {
+		kfree(cache->free_space_ctl);
+		kfree(cache);
+		return NULL;
+	}
 	spin_lock_init(&cache->lock);
 	init_rwsem(&cache->data_rwsem);
 	INIT_LIST_HEAD(&cache->list);
@@ -4550,9 +4562,9 @@ int btrfs_free_block_groups(struct btrfs_fs_info *info)
 		RB_CLEAR_NODE(&block_group->cache_node);
 		write_unlock(&info->block_group_cache_lock);
 
-		down_write(&block_group->space_info->groups_sem);
+		percpu_down_write(&block_group->space_info->groups_sem);
 		list_del(&block_group->list);
-		up_write(&block_group->space_info->groups_sem);
+		percpu_up_write(&block_group->space_info->groups_sem);
 
 		/*
 		 * We haven't cached this block group, which means we could
@@ -4567,9 +4579,10 @@ int btrfs_free_block_groups(struct btrfs_fs_info *info)
 		ASSERT(list_empty(&block_group->dirty_list));
 		ASSERT(list_empty(&block_group->io_list));
 		ASSERT(list_empty(&block_group->bg_list));
-		ASSERT(refcount_read(&block_group->refs) == 1);
+		ASSERT(!percpu_ref_is_zero(&block_group->refs));
 		ASSERT(block_group->swap_extents == 0);
-		btrfs_put_block_group(block_group);
+		percpu_ref_kill(&block_group->refs);
+		ASSERT(percpu_ref_is_zero(&block_group->refs));
 
 		write_lock(&info->block_group_cache_lock);
 	}
