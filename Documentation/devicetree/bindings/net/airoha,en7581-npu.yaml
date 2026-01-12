@@ -58,6 +58,11 @@ properties:
       - const: tx-pkt
       - const: tx-bufid
 
+  firmware-name:
+    items:
+      - description: Firmware name of RiscV core
+      - description: Firmware name of Data section
+
 required:
   - compatible
   - reg
@@ -95,5 +100,7 @@ examples:
         memory-region = <&npu_firmware>, <&npu_pkt>, <&npu_txpkt>,
                         <&npu_txbufid>;
         memory-region-names = "firmware", "pkt", "tx-pkt", "tx-bufid";
+        firmware-name = "airoha/en7581_npu_rv32.bin",
+                        "airoha/en7581_npu_data.bin";
       };
     };
