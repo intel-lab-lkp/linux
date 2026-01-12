@@ -1010,6 +1010,11 @@ static void svm_recalc_instruction_intercepts(struct kvm_vcpu *vcpu)
 			svm_clr_intercept(svm, INTERCEPT_VMSAVE);
 			svm->vmcb->control.virt_ext |= VIRTUAL_VMLOAD_VMSAVE_ENABLE_MASK;
 		}
+
+		if (vgif) {
+			svm_clr_intercept(svm, INTERCEPT_STGI);
+			svm_clr_intercept(svm, INTERCEPT_CLGI);
+		}
 	}
 }
 
@@ -1147,11 +1152,8 @@ static void init_vmcb(struct kvm_vcpu *vcpu, bool init_event)
 	if (vnmi)
 		svm->vmcb->control.int_ctl |= V_NMI_ENABLE_MASK;
 
-	if (vgif) {
-		svm_clr_intercept(svm, INTERCEPT_STGI);
-		svm_clr_intercept(svm, INTERCEPT_CLGI);
+	if (vgif)
 		svm->vmcb->control.int_ctl |= V_GIF_ENABLE_MASK;
-	}
 
 	if (vcpu->kvm->arch.bus_lock_detection_enabled)
 		svm_set_intercept(svm, INTERCEPT_BUSLOCK);
