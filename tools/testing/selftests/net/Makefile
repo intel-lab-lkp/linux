@@ -113,6 +113,7 @@ TEST_PROGS := \
 	veth.sh \
 	vlan_bridge_binding.sh \
 	vlan_hw_filter.sh \
+	vlan_hw_offload.sh \
 	vrf-xfrm-tests.sh \
 	vrf_route_leaking.sh \
 	vrf_strict_mode_test.sh \
