@@ -109,7 +109,10 @@ clean: doc_clean fixdep-clean
 	$(Q)rm -f rtla rtla-static fixdep FEATURE-DUMP rtla-*
 	$(Q)rm -rf feature
 	$(Q)rm -f src/timerlat.bpf.o src/timerlat.skel.h example/timerlat_bpf_action.o
+
 check: $(RTLA) tests/bpf/bpf_action_map.o
+	make -C tests/ check
 	RTLA=$(RTLA) BPFTOOL=$(SYSTEM_BPFTOOL) prove -o -f -v tests/
+
 examples: example/timerlat_bpf_action.o
 .PHONY: FORCE clean check
