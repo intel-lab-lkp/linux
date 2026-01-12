@@ -813,10 +813,11 @@ static void clear_bank(struct mce *m)
  * is already totally * confused. In this case it's likely it will
  * not fully execute the machine check handler either.
  */
-void machine_check_poll(enum mcp_flags flags, mce_banks_t *b)
+bool machine_check_poll(enum mcp_flags flags, mce_banks_t *b)
 {
 	struct mce_bank *mce_banks = this_cpu_ptr(mce_banks_array);
 	struct mce_hw_err err;
+	bool logged = false;
 	struct mce *m;
 	int i;
 
@@ -868,6 +869,7 @@ void machine_check_poll(enum mcp_flags flags, mce_banks_t *b)
 		else
 			mce_log(&err);
 
+		logged = true;
 clear_it:
 		clear_bank(m);
 	}
@@ -878,6 +880,8 @@ clear_it:
 	 */
 
 	sync_core();
+
+	return logged;
 }
 EXPORT_SYMBOL_GPL(machine_check_poll);
 
@@ -1776,12 +1780,12 @@ static void __start_timer(struct timer_list *t, unsigned long interval)
 	local_irq_restore(flags);
 }
 
-static void mc_poll_banks_default(void)
+static bool mc_poll_banks_default(void)
 {
-	machine_check_poll(0, this_cpu_ptr(&mce_poll_banks));
+	return machine_check_poll(0, this_cpu_ptr(&mce_poll_banks));
 }
 
-void (*mc_poll_banks)(void) = mc_poll_banks_default;
+bool (*mc_poll_banks)(void) = mc_poll_banks_default;
 
 static bool should_enable_timer(unsigned long iv)
 {
@@ -1792,19 +1796,20 @@ static void mce_timer_fn(struct timer_list *t)
 {
 	struct timer_list *cpu_t = this_cpu_ptr(&mce_timer);
 	unsigned long iv;
+	bool logged = false;
 
 	WARN_ON(cpu_t != t);
 
 	iv = __this_cpu_read(mce_next_interval);
 
 	if (mce_available(this_cpu_ptr(&cpu_info)))
-		mc_poll_banks();
+		logged = mc_poll_banks();
 
 	/*
 	 * Alert userspace if needed. If we logged an MCE, reduce the polling
 	 * interval, otherwise increase the polling interval.
 	 */
-	if (mce_notify_irq())
+	if (logged)
 		iv = max(iv / 2, (unsigned long) HZ/100);
 	else
 		iv = min(iv * 2, round_jiffies_relative(check_interval * HZ));
