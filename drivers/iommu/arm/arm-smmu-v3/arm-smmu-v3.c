@@ -1096,6 +1096,24 @@ void arm_smmu_get_ste_update_safe(const __le64 *cur, const __le64 *target,
 	 *  fault records even when MEV == 0.
 	 */
 	safe_bits[1] |= cpu_to_le64(STRTAB_STE_1_MEV);
+
+	/*
+	 * When a STE comes to change EATS the sequencing code in the attach
+	 * logic already will have the PCI cap for ATS disabled. Thus at this
+	 * moment we can expect that the device will not generate ATS queries
+	 * and so we don't care about the sequencing of EATS. The purpose of
+	 * EATS is to protect the system from hostile untrusted devices that
+	 * issue ATS when the PCI config space is disabled. However, if EATS
+	 * is being changed then we already must be trusting the device since
+	 * the EATS security block is being disabled.
+	 *
+	 *  Note: Since we moved the EATS update to the first phase, changing
+	 *  S2S and EATS might transiently set S2S=1 and EATS=1, resulting in
+	 *  a bad STE. See "5.2 Stream Table Entry". In such a case, we can't
+	 *  do a hitless update.
+	 */
+	if (!((cur[2] | target[2]) & cpu_to_le64(STRTAB_STE_2_S2S)))
+		safe_bits[1] |= cpu_to_le64(STRTAB_STE_1_EATS);
 }
 EXPORT_SYMBOL_IF_KUNIT(arm_smmu_get_ste_update_safe);
 
