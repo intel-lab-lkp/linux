@@ -501,10 +501,8 @@ static struct hid_driver appletb_kbd_hid_driver = {
 	.remove = appletb_kbd_remove,
 	.event = appletb_kbd_hid_event,
 	.input_configured = appletb_kbd_input_configured,
-#ifdef CONFIG_PM
-	.suspend = appletb_kbd_suspend,
-	.reset_resume = appletb_kbd_reset_resume,
-#endif
+	.suspend = pm_ptr(appletb_kbd_suspend),
+	.reset_resume = pm_ptr(appletb_kbd_reset_resume),
 	.driver.dev_groups = appletb_kbd_groups,
 };
 module_hid_driver(appletb_kbd_hid_driver);
