@@ -38,6 +38,7 @@
 #include <linux/node.h>
 
 #include <asm/tlbflush.h>
+#include <asm/unaccepted_memory.h>
 
 #include "internal.h"
 #include "shuffle.h"
@@ -1566,6 +1567,9 @@ int add_memory_resource(int nid, struct resource *res, mhp_t mhp_flags)
 	/* create new memmap entry */
 	if (!strcmp(res->name, "System RAM"))
 		firmware_map_add_hotplug(start, start + size, "System RAM");
+
+	if (IS_ENABLED(CONFIG_UNACCEPTED_MEMORY))
+		arch_accept_memory(start, start + size);
 
 	/* device_online() will take the lock when calling online_pages() */
 	mem_hotplug_done();
