@@ -745,10 +745,8 @@ static int simple_probe(struct platform_device *pdev)
 	if (np && of_device_is_available(np)) {
 
 		ret = simple_parse_of(priv, li);
-		if (ret < 0) {
-			dev_err_probe(dev, ret, "parse error\n");
+		if (ret < 0)
 			goto err;
-		}
 
 	} else {
 		struct simple_util_info *cinfo;
