@@ -966,6 +966,7 @@ properties:
               - sony,pdx201
               - xiaomi,ginkgo
               - xiaomi,laurel-sprout
+              - xiaomi,willow
           - const: qcom,sm6125
 
       - items:
