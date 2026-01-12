@@ -1227,6 +1227,7 @@ void btrfs_free_fs_info(struct btrfs_fs_info *fs_info)
 		btrfs_close_devices(fs_info->fs_devices);
 	btrfs_free_compress_wsm(fs_info);
 	percpu_counter_destroy(&fs_info->stats_read_blocks);
+	percpu_free_rwsem(&fs_info->block_group_cache_lock);
 	percpu_counter_destroy(&fs_info->dirty_metadata_bytes);
 	percpu_counter_destroy(&fs_info->delalloc_bytes);
 	percpu_counter_destroy(&fs_info->ordered_bytes);
@@ -2804,7 +2805,6 @@ void btrfs_init_fs_info(struct btrfs_fs_info *fs_info)
 	btrfs_init_async_reclaim_work(fs_info);
 	btrfs_init_extent_map_shrinker_work(fs_info);
 
-	rwlock_init(&fs_info->block_group_cache_lock);
 	fs_info->block_group_cache_tree = RB_ROOT_CACHED;
 
 	btrfs_extent_io_tree_init(fs_info, &fs_info->excluded_extents,
@@ -2860,6 +2860,10 @@ static int init_mount_fs_info(struct btrfs_fs_info *fs_info, struct super_block 
 	/* Temporary fixed values for block size until we read the superblock. */
 	sb->s_blocksize = BTRFS_BDEV_BLOCKSIZE;
 	sb->s_blocksize_bits = blksize_bits(BTRFS_BDEV_BLOCKSIZE);
+
+	ret = percpu_init_rwsem(&fs_info->block_group_cache_lock);
+	if (ret)
+		return ret;
 
 	ret = percpu_counter_init(&fs_info->ordered_bytes, 0, GFP_KERNEL);
 	if (ret)

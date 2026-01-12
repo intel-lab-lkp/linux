@@ -479,7 +479,7 @@ struct btrfs_fs_info {
 	struct radix_tree_root fs_roots_radix;
 
 	/* Block group cache stuff */
-	rwlock_t block_group_cache_lock;
+	struct percpu_rw_semaphore block_group_cache_lock;
 	struct rb_root_cached block_group_cache_tree;
 
 	/* Keep track of unallocated space */
