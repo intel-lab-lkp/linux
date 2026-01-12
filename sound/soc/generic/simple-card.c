@@ -806,7 +806,7 @@ static int simple_probe(struct platform_device *pdev)
 err:
 	simple_util_clean_reference(card);
 end:
-	return dev_err_probe(dev, ret, "parse error\n");
+	return dev_err_probe(dev, ret, "components missing or uninitialized\n");
 }
 
 static const struct of_device_id simple_of_match[] = {
