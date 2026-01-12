@@ -2242,6 +2242,9 @@ static int try_remove_memory(u64 start, u64 size)
 
 	mem_hotplug_begin();
 
+	if (IS_ENABLED(CONFIG_UNACCEPTED_MEMORY))
+		arch_unaccept_memory(start, start + size);
+
 	rc = memory_blocks_have_altmaps(start, size);
 	if (rc < 0) {
 		mem_hotplug_done();
