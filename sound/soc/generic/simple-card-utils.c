@@ -888,6 +888,15 @@ static struct simple_util_dai dummy_util_dais = {
 	.name = "dummy_util_dais",
 };
 
+/**
+ * simple_util_init_priv - Initializes private data of a simple audio card.
+ * @priv: Private data to initialize. Must be pre-allocated.
+ * @li: Links of the card. Cannot be NULL.
+ *
+ * Returns:
+ * * %0       - OK.
+ * * %-ENOMEM - Could not allocate memory.
+ */
 int simple_util_init_priv(struct simple_util_priv *priv,
 			  struct link_info *li)
 {

@@ -706,47 +706,26 @@ end:
 	return simple_ret(priv, ret);
 }
 
-static int simple_probe(struct platform_device *pdev)
+static int simple_probe_merge_components(const struct device *dev,
+					 struct simple_util_priv *priv,
+					 struct link_info *li)
 {
-	struct simple_util_priv *priv;
-	struct device *dev = &pdev->dev;
-	struct device_node *np = dev->of_node;
-	struct snd_soc_card *card;
+	const struct device_node *np = dev->of_node;
+	struct snd_soc_card *card = simple_priv_to_card(priv);
 	int ret;
 
-	/* Allocate the private data and the DAI link array */
-	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
-	if (!priv)
-		return -ENOMEM;
-
-	card = simple_priv_to_card(priv);
-	card->owner		= THIS_MODULE;
-	card->dev		= dev;
-	card->probe		= simple_soc_probe;
-	card->driver_name       = "simple-card";
-
-	ret = -ENOMEM;
-	struct link_info *li __free(kfree) = kzalloc(sizeof(*li), GFP_KERNEL);
-	if (!li)
-		goto end;
+	if (!li->link)
+		return -EINVAL;
 
 	ret = simple_get_dais_count(priv, li);
 	if (ret < 0)
-		goto end;
-
-	ret = -EINVAL;
-	if (!li->link)
-		goto end;
-
-	ret = simple_util_init_priv(priv, li);
-	if (ret < 0)
-		goto end;
+		dev_err_probe(dev, ret, "failed to count DAIs");
 
 	if (np && of_device_is_available(np)) {
-
 		ret = simple_parse_of(priv, li);
 		if (ret < 0)
-			goto err;
+			dev_err_probe(dev, ret,
+				      "components missing or uninitialized");
 
 	} else {
 		struct simple_util_info *cinfo;
@@ -756,57 +735,85 @@ static int simple_probe(struct platform_device *pdev)
 		struct snd_soc_dai_link *dai_link = priv->dai_link;
 		struct simple_dai_props *dai_props = priv->dai_props;
 
-		ret = -EINVAL;
-
 		cinfo = dev->platform_data;
-		if (!cinfo) {
-			dev_err(dev, "no info for asoc-simple-card\n");
-			goto err;
-		}
+		if (!cinfo)
+			return dev_err_probe(dev, -EINVAL,
+					     "no info for asoc-simple-card\n");
 
-		if (!cinfo->name ||
-		    !cinfo->codec_dai.name ||
-		    !cinfo->codec ||
-		    !cinfo->platform ||
-		    !cinfo->cpu_dai.name) {
-			dev_err(dev, "insufficient simple_util_info settings\n");
-			goto err;
-		}
+		if (!cinfo->name || !cinfo->codec_dai.name || !cinfo->codec ||
+		    !cinfo->platform || !cinfo->cpu_dai.name)
+			return dev_err_probe(
+				dev, -EINVAL,
+				"insufficient simple_util_info settings\n");
 
-		cpus			= dai_link->cpus;
-		cpus->dai_name		= cinfo->cpu_dai.name;
+		cpus = dai_link->cpus;
+		cpus->dai_name = cinfo->cpu_dai.name;
 
-		codecs			= dai_link->codecs;
-		codecs->name		= cinfo->codec;
-		codecs->dai_name	= cinfo->codec_dai.name;
+		codecs = dai_link->codecs;
+		codecs->name = cinfo->codec;
+		codecs->dai_name = cinfo->codec_dai.name;
 
-		platform		= dai_link->platforms;
-		platform->name		= cinfo->platform;
+		platform = dai_link->platforms;
+		platform->name = cinfo->platform;
 
-		card->name		= (cinfo->card) ? cinfo->card : cinfo->name;
-		dai_link->name		= cinfo->name;
-		dai_link->stream_name	= cinfo->name;
-		dai_link->dai_fmt	= cinfo->daifmt;
-		dai_link->init		= simple_util_dai_init;
+		card->name = (cinfo->card) ? cinfo->card : cinfo->name;
+		dai_link->name = cinfo->name;
+		dai_link->stream_name = cinfo->name;
+		dai_link->dai_fmt = cinfo->daifmt;
+		dai_link->init = simple_util_dai_init;
 		memcpy(dai_props->cpu_dai, &cinfo->cpu_dai,
-					sizeof(*dai_props->cpu_dai));
+		       sizeof(*dai_props->cpu_dai));
 		memcpy(dai_props->codec_dai, &cinfo->codec_dai,
-					sizeof(*dai_props->codec_dai));
+		       sizeof(*dai_props->codec_dai));
 	}
+
+	return 0;
+}
+
+static int simple_probe(struct platform_device *pdev)
+{
+	struct simple_util_priv *priv;
+	struct device *dev = &pdev->dev;
+	struct snd_soc_card *card;
+	int ret;
+
+	/* Allocate the private data and the DAI link array */
+	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
+	if (!priv)
+		return -ENOMEM;
+
+	card = simple_priv_to_card(priv);
+	card->owner = THIS_MODULE;
+	card->dev = dev;
+	card->probe = simple_soc_probe;
+	card->driver_name = "simple-card";
+
+	struct link_info *li __free(kfree) = kzalloc(sizeof(*li), GFP_KERNEL);
+	if (!li)
+		return -ENOMEM;
+
+	ret = simple_util_init_priv(priv, li);
+	if (ret < 0)
+		return ret;
+
+	ret = simple_probe_merge_components(dev, priv, li);
+	if (ret < 0)
+		goto err;
 
 	snd_soc_card_set_drvdata(card, priv);
 
 	simple_util_debug_info(priv);
 
 	ret = devm_snd_soc_register_card(dev, card);
-	if (ret < 0)
+	if (ret < 0) {
+		dev_err_probe(dev, ret, "failed to register card");
 		goto err;
+	}
 
 	return 0;
 err:
 	simple_util_clean_reference(card);
-end:
-	return dev_err_probe(dev, ret, "components missing or uninitialized\n");
+	return ret;
 }
 
 static const struct of_device_id simple_of_match[] = {
