@@ -371,7 +371,7 @@ out:
 }
 
 void btrfs_add_bg_to_space_info(struct btrfs_fs_info *info,
-				struct btrfs_block_group *block_group)
+				struct btrfs_block_group *block_group, int lock)
 {
 	struct btrfs_space_info *space_info = block_group->space_info;
 	int factor, index;
@@ -393,9 +393,11 @@ void btrfs_add_bg_to_space_info(struct btrfs_fs_info *info,
 	block_group->space_info = space_info;
 
 	index = btrfs_bg_flags_to_raid_index(block_group->flags);
-	percpu_down_write(&space_info->groups_sem);
+	if (lock)
+		percpu_down_write(&space_info->groups_sem);
 	list_add_tail(&block_group->list, &space_info->block_groups[index]);
-	percpu_up_write(&space_info->groups_sem);
+	if (lock)
+		percpu_up_write(&space_info->groups_sem);
 }
 
 struct btrfs_space_info *btrfs_find_space_info(struct btrfs_fs_info *info,

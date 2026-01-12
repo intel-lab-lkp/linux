@@ -211,7 +211,7 @@ static int btrfs_bg_start_cmp(const struct rb_node *new,
 /*
  * This adds the block group to the fs_info rb tree for the block group cache
  */
-static int btrfs_add_block_group_cache(struct btrfs_block_group *block_group)
+static int btrfs_add_block_group_cache(struct btrfs_block_group *block_group, int lock)
 {
 	struct btrfs_fs_info *fs_info = block_group->fs_info;
 	struct rb_node *exist;
@@ -219,13 +219,15 @@ static int btrfs_add_block_group_cache(struct btrfs_block_group *block_group)
 
 	ASSERT(block_group->length != 0);
 
-	percpu_down_write(&fs_info->block_group_cache_lock);
+	if (lock)
+		percpu_down_write(&fs_info->block_group_cache_lock);
 
 	exist = rb_find_add_cached(&block_group->cache_node,
 			&fs_info->block_group_cache_tree, btrfs_bg_start_cmp);
 	if (exist)
 		ret = -EEXIST;
-	percpu_up_write(&fs_info->block_group_cache_lock);
+	if (lock)
+		percpu_up_write(&fs_info->block_group_cache_lock);
 
 	return ret;
 }
@@ -2467,14 +2469,14 @@ static int read_one_block_group(struct btrfs_fs_info *info,
 			goto error;
 	}
 
-	ret = btrfs_add_block_group_cache(cache);
+	ret = btrfs_add_block_group_cache(cache, 0);
 	if (ret) {
 		btrfs_remove_free_space_cache(cache);
 		goto error;
 	}
 
 	trace_btrfs_add_block_group(info, cache, 0);
-	btrfs_add_bg_to_space_info(info, cache);
+	btrfs_add_bg_to_space_info(info, cache, 0);
 
 	set_avail_alloc_bits(info, cache->flags);
 	if (btrfs_chunk_writeable(info, cache->start)) {
@@ -2518,7 +2520,7 @@ static int fill_dummy_bgs(struct btrfs_fs_info *fs_info)
 		bg->used = map->chunk_len;
 		bg->flags = map->type;
 		bg->space_info = btrfs_find_space_info(fs_info, bg->flags);
-		ret = btrfs_add_block_group_cache(bg);
+		ret = btrfs_add_block_group_cache(bg, 1);
 		/*
 		 * We may have some valid block group cache added already, in
 		 * that case we skip to the next one.
@@ -2535,7 +2537,7 @@ static int fill_dummy_bgs(struct btrfs_fs_info *fs_info)
 			break;
 		}
 
-		btrfs_add_bg_to_space_info(fs_info, bg);
+		btrfs_add_bg_to_space_info(fs_info, bg, 1);
 
 		set_avail_alloc_bits(fs_info, bg->flags);
 	}
@@ -2949,7 +2951,7 @@ struct btrfs_block_group *btrfs_make_block_group(struct btrfs_trans_handle *tran
 	cache->space_info = space_info;
 	ASSERT(cache->space_info);
 
-	ret = btrfs_add_block_group_cache(cache);
+	ret = btrfs_add_block_group_cache(cache, 1);
 	if (ret) {
 		btrfs_remove_free_space_cache(cache);
 		btrfs_put_block_group(cache);
@@ -2961,7 +2963,7 @@ struct btrfs_block_group *btrfs_make_block_group(struct btrfs_trans_handle *tran
 	 * the rbtree, update the space info's counters.
 	 */
 	trace_btrfs_add_block_group(fs_info, cache, 1);
-	btrfs_add_bg_to_space_info(fs_info, cache);
+	btrfs_add_bg_to_space_info(fs_info, cache, 1);
 	btrfs_update_global_block_rsv(fs_info);
 
 #ifdef CONFIG_BTRFS_DEBUG
