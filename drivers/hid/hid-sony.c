@@ -2399,12 +2399,9 @@ static struct hid_driver sony_driver = {
 	.remove           = sony_remove,
 	.report_fixup     = sony_report_fixup,
 	.raw_event        = sony_raw_event,
-
-#ifdef CONFIG_PM
-	.suspend          = sony_suspend,
-	.resume	          = sony_resume,
-	.reset_resume     = sony_resume,
-#endif
+	.suspend          = pm_ptr(sony_suspend),
+	.resume	          = pm_ptr(sony_resume),
+	.reset_resume     = pm_ptr(sony_resume),
 };
 
 static int __init sony_init(void)
