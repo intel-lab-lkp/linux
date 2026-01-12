@@ -634,7 +634,7 @@ static void set_dr_intercepts(struct vcpu_svm *svm)
 	vmcb_set_intercept(&vmcb->control, INTERCEPT_DR7_READ);
 	vmcb_set_intercept(&vmcb->control, INTERCEPT_DR7_WRITE);
 
-	recalc_intercepts(svm);
+	nested_vmcb02_recalc_intercepts(svm);
 }
 
 static void clr_dr_intercepts(struct vcpu_svm *svm)
@@ -643,7 +643,7 @@ static void clr_dr_intercepts(struct vcpu_svm *svm)
 
 	vmcb->control.intercepts[INTERCEPT_DR] = 0;
 
-	recalc_intercepts(svm);
+	nested_vmcb02_recalc_intercepts(svm);
 }
 
 static bool msr_write_intercepted(struct kvm_vcpu *vcpu, u32 msr)

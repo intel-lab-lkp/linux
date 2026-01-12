@@ -356,7 +356,7 @@ struct svm_cpu_data {
 
 DECLARE_PER_CPU(struct svm_cpu_data, svm_data);
 
-void recalc_intercepts(struct vcpu_svm *svm);
+void nested_vmcb02_recalc_intercepts(struct vcpu_svm *svm);
 
 static __always_inline struct kvm_svm *to_kvm_svm(struct kvm *kvm)
 {
@@ -465,7 +465,7 @@ static inline void set_exception_intercept(struct vcpu_svm *svm, u32 bit)
 	WARN_ON_ONCE(bit >= 32);
 	vmcb_set_intercept(&vmcb->control, INTERCEPT_EXCEPTION_OFFSET + bit);
 
-	recalc_intercepts(svm);
+	nested_vmcb02_recalc_intercepts(svm);
 }
 
 static inline void clr_exception_intercept(struct vcpu_svm *svm, u32 bit)
@@ -475,7 +475,7 @@ static inline void clr_exception_intercept(struct vcpu_svm *svm, u32 bit)
 	WARN_ON_ONCE(bit >= 32);
 	vmcb_clr_intercept(&vmcb->control, INTERCEPT_EXCEPTION_OFFSET + bit);
 
-	recalc_intercepts(svm);
+	nested_vmcb02_recalc_intercepts(svm);
 }
 
 static inline void svm_set_intercept(struct vcpu_svm *svm, int bit)
@@ -484,7 +484,7 @@ static inline void svm_set_intercept(struct vcpu_svm *svm, int bit)
 
 	vmcb_set_intercept(&vmcb->control, bit);
 
-	recalc_intercepts(svm);
+	nested_vmcb02_recalc_intercepts(svm);
 }
 
 static inline void svm_clr_intercept(struct vcpu_svm *svm, int bit)
@@ -493,7 +493,7 @@ static inline void svm_clr_intercept(struct vcpu_svm *svm, int bit)
 
 	vmcb_clr_intercept(&vmcb->control, bit);
 
-	recalc_intercepts(svm);
+	nested_vmcb02_recalc_intercepts(svm);
 }
 
 static inline bool svm_is_intercept(struct vcpu_svm *svm, int bit)
