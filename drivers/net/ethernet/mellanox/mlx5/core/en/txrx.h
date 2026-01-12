@@ -583,4 +583,9 @@ static inline struct mlx5e_mpw_info *mlx5e_get_mpw_info(struct mlx5e_rq *rq, int
 
 	return (struct mlx5e_mpw_info *)((char *)rq->mpwqe.info + array_size(i, isz));
 }
+
+static inline u16 mlx5e_rq_cqe_wqe_id(struct mlx5e_rq *rq, struct mlx5_cqe64 *cqe)
+{
+	return be16_to_cpu(cqe->wqe_id) & rq->mpwqe.wq.fbc.sz_m1;
+}
 #endif

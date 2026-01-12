@@ -1957,7 +1957,7 @@ wq_cyc_pop:
 static void mlx5e_handle_rx_cqe_mpwrq_rep(struct mlx5e_rq *rq, struct mlx5_cqe64 *cqe)
 {
 	u16 cstrides       = mpwrq_get_cqe_consumed_strides(cqe);
-	u16 wqe_id         = be16_to_cpu(cqe->wqe_id);
+	u16 wqe_id         = mlx5e_rq_cqe_wqe_id(rq, cqe);
 	struct mlx5e_mpw_info *wi = mlx5e_get_mpw_info(rq, wqe_id);
 	u16 stride_ix      = mpwrq_get_cqe_stride_index(cqe);
 	u32 wqe_offset     = stride_ix << rq->mpwqe.log_stride_sz;
@@ -2373,7 +2373,7 @@ static void mlx5e_handle_rx_cqe_mpwrq_shampo(struct mlx5e_rq *rq, struct mlx5_cq
 	u16 cstrides		= mpwrq_get_cqe_consumed_strides(cqe);
 	u32 data_offset		= wqe_offset & (PAGE_SIZE - 1);
 	u32 cqe_bcnt		= mpwrq_get_cqe_byte_cnt(cqe);
-	u16 wqe_id		= be16_to_cpu(cqe->wqe_id);
+	u16 wqe_id		= mlx5e_rq_cqe_wqe_id(rq, cqe);
 	u32 page_idx		= wqe_offset >> PAGE_SHIFT;
 	u16 head_size		= cqe->shampo.header_size;
 	struct sk_buff **skb	= &rq->hw_gro_data->skb;
@@ -2478,7 +2478,7 @@ mpwrq_cqe_out:
 static void mlx5e_handle_rx_cqe_mpwrq(struct mlx5e_rq *rq, struct mlx5_cqe64 *cqe)
 {
 	u16 cstrides       = mpwrq_get_cqe_consumed_strides(cqe);
-	u16 wqe_id         = be16_to_cpu(cqe->wqe_id);
+	u16 wqe_id         = mlx5e_rq_cqe_wqe_id(rq, cqe);
 	struct mlx5e_mpw_info *wi = mlx5e_get_mpw_info(rq, wqe_id);
 	u16 stride_ix      = mpwrq_get_cqe_stride_index(cqe);
 	u32 wqe_offset     = stride_ix << rq->mpwqe.log_stride_sz;
