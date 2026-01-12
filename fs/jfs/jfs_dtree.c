@@ -634,7 +634,8 @@ int dtSearch(struct inode *ip, struct component_name * key, ino_t * data,
 		for (base = 0, lim = p->header.nextindex; lim; lim >>= 1) {
 			index = base + (lim >> 1);
 
-			if (stbl[index] < 0) {
+			if (stbl[index] < 0 ||
+			    (bn == 0 && stbl[index] >= DTROOTMAXSLOT)) {
 				rc = -EIO;
 				goto out;
 			}
