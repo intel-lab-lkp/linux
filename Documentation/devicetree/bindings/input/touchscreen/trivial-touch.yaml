@@ -57,13 +57,25 @@ properties:
 
   wakeup-source: true
 
-allOf:
-  - $ref: touchscreen.yaml
-
 required:
   - compatible
   - reg
-  - interrupts
+
+allOf:
+  - $ref: touchscreen.yaml
+  - if:
+      not:
+        properties:
+          compatible:
+            contains:
+              enum:
+                - ilitek,ili210x
+                - ilitek,ili2117
+                - ilitek,ili2120
+                - ilitek,ili251x
+    then:
+      required:
+        - interrupts
 
 unevaluatedProperties: false
 
