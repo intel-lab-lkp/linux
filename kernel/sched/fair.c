@@ -12447,19 +12447,23 @@ static void nohz_balancer_kick(struct rq *rq)
 	 */
 	nohz_balance_exit_idle(rq);
 
+	if (READ_ONCE(nohz.has_blocked_load) &&
+	    time_after(now, READ_ONCE(nohz.next_blocked)))
+		flags = NOHZ_STATS_KICK;
+
+	/*
+	 * If none are in tickless mode, though flag maybe set,
+	 * idle load balancing is not done as find_new_ilb fails
+	 */
+	if (time_before(now, nohz.next_balance))
+		goto out;
+
 	/*
 	 * None are in tickless mode and hence no need for NOHZ idle load
 	 * balancing:
 	 */
 	if (likely(!atomic_read(&nohz.nr_cpus)))
 		return;
-
-	if (READ_ONCE(nohz.has_blocked_load) &&
-	    time_after(now, READ_ONCE(nohz.next_blocked)))
-		flags = NOHZ_STATS_KICK;
-
-	if (time_before(now, nohz.next_balance))
-		goto out;
 
 	if (rq->nr_running >= 2) {
 		flags = NOHZ_STATS_KICK | NOHZ_BALANCE_KICK;
