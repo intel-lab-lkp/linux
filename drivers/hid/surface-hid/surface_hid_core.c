@@ -281,11 +281,6 @@ const struct dev_pm_ops surface_hid_pm_ops = {
 };
 EXPORT_SYMBOL_GPL(surface_hid_pm_ops);
 
-#else /* CONFIG_PM_SLEEP */
-
-const struct dev_pm_ops surface_hid_pm_ops = { };
-EXPORT_SYMBOL_GPL(surface_hid_pm_ops);
-
 #endif /* CONFIG_PM_SLEEP */
 
 MODULE_AUTHOR("Maximilian Luz <luzmaximilian@gmail.com>");

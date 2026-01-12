@@ -241,7 +241,7 @@ static struct ssam_device_driver surface_hid_driver = {
 	.match_table = surface_hid_match,
 	.driver = {
 		.name = "surface_hid",
-		.pm = &surface_hid_pm_ops,
+		.pm = pm_ptr_sleep(&surface_hid_pm_ops),
 		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 };

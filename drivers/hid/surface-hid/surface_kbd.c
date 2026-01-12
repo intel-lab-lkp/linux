@@ -288,7 +288,7 @@ static struct platform_driver surface_kbd_driver = {
 	.driver = {
 		.name = "surface_keyboard",
 		.acpi_match_table = surface_kbd_match,
-		.pm = &surface_hid_pm_ops,
+		.pm = pm_ptr_sleep(&surface_hid_pm_ops),
 		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 };
