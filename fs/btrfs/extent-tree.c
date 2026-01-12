@@ -3578,7 +3578,7 @@ enum btrfs_loop_type {
 static inline void
 btrfs_lock_block_group(struct btrfs_block_group *cache, bool delalloc)
 {
-	if (delalloc)
+	if (delalloc && cache->disk_cache_state != BTRFS_DC_DISABLED)
 		down_read(&cache->data_rwsem);
 }
 
@@ -3586,7 +3586,7 @@ static inline void btrfs_grab_block_group(struct btrfs_block_group *cache,
 					  bool delalloc)
 {
 	btrfs_get_block_group(cache);
-	if (delalloc)
+	if (delalloc && cache->disk_cache_state != BTRFS_DC_DISABLED)
 		down_read(&cache->data_rwsem);
 }
 
@@ -3612,7 +3612,8 @@ static struct btrfs_block_group *btrfs_lock_cluster(
 		if (!delalloc)
 			return used_bg;
 
-		if (down_read_trylock(&used_bg->data_rwsem))
+		if (used_bg->disk_cache_state != BTRFS_DC_DISABLED &&
+			 down_read_trylock(&used_bg->data_rwsem))
 			return used_bg;
 
 		spin_unlock(&cluster->refill_lock);
@@ -3624,7 +3625,8 @@ static struct btrfs_block_group *btrfs_lock_cluster(
 		if (used_bg == cluster->block_group)
 			return used_bg;
 
-		up_read(&used_bg->data_rwsem);
+		if (used_bg->disk_cache_state != BTRFS_DC_DISABLED)
+			up_read(&used_bg->data_rwsem);
 		btrfs_put_block_group(used_bg);
 	}
 }
@@ -3632,7 +3634,7 @@ static struct btrfs_block_group *btrfs_lock_cluster(
 static inline void
 btrfs_release_block_group(struct btrfs_block_group *cache, bool delalloc)
 {
-	if (delalloc)
+	if (delalloc && cache->disk_cache_state != BTRFS_DC_DISABLED)
 		up_read(&cache->data_rwsem);
 	btrfs_put_block_group(cache);
 }
