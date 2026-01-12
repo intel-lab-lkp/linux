@@ -95,6 +95,7 @@ declare -a BEAUTY_FILES=(
   "include/uapi/linux/fcntl.h"
   "include/uapi/linux/fs.h"
   "include/uapi/linux/mount.h"
+  "include/uapi/linux/openat2.h"
   "include/uapi/linux/prctl.h"
   "include/uapi/linux/sched.h"
   "include/uapi/linux/stat.h"
