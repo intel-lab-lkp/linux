@@ -648,11 +648,9 @@ static struct hid_driver picolcd_driver = {
 	.probe =         picolcd_probe,
 	.remove =        picolcd_remove,
 	.raw_event =     picolcd_raw_event,
-#ifdef CONFIG_PM
-	.suspend =       picolcd_suspend,
-	.resume =        picolcd_resume,
-	.reset_resume =  picolcd_reset_resume,
-#endif
+	.suspend =       pm_ptr(picolcd_suspend),
+	.resume =        pm_ptr(picolcd_resume),
+	.reset_resume =  pm_ptr(picolcd_reset_resume),
 };
 module_hid_driver(picolcd_driver);
 
