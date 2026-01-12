@@ -2238,7 +2238,7 @@ static void it6505_hdcp_wait_ksv_list(struct work_struct *work)
 		return;
 
 timeout:
-	it6505_start_hdcp(it6505);
+	it6505_stop_hdcp(it6505);
 }
 
 static void it6505_hdcp_work(struct work_struct *work)
@@ -2596,7 +2596,7 @@ static void it6505_irq_hdcp_fail(struct it6505 *it6505)
 	DRM_DEV_DEBUG_DRIVER(dev, "hdcp fail interrupt");
 	it6505->hdcp_status = HDCP_AUTH_IDLE;
 	it6505_show_hdcp_info(it6505);
-	it6505_start_hdcp(it6505);
+	it6505_stop_hdcp(it6505);
 }
 
 static void it6505_irq_aux_cmd_fail(struct it6505 *it6505)
