@@ -95,8 +95,8 @@
 #define JUMBO_16K	(SZ_16K - VLAN_ETH_HLEN - ETH_FCS_LEN)
 
 static const struct rtl_chip_info {
-	u16 mask;
-	u16 val;
+	u32 mask;
+	u32 val;
 	enum mac_version mac_version;
 	const char *name;
 	const char *fw_name;
@@ -205,8 +205,18 @@ static const struct rtl_chip_info {
 	{ 0xfc8, 0x040,	RTL_GIGA_MAC_VER_03, "RTL8110s" },
 	{ 0xfc8, 0x008,	RTL_GIGA_MAC_VER_02, "RTL8169s" },
 
+	/* extend chip version*/
+	{ 0x7cf, 0x7c8, RTL_GIGA_MAC_VER_CHECK_EXTEND },
+
 	/* Catch-all */
 	{ 0x000, 0x000,	RTL_GIGA_MAC_NONE }
+};
+
+static const struct rtl_chip_info rtl_chip_infos_extend[] = {
+	{ 0x7fffffff, 0x00000000, RTL_GIGA_MAC_VER_64, "RTL9151AS", FIRMWARE_9151A_1},
+
+	/* Catch-all */
+	{ 0x00000000, 0x00000000, RTL_GIGA_MAC_NONE }
 };
 
 static const struct pci_device_id rtl8169_pci_tbl[] = {
@@ -255,6 +265,8 @@ enum rtl_registers {
 	IntrStatus	= 0x3e,
 
 	TxConfig	= 0x40,
+	/* Extend version register */
+	TX_CONFIG_V2	= 0x60b0,
 #define	TXCFG_AUTO_FIFO			(1 << 7)	/* 8111e-vl */
 #define	TXCFG_EMPTY			(1 << 11)	/* 8111e-vl */
 
@@ -2350,6 +2362,15 @@ static const struct ethtool_ops rtl8169_ethtool_ops = {
 	.get_eth_mac_stats	= rtl8169_get_eth_mac_stats,
 	.get_eth_ctrl_stats	= rtl8169_get_eth_ctrl_stats,
 };
+
+static const struct rtl_chip_info *rtl8169_get_extend_chip_version(u32 txconfigv2)
+{
+	const struct rtl_chip_info *p = rtl_chip_infos_extend;
+
+	while ((txconfigv2 & p->mask) != p->val)
+		p++;
+	return p;
+}
 
 static const struct rtl_chip_info *rtl8169_get_chip_version(u16 xid, bool gmii)
 {
@@ -5543,6 +5564,9 @@ static int rtl_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	/* Identify chip attached to board */
 	chip = rtl8169_get_chip_version(xid, tp->supports_gmii);
+
+	if (chip->mac_version == RTL_GIGA_MAC_VER_CHECK_EXTEND)
+		chip = rtl8169_get_extend_chip_version(RTL_R32(tp, TX_CONFIG_V2));
 	if (chip->mac_version == RTL_GIGA_MAC_NONE)
 		return dev_err_probe(&pdev->dev, -ENODEV,
 				     "unknown chip XID %03x, contact r8169 maintainers (see MAINTAINERS file)\n",
