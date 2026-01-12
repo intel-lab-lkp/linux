@@ -7,7 +7,6 @@
 
 #include <linux/bitfield.h>
 #include <linux/debugfs.h>
-#include <linux/dev_printk.h>
 #include <linux/device.h>
 #include <linux/regmap.h>
 #include <linux/seq_file.h>
