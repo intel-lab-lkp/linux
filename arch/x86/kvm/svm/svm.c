@@ -2271,8 +2271,18 @@ static int stgi_interception(struct kvm_vcpu *vcpu)
 {
 	int ret;
 
-	if (nested_svm_check_permissions(vcpu))
+	if ((!(vcpu->arch.efer & EFER_SVME) &&
+	     !guest_cpu_cap_has(vcpu, X86_FEATURE_SVML) &&
+	     !guest_cpu_cap_has(vcpu, X86_FEATURE_SKINIT)) ||
+	    !is_paging(vcpu)) {
+		kvm_queue_exception(vcpu, UD_VECTOR);
 		return 1;
+	}
+
+	if (to_svm(vcpu)->vmcb->save.cpl) {
+		kvm_inject_gp(vcpu, 0);
+		return 1;
+	}
 
 	ret = kvm_skip_emulated_instruction(vcpu);
 	svm_set_gif(to_svm(vcpu), true);
