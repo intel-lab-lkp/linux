@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
- *  Copyright 2016-2023 Broadcom Inc. All rights reserved.
+ *  Copyright 2016-2026 Broadcom Inc. All rights reserved.
  */
 #ifndef MPI30_IOC_H
 #define MPI30_IOC_H     1
@@ -658,9 +658,10 @@ struct mpi3_event_data_diag_buffer_status_change {
 	__le32             reserved04;
 };
 
-#define MPI3_EVENT_DIAG_BUFFER_STATUS_CHANGE_RC_RELEASED             (0x01)
-#define MPI3_EVENT_DIAG_BUFFER_STATUS_CHANGE_RC_PAUSED               (0x02)
-#define MPI3_EVENT_DIAG_BUFFER_STATUS_CHANGE_RC_RESUMED              (0x03)
+#define MPI3_EVENT_DIAG_BUFFER_STATUS_CHANGE_RC_RELEASED	(0x01)
+#define MPI3_EVENT_DIAG_BUFFER_STATUS_CHANGE_RC_PAUSED		(0x02)
+#define MPI3_EVENT_DIAG_BUFFER_STATUS_CHANGE_RC_RESUMED		(0x03)
+#define MPI3_EVENT_DIAG_BUFFER_STATUS_CHANGE_RC_CLEARED		(0x04)
 #define MPI3_PEL_LOCALE_FLAGS_NON_BLOCKING_BOOT_EVENT   (0x0200)
 #define MPI3_PEL_LOCALE_FLAGS_BLOCKING_BOOT_EVENT       (0x0100)
 #define MPI3_PEL_LOCALE_FLAGS_PCIE                      (0x0080)
