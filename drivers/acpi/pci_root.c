@@ -30,6 +30,11 @@ static int acpi_pci_root_add(struct acpi_device *device,
 			     const struct acpi_device_id *not_used);
 static void acpi_pci_root_remove(struct acpi_device *device);
 
+
+void __weak arch_acpi_pci_root_add_clear_dep(struct acpi_device *device)
+{
+}
+
 static int acpi_pci_root_scan_dependent(struct acpi_device *adev)
 {
 	acpiphp_check_host_bridge(adev);
@@ -760,6 +765,7 @@ static int acpi_pci_root_add(struct acpi_device *device,
 	pci_lock_rescan_remove();
 	pci_bus_add_devices(root->bus);
 	pci_unlock_rescan_remove();
+	arch_acpi_pci_root_add_clear_dep(device);
 	return 1;
 
 remove_dmar:
