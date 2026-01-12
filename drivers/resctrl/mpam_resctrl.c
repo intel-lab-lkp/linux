@@ -37,6 +37,21 @@ static struct mpam_resctrl_res mpam_resctrl_controls[RDT_NUM_RESOURCES];
 /* The lock for modifying resctrl's domain lists from cpuhp callbacks. */
 static DEFINE_MUTEX(domain_list_lock);
 
+/*
+ * The classes we've picked to map to resctrl events.
+ * Resctrl believes all the worlds a Xeon, and these are all on the L3. This
+ * array lets us find the actual class backing the event counters. e.g.
+ * the only memory bandwidth counters may be on the memory controller, but to
+ * make use of them, we pretend they are on L3.
+ * Class pointer may be NULL.
+ */
+static struct mpam_resctrl_mon mpam_resctrl_counters[QOS_NUM_EVENTS];
+
+#define for_each_mpam_resctrl_mon(mon, eventid)					\
+	for (eventid = 0, mon = &mpam_resctrl_counters[eventid];		\
+	     eventid < QOS_NUM_EVENTS;						\
+	     eventid++, mon = &mpam_resctrl_counters[eventid])
+
 static bool exposed_alloc_capable;
 static bool exposed_mon_capable;
 
@@ -257,6 +272,28 @@ static bool mba_class_use_mbw_max(struct mpam_props *cprops)
 static bool class_has_usable_mba(struct mpam_props *cprops)
 {
 	return mba_class_use_mbw_max(cprops);
+}
+
+static bool cache_has_usable_csu(struct mpam_class *class)
+{
+	struct mpam_props *cprops;
+
+	if (!class)
+		return false;
+
+	cprops = &class->props;
+
+	if (!mpam_has_feature(mpam_feat_msmon_csu, cprops))
+		return false;
+
+	/*
+	 * CSU counters settle on the value, so we can get away with
+	 * having only one.
+	 */
+	if (!cprops->num_csu_mon)
+		return false;
+
+	return true;
 }
 
 /*
@@ -507,6 +544,64 @@ static void mpam_resctrl_pick_mba(void)
 	}
 }
 
+static void counter_update_class(enum resctrl_event_id evt_id,
+				 struct mpam_class *class)
+{
+	struct mpam_class *existing_class = mpam_resctrl_counters[evt_id].class;
+
+	if (existing_class) {
+		if (class->level == 3) {
+			pr_debug("Existing class is L3 - L3 wins\n");
+			return;
+		}
+
+		if (existing_class->level < class->level) {
+			pr_debug("Existing class is closer to L3, %u versus %u - closer is better\n",
+				 existing_class->level, class->level);
+			return;
+		}
+	}
+
+	mpam_resctrl_counters[evt_id].class = class;
+	exposed_mon_capable = true;
+}
+
+static void mpam_resctrl_pick_counters(void)
+{
+	struct mpam_class *class;
+
+	lockdep_assert_cpus_held();
+
+	guard(srcu)(&mpam_srcu);
+	list_for_each_entry_srcu(class, &mpam_classes, classes_list,
+				 srcu_read_lock_held(&mpam_srcu)) {
+		if (class->level < 3) {
+			pr_debug("class %u is before L3", class->level);
+			continue;
+		}
+
+		if (!cpumask_equal(&class->affinity, cpu_possible_mask)) {
+			pr_debug("class %u does not cover all CPUs",
+				 class->level);
+			continue;
+		}
+
+		if (cache_has_usable_csu(class) && topology_matches_l3(class)) {
+			pr_debug("class %u has usable CSU, and matches L3 topology",
+				 class->level);
+
+			/* CSU counters only make sense on a cache. */
+			switch (class->type) {
+			case MPAM_CLASS_CACHE:
+				counter_update_class(QOS_L3_OCCUP_EVENT_ID, class);
+				break;
+			default:
+				break;
+			}
+		}
+	}
+}
+
 static int mpam_resctrl_control_init(struct mpam_resctrl_res *res)
 {
 	struct mpam_class *class = res->class;
@@ -580,6 +675,57 @@ static int mpam_resctrl_pick_domain_id(int cpu, struct mpam_component *comp)
 
 	/* Otherwise, expose the ID used by the firmware table code. */
 	return comp->comp_id;
+}
+
+static int mpam_resctrl_monitor_init(struct mpam_resctrl_mon *mon,
+				     enum resctrl_event_id type)
+{
+	struct mpam_resctrl_res *res = &mpam_resctrl_controls[RDT_RESOURCE_L3];
+	struct rdt_resource *l3 = &res->resctrl_res;
+
+	lockdep_assert_cpus_held();
+
+	/* There also needs to be an L3 cache present */
+	if (get_cpu_cacheinfo_id(smp_processor_id(), 3) == -1)
+		return 0;
+
+	/*
+	 * If there are no MPAM resources on L3, force it into existence.
+	 * topology_matches_l3() already ensures this looks like the L3.
+	 * The domain-ids will be fixed up by mpam_resctrl_domain_hdr_init().
+	 */
+	if (!res->class) {
+		pr_warn_once("Faking L3 MSC to enable counters.\n");
+		res->class = mpam_resctrl_counters[type].class;
+	}
+
+	/* Called multiple times!, once per event type */
+	if (exposed_mon_capable) {
+		l3->mon_capable = true;
+
+		/* Setting name is necessary on monitor only platforms */
+		l3->name = "L3";
+		l3->mon_scope = RESCTRL_L3_CACHE;
+
+		resctrl_enable_mon_event(type);
+
+		/*
+		 * Unfortunately, num_rmid doesn't mean anything for
+		 * mpam, and its exposed to user-space!
+		 *
+		 * num-rmid is supposed to mean the minimum number of
+		 * monitoring groups that can exist simultaneously, including
+		 * the default monitoring group for each control group.
+		 *
+		 * For mpam, each control group has its own pmg/rmid space, so
+		 * it is not appropriate to advertise the whole rmid_idx space
+		 * here.  But the pmgs corresponding to the parent control
+		 * group can be allocated freely:
+		 */
+		l3->mon.num_rmid = mpam_pmg_max + 1;
+	}
+
+	return 0;
 }
 
 u32 resctrl_arch_get_config(struct rdt_resource *r, struct rdt_ctrl_domain *d,
@@ -958,6 +1104,8 @@ int mpam_resctrl_setup(void)
 	int err = 0;
 	struct mpam_resctrl_res *res;
 	enum resctrl_res_level rid;
+	struct mpam_resctrl_mon *mon;
+	enum resctrl_event_id eventid;
 
 	wait_event(wait_cacheinfo_ready, cacheinfo_ready);
 
@@ -980,15 +1128,25 @@ int mpam_resctrl_setup(void)
 		err = mpam_resctrl_control_init(res);
 		if (err) {
 			pr_debug("Failed to initialise rid %u\n", rid);
-			break;
+			goto internal_error;
 		}
 	}
-	cpus_read_unlock();
 
-	if (err) {
-		pr_debug("Internal error %d - resctrl not supported\n", err);
-		return err;
+	/* Find some classes to use for monitors */
+	mpam_resctrl_pick_counters();
+
+	for_each_mpam_resctrl_mon(mon, eventid) {
+		if (!mon->class)
+			continue;	// dummy resource
+
+		err = mpam_resctrl_monitor_init(mon, eventid);
+		if (err) {
+			pr_debug("Failed to initialise event %u\n", eventid);
+			goto internal_error;
+		}
 	}
+
+	cpus_read_unlock();
 
 	if (!exposed_alloc_capable && !exposed_mon_capable) {
 		pr_debug("No alloc(%u) or monitor(%u) found - resctrl not supported\n",
@@ -999,6 +1157,11 @@ int mpam_resctrl_setup(void)
 	/* TODO: call resctrl_init() */
 
 	return 0;
+
+internal_error:
+	cpus_read_unlock();
+	pr_debug("Internal error %d - resctrl not supported\n", err);
+	return err;
 }
 
 static int __init __cacheinfo_ready(void)
