@@ -8414,6 +8414,16 @@ KVM_X86_QUIRK_IGNORE_GUEST_PAT      By default, on Intel platforms, KVM ignores
                                     guest software, for example if it does not
                                     expose a bochs graphics device (which is
                                     known to have had a buggy driver).
+
+KVM_X86_QUIRK_VMCS12_FREEZE_IN_SMM
+                                    By default, KVM allows L1 to set FREEZE_IN_SMM
+                                    in vmcs12 when using nested VMX.  When this
+                                    quirk is disabled, KVM does not allow L1 to
+                                    set the bit.  Prior to KVM taking ownership
+                                    of the bit to ensure PMCs are frozen during
+                                    physical SMM, L1 could set FREEZE_IN_SMM in
+                                    vmcs12 to freeze PMCs during physical SMM
+                                    coincident with L2's execution.
 =================================== ============================================
 
 7.32 KVM_CAP_MAX_VCPU_ID
