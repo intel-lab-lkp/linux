@@ -442,6 +442,9 @@ void v4l2_ctrl_type_op_log(const struct v4l2_ctrl *ctrl)
 	case V4L2_CTRL_TYPE_AV1_FILM_GRAIN:
 		pr_cont("AV1_FILM_GRAIN");
 		break;
+	case V4L2_CTRL_TYPE_ENC_ROI_PARAMS:
+		pr_cont("ENCODER_ROI");
+		break;
 	case V4L2_CTRL_TYPE_RECT:
 		pr_cont("(%d,%d)/%ux%u",
 			ptr.p_rect->left, ptr.p_rect->top,
@@ -967,6 +970,7 @@ static int std_validate_compound(const struct v4l2_ctrl *ctrl, u32 idx,
 	struct v4l2_ctrl_hevc_decode_params *p_hevc_decode_params;
 	struct v4l2_area *area;
 	struct v4l2_rect *rect;
+	struct v4l2_ctrl_enc_roi_params *p_enc_roi_params;
 	void *p = ptr.p + idx * ctrl->elem_size;
 	unsigned int i;
 
@@ -1329,7 +1333,12 @@ static int std_validate_compound(const struct v4l2_ctrl *ctrl, u32 idx,
 		if (!rect->width || !rect->height)
 			return -EINVAL;
 		break;
-
+	case V4L2_CTRL_TYPE_ENC_ROI_PARAMS:
+		p_enc_roi_params = p;
+		if (p_enc_roi_params->num_roi_regions > 10 ||
+		    p_enc_roi_params->num_roi_regions < 0)
+			return -EINVAL;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -2041,6 +2050,9 @@ static struct v4l2_ctrl *v4l2_ctrl_new(struct v4l2_ctrl_handler *hdl,
 		break;
 	case V4L2_CTRL_TYPE_RECT:
 		elem_size = sizeof(struct v4l2_rect);
+		break;
+	case V4L2_CTRL_TYPE_ENC_ROI_PARAMS:
+		elem_size = sizeof(struct v4l2_ctrl_enc_roi_params);
 		break;
 	default:
 		if (type < V4L2_CTRL_COMPOUND_TYPES)
