@@ -4537,7 +4537,7 @@ struct dvb_usb_device_properties dib0700_devices[] = {
 
 		.rc.core = {
 			.rc_interval      = DEFAULT_RC_INTERVAL,
-			.rc_codes         = RC_MAP_DIB0700_NEC_TABLE,
+			.rc_codes         = RC_MAP_ELGATO,
 			.module_name	  = "dib0700",
 			.rc_query         = dib0700_rc_query_old_firmware,
 			.allowed_protos   = RC_PROTO_BIT_RC5 |
@@ -4766,7 +4766,7 @@ struct dvb_usb_device_properties dib0700_devices[] = {
 
 		.rc.core = {
 			.rc_interval      = DEFAULT_RC_INTERVAL,
-			.rc_codes         = RC_MAP_DIB0700_NEC_TABLE,
+			.rc_codes         = RC_MAP_EVOLUTEPC,
 			.module_name	  = "dib0700",
 			.rc_query         = dib0700_rc_query_old_firmware,
 			.allowed_protos   = RC_PROTO_BIT_RC5 |

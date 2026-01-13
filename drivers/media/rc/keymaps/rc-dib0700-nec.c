@@ -13,8 +13,8 @@
 #include <media/rc-map.h>
 #include <linux/module.h>
 
-static struct rc_map_table dib0700_nec_table[] = {
-	/* Key codes for the Pixelview SBTVD remote */
+/* Key codes for the Pixelview SBTVD remote */
+static struct rc_map_table pixelview_table[] = {
 	{ 0x866b13, KEY_MUTE },
 	{ 0x866b12, KEY_POWER },
 	{ 0x866b01, KEY_NUMERIC_1 },
@@ -44,8 +44,10 @@ static struct rc_map_table dib0700_nec_table[] = {
 
 	{ 0x866b18, KEY_RECORD },
 	{ 0x866b1a, KEY_STOP },
+};
 
-	/* Key codes for the EvolutePC TVWay+ remote */
+/* Key codes for the EvolutePC TVWay+ remote */
+static struct rc_map_table evolutepc_table[] = {
 	{ 0x7a00, KEY_MENU },
 	{ 0x7a01, KEY_RECORD },
 	{ 0x7a02, KEY_PLAY },
@@ -56,8 +58,10 @@ static struct rc_map_table dib0700_nec_table[] = {
 	{ 0x7a13, KEY_VOLUMEDOWN },
 	{ 0x7a40, KEY_POWER },
 	{ 0x7a41, KEY_MUTE },
+};
 
-	/* Key codes for the Elgato EyeTV Diversity silver remote */
+/* Key codes for the Elgato EyeTV Diversity silver remote */
+static struct rc_map_table elgato_table[] = {
 	{ 0x4501, KEY_POWER },
 	{ 0x4502, KEY_MUTE },
 	{ 0x4503, KEY_NUMERIC_1 },
@@ -94,23 +98,64 @@ static struct rc_map_table dib0700_nec_table[] = {
 	{ 0x4542, KEY_SELECT }, /* Select video input, 'Select' for Teletext */
 };
 
-static struct rc_map_list dib0700_nec_map = {
+static struct rc_map_list pixelview_map = {
 	.map = {
-		.scan     = dib0700_nec_table,
-		.size     = ARRAY_SIZE(dib0700_nec_table),
+		.scan     = pixelview_table,
+		.size     = ARRAY_SIZE(pixelview_table),
 		.rc_proto = RC_PROTO_NEC,
-		.name     = RC_MAP_DIB0700_NEC_TABLE,
+		.name     = "RC_MAP_PIXELVIEW",
+	}
+};
+
+static struct rc_map_list evolutepc_map = {
+	.map = {
+		.scan     = evolutepc_table,
+		.size     = ARRAY_SIZE(evolutepc_table),
+		.rc_proto = RC_PROTO_NEC,
+		.name     = "RC_MAP_EVOLUTEPC",
+	}
+};
+
+static struct rc_map_list elgato_map = {
+	.map = {
+		.scan     = elgato_table,
+		.size     = ARRAY_SIZE(elgato_table),
+		.rc_proto = RC_PROTO_NEC,
+		.name     = "RC_MAP_ELGATO",
 	}
 };
 
 static int __init init_rc_map(void)
 {
-	return rc_map_register(&dib0700_nec_map);
+	int ret;
+
+	ret = rc_map_register(&pixelview_map);
+	if (ret)
+		return ret;
+
+	ret = rc_map_register(&evolutepc_map);
+	if (ret)
+		goto unregister_pixelview;
+
+	ret = rc_map_register(&elgato_map);
+	if (ret)
+		goto unregister_evolutepc;
+
+	return 0;
+
+unregister_evolutepc:
+	rc_map_unregister(&evolutepc_map);
+unregister_pixelview:
+	rc_map_unregister(&pixelview_map);
+
+	return ret;
 }
 
 static void __exit exit_rc_map(void)
 {
-	rc_map_unregister(&dib0700_nec_map);
+	rc_map_unregister(&elgato_map);
+	rc_map_unregister(&evolutepc_map);
+	rc_map_unregister(&pixelview_map);
 }
 
 module_init(init_rc_map)
