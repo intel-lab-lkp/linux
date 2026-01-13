@@ -3362,8 +3362,10 @@ static int module_integrity_check(struct load_info *info, int flags)
 
 	if (IS_ENABLED(CONFIG_MODULE_SIG) && sig_type == PKEY_ID_PKCS7) {
 		err = module_sig_check(info, sig, sig_len);
+	} else if (IS_ENABLED(CONFIG_MODULE_HASHES) && sig_type == PKEY_ID_MERKLE) {
+		err = module_hash_check(info, sig, sig_len);
 	} else {
-		pr_err("module: not signed with expected PKCS#7 message\n");
+		pr_err("module: not signed with signature mechanism\n");
 		err = -ENOPKG;
 	}
 

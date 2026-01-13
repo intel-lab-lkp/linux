@@ -63,7 +63,18 @@ ifdef CONFIG_DEBUG_INFO_BTF_MODULES
 endif
 	+$(call cmd,check_tracepoint)
 
+quiet_cmd_merkle = MERKLE  $@
+      cmd_merkle = $(objtree)/scripts/modules-merkle-tree $@ .ko
+
+.tmp_module_hashes.c: $(modules:%.o=%.ko) $(objtree)/scripts/modules-merkle-tree FORCE
+	$(call cmd,merkle)
+
+ifdef CONFIG_MODULE_HASHES
+__modfinal: .tmp_module_hashes.c
+endif
+
 targets += $(modules:%.o=%.ko) $(modules:%.o=%.mod.o) .module-common.o
+targets += $(modules:%.o=%.merkle) .tmp_module_hashes.c
 
 # Add FORCE to the prerequisites of a target to force it to be always rebuilt.
 # ---------------------------------------------------------------------------

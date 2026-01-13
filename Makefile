@@ -1588,7 +1588,9 @@ endif
 # is an exception.
 ifdef CONFIG_DEBUG_INFO_BTF_MODULES
 KBUILD_BUILTIN := y
+ifndef CONFIG_MODULE_HASHES
 modules: vmlinux
+endif
 endif
 
 modules: modules_prepare
@@ -1981,7 +1983,11 @@ modules.order: $(build-dir)
 # KBUILD_MODPOST_NOFINAL can be set to skip the final link of modules.
 # This is solely useful to speed up test compiles.
 modules: modpost
-ifneq ($(KBUILD_MODPOST_NOFINAL),1)
+ifdef CONFIG_MODULE_HASHES
+ifeq ($(MODULE_HASHES_MODPOST_FINAL), 1)
+	$(Q)$(MAKE) -f $(srctree)/scripts/Makefile.modfinal
+endif
+else ifneq ($(KBUILD_MODPOST_NOFINAL),1)
 	$(Q)$(MAKE) -f $(srctree)/scripts/Makefile.modfinal
 endif
 
