@@ -21,6 +21,7 @@
 #include <linux/netdevice.h>
 #include <linux/i2c.h>
 #include <linux/i2c-mux.h>
+#include <linux/i2c-smbus.h>
 #include <linux/if_arp.h>
 #include <net/mctp.h>
 #include <net/mctpdevice.h>
@@ -1096,6 +1097,12 @@ static const struct i2c_device_id mctp_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, mctp_i2c_id);
 
+static const struct smbus_device_id mctp_smbus_id[] = {
+	{ SMBUS_INTERFACE_ASF },
+	{}
+};
+MODULE_DEVICE_TABLE(smbus, mctp_smbus_id);
+
 static const struct of_device_id mctp_i2c_of_match[] = {
 	{ .compatible = "mctp-i2c-controller" },
 	{},
@@ -1110,6 +1117,7 @@ static struct i2c_driver mctp_i2c_driver = {
 	.probe = mctp_i2c_probe,
 	.remove = mctp_i2c_remove,
 	.id_table = mctp_i2c_id,
+	.smbus_id_table = mctp_smbus_id,
 };
 
 static __init int mctp_i2c_mod_init(void)
