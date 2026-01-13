@@ -377,6 +377,18 @@ char *strnchrnul(const char *s, size_t count, int c)
 	return (char *)s;
 }
 
+char *__generic_strrchr(const char *s, int c)
+{
+	const char *last = NULL;
+
+	do {
+		if (*s == (char)c)
+			last = s;
+	} while (*s++);
+	return (char *)last;
+}
+EXPORT_SYMBOL(__generic_strrchr);
+
 #ifndef __HAVE_ARCH_STRRCHR
 /**
  * strrchr - Find the last occurrence of a character in a string
@@ -385,12 +397,7 @@ char *strnchrnul(const char *s, size_t count, int c)
  */
 char *strrchr(const char *s, int c)
 {
-	const char *last = NULL;
-	do {
-		if (*s == (char)c)
-			last = s;
-	} while (*s++);
-	return (char *)last;
+	return __generic_strrchr(s, c);
 }
 EXPORT_SYMBOL(strrchr);
 #endif
