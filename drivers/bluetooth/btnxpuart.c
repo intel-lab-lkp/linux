@@ -22,6 +22,11 @@
 #include <linux/regulator/consumer.h>
 #include <linux/reset.h>
 
+#include <linux/crypto.h>
+#include <crypto/sha2.h>
+#include <crypto/hash.h>
+#include <crypto/kpp.h>
+
 #include <net/bluetooth/bluetooth.h>
 #include <net/bluetooth/hci_core.h>
 
@@ -192,6 +197,9 @@ enum bootloader_param_change {
 };
 
 struct btnxpuart_crypto {
+	struct crypto_shash *tls_handshake_hash_tfm;
+	struct shash_desc *tls_handshake_hash_desc;
+	struct crypto_kpp *kpp;
 	u8 ecdsa_public[NXP_FW_ECDSA_PUBKEY_SIZE];	/* ECDSA public key, Authentication*/
 	u8 fw_uuid[NXP_FW_UUID_SIZE];
 };
@@ -1602,15 +1610,47 @@ static void nxp_get_fw_version(struct hci_dev *hdev)
 static int nxp_authenticate_device(struct hci_dev *hdev)
 {
 	struct btnxpuart_dev *nxpdev = hci_get_drvdata(hdev);
+	size_t desc_size = 0;
 	int ret = 0;
+
+	nxpdev->crypto.tls_handshake_hash_tfm = crypto_alloc_shash("sha256", 0, 0);
+	if (IS_ERR(nxpdev->crypto.tls_handshake_hash_tfm))
+		return PTR_ERR(nxpdev->crypto.tls_handshake_hash_tfm);
+
+	desc_size = sizeof(struct shash_desc) +
+		    crypto_shash_descsize(nxpdev->crypto.tls_handshake_hash_tfm);
+	nxpdev->crypto.tls_handshake_hash_desc = kzalloc(desc_size, GFP_KERNEL);
+	if (!nxpdev->crypto.tls_handshake_hash_desc) {
+		ret = -ENOMEM;
+		goto free_tfm;
+	}
+
+	nxpdev->crypto.kpp = crypto_alloc_kpp("ecdh-nist-p256", 0, 0);
+	if (IS_ERR(nxpdev->crypto.kpp)) {
+		ret = PTR_ERR(nxpdev->crypto.kpp);
+		goto free_desc;
+	}
+
+	nxpdev->crypto.tls_handshake_hash_desc->tfm = nxpdev->crypto.tls_handshake_hash_tfm;
+	crypto_shash_init(nxpdev->crypto.tls_handshake_hash_desc);
 
 	/* TODO: Implement actual TLS handshake protocol
 	 * This will include:
-	 * 1. Crypto allocation (SHA256, ECDH-P256)
-	 * 2. Host/Device hello message exchange
-	 * 3. Master secret and traffic key derivation
-	 * 4. Proper error handling and cleanup
+	 * 1. Host/Device hello message exchange
+	 * 2. Master secret and traffic key derivation
 	 */
+
+free_kpp:
+	crypto_free_kpp(nxpdev->crypto.kpp);
+	nxpdev->crypto.kpp = NULL;
+free_desc:
+	kfree(nxpdev->crypto.tls_handshake_hash_desc);
+	nxpdev->crypto.tls_handshake_hash_desc = NULL;
+free_tfm:
+	crypto_free_shash(nxpdev->crypto.tls_handshake_hash_tfm);
+	nxpdev->crypto.tls_handshake_hash_tfm = NULL;
+	if (ret)
+		bt_dev_err(hdev, "Device Authentication failed: %d", ret);
 
 	return ret;
 }
