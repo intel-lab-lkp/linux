@@ -139,6 +139,23 @@ void synchronize_irq(unsigned int irq)
 }
 EXPORT_SYMBOL(synchronize_irq);
 
+/**
+ * schedule_affinity_notify_work - Schedule work to notify
+ * about irq affinity change.
+ * @desc:  irq descriptor whose affinity changed
+ *
+ * Caller needs to hold desc->lock
+ */
+void schedule_affinity_notify_work(struct irq_desc *desc)
+{
+	kref_get(&desc->affinity_notify->kref);
+	if (!schedule_work(&desc->affinity_notify->work))
+		/* Work was already scheduled, drop our extra ref */
+		kref_put(&desc->affinity_notify->kref,
+			 desc->affinity_notify->release);
+}
+EXPORT_SYMBOL_GPL(schedule_affinity_notify_work);
+
 #ifdef CONFIG_SMP
 cpumask_var_t irq_default_affinity;
 
@@ -367,14 +384,9 @@ int irq_set_affinity_locked(struct irq_data *data, const struct cpumask *mask,
 		irq_copy_pending(desc, mask);
 	}
 
-	if (desc->affinity_notify) {
-		kref_get(&desc->affinity_notify->kref);
-		if (!schedule_work(&desc->affinity_notify->work)) {
-			/* Work was already scheduled, drop our extra ref */
-			kref_put(&desc->affinity_notify->kref,
-				 desc->affinity_notify->release);
-		}
-	}
+	if (desc->affinity_notify)
+		schedule_affinity_notify_work(desc);
+
 	irqd_set(data, IRQD_AFFINITY_SET);
 
 	return ret;
