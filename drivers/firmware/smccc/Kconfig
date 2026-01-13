@@ -18,8 +18,11 @@ config HAVE_ARM_SMCCC_DISCOVERY
 config ARM_SMCCC_SOC_ID
 	bool "SoC bus device for the ARM SMCCC SOC_ID"
 	depends on HAVE_ARM_SMCCC_DISCOVERY
-	default y
+	default n
 	select SOC_BUS
 	help
 	  Include support for the SoC bus on the ARM SMCCC firmware based
 	  platforms providing some sysfs information about the SoC variant.
+	  Note: Several vendor platforms provide their own SoC information
+	  drivers under drivers/soc/*. To avoid conflicting sysfs attribute
+	  formats in /sys/devices/socX/*, this driver defaults to disabled.
