@@ -62,6 +62,7 @@ struct iio_backend {
 	 * backend. Used for the debugfs directory name.
 	 */
 	u8 idx;
+	u32 caps;
 };
 
 /*
@@ -542,6 +543,9 @@ int devm_iio_backend_request_buffer(struct device *dev,
 	struct iio_backend_buffer_pair *pair;
 	struct iio_buffer *buffer;
 
+	if (!iio_backend_caps(back, IIO_BACKEND_CAP_BUFFERING))
+		return 0;
+
 	pair = devm_kzalloc(dev, sizeof(*pair), GFP_KERNEL);
 	if (!pair)
 		return -ENOMEM;
@@ -773,6 +777,12 @@ int iio_backend_extend_chan_spec(struct iio_backend *back,
 	return 0;
 }
 EXPORT_SYMBOL_NS_GPL(iio_backend_extend_chan_spec, "IIO_BACKEND");
+
+int iio_backend_caps(struct iio_backend *back, u32 cap)
+{
+	return back->caps & cap;
+}
+EXPORT_SYMBOL_NS_GPL(iio_backend_caps, "IIO_BACKEND");
 
 static void iio_backend_release(void *arg)
 {
