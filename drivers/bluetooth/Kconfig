@@ -493,6 +493,13 @@ config BT_NXPUART
 	select BT_HCIUART_H4
 	select CRC32
 	select CRC8
+	select CRYPTO
+	select CRYPTO_ECDSA
+	select CRYPTO_ECDH
+	select CRYPTO_AES
+	select CRYPTO_GCM
+	select CRYPTO_SHA256
+	select CRYPTO_HMAC
 	help
 	  NXP is serial driver required for NXP Bluetooth
 	  devices with UART interface.
