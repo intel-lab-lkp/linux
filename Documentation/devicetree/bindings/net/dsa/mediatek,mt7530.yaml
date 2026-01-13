@@ -279,8 +279,11 @@ allOf:
         - resets
         - reset-names
 
-  - dependencies:
-      interrupt-controller: [ interrupts ]
+  - anyOf:
+      - dependencies:
+          interrupt-controller: [ interrupts ]
+      - dependencies:
+          interrupt-controller: [ interrupts-extended ]
 
   - if:
       properties:
