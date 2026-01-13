@@ -1,0 +1,20 @@
+What:		/sys/bus/platform/devices/.../message
+Date:		January 2026
+KernelVersion:	6.19
+Contact:	Siratul Islam <email@sirat.me>
+Description:
+		Write a text string to display on the 7-segment display.
+		Supports alphanumeric characters and decimal points.
+		A decimal point can be added after any character by
+		following it with a dot (e.g., "12.34").
+
+		Reading returns the current segment data in hex format.
+
+What:		/sys/bus/platform/devices/.../brightness
+Date:		January 2026
+KernelVersion:	6.19
+Contact:	Siratul Islam <email@sirat.me>
+Description:
+		Control display brightness. Valid range is 0-8.
+		Writing 0 turns off the display.
+		Writing 1-8 sets brightness levels, with 8 being maximum.

@@ -526,6 +526,17 @@ config SEG_LED_GPIO
 	  This driver can also be built as a module. If so, the module
 	  will be called seg-led-gpio.
 
+config TM1637
+	tristate "Shenzhen Titan Micro Electronics TM1637 7-Segment Display"
+	depends on GPIOLIB || COMPILE_TEST
+	select AUXDISPLAY
+	help
+	  This driver provides support for the Titanmec TM1637 7-segment
+	  display controller connected via GPIO bit-banging.
+
+	  This driver exposes a character interface for controlling the
+	  display content and brightness via sysfs.
+
 #
 # Character LCD with non-conforming interface section
 #
