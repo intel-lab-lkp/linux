@@ -302,7 +302,7 @@ static int rxrpc_peer_seq_show(struct seq_file *seq, void *v)
 		   refcount_read(&peer->ref),
 		   peer->cong_ssthresh,
 		   peer->max_data,
-		   now - peer->last_tx_at,
+		   (s32)now - (s32)peer->last_tx_at,
 		   READ_ONCE(peer->recent_srtt_us),
 		   READ_ONCE(peer->recent_rto_us));
 
