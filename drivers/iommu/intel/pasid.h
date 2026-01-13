@@ -37,7 +37,10 @@ struct pasid_dir_entry {
 };
 
 struct pasid_entry {
-	u64 val[8];
+	union {
+		u64 val[8];
+		u128 val128[4];
+	};
 };
 
 #define PASID_ENTRY_PGTT_FL_ONLY	(1)
@@ -295,6 +298,27 @@ pasid_set_flpm(struct pasid_entry *pe, u64 value)
 static inline void pasid_set_eafe(struct pasid_entry *pe)
 {
 	pasid_set_bits(&pe->val[2], 1 << 7, 1 << 7);
+}
+
+static inline bool pasid_support_hitless_replace(struct pasid_entry *pte,
+						 struct pasid_entry *new, int type)
+{
+	switch (type) {
+	case PASID_ENTRY_PGTT_FL_ONLY:
+	case PASID_ENTRY_PGTT_NESTED:
+		/* The first 128 bits remain the same. */
+		return READ_ONCE(pte->val[0]) == READ_ONCE(new->val[0]) &&
+			READ_ONCE(pte->val[1]) == READ_ONCE(new->val[1]);
+	case PASID_ENTRY_PGTT_SL_ONLY:
+	case PASID_ENTRY_PGTT_PT:
+		/* The second 128 bits remain the same. */
+		return READ_ONCE(pte->val[2]) == READ_ONCE(new->val[2]) &&
+			READ_ONCE(pte->val[3]) == READ_ONCE(new->val[3]);
+	default:
+		WARN_ON(true);
+	}
+
+	return false;
 }
 
 extern unsigned int intel_pasid_max_id;

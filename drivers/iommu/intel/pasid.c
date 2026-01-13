@@ -452,7 +452,20 @@ int intel_pasid_replace_first_level(struct intel_iommu *iommu,
 
 	WARN_ON(old_did != pasid_get_domain_id(pte));
 
-	*pte = new_pte;
+	if (!pasid_support_hitless_replace(pte, &new_pte,
+					   PASID_ENTRY_PGTT_FL_ONLY)) {
+		spin_unlock(&iommu->lock);
+		intel_pasid_tear_down_entry(iommu, dev, pasid, false);
+
+		return intel_pasid_setup_first_level(iommu, dev, fsptptr,
+						     pasid, did, flags);
+	}
+
+	/*
+	 * A first-only hitless replace requires the first 128 bits to remain
+	 * the same. Only the second 128-bit chunk needs to be updated.
+	 */
+	intel_iommu_atomic128_set(&pte->val128[1], new_pte.val128[1]);
 	spin_unlock(&iommu->lock);
 
 	intel_pasid_flush_present(iommu, dev, pasid, old_did, pte);
@@ -563,7 +576,19 @@ int intel_pasid_replace_second_level(struct intel_iommu *iommu,
 
 	WARN_ON(old_did != pasid_get_domain_id(pte));
 
-	*pte = new_pte;
+	if (!pasid_support_hitless_replace(pte, &new_pte,
+					   PASID_ENTRY_PGTT_SL_ONLY)) {
+		spin_unlock(&iommu->lock);
+		intel_pasid_tear_down_entry(iommu, dev, pasid, false);
+
+		return intel_pasid_setup_second_level(iommu, domain, dev, pasid);
+	}
+
+	/*
+	 * A second-only hitless replace requires the second 128 bits to remain
+	 * the same. Only the first 128-bit chunk needs to be updated.
+	 */
+	intel_iommu_atomic128_set(&pte->val128[0], new_pte.val128[0]);
 	spin_unlock(&iommu->lock);
 
 	intel_pasid_flush_present(iommu, dev, pasid, old_did, pte);
@@ -707,7 +732,19 @@ int intel_pasid_replace_pass_through(struct intel_iommu *iommu,
 
 	WARN_ON(old_did != pasid_get_domain_id(pte));
 
-	*pte = new_pte;
+	if (!pasid_support_hitless_replace(pte, &new_pte,
+					   PASID_ENTRY_PGTT_PT)) {
+		spin_unlock(&iommu->lock);
+		intel_pasid_tear_down_entry(iommu, dev, pasid, false);
+
+		return intel_pasid_setup_pass_through(iommu, dev, pasid);
+	}
+
+	/*
+	 * A passthrough hitless replace requires the second 128 bits to remain
+	 * the same. Only the first 128-bit chunk needs to be updated.
+	 */
+	intel_iommu_atomic128_set(&pte->val128[0], new_pte.val128[0]);
 	spin_unlock(&iommu->lock);
 
 	intel_pasid_flush_present(iommu, dev, pasid, old_did, pte);
@@ -903,7 +940,19 @@ int intel_pasid_replace_nested(struct intel_iommu *iommu,
 
 	WARN_ON(old_did != pasid_get_domain_id(pte));
 
-	*pte = new_pte;
+	if (!pasid_support_hitless_replace(pte, &new_pte,
+					   PASID_ENTRY_PGTT_NESTED)) {
+		spin_unlock(&iommu->lock);
+		intel_pasid_tear_down_entry(iommu, dev, pasid, false);
+
+		return intel_pasid_setup_nested(iommu, dev, pasid, domain);
+	}
+
+	/*
+	 * A nested hitless replace requires the first 128 bits to remain
+	 * the same. Only the second 128-bit chunk needs to be updated.
+	 */
+	intel_iommu_atomic128_set(&pte->val128[1], new_pte.val128[1]);
 	spin_unlock(&iommu->lock);
 
 	intel_pasid_flush_present(iommu, dev, pasid, old_did, pte);
