@@ -1134,7 +1134,7 @@ static int xe_pci_suspend(struct device *dev)
 	if (xe_survivability_mode_is_boot_enabled(xe))
 		return -EBUSY;
 
-	err = xe_pm_suspend(xe);
+	err = xe_pm_suspend(xe, false);
 	if (err)
 		return err;
 
@@ -1172,13 +1172,66 @@ static int xe_pci_resume(struct device *dev)
 
 	pci_set_master(pdev);
 
-	err = xe_pm_resume(pdev_to_xe_device(pdev));
+	err = xe_pm_resume(pdev_to_xe_device(pdev), false);
 	if (err)
 		return err;
 
 	return 0;
 }
 
+static int xe_pci_freeze(struct device *dev)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct xe_device *xe = pdev_to_xe_device(pdev);
+	int err;
+
+	if (xe_survivability_mode_is_boot_enabled(xe))
+		return -EBUSY;
+
+	err = xe_pm_suspend(xe, true);
+	if (err)
+		return err;
+
+	/*
+	 * Enabling D3Cold is needed for S2Idle/S0ix.
+	 * It is save to allow here since xe_pm_suspend has evicted
+	 * the local memory and the direct complete optimization is disabled.
+	 */
+	d3cold_toggle(pdev, D3COLD_ENABLE);
+
+	pci_save_state(pdev);
+	pci_disable_device(pdev);
+	pci_set_power_state(pdev, PCI_D3cold);
+
+	return 0;
+}
+
+static int xe_pci_thaw(struct device *dev)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	int err;
+
+	/* Give back the D3Cold decision to the runtime P M*/
+	d3cold_toggle(pdev, D3COLD_DISABLE);
+
+	err = pci_set_power_state(pdev, PCI_D0);
+	if (err)
+		return err;
+
+	pci_restore_state(pdev);
+
+	err = pci_enable_device(pdev);
+	if (err)
+		return err;
+
+	pci_set_master(pdev);
+
+	err = xe_pm_resume(pdev_to_xe_device(pdev), true);
+	if (err)
+		return err;
+
+	return 0;
+}
 static int xe_pci_runtime_suspend(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
@@ -1247,7 +1300,12 @@ static int xe_pci_runtime_idle(struct device *dev)
 }
 
 static const struct dev_pm_ops xe_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(xe_pci_suspend, xe_pci_resume)
+	.suspend = xe_pci_suspend,
+	.resume = xe_pci_resume,
+	.freeze = xe_pci_freeze,
+	.thaw = xe_pci_thaw,
+	.poweroff = xe_pci_freeze,
+	.restore = xe_pci_thaw,
 	SET_RUNTIME_PM_OPS(xe_pci_runtime_suspend, xe_pci_runtime_resume, xe_pci_runtime_idle)
 };
 #endif

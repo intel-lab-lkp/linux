@@ -178,16 +178,17 @@ static void xe_pm_suspend_prepare(struct xe_device *xe)
 /**
  * xe_pm_suspend - Helper for System suspend, i.e. S0->S3 / S0->S2idle
  * @xe: xe device instance
+ * @hibernation: whether the suspend is for hibernation
  *
  * Return: 0 on success
  */
-int xe_pm_suspend(struct xe_device *xe)
+int xe_pm_suspend(struct xe_device *xe, bool hibernation)
 {
 	struct xe_gt *gt;
 	u8 id;
 	int err;
 
-	drm_dbg(&xe->drm, "Suspending device\n");
+	drm_dbg(&xe->drm, "Suspending device for %s\n", hibernation ? "hibernation" : "S3/S2idle");
 	xe_pm_block_begin_signalling();
 	trace_xe_pm_suspend(xe, __builtin_return_address(0));
 
@@ -238,10 +239,11 @@ err:
 /**
  * xe_pm_resume - Helper for System resume S3->S0 / S2idle->S0
  * @xe: xe device instance
+ * @hibernation: whether the resume is from hibernation
  *
  * Return: 0 on success
  */
-int xe_pm_resume(struct xe_device *xe)
+int xe_pm_resume(struct xe_device *xe, bool hibernation)
 {
 	struct xe_tile *tile;
 	struct xe_gt *gt;
@@ -249,7 +251,7 @@ int xe_pm_resume(struct xe_device *xe)
 	int err;
 
 	xe_pm_block_begin_signalling();
-	drm_dbg(&xe->drm, "Resuming device\n");
+	drm_dbg(&xe->drm, "Resuming device from %s\n", hibernation ? "hibernation" : "S3/S2idle");
 	trace_xe_pm_resume(xe, __builtin_return_address(0));
 
 	for_each_gt(gt, xe, id)

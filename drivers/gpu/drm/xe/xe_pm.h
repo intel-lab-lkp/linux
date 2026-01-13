@@ -19,8 +19,8 @@ enum xe_d3_state {
 	XE_D3COLD_OFF,
 };
 
-int xe_pm_suspend(struct xe_device *xe);
-int xe_pm_resume(struct xe_device *xe);
+int xe_pm_suspend(struct xe_device *xe, bool hibernation);
+int xe_pm_resume(struct xe_device *xe, bool hibernation);
 
 int xe_pm_init_early(struct xe_device *xe);
 int xe_pm_init(struct xe_device *xe);
