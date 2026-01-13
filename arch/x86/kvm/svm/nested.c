@@ -1292,6 +1292,16 @@ int nested_svm_vmexit(struct vcpu_svm *svm)
 	kvm_rsp_write(vcpu, vmcb01->save.rsp);
 	kvm_rip_write(vcpu, vmcb01->save.rip);
 
+	/*
+	 * KVM doesn't implement a separate guest PAT
+	 * register. Instead, the guest PAT lives in vcpu->arch.pat
+	 * while in guest mode with nested NPT enabled. Hence, the
+	 * IA32_PAT MSR has to be restored from the vmcb01 g_pat at
+	 * #VMEXIT.
+	 */
+	if (nested_npt_enabled(svm))
+		vcpu->arch.pat = vmcb01->save.g_pat;
+
 	svm->vcpu.arch.dr7 = DR7_FIXED_1;
 	kvm_update_dr7(&svm->vcpu);
 
