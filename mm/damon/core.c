@@ -2489,24 +2489,30 @@ static void kdamond_split_regions(struct damon_ctx *ctx)
 {
 	struct damon_target *t;
 	unsigned int nr_regions = 0;
-	static unsigned int last_nr_regions;
-	int nr_subregions = 2;
+	const unsigned int nr_min = ctx->attrs.min_nr_regions;	/*   10 */
+	const unsigned int nr_max = ctx->attrs.max_nr_regions;	/* 1000 */
+	const unsigned long si_min = ctx->attrs.intervals_goal.min_sample_us;
+	unsigned long si = ctx->attrs.sample_interval;
+	int nr_subregions;
 
 	damon_for_each_target(t, ctx)
 		nr_regions += damon_nr_regions(t);
 
-	if (nr_regions > ctx->attrs.max_nr_regions / 2)
-		return;
-
-	/* Maybe the middle of the region has different access frequency */
-	if (last_nr_regions == nr_regions &&
-			nr_regions < ctx->attrs.max_nr_regions / 3)
-		nr_subregions = 3;
+	nr_subregions = (nr_regions > nr_min) ?
+			((si > si_min * 100) ? nr_max / 10 : nr_max / 20)
+			: nr_max;
+	/*
+	 * nr_subregions is maximized within the range not exceeding nr_max.
+	 * Increasing nr_subregions minimizes missed address detection.
+	 */
+	while (nr_subregions * nr_regions > nr_max) {
+		nr_subregions -= 4;
+		if (nr_subregions < 2)
+			return;
+	}
 
 	damon_for_each_target(t, ctx)
 		damon_split_regions_of(t, nr_subregions, ctx->min_sz_region);
-
-	last_nr_regions = nr_regions;
 }
 
 /*
