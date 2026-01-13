@@ -164,6 +164,16 @@ static inline void *proc_sys_poll_event(struct ctl_table_poll *poll)
 #define DEFINE_CTL_TABLE_POLL(name)					\
 	struct ctl_table_poll name = __CTL_TABLE_POLL_INITIALIZER(name)
 
+#define SYSCTL_IN_RANGE(tbl, val, type) \
+	((tbl) && \
+	 (!(tbl)->extra1 || (*(type *)(tbl)->extra1 <= (type)(val))) && \
+	 (!(tbl)->extra2 || (*(type *)(tbl)->extra2 >= (type)(val))))
+
+#define SYSCTL_IN_RANGE_INT(tbl, val)           SYSCTL_IN_RANGE(tbl, val, int)
+#define SYSCTL_IN_RANGE_LONG(tbl, val)          SYSCTL_IN_RANGE(tbl, val, long)
+#define SYSCTL_IN_RANGE_UINT(tbl, val)          SYSCTL_IN_RANGE(tbl, val, unsigned int)
+#define SYSCTL_IN_RANGE_ULONG(tbl, val)         SYSCTL_IN_RANGE(tbl, val, unsigned long)
+
 /* A sysctl table is an array of struct ctl_table: */
 struct ctl_table {
 	const char *procname;		/* Text ID for /proc/sys */

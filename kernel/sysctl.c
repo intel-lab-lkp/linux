@@ -428,10 +428,7 @@ int proc_uint_conv(ulong *u_ptr, uint *k_ptr, int dir,
 		ret = user_to_kern(u_ptr, &tmp_k);
 		if (ret)
 			return ret;
-		if ((tbl->extra1 &&
-		     *(uint *)tbl->extra1 > tmp_k) ||
-		    (tbl->extra2 &&
-		     *(uint *)tbl->extra2 < tmp_k))
+		if (!SYSCTL_IN_RANGE_UINT(tbl, tmp_k))
 			return -ERANGE;
 		WRITE_ONCE(*k_ptr, tmp_k);
 	} else
@@ -531,8 +528,7 @@ int proc_int_conv(bool *negp, ulong *u_ptr, int *k_ptr, int dir,
 		ret = user_to_kern(negp, u_ptr, &tmp_k);
 		if (ret)
 			return ret;
-		if ((tbl->extra1 && *(int *)tbl->extra1 > tmp_k) ||
-		    (tbl->extra2 && *(int *)tbl->extra2 < tmp_k))
+		if (!SYSCTL_IN_RANGE_INT(tbl, tmp_k))
 			return -EINVAL;
 		WRITE_ONCE(*k_ptr, tmp_k);
 	} else
@@ -969,7 +965,7 @@ static int do_proc_doulongvec_minmax(const struct ctl_table *table, int dir,
 				     unsigned long convmul,
 				     unsigned long convdiv)
 {
-	unsigned long *i, *min, *max;
+	unsigned long *i ;
 	int vleft, first = 1, err = 0;
 	size_t left;
 	char *p;
@@ -981,8 +977,6 @@ static int do_proc_doulongvec_minmax(const struct ctl_table *table, int dir,
 	}
 
 	i = table->data;
-	min = table->extra1;
-	max = table->extra2;
 	vleft = table->maxlen / sizeof(unsigned long);
 	left = *lenp;
 
@@ -1014,7 +1008,7 @@ static int do_proc_doulongvec_minmax(const struct ctl_table *table, int dir,
 			}
 
 			val = convmul * val / convdiv;
-			if ((min && val < *min) || (max && val > *max)) {
+			if (!SYSCTL_IN_RANGE_ULONG(table, val)) {
 				err = -EINVAL;
 				break;
 			}
