@@ -1004,11 +1004,67 @@ static const struct attribute_group *mdio_bus_dev_groups[] = {
 	NULL,
 };
 
+/**
+ * mdio_bus_probe - probe an MDIO device
+ * @dev: device to probe
+ *
+ * Description: Take care of setting up the mdio_device structure
+ * and calling the driver to probe the device.
+ *
+ * Return: Zero if successful, negative error code on failure
+ */
+static int mdio_bus_probe(struct device *dev)
+{
+	struct mdio_device *mdiodev = to_mdio_device(dev);
+	struct device_driver *drv = dev->driver;
+	struct mdio_driver *mdiodrv = to_mdio_driver(drv);
+	int err = 0;
+
+	/* Deassert the reset signal */
+	mdio_device_reset(mdiodev, 0);
+
+	if (mdiodrv->probe) {
+		err = mdiodrv->probe(mdiodev);
+		if (err) {
+			/* Assert the reset signal */
+			mdio_device_reset(mdiodev, 1);
+		}
+	}
+
+	return err;
+}
+
+static void mdio_bus_remove(struct device *dev)
+{
+	struct mdio_device *mdiodev = to_mdio_device(dev);
+	struct device_driver *drv = dev->driver;
+	struct mdio_driver *mdiodrv = to_mdio_driver(drv);
+
+	if (mdiodrv->remove)
+		mdiodrv->remove(mdiodev);
+
+	/* Assert the reset signal */
+	mdio_device_reset(mdiodev, 1);
+}
+
+static void mdio_bus_shutdown(struct device *dev)
+{
+	struct mdio_device *mdiodev = to_mdio_device(dev);
+	struct device_driver *drv = dev->driver;
+	struct mdio_driver *mdiodrv = to_mdio_driver(drv);
+
+	if (drv && mdiodrv->shutdown)
+		mdiodrv->shutdown(mdiodev);
+}
+
 const struct bus_type mdio_bus_type = {
 	.name		= "mdio_bus",
 	.dev_groups	= mdio_bus_dev_groups,
 	.match		= mdio_bus_match,
 	.uevent		= mdio_uevent,
+	.probe		= mdio_bus_probe,
+	.remove		= mdio_bus_remove,
+	.shutdown	= mdio_bus_shutdown,
 };
 EXPORT_SYMBOL(mdio_bus_type);
 
