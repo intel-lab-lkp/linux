@@ -621,6 +621,7 @@
 			interrupts = <GIC_SPI 144 IRQ_TYPE_LEVEL_LOW>,
 				     <GIC_SPI 145 IRQ_TYPE_LEVEL_LOW>;
 			interrupt-names = "afe", "asys";
+			power-domains = <&scpsys MT7622_POWER_DOMAIN_AUDIO>;
 
 			clocks = <&infracfg CLK_INFRA_AUDIO_PD>,
 				 <&topckgen CLK_TOP_AUD1_SEL>,
