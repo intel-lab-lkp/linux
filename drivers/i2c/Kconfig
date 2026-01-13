@@ -134,6 +134,12 @@ config I2C_SLAVE_TESTUNIT
 	  multi-master, SMBus Host Notify, etc. Please read
 	  Documentation/i2c/slave-testunit-backend.rst for further details.
 
+config I2C_TARGET_ARP
+	tristate "SMBus ARP target mode test driver"
+	help
+	  This backend makes Linux respond to SMBus Address Resolution Protocol
+	  commands.
+
 endif
 
 config I2C_DEBUG_CORE
