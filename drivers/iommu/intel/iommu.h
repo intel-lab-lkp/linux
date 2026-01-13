@@ -546,6 +546,16 @@ struct pasid_entry;
 struct pasid_state_entry;
 struct page_req_dsc;
 
+static __always_inline void intel_iommu_atomic128_set(u128 *ptr, u128 val)
+{
+	/*
+	 * Use the cmpxchg16b instruction for 128-bit atomicity. As updates
+	 * are serialized by a spinlock, we use the local (unlocked) variant
+	 * to avoid unnecessary bus locking overhead.
+	 */
+	arch_cmpxchg128_local(ptr, *ptr, val);
+}
+
 /*
  * 0: Present
  * 1-11: Reserved
@@ -569,8 +579,13 @@ struct root_entry {
  * 8-23: domain id
  */
 struct context_entry {
-	u64 lo;
-	u64 hi;
+	union {
+		struct {
+			u64 lo;
+			u64 hi;
+		};
+		u128 val128;
+	};
 };
 
 struct iommu_domain_info {
@@ -946,8 +961,7 @@ static inline int context_domain_id(struct context_entry *c)
 
 static inline void context_clear_entry(struct context_entry *context)
 {
-	context->lo = 0;
-	context->hi = 0;
+	intel_iommu_atomic128_set(&context->val128, 0);
 }
 
 #ifdef CONFIG_INTEL_IOMMU

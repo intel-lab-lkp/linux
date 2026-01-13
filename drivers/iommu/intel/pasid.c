@@ -978,23 +978,23 @@ static int context_entry_set_pasid_table(struct context_entry *context,
 	struct device_domain_info *info = dev_iommu_priv_get(dev);
 	struct pasid_table *table = info->pasid_table;
 	struct intel_iommu *iommu = info->iommu;
+	struct context_entry new = {0};
 	unsigned long pds;
 
-	context_clear_entry(context);
-
 	pds = context_get_sm_pds(table);
-	context->lo = (u64)virt_to_phys(table->table) | context_pdts(pds);
-	context_set_sm_rid2pasid(context, IOMMU_NO_PASID);
+	new.lo = (u64)virt_to_phys(table->table) | context_pdts(pds);
+	context_set_sm_rid2pasid(&new, IOMMU_NO_PASID);
 
 	if (info->ats_supported)
-		context_set_sm_dte(context);
+		context_set_sm_dte(&new);
 	if (info->pasid_supported)
-		context_set_pasid(context);
+		context_set_pasid(&new);
 	if (info->pri_supported)
-		context_set_sm_pre(context);
+		context_set_sm_pre(&new);
 
-	context_set_fault_enable(context);
-	context_set_present(context);
+	context_set_fault_enable(&new);
+	context_set_present(&new);
+	intel_iommu_atomic128_set(&context->val128, new.val128);
 	__iommu_flush_cache(iommu, context, sizeof(*context));
 
 	return 0;

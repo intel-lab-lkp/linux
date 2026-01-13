@@ -1147,8 +1147,8 @@ static int domain_context_mapping_one(struct dmar_domain *domain,
 			domain_lookup_dev_info(domain, iommu, bus, devfn);
 	u16 did = domain_id_iommu(domain, iommu);
 	int translation = CONTEXT_TT_MULTI_LEVEL;
+	struct context_entry *context, new = {0};
 	struct pt_iommu_vtdss_hw_info pt_info;
-	struct context_entry *context;
 	int ret;
 
 	if (WARN_ON(!intel_domain_is_ss_paging(domain)))
@@ -1170,19 +1170,19 @@ static int domain_context_mapping_one(struct dmar_domain *domain,
 		goto out_unlock;
 
 	copied_context_tear_down(iommu, context, bus, devfn);
-	context_clear_entry(context);
-	context_set_domain_id(context, did);
+	context_set_domain_id(&new, did);
 
 	if (info && info->ats_supported)
 		translation = CONTEXT_TT_DEV_IOTLB;
 	else
 		translation = CONTEXT_TT_MULTI_LEVEL;
 
-	context_set_address_root(context, pt_info.ssptptr);
-	context_set_address_width(context, pt_info.aw);
-	context_set_translation_type(context, translation);
-	context_set_fault_enable(context);
-	context_set_present(context);
+	context_set_address_root(&new, pt_info.ssptptr);
+	context_set_address_width(&new, pt_info.aw);
+	context_set_translation_type(&new, translation);
+	context_set_fault_enable(&new);
+	context_set_present(&new);
+	intel_iommu_atomic128_set(&context->val128, new.val128);
 	if (!ecap_coherent(iommu->ecap))
 		clflush_cache_range(context, sizeof(*context));
 	context_present_cache_flush(iommu, did, bus, devfn);
@@ -3771,8 +3771,8 @@ err_unwind:
 static int context_setup_pass_through(struct device *dev, u8 bus, u8 devfn)
 {
 	struct device_domain_info *info = dev_iommu_priv_get(dev);
+	struct context_entry *context, new = {0};
 	struct intel_iommu *iommu = info->iommu;
-	struct context_entry *context;
 
 	spin_lock(&iommu->lock);
 	context = iommu_context_addr(iommu, bus, devfn, 1);
@@ -3787,17 +3787,17 @@ static int context_setup_pass_through(struct device *dev, u8 bus, u8 devfn)
 	}
 
 	copied_context_tear_down(iommu, context, bus, devfn);
-	context_clear_entry(context);
-	context_set_domain_id(context, FLPT_DEFAULT_DID);
+	context_set_domain_id(&new, FLPT_DEFAULT_DID);
 
 	/*
 	 * In pass through mode, AW must be programmed to indicate the largest
 	 * AGAW value supported by hardware. And ASR is ignored by hardware.
 	 */
-	context_set_address_width(context, iommu->msagaw);
-	context_set_translation_type(context, CONTEXT_TT_PASS_THROUGH);
-	context_set_fault_enable(context);
-	context_set_present(context);
+	context_set_address_width(&new, iommu->msagaw);
+	context_set_translation_type(&new, CONTEXT_TT_PASS_THROUGH);
+	context_set_fault_enable(&new);
+	context_set_present(&new);
+	intel_iommu_atomic128_set(&context->val128, new.val128);
 	if (!ecap_coherent(iommu->ecap))
 		clflush_cache_range(context, sizeof(*context));
 	context_present_cache_flush(iommu, FLPT_DEFAULT_DID, bus, devfn);
