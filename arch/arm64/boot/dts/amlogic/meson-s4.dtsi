@@ -833,7 +833,7 @@
 			reg = <0x0 0xfe08a000 0x0 0x800>;
 			interrupts = <GIC_SPI 177 IRQ_TYPE_EDGE_RISING>;
 			clocks = <&clkc_periphs CLKID_SDEMMC_B>,
-				 <&clkc_periphs CLKID_SD_EMMC_B>,
+				 <&xtal>,
 				 <&clkc_pll CLKID_FCLK_DIV2>;
 			clock-names = "core", "clkin0", "clkin1";
 			resets = <&reset RESET_SD_EMMC_B>;
