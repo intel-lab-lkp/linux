@@ -7,6 +7,16 @@ use crate::str::{CStr, CStrExt as _};
 use crate::sync::Arc;
 use core::marker::PhantomData;
 
+/// Type-erased parent that keeps either an `Entry` or `LookupEntry` alive.
+///
+/// This allows an `Entry` to have either type of parent while maintaining proper
+/// lifetime management. The parent is kept alive via `Arc` reference counting.
+#[allow(dead_code)]
+pub(crate) enum DynParent {
+    /// Parent is an owned `Entry` (will be removed on drop).
+    Entry(Arc<Entry<'static>>),
+}
+
 /// Owning handle to a DebugFS entry.
 ///
 /// # Invariants
@@ -15,7 +25,7 @@ use core::marker::PhantomData;
 pub(crate) struct Entry<'a> {
     entry: *mut bindings::dentry,
     // If we were created with an owning parent, this is the keep-alive
-    _parent: Option<Arc<Entry<'static>>>,
+    _parent: Option<DynParent>,
     // If we were created with a non-owning parent, this prevents us from outliving it
     _phantom: PhantomData<&'a ()>,
 }
@@ -41,7 +51,7 @@ impl Entry<'static> {
 
         Entry {
             entry,
-            _parent: parent,
+            _parent: parent.map(DynParent::Entry),
             _phantom: PhantomData,
         }
     }
@@ -74,7 +84,7 @@ impl Entry<'static> {
 
         Entry {
             entry,
-            _parent: Some(parent),
+            _parent: Some(DynParent::Entry(parent)),
             _phantom: PhantomData,
         }
     }
