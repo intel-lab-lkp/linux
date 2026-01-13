@@ -845,7 +845,7 @@ static int tnt4882_allocate_private(struct gpib_board *board)
 
 	board->private_data = kmalloc(sizeof(struct tnt4882_priv), GFP_KERNEL);
 	if (!board->private_data)
-		return -1;
+		return -ENOMEM;
 	tnt_priv = board->private_data;
 	memset(tnt_priv, 0, sizeof(struct tnt4882_priv));
 	init_nec7210_private(&tnt_priv->nec7210_priv);
@@ -916,8 +916,9 @@ static int ni_pci_attach(struct gpib_board *board, const struct gpib_board_confi
 
 	board->status = 0;
 
-	if (tnt4882_allocate_private(board))
-		return -ENOMEM;
+	retval = tnt4882_allocate_private(board);
+	if (retval < 0)
+		return retval;
 	tnt_priv = board->private_data;
 	nec_priv = &tnt_priv->nec7210_priv;
 	nec_priv->type = TNT4882;
@@ -1039,8 +1040,9 @@ static int ni_isa_attach_common(struct gpib_board *board, const struct gpib_boar
 
 	board->status = 0;
 
-	if (tnt4882_allocate_private(board))
-		return -ENOMEM;
+	retval = tnt4882_allocate_private(board);
+	if (retval < 0)
+		return retval;
 	tnt_priv = board->private_data;
 	nec_priv = &tnt_priv->nec7210_priv;
 	nec_priv->type = chipset;
@@ -1725,8 +1727,9 @@ static int ni_pcmcia_attach(struct gpib_board *board, const struct gpib_board_co
 
 	board->status = 0;
 
-	if (tnt4882_allocate_private(board))
-		return -ENOMEM;
+	retval = tnt4882_allocate_private(board);
+	if (retval < 0)
+		return retval;
 
 	tnt_priv = board->private_data;
 	nec_priv = &tnt_priv->nec7210_priv;
