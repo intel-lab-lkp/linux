@@ -165,9 +165,14 @@ static inline void *proc_sys_poll_event(struct ctl_table_poll *poll)
 	struct ctl_table_poll name = __CTL_TABLE_POLL_INITIALIZER(name)
 
 #define SYSCTL_IN_RANGE(tbl, val, type) \
-	((tbl) && \
-	 (!(tbl)->extra1 || (*(type *)(tbl)->extra1 <= (type)(val))) && \
-	 (!(tbl)->extra2 || (*(type *)(tbl)->extra2 >= (type)(val))))
+	((tbl) && ({ \
+		type v = (type)(val); \
+		!((tbl)->min_is_value ? (tbl)->min > (unsigned long)v \
+				: (tbl)->extra1 && *(type*)(tbl)->extra1 > v) \
+		&& !((tbl)->max_is_value ? (tbl)->max < (unsigned long)v \
+				: (tbl)->extra2 && *(type*)(tbl)->extra2 < v); \
+		}) \
+	)
 
 #define SYSCTL_IN_RANGE_INT(tbl, val)           SYSCTL_IN_RANGE(tbl, val, int)
 #define SYSCTL_IN_RANGE_LONG(tbl, val)          SYSCTL_IN_RANGE(tbl, val, long)
@@ -180,11 +185,51 @@ struct ctl_table {
 	void *data;
 	int maxlen;
 	umode_t mode;
+
+	/**
+	 * Range bound type flags
+	 * - min_is_value: 1 = min field is direct value, 0 = extra1 is pointer
+	 * - max_is_value: 1 = max field is direct value, 0 = extra2 is pointer
+	 */
+	union {
+		struct {
+			unsigned char min_is_value : 1;  /* bit 0: min type */
+			unsigned char max_is_value : 1;  /* bit 1: max type */
+			unsigned char reserved     : 6;  /* bits 2-7: reserved */
+		};
+		unsigned char flags;
+	};
+
 	proc_handler *proc_handler;	/* Callback for text formatting */
 	struct ctl_table_poll *poll;
-	void *extra1;
-	void *extra2;
+
+	/* Range bounds: either pointers or direct values */
+	union {
+		struct {
+			void *extra1;          /* min as pointer */
+			void *extra2;          /* max as pointer */
+		};
+		struct {
+			unsigned long min;     /* min as direct value */
+			unsigned long max;     /* max as direct value */
+		};
+	};
 } __randomize_layout;
+
+/* Pointer detection using _Generic */
+#define IS_PTR(x) _Generic((x), \
+        char*:1, short*:1, int*:1, long*:1, \
+        unsigned char*:1, unsigned short*:1, unsigned int*:1, unsigned long*:1, \
+        const char*:1, const int*:1, const long*:1, \
+        void*:1, const void*:1, default:0)
+
+/* Auto-detect range flags: 0=ptr_ptr, 1=val_ptr, 2=ptr_val, 3=val_val */
+#define RANGE_FLAGS(smin, smax)  ((!IS_PTR(smin)) | ((!IS_PTR(smax)) << 1))
+
+/* Type-specific checks */
+#define CHECK_INT(tbl, val)     CHECK(tbl, val, int)
+#define CHECK_UINT(tbl, val)    CHECK(tbl, val, unsigned int)
+#define CHECK_LONG(tbl, val)    CHECK(tbl, val, long)
 
 #define __SYSCTL_ENTRY(NAME, DATA, TYPE, MODE, HANDLER, SMIN, SMAX)\
 	{							\
@@ -193,8 +238,9 @@ struct ctl_table {
 		.maxlen		= sizeof(TYPE),			\
 		.mode		= MODE,				\
 		.proc_handler	= HANDLER,			\
-		.extra1		= SMIN,				\
-		.extra2		= SMAX,				\
+		.flags		= RANGE_FLAGS(SMIN, SMAX),      \
+		.min		= (unsigned long)(SMIN),        \
+		.max		= (unsigned long)(SMAX),        \
 	}
 
 #define SYSCTL_ENTRY(NAME, DATA, TYPE, MODE)			\

@@ -300,6 +300,147 @@ static void sysctl_test_api_dointvec_write_single_greater_int_max(
 	KUNIT_EXPECT_EQ(test, 0, *((int *)table.data));
 }
 
+/*
+ * Test that writing values within the specified range succeeds,
+ * and ensures out-of-range writes are correctly rejected.
+ */
+static void sysctl_test_api_dointvec_write_range_check(struct kunit *test)
+{
+	int data = 0;
+	size_t len;
+	loff_t pos;
+	char *buffer;
+	char __user *user_buffer;
+
+	/* Prepare bound variables for pointer modes */
+	int min_bounds[] = {10, 0, 15, 0};
+	int max_bounds[] = {90, 75, 0, 0};
+
+	/* Initialize test tables using macro */
+	struct ctl_table test_cases[] = {
+		/* PTR_PTR: both pointers */
+		SYSCTL_RANGE_ENTRY("ptr_ptr", &data, int, 0644,
+				&min_bounds[0], &max_bounds[0]),
+		/* VAL_PTR: min is value, max is pointer */
+		SYSCTL_RANGE_ENTRY("val_ptr", &data, int, 0644,
+				25, &max_bounds[1]),
+		/* PTR_VAL: min is pointer, max is value */
+		SYSCTL_RANGE_ENTRY("ptr_val", &data, int, 0644,
+				&min_bounds[2], 85),
+		/* VAL_VAL: both values */
+		SYSCTL_RANGE_ENTRY("val_val", &data, int, 0644,
+				20, 80),
+	};
+
+	/* Test parameters for each mode */
+	const struct {
+		int min, max;
+		const char *valid;
+		const char *below_min;
+		const char *above_max;
+	} test_params[] = {
+		{10, 90, "50", "5",  "95"},  /* PTR_PTR */
+		{25, 75, "50", "20", "80"},  /* VAL_PTR */
+		{15, 85, "50", "10", "90"},  /* PTR_VAL */
+		{20, 80, "50", "15", "85"},  /* VAL_VAL */
+	};
+
+	for (int i = 0; i < 4; i++) {
+		struct ctl_table *table = &test_cases[i];
+		const typeof(test_params[0]) *param = &test_params[i];
+
+		/* Verify flags auto-detection */
+		KUNIT_EXPECT_EQ(test, table->flags, i);
+		KUNIT_EXPECT_EQ(test, (int)table->min_is_value, (i & 1) != 0);
+		KUNIT_EXPECT_EQ(test, (int)table->max_is_value, (i & 2) != 0);
+
+		/* Verify union access */
+		if (table->min_is_value) {
+			KUNIT_EXPECT_EQ(test, table->min, (unsigned long)param->min);
+		} else {
+			KUNIT_EXPECT_PTR_EQ(test, table->extra1, &min_bounds[i]);
+			KUNIT_EXPECT_EQ(test, *(int *)table->extra1, param->min);
+		}
+
+		if (table->max_is_value) {
+			KUNIT_EXPECT_EQ(test, table->max, (unsigned long)param->max);
+		} else {
+			KUNIT_EXPECT_PTR_EQ(test, table->extra2, &max_bounds[i]);
+			KUNIT_EXPECT_EQ(test, *(int *)table->extra2, param->max);
+		}
+
+		/* Test valid value in range */
+		data = 0;
+		len = strlen(param->valid);
+		pos = 0;
+		buffer = kunit_kzalloc(test, len, GFP_USER);
+		user_buffer = (char __user *)buffer;
+		memcpy(buffer, param->valid, len);
+
+		KUNIT_EXPECT_EQ(test, 0, proc_dointvec_minmax(table, KUNIT_PROC_WRITE,
+					user_buffer, &len, &pos));
+		KUNIT_EXPECT_EQ(test, strlen(param->valid), len);
+		KUNIT_EXPECT_EQ(test, strlen(param->valid), pos);
+		KUNIT_EXPECT_EQ(test, 50, data);
+
+		/* Test min boundary */
+		data = 0;
+		char min_str[16];
+		snprintf(min_str, sizeof(min_str), "%d", param->min);
+		len = strlen(min_str);
+		pos = 0;
+		buffer = kunit_kzalloc(test, len, GFP_USER);
+		user_buffer = (char __user *)buffer;
+		memcpy(buffer, min_str, len);
+
+		KUNIT_EXPECT_EQ(test, 0, proc_dointvec_minmax(table, KUNIT_PROC_WRITE,
+					user_buffer, &len, &pos));
+		KUNIT_EXPECT_EQ(test, strlen(min_str), len);
+		KUNIT_EXPECT_EQ(test, strlen(min_str), pos);
+		KUNIT_EXPECT_EQ(test, param->min, data);
+
+		/* Test max boundary */
+		data = 0;
+		char max_str[16];
+		snprintf(max_str, sizeof(max_str), "%d", param->max);
+		len = strlen(max_str);
+		pos = 0;
+		buffer = kunit_kzalloc(test, len, GFP_USER);
+		user_buffer = (char __user *)buffer;
+		memcpy(buffer, max_str, len);
+
+		KUNIT_EXPECT_EQ(test, 0, proc_dointvec_minmax(table, KUNIT_PROC_WRITE,
+					user_buffer, &len, &pos));
+		KUNIT_EXPECT_EQ(test, strlen(max_str), len);
+		KUNIT_EXPECT_EQ(test, strlen(max_str), pos);
+		KUNIT_EXPECT_EQ(test, param->max, data);
+
+		/* Test below min - should fail */
+		data = 0;
+		len = strlen(param->below_min);
+		pos = 0;
+		buffer = kunit_kzalloc(test, len, GFP_USER);
+		user_buffer = (char __user *)buffer;
+		memcpy(buffer, param->below_min, len);
+
+		KUNIT_EXPECT_EQ(test, -EINVAL, proc_dointvec_minmax(table, KUNIT_PROC_WRITE,
+					user_buffer, &len, &pos));
+		KUNIT_EXPECT_EQ(test, 0, data);
+
+		/* Test above max - should fail */
+		data = 0;
+		len = strlen(param->above_max);
+		pos = 0;
+		buffer = kunit_kzalloc(test, len, GFP_USER);
+		user_buffer = (char __user *)buffer;
+		memcpy(buffer, param->above_max, len);
+
+		KUNIT_EXPECT_EQ(test, -EINVAL, proc_dointvec_minmax(table, KUNIT_PROC_WRITE,
+					user_buffer, &len, &pos));
+		KUNIT_EXPECT_EQ(test, 0, data);
+	}
+}
+
 static struct kunit_case sysctl_test_cases[] = {
 	KUNIT_CASE(sysctl_test_api_dointvec_null_tbl_data),
 	KUNIT_CASE(sysctl_test_api_dointvec_table_maxlen_unset),
@@ -311,6 +452,7 @@ static struct kunit_case sysctl_test_cases[] = {
 	KUNIT_CASE(sysctl_test_dointvec_write_happy_single_negative),
 	KUNIT_CASE(sysctl_test_api_dointvec_write_single_less_int_min),
 	KUNIT_CASE(sysctl_test_api_dointvec_write_single_greater_int_max),
+	KUNIT_CASE(sysctl_test_api_dointvec_write_range_check),
 	{}
 };
 
