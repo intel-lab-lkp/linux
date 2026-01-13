@@ -18627,12 +18627,16 @@ L:	linux-kernel@vger.kernel.org
 L:	linux-i3c-owner@lists.infradead.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/mfd/nxp,p3h2840-i3c-hub.yaml
+F:	drivers/i3c/Kconfig
+F:	drivers/i3c/Makefile
+F:	drivers/i3c/hub/*
 F:	drivers/mfd/Kconfig
 F:	drivers/mfd/Makefile
 F:	drivers/mfd/p3h2840.c
 F:	drivers/regulator/Kconfig
 F:	drivers/regulator/Makefile
 F:	drivers/regulator/p3h2840_i3c_hub_regulator.c
+F:	include/linux/i3c/device.h
 F:	include/linux/mfd/p3h2840.h
 
 NXP SGTL5000 DRIVER
