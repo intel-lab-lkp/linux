@@ -317,6 +317,15 @@ int strncmp(const char *cs, const char *ct, size_t count)
 EXPORT_SYMBOL(strncmp);
 #endif
 
+char *__generic_strchr(const char *s, int c)
+{
+	for (; *s != (char)c; ++s)
+		if (*s == '\0')
+			return NULL;
+	return (char *)s;
+}
+EXPORT_SYMBOL(__generic_strchr);
+
 #ifndef __HAVE_ARCH_STRCHR
 /**
  * strchr - Find the first occurrence of a character in a string
@@ -328,10 +337,7 @@ EXPORT_SYMBOL(strncmp);
  */
 char *strchr(const char *s, int c)
 {
-	for (; *s != (char)c; ++s)
-		if (*s == '\0')
-			return NULL;
-	return (char *)s;
+	return __generic_strchr(s, c);
 }
 EXPORT_SYMBOL(strchr);
 #endif
