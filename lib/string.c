@@ -430,14 +430,20 @@ size_t strlen(const char *s)
 EXPORT_SYMBOL(strlen);
 #endif
 
-#ifndef __HAVE_ARCH_STRNLEN
-size_t strnlen(const char *s, size_t count)
+size_t __generic_strnlen(const char *s, size_t count)
 {
 	const char *sc;
 
 	for (sc = s; count-- && *sc != '\0'; ++sc)
 		/* nothing */;
 	return sc - s;
+}
+EXPORT_SYMBOL(__generic_strnlen);
+
+#ifndef __HAVE_ARCH_STRNLEN
+size_t strnlen(const char *s, size_t count)
+{
+	return __generic_strnlen(s, count);
 }
 EXPORT_SYMBOL(strnlen);
 #endif

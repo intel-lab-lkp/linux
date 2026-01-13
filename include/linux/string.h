@@ -201,6 +201,7 @@ extern __kernel_size_t __generic_strlen(const char *);
 #ifndef __HAVE_ARCH_STRLEN
 extern __kernel_size_t strlen(const char *);
 #endif
+extern __kernel_size_t __generic_strnlen(const char *, __kernel_size_t);
 #ifndef __HAVE_ARCH_STRNLEN
 extern __kernel_size_t strnlen(const char *,__kernel_size_t);
 #endif
