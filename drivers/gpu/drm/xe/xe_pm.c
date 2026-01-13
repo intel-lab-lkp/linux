@@ -169,7 +169,7 @@ static void xe_rpm_lockmap_release(const struct xe_device *xe)
 
 static void xe_pm_suspend_prepare(struct xe_device *xe)
 {
-	if (pm_suspend_target_state == PM_SUSPEND_TO_IDLE)
+	if (pm_suspend_default_s2idle())
 		xe_pm_d3cold_target_state_toggle(xe);
 	else
 		xe->d3cold.target_state = XE_D3COLD_OFF;
@@ -191,8 +191,6 @@ int xe_pm_suspend(struct xe_device *xe, bool hibernation)
 	drm_dbg(&xe->drm, "Suspending device for %s\n", hibernation ? "hibernation" : "S3/S2idle");
 	xe_pm_block_begin_signalling();
 	trace_xe_pm_suspend(xe, __builtin_return_address(0));
-
-	xe_pm_suspend_prepare(xe);
 
 	err = xe_pxp_pm_suspend(xe->pxp);
 	if (err)
@@ -558,8 +556,12 @@ static int xe_pm_notifier_callback(struct notifier_block *nb,
 	int err = 0;
 
 	switch (action) {
-	case PM_HIBERNATION_PREPARE:
 	case PM_SUSPEND_PREPARE:
+		xe_pm_suspend_prepare(xe);
+		if (xe->d3cold.target_state == XE_D3COLD_VRSR)
+			break;
+		fallthrough;
+	case PM_HIBERNATION_PREPARE:
 	{
 		struct xe_validation_ctx ctx;
 
@@ -584,8 +586,11 @@ static int xe_pm_notifier_callback(struct notifier_block *nb,
 		xe_pm_block_end_signalling();
 		break;
 	}
-	case PM_POST_HIBERNATION:
 	case PM_POST_SUSPEND:
+		if (xe->d3cold.target_state == XE_D3COLD_VRSR)
+			break;
+		fallthrough;
+	case PM_POST_HIBERNATION:
 		complete_all(&xe->pm_block);
 		xe_pm_wake_rebind_workers(xe);
 		xe_bo_notifier_unprepare_all_pinned(xe);
