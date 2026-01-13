@@ -96,7 +96,7 @@ static u64 get_id_range(size_t number_of_ids, atomic64_t *const counter,
 	 * We should return at least 1 ID, and we may need a set of consecutive
 	 * ones (e.g. to generate a set of inodes).
 	 */
-	if (WARN_ON_ONCE(number_of_ids <= 0))
+	if (WARN_ON_ONCE(number_of_ids == 0))
 		number_of_ids = 1;
 
 	/*
