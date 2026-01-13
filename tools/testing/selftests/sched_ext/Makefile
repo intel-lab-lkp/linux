@@ -184,6 +184,9 @@ auto-test-targets :=			\
 	select_cpu_dispatch_dbl_dsp	\
 	select_cpu_vtime		\
 	test_example			\
+	dsq_operations			\
+	concurrent_pressure		\
+	error_handling			\
 
 testcase-targets := $(addsuffix .o,$(addprefix $(SCXOBJ_DIR)/,$(auto-test-targets)))
 
