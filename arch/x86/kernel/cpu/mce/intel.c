@@ -395,11 +395,15 @@ void cmci_disable_bank(int bank)
 }
 
 /* Bank polling function when CMCI is disabled. */
-static void cmci_mc_poll_banks(void)
+static bool cmci_mc_poll_banks(void)
 {
+	bool logged;
+
 	spin_lock(&cmci_poll_lock);
-	machine_check_poll(0, this_cpu_ptr(&mce_poll_banks));
+	logged = machine_check_poll(0, this_cpu_ptr(&mce_poll_banks));
 	spin_unlock(&cmci_poll_lock);
+
+	return logged;
 }
 
 void intel_init_cmci(void)

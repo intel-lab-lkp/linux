@@ -303,7 +303,7 @@ enum mcp_flags {
 	MCP_QUEUE_LOG	= BIT(2),	/* only queue to genpool */
 };
 
-void machine_check_poll(enum mcp_flags flags, mce_banks_t *b);
+bool machine_check_poll(enum mcp_flags flags, mce_banks_t *b);
 
 DECLARE_PER_CPU(struct mce, injectm);
 
