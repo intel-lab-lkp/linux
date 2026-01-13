@@ -645,6 +645,9 @@ static int ad9467_backend_testmode_on(struct ad9467_state *st,
 	};
 	int ret;
 
+	if (!iio_backend_caps(st->back, IIO_BACKEND_CAP_TEST_PATTERNS))
+		return 0;
+
 	ret = iio_backend_data_format_set(st->back, chan, &data);
 	if (ret)
 		return ret;
@@ -664,6 +667,9 @@ static int ad9467_backend_testmode_off(struct ad9467_state *st,
 		.sign_extend = true,
 	};
 	int ret;
+
+	if (!iio_backend_caps(st->back, IIO_BACKEND_CAP_TEST_PATTERNS))
+		return 0;
 
 	ret = iio_backend_chan_disable(st->back, chan);
 	if (ret)
@@ -806,6 +812,9 @@ static int ad9467_calibrate(struct ad9467_state *st)
 	struct device *dev = &st->spi->dev;
 	bool invert = false, stat;
 	int ret;
+
+	if (!iio_backend_caps(st->back, IIO_BACKEND_CAP_CALIBRATION))
+		return 0;
 
 	/* all points invalid */
 	bitmap_fill(st->calib_map, st->calib_map_size);
