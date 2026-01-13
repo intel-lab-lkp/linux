@@ -60,6 +60,8 @@ static inline int __i2c_check_suspended(struct i2c_adapter *adap)
 	return 0;
 }
 
+int i2c_check_addr_busy(struct i2c_adapter *adapter, int addr);
+
 #ifdef CONFIG_ACPI
 void i2c_acpi_register_devices(struct i2c_adapter *adap);
 
@@ -106,3 +108,9 @@ static inline int i2c_setup_smbus_alert(struct i2c_adapter *adap)
 	return 0;
 }
 #endif
+
+const struct smbus_device_id *i2c_smbus_match_id(const struct i2c_client *client,
+						 const struct smbus_device_id *id);
+int i2c_smbus_arp_detect(struct i2c_adapter *adapter, u8 target_address);
+int i2c_smbus_arp_probe(struct i2c_adapter *adapter);
+void i2c_smbus_arp_remove(struct i2c_adapter *adapter);

@@ -147,6 +147,14 @@ int main(void)
 	DEVID(i2c_device_id);
 	DEVID_FIELD(i2c_device_id, name);
 
+	DEVID(smbus_device_id);
+	DEVID_FIELD(smbus_device_id, vendor);
+	DEVID_FIELD(smbus_device_id, device);
+	DEVID_FIELD(smbus_device_id, interface);
+	DEVID_FIELD(smbus_device_id, subvendor);
+	DEVID_FIELD(smbus_device_id, subdevice);
+	DEVID_FIELD(smbus_device_id, vendor_specific_id);
+
 	DEVID(i3c_device_id);
 	DEVID_FIELD(i3c_device_id, match_flags);
 	DEVID_FIELD(i3c_device_id, dcr);

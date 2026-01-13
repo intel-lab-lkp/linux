@@ -480,6 +480,19 @@ struct i2c_device_id {
 	kernel_ulong_t driver_data;	/* Data private to the driver */
 };
 
+#define SMBUS_ANY_ID			0xffff
+#define SMBUS_ANY_VENDOR_SPECIFIC_ID	0xffffffff
+
+struct smbus_device_id {
+	__u16 vendor;
+	__u16 device;
+	__u16 interface;
+	__u16 subvendor;
+	__u16 subdevice;
+	__u32 vendor_specific_id;
+	kernel_ulong_t driver_data;	/* Data private to the driver */
+};
+
 /* pci_epf */
 
 #define PCI_EPF_NAME_SIZE	20
