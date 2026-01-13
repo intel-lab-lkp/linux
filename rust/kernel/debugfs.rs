@@ -35,6 +35,18 @@ mod entry;
 #[cfg(CONFIG_DEBUG_FS)]
 use entry::Entry;
 
+/// Trait for DebugFS directory operations.
+///
+/// This trait abstracts the core operations that can be performed on a DebugFS directory,
+/// allowing for alternative implementations (e.g., for testing).
+pub trait Directory: Clone + Sized {
+    /// Create a new directory at the DebugFS root.
+    fn new(name: &CStr) -> Self;
+
+    /// Creates a subdirectory within this directory.
+    fn subdir(&self, name: &CStr) -> Self;
+}
+
 /// Owning handle to a DebugFS directory.
 ///
 /// The directory in the filesystem represented by [`Dir`] will be removed when handle has been
@@ -96,7 +108,9 @@ impl Dir {
             } ? E
         }
     }
+}
 
+impl Directory for Dir {
     /// Create a new directory in DebugFS at the root.
     ///
     /// # Examples
@@ -106,7 +120,7 @@ impl Dir {
     /// # use kernel::debugfs::Dir;
     /// let debugfs = Dir::new(c_str!("parent"));
     /// ```
-    pub fn new(name: &CStr) -> Self {
+    fn new(name: &CStr) -> Self {
         Dir::create(name, None)
     }
 
@@ -120,9 +134,12 @@ impl Dir {
     /// let parent = Dir::new(c_str!("parent"));
     /// let child = parent.subdir(c_str!("child"));
     /// ```
-    pub fn subdir(&self, name: &CStr) -> Self {
+    fn subdir(&self, name: &CStr) -> Self {
         Dir::create(name, Some(self))
     }
+}
+
+impl Dir {
 
     /// Creates a read-only file in this directory.
     ///
