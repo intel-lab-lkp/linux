@@ -342,7 +342,7 @@ F:	drivers/acpi/arm64
 F:	include/linux/acpi_iort.h
 
 ACPI FOR RISC-V (ACPI/riscv)
-M:	Sunil V L <sunilvl@ventanamicro.com>
+M:	Sunil V L <sunilvl@oss.qualcomm.com>
 L:	linux-acpi@vger.kernel.org
 L:	linux-riscv@lists.infradead.org
 S:	Maintained
