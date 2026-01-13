@@ -15,26 +15,19 @@
 #include <uapi/linux/module.h>
 #include "internal.h"
 
-int module_sig_check(struct load_info *info, int flags)
+int module_sig_check(struct load_info *info, const u8 *sig, size_t sig_len)
 {
 	int err;
 	const char *reason;
 	const void *mod = info->hdr;
-	size_t sig_len;
-	const u8 *sig;
-	bool mangled_module = flags & (MODULE_INIT_IGNORE_MODVERSIONS |
-				       MODULE_INIT_IGNORE_VERMAGIC);
 
-	err = mod_split_sig(info->hdr, &info->len, mangled_module, &sig_len, &sig, "module");
+	err = verify_pkcs7_signature(mod, info->len, sig, sig_len,
+				     VERIFY_USE_SECONDARY_KEYRING,
+				     VERIFYING_MODULE_SIGNATURE,
+				     NULL, NULL);
 	if (!err) {
-		err = verify_pkcs7_signature(mod, info->len, sig, sig_len,
-					     VERIFY_USE_SECONDARY_KEYRING,
-					     VERIFYING_MODULE_SIGNATURE,
-					     NULL, NULL);
-		if (!err) {
-			info->sig_ok = true;
-			return 0;
-		}
+		info->sig_ok = true;
+		return 0;
 	}
 
 	/*

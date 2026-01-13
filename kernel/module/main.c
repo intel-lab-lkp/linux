@@ -3346,10 +3346,21 @@ static int early_mod_check(struct load_info *info, int flags)
 
 static int module_integrity_check(struct load_info *info, int flags)
 {
+	bool mangled_module = flags & (MODULE_INIT_IGNORE_MODVERSIONS |
+				       MODULE_INIT_IGNORE_VERMAGIC);
+	size_t sig_len;
+	const u8 *sig;
 	int err = 0;
 
+	if (IS_ENABLED(CONFIG_MODULE_SIG_POLICY)) {
+		err = mod_split_sig(info->hdr, &info->len, mangled_module,
+				    &sig_len, &sig, "module");
+		if (err)
+			return err;
+	}
+
 	if (IS_ENABLED(CONFIG_MODULE_SIG))
-		err = module_sig_check(info, flags);
+		err = module_sig_check(info, sig, sig_len);
 
 	if (err)
 		return err;
