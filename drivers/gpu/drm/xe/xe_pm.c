@@ -205,10 +205,12 @@ int xe_pm_suspend(struct xe_device *xe, bool hibernation)
 
 	xe_display_pm_suspend(xe);
 
-	/* FIXME: Super racey... */
-	err = xe_bo_evict_all(xe);
-	if (err)
-		goto err_display;
+	if (hibernation || xe->d3cold.target_state != XE_D3COLD_VRSR) {
+		/* FIXME: Super racey... */
+		err = xe_bo_evict_all(xe);
+		if (err)
+			goto err;
+	}
 
 	for_each_gt(gt, xe, id) {
 		err = xe_gt_suspend(gt);
@@ -221,6 +223,12 @@ int xe_pm_suspend(struct xe_device *xe, bool hibernation)
 	xe_display_pm_suspend_late(xe);
 
 	xe_i2c_pm_suspend(xe);
+
+	if (!hibernation && xe->d3cold.target_state == XE_D3COLD_VRSR) {
+		err = xe_pm_vrsr_enable(xe);
+		if (err)
+			goto err_display;
+	}
 
 	drm_dbg(&xe->drm, "Device suspended\n");
 	xe_pm_block_end_signalling();
@@ -264,15 +272,20 @@ int xe_pm_resume(struct xe_device *xe, bool hibernation)
 	if (err)
 		return err;
 
+	if (!hibernation && xe->d3cold.target_state == XE_D3COLD_VRSR)
+		xe_pm_vrsr_disable(xe);
+
 	xe_display_pm_resume_early(xe);
 
 	/*
 	 * This only restores pinned memory which is the memory required for the
 	 * GT(s) to resume.
 	 */
-	err = xe_bo_restore_early(xe);
-	if (err)
-		goto err;
+	if (hibernation || xe->d3cold.target_state != XE_D3COLD_VRSR) {
+		err = xe_bo_restore_early(xe);
+		if (err)
+			goto err;
+	}
 
 	xe_i2c_pm_resume(xe, true);
 
@@ -292,9 +305,11 @@ int xe_pm_resume(struct xe_device *xe, bool hibernation)
 	if (err)
 		goto err;
 
-	err = xe_bo_restore_late(xe);
-	if (err)
-		goto err;
+	if (hibernation || xe->d3cold.target_state != XE_D3COLD_VRSR) {
+		err = xe_bo_restore_late(xe);
+		if (err)
+			goto err;
+	}
 
 	xe_pxp_pm_resume(xe->pxp);
 
@@ -744,7 +759,7 @@ int xe_pm_runtime_suspend(struct xe_device *xe)
 
 	xe_display_pm_runtime_suspend(xe);
 
-	if (xe->d3cold.target_state) {
+	if (xe->d3cold.target_state == XE_D3COLD_OFF) {
 		err = xe_bo_evict_all(xe);
 		if (err)
 			goto out_resume;
@@ -761,6 +776,14 @@ int xe_pm_runtime_suspend(struct xe_device *xe)
 	xe_display_pm_runtime_suspend_late(xe);
 
 	xe_i2c_pm_suspend(xe);
+
+	if (xe->d3cold.target_state == XE_D3COLD_VRSR) {
+		err = xe_pm_vrsr_enable(xe);
+		if (err) {
+			drm_err(&xe->drm, "Failed to enable VRSR: %d\n", err);
+			goto out_resume;
+		}
+	}
 
 	xe_rpm_lockmap_release(xe);
 	xe_pm_write_callback_task(xe, NULL);
@@ -793,6 +816,9 @@ int xe_pm_runtime_resume(struct xe_device *xe)
 
 	xe_rpm_lockmap_acquire(xe);
 
+	if (xe->d3cold.target_state == XE_D3COLD_VRSR)
+		xe_pm_vrsr_disable(xe);
+
 	if (xe->d3cold.target_state) {
 		for_each_gt(gt, xe, id)
 			xe_gt_idle_disable_c6(gt);
@@ -802,7 +828,9 @@ int xe_pm_runtime_resume(struct xe_device *xe)
 			goto out;
 
 		xe_display_pm_resume_early(xe);
+	}
 
+	if (xe->d3cold.target_state == XE_D3COLD_OFF) {
 		/*
 		 * This only restores pinned memory which is the memory
 		 * required for the GT(s) to resume.
@@ -830,7 +858,7 @@ int xe_pm_runtime_resume(struct xe_device *xe)
 	if (err)
 		goto out;
 
-	if (xe->d3cold.target_state) {
+	if (xe->d3cold.target_state == XE_D3COLD_OFF) {
 		err = xe_bo_restore_late(xe);
 		if (err)
 			goto out;
