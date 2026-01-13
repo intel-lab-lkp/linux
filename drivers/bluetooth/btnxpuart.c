@@ -26,6 +26,7 @@
 #include <crypto/sha2.h>
 #include <crypto/hash.h>
 #include <crypto/kpp.h>
+#include <crypto/ecdh.h>
 
 #include <net/bluetooth/bluetooth.h>
 #include <net/bluetooth/hci_core.h>
@@ -124,6 +125,8 @@
 #define HCI_NXP_IND_RESET	0xfcfc
 /* Bluetooth vendor command: Trigger FW dump */
 #define HCI_NXP_TRIGGER_DUMP	0xfe91
+/* Bluetooth vendor command: Secure Host Interface */
+#define HCI_NXP_SHI_ENCRYPT	0xfe9c
 
 /* Bluetooth Power State : Vendor cmd params */
 #define BT_PS_ENABLE			0x02
@@ -386,6 +389,55 @@ union nxp_set_bd_addr_payload {
 		u8 param[6];
 	} __packed data;
 	u8 buf[8];
+};
+
+/* Secure Host Interface */
+#define NXP_TLS_MAGIC			0x43b826f3
+#define NXP_TLS_VERSION			1
+
+#define NXP_TLS_ECDH_PUBLIC_KEY_SIZE	64
+
+enum nxp_tls_signature_algorithm {
+	NXP_TLS_ECDSA_SECP256R1_SHA256 = 0x0403,
+};
+
+enum nxp_tls_key_exchange_type {
+	NXP_TLS_ECDHE_SECP256R1 = 0x0017,
+};
+
+enum nxp_tls_cipher_suite {
+	NXP_TLS_AES_128_GCM_SHA256 = 0x1301,
+};
+
+enum nxp_tls_message_id {
+	NXP_TLS_HOST_HELLO	= 1,
+	NXP_TLS_DEVICE_HELLO	= 2,
+	NXP_TLS_HOST_FINISHED	= 3,
+};
+
+struct nxp_tls_message_hdr {
+	__le32 magic;
+	__le16 len;
+	u8 message_id;
+	u8 protocol_version;
+};
+
+struct nxp_tls_host_hello {
+	struct nxp_tls_message_hdr hdr;
+	__le16 sig_alg;
+	__le16 key_exchange_type;
+	__le16 cipher_suite;
+	__le16 reserved;
+	u8 random[32];
+	u8 pubkey[NXP_TLS_ECDH_PUBLIC_KEY_SIZE]; /* ECDHE */
+};
+
+union nxp_tls_host_hello_payload {
+	struct {
+		u8 msg_type;
+		struct nxp_tls_host_hello host_hello;
+	} __packed;
+	u8 buf[113];
 };
 
 /* FW Meta Data */
@@ -1607,10 +1659,137 @@ static void nxp_get_fw_version(struct hci_dev *hdev)
 }
 
 /* Secure Interface */
+static int nxp_generate_ecdh_public_key(struct crypto_kpp *tfm, u8 public_key[64])
+{
+	DECLARE_CRYPTO_WAIT(result);
+	struct kpp_request *req;
+	u8 *tmp;
+	struct scatterlist dst;
+	int err;
+
+	tmp = kzalloc(64, GFP_KERNEL);
+	if (!tmp)
+		return -ENOMEM;
+
+	req = kpp_request_alloc(tfm, GFP_KERNEL);
+	if (!req) {
+		err = -ENOMEM;
+		goto free_tmp;
+	}
+
+	sg_init_one(&dst, tmp, 64);
+	kpp_request_set_input(req, NULL, 0);
+	kpp_request_set_output(req, &dst, 64);
+	kpp_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG,
+				 crypto_req_done, &result);
+
+	err = crypto_kpp_generate_public_key(req);
+	err = crypto_wait_req(err, &result);
+	if (err < 0)
+		goto free_all;
+
+	memcpy(public_key, tmp, 64);
+
+free_all:
+	kpp_request_free(req);
+free_tmp:
+	kfree(tmp);
+	return err;
+}
+
+static inline void nxp_tls_hdr_init(struct nxp_tls_message_hdr *hdr, size_t len,
+				   enum nxp_tls_message_id id)
+{
+	hdr->magic = cpu_to_le32(NXP_TLS_MAGIC);
+	hdr->len = cpu_to_le16((u16)len);
+	hdr->message_id = (u8)id;
+	hdr->protocol_version = NXP_TLS_VERSION;
+}
+
+static struct sk_buff *nxp_host_do_hello(struct hci_dev *hdev)
+{
+	struct btnxpuart_dev *nxpdev = hci_get_drvdata(hdev);
+	union nxp_tls_host_hello_payload tls_hello;
+	struct nxp_tls_host_hello *host_hello = &tls_hello.host_hello;
+	struct ecdh p = {0};
+	u8 *buf = NULL;
+	unsigned int buf_len;
+	struct sk_buff *skb;
+	int ret;
+
+	nxp_tls_hdr_init(&host_hello->hdr, sizeof(*host_hello), NXP_TLS_HOST_HELLO);
+
+	host_hello->sig_alg = cpu_to_le16(NXP_TLS_ECDSA_SECP256R1_SHA256);
+	host_hello->key_exchange_type = cpu_to_le16(NXP_TLS_ECDHE_SECP256R1);
+	host_hello->cipher_suite = cpu_to_le16(NXP_TLS_AES_128_GCM_SHA256);
+
+	get_random_bytes(host_hello->random, sizeof(host_hello->random));
+
+	/* Generate random private key */
+	p.key_size = 32;
+	p.key = kzalloc(p.key_size, GFP_KERNEL);
+	if (!p.key)
+		return ERR_PTR(-ENOMEM);
+
+	get_random_bytes(p.key, p.key_size);
+
+	buf_len = crypto_ecdh_key_len(&p);
+	buf = kzalloc(buf_len, GFP_KERNEL);
+	if (!buf) {
+		ret = -ENOMEM;
+		goto free_key;
+	}
+
+	ret = crypto_ecdh_encode_key(buf, buf_len, &p);
+	if (ret) {
+		bt_dev_err(hdev, "crypto_ecdh_encode_key() failed");
+		goto free_buf;
+	}
+
+	ret = crypto_kpp_set_secret(nxpdev->crypto.kpp, buf, buf_len);
+	if (ret) {
+		bt_dev_err(hdev, "crypto_kpp_set_secret() failed");
+		goto free_buf;
+	}
+
+	ret = nxp_generate_ecdh_public_key(nxpdev->crypto.kpp, host_hello->pubkey);
+	if (ret) {
+		bt_dev_err(hdev, "Failed to generate ECDH public key: %d", ret);
+		goto free_buf;
+	}
+
+	ret = crypto_shash_update(nxpdev->crypto.tls_handshake_hash_desc,
+				  (u8 *)host_hello, sizeof(*host_hello));
+	if (ret) {
+		bt_dev_err(hdev, "Failed to update handshake hash: %d", ret);
+		goto free_buf;
+	}
+
+	tls_hello.msg_type = 0;
+
+	skb = __hci_cmd_sync(hdev, HCI_NXP_SHI_ENCRYPT, sizeof(tls_hello),
+			     tls_hello.buf, HCI_CMD_TIMEOUT);
+	if (IS_ERR(skb)) {
+		bt_dev_err(hdev, "Host Hello command failed: %ld", PTR_ERR(skb));
+		ret = PTR_ERR(skb);
+	}
+
+free_buf:
+	kfree(buf);
+free_key:
+	memset(p.key, 0, p.key_size);
+	kfree(p.key);
+	if (ret)
+		return ERR_PTR(ret);
+	else
+		return skb;
+}
+
 static int nxp_authenticate_device(struct hci_dev *hdev)
 {
 	struct btnxpuart_dev *nxpdev = hci_get_drvdata(hdev);
 	size_t desc_size = 0;
+	struct sk_buff *skb;
 	int ret = 0;
 
 	nxpdev->crypto.tls_handshake_hash_tfm = crypto_alloc_shash("sha256", 0, 0);
@@ -1634,12 +1813,20 @@ static int nxp_authenticate_device(struct hci_dev *hdev)
 	nxpdev->crypto.tls_handshake_hash_desc->tfm = nxpdev->crypto.tls_handshake_hash_tfm;
 	crypto_shash_init(nxpdev->crypto.tls_handshake_hash_desc);
 
+	skb = nxp_host_do_hello(hdev);
+	if (IS_ERR(skb)) {
+		ret =  PTR_ERR(skb);
+		goto free_kpp;
+	}
+
 	/* TODO: Implement actual TLS handshake protocol
 	 * This will include:
-	 * 1. Host/Device hello message exchange
+	 * 1. Handle Device hello message exchange
 	 * 2. Master secret and traffic key derivation
 	 */
 
+free_skb:
+	kfree_skb(skb);
 free_kpp:
 	crypto_free_kpp(nxpdev->crypto.kpp);
 	nxpdev->crypto.kpp = NULL;
