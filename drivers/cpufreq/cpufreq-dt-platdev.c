@@ -153,6 +153,8 @@ static const struct of_device_id blocklist[] __initconst = {
 	{ .compatible = "nvidia,tegra234", },
 
 	{ .compatible = "qcom,apq8096", },
+	{ .compatible = "qcom,glymur", },
+	{ .compatible = "qcom,kaanapali", },
 	{ .compatible = "qcom,msm8909", },
 	{ .compatible = "qcom,msm8996", },
 	{ .compatible = "qcom,msm8998", },
@@ -171,6 +173,8 @@ static const struct of_device_id blocklist[] __initconst = {
 	{ .compatible = "qcom,sdm845", },
 	{ .compatible = "qcom,sdx75", },
 	{ .compatible = "qcom,sm6115", },
+	{ .compatible = "qcom,sm6125", },
+	{ .compatible = "qcom,sm6150", },
 	{ .compatible = "qcom,sm6350", },
 	{ .compatible = "qcom,sm6375", },
 	{ .compatible = "qcom,sm7225", },
@@ -181,6 +185,9 @@ static const struct of_device_id blocklist[] __initconst = {
 	{ .compatible = "qcom,sm8450", },
 	{ .compatible = "qcom,sm8550", },
 	{ .compatible = "qcom,sm8650", },
+	{ .compatible = "qcom,sm8750", },
+	{ .compatible = "qcom,x1p42100", },
+	{ .compatible = "qcom,x1e80100", },
 
 	{ .compatible = "st,stih407", },
 	{ .compatible = "st,stih410", },
