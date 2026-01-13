@@ -64,8 +64,8 @@ as a module parameter (tjmax).
 Appendix A. Known TjMax lists (TBD):
 Some information comes from ark.intel.com
 
-=============== =============================================== ================
-Process		Processor					TjMax(C)
+=============== ======================================================= ================
+Process		Processor						TjMax(C)
 
 22nm		Core i5/i7 Processors
 		i7 3920XM, 3820QM, 3720QM, 3667U, 3520M		105
@@ -192,4 +192,4 @@ Process		Processor					TjMax(C)
 65nm		Celeron Processors
 		T1700/1600					100
 		560/550/540/530					100
-=============== =============================================== ================
+=============== ======================================================= ================
