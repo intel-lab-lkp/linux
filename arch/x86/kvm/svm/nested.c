@@ -1885,6 +1885,13 @@ static int svm_set_nested_state(struct kvm_vcpu *vcpu,
 		goto out_free;
 
 	/*
+	 * If kvm_state doesn't have a valid saved L1 g_pat, use the
+	 * PAT MSR instead. This preserves the legacy behavior.
+	 */
+	if (!(kvm_state->hdr.svm.flags & KVM_STATE_SVM_VALID_GPAT))
+		save->g_pat = vcpu->arch.pat;
+
+	/*
 	 * Validate host state saved from before VMRUN (see
 	 * nested_svm_check_permissions).
 	 */
