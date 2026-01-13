@@ -34,6 +34,8 @@ use file_ops::{
 mod entry;
 #[cfg(CONFIG_DEBUG_FS)]
 use entry::Entry;
+#[cfg(CONFIG_DEBUG_FS)]
+use entry::LookupEntry;
 
 /// Trait for DebugFS directory operations.
 ///
@@ -389,6 +391,131 @@ impl Dir {
             let scoped = self.scoped_dir(name);
             init(data, &scoped);
             scoped.into_entry()
+        })
+    }
+}
+
+/// Non-owning handle to an existing DebugFS directory.
+///
+/// Unlike [`Dir`], a [`LookupDir`] does not create a new directory. Instead, it looks up an
+/// existing directory in the DebugFS filesystem. When dropped, the directory is **not** removed
+/// from the filesystem - only the reference is released.
+///
+/// This is useful when you want to add files to an existing directory created by another part
+/// of the system without taking ownership of that directory.
+#[derive(Clone)]
+pub struct LookupDir(#[cfg(CONFIG_DEBUG_FS)] Option<Arc<LookupEntry>>);
+
+impl LookupDir {
+    /// Looks up an existing directory in DebugFS.
+    ///
+    /// If `parent` is [`None`], the lookup is performed from the root of the debugfs filesystem.
+    ///
+    /// Returns [`Some(LookupDir)`] if the directory exists, [`None`] otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use kernel::c_str;
+    /// # use kernel::debugfs::LookupDir;
+    /// // Look up a top-level directory
+    /// if let Some(dir) = LookupDir::lookup(c_str!("existing_dir"), None) {
+    ///     // Use the directory...
+    /// }
+    /// // When `dir` is dropped, the directory is NOT removed.
+    /// ```
+    pub fn lookup(name: &CStr, parent: Option<&LookupDir>) -> Option<Self> {
+        #[cfg(CONFIG_DEBUG_FS)]
+        {
+            let parent_entry = match parent {
+                Some(LookupDir(None)) => return None,
+                Some(LookupDir(Some(entry))) => Some(entry.clone()),
+                None => None,
+            };
+            let entry = LookupEntry::lookup(name, parent_entry)?;
+            Some(Self(Arc::new(entry, GFP_KERNEL).ok()))
+        }
+        #[cfg(not(CONFIG_DEBUG_FS))]
+        None
+    }
+
+    // While this function is safe, it is intentionally not public because it's a bit of a
+    // footgun.
+    //
+    // Unless you also extract the `entry` later and schedule it for `Drop` at the appropriate
+    // time, a `ScopedDir` with a `LookupDir` parent will never be deleted.
+    fn scoped_dir<'data>(&self, name: &CStr) -> ScopedDir<'data, 'static> {
+        #[cfg(CONFIG_DEBUG_FS)]
+        {
+            let parent_entry = match &self.0 {
+                None => return ScopedDir::empty(),
+                Some(entry) => entry.clone(),
+            };
+            ScopedDir {
+                entry: ManuallyDrop::new(Entry::dynamic_dir_with_lookup_parent(name, parent_entry)),
+                _phantom: PhantomData,
+            }
+        }
+        #[cfg(not(CONFIG_DEBUG_FS))]
+        ScopedDir::empty()
+    }
+
+    /// Creates a new scope, which is a directory associated with some data `T`.
+    ///
+    /// The created directory will be a subdirectory of `self`. The `init` closure is called to
+    /// populate the directory with files and subdirectories. These files can reference the data
+    /// stored in the scope.
+    ///
+    /// The entire directory tree created within the scope will be removed when the returned
+    /// `Scope` handle is dropped.
+    ///
+    /// Note: Unlike [`Dir::scope`], this method consumes `self` because the parent entry
+    /// is kept alive by the created scope via [`DynParent`], not by the `LookupDir` handle.
+    pub fn scope<'a, T: 'a, E: 'a, F>(
+        self,
+        data: impl PinInit<T, E> + 'a,
+        name: &'a CStr,
+        init: F,
+    ) -> impl PinInit<Scope<T>, E> + 'a
+    where
+        F: for<'data, 'dir> FnOnce(&'data T, &'dir ScopedDir<'data, 'dir>) + 'a,
+    {
+        Scope::new(data, move |data| {
+            let scoped = self.scoped_dir(name);
+            init(data, &scoped);
+            scoped.into_entry()
+        })
+    }
+}
+
+impl Directory for LookupDir {
+    /// Looks up an existing directory at the DebugFS root.
+    ///
+    /// Note: Unlike [`Dir::new`], this will return an empty handle if the directory
+    /// does not exist, rather than creating it.
+    fn new(name: &CStr) -> Self {
+        Self::lookup(name, None).unwrap_or_else(|| {
+            #[cfg(CONFIG_DEBUG_FS)]
+            {
+                Self(None)
+            }
+            #[cfg(not(CONFIG_DEBUG_FS))]
+            Self()
+        })
+    }
+
+    /// Looks up a subdirectory within this directory.
+    ///
+    /// Note: Unlike [`Dir::subdir`], this will return an empty handle if the subdirectory
+    /// does not exist, rather than creating it.
+    fn subdir(&self, name: &CStr) -> Self {
+        Self::lookup(name, Some(self)).unwrap_or_else(|| {
+            #[cfg(CONFIG_DEBUG_FS)]
+            {
+                Self(None)
+            }
+            #[cfg(not(CONFIG_DEBUG_FS))]
+            Self()
         })
     }
 }

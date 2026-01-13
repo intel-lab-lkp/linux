@@ -15,6 +15,8 @@ use core::marker::PhantomData;
 pub(crate) enum DynParent {
     /// Parent is an owned `Entry` (will be removed on drop).
     Entry(Arc<Entry<'static>>),
+    /// Parent is a looked-up `LookupEntry` (will NOT be removed on drop).
+    LookupEntry(Arc<LookupEntry>),
 }
 
 /// Owning handle to a DebugFS entry.
@@ -52,6 +54,24 @@ impl Entry<'static> {
         Entry {
             entry,
             _parent: parent.map(DynParent::Entry),
+            _phantom: PhantomData,
+        }
+    }
+
+    /// Creates a new directory entry with a `LookupEntry` as parent.
+    ///
+    /// The parent is kept alive via `Arc` reference counting. When this `Entry` is dropped,
+    /// the created directory will be removed, but the parent `LookupEntry` will only have
+    /// its reference count decremented.
+    pub(crate) fn dynamic_dir_with_lookup_parent(name: &CStr, parent: Arc<LookupEntry>) -> Self {
+        // SAFETY: The invariants of this function's arguments ensure the safety of this call.
+        // * `name` is a valid C string by the invariants of `&CStr`.
+        // * `parent.as_ptr()` is a pointer to a valid `dentry` by the invariants of `LookupEntry`.
+        let entry = unsafe { bindings::debugfs_create_dir(name.as_char_ptr(), parent.as_ptr()) };
+
+        Entry {
+            entry,
+            _parent: Some(DynParent::LookupEntry(parent)),
             _phantom: PhantomData,
         }
     }
@@ -170,5 +190,69 @@ impl Drop for Entry<'_> {
         // SAFETY: `debugfs_remove` can take `NULL`, error values, and legal DebugFS dentries.
         // `as_ptr` guarantees that the pointer is of this form.
         unsafe { bindings::debugfs_remove(self.as_ptr()) }
+    }
+}
+
+/// Non-owning handle to a DebugFS entry obtained via lookup.
+///
+/// Unlike [`Entry`], dropping a [`LookupEntry`] does not remove the directory from the
+/// filesystem. It only releases the reference obtained via `debugfs_lookup`.
+///
+/// # Invariants
+///
+/// The wrapped pointer will always be `NULL` or a valid DebugFS `dentry` obtained via
+/// `debugfs_lookup`.
+pub(crate) struct LookupEntry {
+    entry: *mut bindings::dentry,
+    // If we were created with an owning parent, this is the keep-alive
+    _parent: Option<Arc<LookupEntry>>,
+}
+
+// SAFETY: [`LookupEntry`] is just a `dentry` under the hood, which the API promises can be
+// transferred between threads.
+unsafe impl Send for LookupEntry {}
+
+// SAFETY: All the C functions we call on the `dentry` pointer are threadsafe.
+unsafe impl Sync for LookupEntry {}
+
+impl LookupEntry {
+    /// Looks up an existing directory in DebugFS.
+    ///
+    /// Returns `Some(LookupEntry)` if the directory exists, `None` otherwise.
+    pub(crate) fn lookup(name: &CStr, parent: Option<Arc<Self>>) -> Option<Self> {
+        let parent_ptr = match &parent {
+            Some(entry) => entry.as_ptr(),
+            None => core::ptr::null_mut(),
+        };
+        // SAFETY: The invariants of this function's arguments ensure the safety of this call.
+        // * `name` is a valid C string by the invariants of `&CStr`.
+        // * `parent_ptr` is either `NULL` (if `parent` is `None`), or a pointer to a valid
+        //   `dentry` by our invariant. `debugfs_lookup` handles `NULL` pointers correctly
+        //   (searches from debugfs root).
+        let entry = unsafe { bindings::debugfs_lookup(name.as_char_ptr(), parent_ptr) };
+
+        if entry.is_null() {
+            None
+        } else {
+            Some(LookupEntry {
+                entry,
+                _parent: parent,
+            })
+        }
+    }
+
+    /// Returns the pointer representation of the DebugFS directory.
+    pub(crate) fn as_ptr(&self) -> *mut bindings::dentry {
+        self.entry
+    }
+}
+
+impl Drop for LookupEntry {
+    fn drop(&mut self) {
+        if !self.entry.is_null() {
+            // SAFETY: `dput` decrements the reference count on a dentry. The pointer is valid
+            // because it was obtained via `debugfs_lookup` which increments the reference count.
+            unsafe { bindings::dput(self.entry) }
+        }
     }
 }
