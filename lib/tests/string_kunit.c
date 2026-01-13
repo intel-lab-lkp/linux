@@ -20,6 +20,77 @@
 #define STRING_TEST_MAX_LEN	128
 #define STRING_TEST_MAX_OFFSET	16
 
+#if defined(__HAVE_ARCH_STRLEN)
+#define STRING_BENCH_ENABLED
+#endif
+
+#ifdef STRING_BENCH_ENABLED
+/* Configuration for string benchmark scenarios */
+struct string_bench_case {
+	const char *name;
+	size_t len;
+	unsigned int iterations;
+};
+
+static const struct string_bench_case bench_cases[] = {
+	{"short", 8, 100000},
+	{"medium", 64, 100000},
+	{"long", 2048, 10000},
+};
+
+/**
+ * get_max_bench_len() - Get the maximum length from benchmark cases
+ * @cases: array of test cases
+ * @count: number of cases
+ */
+static size_t get_max_bench_len(const struct string_bench_case *cases, size_t count)
+{
+	size_t i, max_len = 0;
+
+	for (i = 0; i < count; i++) {
+		if (cases[i].len > max_len)
+			max_len = cases[i].len;
+	}
+
+	return max_len;
+}
+
+/**
+ * get_random_nonzero_bytes() - Fill buffer with random non-null bytes
+ * @buf: buffer to fill
+ * @len: number of bytes to fill
+ */
+static void get_random_nonzero_bytes(void *buf, size_t len)
+{
+	u8 *s = (u8 *)buf;
+
+	get_random_bytes(buf, len);
+
+	/* Replace null bytes to avoid early string termination */
+	for (size_t i = 0; i < len; i++) {
+		if (s[i] == '\0')
+			s[i] = 0x01;
+	}
+}
+
+static void string_bench_report(struct kunit *test, const char *func,
+		const struct string_bench_case *bc,
+		u64 time_arch, u64 time_generic)
+{
+	u64 ratio_int, ratio_frac;
+
+	/* Calculate speedup ratio with 2 decimal places. */
+	ratio_int = div64_u64(time_generic, time_arch);
+	ratio_frac = div64_u64((time_generic % time_arch) * 100, time_arch);
+
+	kunit_info(test, "%s performance (%s, len: %zu, iters: %u):\n",
+		func, bc->name, bc->len, bc->iterations);
+	kunit_info(test, "  arch-optimized: %llu ns\n", time_arch);
+	kunit_info(test, "  generic C:      %llu ns\n", time_generic);
+	kunit_info(test, "  speedup:        %llu.%02llux\n", ratio_int, ratio_frac);
+}
+#endif /* STRING_BENCH_ENABLED */
+
 static void string_test_memset16(struct kunit *test)
 {
 	unsigned i, j, k;
@@ -128,6 +199,49 @@ static void string_test_strlen(struct kunit *test)
 		}
 	}
 }
+
+#ifdef __HAVE_ARCH_STRLEN
+static void string_test_strlen_bench(struct kunit *test)
+{
+	char *buf;
+	size_t buf_len, iters;
+	ktime_t start, end;
+	u64 time_arch, time_generic;
+
+	buf_len = get_max_bench_len(bench_cases, ARRAY_SIZE(bench_cases)) + 1;
+
+	buf = kunit_kzalloc(test, buf_len, GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, buf);
+
+	for (size_t i = 0; i < ARRAY_SIZE(bench_cases); i++) {
+		get_random_nonzero_bytes(buf, bench_cases[i].len);
+		buf[bench_cases[i].len] = '\0';
+
+		iters = bench_cases[i].iterations;
+
+		/* 1. Benchmark the architecture-optimized version */
+		start = ktime_get();
+		for (unsigned int j = 0; j < iters; j++) {
+			OPTIMIZER_HIDE_VAR(buf);
+			(void)strlen(buf);
+		}
+		end = ktime_get();
+		time_arch = ktime_to_ns(ktime_sub(end, start));
+
+		/* 2. Benchmark the generic C version */
+		start = ktime_get();
+		for (unsigned int j = 0; j < iters; j++) {
+			OPTIMIZER_HIDE_VAR(buf);
+			(void)__generic_strlen(buf);
+		}
+		end = ktime_get();
+		time_generic = ktime_to_ns(ktime_sub(end, start));
+
+		string_bench_report(test, "strlen", &bench_cases[i],
+				time_arch, time_generic);
+	}
+}
+#endif
 
 static void string_test_strnlen(struct kunit *test)
 {
@@ -702,6 +816,9 @@ static struct kunit_case string_test_cases[] = {
 	KUNIT_CASE(string_test_memset32),
 	KUNIT_CASE(string_test_memset64),
 	KUNIT_CASE(string_test_strlen),
+#ifdef __HAVE_ARCH_STRLEN
+	KUNIT_CASE(string_test_strlen_bench),
+#endif
 	KUNIT_CASE(string_test_strnlen),
 	KUNIT_CASE(string_test_strchr),
 	KUNIT_CASE(string_test_strnchr),
