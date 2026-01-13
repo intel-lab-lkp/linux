@@ -13,6 +13,7 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#include <linux/array_size.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -44,6 +45,7 @@ MODULE_ALIAS("wmi:5FB7F034-2C63-45E9-BE91-3D44E2C707E4");
 #define HP_OMEN_EC_THERMAL_PROFILE_FLAGS_OFFSET 0x62
 #define HP_OMEN_EC_THERMAL_PROFILE_TIMER_OFFSET 0x63
 #define HP_OMEN_EC_THERMAL_PROFILE_OFFSET 0x95
+#define HP_VICTUS_S_EC_THERMAL_PROFILE_OFFSET 0x59
 
 #define HP_FAN_SPEED_AUTOMATIC	 0x00
 #define HP_POWER_LIMIT_DEFAULT	 0x00
@@ -638,6 +640,12 @@ static bool is_omen_thermal_profile(void)
 	return match_string(omen_thermal_profile_boards,
 			    ARRAY_SIZE(omen_thermal_profile_boards),
 			    board_name) >= 0;
+}
+
+static bool is_victus_s_thermal_profile(void)
+{
+	/* Initialised in driver init, hence safe to use here */
+	return is_victus_s_board;
 }
 
 static int omen_get_thermal_policy_version(void)
@@ -1631,12 +1639,6 @@ static int platform_profile_victus_set_ec(enum platform_profile_option profile)
 	return 0;
 }
 
-static bool is_victus_s_thermal_profile(void)
-{
-	/* Initialised in driver init, hence safe to use here */
-	return is_victus_s_board;
-}
-
 static int victus_s_gpu_thermal_profile_get(bool *ctgp_enable,
 					    bool *ppab_enable,
 					    u8 *dstate,
@@ -1713,6 +1715,68 @@ static int victus_s_set_cpu_pl1_pl2(u8 pl1, u8 pl2)
 				   &power_limits, sizeof(power_limits), 0);
 
 	return ret;
+}
+
+static int platform_profile_victus_s_get_ec(enum platform_profile_option *profile)
+{
+	int ret, i;
+	bool current_ctgp_state, current_ppab_state;
+	u8 current_dstate, current_gpu_slowdown_temp, tp;
+	static const u8 tp_ec_offsets[2] = { HP_OMEN_EC_THERMAL_PROFILE_OFFSET,
+					     HP_VICTUS_S_EC_THERMAL_PROFILE_OFFSET };
+
+	/*
+	 * Victus S devices have more than 1 EC layouts, hence we cannot directly
+	 * call omen_thermal_profile_get() like other platform_profile_*_get_ec()
+	 * variants, since it would only resolve to that 1 type of board. Hence
+	 * we iteratively query a set of candidates: tp_ec_offsets[] until we
+	 * find a valid thermal profile.
+	 */
+	for (i = 0 ; i < ARRAY_SIZE(tp_ec_offsets) ; i++) {
+		ret = ec_read(tp_ec_offsets[i], &tp);
+		if (ret)
+			return ret;
+
+		/*
+		 * We cannot use active_thermal_profile_params here, because boards
+		 * like 8C78 have tp == 0x0 || tp == 0x1 after cold boot, but logically
+		 * it should have tp == 0x30 || tp == 0x31, as corrected by the Omen
+		 * Gaming Hub on windows. Hence accept both of these values.
+		 */
+		if (tp == victus_s_thermal_params.performance ||
+		    tp == omen_v1_thermal_params.performance) {
+			*profile = PLATFORM_PROFILE_PERFORMANCE;
+			return 0;
+		} else if (tp == victus_s_thermal_params.balanced ||
+			   tp == omen_v1_thermal_params.balanced) {
+			/*
+			 * Since both PLATFORM_PROFILE_LOW_POWER and
+			 * PLATFORM_PROFILE_BALANCED share the same thermal
+			 * profile parameter value, hence to differentiate
+			 * between them, we query the GPU CTGP and PPAB states
+			 * and compare based off of that.
+			 */
+			ret = victus_s_gpu_thermal_profile_get(&current_ctgp_state,
+							       &current_ppab_state,
+							       &current_dstate,
+							       &current_gpu_slowdown_temp);
+			if (ret < 0)
+				return ret;
+
+			if (current_ctgp_state == 0 && current_ppab_state == 0) {
+				*profile = PLATFORM_PROFILE_LOW_POWER;
+				return 0;
+			} else if (current_ctgp_state == 0 && current_ppab_state == 1) {
+				*profile = PLATFORM_PROFILE_BALANCED;
+				return 0;
+			} else {
+				return -EINVAL;
+			}
+		}
+	}
+
+	/* Failed to get thermal profile from all EC offsets */
+	return -EINVAL;
 }
 
 static int platform_profile_victus_s_set_ec(enum platform_profile_option profile)
@@ -1882,12 +1946,24 @@ static int victus_s_powersource_event(struct notifier_block *nb,
 				      void *data)
 {
 	struct acpi_bus_event *event_entry = data;
+	enum platform_profile_option actual_profile;
 	int err;
 
 	if (strcmp(event_entry->device_class, ACPI_AC_CLASS) != 0)
 		return NOTIFY_DONE;
 
 	pr_debug("Received power source device event\n");
+
+	guard(mutex)(&active_platform_profile_lock);
+	err = platform_profile_victus_s_get_ec(&actual_profile);
+	if (err < 0) {
+		/*
+		 * Although we failed to get the current platform profile, we
+		 * still want the other event consumers to process it.
+		 */
+		pr_warn("Failed to read current platform profile (%d)\n", err);
+		return NOTIFY_DONE;
+	}
 
 	/*
 	 * Switching to battery power source while Performance mode is active
@@ -1897,7 +1973,7 @@ static int victus_s_powersource_event(struct notifier_block *nb,
 	 * Seen on HP 16-s1034nf (board 8C9C) with F.11 and F.13 BIOS versions.
 	 */
 
-	if (active_platform_profile == PLATFORM_PROFILE_PERFORMANCE) {
+	if (actual_profile == PLATFORM_PROFILE_PERFORMANCE) {
 		pr_debug("Triggering CPU PL1/PL2 actualization\n");
 		err = victus_s_set_cpu_pl1_pl2(HP_POWER_LIMIT_DEFAULT,
 					       HP_POWER_LIMIT_DEFAULT);
@@ -2007,12 +2083,14 @@ static int thermal_profile_setup(struct platform_device *device)
 
 		ops = &platform_profile_victus_ops;
 	} else if (is_victus_s_thermal_profile()) {
-		/*
-		 * Being unable to retrieve laptop's current thermal profile,
-		 * during this setup, we set it to Balanced by default.
-		 */
-		active_platform_profile = PLATFORM_PROFILE_BALANCED;
+		err = platform_profile_victus_s_get_ec(&active_platform_profile);
+		if (err < 0)
+			return err;
 
+		/*
+		 * call thermal profile write command to ensure that the
+		 * firmware correctly sets the OEM variables
+		 */
 		err = platform_profile_victus_s_set_ec(active_platform_profile);
 		if (err < 0)
 			return err;
