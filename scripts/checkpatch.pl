@@ -3922,6 +3922,26 @@ sub process {
 			     "Avoid using '.L' prefixed local symbol names for denoting a range of code via 'SYM_*_START/END' annotations; see Documentation/core-api/asm-annotations.rst\n" . $herecurr);
 		}
 
+# check for Rust comments that should likely be doc comments
+# Warn when a // comment that looks like documentation (contains rustdoc
+# link patterns like [`Foo`]) appears directly above a Rust item.
+		if ($realfile =~ /\.rs$/ &&
+		    $rawline =~ /^\+(\s*)\/\/\s+(.*)$/) {
+			my $comment_text = $2;
+			# Check if this looks like a doc comment (contains rustdoc link patterns)
+			# and is NOT a special comment like SAFETY:, TODO:, FIXME:, etc.
+			if ($comment_text =~ /\[`[^\]]+`\]/ &&
+			    $comment_text !~ /^\s*(?:SAFETY|TODO|FIXME|NOTE|XXX|HACK|BUG|INVARIANT):/) {
+				# Check if next line starts a Rust item
+				my $nextline = $rawlines[$linenr];
+				if (defined($nextline) &&
+				    $nextline =~ /^\+\s*(?:pub(?:\s*\([^)]*\))?\s+)?(?:unsafe\s+)?(?:async\s+)?(?:fn|struct|enum|impl|trait|const|static|type|mod|use)\b/) {
+					WARN("RUST_COMMENT_NOT_DOC",
+					     "Comment with rustdoc link pattern may need '///' instead of '//'\n" . $herecurr);
+				}
+			}
+		}
+
 # check we are in a valid source file C or perl if not then ignore this hunk
 		next if ($realfile !~ /\.(h|c|pl|dtsi|dts)$/);
 
