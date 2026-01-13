@@ -20,7 +20,7 @@
 #define STRING_TEST_MAX_LEN	128
 #define STRING_TEST_MAX_OFFSET	16
 
-#if defined(__HAVE_ARCH_STRLEN)
+#if defined(__HAVE_ARCH_STRLEN) || defined(__HAVE_ARCH_STRNLEN)
 #define STRING_BENCH_ENABLED
 #endif
 
@@ -271,6 +271,49 @@ static void string_test_strnlen(struct kunit *test)
 		}
 	}
 }
+
+#ifdef __HAVE_ARCH_STRNLEN
+static void string_test_strnlen_bench(struct kunit *test)
+{
+	char *buf;
+	size_t buf_len, iters;
+	ktime_t start, end;
+	u64 time_arch, time_generic;
+
+	buf_len = get_max_bench_len(bench_cases, ARRAY_SIZE(bench_cases)) + 1;
+
+	buf = kunit_kzalloc(test, buf_len, GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, buf);
+
+	for (size_t i = 0; i < ARRAY_SIZE(bench_cases); i++) {
+		get_random_nonzero_bytes(buf, bench_cases[i].len);
+		buf[bench_cases[i].len] = '\0';
+
+		iters = bench_cases[i].iterations;
+
+		/* 1. Benchmark the architecture-optimized version */
+		start = ktime_get();
+		for (unsigned int j = 0; j < iters; j++) {
+			OPTIMIZER_HIDE_VAR(buf);
+			(void)strnlen(buf, buf_len);
+		}
+		end = ktime_get();
+		time_arch = ktime_to_ns(ktime_sub(end, start));
+
+		/* 2. Benchmark the generic C version */
+		start = ktime_get();
+		for (unsigned int j = 0; j < iters; j++) {
+			OPTIMIZER_HIDE_VAR(buf);
+			(void)__generic_strnlen(buf, buf_len);
+		}
+		end = ktime_get();
+		time_generic = ktime_to_ns(ktime_sub(end, start));
+
+		string_bench_report(test, "strnlen", &bench_cases[i],
+				time_arch, time_generic);
+	}
+}
+#endif
 
 static void string_test_strchr(struct kunit *test)
 {
@@ -820,6 +863,9 @@ static struct kunit_case string_test_cases[] = {
 	KUNIT_CASE(string_test_strlen_bench),
 #endif
 	KUNIT_CASE(string_test_strnlen),
+#ifdef __HAVE_ARCH_STRNLEN
+	KUNIT_CASE(string_test_strnlen_bench),
+#endif
 	KUNIT_CASE(string_test_strchr),
 	KUNIT_CASE(string_test_strnchr),
 	KUNIT_CASE(string_test_strrchr),
