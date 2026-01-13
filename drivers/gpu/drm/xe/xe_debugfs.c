@@ -550,6 +550,8 @@ void xe_debugfs_register(struct xe_device *xe)
 	debugfs_create_file("disable_late_binding", 0600, root, xe,
 			    &disable_late_binding_fops);
 
+	debugfs_create_bool("vrsr_capable", 0400, root,
+			    &xe->d3cold.vrsr_capable);
 	/*
 	 * Don't expose page reclaim configuration file if not supported by the
 	 * hardware initially.
