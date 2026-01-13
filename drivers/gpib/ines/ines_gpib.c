@@ -659,7 +659,7 @@ static int ines_allocate_private(struct gpib_board *board)
 
 	board->private_data = kmalloc(sizeof(struct ines_priv), GFP_KERNEL);
 	if (!board->private_data)
-		return -1;
+		return -ENOMEM;
 	priv = board->private_data;
 	memset(priv, 0, sizeof(struct ines_priv));
 	init_nec7210_private(&priv->nec7210_priv);
@@ -676,11 +676,13 @@ static int ines_generic_attach(struct gpib_board *board)
 {
 	struct ines_priv *ines_priv;
 	struct nec7210_priv *nec_priv;
+	int retval;
 
 	board->status = 0;
 
-	if (ines_allocate_private(board))
-		return -ENOMEM;
+	retval = ines_allocate_private(board);
+	if (retval < 0)
+		return retval;
 	ines_priv = board->private_data;
 	nec_priv = &ines_priv->nec7210_priv;
 	nec_priv->read_byte = nec7210_ioport_read_byte;
