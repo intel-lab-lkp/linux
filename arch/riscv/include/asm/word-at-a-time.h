@@ -13,6 +13,9 @@
 #include <linux/bitops.h>
 #include <linux/wordpart.h>
 
+#if !(defined(CONFIG_RISCV_ISA_ZBB) && defined(CONFIG_TOOLCHAIN_HAS_ZBB))
+#include <asm-generic/word-at-a-time.h>
+#else
 struct word_at_a_time {
 	const unsigned long one_bits, high_bits;
 };
@@ -46,6 +49,8 @@ static inline unsigned long find_zero(unsigned long mask)
 
 /* The mask we created is directly usable as a bytemask */
 #define zero_bytemask(mask) (mask)
+
+#endif /* !(defined(CONFIG_RISCV_ISA_ZBB) && defined(CONFIG_TOOLCHAIN_HAS_ZBB)) */
 
 #ifdef CONFIG_DCACHE_WORD_ACCESS
 
