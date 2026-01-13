@@ -1434,6 +1434,12 @@ ssize_t resctrl_mbm_assign_mode_write(struct kernfs_open_file *of, char *buf,
 
 	rdt_last_cmd_clear();
 
+	if (IS_ENABLED(CONFIG_RESCTRL_ASSIGN_FIXED)) {
+		ret = -EINVAL;
+		rdt_last_cmd_puts("assign mode is not configurable\n");
+		goto out_unlock;
+	}
+
 	if (!strcmp(buf, "default")) {
 		enable = 0;
 	} else if (!strcmp(buf, "mbm_event")) {
