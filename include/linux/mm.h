@@ -2849,11 +2849,6 @@ static inline bool get_user_page_fast_only(unsigned long addr,
  */
 static inline unsigned long get_mm_counter(struct mm_struct *mm, int member)
 {
-	return percpu_counter_read_positive(&mm->rss_stat[member]);
-}
-
-static inline unsigned long get_mm_counter_sum(struct mm_struct *mm, int member)
-{
 	return percpu_counter_sum_positive(&mm->rss_stat[member]);
 }
 
