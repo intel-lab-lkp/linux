@@ -11858,8 +11858,6 @@ redo:
 		goto out_balanced;
 	}
 
-	WARN_ON_ONCE(busiest == env.dst_rq);
-
 	update_lb_imbalance_stat(&env, sd, idle);
 
 	env.src_cpu = busiest->cpu;
@@ -11878,6 +11876,8 @@ redo:
 		env.loop_max  = min(sysctl_sched_nr_migrate, busiest->nr_running);
 
 more_balance:
+		WARN_ON_ONCE(busiest == env.dst_rq);
+
 		rq_lock_irqsave(busiest, &rf);
 		update_rq_clock(busiest);
 
