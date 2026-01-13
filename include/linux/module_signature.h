@@ -41,6 +41,6 @@ struct module_signature {
 };
 
 int mod_split_sig(const void *buf, size_t *buf_len, bool mangled,
-		  size_t *sig_len, const u8 **sig, const char *name);
+		  enum pkey_id_type *sig_type, size_t *sig_len, const u8 **sig, const char *name);
 
 #endif /* _LINUX_MODULE_SIGNATURE_H */

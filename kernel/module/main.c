@@ -3348,19 +3348,24 @@ static int module_integrity_check(struct load_info *info, int flags)
 {
 	bool mangled_module = flags & (MODULE_INIT_IGNORE_MODVERSIONS |
 				       MODULE_INIT_IGNORE_VERMAGIC);
+	enum pkey_id_type sig_type;
 	size_t sig_len;
 	const u8 *sig;
 	int err = 0;
 
 	if (IS_ENABLED(CONFIG_MODULE_SIG_POLICY)) {
 		err = mod_split_sig(info->hdr, &info->len, mangled_module,
-				    &sig_len, &sig, "module");
+				    &sig_type, &sig_len, &sig, "module");
 		if (err)
 			return err;
 	}
 
-	if (IS_ENABLED(CONFIG_MODULE_SIG))
+	if (IS_ENABLED(CONFIG_MODULE_SIG) && sig_type == PKEY_ID_PKCS7) {
 		err = module_sig_check(info, sig, sig_len);
+	} else {
+		pr_err("module: not signed with expected PKCS#7 message\n");
+		err = -ENOPKG;
+	}
 
 	if (err)
 		return err;

@@ -41,14 +41,20 @@ int ima_read_modsig(enum ima_hooks func, const void *buf, loff_t buf_len,
 		    struct modsig **modsig)
 {
 	size_t buf_len_sz = buf_len;
+	enum pkey_id_type sig_type;
 	struct modsig *hdr;
 	size_t sig_len;
 	const u8 *sig;
 	int rc;
 
-	rc = mod_split_sig(buf, &buf_len_sz, true, &sig_len, &sig, func_tokens[func]);
+	rc = mod_split_sig(buf, &buf_len_sz, true, &sig_type, &sig_len, &sig, func_tokens[func]);
 	if (rc)
 		return rc;
+
+	if (sig_type != PKEY_ID_PKCS7) {
+		pr_err("%s: not signed with expected PKCS#7 message\n", func_tokens[func]);
+		return -ENOPKG;
+	}
 
 	/* Allocate sig_len additional bytes to hold the raw PKCS#7 data. */
 	hdr = kzalloc(struct_size(hdr, raw_pkcs7, sig_len), GFP_KERNEL);
