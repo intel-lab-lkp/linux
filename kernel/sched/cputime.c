@@ -25,7 +25,7 @@
  */
 DEFINE_PER_CPU(struct irqtime, cpu_irqtime);
 
-int sched_clock_irqtime;
+int sched_clock_irqtime __cacheline_aligned;
 
 void enable_sched_clock_irqtime(void)
 {
