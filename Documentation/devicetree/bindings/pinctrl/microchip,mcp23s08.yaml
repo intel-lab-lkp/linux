@@ -42,6 +42,8 @@ properties:
   interrupts:
     maxItems: 1
 
+  gpio-line-names: true
+
   reset-gpios:
     description: GPIO specifier for active-low reset pin.
     maxItems: 1
@@ -157,5 +159,36 @@ examples:
             #gpio-cells = <2>;
             spi-max-frequency = <1000000>;
             microchip,spi-present-mask = /bits/ 8 <0x01>;
+        };
+    };
+
+  - |
+    /* Multiple chips sharing same SPI CS with gpio-line-names */
+    spi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        gpio@0 {
+            compatible = "microchip,mcp23s17";
+            reg = <0>;
+            gpio-controller;
+            #gpio-cells = <2>;
+            spi-max-frequency = <10000000>;
+            /* Two chips at hardware addresses 0 and 1 */
+            microchip,spi-present-mask = /bits/ 8 <0x03>;
+            /*
+             * Names assigned sequentially in address order.
+             * First 16 names for chip at address 0 (GPA0-7, GPB0-7).
+             * Next 16 names for chip at address 1 (GPA0-7, GPB0-7).
+             */
+            gpio-line-names =
+                "EXP0_GPA0", "EXP0_GPA1", "EXP0_GPA2", "EXP0_GPA3",
+                "EXP0_GPA4", "EXP0_GPA5", "EXP0_GPA6", "EXP0_GPA7",
+                "EXP0_GPB0", "EXP0_GPB1", "EXP0_GPB2", "EXP0_GPB3",
+                "EXP0_GPB4", "EXP0_GPB5", "EXP0_GPB6", "EXP0_GPB7",
+                "EXP1_GPA0", "EXP1_GPA1", "EXP1_GPA2", "EXP1_GPA3",
+                "EXP1_GPA4", "EXP1_GPA5", "EXP1_GPA6", "EXP1_GPA7",
+                "EXP1_GPB0", "EXP1_GPB1", "EXP1_GPB2", "EXP1_GPB3",
+                "EXP1_GPB4", "EXP1_GPB5", "EXP1_GPB6", "EXP1_GPB7";
         };
     };
