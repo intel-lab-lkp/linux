@@ -27,6 +27,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/firmware.h>
+#include <linux/unaligned.h>
 
 #include <drm/display/drm_dp_helper.h>
 #include <drm/display/drm_dsc_helper.h>
@@ -84,9 +85,9 @@ static u32 _get_blocksize(const u8 *block_base)
 {
 	/* The MIPI Sequence Block v3+ has a separate size field. */
 	if (*block_base == BDB_MIPI_SEQUENCE && *(block_base + 3) >= 3)
-		return *((const u32 *)(block_base + 4));
+		return get_unaligned_le32(block_base + 4);
 	else
-		return *((const u16 *)(block_base + 1));
+		return get_unaligned_le16(block_base + 1);
 }
 
 /* Get BDB block size give a pointer to data after Block ID and Block Size. */
