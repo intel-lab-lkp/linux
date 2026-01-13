@@ -9,17 +9,24 @@
  * may be copied, distributed, and modified under those terms.
  */
 
+#include <linux/array_size.h>
+#include <linux/delay.h>
+#include <linux/device.h>
+#include <linux/firmware.h>
 #include <linux/i2c.h>
 #include <linux/input.h>
+#include <linux/input/mt.h>
 #include <linux/interrupt.h>
-#include <linux/delay.h>
 #include <linux/irq.h>
 #include <linux/io.h>
+#include <linux/math.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
+#include <linux/pm.h>
 #include <linux/slab.h>
-#include <linux/firmware.h>
-#include <linux/input/mt.h>
-#include <linux/acpi.h>
+#include <linux/sysfs.h>
+#include <linux/types.h>
 #include <linux/unaligned.h>
 
 #define WDT87XX_NAME		"wdt87xx_i2c"
@@ -1153,13 +1160,11 @@ static const struct i2c_device_id wdt87xx_dev_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, wdt87xx_dev_id);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id wdt87xx_acpi_id[] = {
-	{ "WDHT0001", 0 },
+	{ "WDHT0001" },
 	{ }
 };
 MODULE_DEVICE_TABLE(acpi, wdt87xx_acpi_id);
-#endif
 
 static struct i2c_driver wdt87xx_driver = {
 	.probe		= wdt87xx_ts_probe,
@@ -1168,7 +1173,7 @@ static struct i2c_driver wdt87xx_driver = {
 		.name = WDT87XX_NAME,
 		.dev_groups = wdt87xx_groups,
 		.pm = pm_sleep_ptr(&wdt87xx_pm_ops),
-		.acpi_match_table = ACPI_PTR(wdt87xx_acpi_id),
+		.acpi_match_table = wdt87xx_acpi_id,
 	},
 };
 module_i2c_driver(wdt87xx_driver);
