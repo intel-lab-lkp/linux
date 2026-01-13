@@ -4462,7 +4462,6 @@ static void btusb_disconnect(struct usb_interface *intf)
 	kfree(data);
 }
 
-#ifdef CONFIG_PM
 static int btusb_suspend(struct usb_interface *intf, pm_message_t message)
 {
 	struct btusb_data *data = usb_get_intfdata(intf);
@@ -4616,7 +4615,6 @@ done:
 
 	return err;
 }
-#endif
 
 #ifdef CONFIG_DEV_COREDUMP
 static void btusb_coredump(struct device *dev)
@@ -4633,10 +4631,8 @@ static struct usb_driver btusb_driver = {
 	.name		= "btusb",
 	.probe		= btusb_probe,
 	.disconnect	= btusb_disconnect,
-#ifdef CONFIG_PM
-	.suspend	= btusb_suspend,
-	.resume		= btusb_resume,
-#endif
+	.suspend	= pm_ptr(btusb_suspend),
+	.resume		= pm_ptr(btusb_resume),
 	.id_table	= btusb_table,
 	.supports_autosuspend = 1,
 	.disable_hub_initiated_lpm = 1,
