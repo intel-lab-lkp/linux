@@ -26299,6 +26299,13 @@ W:	http://sourceforge.net/projects/tlan/
 F:	Documentation/networking/device_drivers/ethernet/ti/tlan.rst
 F:	drivers/net/ethernet/ti/tlan.*
 
+TM1637 7-SEGMENT DISPLAY DRIVER
+M:	Siratul Islam <email@sirat.me>
+S:	Maintained
+F:	Documentation/ABI/testing/sysfs-platform-tm1637
+F:	Documentation/devicetree/bindings/auxdisplay/titanmec,tm1637.yaml
+F:	drivers/auxdisplay/tm1637.c
+
 TMIO/SDHI MMC DRIVER
 M:	Wolfram Sang <wsa+renesas@sang-engineering.com>
 L:	linux-mmc@vger.kernel.org
