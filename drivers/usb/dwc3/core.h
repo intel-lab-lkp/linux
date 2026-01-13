@@ -1178,6 +1178,8 @@ struct dwc3_glue_ops {
  * @wakeup_pending_funcs: Indicates whether any interface has requested for
  *			 function wakeup in bitmap format where bit position
  *			 represents interface_id.
+ * @address: The register base address of controller as specified in DT/ACPI.
+ *	     Stored as string & used for logging the controller instance in trace.
  */
 struct dwc3 {
 	struct work_struct	drd_work;
@@ -1412,6 +1414,7 @@ struct dwc3 {
 	struct dentry		*debug_root;
 	u32			gsbuscfg0_reqinfo;
 	u32			wakeup_pending_funcs;
+	u32			address;
 };
 
 #define INCRX_BURST_MODE 0
