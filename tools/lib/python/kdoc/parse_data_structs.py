@@ -73,7 +73,7 @@ class ParseDataStructs:
         - enum: for the name of a non-anonymous enum;
         - struct: for structs.
 
-    Examples:
+    Examples::
 
         ignore define __LINUX_MEDIA_H
         ignore ioctl VIDIOC_ENUM_FMT

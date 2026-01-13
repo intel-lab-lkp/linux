@@ -5,9 +5,6 @@
 # pylint: disable=C0301,C0302,R0904,R0912,R0913,R0914,R0915,R0917,R1702
 
 """
-kdoc_parser
-===========
-
 Read a C language source or header FILE and extract embedded
 documentation comments
 """
@@ -230,15 +227,15 @@ class state:
     """
 
     # Parser states
-    NORMAL        = 0        # normal code
-    NAME          = 1        # looking for function name
-    DECLARATION   = 2        # We have seen a declaration which might not be done
-    BODY          = 3        # the body of the comment
-    SPECIAL_SECTION = 4      # doc section ending with a blank line
-    PROTO         = 5        # scanning prototype
-    DOCBLOCK      = 6        # documentation block
-    INLINE_NAME   = 7        # gathering doc outside main block
-    INLINE_TEXT   = 8	     # reading the body of inline docs
+    NORMAL        = 0        #: normal code
+    NAME          = 1        #: looking for function name
+    DECLARATION   = 2        #: We have seen a declaration which might not be done
+    BODY          = 3        #: the body of the comment
+    SPECIAL_SECTION = 4      #: doc section ending with a blank line
+    PROTO         = 5        #: scanning prototype
+    DOCBLOCK      = 6        #: documentation block
+    INLINE_NAME   = 7        #: gathering doc outside main block
+    INLINE_TEXT   = 8	     #: reading the body of inline docs
 
     name = [
         "NORMAL",

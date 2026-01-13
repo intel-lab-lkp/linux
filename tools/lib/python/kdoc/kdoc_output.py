@@ -54,13 +54,16 @@ class OutputFormat:
     """
 
     # output mode.
-    OUTPUT_ALL          = 0 # output all symbols and doc sections
-    OUTPUT_INCLUDE      = 1 # output only specified symbols
-    OUTPUT_EXPORTED     = 2 # output exported symbols
-    OUTPUT_INTERNAL     = 3 # output non-exported symbols
+    OUTPUT_ALL          = 0 #: output all symbols and doc sections
+    OUTPUT_INCLUDE      = 1 #: output only specified symbols
+    OUTPUT_EXPORTED     = 2 #: output exported symbols
+    OUTPUT_INTERNAL     = 3 #: output non-exported symbols
 
-    # Virtual member to be overridden at the inherited classes
+    #: Highlights to be used in ReST format
     highlights = []
+
+    #: Blank line character
+    blankline = ""
 
     def __init__(self):
         """Declare internal vars and set mode to OUTPUT_ALL"""
@@ -244,6 +247,7 @@ class OutputFormat:
 class RestFormat(OutputFormat):
     """Consts and functions used by ReST output"""
 
+    #: Highlights to be used in ReST format
     highlights = [
         (type_constant, r"``\1``"),
         (type_constant2, r"``\1``"),
@@ -263,9 +267,13 @@ class RestFormat(OutputFormat):
         (type_fallback, r":c:type:`\1`"),
         (type_param_ref, r"**\1\2**")
     ]
+
     blankline = "\n"
 
+    #: Sphinx literal block regex
     sphinx_literal = KernRe(r'^[^.].*::$', cache=False)
+
+    #: Sphinx code block regex
     sphinx_cblock = KernRe(r'^\.\.\ +code-block::', cache=False)
 
     def __init__(self):
@@ -587,6 +595,7 @@ class ManFormat(OutputFormat):
     )
     blankline = ""
 
+    #: Allowed timestamp formats
     date_formats = [
         "%a %b %d %H:%M:%S %Z %Y",
         "%a %b %d %H:%M:%S %Y",

@@ -13,10 +13,16 @@ from  textwrap import dedent
 
 import sphinx
 
+# Location of Documentation/ directory
+doctree = os.path.abspath(".")
+
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 sys.path.insert(0, os.path.abspath("sphinx"))
+
+# Allow sphinx.ext.autodoc to document from tools/lib/python
+sys.path.insert(0, f"{doctree}/../tools/lib/python")
 
 # Minimal supported version
 needs_sphinx = "3.4.3"
@@ -31,9 +37,6 @@ else:
     has_include_patterns = True
     # Include patterns that don't contain directory names, in glob format
     include_patterns = ["**.rst"]
-
-# Location of Documentation/ directory
-doctree = os.path.abspath(".")
 
 # Exclude of patterns that don't contain directory names, in glob format.
 exclude_patterns = []
@@ -151,6 +154,7 @@ extensions = [
     "maintainers_include",
     "parser_yaml",
     "rstFlatTable",
+    "sphinx.ext.autodoc",
     "sphinx.ext.autosectionlabel",
     "sphinx.ext.ifconfig",
     "translations",

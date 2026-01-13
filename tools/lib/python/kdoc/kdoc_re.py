@@ -51,6 +51,9 @@ class KernRe:
         """
         return self.regex.pattern
 
+    def __repr__(self):
+        return f're.compile("{self.regex.pattern}")'
+
     def __add__(self, other):
         """
         Allows adding two regular expressions into one.

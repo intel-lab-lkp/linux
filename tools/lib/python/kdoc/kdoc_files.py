@@ -5,7 +5,8 @@
 # pylint: disable=R0903,R0913,R0914,R0917
 
 """
-Parse lernel-doc tags on multiple kernel source files.
+Parse kernel-doc tags on multiple kernel source files
+=====================================================
 """
 
 import argparse
