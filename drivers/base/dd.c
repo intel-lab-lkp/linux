@@ -1178,7 +1178,9 @@ static int __driver_attach(struct device *dev, void *data)
 	 * is an error.
 	 */
 
+	device_lock(dev);
 	ret = driver_match_device(drv, dev);
+	device_unlock(dev);
 	if (ret == 0) {
 		/* no match */
 		return 0;
