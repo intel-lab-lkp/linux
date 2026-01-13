@@ -8,6 +8,7 @@
 
 #include <linux/errno.h>
 #include <linux/printk.h>
+#include <linux/string.h>
 #include <linux/module_signature.h>
 #include <asm/byteorder.h>
 
@@ -18,8 +19,8 @@
  * @file_len:	Size of the file to which @ms is appended.
  * @name:	What is being checked. Used for error messages.
  */
-int mod_check_sig(const struct module_signature *ms, size_t file_len,
-		  const char *name)
+static int mod_check_sig(const struct module_signature *ms, size_t file_len,
+			 const char *name)
 {
 	if (be32_to_cpu(ms->sig_len) >= file_len - sizeof(*ms))
 		return -EBADMSG;
@@ -41,6 +42,42 @@ int mod_check_sig(const struct module_signature *ms, size_t file_len,
 		       name);
 		return -EBADMSG;
 	}
+
+	return 0;
+}
+
+int mod_split_sig(const void *buf, size_t *buf_len, bool mangled,
+		  size_t *sig_len, const u8 **sig, const char *name)
+{
+	const unsigned long markerlen = sizeof(MODULE_SIG_STRING) - 1;
+	struct module_signature ms;
+	size_t modlen = *buf_len;
+	int ret;
+
+	/*
+	 * Do not allow mangled modules as a module with version information
+	 * removed is no longer the module that was signed.
+	 */
+	if (!mangled &&
+	    *buf_len > markerlen &&
+	    memcmp(buf + modlen - markerlen, MODULE_SIG_STRING, markerlen) == 0) {
+		/* We truncate the module to discard the signature */
+		modlen -= markerlen;
+	}
+
+	if (modlen <= sizeof(ms))
+		return -EBADMSG;
+
+	memcpy(&ms, buf + (modlen - sizeof(ms)), sizeof(ms));
+
+	ret = mod_check_sig(&ms, modlen, name);
+	if (ret)
+		return ret;
+
+	*sig_len = be32_to_cpu(ms.sig_len);
+	modlen -= *sig_len + sizeof(ms);
+	*buf_len = modlen;
+	*sig = buf + modlen;
 
 	return 0;
 }

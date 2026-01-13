@@ -40,29 +40,15 @@ struct modsig {
 int ima_read_modsig(enum ima_hooks func, const void *buf, loff_t buf_len,
 		    struct modsig **modsig)
 {
-	const size_t marker_len = strlen(MODULE_SIG_STRING);
-	const struct module_signature *sig;
+	size_t buf_len_sz = buf_len;
 	struct modsig *hdr;
 	size_t sig_len;
-	const void *p;
+	const u8 *sig;
 	int rc;
 
-	if (buf_len <= marker_len + sizeof(*sig))
-		return -ENOENT;
-
-	p = buf + buf_len - marker_len;
-	if (memcmp(p, MODULE_SIG_STRING, marker_len))
-		return -ENOENT;
-
-	buf_len -= marker_len;
-	sig = (const struct module_signature *)(p - sizeof(*sig));
-
-	rc = mod_check_sig(sig, buf_len, func_tokens[func]);
+	rc = mod_split_sig(buf, &buf_len_sz, true, &sig_len, &sig, func_tokens[func]);
 	if (rc)
 		return rc;
-
-	sig_len = be32_to_cpu(sig->sig_len);
-	buf_len -= sig_len + sizeof(*sig);
 
 	/* Allocate sig_len additional bytes to hold the raw PKCS#7 data. */
 	hdr = kzalloc(struct_size(hdr, raw_pkcs7, sig_len), GFP_KERNEL);
@@ -70,14 +56,14 @@ int ima_read_modsig(enum ima_hooks func, const void *buf, loff_t buf_len,
 		return -ENOMEM;
 
 	hdr->raw_pkcs7_len = sig_len;
-	hdr->pkcs7_msg = pkcs7_parse_message(buf + buf_len, sig_len);
+	hdr->pkcs7_msg = pkcs7_parse_message(sig, sig_len);
 	if (IS_ERR(hdr->pkcs7_msg)) {
 		rc = PTR_ERR(hdr->pkcs7_msg);
 		kfree(hdr);
 		return rc;
 	}
 
-	memcpy(hdr->raw_pkcs7, buf + buf_len, sig_len);
+	memcpy(hdr->raw_pkcs7, sig, sig_len);
 
 	/* We don't know the hash algorithm yet. */
 	hdr->hash_algo = HASH_ALGO__LAST;
