@@ -275,6 +275,18 @@ void dma_fence_free(struct dma_fence *fence);
 void dma_fence_describe(struct dma_fence *fence, struct seq_file *seq);
 
 /**
+ * dma_fence_is_initialized - test if fence was initialized
+ * @fence: fence to test
+ *
+ * Return: True if fence was initialized, false otherwise. Works correctly only
+ * when memory backing the fence structure is zero initialized on allocation.
+ */
+static inline bool dma_fence_is_initialized(struct dma_fence *fence)
+{
+	return fence && !!fence->ops;
+}
+
+/**
  * dma_fence_put - decreases refcount of the fence
  * @fence: fence to reduce refcount of
  */
