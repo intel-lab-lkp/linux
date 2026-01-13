@@ -3,7 +3,8 @@
 mod boot;
 
 use kernel::{
-    debugfs,
+    c_str,
+    debugfs::{self, Directory},
     device,
     dma::{
         CoherentAllocation,
@@ -101,17 +102,24 @@ impl LogBuffer {
     }
 }
 
-/// GSP runtime data.
-#[pin_data]
-pub(crate) struct Gsp {
-    /// Libos arguments.
-    pub(crate) libos: CoherentAllocation<LibosMemoryRegionInitArgument>,
+/// Log buffers used by GSP-RM for debug logging.
+struct LogBuffers {
     /// Init log buffer.
     loginit: LogBuffer,
     /// Interrupts log buffer.
     logintr: LogBuffer,
     /// RM log buffer.
     logrm: LogBuffer,
+}
+
+/// GSP runtime data.
+#[pin_data]
+pub(crate) struct Gsp {
+    /// Libos arguments.
+    pub(crate) libos: CoherentAllocation<LibosMemoryRegionInitArgument>,
+    /// Log buffers, optionally exposed via debugfs.
+    #[pin]
+    logs: debugfs::Scope<LogBuffers>,
     /// Command queue.
     pub(crate) cmdq: Cmdq,
     /// RM arguments.
@@ -147,15 +155,17 @@ impl Gsp {
         pin_init::pin_init_scope(move || {
             let dev = pdev.as_ref();
 
+            // Create log buffers before try_pin_init! so they're accessible throughout
+            let loginit = LogBuffer::new(dev)?;
+            let logintr = LogBuffer::new(dev)?;
+            let logrm = LogBuffer::new(dev)?;
+
             Ok(try_pin_init!(Self {
                 libos: CoherentAllocation::<LibosMemoryRegionInitArgument>::alloc_coherent(
                     dev,
                     GSP_PAGE_SIZE / size_of::<LibosMemoryRegionInitArgument>(),
                     GFP_KERNEL | __GFP_ZERO,
                 )?,
-                loginit: LogBuffer::new(dev)?,
-                logintr: LogBuffer::new(dev)?,
-                logrm: LogBuffer::new(dev)?,
                 cmdq: Cmdq::new(dev)?,
                 rmargs: CoherentAllocation::<GspArgumentsCached>::alloc_coherent(
                     dev,
@@ -175,6 +185,24 @@ impl Gsp {
                     dma_write!(libos[2] = LibosMemoryRegionInitArgument::new("LOGRM", &logrm.0))?;
                     dma_write!(rmargs[0] = fw::GspArgumentsCached::new(cmdq))?;
                     dma_write!(libos[3] = LibosMemoryRegionInitArgument::new("RMARGS", rmargs))?;
+                },
+                logs <- {
+                    let log_buffers = LogBuffers {
+                        loginit,
+                        logintr,
+                        logrm,
+                    };
+
+                    // Look up nova_core debugfs directory - only create entries if it exists.
+                    // If nova_core doesn't exist, debugfs_dir will be empty and file creation
+                    // becomes a no-op (data is still stored, just not exposed via debugfs).
+                    let debugfs_dir = debugfs::LookupDir::new(c_str!("nova_core"));
+
+                    debugfs_dir.scope(log_buffers, pdev.name(), |logs, dir| {
+                        dir.read_binary_file(c_str!("loginit"), &logs.loginit);
+                        dir.read_binary_file(c_str!("logintr"), &logs.logintr);
+                        dir.read_binary_file(c_str!("logrm"), &logs.logrm);
+                    })
                 },
             }))
         })
