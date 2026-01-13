@@ -53,6 +53,7 @@ struct ctl_dir;
 #define SYSCTL_MAXOLDUID		((void *)&sysctl_vals[10])
 #define SYSCTL_NEG_ONE			((void *)&sysctl_vals[11])
 
+#define SYSCTL_NULL			((void *)NULL)
 extern const int sysctl_vals[];
 
 #define SYSCTL_LONG_ZERO	((void *)&sysctl_long_vals[0])
@@ -174,6 +175,23 @@ struct ctl_table {
 	void *extra1;
 	void *extra2;
 } __randomize_layout;
+
+#define __SYSCTL_ENTRY(NAME, DATA, TYPE, MODE, HANDLER, SMIN, SMAX)\
+	{							\
+		.procname	= NAME,				\
+		.data		= DATA,				\
+		.maxlen		= sizeof(TYPE),			\
+		.mode		= MODE,				\
+		.proc_handler	= HANDLER,			\
+		.extra1		= SMIN,				\
+		.extra2		= SMAX,				\
+	}
+
+#define SYSCTL_ENTRY(NAME, DATA, TYPE, MODE)			\
+	__SYSCTL_ENTRY(NAME, DATA, TYPE, MODE, proc_do##TYPE##vec, NULL, NULL)
+
+#define SYSCTL_RANGE_ENTRY(NAME, DATA, TYPE, MODE, SMIN, SMAX)	\
+	__SYSCTL_ENTRY(NAME, DATA, TYPE, MODE, proc_do##TYPE##vec_minmax, SMIN, SMAX)
 
 struct ctl_node {
 	struct rb_node node;

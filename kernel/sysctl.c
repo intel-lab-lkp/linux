@@ -1373,47 +1373,16 @@ int proc_do_static_key(const struct ctl_table *table, int dir,
 
 static const struct ctl_table sysctl_subsys_table[] = {
 #ifdef CONFIG_PROC_SYSCTL
-	{
-		.procname	= "sysctl_writes_strict",
-		.data		= &sysctl_writes_strict,
-		.maxlen		= sizeof(int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax,
-		.extra1		= SYSCTL_NEG_ONE,
-		.extra2		= SYSCTL_ONE,
-	},
+	SYSCTL_RANGE_ENTRY("sysctl_writes_strict", &sysctl_writes_strict, int, \
+			   0644, SYSCTL_NEG_ONE, SYSCTL_ONE),
 #endif
-	{
-		.procname	= "ngroups_max",
-		.data		= (void *)&ngroups_max,
-		.maxlen		= sizeof (int),
-		.mode		= 0444,
-		.proc_handler	= proc_dointvec,
-	},
-	{
-		.procname	= "cap_last_cap",
-		.data		= (void *)&cap_last_cap,
-		.maxlen		= sizeof(int),
-		.mode		= 0444,
-		.proc_handler	= proc_dointvec,
-	},
+	SYSCTL_ENTRY("ngroups_max", (void *)&ngroups_max, int, 0444),
+	SYSCTL_ENTRY("cap_last_cap", (void *)&cap_last_cap, int, 0444),
 #ifdef CONFIG_SYSCTL_ARCH_UNALIGN_ALLOW
-	{
-		.procname	= "unaligned-trap",
-		.data		= &unaligned_enabled,
-		.maxlen		= sizeof(int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
-	},
+	SYSCTL_ENTRY("unaligned-trap", &unaligned_enabled, int, 0644),
 #endif
 #ifdef CONFIG_SYSCTL_ARCH_UNALIGN_NO_WARN
-	{
-		.procname	= "ignore-unaligned-usertrap",
-		.data		= &no_unaligned_warning,
-		.maxlen		= sizeof (int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
-	},
+	SYSCTL_ENTRY("ignore-unaligned-usertrap", &no_unaligned_warning, int, 0644),
 #endif
 };
 
