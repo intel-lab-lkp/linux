@@ -1418,6 +1418,142 @@ static void pci_acpi_optimize_delay(struct pci_dev *pdev,
 	ACPI_FREE(obj);
 }
 
+static LIST_HEAD(acpi_aux_pwr_list);
+static DEFINE_MUTEX(acpi_aux_pwr_lock);
+
+struct aux_pwr {
+	u32 aux_pwr_limit;		/* aux power limit granted by platform firmware */
+	struct device *dev;		/* device to which aux power is granted  */
+	struct acpi_device *adev;	/* root port/downstream port */
+	struct list_head list;
+};
+
+enum aux_pwr_req_status {
+	AUX_PWR_REQ_DENIED               = 0x0,
+	AUX_PWR_REQ_GRANTED              = 0x1,
+	AUX_PWR_REQ_NO_MAIN_PWR_REMOVAL  = 0x2,
+	AUX_PWR_REQ_RETRY_INTERVAL_MIN   = 0x11,
+	AUX_PWR_REQ_RETRY_INTERVAL_MAX   = 0x1F
+};
+
+/**
+ * pci_acpi_request_d3cold_aux_power - Request aux power while device is in D3cold
+ * @dev: PCI device instance
+ * @requested_mw: Requested auxiliary power in milliwatts
+ * @retry_interval: Retry interval returned by platform to retry auxiliary
+ *                  power request
+ *
+ * Request auxilary power to platform firmware, via Root Port/Switch Downstream
+ * Port ACPI _DSM Function 0Ah, needed for the PCI device when it is in D3cold.
+ * Evaluate the _DSM and handle the response accordingly.
+ *
+ * For Multi-Function Devices, driver for Function 0 is required to report an
+ * aggregate power requirement covering all functions contained within the
+ * device.
+ *
+ * Return: 0 Aux power request granted
+ *	   1 No main power removal
+ *         errno on failure.
+ */
+int pci_acpi_request_d3cold_aux_power(struct pci_dev *dev, u32 requested_mw,
+				      u32 *retry_interval)
+{
+	union acpi_object in_obj = {
+		.integer.type = ACPI_TYPE_INTEGER,
+		.integer.value = requested_mw,
+	};
+
+	union acpi_object *out_obj;
+	int result;
+	struct pci_dev *bdev;
+	struct acpi_device *adev;
+	acpi_handle handle;
+	struct aux_pwr *apwr, *next;
+
+	if (!dev)
+		return -EINVAL;
+
+	for (bdev = dev; bdev; bdev = pci_upstream_bridge(bdev)) {
+		handle = ACPI_HANDLE(&bdev->dev);
+		if (handle &&
+		    acpi_check_dsm(handle, &pci_acpi_dsm_guid, 4,
+				   1 << DSM_PCI_D3COLD_AUX_POWER_LIMIT))
+			break;
+	}
+
+	if (!bdev)
+		return -ENODEV;
+
+	adev = ACPI_COMPANION(&bdev->dev);
+	if (!adev)
+		return -EINVAL;
+
+	guard(mutex)(&acpi_aux_pwr_lock);
+	/* Check if aux power already granted to different device */
+	list_for_each_entry_safe(apwr, next, &acpi_aux_pwr_list, list) {
+		if (apwr->adev == adev && apwr->dev != &dev->dev) {
+			pci_info(to_pci_dev(apwr->dev),
+				 "D3cold Aux Power request already granted: %u mW\n",
+				 apwr->aux_pwr_limit);
+			return -EALREADY;
+		}
+		if (apwr->adev == adev && apwr->dev == &dev->dev) {
+			list_del(&apwr->list);
+			kfree(apwr);
+			break;
+		}
+	}
+
+	out_obj = acpi_evaluate_dsm_typed(ACPI_HANDLE(&bdev->dev),
+					  &pci_acpi_dsm_guid, 4,
+					  DSM_PCI_D3COLD_AUX_POWER_LIMIT,
+					  &in_obj, ACPI_TYPE_INTEGER);
+	if (!out_obj)
+		return -EINVAL;
+
+	result = out_obj->integer.value;
+	ACPI_FREE(out_obj);
+
+	if (retry_interval)
+		*retry_interval = 0;
+
+	switch (result) {
+	case AUX_PWR_REQ_DENIED:
+		pci_dbg(bdev, "D3cold Aux Power %u mW request denied\n",
+			requested_mw);
+		return -EINVAL;
+	case AUX_PWR_REQ_GRANTED:
+		pci_info(bdev, "D3cold Aux Power request granted: %u mW\n",
+			 requested_mw);
+		apwr = kzalloc(sizeof(*apwr), GFP_KERNEL);
+		if (apwr) {
+			apwr->aux_pwr_limit = requested_mw;
+			apwr->dev = &dev->dev;
+			apwr->adev = adev;
+			INIT_LIST_HEAD(&apwr->list);
+			list_add(&acpi_aux_pwr_list,
+				 &apwr->list);
+		}
+		return 0;
+	case AUX_PWR_REQ_NO_MAIN_PWR_REMOVAL:
+		pci_info(bdev, "D3cold Aux Power: Main power won't be removed\n");
+		return 2;
+	case AUX_PWR_REQ_RETRY_INTERVAL_MIN ... AUX_PWR_REQ_RETRY_INTERVAL_MAX:
+		pci_info(bdev, "D3cold Aux Power request needs retry, interval: %u seconds\n",
+			 result & 0xF);
+		if (retry_interval) {
+			*retry_interval = result & 0xF;
+			return -EAGAIN;
+		}
+		return -EINVAL;
+	default:
+		pci_err(bdev, "D3cold Aux Power: Reserved or unsupported response: 0x%x\n",
+			result);
+		return -EINVAL;
+	}
+}
+EXPORT_SYMBOL_GPL(pci_acpi_request_d3cold_aux_power);
+
 static void pci_acpi_set_external_facing(struct pci_dev *dev)
 {
 	u8 val;
