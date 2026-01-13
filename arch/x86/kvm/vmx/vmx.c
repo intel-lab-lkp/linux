@@ -8829,8 +8829,11 @@ __init int vmx_hardware_setup(void)
 	}
 
 	r = alloc_kvm_area();
-	if (r && nested)
-		nested_vmx_hardware_unsetup();
+	if (r) {
+		if (nested)
+			nested_vmx_hardware_unsetup();
+		return r;
+	}
 
 	kvm_set_posted_intr_wakeup_handler(pi_wakeup_handler);
 
