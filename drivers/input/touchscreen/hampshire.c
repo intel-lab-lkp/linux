@@ -118,7 +118,7 @@ static int hampshire_connect(struct serio *serio, struct serio_driver *drv)
 
 	phampshire->serio = serio;
 	phampshire->dev = input_dev;
-	snprintf(phampshire->phys, sizeof(phampshire->phys),
+	scnprintf(phampshire->phys, sizeof(phampshire->phys),
 		 "%s/input0", serio->phys);
 
 	input_dev->name = "Hampshire Serial TouchScreen";
