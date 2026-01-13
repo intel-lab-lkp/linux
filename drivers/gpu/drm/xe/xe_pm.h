@@ -54,4 +54,6 @@ DEFINE_GUARD_COND(xe_pm_runtime, _ioctl, xe_pm_runtime_get_ioctl(_T), _RET >= 0)
 DEFINE_GUARD(xe_pm_runtime_release_only, struct xe_device *,
 	     __xe_pm_runtime_noop(_T), xe_pm_runtime_put(_T));
 
+int xe_pm_vrsr_enable(struct xe_device *xe);
+void xe_pm_vrsr_disable(struct xe_device *xe);
 #endif
