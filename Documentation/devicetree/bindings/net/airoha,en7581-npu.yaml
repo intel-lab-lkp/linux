@@ -18,6 +18,7 @@ properties:
   compatible:
     enum:
       - airoha,en7581-npu
+      - airoha,en7581-npu-7996
       - airoha,an7583-npu
 
   reg:
