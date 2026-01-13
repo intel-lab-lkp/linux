@@ -1197,6 +1197,15 @@ int nested_svm_vmexit(struct vcpu_svm *svm)
 	vmcb12->save.dr6    = svm->vcpu.arch.dr6;
 	vmcb12->save.cpl    = vmcb02->save.cpl;
 
+	/*
+	 * KVM stores the guest PAT in the IA32_PAT register while in
+	 * guest mode with nested NPT enabled (rather than in a
+	 * separate G_PAT register). Hence, the IA32_PAT MSR is stored
+	 * in the VMCB12 g_pat field on #VMEXIT.
+	 */
+	if (nested_npt_enabled(svm))
+		vmcb12->save.g_pat = vcpu->arch.pat;
+
 	if (guest_cpu_cap_has(vcpu, X86_FEATURE_SHSTK)) {
 		vmcb12->save.s_cet	= vmcb02->save.s_cet;
 		vmcb12->save.isst_addr	= vmcb02->save.isst_addr;
