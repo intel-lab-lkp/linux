@@ -1668,6 +1668,13 @@ enum v4l2_mpeg_video_h264_hierarchical_coding_type -
     Codecs need to always use the specified range, rather then a HW custom range.
     Applicable to encoders
 
+``V4L2_CID_MPEG_VIDEO_ENC_ROI (struct)``
+    Defines the control id to configure specific delta QP for one or more
+    rectangular regions of interest. The struct v4l2_ctrl_enc_roi_params
+    is defined to hold up to 10 v4l2_rect regions and their corresponding
+    delta_qp with a range of -31 to 30.
+    Applicable to encoders
+
 .. raw:: latex
 
     \normalsize

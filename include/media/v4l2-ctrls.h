@@ -91,6 +91,7 @@ union v4l2_ctrl_ptr {
 	struct v4l2_ctrl_av1_frame *p_av1_frame;
 	struct v4l2_ctrl_av1_film_grain *p_av1_film_grain;
 	struct v4l2_rect *p_rect;
+	struct v4l2_ctrl_enc_roi_params *p_enc_roi_params;
 	void *p;
 	const void *p_const;
 };

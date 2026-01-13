@@ -1909,6 +1909,7 @@ struct v4l2_ext_control {
 		struct v4l2_ctrl_av1_film_grain __user *p_av1_film_grain;
 		struct v4l2_ctrl_hdr10_cll_info __user *p_hdr10_cll_info;
 		struct v4l2_ctrl_hdr10_mastering_display __user *p_hdr10_mastering_display;
+		struct v4l2_ctrl_enc_roi_params __user *p_enc_roi_params;
 		void __user *ptr;
 	} __attribute__ ((packed));
 } __attribute__ ((packed));
@@ -1990,6 +1991,8 @@ enum v4l2_ctrl_type {
 	V4L2_CTRL_TYPE_AV1_TILE_GROUP_ENTRY = 0x281,
 	V4L2_CTRL_TYPE_AV1_FRAME	    = 0x282,
 	V4L2_CTRL_TYPE_AV1_FILM_GRAIN	    = 0x283,
+
+	V4L2_CTRL_TYPE_ENC_ROI_PARAMS	    = 0x284,
 };
 
 /*  Used in the VIDIOC_QUERYCTRL ioctl for querying controls */
@@ -2538,6 +2541,20 @@ struct v4l2_streamparm {
 		struct v4l2_outputparm	output;
 		__u8	raw_data[200];  /* user-defined */
 	} parm;
+};
+
+/* Roi format
+ */
+#define VIDEO_MAX_ROI_REGIONS         10
+
+struct v4l2_roi_param {
+	struct v4l2_rect roi_rect;
+	__s32 delta_qp;
+};
+
+struct v4l2_ctrl_enc_roi_params {
+	__u32 num_roi_regions;
+	struct v4l2_roi_param roi_params[VIDEO_MAX_ROI_REGIONS];
 };
 
 /*
