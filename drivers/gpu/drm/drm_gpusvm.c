@@ -1216,12 +1216,12 @@ bool drm_gpusvm_range_pages_valid(struct drm_gpusvm *gpusvm,
 EXPORT_SYMBOL_GPL(drm_gpusvm_range_pages_valid);
 
 /**
- * drm_gpusvm_range_pages_valid_unlocked() - GPU SVM range pages valid unlocked
+ * drm_gpusvm_pages_valid_unlocked() - GPU SVM range pages valid unlocked
  * @gpusvm: Pointer to the GPU SVM structure
- * @range: Pointer to the GPU SVM range structure
+ * @svm_pages: Pointer to the GPU SVM pages structure
  *
- * This function determines if a GPU SVM range pages are valid. Expected be
- * called without holding gpusvm->notifier_lock.
+ * This function determines if a GPU SVM range of pages is valid. Expected to
+ * be called without holding gpusvm->notifier_lock.
  *
  * Return: True if GPU SVM range has valid pages, False otherwise
  */
