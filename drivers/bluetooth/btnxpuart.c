@@ -105,6 +105,8 @@
 #define PS_STATE_SLEEP          1
 
 /* NXP Vendor Commands. Refer user manual UM11628 on nxp.com */
+/* Get FW version */
+#define HCI_NXP_GET_FW_VERSION	0xfc0f
 /* Set custom BD Address */
 #define HCI_NXP_SET_BD_ADDR	0xfc22
 /* Set Auto-Sleep mode */
@@ -227,6 +229,7 @@ struct btnxpuart_dev {
 	struct btnxpuart_data *nxp_data;
 	struct reset_control *pdn;
 	struct hci_uart hu;
+	bool secure_interface;
 	struct btnxpuart_crypto crypto;
 };
 
@@ -1554,6 +1557,47 @@ static int nxp_set_bdaddr(struct hci_dev *hdev, const bdaddr_t *bdaddr)
 	return 0;
 }
 
+static void nxp_handle_chip_specific_features(struct hci_dev *hdev, u8 *version)
+{
+	struct btnxpuart_dev *nxpdev = hci_get_drvdata(hdev);
+
+	if (!version || strlen(version) == 0)
+		return;
+
+	if (!strncmp(version, "aw693n-V1", strlen("aw693n-V1")))
+		nxpdev->secure_interface = true;
+}
+
+static void nxp_get_fw_version(struct hci_dev *hdev)
+{
+	struct sk_buff *skb;
+	u8 version[100] = {0};
+	u8 cmd = 0;
+	u8 *status;
+
+	skb = nxp_drv_send_cmd(hdev, HCI_NXP_GET_FW_VERSION, 1, &cmd, true);
+	if (IS_ERR(skb)) {
+		bt_dev_err(hdev, "Failed to get firmware version (%ld)",
+			   PTR_ERR(skb));
+		return;
+	}
+
+	status = skb_pull_data(skb, 1);
+	if (status) {
+		if (*status) {
+			bt_dev_err(hdev, "Error get FW version: %d", *status);
+		} else if (skb->len < 10 || skb->len >= 100) {
+			bt_dev_err(hdev, "Invalid FW version");
+		} else {
+			memcpy(version, skb->data, skb->len);
+			bt_dev_info(hdev, "FW Version: %s", version);
+			nxp_handle_chip_specific_features(hdev, version);
+		}
+	}
+
+	kfree_skb(skb);
+}
+
 /* NXP protocol */
 static int nxp_setup(struct hci_dev *hdev)
 {
@@ -1582,6 +1626,8 @@ static int nxp_setup(struct hci_dev *hdev)
 
 	serdev_device_set_baudrate(nxpdev->serdev, nxpdev->fw_init_baudrate);
 	nxpdev->current_baudrate = nxpdev->fw_init_baudrate;
+
+	nxp_get_fw_version(hdev);
 
 	ps_init(hdev);
 
