@@ -2933,10 +2933,18 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 		if (ret)
 			break;
 
-		svm->vmcb01.ptr->save.g_pat = data;
-		if (is_guest_mode(vcpu))
-			nested_vmcb02_compute_g_pat(svm);
+		if (!npt_enabled)
+			break;
+
+		svm->vmcb->save.g_pat = data;
 		vmcb_mark_dirty(svm->vmcb, VMCB_NPT);
+
+		if (!is_guest_mode(vcpu) || nested_npt_enabled(svm))
+			break;
+
+		svm->vmcb01.ptr->save.g_pat = data;
+		vmcb_mark_dirty(svm->vmcb01.ptr, VMCB_NPT);
+
 		break;
 	case MSR_IA32_SPEC_CTRL:
 		if (!msr->host_initiated &&
