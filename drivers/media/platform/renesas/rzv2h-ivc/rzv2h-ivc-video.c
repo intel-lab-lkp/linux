@@ -445,7 +445,7 @@ int rzv2h_ivc_init_vdev(struct rzv2h_ivc *ivc, struct v4l2_device *v4l2_dev)
 	INIT_LIST_HEAD(&ivc->buffers.queue);
 	INIT_WORK(&ivc->buffers.work, rzv2h_ivc_transfer_buffer);
 
-	ivc->buffers.async_wq = alloc_workqueue("rzv2h-ivc", 0, 0);
+	ivc->buffers.async_wq = alloc_workqueue("rzv2h-ivc", WQ_PERCPU, 0);
 	if (!ivc->buffers.async_wq)
 		return -EINVAL;
 
