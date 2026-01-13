@@ -502,6 +502,13 @@ enum cxl_partition_mode {
 	CXL_PARTMODE_PMEM,
 };
 
+
+enum cxl_region_driver {
+	CXL_REGION_DRIVER_NONE,
+	CXL_REGION_DRIVER_DAX,
+	CXL_REGION_DRIVER_PMEM,
+};
+
 /*
  * Indicate whether this region has been assembled by autodetection or
  * userspace assembly. Prevent endpoint decoders outside of automatic
@@ -543,6 +550,7 @@ struct cxl_region {
 	struct device dev;
 	int id;
 	enum cxl_partition_mode mode;
+	enum cxl_region_driver driver;
 	enum cxl_decoder_type type;
 	struct cxl_nvdimm_bridge *cxl_nvb;
 	struct cxl_pmem_region *cxlr_pmem;

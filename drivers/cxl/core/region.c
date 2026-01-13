@@ -626,6 +626,57 @@ static ssize_t mode_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RO(mode);
 
+static ssize_t region_driver_show(struct device *dev,
+				  struct device_attribute *attr,
+				  char *buf)
+{
+	struct cxl_region *cxlr = to_cxl_region(dev);
+	const char *desc;
+
+	switch (cxlr->driver) {
+	case CXL_REGION_DRIVER_NONE:
+		desc = "none";
+		break;
+	case CXL_REGION_DRIVER_DAX:
+		desc = "dax";
+		break;
+	case CXL_REGION_DRIVER_PMEM:
+		desc = "pmem";
+		break;
+	}
+
+	return sysfs_emit(buf, "%s\n", desc);
+}
+
+static ssize_t region_driver_store(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t len)
+{
+	struct cxl_region *cxlr = to_cxl_region(dev);
+	struct cxl_region_params *p = &cxlr->params;
+	int rc;
+
+	ACQUIRE(rwsem_write_kill, rwsem)(&cxl_rwsem.region);
+	if ((rc = ACQUIRE_ERR(rwsem_write_kill, &rwsem)))
+		return rc;
+
+	if (p->state >= CXL_CONFIG_COMMIT)
+		return -EBUSY;
+
+	/* PMEM drivers cannot be changed */
+	if (cxlr->mode == CXL_PARTMODE_PMEM)
+		return -EBUSY;
+
+	/* NONE type is not a valid selection for manually probed regions */
+	if (sysfs_streq(buf, "dax"))
+		cxlr->driver = CXL_REGION_DRIVER_DAX;
+	else
+		return -EINVAL;
+
+	return len;
+}
+static DEVICE_ATTR_RW(region_driver);
+
 static int alloc_hpa(struct cxl_region *cxlr, resource_size_t size)
 {
 	struct cxl_root_decoder *cxlrd = to_cxl_root_decoder(cxlr->dev.parent);
@@ -772,6 +823,7 @@ static struct attribute *cxl_region_attrs[] = {
 	&dev_attr_size.attr,
 	&dev_attr_mode.attr,
 	&dev_attr_extended_linear_cache_size.attr,
+	&dev_attr_region_driver.attr,
 	NULL,
 };
 
@@ -2599,6 +2651,16 @@ static struct cxl_region *devm_cxl_add_region(struct cxl_root_decoder *cxlrd,
 	cxlr->mode = mode;
 	cxlr->type = type;
 
+	/*
+	 * PMEM regions only have 1 driver: pmem_region
+	 * RAM regions default to DAX, but if the memory is already onlined by
+	 * BIOS as 'System-RAM', the DAX driver will be dropped during probe.
+	 */
+	if (mode == CXL_PARTMODE_PMEM)
+		cxlr->driver = CXL_REGION_DRIVER_PMEM;
+	else
+		cxlr->driver = CXL_REGION_DRIVER_DAX;
+
 	dev = &cxlr->dev;
 	rc = dev_set_name(dev, "region%d", id);
 	if (rc)
@@ -3951,33 +4013,38 @@ static int cxl_region_probe(struct device *dev)
 			return rc;
 	}
 
-	switch (cxlr->mode) {
-	case CXL_PARTMODE_PMEM:
-		rc = devm_cxl_region_edac_register(cxlr);
-		if (rc)
-			dev_dbg(&cxlr->dev, "CXL EDAC registration for region_id=%d failed\n",
-				cxlr->id);
-
-		return devm_cxl_add_pmem_region(cxlr);
-	case CXL_PARTMODE_RAM:
-		rc = devm_cxl_region_edac_register(cxlr);
-		if (rc)
-			dev_dbg(&cxlr->dev, "CXL EDAC registration for region_id=%d failed\n",
-				cxlr->id);
-
-		/*
-		 * The region can not be manged by CXL if any portion of
-		 * it is already online as 'System RAM'
-		 */
-		if (walk_iomem_res_desc(IORES_DESC_NONE,
-					IORESOURCE_SYSTEM_RAM | IORESOURCE_BUSY,
-					p->res->start, p->res->end, cxlr,
-					is_system_ram) > 0)
-			return 0;
-		return devm_cxl_add_dax_region(cxlr);
-	default:
+	if (cxlr->mode > CXL_PARTMODE_PMEM) {
 		dev_dbg(&cxlr->dev, "unsupported region mode: %d\n",
 			cxlr->mode);
+		return -ENXIO;
+	}
+
+	/*
+	 * The region can not be managed by CXL if any portion of
+	 * it is already online as 'System RAM'.
+	 */
+	if (walk_iomem_res_desc(IORES_DESC_NONE,
+				IORESOURCE_SYSTEM_RAM | IORESOURCE_BUSY,
+				p->res->start, p->res->end, cxlr,
+					is_system_ram) > 0) {
+		cxlr->driver = CXL_REGION_DRIVER_NONE;
+		return 0;
+	}
+
+	rc = devm_cxl_region_edac_register(cxlr);
+	dev_dbg(&cxlr->dev, "CXL EDAC registration for region_id=%d %s\n",
+			cxlr->id, rc ? "failed" : "succeeded");
+
+	switch (cxlr->driver) {
+	case CXL_REGION_DRIVER_NONE:
+		return 0;
+	case CXL_REGION_DRIVER_DAX:
+		return devm_cxl_add_dax_region(cxlr);
+	case CXL_REGION_DRIVER_PMEM:
+		return devm_cxl_add_pmem_region(cxlr);
+	default:
+		dev_dbg(&cxlr->dev, "unsupported region driver: %d\n",
+			cxlr->driver);
 		return -ENXIO;
 	}
 }
