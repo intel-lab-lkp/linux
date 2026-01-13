@@ -1368,7 +1368,7 @@ __always_inline bool free_pages_prepare(struct page *page,
 		count_vm_events(UNEVICTABLE_PGCLEARED, nr_pages);
 	}
 
-	if (unlikely(PageHWPoison(page)) && !order) {
+	if (unlikely(PageHWPoison(page))) {
 		/* Do not let hwpoison pages hit pcplists/buddy */
 		reset_page_owner(page, order);
 		page_table_check_free(page, order);
