@@ -15981,6 +15981,46 @@ lpfc_dual_chute_pci_bar_map(struct lpfc_hba *phba, uint16_t pci_barset)
 	return NULL;
 }
 
+static phys_addr_t
+lpfc_dual_chute_pci_bar_addr(struct lpfc_hba *phba, uint16_t pci_barset)
+{
+	if (!phba->pcidev)
+		return PHYS_ADDR_MAX;
+
+	switch (pci_barset) {
+	case WQ_PCI_BAR_0_AND_1:
+		return phba->pci_bar0_map;
+	case WQ_PCI_BAR_2_AND_3:
+		return phba->pci_bar1_map;
+	case WQ_PCI_BAR_4_AND_5:
+		return phba->pci_bar2_map;
+	default:
+		break;
+	}
+	return PHYS_ADDR_MAX;
+}
+
+static __maybe_unused void __iomem *
+lpfc_dpp_wc_map(struct lpfc_hba *phba, uint16_t pci_barset, uint32_t dpp_offset,
+		uint32_t size)
+{
+	if (!phba->sli4_hba.dpp_regs_memmap_wc_p) {
+		void __iomem *dpp_map;
+		phys_addr_t dpp_addr;
+
+		dpp_addr = lpfc_dual_chute_pci_bar_addr(phba, pci_barset);
+		if (dpp_addr == PHYS_ADDR_MAX)
+			return NULL;
+
+		dpp_addr += dpp_offset;
+		dpp_map = ioremap_wc(dpp_addr, size);
+		if (dpp_map)
+			phba->sli4_hba.dpp_regs_memmap_wc_p = dpp_map;
+	}
+
+	return phba->sli4_hba.dpp_regs_memmap_wc_p;
+}
+
 /**
  * lpfc_modify_hba_eq_delay - Modify Delay Multiplier on EQs
  * @phba: HBA structure that EQs are on.
@@ -16944,9 +16984,6 @@ lpfc_wq_create(struct lpfc_hba *phba, struct lpfc_queue *wq,
 	uint8_t dpp_barset;
 	uint32_t dpp_offset;
 	uint8_t wq_create_version;
-#ifdef CONFIG_X86
-	unsigned long pg_addr;
-#endif
 
 	/* sanity check on queue memory */
 	if (!wq || !cq)
@@ -17132,14 +17169,17 @@ lpfc_wq_create(struct lpfc_hba *phba, struct lpfc_queue *wq,
 
 #ifdef CONFIG_X86
 			/* Enable combined writes for DPP aperture */
-			pg_addr = (unsigned long)(wq->dpp_regaddr) & PAGE_MASK;
-			rc = set_memory_wc(pg_addr, 1);
-			if (rc) {
+			bar_memmap_p = lpfc_dpp_wc_map(phba, pci_barset,
+						       dpp_offset,
+						       wq->entry_size);
+			if (!bar_memmap_p) {
 				lpfc_printf_log(phba, KERN_ERR, LOG_INIT,
 					"3272 Cannot setup Combined "
 					"Write on WQ[%d] - disable DPP\n",
 					wq->queue_id);
 				phba->cfg_enable_dpp = 0;
+			} else {
+				wq->dpp_regaddr = bar_memmap_p;
 			}
 #else
 			phba->cfg_enable_dpp = 0;
