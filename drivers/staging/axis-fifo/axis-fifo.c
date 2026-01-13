@@ -145,16 +145,26 @@ struct axis_fifo_debug_reg {
  * ----------------------------
  */
 
+static inline u32 axis_fifo_read_reg(struct axis_fifo *fifo, int offset)
+{
+	return ioread32(fifo->base_addr + offset);
+}
+
+static inline void axis_fifo_write_reg(struct axis_fifo *fifo, int offset, u32 val)
+{
+	iowrite32(val, fifo->base_addr + offset);
+}
+
 static void reset_ip_core(struct axis_fifo *fifo)
 {
-	iowrite32(XLLF_SRR_RESET_MASK, fifo->base_addr + XLLF_SRR_OFFSET);
-	iowrite32(XLLF_TDFR_RESET_MASK, fifo->base_addr + XLLF_TDFR_OFFSET);
-	iowrite32(XLLF_RDFR_RESET_MASK, fifo->base_addr + XLLF_RDFR_OFFSET);
-	iowrite32(XLLF_INT_TC_MASK | XLLF_INT_RC_MASK | XLLF_INT_RPURE_MASK |
+	axis_fifo_write_reg(fifo, XLLF_SRR_OFFSET, XLLF_SRR_RESET_MASK);
+	axis_fifo_write_reg(fifo, XLLF_TDFR_OFFSET, XLLF_TDFR_RESET_MASK);
+	axis_fifo_write_reg(fifo, XLLF_RDFR_OFFSET, XLLF_RDFR_RESET_MASK);
+	axis_fifo_write_reg(fifo, XLLF_IER_OFFSET, XLLF_INT_TC_MASK |
+			XLLF_INT_RC_MASK | XLLF_INT_RPURE_MASK |
 		  XLLF_INT_RPORE_MASK | XLLF_INT_RPUE_MASK |
-		  XLLF_INT_TPOE_MASK | XLLF_INT_TSE_MASK,
-		  fifo->base_addr + XLLF_IER_OFFSET);
-	iowrite32(XLLF_INT_CLEAR_ALL, fifo->base_addr + XLLF_ISR_OFFSET);
+		  XLLF_INT_TPOE_MASK | XLLF_INT_TSE_MASK);
+	axis_fifo_write_reg(fifo, XLLF_ISR_OFFSET, XLLF_INT_CLEAR_ALL);
 }
 
 /**
@@ -192,7 +202,7 @@ static ssize_t axis_fifo_read(struct file *f, char __user *buf,
 		if (!mutex_trylock(&fifo->read_lock))
 			return -EAGAIN;
 
-		if (!ioread32(fifo->base_addr + XLLF_RDFO_OFFSET)) {
+		if (!axis_fifo_read_reg(fifo, XLLF_RDFO_OFFSET)) {
 			ret = -EAGAIN;
 			goto end_unlock;
 		}
@@ -203,7 +213,7 @@ static ssize_t axis_fifo_read(struct file *f, char __user *buf,
 		 */
 		mutex_lock(&fifo->read_lock);
 		ret = wait_event_interruptible_timeout(fifo->read_queue,
-						       ioread32(fifo->base_addr + XLLF_RDFO_OFFSET),
+						       axis_fifo_read_reg(fifo, XLLF_RDFO_OFFSET),
 						       read_timeout);
 
 		if (ret <= 0) {
@@ -218,7 +228,7 @@ static ssize_t axis_fifo_read(struct file *f, char __user *buf,
 		}
 	}
 
-	bytes_available = ioread32(fifo->base_addr + XLLF_RLR_OFFSET);
+	bytes_available = axis_fifo_read_reg(fifo, XLLF_RLR_OFFSET);
 	words_available = bytes_available / sizeof(u32);
 	if (!bytes_available) {
 		dev_err(fifo->dt_device, "received a packet of length 0\n");
@@ -334,8 +344,7 @@ static ssize_t axis_fifo_write(struct file *f, const char __user *buf,
 		if (!mutex_trylock(&fifo->write_lock))
 			return -EAGAIN;
 
-		if (words_to_write > ioread32(fifo->base_addr +
-					      XLLF_TDFV_OFFSET)) {
+		if (words_to_write > axis_fifo_read_reg(fifo, XLLF_TDFV_OFFSET)) {
 			ret = -EAGAIN;
 			goto end_unlock;
 		}
@@ -347,7 +356,7 @@ static ssize_t axis_fifo_write(struct file *f, const char __user *buf,
 		 */
 		mutex_lock(&fifo->write_lock);
 		ret = wait_event_interruptible_timeout(fifo->write_queue,
-						       ioread32(fifo->base_addr + XLLF_TDFV_OFFSET)
+						       axis_fifo_read_reg(fifo, XLLF_TDFV_OFFSET)
 								>= words_to_write,
 						       write_timeout);
 
@@ -373,7 +382,7 @@ static ssize_t axis_fifo_write(struct file *f, const char __user *buf,
 		iowrite32(txbuf[i], fifo->base_addr + XLLF_TDFD_OFFSET);
 
 	/* write packet size to fifo */
-	iowrite32(len, fifo->base_addr + XLLF_TLR_OFFSET);
+	axis_fifo_write_reg(fifo, XLLF_TLR_OFFSET, len);
 
 	ret = len;
 	kvfree(txbuf);
@@ -388,8 +397,8 @@ static irqreturn_t axis_fifo_irq(int irq, void *dw)
 	struct axis_fifo *fifo = dw;
 	u32 isr, ier, intr;
 
-	ier = ioread32(fifo->base_addr + XLLF_IER_OFFSET);
-	isr = ioread32(fifo->base_addr + XLLF_ISR_OFFSET);
+	ier = axis_fifo_read_reg(fifo, XLLF_IER_OFFSET);
+	isr = axis_fifo_read_reg(fifo, XLLF_ISR_OFFSET);
 	intr = ier & isr;
 
 	if (intr & XLLF_INT_RC_MASK)
@@ -414,7 +423,7 @@ static irqreturn_t axis_fifo_irq(int irq, void *dw)
 		dev_err(fifo->dt_device,
 			"transmit length mismatch error interrupt\n");
 
-	iowrite32(XLLF_INT_CLEAR_ALL, fifo->base_addr + XLLF_ISR_OFFSET);
+	axis_fifo_write_reg(fifo, XLLF_ISR_OFFSET, XLLF_INT_CLEAR_ALL);
 
 	return IRQ_HANDLED;
 }
@@ -464,7 +473,7 @@ static int axis_fifo_debugfs_regs_show(struct seq_file *m, void *p)
 	struct axis_fifo *fifo = m->private;
 
 	for (reg = regs; reg->name; ++reg) {
-		u32 val = ioread32(fifo->base_addr + reg->offset);
+		u32 val = axis_fifo_read_reg(fifo, reg->offset);
 
 		seq_printf(m, "%*s: 0x%08x\n", AXIS_FIFO_DEBUG_REG_NAME_MAX_LEN,
 			   reg->name, val);
