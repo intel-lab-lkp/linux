@@ -2460,27 +2460,18 @@ static void damon_split_regions_of(struct damon_target *t, int nr_subs,
 				  unsigned long min_sz_region)
 {
 	struct damon_region *r, *next;
-	unsigned long sz_region, sz_sub = 0;
+	unsigned long sz_region, sz_sub;
 	int i;
 
 	damon_for_each_region_safe(r, next, t) {
 		sz_region = damon_sz_region(r);
+		sz_sub = ALIGN_DOWN(sz_region / nr_subs, min_sz_region);
 
-		for (i = 0; i < nr_subs - 1 &&
-				sz_region > 2 * min_sz_region; i++) {
-			/*
-			 * Randomly select size of left sub-region to be at
-			 * least 10 percent and at most 90% of original region
-			 */
-			sz_sub = ALIGN_DOWN(damon_rand(1, 10) *
-					sz_region / 10, min_sz_region);
-			/* Do not allow blank region */
-			if (sz_sub == 0 || sz_sub >= sz_region)
-				continue;
+		if (sz_sub < min_sz_region)
+			continue;
 
-			damon_split_region_at(t, r, sz_sub);
-			sz_region = sz_sub;
-		}
+		for (i = 1; i < nr_subs; i++)
+			damon_split_region_at(t, r, sz_region - sz_sub * i);
 	}
 }
 
