@@ -529,7 +529,7 @@ static int usb_amradio_probe(struct usb_interface *intf,
 	if (radio->hdl.error) {
 		retval = radio->hdl.error;
 		dev_err(&intf->dev, "couldn't register control\n");
-		goto err_ctrl;
+		goto err_vdev;
 	}
 	mutex_init(&radio->lock);
 
