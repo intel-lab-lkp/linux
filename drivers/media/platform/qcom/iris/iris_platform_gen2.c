@@ -586,6 +586,14 @@ static const struct platform_inst_fw_cap inst_fw_cap_sm8550_enc[] = {
 		.flags = CAP_FLAG_OUTPUT_PORT,
 		.set = iris_set_u32,
 	},
+	{
+		.cap_id = ROI_PARAMS,
+		.step_or_mask = 1,
+		.p_def = NULL,
+		.flags = CAP_FLAG_OUTPUT_PORT | CAP_FLAG_COMPOUND |
+			 CAP_FLAG_DYNAMIC_ALLOWED,
+		.set = iris_set_roi_params,
+	},
 };
 
 static struct platform_inst_caps platform_inst_cap_sm8550 = {

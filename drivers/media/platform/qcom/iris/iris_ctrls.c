@@ -98,6 +98,8 @@ static enum platform_inst_fw_cap_type iris_get_cap_id(u32 id)
 		return B_FRAME_QP_H264;
 	case V4L2_CID_MPEG_VIDEO_HEVC_B_FRAME_QP:
 		return B_FRAME_QP_HEVC;
+	case V4L2_CID_MPEG_VIDEO_ENC_ROI:
+		return ROI_PARAMS;
 	default:
 		return INST_FW_CAP_MAX;
 	}
@@ -185,6 +187,8 @@ static u32 iris_get_v4l2_id(enum platform_inst_fw_cap_type cap_id)
 		return V4L2_CID_MPEG_VIDEO_H264_B_FRAME_QP;
 	case B_FRAME_QP_HEVC:
 		return V4L2_CID_MPEG_VIDEO_HEVC_B_FRAME_QP;
+	case ROI_PARAMS:
+		return V4L2_CID_MPEG_VIDEO_ENC_ROI;
 	default:
 		return 0;
 	}
@@ -208,8 +212,13 @@ static int iris_op_s_ctrl(struct v4l2_ctrl *ctrl)
 		return -EINVAL;
 
 	cap[cap_id].flags |= CAP_FLAG_CLIENT_SET;
-
 	inst->fw_caps[cap_id].value = ctrl->val;
+
+	if (inst->fw_caps[cap_id].flags & CAP_FLAG_COMPOUND) {
+		if (cap_id == ROI_PARAMS)
+			inst->fw_caps[cap_id].p_def =
+				(const void *)ctrl->p_new.p_enc_roi_params;
+	}
 
 	if (vb2_is_streaming(q)) {
 		if (cap[cap_id].set)
@@ -221,6 +230,21 @@ static int iris_op_s_ctrl(struct v4l2_ctrl *ctrl)
 
 static const struct v4l2_ctrl_ops iris_ctrl_ops = {
 	.s_ctrl = iris_op_s_ctrl,
+};
+
+static const struct v4l2_ctrl_enc_roi_params enc_roi_params = {
+	.num_roi_regions = 10,
+	.roi_params = {
+	[0 ... 9] = {
+		.roi_rect = {
+			.left = 0,
+			.top = 0,
+			.width = 0,
+			.height = 0,
+			},
+		.delta_qp = 0,
+		},
+	},
 };
 
 int iris_ctrls_init(struct iris_inst *inst)
@@ -263,6 +287,22 @@ int iris_ctrls_init(struct iris_inst *inst)
 						      cap[idx].max,
 						      ~(cap[idx].step_or_mask),
 						      cap[idx].value);
+		} else if (cap[idx].flags & CAP_FLAG_COMPOUND) {
+			if (cap[idx].cap_id == ROI_PARAMS)
+				cap[idx].p_def = &enc_roi_params;
+
+			ctrl = v4l2_ctrl_new_std_compound(&inst->ctrl_handler,
+							  &iris_ctrl_ops,
+							  v4l2_id,
+							  v4l2_ctrl_ptr_create
+							  ((void *)
+							    cap[idx].p_def),
+							  v4l2_ctrl_ptr_create
+							  ((void *)
+							    NULL),
+							  v4l2_ctrl_ptr_create
+							  ((void *)
+							    NULL));
 		} else {
 			ctrl = v4l2_ctrl_new_std(&inst->ctrl_handler,
 						 &iris_ctrl_ops,
@@ -912,6 +952,18 @@ int iris_set_properties(struct iris_inst *inst, u32 plane)
 		if (cap->cap_id && cap->set)
 			cap->set(inst, i);
 	}
+
+	return 0;
+}
+
+int iris_set_roi_params(struct iris_inst *inst, u32 plane)
+{
+	const struct v4l2_ctrl_enc_roi_params *enc_roi_params;
+	enc_roi_params = inst->fw_caps[ROI_PARAMS].p_def;
+
+	/* Todo: Send HFI prop to firmware
+	 * once support is available
+	 */
 
 	return 0;
 }
