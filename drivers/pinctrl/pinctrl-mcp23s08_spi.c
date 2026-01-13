@@ -141,6 +141,7 @@ static int mcp23s08_probe(struct spi_device *spi)
 	unsigned long spi_present_mask;
 	unsigned int ngpio = 0;
 	unsigned int addr;
+	unsigned int line_offset = 0;
 	int chips;
 	int ret;
 	u32 v;
@@ -177,6 +178,9 @@ static int mcp23s08_probe(struct spi_device *spi)
 		ret = mcp23s08_spi_regmap_init(data->mcp[addr], dev, addr, info);
 		if (ret)
 			return ret;
+
+		data->mcp[addr]->chip.offset = line_offset;
+		line_offset += data->mcp[addr]->chip.ngpio;
 
 		data->mcp[addr]->pinctrl_desc.name = devm_kasprintf(dev, GFP_KERNEL,
 								    "mcp23xxx-pinctrl.%d",
