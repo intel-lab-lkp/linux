@@ -1194,6 +1194,21 @@ int dw_pcie_suspend_noirq(struct dw_pcie *pci)
 			return ret;
 	}
 
+	/*
+	 * Skip L23 poll and wait to avoid the read hang, when LTSSM is
+	 * not powered in L2/L3/LDn properly.
+	 *
+	 * Refer to PCIe r6.0, sec 5.2, fig 5-1 Link Power Management
+	 * State Flow Diagram. Both L0 and L2/L3 Ready can be
+	 * transferred to LDn directly. On the LTSSM states poll broken
+	 * platforms, add a max 10ms delay refer to PCIe r6.0,
+	 * sec 5.3.3.2.1 PME Synchronization.
+	 */
+	if (pci->pp.skip_l23_wait) {
+		mdelay(PCIE_PME_TO_L2_TIMEOUT_US/1000);
+		goto stop_link;
+	}
+
 	ret = read_poll_timeout(dw_pcie_get_ltssm, val,
 				val == DW_PCIE_LTSSM_L2_IDLE ||
 				val <= DW_PCIE_LTSSM_DETECT_WAIT,
