@@ -452,7 +452,8 @@ static bool mdio_i2c_check_functionality(struct i2c_adapter *i2c,
 		return true;
 
 	if (i2c_check_functionality(i2c, I2C_FUNC_SMBUS_BYTE_DATA) &&
-	    protocol == MDIO_I2C_MARVELL_C22)
+	    (protocol == MDIO_I2C_MARVELL_C22 ||
+	     protocol == MDIO_I2C_SINGLE_BYTE_C22))
 		return true;
 
 	return false;
@@ -475,9 +476,12 @@ struct mii_bus *mdio_i2c_alloc(struct device *parent, struct i2c_adapter *i2c,
 	mii->parent = parent;
 	mii->priv = i2c;
 
-	/* Only use SMBus if we have no other choice */
-	if (i2c_check_functionality(i2c, I2C_FUNC_SMBUS_BYTE_DATA) &&
-	    !i2c_check_functionality(i2c, I2C_FUNC_I2C)) {
+	/* Only use single-byte SMBus if explicitly asked, or if we have no
+	 * other choice.
+	 */
+	if (protocol == MDIO_I2C_SINGLE_BYTE_C22 ||
+	    (i2c_check_functionality(i2c, I2C_FUNC_SMBUS_BYTE_DATA) &&
+	    !i2c_check_functionality(i2c, I2C_FUNC_I2C))) {
 		mii->read = smbus_byte_mii_read_default_c22;
 		mii->write = smbus_byte_mii_write_default_c22;
 		return mii;

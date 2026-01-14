@@ -2016,6 +2016,7 @@ static int sfp_sm_probe_for_phy(struct sfp *sfp)
 		break;
 
 	case MDIO_I2C_MARVELL_C22:
+	case MDIO_I2C_SINGLE_BYTE_C22:
 		err = sfp_sm_probe_phy(sfp, SFP_PHY_ADDR, false);
 		break;
 
