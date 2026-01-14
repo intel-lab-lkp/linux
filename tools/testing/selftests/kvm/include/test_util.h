@@ -152,6 +152,8 @@ enum vm_mem_backing_src_type {
 	VM_MEM_SRC_ANONYMOUS_HUGETLB_16GB,
 	VM_MEM_SRC_SHMEM,
 	VM_MEM_SRC_SHARED_HUGETLB,
+	VM_MEM_SRC_GUEST_MEMFD,
+	VM_MEM_SRC_GUEST_MEMFD_NO_DIRECT_MAP,
 	NUM_SRC_TYPES,
 };
 
@@ -182,6 +184,11 @@ bool is_numa_balancing_enabled(void);
 static inline bool backing_src_is_shared(enum vm_mem_backing_src_type t)
 {
 	return vm_mem_backing_src_alias(t)->flag & MAP_SHARED;
+}
+
+static inline bool backing_src_is_guest_memfd(enum vm_mem_backing_src_type t)
+{
+	return t == VM_MEM_SRC_GUEST_MEMFD || t == VM_MEM_SRC_GUEST_MEMFD_NO_DIRECT_MAP;
 }
 
 static inline bool backing_src_can_be_huge(enum vm_mem_backing_src_type t)
