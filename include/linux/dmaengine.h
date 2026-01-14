@@ -317,66 +317,6 @@ struct dma_router {
 };
 
 /**
- * struct dma_chan - devices supply DMA channels, clients use them
- * @device: ptr to the dma device who supplies this channel, always !%NULL
- * @slave: ptr to the device using this channel
- * @cookie: last cookie value returned to client
- * @completed_cookie: last completed cookie for this channel
- * @chan_id: channel ID for sysfs
- * @dev: class device for sysfs
- * @name: backlink name for sysfs
- * @dbg_client_name: slave name for debugfs in format:
- *	dev_name(requester's dev):channel name, for example: "2b00000.mcasp:tx"
- * @device_node: used to add this to the device chan list
- * @local: per-cpu pointer to a struct dma_chan_percpu
- * @client_count: how many clients are using this channel
- * @table_count: number of appearances in the mem-to-mem allocation table
- * @router: pointer to the DMA router structure
- * @route_data: channel specific data for the router
- * @private: private data for certain client-channel associations
- */
-struct dma_chan {
-	struct dma_device *device;
-	struct device *slave;
-	dma_cookie_t cookie;
-	dma_cookie_t completed_cookie;
-
-	/* sysfs */
-	int chan_id;
-	struct dma_chan_dev *dev;
-	const char *name;
-#ifdef CONFIG_DEBUG_FS
-	char *dbg_client_name;
-#endif
-
-	struct list_head device_node;
-	struct dma_chan_percpu __percpu *local;
-	int client_count;
-	int table_count;
-
-	/* DMA router */
-	struct dma_router *router;
-	void *route_data;
-
-	void *private;
-};
-
-/**
- * struct dma_chan_dev - relate sysfs device node to backing channel device
- * @chan: driver channel device
- * @device: sysfs device
- * @dev_id: parent dma_device dev_id
- * @chan_dma_dev: The channel is using custom/different dma-mapping
- * compared to the parent dma_device
- */
-struct dma_chan_dev {
-	struct dma_chan *chan;
-	struct device device;
-	int dev_id;
-	bool chan_dma_dev;
-};
-
-/**
  * enum dma_slave_buswidth - defines bus width of the DMA slave
  * device, source or target buses
  */
@@ -457,6 +397,66 @@ struct dma_slave_config {
 	bool device_fc;
 	void *peripheral_config;
 	size_t peripheral_size;
+};
+
+/**
+ * struct dma_chan - devices supply DMA channels, clients use them
+ * @device: ptr to the dma device who supplies this channel, always !%NULL
+ * @slave: ptr to the device using this channel
+ * @cookie: last cookie value returned to client
+ * @completed_cookie: last completed cookie for this channel
+ * @chan_id: channel ID for sysfs
+ * @dev: class device for sysfs
+ * @name: backlink name for sysfs
+ * @dbg_client_name: slave name for debugfs in format:
+ *      dev_name(requester's dev):channel name, for example: "2b00000.mcasp:tx"
+ * @device_node: used to add this to the device chan list
+ * @local: per-cpu pointer to a struct dma_chan_percpu
+ * @client_count: how many clients are using this channel
+ * @table_count: number of appearances in the mem-to-mem allocation table
+ * @router: pointer to the DMA router structure
+ * @route_data: channel specific data for the router
+ * @private: private data for certain client-channel associations
+ */
+struct dma_chan {
+	struct dma_device *device;
+	struct device *slave;
+	dma_cookie_t cookie;
+	dma_cookie_t completed_cookie;
+
+	/* sysfs */
+	int chan_id;
+	struct dma_chan_dev *dev;
+	const char *name;
+#ifdef CONFIG_DEBUG_FS
+	char *dbg_client_name;
+#endif
+
+	struct list_head device_node;
+	struct dma_chan_percpu __percpu *local;
+	int client_count;
+	int table_count;
+
+	/* DMA router */
+	struct dma_router *router;
+	void *route_data;
+
+	void *private;
+};
+
+/**
+ * struct dma_chan_dev - relate sysfs device node to backing channel device
+ * @chan: driver channel device
+ * @device: sysfs device
+ * @dev_id: parent dma_device dev_id
+ * @chan_dma_dev: The channel is using custom/different dma-mapping
+ * compared to the parent dma_device
+ */
+struct dma_chan_dev {
+	struct dma_chan *chan;
+	struct device device;
+	int dev_id;
+	bool chan_dma_dev;
 };
 
 /**
