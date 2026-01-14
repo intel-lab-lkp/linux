@@ -85,6 +85,20 @@ enum iio_backend_filter_type {
 };
 
 /**
+ * enum iio_backend_capabilities - Backend capabilities
+ * Backend capabilities can be used by frontends to check if a given
+ * functionality is supported by the backend. Capabilities are loosely
+ * coupled with operations, meaning that a capability requires certain
+ * operations to be implemented by the backend.
+ * @IIO_BACKEND_CAP_CALIBRATION: Backend supports calibration. Needs at least
+ * iodelay_set(), test_pattern_set() data_sample_trigger(), chan_status()
+ * and data_format_set() operations implemented.
+ */
+enum iio_backend_capabilities {
+	IIO_BACKEND_CAP_CALIBRATION = BIT(0),
+};
+
+/**
  * struct iio_backend_ops - operations structure for an iio_backend
  * @enable: Enable backend.
  * @disable: Disable backend.
@@ -179,10 +193,12 @@ struct iio_backend_ops {
  * struct iio_backend_info - info structure for an iio_backend
  * @name: Backend name.
  * @ops: Backend operations.
+ * @caps: Backend capabilities. @see iio_backend_capabilities
  */
 struct iio_backend_info {
 	const char *name;
 	const struct iio_backend_ops *ops;
+	u32 caps;
 };
 
 int iio_backend_chan_enable(struct iio_backend *back, unsigned int chan);
@@ -235,6 +251,7 @@ int iio_backend_read_raw(struct iio_backend *back,
 			 long mask);
 int iio_backend_extend_chan_spec(struct iio_backend *back,
 				 struct iio_chan_spec *chan);
+int iio_backend_has_caps(struct iio_backend *back, u32 caps);
 void *iio_backend_get_priv(const struct iio_backend *conv);
 struct iio_backend *devm_iio_backend_get(struct device *dev, const char *name);
 struct iio_backend *devm_iio_backend_fwnode_get(struct device *dev,
