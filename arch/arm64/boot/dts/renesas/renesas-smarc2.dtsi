@@ -96,6 +96,13 @@
 	clock-frequency = <400000>;
 };
 
+&pcie {
+	dma-ranges = <0x42000000 0 0x40000000 0 0x40000000 1 0x00000000>;
+	pinctrl-0 = <&pcie_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
 &scif0 {
 	status = "okay";
 };
