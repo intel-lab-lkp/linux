@@ -1364,7 +1364,8 @@ struct klp_object_ext *klp_build_locate_init_objects(const struct module *mod,
 	for (int i = 1; i < info->hdr.e_shnum; i++) {
 		Elf_Shdr *shdr = &info->sechdrs[i];
 
-		if (strcmp(info->secstrings + shdr->sh_name, "__klp_objects"))
+		if (strcmp(info->secstrings + shdr->sh_name,
+			   ".init.klp_objects"))
 			continue;
 
 		*nr_objs = shdr->sh_size / sizeof(struct klp_object_ext);
