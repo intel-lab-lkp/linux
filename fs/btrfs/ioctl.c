@@ -1432,30 +1432,6 @@ out:
 	return ret;
 }
 
-static noinline bool key_in_sk(const struct btrfs_key *key,
-			       const struct btrfs_ioctl_search_key *sk)
-{
-	struct btrfs_key test;
-	int ret;
-
-	test.objectid = sk->min_objectid;
-	test.type = sk->min_type;
-	test.offset = sk->min_offset;
-
-	ret = btrfs_comp_cpu_keys(key, &test);
-	if (ret < 0)
-		return false;
-
-	test.objectid = sk->max_objectid;
-	test.type = sk->max_type;
-	test.offset = sk->max_offset;
-
-	ret = btrfs_comp_cpu_keys(key, &test);
-	if (ret > 0)
-		return false;
-	return true;
-}
-
 static noinline int copy_to_sk(struct btrfs_path *path,
 			       struct btrfs_key *key,
 			       const struct btrfs_ioctl_search_key *sk,
@@ -1467,7 +1443,7 @@ static noinline int copy_to_sk(struct btrfs_path *path,
 	u64 found_transid;
 	struct extent_buffer *leaf;
 	struct btrfs_ioctl_search_header sh;
-	struct btrfs_key test;
+	struct btrfs_key max_key;
 	unsigned long item_off;
 	unsigned long item_len;
 	int nritems;
@@ -1483,6 +1459,9 @@ static noinline int copy_to_sk(struct btrfs_path *path,
 		i = nritems;
 		goto advance_key;
 	}
+	max_key.objectid = sk->max_objectid;
+	max_key.type = sk->max_type;
+	max_key.offset = sk->max_offset;
 	found_transid = btrfs_header_generation(leaf);
 
 	for (i = slot; i < nritems; i++) {
@@ -1490,8 +1469,10 @@ static noinline int copy_to_sk(struct btrfs_path *path,
 		item_len = btrfs_item_size(leaf, i);
 
 		btrfs_item_key_to_cpu(leaf, key, i);
-		if (!key_in_sk(key, sk))
-			continue;
+		if (btrfs_comp_cpu_keys(key, &max_key) > 0) {
+			ret = 1;
+			goto out;
+		}
 
 		if (sizeof(sh) + item_len > *buf_size) {
 			if (*num_found) {
@@ -1560,10 +1541,7 @@ static noinline int copy_to_sk(struct btrfs_path *path,
 	}
 advance_key:
 	ret = 0;
-	test.objectid = sk->max_objectid;
-	test.type = sk->max_type;
-	test.offset = sk->max_offset;
-	if (btrfs_comp_cpu_keys(key, &test) >= 0)
+	if (btrfs_comp_cpu_keys(key, &max_key) >= 0)
 		ret = 1;
 	else if (key->offset < (u64)-1)
 		key->offset++;
