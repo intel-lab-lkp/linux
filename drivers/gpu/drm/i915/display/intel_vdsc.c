@@ -421,7 +421,7 @@ intel_dsc_power_domain(struct intel_crtc *crtc, enum transcoder cpu_transcoder)
 
 static int intel_dsc_get_vdsc_per_pipe(const struct intel_crtc_state *crtc_state)
 {
-	return crtc_state->dsc.num_streams;
+	return crtc_state->dsc.slice_config.streams_per_pipe;
 }
 
 int intel_dsc_get_num_vdsc_instances(const struct intel_crtc_state *crtc_state)
@@ -1023,12 +1023,13 @@ void intel_dsc_get_config(struct intel_crtc_state *crtc_state)
 	if (!crtc_state->dsc.compression_enable)
 		goto out;
 
+	/* TODO: Read out slice_config.pipes_per_line/slices_per_stream as well */
 	if (dss_ctl1 & JOINER_ENABLE && dss_ctl2 & (VDSC2_ENABLE | SMALL_JOINER_CONFIG_3_ENGINES))
-		crtc_state->dsc.num_streams = 3;
+		crtc_state->dsc.slice_config.streams_per_pipe = 3;
 	else if (dss_ctl1 & JOINER_ENABLE && dss_ctl2 & VDSC1_ENABLE)
-		crtc_state->dsc.num_streams = 2;
+		crtc_state->dsc.slice_config.streams_per_pipe = 2;
 	else
-		crtc_state->dsc.num_streams = 1;
+		crtc_state->dsc.slice_config.streams_per_pipe = 1;
 
 	intel_dsc_get_pps_config(crtc_state);
 out:
@@ -1042,7 +1043,7 @@ static void intel_vdsc_dump_state(struct drm_printer *p, int indent,
 			  "dsc-dss: compressed-bpp:" FXP_Q4_FMT ", slice-count: %d, num_streams: %d\n",
 			  FXP_Q4_ARGS(crtc_state->dsc.compressed_bpp_x16),
 			  crtc_state->dsc.slice_count,
-			  crtc_state->dsc.num_streams);
+			  crtc_state->dsc.slice_config.streams_per_pipe);
 }
 
 void intel_vdsc_state_dump(struct drm_printer *p, int indent,

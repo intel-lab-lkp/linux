@@ -2418,11 +2418,11 @@ int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 	 */
 	if (pipe_config->joiner_pipes && num_joined_pipes == 4 &&
 	    pipe_config->dsc.slice_count == 12)
-		pipe_config->dsc.num_streams = 3;
+		pipe_config->dsc.slice_config.streams_per_pipe = 3;
 	else if (pipe_config->joiner_pipes || pipe_config->dsc.slice_count > 1)
-		pipe_config->dsc.num_streams = 2;
+		pipe_config->dsc.slice_config.streams_per_pipe = 2;
 	else
-		pipe_config->dsc.num_streams = 1;
+		pipe_config->dsc.slice_config.streams_per_pipe = 1;
 
 	ret = intel_dp_dsc_compute_params(connector, pipe_config);
 	if (ret < 0) {
