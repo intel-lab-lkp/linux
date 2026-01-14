@@ -959,14 +959,11 @@ u32 get_max_compressed_bpp_with_joiner(struct intel_display *display,
 	return max_bpp;
 }
 
-u8 intel_dp_dsc_get_slice_count(const struct intel_connector *connector,
-				int mode_clock, int mode_hdisplay,
-				int num_joined_pipes)
+static int intel_dp_dsc_min_slice_count(const struct intel_connector *connector,
+					int mode_clock, int mode_hdisplay)
 {
 	struct intel_display *display = to_intel_display(connector);
-	u32 sink_slice_count_mask =
-		drm_dp_dsc_sink_slice_count_mask(connector->dp.dsc_dpcd, false);
-	u8 min_slice_count, i;
+	u8 min_slice_count;
 	int max_slice_width;
 	int tp_rgb_yuv444;
 	int tp_yuv422_420;
@@ -1024,6 +1021,20 @@ u8 intel_dp_dsc_get_slice_count(const struct intel_connector *connector,
 	min_slice_count = max_t(u8, min_slice_count,
 				DIV_ROUND_UP(mode_hdisplay,
 					     max_slice_width));
+
+	return min_slice_count;
+}
+
+u8 intel_dp_dsc_get_slice_count(const struct intel_connector *connector,
+				int mode_clock, int mode_hdisplay,
+				int num_joined_pipes)
+{
+	struct intel_display *display = to_intel_display(connector);
+	int min_slice_count =
+		intel_dp_dsc_min_slice_count(connector, mode_clock, mode_hdisplay);
+	u32 sink_slice_count_mask =
+		drm_dp_dsc_sink_slice_count_mask(connector->dp.dsc_dpcd, false);
+	int i;
 
 	/* Find the closest match to the valid slice count values */
 	for (i = 0; i < ARRAY_SIZE(valid_dsc_slicecount); i++) {
