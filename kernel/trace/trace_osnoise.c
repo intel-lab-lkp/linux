@@ -2186,6 +2186,31 @@ static const struct seq_operations osnoise_options_seq_ops = {
 	.stop		= s_options_stop
 };
 
+/**
+ * osnoise_validate_option - Check if set option is valid
+ * @option: The index of the option
+ * @enabled: The requested state of the option
+ *
+ * Verify if the requested osnoise option is valid with regards to the current
+ * state of the tracer.
+ *
+ * If valid, return 0, if not, return error number.
+ */
+static int osnoise_validate_option(int option, int enabled)
+{
+	int cpu;
+
+	if (option == OSN_WORKLOAD && enabled &&
+	    !test_bit(OSN_WORKLOAD, &osnoise_options)) {
+		/* Trying to enable kernel threads while user workload is running? */
+		for_each_online_cpu(cpu)
+			if (per_cpu(per_cpu_osnoise_var, cpu).pid)
+				return -EBUSY;
+	}
+
+	return 0;
+}
+
 static int osnoise_options_open(struct inode *inode, struct file *file)
 {
 	return seq_open(file, &osnoise_options_seq_ops);
@@ -2228,6 +2253,10 @@ static ssize_t osnoise_options_write(struct file *filp, const char __user *ubuf,
 	option = match_string(osnoise_options_str, OSN_MAX, option_str);
 	if (option < 0)
 		return -EINVAL;
+
+	retval = osnoise_validate_option(option, enable);
+	if (retval != 0)
+		return retval;
 
 	/*
 	 * trace_types_lock is taken to avoid concurrency on start/stop.
