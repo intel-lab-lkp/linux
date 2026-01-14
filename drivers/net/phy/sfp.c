@@ -2446,7 +2446,8 @@ static int sfp_sm_mod_probe(struct sfp *sfp, bool report)
 	    sfp->id.base.extended_cc == SFF8024_ECC_5GBASE_T ||
 	    sfp->id.base.extended_cc == SFF8024_ECC_2_5GBASE_T)
 		sfp->mdio_protocol = MDIO_I2C_C45;
-	else if (sfp->id.base.e1000_base_t)
+	else if (sfp->id.base.e1000_base_t || sfp->id.base.e100_base_fx ||
+		 sfp->id.base.e100_base_lx)
 		sfp->mdio_protocol = MDIO_I2C_MARVELL_C22;
 	else
 		sfp->mdio_protocol = MDIO_I2C_NONE;

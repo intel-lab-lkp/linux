@@ -105,6 +105,14 @@ static void sfp_module_parse_may_have_phy(struct sfp_bus *bus,
 		return;
 	}
 
+	/* Some 100M fiber modules have a PHY, acting as an SGMII to 100FX
+	 * media converter.
+	 */
+	if (id->base.e100_base_fx || id->base.e100_base_lx) {
+		bus->caps.may_have_phy = true;
+		return;
+	}
+
 	if (id->base.phys_id != SFF8024_ID_DWDM_SFP) {
 		switch (id->base.extended_cc) {
 		case SFF8024_ECC_10GBASE_T_SFI:
@@ -188,6 +196,9 @@ static void sfp_module_parse_support(struct sfp_bus *bus,
 	if (id->base.e100_base_fx || id->base.e100_base_lx) {
 		phylink_set(modes, 100baseFX_Full);
 		__set_bit(PHY_INTERFACE_MODE_100BASEX, interfaces);
+
+		/* SGMII to 100Base-FX modules with internal PHY */
+		__set_bit(PHY_INTERFACE_MODE_SGMII, interfaces);
 	}
 	if ((id->base.e_base_px || id->base.e_base_bx10) && br_nom == 100) {
 		phylink_set(modes, 100baseFX_Full);
