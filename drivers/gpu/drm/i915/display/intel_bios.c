@@ -3545,12 +3545,13 @@ bool intel_bios_is_dsi_present(struct intel_display *display,
 	return false;
 }
 
-static void fill_dsc(struct intel_crtc_state *crtc_state,
+static bool fill_dsc(struct intel_crtc_state *crtc_state,
 		     struct dsc_compression_parameters_entry *dsc,
 		     int dsc_max_bpc)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
 	struct drm_dsc_config *vdsc_cfg = &crtc_state->dsc.config;
+	int slices_per_line;
 	int bpc = 8;
 
 	vdsc_cfg->dsc_version_major = dsc->version_major;
@@ -3579,23 +3580,23 @@ static void fill_dsc(struct intel_crtc_state *crtc_state,
 	 *
 	 * FIXME: split only when necessary
 	 */
-	crtc_state->dsc.slice_config.pipes_per_line = 1;
-
 	if (dsc->slices_per_line & BIT(2)) {
-		crtc_state->dsc.slice_config.streams_per_pipe = 2;
-		crtc_state->dsc.slice_config.slices_per_stream = 2;
+		slices_per_line = 4;
 	} else if (dsc->slices_per_line & BIT(1)) {
-		crtc_state->dsc.slice_config.streams_per_pipe = 2;
-		crtc_state->dsc.slice_config.slices_per_stream = 1;
+		slices_per_line = 2;
 	} else {
 		/* FIXME */
 		if (!(dsc->slices_per_line & BIT(0)))
 			drm_dbg_kms(display->drm,
 				    "VBT: Unsupported DSC slice count for DSI\n");
 
-		crtc_state->dsc.slice_config.streams_per_pipe = 1;
-		crtc_state->dsc.slice_config.slices_per_stream = 1;
+		slices_per_line = 1;
 	}
+
+	if (drm_WARN_ON(display->drm,
+			!intel_dsc_get_slice_config(display, 1, slices_per_line,
+						    &crtc_state->dsc.slice_config)))
+		return false;
 
 	if (crtc_state->hw.adjusted_mode.crtc_hdisplay %
 	    intel_dsc_line_slice_count(&crtc_state->dsc.slice_config) != 0)
@@ -3617,6 +3618,8 @@ static void fill_dsc(struct intel_crtc_state *crtc_state,
 	vdsc_cfg->block_pred_enable = dsc->block_prediction_enable;
 
 	vdsc_cfg->slice_height = dsc->slice_height;
+
+	return true;
 }
 
 /* FIXME: initially DSI specific */
@@ -3637,9 +3640,7 @@ bool intel_bios_get_dsc_params(struct intel_encoder *encoder,
 			if (!devdata->dsc)
 				return false;
 
-			fill_dsc(crtc_state, devdata->dsc, dsc_max_bpc);
-
-			return true;
+			return fill_dsc(crtc_state, devdata->dsc, dsc_max_bpc);
 		}
 	}
 
