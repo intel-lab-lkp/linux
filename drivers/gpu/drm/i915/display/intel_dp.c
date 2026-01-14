@@ -963,7 +963,7 @@ static int intel_dp_dsc_min_slice_count(const struct intel_connector *connector,
 					int mode_clock, int mode_hdisplay)
 {
 	struct intel_display *display = to_intel_display(connector);
-	u8 min_slice_count;
+	int min_slice_count;
 	int max_slice_width;
 	int tp_rgb_yuv444;
 	int tp_yuv422_420;
@@ -1008,7 +1008,7 @@ static int intel_dp_dsc_min_slice_count(const struct intel_connector *connector,
 	 * slice and VDSC engine, whenever we approach close enough to max CDCLK
 	 */
 	if (mode_clock >= ((display->cdclk.max_cdclk_freq * 85) / 100))
-		min_slice_count = max_t(u8, min_slice_count, 2);
+		min_slice_count = max(min_slice_count, 2);
 
 	max_slice_width = drm_dp_dsc_sink_max_slice_width(connector->dp.dsc_dpcd);
 	if (max_slice_width < DP_DSC_MIN_SLICE_WIDTH_VALUE) {
@@ -1018,9 +1018,8 @@ static int intel_dp_dsc_min_slice_count(const struct intel_connector *connector,
 		return 0;
 	}
 	/* Also take into account max slice width */
-	min_slice_count = max_t(u8, min_slice_count,
-				DIV_ROUND_UP(mode_hdisplay,
-					     max_slice_width));
+	min_slice_count = max(min_slice_count,
+			      DIV_ROUND_UP(mode_hdisplay, max_slice_width));
 
 	return min_slice_count;
 }
@@ -1038,7 +1037,7 @@ u8 intel_dp_dsc_get_slice_count(const struct intel_connector *connector,
 
 	/* Find the closest match to the valid slice count values */
 	for (i = 0; i < ARRAY_SIZE(valid_dsc_slicecount); i++) {
-		u8 test_slice_count = valid_dsc_slicecount[i] * num_joined_pipes;
+		int test_slice_count = valid_dsc_slicecount[i] * num_joined_pipes;
 
 		/*
 		 * 3 DSC Slices per pipe need 3 DSC engines, which is supported only
