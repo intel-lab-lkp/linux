@@ -285,13 +285,15 @@ static void get_recent_times(struct psi_group *group, int cpu,
 	/* Snapshot a coherent view of the CPU state */
 	do {
 		seq = psi_read_begin(cpu);
-		now = cpu_clock(cpu);
 		memcpy(times, groupc->times, sizeof(groupc->times));
 		state_mask = groupc->state_mask;
 		state_start = groupc->state_start;
 		if (cpu == current_cpu)
 			memcpy(tasks, groupc->tasks, sizeof(groupc->tasks));
 	} while (psi_read_retry(cpu, seq));
+
+	if (state_mask)
+		now = cpu_clock(cpu);
 
 	/* Calculate state time deltas against the previous snapshot */
 	for (s = 0; s < NR_PSI_STATES; s++) {
@@ -308,7 +310,22 @@ static void get_recent_times(struct psi_group *group, int cpu,
 		if (state_mask & (1 << s))
 			times[s] += now - state_start;
 
+		/*
+		 * This snooping ahead can obviously race with the
+		 * state concluding on the cpu. If we previously
+		 * snooped to a time past where the state concludes,
+		 * times[s] can now be behind times_prev[s].
+		 *
+		 * time_after32() would be the obvious choice, but
+		 * S32_MAX is right around two seconds, which is the
+		 * aggregation interval; if the aggregator gets
+		 * delayed, there would be a risk of dismissing
+		 * genuinely large samples. Use a larger margin.
+		 */
 		delta = times[s] - groupc->times_prev[aggregator][s];
+		if (delta > psi_period + (psi_period >> 1))
+			delta = 0;
+
 		groupc->times_prev[aggregator][s] = times[s];
 
 		times[s] = delta;
@@ -908,16 +925,18 @@ static void psi_flags_change(struct task_struct *task, int clear, int set)
 
 void psi_task_change(struct task_struct *task, int clear, int set)
 {
-	int cpu = task_cpu(task);
+	int cpu;
 	u64 now;
 
 	if (!task->pid)
 		return;
 
+	cpu = task_cpu(task);
+	now = cpu_clock(cpu);
+
 	psi_flags_change(task, clear, set);
 
 	psi_write_begin(cpu);
-	now = cpu_clock(cpu);
 	for_each_group(group, task_psi_group(task))
 		psi_group_change(group, cpu, clear, set, now, true);
 	psi_write_end(cpu);
@@ -928,10 +947,9 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 {
 	struct psi_group *common = NULL;
 	int cpu = task_cpu(prev);
-	u64 now;
+	u64 now = cpu_clock(cpu);
 
 	psi_write_begin(cpu);
-	now = cpu_clock(cpu);
 
 	if (next->pid) {
 		psi_flags_change(next, 0, TSK_ONCPU);
@@ -999,6 +1017,7 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 				psi_group_change(group, cpu, clear, set, now, wake_clock);
 		}
 	}
+
 	psi_write_end(cpu);
 }
 
@@ -1027,9 +1046,9 @@ void psi_account_irqtime(struct rq *rq, struct task_struct *curr, struct task_st
 		return;
 	rq->psi_irq_time = irq;
 
-	psi_write_begin(cpu);
 	now = cpu_clock(cpu);
 
+	psi_write_begin(cpu);
 	for_each_group(group, task_psi_group(curr)) {
 		if (!group->enabled)
 			continue;
@@ -1234,8 +1253,9 @@ void psi_cgroup_restart(struct psi_group *group)
 
 		guard(rq_lock_irq)(cpu_rq(cpu));
 
-		psi_write_begin(cpu);
 		now = cpu_clock(cpu);
+
+		psi_write_begin(cpu);
 		psi_group_change(group, cpu, 0, 0, now, true);
 		psi_write_end(cpu);
 	}
