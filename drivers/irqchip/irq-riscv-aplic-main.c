@@ -231,4 +231,16 @@ static struct platform_driver aplic_driver = {
 	},
 	.probe = aplic_probe,
 };
-builtin_platform_driver(aplic_driver);
+
+static int __init aplic_driver_init(void)
+{
+	return platform_driver_register(&aplic_driver);
+}
+
+/*
+ * APLIC serves part of GSI interrupts and some key system devices like
+ * TTY/PCI depends on its initialization. Register the driver prior to
+ * APLIC device (on ACPI it's created in subsys_initcall when scanning
+ * the namespace devices) to make the GSI service ready early.
+ */
+core_initcall(aplic_driver_init);
