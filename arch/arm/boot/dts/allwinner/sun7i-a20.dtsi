@@ -55,6 +55,10 @@
 	#size-cells = <1>;
 
 	aliases {
+		mmc0 = &mmc0;
+		mmc1 = &mmc1;
+		mmc2 = &mmc2;
+		mmc3 = &mmc3;
 		ethernet0 = &gmac;
 	};
 
