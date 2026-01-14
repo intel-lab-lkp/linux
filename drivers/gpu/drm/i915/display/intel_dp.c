@@ -949,10 +949,19 @@ static int intel_dp_dsc_min_slice_count(const struct intel_connector *connector,
 					int mode_clock, int mode_hdisplay)
 {
 	struct intel_display *display = to_intel_display(connector);
+	bool is_edp =
+		connector->base.connector_type == DRM_MODE_CONNECTOR_eDP;
 	int min_slice_count;
 	int max_slice_width;
 	int tp_rgb_yuv444;
 	int tp_yuv422_420;
+
+	/*
+	 * TODO: allow using less than the maximum number of slices
+	 * supported by the eDP sink, to allow using fewer DSC engines.
+	 */
+	if (is_edp)
+		return drm_dp_dsc_sink_max_slice_count(connector->dp.dsc_dpcd, true);
 
 	/*
 	 * TODO: Use the throughput value specific to the actual RGB/YUV
@@ -1017,8 +1026,10 @@ u8 intel_dp_dsc_get_slice_count(const struct intel_connector *connector,
 	struct intel_display *display = to_intel_display(connector);
 	int min_slice_count =
 		intel_dp_dsc_min_slice_count(connector, mode_clock, mode_hdisplay);
+	bool is_edp =
+		connector->base.connector_type == DRM_MODE_CONNECTOR_eDP;
 	u32 sink_slice_count_mask =
-		drm_dp_dsc_sink_slice_count_mask(connector->dp.dsc_dpcd, false);
+		drm_dp_dsc_sink_slice_count_mask(connector->dp.dsc_dpcd, is_edp);
 	int slices_per_pipe;
 
 	/*
@@ -1471,9 +1482,13 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 		if (intel_dp_is_edp(intel_dp)) {
 			dsc_max_compressed_bpp =
 				drm_edp_dsc_sink_output_bpp(connector->dp.dsc_dpcd) >> 4;
+
 			dsc_slice_count =
-				drm_dp_dsc_sink_max_slice_count(connector->dp.dsc_dpcd,
-								true);
+				intel_dp_dsc_get_slice_count(connector,
+							     target_clock,
+							     mode->hdisplay,
+							     num_joined_pipes);
+
 			dsc = dsc_max_compressed_bpp && dsc_slice_count;
 		} else if (drm_dp_sink_supports_fec(connector->dp.fec_capability)) {
 			unsigned long bw_overhead_flags = 0;
@@ -2381,28 +2396,13 @@ int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 	}
 
 	/* Calculate Slice count */
-	if (intel_dp_is_edp(intel_dp)) {
-		slices_per_line =
-			drm_dp_dsc_sink_max_slice_count(connector->dp.dsc_dpcd,
-							true);
-		if (!slices_per_line) {
-			drm_dbg_kms(display->drm,
-				    "Unsupported Slice Count %d\n",
-				    slices_per_line);
-			return -EINVAL;
-		}
-	} else {
-		slices_per_line =
-			intel_dp_dsc_get_slice_count(connector,
-						     adjusted_mode->crtc_clock,
-						     adjusted_mode->crtc_hdisplay,
-						     num_joined_pipes);
-		if (!slices_per_line) {
-			drm_dbg_kms(display->drm,
-				    "Compressed Slice Count not supported\n");
-			return -EINVAL;
-		}
-	}
+	slices_per_line = intel_dp_dsc_get_slice_count(connector,
+						       adjusted_mode->crtc_clock,
+						       adjusted_mode->crtc_hdisplay,
+						       num_joined_pipes);
+	if (!slices_per_line)
+		return -EINVAL;
+
 	/*
 	 * VDSC engine operates at 1 Pixel per clock, so if peak pixel rate
 	 * is greater than the maximum Cdclock and if slice count is even
