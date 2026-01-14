@@ -1015,7 +1015,19 @@ static long madvise_remove(struct madvise_behavior *madv_behavior)
 	unsigned long start = madv_behavior->range.start;
 	unsigned long end = madv_behavior->range.end;
 
-	mark_mmap_lock_dropped(madv_behavior);
+	/*
+	 * Prefer VMA read lock path: when operating under VMA lock, we avoid
+	 * dropping/reacquiring the mmap lock and directly perform the filesystem
+	 * operation while the VMA is read-locked. We still take and drop a file
+	 * reference to protect against concurrent file changes.
+	 *
+	 * When operating under mmap read lock (fallback), preserve existing
+	 * behaviour: mark lock dropped, coordinate with userfaultfd_remove(),
+	 * temporarily drop mmap_read_lock around vfs_fallocate(), and then
+	 * reacquire it.
+	 */
+	if (madv_behavior->lock_mode == MADVISE_MMAP_READ_LOCK)
+		mark_mmap_lock_dropped(madv_behavior);
 
 	if (vma->vm_flags & VM_LOCKED)
 		return -EINVAL;
@@ -1033,12 +1045,19 @@ static long madvise_remove(struct madvise_behavior *madv_behavior)
 			+ ((loff_t)vma->vm_pgoff << PAGE_SHIFT);
 
 	/*
-	 * Filesystem's fallocate may need to take i_rwsem.  We need to
-	 * explicitly grab a reference because the vma (and hence the
-	 * vma's reference to the file) can go away as soon as we drop
-	 * mmap_lock.
+	 * Execute filesystem punch-hole under appropriate locking.
+	 * - VMA lock path: no mmap lock held; call vfs_fallocate() directly.
+	 * - mmap lock path: follow existing protocol including UFFD coordination
+	 *   and temporary mmap_read_unlock/lock around the filesystem call.
 	 */
 	get_file(f);
+	if (madv_behavior->lock_mode == MADVISE_VMA_READ_LOCK) {
+		error = vfs_fallocate(f,
+					FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
+					offset, end - start);
+		fput(f);
+		return error;
+	}
 	if (userfaultfd_remove(vma, start, end)) {
 		/* mmap_lock was not released by userfaultfd_remove() */
 		mmap_read_unlock(mm);
@@ -1754,7 +1773,6 @@ static enum madvise_lock_mode get_lock_mode(struct madvise_behavior *madv_behavi
 		return MADVISE_NO_LOCK;
 
 	switch (madv_behavior->behavior) {
-	case MADV_REMOVE:
 	case MADV_WILLNEED:
 	case MADV_COLD:
 	case MADV_PAGEOUT:
@@ -1762,6 +1780,7 @@ static enum madvise_lock_mode get_lock_mode(struct madvise_behavior *madv_behavi
 	case MADV_POPULATE_WRITE:
 	case MADV_COLLAPSE:
 		return MADVISE_MMAP_READ_LOCK;
+	case MADV_REMOVE:
 	case MADV_GUARD_INSTALL:
 	case MADV_GUARD_REMOVE:
 	case MADV_DONTNEED:
