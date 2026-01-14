@@ -1337,6 +1337,15 @@ rzv2h_cpg_register_mod_clk(const struct rzv2h_mod_clk *mod,
 		spin_unlock_irqrestore(&priv->rmw_lock, flags);
 	}
 
+	/*
+	 * Turn off clocks marked with init_off flag if they were left
+	 * enabled by the bootloader. This ensures a known initial state.
+	 */
+	if (mod->init_off && rzv2h_mod_clock_is_enabled(&clock->hw)) {
+		dev_dbg(dev, "Disabling clock %s (init_off)\n", mod->name);
+		rzv2h_mod_clock_endisable(&clock->hw, false);
+	}
+
 	return;
 
 fail:
