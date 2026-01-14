@@ -384,20 +384,46 @@ enum dma_slave_buswidth {
  * If not: if it is fixed so that it be sent in static from the platform
  * data, then prefer to do that.
  */
+struct dma_slave_cfg { /* order must be align below dma_slave_config union */
+	phys_addr_t addr;
+	enum dma_slave_buswidth addr_width;
+	u32 maxburst;
+	u32 port_window_size;
+};
+
 struct dma_slave_config {
 	enum dma_transfer_direction direction;
-	phys_addr_t src_addr;
-	phys_addr_t dst_addr;
-	enum dma_slave_buswidth src_addr_width;
-	enum dma_slave_buswidth dst_addr_width;
-	u32 src_maxburst;
-	u32 dst_maxburst;
-	u32 src_port_window_size;
-	u32 dst_port_window_size;
+	union {
+		struct {
+			phys_addr_t src_addr;
+			enum dma_slave_buswidth src_addr_width;
+			u32 src_maxburst;
+			u32 src_port_window_size;
+			phys_addr_t dst_addr;
+			enum dma_slave_buswidth dst_addr_width;
+			u32 dst_maxburst;
+			u32 dst_port_window_size;
+		};
+
+		struct {
+			struct dma_slave_cfg src;
+			struct dma_slave_cfg dst;
+		};
+	};
 	bool device_fc;
 	void *peripheral_config;
 	size_t peripheral_size;
 };
+
+static inline struct dma_slave_cfg *
+dma_slave_get_cfg(struct dma_slave_config *config,
+		  enum dma_transfer_direction dir)
+{
+	if (dir == DMA_MEM_TO_DEV)
+		return &config->dst;
+
+	return &config->src;
+}
 
 /**
  * struct dma_chan - devices supply DMA channels, clients use them
