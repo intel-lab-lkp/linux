@@ -1164,6 +1164,11 @@ static bool riscv_cpufeature_patch_check(u16 id, u16 value)
 		 * then the alternative cannot be applied.
 		 */
 		return riscv_cboz_block_size <= (1U << value);
+	case RISCV_ISA_EXT_ZALRSC:
+		/*
+		 * Aply ZALRSC alternatives only if ZAAMO not available
+		 */
+		return !__riscv_isa_extension_available(NULL, RISCV_ISA_EXT_ZAAMO);
 	}
 
 	return false;

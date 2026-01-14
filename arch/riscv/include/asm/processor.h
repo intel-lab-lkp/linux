@@ -151,7 +151,139 @@ static inline void arch_thread_struct_whitelist(unsigned long *offset,
 #define PREFETCHW_ASM(x)						\
 	ALTERNATIVE(__nops(1), PREFETCH_W(x, 0), 0,			\
 		    RISCV_ISA_EXT_ZICBOP, CONFIG_RISCV_ISA_ZICBOP)
+/* atomics - begin */
+#define ALT_ATOMIC_OP(asm_op, I, asm_type, v, ret, temp)		\
+asm(ALTERNATIVE(							\
+		"	amo" #asm_op "." #asm_type " zero, %3, %0\n"	\
+		__nops(3),						\
+		"1:	lr." #asm_type " %1, %0\n"			\
+		"	" #asm_op " %2, %1, %3\n"			\
+		"	sc." #asm_type " %2, %2, %0\n"			\
+		"	bnez %2, 1b\n",					\
+		0, RISCV_ISA_EXT_ZALRSC, 1)				\
+	: "+A" ((v)->counter), "=&r" (ret), "=&r" (temp)		\
+	: "r" (I)							\
+	: "memory")
 
+#define ALT_ATOMIC_FETCH_OP_RELAXED(asm_op, I, asm_type, v, ret, temp)	\
+asm(ALTERNATIVE(							\
+		"	amo" #asm_op "." #asm_type " %1, %3, %0\n"	\
+		__nops(3),						\
+		"1:	lr." #asm_type " %1, %0\n"			\
+		"	" #asm_op " %2, %1, %3\n"			\
+		"	sc." #asm_type " %2, %2, %0\n"			\
+		"	bnez %2, 1b\n",					\
+		0, RISCV_ISA_EXT_ZALRSC, 1)				\
+	: "+A" ((v)->counter), "=&r" (ret), "=&r" (temp)		\
+	: "r" (I)							\
+	: "memory")
+
+#define ALT_ATOMIC_FETCH_OP(asm_op, I, asm_type, v, ret, temp)		\
+asm(ALTERNATIVE(							\
+		"	amo" #asm_op "." #asm_type ".aqrl  %1, %3, %0\n"\
+		__nops(3),						\
+		"1:	lr." #asm_type ".aqrl %1, %0\n"			\
+		"	" #asm_op " %2, %1, %3\n"			\
+		"	sc." #asm_type ".aqrl %2, %2, %0\n"		\
+		"	bnez %2, 1b\n",					\
+		0, RISCV_ISA_EXT_ZALRSC, 1)				\
+	: "+A" ((v)->counter), "=&r" (ret), "=&r" (temp)		\
+	: "r" (I)							\
+	: "memory")
+/* BITOPS.h */
+#define ALT_TEST_AND_OP_BIT_ORD(op, mod, nr, addr, ord, __res, __mask, __temp)	\
+asm(ALTERNATIVE(								\
+		__AMO(op) #ord " zero, %3, %1\n"				\
+		__nops(3),							\
+		"1:	" __LR #ord " %0, %1\n"					\
+			#op " %2, %0, %3\n"					\
+			__SC #ord " %2, %2, %1\n"				\
+			"bnez %2, 1b\n",					\
+		0, RISCV_ISA_EXT_ZALRSC, 1)					\
+	: "=&r" (__res), "+A" (addr[BIT_WORD(nr)]), "=&r" (__temp)		\
+	: "r" (mod(__mask))							\
+	: "memory")
+
+#define ALT_OP_BIT_ORD(op, mod, nr, addr, ord, __res, __temp)		\
+asm(ALTERNATIVE(							\
+		__AMO(op) #ord " zero, %3, %1\n"			\
+		__nops(3),						\
+		"1:	" __LR #ord " %0, %1\n"				\
+			#op " %2, %0, %3\n"				\
+			__SC #ord " %2, %2, %1\n"			\
+			"bnez %2, 1b\n",				\
+		0, RISCV_ISA_EXT_ZALRSC, 1)				\
+	: "=&r" (__res), "+A" (addr[BIT_WORD(nr)]), "=&r" (__temp)	\
+	: "r" (mod(BIT_MASK(nr)))					\
+	: "memory")
+
+#define ALT_ARCH_XOR_UNLOCK(mask, addr, __res, __temp)	\
+asm(ALTERNATIVE(					\
+		__AMO(xor) ".rl %0, %3, %1\n"		\
+		__nops(3),				\
+		"1:	" __LR ".rl %0, %1\n"		\
+			"xor %2, %0, %3\n"		\
+			__SC ".rl %2, %2, %1\n"		\
+			"bnez %2, 1b\n",		\
+		0, RISCV_ISA_EXT_ZALRSC, 1)		\
+	: "=&r" (__res), "+A" (*(addr)), "=&r" (__temp)	\
+	: "r" (__NOP(mask))				\
+	: "memory")
+
+#define ALT_ARCH_XCHG(sfx, prepend, append, r, p, n, temp)	\
+asm(ALTERNATIVE(						\
+		prepend						\
+		"	amoswap" sfx " %0, %3, %1\n"		\
+		__nops(2)					\
+		append,						\
+		prepend						\
+		"1:	lr" sfx " %0, %1\n"			\
+		"	sc" sfx " %2, %3, %1\n"			\
+		"	bnez %2, 1b\n"				\
+		append,						\
+		0, RISCV_ISA_EXT_ZALRSC, 1)			\
+	: "=&r" (r), "+A" (*(p)), "=&r" (temp)			\
+	: "r" (n)						\
+	: "memory")
+
+/* FUTEX.H */
+#define ALT_FUTEX_ATOMIC_OP(insn, ret, oldval, uaddr, oparg, temp)	\
+asm(ALTERNATIVE(							\
+		"1: amo" #insn ".w.aqrl %[ov],%z[op],%[u]\n"		\
+		__nops(3)						\
+		"2:\n"							\
+		_ASM_EXTABLE_UACCESS_ERR(1b, 2b, %[r]),			\
+		"1:	lr.w.aqrl %[ov], %[u]\n"			\
+		"	" #insn " %[t], %[ov], %z[op]\n"		\
+		"	sc.w.aqrl %[t], %[t], %[u]\n"			\
+		"	bnez %[t], 1b\n"				\
+		"2:\n"							\
+		_ASM_EXTABLE_UACCESS_ERR(1b, 2b, %[r]),			\
+		0, RISCV_ISA_EXT_ZALRSC, 1)				\
+	: [r] "+r" (ret), [ov] "=&r" (oldval),				\
+	  [t] "=&r" (temp), [u] "+m" (*(uaddr))				\
+	: [op] "Jr" (oparg)						\
+	: "memory")
+
+#define ALT_FUTEX_ATOMIC_SWAP(ret, oldval, uaddr, oparg, temp)	\
+asm(ALTERNATIVE(						\
+		"1: amoswap.w.aqrl %[ov],%z[op],%[u]\n"		\
+		__nops(3)					\
+		"2:\n"						\
+		_ASM_EXTABLE_UACCESS_ERR(1b, 2b, %[r]),		\
+		"1:	lr.w.aqrl %[ov], %[u]\n"		\
+		"	mv %[t], %z[op]\n"			\
+		"	sc.w.aqrl %[t], %[t], %[u]\n"		\
+		"	bnez %[t], 1b\n"			\
+		"2:\n"						\
+		_ASM_EXTABLE_UACCESS_ERR(1b, 2b, %[r]),		\
+		0, RISCV_ISA_EXT_ZALRSC, 1)			\
+	: [r] "+r" (ret), [ov] "=&r" (oldval),			\
+	  [t] "=&r" (temp), [u] "+m" (*(uaddr))			\
+	: [op] "Jr" (oparg)					\
+	: "memory")
+
+/* atomics - end */
 #ifdef CONFIG_RISCV_ISA_ZICBOP
 #define ARCH_HAS_PREFETCH
 static inline void prefetch(const void *x)

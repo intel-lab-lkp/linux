@@ -73,7 +73,13 @@
 	beq	a2, zero, .Lnew_vmalloc_restore_context
 
 	/* Atomically reset the current cpu bit in new_vmalloc */
-	amoxor.d	a0, a1, (a0)
+	ALTERNATIVE("amoxor.d a0, a1, (a0);	\
+		     .rept 3; nop; .endr;",
+		    "1:	lr.d a2, (a0);		\
+			xor a2, a2, a1;		\
+			sc.d a2, a2, (a0);	\
+			bnez a2, 1b;",
+		     0, RISCV_ISA_EXT_ZALRSC, 1)
 
 	/* Only emit a sfence.vma if the uarch caches invalid entries */
 	ALTERNATIVE("sfence.vma", "nop", 0, RISCV_ISA_EXT_SVVPTC, 1)
