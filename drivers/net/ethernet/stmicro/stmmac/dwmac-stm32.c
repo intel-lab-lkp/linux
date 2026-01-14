@@ -618,11 +618,21 @@ static void stm32_dwmac_remove(struct platform_device *pdev)
 
 static int stm32mp1_suspend(struct stm32_dwmac *dwmac)
 {
+	struct net_device *ndev = dev_get_drvdata(dwmac->dev);
+
+	if (!ndev || !netif_running(ndev))
+		return 0;
+
 	return clk_prepare_enable(dwmac->clk_ethstp);
 }
 
 static void stm32mp1_resume(struct stm32_dwmac *dwmac)
 {
+	struct net_device *ndev = dev_get_drvdata(dwmac->dev);
+
+	if (!ndev || !netif_running(ndev))
+		return;
+
 	clk_disable_unprepare(dwmac->clk_ethstp);
 }
 
