@@ -14,6 +14,7 @@ enum {
 	RDMA_RW_MULTI_WR,
 	RDMA_RW_MR,
 	RDMA_RW_SIG_MR,
+	RDMA_RW_IOVA,
 };
 
 static bool rdma_rw_force_mr;
@@ -392,6 +393,137 @@ out_free_sges:
 	return -ENOMEM;
 }
 
+/*
+ * Try to use the two-step IOVA API to map bvecs into a contiguous DMA range.
+ * This reduces IOTLB sync overhead by doing one sync at the end instead of
+ * one per bvec, and produces a contiguous DMA address range.
+ *
+ * Returns the number of WQEs on success, -EOPNOTSUPP if IOVA mapping is not
+ * available, or another negative error code on failure.
+ */
+static int rdma_rw_init_iova_wrs_bvec(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
+		const struct bio_vec *bvec, u32 nr_bvec, u32 offset,
+		u64 remote_addr, u32 rkey, enum dma_data_direction dir)
+{
+	struct ib_device *dev = qp->pd->device;
+	struct device *dma_dev = dev->dma_device;
+	u32 max_sge = dir == DMA_TO_DEVICE ? qp->max_write_sge :
+		      qp->max_read_sge;
+	struct ib_sge *sge;
+	size_t total_len = 0, mapped_len = 0;
+	u32 i, j, bvec_idx = 0;
+	int ret;
+
+	/* Virtual DMA devices don't support IOVA mapping */
+	if (ib_uses_virt_dma(dev))
+		return -EOPNOTSUPP;
+
+	if (!max_sge)
+		return -EINVAL;
+
+	/* Calculate total transfer length */
+	for (i = 0; i < nr_bvec; i++) {
+		size_t len = (i == 0 && offset) ?
+			     bvec[i].bv_len - offset : bvec[i].bv_len;
+
+		if (check_add_overflow(total_len, len, &total_len))
+			return -EINVAL;
+	}
+
+	/* Try to allocate contiguous IOVA space */
+	if (!dma_iova_try_alloc(dma_dev, &ctx->iova.state,
+				bvec_phys(&bvec[0]) + offset, total_len))
+		return -EOPNOTSUPP;
+
+	ctx->nr_ops = DIV_ROUND_UP(nr_bvec, max_sge);
+
+	ctx->iova.sges = sge = kcalloc(nr_bvec, sizeof(*sge), GFP_KERNEL);
+	if (!ctx->iova.sges) {
+		ret = -ENOMEM;
+		goto out_free_iova;
+	}
+
+	ctx->iova.wrs = kcalloc(ctx->nr_ops, sizeof(*ctx->iova.wrs), GFP_KERNEL);
+	if (!ctx->iova.wrs) {
+		ret = -ENOMEM;
+		goto out_free_sges;
+	}
+
+	/* Link all bvecs into the IOVA space */
+	for (i = 0; i < nr_bvec; i++) {
+		const struct bio_vec *bv = &bvec[i];
+		phys_addr_t phys = bvec_phys(bv);
+		size_t len = bv->bv_len;
+
+		if (i == 0 && offset) {
+			phys += offset;
+			len -= offset;
+		}
+
+		ret = dma_iova_link(dma_dev, &ctx->iova.state, phys,
+				    mapped_len, len, dir, 0);
+		if (ret)
+			goto out_destroy;
+
+		mapped_len += len;
+	}
+
+	/* Sync the IOTLB once for all linked pages */
+	ret = dma_iova_sync(dma_dev, &ctx->iova.state, 0, mapped_len);
+	if (ret)
+		goto out_destroy;
+
+	ctx->iova.mapped_len = mapped_len;
+
+	/* Build SGEs using offsets into the contiguous IOVA range */
+	mapped_len = 0;
+	for (i = 0; i < ctx->nr_ops; i++) {
+		struct ib_rdma_wr *rdma_wr = &ctx->iova.wrs[i];
+		u32 nr_sge = min(nr_bvec - bvec_idx, max_sge);
+
+		if (dir == DMA_TO_DEVICE)
+			rdma_wr->wr.opcode = IB_WR_RDMA_WRITE;
+		else
+			rdma_wr->wr.opcode = IB_WR_RDMA_READ;
+		rdma_wr->remote_addr = remote_addr + mapped_len;
+		rdma_wr->rkey = rkey;
+		rdma_wr->wr.num_sge = nr_sge;
+		rdma_wr->wr.sg_list = sge;
+
+		for (j = 0; j < nr_sge; j++, bvec_idx++) {
+			const struct bio_vec *bv = &bvec[bvec_idx];
+			size_t len = bv->bv_len;
+
+			if (bvec_idx == 0 && offset)
+				len -= offset;
+
+			sge->addr = ctx->iova.state.addr + mapped_len;
+			sge->length = len;
+			sge->lkey = qp->pd->local_dma_lkey;
+
+			mapped_len += len;
+			sge++;
+		}
+
+		rdma_wr->wr.next = i + 1 < ctx->nr_ops ?
+			&ctx->iova.wrs[i + 1].wr : NULL;
+	}
+
+	ctx->type = RDMA_RW_IOVA;
+	return ctx->nr_ops;
+
+out_destroy:
+	dma_iova_destroy(dma_dev, &ctx->iova.state, mapped_len, dir, 0);
+	kfree(ctx->iova.wrs);
+	kfree(ctx->iova.sges);
+	return ret;
+out_free_sges:
+	kfree(ctx->iova.sges);
+out_free_iova:
+	dma_iova_free(dma_dev, &ctx->iova.state);
+	return ret;
+}
+
 /**
  * rdma_rw_ctx_init - initialize a RDMA READ/WRITE context
  * @ctx:	context to initialize
@@ -486,6 +618,8 @@ int rdma_rw_ctx_init_bvec(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
 		u32 offset, u64 remote_addr, u32 rkey,
 		enum dma_data_direction dir)
 {
+	int ret;
+
 	if (nr_bvec == 0 || offset > bvec[0].bv_len)
 		return -EINVAL;
 
@@ -496,6 +630,15 @@ int rdma_rw_ctx_init_bvec(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
 	if (nr_bvec == 1)
 		return rdma_rw_init_single_wr_bvec(ctx, qp, bvec, offset,
 				remote_addr, rkey, dir);
+
+	/*
+	 * Try IOVA-based mapping first for multi-bvec transfers.
+	 * This reduces IOTLB sync overhead by batching all mappings.
+	 */
+	ret = rdma_rw_init_iova_wrs_bvec(ctx, qp, bvec, nr_bvec, offset,
+			remote_addr, rkey, dir);
+	if (ret != -EOPNOTSUPP)
+		return ret;
 
 	return rdma_rw_init_map_wrs_bvec(ctx, qp, bvec, nr_bvec, offset,
 			remote_addr, rkey, dir);
@@ -673,6 +816,10 @@ struct ib_send_wr *rdma_rw_ctx_wrs(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
 			first_wr = &ctx->reg[0].reg_wr.wr;
 		last_wr = &ctx->reg[ctx->nr_ops - 1].wr.wr;
 		break;
+	case RDMA_RW_IOVA:
+		first_wr = &ctx->iova.wrs[0].wr;
+		last_wr = &ctx->iova.wrs[ctx->nr_ops - 1].wr;
+		break;
 	case RDMA_RW_MULTI_WR:
 		first_wr = &ctx->map.wrs[0].wr;
 		last_wr = &ctx->map.wrs[ctx->nr_ops - 1].wr;
@@ -774,6 +921,12 @@ void rdma_rw_ctx_destroy_bvec(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
 	u32 i;
 
 	switch (ctx->type) {
+	case RDMA_RW_IOVA:
+		dma_iova_destroy(dev->dma_device, &ctx->iova.state,
+				 ctx->iova.mapped_len, dir, 0);
+		kfree(ctx->iova.wrs);
+		kfree(ctx->iova.sges);
+		break;
 	case RDMA_RW_MULTI_WR:
 		for (i = 0; i < nr_bvec; i++)
 			ib_dma_unmap_bvec(dev, ctx->map.sges[i].addr,
