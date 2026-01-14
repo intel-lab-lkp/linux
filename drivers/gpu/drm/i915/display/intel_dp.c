@@ -1030,26 +1030,18 @@ u8 intel_dp_dsc_get_slice_count(const struct intel_connector *connector,
 	 * TGL+: 2x4 (TODO: Add support for this)
 	 */
 	for (slices_per_pipe = 1; slices_per_pipe <= 4; slices_per_pipe++) {
-		int slices_per_line = slices_per_pipe * num_joined_pipes;
+		struct intel_dsc_slice_config config;
+		int slices_per_line;
 
-		/*
-		 * 3 DSC Slices per pipe need 3 DSC engines, which is supported only
-		 * with Ultrajoiner only for some platforms.
-		 */
-		if (slices_per_pipe == 3 &&
-		    (!HAS_DSC_3ENGINES(display) || num_joined_pipes != 4))
+		if (!intel_dsc_get_slice_config(display,
+						num_joined_pipes, slices_per_pipe,
+						&config))
 			continue;
+
+		slices_per_line = intel_dsc_line_slice_count(&config);
 
 		if (!(drm_dp_dsc_slice_count_to_mask(slices_per_line) &
 		      sink_slice_count_mask))
-			continue;
-
-		 /*
-		  * Bigjoiner needs small joiner to be enabled.
-		  * So there should be at least 2 dsc slices per pipe,
-		  * whenever bigjoiner is enabled.
-		  */
-		if (num_joined_pipes > 1 && slices_per_pipe < 2)
 			continue;
 
 		if (mode_hdisplay % slices_per_line)

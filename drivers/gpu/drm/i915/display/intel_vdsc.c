@@ -40,6 +40,53 @@ int intel_dsc_line_slice_count(const struct intel_dsc_slice_config *config)
 	return config->pipes_per_line * config->streams_per_pipe * config->slices_per_stream;
 }
 
+bool intel_dsc_get_slice_config(struct intel_display *display,
+				int pipes_per_line, int slices_per_pipe,
+				struct intel_dsc_slice_config *config)
+{
+	int streams_per_pipe;
+
+	/* TODO: Add support for 8 slices per pipe on TGL+. */
+	switch (slices_per_pipe) {
+	case 3:
+		/*
+		 * 3 DSC Slices per pipe need 3 DSC engines, which is supported only
+		 * with Ultrajoiner only for some platforms.
+		 */
+		if (!HAS_DSC_3ENGINES(display) || pipes_per_line != 4)
+			return false;
+
+		streams_per_pipe = 3;
+		break;
+	case 4:
+		/* TODO: Consider using 1 DSC engine stream x 4 slices instead. */
+	case 2:
+		/* TODO: Consider using 1 DSC engine stream x 2 slices instead. */
+		streams_per_pipe = 2;
+		break;
+	case 1:
+		 /*
+		  * Bigjoiner needs small joiner to be enabled.
+		  * So there should be at least 2 dsc slices per pipe,
+		  * whenever bigjoiner is enabled.
+		  */
+		if (pipes_per_line > 1)
+			return false;
+
+		streams_per_pipe = 1;
+		break;
+	default:
+		MISSING_CASE(slices_per_pipe);
+		return false;
+	}
+
+	config->pipes_per_line = pipes_per_line;
+	config->streams_per_pipe = streams_per_pipe;
+	config->slices_per_stream = slices_per_pipe / streams_per_pipe;
+
+	return true;
+}
+
 static bool is_pipe_dsc(struct intel_crtc *crtc, enum transcoder cpu_transcoder)
 {
 	struct intel_display *display = to_intel_display(crtc);
