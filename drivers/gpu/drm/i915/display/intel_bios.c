@@ -41,6 +41,7 @@
 #include "intel_display_utils.h"
 #include "intel_gmbus.h"
 #include "intel_rom.h"
+#include "intel_vdsc.h"
 
 #define _INTEL_BIOS_PRIVATE
 #include "intel_vbt_defs.h"
@@ -3578,12 +3579,14 @@ static void fill_dsc(struct intel_crtc_state *crtc_state,
 	 *
 	 * FIXME: split only when necessary
 	 */
+	crtc_state->dsc.slice_config.pipes_per_line = 1;
+
 	if (dsc->slices_per_line & BIT(2)) {
 		crtc_state->dsc.slice_config.streams_per_pipe = 2;
-		crtc_state->dsc.slice_count = 4;
+		crtc_state->dsc.slice_config.slices_per_stream = 2;
 	} else if (dsc->slices_per_line & BIT(1)) {
 		crtc_state->dsc.slice_config.streams_per_pipe = 2;
-		crtc_state->dsc.slice_count = 2;
+		crtc_state->dsc.slice_config.slices_per_stream = 1;
 	} else {
 		/* FIXME */
 		if (!(dsc->slices_per_line & BIT(0)))
@@ -3591,8 +3594,10 @@ static void fill_dsc(struct intel_crtc_state *crtc_state,
 				    "VBT: Unsupported DSC slice count for DSI\n");
 
 		crtc_state->dsc.slice_config.streams_per_pipe = 1;
-		crtc_state->dsc.slice_count = 1;
+		crtc_state->dsc.slice_config.slices_per_stream = 1;
 	}
+
+	crtc_state->dsc.slice_count = intel_dsc_line_slice_count(&crtc_state->dsc.slice_config);
 
 	if (crtc_state->hw.adjusted_mode.crtc_hdisplay %
 	    crtc_state->dsc.slice_count != 0)
