@@ -274,6 +274,124 @@ static int rdma_rw_init_single_wr(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
 	return 1;
 }
 
+static int rdma_rw_init_single_wr_bvec(struct rdma_rw_ctx *ctx,
+		struct ib_qp *qp, const struct bio_vec *bvec, u32 offset,
+		u64 remote_addr, u32 rkey, enum dma_data_direction dir)
+{
+	struct ib_device *dev = qp->pd->device;
+	struct ib_rdma_wr *rdma_wr = &ctx->single.wr;
+	struct bio_vec adjusted = *bvec;
+	u64 dma_addr;
+
+	ctx->nr_ops = 1;
+
+	if (offset) {
+		adjusted.bv_offset += offset;
+		adjusted.bv_len -= offset;
+	}
+
+	dma_addr = ib_dma_map_bvec(dev, &adjusted, dir);
+	if (ib_dma_mapping_error(dev, dma_addr))
+		return -ENOMEM;
+
+	ctx->single.sge.lkey = qp->pd->local_dma_lkey;
+	ctx->single.sge.addr = dma_addr;
+	ctx->single.sge.length = adjusted.bv_len;
+
+	memset(rdma_wr, 0, sizeof(*rdma_wr));
+	if (dir == DMA_TO_DEVICE)
+		rdma_wr->wr.opcode = IB_WR_RDMA_WRITE;
+	else
+		rdma_wr->wr.opcode = IB_WR_RDMA_READ;
+	rdma_wr->wr.sg_list = &ctx->single.sge;
+	rdma_wr->wr.num_sge = 1;
+	rdma_wr->remote_addr = remote_addr;
+	rdma_wr->rkey = rkey;
+
+	ctx->type = RDMA_RW_SINGLE_WR;
+	return 1;
+}
+
+static int rdma_rw_init_map_wrs_bvec(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
+		const struct bio_vec *bvec, u32 nr_bvec, u32 offset,
+		u64 remote_addr, u32 rkey, enum dma_data_direction dir)
+{
+	struct ib_device *dev = qp->pd->device;
+	u32 max_sge = dir == DMA_TO_DEVICE ? qp->max_write_sge :
+		      qp->max_read_sge;
+	struct ib_sge *sge;
+	u32 total_len = 0, i, j, bvec_idx = 0;
+	u32 mapped_bvecs = 0;
+	u64 dma_addr;
+
+	ctx->nr_ops = DIV_ROUND_UP(nr_bvec, max_sge);
+
+	ctx->map.sges = sge = kcalloc(nr_bvec, sizeof(*sge), GFP_KERNEL);
+	if (!ctx->map.sges)
+		return -ENOMEM;
+
+	ctx->map.wrs = kcalloc(ctx->nr_ops, sizeof(*ctx->map.wrs), GFP_KERNEL);
+	if (!ctx->map.wrs)
+		goto out_free_sges;
+
+	for (i = 0; i < ctx->nr_ops; i++) {
+		struct ib_rdma_wr *rdma_wr = &ctx->map.wrs[i];
+		u32 nr_sge = min(nr_bvec - bvec_idx, max_sge);
+
+		if (dir == DMA_TO_DEVICE)
+			rdma_wr->wr.opcode = IB_WR_RDMA_WRITE;
+		else
+			rdma_wr->wr.opcode = IB_WR_RDMA_READ;
+		rdma_wr->remote_addr = remote_addr + total_len;
+		rdma_wr->rkey = rkey;
+		rdma_wr->wr.num_sge = nr_sge;
+		rdma_wr->wr.sg_list = sge;
+
+		for (j = 0; j < nr_sge; j++, bvec_idx++) {
+			const struct bio_vec *bv = &bvec[bvec_idx];
+			u32 len = bv->bv_len;
+
+			/* Handle offset into first bvec */
+			if (bvec_idx == 0 && offset) {
+				struct bio_vec adjusted = *bv;
+
+				adjusted.bv_offset += offset;
+				adjusted.bv_len -= offset;
+				dma_addr = ib_dma_map_bvec(dev, &adjusted, dir);
+				len = adjusted.bv_len;
+			} else {
+				dma_addr = ib_dma_map_bvec(dev, bv, dir);
+			}
+
+			if (ib_dma_mapping_error(dev, dma_addr))
+				goto out_unmap;
+
+			mapped_bvecs++;
+			sge->addr = dma_addr;
+			sge->length = len;
+			sge->lkey = qp->pd->local_dma_lkey;
+
+			total_len += len;
+			sge++;
+		}
+
+		rdma_wr->wr.next = i + 1 < ctx->nr_ops ?
+			&ctx->map.wrs[i + 1].wr : NULL;
+	}
+
+	ctx->type = RDMA_RW_MULTI_WR;
+	return ctx->nr_ops;
+
+out_unmap:
+	for (i = 0; i < mapped_bvecs; i++)
+		ib_dma_unmap_bvec(dev, ctx->map.sges[i].addr,
+				  ctx->map.sges[i].length, dir);
+	kfree(ctx->map.wrs);
+out_free_sges:
+	kfree(ctx->map.sges);
+	return -ENOMEM;
+}
+
 /**
  * rdma_rw_ctx_init - initialize a RDMA READ/WRITE context
  * @ctx:	context to initialize
@@ -343,6 +461,46 @@ out_unmap_sg:
 	return ret;
 }
 EXPORT_SYMBOL(rdma_rw_ctx_init);
+
+/**
+ * rdma_rw_ctx_init_bvec - initialize a RDMA READ/WRITE context from bio_vec
+ * @ctx:	context to initialize
+ * @qp:		queue pair to operate on
+ * @port_num:	port num to which the connection is bound
+ * @bvec:	bio_vec array to READ/WRITE from/to
+ * @nr_bvec:	number of entries in @bvec
+ * @offset:	byte offset into first bvec
+ * @remote_addr:remote address to read/write (relative to @rkey)
+ * @rkey:	remote key to operate on
+ * @dir:	%DMA_TO_DEVICE for RDMA WRITE, %DMA_FROM_DEVICE for RDMA READ
+ *
+ * Maps the bio_vec array directly using dma_map_phys(), avoiding the
+ * intermediate scatterlist conversion. Does not support the MR registration
+ * path (iWARP devices or force_mr=1).
+ *
+ * Returns the number of WQEs that will be needed on the workqueue if
+ * successful, or a negative error code.
+ */
+int rdma_rw_ctx_init_bvec(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
+		u32 port_num, const struct bio_vec *bvec, u32 nr_bvec,
+		u32 offset, u64 remote_addr, u32 rkey,
+		enum dma_data_direction dir)
+{
+	if (nr_bvec == 0 || offset > bvec[0].bv_len)
+		return -EINVAL;
+
+	/* MR path not supported for bvec - reject iWARP and force_mr */
+	if (rdma_rw_io_needs_mr(qp->device, port_num, dir, nr_bvec))
+		return -EOPNOTSUPP;
+
+	if (nr_bvec == 1)
+		return rdma_rw_init_single_wr_bvec(ctx, qp, bvec, offset,
+				remote_addr, rkey, dir);
+
+	return rdma_rw_init_map_wrs_bvec(ctx, qp, bvec, nr_bvec, offset,
+			remote_addr, rkey, dir);
+}
+EXPORT_SYMBOL(rdma_rw_ctx_init_bvec);
 
 /**
  * rdma_rw_ctx_signature_init - initialize a RW context with signature offload
@@ -597,6 +755,42 @@ void rdma_rw_ctx_destroy(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
 	ib_dma_unmap_sg(qp->pd->device, sg, sg_cnt, dir);
 }
 EXPORT_SYMBOL(rdma_rw_ctx_destroy);
+
+/**
+ * rdma_rw_ctx_destroy_bvec - release resources from rdma_rw_ctx_init_bvec
+ * @ctx:	context to release
+ * @qp:		queue pair to operate on
+ * @port_num:	port num to which the connection is bound
+ * @bvec:	bio_vec array that was used for the READ/WRITE
+ * @nr_bvec:	number of entries in @bvec
+ * @dir:	%DMA_TO_DEVICE for RDMA WRITE, %DMA_FROM_DEVICE for RDMA READ
+ */
+void rdma_rw_ctx_destroy_bvec(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
+		u32 __maybe_unused port_num,
+		const struct bio_vec __maybe_unused *bvec,
+		u32 nr_bvec, enum dma_data_direction dir)
+{
+	struct ib_device *dev = qp->pd->device;
+	u32 i;
+
+	switch (ctx->type) {
+	case RDMA_RW_MULTI_WR:
+		for (i = 0; i < nr_bvec; i++)
+			ib_dma_unmap_bvec(dev, ctx->map.sges[i].addr,
+					  ctx->map.sges[i].length, dir);
+		kfree(ctx->map.wrs);
+		kfree(ctx->map.sges);
+		break;
+	case RDMA_RW_SINGLE_WR:
+		ib_dma_unmap_bvec(dev, ctx->single.sge.addr,
+				  ctx->single.sge.length, dir);
+		break;
+	default:
+		WARN_ON_ONCE(1);
+		return;
+	}
+}
+EXPORT_SYMBOL(rdma_rw_ctx_destroy_bvec);
 
 /**
  * rdma_rw_ctx_destroy_signature - release all resources allocated by
