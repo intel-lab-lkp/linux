@@ -2357,6 +2357,7 @@ int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 		&pipe_config->hw.adjusted_mode;
 	int num_joined_pipes = intel_crtc_num_joined_pipes(pipe_config);
 	bool is_mst = intel_crtc_has_type(pipe_config, INTEL_OUTPUT_DP_MST);
+	int slices_per_line;
 	int ret;
 
 	/*
@@ -2384,30 +2385,26 @@ int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 
 	/* Calculate Slice count */
 	if (intel_dp_is_edp(intel_dp)) {
-		pipe_config->dsc.slice_count =
+		slices_per_line =
 			drm_dp_dsc_sink_max_slice_count(connector->dp.dsc_dpcd,
 							true);
-		if (!pipe_config->dsc.slice_count) {
+		if (!slices_per_line) {
 			drm_dbg_kms(display->drm,
 				    "Unsupported Slice Count %d\n",
-				    pipe_config->dsc.slice_count);
+				    slices_per_line);
 			return -EINVAL;
 		}
 	} else {
-		u8 dsc_dp_slice_count;
-
-		dsc_dp_slice_count =
+		slices_per_line =
 			intel_dp_dsc_get_slice_count(connector,
 						     adjusted_mode->crtc_clock,
 						     adjusted_mode->crtc_hdisplay,
 						     num_joined_pipes);
-		if (!dsc_dp_slice_count) {
+		if (!slices_per_line) {
 			drm_dbg_kms(display->drm,
 				    "Compressed Slice Count not supported\n");
 			return -EINVAL;
 		}
-
-		pipe_config->dsc.slice_count = dsc_dp_slice_count;
 	}
 	/*
 	 * VDSC engine operates at 1 Pixel per clock, so if peak pixel rate
@@ -2416,13 +2413,26 @@ int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 	 * In case of Ultrajoiner along with 12 slices we need to use 3
 	 * VDSC instances.
 	 */
+	pipe_config->dsc.slice_config.pipes_per_line = num_joined_pipes;
+
 	if (pipe_config->joiner_pipes && num_joined_pipes == 4 &&
-	    pipe_config->dsc.slice_count == 12)
+	    slices_per_line == 12)
 		pipe_config->dsc.slice_config.streams_per_pipe = 3;
-	else if (pipe_config->joiner_pipes || pipe_config->dsc.slice_count > 1)
+	else if (pipe_config->joiner_pipes || slices_per_line > 1)
 		pipe_config->dsc.slice_config.streams_per_pipe = 2;
 	else
 		pipe_config->dsc.slice_config.streams_per_pipe = 1;
+
+	pipe_config->dsc.slice_config.slices_per_stream =
+		slices_per_line /
+		pipe_config->dsc.slice_config.pipes_per_line /
+		pipe_config->dsc.slice_config.streams_per_pipe;
+
+	pipe_config->dsc.slice_count =
+		intel_dsc_line_slice_count(&pipe_config->dsc.slice_config);
+
+	drm_WARN_ON(display->drm,
+		    pipe_config->dsc.slice_count != slices_per_line);
 
 	ret = intel_dp_dsc_compute_params(connector, pipe_config);
 	if (ret < 0) {
