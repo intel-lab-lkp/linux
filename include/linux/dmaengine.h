@@ -432,6 +432,8 @@ struct dma_chan {
 	char *dbg_client_name;
 #endif
 
+	struct dma_slave_config config;
+
 	struct list_head device_node;
 	struct dma_chan_percpu __percpu *local;
 	int client_count;
@@ -962,6 +964,8 @@ struct dma_device {
 static inline int dmaengine_slave_config(struct dma_chan *chan,
 					  struct dma_slave_config *config)
 {
+	chan->config = *config;
+
 	if (chan->device->device_config)
 		return chan->device->device_config(chan, config);
 
