@@ -588,10 +588,11 @@ static int iomap_readahead_iter(struct iomap_iter *iter,
 		if (ctx->cur_folio &&
 		    offset_in_folio(ctx->cur_folio, iter->pos) == 0) {
 			iomap_read_end(ctx->cur_folio, *cur_bytes_submitted);
+			folio_put(ctx->cur_folio);
 			ctx->cur_folio = NULL;
 		}
 		if (!ctx->cur_folio) {
-			ctx->cur_folio = readahead_folio(ctx->rac);
+			ctx->cur_folio = __readahead_folio(ctx->rac);
 			if (WARN_ON_ONCE(!ctx->cur_folio))
 				return -EINVAL;
 			*cur_bytes_submitted = 0;
@@ -639,8 +640,10 @@ void iomap_readahead(const struct iomap_ops *ops,
 	if (ctx->ops->submit_read)
 		ctx->ops->submit_read(ctx);
 
-	if (ctx->cur_folio)
+	if (ctx->cur_folio) {
 		iomap_read_end(ctx->cur_folio, cur_bytes_submitted);
+		folio_put(ctx->cur_folio);
+	}
 }
 EXPORT_SYMBOL_GPL(iomap_readahead);
 
