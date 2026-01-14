@@ -112,6 +112,7 @@ the following directory structure::
 	|-- all_des_enable
 	|-- all_des_tstamp_enable
 	|-- available_update_intervals_ms
+	|-- components/
 	|-- control
 	|-- current_update_interval_ms
 	|-- de_implementation_version
@@ -201,6 +202,77 @@ values, as in::
 	|-- enable
 	|-- intervals_discrete
 	`-- tstamp_enable
+
+components/
+-----------
+
+An alternative topological view of the des/ directory based on the topology
+relationship information described in des/ ::
+
+	components/
+	├── cpu
+	│   ├── 0
+	│   │   ├── celsius
+	│   │   │   └── 0
+	│   │   │       └── 0x00000001 -> ../../../../../des/0x00000001
+	│   │   └── cycles
+	│   │       ├── 0
+	│   │       │   └── 0x00001010 -> ../../../../../des/0x00001010
+	│   │       └── 1
+	│   │           └── 0x00002020 -> ../../../../../des/0x00002020
+	│   ├── 1
+	│   │   └── celsius
+	│   │       └── 0
+	│   │           └── 0x00000002 -> ../../../../../des/0x00000002
+	│   └── 2
+	│       └── celsius
+	│           └── 0
+	│               └── 0x00000003 -> ../../../../../des/0x00000003
+	├── interconnnect
+	│   └── 0
+	│       └── hertz
+	│           └── 0
+	│               ├── 0x0000A008 -> ../../../../../des/0x0000A008
+	│               └── 0x0000A00B -> ../../../../../des/0x0000A00B
+	├── mem_cntrl
+	│   └── 0
+	│       ├── bps
+	│       │   └── 0
+	│       │       └── 0x0000A00A -> ../../../../../des/0x0000A00A
+	│       ├── celsius
+	│       │   └── 0
+	│       │       └── 0x0000A007 -> ../../../../../des/0x0000A007
+	│       └── joules
+	│           └── 0
+	│               └── 0x0000A002 -> ../../../../../des/0x0000A002
+	├── periph
+	│   ├── 0
+	│   │   └── messages
+	│   │       └── 0
+	│   │           └── 0x00000016 -> ../../../../../des/0x00000016
+	│   ├── 1
+	│   │  	└── messages
+	│   │       └── 0
+	│   │           └── 0x00000017 -> ../../../../../des/0x00000017
+	│   └── 2
+	│       └── messages
+	│           └── 0
+	│               └── 0x00000018 -> ../../../../../des/0x00000018
+	└── unspec
+	└── 0
+	├── celsius
+	│   └── 0
+	│       └── 0x0000A005 -> ../../../../../des/0x0000A005
+	├── counts
+	│   └── 0
+	│       └── 0x0000A00C -> ../../../../../des/0x0000A00C
+	├── joules
+	│   └── 0
+	│      	├── 0x0000A000 -> ../../../../../des/0x0000A000
+	│       └── 0x0000A001 -> ../../../../../des/0x0000A001
+	└── state
+	└── 0
+	└── 0x0000A010 -> ../../../../../des/0x0000A010
 
 Alternative Binary Interfaces - Special files
 =============================================
