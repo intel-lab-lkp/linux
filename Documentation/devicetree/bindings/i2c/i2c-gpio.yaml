@@ -37,6 +37,13 @@ properties:
     description: sda as output only
     type: boolean
 
+  force-set-sda:
+    type: boolean
+    description:
+      Force the use of the SDA output toggle during I2C bus recovery.
+      This is needed for some hardware where the SDA pin is open-drain
+      but the GPIO subsystem cannot automatically detect its output capability.
+
   i2c-gpio,scl-output-only:
     description: scl as output only
     type: boolean
