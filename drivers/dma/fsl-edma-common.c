@@ -291,30 +291,32 @@ static void fsl_edma_unprep_slave_dma(struct fsl_edma_chan *fsl_chan)
 	fsl_chan->dma_dir = DMA_NONE;
 }
 
+static enum dma_data_direction
+fsl_dma_dir_trans_to_data(enum dma_transfer_direction dir)
+{
+	if (dir == DMA_MEM_TO_DEV)
+		return DMA_FROM_DEVICE;
+
+	if (dir ==  DMA_DEV_TO_MEM)
+		return DMA_TO_DEVICE;
+
+	return DMA_NONE;
+}
+
 static bool fsl_edma_prep_slave_dma(struct fsl_edma_chan *fsl_chan,
 				    enum dma_transfer_direction dir)
 {
 	struct dma_slave_config *cfg = &fsl_chan->vchan.chan.config;
+	struct dma_slave_cfg *c = dma_slave_get_cfg(cfg, dir);
 	struct device *dev = fsl_chan->vchan.chan.device->dev;
 	enum dma_data_direction dma_dir;
 	phys_addr_t addr = 0;
 	u32 size = 0;
 
-	switch (dir) {
-	case DMA_MEM_TO_DEV:
-		dma_dir = DMA_FROM_DEVICE;
-		addr = cfg->dst_addr;
-		size = cfg->dst_maxburst;
-		break;
-	case DMA_DEV_TO_MEM:
-		dma_dir = DMA_TO_DEVICE;
-		addr = cfg->src_addr;
-		size = cfg->src_maxburst;
-		break;
-	default:
-		dma_dir = DMA_NONE;
-		break;
-	}
+	dma_dir = fsl_dma_dir_trans_to_data(dir);
+
+	addr = c->addr;
+	size = c->maxburst;
 
 	/* Already mapped for this config? */
 	if (fsl_chan->dma_dir == dma_dir)
@@ -484,6 +486,7 @@ void fsl_edma_fill_tcd(struct fsl_edma_chan *fsl_chan,
 		       bool disable_req, bool enable_sg)
 {
 	struct dma_slave_config *cfg = &fsl_chan->vchan.chan.config;
+	struct dma_slave_cfg *c = dma_slave_get_cfg(cfg, cfg->direction);
 	u32 burst = 0;
 	u16 csr = 0;
 
@@ -507,26 +510,14 @@ void fsl_edma_fill_tcd(struct fsl_edma_chan *fsl_chan,
 	 * If we don't have either of those, will use a major loop reading from addr
 	 * nbytes (29bits).
 	 */
-	if (cfg->direction == DMA_MEM_TO_DEV) {
-		if (fsl_chan->is_multi_fifo)
-			burst = cfg->dst_maxburst * 4;
-		if (cfg->dst_port_window_size)
-			burst = cfg->dst_port_window_size * cfg->dst_addr_width;
-		if (burst) {
-			nbytes |= EDMA_V3_TCD_NBYTES_MLOFF(-burst);
-			nbytes |= EDMA_V3_TCD_NBYTES_DMLOE;
-			nbytes &= ~EDMA_V3_TCD_NBYTES_SMLOE;
-		}
-	} else {
-		if (fsl_chan->is_multi_fifo)
-			burst = cfg->src_maxburst * 4;
-		if (cfg->src_port_window_size)
-			burst = cfg->src_port_window_size * cfg->src_addr_width;
-		if (burst) {
-			nbytes |= EDMA_V3_TCD_NBYTES_MLOFF(-burst);
-			nbytes |= EDMA_V3_TCD_NBYTES_SMLOE;
-			nbytes &= ~EDMA_V3_TCD_NBYTES_DMLOE;
-		}
+	if (fsl_chan->is_multi_fifo)
+		burst = c->maxburst * 4;
+	if (c->port_window_size)
+		burst = c->port_window_size * c->addr_width;
+	if (burst) {
+		nbytes |= EDMA_V3_TCD_NBYTES_MLOFF(-burst);
+		nbytes |= EDMA_V3_TCD_NBYTES_DMLOE;
+		nbytes &= ~EDMA_V3_TCD_NBYTES_SMLOE;
 	}
 
 	fsl_edma_set_tcd_to_le(fsl_chan, tcd, nbytes, nbytes);
