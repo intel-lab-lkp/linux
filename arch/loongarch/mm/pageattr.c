@@ -236,3 +236,19 @@ int set_direct_map_valid_noflush(struct page *page, unsigned nr, bool valid)
 
 	return __set_memory(addr, 1, set, clear);
 }
+
+int folio_zap_direct_map(struct folio *folio)
+{
+	int ret;
+
+	ret = set_direct_map_valid_noflush(folio_page(folio, 0),
+					   folio_nr_pages(folio), false);
+
+	return ret;
+}
+
+int folio_restore_direct_map(struct folio *folio)
+{
+	return set_direct_map_valid_noflush(folio_page(folio, 0),
+					    folio_nr_pages(folio), true);
+}

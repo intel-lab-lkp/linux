@@ -412,6 +412,24 @@ int set_direct_map_valid_noflush(struct page *page, unsigned nr, bool valid)
 	return __set_memory((unsigned long)page_to_virt(page), nr, flags);
 }
 
+int folio_zap_direct_map(struct folio *folio)
+{
+	unsigned long addr = (unsigned long)folio_address(folio);
+	int ret;
+
+	ret = set_direct_map_valid_noflush(folio_page(folio, 0),
+					   folio_nr_pages(folio), false);
+	flush_tlb_kernel_range(addr, addr + folio_size(folio));
+
+	return ret;
+}
+
+int folio_restore_direct_map(struct folio *folio)
+{
+	return set_direct_map_valid_noflush(folio_page(folio, 0),
+					    folio_nr_pages(folio), true);
+}
+
 bool kernel_page_present(struct page *page)
 {
 	unsigned long addr;

@@ -40,6 +40,16 @@ static inline int set_direct_map_valid_noflush(struct page *page,
 	return 0;
 }
 
+static inline int folio_zap_direct_map(struct folio *folio)
+{
+	return 0;
+}
+
+static inline int folio_restore_direct_map(struct folio *folio)
+{
+	return 0;
+}
+
 static inline bool kernel_page_present(struct page *page)
 {
 	return true;

@@ -63,6 +63,8 @@ __SET_MEMORY_FUNC(set_memory_4k, SET_MEMORY_4K)
 int set_direct_map_invalid_noflush(struct page *page);
 int set_direct_map_default_noflush(struct page *page);
 int set_direct_map_valid_noflush(struct page *page, unsigned nr, bool valid);
+int folio_zap_direct_map(struct folio *folio);
+int folio_restore_direct_map(struct folio *folio);
 bool kernel_page_present(struct page *page);
 
 #endif
