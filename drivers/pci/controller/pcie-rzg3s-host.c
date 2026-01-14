@@ -223,6 +223,7 @@ struct rzg3s_pcie_host;
 /**
  * struct rzg3s_pcie_soc_data - SoC specific data
  * @init_phy: PHY initialization function
+ * @set_inbound_windows: SoC-specific function to set up inbound windows
  * @power_resets: array with the resets that need to be de-asserted after
  *                power-on
  * @cfg_resets: array with the resets that need to be de-asserted after
@@ -233,6 +234,9 @@ struct rzg3s_pcie_host;
  */
 struct rzg3s_pcie_soc_data {
 	int (*init_phy)(struct rzg3s_pcie_host *host);
+	int (*set_inbound_windows)(struct rzg3s_pcie_host *host,
+				   struct resource_entry *entry,
+				   int *index);
 	const char * const *power_resets;
 	const char * const *cfg_resets;
 	struct rzg3s_sysc_info sysc_info;
@@ -1354,7 +1358,7 @@ static int rzg3s_pcie_parse_map_dma_ranges(struct rzg3s_pcie_host *host)
 	int i = 0, ret;
 
 	resource_list_for_each_entry(entry, &bridge->dma_ranges) {
-		ret = rzg3s_pcie_set_inbound_windows(host, entry, &i);
+		ret = host->data->set_inbound_windows(host, entry, &i);
 		if (ret)
 			return ret;
 	}
@@ -1753,6 +1757,7 @@ static const struct rzg3s_pcie_soc_data rzg3s_soc_data = {
 	.cfg_resets = rzg3s_soc_cfg_resets,
 	.num_cfg_resets = ARRAY_SIZE(rzg3s_soc_cfg_resets),
 	.init_phy = rzg3s_soc_pcie_init_phy,
+	.set_inbound_windows = rzg3s_pcie_set_inbound_windows,
 	.sysc_info = {
 		.rst_rsm_b = {
 			.offset = 0xd74,
