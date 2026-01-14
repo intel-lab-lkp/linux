@@ -1096,10 +1096,14 @@ void init_entity_runnable_average(struct sched_entity *se)
 	memset(sa, 0, sizeof(*sa));
 
 	/*
-	 * Tasks are initialized with full load to be seen as heavy tasks until
-	 * they get a chance to stabilize to their real load level.
-	 * Group entities are initialized with zero load to reflect the fact that
-	 * nothing has been attached to the task group yet.
+	 * Initialize runnable average for a new sched_entity.
+	 *
+	 * - Ordinary tasks (entity_is_task) are initialized with their
+	 *   scaled load weight so that they are initially considered "heavy"
+	 *   by the scheduler, until PELT smoothing adjusts them to the actual load.
+	 *
+	 * - Group entities (task groups) remain at zero load since no tasks
+	 *   have been attached yet; their load will grow as tasks are added.
 	 */
 	if (entity_is_task(se))
 		sa->load_avg = scale_load_down(se->load.weight);
