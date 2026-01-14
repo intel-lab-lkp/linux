@@ -2238,8 +2238,9 @@ IO Latency
 
 This is a cgroup v2 controller for IO workload protection.  You provide a group
 with a latency target, and if the average latency exceeds that target the
-controller will throttle any peers that have a lower latency target than the
-protected workload.
+controller will throttle any peers that have a higher latency target than the
+protected workload, as well as peers that do not have a latency target
+configured.
 
 The limits are only applied at the peer level in the hierarchy.  This means that
 in the diagram below, only groups A, B, and C will influence each other, and
@@ -2265,8 +2266,9 @@ How IO Latency Throttling Works
 
 io.latency is work conserving; so as long as everybody is meeting their latency
 target the controller doesn't do anything.  Once a group starts missing its
-target it begins throttling any peer group that has a higher target than itself.
-This throttling takes 2 forms:
+target it begins throttling any peer group that has a higher target than itself,
+as well as any peer group without a latency target. This throttling takes 2
+forms:
 
 - Queue depth throttling.  This is the number of outstanding IO's a group is
   allowed to have.  We will clamp down relatively quickly, starting at no limit
