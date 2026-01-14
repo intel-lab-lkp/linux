@@ -262,7 +262,6 @@ int atomisp_reset(struct atomisp_device *isp)
 	/* Reset ISP by power-cycling it */
 	int ret = 0;
 
-	dev_dbg(isp->dev, "%s\n", __func__);
 
 	ret = atomisp_power_off(isp->dev);
 	if (ret < 0)
@@ -356,7 +355,7 @@ void atomisp_eof_event(struct atomisp_sub_device *asd, uint8_t exp_id)
 }
 
 static void atomisp_3a_stats_ready_event(struct atomisp_sub_device *asd,
-	uint8_t exp_id)
+					 uint8_t exp_id)
 {
 	struct v4l2_event event = {0};
 
@@ -367,7 +366,7 @@ static void atomisp_3a_stats_ready_event(struct atomisp_sub_device *asd,
 }
 
 static void atomisp_metadata_ready_event(struct atomisp_sub_device *asd,
-	enum atomisp_metadata_type md_type)
+					 enum atomisp_metadata_type md_type)
 {
 	struct v4l2_event event = {0};
 
@@ -1589,7 +1588,6 @@ int atomisp_get_dis_stat(struct atomisp_sub_device *asd,
 int atomisp_set_array_res(struct atomisp_sub_device *asd,
 			  struct atomisp_resolution  *config)
 {
-	dev_dbg(asd->isp->dev, ">%s start\n", __func__);
 	if (!config) {
 		dev_err(asd->isp->dev, "Set sensor array size is not valid\n");
 		return -EINVAL;
@@ -1745,8 +1743,8 @@ int atomisp_calculate_real_zoom_region(struct atomisp_sub_device *asd,
 	if (dz_config->dx || dz_config->dy)
 		return 0;
 
-	if (css_pipe_id != IA_CSS_PIPE_ID_PREVIEW
-	    && css_pipe_id != IA_CSS_PIPE_ID_CAPTURE) {
+	if (css_pipe_id != IA_CSS_PIPE_ID_PREVIEW &&
+	    css_pipe_id != IA_CSS_PIPE_ID_CAPTURE) {
 		dev_err(asd->isp->dev, "%s the set pipe no support crop region"
 			, __func__);
 		return -EINVAL;
@@ -1762,15 +1760,15 @@ int atomisp_calculate_real_zoom_region(struct atomisp_sub_device *asd,
 		return -EINVAL;
 	}
 
-	if (dz_config->zoom_region.resolution.width
-	    == asd->sensor_array_res.width
-	    || dz_config->zoom_region.resolution.height
+	if (dz_config->zoom_region.width
+	    == asd->sensor_array_res.width ||
+	    dz_config->zoom_region.height
 	    == asd->sensor_array_res.height) {
 		/*no need crop region*/
-		dz_config->zoom_region.origin.x = 0;
-		dz_config->zoom_region.origin.y = 0;
-		dz_config->zoom_region.resolution.width = eff_res.width;
-		dz_config->zoom_region.resolution.height = eff_res.height;
+		dz_config->zoom_region.left = 0;
+		dz_config->zoom_region.top = 0;
+		dz_config->zoom_region.width = eff_res.width;
+		dz_config->zoom_region.height = eff_res.height;
 		return 0;
 	}
 
@@ -1781,16 +1779,16 @@ int atomisp_calculate_real_zoom_region(struct atomisp_sub_device *asd,
 	 */
 
 	if (!IS_ISP2401) {
-		dz_config->zoom_region.origin.x = dz_config->zoom_region.origin.x
+		dz_config->zoom_region.left = dz_config->zoom_region.left
 						  * eff_res.width
 						  / asd->sensor_array_res.width;
-		dz_config->zoom_region.origin.y = dz_config->zoom_region.origin.y
+		dz_config->zoom_region.top = dz_config->zoom_region.top
 						  * eff_res.height
 						  / asd->sensor_array_res.height;
-		dz_config->zoom_region.resolution.width = dz_config->zoom_region.resolution.width
+		dz_config->zoom_region.width = dz_config->zoom_region.width
 							  * eff_res.width
 							  / asd->sensor_array_res.width;
-		dz_config->zoom_region.resolution.height = dz_config->zoom_region.resolution.height
+		dz_config->zoom_region.height = dz_config->zoom_region.height
 							  * eff_res.height
 							  / asd->sensor_array_res.height;
 		/*
@@ -1819,62 +1817,62 @@ int atomisp_calculate_real_zoom_region(struct atomisp_sub_device *asd,
 				   - asd->sensor_array_res.width
 				   * out_res.height / out_res.width;
 			h_offset = h_offset / 2;
-			if (dz_config->zoom_region.origin.y < h_offset)
-				dz_config->zoom_region.origin.y = 0;
+			if (dz_config->zoom_region.top < h_offset)
+				dz_config->zoom_region.top = 0;
 			else
-				dz_config->zoom_region.origin.y = dz_config->zoom_region.origin.y - h_offset;
+				dz_config->zoom_region.top = dz_config->zoom_region.top - h_offset;
 			w_offset = 0;
 		} else {
 			w_offset = asd->sensor_array_res.width
 				   - asd->sensor_array_res.height
 				   * out_res.width / out_res.height;
 			w_offset = w_offset / 2;
-			if (dz_config->zoom_region.origin.x < w_offset)
-				dz_config->zoom_region.origin.x = 0;
+			if (dz_config->zoom_region.left < w_offset)
+				dz_config->zoom_region.left = 0;
 			else
-				dz_config->zoom_region.origin.x = dz_config->zoom_region.origin.x - w_offset;
+				dz_config->zoom_region.left = dz_config->zoom_region.left - w_offset;
 			h_offset = 0;
 		}
-		dz_config->zoom_region.origin.x = dz_config->zoom_region.origin.x
+		dz_config->zoom_region.left = dz_config->zoom_region.left
 						  * eff_res.width
 						  / (asd->sensor_array_res.width - 2 * w_offset);
-		dz_config->zoom_region.origin.y = dz_config->zoom_region.origin.y
+		dz_config->zoom_region.top = dz_config->zoom_region.top
 						  * eff_res.height
 						  / (asd->sensor_array_res.height - 2 * h_offset);
-		dz_config->zoom_region.resolution.width = dz_config->zoom_region.resolution.width
+		dz_config->zoom_region.width = dz_config->zoom_region.width
 						  * eff_res.width
 						  / (asd->sensor_array_res.width - 2 * w_offset);
-		dz_config->zoom_region.resolution.height = dz_config->zoom_region.resolution.height
+		dz_config->zoom_region.height = dz_config->zoom_region.height
 						  * eff_res.height
 						  / (asd->sensor_array_res.height - 2 * h_offset);
 	}
 
-	if (out_res.width * dz_config->zoom_region.resolution.height
-	    > dz_config->zoom_region.resolution.width * out_res.height) {
-		dz_config->zoom_region.resolution.height =
-		    dz_config->zoom_region.resolution.width
+	if (out_res.width * dz_config->zoom_region.height
+	    > dz_config->zoom_region.width * out_res.height) {
+		dz_config->zoom_region.height =
+		    dz_config->zoom_region.width
 		    * out_res.height / out_res.width;
 	} else {
-		dz_config->zoom_region.resolution.width =
-		    dz_config->zoom_region.resolution.height
+		dz_config->zoom_region.width =
+		    dz_config->zoom_region.height
 		    * out_res.width / out_res.height;
 	}
 	dev_dbg(asd->isp->dev,
 		"%s crop region:(%d,%d),(%d,%d) eff_res(%d, %d) array_size(%d,%d) out_res(%d, %d)\n",
-		__func__, dz_config->zoom_region.origin.x,
-		dz_config->zoom_region.origin.y,
-		dz_config->zoom_region.resolution.width,
-		dz_config->zoom_region.resolution.height,
+		__func__, dz_config->zoom_region.left,
+		dz_config->zoom_region.top,
+		dz_config->zoom_region.width,
+		dz_config->zoom_region.height,
 		eff_res.width, eff_res.height,
 		asd->sensor_array_res.width,
 		asd->sensor_array_res.height,
 		out_res.width, out_res.height);
 
-	if ((dz_config->zoom_region.origin.x +
-	     dz_config->zoom_region.resolution.width
+	if ((dz_config->zoom_region.left +
+	     dz_config->zoom_region.width
 	     > eff_res.width) ||
-	    (dz_config->zoom_region.origin.y +
-	     dz_config->zoom_region.resolution.height
+	    (dz_config->zoom_region.top +
+	     dz_config->zoom_region.height
 	     > eff_res.height))
 		return -EINVAL;
 
@@ -1899,10 +1897,10 @@ static bool atomisp_check_zoom_region(
 
 	config.width = asd->sensor_array_res.width;
 	config.height = asd->sensor_array_res.height;
-	w = dz_config->zoom_region.origin.x +
-	    dz_config->zoom_region.resolution.width;
-	h = dz_config->zoom_region.origin.y +
-	    dz_config->zoom_region.resolution.height;
+	w = dz_config->zoom_region.left +
+	    dz_config->zoom_region.width;
+	h = dz_config->zoom_region.top +
+	    dz_config->zoom_region.height;
 
 	if ((w <= config.width) && (h <= config.height) && w > 0 && h > 0)
 		flag = true;
@@ -1910,10 +1908,10 @@ static bool atomisp_check_zoom_region(
 		/* setting error zoom region */
 		dev_err(asd->isp->dev,
 			"%s zoom region ERROR:dz_config:(%d,%d),(%d,%d)array_res(%d, %d)\n",
-			__func__, dz_config->zoom_region.origin.x,
-			dz_config->zoom_region.origin.y,
-			dz_config->zoom_region.resolution.width,
-			dz_config->zoom_region.resolution.height,
+			__func__, dz_config->zoom_region.left,
+			dz_config->zoom_region.top,
+			dz_config->zoom_region.width,
+			dz_config->zoom_region.height,
 			config.width, config.height);
 
 	return flag;
@@ -2352,7 +2350,7 @@ int atomisp_cp_lsc_table(struct atomisp_sub_device *asd,
 
 	if (IS_ISP2401) {
 		if (copy_from_compatible(&dest_st, source_st,
-					sizeof(struct atomisp_shading_table),
+					 sizeof(struct atomisp_shading_table),
 					from_user)) {
 			dev_err(asd->isp->dev, "copy shading table failed!");
 			return -EFAULT;
@@ -2488,28 +2486,28 @@ int atomisp_css_cp_dvs2_coefs(struct atomisp_sub_device *asd,
 		dvs_hor_coef_bytes = asd->params.dvs_hor_coef_bytes;
 		dvs_ver_coef_bytes = asd->params.dvs_ver_coef_bytes;
 		if (copy_from_compatible(css_param->dvs2_coeff->hor_coefs.odd_real,
-					coefs->hor_coefs.odd_real, dvs_hor_coef_bytes, from_user) ||
+					 coefs->hor_coefs.odd_real, dvs_hor_coef_bytes, from_user) ||
 		    copy_from_compatible(css_param->dvs2_coeff->hor_coefs.odd_imag,
-					coefs->hor_coefs.odd_imag, dvs_hor_coef_bytes, from_user) ||
+					 coefs->hor_coefs.odd_imag, dvs_hor_coef_bytes, from_user) ||
 		    copy_from_compatible(css_param->dvs2_coeff->hor_coefs.even_real,
-					coefs->hor_coefs.even_real, dvs_hor_coef_bytes, from_user) ||
+					 coefs->hor_coefs.even_real, dvs_hor_coef_bytes, from_user) ||
 		    copy_from_compatible(css_param->dvs2_coeff->hor_coefs.even_imag,
-					coefs->hor_coefs.even_imag, dvs_hor_coef_bytes, from_user) ||
+					 coefs->hor_coefs.even_imag, dvs_hor_coef_bytes, from_user) ||
 		    copy_from_compatible(css_param->dvs2_coeff->ver_coefs.odd_real,
-					coefs->ver_coefs.odd_real, dvs_ver_coef_bytes, from_user) ||
+					 coefs->ver_coefs.odd_real, dvs_ver_coef_bytes, from_user) ||
 		    copy_from_compatible(css_param->dvs2_coeff->ver_coefs.odd_imag,
-					coefs->ver_coefs.odd_imag, dvs_ver_coef_bytes, from_user) ||
+					 coefs->ver_coefs.odd_imag, dvs_ver_coef_bytes, from_user) ||
 		    copy_from_compatible(css_param->dvs2_coeff->ver_coefs.even_real,
-					coefs->ver_coefs.even_real, dvs_ver_coef_bytes, from_user) ||
+					 coefs->ver_coefs.even_real, dvs_ver_coef_bytes, from_user) ||
 		    copy_from_compatible(css_param->dvs2_coeff->ver_coefs.even_imag,
-					coefs->ver_coefs.even_imag, dvs_ver_coef_bytes, from_user)) {
+					 coefs->ver_coefs.even_imag, dvs_ver_coef_bytes, from_user)) {
 			ia_css_dvs2_coefficients_free(css_param->dvs2_coeff);
 			css_param->dvs2_coeff = NULL;
 			return -EFAULT;
 		}
 	} else {
 		if (copy_from_compatible(&dvs2_coefs, coefs,
-					sizeof(struct ia_css_dvs2_coefficients),
+					 sizeof(struct ia_css_dvs2_coefficients),
 					from_user)) {
 			dev_err(asd->isp->dev, "copy dvs2 coef failed");
 			return -EFAULT;
@@ -2544,21 +2542,21 @@ int atomisp_css_cp_dvs2_coefs(struct atomisp_sub_device *asd,
 		dvs_hor_coef_bytes = asd->params.dvs_hor_coef_bytes;
 		dvs_ver_coef_bytes = asd->params.dvs_ver_coef_bytes;
 		if (copy_from_compatible(css_param->dvs2_coeff->hor_coefs.odd_real,
-					dvs2_coefs.hor_coefs.odd_real, dvs_hor_coef_bytes, from_user) ||
+					 dvs2_coefs.hor_coefs.odd_real, dvs_hor_coef_bytes, from_user) ||
 		    copy_from_compatible(css_param->dvs2_coeff->hor_coefs.odd_imag,
-					dvs2_coefs.hor_coefs.odd_imag, dvs_hor_coef_bytes, from_user) ||
+					 dvs2_coefs.hor_coefs.odd_imag, dvs_hor_coef_bytes, from_user) ||
 		    copy_from_compatible(css_param->dvs2_coeff->hor_coefs.even_real,
-					dvs2_coefs.hor_coefs.even_real, dvs_hor_coef_bytes, from_user) ||
+					 dvs2_coefs.hor_coefs.even_real, dvs_hor_coef_bytes, from_user) ||
 		    copy_from_compatible(css_param->dvs2_coeff->hor_coefs.even_imag,
-					dvs2_coefs.hor_coefs.even_imag, dvs_hor_coef_bytes, from_user) ||
+					 dvs2_coefs.hor_coefs.even_imag, dvs_hor_coef_bytes, from_user) ||
 		    copy_from_compatible(css_param->dvs2_coeff->ver_coefs.odd_real,
-					dvs2_coefs.ver_coefs.odd_real, dvs_ver_coef_bytes, from_user) ||
+					 dvs2_coefs.ver_coefs.odd_real, dvs_ver_coef_bytes, from_user) ||
 		    copy_from_compatible(css_param->dvs2_coeff->ver_coefs.odd_imag,
-					dvs2_coefs.ver_coefs.odd_imag, dvs_ver_coef_bytes, from_user) ||
+					 dvs2_coefs.ver_coefs.odd_imag, dvs_ver_coef_bytes, from_user) ||
 		    copy_from_compatible(css_param->dvs2_coeff->ver_coefs.even_real,
-					dvs2_coefs.ver_coefs.even_real, dvs_ver_coef_bytes, from_user) ||
+					 dvs2_coefs.ver_coefs.even_real, dvs_ver_coef_bytes, from_user) ||
 		    copy_from_compatible(css_param->dvs2_coeff->ver_coefs.even_imag,
-					dvs2_coefs.ver_coefs.even_imag, dvs_ver_coef_bytes, from_user)) {
+					 dvs2_coefs.ver_coefs.even_imag, dvs_ver_coef_bytes, from_user)) {
 			ia_css_dvs2_coefficients_free(css_param->dvs2_coeff);
 			css_param->dvs2_coeff = NULL;
 			return -EFAULT;
@@ -2605,7 +2603,7 @@ int atomisp_cp_dvs_6axis_config(struct atomisp_sub_device *asd,
 		struct ia_css_dvs_6axis_config t_6axis_config;
 
 		if (copy_from_compatible(&t_6axis_config, source_6axis_config,
-					sizeof(struct atomisp_dvs_6axis_config),
+					 sizeof(struct atomisp_dvs_6axis_config),
 					from_user)) {
 			dev_err(asd->isp->dev, "copy morph table failed!");
 			return -EFAULT;
@@ -2631,28 +2629,28 @@ int atomisp_cp_dvs_6axis_config(struct atomisp_sub_device *asd,
 		dvs_6axis_config->exp_id = t_6axis_config.exp_id;
 
 		if (copy_from_compatible(dvs_6axis_config->xcoords_y,
-					t_6axis_config.xcoords_y,
+					 t_6axis_config.xcoords_y,
 					t_6axis_config.width_y *
 					t_6axis_config.height_y *
 					sizeof(*dvs_6axis_config->xcoords_y),
 					from_user))
 			goto error;
 		if (copy_from_compatible(dvs_6axis_config->ycoords_y,
-					t_6axis_config.ycoords_y,
+					 t_6axis_config.ycoords_y,
 					t_6axis_config.width_y *
 					t_6axis_config.height_y *
 					sizeof(*dvs_6axis_config->ycoords_y),
 					from_user))
 			goto error;
 		if (copy_from_compatible(dvs_6axis_config->xcoords_uv,
-					t_6axis_config.xcoords_uv,
+					 t_6axis_config.xcoords_uv,
 					t_6axis_config.width_uv *
 					t_6axis_config.height_uv *
 					sizeof(*dvs_6axis_config->xcoords_uv),
 					from_user))
 			goto error;
 		if (copy_from_compatible(dvs_6axis_config->ycoords_uv,
-					t_6axis_config.ycoords_uv,
+					 t_6axis_config.ycoords_uv,
 					t_6axis_config.width_uv *
 					t_6axis_config.height_uv *
 					sizeof(*dvs_6axis_config->ycoords_uv),
@@ -2683,28 +2681,28 @@ int atomisp_cp_dvs_6axis_config(struct atomisp_sub_device *asd,
 		dvs_6axis_config->exp_id = source_6axis_config->exp_id;
 
 		if (copy_from_compatible(dvs_6axis_config->xcoords_y,
-					source_6axis_config->xcoords_y,
+					 source_6axis_config->xcoords_y,
 					source_6axis_config->width_y *
 					source_6axis_config->height_y *
 					sizeof(*source_6axis_config->xcoords_y),
 					from_user))
 			goto error;
 		if (copy_from_compatible(dvs_6axis_config->ycoords_y,
-					source_6axis_config->ycoords_y,
+					 source_6axis_config->ycoords_y,
 					source_6axis_config->width_y *
 					source_6axis_config->height_y *
 					sizeof(*source_6axis_config->ycoords_y),
 					from_user))
 			goto error;
 		if (copy_from_compatible(dvs_6axis_config->xcoords_uv,
-					source_6axis_config->xcoords_uv,
+					 source_6axis_config->xcoords_uv,
 					source_6axis_config->width_uv *
 					source_6axis_config->height_uv *
 					sizeof(*source_6axis_config->xcoords_uv),
 					from_user))
 			goto error;
 		if (copy_from_compatible(dvs_6axis_config->ycoords_uv,
-					source_6axis_config->ycoords_uv,
+					 source_6axis_config->ycoords_uv,
 					source_6axis_config->width_uv *
 					source_6axis_config->height_uv *
 					sizeof(*source_6axis_config->ycoords_uv),
@@ -2744,7 +2742,7 @@ int atomisp_cp_morph_table(struct atomisp_sub_device *asd,
 		struct ia_css_morph_table mtbl;
 
 		if (copy_from_compatible(&mtbl, source_morph_table,
-				sizeof(struct atomisp_morph_table),
+					 sizeof(struct atomisp_morph_table),
 				from_user)) {
 			dev_err(asd->isp->dev, "copy morph table failed!");
 			return -EFAULT;
@@ -2758,14 +2756,14 @@ int atomisp_cp_morph_table(struct atomisp_sub_device *asd,
 
 		for (i = 0; i < IA_CSS_MORPH_TABLE_NUM_PLANES; i++) {
 			if (copy_from_compatible(morph_table->coordinates_x[i],
-						(__force void *)source_morph_table->coordinates_x[i],
+						 (__force void *)source_morph_table->coordinates_x[i],
 						mtbl.height * mtbl.width *
 						sizeof(*morph_table->coordinates_x[i]),
 						from_user))
 				goto error;
 
 			if (copy_from_compatible(morph_table->coordinates_y[i],
-						(__force void *)source_morph_table->coordinates_y[i],
+						 (__force void *)source_morph_table->coordinates_y[i],
 						mtbl.height * mtbl.width *
 						sizeof(*morph_table->coordinates_y[i]),
 						from_user))
@@ -2782,14 +2780,14 @@ int atomisp_cp_morph_table(struct atomisp_sub_device *asd,
 
 		for (i = 0; i < IA_CSS_MORPH_TABLE_NUM_PLANES; i++) {
 			if (copy_from_compatible(morph_table->coordinates_x[i],
-						(__force void *)source_morph_table->coordinates_x[i],
+						 (__force void *)source_morph_table->coordinates_x[i],
 						source_morph_table->height * source_morph_table->width *
 						sizeof(*source_morph_table->coordinates_x[i]),
 						from_user))
 				goto error;
 
 			if (copy_from_compatible(morph_table->coordinates_y[i],
-						(__force void *)source_morph_table->coordinates_y[i],
+						 (__force void *)source_morph_table->coordinates_y[i],
 						source_morph_table->height * source_morph_table->width *
 						sizeof(*source_morph_table->coordinates_y[i]),
 						from_user))
@@ -3321,7 +3319,7 @@ atomisp_v4l2_framebuffer_to_css_frame(const struct v4l2_framebuffer *arg,
 	   bytes. The RAW frame we use here should always be a 16bit RAW
 	   frame. This is why we bytesperline/2 is equal to the padded with */
 	if (ia_css_frame_allocate(&res, arg->fmt.width, arg->fmt.height,
-				       sh_format, padded_width, 0)) {
+				  sh_format, padded_width, 0)) {
 		ret = -ENOMEM;
 		goto err;
 	}
@@ -3580,7 +3578,7 @@ void atomisp_get_padding(struct atomisp_device *isp, u32 width, u32 height,
 	height = min(height, input->active_rect.height);
 
 	if (input->binning_support && width <= (input->active_rect.width / 2) &&
-				      height <= (input->active_rect.height / 2)) {
+	    height <= (input->active_rect.height / 2)) {
 		native_rect.width /= 2;
 		native_rect.height /= 2;
 	}
@@ -3730,7 +3728,7 @@ static int atomisp_set_sensor_crop_and_fmt(struct atomisp_device *isp,
 
 	/* Cropping is done before binning, when binning double the crop rect */
 	if (input->binning_support && sel.r.width <= (input->native_rect.width / 2) &&
-				      sel.r.height <= (input->native_rect.height / 2)) {
+	    sel.r.height <= (input->native_rect.height / 2)) {
 		sel.r.width *= 2;
 		sel.r.height *= 2;
 	}
