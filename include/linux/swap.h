@@ -330,6 +330,7 @@ extern unsigned long totalreserve_pages;
 void lru_note_cost_unlock_irq(struct lruvec *lruvec, bool file,
 		unsigned int nr_io, unsigned int nr_rotated)
 		__releases(lruvec->lru_lock);
+		__releases(rcu)
 void lru_note_cost_refault(struct folio *);
 void folio_add_lru(struct folio *);
 void folio_add_lru_vma(struct folio *, struct vm_area_struct *);
