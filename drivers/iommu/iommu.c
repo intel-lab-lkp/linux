@@ -950,10 +950,9 @@ static ssize_t iommu_group_show_resv_regions(struct iommu_group *group,
 					     char *buf)
 {
 	struct iommu_resv_region *region, *next;
-	struct list_head group_resv_regions;
+	LIST_HEAD(group_resv_regions);
 	int offset = 0;
 
-	INIT_LIST_HEAD(&group_resv_regions);
 	iommu_get_group_resv_regions(group, &group_resv_regions);
 
 	list_for_each_entry_safe(region, next, &group_resv_regions, list) {
