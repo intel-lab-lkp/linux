@@ -1333,6 +1333,11 @@ struct intel_crtc_state {
 		bool compression_enabled_on_link;
 		bool compression_enable;
 		int num_streams;
+		struct intel_dsc_slice_config {
+			int pipes_per_line;
+			int streams_per_pipe;
+			int slices_per_stream;
+		} slice_config;
 		/* Compressed Bpp in U6.4 format (first 4 bits for fractional part) */
 		u16 compressed_bpp_x16;
 		u8 slice_count;

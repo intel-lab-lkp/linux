@@ -35,6 +35,11 @@ bool intel_dsc_source_support(const struct intel_crtc_state *crtc_state)
 	return true;
 }
 
+int intel_dsc_line_slice_count(const struct intel_dsc_slice_config *config)
+{
+	return config->pipes_per_line * config->streams_per_pipe * config->slices_per_stream;
+}
+
 static bool is_pipe_dsc(struct intel_crtc *crtc, enum transcoder cpu_transcoder)
 {
 	struct intel_display *display = to_intel_display(crtc);
