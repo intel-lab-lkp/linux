@@ -42,6 +42,9 @@
 #include <linux/rwsem.h>
 #include <linux/slab.h>
 #include <linux/string_choices.h>
+#include <linux/device.h>
+#include <linux/gpio/driver.h>
+#include <linux/fwnode.h>
 
 #include "i2c-core.h"
 
@@ -422,9 +425,25 @@ static int i2c_gpio_init_recovery(struct i2c_adapter *adap)
 	return i2c_gpio_init_generic_recovery(adap);
 }
 
+/* Check if SDA can be driven for recovery when
+ * GPIO direction reporting is unavailable.
+ * Usage: add new flag "force-set-sda" in dts pinctrl.
+ */
+static bool force_set_sda(struct device *dev)
+{
+	if (!dev || !dev->of_node)
+		return false;
+
+	if (of_property_read_bool(dev->of_node, "force-set-sda"))
+		return true;
+	else
+		return false;
+}
+
 static int i2c_init_recovery(struct i2c_adapter *adap)
 {
 	struct i2c_bus_recovery_info *bri = adap->bus_recovery_info;
+	struct device *dev = &adap->dev;
 	bool is_error_level = true;
 	char *err_str;
 
@@ -446,7 +465,7 @@ static int i2c_init_recovery(struct i2c_adapter *adap)
 		if (bri->sda_gpiod) {
 			bri->get_sda = get_sda_gpio_value;
 			/* FIXME: add proper flag instead of '0' once available */
-			if (gpiod_get_direction(bri->sda_gpiod) == 0)
+			if (gpiod_get_direction(bri->sda_gpiod) == 0 || force_set_sda(dev))
 				bri->set_sda = set_sda_gpio_value;
 		}
 	} else if (bri->recover_bus == i2c_generic_scl_recovery) {
