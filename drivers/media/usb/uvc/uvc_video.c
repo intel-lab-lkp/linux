@@ -1808,9 +1808,7 @@ static int uvc_alloc_urb_buffers(struct uvc_streaming *stream,
 	 * Compute the number of packets. Bulk endpoints might transfer UVC
 	 * payloads across multiple URBs.
 	 */
-	npackets = DIV_ROUND_UP(size, psize);
-	if (npackets > UVC_MAX_PACKETS)
-		npackets = UVC_MAX_PACKETS;
+	npackets = min(UVC_MAX_PACKETS, DIV_ROUND_UP(size, psize));
 
 	/* Retry allocations until one succeed. */
 	for (; npackets > 0; npackets /= 2) {
