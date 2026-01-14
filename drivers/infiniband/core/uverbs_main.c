@@ -901,10 +901,12 @@ void uverbs_user_mmap_disassociate(struct ib_uverbs_file *ufile)
  * This function should be called by drivers that need to disable mmaps for the
  * device, for instance because it is going to be reset.
  */
-void rdma_user_mmap_disassociate(struct ib_device *device)
+int rdma_user_mmap_disassociate(struct ib_device *device)
 {
 	struct ib_uverbs_device *uverbs_dev =
 		ib_get_client_data(device, &uverbs_client);
+	if (!uverbs_dev)
+		return -ENODEV;
 	struct ib_uverbs_file *ufile;
 
 	mutex_lock(&uverbs_dev->lists_mutex);
@@ -913,6 +915,7 @@ void rdma_user_mmap_disassociate(struct ib_device *device)
 			uverbs_user_mmap_disassociate(ufile);
 	}
 	mutex_unlock(&uverbs_dev->lists_mutex);
+	return 0;
 }
 EXPORT_SYMBOL(rdma_user_mmap_disassociate);
 
