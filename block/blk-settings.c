@@ -41,7 +41,6 @@ void blk_set_stacking_limits(struct queue_limits *lim)
 	lim->physical_block_size = SECTOR_SIZE;
 	lim->io_min = SECTOR_SIZE;
 	lim->discard_granularity = SECTOR_SIZE;
-	lim->dma_alignment = SECTOR_SIZE - 1;
 	lim->seg_boundary_mask = BLK_SEG_BOUNDARY_MASK;
 
 	/* Inherit limits from component devices */
