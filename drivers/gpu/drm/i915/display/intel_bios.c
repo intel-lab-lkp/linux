@@ -3575,10 +3575,14 @@ static void fill_dsc(struct intel_crtc_state *crtc_state,
 	 * throughput etc. into account.
 	 *
 	 * Also, per spec DSI supports 1, 2, 3 or 4 horizontal slices.
+	 *
+	 * FIXME: split only when necessary
 	 */
 	if (dsc->slices_per_line & BIT(2)) {
+		crtc_state->dsc.slice_config.streams_per_pipe = 2;
 		crtc_state->dsc.slice_count = 4;
 	} else if (dsc->slices_per_line & BIT(1)) {
+		crtc_state->dsc.slice_config.streams_per_pipe = 2;
 		crtc_state->dsc.slice_count = 2;
 	} else {
 		/* FIXME */
@@ -3586,6 +3590,7 @@ static void fill_dsc(struct intel_crtc_state *crtc_state,
 			drm_dbg_kms(display->drm,
 				    "VBT: Unsupported DSC slice count for DSI\n");
 
+		crtc_state->dsc.slice_config.streams_per_pipe = 1;
 		crtc_state->dsc.slice_count = 1;
 	}
 
