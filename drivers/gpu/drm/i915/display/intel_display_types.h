@@ -1339,7 +1339,6 @@ struct intel_crtc_state {
 		} slice_config;
 		/* Compressed Bpp in U6.4 format (first 4 bits for fractional part) */
 		u16 compressed_bpp_x16;
-		u8 slice_count;
 		struct drm_dsc_config config;
 	} dsc;
 

@@ -3597,14 +3597,12 @@ static void fill_dsc(struct intel_crtc_state *crtc_state,
 		crtc_state->dsc.slice_config.slices_per_stream = 1;
 	}
 
-	crtc_state->dsc.slice_count = intel_dsc_line_slice_count(&crtc_state->dsc.slice_config);
-
 	if (crtc_state->hw.adjusted_mode.crtc_hdisplay %
-	    crtc_state->dsc.slice_count != 0)
+	    intel_dsc_line_slice_count(&crtc_state->dsc.slice_config) != 0)
 		drm_dbg_kms(display->drm,
 			    "VBT: DSC hdisplay %d not divisible by slice count %d\n",
 			    crtc_state->hw.adjusted_mode.crtc_hdisplay,
-			    crtc_state->dsc.slice_count);
+			    intel_dsc_line_slice_count(&crtc_state->dsc.slice_config));
 
 	/*
 	 * The VBT rc_buffer_block_size and rc_buffer_size definitions

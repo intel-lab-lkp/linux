@@ -283,8 +283,9 @@ int intel_dsc_compute_params(struct intel_crtc_state *pipe_config)
 	int ret;
 
 	vdsc_cfg->pic_width = pipe_config->hw.adjusted_mode.crtc_hdisplay;
-	vdsc_cfg->slice_width = DIV_ROUND_UP(vdsc_cfg->pic_width,
-					     pipe_config->dsc.slice_count);
+	vdsc_cfg->slice_width =
+		DIV_ROUND_UP(vdsc_cfg->pic_width,
+			     intel_dsc_line_slice_count(&pipe_config->dsc.slice_config));
 
 	err = intel_dsc_slice_dimensions_valid(pipe_config, vdsc_cfg);
 
@@ -1042,7 +1043,7 @@ static void intel_vdsc_dump_state(struct drm_printer *p, int indent,
 	drm_printf_indent(p, indent,
 			  "dsc-dss: compressed-bpp:" FXP_Q4_FMT ", slice-count: %d, num_streams: %d\n",
 			  FXP_Q4_ARGS(crtc_state->dsc.compressed_bpp_x16),
-			  crtc_state->dsc.slice_count,
+			  intel_dsc_line_slice_count(&crtc_state->dsc.slice_config),
 			  crtc_state->dsc.slice_config.streams_per_pipe);
 }
 
@@ -1078,7 +1079,7 @@ int intel_vdsc_min_cdclk(const struct intel_crtc_state *crtc_state)
 	struct intel_display *display = to_intel_display(crtc_state);
 	int num_vdsc_instances = intel_dsc_get_num_vdsc_instances(crtc_state);
 	int htotal = crtc_state->hw.adjusted_mode.crtc_htotal;
-	int dsc_slices = crtc_state->dsc.slice_count;
+	int dsc_slices = intel_dsc_line_slice_count(&crtc_state->dsc.slice_config);
 	int pixel_rate;
 	int min_cdclk;
 

@@ -2032,12 +2032,14 @@ static int dsc_compute_link_config(struct intel_dp *intel_dp,
 			} else {
 				unsigned long bw_overhead_flags =
 					pipe_config->fec_enable ? DRM_DP_BW_OVERHEAD_FEC : 0;
+				int line_slice_count =
+					intel_dsc_line_slice_count(&pipe_config->dsc.slice_config);
 
 				if (!is_bw_sufficient_for_dsc_config(intel_dp,
 								     link_rate, lane_count,
 								     adjusted_mode->crtc_clock,
 								     adjusted_mode->hdisplay,
-								     pipe_config->dsc.slice_count,
+								     line_slice_count,
 								     dsc_bpp_x16,
 								     bw_overhead_flags))
 					continue;
@@ -2428,11 +2430,8 @@ int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 		pipe_config->dsc.slice_config.pipes_per_line /
 		pipe_config->dsc.slice_config.streams_per_pipe;
 
-	pipe_config->dsc.slice_count =
-		intel_dsc_line_slice_count(&pipe_config->dsc.slice_config);
-
 	drm_WARN_ON(display->drm,
-		    pipe_config->dsc.slice_count != slices_per_line);
+		    intel_dsc_line_slice_count(&pipe_config->dsc.slice_config) != slices_per_line);
 
 	ret = intel_dp_dsc_compute_params(connector, pipe_config);
 	if (ret < 0) {
@@ -2450,7 +2449,7 @@ int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 		    "Compressed Bpp = " FXP_Q4_FMT " Slice Count = %d\n",
 		    pipe_config->pipe_bpp,
 		    FXP_Q4_ARGS(pipe_config->dsc.compressed_bpp_x16),
-		    pipe_config->dsc.slice_count);
+		    intel_dsc_line_slice_count(&pipe_config->dsc.slice_config));
 
 	return 0;
 }
