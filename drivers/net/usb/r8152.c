@@ -1954,6 +1954,8 @@ static void write_bulk_callback(struct urb *urb)
 
 	if (!skb_queue_empty(&tp->tx_queue))
 		tasklet_schedule(&tp->tx_tl);
+
+	netif_trans_update(netdev);
 }
 
 static void intr_callback(struct urb *urb)
