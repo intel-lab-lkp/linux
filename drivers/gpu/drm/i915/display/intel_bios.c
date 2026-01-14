@@ -27,6 +27,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/firmware.h>
+#include <linux/unaligned.h>
 
 #include <drm/display/drm_dp_helper.h>
 #include <drm/display/drm_dsc_helper.h>
@@ -84,9 +85,9 @@ static u32 _get_blocksize(const u8 *block_base)
 {
 	/* The MIPI Sequence Block v3+ has a separate size field. */
 	if (*block_base == BDB_MIPI_SEQUENCE && *(block_base + 3) >= 3)
-		return *((const u32 *)(block_base + 4));
+		return get_unaligned_le32(block_base + 4);
 	else
-		return *((const u16 *)(block_base + 1));
+		return get_unaligned_le16(block_base + 1);
 }
 
 /* Get BDB block size give a pointer to data after Block ID and Block Size. */
@@ -1790,9 +1791,9 @@ find_panel_sequence_block(struct intel_display *display,
 
 		current_id = *(data + index);
 		if (sequence->version >= 3)
-			current_size = *((const u32 *)(data + index + 1));
+			current_size = get_unaligned_le32(data + index + 1);
 		else
-			current_size = *((const u16 *)(data + index + 1));
+			current_size = get_unaligned_le16(data + index + 1);
 
 		index += header_size;
 
@@ -1832,7 +1833,7 @@ static int goto_next_sequence(struct intel_display *display,
 			if (index + 4 > total)
 				return 0;
 
-			len = *((const u16 *)(data + index + 2)) + 4;
+			len = get_unaligned_le16(data + index + 2) + 4;
 			break;
 		case MIPI_SEQ_ELEM_DELAY:
 			len = 4;
@@ -1878,7 +1879,7 @@ static int goto_next_sequence_v3(struct intel_display *display,
 	 * includes MIPI_SEQ_ELEM_END byte, excludes the final MIPI_SEQ_END
 	 * byte.
 	 */
-	size_of_sequence = *((const u32 *)(data + index));
+	size_of_sequence = get_unaligned_le32(data + index);
 	index += 4;
 
 	seq_end = index + size_of_sequence;
