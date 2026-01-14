@@ -48,6 +48,14 @@ struct rdma_rw_ctx {
 			struct ib_mr		*mr;
 		} *reg;
 	};
+
+	/*
+	 * For bvec MR path: store synthetic scatterlist with DMA addresses
+	 * for cleanup. Only valid when type == RDMA_RW_MR and initialized
+	 * via rdma_rw_ctx_init_bvec().
+	 */
+	struct scatterlist	*mr_sgl;
+	u32			mr_sg_cnt;
 };
 
 int rdma_rw_ctx_init(struct rdma_rw_ctx *ctx, struct ib_qp *qp, u32 port_num,

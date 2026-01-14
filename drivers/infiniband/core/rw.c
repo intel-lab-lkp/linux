@@ -193,6 +193,140 @@ out:
 	return ret;
 }
 
+static int rdma_rw_init_mr_wrs_bvec(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
+		u32 port_num, const struct bio_vec *bvec, u32 nr_bvec,
+		u32 offset, u64 remote_addr, u32 rkey,
+		enum dma_data_direction dir)
+{
+	struct ib_device *dev = qp->pd->device;
+	struct rdma_rw_reg_ctx *prev = NULL;
+	u32 pages_per_mr = rdma_rw_fr_page_list_len(dev, qp->integrity_en);
+	struct scatterlist *sgl;
+	int i, j, ret = 0, count = 0;
+	u32 sg_idx = 0;
+
+	ctx->nr_ops = DIV_ROUND_UP(nr_bvec, pages_per_mr);
+	ctx->reg = kcalloc(ctx->nr_ops, sizeof(*ctx->reg), GFP_KERNEL);
+	if (!ctx->reg)
+		return -ENOMEM;
+
+	/*
+	 * Allocate synthetic scatterlist to hold DMA addresses.
+	 * ib_map_mr_sg() extracts sg_dma_address/len, so the page
+	 * pointer is unused.
+	 */
+	sgl = kmalloc_array(nr_bvec, sizeof(*sgl), GFP_KERNEL);
+	if (!sgl) {
+		ret = -ENOMEM;
+		goto out_free_reg;
+	}
+	sg_init_table(sgl, nr_bvec);
+
+	/*
+	 * DMA map all bvecs and populate the synthetic scatterlist.
+	 */
+	for (i = 0; i < nr_bvec; i++) {
+		const struct bio_vec *bv = &bvec[i];
+		struct bio_vec adjusted;
+		u64 dma_addr;
+		u32 len;
+
+		if (i == 0 && offset) {
+			adjusted = *bv;
+			adjusted.bv_offset += offset;
+			adjusted.bv_len -= offset;
+			bv = &adjusted;
+		}
+		len = bv->bv_len;
+
+		dma_addr = ib_dma_map_bvec(dev, bv, dir);
+		if (ib_dma_mapping_error(dev, dma_addr)) {
+			ret = -ENOMEM;
+			goto out_unmap;
+		}
+
+		/*
+		 * Populate sg entry with DMA address. sg_set_page() is
+		 * called to initialize the entry, but the page pointer
+		 * is unused by ib_map_mr_sg().
+		 */
+		sg_set_page(&sgl[i], bv->bv_page, len, bv->bv_offset);
+		sg_dma_address(&sgl[i]) = dma_addr;
+		sg_dma_len(&sgl[i]) = len;
+	}
+
+	/*
+	 * Build MR chain using the synthetic scatterlist.
+	 */
+	for (i = 0; i < ctx->nr_ops; i++) {
+		struct rdma_rw_reg_ctx *reg = &ctx->reg[i];
+		u32 nents = min(nr_bvec - sg_idx, pages_per_mr);
+
+		ret = rdma_rw_init_one_mr(qp, port_num, reg, &sgl[sg_idx],
+					  nents, 0);
+		if (ret < 0)
+			goto out_free_mrs;
+		count += ret;
+
+		if (prev) {
+			if (reg->mr->need_inval)
+				prev->wr.wr.next = &reg->inv_wr;
+			else
+				prev->wr.wr.next = &reg->reg_wr.wr;
+		}
+
+		reg->reg_wr.wr.next = &reg->wr.wr;
+
+		reg->wr.wr.sg_list = &reg->sge;
+		reg->wr.wr.num_sge = 1;
+		reg->wr.remote_addr = remote_addr;
+		reg->wr.rkey = rkey;
+
+		if (dir == DMA_TO_DEVICE) {
+			reg->wr.wr.opcode = IB_WR_RDMA_WRITE;
+		} else if (!rdma_cap_read_inv(qp->device, port_num)) {
+			reg->wr.wr.opcode = IB_WR_RDMA_READ;
+		} else {
+			reg->wr.wr.opcode = IB_WR_RDMA_READ_WITH_INV;
+			reg->wr.wr.ex.invalidate_rkey = reg->mr->lkey;
+		}
+		count++;
+
+		remote_addr += reg->sge.length;
+		sg_idx += nents;
+		prev = reg;
+	}
+
+	if (prev)
+		prev->wr.wr.next = NULL;
+
+	ctx->type = RDMA_RW_MR;
+	ctx->mr_sgl = sgl;
+	ctx->mr_sg_cnt = nr_bvec;
+	return count;
+
+out_free_mrs:
+	while (--i >= 0)
+		ib_mr_pool_put(qp, &qp->rdma_mrs, ctx->reg[i].mr);
+	/* All bvecs were mapped successfully, unmap them all */
+	for (j = 0; j < nr_bvec; j++)
+		ib_dma_unmap_bvec(dev, sg_dma_address(&sgl[j]),
+				  sg_dma_len(&sgl[j]), dir);
+	kfree(sgl);
+	kfree(ctx->reg);
+	return ret;
+
+out_unmap:
+	/* Unmap bvecs that were successfully mapped (0 through i-1) */
+	for (j = 0; j < i; j++)
+		ib_dma_unmap_bvec(dev, sg_dma_address(&sgl[j]),
+				  sg_dma_len(&sgl[j]), dir);
+	kfree(sgl);
+out_free_reg:
+	kfree(ctx->reg);
+	return ret;
+}
+
 static int rdma_rw_init_map_wrs(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
 		struct scatterlist *sg, u32 sg_cnt, u32 offset,
 		u64 remote_addr, u32 rkey, enum dma_data_direction dir)
@@ -606,9 +740,8 @@ EXPORT_SYMBOL(rdma_rw_ctx_init);
  * @rkey:	remote key to operate on
  * @dir:	%DMA_TO_DEVICE for RDMA WRITE, %DMA_FROM_DEVICE for RDMA READ
  *
- * Maps the bio_vec array directly using dma_map_phys(), avoiding the
- * intermediate scatterlist conversion. Does not support the MR registration
- * path (iWARP devices or force_mr=1).
+ * Maps the bio_vec array directly, avoiding intermediate scatterlist
+ * conversion. Supports MR registration for iWARP devices and force_mr mode.
  *
  * Returns the number of WQEs that will be needed on the workqueue if
  * successful, or a negative error code.
@@ -618,14 +751,16 @@ int rdma_rw_ctx_init_bvec(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
 		u32 offset, u64 remote_addr, u32 rkey,
 		enum dma_data_direction dir)
 {
+	struct ib_device *dev = qp->pd->device;
 	int ret;
 
 	if (nr_bvec == 0 || offset > bvec[0].bv_len)
 		return -EINVAL;
 
-	/* MR path not supported for bvec - reject iWARP and force_mr */
-	if (rdma_rw_io_needs_mr(qp->device, port_num, dir, nr_bvec))
-		return -EOPNOTSUPP;
+	if (rdma_rw_io_needs_mr(dev, port_num, dir, nr_bvec))
+		return rdma_rw_init_mr_wrs_bvec(ctx, qp, port_num, bvec,
+						nr_bvec, offset, remote_addr,
+						rkey, dir);
 
 	if (nr_bvec == 1)
 		return rdma_rw_init_single_wr_bvec(ctx, qp, bvec, offset,
@@ -921,6 +1056,16 @@ void rdma_rw_ctx_destroy_bvec(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
 	u32 i;
 
 	switch (ctx->type) {
+	case RDMA_RW_MR:
+		for (i = 0; i < ctx->nr_ops; i++)
+			ib_mr_pool_put(qp, &qp->rdma_mrs, ctx->reg[i].mr);
+		kfree(ctx->reg);
+		/* Unmap bvecs using stored DMA addresses */
+		for (i = 0; i < ctx->mr_sg_cnt; i++)
+			ib_dma_unmap_bvec(dev, sg_dma_address(&ctx->mr_sgl[i]),
+					  sg_dma_len(&ctx->mr_sgl[i]), dir);
+		kfree(ctx->mr_sgl);
+		break;
 	case RDMA_RW_IOVA:
 		dma_iova_destroy(dev->dma_device, &ctx->iova.state,
 				 ctx->iova.mapped_len, dir, 0);
