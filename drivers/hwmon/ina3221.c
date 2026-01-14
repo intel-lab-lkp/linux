@@ -67,6 +67,7 @@
 
 #define INA3221_CONFIG_DEFAULT		0x7127
 #define INA3221_RSHUNT_DEFAULT		10000
+#define SQ52210_SHUNT_LSB			40000000	/* pV/LSB */
 
 enum ina3221_fields {
 	/* Configuration */
@@ -121,8 +122,16 @@ struct ina3221_input {
 
 enum ina3221_ids { ina3221, sq52210 };
 
+struct ina3221_config {
+	bool has_current;	/* chip has internal current reg */
+	bool has_power;		/* chip has internal power reg */
+	int calibration_value;	/* calculate current_lsb */
+	int power_lsb_factor;
+};
+
 /**
  * struct ina3221_data - device specific information
+ * @config:	Used to store characteristics of different chips
  * @chip: Chip type identifier
  * @pm_dev: Device pointer for pm runtime
  * @regmap: Register map of the device
@@ -131,9 +140,12 @@ enum ina3221_ids { ina3221, sq52210 };
  * @reg_config: Register value of INA3221_CONFIG
  * @summation_shunt_resistor: equivalent shunt resistor value for summation
  * @summation_channel_control: Value written to SCC field in INA3221_MASK_ENABLE
+ * @current_lsb_uA: The value of one LSB corresponding to the current register
+ * @power_lsb_uW: The value of one LSB corresponding to the power register
  * @single_shot: running in single-shot operating mode
  */
 struct ina3221_data {
+	const struct ina3221_config *config;
 	enum ina3221_ids chip;
 
 	struct device *pm_dev;
@@ -143,8 +155,28 @@ struct ina3221_data {
 	u32 reg_config;
 	int summation_shunt_resistor;
 	u32 summation_channel_control;
+	long current_lsb_uA;
+	long power_lsb_uW;
 
 	bool single_shot;
+};
+
+static const struct ina3221_config ina3221_config[] = {
+	[ina3221] = {
+		.has_current = false,
+		.has_power = false,
+	},
+	[sq52210] = {
+		.has_current = true,
+		.has_power = true,
+		/*
+		 * With this default value configuration,
+		 * the following formula can be obtained:
+		 * Current_LSB = Shunt_LSB / Rshunt
+		 */
+		.calibration_value = 256,
+		.power_lsb_factor = 20,
+	},
 };
 
 static inline bool ina3221_is_enabled(struct ina3221_data *ina, int channel)
@@ -697,6 +729,25 @@ static const struct hwmon_chip_info ina3221_chip_info = {
 };
 
 /* Extra attribute groups */
+
+/*
+ * Calculate the value corresponding to one LSB of the current and
+ * power registers.
+ * formula : Current_LSB = Shunt_LSB / Rshunt
+ *           Power_LSB = power_lsb_factor * Current_LSB
+ */
+static int ina3221_set_shunt(struct ina3221_data *ina, unsigned long val)
+{
+	if (!val || val > SQ52210_SHUNT_LSB)
+		return -EINVAL;
+
+	ina->current_lsb_uA = DIV_ROUND_CLOSEST(SQ52210_SHUNT_LSB, val);
+	ina->power_lsb_uW = ina->config->power_lsb_factor *
+			    ina->current_lsb_uA;
+
+	return 0;
+}
+
 static ssize_t ina3221_shunt_show(struct device *dev,
 				  struct device_attribute *attr, char *buf)
 {
@@ -730,6 +781,17 @@ static ssize_t ina3221_shunt_store(struct device *dev,
 	/* Update summation_shunt_resistor for summation channel */
 	ina->summation_shunt_resistor = ina3221_summation_shunt_resistor(ina);
 
+	/*
+	 * The current and power registers can only be used when
+	 * all enabled channels have identical shunt resistors
+	 */
+	if (ina->summation_shunt_resistor) {
+		if (ina->config->has_current) {
+			ret = ina3221_set_shunt(ina, val);
+			if (ret < 0)
+				return ret;
+		}
+	}
 	return count;
 }
 
@@ -846,6 +908,7 @@ static int ina3221_probe(struct i2c_client *client)
 		return -ENOMEM;
 
 	ina->chip = chip;
+	ina->config = &ina3221_config[chip];
 
 	ina->regmap = devm_regmap_init_i2c(client, &ina3221_regmap_config);
 	if (IS_ERR(ina->regmap)) {
@@ -890,6 +953,16 @@ static int ina3221_probe(struct i2c_client *client)
 	for (i = 0; i < INA3221_NUM_CHANNELS; i++) {
 		if (!ina->inputs[i].summation_disable)
 			ina->summation_channel_control |= BIT(14 - i);
+	}
+
+	/*
+	 * The current and power registers can only be used when
+	 * all enabled channels have identical shunt resistors
+	 */
+	if (ina->summation_shunt_resistor) {
+		ret = ina3221_set_shunt(ina, ina->summation_shunt_resistor);
+		if (ret < 0)
+			return ret;
 	}
 
 	ina->pm_dev = dev;
@@ -1008,6 +1081,18 @@ static int ina3221_resume(struct device *dev)
 		if (ret) {
 			dev_err(dev, "Unable to control summation channel\n");
 			return ret;
+		}
+		/*
+		 * The calibration register can only be enabled when all
+		 * shunt resistor values are identical.
+		 */
+		if (ina->config->has_current) {
+			ret = regmap_write(ina->regmap, SQ52210_CALIBRATION,
+						ina->config->calibration_value);
+			if (ret) {
+				dev_err(dev, "Unable to set calibration value\n");
+				return ret;
+			}
 		}
 	}
 
