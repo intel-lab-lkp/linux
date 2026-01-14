@@ -443,3 +443,50 @@ u32 phy_caps_mediums_from_linkmodes(unsigned long *linkmodes)
 	return mediums;
 }
 EXPORT_SYMBOL_GPL(phy_caps_mediums_from_linkmodes);
+
+/**
+ * phy_caps_select_fastest_interface - Select the fastest interface that can
+ *				       support the fastest of the given
+ *				       linkmodes
+ * @interfaces: The interface list to lookup from
+ * @linkmodes: Linkmodes we want to support
+ *
+ * Returns: The fastest matching interface, PHY_INTERFACE_MODE_NA otherwise.
+ */
+phy_interface_t
+phy_caps_select_fastest_interface(const unsigned long *interfaces,
+				  const unsigned long *linkmodes)
+{
+	phy_interface_t interface = PHY_INTERFACE_MODE_NA;
+	u32 target_link_caps = 0;
+	int i, max_capa = 0;
+
+	/* Link caps from the linkmodes */
+	for_each_set_bit(i, linkmodes, __ETHTOOL_LINK_MODE_MASK_NBITS) {
+		const struct link_mode_info *linkmode;
+
+		linkmode = &link_mode_params[i];
+		target_link_caps |= speed_duplex_to_capa(linkmode->speed,
+							 linkmode->duplex);
+	}
+
+	for_each_set_bit(i, interfaces, PHY_INTERFACE_MODE_MAX) {
+		u32 interface_caps = phy_caps_from_interface(i);
+		u32 interface_max_capa;
+
+		/* Can we achieve at least one mode with this interface ? */
+		if (!(interface_caps & target_link_caps))
+			continue;
+
+		/* Biggest link_capa we can achieve with this interface */
+		interface_max_capa = fls(interface_caps & target_link_caps);
+
+		if (interface_max_capa > max_capa) {
+			max_capa = interface_max_capa;
+			interface = i;
+		}
+	}
+
+	return interface;
+}
+EXPORT_SYMBOL_GPL(phy_caps_select_fastest_interface);

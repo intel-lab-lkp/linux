@@ -10,6 +10,7 @@
 #include <linux/ethtool.h>
 #include <linux/phy.h>
 
+/* this must be sorted by speed */
 enum {
 	LINK_CAPA_10HD = 0,
 	LINK_CAPA_10FD,
@@ -65,5 +66,9 @@ void phy_caps_medium_get_supported(unsigned long *supported,
 				   enum ethtool_link_medium medium,
 				   int lanes);
 u32 phy_caps_mediums_from_linkmodes(unsigned long *linkmodes);
+
+phy_interface_t
+phy_caps_select_fastest_interface(const unsigned long *interfaces,
+				  const unsigned long *linkmodes);
 
 #endif /* __PHY_CAPS_H */
