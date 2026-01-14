@@ -31,6 +31,8 @@ under the following path:
 
   /sys/class/firmware-attributes/lenovo-wmi-other/attributes/<attribute>/
 
+Additionally, this driver also exports attributes to HWMON.
+
 LENOVO_CAPABILITY_DATA_00
 -------------------------
 
@@ -38,6 +40,11 @@ WMI GUID ``362A3AFE-3D96-4665-8530-96DAD5BB300E``
 
 The LENOVO_CAPABILITY_DATA_00 interface provides various information that
 does not rely on the gamezone thermal mode.
+
+The following HWMON attributes are implemented:
+ - fanX_enable: enable/disable the fan (tunable)
+ - fanX_input: current RPM
+ - fanX_target: target RPM (tunable)
 
 LENOVO_CAPABILITY_DATA_01
 -------------------------
@@ -69,6 +76,10 @@ WMI GUID ``B642801B-3D21-45DE-90AE-6E86F164FB21``
 
 The LENOVO_FAN_TEST_DATA interface provides reference data for self-test of
 cooling fans.
+
+The following HWMON attributes are implemented:
+ - fanX_max: maximum RPM
+ - fanX_min: minimum RPM
 
 WMI interface description
 =========================
