@@ -3423,6 +3423,20 @@ static void intel_ddi_enable_hdmi(struct intel_atomic_state *state,
 		drm_dbg_kms(display->drm,
 			    "[CONNECTOR:%d:%s] Failed to configure sink scrambling/TMDS bit clock ratio\n",
 			    connector->base.id, connector->name);
+	/*
+	 * HDMI 2.0 spec section 10.4.1.7: Some monitors need time to process
+	 * the SCDC configuration before PHY initialization begins. Testing
+	 * shows the delay can be placed anywhere in the modeset sequence after
+	 * SCDC config, but placing it here (immediately after) makes the code
+	 * intent clear and allows subsequent PHY operations to benefit from
+	 * the monitor preparation time.
+	 *
+	 * Without this delay, certain monitors (e.g., Cisco Desk Pro) fail to
+	 * detect the scrambled signal and report format detection errors despite
+	 * proper SCDC configuration.
+	 */
+	if (crtc_state->hdmi_scrambling)
+		msleep(150);
 
 	if (has_buf_trans_select(display))
 		hsw_prepare_hdmi_ddi_buffers(encoder, crtc_state);
