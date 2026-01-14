@@ -5522,11 +5522,12 @@ void sched_tick(void)
 	sched_clock_tick();
 
 	rq_lock(rq, &rf);
+	update_rq_clock(rq);
+
 	donor = rq->donor;
 
 	psi_account_irqtime(rq, donor, NULL);
 
-	update_rq_clock(rq);
 	hw_pressure = arch_scale_hw_pressure(cpu_of(rq));
 	update_hw_load_avg(rq_clock_task(rq), rq, hw_pressure);
 

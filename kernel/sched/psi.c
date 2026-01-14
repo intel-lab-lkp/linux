@@ -932,7 +932,7 @@ void psi_task_change(struct task_struct *task, int clear, int set)
 		return;
 
 	cpu = task_cpu(task);
-	now = cpu_clock(cpu);
+	now = rq_clock(cpu_rq(cpu));
 
 	psi_flags_change(task, clear, set);
 
@@ -947,7 +947,7 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 {
 	struct psi_group *common = NULL;
 	int cpu = task_cpu(prev);
-	u64 now = cpu_clock(cpu);
+	u64 now = rq_clock(cpu_rq(cpu));
 
 	psi_write_begin(cpu);
 
@@ -1026,9 +1026,8 @@ void psi_account_irqtime(struct rq *rq, struct task_struct *curr, struct task_st
 {
 	int cpu = task_cpu(curr);
 	struct psi_group_cpu *groupc;
+	u64 irq, now;
 	s64 delta;
-	u64 irq;
-	u64 now;
 
 	if (static_branch_likely(&psi_disabled) || !irqtime_enabled())
 		return;
@@ -1046,7 +1045,7 @@ void psi_account_irqtime(struct rq *rq, struct task_struct *curr, struct task_st
 		return;
 	rq->psi_irq_time = irq;
 
-	now = cpu_clock(cpu);
+	now = rq_clock(rq);
 
 	psi_write_begin(cpu);
 	for_each_group(group, task_psi_group(curr)) {
@@ -1089,6 +1088,7 @@ void psi_memstall_enter(unsigned long *flags)
 	 * race with CPU migration.
 	 */
 	rq = this_rq_lock_irq(&rf);
+	update_rq_clock(rq);
 
 	current->in_memstall = 1;
 	psi_task_change(current, 0, TSK_MEMSTALL | TSK_MEMSTALL_RUNNING);
@@ -1119,6 +1119,7 @@ void psi_memstall_leave(unsigned long *flags)
 	 * race with CPU migration.
 	 */
 	rq = this_rq_lock_irq(&rf);
+	update_rq_clock(rq);
 
 	current->in_memstall = 0;
 	psi_task_change(current, TSK_MEMSTALL | TSK_MEMSTALL_RUNNING, 0);
@@ -1187,6 +1188,7 @@ void cgroup_move_task(struct task_struct *task, struct css_set *to)
 	}
 
 	rq = task_rq_lock(task, &rf);
+	update_rq_clock(rq);
 
 	/*
 	 * We may race with schedule() dropping the rq lock between
