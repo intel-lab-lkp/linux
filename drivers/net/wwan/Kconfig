@@ -26,6 +26,18 @@ config WWAN_DEBUGFS
 	  If this option is selected, then you can find the debug interface
 	  elements for each WWAN device in a directory that is corresponding to
 	  the device name: debugfs/wwan/wwanX.
+config WWAN_ADB_PORT
+	bool "MediaTek T7xx ADB port support" if EXPERT
+	depends on MTK_T7XX
+	default y
+	help
+	  Enables ADB (Android Debug Bridge) debug port support for MediaTek T7xx WWAN devices.
+
+	  This option enables the ADB debug port functionality in the MediaTek T7xx driver,
+	  allowing Android Debug Bridge connections through T7xx modems that support
+	  this feature. It is primarily used for debugging and development purposes.
+
+	  If unsure, say Y.
 
 config WWAN_HWSIM
 	tristate "Simulated WWAN device"
