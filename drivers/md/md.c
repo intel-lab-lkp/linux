@@ -428,6 +428,56 @@ check_suspended:
 }
 EXPORT_SYMBOL(md_handle_request);
 
+static struct bio *__md_bio_align_to_limits(struct mddev *mddev,
+					     struct bio *bio)
+{
+	unsigned int max_sectors = mddev->gendisk->queue->limits.max_sectors;
+	sector_t start = bio->bi_iter.bi_sector;
+	sector_t end = start + bio_sectors(bio);
+	sector_t align_start;
+	sector_t align_end;
+	u32 rem;
+
+	/* calculate align_start = roundup(start, max_sectors) */
+	align_start = start;
+	rem = sector_div(align_start, max_sectors);
+	/* already aligned */
+	if (!rem)
+		return bio;
+
+	align_start = start + max_sectors - rem;
+
+	/* calculate align_end = rounddown(end, max_sectors) */
+	align_end = end;
+	rem = sector_div(align_end, max_sectors);
+	align_end = end - rem;
+
+	/* bio is too small to split */
+	if (align_end <= align_start)
+		return bio;
+
+	return bio_submit_split_bioset(bio, align_start - start,
+				       &mddev->gendisk->bio_split);
+}
+
+static struct bio *md_bio_align_to_limits(struct mddev *mddev, struct bio *bio)
+{
+	if (!test_bit(MD_BIO_ALIGN, &mddev->flags))
+		return bio;
+
+	/* atomic write can't split */
+	if (bio->bi_opf & REQ_ATOMIC)
+		return bio;
+
+	switch (bio_op(bio)) {
+	case REQ_OP_READ:
+	case REQ_OP_WRITE:
+		return __md_bio_align_to_limits(mddev, bio);
+	default:
+		return bio;
+	}
+}
+
 static void md_submit_bio(struct bio *bio)
 {
 	const int rw = bio_data_dir(bio);
@@ -442,6 +492,10 @@ static void md_submit_bio(struct bio *bio)
 		bio_io_error(bio);
 		return;
 	}
+
+	bio = md_bio_align_to_limits(mddev, bio);
+	if (!bio)
+		return;
 
 	bio = bio_split_to_limits(bio);
 	if (!bio)
