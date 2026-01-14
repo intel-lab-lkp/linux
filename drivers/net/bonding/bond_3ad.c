@@ -1926,6 +1926,7 @@ static void ad_agg_selection_logic(struct aggregator *agg,
 		if (active) {
 			for (port = active->lag_ports; port;
 			     port = port->next_port_in_aggregator) {
+				port->sm_rx_state = AD_RX_PORT_DISABLED;
 				__disable_port(port);
 			}
 		}
