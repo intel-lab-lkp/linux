@@ -1180,6 +1180,10 @@ static void neigh_timer_handler(struct timer_list *t)
 		if (!mod_timer(&neigh->timer, next))
 			neigh_hold(neigh);
 	}
+
+	if (notify)
+		__neigh_notify(neigh, RTM_NEWNEIGH, 0, 0);
+
 	if (neigh->nud_state & (NUD_INCOMPLETE | NUD_PROBE)) {
 		neigh_probe(neigh);
 	} else {
@@ -1187,10 +1191,8 @@ out:
 		write_unlock(&neigh->lock);
 	}
 
-	if (notify) {
-		neigh_notify(neigh, RTM_NEWNEIGH, 0, 0);
+	if (notify)
 		call_netevent_notifiers(NETEVENT_NEIGH_UPDATE, neigh);
-	}
 
 	trace_neigh_timer_handler(neigh, 0);
 
