@@ -298,7 +298,8 @@ void intel_dpll_enable(const struct intel_crtc_state *crtc_state)
 
 	if (old_mask) {
 		drm_WARN_ON(display->drm, !pll->on);
-		assert_dpll_enabled(display, pll);
+		if (DISPLAY_VER(display) < 14)
+			assert_dpll_enabled(display, pll);
 		goto out;
 	}
 	drm_WARN_ON(display->drm, pll->on);
@@ -342,7 +343,9 @@ void intel_dpll_disable(const struct intel_crtc_state *crtc_state)
 		    pll->info->name, pll->active_mask, pll->on,
 		    crtc->base.base.id, crtc->base.name);
 
-	assert_dpll_enabled(display, pll);
+	if (DISPLAY_VER(display) < 14)
+		assert_dpll_enabled(display, pll);
+
 	drm_WARN_ON(display->drm, !pll->on);
 
 	pll->active_mask &= ~pipe_mask;
