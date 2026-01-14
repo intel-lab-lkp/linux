@@ -649,6 +649,8 @@ struct phy_oatc14_sqi_capability {
  * @ports: List of PHY ports structures
  * @n_ports: Number of ports currently attached to the PHY
  * @max_n_ports: Max number of ports this PHY can expose
+ * @parent_sfp_caps: Capabilities of the SFP module that embeds this PHY. Only
+ *		     valid when is_on_sfp_module is true.
  * @lock:  Mutex for serialization access to PHY
  * @state_queue: Work queue for state machine
  * @link_down_events: Number of times link was lost
@@ -790,6 +792,8 @@ struct phy_device {
 	struct list_head ports;
 	int n_ports;
 	int max_n_ports;
+
+	const struct sfp_module_caps *parent_sfp_caps;
 
 	u8 mdix;
 	u8 mdix_ctrl;

@@ -1895,6 +1895,11 @@ static int sfp_sm_probe_phy(struct sfp *sfp, int addr, bool is_c45)
 	/* Mark this PHY as being on a SFP module */
 	phy->is_on_sfp_module = true;
 
+	/* We need to populate the parent_sfp_caps now, as it may be used during
+	 * the phy registering process, such as in phydrv->get_features()
+	 */
+	phy->parent_sfp_caps = sfp_get_module_caps(sfp->sfp_bus);
+
 	err = phy_device_register(phy);
 	if (err) {
 		phy_device_free(phy);
