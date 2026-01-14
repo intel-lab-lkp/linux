@@ -166,7 +166,6 @@ struct fsl_edma_chan {
 	enum fsl_edma_pm_state		pm_state;
 	struct fsl_edma_engine		*edma;
 	struct fsl_edma_desc		*edesc;
-	struct dma_slave_config		cfg;
 	u32				attr;
 	bool                            is_sw;
 	struct dma_pool			*tcd_pool;

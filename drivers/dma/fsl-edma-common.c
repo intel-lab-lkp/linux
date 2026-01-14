@@ -294,6 +294,7 @@ static void fsl_edma_unprep_slave_dma(struct fsl_edma_chan *fsl_chan)
 static bool fsl_edma_prep_slave_dma(struct fsl_edma_chan *fsl_chan,
 				    enum dma_transfer_direction dir)
 {
+	struct dma_slave_config *cfg = &fsl_chan->vchan.chan.config;
 	struct device *dev = fsl_chan->vchan.chan.device->dev;
 	enum dma_data_direction dma_dir;
 	phys_addr_t addr = 0;
@@ -302,13 +303,13 @@ static bool fsl_edma_prep_slave_dma(struct fsl_edma_chan *fsl_chan,
 	switch (dir) {
 	case DMA_MEM_TO_DEV:
 		dma_dir = DMA_FROM_DEVICE;
-		addr = fsl_chan->cfg.dst_addr;
-		size = fsl_chan->cfg.dst_maxburst;
+		addr = cfg->dst_addr;
+		size = cfg->dst_maxburst;
 		break;
 	case DMA_DEV_TO_MEM:
 		dma_dir = DMA_TO_DEVICE;
-		addr = fsl_chan->cfg.src_addr;
-		size = fsl_chan->cfg.src_maxburst;
+		addr = cfg->src_addr;
+		size = cfg->src_maxburst;
 		break;
 	default:
 		dma_dir = DMA_NONE;
@@ -335,7 +336,6 @@ int fsl_edma_slave_config(struct dma_chan *chan,
 {
 	struct fsl_edma_chan *fsl_chan = to_fsl_edma_chan(chan);
 
-	memcpy(&fsl_chan->cfg, cfg, sizeof(*cfg));
 	fsl_edma_unprep_slave_dma(fsl_chan);
 
 	return 0;
@@ -483,7 +483,7 @@ void fsl_edma_fill_tcd(struct fsl_edma_chan *fsl_chan,
 		       u16 biter, u16 doff, dma_addr_t dlast_sga, bool major_int,
 		       bool disable_req, bool enable_sg)
 {
-	struct dma_slave_config *cfg = &fsl_chan->cfg;
+	struct dma_slave_config *cfg = &fsl_chan->vchan.chan.config;
 	u32 burst = 0;
 	u16 csr = 0;
 
@@ -593,6 +593,7 @@ struct dma_async_tx_descriptor *fsl_edma_prep_dma_cyclic(
 		unsigned long flags)
 {
 	struct fsl_edma_chan *fsl_chan = to_fsl_edma_chan(chan);
+	struct dma_slave_config *cfg = &chan->config;
 	struct fsl_edma_desc *fsl_desc;
 	dma_addr_t dma_buf_next;
 	bool major_int = true;
@@ -616,21 +617,19 @@ struct dma_async_tx_descriptor *fsl_edma_prep_dma_cyclic(
 
 	dma_buf_next = dma_addr;
 	if (direction == DMA_MEM_TO_DEV) {
-		if (!fsl_chan->cfg.src_addr_width)
-			fsl_chan->cfg.src_addr_width = fsl_chan->cfg.dst_addr_width;
+		if (!cfg->src_addr_width)
+			cfg->src_addr_width = cfg->dst_addr_width;
 		fsl_chan->attr =
-			fsl_edma_get_tcd_attr(fsl_chan->cfg.src_addr_width,
-					      fsl_chan->cfg.dst_addr_width);
-		nbytes = fsl_chan->cfg.dst_addr_width *
-			fsl_chan->cfg.dst_maxburst;
+			fsl_edma_get_tcd_attr(cfg->src_addr_width,
+					      cfg->dst_addr_width);
+		nbytes = cfg->dst_addr_width * cfg->dst_maxburst;
 	} else {
-		if (!fsl_chan->cfg.dst_addr_width)
-			fsl_chan->cfg.dst_addr_width = fsl_chan->cfg.src_addr_width;
+		if (!cfg->dst_addr_width)
+			cfg->dst_addr_width = cfg->src_addr_width;
 		fsl_chan->attr =
-			fsl_edma_get_tcd_attr(fsl_chan->cfg.src_addr_width,
-					      fsl_chan->cfg.dst_addr_width);
-		nbytes = fsl_chan->cfg.src_addr_width *
-			fsl_chan->cfg.src_maxburst;
+			fsl_edma_get_tcd_attr(cfg->src_addr_width,
+					      cfg->dst_addr_width);
+		nbytes = cfg->src_addr_width * cfg->src_maxburst;
 	}
 
 	iter = period_len / nbytes;
@@ -645,21 +644,21 @@ struct dma_async_tx_descriptor *fsl_edma_prep_dma_cyclic(
 		if (direction == DMA_MEM_TO_DEV) {
 			src_addr = dma_buf_next;
 			dst_addr = fsl_chan->dma_dev_addr;
-			soff = fsl_chan->cfg.dst_addr_width;
+			soff = cfg->dst_addr_width;
 			doff = fsl_chan->is_multi_fifo ? 4 : 0;
-			if (fsl_chan->cfg.dst_port_window_size)
-				doff = fsl_chan->cfg.dst_addr_width;
+			if (cfg->dst_port_window_size)
+				doff = cfg->dst_addr_width;
 		} else if (direction == DMA_DEV_TO_MEM) {
 			src_addr = fsl_chan->dma_dev_addr;
 			dst_addr = dma_buf_next;
 			soff = fsl_chan->is_multi_fifo ? 4 : 0;
-			doff = fsl_chan->cfg.src_addr_width;
-			if (fsl_chan->cfg.src_port_window_size)
-				soff = fsl_chan->cfg.src_addr_width;
+			doff = cfg->src_addr_width;
+			if (cfg->src_port_window_size)
+				soff = cfg->src_addr_width;
 		} else {
 			/* DMA_DEV_TO_DEV */
-			src_addr = fsl_chan->cfg.src_addr;
-			dst_addr = fsl_chan->cfg.dst_addr;
+			src_addr = cfg->src_addr;
+			dst_addr = cfg->dst_addr;
 			soff = doff = 0;
 			major_int = false;
 		}
@@ -679,6 +678,7 @@ struct dma_async_tx_descriptor *fsl_edma_prep_slave_sg(
 		unsigned long flags, void *context)
 {
 	struct fsl_edma_chan *fsl_chan = to_fsl_edma_chan(chan);
+	struct dma_slave_config *cfg = &chan->config;
 	struct fsl_edma_desc *fsl_desc;
 	struct scatterlist *sg;
 	dma_addr_t src_addr, dst_addr, last_sg;
@@ -699,38 +699,38 @@ struct dma_async_tx_descriptor *fsl_edma_prep_slave_sg(
 	fsl_desc->dirn = direction;
 
 	if (direction == DMA_MEM_TO_DEV) {
-		if (!fsl_chan->cfg.src_addr_width)
-			fsl_chan->cfg.src_addr_width = fsl_chan->cfg.dst_addr_width;
+		if (!cfg->src_addr_width)
+			cfg->src_addr_width = cfg->dst_addr_width;
 		fsl_chan->attr =
-			fsl_edma_get_tcd_attr(fsl_chan->cfg.src_addr_width,
-					      fsl_chan->cfg.dst_addr_width);
-		nbytes = fsl_chan->cfg.dst_addr_width *
-			fsl_chan->cfg.dst_maxburst;
+			fsl_edma_get_tcd_attr(cfg->src_addr_width,
+					      cfg->dst_addr_width);
+		nbytes = cfg->dst_addr_width *
+			cfg->dst_maxburst;
 	} else {
-		if (!fsl_chan->cfg.dst_addr_width)
-			fsl_chan->cfg.dst_addr_width = fsl_chan->cfg.src_addr_width;
+		if (!cfg->dst_addr_width)
+			cfg->dst_addr_width = cfg->src_addr_width;
 		fsl_chan->attr =
-			fsl_edma_get_tcd_attr(fsl_chan->cfg.src_addr_width,
-					      fsl_chan->cfg.dst_addr_width);
-		nbytes = fsl_chan->cfg.src_addr_width *
-			fsl_chan->cfg.src_maxburst;
+			fsl_edma_get_tcd_attr(cfg->src_addr_width,
+					      cfg->dst_addr_width);
+		nbytes = cfg->src_addr_width *
+			cfg->src_maxburst;
 	}
 
 	for_each_sg(sgl, sg, sg_len, i) {
 		if (direction == DMA_MEM_TO_DEV) {
 			src_addr = sg_dma_address(sg);
 			dst_addr = fsl_chan->dma_dev_addr;
-			soff = fsl_chan->cfg.dst_addr_width;
+			soff = cfg->dst_addr_width;
 			doff = 0;
 		} else if (direction == DMA_DEV_TO_MEM) {
 			src_addr = fsl_chan->dma_dev_addr;
 			dst_addr = sg_dma_address(sg);
 			soff = 0;
-			doff = fsl_chan->cfg.src_addr_width;
+			doff = cfg->src_addr_width;
 		} else {
 			/* DMA_DEV_TO_DEV */
-			src_addr = fsl_chan->cfg.src_addr;
-			dst_addr = fsl_chan->cfg.dst_addr;
+			src_addr = cfg->src_addr;
+			dst_addr = cfg->dst_addr;
 			soff = 0;
 			doff = 0;
 		}
@@ -743,8 +743,8 @@ struct dma_async_tx_descriptor *fsl_edma_prep_slave_sg(
 		if (sg_dma_len(sg) % nbytes) {
 			u32 width = (direction == DMA_DEV_TO_MEM) ? doff : soff;
 			u32 burst = (direction == DMA_DEV_TO_MEM) ?
-						fsl_chan->cfg.src_maxburst :
-						fsl_chan->cfg.dst_maxburst;
+						cfg->src_maxburst :
+						cfg->dst_maxburst;
 			int j;
 
 			for (j = burst; j > 1; j--) {
