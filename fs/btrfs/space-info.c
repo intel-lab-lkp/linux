@@ -1108,6 +1108,7 @@ static bool maybe_fail_all_tickets(struct btrfs_space_info *space_info)
 	struct reserve_ticket *ticket;
 	u64 tickets_id = space_info->tickets_id;
 	const int abort_error = BTRFS_FS_ERROR(fs_info);
+	struct list_head *head = &space_info->priority_tickets;
 
 	trace_btrfs_fail_all_tickets(fs_info, space_info);
 
@@ -1116,10 +1117,9 @@ static bool maybe_fail_all_tickets(struct btrfs_space_info *space_info)
 		__btrfs_dump_space_info(space_info);
 	}
 
-	while (!list_empty(&space_info->tickets) &&
-	       tickets_id == space_info->tickets_id) {
-		ticket = list_first_entry(&space_info->tickets,
-					  struct reserve_ticket, list);
+again:
+	while (!list_empty(head) && tickets_id == space_info->tickets_id) {
+		ticket = list_first_entry(head, struct reserve_ticket, list);
 		if (unlikely(abort_error)) {
 			remove_ticket(space_info, ticket, abort_error);
 		} else {
@@ -1141,6 +1141,12 @@ static bool maybe_fail_all_tickets(struct btrfs_space_info *space_info)
 			btrfs_try_granting_tickets(space_info);
 		}
 	}
+
+	if (head == &space_info->priority_tickets) {
+		head = &space_info->tickets;
+		goto again;
+	}
+
 	return (tickets_id != space_info->tickets_id);
 }
 
