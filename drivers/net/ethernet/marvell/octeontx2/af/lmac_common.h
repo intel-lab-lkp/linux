@@ -134,6 +134,7 @@ struct mac_ops {
 	int			(*mac_stats_reset)(void *cgxd, int lmac_id);
 	void                    (*mac_x2p_reset)(void *cgxd, bool enable);
 	int			(*mac_enadis_rx)(void *cgxd, int lmac_id, bool enable);
+	u64			(*get_dmacflt_dropped_pktcnt)(void *cgxd, int lmac_id);
 };
 
 struct cgx {
