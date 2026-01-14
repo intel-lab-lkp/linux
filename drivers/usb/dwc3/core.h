@@ -1043,6 +1043,7 @@ struct dwc3_glue_ops {
  * @gadget_max_speed: maximum gadget speed requested
  * @gadget_ssp_rate: Gadget driver's maximum supported SuperSpeed Plus signaling
  *			rate and lane count.
+ * @address: Cached lower 32-bit base address to be used for logging.
  * @ip: controller's ID
  * @revision: controller's version of an IP
  * @version_type: VERSIONTYPE register contents, a sub release of a revision
@@ -1258,6 +1259,7 @@ struct dwc3 {
 	enum usb_ssp_rate	max_ssp_rate;
 	enum usb_ssp_rate	gadget_ssp_rate;
 
+	u32			address;
 	u32			ip;
 
 #define DWC3_IP			0x5533
