@@ -150,9 +150,19 @@ static inline u32 axis_fifo_read_reg(struct axis_fifo *fifo, int offset)
 	return ioread32(fifo->base_addr + offset);
 }
 
+static inline void axis_fifo_read_data(struct axis_fifo *fifo, void *buf, int count)
+{
+	ioread32_rep(fifo->base_addr + XLLF_RDFD_OFFSET, buf, count);
+}
+
 static inline void axis_fifo_write_reg(struct axis_fifo *fifo, int offset, u32 val)
 {
 	iowrite32(val, fifo->base_addr + offset);
+}
+
+static inline void axis_fifo_write_data(struct axis_fifo *fifo, const void *buf, int count)
+{
+	iowrite32_rep(fifo->base_addr + XLLF_TDFD_OFFSET, buf, count);
 }
 
 static void reset_ip_core(struct axis_fifo *fifo)
@@ -190,7 +200,6 @@ static ssize_t axis_fifo_read(struct file *f, char __user *buf,
 	unsigned int words_available;
 	unsigned int copied;
 	unsigned int copy;
-	unsigned int i;
 	int ret;
 	u32 tmp_buf[READ_BUF_SIZE];
 
@@ -259,10 +268,8 @@ static ssize_t axis_fifo_read(struct file *f, char __user *buf,
 	while (words_available > 0) {
 		copy = min(words_available, READ_BUF_SIZE);
 
-		for (i = 0; i < copy; i++) {
-			tmp_buf[i] = ioread32(fifo->base_addr +
-					      XLLF_RDFD_OFFSET);
-		}
+		axis_fifo_read_data(fifo, tmp_buf, copy);
+
 		words_available -= copy;
 
 		if (copy_to_user(buf + copied * sizeof(u32), tmp_buf,
@@ -378,8 +385,7 @@ static ssize_t axis_fifo_write(struct file *f, const char __user *buf,
 		goto end_unlock;
 	}
 
-	for (int i = 0; i < words_to_write; ++i)
-		iowrite32(txbuf[i], fifo->base_addr + XLLF_TDFD_OFFSET);
+	axis_fifo_write_data(fifo, txbuf, words_to_write);
 
 	/* write packet size to fifo */
 	axis_fifo_write_reg(fifo, XLLF_TLR_OFFSET, len);
