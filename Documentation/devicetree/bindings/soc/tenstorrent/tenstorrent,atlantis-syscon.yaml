@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/soc/tenstorrent/tenstorrent,atlantis-syscon.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Tenstorrent Atlantis SoC System Controller
+
+maintainers:
+  - Anirudh Srinivasan <asrinivasan@oss.tenstorrent.com>
+
+description:
+  System controller found in Tenstorrent Atlantis SoC, which is capable of
+  clock and reset functions.
+
+  RCPU syscon controls clocks and resets for low speed IO interfaces on chip
+
+properties:
+  compatible:
+    enum:
+      - tenstorrent,atlantis-syscon-rcpu
+
+  reg:
+    maxItems: 1
+
+  clocks:
+    maxItems: 1
+
+  "#clock-cells":
+    const: 1
+    description:
+      See <dt-bindings/clock/tenstorrent,atlantis-syscon.h> for valid indices.
+
+required:
+  - compatible
+  - reg
+  - clocks
+  - "#clock-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    clocks {
+      osc_24m: clock-24m {
+        compatible = "fixed-clock";
+        clock-frequency = <24000000>;
+        clock-output-names = "osc_24m";
+        #clock-cells = <0>;
+      };
+    };
+
+    syscon_rcpu: system-controller@a8000000 {
+      compatible = "tenstorrent,atlantis-sycon-rcpu";
+      reg = <0x0 0xa8000000 0x0 0x10000>;
+      clocks = <&osc_24m>;
+      #clock-cells = <1>;
+    };
