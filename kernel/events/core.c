@@ -2698,6 +2698,11 @@ static void perf_event_throttle_group(struct perf_event *event)
 	struct perf_event *sibling, *leader = event->group_leader;
 
 	perf_event_throttle(leader);
+   /*
+    * Disable IRQs to protect sibling iteration; for_each_sibling_event()
+    * needs ctx->mutex or IRQs off.
+    */
+	guard(irqsave)();
 	for_each_sibling_event(sibling, leader)
 		perf_event_throttle(sibling);
 }
