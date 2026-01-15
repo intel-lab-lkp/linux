@@ -61,7 +61,7 @@ u64 cxl_do_xormap_calc(struct cxl_cxims_data *cximsd, u64 addr, int hbiw)
 	 * bits results in val==0, if odd the XOR result is val==1.
 	 */
 
-	for (int i = 0; i < cximsd->nr_maps; i++) {
+	for (int i = 0; i < nr_maps_to_apply; i++) {
 		if (!cximsd->xormaps[i])
 			continue;
 		pos = __ffs(cximsd->xormaps[i]);
