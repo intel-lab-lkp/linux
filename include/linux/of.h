@@ -138,10 +138,12 @@ static inline void of_node_put(struct device_node *node) { }
 DEFINE_FREE(device_node, struct device_node *, if (_T) of_node_put(_T))
 
 /* Pointer for first entry in chain of all nodes. */
+#if IS_ENABLED(CONFIG_OF)
 extern struct device_node *of_root;
 extern struct device_node *of_chosen;
 extern struct device_node *of_aliases;
 extern struct device_node *of_stdout;
+#endif
 
 /*
  * struct device_node flag descriptions
