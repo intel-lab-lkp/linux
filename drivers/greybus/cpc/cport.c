@@ -91,6 +91,7 @@ int cpc_cport_transmit(struct cpc_cport *cport, struct sk_buff *skb)
 	mutex_lock(&cport->lock);
 
 	CPC_SKB_CB(skb)->seq = cport->tcb.seq;
+	CPC_SKB_CB(skb)->cpc_flags = CPC_SKB_FLAG_REQ_ACK;
 
 	cport->tcb.seq++;
 	ack = cport->tcb.ack;

@@ -51,6 +51,9 @@ struct cpc_skb_cb {
 	struct gb_message *gb_message;
 
 	u8 seq;
+
+#define CPC_SKB_FLAG_REQ_ACK (1 << 0)
+	u8 cpc_flags;
 };
 
 #define CPC_SKB_CB(__skb) ((struct cpc_skb_cb *)&((__skb)->cb[0]))
