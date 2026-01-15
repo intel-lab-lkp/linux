@@ -1208,6 +1208,7 @@ static struct dentry *fuse_get_parent(struct dentry *child)
 /* only for fid encoding; no support for file handle */
 static const struct export_operations fuse_export_fid_operations = {
 	.encode_fh	= fuse_encode_fh,
+	.flags		= EXPORT_OP_STABLE_HANDLES,
 };
 
 static const struct export_operations fuse_export_operations = {
@@ -1215,6 +1216,7 @@ static const struct export_operations fuse_export_operations = {
 	.fh_to_parent	= fuse_fh_to_parent,
 	.encode_fh	= fuse_encode_fh,
 	.get_parent	= fuse_get_parent,
+	.flags		= EXPORT_OP_STABLE_HANDLES,
 };
 
 static const struct super_operations fuse_super_operations = {
