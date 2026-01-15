@@ -2651,6 +2651,11 @@ static long fuse_dev_ioctl_backing_close(struct file *file, __u32 __user *argp)
 	if (get_user(backing_id, argp))
 		return -EFAULT;
 
+	if (backing_id == -1) {
+		fuse_backing_close_all(fud->fc);
+		return 0;
+	}
+
 	return fuse_backing_close(fud->fc, backing_id);
 }
 
