@@ -61,5 +61,13 @@ integrity_inode_attrs_changed(const struct integrity_inode_attributes *attrs,
 		!inode_eq_iversion(inode, attrs->version));
 }
 
+#ifdef CONFIG_INTEGRITY_SECURE_BOOT
+bool arch_integrity_get_secureboot(void);
+#else
+static inline bool arch_integrity_get_secureboot(void)
+{
+	return false;
+}
+#endif
 
 #endif /* _LINUX_INTEGRITY_H */
