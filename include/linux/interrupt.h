@@ -20,6 +20,7 @@
 #include <asm/ptrace.h>
 #include <asm/irq.h>
 #include <asm/sections.h>
+#include <linux/jiffies.h>
 
 /*
  * These correspond to the IORESOURCE_IRQ_* defines in
@@ -138,6 +139,14 @@ struct irqaction {
 	const char		*name;
 	struct proc_dir_entry	*dir;
 } ____cacheline_internodealigned_in_smp;
+
+/**
+ * irq_storm_cb_t - callback function type for interrupt storm detection
+ * @irq: interrupt number that is storming
+ * @freq: detected frequency (interrupts per second)
+ * @dev_id: device identifier passed during registration
+ */
+typedef void (*irq_storm_cb_t)(unsigned int irq, unsigned int freq, void *dev_id);
 
 extern irqreturn_t no_action(int cpl, void *dev_id);
 
@@ -330,6 +339,10 @@ extern int irq_force_affinity(unsigned int irq, const struct cpumask *cpumask);
 
 extern int irq_can_set_affinity(unsigned int irq);
 extern int irq_select_affinity(unsigned int irq);
+
+extern bool irq_register_storm_detection(unsigned int irq, unsigned int max_freq,
+					 irq_storm_cb_t cb, void *dev_id);
+extern void irq_unregister_storm_detection(unsigned int irq);
 
 extern int __irq_apply_affinity_hint(unsigned int irq, const struct cpumask *m,
 				     bool setaffinity);

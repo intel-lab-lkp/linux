@@ -22,6 +22,90 @@ static DEFINE_TIMER(poll_spurious_irq_timer, poll_spurious_irqs);
 int irq_poll_cpu;
 static atomic_t irq_poll_active;
 
+/* Minimum frequency threshold */
+#define IRQ_STORM_MIN_FREQ_HZ		50
+#define IRQ_STORM_MAX_FREQ_SCALE	(IRQ_STORM_MIN_FREQ_HZ * 2)
+/* Time window over which storm check is performed */
+#define IRQ_STORM_PERIOD_WINDOW_MS	(IRQ_STORM_MIN_FREQ_HZ * 20)
+
+
+/**
+ * irq_register_storm_detection - register interrupt storm detection for an IRQ
+ * @irq: interrupt number
+ * @max_freq: maximum allowed frequency (interrupts per second)
+ * @cb: callback function to invoke when storm is detected
+ * @dev_id: device identifier passed to callback
+ *
+ * Returns: true on success, false on failure
+ */
+bool irq_register_storm_detection(unsigned int irq, unsigned int max_freq,
+				  irq_storm_cb_t cb, void *dev_id)
+{
+	struct irq_storm *storm;
+	bool ret = false;
+
+	if (max_freq < IRQ_STORM_MIN_FREQ_HZ || !cb)
+		return false;
+
+	storm = kzalloc(sizeof(*storm), GFP_KERNEL);
+	if (!storm)
+		return false;
+
+	/* Adjust to count per 10ms */
+	storm->max_cnt = max_freq / (IRQ_STORM_MAX_FREQ_SCALE);
+	storm->cb = cb;
+	storm->dev_id = dev_id;
+
+	scoped_irqdesc_get_and_buslock(irq, IRQ_GET_DESC_CHECK_GLOBAL) {
+		if (scoped_irqdesc->action && !scoped_irqdesc->irq_storm) {
+			storm->last_cnt = scoped_irqdesc->tot_count;
+			storm->next_period = jiffies + msecs_to_jiffies(IRQ_STORM_PERIOD_WINDOW_MS);
+			scoped_irqdesc->irq_storm = storm;
+			ret = true;
+		}
+	}
+
+	if (!ret)
+		kfree(storm);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(irq_register_storm_detection);
+
+/**
+ * irq_unregister_storm_detection - unregister interrupt storm detection
+ * @irq: interrupt number
+ */
+void irq_unregister_storm_detection(unsigned int irq)
+{
+	scoped_irqdesc_get_and_buslock(irq, IRQ_GET_DESC_CHECK_GLOBAL) {
+		if (scoped_irqdesc->irq_storm) {
+			kfree(scoped_irqdesc->irq_storm);
+			scoped_irqdesc->irq_storm = NULL;
+		}
+	}
+}
+EXPORT_SYMBOL_GPL(irq_unregister_storm_detection);
+
+static void irq_storm_check(struct irq_desc *desc)
+{
+	struct irq_storm *storm = desc->irq_storm;
+	unsigned long delta, now = jiffies;
+
+	if (!time_after_eq(now, storm->next_period))
+		return;
+
+	storm->next_period = now + msecs_to_jiffies(IRQ_STORM_PERIOD_WINDOW_MS);
+	delta = desc->tot_count - storm->last_cnt;
+	storm->last_cnt = desc->tot_count;
+	if (delta > storm->max_cnt) {
+		/* Calculate actual frequency: interrupts per second */
+		storm->cb(irq_desc_get_irq(desc),
+			(delta * (IRQ_STORM_MAX_FREQ_SCALE)),
+			storm->dev_id);
+	}
+}
+
 /*
  * Recovery handler for misrouted interrupts.
  */
@@ -230,6 +314,9 @@ void note_interrupt(struct irq_desc *desc, irqreturn_t action_ret)
 		report_bad_irq(desc, action_ret);
 		return;
 	}
+
+	if (desc->irq_storm && action_ret == IRQ_HANDLED)
+		irq_storm_check(desc);
 
 	/*
 	 * We cannot call note_interrupt from the threaded handler

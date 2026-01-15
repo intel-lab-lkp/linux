@@ -17,6 +17,9 @@ struct irq_desc;
 struct irq_domain;
 struct pt_regs;
 
+/* Forward declaration - full definition in interrupt.h */
+typedef void (*irq_storm_cb_t)(unsigned int, unsigned int, void *);
+
 /**
  * struct irqstat - interrupt statistics
  * @cnt:	real-time interrupt count
@@ -27,6 +30,22 @@ struct irqstat {
 #ifdef CONFIG_GENERIC_IRQ_STAT_SNAPSHOT
 	unsigned int	ref;
 #endif
+};
+
+/**
+ * struct irq_storm - interrupt storm detection data
+ * @max_cnt:		maximum interrupt count per time window
+ * @last_cnt:		last total interrupt count snapshot
+ * @next_period:	next time period boundary (jiffies)
+ * @cb:			callback function to invoke on storm detection
+ * @dev_id:		device identifier for callback
+ */
+struct irq_storm {
+	unsigned long		max_cnt;
+	unsigned long		last_cnt;
+	unsigned long		next_period;
+	irq_storm_cb_t		cb;
+	void			*dev_id;
 };
 
 /**
@@ -101,6 +120,7 @@ struct irq_desc {
 #ifdef CONFIG_PROC_FS
 	struct proc_dir_entry	*dir;
 #endif
+	struct irq_storm	*irq_storm;
 #ifdef CONFIG_GENERIC_IRQ_DEBUGFS
 	struct dentry		*debugfs_file;
 	const char		*dev_name;

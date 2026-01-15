@@ -1951,6 +1951,10 @@ static struct irqaction *__free_irq(struct irq_desc *desc, void *dev_id)
 		irq_release_resources(desc);
 		chip_bus_sync_unlock(desc);
 		irq_remove_timings(desc);
+		if (desc->irq_storm) {
+			kfree(desc->irq_storm);
+			desc->irq_storm = NULL;
+		}
 	}
 
 	mutex_unlock(&desc->request_mutex);
