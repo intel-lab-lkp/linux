@@ -424,7 +424,7 @@ struct lruvec_stats {
 	long state[NR_MEMCG_NODE_STAT_ITEMS];
 
 	/* Non-hierarchical (CPU aggregated) state */
-	long state_local[NR_MEMCG_NODE_STAT_ITEMS];
+	atomic_long_t state_local[NR_MEMCG_NODE_STAT_ITEMS];
 
 	/* Pending child counts during tree propagation */
 	long state_pending[NR_MEMCG_NODE_STAT_ITEMS];
@@ -467,7 +467,7 @@ unsigned long lruvec_page_state_local(struct lruvec *lruvec,
 		return 0;
 
 	pn = container_of(lruvec, struct mem_cgroup_per_node, lruvec);
-	x = READ_ONCE(pn->lruvec_stats->state_local[i]);
+	x = atomic_long_read(&(pn->lruvec_stats->state_local[i]));
 #ifdef CONFIG_SMP
 	if (x < 0)
 		x = 0;
@@ -492,8 +492,7 @@ static void reparent_memcg_lruvec_state_local(struct mem_cgroup *memcg,
 
 		parent_pn = container_of(parent_lruvec, struct mem_cgroup_per_node, lruvec);
 
-		WRITE_ONCE(parent_pn->lruvec_stats->state_local[i],
-			   parent_pn->lruvec_stats->state_local[i] + value);
+		atomic_long_add(value, &(parent_pn->lruvec_stats->state_local[i]));
 	}
 }
 
@@ -588,8 +587,8 @@ struct memcg_vmstats {
 	unsigned long		events[NR_MEMCG_EVENTS];
 
 	/* Non-hierarchical (CPU aggregated) page state & events */
-	long			state_local[MEMCG_VMSTAT_SIZE];
-	unsigned long		events_local[NR_MEMCG_EVENTS];
+	atomic_long_t		state_local[MEMCG_VMSTAT_SIZE];
+	atomic_long_t		events_local[NR_MEMCG_EVENTS];
 
 	/* Pending child counts during tree propagation */
 	long			state_pending[MEMCG_VMSTAT_SIZE];
@@ -781,7 +780,7 @@ unsigned long memcg_page_state_local(struct mem_cgroup *memcg, int idx)
 	if (WARN_ONCE(BAD_STAT_IDX(i), "%s: missing stat item %d\n", __func__, idx))
 		return 0;
 
-	x = READ_ONCE(memcg->vmstats->state_local[i]);
+	x = atomic_long_read(&(memcg->vmstats->state_local[i]));
 #ifdef CONFIG_SMP
 	if (x < 0)
 		x = 0;
@@ -798,7 +797,7 @@ void reparent_memcg_state_local(struct mem_cgroup *memcg,
 	if (WARN_ONCE(BAD_STAT_IDX(i), "%s: missing stat item %d\n", __func__, idx))
 		return;
 
-	WRITE_ONCE(parent->vmstats->state_local[i], parent->vmstats->state_local[i] + value);
+	atomic_long_add(value, &(parent->vmstats->state_local[i]));
 }
 #endif
 
@@ -944,7 +943,7 @@ unsigned long memcg_events_local(struct mem_cgroup *memcg, int event)
 	if (WARN_ONCE(BAD_STAT_IDX(i), "%s: missing stat item %d\n", __func__, event))
 		return 0;
 
-	return READ_ONCE(memcg->vmstats->events_local[i]);
+	return atomic_long_read(&(memcg->vmstats->events_local[i]));
 }
 #endif
 
@@ -4033,7 +4032,7 @@ struct aggregate_control {
 	/* pointer to the aggregated (CPU and subtree aggregated) counters */
 	long *aggregate;
 	/* pointer to the non-hierarchichal (CPU aggregated) counters */
-	long *local;
+	atomic_long_t *local;
 	/* pointer to the pending child counters during tree propagation */
 	long *pending;
 	/* pointer to the parent's pending counters, could be NULL */
@@ -4072,7 +4071,7 @@ static void mem_cgroup_stat_aggregate(struct aggregate_control *ac)
 
 		/* Aggregate counts on this level and propagate upwards */
 		if (delta_cpu)
-			ac->local[i] += delta_cpu;
+			atomic_long_add(delta_cpu, &(ac->local[i]));
 
 		if (delta) {
 			ac->aggregate[i] += delta;
