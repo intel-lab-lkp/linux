@@ -2837,19 +2837,21 @@ of a Guest VCPU and it has the following id bit patterns::
 
 Following are the RISC-V csr registers:
 
-======================= ========= =============================================
-    Encoding            Register  Description
-======================= ========= =============================================
-  0x80x0 0000 0300 0000 sstatus   Supervisor status
-  0x80x0 0000 0300 0001 sie       Supervisor interrupt enable
-  0x80x0 0000 0300 0002 stvec     Supervisor trap vector base
-  0x80x0 0000 0300 0003 sscratch  Supervisor scratch register
-  0x80x0 0000 0300 0004 sepc      Supervisor exception program counter
-  0x80x0 0000 0300 0005 scause    Supervisor trap cause
-  0x80x0 0000 0300 0006 stval     Supervisor bad address or instruction
-  0x80x0 0000 0300 0007 sip       Supervisor interrupt pending
-  0x80x0 0000 0300 0008 satp      Supervisor address translation and protection
-======================= ========= =============================================
+======================= ========== =============================================
+    Encoding            Register   Description
+======================= ========== =============================================
+  0x80x0 0000 0300 0000 sstatus    Supervisor status
+  0x80x0 0000 0300 0001 sie        Supervisor interrupt enable
+  0x80x0 0000 0300 0002 stvec      Supervisor trap vector base
+  0x80x0 0000 0300 0003 sscratch   Supervisor scratch register
+  0x80x0 0000 0300 0004 sepc       Supervisor exception program counter
+  0x80x0 0000 0300 0005 scause     Supervisor trap cause
+  0x80x0 0000 0300 0006 stval      Supervisor bad address or instruction
+  0x80x0 0000 0300 0007 sip        Supervisor interrupt pending
+  0x80x0 0000 0300 0008 satp       Supervisor address translation and protection
+  0x80x0 0000 0300 0009 scounteren Supervisor counter-enable
+  0x80x0 0000 0300 000a senvcfg    Supervisor environment configuration
+======================= ========== =============================================
 
 RISC-V timer registers represent the timer state of a Guest VCPU and it has
 the following id bit patterns::
