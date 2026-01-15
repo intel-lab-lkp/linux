@@ -885,9 +885,9 @@ static inline void __del_page_from_free_list(struct page *page, struct zone *zon
 {
 	int nr_pages = 1 << order;
 
-        VM_WARN_ONCE(get_pageblock_migratetype(page) != migratetype,
-		     "page type is %d, passed migratetype is %d (nr=%d)\n",
-		     get_pageblock_migratetype(page), migratetype, nr_pages);
+	VM_WARN_ONCE(get_pageblock_migratetype(page) != migratetype,
+			"page type is %d, passed migratetype is %d (nr=%d)\n",
+			get_pageblock_migratetype(page), migratetype, nr_pages);
 
 	/* clear reported state and update reported page count */
 	if (page_reported(page))
