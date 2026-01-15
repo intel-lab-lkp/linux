@@ -145,6 +145,7 @@ struct vmcb_save_area_cached {
 	u64 cr0;
 	u64 dr7;
 	u64 dr6;
+	u64 g_pat;
 };
 
 struct vmcb_ctrl_area_cached {

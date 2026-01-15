@@ -506,6 +506,8 @@ static void __nested_copy_vmcb_save_to_cache(struct vmcb_save_area_cached *to,
 
 	to->dr6 = from->dr6;
 	to->dr7 = from->dr7;
+
+	to->g_pat = from->g_pat;
 }
 
 void nested_copy_vmcb_save_to_cache(struct vcpu_svm *svm,
