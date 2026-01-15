@@ -50,9 +50,11 @@ static inline u8 fd_inb(u16 base, u16 reg)
 {
 	u8 ret = inb_p(base + reg);
 
+#ifdef CONFIG_IO_DELAY
 	native_io_delay();
 	native_io_delay();
 	native_io_delay();
+#endif
 
 	return ret;
 }
@@ -61,9 +63,11 @@ static inline void fd_outb(u8 value, u16 base, u16 reg)
 {
 	outb_p(value, base + reg);
 
+#ifdef CONFIG_IO_DELAY
 	native_io_delay();
 	native_io_delay();
 	native_io_delay();
+#endif
 }
 
 static irqreturn_t floppy_hardint(int irq, void *dev_id)
