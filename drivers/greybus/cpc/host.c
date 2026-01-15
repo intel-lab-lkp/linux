@@ -203,20 +203,23 @@ void cpc_hd_message_sent(struct sk_buff *skb, int status)
 }
 EXPORT_SYMBOL_GPL(cpc_hd_message_sent);
 
-void cpc_hd_rcvd(struct cpc_host_device *cpc_hd, u8 *data, size_t length)
+void cpc_hd_rcvd(struct cpc_host_device *cpc_hd, struct sk_buff *skb)
 {
 	struct gb_operation_msg_hdr *gb_hdr;
 	u16 cport_id;
 
 	/* Prevent an out-of-bound access if called with non-sensical parameters. */
-	if (!data || length < sizeof(*gb_hdr))
-		return;
+	if (skb->len < sizeof(*gb_hdr))
+		goto free_skb;
 
 	/* Retrieve cport ID that was packed in Greybus header */
-	gb_hdr = (struct gb_operation_msg_hdr *)data;
+	gb_hdr = (struct gb_operation_msg_hdr *)skb->data;
 	cport_id = cpc_cport_unpack(gb_hdr);
 
-	greybus_data_rcvd(cpc_hd->gb_hd, cport_id, data, length);
+	greybus_data_rcvd(cpc_hd->gb_hd, cport_id, skb->data, skb->len);
+
+free_skb:
+	kfree_skb(skb);
 }
 EXPORT_SYMBOL_GPL(cpc_hd_rcvd);
 
