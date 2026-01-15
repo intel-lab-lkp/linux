@@ -4506,7 +4506,6 @@ static void __lru_gen_reparent_memcg(struct lruvec *child_lruvec, struct lruvec 
 				     int zone, int type)
 {
 	struct lru_gen_folio *child_lrugen, *parent_lrugen;
-	enum lru_list lru = type * LRU_INACTIVE_FILE;
 	int i;
 
 	child_lrugen = &child_lruvec->lrugen;
@@ -4515,7 +4514,6 @@ static void __lru_gen_reparent_memcg(struct lruvec *child_lruvec, struct lruvec 
 	for (i = 0; i < get_nr_gens(child_lruvec, type); i++) {
 		int gen = lru_gen_from_seq(child_lrugen->max_seq - i);
 		long nr_pages = child_lrugen->nr_pages[gen][type][zone];
-		int dst_lru_active = lru_gen_is_active(parent_lruvec, gen) ? LRU_ACTIVE : 0;
 
 		/* Assuming that child pages are colder than parent pages */
 		list_splice_init(&child_lrugen->folios[gen][type][zone],
@@ -4524,8 +4522,6 @@ static void __lru_gen_reparent_memcg(struct lruvec *child_lruvec, struct lruvec 
 		WRITE_ONCE(child_lrugen->nr_pages[gen][type][zone], 0);
 		WRITE_ONCE(parent_lrugen->nr_pages[gen][type][zone],
 			   parent_lrugen->nr_pages[gen][type][zone] + nr_pages);
-
-		update_lru_size(parent_lruvec, lru + dst_lru_active, zone, nr_pages);
 	}
 }
 
@@ -4537,15 +4533,21 @@ void lru_gen_reparent_memcg(struct mem_cgroup *memcg, struct mem_cgroup *parent)
 		struct lruvec *child_lruvec, *parent_lruvec;
 		int type, zid;
 		struct zone *zone;
+		enum lru_list lru;
 
 		child_lruvec = get_lruvec(memcg, nid);
 		parent_lruvec = get_lruvec(parent, nid);
 
-		for_each_managed_zone_pgdat(zone, NODE_DATA(nid), zid, MAX_NR_ZONES - 1) {
+		for_each_managed_zone_pgdat(zone, NODE_DATA(nid), zid, MAX_NR_ZONES - 1)
 			for (type = 0; type < ANON_AND_FILE; type++)
 				__lru_gen_reparent_memcg(child_lruvec, parent_lruvec, zid, type);
-			mem_cgroup_update_lru_size(parent_lruvec, LRU_UNEVICTABLE, zid,
-				mem_cgroup_get_zone_lru_size(child_lruvec, LRU_UNEVICTABLE, zid));
+
+		for_each_lru(lru) {
+			for_each_managed_zone_pgdat(zone, NODE_DATA(nid), zid, MAX_NR_ZONES - 1) {
+				unsigned long size = mem_cgroup_get_zone_lru_size(child_lruvec, lru, zid);
+
+				mem_cgroup_update_lru_size(parent_lruvec, lru, zid, size);
+			}
 		}
 	}
 }
