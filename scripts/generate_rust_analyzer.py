@@ -19,7 +19,7 @@ def args_crates_cfgs(cfgs):
 
     return crates_cfgs
 
-def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, core_edition):
+def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, sysroot_edition):
     # Generate the configuration list.
     cfg = []
     with open(objtree / "include" / "generated" / "rustc_cfg") as fd:
@@ -61,7 +61,6 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, core_edit
         display_name,
         deps,
         cfg=[],
-        edition="2021",
     ):
         append_crate(
             display_name,
@@ -69,13 +68,13 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, core_edit
             deps,
             cfg,
             is_workspace_member=False,
-            edition=edition,
+            edition=sysroot_edition,
         )
 
     # NB: sysroot crates reexport items from one another so setting up our transitive dependencies
     # here is important for ensuring that rust-analyzer can resolve symbols. The sources of truth
     # for this dependency graph are `(sysroot_src / crate / "Cargo.toml" for crate in crates)`.
-    append_sysroot_crate("core", [], cfg=crates_cfgs.get("core", []), edition=core_edition)
+    append_sysroot_crate("core", [], cfg=crates_cfgs.get("core", []))
     append_sysroot_crate("alloc", ["core"])
     append_sysroot_crate("std", ["alloc", "core"])
     append_sysroot_crate("proc_macro", ["core", "std"])
@@ -200,7 +199,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--verbose', '-v', action='store_true')
     parser.add_argument('--cfgs', action='append', default=[])
-    parser.add_argument("core_edition")
+    parser.add_argument("sysroot_edition")
     parser.add_argument("srctree", type=pathlib.Path)
     parser.add_argument("objtree", type=pathlib.Path)
     parser.add_argument("sysroot", type=pathlib.Path)
@@ -217,7 +216,7 @@ def main():
     assert args.sysroot in args.sysroot_src.parents
 
     rust_project = {
-        "crates": generate_crates(args.srctree, args.objtree, args.sysroot_src, args.exttree, args.cfgs, args.core_edition),
+        "crates": generate_crates(args.srctree, args.objtree, args.sysroot_src, args.exttree, args.cfgs, args.sysroot_edition),
         "sysroot": str(args.sysroot),
     }
 
