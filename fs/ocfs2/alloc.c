@@ -4424,6 +4424,12 @@ static int ocfs2_figure_merge_contig_type(struct ocfs2_extent_tree *et,
 				ret = CONTIG_RIGHT;
 		} else {
 			ret = ocfs2_et_extent_contig(et, rec, split_rec);
+			if (ret != CONTIG_NONE && et->et_max_leaf_clusters) {
+				if (le16_to_cpu(rec->e_leaf_clusters) +
+				    le16_to_cpu(split_rec->e_leaf_clusters) >
+				    et->et_max_leaf_clusters)
+					ret = CONTIG_NONE;
+			}
 		}
 	}
 
@@ -4470,6 +4476,12 @@ static int ocfs2_figure_merge_contig_type(struct ocfs2_extent_tree *et,
 		enum ocfs2_contig_type contig_type;
 
 		contig_type = ocfs2_et_extent_contig(et, rec, split_rec);
+		if (contig_type != CONTIG_NONE && et->et_max_leaf_clusters) {
+			if (le16_to_cpu(rec->e_leaf_clusters) +
+			    le16_to_cpu(split_rec->e_leaf_clusters) >
+			    et->et_max_leaf_clusters)
+				contig_type = CONTIG_NONE;
+		}
 
 		if (contig_type == CONTIG_LEFT && ret == CONTIG_RIGHT)
 			ret = CONTIG_LEFTRIGHT;
