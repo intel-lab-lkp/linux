@@ -11164,7 +11164,7 @@ static bool display_damage(char *buf, int *count, char *type, unsigned int dmg_s
 			break;
 		default:
 			pr_err("Unexpected value %d in switch statement\n", pos_status);
-		};
+		}
 
 		switch (panel_status) {
 		case POS_LEFT:
@@ -11179,7 +11179,7 @@ static bool display_damage(char *buf, int *count, char *type, unsigned int dmg_s
 		default:
 			*count += sysfs_emit_at(buf, *count, "Undefined\n");
 			break;
-		};
+		}
 		damage_detected = true;
 	}
 	return damage_detected;
