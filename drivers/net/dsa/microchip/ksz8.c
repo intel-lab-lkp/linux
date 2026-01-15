@@ -143,9 +143,9 @@ int ksz8_reset_switch(struct ksz_device *dev)
 			KSZ8863_GLOBAL_SOFTWARE_RESET | KSZ8863_PCS_RESET, false);
 	} else if (ksz_is_ksz8463(dev)) {
 		ksz_cfg(dev, KSZ8463_REG_SW_RESET,
-			KSZ8463_GLOBAL_SOFTWARE_RESET, true);
+			KSZ8463_GLOBAL_SOFTWARE_RESET | KSZ8463_PTP_SOFTWARE_RESET, true);
 		ksz_cfg(dev, KSZ8463_REG_SW_RESET,
-			KSZ8463_GLOBAL_SOFTWARE_RESET, false);
+			KSZ8463_GLOBAL_SOFTWARE_RESET | KSZ8463_PTP_SOFTWARE_RESET, false);
 	} else {
 		/* reset switch */
 		ksz_write8(dev, REG_POWER_MANAGEMENT_1,
@@ -1762,17 +1762,6 @@ void ksz8_config_cpu_port(struct dsa_switch *ds)
 					   KSZ8463_REG_DSP_CTRL_6,
 					   COPPER_RECEIVE_ADJUSTMENT, 0);
 		}
-
-		/* Turn off PTP function as the switch's proprietary way of
-		 * handling timestamp is not supported in current Linux PTP
-		 * stack implementation.
-		 */
-		regmap_update_bits(ksz_regmap_16(dev),
-				   KSZ8463_PTP_MSG_CONF1,
-				   PTP_ENABLE, 0);
-		regmap_update_bits(ksz_regmap_16(dev),
-				   KSZ8463_PTP_CLK_CTRL,
-				   PTP_CLK_ENABLE, 0);
 	}
 }
 
