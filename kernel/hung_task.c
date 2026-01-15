@@ -17,6 +17,7 @@
 #include <linux/export.h>
 #include <linux/panic_notifier.h>
 #include <linux/sysctl.h>
+#include <linux/atomic.h>
 #include <linux/suspend.h>
 #include <linux/utsname.h>
 #include <linux/sched/signal.h>
@@ -36,7 +37,7 @@ static int __read_mostly sysctl_hung_task_check_count = PID_MAX_LIMIT;
 /*
  * Total number of tasks detected as hung since boot:
  */
-static unsigned long __read_mostly sysctl_hung_task_detect_count;
+static atomic_long_t sysctl_hung_task_detect_count = ATOMIC_LONG_INIT(0);
 
 /*
  * Limit number of tasks checked in a batch.
@@ -224,9 +225,9 @@ static inline void debug_show_blocker(struct task_struct *task, unsigned long ti
 #endif
 
 static void check_hung_task(struct task_struct *t, unsigned long timeout,
-		unsigned long prev_detect_count)
+			    unsigned long prev_detect_count)
 {
-	unsigned long total_hung_task;
+	unsigned long total_hung_task, cur_detect_count;
 
 	if (!task_is_hung(t, timeout))
 		return;
@@ -235,9 +236,9 @@ static void check_hung_task(struct task_struct *t, unsigned long timeout,
 	 * This counter tracks the total number of tasks detected as hung
 	 * since boot.
 	 */
-	sysctl_hung_task_detect_count++;
+	cur_detect_count = atomic_long_inc_return_relaxed(&sysctl_hung_task_detect_count);
+	total_hung_task = cur_detect_count - prev_detect_count;
 
-	total_hung_task = sysctl_hung_task_detect_count - prev_detect_count;
 	trace_sched_process_hang(t);
 
 	if (sysctl_hung_task_panic && total_hung_task >= sysctl_hung_task_panic) {
@@ -305,10 +306,11 @@ static void check_hung_uninterruptible_tasks(unsigned long timeout)
 	int max_count = sysctl_hung_task_check_count;
 	unsigned long last_break = jiffies;
 	struct task_struct *g, *t;
-	unsigned long prev_detect_count = sysctl_hung_task_detect_count;
+	unsigned long prev_detect_count;
 	int need_warning = sysctl_hung_task_warnings;
 	unsigned long si_mask = hung_task_si_mask;
 
+	prev_detect_count = atomic_long_read(&sysctl_hung_task_detect_count);
 	/*
 	 * If the system crashed already then all bets are off,
 	 * do not report extra hung tasks:
@@ -333,7 +335,8 @@ static void check_hung_uninterruptible_tasks(unsigned long timeout)
  unlock:
 	rcu_read_unlock();
 
-	if (!(sysctl_hung_task_detect_count - prev_detect_count))
+	if (!(atomic_long_read(&sysctl_hung_task_detect_count) -
+				prev_detect_count))
 		return;
 
 	if (need_warning || hung_task_call_panic) {
@@ -358,6 +361,31 @@ static long hung_timeout_jiffies(unsigned long last_checked,
 }
 
 #ifdef CONFIG_SYSCTL
+
+/**
+ * proc_dohung_task_detect_count - proc handler for hung_task_detect_count
+ * @table: Pointer to the struct ctl_table definition for this proc entry
+ * @dir: Flag indicating the operation
+ * @buffer: User space buffer for data transfer
+ * @lenp: Pointer to the length of the data being transferred
+ * @ppos: Pointer to the current file offset
+ *
+ * This handler is used for reading the current hung task detection count.
+ * Returns 0 on success or a negative error code on failure.
+ */
+static int proc_dohung_task_detect_count(const struct ctl_table *table, int dir,
+					 void *buffer, size_t *lenp, loff_t *ppos)
+{
+	unsigned long detect_count;
+	struct ctl_table proxy_table;
+
+	detect_count = atomic_long_read(&sysctl_hung_task_detect_count);
+	proxy_table = *table;
+	proxy_table.data = &detect_count;
+
+	return proc_doulongvec_minmax(&proxy_table, dir, buffer, lenp, ppos);
+}
+
 /*
  * Process updating of timeout sysctl
  */
@@ -438,10 +466,9 @@ static const struct ctl_table hung_task_sysctls[] = {
 	},
 	{
 		.procname	= "hung_task_detect_count",
-		.data		= &sysctl_hung_task_detect_count,
 		.maxlen		= sizeof(unsigned long),
 		.mode		= 0444,
-		.proc_handler	= proc_doulongvec_minmax,
+		.proc_handler	= proc_dohung_task_detect_count,
 	},
 	{
 		.procname	= "hung_task_sys_info",
