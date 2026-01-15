@@ -175,7 +175,6 @@ struct vmcb_ctrl_area_cached {
 	u64 msrpm_base_pa;
 	u64 tsc_offset;
 	u32 asid;
-	u8 tlb_ctl;
 	u8 erap_ctl;
 	u32 int_ctl;
 	u32 int_vector;
