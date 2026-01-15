@@ -6748,20 +6748,24 @@ static inline struct kmem_cache *virt_to_cache(const void *obj)
 	return slab->slab_cache;
 }
 
-static inline struct kmem_cache *cache_from_obj(struct kmem_cache *s, void *x)
+static struct kmem_cache *__cache_from_obj(struct kmem_cache *s, void *x)
 {
-	struct kmem_cache *cachep;
+	struct kmem_cache *cachep = virt_to_cache(x);
 
-	if (!IS_ENABLED(CONFIG_SLAB_FREELIST_HARDENED) &&
-	    !kmem_cache_debug_flags(s, SLAB_CONSISTENCY_CHECKS))
-		return s;
-
-	cachep = virt_to_cache(x);
 	if (WARN(cachep && cachep != s,
 		 "%s: Wrong slab cache. %s but object is from %s\n",
 		 __func__, s->name, cachep->name))
 		print_tracking(cachep, x);
 	return cachep;
+}
+
+static __fastpath_inline struct kmem_cache *cache_from_obj(struct kmem_cache *s, void *x)
+{
+	if (!IS_ENABLED(CONFIG_SLAB_FREELIST_HARDENED) &&
+	    !kmem_cache_debug_flags(s, SLAB_CONSISTENCY_CHECKS))
+		return s;
+
+	return __cache_from_obj(s, x);
 }
 
 /**
