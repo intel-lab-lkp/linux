@@ -1128,6 +1128,12 @@ int nested_svm_vmexit(struct vcpu_svm *svm)
 		vmcb12->save.ssp	= vmcb02->save.ssp;
 	}
 
+	if (guest_cpu_cap_has(vcpu, X86_FEATURE_DECODEASSISTS)) {
+		memcpy(vmcb12->control.insn_bytes, vmcb02->control.insn_bytes,
+		       ARRAY_SIZE(vmcb12->control.insn_bytes));
+		vmcb12->control.insn_len = vmcb02->control.insn_len;
+	}
+
 	vmcb12->control.int_state         = vmcb02->control.int_state;
 	vmcb12->control.exit_code         = vmcb02->control.exit_code;
 	vmcb12->control.exit_code_hi      = vmcb02->control.exit_code_hi;
