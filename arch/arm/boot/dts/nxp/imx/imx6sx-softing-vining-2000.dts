@@ -500,7 +500,6 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_pcie>;
 	reset-gpio = <&gpio4 6 GPIO_ACTIVE_HIGH>;
-	reset-gpio-active-high;
 	status = "okay";
 };
 
