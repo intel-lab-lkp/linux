@@ -922,7 +922,7 @@ static struct emif_data *of_get_memory_device_details(
 	if (!emif || !pd || !dev_info) {
 		dev_err(dev, "%s: Out of memory!!\n",
 			__func__);
-		goto error;
+		goto err_put_node;
 	}
 
 	emif->plat_data		= pd;
@@ -946,7 +946,7 @@ static struct emif_data *of_get_memory_device_details(
 			pd->device_info->io_width, pd->phy_type, pd->ip_rev,
 			emif->dev)) {
 		dev_err(dev, "%s: invalid device data!!\n", __func__);
-		goto error;
+		goto err_put_node;
 	}
 	/*
 	 * For EMIF instances other than EMIF1 see if the devices connected
@@ -970,6 +970,8 @@ static struct emif_data *of_get_memory_device_details(
 	emif->plat_data->min_tck = of_get_min_tck(np_ddr, emif->dev);
 	goto out;
 
+err_put_node:
+	of_node_put(np_ddr);
 error:
 	return NULL;
 out:
@@ -1139,6 +1141,7 @@ static void emif_remove(struct platform_device *pdev)
 {
 	struct emif_data *emif = platform_get_drvdata(pdev);
 
+	of_node_put(emif->np_ddr);
 	emif_debugfs_exit(emif);
 }
 
