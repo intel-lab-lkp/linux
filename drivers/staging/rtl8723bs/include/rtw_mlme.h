@@ -93,9 +93,9 @@ struct sitesurvey_ctrl {
 };
 
 struct rt_link_detect_t {
-	u32 			NumTxOkInPeriod;
-	u32 			NumRxOkInPeriod;
-	u32 			NumRxUnicastOkInPeriod;
+	u32			tx_ok_in_period;
+	u32			NumRxOkInPeriod;
+	u32			NumRxUnicastOkInPeriod;
 	bool			bBusyTraffic;
 	bool			bTxBusyTraffic;
 	bool			bRxBusyTraffic;
