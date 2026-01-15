@@ -445,6 +445,16 @@ config I2C_AT91_SLAVE_EXPERIMENTAL
 	    - There are some mismatches with a SAMA5D4 as slave and a SAMA5D2 as
 	    master.
 
+config I2C_ATCIIC100
+	tristate "Andes I2C Controller"
+	depends on ARCH_ANDES || COMPILE_TEST
+	help
+	  If you say yes to this option, support will be included for the
+	  Andes I2C controller.
+
+	  This support is also available as a module. If so, the module
+	  will be called i2c-atciic100.
+
 config I2C_AU1550
 	tristate "Au1550/Au1200/Au1300 SMBus interface"
 	depends on MIPS_ALCHEMY
