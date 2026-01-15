@@ -11,22 +11,30 @@
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/i2c.h>
+#include <linux/i3c/master.h>
 #include <linux/i3c/device.h>
 #include <linux/init.h>
 #include <linux/jiffies.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
+#include <linux/util_macros.h>
 
 #define	DRIVER_NAME "tmp108"
+
+enum tmp108_hw_id {
+	P3T1035_ID,		/* For sensors p3t1035 and p3t2030 */
+	P3T1085_ID,
+	TMP108_ID,
+};
 
 #define	TMP108_REG_TEMP		0x00
 #define	TMP108_REG_CONF		0x01
 #define	TMP108_REG_TLOW		0x02
 #define	TMP108_REG_THIGH	0x03
 
-#define TMP108_TEMP_MIN_MC	-50000 /* Minimum millicelcius. */
-#define TMP108_TEMP_MAX_MC	127937 /* Maximum millicelcius. */
+#define TMP108_TEMP_MIN_MC	-50000 /* Minimum millicelsius. */
+#define TMP108_TEMP_MAX_MC	127937 /* Maximum millicelsius. */
 
 /* Configuration register bits.
  * Note: these bit definitions are byte swapped.
@@ -61,6 +69,7 @@
 #define TMP108_CONVRATE_1HZ		TMP108_CONF_CR0		/* Default */
 #define TMP108_CONVRATE_4HZ		TMP108_CONF_CR1
 #define TMP108_CONVRATE_16HZ		(TMP108_CONF_CR0|TMP108_CONF_CR1)
+#define TMP108_CONVRATE_SHIFT		13
 
 #define TMP108_CONF_HYSTERESIS_MASK	(TMP108_CONF_HYS0|TMP108_CONF_HYS1)
 #define TMP108_HYSTERESIS_0C		0x0000
@@ -71,10 +80,20 @@
 #define TMP108_CONVERSION_TIME_MS	30	/* in milli-seconds */
 
 struct tmp108 {
-	struct regmap *regmap;
-	u16 orig_config;
-	unsigned long ready_time;
+	struct regmap		*regmap;
+	u16			orig_config;
+	unsigned long		ready_time;
+	enum tmp108_hw_id	hw_id;
+	bool			config_reg_16bits;
+	u8			reg_buf[1];
+	u8			val_buf[3];
+	unsigned int		sample_times[4];
 };
+
+static const u16 tmp108_sample_set_masks[] = { 3 << TMP108_CONVRATE_SHIFT,
+					       2 << TMP108_CONVRATE_SHIFT,
+					       1 << TMP108_CONVRATE_SHIFT,
+					       0 << TMP108_CONVRATE_SHIFT };
 
 /* convert 12-bit TMP108 register value to milliCelsius */
 static inline int tmp108_temp_reg_to_mC(s16 val)
@@ -94,6 +113,8 @@ static int tmp108_read(struct device *dev, enum hwmon_sensor_types type,
 	struct tmp108 *tmp108 = dev_get_drvdata(dev);
 	unsigned int regval;
 	int err, hyst;
+	u16 conv_rate;
+	u8 index;
 
 	if (type == hwmon_chip) {
 		if (attr == hwmon_chip_update_interval) {
@@ -101,21 +122,10 @@ static int tmp108_read(struct device *dev, enum hwmon_sensor_types type,
 					  &regval);
 			if (err < 0)
 				return err;
-			switch (regval & TMP108_CONF_CONVRATE_MASK) {
-			case TMP108_CONVRATE_0P25HZ:
-			default:
-				*temp = 4000;
-				break;
-			case TMP108_CONVRATE_1HZ:
-				*temp = 1000;
-				break;
-			case TMP108_CONVRATE_4HZ:
-				*temp = 250;
-				break;
-			case TMP108_CONVRATE_16HZ:
-				*temp = 63;
-				break;
-			}
+			conv_rate = regval & TMP108_CONF_CONVRATE_MASK;
+			index = find_closest_descending(conv_rate, tmp108_sample_set_masks,
+							(int)ARRAY_SIZE(tmp108_sample_set_masks));
+			*temp = tmp108->sample_times[index];
 			return 0;
 		}
 		return -EOPNOTSUPP;
@@ -192,22 +202,17 @@ static int tmp108_write(struct device *dev, enum hwmon_sensor_types type,
 {
 	struct tmp108 *tmp108 = dev_get_drvdata(dev);
 	u32 regval, mask;
+	u8 index;
 	int err;
 
 	if (type == hwmon_chip) {
 		if (attr == hwmon_chip_update_interval) {
-			if (temp < 156)
-				mask = TMP108_CONVRATE_16HZ;
-			else if (temp < 625)
-				mask = TMP108_CONVRATE_4HZ;
-			else if (temp < 2500)
-				mask = TMP108_CONVRATE_1HZ;
-			else
-				mask = TMP108_CONVRATE_0P25HZ;
+			index = find_closest(temp, tmp108->sample_times,
+					     (int)ARRAY_SIZE(tmp108->sample_times));
 			return regmap_update_bits(tmp108->regmap,
 						  TMP108_REG_CONF,
 						  TMP108_CONF_CONVRATE_MASK,
-						  mask);
+						  tmp108_sample_set_masks[index]);
 		}
 		return -EOPNOTSUPP;
 	}
@@ -251,6 +256,8 @@ static int tmp108_write(struct device *dev, enum hwmon_sensor_types type,
 static umode_t tmp108_is_visible(const void *data, enum hwmon_sensor_types type,
 				 u32 attr, int channel)
 {
+	const struct tmp108 *tmp108 = data;
+
 	if (type == hwmon_chip && attr == hwmon_chip_update_interval)
 		return 0644;
 
@@ -264,8 +271,11 @@ static umode_t tmp108_is_visible(const void *data, enum hwmon_sensor_types type,
 		return 0444;
 	case hwmon_temp_min:
 	case hwmon_temp_max:
+		return 0644;
 	case hwmon_temp_min_hyst:
 	case hwmon_temp_max_hyst:
+		if (tmp108->hw_id == P3T1035_ID)
+			return 0;
 		return 0644;
 	default:
 		return 0;
@@ -311,6 +321,105 @@ static bool tmp108_is_volatile_reg(struct device *dev, unsigned int reg)
 	return reg == TMP108_REG_TEMP || reg == TMP108_REG_CONF;
 }
 
+static int tmp108_i2c_reg_read(void *context, unsigned int reg, unsigned int *val)
+{
+	struct i2c_client *client = context;
+	struct tmp108 *tmp108 = i2c_get_clientdata(client);
+	int ret;
+
+	if (reg == TMP108_REG_CONF && !tmp108->config_reg_16bits)
+		ret = i2c_smbus_read_byte_data(client, TMP108_REG_CONF);
+	else
+		ret = i2c_smbus_read_word_swapped(client, reg);
+
+	if (ret < 0)
+		return ret;
+
+	if (reg == TMP108_REG_CONF && !tmp108->config_reg_16bits)
+		*val = ret << 8;
+	else
+		*val = ret;
+
+	return 0;
+}
+
+static int tmp108_i2c_reg_write(void *context, unsigned int reg, unsigned int val)
+{
+	struct i2c_client *client = context;
+	struct tmp108 *tmp108 = i2c_get_clientdata(client);
+
+	if (reg == TMP108_REG_CONF && !tmp108->config_reg_16bits)
+		return i2c_smbus_write_byte_data(client, reg, val >> 8);
+	return i2c_smbus_write_word_swapped(client, reg, val);
+}
+
+static const struct regmap_bus tmp108_i2c_regmap_bus = {
+	.reg_read = tmp108_i2c_reg_read,
+	.reg_write = tmp108_i2c_reg_write,
+};
+
+static int tmp108_i3c_reg_read(void *context, unsigned int reg, unsigned int *val)
+{
+	struct i3c_device *i3cdev = context;
+	struct tmp108 *tmp108 = i3cdev_get_drvdata(i3cdev);
+	struct i3c_xfer xfers[] = {
+		{
+			.rnw = false,
+			.len = 1,
+			.data.out = tmp108->reg_buf,
+		},
+		{
+			.rnw = true,
+			.len = 2,
+			.data.in = tmp108->val_buf,
+		},
+	};
+	int ret;
+
+	tmp108->reg_buf[0] = reg;
+
+	if (reg == TMP108_REG_CONF && !tmp108->config_reg_16bits)
+		xfers[1].len--;
+
+	ret = i3c_device_do_xfers(i3cdev, xfers, 2, I3C_SDR);
+	if (ret < 0)
+		return ret;
+
+	*val = tmp108->val_buf[0] << 8;
+	if (!(reg == TMP108_REG_CONF && !tmp108->config_reg_16bits))
+		*val |= tmp108->val_buf[1];
+
+	return 0;
+}
+
+static int tmp108_i3c_reg_write(void *context, unsigned int reg, unsigned int val)
+{
+	struct i3c_device *i3cdev = context;
+	struct tmp108 *tmp108 = i3cdev_get_drvdata(i3cdev);
+	struct i3c_xfer xfers[] = {
+		{
+			.rnw = false,
+			.len = 3,
+			.data.out = tmp108->val_buf,
+		},
+	};
+
+	tmp108->val_buf[0] = reg;
+	tmp108->val_buf[1] = (val >> 8) & 0xff;
+
+	if (reg == TMP108_REG_CONF && !tmp108->config_reg_16bits)
+		xfers[0].len--;
+	else
+		tmp108->val_buf[2] = val & 0xff;
+
+	return i3c_device_do_xfers(i3cdev, xfers, 1, I3C_SDR);
+}
+
+static const struct regmap_bus tmp108_i3c_regmap_bus = {
+	.reg_read = tmp108_i3c_reg_read,
+	.reg_write = tmp108_i3c_reg_write,
+};
+
 static const struct regmap_config tmp108_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 16,
@@ -323,7 +432,8 @@ static const struct regmap_config tmp108_regmap_config = {
 	.use_single_write = true,
 };
 
-static int tmp108_common_probe(struct device *dev, struct regmap *regmap, char *name)
+static int tmp108_common_probe(struct device *dev, struct regmap *regmap, char *name,
+			       enum tmp108_hw_id hw_id)
 {
 	struct device *hwmon_dev;
 	struct tmp108 *tmp108;
@@ -340,10 +450,18 @@ static int tmp108_common_probe(struct device *dev, struct regmap *regmap, char *
 
 	dev_set_drvdata(dev, tmp108);
 	tmp108->regmap = regmap;
+	tmp108->hw_id = hw_id;
+	tmp108->config_reg_16bits = (hw_id == P3T1035_ID) ? false : true;
+	if (hw_id == P3T1035_ID)
+		memcpy(tmp108->sample_times, (unsigned int[]){ 125, 250, 1000, 4000 },
+		       sizeof(tmp108->sample_times));
+	else
+		memcpy(tmp108->sample_times, (unsigned int[]){ 63, 250, 1000, 4000 },
+		       sizeof(tmp108->sample_times));
 
 	err = regmap_read(tmp108->regmap, TMP108_REG_CONF, &config);
 	if (err < 0) {
-		dev_err(dev, "error reading config register: %d", err);
+		dev_err_probe(dev, err, "Error reading config register");
 		return err;
 	}
 	tmp108->orig_config = config;
@@ -351,13 +469,12 @@ static int tmp108_common_probe(struct device *dev, struct regmap *regmap, char *
 	/* Only continuous mode is supported. */
 	config &= ~TMP108_CONF_MODE_MASK;
 	config |= TMP108_MODE_CONTINUOUS;
-
 	/* Only comparator mode is supported. */
 	config &= ~TMP108_CONF_TM;
 
 	err = regmap_write(tmp108->regmap, TMP108_REG_CONF, config);
 	if (err < 0) {
-		dev_err(dev, "error writing config register: %d", err);
+		dev_err_probe(dev, err, "Error writing config register");
 		return err;
 	}
 
@@ -369,7 +486,7 @@ static int tmp108_common_probe(struct device *dev, struct regmap *regmap, char *
 
 	err = devm_add_action_or_reset(dev, tmp108_restore_config, tmp108);
 	if (err) {
-		dev_err(dev, "add action or reset failed: %d", err);
+		dev_err_probe(dev, err, "Add action or reset failed");
 		return err;
 	}
 
@@ -384,17 +501,34 @@ static int tmp108_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct regmap *regmap;
+	enum tmp108_hw_id hw_id;
+	const void *of_data;
 
 	if (!i2c_check_functionality(client->adapter,
-				     I2C_FUNC_SMBUS_WORD_DATA))
-		return dev_err_probe(dev, -ENODEV,
+				     I2C_FUNC_SMBUS_BYTE_DATA | I2C_FUNC_SMBUS_WORD_DATA))
+		return dev_err_probe(dev, -EOPNOTSUPP,
 				     "adapter doesn't support SMBus word transactions\n");
 
-	regmap = devm_regmap_init_i2c(client, &tmp108_regmap_config);
+	regmap = devm_regmap_init(dev, &tmp108_i2c_regmap_bus, client, &tmp108_regmap_config);
 	if (IS_ERR(regmap))
 		return dev_err_probe(dev, PTR_ERR(regmap), "regmap init failed");
 
-	return tmp108_common_probe(dev, regmap, client->name);
+	/* Prefer OF match data (DT-first systems) */
+	of_data = device_get_match_data(&client->dev);
+	if (of_data) {
+		hw_id = (enum tmp108_hw_id)(uintptr_t)of_data;
+	} else {
+		/* Fall back to legacy I2C ID table */
+		const struct i2c_device_id *id = i2c_client_get_device_id(client);
+
+		if (!id) {
+			dev_err_probe(dev, -ENODEV, "No matching device ID for i2c device\n");
+			return -ENODEV;
+		}
+		hw_id = (enum tmp108_hw_id)id->driver_data;
+	}
+
+	return tmp108_common_probe(dev, regmap, client->name, hw_id);
 }
 
 static int tmp108_suspend(struct device *dev)
@@ -420,16 +554,20 @@ static int tmp108_resume(struct device *dev)
 static DEFINE_SIMPLE_DEV_PM_OPS(tmp108_dev_pm_ops, tmp108_suspend, tmp108_resume);
 
 static const struct i2c_device_id tmp108_i2c_ids[] = {
-	{ "p3t1085" },
-	{ "tmp108" },
-	{ }
+	{ "p3t1035", P3T1035_ID },
+	{ "p3t1085", P3T1085_ID },
+	{ "p3t2030", P3T1035_ID },
+	{ "tmp108", TMP108_ID },
+	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(i2c, tmp108_i2c_ids);
 
 static const struct of_device_id tmp108_of_ids[] = {
-	{ .compatible = "nxp,p3t1085", },
-	{ .compatible = "ti,tmp108", },
-	{}
+	{ .compatible = "nxp,p3t1035", .data = (void *)(uintptr_t)P3T1035_ID },
+	{ .compatible = "nxp,p3t1085", .data = (void *)(uintptr_t)P3T1085_ID },
+	{ .compatible = "nxp,p3t2030", .data = (void *)(uintptr_t)P3T1035_ID },
+	{ .compatible = "ti,tmp108", .data = (void *)(uintptr_t)TMP108_ID },
+	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, tmp108_of_ids);
 
@@ -444,8 +582,9 @@ static struct i2c_driver tmp108_driver = {
 };
 
 static const struct i3c_device_id p3t1085_i3c_ids[] = {
-	I3C_DEVICE(0x011b, 0x1529, NULL),
-	{}
+	I3C_DEVICE(0x011B, 0x1529, (void *)P3T1085_ID),
+	I3C_DEVICE(0x011B, 0x152B, (void *)P3T1035_ID),
+	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(i3c, p3t1085_i3c_ids);
 
@@ -453,13 +592,22 @@ static int p3t1085_i3c_probe(struct i3c_device *i3cdev)
 {
 	struct device *dev = i3cdev_to_dev(i3cdev);
 	struct regmap *regmap;
+	const struct i3c_device_id *id;
+	enum tmp108_hw_id hw_id;
 
-	regmap = devm_regmap_init_i3c(i3cdev, &tmp108_regmap_config);
+	regmap = devm_regmap_init(dev, &tmp108_i3c_regmap_bus, i3cdev, &tmp108_regmap_config);
 	if (IS_ERR(regmap))
 		return dev_err_probe(dev, PTR_ERR(regmap),
 				     "Failed to register i3c regmap\n");
 
-	return tmp108_common_probe(dev, regmap, "p3t1085_i3c");
+	id = i3c_device_match_id(i3cdev, p3t1085_i3c_ids);
+	if (!id) {
+		dev_err_probe(dev, -ENODEV, "No matching device ID for i3c device\n");
+		return -ENODEV;
+	}
+	hw_id = (enum tmp108_hw_id)(uintptr_t)id->data;
+
+	return tmp108_common_probe(dev, regmap, "p3t1085_i3c", hw_id);
 }
 
 static struct i3c_driver p3t1085_driver = {
