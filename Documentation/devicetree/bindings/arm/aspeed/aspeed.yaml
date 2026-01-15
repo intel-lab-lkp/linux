@@ -79,6 +79,7 @@ properties:
               - ampere,mtmitchell-bmc
               - aspeed,ast2600-evb
               - aspeed,ast2600-evb-a1
+              - asus,ast2600-kommando-ipmi-card
               - asus,x4tf-bmc
               - facebook,bletchley-bmc
               - facebook,catalina-bmc
