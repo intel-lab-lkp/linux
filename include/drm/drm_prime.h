@@ -61,6 +61,7 @@ enum dma_data_direction;
 struct drm_device;
 struct drm_gem_object;
 struct drm_file;
+struct dma_buf_ops;
 
 /* core prime functions */
 struct dma_buf *drm_gem_dmabuf_export(struct drm_device *dev,
@@ -115,5 +116,7 @@ int drm_prime_sg_to_page_array(struct sg_table *sgt, struct page **pages,
 			       int max_pages);
 int drm_prime_sg_to_dma_addr_array(struct sg_table *sgt, dma_addr_t *addrs,
 				   int max_pages);
-
+struct drm_gem_object *drm_gem_prime_self_import(struct drm_device *dev,
+						 struct dma_buf *dma_buf,
+						 const struct dma_buf_ops *expected_ops);
 #endif /* __DRM_PRIME_H__ */
