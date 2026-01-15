@@ -637,3 +637,46 @@ impl From<bool> for Flag {
         Flag::new(b)
     }
 }
+
+/// A convenience wrapper around [`Atomic<Flag>`] that exposes a [`bool`] API.
+pub struct AtomicFlag(Atomic<Flag>);
+
+impl AtomicFlag {
+    /// Creates a new atomic flag.
+    #[inline(always)]
+    pub const fn new(b: bool) -> Self {
+        AtomicFlag(Atomic::new(Flag::new(b)))
+    }
+
+    /// Loads the value from the atomic flag.
+    #[inline(always)]
+    pub fn load<Ordering: ordering::AcquireOrRelaxed>(&self, o: Ordering) -> bool {
+        self.0.load(o).into()
+    }
+
+    /// Stores a value to the atomic flag.
+    #[inline(always)]
+    pub fn store<Ordering: ordering::ReleaseOrRelaxed>(&self, b: bool, o: Ordering) {
+        self.0.store(b.into(), o)
+    }
+
+    /// Stores a value to the atomic flag and returns the previous value.
+    #[inline(always)]
+    pub fn xchg<Ordering: ordering::Ordering>(&self, b: bool, o: Ordering) -> bool {
+        self.0.xchg(b.into(), o).into()
+    }
+
+    /// Store a value to the atomic flag if the current value is equal to `old`.
+    #[inline(always)]
+    pub fn cmpxchg<Ordering: ordering::Ordering>(
+        &self,
+        old: bool,
+        new: bool,
+        o: Ordering,
+    ) -> Result<bool, bool> {
+        match self.0.cmpxchg(old.into(), new.into(), o) {
+            Ok(v) => Ok(v.into()),
+            Err(v) => Err(v.into()),
+        }
+    }
+}
