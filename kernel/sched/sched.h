@@ -313,10 +313,10 @@ struct rt_prio_array {
 struct rt_bandwidth {
 	/* nests inside the rq lock: */
 	raw_spinlock_t		rt_runtime_lock;
+	unsigned int		rt_period_active;
 	ktime_t			rt_period;
 	u64			rt_runtime;
 	struct hrtimer		rt_period_timer;
-	unsigned int		rt_period_active;
 };
 
 static inline int dl_bandwidth_enabled(void)
