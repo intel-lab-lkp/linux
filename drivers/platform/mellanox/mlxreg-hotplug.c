@@ -30,6 +30,9 @@
 #define MLXREG_HOTPLUG_ATTRS_MAX	128
 #define MLXREG_HOTPLUG_NOT_ASSERT	3
 
+/* Interrupt storm frequency */
+#define MLXREG_HOTPLUG_INTR_FREQ_HZ	100
+
 /**
  * struct mlxreg_hotplug_priv_data - platform private data:
  * @irq: platform device interrupt number;
@@ -339,6 +342,57 @@ static int mlxreg_hotplug_attr_init(struct mlxreg_hotplug_priv_data *priv)
 	return 0;
 }
 
+/**
+ * mlxreg_hotplug_storm_handler - generic interrupt storm detection callback
+ * @irq: interrupt number experiencing storm
+ * @freq: detected frequency (interrupts per second)
+ * @dev_id: device data (mlxreg_hotplug_priv_data)
+ *
+ * This callback is invoked by the generic interrupt storm detection mechanism
+ * when an interrupt storm is detected on the shared IRQ line. The driver then
+ * analyzes per-device interrupt counters to identify which specific devices
+ * are causing excessive interrupts without blocking operations.
+ */
+static void mlxreg_hotplug_storm_handler(unsigned int irq, unsigned int freq, void *dev_id)
+{
+	struct mlxreg_hotplug_priv_data *priv = dev_id;
+	struct mlxreg_core_hotplug_platform_data *pdata;
+	struct mlxreg_core_item *item;
+	struct mlxreg_core_data *data;
+	unsigned long asserted;
+	u32 bit;
+
+	dev_warn(priv->dev,
+		 "Interrupt storm detected on IRQ %u (%u interrupts/sec)",
+		 irq, freq);
+
+	pdata = dev_get_platdata(&priv->pdev->dev);
+	item = pdata->items;
+	asserted = item->cache;
+
+	for_each_set_bit(bit, &asserted, 8) {
+		int pos;
+
+		pos = mlxreg_hotplug_item_label_index_get(item->mask, bit);
+		if (pos < 0)
+			goto out;
+
+		data = item->data + pos;
+		/* Check per device interrupt counter */
+		if (data->wmark_cntr >= MLXREG_HOTPLUG_INTR_FREQ_HZ - 1) {
+			dev_err(priv->dev,
+				"Storming bit %d (label: %s) - interrupt masked permanently. Replace broken HW.",
+				bit, data->label);
+			/* Mark bit as storming. */
+			item->storming_bits |= BIT(bit);
+		}
+		data->wmark_cntr = 0;
+	}
+	return;
+ out:
+	dev_err(priv->dev, "Failed to complete interrupt storm handler\n");
+}
+
 static void
 mlxreg_hotplug_work_helper(struct mlxreg_hotplug_priv_data *priv,
 			   struct mlxreg_core_item *item)
@@ -371,6 +425,10 @@ mlxreg_hotplug_work_helper(struct mlxreg_hotplug_priv_data *priv,
 			goto out;
 
 		data = item->data + pos;
+
+		/* Counter to keep track of interrupt storm */
+		data->wmark_cntr++;
+
 		if (regval & BIT(bit)) {
 			if (item->inversed)
 				mlxreg_hotplug_device_destroy(priv, data, item->kind);
@@ -390,9 +448,9 @@ mlxreg_hotplug_work_helper(struct mlxreg_hotplug_priv_data *priv,
 	if (ret)
 		goto out;
 
-	/* Unmask event. */
+	/* Unmask event, exclude storming bits. */
 	ret = regmap_write(priv->regmap, item->reg + MLXREG_HOTPLUG_MASK_OFF,
-			   item->mask);
+			   item->mask & ~item->storming_bits);
 
  out:
 	if (ret)
@@ -767,6 +825,15 @@ static int mlxreg_hotplug_probe(struct platform_device *pdev)
 
 	/* Perform initial interrupts setup. */
 	mlxreg_hotplug_set_irq(priv);
+
+	/* Register with generic interrupt storm detection */
+	if (!irq_register_storm_detection(priv->irq, MLXREG_HOTPLUG_INTR_FREQ_HZ,
+					  mlxreg_hotplug_storm_handler, priv)) {
+		dev_warn(&pdev->dev, "Failed to register generic interrupt storm detection\n");
+	} else {
+		dev_info(&pdev->dev, "Registered generic storm detection for IRQ %d\n", priv->irq);
+	}
+
 	priv->after_probe = true;
 
 	return 0;
@@ -775,6 +842,9 @@ static int mlxreg_hotplug_probe(struct platform_device *pdev)
 static void mlxreg_hotplug_remove(struct platform_device *pdev)
 {
 	struct mlxreg_hotplug_priv_data *priv = dev_get_drvdata(&pdev->dev);
+
+	/* Unregister generic interrupt storm detection */
+	irq_unregister_storm_detection(priv->irq);
 
 	/* Clean interrupts setup. */
 	mlxreg_hotplug_unset_irq(priv);
