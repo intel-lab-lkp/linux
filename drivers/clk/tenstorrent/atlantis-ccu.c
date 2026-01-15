@@ -491,6 +491,7 @@ struct atlantis_ccu {
 struct atlantis_ccu_data {
 	struct clk_hw **hws;
 	size_t num;
+	const char *reset_name;
 };
 
 static const struct clk_parent_data osc_24m_clk[] = {
@@ -706,6 +707,7 @@ static struct clk_hw *atlantis_rcpu_clks[] = {
 static const struct atlantis_ccu_data atlantis_ccu_rcpu_data = {
 	.hws = atlantis_rcpu_clks,
 	.num = ARRAY_SIZE(atlantis_rcpu_clks),
+	.reset_name = "rcpu-reset"
 };
 
 static int atlantis_ccu_clocks_register(struct device *dev,
@@ -875,6 +877,59 @@ static int atlantis_ccu_clocks_register(struct device *dev,
 	return ret;
 }
 
+static void atlantis_cadev_release(struct device *dev)
+{
+	struct auxiliary_device *adev = to_auxiliary_dev(dev);
+
+	kfree(to_atlantis_ccu_adev(adev));
+}
+
+static void atlantis_adev_unregister(void *data)
+{
+	struct auxiliary_device *adev = data;
+
+	auxiliary_device_delete(adev);
+	auxiliary_device_uninit(adev);
+}
+
+static int atlantis_ccu_adev_register(struct device *dev,
+				      struct atlantis_ccu *ccu,
+				      const struct atlantis_ccu_data *data,
+				      const char *adev_name)
+{
+	struct atlantis_ccu_adev *cadev;
+	struct auxiliary_device *adev;
+	int ret;
+
+	cadev = kzalloc(sizeof(*cadev), GFP_KERNEL);
+	if (!cadev)
+		return -ENOMEM;
+
+	cadev->regmap = ccu->regmap;
+
+	adev = &cadev->adev;
+	adev->name = adev_name;
+	adev->dev.parent = dev;
+	adev->dev.release = atlantis_cadev_release;
+	adev->dev.of_node = dev->of_node;
+
+	ret = auxiliary_device_init(adev);
+	if (ret)
+		goto err_free_cadev;
+
+	ret = auxiliary_device_add(adev);
+	if (ret) {
+		auxiliary_device_uninit(adev);
+		return ret;
+	}
+
+	return devm_add_action_or_reset(dev, atlantis_adev_unregister, adev);
+
+err_free_cadev:
+	kfree(cadev);
+
+	return ret;
+}
 static int atlantis_ccu_probe(struct platform_device *pdev)
 {
 	const struct atlantis_ccu_data *data;
@@ -904,6 +959,10 @@ static int atlantis_ccu_probe(struct platform_device *pdev)
 	ret = atlantis_ccu_clocks_register(dev, ccu, data);
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to register clocks\n");
+
+	ret = atlantis_ccu_adev_register(dev, ccu, data, data->reset_name);
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to register resets\n");
 
 	return 0;
 }
