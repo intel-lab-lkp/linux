@@ -8,6 +8,14 @@
 #include <linux/bits.h>
 #include <linux/types.h>
 
+struct atlantis_ccu_adev {
+	struct auxiliary_device adev;
+	struct regmap *regmap;
+};
+
+#define to_atlantis_ccu_adev(_adev) \
+	container_of((_adev), struct atlantis_ccu_adev, adev)
+
 /* RCPU Clock Register Offsets */
 #define RCPU_PLL_CFG_REG 0x0000
 #define RCPU_NOCC_PLL_CFG_REG 0x0004
