@@ -9,6 +9,9 @@
 
 #include "qcom.h"
 
+#define AT803X_CDT_POLL_INTERVAL_US             30000
+#define AT803X_CDT_TIMEOUT_US                   100000
+
 MODULE_DESCRIPTION("Qualcomm PHY driver Common Functions");
 MODULE_AUTHOR("Matus Ujhelyi");
 MODULE_AUTHOR("Christian Marangi <ansuelsmth@gmail.com>");
@@ -484,7 +487,9 @@ int at803x_cdt_wait_for_completion(struct phy_device *phydev,
 	/* One test run takes about 25ms */
 	ret = phy_read_poll_timeout(phydev, AT803X_CDT, val,
 				    !(val & cdt_en),
-				    30000, 100000, true);
+				    AT803X_CDT_POLL_INTERVAL_US,
+				    AT803X_CDT_TIMEOUT_US,
+				    true);
 
 	return ret < 0 ? ret : 0;
 }
