@@ -960,9 +960,6 @@ static noinline int balance_level(struct btrfs_trans_handle *trans,
 
 		return promote_child_to_root(trans, root, path, level, mid);
 	}
-	if (btrfs_header_nritems(mid) >
-	    BTRFS_NODEPTRS_PER_BLOCK(fs_info) / 4)
-		return 0;
 
 	if (pslot) {
 		left = btrfs_read_node_slot(parent, pslot - 1);
@@ -1646,8 +1643,8 @@ setup_nodes_for_search(struct btrfs_trans_handle *trans,
 		ret = split_node(trans, root, p, level);
 
 		b = p->nodes[level];
-	} else if (ins_len < 0 && btrfs_header_nritems(b) <
-		   BTRFS_NODEPTRS_PER_BLOCK(fs_info) / 2) {
+	} else if (ins_len < 0 && btrfs_header_nritems(b) <=
+		   BTRFS_NODEPTRS_PER_BLOCK(fs_info) / 4) {
 
 		if (*write_lock_level < level + 1) {
 			*write_lock_level = level + 1;
