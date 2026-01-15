@@ -466,6 +466,10 @@ static int em_create_pd(struct device *dev, int nr_states,
 	if (_is_cpu_device(dev))
 		for_each_cpu(cpu, cpus) {
 			cpu_dev = get_cpu_device(cpu);
+			if (!cpu_dev) {
+				ret = -ENODEV;
+				goto free_pd_table;
+			}
 			cpu_dev->em_pd = pd;
 		}
 
