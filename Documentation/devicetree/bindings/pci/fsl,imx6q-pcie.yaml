@@ -63,12 +63,6 @@ properties:
       reset signal. It's not polarity aware and defaults to active-low reset
       sequence (L=reset state, H=operation state) (optional required).
 
-  reset-gpio-active-high:
-    description: If present then the reset sequence using the GPIO
-      specified in the "reset-gpio" property is reversed (H=reset state,
-      L=operation state) (optional required).
-    type: boolean
-
 required:
   - compatible
   - reg
