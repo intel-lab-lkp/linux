@@ -211,15 +211,15 @@ long parse_ns_duration(char *val)
 	t = strtol(val, &end, 10);
 
 	if (end) {
-		if (!strncmp(end, "ns", 2)) {
+		if (strcmp(end, "ns") == 0) {
 			return t;
-		} else if (!strncmp(end, "us", 2)) {
+		} else if (strcmp(end, "us") == 0) {
 			t *= 1000;
 			return t;
-		} else if (!strncmp(end, "ms", 2)) {
+		} else if (strcmp(end, "ms") == 0) {
 			t *= 1000 * 1000;
 			return t;
-		} else if (!strncmp(end, "s", 1)) {
+		} else if (strcmp(end, "s") == 0) {
 			t *= 1000 * 1000 * 1000;
 			return t;
 		}
