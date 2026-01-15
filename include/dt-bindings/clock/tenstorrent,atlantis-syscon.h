@@ -64,4 +64,38 @@
 #define CLK_CAN0_TIMER_CLK 52
 #define CLK_CAN1_TIMER_CLK 53
 
+/* RCPU domain reset */
+#define RST_SMNDMA0  0
+#define RST_SMNDMA1  1
+#define RST_WDT0     2
+#define RST_WDT1     3
+#define RST_TMR      4
+#define RST_PVTC     5
+#define RST_PMU      6
+#define RST_MAILBOX  7
+#define RST_SPACC    8
+#define RST_OTP      9
+#define RST_TRNG     10
+#define RST_CRC      11
+#define RST_QSPI     12
+#define RST_I2C0     13
+#define RST_I2C1     14
+#define RST_I2C2     15
+#define RST_I2C3     16
+#define RST_I2C4     17
+#define RST_UART0    18
+#define RST_UART1    19
+#define RST_UART2    20
+#define RST_UART3    21
+#define RST_UART4    22
+#define RST_SPI0     23
+#define RST_SPI1     24
+#define RST_SPI2     25
+#define RST_SPI3     26
+#define RST_GPIO     27
+#define RST_CAN0     28
+#define RST_CAN1     29
+#define RST_I2S0     30
+#define RST_I2S1     31
+
 #endif /* _DT_BINDINGS_ATLANTIS_SYSCON_H */
