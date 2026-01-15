@@ -774,6 +774,13 @@ struct gve_flow_rule {
 	struct gve_flow_spec mask;
 };
 
+struct gve_tstamp_conversion {
+	u64 last_sync_ns;
+	seqlock_t lock; /* protects tc and cc */
+	struct timecounter tc;
+	struct cyclecounter cc;
+};
+
 struct gve_flow_rules_cache {
 	bool rules_cache_synced; /* False if the driver's rules_cache is outdated */
 	struct gve_adminq_queried_flow_rule *rules_cache;
@@ -925,6 +932,7 @@ struct gve_priv {
 	struct gve_nic_ts_report *nic_ts_report;
 	dma_addr_t nic_ts_report_bus;
 	u64 last_sync_nic_counter; /* Clock counter from last NIC TS report */
+	struct gve_tstamp_conversion ts_real;
 };
 
 enum gve_service_task_flags_bit {

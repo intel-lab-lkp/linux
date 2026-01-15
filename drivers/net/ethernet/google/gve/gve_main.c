@@ -2198,6 +2198,32 @@ static int gve_set_ts_config(struct net_device *dev,
 	return 0;
 }
 
+static ktime_t gve_get_tstamp(struct net_device *dev,
+			      const struct skb_shared_hwtstamps *hwtstamps,
+			      enum netdev_tstamp_type type)
+{
+	struct gve_priv *priv = netdev_priv(dev);
+	unsigned int seq;
+	u64 ns;
+
+	if (type == NETDEV_TSTAMP_RAW)
+		return hwtstamps->hwtstamp;
+
+	if (type != NETDEV_TSTAMP_REALTIME)
+		return 0;
+
+	/* Skip if never synced */
+	if (!READ_ONCE(priv->ts_real.last_sync_ns))
+		return 0;
+
+	do {
+		seq = read_seqbegin(&priv->ts_real.lock);
+		ns = timecounter_cyc2time(&priv->ts_real.tc,
+					  hwtstamps->hwtstamp);
+	} while (read_seqretry(&priv->ts_real.lock, seq));
+	return ns_to_ktime(ns);
+}
+
 static const struct net_device_ops gve_netdev_ops = {
 	.ndo_start_xmit		=	gve_start_xmit,
 	.ndo_features_check	=	gve_features_check,
@@ -2209,6 +2235,7 @@ static const struct net_device_ops gve_netdev_ops = {
 	.ndo_bpf		=	gve_xdp,
 	.ndo_xdp_xmit		=	gve_xdp_xmit,
 	.ndo_xsk_wakeup		=	gve_xsk_wakeup,
+	.ndo_get_tstamp		=	gve_get_tstamp,
 	.ndo_hwtstamp_get	=	gve_get_ts_config,
 	.ndo_hwtstamp_set	=	gve_set_ts_config,
 };
