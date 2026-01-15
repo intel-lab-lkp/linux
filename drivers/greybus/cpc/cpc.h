@@ -9,15 +9,15 @@
 #include <linux/device.h>
 #include <linux/greybus.h>
 #include <linux/mutex.h>
+#include <linux/skbuff.h>
 #include <linux/types.h>
-
-struct sk_buff;
 
 /**
  * struct cpc_cport - CPC cport
  * @id: cport ID
  * @cpc_hd: pointer to the CPC host device this cport belongs to
  * @lock: mutex to synchronize accesses to tcb and other attributes
+ * @holding_queue: list of frames queued to be sent
  * @tcb: Transmission Control Block
  */
 struct cpc_cport {
@@ -25,6 +25,8 @@ struct cpc_cport {
 
 	struct cpc_host_device *cpc_hd;
 	struct mutex lock; /* Synchronize access to state variables */
+
+	struct sk_buff_head holding_queue;
 
 	/*
 	 * @ack: current acknowledge number
@@ -42,7 +44,7 @@ void cpc_cport_release(struct cpc_cport *cport);
 void cpc_cport_pack(struct gb_operation_msg_hdr *gb_hdr, u16 cport_id);
 u16 cpc_cport_unpack(struct gb_operation_msg_hdr *gb_hdr);
 
-int cpc_cport_transmit(struct cpc_cport *cport, struct sk_buff *skb);
+void cpc_cport_transmit(struct cpc_cport *cport, struct sk_buff *skb);
 
 struct cpc_skb_cb {
 	struct cpc_cport *cport;
@@ -58,7 +60,7 @@ struct cpc_skb_cb {
 
 #define CPC_SKB_CB(__skb) ((struct cpc_skb_cb *)&((__skb)->cb[0]))
 
-void cpc_protocol_prepare_header(struct sk_buff *skb, u8 ack);
 void cpc_protocol_on_data(struct cpc_cport *cport, struct sk_buff *skb);
+void __cpc_protocol_write_head(struct cpc_cport *cport);
 
 #endif

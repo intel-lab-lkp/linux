@@ -7,7 +7,6 @@
 #include <linux/skbuff.h>
 
 #include "cpc.h"
-#include "host.h"
 
 /**
  * cpc_cport_tcb_reset() - Reset cport's TCB to initial values.
@@ -38,13 +37,21 @@ struct cpc_cport *cpc_cport_alloc(u16 cport_id, gfp_t gfp_mask)
 	cpc_cport_tcb_reset(cport);
 
 	mutex_init(&cport->lock);
+	skb_queue_head_init(&cport->holding_queue);
 
 	return cport;
 }
 
 void cpc_cport_release(struct cpc_cport *cport)
 {
+	skb_queue_purge(&cport->holding_queue);
 	kfree(cport);
+}
+
+static void cpc_cport_queue_skb(struct cpc_cport *cport, struct sk_buff *skb)
+{
+	__skb_header_release(skb);
+	__skb_queue_tail(&cport->holding_queue, skb);
 }
 
 /**
@@ -78,11 +85,9 @@ u16 cpc_cport_unpack(struct gb_operation_msg_hdr *gb_hdr)
  * @cport: cport.
  * @skb: skb to be transmitted.
  */
-int cpc_cport_transmit(struct cpc_cport *cport, struct sk_buff *skb)
+void cpc_cport_transmit(struct cpc_cport *cport, struct sk_buff *skb)
 {
-	struct cpc_host_device *cpc_hd = cport->cpc_hd;
 	struct gb_operation_msg_hdr *gb_hdr;
-	u8 ack;
 
 	/* Inject cport ID in Greybus header */
 	gb_hdr = (struct gb_operation_msg_hdr *)skb->data;
@@ -94,11 +99,9 @@ int cpc_cport_transmit(struct cpc_cport *cport, struct sk_buff *skb)
 	CPC_SKB_CB(skb)->cpc_flags = CPC_SKB_FLAG_REQ_ACK;
 
 	cport->tcb.seq++;
-	ack = cport->tcb.ack;
+
+	cpc_cport_queue_skb(cport, skb);
+	__cpc_protocol_write_head(cport);
 
 	mutex_unlock(&cport->lock);
-
-	cpc_protocol_prepare_header(skb, ack);
-
-	return cpc_hd_send_skb(cpc_hd, skb);
 }

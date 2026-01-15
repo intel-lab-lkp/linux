@@ -14,7 +14,7 @@ static bool cpc_skb_is_sequenced(struct sk_buff *skb)
 	return CPC_SKB_CB(skb)->cpc_flags & CPC_SKB_FLAG_REQ_ACK;
 }
 
-void cpc_protocol_prepare_header(struct sk_buff *skb, u8 ack)
+static void cpc_protocol_prepare_header(struct sk_buff *skb, u8 ack)
 {
 	struct cpc_header *hdr;
 
@@ -83,5 +83,28 @@ void cpc_protocol_on_data(struct cpc_cport *cport, struct sk_buff *skb)
 		skb_pull(skb, CPC_HEADER_SIZE);
 
 		greybus_data_rcvd(cport->cpc_hd->gb_hd, cport->id, skb->data, skb->len);
+	}
+}
+
+static void __cpc_protocol_write_skb(struct cpc_cport *cport, struct sk_buff *skb, u8 ack)
+{
+	cpc_protocol_prepare_header(skb, ack);
+
+	cpc_hd_send_skb(cport->cpc_hd, skb);
+}
+
+/* Write skbs at the head of holding queue */
+void __cpc_protocol_write_head(struct cpc_cport *cport)
+{
+	struct sk_buff *skb;
+	u8 ack;
+
+	ack = cport->tcb.ack;
+
+	/* For each SKB in the holding queue, clone it and pass it to lower layer */
+	while ((skb = skb_peek(&cport->holding_queue))) {
+		skb_unlink(skb, &cport->holding_queue);
+
+		__cpc_protocol_write_skb(cport, skb, ack);
 	}
 }
