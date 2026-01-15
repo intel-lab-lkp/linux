@@ -4217,8 +4217,16 @@ static void svm_cancel_injection(struct kvm_vcpu *vcpu)
 
 static int svm_vcpu_pre_run(struct kvm_vcpu *vcpu)
 {
+	struct vcpu_svm *svm = to_svm(vcpu);
+
 	if (to_kvm_sev_info(vcpu->kvm)->need_init)
 		return -EINVAL;
+
+	if (svm->nested.restore_gpat_from_pat) {
+		svm->vmcb->save.g_pat = vcpu->arch.pat;
+		vmcb_mark_dirty(svm->vmcb, VMCB_NPT);
+		svm->nested.restore_gpat_from_pat = false;
+	}
 
 	return 1;
 }

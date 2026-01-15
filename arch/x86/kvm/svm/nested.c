@@ -1958,9 +1958,12 @@ static int svm_set_nested_state(struct kvm_vcpu *vcpu,
 	if (ret)
 		goto out_free;
 
-	if (is_guest_mode(vcpu) && nested_npt_enabled(svm) &&
-	    (kvm_state.hdr.svm.flags & KVM_STATE_SVM_VALID_GPAT))
-		svm->vmcb->save.g_pat = save_cached.g_pat;
+	if (is_guest_mode(vcpu) && nested_npt_enabled(svm)) {
+		svm->nested.restore_gpat_from_pat =
+			!(kvm_state->hdr.svm.flags & KVM_STATE_SVM_VALID_GPAT);
+		if (kvm_state->hdr.svm.flags & KVM_STATE_SVM_VALID_GPAT)
+			svm->vmcb->save.g_pat = save_cached.g_pat;
+	}
 
 	svm->nested.force_msr_bitmap_recalc = true;
 

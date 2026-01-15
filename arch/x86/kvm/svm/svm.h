@@ -219,6 +219,12 @@ struct svm_nested_state {
 	 * on its side.
 	 */
 	bool force_msr_bitmap_recalc;
+
+	/*
+	 * Indicates that vcpu->arch.pat should be copied to
+	 * vmcb02->save.g_pat at the next vcpu_run.
+	 */
+	bool restore_gpat_from_pat;
 };
 
 struct vcpu_sev_es_state {
