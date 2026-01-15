@@ -155,6 +155,17 @@ config IRQ_KUNIT_TEST
 
 endmenu
 
+config IRQ_SW_MODERATION
+	bool "Enable Global Software Interrupt Moderation"
+	depends on PROC_FS
+	help
+	  Enable Global Software Interrupt Moderation.
+	  Uses a local timer to delay interrupts in configurable ways
+	  and depending on various global system load indicators
+	  and targets.
+
+	  If you don't know what to do here, say N.
+
 config GENERIC_IRQ_MULTI_HANDLER
 	bool
 	help

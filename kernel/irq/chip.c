@@ -18,6 +18,7 @@
 #include <trace/events/irq.h>
 
 #include "internals.h"
+#include "irq_moderation.h"
 
 static irqreturn_t bad_chained_irq(int irq, void *dev_id)
 {
@@ -486,6 +487,10 @@ static bool irq_can_handle_pm(struct irq_desc *desc)
 	if (!irqd_has_set(irqd, IRQD_IRQ_INPROGRESS | IRQD_WAKEUP_ARMED))
 		return true;
 
+	/* Moderated ones (also have IRQD_IRQ_INPROGRESS) need early return. */
+	if (irqd_has_set(&desc->irq_data, IRQD_IRQ_MODERATED))
+		return false;
+
 	/*
 	 * If the interrupt is an armed wakeup source, mark it pending
 	 * and suspended, disable it and notify the pm core about the
@@ -745,6 +750,10 @@ void handle_fasteoi_irq(struct irq_desc *desc)
 	 * handling the previous one - it may need to be resent.
 	 */
 	if (!irq_can_handle_pm(desc)) {
+		if (irqd_has_set(&desc->irq_data, IRQD_IRQ_MODERATED)) {
+			desc->istate |= IRQS_PENDING;
+			mask_irq(desc);
+		}
 		if (irqd_needs_resend_when_in_progress(&desc->irq_data))
 			desc->istate |= IRQS_PENDING;
 		cond_eoi_irq(chip, &desc->irq_data);
@@ -764,6 +773,9 @@ void handle_fasteoi_irq(struct irq_desc *desc)
 	handle_irq_event(desc);
 
 	cond_unmask_eoi_irq(desc, chip);
+
+	if (irq_start_moderation(desc))
+		return;
 
 	/*
 	 * When the race described above happens this will resend the interrupt.
@@ -853,6 +865,9 @@ void handle_edge_irq(struct irq_desc *desc)
 		}
 
 		handle_irq_event(desc);
+
+		if (irq_start_moderation(desc))
+			break;
 
 	} while ((desc->istate & IRQS_PENDING) && !irqd_irq_disabled(&desc->irq_data));
 }

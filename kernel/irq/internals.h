@@ -521,3 +521,13 @@ static inline void irq_debugfs_copy_devname(int irq, struct device *dev)
 {
 }
 #endif /* CONFIG_GENERIC_IRQ_DEBUGFS */
+
+#ifdef CONFIG_IRQ_SW_MODERATION
+void irq_moderation_init_fields(struct irq_desc_mod *mod);
+void irq_moderation_procfs_add(struct irq_desc *desc, umode_t umode);
+void irq_moderation_procfs_remove(struct irq_desc *desc);
+#else
+static inline void irq_moderation_init_fields(struct irq_desc_mod *mod) {}
+static inline void irq_moderation_procfs_add(struct irq_desc *desc, umode_t umode) {}
+static inline void irq_moderation_procfs_remove(struct irq_desc *desc) {}
+#endif

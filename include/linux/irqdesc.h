@@ -18,6 +18,16 @@ struct irq_domain;
 struct pt_regs;
 
 /**
+ * struct irq_desc_mod - interrupt moderation information
+ * @ms_node:		per-CPU list of moderated irq_desc
+ */
+struct irq_desc_mod {
+#ifdef CONFIG_IRQ_SW_MODERATION
+	struct list_head	ms_node;
+#endif
+};
+
+/**
  * struct irqstat - interrupt statistics
  * @cnt:	real-time interrupt count
  * @ref:	snapshot of interrupt count
@@ -46,6 +56,7 @@ struct irqstat {
  * @threads_handled:	stats field for deferred spurious detection of threaded handlers
  * @threads_handled_last: comparator field for deferred spurious detection of threaded handlers
  * @lock:		locking for SMP
+ * @mod_state:		moderation state
  * @affinity_hint:	hint to user space for preferred irq affinity
  * @affinity_notify:	context for notification of affinity changes
  * @pending_mask:	pending rebalanced interrupts
@@ -81,6 +92,7 @@ struct irq_desc {
 	atomic_t		threads_handled;
 	int			threads_handled_last;
 	raw_spinlock_t		lock;
+	struct irq_desc_mod	mod_state;
 	struct cpumask		*percpu_enabled;
 #ifdef CONFIG_SMP
 	const struct cpumask	*affinity_hint;
