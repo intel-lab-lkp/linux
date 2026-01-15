@@ -463,10 +463,20 @@ static void gswip_shutdown(struct platform_device *pdev)
 }
 
 static const struct gswip_hw_info gswip_xrx200 = {
-	.max_ports = 7,
+	.max_ports = GSWIP_MAX_PORTS,
 	.allowed_cpu_ports = BIT(6),
-	.mii_ports = BIT(0) | BIT(1) | BIT(5),
-	.mii_port_reg_offset = 0,
+	.mii_cfg = {
+		[0 ... GSWIP_MAX_PORTS - 1] = -1,
+		[0] = GSWIP_MII_CFGp(0),
+		[1] = GSWIP_MII_CFGp(1),
+		[5] = GSWIP_MII_CFGp(5),
+	},
+	.mii_pcdu = {
+		[0 ... GSWIP_MAX_PORTS - 1] = -1,
+		[0] = GSWIP_MII_PCDU0,
+		[1] = GSWIP_MII_PCDU1,
+		[5] = GSWIP_MII_PCDU5,
+	},
 	.phylink_get_caps = gswip_xrx200_phylink_get_caps,
 	.pce_microcode = &gswip_pce_microcode,
 	.pce_microcode_size = ARRAY_SIZE(gswip_pce_microcode),
@@ -474,10 +484,18 @@ static const struct gswip_hw_info gswip_xrx200 = {
 };
 
 static const struct gswip_hw_info gswip_xrx300 = {
-	.max_ports = 7,
+	.max_ports = GSWIP_MAX_PORTS,
 	.allowed_cpu_ports = BIT(6),
-	.mii_ports = BIT(0) | BIT(5),
-	.mii_port_reg_offset = 0,
+	.mii_cfg = {
+		[0 ... GSWIP_MAX_PORTS - 1] = -1,
+		[0] = GSWIP_MII_CFGp(0),
+		[5] = GSWIP_MII_CFGp(5),
+	},
+	.mii_pcdu = {
+		[0 ... GSWIP_MAX_PORTS - 1] = -1,
+		[0] = GSWIP_MII_PCDU0,
+		[5] = GSWIP_MII_PCDU5,
+	},
 	.phylink_get_caps = gswip_xrx300_phylink_get_caps,
 	.pce_microcode = &gswip_pce_microcode,
 	.pce_microcode_size = ARRAY_SIZE(gswip_pce_microcode),
