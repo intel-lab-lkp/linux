@@ -224,7 +224,35 @@ static inline bool folio_try_hugetlb_mte_tagging(struct folio *folio)
 }
 #endif
 
-static inline void mte_disable_tco_entry(struct task_struct *task)
+static inline bool user_uses_tagcheck(struct task_struct *task)
+{
+	/*
+	 * To decide whether userspace wants tag checking we only look
+	 * at TCF0 (SCTLR_EL1.TCF0 bit 0 is set for both synchronous
+	 * or asymmetric mode).
+	 *
+	 * There's an argument that could be made that the kernel
+	 * should also consider the state of TCO (tag check override)
+	 * since userspace does have the ability to set that as well,
+	 * and that could suggest a desire to disable tag checking in
+	 * spite of the state of TCF0. However, the Linux kernel has
+	 * never historically considered the userspace state of TCO,
+	 * (so changing this would be an ABI break), and the hardware
+	 * unconditionally sets TCO when an exception occurs
+	 * anyway.
+	 *
+	 * So, again, here we look only at TCF0 and do not consider
+	 * TCO.
+	 */
+	return (task->thread.sctlr_user & (1UL << SCTLR_EL1_TCF0_SHIFT));
+}
+
+/*
+ * Set the kernel's desired policy for MTE tag checking.
+ *
+ * This function should be used right after the kernel entry.
+ */
+static inline void set_kernel_mte_policy(struct task_struct *task)
 {
 	if (!system_supports_mte())
 		return;
@@ -232,15 +260,13 @@ static inline void mte_disable_tco_entry(struct task_struct *task)
 	/*
 	 * Re-enable tag checking (TCO set on exception entry). This is only
 	 * necessary if MTE is enabled in either the kernel or the userspace
-	 * task in synchronous or asymmetric mode (SCTLR_EL1.TCF0 bit 0 is set
-	 * for both). With MTE disabled in the kernel and disabled or
-	 * asynchronous in userspace, tag check faults (including in uaccesses)
-	 * are not reported, therefore there is no need to re-enable checking.
+	 * task. With MTE disabled in the kernel and disabled or asynchronous
+	 * in userspace, tag check faults (including in uaccesses) are not
+	 * reported, therefore there is no need to re-enable checking.
 	 * This is beneficial on microarchitectures where re-enabling TCO is
 	 * expensive.
 	 */
-	if (kasan_hw_tags_enabled() ||
-	    (task->thread.sctlr_user & (1UL << SCTLR_EL1_TCF0_SHIFT)))
+	if (kasan_hw_tags_enabled() || user_uses_tagcheck(task))
 		asm volatile(SET_PSTATE_TCO(0));
 }
 
