@@ -2581,10 +2581,19 @@ static int kvm_set_tsc_khz(struct kvm_vcpu *vcpu, u32 user_tsc_khz)
 
 static u64 compute_guest_tsc(struct kvm_vcpu *vcpu, s64 kernel_ns)
 {
-	u64 tsc = pvclock_scale_delta(kernel_ns-vcpu->arch.this_tsc_nsec,
-				      vcpu->arch.virtual_tsc_mult,
-				      vcpu->arch.virtual_tsc_shift);
-	tsc += vcpu->arch.this_tsc_write;
+	s64 delta = kernel_ns - vcpu->arch.this_tsc_nsec;
+	u64 tsc = vcpu->arch.this_tsc_write;
+
+	/* pvclock_scale_delta cannot cope with negative deltas */
+	if (delta >= 0)
+		tsc += pvclock_scale_delta(delta,
+					   vcpu->arch.virtual_tsc_mult,
+					   vcpu->arch.virtual_tsc_shift);
+	else
+		tsc -= pvclock_scale_delta(-delta,
+					   vcpu->arch.virtual_tsc_mult,
+					   vcpu->arch.virtual_tsc_shift);
+
 	return tsc;
 }
 
@@ -2595,7 +2604,7 @@ static inline bool gtod_is_based_on_tsc(int mode)
 }
 #endif
 
-static void kvm_track_tsc_matching(struct kvm_vcpu *vcpu, bool new_generation)
+static void kvm_track_tsc_matching(struct kvm_vcpu *vcpu)
 {
 #ifdef CONFIG_X86_64
 	struct kvm_arch *ka = &vcpu->kvm->arch;
@@ -2612,12 +2621,9 @@ static void kvm_track_tsc_matching(struct kvm_vcpu *vcpu, bool new_generation)
 
 	/*
 	 * Request a masterclock update if the masterclock needs to be toggled
-	 * on/off, or when starting a new generation and the masterclock is
-	 * enabled (compute_guest_tsc() requires the masterclock snapshot to be
-	 * taken _after_ the new generation is created).
+	 * on/off.
 	 */
-	if ((ka->use_master_clock && new_generation) ||
-	    (ka->use_master_clock != use_master_clock))
+	if (ka->use_master_clock != use_master_clock)
 		kvm_make_request(KVM_REQ_MASTERCLOCK_UPDATE, vcpu);
 
 	trace_kvm_track_tsc(vcpu->vcpu_id, ka->nr_vcpus_matched_tsc,
@@ -2803,7 +2809,7 @@ static void __kvm_synchronize_tsc(struct kvm_vcpu *vcpu, u64 offset, u64 tsc,
 	vcpu->arch.this_tsc_nsec = kvm->arch.cur_tsc_nsec;
 	vcpu->arch.this_tsc_write = kvm->arch.cur_tsc_write;
 
-	kvm_track_tsc_matching(vcpu, !matched);
+	kvm_track_tsc_matching(vcpu);
 }
 
 static void kvm_synchronize_tsc(struct kvm_vcpu *vcpu, u64 *user_value)
