@@ -147,15 +147,25 @@ ssize_t fuse_passthrough_mmap(struct file *file, struct vm_area_struct *vma)
 /*
  * Setup passthrough to a backing file.
  *
+ * If fuse inode backing is provided and FOPEN_PASSTHROUGH_INODE_CACHE flag
+ * is set, try to reuse it first before looking up backing_id.
+ *
  * Returns an fb object with elevated refcount to be stored in fuse inode.
  */
 struct fuse_backing *fuse_passthrough_open(struct file *file, int backing_id)
 {
 	struct fuse_file *ff = file->private_data;
 	struct fuse_conn *fc = ff->fm->fc;
+	struct fuse_inode *fi = get_fuse_inode(file->f_inode);
 	struct fuse_backing *fb = NULL;
 	struct file *backing_file;
 	int err;
+
+	if (ff->open_flags & FOPEN_PASSTHROUGH_INODE_CACHE) {
+		fb = fuse_backing_get(fuse_inode_backing(fi));
+		if (fb)
+			goto do_open;
+	}
 
 	err = -EINVAL;
 	if (backing_id <= 0)
@@ -166,6 +176,7 @@ struct fuse_backing *fuse_passthrough_open(struct file *file, int backing_id)
 	if (!fb)
 		goto out;
 
+do_open:
 	/* Allocate backing file per fuse file to store fuse path */
 	backing_file = backing_file_open(&file->f_path, file->f_flags,
 					 &fb->file->f_path, fb->cred);

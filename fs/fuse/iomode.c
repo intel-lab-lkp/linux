@@ -163,7 +163,7 @@ static void fuse_file_uncached_io_release(struct fuse_file *ff,
  */
 #define FOPEN_PASSTHROUGH_MASK \
 	(FOPEN_PASSTHROUGH | FOPEN_DIRECT_IO | FOPEN_PARALLEL_DIRECT_WRITES | \
-	 FOPEN_NOFLUSH)
+	 FOPEN_NOFLUSH | FOPEN_PASSTHROUGH_INODE_CACHE)
 
 static int fuse_file_passthrough_open(struct inode *inode, struct file *file)
 {
