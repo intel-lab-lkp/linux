@@ -1315,7 +1315,11 @@ void __init kpti_install_ng_mappings(void)
 
 static pgprot_t __init kernel_exec_prot(void)
 {
+#if defined(CONFIG_STRICT_KERNEL_RWX) || defined(CONFIG_STRICT_MODULE_RWX)
 	return rodata_enabled ? PAGE_KERNEL_ROX : PAGE_KERNEL_EXEC;
+#else
+	return PAGE_KERNEL_EXEC;
+#endif
 }
 
 static int __init map_entry_trampoline(void)
