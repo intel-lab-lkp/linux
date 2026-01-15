@@ -961,7 +961,7 @@ waiting_done:
 		wait_for_completion(&drain->done);
 }
 
-void hns_roce_v2_drain_rq(struct ib_qp *ibqp)
+static void hns_roce_v2_drain_rq(struct ib_qp *ibqp)
 {
 	struct hns_roce_dev *hr_dev = to_hr_dev(ibqp->device);
 	struct ib_qp_attr attr = { .qp_state = IB_QPS_ERR };
@@ -998,7 +998,7 @@ void hns_roce_v2_drain_rq(struct ib_qp *ibqp)
 	handle_drain_completion(cq, &rdrain, hr_dev);
 }
 
-void hns_roce_v2_drain_sq(struct ib_qp *ibqp)
+static void hns_roce_v2_drain_sq(struct ib_qp *ibqp)
 {
 	struct hns_roce_dev *hr_dev = to_hr_dev(ibqp->device);
 	struct ib_qp_attr attr = { .qp_state = IB_QPS_ERR };
