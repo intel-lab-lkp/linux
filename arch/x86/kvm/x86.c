@@ -7173,6 +7173,8 @@ static int kvm_vm_ioctl_set_clock(struct kvm *kvm, void __user *argp)
 {
 	struct kvm_arch *ka = &kvm->arch;
 	struct kvm_clock_data data;
+	struct kvm_vcpu *vcpu;
+	unsigned long i;
 	u64 now_raw_ns;
 
 	if (copy_from_user(&data, argp, sizeof(data)))
@@ -7211,6 +7213,12 @@ static int kvm_vm_ioctl_set_clock(struct kvm *kvm, void __user *argp)
 	else
 		now_raw_ns = get_kvmclock_base_ns();
 	ka->kvmclock_offset = data.clock - now_raw_ns;
+
+	if (kvm->arch.use_master_clock) {
+		kvm_for_each_vcpu(i, vcpu, kvm)
+			kvm_clear_request(KVM_REQ_MASTERCLOCK_UPDATE, vcpu);
+	}
+
 	kvm_end_pvclock_update(kvm);
 	return 0;
 }
