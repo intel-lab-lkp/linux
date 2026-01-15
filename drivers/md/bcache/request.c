@@ -1104,7 +1104,14 @@ static void detached_dev_end_io(struct bio *bio)
 	}
 
 	kfree(ddip);
-	bio_endio(bio);
+	/*
+	 * This is an exception where bio_endio() cannot be used.
+	 * We are already called from within a bio_endio() stack;
+	 * calling it again here would result in a double-completion
+	 * (decrementing bi_remaining twice). We must call the
+	 * original completion routine directly.
+	 */
+	bio->bi_end_io(bio);
 }
 
 static void detached_dev_do_request(struct bcache_device *d, struct bio *bio,
@@ -1136,7 +1143,7 @@ static void detached_dev_do_request(struct bcache_device *d, struct bio *bio,
 
 	if ((bio_op(bio) == REQ_OP_DISCARD) &&
 	    !bdev_max_discard_sectors(dc->bdev))
-		detached_dev_end_io(bio);
+		bio_endio(bio);
 	else
 		submit_bio_noacct(bio);
 }
