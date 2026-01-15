@@ -369,7 +369,8 @@ static bool __nested_vmcb_check_controls(struct kvm_vcpu *vcpu,
 
 /* Common checks that apply to both L1 and L2 state.  */
 static bool __nested_vmcb_check_save(struct kvm_vcpu *vcpu,
-				     struct vmcb_save_area_cached *save)
+				     struct vmcb_save_area_cached *save,
+				     struct vmcb_ctrl_area_cached *control)
 {
 	if (CC(!(save->efer & EFER_SVME)))
 		return false;
@@ -400,6 +401,10 @@ static bool __nested_vmcb_check_save(struct kvm_vcpu *vcpu,
 	if (CC(!kvm_valid_efer(vcpu, save->efer)))
 		return false;
 
+	if (CC((control->nested_ctl & SVM_NESTED_CTL_NP_ENABLE) &&
+	       npt_enabled && !kvm_pat_valid(save->g_pat)))
+		return false;
+
 	return true;
 }
 
@@ -407,8 +412,9 @@ static bool nested_vmcb_check_save(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
 	struct vmcb_save_area_cached *save = &svm->nested.save;
+	struct vmcb_ctrl_area_cached *ctl = &svm->nested.ctl;
 
-	return __nested_vmcb_check_save(vcpu, save);
+	return __nested_vmcb_check_save(vcpu, save, ctl);
 }
 
 static bool nested_vmcb_check_controls(struct kvm_vcpu *vcpu)
@@ -1892,7 +1898,7 @@ static int svm_set_nested_state(struct kvm_vcpu *vcpu,
 	if (!(save->cr0 & X86_CR0_PG) ||
 	    !(save->cr0 & X86_CR0_PE) ||
 	    (save->rflags & X86_EFLAGS_VM) ||
-	    !__nested_vmcb_check_save(vcpu, &save_cached))
+	    !__nested_vmcb_check_save(vcpu, &save_cached, &ctl_cached))
 		goto out_free;
 
 
