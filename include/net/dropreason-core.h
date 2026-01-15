@@ -69,6 +69,8 @@
 	FN(QDISC_DROP)			\
 	FN(QDISC_OVERLIMIT)		\
 	FN(QDISC_CONGESTED)		\
+	FN(QDISC_MAXFLOWS)		\
+	FN(QDISC_MAXDEPTH)		\
 	FN(CAKE_FLOOD)			\
 	FN(FQ_BAND_LIMIT)		\
 	FN(FQ_HORIZON_LIMIT)		\
@@ -384,6 +386,16 @@ enum skb_drop_reason {
 	 * due to congestion.
 	 */
 	SKB_DROP_REASON_QDISC_CONGESTED,
+	/**
+	 * @SKB_DROP_REASON_QDISC_MAXFLOWS: dropped by qdisc when the maximum
+	 * number of flows is exceeded.
+	 */
+	SKB_DROP_REASON_QDISC_MAXFLOWS,
+	/**
+	 * @SKB_DROP_REASON_QDISC_MAXDEPTH: dropped by qdisc when a flow
+	 * exceeds its maximum queue depth limit.
+	 */
+	SKB_DROP_REASON_QDISC_MAXDEPTH,
 	/**
 	 * @SKB_DROP_REASON_CAKE_FLOOD: dropped by the flood protection part of
 	 * CAKE qdisc AQM algorithm (BLUE).
