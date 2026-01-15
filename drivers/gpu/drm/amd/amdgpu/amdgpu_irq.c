@@ -636,7 +636,7 @@ int amdgpu_irq_put(struct amdgpu_device *adev, struct amdgpu_irq_src *src,
 	if (!src->enabled_types || !src->funcs->set)
 		return -EINVAL;
 
-	if (WARN_ON(!amdgpu_irq_enabled(adev, src, type)))
+	if (!atomic_read(&src->enabled_types[type]))
 		return -EINVAL;
 
 	if (atomic_dec_and_test(&src->enabled_types[type]))
