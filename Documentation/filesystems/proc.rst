@@ -291,12 +291,19 @@ It's slow but very precise.
  SpeculationIndirectBranch   indirect branch speculation mode
  Cpus_allowed                mask of CPUs on which this process may run
  Cpus_allowed_list           Same as previous, but in "list format"
+ Cpus_active_mm              mask of CPUs on which this process has an active
+                             memory context
+ Cpus_active_mm_list         Same as previous, but in "list format"
  Mems_allowed                mask of memory nodes allowed to this process
  Mems_allowed_list           Same as previous, but in "list format"
  voluntary_ctxt_switches     number of voluntary context switches
  nonvoluntary_ctxt_switches  number of non voluntary context switches
  ==========================  ===================================================
 
+Note "Cpus_active_mm" is currently only supported on x86. Its semantics are
+architecture-dependent; on x86, it represents the set of CPUs that may hold
+stale TLB entries for the process and thus require IPI-based TLB shootdowns to
+maintain coherency.
 
 .. table:: Table 1-3: Contents of the statm fields (as of 2.6.8-rc3)
 

@@ -127,3 +127,17 @@ config PROC_PID_ARCH_STATUS
 config PROC_CPU_RESCTRL
 	def_bool n
 	depends on PROC_FS
+
+config ARCH_WANT_PROC_CPUS_ACTIVE_MM
+	bool
+	depends on PROC_FS
+	help
+	  Selected by architectures that reliably maintain mm_cpumask for TLB
+	  and cache synchronisation and wish to expose it in
+	  /proc/[pid]/status. Exposing this information allows userspace to
+	  easily describe the relationship between CPUs where a memory
+	  descriptor is "active" and the CPUs where the thread is allowed to
+	  execute. The primary intent is to provide visibility into the
+	  "memory footprint" across CPUs, which is invaluable for debugging
+	  performance issues related to IPI storms and TLB shootdowns in
+	  large-scale NUMA systems.
