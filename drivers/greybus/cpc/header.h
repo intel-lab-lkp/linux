@@ -41,4 +41,6 @@ struct cpc_header {
 #define CPC_HEADER_SIZE (sizeof(struct cpc_header))
 #define GREYBUS_HEADER_SIZE (sizeof(struct gb_operation_msg_hdr))
 
+u8 cpc_header_get_seq(const struct cpc_header *hdr);
+
 #endif
