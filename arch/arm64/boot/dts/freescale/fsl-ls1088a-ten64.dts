@@ -264,6 +264,48 @@
 	max-frequency = <25000000>;
 };
 
+&gpio1 {
+	/* Only GPIO 17 is utilised on this controller */
+	gpio-line-names =
+		"", "", "", "", "", "", "", "",
+		"", "", "", "", "", "", "", "",
+		"",
+		"EXT_PWR_DWN",
+		"", "", "", "", "", "",
+		"", "", "", "", "", "", "", "";
+};
+
+&gpio2 {
+	/* Only GPIO 27,28,29 are utilised on this controller */
+	gpio-line-names =
+		"", "", "", "", "", "", "", "",
+		"", "", "", "", "", "", "", "",
+		"", "", "", "", "", "", "", "",
+		"", "", "",
+		"P6_GPIO_A",
+		"P6_GPIO_B",
+		"P6_GPIO_C",
+		"", "";
+};
+
+&gpio3 {
+	/* Only GPIO4-9, 11-13 are utilised on this controller */
+	gpio-line-names =
+		"", "", "", "",
+		"P6_GPIO_D",
+		"P6_GPIO_E",
+		"P6_GPIO_F",
+		"P6_GPIO_G",
+		"P6_GPIO_H_ADMIN_BTN",
+		"",
+		"TCA9539_INT",
+		"SFP_XG0_ACT_LED",
+		"SFP_XG1_ACT_LED",
+		"SIM_SD_TRAY_STATUS",
+		"", "", "", "", "", "", "", "", "", "",
+		"", "", "", "", "", "", "", "";
+};
+
 &i2c0 {
 	status = "okay";
 
@@ -272,6 +314,24 @@
 		reg = <0x76>;
 		#gpio-cells = <2>;
 		gpio-controller;
+
+		gpio-line-names =
+			"XG1_TX_FAULT", /* Upper SFP+ signals */
+			"XG1_TX_DISABLE",
+			"XG1_PRESENT",
+			"XG1_LOS",
+			"XG0_TX_FAULT", /* Lower SFP+ signals */
+			"XG0_TX_DISABLE",
+			"XG0_PRESENT",
+			"XG0_LOS",
+			"CELLULAR_RESET",
+			"CELLULAR_POWER_OFF",
+			"CELLULAR_DISABLE",
+			"CELLULAR_GNSS_DISABLE",
+			"ADMIN_LED_P",
+			"ADMIN_LED_N",
+			"USER_SWITCH",
+			"ATX_HD_ACT_LED";
 
 		admin-led-lower-hog {
 			gpio-hog;
