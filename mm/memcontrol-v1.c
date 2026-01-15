@@ -639,8 +639,10 @@ void memcg1_swapout(struct folio *folio, swp_entry_t entry)
 	 * in swapcache, reusing the same swap entries.
 	 */
 	oldid = lookup_swap_cgroup_id(entry);
-	if (oldid == mem_cgroup_id(memcg))
+	if (oldid == mem_cgroup_id(memcg)) {
+		rcu_read_unlock();
 		return;
+	}
 	VM_WARN_ON_ONCE(oldid != 0);
 
 	/*
