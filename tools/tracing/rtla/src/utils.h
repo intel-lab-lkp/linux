@@ -97,6 +97,7 @@ static inline int have_libcpupower_support(void) { return 0; }
 #endif /* HAVE_LIBCPUPOWER_SUPPORT */
 int auto_house_keeping(cpu_set_t *monitored_cpus);
 __attribute__((__warn_unused_result__)) int strtoi(const char *s, int *res);
+ssize_t strscpy(char *dst, const char *src, size_t count);
 
 #define ns_to_usf(x) (((double)x/1000))
 #define ns_to_per(total, part) ((part * 100) / (double)total)

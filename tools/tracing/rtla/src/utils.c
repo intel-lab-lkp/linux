@@ -722,8 +722,7 @@ static const int find_mount(const char *fs, char *mp, int sizeof_mp)
 	if (!found)
 		return 0;
 
-	memset(mp, 0, sizeof_mp);
-	strncpy(mp, mount_point, sizeof_mp - 1);
+	strscpy(mp, mount_point, sizeof_mp);
 
 	debug_msg("Fs %s found at %s\n", fs, mp);
 	return 1;
@@ -1034,6 +1033,37 @@ int strtoi(const char *s, int *res)
 
 	*res = (int) lres;
 	return 0;
+}
+
+/**
+ * strscpy - Copy a C-string into a sized buffer
+ * @dst: Where to copy the string to
+ * @src: Where to copy the string from
+ * @count: Size of destination buffer
+ *
+ * Copy the source string @src, or as much of it as fits, into the destination
+ * @dst buffer. The destination @dst buffer is always NUL-terminated, unless
+ * it's zero-sized.
+ *
+ * This is a userspace implementation matching the kernel's strscpy() semantics,
+ * built on top of glibc's strlcpy().
+ *
+ * Returns the number of characters copied (not including the trailing NUL)
+ * or -E2BIG if @count is 0 or the copy was truncated.
+ */
+ssize_t strscpy(char *dst, const char *src, size_t count)
+{
+	size_t len;
+
+	if (count == 0)
+		return -E2BIG;
+
+	len = strlcpy(dst, src, count);
+
+	if (len >= count)
+		return -E2BIG;
+
+	return (ssize_t) len;
 }
 
 static inline void fatal_alloc(void)
