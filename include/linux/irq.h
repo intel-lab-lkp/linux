@@ -72,6 +72,7 @@ enum irqchip_irq_state;
  * IRQ_DISABLE_UNLAZY		- Disable lazy irq disable
  * IRQ_HIDDEN			- Don't show up in /proc/interrupts
  * IRQ_NO_DEBUG			- Exclude from note_interrupt() debugging
+ * IRQ_SW_MODERATION		- Can do software interrupt moderation
  */
 enum {
 	IRQ_TYPE_NONE		= 0x00000000,
@@ -99,13 +100,14 @@ enum {
 	IRQ_DISABLE_UNLAZY	= (1 << 19),
 	IRQ_HIDDEN		= (1 << 20),
 	IRQ_NO_DEBUG		= (1 << 21),
+	IRQ_SW_MODERATION	= (1 << 22),
 };
 
 #define IRQF_MODIFY_MASK	\
 	(IRQ_TYPE_SENSE_MASK | IRQ_NOPROBE | IRQ_NOREQUEST | \
 	 IRQ_NOAUTOEN | IRQ_LEVEL | IRQ_NO_BALANCING | \
 	 IRQ_PER_CPU | IRQ_NESTED_THREAD | IRQ_NOTHREAD | IRQ_PER_CPU_DEVID | \
-	 IRQ_IS_POLLED | IRQ_DISABLE_UNLAZY | IRQ_HIDDEN)
+	 IRQ_IS_POLLED | IRQ_DISABLE_UNLAZY | IRQ_HIDDEN | IRQ_SW_MODERATION)
 
 #define IRQ_NO_BALANCING_MASK	(IRQ_PER_CPU | IRQ_NO_BALANCING)
 
@@ -219,6 +221,7 @@ struct irq_data {
  *				  irqchip have flag IRQCHIP_ENABLE_WAKEUP_ON_SUSPEND set.
  * IRQD_RESEND_WHEN_IN_PROGRESS	- Interrupt may fire when already in progress in which
  *				  case it must be resent at the next available opportunity.
+ * IRQD_IRQ_MODERATED		- Interrupt is currently moderated.
  */
 enum {
 	IRQD_TRIGGER_MASK		= 0xf,
@@ -244,6 +247,7 @@ enum {
 	IRQD_AFFINITY_ON_ACTIVATE	= BIT(28),
 	IRQD_IRQ_ENABLED_ON_SUSPEND	= BIT(29),
 	IRQD_RESEND_WHEN_IN_PROGRESS    = BIT(30),
+	IRQD_IRQ_MODERATED		= BIT(31),
 };
 
 #define __irqd_to_state(d) ACCESS_PRIVATE((d)->common, state_use_accessors)
