@@ -140,12 +140,53 @@ static int vimc_sensor_set_fmt(struct v4l2_subdev *sd,
 
 	return 0;
 }
+static int vimc_sensor_get_frame_interval(struct v4l2_subdev *sd,
+					  struct v4l2_subdev_state *state,
+					  struct v4l2_subdev_frame_interval *fi)
+{
+	struct vimc_sensor_device *vsensor = v4l2_get_subdevdata(sd);
+
+	fi->interval = vsensor->frame_interval;
+
+	return 0;
+}
+
+static int vimc_sensor_set_frame_interval(struct v4l2_subdev *sd,
+					  struct v4l2_subdev_state *state,
+					  struct v4l2_subdev_frame_interval *fi)
+{
+	struct vimc_sensor_device *vsensor = v4l2_get_subdevdata(sd);
+	u32 fps;
+
+	/* Sanitize to default if invalid */
+	if (unlikely(!fi->interval.numerator || !fi->interval.denominator)) {
+		fi->interval.numerator = 1;
+		fi->interval.denominator = 60;
+	} else {
+		/* Clamp FPS to 1-240 range */
+		fps = fi->interval.denominator / fi->interval.numerator;
+		fps = clamp(fps, 1U, 240U);
+
+		fi->interval.numerator = 1;
+		fi->interval.denominator = fps;
+	}
+
+	vsensor->frame_interval = fi->interval;
+
+	/* Update hardware timing configuration */
+	vsensor->hw.fps_jiffies = (HZ * vsensor->frame_interval.numerator) /
+				  vsensor->frame_interval.denominator;
+
+	return 0;
+}
 
 static const struct v4l2_subdev_pad_ops vimc_sensor_pad_ops = {
 	.enum_mbus_code		= vimc_sensor_enum_mbus_code,
 	.enum_frame_size	= vimc_sensor_enum_frame_size,
 	.get_fmt		= v4l2_subdev_get_fmt,
 	.set_fmt		= vimc_sensor_set_fmt,
+	.get_frame_interval     = vimc_sensor_get_frame_interval,
+	.set_frame_interval     = vimc_sensor_set_frame_interval,
 };
 
 static void *vimc_sensor_process_frame(struct vimc_ent_device *ved,
@@ -400,6 +441,10 @@ static struct vimc_ent_device *vimc_sensor_add(struct vimc_device *vimc,
 
 	vsensor->ved.process_frame = vimc_sensor_process_frame;
 	vsensor->ved.dev = vimc->mdev.dev;
+	/* Initialize to 60 FPS */
+	vsensor->frame_interval.numerator = 1;
+	vsensor->frame_interval.denominator = 60;
+	vsensor->hw.fps_jiffies = HZ / 60;
 
 	return &vsensor->ved;
 
