@@ -1820,6 +1820,7 @@ void bdev_fput(struct file *bdev_file);
 
 struct io_comp_batch {
 	struct rq_list req_list;
+	void *poll_ctx;
 	bool need_ts;
 	void (*complete)(struct io_comp_batch *);
 };

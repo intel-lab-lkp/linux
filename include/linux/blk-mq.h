@@ -175,11 +175,13 @@ struct request {
 	 * request reaches the dispatch list. The ipi_list is only used
 	 * to queue the request for softirq completion, which is long
 	 * after the request has been unhashed (and even removed from
-	 * the dispatch list).
+	 * the dispatch list). poll_ctx is used during iopoll to track
+	 * the io_ring_ctx that initiated the poll operation.
 	 */
 	union {
 		struct hlist_node hash;	/* merge hash */
 		struct llist_node ipi_list;
+		void *poll_ctx;		/* iopoll context */
 	};
 
 	/*

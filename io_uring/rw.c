@@ -1322,6 +1322,13 @@ int io_do_iopoll(struct io_ring_ctx *ctx, bool force_nonspin)
 	int nr_events = 0;
 
 	/*
+	 * Store the polling ctx so drivers can detect if they're completing
+	 * a request from the same ring that's polling (local) vs a different
+	 * ring (remote). This enables optimizations for local completions.
+	 */
+	iob.poll_ctx = ctx;
+
+	/*
 	 * Only spin for completions if we don't have multiple devices hanging
 	 * off our complete list.
 	 */

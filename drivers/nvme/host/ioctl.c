@@ -425,14 +425,28 @@ static enum rq_end_io_ret nvme_uring_cmd_end_io(struct request *req,
 	pdu->result = le64_to_cpu(nvme_req(req)->result.u64);
 
 	/*
-	 * IOPOLL could potentially complete this request directly, but
-	 * if multiple rings are polling on the same queue, then it's possible
-	 * for one ring to find completions for another ring. Punting the
-	 * completion via task_work will always direct it to the right
-	 * location, rather than potentially complete requests for ringA
-	 * under iopoll invocations from ringB.
+	 * For IOPOLL, check if this completion is happening in the context
+	 * of the same io_ring that owns the request (local context). If so,
+	 * we can complete inline without task_work overhead. Otherwise, we
+	 * must punt to task_work to ensure completion happens in the correct
+	 * ring's context.
 	 */
-	io_uring_cmd_do_in_task_lazy(ioucmd, nvme_uring_task_cb);
+	if (blk_rq_is_poll(req) && req->poll_ctx == io_uring_cmd_ctx_handle(ioucmd)) {
+		/*
+		 * Local context: the polling ring owns this request.
+		 * Complete inline for optimal performance.
+		 */
+		if (pdu->bio)
+			blk_rq_unmap_user(pdu->bio);
+		io_uring_cmd_done32(ioucmd, pdu->status, pdu->result, 0);
+	} else {
+		/*
+		 * Remote or non-IOPOLL context: either a different ring found
+		 * this completion, or this is IRQ/softirq completion. Use
+		 * task_work to direct completion to the correct location.
+		 */
+		io_uring_cmd_do_in_task_lazy(ioucmd, nvme_uring_task_cb);
+	}
 	return RQ_END_IO_FREE;
 }
 
@@ -677,8 +691,14 @@ int nvme_ns_chr_uring_cmd_iopoll(struct io_uring_cmd *ioucmd,
 	struct nvme_uring_cmd_pdu *pdu = nvme_uring_cmd_pdu(ioucmd);
 	struct request *req = pdu->req;
 
-	if (req && blk_rq_is_poll(req))
+	if (req && blk_rq_is_poll(req)) {
+		/*
+		 * Store the polling context in the request so end_io can
+		 * detect if it's completing in the local ring's context.
+		 */
+		req->poll_ctx = iob ? iob->poll_ctx : NULL;
 		return blk_rq_poll(req, iob, poll_flags);
+	}
 	return 0;
 }
 #ifdef CONFIG_NVME_MULTIPATH
