@@ -311,8 +311,15 @@ static ssize_t pm8001_ctl_host_sas_address_show(struct device *cdev,
 	struct Scsi_Host *shost = class_to_shost(cdev);
 	struct sas_ha_struct *sha = SHOST_TO_SAS_HA(shost);
 	struct pm8001_hba_info *pm8001_ha = sha->lldd_ha;
-	return sysfs_emit(buf, "0x%016llx\n",
-			be64_to_cpu(*(__be64 *)pm8001_ha->sas_addr));
+	unsigned long flags;
+	ssize_t ret;
+
+	spin_lock_irqsave(&pm8001_ha->lock, flags);
+	ret = sysfs_emit(buf, "0x%016llx\n",
+			 be64_to_cpu(*(__be64 *)pm8001_ha->sas_addr));
+	spin_unlock_irqrestore(&pm8001_ha->lock, flags);
+
+	return ret;
 }
 static DEVICE_ATTR(host_sas_address, S_IRUGO,
 		   pm8001_ctl_host_sas_address_show, NULL);
