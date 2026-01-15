@@ -109,7 +109,11 @@ void mmc_unregister_host_class(void)
  */
 void mmc_retune_enable(struct mmc_host *host)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&host->lock, flags);
 	host->can_retune = 1;
+	spin_unlock_irqrestore(&host->lock, flags);
 	if (host->retune_period)
 		mod_timer(&host->retune_timer,
 			  jiffies + host->retune_period * HZ);
@@ -121,18 +125,31 @@ void mmc_retune_enable(struct mmc_host *host)
  */
 void mmc_retune_pause(struct mmc_host *host)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&host->lock, flags);
 	if (!host->retune_paused) {
 		host->retune_paused = 1;
-		mmc_retune_hold(host);
+		__mmc_retune_hold(host);
 	}
+	spin_unlock_irqrestore(&host->lock, flags);
 }
 EXPORT_SYMBOL(mmc_retune_pause);
 
 void mmc_retune_unpause(struct mmc_host *host)
 {
+	unsigned long flags;
+	bool released;
+
+	spin_lock_irqsave(&host->lock, flags);
 	if (host->retune_paused) {
 		host->retune_paused = 0;
-		mmc_retune_release(host);
+		released = __mmc_retune_release(host);
+		spin_unlock_irqrestore(&host->lock, flags);
+		if (!released)
+			WARN_ON(1);
+	} else {
+		spin_unlock_irqrestore(&host->lock, flags);
 	}
 }
 EXPORT_SYMBOL(mmc_retune_unpause);
@@ -145,8 +162,12 @@ EXPORT_SYMBOL(mmc_retune_unpause);
  */
 void mmc_retune_disable(struct mmc_host *host)
 {
+	unsigned long flags;
+
 	mmc_retune_unpause(host);
+	spin_lock_irqsave(&host->lock, flags);
 	host->can_retune = 0;
+	spin_unlock_irqrestore(&host->lock, flags);
 	timer_delete_sync(&host->retune_timer);
 	mmc_retune_clear(host);
 }
@@ -159,16 +180,22 @@ EXPORT_SYMBOL(mmc_retune_timer_stop);
 
 void mmc_retune_hold(struct mmc_host *host)
 {
-	if (!host->hold_retune)
-		host->retune_now = 1;
-	host->hold_retune += 1;
+	unsigned long flags;
+
+	spin_lock_irqsave(&host->lock, flags);
+	__mmc_retune_hold(host);
+	spin_unlock_irqrestore(&host->lock, flags);
 }
 
 void mmc_retune_release(struct mmc_host *host)
 {
-	if (host->hold_retune)
-		host->hold_retune -= 1;
-	else
+	unsigned long flags;
+	bool released;
+
+	spin_lock_irqsave(&host->lock, flags);
+	released = __mmc_retune_release(host);
+	spin_unlock_irqrestore(&host->lock, flags);
+	if (!released)
 		WARN_ON(1);
 }
 EXPORT_SYMBOL(mmc_retune_release);
@@ -177,18 +204,23 @@ int mmc_retune(struct mmc_host *host)
 {
 	bool return_to_hs400 = false;
 	int err;
+	unsigned long flags;
 
-	if (host->retune_now)
-		host->retune_now = 0;
-	else
+	spin_lock_irqsave(&host->lock, flags);
+	if (!host->retune_now) {
+		spin_unlock_irqrestore(&host->lock, flags);
 		return 0;
+	}
+	host->retune_now = 0;
 
-	if (!host->need_retune || host->doing_retune || !host->card)
+	if (!host->need_retune || host->doing_retune || !host->card) {
+		spin_unlock_irqrestore(&host->lock, flags);
 		return 0;
+	}
 
 	host->need_retune = 0;
-
 	host->doing_retune = 1;
+	spin_unlock_irqrestore(&host->lock, flags);
 
 	if (host->ios.timing == MMC_TIMING_MMC_HS400) {
 		err = mmc_hs400_to_hs200(host->card);
@@ -205,7 +237,9 @@ int mmc_retune(struct mmc_host *host)
 	if (return_to_hs400)
 		err = mmc_hs200_to_hs400(host->card);
 out:
+	spin_lock_irqsave(&host->lock, flags);
 	host->doing_retune = 0;
+	spin_unlock_irqrestore(&host->lock, flags);
 
 	return err;
 }

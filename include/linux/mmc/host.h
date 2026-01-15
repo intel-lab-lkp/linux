@@ -713,8 +713,12 @@ void mmc_retune_timer_stop(struct mmc_host *host);
 
 static inline void mmc_retune_needed(struct mmc_host *host)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&host->lock, flags);
 	if (host->can_retune)
 		host->need_retune = 1;
+	spin_unlock_irqrestore(&host->lock, flags);
 }
 
 static inline bool mmc_can_retune(struct mmc_host *host)

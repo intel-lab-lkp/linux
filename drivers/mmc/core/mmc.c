@@ -1820,13 +1820,19 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		goto free_card;
 
 	if (mmc_card_hs200(card)) {
+		unsigned long flags;
+
+		spin_lock_irqsave(&host->lock, flags);
 		host->doing_init_tune = 1;
+		spin_unlock_irqrestore(&host->lock, flags);
 
 		err = mmc_hs200_tuning(card);
 		if (!err)
 			err = mmc_select_hs400(card);
 
+		spin_lock_irqsave(&host->lock, flags);
 		host->doing_init_tune = 0;
+		spin_unlock_irqrestore(&host->lock, flags);
 
 		if (err)
 			goto free_card;

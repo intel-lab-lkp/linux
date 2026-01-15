@@ -237,6 +237,7 @@ static blk_status_t mmc_mq_queue_rq(struct blk_mq_hw_ctx *hctx,
 	enum mmc_issue_type issue_type;
 	enum mmc_issued issued;
 	bool get_card, cqe_retune_ok;
+	unsigned long flags;
 	blk_status_t ret;
 
 	if (mmc_card_removed(mq->card)) {
@@ -297,8 +298,10 @@ static blk_status_t mmc_mq_queue_rq(struct blk_mq_hw_ctx *hctx,
 		mmc_get_card(card, &mq->ctx);
 
 	if (host->cqe_enabled) {
+		spin_lock_irqsave(&host->lock, flags);
 		host->retune_now = host->need_retune && cqe_retune_ok &&
 				   !host->hold_retune;
+		spin_unlock_irqrestore(&host->lock, flags);
 	}
 
 	blk_mq_start_request(req);

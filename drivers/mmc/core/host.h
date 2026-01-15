@@ -21,22 +21,55 @@ int mmc_retune(struct mmc_host *host);
 void mmc_retune_pause(struct mmc_host *host);
 void mmc_retune_unpause(struct mmc_host *host);
 
-static inline void mmc_retune_clear(struct mmc_host *host)
+static inline void __mmc_retune_clear(struct mmc_host *host)
 {
 	host->retune_now = 0;
 	host->need_retune = 0;
 }
 
+static inline void mmc_retune_clear(struct mmc_host *host)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&host->lock, flags);
+	__mmc_retune_clear(host);
+	spin_unlock_irqrestore(&host->lock, flags);
+}
+
+static inline void __mmc_retune_hold(struct mmc_host *host)
+{
+	if (!host->hold_retune)
+		host->retune_now = 1;
+	host->hold_retune += 1;
+}
+
+static inline bool __mmc_retune_release(struct mmc_host *host)
+{
+	if (host->hold_retune) {
+		host->hold_retune -= 1;
+		return true;
+	}
+	return false;
+}
+
 static inline void mmc_retune_hold_now(struct mmc_host *host)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&host->lock, flags);
 	host->retune_now = 0;
 	host->hold_retune += 1;
+	spin_unlock_irqrestore(&host->lock, flags);
 }
 
 static inline void mmc_retune_recheck(struct mmc_host *host)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&host->lock, flags);
 	if (host->hold_retune <= 1)
 		host->retune_now = 1;
+	spin_unlock_irqrestore(&host->lock, flags);
 }
 
 static inline int mmc_host_can_cmd23(struct mmc_host *host)
