@@ -986,7 +986,7 @@ int enter_svm_guest_mode(struct kvm_vcpu *vcpu, u64 vmcb12_gpa,
 	return 0;
 }
 
-static void __nested_svm_vmexit(struct vcpu_svm *svm)
+static void __nested_svm_vmexit(struct vcpu_svm *svm, struct vmcb *vmcb12)
 {
 	struct vmcb *vmcb01 = svm->vmcb01.ptr;
 	struct kvm_vcpu *vcpu = &svm->vcpu;
@@ -999,6 +999,10 @@ static void __nested_svm_vmexit(struct vcpu_svm *svm)
 	/* GIF is cleared on #VMEXIT, no event can be injected in L1 */
 	svm_set_gif(svm, false);
 	vmcb01->control.exit_int_info = 0;
+
+	/* event_inj is cleared on #VMEXIT */
+	vmcb12->control.event_inj = 0;
+	vmcb12->control.event_inj_err = 0;
 
 	nested_svm_uninit_mmu_context(vcpu);
 	if (nested_svm_load_cr3(vcpu, vmcb01->save.cr3, false, true)) {
@@ -1026,7 +1030,7 @@ static void nested_svm_failed_vmrun(struct vcpu_svm *svm, struct vmcb *vmcb12)
 	vmcb12->control.exit_code_hi = -1u;
 	vmcb12->control.exit_info_1 = 0;
 	vmcb12->control.exit_info_2 = 0;
-	__nested_svm_vmexit(svm);
+	__nested_svm_vmexit(svm, vmcb12);
 }
 
 int nested_svm_vmrun(struct kvm_vcpu *vcpu)
@@ -1209,8 +1213,6 @@ void nested_svm_vmexit(struct vcpu_svm *svm)
 		vmcb12->control.next_rip  = vmcb02->control.next_rip;
 
 	vmcb12->control.int_ctl           = svm->nested.ctl.int_ctl;
-	vmcb12->control.event_inj         = svm->nested.ctl.event_inj;
-	vmcb12->control.event_inj_err     = svm->nested.ctl.event_inj_err;
 
 	if (!kvm_pause_in_guest(vcpu->kvm)) {
 		vmcb01->control.pause_filter_count = vmcb02->control.pause_filter_count;
@@ -1315,8 +1317,6 @@ void nested_svm_vmexit(struct vcpu_svm *svm)
 				       vmcb12->control.exit_int_info_err,
 				       KVM_ISA_SVM);
 
-	kvm_vcpu_unmap(vcpu, &map);
-
 	nested_svm_transition_tlb_flush(vcpu);
 
 	/*
@@ -1338,7 +1338,9 @@ void nested_svm_vmexit(struct vcpu_svm *svm)
 	 * Potentially queues an exception, so it needs to be after
 	 * kvm_clear_exception_queue() is called above.
 	 */
-	__nested_svm_vmexit(svm);
+	__nested_svm_vmexit(svm, vmcb12);
+
+	kvm_vcpu_unmap(vcpu, &map);
 }
 
 static void nested_svm_triple_fault(struct kvm_vcpu *vcpu)
