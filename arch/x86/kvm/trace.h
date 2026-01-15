@@ -1403,6 +1403,32 @@ TRACE_EVENT(kvm_hv_stimer_start_one_shot,
 );
 
 /*
+ * Tracepoint for stimer_start(one-shot timer already expired).
+ */
+TRACE_EVENT(kvm_hv_stimer_start_expired,
+	TP_PROTO(int vcpu_id, int timer_index, u64 time_now, u64 count),
+	TP_ARGS(vcpu_id, timer_index, time_now, count),
+
+	TP_STRUCT__entry(
+		__field(int, vcpu_id)
+		__field(int, timer_index)
+		__field(u64, time_now)
+		__field(u64, count)
+	),
+
+	TP_fast_assign(
+		__entry->vcpu_id = vcpu_id;
+		__entry->timer_index = timer_index;
+		__entry->time_now = time_now;
+		__entry->count = count;
+	),
+
+	TP_printk("vcpu_id %d timer %d time_now %llu count %llu (expired)",
+		  __entry->vcpu_id, __entry->timer_index, __entry->time_now,
+		  __entry->count)
+);
+
+/*
  * Tracepoint for stimer_timer_callback.
  */
 TRACE_EVENT(kvm_hv_stimer_callback,

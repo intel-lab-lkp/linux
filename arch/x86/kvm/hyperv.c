@@ -666,13 +666,27 @@ static int stimer_start(struct kvm_vcpu_hv_stimer *stimer)
 	stimer->exp_time = stimer->count;
 	if (time_now >= stimer->count) {
 		/*
-		 * Expire timer according to Hypervisor Top-Level Functional
-		 * specification v4(15.3.1):
+		 * Hypervisor Top-Level Functional specification v4(15.3.1):
 		 * "If a one shot is enabled and the specified count is in
 		 * the past, it will expire immediately."
+		 *
+		 * However, there are cases during hibernation when Windows's
+		 * interrupt count calculation can go out of sync with KVM's
+		 * view of it, causing Windows to emit timer events in the past
+		 * for events that do not fire yet according to the real time
+		 * source. This then leads to interrupt storms in the guest
+		 * which slow down execution to a point where watchdogs trigger.
+		 *
+		 * Instead of taking TLFS literally on what "immediately" means,
+		 * give the guest at least 10µs to process work. While this can
+		 * marginally reduce accuracy of guest timers, 10µs are within
+		 * the noise of VM entry/exit overhead (~1-2 µs).
 		 */
-		stimer_mark_pending(stimer, false);
-		return 0;
+		trace_kvm_hv_stimer_start_expired(
+					hv_stimer_to_vcpu(stimer)->vcpu_id,
+					stimer->index,
+					time_now, stimer->count);
+		stimer->count = time_now + 100;
 	}
 
 	trace_kvm_hv_stimer_start_one_shot(hv_stimer_to_vcpu(stimer)->vcpu_id,
