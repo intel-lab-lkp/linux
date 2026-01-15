@@ -203,6 +203,13 @@ static int idxd_dma_terminate_all(struct dma_chan *c)
 	return 0;
 }
 
+static void idxd_dma_synchronize(struct dma_chan *c)
+{
+	struct idxd_wq *wq = to_idxd_wq(c);
+
+	idxd_wq_drain(wq);
+}
+
 int idxd_register_dma_device(struct idxd_device *idxd)
 {
 	struct idxd_dma_dev *idxd_dma;
@@ -234,6 +241,7 @@ int idxd_register_dma_device(struct idxd_device *idxd)
 	dma->device_alloc_chan_resources = idxd_dma_alloc_chan_resources;
 	dma->device_free_chan_resources = idxd_dma_free_chan_resources;
 	dma->device_terminate_all = idxd_dma_terminate_all;
+	dma->device_synchronize = idxd_dma_synchronize;
 
 	rc = dma_async_device_register(dma);
 	if (rc < 0) {
