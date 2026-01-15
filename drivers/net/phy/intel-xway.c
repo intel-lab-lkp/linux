@@ -4,6 +4,7 @@
  * Copyright (C) 2016 Hauke Mehrtens <hauke@hauke-m.de>
  */
 
+#include <linux/delay.h>
 #include <linux/mdio.h>
 #include <linux/module.h>
 #include <linux/phy.h>
@@ -286,8 +287,33 @@ static int xway_gphy_config_init(struct phy_device *phydev)
 		return err;
 
 	/* Use default LED configuration if 'leds' node isn't defined */
-	if (!of_get_child_by_name(np, "leds"))
+	if (!of_get_child_by_name(np, "leds")) {
 		xway_gphy_init_leds(phydev);
+	} else {
+		/* Due to a bug in some PHY internal firmware, manual control
+		 * as well as polarity configuration of the PHY LEDs has no
+		 * effect until a link has been detected at least once after
+		 * reset. Apparently the LED control thread is not started
+		 * until then.
+		 *
+		 * Workaround: clear the BMCR_ANENABLE bit to force the firmware
+		 * to start the LED thread, allowing manual LED control and
+		 * respecting LED polarity before the first link comes up.
+		 *
+		 * In case the default LED configuration is used the bug isn't
+		 * visible, so only apply the workaround in case LED
+		 * configuration is present in the device tree.
+		 */
+		phy_clear_bits(phydev, MII_BMCR, BMCR_ANENABLE);
+		/* 100ms was found to be required by experimentation.
+		 * A shorter delay causes other (serious) bugs...
+		 */
+		msleep(100);
+		/* It turns out BMCR_ANENABLE *has* to be set when removing
+		 * BMCR_PDOWN for not facing yet different bugs
+		 */
+		phy_set_bits(phydev, MII_BMCR, BMCR_ANENABLE);
+	}
 
 	/* Clear all pending interrupts */
 	phy_read(phydev, XWAY_MDIO_ISTAT);
