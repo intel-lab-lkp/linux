@@ -121,9 +121,24 @@ static const struct regmap_irq_chip stpmic1_regmap_irq_chip = {
 static int stpmic1_power_off(struct sys_off_data *data)
 {
 	struct stpmic1 *ddata = data->cb_data;
+	int i, ret;
 
-	regmap_update_bits(ddata->regmap, MAIN_CR,
-			   SOFTWARE_SWITCH_OFF, SOFTWARE_SWITCH_OFF);
+	for (i = 0; i < 2; i++) {
+		ret = regmap_update_bits(ddata->regmap, MAIN_CR, SOFTWARE_SWITCH_OFF,
+					 SOFTWARE_SWITCH_OFF);
+		if (!ret)
+			return NOTIFY_DONE;
+
+		/*
+		 * Attempt to shut down again, in case the first attempt failed.
+		 * The STPMIC1 might get confused and the first regmap_update_bits()
+		 * returns with -ETIMEDOUT / -110 . If that or similar transient
+		 * failure occurs, try to shut down again. If the second attempt
+		 * fails, there is some bigger problem, report it to user.
+		 */
+		if (i)
+			dev_err(ddata->dev, "Failed to access PMIC I2C bus (%d)\n", ret);
+	}
 
 	return NOTIFY_DONE;
 }
