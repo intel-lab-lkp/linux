@@ -3108,12 +3108,15 @@ static bool kvm_get_walltime_and_clockread(struct timespec64 *ts,
  *
  */
 
-static void pvclock_update_vm_gtod_copy(struct kvm *kvm)
+static void pvclock_update_vm_gtod_copy(struct kvm *kvm, bool forced)
 {
 #ifdef CONFIG_X86_64
 	struct kvm_arch *ka = &kvm->arch;
 	int vclock_mode;
 	bool host_tsc_clocksource, vcpus_matched;
+	bool use_master_clock;
+	u64 master_kernel_ns;
+	u64 master_cycle_now;
 
 	lockdep_assert_held(&kvm->arch.tsc_write_lock);
 	vcpus_matched = (ka->nr_vcpus_matched_tsc + 1 ==
@@ -3124,12 +3127,26 @@ static void pvclock_update_vm_gtod_copy(struct kvm *kvm)
 	 * to the guest.
 	 */
 	host_tsc_clocksource = kvm_get_time_and_clockread(
-					&ka->master_kernel_ns,
-					&ka->master_cycle_now);
+					&master_kernel_ns,
+					&master_cycle_now);
 
-	ka->use_master_clock = host_tsc_clocksource && vcpus_matched
-				&& !ka->backwards_tsc_observed
-				&& !ka->boot_vcpu_runs_old_kvmclock;
+	use_master_clock = host_tsc_clocksource && vcpus_matched
+			    && !ka->backwards_tsc_observed
+			    && !ka->boot_vcpu_runs_old_kvmclock;
+
+	/*
+	 * Always update masterclock data unconditionally if not for
+	 * KVM_REQ_MASTERCLOCK_UPDATE request.
+	 *
+	 * Otherwise, do not update masterclock data if it is already
+	 * active and will remain active.
+	 */
+	if (forced || !(use_master_clock && ka->use_master_clock)) {
+		ka->master_kernel_ns = master_kernel_ns;
+		ka->master_cycle_now = master_cycle_now;
+	}
+
+	ka->use_master_clock = use_master_clock;
 
 	if (ka->use_master_clock)
 		atomic_set(&kvm_guest_has_master_clock, 1);
@@ -3179,7 +3196,7 @@ static void kvm_update_masterclock(struct kvm *kvm)
 {
 	kvm_hv_request_tsc_page_update(kvm);
 	kvm_start_pvclock_update(kvm);
-	pvclock_update_vm_gtod_copy(kvm);
+	pvclock_update_vm_gtod_copy(kvm, false);
 	kvm_end_pvclock_update(kvm);
 }
 
@@ -7189,7 +7206,7 @@ static int kvm_vm_ioctl_set_clock(struct kvm *kvm, void __user *argp)
 
 	kvm_hv_request_tsc_page_update(kvm);
 	kvm_start_pvclock_update(kvm);
-	pvclock_update_vm_gtod_copy(kvm);
+	pvclock_update_vm_gtod_copy(kvm, true);
 
 	/*
 	 * This pairs with kvm_guest_time_update(): when masterclock is
@@ -9773,7 +9790,7 @@ static void kvm_hyperv_tsc_notifier(void)
 
 	list_for_each_entry(kvm, &vm_list, vm_list) {
 		__kvm_start_pvclock_update(kvm);
-		pvclock_update_vm_gtod_copy(kvm);
+		pvclock_update_vm_gtod_copy(kvm, true);
 		kvm_end_pvclock_update(kvm);
 	}
 
@@ -13206,7 +13223,7 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 	kvm->arch.kvmclock_offset = -get_kvmclock_base_ns();
 
 	raw_spin_lock_irqsave(&kvm->arch.tsc_write_lock, flags);
-	pvclock_update_vm_gtod_copy(kvm);
+	pvclock_update_vm_gtod_copy(kvm, true);
 	raw_spin_unlock_irqrestore(&kvm->arch.tsc_write_lock, flags);
 
 	kvm->arch.default_tsc_khz = max_tsc_khz ? : tsc_khz;
