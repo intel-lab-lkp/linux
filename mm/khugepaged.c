@@ -1664,10 +1664,10 @@ static enum scan_result try_collapse_pte_mapped_thp(struct mm_struct *mm, unsign
 		}
 	}
 	pgt_pmd = pmdp_collapse_flush(vma, haddr, pmd);
-	pmdp_get_lockless_sync();
 	pte_unmap_unlock(start_pte, ptl);
 	if (ptl != pml)
 		spin_unlock(pml);
+	tlb_remove_table_sync_one();
 
 	mmu_notifier_invalidate_range_end(&range);
 
@@ -1818,7 +1818,6 @@ static void retract_page_tables(struct address_space *mapping, pgoff_t pgoff)
 		 */
 		if (likely(file_backed_vma_is_retractable(vma))) {
 			pgt_pmd = pmdp_collapse_flush(vma, addr, pmd);
-			pmdp_get_lockless_sync();
 			success = true;
 		}
 
@@ -1826,6 +1825,8 @@ static void retract_page_tables(struct address_space *mapping, pgoff_t pgoff)
 			spin_unlock(ptl);
 drop_pml:
 		spin_unlock(pml);
+		if (success)
+			tlb_remove_table_sync_one();
 
 		mmu_notifier_invalidate_range_end(&range);
 
