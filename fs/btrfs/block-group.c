@@ -1011,7 +1011,7 @@ static void clear_incompat_bg_bits(struct btrfs_fs_info *fs_info, u64 flags)
 		struct list_head *head = &fs_info->space_info;
 		struct btrfs_space_info *sinfo;
 
-		list_for_each_entry_rcu(sinfo, head, list) {
+		list_for_each_entry(sinfo, head, list) {
 			down_read(&sinfo->groups_sem);
 			if (!list_empty(&sinfo->block_groups[BTRFS_RAID_RAID5]))
 				found_raid56 = true;
