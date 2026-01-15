@@ -2275,15 +2275,17 @@ static int tsnep_netdev_set_features(struct net_device *netdev,
 
 static ktime_t tsnep_netdev_get_tstamp(struct net_device *netdev,
 				       const struct skb_shared_hwtstamps *hwtstamps,
-				       bool cycles)
+				       enum netdev_tstamp_type type)
 {
 	struct tsnep_rx_inline *rx_inline = hwtstamps->netdev_data;
 	u64 timestamp;
 
-	if (cycles)
+	if (type == NETDEV_TSTAMP_CYCLE)
 		timestamp = __le64_to_cpu(rx_inline->counter);
-	else
+	else if (type == NETDEV_TSTAMP_RAW)
 		timestamp = __le64_to_cpu(rx_inline->timestamp);
+	else
+		return 0;
 
 	return ns_to_ktime(timestamp);
 }

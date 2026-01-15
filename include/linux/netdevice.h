@@ -1062,6 +1062,12 @@ struct netdev_net_notifier {
 	struct notifier_block *nb;
 };
 
+enum netdev_tstamp_type {
+	NETDEV_TSTAMP_RAW = 0,
+	NETDEV_TSTAMP_CYCLE,
+	NETDEV_TSTAMP_REALTIME,
+};
+
 /*
  * This structure defines the management hooks for network devices.
  * The following hooks can be defined; unless noted otherwise, they are
@@ -1406,11 +1412,10 @@ struct netdev_net_notifier {
  *     Get the forwarding path to reach the real device from the HW destination address
  * ktime_t (*ndo_get_tstamp)(struct net_device *dev,
  *			     const struct skb_shared_hwtstamps *hwtstamps,
- *			     bool cycles);
- *	Get hardware timestamp based on normal/adjustable time or free running
- *	cycle counter. This function is required if physical clock supports a
- *	free running cycle counter.
- *
+ *			     enum netdev_tstamp_type type);
+ *	Get hardware timestamp based on the type requested, or return 0 if the
+ *	requested type is not supported. This function is required if physical
+ *	clock supports a free running cycle counter.
  * int (*ndo_hwtstamp_get)(struct net_device *dev,
  *			   struct kernel_hwtstamp_config *kernel_config);
  *	Get the currently configured hardware timestamping parameters for the
@@ -1661,7 +1666,7 @@ struct net_device_ops {
                                                          struct net_device_path *path);
 	ktime_t			(*ndo_get_tstamp)(struct net_device *dev,
 						  const struct skb_shared_hwtstamps *hwtstamps,
-						  bool cycles);
+						  enum netdev_tstamp_type type);
 	int			(*ndo_hwtstamp_get)(struct net_device *dev,
 						    struct kernel_hwtstamp_config *kernel_config);
 	int			(*ndo_hwtstamp_set)(struct net_device *dev,
@@ -5236,9 +5241,11 @@ static inline ktime_t netdev_get_tstamp(struct net_device *dev,
 					bool cycles)
 {
 	const struct net_device_ops *ops = dev->netdev_ops;
+	enum netdev_tstamp_type type = cycles ? NETDEV_TSTAMP_CYCLE :
+						NETDEV_TSTAMP_RAW;
 
 	if (ops->ndo_get_tstamp)
-		return ops->ndo_get_tstamp(dev, hwtstamps, cycles);
+		return ops->ndo_get_tstamp(dev, hwtstamps, type);
 
 	return hwtstamps->hwtstamp;
 }

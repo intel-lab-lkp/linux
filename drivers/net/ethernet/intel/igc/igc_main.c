@@ -6947,7 +6947,7 @@ int igc_xsk_wakeup(struct net_device *dev, u32 queue_id, u32 flags)
 
 static ktime_t igc_get_tstamp(struct net_device *dev,
 			      const struct skb_shared_hwtstamps *hwtstamps,
-			      bool cycles)
+			      enum netdev_tstamp_type type)
 {
 	struct igc_adapter *adapter = netdev_priv(dev);
 	struct igc_inline_rx_tstamps *tstamp;
@@ -6955,10 +6955,12 @@ static ktime_t igc_get_tstamp(struct net_device *dev,
 
 	tstamp = hwtstamps->netdev_data;
 
-	if (cycles)
+	if (type == NETDEV_TSTAMP_CYCLE)
 		timestamp = igc_ptp_rx_pktstamp(adapter, tstamp->timer1);
-	else
+	else if (type == NETDEV_TSTAMP_RAW)
 		timestamp = igc_ptp_rx_pktstamp(adapter, tstamp->timer0);
+	else
+		return 0;
 
 	return timestamp;
 }
