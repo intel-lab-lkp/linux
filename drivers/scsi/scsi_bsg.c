@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/bsg.h>
+#include <linux/io_uring/cmd.h>
 #include <scsi/scsi.h>
 #include <scsi/scsi_ioctl.h>
 #include <scsi/scsi_cmnd.h>
@@ -8,6 +9,12 @@
 #include "scsi_priv.h"
 
 #define uptr64(val) ((void __user *)(uintptr_t)(val))
+
+int scsi_bsg_uring_cmd(struct request_queue *q, struct io_uring_cmd *ioucmd,
+		       unsigned int issue_flags, bool open_for_write)
+{
+	return -EOPNOTSUPP;
+}
 
 static int scsi_bsg_sg_io_fn(struct request_queue *q, struct sg_io_v4 *hdr,
 		bool open_for_write, unsigned int timeout)
