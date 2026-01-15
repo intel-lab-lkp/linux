@@ -63,5 +63,24 @@ struct sg_io_v4 {
 	__u32 padding;
 };
 
+struct bsg_uring_cmd {
+	/* Command request related */
+	__u64 request;		/* [i], [*i] command descriptor address */
+	__u32 request_len;	/* [i] command descriptor length in bytes */
+	/* Protocol related */
+	__u32 protocol;		/* [i] protocol type (BSG_PROTOCOL_*) */
+	__u32 subprotocol;	/* [i] subprotocol type (BSG_SUB_PROTOCOL_*) */
+	/* Response data related */
+	__u32 max_response_len;	/* [i] response buffer size in bytes */
+	__u64 response;		/* [i], [*o] response data address */
+	/* Data transfer related */
+	__u64 xfer_addr;	/* [i] data transfer buffer address */
+	__u32 xfer_len;		/* [i] data transfer length in bytes */
+	__u32 xfer_dir;		/* [i] 0=din (read), 1=dout (write) */
+	__u32 iovec_count;	/* [i] iovec array count, 0 for flat buffer */
+	/* Control related */
+	__u32 timeout_ms;	/* [i] timeout in milliseconds */
+	__u8  reserved[24];	/* reserved for future extension */
+};
 
 #endif /* _UAPIBSG_H */
