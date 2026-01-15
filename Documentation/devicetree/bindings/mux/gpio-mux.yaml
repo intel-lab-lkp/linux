@@ -19,7 +19,9 @@ description: |+
 
 properties:
   compatible:
-    const: gpio-mux
+    enum:
+      - gpio-mux
+      - adi,adg2404
 
   mux-gpios:
     description:
@@ -106,5 +108,20 @@ examples:
                 reg = <0x20>;
             };
         };
+    };
+
+  - |
+    /* ADG2404 4:1 multiplexer with enable GPIO */
+    #include <dt-bindings/gpio/gpio.h>
+
+    mux-controller {
+        compatible = "adi,adg2404";
+        #mux-control-cells = <0>;
+
+        mux-gpios = <&gpio 1 GPIO_ACTIVE_HIGH>,
+                    <&gpio 2 GPIO_ACTIVE_HIGH>;
+        enable-gpios = <&gpio 3 GPIO_ACTIVE_HIGH>;
+
+        idle-state = <0>; /* Select channel S1 when idle */
     };
 ...
