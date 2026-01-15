@@ -45,7 +45,7 @@ struct cpc_host_device *cpc_hd_create(struct cpc_hd_driver *driver, struct devic
 int cpc_hd_add(struct cpc_host_device *cpc_hd);
 void cpc_hd_put(struct cpc_host_device *cpc_hd);
 void cpc_hd_del(struct cpc_host_device *cpc_hd);
-void cpc_hd_rcvd(struct cpc_host_device *cpc_hd, u16 cport_id, u8 *data, size_t length);
+void cpc_hd_rcvd(struct cpc_host_device *cpc_hd, u8 *data, size_t length);
 void cpc_hd_message_sent(struct sk_buff *skb, int status);
 
 int cpc_hd_send_skb(struct cpc_host_device *cpc_hd, struct sk_buff *skb);

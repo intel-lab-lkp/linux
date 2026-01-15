@@ -24,6 +24,9 @@ struct cpc_cport {
 struct cpc_cport *cpc_cport_alloc(u16 cport_id, gfp_t gfp_mask);
 void cpc_cport_release(struct cpc_cport *cport);
 
+void cpc_cport_pack(struct gb_operation_msg_hdr *gb_hdr, u16 cport_id);
+u16 cpc_cport_unpack(struct gb_operation_msg_hdr *gb_hdr);
+
 int cpc_cport_transmit(struct cpc_cport *cport, struct sk_buff *skb);
 
 struct cpc_skb_cb {
