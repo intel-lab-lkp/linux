@@ -2679,8 +2679,7 @@ void restore_reserve_on_error(struct hstate *h, struct vm_area_struct *vma,
 			/*
 			 * No reservation present, do nothing
 			 */
-			 vma_end_reservation(h, vma, address);
-
+			vma_end_reservation(h, vma, address);
 		}
 	}
 }
