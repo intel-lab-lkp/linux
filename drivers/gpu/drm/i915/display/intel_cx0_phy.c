@@ -18,6 +18,7 @@
 #include "intel_display_types.h"
 #include "intel_display_utils.h"
 #include "intel_dp.h"
+#include "intel_dpll.h"
 #include "intel_hdmi.h"
 #include "intel_lt_phy.h"
 #include "intel_panel.h"
@@ -2224,7 +2225,10 @@ static int intel_c10pll_calc_state_from_table(struct intel_encoder *encoder,
 	int i;
 
 	for (i = 0; tables[i].name; i++) {
-		if (port_clock == tables[i].clock_rate) {
+		int clock = intel_c10pll_calc_port_clock(tables[i].c10);
+
+		drm_WARN_ON(display->drm, !intel_dpll_clock_matches(clock, tables[i].clock_rate));
+		if (intel_dpll_clock_matches(port_clock, clock)) {
 			pll_state->c10 = *tables[i].c10;
 			intel_cx0pll_update_ssc(encoder, pll_state, is_dp);
 			intel_c10pll_update_pll(encoder, pll_state);
@@ -2710,6 +2714,7 @@ static const struct intel_cx0pll_params *
 intel_c20_pll_find_table(const struct intel_crtc_state *crtc_state,
 			 struct intel_encoder *encoder)
 {
+	struct intel_display *display = to_intel_display(crtc_state);
 	const struct intel_cx0pll_params *tables;
 	int i;
 
@@ -2717,9 +2722,13 @@ intel_c20_pll_find_table(const struct intel_crtc_state *crtc_state,
 	if (!tables)
 		return NULL;
 
-	for (i = 0; tables[i].name; i++)
-		if (crtc_state->port_clock == tables[i].clock_rate)
+	for (i = 0; tables[i].name; i++) {
+		int clock = intel_c20pll_calc_port_clock(tables[i].c20);
+
+		drm_WARN_ON(display->drm, !intel_dpll_clock_matches(clock, tables[i].clock_rate));
+		if (intel_dpll_clock_matches(crtc_state->port_clock, clock))
 			return &tables[i];
+	}
 
 	return NULL;
 }
@@ -3255,7 +3264,6 @@ static u32 intel_cx0_get_pclk_pll_ack(u8 lane_mask)
 static void intel_cx0pll_enable(struct intel_encoder *encoder,
 				const struct intel_cx0pll_state *pll_state)
 {
-	int port_clock = pll_state->use_c10 ? pll_state->c10.clock : pll_state->c20.clock;
 	struct intel_display *display = to_intel_display(encoder);
 	enum phy phy = intel_encoder_to_phy(encoder);
 	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
@@ -3263,6 +3271,12 @@ static void intel_cx0pll_enable(struct intel_encoder *encoder,
 	u8 maxpclk_lane = lane_reversal ? INTEL_CX0_LANE1 :
 					  INTEL_CX0_LANE0;
 	struct ref_tracker *wakeref = intel_cx0_phy_transaction_begin(encoder);
+	int port_clock;
+
+	if (pll_state->use_c10)
+		port_clock = intel_c10pll_calc_port_clock(&pll_state->c10);
+	else
+		port_clock = intel_c20pll_calc_port_clock(&pll_state->c20);
 
 	/*
 	 * Lane reversal is never used in DP-alt mode, in that case the
