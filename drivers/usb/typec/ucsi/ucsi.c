@@ -599,6 +599,8 @@ static int ucsi_register_altmodes(struct ucsi_connector *con, u8 recipient)
 		 * incremented.
 		 */
 		num = len / sizeof(alt[0]);
+		if (num > ARRAY_SIZE(alt))
+			num = ARRAY_SIZE(alt);
 		i += num;
 
 		for (j = 0; j < num; j++) {
