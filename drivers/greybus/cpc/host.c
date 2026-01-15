@@ -155,6 +155,7 @@ static struct gb_hd_driver cpc_gb_driver = {
 static void cpc_hd_init(struct cpc_host_device *cpc_hd)
 {
 	mutex_init(&cpc_hd->lock);
+	skb_queue_head_init(&cpc_hd->tx_queue);
 }
 
 struct cpc_host_device *cpc_hd_create(struct cpc_hd_driver *driver, struct device *parent)
@@ -162,7 +163,7 @@ struct cpc_host_device *cpc_hd_create(struct cpc_hd_driver *driver, struct devic
 	struct cpc_host_device *cpc_hd;
 	struct gb_host_device *hd;
 
-	if (!driver->transmit) {
+	if (!driver->wake_tx) {
 		dev_err(parent, "missing mandatory callback\n");
 		return ERR_PTR(-EINVAL);
 	}
@@ -231,12 +232,79 @@ EXPORT_SYMBOL_GPL(cpc_hd_rcvd);
  * @cpc_hd: Host device to send SKB over.
  * @skb: SKB to send.
  */
-int cpc_hd_send_skb(struct cpc_host_device *cpc_hd, struct sk_buff *skb)
+void cpc_hd_send_skb(struct cpc_host_device *cpc_hd, struct sk_buff *skb)
 {
 	const struct cpc_hd_driver *drv = cpc_hd->driver;
 
-	return drv->transmit(cpc_hd, skb);
+	mutex_lock(&cpc_hd->lock);
+	skb_queue_tail(&cpc_hd->tx_queue, skb);
+	mutex_unlock(&cpc_hd->lock);
+
+	drv->wake_tx(cpc_hd);
 }
+
+/**
+ * cpc_hd_tx_queue_empty() - Check if transmit queue is empty.
+ * @cpc_hd: CPC Host Device.
+ *
+ * Return: True if transmit queue is empty, false otherwise.
+ */
+bool cpc_hd_tx_queue_empty(struct cpc_host_device *cpc_hd)
+{
+	bool empty;
+
+	mutex_lock(&cpc_hd->lock);
+	empty = skb_queue_empty(&cpc_hd->tx_queue);
+	mutex_unlock(&cpc_hd->lock);
+
+	return empty;
+}
+EXPORT_SYMBOL_GPL(cpc_hd_tx_queue_empty);
+
+/**
+ * cpc_hd_dequeue() - Get the next SKB that was queued for transmission.
+ * @cpc_hd: CPC Host Device.
+ *
+ * Get an SKB that was previously queued by cpc_hd_send_skb().
+ *
+ * Return: An SKB, or %NULL if queue was empty.
+ */
+struct sk_buff *cpc_hd_dequeue(struct cpc_host_device *cpc_hd)
+{
+	struct sk_buff *skb;
+
+	mutex_lock(&cpc_hd->lock);
+	skb = skb_dequeue(&cpc_hd->tx_queue);
+	mutex_unlock(&cpc_hd->lock);
+
+	return skb;
+}
+EXPORT_SYMBOL_GPL(cpc_hd_dequeue);
+
+/**
+ * cpc_hd_dequeue_many() - Get the next max_frames SKBs that were queued for transmission.
+ * @cpc_hd: CPC host device.
+ * @frame_list: Caller-provided sk_buff_head to fill with dequeued frames.
+ * @max_frames: Maximum number of frames to dequeue.
+ *
+ * Return: Number of frames actually dequeued.
+ */
+u32 cpc_hd_dequeue_many(struct cpc_host_device *cpc_hd, struct sk_buff_head *frame_list,
+			unsigned int max_frames)
+{
+	struct sk_buff *skb;
+	unsigned int count = 0;
+
+	mutex_lock(&cpc_hd->lock);
+	while (count < max_frames && (skb = skb_dequeue(&cpc_hd->tx_queue))) {
+		skb_queue_tail(frame_list, skb);
+		count++;
+	}
+	mutex_unlock(&cpc_hd->lock);
+
+	return count;
+}
+EXPORT_SYMBOL_GPL(cpc_hd_dequeue_many);
 
 MODULE_DESCRIPTION("Greybus over CPC");
 MODULE_LICENSE("GPL");
