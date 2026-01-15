@@ -42,8 +42,14 @@ struct cpc_header {
 #define GREYBUS_HEADER_SIZE (sizeof(struct gb_operation_msg_hdr))
 
 bool cpc_header_is_control(const struct cpc_header *hdr);
+u8 cpc_header_get_recv_wnd(const struct cpc_header *hdr);
 u8 cpc_header_get_seq(const struct cpc_header *hdr);
+u8 cpc_header_get_ack(const struct cpc_header *hdr);
 bool cpc_header_get_req_ack(const struct cpc_header *hdr);
 u8 cpc_header_encode_ctrl_flags(bool control, bool req_ack);
+
+u8 cpc_header_get_frames_acked_count(u8 seq, u8 ack);
+bool cpc_header_number_in_window(u8 start, u8 wnd, u8 n);
+bool cpc_header_number_in_range(u8 start, u8 end, u8 n);
 
 #endif

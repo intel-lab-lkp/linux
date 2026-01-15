@@ -16,6 +16,9 @@ static void cpc_cport_tcb_reset(struct cpc_cport *cport)
 {
 	cport->tcb.ack = 0;
 	cport->tcb.seq = 0;
+	cport->tcb.send_nxt = 0;
+	cport->tcb.send_una = 0;
+	cport->tcb.send_wnd = 1;
 }
 
 /**
@@ -38,12 +41,14 @@ struct cpc_cport *cpc_cport_alloc(u16 cport_id, gfp_t gfp_mask)
 
 	mutex_init(&cport->lock);
 	skb_queue_head_init(&cport->holding_queue);
+	skb_queue_head_init(&cport->retx_queue);
 
 	return cport;
 }
 
 void cpc_cport_release(struct cpc_cport *cport)
 {
+	skb_queue_purge(&cport->retx_queue);
 	skb_queue_purge(&cport->holding_queue);
 	kfree(cport);
 }
