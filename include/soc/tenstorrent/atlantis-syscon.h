@@ -19,6 +19,13 @@
 #define PLL_NOCC_EN_REG 0x120
 #define BUS_CG_REG 0x01FC
 
+/* RCPU Reset Register Offsets */
+#define RCPU_BLK_RST_REG 0x1c
+#define LSIO_BLK_RST_REG 0x20
+#define HSIO_BLK_RST_REG 0x0c
+#define PCIE_SUBS_RST_REG 0x00
+#define MM_RSTN_REG 0x14
+
 /* PLL Bit Definitions */
 #define PLL_CFG_EN_BIT BIT(0)
 #define PLL_CFG_BYPASS_BIT BIT(1)
