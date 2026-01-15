@@ -1106,25 +1106,57 @@ static void __nested_svm_vmexit(struct vcpu_svm *svm, struct vmcb *vmcb12)
 		kvm_queue_exception(vcpu, DB_VECTOR);
 }
 
-static void nested_svm_failed_vmrun(struct vcpu_svm *svm, struct vmcb *vmcb12)
+static void nested_svm_failed_vmrun(struct vcpu_svm *svm, u64 vmcb12_gpa)
 {
+	struct kvm_vcpu *vcpu = &svm->vcpu;
+	struct kvm_host_map map;
+	struct vmcb *vmcb12;
+	int r;
+
 	WARN_ON(svm->vmcb == svm->nested.vmcb02.ptr);
 
 	leave_guest_mode(vcpu);
 
+	r = kvm_vcpu_map(vcpu, gpa_to_gfn(vmcb12_gpa), &map);
+	if (r) {
+		kvm_make_request(KVM_REQ_TRIPLE_FAULT, vcpu);
+		return;
+	}
+
+	vmcb12 = map.hva;
 	vmcb12->control.exit_code = SVM_EXIT_ERR;
 	vmcb12->control.exit_code_hi = -1u;
 	vmcb12->control.exit_info_1 = 0;
 	vmcb12->control.exit_info_2 = 0;
 	__nested_svm_vmexit(svm, vmcb12);
+
+	kvm_vcpu_unmap(vcpu, &map);
+}
+
+static int nested_svm_copy_vmcb12_to_cache(struct kvm_vcpu *vcpu, u64 vmcb12_gpa)
+{
+	struct vcpu_svm *svm = to_svm(vcpu);
+	struct kvm_host_map map;
+	struct vmcb *vmcb12;
+	int r;
+
+	r = kvm_vcpu_map_readonly(vcpu, gpa_to_gfn(vmcb12_gpa), &map);
+	if (r)
+		return r;
+
+	vmcb12 = map.hva;
+
+	nested_copy_vmcb_control_to_cache(svm, &vmcb12->control);
+	nested_copy_vmcb_save_to_cache(svm, &vmcb12->save);
+
+	kvm_vcpu_unmap(vcpu, &map);
+	return 0;
 }
 
 int nested_svm_vmrun(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
 	int ret;
-	struct vmcb *vmcb12;
-	struct kvm_host_map map;
 	u64 vmcb12_gpa;
 	struct vmcb *vmcb01 = svm->vmcb01.ptr;
 
@@ -1145,21 +1177,16 @@ int nested_svm_vmrun(struct kvm_vcpu *vcpu)
 		return ret;
 	}
 
+	if (WARN_ON_ONCE(!svm->nested.initialized))
+		return -EINVAL;
+
 	vmcb12_gpa = svm->vmcb->save.rax;
-	if (kvm_vcpu_map(vcpu, gpa_to_gfn(vmcb12_gpa), &map)) {
+	if (nested_svm_copy_vmcb12_to_cache(vcpu, vmcb12_gpa)) {
 		kvm_inject_gp(vcpu, 0);
 		return 1;
 	}
 
 	ret = kvm_skip_emulated_instruction(vcpu);
-
-	vmcb12 = map.hva;
-
-	if (WARN_ON_ONCE(!svm->nested.initialized))
-		return -EINVAL;
-
-	nested_copy_vmcb_control_to_cache(svm, &vmcb12->control);
-	nested_copy_vmcb_save_to_cache(svm, &vmcb12->save);
 
 	/*
 	 * Since vmcb01 is not in use, we can use it to store some of the L1
@@ -1181,10 +1208,8 @@ int nested_svm_vmrun(struct kvm_vcpu *vcpu)
 		svm->nmi_l1_to_l2 = false;
 		svm->soft_int_injected = false;
 
-		nested_svm_failed_vmrun(svm, vmcb12);
+		nested_svm_failed_vmrun(svm, vmcb12_gpa);
 	}
-
-	kvm_vcpu_unmap(vcpu, &map);
 
 	return ret;
 }
