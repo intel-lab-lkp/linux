@@ -23,6 +23,7 @@
 #include <linux/usb/xhci-sideband.h>
 
 #include "xhci.h"
+#include "xhci-pci.h"
 #include "xhci-trace.h"
 #include "xhci-debugfs.h"
 #include "xhci-dbgcap.h"
@@ -346,6 +347,29 @@ int xhci_disable_interrupter(struct xhci_hcd *xhci, struct xhci_interrupter *ir)
 	return 0;
 }
 
+static int xhci_quiesce_interrupter(struct xhci_hcd *xhci, struct xhci_interrupter *ir)
+{
+	u32 iman;
+	u64 erdp;
+
+	if (!ir || !ir->ir_set)
+		return -EINVAL;
+
+	xhci_disable_interrupter(xhci, ir);
+
+	if (!ir->ip_autoclear) {
+		iman = readl(&ir->ir_set->iman);
+		iman |= IMAN_IP;
+		writel(iman, &ir->ir_set->iman);
+		readl(&ir->ir_set->iman);
+	}
+
+	erdp = xhci_read_64(xhci, &ir->ir_set->erst_dequeue);
+	xhci_write_64(xhci, erdp | ERST_EHB, &ir->ir_set->erst_dequeue);
+
+	return 0;
+}
+
 /* interrupt moderation interval imod_interval in nanoseconds */
 int xhci_set_interrupter_moderation(struct xhci_interrupter *ir,
 				    u32 imod_interval)
@@ -597,6 +621,11 @@ static int xhci_run_finished(struct xhci_hcd *xhci)
 	struct xhci_interrupter *ir = xhci->interrupters[0];
 	unsigned long	flags;
 	u32		temp;
+	int		i;
+	struct usb_hcd  *hcd = xhci_to_hcd(xhci);
+
+	/* Ensure handler_data is set for secondary MSI/MSI-X vectors. */
+	xhci_msix_set_handler_data(hcd);
 
 	/*
 	 * Enable interrupts before starting the host (xhci 4.2 and 5.5.2).
@@ -611,6 +640,12 @@ static int xhci_run_finished(struct xhci_hcd *xhci)
 
 	xhci_dbg_trace(xhci, trace_xhci_dbg_init, "Enable primary interrupter");
 	xhci_enable_interrupter(ir);
+
+	/* Enable secondary interrupters (if any were successfully requested) */
+	for (i = 0; i < xhci->secondary_irqs_enabled; i++) {
+		if (xhci->interrupters[i + 1])
+			xhci_enable_interrupter(xhci->interrupters[i + 1]);
+	}
 
 	if (xhci_start(xhci)) {
 		xhci_halt(xhci);
@@ -708,6 +743,7 @@ void xhci_stop(struct usb_hcd *hcd)
 	u32 temp;
 	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
 	struct xhci_interrupter *ir = xhci->interrupters[0];
+	int i;
 
 	mutex_lock(&xhci->mutex);
 
@@ -743,6 +779,12 @@ void xhci_stop(struct usb_hcd *hcd)
 	temp = readl(&xhci->op_regs->status);
 	writel((temp & ~0x1fff) | STS_EINT, &xhci->op_regs->status);
 	xhci_disable_interrupter(xhci, ir);
+
+	/* Disable secondary interrupters */
+	for (i = 0; i < xhci->secondary_irqs_enabled; i++) {
+		if (xhci->interrupters[i + 1])
+			xhci_quiesce_interrupter(xhci, (xhci->interrupters[i + 1]));
+	}
 
 	xhci_dbg_trace(xhci, trace_xhci_dbg_init, "cleaning up memory");
 	xhci_mem_cleanup(xhci);
@@ -1087,6 +1129,7 @@ int xhci_resume(struct xhci_hcd *xhci, bool power_lost, bool is_auto_resume)
 	bool			comp_timer_running = false;
 	bool			pending_portevent = false;
 	bool			suspended_usb3_devs = false;
+	int			i;
 
 	if (!hcd->state)
 		return 0;
@@ -1181,6 +1224,12 @@ int xhci_resume(struct xhci_hcd *xhci, bool power_lost, bool is_auto_resume)
 		temp = readl(&xhci->op_regs->status);
 		writel((temp & ~0x1fff) | STS_EINT, &xhci->op_regs->status);
 		xhci_disable_interrupter(xhci, xhci->interrupters[0]);
+
+		/* Disable secondary interrupters as well */
+		for (i = 0; i < xhci->secondary_irqs_enabled; i++) {
+			if (xhci->interrupters[i + 1])
+				xhci_quiesce_interrupter(xhci, (xhci->interrupters[i + 1]));
+		}
 
 		xhci_dbg(xhci, "cleaning up memory\n");
 		xhci_mem_cleanup(xhci);
@@ -4112,6 +4161,8 @@ static void xhci_free_dev(struct usb_hcd *hcd, struct usb_device *udev)
 	virt_dev->udev = NULL;
 	xhci_disable_slot(xhci, udev->slot_id);
 
+	virt_dev->interrupter = NULL;
+
 	spin_lock_irqsave(&xhci->lock, flags);
 	xhci_free_virt_device(xhci, virt_dev, udev->slot_id);
 	spin_unlock_irqrestore(&xhci->lock, flags);
@@ -4207,6 +4258,7 @@ int xhci_alloc_dev(struct usb_hcd *hcd, struct usb_device *udev)
 	unsigned long flags;
 	int ret, slot_id;
 	struct xhci_command *command;
+	unsigned int intr_num;
 
 	command = xhci_alloc_command(xhci, true, GFP_KERNEL);
 	if (!command)
@@ -4262,6 +4314,18 @@ int xhci_alloc_dev(struct usb_hcd *hcd, struct usb_device *udev)
 	trace_xhci_alloc_dev(slot_ctx);
 
 	udev->slot_id = slot_id;
+
+	/*
+	 * Select a default interrupter for this device.
+	 *
+	 * Using slot_id modulo spreads devices across enabled secondary vectors;
+	 * queueing code will use this to program TRB_INTR_TARGET().
+	 */
+	if (xhci->secondary_irqs_enabled) {
+		intr_num = slot_id % xhci->secondary_irqs_enabled;
+		vdev->interrupter = xhci->interrupters[intr_num + 1];
+	} else
+		vdev->interrupter = xhci->interrupters[0];
 
 	xhci_debugfs_create_slot(xhci, slot_id);
 
