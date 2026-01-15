@@ -752,11 +752,10 @@ static struct clk * __init clkgen_odf_register(const char *parent_name,
 	return clk;
 }
 
-
 static void __init clkgen_c32_pll_setup(struct device_node *np,
 		struct clkgen_pll_data_clks *datac)
 {
-	struct clk *clk;
+	struct clk *pll_clk;
 	const char *parent_name, *pll_name;
 	void __iomem *pll_base;
 	int num_odfs, odf;
@@ -774,18 +773,18 @@ static void __init clkgen_c32_pll_setup(struct device_node *np,
 
 	of_clk_detect_critical(np, 0, &pll_flags);
 
-	clk = clkgen_pll_register(parent_name, datac->data, pll_base, pll_flags,
+	pll_clk = clkgen_pll_register(parent_name, datac->data, pll_base, pll_flags,
 				  np->name, datac->data->lock);
-	if (IS_ERR(clk))
-		return;
+	if (IS_ERR(pll_clk))
+		goto err_unmap;
 
-	pll_name = __clk_get_name(clk);
+	pll_name = __clk_get_name(pll_clk);
 
 	num_odfs = datac->data->num_odfs;
 
 	clk_data = kzalloc(sizeof(*clk_data), GFP_KERNEL);
 	if (!clk_data)
-		return;
+		goto err_pll_unregister;
 
 	clk_data->clk_num = num_odfs;
 	clk_data->clks = kcalloc(clk_data->clk_num, sizeof(struct clk *),
@@ -795,7 +794,7 @@ static void __init clkgen_c32_pll_setup(struct device_node *np,
 		goto err;
 
 	for (odf = 0; odf < num_odfs; odf++) {
-		struct clk *clk;
+		struct clk *odf_clk;
 		const char *clk_name;
 		unsigned long odf_flags = 0;
 
@@ -806,28 +805,45 @@ static void __init clkgen_c32_pll_setup(struct device_node *np,
 			if (of_property_read_string_index(np,
 							  "clock-output-names",
 							  odf, &clk_name))
-				return;
+				goto err;
 
 			of_clk_detect_critical(np, odf, &odf_flags);
 		}
 
-		clk = clkgen_odf_register(pll_name, pll_base, datac->data,
+		odf_clk = clkgen_odf_register(pll_name, pll_base, datac->data,
 				odf_flags, odf, &clkgena_c32_odf_lock,
 				clk_name);
-		if (IS_ERR(clk))
-			goto err;
+		if (IS_ERR(odf_clk))
+			goto err_odf_unregister;
 
-		clk_data->clks[odf] = clk;
+		clk_data->clks[odf] = odf_clk;
 	}
 
 	of_clk_add_provider(np, of_clk_src_onecell_get, clk_data);
 	return;
 
+err_odf_unregister:
+	while (odf--) {
+		struct clk_gate *gate = to_clk_gate(__clk_get_hw(clk_data->clks[odf]));
+		struct clk_divider *div = to_clk_divider(__clk_get_hw(clk_data->clks[odf]));
+
+		clk_unregister_composite(clk_data->clks[odf]);
+		kfree(div);
+		kfree(gate);
+	}
 err:
-	kfree(pll_name);
 	kfree(clk_data->clks);
 	kfree(clk_data);
+err_pll_unregister:
+	struct clkgen_pll *pll = to_clkgen_pll(__clk_get_hw(pll_clk));
+
+	clk_unregister(pll_clk);
+	kfree(pll);
+err_unmap:
+	if (pll_base)
+		iounmap(pll_base);
 }
+
 static void __init clkgen_c32_pll0_setup(struct device_node *np)
 {
 	clkgen_c32_pll_setup(np,
