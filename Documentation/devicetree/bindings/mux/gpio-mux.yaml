@@ -25,6 +25,13 @@ properties:
     description:
       List of gpios used to control the multiplexer, least significant bit first.
 
+  enable-gpios:
+    description:
+      Optional GPIO to enable the multiplexer. When present, the mux will be
+      disabled before changing address lines and re-enabled after to prevent
+      glitches. Required for MUX_IDLE_DISCONNECT idle-state.
+    maxItems: 1
+
   mux-supply:
     description:
       Regulator to power on the multiplexer.
