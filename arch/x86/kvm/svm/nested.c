@@ -1789,6 +1789,8 @@ static int svm_get_nested_state(struct kvm_vcpu *vcpu,
 	/* First fill in the header and copy it out.  */
 	if (is_guest_mode(vcpu)) {
 		kvm_state.hdr.svm.vmcb_pa = svm->nested.vmcb12_gpa;
+		if (nested_npt_enabled(svm))
+			kvm_state.hdr.svm.flags |= KVM_STATE_SVM_VALID_GPAT;
 		kvm_state.size += KVM_STATE_NESTED_SVM_VMCB_SIZE;
 		kvm_state.flags |= KVM_STATE_NESTED_GUEST_MODE;
 
@@ -1823,6 +1825,11 @@ static int svm_get_nested_state(struct kvm_vcpu *vcpu,
 	if (r)
 		return -EFAULT;
 
+	/*
+	 * vmcb01->save.g_pat is dead now, so it is safe to overwrite it with
+	 * vmcb02->save.g_pat, whether or not nested NPT is enabled.
+	 */
+	svm->vmcb01.ptr->save.g_pat = svm->vmcb->save.g_pat;
 	if (copy_to_user(&user_vmcb->save, &svm->vmcb01.ptr->save,
 			 sizeof(user_vmcb->save)))
 		return -EFAULT;
@@ -1904,7 +1911,7 @@ static int svm_set_nested_state(struct kvm_vcpu *vcpu,
 		goto out_free;
 
 	/*
-	 * Validate host state saved from before VMRUN (see
+	 * Validate host state saved from before VMRUN and gPAT (see
 	 * nested_svm_check_permissions).
 	 */
 	__nested_copy_vmcb_save_to_cache(&save_cached, save);
@@ -1950,6 +1957,10 @@ static int svm_set_nested_state(struct kvm_vcpu *vcpu,
 				  nested_npt_enabled(svm), false);
 	if (ret)
 		goto out_free;
+
+	if (is_guest_mode(vcpu) && nested_npt_enabled(svm) &&
+	    (kvm_state.hdr.svm.flags & KVM_STATE_SVM_VALID_GPAT))
+		svm->vmcb->save.g_pat = save_cached.g_pat;
 
 	svm->nested.force_msr_bitmap_recalc = true;
 
