@@ -2011,7 +2011,7 @@ static int ftgmac100_probe(struct platform_device *pdev)
 	    priv->mac_id == FTGMAC100_AST2500) {
 		err = ftgmac100_setup_mdio(netdev);
 		if (err)
-			goto err_phy_connect;
+			return err;
 	}
 
 	if (np) {
