@@ -66,7 +66,6 @@ static inline void __mmap_lock_trace_released(struct mm_struct *mm, bool write)
 
 #endif /* CONFIG_TRACING */
 
-
 static inline bool mmap_lock_is_contended(struct mm_struct *mm)
 {
 	return rwsem_is_contended(&mm->mmap_lock);
@@ -272,6 +271,11 @@ static inline bool vma_is_locked(struct vm_area_struct *vma)
 	return vma_is_read_locked(vma) || vma_is_write_locked(vma);
 }
 
+static inline bool vma_is_stabilised(struct vm_area_struct *vma)
+{
+	return vma_is_locked(vma) || mmap_is_locked(vma->vm_mm);
+}
+
 static inline void vma_assert_write_locked(struct vm_area_struct *vma)
 {
 	VM_BUG_ON_VMA(!vma_is_write_locked(vma), vma);
@@ -356,6 +360,11 @@ static inline struct vm_area_struct *lock_vma_under_rcu(struct mm_struct *mm,
 		unsigned long address)
 {
 	return NULL;
+}
+
+static inline bool vma_is_stabilised(struct vm_area_struct *vma)
+{
+	return mmap_is_locked(vma->vm_mm);
 }
 
 static inline void vma_assert_locked(struct vm_area_struct *vma)
@@ -461,6 +470,18 @@ static inline void mmap_read_unlock_non_owner(struct mm_struct *mm)
 {
 	__mmap_lock_trace_released(mm, false);
 	up_read_non_owner(&mm->mmap_lock);
+}
+
+/**
+ * vma_assert_stabilised() - assert that this VMA cannot be changed from
+ * underneath us either by having a VMA or mmap lock held.
+ * @vma: The VMA whose stability we wish to assess.
+ *
+ * Note that this will only trigger an assert if CONFIG_DEBUG_VM is set.
+ */
+static inline void vma_assert_stabilised(struct vm_area_struct *vma)
+{
+	VM_BUG_ON_VMA(!vma_is_stabilised(vma), vma);
 }
 
 #endif /* _LINUX_MMAP_LOCK_H */
