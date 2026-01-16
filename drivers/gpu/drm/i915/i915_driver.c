@@ -93,6 +93,7 @@
 #include "i915_driver.h"
 #include "i915_drm_client.h"
 #include "i915_drv.h"
+#include "i915_dsb_buffer.h"
 #include "i915_edram.h"
 #include "i915_file_private.h"
 #include "i915_getparam.h"
@@ -764,6 +765,7 @@ static bool vgpu_active(struct drm_device *drm)
 }
 
 static const struct intel_display_parent_interface parent = {
+	.dsb = &i915_display_dsb_interface,
 	.hdcp = &i915_display_hdcp_interface,
 	.initial_plane = &i915_display_initial_plane_interface,
 	.irq = &i915_display_irq_interface,
