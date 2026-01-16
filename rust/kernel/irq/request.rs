@@ -120,6 +120,23 @@ impl<'a> IrqRequest<'a> {
     pub fn irq(&self) -> u32 {
         self.irq
     }
+
+    /// Attach the IRQ as a device wake IRQ.
+    ///
+    /// Attaches the device IO interrupt as a wake IRQ. The wake IRQ gets
+    /// automatically configured for wake-up from suspend based on the
+    /// device's sysfs wakeup entry. Typically called during driver probe
+    /// after calling `devm_init_wakeup()`.
+    ///
+    /// The wake IRQ is automatically cleared when the device is removed
+    /// (resource-managed).
+    ///
+    /// Returns `Ok(())` on success, or an error code on failure.
+    pub fn devm_set_wake_irq(&self) -> Result {
+        // SAFETY: `self.as_raw()` is a valid pointer to a `struct device`.
+        let ret = unsafe { bindings::devm_pm_set_wake_irq(self.dev.as_raw(), self.irq as i32) };
+        to_result(ret)
+    }
 }
 
 /// A registration of an IRQ handler for a given IRQ line.
