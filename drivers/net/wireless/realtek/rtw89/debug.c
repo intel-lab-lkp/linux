@@ -834,8 +834,10 @@ static ssize_t __print_txpwr_map(struct rtw89_dev *rtwdev, char *buf, size_t buf
 	else
 		max_valid_addr = map->addr_to;
 
-	if (max_valid_addr == 0)
+	if (max_valid_addr == 0) {
+		vfree(bufp);
 		return -EOPNOTSUPP;
+	}
 
 	for (addr = map->addr_from; addr <= max_valid_addr; addr += 4) {
 		ret = rtw89_mac_txpwr_read32(rtwdev, RTW89_PHY_0, addr, &val);
