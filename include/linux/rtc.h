@@ -83,6 +83,7 @@ struct rtc_timer {
 /* flags */
 #define RTC_DEV_BUSY 0
 #define RTC_NO_CDEV  1
+#define RTC_OPS_USE_RTC_DEV 2
 
 struct rtc_device {
 	struct device dev;
@@ -166,6 +167,20 @@ struct rtc_device {
 
 #define rtc_lock(d) mutex_lock(&d->ops_lock)
 #define rtc_unlock(d) mutex_unlock(&d->ops_lock)
+
+/**
+ * rtc_ops_dev - Get the device pointer for RTC ops callbacks
+ * @rtc: RTC device
+ *
+ * Returns &rtc->dev if RTC_OPS_USE_RTC_DEV flag is set,
+ * otherwise returns rtc->dev.parent.
+ */
+static inline struct device *rtc_ops_dev(struct rtc_device *rtc)
+{
+	if (test_bit(RTC_OPS_USE_RTC_DEV, &rtc->flags))
+		return &rtc->dev;
+	return rtc->dev.parent;
+}
 
 /* useful timestamps */
 #define RTC_TIMESTAMP_BEGIN_0000	-62167219200ULL /* 0000-01-01 00:00:00 */
