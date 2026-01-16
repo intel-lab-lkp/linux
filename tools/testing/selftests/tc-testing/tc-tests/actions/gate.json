@@ -131,7 +131,7 @@
                 255
             ]
         ],
-        "cmdUnderTest": "$TC action replace action gate base-time 400000000000ns index 20",
+        "cmdUnderTest": "$TC action replace action gate base-time 400000000000ns sched-entry open 200000000ns -1 8000000b index 20",
         "expExitCode": "0",
         "verifyCmd": "$TC action get action gate index 20",
         "matchPattern": "action order [0-9]*: .*base-time 400s.*index 20 ref",
