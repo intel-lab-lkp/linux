@@ -40,6 +40,7 @@
 #include "intel_hti.h"
 #include "intel_mg_phy_regs.h"
 #include "intel_pch_refclk.h"
+#include "intel_pps.h"
 #include "intel_step.h"
 #include "intel_tc.h"
 
@@ -4400,6 +4401,10 @@ static void mtl_pll_enable(struct intel_display *display,
 
 	if (drm_WARN_ON(display->drm, !encoder))
 		return;
+
+	/* Enable Panel Power if PPS is required */
+	if (intel_encoder_is_dp(encoder))
+		intel_pps_on(enc_to_intel_dp(encoder));
 
 	intel_mtl_pll_enable(encoder, pll, dpll_hw_state);
 }

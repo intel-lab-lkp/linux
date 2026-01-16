@@ -2653,8 +2653,10 @@ static void mtl_ddi_pre_enable_dp(struct intel_atomic_state *state,
 	/* 3. Select Thunderbolt */
 	mtl_port_buf_ctl_io_selection(encoder);
 
-	/* 4. Enable Panel Power if PPS is required */
-	intel_pps_on(intel_dp);
+	/*
+	 * 4. Enable Panel Power if PPS is required
+	 *    moved to intel_dpll_mgr .enable hook
+	 */
 
 	/* 5. Enable the port PLL */
 	intel_ddi_enable_clock(encoder, crtc_state);
