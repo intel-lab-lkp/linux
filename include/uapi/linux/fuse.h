@@ -242,7 +242,7 @@
  *  - add FUSE_NOTIFY_PRUNE
  *
  *  7.46
- *  - add fuse_uring_cmd_req init flags
+ *  - add fuse_uring_cmd_req init flags and queue_depth
  */
 
 #ifndef _LINUX_FUSE_H
@@ -1299,6 +1299,7 @@ enum fuse_uring_cmd {
 
 /* fuse_uring_cmd_req init flags */
 #define FUSE_URING_BUF_RING	(1 << 0)
+#define FUSE_URING_ZERO_COPY	(1 << 1)
 
 /**
  * In the 80B command area of the SQE.
@@ -1315,10 +1316,11 @@ struct fuse_uring_cmd_req {
 	union {
 		struct {
 			uint16_t flags;
+			uint16_t queue_depth;
 		} init;
 	};
 
-	uint8_t padding[4];
+	uint8_t padding[2];
 };
 
 #endif /* _LINUX_FUSE_H */
