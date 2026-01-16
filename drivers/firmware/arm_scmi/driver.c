@@ -3167,17 +3167,10 @@ static int scmi_probe(struct platform_device *pdev)
 	handle->devm_protocol_put = scmi_devm_protocol_put;
 	handle->is_transport_atomic = scmi_is_transport_atomic;
 
-	/* Setup all channels described in the DT at first */
-	ret = scmi_channels_setup(info);
-	if (ret) {
-		err_str = "failed to setup channels\n";
-		goto clear_ida;
-	}
-
 	ret = bus_register_notifier(&scmi_bus_type, &info->bus_nb);
 	if (ret) {
 		err_str = "failed to register bus notifier\n";
-		goto clear_txrx_setup;
+		goto clear_ida;
 	}
 
 	ret = blocking_notifier_chain_register(&scmi_requested_devices_nh,
@@ -3221,6 +3214,12 @@ static int scmi_probe(struct platform_device *pdev)
 		dev_err(dev,
 			"Transport is not polling capable. Atomic mode not supported.\n");
 
+	ret = scmi_channels_setup(info);
+	if (ret) {
+		err_str = "failed to setup channels\n";
+		goto notification_exit;
+	}
+
 	/*
 	 * Trigger SCMI Base protocol initialization.
 	 * It's mandatory and won't be ever released/deinit until the
@@ -3233,7 +3232,7 @@ static int scmi_probe(struct platform_device *pdev)
 			dev_err(dev, "%s", err_str);
 			return 0;
 		}
-		goto notification_exit;
+		goto clear_txrx_setup;
 	}
 
 	mutex_lock(&scmi_list_mutex);
@@ -3275,6 +3274,8 @@ static int scmi_probe(struct platform_device *pdev)
 
 	return 0;
 
+clear_txrx_setup:
+	scmi_cleanup_txrx_channels(info);
 notification_exit:
 	if (IS_ENABLED(CONFIG_ARM_SCMI_RAW_MODE_SUPPORT))
 		scmi_raw_mode_cleanup(info->raw);
@@ -3284,8 +3285,6 @@ clear_dev_req_notifier:
 					   &info->dev_req_nb);
 clear_bus_notifier:
 	bus_unregister_notifier(&scmi_bus_type, &info->bus_nb);
-clear_txrx_setup:
-	scmi_cleanup_txrx_channels(info);
 clear_ida:
 	ida_free(&scmi_id, info->id);
 
@@ -3309,6 +3308,9 @@ static void scmi_remove(struct platform_device *pdev)
 	list_del(&info->node);
 	mutex_unlock(&scmi_list_mutex);
 
+	/* Safe to free channels since no more users */
+	scmi_cleanup_txrx_channels(info);
+
 	scmi_notification_exit(&info->handle);
 
 	mutex_lock(&info->protocols_mtx);
@@ -3322,9 +3324,6 @@ static void scmi_remove(struct platform_device *pdev)
 	blocking_notifier_chain_unregister(&scmi_requested_devices_nh,
 					   &info->dev_req_nb);
 	bus_unregister_notifier(&scmi_bus_type, &info->bus_nb);
-
-	/* Safe to free channels since no more users */
-	scmi_cleanup_txrx_channels(info);
 
 	ida_free(&scmi_id, info->id);
 }
