@@ -6598,7 +6598,9 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 		r = -ENOMEM;
 		if (!u.sregs2)
 			goto out;
+		kvm_vcpu_srcu_read_lock(vcpu);
 		__get_sregs2(vcpu, u.sregs2);
+		kvm_vcpu_srcu_read_unlock(vcpu);
 		r = -EFAULT;
 		if (copy_to_user(argp, u.sregs2, sizeof(struct kvm_sregs2)))
 			goto out;
