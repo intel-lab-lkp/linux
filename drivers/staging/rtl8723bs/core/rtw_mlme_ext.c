@@ -946,6 +946,7 @@ static unsigned short rtw_parse_assoc_security_ies(struct adapter *padapter,
 	pstat->wpa_pairwise_cipher = 0;
 	pstat->wpa2_pairwise_cipher = 0;
 	memset(pstat->wpa_ie, 0, sizeof(pstat->wpa_ie));
+
 	if ((psecuritypriv->wpa_psk & BIT(1)) && elems->rsn_ie) {
 
 		int group_cipher = 0, pairwise_cipher = 0;
@@ -1016,17 +1017,15 @@ static unsigned short rtw_parse_assoc_security_ies(struct adapter *padapter,
 		}
 
 	} else {
-		int copy_len;
+		int copy_len = 0;
 
 		if (psecuritypriv->wpa_psk == 0) 
 			return WLAN_STATUS_INVALID_IE;
 
-		if (elems->wps_ie) {
+		if (elems->wps_ie)
 			pstat->flags |= WLAN_STA_WPS;
-			copy_len = 0;
-		} else {
+		else
 			copy_len = min_t(int, sizeof(pstat->wpa_ie), wpa_ie_len+2);
-		}
 
 		if (copy_len > 0)
 			memcpy(pstat->wpa_ie, wpa_ie-2, copy_len);
