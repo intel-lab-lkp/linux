@@ -1934,72 +1934,10 @@ static void ufshcd_ungate_work(struct work_struct *work)
  */
 void ufshcd_hold(struct ufs_hba *hba)
 {
-	bool flush_result;
-	unsigned long flags;
-
-	if (!ufshcd_is_clkgating_allowed(hba) ||
-	    !hba->clk_gating.is_initialized)
-		return;
-	spin_lock_irqsave(&hba->clk_gating.lock, flags);
-	hba->clk_gating.active_reqs++;
-
-start:
-	switch (hba->clk_gating.state) {
-	case CLKS_ON:
-		/*
-		 * Wait for the ungate work to complete if in progress.
-		 * Though the clocks may be in ON state, the link could
-		 * still be in hibner8 state if hibern8 is allowed
-		 * during clock gating.
-		 * Make sure we exit hibern8 state also in addition to
-		 * clocks being ON.
-		 */
-		if (ufshcd_can_hibern8_during_gating(hba) &&
-		    ufshcd_is_link_hibern8(hba)) {
-			spin_unlock_irqrestore(&hba->clk_gating.lock, flags);
-			flush_result = flush_work(&hba->clk_gating.ungate_work);
-			if (hba->clk_gating.is_suspended && !flush_result)
-				return;
-			spin_lock_irqsave(&hba->clk_gating.lock, flags);
-			goto start;
-		}
-		break;
-	case REQ_CLKS_OFF:
-		if (cancel_delayed_work(&hba->clk_gating.gate_work)) {
-			hba->clk_gating.state = CLKS_ON;
-			trace_ufshcd_clk_gating(hba,
-						hba->clk_gating.state);
-			break;
-		}
-		/*
-		 * If we are here, it means gating work is either done or
-		 * currently running. Hence, fall through to cancel gating
-		 * work and to enable clocks.
-		 */
-		fallthrough;
-	case CLKS_OFF:
-		hba->clk_gating.state = REQ_CLKS_ON;
-		trace_ufshcd_clk_gating(hba,
-					hba->clk_gating.state);
-		queue_work(hba->clk_gating.clk_gating_workq,
-			   &hba->clk_gating.ungate_work);
-		/*
-		 * fall through to check if we should wait for this
-		 * work to be done or not.
-		 */
-		fallthrough;
-	case REQ_CLKS_ON:
-		spin_unlock_irqrestore(&hba->clk_gating.lock, flags);
-		flush_work(&hba->clk_gating.ungate_work);
-		/* Make sure state is CLKS_ON before returning */
-		spin_lock_irqsave(&hba->clk_gating.lock, flags);
-		goto start;
-	default:
-		dev_err(hba->dev, "%s: clk gating is in invalid state %d\n",
-				__func__, hba->clk_gating.state);
-		break;
-	}
-	spin_unlock_irqrestore(&hba->clk_gating.lock, flags);
+	/* blk_pm_runtime_init() sets q->dev */
+	if (hba->ufs_device_wlun && hba->ufs_device_wlun->request_queue->dev &&
+	    !hba->pm_op_in_progress)
+		ufshcd_rpm_get_sync(hba);
 }
 EXPORT_SYMBOL_GPL(ufshcd_hold);
 
@@ -2071,37 +2009,12 @@ static void ufshcd_gate_work(struct work_struct *work)
 	}
 }
 
-static void __ufshcd_release(struct ufs_hba *hba)
-{
-	lockdep_assert_held(&hba->clk_gating.lock);
-
-	if (!ufshcd_is_clkgating_allowed(hba))
-		return;
-
-	hba->clk_gating.active_reqs--;
-
-	if (hba->clk_gating.active_reqs || hba->clk_gating.is_suspended ||
-	    !hba->clk_gating.is_initialized ||
-	    hba->clk_gating.state == CLKS_OFF)
-		return;
-
-	scoped_guard(spinlock_irqsave, hba->host->host_lock) {
-		if (ufshcd_has_pending_tasks(hba) ||
-		    hba->ufshcd_state != UFSHCD_STATE_OPERATIONAL)
-			return;
-	}
-
-	hba->clk_gating.state = REQ_CLKS_OFF;
-	trace_ufshcd_clk_gating(hba, hba->clk_gating.state);
-	queue_delayed_work(hba->clk_gating.clk_gating_workq,
-			   &hba->clk_gating.gate_work,
-			   msecs_to_jiffies(hba->clk_gating.delay_ms));
-}
-
 void ufshcd_release(struct ufs_hba *hba)
 {
-	guard(spinlock_irqsave)(&hba->clk_gating.lock);
-	__ufshcd_release(hba);
+	/* blk_pm_runtime_init() sets q->dev */
+	if (hba->ufs_device_wlun && hba->ufs_device_wlun->request_queue->dev &&
+	    !hba->pm_op_in_progress)
+		ufshcd_rpm_put(hba);
 }
 EXPORT_SYMBOL_GPL(ufshcd_release);
 
