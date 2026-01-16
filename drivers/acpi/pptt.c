@@ -529,6 +529,43 @@ static void acpi_pptt_warn_missing(void)
 	pr_warn_once("No PPTT table found, CPU and cache topology may be inaccurate\n");
 }
 
+static void pptt_verify_cpu_count(struct acpi_table_header *table_hdr)
+{
+	struct acpi_subtable_header *entry;
+	unsigned long end;
+	struct acpi_pptt_processor *cpu;
+	u8 len;
+	int nr_pptt_cpus = 0;
+	static bool checked;
+
+	if (checked)
+		return;
+
+	end = (unsigned long)table_hdr + table_hdr->length;
+	entry = ACPI_ADD_PTR(struct acpi_subtable_header, table_hdr,
+				sizeof(struct acpi_table_pptt));
+
+	while ((unsigned long)entry + sizeof(struct acpi_pptt_processor) <= end) {
+		len = entry->length;
+		if (!len) {
+			pr_warn("Invalid zero length subtable\n");
+			return;
+		}
+
+		cpu = (struct acpi_pptt_processor *)entry;
+		entry = ACPI_ADD_PTR(struct acpi_subtable_header, entry, len);
+		if (cpu->header.type == ACPI_PPTT_TYPE_PROCESSOR &&
+		    (cpu->flags & ACPI_PPTT_ACPI_LEAF_NODE))
+			nr_pptt_cpus++;
+	}
+
+	if (nr_pptt_cpus != num_possible_cpus())
+		pr_warn("The number of CPUs (%d) in PPTT table doesn't match system's CPU count (%d)!\n",
+			nr_pptt_cpus, num_possible_cpus());
+
+	checked = true;
+}
+
 /**
  * topology_get_acpi_cpu_tag() - Find a unique topology value for a feature
  * @table: Pointer to the head of the PPTT table
@@ -565,6 +602,9 @@ static int topology_get_acpi_cpu_tag(struct acpi_table_header *table,
 	}
 	pr_warn_once("PPTT table found, but unable to locate core %d (%d)\n",
 		    cpu, acpi_cpu_id);
+
+	/* Check whether PPTT table's CPU count match with system count */
+	pptt_verify_cpu_count(table);
 	return -ENOENT;
 }
 
