@@ -10,6 +10,7 @@
 #ifndef NOLIBC_NO_RUNTIME
 
 #include "compiler.h"
+#include "elf.h"
 
 char **environ __attribute__((weak));
 const unsigned long *_auxv __attribute__((weak));
@@ -46,6 +47,61 @@ void _start_c(long *sp)
 
 	/* initialize stack protector */
 	__stack_chk_init();
+
+#ifdef NOLIBC_STATIC_PIE
+#define R_68K_RELATIVE	22
+{
+	void *base = (void *) 0x6d8000; // TODO: how to actually get this?
+	unsigned int rela_count = 0;
+	unsigned int rela_off = 0;
+	unsigned long dyn_addr;
+	Elf32_Rela *rela;
+	Elf32_Addr *addr;
+	Elf32_Dyn *dyn;
+	int i;
+
+	/* For m68k with the FDPIC loader d5 contains the offset to the DYNAMIC segment */
+	__asm__ volatile (
+		"move.l %%d5, %0\n"
+		: "=r" (dyn_addr)
+	);
+	dyn = (Elf32_Dyn *) dyn_addr;
+
+	/* Go through the DYNAMIC segment and get the offset to rela and the number of relocations */
+	for (; dyn->d_tag != DT_NULL; dyn++) {
+		switch (dyn->d_tag) {
+		case DT_RELA:
+			rela_off = dyn->d_un.d_ptr;
+			break;
+		case DT_RELACOUNT:
+			rela_count = dyn->d_un.d_val;
+			break;
+		}
+	}
+
+	if (!rela_off || !rela_count)
+		exit(42); //TODO nonsense error
+
+	rela = base + rela_off;
+
+	/* Do the relocations, only R_68K_RELATIVE for now */
+	for (i = 0; i < rela_count; i++) {
+		Elf32_Rela *entry = &rela[i];
+
+		switch (ELF32_R_TYPE(entry->r_info)) {
+		case R_68K_RELATIVE:
+		{
+			addr = (Elf32_Addr *)(base + entry->r_offset);
+			*addr = (Elf32_Addr) (base + entry->r_addend);
+		}
+			break;
+		default:
+			exit(43); //TODO nonsense error
+			break;
+		}
+	}
+}
+#endif
 
 	/*
 	 * sp  :    argc          <-- argument count, required by main()
