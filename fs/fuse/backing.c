@@ -166,6 +166,25 @@ out:
 	return err;
 }
 
+static int fuse_backing_close_one(int id, void *p, void *data)
+{
+	struct fuse_conn *fc = data;
+
+	fuse_backing_close(fc, id);
+
+	return 0;
+}
+
+int fuse_backing_close_all(struct fuse_conn *fc)
+{
+	if (!fc->passthrough || !capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	idr_for_each(&fc->backing_files_map, fuse_backing_close_one, fc);
+
+	return 0;
+}
+
 struct fuse_backing *fuse_backing_lookup(struct fuse_conn *fc, int backing_id)
 {
 	struct fuse_backing *fb;
