@@ -25,8 +25,8 @@ struct intel_dpll_hw_state;
 struct intel_encoder;
 struct intel_hdmi;
 
-void intel_clear_response_ready_flag(struct intel_encoder *encoder,
-				     int lane);
+void intel_cx0_clear_response_ready_flag(struct intel_encoder *encoder,
+					 int lane);
 bool intel_encoder_is_c10phy(struct intel_encoder *encoder);
 void intel_mtl_pll_enable(struct intel_encoder *encoder,
 			  struct intel_dpll *pll,
