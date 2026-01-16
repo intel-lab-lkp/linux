@@ -23,7 +23,7 @@ properties:
     maxItems: 1
 
   interrupts:
-    maxItems: 1
+    maxItems: 1 # optional
 
   xlnx,num-ss-bits:
     description: Number of chip selects used.
@@ -38,7 +38,6 @@ properties:
 required:
   - compatible
   - reg
-  - interrupts
 
 unevaluatedProperties: false
 
