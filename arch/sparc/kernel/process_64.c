@@ -568,13 +568,13 @@ barf:
 int copy_thread(struct task_struct *p, const struct kernel_clone_args *args)
 {
 	u64 clone_flags = args->flags;
-	unsigned long sp = args->stack;
 	unsigned long tls = args->tls;
 	struct thread_info *t = task_thread_info(p);
 	struct pt_regs *regs = current_pt_regs();
 	struct sparc_stackf *parent_sf;
 	unsigned long child_stack_sz;
 	char *child_trap_frame;
+	unsigned long sp = args->stack ? args->stack : regs->u_regs[UREG_FP];
 
 	/* Calculate offset to stack_frame & pt_regs */
 	child_stack_sz = (STACKFRAME_SZ + TRACEREG_SZ);

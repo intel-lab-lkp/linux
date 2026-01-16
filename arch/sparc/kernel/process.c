@@ -12,6 +12,7 @@
 #include <linux/sched/task.h>
 #include <linux/sched/task_stack.h>
 #include <linux/signal.h>
+#include <linux/syscalls.h>
 
 #include "kernel.h"
 
@@ -115,6 +116,30 @@ asmlinkage long sparc_clone(struct pt_regs *regs)
 	 */
 	if ((unsigned long)ret >= -ERESTART_RESTARTBLOCK)
 		regs->u_regs[UREG_I1] = orig_i1;
+
+	return ret;
+}
+
+asmlinkage long sparc_clone3(struct pt_regs *regs)
+{
+	unsigned long sz;
+	long ret;
+	struct clone_args __user *cl_args;
+
+	synchronize_user_stack();
+
+	cl_args = (struct clone_args __user *)regs->u_regs[UREG_I0];
+	sz = regs->u_regs[UREG_I1];
+
+	ret = sys_clone3(cl_args, sz);
+
+	/* If we get an error and potentially restart the system
+	 * call, we're screwed because copy_thread() clobbered
+	 * the parent's %o1.  So detect that case and restore it
+	 * here.
+	 */
+	if ((unsigned long)ret >= -ERESTART_RESTARTBLOCK)
+		regs->u_regs[UREG_I1] = sz;
 
 	return ret;
 }

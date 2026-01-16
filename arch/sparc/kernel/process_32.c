@@ -261,11 +261,11 @@ extern void ret_from_kernel_thread(void);
 int copy_thread(struct task_struct *p, const struct kernel_clone_args *args)
 {
 	u64 clone_flags = args->flags;
-	unsigned long sp = args->stack;
 	unsigned long tls = args->tls;
 	struct thread_info *ti = task_thread_info(p);
 	struct pt_regs *childregs, *regs = current_pt_regs();
 	char *new_stack;
+	unsigned long sp = args->stack ? args->stack : regs->u_regs[UREG_FP];
 
 #ifndef CONFIG_SMP
 	if(last_task_used_math == current) {
