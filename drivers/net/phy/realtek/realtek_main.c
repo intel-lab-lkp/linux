@@ -18,6 +18,7 @@
 #include <linux/clk.h>
 #include <linux/string_choices.h>
 
+#include "../phylib.h"
 #include "realtek.h"
 
 #define RTL8201F_IER				0x13
@@ -162,6 +163,8 @@
 
 #define RTL8224_SRAM_RTCT_LEN(pair)		(0x8028 + (pair) * 4)
 
+#define RTL8224_VND1_MDI_PAIR_SWAP		0xa90
+
 #define RTL8366RB_POWER_SAVE			0x15
 #define RTL8366RB_POWER_SAVE_ON			BIT(12)
 
@@ -206,6 +209,16 @@ struct rtl821x_priv {
 	struct clk *clk;
 	/* rtl8211f */
 	u16 iner;
+};
+
+enum pair_swap_state {
+	PAIR_SWAP_KEEP = 0,
+	PAIR_SWAP_OFF = 1,
+	PAIR_SWAP_ON = 2,
+};
+
+struct rtl8224_priv {
+	enum pair_swap_state pair_swap;
 };
 
 static int rtl821x_read_page(struct phy_device *phydev)
@@ -1683,6 +1696,65 @@ static int rtl8224_cable_test_get_status(struct phy_device *phydev, bool *finish
 	return rtl8224_cable_test_report(phydev, finished);
 }
 
+static void rtl8224_mdi_pair_swap(struct phy_device *phydev, bool swap)
+{
+	u32 val;
+	u8 port_offset;
+
+	port_offset = phydev->mdio.addr & 3;
+	val = __phy_package_read_mmd(phydev, 0, MDIO_MMD_VEND1,
+				     RTL8224_VND1_MDI_PAIR_SWAP);
+	if (swap)
+		val |= (1 << port_offset);
+	else
+		val &= ~(1 << port_offset);
+
+	__phy_package_write_mmd(phydev, 0, MDIO_MMD_VEND1,
+				RTL8224_VND1_MDI_PAIR_SWAP, val);
+}
+
+static int rtl8224_config_init(struct phy_device *phydev)
+{
+	struct rtl8224_priv *priv = phydev->priv;
+
+	if (priv->pair_swap != PAIR_SWAP_KEEP)
+		rtl8224_mdi_pair_swap(phydev, priv->pair_swap == PAIR_SWAP_ON);
+
+	return 0;
+}
+
+static enum pair_swap_state rtlgen_pair_swap_state_get(const struct device_node *np)
+{
+	const char *state = NULL;
+
+	if (!of_property_read_string(np, "realtek,mdi-pair-swap", &state)) {
+		if (!strcmp(state, "off"))
+			return PAIR_SWAP_OFF;
+		if (!strcmp(state, "on"))
+			return PAIR_SWAP_ON;
+	}
+
+	return PAIR_SWAP_KEEP;
+}
+
+static int rtl8224_probe(struct phy_device *phydev)
+{
+	struct device *dev = &phydev->mdio.dev;
+	struct rtl8224_priv *priv;
+
+	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
+	if (!priv)
+		return -ENOMEM;
+	phydev->priv = priv;
+
+	priv->pair_swap = rtlgen_pair_swap_state_get(dev->of_node);
+
+	/* Device has 4 ports */
+	devm_phy_package_join(dev, phydev, phydev->mdio.addr & (~3), 0);
+
+	return 0;
+}
+
 static bool rtlgen_supports_2_5gbps(struct phy_device *phydev)
 {
 	int val;
@@ -2212,6 +2284,8 @@ static struct phy_driver realtek_drvs[] = {
 		PHY_ID_MATCH_EXACT(0x001ccad0),
 		.name		= "RTL8224 2.5Gbps PHY",
 		.flags		= PHY_POLL_CABLE_TEST,
+		.probe		= rtl8224_probe,
+		.config_init	= rtl8224_config_init,
 		.get_features   = rtl822x_c45_get_features,
 		.config_aneg    = rtl822x_c45_config_aneg,
 		.read_status    = rtl822x_c45_read_status,

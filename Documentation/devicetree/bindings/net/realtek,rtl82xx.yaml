@@ -55,6 +55,18 @@ properties:
     description:
       Enable Wake-on-LAN support for the RTL8211F PHY.
 
+  realtek,mdi-pair-swap:
+    description:
+      Enable or disable the swap of the ethernet pairs (from ABCD to DCBA).
+      The "keep" setting will keep the pair configuration at whatever its
+      current state is.
+    $ref: /schemas/types.yaml#/definitions/string
+    enum:
+      - keep
+      - on
+      - off
+    default: keep
+
 unevaluatedProperties: false
 
 allOf:
@@ -79,5 +91,6 @@ examples:
                 reg = <1>;
                 realtek,clkout-disable;
                 realtek,aldps-enable;
+                realtek,mdi-pair-swap = "on";
         };
     };
