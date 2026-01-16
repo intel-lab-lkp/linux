@@ -1,3 +1,4 @@
 # SPDX-License-Identifier: GPL-2.0-only
 
+source "drivers/media/platform/synopsys/dw-mipi-csi2/Kconfig"
 source "drivers/media/platform/synopsys/hdmirx/Kconfig"
