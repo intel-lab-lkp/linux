@@ -34,7 +34,7 @@
 #define NFSEXP_GATHERED_WRITES	BIT(5)
 #define NFSEXP_NOREADDIRPLUS    BIT(6)
 #define NFSEXP_SECURITY_LABEL	BIT(7)
-/* BIT(8) currently unused */
+#define NFSEXP_SIGN_FH			BIT(8)
 #define NFSEXP_NOHIDE			BIT(9)
 #define NFSEXP_NOSUBTREECHECK	BIT(10)
 #define NFSEXP_NOAUTHNLM		BIT(11)	/* Don't authenticate NLM requests - just trust */
@@ -55,7 +55,7 @@
 #define NFSEXP_PNFS				BIT(17)
 
 /* All flags that we claim to support.  (Note we don't support NOACL.) */
-#define NFSEXP_ALLFLAGS			BIT(18) - BIT(8) - 1
+#define NFSEXP_ALLFLAGS			BIT(18) - 1
 
 /* The flags that may vary depending on security flavor: */
 #define NFSEXP_SECINFO_FLAGS	(NFSEXP_READONLY | NFSEXP_ROOTSQUASH \
