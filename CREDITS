@@ -2231,6 +2231,10 @@ S: Markham, Ontario
 S: L3R 8B2
 S: Canada
 
+N: Krzysztof Kozlowski
+E: krzk@kernel.org
+D: Samsung S2M/S5M Multifunction PMIC device drivers for Exynos platforms
+
 N: Christian Krafft
 D: PowerPC Cell support
 
