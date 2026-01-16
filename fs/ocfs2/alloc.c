@@ -2327,6 +2327,10 @@ static int ocfs2_rotate_requires_path_adjustment(struct ocfs2_path *left_path,
 
 	left_el = path_leaf_el(left_path);
 	next_free = le16_to_cpu(left_el->l_next_free_rec);
+
+	if (unlikely(next_free == 0))
+		return 0;
+
 	rec = &left_el->l_recs[next_free - 1];
 
 	if (insert_cpos > le32_to_cpu(rec->e_cpos))
