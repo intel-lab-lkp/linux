@@ -85,6 +85,13 @@
 
 #define MAX_IOV 1024
 
+enum unbind_mode_type {
+	UNBIND_MODE_NORMAL,
+	UNBIND_MODE_BEFORE_RECV,
+	UNBIND_MODE_AFTER_RECV,
+	UNBIND_MODE_INVAL,
+};
+
 static size_t max_chunk;
 static char *server_ip;
 static char *client_ip;
@@ -92,6 +99,8 @@ static char *port;
 static size_t do_validation;
 static int start_queue = -1;
 static int num_queues = -1;
+static int devmem_autorelease;
+static enum unbind_mode_type unbind_mode;
 static char *ifname;
 static unsigned int ifindex;
 static unsigned int dmabuf_id;
@@ -679,7 +688,8 @@ static int configure_flow_steering(struct sockaddr_in6 *server_sin)
 
 static int bind_rx_queue(unsigned int ifindex, unsigned int dmabuf_fd,
 			 struct netdev_queue_id *queues,
-			 unsigned int n_queue_index, struct ynl_sock **ys)
+			 unsigned int n_queue_index, struct ynl_sock **ys,
+			 int autorelease)
 {
 	struct netdev_bind_rx_req *req = NULL;
 	struct netdev_bind_rx_rsp *rsp = NULL;
@@ -695,6 +705,7 @@ static int bind_rx_queue(unsigned int ifindex, unsigned int dmabuf_fd,
 	req = netdev_bind_rx_req_alloc();
 	netdev_bind_rx_req_set_ifindex(req, ifindex);
 	netdev_bind_rx_req_set_fd(req, dmabuf_fd);
+	netdev_bind_rx_req_set_autorelease(req, autorelease);
 	__netdev_bind_rx_req_set_queues(req, queues, n_queue_index);
 
 	rsp = netdev_bind_rx(*ys, req);
@@ -872,7 +883,8 @@ static int do_server(struct memory_buffer *mem)
 		goto err_reset_rss;
 	}
 
-	if (bind_rx_queue(ifindex, mem->fd, create_queues(), num_queues, &ys)) {
+	if (bind_rx_queue(ifindex, mem->fd, create_queues(), num_queues, &ys,
+			  devmem_autorelease)) {
 		pr_err("Failed to bind");
 		goto err_reset_flow_steering;
 	}
@@ -922,6 +934,23 @@ static int do_server(struct memory_buffer *mem)
 	fprintf(stderr, "Got connection from %s:%d\n", buffer,
 		ntohs(client_addr.sin6_port));
 
+	if (unbind_mode == UNBIND_MODE_BEFORE_RECV) {
+		struct pollfd pfd = {
+			.fd = client_fd,
+			.events = POLLIN,
+		};
+
+		/* Wait for data then unbind (before recvmsg) */
+		ret = poll(&pfd, 1, 5000);
+		if (ret <= 0) {
+			pr_err("poll failed or timed out waiting for data");
+			goto err_close_client;
+		}
+
+		ynl_sock_destroy(ys);
+		ys = NULL;
+	}
+
 	while (1) {
 		struct iovec iov = { .iov_base = iobuf,
 				     .iov_len = sizeof(iobuf) };
@@ -942,9 +971,17 @@ static int do_server(struct memory_buffer *mem)
 		if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
 			continue;
 		if (ret < 0) {
+			if (unbind_mode == UNBIND_MODE_BEFORE_RECV &&
+			    errno == ENODEV)
+				goto cleanup;
+
 			perror("recvmsg");
 			if (errno == EFAULT) {
 				pr_err("received EFAULT, won't recover");
+				goto err_close_client;
+			}
+			if (errno == ENODEV) {
+				pr_err("unexpected ENODEV");
 				goto err_close_client;
 			}
 			continue;
@@ -1025,6 +1062,11 @@ static int do_server(struct memory_buffer *mem)
 			goto err_close_client;
 		}
 
+		if (unbind_mode == UNBIND_MODE_AFTER_RECV && ys) {
+			ynl_sock_destroy(ys);
+			ys = NULL;
+		}
+
 		fprintf(stderr, "total_received=%lu\n", total_received);
 	}
 
@@ -1043,7 +1085,8 @@ err_close_socket:
 err_free_tmp:
 	free(tmp_mem);
 err_unbind:
-	ynl_sock_destroy(ys);
+	if (ys)
+		ynl_sock_destroy(ys);
 err_reset_flow_steering:
 	reset_flow_steering();
 err_reset_rss:
@@ -1092,7 +1135,7 @@ int run_devmem_tests(void)
 		goto err_reset_headersplit;
 	}
 
-	if (!bind_rx_queue(ifindex, mem->fd, queues, num_queues, &ys)) {
+	if (!bind_rx_queue(ifindex, mem->fd, queues, num_queues, &ys, 0)) {
 		pr_err("Binding empty queues array should have failed");
 		goto err_unbind;
 	}
@@ -1108,7 +1151,7 @@ int run_devmem_tests(void)
 		goto err_reset_headersplit;
 	}
 
-	if (!bind_rx_queue(ifindex, mem->fd, queues, num_queues, &ys)) {
+	if (!bind_rx_queue(ifindex, mem->fd, queues, num_queues, &ys, 0)) {
 		pr_err("Configure dmabuf with header split off should have failed");
 		goto err_unbind;
 	}
@@ -1124,7 +1167,7 @@ int run_devmem_tests(void)
 		goto err_reset_headersplit;
 	}
 
-	if (bind_rx_queue(ifindex, mem->fd, queues, num_queues, &ys)) {
+	if (bind_rx_queue(ifindex, mem->fd, queues, num_queues, &ys, 0)) {
 		pr_err("Failed to bind");
 		goto err_reset_headersplit;
 	}
@@ -1397,7 +1440,7 @@ int main(int argc, char *argv[])
 	int is_server = 0, opt;
 	int ret, err = 1;
 
-	while ((opt = getopt(argc, argv, "ls:c:p:v:q:t:f:z:")) != -1) {
+	while ((opt = getopt(argc, argv, "ls:c:p:v:q:t:f:z:a:U:")) != -1) {
 		switch (opt) {
 		case 'l':
 			is_server = 1;
@@ -1426,6 +1469,12 @@ int main(int argc, char *argv[])
 		case 'z':
 			max_chunk = atoi(optarg);
 			break;
+		case 'a':
+			devmem_autorelease = atoi(optarg);
+			break;
+		case 'U':
+			unbind_mode = atoi(optarg);
+			break;
 		case '?':
 			fprintf(stderr, "unknown option: %c\n", optopt);
 			break;
@@ -1434,6 +1483,11 @@ int main(int argc, char *argv[])
 
 	if (!ifname) {
 		pr_err("Missing -f argument");
+		return 1;
+	}
+
+	if (unbind_mode >= UNBIND_MODE_INVAL) {
+		pr_err("invalid unbind mode %u\n", unbind_mode);
 		return 1;
 	}
 
