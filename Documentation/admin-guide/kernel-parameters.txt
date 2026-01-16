@@ -8253,6 +8253,20 @@ Kernel parameters
 			            them quite hard to use for exploits but
 			            might break your system.
 
+	vsock_init_ns_mode=
+			[KNL,NET] Set the vsock namespace mode for the init
+			(root) network namespace.
+
+			global      [default] The init namespace operates in
+			            global mode where CIDs are system-wide and
+			            sockets can communicate across global
+			            namespaces.
+
+			local       The init namespace operates in local mode
+			            where CIDs are private to the namespace and
+			            sockets can only communicate within the same
+			            namespace.
+
 	vt.color=	[VT] Default text color.
 			Format: 0xYX, X = foreground, Y = background.
 			Default: 0x07 = light gray on black.
