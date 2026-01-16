@@ -755,11 +755,10 @@ static struct clk * __init clkgen_odf_register(const char *parent_name,
 	return clk;
 }
 
-
 static void __init clkgen_c32_pll_setup(struct device_node *np,
 		struct clkgen_pll_data_clks *datac)
 {
-	struct clk *clk;
+	struct clk *pll_clk;
 	const char *parent_name, *pll_name;
 	void __iomem *pll_base;
 	int num_odfs, odf;
@@ -777,12 +776,12 @@ static void __init clkgen_c32_pll_setup(struct device_node *np,
 
 	of_clk_detect_critical(np, 0, &pll_flags);
 
-	clk = clkgen_pll_register(parent_name, datac->data, pll_base, pll_flags,
+	pll_clk = clkgen_pll_register(parent_name, datac->data, pll_base, pll_flags,
 				  np->name, datac->data->lock);
-	if (IS_ERR(clk))
 		return;
+	if (IS_ERR(pll_clk))
 
-	pll_name = __clk_get_name(clk);
+	pll_name = __clk_get_name(pll_clk);
 
 	num_odfs = datac->data->num_odfs;
 
