@@ -73,7 +73,7 @@ void intel_wait_for_vblank_if_active(struct intel_display *display,
 {
 	struct intel_crtc *crtc = intel_crtc_for_pipe(display, pipe);
 
-	if (crtc->active)
+	if (crtc && crtc->active)
 		intel_crtc_wait_for_next_vblank(crtc);
 }
 
