@@ -2105,18 +2105,31 @@ void ufshcd_release(struct ufs_hba *hba)
 }
 EXPORT_SYMBOL_GPL(ufshcd_release);
 
+/* The struct device instance that controls RPM for the UFS device. */
+static inline struct device *ufs_rpm_dev(struct ufs_hba *hba)
+{
+	return &hba->ufs_device_wlun->sdev_gendev;
+}
+
 static ssize_t ufshcd_clkgate_delay_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct device *rpm_dev = ufs_rpm_dev(hba);
 
-	return sysfs_emit(buf, "%lu\n", hba->clk_gating.delay_ms);
+	if (!rpm_dev->power.use_autosuspend)
+		return -EIO;
+
+	return sysfs_emit(buf, "%u\n", rpm_dev->power.autosuspend_delay);
 }
 
 void ufshcd_clkgate_delay_set(struct ufs_hba *hba, unsigned long value)
 {
-	guard(spinlock_irqsave)(&hba->clk_gating.lock);
-	hba->clk_gating.delay_ms = value;
+	struct device *rpm_dev = ufs_rpm_dev(hba);
+
+	device_lock(rpm_dev);
+	pm_runtime_set_autosuspend_delay(rpm_dev, value);
+	device_unlock(rpm_dev);
 }
 EXPORT_SYMBOL_GPL(ufshcd_clkgate_delay_set);
 
@@ -2124,7 +2137,11 @@ static ssize_t ufshcd_clkgate_delay_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct device *rpm_dev = ufs_rpm_dev(hba);
 	unsigned long value;
+
+	if (!rpm_dev->power.use_autosuspend)
+		return -EIO;
 
 	if (kstrtoul(buf, 0, &value))
 		return -EINVAL;
@@ -2138,31 +2155,27 @@ static ssize_t ufshcd_clkgate_enable_show(struct device *dev,
 {
 	struct ufs_hba *hba = dev_get_drvdata(dev);
 
-	return sysfs_emit(buf, "%d\n", hba->clk_gating.is_enabled);
+	return sysfs_emit(buf, "%d\n", ufs_rpm_dev(hba)->power.runtime_auto);
 }
 
 static ssize_t ufshcd_clkgate_enable_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct ufs_hba *hba = dev_get_drvdata(dev);
-	u32 value;
+	struct device *rpm_dev = ufs_rpm_dev(hba);
+	bool value;
+	int err;
 
-	if (kstrtou32(buf, 0, &value))
-		return -EINVAL;
+	err = kstrtobool(buf, &value);
+	if (err)
+		return err;
 
-	value = !!value;
-
-	guard(spinlock_irqsave)(&hba->clk_gating.lock);
-
-	if (value == hba->clk_gating.is_enabled)
-		return count;
-
+	device_lock(rpm_dev);
 	if (value)
-		__ufshcd_release(hba);
+		pm_runtime_allow(rpm_dev);
 	else
-		hba->clk_gating.active_reqs++;
-
-	hba->clk_gating.is_enabled = value;
+		pm_runtime_forbid(rpm_dev);
+	device_unlock(rpm_dev);
 
 	return count;
 }

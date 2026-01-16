@@ -1224,7 +1224,7 @@ static inline bool ufshcd_can_autobkops_during_suspend(struct ufs_hba *hba)
 }
 static inline bool ufshcd_is_rpm_autosuspend_allowed(struct ufs_hba *hba)
 {
-	return hba->caps & UFSHCD_CAP_RPM_AUTOSUSPEND;
+	return hba->caps & (UFSHCD_CAP_RPM_AUTOSUSPEND | UFSHCD_CAP_CLK_GATING);
 }
 
 static inline bool ufshcd_is_intr_aggr_allowed(struct ufs_hba *hba)
