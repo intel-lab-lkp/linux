@@ -12,6 +12,7 @@
 #include <linux/idr.h>
 #include <linux/bsg.h>
 #include <linux/slab.h>
+#include <linux/io_uring/cmd.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_ioctl.h>
@@ -158,11 +159,76 @@ static long bsg_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	}
 }
 
+static int bsg_check_uring_features(unsigned int issue_flags)
+{
+	/* BSG passthrough requires big SQE/CQE support */
+	if ((issue_flags & (IO_URING_F_SQE128|IO_URING_F_CQE32)) !=
+	    (IO_URING_F_SQE128|IO_URING_F_CQE32))
+		return -EOPNOTSUPP;
+	return 0;
+}
+
+static int bsg_validate_command(const struct bsg_uring_cmd *cmd)
+{
+	if (cmd->protocol != BSG_PROTOCOL_SCSI)
+		return -EINVAL;
+
+	if (cmd->subprotocol == BSG_SUB_PROTOCOL_SCSI_CMD) {
+		if (!cmd->request || cmd->request_len == 0)
+			return -EINVAL;
+
+		if (cmd->dout_xfer_len && cmd->din_xfer_len) {
+			pr_warn_once("BIDI support in bsg has been removed.\n");
+			return -EOPNOTSUPP;
+		}
+
+		if (cmd->dout_iovec_count > 0 || cmd->din_iovec_count > 0)
+			return -EOPNOTSUPP;
+
+		return 0;
+	} else if (cmd->subprotocol == BSG_SUB_PROTOCOL_SCSI_TRANSPORT) {
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
+static int bsg_uring_cmd(struct io_uring_cmd *ioucmd, unsigned int issue_flags)
+{
+	struct bsg_device *bd = to_bsg_device(file_inode(ioucmd->file));
+	struct request_queue *q = bd->queue;
+	bool open_for_write = ioucmd->file->f_mode & FMODE_WRITE;
+	const struct bsg_uring_cmd *cmd = io_uring_sqe_cmd(ioucmd->sqe);
+	int ret;
+
+	if (!q)
+		return -EINVAL;
+
+	ret = bsg_check_uring_features(issue_flags);
+	if (ret)
+		return ret;
+
+	ret = bsg_validate_command(cmd);
+	if (ret)
+		return ret;
+
+	if (cmd->protocol == BSG_PROTOCOL_SCSI) {
+		if (cmd->subprotocol == BSG_SUB_PROTOCOL_SCSI_CMD)
+			return scsi_bsg_uring_cmd(q, ioucmd, issue_flags, open_for_write);
+		else if (cmd->subprotocol == BSG_SUB_PROTOCOL_SCSI_TRANSPORT)
+			return -EOPNOTSUPP;
+		return -EINVAL;
+	}
+
+	return -EINVAL;
+}
+
 static const struct file_operations bsg_fops = {
 	.open		=	bsg_open,
 	.release	=	bsg_release,
 	.unlocked_ioctl	=	bsg_ioctl,
 	.compat_ioctl	=	compat_ptr_ioctl,
+	.uring_cmd	=	bsg_uring_cmd,
 	.owner		=	THIS_MODULE,
 	.llseek		=	default_llseek,
 };
