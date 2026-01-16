@@ -742,8 +742,11 @@ static struct clk * __init clkgen_odf_register(const char *parent_name,
 				     &div->hw, &clk_divider_ops,
 				     &gate->hw, &clk_gate_ops,
 				     flags);
-	if (IS_ERR(clk))
+	if (IS_ERR(clk)) {
+		kfree(div);
+		kfree(gate);
 		return clk;
+	}
 
 	pr_debug("%s: parent %s rate %lu\n",
 			__clk_get_name(clk),
