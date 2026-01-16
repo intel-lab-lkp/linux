@@ -46,14 +46,8 @@ static struct bio *blk_rq_map_bio_alloc(struct request *rq,
 		unsigned int nr_vecs, gfp_t gfp_mask)
 {
 	struct block_device *bdev = rq->q->disk ? rq->q->disk->part0 : NULL;
-	struct bio *bio;
 
-	bio = bio_alloc_bioset(bdev, nr_vecs, rq->cmd_flags, gfp_mask,
-				&fs_bio_set);
-	if (!bio)
-		return NULL;
-
-	return bio;
+	return bio_alloc_bioset(bdev, nr_vecs, rq->cmd_flags, gfp_mask, &fs_bio_set);
 }
 
 /**
