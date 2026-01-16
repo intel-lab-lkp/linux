@@ -4655,10 +4655,9 @@ static void __iomem *arm_smmu_ioremap(struct device *dev, resource_size_t start,
 
 static void arm_smmu_rmr_install_bypass_ste(struct arm_smmu_device *smmu)
 {
-	struct list_head rmr_list;
+	LIST_HEAD(rmr_list);
 	struct iommu_resv_region *e;
 
-	INIT_LIST_HEAD(&rmr_list);
 	iort_get_rmr_sids(dev_fwnode(smmu->dev), &rmr_list);
 
 	list_for_each_entry(e, &rmr_list, list) {

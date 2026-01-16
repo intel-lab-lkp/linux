@@ -925,7 +925,7 @@ int iommu_get_group_resv_regions(struct iommu_group *group,
 
 	mutex_lock(&group->mutex);
 	for_each_group_device(group, device) {
-		struct list_head dev_resv_regions;
+		LIST_HEAD(dev_resv_regions);
 
 		/*
 		 * Non-API groups still expose reserved_regions in sysfs,
@@ -934,7 +934,6 @@ int iommu_get_group_resv_regions(struct iommu_group *group,
 		if (!dev_has_iommu(device->dev))
 			break;
 
-		INIT_LIST_HEAD(&dev_resv_regions);
 		iommu_get_resv_regions(device->dev, &dev_resv_regions);
 		ret = iommu_insert_device_resv_regions(&dev_resv_regions, head);
 		iommu_put_resv_regions(device->dev, &dev_resv_regions);
@@ -950,10 +949,9 @@ static ssize_t iommu_group_show_resv_regions(struct iommu_group *group,
 					     char *buf)
 {
 	struct iommu_resv_region *region, *next;
-	struct list_head group_resv_regions;
+	LIST_HEAD(group_resv_regions);
 	int offset = 0;
 
-	INIT_LIST_HEAD(&group_resv_regions);
 	iommu_get_group_resv_regions(group, &group_resv_regions);
 
 	list_for_each_entry_safe(region, next, &group_resv_regions, list) {

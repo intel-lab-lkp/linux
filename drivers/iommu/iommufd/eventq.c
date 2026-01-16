@@ -21,12 +21,11 @@ void iommufd_auto_response_faults(struct iommufd_hw_pagetable *hwpt,
 {
 	struct iommufd_fault *fault = hwpt->fault;
 	struct iopf_group *group, *next;
-	struct list_head free_list;
+	LIST_HEAD(free_list);
 	unsigned long index;
 
 	if (!fault || !handle)
 		return;
-	INIT_LIST_HEAD(&free_list);
 
 	mutex_lock(&fault->mutex);
 	spin_lock(&fault->common.lock);

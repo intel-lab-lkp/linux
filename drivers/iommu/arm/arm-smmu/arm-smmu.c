@@ -2072,12 +2072,11 @@ static int arm_smmu_device_dt_probe(struct arm_smmu_device *smmu,
 
 static void arm_smmu_rmr_install_bypass_smr(struct arm_smmu_device *smmu)
 {
-	struct list_head rmr_list;
+	LIST_HEAD(rmr_list);
 	struct iommu_resv_region *e;
 	int idx, cnt = 0;
 	u32 reg;
 
-	INIT_LIST_HEAD(&rmr_list);
 	iort_get_rmr_sids(dev_fwnode(smmu->dev), &rmr_list);
 
 	/*
