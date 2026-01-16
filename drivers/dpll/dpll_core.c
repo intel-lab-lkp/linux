@@ -13,6 +13,7 @@
 #include <linux/property.h>
 #include <linux/slab.h>
 #include <linux/string.h>
+#include <dt-bindings/dpll/dpll.h>
 
 #include "dpll_core.h"
 #include "dpll_netlink.h"
@@ -653,6 +654,79 @@ struct dpll_pin *fwnode_dpll_pin_find(struct fwnode_handle *fwnode)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(fwnode_dpll_pin_find);
+
+/**
+ * fwnode_dpll_pin_node_get - get dpll pin node from given fw node and pin name
+ * @fwnode: firmware node that uses the dpll pin
+ * @name: dpll pin name from dpll-pin-names property
+ *
+ * Return: ERR_PTR() on error or a valid firmware node handle on success.
+ */
+struct fwnode_handle *fwnode_dpll_pin_node_get(struct fwnode_handle *fwnode,
+					       const char *name)
+{
+	struct fwnode_handle *parent_node, *pin_node;
+	struct fwnode_reference_args args;
+	const char *parent_name;
+	int ret, index = 0;
+
+	if (name) {
+		index = fwnode_property_match_string(fwnode, "dpll-pin-names",
+						     name);
+		if (index < 0)
+			return ERR_PTR(-ENOENT);
+	}
+
+	ret = fwnode_property_get_reference_args(fwnode, "dpll-pins",
+						 "#dpll-pin-cells", 2, index,
+						 &args);
+	if (ret)
+		return ERR_PTR(ret);
+
+	/* We support only 2 cell DPLL bindings in the kernel currently. */
+	if (args.nargs != 2) {
+		fwnode_handle_put(args.fwnode);
+		return ERR_PTR(-ENOENT);
+	}
+
+	/* Resolve parent node name according pin direction type */
+	switch (args.args[1]) {
+	case DPLL_PIN_INPUT:
+		parent_name = "input-pins";
+		break;
+	case DPLL_PIN_OUTPUT:
+		parent_name = "output-pins";
+		break;
+	default:
+		fwnode_handle_put(args.fwnode);
+		return ERR_PTR(-EINVAL);
+	}
+
+	/* Get pin's parent sub-node */
+	parent_node = fwnode_get_named_child_node(args.fwnode, parent_name);
+	if (!parent_node) {
+		fwnode_handle_put(args.fwnode);
+		return ERR_PTR(-ENOENT);
+	}
+
+	/* Enumerate child pin nodes and find the requested one */
+	fwnode_for_each_child_node(parent_node, pin_node) {
+		u32 reg;
+
+		if (fwnode_property_read_u32(pin_node, "reg", &reg))
+			continue;
+
+		if (reg == args.args[0])
+			break;
+	}
+
+	/* Release pin's parent and dpll device node */
+	fwnode_handle_put(parent_node);
+	fwnode_handle_put(args.fwnode);
+
+	return pin_node ? pin_node : ERR_PTR(-ENOENT);
+}
+EXPORT_SYMBOL_GPL(fwnode_dpll_pin_node_get);
 
 static int
 __dpll_pin_register(struct dpll_device *dpll, struct dpll_pin *pin,
