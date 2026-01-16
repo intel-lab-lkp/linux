@@ -113,9 +113,13 @@ static ssize_t proc_bus_pci_write(struct file *file, const char __user *buf,
 {
 	struct inode *ino = file_inode(file);
 	struct pci_dev *dev = pde_data(ino);
-	int pos = *ppos;
+	int pos;
 	int size = dev->cfg_size;
 	int cnt, ret;
+
+	if (*ppos > INT_MAX)
+		return -EINVAL;
+	pos = *ppos;
 
 	ret = security_locked_down(LOCKDOWN_PCI_ACCESS);
 	if (ret)
