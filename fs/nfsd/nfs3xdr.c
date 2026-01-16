@@ -120,10 +120,15 @@ svcxdr_encode_nfsstat3(struct xdr_stream *xdr, __be32 status)
 }
 
 static bool
-svcxdr_encode_nfs_fh3(struct xdr_stream *xdr, const struct svc_fh *fhp)
+svcxdr_encode_nfs_fh3(struct svc_rqst *rqstp, struct xdr_stream *xdr,
+						struct svc_fh *fhp)
 {
-	u32 size = fhp->fh_handle.fh_size;
+	u32 size;
 	__be32 *p;
+
+	if (fh_append_mac(fhp, SVC_NET(rqstp)))
+		return false;
+	size = fhp->fh_handle.fh_size;
 
 	p = xdr_reserve_space(xdr, XDR_UNIT + size);
 	if (!p)
@@ -137,11 +142,12 @@ svcxdr_encode_nfs_fh3(struct xdr_stream *xdr, const struct svc_fh *fhp)
 }
 
 static bool
-svcxdr_encode_post_op_fh3(struct xdr_stream *xdr, const struct svc_fh *fhp)
+svcxdr_encode_post_op_fh3(struct svc_rqst *rqstp, struct xdr_stream *xdr,
+							struct svc_fh *fhp)
 {
 	if (xdr_stream_encode_item_present(xdr) < 0)
 		return false;
-	if (!svcxdr_encode_nfs_fh3(xdr, fhp))
+	if (!svcxdr_encode_nfs_fh3(rqstp, xdr, fhp))
 		return false;
 
 	return true;
@@ -772,7 +778,7 @@ nfs3svc_encode_lookupres(struct svc_rqst *rqstp, struct xdr_stream *xdr)
 		return false;
 	switch (resp->status) {
 	case nfs_ok:
-		if (!svcxdr_encode_nfs_fh3(xdr, &resp->fh))
+		if (!svcxdr_encode_nfs_fh3(rqstp, xdr, &resp->fh))
 			return false;
 		if (!svcxdr_encode_post_op_attr(rqstp, xdr, &resp->fh))
 			return false;
@@ -908,7 +914,7 @@ nfs3svc_encode_createres(struct svc_rqst *rqstp, struct xdr_stream *xdr)
 		return false;
 	switch (resp->status) {
 	case nfs_ok:
-		if (!svcxdr_encode_post_op_fh3(xdr, &resp->fh))
+		if (!svcxdr_encode_post_op_fh3(rqstp, xdr, &resp->fh))
 			return false;
 		if (!svcxdr_encode_post_op_attr(rqstp, xdr, &resp->fh))
 			return false;
@@ -1117,7 +1123,7 @@ svcxdr_encode_entry3_plus(struct nfsd3_readdirres *resp, const char *name,
 
 	if (!svcxdr_encode_post_op_attr(resp->rqstp, xdr, fhp))
 		goto out;
-	if (!svcxdr_encode_post_op_fh3(xdr, fhp))
+	if (!svcxdr_encode_post_op_fh3(resp->rqstp, xdr, fhp))
 		goto out;
 	result = true;
 

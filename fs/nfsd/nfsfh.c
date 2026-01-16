@@ -11,6 +11,7 @@
 #include <linux/exportfs.h>
 
 #include <linux/sunrpc/svcauth_gss.h>
+#include <crypto/skcipher.h>
 #include "nfsd.h"
 #include "vfs.h"
 #include "auth.h"
@@ -138,6 +139,62 @@ static inline __be32 check_pseudo_root(struct dentry *dentry,
 }
 
 /*
+ * Intended to be called when encoding, appends an 8-byte MAC
+ * to the filehandle hashed from the server's fh_key:
+ */
+int fh_append_mac(struct svc_fh *fhp, struct net *net)
+{
+	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+	struct knfsd_fh *fh = &fhp->fh_handle;
+	siphash_key_t *fh_key = nn->fh_key;
+	u64 hash;
+
+	if (!(fhp->fh_export->ex_flags & NFSEXP_SIGN_FH))
+		return 0;
+
+	if (!fh_key) {
+		pr_warn("NFSD: unable to sign filehandles, fh_key not set.\n");
+		return -EINVAL;
+	}
+
+	if (fh->fh_size + sizeof(hash) > fhp->fh_maxsize) {
+		pr_warn("NFSD: unable to sign filehandles, fh_size %lu would be greater"
+			" than fh_maxsize %d.\n", fh->fh_size + sizeof(hash), fhp->fh_maxsize);
+		return -EINVAL;
+	}
+
+	fh->fh_auth_type = FH_AT_MAC;
+	hash = siphash(&fh->fh_raw, fh->fh_size, fh_key);
+	memcpy(&fh->fh_raw[fh->fh_size], &hash, sizeof(hash));
+	fh->fh_size += sizeof(hash);
+
+	return 0;
+}
+
+/*
+ * Verify that the the filehandle's MAC was hashed from this filehandle
+ * given the server's fh_key:
+ */
+static int fh_verify_mac(struct svc_fh *fhp, struct net *net)
+{
+	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+	struct knfsd_fh *fh = &fhp->fh_handle;
+	siphash_key_t *fh_key = nn->fh_key;
+	u64 hash;
+
+	if (fhp->fh_handle.fh_auth_type != FH_AT_MAC)
+		return -EINVAL;
+
+	if (!fh_key) {
+		pr_warn("NFSD: unable to verify signed filehandles, fh_key not set.\n");
+		return -EINVAL;
+	}
+
+	hash = siphash(&fh->fh_raw, fh->fh_size - sizeof(hash),  fh_key);
+	return memcmp(&fh->fh_raw[fh->fh_size - sizeof(hash)], &hash, sizeof(hash));
+}
+
+/*
  * Use the given filehandle to look up the corresponding export and
  * dentry.  On success, the results are used to set fh_export and
  * fh_dentry.
@@ -166,8 +223,11 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct net *net,
 
 	if (--data_left < 0)
 		return error;
-	if (fh->fh_auth_type != 0)
+
+	/* either FH_AT_NONE or FH_AT_MAC */
+	if (fh->fh_auth_type > 1)
 		return error;
+
 	len = key_len(fh->fh_fsid_type) / 4;
 	if (len == 0)
 		return error;
@@ -237,9 +297,15 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct net *net,
 
 	fileid_type = fh->fh_fileid_type;
 
-	if (fileid_type == FILEID_ROOT)
+	if (fileid_type == FILEID_ROOT) {
 		dentry = dget(exp->ex_path.dentry);
-	else {
+	} else {
+		/* Root filehandle always unsigned because rpc.mountd has no key */
+		if (exp->ex_flags & NFSEXP_SIGN_FH && fh_verify_mac(fhp, net)) {
+			trace_nfsd_set_fh_dentry_badhandle(rqstp, fhp, -EKEYREJECTED);
+			goto out;
+		}
+
 		dentry = exportfs_decode_fh_raw(exp->ex_path.mnt, fid,
 						data_left, fileid_type, 0,
 						nfsd_acceptable, exp);

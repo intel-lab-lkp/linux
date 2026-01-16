@@ -2701,9 +2701,13 @@ nfsd4_decode_compound(struct nfsd4_compoundargs *argp)
 }
 
 static __be32 nfsd4_encode_nfs_fh4(struct xdr_stream *xdr,
-				   struct knfsd_fh *fh_handle)
+					struct svc_fh *fhp)
 {
-	return nfsd4_encode_opaque(xdr, fh_handle->fh_raw, fh_handle->fh_size);
+	if (fh_append_mac(fhp, SVC_NET(RESSTRM_RQST(xdr))))
+		return nfserr_resource;
+
+	return nfsd4_encode_opaque(xdr, fhp->fh_handle.fh_raw,
+		fhp->fh_handle.fh_size);
 }
 
 /* This is a frequently-encoded type; open-coded for speed */
@@ -3359,7 +3363,7 @@ static __be32 nfsd4_encode_fattr4_acl(struct xdr_stream *xdr,
 static __be32 nfsd4_encode_fattr4_filehandle(struct xdr_stream *xdr,
 					     const struct nfsd4_fattr_args *args)
 {
-	return nfsd4_encode_nfs_fh4(xdr, &args->fhp->fh_handle);
+	return nfsd4_encode_nfs_fh4(xdr, args->fhp);
 }
 
 static __be32 nfsd4_encode_fattr4_fileid(struct xdr_stream *xdr,
@@ -4460,7 +4464,7 @@ nfsd4_encode_getfh(struct nfsd4_compoundres *resp, __be32 nfserr,
 	struct svc_fh *fhp = u->getfh;
 
 	/* object */
-	return nfsd4_encode_nfs_fh4(xdr, &fhp->fh_handle);
+	return nfsd4_encode_nfs_fh4(xdr, fhp);
 }
 
 static __be32

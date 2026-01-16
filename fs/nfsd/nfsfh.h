@@ -59,6 +59,9 @@ struct knfsd_fh {
 #define fh_fsid_type		fh_raw[2]
 #define fh_fileid_type		fh_raw[3]
 
+#define FH_AT_NONE		0
+#define FH_AT_MAC		1
+
 static inline u32 *fh_fsid(const struct knfsd_fh *fh)
 {
 	return (u32 *)&fh->fh_raw[4];
@@ -226,6 +229,7 @@ __be32	fh_getattr(const struct svc_fh *fhp, struct kstat *stat);
 __be32	fh_compose(struct svc_fh *, struct svc_export *, struct dentry *, struct svc_fh *);
 __be32	fh_update(struct svc_fh *);
 void	fh_put(struct svc_fh *);
+int	fh_append_mac(struct svc_fh *, struct net *net);
 
 static __inline__ struct svc_fh *
 fh_copy(struct svc_fh *dst, const struct svc_fh *src)
@@ -272,6 +276,24 @@ static inline bool fh_fsid_match(const struct knfsd_fh *fh1,
 	if (memcmp(fsid1, fsid2, key_len(fh1->fh_fsid_type)) != 0)
 		return false;
 	return true;
+}
+
+static inline size_t fh_fileid_offset(const struct knfsd_fh *fh)
+{
+	return key_len(fh->fh_fsid_type) + 4;
+}
+
+static inline size_t fh_fileid_len(const struct knfsd_fh *fh)
+{
+	switch (fh->fh_auth_type) {
+	case FH_AT_NONE:
+		return fh->fh_size - fh_fileid_offset(fh);
+		break;
+	case FH_AT_MAC:
+		return fh->fh_size - 8 - fh_fileid_offset(fh);
+		break;
+	}
+	return 0;
 }
 
 /**
