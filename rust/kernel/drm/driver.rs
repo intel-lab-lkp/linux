@@ -10,6 +10,7 @@ use crate::{
     prelude::*,
     sync::aref::ARef,
 };
+use core::{mem, ptr::NonNull};
 use macros::vtable;
 
 /// Driver use the GEM memory manager. This should be set for all modern drivers.
@@ -122,30 +123,46 @@ pub struct Registration<T: Driver>(ARef<drm::Device<T>>);
 
 impl<T: Driver> Registration<T> {
     /// Creates a new [`Registration`] and registers it.
-    fn new(drm: &drm::Device<T>, flags: usize) -> Result<Self> {
+    fn new(drm: drm::UnregisteredDevice<T>, flags: usize) -> Result<Self> {
         // SAFETY: `drm.as_raw()` is valid by the invariants of `drm::Device`.
         to_result(unsafe { bindings::drm_dev_register(drm.as_raw(), flags) })?;
 
-        Ok(Self(drm.into()))
+        // SAFETY: We just called `drm_dev_register` above
+        let new = NonNull::from(unsafe { drm.assume_ctx() });
+
+        // Leak the ARef from UnregisteredDevice in preparation for transferring its ownership.
+        mem::forget(drm);
+
+        // SAFETY: `drm`'s `Drop` constructor was never called, ensuring that there remains at least
+        // one reference to the device - which we take ownership over here.
+        let new = unsafe { ARef::from_raw(new) };
+
+        Ok(Self(new))
     }
 
-    /// Same as [`Registration::new`}, but transfers ownership of the [`Registration`] to
+    /// Same as [`Registration::new`], but transfers ownership of the [`Registration`] to
     /// [`devres::register`].
-    pub fn new_foreign_owned(
-        drm: &drm::Device<T>,
-        dev: &device::Device<device::Bound>,
+    pub fn new_foreign_owned<'a>(
+        drm: drm::UnregisteredDevice<T>,
+        dev: &'a device::Device<device::Bound>,
         flags: usize,
-    ) -> Result
+    ) -> Result<&'a drm::Device<T>>
     where
         T: 'static,
     {
-        if drm.as_ref().as_raw() != dev.as_raw() {
+        let this_dev: &device::Device = drm.as_ref();
+        if this_dev.as_raw() != dev.as_raw() {
             return Err(EINVAL);
         }
 
         let reg = Registration::<T>::new(drm, flags)?;
+        let drm = NonNull::from(reg.device());
 
-        devres::register(dev, reg, GFP_KERNEL)
+        devres::register(dev, reg, GFP_KERNEL)?;
+
+        // SAFETY: Since `reg` was passed to devres::register(), the device now owns the lifetime
+        // of the DRM registration - ensuring that this references lives for at least as long as 'a.
+        Ok(unsafe { drm.as_ref() })
     }
 
     /// Returns a reference to the `Device` instance for this registration.
