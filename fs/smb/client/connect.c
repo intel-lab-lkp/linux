@@ -64,6 +64,10 @@ static int generic_ip_connect(struct TCP_Server_Info *server);
 static void tlink_rb_insert(struct rb_root *root, struct tcon_link *new_tlink);
 static void cifs_prune_tlinks(struct work_struct *work);
 
+static struct mchan_mount *mchan_mount_alloc(struct smb3_fs_context *ctx);
+static void mchan_mount_release(struct kref *refcount);
+static void mchan_mount_work_fn(struct work_struct *work);
+
 /*
  * Resolve hostname and set ip addr in tcp ses. Useful for hostnames that may
  * get their ip addresses changed at some point.
@@ -3899,15 +3903,78 @@ out:
 	return rc;
 }
 
+static struct mchan_mount *
+mchan_mount_alloc(struct smb3_fs_context *ctx)
+{
+	int rc;
+	struct TCP_Server_Info *server;
+	struct mchan_mount *mchan_mount;
+
+	mchan_mount = kzalloc(sizeof(*mchan_mount), GFP_KERNEL);
+	if (!mchan_mount)
+		return ERR_PTR(-ENOMEM);
+
+	INIT_WORK(&mchan_mount->work, mchan_mount_work_fn);
+	kref_init(&mchan_mount->refcount);
+
+	server = cifs_get_tcp_session(ctx, NULL);
+	if (IS_ERR(server)) {
+		rc = PTR_ERR(server);
+		goto error;
+	}
+
+	mchan_mount->ses = cifs_get_smb_ses(server, ctx);
+	if (IS_ERR(mchan_mount->ses)) {
+		cifs_put_tcp_session(server, false);
+		rc = PTR_ERR(mchan_mount->ses);
+		goto error;
+	}
+
+	return mchan_mount;
+
+error:
+	kfree(mchan_mount);
+
+	return ERR_PTR(rc);
+}
+
+static void
+mchan_mount_release(struct kref *refcount)
+{
+	struct mchan_mount *mchan_mount = container_of(refcount, struct mchan_mount, refcount);
+
+	cifs_put_smb_ses(mchan_mount->ses);
+	kfree(mchan_mount);
+}
+
+static void
+mchan_mount_work_fn(struct work_struct *work)
+{
+	struct mchan_mount *mchan_mount = container_of(work, struct mchan_mount, work);
+
+	smb3_update_ses_channels(mchan_mount->ses, mchan_mount->ses->server, false, false);
+	kref_put(&mchan_mount->refcount, mchan_mount_release);
+}
+
 #ifdef CONFIG_CIFS_DFS_UPCALL
 int cifs_mount(struct cifs_sb_info *cifs_sb, struct smb3_fs_context *ctx)
 {
 	struct cifs_mount_ctx mnt_ctx = { .cifs_sb = cifs_sb, .fs_ctx = ctx, };
+	struct mchan_mount *mchan_mount = NULL;
 	int rc;
 
 	rc = dfs_mount_share(&mnt_ctx);
 	if (rc)
 		goto error;
+
+	if (ctx->multichannel) {
+		mchan_mount = mchan_mount_alloc(ctx);
+		if (IS_ERR(mchan_mount)) {
+			rc = PTR_ERR(mchan_mount);
+			goto error;
+		}
+	}
+
 	if (!ctx->dfs_conn)
 		goto out;
 
@@ -3926,17 +3993,19 @@ int cifs_mount(struct cifs_sb_info *cifs_sb, struct smb3_fs_context *ctx)
 	ctx->prepath = NULL;
 
 out:
-	smb3_update_ses_channels(mnt_ctx.ses, mnt_ctx.server,
-				  false /* from_reconnect */,
-				  false /* disable_mchan */);
 	rc = mount_setup_tlink(cifs_sb, mnt_ctx.ses, mnt_ctx.tcon);
 	if (rc)
 		goto error;
+
+	if (ctx->multichannel)
+		queue_work(cifsiod_wq, &mchan_mount->work);
 
 	free_xid(mnt_ctx.xid);
 	return rc;
 
 error:
+	if (ctx->multichannel && !IS_ERR_OR_NULL(mchan_mount))
+		kref_put(&mchan_mount->refcount, mchan_mount_release);
 	cifs_mount_put_conns(&mnt_ctx);
 	return rc;
 }
