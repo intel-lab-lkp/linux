@@ -767,6 +767,9 @@ static int __iomap_write_begin(const struct iomap_iter *iter,
 	size_t from = offset_in_folio(folio, pos), to = from + len;
 	size_t poff, plen;
 
+	if (write_ops && write_ops->tag_folio)
+		write_ops->tag_folio(&iter->iomap, folio, pos, len);
+
 	/*
 	 * If the write or zeroing completely overlaps the current folio, then
 	 * entire folio will be dirtied so there is no need for

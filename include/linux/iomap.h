@@ -182,6 +182,9 @@ struct iomap_write_ops {
 	 */
 	int (*read_folio_range)(const struct iomap_iter *iter,
 			struct folio *folio, loff_t pos, size_t len);
+
+	void (*tag_folio)(const struct iomap *iomap,
+			struct folio *folio,  loff_t pos, size_t len);
 };
 
 /*
