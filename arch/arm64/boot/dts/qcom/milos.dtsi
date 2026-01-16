@@ -915,7 +915,7 @@
 				interconnect-names = "qup-core",
 						     "qup-config";
 
-				pinctrl-0 = <&qup_uart11_default>, <&qup_uart11_cts_rts>;
+				pinctrl-0 = <&qup_uart11_cts>, <&qup_uart11_rts>, <&qup_uart11_tx>, <&qup_uart11_rx>;
 				pinctrl-names = "default";
 
 				status = "disabled";
@@ -1714,20 +1714,24 @@
 				bias-disable;
 			};
 
-			qup_uart11_default: qup-uart11-default-state {
-				/* TX, RX */
-				pins = "gpio50", "gpio51";
+			qup_uart11_cts: qup-uart11-cts-state {
+				pins = "gpio48";
 				function = "qup1_se4";
-				drive-strength = <2>;
-				bias-pull-up;
 			};
 
-			qup_uart11_cts_rts: qup-uart11-cts-rts-state {
-				/* CTS, RTS */
-				pins = "gpio48", "gpio49";
+			qup_uart11_rts: qup-uart11-rts-state {
+				pins = "gpio49";
 				function = "qup1_se4";
-				drive-strength = <2>;
-				bias-pull-down;
+			};
+
+			qup_uart11_tx: qup-uart11-tx-state {
+				pins = "gpio50";
+				function = "qup1_se4";
+			};
+
+			qup_uart11_rx: qup-uart11-rx-state {
+				pins = "gpio51";
+				function = "qup1_se4";
 			};
 
 			sdc2_default: sdc2-default-state {
