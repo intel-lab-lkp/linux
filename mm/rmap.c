@@ -1864,6 +1864,9 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 	unsigned long hsz = 0;
 	int ptes = 0;
 
+	if ((flags & TTU_SKIP_EXEC) && (vma->vm_flags & VM_EXEC))
+		return false;
+
 	/*
 	 * When racing against e.g. zap_pte_range() on another cpu,
 	 * in between its ptep_get_and_clear_full() and folio_remove_rmap_*(),

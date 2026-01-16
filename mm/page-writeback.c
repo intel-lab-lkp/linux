@@ -101,7 +101,6 @@ static unsigned long vm_dirty_bytes;
  * The interval between `kupdate'-style writebacks
  */
 unsigned int dirty_writeback_interval = 5 * 100; /* centiseconds */
-
 EXPORT_SYMBOL_GPL(dirty_writeback_interval);
 
 /*
@@ -114,8 +113,10 @@ unsigned int dirty_expire_interval = 30 * 100; /* centiseconds */
  * a full sync is triggered after this time elapses without any disk activity.
  */
 int laptop_mode;
-
 EXPORT_SYMBOL(laptop_mode);
+
+int skipexec_enabled;
+EXPORT_SYMBOL(skipexec_enabled);
 
 /* End of sysctl-exported parameters */
 
@@ -2333,6 +2334,15 @@ static const struct ctl_table vm_page_writeback_sysctls[] = {
 		.maxlen		= sizeof(laptop_mode),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_jiffies,
+	},
+	{
+		.procname	= "skipexec_enabled",
+		.data		= &skipexec_enabled,
+		.maxlen		= sizeof(skipexec_enabled),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
 	},
 };
 #endif
