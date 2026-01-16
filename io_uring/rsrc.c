@@ -1141,6 +1141,65 @@ int io_import_reg_buf(struct io_kiocb *req, struct iov_iter *iter,
 	return io_import_fixed(ddir, iter, node->buf, buf_addr, len);
 }
 
+struct io_rsrc_node *io_uring_fixed_index_get(struct io_uring_cmd *cmd,
+					      int buf_index, unsigned int off,
+					      size_t len, int ddir,
+					      struct iov_iter *iter,
+					      unsigned int issue_flags)
+{
+	struct io_ring_ctx *ctx = cmd_to_io_kiocb(cmd)->ctx;
+	struct io_rsrc_node *node;
+	struct io_mapped_ubuf *imu;
+	u64 addr;
+	int err;
+
+	io_ring_submit_lock(ctx, issue_flags);
+
+	node = io_rsrc_node_lookup(&ctx->buf_table, buf_index);
+	if (!node) {
+		io_ring_submit_unlock(ctx, issue_flags);
+		return ERR_PTR(-EINVAL);
+	}
+
+	node->refs++;
+
+	io_ring_submit_unlock(ctx, issue_flags);
+
+	imu = node->buf;
+	if (!imu) {
+		err = -EFAULT;
+		goto error;
+	}
+
+	if (check_add_overflow(imu->ubuf, off, &addr)) {
+		err = -EINVAL;
+		goto error;
+	}
+
+	err = io_import_fixed(ddir, iter, imu, addr, len);
+	if (err)
+		goto error;
+
+	return node;
+
+error:
+	io_uring_fixed_index_put(cmd, node, issue_flags);
+	return ERR_PTR(err);
+}
+EXPORT_SYMBOL_GPL(io_uring_fixed_index_get);
+
+void io_uring_fixed_index_put(struct io_uring_cmd *cmd,
+			      struct io_rsrc_node *node,
+			      unsigned int issue_flags)
+{
+	struct io_ring_ctx *ctx = cmd_to_io_kiocb(cmd)->ctx;
+
+	io_ring_submit_lock(ctx, issue_flags);
+	io_put_rsrc_node(ctx, node);
+	io_ring_submit_unlock(ctx, issue_flags);
+}
+EXPORT_SYMBOL_GPL(io_uring_fixed_index_put);
+
 /* Lock two rings at once. The rings must be different! */
 static void lock_two_rings(struct io_ring_ctx *ctx1, struct io_ring_ctx *ctx2)
 {
