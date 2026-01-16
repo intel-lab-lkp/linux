@@ -946,6 +946,7 @@ static void atp_disconnect(struct usb_interface *iface)
 	usb_set_intfdata(iface, NULL);
 	if (dev) {
 		usb_kill_urb(dev->urb);
+		disable_work_sync(&dev->work);
 		input_unregister_device(dev->input);
 		usb_free_coherent(dev->udev, dev->info->datalen,
 				  dev->data, dev->urb->transfer_dma);
