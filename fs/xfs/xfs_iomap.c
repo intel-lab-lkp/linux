@@ -12,6 +12,9 @@
 #include "xfs_trans_resv.h"
 #include "xfs_mount.h"
 #include "xfs_inode.h"
+#include "xfs_alloc.h"
+#include "xfs_ag.h"
+#include "xfs_ag_resv.h"
 #include "xfs_btree.h"
 #include "xfs_bmap_btree.h"
 #include "xfs_bmap.h"
@@ -92,8 +95,119 @@ xfs_iomap_valid(
 	return true;
 }
 
+static xfs_agnumber_t
+xfs_predict_delalloc_agno(const struct xfs_inode *ip, loff_t pos, loff_t len)
+{
+	struct xfs_mount *mp = ip->i_mount;
+	xfs_agnumber_t start_agno, agno, best_agno;
+	struct xfs_perag *pag;
+
+	xfs_extlen_t free, resv, avail;
+	xfs_extlen_t need_fsbs, min_free_fsbs;
+	xfs_extlen_t best_free = 0;
+	xfs_agnumber_t agcount = mp->m_sb.sb_agcount;
+
+	/* RT inodes allocate from the realtime volume */
+	if (XFS_IS_REALTIME_INODE(ip))
+		return XFS_INO_TO_AGNO(mp, ip->i_ino);
+
+	start_agno =  XFS_INO_TO_AGNO(mp, ip->i_ino);
+
+	/*
+	 * size-based minimum free requirement.
+	 * Convert bytes to fsbs and require some slack.
+	 */
+	need_fsbs = XFS_B_TO_FSB(mp, (xfs_fsize_t)len);
+	min_free_fsbs = need_fsbs + max_t(xfs_extlen_t, need_fsbs >> 2, 128);
+
+	/*
+	 * scan AGs starting at start_agno and wrapping.
+	 * Pick the first AG that meets min_free_fsbs after reservations.
+	 * Keep a "best" fallback = maximum (free - resv).
+	 */
+	best_agno = start_agno;
+
+	for (xfs_agnumber_t i = 0; i < agcount; i++) {
+		agno = (start_agno + i) % agcount;
+		pag = xfs_perag_get(mp, agno);
+
+		if (!xfs_perag_initialised_agf(pag))
+			goto next;
+
+		free = READ_ONCE(pag->pagf_freeblks);
+		resv = xfs_ag_resv_needed(pag, XFS_AG_RESV_NONE);
+
+		if (free <= resv)
+			goto next;
+
+		avail = free - resv;
+
+		if (avail >= min_free_fsbs) {
+			xfs_perag_put(pag);
+			return agno;
+		}
+
+		if (avail > best_free) {
+			best_free = avail;
+			best_agno = agno;
+		}
+next:
+		xfs_perag_put(pag);
+	}
+
+	return best_agno;
+}
+
+static inline xfs_agnumber_t xfs_ag_from_iomap(const struct xfs_mount *mp,
+		const struct iomap *iomap,
+		const struct xfs_inode *ip, loff_t pos, size_t len)
+{
+	if (iomap->type == IOMAP_MAPPED || iomap->type == IOMAP_UNWRITTEN) {
+		/* iomap->addr is byte address on device for buffered I/O */
+		xfs_fsblock_t fsb = XFS_BB_TO_FSBT(mp, BTOBB(iomap->addr));
+
+		return XFS_FSB_TO_AGNO(mp, fsb);
+	} else if (iomap->type == IOMAP_HOLE || iomap->type == IOMAP_DELALLOC) {
+		return xfs_predict_delalloc_agno(ip, pos, len);
+	}
+
+	return XFS_INO_TO_AGNO(mp, ip->i_ino);
+}
+
+static void xfs_agp_set(struct xfs_inode *ip, pgoff_t index,
+			xfs_agnumber_t agno, u8 type)
+{
+	u32 packed = xfs_agp_pack((u32)agno, type, true);
+
+	/* store as immediate value */
+	xa_store(&ip->i_ag_pmap, index, xa_mk_value(packed), GFP_NOFS);
+
+	/* Mark this AG as having potential dirty work */
+	if (ip->i_ag_dirty_bitmap && (u32)agno < ip->i_ag_dirty_bits)
+		set_bit((u32)agno, ip->i_ag_dirty_bitmap);
+}
+
+static void
+xfs_iomap_tag_folio(const struct iomap *iomap, struct folio *folio,
+		loff_t pos, size_t len)
+{
+	struct inode *inode;
+	struct xfs_inode *ip;
+	struct xfs_mount *mp;
+	xfs_agnumber_t agno;
+
+	inode = folio_mapping(folio)->host;
+	ip = XFS_I(inode);
+	mp = ip->i_mount;
+
+	agno = xfs_ag_from_iomap(mp, iomap, ip, pos, len);
+
+	xfs_agp_set(ip, folio->index, agno, (u8)iomap->type);
+}
+
 const struct iomap_write_ops xfs_iomap_write_ops = {
 	.iomap_valid		= xfs_iomap_valid,
+	.tag_folio		= xfs_iomap_tag_folio,
 };
 
 int
