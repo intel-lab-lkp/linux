@@ -284,8 +284,10 @@ static bool thermal_of_cm_lookup(struct device_node *cm_np,
 		int count, i;
 
 		tr_np = of_parse_phandle(child, "trip", 0);
-		if (tr_np != trip->priv)
+		if (tr_np != trip->priv) {
+			of_node_put(tr_np);
 			continue;
+		}
 
 		/* The trip has been found, look up the cdev. */
 		count = of_count_phandle_with_args(child, "cooling-device",
@@ -294,9 +296,12 @@ static bool thermal_of_cm_lookup(struct device_node *cm_np,
 			pr_err("Add a cooling_device property with at least one device\n");
 
 		for (i = 0; i < count; i++) {
-			if (thermal_of_get_cooling_spec(child, i, cdev, c))
+			if (thermal_of_get_cooling_spec(child, i, cdev, c)) {
+				of_node_put(tr_np);
 				return true;
+			}
 		}
+		of_node_put(tr_np);
 	}
 
 	return false;
