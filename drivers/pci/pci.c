@@ -5338,12 +5338,17 @@ static void pci_slot_unlock(struct pci_slot *slot)
 		else
 			pci_dev_unlock(dev);
 	}
+	if (slot->bus->self)
+		pci_dev_unlock(slot->bus->self);
 }
 
 /* Return 1 on successful lock, 0 on contention */
 static int pci_slot_trylock(struct pci_slot *slot)
 {
-	struct pci_dev *dev;
+	struct pci_dev *dev, *bridge = slot->bus->self;
+
+	if (bridge && !pci_dev_trylock(bridge))
+		return 0;
 
 	list_for_each_entry(dev, &slot->bus->devices, bus_list) {
 		if (!dev->slot || dev->slot != slot)
@@ -5366,6 +5371,9 @@ unlock:
 		else
 			pci_dev_unlock(dev);
 	}
+
+	if (bridge)
+		pci_dev_unlock(bridge);
 	return 0;
 }
 
@@ -5428,6 +5436,8 @@ static void pci_slot_restore_locked(struct pci_slot *slot)
 {
 	struct pci_dev *dev;
 
+	if (slot->bus->self)
+		pci_dev_lock(slot->bus->self);
 	list_for_each_entry(dev, &slot->bus->devices, bus_list) {
 		if (!dev->slot || dev->slot != slot)
 			continue;
