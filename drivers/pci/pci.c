@@ -4963,6 +4963,7 @@ static int cxl_reset_init(struct pci_dev *dev, u16 dvsec)
  */
 static int cxl_reset(struct pci_dev *dev, bool probe)
 {
+	struct cxl_type2_saved_state cxl_state;
 	u16 dvsec, reg;
 	int rc;
 
@@ -4988,6 +4989,11 @@ static int cxl_reset(struct pci_dev *dev, bool probe)
 	if (probe)
 		return 0;
 
+	pci_save_state(dev);
+	rc = cxl_config_save_state(dev, &cxl_state);
+	if (rc)
+		pci_warn(dev, "Failed to save CXL config state: %d\n", rc);
+
 	/*
 	 * CXL-reset-specific preparation: validate memory offline,
 	 * tear down regions, flush device caches.
@@ -5003,10 +5009,16 @@ static int cxl_reset(struct pci_dev *dev, bool probe)
 	if (rc)
 		goto out_cleanup;
 
+	pci_restore_state(dev);
+	rc = cxl_config_restore_state(dev, &cxl_state);
+	if (rc)
+		pci_warn(dev, "Failed to restore CXL config state: %d\n", rc);
+
 	cxl_reset_cleanup_device(dev);
 	return 0;
 
 out_cleanup:
+	pci_restore_state(dev);
 	cxl_reset_cleanup_device(dev);
 	return rc;
 }
