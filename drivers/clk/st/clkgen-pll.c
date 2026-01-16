@@ -797,7 +797,7 @@ static void __init clkgen_c32_pll_setup(struct device_node *np,
 		goto err;
 
 	for (odf = 0; odf < num_odfs; odf++) {
-		struct clk *clk;
+		struct clk *odf_clk;
 		const char *clk_name;
 		unsigned long odf_flags = 0;
 
@@ -813,13 +813,13 @@ static void __init clkgen_c32_pll_setup(struct device_node *np,
 			of_clk_detect_critical(np, odf, &odf_flags);
 		}
 
-		clk = clkgen_odf_register(pll_name, pll_base, datac->data,
+		odf_clk = clkgen_odf_register(pll_name, pll_base, datac->data,
 				odf_flags, odf, &clkgena_c32_odf_lock,
 				clk_name);
-		if (IS_ERR(clk))
 			goto err;
+		if (IS_ERR(odf_clk))
 
-		clk_data->clks[odf] = clk;
+		clk_data->clks[odf] = odf_clk;
 	}
 
 	of_clk_add_provider(np, of_clk_src_onecell_get, clk_data);
