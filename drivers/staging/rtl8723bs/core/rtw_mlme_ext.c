@@ -935,8 +935,8 @@ static unsigned short rtw_parse_assoc_security_ies(struct adapter *padapter,
 {
 	struct security_priv *psecuritypriv = &padapter->securitypriv;
 	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
-	unsigned char *wpa_ie;
-	int wpa_ie_len;
+	unsigned char *wpa_ie = NULL;
+	int wpa_ie_len = 0;
 
 	pstat->dot8021xalg = 0;
 	pstat->wpa_psk = 0;
@@ -991,10 +991,6 @@ static unsigned short rtw_parse_assoc_security_ies(struct adapter *padapter,
 		} else {
 			return WLAN_STATUS_INVALID_IE;
 		}
-
-	} else {
-		wpa_ie = NULL;
-		wpa_ie_len = 0;
 	}
 
 	pstat->flags &= ~(WLAN_STA_WPS | WLAN_STA_MAYBE_WPS);
