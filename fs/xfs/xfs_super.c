@@ -1765,6 +1765,8 @@ xfs_fs_fill_super(
 	if (error)
 		goto out_free_sb;
 
+	xfs_init_ag_writeback(mp);
+
 	/*
 	 * V4 support is undergoing deprecation.
 	 *

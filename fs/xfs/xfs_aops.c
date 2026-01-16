@@ -23,6 +23,23 @@
 #include "xfs_zone_alloc.h"
 #include "xfs_rtgroup.h"
 
+#define XFS_AG_TASK_POOL_MIN 1024
+
+struct xfs_ag_wb_task {
+	struct list_head list;
+	struct xfs_inode *ip;
+	struct writeback_control wbc;
+	xfs_agnumber_t agno;
+};
+
+struct xfs_ag_wb {
+	struct delayed_work ag_work;
+	spinlock_t lock;
+	struct list_head task_list;
+	xfs_agnumber_t agno;
+	struct xfs_mount *mp;
+};
+
 struct xfs_writepage_ctx {
 	struct iomap_writepage_ctx ctx;
 	unsigned int		data_seq;
@@ -665,6 +682,68 @@ static const struct iomap_writeback_ops xfs_zoned_writeback_ops = {
 	.writeback_range	= xfs_zoned_writeback_range,
 	.writeback_submit	= xfs_zoned_writeback_submit,
 };
+
+void
+xfs_init_ag_writeback(struct xfs_mount *mp)
+{
+	xfs_agnumber_t agno;
+
+	mp->m_ag_wq = alloc_workqueue("xfs-ag-wb", WQ_UNBOUND | WQ_MEM_RECLAIM,
+				      0);
+	if (!mp->m_ag_wq)
+		return;
+
+	mp->m_ag_wb = kcalloc(mp->m_sb.sb_agcount,
+				sizeof(struct xfs_ag_wb),
+				GFP_KERNEL);
+
+	if (!mp->m_ag_wb) {
+		destroy_workqueue(mp->m_ag_wq);
+		mp->m_ag_wq = NULL;
+		return;
+	}
+
+	for (agno = 0; agno < mp->m_sb.sb_agcount; agno++) {
+		struct xfs_ag_wb *awb = &mp->m_ag_wb[agno];
+
+		spin_lock_init(&awb->lock);
+		INIT_LIST_HEAD(&awb->task_list);
+		awb->agno = agno;
+		awb->mp = mp;
+	}
+
+	mp->m_ag_task_cachep = kmem_cache_create("xfs_ag_wb_task",
+						sizeof(struct xfs_ag_wb_task),
+						0,
+						SLAB_RECLAIM_ACCOUNT,
+						NULL);
+
+	mp->m_ag_task_pool = mempool_create_slab_pool(XFS_AG_TASK_POOL_MIN,
+	mp->m_ag_task_cachep);
+
+	if (!mp->m_ag_task_pool) {
+		kmem_cache_destroy(mp->m_ag_task_cachep);
+		mp->m_ag_task_cachep = NULL;
+	}
+}
+
+void
+xfs_destroy_ag_writeback(struct xfs_mount *mp)
+{
+	if (mp->m_ag_wq) {
+		flush_workqueue(mp->m_ag_wq);
+		destroy_workqueue(mp->m_ag_wq);
+		mp->m_ag_wq = NULL;
+	}
+	kfree(mp->m_ag_wb);
+	mp->m_ag_wb = NULL;
+
+	mempool_destroy(mp->m_ag_task_pool);
+	mp->m_ag_task_pool = NULL;
+
+	kmem_cache_destroy(mp->m_ag_task_cachep);
+	mp->m_ag_task_cachep = NULL;
+}
 
 STATIC int
 xfs_vm_writepages(

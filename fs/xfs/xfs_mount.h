@@ -342,6 +342,16 @@ typedef struct xfs_mount {
 
 	/* Hook to feed dirent updates to an active online repair. */
 	struct xfs_hooks	m_dir_update_hooks;
+
+
+	/* global XFS AG writeback wq */
+	struct workqueue_struct *m_ag_wq;
+	/* array of [sb_agcount] */
+	struct xfs_ag_wb        *m_ag_wb;
+
+	/* task cache and pool */
+	struct kmem_cache *m_ag_task_cachep;
+	mempool_t *m_ag_task_pool;
 } xfs_mount_t;
 
 #define M_IGEO(mp)		(&(mp)->m_ino_geo)

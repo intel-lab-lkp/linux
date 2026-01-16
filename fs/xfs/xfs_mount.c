@@ -1323,6 +1323,8 @@ xfs_unmountfs(
 
 	xfs_qm_unmount(mp);
 
+	xfs_destroy_ag_writeback(mp);
+
 	/*
 	 * Unreserve any blocks we have so that when we unmount we don't account
 	 * the reserved free space as used. This is really only necessary for
