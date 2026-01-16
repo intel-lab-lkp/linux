@@ -131,8 +131,8 @@ DECLARE_EVENT_CLASS(iommu_error,
 	TP_ARGS(dev, iova, flags),
 
 	TP_STRUCT__entry(
-		__string(device, dev_name(dev))
-		__string(driver, dev_driver_string(dev))
+		__string(device, dev ? dev_name(dev) : NULL)
+		__string(driver, dev ? dev_driver_string(dev) : NULL)
 		__field(u64, iova)
 		__field(int, flags)
 	),
