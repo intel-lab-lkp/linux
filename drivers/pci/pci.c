@@ -4988,10 +4988,27 @@ static int cxl_reset(struct pci_dev *dev, bool probe)
 	if (probe)
 		return 0;
 
+	/*
+	 * CXL-reset-specific preparation: validate memory offline,
+	 * tear down regions, flush device caches.
+	 */
+	rc = cxl_reset_prepare_device(dev);
+	if (rc)
+		return rc;
+
 	if (!pci_wait_for_pending_transaction(dev))
 		pci_err(dev, "timed out waiting for pending transaction; performing function level reset anyway\n");
 
-	return cxl_reset_init(dev, dvsec);
+	rc = cxl_reset_init(dev, dvsec);
+	if (rc)
+		goto out_cleanup;
+
+	cxl_reset_cleanup_device(dev);
+	return 0;
+
+out_cleanup:
+	cxl_reset_cleanup_device(dev);
+	return rc;
 }
 
 static int cxl_reset_bus_function(struct pci_dev *dev, bool probe)

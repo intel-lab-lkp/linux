@@ -1470,6 +1470,8 @@ int __must_check pci_resize_resource(struct pci_dev *dev, int i, int size,
 int pci_select_bars(struct pci_dev *dev, unsigned long flags);
 bool pci_device_is_present(struct pci_dev *pdev);
 bool cxl_is_type2_device(struct pci_dev *dev);
+int cxl_reset_prepare_device(struct pci_dev *pdev);
+void cxl_reset_cleanup_device(struct pci_dev *pdev);
 void pci_ignore_hotplug(struct pci_dev *dev);
 struct pci_dev *pci_real_dma_dev(struct pci_dev *dev);
 int pci_status_get_and_clear_errors(struct pci_dev *pdev);
