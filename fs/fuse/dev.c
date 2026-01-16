@@ -1792,7 +1792,7 @@ static int fuse_notify_store(struct fuse_conn *fc, unsigned int size,
 
 	mapping = inode->i_mapping;
 	index = outarg.offset >> PAGE_SHIFT;
-	offset = outarg.offset & ~PAGE_MASK;
+	offset = offset_in_page(outarg.offset);
 	file_size = i_size_read(inode);
 	end = outarg.offset + outarg.size;
 	if (end > file_size) {
@@ -1874,7 +1874,7 @@ static int fuse_retrieve(struct fuse_mount *fm, struct inode *inode,
 	struct fuse_args_pages *ap;
 	struct fuse_args *args;
 
-	offset = outarg->offset & ~PAGE_MASK;
+	offset = offset_in_page(outarg->offset);
 	file_size = i_size_read(inode);
 
 	num = min(outarg->size, fc->max_write);
