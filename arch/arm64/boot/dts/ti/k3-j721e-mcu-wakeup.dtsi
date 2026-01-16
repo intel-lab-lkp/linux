@@ -7,14 +7,15 @@
 
 &cbass_mcu_wakeup {
 	dmsc: system-controller@44083000 {
-		compatible = "ti,k2g-sci";
+		compatible = "ti,am654-sci";
 		ti,host-id = <12>;
 
-		mbox-names = "rx", "tx";
+		mbox-names = "rx", "tx", "boot_rx", "boot_tx";
 
 		mboxes = <&secure_proxy_main 11>,
-			 <&secure_proxy_main 13>;
-
+			 <&secure_proxy_main 13>,
+			 <&secure_proxy_mcu 5>,
+			 <&secure_proxy_mcu 4>;
 		reg-names = "debug_messages";
 		reg = <0x00 0x44083000 0x0 0x1000>;
 

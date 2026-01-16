@@ -209,11 +209,13 @@
 
 	dmsc: system-controller@44043000 {
 		bootph-all;
-		compatible = "ti,k2g-sci";
+		compatible = "ti,am654-sci";
 		ti,host-id = <12>;
-		mbox-names = "rx", "tx";
+		mbox-names = "rx", "tx", "boot_rx", "boot_tx";
 		mboxes = <&secure_proxy_main 12>,
-			<&secure_proxy_main 13>;
+			<&secure_proxy_main 13>,
+			<&secure_proxy_main 0>,
+			<&secure_proxy_main 1>;
 		reg-names = "debug_messages";
 		reg = <0x00 0x44043000 0x00 0xfe0>;
 

@@ -214,13 +214,16 @@
 	};
 
 	dmsc: system-controller@44043000 {
-		compatible = "ti,k2g-sci";
+		compatible = "ti,am654-sci";
 		reg = <0x00 0x44043000 0x00 0xfe0>;
 		reg-names = "debug_messages";
 		ti,host-id = <12>;
-		mbox-names = "rx", "tx";
+		mbox-names = "rx", "tx", "boot_rx", "boot_tx", "boot_notify";
 		mboxes = <&secure_proxy_main 12>,
-			 <&secure_proxy_main 13>;
+			 <&secure_proxy_main 13>,
+			 <&secure_proxy_main 0>,
+			 <&secure_proxy_main 1>,
+			 <&secure_proxy_sa3 0>;
 
 		k3_pds: power-controller {
 			compatible = "ti,sci-pm-domain";
