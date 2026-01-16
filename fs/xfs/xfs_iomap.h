@@ -12,6 +12,37 @@ struct xfs_inode;
 struct xfs_bmbt_irec;
 struct xfs_zone_alloc_ctx;
 
+/* pack prediction in a u32 stored in xarray */
+#define XFS_AGP_VALID_SHIFT 31
+#define XFS_AGP_TYPE_SHIFT 24
+#define XFS_AGP_TYPE_MASK 0x7fu
+#define XFS_AGP_AGNO_MASK 0x00ffffffu
+
+static inline u32 xfs_agp_pack(u32 agno, u8 iomap_type, bool valid)
+{
+	u32 v = agno & XFS_AGP_AGNO_MASK;
+
+	v |= ((u32)iomap_type & XFS_AGP_TYPE_MASK) << XFS_AGP_TYPE_SHIFT;
+	if (valid)
+		v |= (1u << XFS_AGP_VALID_SHIFT);
+	return v;
+}
+
+static inline bool xfs_agp_valid(u32 v)
+{
+	return v >> XFS_AGP_VALID_SHIFT;
+}
+
+static inline u32 xfs_agp_agno(u32 v)
+{
+	return v & XFS_AGP_AGNO_MASK;
+}
+
+static inline u8 xfs_agp_type(u32 v)
+{
+	return (u8)((v >> XFS_AGP_TYPE_SHIFT) & XFS_AGP_TYPE_MASK);
+}
+
 int xfs_iomap_write_direct(struct xfs_inode *ip, xfs_fileoff_t offset_fsb,
 		xfs_fileoff_t count_fsb, unsigned int flags,
 		struct xfs_bmbt_irec *imap, u64 *sequence);
