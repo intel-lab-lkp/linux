@@ -1014,7 +1014,7 @@ static int ixp4xx_get_ts_info(struct net_device *dev,
 {
 	struct port *port = netdev_priv(dev);
 
-	if (port->phc_index < 0)
+	if (cpu_is_ixp46x() && (port->phc_index < 0))
 		ixp46x_ptp_find(&port->timesync_regs, &port->phc_index);
 
 	info->phc_index = port->phc_index;
