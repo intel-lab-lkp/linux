@@ -15,6 +15,14 @@
 
 #include <dt-bindings/clock/at91.h>
 
+#define AT91_CLK_PD_NAME(n) ((struct clk_parent_data){ \
+	.hw = NULL, .name = (n), .fw_name = NULL, .index = -1, \
+})
+
+#define AT91_CLK_PD_HW(h) ((struct clk_parent_data){ \
+	.hw = (h), .name = NULL, .fw_name = NULL, .index = -1, \
+})
+
 extern spinlock_t pmc_pcr_lock;
 
 struct pmc_data {
