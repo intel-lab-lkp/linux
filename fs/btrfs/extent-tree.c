@@ -2755,8 +2755,7 @@ static int unpin_extent_range(struct btrfs_fs_info *fs_info,
 		u64 len;
 		bool readonly;
 
-		if (!cache ||
-		    start >= cache->start + cache->length) {
+		if (!cache || start >= btrfs_block_group_end(cache)) {
 			if (cache)
 				btrfs_put_block_group(cache);
 			total_unpinned = 0;
@@ -2772,7 +2771,7 @@ static int unpin_extent_range(struct btrfs_fs_info *fs_info,
 			empty_cluster <<= 1;
 		}
 
-		len = cache->start + cache->length - start;
+		len = btrfs_block_group_end(cache) - start;
 		len = min(len, end + 1 - start);
 
 		if (return_free_space)
@@ -4569,7 +4568,7 @@ have_block_group:
 
 		/* move on to the next group */
 		if (ffe_ctl->search_start + ffe_ctl->num_bytes >
-		    block_group->start + block_group->length) {
+		    btrfs_block_group_end(block_group)) {
 			btrfs_add_free_space_unused(block_group,
 					    ffe_ctl->found_offset,
 					    ffe_ctl->num_bytes);
@@ -6533,7 +6532,7 @@ int btrfs_trim_fs(struct btrfs_fs_info *fs_info, struct fstrim_range *range)
 		}
 
 		start = max(range->start, cache->start);
-		end = min(range_end, cache->start + cache->length);
+		end = min(range_end, btrfs_block_group_end(cache));
 
 		if (end - start >= range->minlen) {
 			if (!btrfs_block_group_done(cache)) {
