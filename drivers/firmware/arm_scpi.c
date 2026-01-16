@@ -665,6 +665,7 @@ static int scpi_dev_domain_id(struct device *dev)
 				       0, &clkspec))
 		return -EINVAL;
 
+	of_node_put(clkspec.np);
 	return clkspec.args[0];
 }
 
