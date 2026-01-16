@@ -562,6 +562,17 @@ attribute-sets:
         type: u32
         checks:
           min: 1
+      -
+        name: autorelease
+        doc: |
+          Token autorelease mode. If true (1), leaked tokens are automatically
+          released when the socket closes. If false (0), leaked tokens are only
+          released when the dmabuf is torn down. Once a binding is created with
+          a specific mode, all subsequent bindings system-wide must use the
+          same mode.
+
+          Optional. Defaults to false if not specified.
+        type: u8
 
 operations:
   list:
@@ -769,6 +780,7 @@ operations:
             - ifindex
             - fd
             - queues
+            - autorelease
         reply:
           attributes:
             - id
