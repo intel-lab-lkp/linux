@@ -761,10 +761,12 @@ static void __init clkgen_c32_pll_setup(struct device_node *np,
 	struct clk *pll_clk;
 	const char *parent_name, *pll_name;
 	void __iomem *pll_base;
-	int num_odfs, odf;
+	int num_odfs, odf = 0;
 	struct clk_onecell_data *clk_data;
 	unsigned long pll_flags = 0;
 	struct clkgen_pll *pll;
+	struct clk_gate *gate;
+	struct clk_divider *div;
 
 	parent_name = of_clk_get_parent_name(np, 0);
 	if (!parent_name)
@@ -808,7 +810,7 @@ static void __init clkgen_c32_pll_setup(struct device_node *np,
 			if (of_property_read_string_index(np,
 							  "clock-output-names",
 							  odf, &clk_name))
-				return;
+				goto err_odf_unregister;
 
 			of_clk_detect_critical(np, odf, &odf_flags);
 		}
@@ -816,8 +818,8 @@ static void __init clkgen_c32_pll_setup(struct device_node *np,
 		odf_clk = clkgen_odf_register(pll_name, pll_base, datac->data,
 				odf_flags, odf, &clkgena_c32_odf_lock,
 				clk_name);
-			goto err;
 		if (IS_ERR(odf_clk))
+			goto err_odf_unregister;
 
 		clk_data->clks[odf] = odf_clk;
 	}
@@ -825,6 +827,14 @@ static void __init clkgen_c32_pll_setup(struct device_node *np,
 	of_clk_add_provider(np, of_clk_src_onecell_get, clk_data);
 	return;
 
+err_odf_unregister:
+	while (--odf >= 0) {
+		gate = to_clk_gate(__clk_get_hw(clk_data->clks[odf]));
+		div = to_clk_divider(__clk_get_hw(clk_data->clks[odf]));
+		clk_unregister_composite(clk_data->clks[odf]);
+		kfree(div);
+		kfree(gate);
+	}
 err:
 	kfree(clk_data->clks);
 	kfree(clk_data);
