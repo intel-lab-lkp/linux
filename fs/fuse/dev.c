@@ -1812,7 +1812,7 @@ static int fuse_notify_store(struct fuse_conn *fc, unsigned int size,
 		if (IS_ERR(folio))
 			goto out_iput;
 
-		folio_offset = ((index - folio->index) << PAGE_SHIFT) + offset;
+		folio_offset = offset_in_folio(folio, outarg.offset);
 		nr_bytes = min_t(unsigned, num, folio_size(folio) - folio_offset);
 		nr_pages = DIV_ROUND_UP(offset + nr_bytes, PAGE_SIZE);
 
@@ -1916,7 +1916,7 @@ static int fuse_retrieve(struct fuse_mount *fm, struct inode *inode,
 		if (IS_ERR(folio))
 			break;
 
-		folio_offset = ((index - folio->index) << PAGE_SHIFT) + offset;
+		folio_offset = offset_in_folio(folio, outarg->offset);
 		nr_bytes = min(folio_size(folio) - folio_offset, num);
 		nr_pages = DIV_ROUND_UP(offset + nr_bytes, PAGE_SIZE);
 
