@@ -135,6 +135,8 @@ pub mod pwm;
 pub mod rbtree;
 pub mod regulator;
 pub mod revocable;
+#[cfg(CONFIG_RTC_CLASS)]
+pub mod rtc;
 pub mod scatterlist;
 pub mod security;
 pub mod seq_file;
