@@ -490,6 +490,9 @@ struct wl12xx_vif {
 	 */
 	u64 total_freed_pkts;
 
+	/* cached tsf for debugfs */
+	u64 debug_tsf;
+
 	/*
 	 * This struct must be last!
 	 * data that has to be saved acrossed reconfigs (e.g. recovery)

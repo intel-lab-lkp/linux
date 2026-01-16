@@ -2338,6 +2338,7 @@ static int wl12xx_init_vif_data(struct wl1271 *wl, struct ieee80211_vif *vif)
 	wlvif->bitrate_masks[NL80211_BAND_2GHZ] = wl->conf.tx.basic_rate;
 	wlvif->bitrate_masks[NL80211_BAND_5GHZ] = wl->conf.tx.basic_rate_5;
 	wlvif->beacon_int = WL1271_DEFAULT_BEACON_INT;
+	wlvif->debug_tsf = ULLONG_MAX;
 
 	/*
 	 * mac80211 configures some values globally, while we treat them
@@ -4988,6 +4989,10 @@ static u64 wl1271_op_get_tsf(struct ieee80211_hw *hw,
 
 	wl1271_debug(DEBUG_MAC80211, "mac80211 get tsf");
 
+	/* Return cached value to debugfs */
+	if (!preemptible())
+		return wlvif->debug_tsf;
+
 	mutex_lock(&wl->mutex);
 
 	if (unlikely(wl->state != WLCORE_STATE_ON))
@@ -5000,6 +5005,7 @@ static u64 wl1271_op_get_tsf(struct ieee80211_hw *hw,
 	ret = wl12xx_acx_tsf_info(wl, wlvif, &mactime);
 	if (ret < 0)
 		goto out_sleep;
+	wlvif->debug_tsf = mactime;
 
 out_sleep:
 	pm_runtime_put_autosuspend(wl->dev);
