@@ -89,6 +89,9 @@
 
 #include <crypto/md5.h>
 
+#include <linux/dma-buf.h>
+#include "../core/devmem.h"
+
 #include <trace/events/tcp.h>
 
 #ifdef CONFIG_TCP_MD5SIG
@@ -2492,7 +2495,7 @@ static void tcp_release_user_frags(struct sock *sk)
 	unsigned long index;
 	void *netmem;
 
-	xa_for_each(&sk->sk_user_frags, index, netmem)
+	xa_for_each(&sk->sk_devmem_info.frags, index, netmem)
 		WARN_ON_ONCE(!napi_pp_put_page((__force netmem_ref)netmem));
 #endif
 }
@@ -2503,7 +2506,15 @@ void tcp_v4_destroy_sock(struct sock *sk)
 
 	tcp_release_user_frags(sk);
 
-	xa_destroy(&sk->sk_user_frags);
+	if (!net_devmem_autorelease_enabled() && sk->sk_devmem_info.binding) {
+		net_devmem_dmabuf_binding_user_put(sk->sk_devmem_info.binding);
+		net_devmem_dmabuf_binding_put(sk->sk_devmem_info.binding);
+		sk->sk_devmem_info.binding = NULL;
+		WARN_ONCE(!xa_empty(&sk->sk_devmem_info.frags),
+			  "non-empty xarray discovered in autorelease off mode");
+	}
+
+	xa_destroy(&sk->sk_devmem_info.frags);
 
 	trace_tcp_destroy_sock(sk);
 

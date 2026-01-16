@@ -260,6 +260,7 @@
 #include <linux/memblock.h>
 #include <linux/highmem.h>
 #include <linux/cache.h>
+#include <linux/dma-buf.h>
 #include <linux/err.h>
 #include <linux/time.h>
 #include <linux/slab.h>
@@ -492,7 +493,8 @@ void tcp_init_sock(struct sock *sk)
 
 	set_bit(SOCK_SUPPORT_ZC, &sk->sk_socket->flags);
 	sk_sockets_allocated_inc(sk);
-	xa_init_flags(&sk->sk_user_frags, XA_FLAGS_ALLOC1);
+	xa_init_flags(&sk->sk_devmem_info.frags, XA_FLAGS_ALLOC1);
+	sk->sk_devmem_info.binding = NULL;
 }
 EXPORT_IPV6_MOD(tcp_init_sock);
 
@@ -2424,11 +2426,12 @@ static void tcp_xa_pool_commit_locked(struct sock *sk, struct tcp_xa_pool *p)
 
 	/* Commit part that has been copied to user space. */
 	for (i = 0; i < p->idx; i++)
-		__xa_cmpxchg(&sk->sk_user_frags, p->tokens[i], XA_ZERO_ENTRY,
-			     (__force void *)p->netmems[i], GFP_KERNEL);
+		__xa_cmpxchg(&sk->sk_devmem_info.frags, p->tokens[i],
+			     XA_ZERO_ENTRY, (__force void *)p->netmems[i],
+			     GFP_KERNEL);
 	/* Rollback what has been pre-allocated and is no longer needed. */
 	for (; i < p->max; i++)
-		__xa_erase(&sk->sk_user_frags, p->tokens[i]);
+		__xa_erase(&sk->sk_devmem_info.frags, p->tokens[i]);
 
 	p->max = 0;
 	p->idx = 0;
@@ -2436,14 +2439,17 @@ static void tcp_xa_pool_commit_locked(struct sock *sk, struct tcp_xa_pool *p)
 
 static void tcp_xa_pool_commit(struct sock *sk, struct tcp_xa_pool *p)
 {
+	if (!net_devmem_autorelease_enabled())
+		return;
+
 	if (!p->max)
 		return;
 
-	xa_lock_bh(&sk->sk_user_frags);
+	xa_lock_bh(&sk->sk_devmem_info.frags);
 
 	tcp_xa_pool_commit_locked(sk, p);
 
-	xa_unlock_bh(&sk->sk_user_frags);
+	xa_unlock_bh(&sk->sk_devmem_info.frags);
 }
 
 static int tcp_xa_pool_refill(struct sock *sk, struct tcp_xa_pool *p,
@@ -2454,22 +2460,39 @@ static int tcp_xa_pool_refill(struct sock *sk, struct tcp_xa_pool *p,
 	if (p->idx < p->max)
 		return 0;
 
-	xa_lock_bh(&sk->sk_user_frags);
+	xa_lock_bh(&sk->sk_devmem_info.frags);
 
 	tcp_xa_pool_commit_locked(sk, p);
 
 	for (k = 0; k < max_frags; k++) {
-		err = __xa_alloc(&sk->sk_user_frags, &p->tokens[k],
+		err = __xa_alloc(&sk->sk_devmem_info.frags, &p->tokens[k],
 				 XA_ZERO_ENTRY, xa_limit_31b, GFP_KERNEL);
 		if (err)
 			break;
 	}
 
-	xa_unlock_bh(&sk->sk_user_frags);
+	xa_unlock_bh(&sk->sk_devmem_info.frags);
 
 	p->max = k;
 	p->idx = 0;
 	return k ? 0 : err;
+}
+
+static void tcp_xa_pool_inc_pp_ref_count(struct tcp_xa_pool *tcp_xa_pool,
+					 skb_frag_t *frag)
+{
+	struct net_iov *niov;
+
+	niov = skb_frag_net_iov(frag);
+
+	if (net_devmem_autorelease_enabled()) {
+		atomic_long_inc(&niov->desc.pp_ref_count);
+		tcp_xa_pool->netmems[tcp_xa_pool->idx++] =
+			skb_frag_netmem(frag);
+	} else {
+		if (atomic_inc_return(&niov->uref) == 1)
+			atomic_long_inc(&niov->desc.pp_ref_count);
+	}
 }
 
 /* On error, returns the -errno. On success, returns number of bytes sent to the
@@ -2533,6 +2556,7 @@ static int tcp_recvmsg_dmabuf(struct sock *sk, const struct sk_buff *skb,
 		 * sequence of cmsg
 		 */
 		for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
+			struct net_devmem_dmabuf_binding *binding = NULL;
 			skb_frag_t *frag = &skb_shinfo(skb)->frags[i];
 			struct net_iov *niov;
 			u64 frag_offset;
@@ -2568,13 +2592,45 @@ static int tcp_recvmsg_dmabuf(struct sock *sk, const struct sk_buff *skb,
 					      start;
 				dmabuf_cmsg.frag_offset = frag_offset;
 				dmabuf_cmsg.frag_size = copy;
-				err = tcp_xa_pool_refill(sk, &tcp_xa_pool,
-							 skb_shinfo(skb)->nr_frags - i);
-				if (err)
-					goto out;
+
+				binding = net_devmem_iov_binding(niov);
+
+				if (net_devmem_autorelease_enabled()) {
+					err = tcp_xa_pool_refill(sk,
+								 &tcp_xa_pool,
+								 skb_shinfo(skb)->nr_frags - i);
+					if (err)
+						goto out;
+
+					dmabuf_cmsg.frag_token =
+						tcp_xa_pool.tokens[tcp_xa_pool.idx];
+				} else {
+					if (!sk->sk_devmem_info.binding) {
+						if (!net_devmem_dmabuf_binding_user_get(binding)) {
+							err = -ENODEV;
+							goto out;
+						}
+
+						if (!net_devmem_dmabuf_binding_get(binding)) {
+							net_devmem_dmabuf_binding_user_put(binding);
+							err = -ENODEV;
+							goto out;
+						}
+
+						sk->sk_devmem_info.binding = binding;
+					}
+
+					if (sk->sk_devmem_info.binding != binding) {
+						err = -EFAULT;
+						goto out;
+					}
+
+					dmabuf_cmsg.frag_token =
+						net_iov_virtual_addr(niov) >> PAGE_SHIFT;
+				}
+
 
 				/* Will perform the exchange later */
-				dmabuf_cmsg.frag_token = tcp_xa_pool.tokens[tcp_xa_pool.idx];
 				dmabuf_cmsg.dmabuf_id = net_devmem_iov_binding_id(niov);
 
 				offset += copy;
@@ -2587,8 +2643,7 @@ static int tcp_recvmsg_dmabuf(struct sock *sk, const struct sk_buff *skb,
 				if (err)
 					goto out;
 
-				atomic_long_inc(&niov->desc.pp_ref_count);
-				tcp_xa_pool.netmems[tcp_xa_pool.idx++] = skb_frag_netmem(frag);
+				tcp_xa_pool_inc_pp_ref_count(&tcp_xa_pool, frag);
 
 				sent += copy;
 

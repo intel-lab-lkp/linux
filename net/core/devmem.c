@@ -11,6 +11,7 @@
 #include <linux/genalloc.h>
 #include <linux/mm.h>
 #include <linux/netdevice.h>
+#include <linux/skbuff_ref.h>
 #include <linux/types.h>
 #include <net/netdev_queues.h>
 #include <net/netdev_rx_queue.h>
@@ -27,6 +28,9 @@
 /* Device memory support */
 
 static DEFINE_XARRAY_FLAGS(net_devmem_dmabuf_bindings, XA_FLAGS_ALLOC1);
+static DEFINE_MUTEX(devmem_ar_lock);
+DEFINE_STATIC_KEY_FALSE(tcp_devmem_ar_key);
+EXPORT_SYMBOL(tcp_devmem_ar_key);
 
 static const struct memory_provider_ops dmabuf_devmem_ops;
 
@@ -63,11 +67,70 @@ static void net_devmem_dmabuf_binding_release(struct percpu_ref *ref)
 	schedule_work(&binding->unbind_w);
 }
 
+static bool net_devmem_has_rx_bindings(void)
+{
+	struct net_devmem_dmabuf_binding *binding;
+	unsigned long index;
+
+	lockdep_assert_held(&devmem_ar_lock);
+
+	xa_for_each(&net_devmem_dmabuf_bindings, index, binding) {
+		if (binding->direction == DMA_FROM_DEVICE)
+			return true;
+	}
+	return false;
+}
+
+/* caller must hold devmem_ar_lock */
+static int
+__net_devmem_dmabuf_binding_set_mode(enum dma_data_direction direction,
+				     bool autorelease)
+{
+	lockdep_assert_held(&devmem_ar_lock);
+
+	if (direction != DMA_FROM_DEVICE)
+		return 0;
+
+	if (net_devmem_has_rx_bindings() &&
+	    static_key_enabled(&tcp_devmem_ar_key) != autorelease)
+		return -EBUSY;
+
+	if (autorelease)
+		static_branch_enable(&tcp_devmem_ar_key);
+
+	return 0;
+}
+
+/* caller must hold devmem_ar_lock */
+static void
+__net_devmem_dmabuf_binding_unset_mode(enum dma_data_direction direction)
+{
+	lockdep_assert_held(&devmem_ar_lock);
+
+	if (direction != DMA_FROM_DEVICE)
+		return;
+
+	if (net_devmem_has_rx_bindings())
+		return;
+
+	static_branch_disable(&tcp_devmem_ar_key);
+}
+
 void __net_devmem_dmabuf_binding_free(struct work_struct *wq)
 {
 	struct net_devmem_dmabuf_binding *binding = container_of(wq, typeof(*binding), unbind_w);
 
 	size_t size, avail;
+
+	mutex_lock(&devmem_ar_lock);
+	xa_erase(&net_devmem_dmabuf_bindings, binding->id);
+	__net_devmem_dmabuf_binding_unset_mode(binding->direction);
+	mutex_unlock(&devmem_ar_lock);
+
+	/* Ensure no tx net_devmem_lookup_dmabuf() are in flight after the
+	 * erase.
+	 */
+	synchronize_net();
 
 	gen_pool_for_each_chunk(binding->chunk_pool,
 				net_devmem_dmabuf_free_chunk_owner, NULL);
@@ -126,18 +189,29 @@ void net_devmem_free_dmabuf(struct net_iov *niov)
 	gen_pool_free(binding->chunk_pool, dma_addr, PAGE_SIZE);
 }
 
+void
+net_devmem_dmabuf_binding_put_urefs(struct net_devmem_dmabuf_binding *binding)
+{
+	int i;
+
+	for (i = 0; i < binding->dmabuf->size / PAGE_SIZE; i++) {
+		struct net_iov *niov;
+		netmem_ref netmem;
+
+		niov = binding->vec[i];
+		netmem = net_iov_to_netmem(niov);
+
+		/* Multiple urefs map to only a single netmem ref. */
+		if (atomic_xchg(&niov->uref, 0) > 0)
+			WARN_ON_ONCE(!napi_pp_put_page(netmem));
+	}
+}
+
 void net_devmem_unbind_dmabuf(struct net_devmem_dmabuf_binding *binding)
 {
 	struct netdev_rx_queue *rxq;
 	unsigned long xa_idx;
 	unsigned int rxq_idx;
-
-	xa_erase(&net_devmem_dmabuf_bindings, binding->id);
-
-	/* Ensure no tx net_devmem_lookup_dmabuf() are in flight after the
-	 * erase.
-	 */
-	synchronize_net();
 
 	if (binding->list.next)
 		list_del(&binding->list);
@@ -151,6 +225,8 @@ void net_devmem_unbind_dmabuf(struct net_devmem_dmabuf_binding *binding)
 		rxq_idx = get_netdev_rx_queue_index(rxq);
 
 		__net_mp_close_rxq(binding->dev, rxq_idx, &mp_params);
+
+		net_devmem_dmabuf_binding_user_put(binding);
 	}
 
 	percpu_ref_kill(&binding->ref);
@@ -178,6 +254,8 @@ int net_devmem_bind_dmabuf_to_queue(struct net_device *dev, u32 rxq_idx,
 	if (err)
 		goto err_close_rxq;
 
+	atomic_inc(&binding->users);
+
 	return 0;
 
 err_close_rxq:
@@ -189,8 +267,10 @@ struct net_devmem_dmabuf_binding *
 net_devmem_bind_dmabuf(struct net_device *dev,
 		       struct device *dma_dev,
 		       enum dma_data_direction direction,
-		       unsigned int dmabuf_fd, struct netdev_nl_sock *priv,
-		       struct netlink_ext_ack *extack)
+		       unsigned int dmabuf_fd,
+		       struct netdev_nl_sock *priv,
+		       struct netlink_ext_ack *extack,
+		       bool autorelease)
 {
 	struct net_devmem_dmabuf_binding *binding;
 	static u32 id_alloc_next;
@@ -225,6 +305,8 @@ net_devmem_bind_dmabuf(struct net_device *dev,
 	if (err < 0)
 		goto err_free_binding;
 
+	atomic_set(&binding->users, 0);
+
 	mutex_init(&binding->lock);
 
 	binding->dmabuf = dmabuf;
@@ -245,14 +327,12 @@ net_devmem_bind_dmabuf(struct net_device *dev,
 		goto err_detach;
 	}
 
-	if (direction == DMA_TO_DEVICE) {
-		binding->vec = kvmalloc_array(dmabuf->size / PAGE_SIZE,
-					      sizeof(struct net_iov *),
-					      GFP_KERNEL);
-		if (!binding->vec) {
-			err = -ENOMEM;
-			goto err_unmap;
-		}
+	binding->vec = kvmalloc_array(dmabuf->size / PAGE_SIZE,
+				      sizeof(struct net_iov *),
+				      GFP_KERNEL | __GFP_ZERO);
+	if (!binding->vec) {
+		err = -ENOMEM;
+		goto err_unmap;
 	}
 
 	/* For simplicity we expect to make PAGE_SIZE allocations, but the
@@ -306,25 +386,41 @@ net_devmem_bind_dmabuf(struct net_device *dev,
 			niov = &owner->area.niovs[i];
 			niov->type = NET_IOV_DMABUF;
 			niov->owner = &owner->area;
+			atomic_set(&niov->uref, 0);
 			page_pool_set_dma_addr_netmem(net_iov_to_netmem(niov),
 						      net_devmem_get_dma_addr(niov));
-			if (direction == DMA_TO_DEVICE)
-				binding->vec[owner->area.base_virtual / PAGE_SIZE + i] = niov;
+			binding->vec[owner->area.base_virtual / PAGE_SIZE + i] = niov;
 		}
 
 		virtual += len;
+	}
+
+	mutex_lock(&devmem_ar_lock);
+
+	err = __net_devmem_dmabuf_binding_set_mode(direction, autorelease);
+	if (err < 0) {
+		NL_SET_ERR_MSG_FMT(extack,
+				   "System already configured with autorelease=%d",
+				   static_key_enabled(&tcp_devmem_ar_key));
+		goto err_unlock_mutex;
 	}
 
 	err = xa_alloc_cyclic(&net_devmem_dmabuf_bindings, &binding->id,
 			      binding, xa_limit_32b, &id_alloc_next,
 			      GFP_KERNEL);
 	if (err < 0)
-		goto err_free_chunks;
+		goto err_unset_mode;
+
+	mutex_unlock(&devmem_ar_lock);
 
 	list_add(&binding->list, &priv->bindings);
 
 	return binding;
 
+err_unset_mode:
+	__net_devmem_dmabuf_binding_unset_mode(direction);
+err_unlock_mutex:
+	mutex_unlock(&devmem_ar_lock);
 err_free_chunks:
 	gen_pool_for_each_chunk(binding->chunk_pool,
 				net_devmem_dmabuf_free_chunk_owner, NULL);

@@ -12,8 +12,12 @@
 
 #include <net/netmem.h>
 #include <net/netdev_netlink.h>
+#include <linux/jump_label.h>
 
 struct netlink_ext_ack;
+
+/* static key for TCP devmem autorelease */
+extern struct static_key_false tcp_devmem_ar_key;
 
 struct net_devmem_dmabuf_binding {
 	struct dma_buf *dmabuf;
@@ -43,6 +47,12 @@ struct net_devmem_dmabuf_binding {
 	 */
 	struct percpu_ref ref;
 
+	/* Counts sockets and rxqs that are using the binding. When this
+	 * reaches zero, all urefs are drained and new sockets cannot join the
+	 * binding.
+	 */
+	atomic_t users;
+
 	/* The list of bindings currently active. Used for netlink to notify us
 	 * of the user dropping the bind.
 	 */
@@ -61,7 +71,7 @@ struct net_devmem_dmabuf_binding {
 
 	/* Array of net_iov pointers for this binding, sorted by virtual
 	 * address. This array is convenient to map the virtual addresses to
-	 * net_iovs in the TX path.
+	 * net_iovs.
 	 */
 	struct net_iov **vec;
 
@@ -88,7 +98,7 @@ net_devmem_bind_dmabuf(struct net_device *dev,
 		       struct device *dma_dev,
 		       enum dma_data_direction direction,
 		       unsigned int dmabuf_fd, struct netdev_nl_sock *priv,
-		       struct netlink_ext_ack *extack);
+		       struct netlink_ext_ack *extack, bool autorelease);
 struct net_devmem_dmabuf_binding *net_devmem_lookup_dmabuf(u32 id);
 void net_devmem_unbind_dmabuf(struct net_devmem_dmabuf_binding *binding);
 int net_devmem_bind_dmabuf_to_queue(struct net_device *dev, u32 rxq_idx,
@@ -134,6 +144,26 @@ net_devmem_dmabuf_binding_put(struct net_devmem_dmabuf_binding *binding)
 	percpu_ref_put(&binding->ref);
 }
 
+void net_devmem_dmabuf_binding_put_urefs(struct net_devmem_dmabuf_binding *binding);
+
+static inline bool
+net_devmem_dmabuf_binding_user_get(struct net_devmem_dmabuf_binding *binding)
+{
+	return atomic_inc_not_zero(&binding->users);
+}
+
+static inline void
+net_devmem_dmabuf_binding_user_put(struct net_devmem_dmabuf_binding *binding)
+{
+	if (atomic_dec_and_test(&binding->users))
+		net_devmem_dmabuf_binding_put_urefs(binding);
+}
+
+static inline bool net_devmem_autorelease_enabled(void)
+{
+	return static_branch_unlikely(&tcp_devmem_ar_key);
+}
+
 void net_devmem_get_net_iov(struct net_iov *niov);
 void net_devmem_put_net_iov(struct net_iov *niov);
 
@@ -151,9 +181,36 @@ net_devmem_get_niov_at(struct net_devmem_dmabuf_binding *binding, size_t addr,
 #else
 struct net_devmem_dmabuf_binding;
 
+static inline bool
+net_devmem_dmabuf_binding_get(struct net_devmem_dmabuf_binding *binding)
+{
+	return false;
+}
+
 static inline void
 net_devmem_dmabuf_binding_put(struct net_devmem_dmabuf_binding *binding)
 {
+}
+
+static inline void
+net_devmem_dmabuf_binding_put_urefs(struct net_devmem_dmabuf_binding *binding)
+{
+}
+
+static inline bool
+net_devmem_dmabuf_binding_user_get(struct net_devmem_dmabuf_binding *binding)
+{
+	return false;
+}
+
+static inline void
+net_devmem_dmabuf_binding_user_put(struct net_devmem_dmabuf_binding *binding)
+{
+}
+
+static inline bool net_devmem_autorelease_enabled(void)
+{
+	return false;
 }
 
 static inline void net_devmem_get_net_iov(struct net_iov *niov)
@@ -170,7 +227,8 @@ net_devmem_bind_dmabuf(struct net_device *dev,
 		       enum dma_data_direction direction,
 		       unsigned int dmabuf_fd,
 		       struct netdev_nl_sock *priv,
-		       struct netlink_ext_ack *extack)
+		       struct netlink_ext_ack *extack,
+		       bool autorelease)
 {
 	return ERR_PTR(-EOPNOTSUPP);
 }
