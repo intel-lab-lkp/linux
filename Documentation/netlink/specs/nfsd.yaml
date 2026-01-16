@@ -81,6 +81,9 @@ attribute-sets:
       -
         name: min-threads
         type: u32
+      -
+        name: fh-key
+        type: binary
   -
     name: version
     attributes:
@@ -227,3 +230,12 @@ operations:
           attributes:
             - mode
             - npools
+    -
+      name: fh-key-set
+      doc: set encryption key for filehandles
+      attribute-set: server
+      flags: [admin-perm]
+      do:
+        request:
+          attributes:
+            - fh-key

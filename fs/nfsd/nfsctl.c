@@ -19,6 +19,7 @@
 #include <linux/module.h>
 #include <linux/fsnotify.h>
 #include <linux/nfslocalio.h>
+#include <crypto/skcipher.h>
 
 #include "idmap.h"
 #include "nfsd.h"
@@ -49,6 +50,7 @@ enum {
 	NFSD_Ports,
 	NFSD_MaxBlkSize,
 	NFSD_MinThreads,
+	NFSD_Fh_Key,
 	NFSD_Filecache,
 	NFSD_Leasetime,
 	NFSD_Gracetime,
@@ -69,6 +71,7 @@ static ssize_t write_versions(struct file *file, char *buf, size_t size);
 static ssize_t write_ports(struct file *file, char *buf, size_t size);
 static ssize_t write_maxblksize(struct file *file, char *buf, size_t size);
 static ssize_t write_minthreads(struct file *file, char *buf, size_t size);
+static ssize_t write_fh_key(struct file *file, char *buf, size_t size);
 #ifdef CONFIG_NFSD_V4
 static ssize_t write_leasetime(struct file *file, char *buf, size_t size);
 static ssize_t write_gracetime(struct file *file, char *buf, size_t size);
@@ -88,6 +91,7 @@ static ssize_t (*const write_op[])(struct file *, char *, size_t) = {
 	[NFSD_Ports] = write_ports,
 	[NFSD_MaxBlkSize] = write_maxblksize,
 	[NFSD_MinThreads] = write_minthreads,
+	[NFSD_Fh_Key] = write_fh_key,
 #ifdef CONFIG_NFSD_V4
 	[NFSD_Leasetime] = write_leasetime,
 	[NFSD_Gracetime] = write_gracetime,
@@ -950,6 +954,54 @@ static ssize_t write_minthreads(struct file *file, char *buf, size_t size)
 	return scnprintf(buf, SIMPLE_TRANSACTION_LIMIT, "%u\n", minthreads);
 }
 
+/*
+ * write_fh_key - Set or report the current NFS filehandle key
+ *
+ * Input:
+ *			buf:		ignored
+ *			size:		zero
+ * OR
+ *
+ * Input:
+ *			buf:		C string containing a parseable UUID
+ *			size:		non-zero length of C string in @buf
+ * Output:
+ *	On success:	passed-in buffer filled with '\n'-terminated C string
+ *			containing the standard UUID format of the server's fh_key
+ *			return code is the size in bytes of the string
+ *	On error:	return code is zero or a negative errno value
+ */
+static ssize_t write_fh_key(struct file *file, char *buf, size_t size)
+{
+	struct nfsd_net *nn = net_generic(netns(file), nfsd_net_id);
+
+	if (size > 35 && size < 38) {
+		siphash_key_t *sip_fh_key;
+		uuid_t uuid_fh_key;
+		int ret;
+
+		/* Is the key already set? */
+		if (nn->fh_key)
+			return -EEXIST;
+
+		ret = uuid_parse(buf, &uuid_fh_key);
+		if (ret)
+			return ret;
+
+		sip_fh_key = kmalloc(sizeof(siphash_key_t), GFP_KERNEL);
+		if (!sip_fh_key)
+			return -ENOMEM;
+
+		memcpy(sip_fh_key, &uuid_fh_key, sizeof(siphash_key_t));
+		nn->fh_key = sip_fh_key;
+
+		trace_nfsd_ctl_fh_key_set((const char *)sip_fh_key, ret);
+	}
+
+	return scnprintf(buf, SIMPLE_TRANSACTION_LIMIT, "%pUb\n",
+							nn->fh_key);
+}
+
 #ifdef CONFIG_NFSD_V4
 static ssize_t __nfsd4_write_time(struct file *file, char *buf, size_t size,
 				  time64_t *time, struct nfsd_net *nn)
@@ -1343,6 +1395,7 @@ static int nfsd_fill_super(struct super_block *sb, struct fs_context *fc)
 		[NFSD_Ports] = {"portlist", &transaction_ops, S_IWUSR|S_IRUGO},
 		[NFSD_MaxBlkSize] = {"max_block_size", &transaction_ops, S_IWUSR|S_IRUGO},
 		[NFSD_MinThreads] = {"min_threads", &transaction_ops, S_IWUSR|S_IRUGO},
+		[NFSD_Fh_Key] = {"fh_key", &transaction_ops, S_IWUSR|S_IRUSR},
 		[NFSD_Filecache] = {"filecache", &nfsd_file_cache_stats_fops, S_IRUGO},
 #ifdef CONFIG_NFSD_V4
 		[NFSD_Leasetime] = {"nfsv4leasetime", &transaction_ops, S_IWUSR|S_IRUSR},
@@ -2199,6 +2252,37 @@ err_free_msg:
 	return err;
 }
 
+int nfsd_nl_fh_key_set_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	siphash_key_t *fh_key;
+	struct nfsd_net *nn;
+	int fh_key_len;
+	int ret;
+
+	if (GENL_REQ_ATTR_CHECK(info, NFSD_A_SERVER_FH_KEY))
+		return -EINVAL;
+
+	fh_key_len = nla_len(info->attrs[NFSD_A_SERVER_FH_KEY]);
+	if (fh_key_len != sizeof(siphash_key_t))
+		return -EINVAL;
+
+	/* Is the key already set? */
+	nn = net_generic(genl_info_net(info), nfsd_net_id);
+	if (nn->fh_key)
+		return -EEXIST;
+
+	fh_key = kmalloc(sizeof(siphash_key_t), GFP_KERNEL);
+	if (!fh_key)
+		return -ENOMEM;
+
+	memcpy(fh_key, nla_data(info->attrs[NFSD_A_SERVER_FH_KEY]), sizeof(siphash_key_t));
+	nn = net_generic(genl_info_net(info), nfsd_net_id);
+	nn->fh_key = fh_key;
+
+	trace_nfsd_ctl_fh_key_set((const char *)fh_key, ret);
+	return ret;
+}
+
 /**
  * nfsd_net_init - Prepare the nfsd_net portion of a new net namespace
  * @net: a freshly-created network namespace
@@ -2284,6 +2368,7 @@ static __net_exit void nfsd_net_exit(struct net *net)
 {
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
 
+	kfree_sensitive(nn->fh_key);
 	nfsd_proc_stat_shutdown(net);
 	percpu_counter_destroy_many(nn->counter, NFSD_STATS_COUNTERS_NUM);
 	nfsd_idmap_shutdown(net);
