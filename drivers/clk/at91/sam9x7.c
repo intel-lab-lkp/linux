@@ -746,11 +746,10 @@ static void __init sam9x7_pmc_setup(struct device_node *np)
 	struct clk_range range = CLK_RANGE(0, 0);
 	const char *main_xtal_name, *td_slck_name, *md_slck_name;
 	struct pmc_data *sam9x7_pmc;
-	const char *parent_names[9];
 	void **clk_mux_buffer = NULL;
 	int clk_mux_buffer_size = 0;
 	struct regmap *regmap;
-	struct clk_hw *hw, *main_rc_hw, *main_osc_hw, *main_xtal_hw;
+	struct clk_hw *hw, *main_rc_hw, *main_osc_hw;
 	struct clk_hw *usbck_hw;
 	struct clk_parent_data parent_data[9];
 	int i, j;
@@ -818,18 +817,22 @@ static void __init sam9x7_pmc_setup(struct device_node *np)
 				switch (sam9x7_plls[i][j].p) {
 				case SAM9X7_PLL_PARENT_MAINCK:
 					parent_data[0] = AT91_CLK_PD_NAME("mainck");
-					hw = sam9x7_pmc->chws[PMC_MAIN];
+					parent_rate = clk_hw_get_rate(sam9x7_pmc->chws[PMC_MAIN]);
 					break;
 				case SAM9X7_PLL_PARENT_MAIN_XTAL:
+					struct clk *main_xtal;
+					main_xtal = of_clk_get_by_name(np, main_xtal_name);
+					if (IS_ERR(main_xtal))
+						goto err_free;
 					parent_data[0] = AT91_CLK_PD_NAME(main_xtal_name);
-					hw = main_xtal_hw;
+					parent_rate = clk_get_rate(main_xtal);
+					clk_put(main_xtal);
 					break;
 				default:
 					/* Should not happen. */
 					break;
 				}
 
-				parent_rate = clk_hw_get_rate(hw);
 				if (!parent_rate)
 					return;
 
@@ -884,10 +887,10 @@ static void __init sam9x7_pmc_setup(struct device_node *np)
 
 	sam9x7_pmc->chws[PMC_MCK] = hw;
 
-	parent_names[0] = "plla_divpmcck";
-	parent_names[1] = "upll_divpmcck";
-	parent_names[2] = "main_osc";
-	usbck_hw = sam9x60_clk_register_usb(regmap, "usbck", parent_names, 3);
+	parent_data[0] = AT91_CLK_PD_HW(sam9x7_plls[PLL_ID_PLLA][PLL_COMPID_DIV0].hw);
+	parent_data[1] = AT91_CLK_PD_HW(sam9x7_plls[PLL_ID_UPLL][PLL_COMPID_DIV0].hw);
+	parent_data[2] = AT91_CLK_PD_HW(main_osc_hw);
+	usbck_hw = sam9x60_clk_register_usb(regmap, "usbck", NULL, parent_data, 3);
 	if (IS_ERR(usbck_hw))
 		goto err_free;
 
