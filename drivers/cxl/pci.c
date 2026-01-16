@@ -1161,6 +1161,113 @@ static int cxl_region_flush_host_cpu_caches(struct device *dev, void *data)
 	return 0;
 }
 
+/*
+ * CXL DVSEC register save/restore
+ */
+static int cxl_save_dvsec_state(struct pci_dev *pdev,
+				struct cxl_type2_saved_state *state, int dvsec)
+{
+	int rc;
+
+	rc = pci_read_config_word(pdev, dvsec + CXL_DVSEC_CTRL_OFFSET,
+				  &state->dvsec_ctrl);
+	if (rc)
+		return rc;
+
+	rc = pci_read_config_word(pdev, dvsec + CXL_DVSEC_CTRL2_OFFSET,
+				  &state->dvsec_ctrl2);
+	return rc;
+}
+
+static int cxl_restore_dvsec_state(struct pci_dev *pdev,
+				   const struct cxl_type2_saved_state *state,
+				   int dvsec, bool config_locked)
+{
+	int rc;
+	u16 val_to_restore;
+
+	if (config_locked) {
+		u16 current_val;
+
+		rc = pci_read_config_word(pdev, dvsec + CXL_DVSEC_CTRL_OFFSET,
+					  &current_val);
+		if (rc)
+			return rc;
+
+		val_to_restore = (current_val & CXL_DVSEC_CTRL_RWL_MASK) |
+				 (state->dvsec_ctrl & ~CXL_DVSEC_CTRL_RWL_MASK);
+	} else {
+		val_to_restore = state->dvsec_ctrl;
+	}
+
+	rc = pci_write_config_word(pdev, dvsec + CXL_DVSEC_CTRL_OFFSET,
+				   val_to_restore);
+	if (rc)
+		return rc;
+
+	rc = pci_write_config_word(pdev, dvsec + CXL_DVSEC_CTRL2_OFFSET,
+				   state->dvsec_ctrl2);
+	return rc;
+}
+
+/**
+ * cxl_config_save_state - Save CXL configuration state
+ * @pdev: PCI device
+ * @state: Structure to store saved state
+ *
+ * Saves CXL DVSEC state before reset.
+ */
+int cxl_config_save_state(struct pci_dev *pdev,
+			  struct cxl_type2_saved_state *state)
+{
+	struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
+	int dvsec;
+
+	if (!cxlds || !state)
+		return -EINVAL;
+
+	memset(state, 0, sizeof(*state));
+
+	dvsec = cxlds->cxl_dvsec;
+	if (!dvsec)
+		return -ENODEV;
+
+	return cxl_save_dvsec_state(pdev, state, dvsec);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_config_save_state, "CXL");
+
+/**
+ * cxl_config_restore_state - Restore CXL configuration state
+ * @pdev: PCI device
+ * @state: Previously saved state
+ *
+ * Restores CXL DVSEC state after reset.
+ */
+int cxl_config_restore_state(struct pci_dev *pdev,
+			     const struct cxl_type2_saved_state *state)
+{
+	struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
+	bool config_locked;
+	int rc, dvsec;
+	u16 lock_reg;
+
+	if (!cxlds || !state)
+		return -EINVAL;
+
+	dvsec = cxlds->cxl_dvsec;
+	if (!dvsec)
+		return -ENODEV;
+
+	rc = pci_read_config_word(pdev, dvsec + CXL_DVSEC_LOCK_OFFSET, &lock_reg);
+	if (rc)
+		return rc;
+
+	config_locked = !!(lock_reg & CXL_DVSEC_LOCK_CONFIG_LOCK);
+
+	return cxl_restore_dvsec_state(pdev, state, dvsec, config_locked);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_config_restore_state, "CXL");
+
 static int cxl_check_region_driver_bound(struct device *dev, void *data)
 {
 	struct cxl_decoder *cxld = to_cxl_decoder(dev);
