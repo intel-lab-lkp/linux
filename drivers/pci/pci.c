@@ -30,6 +30,7 @@
 #include <asm/dma.h>
 #include <linux/aer.h>
 #include <linux/bitfield.h>
+#include <cxl/pci.h>
 #include "pci.h"
 
 DEFINE_MUTEX(pci_slot_mutex);
@@ -4845,7 +4846,7 @@ static int pci_dev_reset_slot_function(struct pci_dev *dev, bool probe)
 static u16 cxl_port_dvsec(struct pci_dev *dev)
 {
 	return pci_find_dvsec_capability(dev, PCI_VENDOR_ID_CXL,
-					 PCI_DVSEC_CXL_PORT);
+					 CXL_DVSEC_PORT_EXTENSIONS);
 }
 
 static bool cxl_sbr_masked(struct pci_dev *dev)
@@ -4857,7 +4858,7 @@ static bool cxl_sbr_masked(struct pci_dev *dev)
 	if (!dvsec)
 		return false;
 
-	rc = pci_read_config_word(dev, dvsec + PCI_DVSEC_CXL_PORT_CTL, &reg);
+	rc = pci_read_config_word(dev, dvsec + CXL_DVSEC_PORT_CTL, &reg);
 	if (rc || PCI_POSSIBLE_ERROR(reg))
 		return false;
 
@@ -4866,7 +4867,7 @@ static bool cxl_sbr_masked(struct pci_dev *dev)
 	 * bit in Bridge Control has no effect.  When 1, the Port generates
 	 * hot reset when the SBR bit is set to 1.
 	 */
-	if (reg & PCI_DVSEC_CXL_PORT_CTL_UNMASK_SBR)
+	if (reg & CXL_DVSEC_UNMASK_SBR)
 		return false;
 
 	return true;
@@ -4911,22 +4912,22 @@ static int cxl_reset_bus_function(struct pci_dev *dev, bool probe)
 	if (probe)
 		return 0;
 
-	rc = pci_read_config_word(bridge, dvsec + PCI_DVSEC_CXL_PORT_CTL, &reg);
+	rc = pci_read_config_word(bridge, dvsec + CXL_DVSEC_PORT_CTL, &reg);
 	if (rc)
 		return -ENOTTY;
 
-	if (reg & PCI_DVSEC_CXL_PORT_CTL_UNMASK_SBR) {
+	if (reg & CXL_DVSEC_UNMASK_SBR) {
 		val = reg;
 	} else {
-		val = reg | PCI_DVSEC_CXL_PORT_CTL_UNMASK_SBR;
-		pci_write_config_word(bridge, dvsec + PCI_DVSEC_CXL_PORT_CTL,
+		val = reg | CXL_DVSEC_UNMASK_SBR;
+		pci_write_config_word(bridge, dvsec + CXL_DVSEC_PORT_CTL,
 				      val);
 	}
 
 	rc = pci_reset_bus_function(dev, probe);
 
 	if (reg != val)
-		pci_write_config_word(bridge, dvsec + PCI_DVSEC_CXL_PORT_CTL,
+		pci_write_config_word(bridge, dvsec + CXL_DVSEC_PORT_CTL,
 				      reg);
 
 	return rc;
