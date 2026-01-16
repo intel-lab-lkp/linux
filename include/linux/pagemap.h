@@ -1419,7 +1419,15 @@ void page_cache_async_readahead(struct address_space *mapping,
 	page_cache_async_ra(&ractl, folio, req_count);
 }
 
-static inline struct folio *__readahead_folio(struct readahead_control *ractl)
+/**
+ * readahead_folio - Get the next folio to read.
+ * @ractl: The current readahead request.
+ *
+ * Context: The folio is locked.  The caller should unlock the folio once
+ * all I/O to that folio has completed.
+ * Return: A pointer to the next folio, or %NULL if we are done.
+ */
+static inline struct folio *readahead_folio(struct readahead_control *ractl)
 {
 	struct folio *folio;
 
@@ -1435,21 +1443,6 @@ static inline struct folio *__readahead_folio(struct readahead_control *ractl)
 	folio = xa_load(&ractl->mapping->i_pages, ractl->_index);
 	VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
 	ractl->_batch_count = folio_nr_pages(folio);
-
-	return folio;
-}
-
-/**
- * readahead_folio - Get the next folio to read.
- * @ractl: The current readahead request.
- *
- * Context: The folio is locked.  The caller should unlock the folio once
- * all I/O to that folio has completed.
- * Return: A pointer to the next folio, or %NULL if we are done.
- */
-static inline struct folio *readahead_folio(struct readahead_control *ractl)
-{
-	struct folio *folio = __readahead_folio(ractl);
 
 	if (folio)
 		folio_put(folio);
