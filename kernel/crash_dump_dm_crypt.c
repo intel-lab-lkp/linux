@@ -5,6 +5,7 @@
 #include <linux/crash_dump.h>
 #include <linux/cc_platform.h>
 #include <linux/configfs.h>
+#include <linux/memblock.h>
 #include <linux/module.h>
 
 #define KEY_NUM_MAX 128	/* maximum dm crypt keys */
@@ -47,6 +48,26 @@ static int __init setup_dmcryptkeys(char *arg)
 }
 
 early_param("dmcryptkeys", setup_dmcryptkeys);
+
+static int __init setup_dmcryptkeys_size(char *arg)
+{
+	size_t keys_size;
+	int ret;
+
+	if (dm_crypt_keys_addr == 0) {
+		pr_warn("dmcryptkeys=0\n");
+		return -EINVAL;
+	}
+
+	if (!arg)
+		return -EINVAL;
+
+	ret = kstrtoul(arg, 0, &keys_size);
+	memblock_reserve((phys_addr_t)dm_crypt_keys_addr, keys_size);
+	return 0;
+}
+
+early_param("dmcryptkeys_size", setup_dmcryptkeys_size);
 
 /*
  * Architectures may override this function to read dm crypt keys
@@ -415,22 +436,27 @@ int crash_load_dm_crypt_keys(struct kimage *image)
 			return r;
 	}
 
-	kbuf.buffer = keys_header;
-	kbuf.bufsz = get_keys_header_size(key_count);
+	if (!IS_ENABLED(CONFIG_S390)) {
+		kbuf.buffer = keys_header;
+		kbuf.bufsz = get_keys_header_size(key_count);
 
-	kbuf.memsz = kbuf.bufsz;
-	kbuf.buf_align = ELF_CORE_HEADER_ALIGN;
-	kbuf.mem = KEXEC_BUF_MEM_UNKNOWN;
-	r = kexec_add_buffer(&kbuf);
-	if (r) {
-		kvfree((void *)kbuf.buffer);
-		return r;
+		kbuf.memsz = kbuf.bufsz;
+		kbuf.buf_align = ELF_CORE_HEADER_ALIGN;
+		kbuf.mem = KEXEC_BUF_MEM_UNKNOWN;
+		r = kexec_add_buffer(&kbuf);
+		if (r) {
+			kvfree((void *)kbuf.buffer);
+			return r;
+		}
+		image->dm_crypt_keys_addr = kbuf.mem;
+		image->dm_crypt_keys_sz = kbuf.bufsz;
+		kexec_dprintk(
+			"Loaded dm crypt keys to kexec_buffer bufsz=0x%lx memsz=0x%lx\n",
+			kbuf.bufsz, kbuf.memsz);
+	} else {
+		image->dm_crypt_keys_addr = (unsigned long)keys_header;
+		image->dm_crypt_keys_sz = get_keys_header_size(key_count);
 	}
-	image->dm_crypt_keys_addr = kbuf.mem;
-	image->dm_crypt_keys_sz = kbuf.bufsz;
-	kexec_dprintk(
-		"Loaded dm crypt keys to kexec_buffer bufsz=0x%lx memsz=0x%lx\n",
-		kbuf.bufsz, kbuf.memsz);
 
 	return r;
 }

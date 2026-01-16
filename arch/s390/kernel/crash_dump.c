@@ -705,3 +705,12 @@ ssize_t elfcorehdr_read_notes(char *buf, size_t count, u64 *ppos)
 	*ppos += count;
 	return count;
 }
+
+ssize_t dm_crypt_keys_read(char *buf, size_t count, u64 *ppos)
+{
+	void *src = __va((phys_addr_t)dm_crypt_keys_addr);
+
+	memcpy(buf, src, count);
+	*ppos += count;
+	return count;
+}

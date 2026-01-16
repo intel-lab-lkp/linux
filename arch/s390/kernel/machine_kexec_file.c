@@ -239,6 +239,65 @@ out:
 	return ret;
 }
 
+#ifdef CONFIG_CRASH_DUMP
+static int setup_crash_dmcrypt(struct kimage *image, struct s390_load_data *data,
+			       unsigned long max_command_line_size)
+{
+	struct kexec_buf kexec_buf = { .random = true };
+	unsigned long temp_start, temp_end;
+	size_t cmd_buf_len;
+	char *cmd_buf;
+	int ret;
+
+	ret = crash_load_dm_crypt_keys(image);
+	if (ret == -ENOENT) {
+		kexec_dprintk("No dm crypt key to load\n");
+		return 0;
+	} else if (ret) {
+		pr_err("Failed to load dm crypt keys\n");
+		return -EINVAL;
+	}
+
+	kexec_buf.image = image;
+	kexec_buf.buffer = (void *)image->dm_crypt_keys_addr;
+	kexec_buf.bufsz = image->dm_crypt_keys_sz;
+	kexec_buf.memsz = kexec_buf.bufsz;
+
+	// Place dm-crypt keys randomly above crashk_res.start+SZ_64M
+	temp_start = crashk_res.start + SZ_64M;
+	temp_end = temp_start + SZ_32M;
+	kexec_random_range_start(temp_start, temp_end, &kexec_buf, &temp_start);
+	kexec_buf.mem = ALIGN_DOWN(temp_start, PAGE_SIZE);
+	ret = kexec_add_buffer(&kexec_buf);
+	if (ret)
+		return ret;
+
+	data->memsz = kexec_buf.mem - crashk_res.start;
+	data->memsz += kexec_buf.memsz;
+	ret = ipl_report_add_component(data->report, &kexec_buf, 0, 0);
+	if (ret)
+		return ret;
+
+	image->dm_crypt_keys_addr = kexec_buf.mem;
+	cmd_buf = kasprintf(GFP_KERNEL,
+			    "%s dmcryptkeys=0x%llx dmcryptkeys_size=%lu",
+			    image->cmdline_buf,
+			    kexec_buf.mem - crashk_res.start,
+			    image->dm_crypt_keys_sz);
+	cmd_buf_len = strlen(cmd_buf) + 1;
+
+	if (cmd_buf_len > max_command_line_size) {
+		kfree(cmd_buf);
+		return -ENOMEM;
+	}
+
+	kfree(image->cmdline_buf);
+	image->cmdline_buf_len = cmd_buf_len;
+	image->cmdline_buf = cmd_buf;
+	return 0;
+}
+#endif
+
 void *kexec_file_add_components(struct kimage *image,
 				int (*add_kernel)(struct kimage *image,
 						  struct s390_load_data *data))
@@ -273,9 +332,6 @@ void *kexec_file_add_components(struct kimage *image,
 	if (image->cmdline_buf_len >= max_command_line_size)
 		goto out;
 
-	memcpy(data.parm->command_line, image->cmdline_buf,
-	       image->cmdline_buf_len);
-
 #ifdef CONFIG_CRASH_DUMP
 	if (image->type == KEXEC_TYPE_CRASH) {
 		data.parm->oldmem_base = crashk_res.start;
@@ -292,6 +348,12 @@ void *kexec_file_add_components(struct kimage *image,
 	ret = kexec_file_add_purgatory(image, &data);
 	if (ret)
 		goto out;
+
+	if (setup_crash_dmcrypt(image, &data, max_command_line_size))
+		goto out;
+
+	memcpy(data.parm->command_line, image->cmdline_buf,
+	       image->cmdline_buf_len);
 
 	if (data.kernel_mem == 0) {
 		unsigned long restart_psw =  0x0008000080000000UL;
