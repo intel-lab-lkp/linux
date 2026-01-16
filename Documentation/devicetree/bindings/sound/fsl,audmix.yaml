@@ -34,7 +34,9 @@ description: |
 
 properties:
   compatible:
-    const: fsl,imx8qm-audmix
+    enum:
+      - fsl,imx8qm-audmix
+      - fsl,imx952-audmix
 
   reg:
     maxItems: 1
@@ -75,12 +77,41 @@ properties:
         unevaluatedProperties: false
         description: Output port to SAI RX
 
+  fsl,amix-bypass:
+    type: boolean
+    description:
+      The audmix module is bypassed from hardware.
+
 required:
   - compatible
   - reg
   - clocks
   - clock-names
-  - power-domains
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - fsl,imx8qm-audmix
+    then:
+      required:
+        - power-domains
+      not:
+        required:
+          - fsl,amix-bypass
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - fsl,imx952-audmix
+    then:
+      not:
+        required:
+          - power-domains
 
 unevaluatedProperties: false
 
