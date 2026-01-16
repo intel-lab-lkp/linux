@@ -502,6 +502,8 @@ static int iomap_read_folio_iter(struct iomap_iter *iter,
 	loff_t pos = iter->pos;
 	loff_t length = iomap_length(iter);
 	struct folio *folio = ctx->cur_folio;
+	size_t folio_len = folio_size(folio);
+	struct iomap_folio_state *ifs;
 	size_t poff, plen;
 	loff_t pos_diff;
 	int ret;
@@ -513,10 +515,10 @@ static int iomap_read_folio_iter(struct iomap_iter *iter,
 		return iomap_iter_advance(iter, length);
 	}
 
-	ifs_alloc(iter->inode, folio, iter->flags);
+	ifs = ifs_alloc(iter->inode, folio, iter->flags);
 
 	length = min_t(loff_t, length,
-			folio_size(folio) - offset_in_folio(folio, pos));
+			folio_len - offset_in_folio(folio, pos));
 	while (length) {
 		iomap_adjust_read_range(iter->inode, folio, &pos, length, &poff,
 				&plen);
@@ -542,7 +544,24 @@ static int iomap_read_folio_iter(struct iomap_iter *iter,
 			ret = ctx->ops->read_folio_range(iter, ctx, plen);
 			if (ret)
 				return ret;
+
 			*bytes_submitted += plen;
+			/*
+			 * If the folio does not have ifs metadata attached,
+			 * then after ->read_folio_range(), the folio might have
+			 * gotten freed (eg iomap_finish_folio_read() ->
+			 * folio_end_read() followed by page cache eviction,
+			 * which for readahead folios drops the last refcount).
+			 * Invalidate ctx->cur_folio here.
+			 *
+			 * For folios without ifs metadata attached, the read
+			 * should be on the entire folio.
+			 */
+			if (!ifs) {
+				ctx->cur_folio = NULL;
+				if (unlikely(plen != folio_len))
+				    return -EIO;
+			}
 		}
 
 		ret = iomap_iter_advance(iter, plen);
