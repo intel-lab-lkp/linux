@@ -574,7 +574,8 @@ static struct dm_io *alloc_io(struct mapped_device *md, struct bio *bio, gfp_t g
 	struct dm_target_io *tio;
 	struct bio *clone;
 
-	clone = bio_alloc_clone(NULL, bio, gfp_mask, &md->mempools->io_bs);
+	clone = bio_alloc_clone(bio->bi_bdev, bio,
+				gfp_mask, &md->mempools->io_bs);
 	if (unlikely(!clone))
 		return NULL;
 	tio = clone_to_tio(clone);
@@ -623,7 +624,7 @@ static struct bio *alloc_tio(struct clone_info *ci, struct dm_target *ti,
 		/* alloc_io() already initialized embedded clone */
 		clone = &tio->clone;
 	} else {
-		clone = bio_alloc_clone(NULL, ci->bio, gfp_mask,
+		clone = bio_alloc_clone(ci->bio->bi_bdev, ci->bio, gfp_mask,
 					&md->mempools->bs);
 		if (!clone)
 			return NULL;
