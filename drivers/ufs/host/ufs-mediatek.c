@@ -1109,7 +1109,6 @@ static void ufs_mtk_vreg_fix_vccqx(struct ufs_hba *hba)
 
 static void ufs_mtk_setup_clk_gating(struct ufs_hba *hba)
 {
-	unsigned long flags;
 	u32 ah_ms = 10;
 	u32 ah_scale, ah_timer;
 	u32 scale_us[] = {1, 10, 100, 1000, 10000, 100000};
@@ -1124,9 +1123,7 @@ static void ufs_mtk_setup_clk_gating(struct ufs_hba *hba)
 				ah_ms = ah_timer * scale_us[ah_scale] / 1000;
 		}
 
-		spin_lock_irqsave(hba->host->host_lock, flags);
-		hba->clk_gating.delay_ms = max(ah_ms, 10U);
-		spin_unlock_irqrestore(hba->host->host_lock, flags);
+		ufshcd_clkgate_delay_set(hba, max(ah_ms, 10U));
 	}
 }
 
