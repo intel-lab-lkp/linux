@@ -644,19 +644,18 @@ nla_put_failure:
 static int tcf_gate_dump(struct sk_buff *skb, struct tc_action *a,
 			 int bind, int ref)
 {
-	unsigned char *b = skb_tail_pointer(skb);
 	struct tcf_gate *gact = to_gate(a);
-	struct tc_gate opt = {
-		.index    = gact->tcf_index,
-		.refcnt   = refcount_read(&gact->tcf_refcnt) - ref,
-		.bindcnt  = atomic_read(&gact->tcf_bindcnt) - bind,
-	};
 	struct tcfg_gate_entry *entry;
 	struct tcf_gate_params *p;
 	struct nlattr *entry_list;
+	struct tc_gate opt = { };
 	struct tcf_t t;
+	unsigned char *b = skb_tail_pointer(skb);
 
 	spin_lock_bh(&gact->tcf_lock);
+	opt.index    = gact->tcf_index;
+	opt.refcnt   = refcount_read(&gact->tcf_refcnt) - ref;
+	opt.bindcnt  = atomic_read(&gact->tcf_bindcnt) - bind;
 	opt.action = gact->tcf_action;
 
 	p = rcu_dereference_protected(gact->param,
