@@ -31,6 +31,7 @@
 #include <linux/of.h>
 #include <linux/aperture.h>
 #include <linux/unaligned.h>
+#include <linux/align.h>
 #include "pci.h"
 
 #ifndef ARCH_PCI_DEV_GROUPS
@@ -1166,12 +1167,16 @@ static ssize_t pci_resource_io(struct file *filp, struct kobject *kobj,
 			*(u8 *)buf = inb(port);
 		return 1;
 	case 2:
+		if (!IS_ALIGNED(port, count))
+			return -EINVAL;
 		if (write)
 			outw(*(u16 *)buf, port);
 		else
 			*(u16 *)buf = inw(port);
 		return 2;
 	case 4:
+		if (!IS_ALIGNED(port, count))
+			return -EINVAL;
 		if (write)
 			outl(*(u32 *)buf, port);
 		else
