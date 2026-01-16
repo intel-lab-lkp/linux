@@ -929,20 +929,132 @@ authclnt_fail:
 
 }
 
+static unsigned short rtw_parse_assoc_security_ies(struct adapter *padapter,
+						   struct rtw_ieee802_11_elems *elems,
+						   struct sta_info *pstat)
+{
+	struct security_priv *psecuritypriv = &padapter->securitypriv;
+	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
+	unsigned char *wpa_ie;
+	int wpa_ie_len;
+
+	pstat->dot8021xalg = 0;
+	pstat->wpa_psk = 0;
+	pstat->wpa_group_cipher = 0;
+	pstat->wpa2_group_cipher = 0;
+	pstat->wpa_pairwise_cipher = 0;
+	pstat->wpa2_pairwise_cipher = 0;
+	memset(pstat->wpa_ie, 0, sizeof(pstat->wpa_ie));
+	if ((psecuritypriv->wpa_psk & BIT(1)) && elems->rsn_ie) {
+
+		int group_cipher = 0, pairwise_cipher = 0;
+
+		wpa_ie = elems->rsn_ie;
+		wpa_ie_len = elems->rsn_ie_len;
+
+		if (rtw_parse_wpa2_ie(wpa_ie-2, wpa_ie_len+2, &group_cipher, &pairwise_cipher, NULL) == _SUCCESS) {
+			pstat->dot8021xalg = 1;/* psk,  todo:802.1x */
+			pstat->wpa_psk |= BIT(1);
+
+			pstat->wpa2_group_cipher = group_cipher&psecuritypriv->wpa2_group_cipher;
+			pstat->wpa2_pairwise_cipher = pairwise_cipher&psecuritypriv->wpa2_pairwise_cipher;
+
+			if (!pstat->wpa2_group_cipher)
+				return WLAN_STATUS_INVALID_GROUP_CIPHER;
+
+			if (!pstat->wpa2_pairwise_cipher)
+				return WLAN_STATUS_INVALID_PAIRWISE_CIPHER;
+		} else {
+			return WLAN_STATUS_INVALID_IE;
+		}
+
+	} else if ((psecuritypriv->wpa_psk & BIT(0)) && elems->wpa_ie) {
+
+		int group_cipher = 0, pairwise_cipher = 0;
+
+		wpa_ie = elems->wpa_ie;
+		wpa_ie_len = elems->wpa_ie_len;
+
+		if (rtw_parse_wpa_ie(wpa_ie-2, wpa_ie_len+2, &group_cipher, &pairwise_cipher, NULL) == _SUCCESS) {
+			pstat->dot8021xalg = 1;/* psk,  todo:802.1x */
+			pstat->wpa_psk |= BIT(0);
+
+			pstat->wpa_group_cipher = group_cipher&psecuritypriv->wpa_group_cipher;
+			pstat->wpa_pairwise_cipher = pairwise_cipher&psecuritypriv->wpa_pairwise_cipher;
+
+			if (!pstat->wpa_group_cipher)
+				return WLAN_STATUS_INVALID_GROUP_CIPHER;
+
+			if (!pstat->wpa_pairwise_cipher)
+				return WLAN_STATUS_INVALID_PAIRWISE_CIPHER;
+
+		} else {
+			return WLAN_STATUS_INVALID_IE;
+		}
+
+	} else {
+		wpa_ie = NULL;
+		wpa_ie_len = 0;
+	}
+
+	pstat->flags &= ~(WLAN_STA_WPS | WLAN_STA_MAYBE_WPS);
+	if (!wpa_ie) {
+		if (elems->wps_ie) {
+			pstat->flags |= WLAN_STA_WPS;
+		} else {
+			pstat->flags |= WLAN_STA_MAYBE_WPS;
+		}
+
+
+		/*  AP support WPA/RSN, and sta is going to do WPS, but AP is not ready */
+		/*  that the selected registrar of AP is _FLASE */
+		if ((psecuritypriv->wpa_psk > 0)
+			&& (pstat->flags & (WLAN_STA_WPS|WLAN_STA_MAYBE_WPS))) {
+			if (pmlmepriv->wps_beacon_ie) {
+				u8 selected_registrar = 0;
+
+				rtw_get_wps_attr_content(pmlmepriv->wps_beacon_ie, pmlmepriv->wps_beacon_ie_len, WPS_ATTR_SELECTED_REGISTRAR, &selected_registrar, NULL);
+
+				if (!selected_registrar)
+					return WLAN_STATUS_AP_UNABLE_TO_HANDLE_NEW_STA;
+			}
+		}
+
+	} else {
+		int copy_len;
+
+		if (psecuritypriv->wpa_psk == 0) {
+			return WLAN_STATUS_INVALID_IE;
+		}
+
+		if (elems->wps_ie) {
+			pstat->flags |= WLAN_STA_WPS;
+			copy_len = 0;
+		} else {
+			copy_len = ((wpa_ie_len+2) > sizeof(pstat->wpa_ie)) ? (sizeof(pstat->wpa_ie)):(wpa_ie_len+2);
+		}
+
+
+		if (copy_len > 0)
+			memcpy(pstat->wpa_ie, wpa_ie-2, copy_len);
+
+	}
+	return WLAN_STATUS_SUCCESS;
+}
+
 unsigned int OnAssocReq(struct adapter *padapter, union recv_frame *precv_frame)
 {
 	u16 capab_info;
 	struct rtw_ieee802_11_elems elems;
 	struct sta_info *pstat;
-	unsigned char *p, *pos, *wpa_ie;
+	unsigned char *p, *pos;
 	unsigned char WMM_IE[] = {0x00, 0x50, 0xf2, 0x02, 0x00, 0x01};
-	int		i, ie_len, wpa_ie_len, left;
+	int		i, ie_len, left;
 	unsigned char supportRate[16];
 	int					supportRateNum;
-	unsigned short		status = WLAN_STATUS_SUCCESS;
+	unsigned short		status = WLAN_STATUS_SUCCESS, parse_status;
 	unsigned short		frame_type, ie_offset = 0;
 	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
-	struct security_priv *psecuritypriv = &padapter->securitypriv;
 	struct mlme_ext_priv *pmlmeext = &padapter->mlmeextpriv;
 	struct mlme_ext_info *pmlmeinfo = &(pmlmeext->mlmext_info);
 	struct wlan_bssid_ex	*cur = &(pmlmeinfo->network);
@@ -1056,117 +1168,12 @@ unsigned int OnAssocReq(struct adapter *padapter, union recv_frame *precv_frame)
 	update_basic_rate_table_soft_ap(pstat->bssrateset, pstat->bssratelen);
 
 	/* check RSN/WPA/WPS */
-	pstat->dot8021xalg = 0;
-	pstat->wpa_psk = 0;
-	pstat->wpa_group_cipher = 0;
-	pstat->wpa2_group_cipher = 0;
-	pstat->wpa_pairwise_cipher = 0;
-	pstat->wpa2_pairwise_cipher = 0;
-	memset(pstat->wpa_ie, 0, sizeof(pstat->wpa_ie));
-	if ((psecuritypriv->wpa_psk & BIT(1)) && elems.rsn_ie) {
-
-		int group_cipher = 0, pairwise_cipher = 0;
-
-		wpa_ie = elems.rsn_ie;
-		wpa_ie_len = elems.rsn_ie_len;
-
-		if (rtw_parse_wpa2_ie(wpa_ie-2, wpa_ie_len+2, &group_cipher, &pairwise_cipher, NULL) == _SUCCESS) {
-			pstat->dot8021xalg = 1;/* psk,  todo:802.1x */
-			pstat->wpa_psk |= BIT(1);
-
-			pstat->wpa2_group_cipher = group_cipher&psecuritypriv->wpa2_group_cipher;
-			pstat->wpa2_pairwise_cipher = pairwise_cipher&psecuritypriv->wpa2_pairwise_cipher;
-
-			if (!pstat->wpa2_group_cipher)
-				status = WLAN_STATUS_INVALID_GROUP_CIPHER;
-
-			if (!pstat->wpa2_pairwise_cipher)
-				status = WLAN_STATUS_INVALID_PAIRWISE_CIPHER;
-		} else {
-			status = WLAN_STATUS_INVALID_IE;
-		}
-
-	} else if ((psecuritypriv->wpa_psk & BIT(0)) && elems.wpa_ie) {
-
-		int group_cipher = 0, pairwise_cipher = 0;
-
-		wpa_ie = elems.wpa_ie;
-		wpa_ie_len = elems.wpa_ie_len;
-
-		if (rtw_parse_wpa_ie(wpa_ie-2, wpa_ie_len+2, &group_cipher, &pairwise_cipher, NULL) == _SUCCESS) {
-			pstat->dot8021xalg = 1;/* psk,  todo:802.1x */
-			pstat->wpa_psk |= BIT(0);
-
-			pstat->wpa_group_cipher = group_cipher&psecuritypriv->wpa_group_cipher;
-			pstat->wpa_pairwise_cipher = pairwise_cipher&psecuritypriv->wpa_pairwise_cipher;
-
-			if (!pstat->wpa_group_cipher)
-				status = WLAN_STATUS_INVALID_GROUP_CIPHER;
-
-			if (!pstat->wpa_pairwise_cipher)
-				status = WLAN_STATUS_INVALID_PAIRWISE_CIPHER;
-
-		} else {
-			status = WLAN_STATUS_INVALID_IE;
-		}
-
-	} else {
-		wpa_ie = NULL;
-		wpa_ie_len = 0;
-	}
+	parse_status = rtw_parse_assoc_security_ies(padapter, &elems, pstat);
+	if (parse_status != WLAN_STATUS_SUCCESS)
+		status = parse_status;
 
 	if (status != WLAN_STATUS_SUCCESS)
 		goto OnAssocReqFail;
-
-	pstat->flags &= ~(WLAN_STA_WPS | WLAN_STA_MAYBE_WPS);
-	if (!wpa_ie) {
-		if (elems.wps_ie) {
-			pstat->flags |= WLAN_STA_WPS;
-		} else {
-			pstat->flags |= WLAN_STA_MAYBE_WPS;
-		}
-
-
-		/*  AP support WPA/RSN, and sta is going to do WPS, but AP is not ready */
-		/*  that the selected registrar of AP is _FLASE */
-		if ((psecuritypriv->wpa_psk > 0)
-			&& (pstat->flags & (WLAN_STA_WPS|WLAN_STA_MAYBE_WPS))) {
-			if (pmlmepriv->wps_beacon_ie) {
-				u8 selected_registrar = 0;
-
-				rtw_get_wps_attr_content(pmlmepriv->wps_beacon_ie, pmlmepriv->wps_beacon_ie_len, WPS_ATTR_SELECTED_REGISTRAR, &selected_registrar, NULL);
-
-				if (!selected_registrar) {
-					status = WLAN_STATUS_AP_UNABLE_TO_HANDLE_NEW_STA;
-
-					goto OnAssocReqFail;
-				}
-			}
-		}
-
-	} else {
-		int copy_len;
-
-		if (psecuritypriv->wpa_psk == 0) {
-			status = WLAN_STATUS_INVALID_IE;
-
-			goto OnAssocReqFail;
-
-		}
-
-		if (elems.wps_ie) {
-			pstat->flags |= WLAN_STA_WPS;
-			copy_len = 0;
-		} else {
-			copy_len = ((wpa_ie_len+2) > sizeof(pstat->wpa_ie)) ? (sizeof(pstat->wpa_ie)):(wpa_ie_len+2);
-		}
-
-
-		if (copy_len > 0)
-			memcpy(pstat->wpa_ie, wpa_ie-2, copy_len);
-
-	}
-
 
 	/*  check if there is WMM IE & support WWM-PS */
 	pstat->flags &= ~WLAN_STA_WME;
