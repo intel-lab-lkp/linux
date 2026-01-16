@@ -33,6 +33,7 @@ properties:
       - const: core
 
   iommus:
+    minItems: 1
     maxItems: 2
 
   interconnects:
@@ -107,9 +108,7 @@ examples:
         interconnect-names = "mdp0-mem",
                              "cpu-cfg";
 
-        iommus = <&apps_smmu 0x420 0x2>,
-                 <&apps_smmu 0x421 0x0>;
-        ranges;
+        iommus = <&apps_smmu 0x420 0x2>;
 
         display-controller@5e01000 {
             compatible = "qcom,qcm2290-dpu";
