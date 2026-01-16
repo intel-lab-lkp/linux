@@ -2089,7 +2089,7 @@ int bnxt_re_modify_qp(struct ib_qp *ib_qp, struct ib_qp_attr *qp_attr,
 	unsigned int flags;
 	u8 nw_type;
 
-	if (qp_attr_mask & ~IB_QP_ATTR_STANDARD_BITS)
+	if (qp_attr_mask & ~(IB_QP_ATTR_STANDARD_BITS | IB_QP_RATE_LIMIT))
 		return -EOPNOTSUPP;
 
 	qp->qplib_qp.modify_flags = 0;
@@ -2127,6 +2127,21 @@ int bnxt_re_modify_qp(struct ib_qp *ib_qp, struct ib_qp_attr *qp_attr,
 			flags = bnxt_re_lock_cqs(qp);
 			bnxt_qplib_clean_qp(&qp->qplib_qp);
 			bnxt_re_unlock_cqs(qp, flags);
+		}
+	}
+
+	if (qp_attr_mask & IB_QP_RATE_LIMIT) {
+		if (qp->qplib_qp.type == IB_QPT_RC &&
+		    _is_modify_qp_rate_limit_supported(dev_attr->dev_cap_flags2)) {
+			/* check rate limit within device limits */
+			if (qp_attr->rate_limit > dev_attr->rate_limit_max ||
+			    qp_attr->rate_limit < dev_attr->rate_limit_min) {
+				dev_err(rdev_to_dev(rdev), "Invalid rate_limit value\n");
+				return -EINVAL;
+			}
+			qp->qplib_qp.ext_modify_flags |=
+				CMDQ_MODIFY_QP_EXT_MODIFY_MASK_RATE_LIMIT_VALID;
+			qp->qplib_qp.rate_limit = qp_attr->rate_limit;
 		}
 	}
 	if (qp_attr_mask & IB_QP_EN_SQD_ASYNC_NOTIFY) {
