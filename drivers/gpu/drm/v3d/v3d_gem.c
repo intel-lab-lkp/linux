@@ -125,10 +125,16 @@ void
 v3d_reset(struct v3d_dev *v3d)
 {
 	struct drm_device *dev = &v3d->drm;
+	int ret;
+
+	ret = v3d_pm_runtime_get(v3d);
+	if (ret)
+		return;
 
 	DRM_DEV_ERROR(dev->dev, "Resetting GPU for hang.\n");
 	DRM_DEV_ERROR(dev->dev, "V3D_ERR_STAT: 0x%08x\n",
 		      V3D_CORE_READ(0, V3D_ERR_STAT));
+
 	trace_v3d_reset_begin(dev);
 
 	/* XXX: only needed for safe powerdown, not reset. */
@@ -147,6 +153,8 @@ v3d_reset(struct v3d_dev *v3d)
 	v3d_perfmon_stop(v3d, v3d->active_perfmon, false);
 
 	trace_v3d_reset_end(dev);
+
+	v3d_pm_runtime_put(v3d);
 }
 
 static void
@@ -344,7 +352,6 @@ v3d_gem_init(struct drm_device *dev)
 	struct v3d_dev *v3d = to_v3d_dev(dev);
 
 	v3d_init_hw_state(v3d);
-	v3d_mmu_set_page_table(v3d);
 }
 
 void
