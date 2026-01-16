@@ -67,6 +67,13 @@ properties:
       - off
     default: keep
 
+  realtek,mdi-polarity-swap:
+    description:
+      A bitmap to describe pair polarity swap. Bit 0 to swap polarity of pair A,
+      bit 1 to swap polarity of pair B, bit 2 to swap polarity of pair C and bit
+      3 to swap polarity of pair D.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
 unevaluatedProperties: false
 
 allOf:

@@ -164,6 +164,7 @@
 #define RTL8224_SRAM_RTCT_LEN(pair)		(0x8028 + (pair) * 4)
 
 #define RTL8224_VND1_MDI_PAIR_SWAP		0xa90
+#define RTL8224_VND1_MDI_POLARITY_SWAP		0xa94
 
 #define RTL8366RB_POWER_SAVE			0x15
 #define RTL8366RB_POWER_SAVE_ON			BIT(12)
@@ -219,6 +220,7 @@ enum pair_swap_state {
 
 struct rtl8224_priv {
 	enum pair_swap_state pair_swap;
+	int polarity_swap;
 };
 
 static int rtl821x_read_page(struct phy_device *phydev)
@@ -1713,12 +1715,28 @@ static void rtl8224_mdi_pair_swap(struct phy_device *phydev, bool swap)
 				RTL8224_VND1_MDI_PAIR_SWAP, val);
 }
 
+static void rtl8224_mdi_polarity_swap(struct phy_device *phydev, u32 swap)
+{
+	u32 val;
+	u8 offset;
+
+	offset = (phydev->mdio.addr & 3) * 4;
+	val = __phy_package_read_mmd(phydev, 0, MDIO_MMD_VEND1,
+				     RTL8224_VND1_MDI_POLARITY_SWAP);
+	val &= ~(0xf << offset);
+	val |= (swap & 0xf) << offset;
+	__phy_package_write_mmd(phydev, 0, MDIO_MMD_VEND1,
+				RTL8224_VND1_MDI_POLARITY_SWAP, val);
+}
+
 static int rtl8224_config_init(struct phy_device *phydev)
 {
 	struct rtl8224_priv *priv = phydev->priv;
 
 	if (priv->pair_swap != PAIR_SWAP_KEEP)
 		rtl8224_mdi_pair_swap(phydev, priv->pair_swap == PAIR_SWAP_ON);
+	if (priv->polarity_swap >= 0)
+		rtl8224_mdi_polarity_swap(phydev, priv->polarity_swap);
 
 	return 0;
 }
@@ -1737,6 +1755,16 @@ static enum pair_swap_state rtlgen_pair_swap_state_get(const struct device_node 
 	return PAIR_SWAP_KEEP;
 }
 
+static int rtlgen_polarity_swap_get(const struct device_node *np)
+{
+	u32 polarity;
+
+	if (!of_property_read_u32(np, "realtek,mdi-polarity-swap", &polarity))
+		return polarity;
+
+	return -1;
+}
+
 static int rtl8224_probe(struct phy_device *phydev)
 {
 	struct device *dev = &phydev->mdio.dev;
@@ -1748,6 +1776,7 @@ static int rtl8224_probe(struct phy_device *phydev)
 	phydev->priv = priv;
 
 	priv->pair_swap = rtlgen_pair_swap_state_get(dev->of_node);
+	priv->polarity_swap = rtlgen_polarity_swap_get(dev->of_node);
 
 	/* Device has 4 ports */
 	devm_phy_package_join(dev, phydev, phydev->mdio.addr & (~3), 0);
