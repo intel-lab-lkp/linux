@@ -212,6 +212,13 @@ static int __init dummy_numa_init(void)
 	node_set(0, numa_nodes_parsed);
 	numa_add_memblk(0, 0, PFN_PHYS(max_pfn));
 
+	/* Map all unassociated APIC IDs to the fake node 0 */
+	unsigned int apicid;
+	for (apicid = 0; apicid < MAX_LOCAL_APIC; apicid++) {
+		if (__apicid_to_node[apicid] == NUMA_NO_NODE)
+			 __apicid_to_node[apicid] = 0;
+        }
+
 	return 0;
 }
 
