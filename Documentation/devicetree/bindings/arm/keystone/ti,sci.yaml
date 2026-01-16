@@ -51,15 +51,27 @@ properties:
     minItems: 1
 
   mbox-names:
+    minItems: 2
     description: |
       Specifies the mailboxes used to communicate with TI-SCI Controller
       made available from TI-SCI controller.
     items:
       - const: rx
       - const: tx
+      - const: boot_rx
+      - const: boot_tx
+      - const: boot_notify
+      - const: notify
 
   mboxes:
     minItems: 2
+    items:
+      - description: RX thread
+      - description: TX thread
+      - description: boot stage RX thread
+      - description: boot stage TX thread
+      - description: boot stage Notify thread
+      - description: Notify thread
 
   ti,host-id:
     $ref: /schemas/types.yaml#/definitions/uint32
@@ -78,6 +90,18 @@ properties:
   reset-controller:
     type: object
     $ref: /schemas/reset/ti,sci-reset.yaml#
+
+if:
+  properties:
+    compatible:
+      contains:
+        const: ti,k2g-sci
+then:
+  properties:
+    mbox-names:
+      maxItems: 2
+    mboxes:
+      maxItems: 2
 
 required:
   - compatible
