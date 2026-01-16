@@ -24,6 +24,7 @@
 #include <linux/if_arp.h>
 #include <net/mctp.h>
 #include <net/mctpdevice.h>
+#include <linux/errqueue.h>
 
 /* byte_count is limited to u8 */
 #define MCTP_I2C_MAXBLOCK 255
@@ -483,6 +484,23 @@ static void mctp_i2c_invalidate_tx_flow(struct mctp_i2c_dev *midev,
 		mctp_i2c_unlock_nest(midev);
 }
 
+static void mctp_i2c_report_error(struct sock *sk, struct sk_buff *skb, int rc)
+{
+	struct sock_exterr_skb *serr;
+
+	skb = skb_clone(skb, GFP_ATOMIC);
+	if (!skb)
+		return;
+
+	serr = SKB_EXT_ERR(skb);
+	memset(serr, 0, sizeof(*serr));
+	serr->ee.ee_errno = -rc;
+	serr->ee.ee_origin = SO_EE_ORIGIN_LOCAL;
+
+	if (sock_queue_err_skb(sk, skb))
+		kfree_skb(skb);
+}
+
 static void mctp_i2c_xmit(struct mctp_i2c_dev *midev, struct sk_buff *skb)
 {
 	struct net_device_stats *stats = &midev->ndev->stats;
@@ -543,8 +561,11 @@ static void mctp_i2c_xmit(struct mctp_i2c_dev *midev, struct sk_buff *skb)
 		rc = __i2c_transfer(midev->adapter, &msg, 1);
 
 		/* on tx errors, the flow can no longer be considered valid */
-		if (rc < 0)
+		if (rc < 0) {
 			mctp_i2c_invalidate_tx_flow(midev, skb);
+			if (skb->sk)
+				mctp_i2c_report_error(skb->sk, skb, rc);
+		}
 
 		break;
 
