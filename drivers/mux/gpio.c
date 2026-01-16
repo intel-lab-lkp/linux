@@ -19,6 +19,7 @@
 
 struct mux_gpio {
 	struct gpio_descs *gpios;
+	struct gpio_desc *enable;
 };
 
 static int mux_gpio_set(struct mux_control *mux, int state)
@@ -27,9 +28,27 @@ static int mux_gpio_set(struct mux_control *mux, int state)
 	DECLARE_BITMAP(values, BITS_PER_TYPE(state));
 	u32 value = state;
 
+	if (state == MUX_IDLE_DISCONNECT) {
+		if (mux_gpio->enable)
+			gpiod_set_value_cansleep(mux_gpio->enable, 0);
+		return 0;
+	}
+
+	if (mux_gpio->enable) {
+		/*
+		 * Disable the mux before changing address lines to prevent
+		 * glitches. Changing address while enabled could briefly
+		 * activate an unintended channel during the transition.
+		 */
+		gpiod_set_value_cansleep(mux_gpio->enable, 0);
+	}
+
 	bitmap_from_arr32(values, &value, BITS_PER_TYPE(value));
 
 	gpiod_multi_set_value_cansleep(mux_gpio->gpios, values);
+
+	if (mux_gpio->enable)
+		gpiod_set_value_cansleep(mux_gpio->enable, 1);
 
 	return 0;
 }
@@ -71,9 +90,20 @@ static int mux_gpio_probe(struct platform_device *pdev)
 	WARN_ON(pins != mux_gpio->gpios->ndescs);
 	mux_chip->mux->states = BIT(pins);
 
+	mux_gpio->enable = devm_gpiod_get_optional(dev, "enable", GPIOD_OUT_LOW);
+	if (IS_ERR(mux_gpio->enable))
+		return dev_err_probe(dev, PTR_ERR(mux_gpio->enable),
+				     "failed to get enable gpio\n");
+
 	ret = device_property_read_u32(dev, "idle-state", (u32 *)&idle_state);
 	if (ret >= 0 && idle_state != MUX_IDLE_AS_IS) {
-		if (idle_state < 0 || idle_state >= mux_chip->mux->states) {
+		if (idle_state == MUX_IDLE_DISCONNECT) {
+			if (!mux_gpio->enable) {
+				dev_err(dev,
+					"invalid idle-state (MUX_IDLE_DISCONNECT requires enable-gpios)\n");
+				return -EINVAL;
+			}
+		} else if (idle_state < 0 || idle_state >= mux_chip->mux->states) {
 			dev_err(dev, "invalid idle-state %u\n", idle_state);
 			return -EINVAL;
 		}
