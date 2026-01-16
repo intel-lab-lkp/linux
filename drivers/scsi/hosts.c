@@ -373,7 +373,7 @@ static void scsi_host_dev_release(struct device *dev)
 		 * name as well as the proc dir structure are leaked.
 		 */
 		scsi_proc_hostdir_rm(shost->hostt);
-		kfree(dev_name(&shost->shost_dev));
+		kfree_const(dev_name(&shost->shost_dev));
 	}
 
 	kfree(shost->shost_data);
