@@ -90,7 +90,7 @@ int fuse_inode_uncached_io_start(struct fuse_inode *fi, struct fuse_backing *fb)
 	spin_lock(&fi->lock);
 	/* deny conflicting backing files on same fuse inode */
 	oldfb = fuse_inode_backing(fi);
-	if (fb && oldfb && oldfb != fb) {
+	if (fb && oldfb && file_inode(oldfb->file) != file_inode(fb->file)) {
 		err = -EBUSY;
 		goto unlock;
 	}
