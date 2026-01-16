@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 #ifndef __LINUX_SPINLOCK_UP_H
 #define __LINUX_SPINLOCK_UP_H
 
@@ -12,7 +13,6 @@
  * include/linux/spinlock_up.h - UP-debug version of spinlocks.
  *
  * portions Copyright 2005, Red Hat, Inc., Ingo Molnar
- * Released under the General Public License (GPL).
  *
  * In the debug case, 1 means unlocked, 0 means locked. (the values
  * are inverted, to catch initialization bugs)

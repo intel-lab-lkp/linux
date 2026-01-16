@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 #ifndef __LINUX_SPINLOCK_API_SMP_H
 #define __LINUX_SPINLOCK_API_SMP_H
 
@@ -12,7 +13,6 @@
  * (implemented in kernel/spinlock.c)
  *
  * portions Copyright 2005, Red Hat, Inc., Ingo Molnar
- * Released under the General Public License (GPL).
  */
 
 int in_lock_functions(unsigned long addr);

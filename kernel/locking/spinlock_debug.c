@@ -1,6 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright 2005, Red Hat, Inc., Ingo Molnar
- * Released under the General Public License (GPL).
  *
  * This file contains the spinlock/rwlock implementations for
  * DEBUG_SPINLOCK.

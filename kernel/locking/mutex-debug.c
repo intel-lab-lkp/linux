@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Debugging code for mutexes
  *
@@ -8,7 +9,6 @@
  * lock debugging, locking tree, deadlock detection started by:
  *
  *  Copyright (C) 2004, LynuxWorks, Inc., Igor Manyilov, Bill Huey
- *  Released under the General Public License (GPL).
  */
 #include <linux/mutex.h>
 #include <linux/delay.h>

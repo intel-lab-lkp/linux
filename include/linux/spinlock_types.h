@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 #ifndef __LINUX_SPINLOCK_TYPES_H
 #define __LINUX_SPINLOCK_TYPES_H
 
@@ -6,7 +7,6 @@
  *                                  and initializers
  *
  * portions Copyright 2005, Red Hat, Inc., Ingo Molnar
- * Released under the General Public License (GPL).
  */
 
 #include <linux/spinlock_types_raw.h>

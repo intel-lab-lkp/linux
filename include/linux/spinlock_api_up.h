@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 #ifndef __LINUX_SPINLOCK_API_UP_H
 #define __LINUX_SPINLOCK_API_UP_H
 
@@ -11,7 +12,6 @@
  * spinlock API implementation on UP-nondebug (inlined implementation)
  *
  * portions Copyright 2005, Red Hat, Inc., Ingo Molnar
- * Released under the General Public License (GPL).
  */
 
 #define in_lock_functions(ADDR)		0
