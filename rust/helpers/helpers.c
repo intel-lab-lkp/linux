@@ -48,6 +48,7 @@
 #include "rcu.c"
 #include "refcount.c"
 #include "regulator.c"
+#include "rtc.c"
 #include "scatterlist.c"
 #include "security.c"
 #include "signal.c"
