@@ -252,7 +252,6 @@ enum wd_read_status {
 
 static enum wd_read_status cs_watchdog_read(struct clocksource *cs, u64 *csnow, u64 *wdnow)
 {
-	int64_t md = 2 * watchdog->uncertainty_margin;
 	unsigned int nretries, max_retries;
 	int64_t wd_delay, wd_seq_delay;
 	u64 wd_end, wd_end2;
@@ -267,7 +266,8 @@ static enum wd_read_status cs_watchdog_read(struct clocksource *cs, u64 *csnow, 
 		local_irq_enable();
 
 		wd_delay = cycles_to_nsec_safe(watchdog, *wdnow, wd_end);
-		if (wd_delay <= md + cs->uncertainty_margin) {
+		if (wd_delay <= watchdog->uncertainty_margin
+				+ cs->uncertainty_margin) {
 			if (nretries > 1 && nretries >= max_retries) {
 				pr_warn("timekeeping watchdog on CPU%d: %s retried %d times before success\n",
 					smp_processor_id(), watchdog->name, nretries);
@@ -280,12 +280,12 @@ static enum wd_read_status cs_watchdog_read(struct clocksource *cs, u64 *csnow, 
 		 * there is too much external interferences that cause
 		 * significant delay in reading both clocksource and watchdog.
 		 *
-		 * If consecutive WD read-back delay > md, report
-		 * system busy, reinit the watchdog and skip the current
-		 * watchdog test.
+		 * If consecutive WD read-back delay is greater than
+		 * 2 * watchdog->uncertainty_margin, report system busy,
+		 * reinit the watchdog and skip the current watchdog test.
 		 */
 		wd_seq_delay = cycles_to_nsec_safe(watchdog, wd_end, wd_end2);
-		if (wd_seq_delay > md)
+		if (wd_seq_delay > 2 * watchdog->uncertainty_margin)
 			goto skip_test;
 	}
 
