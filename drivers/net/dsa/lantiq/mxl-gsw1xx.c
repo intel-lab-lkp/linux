@@ -10,6 +10,7 @@
  */
 
 #include <linux/bits.h>
+#include <linux/compiler.h>
 #include <linux/delay.h>
 #include <linux/jiffies.h>
 #include <linux/module.h>
@@ -699,11 +700,21 @@ static void gsw1xx_shutdown(struct mdio_device *mdiodev)
 	cancel_delayed_work_sync(&gsw1xx_priv->clear_raneg);
 }
 
+__diag_push();
+__diag_ignore_all("-Woverride-init",
+		  "logic to initialize all and then override some is OK");
+
 static const struct gswip_hw_info gsw12x_data = {
 	.max_ports		= GSW1XX_PORTS,
 	.allowed_cpu_ports	= BIT(GSW1XX_MII_PORT) | BIT(GSW1XX_SGMII_PORT),
-	.mii_ports		= BIT(GSW1XX_MII_PORT),
-	.mii_port_reg_offset	= -GSW1XX_MII_PORT,
+	.mii_cfg = {
+		[0 ... GSWIP_MAX_PORTS - 1] = -1,
+		[GSW1XX_MII_PORT] = GSWIP_MII_CFGp(0),
+	},
+	.mii_pcdu = {
+		[0 ... GSWIP_MAX_PORTS - 1] = -1,
+		[GSW1XX_MII_PORT] = GSWIP_MII_PCDU0,
+	},
 	.mac_select_pcs		= gsw1xx_phylink_mac_select_pcs,
 	.phylink_get_caps	= &gsw1xx_phylink_get_caps,
 	.supports_2500m		= true,
@@ -715,8 +726,14 @@ static const struct gswip_hw_info gsw12x_data = {
 static const struct gswip_hw_info gsw140_data = {
 	.max_ports		= GSW1XX_PORTS,
 	.allowed_cpu_ports	= BIT(GSW1XX_MII_PORT) | BIT(GSW1XX_SGMII_PORT),
-	.mii_ports		= BIT(GSW1XX_MII_PORT),
-	.mii_port_reg_offset	= -GSW1XX_MII_PORT,
+	.mii_cfg = {
+		[0 ... GSWIP_MAX_PORTS - 1] = -1,
+		[GSW1XX_MII_PORT] = GSWIP_MII_CFGp(0),
+	},
+	.mii_pcdu = {
+		[0 ... GSWIP_MAX_PORTS - 1] = -1,
+		[GSW1XX_MII_PORT] = GSWIP_MII_PCDU0,
+	},
 	.mac_select_pcs		= gsw1xx_phylink_mac_select_pcs,
 	.phylink_get_caps	= &gsw1xx_phylink_get_caps,
 	.supports_2500m		= true,
@@ -728,14 +745,22 @@ static const struct gswip_hw_info gsw140_data = {
 static const struct gswip_hw_info gsw141_data = {
 	.max_ports		= GSW1XX_PORTS,
 	.allowed_cpu_ports	= BIT(GSW1XX_MII_PORT) | BIT(GSW1XX_SGMII_PORT),
-	.mii_ports		= BIT(GSW1XX_MII_PORT),
-	.mii_port_reg_offset	= -GSW1XX_MII_PORT,
+	.mii_cfg = {
+		[0 ... GSWIP_MAX_PORTS - 1] = -1,
+		[GSW1XX_MII_PORT] = GSWIP_MII_CFGp(0),
+	},
+	.mii_pcdu = {
+		[0 ... GSWIP_MAX_PORTS - 1] = -1,
+		[GSW1XX_MII_PORT] = GSWIP_MII_PCDU0,
+	},
 	.mac_select_pcs		= gsw1xx_phylink_mac_select_pcs,
 	.phylink_get_caps	= gsw1xx_phylink_get_caps,
 	.pce_microcode		= &gsw1xx_pce_microcode,
 	.pce_microcode_size	= ARRAY_SIZE(gsw1xx_pce_microcode),
 	.tag_protocol		= DSA_TAG_PROTO_MXL_GSW1XX,
 };
+
+__diag_pop();
 
 /*
  * GSW125 is the industrial temperature version of GSW120.
