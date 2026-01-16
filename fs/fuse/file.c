@@ -277,6 +277,16 @@ static int fuse_open(struct inode *inode, struct file *file)
 	err = fuse_do_open(fm, get_node_id(inode), file, false);
 	if (!err) {
 		ff = file->private_data;
+
+		if ((fm->fc->famfs_iomap) && (S_ISREG(inode->i_mode))) {
+			/* Get the famfs fmap - failure is fatal */
+			err = fuse_get_fmap(fm, inode);
+			if (err) {
+				fuse_sync_release(fi, ff, file->f_flags);
+				goto out_nowrite;
+			}
+		}
+
 		err = fuse_finish_open(inode, file);
 		if (err)
 			fuse_sync_release(fi, ff, file->f_flags);
@@ -284,12 +294,14 @@ static int fuse_open(struct inode *inode, struct file *file)
 			fuse_truncate_update_attr(inode, file);
 	}
 
+out_nowrite:
 	if (is_wb_truncate || dax_truncate)
 		fuse_release_nowrite(inode);
 	if (!err) {
 		if (is_truncate)
 			truncate_pagecache(inode, 0);
-		else if (!(ff->open_flags & FOPEN_KEEP_CACHE))
+		else if (!(ff->open_flags & FOPEN_KEEP_CACHE) &&
+			 !fuse_file_famfs(fi))
 			invalidate_inode_pages2(inode->i_mapping);
 	}
 	if (dax_truncate)

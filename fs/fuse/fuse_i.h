@@ -223,6 +223,14 @@ struct fuse_inode {
 	 * so preserve the blocksize specified by the server.
 	 */
 	u8 cached_i_blkbits;
+
+#if IS_ENABLED(CONFIG_FUSE_FAMFS_DAX)
+	/* Pointer to the file's famfs metadata. Primary content is the
+	 * in-memory version of the fmap - the map from file's offset range
+	 * to DAX memory
+	 */
+	void *famfs_meta;
+#endif
 };
 
 /** FUSE inode state bits */
@@ -1511,11 +1519,8 @@ void fuse_free_conn(struct fuse_conn *fc);
 
 /* dax.c */
 
-static inline bool fuse_file_famfs(struct fuse_inode *fuse_inode) /* Will be superseded */
-{
-	(void)fuse_inode;
-	return false;
-}
+static inline int fuse_file_famfs(struct fuse_inode *fi); /* forward */
+
 #define FUSE_IS_VIRTIO_DAX(fuse_inode) (IS_ENABLED(CONFIG_FUSE_DAX)	\
 					&& IS_DAX(&fuse_inode->inode)  \
 					&& !fuse_file_famfs(fuse_inode))
@@ -1633,5 +1638,60 @@ extern void fuse_sysctl_unregister(void);
 #define fuse_sysctl_register()		(0)
 #define fuse_sysctl_unregister()	do { } while (0)
 #endif /* CONFIG_SYSCTL */
+
+/* famfs.c */
+
+#if IS_ENABLED(CONFIG_FUSE_FAMFS_DAX)
+void __famfs_meta_free(void *map);
+
+/* Set fi->famfs_meta = NULL regardless of prior value */
+static inline void famfs_meta_init(struct fuse_inode *fi)
+{
+	fi->famfs_meta = NULL;
+}
+
+/* Set fi->famfs_meta iff the current value is NULL */
+static inline struct fuse_backing *famfs_meta_set(struct fuse_inode *fi,
+						  void *meta)
+{
+	return cmpxchg(&fi->famfs_meta, NULL, meta);
+}
+
+static inline void famfs_meta_free(struct fuse_inode *fi)
+{
+	famfs_meta_set(fi, NULL);
+}
+
+static inline int fuse_file_famfs(struct fuse_inode *fi)
+{
+	return (READ_ONCE(fi->famfs_meta) != NULL);
+}
+
+int fuse_get_fmap(struct fuse_mount *fm, struct inode *inode);
+
+#else /* !CONFIG_FUSE_FAMFS_DAX */
+
+static inline struct fuse_backing *famfs_meta_set(struct fuse_inode *fi,
+						  void *meta)
+{
+	return NULL;
+}
+
+static inline void famfs_meta_free(struct fuse_inode *fi)
+{
+}
+
+static inline int fuse_file_famfs(struct fuse_inode *fi)
+{
+	return 0;
+}
+
+static inline int
+fuse_get_fmap(struct fuse_mount *fm, struct inode *inode)
+{
+	return 0;
+}
+
+#endif /* CONFIG_FUSE_FAMFS_DAX */
 
 #endif /* _FS_FUSE_I_H */
