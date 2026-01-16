@@ -7655,6 +7655,7 @@ F:	Documentation/devicetree/bindings/dpll/dpll-device.yaml
 F:	Documentation/devicetree/bindings/dpll/dpll-pin.yaml
 F:	Documentation/driver-api/dpll.rst
 F:	drivers/dpll/
+F:	include/dt-bindings/dpll/dpll.h
 F:	include/linux/dpll.h
 F:	include/uapi/linux/dpll.h
 

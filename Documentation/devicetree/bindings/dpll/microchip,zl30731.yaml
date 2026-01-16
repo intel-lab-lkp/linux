@@ -44,6 +44,8 @@ examples:
       #size-cells = <0>;
 
       dpll@70 {
+        #dpll-pin-cells = <2>;
+
         compatible = "microchip,zl30732";
         reg = <0x70>;
         dpll-types = "pps", "eec";
@@ -80,6 +82,8 @@ examples:
       #size-cells = <0>;
 
       dpll@70 {
+        #dpll-pin-cells = <2>;
+
         compatible = "microchip,zl30731";
         reg = <0x70>;
         spi-max-frequency = <12500000>;

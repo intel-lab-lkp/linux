@@ -27,6 +27,13 @@ properties:
   "#size-cells":
     const: 0
 
+  "#dpll-pin-cells":
+    const: 2
+    description: |
+      - Specified pin index
+      - Specified pin direction. The macros are defined in
+        dt-bindings/dpll/dpll.h
+
   dpll-types:
     description: List of DPLL channel types, one per DPLL instance.
     $ref: /schemas/types.yaml#/definitions/non-unique-string-array
@@ -72,5 +79,8 @@ properties:
     required:
       - "#address-cells"
       - "#size-cells"
+
+required:
+  - "#dpll-pin-cells"
 
 additionalProperties: true
