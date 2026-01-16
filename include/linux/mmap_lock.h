@@ -236,19 +236,31 @@ int vma_start_write_killable(struct vm_area_struct *vma)
 	return __vma_start_write(vma, mm_lock_seq, TASK_KILLABLE);
 }
 
-static inline void vma_assert_write_locked(struct vm_area_struct *vma)
+static inline bool vma_is_read_locked(struct vm_area_struct *vma)
+{
+	return refcount_read(&vma->vm_refcnt) > 1;
+}
+
+static inline bool vma_is_write_locked(struct vm_area_struct *vma)
 {
 	unsigned int mm_lock_seq;
 
-	VM_BUG_ON_VMA(!__is_vma_write_locked(vma, &mm_lock_seq), vma);
+	return __is_vma_write_locked(vma, &mm_lock_seq);
+}
+
+static inline bool vma_is_locked(struct vm_area_struct *vma)
+{
+	return vma_is_read_locked(vma) || vma_is_write_locked(vma);
+}
+
+static inline void vma_assert_write_locked(struct vm_area_struct *vma)
+{
+	VM_BUG_ON_VMA(!vma_is_write_locked(vma), vma);
 }
 
 static inline void vma_assert_locked(struct vm_area_struct *vma)
 {
-	unsigned int mm_lock_seq;
-
-	VM_BUG_ON_VMA(refcount_read(&vma->vm_refcnt) <= 1 &&
-		      !__is_vma_write_locked(vma, &mm_lock_seq), vma);
+	VM_BUG_ON_VMA(!vma_is_locked(vma), vma);
 }
 
 static inline bool vma_is_attached(struct vm_area_struct *vma)
