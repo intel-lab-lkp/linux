@@ -687,7 +687,6 @@ static void ufshcd_print_host_state(struct ufs_hba *hba)
 		hba->pm_op_in_progress, hba->is_sys_suspended);
 	dev_err(hba->dev, "Auto BKOPS=%d, Host self-block=%d\n",
 		hba->auto_bkops_enabled, hba->host->host_self_blocked);
-	dev_err(hba->dev, "Clk gate=%d\n", hba->clk_gating.state);
 	dev_err(hba->dev,
 		"last_hibern8_exit_tstamp at %lld us, hibern8_exit_cnt=%d\n",
 		div_u64(hba->ufs_stats.last_hibern8_exit_tstamp, 1000),
@@ -1893,40 +1892,6 @@ static void ufshcd_exit_clk_scaling(struct ufs_hba *hba)
 	hba->clk_scaling.is_initialized = false;
 }
 
-static void ufshcd_ungate_work(struct work_struct *work)
-{
-	int ret;
-	struct ufs_hba *hba = container_of(work, struct ufs_hba,
-			clk_gating.ungate_work);
-
-	cancel_delayed_work_sync(&hba->clk_gating.gate_work);
-
-	scoped_guard(spinlock_irqsave, &hba->clk_gating.lock) {
-		if (hba->clk_gating.state == CLKS_ON)
-			return;
-	}
-
-	ufshcd_hba_vreg_set_hpm(hba);
-	ufshcd_setup_clocks(hba, true);
-
-	ufshcd_enable_irq(hba);
-
-	/* Exit from hibern8 */
-	if (ufshcd_can_hibern8_during_gating(hba)) {
-		/* Prevent gating in this path */
-		hba->clk_gating.is_suspended = true;
-		if (ufshcd_is_link_hibern8(hba)) {
-			ret = ufshcd_uic_hibern8_exit(hba);
-			if (ret)
-				dev_err(hba->dev, "%s: hibern8 exit failed %d\n",
-					__func__, ret);
-			else
-				ufshcd_set_link_active(hba);
-		}
-		hba->clk_gating.is_suspended = false;
-	}
-}
-
 /**
  * ufshcd_hold - Enable clocks that were gated earlier due to ufshcd_release.
  * Also, exit from hibern8 mode and set the link as active.
@@ -1940,74 +1905,6 @@ void ufshcd_hold(struct ufs_hba *hba)
 		ufshcd_rpm_get_sync(hba);
 }
 EXPORT_SYMBOL_GPL(ufshcd_hold);
-
-static void ufshcd_gate_work(struct work_struct *work)
-{
-	struct ufs_hba *hba = container_of(work, struct ufs_hba,
-			clk_gating.gate_work.work);
-	int ret;
-
-	scoped_guard(spinlock_irqsave, &hba->clk_gating.lock) {
-		/*
-		 * In case you are here to cancel this work the gating state
-		 * would be marked as REQ_CLKS_ON. In this case save time by
-		 * skipping the gating work and exit after changing the clock
-		 * state to CLKS_ON.
-		 */
-		if (hba->clk_gating.is_suspended ||
-		    hba->clk_gating.state != REQ_CLKS_OFF) {
-			hba->clk_gating.state = CLKS_ON;
-			trace_ufshcd_clk_gating(hba,
-						hba->clk_gating.state);
-			return;
-		}
-
-		if (hba->clk_gating.active_reqs)
-			return;
-	}
-
-	scoped_guard(spinlock_irqsave, hba->host->host_lock) {
-		if (ufshcd_is_ufs_dev_busy(hba) ||
-		    hba->ufshcd_state != UFSHCD_STATE_OPERATIONAL)
-			return;
-	}
-
-	/* put the link into hibern8 mode before turning off clocks */
-	if (ufshcd_can_hibern8_during_gating(hba)) {
-		ret = ufshcd_uic_hibern8_enter(hba);
-		if (ret) {
-			hba->clk_gating.state = CLKS_ON;
-			dev_err(hba->dev, "%s: hibern8 enter failed %d\n",
-					__func__, ret);
-			trace_ufshcd_clk_gating(hba,
-						hba->clk_gating.state);
-			return;
-		}
-		ufshcd_set_link_hibern8(hba);
-	}
-
-	ufshcd_disable_irq(hba);
-
-	ufshcd_setup_clocks(hba, false);
-
-	/* Put the host controller in low power mode if possible */
-	ufshcd_hba_vreg_set_lpm(hba);
-	/*
-	 * In case you are here to cancel this work the gating state
-	 * would be marked as REQ_CLKS_ON. In this case keep the state
-	 * as REQ_CLKS_ON which would anyway imply that clocks are off
-	 * and a request to turn them on is pending. By doing this way,
-	 * we keep the state machine in tact and this would ultimately
-	 * prevent from doing cancel work multiple times when there are
-	 * new requests arriving before the current cancel work is done.
-	 */
-	guard(spinlock_irqsave)(&hba->clk_gating.lock);
-	if (hba->clk_gating.state == REQ_CLKS_OFF) {
-		hba->clk_gating.state = CLKS_OFF;
-		trace_ufshcd_clk_gating(hba,
-					hba->clk_gating.state);
-	}
-}
 
 void ufshcd_release(struct ufs_hba *hba)
 {
@@ -2125,19 +2022,8 @@ static void ufshcd_init_clk_gating(struct ufs_hba *hba)
 	if (!ufshcd_is_clkgating_allowed(hba))
 		return;
 
-	hba->clk_gating.state = CLKS_ON;
-
-	hba->clk_gating.delay_ms = 150;
-	INIT_DELAYED_WORK(&hba->clk_gating.gate_work, ufshcd_gate_work);
-	INIT_WORK(&hba->clk_gating.ungate_work, ufshcd_ungate_work);
-
-	hba->clk_gating.clk_gating_workq = alloc_ordered_workqueue(
-		"ufs_clk_gating_%d", WQ_MEM_RECLAIM | WQ_HIGHPRI,
-		hba->host->host_no);
-
 	ufshcd_init_clk_gating_sysfs(hba);
 
-	hba->clk_gating.is_enabled = true;
 	hba->clk_gating.is_initialized = true;
 }
 
@@ -2152,8 +2038,6 @@ static void ufshcd_exit_clk_gating(struct ufs_hba *hba)
 	ufshcd_hold(hba);
 	hba->clk_gating.is_initialized = false;
 	ufshcd_release(hba);
-
-	destroy_workqueue(hba->clk_gating.clk_gating_workq);
 }
 
 static void ufshcd_clk_scaling_start_busy(struct ufs_hba *hba)
@@ -8405,8 +8289,7 @@ static void ufshcd_rtc_work(struct work_struct *work)
 
 	 /* Update RTC only when there are no requests in progress and UFSHCI is operational */
 	if (!ufshcd_is_ufs_dev_busy(hba) &&
-	    hba->ufshcd_state == UFSHCD_STATE_OPERATIONAL &&
-	    !hba->clk_gating.active_reqs)
+	    hba->ufshcd_state == UFSHCD_STATE_OPERATIONAL)
 		ufshcd_update_rtc(hba);
 
 	if (ufshcd_is_ufs_dev_active(hba) && hba->dev_info.rtc_update_period)
@@ -9418,7 +9301,6 @@ static int ufshcd_setup_clocks(struct ufs_hba *hba, bool on)
 	int ret = 0;
 	struct ufs_clk_info *clki;
 	struct list_head *head = &hba->clk_list_head;
-	ktime_t start = ktime_get();
 	bool clk_state_changed = false;
 
 	if (list_empty(head))
@@ -9467,17 +9349,8 @@ out:
 			if (!IS_ERR_OR_NULL(clki->clk) && clki->enabled)
 				clk_disable_unprepare(clki->clk);
 		}
-	} else if (!ret && on && hba->clk_gating.is_initialized) {
-		scoped_guard(spinlock_irqsave, &hba->clk_gating.lock)
-			hba->clk_gating.state = CLKS_ON;
-		trace_ufshcd_clk_gating(hba,
-					hba->clk_gating.state);
 	}
 
-	if (clk_state_changed)
-		trace_ufshcd_profile_clk_gating(hba,
-			(on ? "on" : "off"),
-			ktime_to_us(ktime_sub(ktime_get(), start)), ret);
 	return ret;
 }
 
@@ -9911,9 +9784,6 @@ static int __ufshcd_wl_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	 * If we can't transition into any of the low power modes
 	 * just gate the clocks.
 	 */
-	ufshcd_hold(hba);
-	hba->clk_gating.is_suspended = true;
-
 	if (ufshcd_is_clkscaling_supported(hba))
 		ufshcd_clk_scaling_suspend(hba, true);
 
@@ -10061,11 +9931,9 @@ out:
 			msecs_to_jiffies(RPM_DEV_FLUSH_RECHECK_WORK_DELAY_MS));
 	}
 
-	if (ret) {
+	if (ret)
 		ufshcd_update_evt_hist(hba, UFS_EVT_WL_SUSP_ERR, (u32)ret);
-		hba->clk_gating.is_suspended = false;
-		ufshcd_release(hba);
-	}
+
 	hba->pm_op_in_progress = false;
 	return ret;
 }
@@ -10156,8 +10024,7 @@ vendor_suspend:
 out:
 	if (ret)
 		ufshcd_update_evt_hist(hba, UFS_EVT_WL_RES_ERR, (u32)ret);
-	hba->clk_gating.is_suspended = false;
-	ufshcd_release(hba);
+
 	hba->pm_op_in_progress = false;
 	return ret;
 }
@@ -10285,11 +10152,6 @@ static int ufshcd_suspend(struct ufs_hba *hba)
 	if (ret) {
 		ufshcd_enable_irq(hba);
 		return ret;
-	}
-	if (ufshcd_is_clkgating_allowed(hba)) {
-		hba->clk_gating.state = CLKS_OFF;
-		trace_ufshcd_clk_gating(hba,
-					hba->clk_gating.state);
 	}
 
 	ufshcd_vreg_set_lpm(hba);
@@ -10749,12 +10611,6 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 	hba->mmio_base = mmio_base;
 	hba->irq = irq;
 	hba->vps = &ufs_hba_vps;
-
-	/*
-	 * Initialize clk_gating.lock early since it is being used in
-	 * ufshcd_setup_clocks()
-	 */
-	spin_lock_init(&hba->clk_gating.lock);
 
 	/* Initialize mutex for PM QoS request synchronization */
 	mutex_init(&hba->pm_qos_mutex);

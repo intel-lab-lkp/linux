@@ -63,7 +63,6 @@
 
 UFS_LINK_STATES;
 UFS_PWR_MODES;
-UFSCHD_CLK_GATING_STATES;
 UFS_CMD_TRACE_STRINGS
 UFS_CMD_TRACE_TSF_TYPES
 
@@ -80,27 +79,6 @@ UFS_CMD_TRACE_TSF_TYPES
 				__print_symbolic(str_t, UFS_CMD_TRACE_STRINGS)
 #define show_ufs_cmd_trace_tsf(tsf)	\
 				__print_symbolic(tsf, UFS_CMD_TRACE_TSF_TYPES)
-
-TRACE_EVENT(ufshcd_clk_gating,
-
-	TP_PROTO(struct ufs_hba *hba, int state),
-
-	TP_ARGS(hba, state),
-
-	TP_STRUCT__entry(
-		__field(struct ufs_hba *, hba)
-		__field(int, state)
-	),
-
-	TP_fast_assign(
-		__entry->hba = hba;
-		__entry->state = state;
-	),
-
-	TP_printk("%s: gating state changed to %s",
-		dev_name(__entry->hba->dev),
-		__print_symbolic(__entry->state, UFSCHD_CLK_GATING_STATES))
-);
 
 TRACE_EVENT(ufshcd_clk_scaling,
 
@@ -176,11 +154,6 @@ DECLARE_EVENT_CLASS(ufshcd_profiling_template,
 );
 
 DEFINE_EVENT(ufshcd_profiling_template, ufshcd_profile_hibern8,
-	TP_PROTO(struct ufs_hba *hba, const char *profile_info, s64 time_us,
-		 int err),
-	TP_ARGS(hba, profile_info, time_us, err));
-
-DEFINE_EVENT(ufshcd_profiling_template, ufshcd_profile_clk_gating,
 	TP_PROTO(struct ufs_hba *hba, const char *profile_info, s64 time_us,
 		 int err),
 	TP_ARGS(hba, profile_info, time_us, err));
