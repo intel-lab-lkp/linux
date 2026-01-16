@@ -995,12 +995,10 @@ static unsigned short rtw_parse_assoc_security_ies(struct adapter *padapter,
 
 	pstat->flags &= ~(WLAN_STA_WPS | WLAN_STA_MAYBE_WPS);
 	if (!wpa_ie) {
-		if (elems->wps_ie) {
+		if (elems->wps_ie) 
 			pstat->flags |= WLAN_STA_WPS;
-		} else {
+		else
 			pstat->flags |= WLAN_STA_MAYBE_WPS;
-		}
-
 
 		/*  AP support WPA/RSN, and sta is going to do WPS, but AP is not ready */
 		/*  that the selected registrar of AP is _FLASE */
@@ -1019,9 +1017,8 @@ static unsigned short rtw_parse_assoc_security_ies(struct adapter *padapter,
 	} else {
 		int copy_len;
 
-		if (psecuritypriv->wpa_psk == 0) {
+		if (psecuritypriv->wpa_psk == 0) 
 			return WLAN_STATUS_INVALID_IE;
-		}
 
 		if (elems->wps_ie) {
 			pstat->flags |= WLAN_STA_WPS;
@@ -1035,6 +1032,7 @@ static unsigned short rtw_parse_assoc_security_ies(struct adapter *padapter,
 			memcpy(pstat->wpa_ie, wpa_ie-2, copy_len);
 
 	}
+
 	return WLAN_STATUS_SUCCESS;
 }
 
