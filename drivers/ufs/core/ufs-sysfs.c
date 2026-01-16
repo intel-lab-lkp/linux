@@ -256,9 +256,7 @@ static int ufshcd_read_hci_reg(struct ufs_hba *hba, u32 *val, unsigned int reg)
 	}
 
 	ufshcd_rpm_get_sync(hba);
-	ufshcd_hold(hba);
 	*val = ufshcd_readl(hba, reg);
-	ufshcd_release(hba);
 	ufshcd_rpm_put_sync(hba);
 
 	up(&hba->host_sem);

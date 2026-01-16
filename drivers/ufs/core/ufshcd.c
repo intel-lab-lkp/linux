@@ -1807,7 +1807,6 @@ static ssize_t ufshcd_clkscale_enable_store(struct device *dev,
 		goto out;
 
 	ufshcd_rpm_get_sync(hba);
-	ufshcd_hold(hba);
 
 	hba->clk_scaling.is_enabled = value;
 
@@ -1832,7 +1831,6 @@ static ssize_t ufshcd_clkscale_enable_store(struct device *dev,
 		hba->clk_scaling.target_freq = freq;
 
 out_rel:
-	ufshcd_release(hba);
 	ufshcd_rpm_put_sync(hba);
 out:
 	up(&hba->host_sem);
@@ -4366,9 +4364,7 @@ void ufshcd_auto_hibern8_update(struct ufs_hba *hba, u32 ahit)
 	WRITE_ONCE(hba->ahit, ahit);
 	if (!pm_runtime_suspended(&hba->ufs_device_wlun->sdev_gendev)) {
 		ufshcd_rpm_get_sync(hba);
-		ufshcd_hold(hba);
 		ufshcd_configure_auto_hibern8(hba);
-		ufshcd_release(hba);
 		ufshcd_rpm_put_sync(hba);
 	}
 }
