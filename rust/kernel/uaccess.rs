@@ -481,6 +481,56 @@ impl UserSliceWriter {
         Ok(())
     }
 
+    /// Writes raw data to this user pointer from a raw kernel pointer.
+    ///
+    /// This is similar to [`Self::write_slice`] but takes a raw pointer instead of a slice,
+    /// along with a total buffer length, an offset into the that buffer, and a count of bytes
+    /// to copy.
+    ///
+    /// Returns error if the offset+count exceeds the buffer size.
+    ///
+    /// Fails with [`EFAULT`] if the write happens on a bad address, or if the write goes out of
+    /// bounds of this [`UserSliceWriter`]. This call may modify the associated userspace slice
+    /// even if it returns an error.
+    ///
+    /// # Safety
+    ///
+    /// - `data` must point to a valid memory region of at least `len` bytes that remains allocated
+    ///   for the duration of this call.
+    ///
+    /// Note: Unlike [`Self::write_slice`], this method does not require exclusive access to the
+    /// source memory. The memory may be concurrently modified by other threads or hardware (e.g.,
+    /// DMA buffers). In such cases, the copied data may be inconsistent, but this does not cause
+    /// undefined behavior.
+    pub unsafe fn write_buffer(
+        &mut self,
+        data: *const u8,
+        len: usize,
+        offset: usize,
+        count: usize,
+    ) -> Result {
+        if offset.checked_add(count).ok_or(EOVERFLOW)? > len {
+            return Err(ERANGE);
+        }
+
+        // SAFETY: The caller guarantees that `data` is valid for reads of `len` bytes,
+        // so `data.add(offset_val)` is valid for reads of `count` bytes.
+        let src_ptr = unsafe { data.add(offset) };
+
+        // SAFETY: `src_ptr` is valid for reads of `to_write` bytes per the above.
+        let res = unsafe {
+            bindings::copy_to_user(self.ptr.as_mut_ptr(), src_ptr.cast::<c_void>(), count)
+        };
+        if res != 0 {
+            return Err(EFAULT);
+        }
+
+        self.ptr = self.ptr.wrapping_byte_add(count);
+        self.length -= count;
+
+        Ok(())
+    }
+
     /// Writes raw data to this user pointer from a kernel buffer partially.
     ///
     /// This is the same as [`Self::write_slice`] but considers the given `offset` into `data` and
