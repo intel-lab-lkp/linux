@@ -110,6 +110,24 @@ impl Dir {
         Dir::create(name, None)
     }
 
+    /// Returns a reference to a static no-op directory that doesn't create any debugfs entries.
+    ///
+    /// All file and subdirectory creation operations on this directory will silently succeed
+    /// without creating actual filesystem entries. This is useful when you want to conditionally
+    /// enable debugfs but use the same code path regardless.
+    pub fn empty() -> &'static Self {
+        #[cfg(CONFIG_DEBUG_FS)]
+        {
+            static EMPTY: Dir = Dir(None);
+            &EMPTY
+        }
+        #[cfg(not(CONFIG_DEBUG_FS))]
+        {
+            static EMPTY: Dir = Dir();
+            &EMPTY
+        }
+    }
+
     /// Creates a subdirectory within this directory.
     ///
     /// # Examples
