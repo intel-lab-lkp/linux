@@ -31,6 +31,26 @@ DEFINE_X86_SHA256_FN(sha256_blocks_avx, sha256_transform_avx);
 DEFINE_X86_SHA256_FN(sha256_blocks_avx2, sha256_transform_rorx);
 DEFINE_X86_SHA256_FN(sha256_blocks_ni, sha256_ni_transform);
 
+#if IS_ENABLED(CONFIG_CPU_SUP_ZHAOXIN)
+#define PHE_ALIGNMENT 16
+static void sha256_blocks_phe(struct sha256_block_state *state,
+			     const u8 *data, size_t nblocks)
+{
+	/*
+	 * XSHA256 requires %edi to point to a 32-byte, 16-byte-aligned
+	 * buffer on Zhaoxin processors.
+	 */
+	u8 buf[32 + PHE_ALIGNMENT - 1];
+	u8 *dst = PTR_ALIGN(&buf[0], PHE_ALIGNMENT);
+
+	memcpy(dst, state, SHA256_DIGEST_SIZE);
+	asm volatile(".byte 0xf3,0x0f,0xa6,0xd0"
+			: "+S"(data), "+D"(dst)
+			: "a"((long)-1), "c"(nblocks));
+	memcpy(state, dst, SHA256_DIGEST_SIZE);
+}
+#endif /* CONFIG_CPU_SUP_ZHAOXIN */
+
 static void sha256_blocks(struct sha256_block_state *state,
 			  const u8 *data, size_t nblocks)
 {
@@ -79,6 +99,11 @@ static void sha256_mod_init_arch(void)
 	if (boot_cpu_has(X86_FEATURE_SHA_NI)) {
 		static_call_update(sha256_blocks_x86, sha256_blocks_ni);
 		static_branch_enable(&have_sha_ni);
+#if IS_ENABLED(CONFIG_CPU_SUP_ZHAOXIN)
+	} else if (boot_cpu_has(X86_FEATURE_PHE_EN)) {
+		if (boot_cpu_data.x86 >= 0x07)
+			static_call_update(sha256_blocks_x86, sha256_blocks_phe);
+#endif
 	} else if (cpu_has_xfeatures(XFEATURE_MASK_SSE | XFEATURE_MASK_YMM,
 				     NULL) &&
 		   boot_cpu_has(X86_FEATURE_AVX)) {
