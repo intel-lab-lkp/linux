@@ -2890,16 +2890,12 @@ static int ufshcd_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *cmd)
 
 	hba->req_abort_count = 0;
 
-	ufshcd_hold(hba);
-
 	ufshcd_setup_scsi_cmd(hba, cmd,
 			      ufshcd_scsi_to_upiu_lun(cmd->device->lun), tag);
 
 	err = ufshcd_map_sg(hba, cmd);
-	if (err) {
-		ufshcd_release(hba);
+	if (err)
 		goto out;
-	}
 
 	if (hba->mcq_enabled)
 		hwq = ufshcd_mcq_req_to_hwq(hba, scsi_cmd_to_rq(cmd));
@@ -5401,7 +5397,6 @@ void ufshcd_release_scsi_cmd(struct ufs_hba *hba, struct scsi_cmnd *cmd)
 {
 	scsi_dma_unmap(cmd);
 	ufshcd_crypto_clear_prdt(hba, cmd);
-	ufshcd_release(hba);
 	ufshcd_clk_scaling_update_busy(hba);
 }
 
@@ -10675,7 +10670,6 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 	host->max_channel = UFSHCD_MAX_CHANNEL;
 	host->unique_id = host->host_no;
 	host->max_cmd_len = UFS_CDB_SIZE;
-	host->queuecommand_may_block = !!(hba->caps & UFSHCD_CAP_CLK_GATING);
 
 	/* Use default RPM delay if host not set */
 	if (host->rpm_autosuspend_delay == 0)
