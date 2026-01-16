@@ -66,6 +66,22 @@ static inline void __mmap_lock_trace_released(struct mm_struct *mm, bool write)
 
 #endif /* CONFIG_TRACING */
 
+
+static inline bool mmap_lock_is_contended(struct mm_struct *mm)
+{
+	return rwsem_is_contended(&mm->mmap_lock);
+}
+
+static inline bool mmap_is_locked(const struct mm_struct *mm)
+{
+	return rwsem_is_locked(&mm->mmap_lock);
+}
+
+static inline bool mmap_is_write_locked(const struct mm_struct *mm)
+{
+	return rwsem_is_write_locked(&mm->mmap_lock);
+}
+
 static inline void mmap_assert_locked(const struct mm_struct *mm)
 {
 	rwsem_assert_held(&mm->mmap_lock);
@@ -183,7 +199,8 @@ static inline void vma_end_read(struct vm_area_struct *vma)
 }
 
 /* WARNING! Can only be used if mmap_lock is expected to be write-locked */
-static inline bool __is_vma_write_locked(struct vm_area_struct *vma, unsigned int *mm_lock_seq)
+static inline bool __is_vma_write_locked(const struct vm_area_struct *vma,
+		unsigned int *mm_lock_seq)
 {
 	mmap_assert_write_locked(vma->vm_mm);
 
@@ -236,19 +253,33 @@ int vma_start_write_killable(struct vm_area_struct *vma)
 	return __vma_start_write(vma, mm_lock_seq, TASK_KILLABLE);
 }
 
-static inline void vma_assert_write_locked(struct vm_area_struct *vma)
+static inline bool vma_is_read_locked(const struct vm_area_struct *vma)
+{
+	return refcount_read(&vma->vm_refcnt) > 1;
+}
+
+static inline bool vma_is_write_locked(struct vm_area_struct *vma)
 {
 	unsigned int mm_lock_seq;
 
-	VM_BUG_ON_VMA(!__is_vma_write_locked(vma, &mm_lock_seq), vma);
+	/* __is_vma_write_locked() requires the mmap write lock. */
+	return mmap_is_write_locked(vma->vm_mm) &&
+		__is_vma_write_locked(vma, &mm_lock_seq);
+}
+
+static inline bool vma_is_locked(struct vm_area_struct *vma)
+{
+	return vma_is_read_locked(vma) || vma_is_write_locked(vma);
+}
+
+static inline void vma_assert_write_locked(struct vm_area_struct *vma)
+{
+	VM_BUG_ON_VMA(!vma_is_write_locked(vma), vma);
 }
 
 static inline void vma_assert_locked(struct vm_area_struct *vma)
 {
-	unsigned int mm_lock_seq;
-
-	VM_BUG_ON_VMA(refcount_read(&vma->vm_refcnt) <= 1 &&
-		      !__is_vma_write_locked(vma, &mm_lock_seq), vma);
+	VM_BUG_ON_VMA(!vma_is_locked(vma), vma);
 }
 
 static inline bool vma_is_attached(struct vm_area_struct *vma)
@@ -430,11 +461,6 @@ static inline void mmap_read_unlock_non_owner(struct mm_struct *mm)
 {
 	__mmap_lock_trace_released(mm, false);
 	up_read_non_owner(&mm->mmap_lock);
-}
-
-static inline int mmap_lock_is_contended(struct mm_struct *mm)
-{
-	return rwsem_is_contended(&mm->mmap_lock);
 }
 
 #endif /* _LINUX_MMAP_LOCK_H */
