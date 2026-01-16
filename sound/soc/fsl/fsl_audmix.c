@@ -6,6 +6,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/firmware/imx/sm.h>
 #include <linux/module.h>
 #include <linux/of_platform.h>
 #include <linux/pm_runtime.h>
@@ -440,9 +441,22 @@ static const struct regmap_config fsl_audmix_regmap_config = {
 	.cache_type = REGCACHE_FLAT,
 };
 
+static const struct fsl_audmix_soc_data fsl_audmix_imx8qm_data = {
+	.bypass_index = -1,
+};
+
+static const struct fsl_audmix_soc_data fsl_audmix_imx952_data = {
+	.bypass_index = SCMI_IMX952_CTRL_BYPASS_AUDMIX,
+};
+
 static const struct of_device_id fsl_audmix_ids[] = {
 	{
 		.compatible = "fsl,imx8qm-audmix",
+		.data = &fsl_audmix_imx8qm_data,
+	},
+	{
+		.compatible = "fsl,imx952-audmix",
+		.data = &fsl_audmix_imx952_data,
 	},
 	{ /* sentinel */ }
 };
@@ -450,6 +464,7 @@ MODULE_DEVICE_TABLE(of, fsl_audmix_ids);
 
 static int fsl_audmix_probe(struct platform_device *pdev)
 {
+	const struct fsl_audmix_soc_data *soc_data;
 	struct device *dev = &pdev->dev;
 	struct fsl_audmix *priv;
 	void __iomem *regs;
@@ -499,6 +514,19 @@ static int fsl_audmix_probe(struct platform_device *pdev)
 			dev_err(dev, "failed to register platform: %d\n", ret);
 			goto err_disable_pm;
 		}
+	}
+
+	soc_data = of_device_get_match_data(dev);
+	if (!soc_data) {
+		dev_err(dev, "failed to match device\n");
+		goto err_disable_pm;
+	}
+
+	if (of_property_read_bool(pdev->dev.of_node, "fsl,amix-bypass") &&
+	    soc_data->bypass_index > 0) {
+		ret = scmi_imx_misc_ctrl_set(soc_data->bypass_index, 0);
+		if (ret)
+			goto err_disable_pm;
 	}
 
 	return 0;

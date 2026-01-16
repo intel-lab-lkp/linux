@@ -92,6 +92,11 @@
 #define FSL_AUDMIX_ATSTP_STPCTR_MASK	0x3FFFF
 
 #define FSL_AUDMIX_MAX_DAIS		2
+
+struct fsl_audmix_soc_data {
+	int bypass_index;
+};
+
 struct fsl_audmix {
 	struct platform_device *pdev;
 	struct regmap *regmap;
