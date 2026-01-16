@@ -661,8 +661,8 @@ static int nfs42_do_offload_cancel_async(struct file *dst,
 	msg.rpc_argp = &data->args;
 	msg.rpc_resp = &data->res;
 	task_setup_data.callback_data = data;
-	nfs4_init_sequence(&data->args.osa_seq_args, &data->res.osr_seq_res,
-			   1, 0);
+	nfs4_init_sequence(dst_server->nfs_client, &data->args.osa_seq_args,
+			   &data->res.osr_seq_res, 1, 0);
 	task = rpc_run_task(&task_setup_data);
 	if (IS_ERR(task))
 		return PTR_ERR(task);
@@ -1063,7 +1063,8 @@ int nfs42_proc_layoutstats_generic(struct nfs_server *server,
 		nfs42_layoutstat_release(data);
 		return -EAGAIN;
 	}
-	nfs4_init_sequence(&data->args.seq_args, &data->res.seq_res, 0, 0);
+	nfs4_init_sequence(server->nfs_client, &data->args.seq_args,
+			   &data->res.seq_res, 0, 0);
 	task = rpc_run_task(&task_setup);
 	if (IS_ERR(task))
 		return PTR_ERR(task);
@@ -1201,6 +1202,7 @@ int nfs42_proc_layouterror(struct pnfs_layout_segment *lseg,
 		const struct nfs42_layout_error *errors, size_t n)
 {
 	struct inode *inode = lseg->pls_layout->plh_inode;
+	struct nfs_server *server = NFS_SERVER(inode);
 	struct nfs42_layouterror_data *data;
 	struct rpc_task *task;
 	struct rpc_message msg = {
@@ -1228,8 +1230,9 @@ int nfs42_proc_layouterror(struct pnfs_layout_segment *lseg,
 	msg.rpc_argp = &data->args;
 	msg.rpc_resp = &data->res;
 	task_setup.callback_data = data;
-	task_setup.rpc_client = NFS_SERVER(inode)->client;
-	nfs4_init_sequence(&data->args.seq_args, &data->res.seq_res, 0, 0);
+	task_setup.rpc_client = server->client;
+	nfs4_init_sequence(server->nfs_client, &data->args.seq_args,
+			   &data->res.seq_res, 0, 0);
 	task = rpc_run_task(&task_setup);
 	if (IS_ERR(task))
 		return PTR_ERR(task);
