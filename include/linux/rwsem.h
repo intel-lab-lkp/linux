@@ -70,19 +70,24 @@ struct rw_semaphore {
 #define RWSEM_WRITER_LOCKED		(1UL << 0)
 #define __RWSEM_COUNT_INIT(name)	.count = ATOMIC_LONG_INIT(RWSEM_UNLOCKED_VALUE)
 
-static inline int rwsem_is_locked(struct rw_semaphore *sem)
+static inline bool rwsem_is_locked(const struct rw_semaphore *sem)
 {
 	return atomic_long_read(&sem->count) != RWSEM_UNLOCKED_VALUE;
 }
 
+static inline bool rwsem_is_write_locked(const struct rw_semaphore *sem)
+{
+	return atomic_long_read(&sem->count) & RWSEM_WRITER_LOCKED;
+}
+
 static inline void rwsem_assert_held_nolockdep(const struct rw_semaphore *sem)
 {
-	WARN_ON(atomic_long_read(&sem->count) == RWSEM_UNLOCKED_VALUE);
+	WARN_ON(!rwsem_is_locked(sem));
 }
 
 static inline void rwsem_assert_held_write_nolockdep(const struct rw_semaphore *sem)
 {
-	WARN_ON(!(atomic_long_read(&sem->count) & RWSEM_WRITER_LOCKED));
+	WARN_ON(!rwsem_is_write_locked(sem));
 }
 
 /* Common initializer macros and functions */
@@ -174,9 +179,14 @@ do {								\
 	__init_rwsem((sem), #sem, &__key);			\
 } while (0)
 
-static __always_inline int rwsem_is_locked(const struct rw_semaphore *sem)
+static __always_inline bool rwsem_is_locked(const struct rw_semaphore *sem)
 {
 	return rw_base_is_locked(&sem->rwbase);
+}
+
+static __always_inline bool rwsem_is_write_locked(const struct rw_semaphore *sem)
+{
+	return rw_base_is_write_locked(&sem->rwbase);
 }
 
 static __always_inline void rwsem_assert_held_nolockdep(const struct rw_semaphore *sem)
@@ -186,7 +196,7 @@ static __always_inline void rwsem_assert_held_nolockdep(const struct rw_semaphor
 
 static __always_inline void rwsem_assert_held_write_nolockdep(const struct rw_semaphore *sem)
 {
-	WARN_ON(!rw_base_is_write_locked(&sem->rwbase));
+	WARN_ON(!rwsem_is_write_locked(sem));
 }
 
 static __always_inline int rwsem_is_contended(struct rw_semaphore *sem)
