@@ -674,8 +674,7 @@ static ssize_t cfam_read(struct file *filep, char __user *buf, size_t count,
 	for (total_len = 0; total_len < count; total_len += read_len) {
 		__be32 data;
 
-		read_len = min_t(size_t, count, 4);
-		read_len -= off & 0x3;
+		read_len = min_t(size_t, 4 - (off & 0x3), count - total_len);
 
 		rc = fsi_slave_read(slave, off, &data, read_len);
 		if (rc)
@@ -711,8 +710,7 @@ static ssize_t cfam_write(struct file *filep, const char __user *buf,
 	for (total_len = 0; total_len < count; total_len += write_len) {
 		__be32 data;
 
-		write_len = min_t(size_t, count, 4);
-		write_len -= off & 0x3;
+		write_len = min_t(size_t, 4 - (off & 0x3), count - total_len);
 
 		rc = copy_from_user(&data, buf + total_len, write_len);
 		if (rc) {
