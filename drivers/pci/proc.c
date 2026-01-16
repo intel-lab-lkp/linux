@@ -29,9 +29,12 @@ static ssize_t proc_bus_pci_read(struct file *file, char __user *buf,
 				 size_t nbytes, loff_t *ppos)
 {
 	struct pci_dev *dev = pde_data(file_inode(file));
-	unsigned int pos = *ppos;
+	int pos;
 	unsigned int cnt, size;
 
+	if (*ppos > INT_MAX)
+		return -EINVAL;
+	pos = *ppos;
 	/*
 	 * Normal users can read only the standardized portion of the
 	 * configuration space as several chips lock up when trying to read
