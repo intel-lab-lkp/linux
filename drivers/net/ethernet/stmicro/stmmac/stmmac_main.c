@@ -4448,6 +4448,7 @@ static netdev_tx_t stmmac_tso_xmit(struct sk_buff *skb, struct net_device *dev)
 	if (dma_mapping_error(priv->device, des))
 		goto dma_map_err;
 
+	tx_q->tx_skbuff_dma[first_entry].last_segment = false;
 	stmmac_set_desc_addr(priv, first, des);
 	stmmac_tso_allocator(priv, des + proto_hdr_len, pay_len,
 			     (nfrags == 0), queue);
