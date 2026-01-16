@@ -1591,6 +1591,15 @@ config RTC_DRV_PL031
 	  To compile this driver as a module, choose M here: the
 	  module will be called rtc-pl031.
 
+config RTC_DRV_PL031_RUST
+	tristate "ARM AMBA PL031 RTC (Rust)"
+	depends on RUST && RTC_CLASS
+	help
+	  This is the Rust implementation of the PL031 RTC driver.
+	  It provides the same functionality as the C driver but is
+	  written in Rust for improved memory safety. The driver supports
+	  ARM, ST v1, and ST v2 variants of the PL031 RTC controller.
+
 config RTC_DRV_AT91RM9200
 	tristate "AT91RM9200 or some AT91SAM9 RTC"
 	depends on ARCH_AT91 || COMPILE_TEST
