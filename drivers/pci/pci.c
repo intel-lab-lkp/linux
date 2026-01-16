@@ -4895,6 +4895,105 @@ static int pci_reset_bus_function(struct pci_dev *dev, bool probe)
 	return pci_parent_bus_reset(dev, probe);
 }
 
+static int cxl_reset_init(struct pci_dev *dev, u16 dvsec)
+{
+	/*
+	 * Timeout values ref CXL Spec v3.2 Ch 8 Control and Status Registers,
+	 * under section 8.1.3.1 DVSEC CXL Capability.
+	 */
+	u32 reset_timeouts_ms[] = { 10, 100, 1000, 10000, 100000 };
+	u16 reg;
+	u32 timeout_ms;
+	int rc, ind;
+
+	/* Check if CXL Reset MEM CLR is supported. */
+	rc = pci_read_config_word(dev, dvsec + CXL_DVSEC_CAP_OFFSET, &reg);
+	if (rc)
+		return rc;
+
+	if (reg & CXL_DVSEC_CXL_RST_MEM_CLR_CAPABLE) {
+		rc = pci_read_config_word(dev, dvsec + CXL_DVSEC_CTRL2_OFFSET,
+					  &reg);
+		if (rc)
+			return rc;
+
+		reg |= CXL_DVSEC_CXL_RST_MEM_CLR_ENABLE;
+		pci_write_config_word(dev, dvsec + CXL_DVSEC_CTRL2_OFFSET, reg);
+	}
+
+	/* Read timeout value. */
+	rc = pci_read_config_word(dev, dvsec + CXL_DVSEC_CAP_OFFSET, &reg);
+	if (rc)
+		return rc;
+	ind = FIELD_GET(CXL_DVSEC_CXL_RST_TIMEOUT_MASK, reg);
+	timeout_ms = reset_timeouts_ms[ind];
+
+	/* Write reset config. */
+	rc = pci_read_config_word(dev, dvsec + CXL_DVSEC_CTRL2_OFFSET, &reg);
+	if (rc)
+		return rc;
+
+	reg |= CXL_DVSEC_INIT_CXL_RESET;
+	pci_write_config_word(dev, dvsec + CXL_DVSEC_CTRL2_OFFSET, reg);
+
+	/* Wait till timeout and then check reset status is complete. */
+	msleep(timeout_ms);
+	rc = pci_read_config_word(dev, dvsec + CXL_DVSEC_STATUS2_OFFSET, &reg);
+	if (rc)
+		return rc;
+	if (reg & CXL_DVSEC_CXL_RESET_ERR ||
+	    ~reg & CXL_DVSEC_CXL_RST_COMPLETE)
+		return -ETIMEDOUT;
+
+	rc = pci_read_config_word(dev, dvsec + CXL_DVSEC_CTRL2_OFFSET, &reg);
+	if (rc)
+		return rc;
+	reg &= (~CXL_DVSEC_DISABLE_CACHING);
+	pci_write_config_word(dev, dvsec + CXL_DVSEC_CTRL2_OFFSET, reg);
+
+	return 0;
+}
+
+/**
+ * cxl_reset - initiate a cxl reset
+ * @dev: device to reset
+ * @probe: if true, return 0 if device can be reset this way
+ *
+ * Initiate a cxl reset on @dev.
+ */
+static int cxl_reset(struct pci_dev *dev, bool probe)
+{
+	u16 dvsec, reg;
+	int rc;
+
+	dvsec = pci_find_dvsec_capability(dev, PCI_VENDOR_ID_CXL,
+					  CXL_DVSEC_PCIE_DEVICE);
+	if (!dvsec)
+		return -ENOTTY;
+
+	/* Check if CXL Reset is supported. */
+	rc = pci_read_config_word(dev, dvsec + CXL_DVSEC_CAP_OFFSET, &reg);
+	if (rc)
+		return -ENOTTY;
+
+	if (reg & CXL_DVSEC_CXL_RST_CAPABLE == 0)
+		return -ENOTTY;
+
+	/*
+	 * Expose CXL reset for Type 2 devices.
+	 */
+	if (!cxl_is_type2_device(dev))
+		return -ENOTTY;
+
+	if (probe)
+		return 0;
+
+	if (!pci_wait_for_pending_transaction(dev))
+		pci_err(dev, "timed out waiting for pending transaction; performing function level reset anyway\n");
+
+	return cxl_reset_init(dev, dvsec);
+}
+
 static int cxl_reset_bus_function(struct pci_dev *dev, bool probe)
 {
 	struct pci_dev *bridge;
@@ -5019,6 +5118,7 @@ const struct pci_reset_fn_method pci_reset_fn_methods[] = {
 	{ pci_dev_acpi_reset, .name = "acpi" },
 	{ pcie_reset_flr, .name = "flr" },
 	{ pci_af_flr, .name = "af_flr" },
+	{ cxl_reset, .name = "cxl_reset" },
 	{ pci_pm_reset, .name = "pm" },
 	{ pci_reset_bus_function, .name = "bus" },
 	{ cxl_reset_bus_function, .name = "cxl_bus" },
