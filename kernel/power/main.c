@@ -362,16 +362,23 @@ void dpm_save_failed_dev(const char *name)
 
 void dpm_save_failed_step(enum suspend_stat_step step)
 {
+	mutex_lock(&suspend_stats_lock);
+
 	suspend_stats.step_failures[step-1]++;
 	suspend_stats.failed_steps[suspend_stats.last_failed_step] = step;
 	suspend_stats.last_failed_step++;
 	suspend_stats.last_failed_step %= REC_FAILED_NUM;
+
+	mutex_unlock(&suspend_stats_lock);
 }
 
 void dpm_save_errno(int err)
 {
+	mutex_lock(&suspend_stats_lock);
+
 	if (!err) {
 		suspend_stats.success++;
+		mutex_unlock(&suspend_stats_lock);
 		return;
 	}
 
@@ -380,6 +387,8 @@ void dpm_save_errno(int err)
 	suspend_stats.errno[suspend_stats.last_failed_errno] = err;
 	suspend_stats.last_failed_errno++;
 	suspend_stats.last_failed_errno %= REC_FAILED_NUM;
+
+	mutex_unlock(&suspend_stats_lock);
 }
 
 void pm_report_hw_sleep_time(u64 t)
