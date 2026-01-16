@@ -39,8 +39,10 @@ extern const struct nvdimm_security_ops *cxl_security_ops;
 #define CXL_CM_CAP_PTR_MASK GENMASK(31, 20)
 
 #define   CXL_CM_CAP_CAP_ID_RAS 0x2
+#define   CXL_CM_CAP_CAP_ID_IDE 0x4
 #define   CXL_CM_CAP_CAP_ID_HDM 0x5
 #define   CXL_CM_CAP_CAP_HDM_VERSION 1
+#define   CXL_IDE_CAPABILITY_LENGTH 0x20
 
 /* HDM decoders CXL 2.0 8.2.5.12 CXL HDM Decoder Capability Structure */
 #define CXL_HDM_DECODER_CAP_OFFSET 0x0
@@ -214,6 +216,7 @@ struct cxl_regs {
 	struct_group_tagged(cxl_component_regs, component,
 		void __iomem *hdm_decoder;
 		void __iomem *ras;
+		void __iomem *ide;
 	);
 	/*
 	 * Common set of CXL Device register block base pointers
@@ -256,6 +259,7 @@ struct cxl_reg_map {
 struct cxl_component_reg_map {
 	struct cxl_reg_map hdm_decoder;
 	struct cxl_reg_map ras;
+	struct cxl_reg_map ide;
 };
 
 struct cxl_device_reg_map {

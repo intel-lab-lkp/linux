@@ -4,11 +4,33 @@
 #ifndef __CXL_ACCEL_PCI_H
 #define __CXL_ACCEL_PCI_H
 
+/* HDM Decoder state for save/restore */
+struct cxl_hdm_decoder_state {
+	u64 base;
+	u64 size;
+	u32 ctrl;
+	u64 dpa_skip;
+	bool enabled;
+};
+
+#define CXL_MAX_DECODERS 10
+
 /* CXL Type 2 device state for save/restore across reset */
 struct cxl_type2_saved_state {
 	/* DVSEC registers */
 	u16 dvsec_ctrl;
 	u16 dvsec_ctrl2;
+
+	/* HDM Decoder registers */
+	u32 hdm_decoder_count;
+	u32 hdm_global_ctrl;
+	struct cxl_hdm_decoder_state decoders[CXL_MAX_DECODERS];
+
+	/* IDE registers */
+	u32 ide_cap;
+	u32 ide_ctrl;
+	u32 ide_key_refresh_time;
+	u32 ide_truncation_delay;
 };
 
 int cxl_config_save_state(struct pci_dev *pdev,
@@ -57,6 +79,27 @@ int cxl_config_restore_state(struct pci_dev *pdev,
 #define     CXL_DVSEC_MEM_BASE_LOW_MASK	GENMASK(31, 28)
 
 #define CXL_DVSEC_RANGE_MAX		2
+
+/* CXL HDM Decoder Capability Structure (Section 8.2.4.20) */
+#define CXL_HDM_DECODER_CAP_OFFSET		0x0
+#define   CXL_HDM_DECODER_COUNT_MASK		GENMASK(3, 0)
+#define CXL_HDM_DECODER_GLOBAL_CTRL_OFFSET	0x4
+#define   CXL_HDM_DECODER_ENABLE		BIT(1)
+/* CXL HDM Decoder n registers (Offset 20h*n + base) */
+#define CXL_HDM_DECODER_BASE_LOW(n)		(0x10 + ((n) * 0x20))
+#define CXL_HDM_DECODER_BASE_HIGH(n)		(0x14 + ((n) * 0x20))
+#define CXL_HDM_DECODER_SIZE_LOW(n)		(0x18 + ((n) * 0x20))
+#define CXL_HDM_DECODER_SIZE_HIGH(n)		(0x1C + ((n) * 0x20))
+#define CXL_HDM_DECODER_CTRL(n)			(0x20 + ((n) * 0x20))
+#define CXL_HDM_DECODER_DPA_SKIP_LOW(n)		(0x24 + ((n) * 0x20))
+#define CXL_HDM_DECODER_DPA_SKIP_HIGH(n)	(0x28 + ((n) * 0x20))
+
+/* CXL IDE Capability Structure (Section 8.2.4.22) */
+#define CXL_IDE_CAP_OFFSET			0x00
+#define   CXL_IDE_CAP_CAPABLE			BIT(0)
+#define CXL_IDE_CTRL_OFFSET			0x04
+#define CXL_IDE_KEY_REFRESH_TIME_CTRL_OFFSET	0x18
+#define CXL_IDE_TRUNCATION_DELAY_CTRL_OFFSET	0x1C
 
 /* CXL 2.0 8.1.4: Non-CXL Function Map DVSEC */
 #define CXL_DVSEC_FUNCTION_MAP					2
