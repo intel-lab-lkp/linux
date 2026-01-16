@@ -21,6 +21,10 @@ struct live_active {
 	struct i915_active base;
 	struct kref ref;
 	bool retired;
+
+	struct i915_sw_fence *submit;
+	struct delayed_work work;
+	bool work_finished;
 };
 
 static void __live_get(struct live_active *active)
@@ -76,11 +80,19 @@ static struct live_active *__live_alloc(struct drm_i915_private *i915)
 	return active;
 }
 
+static void __live_submit_work_handler(struct work_struct *work)
+{
+	struct delayed_work *d_work = container_of(work, struct delayed_work, work);
+	struct live_active *active = container_of(d_work, struct live_active, work);
+	i915_sw_fence_commit(active->submit);
+	heap_fence_put(active->submit);
+	active->work_finished = true;
+}
+
 static struct live_active *
 __live_active_setup(struct drm_i915_private *i915)
 {
 	struct intel_engine_cs *engine;
-	struct i915_sw_fence *submit;
 	struct live_active *active;
 	unsigned int count = 0;
 	int err = 0;
@@ -89,8 +101,11 @@ __live_active_setup(struct drm_i915_private *i915)
 	if (!active)
 		return ERR_PTR(-ENOMEM);
 
-	submit = heap_fence_create(GFP_KERNEL);
-	if (!submit) {
+	INIT_DELAYED_WORK(&active->work, __live_submit_work_handler);
+	active->work_finished = false;
+
+	active->submit = heap_fence_create(GFP_KERNEL);
+	if (!active->submit) {
 		kfree(active);
 		return ERR_PTR(-ENOMEM);
 	}
@@ -109,7 +124,7 @@ __live_active_setup(struct drm_i915_private *i915)
 		}
 
 		err = i915_sw_fence_await_sw_fence_gfp(&rq->submit,
-						       submit,
+						       active->submit,
 						       GFP_KERNEL);
 		if (err >= 0)
 			err = i915_active_add_request(&active->base, rq);
@@ -134,8 +149,6 @@ __live_active_setup(struct drm_i915_private *i915)
 	}
 
 out:
-	i915_sw_fence_commit(submit);
-	heap_fence_put(submit);
 	if (err) {
 		__live_put(active);
 		active = ERR_PTR(err);
@@ -156,6 +169,8 @@ static int live_active_wait(void *arg)
 	if (IS_ERR(active))
 		return PTR_ERR(active);
 
+	schedule_delayed_work(&active->work, msecs_to_jiffies(500));
+
 	__i915_active_wait(&active->base, TASK_UNINTERRUPTIBLE);
 	if (!READ_ONCE(active->retired)) {
 		struct drm_printer p = drm_err_printer(&i915->drm, __func__);
@@ -164,6 +179,15 @@ static int live_active_wait(void *arg)
 		i915_active_print(&active->base, &p);
 
 		err = -EINVAL;
+	}
+
+	if (!active->work_finished) {
+		struct drm_printer p = drm_err_printer(&i915->drm, __func__);
+
+		drm_printf(&p, "active->work hasn't finished, something went\
+				terribly wrong\n");
+		err = -EINVAL;
+		cancel_delayed_work_sync(&active->work);
 	}
 
 	__live_put(active);
@@ -186,6 +210,8 @@ static int live_active_retire(void *arg)
 	if (IS_ERR(active))
 		return PTR_ERR(active);
 
+	schedule_delayed_work(&active->work, msecs_to_jiffies(500));
+
 	/* waits for & retires all requests */
 	if (igt_flush_test(i915))
 		err = -EIO;
@@ -197,6 +223,15 @@ static int live_active_retire(void *arg)
 		i915_active_print(&active->base, &p);
 
 		err = -EINVAL;
+	}
+
+	if (!active->work_finished) {
+		struct drm_printer p = drm_err_printer(&i915->drm, __func__);
+
+		drm_printf(&p, "active->work hasn't finished, something went\
+				terribly wrong\n");
+		err = -EINVAL;
+		cancel_delayed_work_sync(&active->work);
 	}
 
 	__live_put(active);
