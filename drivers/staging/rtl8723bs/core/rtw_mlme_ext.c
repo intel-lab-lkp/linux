@@ -4,6 +4,7 @@
  * Copyright(c) 2007 - 2012 Realtek Corporation. All rights reserved.
  *
  ******************************************************************************/
+#include <linux/minmax.h>
 #include <drv_types.h>
 #include <rtw_wifi_regd.h>
 #include <hal_btcoex.h>
@@ -1024,13 +1025,11 @@ static unsigned short rtw_parse_assoc_security_ies(struct adapter *padapter,
 			pstat->flags |= WLAN_STA_WPS;
 			copy_len = 0;
 		} else {
-			copy_len = ((wpa_ie_len+2) > sizeof(pstat->wpa_ie)) ? (sizeof(pstat->wpa_ie)):(wpa_ie_len+2);
+			copy_len = min_t(int, sizeof(pstat->wpa_ie), wpa_ie_len+2);
 		}
-
 
 		if (copy_len > 0)
 			memcpy(pstat->wpa_ie, wpa_ie-2, copy_len);
-
 	}
 
 	return WLAN_STATUS_SUCCESS;
