@@ -1814,7 +1814,7 @@ static int fuse_notify_store(struct fuse_conn *fc, unsigned int size,
 
 		folio_offset = ((index - folio->index) << PAGE_SHIFT) + offset;
 		nr_bytes = min_t(unsigned, num, folio_size(folio) - folio_offset);
-		nr_pages = (offset + nr_bytes + PAGE_SIZE - 1) >> PAGE_SHIFT;
+		nr_pages = DIV_ROUND_UP(offset + nr_bytes, PAGE_SIZE);
 
 		err = fuse_copy_folio(cs, &folio, folio_offset, nr_bytes, 0);
 		if (!folio_test_uptodate(folio) && !err && offset == 0 &&
@@ -1883,7 +1883,7 @@ static int fuse_retrieve(struct fuse_mount *fm, struct inode *inode,
 	else if (outarg->offset + num > file_size)
 		num = file_size - outarg->offset;
 
-	num_pages = (num + offset + PAGE_SIZE - 1) >> PAGE_SHIFT;
+	num_pages = DIV_ROUND_UP(num + offset, PAGE_SIZE);
 	num_pages = min(num_pages, fc->max_pages);
 	num = min(num, num_pages << PAGE_SHIFT);
 
@@ -1918,7 +1918,7 @@ static int fuse_retrieve(struct fuse_mount *fm, struct inode *inode,
 
 		folio_offset = ((index - folio->index) << PAGE_SHIFT) + offset;
 		nr_bytes = min(folio_size(folio) - folio_offset, num);
-		nr_pages = (offset + nr_bytes + PAGE_SIZE - 1) >> PAGE_SHIFT;
+		nr_pages = DIV_ROUND_UP(offset + nr_bytes, PAGE_SIZE);
 
 		ap->folios[ap->num_folios] = folio;
 		ap->descs[ap->num_folios].offset = folio_offset;
