@@ -2834,6 +2834,11 @@ static int kdamond_fn(void *data)
 			if (ctx->ops.update)
 				ctx->ops.update(ctx);
 			sz_limit = damon_region_sz_limit(ctx);
+
+			/* reinitialize when overflow occurs */
+			if (ctx->passed_sample_intervals >=
+					ctx->next_ops_update_sis)
+				kdamond_init_ctx(ctx);
 		}
 	}
 done:
