@@ -80,6 +80,25 @@ static inline xa_mark_t ici_tag_to_mark(unsigned int tag)
 	return XFS_PERAG_BLOCKGC_MARK;
 }
 
+static int xfs_inode_init_ag_bitmap(struct xfs_inode *ip)
+{
+	unsigned int bits = ip->i_mount->m_sb.sb_agcount;
+	unsigned int nlongs;
+
+	xa_init_flags(&ip->i_ag_pmap, XA_FLAGS_LOCK_IRQ);
+	ip->i_ag_dirty_bitmap = NULL;
+	ip->i_ag_dirty_bits = bits;
+
+	if (!bits)
+		return 0;
+
+	nlongs = BITS_TO_LONGS(bits);
+	ip->i_ag_dirty_bitmap = kcalloc(nlongs, sizeof(unsigned long),
+					GFP_NOFS);
+
+	return ip->i_ag_dirty_bitmap ? 0 : -ENOMEM;
+}
+
 /*
  * Allocate and initialise an xfs_inode.
  */
@@ -130,6 +149,8 @@ xfs_inode_alloc(
 	spin_lock_init(&ip->i_ioend_lock);
 	ip->i_next_unlinked = NULLAGINO;
 	ip->i_prev_unlinked = 0;
+
+	xfs_inode_init_ag_bitmap(ip);
 
 	return ip;
 }
@@ -193,6 +214,12 @@ xfs_inode_free(
 	ip->i_flags = XFS_IRECLAIM;
 	ip->i_ino = 0;
 	spin_unlock(&ip->i_flags_lock);
+
+	/* free xarray contents (values are immediate packed ints) */
+	xa_destroy(&ip->i_ag_pmap);
+	kfree(ip->i_ag_dirty_bitmap);
+	ip->i_ag_dirty_bitmap = NULL;
+	ip->i_ag_dirty_bits = 0;
 
 	__xfs_inode_free(ip);
 }

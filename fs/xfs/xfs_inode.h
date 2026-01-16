@@ -99,6 +99,11 @@ typedef struct xfs_inode {
 	spinlock_t		i_ioend_lock;
 	struct work_struct	i_ioend_work;
 	struct list_head	i_ioend_list;
+
+	/* AG prediction map: pgoff_t -> packed u32 */
+	struct xarray           i_ag_pmap;
+	unsigned long           *i_ag_dirty_bitmap;
+	unsigned int            i_ag_dirty_bits;
 } xfs_inode_t;
 
 static inline bool xfs_inode_on_unlinked_list(const struct xfs_inode *ip)
