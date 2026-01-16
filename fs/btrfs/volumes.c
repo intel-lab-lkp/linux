@@ -1547,7 +1547,7 @@ static u64 dev_extent_search_start(struct btrfs_device *device)
 	}
 }
 
-static bool dev_extent_hole_check_zoned(struct btrfs_device *device,
+static bool dev_extent_hole_check_zoned(struct btrfs_device *device, u64 type,
 					u64 *hole_start, u64 *hole_size,
 					u64 num_bytes)
 {
@@ -1560,6 +1560,8 @@ static bool dev_extent_hole_check_zoned(struct btrfs_device *device,
 	       "hole_start=%llu zone_size=%llu", *hole_start, zone_size);
 
 	while (*hole_size > 0) {
+		bool sequential;
+
 		pos = btrfs_find_allocatable_zones(device, *hole_start,
 						   *hole_start + *hole_size,
 						   num_bytes);
@@ -1570,6 +1572,11 @@ static bool dev_extent_hole_check_zoned(struct btrfs_device *device,
 			if (*hole_size < num_bytes)
 				break;
 		}
+
+		sequential = btrfs_dev_is_sequential(device, pos);
+
+		if (type & BTRFS_BLOCK_GROUP_DATA && !sequential)
+			goto next_zone;
 
 		ret = btrfs_ensure_empty_zones(device, pos, num_bytes);
 
@@ -1584,6 +1591,7 @@ static bool dev_extent_hole_check_zoned(struct btrfs_device *device,
 			return true;
 		}
 
+next_zone:
 		*hole_start += zone_size;
 		*hole_size -= zone_size;
 		changed = true;
@@ -1603,8 +1611,8 @@ static bool dev_extent_hole_check_zoned(struct btrfs_device *device,
  * This function may modify @hole_start and @hole_size to reflect the suitable
  * position for allocation. Returns 1 if hole position is updated, 0 otherwise.
  */
-static bool dev_extent_hole_check(struct btrfs_device *device, u64 *hole_start,
-				  u64 *hole_size, u64 num_bytes)
+static bool dev_extent_hole_check(struct btrfs_device *device, u64 type,
+				  u64 *hole_start, u64 *hole_size, u64 num_bytes)
 {
 	bool changed = false;
 	u64 hole_end = *hole_start + *hole_size;
@@ -1630,7 +1638,7 @@ static bool dev_extent_hole_check(struct btrfs_device *device, u64 *hole_start,
 			/* No extra check */
 			break;
 		case BTRFS_CHUNK_ALLOC_ZONED:
-			if (dev_extent_hole_check_zoned(device, hole_start,
+			if (dev_extent_hole_check_zoned(device, type, hole_start,
 							hole_size, num_bytes)) {
 				changed = true;
 				/*
@@ -1675,8 +1683,8 @@ static bool dev_extent_hole_check(struct btrfs_device *device, u64 *hole_start,
  * correct usable device space, as device extent freed in current transaction
  * is not reported as available.
  */
-static int find_free_dev_extent(struct btrfs_device *device, u64 num_bytes,
-				u64 *start, u64 *len)
+static int find_free_dev_extent(struct btrfs_device *device, u64 type,
+				u64 num_bytes, u64 *start, u64 *len)
 {
 	struct btrfs_fs_info *fs_info = device->fs_info;
 	struct btrfs_root *root = fs_info->dev_root;
@@ -1751,8 +1759,8 @@ again:
 
 		if (key.offset > search_start) {
 			hole_size = key.offset - search_start;
-			dev_extent_hole_check(device, &search_start, &hole_size,
-					      num_bytes);
+			dev_extent_hole_check(device, type, &search_start,
+					      &hole_size, num_bytes);
 
 			if (hole_size > max_hole_size) {
 				max_hole_start = search_start;
@@ -1791,7 +1799,7 @@ next:
 	 */
 	if (search_end > search_start) {
 		hole_size = search_end - search_start;
-		if (dev_extent_hole_check(device, &search_start, &hole_size,
+		if (dev_extent_hole_check(device, type, &search_start, &hole_size,
 					  num_bytes)) {
 			btrfs_release_path(path);
 			goto again;
@@ -5243,8 +5251,8 @@ static int gather_device_info(struct btrfs_fs_devices *fs_devices,
 		if (total_avail < ctl->dev_extent_min)
 			continue;
 
-		ret = find_free_dev_extent(device, dev_extent_want, &dev_offset,
-					   &max_avail);
+		ret = find_free_dev_extent(device, ctl->type, dev_extent_want,
+					   &dev_offset, &max_avail);
 		if (ret && ret != -ENOSPC)
 			return ret;
 
