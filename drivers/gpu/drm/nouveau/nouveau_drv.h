@@ -10,7 +10,7 @@
 
 #define DRIVER_MAJOR		1
 #define DRIVER_MINOR		4
-#define DRIVER_PATCHLEVEL	1
+#define DRIVER_PATCHLEVEL	0
 
 /*
  * 1.1.1:
@@ -37,6 +37,8 @@
  *      - implemented limited ABI16/NVIF interop
  * 1.4.1:
  *      - add variable page sizes and compression for Turing+
+ *        Note: Rolled back due to issues with large page support
+ *        see https://gitlab.freedesktop.org/mesa/mesa/-/issues/14610
  */
 
 #include <linux/notifier.h>
