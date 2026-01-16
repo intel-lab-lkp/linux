@@ -1433,7 +1433,7 @@ void ufshcd_fixup_dev_quirks(struct ufs_hba *hba,
 void ufshcd_hold(struct ufs_hba *hba);
 void ufshcd_release(struct ufs_hba *hba);
 
-void ufshcd_clkgate_delay_set(struct device *dev, unsigned long value);
+void ufshcd_clkgate_delay_set(struct ufs_hba *hba, unsigned long value);
 
 int ufshcd_get_vreg(struct device *dev, struct ufs_vreg *vreg);
 

@@ -2113,10 +2113,8 @@ static ssize_t ufshcd_clkgate_delay_show(struct device *dev,
 	return sysfs_emit(buf, "%lu\n", hba->clk_gating.delay_ms);
 }
 
-void ufshcd_clkgate_delay_set(struct device *dev, unsigned long value)
+void ufshcd_clkgate_delay_set(struct ufs_hba *hba, unsigned long value)
 {
-	struct ufs_hba *hba = dev_get_drvdata(dev);
-
 	guard(spinlock_irqsave)(&hba->clk_gating.lock);
 	hba->clk_gating.delay_ms = value;
 }
@@ -2125,12 +2123,13 @@ EXPORT_SYMBOL_GPL(ufshcd_clkgate_delay_set);
 static ssize_t ufshcd_clkgate_delay_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
+	struct ufs_hba *hba = dev_get_drvdata(dev);
 	unsigned long value;
 
 	if (kstrtoul(buf, 0, &value))
 		return -EINVAL;
 
-	ufshcd_clkgate_delay_set(dev, value);
+	ufshcd_clkgate_delay_set(hba, value);
 	return count;
 }
 
