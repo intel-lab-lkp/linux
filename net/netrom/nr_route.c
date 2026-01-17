@@ -176,6 +176,7 @@ static int __must_check nr_add_node(ax25_address *nr, const char *mnemonic,
 		hlist_add_head(&nr_neigh->neigh_node, &nr_neigh_list);
 		nr_neigh_hold(nr_neigh);
 		spin_unlock_bh(&nr_neigh_list_lock);
+		nr_neigh_put(nr_neigh);
 	}
 
 	if (quality != 0 && ax25cmp(nr, ax25) == 0 && !nr_neigh->locked)
