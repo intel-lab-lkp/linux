@@ -776,6 +776,8 @@ int main(int argc, char **argv)
 			ref_file = fopen(optarg, "r");
 			if (!ref_file) {
 				perror(optarg);
+				if (dumpfile)
+					fclose(dumpfile);
 				return 1;
 			}
 			break;
@@ -784,6 +786,8 @@ int main(int argc, char **argv)
 			dumpfile = fopen(optarg, "w");
 			if (!dumpfile) {
 				perror(optarg);
+				if (ref_file)
+					fclose(ref_file);
 				return 1;
 			}
 			break;
@@ -792,9 +796,17 @@ int main(int argc, char **argv)
 			break;
 		case 'h':
 			genksyms_usage();
+			if (ref_file)
+				fclose(ref_file);
+			if (dumpfile)
+				fclose(dumpfile);
 			return 0;
 		default:
 			genksyms_usage();
+			if (ref_file)
+				fclose(ref_file);
+			if (dumpfile)
+				fclose(dumpfile);
 			return 1;
 		}
 	{
