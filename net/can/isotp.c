@@ -218,7 +218,7 @@ static int isotp_send_fc(struct sock *sk, int ae, u8 flowstatus)
 	struct isotp_sock *so = isotp_sk(sk);
 	int can_send_ret;
 
-	nskb = alloc_skb(so->ll.mtu + sizeof(struct can_skb_priv), gfp_any());
+	nskb = alloc_skb(so->ll.mtu, gfp_any());
 	if (!nskb)
 		return 1;
 
@@ -228,7 +228,6 @@ static int isotp_send_fc(struct sock *sk, int ae, u8 flowstatus)
 		return 1;
 	}
 
-	can_skb_reserve(nskb);
 	nskb->can_iif = dev->ifindex;
 
 	nskb->dev = dev;
@@ -771,13 +770,12 @@ static void isotp_send_cframe(struct isotp_sock *so)
 	if (!dev)
 		return;
 
-	skb = alloc_skb(so->ll.mtu + sizeof(struct can_skb_priv), GFP_ATOMIC);
+	skb = alloc_skb(so->ll.mtu, GFP_ATOMIC);
 	if (!skb) {
 		dev_put(dev);
 		return;
 	}
 
-	can_skb_reserve(skb);
 	skb->can_iif = dev->ifindex;
 
 	cf = (struct canfd_frame *)skb->data;
@@ -998,14 +996,13 @@ static int isotp_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 		goto err_out_drop;
 	}
 
-	skb = sock_alloc_send_skb(sk, so->ll.mtu + sizeof(struct can_skb_priv),
+	skb = sock_alloc_send_skb(sk, so->ll.mtu,
 				  msg->msg_flags & MSG_DONTWAIT, &err);
 	if (!skb) {
 		dev_put(dev);
 		goto err_out_drop;
 	}
 
-	can_skb_reserve(skb);
 	skb->can_iif = dev->ifindex;
 
 	so->tx.len = size;
