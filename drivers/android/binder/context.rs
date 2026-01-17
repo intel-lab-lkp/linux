@@ -3,8 +3,8 @@
 // Copyright (C) 2025 Google LLC.
 
 use kernel::{
-    error::Error,
-    list::{List, ListArc, ListLinks},
+    alloc::kvec::{KVVec, KVec},
+    error::code::*,
     prelude::*,
     security,
     str::{CStr, CString},
@@ -17,22 +17,19 @@ use crate::{error::BinderError, node::NodeRef, process::Process};
 kernel::sync::global_lock! {
     // SAFETY: We call `init` in the module initializer, so it's initialized before first use.
     pub(crate) unsafe(uninit) static CONTEXTS: Mutex<ContextList> = ContextList {
-        list: List::new(),
+        contexts: KVVec::new(),
     };
 }
 
 pub(crate) struct ContextList {
-    list: List<Context>,
+    contexts: KVVec<Arc<Context>>,
 }
 
 pub(crate) fn get_all_contexts() -> Result<KVec<Arc<Context>>> {
     let lock = CONTEXTS.lock();
-
-    let count = lock.list.iter().count();
-
-    let mut ctxs = KVec::with_capacity(count, GFP_KERNEL)?;
-    for ctx in &lock.list {
-        ctxs.push(Arc::from(ctx), GFP_KERNEL)?;
+    let mut ctxs = KVec::with_capacity(lock.contexts.len(), GFP_KERNEL)?;
+    for ctx in lock.contexts.iter() {
+        ctxs.push(ctx.clone(), GFP_KERNEL)?;
     }
     Ok(ctxs)
 }
@@ -42,7 +39,7 @@ pub(crate) fn get_all_contexts() -> Result<KVec<Arc<Context>>> {
 struct Manager {
     node: Option<NodeRef>,
     uid: Option<Kuid>,
-    all_procs: List<Process>,
+    all_procs: KVVec<Arc<Process>>,
 }
 
 /// There is one context per binder file (/dev/binder, /dev/hwbinder, etc)
@@ -51,28 +48,16 @@ pub(crate) struct Context {
     #[pin]
     manager: Mutex<Manager>,
     pub(crate) name: CString,
-    #[pin]
-    links: ListLinks,
-}
-
-kernel::list::impl_list_arc_safe! {
-    impl ListArcSafe<0> for Context { untracked; }
-}
-kernel::list::impl_list_item! {
-    impl ListItem<0> for Context {
-        using ListLinks { self.links };
-    }
 }
 
 impl Context {
     pub(crate) fn new(name: &CStr) -> Result<Arc<Self>> {
         let name = CString::try_from(name)?;
-        let list_ctx = ListArc::pin_init::<Error>(
+        let ctx = Arc::pin_init(
             try_pin_init!(Context {
                 name,
-                links <- ListLinks::new(),
                 manager <- kernel::new_mutex!(Manager {
-                    all_procs: List::new(),
+                    all_procs: KVVec::new(),
                     node: None,
                     uid: None,
                 }, "Context::manager"),
@@ -80,8 +65,7 @@ impl Context {
             GFP_KERNEL,
         )?;
 
-        let ctx = list_ctx.clone_arc();
-        CONTEXTS.lock().list.push_back(list_ctx);
+        CONTEXTS.lock().contexts.push(ctx.clone(), GFP_KERNEL)?;
 
         Ok(ctx)
     }
@@ -90,17 +74,24 @@ impl Context {
     ///
     /// No-op if called twice.
     pub(crate) fn deregister(&self) {
-        // SAFETY: We never add the context to any other linked list than this one, so it is either
-        // in this list, or not in any list.
-        unsafe { CONTEXTS.lock().list.remove(self) };
+        // Safe removal using retain
+        CONTEXTS.lock().contexts.retain(|c| {
+            let p1 = Arc::as_ptr(c);
+            let p2 = self as *const Context;
+            p1 != p2
+        });
     }
 
-    pub(crate) fn register_process(self: &Arc<Self>, proc: ListArc<Process>) {
+    pub(crate) fn register_process(self: &Arc<Self>, proc: Arc<Process>) -> Result {
         if !Arc::ptr_eq(self, &proc.ctx) {
             pr_err!("Context::register_process called on the wrong context.");
-            return;
+            return Err(EINVAL);
         }
-        self.manager.lock().all_procs.push_back(proc);
+        self.manager
+            .lock()
+            .all_procs
+            .push(proc, GFP_KERNEL)
+            .map_err(Error::from)
     }
 
     pub(crate) fn deregister_process(self: &Arc<Self>, proc: &Process) {
@@ -108,8 +99,12 @@ impl Context {
             pr_err!("Context::deregister_process called on the wrong context.");
             return;
         }
-        // SAFETY: We just checked that this is the right list.
-        unsafe { self.manager.lock().all_procs.remove(proc) };
+        // Safe removal using retain
+        self.manager.lock().all_procs.retain(|p| {
+            let p1 = Arc::as_ptr(p);
+            let p2 = proc as *const Process;
+            p1 != p2
+        });
     }
 
     pub(crate) fn set_manager_node(&self, node_ref: NodeRef) -> Result {
@@ -160,11 +155,9 @@ impl Context {
 
     pub(crate) fn get_all_procs(&self) -> Result<KVec<Arc<Process>>> {
         let lock = self.manager.lock();
-        let count = lock.all_procs.iter().count();
-
-        let mut procs = KVec::with_capacity(count, GFP_KERNEL)?;
-        for proc in &lock.all_procs {
-            procs.push(Arc::from(proc), GFP_KERNEL)?;
+        let mut procs = KVec::with_capacity(lock.all_procs.len(), GFP_KERNEL)?;
+        for proc in lock.all_procs.iter() {
+            procs.push(Arc::clone(proc), GFP_KERNEL)?;
         }
         Ok(procs)
     }
