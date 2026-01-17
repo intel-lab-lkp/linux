@@ -865,6 +865,7 @@ enum skb_tstamp_type {
  *	@vlan_tci: vlan tag control information
  *	@can_iif: ifindex of the first interface the CAN frame appeared on
  *	@can_framelen: cached echo CAN frame length for bql
+ *	@can_gw_hops: can-gw CAN frame time-to-live counter
  *	@inner_protocol: Protocol (encapsulation)
  *	@inner_ipproto: (aka @inner_protocol) stores ipproto when
  *		skb->inner_protocol_type == ENCAP_TYPE_IPPROTO;
@@ -1087,6 +1088,7 @@ struct sk_buff {
 		struct {
 			int	can_iif;
 			__u16	can_framelen;
+			__u16	can_gw_hops;
 		};
 	};
 
