@@ -49,9 +49,10 @@
  */
 static int pm8001_find_tag(struct sas_task *task, u32 *tag)
 {
-	if (task->lldd_task) {
-		struct pm8001_ccb_info *ccb;
-		ccb = task->lldd_task;
+	struct pm8001_ccb_info *ccb;
+
+	ccb = READ_ONCE(task->lldd_task);
+	if (ccb) {
 		*tag = ccb->ccb_tag;
 		return 1;
 	}
@@ -617,7 +618,7 @@ void pm8001_ccb_task_free(struct pm8001_hba_info *pm8001_ha,
 			pm8001_dev ? atomic_read(&pm8001_dev->running_req) : -1);
 	}
 
-	task->lldd_task = NULL;
+	WRITE_ONCE(task->lldd_task, NULL);
 	pm8001_ccb_free(pm8001_ha, ccb);
 }
 
