@@ -21,6 +21,31 @@ secno hpfs_bplus_lookup(struct super_block *s, struct inode *inode,
 	int c1, c2 = 0;
 	go_down:
 	if (hpfs_sb(s)->sb_chk) if (hpfs_stop_cycles(s, a, &c1, &c2, "hpfs_bplus_lookup")) return -1;
+
+	if (bp_internal(btree)) {
+		unsigned int max_internal_nodes;
+
+		max_internal_nodes = (bh->b_size - ((char *)btree->u.internal - (char *)bh->b_data))
+				      / sizeof(btree->u.internal[0]);
+		if (btree->n_used_nodes > max_internal_nodes) {
+			hpfs_error(s, "btree->n_used_nodes = %u, but max for internal node is %u",
+				   btree->n_used_nodes, max_internal_nodes);
+			brelse(bh);
+			return -1;
+		}
+	} else {
+		unsigned int max_external_nodes;
+
+		max_external_nodes = (bh->b_size - ((char *)btree->u.external - (char *)bh->b_data))
+				     / sizeof(btree->u.external[0]);
+		if (btree->n_used_nodes > max_external_nodes) {
+			hpfs_error(s, "btree->n_used_nodes = %u, but max for external node is %u",
+				   btree->n_used_nodes, max_external_nodes);
+			brelse(bh);
+			return -1;
+		}
+	}
+
 	if (bp_internal(btree)) {
 		for (i = 0; i < btree->n_used_nodes; i++)
 			if (le32_to_cpu(btree->u.internal[i].file_secno) > sec) {
