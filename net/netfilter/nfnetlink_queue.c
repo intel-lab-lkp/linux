@@ -30,6 +30,11 @@
 #include <linux/netfilter/nf_conntrack_common.h>
 #include <linux/list.h>
 #include <linux/cgroup-defs.h>
+#include <linux/workqueue.h>
+#include <linux/jiffies.h>
+#include <linux/log2.h>
+#include <linux/memcontrol.h>
+#include <linux/sched/mm.h>
 #include <net/gso.h>
 #include <net/sock.h>
 #include <net/tcp_states.h>
@@ -46,7 +51,11 @@
 #include <net/netfilter/nf_conntrack.h>
 #endif
 
-#define NFQNL_QMAX_DEFAULT 1024
+#define NFQNL_QMAX_DEFAULT         1024
+#define NFQNL_HASH_MIN_SIZE        16
+#define NFQNL_HASH_MAX_SIZE        131072
+#define NFQNL_HASH_DEFAULT_SIZE    NFQNL_HASH_MIN_SIZE
+#define NFQNL_HASH_SHRINK_INTERVAL (60 * HZ)	/* Only shrink every 60 seconds */
 
 /* We're using struct nlattr which has 16bit nla_len. Note that nla_len
  * includes the header length. Thus, the maximum packet length that we
@@ -59,13 +68,17 @@
 struct nfqnl_instance {
 	struct hlist_node hlist;		/* global list of queues */
 	struct rcu_head rcu;
+	struct work_struct destroy_work;
+	struct work_struct resize_work;
+#ifdef CONFIG_MEMCG
+	struct mem_cgroup *resize_memcg;
+#endif
 
 	u32 peer_portid;
 	unsigned int queue_maxlen;
 	unsigned int copy_range;
 	unsigned int queue_dropped;
 	unsigned int queue_user_dropped;
-
 
 	u_int16_t queue_num;			/* number of this queue */
 	u_int8_t copy_mode;
@@ -77,6 +90,10 @@ struct nfqnl_instance {
 	spinlock_t	lock	____cacheline_aligned_in_smp;
 	unsigned int	queue_total;
 	unsigned int	id_sequence;		/* 'sequence' of pkt ids */
+	unsigned int	queue_hash_size;
+	unsigned int	queue_hash_mask;
+	unsigned long	queue_hash_last_shrink_jiffies;
+	struct hlist_head *queue_hash;
 	struct list_head queue_list;		/* packets in queue */
 };
 
@@ -114,9 +131,183 @@ instance_lookup(struct nfnl_queue_net *q, u_int16_t queue_num)
 	return NULL;
 }
 
+static inline unsigned int
+nfqnl_packet_hash(unsigned int id, unsigned int mask)
+{
+	return id & mask;
+}
+
+static inline void
+nfqnl_resize_schedule_work(struct nfqnl_instance *queue, struct sk_buff *skb)
+{
+#ifdef CONFIG_MEMCG
+	/* Capture the cgroup of the packet triggering the grow request.
+	 * If resize_memcg is already set, a previous packet claimed it.
+	 * If the worker is currently running, it clears this pointer
+	 * early, allowing us to queue the blame for the next run.
+	 */
+	if (!queue->resize_memcg && skb->sk && sk_fullsock(skb->sk) && skb->sk->sk_memcg) {
+		queue->resize_memcg = skb->sk->sk_memcg;
+		/* Increment reference count */
+		css_get(&queue->resize_memcg->css);
+	}
+#endif
+
+	schedule_work(&queue->resize_work);
+}
+
+static inline bool
+nfqnl_should_grow(struct nfqnl_instance *queue)
+{
+	/* Grow if above 75% */
+	return queue->queue_total > (queue->queue_hash_size / 4 * 3) &&
+		queue->queue_hash_size < NFQNL_HASH_MAX_SIZE;
+}
+
+static inline void
+nfqnl_check_grow(struct nfqnl_instance *queue, struct sk_buff *skb)
+{
+	if (nfqnl_should_grow(queue))
+		nfqnl_resize_schedule_work(queue, skb);
+}
+
+static inline bool
+nfqnl_should_shrink(struct nfqnl_instance *queue)
+{
+	/* shrink if below 25% and 60+ seconds since last shrink */
+	return queue->queue_total < (queue->queue_hash_size / 4) &&
+		queue->queue_hash_size > NFQNL_HASH_MIN_SIZE &&
+		time_after(jiffies,
+			   queue->queue_hash_last_shrink_jiffies + NFQNL_HASH_SHRINK_INTERVAL);
+}
+
+static inline void
+nfqnl_check_shrink(struct nfqnl_instance *queue, struct sk_buff *skb)
+{
+	if (nfqnl_should_shrink(queue))
+		nfqnl_resize_schedule_work(queue, skb);
+}
+
+static void
+nfqnl_hash_resize_work(struct work_struct *work)
+{
+	struct nfqnl_instance *inst = container_of(work, struct nfqnl_instance, resize_work);
+	struct mem_cgroup *old_memcg = NULL, *target_memcg = NULL;
+	struct hlist_head *new_hash, *old_hash;
+	struct nf_queue_entry *entry;
+	unsigned int h, hash_mask, new_size;
+
+	/* Check current size under lock and determine if grow/shrink is required */
+	spin_lock_bh(&inst->lock);
+#ifdef CONFIG_MEMCG
+	target_memcg = inst->resize_memcg;
+	inst->resize_memcg = NULL;
+#endif
+
+	new_size = inst->queue_hash_size;
+	if (nfqnl_should_grow(inst)) {
+		/* Resize cannot be done synchronously from __enqueue_entry because
+		 * it runs in softirq context where the GFP_KERNEL_ACCOUNT allocation
+		 * (which can sleep) is not allowed. Instead, resize is deferred to
+		 * work queue. During packet bursts, multiple enqueues may occur before
+		 * any work runs, so we calculate target size based on current queue_total
+		 * (aiming for 75% load) rather than just doubling. Ensure minimum 2x
+		 * growth to avoid tiny increments.
+		 */
+		new_size = (inst->queue_total > NFQNL_HASH_MAX_SIZE * 3 / 4) ?
+			NFQNL_HASH_MAX_SIZE :
+			roundup_pow_of_two(inst->queue_total / 3 * 4);
+
+		new_size = max(new_size, inst->queue_hash_size * 2);
+	} else if (nfqnl_should_shrink(inst)) {
+		new_size = inst->queue_hash_size / 2;
+	}
+
+	if (new_size == inst->queue_hash_size) {
+		spin_unlock_bh(&inst->lock);
+		goto out_put;
+	}
+
+	/* Work queue serialization guarantees only one instance of this function
+	 * runs at a time for a given queue, so we can safely drop the lock during
+	 * allocation without worrying about concurrent resizes.
+	 */
+	spin_unlock_bh(&inst->lock);
+
+	if (target_memcg)
+		old_memcg = set_active_memcg(target_memcg);
+
+	new_hash = kvmalloc_array(new_size, sizeof(*new_hash), GFP_KERNEL_ACCOUNT);
+
+	if (target_memcg)
+		set_active_memcg(old_memcg);
+
+	if (!new_hash)
+		goto out_put;
+
+	hash_mask = new_size - 1;
+	for (h = 0; h < new_size; h++)
+		INIT_HLIST_HEAD(&new_hash[h]);
+
+	spin_lock_bh(&inst->lock);
+
+	list_for_each_entry(entry, &inst->queue_list, list) {
+		/* No hlist_del() since old_hash will be freed and we hold lock */
+		h = nfqnl_packet_hash(entry->id, hash_mask);
+		hlist_add_head(&entry->hash_node, &new_hash[h]);
+	}
+
+	old_hash = inst->queue_hash;
+
+	if (new_size < inst->queue_hash_size)
+		inst->queue_hash_last_shrink_jiffies = jiffies;
+
+	inst->queue_hash_size = new_size;
+	inst->queue_hash_mask = hash_mask;
+	inst->queue_hash = new_hash;
+
+	spin_unlock_bh(&inst->lock);
+
+	kvfree(old_hash);
+
+out_put:
+#ifdef CONFIG_MEMCG
+	/* Decrement reference count after we are done */
+	if (target_memcg)
+		css_put(&target_memcg->css);
+#endif
+}
+
+static void
+instance_destroy_work(struct work_struct *work)
+{
+	struct nfqnl_instance *inst = container_of(work, struct nfqnl_instance,
+						    destroy_work);
+
+	/* Cancel resize_work to avoid use-after-free */
+	cancel_work_sync(&inst->resize_work);
+
+#ifdef CONFIG_MEMCG
+	if (inst->resize_memcg)
+		css_put(&inst->resize_memcg->css);
+#endif
+
+	kvfree(inst->queue_hash);
+	kfree(inst);
+	module_put(THIS_MODULE);
+}
+
 static struct nfqnl_instance *
 instance_create(struct nfnl_queue_net *q, u_int16_t queue_num, u32 portid)
 {
+	/* Must be power of two for queue_hash_mask to work correctly.
+	 * Avoid overflow of is_power_of_2 by bounding NFQNL_MAX_HASH_SIZE.
+	 */
+	BUILD_BUG_ON(!is_power_of_2(NFQNL_HASH_MIN_SIZE) ||
+		     !is_power_of_2(NFQNL_HASH_DEFAULT_SIZE) ||
+		     !is_power_of_2(NFQNL_HASH_MAX_SIZE) ||
+		     NFQNL_HASH_MAX_SIZE > 1U << 31);
+
 	struct nfqnl_instance *inst;
 	unsigned int h;
 	int err;
@@ -125,11 +316,26 @@ instance_create(struct nfnl_queue_net *q, u_int16_t queue_num, u32 portid)
 	if (!inst)
 		return ERR_PTR(-ENOMEM);
 
+	inst->queue_hash_size = NFQNL_HASH_DEFAULT_SIZE;
+	inst->queue_hash_mask = inst->queue_hash_size - 1;
+	inst->queue_hash = kvmalloc_array(inst->queue_hash_size, sizeof(*inst->queue_hash),
+					  GFP_KERNEL_ACCOUNT);
+	if (!inst->queue_hash) {
+		err = -ENOMEM;
+		goto out_free;
+	}
+
+	for (h = 0; h < inst->queue_hash_size; h++)
+		INIT_HLIST_HEAD(&inst->queue_hash[h]);
+
 	inst->queue_num = queue_num;
 	inst->peer_portid = portid;
 	inst->queue_maxlen = NFQNL_QMAX_DEFAULT;
 	inst->copy_range = NFQNL_MAX_COPY_RANGE;
 	inst->copy_mode = NFQNL_COPY_NONE;
+	inst->queue_hash_last_shrink_jiffies = jiffies;
+	INIT_WORK(&inst->destroy_work, instance_destroy_work);
+	INIT_WORK(&inst->resize_work, nfqnl_hash_resize_work);
 	spin_lock_init(&inst->lock);
 	INIT_LIST_HEAD(&inst->queue_list);
 
@@ -153,6 +359,9 @@ instance_create(struct nfnl_queue_net *q, u_int16_t queue_num, u32 portid)
 
 out_unlock:
 	spin_unlock(&q->instances_lock);
+
+out_free:
+	kvfree(inst->queue_hash);
 	kfree(inst);
 	return ERR_PTR(err);
 }
@@ -169,8 +378,11 @@ instance_destroy_rcu(struct rcu_head *head)
 	rcu_read_lock();
 	nfqnl_flush(inst, NULL, 0);
 	rcu_read_unlock();
-	kfree(inst);
-	module_put(THIS_MODULE);
+
+	/* Defer kvfree to process context (work queue) because kvfree can
+	 * sleep if memory was vmalloc'd, and RCU callbacks run in softirq.
+	 */
+	schedule_work(&inst->destroy_work);
 }
 
 static void
@@ -191,25 +403,33 @@ instance_destroy(struct nfnl_queue_net *q, struct nfqnl_instance *inst)
 static inline void
 __enqueue_entry(struct nfqnl_instance *queue, struct nf_queue_entry *entry)
 {
-       list_add_tail(&entry->list, &queue->queue_list);
-       queue->queue_total++;
+	unsigned int hash = nfqnl_packet_hash(entry->id, queue->queue_hash_mask);
+
+	hlist_add_head(&entry->hash_node, &queue->queue_hash[hash]);
+	list_add_tail(&entry->list, &queue->queue_list);
+	queue->queue_total++;
+	nfqnl_check_grow(queue, entry->skb);
 }
 
 static void
 __dequeue_entry(struct nfqnl_instance *queue, struct nf_queue_entry *entry)
 {
+	hlist_del(&entry->hash_node);
 	list_del(&entry->list);
 	queue->queue_total--;
+	nfqnl_check_shrink(queue, entry->skb);
 }
 
 static struct nf_queue_entry *
 find_dequeue_entry(struct nfqnl_instance *queue, unsigned int id)
 {
 	struct nf_queue_entry *entry = NULL, *i;
+	unsigned int hash;
 
 	spin_lock_bh(&queue->lock);
 
-	list_for_each_entry(i, &queue->queue_list, list) {
+	hash = nfqnl_packet_hash(id, queue->queue_hash_mask);
+	hlist_for_each_entry(i, &queue->queue_hash[hash], hash_node) {
 		if (i->id == id) {
 			entry = i;
 			break;
@@ -404,8 +624,7 @@ nfqnl_flush(struct nfqnl_instance *queue, nfqnl_cmpfn cmpfn, unsigned long data)
 	spin_lock_bh(&queue->lock);
 	list_for_each_entry_safe(entry, next, &queue->queue_list, list) {
 		if (!cmpfn || cmpfn(entry, data)) {
-			list_del(&entry->list);
-			queue->queue_total--;
+			__dequeue_entry(queue, entry);
 			nfqnl_reinject(entry, NF_DROP);
 		}
 	}
