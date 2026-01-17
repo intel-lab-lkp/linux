@@ -1352,3 +1352,23 @@ void rvu_mac_reset(struct rvu *rvu, u16 pcifunc)
 	if (mac_ops->mac_reset(cgxd, lmac, !is_vf(pcifunc)))
 		dev_err(rvu->dev, "Failed to reset MAC\n");
 }
+
+int rvu_mbox_handler_cgx_get_dmacflt_dropped_pktcnt(struct rvu *rvu,
+						    struct msg_req *req,
+						    struct cgx_dmac_filter_drop_cnt *rsp)
+{
+	int pf = rvu_get_pf(rvu->pdev, req->hdr.pcifunc);
+	struct mac_ops *mac_ops;
+	u8 cgx_id, lmac_id;
+	void *cgxd;
+
+	rvu_get_cgx_lmac_id(rvu->pf2cgxlmac_map[pf], &cgx_id, &lmac_id);
+	cgxd = rvu_cgx_pdata(cgx_id, rvu);
+	mac_ops = get_mac_ops(cgxd);
+
+	if (!mac_ops->get_dmacflt_dropped_pktcnt)
+		return 0;
+
+	rsp->count =  mac_ops->get_dmacflt_dropped_pktcnt(cgxd, lmac_id);
+	return 0;
+}
