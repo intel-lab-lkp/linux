@@ -48,12 +48,10 @@ bool can_dropped_invalid_skb(struct net_device *dev, struct sk_buff *skb);
 
 /**
  * struct can_skb_priv - private additional data inside CAN sk_buffs
- * @ifindex:	ifindex of the first interface the CAN frame appeared on
  * @frame_len:	length of CAN frame in data link layer
  * @cf:		align to the following CAN frame at skb->data
  */
 struct can_skb_priv {
-	int ifindex;
 	unsigned int frame_len;
 	struct can_frame cf[];
 };

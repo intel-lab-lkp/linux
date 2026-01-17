@@ -863,6 +863,7 @@ enum skb_tstamp_type {
  *	@vlan_all: vlan fields (proto & tci)
  *	@vlan_proto: vlan encapsulation protocol
  *	@vlan_tci: vlan tag control information
+ *	@can_iif: ifindex of the first interface the CAN frame appeared on
  *	@inner_protocol: Protocol (encapsulation)
  *	@inner_ipproto: (aka @inner_protocol) stores ipproto when
  *		skb->inner_protocol_type == ENCAP_TYPE_IPPROTO;
@@ -1069,13 +1070,23 @@ struct sk_buff {
 	};
 
 	union {
-		__be16		inner_protocol;
-		__u8		inner_ipproto;
-	};
+		/* inner protocol data for eth/ip encapsulation */
+		struct {
+			union {
+				__be16	inner_protocol;
+				__u8	inner_ipproto;
+			};
 
-	__u16			inner_transport_header;
-	__u16			inner_network_header;
-	__u16			inner_mac_header;
+			__u16	inner_transport_header;
+			__u16	inner_network_header;
+			__u16	inner_mac_header;
+		};
+
+		/* space for protocols without protocol/header encapsulation */
+		struct {
+			int	can_iif;
+		};
+	};
 
 	__be16			protocol;
 	__u16			transport_header;

@@ -957,7 +957,7 @@ static int raw_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 		goto put_dev;
 
 	can_skb_reserve(skb);
-	can_skb_prv(skb)->ifindex = dev->ifindex;
+	skb->can_iif = dev->ifindex;
 
 	/* fill the skb before testing for valid CAN frames */
 	err = memcpy_from_msg(skb_put(skb, size), msg, size);
