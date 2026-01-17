@@ -3337,6 +3337,9 @@ module_init(sysc_init);
 
 static void __exit sysc_exit(void)
 {
+	if (!IS_ERR_OR_NULL(stdout_path))
+		of_node_put(stdout_path);
+
 	bus_unregister_notifier(&platform_bus_type, &sysc_nb);
 	platform_driver_unregister(&sysc_driver);
 	sysc_cleanup_static_data();
