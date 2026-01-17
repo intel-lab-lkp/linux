@@ -347,11 +347,13 @@ static ssize_t xhci_port_write(struct file *file,  const char __user *ubuf,
 	struct xhci_port	*port = s->private;
 	struct xhci_hcd		*xhci = hcd_to_xhci(port->rhub->hcd);
 	char                    buf[32];
+	size_t			len = min_t(size_t, sizeof(buf) - 1, count);
 	u32			portsc;
 	unsigned long		flags;
 
-	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count)))
+	if (copy_from_user(&buf, ubuf, len))
 		return -EFAULT;
+	buf[len] = '\0';
 
 	if (!strncmp(buf, "compliance", 10)) {
 		/* If CTC is clear, compliance is enabled by default */
