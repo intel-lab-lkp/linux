@@ -577,6 +577,9 @@ static const struct NTFS_DE *hdr_find_split(const struct INDEX_HDR *hdr)
 			return p;
 
 		esize = le16_to_cpu(e->size);
+
+		if (esize < sizeof(struct NTFS_DE))
+			return NULL;
 	}
 
 	return e;
