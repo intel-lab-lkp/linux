@@ -466,7 +466,6 @@ static int nr_dec_obs(void)
 				nr_neigh = s->routes[i].neighbour;
 
 				nr_neigh->count--;
-				nr_neigh_put(nr_neigh);
 
 				if (nr_neigh->count == 0 && !nr_neigh->locked)
 					nr_remove_neigh(nr_neigh);
