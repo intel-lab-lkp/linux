@@ -1248,7 +1248,7 @@ next_iter:
 		    sizeof(struct NTFS_DE) + sizeof(u64)) {
 			if (n) {
 				fnd_pop(fnd);
-				kfree(n);
+				put_indx_node(n);
 			}
 			return -EINVAL;
 		}
@@ -1261,7 +1261,7 @@ next_iter:
 		/* Try next level. */
 		e = hdr_first_de(&n->index->ihdr);
 		if (!e) {
-			kfree(n);
+			put_indx_node(n);
 			return -EINVAL;
 		}
 
@@ -1281,7 +1281,7 @@ pop_level:
 		/* Pop one level. */
 		if (n) {
 			fnd_pop(fnd);
-			kfree(n);
+			put_indx_node(n);
 		}
 
 		level = fnd->level;
