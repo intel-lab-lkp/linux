@@ -332,7 +332,7 @@ static inline void tcp_wmem_free_skb(struct sock *sk, struct sk_buff *skb)
 		sk_mem_uncharge(sk, skb->truesize);
 	else
 		sk_mem_uncharge(sk, SKB_TRUESIZE(skb_end_offset(skb)));
-	__kfree_skb(skb);
+	skb_attempt_defer_free(skb);
 }
 
 void sk_forced_mem_schedule(struct sock *sk, int size);
