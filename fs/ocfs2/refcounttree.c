@@ -1122,6 +1122,11 @@ static int ocfs2_get_refcount_rec(struct ocfs2_caching_info *ci,
 
 		if (cpos_end < low_cpos + len)
 			len = cpos_end - low_cpos;
+	} else {
+		ret = ocfs2_error(sb, "Refcount tree %llu has no extent record covering cpos %u\n",
+				  (unsigned long long)ocfs2_metadata_cache_owner(ci),
+				  low_cpos);
+		goto out;
 	}
 
 	ret = ocfs2_read_refcount_block(ci, le64_to_cpu(rec->e_blkno),
