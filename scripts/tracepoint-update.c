@@ -93,8 +93,10 @@ static void make_trace_array(struct elf_tracepoint *etrace)
 	for_each_shdr_str(len, ehdr, check_data_sec) {
 		if (!len)
 			continue;
-		if (add_string(str, &vals, &count) < 0)
+		if (add_string(str, &vals, &count) < 0) {
+			free(vals);
 			return;
+		}
 	}
 
 	/* If CONFIG_TRACEPOINT_VERIFY_USED is not set, there's nothing to do */
