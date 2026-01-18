@@ -1521,12 +1521,15 @@ static int elf_alloc_reloc(struct elf *elf, struct section *rsec)
 		memcpy(rsec->data->d_buf, orig_buf,
 		       nr_relocs_old * elf_rela_size(elf));
 	} else {
-		rsec->data->d_buf = realloc(rsec->data->d_buf,
-					    nr_alloc * elf_rela_size(elf));
-		if (!rsec->data->d_buf) {
+		void *new_d_buf = realloc(rsec->data->d_buf,
+					  nr_alloc * elf_rela_size(elf));
+		if (!new_d_buf) {
 			ERROR_GLIBC("realloc");
+			free(rsec->data->d_buf);
+			rsec->data->d_buf = NULL;
 			return -1;
 		}
+		rsec->data->d_buf = new_d_buf;
 	}
 
 	rsec->nr_alloc_relocs = nr_alloc;
