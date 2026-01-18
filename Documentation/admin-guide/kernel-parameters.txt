@@ -2242,10 +2242,11 @@ Kernel parameters
 	idle=		[X86,EARLY]
 			Format: idle=poll, idle=halt, idle=nomwait
 
-			idle=poll:  Don't do power saving in the idle loop
-			using HLT, but poll for rescheduling event. This will
-			make the CPUs eat a lot more power, but may be useful
-			to get slightly better performance in multiprocessor
+			idle=poll: [Deprecated - use PM QoS]
+			Don't do power saving in the idle loop using HLT, but
+			poll for rescheduling event. This will make the CPUs
+			eat a lot more power, but may be useful to get
+			slightly better performance in multiprocessor
 			benchmarks. It also makes some profiling using
 			performance counters more accurate.  Please note that
 			on systems with MONITOR/MWAIT support (like Intel

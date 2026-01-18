@@ -1000,6 +1000,7 @@ static int __init idle_setup(char *str)
 
 	if (!strcmp(str, "poll")) {
 		pr_info("using polling idle threads\n");
+		pr_warn("idle=poll is deprecated. Use the PM QoS interface instead via /sys/devices/system/cpu/cpuN/power/\n");
 		boot_option_idle_override = IDLE_POLL;
 		cpu_idle_poll_ctrl(true);
 	} else if (!strcmp(str, "halt")) {

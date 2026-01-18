@@ -234,6 +234,15 @@ Known Issues
 	a.	Use PMQOS from userspace to inform the kernel of your
 		latency requirements (preferred).
 
+		This interface offers a superior and more flexible alternative to
+		global boot parameters such as "idle=poll", as it can be adjusted
+		at runtime with per-CPU granularity.
+
+		To force a specific CPU (where N is the logical CPU number) to poll
+		on idle, one can set the latency requirement to 0 microseconds:
+
+			echo "n/a" > /sys/devices/system/cpu/cpuN/power/pm_qos_resume_latency_us
+
 	b.	On x86 systems, use the "idle=mwait" boot parameter.
 
 	c.	On x86 systems, use the "intel_idle.max_cstate=" to limit
