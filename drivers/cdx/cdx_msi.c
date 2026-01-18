@@ -124,7 +124,7 @@ static int cdx_msi_prepare(struct irq_domain *msi_domain,
 	struct cdx_device *cdx_dev = to_cdx_device(dev);
 	struct device *parent = cdx_dev->cdx->dev;
 	struct msi_domain_info *msi_info;
-	u32 dev_id;
+	u32 dev_id = 0;
 	int ret;
 
 	/* Retrieve device ID from requestor ID using parent device */
