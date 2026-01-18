@@ -11264,7 +11264,10 @@ static void scsih_remove(struct pci_dev *pdev)
 	if (_scsih_get_shost_and_ioc(pdev, &shost, &ioc))
 		return;
 
-	ioc->remove_host = 1;
+	/* Set remove_host flag under pci_access_mutex to synchronize with ioctl path */
+	scoped_guard(mutex, &ioc->pci_access_mutex) {
+		ioc->remove_host = 1;
+	}
 
 	if (!pci_device_is_present(pdev)) {
 		mpt3sas_base_pause_mq_polling(ioc);
