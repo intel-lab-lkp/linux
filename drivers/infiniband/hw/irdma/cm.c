@@ -3448,9 +3448,9 @@ void irdma_cm_disconn(struct irdma_qp *iwqp)
 	if (!work)
 		return;
 
-	spin_lock_irqsave(&iwdev->rf->qptable_lock, flags);
-	if (!iwdev->rf->qp_table[iwqp->ibqp.qp_num]) {
-		spin_unlock_irqrestore(&iwdev->rf->qptable_lock, flags);
+	xa_lock_irqsave(&iwdev->rf->qp_xa, flags);
+	if (!xa_load(&iwdev->rf->qp_xa, iwqp->ibqp.qp_num)) {
+		xa_unlock_irqrestore(&iwdev->rf->qp_xa, flags);
 		ibdev_dbg(&iwdev->ibdev,
 			  "CM: qp_id %d is already freed\n",
 			  iwqp->ibqp.qp_num);
@@ -3458,7 +3458,7 @@ void irdma_cm_disconn(struct irdma_qp *iwqp)
 		return;
 	}
 	irdma_qp_add_ref(&iwqp->ibqp);
-	spin_unlock_irqrestore(&iwdev->rf->qptable_lock, flags);
+	xa_unlock_irqrestore(&iwdev->rf->qp_xa, flags);
 
 	work->iwqp = iwqp;
 	INIT_WORK(&work->work, irdma_disconnect_worker);

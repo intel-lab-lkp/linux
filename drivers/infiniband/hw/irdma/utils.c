@@ -797,15 +797,15 @@ void irdma_qp_rem_ref(struct ib_qp *ibqp)
 	u32 qp_num;
 	unsigned long flags;
 
-	spin_lock_irqsave(&iwdev->rf->qptable_lock, flags);
+	xa_lock_irqsave(&iwdev->rf->qp_xa, flags);
 	if (!refcount_dec_and_test(&iwqp->refcnt)) {
-		spin_unlock_irqrestore(&iwdev->rf->qptable_lock, flags);
+		xa_unlock_irqrestore(&iwdev->rf->qp_xa, flags);
 		return;
 	}
 
 	qp_num = iwqp->ibqp.qp_num;
-	iwdev->rf->qp_table[qp_num] = NULL;
-	spin_unlock_irqrestore(&iwdev->rf->qptable_lock, flags);
+	__xa_erase(&iwdev->rf->qp_xa, qp_num);
+	xa_unlock_irqrestore(&iwdev->rf->qp_xa, flags);
 	complete(&iwqp->free_qp);
 }
 
@@ -847,11 +847,16 @@ struct ib_device *to_ibdev(struct irdma_sc_dev *dev)
 struct ib_qp *irdma_get_qp(struct ib_device *device, int qpn)
 {
 	struct irdma_device *iwdev = to_iwdev(device);
+	struct irdma_qp *iqp;
 
 	if (qpn < IW_FIRST_QPN || qpn >= iwdev->rf->max_qp)
 		return NULL;
 
-	return &iwdev->rf->qp_table[qpn]->ibqp;
+	iqp = xa_load(&iwdev->rf->qp_xa, qpn);
+	if (!iqp)
+		return NULL;
+
+	return &iqp->ibqp;
 }
 
 /**

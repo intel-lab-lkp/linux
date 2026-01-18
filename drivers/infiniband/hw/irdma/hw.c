@@ -245,11 +245,10 @@ static void irdma_process_aeq(struct irdma_pci_f *rf)
 			  info->iwarp_state, info->ae_src);
 
 		if (info->qp) {
-			spin_lock_irqsave(&rf->qptable_lock, flags);
-			iwqp = rf->qp_table[info->qp_cq_id];
+			xa_lock_irqsave(&rf->qp_xa, flags);
+			iwqp = xa_load(&rf->qp_xa, info->qp_cq_id);
 			if (!iwqp) {
-				spin_unlock_irqrestore(&rf->qptable_lock,
-						       flags);
+				xa_unlock_irqrestore(&rf->qp_xa, flags);
 				if (info->ae_id == IRDMA_AE_QP_SUSPEND_COMPLETE) {
 					atomic_dec(&iwdev->vsi.qp_suspend_reqs);
 					wake_up(&iwdev->suspend_wq);
@@ -260,7 +259,7 @@ static void irdma_process_aeq(struct irdma_pci_f *rf)
 				continue;
 			}
 			irdma_qp_add_ref(&iwqp->ibqp);
-			spin_unlock_irqrestore(&rf->qptable_lock, flags);
+			xa_unlock_irqrestore(&rf->qp_xa, flags);
 			qp = &iwqp->sc_qp;
 			spin_lock_irqsave(&iwqp->lock, flags);
 			iwqp->hw_tcp_state = info->tcp_state;
@@ -1633,6 +1632,7 @@ static void irdma_del_init_mem(struct irdma_pci_f *rf)
 	dev->hmc_info->sd_table.sd_entry = NULL;
 	vfree(rf->mem_rsrc);
 	rf->mem_rsrc = NULL;
+	xa_destroy(&rf->qp_xa);
 	dma_free_coherent(rf->hw.device, rf->obj_mem.size, rf->obj_mem.va,
 			  rf->obj_mem.pa);
 	rf->obj_mem.va = NULL;
@@ -2023,13 +2023,12 @@ static void irdma_set_hw_rsrc(struct irdma_pci_f *rf)
 	rf->allocated_ahs = &rf->allocated_pds[BITS_TO_LONGS(rf->max_pd)];
 	rf->allocated_mcgs = &rf->allocated_ahs[BITS_TO_LONGS(rf->max_ah)];
 	rf->allocated_arps = &rf->allocated_mcgs[BITS_TO_LONGS(rf->max_mcg)];
-	rf->qp_table = (struct irdma_qp **)
+	rf->cq_table = (struct irdma_cq **)
 		(&rf->allocated_arps[BITS_TO_LONGS(rf->arp_table_size)]);
-	rf->cq_table = (struct irdma_cq **)(&rf->qp_table[rf->max_qp]);
 
+	xa_init_flags(&rf->qp_xa, XA_FLAGS_LOCK_IRQ);
 	spin_lock_init(&rf->rsrc_lock);
 	spin_lock_init(&rf->arp_lock);
-	spin_lock_init(&rf->qptable_lock);
 	spin_lock_init(&rf->cqtable_lock);
 	spin_lock_init(&rf->qh_list_lock);
 }
@@ -2051,9 +2050,7 @@ static u32 irdma_calc_mem_rsrc_size(struct irdma_pci_f *rf)
 	rsrc_size += sizeof(unsigned long) * BITS_TO_LONGS(rf->arp_table_size);
 	rsrc_size += sizeof(unsigned long) * BITS_TO_LONGS(rf->max_ah);
 	rsrc_size += sizeof(unsigned long) * BITS_TO_LONGS(rf->max_mcg);
-	rsrc_size += sizeof(struct irdma_qp **) * rf->max_qp;
 	rsrc_size += sizeof(struct irdma_cq **) * rf->max_cq;
-	rsrc_size += sizeof(struct irdma_srq **) * rf->max_srq;
 
 	return rsrc_size;
 }

@@ -320,9 +320,8 @@ struct irdma_pci_f {
 	struct irdma_arp_entry *arp_table;
 	spinlock_t arp_lock; /*protect ARP table access*/
 	spinlock_t rsrc_lock; /* protect HW resource array access */
-	spinlock_t qptable_lock; /*protect QP table access*/
 	spinlock_t cqtable_lock; /*protect CQ table access*/
-	struct irdma_qp **qp_table;
+	struct xarray qp_xa;
 	struct irdma_cq **cq_table;
 	spinlock_t qh_list_lock; /* protect mc_qht_list */
 	struct mc_table_list mc_qht_list;
