@@ -838,6 +838,13 @@ static void ks8995_remove(struct spi_device *spi)
 	gpiod_set_value_cansleep(ks->reset_gpio, 1);
 }
 
+static void ks8995_shutdown(struct spi_device *spi)
+{
+	struct ks8995_switch *ks = spi_get_drvdata(spi);
+
+	dsa_switch_shutdown(ks->ds);
+}
+
 /* ------------------------------------------------------------------------ */
 static struct spi_driver ks8995_driver = {
 	.driver = {
@@ -846,6 +853,7 @@ static struct spi_driver ks8995_driver = {
 	},
 	.probe	  = ks8995_probe,
 	.remove	  = ks8995_remove,
+	.shutdown = ks8995_shutdown,
 	.id_table = ks8995_id,
 };
 
