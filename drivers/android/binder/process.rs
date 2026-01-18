@@ -513,7 +513,9 @@ impl Process {
         )?;
 
         let process = list_process.clone_arc();
-        process.ctx.register_process(list_process);
+        process
+            .ctx
+            .register_process(Arc::from(list_process.as_arc_borrow()))?;
 
         Ok(process)
     }
