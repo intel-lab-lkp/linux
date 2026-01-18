@@ -1974,6 +1974,11 @@ static void ocfs2_adjust_adjacent_records(struct ocfs2_extent_rec *left_rec,
 {
 	u32 left_clusters, right_end;
 
+	if (le16_to_cpu(right_child_el->l_next_free_rec) == 0) {
+		mlog(ML_ERROR, "Extent list has no records\n");
+		return;
+	}
+
 	/*
 	 * Interior nodes never have holes. Their cpos is the cpos of
 	 * the leftmost record in their child list. Their cluster
