@@ -156,6 +156,7 @@ typedef const struct iio_mount_matrix *
  * struct iio_event_spec - specification for a channel event
  * @type:		    Type of the event
  * @dir:		    Direction of the event
+ * @unit:		    Unit of the data to be handled (raw or processed).
  * @mask_separate:	    Bit mask of enum iio_event_info values. Attributes
  *			    set in this mask will be registered per channel.
  * @mask_shared_by_type:    Bit mask of enum iio_event_info values. Attributes
@@ -169,6 +170,7 @@ typedef const struct iio_mount_matrix *
 struct iio_event_spec {
 	enum iio_event_type type;
 	enum iio_event_direction dir;
+	enum iio_event_unit unit;
 	unsigned long mask_separate;
 	unsigned long mask_shared_by_type;
 	unsigned long mask_shared_by_dir;
@@ -522,13 +524,15 @@ struct iio_info {
 				const struct iio_chan_spec *chan,
 				enum iio_event_type type,
 				enum iio_event_direction dir,
-				enum iio_event_info info, int *val, int *val2);
+				enum iio_event_info info,
+				enum iio_event_unit unit, int *val, int *val2);
 
 	int (*write_event_value)(struct iio_dev *indio_dev,
 				 const struct iio_chan_spec *chan,
 				 enum iio_event_type type,
 				 enum iio_event_direction dir,
-				 enum iio_event_info info, int val, int val2);
+				 enum iio_event_info info,
+				 enum iio_event_unit unit, int val, int val2);
 
 	int (*read_event_label)(struct iio_dev *indio_dev,
 				struct iio_chan_spec const *chan,

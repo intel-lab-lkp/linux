@@ -258,6 +258,11 @@ static const char * const iio_ev_info_text[] = {
 	[IIO_EV_INFO_RUNNING_COUNT] = "runningcount",
 };
 
+static const char * const iio_ev_unit_text[] = {
+	[IIO_EV_UNIT_RAW] = "raw",
+	[IIO_EV_UNIT_PROCESSED] = "input",
+};
+
 static enum iio_event_direction iio_ev_attr_dir(struct iio_dev_attr *attr)
 {
 	return attr->c->event_spec[attr->address & 0xffff].dir;
@@ -271,6 +276,11 @@ static enum iio_event_type iio_ev_attr_type(struct iio_dev_attr *attr)
 static enum iio_event_info iio_ev_attr_info(struct iio_dev_attr *attr)
 {
 	return (attr->address >> 16) & 0xffff;
+}
+
+static enum iio_event_unit iio_ev_attr_unit(struct iio_dev_attr *attr)
+{
+	return attr->c->event_spec[attr->address & 0xffff].unit;
 }
 
 static ssize_t iio_ev_state_store(struct device *dev,
@@ -332,7 +342,7 @@ static ssize_t iio_ev_value_show(struct device *dev,
 	ret = indio_dev->info->read_event_value(indio_dev,
 		this_attr->c, iio_ev_attr_type(this_attr),
 		iio_ev_attr_dir(this_attr), iio_ev_attr_info(this_attr),
-		&val, &val2);
+		iio_ev_attr_unit(this_attr), &val, &val2);
 	if (ret < 0)
 		return ret;
 	val_arr[0] = val;
@@ -359,7 +369,7 @@ static ssize_t iio_ev_value_store(struct device *dev,
 	ret = indio_dev->info->write_event_value(indio_dev,
 		this_attr->c, iio_ev_attr_type(this_attr),
 		iio_ev_attr_dir(this_attr), iio_ev_attr_info(this_attr),
-		val, val2);
+		iio_ev_attr_unit(this_attr), val, val2);
 	if (ret < 0)
 		return ret;
 
@@ -384,7 +394,8 @@ static ssize_t iio_ev_label_show(struct device *dev,
 static int iio_device_add_event(struct iio_dev *indio_dev,
 	const struct iio_chan_spec *chan, unsigned int spec_index,
 	enum iio_event_type type, enum iio_event_direction dir,
-	enum iio_shared_by shared_by, const unsigned long *mask)
+	enum iio_event_unit unit, enum iio_shared_by shared_by,
+	const unsigned long *mask)
 {
 	struct iio_dev_opaque *iio_dev_opaque = to_iio_dev_opaque(indio_dev);
 	ssize_t (*show)(struct device *dev, struct device_attribute *attr,
@@ -399,15 +410,23 @@ static int iio_device_add_event(struct iio_dev *indio_dev,
 	for_each_set_bit(i, mask, sizeof(*mask)*8) {
 		if (i >= ARRAY_SIZE(iio_ev_info_text))
 			return -EINVAL;
-		if (dir != IIO_EV_DIR_NONE)
-			postfix = kasprintf(GFP_KERNEL, "%s_%s_%s",
-					iio_ev_type_text[type],
-					iio_ev_dir_text[dir],
-					iio_ev_info_text[i]);
-		else
+		if (dir != IIO_EV_DIR_NONE) {
+			if (i == IIO_EV_INFO_ENABLE)
+				postfix = kasprintf(GFP_KERNEL, "%s_%s_%s",
+						iio_ev_type_text[type],
+						iio_ev_dir_text[dir],
+						iio_ev_info_text[i]);
+			else
+				postfix = kasprintf(GFP_KERNEL, "%s_%s_%s_%s",
+						iio_ev_unit_text[unit],
+						iio_ev_type_text[type],
+						iio_ev_dir_text[dir],
+						iio_ev_info_text[i]);
+		} else {
 			postfix = kasprintf(GFP_KERNEL, "%s_%s",
 					iio_ev_type_text[type],
 					iio_ev_info_text[i]);
+		}
 		if (postfix == NULL)
 			return -ENOMEM;
 
@@ -478,32 +497,34 @@ static int iio_device_add_event_sysfs(struct iio_dev *indio_dev,
 	int ret = 0, i, attrcount = 0;
 	enum iio_event_direction dir;
 	enum iio_event_type type;
+	enum iio_event_unit unit;
 
 	for (i = 0; i < chan->num_event_specs; i++) {
 		type = chan->event_spec[i].type;
 		dir = chan->event_spec[i].dir;
+		unit = chan->event_spec[i].unit;
 
-		ret = iio_device_add_event(indio_dev, chan, i, type, dir,
+		ret = iio_device_add_event(indio_dev, chan, i, type, dir, unit,
 			IIO_SEPARATE, &chan->event_spec[i].mask_separate);
 		if (ret < 0)
 			return ret;
 		attrcount += ret;
 
-		ret = iio_device_add_event(indio_dev, chan, i, type, dir,
+		ret = iio_device_add_event(indio_dev, chan, i, type, dir, unit,
 			IIO_SHARED_BY_TYPE,
 			&chan->event_spec[i].mask_shared_by_type);
 		if (ret < 0)
 			return ret;
 		attrcount += ret;
 
-		ret = iio_device_add_event(indio_dev, chan, i, type, dir,
+		ret = iio_device_add_event(indio_dev, chan, i, type, dir, unit,
 			IIO_SHARED_BY_DIR,
 			&chan->event_spec[i].mask_shared_by_dir);
 		if (ret < 0)
 			return ret;
 		attrcount += ret;
 
-		ret = iio_device_add_event(indio_dev, chan, i, type, dir,
+		ret = iio_device_add_event(indio_dev, chan, i, type, dir, unit,
 			IIO_SHARED_BY_ALL,
 			&chan->event_spec[i].mask_shared_by_all);
 		if (ret < 0)

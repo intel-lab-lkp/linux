@@ -137,4 +137,9 @@ enum iio_event_direction {
 	IIO_EV_DIR_FAULT_OPENWIRE,
 };
 
+enum iio_event_unit {
+	IIO_EV_UNIT_RAW,
+	IIO_EV_UNIT_PROCESSED,
+};
+
 #endif /* _UAPI_IIO_TYPES_H_ */
