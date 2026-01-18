@@ -152,12 +152,16 @@ static void ldisc_receive(struct tty_struct *tty, const u8 *data,
 	int ret;
 
 	ser = tty->disc_data;
+	if (!ser)
+		return;
 
 	/*
 	 * NOTE: flags may contain information about break or overrun.
 	 * This is not yet handled.
 	 */
 
+	if (!ser->dev)
+		return;
 
 	/*
 	 * Workaround for garbage at start of transmission,
@@ -169,8 +173,6 @@ static void ldisc_receive(struct tty_struct *tty, const u8 *data,
 			"bytes discarded.\n");
 		return;
 	}
-
-	BUG_ON(ser->dev == NULL);
 
 	/* Get a suitable caif packet and copy in data. */
 	skb = netdev_alloc_skb(ser->dev, count+1);
