@@ -10386,6 +10386,7 @@ L:	linux-cxl@vger.kernel.org
 L:	linux-fsdevel@vger.kernel.org
 S:	Supported
 F:	fs/fuse/famfs.c
+F:	fs/fuse/famfs_kfmap.h
 
 FUTEX SUBSYSTEM
 M:	Thomas Gleixner <tglx@kernel.org>

@@ -1464,8 +1464,21 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 				timeout = arg->request_timeout;
 
 			if (IS_ENABLED(CONFIG_FUSE_FAMFS_DAX) &&
-			    flags & FUSE_DAX_FMAP)
-				fc->famfs_iomap = 1;
+			    flags & FUSE_DAX_FMAP) {
+				/* famfs_iomap is only allowed if the fuse
+				 * server has CAP_SYS_RAWIO. This was checked
+				 * in fuse_send_init, and FUSE_DAX_IOMAP was
+				 * set in in_flags if so. Only allow enablement
+				 * if we find it there. This function is
+				 * normally not running in fuse server context,
+				 * so we can't do the capability check here...
+				 */
+				u64 in_flags = ((u64)ia->in.flags2 << 32)
+						| ia->in.flags;
+
+				if (in_flags & FUSE_DAX_FMAP)
+					fc->famfs_iomap = 1;
+			}
 		} else {
 			ra_pages = fc->max_read / PAGE_SIZE;
 			fc->no_lock = 1;
@@ -1527,7 +1540,7 @@ static struct fuse_init_args *fuse_new_init(struct fuse_mount *fm)
 		flags |= FUSE_SUBMOUNTS;
 	if (IS_ENABLED(CONFIG_FUSE_PASSTHROUGH))
 		flags |= FUSE_PASSTHROUGH;
-	if (IS_ENABLED(CONFIG_FUSE_FAMFS_DAX))
+	if (IS_ENABLED(CONFIG_FUSE_FAMFS_DAX) && capable(CAP_SYS_RAWIO))
 		flags |= FUSE_DAX_FMAP;
 
 	/*
