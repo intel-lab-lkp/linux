@@ -152,6 +152,8 @@ static void ldisc_receive(struct tty_struct *tty, const u8 *data,
 	int ret;
 
 	ser = tty->disc_data;
+	if (!ser || !ser->dev)
+		return;
 
 	/*
 	 * NOTE: flags may contain information about break or overrun.
@@ -169,8 +171,6 @@ static void ldisc_receive(struct tty_struct *tty, const u8 *data,
 			"bytes discarded.\n");
 		return;
 	}
-
-	BUG_ON(ser->dev == NULL);
 
 	/* Get a suitable caif packet and copy in data. */
 	skb = netdev_alloc_skb(ser->dev, count+1);
@@ -355,11 +355,15 @@ static void ldisc_close(struct tty_struct *tty)
 {
 	struct ser_device *ser = tty->disc_data;
 
+	if (!ser)
+		return;
+
 	tty_kref_put(ser->tty);
 
 	spin_lock(&ser_lock);
 	list_move(&ser->node, &ser_release_list);
 	spin_unlock(&ser_lock);
+	tty->disc_data = NULL;
 	schedule_work(&ser_release_work);
 }
 
