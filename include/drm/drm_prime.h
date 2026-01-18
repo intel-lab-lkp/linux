@@ -54,6 +54,7 @@ struct device;
 struct dma_buf_export_info;
 struct dma_buf;
 struct dma_buf_attachment;
+struct dma_buf_ops;
 struct iosys_map;
 
 enum dma_data_direction;
@@ -108,6 +109,9 @@ struct drm_gem_object *drm_gem_prime_import_dev(struct drm_device *dev,
 						struct device *attach_dev);
 struct drm_gem_object *drm_gem_prime_import(struct drm_device *dev,
 					    struct dma_buf *dma_buf);
+struct drm_gem_object *drm_gem_prime_self_import(struct drm_device *dev,
+						 struct dma_buf *dma_buf,
+						 const struct dma_buf_ops *expected_ops);
 
 void drm_prime_gem_destroy(struct drm_gem_object *obj, struct sg_table *sg);
 
@@ -115,5 +119,4 @@ int drm_prime_sg_to_page_array(struct sg_table *sgt, struct page **pages,
 			       int max_pages);
 int drm_prime_sg_to_dma_addr_array(struct sg_table *sgt, dma_addr_t *addrs,
 				   int max_pages);
-
 #endif /* __DRM_PRIME_H__ */
