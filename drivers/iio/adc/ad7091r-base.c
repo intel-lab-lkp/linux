@@ -27,6 +27,7 @@ const struct iio_event_spec ad7091r_events[] = {
 	{
 		.type = IIO_EV_TYPE_THRESH,
 		.dir = IIO_EV_DIR_FALLING,
+		.unit = IIO_EV_UNIT_RAW,
 		.mask_separate = BIT(IIO_EV_INFO_VALUE) |
 				 BIT(IIO_EV_INFO_ENABLE),
 	},
@@ -183,7 +184,8 @@ static int ad7091r_read_event_value(struct iio_dev *indio_dev,
 				    const struct iio_chan_spec *chan,
 				    enum iio_event_type type,
 				    enum iio_event_direction dir,
-				    enum iio_event_info info, int *val, int *val2)
+				    enum iio_event_info info,
+				    enum iio_event_unit unit, int *val, int *val2)
 {
 	struct ad7091r_state *st = iio_priv(indio_dev);
 	int ret;
@@ -224,7 +226,8 @@ static int ad7091r_write_event_value(struct iio_dev *indio_dev,
 				     const struct iio_chan_spec *chan,
 				     enum iio_event_type type,
 				     enum iio_event_direction dir,
-				     enum iio_event_info info, int val, int val2)
+				     enum iio_event_info info,
+				     enum iio_event_unit unit, int val, int val2)
 {
 	struct ad7091r_state *st = iio_priv(indio_dev);
 
