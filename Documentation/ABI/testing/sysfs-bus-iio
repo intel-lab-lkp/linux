@@ -1062,7 +1062,9 @@ Description:
 
 		The raw or input element of the name indicates whether the
 		value is in raw device units or in processed units (as _raw
-		and _input do on sysfs direct channel read attributes).
+		and _input do on sysfs direct channel read attributes). If the
+		raw/input element of the name is absent, values are in raw
+		device units.
 
 What:		/sys/.../events/in_accel_scale
 What:		/sys/.../events/in_accel_peak_scale
