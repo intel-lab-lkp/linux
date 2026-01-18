@@ -477,7 +477,31 @@ void unlink_anon_vmas(struct vm_area_struct *vma)
 
 	/* Unfaulted is a no-op. */
 	if (!active_anon_vma) {
-		VM_WARN_ON_ONCE(!list_empty(&vma->anon_vma_chain));
+		/*
+		 * Handle anon_vma_fork() error path where anon_vma_clone()
+		 * succeeded and populated the chain (with entries in interval
+		 * trees), but maybe_reuse_anon_vma() didn't set vma->anon_vma
+		 * because reuse conditions weren't met, and a later allocation
+		 * failed before we could allocate and assign a new anon_vma.
+		 *
+		 * We must properly remove entries from interval trees before
+		 * freeing to avoid leaving dangling pointers.
+		 */
+		if (!list_empty(&vma->anon_vma_chain)) {
+			struct anon_vma_chain *avc, *next;
+
+			list_for_each_entry_safe(avc, next, &vma->anon_vma_chain,
+						same_vma) {
+				struct anon_vma *anon_vma = avc->anon_vma;
+
+				anon_vma_lock_write(anon_vma);
+				anon_vma_interval_tree_remove(avc, &anon_vma->rb_root);
+				anon_vma_unlock_write(anon_vma);
+				list_del(&avc->same_vma);
+				anon_vma_chain_free(avc);
+			}
+		}
+
 		return;
 	}
 
