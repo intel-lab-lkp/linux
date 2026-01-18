@@ -1054,9 +1054,9 @@ Contact:	linux-iio@vger.kernel.org
 Description:
 		Specifies the value of threshold that the device is comparing
 		against for the events enabled by
-		<type>Y[_name]_thresh[_rising|falling]_en.
+		<type>Y[_name]_thresh[_rising|_falling]_en.
 
-		If separate attributes exist for the two directions, but
+		If separate enable attributes exist for the two directions, but
 		direction is not specified for this attribute, then a single
 		threshold value applies to both directions.
 
