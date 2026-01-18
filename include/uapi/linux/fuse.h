@@ -247,6 +247,9 @@
  *    - struct fuse_famfs_simple_ext
  *    - struct fuse_famfs_iext
  *    - struct fuse_famfs_fmap_header
+ *  - Add the following structs for the GET_DAXDEV message and reply
+ *    - struct fuse_get_daxdev_in
+ *    - struct fuse_get_daxdev_out
  *  - Add the following enumerated types
  *    - enum fuse_famfs_file_type
  *    - enum famfs_ext_type
@@ -678,6 +681,7 @@ enum fuse_opcode {
 
 	/* Famfs / devdax opcodes */
 	FUSE_GET_FMAP           = 54,
+	FUSE_GET_DAXDEV         = 55,
 
 	/* CUSE specific operations */
 	CUSE_INIT		= 4096,
@@ -1367,6 +1371,22 @@ struct fuse_famfs_fmap_header {
 	uint32_t reserved0;
 	uint64_t file_size;
 	uint64_t reserved1;
+};
+
+struct fuse_get_daxdev_in {
+	uint32_t        daxdev_num;
+};
+
+#define DAXDEV_NAME_MAX 256
+
+/* fuse_daxdev_out has enough space for a uuid if we need it */
+struct fuse_daxdev_out {
+	uint16_t index;
+	uint16_t reserved;
+	uint32_t reserved2;
+	uint64_t reserved3;
+	uint64_t reserved4;
+	char name[DAXDEV_NAME_MAX];
 };
 
 static inline int32_t fmap_msg_min_size(void)
