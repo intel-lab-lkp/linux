@@ -681,8 +681,8 @@ static int corsair_input_mapping(struct hid_device *dev,
  * The report descriptor of some of the Corsair gaming mice is
  * non parseable as they define two consecutive Logical Minimum for
  * the Usage Page (Consumer) in rdescs bytes 75 and 77 being 77 0x16
- * that should be obviousy 0x26 for Logical Magimum of 16 bits. This
- * prevents poper parsing of the report descriptor due Logical
+ * that should be obviously 0x26 for Logical Maximum of 16 bits. This
+ * prevents proper parsing of the report descriptor due to Logical
  * Minimum being larger than Logical Maximum.
  *
  * This driver fixes the report descriptor for:
