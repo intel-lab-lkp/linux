@@ -906,9 +906,9 @@ Description:
 		(_rising|_falling) direction. If the direction is not specified,
 		then either the device will report an event which ever direction
 		a single threshold value is passed in (e.g.
-		<type>[Y][_name]_<raw|input>_thresh_value) or
-		<type>[Y][_name]_<raw|input>_thresh_rising_value and
-		<type>[Y][_name]_<raw|input>_thresh_falling_value may take
+		<type>[Y][_name][_raw|_input]_thresh_value) or
+		<type>[Y][_name][_raw|_input]_thresh_rising_value and
+		<type>[Y][_name][_raw|_input]_thresh_falling_value may take
 		different values, but the device can only enable both thresholds
 		or neither.
 
