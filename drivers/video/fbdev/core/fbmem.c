@@ -113,15 +113,17 @@ void fb_pad_unaligned_buffer(u8 *dst, u32 d_pitch, u8 *src, u32 idx, u32 height,
 			dst[j+1] = tmp;
 			src++;
 		}
-		tmp = dst[idx];
-		tmp &= mask;
-		tmp |= *src >> shift_low;
-		dst[idx] = tmp;
-		if (shift_high < mod) {
-			tmp = *src << shift_high;
-			dst[idx+1] = tmp;
+		if (mod) {
+			tmp = dst[idx];
+			tmp &= mask;
+			tmp |= *src >> shift_low;
+			dst[idx] = tmp;
+			if (shift_high < mod) {
+				tmp = *src << shift_high;
+				dst[idx+1] = tmp;
+			}
+			src++;
 		}
-		src++;
 		dst += d_pitch;
 	}
 }
