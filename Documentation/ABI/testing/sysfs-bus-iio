@@ -1601,7 +1601,6 @@ Description:
 		For a list of available output power modes read
 		in_accel_power_mode_available.
 
-What:		/sys/.../iio:deviceX/in_energy_input
 What:		/sys/.../iio:deviceX/in_energy_raw
 What:		/sys/.../iio:deviceX/in_energyY_active_raw
 What:		/sys/.../iio:deviceX/in_energyY_reactive_raw
