@@ -1613,6 +1613,13 @@ Description:
 		user). Units after application of scale are Joules.
 
 What:		/sys/.../iio:deviceX/in_distance_input
+KernelVersion:	4.0
+Contact:	linux-iio@vger.kernel.org
+Description:
+		This attribute is used to read the measured distance (in meters)
+		to an object or the distance covered by the user since the last
+		reboot while activated.
+
 What:		/sys/.../iio:deviceX/in_distance_raw
 KernelVersion:	4.0
 Contact:	linux-iio@vger.kernel.org
