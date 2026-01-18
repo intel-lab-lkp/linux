@@ -247,6 +247,7 @@ static void sfp_module_parse_support(struct sfp_bus *bus,
 	case SFF8024_ECC_100GBASE_LR4_25GBASE_LR:
 	case SFF8024_ECC_100GBASE_ER4_25GBASE_ER:
 		phylink_set(modes, 100000baseLR4_ER4_Full);
+		phylink_set(modes, 25000baseLR_Full);
 		break;
 	case SFF8024_ECC_100GBASE_CR4:
 		phylink_set(modes, 100000baseCR4_Full);
@@ -342,7 +343,8 @@ phy_interface_t sfp_select_interface(struct sfp_bus *bus,
 {
 	if (phylink_test(link_modes, 25000baseCR_Full) ||
 	    phylink_test(link_modes, 25000baseKR_Full) ||
-	    phylink_test(link_modes, 25000baseSR_Full))
+	    phylink_test(link_modes, 25000baseSR_Full) ||
+	    phylink_test(link_modes, 25000baseLR_Full))
 		return PHY_INTERFACE_MODE_25GBASER;
 
 	if (phylink_test(link_modes, 10000baseCR_Full) ||
