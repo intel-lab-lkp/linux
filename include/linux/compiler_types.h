@@ -249,6 +249,16 @@ struct ftrace_likely_data {
 #define inline inline __gnu_inline __inline_maybe_unused notrace
 
 /*
+ * Compilers might decide to ignore inline hint.
+ * Functions that are performance critical can use inline_for_performance.
+ */
+#ifdef CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE
+#define inline_for_performance __always_inline
+#else
+#define inline_for_performance
+#endif
+
+/*
  * gcc provides both __inline__ and __inline as alternate spellings of
  * the inline keyword, though the latter is undocumented. New kernel
  * code should only use the inline spelling, but some existing code
