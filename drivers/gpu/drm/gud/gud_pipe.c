@@ -614,6 +614,9 @@ void gud_plane_atomic_update(struct drm_plane *plane,
 	if (!drm_dev_enter(drm, &idx))
 		return;
 
+	if (!crtc)
+		goto ctrl_disable;
+
 	if (!old_state->fb)
 		gud_usb_set_u8(gdrm, GUD_REQ_SET_CONTROLLER_ENABLE, 1);
 
@@ -637,7 +640,7 @@ void gud_plane_atomic_update(struct drm_plane *plane,
 	drm_gem_fb_end_cpu_access(fb, DMA_FROM_DEVICE);
 
 ctrl_disable:
-	if (!crtc->state->enable)
+	if (!crtc || !crtc->state->enable)
 		gud_usb_set_u8(gdrm, GUD_REQ_SET_CONTROLLER_ENABLE, 0);
 
 	drm_dev_exit(idx);
