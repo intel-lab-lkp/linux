@@ -111,7 +111,6 @@ class Automata:
             cursor += 1
 
         states = sorted(set(states))
-        states.remove(initial_state)
 
         # Insert the initial state at the beginning of the states
         states.insert(0, initial_state)
