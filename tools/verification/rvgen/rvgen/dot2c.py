@@ -202,7 +202,7 @@ class Dot2c(Automata):
         line = ""
         first = True
         for state in self.states:
-            if first == False:
+            if not first:
                 line = line + ', '
             else:
                 first = False
