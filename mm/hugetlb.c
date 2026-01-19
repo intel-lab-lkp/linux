@@ -5656,10 +5656,11 @@ int hugetlb_add_to_page_cache(struct folio *folio, struct address_space *mapping
 	struct inode *inode = mapping->host;
 	struct hstate *h = hstate_inode(inode);
 	int err;
+	XA_STATE_ORDER(xas, &mapping->i_pages, idx, folio_order(folio));
 
 	idx <<= huge_page_order(h);
 	__folio_set_locked(folio);
-	err = __filemap_add_folio(mapping, folio, idx, GFP_KERNEL, NULL);
+	err = __filemap_add_folio(mapping, folio, &xas, GFP_KERNEL, NULL, false);
 
 	if (unlikely(err)) {
 		__folio_clear_locked(folio);

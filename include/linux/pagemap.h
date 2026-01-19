@@ -1308,7 +1308,7 @@ loff_t mapping_seek_hole_data(struct address_space *, loff_t start, loff_t end,
 
 /* Must be non-static for BPF error injection */
 int __filemap_add_folio(struct address_space *mapping, struct folio *folio,
-		pgoff_t index, gfp_t gfp, void **shadowp);
+		struct xa_state *xas, gfp_t gfp, void **shadowp, bool xa_locked);
 
 bool filemap_range_has_writeback(struct address_space *mapping,
 				 loff_t start_byte, loff_t end_byte);
