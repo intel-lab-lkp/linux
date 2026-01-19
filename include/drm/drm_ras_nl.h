@@ -1,0 +1,24 @@
+/* SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-3-Clause) */
+/* Do not edit directly, auto-generated from: */
+/*	Documentation/netlink/specs/drm_ras.yaml */
+/* YNL-GEN kernel header */
+
+#ifndef _LINUX_DRM_RAS_GEN_H
+#define _LINUX_DRM_RAS_GEN_H
+
+#include <net/netlink.h>
+#include <net/genetlink.h>
+
+#include <uapi/drm/drm_ras.h>
+#include <drm/drm_ras_nl.h>
+
+int drm_ras_nl_list_nodes_dumpit(struct sk_buff *skb,
+				 struct netlink_callback *cb);
+int drm_ras_nl_get_error_counters_dumpit(struct sk_buff *skb,
+					 struct netlink_callback *cb);
+int drm_ras_nl_query_error_counter_doit(struct sk_buff *skb,
+					struct genl_info *info);
+
+extern struct genl_family drm_ras_nl_family;
+
+#endif /* _LINUX_DRM_RAS_GEN_H */
