@@ -2359,6 +2359,7 @@ static int f2fs_mpage_readpages(struct inode *inode,
 	unsigned nr_pages = rac ? readahead_count(rac) : 1;
 	unsigned max_nr_pages = nr_pages;
 	int ret = 0;
+	unsigned int did_fsverity_readahead = 0;
 
 #ifdef CONFIG_F2FS_FS_COMPRESSION
 	if (f2fs_compressed_file(inode)) {
@@ -2382,6 +2383,9 @@ static int f2fs_mpage_readpages(struct inode *inode,
 			folio = readahead_folio(rac);
 			prefetchw(&folio->flags);
 		}
+
+		if (!did_fsverity_readahead++)
+			fsverity_readahead(inode, folio->index, nr_pages);
 
 #ifdef CONFIG_F2FS_FS_COMPRESSION
 		index = folio->index;

@@ -90,10 +90,6 @@ struct fsverity_operations {
 	 *
 	 * @inode: the inode
 	 * @index: 0-based index of the page within the Merkle tree
-	 * @num_ra_pages: The number of Merkle tree pages that should be
-	 *		  prefetched starting at @index if the page at @index
-	 *		  isn't already cached.  Implementations may ignore this
-	 *		  argument; it's only a performance optimization.
 	 *
 	 * This can be called at any time on an open verity file.  It may be
 	 * called by multiple processes concurrently, even with the same page.
@@ -103,8 +99,10 @@ struct fsverity_operations {
 	 * Return: the page on success, ERR_PTR() on failure
 	 */
 	struct page *(*read_merkle_tree_page)(struct inode *inode,
-					      pgoff_t index,
-					      unsigned long num_ra_pages);
+					      pgoff_t index);
+
+	void (*readahead_merkle_tree)(struct inode *inode, pgoff_t index,
+			unsigned long nr_pages);
 
 	/**
 	 * Write a Merkle tree block to the given inode.
@@ -245,5 +243,29 @@ static inline bool fsverity_active(const struct inode *inode)
 {
 	return fsverity_get_info(inode) != NULL;
 }
+
+/**
+ * fsverity_readahead() - kick off readahead on fsverity hashes
+ * @inode:		inode containing fsverity hashes
+ * @index:		first data page offset to read ahead for
+ * @nr_pages:		number of data pages to read ahead for
+ *
+ * Start readahead on fsverity hashes.  To be called from the file systems
+ * ->read_folio and ->readahead methods to ensure that the hashes are
+ * already cached on completion of the file data read if possible.
+ */
+void __fsverity_readahead(struct inode *inode, const struct fsverity_info *vi,
+		pgoff_t index, unsigned long nr_pages);
+static inline void fsverity_readahead(struct inode *inode,
+		pgoff_t index, unsigned long nr_pages)
+{
+	const struct fsverity_info *vi = fsverity_get_info(inode);
+
+	if (vi)
+		__fsverity_readahead(inode, vi, index, nr_pages);
+}
+
+void generic_readahead_merkle_tree(struct inode *inode, pgoff_t index,
+		unsigned long nr_pages);
 
 #endif	/* _LINUX_FSVERITY_H */
