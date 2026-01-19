@@ -229,7 +229,7 @@ obj-$(CONFIG_RV_MON_{name_up}) += monitors/{name}/{name}.o
 
 
 class Monitor(RVGenerator):
-    monitor_types = { "global" : 1, "per_cpu" : 2, "per_task" : 3 }
+    monitor_types = {"global": 1, "per_cpu": 2, "per_task": 3}
 
     def __init__(self, extra_params={}):
         super().__init__(extra_params)

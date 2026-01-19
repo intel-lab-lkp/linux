@@ -109,8 +109,8 @@ class dot2k(Monitor, Dot2c):
         tp_args = tp_args_event if tp_type == "event" else tp_args_error
         if self.monitor_type == "per_task":
             tp_args.insert(0, tp_args_id)
-        tp_proto_c = ", ".join([a+b for a,b in tp_args])
-        tp_args_c = ", ".join([b for a,b in tp_args])
+        tp_proto_c = ", ".join([a + b for a, b in tp_args])
+        tp_args_c = ", ".join([b for a, b in tp_args])
         buff.append(f"	     TP_PROTO({tp_proto_c}),")
         buff.append(f"	     TP_ARGS({tp_args_c})")
         return '\n'.join(buff)
