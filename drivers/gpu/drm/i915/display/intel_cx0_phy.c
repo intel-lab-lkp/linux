@@ -3012,6 +3012,12 @@ static void intel_c20_pll_program(struct intel_display *display,
 		      MB_WRITE_COMMITTED);
 }
 
+static bool is_mplla_clock_rate(int clock)
+{
+	return intel_dpll_clock_matches(clock, 1000000) ||
+	       intel_dpll_clock_matches(clock, 2000000);
+}
+
 static void intel_program_port_clock_ctl(struct intel_encoder *encoder,
 					 const struct intel_cx0pll_state *pll_state,
 					 int port_clock,
@@ -3037,7 +3043,7 @@ static void intel_program_port_clock_ctl(struct intel_encoder *encoder,
 
 	/* TODO: HDMI FRL */
 	/* DP2.0 10G and 20G rates enable MPLLA*/
-	if (port_clock == 1000000 || port_clock == 2000000)
+	if (is_mplla_clock_rate(port_clock))
 		val |= pll_state->ssc_enabled ? XELPDP_SSC_ENABLE_PLLA : 0;
 	else
 		val |= pll_state->ssc_enabled ? XELPDP_SSC_ENABLE_PLLB : 0;
