@@ -193,6 +193,149 @@ static struct folio *ractl_alloc_folio(struct readahead_control *ractl,
 	return folio;
 }
 
+static void ractl_free_folios(struct folio **folios, unsigned long folio_count)
+{
+	unsigned long i;
+
+	if (!folios)
+		return;
+
+	for (i = 0; i < folio_count; ++i) {
+		if (folios[i])
+			folio_put(folios[i]);
+	}
+	kvfree(folios);
+}
+
+static struct folio **ractl_alloc_folios(struct readahead_control *ractl,
+					 gfp_t gfp_mask, unsigned int order,
+					 unsigned long folio_count)
+{
+	struct folio **folios;
+	unsigned long i;
+
+	folios = kvcalloc(folio_count, sizeof(struct folio *), GFP_KERNEL);
+
+	if (!folios)
+		return NULL;
+
+	for (i = 0; i < folio_count; ++i) {
+		struct folio *folio = ractl_alloc_folio(ractl, gfp_mask, order);
+
+		if (!folio)
+			break;
+		folios[i] = folio;
+	}
+
+	if (i != folio_count) {
+		ractl_free_folios(folios, i);
+		i = 0;
+		folios = NULL;
+	}
+
+	return folios;
+}
+
+static void ra_fill_folios_batched(struct readahead_control *ractl,
+				   struct folio **folios, unsigned long nr_to_read,
+				   unsigned long start_index, unsigned long mark,
+				   gfp_t gfp_mask)
+{
+	struct address_space *mapping = ractl->mapping;
+	unsigned int min_nrpages = mapping_min_folio_nrpages(mapping);
+	unsigned long added_folios = 0;
+	unsigned long i = 0;
+
+	while (i < nr_to_read) {
+		long ret;
+		unsigned long added_nrpages;
+
+		ret = filemap_add_folio_range(mapping, folios + added_folios,
+					      start_index + i,
+					      start_index + nr_to_read,
+					      gfp_mask);
+
+		if (unlikely(ret < 0)) {
+			if (ret == -ENOMEM)
+				break;
+			read_pages(ractl);
+			ractl->_index += min_nrpages;
+			i = ractl->_index + ractl->_nr_pages - start_index;
+			continue;
+		}
+
+		if (unlikely(ret == 0))
+			break;
+
+		added_nrpages = ret;
+		/*
+		 * `added_nrpages` is multiple of min_nrpages.
+		 */
+		added_folios += added_nrpages / min_nrpages;
+
+		if (i <= mark && mark < i + added_nrpages)
+			folio_set_readahead(xa_load(&mapping->i_pages,
+						    start_index + mark));
+		for (unsigned long j = i; j < i + added_nrpages; j += min_nrpages)
+			ractl->_workingset |= folio_test_workingset(xa_load(&mapping->i_pages,
+									    start_index + j));
+		ractl->_nr_pages += added_nrpages;
+
+		i += added_nrpages;
+	}
+}
+
+static void ra_fill_folios_single(struct readahead_control *ractl,
+				  unsigned long nr_to_read,
+				  unsigned long start_index, unsigned long mark,
+				  gfp_t gfp_mask)
+{
+	struct address_space *mapping = ractl->mapping;
+	unsigned int min_nrpages = mapping_min_folio_nrpages(mapping);
+	unsigned long i = 0;
+
+	while (i < nr_to_read) {
+		struct folio *folio = xa_load(&mapping->i_pages, start_index + i);
+		int ret;
+
+		if (folio && !xa_is_value(folio)) {
+			/*
+			 * Page already present?  Kick off the current batch
+			 * of contiguous pages before continuing with the
+			 * next batch.  This page may be the one we would
+			 * have intended to mark as Readahead, but we don't
+			 * have a stable reference to this page, and it's
+			 * not worth getting one just for that.
+			 */
+			read_pages(ractl);
+			ractl->_index += min_nrpages;
+			i = ractl->_index + ractl->_nr_pages - start_index;
+			continue;
+		}
+
+		folio = ractl_alloc_folio(ractl, gfp_mask,
+					  mapping_min_folio_order(mapping));
+		if (!folio)
+			break;
+
+		ret = filemap_add_folio(mapping, folio, start_index + i, gfp_mask);
+		if (ret < 0) {
+			folio_put(folio);
+			if (ret == -ENOMEM)
+				break;
+			read_pages(ractl);
+			ractl->_index += min_nrpages;
+			i = ractl->_index + ractl->_nr_pages - start_index;
+			continue;
+		}
+		if (i == mark)
+			folio_set_readahead(folio);
+		ractl->_workingset |= folio_test_workingset(folio);
+		ractl->_nr_pages += min_nrpages;
+		i += min_nrpages;
+	}
+}
+
 /**
  * page_cache_ra_unbounded - Start unchecked readahead.
  * @ractl: Readahead control.
@@ -213,8 +356,10 @@ void page_cache_ra_unbounded(struct readahead_control *ractl,
 	struct address_space *mapping = ractl->mapping;
 	unsigned long index = readahead_index(ractl);
 	gfp_t gfp_mask = readahead_gfp_mask(mapping);
-	unsigned long mark = ULONG_MAX, i = 0;
+	unsigned long mark = ULONG_MAX;
 	unsigned int min_nrpages = mapping_min_folio_nrpages(mapping);
+	struct folio **folios = NULL;
+	unsigned long alloc_folios = 0;
 
 	/*
 	 * Partway through the readahead operation, we will have added
@@ -249,49 +394,18 @@ void page_cache_ra_unbounded(struct readahead_control *ractl,
 	}
 	nr_to_read += readahead_index(ractl) - index;
 	ractl->_index = index;
-
+	alloc_folios = DIV_ROUND_UP(nr_to_read, min_nrpages);
 	/*
 	 * Preallocate as many pages as we will need.
 	 */
-	while (i < nr_to_read) {
-		struct folio *folio = xa_load(&mapping->i_pages, index + i);
-		int ret;
-
-		if (folio && !xa_is_value(folio)) {
-			/*
-			 * Page already present?  Kick off the current batch
-			 * of contiguous pages before continuing with the
-			 * next batch.  This page may be the one we would
-			 * have intended to mark as Readahead, but we don't
-			 * have a stable reference to this page, and it's
-			 * not worth getting one just for that.
-			 */
-			read_pages(ractl);
-			ractl->_index += min_nrpages;
-			i = ractl->_index + ractl->_nr_pages - index;
-			continue;
-		}
-
-		folio = ractl_alloc_folio(ractl, gfp_mask,
-					mapping_min_folio_order(mapping));
-		if (!folio)
-			break;
-
-		ret = filemap_add_folio(mapping, folio, index + i, gfp_mask);
-		if (ret < 0) {
-			folio_put(folio);
-			if (ret == -ENOMEM)
-				break;
-			read_pages(ractl);
-			ractl->_index += min_nrpages;
-			i = ractl->_index + ractl->_nr_pages - index;
-			continue;
-		}
-		if (i == mark)
-			folio_set_readahead(folio);
-		ractl->_workingset |= folio_test_workingset(folio);
-		ractl->_nr_pages += min_nrpages;
-		i += min_nrpages;
+	folios = ractl_alloc_folios(ractl, gfp_mask,
+				    mapping_min_folio_order(mapping),
+				    alloc_folios);
+	if (folios) {
+		ra_fill_folios_batched(ractl, folios, nr_to_read, index, mark, gfp_mask);
+		ractl_free_folios(folios, alloc_folios);
+	} else {
+		ra_fill_folios_single(ractl, nr_to_read, index, mark, gfp_mask);
 	}
 
 	/*
