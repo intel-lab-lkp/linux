@@ -2700,7 +2700,7 @@ int ath11k_wmi_send_wmm_update_cmd_tlv(struct ath11k *ar, u32 vdev_id,
 			  FIELD_PREP(WMI_TLV_LEN, sizeof(*cmd) - TLV_HDR_SIZE);
 
 	cmd->vdev_id = vdev_id;
-	cmd->wmm_param_type = wmm_param_type;
+	cmd->wmm_param_type = WMI_WMM_PARAM_TYPE_LEGACY;
 
 	for (ac = 0; ac < WME_NUM_AC; ac++) {
 		switch (ac) {
