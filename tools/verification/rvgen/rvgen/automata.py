@@ -18,7 +18,7 @@ class AutomataError(OSError):
     """
 
 class Automata:
-    """Automata class: Reads a dot file and part it as an automata.
+    """Automata class: Reads a dot file and parses it as an automata.
 
     Attributes:
         dot_file: A dot file with an state_automaton definition.
@@ -113,7 +113,7 @@ class Automata:
         states = sorted(set(states))
         states.remove(initial_state)
 
-        # Insert the initial state at the bein og the states
+        # Insert the initial state at the beginning of the states
         states.insert(0, initial_state)
 
         if not has_final_states:
@@ -134,7 +134,7 @@ class Automata:
                 line = self.__dot_lines[cursor].split()
                 event = line[-2].replace('"','')
 
-                # when a transition has more than one lables, they are like this
+                # when a transition has more than one labels, they are like this
                 # "local_irq_enable\nhw_local_irq_enable_n"
                 # so split them.
 
