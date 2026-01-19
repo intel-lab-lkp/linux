@@ -331,7 +331,7 @@ out:
 	WRITE_ONCE(ref->cache, node);
 	spin_unlock_irq(&ref->tree_lock);
 
-	return &node->base;
+	return node ? &node->base : NULL;
 }
 
 void __i915_active_init(struct i915_active *ref,
