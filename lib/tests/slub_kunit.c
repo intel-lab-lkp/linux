@@ -7,6 +7,8 @@
 #include <linux/kernel.h>
 #include <linux/rcupdate.h>
 #include <linux/delay.h>
+#include <linux/cpumask.h>
+#include <linux/smp.h>
 #include "../mm/slab.h"
 
 static struct kunit_resource resource;
@@ -290,7 +292,68 @@ static void test_krealloc_redzone_zeroing(struct kunit *test)
 	kasan_enable_current();
 	kmem_cache_destroy(s);
 }
+struct cache_obj {
+    struct kmem_cache *cache;
+    void *obj;
+    struct kunit *test;
+};
 
+/* CPU execute  alloc */
+static void alloc_obj_fn(void *arg)
+{
+    struct cache_obj *co = arg;
+
+    co->obj = kmem_cache_alloc(co->cache, GFP_KERNEL);
+    KUNIT_ASSERT_NOT_NULL(co->test, co->obj);
+}
+
+/* CPU execute  free */
+static void free_obj_fn(void *arg)
+{
+    struct cache_obj *co = arg;
+    kmem_cache_free(co->cache, co->obj);
+}
+
+static void test_cross_cpu_alloc_free(struct kunit *test)
+{
+    struct kmem_cache *cache;
+    struct cache_obj co;
+    int cpu0, cpu1;
+
+    if ( num_online_cpus() < 2)
+        kunit_skip(test, "need >= 2 CPUs");
+
+    /* Create a test cache */
+    cache = kmem_cache_create("cross_cpu_test",
+                              64, 0, SLAB_DEBUG_FLAGS, NULL);
+    KUNIT_ASSERT_NOT_ERR_OR_NULL(test, cache);
+
+    /* Pick two different online CPUs */
+    cpu0 = cpumask_first(cpu_online_mask);
+    cpu1 = cpumask_next(cpu0, cpu_online_mask);
+
+    /* Fill the struct to pass as argument */
+    co.cache = cache;
+    co.obj = NULL;
+    co.test = test;
+
+    /* CPU0 alloc */
+    KUNIT_ASSERT_EQ(test, smp_call_function_single(cpu0,
+                                                   alloc_obj_fn,
+                                                   &co, 1), 0);
+
+    /* CPU1 free */
+    KUNIT_ASSERT_EQ(test, smp_call_function_single(cpu1,
+                                                   free_obj_fn,
+                                                   &co, 1), 0);
+
+    /* Allocate again (any CPU) */
+    co.obj = kmem_cache_alloc(cache, GFP_KERNEL);
+    KUNIT_ASSERT_NOT_NULL(test, co.obj);
+
+    kmem_cache_free(cache, co.obj);
+    kmem_cache_destroy(cache);
+}
 static int test_init(struct kunit *test)
 {
 	slab_errors = 0;
@@ -315,6 +378,7 @@ static struct kunit_case test_cases[] = {
 	KUNIT_CASE(test_kfree_rcu_wq_destroy),
 	KUNIT_CASE(test_leak_destroy),
 	KUNIT_CASE(test_krealloc_redzone_zeroing),
+        KUNIT_CASE(test_cross_cpu_alloc_free),
 	{}
 };
 
