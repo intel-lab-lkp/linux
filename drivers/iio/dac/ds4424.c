@@ -193,6 +193,7 @@ static int ds4424_write_raw(struct iio_dev *indio_dev,
 		if (val < -max_val || val > max_val)
 			return -EINVAL;
 
+		/* Canonicalize 0 to sink; datasheet treats sign as don't-care. */
 		if (val > 0) {
 			raw.source_bit = DS4424_SOURCE_I;
 			raw.dx = val;
@@ -212,6 +213,7 @@ static int ds4424_verify_chip(struct iio_dev *indio_dev)
 {
 	int ret, val;
 
+	/* No device ID; verify presence by a readable register. */
 	ret = ds4424_get_value(indio_dev, &val, 0);
 	if (ret < 0)
 		dev_err(&indio_dev->dev,
