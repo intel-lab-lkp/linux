@@ -61,7 +61,6 @@ struct lt_phy_params {
 };
 
 static const struct intel_lt_phy_pll_state xe3plpd_lt_dp_rbr = {
-	.clock = 162000,
 	.config = {
 		0x83,
 		0x2d,
@@ -115,7 +114,6 @@ static const struct intel_lt_phy_pll_state xe3plpd_lt_dp_rbr = {
 };
 
 static const struct intel_lt_phy_pll_state xe3plpd_lt_dp_hbr1 = {
-	.clock = 270000,
 	.config = {
 		0x8b,
 		0x2d,
@@ -169,7 +167,6 @@ static const struct intel_lt_phy_pll_state xe3plpd_lt_dp_hbr1 = {
 };
 
 static const struct intel_lt_phy_pll_state xe3plpd_lt_dp_hbr2 = {
-	.clock = 540000,
 	.config = {
 		0x93,
 		0x2d,
@@ -223,7 +220,6 @@ static const struct intel_lt_phy_pll_state xe3plpd_lt_dp_hbr2 = {
 };
 
 static const struct intel_lt_phy_pll_state xe3plpd_lt_dp_hbr3 = {
-	.clock = 810000,
 	.config = {
 		0x9b,
 		0x2d,
@@ -277,7 +273,6 @@ static const struct intel_lt_phy_pll_state xe3plpd_lt_dp_hbr3 = {
 };
 
 static const struct intel_lt_phy_pll_state xe3plpd_lt_dp_uhbr10 = {
-	.clock = 1000000,
 	.config = {
 		0x43,
 		0x2d,
@@ -331,7 +326,6 @@ static const struct intel_lt_phy_pll_state xe3plpd_lt_dp_uhbr10 = {
 };
 
 static const struct intel_lt_phy_pll_state xe3plpd_lt_dp_uhbr13_5 = {
-	.clock = 1350000,
 	.config = {
 		0xcb,
 		0x2d,
@@ -385,7 +379,6 @@ static const struct intel_lt_phy_pll_state xe3plpd_lt_dp_uhbr13_5 = {
 };
 
 static const struct intel_lt_phy_pll_state xe3plpd_lt_dp_uhbr20 = {
-	.clock = 2000000,
 	.config = {
 		0x53,
 		0x2d,
@@ -467,7 +460,6 @@ static const struct intel_lt_phy_pll_params xe3plpd_lt_dp_tables[] = {
 };
 
 static const struct intel_lt_phy_pll_state xe3plpd_lt_edp_2_16 = {
-	.clock = 216000,
 	.config = {
 		0xa3,
 		0x2d,
@@ -521,7 +513,6 @@ static const struct intel_lt_phy_pll_state xe3plpd_lt_edp_2_16 = {
 };
 
 static const struct intel_lt_phy_pll_state xe3plpd_lt_edp_2_43 = {
-	.clock = 243000,
 	.config = {
 		0xab,
 		0x2d,
@@ -575,7 +566,6 @@ static const struct intel_lt_phy_pll_state xe3plpd_lt_edp_2_43 = {
 };
 
 static const struct intel_lt_phy_pll_state xe3plpd_lt_edp_3_24 = {
-	.clock = 324000,
 	.config = {
 		0xb3,
 		0x2d,
@@ -629,7 +619,6 @@ static const struct intel_lt_phy_pll_state xe3plpd_lt_edp_3_24 = {
 };
 
 static const struct intel_lt_phy_pll_state xe3plpd_lt_edp_4_32 = {
-	.clock = 432000,
 	.config = {
 		0xbb,
 		0x2d,
@@ -683,7 +672,6 @@ static const struct intel_lt_phy_pll_state xe3plpd_lt_edp_4_32 = {
 };
 
 static const struct intel_lt_phy_pll_state xe3plpd_lt_edp_6_75 = {
-	.clock = 675000,
 	.config = {
 		0xdb,
 		0x2d,
@@ -750,7 +738,6 @@ static const struct intel_lt_phy_pll_params xe3plpd_lt_edp_tables[] = {
 };
 
 static const struct intel_lt_phy_pll_state xe3plpd_lt_hdmi_252 = {
-	.clock = 25200,
 	.config = {
 		0x84,
 		0x2d,
@@ -804,7 +791,6 @@ static const struct intel_lt_phy_pll_state xe3plpd_lt_hdmi_252 = {
 };
 
 static const struct intel_lt_phy_pll_state xe3plpd_lt_hdmi_742p5 = {
-	.clock = 74250,
 	.config = {
 		0x84,
 		0x2d,
@@ -858,7 +844,6 @@ static const struct intel_lt_phy_pll_state xe3plpd_lt_hdmi_742p5 = {
 };
 
 static const struct intel_lt_phy_pll_state xe3plpd_lt_hdmi_1p485 = {
-	.clock = 148500,
 	.config = {
 		0x84,
 		0x2d,
@@ -912,7 +897,6 @@ static const struct intel_lt_phy_pll_state xe3plpd_lt_hdmi_1p485 = {
 };
 
 static const struct intel_lt_phy_pll_state xe3plpd_lt_hdmi_5p94 = {
-	.clock = 594000,
 	.config = {
 		0x84,
 		0x2d,
@@ -1732,7 +1716,7 @@ intel_lt_phy_calc_port_clock(struct intel_display *display,
 		clk = intel_lt_phy_calc_hdmi_port_clock(display, lt_state);
 	} else {
 		drm_WARN_ON(display->drm, "Unsupported LT PHY Mode!\n");
-		clk = xe3plpd_lt_hdmi_252.clock;
+		clk = 25200;
 	}
 
 	return clk;
@@ -2192,7 +2176,6 @@ void intel_lt_phy_pll_readout_hw_state(struct intel_encoder *encoder,
 				       const struct intel_crtc_state *crtc_state,
 				       struct intel_lt_phy_pll_state *pll_state)
 {
-	struct intel_display *display = to_intel_display(encoder);
 	u8 owned_lane_mask;
 	u8 lane;
 	struct ref_tracker *wakeref;
@@ -2217,8 +2200,6 @@ void intel_lt_phy_pll_readout_hw_state(struct intel_encoder *encoder,
 						  LT_PHY_VDR_X_DATAY(i, j));
 	}
 
-	pll_state->clock =
-		intel_lt_phy_calc_port_clock(display, &crtc_state->dpll_hw_state.ltpll);
 	intel_lt_phy_transaction_end(encoder, wakeref);
 }
 
