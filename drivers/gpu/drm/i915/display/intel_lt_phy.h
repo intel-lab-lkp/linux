@@ -21,8 +21,8 @@ void intel_lt_phy_pll_disable(struct intel_encoder *encoder);
 int
 intel_lt_phy_pll_calc_state(struct intel_crtc_state *crtc_state,
 			    struct intel_encoder *encoder);
-int intel_lt_phy_calc_port_clock(struct intel_encoder *encoder,
-				 const struct intel_crtc_state *crtc_state);
+int intel_lt_phy_calc_port_clock(struct intel_display *display,
+				 const struct intel_lt_phy_pll_state *lt_state);
 void intel_lt_phy_set_signal_levels(struct intel_encoder *encoder,
 				    const struct intel_crtc_state *crtc_state);
 void intel_lt_phy_dump_hw_state(struct intel_display *display,
