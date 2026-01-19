@@ -237,6 +237,7 @@ static inline void __iowrite32_copy(void __iomem *to, const void *from,
 
 #endif /* __KERNEL__ */
 
+#ifdef CONFIG_IO_DELAY
 extern void native_io_delay(void);
 
 extern int io_delay_type;
@@ -254,6 +255,11 @@ static inline void slow_down_io(void)
 
 	native_io_delay();
 }
+#else
+static inline void slow_down_io(void)
+{
+}
+#endif
 
 #define BUILDIO(bwl, type)						\
 static inline void out##bwl##_p(type value, u16 port)			\
