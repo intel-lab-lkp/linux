@@ -120,7 +120,7 @@ class Dot2c(Automata):
         for entry in buff:
             if first:
                 string = string + "\t\t\"" + entry
-                first = False;
+                first = False
             else:
                 string = string + "\",\n\t\t\"" + entry
         string = string + "\""
