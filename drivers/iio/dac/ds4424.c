@@ -147,8 +147,9 @@ static int ds4424_read_raw(struct iio_dev *indio_dev,
 	case IIO_CHAN_INFO_RAW:
 		ret = ds4424_get_value(indio_dev, val, chan->channel);
 		if (ret < 0) {
-			pr_err("%s : ds4424_get_value returned %d\n",
-							__func__, ret);
+			dev_err_ratelimited(&indio_dev->dev,
+					    "%s: ds4424_get_value failed %pe\n",
+					    __func__, ERR_PTR(ret));
 			return ret;
 		}
 		raw.bits = *val;
