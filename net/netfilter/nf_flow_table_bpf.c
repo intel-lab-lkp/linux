@@ -31,6 +31,9 @@ __diag_ignore_all("-Wmissing-prototypes",
 		  "Global functions as their definitions will be in nf_flow_table BTF");
 
 __bpf_kfunc_start_defs();
+__bpf_kfunc struct flow_offload_tuple_rhash *
+bpf_xdp_flow_lookup(struct xdp_md *ctx, struct bpf_fib_lookup *fib_tuple,
+		    struct bpf_flowtable_opts *opts, u32 opts_len);
 
 static struct flow_offload_tuple_rhash *
 bpf_xdp_flow_tuple_lookup(struct net_device *dev,
