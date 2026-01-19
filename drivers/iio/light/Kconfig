@@ -580,6 +580,17 @@ config ST_UVIS25_SPI
 	depends on ST_UVIS25
 	select REGMAP_SPI
 
+config TCS3400
+	tristate "AMS TCS3400 color light-to-digital converter"
+	depends on I2C
+	default n
+	help
+	  If you say yes here you get support for the AMS TCS3400.
+	  This sensor can detect ambient light and color (RGB) values.
+
+	  This driver can also be built as a module.  If so, the module
+	  will be called tcs3400.
+
 config TCS3414
 	tristate "TAOS TCS3414 digital color sensor"
 	depends on I2C

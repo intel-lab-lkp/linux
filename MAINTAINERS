@@ -22871,6 +22871,7 @@ M:	Petr Hodina
 L:	Petr Hodina <petr.hodina@protonmail.com>
 S:	Petr Hodina <petr.hodina@protonmail.com>
 F:	Documentation/devicetree/bindings/iio/light/ams,tcs3400.yaml
+F:	drivers/iio/light/tcs3400.c
 
 ROHM BH1745 COLOUR SENSOR
 M:	Mudit Sharma <muditsharma.info@gmail.com>
