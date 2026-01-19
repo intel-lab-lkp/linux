@@ -24,6 +24,8 @@ properties:
 
   vdd-supply: true
 
+  vio-supply: true
+
 required:
   - compatible
   - reg
