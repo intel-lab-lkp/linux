@@ -456,8 +456,11 @@
 };
 
 &pcie {
-	reset-gpio = <&extended_io 1 GPIO_ACTIVE_LOW>;
 	status = "okay";
+};
+
+&pcie_port0 {
+	reset-gpios = <&extended_io 1 GPIO_ACTIVE_LOW>;
 };
 
 &reg_1p0d {
