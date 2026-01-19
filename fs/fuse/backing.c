@@ -32,19 +32,29 @@ void fuse_backing_put(struct fuse_backing *fb)
 		fuse_backing_free(fb);
 }
 
-void fuse_backing_files_init(struct fuse_conn *fc)
+int fuse_backing_files_init(struct fuse_conn *fc)
 {
-	idr_init(&fc->backing_files_map);
+	struct idr *idr;
+
+	idr = kzalloc(sizeof(*idr), GFP_KERNEL);
+	if (!idr)
+		return -ENOMEM;
+	idr_init(idr);
+	rcu_assign_pointer(fc->backing_files_map, idr);
+	return 0;
 }
 
 static int fuse_backing_id_alloc(struct fuse_conn *fc, struct fuse_backing *fb)
 {
+	struct idr *idr;
 	int id;
 
 	idr_preload(GFP_KERNEL);
 	spin_lock(&fc->lock);
+	idr = rcu_dereference_protected(fc->backing_files_map,
+					lockdep_is_held(&fc->lock));
 	/* FIXME: xarray might be space inefficient */
-	id = idr_alloc_cyclic(&fc->backing_files_map, fb, 1, 0, GFP_ATOMIC);
+	id = idr_alloc_cyclic(idr, fb, 1, 0, GFP_ATOMIC);
 	spin_unlock(&fc->lock);
 	idr_preload_end();
 
@@ -55,10 +65,13 @@ static int fuse_backing_id_alloc(struct fuse_conn *fc, struct fuse_backing *fb)
 static struct fuse_backing *fuse_backing_id_remove(struct fuse_conn *fc,
 						   int id)
 {
+	struct idr *idr;
 	struct fuse_backing *fb;
 
 	spin_lock(&fc->lock);
-	fb = idr_remove(&fc->backing_files_map, id);
+	idr = rcu_dereference_protected(fc->backing_files_map,
+					lockdep_is_held(&fc->lock));
+	fb = idr_remove(idr, id);
 	spin_unlock(&fc->lock);
 
 	return fb;
@@ -75,8 +88,13 @@ static int fuse_backing_id_free(int id, void *p, void *data)
 
 void fuse_backing_files_free(struct fuse_conn *fc)
 {
-	idr_for_each(&fc->backing_files_map, fuse_backing_id_free, NULL);
-	idr_destroy(&fc->backing_files_map);
+	struct idr *idr = rcu_dereference_protected(fc->backing_files_map, 1);
+
+	if (idr) {
+		idr_for_each(idr, fuse_backing_id_free, NULL);
+		idr_destroy(idr);
+		kfree(idr);
+	}
 }
 
 int fuse_backing_open(struct fuse_conn *fc, struct fuse_backing_map *map)
@@ -166,12 +184,56 @@ out:
 	return err;
 }
 
+int fuse_backing_close_all(struct fuse_conn *fc)
+{
+	struct idr *old_idr, *new_idr;
+	struct fuse_backing *fb;
+	int id;
+
+	if (!fc->passthrough || !capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	new_idr = kzalloc(sizeof(*new_idr), GFP_KERNEL);
+	if (!new_idr)
+		return -ENOMEM;
+
+	idr_init(new_idr);
+
+	/*
+	 * Atomically exchange the old IDR with a new empty one under lock.
+	 * This avoids long lock hold times and races with concurrent
+	 * open/close operations.
+	 */
+	spin_lock(&fc->lock);
+	old_idr = rcu_replace_pointer(fc->backing_files_map, new_idr,
+				      lockdep_is_held(&fc->lock));
+	spin_unlock(&fc->lock);
+
+	/*
+	 * Ensure all concurrent RCU readers complete before releasing backing
+	 * files, so any in-flight lookups can safely take references.
+	 */
+	synchronize_rcu();
+
+	if (old_idr) {
+		idr_for_each_entry(old_idr, fb, id)
+			fuse_backing_put(fb);
+
+		idr_destroy(old_idr);
+		kfree(old_idr);
+	}
+
+	return 0;
+}
+
 struct fuse_backing *fuse_backing_lookup(struct fuse_conn *fc, int backing_id)
 {
+	struct idr *idr;
 	struct fuse_backing *fb;
 
 	rcu_read_lock();
-	fb = idr_find(&fc->backing_files_map, backing_id);
+	idr = rcu_dereference(fc->backing_files_map);
+	fb = idr ? idr_find(idr, backing_id) : NULL;
 	fb = fuse_backing_get(fb);
 	rcu_read_unlock();
 

@@ -2654,6 +2654,19 @@ static long fuse_dev_ioctl_backing_close(struct file *file, __u32 __user *argp)
 	return fuse_backing_close(fud->fc, backing_id);
 }
 
+static long fuse_dev_ioctl_backing_close_all(struct file *file)
+{
+	struct fuse_dev *fud = fuse_get_dev(file);
+
+	if (IS_ERR(fud))
+		return PTR_ERR(fud);
+
+	if (!IS_ENABLED(CONFIG_FUSE_PASSTHROUGH))
+		return -EOPNOTSUPP;
+
+	return fuse_backing_close_all(fud->fc);
+}
+
 static long fuse_dev_ioctl_sync_init(struct file *file)
 {
 	int err = -EINVAL;
@@ -2681,6 +2694,9 @@ static long fuse_dev_ioctl(struct file *file, unsigned int cmd,
 
 	case FUSE_DEV_IOC_BACKING_CLOSE:
 		return fuse_dev_ioctl_backing_close(file, argp);
+
+	case FUSE_DEV_IOC_BACKING_CLOSE_ALL:
+		return fuse_dev_ioctl_backing_close_all(file);
 
 	case FUSE_DEV_IOC_SYNC_INIT:
 		return fuse_dev_ioctl_sync_init(file);
