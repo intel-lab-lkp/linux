@@ -31,10 +31,8 @@ struct pci_config_window *pci_host_common_ecam_create(struct device *dev,
 	struct pci_config_window *cfg;
 
 	err = of_address_to_resource(dev->of_node, 0, &cfgres);
-	if (err) {
-		dev_err(dev, "missing \"reg\" property\n");
+	if (err)
 		return ERR_PTR(err);
-	}
 
 	bus = resource_list_first_type(&bridge->windows, IORESOURCE_BUS);
 	if (!bus)
