@@ -319,13 +319,17 @@ int ovs_vport_get_upcall_stats(struct vport *vport, struct sk_buff *skb)
 	for_each_possible_cpu(i) {
 		const struct vport_upcall_stats_percpu *stats;
 		unsigned int start;
+		__u64 n_success;
+		__u64 n_fail;
 
 		stats = per_cpu_ptr(vport->upcall_stats, i);
 		do {
 			start = u64_stats_fetch_begin(&stats->syncp);
-			tx_success += u64_stats_read(&stats->n_success);
-			tx_fail += u64_stats_read(&stats->n_fail);
+			n_success = u64_stats_read(&stats->n_success);
+			n_fail = u64_stats_read(&stats->n_fail);
 		} while (u64_stats_fetch_retry(&stats->syncp, start));
+		tx_success += n_success;
+		tx_fail += n_fail;
 	}
 
 	nla = nla_nest_start_noflag(skb, OVS_VPORT_ATTR_UPCALL_STATS);
