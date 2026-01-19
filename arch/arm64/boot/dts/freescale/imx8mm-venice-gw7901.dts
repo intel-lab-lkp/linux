@@ -741,10 +741,6 @@
 	status = "disabled";
 };
 
-&pgc_gpumix {
-	status = "disabled";
-};
-
 &pgc_mipi {
 	status = "disabled";
 };
