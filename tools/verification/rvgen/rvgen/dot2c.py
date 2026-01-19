@@ -207,7 +207,7 @@ class Dot2c(Automata):
             else:
                 first = False
 
-            if self.final_states.__contains__(state):
+            if state in self.final_states:
                 line = line + '1'
             else:
                 line = line + '0'
