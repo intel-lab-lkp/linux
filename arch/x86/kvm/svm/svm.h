@@ -96,6 +96,7 @@ struct kvm_sev_info {
 	bool active;		/* SEV enabled guest */
 	bool es_active;		/* SEV-ES enabled guest */
 	bool need_init;		/* waiting for SEV_INIT2 */
+	bool snp_finished;	/* SNP guest measurement has been finalized */
 	unsigned int asid;	/* ASID used for this guest */
 	unsigned int handle;	/* SEV firmware handle */
 	int fd;			/* SEV device fd */
