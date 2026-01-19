@@ -98,7 +98,7 @@ pub trait AllocImpl: super::private::Sealed + drm::gem::IntoGEMObject {
 /// This trait must be implemented by drivers in order to create a `struct drm_device` and `struct
 /// drm_driver` to be registered in the DRM subsystem.
 #[vtable]
-pub trait Driver {
+pub trait Driver: DriverFeatures {
     /// Context data associated with the DRM driver
     type Data: Sync + Send;
 
@@ -168,3 +168,18 @@ impl<T: Driver> Drop for Registration<T> {
         unsafe { bindings::drm_dev_unregister(self.0.as_raw()) };
     }
 }
+
+/// Marker trait for drivers supporting specific features.
+///
+/// This trait is unsafe, and each feature might add its own safety
+/// requirements. The safety requirements for this trait requires the caller to
+/// comply with the safety requirements of each supported feature.
+///
+/// Features might also require additional trait implementations to be present.
+/// These additional traits may also be unsafe.
+///
+/// # Safety
+///
+/// Drivers implementing this trait must ensure they comply with the safety
+/// requirements of each supported feature.
+pub unsafe trait DriverFeatures {}

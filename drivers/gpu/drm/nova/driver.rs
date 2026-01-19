@@ -69,3 +69,8 @@ impl drm::Driver for NovaDriver {
         (NOVA_GEM_INFO, drm_nova_gem_info, ioctl::AUTH | ioctl::RENDER_ALLOW, File::gem_info),
     }
 }
+
+// SAFETY: This trait requires implementers to observe the safety requirements
+// of each enabled feature. There are no features enabled, so this is safe by
+// definition.
+unsafe impl drm::driver::DriverFeatures for NovaDriver {}
