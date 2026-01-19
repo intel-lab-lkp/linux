@@ -32,16 +32,16 @@ pub type ResourceSize = bindings::resource_size_t;
 /// By itself, the existence of an instance of this structure does not provide any guarantees that
 /// the represented MMIO region does exist or is properly mapped.
 ///
-/// Instead, the bus specific MMIO implementation must convert this raw representation into an `Io`
-/// instance providing the actual memory accessors. Only by the conversion into an `Io` structure
-/// any guarantees are given.
-pub struct IoRaw<const SIZE: usize = 0> {
+/// Instead, the bus specific MMIO implementation must convert this raw representation into an
+/// `Mmio` instance providing the actual memory accessors. Only by the conversion into an `Mmio`
+/// structure any guarantees are given.
+pub struct MmioRaw<const SIZE: usize = 0> {
     addr: usize,
     maxsize: usize,
 }
 
-impl<const SIZE: usize> IoRaw<SIZE> {
-    /// Returns a new `IoRaw` instance on success, an error otherwise.
+impl<const SIZE: usize> MmioRaw<SIZE> {
+    /// Returns a new `MmioRaw` instance on success, an error otherwise.
     pub fn new(addr: usize, maxsize: usize) -> Result<Self> {
         if maxsize < SIZE {
             return Err(EINVAL);
@@ -81,14 +81,15 @@ impl<const SIZE: usize> IoRaw<SIZE> {
 ///     ffi::c_void,
 ///     io::{
 ///         Io,
-///         IoRaw,
+///         Mmio,
+///         MmioRaw,
 ///         PhysAddr,
 ///     },
 /// };
 /// use core::ops::Deref;
 ///
 /// // See also `pci::Bar` for a real example.
-/// struct IoMem<const SIZE: usize>(IoRaw<SIZE>);
+/// struct IoMem<const SIZE: usize>(MmioRaw<SIZE>);
 ///
 /// impl<const SIZE: usize> IoMem<SIZE> {
 ///     /// # Safety
@@ -103,7 +104,7 @@ impl<const SIZE: usize> IoRaw<SIZE> {
 ///             return Err(ENOMEM);
 ///         }
 ///
-///         Ok(IoMem(IoRaw::new(addr as usize, SIZE)?))
+///         Ok(IoMem(MmioRaw::new(addr as usize, SIZE)?))
 ///     }
 /// }
 ///
@@ -115,11 +116,11 @@ impl<const SIZE: usize> IoRaw<SIZE> {
 /// }
 ///
 /// impl<const SIZE: usize> Deref for IoMem<SIZE> {
-///    type Target = Io<SIZE>;
+///    type Target = Mmio<SIZE>;
 ///
 ///    fn deref(&self) -> &Self::Target {
 ///         // SAFETY: The memory range stored in `self` has been properly mapped in `Self::new`.
-///         unsafe { Io::from_raw(&self.0) }
+///         unsafe { Mmio::from_raw(&self.0) }
 ///    }
 /// }
 ///
@@ -133,29 +134,31 @@ impl<const SIZE: usize> IoRaw<SIZE> {
 /// # }
 /// ```
 #[repr(transparent)]
-pub struct Io<const SIZE: usize = 0>(IoRaw<SIZE>);
+pub struct Mmio<const SIZE: usize = 0>(MmioRaw<SIZE>);
 
 macro_rules! define_read {
-    ($(#[$attr:meta])* $name:ident, $try_name:ident, $c_fn:ident -> $type_name:ty) => {
+    (infallible, $(#[$attr:meta])* $vis:vis $name:ident, $c_fn:ident -> $type_name:ty) => {
         /// Read IO data from a given offset known at compile time.
         ///
         /// Bound checks are performed on compile time, hence if the offset is not known at compile
         /// time, the build will fail.
         $(#[$attr])*
         #[inline]
-        pub fn $name(&self, offset: usize) -> $type_name {
+        $vis fn $name(&self, offset: usize) -> $type_name {
             let addr = self.io_addr_assert::<$type_name>(offset);
 
             // SAFETY: By the type invariant `addr` is a valid address for MMIO operations.
             unsafe { bindings::$c_fn(addr as *const c_void) }
         }
+    };
 
+    (fallible, $(#[$attr:meta])* $vis:vis $try_name:ident, $c_fn:ident -> $type_name:ty) => {
         /// Read IO data from a given offset.
         ///
         /// Bound checks are performed on runtime, it fails if the offset (plus the type size) is
         /// out of bounds.
         $(#[$attr])*
-        pub fn $try_name(&self, offset: usize) -> Result<$type_name> {
+        $vis fn $try_name(&self, offset: usize) -> Result<$type_name> {
             let addr = self.io_addr::<$type_name>(offset)?;
 
             // SAFETY: By the type invariant `addr` is a valid address for MMIO operations.
@@ -163,74 +166,116 @@ macro_rules! define_read {
         }
     };
 }
+pub(crate) use define_read;
 
 macro_rules! define_write {
-    ($(#[$attr:meta])* $name:ident, $try_name:ident, $c_fn:ident <- $type_name:ty) => {
+    (infallible, $(#[$attr:meta])* $vis:vis $name:ident, $c_fn:ident <- $type_name:ty) => {
         /// Write IO data from a given offset known at compile time.
         ///
         /// Bound checks are performed on compile time, hence if the offset is not known at compile
         /// time, the build will fail.
         $(#[$attr])*
         #[inline]
-        pub fn $name(&self, value: $type_name, offset: usize) {
+        $vis fn $name(&self, value: $type_name, offset: usize) {
             let addr = self.io_addr_assert::<$type_name>(offset);
 
             // SAFETY: By the type invariant `addr` is a valid address for MMIO operations.
             unsafe { bindings::$c_fn(value, addr as *mut c_void) }
         }
+    };
 
+    (fallible, $(#[$attr:meta])* $vis:vis $try_name:ident, $c_fn:ident <- $type_name:ty) => {
         /// Write IO data from a given offset.
         ///
         /// Bound checks are performed on runtime, it fails if the offset (plus the type size) is
         /// out of bounds.
         $(#[$attr])*
-        pub fn $try_name(&self, value: $type_name, offset: usize) -> Result {
+        $vis fn $try_name(&self, value: $type_name, offset: usize) -> Result {
             let addr = self.io_addr::<$type_name>(offset)?;
 
             // SAFETY: By the type invariant `addr` is a valid address for MMIO operations.
-            unsafe { bindings::$c_fn(value, addr as *mut c_void) }
+            unsafe { bindings::$c_fn(value, addr as *mut c_void) };
             Ok(())
         }
     };
 }
+pub(crate) use define_write;
 
-impl<const SIZE: usize> Io<SIZE> {
-    /// Converts an `IoRaw` into an `Io` instance, providing the accessors to the MMIO mapping.
-    ///
-    /// # Safety
-    ///
-    /// Callers must ensure that `addr` is the start of a valid I/O mapped memory region of size
-    /// `maxsize`.
-    pub unsafe fn from_raw(raw: &IoRaw<SIZE>) -> &Self {
-        // SAFETY: `Io` is a transparent wrapper around `IoRaw`.
-        unsafe { &*core::ptr::from_ref(raw).cast() }
+/// Checks whether an access of type `U` at the given `offset`
+/// is valid within this region.
+#[inline]
+const fn offset_valid<U>(offset: usize, size: usize) -> bool {
+    let type_size = core::mem::size_of::<U>();
+    if let Some(end) = offset.checked_add(type_size) {
+        end <= size && offset % type_size == 0
+    } else {
+        false
     }
+}
+
+/// Trait representing infallible I/O operations of a certain type.
+///
+/// This trait is used to provide compile-time bounds-checked I/O operations.
+/// Different I/O backends can implement this trait to expose only the operations they support.
+///
+/// For example, a PCI configuration space may implement `IoCapable<u8>`, `IoCapable<u16>`,
+/// and `IoCapable<u32>`, but not `IoCapable<u64>`, while an MMIO region on a 64-bit
+/// system might implement all four.
+pub trait IoCapable<T> {
+    /// Infallible read with compile-time bounds check.
+    fn read(&self, offset: usize) -> T;
+
+    /// Infallible write with compile-time bounds check.
+    fn write(&self, value: T, offset: usize);
+}
+
+/// Trait representing fallible I/O operations of a certain type.
+///
+/// This trait is used to provide runtime bounds-checked I/O operations.
+/// Backends that do not support fallible operations (e.g., PCI configuration space)
+/// do not need to implement this trait.
+pub trait IoTryCapable<T> {
+    /// Fallible read with runtime bounds check.
+    fn try_read(&self, offset: usize) -> Result<T>;
+
+    /// Fallible write with runtime bounds check.
+    fn try_write(&self, value: T, offset: usize) -> Result;
+}
+
+/// Types implementing this trait (e.g. MMIO BARs or PCI config regions)
+/// can perform I/O operations on regions of memory.
+///
+/// This is an abstract representation to be implemented by arbitrary I/O
+/// backends (e.g. MMIO, PCI config space, etc.).
+///
+/// The [`Io`] trait provides:
+/// - Base address and size information
+/// - Helper methods for offset validation and address calculation
+/// - Both infallible (compile-time checked) and fallible (runtime checked)
+///   accessors for different data widths
+///
+/// Which I/O methods are available depends on which [`IoCapable<T>`] and
+/// [`IoTryCapable<T>`] traits are implemented for the type.
+///
+/// # Examples
+///
+/// For MMIO regions, all widths (u8, u16, u32, and u64 on 64-bit systems) are typically
+/// supported. For PCI configuration space, u8, u16, and u32 are supported but u64 is not.
+pub trait Io {
+    /// Minimum usable size of this region.
+    const MIN_SIZE: usize;
 
     /// Returns the base address of this mapping.
-    #[inline]
-    pub fn addr(&self) -> usize {
-        self.0.addr()
-    }
+    fn addr(&self) -> usize;
 
     /// Returns the maximum size of this mapping.
-    #[inline]
-    pub fn maxsize(&self) -> usize {
-        self.0.maxsize()
-    }
+    fn maxsize(&self) -> usize;
 
-    #[inline]
-    const fn offset_valid<U>(offset: usize, size: usize) -> bool {
-        let type_size = core::mem::size_of::<U>();
-        if let Some(end) = offset.checked_add(type_size) {
-            end <= size && offset % type_size == 0
-        } else {
-            false
-        }
-    }
-
+    /// Returns the absolute I/O address for a given `offset`,
+    /// performing runtime bound checks.
     #[inline]
     fn io_addr<U>(&self, offset: usize) -> Result<usize> {
-        if !Self::offset_valid::<U>(offset, self.maxsize()) {
+        if !offset_valid::<U>(offset, self.maxsize()) {
             return Err(EINVAL);
         }
 
@@ -239,50 +284,257 @@ impl<const SIZE: usize> Io<SIZE> {
         self.addr().checked_add(offset).ok_or(EINVAL)
     }
 
+    /// Returns the absolute I/O address for a given `offset`,
+    /// performing compile-time bound checks.
     #[inline]
     fn io_addr_assert<U>(&self, offset: usize) -> usize {
-        build_assert!(Self::offset_valid::<U>(offset, SIZE));
+        build_assert!(offset_valid::<U>(offset, Self::MIN_SIZE));
 
         self.addr() + offset
     }
 
-    define_read!(read8, try_read8, readb -> u8);
-    define_read!(read16, try_read16, readw -> u16);
-    define_read!(read32, try_read32, readl -> u32);
-    define_read!(
-        #[cfg(CONFIG_64BIT)]
-        read64,
-        try_read64,
-        readq -> u64
-    );
+    /// Infallible 8-bit read with compile-time bounds check.
+    fn read8(&self, offset: usize) -> u8
+    where
+        Self: IoCapable<u8>
+    {
+        <Self as IoCapable<u8>>::read(self, offset)
+    }
 
-    define_read!(read8_relaxed, try_read8_relaxed, readb_relaxed -> u8);
-    define_read!(read16_relaxed, try_read16_relaxed, readw_relaxed -> u16);
-    define_read!(read32_relaxed, try_read32_relaxed, readl_relaxed -> u32);
+    /// Infallible 16-bit read with compile-time bounds check.
+    fn read16(&self, offset: usize) -> u16
+    where
+        Self: IoCapable<u16>
+    {
+        <Self as IoCapable<u16>>::read(self, offset)
+    }
+
+    /// Infallible 32-bit read with compile-time bounds check.
+    fn read32(&self, offset: usize) -> u32
+    where
+        Self: IoCapable<u32>
+    {
+        <Self as IoCapable<u32>>::read(self, offset)
+    }
+
+    /// Infallible 64-bit read with compile-time bounds check.
+    #[cfg(CONFIG_64BIT)]
+    fn read64(&self, offset: usize) -> u64
+    where
+        Self: IoCapable<u64>
+    {
+        <Self as IoCapable<u64>>::read(self, offset)
+    }
+
+    /// Infallible 8-bit write with compile-time bounds check.
+    fn write8(&self, value: u8, offset: usize)
+    where
+        Self: IoCapable<u8>
+    {
+        <Self as IoCapable<u8>>::write(self, value, offset)
+    }
+
+    /// Infallible 16-bit write with compile-time bounds check.
+    fn write16(&self, value: u16, offset: usize)
+    where
+        Self: IoCapable<u16>
+    {
+        <Self as IoCapable<u16>>::write(self, value, offset)
+    }
+
+    /// Infallible 32-bit write with compile-time bounds check.
+    fn write32(&self, value: u32, offset: usize)
+    where
+        Self: IoCapable<u32>
+    {
+        <Self as IoCapable<u32>>::write(self, value, offset)
+    }
+
+    /// Infallible 64-bit write with compile-time bounds check.
+    #[cfg(CONFIG_64BIT)]
+    fn write64(&self, value: u64, offset: usize)
+    where
+        Self: IoCapable<u64>
+    {
+        <Self as IoCapable<u64>>::write(self, value, offset)
+    }
+
+    /// Fallible 8-bit read with runtime bounds check.
+    fn try_read8(&self, offset: usize) -> Result<u8>
+    where
+        Self: IoTryCapable<u8>
+    {
+        <Self as IoTryCapable<u8>>::try_read(self, offset)
+    }
+
+    /// Fallible 16-bit read with runtime bounds check.
+    fn try_read16(&self, offset: usize) -> Result<u16>
+    where
+        Self: IoTryCapable<u16>
+    {
+        <Self as IoTryCapable<u16>>::try_read(self, offset)
+    }
+
+    /// Fallible 32-bit read with runtime bounds check.
+    fn try_read32(&self, offset: usize) -> Result<u32>
+    where
+        Self: IoTryCapable<u32>
+    {
+        <Self as IoTryCapable<u32>>::try_read(self, offset)
+    }
+
+    /// Fallible 64-bit read with runtime bounds check.
+    #[cfg(CONFIG_64BIT)]
+    fn try_read64(&self, offset: usize) -> Result<u64>
+    where
+        Self: IoTryCapable<u64>
+    {
+        <Self as IoTryCapable<u64>>::try_read(self, offset)
+    }
+
+    /// Fallible 8-bit write with runtime bounds check.
+    fn try_write8(&self, value: u8, offset: usize) -> Result
+    where
+        Self: IoTryCapable<u8>
+    {
+        <Self as IoTryCapable<u8>>::try_write(self, value, offset)
+    }
+
+    /// Fallible 16-bit write with runtime bounds check.
+    fn try_write16(&self, value: u16, offset: usize) -> Result
+    where
+        Self: IoTryCapable<u16>
+    {
+        <Self as IoTryCapable<u16>>::try_write(self, value, offset)
+    }
+
+    /// Fallible 32-bit write with runtime bounds check.
+    fn try_write32(&self, value: u32, offset: usize) -> Result
+    where
+        Self: IoTryCapable<u32>
+    {
+        <Self as IoTryCapable<u32>>::try_write(self, value, offset)
+    }
+
+    /// Fallible 64-bit write with runtime bounds check.
+    #[cfg(CONFIG_64BIT)]
+    fn try_write64(&self, value: u64, offset: usize) -> Result
+    where
+        Self: IoTryCapable<u64>
+    {
+        <Self as IoTryCapable<u64>>::try_write(self, value, offset)
+    }
+}
+
+// MMIO regions support 8, 16, and 32-bit accesses.
+impl<const SIZE: usize> IoCapable<u8> for Mmio<SIZE> {
+    define_read!(infallible, read, readb -> u8);
+    define_write!(infallible, write, writeb <- u8);
+}
+
+impl<const SIZE: usize> IoCapable<u16> for Mmio<SIZE> {
+    define_read!(infallible, read, readw -> u16);
+    define_write!(infallible, write, writew <- u16);
+}
+
+impl<const SIZE: usize> IoCapable<u32> for Mmio<SIZE> {
+    define_read!(infallible, read, readl -> u32);
+    define_write!(infallible, write, writel <- u32);
+}
+
+// MMIO regions on 64-bit systems also support 64-bit accesses.
+#[cfg(CONFIG_64BIT)]
+impl<const SIZE: usize> IoCapable<u64> for Mmio<SIZE> {
+    define_read!(infallible, read, readq -> u64);
+    define_write!(infallible, write, writeq <- u64);
+}
+
+impl<const SIZE: usize> IoTryCapable<u8> for Mmio<SIZE> {
+    define_read!(fallible, try_read, readb -> u8);
+    define_write!(fallible, try_write, writeb <- u8);
+}
+
+impl<const SIZE: usize> IoTryCapable<u16> for Mmio<SIZE> {
+    define_read!(fallible, try_read, readw -> u16);
+    define_write!(fallible, try_write, writew <- u16);
+}
+
+impl<const SIZE: usize> IoTryCapable<u32> for Mmio<SIZE> {
+    define_read!(fallible, try_read, readl -> u32);
+    define_write!(fallible, try_write, writel <- u32);
+}
+
+#[cfg(CONFIG_64BIT)]
+impl<const SIZE: usize> IoTryCapable<u64> for Mmio<SIZE> {
+    define_read!(fallible, try_read, readq -> u64);
+    define_write!(fallible, try_write, writeq <- u64);
+}
+
+impl<const SIZE: usize> Io for Mmio<SIZE> {
+    const MIN_SIZE: usize = SIZE;
+
+    /// Returns the base address of this mapping.
+    #[inline]
+    fn addr(&self) -> usize {
+        self.0.addr()
+    }
+
+    /// Returns the maximum size of this mapping.
+    #[inline]
+    fn maxsize(&self) -> usize {
+        self.0.maxsize()
+    }
+}
+
+impl<const SIZE: usize> Mmio<SIZE> {
+    /// Converts an `MmioRaw` into an `Mmio` instance, providing the accessors to the MMIO mapping.
+    ///
+    /// # Safety
+    ///
+    /// Callers must ensure that `addr` is the start of a valid I/O mapped memory region of size
+    /// `maxsize`.
+    pub unsafe fn from_raw(raw: &MmioRaw<SIZE>) -> &Self {
+        // SAFETY: `Mmio` is a transparent wrapper around `MmioRaw`.
+        unsafe { &*core::ptr::from_ref(raw).cast() }
+    }
+
+    define_read!(infallible, pub read8_relaxed, readb_relaxed -> u8);
+    define_read!(infallible, pub read16_relaxed, readw_relaxed -> u16);
+    define_read!(infallible, pub read32_relaxed, readl_relaxed -> u32);
     define_read!(
+        infallible,
         #[cfg(CONFIG_64BIT)]
-        read64_relaxed,
-        try_read64_relaxed,
+        pub read64_relaxed,
         readq_relaxed -> u64
     );
 
-    define_write!(write8, try_write8, writeb <- u8);
-    define_write!(write16, try_write16, writew <- u16);
-    define_write!(write32, try_write32, writel <- u32);
-    define_write!(
+    define_read!(fallible, pub try_read8_relaxed, readb_relaxed -> u8);
+    define_read!(fallible, pub try_read16_relaxed, readw_relaxed -> u16);
+    define_read!(fallible, pub try_read32_relaxed, readl_relaxed -> u32);
+    define_read!(
+        fallible,
         #[cfg(CONFIG_64BIT)]
-        write64,
-        try_write64,
-        writeq <- u64
+        pub try_read64_relaxed,
+        readq_relaxed -> u64
     );
 
-    define_write!(write8_relaxed, try_write8_relaxed, writeb_relaxed <- u8);
-    define_write!(write16_relaxed, try_write16_relaxed, writew_relaxed <- u16);
-    define_write!(write32_relaxed, try_write32_relaxed, writel_relaxed <- u32);
+    define_write!(infallible, pub write8_relaxed, writeb_relaxed <- u8);
+    define_write!(infallible, pub write16_relaxed, writew_relaxed <- u16);
+    define_write!(infallible, pub write32_relaxed, writel_relaxed <- u32);
     define_write!(
+        infallible,
         #[cfg(CONFIG_64BIT)]
-        write64_relaxed,
-        try_write64_relaxed,
+        pub write64_relaxed,
+        writeq_relaxed <- u64
+    );
+
+    define_write!(fallible, pub try_write8_relaxed, writeb_relaxed <- u8);
+    define_write!(fallible, pub try_write16_relaxed, writew_relaxed <- u16);
+    define_write!(fallible, pub try_write32_relaxed, writel_relaxed <- u32);
+    define_write!(
+        fallible,
+        #[cfg(CONFIG_64BIT)]
+        pub try_write64_relaxed,
         writeq_relaxed <- u64
     );
 }
