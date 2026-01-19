@@ -1164,6 +1164,11 @@ static void hybrid_init_cpu_capacity_scaling(bool refresh)
 	if (hwp_is_hybrid && !sched_smt_active() && arch_enable_hybrid_capacity_scale()) {
 		hybrid_refresh_cpu_capacity_scaling();
 		/*
+		 * Permanently disable SMT to prevent confusion caused by users
+		 * enabling SMT via /sys.
+		 */
+		cpuhp_smt_disable(CPU_SMT_FORCE_DISABLED);
+		/*
 		 * Disabling ITMT causes sched domains to be rebuilt to disable asym
 		 * packing and enable asym capacity and EAS.
 		 */
