@@ -53,8 +53,7 @@
 #define IMX8MM_VPUG1_A53_DOMAIN			BIT(13)
 #define IMX8MM_DISPMIX_A53_DOMAIN		BIT(12)
 #define IMX8MM_VPUMIX_A53_DOMAIN		BIT(10)
-#define IMX8MM_GPUMIX_A53_DOMAIN		BIT(9)
-#define IMX8MM_GPU_A53_DOMAIN			(BIT(8) | BIT(11))
+#define IMX8MM_GPU_A53_DOMAIN			(BIT(8) | BIT(9) | BIT(11))
 #define IMX8MM_DDR1_A53_DOMAIN			BIT(7)
 #define IMX8MM_OTG2_A53_DOMAIN			BIT(5)
 #define IMX8MM_OTG1_A53_DOMAIN			BIT(4)
@@ -292,6 +291,13 @@ struct imx_pgc_domain {
 		u32 hskack;
 	} bits;
 
+	const struct {
+		u32 pxx;
+		u32 hskreq;
+		u32 hskack;
+		unsigned long pgc;
+	} parent_bits;
+
 	const int voltage;
 	const bool keep_clocks;
 	struct device *dev;
@@ -335,6 +341,30 @@ static int imx_pgc_power_up(struct generic_pm_domain *genpd)
 		}
 	}
 
+	/* Need to do special handling for parent domain like GPUMIX on i.MX8MM */
+	if (domain->parent_bits.pxx) {
+			/* request the domain to power up */
+		regmap_update_bits(domain->regmap, domain->regs->pup,
+				   domain->parent_bits.pxx, domain->parent_bits.pxx);
+		/*
+		 * As per "5.5.9.4 Example Code 4" in IMX7DRM.pdf wait
+		 * for PUP_REQ/PDN_REQ bit to be cleared
+		 */
+		ret = regmap_read_poll_timeout(domain->regmap,
+					       domain->regs->pup, reg_val,
+					       !(reg_val & domain->parent_bits.pxx),
+					       0, USEC_PER_MSEC);
+		if (ret)
+			dev_err(domain->dev, "failed to command parent PGC\n");
+
+		/* disable power control */
+		for_each_set_bit(pgc, &domain->parent_bits.pgc, 32) {
+			regmap_clear_bits(domain->regmap, GPC_PGC_CTRL(pgc),
+					  GPC_PGC_CTRL_PCR);
+		}
+
+	}
+
 	reset_control_assert(domain->reset);
 
 	/* Enable reset clocks for all devices in the domain */
@@ -375,6 +405,11 @@ static int imx_pgc_power_up(struct generic_pm_domain *genpd)
 	udelay(5);
 
 	reset_control_deassert(domain->reset);
+
+	/* request parent ADB400 to power up */
+	if (domain->parent_bits.hskreq)
+		regmap_update_bits(domain->regmap, domain->regs->hsk,
+				   domain->parent_bits.hskreq, domain->parent_bits.hskreq);
 
 	/* request the ADB400 to power up */
 	if (domain->bits.hskreq) {
@@ -438,6 +473,21 @@ static int imx_pgc_power_down(struct generic_pm_domain *genpd)
 		}
 	}
 
+	/* request the Parent domain ADB400 to power down */
+	if (domain->parent_bits.hskreq) {
+		regmap_clear_bits(domain->regmap, domain->regs->hsk,
+				  domain->parent_bits.hskreq);
+
+		ret = regmap_read_poll_timeout(domain->regmap, domain->regs->hsk,
+					       reg_val,
+					       !(reg_val & domain->parent_bits.hskack),
+					       0, USEC_PER_MSEC);
+		if (ret) {
+			dev_err(domain->dev, "failed to power down parent ADB400\n");
+			goto out_clk_disable;
+		}
+	}
+
 	/* request the ADB400 to power down */
 	if (domain->bits.hskreq) {
 		regmap_clear_bits(domain->regmap, domain->regs->hsk,
@@ -473,6 +523,30 @@ static int imx_pgc_power_down(struct generic_pm_domain *genpd)
 					       0, USEC_PER_MSEC);
 		if (ret) {
 			dev_err(domain->dev, "failed to command PGC\n");
+			goto out_clk_disable;
+		}
+	}
+
+	if (domain->parent_bits.pxx) {
+		/* enable power control */
+		for_each_set_bit(pgc, &domain->parent_bits.pgc, 32) {
+			regmap_update_bits(domain->regmap, GPC_PGC_CTRL(pgc),
+					   GPC_PGC_CTRL_PCR, GPC_PGC_CTRL_PCR);
+		}
+
+		/* request the domain to power down */
+		regmap_update_bits(domain->regmap, domain->regs->pdn,
+				   domain->parent_bits.pxx, domain->parent_bits.pxx);
+		/*
+		 * As per "5.5.9.4 Example Code 4" in IMX7DRM.pdf wait
+		 * for PUP_REQ/PDN_REQ bit to be cleared
+		 */
+		ret = regmap_read_poll_timeout(domain->regmap,
+					       domain->regs->pdn, reg_val,
+					       !(reg_val & domain->parent_bits.pxx),
+					       0, USEC_PER_MSEC);
+		if (ret) {
+			dev_err(domain->dev, "failed to command Parent PGC\n");
 			goto out_clk_disable;
 		}
 	}
@@ -787,20 +861,6 @@ static const struct imx_pgc_domain imx8mm_pgc_domains[] = {
 		.pgc   = BIT(IMX8MM_PGC_OTG2),
 	},
 
-	[IMX8MM_POWER_DOMAIN_GPUMIX] = {
-		.genpd = {
-			.name = "gpumix",
-		},
-		.bits  = {
-			.pxx = IMX8MM_GPUMIX_SW_Pxx_REQ,
-			.map = IMX8MM_GPUMIX_A53_DOMAIN,
-			.hskreq = IMX8MM_GPUMIX_HSK_PWRDNREQN,
-			.hskack = IMX8MM_GPUMIX_HSK_PWRDNACKN,
-		},
-		.pgc   = BIT(IMX8MM_PGC_GPUMIX),
-		.keep_clocks = true,
-	},
-
 	[IMX8MM_POWER_DOMAIN_GPU] = {
 		.genpd = {
 			.name = "gpu",
@@ -811,6 +871,14 @@ static const struct imx_pgc_domain imx8mm_pgc_domains[] = {
 			.hskreq = IMX8MM_GPU_HSK_PWRDNREQN,
 			.hskack = IMX8MM_GPU_HSK_PWRDNACKN,
 		},
+
+		.parent_bits = {
+			.pxx = IMX8MM_GPUMIX_SW_Pxx_REQ,
+			.hskreq = IMX8MM_GPUMIX_HSK_PWRDNREQN,
+			.hskack = IMX8MM_GPUMIX_HSK_PWRDNACKN,
+			.pgc = BIT(IMX8MM_PGC_GPUMIX),
+		},
+
 		.pgc   = BIT(IMX8MM_PGC_GPU2D) | BIT(IMX8MM_PGC_GPU3D),
 	},
 
