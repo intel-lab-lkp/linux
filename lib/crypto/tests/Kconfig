@@ -1,5 +1,17 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
+config CRYPTO_LIB_AES_KUNIT_TEST
+	tristate "KUnit tests for AES" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS || CRYPTO_SELFTESTS
+	select CRYPTO_LIB_BENCHMARK_VISIBLE
+	select CRYPTO_LIB_AES
+	help
+	  KUnit tests for the AES library functions, including known answer
+	  tests and benchmarks for encrypt/decrypt with all key sizes. The
+	  test suite does not contain any key generation test, nor any error
+	  cases.
+
 config CRYPTO_LIB_BLAKE2B_KUNIT_TEST
 	tristate "KUnit tests for BLAKE2b" if !KUNIT_ALL_TESTS
 	depends on KUNIT
