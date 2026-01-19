@@ -67,6 +67,9 @@ static inline fsnotify_connp_t *fsnotify_sb_marks(struct super_block *sb)
 	return sbinfo ? &sbinfo->sb_marks : NULL;
 }
 
+struct fsnotify_mark_connector *fsnotify_inode_connector_from_list(
+						struct list_head *head);
+
 /* destroy all events sitting in this groups notification queue */
 extern void fsnotify_flush_notify(struct fsnotify_group *group);
 
@@ -106,6 +109,6 @@ static inline void fsnotify_clear_marks_by_mntns(struct mnt_namespace *mntns)
  */
 extern void fsnotify_set_children_dentry_flags(struct inode *inode);
 
-extern struct kmem_cache *fsnotify_mark_connector_cachep;
+void fsnotify_init_connector_caches(void);
 
 #endif	/* __FS_NOTIFY_FSNOTIFY_H_ */
