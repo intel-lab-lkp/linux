@@ -471,6 +471,142 @@ static int em25xx_bus_B_check_for_device(struct em28xx *dev, u16 addr)
 	 */
 }
 
+/*
+ * EM28281 integrated TVP5150 decoder access functions
+ *
+ * The EM28281 has a TVP5150-compatible video decoder integrated into the chip.
+ * Unlike external TVP5150 chips which communicate via I2C, this integrated
+ * decoder is accessed through direct USB control transfers at register
+ * addresses starting at 0x7a00.
+ */
+static inline bool is_tvp5150_addr(u16 addr)
+{
+	return addr == 0xb8;
+}
+
+static int em28281_integrated_send_bytes(struct em28xx *dev, u16 addr, u8 *buf, u16 len)
+{
+	int ret;
+	u16 reg;
+
+	if (!is_tvp5150_addr(addr))
+		return -EOPNOTSUPP;
+	if (len == 1) {
+		/* setting register address for subsequent read */
+		dev->em28281_last_reg = buf[0];
+		return 1;
+	}
+	if (len != 2) {
+		dev_warn(&dev->intf->dev,
+			 "em28281: unexpected I2C write len %d (addr=0x%02x)\n",
+			 len, addr);
+		return -EINVAL;
+	}
+
+	// ignore values to avoid image corrruption
+	switch (buf[0]) {
+	// TVP5150_DATA_RATE_SEL
+	case 0x0d: return len; // image B/W
+	// TVP5150_HORIZ_SYNC_START
+	case 0x16: return len; // image B/W and weird
+	// undocumented, but initialized on WinTV USB2
+	case 0x27: return len; // image moves to right
+	// TVP5150_TELETEXT_FIL_ENA
+	case 0xbb: return len; // super bright
+	// TVP5150_INT_CONF
+	case 0xc2: return len; // green screen
+	// TVP5150_VDP_CONF_RAM_DATA
+	case 0xc3: return len; // wobbling
+	}
+
+	// override reg values to avoid image corruption
+	 // TVP5150_VD_IN_SRC_SEL_1, required otherwise gets stuck
+	if (buf[0] == 0x00)
+		return em28xx_write_reg(dev, 0x7a00 | buf[0], 0x32);
+	 // TVP5150_LUMA_PROC_CTL_1, makes color weird
+	if (buf[0] == 0x07)
+		return em28xx_write_reg(dev, 0x7a00 | buf[0], 0x2f);
+	 // TVP5150_LUMA_PROC_CTL_2, makes color very weird
+	if (buf[0] == 0x08)
+		return em28xx_write_reg(dev, 0x7a00 | buf[0], 0x7a);
+	 // TVP5150_BRIGHT_CTL, four times brighter than usual
+	if (buf[0] == 0x09)
+		return em28xx_write_reg(dev, 0x7a00 | buf[0], buf[1]>>2);
+	 // TVP5150_VERT_BLANKING_START, output very corrupted
+	if (buf[0] == 0x18)
+		return em28xx_write_reg(dev, 0x7a00 | buf[0], 0x28);
+	 // TVP5150_VERT_BLANKING_STOP, color weird
+	if (buf[0] == 0x19)
+		return em28xx_write_reg(dev, 0x7a00 | buf[0], 0x32);
+	 // TVP5150_INT_RESET_REG_B, crashes device if different
+	if (buf[0] == 0x1c)
+		return em28xx_write_reg(dev, 0x7a00 | buf[0], 0x1e);
+	 // TVP5150_MACROVISION_ON_CTR, b/w + shifted to right
+	if (buf[0] == 0x2e)
+		return em28xx_write_reg(dev, 0x7a00 | buf[0], 0x88);
+	 // TVP5150_MACROVISION_OFF_CTR, output quite corrupted
+	if (buf[0] == 0x2f)
+		return em28xx_write_reg(dev, 0x7a00 | buf[0], 0x52);
+	 // TVP5150_INT_ENABLE_REG_A, required otherwise shows green screen
+	if (buf[0] == 0xc1)
+		return em28xx_write_reg(dev, 0x7a00 | buf[0], 0x1b);
+
+	reg = 0x7a00 | buf[0];
+	ret = em28xx_write_reg(dev, reg, buf[1]);
+	if (ret < 0) {
+		dev_warn(&dev->intf->dev,
+			 "em28281 decoder write failed at reg 0x%04x (error=%i)\n",
+			 reg, ret);
+		return ret;
+	}
+
+	return len;
+}
+
+/*
+ * em28281_integrated_recv_bytes()
+ * Read bytes from the EM28281 integrated TVP5150 decoder.
+ * Translates I2C reads to direct USB register reads at 0x7a00+reg.
+ *
+ * The register address was set by a previous 1-byte write and saved
+ * in dev->em28281_last_reg.
+ */
+static int em28281_integrated_recv_bytes(struct em28xx *dev, u16 addr,
+					 u8 *buf, u16 len)
+{
+	int ret;
+	u16 reg;
+
+	if (!is_tvp5150_addr(addr))
+		return -EOPNOTSUPP;
+	if (len < 1)
+		return -EINVAL;
+
+	reg = 0x7a00 | dev->em28281_last_reg;
+	ret = em28xx_read_reg(dev, reg);
+	if (ret < 0) {
+		dev_warn(&dev->intf->dev,
+				"em28281 decoder read failed at reg 0x%04x (error=%i)\n",
+				reg, ret);
+		return ret;
+	}
+	buf[0] = ret & 0xff;
+
+	return len;
+}
+
+static int em28281_integrated_check_for_device(struct em28xx *dev, u16 addr)
+{
+	if (!is_tvp5150_addr(addr))
+		return -EOPNOTSUPP;
+	/*
+	 * The integrated decoder is always present on EM28281 chips.
+	 * We could verify by reading a known register, but for simplicity
+	 * we trust the chip ID detection.
+	 */
+	return 0;
+}
+
 static inline int i2c_check_for_device(struct em28xx_i2c_bus *i2c_bus, u16 addr)
 {
 	struct em28xx *dev = i2c_bus->dev;
@@ -482,6 +618,8 @@ static inline int i2c_check_for_device(struct em28xx_i2c_bus *i2c_bus, u16 addr)
 		rc = em2800_i2c_check_for_device(dev, addr);
 	else if (i2c_bus->algo_type == EM28XX_I2C_ALGO_EM25XX_BUS_B)
 		rc = em25xx_bus_B_check_for_device(dev, addr);
+	else if (i2c_bus->algo_type == EM28XX_I2C_ALGO_EM28281_INTEGRATED)
+		rc = em28281_integrated_check_for_device(dev, addr);
 	return rc;
 }
 
@@ -498,6 +636,8 @@ static inline int i2c_recv_bytes(struct em28xx_i2c_bus *i2c_bus,
 		rc = em2800_i2c_recv_bytes(dev, addr, msg.buf, msg.len);
 	else if (i2c_bus->algo_type == EM28XX_I2C_ALGO_EM25XX_BUS_B)
 		rc = em25xx_bus_B_recv_bytes(dev, addr, msg.buf, msg.len);
+	else if (i2c_bus->algo_type == EM28XX_I2C_ALGO_EM28281_INTEGRATED)
+		rc = em28281_integrated_recv_bytes(dev, addr, msg.buf, msg.len);
 	return rc;
 }
 
@@ -514,6 +654,8 @@ static inline int i2c_send_bytes(struct em28xx_i2c_bus *i2c_bus,
 		rc = em2800_i2c_send_bytes(dev, addr, msg.buf, msg.len);
 	else if (i2c_bus->algo_type == EM28XX_I2C_ALGO_EM25XX_BUS_B)
 		rc = em25xx_bus_B_send_bytes(dev, addr, msg.buf, msg.len);
+	else if (i2c_bus->algo_type == EM28XX_I2C_ALGO_EM28281_INTEGRATED)
+		rc = em28281_integrated_send_bytes(dev, addr, msg.buf, msg.len);
 	return rc;
 }
 
@@ -881,7 +1023,8 @@ static u32 functionality(struct i2c_adapter *i2c_adap)
 	struct em28xx_i2c_bus *i2c_bus = i2c_adap->algo_data;
 
 	if (i2c_bus->algo_type == EM28XX_I2C_ALGO_EM28XX ||
-	    i2c_bus->algo_type == EM28XX_I2C_ALGO_EM25XX_BUS_B) {
+	    i2c_bus->algo_type == EM28XX_I2C_ALGO_EM25XX_BUS_B ||
+	    i2c_bus->algo_type == EM28XX_I2C_ALGO_EM28281_INTEGRATED) {
 		return I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL;
 	} else if (i2c_bus->algo_type == EM28XX_I2C_ALGO_EM2800)  {
 		return (I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL) &

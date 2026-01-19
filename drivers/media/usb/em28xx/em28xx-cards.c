@@ -1154,6 +1154,21 @@ const struct em28xx_board em28xx_boards[] = {
 			.amux     = EM28XX_AMUX_LINE_IN,
 		} },
 	},
+	[EM28281_BOARD_STARTECH_SVID2USB232] = {
+		.name          = "StarTech SVID2USB232",
+		.tuner_type    = TUNER_ABSENT,
+		.decoder       = EM28XX_TVP5150,
+		.xclk          = EM28XX_XCLK_FREQUENCY_12MHZ,
+		.input         = { {
+			.type     = EM28XX_VMUX_COMPOSITE,
+			.vmux     = TVP5150_COMPOSITE0,
+			.amux     = EM28XX_AMUX_LINE_IN,
+		}, {
+			.type     = EM28XX_VMUX_SVIDEO,
+			.vmux     = TVP5150_SVIDEO,
+			.amux     = EM28XX_AMUX_LINE_IN,
+		} },
+	},
 	[EM2861_BOARD_PLEXTOR_PX_TV100U] = {
 		.name         = "Plextor ConvertX PX-TV100U",
 		.tuner_type   = TUNER_TNF_5335MF,
@@ -2849,6 +2864,8 @@ struct usb_device_id em28xx_id_table[] = {
 			.driver_info = EM28178_BOARD_PLEX_PX_BCUD },
 	{ USB_DEVICE(0xeb1a, 0x5051), /* Ion Video 2 PC MKII / Startech svid2usb23 / Raygo R12-41373 */
 			.driver_info = EM2860_BOARD_TVP5150_REFERENCE_DESIGN },
+	{ USB_DEVICE(0xeb1a, 0x8286), /* StarTech SVID2USB232 */
+			.driver_info = EM28281_BOARD_STARTECH_SVID2USB232 },
 	{ USB_DEVICE(0x1b80, 0xe349), /* Magix USB Videowandler-2 */
 		.driver_info = EM2861_BOARD_MAGIX_VIDEOWANDLER2 },
 	{ },
@@ -3092,6 +3109,14 @@ static void em28xx_pre_card_setup(struct em28xx *dev)
 		 * proceeding. In practice, this will wait about 1.6 seconds.
 		 */
 		em28xx_wait_until_ac97_features_equals(dev, 0x6a90);
+		break;
+
+	case EM28281_BOARD_STARTECH_SVID2USB232:
+		em28xx_write_reg(dev, EM2874_R80_GPIO_P0_CTRL, 0xff);
+		em28xx_write_reg(dev, 0x0D, 0xff);
+		msleep(70);
+		em28xx_write_reg(dev, 0x7A31, 0xc3);
+		em28xx_write_reg(dev, 0x7A3F, 0x00);
 		break;
 	}
 
@@ -3651,6 +3676,11 @@ static int em28xx_init_dev(struct em28xx *dev, struct usb_device *udev,
 			dev->wait_after_write = 0;
 			dev->eeprom_addrwidth_16bit = 1;
 			break;
+		case CHIP_ID_EM28281:
+			chip_name = "em28281";
+			dev->wait_after_write = 0;
+			dev->eeprom_addrwidth_16bit = 1;
+			break;
 		case CHIP_ID_EM2883:
 			chip_name = "em2882/3";
 			dev->wait_after_write = 0;
@@ -3688,6 +3718,8 @@ static int em28xx_init_dev(struct em28xx *dev, struct usb_device *udev,
 	/* register i2c bus 0 */
 	if (dev->board.is_em2800)
 		retval = em28xx_i2c_register(dev, 0, EM28XX_I2C_ALGO_EM2800);
+	else if (dev->chip_id == CHIP_ID_EM28281)
+		retval = em28xx_i2c_register(dev, 0, EM28XX_I2C_ALGO_EM28281_INTEGRATED);
 	else
 		retval = em28xx_i2c_register(dev, 0, EM28XX_I2C_ALGO_EM28XX);
 	if (retval < 0) {
@@ -3702,6 +3734,9 @@ static int em28xx_init_dev(struct em28xx *dev, struct usb_device *udev,
 		if (dev->is_em25xx)
 			retval = em28xx_i2c_register(dev, 1,
 						     EM28XX_I2C_ALGO_EM25XX_BUS_B);
+		else if (dev->chip_id == CHIP_ID_EM28281)
+			retval = em28xx_i2c_register(dev, 1,
+							 EM28XX_I2C_ALGO_EM28281_INTEGRATED);
 		else
 			retval = em28xx_i2c_register(dev, 1,
 						     EM28XX_I2C_ALGO_EM28XX);

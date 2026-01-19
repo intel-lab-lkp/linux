@@ -506,6 +506,13 @@ int em28xx_audio_setup(struct em28xx *dev)
 		return 0;
 	}
 
+	if (dev->chip_id == CHIP_ID_EM28281) {
+		/* Skip standard AC97 initialization which fails on this chip */
+		dev->int_audio_type = EM28XX_INT_AUDIO_NONE;
+		dev->audio_mode.ac97 = EM28XX_NO_AC97;
+		return 0;
+	}
+
 	/* See how this device is configured */
 	cfg = em28xx_read_reg(dev, EM28XX_R00_CHIPCFG);
 	dev_info(&dev->intf->dev, "Config register raw data: 0x%02x\n", cfg);

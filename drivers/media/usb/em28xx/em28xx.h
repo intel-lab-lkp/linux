@@ -144,6 +144,7 @@
 #define EM2860_BOARD_MYGICA_IGRABBER              105
 #define EM2874_BOARD_HAUPPAUGE_USB_QUADHD         106
 #define EM2860_BOARD_MYGICA_UTV3                  107
+#define EM28281_BOARD_STARTECH_SVID2USB232        108
 
 /* Limits minimum and default number of buffers */
 #define EM28XX_MIN_BUF 4
@@ -623,6 +624,7 @@ enum em28xx_i2c_algo_type {
 	EM28XX_I2C_ALGO_EM28XX = 0,
 	EM28XX_I2C_ALGO_EM2800,
 	EM28XX_I2C_ALGO_EM25XX_BUS_B,
+	EM28XX_I2C_ALGO_EM28281_INTEGRATED,
 };
 
 struct em28xx_i2c_bus {
@@ -682,6 +684,9 @@ struct em28xx {
 	unsigned int def_i2c_bus;	// Default I2C bus
 	unsigned int cur_i2c_bus;	// Current I2C bus
 	struct rt_mutex i2c_bus_lock;
+
+	/* EM28281 integrated decoder state */
+	u8 em28281_last_reg;		// Last register address for I2C reads
 
 	// video for linux
 	unsigned int ctl_input;	// selected input
