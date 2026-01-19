@@ -55,7 +55,10 @@ static DEFINE_IDA(host_index_ida);
 
 static void scsi_host_cls_release(struct device *dev)
 {
-	put_device(&class_to_shost(dev)->shost_gendev);
+	/*
+	 * Keep an empty release() to prevent device_release() from emitting a
+	 * warning.
+	 */
 }
 
 static struct class shost_class = {
@@ -279,11 +282,9 @@ int scsi_add_host_with_dma(struct Scsi_Host *shost, struct device *dev,
 		goto out_disable_runtime_pm;
 
 	scsi_host_set_state(shost, SHOST_RUNNING);
-	get_device(shost->shost_gendev.parent);
 
 	device_enable_async_suspend(&shost->shost_dev);
 
-	get_device(&shost->shost_gendev);
 	error = device_add(&shost->shost_dev);
 	if (error)
 		goto out_del_gendev;
@@ -352,7 +353,6 @@ EXPORT_SYMBOL(scsi_add_host_with_dma);
 static void scsi_host_dev_release(struct device *dev)
 {
 	struct Scsi_Host *shost = dev_to_shost(dev);
-	struct device *parent = dev->parent;
 
 	/* Wait for functions invoked through call_rcu(&scmd->rcu, ...) */
 	rcu_barrier();
@@ -366,22 +366,20 @@ static void scsi_host_dev_release(struct device *dev)
 
 	if (shost->shost_state == SHOST_CREATED) {
 		/*
-		 * Free the shost_dev device name and remove the proc host dir
+		 * Drop the reference to shost_dev and remove the proc host dir
 		 * here if scsi_host_{alloc,put}() have been called but neither
-		 * scsi_host_add() nor scsi_remove_host() has been called.
+		 * scsi_add_host() nor scsi_remove_host() has been called.
 		 * This avoids that the memory allocated for the shost_dev
 		 * name as well as the proc dir structure are leaked.
 		 */
 		scsi_proc_hostdir_rm(shost->hostt);
-		kfree(dev_name(&shost->shost_dev));
+		put_device(&shost->shost_dev);
 	}
 
 	kfree(shost->shost_data);
 
 	ida_free(&host_index_ida, shost->host_no);
 
-	if (shost->shost_state != SHOST_CREATED)
-		put_device(parent);
 	kfree(shost);
 }
 
@@ -550,8 +548,8 @@ struct Scsi_Host *scsi_host_alloc(const struct scsi_host_template *sht, int priv
  fail:
 	/*
 	 * Host state is still SHOST_CREATED and that is enough to release
-	 * ->shost_gendev. scsi_host_dev_release() will free
-	 * dev_name(&shost->shost_dev).
+	 * ->shost_gendev. scsi_host_dev_release() will
+	 * put_device(&shost->shost_dev).
 	 */
 	put_device(&shost->shost_gendev);
 
