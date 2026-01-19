@@ -40,7 +40,7 @@ if __name__ == '__main__':
     params = parser.parse_args()
 
     if params.subcmd == "monitor":
-        print("Opening and parsing the specification file %s" % params.spec)
+        print(f"Opening and parsing the specification file {params.spec}")
         if params.monitor_class == "da":
             monitor = dot2k(params.spec, params.monitor_type, vars(params))
         elif params.monitor_class == "ltl":
@@ -51,11 +51,11 @@ if __name__ == '__main__':
     else:
         monitor = Container(vars(params))
 
-    print("Writing the monitor into the directory %s" % monitor.name)
+    print(f"Writing the monitor into the directory {monitor.name}")
     monitor.print_files()
     print("Almost done, checklist")
     if params.subcmd == "monitor":
-        print("  - Edit the %s/%s.c to add the instrumentation" % (monitor.name, monitor.name))
+        print(f"  - Edit the {monitor.name}/{monitor.name}.c to add the instrumentation")
         print(monitor.fill_tracepoint_tooltip())
     print(monitor.fill_makefile_tooltip())
     print(monitor.fill_kconfig_tooltip())
