@@ -55,6 +55,7 @@ struct vl53l0x_data {
 	struct i2c_client *client;
 	struct completion completion;
 	struct regulator *vdd_supply;
+	struct regulator *vio_supply;
 	struct gpio_desc *reset_gpio;
 	struct iio_trigger *trig;
 };
@@ -256,6 +257,8 @@ static void vl53l0x_power_off(void *_data)
 	gpiod_set_value_cansleep(data->reset_gpio, 1);
 
 	regulator_disable(data->vdd_supply);
+	if (data->vio_supply)
+		regulator_disable(data->vio_supply);
 }
 
 static int vl53l0x_power_on(struct vl53l0x_data *data)
@@ -265,6 +268,12 @@ static int vl53l0x_power_on(struct vl53l0x_data *data)
 	ret = regulator_enable(data->vdd_supply);
 	if (ret)
 		return ret;
+
+	if (data->vio_supply) {
+		ret = regulator_enable(data->vio_supply);
+		if (ret)
+			return ret;
+	}
 
 	gpiod_set_value_cansleep(data->reset_gpio, 0);
 
@@ -337,6 +346,13 @@ static int vl53l0x_probe(struct i2c_client *client)
 	if (IS_ERR(data->vdd_supply))
 		return dev_err_probe(&client->dev, PTR_ERR(data->vdd_supply),
 				     "Unable to get VDD regulator\n");
+
+	data->vio_supply = devm_regulator_get_optional(&client->dev, "vio");
+	if (PTR_ERR(data->vio_supply) == -ENODEV)
+		data->vio_supply = NULL;
+	else if (IS_ERR(data->vio_supply))
+		return dev_err_probe(&client->dev, PTR_ERR(data->vio_supply),
+				     "Unable to get VDDIO regulator\n");
 
 	data->reset_gpio = devm_gpiod_get_optional(&client->dev, "reset", GPIOD_OUT_HIGH);
 	if (IS_ERR(data->reset_gpio))
