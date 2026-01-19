@@ -1450,11 +1450,49 @@ static inline int of_property_read_u32(const struct device_node *np,
 	return of_property_read_u32_array(np, propname, out_value, 1);
 }
 
+
+/**
+ * of_property_read_u32_default() - Read a u32 DT property or return a default.
+ * @np:		device node
+ * @propname:	property name
+ * @def:	default value to return if the property cannot be read
+ *
+ * Return: The property value on success, or @def if the property is missing
+ *         or invalid. This helper intentionally ignores the error code; it
+ *         is intended for optional properties with a sensible default.
+ */
+static inline u32 of_property_read_u32_default(const struct device_node *np,
+					       const char *propname,
+					       u32 def)
+{
+	of_property_read_u32(np, propname, &def);
+	return def;
+}
+
 static inline int of_property_read_s32(const struct device_node *np,
 				       const char *propname,
 				       s32 *out_value)
 {
 	return of_property_read_u32(np, propname, (u32*) out_value);
+}
+
+
+/**
+ * of_property_read_s32_default() - Read an s32 DT property or return a default.
+ * @np:		device node
+ * @propname:	property name
+ * @def:	default value to return if the property cannot be read
+ *
+ * Return: The property value on success, or @def if the property is missing
+ *	   or invalid. This helper intentionally ignores the error code; it
+ *	   is intended for optional properties with a sensible default.
+ */
+static inline s32 of_property_read_s32_default(const struct device_node *np,
+					       const char *propname,
+					       s32 def)
+{
+	of_property_read_s32(np, propname, &def);
+	return def;
 }
 
 #define of_for_each_phandle(it, err, np, ln, cn, cc)			\
