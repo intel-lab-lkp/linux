@@ -257,6 +257,9 @@ class ltl2k(generator.Monitor):
 
         return '\n'.join(buf)
 
+    def fill_tracepoint_args_skel(self, tp_type) -> str:
+        return ""
+
     def fill_monitor_class_type(self):
         return "LTL_MON_EVENTS_ID"
 
