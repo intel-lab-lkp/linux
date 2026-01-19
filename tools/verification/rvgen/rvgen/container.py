@@ -30,3 +30,15 @@ class Container(generator.RVGenerator):
                              self._kconfig_marker(), container_marker)
             return result
         return result + container_marker
+
+    def fill_tracepoint_handlers_skel(self) -> str:
+        return ""
+
+    def fill_tracepoint_attach_probe(self) -> str:
+        return ""
+
+    def fill_tracepoint_detach_helper(self) -> str:
+        return ""
+
+    def fill_monitor_class_type(self) -> str:
+        return ""
