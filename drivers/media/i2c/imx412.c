@@ -1039,7 +1039,7 @@ static int imx412_power_on(struct device *dev)
 
 	gpiod_set_value_cansleep(imx412->reset_gpio, 0);
 
-	usleep_range(1000, 1200);
+	usleep_range(10000, 12000);
 
 	return 0;
 
