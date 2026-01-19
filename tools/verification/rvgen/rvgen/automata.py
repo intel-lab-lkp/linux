@@ -10,12 +10,14 @@
 
 import ntpath
 
+
 class AutomataError(OSError):
     """Exception raised for errors in automata parsing and validation.
 
     Raised when DOT file processing fails due to invalid format, I/O errors,
     or malformed automaton definitions.
     """
+
 
 class Automata:
     """Automata class: Reads a dot file and parses it as an automata.
@@ -31,7 +33,9 @@ class Automata:
         self.__dot_path = file_path
         self.name = model_name or self.__get_model_name()
         self.__dot_lines = self.__open_dot()
-        self.states, self.initial_state, self.final_states = self.__get_state_variables()
+        self.states, self.initial_state, self.final_states = (
+            self.__get_state_variables()
+        )
         self.events = self.__get_event_variables()
         self.function = self.__create_matrix()
         self.events_start, self.events_start_run = self.__store_init_events()
@@ -86,6 +90,7 @@ class Automata:
         # wait for node declaration
         states = []
         final_states = []
+        initial_state = None
 
         has_final_states = False
         cursor = self.__get_cursor_begin_states()
@@ -96,9 +101,9 @@ class Automata:
             raw_state = line[-1]
 
             #  "enabled_fired"}; -> enabled_fired
-            state = raw_state.replace('"', '').replace('};', '').replace(',', '_')
+            state = raw_state.replace('"', "").replace("};", "").replace(",", "_")
             if state.startswith(self.init_marker):
-                initial_state = state[len(self.init_marker):]
+                initial_state = state[len(self.init_marker) :]
             else:
                 states.append(state)
                 if "doublecircle" in self.__dot_lines[cursor]:
@@ -110,6 +115,9 @@ class Automata:
                     has_final_states = True
 
             cursor += 1
+
+        if initial_state is None:
+            raise AutomataError("The automaton doesn't have a initial state")
 
         states = sorted(set(states))
 
@@ -132,7 +140,7 @@ class Automata:
             #  ------------ event is here ------------^^^^^
             if self.__dot_lines[cursor].split()[1] == "->":
                 line = self.__dot_lines[cursor].split()
-                event = line[-2].replace('"', '')
+                event = line[-2].replace('"', "")
 
                 # when a transition has more than one labels, they are like this
                 # "local_irq_enable\nhw_local_irq_enable_n"
@@ -162,7 +170,9 @@ class Automata:
             nr_state += 1
 
         # declare the matrix....
-        matrix = [[self.invalid_state_str for x in range(nr_event)] for y in range(nr_state)]
+        matrix = [
+            [self.invalid_state_str for x in range(nr_event)] for y in range(nr_state)
+        ]
 
         # and we are back! Let's fill the matrix
         cursor = self.__get_cursor_begin_events()
@@ -170,9 +180,9 @@ class Automata:
         while self.__dot_lines[cursor].lstrip()[0] == '"':
             if self.__dot_lines[cursor].split()[1] == "->":
                 line = self.__dot_lines[cursor].split()
-                origin_state = line[0].replace('"', '').replace(',', '_')
-                dest_state = line[2].replace('"', '').replace(',', '_')
-                possible_events = line[-2].replace('"', '').replace("\\n", " ")
+                origin_state = line[0].replace('"', "").replace(",", "_")
+                dest_state = line[2].replace('"', "").replace(",", "_")
+                possible_events = line[-2].replace('"', "").replace("\\n", " ")
                 for event in possible_events.split():
                     matrix[states_dict[origin_state]][events_dict[event]] = dest_state
             cursor += 1
