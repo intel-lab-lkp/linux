@@ -2,6 +2,8 @@
 #ifndef _ASM_X86_INTEL_FAMILY_H
 #define _ASM_X86_INTEL_FAMILY_H
 
+#include <asm/vfm.h>
+
 /*
  * "Big Core" Processors (Branded as Core, Xeon, etc...)
  *
