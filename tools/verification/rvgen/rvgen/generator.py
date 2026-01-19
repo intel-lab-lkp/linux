@@ -12,6 +12,7 @@ from .utils import not_implemented
 
 class RVGenerator:
     rv_dir = "kernel/trace/rv"
+    template_dir: str
 
     def __init__(self, extra_params={}):
         self.name = extra_params.get("model_name")
@@ -66,24 +67,24 @@ class RVGenerator:
             path = os.path.join(self.abs_template_dir, "..", file)
             return self._read_file(path)
 
-    def fill_parent(self):
+    def fill_parent(self) -> str:
         return f"&rv_{self.parent}" if self.parent else "NULL"
 
-    def fill_include_parent(self):
+    def fill_include_parent(self) -> str:
         if self.parent:
             return f"#include <monitors/{self.parent}/{self.parent}.h>\n"
         return ""
 
     @not_implemented
-    def fill_tracepoint_handlers_skel(self): ...
+    def fill_tracepoint_handlers_skel(self) -> str: ...
 
     @not_implemented
-    def fill_tracepoint_attach_probe(self): ...
+    def fill_tracepoint_attach_probe(self) -> str: ...
 
     @not_implemented
-    def fill_tracepoint_detach_helper(self): ...
+    def fill_tracepoint_detach_helper(self) -> str: ...
 
-    def fill_main_c(self):
+    def fill_main_c(self) -> str:
         main_c = self.main_c
         tracepoint_handlers = self.fill_tracepoint_handlers_skel()
         tracepoint_attach = self.fill_tracepoint_attach_probe()
@@ -102,18 +103,18 @@ class RVGenerator:
         return main_c
 
     @not_implemented
-    def fill_model_h(self): ...
+    def fill_model_h(self) -> str: ...
 
     @not_implemented
-    def fill_monitor_class_type(self): ...
+    def fill_monitor_class_type(self) -> str: ...
 
     @not_implemented
-    def fill_monitor_class(self): ...
+    def fill_monitor_class(self) -> str: ...
 
     @not_implemented
-    def fill_tracepoint_args_skel(self, tp_type): ...
+    def fill_tracepoint_args_skel(self, tp_type) -> str: ...
 
-    def fill_monitor_deps(self):
+    def fill_monitor_deps(self) -> str:
         buff = []
         buff.append("	# XXX: add dependencies if there")
         if self.parent:
@@ -121,7 +122,7 @@ class RVGenerator:
             buff.append("	default y")
         return '\n'.join(buff)
 
-    def fill_kconfig(self):
+    def fill_kconfig(self) -> str:
         kconfig = self.kconfig
         monitor_class_type = self.fill_monitor_class_type()
         monitor_deps = self.fill_monitor_deps()
@@ -139,7 +140,7 @@ class RVGenerator:
         content = content.replace(marker, line + "\n" + marker)
         self.__write_file(file_to_patch, content)
 
-    def fill_tracepoint_tooltip(self):
+    def fill_tracepoint_tooltip(self) -> str:
         monitor_class_type = self.fill_monitor_class_type()
         if self.auto_patch:
             self._patch_file("rv_trace.h",
@@ -155,7 +156,7 @@ Add this line where other tracepoints are included and {monitor_class_type} is d
     def _kconfig_marker(self, container=None) -> str:
         return f"# Add new {container + ' ' if container else ''}monitors here"
 
-    def fill_kconfig_tooltip(self):
+    def fill_kconfig_tooltip(self) -> str:
         if self.auto_patch:
             # monitors with a container should stay together in the Kconfig
             self._patch_file("Kconfig",
@@ -168,7 +169,7 @@ Add this line where other monitors are included:
 source \"kernel/trace/rv/monitors/{self.name}/Kconfig\"
 """
 
-    def fill_makefile_tooltip(self):
+    def fill_makefile_tooltip(self) -> str:
         name = self.name
         name_up = name.upper()
         if self.auto_patch:
@@ -182,7 +183,7 @@ Add this line where other monitors are included:
 obj-$(CONFIG_RV_MON_{name_up}) += monitors/{name}/{name}.o
 """
 
-    def fill_monitor_tooltip(self):
+    def fill_monitor_tooltip(self) -> str:
         if self.auto_patch:
             return f"  - Monitor created in {self.rv_dir}/monitors/{self.name}"
         return f"  - Move {self.name}/ to the kernel's monitor directory ({self.rv_dir}/monitors)"
@@ -229,7 +230,7 @@ class Monitor(RVGenerator):
         super().__init__(extra_params)
         self.trace_h = self._read_template_file("trace.h")
 
-    def fill_trace_h(self):
+    def fill_trace_h(self) -> str:
         trace_h = self.trace_h
         monitor_class = self.fill_monitor_class()
         monitor_class_type = self.fill_monitor_class_type()

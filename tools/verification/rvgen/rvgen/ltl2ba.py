@@ -7,9 +7,14 @@
 # https://doi.org/10.1007/978-0-387-34892-6_1
 # With extra optimizations
 
+from __future__ import annotations
+from typing import Union
 from ply.lex import lex
 from ply.yacc import yacc
 from .utils import not_implemented
+
+# Type alias for all LTL node types in the AST
+LTLNode = Union['BinaryOp', 'UnaryOp', 'Variable', 'Literal']
 
 # Grammar:
 # 	ltl ::= opd | ( ltl ) | ltl binop ltl | unop ltl
@@ -152,15 +157,15 @@ class BinaryOp:
         yield from self.right
 
     @not_implemented
-    def normalize(self): ...
+    def normalize(self) -> BinaryOp: ...
 
     @not_implemented
-    def negate(self): ...
+    def negate(self) -> BinaryOp: ...
 
     @not_implemented
-    def _is_temporal(self): ...
+    def _is_temporal(self) -> bool: ...
 
-    def is_temporal(self):
+    def is_temporal(self) -> bool:
         if self.left.op.is_temporal():
             return True
         if self.right.op.is_temporal():
@@ -291,20 +296,20 @@ class UnaryOp:
         return hash(self.child)
 
     @not_implemented
-    def normalize(self):
+    def normalize(self) -> LTLNode:
         ...
 
     @not_implemented
-    def _is_temporal(self):
+    def _is_temporal(self) -> bool:
         ...
 
-    def is_temporal(self):
+    def is_temporal(self) -> bool:
         if self.child.op.is_temporal():
             return True
         return self._is_temporal()
 
     @not_implemented
-    def negate(self):
+    def negate(self) -> LTLNode:
         ...
 
 class EventuallyOp(UnaryOp):
@@ -386,14 +391,14 @@ class Variable:
     def __iter__(self):
         yield from ()
 
-    def negate(self):
+    def negate(self) -> NotOp:
         new = ASTNode(self)
         return NotOp(new)
 
-    def normalize(self):
+    def normalize(self) -> Variable:
         return self
 
-    def is_temporal(self):
+    def is_temporal(self) -> bool:
         return False
 
     @staticmethod
@@ -419,14 +424,14 @@ class Literal:
             return "true"
         return "false"
 
-    def negate(self):
+    def negate(self) -> Literal:
         self.value = not self.value
         return self
 
-    def normalize(self):
+    def normalize(self) -> Literal:
         return self
 
-    def is_temporal(self):
+    def is_temporal(self) -> bool:
         return False
 
     @staticmethod
