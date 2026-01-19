@@ -254,11 +254,6 @@ static inline void slow_down_io(void)
 		return;
 
 	native_io_delay();
-#ifdef REALLY_SLOW_IO
-	native_io_delay();
-	native_io_delay();
-	native_io_delay();
-#endif
 }
 
 #define BUILDIO(bwl, type)						\
