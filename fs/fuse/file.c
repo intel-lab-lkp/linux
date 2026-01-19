@@ -994,6 +994,26 @@ static int fuse_iomap_read_folio_range(const struct iomap_iter *iter,
 	return fuse_do_readfolio(file, folio, off, len);
 }
 
+static bool hit_folio_end(size_t num_read, struct folio *folio, struct inode *inode)
+{
+	if ((folio->index << PAGE_SHIFT) + num_read == i_size_read(inode)) {
+		return true;
+	}
+
+	return false;
+}
+
+static bool folio_read_done(int index, size_t num_read, struct folio *folio,
+			    struct inode *inode)
+{
+	if (index < (num_read >> PAGE_SHIFT) || (index == (num_read >> PAGE_SHIFT) &&
+	    hit_folio_end(num_read, folio, inode))) {
+		return true;
+	}
+
+	return false;
+}
+
 static void fuse_readpages_end(struct fuse_mount *fm, struct fuse_args *args,
 			       int err)
 {
@@ -1018,8 +1038,10 @@ static void fuse_readpages_end(struct fuse_mount *fm, struct fuse_args *args,
 	fuse_invalidate_atime(inode);
 
 	for (i = 0; i < ap->num_folios; i++) {
-		iomap_finish_folio_read(ap->folios[i], ap->descs[i].offset,
-					ap->descs[i].length, err);
+		if (!err && folio_read_done(i, num_read, ap->folios[0], inode)) {
+			iomap_finish_folio_read(ap->folios[i], ap->descs[i].offset,
+						ap->descs[i].length, 0);
+		}
 		folio_put(ap->folios[i]);
 	}
 	if (ia->ff)
