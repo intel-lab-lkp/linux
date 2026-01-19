@@ -1022,6 +1022,8 @@ static int imx412_power_on(struct device *dev)
 	struct imx412 *imx412 = to_imx412(sd);
 	int ret;
 
+	gpiod_set_value_cansleep(imx412->reset_gpio, 1);
+
 	ret = regulator_bulk_enable(ARRAY_SIZE(imx412_supply_names),
 				    imx412->supplies);
 	if (ret < 0) {
@@ -1029,20 +1031,19 @@ static int imx412_power_on(struct device *dev)
 		return ret;
 	}
 
-	gpiod_set_value_cansleep(imx412->reset_gpio, 0);
-
 	ret = clk_prepare_enable(imx412->inclk);
 	if (ret) {
 		dev_err(imx412->dev, "fail to enable inclk\n");
 		goto error_reset;
 	}
 
+	gpiod_set_value_cansleep(imx412->reset_gpio, 0);
+
 	usleep_range(1000, 1200);
 
 	return 0;
 
 error_reset:
-	gpiod_set_value_cansleep(imx412->reset_gpio, 1);
 	regulator_bulk_disable(ARRAY_SIZE(imx412_supply_names),
 			       imx412->supplies);
 
