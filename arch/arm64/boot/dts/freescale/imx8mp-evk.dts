@@ -712,7 +712,6 @@
 &pcie0 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_pcie0>;
-	reset-gpio = <&gpio2 7 GPIO_ACTIVE_LOW>;
 	vpcie-supply = <&reg_pcie0>;
 	vpcie3v3aux-supply = <&reg_pcie0>;
 	supports-clkreq;
@@ -723,6 +722,10 @@
 	pinctrl-0 = <&pinctrl_pcie0>;
 	pinctrl-names = "default";
 	status = "disabled";
+};
+
+&pcie0_port0 {
+	reset-gpios = <&gpio2 7 GPIO_ACTIVE_LOW>;
 };
 
 &pwm1 {
