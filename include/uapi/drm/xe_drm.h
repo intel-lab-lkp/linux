@@ -2357,6 +2357,85 @@ struct drm_xe_exec_queue_set_property {
 	__u64 reserved[2];
 };
 
+/**
+ * DOC: Xe DRM RAS
+ *
+ * The enums and strings defined below map to the attributes of the DRM RAS Netlink Interface.
+ * Refer to Documentation/netlink/specs/drm_ras.yaml for complete interface specification.
+ *
+ * Node Registration
+ * =================
+ *
+ * The driver registers DRM RAS nodes for each error severity level.
+ * enum drm_xe_ras_error_severity defines the node-id, while DRM_XE_RAS_ERROR_SEVERITY_NAMES maps
+ * node-id to node-name.
+ *
+ * Error Classification
+ * ====================
+ *
+ * Each node contains a list of error counters. Each error is identified by a error-id and
+ * an error-name. enum drm_xe_ras_error_class defines the error-id, while
+ * DRM_XE_RAS_ERROR_CLASS_NAMES maps error-id to error-name.
+ *
+ * User Interface
+ * ==============
+ *
+ * To retrieve error values of a error counter, userspace applications should
+ * follow the below steps:
+ *
+ * 1. Use command LIST_NODES to enumerate all available nodes
+ * 2. Select node by node-id or node-name
+ * 3. Use command GET_ERROR_COUNTERS to list errors of specific node
+ * 4. Query specific error values using either error-id or error-name
+ *
+ * .. code-block:: C
+ *
+ *	// Lookup tables for ID-to-name resolution
+ *	static const char *nodes[] = DRM_XE_RAS_ERROR_SEVERITY_NAMES;
+ *	static const char *errors[] = DRM_XE_RAS_ERROR_CLASS_NAMES;
+ *
+ */
+
+/**
+ * enum drm_xe_ras_error_severity - DRM RAS error severity.
+ */
+enum drm_xe_ras_error_severity {
+	/** @DRM_XE_RAS_ERROR_SEVERITY_CORRECTABLE: Correctable Error */
+	DRM_XE_RAS_ERROR_SEVERITY_CORRECTABLE = 0,
+	/** @DRM_XE_RAS_ERROR_UNCORRECTABLE: Uncorrectable Error */
+	DRM_XE_RAS_ERROR_SEVERITY_UNCORRECTABLE,
+	/** @DRM_XE_RAS_ERROR_SEVERITY_MAX: Max severity */
+	DRM_XE_RAS_ERROR_SEVERITY_MAX /* non-ABI */
+};
+
+/**
+ * enum drm_xe_ras_error_class - DRM RAS error classes.
+ */
+enum drm_xe_ras_error_class {
+	/** @DRM_XE_RAS_ERROR_CLASS_GT: GT Error */
+	DRM_XE_RAS_ERROR_CLASS_GT = 1,
+	/** @DRM_XE_RAS_ERROR_CLASS_SOC: SoC Error */
+	DRM_XE_RAS_ERROR_CLASS_SOC,
+	/** @DRM_XE_RAS_ERROR_CLASS_MAX: Max Error */
+	DRM_XE_RAS_ERROR_CLASS_MAX	/* non-ABI */
+};
+
+/*
+ * Error severity to name mapping.
+ */
+#define DRM_XE_RAS_ERROR_SEVERITY_NAMES {					\
+	[DRM_XE_RAS_ERROR_SEVERITY_CORRECTABLE] = "correctable-errors",		\
+	[DRM_XE_RAS_ERROR_SEVERITY_UNCORRECTABLE] = "uncorrectable-errors",	\
+}
+
+/*
+ * Error class to name mapping.
+ */
+#define DRM_XE_RAS_ERROR_CLASS_NAMES {					\
+	[DRM_XE_RAS_ERROR_CLASS_GT] = "GT",				\
+	[DRM_XE_RAS_ERROR_CLASS_SOC] = "SoC"				\
+}
+
 #if defined(__cplusplus)
 }
 #endif
