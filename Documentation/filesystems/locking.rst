@@ -398,6 +398,8 @@ prototypes::
 	bool (*lm_breaker_owns_lease)(struct file_lock *);
         bool (*lm_lock_expirable)(struct file_lock *);
         void (*lm_expire_lock)(void);
+        void (*lm_breaker_timedout)(struct file_lease *);
+        bool (*lm_need_to_retry)(struct file_lease *, struct file_lock_context *);
 
 locking rules:
 
@@ -412,6 +414,8 @@ lm_breaker_owns_lease:	yes     	no			no
 lm_lock_expirable	yes		no			no
 lm_expire_lock		no		no			yes
 lm_open_conflict	yes		no			no
+lm_breaker_timedout     no              no                      yes
+lm_need_to_retry        yes             no                      no
 ======================	=============	=================	=========
 
 buffer_head

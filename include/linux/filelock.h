@@ -17,6 +17,7 @@
 #define FL_OFDLCK	1024	/* lock is "owned" by struct file */
 #define FL_LAYOUT	2048	/* outstanding pNFS layout */
 #define FL_RECLAIM	4096	/* reclaiming from a reboot server */
+#define	FL_BREAKER_TIMEDOUT	8192	/* lease breaker timed out */
 
 #define FL_CLOSE_POSIX (FL_POSIX | FL_CLOSE)
 
@@ -50,6 +51,9 @@ struct lease_manager_operations {
 	void (*lm_setup)(struct file_lease *, void **);
 	bool (*lm_breaker_owns_lease)(struct file_lease *);
 	int (*lm_open_conflict)(struct file *, int);
+	void (*lm_breaker_timedout)(struct file_lease *fl);
+	bool (*lm_need_to_retry)(struct file_lease *fl,
+			struct file_lock_context *ctx);
 };
 
 struct lock_manager {
@@ -145,6 +149,9 @@ struct file_lock_context {
 	struct list_head	flc_flock;
 	struct list_head	flc_posix;
 	struct list_head	flc_lease;
+
+	/* for FL_LAYOUT */
+	bool			flc_in_conflict;
 };
 
 #ifdef CONFIG_FILE_LOCKING

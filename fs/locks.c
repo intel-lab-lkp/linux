@@ -391,6 +391,14 @@ lease_dispose_list(struct list_head *dispose)
 	while (!list_empty(dispose)) {
 		flc = list_first_entry(dispose, struct file_lock_core, flc_list);
 		list_del_init(&flc->flc_list);
+		if (flc->flc_flags & FL_BREAKER_TIMEDOUT) {
+			struct file_lease *fl;
+
+			fl = file_lease(flc);
+			if (fl->fl_lmops &&
+					fl->fl_lmops->lm_breaker_timedout)
+				fl->fl_lmops->lm_breaker_timedout(fl);
+		}
 		locks_free_lease(file_lease(flc));
 	}
 }
@@ -1541,8 +1549,10 @@ static void time_out_leases(struct inode *inode, struct list_head *dispose)
 		trace_time_out_leases(inode, fl);
 		if (past_time(fl->fl_downgrade_time))
 			lease_modify(fl, F_RDLCK, dispose);
-		if (past_time(fl->fl_break_time))
+		if (past_time(fl->fl_break_time)) {
 			lease_modify(fl, F_UNLCK, dispose);
+			fl->c.flc_flags |= FL_BREAKER_TIMEDOUT;
+		}
 	}
 }
 
@@ -1643,6 +1653,8 @@ int __break_lease(struct inode *inode, unsigned int flags)
 	list_for_each_entry_safe(fl, tmp, &ctx->flc_lease, c.flc_list) {
 		if (!leases_conflict(&fl->c, &new_fl->c))
 			continue;
+		if (new_fl->fl_lmops != fl->fl_lmops)
+			new_fl->fl_lmops = fl->fl_lmops;
 		if (want_write) {
 			if (fl->c.flc_flags & FL_UNLOCK_PENDING)
 				continue;
@@ -1666,6 +1678,18 @@ int __break_lease(struct inode *inode, unsigned int flags)
 		error = -EWOULDBLOCK;
 		goto out;
 	}
+
+	/*
+	 * Check whether the lease manager wants the operation
+	 * causing the conflict to be retried.
+	 */
+	if (new_fl->fl_lmops && new_fl->fl_lmops->lm_need_to_retry &&
+			new_fl->fl_lmops->lm_need_to_retry(new_fl, ctx)) {
+		trace_break_lease_noblock(inode, new_fl);
+		error = -ERESTARTSYS;
+		goto out;
+	}
+	ctx->flc_in_conflict = true;
 
 restart:
 	fl = list_first_entry(&ctx->flc_lease, struct file_lease, c.flc_list);
@@ -1703,6 +1727,9 @@ out:
 	spin_unlock(&ctx->flc_lock);
 	percpu_up_read(&file_rwsem);
 	lease_dispose_list(&dispose);
+	spin_lock(&ctx->flc_lock);
+	ctx->flc_in_conflict = false;
+	spin_unlock(&ctx->flc_lock);
 free_lock:
 	locks_free_lease(new_fl);
 	return error;

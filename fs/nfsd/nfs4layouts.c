@@ -747,11 +747,9 @@ static bool
 nfsd4_layout_lm_break(struct file_lease *fl)
 {
 	/*
-	 * We don't want the locks code to timeout the lease for us;
-	 * we'll remove it ourself if a layout isn't returned
-	 * in time:
+	 * Enforce break lease timeout to prevent NFSD
+	 * thread from hanging in __break_lease.
 	 */
-	fl->fl_break_time = 0;
 	nfsd4_recall_file_layout(fl->c.flc_owner);
 	return false;
 }
@@ -782,10 +780,69 @@ nfsd4_layout_lm_open_conflict(struct file *filp, int arg)
 	return 0;
 }
 
+/**
+ * nfsd_layout_breaker_timedout - The layout recall has timed out.
+ * If the layout type supports fence operation then do it to stop
+ * the client from accessing the block device.
+ *
+ * @fl: file to check
+ *
+ * Return value: None.
+ */
+static void
+nfsd4_layout_lm_breaker_timedout(struct file_lease *fl)
+{
+	struct nfs4_layout_stateid *ls = fl->c.flc_owner;
+	struct nfsd_file *nf;
+	u32 type;
+
+	rcu_read_lock();
+	nf = nfsd_file_get(ls->ls_file);
+	rcu_read_unlock();
+	if (!nf)
+		return;
+	type = ls->ls_layout_type;
+	if (nfsd4_layout_ops[type]->fence_client)
+		nfsd4_layout_ops[type]->fence_client(ls, nf);
+	nfsd_file_put(nf);
+}
+
+/**
+ * nfsd4_layout_lm_conflict - Handle multiple conflicts in the same file.
+ *
+ * This function is called from __break_lease when a conflict occurs.
+ * For layout conflicts on the same file, each conflict triggers a
+ * layout  recall. Only the thread handling the first conflict needs
+ * to remain in __break_lease to manage the timeout for these recalls;
+ * subsequent threads should not wait in __break_lease.
+ *
+ * This is done to prevent excessive nfsd threads from becoming tied up
+ * in __break_lease, which could hinder the server's ability to service
+ * incoming requests.
+ *
+ * Return true if thread should not wait in __break_lease else return
+ * false.
+ */
+static bool
+nfsd4_layout_lm_retry(struct file_lease *fl,
+				struct file_lock_context *ctx)
+{
+	struct svc_rqst *rqstp;
+
+	rqstp = nfsd_current_rqst();
+	if (!rqstp)
+		return false;
+	if ((fl->c.flc_flags & FL_LAYOUT) && ctx->flc_in_conflict)
+		return true;
+	return false;
+}
+
 static const struct lease_manager_operations nfsd4_layouts_lm_ops = {
 	.lm_break		= nfsd4_layout_lm_break,
 	.lm_change		= nfsd4_layout_lm_change,
 	.lm_open_conflict	= nfsd4_layout_lm_open_conflict,
+	.lm_breaker_timedout	= nfsd4_layout_lm_breaker_timedout,
+	.lm_need_to_retry	= nfsd4_layout_lm_retry,
 };
 
 int
