@@ -485,7 +485,23 @@
 	clock-frequency = <400000>;
 
 	/* SONY ToF sensor @ 52 */
-	/* AMS TCS3490 RGB+IR color sensor @ 72 */
+
+	tcs3400_sensor: tcs3400_sensor@39 {
+		compatible = "ams,tcs3400";
+		reg = <0x39>;
+
+		interrupts-extended = <&tlmm 11 IRQ_TYPE_EDGE_FALLING>;
+
+		vdd-supply = <&vreg_l22a_2p8>;
+		vio-supply = <&cam_vio_vreg>;
+
+		pinctrl-0 = <&ams_sensor_default>;
+		pinctrl-1 = <&ams_sensor_sleep>;
+
+		ams,rgbcir-vdd-supply = <1>;
+		ams,rgbcir-gpio-vdd = <0>;
+		ams,rgbcir-vio-supply = <1>;
+	};
 };
 
 &ibb {
@@ -746,6 +762,24 @@
 
 		int-pins {
 			pins = "gpio125";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-pull-down;
+		};
+	};
+
+	ams_sensor_default: ams-sensor-default-state {
+		int-pins {
+			pins = "gpio11";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+	};
+
+	ams_sensor_sleep: ams_sensor-sleep-state {
+		int-pins {
+			pins = "gpio11";
 			function = "gpio";
 			drive-strength = <2>;
 			bias-pull-down;
