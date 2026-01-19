@@ -717,6 +717,8 @@ cpu_attach_domain(struct sched_domain *sd, struct root_domain *rd, int cpu)
 {
 	struct rq *rq = cpu_rq(cpu);
 	struct sched_domain *tmp;
+	unsigned int imb = 0;
+	unsigned int imb_span = 1;
 
 	/* Remove the sched domains which do not contribute to scheduling. */
 	for (tmp = sd; tmp; ) {
@@ -761,6 +763,61 @@ cpu_attach_domain(struct sched_domain *sd, struct root_domain *rd, int cpu)
 			} while (sg != sd->groups);
 
 			sd->child = NULL;
+		}
+	}
+
+	/*
+	 * Calculate an allowed NUMA imbalance such that LLCs do not get
+	 * imbalanced.
+	 * Perform this calculation after domain degeneration so that
+	 * sd->imb_numa_nr reflects the final effective topology.
+	 */
+	for (tmp = sd; tmp; tmp = tmp->parent) {
+		struct sched_domain *child = tmp->child;
+
+		if (!(tmp->flags & SD_SHARE_LLC) && child &&
+			(child->flags & SD_SHARE_LLC)) {
+			struct sched_domain __rcu *top_p;
+			unsigned int nr_llcs;
+
+			/*
+			 * For a single LLC per node, allow an
+			 * imbalance up to 12.5% of the node. This is
+			 * arbitrary cutoff based two factors -- SMT and
+			 * memory channels. For SMT-2, the intent is to
+			 * avoid premature sharing of HT resources but
+			 * SMT-4 or SMT-8 *may* benefit from a different
+			 * cutoff. For memory channels, this is a very
+			 * rough estimate of how many channels may be
+			 * active and is based on recent CPUs with
+			 * many cores.
+			 *
+			 * For multiple LLCs, allow an imbalance
+			 * until multiple tasks would share an LLC
+			 * on one node while LLCs on another node
+			 * remain idle. This assumes that there are
+			 * enough logical CPUs per LLC to avoid SMT
+			 * factors and that there is a correlation
+			 * between LLCs and memory channels.
+			 */
+			nr_llcs = tmp->span_weight / child->span_weight;
+			if (nr_llcs == 1)
+				imb = tmp->span_weight >> 3;
+			else
+				imb = nr_llcs;
+			imb = max(1U, imb);
+			tmp->imb_numa_nr = imb;
+
+			/* Set span based on the first NUMA domain. */
+			top_p = tmp->parent;
+			while (top_p && !(top_p->flags & SD_NUMA)) {
+				top_p = top_p->parent;
+			}
+			imb_span = top_p ? top_p->span_weight : tmp->span_weight;
+		} else {
+			int factor = max(1U, (tmp->span_weight / imb_span));
+
+			tmp->imb_numa_nr = imb * factor;
 		}
 	}
 
@@ -2596,64 +2653,6 @@ build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *att
 			} else {
 				if (build_sched_groups(sd, i))
 					goto error;
-			}
-		}
-	}
-
-	/*
-	 * Calculate an allowed NUMA imbalance such that LLCs do not get
-	 * imbalanced.
-	 */
-	for_each_cpu(i, cpu_map) {
-		unsigned int imb = 0;
-		unsigned int imb_span = 1;
-
-		for (sd = *per_cpu_ptr(d.sd, i); sd; sd = sd->parent) {
-			struct sched_domain *child = sd->child;
-
-			if (!(sd->flags & SD_SHARE_LLC) && child &&
-			    (child->flags & SD_SHARE_LLC)) {
-				struct sched_domain __rcu *top_p;
-				unsigned int nr_llcs;
-
-				/*
-				 * For a single LLC per node, allow an
-				 * imbalance up to 12.5% of the node. This is
-				 * arbitrary cutoff based two factors -- SMT and
-				 * memory channels. For SMT-2, the intent is to
-				 * avoid premature sharing of HT resources but
-				 * SMT-4 or SMT-8 *may* benefit from a different
-				 * cutoff. For memory channels, this is a very
-				 * rough estimate of how many channels may be
-				 * active and is based on recent CPUs with
-				 * many cores.
-				 *
-				 * For multiple LLCs, allow an imbalance
-				 * until multiple tasks would share an LLC
-				 * on one node while LLCs on another node
-				 * remain idle. This assumes that there are
-				 * enough logical CPUs per LLC to avoid SMT
-				 * factors and that there is a correlation
-				 * between LLCs and memory channels.
-				 */
-				nr_llcs = sd->span_weight / child->span_weight;
-				if (nr_llcs == 1)
-					imb = sd->span_weight >> 3;
-				else
-					imb = nr_llcs;
-				imb = max(1U, imb);
-				sd->imb_numa_nr = imb;
-
-				/* Set span based on the first NUMA domain. */
-				top_p = sd->parent;
-				while (top_p && !(top_p->flags & SD_NUMA)) {
-					top_p = top_p->parent;
-				}
-				imb_span = top_p ? top_p->span_weight : sd->span_weight;
-			} else {
-				int factor = max(1U, (sd->span_weight / imb_span));
-
-				sd->imb_numa_nr = imb * factor;
 			}
 		}
 	}
