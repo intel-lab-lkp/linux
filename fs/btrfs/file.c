@@ -3809,16 +3809,10 @@ static loff_t btrfs_file_llseek(struct file *file, loff_t offset, int whence)
 
 static int btrfs_file_open(struct inode *inode, struct file *filp)
 {
-	int ret;
-
 	if (unlikely(btrfs_is_shutdown(inode_to_fs_info(inode))))
 		return -EIO;
 
 	filp->f_mode |= FMODE_NOWAIT | FMODE_CAN_ODIRECT;
-
-	ret = fsverity_file_open(inode, filp);
-	if (ret)
-		return ret;
 	return generic_file_open(inode, filp);
 }
 

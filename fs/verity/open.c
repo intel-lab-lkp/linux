@@ -376,13 +376,19 @@ out_free_desc:
 	return err;
 }
 
-int __fsverity_file_open(struct inode *inode, struct file *filp)
+/*
+ * When opening a verity file, deny the open if it is for writing.  Otherwise,
+ * set up the inode's verity info if not already done.
+ *
+ * When combined with fscrypt, this must be called after fscrypt_file_open().
+ * Otherwise, we won't have the key set up to decrypt the verity metadata.
+ */
+int fsverity_file_open(struct inode *inode, struct file *filp)
 {
 	if (filp->f_mode & FMODE_WRITE)
 		return -EPERM;
 	return ensure_verity_info(inode);
 }
-EXPORT_SYMBOL_GPL(__fsverity_file_open);
 
 void fsverity_cleanup_inode(struct inode *inode)
 {

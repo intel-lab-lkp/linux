@@ -130,6 +130,7 @@ struct fsverity_operations {
 				       u64 pos, unsigned int size);
 };
 
+int fsverity_file_open(struct inode *inode, struct file *filp);
 void fsverity_cleanup_inode(struct inode *inode);
 
 #ifdef CONFIG_FS_VERITY
@@ -178,10 +179,6 @@ int fsverity_get_digest(struct inode *inode,
 			u8 raw_digest[FS_VERITY_MAX_DIGEST_SIZE],
 			u8 *alg, enum hash_algo *halg);
 
-/* open.c */
-
-int __fsverity_file_open(struct inode *inode, struct file *filp);
-
 /* read_metadata.c */
 
 int fsverity_ioctl_read_metadata(struct file *filp, const void __user *uarg);
@@ -223,13 +220,6 @@ static inline int fsverity_get_digest(struct inode *inode,
 	 * that the file doesn't have fsverity enabled (digest size 0).
 	 */
 	return 0;
-}
-
-/* open.c */
-
-static inline int __fsverity_file_open(struct inode *inode, struct file *filp)
-{
-	return -EOPNOTSUPP;
 }
 
 /* read_metadata.c */
@@ -287,26 +277,6 @@ static inline bool fsverity_verify_page(struct page *page)
 static inline bool fsverity_active(const struct inode *inode)
 {
 	return fsverity_get_info(inode) != NULL;
-}
-
-/**
- * fsverity_file_open() - prepare to open a verity file
- * @inode: the inode being opened
- * @filp: the struct file being set up
- *
- * When opening a verity file, deny the open if it is for writing.  Otherwise,
- * set up the inode's verity info if not already done.
- *
- * When combined with fscrypt, this must be called after fscrypt_file_open().
- * Otherwise, we won't have the key set up to decrypt the verity metadata.
- *
- * Return: 0 on success, -errno on failure
- */
-static inline int fsverity_file_open(struct inode *inode, struct file *filp)
-{
-	if (IS_VERITY(inode))
-		return __fsverity_file_open(inode, filp);
-	return 0;
 }
 
 #endif	/* _LINUX_FSVERITY_H */
