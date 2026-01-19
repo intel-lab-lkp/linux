@@ -219,6 +219,20 @@ static int ds4424_verify_chip(struct iio_dev *indio_dev)
 	return ret;
 }
 
+static int ds4424_init(struct iio_dev *indio_dev)
+{
+	int i, ret;
+
+	/* Set all channels to 0 current. */
+	for (i = 0; i < indio_dev->num_channels; i++) {
+		ret = ds4424_set_value(indio_dev, 0, &indio_dev->channels[i]);
+		if (ret < 0)
+			return ret;
+	}
+
+	return 0;
+}
+
 static int ds4424_setup_channels(struct i2c_client *client,
 				 struct ds4424_data *data,
 				 struct iio_dev *indio_dev)
@@ -393,6 +407,11 @@ static int ds4424_probe(struct i2c_client *client)
 		goto fail;
 
 	ret = ds4424_setup_channels(client, data, indio_dev);
+	if (ret)
+		goto fail;
+
+	/* No reset pin/bit: clear any preconfigured output on probe. */
+	ret = ds4424_init(indio_dev);
 	if (ret)
 		goto fail;
 
