@@ -624,8 +624,6 @@ static struct fan53555_platform_data *fan53555_parse_dt(struct device *dev,
 					      const struct regulator_desc *desc)
 {
 	struct fan53555_platform_data *pdata;
-	int ret;
-	u32 tmp;
 
 	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
 	if (!pdata)
@@ -633,10 +631,8 @@ static struct fan53555_platform_data *fan53555_parse_dt(struct device *dev,
 
 	pdata->regulator = of_get_regulator_init_data(dev, np, desc);
 
-	ret = of_property_read_u32(np, "fcs,suspend-voltage-selector",
-				   &tmp);
-	if (!ret)
-		pdata->sleep_vsel_id = tmp;
+	pdata->sleep_vsel_id = of_property_read_u32_default(np, "fcs,suspend-voltage-selector",
+							    FAN53555_VSEL_ID_0);
 
 	return pdata;
 }
