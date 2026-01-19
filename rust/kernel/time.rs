@@ -363,9 +363,14 @@ impl Delta {
     /// A span of time equal to zero.
     pub const ZERO: Self = Self { nanos: 0 };
 
+    /// The minimum number of microseconds that can be represented by a [`Delta`].
+    pub const MIN_MICROS: i64 = -9_223_372_036_854_775;
+    /// The maximum number of microseconds that can be represented by a [`Delta`].
+    pub const MAX_MICROS: i64 = 9_223_372_036_854_775;
+
     /// Create a new [`Delta`] from a number of microseconds.
     ///
-    /// The `micros` can range from -9_223_372_036_854_775 to 9_223_372_036_854_775.
+    /// The `micros` can range from [`Delta::MIN_MICROS`] to [`Delta::MAX_MICROS`].
     /// If `micros` is outside this range, `i64::MIN` is used for negative values,
     /// and `i64::MAX` is used for positive values due to saturation.
     #[inline]
@@ -375,9 +380,14 @@ impl Delta {
         }
     }
 
+    /// The minimum number of milliseconds that can be represented by a [`Delta`].
+    pub const MIN_MILLIS: i64 = -9_223_372_036_854;
+    /// The maximum number of milliseconds that can be represented by a [`Delta`].
+    pub const MAX_MILLIS: i64 = 9_223_372_036_854;
+
     /// Create a new [`Delta`] from a number of milliseconds.
     ///
-    /// The `millis` can range from -9_223_372_036_854 to 9_223_372_036_854.
+    /// The `millis` can range from [`Delta::MIN_MILLIS`] to [`Delta::MAX_MILLIS`].
     /// If `millis` is outside this range, `i64::MIN` is used for negative values,
     /// and `i64::MAX` is used for positive values due to saturation.
     #[inline]
@@ -387,9 +397,14 @@ impl Delta {
         }
     }
 
+    /// The minimum number of seconds that can be represented by a [`Delta`].
+    pub const MIN_SECS: i64 = -9_223_372_036;
+    /// The maximum number of seconds that can be represented by a [`Delta`].
+    pub const MAX_SECS: i64 = 9_223_372_036;
+
     /// Create a new [`Delta`] from a number of seconds.
     ///
-    /// The `secs` can range from -9_223_372_036 to 9_223_372_036.
+    /// The `secs` can range from [`Delta::MIN_SECS`] to [`Delta::MAX_SECS`].
     /// If `secs` is outside this range, `i64::MIN` is used for negative values,
     /// and `i64::MAX` is used for positive values due to saturation.
     #[inline]
