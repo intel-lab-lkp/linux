@@ -140,6 +140,7 @@ struct cpuinfo_x86 {
 		__u32		x86_vfm;
 	};
 	__u8			x86_stepping;
+	__u8			x86_platform_id; /* Intel-only. 3 bits */
 #ifdef CONFIG_X86_64
 	/* Number of 4K pages in DTLB/ITLB combined(in pages): */
 	int			x86_tlbsize;

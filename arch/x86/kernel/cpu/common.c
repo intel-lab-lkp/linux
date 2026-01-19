@@ -1981,7 +1981,9 @@ static void identify_cpu(struct cpuinfo_x86 *c)
 	c->loops_per_jiffy = loops_per_jiffy;
 	c->x86_cache_size = 0;
 	c->x86_vendor = X86_VENDOR_UNKNOWN;
-	c->x86_model = c->x86_stepping = 0;	/* So far unknown... */
+	c->x86_model = 0;
+	c->x86_stepping = 0;
+	c->x86_platform_id = 0;
 	c->x86_vendor_id[0] = '\0'; /* Unset */
 	c->x86_model_id[0] = '\0';  /* Unset */
 #ifdef CONFIG_X86_64
