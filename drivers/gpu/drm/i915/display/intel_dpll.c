@@ -2334,3 +2334,8 @@ void assert_pll_disabled(struct intel_display *display, enum pipe pipe)
 {
 	assert_pll(display, pipe, false);
 }
+
+bool intel_dpll_clock_matches(int clock1, int clock2)
+{
+	return abs(clock1 - clock2) <= 1;
+}
