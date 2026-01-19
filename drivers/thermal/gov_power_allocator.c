@@ -263,7 +263,8 @@ static u32 pid_controller(struct thermal_zone_device *tz,
 	 */
 	i = mul_frac(tz->tzp->k_i, params->err_integral);
 
-	if (err < int_to_frac(tz->tzp->integral_cutoff)) {
+	if (err < int_to_frac(tz->tzp->integral_cutoff) ||
+	    (err > 0 && params->err_integral < 0)) {
 		s64 i_next = i + mul_frac(tz->tzp->k_i, err);
 
 		if (abs(i_next) < max_power_frac) {
