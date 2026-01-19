@@ -845,95 +845,114 @@ void replace_page_cache_folio(struct folio *old, struct folio *new)
 }
 EXPORT_SYMBOL_GPL(replace_page_cache_folio);
 
-noinline int __filemap_add_folio(struct address_space *mapping,
-		struct folio *folio, pgoff_t index, gfp_t gfp, void **shadowp)
+/*
+ * The critical section for storing a folio in an XArray.
+ * Context: Expects xas->xa->xa_lock to be held.
+ */
+static void __filemap_add_folio_xa_locked(struct xa_state *xas,
+		struct address_space *mapping, struct folio *folio, void **shadowp)
 {
-	XA_STATE_ORDER(xas, &mapping->i_pages, index, folio_order(folio));
 	bool huge;
 	long nr;
 	unsigned int forder = folio_order(folio);
+	int order = -1;
+	void *entry, *old = NULL;
+
+	lockdep_assert_held(&xas->xa->xa_lock);
+
+	huge = folio_test_hugetlb(folio);
+	nr = folio_nr_pages(folio);
+
+	xas_for_each_conflict(xas, entry) {
+		old = entry;
+		if (!xa_is_value(entry)) {
+			xas_set_err(xas, -EEXIST);
+			return;
+		}
+		/*
+		 * If a larger entry exists,
+		 * it will be the first and only entry iterated.
+		 */
+		if (order == -1)
+			order = xas_get_order(xas);
+	}
+
+	if (old) {
+		if (order > 0 && order > forder) {
+			unsigned int split_order = max(forder,
+					xas_try_split_min_order(order));
+
+			/* How to handle large swap entries? */
+			BUG_ON(shmem_mapping(mapping));
+
+			while (order > forder) {
+				xas_set_order(xas, xas->xa_index, split_order);
+				xas_try_split(xas, old, order);
+				if (xas_error(xas))
+					return;
+				order = split_order;
+				split_order =
+					max(xas_try_split_min_order(
+						    split_order),
+					    forder);
+			}
+			xas_reset(xas);
+		}
+		if (shadowp)
+			*shadowp = old;
+	}
+
+	xas_store(xas, folio);
+	if (xas_error(xas))
+		return;
+
+	mapping->nrpages += nr;
+
+	/* hugetlb pages do not participate in page cache accounting */
+	if (!huge) {
+		lruvec_stat_mod_folio(folio, NR_FILE_PAGES, nr);
+		if (folio_test_pmd_mappable(folio))
+			lruvec_stat_mod_folio(folio,
+					NR_FILE_THPS, nr);
+	}
+}
+
+noinline int __filemap_add_folio(struct address_space *mapping,
+				 struct folio *folio, struct xa_state *xas,
+				 gfp_t gfp, void **shadowp, bool xa_locked)
+{
+	long nr;
 
 	VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
 	VM_BUG_ON_FOLIO(folio_test_swapbacked(folio), folio);
 	VM_BUG_ON_FOLIO(folio_order(folio) < mapping_min_folio_order(mapping),
 			folio);
-	mapping_set_update(&xas, mapping);
+	mapping_set_update(xas, mapping);
 
-	VM_BUG_ON_FOLIO(index & (folio_nr_pages(folio) - 1), folio);
-	huge = folio_test_hugetlb(folio);
+	VM_BUG_ON_FOLIO(xas->xa_index & (folio_nr_pages(folio) - 1), folio);
 	nr = folio_nr_pages(folio);
 
 	gfp &= GFP_RECLAIM_MASK;
 	folio_ref_add(folio, nr);
 	folio->mapping = mapping;
-	folio->index = xas.xa_index;
+	folio->index = xas->xa_index;
 
-	for (;;) {
-		int order = -1;
-		void *entry, *old = NULL;
+	if (xa_locked) {
+		lockdep_assert_held(&xas->xa->xa_lock);
+		__filemap_add_folio_xa_locked(xas, mapping, folio, shadowp);
+	} else {
+		lockdep_assert_not_held(&xas->xa->xa_lock);
+		for (;;) {
+			xas_lock_irq(xas);
+			__filemap_add_folio_xa_locked(xas, mapping, folio, shadowp);
+			xas_unlock_irq(xas);
 
-		xas_lock_irq(&xas);
-		xas_for_each_conflict(&xas, entry) {
-			old = entry;
-			if (!xa_is_value(entry)) {
-				xas_set_err(&xas, -EEXIST);
-				goto unlock;
-			}
-			/*
-			 * If a larger entry exists,
-			 * it will be the first and only entry iterated.
-			 */
-			if (order == -1)
-				order = xas_get_order(&xas);
+			if (!xas_nomem(xas, gfp))
+				break;
 		}
-
-		if (old) {
-			if (order > 0 && order > forder) {
-				unsigned int split_order = max(forder,
-						xas_try_split_min_order(order));
-
-				/* How to handle large swap entries? */
-				BUG_ON(shmem_mapping(mapping));
-
-				while (order > forder) {
-					xas_set_order(&xas, index, split_order);
-					xas_try_split(&xas, old, order);
-					if (xas_error(&xas))
-						goto unlock;
-					order = split_order;
-					split_order =
-						max(xas_try_split_min_order(
-							    split_order),
-						    forder);
-				}
-				xas_reset(&xas);
-			}
-			if (shadowp)
-				*shadowp = old;
-		}
-
-		xas_store(&xas, folio);
-		if (xas_error(&xas))
-			goto unlock;
-
-		mapping->nrpages += nr;
-
-		/* hugetlb pages do not participate in page cache accounting */
-		if (!huge) {
-			lruvec_stat_mod_folio(folio, NR_FILE_PAGES, nr);
-			if (folio_test_pmd_mappable(folio))
-				lruvec_stat_mod_folio(folio,
-						NR_FILE_THPS, nr);
-		}
-
-unlock:
-		xas_unlock_irq(&xas);
-
-		if (!xas_nomem(&xas, gfp))
-			break;
 	}
 
-	if (xas_error(&xas))
+	if (xas_error(xas))
 		goto error;
 
 	trace_mm_filemap_add_to_page_cache(folio);
@@ -942,12 +961,12 @@ error:
 	folio->mapping = NULL;
 	/* Leave folio->index set: truncation relies upon it */
 	folio_put_refs(folio, nr);
-	return xas_error(&xas);
+	return xas_error(xas);
 }
 ALLOW_ERROR_INJECTION(__filemap_add_folio, ERRNO);
 
-int filemap_add_folio(struct address_space *mapping, struct folio *folio,
-				pgoff_t index, gfp_t gfp)
+static int _filemap_add_folio(struct address_space *mapping, struct folio *folio,
+				struct xa_state *xas, gfp_t gfp, bool xa_locked)
 {
 	void *shadow = NULL;
 	int ret;
@@ -963,7 +982,7 @@ int filemap_add_folio(struct address_space *mapping, struct folio *folio,
 		return ret;
 
 	__folio_set_locked(folio);
-	ret = __filemap_add_folio(mapping, folio, index, gfp, &shadow);
+	ret = __filemap_add_folio(mapping, folio, xas, gfp, &shadow, xa_locked);
 	if (unlikely(ret)) {
 		mem_cgroup_uncharge(folio);
 		__folio_clear_locked(folio);
@@ -986,6 +1005,14 @@ int filemap_add_folio(struct address_space *mapping, struct folio *folio,
 					    folio_nr_pages(folio));
 	}
 	return ret;
+}
+
+int filemap_add_folio(struct address_space *mapping, struct folio *folio,
+				pgoff_t index, gfp_t gfp)
+{
+	XA_STATE_ORDER(xas, &mapping->i_pages, index, folio_order(folio));
+
+	return _filemap_add_folio(mapping, folio, &xas, gfp, false);
 }
 EXPORT_SYMBOL_GPL(filemap_add_folio);
 
