@@ -2478,7 +2478,7 @@ max_dst_opts_number - INTEGER
         options extension header. If this value is zero then receive
         Destination Options processing is disabled in which case packets
         with the Destination Options extension header are dropped. If
-        this value is less than zero then unknown options are disallowed
+        this value is less than zero then unknown options is disallowed
         and the number of known TLVs allowed is the absolute value of
         this number.
 
@@ -2580,6 +2580,35 @@ ioam6_id_wide - LONG INTEGER
         - Max: 0xFFFFFFFFFFFFFF
 
         Default: 0xFFFFFFFFFFFFFF
+
+enforce_ext_hdr_order - BOOLEAN
+	Enforce recommended Extension Header ordering in RFC8200.
+	If the sysctl is set to 1 then the ordering the ordering is
+	enforced in received packets and each Extension Header
+	may be present at most once per packet. If the sysctl is
+	set to 0 then ordering is not enforced and Extension Headers
+	may be present in any order and have any number of
+	occurences per packet (except for Hop-by-Hop Options). Also,
+	if the sysctl is set then Destination Options before the
+	Routing header are disllowed.
+
+	The Extension Header order is:
+
+	    IPv6 header
+	    Hop-by-Hop Options header
+	    Routing header
+	    Fragment header
+	    Authentication header
+	    Encapsulating Security Payload header
+	    Destination Options header
+	    Upper-Layer header
+
+	Possible values:
+
+	- 0 (disabled)
+	- 1 (enabled)
+
+	Default: 1 (enabled)
 
 IPv6 Fragmentation:
 
