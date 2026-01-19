@@ -173,17 +173,5 @@ notrace long system_call_exception(struct pt_regs *regs, unsigned long r0)
 	}
 #endif
 
-	/*
-	 * Ultimately, this value will get limited by KSTACK_OFFSET_MAX(),
-	 * so the maximum stack offset is 1k bytes (10 bits).
-	 *
-	 * The actual entropy will be further reduced by the compiler when
-	 * applying stack alignment constraints: the powerpc architecture
-	 * may have two kinds of stack alignment (16-bytes and 8-bytes).
-	 *
-	 * So the resulting 6 or 7 bits of entropy is seen in SP[9:4] or SP[9:3].
-	 */
-	choose_random_kstack_offset(mftb());
-
 	return ret;
 }
