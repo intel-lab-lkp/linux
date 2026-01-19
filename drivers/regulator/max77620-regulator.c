@@ -605,38 +605,30 @@ static int max77620_of_parse_cb(struct device_node *np,
 {
 	struct max77620_regulator *pmic = config->driver_data;
 	struct max77620_regulator_pdata *rpdata = &pmic->reg_pdata[desc->id];
-	u32 pval;
-	int ret;
 
-	ret = of_property_read_u32(np, "maxim,active-fps-source", &pval);
-	rpdata->active_fps_src = (!ret) ? pval : MAX77620_FPS_SRC_DEF;
+	rpdata->active_fps_src =
+		of_property_read_u32_default(np, "maxim,active-fps-source", MAX77620_FPS_SRC_DEF);
 
-	ret = of_property_read_u32(np, "maxim,active-fps-power-up-slot", &pval);
-	rpdata->active_fps_pu_slot = (!ret) ? pval : -1;
+	rpdata->active_fps_pu_slot =
+		of_property_read_u32_default(np, "maxim,active-fps-power-up-slot", -1U);
 
-	ret = of_property_read_u32(
-			np, "maxim,active-fps-power-down-slot", &pval);
-	rpdata->active_fps_pd_slot = (!ret) ? pval : -1;
+	rpdata->active_fps_pd_slot =
+		of_property_read_u32_default(np, "maxim,active-fps-power-down-slot", -1U);
 
-	ret = of_property_read_u32(np, "maxim,suspend-fps-source", &pval);
-	rpdata->suspend_fps_src = (!ret) ? pval : -1;
+	rpdata->suspend_fps_src =
+		of_property_read_u32_default(np, "maxim,suspend-fps-source", -1U);
 
-	ret = of_property_read_u32(
-			np, "maxim,suspend-fps-power-up-slot", &pval);
-	rpdata->suspend_fps_pu_slot = (!ret) ? pval : -1;
+	rpdata->suspend_fps_pu_slot =
+		of_property_read_u32_default(np, "maxim,suspend-fps-power-up-slot", -1U);
 
-	ret = of_property_read_u32(
-			np, "maxim,suspend-fps-power-down-slot", &pval);
-	rpdata->suspend_fps_pd_slot = (!ret) ? pval : -1;
+	rpdata->suspend_fps_pd_slot =
+		of_property_read_u32_default(np, "maxim,suspend-fps-power-down-slot", -1U);
 
-	ret = of_property_read_u32(np, "maxim,power-ok-control", &pval);
-	if (!ret)
-		rpdata->power_ok = pval;
-	else
-		rpdata->power_ok = -1;
+	rpdata->power_ok =
+		of_property_read_u32_default(np, "maxim,power-ok-control", -1U);
 
-	ret = of_property_read_u32(np, "maxim,ramp-rate-setting", &pval);
-	rpdata->ramp_rate_setting = (!ret) ? pval : 0;
+	rpdata->ramp_rate_setting =
+		of_property_read_u32_default(np, "maxim,ramp-rate-setting", 0);
 
 	return max77620_init_pmic(pmic, desc->id);
 }
