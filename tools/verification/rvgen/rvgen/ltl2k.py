@@ -45,6 +45,7 @@ def abbreviate_atoms(atoms: list[str]) -> list[str]:
 
     abbrs = []
     for atom in atoms:
+        i = 0
         for i in range(len(atom), -1, -1):
             if sum(a.startswith(atom[:i]) for a in atoms) > 1:
                 break
