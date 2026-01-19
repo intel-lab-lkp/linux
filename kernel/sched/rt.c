@@ -2810,15 +2810,7 @@ long sched_group_rt_period(struct task_group *tg)
 #ifdef CONFIG_SYSCTL
 static int sched_rt_global_constraints(void)
 {
-	int ret = 0;
-	if (!rt_group_sched_enabled())
-		return ret;
-
-	mutex_lock(&rt_constraints_mutex);
-	ret = __rt_schedulable(NULL, 0, 0);
-	mutex_unlock(&rt_constraints_mutex);
-
-	return ret;
+	return 0;
 }
 #endif /* CONFIG_SYSCTL */
 
@@ -2850,7 +2842,16 @@ static int sched_rt_global_validate(void)
 			NSEC_PER_USEC > max_rt_runtime)))
 		return -EINVAL;
 
-	return 0;
+	int ret = 0;
+#ifdef CONFIG_RT_GROUP_SCHED
+	if (!rt_group_sched_enabled())
+		return ret;
+
+	mutex_lock(&rt_constraints_mutex);
+	ret = __rt_schedulable(NULL, 0, 0);
+	mutex_unlock(&rt_constraints_mutex);
+#endif
+	return ret;
 }
 
 static void sched_rt_do_global(void)
