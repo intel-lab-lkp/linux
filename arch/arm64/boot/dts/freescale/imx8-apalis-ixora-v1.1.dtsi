@@ -85,8 +85,6 @@
 	status = "okay";
 };
 
-/* TODO: GPU */
-
 /* Apalis I2C1 */
 &i2c2 {
 	status = "okay";
