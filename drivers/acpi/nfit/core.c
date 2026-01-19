@@ -2112,6 +2112,8 @@ enum nfit_aux_cmds {
 	NFIT_CMD_ARS_INJECT_SET = 7,
 	NFIT_CMD_ARS_INJECT_CLEAR = 8,
 	NFIT_CMD_ARS_INJECT_GET = 9,
+	/* ACPI 6.5: DSM function 0xA — Query ARS Error Inject Capabilities */
+	NFIT_CMD_ARS_QUERY_CAP = 10,
 };
 
 static void acpi_nfit_init_dsms(struct acpi_nfit_desc *acpi_desc)
@@ -2151,10 +2153,13 @@ static void acpi_nfit_init_dsms(struct acpi_nfit_desc *acpi_desc)
 		(1 << NFIT_CMD_TRANSLATE_SPA) |
 		(1 << NFIT_CMD_ARS_INJECT_SET) |
 		(1 << NFIT_CMD_ARS_INJECT_CLEAR) |
-		(1 << NFIT_CMD_ARS_INJECT_GET);
+		(1 << NFIT_CMD_ARS_INJECT_GET)	|
+		(1 << NFIT_CMD_ARS_QUERY_CAP);
 	for_each_set_bit(i, &dsm_mask, BITS_PER_LONG)
 		if (acpi_check_dsm(adev->handle, guid, 1, 1ULL << i))
 			set_bit(i, &acpi_desc->bus_dsm_mask);
+	dev_dbg(acpi_desc->dev, "NFIT DSM mask detected: %#lx\n",
+	acpi_desc->bus_dsm_mask);
 
 	/* Enumerate allowed NVDIMM_BUS_FAMILY_INTEL commands */
 	dsm_mask = NVDIMM_BUS_INTEL_FW_ACTIVATE_CMDMASK;
