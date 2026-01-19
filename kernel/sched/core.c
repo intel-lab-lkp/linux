@@ -9110,6 +9110,7 @@ static void sched_change_group(struct task_struct *tsk)
 void sched_move_task(struct task_struct *tsk, bool for_autogroup)
 {
 	unsigned int queue_flags = DEQUEUE_SAVE | DEQUEUE_MOVE;
+	bool queued = false;
 	bool resched = false;
 	struct rq *rq;
 
@@ -9120,12 +9121,16 @@ void sched_move_task(struct task_struct *tsk, bool for_autogroup)
 		sched_change_group(tsk);
 		if (!for_autogroup)
 			scx_cgroup_move_task(tsk);
+		if (scope->queued)
+			queued = true;
 		if (scope->running)
 			resched = true;
 	}
 
 	if (resched)
 		resched_curr(rq);
+	else if (queued)
+		wakeup_preempt(rq, tsk, 0);
 
 	__balance_callbacks(rq, &rq_guard.rf);
 }
