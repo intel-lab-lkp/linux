@@ -39,22 +39,17 @@ if __name__ == '__main__':
 
     params = parser.parse_args()
 
-    try:
-        if params.subcmd == "monitor":
-            print("Opening and parsing the specification file %s" % params.spec)
-            if params.monitor_class == "da":
-                monitor = dot2k(params.spec, params.monitor_type, vars(params))
-            elif params.monitor_class == "ltl":
-                monitor = ltl2k(params.spec, params.monitor_type, vars(params))
-            else:
-                print("Unknown monitor class:", params.monitor_class)
-                sys.exit(1)
+    if params.subcmd == "monitor":
+        print("Opening and parsing the specification file %s" % params.spec)
+        if params.monitor_class == "da":
+            monitor = dot2k(params.spec, params.monitor_type, vars(params))
+        elif params.monitor_class == "ltl":
+            monitor = ltl2k(params.spec, params.monitor_type, vars(params))
         else:
-            monitor = Container(vars(params))
-    except Exception as e:
-        print('Error: '+ str(e))
-        print("Sorry : :-(")
-        sys.exit(1)
+            print("Unknown monitor class:", params.monitor_class)
+            sys.exit(1)
+    else:
+        monitor = Container(vars(params))
 
     print("Writing the monitor into the directory %s" % monitor.name)
     monitor.print_files()

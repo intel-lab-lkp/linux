@@ -10,6 +10,13 @@
 
 import ntpath
 
+class AutomataError(OSError):
+    """Exception raised for errors in automata parsing and validation.
+
+    Raised when DOT file processing fails due to invalid format, I/O errors,
+    or malformed automaton definitions.
+    """
+
 class Automata:
     """Automata class: Reads a dot file and part it as an automata.
 
@@ -32,11 +39,11 @@ class Automata:
         basename = ntpath.basename(self.__dot_path)
         if not basename.endswith(".dot") and not basename.endswith(".gv"):
             print("not a dot file")
-            raise Exception("not a dot file: %s" % self.__dot_path)
+            raise AutomataError("not a dot file: %s" % self.__dot_path)
 
         model_name = ntpath.splitext(basename)[0]
         if model_name.__len__() == 0:
-            raise Exception("not a dot file: %s" % self.__dot_path)
+            raise AutomataError("not a dot file: %s" % self.__dot_path)
 
         return model_name
 
@@ -45,8 +52,8 @@ class Automata:
         dot_lines = []
         try:
             dot_file = open(self.__dot_path)
-        except:
-            raise Exception("Cannot open the file: %s" % self.__dot_path)
+        except OSError as exc:
+            raise AutomataError(f"Cannot open the file: {self.__dot_path}") from exc
 
         dot_lines = dot_file.read().splitlines()
         dot_file.close()
@@ -55,7 +62,7 @@ class Automata:
         line = dot_lines[cursor].split()
 
         if (line[0] != "digraph") and (line[1] != "state_automaton"):
-            raise Exception("Not a valid .dot format: %s" % self.__dot_path)
+            raise AutomataError("Not a valid .dot format: %s" % self.__dot_path)
         else:
             cursor += 1
         return dot_lines
