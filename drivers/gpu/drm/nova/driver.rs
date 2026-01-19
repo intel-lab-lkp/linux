@@ -73,4 +73,6 @@ impl drm::Driver for NovaDriver {
 // SAFETY: This trait requires implementers to observe the safety requirements
 // of each enabled feature. There are no features enabled, so this is safe by
 // definition.
-unsafe impl drm::driver::DriverFeatures for NovaDriver {}
+unsafe impl drm::driver::DriverFeatures for NovaDriver {
+    type Render = drm::driver::NoRender;
+}

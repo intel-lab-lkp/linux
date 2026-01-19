@@ -192,9 +192,15 @@ impl drm::Driver for TyrDriver {
 }
 
 // SAFETY: This trait requires implementers to observe the safety requirements
-// of each enabled feature. There are no features enabled, so this is safe by
-// definition.
-unsafe impl drm::driver::DriverFeatures for TyrDriver {}
+// of each enabled feature.
+//
+// For `FeatureRender`: we do not call modesetting APIs in our ioctls, and we do
+// not use any APIs requiring a DRM master. Furthermore, it is not possible for
+// a client to interfere in another client by design. This is enforced by the
+// `VM` layer and, at a lower level, by the system's IOMMU.
+unsafe impl drm::driver::DriverFeatures for TyrDriver {
+    type Render = drm::driver::RenderSupported;
+}
 
 #[pin_data]
 struct Clocks {

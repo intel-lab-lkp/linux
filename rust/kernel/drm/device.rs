@@ -62,7 +62,15 @@ pub struct Device<T: drm::Driver> {
 
 impl<T: drm::Driver> Device<T> {
     const fn compute_features() -> u32 {
-        drm::driver::FEAT_GEM
+        use crate::drm::driver::FeatureRender;
+
+        let mut features = drm::driver::FEAT_GEM;
+
+        if T::Render::ENABLED {
+            features |= drm::driver::FEAT_RENDER;
+        }
+
+        features
     }
 
     const VTABLE: bindings::drm_driver = drm_legacy_fields! {

@@ -15,6 +15,9 @@ use macros::vtable;
 /// Driver use the GEM memory manager. This should be set for all modern drivers.
 pub(crate) const FEAT_GEM: u32 = bindings::drm_driver_feature_DRIVER_GEM;
 
+/// Driver supports render nodes, i.e.: /dev/dri/renderDXX devices.
+pub(crate) const FEAT_RENDER: u32 = bindings::drm_driver_feature_DRIVER_RENDER;
+
 /// Information data for a DRM Driver.
 pub struct DriverInfo {
     /// Driver major version.
@@ -182,4 +185,36 @@ impl<T: Driver> Drop for Registration<T> {
 ///
 /// Drivers implementing this trait must ensure they comply with the safety
 /// requirements of each supported feature.
-pub unsafe trait DriverFeatures {}
+///
+/// - For drivers implementing `FeatureRender`:
+///
+/// The render-accessible subset of the driver's functionality must not allow
+/// clients to interfere with each other or require master privileges. In other
+/// words, any ioctl declared with [`drm::RENDER_ALLOW`] must not call any
+/// KMS/modesetting APIs or require `DRM_MASTER`.
+pub unsafe trait DriverFeatures {
+    /// Feature for render nodes.
+    type Render: FeatureRender;
+}
+
+/// Controls whether render nodes are supported via `Self::ENABLED`.
+pub trait FeatureRender: drm::private::Sealed {
+    /// Whether render nodes are enabled.
+    const ENABLED: bool;
+}
+
+/// A marker type indicating that the driver supports render nodes.
+pub struct RenderSupported;
+
+/// A marker type indicating that the driver does not support render nodes.
+pub struct NoRender;
+
+impl drm::private::Sealed for RenderSupported {}
+impl FeatureRender for RenderSupported {
+    const ENABLED: bool = true;
+}
+
+impl drm::private::Sealed for NoRender {}
+impl FeatureRender for NoRender {
+    const ENABLED: bool = false;
+}
