@@ -490,14 +490,15 @@ void intel_enable_transcoder(const struct intel_crtc_state *new_crtc_state)
 	intel_de_posting_read(display, TRANSCONF(display, cpu_transcoder));
 
 	/*
-	 * Until the pipe starts PIPEDSL reads will return a stale value,
-	 * which causes an apparent vblank timestamp jump when PIPEDSL
+	 * Until the pipe starts PIPEDSL/PIPE_SCANLINE reads will return a
+	 * stale value, this is because it may take 1 vblank for TRANSCONF
+	 * register to enable the pipe, which causes an apparent vblank
+	 * timestamp and scaline jump  jump when PIPEDSL/PIPE_SCANLINE
 	 * resets to its proper value. That also messes up the frame count
 	 * when it's derived from the timestamps. So let's wait for the
 	 * pipe to start properly before we call drm_crtc_vblank_on()
 	 */
-	if (intel_crtc_max_vblank_count(new_crtc_state) == 0)
-		intel_wait_for_pipe_scanline_moving(crtc);
+	intel_wait_for_pipe_scanline_moving(crtc);
 }
 
 void intel_disable_transcoder(const struct intel_crtc_state *old_crtc_state)
