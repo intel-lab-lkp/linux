@@ -6,7 +6,10 @@
 
 pub use core::fmt::{Arguments, Debug, Error, Formatter, Result, Write};
 
-use crate::bindings;
+use crate::{
+    bindings,
+    ffi::c_void, //
+};
 
 /// Internal adapter used to route allow implementations of formatting traits for foreign types.
 ///
@@ -232,4 +235,44 @@ impl_pointer_forward!(
     {<T>} Adapter<*mut T>,
     {<T>} Adapter<&*const T>,
     {<T>} Adapter<&*mut T>,
+);
+
+/// A pointer that will be printed as its raw address (corresponds to `%px`).
+///
+/// **Warning**: This exposes the real kernel address and should only be
+/// used for debugging purposes. Consider using [`HashedPtr`] instead for
+/// production code.
+///
+/// # Example
+///
+/// ```
+/// use kernel::{
+///     fmt::RawPtr,
+///     prelude::fmt,
+///     str::CString, //
+/// };
+///
+/// let ptr = RawPtr(0x12345678 as *const u8);
+/// pr_info!("Raw pointer: {:016p}\n", ptr);
+///
+/// // Width option test
+/// let cstr = CString::try_from_fmt(fmt!("{:30p}", ptr))?;
+/// let width_30 = cstr.to_str()?;
+/// assert_eq!(width_30.len(), 30);
+/// # Ok::<(), kernel::error::Error>(())
+/// ```
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+pub struct RawPtr<T>(pub *const T);
+
+impl<T> Pointer for RawPtr<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        // Directly format the raw address - no hashing or restriction.
+        // This corresponds to %px behavior.
+        core::fmt::Pointer::fmt(&self.0.cast::<c_void>(), f)
+    }
+}
+
+impl_pointer_forward!(
+    {<T>} RawPtr<T>,
 );
