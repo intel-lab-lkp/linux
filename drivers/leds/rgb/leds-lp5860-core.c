@@ -72,6 +72,8 @@ static int lp5860_led_init(struct lp5860_led *led, struct fwnode_handle *fwnode,
 	int ret;
 
 	ret = regmap_read(led->chip->regmap, LP5860_REG_PWM_BRI_START + channel, &brightness);
+	if (ret)
+		return ret;
 
 	default_state = led_init_default_state_get(fwnode);
 
