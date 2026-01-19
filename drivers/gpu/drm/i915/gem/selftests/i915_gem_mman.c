@@ -916,6 +916,13 @@ static int __igt_mmap(struct drm_i915_private *i915,
 	if (err)
 		return err;
 
+	/*
+	 * Get a reference to tasks's mm_struct to artificially increase mm_users
+	 * and ensure the kernel does not try to clean up the userspace mappings
+	 * of the current task during the test.
+	 */
+	mmget_not_zero(current->mm);
+
 	addr = igt_mmap_offset(i915, offset, obj->base.size, PROT_WRITE, MAP_SHARED);
 	if (IS_ERR_VALUE(addr))
 		return addr;
@@ -968,6 +975,11 @@ static int __igt_mmap(struct drm_i915_private *i915,
 		err = gtt_check(obj);
 out_unmap:
 	vm_munmap(addr, obj->base.size);
+	/*
+	 * mmput() is not supposed to be called on task's own
+	 * mm_struct, so let kernel handle that.
+	 */
+	mmput_async(current->mm);
 	return err;
 }
 
@@ -1178,6 +1190,13 @@ static int __igt_mmap_migrate(struct intel_memory_region **placements,
 		goto out_put;
 
 	/*
+	 * Get a reference to tasks's mm_struct to artificially increase mm_users
+	 * and ensure the kernel does not try to clean up the userspace mappings
+	 * of the current task during the test.
+	 */
+	mmget_not_zero(current->mm);
+
+	/*
 	 * This will eventually create a GEM context, due to opening dummy drm
 	 * file, which needs a tiny amount of mappable device memory for the top
 	 * level paging structures(and perhaps scratch), so make sure we
@@ -1293,6 +1312,11 @@ static int __igt_mmap_migrate(struct intel_memory_region **placements,
 
 out_addr:
 	vm_munmap(addr, obj->base.size);
+	/*
+	 * mmput() is not supposed to be called on task's own
+	 * mm_struct, so let kernel handle that.
+	 */
+	mmput_async(current->mm);
 
 out_put:
 	i915_gem_object_put(obj);
