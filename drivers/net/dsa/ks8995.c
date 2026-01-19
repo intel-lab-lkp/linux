@@ -80,6 +80,11 @@
 #define KS8995_PC0_TAG_REM	BIT(1)	/* Enable tag removal on port */
 #define KS8995_PC0_PRIO_EN	BIT(0)	/* Enable priority handling */
 
+#define KS8995_PC1_SNIFF_PORT	BIT(7)	/* This port is a sniffer port */
+#define KS8995_PC1_RCV_SNIFF	BIT(6)	/* Packets received goes to sniffer port(s) */
+#define KS8995_PC1_XMIT_SNIFF	BIT(5)	/* Packets transmitted goes to sniffer port(s) */
+#define KS8995_PC1_PORT_VLAN	GENMASK(4, 0)	/* Port isolation mask */
+
 #define KS8995_PC2_TXEN		BIT(2)	/* Enable TX on port */
 #define KS8995_PC2_RXEN		BIT(1)	/* Enable RX on port */
 #define KS8995_PC2_LEARN_DIS	BIT(0)	/* Disable learning on port */
@@ -441,6 +446,44 @@ dsa_tag_protocol ks8995_get_tag_protocol(struct dsa_switch *ds,
 
 static int ks8995_setup(struct dsa_switch *ds)
 {
+	struct ks8995_switch *ks = ds->priv;
+	int ret;
+	u8 val;
+	int i;
+
+	/* Isolate all user ports so they can only send packets to itself and the CPU port */
+	for (i = 0; i < KS8995_CPU_PORT; i++) {
+		ret = ks8995_read_reg(ks, KS8995_REG_PC(i, KS8995_REG_PC1), &val);
+		if (ret) {
+			dev_err(ks->dev, "failed to read KS8995_REG_PC1 on port %d\n", i);
+			return ret;
+		}
+
+		val &= ~KS8995_PC1_PORT_VLAN;
+		val |= (BIT(i) | BIT(KS8995_CPU_PORT));
+
+		ret = ks8995_write_reg(ks, KS8995_REG_PC(i, KS8995_REG_PC1), val);
+		if (ret) {
+			dev_err(ks->dev, "failed to write KS8995_REG_PC1 on port %d\n", i);
+			return ret;
+		}
+	}
+
+	/* The CPU port should be able to talk to all ports */
+	ret = ks8995_read_reg(ks, KS8995_REG_PC(KS8995_CPU_PORT, KS8995_REG_PC1), &val);
+	if (ret) {
+		dev_err(ks->dev, "failed to read KS8995_REG_PC1 on CPU port\n");
+		return ret;
+	}
+
+	val |= KS8995_PC1_PORT_VLAN;
+
+	ret = ks8995_write_reg(ks, KS8995_REG_PC(KS8995_CPU_PORT, KS8995_REG_PC1), val);
+	if (ret) {
+		dev_err(ks->dev, "failed to write KS8995_REG_PC1 on CPU port\n");
+		return ret;
+	}
+
 	return 0;
 }
 
@@ -466,8 +509,44 @@ static int ks8995_port_bridge_join(struct dsa_switch *ds, int port,
 				   bool *tx_fwd_offload,
 				   struct netlink_ext_ack *extack)
 {
+	struct ks8995_switch *ks = ds->priv;
+	u8 port_bitmap = 0;
+	int ret;
+	u8 val;
+	int i;
+
+	/* De-isolate this port from any other port on the bridge */
+	port_bitmap |= BIT(port);
+	for (i = 0; i < KS8995_CPU_PORT; i++) {
+		if (i == port)
+			continue;
+		if (!dsa_port_offloads_bridge(dsa_to_port(ds, i), &bridge))
+			continue;
+		port_bitmap |= BIT(i);
+	}
+
+	/* Update all affected ports with the new bitmask */
+	for (i = 0; i < KS8995_CPU_PORT; i++) {
+		if (!dsa_port_offloads_bridge(dsa_to_port(ds, i), &bridge))
+			continue;
+
+		ret = ks8995_read_reg(ks, KS8995_REG_PC(i, KS8995_REG_PC1), &val);
+		if (ret) {
+			dev_err(ks->dev, "failed to read KS8995_REG_PC1 on port %d\n", i);
+			return ret;
+		}
+
+		val |= port_bitmap;
+
+		ret = ks8995_write_reg(ks, KS8995_REG_PC(i, KS8995_REG_PC1), val);
+		if (ret) {
+			dev_err(ks->dev, "failed to write KS8995_REG_PC1 on port %d\n", i);
+			return ret;
+		}
+	}
+
 	/* port_stp_state_set() will be called after to put the port in
-	 * appropriate state so there is no need to do anything.
+	 * appropriate state.
 	 */
 
 	return 0;
@@ -476,8 +555,56 @@ static int ks8995_port_bridge_join(struct dsa_switch *ds, int port,
 static void ks8995_port_bridge_leave(struct dsa_switch *ds, int port,
 				     struct dsa_bridge bridge)
 {
+	struct ks8995_switch *ks = ds->priv;
+	u8 port_bitmap = 0;
+	int ret;
+	u8 val;
+	int i;
+
+	/* Isolate this port from any other port on the bridge */
+	for (i = 0; i < KS8995_CPU_PORT; i++) {
+		/* Current port handled last */
+		if (i == port)
+			continue;
+		/* Not on this bridge */
+		if (!dsa_port_offloads_bridge(dsa_to_port(ds, i), &bridge))
+			continue;
+
+		ret = ks8995_read_reg(ks, KS8995_REG_PC(i, KS8995_REG_PC1), &val);
+		if (ret) {
+			dev_err(ks->dev, "failed to read KS8995_REG_PC1 on port %d\n", i);
+			return;
+		}
+
+		val &= ~BIT(port);
+
+		ret = ks8995_write_reg(ks, KS8995_REG_PC(i, KS8995_REG_PC1), val);
+		if (ret) {
+			dev_err(ks->dev, "failed to write KS8995_REG_PC1 on port %d\n", i);
+			return;
+		}
+
+		/* Accumulate this port for access by current */
+		port_bitmap |= BIT(i);
+	}
+
+	/* Isolate this port from all other ports formerly on the bridge */
+	ret = ks8995_read_reg(ks, KS8995_REG_PC(port, KS8995_REG_PC1), &val);
+	if (ret) {
+		dev_err(ks->dev, "failed to read KS8995_REG_PC1 on port %d\n", port);
+		return;
+	}
+
+	val &= ~port_bitmap;
+
+	ret = ks8995_write_reg(ks, KS8995_REG_PC(port, KS8995_REG_PC1), val);
+	if (ret) {
+		dev_err(ks->dev, "failed to write KS8995_REG_PC1 on port %d\n", port);
+		return;
+	}
+
 	/* port_stp_state_set() will be called after to put the port in
-	 * forwarding state so there is no need to do anything.
+	 * forwarding state.
 	 */
 }
 
