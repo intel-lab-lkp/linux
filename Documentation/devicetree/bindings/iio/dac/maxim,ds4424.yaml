@@ -27,6 +27,17 @@ properties:
 
   vcc-supply: true
 
+  maxim,rfs-ohms:
+    description: |
+      Array of resistance values in Ohms for the external Rfs resistors
+      connected to the FS pins.
+      - For DS44x2 (2 channels): 2 values required.
+      - For DS44x4 (4 channels): 4 values required.
+      Typical values range from 40000 (40 kOhm) to 160000 (160 kOhm).
+    minItems: 2
+    maxItems: 4
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+
 required:
   - compatible
   - reg
