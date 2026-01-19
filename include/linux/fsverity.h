@@ -130,6 +130,8 @@ struct fsverity_operations {
 				       u64 pos, unsigned int size);
 };
 
+void fsverity_cleanup_inode(struct inode *inode);
+
 #ifdef CONFIG_FS_VERITY
 
 /*
@@ -179,26 +181,6 @@ int fsverity_get_digest(struct inode *inode,
 /* open.c */
 
 int __fsverity_file_open(struct inode *inode, struct file *filp);
-void __fsverity_cleanup_inode(struct inode *inode);
-
-/**
- * fsverity_cleanup_inode() - free the inode's verity info, if present
- * @inode: an inode being evicted
- *
- * Filesystems must call this on inode eviction to free the inode's verity info.
- */
-static inline void fsverity_cleanup_inode(struct inode *inode)
-{
-	/*
-	 * Only IS_VERITY() inodes can have verity info, so start by checking
-	 * for IS_VERITY() (which is faster than retrieving the pointer to the
-	 * verity info).  This minimizes overhead for non-verity inodes.
-	 */
-	if (IS_VERITY(inode))
-		__fsverity_cleanup_inode(inode);
-	else
-		VFS_WARN_ON_ONCE(*fsverity_info_addr(inode) != NULL);
-}
 
 /* read_metadata.c */
 
@@ -248,10 +230,6 @@ static inline int fsverity_get_digest(struct inode *inode,
 static inline int __fsverity_file_open(struct inode *inode, struct file *filp)
 {
 	return -EOPNOTSUPP;
-}
-
-static inline void fsverity_cleanup_inode(struct inode *inode)
-{
 }
 
 /* read_metadata.c */
