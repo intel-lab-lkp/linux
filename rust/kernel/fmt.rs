@@ -6,6 +6,8 @@
 
 pub use core::fmt::{Arguments, Debug, Error, Formatter, Result, Write};
 
+use crate::bindings;
+
 /// Internal adapter used to route allow implementations of formatting traits for foreign types.
 ///
 /// It is inserted automatically by the [`fmt!`] macro and is not meant to be used directly.
@@ -135,3 +137,58 @@ macro_rules! impl_pointer_forward {
         )*
     };
 }
+
+/// A pointer that will be hashed when printed (corresponds to `%p`).
+///
+/// This is the default behavior for kernel pointers - they are hashed to
+/// prevent leaking information about the kernel memory layout.
+///
+/// # Example
+///
+/// ```
+/// use kernel::{
+///     fmt::HashedPtr,
+///     prelude::fmt,
+///     str::CString, //
+/// };
+///
+/// let ptr = HashedPtr(0x12345678 as *const u8);
+/// pr_info!("Hashed pointer: {:016p}\n", ptr);
+///
+/// // Width option test
+/// let cstr = CString::try_from_fmt(fmt!("{:30p}", ptr))?;
+/// let width_30 = cstr.to_str()?;
+/// assert_eq!(width_30.len(), 30);
+/// # Ok::<(), kernel::error::Error>(())
+/// ```
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+pub struct HashedPtr<T>(pub *const T);
+
+impl<T> Pointer for HashedPtr<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        let ptr = self.0;
+        // Buffer size chosen to accommodate pointer formatting
+        // 32 bytes is sufficient for all pointer formats including hash values
+        let mut buf = [0u8; 32];
+
+        // SAFETY: We're calling the kernel's scnprintf function which is
+        // safe to use. The buffer is large enough to hold the formatted
+        // pointer string. Using "%p" format specifier applies kernel's
+        // pointer hashing automatically.
+        let len =
+            unsafe { bindings::scnprintf(buf.as_mut_ptr(), buf.len(), c"0x%p".as_ptr(), ptr) };
+
+        // scnprintf returns the number of characters written (excluding
+        // null terminator), and guarantees it never exceeds size-1
+        let formatted = core::str::from_utf8(&buf[..len as usize]).map_err(|_| Error)?;
+
+        // Use pad() to respect formatting options (width, alignment,
+        // padding, etc.)
+        f.pad(formatted)
+    }
+}
+
+impl_pointer_forward!(
+    {<T>} HashedPtr<T>,
+);
