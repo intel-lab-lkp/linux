@@ -178,12 +178,9 @@ static int of_get_regulation_constraints(struct device *dev,
 	if (!ret)
 		constraints->enable_time = pval;
 
-	ret = of_property_read_u32(np, "regulator-uv-less-critical-window-ms", &pval);
-	if (!ret)
-		constraints->uv_less_critical_window_ms = pval;
-	else
-		constraints->uv_less_critical_window_ms =
-				REGULATOR_DEF_UV_LESS_CRITICAL_WINDOW_MS;
+	constraints->uv_less_critical_window_ms =
+		of_property_read_u32_default(np, "regulator-uv-less-critical-window-ms",
+					     REGULATOR_DEF_UV_LESS_CRITICAL_WINDOW_MS);
 
 	constraints->soft_start = of_property_read_bool(np,
 					"regulator-soft-start");
@@ -313,11 +310,10 @@ static int of_get_regulation_constraints(struct device *dev,
 				"regulator-suspend-max-microvolt", &pval))
 			suspend_state->max_uV = pval;
 
-		if (!of_property_read_u32(suspend_np,
-					"regulator-suspend-microvolt", &pval))
-			suspend_state->uV = pval;
-		else /* otherwise use min_uV as default suspend voltage */
-			suspend_state->uV = suspend_state->min_uV;
+		/* Use min_uV as default suspend voltage if fail to get property */
+		suspend_state->uV =
+			of_property_read_u32_default(suspend_np, "regulator-suspend-microvolt",
+						     suspend_state->min_uV);
 
 		if (of_property_read_bool(suspend_np,
 					"regulator-changeable-in-suspend"))
