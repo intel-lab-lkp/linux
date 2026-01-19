@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: "http://devicetree.org/schemas/iio/light/ams,tcs3400.yaml#"
+$schema: "http://devicetree.org/meta-schemas/core.yaml#"
+
+title: AMS TCS3400 Color Light-to-Digital Converter
+
+maintainers:
+  - name: Petr Hodina
+    email: petr.hodina@protonmail.com
+
+description: |
+  The AMS TCS3400 is an I2C-connected color light sensor providing
+  RGBC or RGB-IR measurements with a programmable integration time
+  and gain.
+
+properties:
+  compatible:
+    const: ams,tcs3400
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+    description:
+      Interrupt line signaling ALS data ready or threshold events.
+
+  vdd-supply:
+    description:
+      Regulator supplying the main sensor power.
+
+required:
+  - compatible
+  - reg
+  - vdd-supply
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        light-sensor@39 {
+            compatible = "ams,tcs3400";
+            reg = <0x39>;
+            interrupt-parent = <&gpio1>;
+            interrupts = <5 IRQ_TYPE_EDGE_FALLING>;
+            vdd-supply = <&vdd_3v3>;
+        };
+    };

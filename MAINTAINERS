@@ -22866,6 +22866,12 @@ S:	Supported
 F:	drivers/iio/adc/rohm-bd79112.c
 F:	drivers/iio/adc/rohm-bd79124.c
 
+AMS TCS3400 AMBIENT LIGHT SENSOR DRIVER
+M:	Petr Hodina
+L:	Petr Hodina <petr.hodina@protonmail.com>
+S:	Petr Hodina <petr.hodina@protonmail.com>
+F:	Documentation/devicetree/bindings/iio/light/ams,tcs3400.yaml
+
 ROHM BH1745 COLOUR SENSOR
 M:	Mudit Sharma <muditsharma.info@gmail.com>
 L:	linux-iio@vger.kernel.org
