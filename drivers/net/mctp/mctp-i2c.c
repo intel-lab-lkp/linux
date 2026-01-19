@@ -587,7 +587,7 @@ static void mctp_i2c_flow_release(struct mctp_i2c_dev *midev)
 
 static int mctp_i2c_header_create(struct sk_buff *skb, struct net_device *dev,
 				  unsigned short type, const void *daddr,
-	   const void *saddr, unsigned int len)
+				  const void *saddr, unsigned int len)
 {
 	struct mctp_i2c_hdr *hdr;
 	struct mctp_hdr *mhdr;
