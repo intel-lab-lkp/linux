@@ -690,7 +690,6 @@
 	phy-names = "pcie-phy";
 	pinctrl-0 = <&pinctrl_pcieb>;
 	pinctrl-names = "default";
-	reset-gpios = <&lsio_gpio4 0 GPIO_ACTIVE_LOW>;
 	vpcie-supply = <&reg_pcieb>;
 	vpcie3v3aux-supply = <&reg_pcieb>;
 	supports-clkreq;
@@ -704,6 +703,10 @@
 	pinctrl-names = "default";
 	vpcie-supply = <&reg_pcieb>;
 	status = "disabled";
+};
+
+&pcieb_port0 {
+	reset-gpios = <&lsio_gpio4 0 GPIO_ACTIVE_LOW>;
 };
 
 &scu_key {
