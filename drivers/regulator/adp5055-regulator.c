@@ -218,25 +218,17 @@ static int adp5055_of_parse_cb(struct device_node *np,
 		adp5055->en_mode_software = true;
 	}
 
-	ret = of_property_read_u32(np, "adi,dvs-limit-upper-microvolt", &pval);
-	if (ret)
-		adp5055->dvs_limit_upper[id] = 192000;
-	else
-		adp5055->dvs_limit_upper[id] = pval;
+	pval = of_property_read_u32_default(np, "adi,dvs-limit-upper-microvolt", 192000);
+	if (pval > 192000 || pval < 12000)
+		return dev_err_probe(config->dev, -EINVAL,
+				     "Out of range - dvs-limit-upper-microvolt value.");
+	adp5055->dvs_limit_upper[id] = pval;
 
-	if (adp5055->dvs_limit_upper[id] > 192000 || adp5055->dvs_limit_upper[id] < 12000)
-		return dev_err_probe(config->dev, adp5055->dvs_limit_upper[id],
-			"Out of range - dvs-limit-upper-microvolt value.");
-
-	ret = of_property_read_u32(np, "adi,dvs-limit-lower-microvolt", &pval);
-	if (ret)
-		adp5055->dvs_limit_lower[id] = -190500;
-	else
-		adp5055->dvs_limit_lower[id] = pval;
-
-	if (adp5055->dvs_limit_lower[id] > -10500 || adp5055->dvs_limit_lower[id] < -190500)
-		return dev_err_probe(config->dev, adp5055->dvs_limit_lower[id],
-			"Out of range - dvs-limit-lower-microvolt value.");
+	pval = of_property_read_s32_default(np, "adi,dvs-limit-lower-microvolt", -190500);
+	if (pval > -10500 || pval < -190500)
+		return dev_err_probe(config->dev, -EINVAL,
+				     "Out of range - dvs-limit-lower-microvolt value.");
+	adp5055->dvs_limit_lower[id] = pval;
 
 	for (i = 0; i < 4; i++) {
 		ret = of_property_match_string(np, "adi,fast-transient",
