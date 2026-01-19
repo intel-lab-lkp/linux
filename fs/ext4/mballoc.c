@@ -7192,6 +7192,10 @@ out_unload:
 	return error;
 }
 
-#ifdef CONFIG_EXT4_KUNIT_TESTS
+#if IS_ENABLED(CONFIG_EXT4_KUNIT_TESTS)
+#if IS_BUILTIN(CONFIG_EXT4_FS) && IS_MODULE(CONFIG_KUNIT)
+/* This case will lead to link error. */
+#else
 #include "mballoc-test.c"
+#endif
 #endif
