@@ -619,47 +619,6 @@ int io_sqe_buffers_unregister(struct io_ring_ctx *ctx)
 	return 0;
 }
 
-/*
- * Not super efficient, but this is just a registration time. And we do cache
- * the last compound head, so generally we'll only do a full search if we don't
- * match that one.
- *
- * We check if the given compound head page has already been accounted, to
- * avoid double accounting it. This allows us to account the full size of the
- * page, not just the constituent pages of a huge page.
- */
-static bool headpage_already_acct(struct io_ring_ctx *ctx, struct page **pages,
-				  int nr_pages, struct page *hpage)
-{
-	int i, j;
-
-	/* check current page array */
-	for (i = 0; i < nr_pages; i++) {
-		if (!PageCompound(pages[i]))
-			continue;
-		if (compound_head(pages[i]) == hpage)
-			return true;
-	}
-
-	/* check previously registered pages */
-	for (i = 0; i < ctx->buf_table.nr; i++) {
-		struct io_rsrc_node *node = ctx->buf_table.nodes[i];
-		struct io_mapped_ubuf *imu;
-
-		if (!node)
-			continue;
-		imu = node->buf;
-		for (j = 0; j < imu->nr_bvecs; j++) {
-			if (!PageCompound(imu->bvec[j].bv_page))
-				continue;
-			if (compound_head(imu->bvec[j].bv_page) == hpage)
-				return true;
-		}
-	}
-
-	return false;
-}
-
 static int io_buffer_account_pin(struct io_ring_ctx *ctx, struct page **pages,
 				 int nr_pages, struct io_mapped_ubuf *imu,
 				 struct page **last_hpage)
@@ -677,8 +636,6 @@ static int io_buffer_account_pin(struct io_ring_ctx *ctx, struct page **pages,
 			if (hpage == *last_hpage)
 				continue;
 			*last_hpage = hpage;
-			if (headpage_already_acct(ctx, pages, i, hpage))
-				continue;
 			imu->acct_pages += page_size(hpage) >> PAGE_SHIFT;
 		}
 	}
