@@ -38,6 +38,7 @@
 #include "intel_dpll.h"
 #include "intel_dpll_mgr.h"
 #include "intel_hti.h"
+#include "intel_lt_phy.h"
 #include "intel_mg_phy_regs.h"
 #include "intel_pch_refclk.h"
 #include "intel_step.h"
@@ -4639,6 +4640,7 @@ out_verify:
 	 * debug option.
 	 */
 	intel_cx0pll_verify_plls(display);
+	intel_lt_phy_verify_plls(display);
 }
 
 /**

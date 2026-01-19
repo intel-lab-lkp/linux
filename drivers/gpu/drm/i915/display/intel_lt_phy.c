@@ -2337,3 +2337,66 @@ void intel_xe3plpd_pll_disable(struct intel_encoder *encoder)
 		intel_lt_phy_pll_disable(encoder);
 
 }
+
+static void intel_lt_phy_pll_verify_clock(struct intel_display *display,
+					  int precomputed_clock,
+					  const char *pll_state_name,
+					  const struct intel_lt_phy_pll_state *pll_state,
+					  bool is_precomputed_state)
+{
+	struct drm_printer p;
+	int clock;
+
+	clock = intel_lt_phy_calc_port_clock(display, pll_state);
+
+	if (intel_dpll_clock_matches(clock, precomputed_clock))
+		return;
+
+	drm_warn(display->drm,
+		 "PLL state %s (%s): clock difference too high: computed %d, pre-computed %d\n",
+		 pll_state_name,
+		 is_precomputed_state ? "precomputed" : "computed",
+		 clock, precomputed_clock);
+
+	if (!drm_debug_enabled(DRM_UT_KMS))
+		return;
+
+	p = drm_dbg_printer(display->drm, DRM_UT_KMS, NULL);
+
+	drm_printf(&p, "PLL state %s (%s):\n",
+		   pll_state_name,
+		   is_precomputed_state ? "precomputed" : "computed");
+	intel_lt_phy_dump_hw_state(display, pll_state);
+}
+
+static void intel_lt_phy_pll_verify_params(struct intel_display *display,
+					   const struct intel_lt_phy_pll_params *pll_params)
+{
+	struct intel_lt_phy_pll_state pll_state;
+
+	intel_lt_phy_pll_verify_clock(display, pll_params->clock_rate, pll_params->name, pll_params->state, true);
+
+	if (!pll_params->is_hdmi)
+		return;
+
+	if (intel_lt_phy_calculate_hdmi_state(&pll_state, pll_params->clock_rate) != 0)
+		return;
+
+	intel_lt_phy_pll_verify_clock(display, pll_params->clock_rate, pll_params->name, &pll_state, false);
+}
+
+static void intel_lt_phy_pll_verify_tables(struct intel_display *display,
+					   const struct intel_lt_phy_pll_params *tables)
+{
+	int i;
+
+	for (i = 0; tables[i].name; i++)
+		intel_lt_phy_pll_verify_params(display, &tables[i]);
+}
+
+void intel_lt_phy_verify_plls(struct intel_display *display)
+{
+	intel_lt_phy_pll_verify_tables(display, xe3plpd_lt_dp_tables);
+	intel_lt_phy_pll_verify_tables(display, xe3plpd_lt_edp_tables);
+	intel_lt_phy_pll_verify_tables(display, xe3plpd_lt_hdmi_tables);
+}
