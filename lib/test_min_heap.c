@@ -218,5 +218,5 @@ static void __exit test_min_heap_exit(void)
 }
 module_exit(test_min_heap_exit);
 
-MODULE_DESCRIPTION("Test cases for the min max heap");
+MODULE_DESCRIPTION("Test cases for the min heap");
 MODULE_LICENSE("GPL");
