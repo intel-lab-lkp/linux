@@ -275,9 +275,13 @@ static int vl53l0x_power_on(struct vl53l0x_data *data)
 			return ret;
 	}
 
-	gpiod_set_value_cansleep(data->reset_gpio, 0);
-
-	usleep_range(3200, 5000);
+	usleep_range(5000, 6000);
+	if (data->reset_gpio) {
+		gpiod_set_value_cansleep(data->reset_gpio, 1);
+		usleep_range(5000, 6000);
+		gpiod_set_value_cansleep(data->reset_gpio, 0);
+		usleep_range(5000, 6000);
+	}
 
 	return 0;
 }
@@ -354,7 +358,7 @@ static int vl53l0x_probe(struct i2c_client *client)
 		return dev_err_probe(&client->dev, PTR_ERR(data->vio_supply),
 				     "Unable to get VDDIO regulator\n");
 
-	data->reset_gpio = devm_gpiod_get_optional(&client->dev, "reset", GPIOD_OUT_HIGH);
+	data->reset_gpio = devm_gpiod_get_optional(&client->dev, "reset", GPIOD_OUT_LOW);
 	if (IS_ERR(data->reset_gpio))
 		return dev_err_probe(&client->dev, PTR_ERR(data->reset_gpio),
 				     "Cannot get reset GPIO\n");
