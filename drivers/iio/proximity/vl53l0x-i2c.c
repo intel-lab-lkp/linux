@@ -320,11 +320,35 @@ static const struct iio_trigger_ops vl53l0x_trigger_ops = {
 	.validate_device = iio_trigger_validate_own_device,
 };
 
+
+static int vl53l0x_read_word(struct i2c_client *client, u8 reg, u16 *val)
+{
+	int ret;
+	u8 buf[2];
+
+	ret = i2c_master_send(client, &reg, 1);
+	if (ret < 0)
+		return ret;
+	if (ret != 1)
+		return -EIO;
+
+	ret = i2c_master_recv(client, buf, 2);
+	if (ret < 0)
+		return ret;
+	if (ret != 2)
+		return -EIO;
+
+	*val = (buf[0] << 8) | buf[1];
+
+	return 0;
+}
+
 static int vl53l0x_probe(struct i2c_client *client)
 {
 	struct vl53l0x_data *data;
 	struct iio_dev *indio_dev;
 	int ret;
+	u16 model, rev;
 
 	indio_dev = devm_iio_device_alloc(&client->dev, sizeof(*data));
 	if (!indio_dev)
@@ -338,13 +362,6 @@ static int vl53l0x_probe(struct i2c_client *client)
 				     I2C_FUNC_SMBUS_READ_I2C_BLOCK |
 				     I2C_FUNC_SMBUS_BYTE_DATA))
 		return -EOPNOTSUPP;
-
-	ret = i2c_smbus_read_byte_data(data->client, VL_REG_IDENTIFICATION_MODEL_ID);
-	if (ret < 0)
-		return -EINVAL;
-
-	if (ret != VL53L0X_MODEL_ID_VAL)
-		dev_info(&client->dev, "Unknown model id: 0x%x", ret);
 
 	data->vdd_supply = devm_regulator_get(&client->dev, "vdd");
 	if (IS_ERR(data->vdd_supply))
@@ -371,6 +388,20 @@ static int vl53l0x_probe(struct i2c_client *client)
 	ret = devm_add_action_or_reset(&client->dev, vl53l0x_power_off, data);
 	if (ret)
 		return ret;
+
+	ret = vl53l0x_read_word(client, 0xC0, &model);
+	if (ret)
+		return dev_err_probe(&client->dev, ret, "Failed to read model ID\n");
+
+	ret = vl53l0x_read_word(client, 0xC2, &rev);
+	if (ret)
+		return dev_err_probe(&client->dev, ret, "Failed to read revision ID\n");
+
+	dev_info(&client->dev, "VL53L0X model=0x%04x rev=0x%04x\n", model, rev);
+
+	if ((model >> 8) != VL53L0X_MODEL_ID_VAL)
+		return dev_err_probe(&client->dev, -ENODEV,
+			"Unexpected model ID: 0x%04x\n", model);
 
 	indio_dev->name = "vl53l0x";
 	indio_dev->info = &vl53l0x_info;
