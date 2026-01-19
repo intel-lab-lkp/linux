@@ -7,6 +7,7 @@
 
 import platform
 import os
+from .utils import not_implemented
 
 
 class RVGenerator:
@@ -73,14 +74,14 @@ class RVGenerator:
             return f"#include <monitors/{self.parent}/{self.parent}.h>\n"
         return ""
 
-    def fill_tracepoint_handlers_skel(self):
-        return "NotImplemented"
+    @not_implemented
+    def fill_tracepoint_handlers_skel(self): ...
 
-    def fill_tracepoint_attach_probe(self):
-        return "NotImplemented"
+    @not_implemented
+    def fill_tracepoint_attach_probe(self): ...
 
-    def fill_tracepoint_detach_helper(self):
-        return "NotImplemented"
+    @not_implemented
+    def fill_tracepoint_detach_helper(self): ...
 
     def fill_main_c(self):
         main_c = self.main_c
@@ -100,17 +101,17 @@ class RVGenerator:
 
         return main_c
 
-    def fill_model_h(self):
-        return "NotImplemented"
+    @not_implemented
+    def fill_model_h(self): ...
 
-    def fill_monitor_class_type(self):
-        return "NotImplemented"
+    @not_implemented
+    def fill_monitor_class_type(self): ...
 
-    def fill_monitor_class(self):
-        return "NotImplemented"
+    @not_implemented
+    def fill_monitor_class(self): ...
 
-    def fill_tracepoint_args_skel(self, tp_type):
-        return "NotImplemented"
+    @not_implemented
+    def fill_tracepoint_args_skel(self, tp_type): ...
 
     def fill_monitor_deps(self):
         buff = []

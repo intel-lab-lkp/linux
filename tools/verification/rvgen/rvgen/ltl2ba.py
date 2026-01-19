@@ -9,6 +9,7 @@
 
 from ply.lex import lex
 from ply.yacc import yacc
+from .utils import not_implemented
 
 # Grammar:
 # 	ltl ::= opd | ( ltl ) | ltl binop ltl | unop ltl
@@ -150,14 +151,14 @@ class BinaryOp:
         yield from self.left
         yield from self.right
 
-    def normalize(self):
-        raise NotImplementedError
+    @not_implemented
+    def normalize(self): ...
 
-    def negate(self):
-        raise NotImplementedError
+    @not_implemented
+    def negate(self): ...
 
-    def _is_temporal(self):
-        raise NotImplementedError
+    @not_implemented
+    def _is_temporal(self): ...
 
     def is_temporal(self):
         if self.left.op.is_temporal():
@@ -167,8 +168,9 @@ class BinaryOp:
         return self._is_temporal()
 
     @staticmethod
+    @not_implemented
     def expand(n: ASTNode, node: GraphNode, node_set) -> set[GraphNode]:
-        raise NotImplementedError
+        ...
 
 class AndOp(BinaryOp):
     op_str = '&&'
@@ -288,19 +290,22 @@ class UnaryOp:
     def __hash__(self):
         return hash(self.child)
 
+    @not_implemented
     def normalize(self):
-        raise NotImplementedError
+        ...
 
+    @not_implemented
     def _is_temporal(self):
-        raise NotImplementedError
+        ...
 
     def is_temporal(self):
         if self.child.op.is_temporal():
             return True
         return self._is_temporal()
 
+    @not_implemented
     def negate(self):
-        raise NotImplementedError
+        ...
 
 class EventuallyOp(UnaryOp):
     def __str__(self):
