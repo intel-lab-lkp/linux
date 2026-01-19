@@ -1016,6 +1016,71 @@ int filemap_add_folio(struct address_space *mapping, struct folio *folio,
 }
 EXPORT_SYMBOL_GPL(filemap_add_folio);
 
+/**
+ * filemap_add_folio_range - add folios to the page range [start, end) of filemap.
+ * @mapping:	The address space structure to add folios to.
+ * @folios:	The array of folios to add to page cache.
+ * @start:	The starting page cache index.
+ * @end:	The ending page cache index (exclusive).
+ * @gfp:	The memory allocator flags to use.
+ *
+ * This function adds folios to mapping->i_pages with contiguous indices.
+ *
+ * If an entry for an index in the range [start, end) already exists, a folio is
+ * invalid, or _filemap_add_folio fails, this function aborts. All folios up
+ * to the point of failure will have been inserted, the rest are left uninserted.
+ *
+ * Return: If the pages are partially or fully added to the page cache, the number
+ * of pages (instead of folios) is returned. Elsewise, if no pages are inserted,
+ * the error number is returned.
+ */
+long filemap_add_folio_range(struct address_space *mapping, struct folio **folios,
+			     pgoff_t start, pgoff_t end, gfp_t gfp)
+{
+	int ret;
+	XA_STATE_ORDER(xas, &mapping->i_pages, start, mapping_min_folio_order(mapping));
+	unsigned long min_nrpages = mapping_min_folio_nrpages(mapping);
+
+	do {
+		xas_lock_irq(&xas);
+
+		while (xas.xa_index < end) {
+			unsigned long index = (xas.xa_index - start) / min_nrpages;
+			struct folio *folio;
+
+			folio = xas_load(&xas);
+			if (folio && !xa_is_value(folio)) {
+				ret = -EEXIST;
+				break;
+			}
+
+			folio = folios[index];
+			if (!folio) {
+				ret = -EINVAL;
+				break;
+			}
+
+			ret = _filemap_add_folio(mapping, folio, &xas, gfp, true);
+
+			if (unlikely(ret))
+				break;
+
+			/*
+			 * On successful insertion, the folio's array entry is set to NULL.
+			 * The caller is responsible for reclaiming any uninserted folios.
+			 */
+			folios[index] = NULL;
+			for (unsigned int i = 0; i < min_nrpages; i++)
+				xas_next(&xas);
+		}
+
+		xas_unlock_irq(&xas);
+	} while (xas_nomem(&xas, gfp & GFP_RECLAIM_MASK));
+
+	return xas.xa_index > start ? (long) xas.xa_index - start : ret;
+}
+EXPORT_SYMBOL_GPL(filemap_add_folio_range);
+
 #ifdef CONFIG_NUMA
 struct folio *filemap_alloc_folio_noprof(gfp_t gfp, unsigned int order,
 		struct mempolicy *policy)
