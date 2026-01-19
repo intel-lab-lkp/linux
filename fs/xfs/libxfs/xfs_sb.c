@@ -1268,7 +1268,7 @@ xfs_sb_mount_common(
 	mp->m_agno_log = xfs_highbit32(sbp->sb_agcount - 1) + 1;
 	mp->m_blockmask = sbp->sb_blocksize - 1;
 	mp->m_blockwsize = xfs_rtbmblock_size(sbp) >> XFS_WORDLOG;
-	mp->m_rtx_per_rbmblock = mp->m_blockwsize << XFS_NBWORDLOG;
+	mp->m_rtx_per_rbmblock = xfs_rtbitmap_rtx_per_rbmblock(mp);
 
 	ags->blocks = mp->m_sb.sb_agblocks;
 	ags->blklog = mp->m_sb.sb_agblklog;
