@@ -5,6 +5,7 @@
  * Author: Lee Jones <lee.jones@linaro.org> for ST-Ericsson.
  */
 
+#include <linux/cleanup.h>
 #include <linux/err.h>
 #include <linux/glob.h>
 #include <linux/idr.h>
@@ -111,17 +112,18 @@ static void soc_release(struct device *dev)
 	kfree(soc_dev);
 }
 
-static void soc_device_get_machine(struct soc_device_attribute *soc_dev_attr)
+int soc_device_get_machine(struct soc_device_attribute *soc_dev_attr)
 {
-	struct device_node *np;
-
 	if (soc_dev_attr->machine)
-		return;
+		return -EBUSY;
 
-	np = of_find_node_by_path("/");
-	of_property_read_string(np, "model", &soc_dev_attr->machine);
-	of_node_put(np);
+	struct device_node *np __free(device_node) = of_find_node_by_path("/");
+	if (!np)
+		return -ENOENT;
+
+	return of_property_read_string(np, "model", &soc_dev_attr->machine);
 }
+EXPORT_SYMBOL_GPL(soc_device_get_machine);
 
 static struct soc_device_attribute *early_soc_dev_attr;
 
