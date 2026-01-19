@@ -192,3 +192,44 @@ impl<T> Pointer for HashedPtr<T> {
 impl_pointer_forward!(
     {<T>} HashedPtr<T>,
 );
+
+// Special handling for Pointer: default to HashedPtr for raw pointers.
+// This overrides the default Pointer implementation for raw pointers to
+// use hashing, which is the safe default behavior for kernel pointers.
+impl<T> Pointer for Adapter<*const T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        let Self(ptr) = self;
+        Pointer::fmt(&HashedPtr(*ptr), f)
+    }
+}
+
+impl<T> Pointer for Adapter<*mut T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        let Self(ptr) = self;
+        Pointer::fmt(&HashedPtr(*ptr), f)
+    }
+}
+
+// Handle references to raw pointers (needed when pointers are passed by
+// reference in macros).
+impl<T> Pointer for Adapter<&*const T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        let Self(ptr) = self;
+        Pointer::fmt(&HashedPtr(**ptr), f)
+    }
+}
+
+impl<T> Pointer for Adapter<&*mut T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        let Self(ptr) = self;
+        Pointer::fmt(&HashedPtr(**ptr), f)
+    }
+}
+
+// Bridge implementations for raw pointer adapters.
+impl_pointer_forward!(
+    {<T>} Adapter<*const T>,
+    {<T>} Adapter<*mut T>,
+    {<T>} Adapter<&*const T>,
+    {<T>} Adapter<&*mut T>,
+);
