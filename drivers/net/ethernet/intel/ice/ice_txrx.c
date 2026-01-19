@@ -582,7 +582,6 @@ void ice_zero_rx_ring(struct ice_rx_ring *rx_ring)
 		     PAGE_SIZE);
 	memset(rx_ring->desc, 0, size);
 
-	rx_ring->next_to_alloc = 0;
 	rx_ring->next_to_clean = 0;
 	rx_ring->next_to_use = 0;
 }
