@@ -40,6 +40,12 @@ do
 	fi
 	cp .config ${INSTALL_PATH}/config-${KERNELRELEASE}
 
+	# Install system map file
+	if [ -f ${INSTALL_PATH}/System.map-${KERNELRELEASE} ]; then
+	  mv ${INSTALL_PATH}/System.map-${KERNELRELEASE} ${INSTALL_PATH}/System.map-${KERNELRELEASE}.old
+	fi
+	cp System.map ${INSTALL_PATH}/System.map-${KERNELRELEASE}
+
 	# installkernel(8) says the parameters are like follows:
 	#
 	#   installkernel version zImage System.map [directory]
