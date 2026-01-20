@@ -443,7 +443,7 @@ static int memfd_luo_retrieve(struct liveupdate_file_op_args *args)
 	if (!ser)
 		return -EINVAL;
 
-	file = shmem_file_setup("", 0, VM_NORESERVE);
+	file = shmem_file_setup("", 0, mk_vma_flags(VMA_NORESERVE_BIT));
 
 	if (IS_ERR(file)) {
 		pr_err("failed to setup file: %pe\n", file);
