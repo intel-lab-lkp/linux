@@ -23,6 +23,10 @@ struct printk_info {
 	u8	flags:5;	/* internal record flags */
 	u8	level:3;	/* syslog level */
 	u32	caller_id;	/* thread id or processor id */
+#ifdef CONFIG_PRINTK_EXECUTION_CTX
+	u32	caller_id2;	/* caller_id complement */
+	char	comm[TASK_COMM_LEN]; /* name of the task that generated the message */
+#endif
 
 	struct dev_printk_info	dev_info;
 };
