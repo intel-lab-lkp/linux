@@ -122,20 +122,27 @@
 			clock-names = "ipg", "source0";
 		};
 
-		pinctrl: pinctrl@4009c240 {
-			compatible = "nxp,s32g2-siul2-pinctrl";
-				/* MSCR0-MSCR101 registers on siul2_0 */
-			reg = <0x4009c240 0x198>,
-				/* MSCR112-MSCR122 registers on siul2_1 */
-			      <0x44010400 0x2c>,
-				/* MSCR144-MSCR190 registers on siul2_1 */
-			      <0x44010480 0xbc>,
-				/* IMCR0-IMCR83 registers on siul2_0 */
-			      <0x4009ca40 0x150>,
-				/* IMCR119-IMCR397 registers on siul2_1 */
-			      <0x44010c1c 0x45c>,
-				/* IMCR430-IMCR495 registers on siul2_1 */
-			      <0x440110f8 0x108>;
+		pinctrl: pinctrl@4009c000 {
+			compatible = "nxp,s32g2-siul2";
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&pinctrl 0 0 102>, <&pinctrl 112 112 79>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			interrupts = <GIC_SPI 210 IRQ_TYPE_LEVEL_HIGH>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges;
+
+			siul2_0: siul2_0@4009c000 {
+				compatible = "syscon";
+				reg = <0x4009c000 0x179c>;
+			};
+
+			siul2_1: siul2_1@44010000 {
+				compatible = "syscon";
+				reg = <0x44010000 0x17b0>;
+			};
 
 			jtag_pins: jtag-pins {
 				jtag-grp0 {
