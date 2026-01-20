@@ -49,6 +49,16 @@ void rdma_rw_ctx_destroy(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
 			 u32 port_num, struct scatterlist *sg, u32 sg_cnt,
 			 enum dma_data_direction dir);
 
+struct bio_vec;
+
+int rdma_rw_ctx_init_bvec(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
+		u32 port_num, const struct bio_vec *bvec, u32 nr_bvec,
+		u32 offset, u64 remote_addr, u32 rkey,
+		enum dma_data_direction dir);
+void rdma_rw_ctx_destroy_bvec(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
+		u32 port_num, const struct bio_vec *bvec, u32 nr_bvec,
+		enum dma_data_direction dir);
+
 int rdma_rw_ctx_signature_init(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
 		u32 port_num, struct scatterlist *sg, u32 sg_cnt,
 		struct scatterlist *prot_sg, u32 prot_sg_cnt,
