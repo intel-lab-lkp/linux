@@ -104,18 +104,17 @@
 #define CR3_AVAIL_PCID_BITS (X86_CR3_PCID_BITS - PTI_CONSUMED_PCID_BITS)
 
 /*
- * ASIDs are zero-based: 0->MAX_AVAIL_ASID are valid.  -1 below to account
- * for them being zero-based.  Another -1 is because PCID 0 is reserved for
- * use by non-PCID-aware users.
+ * ASIDs are zero-based: 0->MAX_ASID_AVAILABLE-1 are valid.  -1 is because
+ * PCID 0 is reserved for use by non-PCID-aware users.
  */
-#define MAX_ASID_AVAILABLE ((1 << CR3_AVAIL_PCID_BITS) - 2)
+#define MAX_ASID_AVAILABLE ((1 << CR3_AVAIL_PCID_BITS) - 1)
 
 /*
  * Given @asid, compute kPCID
  */
 static inline u16 kern_pcid(u16 asid)
 {
-	VM_WARN_ON_ONCE(asid > MAX_ASID_AVAILABLE);
+	VM_WARN_ON_ONCE(asid >= MAX_ASID_AVAILABLE);
 
 #ifdef CONFIG_MITIGATION_PAGE_TABLE_ISOLATION
 	/*
