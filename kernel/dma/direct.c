@@ -23,14 +23,6 @@
  */
 u64 zone_dma_limit __ro_after_init = DMA_BIT_MASK(24);
 
-static inline dma_addr_t phys_to_dma_direct(struct device *dev,
-		phys_addr_t phys)
-{
-	if (force_dma_unencrypted(dev))
-		return phys_to_dma_unencrypted(dev, phys);
-	return phys_to_dma(dev, phys);
-}
-
 static inline struct page *dma_direct_to_page(struct device *dev,
 		dma_addr_t dma_addr)
 {
@@ -40,7 +32,7 @@ static inline struct page *dma_direct_to_page(struct device *dev,
 u64 dma_direct_get_required_mask(struct device *dev)
 {
 	phys_addr_t phys = (phys_addr_t)(max_pfn - 1) << PAGE_SHIFT;
-	u64 max_dma = phys_to_dma_direct(dev, phys);
+	u64 max_dma = phys_to_dma(dev, phys);
 
 	return (1ULL << (fls64(max_dma) - 1)) * 2 - 1;
 }
@@ -69,7 +61,7 @@ static gfp_t dma_direct_optimal_gfp_mask(struct device *dev, u64 *phys_limit)
 
 bool dma_coherent_ok(struct device *dev, phys_addr_t phys, size_t size)
 {
-	dma_addr_t dma_addr = phys_to_dma_direct(dev, phys);
+	dma_addr_t dma_addr = phys_to_dma(dev, phys);
 
 	if (dma_addr == DMA_MAPPING_ERROR)
 		return false;
@@ -178,7 +170,7 @@ static void *dma_direct_alloc_from_pool(struct device *dev, size_t size,
 	page = dma_alloc_from_pool(dev, size, &ret, gfp, dma_coherent_ok);
 	if (!page)
 		return NULL;
-	*dma_handle = phys_to_dma_direct(dev, page_to_phys(page));
+	*dma_handle = phys_to_dma(dev, page_to_phys(page));
 	return ret;
 }
 
@@ -196,7 +188,7 @@ static void *dma_direct_alloc_no_mapping(struct device *dev, size_t size,
 		arch_dma_prep_coherent(page, size);
 
 	/* return the page pointer as the opaque cookie */
-	*dma_handle = phys_to_dma_direct(dev, page_to_phys(page));
+	*dma_handle = phys_to_dma(dev, page_to_phys(page));
 	return page;
 }
 
@@ -294,7 +286,7 @@ void *dma_direct_alloc(struct device *dev, size_t size,
 			goto out_encrypt_pages;
 	}
 
-	*dma_handle = phys_to_dma_direct(dev, page_to_phys(page));
+	*dma_handle = phys_to_dma(dev, page_to_phys(page));
 	return ret;
 
 out_encrypt_pages:
@@ -367,7 +359,7 @@ struct page *dma_direct_alloc_pages(struct device *dev, size_t size,
 	if (dma_set_decrypted(dev, ret, size))
 		goto out_leak_pages;
 	memset(ret, 0, size);
-	*dma_handle = phys_to_dma_direct(dev, page_to_phys(page));
+	*dma_handle = phys_to_dma(dev, page_to_phys(page));
 	return page;
 out_leak_pages:
 	return NULL;

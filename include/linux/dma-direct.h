@@ -90,15 +90,19 @@ static inline dma_addr_t phys_to_dma_unencrypted(struct device *dev,
 {
 	return dma_addr_unencrypted(__phys_to_dma(dev, paddr));
 }
-/*
- * If memory encryption is supported, phys_to_dma will set the memory encryption
- * bit in the DMA address, and dma_to_phys will clear it.
- * phys_to_dma_unencrypted is for use on special unencrypted memory like swiotlb
- * buffers.
- */
-static inline dma_addr_t phys_to_dma(struct device *dev, phys_addr_t paddr)
+
+static inline dma_addr_t phys_to_dma_encrypted(struct device *dev,
+					       phys_addr_t paddr)
 {
 	return dma_addr_encrypted(__phys_to_dma(dev, paddr));
+}
+
+static inline dma_addr_t phys_to_dma(struct device *dev, phys_addr_t paddr)
+{
+
+	if (force_dma_unencrypted(dev))
+		return phys_to_dma_unencrypted(dev, paddr);
+	return phys_to_dma_encrypted(dev, paddr);
 }
 
 static inline phys_addr_t dma_to_phys(struct device *dev, dma_addr_t dma_addr)
