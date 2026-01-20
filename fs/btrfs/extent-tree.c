@@ -6400,10 +6400,13 @@ void btrfs_error_unpin_extent_range(struct btrfs_fs_info *fs_info, u64 start, u6
  * it while performing the free space search since we have already
  * held back allocations.
  */
-static int btrfs_trim_free_extents(struct btrfs_device *device, u64 *trimmed)
+static int btrfs_trim_free_extents_throttle(struct btrfs_device *device,
+		u64 *trimmed, u64 pos, u64 maxlen, u64 *ret_next_pos)
 {
-	u64 start = BTRFS_DEVICE_RANGE_RESERVED, len = 0, end = 0;
+	u64 start = pos, len = 0, end = 0;
 	int ret;
+	u64 cur_start;
+	u64 trim_len = 0;
 
 	*trimmed = 0;
 
@@ -6429,9 +6432,11 @@ static int btrfs_trim_free_extents(struct btrfs_device *device, u64 *trimmed)
 		if (ret)
 			break;
 
+		cur_start = start;
 		btrfs_find_first_clear_extent_bit(&device->alloc_state, start,
 						  &start, &end,
 						  CHUNK_TRIMMED | CHUNK_ALLOCATED);
+		start = max(start, cur_start);
 
 		/* Check if there are any CHUNK_* bits left */
 		if (start > device->total_bytes) {
@@ -6457,6 +6462,7 @@ static int btrfs_trim_free_extents(struct btrfs_device *device, u64 *trimmed)
 		end = min(end, device->total_bytes - 1);
 
 		len = end - start + 1;
+		len = min(len, maxlen);
 
 		/* We didn't find any extents */
 		if (!len) {
@@ -6477,6 +6483,12 @@ static int btrfs_trim_free_extents(struct btrfs_device *device, u64 *trimmed)
 
 		start += len;
 		*trimmed += bytes;
+		trim_len += len;
+		if (trim_len >= maxlen) {
+			*ret_next_pos = start;
+			ret = -EAGAIN;
+			break;
+		}
 
 		if (btrfs_trim_interrupted()) {
 			ret = -ERESTARTSYS;
@@ -6486,6 +6498,114 @@ static int btrfs_trim_free_extents(struct btrfs_device *device, u64 *trimmed)
 		cond_resched();
 	}
 
+	return ret;
+}
+
+
+static int btrfs_trim_free_extents(struct btrfs_fs_info *fs_info, u64 *trimmed)
+{
+	int ret;
+	struct btrfs_device *dev;
+	struct btrfs_device *working_dev = NULL;
+	struct btrfs_fs_devices *fs_devices = fs_info->fs_devices;
+	u8 uuid[BTRFS_UUID_SIZE];
+	u64 start = BTRFS_DEVICE_RANGE_RESERVED;
+	u64 maxlen = SZ_2G;
+	u64 next_pos = 0;
+	u64 group_trimmed;
+
+	*trimmed = 0;
+
+	mutex_lock(&fs_devices->device_list_mutex);
+	list_for_each_entry(dev, &fs_devices->devices, dev_list) {
+		if (test_bit(BTRFS_DEV_STATE_MISSING, &dev->dev_state))
+			continue;
+		if (!working_dev ||
+			memcmp(dev->uuid, working_dev->uuid, BTRFS_UUID_SIZE) < 0)
+			working_dev = dev;
+	}
+	if (working_dev)
+		memcpy(uuid, working_dev->uuid, BTRFS_UUID_SIZE);
+	mutex_unlock(&fs_devices->device_list_mutex);
+	if (!working_dev) {
+		ret = 0;
+		goto out;
+	}
+
+	while (1) {
+		mutex_lock(&fs_devices->device_list_mutex);
+		ret = 0;
+
+		group_trimmed = 0;
+		list_for_each_entry(dev, &fs_devices->devices, dev_list) {
+			if (test_bit(BTRFS_DEV_STATE_MISSING, &dev->dev_state))
+				continue;
+			if (dev == working_dev) {
+				ret = btrfs_trim_free_extents_throttle(working_dev,
+					&group_trimmed, start, maxlen, &next_pos);
+				break;
+			}
+		}
+		*trimmed += group_trimmed;
+
+		if (!ret) {
+			/*
+			 * Device completed, go next device.
+			 * Find a device which has the smallest uuid but larger than
+			 * current one.
+			 * Note: Devices added during trim with UUID smaller than the
+			 * current device will be skipped.
+			 */
+			working_dev = NULL;
+			list_for_each_entry(dev, &fs_devices->devices, dev_list) {
+				if (test_bit(BTRFS_DEV_STATE_MISSING, &dev->dev_state))
+					continue;
+
+				/* must larger than current uuid */
+				if (memcmp(dev->uuid, uuid, BTRFS_UUID_SIZE) <= 0)
+					continue;
+
+				/* find the smallest */
+				if (!working_dev ||
+					memcmp(dev->uuid, working_dev->uuid, BTRFS_UUID_SIZE) < 0)
+					working_dev = dev;
+			}
+			if (working_dev)
+				memcpy(uuid, working_dev->uuid, BTRFS_UUID_SIZE);
+			start = BTRFS_DEVICE_RANGE_RESERVED;
+		}
+		mutex_unlock(&fs_devices->device_list_mutex);
+
+		if (ret == -EAGAIN) {
+			/*
+			 * Ensure next_pos actually progressed beyond start.
+			 * If not, we're stuck and must break to avoid infinite loop.
+			 */
+			if (next_pos <= start) {
+				btrfs_warn(fs_info,
+				   "trim throttle: no progress, start=%llu next_pos=%llu, aborting",
+				   start, next_pos);
+				goto out;
+			}
+			start = next_pos;
+			ret = 0;
+		}
+
+		if (ret)
+			goto out;
+
+		if (!working_dev) /* error or no more device */
+			break;
+
+		if (btrfs_trim_interrupted()) {
+			ret = -ERESTARTSYS;
+			goto out;
+		}
+		cond_resched();
+	}
+
+	ret = 0;
+out:
 	return ret;
 }
 
@@ -6500,9 +6620,7 @@ static int btrfs_trim_free_extents(struct btrfs_device *device, u64 *trimmed)
  */
 int btrfs_trim_fs(struct btrfs_fs_info *fs_info, struct fstrim_range *range)
 {
-	struct btrfs_fs_devices *fs_devices = fs_info->fs_devices;
 	struct btrfs_block_group *cache = NULL;
-	struct btrfs_device *device;
 	u64 group_trimmed;
 	u64 range_end = U64_MAX;
 	u64 start;
@@ -6564,21 +6682,12 @@ int btrfs_trim_fs(struct btrfs_fs_info *fs_info, struct fstrim_range *range)
 			"failed to trim %llu block group(s), last error %d",
 			bg_failed, bg_ret);
 
-	mutex_lock(&fs_devices->device_list_mutex);
-	list_for_each_entry(device, &fs_devices->devices, dev_list) {
-		if (test_bit(BTRFS_DEV_STATE_MISSING, &device->dev_state))
-			continue;
-
-		ret = btrfs_trim_free_extents(device, &group_trimmed);
-
-		trimmed += group_trimmed;
-		if (ret) {
-			dev_failed++;
-			dev_ret = ret;
-			break;
-		}
+	ret = btrfs_trim_free_extents(fs_info, &group_trimmed);
+	trimmed += group_trimmed;
+	if (ret) {
+		dev_failed++;
+		dev_ret = ret;
 	}
-	mutex_unlock(&fs_devices->device_list_mutex);
 
 	if (dev_failed)
 		btrfs_warn(fs_info,
