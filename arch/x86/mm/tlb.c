@@ -286,7 +286,7 @@ static DEFINE_RAW_SPINLOCK(global_asid_lock);
 static u16 last_global_asid = MAX_ASID_AVAILABLE;
 static DECLARE_BITMAP(global_asid_used, MAX_ASID_AVAILABLE);
 static DECLARE_BITMAP(global_asid_freed, MAX_ASID_AVAILABLE);
-static int global_asid_available = MAX_ASID_AVAILABLE - TLB_NR_DYN_ASIDS - 1;
+static int global_asid_available = MAX_ASID_AVAILABLE - TLB_NR_DYN_ASIDS;
 
 /*
  * When the search for a free ASID in the global ASID space reaches
