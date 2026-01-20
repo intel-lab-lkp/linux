@@ -378,6 +378,14 @@ static noinline int i2cdev_ioctl_smbus(struct i2c_client *client,
 	    (read_write == I2C_SMBUS_WRITE)) {
 		if (copy_from_user(&temp, data, datasize))
 			return -EFAULT;
+
+		if (temp.block[0] > datasize) {
+			dev_dbg(&client->adapter->dev,
+				"user input data size (%u) is too big "
+				"in ioctl I2C_SMBUS.\n",
+				temp.block[0]);
+			return -EINVAL;
+		}
 	}
 	if (size == I2C_SMBUS_I2C_BLOCK_BROKEN) {
 		/* Convert old I2C block commands to the new
