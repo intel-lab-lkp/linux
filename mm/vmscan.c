@@ -4855,7 +4855,7 @@ static long get_nr_to_scan(struct lruvec *lruvec, struct scan_control *sc, int s
 	return try_to_inc_max_seq(lruvec, max_seq, swappiness, false) ? -1 : 0;
 }
 
-static bool should_abort_scan(struct lruvec *lruvec, struct scan_control *sc)
+static bool lru_gen_should_abort_scan(struct lruvec *lruvec, struct scan_control *sc)
 {
 	int i;
 	enum zone_watermarks mark;
@@ -4907,7 +4907,7 @@ static bool try_to_shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 		if (scanned >= nr_to_scan)
 			break;
 
-		if (should_abort_scan(lruvec, sc))
+		if (lru_gen_should_abort_scan(lruvec, sc))
 			break;
 
 		cond_resched();
@@ -5011,7 +5011,7 @@ restart:
 
 		rcu_read_lock();
 
-		if (should_abort_scan(lruvec, sc))
+		if (lru_gen_should_abort_scan(lruvec, sc))
 			break;
 	}
 
@@ -5788,6 +5788,10 @@ static void lru_gen_shrink_node(struct pglist_data *pgdat, struct scan_control *
 	BUILD_BUG();
 }
 
+static bool lru_gen_should_abort_scan(struct lruvec *lruvec, struct scan_control *sc)
+{
+	return false;
+}
 #endif /* CONFIG_LRU_GEN */
 
 static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
