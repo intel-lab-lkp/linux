@@ -12,6 +12,7 @@
 #include <linux/gpio/driver.h>
 #include <linux/init.h>
 #include <linux/io.h>
+#include <linux/mfd/nxp-siul2.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
@@ -101,6 +102,8 @@ struct s32_pinctrl_context {
  * @gpio_configs: saved configurations for GPIO pins
  * @gpio_configs_lock: lock for the `gpio_configs` list
  * @saved_context: configuration saved over system sleep
+ * @legacy: true if the old pinctrl bindings are in use
+ *	    instead of the newer MFD based ones
  */
 struct s32_pinctrl {
 	struct device *dev;
@@ -112,6 +115,7 @@ struct s32_pinctrl {
 #ifdef CONFIG_PM_SLEEP
 	struct s32_pinctrl_context saved_context;
 #endif
+	bool legacy;
 };
 
 static struct s32_pinctrl_mem_region *
@@ -129,6 +133,19 @@ s32_get_region(struct pinctrl_dev *pctldev, unsigned int pin)
 	}
 
 	return NULL;
+}
+
+static struct device *s32_get_dev(struct s32_pinctrl *ipctl)
+{
+	if (ipctl->legacy)
+		return ipctl->dev;
+
+	return ipctl->dev->parent;
+}
+
+static struct device_node *s32_get_np(struct s32_pinctrl *ipctl)
+{
+	return s32_get_dev(ipctl)->of_node;
 }
 
 static int s32_check_pin(struct pinctrl_dev *pctldev,
@@ -231,7 +248,7 @@ static int s32_dt_group_node_to_map(struct pinctrl_dev *pctldev,
 				    const char *func_name)
 {
 	struct s32_pinctrl *ipctl = pinctrl_dev_get_drvdata(pctldev);
-	struct device *dev = ipctl->dev;
+	struct device *dev = s32_get_dev(ipctl);
 	unsigned long *cfgs = NULL;
 	unsigned int n_cfgs, reserve = 1;
 	int n_pins, ret;
@@ -804,8 +821,8 @@ static int s32_pinctrl_parse_groups(struct device_node *np,
 }
 
 static int s32_pinctrl_parse_functions(struct device_node *np,
-					struct s32_pinctrl_soc_info *info,
-					u32 index)
+				       struct s32_pinctrl_soc_info *info,
+				       u32 index)
 {
 	struct pinfunction *func;
 	struct s32_pin_group *grp;
@@ -843,31 +860,21 @@ static int s32_pinctrl_parse_functions(struct device_node *np,
 	return 0;
 }
 
-static int s32_pinctrl_probe_dt(struct platform_device *pdev,
-				struct s32_pinctrl *ipctl)
+static int legacy_s32_pinctrl_regmap_init(struct platform_device *pdev,
+					  struct s32_pinctrl *ipctl)
 {
 	struct s32_pinctrl_soc_info *info = ipctl->info;
-	struct device_node *np = pdev->dev.of_node;
+	unsigned int mem_regions;
 	struct resource *res;
 	struct regmap *map;
 	void __iomem *base;
-	unsigned int mem_regions = info->soc_data->mem_regions;
-	int ret;
-	u32 nfuncs = 0;
 	u32 i = 0;
 
-	if (!np)
-		return -ENODEV;
-
-	if (mem_regions == 0 || mem_regions >= 10000) {
-		dev_err(&pdev->dev, "mem_regions is invalid: %u\n", mem_regions);
-		return -EINVAL;
-	}
-
-	ipctl->regions = devm_kcalloc(&pdev->dev, mem_regions,
-				      sizeof(*ipctl->regions), GFP_KERNEL);
-	if (!ipctl->regions)
-		return -ENOMEM;
+	mem_regions = info->soc_data->mem_regions;
+	if (mem_regions == 0 || mem_regions >= 10000)
+		return dev_err_probe(&pdev->dev, -EINVAL,
+				     "mem_regions is invalid: %u\n",
+				     mem_regions);
 
 	for (i = 0; i < mem_regions; i++) {
 		base = devm_platform_get_and_ioremap_resource(pdev, i, &res);
@@ -882,7 +889,7 @@ static int s32_pinctrl_probe_dt(struct platform_device *pdev,
 						 s32_regmap_config.reg_stride;
 
 		map = devm_regmap_init_mmio(&pdev->dev, base,
-						&s32_regmap_config);
+					    &s32_regmap_config);
 		if (IS_ERR(map)) {
 			dev_err(&pdev->dev, "Failed to init regmap[%u]\n", i);
 			return PTR_ERR(map);
@@ -892,7 +899,49 @@ static int s32_pinctrl_probe_dt(struct platform_device *pdev,
 		ipctl->regions[i].pin_range = &info->soc_data->mem_pin_ranges[i];
 	}
 
-	nfuncs = of_get_child_count(np);
+	return 0;
+}
+
+static int s32_pinctrl_mfd_regmap_init(struct platform_device *pdev,
+				       struct s32_pinctrl *ipctl)
+
+{
+	struct nxp_siul2_mfd *mfd = dev_get_drvdata(pdev->dev.parent);
+	struct s32_pinctrl_soc_info *info = ipctl->info;
+	unsigned int mem_regions;
+	u8 regmap_type;
+	u32 i = 0, j;
+
+	/* One MSCR and one IMCR region per SIUL2 module. */
+	mem_regions = info->soc_data->mem_regions;
+	if (mem_regions != mfd->num_siul2 * 2)
+		return dev_err_probe(&pdev->dev, -EINVAL,
+				     "mem_regions is invalid: %u\n",
+				     mem_regions);
+
+	for (i = 0; i < mem_regions; i++) {
+		regmap_type = i < mem_regions / 2 ? SIUL2_MSCR : SIUL2_IMCR;
+		j = i % mfd->num_siul2;
+		ipctl->regions[i].map = mfd->siul2[j].regmaps[regmap_type];
+		ipctl->regions[i].pin_range = &info->soc_data->mem_pin_ranges[i];
+	}
+
+	return 0;
+}
+
+static int s32_pinctrl_probe_dt(struct platform_device *pdev,
+				struct s32_pinctrl *ipctl)
+{
+	struct s32_pinctrl_soc_info *info = ipctl->info;
+	struct device_node *np = s32_get_np(ipctl);
+	u32 nfuncs = 0, i = 0;
+	int ret;
+
+	if (!np)
+		return -ENODEV;
+
+	for_each_child_of_node_scoped(np, child)
+		++nfuncs;
 	if (nfuncs <= 0)
 		return dev_err_probe(&pdev->dev, -EINVAL,
 				     "No functions defined\n");
@@ -912,7 +961,6 @@ static int s32_pinctrl_probe_dt(struct platform_device *pdev,
 	if (!info->groups)
 		return -ENOMEM;
 
-	i = 0;
 	for_each_child_of_node_scoped(np, child) {
 		ret = s32_pinctrl_parse_functions(child, info, i++);
 		if (ret)
@@ -969,12 +1017,28 @@ int s32_pinctrl_probe(struct platform_device *pdev,
 	s32_pinctrl_desc->confops = &s32_pinconf_ops;
 	s32_pinctrl_desc->owner = THIS_MODULE;
 
+	ipctl->regions = devm_kcalloc(&pdev->dev, soc_data->mem_regions,
+				      sizeof(*ipctl->regions), GFP_KERNEL);
+	if (!ipctl->regions)
+		return -ENOMEM;
+
+	ipctl->legacy = soc_data->legacy;
+	if (soc_data->legacy)
+		ret = legacy_s32_pinctrl_regmap_init(pdev, ipctl);
+	else
+		ret = s32_pinctrl_mfd_regmap_init(pdev, ipctl);
+
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret,
+				     "Failed to init driver regmap!\n");
+
 	ret = s32_pinctrl_probe_dt(pdev, ipctl);
 	if (ret)
 		return dev_err_probe(&pdev->dev, ret,
 				     "Fail to probe dt properties\n");
 
-	ret = devm_pinctrl_register_and_init(&pdev->dev, s32_pinctrl_desc,
+	ret = devm_pinctrl_register_and_init(s32_get_dev(ipctl),
+					     s32_pinctrl_desc,
 					     ipctl, &ipctl->pctl);
 	if (ret)
 		return dev_err_probe(&pdev->dev, ret,

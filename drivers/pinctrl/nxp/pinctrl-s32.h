@@ -2,7 +2,7 @@
  *
  * S32 pinmux core definitions
  *
- * Copyright 2016-2020, 2022 NXP
+ * Copyright 2016-2020, 2022, 2025 NXP
  * Copyright (C) 2022 SUSE LLC
  * Copyright 2015-2016 Freescale Semiconductor, Inc.
  * Copyright (C) 2012 Linaro Ltd.
@@ -28,6 +28,7 @@ struct s32_pin_group {
  * struct s32_pin_range - pin ID range for each memory region.
  * @start: start pin ID
  * @end: end pin ID
+ * @legacy: legacy standalone pinctrl driver or MFD cell
  */
 struct s32_pin_range {
 	unsigned int start;
@@ -39,6 +40,7 @@ struct s32_pinctrl_soc_data {
 	unsigned int npins;
 	const struct s32_pin_range *mem_pin_ranges;
 	unsigned int mem_regions;
+	bool legacy;
 };
 
 struct s32_pinctrl_soc_info {
