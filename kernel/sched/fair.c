@@ -3826,6 +3826,8 @@ static void reweight_entity(struct cfs_rq *cfs_rq, struct sched_entity *se,
 		if (!curr)
 			__enqueue_entity(cfs_rq, se);
 		cfs_rq->nr_queued++;
+		if (curr)
+			set_protect_slice(cfs_rq, se);
 	}
 }
 
