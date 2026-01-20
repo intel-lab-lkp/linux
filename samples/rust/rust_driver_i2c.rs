@@ -56,11 +56,11 @@ impl i2c::Driver for SampleDriver {
     }
 
     fn shutdown(idev: &i2c::I2cClient<Core>, _this: Pin<&Self>) {
-        dev_info!(idev.as_ref(), "Shutdown Rust I2C driver sample.\n");
+        dev_info!(idev, "Shutdown Rust I2C driver sample.\n");
     }
 
     fn unbind(idev: &i2c::I2cClient<Core>, _this: Pin<&Self>) {
-        dev_info!(idev.as_ref(), "Unbind Rust I2C driver sample.\n");
+        dev_info!(idev, "Unbind Rust I2C driver sample.\n");
     }
 }
 

@@ -113,10 +113,7 @@ impl platform::Driver for SampleDriver {
         pdev: &platform::Device<device::Core>,
         _info: Option<&Self::IdInfo>,
     ) -> impl PinInit<Self, Error> {
-        dev_info!(
-            pdev.as_ref(),
-            "Probe Rust I2C Client registration sample.\n"
-        );
+        dev_info!(pdev, "Probe Rust I2C Client registration sample.\n");
 
         kernel::try_pin_init!( Self {
             parent_dev: pdev.into(),
@@ -130,10 +127,7 @@ impl platform::Driver for SampleDriver {
     }
 
     fn unbind(pdev: &platform::Device<device::Core>, _this: Pin<&Self>) {
-        dev_info!(
-            pdev.as_ref(),
-            "Unbind Rust I2C Client registration sample.\n"
-        );
+        dev_info!(pdev, "Unbind Rust I2C Client registration sample.\n");
     }
 }
 
