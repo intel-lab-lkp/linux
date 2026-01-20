@@ -4051,7 +4051,8 @@ static int igb_sw_init(struct igb_adapter *adapter)
 	pci_read_config_word(pdev, PCI_COMMAND, &hw->bus.pci_cmd_word);
 
 	/* init RSS key */
-	netdev_rss_key_fill(adapter->rss_key, sizeof(adapter->rss_key));
+	if (!adapter->has_user_rss_key)
+		netdev_rss_key_fill(adapter->rss_key, sizeof(adapter->rss_key));
 
 	/* set default ring sizes */
 	adapter->tx_ring_count = IGB_DEFAULT_TXD;
