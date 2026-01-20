@@ -5978,6 +5978,124 @@ static inline bool should_continue_reclaim(struct pglist_data *pgdat,
 	return inactive_lru_pages > pages_for_compaction;
 }
 
+enum memcg_scan_level {
+	MEMCG_LEVEL_COLD,
+	MEMCG_LEVEL_WARM,
+	MEMCG_LEVEL_HOT,
+	MEMCG_LEVEL_MAX,
+};
+
+#define MEMCG_HEAT_WARM		4
+#define MEMCG_HEAT_HOT		8
+#define MEMCG_HEAT_MAX		12
+#define MEMCG_HEAT_DECAY_STEP	1
+#define MEMCG_HEAT_DECAY_INTERVAL	(1 * HZ)
+
+static void memcg_adjust_heat(struct mem_cgroup_per_node *pn, long delta)
+{
+	long heat, new_heat;
+
+	if (mem_cgroup_is_root(pn->memcg))
+		return;
+
+	heat = atomic_long_read(&pn->reclaim.heat);
+	do {
+		new_heat = clamp_t(long, heat + delta, 0, MEMCG_HEAT_MAX);
+		if (atomic_long_cmpxchg(&pn->reclaim.heat, heat, new_heat) == heat)
+			break;
+		heat = atomic_long_read(&pn->reclaim.heat);
+	} while (1);
+}
+
+static void memcg_decay_heat(struct mem_cgroup_per_node *pn)
+{
+	unsigned long last;
+	unsigned long now = jiffies;
+
+	if (mem_cgroup_is_root(pn->memcg))
+		return;
+
+	last = READ_ONCE(pn->reclaim.last_decay);
+	if (!time_after(now, last + MEMCG_HEAT_DECAY_INTERVAL))
+		return;
+
+	if (cmpxchg(&pn->reclaim.last_decay, last, now) != last)
+		return;
+
+	memcg_adjust_heat(pn, -MEMCG_HEAT_DECAY_STEP);
+}
+
+static int memcg_heat_level(struct mem_cgroup_per_node *pn)
+{
+	long heat;
+
+	if (mem_cgroup_is_root(pn->memcg))
+		return MEMCG_LEVEL_COLD;
+
+	memcg_decay_heat(pn);
+	heat = atomic_long_read(&pn->reclaim.heat);
+
+	if (heat >= MEMCG_HEAT_HOT)
+		return MEMCG_LEVEL_HOT;
+	if (heat >= MEMCG_HEAT_WARM)
+		return MEMCG_LEVEL_WARM;
+	return MEMCG_LEVEL_COLD;
+}
+
+static void memcg_record_reclaim_result(struct mem_cgroup_per_node *pn,
+					struct lruvec *lruvec,
+					unsigned long scanned,
+					unsigned long reclaimed)
+{
+	long delta;
+
+	if (mem_cgroup_is_root(pn->memcg))
+		return;
+
+	memcg_decay_heat(pn);
+
+	/*
+	 * Memory cgroup heat adjustment algorithm:
+	 * - If scanned == 0: mark as hottest (+MAX_HEAT)
+	 * - If reclaimed >= 50% * scanned: strong cool (-2)
+	 * - If reclaimed >= 25% * scanned: mild cool (-1)
+	 * - Otherwise:  warm up (+1)
+	 */
+	if (!scanned)
+		delta = MEMCG_HEAT_MAX;
+	else if (reclaimed * 2 >= scanned)
+		delta = -2;
+	else if (reclaimed * 4 >= scanned)
+		delta = -1;
+	else
+		delta = 1;
+
+	/*
+	 * Refault-based heat adjustment:
+	 * - If refault increase > reclaimed pages: heat up (more cautious reclaim)
+	 * - If no refaults and currently warm:     cool down (allow more reclaim)
+	 * This prevents thrashing by backing off when refaults indicate over-reclaim.
+	 */
+	if (lruvec) {
+		unsigned long total_refaults;
+		unsigned long prev;
+		long refault_delta;
+
+		total_refaults = lruvec_page_state(lruvec, WORKINGSET_ACTIVATE_ANON);
+		total_refaults += lruvec_page_state(lruvec, WORKINGSET_ACTIVATE_FILE);
+
+		prev = atomic_long_xchg(&pn->reclaim.last_refault, total_refaults);
+		refault_delta = total_refaults - prev;
+
+		if (refault_delta > reclaimed)
+			delta++;
+		else if (!refault_delta && delta > 0)
+			delta--;
+	}
+
+	memcg_adjust_heat(pn, delta);
+}
+
 static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 {
 	struct mem_cgroup *target_memcg = sc->target_mem_cgroup;
@@ -5986,7 +6104,8 @@ static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 	};
 	struct mem_cgroup_reclaim_cookie *partial = &reclaim;
 	struct mem_cgroup *memcg;
-
+	int level;
+	int max_level = root_reclaim(sc) ? MEMCG_LEVEL_MAX : MEMCG_LEVEL_WARM;
 	/*
 	 * In most cases, direct reclaimers can do partial walks
 	 * through the cgroup tree, using an iterator state that
@@ -5999,62 +6118,80 @@ static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 	if (current_is_kswapd() || sc->memcg_full_walk)
 		partial = NULL;
 
-	memcg = mem_cgroup_iter(target_memcg, NULL, partial);
-	do {
-		struct lruvec *lruvec = mem_cgroup_lruvec(memcg, pgdat);
-		unsigned long reclaimed;
-		unsigned long scanned;
+	for (level = MEMCG_LEVEL_COLD; level < max_level; level++) {
+		bool need_next_level = false;
 
-		/*
-		 * This loop can become CPU-bound when target memcgs
-		 * aren't eligible for reclaim - either because they
-		 * don't have any reclaimable pages, or because their
-		 * memory is explicitly protected. Avoid soft lockups.
-		 */
-		cond_resched();
+		memcg = mem_cgroup_iter(target_memcg, NULL, partial);
+		do {
+			struct lruvec *lruvec = mem_cgroup_lruvec(memcg, pgdat);
+			unsigned long reclaimed;
+			unsigned long scanned;
+			struct mem_cgroup_per_node *pn = memcg->nodeinfo[pgdat->node_id];
 
-		mem_cgroup_calculate_protection(target_memcg, memcg);
-
-		if (mem_cgroup_below_min(target_memcg, memcg)) {
 			/*
-			 * Hard protection.
-			 * If there is no reclaimable memory, OOM.
+			 * This loop can become CPU-bound when target memcgs
+			 * aren't eligible for reclaim - either because they
+			 * don't have any reclaimable pages, or because their
+			 * memory is explicitly protected. Avoid soft lockups.
 			 */
-			continue;
-		} else if (mem_cgroup_below_low(target_memcg, memcg)) {
-			/*
-			 * Soft protection.
-			 * Respect the protection only as long as
-			 * there is an unprotected supply
-			 * of reclaimable memory from other cgroups.
-			 */
-			if (!sc->memcg_low_reclaim) {
-				sc->memcg_low_skipped = 1;
+			cond_resched();
+
+			mem_cgroup_calculate_protection(target_memcg, memcg);
+
+			if (mem_cgroup_below_min(target_memcg, memcg)) {
+				/*
+				 * Hard protection.
+				 * If there is no reclaimable memory, OOM.
+				 */
+				continue;
+			} else if (mem_cgroup_below_low(target_memcg, memcg)) {
+				/*
+				 * Soft protection.
+				 * Respect the protection only as long as
+				 * there is an unprotected supply
+				 * of reclaimable memory from other cgroups.
+				 */
+				if (!sc->memcg_low_reclaim) {
+					sc->memcg_low_skipped = 1;
+					continue;
+				}
+				memcg_memory_event(memcg, MEMCG_LOW);
+			}
+
+			if (root_reclaim(sc) && memcg_heat_level(pn) > level) {
+				need_next_level = true;
 				continue;
 			}
-			memcg_memory_event(memcg, MEMCG_LOW);
-		}
 
-		reclaimed = sc->nr_reclaimed;
-		scanned = sc->nr_scanned;
+			reclaimed = sc->nr_reclaimed;
+			scanned = sc->nr_scanned;
 
-		shrink_lruvec(lruvec, sc);
+			shrink_lruvec(lruvec, sc);
+			if (!memcg || memcg_page_state(memcg, NR_SLAB_RECLAIMABLE_B))
+				shrink_slab(sc->gfp_mask, pgdat->node_id, memcg,
+					    sc->priority);
 
-		shrink_slab(sc->gfp_mask, pgdat->node_id, memcg,
-			    sc->priority);
+			if (root_reclaim(sc))
+				memcg_record_reclaim_result(pn, lruvec,
+						    sc->nr_scanned - scanned,
+						    sc->nr_reclaimed - reclaimed);
 
-		/* Record the group's reclaim efficiency */
-		if (!sc->proactive)
-			vmpressure(sc->gfp_mask, memcg, false,
-				   sc->nr_scanned - scanned,
-				   sc->nr_reclaimed - reclaimed);
+			/* Record the group's reclaim efficiency */
+			if (!sc->proactive)
+				vmpressure(sc->gfp_mask, memcg, false,
+					   sc->nr_scanned - scanned,
+					   sc->nr_reclaimed - reclaimed);
 
-		/* If partial walks are allowed, bail once goal is reached */
-		if (partial && sc->nr_reclaimed >= sc->nr_to_reclaim) {
-			mem_cgroup_iter_break(target_memcg, memcg);
+			/* If partial walks are allowed, bail once goal is reached */
+			if (partial && sc->nr_reclaimed >= sc->nr_to_reclaim) {
+				mem_cgroup_iter_break(target_memcg, memcg);
+				break;
+			}
+		} while ((memcg = mem_cgroup_iter(target_memcg, memcg, partial)));
+
+		if (!need_next_level)
 			break;
-		}
-	} while ((memcg = mem_cgroup_iter(target_memcg, memcg, partial)));
+	}
 }
 
 static void shrink_node(pg_data_t *pgdat, struct scan_control *sc)

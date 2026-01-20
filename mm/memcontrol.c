@@ -3713,6 +3713,9 @@ static bool alloc_mem_cgroup_per_node_info(struct mem_cgroup *memcg, int node)
 
 	lruvec_init(&pn->lruvec);
 	pn->memcg = memcg;
+	atomic_long_set(&pn->reclaim.heat, 0);
+	pn->reclaim.last_decay = jiffies;
+	atomic_long_set(&pn->reclaim.last_refault, 0);
 
 	memcg->nodeinfo[node] = pn;
 	return true;

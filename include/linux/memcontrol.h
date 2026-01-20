@@ -76,6 +76,12 @@ struct memcg_vmstats;
 struct lruvec_stats_percpu;
 struct lruvec_stats;
 
+struct memcg_reclaim_state {
+	atomic_long_t heat;
+	unsigned long last_decay;
+	atomic_long_t last_refault;
+};
+
 struct mem_cgroup_reclaim_iter {
 	struct mem_cgroup *position;
 	/* scan generation, increased every round-trip */
@@ -114,6 +120,7 @@ struct mem_cgroup_per_node {
 	CACHELINE_PADDING(_pad2_);
 	unsigned long		lru_zone_size[MAX_NR_ZONES][NR_LRU_LISTS];
 	struct mem_cgroup_reclaim_iter	iter;
+	struct memcg_reclaim_state	reclaim;
 
 #ifdef CONFIG_MEMCG_NMI_SAFETY_REQUIRES_ATOMIC
 	/* slab stats for nmi context */
