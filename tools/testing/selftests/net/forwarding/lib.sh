@@ -2163,3 +2163,22 @@ has_unicast_flt()
 
 	[[ $promisc == 1 ]] && echo "no" || echo "yes"
 }
+
+run_cmd_grep_common()
+{
+	local find="$1"; shift
+	local cmd="$*"
+
+	if [ "$VERBOSE" = "1" ]; then
+		echo "COMMAND: ${cmd} 2>&1 | grep -q '${find}'"
+	fi
+	$cmd 2>&1 | grep -q "${find}"
+	return $?
+}
+
+run_cmd_grep() {
+	run_cmd_grep_common "$@"
+	rc=$?
+	check_err $rc
+	return $rc
+}
