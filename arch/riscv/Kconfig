@@ -710,6 +710,25 @@ config RISCV_ISA_ZACAS
 
 	  If you don't know what to do here, say Y.
 
+config RISCV_ISA_ZAAMO
+	bool "Zaamo extension support for AMO atomics" if NONPORTABLE
+	default y
+	help
+	   support AMO instructions.
+
+	   If you don't know what to do here, say Y.
+
+config RISCV_ISA_ZALRSC
+	bool "Zalrsc extension support for LR/SC atomics" if NONPORTABLE
+	default y
+	help
+	   support lr and sc to build atomic functions.
+
+	   If you don't know what to do here, say Y.
+
+config RISCV_ISA_A
+	def_bool RISCV_ISA_ZAAMO && RISCV_ISA_ZALRSC
+
 config TOOLCHAIN_HAS_ZBB
 	bool
 	default y

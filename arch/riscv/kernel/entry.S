@@ -73,7 +73,16 @@
 	beq	a2, zero, .Lnew_vmalloc_restore_context
 
 	/* Atomically reset the current cpu bit in new_vmalloc */
+#if defined(__riscv_atomic) || defined(__riscv_zaamo)
 	amoxor.d	a0, a1, (a0)
+#elif defined(__riscv_zalrsc)
+1:	lr.d	a2, (a0)
+	xor	a2, a1, a2
+	sc.d	a2, a2, (a0)
+	bnez	a2, 1b
+#else
+#error "Need AMO or LR/SC atomics"
+#endif
 
 	/* Only emit a sfence.vma if the uarch caches invalid entries */
 	ALTERNATIVE("sfence.vma", "nop", 0, RISCV_ISA_EXT_SVVPTC, 1)
