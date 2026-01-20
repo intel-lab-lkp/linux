@@ -11,6 +11,7 @@ import pathlib
 import subprocess
 import sys
 
+
 def args_single(args):
     result = {}
     for arg in args:
@@ -26,7 +27,7 @@ def args_crates_cfgs(cfgs):
 
     return crates_cfgs
 
-def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, editions):
+def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, editions, crate_attrs):
     # Generate the configuration list.
     generated_cfg = []
     with open(objtree / "include" / "generated" / "rustc_cfg") as fd:
@@ -42,6 +43,7 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, editions)
     crates_indexes = {}
     crates_cfgs = args_crates_cfgs(cfgs)
     crates_editions = args_single(editions)
+    crates_crate_attrs = args_crates_cfgs(crate_attrs)
 
     def append_crate(display_name, root_module, deps, cfg=[], is_workspace_member=True, is_proc_macro=False):
         # Miguel Ojeda writes:
@@ -78,6 +80,8 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, editions)
             "deps": [{"crate": crates_indexes[dep], "name": dep} for dep in deps],
             "cfg": cfg,
             "edition": edition,
+            # Crate attributes were introduced in 1.94.0 but older versions will silently ignore this.
+            "crate_attrs": crates_crate_attrs.get(display_name, []),
             "env": {
                 "RUST_MODFILE": "This is only for rust-analyzer"
             }
@@ -233,6 +237,7 @@ def main():
     parser.add_argument('--verbose', '-v', action='store_true')
     parser.add_argument('--cfgs', action='append', default=[])
     parser.add_argument('--editions', action='append', default=[])
+    parser.add_argument('--crate-attrs', action='append', default=[])
     parser.add_argument("srctree", type=pathlib.Path)
     parser.add_argument("objtree", type=pathlib.Path)
     parser.add_argument("sysroot", type=pathlib.Path)
@@ -246,7 +251,7 @@ def main():
     )
 
     rust_project = {
-        "crates": generate_crates(args.srctree, args.objtree, args.sysroot_src, args.exttree, args.cfgs, args.editions),
+        "crates": generate_crates(args.srctree, args.objtree, args.sysroot_src, args.exttree, args.cfgs, args.editions, args.crate_attrs),
         "sysroot": str(args.sysroot),
     }
 

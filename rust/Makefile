@@ -84,9 +84,11 @@ proc_macro2-cfgs := \
     $(if $(call rustc-min-version,108800),proc_macro_span_file proc_macro_span_location)
 
 # Stable since Rust 1.79.0: `feature(proc_macro_byte_character,proc_macro_c_str_literals)`.
+proc_macro2-crate-attrs := feature(proc_macro_byte_character,proc_macro_c_str_literals)
+
 proc_macro2-flags := \
     --cap-lints=allow \
-    -Zcrate-attr='feature(proc_macro_byte_character,proc_macro_c_str_literals)' \
+    -Zcrate-attr='$(proc_macro2-crate-attrs)' \
     $(call cfgs-to-flags,$(proc_macro2-cfgs))
 
 quote-cfgs := \
@@ -575,6 +577,7 @@ rust-analyzer:
 		--cfgs='syn=$(syn-cfgs)' \
 		--editions='core=$(core-edition)' \
 		--editions='quote=$(quote-edition)' \
+		--crate-attrs='proc_macro2=$(proc_macro2-crate-attrs)' \
 		$(realpath $(srctree)) $(realpath $(objtree)) \
 		$(rustc_sysroot) $(RUST_LIB_SRC) $(if $(KBUILD_EXTMOD),$(srcroot)) \
 		> rust-project.json
