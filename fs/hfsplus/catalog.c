@@ -199,6 +199,7 @@ int hfsplus_find_cat(struct super_block *sb, u32 cnid,
 	u16 type;
 
 	hfsplus_cat_build_key_with_cnid(sb, fd->search_key, cnid);
+	memset(&tmp, 0, sizeof(tmp));
 	err = hfs_brec_read(fd, &tmp, sizeof(hfsplus_cat_entry));
 	if (err)
 		return err;
