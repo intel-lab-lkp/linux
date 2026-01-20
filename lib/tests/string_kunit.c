@@ -17,6 +17,9 @@
 #define STRCMP_TEST_EXPECT_LOWER(test, fn, ...) KUNIT_EXPECT_LT(test, fn(__VA_ARGS__), 0)
 #define STRCMP_TEST_EXPECT_GREATER(test, fn, ...) KUNIT_EXPECT_GT(test, fn(__VA_ARGS__), 0)
 
+#define STRING_TEST_MAX_LEN	128
+#define STRING_TEST_MAX_OFFSET	16
+
 static void string_test_memset16(struct kunit *test)
 {
 	unsigned i, j, k;
@@ -100,6 +103,28 @@ static void string_test_memset64(struct kunit *test)
 						"i:%d j:%d k:%d", i, j, k);
 				}
 			}
+		}
+	}
+}
+
+static void string_test_strlen(struct kunit *test)
+{
+	char *s;
+	size_t len, offset;
+	const size_t buf_size = STRING_TEST_MAX_LEN + STRING_TEST_MAX_OFFSET + 1;
+
+	s = kunit_kzalloc(test, buf_size, GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, s);
+
+	memset(s, 'A', buf_size);
+	s[buf_size - 1] = '\0';
+
+	for (offset = 0; offset < STRING_TEST_MAX_OFFSET; offset++) {
+		for (len = 0; len <= STRING_TEST_MAX_LEN; len++) {
+			s[offset + len] = '\0';
+			KUNIT_EXPECT_EQ_MSG(test, strlen(s + offset), len,
+				"offset:%zu len:%zu", offset, len);
+			s[offset + len] = 'A';
 		}
 	}
 }
@@ -618,6 +643,7 @@ static struct kunit_case string_test_cases[] = {
 	KUNIT_CASE(string_test_memset16),
 	KUNIT_CASE(string_test_memset32),
 	KUNIT_CASE(string_test_memset64),
+	KUNIT_CASE(string_test_strlen),
 	KUNIT_CASE(string_test_strchr),
 	KUNIT_CASE(string_test_strnchr),
 	KUNIT_CASE(string_test_strspn),
