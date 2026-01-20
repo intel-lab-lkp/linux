@@ -322,6 +322,8 @@ test_mpath_seed_stability_ipv6()
 			-p 64 -d 0 -c 10 -t udp
 }
 
+run_cmd_grep 'hw_stats' ip nexthop add help || exit $ksft_skip
+
 trap cleanup EXIT
 
 setup_prepare
