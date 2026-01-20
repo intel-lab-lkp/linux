@@ -1910,6 +1910,7 @@
 						 <&scmi_clk IMX95_CLK_SYSPLL1_PFD1_DIV2>;
 			msi-map = <0x0 &its 0x10 0x1>;
 			power-domains = <&scmi_devpd IMX95_PD_HSIO_TOP>;
+			fsl,max-link-speed = <3>;
 			status = "disabled";
 		};
 
@@ -1987,6 +1988,7 @@
 						 <&scmi_clk IMX95_CLK_SYSPLL1_PFD1_DIV2>;
 			msi-map = <0x0 &its 0x98 0x1>;
 			power-domains = <&scmi_devpd IMX95_PD_HSIO_TOP>;
+			fsl,max-link-speed = <3>;
 			status = "disabled";
 		};
 
