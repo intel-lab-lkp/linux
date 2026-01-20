@@ -12064,9 +12064,6 @@ static int drx39xxj_read_ucblocks(struct dvb_frontend *fe, u32 *ucb)
 
 static int drx39xxj_set_frontend(struct dvb_frontend *fe)
 {
-#ifdef DJH_DEBUG
-	int i;
-#endif
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	struct drx39xxj_state *state = fe->demodulator_priv;
 	struct drx_demod_instance *demod = state->demod;
