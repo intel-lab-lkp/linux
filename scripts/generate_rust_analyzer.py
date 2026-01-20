@@ -27,25 +27,14 @@ def args_crates_cfgs(cfgs):
 
     return crates_cfgs
 
-def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, editions, crate_attrs, common_crate_attrs):
-    # Generate the configuration list.
-    generated_cfg = []
-    with open(objtree / "include" / "generated" / "rustc_cfg") as fd:
-        for line in fd:
-            line = line.replace("--cfg=", "")
-            line = line.replace("\n", "")
-            generated_cfg.append(line)
-
-    # Now fill the crates list -- dependencies need to come first.
-    #
-    # Avoid O(n^2) iterations by keeping a map of indexes.
+def generate_sysroot_crates(cfgs, editions, crate_attrs):
     crates = []
     crates_indexes = {}
     crates_cfgs = args_crates_cfgs(cfgs)
     crates_editions = args_single(editions)
     crates_crate_attrs = args_crates_cfgs(crate_attrs)
 
-    def append_crate(display_name, root_module, deps, cfg=[], is_workspace_member=True, is_proc_macro=False, is_proc_macro_library=False):
+    def append_sysroot_crate(display_name, deps):
         # Miguel Ojeda writes:
         #
         # > ... in principle even the sysroot crates may have different
@@ -72,6 +61,52 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, editions,
         # assumption if future edition moves span multiple rust versions.
         edition = crates_editions.get(display_name, "2021")
 
+        cfg = crates_cfgs.get(display_name, [])
+        crates_indexes[display_name] = len(crates)
+        crates.append({
+            "display_name": display_name,
+            # Paths in sysroot_project are relative to sysroot_src.
+            "root_module": f"{display_name}/src/lib.rs",
+            "is_workspace_member": False,
+            "is_proc_macro": False,
+            "deps": [{"crate": crates_indexes[dep], "name": dep} for dep in deps],
+            "cfg": cfg,
+            "edition": edition,
+            # Crate attributes were introduced in 1.94.0 but older versions will silently ignore this.
+            "crate_attrs": crates_crate_attrs.get(display_name, []),
+            "env": {
+                "RUST_MODFILE": "This is only for rust-analyzer"
+            }
+        })
+
+    append_sysroot_crate("core", [])
+    append_sysroot_crate("alloc", ["core"])
+    append_sysroot_crate("std", ["alloc", "core"])
+    append_sysroot_crate("proc_macro", ["core", "std"])
+
+    return crates
+
+def generate_crates(srctree, objtree, external_src, cfgs, editions, crate_attrs, common_crate_attrs):
+    # Generate the configuration list.
+    generated_cfg = []
+    with open(objtree / "include" / "generated" / "rustc_cfg") as fd:
+        for line in fd:
+            line = line.replace("--cfg=", "")
+            line = line.replace("\n", "")
+            generated_cfg.append(line)
+
+    # Now fill the crates list -- dependencies need to come first.
+    #
+    # Avoid O(n^2) iterations by keeping a map of indexes.
+    crates = []
+    crates_indexes = {}
+    crates_cfgs = args_crates_cfgs(cfgs)
+    crates_editions = args_single(editions)
+    crates_crate_attrs = args_crates_cfgs(crate_attrs)
+
+    def append_crate(display_name, root_module, deps, cfg=[], is_proc_macro=False, is_proc_macro_library=False):
+        edition = crates_editions.get(display_name, "2021")
+
         crate_attrs = crates_crate_attrs.get(display_name, [])
         # Apply common crate attrs to non-host crates.
         if not is_proc_macro_library and not is_proc_macro:
@@ -80,7 +115,7 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, editions,
         crate = {
             "display_name": display_name,
             "root_module": str(root_module),
-            "is_workspace_member": is_workspace_member,
+            "is_workspace_member": True,
             "is_proc_macro": is_proc_macro,
             "deps": [{"crate": crates_indexes[dep], "name": dep} for dep in deps],
             "cfg": cfg,
@@ -100,37 +135,20 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, editions,
         crates_indexes[display_name] = len(crates)
         crates.append(crate)
 
-    def append_sysroot_crate(
-        display_name,
-        deps,
-        cfg=[],
-    ):
-        append_crate(
-            display_name,
-            sysroot_src / display_name / "src" / "lib.rs",
-            deps,
-            cfg,
-            is_workspace_member=False,
-        )
-
-    # NB: sysroot crates reexport items from one another so setting up our transitive dependencies
-    # here is important for ensuring that rust-analyzer can resolve symbols. The sources of truth
-    # for this dependency graph are `(sysroot_src / crate / "Cargo.toml" for crate in crates)`.
-    append_sysroot_crate("core", [], cfg=crates_cfgs.get("core", []))
-    append_sysroot_crate("alloc", ["core"])
-    append_sysroot_crate("std", ["alloc", "core"])
-    append_sysroot_crate("proc_macro", ["core", "std"])
+    # Sysroot crates (core, alloc, std, proc_macro) are in sysroot_project,
+    # and their deps are automatically added to all crates by rust-analyzer.
+    # We only need to define deps between our own crates here.
 
     append_crate(
         "compiler_builtins",
         srctree / "rust" / "compiler_builtins.rs",
-        ["core"],
+        [],
     )
 
     append_crate(
         "proc_macro2",
         srctree / "rust" / "proc-macro2" / "lib.rs",
-        ["core", "alloc", "std", "proc_macro"],
+        [],
         cfg=crates_cfgs["proc_macro2"],
         is_proc_macro_library=True,
     )
@@ -138,7 +156,7 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, editions,
     append_crate(
         "quote",
         srctree / "rust" / "quote" / "lib.rs",
-        ["core", "alloc", "std", "proc_macro", "proc_macro2"],
+        ["proc_macro2"],
         cfg=crates_cfgs["quote"],
         is_proc_macro_library=True,
     )
@@ -146,7 +164,7 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, editions,
     append_crate(
         "syn",
         srctree / "rust" / "syn" / "lib.rs",
-        ["std", "proc_macro", "proc_macro2", "quote"],
+        ["proc_macro2", "quote"],
         cfg=crates_cfgs["syn"],
         is_proc_macro_library=True,
     )
@@ -154,20 +172,20 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, editions,
     append_crate(
         "macros",
         srctree / "rust" / "macros" / "lib.rs",
-        ["std", "proc_macro", "proc_macro2", "quote", "syn"],
+        ["proc_macro2", "quote", "syn"],
         is_proc_macro=True,
     )
 
     append_crate(
         "build_error",
         srctree / "rust" / "build_error.rs",
-        ["core", "compiler_builtins"],
+        ["compiler_builtins"],
     )
 
     append_crate(
         "pin_init_internal",
         srctree / "rust" / "pin-init" / "internal" / "src" / "lib.rs",
-        ["std", "proc_macro"],
+        [],
         cfg=["kernel"],
         is_proc_macro=True,
     )
@@ -175,14 +193,14 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, editions,
     append_crate(
         "pin_init",
         srctree / "rust" / "pin-init" / "src" / "lib.rs",
-        ["core", "compiler_builtins", "pin_init_internal", "macros"],
+        ["pin_init_internal", "macros"],
         cfg=["kernel"],
     )
 
     append_crate(
         "ffi",
         srctree / "rust" / "ffi.rs",
-        ["core", "compiler_builtins"],
+        ["compiler_builtins"],
     )
 
     def append_crate_with_generated(
@@ -204,9 +222,9 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, editions,
             "exclude_dirs": [],
         }
 
-    append_crate_with_generated("bindings", ["core", "ffi", "pin_init"])
-    append_crate_with_generated("uapi", ["core", "ffi", "pin_init"])
-    append_crate_with_generated("kernel", ["core", "macros", "build_error", "pin_init", "ffi", "bindings", "uapi"])
+    append_crate_with_generated("bindings", ["ffi", "pin_init"])
+    append_crate_with_generated("uapi", ["ffi", "pin_init"])
+    append_crate_with_generated("kernel", ["macros", "build_error", "pin_init", "ffi", "bindings", "uapi"])
 
     def is_root_crate(build_file, target):
         try:
@@ -234,7 +252,7 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, editions,
             append_crate(
                 name,
                 path,
-                ["core", "kernel", "pin_init"],
+                ["kernel", "pin_init"],
                 cfg=generated_cfg,
             )
 
@@ -261,7 +279,11 @@ def main():
 
     common_crate_attrs = args.common_crate_attrs.split() if args.common_crate_attrs else []
     rust_project = {
-        "crates": generate_crates(args.srctree, args.objtree, args.sysroot_src, args.exttree, args.cfgs, args.editions, args.crate_attrs, common_crate_attrs),
+        "sysroot_src": str(args.sysroot_src),
+        "sysroot_project": {
+            "crates": generate_sysroot_crates(args.cfgs, args.editions, args.crate_attrs),
+        },
+        "crates": generate_crates(args.srctree, args.objtree, args.exttree, args.cfgs, args.editions, args.crate_attrs, common_crate_attrs),
         "sysroot": str(args.sysroot),
     }
 
