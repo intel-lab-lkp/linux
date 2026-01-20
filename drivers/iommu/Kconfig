@@ -355,6 +355,7 @@ config HYPERV_IOMMU
 	bool "Hyper-V IRQ Handling"
 	depends on HYPERV && X86
 	select IOMMU_API
+	select IRQ_REMAP
 	default HYPERV
 	help
 	  Stub IOMMU driver to handle IRQs to support Hyper-V Linux
