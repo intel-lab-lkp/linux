@@ -487,7 +487,7 @@ bool aa_policy_init(struct aa_policy *policy, const char *prefix,
 	} else {
 		hname = aa_str_alloc(strlen(name) + 1, gfp);
 		if (hname)
-			strcpy(hname, name);
+			strscpy(hname, name, strlen(name) + 1);
 	}
 	if (!hname)
 		return false;
