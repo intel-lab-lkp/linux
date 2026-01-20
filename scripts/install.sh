@@ -34,6 +34,12 @@ do
 		continue
 	fi
 
+	# Install kernel config file
+	if [ -f ${INSTALL_PATH}/config-${KERNELRELEASE} ]; then
+	  mv ${INSTALL_PATH}/config-${KERNELRELEASE} ${INSTALL_PATH}/config-${KERNELRELEASE}.old
+	fi
+	cp .config ${INSTALL_PATH}/config-${KERNELRELEASE}
+
 	# installkernel(8) says the parameters are like follows:
 	#
 	#   installkernel version zImage System.map [directory]
