@@ -35,7 +35,9 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, core_edit
     crates_indexes = {}
     crates_cfgs = args_crates_cfgs(cfgs)
 
-    def append_crate(display_name, root_module, deps, cfg=[], is_workspace_member=True, is_proc_macro=False, edition="2021"):
+    def append_crate(display_name, root_module, deps, cfg=None, is_workspace_member=True, is_proc_macro=False, edition="2021"):
+        if cfg is None:
+            cfg = crates_cfgs.get(display_name, [])
         crate = {
             "display_name": display_name,
             "root_module": str(root_module),
@@ -60,7 +62,7 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, core_edit
     def append_sysroot_crate(
         display_name,
         deps,
-        cfg=[],
+        cfg=None,
         edition="2021",
     ):
         append_crate(
@@ -75,7 +77,7 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, core_edit
     # NB: sysroot crates reexport items from one another so setting up our transitive dependencies
     # here is important for ensuring that rust-analyzer can resolve symbols. The sources of truth
     # for this dependency graph are `(sysroot_src / crate / "Cargo.toml" for crate in crates)`.
-    append_sysroot_crate("core", [], cfg=crates_cfgs.get("core", []), edition=core_edition)
+    append_sysroot_crate("core", [], edition=core_edition)
     append_sysroot_crate("alloc", ["core"])
     append_sysroot_crate("std", ["alloc", "core"])
     append_sysroot_crate("proc_macro", ["core", "std"])
@@ -90,21 +92,18 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, core_edit
         "proc_macro2",
         srctree / "rust" / "proc-macro2" / "lib.rs",
         ["core", "alloc", "std", "proc_macro"],
-        cfg=crates_cfgs["proc_macro2"],
     )
 
     append_crate(
         "quote",
         srctree / "rust" / "quote" / "lib.rs",
         ["alloc", "proc_macro", "proc_macro2"],
-        cfg=crates_cfgs["quote"],
     )
 
     append_crate(
         "syn",
         srctree / "rust" / "syn" / "lib.rs",
         ["proc_macro", "proc_macro2", "quote"],
-        cfg=crates_cfgs["syn"],
     )
 
     append_crate(
@@ -124,7 +123,6 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, core_edit
         "pin_init_internal",
         srctree / "rust" / "pin-init" / "internal" / "src" / "lib.rs",
         [],
-        cfg=["kernel"],
         is_proc_macro=True,
     )
 
@@ -132,7 +130,6 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, core_edit
         "pin_init",
         srctree / "rust" / "pin-init" / "src" / "lib.rs",
         ["core", "pin_init_internal", "macros"],
-        cfg=["kernel"],
     )
 
     append_crate(
