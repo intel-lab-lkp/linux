@@ -126,6 +126,11 @@ void *uml_kmalloc(int size, int flags)
 	return kmalloc(size, flags);
 }
 
+void *uml_kmalloc_array(int count, int size, int flags)
+{
+	return kmalloc_array(count, size, flags);
+}
+
 static const pgprot_t protection_map[16] = {
 	[VM_NONE]					= PAGE_NONE,
 	[VM_READ]					= PAGE_READONLY,

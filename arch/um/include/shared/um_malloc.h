@@ -9,6 +9,7 @@
 #include <generated/asm-offsets.h>
 
 extern void *uml_kmalloc(int size, int flags);
+extern void *uml_kmalloc_array(int count, int size, int flags);
 extern void kfree(const void *ptr);
 
 extern void *vmalloc_noprof(unsigned long size);
