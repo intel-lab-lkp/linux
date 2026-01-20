@@ -900,6 +900,29 @@ static struct vc3_hw_data clk_div[] = {
 	}
 };
 
+static const struct clk_parent_data clk_mux_parent_data[][2] = {
+	[VC3_SE1_MUX] = {
+		{ .hw = &clk_div[VC3_DIV5].hw },
+		{ .hw = &clk_div[VC3_DIV4].hw }
+	},
+	[VC3_SE2_MUX] = {
+		{ .hw = &clk_div[VC3_DIV5].hw },
+		{ .hw = &clk_div[VC3_DIV4].hw }
+	},
+	[VC3_SE3_MUX] = {
+		{ .hw = &clk_div[VC3_DIV2].hw },
+		{ .hw = &clk_div[VC3_DIV4].hw }
+	},
+	[VC3_DIFF1_MUX] = {
+		{ .hw = &clk_div[VC3_DIV1].hw },
+		{ .hw = &clk_div[VC3_DIV3].hw }
+	},
+	[VC3_DIFF2_MUX] = {
+		{ .hw = &clk_div[VC3_DIV1].hw },
+		{ .hw = &clk_div[VC3_DIV3].hw }
+	},
+};
+
 static struct vc3_hw_data clk_mux[] = {
 	[VC3_SE1_MUX] = {
 		.data = &(struct vc3_clk_data) {
@@ -909,10 +932,7 @@ static struct vc3_hw_data clk_mux[] = {
 		.hw.init = &(struct clk_init_data) {
 			.name = "se1_mux",
 			.ops = &vc3_clk_mux_ops,
-			.parent_hws = (const struct clk_hw *[]) {
-				&clk_div[VC3_DIV5].hw,
-				&clk_div[VC3_DIV4].hw
-			},
+			.parent_data = clk_mux_parent_data[VC3_SE1_MUX],
 			.num_parents = 2,
 			.flags = CLK_SET_RATE_PARENT
 		}
@@ -924,10 +944,7 @@ static struct vc3_hw_data clk_mux[] = {
 		.hw.init = &(struct clk_init_data) {
 			.name = "se2_mux",
 			.ops = &vc3_clk_mux_ops,
-			.parent_hws = (const struct clk_hw *[]) {
-				&clk_div[VC3_DIV5].hw,
-				&clk_div[VC3_DIV4].hw
-			},
+			.parent_data = clk_mux_parent_data[VC3_SE2_MUX],
 			.num_parents = 2,
 			.flags = CLK_SET_RATE_PARENT
 		}
@@ -940,10 +957,7 @@ static struct vc3_hw_data clk_mux[] = {
 		.hw.init = &(struct clk_init_data) {
 			.name = "se3_mux",
 			.ops = &vc3_clk_mux_ops,
-			.parent_hws = (const struct clk_hw *[]) {
-				&clk_div[VC3_DIV2].hw,
-				&clk_div[VC3_DIV4].hw
-			},
+			.parent_data = clk_mux_parent_data[VC3_SE3_MUX],
 			.num_parents = 2,
 			.flags = CLK_SET_RATE_PARENT
 		}
@@ -956,10 +970,7 @@ static struct vc3_hw_data clk_mux[] = {
 		.hw.init = &(struct clk_init_data) {
 			.name = "diff1_mux",
 			.ops = &vc3_clk_mux_ops,
-			.parent_hws = (const struct clk_hw *[]) {
-				&clk_div[VC3_DIV1].hw,
-				&clk_div[VC3_DIV3].hw
-			},
+			.parent_data = clk_mux_parent_data[VC3_DIFF1_MUX],
 			.num_parents = 2,
 			.flags = CLK_SET_RATE_PARENT
 		}
@@ -972,10 +983,7 @@ static struct vc3_hw_data clk_mux[] = {
 		.hw.init = &(struct clk_init_data) {
 			.name = "diff2_mux",
 			.ops = &vc3_clk_mux_ops,
-			.parent_hws = (const struct clk_hw *[]) {
-				&clk_div[VC3_DIV1].hw,
-				&clk_div[VC3_DIV3].hw
-			},
+			.parent_data = clk_mux_parent_data[VC3_DIFF2_MUX],
 			.num_parents = 2,
 			.flags = CLK_SET_RATE_PARENT
 		}
