@@ -7,6 +7,7 @@
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/dmaengine.h>
+#include <linux/firmware/imx/sm.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/pinctrl/consumer.h>
@@ -1429,6 +1430,7 @@ static int fsl_sai_probe(struct platform_device *pdev)
 	int irq, ret, i;
 	int index;
 	u32 dmas[4];
+	u32 val;
 
 	sai = devm_kzalloc(dev, sizeof(*sai), GFP_KERNEL);
 	if (!sai)
@@ -1597,6 +1599,21 @@ static int fsl_sai_probe(struct platform_device *pdev)
 	ret = pm_runtime_put_sync(dev);
 	if (ret < 0 && ret != -ENOSYS)
 		goto err_pm_get_sync;
+
+	if (of_property_present(np, "fsl,sai-amix-mode") &&
+	    of_device_is_compatible(np, "fsl,imx952-sai")) {
+		ret = of_property_read_u32(np, "fsl,sai-amix-mode", &val);
+		if (ret || val > 1) {
+			dev_err_probe(dev, ret, "Invalid audmix mode\n");
+			goto err_pm_get_sync;
+		}
+
+		ret = scmi_imx_misc_ctrl_set(SCMI_IMX952_CTRL_BYPASS_AUDMIX, val);
+		if (ret) {
+			dev_err_probe(dev, ret, "Error setting audmix mode\n");
+			goto err_pm_get_sync;
+		}
+	}
 
 	/*
 	 * Register platform component before registering cpu dai for there
