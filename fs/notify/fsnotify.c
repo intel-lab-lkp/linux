@@ -34,62 +34,31 @@ void __fsnotify_mntns_delete(struct mnt_namespace *mntns)
 }
 
 /**
- * fsnotify_unmount_inodes - an sb is unmounting.  handle any watched inodes.
- * @sb: superblock being unmounted.
+ * fsnotify_unmount_inodes - an sb is unmounting. Handle any watched inodes.
+ * @sbinfo: fsnotify info for superblock being unmounted.
  *
- * Called during unmount with no locks held, so needs to be safe against
- * concurrent modifiers. We temporarily drop sb->s_inode_list_lock and CAN block.
+ * Walk all inode connectors for the superblock and free all associated marks.
  */
-static void fsnotify_unmount_inodes(struct super_block *sb)
+static void fsnotify_unmount_inodes(struct fsnotify_sb_info *sbinfo)
 {
-	struct inode *inode, *iput_inode = NULL;
+	struct fsnotify_mark_connector *conn;
+	struct inode *inode;
 
-	spin_lock(&sb->s_inode_list_lock);
-	list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
-		/*
-		 * We cannot __iget() an inode in state I_FREEING,
-		 * I_WILL_FREE, or I_NEW which is fine because by that point
-		 * the inode cannot have any associated watches.
-		 */
-		spin_lock(&inode->i_lock);
-		if (inode_state_read(inode) & (I_FREEING | I_WILL_FREE | I_NEW)) {
-			spin_unlock(&inode->i_lock);
-			continue;
-		}
-
-		/*
-		 * If i_count is zero, the inode cannot have any watches and
-		 * doing an __iget/iput with SB_ACTIVE clear would actually
-		 * evict all inodes with zero i_count from icache which is
-		 * unnecessarily violent and may in fact be illegal to do.
-		 * However, we should have been called /after/ evict_inodes
-		 * removed all zero refcount inodes, in any case.  Test to
-		 * be sure.
-		 */
-		if (!icount_read(inode)) {
-			spin_unlock(&inode->i_lock);
-			continue;
-		}
-
-		__iget(inode);
-		spin_unlock(&inode->i_lock);
-		spin_unlock(&sb->s_inode_list_lock);
-
-		iput(iput_inode);
-
-		/* for each watch, send FS_UNMOUNT and then remove it */
+	spin_lock(&sbinfo->list_lock);
+	while (!list_empty(&sbinfo->inode_conn_list)) {
+		conn = fsnotify_inode_connector_from_list(
+						sbinfo->inode_conn_list.next);
+		/* All connectors on the list are still attached to an inode */
+		inode = conn->obj;
+		ihold(inode);
+		spin_unlock(&sbinfo->list_lock);
 		fsnotify_inode(inode, FS_UNMOUNT);
-
-		fsnotify_inode_delete(inode);
-
-		iput_inode = inode;
-
+		fsnotify_clear_marks_by_inode(inode);
+		iput(inode);
 		cond_resched();
-		spin_lock(&sb->s_inode_list_lock);
+		spin_lock(&sbinfo->list_lock);
 	}
-	spin_unlock(&sb->s_inode_list_lock);
-
-	iput(iput_inode);
+	spin_unlock(&sbinfo->list_lock);
 }
 
 void fsnotify_sb_delete(struct super_block *sb)
@@ -100,7 +69,7 @@ void fsnotify_sb_delete(struct super_block *sb)
 	if (!sbinfo)
 		return;
 
-	fsnotify_unmount_inodes(sb);
+	fsnotify_unmount_inodes(sbinfo);
 	fsnotify_clear_marks_by_sb(sb);
 	/* Wait for outstanding object references from connectors */
 	wait_var_event(fsnotify_sb_watched_objects(sb),
