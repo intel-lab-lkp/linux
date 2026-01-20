@@ -935,8 +935,6 @@ static void gbaudio_codec_cleanup(struct gbaudio_module_info *module)
 void gbaudio_unregister_module(struct gbaudio_module_info *module)
 {
 	struct snd_soc_component *comp = gbcodec->component;
-	struct gbaudio_jack *jack, *n;
-	int mask;
 
 	dev_dbg(comp->dev, "Unregister %s module\n", module->name);
 
@@ -948,6 +946,8 @@ void gbaudio_unregister_module(struct gbaudio_module_info *module)
 	mutex_unlock(&gbcodec->lock);
 
 #ifdef CONFIG_SND_JACK
+	struct gbaudio_jack *jack, *n;
+	int mask;
 	/* free jack devices for this module jack_list */
 	list_for_each_entry_safe(jack, n, &module->jack_list, list) {
 		if (jack == &module->headset)
