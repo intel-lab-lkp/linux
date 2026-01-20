@@ -185,6 +185,7 @@ bool is_swiotlb_active(struct device *dev);
 void __init swiotlb_adjust_size(unsigned long size);
 phys_addr_t default_swiotlb_base(void);
 phys_addr_t default_swiotlb_limit(void);
+bool force_swiotlb_bounce(void);
 #else
 static inline void swiotlb_init(bool addressing_limited, unsigned int flags)
 {
@@ -234,6 +235,12 @@ static inline phys_addr_t default_swiotlb_limit(void)
 {
 	return 0;
 }
+
+static inline bool force_swiotlb_bounce(void)
+{
+	return false;
+}
+
 #endif /* CONFIG_SWIOTLB */
 
 phys_addr_t swiotlb_tbl_map_single(struct device *hwdev, phys_addr_t phys,

@@ -1644,6 +1644,11 @@ phys_addr_t default_swiotlb_base(void)
 	return io_tlb_default_mem.defpool.start;
 }
 
+bool force_swiotlb_bounce(void)
+{
+	return swiotlb_force_bounce;
+}
+
 /**
  * default_swiotlb_limit() - get the address limit of the default SWIOTLB
  *
