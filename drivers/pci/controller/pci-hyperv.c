@@ -660,15 +660,17 @@ static void hv_irq_retarget_interrupt(struct irq_data *data)
 
 	params = *this_cpu_ptr(hyperv_pcpu_input_arg);
 	memset(params, 0, sizeof(*params));
-	params->partition_id = HV_PARTITION_ID_SELF;
+
+	if (hv_pcidev_is_attached_dev(pdev))
+		params->partition_id = hv_iommu_get_curr_partid();
+	else
+		params->partition_id = HV_PARTITION_ID_SELF;
+
 	params->int_entry.source = HV_INTERRUPT_SOURCE_MSI;
-	params->int_entry.msi_entry.address.as_uint32 = int_desc->address & 0xffffffff;
+	params->int_entry.msi_entry.address.as_uint32 =
+						int_desc->address & 0xffffffff;
 	params->int_entry.msi_entry.data.as_uint32 = int_desc->data;
-	params->device_id = (hbus->hdev->dev_instance.b[5] << 24) |
-			   (hbus->hdev->dev_instance.b[4] << 16) |
-			   (hbus->hdev->dev_instance.b[7] << 8) |
-			   (hbus->hdev->dev_instance.b[6] & 0xf8) |
-			   PCI_FUNC(pdev->devfn);
+	params->device_id = hv_pci_vmbus_device_id(pdev);
 	params->int_target.vector = hv_msi_get_int_vector(data);
 
 	if (hbus->protocol_version >= PCI_PROTOCOL_VERSION_1_2) {
@@ -1263,6 +1265,15 @@ static void _hv_pcifront_read_config(struct hv_pci_dev *hpdev, int where,
 			mb();
 		}
 		spin_unlock_irqrestore(&hbus->config_lock, flags);
+		/*
+		 * Make sure PCI_INTERRUPT_PIN is hard-wired to 0 since it may
+		 * be read using a 32bit read which is skipped by the above
+		 * emulation.
+		 */
+		if (PCI_INTERRUPT_PIN >= where &&
+		    PCI_INTERRUPT_PIN <= (where + size)) {
+			*((char *)val + PCI_INTERRUPT_PIN - where) = 0;
+		}
 	} else {
 		dev_err(dev, "Attempt to read beyond a function's config space.\n");
 	}
@@ -1731,14 +1742,22 @@ static void hv_msi_free(struct irq_domain *domain, unsigned int irq)
 	if (!int_desc)
 		return;
 
-	irq_data->chip_data = NULL;
 	hpdev = get_pcichild_wslot(hbus, devfn_to_wslot(pdev->devfn));
 	if (!hpdev) {
+		irq_data->chip_data = NULL;
 		kfree(int_desc);
 		return;
 	}
 
-	hv_int_desc_free(hpdev, int_desc);
+	if (hv_pcidev_is_attached_dev(pdev)) {
+		hv_unmap_msi_interrupt(pdev, irq_data->chip_data);
+		kfree(irq_data->chip_data);
+		irq_data->chip_data = NULL;
+	} else {
+		irq_data->chip_data = NULL;
+		hv_int_desc_free(hpdev, int_desc);
+	}
+
 	put_pcichild(hpdev);
 }
 
@@ -2139,6 +2158,56 @@ return_null_message:
 	msg->data = 0;
 }
 
+/* Compose an msi message for a directly attached device */
+static void hv_dda_compose_msi_msg(struct irq_data *irq_data,
+				   struct msi_desc *msi_desc,
+				   struct msi_msg *msg)
+{
+	bool multi_msi;
+	struct hv_pcibus_device *hbus;
+	struct hv_pci_dev *hpdev;
+	struct pci_dev *pdev = msi_desc_to_pci_dev(msi_desc);
+
+	multi_msi = !msi_desc->pci.msi_attrib.is_msix &&
+		    msi_desc->nvec_used > 1;
+
+	if (multi_msi) {
+		dev_err(&hbus->hdev->device,
+			"Passthru direct attach does not support multi msi\n");
+		goto outerr;
+	}
+
+	hbus = container_of(pdev->bus->sysdata, struct hv_pcibus_device,
+			    sysdata);
+
+	hpdev = get_pcichild_wslot(hbus, devfn_to_wslot(pdev->devfn));
+	if (!hpdev)
+		goto outerr;
+
+	/* will unmap if needed and also update irq_data->chip_data */
+	hv_irq_compose_msi_msg(irq_data, msg);
+
+	put_pcichild(hpdev);
+	return;
+
+outerr:
+	memset(msg, 0, sizeof(*msg));
+}
+
+static void hv_compose_msi_msg(struct irq_data *data, struct msi_msg *msg)
+{
+	struct pci_dev *pdev;
+	struct msi_desc *msi_desc;
+
+	msi_desc = irq_data_get_msi_desc(data);
+	pdev = msi_desc_to_pci_dev(msi_desc);
+
+	if (hv_pcidev_is_attached_dev(pdev))
+		hv_dda_compose_msi_msg(data, msi_desc, msg);
+	else
+		hv_vmbus_compose_msi_msg(data, msg);
+}
+
 static bool hv_pcie_init_dev_msi_info(struct device *dev, struct irq_domain *domain,
 				      struct irq_domain *real_parent, struct msi_domain_info *info)
 {
@@ -2177,7 +2246,7 @@ static const struct msi_parent_ops hv_pcie_msi_parent_ops = {
 /* HW Interrupt Chip Descriptor */
 static struct irq_chip hv_msi_irq_chip = {
 	.name			= "Hyper-V PCIe MSI",
-	.irq_compose_msi_msg	= hv_vmbus_compose_msi_msg,
+	.irq_compose_msi_msg	= hv_compose_msi_msg,
 	.irq_set_affinity	= irq_chip_set_affinity_parent,
 	.irq_ack		= irq_chip_ack_parent,
 	.irq_eoi		= irq_chip_eoi_parent,
@@ -4096,7 +4165,7 @@ static int hv_pci_restore_msi_msg(struct pci_dev *pdev, void *arg)
 		irq_data = irq_get_irq_data(entry->irq);
 		if (WARN_ON_ONCE(!irq_data))
 			return -EINVAL;
-		hv_vmbus_compose_msi_msg(irq_data, &entry->msg);
+		hv_compose_msi_msg(irq_data, &entry->msg);
 	}
 	return 0;
 }

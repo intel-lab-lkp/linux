@@ -53,6 +53,21 @@ static inline u64 hv_get_non_nested_msr(unsigned int reg)
 	return hv_get_msr(reg);
 }
 
+struct irq_data;
+struct msi_msg;
+struct pci_dev;
+static inline void hv_irq_compose_msi_msg(struct irq_data *data,
+					  struct msi_msg *msg) {};
+static inline int hv_unmap_msi_interrupt(struct pci_dev *pdev,
+					struct hv_interrupt_entry *hvirqe)
+{
+	return -EOPNOTSUPP;
+}
+static inline bool hv_pcidev_is_attached_dev(struct pci_dev *pdev)
+{
+	return false;
+}
+
 /* SMCCC hypercall parameters */
 #define HV_SMCCC_FUNC_NUMBER	1
 #define HV_FUNC_ID	ARM_SMCCC_CALL_VAL(			\

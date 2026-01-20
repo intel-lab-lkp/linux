@@ -13,6 +13,16 @@
 #include <linux/irqchip/irq-msi-lib.h>
 #include <asm/mshyperv.h>
 
+/*
+ * For direct attached devices (which use logical device ids), hypervisor will
+ * not allow mappings to host. But VFIO needs to bind the interrupt at the very
+ * start before the guest cpu/vector is known. So we use dummy cpu and vector
+ * to bind in such case, and later when the guest starts, retarget will move it
+ * to correct guest cpu and vector.
+ */
+#define HV_DDA_DUMMY_CPU      0
+#define HV_DDA_DUMMY_VECTOR  32
+
 static u64 hv_map_interrupt_hcall(u64 ptid, union hv_device_id hv_devid,
 				  bool level, int cpu, int vector,
 				  struct hv_interrupt_entry *ret_entry)
@@ -23,6 +33,11 @@ static u64 hv_map_interrupt_hcall(u64 ptid, union hv_device_id hv_devid,
 	unsigned long flags;
 	u64 status;
 	int nr_bank, var_size;
+
+	if (hv_devid.device_type == HV_DEVICE_TYPE_LOGICAL) {
+		cpu = HV_DDA_DUMMY_CPU;
+		vector = HV_DDA_DUMMY_VECTOR;
+	}
 
 	local_irq_save(flags);
 
@@ -95,7 +110,8 @@ static int hv_map_interrupt(u64 ptid, union hv_device_id device_id, bool level,
 	return hv_result_to_errno(status);
 }
 
-static int hv_unmap_interrupt(u64 id, struct hv_interrupt_entry *irq_entry)
+static int hv_unmap_interrupt(union hv_device_id hv_devid,
+			      struct hv_interrupt_entry *irq_entry)
 {
 	unsigned long flags;
 	struct hv_input_unmap_device_interrupt *input;
@@ -103,10 +119,14 @@ static int hv_unmap_interrupt(u64 id, struct hv_interrupt_entry *irq_entry)
 
 	local_irq_save(flags);
 	input = *this_cpu_ptr(hyperv_pcpu_input_arg);
-
 	memset(input, 0, sizeof(*input));
-	input->partition_id = hv_current_partition_id;
-	input->device_id = id;
+
+	if (hv_devid.device_type == HV_DEVICE_TYPE_LOGICAL)
+		input->partition_id = hv_iommu_get_curr_partid();
+	else
+		input->partition_id = hv_current_partition_id;
+
+	input->device_id = hv_devid.as_uint64;
 	input->interrupt_entry = *irq_entry;
 
 	status = hv_do_hypercall(HVCALL_UNMAP_DEVICE_INTERRUPT, input, NULL);
@@ -263,6 +283,7 @@ static u64 hv_build_irq_devid(struct pci_dev *pdev)
 int hv_map_msi_interrupt(struct irq_data *data,
 			 struct hv_interrupt_entry *out_entry)
 {
+	u64 ptid;
 	struct irq_cfg *cfg = irqd_cfg(data);
 	struct hv_interrupt_entry dummy;
 	union hv_device_id hv_devid;
@@ -275,8 +296,17 @@ int hv_map_msi_interrupt(struct irq_data *data,
 	hv_devid.as_uint64 = hv_build_irq_devid(pdev);
 	cpu = cpumask_first(irq_data_get_effective_affinity_mask(data));
 
-	return hv_map_interrupt(hv_current_partition_id, hv_devid, false, cpu,
-				cfg->vector, out_entry ? out_entry : &dummy);
+	if (hv_devid.device_type == HV_DEVICE_TYPE_LOGICAL)
+		if (hv_pcidev_is_attached_dev(pdev))
+			ptid = hv_iommu_get_curr_partid();
+		else
+			/* Device actually on l1vh root, not passthru'd to vm */
+			ptid = hv_current_partition_id;
+	else
+		ptid = hv_current_partition_id;
+
+	return hv_map_interrupt(ptid, hv_devid, false, cpu, cfg->vector,
+				out_entry ? out_entry : &dummy);
 }
 EXPORT_SYMBOL_GPL(hv_map_msi_interrupt);
 
@@ -289,10 +319,7 @@ static void entry_to_msi_msg(struct hv_interrupt_entry *entry,
 	msg->data = entry->msi_entry.data.as_uint32;
 }
 
-static int hv_unmap_msi_interrupt(struct pci_dev *pdev,
-				  struct hv_interrupt_entry *irq_entry);
-
-static void hv_irq_compose_msi_msg(struct irq_data *data, struct msi_msg *msg)
+void hv_irq_compose_msi_msg(struct irq_data *data, struct msi_msg *msg)
 {
 	struct hv_interrupt_entry *stored_entry;
 	struct irq_cfg *cfg = irqd_cfg(data);
@@ -341,16 +368,18 @@ static void hv_irq_compose_msi_msg(struct irq_data *data, struct msi_msg *msg)
 	data->chip_data = stored_entry;
 	entry_to_msi_msg(data->chip_data, msg);
 }
+EXPORT_SYMBOL_GPL(hv_irq_compose_msi_msg);
 
-static int hv_unmap_msi_interrupt(struct pci_dev *pdev,
-				  struct hv_interrupt_entry *irq_entry)
+int hv_unmap_msi_interrupt(struct pci_dev *pdev,
+			   struct hv_interrupt_entry *irq_entry)
 {
 	union hv_device_id hv_devid;
 
 	hv_devid.as_uint64 = hv_build_irq_devid(pdev);
 
-	return hv_unmap_interrupt(hv_devid.as_uint64, irq_entry);
+	return hv_unmap_interrupt(hv_devid, irq_entry);
 }
+EXPORT_SYMBOL_GPL(hv_unmap_msi_interrupt);
 
 /* NB: during map, hv_interrupt_entry is saved via data->chip_data */
 static void hv_teardown_msi_irq(struct pci_dev *pdev, struct irq_data *irqd)
@@ -486,7 +515,7 @@ int hv_unmap_ioapic_interrupt(int ioapic_id, struct hv_interrupt_entry *entry)
 	hv_devid.device_type = HV_DEVICE_TYPE_IOAPIC;
 	hv_devid.ioapic.ioapic_id = (u8)ioapic_id;
 
-	return hv_unmap_interrupt(hv_devid.as_uint64, entry);
+	return hv_unmap_interrupt(hv_devid, entry);
 }
 EXPORT_SYMBOL_GPL(hv_unmap_ioapic_interrupt);
 
