@@ -9,6 +9,7 @@ use r570_144 as bindings;
 use core::ops::Range;
 
 use kernel::{
+    bitfield,
     dma::CoherentAllocation,
     fmt,
     prelude::*,
@@ -762,8 +763,8 @@ unsafe impl AsBytes for MsgqRxHeader {}
 
 bitfield! {
     struct MsgHeaderVersion(u32) {
-        31:24 major as u8;
-        23:16 minor as u8;
+        31:24 major;
+        23:16 minor;
     }
 }
 
