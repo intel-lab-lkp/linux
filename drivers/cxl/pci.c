@@ -963,7 +963,8 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		dev_dbg(&pdev->dev, "RAS registers not found\n");
 
 	rc = cxl_map_component_regs(&cxlds->reg_map, &cxlds->regs.component,
-				    BIT(CXL_CM_CAP_CAP_ID_RAS));
+				    BIT(CXL_CM_CAP_CAP_ID_RAS) |
+				    BIT(CXL_CM_CAP_CAP_ID_IDE));
 	if (rc)
 		dev_dbg(&pdev->dev, "Failed to map RAS capability.\n");
 
@@ -1210,18 +1211,126 @@ static int cxl_restore_dvsec_state(struct pci_dev *pdev,
 	return rc;
 }
 
+/*
+ * CXL HDM Decoder register save/restore
+ */
+static int cxl_save_hdm_state(struct cxl_dev_state *cxlds,
+			      struct cxl_type2_saved_state *state)
+{
+	void __iomem *hdm = cxlds->regs.hdm_decoder;
+	u32 cap, ctrl;
+	int i, count;
+
+	if (!hdm)
+		return 0;
+
+	cap = readl(hdm + CXL_HDM_DECODER_CAP_OFFSET);
+	count = cap & CXL_HDM_DECODER_COUNT_MASK;
+	count = min(count, CXL_MAX_DECODERS);
+
+	state->hdm_decoder_count = count;
+	state->hdm_global_ctrl = readl(hdm + CXL_HDM_DECODER_GLOBAL_CTRL_OFFSET);
+
+	for (i = 0; i < count; i++) {
+		struct cxl_hdm_decoder_state *d = &state->decoders[i];
+		u32 base_low, base_high, size_low, size_high;
+		u32 dpa_skip_low, dpa_skip_high;
+
+		base_low = readl(hdm + CXL_HDM_DECODER_BASE_LOW(i));
+		base_high = readl(hdm + CXL_HDM_DECODER_BASE_HIGH(i));
+		size_low = readl(hdm + CXL_HDM_DECODER_SIZE_LOW(i));
+		size_high = readl(hdm + CXL_HDM_DECODER_SIZE_HIGH(i));
+		ctrl = readl(hdm + CXL_HDM_DECODER_CTRL(i));
+		dpa_skip_low = readl(hdm + CXL_HDM_DECODER_DPA_SKIP_LOW(i));
+		dpa_skip_high = readl(hdm + CXL_HDM_DECODER_DPA_SKIP_HIGH(i));
+
+		d->base = ((u64)base_high << 32) | base_low;
+		d->size = ((u64)size_high << 32) | size_low;
+		d->ctrl = ctrl;
+		d->dpa_skip = ((u64)dpa_skip_high << 32) | dpa_skip_low;
+		d->enabled = !!(ctrl & CXL_HDM_DECODER_ENABLE);
+	}
+
+	return 0;
+}
+
+static int cxl_restore_hdm_state(struct cxl_dev_state *cxlds,
+				 const struct cxl_type2_saved_state *state)
+{
+	void __iomem *hdm = cxlds->regs.hdm_decoder;
+	int i;
+
+	if (!hdm || state->hdm_decoder_count == 0)
+		return 0;
+
+	writel(state->hdm_global_ctrl, hdm + CXL_HDM_DECODER_GLOBAL_CTRL_OFFSET);
+
+	for (i = 0; i < state->hdm_decoder_count; i++) {
+		const struct cxl_hdm_decoder_state *d = &state->decoders[i];
+
+		writel((u32)d->base, hdm + CXL_HDM_DECODER_BASE_LOW(i));
+		writel((u32)(d->base >> 32), hdm + CXL_HDM_DECODER_BASE_HIGH(i));
+		writel((u32)d->size, hdm + CXL_HDM_DECODER_SIZE_LOW(i));
+		writel((u32)(d->size >> 32), hdm + CXL_HDM_DECODER_SIZE_HIGH(i));
+		writel(d->ctrl, hdm + CXL_HDM_DECODER_CTRL(i));
+		writel((u32)d->dpa_skip, hdm + CXL_HDM_DECODER_DPA_SKIP_LOW(i));
+		writel((u32)(d->dpa_skip >> 32), hdm + CXL_HDM_DECODER_DPA_SKIP_HIGH(i));
+	}
+
+	return 0;
+}
+
+/*
+ * CXL IDE register save/restore
+ */
+static int cxl_save_ide_state(struct cxl_dev_state *cxlds,
+			      struct cxl_type2_saved_state *state)
+{
+	void __iomem *ide = cxlds->regs.ide;
+	u32 cap;
+
+	if (!ide)
+		return 0;
+
+	cap = readl(ide + CXL_IDE_CAP_OFFSET);
+	if (!(cap & CXL_IDE_CAP_CAPABLE))
+		return 0;
+
+	state->ide_cap = cap;
+	state->ide_ctrl = readl(ide + CXL_IDE_CTRL_OFFSET);
+	state->ide_key_refresh_time = readl(ide + CXL_IDE_KEY_REFRESH_TIME_CTRL_OFFSET);
+	state->ide_truncation_delay = readl(ide + CXL_IDE_TRUNCATION_DELAY_CTRL_OFFSET);
+
+	return 0;
+}
+
+static int cxl_restore_ide_state(struct cxl_dev_state *cxlds,
+				 const struct cxl_type2_saved_state *state)
+{
+	void __iomem *ide = cxlds->regs.ide;
+
+	if (!ide || !(state->ide_cap & CXL_IDE_CAP_CAPABLE))
+		return 0;
+
+	writel(state->ide_ctrl, ide + CXL_IDE_CTRL_OFFSET);
+	writel(state->ide_key_refresh_time, ide + CXL_IDE_KEY_REFRESH_TIME_CTRL_OFFSET);
+	writel(state->ide_truncation_delay, ide + CXL_IDE_TRUNCATION_DELAY_CTRL_OFFSET);
+
+	return 0;
+}
+
 /**
  * cxl_config_save_state - Save CXL configuration state
  * @pdev: PCI device
  * @state: Structure to store saved state
  *
- * Saves CXL DVSEC state before reset.
+ * Saves CXL DVSEC, HDM decoder, and IDE state before reset.
  */
 int cxl_config_save_state(struct pci_dev *pdev,
 			  struct cxl_type2_saved_state *state)
 {
 	struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
-	int dvsec;
+	int rc, dvsec;
 
 	if (!cxlds || !state)
 		return -EINVAL;
@@ -1232,7 +1341,23 @@ int cxl_config_save_state(struct pci_dev *pdev,
 	if (!dvsec)
 		return -ENODEV;
 
-	return cxl_save_dvsec_state(pdev, state, dvsec);
+	rc = cxl_save_dvsec_state(pdev, state, dvsec);
+	if (rc)
+		return rc;
+
+	if (cxlds->regs.hdm_decoder) {
+		rc = cxl_save_hdm_state(cxlds, state);
+		if (rc)
+			pci_warn(pdev, "Failed to save HDM state: %d\n", rc);
+	}
+
+	if (cxlds->regs.ide) {
+		rc = cxl_save_ide_state(cxlds, state);
+		if (rc)
+			pci_warn(pdev, "Failed to save IDE state: %d\n", rc);
+	}
+
+	return 0;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_config_save_state, "CXL");
 
@@ -1241,7 +1366,7 @@ EXPORT_SYMBOL_NS_GPL(cxl_config_save_state, "CXL");
  * @pdev: PCI device
  * @state: Previously saved state
  *
- * Restores CXL DVSEC state after reset.
+ * Restores CXL DVSEC, HDM decoder, and IDE state after reset.
  */
 int cxl_config_restore_state(struct pci_dev *pdev,
 			     const struct cxl_type2_saved_state *state)
@@ -1264,7 +1389,23 @@ int cxl_config_restore_state(struct pci_dev *pdev,
 
 	config_locked = !!(lock_reg & CXL_DVSEC_LOCK_CONFIG_LOCK);
 
-	return cxl_restore_dvsec_state(pdev, state, dvsec, config_locked);
+	rc = cxl_restore_dvsec_state(pdev, state, dvsec, config_locked);
+	if (rc)
+		return rc;
+
+	if (cxlds->regs.hdm_decoder && state->hdm_decoder_count > 0) {
+		rc = cxl_restore_hdm_state(cxlds, state);
+		if (rc)
+			pci_warn(pdev, "Failed to restore HDM state: %d\n", rc);
+	}
+
+	if (cxlds->regs.ide && (state->ide_cap & CXL_IDE_CAP_CAPABLE)) {
+		rc = cxl_restore_ide_state(cxlds, state);
+		if (rc)
+			pci_warn(pdev, "Failed to restore IDE state: %d\n", rc);
+	}
+
+	return 0;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_config_restore_state, "CXL");
 
