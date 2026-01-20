@@ -233,16 +233,19 @@ struct rtable *udp_tunnel_dst_lookup(struct sk_buff *skb,
 				     __be32 *saddr,
 				     const struct ip_tunnel_key *key,
 				     __be16 sport, __be16 dport, u8 tos,
-				     struct dst_cache *dst_cache)
+				     struct dst_cache *dst_cache,
+				     bool *noref)
 {
 	struct rtable *rt = NULL;
 	struct flowi4 fl4;
 
 #ifdef CONFIG_DST_CACHE
 	if (dst_cache) {
-		rt = dst_cache_get_ip4(dst_cache, saddr);
-		if (rt)
+		rt = dst_cache_get_ip4_rcu(dst_cache, saddr);
+		if (rt) {
+			*noref = true;
 			return rt;
+		}
 	}
 #endif
 
@@ -267,9 +270,12 @@ struct rtable *udp_tunnel_dst_lookup(struct sk_buff *skb,
 		ip_rt_put(rt);
 		return ERR_PTR(-ELOOP);
 	}
+	*noref = false;
 #ifdef CONFIG_DST_CACHE
-	if (dst_cache)
-		dst_cache_set_ip4(dst_cache, &rt->dst, fl4.saddr);
+	if (dst_cache) {
+		dst_cache_steal_ip4(dst_cache, &rt->dst, fl4.saddr);
+		*noref = true;
+	}
 #endif
 	*saddr = fl4.saddr;
 	return rt;

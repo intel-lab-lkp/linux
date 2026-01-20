@@ -126,6 +126,7 @@ EXPORT_SYMBOL_GPL(udp_tunnel6_xmit_skb);
  *      @dport: UDP destination port
  *      @dsfield: The traffic class field
  *      @dst_cache: The dst cache to use for lookup
+ *      @noref: Is the returned dst noref?
  *      This function performs a route lookup on a UDP tunnel
  *
  *      It returns a valid dst pointer and stores src address to be used in
@@ -140,16 +141,19 @@ struct dst_entry *udp_tunnel6_dst_lookup(struct sk_buff *skb,
 					 struct in6_addr *saddr,
 					 const struct ip_tunnel_key *key,
 					 __be16 sport, __be16 dport, u8 dsfield,
-					 struct dst_cache *dst_cache)
+					 struct dst_cache *dst_cache,
+					 bool *noref)
 {
 	struct dst_entry *dst = NULL;
 	struct flowi6 fl6;
 
 #ifdef CONFIG_DST_CACHE
 	if (dst_cache) {
-		dst = dst_cache_get_ip6(dst_cache, saddr);
-		if (dst)
+		dst = dst_cache_get_ip6_rcu(dst_cache, saddr);
+		if (dst) {
+			*noref = true;
 			return dst;
+		}
 	}
 #endif
 	memset(&fl6, 0, sizeof(fl6));
@@ -173,9 +177,12 @@ struct dst_entry *udp_tunnel6_dst_lookup(struct sk_buff *skb,
 		dst_release(dst);
 		return ERR_PTR(-ELOOP);
 	}
+	*noref = false;
 #ifdef CONFIG_DST_CACHE
-	if (dst_cache)
-		dst_cache_set_ip6(dst_cache, dst, &fl6.saddr);
+	if (dst_cache) {
+		dst_cache_steal_ip6(dst_cache, dst, &fl6.saddr);
+		*noref = true;
+	}
 #endif
 	*saddr = fl6.saddr;
 	return dst;
