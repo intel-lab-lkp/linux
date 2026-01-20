@@ -125,8 +125,24 @@ netns_ping() { # (netns, args...)
 }
 
 clear_counters() {
-	[ -n "$iptables" ] && ip netns exec "$ns2" "$iptables" -t raw -Z
-	[ -n "$ip6tables" ] && ip netns exec "$ns2" "$ip6tables" -t raw -Z
+	if [ -n "$iptables" ]; then
+		if ! ip netns exec "$ns2" "$iptables" -t raw -Z 2>/dev/null; then
+			ip netns exec "$ns2" "$iptables" -L PREROUTING -t raw -n --line-numbers | \
+			awk '$1+0>0 {print $1}' | \
+			while read rulenum; do
+				ip netns exec "$ns2" "$iptables" -t raw -Z PREROUTING "$rulenum" 2>/dev/null
+			done
+		fi
+	fi
+	if [ -n "$ip6tables" ]; then
+		if ! ip netns exec "$ns2" "$ip6tables" -t raw -Z 2>/dev/null; then
+			ip netns exec "$ns2" "$ip6tables" -L PREROUTING -t raw -n --line-numbers | \
+			awk '$1+0>0 {print $1}' | \
+			while read rulenum; do
+				ip netns exec "$ns2" "$ip6tables" -t raw -Z PREROUTING "$rulenum" 2>/dev/null
+			done
+		fi
+	fi
 	if [ -n "$nft" ]; then
 		(
 			echo "delete table inet t";
