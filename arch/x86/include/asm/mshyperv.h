@@ -189,16 +189,17 @@ static inline void hv_apic_init(void) {}
 #endif
 
 #if IS_ENABLED(CONFIG_HYPERV_IOMMU)
-static inline bool hv_pcidev_is_attached_dev(struct pci_dev *pdev)
-{ return false; }       /* temporary */
+bool hv_pcidev_is_attached_dev(struct pci_dev *pdev);
 u64 hv_build_devid_oftype(struct pci_dev *pdev, enum hv_device_type type);
+u64 hv_iommu_get_curr_partid(void);
 #else	/* CONFIG_HYPERV_IOMMU */
 static inline bool hv_pcidev_is_attached_dev(struct pci_dev *pdev)
 { return false; }
-
 static inline u64 hv_build_devid_oftype(struct pci_dev *pdev,
 				       enum hv_device_type type)
 { return 0; }
+static inline u64 hv_iommu_get_curr_partid(void)
+{ return HV_PARTITION_ID_INVALID; }
 
 #endif	/* CONFIG_HYPERV_IOMMU */
 
