@@ -2162,7 +2162,7 @@ extern int group_balance_cpu(struct sched_group *sg);
 extern void update_sched_domain_debugfs(void);
 extern void dirty_sched_domain_sysctl(int cpu);
 
-extern int sched_update_scaling(void);
+extern void sched_update_scaling(void);
 
 static inline const struct cpumask *task_user_cpus(struct task_struct *p)
 {
