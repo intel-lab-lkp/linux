@@ -51,7 +51,7 @@
 			       PCI_STATUS_PARITY)
 
 /* Number of reset methods used in pci_reset_fn_methods array in pci.c */
-#define PCI_NUM_RESET_METHODS 8
+#define PCI_NUM_RESET_METHODS 9
 
 #define PCI_RESET_PROBE		true
 #define PCI_RESET_DO_RESET	false
@@ -1468,6 +1468,14 @@ int __must_check pci_resize_resource(struct pci_dev *dev, int i, int size,
 
 int pci_select_bars(struct pci_dev *dev, unsigned long flags);
 bool pci_device_is_present(struct pci_dev *pdev);
+#ifdef CONFIG_CXL_PCI
+bool cxl_is_type2_device(struct pci_dev *dev);
+#else
+static inline bool cxl_is_type2_device(struct pci_dev *dev)
+{
+	return false;
+}
+#endif
 void pci_ignore_hotplug(struct pci_dev *dev);
 struct pci_dev *pci_real_dma_dev(struct pci_dev *dev);
 int pci_status_get_and_clear_errors(struct pci_dev *pdev);
