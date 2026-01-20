@@ -211,6 +211,7 @@ void __init ms_hyperv_late_init(void);
 int hv_common_cpu_init(unsigned int cpu);
 int hv_common_cpu_die(unsigned int cpu);
 void hv_identify_partition_type(void);
+u64 mshv_pid_to_partid(pid_t tgid);
 
 /**
  * hv_cpu_number_to_vp_number() - Map CPU to VP.

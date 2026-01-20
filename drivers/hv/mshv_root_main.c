@@ -1823,6 +1823,20 @@ mshv_partition_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
+/* Given a process tgid, return partition id if it is a VMM process */
+u64 mshv_pid_to_partid(pid_t tgid)
+{
+	struct mshv_partition *pt;
+	int i;
+
+	hash_for_each_rcu(mshv_root.pt_htable, i, pt, pt_hnode)
+		if (pt->pt_vmm_tgid == tgid)
+			return pt->pt_id;
+
+	return HV_PARTITION_ID_INVALID;
+}
+EXPORT_SYMBOL_GPL(mshv_pid_to_partid);
+
 static int
 add_partition(struct mshv_partition *partition)
 {
@@ -1987,13 +2001,20 @@ mshv_ioctl_create_partition(void __user *user_arg, struct device *module_dev)
 		goto delete_partition;
 
 	ret = mshv_init_async_handler(partition);
-	if (!ret) {
-		ret = FD_ADD(O_CLOEXEC, anon_inode_getfile("mshv_partition",
-							   &mshv_partition_fops,
-							   partition, O_RDWR));
-		if (ret >= 0)
-			return ret;
-	}
+	if (ret)
+		goto rem_partition;
+
+	ret = FD_ADD(O_CLOEXEC, anon_inode_getfile("mshv_partition",
+						   &mshv_partition_fops,
+						   partition, O_RDWR));
+	if (ret < 0)
+		goto rem_partition;
+
+	partition->pt_vmm_tgid = current->tgid;
+
+	return ret;
+
+rem_partition:
 	remove_partition(partition);
 delete_partition:
 	hv_call_delete_partition(partition->pt_id);
