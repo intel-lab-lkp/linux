@@ -891,6 +891,7 @@ struct ixgbe_hw_caps {
 	u8 apm_wol_support;
 	u8 acpi_prog_mthd;
 	u8 proxy_support;
+	u8 eee_support;
 	bool nvm_update_pending_nvm;
 	bool nvm_update_pending_orom;
 	bool nvm_update_pending_netlist;
@@ -925,6 +926,12 @@ struct ixgbe_hw_caps {
 } __packed;
 
 #define IXGBE_OROM_CIV_SIGNATURE	"$CIV"
+
+#define IXGBE_EEE_SUPPORT_100BASE_TX	BIT(0)
+#define IXGBE_EEE_SUPPORT_1000BASE_T	BIT(1)
+#define IXGBE_EEE_SUPPORT_10GBASE_T	BIT(2)
+#define IXGBE_EEE_SUPPORT_5GBASE_T	BIT(3)
+#define IXGBE_EEE_SUPPORT_2_5GBASE_T	BIT(4)
 
 struct ixgbe_orom_civd_info {
 	u8 signature[4];	/* Must match ASCII '$CIV' characters */
