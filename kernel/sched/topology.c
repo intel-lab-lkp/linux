@@ -679,6 +679,9 @@ static void update_top_cache_domain(int cpu)
 	if (sd) {
 		id = cpumask_first(sched_domain_span(sd));
 		size = cpumask_weight(sched_domain_span(sd));
+
+		/* If sd_llc exists, sd_llc_shared should exist too. */
+		WARN_ON_ONCE(!sd->shared);
 		sds = sd->shared;
 	}
 
@@ -726,6 +729,13 @@ cpu_attach_domain(struct sched_domain *sd, struct root_domain *rd, int cpu)
 
 		if (sd_parent_degenerate(tmp, parent)) {
 			tmp->parent = parent->parent;
+
+			/* Pick reference to parent->shared. */
+			if (parent->shared) {
+				WARN_ON_ONCE(tmp->shared);
+				tmp->shared = parent->shared;
+				parent->shared = NULL;
+			}
 
 			if (parent->parent) {
 				parent->parent->child = tmp;
@@ -1732,16 +1742,6 @@ sd_init(struct sched_domain_topology_level *tl,
 		sd->cache_nice_tries = 1;
 	}
 
-	/*
-	 * For all levels sharing cache; connect a sched_domain_shared
-	 * instance.
-	 */
-	if (sd->flags & SD_SHARE_LLC) {
-		sd->shared = *per_cpu_ptr(sdd->sds, sd_id);
-		atomic_inc(&sd->shared->ref);
-		atomic_set(&sd->shared->nr_busy_cpus, sd_weight);
-	}
-
 	sd->private = sdd;
 
 	return sd;
@@ -2655,7 +2655,18 @@ build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *att
 		unsigned int imb_span = 1;
 
 		for (sd = *per_cpu_ptr(d.sd, i); sd; sd = sd->parent) {
+			struct sched_domain *parent = sd->parent;
 			struct sched_domain *child = sd->child;
+
+			/* Attach sd->shared to the topmost SD_SHARE_LLC domain. */
+			if ((sd->flags & SD_SHARE_LLC) &&
+			    (!parent || !(parent->flags & SD_SHARE_LLC))) {
+				int llc_id = cpumask_first(sched_domain_span(sd));
+
+				sd->shared = *per_cpu_ptr(d.sds, llc_id);
+				atomic_set(&sd->shared->nr_busy_cpus, sd->span_weight);
+				atomic_inc(&sd->shared->ref);
+			}
 
 			if (!(sd->flags & SD_SHARE_LLC) && child &&
 			    (child->flags & SD_SHARE_LLC)) {
@@ -2708,6 +2719,9 @@ build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *att
 	for (i = nr_cpumask_bits-1; i >= 0; i--) {
 		if (!cpumask_test_cpu(i, cpu_map))
 			continue;
+
+		if (atomic_read(&(*per_cpu_ptr(d.sds, i))->ref))
+			*per_cpu_ptr(d.sds, i) = NULL;
 
 		for (sd = *per_cpu_ptr(d.sd, i); sd; sd = sd->parent) {
 			claim_allocations(i, sd);
