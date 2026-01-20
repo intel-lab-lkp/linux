@@ -188,6 +188,8 @@ bool hv_vcpu_is_preempted(int vcpu);
 static inline void hv_apic_init(void) {}
 #endif
 
+u64 hv_pci_vmbus_device_id(struct pci_dev *pdev);
+
 struct irq_domain *hv_create_pci_msi_domain(void);
 
 int hv_map_msi_interrupt(struct irq_data *data,
