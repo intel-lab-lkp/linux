@@ -28,8 +28,10 @@ uint _rtw_pktfile_read(struct pkt_file *pfile, u8 *rmem, uint rlen)
 	len =  rtw_remainder_len(pfile);
 	len = (rlen > len) ? len : rlen;
 
-	if (rmem)
-		skb_copy_bits(pfile->pkt, pfile->buf_len - pfile->pkt_len, rmem, len);
+	if (rmem) {
+		if (skb_copy_bits(pfile->pkt, pfile->buf_len - pfile->pkt_len, rmem, len) != 0)
+			return 0;
+	}
 
 	pfile->cur_addr += len;
 	pfile->pkt_len -= len;
