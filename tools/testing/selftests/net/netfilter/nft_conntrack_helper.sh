@@ -60,6 +60,12 @@ table $family raw {
 		tcp dport 2121 ct helper set "ftp"
 	}
 }
+table $family filter {
+	chain forward {
+		type filter hook forward priority 0; policy accept;
+		ct state new,established,related accept
+	}
+}
 EOF
 	return $?
 }
