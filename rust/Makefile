@@ -95,8 +95,10 @@ quote-cfgs := \
 quote-skip_flags := \
     --edition=2021
 
+quote-edition := 2018
+
 quote-flags := \
-    --edition=2018 \
+    --edition=$(quote-edition) \
     --cap-lints=allow \
     --extern proc_macro2 \
     $(call cfgs-to-flags,$(quote-cfgs))
@@ -567,10 +569,12 @@ quiet_cmd_rustc_library = $(if $(skip_clippy),RUSTC,$(RUSTC_OR_CLIPPY_QUIET)) L 
 
 rust-analyzer:
 	$(Q)MAKEFLAGS= $(srctree)/scripts/generate_rust_analyzer.py \
-		--cfgs='core=$(core-cfgs)' $(core-edition) \
+		--cfgs='core=$(core-cfgs)' \
 		--cfgs='proc_macro2=$(proc_macro2-cfgs)' \
 		--cfgs='quote=$(quote-cfgs)' \
 		--cfgs='syn=$(syn-cfgs)' \
+		--editions='core=$(core-edition)' \
+		--editions='quote=$(quote-edition)' \
 		$(realpath $(srctree)) $(realpath $(objtree)) \
 		$(rustc_sysroot) $(RUST_LIB_SRC) $(if $(KBUILD_EXTMOD),$(srcroot)) \
 		> rust-project.json
