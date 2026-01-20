@@ -556,12 +556,12 @@ int dma_direct_supported(struct device *dev, u64 mask)
 
 	/*
 	 * This check needs to be against the actual bit mask value, so use
-	 * phys_to_dma_unencrypted() here so that the SME encryption mask isn't
+	 * __phys_to_dma() here so that the arch specific encryption mask isn't
 	 * part of the check.
 	 */
 	if (IS_ENABLED(CONFIG_ZONE_DMA))
 		min_mask = min_t(u64, min_mask, zone_dma_limit);
-	return mask >= phys_to_dma_unencrypted(dev, min_mask);
+	return mask >= __phys_to_dma(dev, min_mask);
 }
 
 static const struct bus_dma_region *dma_find_range(struct device *dev,
