@@ -551,6 +551,10 @@ properties:
       - description: RZ/G3L (R9A08G046)
         items:
           - enum:
+              - renesas,smarc2-evk # RZ SMARC Carrier-II EVK
+          - enum:
+              - renesas,rzg3l-smarcm # RZ/G3L SMARC Module (SoM)
+          - enum:
               - renesas,r9a08g046l26 # Dual Cortex-A55 + Cortex-M33 (14mm LFBGA)
               - renesas,r9a08g046l28 # Dual Cortex-A55 + Cortex-M33 (17mm LFBGA)
               - renesas,r9a08g046l46 # Quad Cortex-A55 + Cortex-M33 (14mm LFBGA)
