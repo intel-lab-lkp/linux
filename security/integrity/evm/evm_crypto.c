@@ -297,10 +297,12 @@ static int evm_calc_hmac_or_hash(struct dentry *dentry,
 	hmac_add_misc(desc, inode, type, data->digest);
 
 	if (inode != d_backing_inode(dentry) && iint) {
+		struct timespec64 ctime = {0};
+
 		if (IS_I_VERSION(inode))
 			i_version = inode_query_iversion(inode);
 		integrity_inode_attrs_store(&iint->metadata_inode, i_version,
-					    inode);
+					    ctime, inode);
 	}
 
 	/* Portable EVM signatures must include an IMA hash */
