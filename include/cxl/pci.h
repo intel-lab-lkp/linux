@@ -4,6 +4,18 @@
 #ifndef __CXL_ACCEL_PCI_H
 #define __CXL_ACCEL_PCI_H
 
+/* CXL Type 2 device state for save/restore across reset */
+struct cxl_type2_saved_state {
+	/* DVSEC registers */
+	u16 dvsec_ctrl;
+	u16 dvsec_ctrl2;
+};
+
+int cxl_config_save_state(struct pci_dev *pdev,
+			  struct cxl_type2_saved_state *state);
+int cxl_config_restore_state(struct pci_dev *pdev,
+			     const struct cxl_type2_saved_state *state);
+
 /*
  * See section 8.1 Configuration Space Registers in the CXL 2.0
  * Specification. Names are taken straight from the specification with "CXL" and
@@ -23,6 +35,7 @@
 #define     CXL_DVSEC_CXL_RST_MEM_CLR_CAPABLE	BIT(11)
 #define   CXL_DVSEC_CTRL_OFFSET		0xC
 #define     CXL_DVSEC_MEM_ENABLE	BIT(2)
+#define     CXL_DVSEC_CTRL_RWL_MASK	0x5FED
 #define   CXL_DVSEC_CTRL2_OFFSET	0x10
 #define     CXL_DVSEC_DISABLE_CACHING	BIT(0)
 #define     CXL_DVSEC_INIT_CACHE_WBI	BIT(1)
@@ -32,6 +45,8 @@
 #define     CXL_DVSEC_CACHE_INVALID	BIT(0)
 #define     CXL_DVSEC_CXL_RST_COMPLETE	BIT(1)
 #define     CXL_DVSEC_CXL_RESET_ERR	BIT(2)
+#define   CXL_DVSEC_LOCK_OFFSET		0x14
+#define     CXL_DVSEC_LOCK_CONFIG_LOCK	BIT(0)
 #define   CXL_DVSEC_RANGE_SIZE_HIGH(i)	(0x18 + ((i) * 0x10))
 #define   CXL_DVSEC_RANGE_SIZE_LOW(i)	(0x1C + ((i) * 0x10))
 #define     CXL_DVSEC_MEM_INFO_VALID	BIT(0)
