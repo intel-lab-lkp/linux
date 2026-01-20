@@ -197,6 +197,8 @@ M(CGX_MAC_ADDR_UPDATE,	0x21E, cgx_mac_addr_update, cgx_mac_addr_update_req, \
 						    cgx_mac_addr_update_rsp) \
 M(CGX_PRIO_FLOW_CTRL_CFG, 0x21F, cgx_prio_flow_ctrl_cfg, cgx_pfc_cfg,  \
 				 cgx_pfc_rsp)                               \
+M(CGX_DMAC_FILTER_DROP_CNT, 0x220, cgx_get_dmacflt_dropped_pktcnt, msg_req,  \
+				 cgx_dmac_filter_drop_cnt)                      \
 /* NPA mbox IDs (range 0x400 - 0x5FF) */				\
 M(NPA_LF_ALLOC,		0x400, npa_lf_alloc,				\
 				npa_lf_alloc_req, npa_lf_alloc_rsp)	\
@@ -716,6 +718,11 @@ struct cgx_mac_addr_update_req {
 struct cgx_mac_addr_update_rsp {
 	struct mbox_msghdr hdr;
 	u32 index;
+};
+
+struct cgx_dmac_filter_drop_cnt {
+	struct mbox_msghdr hdr;
+	u64 count;
 };
 
 #define RVU_LMAC_FEAT_FC		BIT_ULL(0) /* pause frames */
