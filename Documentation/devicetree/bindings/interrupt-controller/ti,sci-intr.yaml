@@ -15,8 +15,7 @@ allOf:
 description: |
   The Interrupt Router (INTR) module provides a mechanism to mux M
   interrupt inputs to N interrupt outputs, where all M inputs are selectable
-  to be driven per N output. An Interrupt Router can either handle edge
-  triggered or level triggered interrupts and that is fixed in hardware.
+  to be driven per N output.
 
                                    Interrupt Router
                                +----------------------+
@@ -52,11 +51,12 @@ properties:
 
   ti,intr-trigger-type:
     $ref: /schemas/types.yaml#/definitions/uint32
-    enum: [1, 4]
+    enum: [1, 4, 15]
     description: |
       Should be one of the following.
         1 = If intr supports edge triggered interrupts.
         4 = If intr supports level triggered interrupts.
+        15 = If intr preserves the source interrupt type.
 
   reg:
     maxItems: 1
@@ -64,9 +64,14 @@ properties:
   interrupt-controller: true
 
   '#interrupt-cells':
-    const: 1
+    enum: [1, 2]
     description: |
-      The 1st cell should contain interrupt router input hw number.
+      Number of cells in interrupt specifier. Depends on ti,intr-trigger-type:
+      - If ti,intr-trigger-type is 1 or 4: must be 1
+        The 1st cell should contain interrupt router input hw number.
+      - If ti,intr-trigger-type is 15: must be 2
+        The 1st cell should contain interrupt router input hw number.
+        The 2nd cell should contain interrupt trigger type (preserved by router).
 
   ti,interrupt-ranges:
     $ref: /schemas/types.yaml#/definitions/uint32-matrix
@@ -81,6 +86,21 @@ properties:
             "parent's input irq" specifies the base for parent irq
         - description: |
             "limit" specifies the limit for translation
+
+if:
+  properties:
+    ti,intr-trigger-type:
+      enum: [1, 4]
+then:
+  properties:
+    '#interrupt-cells':
+      const: 1
+      description: Interrupt ID only. Interrupt type is specified globally
+else:
+  properties:
+    '#interrupt-cells':
+      const: 2
+      description: Interrupt ID and corresponding interrupt type
 
 required:
   - compatible
@@ -101,6 +121,18 @@ examples:
         interrupt-controller;
         interrupt-parent = <&gic500>;
         #interrupt-cells = <1>;
+        ti,sci = <&dmsc>;
+        ti,sci-dev-id = <131>;
+        ti,interrupt-ranges = <0 360 32>;
+    };
+
+  - |
+    main_gpio_intr1: interrupt-controller1 {
+        compatible = "ti,sci-intr";
+        ti,intr-trigger-type = <15>;
+        interrupt-controller;
+        interrupt-parent = <&gic500>;
+        #interrupt-cells = <2>;
         ti,sci = <&dmsc>;
         ti,sci-dev-id = <131>;
         ti,interrupt-ranges = <0 360 32>;
