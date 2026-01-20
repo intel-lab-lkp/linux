@@ -2,7 +2,7 @@
 /*
  * Core driver for the S32 CC (Common Chassis) pin controller
  *
- * Copyright 2017-2022,2024-2025 NXP
+ * Copyright 2017-2022,2024-2025-2026 NXP
  * Copyright (C) 2022 SUSE LLC
  * Copyright 2015-2016 Freescale Semiconductor, Inc.
  */
@@ -832,6 +832,9 @@ static int s32_pinctrl_parse_functions(struct device_node *np,
 
 	dev_dbg(info->dev, "parse function(%u): %pOFn\n", index, np);
 
+	if (of_device_is_compatible(np, "syscon"))
+		return 0;
+
 	func = &info->functions[index];
 
 	/* Initialise function */
@@ -941,7 +944,8 @@ static int s32_pinctrl_probe_dt(struct platform_device *pdev,
 		return -ENODEV;
 
 	for_each_child_of_node_scoped(np, child)
-		++nfuncs;
+		if (!of_device_is_compatible(child, "syscon"))
+			++nfuncs;
 	if (nfuncs <= 0)
 		return dev_err_probe(&pdev->dev, -EINVAL,
 				     "No functions defined\n");
@@ -962,6 +966,9 @@ static int s32_pinctrl_probe_dt(struct platform_device *pdev,
 		return -ENOMEM;
 
 	for_each_child_of_node_scoped(np, child) {
+		if (of_device_is_compatible(child, "syscon"))
+			continue;
+
 		ret = s32_pinctrl_parse_functions(child, info, i++);
 		if (ret)
 			return ret;
