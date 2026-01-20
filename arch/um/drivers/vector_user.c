@@ -868,8 +868,8 @@ void *uml_vector_default_bpf(const void *mac)
 	} else {
 		return NULL;
 	}
-	bpf = uml_kmalloc(
-		sizeof(struct sock_filter) * DEFAULT_BPF_LEN, UM_GFP_KERNEL);
+	bpf = uml_kmalloc_array(DEFAULT_BPF_LEN, sizeof(struct sock_filter),
+			UM_GFP_KERNEL);
 	if (bpf) {
 		bpf_prog->filter = bpf;
 		/* ld	[8] */

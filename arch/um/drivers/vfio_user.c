@@ -194,7 +194,7 @@ int uml_vfio_user_setup_device(struct uml_vfio_user_device *dev,
 	if (dev->num_regions > VFIO_PCI_CONFIG_REGION_INDEX + 1)
 		dev->num_regions = VFIO_PCI_CONFIG_REGION_INDEX + 1;
 
-	dev->region = uml_kmalloc(sizeof(*dev->region) * dev->num_regions,
+	dev->region = uml_kmalloc_array(dev->num_regions, sizeof(*dev->region),
 				  UM_GFP_KERNEL);
 	if (!dev->region) {
 		err = -ENOMEM;
@@ -223,7 +223,7 @@ int uml_vfio_user_setup_device(struct uml_vfio_user_device *dev,
 
 	dev->irq_count = irq_info.count;
 
-	dev->irqfd = uml_kmalloc(sizeof(int) * dev->irq_count, UM_GFP_KERNEL);
+	dev->irqfd = uml_kmalloc_array(dev->irq_count, sizeof(int), UM_GFP_KERNEL);
 	if (!dev->irqfd) {
 		err = -ENOMEM;
 		goto free_region;
