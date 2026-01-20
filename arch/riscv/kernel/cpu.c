@@ -82,12 +82,26 @@ int __init riscv_early_of_processor_hartid(struct device_node *node, unsigned lo
 		return -ENODEV;
 
 	if (of_property_match_string(node, "riscv,isa-extensions", "i") < 0 ||
-	    of_property_match_string(node, "riscv,isa-extensions", "m") < 0 ||
-	    of_property_match_string(node, "riscv,isa-extensions", "a") < 0) {
-		pr_warn("CPU with hartid=%lu does not support ima", *hart);
+	    of_property_match_string(node, "riscv,isa-extensions", "m") < 0) {
+		pr_warn("CPU with hartid=%lu does not support im", *hart);
 		return -ENODEV;
 	}
-
+	/* any atomic supported? */
+#if defined(__riscv_atomic) || defined(__riscv_zaamo)
+	if (of_property_match_string(node, "riscv,isa-extensions", "a") < 0 &&
+	    of_property_match_string(node, "riscv,isa-extensions", "zaamo") < 0) {
+		pr_warn("CPU with hartid=%lu does not support AMO atomics", *hart);
+		return -ENODEV;
+	}
+#elif defined(__riscv_zalrsc)
+	if (of_property_match_string(node, "riscv,isa-extensions", "a") < 0 &&
+	    of_property_match_string(node, "riscv,isa-extensions", "zalrsc") < 0) {
+		pr_warn("CPU with hartid=%lu does not support LS/SC atomics", *hart);
+		return -ENODEV;
+	}
+#else
+#error "need atomic or zalrsc extension"
+#endif
 	return 0;
 
 old_interface:
