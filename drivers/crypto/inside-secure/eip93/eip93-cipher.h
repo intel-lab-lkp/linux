@@ -44,7 +44,8 @@ struct eip93_cipher_reqctx {
 	dma_addr_t			sa_state_ctr_base;
 };
 
-int check_valid_request(struct eip93_cipher_reqctx *rctx);
+int check_valid_request(struct crypto_async_request *async,
+			struct eip93_cipher_reqctx *rctx);
 
 void eip93_unmap_dma(struct eip93_device *eip93, struct eip93_cipher_reqctx *rctx,
 		     struct scatterlist *reqsrc, struct scatterlist *reqdst);

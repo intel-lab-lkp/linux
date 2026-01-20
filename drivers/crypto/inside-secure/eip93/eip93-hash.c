@@ -215,6 +215,7 @@ static int eip93_send_hash_req(struct crypto_async_request *async, u8 *data,
 	struct eip93_device *eip93 = ctx->eip93;
 	struct eip93_descriptor cdesc = { };
 	dma_addr_t src_addr;
+	bool maysleep;
 	int ret;
 
 	/* Map block data to DMA */
@@ -267,12 +268,16 @@ static int eip93_send_hash_req(struct crypto_async_request *async, u8 *data,
 				 FIELD_PREP(EIP93_PE_USER_ID_DESC_FLAGS, EIP93_DESC_LAST);
 	}
 
+	maysleep = async->flags & CRYPTO_TFM_REQ_MAY_SLEEP;
 again:
 	scoped_guard(spinlock_irqsave, &eip93->ring->write_lock)
 		ret = eip93_put_descriptor(eip93, &cdesc);
 	if (ret) {
-		usleep_range(EIP93_RING_BUSY_DELAY,
-			     EIP93_RING_BUSY_DELAY * 2);
+		if (maysleep)
+			usleep_range(EIP93_RING_BUSY_DELAY,
+				     EIP93_RING_BUSY_DELAY * 2);
+		else
+			cpu_relax();
 		goto again;
 	}
 

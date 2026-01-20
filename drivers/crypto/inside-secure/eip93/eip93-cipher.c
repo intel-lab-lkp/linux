@@ -36,7 +36,7 @@ static int eip93_skcipher_send_req(struct crypto_async_request *async)
 	struct eip93_cipher_reqctx *rctx = skcipher_request_ctx(req);
 	int err;
 
-	err = check_valid_request(rctx);
+	err = check_valid_request(async, rctx);
 
 	if (err) {
 		skcipher_request_complete(req, err);
