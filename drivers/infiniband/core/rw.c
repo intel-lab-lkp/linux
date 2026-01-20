@@ -15,6 +15,7 @@ enum {
 	RDMA_RW_MULTI_WR,
 	RDMA_RW_MR,
 	RDMA_RW_SIG_MR,
+	RDMA_RW_IOVA,
 };
 
 static bool rdma_rw_force_mr;
@@ -380,6 +381,93 @@ out_free_sges:
 	return -ENOMEM;
 }
 
+/*
+ * Try to use the two-step IOVA API to map bvecs into a contiguous DMA range.
+ * This reduces IOTLB sync overhead by doing one sync at the end instead of
+ * one per bvec, and produces a contiguous DMA address range that can be
+ * described by a single SGE.
+ *
+ * Returns the number of WQEs (always 1) on success, -EOPNOTSUPP if IOVA
+ * mapping is not available, or another negative error code on failure.
+ */
+static int rdma_rw_init_iova_wrs_bvec(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
+		const struct bio_vec *bvec, u32 nr_bvec,
+		struct bvec_iter *iter,
+		u64 remote_addr, u32 rkey, enum dma_data_direction dir)
+{
+	struct ib_device *dev = qp->pd->device;
+	struct device *dma_dev = dev->dma_device;
+	struct bvec_iter link_iter;
+	struct bio_vec first_bv;
+	size_t total_len, mapped_len = 0;
+	int ret;
+
+	/* Virtual DMA devices lack IOVA allocators */
+	if (ib_uses_virt_dma(dev))
+		return -EOPNOTSUPP;
+
+	total_len = iter->bi_size;
+
+	/* Get the first (possibly offset-adjusted) bvec for starting phys addr */
+	first_bv = mp_bvec_iter_bvec(bvec, *iter);
+
+	/* Try to allocate contiguous IOVA space */
+	if (!dma_iova_try_alloc(dma_dev, &ctx->iova.state,
+				bvec_phys(&first_bv), total_len))
+		return -EOPNOTSUPP;
+
+	/* Link all bvecs into the IOVA space */
+	link_iter = *iter;
+	while (link_iter.bi_size) {
+		struct bio_vec bv = mp_bvec_iter_bvec(bvec, link_iter);
+
+		ret = dma_iova_link(dma_dev, &ctx->iova.state, bvec_phys(&bv),
+				    mapped_len, bv.bv_len, dir, 0);
+		if (ret)
+			goto out_destroy;
+
+		if (check_add_overflow(mapped_len, bv.bv_len, &mapped_len)) {
+			ret = -EOVERFLOW;
+			goto out_destroy;
+		}
+		bvec_iter_advance(bvec, &link_iter, bv.bv_len);
+	}
+
+	/* Sync the IOTLB once for all linked pages */
+	ret = dma_iova_sync(dma_dev, &ctx->iova.state, 0, mapped_len);
+	if (ret)
+		goto out_destroy;
+
+	ctx->iova.mapped_len = mapped_len;
+
+	/* Single SGE covers the entire contiguous IOVA range */
+	ctx->iova.sge.addr = ctx->iova.state.addr;
+	ctx->iova.sge.length = mapped_len;
+	ctx->iova.sge.lkey = qp->pd->local_dma_lkey;
+
+	/* Single WR for the whole transfer */
+	memset(&ctx->iova.wr, 0, sizeof(ctx->iova.wr));
+	ctx->iova.wr.wr.opcode = dir == DMA_TO_DEVICE ?
+		IB_WR_RDMA_WRITE : IB_WR_RDMA_READ;
+	ctx->iova.wr.wr.num_sge = 1;
+	ctx->iova.wr.wr.sg_list = &ctx->iova.sge;
+	ctx->iova.wr.remote_addr = remote_addr;
+	ctx->iova.wr.rkey = rkey;
+
+	ctx->type = RDMA_RW_IOVA;
+	ctx->nr_ops = 1;
+	return 1;
+
+out_destroy:
+	/*
+	 * dma_iova_destroy() expects the actual mapped length, not the
+	 * total allocation size. It unlinks only the successfully linked
+	 * range and frees the entire IOVA allocation.
+	 */
+	dma_iova_destroy(dma_dev, &ctx->iova.state, mapped_len, dir, 0);
+	return ret;
+}
+
 /**
  * rdma_rw_ctx_init - initialize a RDMA READ/WRITE context
  * @ctx:	context to initialize
@@ -484,6 +572,7 @@ int rdma_rw_ctx_init_bvec(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
 {
 	struct bvec_iter iter;
 	u32 i, total_len = 0;
+	int ret;
 
 	if (nr_bvec == 0 || offset >= bvec[0].bv_len)
 		return -EINVAL;
@@ -506,6 +595,21 @@ int rdma_rw_ctx_init_bvec(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
 	if (nr_bvec == 1)
 		return rdma_rw_init_single_wr_bvec(ctx, qp, bvec, &iter,
 				remote_addr, rkey, dir);
+
+	/*
+	 * Try IOVA-based mapping first for multi-bvec transfers.
+	 * This reduces IOTLB sync overhead by batching all mappings.
+	 */
+	ret = rdma_rw_init_iova_wrs_bvec(ctx, qp, bvec, nr_bvec, &iter,
+			remote_addr, rkey, dir);
+	if (ret != -EOPNOTSUPP)
+		return ret;
+
+	/* Fallback path requires iterator at initial state */
+	iter.bi_sector = 0;
+	iter.bi_size = total_len;
+	iter.bi_idx = 0;
+	iter.bi_bvec_done = offset;
 
 	return rdma_rw_init_map_wrs_bvec(ctx, qp, bvec, nr_bvec, &iter,
 			remote_addr, rkey, dir);
@@ -683,6 +787,10 @@ struct ib_send_wr *rdma_rw_ctx_wrs(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
 			first_wr = &ctx->reg[0].reg_wr.wr;
 		last_wr = &ctx->reg[ctx->nr_ops - 1].wr.wr;
 		break;
+	case RDMA_RW_IOVA:
+		first_wr = &ctx->iova.wr.wr;
+		last_wr = &ctx->iova.wr.wr;
+		break;
 	case RDMA_RW_MULTI_WR:
 		first_wr = &ctx->map.wrs[0].wr;
 		last_wr = &ctx->map.wrs[ctx->nr_ops - 1].wr;
@@ -757,6 +865,10 @@ void rdma_rw_ctx_destroy(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
 		break;
 	case RDMA_RW_SINGLE_WR:
 		break;
+	case RDMA_RW_IOVA:
+		/* IOVA contexts must use rdma_rw_ctx_destroy_bvec() */
+		WARN_ON_ONCE(1);
+		break;
 	default:
 		BUG();
 		break;
@@ -790,6 +902,10 @@ void rdma_rw_ctx_destroy_bvec(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
 	u32 i;
 
 	switch (ctx->type) {
+	case RDMA_RW_IOVA:
+		dma_iova_destroy(dev->dma_device, &ctx->iova.state,
+				 ctx->iova.mapped_len, dir, 0);
+		break;
 	case RDMA_RW_MULTI_WR:
 		for (i = 0; i < nr_bvec; i++)
 			ib_dma_unmap_bvec(dev, ctx->map.sges[i].addr,
