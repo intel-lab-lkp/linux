@@ -316,16 +316,18 @@ static void reset_global_asid_space(void)
 static u16 allocate_global_asid(void)
 {
 	u16 asid;
+	bool reset = false;
 
 	lockdep_assert_held(&global_asid_lock);
 
-	/* The previous allocation hit the edge of available address space */
-	if (last_global_asid >= MAX_ASID_AVAILABLE - 1)
-		reset_global_asid_space();
-
+restart:
 	asid = find_next_zero_bit(global_asid_used, MAX_ASID_AVAILABLE, last_global_asid);
-
 	if (asid >= MAX_ASID_AVAILABLE) {
+		if (!reset) {
+			reset_global_asid_space();
+			reset = true;
+			goto restart;
+		}
 		/* This should never happen. */
 		VM_WARN_ONCE(1, "Unable to allocate global ASID despite %d available\n",
 				global_asid_available);
