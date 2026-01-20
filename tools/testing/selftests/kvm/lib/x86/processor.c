@@ -1229,7 +1229,8 @@ const struct kvm_cpuid_entry2 *get_cpuid_entry(const struct kvm_cpuid2 *cpuid,
 		     "1: vmmcall\n\t"					\
 		     "2:"						\
 		     : "=a"(r)						\
-		     : [use_vmmcall] "r" (host_cpu_is_amd), inputs);	\
+		     : [use_vmmcall] "r"				\
+		     (host_cpu_is_amd || host_cpu_is_hygon), inputs);	\
 									\
 	r;								\
 })
