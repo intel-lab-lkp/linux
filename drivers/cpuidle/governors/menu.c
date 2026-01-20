@@ -287,12 +287,20 @@ static int menu_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 	/*
 	 * If the tick is already stopped, the cost of possible short idle
 	 * duration misprediction is much higher, because the CPU may be stuck
-	 * in a shallow idle state for a long time as a result of it.  In that
-	 * case, say we might mispredict and use the known time till the closest
-	 * timer event for the idle state selection.
+	 * in a shallow idle state for a long time as a result of it.
+	 *
+	 * Add a 25% safety margin to the prediction to reduce the risk of
+	 * selecting too shallow state, but clamp to next_timer to avoid
+	 * selecting unnecessarily deep states.
+	 *
+	 * This helps on platforms with high C-state exit latencies (e.g.,
+	 * Intel server platforms 2022+ with ~150us) where using next_timer
+	 * directly causes excessive wakeup latency when the actual idle
+	 * duration is much shorter.
 	 */
 	if (tick_nohz_tick_stopped() && predicted_ns < TICK_NSEC)
-		predicted_ns = data->next_timer_ns;
+		predicted_ns = min(predicted_ns + (predicted_ns >> 2),
+				   data->next_timer_ns);
 
 	/*
 	 * Find the idle state with the lowest power while satisfying
