@@ -911,6 +911,13 @@ get_encoder_power_domains(struct intel_display *display)
 static void intel_early_display_was(struct intel_display *display)
 {
 	/*
+	 * Wa_22021451799
+	 * Disable DMG Clock gating
+	 */
+	if (DISPLAY_VER(display) == 35)
+		intel_de_rmw(display, GEN9_CLKGATE_DIS_0, 0, DMG_GATING_DIS);
+
+	/*
 	 * Display WA #1185 WaDisableDARBFClkGating:glk,icl,ehl,tgl
 	 * Also known as Wa_14010480278.
 	 */
