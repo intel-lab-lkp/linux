@@ -12,6 +12,7 @@
 #include <linux/aer.h>
 #include <linux/io.h>
 #include <cxl/mailbox.h>
+#include <cxl/pci.h>
 #include "cxlmem.h"
 #include "cxlpci.h"
 #include "cxl.h"
