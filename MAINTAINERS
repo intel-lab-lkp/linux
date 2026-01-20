@@ -13681,6 +13681,7 @@ F:	scripts/include/
 F:	scripts/mk*
 F:	scripts/mod/
 F:	scripts/package/
+F:	scripts/install.sh
 F:	usr/
 
 KERNEL HARDENING (not covered by other areas)
