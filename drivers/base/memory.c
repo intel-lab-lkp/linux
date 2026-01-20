@@ -246,31 +246,12 @@ static int memory_block_online(struct memory_block *mem)
 		nr_vmemmap_pages = mem->altmap->free;
 
 	mem_hotplug_begin();
-	if (nr_vmemmap_pages) {
-		ret = mhp_init_memmap_on_memory(start_pfn, nr_vmemmap_pages, zone);
-		if (ret)
-			goto out;
-	}
-
-	ret = online_pages(start_pfn + nr_vmemmap_pages,
-			   nr_pages - nr_vmemmap_pages, zone, mem->group);
-	if (ret) {
-		if (nr_vmemmap_pages)
-			mhp_deinit_memmap_on_memory(start_pfn, nr_vmemmap_pages);
-		goto out;
-	}
-
-	/*
-	 * Account once onlining succeeded. If the zone was unpopulated, it is
-	 * now already properly populated.
-	 */
-	if (nr_vmemmap_pages)
-		adjust_present_page_count(pfn_to_page(start_pfn), mem->group,
-					  nr_vmemmap_pages);
-
-	mem->zone = zone;
-out:
+	ret = online_memory_block_pages(start_pfn, nr_pages, nr_vmemmap_pages,
+					zone, mem->group);
+	if (!ret)
+		mem->zone = zone;
 	mem_hotplug_done();
+
 	return ret;
 }
 
@@ -295,26 +276,12 @@ static int memory_block_offline(struct memory_block *mem)
 		nr_vmemmap_pages = mem->altmap->free;
 
 	mem_hotplug_begin();
-	if (nr_vmemmap_pages)
-		adjust_present_page_count(pfn_to_page(start_pfn), mem->group,
-					  -nr_vmemmap_pages);
-
-	ret = offline_pages(start_pfn + nr_vmemmap_pages,
-			    nr_pages - nr_vmemmap_pages, mem->zone, mem->group);
-	if (ret) {
-		/* offline_pages() failed. Account back. */
-		if (nr_vmemmap_pages)
-			adjust_present_page_count(pfn_to_page(start_pfn),
-						  mem->group, nr_vmemmap_pages);
-		goto out;
-	}
-
-	if (nr_vmemmap_pages)
-		mhp_deinit_memmap_on_memory(start_pfn, nr_vmemmap_pages);
-
-	mem->zone = NULL;
-out:
+	ret = offline_memory_block_pages(start_pfn, nr_pages, nr_vmemmap_pages,
+					 mem->zone, mem->group);
+	if (!ret)
+		mem->zone = NULL;
 	mem_hotplug_done();
+
 	return ret;
 }
 
