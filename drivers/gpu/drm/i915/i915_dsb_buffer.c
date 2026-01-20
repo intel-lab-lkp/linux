@@ -3,11 +3,11 @@
  * Copyright 2023, Intel Corporation.
  */
 
+#include "display/intel_dsb_buffer.h"
 #include "gem/i915_gem_internal.h"
 #include "gem/i915_gem_lmem.h"
 #include "i915_drv.h"
 #include "i915_vma.h"
-#include "intel_dsb_buffer.h"
 
 struct intel_dsb_buffer {
 	u32 *cmd_buf;
