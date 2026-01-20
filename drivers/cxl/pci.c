@@ -1082,6 +1082,16 @@ static pci_ers_result_t cxl_slot_reset(struct pci_dev *pdev)
 	return PCI_ERS_RESULT_RECOVERED;
 }
 
+bool cxl_is_type2_device(struct pci_dev *pdev)
+{
+	struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
+
+	if (!cxlds)
+		return false;
+
+	return cxlds->type == CXL_DEVTYPE_DEVMEM;
+}
+
 static void cxl_error_resume(struct pci_dev *pdev)
 {
 	struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
