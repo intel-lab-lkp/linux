@@ -4965,76 +4965,6 @@ static int shrink_one(struct lruvec *lruvec, struct scan_control *sc)
 	       MEMCG_LRU_TAIL : MEMCG_LRU_YOUNG;
 }
 
-static void shrink_many(struct pglist_data *pgdat, struct scan_control *sc)
-{
-	int op;
-	int gen;
-	int bin;
-	int first_bin;
-	struct lruvec *lruvec;
-	struct lru_gen_folio *lrugen;
-	struct mem_cgroup *memcg;
-	struct hlist_nulls_node *pos;
-
-	gen = get_memcg_gen(READ_ONCE(pgdat->memcg_lru.seq));
-	bin = first_bin = get_random_u32_below(MEMCG_NR_BINS);
-restart:
-	op = 0;
-	memcg = NULL;
-
-	rcu_read_lock();
-
-	hlist_nulls_for_each_entry_rcu(lrugen, pos, &pgdat->memcg_lru.fifo[gen][bin], list) {
-		if (op) {
-			lru_gen_rotate_memcg(lruvec, op);
-			op = 0;
-		}
-
-		mem_cgroup_put(memcg);
-		memcg = NULL;
-
-		if (gen != READ_ONCE(lrugen->gen))
-			continue;
-
-		lruvec = container_of(lrugen, struct lruvec, lrugen);
-		memcg = lruvec_memcg(lruvec);
-
-		if (!mem_cgroup_tryget(memcg)) {
-			lru_gen_release_memcg(memcg);
-			memcg = NULL;
-			continue;
-		}
-
-		rcu_read_unlock();
-
-		op = shrink_one(lruvec, sc);
-
-		rcu_read_lock();
-
-		if (lru_gen_should_abort_scan(lruvec, sc))
-			break;
-	}
-
-	rcu_read_unlock();
-
-	if (op)
-		lru_gen_rotate_memcg(lruvec, op);
-
-	mem_cgroup_put(memcg);
-
-	if (!is_a_nulls(pos))
-		return;
-
-	/* restart if raced with lru_gen_rotate_memcg() */
-	if (gen != get_nulls_value(pos))
-		goto restart;
-
-	/* try the rest of the bins of the current generation */
-	bin = get_memcg_bin(bin + 1);
-	if (bin != first_bin)
-		goto restart;
-}
-
 static void lru_gen_shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 {
 	struct blk_plug plug;
@@ -5064,6 +4994,7 @@ static void lru_gen_shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc
 	blk_finish_plug(&plug);
 }
 
+static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc);
 static void lru_gen_shrink_node(struct pglist_data *pgdat, struct scan_control *sc)
 {
 	struct blk_plug plug;
@@ -5093,7 +5024,7 @@ static void lru_gen_shrink_node(struct pglist_data *pgdat, struct scan_control *
 	if (mem_cgroup_disabled())
 		shrink_one(&pgdat->__lruvec, sc);
 	else
-		shrink_many(pgdat, sc);
+		shrink_node_memcgs(pgdat, sc);
 
 	if (current_is_kswapd())
 		sc->nr_reclaimed += reclaimed;
@@ -5800,6 +5731,11 @@ static bool lru_gen_should_abort_scan(struct lruvec *lruvec, struct scan_control
 {
 	return false;
 }
+
+static bool lruvec_is_sizable(struct lruvec *lruvec, struct scan_control *sc)
+{
+	BUILD_BUG();
+}
 #endif /* CONFIG_LRU_GEN */
 
 static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
@@ -5812,11 +5748,6 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 	unsigned long nr_to_reclaim = sc->nr_to_reclaim;
 	bool proportional_reclaim;
 	struct blk_plug plug;
-
-	if (lru_gen_enabled() && !root_reclaim(sc)) {
-		lru_gen_shrink_lruvec(lruvec, sc);
-		return;
-	}
 
 	get_scan_count(lruvec, sc, nr);
 
@@ -6127,7 +6058,8 @@ static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 	 * For kswapd, reliable forward progress is more important
 	 * than a quick return to idle. Always do full walks.
 	 */
-	if (current_is_kswapd() || sc->memcg_full_walk)
+	if ((current_is_kswapd() && lru_gen_enabled())
+	    || sc->memcg_full_walk)
 		partial = NULL;
 
 	for (level = MEMCG_LEVEL_COLD; level < max_level; level++) {
@@ -6178,7 +6110,13 @@ static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 			reclaimed = sc->nr_reclaimed;
 			scanned = sc->nr_scanned;
 
-			shrink_lruvec(lruvec, sc);
+			if (lru_gen_enabled()) {
+				if (!lruvec_is_sizable(lruvec, sc))
+					continue;
+				lru_gen_shrink_lruvec(lruvec, sc);
+			} else
+				shrink_lruvec(lruvec, sc);
+
 			if (!memcg || memcg_page_state(memcg, NR_SLAB_RECLAIMABLE_B))
 				shrink_slab(sc->gfp_mask, pgdat->node_id, memcg,
 					    sc->priority);
@@ -6196,7 +6134,12 @@ static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 
 			flush_reclaim_state(sc);
 			/* If partial walks are allowed, bail once goal is reached */
-			if (partial && sc->nr_reclaimed >= sc->nr_to_reclaim) {
+			if (lru_gen_enabled() && root_reclaim(sc)) {
+				if (lru_gen_should_abort_scan(lruvec, sc)) {
+					mem_cgroup_iter_break(target_memcg, memcg);
+					break;
+				}
+			} else if (partial && sc->nr_reclaimed >= sc->nr_to_reclaim) {
 				mem_cgroup_iter_break(target_memcg, memcg);
 				break;
 			}
