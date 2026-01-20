@@ -11,6 +11,10 @@
 #include <linux/pci.h>
 #include <linux/aer.h>
 #include <linux/io.h>
+#include <linux/align.h>
+#include <linux/cache.h>
+#include <linux/cacheflush.h>
+#include <linux/smp.h>
 #include <cxl/mailbox.h>
 #include <cxl/pci.h>
 #include "cxlmem.h"
@@ -1092,6 +1096,71 @@ bool cxl_is_type2_device(struct pci_dev *pdev)
 	return cxlds->type == CXL_DEVTYPE_DEVMEM;
 }
 
+#ifdef CONFIG_ARM64
+struct cxl_cache_flush_ctx {
+	void *va;
+	size_t len;
+};
+
+static void cxl_flush_by_va_local(void *info)
+{
+	struct cxl_cache_flush_ctx *ctx = info;
+
+	dcache_clean_inval_poc((unsigned long)ctx->va,
+			       (unsigned long)ctx->va + ctx->len);
+	asm volatile("dsb ish" ::: "memory");
+}
+#endif
+
+static int cxl_region_flush_host_cpu_caches(struct device *dev, void *data)
+{
+	struct cxl_endpoint_decoder *cxled = to_cxl_endpoint_decoder(dev);
+	struct cxl_region *cxlr = cxled->cxld.region;
+	struct resource *res;
+
+	if (!is_endpoint_decoder(dev))
+		return 0;
+
+	if (!cxlr || !cxlr->params.res)
+		return 0;
+
+	res = cxlr->params.res;
+
+#ifdef CONFIG_X86
+	static bool flushed;
+
+	if (!flushed) {
+		wbinvd_on_all_cpus();
+		flushed = true;
+	}
+#elif defined(CONFIG_ARM64)
+	void *va;
+	size_t len, line_size = L1_CACHE_BYTES;
+	phys_addr_t start, end, aligned_start, aligned_end;
+	struct cxl_cache_flush_ctx flush_ctx;
+
+	start = res->start;
+	end = res->end;
+
+	aligned_start = ALIGN_DOWN(start, line_size);
+	aligned_end = ALIGN(end + 1, line_size);
+	len = aligned_end - aligned_start;
+
+	va = memremap(aligned_start, len, MEMREMAP_WB);
+	if (!va) {
+		pr_warn("Failed to map region for cache flush\n");
+		return 0;
+	}
+
+	flush_ctx.va = va;
+	flush_ctx.len = len;
+	on_each_cpu(cxl_flush_by_va_local, &flush_ctx, 1);
+
+	memunmap(va);
+#endif
+	return 0;
+}
+
 static int cxl_check_region_driver_bound(struct device *dev, void *data)
 {
 	struct cxl_decoder *cxld = to_cxl_decoder(dev);
@@ -1252,6 +1321,9 @@ static int cxl_reset_prepare_memdev(struct pci_dev *pdev)
 		return rc;
 	}
 
+	device_for_each_child(&endpoint->dev, NULL,
+			      cxl_region_flush_host_cpu_caches);
+
 	/* Keep cxl_region_rwsem held, released by cleanup function */
 	return 0;
 }
@@ -1266,12 +1338,79 @@ static void cxl_reset_cleanup_memdev(struct pci_dev *pdev)
 		up_write(&cxl_region_rwsem);
 }
 
+static int cxl_reset_prepare_all_functions(struct pci_dev *pdev)
+{
+	struct pci_dev *func_dev;
+	unsigned int devfn;
+	int func, rc;
+	struct pci_dev *prepared_funcs[8] = { NULL };
+	int prepared_count = 0;
+
+	for (func = 0; func < 8; func++) {
+		devfn = PCI_DEVFN(PCI_SLOT(pdev->devfn), func);
+
+		if (devfn == pdev->devfn)
+			continue;
+
+		func_dev = pci_get_slot(pdev->bus, devfn);
+		if (!func_dev)
+			continue;
+
+		if (!cxl_is_type2_device(func_dev)) {
+			pci_dev_put(func_dev);
+			continue;
+		}
+
+		rc = cxl_reset_prepare_memdev(func_dev);
+		if (rc) {
+			pci_dev_put(func_dev);
+			goto cleanup_funcs;
+		}
+
+		prepared_funcs[prepared_count++] = func_dev;
+	}
+
+	return 0;
+
+cleanup_funcs:
+	for (func = 0; func < prepared_count; func++) {
+		if (prepared_funcs[func]) {
+			cxl_reset_cleanup_memdev(prepared_funcs[func]);
+			pci_dev_put(prepared_funcs[func]);
+		}
+	}
+	return rc;
+}
+
+static void cxl_reset_cleanup_all_functions(struct pci_dev *pdev)
+{
+	struct pci_dev *func_dev;
+	unsigned int devfn;
+	int func;
+
+	for (func = 0; func < 8; func++) {
+		devfn = PCI_DEVFN(PCI_SLOT(pdev->devfn), func);
+
+		if (devfn == pdev->devfn)
+			continue;
+
+		func_dev = pci_get_slot(pdev->bus, devfn);
+		if (!func_dev)
+			continue;
+
+		if (cxl_is_type2_device(func_dev))
+			cxl_reset_cleanup_memdev(func_dev);
+
+		pci_dev_put(func_dev);
+	}
+}
+
 /**
  * cxl_reset_prepare_device - Prepare CXL device for reset
  * @pdev: PCI device being reset
  *
  * CXL-reset-specific preparation. Validates memory is offline, flushes
- * device caches, and tears down regions.
+ * device caches, and tears down regions for device and siblings.
  *
  * Returns: 0 on success, -EBUSY if memory online, negative on error
  */
@@ -1290,6 +1429,12 @@ int cxl_reset_prepare_device(struct pci_dev *pdev)
 		return rc;
 	}
 
+	rc = cxl_reset_prepare_all_functions(pdev);
+	if (rc) {
+		cxl_reset_cleanup_memdev(pdev);
+		return rc;
+	}
+
 	return 0;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_reset_prepare_device, "CXL");
@@ -1298,10 +1443,11 @@ EXPORT_SYMBOL_NS_GPL(cxl_reset_prepare_device, "CXL");
  * cxl_reset_cleanup_device - Cleanup after CXL reset
  * @pdev: PCI device that was reset
  *
- * Releases region locks held during reset.
+ * Releases region locks for device and all sibling functions.
  */
 void cxl_reset_cleanup_device(struct pci_dev *pdev)
 {
+	cxl_reset_cleanup_all_functions(pdev);
 	cxl_reset_cleanup_memdev(pdev);
 }
 EXPORT_SYMBOL_NS_GPL(cxl_reset_cleanup_device, "CXL");
