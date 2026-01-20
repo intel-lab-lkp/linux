@@ -717,6 +717,14 @@ static void i2c_dw_process_transfer(struct dw_i2c_dev *dev, unsigned int stat)
 	if (stat & DW_IC_INTR_TX_EMPTY)
 		i2c_dw_xfer_msg(dev);
 
+	/* Abort if we detect a STOP in the middle of a read or a write */
+	if ((stat & DW_IC_INTR_STOP_DET) &&
+	    (dev->status & (STATUS_READ_IN_PROGRESS | STATUS_WRITE_IN_PROGRESS))) {
+		dev_err(dev->dev, "spurious STOP detected\n");
+		dev->rx_outstanding = 0;
+		dev->msg_err = -EIO;
+	}
+
 	/*
 	 * No need to modify or disable the interrupt mask here.
 	 * i2c_dw_xfer_msg() will take care of it according to
@@ -896,6 +904,16 @@ i2c_dw_msg_is_valid(struct dw_i2c_dev *dev, const struct i2c_msg *msgs, size_t i
 	 */
 	if (msgs[idx - 1].addr != msgs[idx].addr) {
 		dev_err(dev->dev, "invalid target address\n");
+		return false;
+	}
+
+	/*
+	 * Make sure we don't need explicit RESTART between two messages
+	 * in the same direction for controllers that cannot emit them.
+	 */
+	if (!dev->emptyfifo_hold_master &&
+	    (msgs[idx - 1].flags & I2C_M_RD) == (msgs[idx].flags & I2C_M_RD)) {
+		dev_err(dev->dev, "cannot emit RESTART\n");
 		return false;
 	}
 
@@ -1116,6 +1134,20 @@ int i2c_dw_probe_master(struct dw_i2c_dev *dev)
 	} else {
 		irq_flags = IRQF_SHARED | IRQF_COND_SUSPEND;
 	}
+
+	/*
+	 * The first writing to TX FIFO buffer causes transmission start.
+	 * If IC_EMPTYFIFO_HOLD_MASTER_EN is not set, when TX FIFO gets
+	 * empty, I2C controller finishes the transaction. If writing to
+	 * FIFO is interrupted, FIFO can get empty and the transaction will
+	 * be finished prematurely. FIFO buffer is filled in IRQ handler,
+	 * but in PREEMPT_RT kernel IRQ handler by default is executed
+	 * in thread that can be preempted with another higher priority
+	 * thread or an interrupt. So, IRQF_NO_THREAD flag is required in
+	 * order to prevent any preemption when filling the FIFO.
+	 */
+	if (!dev->emptyfifo_hold_master)
+		irq_flags |= IRQF_NO_THREAD;
 
 	ret = i2c_dw_acquire_lock(dev);
 	if (ret)

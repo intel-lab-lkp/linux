@@ -388,6 +388,12 @@ int i2c_dw_fw_parse_and_configure(struct dw_i2c_dev *dev)
 
 	dev->clk_freq_optimized = device_property_read_bool(device, "snps,clk-freq-optimized");
 
+	/* Mobileye controllers do not hold the clock on empty FIFO */
+	if (device_is_compatible(device, "mobileye,eyeq6lplus-i2c"))
+		dev->emptyfifo_hold_master = false;
+	else
+		dev->emptyfifo_hold_master = true;
+
 	i2c_dw_adjust_bus_speed(dev);
 
 	if (is_of_node(fwnode))
