@@ -164,4 +164,31 @@ examples:
             reg = <0x7c 0x4>, <0x150 0x8>;
         };
     };
+
+  - |
+    syscon@12c02000 {
+        compatible = "aspeed,ast2700-scu0", "syscon", "simple-mfd";
+        reg = <0x0 0x12c02000 0x0 0x1000>;
+        #clock-cells = <1>;
+        #reset-cells = <1>;
+
+        #address-cells = <1>;
+        #size-cells = <1>;
+        ranges = <0x0 0x0 0x12c02000 0x1000>;
+
+        pinctrl0: pinctrl@400 {
+            compatible = "aspeed,ast2700-soc0-pinctrl";
+            reg = <0x400 0x600>;
+
+            emmc-state {
+                function = "EMMC";
+                groups = "EMMCG1";
+            };
+
+            emmcclk-driving-state {
+                pins = "AC14";
+                drive-strength = <2>;
+            };
+        };
+    };
 ...
