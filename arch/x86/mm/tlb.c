@@ -326,7 +326,7 @@ static u16 allocate_global_asid(void)
 
 	asid = find_next_zero_bit(global_asid_used, MAX_ASID_AVAILABLE, last_global_asid);
 
-	if (asid >= MAX_ASID_AVAILABLE && !global_asid_available) {
+	if (asid >= MAX_ASID_AVAILABLE) {
 		/* This should never happen. */
 		VM_WARN_ONCE(1, "Unable to allocate global ASID despite %d available\n",
 				global_asid_available);
