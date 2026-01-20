@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
 
+include $(srctree)/scripts/Makefile.rust
+
 # Where to place rustdoc generated documentation
 rustdoc_output := $(objtree)/Documentation/output/rust/rustdoc
 
@@ -578,6 +580,7 @@ rust-analyzer:
 		--editions='core=$(core-edition)' \
 		--editions='quote=$(quote-edition)' \
 		--crate-attrs='proc_macro2=$(proc_macro2-crate-attrs)' \
+		--common-crate-attrs='$(rust_common_crate_attrs)' \
 		$(realpath $(srctree)) $(realpath $(objtree)) \
 		$(rustc_sysroot) $(RUST_LIB_SRC) $(if $(KBUILD_EXTMOD),$(srcroot)) \
 		> rust-project.json
