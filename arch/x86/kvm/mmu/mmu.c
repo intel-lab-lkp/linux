@@ -2395,7 +2395,8 @@ static struct kvm_mmu_page *__kvm_mmu_get_shadow_page(struct kvm *kvm,
 	if (!sp) {
 		created = true;
 		sp = kvm_mmu_alloc_shadow_page(kvm, caches, gfn, sp_list, role);
-	}
+	} else if (!list_is_head(&sp->link, &kvm->arch.active_mmu_pages))
+		list_move(&sp->link, &kvm->arch.active_mmu_pages);
 
 	trace_kvm_mmu_get_page(sp, created);
 	return sp;
