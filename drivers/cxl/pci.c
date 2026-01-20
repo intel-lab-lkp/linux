@@ -1092,6 +1092,220 @@ bool cxl_is_type2_device(struct pci_dev *pdev)
 	return cxlds->type == CXL_DEVTYPE_DEVMEM;
 }
 
+static int cxl_check_region_driver_bound(struct device *dev, void *data)
+{
+	struct cxl_decoder *cxld = to_cxl_decoder(dev);
+
+	if (!is_endpoint_decoder(dev))
+		return 0;
+
+	guard(rwsem_read)(&cxl_region_rwsem);
+	if (cxld->region && cxld->region->driver)
+		return -EBUSY;
+
+	return 0;
+}
+
+static int cxl_decoder_kill_region_iter(struct device *dev, void *data)
+{
+	struct cxl_endpoint_decoder *cxled = to_cxl_endpoint_decoder(dev);
+	int rc;
+
+	if (!is_endpoint_decoder(dev))
+		return 0;
+
+	if (!cxled->cxld.region)
+		return 0;
+
+	cxl_decoder_kill_region_locked(cxled);
+
+	rc = device_for_each_child(&cxled->cxld.dev, NULL,
+				   cxl_check_region_driver_bound);
+	if (rc)
+		return rc;
+
+	return 0;
+}
+
+static int cxl_device_cache_wb_invalidate(struct pci_dev *pdev)
+{
+	struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
+	u16 reg, val, cap;
+	int dvsec, rc;
+
+	if (!cxlds)
+		return -ENODEV;
+
+	dvsec = cxlds->cxl_dvsec;
+	if (!dvsec)
+		return -ENODEV;
+
+	rc = pci_read_config_word(pdev, dvsec + CXL_DVSEC_CAP_OFFSET, &cap);
+	if (rc)
+		return rc;
+
+	if (!(cap & CXL_DVSEC_CACHE_WBI_CAPABLE))
+		return 1;
+
+	rc = pci_read_config_word(pdev, dvsec + CXL_DVSEC_CTRL2_OFFSET, &val);
+	if (rc)
+		return rc;
+
+	val |= CXL_DVSEC_INIT_CACHE_WBI;
+	rc = pci_write_config_word(pdev, dvsec + CXL_DVSEC_CTRL2_OFFSET, val);
+	if (rc)
+		return rc;
+
+	do {
+		rc = pci_read_config_word(pdev, dvsec + CXL_DVSEC_STATUS2_OFFSET, &reg);
+		if (rc)
+			return rc;
+	} while (!(reg & CXL_DVSEC_CACHE_INVALID));
+
+	return 0;
+}
+
+static int cxl_region_flush_device_caches(struct device *dev, void *data)
+{
+	struct cxl_endpoint_decoder *cxled = to_cxl_endpoint_decoder(dev);
+	struct cxl_region *cxlr = cxled->cxld.region;
+	struct cxl_region_params *p = &cxlr->params;
+	struct pci_dev *target_pdev = data;
+	int i, rc;
+
+	if (!is_endpoint_decoder(dev))
+		return 0;
+
+	if (!cxlr || !cxlr->params.res)
+		return 0;
+
+	for (i = 0; i < p->nr_targets; i++) {
+		struct cxl_endpoint_decoder *target_cxled = p->targets[i];
+		struct cxl_memdev *target_cxlmd = cxled_to_memdev(target_cxled);
+		struct cxl_dev_state *target_cxlds = target_cxlmd->cxlds;
+
+		if (!target_cxlds || !target_cxlds->pdev)
+			continue;
+
+		if (target_cxlds->pdev != target_pdev)
+			continue;
+
+		rc = cxl_device_cache_wb_invalidate(target_pdev);
+		if (rc && rc != 1)
+			return rc;
+	}
+
+	return 0;
+}
+
+/**
+ * cxl_reset_prepare_memdev - Prepare CXL device for reset
+ * @pdev: PCI device
+ *
+ * Validates it's safe to reset and tears down regions atomically under lock.
+ * Acquires cxl_region_rwsem and keeps it held throughout reset.
+ *
+ * Return: 0 on success (lock held), -EBUSY if memory online, negative on error
+ */
+static int cxl_reset_prepare_memdev(struct pci_dev *pdev)
+{
+	struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
+	struct cxl_memdev *cxlmd;
+	struct cxl_port *endpoint;
+	int rc;
+
+	if (!cxlds)
+		return -ENODEV;
+
+	cxlmd = cxlds->cxlmd;
+	if (!cxlmd)
+		return -ENODEV;
+
+	endpoint = cxlmd->endpoint;
+	if (!endpoint)
+		return 0;
+
+	if (cxl_num_decoders_committed(endpoint) == 0)
+		return 0;
+
+	down_write(&cxl_region_rwsem);
+
+	/* Check and error out if memory is online */
+	rc = device_for_each_child(&endpoint->dev, NULL,
+				   cxl_check_region_driver_bound);
+	if (rc) {
+		up_write(&cxl_region_rwsem);
+		dev_err(&pdev->dev,
+			"Reset blocked: device has active regions with drivers bound\n");
+		return -EBUSY;
+	}
+
+	/* Flush device caches and tear down regions */
+	device_for_each_child(&endpoint->dev, pdev,
+			      cxl_region_flush_device_caches);
+
+	rc = device_for_each_child(&endpoint->dev, NULL,
+				   cxl_decoder_kill_region_iter);
+	if (rc) {
+		up_write(&cxl_region_rwsem);
+		dev_err(&pdev->dev, "Failed to tear down regions: %d\n", rc);
+		return rc;
+	}
+
+	/* Keep cxl_region_rwsem held, released by cleanup function */
+	return 0;
+}
+
+/**
+ * cxl_reset_cleanup_memdev - Release locks after CXL reset
+ * @pdev: PCI device
+ */
+static void cxl_reset_cleanup_memdev(struct pci_dev *pdev)
+{
+	if (lockdep_is_held_type(&cxl_region_rwsem, -1))
+		up_write(&cxl_region_rwsem);
+}
+
+/**
+ * cxl_reset_prepare_device - Prepare CXL device for reset
+ * @pdev: PCI device being reset
+ *
+ * CXL-reset-specific preparation. Validates memory is offline, flushes
+ * device caches, and tears down regions.
+ *
+ * Returns: 0 on success, -EBUSY if memory online, negative on error
+ */
+int cxl_reset_prepare_device(struct pci_dev *pdev)
+{
+	int rc;
+
+	rc = cxl_reset_prepare_memdev(pdev);
+	if (rc) {
+		if (rc == -EBUSY)
+			dev_err(&pdev->dev,
+				"Cannot reset: device has online memory or active regions\n");
+		else
+			dev_err(&pdev->dev,
+				"Failed to prepare device for reset: %d\n", rc);
+		return rc;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_reset_prepare_device, "CXL");
+
+/**
+ * cxl_reset_cleanup_device - Cleanup after CXL reset
+ * @pdev: PCI device that was reset
+ *
+ * Releases region locks held during reset.
+ */
+void cxl_reset_cleanup_device(struct pci_dev *pdev)
+{
+	cxl_reset_cleanup_memdev(pdev);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_reset_cleanup_device, "CXL");
+
 static void cxl_error_resume(struct pci_dev *pdev)
 {
 	struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
