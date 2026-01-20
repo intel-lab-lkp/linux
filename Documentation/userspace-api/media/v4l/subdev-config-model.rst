@@ -41,7 +41,10 @@ necessarily offered by all drivers.
 
 A sub-device complies with the common raw sensor model if the
 ``V4L2_CONFIG_MODEL_COMMON_RAW_SENSOR`` bit is set in the
-``V4L2_CID_CONFIG_MODEL`` control of the sub-device.
+``V4L2_CID_CONFIG_MODEL`` control of the sub-device. A client supporting the
+common raw sensor model shall set the
+``V4L2_SUBDEV_CLIENT_CAP_COMMON_RAW_SENSOR`` :ref:`sub-device client capability
+<VIDIOC_SUBDEV_G_CLIENT_CAP>` bit.
 
 The common raw camera sensor model is aligned with
 :ref:`media_using_camera_sensor_drivers`. Please refer to that regarding aspects

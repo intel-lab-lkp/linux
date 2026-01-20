@@ -91,6 +91,12 @@ is unknown to the kernel.
         ``which`` field. If this is not set (which is the default), the
         ``which`` field is forced to ``V4L2_SUBDEV_FORMAT_ACTIVE`` by the
         kernel.
+    * - ``V4L2_SUBDEV_CLIENT_CAP_COMMON_RAW_SENSOR``
+      - The client is aware of the :ref:`common raw sensor model
+        <media_subdev_config_model_common_raw_sensor>` and expects it where it
+        is supported, as indicated by the :ref:`V4L2_CID_CONFIG_MODEL
+        <v4l2-cid-config-model>` control bit
+        ``V4L2_CONFIG_MODEL_COMMON_RAW_SENSOR``.
 
 Return Value
 ============

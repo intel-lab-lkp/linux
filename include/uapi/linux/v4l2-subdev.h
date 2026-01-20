@@ -270,6 +270,12 @@ struct v4l2_subdev_routing {
  */
 #define V4L2_SUBDEV_CLIENT_CAP_INTERVAL_USES_WHICH	(1ULL << 1)
 
+/*
+ * The client is aware of the common raw sensor model and expects that on camera
+ * sensor UAPI where supported.
+ */
+#define V4L2_SUBDEV_CLIENT_CAP_COMMON_RAW_SENSOR	(1ULL << 2)
+
 /**
  * struct v4l2_subdev_client_capability - Capabilities of the client accessing
  *					  the subdev

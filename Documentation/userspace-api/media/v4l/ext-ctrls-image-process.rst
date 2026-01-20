@@ -60,6 +60,8 @@ Image Process Control IDs
     digital gain the control value needs to be 0x100. The no-gain
     configuration is also typically the default.
 
+.. _v4l2-cid-config-model:
+
 ``V4L2_CID_CONFIG_MODEL (bitmask)``
     Which configuration models the sub-device supports. Please see
     :ref:`media_subdev_config_model`. This is a read-only control.
