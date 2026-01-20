@@ -14,6 +14,7 @@ struct drm_gem_object;
 struct drm_plane_state;
 struct drm_scanout_buffer;
 struct i915_vma;
+struct intel_dsb_buffer;
 struct intel_hdcp_gsc_context;
 struct intel_initial_plane_config;
 struct intel_panic;
@@ -21,6 +22,16 @@ struct intel_stolen_node;
 struct ref_tracker;
 
 /* Keep struct definitions sorted */
+
+struct intel_display_dsb_interface {
+	u32 (*ggtt_offset)(struct intel_dsb_buffer *dsb_buf);
+	void (*write)(struct intel_dsb_buffer *dsb_buf, u32 idx, u32 val);
+	u32 (*read)(struct intel_dsb_buffer *dsb_buf, u32 idx);
+	void (*fill)(struct intel_dsb_buffer *dsb_buf, u32 idx, u32 val, size_t size);
+	struct intel_dsb_buffer *(*create)(struct drm_device *drm, size_t size);
+	void (*cleanup)(struct intel_dsb_buffer *dsb_buf);
+	void (*flush_map)(struct intel_dsb_buffer *dsb_buf);
+};
 
 struct intel_display_hdcp_interface {
 	ssize_t (*gsc_msg_send)(struct intel_hdcp_gsc_context *gsc_context,
@@ -106,6 +117,9 @@ struct intel_display_stolen_interface {
  * check the optional pointers.
  */
 struct intel_display_parent_interface {
+	/** @dsb: DSB buffer interface */
+	const struct intel_display_dsb_interface *dsb;
+
 	/** @hdcp: HDCP GSC interface */
 	const struct intel_display_hdcp_interface *hdcp;
 
