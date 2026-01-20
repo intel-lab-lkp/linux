@@ -467,6 +467,8 @@ patternProperties:
     description: Eckelmann AG
   "^econet,.*":
     description: EcoNet (HK) Limited
+  "^ecs,.*":
+    description: Elitegroup Computer Systems Co., Ltd.
   "^edgeble,.*":
     description: Edgeble AI Technologies Pvt. Ltd.
   "^edimax,.*":
