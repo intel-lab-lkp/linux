@@ -771,9 +771,21 @@ team_create()
 {
 	local if_name=$1; shift
 	local mode=$1; shift
+	local output
+	local status
 
 	require_command $TEAMD
-	$TEAMD -t $if_name -d -c '{"runner": {"name": "'$mode'"}}'
+	output=$($TEAMD -t $if_name -d -c '{"runner": {"name": "'$mode'"}}' 2>&1)
+	status=$?
+
+	if [ $status -ne 0 ]; then
+		if echo "$output" | grep -q "Operation not supported"; then
+			exit $ksft_skip
+		else
+			exit 1
+		fi
+	fi
+
 	for slave in "$@"; do
 		ip link set dev $slave down
 		ip link set dev $slave master $if_name
