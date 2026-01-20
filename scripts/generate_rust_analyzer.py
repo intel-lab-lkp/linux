@@ -234,7 +234,7 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, editions,
             append_crate(
                 name,
                 path,
-                ["core", "kernel"],
+                ["core", "kernel", "pin_init"],
                 cfg=generated_cfg,
             )
 
