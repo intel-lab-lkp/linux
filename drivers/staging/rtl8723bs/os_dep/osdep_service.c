@@ -21,12 +21,7 @@ void *_rtw_malloc(u32 sz)
 
 void *_rtw_zmalloc(u32 sz)
 {
-	void *pbuf = _rtw_malloc(sz);
-
-	if (pbuf)
-		memset(pbuf, 0, sz);
-
-	return pbuf;
+	return kzalloc(sz, in_interrupt() ? GFP_ATOMIC : GFP_KERNEL);
 }
 
 inline struct sk_buff *_rtw_skb_alloc(u32 sz)
