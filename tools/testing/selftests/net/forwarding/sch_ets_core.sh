@@ -98,6 +98,7 @@ classifier_mode()
 {
 	echo "Running in classifier mode"
 	ets_delete_qdisc
+	modprobe cls_basic || exit $ksft_skip
 	ETS_CHANGE_QDISC=ets_change_qdisc_classifier
 }
 
