@@ -21,12 +21,12 @@ def args_crates_cfgs(cfgs):
 
 def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, core_edition):
     # Generate the configuration list.
-    cfg = []
+    generated_cfg = []
     with open(objtree / "include" / "generated" / "rustc_cfg") as fd:
         for line in fd:
             line = line.replace("--cfg=", "")
             line = line.replace("\n", "")
-            cfg.append(line)
+            generated_cfg.append(line)
 
     # Now fill the crates list -- dependencies need to come first.
     #
@@ -173,7 +173,7 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, core_edit
             display_name,
             srctree / "rust"/ display_name / "lib.rs",
             deps,
-            cfg=cfg,
+            cfg=generated_cfg,
         )
         crates[-1]["env"]["OBJTREE"] = str(objtree.resolve(True))
         crates[-1]["source"] = {
@@ -215,7 +215,7 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, core_edit
                 name,
                 path,
                 ["core", "kernel"],
-                cfg=cfg,
+                cfg=generated_cfg,
             )
 
     return crates
