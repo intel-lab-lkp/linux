@@ -8,15 +8,16 @@
  */
 int num_digits(int val)
 {
+	long long v = val;
 	long long m = 10;
 	int d = 1;
 
-	if (val < 0) {
+	if (v < 0) {
 		d++;
-		val = -val;
+		v = -v;
 	}
 
-	while (val >= m) {
+	while (v >= m) {
 		m *= 10;
 		d++;
 	}
