@@ -597,6 +597,10 @@ vrf_cleanup()
 	ip -6 rule del pref 32765
 	ip -4 rule add pref 0 table local
 	ip -4 rule del pref 32765
+
+	for ((i = 1; i <= NUM_NETIFS; i=$i+2)); do
+		ip link delete dev ${NETIFS[p$i]} 2>/dev/null || true
+	done
 }
 
 adf_vrf_prepare()
