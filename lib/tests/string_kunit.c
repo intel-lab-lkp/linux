@@ -6,7 +6,9 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <kunit/test.h>
+#include <linux/math64.h>
 #include <linux/module.h>
+#include <linux/prandom.h>
 #include <linux/printk.h>
 #include <linux/slab.h>
 #include <linux/string.h>
@@ -19,6 +21,9 @@
 
 #define STRING_TEST_MAX_LEN	128
 #define STRING_TEST_MAX_OFFSET	16
+
+#define STRING_BENCH_SEED	888
+#define STRING_BENCH_WORKLOAD	1000000UL
 
 static void string_test_memset16(struct kunit *test)
 {
@@ -700,6 +705,151 @@ static void string_test_strends(struct kunit *test)
 	KUNIT_EXPECT_TRUE(test, strends("", ""));
 }
 
+/* Target string lengths for benchmarking */
+static const size_t bench_lens[] = {
+	0, 1, 7, 8, 16, 31, 64, 127, 512, 1024, 3173, 4096
+};
+
+/**
+ * alloc_max_bench_buffer() - Allocate buffer for the max test case.
+ * @test: KUnit context for managed allocation.
+ * @lens: Array of lengths used in the benchmark cases.
+ * @count: Number of elements in the @lens array.
+ * @buf_len: [out] Pointer to store the actually allocated buffer
+ * size (including null).
+ *
+ * Return: Pointer to the allocated memory, or NULL on failure.
+ */
+static void *alloc_max_bench_buffer(struct kunit *test,
+		const size_t *lens, size_t count, size_t *buf_len)
+{
+	void *buf;
+	size_t i, max_len = 0;
+
+	for (i = 0; i < count; i++) {
+		if (max_len < lens[i])
+			max_len = lens[i];
+	}
+
+	/* Add space for NUL terminator */
+	max_len += 1;
+
+	buf = kunit_kzalloc(test, max_len, GFP_KERNEL);
+	if (buf && buf_len)
+		*buf_len = max_len;
+
+	return buf;
+}
+
+/**
+ * fill_random_string() - Fill buffer with random non-null bytes.
+ * @buf: Buffer to fill.
+ * @len: Number of bytes to fill.
+ */
+static void fill_random_string(char *buf, size_t len)
+{
+	size_t i;
+	struct rnd_state state;
+
+	if (!buf || !len)
+		return;
+
+	/* Use a fixed seed to ensure deterministic benchmark results */
+	prandom_seed_state(&state, 888);
+	prandom_bytes_state(&state, buf, len);
+
+	/* Replace null bytes to avoid early string termination */
+	for (i = 0; i < len; i++) {
+		if (buf[i] == '\0')
+			buf[i] = 0x01;
+	}
+
+	buf[len - 1] = '\0';
+}
+
+/**
+ * STRING_BENCH() - Benchmark string functions.
+ * @iters: Number of iterations to run.
+ * @func: Function to benchmark.
+ * @...: Variable arguments passed to @func.
+ *
+ * Disables preemption and measures the total time in nanoseconds to execute
+ * @func(@__VA_ARGS__) for @iters times, including a small warm-up phase.
+ *
+ * Context: Disables preemption during measurement.
+ * Return: Total execution time in nanoseconds (u64).
+ */
+#define STRING_BENCH(iters, func, ...)					\
+({									\
+	u64 __bn_t;							\
+	size_t __bn_i;							\
+	size_t __bn_iters = (iters);					\
+	size_t __bn_warm_iters = max_t(size_t, __bn_iters / 10, 50U);	\
+	/* Volatile function pointer prevents dead code elimination */	\
+	typeof(func) (* volatile __func) = (func);			\
+									\
+	for (__bn_i = 0; __bn_i < __bn_warm_iters; __bn_i++)		\
+		(void)__func(__VA_ARGS__);				\
+									\
+	preempt_disable();						\
+	__bn_t = ktime_get_ns();					\
+	for (__bn_i = 0; __bn_i < __bn_iters; __bn_i++)			\
+		(void)__func(__VA_ARGS__);				\
+	__bn_t = ktime_get_ns() - __bn_t;				\
+	preempt_enable();						\
+	__bn_t;								\
+})
+
+/**
+ * STRING_BENCH_BUF() - Benchmark harness for single-buffer functions.
+ * @test: KUnit context.
+ * @buf_name: Local char * variable name to be defined.
+ * @buf_size: Local size_t variable name to be defined.
+ * @func: Function to benchmark.
+ * @...: Extra arguments for @func.
+ *
+ * Prepares a randomized, null-terminated buffer and iterates through lengths
+ * in bench_lens, defining @buf_name and @buf_size in each loop.
+ */
+#define STRING_BENCH_BUF(test, buf_name, buf_size, func, ...)		\
+do {									\
+	char *buf_name, *_bn_buf;					\
+	size_t buf_size, _bn_i, _bn_iters, _bn_size = 0;		\
+	u64 _bn_t, _bn_mbps = 0, _bn_lat = 0;				\
+									\
+	if (!IS_ENABLED(CONFIG_STRING_KUNIT_BENCH))			\
+		kunit_skip(test, "not enabled");			\
+									\
+	_bn_buf = alloc_max_bench_buffer(test, bench_lens,		\
+			ARRAY_SIZE(bench_lens), &_bn_size);		\
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, _bn_buf);			\
+									\
+	fill_random_string(_bn_buf, _bn_size);				\
+	_bn_buf[_bn_size - 1] = '\0';					\
+									\
+	for (_bn_i = 0; _bn_i < ARRAY_SIZE(bench_lens); _bn_i++) {	\
+		buf_size = bench_lens[_bn_i];				\
+		buf_name = _bn_buf + _bn_size - buf_size - 1;		\
+		_bn_iters = STRING_BENCH_WORKLOAD /			\
+				max_t(size_t, buf_size, 1U);		\
+									\
+		_bn_t = STRING_BENCH(_bn_iters, func, ##__VA_ARGS__);	\
+									\
+		if (_bn_t > 0) {					\
+			_bn_mbps = (u64)(buf_size) * _bn_iters * 1000;	\
+			_bn_mbps = div64_u64(_bn_mbps, _bn_t);		\
+			_bn_lat = div64_u64(_bn_t, _bn_iters);		\
+		}							\
+		kunit_info(test, "len=%zu: %llu MB/s (%llu ns/call)\n",	\
+				buf_size, _bn_mbps, _bn_lat);		\
+	}								\
+} while (0)
+
+static void string_bench_strlen(struct kunit *test)
+{
+	STRING_BENCH_BUF(test, buf, len, strlen, buf);
+}
+
 static struct kunit_case string_test_cases[] = {
 	KUNIT_CASE(string_test_memset16),
 	KUNIT_CASE(string_test_memset32),
@@ -725,6 +875,7 @@ static struct kunit_case string_test_cases[] = {
 	KUNIT_CASE(string_test_strtomem),
 	KUNIT_CASE(string_test_memtostr),
 	KUNIT_CASE(string_test_strends),
+	KUNIT_CASE(string_bench_strlen),
 	{}
 };
 
