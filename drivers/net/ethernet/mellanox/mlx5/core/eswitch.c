@@ -1066,14 +1066,18 @@ static void mlx5_eswitch_event_handler_register(struct mlx5_eswitch *esw)
 	if (esw->mode == MLX5_ESWITCH_OFFLOADS && mlx5_eswitch_is_funcs_handler(esw->dev)) {
 		MLX5_NB_INIT(&esw->esw_funcs.nb, mlx5_esw_funcs_changed_handler,
 			     ESW_FUNCTIONS_CHANGED);
+		esw->esw_funcs.notifier_enabled = true;
 		mlx5_eq_notifier_register(esw->dev, &esw->esw_funcs.nb);
 	}
 }
 
 static void mlx5_eswitch_event_handler_unregister(struct mlx5_eswitch *esw)
 {
-	if (esw->mode == MLX5_ESWITCH_OFFLOADS && mlx5_eswitch_is_funcs_handler(esw->dev))
+	if (esw->mode == MLX5_ESWITCH_OFFLOADS &&
+	    mlx5_eswitch_is_funcs_handler(esw->dev)) {
+		esw->esw_funcs.notifier_enabled = false;
 		mlx5_eq_notifier_unregister(esw->dev, &esw->esw_funcs.nb);
+	}
 
 	flush_workqueue(esw->work_queue);
 }
