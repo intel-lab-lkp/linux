@@ -347,6 +347,8 @@ cleanup()
 	vrf_cleanup
 }
 
+run_cmd_grep 'l2_miss' tc filter add dev lo ingress flower help || exit $ksft_skip
+
 trap cleanup EXIT
 
 setup_prepare
