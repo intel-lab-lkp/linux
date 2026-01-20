@@ -1040,7 +1040,7 @@ struct sched_entity *__pick_last_entity(struct cfs_rq *cfs_rq)
 /**************************************************************
  * Scheduling class statistics methods:
  */
-int sched_update_scaling(void)
+void sched_update_scaling(void)
 {
 	unsigned int factor = get_update_sysctl_factor();
 
@@ -1048,8 +1048,6 @@ int sched_update_scaling(void)
 	(normalized_sysctl_##name = sysctl_##name / (factor))
 	WRT_SYSCTL(sched_base_slice);
 #undef WRT_SYSCTL
-
-	return 0;
 }
 
 static void clear_buddies(struct cfs_rq *cfs_rq, struct sched_entity *se);
