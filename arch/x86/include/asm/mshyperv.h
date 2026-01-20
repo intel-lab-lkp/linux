@@ -188,6 +188,20 @@ bool hv_vcpu_is_preempted(int vcpu);
 static inline void hv_apic_init(void) {}
 #endif
 
+#if IS_ENABLED(CONFIG_HYPERV_IOMMU)
+static inline bool hv_pcidev_is_attached_dev(struct pci_dev *pdev)
+{ return false; }       /* temporary */
+u64 hv_build_devid_oftype(struct pci_dev *pdev, enum hv_device_type type);
+#else	/* CONFIG_HYPERV_IOMMU */
+static inline bool hv_pcidev_is_attached_dev(struct pci_dev *pdev)
+{ return false; }
+
+static inline u64 hv_build_devid_oftype(struct pci_dev *pdev,
+				       enum hv_device_type type)
+{ return 0; }
+
+#endif	/* CONFIG_HYPERV_IOMMU */
+
 u64 hv_pci_vmbus_device_id(struct pci_dev *pdev);
 
 struct irq_domain *hv_create_pci_msi_domain(void);
