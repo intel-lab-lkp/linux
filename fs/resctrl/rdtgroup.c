@@ -1412,7 +1412,8 @@ static bool rdtgroup_mode_test_exclusive(struct rdtgroup *rdtgrp)
 
 	list_for_each_entry(s, &resctrl_schema_all, list) {
 		r = s->res;
-		if (r->rid == RDT_RESOURCE_MBA || r->rid == RDT_RESOURCE_SMBA)
+		if (r->rid == RDT_RESOURCE_MBA || r->rid == RDT_RESOURCE_GMBA ||
+		    r->rid == RDT_RESOURCE_SMBA)
 			continue;
 		has_cache = true;
 		list_for_each_entry(d, &r->ctrl_domains, hdr.list) {
@@ -1615,6 +1616,7 @@ static int rdtgroup_size_show(struct kernfs_open_file *of,
 								       closid,
 								       type);
 				if (r->rid == RDT_RESOURCE_MBA ||
+				    r->rid == RDT_RESOURCE_GMBA ||
 				    r->rid == RDT_RESOURCE_SMBA)
 					size = ctrl;
 				else
@@ -2168,12 +2170,17 @@ static struct rftype *rdtgroup_get_rftype_by_name(const char *name)
 static void thread_throttle_mode_init(void)
 {
 	enum membw_throttle_mode throttle_mode = THREAD_THROTTLE_UNDEFINED;
-	struct rdt_resource *r_mba, *r_smba;
+	struct rdt_resource *r_mba, *r_gmba, *r_smba;
 
 	r_mba = resctrl_arch_get_resource(RDT_RESOURCE_MBA);
 	if (r_mba->alloc_capable &&
 	    r_mba->membw.throttle_mode != THREAD_THROTTLE_UNDEFINED)
 		throttle_mode = r_mba->membw.throttle_mode;
+
+	r_gmba = resctrl_arch_get_resource(RDT_RESOURCE_GMBA);
+	if (r_gmba->alloc_capable &&
+	    r_gmba->membw.throttle_mode != THREAD_THROTTLE_UNDEFINED)
+		throttle_mode = r_gmba->membw.throttle_mode;
 
 	r_smba = resctrl_arch_get_resource(RDT_RESOURCE_SMBA);
 	if (r_smba->alloc_capable &&
@@ -2394,6 +2401,7 @@ static unsigned long fflags_from_resource(struct rdt_resource *r)
 	case RDT_RESOURCE_L2:
 		return RFTYPE_RES_CACHE;
 	case RDT_RESOURCE_MBA:
+	case RDT_RESOURCE_GMBA:
 	case RDT_RESOURCE_SMBA:
 		return RFTYPE_RES_MB;
 	case RDT_RESOURCE_PERF_PKG:
@@ -3643,6 +3651,7 @@ static int rdtgroup_init_alloc(struct rdtgroup *rdtgrp)
 	list_for_each_entry(s, &resctrl_schema_all, list) {
 		r = s->res;
 		if (r->rid == RDT_RESOURCE_MBA ||
+		    r->rid == RDT_RESOURCE_GMBA ||
 		    r->rid == RDT_RESOURCE_SMBA) {
 			rdtgroup_init_mba(r, rdtgrp->closid);
 			if (is_mba_sc(r))

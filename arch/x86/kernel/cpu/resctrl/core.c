@@ -91,6 +91,15 @@ struct rdt_hw_resource rdt_resources_all[RDT_NUM_RESOURCES] = {
 			.schema_fmt		= RESCTRL_SCHEMA_RANGE,
 		},
 	},
+	[RDT_RESOURCE_GMBA] =
+	{
+		.r_resctrl = {
+			.name			= "GMB",
+			.ctrl_scope		= RESCTRL_L3_CACHE,
+			.ctrl_domains		= ctrl_domain_init(RDT_RESOURCE_GMBA),
+			.schema_fmt		= RESCTRL_SCHEMA_RANGE,
+		},
+	},
 	[RDT_RESOURCE_SMBA] =
 	{
 		.r_resctrl = {
@@ -239,10 +248,22 @@ static __init bool __rdt_get_mem_config_amd(struct rdt_resource *r)
 	u32 eax, ebx, ecx, edx, subleaf;
 
 	/*
-	 * Query CPUID_Fn80000020_EDX_x01 for MBA and
-	 * CPUID_Fn80000020_EDX_x02 for SMBA
+	 * Query CPUID function 0x80000020 to obtain num_closid and max_bw values.
+	 * Use subleaf 1 for MBA, subleaf 2 for SMBA, and subleaf 7 for GMBA.
 	 */
-	subleaf = (r->rid == RDT_RESOURCE_SMBA) ? 2 :  1;
+	switch (r->rid) {
+	case RDT_RESOURCE_MBA:
+		subleaf = 1;
+		break;
+	case RDT_RESOURCE_SMBA:
+		subleaf = 2;
+		break;
+	case RDT_RESOURCE_GMBA:
+		subleaf = 7;
+		break;
+	default:
+		return false;
+	}
 
 	cpuid_count(0x80000020, subleaf, &eax, &ebx, &ecx, &edx);
 	hw_res->num_closid = edx + 1;
@@ -910,6 +931,19 @@ static __init bool get_mem_config(void)
 	return false;
 }
 
+static __init bool get_gmem_config(void)
+{
+	struct rdt_hw_resource *hw_res = &rdt_resources_all[RDT_RESOURCE_GMBA];
+
+	if (!rdt_cpu_has(X86_FEATURE_GMBA))
+		return false;
+
+	if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
+		return __rdt_get_mem_config_amd(&hw_res->r_resctrl);
+
+	return false;
+}
+
 static __init bool get_slow_mem_config(void)
 {
 	struct rdt_hw_resource *hw_res = &rdt_resources_all[RDT_RESOURCE_SMBA];
@@ -953,6 +987,9 @@ static __init bool get_rdt_alloc_resources(void)
 	}
 
 	if (get_mem_config())
+		ret = true;
+
+	if (get_gmem_config())
 		ret = true;
 
 	if (get_slow_mem_config())
@@ -1054,6 +1091,9 @@ static __init void rdt_init_res_defs_amd(void)
 			r->cache.min_cbm_bits = 0;
 		} else if (r->rid == RDT_RESOURCE_MBA) {
 			hw_res->msr_base = MSR_IA32_MBA_BW_BASE;
+			hw_res->msr_update = mba_wrmsr_amd;
+		} else if (r->rid == RDT_RESOURCE_GMBA) {
+			hw_res->msr_base = MSR_IA32_GMBA_BW_BASE;
 			hw_res->msr_update = mba_wrmsr_amd;
 		} else if (r->rid == RDT_RESOURCE_SMBA) {
 			hw_res->msr_base = MSR_IA32_SMBA_BW_BASE;
