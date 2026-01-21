@@ -625,6 +625,11 @@ void lru_gen_offline_memcg(struct mem_cgroup *memcg);
 void lru_gen_release_memcg(struct mem_cgroup *memcg);
 void lru_gen_soft_reclaim(struct mem_cgroup *memcg, int nid);
 
+/* memcg interface */
+struct seq_file;
+void lru_gen_seq_show_memcg(struct seq_file *m, struct mem_cgroup *memcg);
+int lru_gen_seq_write_memcg(struct mem_cgroup *memcg, char *buf);
+
 #else /* !CONFIG_LRU_GEN */
 
 static inline void lru_gen_init_pgdat(struct pglist_data *pgdat)
@@ -662,6 +667,17 @@ static inline void lru_gen_release_memcg(struct mem_cgroup *memcg)
 
 static inline void lru_gen_soft_reclaim(struct mem_cgroup *memcg, int nid)
 {
+}
+
+struct seq_file;
+static inline void lru_gen_seq_show_memcg(struct seq_file *m,
+					  struct mem_cgroup *memcg)
+{
+}
+
+static inline int lru_gen_seq_write_memcg(struct mem_cgroup *memcg, char *buf)
+{
+	return -EOPNOTSUPP;
 }
 
 #endif /* CONFIG_LRU_GEN */

@@ -5668,6 +5668,100 @@ static const struct file_operations lru_gen_ro_fops = {
 };
 
 /******************************************************************************
+ *                          memcg interface
+ ******************************************************************************/
+
+void lru_gen_seq_show_memcg(struct seq_file *m, struct mem_cgroup *memcg)
+{
+	int nid;
+	char *path;
+
+	path = kvmalloc(PATH_MAX, GFP_KERNEL);
+#ifdef CONFIG_MEMCG
+	if (memcg && path)
+		cgroup_path(memcg->css.cgroup, path, PATH_MAX);
+#endif
+	seq_printf(m, "memcg %5hu %s\n", mem_cgroup_id(memcg),
+		   (memcg && path) ? path : "");
+	kvfree(path);
+
+	for_each_node_state(nid, N_MEMORY) {
+		struct lruvec *lruvec = get_lruvec(memcg, nid);
+		DEFINE_MAX_SEQ(lruvec);
+		DEFINE_MIN_SEQ(lruvec);
+
+		seq_printf(m, " node %5d (min_seq=%lu/%lu, max_seq=%lu)\n",
+			   nid, min_seq[LRU_GEN_ANON], min_seq[LRU_GEN_FILE], max_seq);
+		lru_gen_print_lruvec(m, lruvec, max_seq, min_seq, false);
+	}
+}
+
+int lru_gen_seq_write_memcg(struct mem_cgroup *memcg, char *buf)
+{
+	char *cur, *next;
+	unsigned int flags;
+	struct blk_plug plug;
+	int err = -EINVAL;
+	struct scan_control sc = {
+		.may_writepage = true,
+		.may_unmap = true,
+		.may_swap = true,
+		.reclaim_idx = MAX_NR_ZONES - 1,
+		.gfp_mask = GFP_KERNEL,
+		.proactive = true,
+		.target_mem_cgroup = memcg,
+	};
+
+	set_task_reclaim_state(current, &sc.reclaim_state);
+	flags = memalloc_noreclaim_save();
+	blk_start_plug(&plug);
+	if (!set_mm_walk(NULL, true)) {
+		err = -ENOMEM;
+		goto done;
+	}
+
+	next = buf;
+	while ((cur = strsep(&next, ",;\n"))) {
+		int n, end;
+		char cmd, swap_str[5];
+		unsigned int nid, swappiness = -1;
+		unsigned long seq, opt = -1;
+		struct lruvec *lruvec;
+
+		cur = skip_spaces(cur);
+		if (!*cur)
+			continue;
+
+		n = sscanf(cur, "%c %u %lu %n %4s %n %lu %n", &cmd, &nid,
+			   &seq, &end, swap_str, &end, &opt, &end);
+		if (n < 3 || cur[end]) {
+			err = -EINVAL;
+			break;
+		}
+		if (n > 3 && strcmp("max", swap_str) == 0)
+			swappiness = SWAPPINESS_ANON_ONLY;
+		else if (n > 3 && kstrtouint(swap_str, 0, &swappiness))
+			break;
+
+		if (nid >= MAX_NUMNODES || !node_state(nid, N_MEMORY)) {
+			err = -EINVAL;
+			break;
+		}
+
+		lruvec = get_lruvec(memcg, nid);
+		err = __run_cmd(cmd, lruvec, seq, &sc, swappiness, opt);
+		if (err)
+			break;
+	}
+done:
+	clear_mm_walk();
+	blk_finish_plug(&plug);
+	memalloc_noreclaim_restore(flags);
+	set_task_reclaim_state(current, NULL);
+	return err;
+}
+
+/******************************************************************************
  *                          initialization
  ******************************************************************************/
 

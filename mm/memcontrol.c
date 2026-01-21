@@ -4592,6 +4592,30 @@ static ssize_t memory_oom_group_write(struct kernfs_open_file *of,
 	return nbytes;
 }
 
+#ifdef CONFIG_LRU_GEN
+static int memory_lru_gen_show(struct seq_file *m, void *v)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
+
+	lru_gen_seq_show_memcg(m, memcg);
+	return 0;
+}
+
+static ssize_t memory_lru_gen_write(struct kernfs_open_file *of, char *buf,
+				    size_t nbytes, loff_t off)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	int ret;
+
+	buf = strstrip(buf);
+	ret = lru_gen_seq_write_memcg(memcg, buf);
+	if (ret)
+		return ret;
+
+	return nbytes;
+}
+#endif
+
 static ssize_t memory_reclaim(struct kernfs_open_file *of, char *buf,
 			      size_t nbytes, loff_t off)
 {
@@ -4676,6 +4700,13 @@ static struct cftype memory_files[] = {
 		.flags = CFTYPE_NS_DELEGATABLE,
 		.write = memory_reclaim,
 	},
+#ifdef CONFIG_LRU_GEN
+	{
+		.name = "lru_gen",
+		.seq_show = memory_lru_gen_show,
+		.write = memory_lru_gen_write,
+	},
+#endif
 	{ }	/* terminate */
 };
 
