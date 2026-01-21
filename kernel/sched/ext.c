@@ -1150,6 +1150,14 @@ static void dispatch_dequeue(struct rq *rq, struct task_struct *p)
 		if (p->scx.holding_cpu >= 0)
 			p->scx.holding_cpu = -1;
 
+		/*
+		 * Clear direct dispatch state. The task may have been
+		 * direct-dispatched from ops.select_cpu() or ops.enqueue()
+		 * but dequeued before the dispatch completed.
+		 */
+		p->scx.ddsp_dsq_id = SCX_DSQ_INVALID;
+		p->scx.ddsp_enq_flags = 0;
+
 		return;
 	}
 
