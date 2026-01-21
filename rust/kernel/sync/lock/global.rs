@@ -6,7 +6,7 @@
 
 use crate::{
     str::{CStr, CStrExt as _},
-    sync::lock::{Backend, Guard, Lock},
+    sync::lock::{Backend, BackendWithContext, Guard, Lock},
     sync::{LockClassKey, LockedBy},
     types::Opaque,
 };
@@ -87,6 +87,34 @@ impl<G: GlobalLockBackend> GlobalLock<G> {
     pub fn try_lock(&'static self) -> Option<GlobalGuard<'static, G, G::Backend>> {
         Some(GlobalGuard {
             inner: self.inner.try_lock()?,
+        })
+    }
+
+    /// Lock this global lock with the provided `context`.
+    pub fn lock_with<'a, B>(
+        &'static self,
+        context: <G::Backend as BackendWithContext>::Context<'a>,
+    ) -> GlobalGuard<'a, G, B>
+    where
+        G::Backend: BackendWithContext<ContextualBackend = B>,
+        B: Backend,
+    {
+        GlobalGuard {
+            inner: self.inner.lock_with(context),
+        }
+    }
+
+    /// Try to lock this global lock with the provided `context`.
+    pub fn try_lock_with<'a, B>(
+        &'static self,
+        context: <G::Backend as BackendWithContext>::Context<'a>,
+    ) -> Option<GlobalGuard<'a, G, B>>
+    where
+        G::Backend: BackendWithContext<ContextualBackend = B>,
+        B: Backend,
+    {
+        Some(GlobalGuard {
+            inner: self.inner.try_lock_with(context)?,
         })
     }
 }
