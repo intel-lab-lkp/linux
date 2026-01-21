@@ -13507,6 +13507,12 @@ S:	Maintained
 F:	arch/x86/include/asm/jailhouse_para.h
 F:	arch/x86/kernel/jailhouse.c
 
+JEDEC PMIC50X0 HARDWARE MONITOR DRIVER
+M:	Almog Ben Shaul <almogbs@amazon.com>
+L:	linux-hwmon@vger.kernel.org
+S:	Maintained
+F:	drivers/hwmon/pmic50x0.c
+
 JFS FILESYSTEM
 M:	Dave Kleikamp <shaggy@kernel.org>
 L:	jfs-discussion@lists.sourceforge.net

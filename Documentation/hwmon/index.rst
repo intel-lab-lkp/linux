@@ -211,6 +211,7 @@ Hardware Monitoring Kernel Drivers
    peci-cputemp
    peci-dimmtemp
    pmbus
+   pmic50x0
    powerz
    powr1220
    pt5161l
