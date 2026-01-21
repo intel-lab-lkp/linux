@@ -232,5 +232,6 @@ int intel_dp_compute_config_late(struct intel_encoder *encoder,
 				 struct drm_connector_state *conn_state);
 int intel_dp_sdp_min_guardband(const struct intel_crtc_state *crtc_state,
 			       bool assume_all_enabled);
+int intel_dp_hdisplay_limit(struct intel_display *display);
 
 #endif /* __INTEL_DP_H__ */
