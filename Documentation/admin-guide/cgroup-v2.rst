@@ -1426,6 +1426,23 @@ PAGE_SIZE multiple when read back.
 	This means that the networking layer will not adapt based on
 	reclaim induced by memory.reclaim.
 
+  memory.lru_gen
+	A read-write file that exists when CONFIG_LRU_GEN is enabled.
+
+	Reading this file displays the multi-gen LRU information for
+	this memcg, including generation numbers, page counts for
+	anonymous and file pages across all NUMA nodes.
+
+	Writing to this file allows performing aging or eviction
+	operations on this memcg. The format is::
+
+	  echo '<cmd> <node_id> <seq> [<swappiness> [<opt>]]' > memory.lru_gen
+
+	This interface provides the same functionality as the debugfs
+	lru_gen interface but operates directly on the cgroup without
+	requiring the memcg_id. For detailed documentation of the
+	command format and MGLRU, see Documentation/admin-guide/mm/multigen_lru.rst.
+
 The following nested keys are defined.
 
 	  ==========            ================================
