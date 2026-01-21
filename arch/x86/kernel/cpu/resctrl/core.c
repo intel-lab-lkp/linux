@@ -295,6 +295,9 @@ static __init bool __rdt_get_mem_config_amd(struct rdt_resource *r)
 
 	r->alloc_capable = true;
 
+	if (rdt_cpu_has(X86_FEATURE_PLZA))
+		r->plza_capable = true;
+
 	return true;
 }
 
@@ -314,6 +317,9 @@ static void rdt_get_cache_alloc_cfg(int idx, struct rdt_resource *r)
 	if (boot_cpu_data.x86_vendor == X86_VENDOR_INTEL)
 		r->cache.arch_has_sparse_bitmasks = ecx.split.noncont;
 	r->alloc_capable = true;
+
+	if (rdt_cpu_has(X86_FEATURE_PLZA))
+		r->plza_capable = true;
 }
 
 static void rdt_get_cdp_config(int level)

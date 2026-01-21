@@ -319,6 +319,7 @@ struct resctrl_mon {
  * @name:		Name to use in "schemata" file.
  * @schema_fmt:		Which format string and parser is used for this schema.
  * @cdp_capable:	Is the CDP feature available on this resource
+ * @plza_capable:	Is Privilege Level Zero Association capable?
  */
 struct rdt_resource {
 	int			rid;
@@ -334,6 +335,7 @@ struct rdt_resource {
 	char			*name;
 	enum resctrl_schema_fmt	schema_fmt;
 	bool			cdp_capable;
+	bool			plza_capable;
 };
 
 /*
@@ -481,6 +483,7 @@ static inline u32 resctrl_get_config_index(u32 closid,
 
 bool resctrl_arch_get_cdp_enabled(enum resctrl_res_level l);
 int resctrl_arch_set_cdp_enabled(enum resctrl_res_level l, bool enable);
+bool resctrl_arch_get_plza_capable(enum resctrl_res_level l);
 
 /**
  * resctrl_arch_mbm_cntr_assign_enabled() - Check if MBM counter assignment
