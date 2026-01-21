@@ -1192,6 +1192,21 @@ static void iwl_pci_remove(struct pci_dev *pdev)
 	iwl_pcie_gen1_2_remove(trans);
 }
 
+static void iwl_pci_shutdown(struct pci_dev *pdev)
+{
+	struct iwl_trans *trans = pci_get_drvdata(pdev);
+
+	if (trans) {
+		iwl_pcie_gen1_2_remove(trans);
+		pci_set_drvdata(pdev, NULL);
+	}
+
+	pci_save_state(pdev);
+	pci_clear_master(pdev);
+	pci_disable_device(pdev);
+	pci_set_power_state(pdev, PCI_D3hot);
+}
+
 #ifdef CONFIG_PM_SLEEP
 
 static int iwl_pci_suspend(struct device *device)
@@ -1325,6 +1340,7 @@ static struct pci_driver iwl_pci_driver = {
 	.id_table = iwl_hw_card_ids,
 	.probe = iwl_pci_probe,
 	.remove = iwl_pci_remove,
+	.shutdown = iwl_pci_shutdown,
 	.driver.pm = IWL_PM_OPS,
 	.driver.coredump = iwl_pci_dump,
 };
