@@ -2,7 +2,6 @@
 #ifndef __LINUX_BITS_H
 #define __LINUX_BITS_H
 
-#include <vdso/bits.h>
 #include <uapi/linux/bits.h>
 
 #define BIT_MASK(nr)		(UL(1) << ((nr) % BITS_PER_LONG))
@@ -89,10 +88,16 @@ int BIT_INPUT_CHECK_FAIL(void) __compiletime_error("Bit number out of range");
 	((unsigned int)BIT_INPUT_CHECK(+(nr), BITS_PER_TYPE(type)) + ((type)1 << (nr)))
 #endif /* defined(__ASSEMBLY__) */
 
+/* Prefer this definition of BIT() to the one in vdso/bits.h */
+#undef BIT
+#define __VDSO_BITS_H
+#define BIT(nr)		BIT_TYPE(unsigned long, nr)
+#define BIT_ULL(nr)	BIT_TYPE(unsigned long long, nr)
 #define BIT_U8(nr)	BIT_TYPE(u8, nr)
 #define BIT_U16(nr)	BIT_TYPE(u16, nr)
 #define BIT_U32(nr)	BIT_TYPE(u32, nr)
 #define BIT_U64(nr)	BIT_TYPE(u64, nr)
+#define BIT_U128(nr)	BIT_TYPE(u128, nr)
 
 #if defined(__ASSEMBLY__)
 
