@@ -639,7 +639,7 @@ static int rs5c372_set_offset(struct device *dev, long offset)
 	if (!steps || !(val & 0x3E)) {
 		/*
 		 * if offset is too small, set oscillation adjustment register
-		 * or time trimming register with its default value whic means
+		 * or time trimming register with its default value which means
 		 * no increment or decrement. But for rs5c372[a|b], the XSL bit
 		 * should be kept unchanged.
 		 */

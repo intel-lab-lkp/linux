@@ -465,7 +465,7 @@ static int fm3130_probe(struct i2c_client *client)
 
 bad_alarm:
 
-	/* clock registers sanity chek */
+	/* clock registers sanity check */
 	tmp = bcd2bin(fm3130->regs[FM3130_RTC_SECONDS] & 0x7f);
 	if (tmp > 59)
 		goto bad_clock;
