@@ -1356,6 +1356,26 @@ void klp_module_going(struct module *mod)
 	mutex_unlock(&klp_mutex);
 }
 
+void *klp_locate_section_objs(const struct module *mod, const char *name,
+			      size_t object_size, unsigned int *nr_objs)
+{
+	struct klp_modinfo *info = mod->klp_info;
+
+	for (int i = 1; i < info->hdr.e_shnum; i++) {
+		Elf_Shdr *shdr = &info->sechdrs[i];
+
+		if (strcmp(info->secstrings + shdr->sh_name, name))
+			continue;
+
+		*nr_objs = shdr->sh_size / object_size;
+		return (void *)shdr->sh_addr;
+	}
+
+	*nr_objs = 0;
+	return NULL;
+}
+EXPORT_SYMBOL_GPL(klp_locate_section_objs);
+
 static int __init klp_init(void)
 {
 	klp_root_kobj = kobject_create_and_add("livepatch", kernel_kobj);
