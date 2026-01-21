@@ -1130,8 +1130,16 @@ int phy_device_register(struct phy_device *phydev)
 		goto out;
 	}
 
+	if (phydev->mdio.bus->register_phy) {
+		err = phydev->mdio.bus->register_phy(phydev);
+		if (err)
+			goto register_hook_err;
+	}
+
 	return 0;
 
+ register_hook_err:
+	device_del(&phydev->mdio.dev);
  out:
 	/* Assert the reset signal */
 	phy_device_reset(phydev, 1);

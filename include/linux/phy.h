@@ -377,6 +377,9 @@ struct mii_bus {
 	/** @reset: Perform a reset of the bus */
 	int (*reset)(struct mii_bus *bus);
 
+	/** @register_phy: Called for each PHY detected on the bus */
+	int (*register_phy)(struct phy_device *phydev);
+
 	/** @stats: Statistic counters per device on the bus */
 	struct mdio_bus_stats stats[PHY_MAX_ADDR];
 
