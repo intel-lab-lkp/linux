@@ -624,66 +624,66 @@ static int tcf_gate_dump(struct sk_buff *skb, struct tc_action *a,
 {
 	unsigned char *b = skb_tail_pointer(skb);
 	struct tcf_gate *gact = to_gate(a);
-	struct tc_gate opt = { };
 	struct tcfg_gate_entry *entry;
 	struct tcf_gate_params *p;
 	struct nlattr *entry_list;
+	struct tc_gate opt = { };
 	struct tcf_t t;
 
 	opt.index = gact->tcf_index;
 	opt.refcnt = refcount_read(&gact->tcf_refcnt) - ref;
 	opt.bindcnt = atomic_read(&gact->tcf_bindcnt) - bind;
 
-	spin_lock_bh(&gact->tcf_lock);
-	opt.action = gact->tcf_action;
-
-	p = rcu_dereference_protected(gact->param,
-				      lockdep_is_held(&gact->tcf_lock));
+	opt.action = READ_ONCE(gact->tcf_action);
 
 	if (nla_put(skb, TCA_GATE_PARMS, sizeof(opt), &opt))
 		goto nla_put_failure;
 
+	rcu_read_lock();
+	p = rcu_dereference(gact->param);
+
 	if (nla_put_u64_64bit(skb, TCA_GATE_BASE_TIME,
 			      p->tcfg_basetime, TCA_GATE_PAD))
-		goto nla_put_failure;
+		goto nla_put_failure_rcu;
 
 	if (nla_put_u64_64bit(skb, TCA_GATE_CYCLE_TIME,
 			      p->tcfg_cycletime, TCA_GATE_PAD))
-		goto nla_put_failure;
+		goto nla_put_failure_rcu;
 
 	if (nla_put_u64_64bit(skb, TCA_GATE_CYCLE_TIME_EXT,
 			      p->tcfg_cycletime_ext, TCA_GATE_PAD))
-		goto nla_put_failure;
+		goto nla_put_failure_rcu;
 
 	if (nla_put_s32(skb, TCA_GATE_CLOCKID, p->tcfg_clockid))
-		goto nla_put_failure;
+		goto nla_put_failure_rcu;
 
 	if (nla_put_u32(skb, TCA_GATE_FLAGS, p->tcfg_flags))
-		goto nla_put_failure;
+		goto nla_put_failure_rcu;
 
 	if (nla_put_s32(skb, TCA_GATE_PRIORITY, p->tcfg_priority))
-		goto nla_put_failure;
+		goto nla_put_failure_rcu;
 
 	entry_list = nla_nest_start_noflag(skb, TCA_GATE_ENTRY_LIST);
 	if (!entry_list)
-		goto nla_put_failure;
+		goto nla_put_failure_rcu;
 
 	list_for_each_entry(entry, &p->entries, list) {
 		if (dumping_entry(skb, entry) < 0)
-			goto nla_put_failure;
+			goto nla_put_failure_rcu;
 	}
 
 	nla_nest_end(skb, entry_list);
+	rcu_read_unlock();
 
 	tcf_tm_dump(&t, &gact->tcf_tm);
 	if (nla_put_64bit(skb, TCA_GATE_TM, sizeof(t), &t, TCA_GATE_PAD))
 		goto nla_put_failure;
-	spin_unlock_bh(&gact->tcf_lock);
 
 	return skb->len;
 
+nla_put_failure_rcu:
+	rcu_read_unlock();
 nla_put_failure:
-	spin_unlock_bh(&gact->tcf_lock);
 	nlmsg_trim(skb, b);
 	return -1;
 }

@@ -57,9 +57,10 @@ static inline s32 tcf_gate_prio(const struct tc_action *a)
 	s32 tcfg_prio;
 	struct tcf_gate_params *p;
 
-	p = rcu_dereference_protected(to_gate(a)->param,
-				      lockdep_rtnl_is_held());
+	rcu_read_lock();
+	p = rcu_dereference(to_gate(a)->param);
 	tcfg_prio = p->tcfg_priority;
+	rcu_read_unlock();
 
 	return tcfg_prio;
 }
@@ -69,9 +70,10 @@ static inline u64 tcf_gate_basetime(const struct tc_action *a)
 	u64 tcfg_basetime;
 	struct tcf_gate_params *p;
 
-	p = rcu_dereference_protected(to_gate(a)->param,
-				      lockdep_rtnl_is_held());
+	rcu_read_lock();
+	p = rcu_dereference(to_gate(a)->param);
 	tcfg_basetime = p->tcfg_basetime;
+	rcu_read_unlock();
 
 	return tcfg_basetime;
 }
@@ -81,9 +83,10 @@ static inline u64 tcf_gate_cycletime(const struct tc_action *a)
 	u64 tcfg_cycletime;
 	struct tcf_gate_params *p;
 
-	p = rcu_dereference_protected(to_gate(a)->param,
-				      lockdep_rtnl_is_held());
+	rcu_read_lock();
+	p = rcu_dereference(to_gate(a)->param);
 	tcfg_cycletime = p->tcfg_cycletime;
+	rcu_read_unlock();
 
 	return tcfg_cycletime;
 }
@@ -93,9 +96,10 @@ static inline u64 tcf_gate_cycletimeext(const struct tc_action *a)
 	u64 tcfg_cycletimeext;
 	struct tcf_gate_params *p;
 
-	p = rcu_dereference_protected(to_gate(a)->param,
-				      lockdep_rtnl_is_held());
+	rcu_read_lock();
+	p = rcu_dereference(to_gate(a)->param);
 	tcfg_cycletimeext = p->tcfg_cycletime_ext;
+	rcu_read_unlock();
 
 	return tcfg_cycletimeext;
 }
@@ -105,9 +109,10 @@ static inline u32 tcf_gate_num_entries(const struct tc_action *a)
 	u32 num_entries;
 	struct tcf_gate_params *p;
 
-	p = rcu_dereference_protected(to_gate(a)->param,
-				      lockdep_rtnl_is_held());
+	rcu_read_lock();
+	p = rcu_dereference(to_gate(a)->param);
 	num_entries = p->num_entries;
+	rcu_read_unlock();
 
 	return num_entries;
 }
@@ -121,19 +126,23 @@ static inline struct action_gate_entry
 	u32 num_entries;
 	int i = 0;
 
-	p = rcu_dereference_protected(to_gate(a)->param,
-				      lockdep_rtnl_is_held());
+	rcu_read_lock();
+	p = rcu_dereference(to_gate(a)->param);
 	num_entries = p->num_entries;
 
 	list_for_each_entry(entry, &p->entries, list)
 		i++;
 
-	if (i != num_entries)
+	if (i != num_entries) {
+		rcu_read_unlock();
 		return NULL;
+	}
 
 	oe = kcalloc(num_entries, sizeof(*oe), GFP_ATOMIC);
-	if (!oe)
+	if (!oe) {
+		rcu_read_unlock();
 		return NULL;
+	}
 
 	i = 0;
 	list_for_each_entry(entry, &p->entries, list) {
@@ -143,6 +152,7 @@ static inline struct action_gate_entry
 		oe[i].maxoctets = entry->maxoctets;
 		i++;
 	}
+	rcu_read_unlock();
 
 	return oe;
 }
