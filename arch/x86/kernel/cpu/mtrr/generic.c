@@ -970,7 +970,6 @@ static void mtrr_enable(struct mtrr_work_state *state)
  * The caller must ensure that local interrupts are disabled and
  * are reenabled after cache_enable() has been called.
  */
-static DEFINE_RAW_SPINLOCK(cache_disable_lock);
 
 /*
  * Cache flushing is the most time-consuming step when programming the
@@ -984,16 +983,8 @@ static void maybe_flush_caches(void)
 }
 
 static void cache_disable(struct mtrr_work_state *state)
-	__acquires(cache_disable_lock)
 {
 	unsigned long cr0;
-
-	/*
-	 * This is not ideal since the cache is only flushed/disabled
-	 * for this CPU while the MTRRs are changed, but changing this
-	 * requires more invasive changes to the way the kernel boots.
-	 */
-	raw_spin_lock(&cache_disable_lock);
 
 	/* Enter the no-fill (CD=1, NW=0) cache mode and flush caches. */
 	cr0 = read_cr0() | X86_CR0_CD;
@@ -1018,7 +1009,6 @@ static void cache_disable(struct mtrr_work_state *state)
 }
 
 static void cache_enable(struct mtrr_work_state *state)
-	__releases(cache_disable_lock)
 {
 	/* Flush TLBs (no need to flush caches - they are disabled) */
 	count_vm_tlb_event(NR_TLB_LOCAL_FLUSH_ALL);
@@ -1033,8 +1023,6 @@ static void cache_enable(struct mtrr_work_state *state)
 	/* Restore value of CR4 */
 	if (cpu_feature_enabled(X86_FEATURE_PGE))
 		__write_cr4(state->cr4);
-
-	raw_spin_unlock(&cache_disable_lock);
 }
 
 void mtrr_generic_set_state(void)
