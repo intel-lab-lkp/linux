@@ -351,6 +351,21 @@ EXPORT_SYMBOL_GPL(unwind_start);
 static inline unsigned long bt_address(unsigned long ra)
 {
 	extern unsigned long eentry;
+#if defined(CONFIG_NUMA) && !defined(CONFIG_PREEMPT_RT)
+	int cpu;
+	int vec_sz = sizeof(exception_handlers);
+
+	for_each_possible_cpu(cpu) {
+		if (!pcpu_handlers[cpu])
+			continue;
+
+		if (ra >= pcpu_handlers[cpu] &&
+		    ra < pcpu_handlers[cpu] + vec_sz) {
+			ra = eentry + (ra - pcpu_handlers[cpu]);
+			break;
+		}
+	}
+#endif
 
 	if (ra >= eentry && ra < eentry +  EXCCODE_INT_END * VECSIZE) {
 		unsigned long func;
