@@ -1188,6 +1188,8 @@ static int imx412_probe(struct i2c_client *client)
 
 	mutex_init(&imx412->mutex);
 
+	gpiod_set_value_cansleep(imx412->reset_gpio, 1);
+
 	ret = imx412_power_on(imx412->dev);
 	if (ret) {
 		dev_err(imx412->dev, "failed to power-on the sensor\n");
