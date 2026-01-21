@@ -152,6 +152,9 @@ static int mana_gd_query_max_resources(struct pci_dev *pdev)
 	if (gc->max_num_queues > gc->num_msix_usable - 1)
 		gc->max_num_queues = gc->num_msix_usable - 1;
 
+	dev_info(gc->dev, "Max Resources: msix_usable=%u max_queues=%u\n",
+		 gc->num_msix_usable, gc->max_num_queues);
+
 	return 0;
 }
 
@@ -1229,6 +1232,9 @@ int mana_gd_verify_vf_version(struct pci_dev *pdev)
 		}
 		dev_dbg(gc->dev, "set the hwc timeout to %u\n", hwc->hwc_timeout);
 	}
+
+	dev_info(gc->dev, "VF Version: protocol=0x%llx pf_caps=[0x%llx]\n",
+		 resp.gdma_protocol_ver, gc->pf_cap_flags1);
 	return 0;
 }
 

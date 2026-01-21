@@ -1026,8 +1026,8 @@ static int mana_send_request(struct mana_context *ac, void *in_buf,
 
 		if (req->req.msg_type != MANA_QUERY_PHY_STAT &&
 		    mana_need_log(gc, err))
-			dev_err(dev, "Failed to send mana message: %d, 0x%x\n",
-				err, resp->status);
+			dev_err(dev, "Command 0x%x failed with status: 0x%x, err: %d\n",
+				req->req.msg_type, resp->status, err);
 		return err ? err : -EPROTO;
 	}
 
@@ -1222,6 +1222,9 @@ static int mana_query_device_cfg(struct mana_context *ac, u32 proto_major_ver,
 	else
 		*bm_hostmode = 0;
 
+	dev_info(dev, "Device Config: max_vports=%u adapter_mtu=%u bm_hostmode=%u\n",
+		 *max_num_vports, gc->adapter_mtu, *bm_hostmode);
+
 	debugfs_create_u16("adapter-MTU", 0400, gc->mana_pci_debugfs, &gc->adapter_mtu);
 
 	return 0;
@@ -1268,6 +1271,9 @@ static int mana_query_vport_cfg(struct mana_port_context *apc, u32 vport_index,
 	apc->port_handle = resp.vport;
 	ether_addr_copy(apc->mac_addr, resp.mac_addr);
 
+	netdev_info(apc->ndev, "VPort Config: vport=0x%llx max_sq=%u max_rq=%u indir_ent=%u MAC=%pM",
+		    apc->port_handle, *max_sq, *max_rq, *num_indir_entry, apc->mac_addr);
+
 	return 0;
 }
 
@@ -1277,6 +1283,9 @@ void mana_uncfg_vport(struct mana_port_context *apc)
 	apc->vport_use_count--;
 	WARN_ON(apc->vport_use_count < 0);
 	mutex_unlock(&apc->vport_mutex);
+
+	netdev_info(apc->ndev, "Disabled vPort %llu MAC %pM\n",
+		    apc->port_handle, apc->mac_addr);
 }
 EXPORT_SYMBOL_NS(mana_uncfg_vport, "NET_MANA");
 
@@ -1340,8 +1349,8 @@ int mana_cfg_vport(struct mana_port_context *apc, u32 protection_dom_id,
 	apc->tx_shortform_allowed = resp.short_form_allowed;
 	apc->tx_vp_offset = resp.tx_vport_offset;
 
-	netdev_info(apc->ndev, "Configured vPort %llu PD %u DB %u\n",
-		    apc->port_handle, protection_dom_id, doorbell_pg_id);
+	netdev_info(apc->ndev, "Enabled vPort %llu PD %u DB %u MAC %pM\n",
+		    apc->port_handle, protection_dom_id, doorbell_pg_id, apc->mac_addr);
 out:
 	if (err)
 		mana_uncfg_vport(apc);
@@ -1412,8 +1421,10 @@ static int mana_cfg_vport_steering(struct mana_port_context *apc,
 		err = -EPROTO;
 	}
 
-	netdev_info(ndev, "Configured steering vPort %llu entries %u\n",
-		    apc->port_handle, apc->indir_table_sz);
+	netdev_info(ndev,
+		    "Configured steering vPort %llu entries %u MAC %pM [rx:%u rss:%u update_indirection_table:%u cqe_coalescing:%u]\n",
+		    apc->port_handle, apc->indir_table_sz, apc->mac_addr,
+		    rx, apc->rss_state, update_tab, req->cqe_coalescing_enable);
 out:
 	kfree(req);
 	return err;
