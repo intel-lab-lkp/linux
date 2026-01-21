@@ -405,6 +405,7 @@ static struct svc_export *svc_export_lookup(struct svc_export *);
 static int check_export(const struct path *path, int *flags, unsigned char *uuid)
 {
 	struct inode *inode = d_inode(path->dentry);
+	const struct export_operations *nop = inode->i_sb->s_export_op;
 
 	/*
 	 * We currently export only dirs, regular files, and (for v4
@@ -422,13 +423,12 @@ static int check_export(const struct path *path, int *flags, unsigned char *uuid
 	if (*flags & NFSEXP_V4ROOT)
 		*flags |= NFSEXP_READONLY;
 
-	/* There are two requirements on a filesystem to be exportable.
-	 * 1:  We must be able to identify the filesystem from a number.
-	 *       either a device number (so FS_REQUIRES_DEV needed)
-	 *       or an FSID number (so NFSEXP_FSID or ->uuid is needed).
-	 * 2:  We must be able to find an inode from a filehandle.
-	 *       This means that s_export_op must be set.
-	 * 3: We must not currently be on an idmapped mount.
+	/*
+	 * The requirements for a filesystem to be exportable:
+	 * 1. The filehandle must identify a filesystem by number
+	 * 2. The filehandle must uniquely identify an inode
+	 * 3. The filesystem must not have custom filehandle open/perm methods
+	 * 4. The requested file must not reside on an idmapped mount
 	 */
 	if (!(inode->i_sb->s_type->fs_flags & FS_REQUIRES_DEV) &&
 	    !(*flags & NFSEXP_FSID) &&
@@ -437,8 +437,13 @@ static int check_export(const struct path *path, int *flags, unsigned char *uuid
 		return -EINVAL;
 	}
 
-	if (!exportfs_can_decode_fh(inode->i_sb->s_export_op)) {
+	if (!exportfs_can_decode_fh(nop)) {
 		dprintk("exp_export: export of invalid fs type.\n");
+		return -EINVAL;
+	}
+
+	if (nop->open || nop->permission) {
+		dprintk("exp_export: export of non-standard fs type.\n");
 		return -EINVAL;
 	}
 
