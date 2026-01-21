@@ -1058,6 +1058,31 @@ void mtrr_generic_set_state(void)
 }
 
 /**
+ * generic_prepare_set_mtrr - set variable MTRR register data in mtrr_state
+ *
+ * @reg: The register to set.
+ * @base: The base address of the region.
+ * @size: The size of the region. If this is 0 the region is disabled.
+ * @type: The type of the region.
+ *
+ * Returns nothing.
+ */
+static void generic_prepare_set_mtrr(unsigned int reg, unsigned long base,
+				     unsigned long size, mtrr_type type)
+{
+	struct mtrr_var_range *vr = &mtrr_state.var_ranges[reg];
+
+	if (size == 0) {
+		memset(vr, 0, sizeof(struct mtrr_var_range));
+	} else {
+		vr->base_lo = base << PAGE_SHIFT | type;
+		vr->base_hi = (base >> (32 - PAGE_SHIFT)) & ~phys_hi_rsvd;
+		vr->mask_lo = -size << PAGE_SHIFT | MTRR_PHYSMASK_V;
+		vr->mask_hi = (-size >> (32 - PAGE_SHIFT)) & ~phys_hi_rsvd;
+	}
+}
+
+/**
  * generic_set_mtrr - set variable MTRR register on the local CPU.
  *
  * @reg: The register to set.
@@ -1085,13 +1110,7 @@ static void generic_set_mtrr(unsigned int reg, unsigned long base,
 		 * clear the relevant mask register to disable a range.
 		 */
 		mtrr_wrmsr(MTRRphysMask_MSR(reg), 0, 0);
-		memset(vr, 0, sizeof(struct mtrr_var_range));
 	} else {
-		vr->base_lo = base << PAGE_SHIFT | type;
-		vr->base_hi = (base >> (32 - PAGE_SHIFT)) & ~phys_hi_rsvd;
-		vr->mask_lo = -size << PAGE_SHIFT | MTRR_PHYSMASK_V;
-		vr->mask_hi = (-size >> (32 - PAGE_SHIFT)) & ~phys_hi_rsvd;
-
 		mtrr_wrmsr(MTRRphysBase_MSR(reg), vr->base_lo, vr->base_hi);
 		mtrr_wrmsr(MTRRphysMask_MSR(reg), vr->mask_lo, vr->mask_hi);
 	}
@@ -1156,6 +1175,7 @@ int positive_have_wrcomb(void)
 const struct mtrr_ops generic_mtrr_ops = {
 	.get			= generic_get_mtrr,
 	.get_free_region	= generic_get_free_region,
+	.prepare_set		= generic_prepare_set_mtrr,
 	.set			= generic_set_mtrr,
 	.validate_add_page	= generic_validate_add_page,
 	.have_wrcomb		= generic_have_wrcomb,
