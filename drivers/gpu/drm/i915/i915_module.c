@@ -117,6 +117,12 @@ static void __exit i915_exit(void)
 		if (init_funcs[i].exit)
 			init_funcs[i].exit();
 	}
+
+	/* Workaround for "MAX_STACK_TRACE_ENTRIES" too low, reset all locks after exit */
+#if IS_ENABLED(CONFIG_DRM_I915_SELFTEST)
+	if (i915_selftest.live || i915_selftest.mock || i915_selftest.perf)
+		lockdep_reset();
+#endif
 }
 
 module_init(i915_init);
