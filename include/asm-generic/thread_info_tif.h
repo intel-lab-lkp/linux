@@ -2,7 +2,7 @@
 #ifndef _ASM_GENERIC_THREAD_INFO_TIF_H_
 #define _ASM_GENERIC_THREAD_INFO_TIF_H_
 
-#include <vdso/bits.h>
+#include <linux/bits.h>
 
 /* Bits 16-31 are reserved for architecture specific purposes */
 
