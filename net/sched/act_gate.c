@@ -55,15 +55,17 @@ static void gate_get_start_time(struct tcf_gate *gact,
 	*start = ktime_add_ns(base, (n + 1) * cycle);
 }
 
-static void gate_start_timer(struct tcf_gate *gact, ktime_t start)
+static void gate_start_timer(struct tcf_gate *gact, ktime_t start, bool replace)
 {
 	ktime_t expires;
 
-	expires = hrtimer_get_expires(&gact->hitimer);
-	if (expires == 0)
-		expires = KTIME_MAX;
+	if (!replace) {
+		expires = hrtimer_get_expires(&gact->hitimer);
+		if (expires == 0)
+			expires = KTIME_MAX;
 
-	start = min_t(ktime_t, start, expires);
+		start = min_t(ktime_t, start, expires);
+	}
 
 	hrtimer_start(&gact->hitimer, start, HRTIMER_MODE_ABS_SOFT);
 }
@@ -307,24 +309,9 @@ release_list:
 	return err;
 }
 
-static void gate_setup_timer(struct tcf_gate *gact, u64 basetime,
-			     enum tk_offsets tko, s32 clockid,
-			     bool do_init)
+static void gate_setup_timer(struct tcf_gate *gact,
+			     enum tk_offsets tko, s32 clockid)
 {
-	struct tcf_gate_params *p;
-
-	if (!do_init) {
-		p = rcu_dereference_protected(gact->param,
-					      lockdep_is_held(&gact->tcf_lock));
-		if (basetime == p->tcfg_basetime &&
-		    tko == gact->tk_offset &&
-		    clockid == p->tcfg_clockid)
-			return;
-
-		spin_unlock_bh(&gact->tcf_lock);
-		hrtimer_cancel(&gact->hitimer);
-		spin_lock_bh(&gact->tcf_lock);
-	}
 	gact->tk_offset = tko;
 	hrtimer_setup(&gact->hitimer, gate_timer_func, clockid, HRTIMER_MODE_ABS_SOFT);
 }
@@ -527,8 +514,19 @@ static int tcf_gate_init(struct net *net, struct nlattr *nla,
 		goto release_mem;
 
 	spin_lock_bh(&gact->tcf_lock);
-	gate_setup_timer(gact, basetime, tk_offset, clockid,
-			 ret == ACT_P_CREATED);
+
+	if (ret == ACT_P_CREATED) {
+		gate_setup_timer(gact, tk_offset, clockid);
+	} else {
+		old_p = rcu_dereference_protected(gact->param,
+						  lockdep_is_held(&gact->tcf_lock));
+		if (!old_p || clockid != old_p->tcfg_clockid) {
+			spin_unlock_bh(&gact->tcf_lock);
+			hrtimer_cancel(&gact->hitimer);
+			spin_lock_bh(&gact->tcf_lock);
+			gate_setup_timer(gact, tk_offset, clockid);
+		}
+	}
 	gate_get_start_time(gact, p, &start);
 
 	old_p = rcu_replace_pointer(gact->param, p,
@@ -542,7 +540,7 @@ static int tcf_gate_init(struct net *net, struct nlattr *nla,
 
 	goto_ch = tcf_action_set_ctrlact(*a, parm->action, goto_ch);
 
-	gate_start_timer(gact, start);
+	gate_start_timer(gact, start, ret != ACT_P_CREATED);
 
 	spin_unlock_bh(&gact->tcf_lock);
 
@@ -562,9 +560,7 @@ release_idr:
 	 * without taking tcf_lock.
 	 */
 	if (ret == ACT_P_CREATED)
-		gate_setup_timer(gact, 0,
-				 gact->tk_offset, 0,
-				 true);
+		gate_setup_timer(gact, gact->tk_offset, 0);
 	tcf_idr_release(*a, bind);
 	return err;
 }
