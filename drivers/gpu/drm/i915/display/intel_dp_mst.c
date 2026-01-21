@@ -710,6 +710,7 @@ static int mst_stream_compute_config(struct intel_encoder *encoder,
 
 	for (i = 0; i < ARRAY_SIZE(joiner_candidates); i++) {
 		enum joiner_type joiner = joiner_candidates[i];
+		int dsc_slice_count = 0;
 
 		ret = -EINVAL;
 
@@ -741,8 +742,12 @@ static int mst_stream_compute_config(struct intel_encoder *encoder,
 		if (ret)
 			continue;
 
+		dsc_slice_count = intel_dp_mst_dsc_get_slice_count(connector, pipe_config);
+
 		if (intel_dp_pixel_rate_fits_dotclk(display,
 						    adjusted_mode->clock,
+						    adjusted_mode->htotal,
+						    dsc_slice_count,
 						    num_joined_pipes)) {
 			ret = 0;
 			break;
@@ -1542,6 +1547,7 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 
 	for (i = 0; i < ARRAY_SIZE(joiner_candidates); i++) {
 		enum joiner_type joiner = joiner_candidates[i];
+		int dsc_slice_count = 0;
 
 		*status = MODE_CLOCK_HIGH;
 
@@ -1569,6 +1575,11 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 			 */
 			int pipe_bpp = intel_dp_dsc_compute_max_bpp(connector, U8_MAX);
 
+			dsc_slice_count = intel_dp_dsc_get_slice_count(connector,
+								       mode->clock,
+								       mode->hdisplay,
+								       num_joined_pipes);
+
 			if (!drm_dp_is_uhbr_rate(max_link_clock))
 				bw_overhead_flags |= DRM_DP_BW_OVERHEAD_FEC;
 
@@ -1593,6 +1604,8 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 
 		if (intel_dp_pixel_rate_fits_dotclk(display,
 						    mode->clock,
+						    mode->htotal,
+						    dsc_slice_count,
 						    num_joined_pipes)) {
 			*status = MODE_OK;
 			break;
