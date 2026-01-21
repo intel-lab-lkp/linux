@@ -27,7 +27,14 @@
 #define LOSC_OUT_GATING_REG		0x60
 
 #define DCXO_CTRL_REG			0x160
+#define DCXO_CTRL_DCXO_EN		BIT(1)
 #define DCXO_CTRL_CLK16M_RC_EN		BIT(0)
+
+#define DCXO_GATING_REG			0x16c
+#define DCXO_SERDES1_GATING		BIT(5)
+#define DCXO_SERDES0_GATING		BIT(4)
+#define DCXO_HDMI_GATING		BIT(1)
+#define DCXO_UFS_GATING			BIT(0)
 
 #define SUN6I_RTC_AUX_ID(_name)		"rtc_sun6i." #_name
 
