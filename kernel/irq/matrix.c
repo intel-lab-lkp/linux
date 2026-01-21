@@ -140,14 +140,17 @@ static unsigned int matrix_find_best_cpu(struct irq_matrix *m,
 
 	best_cpu = UINT_MAX;
 
+	/* Select the online CPU with the most available vectors */
 	for_each_cpu(cpu, msk) {
 		cm = per_cpu_ptr(m->maps, cpu);
 
-		if (!cm->online || cm->available <= maxavl)
+		if (!cm->online)
 			continue;
 
-		best_cpu = cpu;
-		maxavl = cm->available;
+		if (cm->available > maxavl) {
+			best_cpu = cpu;
+			maxavl = cm->available;
+		}
 	}
 	return best_cpu;
 }
@@ -161,14 +164,17 @@ static unsigned int matrix_find_best_cpu_managed(struct irq_matrix *m,
 
 	best_cpu = UINT_MAX;
 
+	/* Select the online CPU with the fewest managed allocated vectors */
 	for_each_cpu(cpu, msk) {
 		cm = per_cpu_ptr(m->maps, cpu);
 
-		if (!cm->online || cm->managed_allocated > allocated)
+		if (!cm->online)
 			continue;
 
-		best_cpu = cpu;
-		allocated = cm->managed_allocated;
+		if (cm->managed_allocated < allocated) {
+			best_cpu = cpu;
+			allocated = cm->managed_allocated;
+		}
 	}
 	return best_cpu;
 }
