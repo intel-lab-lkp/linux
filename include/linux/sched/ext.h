@@ -84,8 +84,19 @@ struct scx_dispatch_q {
 /* scx_entity.flags */
 enum scx_ent_flags {
 	SCX_TASK_QUEUED		= 1 << 0, /* on ext runqueue */
+	/*
+	 * Set when ops.enqueue() is called; used to determine if ops.dequeue()
+	 * should be invoked when transitioning out of SCX_OPSS_NONE state.
+	 */
+	SCX_TASK_OPS_ENQUEUED	= 1 << 1,
 	SCX_TASK_RESET_RUNNABLE_AT = 1 << 2, /* runnable_at should be reset */
 	SCX_TASK_DEQD_FOR_SLEEP	= 1 << 3, /* last dequeue was for SLEEP */
+	/*
+	 * Set when ops.dequeue() is called after successful dispatch; used to
+	 * distinguish dispatch dequeues from async dequeues (property changes)
+	 * and to prevent duplicate dequeue calls.
+	 */
+	SCX_TASK_DISPATCH_DEQUEUED = 1 << 4,
 
 	SCX_TASK_STATE_SHIFT	= 8,	  /* bit 8 and 9 are used to carry scx_task_state */
 	SCX_TASK_STATE_BITS	= 2,

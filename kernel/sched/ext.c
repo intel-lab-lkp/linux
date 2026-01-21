@@ -1268,6 +1268,20 @@ static void direct_dispatch(struct scx_sched *sch, struct task_struct *p,
 	p->scx.ddsp_enq_flags |= enq_flags;
 
 	/*
+	 * The task is about to be dispatched. If ops.enqueue() was called,
+	 * notify the BPF scheduler by calling ops.dequeue().
+	 *
+	 * Keep %SCX_TASK_OPS_ENQUEUED set so that subsequent property
+	 * changes can trigger ops.dequeue() with %SCX_DEQ_ASYNC. Mark that
+	 * the dispatch dequeue has been called to distinguish from
+	 * property change dequeues.
+	 */
+	if (SCX_HAS_OP(sch, dequeue) && (p->scx.flags & SCX_TASK_OPS_ENQUEUED)) {
+		SCX_CALL_OP_TASK(sch, SCX_KF_REST, dequeue, rq, p, 0);
+		p->scx.flags |= SCX_TASK_DISPATCH_DEQUEUED;
+	}
+
+	/*
 	 * We are in the enqueue path with @rq locked and pinned, and thus can't
 	 * double lock a remote rq and enqueue to its local DSQ. For
 	 * DSQ_LOCAL_ON verdicts targeting the local DSQ of a remote CPU, defer
@@ -1370,6 +1384,16 @@ static void do_enqueue_task(struct rq *rq, struct task_struct *p, u64 enq_flags,
 
 	WARN_ON_ONCE(atomic_long_read(&p->scx.ops_state) != SCX_OPSS_NONE);
 	atomic_long_set(&p->scx.ops_state, SCX_OPSS_QUEUEING | qseq);
+
+	/*
+	 * Mark that ops.enqueue() is being called for this task.
+	 * Clear the dispatch dequeue flag for the new enqueue cycle.
+	 * Only track these flags if ops.dequeue() is implemented.
+	 */
+	if (SCX_HAS_OP(sch, dequeue)) {
+		p->scx.flags |= SCX_TASK_OPS_ENQUEUED;
+		p->scx.flags &= ~SCX_TASK_DISPATCH_DEQUEUED;
+	}
 
 	ddsp_taskp = this_cpu_ptr(&direct_dispatch_task);
 	WARN_ON_ONCE(*ddsp_taskp);
@@ -1503,6 +1527,17 @@ static void ops_dequeue(struct rq *rq, struct task_struct *p, u64 deq_flags)
 
 	switch (opss & SCX_OPSS_STATE_MASK) {
 	case SCX_OPSS_NONE:
+		if (SCX_HAS_OP(sch, dequeue) &&
+		    p->scx.flags & SCX_TASK_OPS_ENQUEUED) {
+			bool is_async_dequeue =
+				!(deq_flags & (DEQUEUE_SLEEP | SCX_DEQ_CORE_SCHED_EXEC));
+
+			if (is_async_dequeue)
+				SCX_CALL_OP_TASK(sch, SCX_KF_REST, dequeue, rq,
+						 p, deq_flags | SCX_DEQ_ASYNC);
+			p->scx.flags &= ~(SCX_TASK_OPS_ENQUEUED |
+					  SCX_TASK_DISPATCH_DEQUEUED);
+		}
 		break;
 	case SCX_OPSS_QUEUEING:
 		/*
@@ -1511,9 +1546,17 @@ static void ops_dequeue(struct rq *rq, struct task_struct *p, u64 deq_flags)
 		 */
 		BUG();
 	case SCX_OPSS_QUEUED:
-		if (SCX_HAS_OP(sch, dequeue))
+		/*
+		 * Task is in the enqueued state. This is a property change
+		 * dequeue before dispatch completes. Notify the BPF scheduler
+		 * with SCX_DEQ_ASYNC flag.
+		 */
+		if (SCX_HAS_OP(sch, dequeue)) {
 			SCX_CALL_OP_TASK(sch, SCX_KF_REST, dequeue, rq,
-					 p, deq_flags);
+					 p, deq_flags | SCX_DEQ_ASYNC);
+			p->scx.flags &= ~(SCX_TASK_OPS_ENQUEUED |
+					  SCX_TASK_DISPATCH_DEQUEUED);
+		}
 
 		if (atomic_long_try_cmpxchg(&p->scx.ops_state, &opss,
 					    SCX_OPSS_NONE))
@@ -2084,6 +2127,22 @@ retry:
 	}
 
 	BUG_ON(!(p->scx.flags & SCX_TASK_QUEUED));
+
+	/*
+	 * The task is about to be dispatched. If ops.enqueue() was called,
+	 * notify the BPF scheduler by calling ops.dequeue().
+	 *
+	 * Keep %SCX_TASK_OPS_ENQUEUED set so that subsequent property
+	 * changes can trigger ops.dequeue() with %SCX_DEQ_ASYNC. Mark that
+	 * the dispatch dequeue has been called to distinguish from
+	 * property change dequeues.
+	 */
+	if (SCX_HAS_OP(sch, dequeue) && (p->scx.flags & SCX_TASK_OPS_ENQUEUED)) {
+		struct rq *task_rq = task_rq(p);
+
+		SCX_CALL_OP_TASK(sch, SCX_KF_REST, dequeue, task_rq, p, 0);
+		p->scx.flags |= SCX_TASK_DISPATCH_DEQUEUED;
+	}
 
 	dsq = find_dsq_for_dispatch(sch, this_rq(), dsq_id, p);
 
