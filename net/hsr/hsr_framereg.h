@@ -82,15 +82,18 @@ int prp_register_frame_out(struct hsr_port *port, struct hsr_frame_info *frame);
 #define hsr_seq_block_index(sequence_nr) ((sequence_nr) >> HSR_SEQ_BLOCK_SHIFT)
 #define hsr_seq_block_bit(sequence_nr) ((sequence_nr) & HSR_SEQ_BLOCK_MASK)
 
+#define DECLARE_BITMAP_FLEX_ARRAY(name, bits) \
+	unsigned long name[][BITS_TO_LONGS(bits)]
+
 struct hsr_seq_block {
 	unsigned long		time;
 	u16			block_idx;
-	DECLARE_BITMAP(seq_nrs, HSR_SEQ_BLOCK_SIZE);
+	DECLARE_BITMAP_FLEX_ARRAY(seq_nrs, HSR_SEQ_BLOCK_SIZE);
 };
 
 struct hsr_node {
 	struct list_head	mac_list;
-	/* Protect R/W access to seq_out and seq_blocks */
+	/* Protect R/W access seq_blocks */
 	spinlock_t		seq_out_lock;
 	unsigned char		macaddress_A[ETH_ALEN];
 	unsigned char		macaddress_B[ETH_ALEN];
@@ -98,17 +101,22 @@ struct hsr_node {
 	enum hsr_port_type	addr_B_port;
 	unsigned long		time_in[HSR_PT_PORTS];
 	bool			time_in_stale[HSR_PT_PORTS];
-	unsigned long		time_out[HSR_PT_PORTS];
 	/* if the node is a SAN */
 	bool			san_a;
 	bool			san_b;
-	u16			seq_out[HSR_PT_PORTS];
 	bool			removed;
-	/* PRP specific duplicate handling */
+	/* Duplicate detection */
 	struct xarray		seq_blocks;
-	struct hsr_seq_block	*block_buf;
+	void			*block_buf;
 	unsigned int		next_block;
+	unsigned int		seq_port_cnt;
 	struct rcu_head		rcu_head;
 };
+
+static inline size_t hsr_seq_block_size(struct hsr_node *node)
+{
+	WARN_ON_ONCE(node->seq_port_cnt == 0);
+	return struct_size_t(struct hsr_seq_block, seq_nrs, node->seq_port_cnt);
+}
 
 #endif /* __HSR_FRAMEREG_H */
