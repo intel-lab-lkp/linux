@@ -2,23 +2,21 @@
 #include <asm/misc.h>
 
 /*
- * Count the digits of @val including a possible sign.
- *
- * (Typed on and submitted from hpa's mobile phone.)
+ * Count the decimal digits of an unsigned integer.
  */
-int num_digits(int val)
+int num_digits(unsigned int x)
 {
-	long long m = 10;
-	int d = 1;
+	int n = 0;
 
-	if (val < 0) {
-		d++;
-		val = -val;
-	}
+	asm("cmp %2,%1; sbb $-2,%0" : "+r" (n) : "r" (x), "g" (10));
+	asm("cmp %2,%1; sbb $-1,%0" : "+r" (n) : "r" (x), "g" (100));
+	asm("cmp %2,%1; sbb $-1,%0" : "+r" (n) : "r" (x), "g" (1000));
+	asm("cmp %2,%1; sbb $-1,%0" : "+r" (n) : "r" (x), "g" (10000));
+	asm("cmp %2,%1; sbb $-1,%0" : "+r" (n) : "r" (x), "g" (100000));
+	asm("cmp %2,%1; sbb $-1,%0" : "+r" (n) : "r" (x), "g" (1000000));
+	asm("cmp %2,%1; sbb $-1,%0" : "+r" (n) : "r" (x), "g" (10000000));
+	asm("cmp %2,%1; sbb $-1,%0" : "+r" (n) : "r" (x), "g" (100000000));
+	asm("cmp %2,%1; sbb $-1,%0" : "+r" (n) : "r" (x), "g" (1000000000));
 
-	while (val >= m) {
-		m *= 10;
-		d++;
-	}
-	return d;
+	return n;
 }
