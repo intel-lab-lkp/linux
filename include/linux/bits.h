@@ -44,8 +44,8 @@
  * - GENMASK_U32(33, 15): doesn't fit in a u32
  */
 #define GENMASK_TYPE(t, h, l)					\
-	((t)(GENMASK_INPUT_CHECK(h, l) +			\
-	     ((t)-1 << (l) & (t)-1 >> (BITS_PER_TYPE(t) - 1 - (h)))))
+	((unsigned int)GENMASK_INPUT_CHECK(h, l) +		\
+	 ((t)-1 << (l) & (t)-1 >> (BITS_PER_TYPE(t) - 1 - (h))))
 
 #define GENMASK(h, l)		GENMASK_TYPE(unsigned long, h, l)
 #define GENMASK_ULL(h, l)	GENMASK_TYPE(unsigned long long, h, l)
@@ -67,7 +67,7 @@
 #define BIT_INPUT_CHECK(type, nr) \
 	BUILD_BUG_ON_ZERO(const_true((nr) >= BITS_PER_TYPE(type)))
 
-#define BIT_TYPE(type, nr) ((type)(BIT_INPUT_CHECK(type, nr) + BIT_ULL(nr)))
+#define BIT_TYPE(type, nr) ((unsigned int)BIT_INPUT_CHECK(type, nr) + ((type)1 << (nr)))
 
 #define BIT_U8(nr)	BIT_TYPE(u8, nr)
 #define BIT_U16(nr)	BIT_TYPE(u16, nr)
