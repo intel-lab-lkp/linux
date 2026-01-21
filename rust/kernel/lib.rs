@@ -101,6 +101,7 @@ pub mod fs;
 pub mod i2c;
 pub mod id_pool;
 pub mod init;
+pub mod interrupt;
 pub mod io;
 pub mod ioctl;
 pub mod iov;
