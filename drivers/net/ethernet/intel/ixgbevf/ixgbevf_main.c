@@ -4166,9 +4166,6 @@ static int ixgbevf_xmit_frame_ring(struct sk_buff *skb,
 	u32 tx_flags = 0;
 	u16 count = TXD_USE_COUNT(skb_headlen(skb));
 	struct ixgbevf_ipsec_tx_data ipsec_tx = { 0 };
-#if PAGE_SIZE > IXGBE_MAX_DATA_PER_TXD
-	unsigned short f;
-#endif
 	u8 hdr_len = 0;
 	u8 *dst_mac = skb_header_pointer(skb, 0, 0, NULL);
 
@@ -4183,15 +4180,15 @@ static int ixgbevf_xmit_frame_ring(struct sk_buff *skb,
 	 *       + 1 desc for context descriptor,
 	 * otherwise try next time
 	 */
-#if PAGE_SIZE > IXGBE_MAX_DATA_PER_TXD
-	for (f = 0; f < skb_shinfo(skb)->nr_frags; f++) {
-		skb_frag_t *frag = &skb_shinfo(skb)->frags[f];
+	if (PAGE_SIZE > IXGBE_MAX_DATA_PER_TXD) {
+		for (unsigned int f = 0; f < skb_shinfo(skb)->nr_frags; f++) {
+			skb_frag_t *frag = &skb_shinfo(skb)->frags[f];
 
-		count += TXD_USE_COUNT(skb_frag_size(frag));
+			count += TXD_USE_COUNT(skb_frag_size(frag));
+		}
+	} else {
+		count += skb_shinfo(skb)->nr_frags;
 	}
-#else
-	count += skb_shinfo(skb)->nr_frags;
-#endif
 	if (ixgbevf_maybe_stop_tx(tx_ring, count + 3)) {
 		tx_ring->tx_stats.tx_busy++;
 		return NETDEV_TX_BUSY;
