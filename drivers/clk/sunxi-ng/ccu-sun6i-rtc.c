@@ -3,6 +3,7 @@
 // Copyright (c) 2021 Samuel Holland <samuel@sholland.org>
 //
 
+#include <linux/auxiliary_bus.h>
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
 #include <linux/device.h>
@@ -10,8 +11,6 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
-
-#include <linux/clk/sunxi-ng.h>
 
 #include "ccu_common.h"
 
@@ -43,6 +42,8 @@
 
 #define DCXO_CTRL_REG			0x160
 #define DCXO_CTRL_CLK16M_RC_EN		BIT(0)
+
+#define SUN6I_RTC_AUX_ID(_name)		"rtc_sun6i." #_name
 
 struct sun6i_rtc_match_data {
 	bool				have_ext_osc32k		: 1;
@@ -349,14 +350,18 @@ static const struct of_device_id sun6i_rtc_ccu_match[] = {
 };
 MODULE_DEVICE_TABLE(of, sun6i_rtc_ccu_match);
 
-int sun6i_rtc_ccu_probe(struct device *dev, void __iomem *reg)
+static int sun6i_rtc_ccu_probe(struct auxiliary_device *adev,
+			       const struct auxiliary_device_id *id)
 {
 	const struct sun6i_rtc_match_data *data;
 	struct clk *ext_osc32k_clk = NULL;
 	const struct of_device_id *match;
+	struct device *dev = &adev->dev;
+	void __iomem *reg = dev->platform_data;
+	struct device *parent = dev->parent;
 
 	/* This driver is only used for newer variants of the hardware. */
-	match = of_match_device(sun6i_rtc_ccu_match, dev);
+	match = of_match_device(sun6i_rtc_ccu_match, parent);
 	if (!match)
 		return 0;
 
@@ -367,9 +372,9 @@ int sun6i_rtc_ccu_probe(struct device *dev, void __iomem *reg)
 		const char *fw_name;
 
 		/* ext-osc32k was the only input clock in the old binding. */
-		fw_name = of_property_present(dev->of_node, "clock-names")
+		fw_name = of_property_present(parent->of_node, "clock-names")
 			? "ext-osc32k" : NULL;
-		ext_osc32k_clk = devm_clk_get_optional(dev, fw_name);
+		ext_osc32k_clk = devm_clk_get_optional(parent, fw_name);
 		if (IS_ERR(ext_osc32k_clk))
 			return PTR_ERR(ext_osc32k_clk);
 	}
@@ -391,6 +396,18 @@ int sun6i_rtc_ccu_probe(struct device *dev, void __iomem *reg)
 
 	return devm_sunxi_ccu_probe(dev, reg, &sun6i_rtc_ccu_desc);
 }
+
+static const struct auxiliary_device_id sun6i_ccu_rtc_ids[] = {
+	{ .name = SUN6I_RTC_AUX_ID(sun6i) },
+	{ /* sentinel */ }
+};
+MODULE_DEVICE_TABLE(auxiliary, sun6i_ccu_rtc_ids);
+
+static struct auxiliary_driver sun6i_ccu_rtc_driver = {
+	.probe = sun6i_rtc_ccu_probe,
+	.id_table = sun6i_ccu_rtc_ids,
+};
+module_auxiliary_driver(sun6i_ccu_rtc_driver);
 
 MODULE_IMPORT_NS("SUNXI_CCU");
 MODULE_DESCRIPTION("Support for the Allwinner H616/R329 RTC CCU");

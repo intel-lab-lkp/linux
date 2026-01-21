@@ -11,9 +11,9 @@
  * Copyright (c) 2013, Carlo Caione <carlo.caione@gmail.com>
  */
 
+#include <linux/auxiliary_bus.h>
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
-#include <linux/clk/sunxi-ng.h>
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/fs.h>
@@ -140,6 +140,11 @@ struct sun6i_rtc_clk_data {
 };
 
 #define RTC_LINEAR_DAY	BIT(0)
+
+struct sun6i_rtc_match_data {
+	const char *adev_name;
+	unsigned long flags;
+};
 
 struct sun6i_rtc_dev {
 	struct rtc_device *rtc;
@@ -745,8 +750,10 @@ static void sun6i_rtc_bus_clk_cleanup(void *data)
 
 static int sun6i_rtc_probe(struct platform_device *pdev)
 {
+	const struct sun6i_rtc_match_data *data;
 	struct sun6i_rtc_dev *chip = sun6i_rtc;
 	struct device *dev = &pdev->dev;
+	struct auxiliary_device *adev;
 	struct clk *bus_clk;
 	int ret;
 
@@ -765,6 +772,8 @@ static int sun6i_rtc_probe(struct platform_device *pdev)
 			return ret;
 	}
 
+	data = of_device_get_match_data(&pdev->dev);
+
 	if (!chip) {
 		chip = devm_kzalloc(&pdev->dev, sizeof(*chip), GFP_KERNEL);
 		if (!chip)
@@ -776,16 +785,17 @@ static int sun6i_rtc_probe(struct platform_device *pdev)
 		if (IS_ERR(chip->base))
 			return PTR_ERR(chip->base);
 
-		if (IS_REACHABLE(CONFIG_SUN6I_RTC_CCU)) {
-			ret = sun6i_rtc_ccu_probe(dev, chip->base);
-			if (ret)
-				return ret;
+		if (data && data->adev_name) {
+			adev = devm_auxiliary_device_create(dev, data->adev_name, chip->base);
+			if (!adev)
+				return -ENODEV;
 		}
 	}
 
 	platform_set_drvdata(pdev, chip);
 
-	chip->flags = (unsigned long)of_device_get_match_data(&pdev->dev);
+	if (data)
+		chip->flags = data->flags;
 
 	chip->irq = platform_get_irq(pdev, 0);
 	if (chip->irq < 0)
@@ -850,6 +860,11 @@ static int sun6i_rtc_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static const struct sun6i_rtc_match_data sun6i_rtc_match_data = {
+	.adev_name = "sun6i",
+	.flags = RTC_LINEAR_DAY,
+};
+
 /*
  * As far as RTC functionality goes, all models are the same. The
  * datasheets claim that different models have different number of
@@ -865,9 +880,9 @@ static const struct of_device_id sun6i_rtc_dt_ids[] = {
 	{ .compatible = "allwinner,sun50i-h5-rtc" },
 	{ .compatible = "allwinner,sun50i-h6-rtc" },
 	{ .compatible = "allwinner,sun50i-h616-rtc",
-		.data = (void *)RTC_LINEAR_DAY },
+		.data = &sun6i_rtc_match_data },
 	{ .compatible = "allwinner,sun50i-r329-rtc",
-		.data = (void *)RTC_LINEAR_DAY },
+		.data = &sun6i_rtc_match_data },
 	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, sun6i_rtc_dt_ids);
