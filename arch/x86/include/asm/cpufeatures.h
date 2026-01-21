@@ -506,7 +506,6 @@
 #define X86_FEATURE_ABMC		(21*32+15) /* Assignable Bandwidth Monitoring Counters */
 #define X86_FEATURE_MSR_IMM		(21*32+16) /* MSR immediate form instructions */
 #define X86_FEATURE_SGX_EUPDATESVN	(21*32+17) /* Support for ENCLS[EUPDATESVN] instruction */
-
 #define X86_FEATURE_SDCIAE		(21*32+18) /* L3 Smart Data Cache Injection Allocation Enforcement */
 #define X86_FEATURE_CLEAR_CPU_BUF_VM_MMIO (21*32+19) /*
 						      * Clear CPU buffers before VM-Enter if the vCPU
@@ -514,6 +513,7 @@
 						      * and purposes if CLEAR_CPU_BUF_VM is set).
 						      */
 #define X86_FEATURE_X2AVIC_EXT		(21*32+20) /* AMD SVM x2AVIC support for 4k vCPUs */
+#define X86_FEATURE_GMBA		(21*32+21) /* Global Memory Bandwidth Allocation */
 
 /*
  * BUG word(s)
