@@ -2412,6 +2412,41 @@ static void pci_configure_serr(struct pci_dev *dev)
 	}
 }
 
+static bool pcie_root_rcb_set(struct pci_dev *dev)
+{
+	struct pci_dev *rp = pcie_find_root_port(dev);
+	u16 lnkctl;
+
+	if (!rp)
+		return false;
+
+	pcie_capability_read_word(rp, PCI_EXP_LNKCTL, &lnkctl);
+
+	return !!(lnkctl & PCI_EXP_LNKCTL_RCB);
+}
+
+static void pci_configure_rcb(struct pci_dev *dev)
+{
+	/*
+	 * Obviously, we need a Link Control register. The RCB is RO
+	 * in Root Ports, so no need to attempt to set it for
+	 * them. For VFs, the RCB is RsvdP, so, no need to set it.
+	 * Then, if the Root Port has RCB set, then we set for the EP
+	 * unless already set.
+	 */
+	if (pcie_cap_has_lnkctl(dev) &&
+	    (pci_pcie_type(dev) != PCI_EXP_TYPE_ROOT_PORT) &&
+	    !dev->is_virtfn && pcie_root_rcb_set(dev)) {
+		u16 lnkctl;
+
+		pcie_capability_read_word(dev, PCI_EXP_LNKCTL, &lnkctl);
+		if (lnkctl & PCI_EXP_LNKCTL_RCB)
+			return;
+
+		pcie_capability_write_word(dev, PCI_EXP_LNKCTL, lnkctl | PCI_EXP_LNKCTL_RCB);
+	}
+}
+
 static void pci_configure_device(struct pci_dev *dev)
 {
 	pci_configure_mps(dev);
@@ -2421,6 +2456,7 @@ static void pci_configure_device(struct pci_dev *dev)
 	pci_configure_aspm_l1ss(dev);
 	pci_configure_eetlp_prefix(dev);
 	pci_configure_serr(dev);
+	pci_configure_rcb(dev);
 
 	pci_acpi_program_hp_params(dev);
 }
