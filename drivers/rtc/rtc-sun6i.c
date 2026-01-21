@@ -865,6 +865,11 @@ static const struct sun6i_rtc_match_data sun6i_rtc_match_data = {
 	.flags = RTC_LINEAR_DAY,
 };
 
+static const struct sun6i_rtc_match_data sun60i_rtc_match_data = {
+	.adev_name = "sun60i",
+	.flags = RTC_LINEAR_DAY,
+};
+
 /*
  * As far as RTC functionality goes, all models are the same. The
  * datasheets claim that different models have different number of
@@ -883,6 +888,8 @@ static const struct of_device_id sun6i_rtc_dt_ids[] = {
 		.data = &sun6i_rtc_match_data },
 	{ .compatible = "allwinner,sun50i-r329-rtc",
 		.data = &sun6i_rtc_match_data },
+	{ .compatible = "allwinner,sun60i-a733-rtc",
+		.data = &sun60i_rtc_match_data },
 	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, sun6i_rtc_dt_ids);
