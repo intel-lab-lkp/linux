@@ -29,6 +29,7 @@ BMEC (Bandwidth Monitoring Event Configuration)			""
 ABMC (Assignable Bandwidth Monitoring Counters)			""
 SDCIAE (Smart Data Cache Injection Allocation Enforcement)	""
 GMBA (Global Memory Bandwidth Allocation)                       ""
+GSMBA (Global Slow Memory Bandwidth Allocation)                 ""
 =============================================================== ================================
 
 Historically, new features were made visible by default in /proc/cpuinfo. This
@@ -995,6 +996,19 @@ is formatted as:
 
 	SMBA:<cache_id0>=bandwidth0;<cache_id1>=bandwidth1;...
 
+Global Slow Memory bandwidth Allocation (GSMBA)
+-----------------------------------------------
+
+AMD hardware supports Global Slow Memory Bandwidth Allocation (GSMBA)
+provides a mechanism for software to specify bandwidth limits for groups
+of threads that span across multiple QoS Domains. It operates Similarly
+to GMBA, however, the target resource is slow memory.
+
+Global Slow Memory b/w domain is L3 cache.
+::
+
+	GSMBA:<cache_id0>=bandwidth;<cache_id1>=bandwidth;...
+
 Reading/writing the schemata file
 ---------------------------------
 Reading the schemata file will show the state of all resources
@@ -1072,6 +1086,31 @@ For example, to allocate 8GB/s limit on the first cache id:
     SMBA:0=2048;1=  64;2=2048;3=2048
       MB:0=2048;1=2048;2=2048;3=2048
       L3:0=ffff;1=ffff;2=ffff;3=ffff
+
+Reading/writing the schemata file (on AMD systems) with GSMBA feature
+---------------------------------------------------------------------
+Reading the schemata file will show the current bandwidth limit on all
+domains. The allocated resources are in multiples of 1 GB/s. The GSMBA
+control domain is created by setting the same GSMBA limits in one or
+more QoS domains.
+
+For example, to configure a GSMBA domain consisting of domains 0 and 2
+with an 8 GB/s limit:
+
+::
+
+  # cat schemata
+    GSMBA:0=2048;1=2048;2=2048;3=2048
+     SMBA:0=2048;1=2048;2=2048;3=2048
+       MB:0=4096;1=4096;2=4096;3=4096
+       L3:0=ffff;1=ffff;2=ffff;3=ffff
+
+  # echo "GSMBA:0=8;2=8" > schemata
+  # cat schemata
+    GSMBA:0=   8;1=2048;2=   8;3=2048
+     SMBA:0=2048;1=2048;2=2048;3=2048
+       MB:0=4096;1=4096;2=4096;3=4096
+       L3:0=ffff;1=ffff;2=ffff;3=ffff
 
 Cache Pseudo-Locking
 ====================
