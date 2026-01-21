@@ -180,7 +180,6 @@ TEST_GEN_PROGS := \
 	tap \
 	tcp_port_share \
 	tls \
-	tun \
 # end of TEST_GEN_PROGS
 
 TEST_FILES := \
@@ -192,7 +191,11 @@ TEST_FILES := \
 
 # YNL files, must be before "include ..lib.mk"
 YNL_GEN_FILES := busy_poller
-YNL_GEN_PROGS := netlink-dumps
+YNL_GEN_PROGS := \
+	netlink-dumps \
+	tun \
+# end of YNL_GEN_PROGS
+
 TEST_GEN_FILES += $(YNL_GEN_FILES)
 TEST_GEN_PROGS += $(YNL_GEN_PROGS)
 
@@ -203,7 +206,14 @@ TEST_INCLUDES := forwarding/lib.sh
 include ../lib.mk
 
 # YNL build
-YNL_GENS := netdev
+YNL_GENS := \
+	netdev \
+	rt-addr \
+	rt-link \
+	rt-neigh \
+	rt-route \
+# end of YNL_GENS
+
 include ynl.mk
 
 $(OUTPUT)/epoll_busy_poll: LDLIBS += -lcap
