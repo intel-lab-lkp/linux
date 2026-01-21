@@ -55,6 +55,12 @@ properties:
     description:
       Enable Wake-on-LAN support for the RTL8211F PHY.
 
+  realtek,mdi-cfg-order:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [0, 1]
+    description:
+      Force normal (0) or reverse (1) order of MDI pairs.
+
 unevaluatedProperties: false
 
 allOf:
@@ -79,5 +85,6 @@ examples:
                 reg = <1>;
                 realtek,clkout-disable;
                 realtek,aldps-enable;
+                realtek,mdi-cfg-order = <1>;
         };
     };
