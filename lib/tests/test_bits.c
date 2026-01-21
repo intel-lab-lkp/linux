@@ -144,6 +144,22 @@ static void genmask_input_check_test(struct kunit *test)
 	BUILD_BUG_ON(GENMASK_INPUT_CHECK(100, 80, 128) != 0);
 	BUILD_BUG_ON(GENMASK_INPUT_CHECK(110, 65, 128) != 0);
 	BUILD_BUG_ON(GENMASK_INPUT_CHECK(127, 0, 128) != 0);
+
+	/*
+	 * Invalid input
+	 * Change GENMASK_INPUT_CHECK() return 'fail' rather than
+	 * generating a compile-time error.
+	 */
+#define GENMASK_INPUT_CHECK_FAIL() 1
+	z = 0;
+	BUILD_BUG_ON(GENMASK_INPUT_CHECK(z + 31, -1, 32) == 0);
+	BUILD_BUG_ON(GENMASK_INPUT_CHECK(z + 0, 1, 32) == 0);
+	BUILD_BUG_ON(GENMASK_INPUT_CHECK(z + 8, 0, 8) == 0);
+	BUILD_BUG_ON(GENMASK_INPUT_CHECK(z + 16, 0, 16) == 0);
+	BUILD_BUG_ON(GENMASK_INPUT_CHECK(z + 32, 0, 32) == 0);
+	BUILD_BUG_ON(GENMASK_INPUT_CHECK(z + 64, 0, 64) == 0);
+	BUILD_BUG_ON(GENMASK_INPUT_CHECK(z + 128, 0, 128) == 0);
+#undef GENMASK_INPUT_CHECK_FAIL
 }
 
 
