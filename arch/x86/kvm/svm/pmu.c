@@ -147,10 +147,33 @@ static int amd_pmu_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	return 1;
 }
 
+static bool amd_pmu_dormant_hg_event(struct kvm_pmc *pmc)
+{
+	u64 hg_only = pmc->eventsel & AMD64_EVENTSEL_HG_ONLY;
+	struct kvm_vcpu *vcpu = pmc->vcpu;
+
+	if (hg_only == 0)
+		/* Not an HG_ONLY event */
+		return false;
+
+	if (!(vcpu->arch.efer & EFER_SVME))
+		/* HG_ONLY bits are ignored when SVME is clear */
+		return false;
+
+	/* Always active if both HG_ONLY bits are set */
+	if (hg_only == AMD64_EVENTSEL_HG_ONLY)
+		return false;
+
+	return !!(hg_only & AMD64_EVENTSEL_HOSTONLY) == is_guest_mode(vcpu);
+}
+
 static void amd_pmu_set_eventsel_hw(struct kvm_pmc *pmc)
 {
 	pmc->eventsel_hw = (pmc->eventsel & ~AMD64_EVENTSEL_HOSTONLY) |
 		AMD64_EVENTSEL_GUESTONLY;
+
+	if (amd_pmu_dormant_hg_event(pmc))
+		pmc->eventsel_hw &= ~ARCH_PERFMON_EVENTSEL_ENABLE;
 }
 
 static int amd_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
