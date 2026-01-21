@@ -752,6 +752,25 @@ success:
 }
 EXPORT_SYMBOL_GPL(xas_create_range);
 
+void xas_destroy_range(struct xa_state *xas, unsigned long start, unsigned long end)
+{
+	unsigned long index;
+	void *entry;
+
+	for (index = start; index < end; ++index) {
+		xas_set(xas, index);
+		entry = xas_load(xas);
+		if (entry)
+			continue;
+
+		if (!xas->xa_node || xas_invalid(xas))
+			continue;
+
+		if (!xas->xa_node->count)
+			xas_delete_node(xas);
+	}
+}
+
 static void update_node(struct xa_state *xas, struct xa_node *node,
 		int count, int values)
 {

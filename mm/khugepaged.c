@@ -1863,7 +1863,7 @@ static int collapse_file(struct mm_struct *mm, unsigned long addr,
 	struct folio *folio, *tmp, *new_folio;
 	pgoff_t index = 0, end = start + HPAGE_PMD_NR;
 	LIST_HEAD(pagelist);
-	XA_STATE_ORDER(xas, &mapping->i_pages, start, HPAGE_PMD_ORDER);
+	XA_STATE(xas, &mapping->i_pages, 0);
 	int nr_none = 0, result = SCAN_SUCCEED;
 	bool is_shmem = shmem_file(file);
 
@@ -1882,22 +1882,7 @@ static int collapse_file(struct mm_struct *mm, unsigned long addr,
 	new_folio->index = start;
 	new_folio->mapping = mapping;
 
-	/*
-	 * Ensure we have slots for all the pages in the range.  This is
-	 * almost certainly a no-op because most of the pages must be present
-	 */
-	do {
-		xas_lock_irq(&xas);
-		xas_create_range(&xas);
-		if (!xas_error(&xas))
-			break;
-		xas_unlock_irq(&xas);
-		if (!xas_nomem(&xas, GFP_KERNEL)) {
-			result = SCAN_FAIL;
-			goto rollback;
-		}
-	} while (1);
-
+	xas_lock_irq(&xas);
 	for (index = start; index < end;) {
 		xas_set(&xas, index);
 		folio = xas_load(&xas);
@@ -2192,6 +2177,23 @@ immap_locked:
 		}
 	} else {
 		xas_lock_irq(&xas);
+	}
+
+	xas_set_order(&xas, start, HPAGE_PMD_ORDER);
+	xas_create_range(&xas);
+	if (xas_error(&xas)) {
+		xas_set_order(&xas, start, 0);
+		if (nr_none) {
+			for (index = start; index < end; index++) {
+				if (xas_next(&xas) == XA_RETRY_ENTRY)
+					xas_store(&xas, NULL);
+			}
+		}
+		xas_destroy_range(&xas, start, end);
+		xas_unlock_irq(&xas);
+		result = SCAN_FAIL;
+
+		goto rollback;
 	}
 
 	if (is_shmem)
