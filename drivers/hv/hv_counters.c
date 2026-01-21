@@ -3,6 +3,7 @@
  * Copyright (c) 2026, Microsoft Corporation.
  *
  * Data for printing stats page counters via debugfs.
+ * Included directly in mshv_debugfs.c.
  *
  * Authors: Microsoft Linux virtualization team
  */
