@@ -32,6 +32,7 @@ struct tcf_gate_params {
 	s32			tcfg_clockid;
 	size_t			num_entries;
 	struct list_head	entries;
+	struct rcu_head		rcu;
 };
 
 #define GATE_ACT_GATE_OPEN	BIT(0)
@@ -39,7 +40,7 @@ struct tcf_gate_params {
 
 struct tcf_gate {
 	struct tc_action	common;
-	struct tcf_gate_params	param;
+	struct tcf_gate_params __rcu *param;
 	u8			current_gate_status;
 	ktime_t			current_close_time;
 	u32			current_entry_octets;
@@ -54,8 +55,11 @@ struct tcf_gate {
 static inline s32 tcf_gate_prio(const struct tc_action *a)
 {
 	s32 tcfg_prio;
+	struct tcf_gate_params *p;
 
-	tcfg_prio = to_gate(a)->param.tcfg_priority;
+	p = rcu_dereference_protected(to_gate(a)->param,
+				      lockdep_rtnl_is_held());
+	tcfg_prio = p->tcfg_priority;
 
 	return tcfg_prio;
 }
@@ -63,8 +67,11 @@ static inline s32 tcf_gate_prio(const struct tc_action *a)
 static inline u64 tcf_gate_basetime(const struct tc_action *a)
 {
 	u64 tcfg_basetime;
+	struct tcf_gate_params *p;
 
-	tcfg_basetime = to_gate(a)->param.tcfg_basetime;
+	p = rcu_dereference_protected(to_gate(a)->param,
+				      lockdep_rtnl_is_held());
+	tcfg_basetime = p->tcfg_basetime;
 
 	return tcfg_basetime;
 }
@@ -72,8 +79,11 @@ static inline u64 tcf_gate_basetime(const struct tc_action *a)
 static inline u64 tcf_gate_cycletime(const struct tc_action *a)
 {
 	u64 tcfg_cycletime;
+	struct tcf_gate_params *p;
 
-	tcfg_cycletime = to_gate(a)->param.tcfg_cycletime;
+	p = rcu_dereference_protected(to_gate(a)->param,
+				      lockdep_rtnl_is_held());
+	tcfg_cycletime = p->tcfg_cycletime;
 
 	return tcfg_cycletime;
 }
@@ -81,8 +91,11 @@ static inline u64 tcf_gate_cycletime(const struct tc_action *a)
 static inline u64 tcf_gate_cycletimeext(const struct tc_action *a)
 {
 	u64 tcfg_cycletimeext;
+	struct tcf_gate_params *p;
 
-	tcfg_cycletimeext = to_gate(a)->param.tcfg_cycletime_ext;
+	p = rcu_dereference_protected(to_gate(a)->param,
+				      lockdep_rtnl_is_held());
+	tcfg_cycletimeext = p->tcfg_cycletime_ext;
 
 	return tcfg_cycletimeext;
 }
@@ -90,8 +103,11 @@ static inline u64 tcf_gate_cycletimeext(const struct tc_action *a)
 static inline u32 tcf_gate_num_entries(const struct tc_action *a)
 {
 	u32 num_entries;
+	struct tcf_gate_params *p;
 
-	num_entries = to_gate(a)->param.num_entries;
+	p = rcu_dereference_protected(to_gate(a)->param,
+				      lockdep_rtnl_is_held());
+	num_entries = p->num_entries;
 
 	return num_entries;
 }
@@ -105,7 +121,8 @@ static inline struct action_gate_entry
 	u32 num_entries;
 	int i = 0;
 
-	p = &to_gate(a)->param;
+	p = rcu_dereference_protected(to_gate(a)->param,
+				      lockdep_rtnl_is_held());
 	num_entries = p->num_entries;
 
 	list_for_each_entry(entry, &p->entries, list)
