@@ -147,6 +147,33 @@ static int amd_pmu_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	return 1;
 }
 
+static void amd_pmu_update_hg_bitmaps(struct kvm_pmc *pmc)
+{
+	struct kvm_pmu *pmu = pmc_to_pmu(pmc);
+	u64 eventsel = pmc->eventsel;
+
+	if (!(eventsel & ARCH_PERFMON_EVENTSEL_ENABLE)) {
+		bitmap_clear(pmu->pmc_hostonly, pmc->idx, 1);
+		bitmap_clear(pmu->pmc_guestonly, pmc->idx, 1);
+		return;
+	}
+
+	switch (eventsel & AMD64_EVENTSEL_HG_ONLY) {
+	case AMD64_EVENTSEL_HOSTONLY:
+		bitmap_set(pmu->pmc_hostonly, pmc->idx, 1);
+		bitmap_clear(pmu->pmc_guestonly, pmc->idx, 1);
+		break;
+	case AMD64_EVENTSEL_GUESTONLY:
+		bitmap_clear(pmu->pmc_hostonly, pmc->idx, 1);
+		bitmap_set(pmu->pmc_guestonly, pmc->idx, 1);
+		break;
+	default:
+		bitmap_clear(pmu->pmc_hostonly, pmc->idx, 1);
+		bitmap_clear(pmu->pmc_guestonly, pmc->idx, 1);
+		break;
+	}
+}
+
 static bool amd_pmu_dormant_hg_event(struct kvm_pmc *pmc)
 {
 	u64 hg_only = pmc->eventsel & AMD64_EVENTSEL_HG_ONLY;
@@ -196,6 +223,7 @@ static int amd_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		if (data != pmc->eventsel) {
 			pmc->eventsel = data;
 			amd_pmu_set_eventsel_hw(pmc);
+			amd_pmu_update_hg_bitmaps(pmc);
 			kvm_pmu_request_counter_reprogram(pmc);
 		}
 		return 0;

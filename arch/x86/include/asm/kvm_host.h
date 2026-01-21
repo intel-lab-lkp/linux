@@ -593,6 +593,10 @@ struct kvm_pmu {
 	DECLARE_BITMAP(pmc_counting_instructions, X86_PMC_IDX_MAX);
 	DECLARE_BITMAP(pmc_counting_branches, X86_PMC_IDX_MAX);
 
+	/* AMD only: track PMCs with Host-Only or Guest-Only bits set */
+	DECLARE_BITMAP(pmc_hostonly, X86_PMC_IDX_MAX);
+	DECLARE_BITMAP(pmc_guestonly, X86_PMC_IDX_MAX);
+
 	u64 ds_area;
 	u64 pebs_enable;
 	u64 pebs_enable_rsvd;
