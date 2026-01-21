@@ -45,8 +45,7 @@
  */
 #define GENMASK_TYPE(t, h, l)					\
 	((t)(GENMASK_INPUT_CHECK(h, l) +			\
-	     (type_max(t) << (l) &				\
-	      type_max(t) >> (BITS_PER_TYPE(t) - 1 - (h)))))
+	     ((t)-1 << (l) & (t)-1 >> (BITS_PER_TYPE(t) - 1 - (h)))))
 
 #define GENMASK(h, l)		GENMASK_TYPE(unsigned long, h, l)
 #define GENMASK_ULL(h, l)	GENMASK_TYPE(unsigned long long, h, l)
