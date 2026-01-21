@@ -23,20 +23,35 @@
 #include <linux/compiler.h>
 #include <linux/overflow.h>
 
-#define GENMASK_INPUT_CHECK(h, l) BUILD_BUG_ON_ZERO(const_true((l) > (h)))
+#ifndef KBUILD_EXTRA_WARNc
+#define GENMASK_INPUT_CHECK(h, l, width) 0
+#else
+int GENMASK_INPUT_CHECK_FAIL(void) __compiletime_error("Invalid bit numbers");
+#define GENMASK_INPUT_CHECK(h, l, width)				\
+	(__builtin_choose_expr(__is_constexpr((l) > (h)),		\
+		sizeof(struct { char low_bit_greater_than_high[-((l) > (h))];}), \
+		__builtin_constant_p((l) | (h)) &&			\
+			((l) < 0 || (l) > (h) || (h) >= width) &&	\
+			GENMASK_INPUT_CHECK_FAIL()))
+#endif
 
 /*
- * Generate a mask for the specified type @t. Additional checks are made to
- * guarantee the value returned fits in that type, relying on
- * -Wshift-count-overflow compiler check to detect incompatible arguments.
+ * Generate a mask for the specified type @t.
+ * Checks are made to guarantee the value returned fits in that type.
+ * The compiler's -Wshift-count-overflow/negative check detects invalid values
+ * from 'constant integer expressions' but not other compile time constants.
+ * Clang treats out of value constants as 'undefined behaviour' and stops
+ * generating code - so explicit checks are needed.
+ * Neither BUILD_BUG() nor BUILD_BUG_ON_ZERO() can be used.
+ *
  * For example, all these create build errors or warnings:
  *
  * - GENMASK(15, 20): wrong argument order
  * - GENMASK(72, 15): doesn't fit unsigned long
  * - GENMASK_U32(33, 15): doesn't fit in a u32
  */
-#define GENMASK_TYPE(t, h, l)					\
-	((unsigned int)GENMASK_INPUT_CHECK(h, l) +		\
+#define GENMASK_TYPE(t, h, l)						\
+	((unsigned int)GENMASK_INPUT_CHECK(h, l, BITS_PER_TYPE(t)) +	\
 	 ((t)-1 << (l) & (t)-1 >> (BITS_PER_TYPE(t) - 1 - (h))))
 #endif
 
@@ -52,16 +67,26 @@
 #if !defined(__ASSEMBLY__)
 /*
  * Fixed-type variants of BIT(), with additional checks like GENMASK_TYPE().
- * The following examples generate compiler warnings from BIT_INPUT_CHECK().
+ * The following examples generate compiler errors from BIT_INPUT_CHECK().
  *
  * - BIT_U8(8)
  * - BIT_U32(-1)
  * - BIT_U32(40)
  */
-#define BIT_INPUT_CHECK(type, nr) \
-	BUILD_BUG_ON_ZERO(const_true((nr) >= BITS_PER_TYPE(type)))
 
-#define BIT_TYPE(type, nr) ((unsigned int)BIT_INPUT_CHECK(type, nr) + ((type)1 << (nr)))
+#ifndef KBUILD_EXTRA_WARNc
+#define BIT_INPUT_CHECK(nr, width) 0
+#else
+int BIT_INPUT_CHECK_FAIL(void) __compiletime_error("Bit number out of range");
+#define BIT_INPUT_CHECK(nr, width)						\
+	(__builtin_choose_expr(__is_constexpr(nr),				\
+		sizeof(struct { char bit_number_too_big[-((nr) >= (width))];}),	\
+		__builtin_constant_p(nr) && ((nr) < 0 || (nr) >= width) &&	\
+			BIT_INPUT_CHECK_FAIL()))
+#endif
+
+#define BIT_TYPE(type, nr) \
+	((unsigned int)BIT_INPUT_CHECK(+(nr), BITS_PER_TYPE(type)) + ((type)1 << (nr)))
 #endif /* defined(__ASSEMBLY__) */
 
 #define BIT_U8(nr)	BIT_TYPE(u8, nr)

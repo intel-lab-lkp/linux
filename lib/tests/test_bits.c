@@ -3,6 +3,8 @@
  * Test cases for functions and macros in bits.h
  */
 
+#define KBUILD_EXTRA_WARNc 1
+
 #include <kunit/test.h>
 #include <linux/bits.h>
 #include <linux/types.h>
@@ -118,24 +120,30 @@ static void genmask_u128_test(struct kunit *test)
 
 static void genmask_input_check_test(struct kunit *test)
 {
-	unsigned int x, y;
-	int z, w;
+	unsigned int x = 1, y = 2;
+	int z = 1, w = 2;
+
+	OPTIMIZER_HIDE_VAR(x);
+	OPTIMIZER_HIDE_VAR(y);
+	OPTIMIZER_HIDE_VAR(z);
+	OPTIMIZER_HIDE_VAR(w);
 
 	/* Unknown input */
-	KUNIT_EXPECT_EQ(test, 0, GENMASK_INPUT_CHECK(x, 0));
-	KUNIT_EXPECT_EQ(test, 0, GENMASK_INPUT_CHECK(0, x));
-	KUNIT_EXPECT_EQ(test, 0, GENMASK_INPUT_CHECK(x, y));
+	KUNIT_EXPECT_EQ(test, 0, GENMASK_INPUT_CHECK(x, 0, 32));
+	KUNIT_EXPECT_EQ(test, 0, GENMASK_INPUT_CHECK(0, x, 32));
+	KUNIT_EXPECT_EQ(test, 0, GENMASK_INPUT_CHECK(x, y, 32));
 
-	KUNIT_EXPECT_EQ(test, 0, GENMASK_INPUT_CHECK(z, 0));
-	KUNIT_EXPECT_EQ(test, 0, GENMASK_INPUT_CHECK(0, z));
-	KUNIT_EXPECT_EQ(test, 0, GENMASK_INPUT_CHECK(z, w));
+	KUNIT_EXPECT_EQ(test, 0, GENMASK_INPUT_CHECK(z, 0, 32));
+	KUNIT_EXPECT_EQ(test, 0, GENMASK_INPUT_CHECK(0, z, 32));
+	KUNIT_EXPECT_EQ(test, 0, GENMASK_INPUT_CHECK(z, w, 32));
 
 	/* Valid input */
-	KUNIT_EXPECT_EQ(test, 0, GENMASK_INPUT_CHECK(1, 1));
-	KUNIT_EXPECT_EQ(test, 0, GENMASK_INPUT_CHECK(39, 21));
-	KUNIT_EXPECT_EQ(test, 0, GENMASK_INPUT_CHECK(100, 80));
-	KUNIT_EXPECT_EQ(test, 0, GENMASK_INPUT_CHECK(110, 65));
-	KUNIT_EXPECT_EQ(test, 0, GENMASK_INPUT_CHECK(127, 0));
+	KUNIT_EXPECT_EQ(test, 0, GENMASK_INPUT_CHECK(1, 1, 32));
+	KUNIT_EXPECT_EQ(test, 0, GENMASK_INPUT_CHECK(39, 21, 64));
+
+	KUNIT_EXPECT_EQ(test, 0, GENMASK_INPUT_CHECK(100, 80, 128));
+	KUNIT_EXPECT_EQ(test, 0, GENMASK_INPUT_CHECK(110, 65, 128));
+	KUNIT_EXPECT_EQ(test, 0, GENMASK_INPUT_CHECK(127, 0, 128));
 }
 
 
