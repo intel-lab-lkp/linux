@@ -8001,6 +8001,18 @@ void intel_setup_outputs(struct intel_display *display)
 	drm_helper_move_panel_connectors_to_head(display->drm);
 }
 
+int intel_dotclock_limit(struct intel_display *display)
+{
+	if (DISPLAY_VERx100(display) == 3002)
+		return 937500;
+	else if (DISPLAY_VER(display) >= 30)
+		return 1350000;
+	else if (DISPLAY_VER(display) >= 13)
+		return 1200000;
+	else
+		return 1100000;
+}
+
 static int max_dotclock(struct intel_display *display)
 {
 	int max_dotclock = display->cdclk.max_dotclk_freq;
