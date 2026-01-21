@@ -671,6 +671,27 @@ Time stamps for outgoing packets are to be generated as follows:
   software time stamping and therefore could lead to unexpected deltas
   between time stamps.
 
+3.1.1 netdev_tstamp_type and ndo_get_tstamp
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The ``ndo_get_tstamp`` operation allows the stack to convert a hardware timestamp
+to a specific time domain or format. The ``type`` argument specifies the
+requested timestamp type:
+
+- ``NETDEV_TSTAMP_PHC``: The hardware timestamp in its PTP Hardware Clock
+  domain.
+- ``NETDEV_TSTAMP_CYCLE``: The hardware timestamp as a cycle counter.
+- ``NETDEV_TSTAMP_REALTIME``: The hardware timestamp converted to system time
+  (``CLOCK_REALTIME``).
+
+For ``NETDEV_TSTAMP_REALTIME``, the driver is responsible for converting the
+hardware timestamp to system time. In that case, ``ndo_get_tstamp`` does not
+provide an accuracy guarantee. A device might use a disciplined clock that is
+synchronized with ``CLOCK_REALTIME``. Or, the driver might estimate the system
+time. The accuracy primarily depends on the physical hardware and driver
+implementation.
+
+
 3.2 Special considerations for stacked PTP Hardware Clocks
 ----------------------------------------------------------
 
