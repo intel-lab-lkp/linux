@@ -515,6 +515,7 @@
 #define X86_FEATURE_X2AVIC_EXT		(21*32+20) /* AMD SVM x2AVIC support for 4k vCPUs */
 #define X86_FEATURE_GMBA		(21*32+21) /* Global Memory Bandwidth Allocation */
 #define X86_FEATURE_GSMBA		(21*32+22) /* Global Slow Memory Bandwidth Enforcement */
+#define X86_FEATURE_PLZA		(21*32+23) /* Privilege-Level Zero Association */
 
 /*
  * BUG word(s)
