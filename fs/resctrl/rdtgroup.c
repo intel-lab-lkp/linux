@@ -706,6 +706,26 @@ static int __rdtgroup_move_task(struct task_struct *tsk,
 	return 0;
 }
 
+static int __rdtgroup_plza_task(struct task_struct *tsk,
+				struct rdtgroup *rdtgrp)
+{
+	if (rdtgrp->type != RDTCTRL_GROUP) {
+		rdt_last_cmd_puts("Can't set PLZA on MON group\n");
+		return -EINVAL;
+	}
+
+	resctrl_arch_set_task_plza(tsk, 1);
+
+	/*
+	 * Order the task's plza state stores above before the loads in
+	 * task_curr(). This pairs with the full barrier between the
+	 * rq->curr update and resctrl_arch_sched_in() during context switch.
+	 */
+	smp_mb();
+
+	return 0;
+}
+
 static bool is_closid_match(struct task_struct *t, struct rdtgroup *r)
 {
 	return (resctrl_arch_alloc_capable() && (r->type == RDTCTRL_GROUP) &&
@@ -795,6 +815,35 @@ static int rdtgroup_move_task(pid_t pid, struct rdtgroup *rdtgrp,
 	return ret;
 }
 
+static int rdtgroup_plza_task(pid_t pid, struct rdtgroup *rdtgrp,
+			      struct kernfs_open_file *of)
+{
+	struct task_struct *tsk;
+	int ret;
+
+	rcu_read_lock();
+	if (pid) {
+		tsk = find_task_by_vpid(pid);
+		if (!tsk) {
+			rcu_read_unlock();
+			rdt_last_cmd_printf("No task %d\n", pid);
+			return -ESRCH;
+		}
+	} else {
+		tsk = current;
+	}
+
+	get_task_struct(tsk);
+	rcu_read_unlock();
+
+	ret = rdtgroup_task_write_permission(tsk, of);
+	if (!ret)
+		ret = __rdtgroup_plza_task(tsk, rdtgrp);
+
+	put_task_struct(tsk);
+	return ret;
+}
+
 static ssize_t rdtgroup_tasks_write(struct kernfs_open_file *of,
 				    char *buf, size_t nbytes, loff_t off)
 {
@@ -832,7 +881,10 @@ static ssize_t rdtgroup_tasks_write(struct kernfs_open_file *of,
 			break;
 		}
 
-		ret = rdtgroup_move_task(pid, rdtgrp, of);
+		if (rdtgrp->plza)
+			ret = rdtgroup_plza_task(pid, rdtgrp, of);
+		else
+			ret = rdtgroup_move_task(pid, rdtgrp, of);
 		if (ret) {
 			rdt_last_cmd_printf("Error while processing task %d\n", pid);
 			break;
@@ -935,6 +987,19 @@ static int rdtgroup_plza_show(struct kernfs_open_file *of,
 	return ret;
 }
 
+static void rdt_task_set_plza(struct rdtgroup *r, bool plza)
+{
+	struct task_struct *p, *t;
+
+	rcu_read_lock();
+	for_each_process_thread(p, t) {
+		if (!rdt_task_match(t, r, r->plza))
+			continue;
+		resctrl_arch_set_task_plza(t, plza);
+	}
+	rcu_read_unlock();
+}
+
 static ssize_t rdtgroup_plza_write(struct kernfs_open_file *of, char *buf,
 				   size_t nbytes, loff_t off)
 {
@@ -991,6 +1056,7 @@ static ssize_t rdtgroup_plza_write(struct kernfs_open_file *of, char *buf,
 
 	/* Enable or disable PLZA state and update per CPU state if there is a change */
 	if (enable != rdtgrp->plza) {
+		rdt_task_set_plza(rdtgrp, enable);
 		resctrl_arch_plza_setup(r, rdtgrp->closid, rdtgrp->mon.rmid);
 
 		for_each_cpu(cpu, &rdtgrp->cpu_mask)
@@ -4209,6 +4275,7 @@ static int rdtgroup_rmdir_ctrl(struct rdtgroup *rdtgrp, cpumask_var_t tmpmask)
 	int cpu;
 
 	if (rdtgrp->plza) {
+		rdt_task_set_plza(rdtgrp, false);
 		for_each_cpu(cpu, &rdtgrp->cpu_mask)
 			resctrl_arch_set_cpu_plza(cpu, rdtgrp->closid,
 						  rdtgrp->mon.rmid, false);
