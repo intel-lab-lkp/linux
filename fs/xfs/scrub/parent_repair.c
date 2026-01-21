@@ -1526,6 +1526,11 @@ xrep_parent_setup_scan(
 
 	/* Set up some staging memory for logging parent pointer updates. */
 	descr = xchk_xfile_ino_descr(sc, "parent pointer entries");
+	if (!descr) {
+		error = -ENOMEM;
+		goto out_xattr_value;
+	}
+
 	error = xfarray_create(descr, 0, sizeof(struct xrep_pptr),
 			&rp->pptr_recs);
 	kfree(descr);
@@ -1533,6 +1538,11 @@ xrep_parent_setup_scan(
 		goto out_xattr_value;
 
 	descr = xchk_xfile_ino_descr(sc, "parent pointer names");
+	if (!descr) {
+		error = -ENOMEM;
+		goto out_recs;
+	}
+
 	error = xfblob_create(descr, &rp->pptr_names);
 	kfree(descr);
 	if (error)
@@ -1541,6 +1551,11 @@ xrep_parent_setup_scan(
 	/* Set up some storage for copying attrs before the mapping exchange */
 	descr = xchk_xfile_ino_descr(sc,
 				"parent pointer retained xattr entries");
+	if (!descr) {
+		error = -ENOMEM;
+		goto out_names;
+	}
+
 	error = xfarray_create(descr, 0, sizeof(struct xrep_parent_xattr),
 			&rp->xattr_records);
 	kfree(descr);
@@ -1549,6 +1564,11 @@ xrep_parent_setup_scan(
 
 	descr = xchk_xfile_ino_descr(sc,
 				"parent pointer retained xattr values");
+	if (!descr) {
+		error = -ENOMEM;
+		goto out_attr_keys;
+	}
+
 	error = xfblob_create(descr, &rp->xattr_blobs);
 	kfree(descr);
 	if (error)

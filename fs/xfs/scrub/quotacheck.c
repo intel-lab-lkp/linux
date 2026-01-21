@@ -757,6 +757,11 @@ xqcheck_setup_scan(
 	error = -ENOMEM;
 	if (xfs_this_quota_on(sc->mp, XFS_DQTYPE_USER)) {
 		descr = xchk_xfile_descr(sc, "user dquot records");
+		if (!descr) {
+			error = -ENOMEM;
+			goto out_teardown;
+		}
+
 		error = xfarray_create(descr, max_dquots,
 				sizeof(struct xqcheck_dquot), &xqc->ucounts);
 		kfree(descr);
@@ -766,6 +771,11 @@ xqcheck_setup_scan(
 
 	if (xfs_this_quota_on(sc->mp, XFS_DQTYPE_GROUP)) {
 		descr = xchk_xfile_descr(sc, "group dquot records");
+		if (!descr) {
+			error = -ENOMEM;
+			goto out_teardown;
+		}
+
 		error = xfarray_create(descr, max_dquots,
 				sizeof(struct xqcheck_dquot), &xqc->gcounts);
 		kfree(descr);
@@ -775,6 +785,11 @@ xqcheck_setup_scan(
 
 	if (xfs_this_quota_on(sc->mp, XFS_DQTYPE_PROJ)) {
 		descr = xchk_xfile_descr(sc, "project dquot records");
+		if (!descr) {
+			error = -ENOMEM;
+			goto out_teardown;
+		}
+
 		error = xfarray_create(descr, max_dquots,
 				sizeof(struct xqcheck_dquot), &xqc->pcounts);
 		kfree(descr);

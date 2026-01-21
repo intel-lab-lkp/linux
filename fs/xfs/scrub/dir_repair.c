@@ -1789,6 +1789,9 @@ xrep_dir_setup_scan(
 
 	/* Set up some staging memory for salvaging dirents. */
 	descr = xchk_xfile_ino_descr(sc, "directory entries");
+	if (!descr)
+		return -ENOMEM;
+
 	error = xfarray_create(descr, 0, sizeof(struct xrep_dirent),
 			&rd->dir_entries);
 	kfree(descr);
@@ -1796,6 +1799,11 @@ xrep_dir_setup_scan(
 		return error;
 
 	descr = xchk_xfile_ino_descr(sc, "directory entry names");
+	if (!descr) {
+		error = -ENOMEM;
+		goto out_xfarray;
+	}
+
 	error = xfblob_create(descr, &rd->dir_names);
 	kfree(descr);
 	if (error)

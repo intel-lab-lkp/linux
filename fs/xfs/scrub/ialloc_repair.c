@@ -817,6 +817,11 @@ xrep_iallocbt(
 	xfs_agino_range(mp, pag_agno(sc->sa.pag), &first_agino, &last_agino);
 	last_agino /= XFS_INODES_PER_CHUNK;
 	descr = xchk_xfile_ag_descr(sc, "inode index records");
+	if (!descr) {
+		error = -ENOMEM;
+		goto out_ri;
+	}
+
 	error = xfarray_create(descr, last_agino,
 			sizeof(struct xfs_inobt_rec_incore),
 			&ri->inode_records);

@@ -1008,6 +1008,11 @@ xchk_nlinks_setup_scan(
 	xfs_agino_range(mp, last_agno, &first_agino, &last_agino);
 	max_inos = XFS_AGINO_TO_INO(mp, last_agno, last_agino) + 1;
 	descr = xchk_xfile_descr(sc, "file link counts");
+	if (!descr) {
+		error = -ENOMEM;
+		goto out_teardown;
+	}
+
 	error = xfarray_create(descr, min(XFS_MAXINUMBER + 1, max_inos),
 			sizeof(struct xchk_nlink), &xnc->nlinks);
 	kfree(descr);

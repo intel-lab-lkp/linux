@@ -1109,6 +1109,11 @@ xchk_directory(
 		 * due to locking contention.
 		 */
 		descr = xchk_xfile_ino_descr(sc, "slow directory entries");
+		if (!descr) {
+			error = -ENOMEM;
+			goto out_sd;
+		}
+
 		error = xfarray_create(descr, 0, sizeof(struct xchk_dirent),
 				&sd->dir_entries);
 		kfree(descr);
@@ -1116,6 +1121,11 @@ xchk_directory(
 			goto out_sd;
 
 		descr = xchk_xfile_ino_descr(sc, "slow directory entry names");
+		if (!descr) {
+			error = -ENOMEM;
+			goto out_entries;
+		}
+
 		error = xfblob_create(descr, &sd->dir_names);
 		kfree(descr);
 		if (error)

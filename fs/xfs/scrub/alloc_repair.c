@@ -877,6 +877,11 @@ xrep_allocbt(
 
 	/* Set up enough storage to handle maximally fragmented free space. */
 	descr = xchk_xfile_ag_descr(sc, "free space records");
+	if (!descr) {
+		error = -ENOMEM;
+		goto out_ra;
+	}
+
 	error = xfarray_create(descr, mp->m_sb.sb_agblocks / 2,
 			sizeof(struct xfs_alloc_rec_incore),
 			&ra->free_records);

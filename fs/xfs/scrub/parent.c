@@ -769,6 +769,9 @@ xchk_parent_pptr(
 	 * due to locking contention.
 	 */
 	descr = xchk_xfile_ino_descr(sc, "slow parent pointer entries");
+	if (!descr)
+		return -ENOMEM;
+
 	error = xfarray_create(descr, 0, sizeof(struct xchk_pptr),
 			&pp->pptr_entries);
 	kfree(descr);
@@ -776,6 +779,11 @@ xchk_parent_pptr(
 		goto out_pp;
 
 	descr = xchk_xfile_ino_descr(sc, "slow parent pointer names");
+	if (!descr) {
+		error = -ENOMEM;
+		goto out_entries;
+	}
+
 	error = xfblob_create(descr, &pp->pptr_names);
 	kfree(descr);
 	if (error)

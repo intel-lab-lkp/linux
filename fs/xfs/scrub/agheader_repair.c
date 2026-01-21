@@ -1743,6 +1743,9 @@ xrep_agi(
 	sc->buf_cleanup = xrep_agi_buf_cleanup;
 
 	descr = xchk_xfile_ag_descr(sc, "iunlinked next pointers");
+	if (!descr)
+		return -ENOMEM;
+
 	error = xfarray_create(descr, 0, sizeof(xfs_agino_t),
 			&ragi->iunlink_next);
 	kfree(descr);
@@ -1750,6 +1753,9 @@ xrep_agi(
 		return error;
 
 	descr = xchk_xfile_ag_descr(sc, "iunlinked prev pointers");
+	if (!descr)
+		return -ENOMEM;
+
 	error = xfarray_create(descr, 0, sizeof(xfs_agino_t),
 			&ragi->iunlink_prev);
 	kfree(descr);

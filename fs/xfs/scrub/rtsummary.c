@@ -71,6 +71,9 @@ xchk_setup_rtsummary(
 	 * us to avoid pinning kernel memory for this purpose.
 	 */
 	descr = xchk_xfile_descr(sc, "realtime summary file");
+	if (!descr)
+		return -ENOMEM;
+
 	error = xfile_create(descr, XFS_FSB_TO_B(mp, mp->m_rsumblocks),
 			&sc->xfile);
 	kfree(descr);

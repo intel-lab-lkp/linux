@@ -117,6 +117,11 @@ xchk_setup_dirtree(
 	mutex_init(&dl->lock);
 
 	descr = xchk_xfile_ino_descr(sc, "dirtree path steps");
+	if (!descr) {
+		error = -ENOMEM;
+		goto out_dl;
+	}
+
 	error = xfarray_create(descr, 0, sizeof(struct xchk_dirpath_step),
 			&dl->path_steps);
 	kfree(descr);
@@ -124,6 +129,11 @@ xchk_setup_dirtree(
 		goto out_dl;
 
 	descr = xchk_xfile_ino_descr(sc, "dirtree path names");
+	if (!descr) {
+		error = -ENOMEM;
+		goto out_steps;
+	}
+
 	error = xfblob_create(descr, &dl->path_names);
 	kfree(descr);
 	if (error)

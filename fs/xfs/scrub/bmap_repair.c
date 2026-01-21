@@ -947,6 +947,11 @@ xrep_bmap(
 	max_bmbt_recs = xfs_iext_max_nextents(large_extcount, whichfork);
 	descr = xchk_xfile_ino_descr(sc, "%s fork mapping records",
 			whichfork == XFS_DATA_FORK ? "data" : "attr");
+	if (!descr) {
+		error = -ENOMEM;
+		goto out_rb;
+	}
+
 	error = xfarray_create(descr, max_bmbt_recs,
 			sizeof(struct xfs_bmbt_rec), &rb->bmap_records);
 	kfree(descr);

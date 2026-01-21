@@ -1556,6 +1556,11 @@ xrep_xattr_setup_scan(
 
 	/* Set up some staging for salvaged attribute keys and values */
 	descr = xchk_xfile_ino_descr(sc, "xattr keys");
+	if (!descr) {
+		error = -ENOMEM;
+		goto out_rx;
+	}
+
 	error = xfarray_create(descr, 0, sizeof(struct xrep_xattr_key),
 			&rx->xattr_records);
 	kfree(descr);
@@ -1563,6 +1568,11 @@ xrep_xattr_setup_scan(
 		goto out_rx;
 
 	descr = xchk_xfile_ino_descr(sc, "xattr names");
+	if (!descr) {
+		error = -ENOMEM;
+		goto out_keys;
+	}
+
 	error = xfblob_create(descr, &rx->xattr_blobs);
 	kfree(descr);
 	if (error)
@@ -1573,6 +1583,11 @@ xrep_xattr_setup_scan(
 
 		descr = xchk_xfile_ino_descr(sc,
 				"xattr retained parent pointer entries");
+		if (!descr) {
+			error = -ENOMEM;
+			goto out_values;
+		}
+
 		error = xfarray_create(descr, 0,
 				sizeof(struct xrep_xattr_pptr),
 				&rx->pptr_recs);
@@ -1582,6 +1597,11 @@ xrep_xattr_setup_scan(
 
 		descr = xchk_xfile_ino_descr(sc,
 				"xattr retained parent pointer names");
+		if (!descr) {
+			error = -ENOMEM;
+			goto out_pprecs;
+		}
+
 		error = xfblob_create(descr, &rx->pptr_names);
 		kfree(descr);
 		if (error)

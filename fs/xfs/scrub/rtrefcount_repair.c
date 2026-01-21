@@ -132,6 +132,9 @@ xrep_setup_rtrefcountbt(
 	int			error;
 
 	descr = xchk_xfile_ag_descr(sc, "rmap record bag");
+	if (!descr)
+		return -ENOMEM;
+
 	error = xrep_setup_xfbtree(sc, descr);
 	kfree(descr);
 	return error;
@@ -723,6 +726,11 @@ xrep_rtrefcountbt(
 
 	/* Set up enough storage to handle one refcount record per rt extent. */
 	descr = xchk_xfile_ag_descr(sc, "reference count records");
+	if (!descr) {
+		error = -ENOMEM;
+		goto out_rr;
+	}
+
 	error = xfarray_create(descr, mp->m_sb.sb_rextents,
 			sizeof(struct xfs_refcount_irec),
 			&rr->refcount_records);

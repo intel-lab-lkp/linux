@@ -53,6 +53,9 @@ xrep_setup_rtbitmap(
 
 	/* Create an xfile to hold our reconstructed bitmap. */
 	descr = xchk_xfile_rtgroup_descr(sc, "bitmap file");
+	if (!descr)
+		return -ENOMEM;
+
 	error = xfile_create(descr, blocks * mp->m_sb.sb_blocksize, &sc->xfile);
 	kfree(descr);
 	if (error)

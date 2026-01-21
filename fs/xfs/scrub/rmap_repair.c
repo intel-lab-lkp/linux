@@ -170,6 +170,9 @@ xrep_setup_ag_rmapbt(
 	xchk_fsgates_enable(sc, XCHK_FSGATES_RMAP);
 
 	descr = xchk_xfile_ag_descr(sc, "reverse mapping records");
+	if (!descr)
+		return -ENOMEM;
+
 	error = xrep_setup_xfbtree(sc, descr);
 	kfree(descr);
 	if (error)
