@@ -1487,6 +1487,12 @@ void tdp_map(struct kvm_vm *vm, uint64_t nested_paddr, uint64_t paddr, uint64_t 
 void tdp_identity_map_default_memslots(struct kvm_vm *vm);
 void tdp_identity_map_1g(struct kvm_vm *vm,  uint64_t addr, uint64_t size);
 
+void __virt_pg_unmap(struct kvm_vm *vm, struct kvm_mmu *mmu, uint64_t vaddr,
+		     int level);
+void __tdp_unmap(struct kvm_vm *vm, uint64_t nested_paddr, uint64_t size,
+		 int level);
+void tdp_unmap(struct kvm_vm *vm, uint64_t nested_paddr, uint64_t size);
+
 /*
  * Basic CPU control in CR0
  */

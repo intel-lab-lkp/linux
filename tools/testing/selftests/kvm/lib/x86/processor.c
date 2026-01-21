@@ -338,6 +338,40 @@ void virt_map_level(struct kvm_vm *vm, uint64_t vaddr, uint64_t paddr,
 	}
 }
 
+void __virt_pg_unmap(struct kvm_vm *vm, struct kvm_mmu *mmu, uint64_t vaddr,
+		     int level)
+{
+	uint64_t *pte = &mmu->pgd;
+	int current_level;
+
+	TEST_ASSERT(level >= PG_LEVEL_4K && level <= mmu->pgtable_levels,
+		    "Invalid level %d", level);
+
+	/* Walk down to target level */
+	for (current_level = mmu->pgtable_levels;
+	     current_level > level;
+	     current_level--) {
+		pte = virt_get_pte(vm, mmu, pte, vaddr, current_level);
+
+		TEST_ASSERT(is_present_pte(mmu, pte),
+			    "Entry not present at level %d for vaddr 0x%lx",
+			    current_level, vaddr);
+		TEST_ASSERT(!is_huge_pte(mmu, pte),
+			    "Unexpected huge page at level %d for vaddr 0x%lx",
+			    current_level, vaddr);
+	}
+
+	/* Get the PTE at target level */
+	pte = virt_get_pte(vm, mmu, pte, vaddr, level);
+
+	TEST_ASSERT(is_present_pte(mmu, pte),
+		    "Entry not present at level %d for vaddr 0x%lx",
+		    level, vaddr);
+
+	/* Clear the PTE */
+	*pte = 0;
+}
+
 static bool vm_is_target_pte(struct kvm_mmu *mmu, uint64_t *pte,
 			     int *level, int current_level)
 {
@@ -539,6 +573,25 @@ void tdp_identity_map_default_memslots(struct kvm_vm *vm)
 void tdp_identity_map_1g(struct kvm_vm *vm, uint64_t addr, uint64_t size)
 {
 	__tdp_map(vm, addr, addr, size, PG_LEVEL_1G);
+}
+
+void __tdp_unmap(struct kvm_vm *vm, uint64_t nested_paddr, uint64_t size,
+		 int level)
+{
+	size_t page_size = PG_LEVEL_SIZE(level);
+	size_t npages = size / page_size;
+
+	TEST_ASSERT(nested_paddr + size > nested_paddr, "Address overflow");
+
+	while (npages--) {
+		__virt_pg_unmap(vm, &vm->stage2_mmu, nested_paddr, level);
+		nested_paddr += page_size;
+	}
+}
+
+void tdp_unmap(struct kvm_vm *vm, uint64_t nested_paddr, uint64_t size)
+{
+	__tdp_unmap(vm, nested_paddr, size, PG_LEVEL_4K);
 }
 
 /*
