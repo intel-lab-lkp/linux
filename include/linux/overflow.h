@@ -31,7 +31,7 @@
  * credit to Christian Biere.
  */
 #define __type_half_max(type) ((type)1 << (8*sizeof(type) - 1 - is_signed_type(type)))
-#define __type_max(T) ((T)((__type_half_max(T) - 1) + __type_half_max(T)))
+#define __type_max(T) ((T)(2 * (__type_half_max(T) - 1) + 1))
 #define type_max(t)	__type_max(typeof(t))
 #define __type_min(T) ((T)((T)-type_max(T)-(T)1))
 #define type_min(t)	__type_min(typeof(t))
