@@ -947,6 +947,7 @@ v4l2_async_nf_name(struct v4l2_async_notifier *notifier)
 		return "nil";
 }
 
+#ifdef CONFIG_DEBUG_FS
 static int pending_subdevs_show(struct seq_file *s, void *data)
 {
 	struct v4l2_async_notifier *notif;
@@ -967,20 +968,25 @@ static int pending_subdevs_show(struct seq_file *s, void *data)
 DEFINE_SHOW_ATTRIBUTE(pending_subdevs);
 
 static struct dentry *v4l2_async_debugfs_dir;
+#endif
 
 static int __init v4l2_async_init(void)
 {
+#ifdef CONFIG_DEBUG_FS
 	v4l2_async_debugfs_dir = debugfs_create_dir("v4l2-async", NULL);
 	debugfs_create_file("pending_async_subdevices", 0444,
 			    v4l2_async_debugfs_dir, NULL,
 			    &pending_subdevs_fops);
 
+#endif
 	return 0;
 }
 
 static void __exit v4l2_async_exit(void)
 {
+#ifdef CONFIG_DEBUG_FS
 	debugfs_remove_recursive(v4l2_async_debugfs_dir);
+#endif
 }
 
 subsys_initcall(v4l2_async_init);
