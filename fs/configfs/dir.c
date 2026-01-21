@@ -163,6 +163,8 @@ static struct configfs_fragment *new_fragment(void)
 	if (p) {
 		atomic_set(&p->frag_count, 1);
 		init_rwsem(&p->frag_sem);
+		lockdep_register_key(&p->frag_sem_key);
+		lockdep_set_class(&p->frag_sem, &p->frag_sem_key);
 		p->frag_dead = false;
 	}
 	return p;
@@ -170,8 +172,10 @@ static struct configfs_fragment *new_fragment(void)
 
 void put_fragment(struct configfs_fragment *frag)
 {
-	if (frag && atomic_dec_and_test(&frag->frag_count))
+	if (frag && atomic_dec_and_test(&frag->frag_count)) {
+		lockdep_unregister_key(&frag->frag_sem_key);
 		kfree(frag);
+	}
 }
 
 struct configfs_fragment *get_fragment(struct configfs_fragment *frag)

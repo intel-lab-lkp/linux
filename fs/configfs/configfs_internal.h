@@ -21,6 +21,7 @@
 struct configfs_fragment {
 	atomic_t frag_count;
 	struct rw_semaphore frag_sem;
+	struct lock_class_key frag_sem_key;
 	bool frag_dead;
 };
 
