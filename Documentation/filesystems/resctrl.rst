@@ -224,7 +224,11 @@ Memory bandwidth(MB) subdirectory contains the following files
 with respect to allocation:
 
 "min_bandwidth":
-		The minimum memory bandwidth percentage which
+		The minimum memory bandwidth percentage or units which
+		user can request.
+
+"max_bandwidth":
+		The maximum memory bandwidth percentage or units which
 		user can request.
 
 "bandwidth_gran":

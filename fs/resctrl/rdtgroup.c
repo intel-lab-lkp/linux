@@ -1153,6 +1153,16 @@ static int rdt_min_bw_show(struct kernfs_open_file *of,
 	return 0;
 }
 
+static int rdt_max_bw_show(struct kernfs_open_file *of,
+			   struct seq_file *seq, void *v)
+{
+	struct resctrl_schema *s = rdt_kn_parent_priv(of->kn);
+	struct rdt_resource *r = s->res;
+
+	seq_printf(seq, "%u\n", r->membw.max_bw);
+	return 0;
+}
+
 static int rdt_num_rmids_show(struct kernfs_open_file *of,
 			      struct seq_file *seq, void *v)
 {
@@ -1957,6 +1967,13 @@ static struct rftype res_common_files[] = {
 		.mode		= 0444,
 		.kf_ops		= &rdtgroup_kf_single_ops,
 		.seq_show	= rdt_min_bw_show,
+		.fflags		= RFTYPE_CTRL_INFO | RFTYPE_RES_MB,
+	},
+	{
+		.name		= "max_bandwidth",
+		.mode		= 0444,
+		.kf_ops		= &rdtgroup_kf_single_ops,
+		.seq_show	= rdt_max_bw_show,
 		.fflags		= RFTYPE_CTRL_INFO | RFTYPE_RES_MB,
 	},
 	{
