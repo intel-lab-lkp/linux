@@ -849,10 +849,10 @@ static void announce_cpu(int cpu, int apicid)
 	int node = early_cpu_to_node(cpu);
 
 	if (!width)
-		width = num_digits(num_possible_cpus()) + 1; /* + '#' sign */
+		width = num_digits_u32(num_possible_cpus()) + 1; /* + '#' sign */
 
 	if (!node_width)
-		node_width = num_digits(num_possible_nodes()) + 1; /* + '#' */
+		node_width = num_digits_u32(num_possible_nodes()) + 1; /* + '#' */
 
 	if (system_state < SYSTEM_RUNNING) {
 		if (first)
@@ -864,7 +864,7 @@ static void announce_cpu(int cpu, int apicid)
 			current_node = node;
 
 			printk(KERN_INFO ".... node %*s#%d, CPUs:  ",
-			       node_width - num_digits(node), " ", node);
+			       node_width - num_digits_u32(node), " ", node);
 		}
 
 		/* Add padding for the BSP */
@@ -872,7 +872,7 @@ static void announce_cpu(int cpu, int apicid)
 			pr_cont("%*s", width + 1, " ");
 		first = 0;
 
-		pr_cont("%*s#%d", width - num_digits(cpu), " ", cpu);
+		pr_cont("%*s#%d", width - num_digits_u32(cpu), " ", cpu);
 	} else
 		pr_info("Booting Node %d Processor %d APIC 0x%x\n",
 			node, cpu, apicid);
