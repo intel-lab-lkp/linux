@@ -845,6 +845,15 @@ unlock:
 	return ret ?: nbytes;
 }
 
+static inline bool rdt_task_match(struct task_struct *t,
+				  struct rdtgroup *r, bool plza)
+{
+	if (plza)
+		return t->plza;
+
+	return is_closid_match(t, r) || is_rmid_match(t, r);
+}
+
 static void show_rdt_tasks(struct rdtgroup *r, struct seq_file *s)
 {
 	struct task_struct *p, *t;
@@ -852,11 +861,12 @@ static void show_rdt_tasks(struct rdtgroup *r, struct seq_file *s)
 
 	rcu_read_lock();
 	for_each_process_thread(p, t) {
-		if (is_closid_match(t, r) || is_rmid_match(t, r)) {
-			pid = task_pid_vnr(t);
-			if (pid)
-				seq_printf(s, "%d\n", pid);
-		}
+		if (!rdt_task_match(t, r, r->plza))
+			continue;
+
+		pid = task_pid_vnr(t);
+		if (pid)
+			seq_printf(s, "%d\n", pid);
 	}
 	rcu_read_unlock();
 }
