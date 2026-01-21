@@ -121,6 +121,10 @@ endif
 # Enable <arm_neon.h>
 CFLAGS_aegis128-neon-inner.o += -isystem $(shell $(CC) -print-file-name=include)
 
+ifeq ($(ARCH),riscv)
+aegis128-$(CONFIG_CRYPTO_AEGIS128_SIMD) += aegis128-rvv.o aegis128-rvv-inner.o
+endif
+
 obj-$(CONFIG_CRYPTO_PCRYPT) += pcrypt.o
 obj-$(CONFIG_CRYPTO_CRYPTD) += cryptd.o
 obj-$(CONFIG_CRYPTO_DES) += des_generic.o

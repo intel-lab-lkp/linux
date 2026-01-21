@@ -777,8 +777,8 @@ config CRYPTO_AEGIS128
 	  AEGIS-128 AEAD algorithm
 
 config CRYPTO_AEGIS128_SIMD
-	bool "AEGIS-128 (arm NEON, arm64 NEON)"
-	depends on CRYPTO_AEGIS128 && ((ARM || ARM64) && KERNEL_MODE_NEON)
+	bool "AEGIS-128 (arm NEON, arm64 NEON, RISC-V vector)"
+	depends on CRYPTO_AEGIS128 && (((ARM || ARM64) && KERNEL_MODE_NEON) || RISCV)
 	default y
 	help
 	  AEGIS-128 AEAD algorithm
