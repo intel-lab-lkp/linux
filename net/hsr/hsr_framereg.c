@@ -11,6 +11,7 @@
  * Same code handles filtering of duplicates for PRP as well.
  */
 
+#include <kunit/visibility.h>
 #include <linux/if_ether.h>
 #include <linux/etherdevice.h>
 #include <linux/slab.h>
@@ -293,8 +294,8 @@ static void hsr_forget_seq_block(struct hsr_node *node,
  * expire after time (in low traffic situations) or when they are replaced in
  * the backing fixed size buffer (in high traffic situations).
  */
-static struct hsr_seq_block *hsr_get_seq_block(struct hsr_node *node,
-					       u16 block_idx)
+VISIBLE_IF_KUNIT struct hsr_seq_block *hsr_get_seq_block(struct hsr_node *node,
+							 u16 block_idx)
 {
 	struct hsr_seq_block *block, *res;
 	size_t block_sz;
@@ -325,6 +326,7 @@ static struct hsr_seq_block *hsr_get_seq_block(struct hsr_node *node,
 
 	return block;
 }
+EXPORT_SYMBOL_IF_KUNIT(hsr_get_seq_block);
 
 /* Use the Supervision frame's info about an eventual macaddress_B for merging
  * nodes that has previously had their macaddress_B registered as a separate
@@ -618,10 +620,7 @@ int prp_register_frame_out(struct hsr_port *port, struct hsr_frame_info *frame)
 
 	return hsr_check_duplicate(frame, 0);
 }
-
-#if IS_MODULE(CONFIG_PRP_DUP_DISCARD_KUNIT_TEST)
-EXPORT_SYMBOL(prp_register_frame_out);
-#endif
+EXPORT_SYMBOL_IF_KUNIT(prp_register_frame_out);
 
 static struct hsr_port *get_late_port(struct hsr_priv *hsr,
 				      struct hsr_node *node)
