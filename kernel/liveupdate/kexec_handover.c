@@ -219,8 +219,11 @@ static int __kho_preserve_order(struct kho_mem_track *track, unsigned long pfn,
 /* For physically contiguous 0-order pages. */
 static void kho_init_pages(struct page *page, unsigned long nr_pages)
 {
-	for (unsigned long i = 0; i < nr_pages; i++)
+	for (unsigned long i = 0; i < nr_pages; i++) {
 		set_page_count(page + i, 1);
+		/* Mark the codetag as empty to avoid accounting mismatch */
+		clear_page_tag_ref(page + i);
+	}
 }
 
 static void kho_init_folio(struct page *page, unsigned int order)
@@ -236,6 +239,9 @@ static void kho_init_folio(struct page *page, unsigned int order)
 
 	if (order > 0)
 		prep_compound_page(page, order);
+
+	/* Mark the codetag as empty to avoid accounting mismatch */
+	clear_page_tag_ref(page);
 }
 
 static struct page *kho_restore_page(phys_addr_t phys, bool is_folio)
@@ -265,7 +271,6 @@ static struct page *kho_restore_page(phys_addr_t phys, bool is_folio)
 	else
 		kho_init_pages(page, nr_pages);
 
-	clear_page_tag_ref(page);
 	adjust_managed_page_count(page, nr_pages);
 	return page;
 }
