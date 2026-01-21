@@ -1,0 +1,53 @@
+What:		/sys/bus/i2c/devices/.../address
+Date:		September 2025
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		This file has the target address the I2C client responds to.
+
+What:		/sys/bus/i2c/devices/.../vendor
+Date:		September 2025
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		This file is only visible for ARP devices. It returns the Vendor
+		ID field from the SMBus ARP Unique Device Identifier. It is the
+		device manufacturer's ID assigned by the SBS Implementers Forum
+		or the PCI SIG.
+
+What:		/sys/bus/i2c/devices/.../device
+Date:		September 2025
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		This file is only visible for ARP devices. It returns the Device
+		ID field from the SMBus ARP Unique Device Identifier. The
+		device ID is assigned by the device manufacturer.
+
+What:		/sys/bus/i2c/devices/.../interface
+Date:		September 2025
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		This file is only visible for ARP devices. It returns the
+		Interface field from the SMBus ARP Unique Device Identifier.
+
+What:		/sys/bus/i2c/devices/.../subsystem_vendor
+Date:		September 2025
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		This file is only visible for ARP devices. It returns the
+		Subsystem Vendor ID field from the SMBus ARP Unique Device
+		Identifier.
+
+What:		/sys/bus/i2c/devices/.../subsystem_device
+Date:		September 2025
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		This file is only visible for ARP devices. It returns the
+		Subsystem Device ID field from the SMBus ARP Unique Device
+		Identifier.
+
+What:		/sys/bus/i2c/devices/.../vendor_specific_id
+Date:		September 2025
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		This file is only visible for ARP devices. It returns the
+		Vendor Specific ID field from the SMBus ARP Unique Device
+		Identifier.

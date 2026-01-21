@@ -686,6 +686,13 @@ name_show(struct device *dev, struct device_attribute *attr, char *buf)
 static DEVICE_ATTR_RO(name);
 
 static ssize_t
+address_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "0x%02x\n", to_i2c_client(dev)->addr);
+}
+static DEVICE_ATTR_RO(address);
+
+static ssize_t
 modalias_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct i2c_client *client = to_i2c_client(dev);
@@ -712,11 +719,109 @@ static DEVICE_ATTR_RO(modalias);
 
 static struct attribute *i2c_dev_attrs[] = {
 	&dev_attr_name.attr,
+	&dev_attr_address.attr,
 	/* modalias helps coldplug:  modprobe $(cat .../modalias) */
 	&dev_attr_modalias.attr,
 	NULL
 };
-ATTRIBUTE_GROUPS(i2c_dev);
+
+static const struct attribute_group i2c_dev_group = {
+	.attrs = i2c_dev_attrs,
+};
+
+static ssize_t
+capabilities_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+
+	return sysfs_emit(buf, "0x%02x\n", client->udid->capabilities);
+}
+static DEVICE_ATTR_RO(capabilities);
+
+static ssize_t
+vendor_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+
+	return sysfs_emit(buf, "0x%04x\n", client->udid->vendor);
+}
+static DEVICE_ATTR_RO(vendor);
+
+static ssize_t
+device_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+
+	return sysfs_emit(buf, "0x%04x\n", client->udid->device);
+}
+static DEVICE_ATTR_RO(device);
+
+static ssize_t
+interface_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+
+	return sysfs_emit(buf, "0x%04x\n", client->udid->interface);
+}
+static DEVICE_ATTR_RO(interface);
+
+static ssize_t
+subsystem_vendor_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+
+	return sysfs_emit(buf, "0x%04x\n", client->udid->subvendor);
+}
+static DEVICE_ATTR_RO(subsystem_vendor);
+
+static ssize_t
+subsystem_device_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+
+	return sysfs_emit(buf, "0x%04x\n", client->udid->subdevice);
+}
+static DEVICE_ATTR_RO(subsystem_device);
+
+static ssize_t
+vendor_specific_id_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+
+	return sysfs_emit(buf, "0x%08x\n", client->udid->vendor_specific_id);
+}
+static DEVICE_ATTR_RO(vendor_specific_id);
+
+static struct attribute *udid_attrs[] = {
+	&dev_attr_capabilities.attr,
+	&dev_attr_vendor.attr,
+	&dev_attr_device.attr,
+	&dev_attr_interface.attr,
+	&dev_attr_subsystem_vendor.attr,
+	&dev_attr_subsystem_device.attr,
+	&dev_attr_vendor_specific_id.attr,
+	NULL
+};
+
+static umode_t
+udid_is_visible(struct kobject *kobj, struct attribute *attr, int n)
+{
+	if (to_i2c_client(kobj_to_dev(kobj))->udid)
+		return attr->mode;
+
+	return 0;
+}
+
+static const struct attribute_group udid_group = {
+	.is_visible = udid_is_visible,
+	.attrs = udid_attrs,
+};
+
+static const struct attribute_group *i2c_dev_groups[] = {
+	&i2c_dev_group,
+	&udid_group,
+	NULL
+};
 
 const struct bus_type i2c_bus_type = {
 	.name		= "i2c",
