@@ -19,7 +19,7 @@
  * a crash disabling EFI runtime services. The following quirk skips reading
  * these variables.
  */
-static const struct dmi_system_id uefi_skip_cert[] = {
+static const struct dmi_system_id uefi_skip_cert[] __initconst = {
 	{ UEFI_QUIRK_SKIP_CERT("Apple Inc.", "MacBookPro15,1") },
 	{ UEFI_QUIRK_SKIP_CERT("Apple Inc.", "MacBookPro15,2") },
 	{ UEFI_QUIRK_SKIP_CERT("Apple Inc.", "MacBookPro15,3") },
