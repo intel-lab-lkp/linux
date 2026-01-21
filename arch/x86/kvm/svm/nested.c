@@ -28,6 +28,7 @@
 #include "smm.h"
 #include "cpuid.h"
 #include "lapic.h"
+#include "pmu.h"
 #include "svm.h"
 #include "hyperv.h"
 
@@ -1054,6 +1055,11 @@ int nested_svm_vmrun(struct kvm_vcpu *vcpu)
 	if (enter_svm_guest_mode(vcpu, vmcb12_gpa, vmcb12, true))
 		goto out_exit_err;
 
+	kvm_pmu_set_pmc_eventsel_hw_enable(vcpu,
+		vcpu_to_pmu(vcpu)->pmc_hostonly, false);
+	kvm_pmu_set_pmc_eventsel_hw_enable(vcpu,
+		vcpu_to_pmu(vcpu)->pmc_guestonly, true);
+
 	if (nested_svm_merge_msrpm(vcpu))
 		goto out;
 
@@ -1137,6 +1143,10 @@ int nested_svm_vmexit(struct vcpu_svm *svm)
 
 	/* Exit Guest-Mode */
 	leave_guest_mode(vcpu);
+	kvm_pmu_set_pmc_eventsel_hw_enable(vcpu,
+		vcpu_to_pmu(vcpu)->pmc_hostonly, true);
+	kvm_pmu_set_pmc_eventsel_hw_enable(vcpu,
+		vcpu_to_pmu(vcpu)->pmc_guestonly, false);
 	svm->nested.vmcb12_gpa = 0;
 	WARN_ON_ONCE(svm->nested.nested_run_pending);
 

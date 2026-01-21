@@ -316,6 +316,22 @@ static void amd_mediated_pmu_put(struct kvm_vcpu *vcpu)
 		wrmsrq(MSR_AMD64_PERF_CNTR_GLOBAL_STATUS_CLR, pmu->global_status);
 }
 
+static void amd_pmu_set_pmc_eventsel_hw_enable(struct kvm_vcpu *vcpu,
+					       unsigned long *bitmap,
+					       bool enable)
+{
+	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
+	struct kvm_pmc *pmc;
+	int i;
+
+	kvm_for_each_pmc(pmu, pmc, i, bitmap) {
+		if (enable)
+			pmc->eventsel_hw |= ARCH_PERFMON_EVENTSEL_ENABLE;
+		else
+			pmc->eventsel_hw &= ~ARCH_PERFMON_EVENTSEL_ENABLE;
+	}
+}
+
 struct kvm_pmu_ops amd_pmu_ops __initdata = {
 	.rdpmc_ecx_to_pmc = amd_rdpmc_ecx_to_pmc,
 	.msr_idx_to_pmc = amd_msr_idx_to_pmc,
@@ -329,6 +345,7 @@ struct kvm_pmu_ops amd_pmu_ops __initdata = {
 	.is_mediated_pmu_supported = amd_pmu_is_mediated_pmu_supported,
 	.mediated_load = amd_mediated_pmu_load,
 	.mediated_put = amd_mediated_pmu_put,
+	.set_pmc_eventsel_hw_enable = amd_pmu_set_pmc_eventsel_hw_enable,
 
 	.EVENTSEL_EVENT = AMD64_EVENTSEL_EVENT,
 	.MAX_NR_GP_COUNTERS = KVM_MAX_NR_AMD_GP_COUNTERS,

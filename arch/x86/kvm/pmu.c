@@ -1142,6 +1142,13 @@ void kvm_pmu_branch_retired(struct kvm_vcpu *vcpu)
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_pmu_branch_retired);
 
+void kvm_pmu_set_pmc_eventsel_hw_enable(struct kvm_vcpu *vcpu,
+				       unsigned long *bitmap, bool enable)
+{
+	kvm_pmu_call(set_pmc_eventsel_hw_enable)(vcpu, bitmap, enable);
+}
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_pmu_set_pmc_eventsel_hw_enable);
+
 static bool is_masked_filter_valid(const struct kvm_x86_pmu_event_filter *filter)
 {
 	u64 mask = kvm_pmu_ops.EVENTSEL_EVENT |
