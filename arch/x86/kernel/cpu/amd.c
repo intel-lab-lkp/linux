@@ -3,6 +3,7 @@
 
 #include <linux/export.h>
 #include <linux/bitops.h>
+#include <linux/dmi.h>
 #include <linux/elf.h>
 #include <linux/mm.h>
 #include <linux/kvm_types.h>
@@ -1406,3 +1407,55 @@ static __init int print_s5_reset_status_mmio(void)
 	return 0;
 }
 late_initcall(print_s5_reset_status_mmio);
+
+static void __init amd_dmi_scan_additional(const struct dmi_header *d, void *p)
+{
+	struct dmi_a_info *info = (struct dmi_a_info *)d;
+	void *next, *end;
+
+	/*
+	 * DMI Additional Info table has a 'count' field. But it's not very
+	 * helpful since the entries are variable length. So don't use it.
+	 */
+	if (info->header.type != DMI_ENTRY_ADDITIONAL ||
+	    info->header.length < DMI_A_INFO_MIN_SIZE)
+		return;
+
+	/*
+	 * Get the first entry.
+	 * The minimum table size guarantees at least one entry is present.
+	 */
+	next = (void *)(info + 1);
+	end  = (void *)info + info->header.length;
+
+	do {
+		struct dmi_a_info_entry *entry;
+		const char *string_ptr;
+
+		entry = (struct dmi_a_info_entry *)next;
+
+		/*
+		 * Not much can be done to validate data. At least the entry
+		 * length shouldn't be 0.
+		 */
+		if (!entry->length)
+			return;
+
+		string_ptr = dmi_string_nosave(&info->header, entry->str_num);
+
+		/* Only one AGESA string is expected. */
+		if (!strncmp(string_ptr, "AGESA", 5)) {
+			pr_info("%s\n", string_ptr);
+			break;
+		}
+
+		next += entry->length;
+	} while (end - next >= DMI_A_INFO_ENT_MIN_SIZE);
+}
+
+static __init int print_dmi_agesa(void)
+{
+	dmi_walk(amd_dmi_scan_additional, NULL);
+	return 0;
+}
+late_initcall(print_dmi_agesa);
