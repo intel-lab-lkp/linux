@@ -48,7 +48,7 @@ static inline unsigned int hugetlb_vmemmap_optimizable_size(const struct hstate 
 
 	if (!is_power_of_2(sizeof(struct page)))
 		return 0;
-	return size > 0 ? size : 0;
+	return max(size, 0);
 }
 #else
 static inline int hugetlb_vmemmap_restore_folio(const struct hstate *h, struct folio *folio)
