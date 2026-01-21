@@ -24,6 +24,13 @@ struct intel_display;
 struct intel_dp;
 struct intel_encoder;
 
+enum joiner_type {
+	FORCED_JOINER = -1,
+	NO_JOINER = 0,		/* 1 pipe */
+	BIG_JOINER = 1,		/* 2 pipes */
+	ULTRA_JOINER = 2,	/* 4 pipes */
+};
+
 struct link_config_limits {
 	int min_rate, max_rate;
 	int min_lane_count, max_lane_count;
