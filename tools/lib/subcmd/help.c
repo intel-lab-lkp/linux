@@ -93,19 +93,19 @@ void exclude_cmds(struct cmdnames *cmds, struct cmdnames *excludes)
 			zfree(&cmds->names[ci]);
 			ci++;
 			ei++;
-		} else if (cmp > 0) {
+		} else {
 			ei++;
 		}
 	}
-	if (ci != cj) {
+	if (ci != cj) {		/* Verify cmds list only if it changed */
 		while (ci < cmds->cnt) {
 			cmds->names[cj++] = cmds->names[ci];
 			cmds->names[ci++] = NULL;
 		}
+		for (ci = cj; ci < cmds->cnt; ci++)
+			assert(!cmds->names[ci]);
+		cmds->cnt = cj;
 	}
-	for (ci = cj; ci < cmds->cnt; ci++)
-		assert(cmds->names[ci] == NULL);
-	cmds->cnt = cj;
 }
 
 static void get_term_dimensions(struct winsize *ws)
