@@ -30,6 +30,7 @@ ABMC (Assignable Bandwidth Monitoring Counters)			""
 SDCIAE (Smart Data Cache Injection Allocation Enforcement)	""
 GMBA (Global Memory Bandwidth Allocation)                       ""
 GSMBA (Global Slow Memory Bandwidth Allocation)                 ""
+PLZA (Privilege Level Zero association)                         ""
 =============================================================== ================================
 
 Historically, new features were made visible by default in /proc/cpuinfo. This
@@ -150,6 +151,22 @@ related to allocation:
 			      Only contiguous 1s value in CBM is supported.
 			"1":
 			      Non-contiguous 1s value in CBM is supported.
+
+"plza_capable":
+                Indicates the availability of Privilege Level Zero Association (PLZA).
+                PLZA is a hardware feature that enables automatic association of execution
+                at Privilege Level Zero (CPL=0) with a designated Class of Service
+                Identifier (CLOSID) and/or Resource Monitoring Identifier (RMID).
+                This mechanism allows the system to override the default per-thread
+                association for threads operating at CPL=0 when necessary. Additionally,
+                PLZA provides configuration capabilities for defining a dedicated resource
+                control group and assigning CPUs and tasks to operate under CLOSID
+                constraints reserved exclusively for PLZA.
+
+			"1":
+                                Resource supports the feature.
+			"0":
+                                Support not available for this resource.
 
 "io_alloc":
 		"io_alloc" enables system software to configure the portion of

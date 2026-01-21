@@ -1260,6 +1260,16 @@ static ssize_t max_threshold_occ_write(struct kernfs_open_file *of,
 	return nbytes;
 }
 
+static int rdt_plza_show(struct kernfs_open_file *of, struct seq_file *seq, void *v)
+{
+	struct resctrl_schema *s = rdt_kn_parent_priv(of->kn);
+	struct rdt_resource *r = s->res;
+
+	seq_printf(seq, "%d\n", r->plza_capable);
+
+	return 0;
+}
+
 /*
  * rdtgroup_mode_show - Display mode of this resource group
  */
@@ -1990,6 +2000,13 @@ static struct rftype res_common_files[] = {
 		.kf_ops		= &rdtgroup_kf_single_ops,
 		.seq_show	= rdt_delay_linear_show,
 		.fflags		= RFTYPE_CTRL_INFO | RFTYPE_RES_MB,
+	},
+	{
+		.name		= "plza_capable",
+		.mode		= 0444,
+		.kf_ops		= &rdtgroup_kf_single_ops,
+		.seq_show	= rdt_plza_show,
+		.fflags		= RFTYPE_CTRL_INFO,
 	},
 	/*
 	 * Platform specific which (if any) capabilities are provided by
