@@ -19,14 +19,6 @@
  */
 #if !defined(__ASSEMBLY__)
 
-/*
- * Missing asm support
- *
- * GENMASK_U*() and BIT_U*() depend on BITS_PER_TYPE() which relies on sizeof(),
- * something not available in asm. Nevertheless, fixed width integers is a C
- * concept. Assembly code can rely on the long and long long versions instead.
- */
-
 #include <linux/build_bug.h>
 #include <linux/compiler.h>
 #include <linux/overflow.h>
@@ -46,6 +38,7 @@
 #define GENMASK_TYPE(t, h, l)					\
 	((unsigned int)GENMASK_INPUT_CHECK(h, l) +		\
 	 ((t)-1 << (l) & (t)-1 >> (BITS_PER_TYPE(t) - 1 - (h))))
+#endif
 
 #define GENMASK(h, l)		GENMASK_TYPE(unsigned long, h, l)
 #define GENMASK_ULL(h, l)	GENMASK_TYPE(unsigned long long, h, l)
@@ -56,9 +49,10 @@
 #define GENMASK_U64(h, l)	GENMASK_TYPE(u64, h, l)
 #define GENMASK_U128(h, l)	GENMASK_TYPE(u128, h, l)
 
+#if !defined(__ASSEMBLY__)
 /*
- * Fixed-type variants of BIT(), with additional checks like GENMASK_TYPE(). The
- * following examples generate compiler warnings due to -Wshift-count-overflow:
+ * Fixed-type variants of BIT(), with additional checks like GENMASK_TYPE().
+ * The following examples generate compiler warnings from BIT_INPUT_CHECK().
  *
  * - BIT_U8(8)
  * - BIT_U32(-1)
@@ -68,21 +62,28 @@
 	BUILD_BUG_ON_ZERO(const_true((nr) >= BITS_PER_TYPE(type)))
 
 #define BIT_TYPE(type, nr) ((unsigned int)BIT_INPUT_CHECK(type, nr) + ((type)1 << (nr)))
+#endif /* defined(__ASSEMBLY__) */
 
 #define BIT_U8(nr)	BIT_TYPE(u8, nr)
 #define BIT_U16(nr)	BIT_TYPE(u16, nr)
 #define BIT_U32(nr)	BIT_TYPE(u32, nr)
 #define BIT_U64(nr)	BIT_TYPE(u64, nr)
 
-#else /* defined(__ASSEMBLY__) */
+#if defined(__ASSEMBLY__)
 
 /*
- * BUILD_BUG_ON_ZERO is not available in h files included from asm files,
- * disable the input check if that is the case.
+ * The assmebler only supports one size of signed integer rather than
+ * the fixed width integer types of C.
+ * There is also no method for reported invalid input.
+ * Error in .h files will usually be picked up when compiled into C files.
+ *
+ * Define type-size agnostic definitions that generate the correct value
+ * provided it can be represented by the assembler.
  */
-#define GENMASK(h, l)		__GENMASK(h, l)
-#define GENMASK_ULL(h, l)	__GENMASK_ULL(h, l)
 
-#endif /* !defined(__ASSEMBLY__) */
+#define GENMASK_TYPE(t, h, l)	((2 << (h)) - (1 << (l)))
+#define BIT_TYPE(type, nr)	(1 << (nr))
+
+#endif /* defined(__ASSEMBLY__) */
 
 #endif	/* __LINUX_BITS_H */
