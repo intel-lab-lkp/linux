@@ -11,6 +11,7 @@
 #include <linux/delay.h>
 #include <linux/pm_runtime.h>
 #include <linux/platform_data/x86/apple.h>
+#include <linux/pci.h>
 
 #include "tb.h"
 #include "tb_regs.h"
@@ -18,6 +19,7 @@
 
 #define TB_TIMEOUT		100	/* ms */
 #define TB_RELEASE_BW_TIMEOUT	10000	/* ms */
+#define TB_PCIEHP_ENUMERATION_DELAY 300	/* ms */
 
 /*
  * How many time bandwidth allocation request from graphics driver is
@@ -83,12 +85,76 @@ struct tb_hotplug_event {
 	int retry;
 };
 
+/* Delayed work to verify PCIe enumeration after tunnel activation */
+struct tb_pci_rescan_work {
+	struct delayed_work work;
+	struct tb *tb;
+	struct pci_bus *bus;
+	int devices_before;
+	u64 route;
+	u8 port;
+};
+
 static void tb_scan_port(struct tb_port *port);
 static void tb_handle_hotplug(struct work_struct *work);
 static void tb_dp_resource_unavailable(struct tb *tb, struct tb_port *port,
 				       const char *reason);
 static void tb_queue_dp_bandwidth_request(struct tb *tb, u64 route, u8 port,
 					  int retry, unsigned long delay);
+
+static void tb_pci_rescan_work_fn(struct work_struct *work)
+{
+	struct tb_pci_rescan_work *rescan_work =
+		container_of(work, typeof(*rescan_work), work.work);
+	struct tb *tb = rescan_work->tb;
+	struct pci_bus *bus = rescan_work->bus;
+	int devices_after = 0;
+	struct pci_dev *dev;
+	struct tb_switch *sw;
+	struct tb_port *port;
+
+	mutex_lock(&tb->lock);
+
+	sw = tb_switch_find_by_route(tb, rescan_work->route);
+	if (!sw) {
+		tb_dbg(tb, "Switch at route %llx disappeared, skipping rescan\n",
+		       rescan_work->route);
+		goto out_unlock;
+	}
+
+	port = &sw->ports[rescan_work->port];
+
+	pci_lock_rescan_remove();
+	for_each_pci_dev(dev)
+		devices_after++;
+	pci_unlock_rescan_remove();
+
+	if (devices_after > rescan_work->devices_before) {
+		tb_port_dbg(port, "pciehp enumerated %d new device(s)\n",
+			    devices_after - rescan_work->devices_before);
+	} else {
+		tb_port_info(port, "pciehp failed to enumerate devices, triggering rescan\n");
+
+		pci_lock_rescan_remove();
+		pci_rescan_bus(bus);
+
+		devices_after = 0;
+		for_each_pci_dev(dev)
+			devices_after++;
+		pci_unlock_rescan_remove();
+
+		if (devices_after > rescan_work->devices_before)
+			tb_port_info(port, "rescan found %d new device(s)\n",
+				     devices_after - rescan_work->devices_before);
+		else
+			tb_port_warn(port, "no devices found even after rescan\n");
+	}
+
+	tb_switch_put(sw);
+out_unlock:
+	mutex_unlock(&tb->lock);
+	kfree(rescan_work);
+}
 
 static void tb_queue_hotplug(struct tb *tb, u64 route, u8 port, bool unplug)
 {
@@ -2313,6 +2379,35 @@ static int tb_tunnel_pci(struct tb *tb, struct tb_switch *sw)
 		tb_sw_warn(sw, "failed to connect xHCI\n");
 
 	list_add_tail(&tunnel->list, &tcm->tunnel_list);
+
+	/* Verify pciehp enumeration; trigger rescan if needed */
+	if (tb->nhi && tb->nhi->pdev && tb->nhi->pdev->bus) {
+		struct pci_bus *bus = tb->nhi->pdev->bus;
+		struct pci_bus *scan_bus = bus->parent ? bus->parent : bus;
+		struct tb_pci_rescan_work *rescan_work;
+		struct pci_dev *dev;
+		int devices_before = 0;
+
+		pci_lock_rescan_remove();
+		for_each_pci_dev(dev)
+			devices_before++;
+		pci_unlock_rescan_remove();
+
+		rescan_work = kmalloc(sizeof(*rescan_work), GFP_KERNEL);
+		if (!rescan_work)
+			return 0;
+
+		rescan_work->tb = tb;
+		rescan_work->bus = scan_bus;
+		rescan_work->devices_before = devices_before;
+		rescan_work->route = tb_route(sw);
+		rescan_work->port = up->port;
+
+		INIT_DELAYED_WORK(&rescan_work->work, tb_pci_rescan_work_fn);
+		queue_delayed_work(tb->wq, &rescan_work->work,
+				   msecs_to_jiffies(TB_PCIEHP_ENUMERATION_DELAY));
+	}
+
 	return 0;
 }
 
