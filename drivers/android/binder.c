@@ -3780,6 +3780,14 @@ static void binder_transaction(struct binder_proc *proc,
 			goto err_dead_proc_or_thread;
 		}
 	} else {
+		/*
+		 * Make a transaction copy. It is not safe to access 't' after
+		 * binder_proc_transaction() reported a pending frozen. The
+		 * target could thaw and consume the transaction at any point.
+		 * Instead, use a safe 't_copy' for binder_netlink_report().
+		 */
+		struct binder_transaction t_copy = *t;
+
 		BUG_ON(target_node == NULL);
 		BUG_ON(t->buffer->async_transaction != 1);
 		return_error = binder_proc_transaction(t, target_proc, NULL);
@@ -3790,7 +3798,7 @@ static void binder_transaction(struct binder_proc *proc,
 		 */
 		if (return_error == BR_TRANSACTION_PENDING_FROZEN) {
 			tcomplete->type = BINDER_WORK_TRANSACTION_PENDING;
-			binder_netlink_report(proc, t, tr->data_size,
+			binder_netlink_report(proc, &t_copy, tr->data_size,
 					      return_error);
 		}
 		binder_enqueue_thread_work(thread, tcomplete);
