@@ -192,6 +192,7 @@ struct p9_rdma_opts {
  * @dfltgid: default numeric groupid to mount hierarchy as
  * @uid: if %V9FS_ACCESS_SINGLE, the numeric uid which mounted the hierarchy
  * @session_lock_timeout: retry interval for blocking locks
+ * @ndentry_timeout: Negative dentry lookup cache retention time in ms
  *
  * This strucure holds options which are parsed and will be transferred
  * to the v9fs_session_info structure when mounted, and therefore largely
@@ -212,6 +213,7 @@ struct p9_session_opts {
 	kgid_t dfltgid;
 	kuid_t uid;
 	long session_lock_timeout;
+	unsigned int ndentry_timeout;
 };
 
 /* Used by mount API to store parsed mount options */
