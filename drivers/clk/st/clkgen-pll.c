@@ -826,7 +826,6 @@ static void __init clkgen_c32_pll_setup(struct device_node *np,
 	return;
 
 err:
-	kfree(pll_name);
 	kfree(clk_data->clks);
 	kfree(clk_data);
 err_pll_unregister:
