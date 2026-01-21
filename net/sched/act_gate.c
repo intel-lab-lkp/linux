@@ -509,6 +509,12 @@ static int tcf_gate_init(struct net *net, struct nlattr *nla,
 		cycletime_ext = nla_get_u64(tb[TCA_GATE_CYCLE_TIME_EXT]);
 	p->tcfg_cycletime_ext = cycletime_ext;
 
+	if (p->num_entries == 0) {
+		NL_SET_ERR_MSG(extack, "The entry list is empty");
+		err = -EINVAL;
+		goto release_mem;
+	}
+
 	err = tcf_action_check_ctrlact(parm->action, tp, &goto_ch, extack);
 	if (err < 0)
 		goto release_mem;
