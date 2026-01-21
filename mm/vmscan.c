@@ -6159,8 +6159,15 @@ static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 				   sc->nr_scanned - scanned,
 				   sc->nr_reclaimed - reclaimed);
 
-		/* If partial walks are allowed, bail once goal is reached */
-		if (partial && sc->nr_reclaimed >= sc->nr_to_reclaim) {
+		/* If partial walks are allowed, or proactive reclaim where
+		 * the target memcg is clearly defined that could let us ignore
+		 * the fairness thing, bail once goal is reached.
+		 * note: for proactive reclaim, the criteria make sense only
+		 * when target_memcg has both of descendant groups and folios
+		 * charged. Other wise, walk the whole tree under target_memcg.
+		 */
+		if ((partial || (sc->proactive && target_memcg == memcg)) &&
+			       sc->nr_reclaimed >= sc->nr_to_reclaim) {
 			mem_cgroup_iter_break(target_memcg, memcg);
 			break;
 		}
