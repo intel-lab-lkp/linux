@@ -15,6 +15,7 @@
  */
 
 #include <linux/arm-cci.h>
+#include <linux/cleanup.h>
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/of_address.h>
@@ -162,9 +163,8 @@ static int __cci_ace_get_port(struct device_node *dn, int type)
 {
 	int i;
 	bool ace_match;
-	struct device_node *cci_portn;
-
-	cci_portn = of_parse_phandle(dn, "cci-control-port", 0);
+	struct device_node *cci_portn __free(device_node) =
+		of_parse_phandle(dn, "cci-control-port", 0);
 	for (i = 0; i < nb_cci_ports; i++) {
 		ace_match = ports[i].type == type;
 		if (ace_match && cci_portn == ports[i].dn)
