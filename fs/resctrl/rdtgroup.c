@@ -508,6 +508,33 @@ static int cpus_ctrl_write(struct rdtgroup *rdtgrp, cpumask_var_t newmask,
 	return 0;
 }
 
+static int cpus_ctrl_plza_write(struct rdtgroup *rdtgrp, cpumask_var_t newmask,
+				cpumask_var_t tmpmask)
+{
+	int cpu;
+
+	/* Check if the cpus are dropped from the group */
+	cpumask_andnot(tmpmask, &rdtgrp->cpu_mask, newmask);
+	if (!cpumask_empty(tmpmask)) {
+		for_each_cpu(cpu, tmpmask)
+			resctrl_arch_set_cpu_plza(cpu, rdtgrp->closid,
+						  rdtgrp->mon.rmid, false);
+	}
+
+	/* If the CPUs are added then enable PLZA on the added CPUs. */
+	cpumask_andnot(tmpmask, newmask, &rdtgrp->cpu_mask);
+	if (!cpumask_empty(tmpmask)) {
+		for_each_cpu(cpu, tmpmask)
+			resctrl_arch_set_cpu_plza(cpu, rdtgrp->closid,
+						  rdtgrp->mon.rmid, true);
+	}
+
+	/* Update the group with new mask */
+	cpumask_copy(&rdtgrp->cpu_mask, newmask);
+
+	return 0;
+}
+
 static ssize_t rdtgroup_cpus_write(struct kernfs_open_file *of,
 				   char *buf, size_t nbytes, loff_t off)
 {
@@ -563,7 +590,9 @@ static ssize_t rdtgroup_cpus_write(struct kernfs_open_file *of,
 		goto unlock;
 	}
 
-	if (rdtgrp->type == RDTCTRL_GROUP)
+	if (rdtgrp->plza)
+		ret = cpus_ctrl_plza_write(rdtgrp, newmask, tmpmask);
+	else if (rdtgrp->type == RDTCTRL_GROUP)
 		ret = cpus_ctrl_write(rdtgrp, newmask, tmpmask, tmpmask1);
 	else if (rdtgrp->type == RDTMON_GROUP)
 		ret = cpus_mon_write(rdtgrp, newmask, tmpmask);
