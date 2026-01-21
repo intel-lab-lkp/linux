@@ -840,6 +840,29 @@ static void do_i2c_entry(struct module *mod, void *symval)
 	module_alias_printf(mod, false, I2C_MODULE_PREFIX "%s", *name);
 }
 
+/* Looks like: smbus:vNdNiNsvNsdNvsiN*/
+static void do_smbus_entry(struct module *mod, void *symval)
+{
+	char alias[256] = {};
+
+	DEF_FIELD(symval, smbus_device_id, vendor);
+	DEF_FIELD(symval, smbus_device_id, device);
+	DEF_FIELD(symval, smbus_device_id, interface);
+	DEF_FIELD(symval, smbus_device_id, subvendor);
+	DEF_FIELD(symval, smbus_device_id, subdevice);
+	DEF_FIELD(symval, smbus_device_id, vendor_specific_id);
+
+	ADD(alias, "v", vendor != SMBUS_ANY_ID, vendor);
+	ADD(alias, "d", device != SMBUS_ANY_ID, device);
+	ADD(alias, "i", interface != SMBUS_ANY_ID, interface);
+	ADD(alias, "sv", subvendor != SMBUS_ANY_ID, subvendor);
+	ADD(alias, "sd", subdevice != SMBUS_ANY_ID, subdevice);
+	ADD(alias, "vsi", vendor_specific_id != SMBUS_ANY_VENDOR_SPECIFIC_ID,
+	    vendor_specific_id);
+
+	module_alias_printf(mod, true, "smbus:%s", alias);
+}
+
 static void do_i3c_entry(struct module *mod, void *symval)
 {
 	char alias[256] = {};
@@ -1439,6 +1462,7 @@ static const struct devtable devtable[] = {
 	{"vmbus", SIZE_hv_vmbus_device_id, do_vmbus_entry},
 	{"rpmsg", SIZE_rpmsg_device_id, do_rpmsg_entry},
 	{"i2c", SIZE_i2c_device_id, do_i2c_entry},
+	{"smbus", SIZE_smbus_device_id, do_smbus_entry},
 	{"i3c", SIZE_i3c_device_id, do_i3c_entry},
 	{"slim", SIZE_slim_device_id, do_slim_entry},
 	{"spi", SIZE_spi_device_id, do_spi_entry},

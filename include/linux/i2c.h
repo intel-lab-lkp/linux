@@ -34,6 +34,8 @@ struct i2c_adapter;
 struct i2c_client;
 struct i2c_driver;
 struct i2c_device_identity;
+struct i2c_smbus_arp;
+struct i2c_arp_udid;
 union i2c_smbus_data;
 struct i2c_board_info;
 enum i2c_slave_event;
@@ -242,6 +244,7 @@ enum i2c_driver_flags {
  * @command: Callback for bus-wide signaling (optional)
  * @driver: Device driver model driver
  * @id_table: List of I2C devices supported by this driver
+ * @smbus_id_table: SMBus ARP devices supported by this driver
  * @detect: Callback for device detection
  * @address_list: The I2C addresses to probe (for detect)
  * @clients: List of detected clients we created (for i2c-core use only)
@@ -295,6 +298,7 @@ struct i2c_driver {
 
 	struct device_driver driver;
 	const struct i2c_device_id *id_table;
+	const struct smbus_device_id *smbus_id_table;
 
 	/* Device detection callback for automatic device creation */
 	int (*detect)(struct i2c_client *client, struct i2c_board_info *info);
@@ -311,6 +315,7 @@ struct i2c_driver {
  * @addr: Address used on the I2C bus connected to the parent adapter.
  * @name: Indicates the type of the device, usually a chip name that's
  *	generic enough to hide second-sourcing and compatible revisions.
+ * @udid: SMBus ARP Unique Device Identifier
  * @adapter: manages the bus segment hosting this I2C device
  * @dev: Driver model device node for the slave.
  * @init_irq: IRQ that was set at initialization
@@ -343,6 +348,7 @@ struct i2c_client {
 					/* addresses are stored in the	*/
 					/* _LOWER_ 7 bits		*/
 	char name[I2C_NAME_SIZE];
+	struct i2c_arp_udid *udid;	/* Unique Device Identifier	*/
 	struct i2c_adapter *adapter;	/* the adapter we sit on	*/
 	struct device dev;		/* the device structure		*/
 	int init_irq;			/* irq set at initialization	*/
@@ -410,6 +416,7 @@ static inline bool i2c_detect_slave_mode(struct device *dev) { return false; }
  * @resources: resources associated with the device
  * @num_resources: number of resources in the @resources array
  * @irq: stored in i2c_client.irq
+ * @udid: SMBus ARP Unique Device Identifier
  *
  * I2C doesn't actually support hardware probing, although controllers and
  * devices may be able to use I2C_SMBUS_QUICK to tell whether or not there's
@@ -433,6 +440,7 @@ struct i2c_board_info {
 	const struct resource *resources;
 	unsigned int	num_resources;
 	int		irq;
+	struct i2c_arp_udid *udid;
 };
 
 /**
@@ -754,6 +762,8 @@ struct i2c_adapter {
 
 	struct mutex userspace_clients_lock;
 	struct list_head userspace_clients;
+
+	struct i2c_smbus_arp *arp;
 
 	struct i2c_bus_recovery_info *bus_recovery_info;
 	const struct i2c_adapter_quirks *quirks;

@@ -120,19 +120,23 @@ EXPORT_SYMBOL_GPL(i2c_match_id);
 const void *i2c_get_match_data(const struct i2c_client *client)
 {
 	struct i2c_driver *driver = to_i2c_driver(client->dev.driver);
+	const struct smbus_device_id *smbus_match;
 	const struct i2c_device_id *match;
 	const void *data;
 
 	data = device_get_match_data(&client->dev);
-	if (!data) {
-		match = i2c_match_id(driver->id_table, client);
-		if (!match)
-			return NULL;
+	if (data)
+		return data;
 
-		data = (const void *)match->driver_data;
-	}
+	smbus_match = i2c_smbus_match_id(client, driver->smbus_id_table);
+	if (smbus_match)
+		return (const void *)smbus_match->driver_data;
 
-	return data;
+	match = i2c_match_id(driver->id_table, client);
+	if (match)
+		return (const void *)match->driver_data;
+
+	return NULL;
 }
 EXPORT_SYMBOL(i2c_get_match_data);
 
@@ -151,6 +155,10 @@ static int i2c_device_match(struct device *dev, const struct device_driver *drv)
 		return 1;
 
 	driver = to_i2c_driver(drv);
+
+	/* SMBus Unique Device Identifier match */
+	if (i2c_smbus_match_id(client, driver->smbus_id_table))
+		return 1;
 
 	/* Finally an I2C match */
 	if (i2c_match_id(driver->id_table, client))
@@ -171,6 +179,13 @@ static int i2c_device_uevent(const struct device *dev, struct kobj_uevent_env *e
 	rc = acpi_device_uevent_modalias(dev, env);
 	if (rc != -ENODEV)
 		return rc;
+
+	if (client->udid)
+		return add_uevent_var(env, "MODALIAS=smbus:v%04xd%04xi%04xsv%04xsd%04xvsi%08x",
+				  client->udid->vendor, client->udid->device,
+				  client->udid->interface,
+				  client->udid->subvendor, client->udid->subdevice,
+				  client->udid->vendor_specific_id);
 
 	return add_uevent_var(env, "MODALIAS=%s%s", I2C_MODULE_PREFIX, client->name);
 }
@@ -684,6 +699,13 @@ modalias_show(struct device *dev, struct device_attribute *attr, char *buf)
 	if (len != -ENODEV)
 		return len;
 
+	if (client->udid)
+		return sysfs_emit(buf, "smbus:v%04xd%04xi%04xsv%04xsd%04xvsi%08x\n",
+				  client->udid->vendor, client->udid->device,
+				  client->udid->interface,
+				  client->udid->subvendor, client->udid->subdevice,
+				  client->udid->vendor_specific_id);
+
 	return sprintf(buf, "%s%s\n", I2C_MODULE_PREFIX, client->name);
 }
 static DEVICE_ATTR_RO(modalias);
@@ -822,7 +844,7 @@ static int i2c_check_mux_children(struct device *dev, void *addrp)
 	return result;
 }
 
-static int i2c_check_addr_busy(struct i2c_adapter *adapter, int addr)
+int i2c_check_addr_busy(struct i2c_adapter *adapter, int addr)
 {
 	struct i2c_adapter *parent = i2c_parent_is_i2c_adapter(adapter);
 	int result = 0;
@@ -973,6 +995,7 @@ i2c_new_client_device(struct i2c_adapter *adap, struct i2c_board_info const *inf
 	client->dev.platform_data = info->platform_data;
 	client->flags = info->flags;
 	client->addr = info->addr;
+	client->udid = info->udid;
 
 	client->init_irq = info->irq;
 	if (!client->init_irq)
@@ -1508,7 +1531,7 @@ int i2c_handle_smbus_host_notify(struct i2c_adapter *adap, unsigned short addr)
 
 	irq = irq_find_mapping(adap->host_notify_domain, addr);
 	if (irq <= 0)
-		return -ENXIO;
+		return i2c_smbus_arp_detect(adap, addr);
 
 	generic_handle_irq_safe(irq);
 
@@ -1601,6 +1624,11 @@ static int i2c_register_adapter(struct i2c_adapter *adap)
 	mutex_lock(&core_lock);
 	bus_for_each_drv(&i2c_bus_type, NULL, adap, __process_new_adapter);
 	mutex_unlock(&core_lock);
+
+	/* Detect ARP clients. */
+	res = i2c_smbus_arp_probe(adap);
+	if (res)
+		dev_err(&adap->dev, "ARP device registration failed\n");
 
 	return 0;
 
@@ -1766,6 +1794,7 @@ void i2c_del_adapter(struct i2c_adapter *adap)
 		return;
 	}
 
+	i2c_smbus_arp_remove(adap);
 	i2c_acpi_remove_space_handler(adap);
 	/* Tell drivers about this removal */
 	mutex_lock(&core_lock);
