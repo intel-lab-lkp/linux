@@ -55,7 +55,7 @@ void stub_complete(struct urb *urb)
 			 "stopped by a call to usb_kill_urb() because of cleaning up a virtual connection\n");
 		return;
 	case -ECONNRESET:
-		dev_info(&urb->dev->dev,
+		dev_dbg(&urb->dev->dev,
 			 "unlinked by a call to usb_unlink_urb()\n");
 		break;
 	case -EPIPE:
