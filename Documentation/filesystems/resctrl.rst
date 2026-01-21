@@ -28,6 +28,7 @@ SMBA (Slow Memory Bandwidth Allocation)				""
 BMEC (Bandwidth Monitoring Event Configuration)			""
 ABMC (Assignable Bandwidth Monitoring Counters)			""
 SDCIAE (Smart Data Cache Injection Allocation Enforcement)	""
+GMBA (Global Memory Bandwidth Allocation)                       ""
 =============================================================== ================================
 
 Historically, new features were made visible by default in /proc/cpuinfo. This
@@ -960,6 +961,21 @@ Memory bandwidth domain is L3 cache.
 
 	MB:<cache_id0>=bw_MiBps0;<cache_id1>=bw_MiBps1;...
 
+Global Memory bandwidth Allocation
+-----------------------------------
+
+AMD hardware supports Global Memory Bandwidth Allocation (GMBA) provides
+a mechanism for software to specify bandwidth limits for groups of threads
+that span across multiple QoS domains. This collection of QOS domains is
+referred to as GMBA control domain. The GMBA control domain is created by
+setting the same GMBA limits in one or more QoS domains. Setting the default
+max_bandwidth excludes the QoS domain from being part of GMBA control domain.
+
+Global Memory b/w domain is L3 cache.
+::
+
+	GMB:<cache_id0>=bandwidth;<cache_id1>=bandwidth;...
+
 Slow Memory Bandwidth Allocation (SMBA)
 ---------------------------------------
 AMD hardware supports Slow Memory Bandwidth Allocation (SMBA).
@@ -997,8 +1013,8 @@ which you wish to change.  E.g.
 Reading/writing the schemata file (on AMD systems)
 --------------------------------------------------
 Reading the schemata file will show the current bandwidth limit on all
-domains. The allocated resources are in multiples of one eighth GB/s.
-When writing to the file, you need to specify what cache id you wish to
+domains. The allocated resources are in multiples of 1/8 GB/s. When
+writing to the file, you need to specify what cache id you wish to
 configure the bandwidth limit.
 
 For example, to allocate 2GB/s limit on the first cache id:
@@ -1013,6 +1029,29 @@ For example, to allocate 2GB/s limit on the first cache id:
   # cat schemata
     MB:0=2048;1=  16;2=2048;3=2048
     L3:0=ffff;1=ffff;2=ffff;3=ffff
+
+Reading/writing the schemata file (on AMD systems) with GMBA feature
+--------------------------------------------------------------------
+Reading the schemata file will show the current bandwidth limit on all
+domains. The allocated resources are in multiples of 1 GB/s. The GMBA
+control domain is created by setting the same GMBA limits in one or more
+QoS domains.
+
+For example, to configure a GMBA domain consisting of domains 0 and 2
+with an 8 GB/s limit:
+
+::
+
+  # cat schemata
+    GMB:0=2048;1=2048;2=2048;3=2048
+     MB:0=4096;1=4096;2=4096;3=4096
+     L3:0=ffff;1=ffff;2=ffff;3=ffff
+
+  # echo "GMB:0=8;2=8" > schemata
+  # cat schemata
+    GMB:0=   8;1=2048;2=   8;3=2048
+     MB:0=4096;1=4096;2=4096;3=4096
+     L3:0=ffff;1=ffff;2=ffff;3=ffff
 
 Reading/writing the schemata file (on AMD systems) with SMBA feature
 --------------------------------------------------------------------
