@@ -193,6 +193,13 @@ static inline bool resctrl_arch_match_rmid(struct task_struct *tsk, u32 ignored,
 	return READ_ONCE(tsk->rmid) == rmid;
 }
 
+static inline void resctrl_arch_set_cpu_plza(int cpu, u32 closid, u32 rmid, u32 enable)
+{
+	WRITE_ONCE(per_cpu(pqr_state.default_plza, cpu), enable);
+	WRITE_ONCE(per_cpu(pqr_state.plza_closid, cpu), closid);
+	WRITE_ONCE(per_cpu(pqr_state.plza_rmid, cpu), rmid);
+}
+
 static inline void resctrl_arch_sched_in(struct task_struct *tsk)
 {
 	if (static_branch_likely(&rdt_enable_key))

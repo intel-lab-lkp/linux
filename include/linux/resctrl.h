@@ -704,6 +704,17 @@ int resctrl_arch_io_alloc_enable(struct rdt_resource *r, bool enable);
  */
 bool resctrl_arch_get_io_alloc_enabled(struct rdt_resource *r);
 
+/*
+ * resctrl_arch_plza_setup() - Reset all private state associated with
+ *				   all rmids and eventids.
+ * @r:		The resctrl resource.
+ * @closid:	The CLOSID to be configered for PLZA.
+ * @rmid:	The RMID to be configered for PLZA.
+ *
+ * This can be called from any CPU.
+ */
+void resctrl_arch_plza_setup(struct rdt_resource *r, u32 closid, u32 rmid);
+
 extern unsigned int resctrl_rmid_realloc_threshold;
 extern unsigned int resctrl_rmid_realloc_limit;
 

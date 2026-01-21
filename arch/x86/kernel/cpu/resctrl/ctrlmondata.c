@@ -131,3 +131,28 @@ int resctrl_arch_io_alloc_enable(struct rdt_resource *r, bool enable)
 
 	return 0;
 }
+
+static void resctrl_plza_set_one_amd(void *arg)
+{
+	union qos_pqr_plza_assoc *plza = arg;
+
+	wrmsrl(MSR_IA32_PQR_PLZA_ASSOC, plza->full);
+}
+
+void resctrl_arch_plza_setup(struct rdt_resource *r, u32 closid, u32 rmid)
+{
+	union qos_pqr_plza_assoc plza = { 0 };
+	struct rdt_ctrl_domain *d;
+	int cpu;
+
+	plza.split.rmid = rmid;
+	plza.split.rmid_en = 1;
+	plza.split.closid = closid;
+	plza.split.closid_en = 1;
+
+	list_for_each_entry(d, &r->ctrl_domains, hdr.list) {
+		for_each_cpu(cpu, &d->hdr.cpu_mask)
+			resctrl_arch_set_cpu_plza(cpu, closid, rmid, 0);
+		on_each_cpu_mask(&d->hdr.cpu_mask, resctrl_plza_set_one_amd, &plza, 1);
+	}
+}
