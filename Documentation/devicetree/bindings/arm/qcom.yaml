@@ -1061,6 +1061,7 @@ properties:
 
       - items:
           - enum:
+              - acer,swift-sfa14-11
               - lenovo,thinkpad-t14s-lcd
               - lenovo,thinkpad-t14s-oled
           - const: lenovo,thinkpad-t14s
