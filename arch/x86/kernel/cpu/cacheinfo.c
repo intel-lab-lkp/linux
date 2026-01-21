@@ -635,92 +635,14 @@ int populate_cache_leaves(unsigned int cpu)
 	return 0;
 }
 
-/*
- * Disable and enable caches. Needed for changing MTRRs and the PAT MSR.
- *
- * Since we are disabling the cache don't allow any interrupts,
- * they would run extremely slow and would only increase the pain.
- *
- * The caller must ensure that local interrupts are disabled and
- * are reenabled after cache_enable() has been called.
- */
-static unsigned long saved_cr4;
-static DEFINE_RAW_SPINLOCK(cache_disable_lock);
-
-/*
- * Cache flushing is the most time-consuming step when programming the
- * MTRRs.  On many Intel CPUs without known erratas, it can be skipped
- * if the CPU declares cache self-snooping support.
- */
-static void maybe_flush_caches(void)
-{
-	if (!static_cpu_has(X86_FEATURE_SELFSNOOP))
-		wbinvd();
-}
-
-void cache_disable(void) __acquires(cache_disable_lock)
-{
-	unsigned long cr0;
-
-	/*
-	 * This is not ideal since the cache is only flushed/disabled
-	 * for this CPU while the MTRRs are changed, but changing this
-	 * requires more invasive changes to the way the kernel boots.
-	 */
-	raw_spin_lock(&cache_disable_lock);
-
-	/* Enter the no-fill (CD=1, NW=0) cache mode and flush caches. */
-	cr0 = read_cr0() | X86_CR0_CD;
-	write_cr0(cr0);
-
-	maybe_flush_caches();
-
-	/* Save value of CR4 and clear Page Global Enable (bit 7) */
-	if (cpu_feature_enabled(X86_FEATURE_PGE)) {
-		saved_cr4 = __read_cr4();
-		__write_cr4(saved_cr4 & ~X86_CR4_PGE);
-	}
-
-	/* Flush all TLBs via a mov %cr3, %reg; mov %reg, %cr3 */
-	count_vm_tlb_event(NR_TLB_LOCAL_FLUSH_ALL);
-	flush_tlb_local();
-
-	if (cpu_feature_enabled(X86_FEATURE_MTRR))
-		mtrr_disable();
-
-	maybe_flush_caches();
-}
-
-void cache_enable(void) __releases(cache_disable_lock)
-{
-	/* Flush TLBs (no need to flush caches - they are disabled) */
-	count_vm_tlb_event(NR_TLB_LOCAL_FLUSH_ALL);
-	flush_tlb_local();
-
-	if (cpu_feature_enabled(X86_FEATURE_MTRR))
-		mtrr_enable();
-
-	/* Enable caches */
-	write_cr0(read_cr0() & ~X86_CR0_CD);
-
-	/* Restore value of CR4 */
-	if (cpu_feature_enabled(X86_FEATURE_PGE))
-		__write_cr4(saved_cr4);
-
-	raw_spin_unlock(&cache_disable_lock);
-}
-
 static void cache_cpu_init(void)
 {
 	unsigned long flags;
 
 	local_irq_save(flags);
 
-	if (memory_caching_control & CACHE_MTRR) {
-		cache_disable();
+	if (memory_caching_control & CACHE_MTRR)
 		mtrr_generic_set_state();
-		cache_enable();
-	}
 
 	if (memory_caching_control & CACHE_PAT)
 		pat_cpu_init();

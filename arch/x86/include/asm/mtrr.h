@@ -58,8 +58,6 @@ extern int mtrr_del(int reg, unsigned long base, unsigned long size);
 extern int mtrr_del_page(int reg, unsigned long base, unsigned long size);
 extern int mtrr_trim_uncached_memory(unsigned long end_pfn);
 extern int amd_special_default_mtrr(void);
-void mtrr_disable(void);
-void mtrr_enable(void);
 void mtrr_generic_set_state(void);
 #  else
 static inline void guest_force_mtrr_state(struct mtrr_var_range *var,
