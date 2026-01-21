@@ -2,8 +2,9 @@
 # ==========================================================================
 # make W=... settings
 #
-# There are four warning groups enabled by W=1, W=2, W=3, and W=e
-# They are independent, and can be combined like W=12 or W=123e.
+# There are five warning groups enabled by W=c, W=1, W=2, W=3, and W=e
+# They are independent, and can be combined like W=12 or W=123e,
+# except that W=1 implies W=c.
 # ==========================================================================
 
 # Default set of warnings, always enabled
@@ -111,6 +112,13 @@ KBUILD_CFLAGS += $(call cc-option,-Werror=designated-init)
 KBUILD_CFLAGS += $(call cc-option,-Wenum-conversion)
 
 KBUILD_CFLAGS += -Wunused
+
+#
+# W=c - Expensive compile-time checks, implied by W=1
+#
+ifneq ($(findstring c, $(KBUILD_EXTRA_WARN))$(findstring 1, $(KBUILD_EXTRA_WARN)),)
+KBUILD_CPPFLAGS += -DKBUILD_EXTRA_WARNc
+endif
 
 #
 # W=1 - warnings which may be relevant and do not occur too often
