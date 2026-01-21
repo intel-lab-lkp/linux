@@ -247,8 +247,8 @@ static int parse_line(char *line, struct resctrl_schema *s,
 
 	if (rdtgrp->mode == RDT_MODE_PSEUDO_LOCKSETUP &&
 	    (r->rid == RDT_RESOURCE_MBA || r->rid == RDT_RESOURCE_GMBA ||
-	     r->rid == RDT_RESOURCE_SMBA)) {
-		rdt_last_cmd_puts("Cannot pseudo-lock MBA resource\n");
+	     r->rid == RDT_RESOURCE_SMBA || r->rid == RDT_RESOURCE_GSMBA)) {
+		rdt_last_cmd_puts("Cannot pseudo-lock MBA/SMBA resource\n");
 		return -EINVAL;
 	}
 

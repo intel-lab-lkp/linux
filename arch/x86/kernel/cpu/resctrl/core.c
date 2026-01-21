@@ -109,6 +109,15 @@ struct rdt_hw_resource rdt_resources_all[RDT_NUM_RESOURCES] = {
 			.schema_fmt		= RESCTRL_SCHEMA_RANGE,
 		},
 	},
+	[RDT_RESOURCE_GSMBA] =
+	{
+		.r_resctrl = {
+			.name			= "GSMBA",
+			.ctrl_scope		= RESCTRL_L3_CACHE,
+			.ctrl_domains		= ctrl_domain_init(RDT_RESOURCE_GSMBA),
+			.schema_fmt		= RESCTRL_SCHEMA_RANGE,
+		},
+	},
 	[RDT_RESOURCE_PERF_PKG] =
 	{
 		.r_resctrl = {
@@ -260,6 +269,9 @@ static __init bool __rdt_get_mem_config_amd(struct rdt_resource *r)
 		break;
 	case RDT_RESOURCE_GMBA:
 		subleaf = 7;
+		break;
+	case RDT_RESOURCE_GSMBA:
+		subleaf = 8;
 		break;
 	default:
 		return false;
@@ -959,6 +971,19 @@ static __init bool get_slow_mem_config(void)
 	return false;
 }
 
+static __init bool get_gslow_mem_config(void)
+{
+	struct rdt_hw_resource *hw_res = &rdt_resources_all[RDT_RESOURCE_GSMBA];
+
+	if (!rdt_cpu_has(X86_FEATURE_GSMBA))
+		return false;
+
+	if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
+		return __rdt_get_mem_config_amd(&hw_res->r_resctrl);
+
+	return false;
+}
+
 static __init bool get_rdt_alloc_resources(void)
 {
 	struct rdt_resource *r;
@@ -995,6 +1020,9 @@ static __init bool get_rdt_alloc_resources(void)
 		ret = true;
 
 	if (get_slow_mem_config())
+		ret = true;
+
+	if (get_gslow_mem_config())
 		ret = true;
 
 	return ret;
@@ -1099,6 +1127,9 @@ static __init void rdt_init_res_defs_amd(void)
 			hw_res->msr_update = mba_wrmsr_amd;
 		} else if (r->rid == RDT_RESOURCE_SMBA) {
 			hw_res->msr_base = MSR_IA32_SMBA_BW_BASE;
+			hw_res->msr_update = mba_wrmsr_amd;
+		} else if (r->rid == RDT_RESOURCE_GSMBA) {
+			hw_res->msr_base = MSR_IA32_GSMBA_BW_BASE;
 			hw_res->msr_update = mba_wrmsr_amd;
 		}
 	}
