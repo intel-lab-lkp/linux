@@ -18,7 +18,7 @@ static int __init livepatch_mod_init(void)
 	unsigned int nr_objs;
 	int ret;
 
-	obj_exts = klp_locate_section_objs(THIS_MODULE, "__klp_objects",
+	obj_exts = klp_locate_section_objs(THIS_MODULE, ".init.klp_objects",
 					   sizeof(*obj_exts), &nr_objs);
 	if (!nr_objs) {
 		pr_err("nothing to patch!\n");
