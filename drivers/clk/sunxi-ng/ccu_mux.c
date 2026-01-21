@@ -277,6 +277,17 @@ const struct clk_ops ccu_mux_ops = {
 };
 EXPORT_SYMBOL_NS_GPL(ccu_mux_ops, "SUNXI_CCU");
 
+const struct clk_ops ccu_mux_ro_ops = {
+	.disable	= ccu_mux_disable,
+	.enable		= ccu_mux_enable,
+	.is_enabled	= ccu_mux_is_enabled,
+
+	.get_parent	= ccu_mux_get_parent,
+
+	.recalc_rate	= ccu_mux_recalc_rate,
+};
+EXPORT_SYMBOL_NS_GPL(ccu_mux_ro_ops, "SUNXI_CCU");
+
 /*
  * This clock notifier is called when the frequency of the of the parent
  * PLL clock is to be changed. The idea is to switch the parent to a

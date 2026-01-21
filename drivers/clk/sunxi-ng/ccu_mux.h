@@ -129,6 +129,7 @@ static inline struct ccu_mux *hw_to_ccu_mux(struct clk_hw *hw)
 }
 
 extern const struct clk_ops ccu_mux_ops;
+extern const struct clk_ops ccu_mux_ro_ops;
 
 unsigned long ccu_mux_helper_apply_prediv(struct ccu_common *common,
 					  struct ccu_mux_internal *cm,
