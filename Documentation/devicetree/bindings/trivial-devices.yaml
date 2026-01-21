@@ -171,6 +171,8 @@ properties:
           - isil,isl76682
             # JEDEC JESD300 (SPD5118) Hub and Serial Presence Detect
           - jedec,spd5118
+            # JEDEC PMIC50X0 DDR5 Power Management ICs
+          - jedec,pmic50x0
             # Linear Technology LTC2488
           - lineartechnology,ltc2488
             # 5 Bit Programmable, Pulse-Width Modulator
