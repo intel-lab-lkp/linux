@@ -880,6 +880,22 @@ static int rdtgroup_rmid_show(struct kernfs_open_file *of,
 	return ret;
 }
 
+static int rdtgroup_plza_show(struct kernfs_open_file *of,
+			      struct seq_file *s, void *v)
+{
+	struct rdtgroup *rdtgrp;
+	int ret = 0;
+
+	rdtgrp = rdtgroup_kn_lock_live(of->kn);
+	if (rdtgrp)
+		seq_printf(s, "%u\n", rdtgrp->plza);
+	else
+		ret = -ENOENT;
+	rdtgroup_kn_unlock(of->kn);
+
+	return ret;
+}
+
 #ifdef CONFIG_PROC_CPU_RESCTRL
 /*
  * A task can only be part of one resctrl control group and of one monitor
@@ -2153,6 +2169,12 @@ static struct rftype res_common_files[] = {
 		.seq_show	= rdtgroup_closid_show,
 		.fflags		= RFTYPE_CTRL_BASE | RFTYPE_DEBUG,
 	},
+	{
+		.name		= "plza",
+		.mode		= 0444,
+		.kf_ops		= &rdtgroup_kf_single_ops,
+		.seq_show	= rdtgroup_plza_show,
+	},
 };
 
 static int rdtgroup_add_files(struct kernfs_node *kn, unsigned long fflags)
@@ -2249,6 +2271,14 @@ static void io_alloc_init(void)
 		resctrl_file_fflags_init("io_alloc_cbm",
 					 RFTYPE_CTRL_INFO | RFTYPE_RES_CACHE);
 	}
+}
+
+static void resctrl_plza_init(void)
+{
+	struct rdt_resource *r = resctrl_arch_get_resource(RDT_RESOURCE_L3);
+
+	if (r->plza_capable)
+		resctrl_file_fflags_init("plza", RFTYPE_CTRL_BASE);
 }
 
 void resctrl_file_fflags_init(const char *config, unsigned long fflags)
@@ -4608,6 +4638,8 @@ int resctrl_init(void)
 	thread_throttle_mode_init();
 
 	io_alloc_init();
+
+	resctrl_plza_init();
 
 	ret = resctrl_l3_mon_resource_init();
 	if (ret)

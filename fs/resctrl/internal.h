@@ -215,6 +215,7 @@ struct mongroup {
  *				monitor only or ctrl_mon group
  * @mon:			mongroup related data
  * @mode:			mode of resource group
+ * @plza:			Is Privilege Level Zero Association enabled?
  * @mba_mbps_event:		input monitoring event id when mba_sc is enabled
  * @plr:			pseudo-locked region
  */
@@ -228,6 +229,7 @@ struct rdtgroup {
 	enum rdt_group_type		type;
 	struct mongroup			mon;
 	enum rdtgrp_mode		mode;
+	bool				plza;
 	enum resctrl_event_id		mba_mbps_event;
 	struct pseudo_lock_region	*plr;
 };
