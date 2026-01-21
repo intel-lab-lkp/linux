@@ -30,10 +30,15 @@ pub use global::{GlobalGuard, GlobalLock, GlobalLockBackend, GlobalLockedBy};
 ///   is owned, that is, between calls to [`lock`] and [`unlock`].
 /// - Implementers must also ensure that [`relock`] uses the same locking method as the original
 ///   lock operation.
+/// - Implementers must ensure if [`BackendInContext`] is a [`Backend`], it's safe to acquire the
+///   lock under the [`Context`], the [`State`] of two backends must be the same.
 ///
 /// [`lock`]: Backend::lock
 /// [`unlock`]: Backend::unlock
 /// [`relock`]: Backend::relock
+/// [`BackendInContext`]: Backend::BackendInContext
+/// [`Context`]: Backend::Context
+/// [`State`]: Backend::State
 pub unsafe trait Backend {
     /// The state required by the lock.
     type State;
@@ -95,6 +100,34 @@ pub unsafe trait Backend {
     ///
     /// Callers must ensure that [`Backend::init`] has been previously called.
     unsafe fn assert_is_held(ptr: *mut Self::State);
+}
+
+/// A lock [`Backend`] with a [`ContextualBackend`] that can make lock acquisition cheaper.
+///
+/// Some locks, such as [`SpinLockIrq`](super::SpinLockIrq), can only be acquired in specific
+/// hardware contexts (e.g. local processor interrupts disabled). Entering and exiting these
+/// contexts incurs additional overhead. But this overhead may be avoided if we know ahead of time
+/// that we are already within the correct context for a given lock as we can then skip any costly
+/// operations required for entering/exiting said context.
+///
+/// Any lock implementing this trait requires such a interrupt context, and can provide cheaper
+/// lock-acquisition functions through [`Lock::lock_with`] and [`Lock::try_lock_with`] as long as a
+/// context token of type [`Context`] is available.
+///
+/// # Safety
+///
+/// - Implementors must ensure that it is safe to acquire the lock under [`Context`].
+///
+/// [`ContextualBackend`]: BackendWithContext::ContextualBackend
+/// [`Context`]: BackendWithContext::Context
+pub unsafe trait BackendWithContext: Backend {
+    /// The context which must be provided in order to acquire the lock with the
+    /// [`ContextualBackend`](BackendWithContext::ContextualBackend).
+    type Context<'a>;
+
+    /// The alternative cheaper backend we can use if a [`Context`](BackendWithContext::Context) is
+    /// provided.
+    type ContextualBackend: Backend<State = Self::State>;
 }
 
 /// A mutual exclusion primitive.
@@ -169,7 +202,8 @@ impl<B: Backend> Lock<(), B> {
 
 impl<T: ?Sized, B: Backend> Lock<T, B> {
     /// Acquires the lock and gives the caller access to the data protected by it.
-    pub fn lock(&self) -> Guard<'_, T, B> {
+    #[inline]
+    pub fn lock<'a>(&'a self) -> Guard<'a, T, B> {
         // SAFETY: The constructor of the type calls `init`, so the existence of the object proves
         // that `init` was called.
         let state = unsafe { B::lock(self.state.get()) };
@@ -186,6 +220,41 @@ impl<T: ?Sized, B: Backend> Lock<T, B> {
         // SAFETY: The constructor of the type calls `init`, so the existence of the object proves
         // that `init` was called.
         unsafe { B::try_lock(self.state.get()).map(|state| Guard::new(self, state)) }
+    }
+}
+
+impl<T: ?Sized, B: BackendWithContext> Lock<T, B> {
+    /// Casts the lock as a `Lock<T, B::ContextualBackend>`.
+    fn as_lock_in_context<'a>(
+        &'a self,
+        _context: B::Context<'a>,
+    ) -> &'a Lock<T, B::ContextualBackend>
+    where
+        B::ContextualBackend: Backend,
+    {
+        // SAFETY:
+        // - Per the safety guarantee of `Backend`, if `B::ContextualBackend` and `B` should
+        //   have the same state, the layout of the lock is the same so it's safe to convert one to
+        //   another.
+        // - The caller provided `B::Context<'a>`, so it is safe to recast and return this lock.
+        unsafe { &*(core::ptr::from_ref(self) as *const _) }
+    }
+
+    /// Acquires the lock with the given context and gives the caller access to the data protected
+    /// by it.
+    pub fn lock_with<'a>(&'a self, context: B::Context<'a>) -> Guard<'a, T, B::ContextualBackend> {
+        self.as_lock_in_context(context).lock()
+    }
+
+    /// Tries to acquire the lock with the given context.
+    ///
+    /// Returns a guard that can be used to access the data protected by the lock if successful.
+    #[must_use = "if unused, the lock will be immediately unlocked"]
+    pub fn try_lock_with<'a>(
+        &'a self,
+        context: B::Context<'a>,
+    ) -> Option<Guard<'a, T, B::ContextualBackend>> {
+        self.as_lock_in_context(context).try_lock()
     }
 }
 
