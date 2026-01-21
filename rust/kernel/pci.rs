@@ -40,7 +40,12 @@ pub use self::id::{
     ClassMask,
     Vendor, //
 };
-pub use self::io::Bar;
+pub use self::io::{
+    Bar,
+    ConfigSpaceSize,
+    Extended,
+    Normal, //
+};
 pub use self::irq::{
     IrqType,
     IrqTypes,
