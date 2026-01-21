@@ -38,6 +38,10 @@ struct resctrl_pqr_state {
 	u32			cur_closid;
 	u32			default_rmid;
 	u32			default_closid;
+	u32			cur_plza;
+	u32			default_plza;
+	u32			plza_rmid;
+	u32			plza_closid;
 };
 
 DECLARE_PER_CPU(struct resctrl_pqr_state, pqr_state);
@@ -115,6 +119,7 @@ static inline void __resctrl_sched_in(struct task_struct *tsk)
 	struct resctrl_pqr_state *state = this_cpu_ptr(&pqr_state);
 	u32 closid = READ_ONCE(state->default_closid);
 	u32 rmid = READ_ONCE(state->default_rmid);
+	u32 plza = READ_ONCE(state->default_plza);
 	u32 tmp;
 
 	/*
@@ -138,6 +143,20 @@ static inline void __resctrl_sched_in(struct task_struct *tsk)
 		state->cur_rmid = rmid;
 		wrmsr(MSR_IA32_PQR_ASSOC, rmid, closid);
 	}
+
+	if (static_branch_likely(&rdt_plza_enable_key)) {
+		tmp = READ_ONCE(tsk->plza);
+		if (tmp)
+			plza = tmp;
+
+		if (plza != state->cur_plza) {
+			state->cur_plza = plza;
+			wrmsr(MSR_IA32_PQR_PLZA_ASSOC,
+			      RMID_EN | state->plza_rmid,
+			      (plza ? PLZA_EN : 0) | CLOSID_EN | state->plza_closid);
+		}
+	}
+
 }
 
 static inline unsigned int resctrl_arch_round_mon_val(unsigned int val)
