@@ -37,9 +37,9 @@
 #define MAX_BUFFER_INDEX	BIT_MASK(30 - PLANE_INDEX_SHIFT)
 #define BUFFER_INDEX_MASK	(MAX_BUFFER_INDEX - 1)
 
-#if BIT(PLANE_INDEX_BITS) != VIDEO_MAX_PLANES
-#error PLANE_INDEX_BITS order must be equal to VIDEO_MAX_PLANES
-#endif
+
+static_assert(BIT(PLANE_INDEX_BITS) == VIDEO_MAX_PLANES,
+	      "PLANE_INDEX_BITS order must be equal to VIDEO_MAX_PLANES");
 
 static int debug;
 module_param(debug, int, 0644);
