@@ -59,6 +59,9 @@ struct knfsd_fh {
 #define fh_fsid_type		fh_raw[2]
 #define fh_fileid_type		fh_raw[3]
 
+#define FH_AT_NONE		0
+#define FH_AT_MAC		1
+
 static inline u32 *fh_fsid(const struct knfsd_fh *fh)
 {
 	return (u32 *)&fh->fh_raw[4];
