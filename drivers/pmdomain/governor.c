@@ -31,6 +31,8 @@ static int dev_update_qos_constraint(struct device *dev, void *data)
 		constraint_ns = td ? td->effective_constraint_ns :
 				PM_QOS_RESUME_LATENCY_NO_CONSTRAINT_NS;
 	} else {
+		enum pm_qos_flags_status flag_status;
+
 		/*
 		 * The child is not in a domain and there's no info on its
 		 * suspend/resume latencies, so assume them to be negligible and
@@ -38,7 +40,14 @@ static int dev_update_qos_constraint(struct device *dev, void *data)
 		 * known at this point anyway).
 		 */
 		constraint_ns = dev_pm_qos_read_value(dev, DEV_PM_QOS_RESUME_LATENCY);
-		constraint_ns *= NSEC_PER_USEC;
+		flag_status = dev_pm_qos_flags(dev, PM_QOS_FLAG_LATENCY_SYS);
+		if ((constraint_ns != PM_QOS_RESUME_LATENCY_NO_CONSTRAINT) &&
+			    (flag_status == PM_QOS_FLAGS_ALL)) {
+			dev_dbg_once(dev, "resume-latency only for system-wide.  Ignoring.\n");
+			constraint_ns = PM_QOS_RESUME_LATENCY_NO_CONSTRAINT_NS;
+		} else {
+			constraint_ns *= NSEC_PER_USEC;
+		}
 	}
 
 	if (constraint_ns < *constraint_ns_p)
@@ -430,10 +439,41 @@ static bool cpu_system_power_down_ok(struct dev_pm_domain *pd)
 	s64 constraint_ns = cpu_wakeup_latency_qos_limit() * NSEC_PER_USEC;
 	struct generic_pm_domain *genpd = pd_to_genpd(pd);
 	int state_idx = genpd->state_count - 1;
+	struct pm_domain_data *pdd;
+	s32 min_dev_latency = PM_QOS_RESUME_LATENCY_NO_CONSTRAINT;
+	s64 min_dev_latency_ns = PM_QOS_RESUME_LATENCY_NO_CONSTRAINT_NS;
+	struct gpd_link *link;
 
 	if (!(genpd->flags & GENPD_FLAG_CPU_DOMAIN)) {
 		genpd->state_idx = state_idx;
 		return true;
+	}
+
+	list_for_each_entry(link, &genpd->parent_links, parent_node) {
+		struct generic_pm_domain *child_pd = link->child;
+
+		list_for_each_entry(pdd, &child_pd->dev_list, list_node) {
+			enum pm_qos_flags_status flag_status;
+			s32 dev_latency;
+
+			dev_latency = dev_pm_qos_read_value(pdd->dev, DEV_PM_QOS_RESUME_LATENCY);
+			flag_status = dev_pm_qos_flags(pdd->dev, PM_QOS_FLAG_LATENCY_SYS);
+			if ((dev_latency != PM_QOS_RESUME_LATENCY_NO_CONSTRAINT) &&
+			    (flag_status == PM_QOS_FLAGS_ALL)) {
+				dev_dbg(pdd->dev,
+					"in domain %s, has QoS system-wide resume latency=%d\n",
+					child_pd->name, dev_latency);
+				if (dev_latency < min_dev_latency)
+					min_dev_latency = dev_latency;
+			}
+		}
+	}
+
+	/* If device latency < CPU wakeup latency, use it instead */
+	if (min_dev_latency != PM_QOS_RESUME_LATENCY_NO_CONSTRAINT) {
+		min_dev_latency_ns = min_dev_latency * NSEC_PER_USEC;
+		if (min_dev_latency_ns < constraint_ns)
+			constraint_ns = min_dev_latency_ns;
 	}
 
 	/* Find the deepest state for the latency constraint. */
