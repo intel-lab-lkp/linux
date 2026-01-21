@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
+#define pr_fmt(fmt) "x86/amd: " fmt
+
 #include <linux/export.h>
 #include <linux/bitops.h>
 #include <linux/elf.h>
@@ -1396,7 +1398,7 @@ static __init int print_s5_reset_status_mmio(void)
 			continue;
 
 		if (s5_reset_reason_txt[i]) {
-			pr_info("x86/amd: Previous system reset reason [0x%08x]: %s\n",
+			pr_info("Previous system reset reason [0x%08x]: %s\n",
 				value, s5_reset_reason_txt[i]);
 		}
 	}
