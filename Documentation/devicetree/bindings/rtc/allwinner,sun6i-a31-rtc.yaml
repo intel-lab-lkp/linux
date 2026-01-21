@@ -26,6 +26,7 @@ properties:
           - allwinner,sun50i-h6-rtc
           - allwinner,sun50i-h616-rtc
           - allwinner,sun50i-r329-rtc
+          - allwinner,sun60i-a733-rtc
       - items:
           - const: allwinner,sun50i-a64-rtc
           - const: allwinner,sun8i-h3-rtc
@@ -46,11 +47,11 @@ properties:
 
   clocks:
     minItems: 1
-    maxItems: 4
+    maxItems: 6
 
   clock-names:
     minItems: 1
-    maxItems: 4
+    maxItems: 6
 
   clock-output-names:
     minItems: 1
@@ -160,10 +161,43 @@ allOf:
       properties:
         compatible:
           contains:
+            const: allwinner,sun60i-a733-rtc
+
+    then:
+      properties:
+        clocks:
+          minItems: 5
+          items:
+            - description: Bus clock for register access
+            - description: 19.2 MHz oscillator
+            - description: 24 MHz oscillator
+            - description: 26 MHz oscillator
+            - description: AHB parent for internal SPI clock
+            - description: External 32768 Hz oscillator
+
+        clock-names:
+          minItems: 5
+          items:
+            - const: bus
+            - const: osc19M
+            - const: osc24M
+            - const: osc26M
+            - const: ahb
+            - const: ext-osc32k
+
+      required:
+        - clocks
+        - clock-names
+
+  - if:
+      properties:
+        compatible:
+          contains:
             enum:
               - allwinner,sun8i-r40-rtc
               - allwinner,sun50i-h616-rtc
               - allwinner,sun50i-r329-rtc
+              - allwinner,sun60i-a733-rtc
 
     then:
       properties:
