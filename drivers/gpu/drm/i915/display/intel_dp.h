@@ -233,5 +233,8 @@ int intel_dp_compute_config_late(struct intel_encoder *encoder,
 int intel_dp_sdp_min_guardband(const struct intel_crtc_state *crtc_state,
 			       bool assume_all_enabled);
 int intel_dp_hdisplay_limit(struct intel_display *display);
+bool intel_dp_pixel_rate_fits_dotclk(struct intel_display *display,
+				     int target_clock,
+				     int num_joined_pipes);
 
 #endif /* __INTEL_DP_H__ */

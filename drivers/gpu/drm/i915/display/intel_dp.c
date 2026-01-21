@@ -1440,6 +1440,18 @@ bool intel_dp_has_dsc(const struct intel_connector *connector)
 	return true;
 }
 
+bool intel_dp_pixel_rate_fits_dotclk(struct intel_display *display,
+				     int target_clock,
+				     int num_joined_pipes)
+{
+	int max_dotclk = display->cdclk.max_dotclk_freq;
+	int effective_dotclk_limit;
+
+	effective_dotclk_limit = max_dotclk * num_joined_pipes;
+
+	return target_clock <= effective_dotclk_limit;
+}
+
 static enum drm_mode_status
 intel_dp_mode_valid(struct drm_connector *_connector,
 		    const struct drm_display_mode *mode)
@@ -1495,7 +1507,6 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 					   link_bpp_x16, 0);
 
 	for (i = 0; i < ARRAY_SIZE(joiner_candidates); i++) {
-		int max_dotclk = display->cdclk.max_dotclk_freq;
 		enum joiner_type joiner = joiner_candidates[i];
 
 		status = MODE_CLOCK_HIGH;
@@ -1569,9 +1580,9 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 		if (status != MODE_OK)
 			continue;
 
-		max_dotclk *= num_joined_pipes;
-
-		if (target_clock <= max_dotclk) {
+		if (intel_dp_pixel_rate_fits_dotclk(display,
+						    target_clock,
+						    num_joined_pipes)) {
 			status = MODE_OK;
 			break;
 		}
@@ -2888,7 +2899,6 @@ intel_dp_compute_link_config(struct intel_encoder *encoder,
 
 	for (i = 0; i < ARRAY_SIZE(joiner_candidates); i++) {
 		enum joiner_type joiner = joiner_candidates[i];
-		int max_dotclk = display->cdclk.max_dotclk_freq;
 
 		if (joiner == FORCED_JOINER) {
 			if (!connector->force_joined_pipes)
@@ -2930,9 +2940,9 @@ intel_dp_compute_link_config(struct intel_encoder *encoder,
 		if (ret)
 			continue;
 
-		max_dotclk *= num_joined_pipes;
-
-		if (adjusted_mode->crtc_clock <= max_dotclk) {
+		if (intel_dp_pixel_rate_fits_dotclk(display,
+						    adjusted_mode->crtc_clock,
+						    num_joined_pipes)) {
 			ret = 0;
 			break;
 		}

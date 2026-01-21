@@ -710,7 +710,6 @@ static int mst_stream_compute_config(struct intel_encoder *encoder,
 
 	for (i = 0; i < ARRAY_SIZE(joiner_candidates); i++) {
 		enum joiner_type joiner = joiner_candidates[i];
-		int max_dotclk = display->cdclk.max_dotclk_freq;
 
 		ret = -EINVAL;
 
@@ -742,9 +741,9 @@ static int mst_stream_compute_config(struct intel_encoder *encoder,
 		if (ret)
 			continue;
 
-		max_dotclk *= num_joined_pipes;
-
-		if (adjusted_mode->clock <= max_dotclk) {
+		if (intel_dp_pixel_rate_fits_dotclk(display,
+						    adjusted_mode->clock,
+						    num_joined_pipes)) {
 			ret = 0;
 			break;
 		}
@@ -1542,7 +1541,6 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 	}
 
 	for (i = 0; i < ARRAY_SIZE(joiner_candidates); i++) {
-		int max_dotclk = display->cdclk.max_dotclk_freq;
 		enum joiner_type joiner = joiner_candidates[i];
 
 		*status = MODE_CLOCK_HIGH;
@@ -1593,9 +1591,9 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 		if (*status != MODE_OK)
 			continue;
 
-		max_dotclk *= num_joined_pipes;
-
-		if (mode->clock <= max_dotclk) {
+		if (intel_dp_pixel_rate_fits_dotclk(display,
+						    mode->clock,
+						    num_joined_pipes)) {
 			*status = MODE_OK;
 			break;
 		}
