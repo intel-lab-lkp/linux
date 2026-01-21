@@ -40,6 +40,20 @@ static inline void get_fs_pwd(struct fs_struct *fs, struct path *pwd)
 	read_sequnlock_excl(&fs->seq);
 }
 
+/*
+ * Conditionally get the current fs->pwd if it differs from the given pwd
+ */
+static inline void get_cond_fs_pwd(struct fs_struct *fs, struct path *pwd)
+{
+	read_seqlock_excl(&fs->seq);
+	if ((fs->pwd.dentry != pwd->dentry) || (fs->pwd.mnt != pwd->mnt)) {
+		path_put(pwd);
+		*pwd = fs->pwd;
+		path_get(pwd);
+	}
+	read_sequnlock_excl(&fs->seq);
+}
+
 extern bool current_chrooted(void);
 
 static inline int current_umask(void)

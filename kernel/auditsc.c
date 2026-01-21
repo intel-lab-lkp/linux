@@ -942,9 +942,7 @@ static inline void audit_free_names(struct audit_context *context)
 			kfree(n);
 	}
 	context->name_count = 0;
-	path_put(&context->pwd);
-	context->pwd.dentry = NULL;
-	context->pwd.mnt = NULL;
+	context->pwd_reset = true;
 }
 
 static inline void audit_free_aux(struct audit_context *context)
@@ -1091,6 +1089,8 @@ static inline void audit_free_context(struct audit_context *context)
 	audit_reset_context(context);
 	audit_proctitle_free(context);
 	free_tree_refs(context);
+	if (context->pwd_reset)
+		path_put(&context->pwd);
 	kfree(context->filterkey);
 	kfree(context);
 }
@@ -1522,7 +1522,8 @@ static void audit_log_name(struct audit_context *context, struct audit_names *n,
 			/* name was specified as a relative path and the
 			 * directory component is the cwd
 			 */
-			if (context->pwd.dentry && context->pwd.mnt)
+			if (context->pwd.dentry && context->pwd.mnt &&
+			    !context->pwd_reset)
 				audit_log_d_path(ab, " name=", &context->pwd);
 			else
 				audit_log_format(ab, " name=(null)");
@@ -1770,7 +1771,7 @@ static void audit_log_exit(void)
 				  context->target_comm))
 		call_panic = 1;
 
-	if (context->pwd.dentry && context->pwd.mnt) {
+	if (context->pwd.dentry && context->pwd.mnt && !context->pwd_reset) {
 		ab = audit_log_start(context, GFP_KERNEL, AUDIT_CWD);
 		if (ab) {
 			audit_log_d_path(ab, "cwd=", &context->pwd);
@@ -2167,8 +2168,12 @@ static struct audit_names *audit_alloc_name(struct audit_context *context,
 	list_add_tail(&aname->list, &context->names_list);
 
 	context->name_count++;
-	if (!context->pwd.dentry)
+	if (context->pwd_reset) {
+		get_cond_fs_pwd(current->fs, &context->pwd);
+		context->pwd_reset = false;
+	} else if (!context->pwd.dentry) {
 		get_fs_pwd(current->fs, &context->pwd);
+	}
 	return aname;
 }
 

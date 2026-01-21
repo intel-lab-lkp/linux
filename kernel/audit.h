@@ -133,6 +133,13 @@ struct audit_context {
 	int		    name_count; /* total records in names_list */
 	struct list_head    names_list;	/* struct audit_names->list anchor */
 	char		    *filterkey;	/* key for rule that triggered record */
+	/*
+	 * pwd_reset is set if audit_free_names() has been called from
+	 * audit_reset_context() to reset pwd, but pwd is still holding dentry
+	 * and mount references to be used in later audit action without
+	 * the need to reacqure the references again.
+	 */
+	int		    pwd_reset;
 	struct path	    pwd;
 	struct audit_aux_data *aux;
 	struct audit_aux_data *aux_pids;
