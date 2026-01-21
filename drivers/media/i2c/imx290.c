@@ -375,10 +375,11 @@ static const struct cci_reg_sequence xclk_regs[][IMX290_NUM_CLK_REGS] = {
 };
 
 static const struct cci_reg_sequence imx290_global_init_settings_327[] = {
-	{ CCI_REG8(0x3011), 0x02 },
-	{ CCI_REG8(0x309e), 0x4A },
-	{ CCI_REG8(0x309f), 0x4A },
-	{ CCI_REG8(0x313b), 0x61 },
+	{ CCI_REG8(0x3011), 0x0a },
+	{ CCI_REG8(0x309e), 0x4a },
+	{ CCI_REG8(0x309f), 0x4a },
+	{ CCI_REG8(0x3128), 0x04 },
+	{ CCI_REG8(0x313b), 0x41 },
 };
 
 static const struct cci_reg_sequence imx290_1080p_settings[] = {
