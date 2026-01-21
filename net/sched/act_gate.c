@@ -82,7 +82,11 @@ static enum hrtimer_restart gate_timer_func(struct hrtimer *timer)
 
 	p = rcu_dereference_protected(gact->param,
 				      lockdep_is_held(&gact->tcf_lock));
+	if (!p)
+		goto out_unlock;
 	next = gact->next_entry;
+	if (!next)
+		goto out_unlock;
 
 	/* cycle start, clear pending bit, clear total octets */
 	gact->current_gate_status = next->gate_state ? GATE_ACT_GATE_OPEN : 0;
@@ -119,6 +123,11 @@ static enum hrtimer_restart gate_timer_func(struct hrtimer *timer)
 	spin_unlock(&gact->tcf_lock);
 
 	return HRTIMER_RESTART;
+
+out_unlock:
+	spin_unlock(&gact->tcf_lock);
+
+	return HRTIMER_NORESTART;
 }
 
 TC_INDIRECT_SCOPE int tcf_gate_act(struct sk_buff *skb,
@@ -584,8 +593,8 @@ static void tcf_gate_cleanup(struct tc_action *a)
 	struct tcf_gate *gact = to_gate(a);
 	struct tcf_gate_params *p;
 
-	p = rcu_replace_pointer(gact->param, NULL, lockdep_rtnl_is_held());
 	hrtimer_cancel(&gact->hitimer);
+	p = rcu_replace_pointer(gact->param, NULL, lockdep_rtnl_is_held());
 	if (p)
 		call_rcu(&p->rcu, tcf_gate_params_free_rcu);
 }
@@ -643,6 +652,8 @@ static int tcf_gate_dump(struct sk_buff *skb, struct tc_action *a,
 
 	rcu_read_lock();
 	p = rcu_dereference(gact->param);
+	if (!p)
+		goto nla_put_failure_rcu;
 
 	if (nla_put_u64_64bit(skb, TCA_GATE_BASE_TIME,
 			      p->tcfg_basetime, TCA_GATE_PAD))

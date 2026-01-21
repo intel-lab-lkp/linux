@@ -54,12 +54,13 @@ struct tcf_gate {
 
 static inline s32 tcf_gate_prio(const struct tc_action *a)
 {
-	s32 tcfg_prio;
+	s32 tcfg_prio = 0;
 	struct tcf_gate_params *p;
 
 	rcu_read_lock();
 	p = rcu_dereference(to_gate(a)->param);
-	tcfg_prio = p->tcfg_priority;
+	if (p)
+		tcfg_prio = p->tcfg_priority;
 	rcu_read_unlock();
 
 	return tcfg_prio;
@@ -67,12 +68,13 @@ static inline s32 tcf_gate_prio(const struct tc_action *a)
 
 static inline u64 tcf_gate_basetime(const struct tc_action *a)
 {
-	u64 tcfg_basetime;
+	u64 tcfg_basetime = 0;
 	struct tcf_gate_params *p;
 
 	rcu_read_lock();
 	p = rcu_dereference(to_gate(a)->param);
-	tcfg_basetime = p->tcfg_basetime;
+	if (p)
+		tcfg_basetime = p->tcfg_basetime;
 	rcu_read_unlock();
 
 	return tcfg_basetime;
@@ -80,12 +82,13 @@ static inline u64 tcf_gate_basetime(const struct tc_action *a)
 
 static inline u64 tcf_gate_cycletime(const struct tc_action *a)
 {
-	u64 tcfg_cycletime;
+	u64 tcfg_cycletime = 0;
 	struct tcf_gate_params *p;
 
 	rcu_read_lock();
 	p = rcu_dereference(to_gate(a)->param);
-	tcfg_cycletime = p->tcfg_cycletime;
+	if (p)
+		tcfg_cycletime = p->tcfg_cycletime;
 	rcu_read_unlock();
 
 	return tcfg_cycletime;
@@ -93,12 +96,13 @@ static inline u64 tcf_gate_cycletime(const struct tc_action *a)
 
 static inline u64 tcf_gate_cycletimeext(const struct tc_action *a)
 {
-	u64 tcfg_cycletimeext;
+	u64 tcfg_cycletimeext = 0;
 	struct tcf_gate_params *p;
 
 	rcu_read_lock();
 	p = rcu_dereference(to_gate(a)->param);
-	tcfg_cycletimeext = p->tcfg_cycletime_ext;
+	if (p)
+		tcfg_cycletimeext = p->tcfg_cycletime_ext;
 	rcu_read_unlock();
 
 	return tcfg_cycletimeext;
@@ -106,12 +110,13 @@ static inline u64 tcf_gate_cycletimeext(const struct tc_action *a)
 
 static inline u32 tcf_gate_num_entries(const struct tc_action *a)
 {
-	u32 num_entries;
+	u32 num_entries = 0;
 	struct tcf_gate_params *p;
 
 	rcu_read_lock();
 	p = rcu_dereference(to_gate(a)->param);
-	num_entries = p->num_entries;
+	if (p)
+		num_entries = p->num_entries;
 	rcu_read_unlock();
 
 	return num_entries;
@@ -128,6 +133,11 @@ static inline struct action_gate_entry
 
 	rcu_read_lock();
 	p = rcu_dereference(to_gate(a)->param);
+	if (!p) {
+		rcu_read_unlock();
+		return NULL;
+	}
+
 	num_entries = p->num_entries;
 
 	list_for_each_entry(entry, &p->entries, list)
