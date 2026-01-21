@@ -15353,6 +15353,12 @@ R:	Vamsi Attunuru <vattunuru@marvell.com>
 S:	Supported
 F:	drivers/pci/hotplug/octep_hp.c
 
+MARVELL OCTEON PEM CONTROLLER DRIVER
+R:	George Cherian <gcherian@marvell.com>
+R:	Pragnesh Patel <pragneshp@marvell.com>
+S:	Supported
+F:	drivers/pci/controller/pci-octeon-pem.c
+
 MATROX FRAMEBUFFER DRIVER
 L:	linux-fbdev@vger.kernel.org
 S:	Orphan
