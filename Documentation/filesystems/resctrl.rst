@@ -626,6 +626,11 @@ When control is enabled all CTRL_MON groups will also contain:
 	Available only with debug option. The identifier used by hardware
 	for the control group. On x86 this is the CLOSID.
 
+"plza":
+        When enabled, CPUs or tasks in the resctrl group follow the group's
+        limits while running at Privilege Level 0 (CPL-0). This can only be
+        enabled for CTRL_MON groups.
+
 When monitoring is enabled all MON groups will also contain:
 
 "mon_data":

@@ -896,6 +896,76 @@ static int rdtgroup_plza_show(struct kernfs_open_file *of,
 	return ret;
 }
 
+static ssize_t rdtgroup_plza_write(struct kernfs_open_file *of, char *buf,
+				   size_t nbytes, loff_t off)
+{
+	struct rdt_resource *r = resctrl_arch_get_resource(RDT_RESOURCE_L3);
+	struct rdtgroup *rdtgrp, *prgrp;
+	int cpu, ret = 0;
+	bool enable;
+
+	ret = kstrtobool(buf, &enable);
+	if (ret)
+		return ret;
+
+	rdtgrp = rdtgroup_kn_lock_live(of->kn);
+	if (!rdtgrp) {
+		rdtgroup_kn_unlock(of->kn);
+		return -ENOENT;
+	}
+
+	rdt_last_cmd_clear();
+
+	if (!r->plza_capable) {
+		rdt_last_cmd_puts("PLZA is not supported in the system\n");
+		ret = -EINVAL;
+		goto unlock;
+	}
+
+	if (rdtgrp == &rdtgroup_default) {
+		rdt_last_cmd_puts("Cannot set PLZA on a default group\n");
+		ret = -EINVAL;
+		goto unlock;
+	}
+
+	if (rdtgrp->mode == RDT_MODE_PSEUDO_LOCKED) {
+		rdt_last_cmd_puts("Resource group is pseudo-locked\n");
+		ret = -EINVAL;
+		goto unlock;
+	}
+
+	if (!list_empty(&rdtgrp->mon.crdtgrp_list)) {
+		rdt_last_cmd_puts("Cannot change CTRL_MON group with sub monitor groups\n");
+		ret = -EINVAL;
+		goto unlock;
+	}
+
+	list_for_each_entry(prgrp, &rdt_all_groups, rdtgroup_list) {
+		if (prgrp == rdtgrp)
+			continue;
+		if (enable && prgrp->plza) {
+			rdt_last_cmd_puts("PLZA is already configured on another group\n");
+			ret = -EINVAL;
+			goto unlock;
+		}
+	}
+
+	/* Enable or disable PLZA state and update per CPU state if there is a change */
+	if (enable != rdtgrp->plza) {
+		resctrl_arch_plza_setup(r, rdtgrp->closid, rdtgrp->mon.rmid);
+
+		for_each_cpu(cpu, &rdtgrp->cpu_mask)
+			resctrl_arch_set_cpu_plza(cpu, rdtgrp->closid,
+						  rdtgrp->mon.rmid, enable);
+		rdtgrp->plza = enable;
+	}
+
+unlock:
+	rdtgroup_kn_unlock(of->kn);
+
+	return ret ?: nbytes;
+}
+
 #ifdef CONFIG_PROC_CPU_RESCTRL
 /*
  * A task can only be part of one resctrl control group and of one monitor
@@ -2171,8 +2241,9 @@ static struct rftype res_common_files[] = {
 	},
 	{
 		.name		= "plza",
-		.mode		= 0444,
+		.mode		= 0644,
 		.kf_ops		= &rdtgroup_kf_single_ops,
+		.write		= rdtgroup_plza_write,
 		.seq_show	= rdtgroup_plza_show,
 	},
 };
@@ -3126,11 +3197,19 @@ static void free_all_child_rdtgrp(struct rdtgroup *rdtgrp)
 static void rmdir_all_sub(void)
 {
 	struct rdtgroup *rdtgrp, *tmp;
+	int cpu;
 
 	/* Move all tasks to the default resource group */
 	rdt_move_group_tasks(NULL, &rdtgroup_default, NULL);
 
 	list_for_each_entry_safe(rdtgrp, tmp, &rdt_all_groups, rdtgroup_list) {
+		if (rdtgrp->plza) {
+			for_each_cpu(cpu, &rdtgrp->cpu_mask)
+				resctrl_arch_set_cpu_plza(cpu, rdtgrp->closid,
+							  rdtgrp->mon.rmid, false);
+			rdtgrp->plza = 0;
+		}
+
 		/* Free any child rmids */
 		free_all_child_rdtgrp(rdtgrp);
 
@@ -4089,6 +4168,13 @@ static int rdtgroup_rmdir_ctrl(struct rdtgroup *rdtgrp, cpumask_var_t tmpmask)
 {
 	u32 closid, rmid;
 	int cpu;
+
+	if (rdtgrp->plza) {
+		for_each_cpu(cpu, &rdtgrp->cpu_mask)
+			resctrl_arch_set_cpu_plza(cpu, rdtgrp->closid,
+						  rdtgrp->mon.rmid, false);
+		rdtgrp->plza = 0;
+	}
 
 	/* Give any tasks back to the default group */
 	rdt_move_group_tasks(rdtgrp, &rdtgroup_default, tmpmask);
