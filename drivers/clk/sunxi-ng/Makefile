@@ -23,6 +23,9 @@ sunxi-ccu-y			+= ccu_nkmp.o
 sunxi-ccu-y			+= ccu_nm.o
 sunxi-ccu-y			+= ccu_mp.o
 
+# RTC clocks
+sunxi-ccu-y			+= ccu_rtc.o
+
 # SoC support
 obj-$(CONFIG_SUNIV_F1C100S_CCU)	+= suniv-f1c100s-ccu.o
 obj-$(CONFIG_SUN20I_D1_CCU)	+= sun20i-d1-ccu.o
