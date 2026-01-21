@@ -189,6 +189,7 @@ macro_rules! b_str {
 //
 // - error[E0379]: functions in trait impls cannot be declared const
 #[inline]
+#[expect(clippy::disallowed_methods, reason = "internal implementation")]
 pub const fn as_char_ptr_in_const_context(c_str: &CStr) -> *const c_char {
     c_str.as_ptr().cast()
 }
@@ -334,6 +335,7 @@ impl CStrExt for CStr {
     }
 
     #[inline]
+    #[expect(clippy::disallowed_methods, reason = "internal implementation")]
     fn as_char_ptr(&self) -> *const c_char {
         self.as_ptr().cast()
     }
