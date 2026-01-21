@@ -313,9 +313,123 @@ int psp_dev_rcv(struct sk_buff *skb, u16 dev_id, u8 generation, bool strip_icv)
 }
 EXPORT_SYMBOL(psp_dev_rcv);
 
+/**
+ * psp_netdevice_event() - Handle netdevice events for PSP device propagation
+ * @nb:		notifier block
+ * @event:	netdevice event
+ * @ptr:	netdevice notifier info
+ *
+ * Propagates psp_dev pointer from lower devices to upper devices when
+ * upper devices are created (e.g., VLAN subinterfaces).
+ */
+static int psp_netdevice_event(struct notifier_block *nb,
+			       unsigned long event, void *ptr)
+{
+	struct netdev_notifier_changeupper_info *info;
+	struct net_device *dev, *upper_dev;
+	struct psp_dev *psd;
+
+	if (event != NETDEV_CHANGEUPPER)
+		return NOTIFY_DONE;
+
+	info = ptr;
+	dev = netdev_notifier_info_to_dev(ptr);
+	upper_dev = info->upper_dev;
+
+	if (info->linking) {
+		bool has_multiple_lowers = false;
+		struct list_head *iter;
+
+		/* Lower device is being linked to an upper device.
+		 * Propagate psp_dev from the immediate lower device to the
+		 * upper device. The immediate lower device would have already
+		 * got the psp_dev pointer set in a previous notification (or
+		 * owns it if it's the lowest device),
+		 * Upper devices just borrow the pointer.
+		 *
+		 * However, if the upper device has multiple lower devices,
+		 * don't propagate psp_dev as it would be ambiguous
+		 * which slave will be used for transmission (eg., bond device).
+		 * If the upper device already has psp_dev set and is getting
+		 * a second lower device, clear the psp_dev.
+		 */
+
+		rcu_read_lock();
+		iter = &upper_dev->adj_list.lower;
+		/* Check if there's a second lower device */
+		if (netdev_next_lower_dev_rcu(upper_dev, &iter))
+			if (netdev_next_lower_dev_rcu(upper_dev, &iter))
+				has_multiple_lowers = true;
+
+		/* If upper device now has multiple lower devices, clear psp_dev
+		 * if it was previously set (from when it had only one slave).
+		 */
+		if (has_multiple_lowers) {
+			psd = rcu_dereference(upper_dev->psp_dev);
+			rcu_read_unlock();
+			if (psd)
+				rcu_assign_pointer(upper_dev->psp_dev, NULL);
+
+			return NOTIFY_DONE;
+		}
+
+		/* Get psp_dev from the immediate lower device */
+		psd = rcu_dereference(dev->psp_dev);
+		rcu_read_unlock();
+
+		/* Propagate psp_dev to upper device if found */
+		if (psd)
+			rcu_assign_pointer(upper_dev->psp_dev, psd);
+	} else {
+		struct net_device *remaining_lower = NULL;
+		bool has_single_lower = false;
+		struct list_head *iter;
+
+		/* Lower device is being unlinked from an upper device.
+		 * After unlinking, check if the upper device now has exactly
+		 * one lower device remaining. If so, propagate psp_dev from
+		 * that remaining lower device to the upper device.
+		 */
+
+		rcu_read_lock();
+		iter = &upper_dev->adj_list.lower;
+		remaining_lower = netdev_next_lower_dev_rcu(upper_dev, &iter);
+		/* Check if there's a second lower device */
+		if (remaining_lower)
+			if (!netdev_next_lower_dev_rcu(upper_dev, &iter))
+				has_single_lower = true;
+
+		if (has_single_lower) {
+			/* Upper device now has exactly one lower device.
+			 * Propagate psp_dev from the remaining lower device.
+			 */
+			psd = rcu_dereference(remaining_lower->psp_dev);
+			rcu_read_unlock();
+			if (psd)
+				rcu_assign_pointer(upper_dev->psp_dev, psd);
+		} else {
+			/* Upper device has zero or multiple lower devices.
+			 * Clear psp_dev if it was previously set.
+			 */
+			psd = rcu_dereference(upper_dev->psp_dev);
+			rcu_read_unlock();
+			if (psd)
+				rcu_assign_pointer(upper_dev->psp_dev, NULL);
+		}
+	}
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block psp_netdevice_notifier = {
+	.notifier_call = psp_netdevice_event,
+};
+
 static int __init psp_init(void)
 {
 	mutex_init(&psp_devs_lock);
+
+	register_netdevice_notifier(&psp_netdevice_notifier);
 
 	return genl_register_family(&psp_nl_family);
 }
