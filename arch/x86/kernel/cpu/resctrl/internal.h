@@ -222,6 +222,32 @@ union l3_qos_abmc_cfg {
 	unsigned long full;
 };
 
+/*
+ * PLZA can be configured on a CPU by writing to MSR_IA32_PQR_PLZA_ASSOC.
+ *
+ * @rmid		: The RMID to be configured for PLZA.
+ * @reserved1		: Reserved.
+ * @rmidid_en		: Asociate RMID or not.
+ * @closid		: The CLOSID to be configured for PLZA.
+ * @reserved2		: Reserved.
+ * @closid_en		: Asociate CLOSID or not.
+ * @reserved3		: Reserved.
+ * @plza_en		: configure PLZA or not
+ */
+union qos_pqr_plza_assoc {
+	struct {
+		unsigned long rmid	:12,
+			      reserved1	:19,
+			      rmid_en	: 1,
+			      closid	: 4,
+			      reserved2	:11,
+			      closid_en	: 1,
+			      reserved3	:15,
+			      plza_en	: 1;
+	} split;
+	unsigned long full;
+};
+
 void rdt_ctrl_update(void *arg);
 
 int rdt_get_l3_mon_config(struct rdt_resource *r);
