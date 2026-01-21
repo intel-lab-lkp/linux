@@ -316,6 +316,32 @@ static ssize_t pm_qos_no_power_off_store(struct device *dev,
 
 static DEVICE_ATTR_RW(pm_qos_no_power_off);
 
+static ssize_t pm_qos_latency_sys_show(struct device *dev,
+				       struct device_attribute *attr,
+				       char *buf)
+{
+	return sysfs_emit(buf, "%d\n", !!(dev_pm_qos_requested_flags(dev)
+					  & PM_QOS_FLAG_LATENCY_SYS));
+}
+
+static ssize_t pm_qos_latency_sys_store(struct device *dev,
+					 struct device_attribute *attr,
+					 const char *buf, size_t n)
+{
+	int ret;
+
+	if (kstrtoint(buf, 0, &ret))
+		return -EINVAL;
+
+	if (ret != 0 && ret != 1)
+		return -EINVAL;
+
+	ret = dev_pm_qos_update_flags(dev, PM_QOS_FLAG_LATENCY_SYS, ret);
+	return ret < 0 ? ret : n;
+}
+
+static DEVICE_ATTR_RW(pm_qos_latency_sys);
+
 #ifdef CONFIG_PM_SLEEP
 static const char _enabled[] = "enabled";
 static const char _disabled[] = "disabled";
@@ -681,6 +707,7 @@ static const struct attribute_group pm_qos_latency_tolerance_attr_group = {
 
 static struct attribute *pm_qos_flags_attrs[] = {
 	&dev_attr_pm_qos_no_power_off.attr,
+	&dev_attr_pm_qos_latency_sys.attr,
 	NULL,
 };
 static const struct attribute_group pm_qos_flags_attr_group = {
