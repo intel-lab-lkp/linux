@@ -2383,6 +2383,9 @@ static struct nfs4_client *alloc_client(struct xdr_netobj name,
 #ifdef CONFIG_NFSD_PNFS
 	INIT_LIST_HEAD(&clp->cl_lo_states);
 #endif
+#ifdef CONFIG_NFSD_SCSILAYOUT
+	xa_init(&clp->cl_dev_fences);
+#endif
 	INIT_LIST_HEAD(&clp->async_copies);
 	spin_lock_init(&clp->async_lock);
 	spin_lock_init(&clp->cl_lock);
@@ -2413,7 +2416,13 @@ static void __free_client(struct kref *k)
 	kmem_cache_free(client_slab, clp);
 }
 
-static void drop_client(struct nfs4_client *clp)
+/**
+ * nfsd4_put_client - release a reference on an nfs4_client
+ * @clp: the client to be released
+ *
+ * When the last reference is released, the client is freed.
+ */
+void nfsd4_put_client(struct nfs4_client *clp)
 {
 	kref_put(&clp->cl_nfsdfs.cl_ref, __free_client);
 }
@@ -2435,7 +2444,7 @@ free_client(struct nfs4_client *clp)
 		clp->cl_nfsd_dentry = NULL;
 		wake_up_all(&expiry_wq);
 	}
-	drop_client(clp);
+	nfsd4_put_client(clp);
 }
 
 /* must be called under the client_lock */
@@ -2538,6 +2547,9 @@ __destroy_client(struct nfs4_client *clp)
 		svc_xprt_put(clp->cl_cb_conn.cb_xprt);
 	atomic_add_unless(&nn->nfs4_client_count, -1, 0);
 	nfsd4_dec_courtesy_client_count(nn, clp);
+#ifdef CONFIG_NFSD_SCSILAYOUT
+	xa_destroy(&clp->cl_dev_fences);
+#endif
 	free_client(clp);
 	wake_up_all(&expiry_wq);
 }
@@ -2833,7 +2845,7 @@ static int client_info_show(struct seq_file *m, void *v)
 	spin_unlock(&clp->cl_lock);
 	seq_puts(m, "\n");
 
-	drop_client(clp);
+	nfsd4_put_client(clp);
 
 	return 0;
 }
@@ -3099,7 +3111,7 @@ static int client_states_open(struct inode *inode, struct file *file)
 
 	ret = seq_open(file, &states_seq_ops);
 	if (ret) {
-		drop_client(clp);
+		nfsd4_put_client(clp);
 		return ret;
 	}
 	s = file->private_data;
@@ -3113,7 +3125,7 @@ static int client_opens_release(struct inode *inode, struct file *file)
 	struct nfs4_client *clp = m->private;
 
 	/* XXX: alternatively, we could get/drop in seq start/stop */
-	drop_client(clp);
+	nfsd4_put_client(clp);
 	return seq_release(inode, file);
 }
 
@@ -3169,7 +3181,7 @@ static ssize_t client_ctl_write(struct file *file, const char __user *buf,
 	if (!clp)
 		return -ENXIO;
 	force_expire_client(clp);
-	drop_client(clp);
+	nfsd4_put_client(clp);
 	return 7;
 }
 
@@ -3204,7 +3216,7 @@ nfsd4_cb_recall_any_release(struct nfsd4_callback *cb)
 {
 	struct nfs4_client *clp = cb->cb_clp;
 
-	drop_client(clp);
+	nfsd4_put_client(clp);
 }
 
 static int
@@ -5530,13 +5542,15 @@ nfsd_break_deleg_cb(struct file_lease *fl)
 static bool nfsd_breaker_owns_lease(struct file_lease *fl)
 {
 	struct nfs4_delegation *dl = fl->c.flc_owner;
+	struct nfsd_thread_local_info *ntli;
 	struct svc_rqst *rqst;
 	struct nfs4_client *clp;
 
 	rqst = nfsd_current_rqst();
 	if (!nfsd_v4client(rqst))
 		return false;
-	clp = *(rqst->rq_lease_breaker);
+	ntli = rqst->rq_private;
+	clp = *ntli->ntli_lease_breaker;
 	return dl->dl_stid.sc_client == clp;
 }
 
@@ -9348,13 +9362,14 @@ __be32
 nfsd4_deleg_getattr_conflict(struct svc_rqst *rqstp, struct dentry *dentry,
 			     struct nfs4_delegation **pdp)
 {
-	__be32 status;
 	struct nfsd_net *nn = net_generic(SVC_NET(rqstp), nfsd_net_id);
+	struct nfsd_thread_local_info *ntli = rqstp->rq_private;
 	struct file_lock_context *ctx;
 	struct nfs4_delegation *dp = NULL;
 	struct file_lease *fl;
 	struct nfs4_cb_fattr *ncf;
 	struct inode *inode = d_inode(dentry);
+	__be32 status;
 
 	ctx = locks_inode_context(inode);
 	if (!ctx)
@@ -9375,7 +9390,7 @@ nfsd4_deleg_getattr_conflict(struct svc_rqst *rqstp, struct dentry *dentry,
 		break;
 	}
 	if (dp == NULL || dp == NON_NFSD_LEASE ||
-	    dp->dl_recall.cb_clp == *(rqstp->rq_lease_breaker)) {
+	    dp->dl_recall.cb_clp == *(ntli->ntli_lease_breaker)) {
 		spin_unlock(&ctx->flc_lock);
 		if (dp == NON_NFSD_LEASE) {
 			status = nfserrno(nfsd_open_break_lease(inode,

@@ -48,6 +48,7 @@ enum {
 	NFSD_Versions,
 	NFSD_Ports,
 	NFSD_MaxBlkSize,
+	NFSD_MinThreads,
 	NFSD_Filecache,
 	NFSD_Leasetime,
 	NFSD_Gracetime,
@@ -67,6 +68,7 @@ static ssize_t write_pool_threads(struct file *file, char *buf, size_t size);
 static ssize_t write_versions(struct file *file, char *buf, size_t size);
 static ssize_t write_ports(struct file *file, char *buf, size_t size);
 static ssize_t write_maxblksize(struct file *file, char *buf, size_t size);
+static ssize_t write_minthreads(struct file *file, char *buf, size_t size);
 #ifdef CONFIG_NFSD_V4
 static ssize_t write_leasetime(struct file *file, char *buf, size_t size);
 static ssize_t write_gracetime(struct file *file, char *buf, size_t size);
@@ -85,6 +87,7 @@ static ssize_t (*const write_op[])(struct file *, char *, size_t) = {
 	[NFSD_Versions] = write_versions,
 	[NFSD_Ports] = write_ports,
 	[NFSD_MaxBlkSize] = write_maxblksize,
+	[NFSD_MinThreads] = write_minthreads,
 #ifdef CONFIG_NFSD_V4
 	[NFSD_Leasetime] = write_leasetime,
 	[NFSD_Gracetime] = write_gracetime,
@@ -285,6 +288,7 @@ static ssize_t write_unlock_fs(struct file *file, char *buf, size_t size)
 	 * 2.  Is that directory a mount point, or
 	 * 3.  Is that directory the root of an exported file system?
 	 */
+	nfsd4_cancel_copy_by_sb(netns(file), path.dentry->d_sb);
 	error = nlmsvc_unlock_all_by_sb(path.dentry->d_sb);
 	mutex_lock(&nfsd_mutex);
 	nn = net_generic(netns(file), nfsd_net_id);
@@ -906,6 +910,46 @@ static ssize_t write_maxblksize(struct file *file, char *buf, size_t size)
 							nfsd_max_blksize);
 }
 
+/*
+ * write_minthreads - Set or report the current min number of threads per pool
+ *
+ * Input:
+ *			buf:		ignored
+ *			size:		zero
+ * OR
+ *
+ * Input:
+ *			buf:		C string containing an unsigned
+ *					integer value representing the new
+ *					min number of threads per pool
+ *			size:		non-zero length of C string in @buf
+ * Output:
+ *	On success:	passed-in buffer filled with '\n'-terminated C string
+ *			containing numeric value of min_threads setting
+ *			for this net namespace;
+ *			return code is the size in bytes of the string
+ *	On error:	return code is zero or a negative errno value
+ */
+static ssize_t write_minthreads(struct file *file, char *buf, size_t size)
+{
+	char *mesg = buf;
+	struct nfsd_net *nn = net_generic(netns(file), nfsd_net_id);
+	unsigned int minthreads = nn->min_threads;
+
+	if (size > 0) {
+		int rv = get_uint(&mesg, &minthreads);
+
+		if (rv)
+			return rv;
+		trace_nfsd_ctl_minthreads(netns(file), minthreads);
+		mutex_lock(&nfsd_mutex);
+		nn->min_threads = minthreads;
+		mutex_unlock(&nfsd_mutex);
+	}
+
+	return scnprintf(buf, SIMPLE_TRANSACTION_LIMIT, "%u\n", minthreads);
+}
+
 #ifdef CONFIG_NFSD_V4
 static ssize_t __nfsd4_write_time(struct file *file, char *buf, size_t size,
 				  time64_t *time, struct nfsd_net *nn)
@@ -1298,6 +1342,7 @@ static int nfsd_fill_super(struct super_block *sb, struct fs_context *fc)
 		[NFSD_Versions] = {"versions", &transaction_ops, S_IWUSR|S_IRUSR},
 		[NFSD_Ports] = {"portlist", &transaction_ops, S_IWUSR|S_IRUGO},
 		[NFSD_MaxBlkSize] = {"max_block_size", &transaction_ops, S_IWUSR|S_IRUGO},
+		[NFSD_MinThreads] = {"min_threads", &transaction_ops, S_IWUSR|S_IRUGO},
 		[NFSD_Filecache] = {"filecache", &nfsd_file_cache_stats_fops, S_IRUGO},
 #ifdef CONFIG_NFSD_V4
 		[NFSD_Leasetime] = {"nfsv4leasetime", &transaction_ops, S_IWUSR|S_IRUSR},
@@ -1642,6 +1687,10 @@ int nfsd_nl_threads_set_doit(struct sk_buff *skb, struct genl_info *info)
 			scope = nla_data(attr);
 	}
 
+	attr = info->attrs[NFSD_A_SERVER_MIN_THREADS];
+	if (attr)
+		nn->min_threads = nla_get_u32(attr);
+
 	ret = nfsd_svc(nrpools, nthreads, net, get_current_cred(), scope);
 	if (ret > 0)
 		ret = 0;
@@ -1681,6 +1730,8 @@ int nfsd_nl_threads_get_doit(struct sk_buff *skb, struct genl_info *info)
 			  nn->nfsd4_grace) ||
 	      nla_put_u32(skb, NFSD_A_SERVER_LEASETIME,
 			  nn->nfsd4_lease) ||
+	      nla_put_u32(skb, NFSD_A_SERVER_MIN_THREADS,
+			  nn->min_threads) ||
 	      nla_put_string(skb, NFSD_A_SERVER_SCOPE,
 			  nn->nfsd_name);
 	if (err)
@@ -1726,6 +1777,7 @@ err_free_msg:
  */
 int nfsd_nl_version_set_doit(struct sk_buff *skb, struct genl_info *info)
 {
+	struct net *net = genl_info_net(info);
 	const struct nlattr *attr;
 	struct nfsd_net *nn;
 	int i, rem;
@@ -1733,10 +1785,22 @@ int nfsd_nl_version_set_doit(struct sk_buff *skb, struct genl_info *info)
 	if (GENL_REQ_ATTR_CHECK(info, NFSD_A_SERVER_PROTO_VERSION))
 		return -EINVAL;
 
+	pr_info("nfsd: %s[%d] attempting to acquire nfsd_mutex\n",
+		current->comm, current->pid);
+
 	mutex_lock(&nfsd_mutex);
 
-	nn = net_generic(genl_info_net(info), nfsd_net_id);
+	pr_info("nfsd: %s[%d] acquired nfsd_mutex\n",
+		current->comm, current->pid);
+
+	nn = net_generic(net, nfsd_net_id);
+
+	pr_info("nfsd: version_set: nn=%p, nfsd_serv=%p, net=%p\n",
+		nn, nn->nfsd_serv, net);
+
 	if (nn->nfsd_serv) {
+		pr_info("nfsd: version_set: service is running (nrthreads=%d), returning -EBUSY\n",
+			nn->nfsd_serv->sv_nrthreads);
 		mutex_unlock(&nfsd_mutex);
 		return -EBUSY;
 	}

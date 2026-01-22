@@ -572,15 +572,29 @@ void nfsd_shutdown_threads(struct net *net)
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
 	struct svc_serv *serv;
 
+	pr_info("nfsd: %s[%d] attempting to acquire nfsd_mutex for shutdown\n",
+		current->comm, current->pid);
+
 	mutex_lock(&nfsd_mutex);
+
+	pr_info("nfsd: %s[%d] acquired nfsd_mutex for shutdown\n",
+		current->comm, current->pid);
+
 	serv = nn->nfsd_serv;
+
+	pr_info("nfsd: shutdown_threads: nn=%p, serv=%p, net=%p\n",
+		nn, serv, net);
+
 	if (serv == NULL) {
+		pr_info("nfsd: shutdown_threads: no service running, unlocking\n");
 		mutex_unlock(&nfsd_mutex);
+		pr_info("nfsd: %s[%d] released nfsd_mutex (no service)\n",
+			current->comm, current->pid);
 		return;
 	}
 
 	/* Kill outstanding nfsd threads */
-	svc_set_num_threads(serv, NULL, 0);
+	svc_set_num_threads(serv, 0, 0);
 	nfsd_destroy_serv(net);
 	mutex_unlock(&nfsd_mutex);
 }
@@ -688,12 +702,9 @@ int nfsd_set_nrthreads(int n, int *nthreads, struct net *net)
 	if (nn->nfsd_serv == NULL || n <= 0)
 		return 0;
 
-	/*
-	 * Special case: When n == 1, pass in NULL for the pool, so that the
-	 * change is distributed equally among them.
-	 */
+	/* Special case: When n == 1, distribute threads equally among pools. */
 	if (n == 1)
-		return svc_set_num_threads(nn->nfsd_serv, NULL, nthreads[0]);
+		return svc_set_num_threads(nn->nfsd_serv, nn->min_threads, nthreads[0]);
 
 	if (n > nn->nfsd_serv->sv_nrpools)
 		n = nn->nfsd_serv->sv_nrpools;
@@ -719,18 +730,18 @@ int nfsd_set_nrthreads(int n, int *nthreads, struct net *net)
 
 	/* apply the new numbers */
 	for (i = 0; i < n; i++) {
-		err = svc_set_num_threads(nn->nfsd_serv,
-					  &nn->nfsd_serv->sv_pools[i],
-					  nthreads[i]);
+		err = svc_set_pool_threads(nn->nfsd_serv,
+					   &nn->nfsd_serv->sv_pools[i],
+					   nn->min_threads, nthreads[i]);
 		if (err)
 			goto out;
 	}
 
 	/* Anything undefined in array is considered to be 0 */
 	for (i = n; i < nn->nfsd_serv->sv_nrpools; ++i) {
-		err = svc_set_num_threads(nn->nfsd_serv,
-					  &nn->nfsd_serv->sv_pools[i],
-					  0);
+		err = svc_set_pool_threads(nn->nfsd_serv,
+					   &nn->nfsd_serv->sv_pools[i],
+					   0, 0);
 		if (err)
 			goto out;
 	}
@@ -885,9 +896,12 @@ static int
 nfsd(void *vrqstp)
 {
 	struct svc_rqst *rqstp = (struct svc_rqst *) vrqstp;
+	struct svc_pool *pool = rqstp->rq_pool;
 	struct svc_xprt *perm_sock = list_entry(rqstp->rq_server->sv_permsocks.next, typeof(struct svc_xprt), xpt_list);
 	struct net *net = perm_sock->xpt_net;
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+	struct nfsd_thread_local_info ntli = { };
+	bool have_mutex = false;
 
 	/* At this point, the thread shares current->fs
 	 * with the init process. We need to create files with the
@@ -901,11 +915,52 @@ nfsd(void *vrqstp)
 
 	set_freezable();
 
+	/* use dynamic allocation if ntli should ever become large */
+	static_assert(sizeof(struct nfsd_thread_local_info) < 256);
+	rqstp->rq_private = &ntli;
+
 	/*
 	 * The main request loop
 	 */
 	while (!svc_thread_should_stop(rqstp)) {
-		svc_recv(rqstp);
+		switch (svc_recv(rqstp, 5 * HZ)) {
+		case -ETIMEDOUT:
+			/* No work arrived within the timeout window */
+			if (mutex_trylock(&nfsd_mutex)) {
+				if (pool->sp_nrthreads > pool->sp_nrthrmin) {
+					trace_nfsd_dynthread_kill(net, pool);
+					set_bit(RQ_VICTIM, &rqstp->rq_flags);
+					have_mutex = true;
+				} else {
+					mutex_unlock(&nfsd_mutex);
+				}
+			} else {
+				trace_nfsd_dynthread_trylock_fail(net, pool);
+			}
+			break;
+		case -EBUSY:
+			/* No idle threads; consider spawning another */
+			if (pool->sp_nrthreads < pool->sp_nrthrmax) {
+				if (mutex_trylock(&nfsd_mutex)) {
+					if (pool->sp_nrthreads < pool->sp_nrthrmax) {
+						int ret;
+
+						trace_nfsd_dynthread_start(net, pool);
+						ret = svc_new_thread(rqstp->rq_server, pool);
+						if (ret)
+							pr_notice_ratelimited("%s: unable to spawn new thread: %d\n",
+									      __func__, ret);
+					}
+					mutex_unlock(&nfsd_mutex);
+				} else {
+					trace_nfsd_dynthread_trylock_fail(net, pool);
+				}
+			}
+			clear_bit(SP_TASK_STARTING, &pool->sp_flags);
+			break;
+		default:
+			break;
+		}
 		nfsd_file_net_dispose(nn);
 	}
 
@@ -913,6 +968,8 @@ nfsd(void *vrqstp)
 
 	/* Release the thread */
 	svc_exit_thread(rqstp);
+	if (have_mutex)
+		mutex_unlock(&nfsd_mutex);
 	return 0;
 }
 
@@ -928,6 +985,7 @@ nfsd(void *vrqstp)
  */
 int nfsd_dispatch(struct svc_rqst *rqstp)
 {
+	struct nfsd_thread_local_info *ntli = rqstp->rq_private;
 	const struct svc_procedure *proc = rqstp->rq_procinfo;
 	__be32 *statp = rqstp->rq_accept_statp;
 	struct nfsd_cacherep *rp;
@@ -938,7 +996,7 @@ int nfsd_dispatch(struct svc_rqst *rqstp)
 	 * Give the xdr decoder a chance to change this if it wants
 	 * (necessary in the NFSv4.0 compound case)
 	 */
-	rqstp->rq_cachetype = proc->pc_cachetype;
+	ntli->ntli_cachetype = proc->pc_cachetype;
 
 	/*
 	 * ->pc_decode advances the argument stream past the NFS
@@ -983,7 +1041,7 @@ int nfsd_dispatch(struct svc_rqst *rqstp)
 	 */
 	smp_store_release(&rqstp->rq_status_counter, rqstp->rq_status_counter + 1);
 
-	nfsd_cache_update(rqstp, rp, rqstp->rq_cachetype, nfs_reply);
+	nfsd_cache_update(rqstp, rp, ntli->ntli_cachetype, nfs_reply);
 out_cached_reply:
 	return 1;
 
