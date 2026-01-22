@@ -2838,8 +2838,8 @@ int btrfs_finish_extent_commit(struct btrfs_trans_handle *trans)
 		struct extent_state *next_state;
 
 		if (btrfs_test_opt(fs_info, DISCARD_SYNC))
-			ret = btrfs_discard_extent(fs_info, start,
-						   end + 1 - start, NULL);
+			btrfs_discard_extent(fs_info, start,
+					     end + 1 - start, NULL);
 
 		next_state = btrfs_next_extent_state(unpin, cached_state);
 		btrfs_clear_extent_dirty(unpin, start, end, &cached_state);
