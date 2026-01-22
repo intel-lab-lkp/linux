@@ -408,6 +408,61 @@ out:
 	return rc;
 }
 
+static int sja1105_regmap_bus_reg_read(void *ctx, unsigned int reg,
+				       unsigned int *val)
+{
+	struct sja1105_private *priv = ctx;
+	u32 tmp;
+	int rc;
+
+	rc = sja1105_xfer_u32(priv, SPI_READ, SJA1110_SPI_ADDR(reg), &tmp,
+			      NULL);
+	if (rc)
+		return rc;
+
+	*val = tmp;
+
+	return 0;
+}
+
+static int sja1105_regmap_bus_reg_write(void *ctx, unsigned int reg,
+					unsigned int val)
+{
+	struct sja1105_private *priv = ctx;
+	u32 tmp = val;
+
+	return sja1105_xfer_u32(priv, SPI_WRITE, SJA1110_SPI_ADDR(reg), &tmp,
+				NULL);
+}
+
+/* The primary purpose of this is to pass it to child devices,
+ * not to abstract SPI access for the main driver.
+ */
+int devm_sja1105_create_regmap(struct sja1105_private *priv)
+{
+	static const struct regmap_bus sja1105_regmap_bus = {
+		.reg_read = sja1105_regmap_bus_reg_read,
+		.reg_write = sja1105_regmap_bus_reg_write,
+		.reg_format_endian_default = REGMAP_ENDIAN_NATIVE,
+		.val_format_endian_default = REGMAP_ENDIAN_NATIVE,
+	};
+	static const struct regmap_config regmap_config = {
+		.name = "regs",
+		.reg_bits = 32,
+		.val_bits = 32,
+		.reg_stride = 4,
+	};
+	struct device *dev = &priv->spidev->dev;
+	struct regmap *regmap;
+
+	regmap = devm_regmap_init(dev, &sja1105_regmap_bus, priv,
+				  &regmap_config);
+	if (IS_ERR(regmap))
+		return PTR_ERR(regmap);
+
+	return 0;
+}
+
 static const struct sja1105_regs sja1105et_regs = {
 	.device_id = 0x0,
 	.prod_id = 0x100BC3,

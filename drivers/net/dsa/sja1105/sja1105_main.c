@@ -3291,6 +3291,12 @@ static int sja1105_probe(struct spi_device *spi)
 
 	priv->info = of_device_get_match_data(dev);
 
+	rc = devm_sja1105_create_regmap(priv);
+	if (rc < 0) {
+		dev_err(dev, "Failed to create regmap: %pe\n", ERR_PTR(rc));
+		return rc;
+	}
+
 	/* Detect hardware device */
 	rc = sja1105_check_device_id(priv);
 	if (rc < 0) {
