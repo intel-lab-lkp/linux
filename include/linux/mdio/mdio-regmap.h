@@ -11,10 +11,12 @@
 
 struct device;
 struct regmap;
+struct resource;
 
 struct mdio_regmap_config {
 	struct device *parent;
 	struct regmap *regmap;
+	const struct resource *resource;
 	char name[MII_BUS_ID_SIZE];
 	u8 valid_addr;
 	bool autoscan;
