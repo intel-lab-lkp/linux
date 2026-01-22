@@ -30,7 +30,7 @@
 
 #define DEFAULT_CMA_NAME "default_cma_region"
 
-static struct cma *dma_areas[MAX_CMA_AREAS] __initdata;
+static struct cma *dma_areas[MAX_EARLY_CMA_AREAS] __initdata;
 static unsigned int dma_areas_num __initdata;
 
 int __init dma_heap_cma_register_heap(struct cma *cma)
