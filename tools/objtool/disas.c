@@ -262,7 +262,7 @@ static void disas_print_addr_reloc(bfd_vma addr, struct disassemble_info *dinfo)
 	 * If the relocation symbol is a section name (for example ".bss")
 	 * then we try to further resolve the name.
 	 */
-	if (reloc->sym->type == STT_SECTION) {
+	if (is_sec_sym(reloc->sym)) {
 		str = offstr(reloc->sym->sec, reloc->sym->offset + offset);
 		DINFO_FPRINTF(dinfo, "0x%lx <%s>", addr, str);
 		free(str);
@@ -578,7 +578,7 @@ static size_t disas_insn_common(struct disas_context *dctx,
 	 */
 	dinfo->buffer = insn->sec->data->d_buf;
 	dinfo->buffer_vma = 0;
-	dinfo->buffer_length = insn->sec->sh.sh_size;
+	dinfo->buffer_length = sec_size(insn->sec);
 
 	return disasm(insn->offset, &dctx->info);
 }
@@ -1229,7 +1229,7 @@ void disas_funcs(struct disas_context *dctx)
 
 	for_each_sec(dctx->file->elf, sec) {
 
-		if (!(sec->sh.sh_flags & SHF_EXECINSTR))
+		if (!is_text_sec(sec))
 			continue;
 
 		sec_for_each_sym(sec, sym) {
