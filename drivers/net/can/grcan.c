@@ -194,9 +194,6 @@ struct grcan_registers {
 #define GRCAN_MSG_OFF		0x00000002
 #define GRCAN_MSG_PASS		0x00000001
 
-#define GRCAN_MSG_DATA_SLOT_INDEX(i) (2 + (i) / 4)
-#define GRCAN_MSG_DATA_SHIFT(i) ((3 - (i) % 4) * 8)
-
 #define GRCAN_BUFFER_ALIGNMENT		1024
 #define GRCAN_DEFAULT_BUFFER_SIZE	1024
 #define GRCAN_VALID_TR_SIZE_MASK	0x001fffc0
@@ -1218,7 +1215,7 @@ static int grcan_receive(struct net_device *dev, int budget)
 	struct sk_buff *skb;
 	u32 wr, rd, startrd;
 	u32 *slot;
-	u32 i, rtr, eff, j, shift;
+	u32 rtr, eff;
 	int work_done = 0;
 
 	rd = grcan_read_reg(&regs->rxrd);
@@ -1254,11 +1251,10 @@ static int grcan_receive(struct net_device *dev, int budget)
 		if (rtr) {
 			cf->can_id |= CAN_RTR_FLAG;
 		} else {
-			for (i = 0; i < cf->len; i++) {
-				j = GRCAN_MSG_DATA_SLOT_INDEX(i);
-				shift = GRCAN_MSG_DATA_SHIFT(i);
-				cf->data[i] = (u8)(slot[j] >> shift);
-			}
+			if (cf->can_dlc > 0)
+				memcpy(cf->data, &slot[2], sizeof(u32));
+			if (cf->can_dlc > 4)
+				memcpy(cf->data + 4, &slot[3], sizeof(u32));
 
 			stats->rx_bytes += cf->len;
 		}
@@ -1397,8 +1393,7 @@ static netdev_tx_t grcan_start_xmit(struct sk_buff *skb,
 	u32 id, txwr, txrd, space, txctrl;
 	int slotindex;
 	u32 *slot;
-	u32 i, rtr, eff, dlc, tmp, err;
-	int j, shift;
+	u32 rtr, eff, dlc, tmp, err;
 	unsigned long flags;
 	u32 oneshotmode = priv->can.ctrlmode & CAN_CTRLMODE_ONE_SHOT;
 
@@ -1451,11 +1446,10 @@ static netdev_tx_t grcan_start_xmit(struct sk_buff *skb,
 	slot[1] = ((dlc << GRCAN_MSG_DLC_BIT) & GRCAN_MSG_DLC);
 	slot[2] = 0;
 	slot[3] = 0;
-	for (i = 0; i < dlc; i++) {
-		j = GRCAN_MSG_DATA_SLOT_INDEX(i);
-		shift = GRCAN_MSG_DATA_SHIFT(i);
-		slot[j] |= cf->data[i] << shift;
-	}
+	if (dlc > 0)
+		memcpy(&slot[2], cf->data, sizeof(u32));
+	if (dlc > 4)
+		memcpy(&slot[3], cf->data + 4, sizeof(u32));
 
 	/* Checking that channel has not been disabled. These cases
 	 * should never happen
