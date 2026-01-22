@@ -381,7 +381,7 @@ struct receive_queue {
 	struct xdp_buff **xsk_buffs;
 };
 
-#define VIRTIO_NET_RSS_MAX_KEY_SIZE     40
+#define VIRTIO_NET_RSS_MAX_KEY_SIZE     52
 
 /* Control VQ buffers: protected by the rtnl lock */
 struct control_buf {
