@@ -5491,8 +5491,10 @@ static int bnxt_alloc_mem(struct bnxt *bp, bool irq_re_init)
 		bp->rx_ring = kcalloc(bp->rx_nr_rings,
 				      sizeof(struct bnxt_rx_ring_info),
 				      GFP_KERNEL);
-		if (!bp->rx_ring)
-			return -ENOMEM;
+		if (!bp->rx_ring) {
+			rc = -ENOMEM;
+			goto alloc_mem_err;
+		}
 
 		for (i = 0; i < bp->rx_nr_rings; i++) {
 			struct bnxt_rx_ring_info *rxr = &bp->rx_ring[i];
@@ -5512,14 +5514,18 @@ static int bnxt_alloc_mem(struct bnxt *bp, bool irq_re_init)
 		bp->tx_ring = kcalloc(bp->tx_nr_rings,
 				      sizeof(struct bnxt_tx_ring_info),
 				      GFP_KERNEL);
-		if (!bp->tx_ring)
-			return -ENOMEM;
+		if (!bp->tx_ring) {
+			rc = -ENOMEM;
+			goto alloc_mem_err;
+		}
 
 		bp->tx_ring_map = kcalloc(bp->tx_nr_rings, sizeof(u16),
 					  GFP_KERNEL);
 
-		if (!bp->tx_ring_map)
-			return -ENOMEM;
+		if (!bp->tx_ring_map) {
+			rc = -ENOMEM;
+			goto alloc_mem_err;
+		}
 
 		if (bp->flags & BNXT_FLAG_SHARED_RINGS)
 			j = 0;
