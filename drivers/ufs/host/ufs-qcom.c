@@ -2070,6 +2070,55 @@ static irqreturn_t ufs_qcom_mcq_esi_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+/**
+ * ufs_qcom_set_esi_affinity - Set CPU affinity hints for ESI interrupts
+ * @hba: UFS host controller instance
+ *
+ * Sets CPU affinity hints for ESI interrupts to distribute them across
+ * online CPUs for better performance in round-robin fashion.
+ */
+static void ufs_qcom_set_esi_affinity(struct ufs_hba *hba)
+{
+	struct msi_desc *desc;
+	int ret, i = 0, nr_irqs = 0;
+	const cpumask_t *mask;
+	int cpu;
+
+	__msi_lock_descs(hba->dev);
+	/* Count the number of MSI descriptors */
+	msi_for_each_desc(desc, hba->dev, MSI_DESC_ALL) {
+		nr_irqs++;
+	}
+	__msi_unlock_descs(hba->dev);
+
+	if (nr_irqs == 0)
+		return;
+
+	__msi_lock_descs(hba->dev);
+	/* Set affinity hints for each interrupt in round-robin fashion */
+	msi_for_each_desc(desc, hba->dev, MSI_DESC_ALL) {
+		if (i >= nr_irqs)
+			break;
+
+		/* Distribute interrupts across online CPUs in round-robin */
+		cpu = cpumask_nth(i % num_online_cpus(), cpu_online_mask);
+		mask = get_cpu_mask(cpu);
+		if (!cpumask_subset(mask, cpu_online_mask)) {
+			dev_err(hba->dev, "Invalid CPU %d in map, using online CPUs\n",
+				cpu);
+			mask = cpu_online_mask;
+		}
+
+		ret = irq_set_affinity_hint(desc->irq, mask);
+		if (ret < 0)
+			dev_err(hba->dev, "Failed to set affinity hint to CPU %d for ESI IRQ %d, err = %d\n",
+				cpu, desc->irq, ret);
+
+		i++;
+	}
+	__msi_unlock_descs(hba->dev);
+}
+
 static int ufs_qcom_config_esi(struct ufs_hba *hba)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
@@ -2122,6 +2171,7 @@ static int ufs_qcom_config_esi(struct ufs_hba *hba)
 			    REG_UFS_CFG3);
 	}
 	ufshcd_mcq_enable_esi(hba);
+	ufs_qcom_set_esi_affinity(hba);
 	host->esi_enabled = true;
 	return 0;
 }
