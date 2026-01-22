@@ -308,6 +308,7 @@ struct ufs_qcom_host {
 	u32 phy_gear;
 
 	bool esi_enabled;
+	u32 spare_cfg;
 };
 
 struct ufs_qcom_drvdata {
