@@ -1088,6 +1088,7 @@ void __init smp_prepare_cpus_common(void)
 
 void __init smp_prepare_boot_cpu(void)
 {
+	x86_smp_ops_static_call_update();
 	smp_ops.smp_prepare_boot_cpu();
 }
 
