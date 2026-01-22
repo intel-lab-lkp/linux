@@ -4,6 +4,9 @@
 #define __MM_MEMCONTROL_V1_H
 
 #include <linux/cgroup-defs.h>
+#include <linux/seq_buf.h>
+#include <linux/seq_file.h>
+#include <linux/sprintf.h>
 
 /* Cgroup v1 and v2 common declarations */
 
@@ -32,6 +35,9 @@ int memory_stat_show(struct seq_file *m, void *v);
 
 void mem_cgroup_id_get_many(struct mem_cgroup *memcg, unsigned int n);
 struct mem_cgroup *mem_cgroup_id_get_online(struct mem_cgroup *memcg);
+
+void memcg_seq_put_name_val(struct seq_file *m, const char *name, u64 val);
+void memcg_seq_buf_put_name_val(struct seq_buf *s, const char *name, u64 val);
 
 /* Cgroup v1-specific declarations */
 #ifdef CONFIG_MEMCG_V1

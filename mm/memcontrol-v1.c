@@ -10,7 +10,7 @@
 #include <linux/poll.h>
 #include <linux/sort.h>
 #include <linux/file.h>
-#include <linux/seq_buf.h>
+#include <linux/string.h>
 
 #include "internal.h"
 #include "swap.h"
@@ -1795,25 +1795,36 @@ static int memcg_numa_stat_show(struct seq_file *m, void *v)
 	mem_cgroup_flush_stats(memcg);
 
 	for (stat = stats; stat < stats + ARRAY_SIZE(stats); stat++) {
-		seq_printf(m, "%s=%lu", stat->name,
-			   mem_cgroup_nr_lru_pages(memcg, stat->lru_mask,
-						   false));
-		for_each_node_state(nid, N_MEMORY)
-			seq_printf(m, " N%d=%lu", nid,
-				   mem_cgroup_node_nr_lru_pages(memcg, nid,
-							stat->lru_mask, false));
+		u64 nr_pages;
+
+		seq_puts(m, stat->name);
+		nr_pages = mem_cgroup_nr_lru_pages(memcg, stat->lru_mask,
+						   false);
+		seq_put_decimal_ull(m, "=", nr_pages);
+		for_each_node_state(nid, N_MEMORY) {
+			nr_pages = mem_cgroup_node_nr_lru_pages(memcg, nid,
+								stat->lru_mask,
+								false);
+			seq_put_decimal_ull(m, " N", nid);
+			seq_put_decimal_ull(m, "=", nr_pages);
+		}
 		seq_putc(m, '\n');
 	}
 
 	for (stat = stats; stat < stats + ARRAY_SIZE(stats); stat++) {
+		u64 nr_pages;
 
-		seq_printf(m, "hierarchical_%s=%lu", stat->name,
-			   mem_cgroup_nr_lru_pages(memcg, stat->lru_mask,
-						   true));
-		for_each_node_state(nid, N_MEMORY)
-			seq_printf(m, " N%d=%lu", nid,
-				   mem_cgroup_node_nr_lru_pages(memcg, nid,
-							stat->lru_mask, true));
+		seq_puts(m, "hierarchical_");
+		seq_puts(m, stat->name);
+		nr_pages = mem_cgroup_nr_lru_pages(memcg, stat->lru_mask, true);
+		seq_put_decimal_ull(m, "=", nr_pages);
+		for_each_node_state(nid, N_MEMORY) {
+			nr_pages = mem_cgroup_node_nr_lru_pages(memcg, nid,
+								stat->lru_mask,
+								true);
+			seq_put_decimal_ull(m, " N", nid);
+			seq_put_decimal_ull(m, "=", nr_pages);
+		}
 		seq_putc(m, '\n');
 	}
 
@@ -1870,6 +1881,7 @@ void memcg1_stat_format(struct mem_cgroup *memcg, struct seq_buf *s)
 	unsigned long memory, memsw;
 	struct mem_cgroup *mi;
 	unsigned int i;
+	u64 memory_limit, memsw_limit;
 
 	BUILD_BUG_ON(ARRAY_SIZE(memcg1_stat_names) != ARRAY_SIZE(memcg1_stats));
 
@@ -1879,17 +1891,24 @@ void memcg1_stat_format(struct mem_cgroup *memcg, struct seq_buf *s)
 		unsigned long nr;
 
 		nr = memcg_page_state_local_output(memcg, memcg1_stats[i]);
-		seq_buf_printf(s, "%s %lu\n", memcg1_stat_names[i], nr);
+		memcg_seq_buf_put_name_val(s, memcg1_stat_names[i], (u64)nr);
 	}
 
-	for (i = 0; i < ARRAY_SIZE(memcg1_events); i++)
-		seq_buf_printf(s, "%s %lu\n", vm_event_name(memcg1_events[i]),
-			       memcg_events_local(memcg, memcg1_events[i]));
+	for (i = 0; i < ARRAY_SIZE(memcg1_events); i++) {
+		u64 events;
 
-	for (i = 0; i < NR_LRU_LISTS; i++)
-		seq_buf_printf(s, "%s %lu\n", lru_list_name(i),
-			       memcg_page_state_local(memcg, NR_LRU_BASE + i) *
-			       PAGE_SIZE);
+		events = memcg_events_local(memcg, memcg1_events[i]);
+		memcg_seq_buf_put_name_val(s, vm_event_name(memcg1_events[i]),
+					   events);
+	}
+
+	for (i = 0; i < NR_LRU_LISTS; i++) {
+		u64 nr_pages;
+
+		nr_pages = memcg_page_state_local(memcg, NR_LRU_BASE + i) *
+			   PAGE_SIZE;
+		memcg_seq_buf_put_name_val(s, lru_list_name(i), nr_pages);
+	}
 
 	/* Hierarchical information */
 	memory = memsw = PAGE_COUNTER_MAX;
@@ -1897,28 +1916,38 @@ void memcg1_stat_format(struct mem_cgroup *memcg, struct seq_buf *s)
 		memory = min(memory, READ_ONCE(mi->memory.max));
 		memsw = min(memsw, READ_ONCE(mi->memsw.max));
 	}
-	seq_buf_printf(s, "hierarchical_memory_limit %llu\n",
-		       (u64)memory * PAGE_SIZE);
-	seq_buf_printf(s, "hierarchical_memsw_limit %llu\n",
-		       (u64)memsw * PAGE_SIZE);
+	memory_limit = (u64)memory * PAGE_SIZE;
+	memsw_limit = (u64)memsw * PAGE_SIZE;
+
+	memcg_seq_buf_put_name_val(s, "hierarchical_memory_limit",
+				   memory_limit);
+	memcg_seq_buf_put_name_val(s, "hierarchical_memsw_limit",
+				   memsw_limit);
 
 	for (i = 0; i < ARRAY_SIZE(memcg1_stats); i++) {
 		unsigned long nr;
 
 		nr = memcg_page_state_output(memcg, memcg1_stats[i]);
-		seq_buf_printf(s, "total_%s %llu\n", memcg1_stat_names[i],
-			       (u64)nr);
+		seq_buf_puts(s, "total_");
+		memcg_seq_buf_put_name_val(s, memcg1_stat_names[i], (u64)nr);
 	}
 
-	for (i = 0; i < ARRAY_SIZE(memcg1_events); i++)
-		seq_buf_printf(s, "total_%s %llu\n",
-			       vm_event_name(memcg1_events[i]),
-			       (u64)memcg_events(memcg, memcg1_events[i]));
+	for (i = 0; i < ARRAY_SIZE(memcg1_events); i++) {
+		u64 events;
 
-	for (i = 0; i < NR_LRU_LISTS; i++)
-		seq_buf_printf(s, "total_%s %llu\n", lru_list_name(i),
-			       (u64)memcg_page_state(memcg, NR_LRU_BASE + i) *
-			       PAGE_SIZE);
+		events = memcg_events(memcg, memcg1_events[i]);
+		seq_buf_puts(s, "total_");
+		memcg_seq_buf_put_name_val(s, vm_event_name(memcg1_events[i]),
+					   events);
+	}
+
+	for (i = 0; i < NR_LRU_LISTS; i++) {
+		u64 nr_pages;
+
+		nr_pages = memcg_page_state(memcg, NR_LRU_BASE + i) * PAGE_SIZE;
+		seq_buf_puts(s, "total_");
+		memcg_seq_buf_put_name_val(s, lru_list_name(i), nr_pages);
+	}
 
 #ifdef CONFIG_DEBUG_VM
 	{
@@ -1933,8 +1962,8 @@ void memcg1_stat_format(struct mem_cgroup *memcg, struct seq_buf *s)
 			anon_cost += mz->lruvec.anon_cost;
 			file_cost += mz->lruvec.file_cost;
 		}
-		seq_buf_printf(s, "anon_cost %lu\n", anon_cost);
-		seq_buf_printf(s, "file_cost %lu\n", file_cost);
+		memcg_seq_buf_put_name_val(s, "anon_cost", (u64)anon_cost);
+		memcg_seq_buf_put_name_val(s, "file_cost", (u64)file_cost);
 	}
 #endif
 }
@@ -1968,11 +1997,14 @@ static int mem_cgroup_swappiness_write(struct cgroup_subsys_state *css,
 static int mem_cgroup_oom_control_read(struct seq_file *sf, void *v)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_seq(sf);
+	u64 oom_kill;
 
-	seq_printf(sf, "oom_kill_disable %d\n", READ_ONCE(memcg->oom_kill_disable));
-	seq_printf(sf, "under_oom %d\n", (bool)memcg->under_oom);
-	seq_printf(sf, "oom_kill %lu\n",
-		   atomic_long_read(&memcg->memory_events[MEMCG_OOM_KILL]));
+	memcg_seq_put_name_val(sf, "oom_kill_disable",
+			       READ_ONCE(memcg->oom_kill_disable));
+	memcg_seq_put_name_val(sf, "under_oom", (bool)memcg->under_oom);
+
+	oom_kill = atomic_long_read(&memcg->memory_events[MEMCG_OOM_KILL]);
+	memcg_seq_put_name_val(sf, "oom_kill", oom_kill);
 	return 0;
 }
 

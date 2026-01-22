@@ -42,6 +42,7 @@
 #include <linux/bit_spinlock.h>
 #include <linux/rcupdate.h>
 #include <linux/limits.h>
+#include <linux/sprintf.h>
 #include <linux/export.h>
 #include <linux/list.h>
 #include <linux/mutex.h>
@@ -1460,9 +1461,70 @@ static bool memcg_accounts_hugetlb(void)
 }
 #endif /* CONFIG_HUGETLB_PAGE */
 
+/* Max 2^64 - 1 = 18446744073709551615 (20 digits) */
+#define MEMCG_DEC_U64_MAX_LEN 20
+
+/**
+ * memcg_seq_put_name_val - Write a name-value pair to a seq_file
+ * @m: The seq_file to write to
+ * @name: The name string (not null-terminated required, uses seq_puts)
+ * @val: The u64 value to write
+ *
+ * This helper formats and writes a "name value\n" line to a seq_file,
+ * commonly used for cgroup statistics output. The value is efficiently
+ * converted to decimal using seq_put_decimal_ull.
+ *
+ * Output format: "<name> <value>\n"
+ * Example: "anon 1048576\n"
+ */
+void memcg_seq_put_name_val(struct seq_file *m, const char *name, u64 val)
+{
+	seq_puts(m, name);
+	/* need a space between name and value */
+	seq_put_decimal_ull(m, " ", val);
+	seq_putc(m, '\n');
+}
+
+/**
+ * memcg_seq_buf_put_name_val - Write a name-value pair to a seq_buf
+ * @s: The seq_buf to write to
+ * @name: The name string to write
+ * @val: The u64 value to write
+ *
+ * This helper formats and writes a "name value\n" line to a seq_buf.
+ * Unlike memcg_seq_put_name_val which uses seq_file's built-in formatting,
+ * this function manually converts the value to a string using num_to_str
+ * and writes it using seq_buf primitives for better performance when
+ * batching multiple writes to a seq_buf.
+ *
+ * The function checks for overflow at each step and returns early if
+ * any operation would cause the buffer to overflow.
+ *
+ * Output format: "<name> <value>\n"
+ * Example: "file 2097152\n"
+ */
+void memcg_seq_buf_put_name_val(struct seq_buf *s, const char *name, u64 val)
+{
+	char num_buf[MEMCG_DEC_U64_MAX_LEN];
+	int num_len;
+
+	num_len = num_to_str(num_buf, sizeof(num_buf), val, 0);
+	if (num_len <= 0)
+		return;
+
+	if (seq_buf_puts(s, name))
+		return;
+	if (seq_buf_putc(s, ' '))
+		return;
+	if (seq_buf_putmem(s, num_buf, num_len))
+		return;
+	seq_buf_putc(s, '\n');
+}
+
 static void memcg_stat_format(struct mem_cgroup *memcg, struct seq_buf *s)
 {
 	int i;
+	u64 pgscan, pgsteal;
 
 	/*
 	 * Provide statistics on the state of the memory subsystem as
@@ -1485,36 +1547,40 @@ static void memcg_stat_format(struct mem_cgroup *memcg, struct seq_buf *s)
 			continue;
 #endif
 		size = memcg_page_state_output(memcg, memory_stats[i].idx);
-		seq_buf_printf(s, "%s %llu\n", memory_stats[i].name, size);
+		memcg_seq_buf_put_name_val(s, memory_stats[i].name, size);
 
 		if (unlikely(memory_stats[i].idx == NR_SLAB_UNRECLAIMABLE_B)) {
 			size += memcg_page_state_output(memcg,
 							NR_SLAB_RECLAIMABLE_B);
-			seq_buf_printf(s, "slab %llu\n", size);
+			memcg_seq_buf_put_name_val(s, "slab", size);
 		}
 	}
 
 	/* Accumulated memory events */
-	seq_buf_printf(s, "pgscan %lu\n",
-		       memcg_events(memcg, PGSCAN_KSWAPD) +
-		       memcg_events(memcg, PGSCAN_DIRECT) +
-		       memcg_events(memcg, PGSCAN_PROACTIVE) +
-		       memcg_events(memcg, PGSCAN_KHUGEPAGED));
-	seq_buf_printf(s, "pgsteal %lu\n",
-		       memcg_events(memcg, PGSTEAL_KSWAPD) +
-		       memcg_events(memcg, PGSTEAL_DIRECT) +
-		       memcg_events(memcg, PGSTEAL_PROACTIVE) +
-		       memcg_events(memcg, PGSTEAL_KHUGEPAGED));
+	pgscan = memcg_events(memcg, PGSCAN_KSWAPD) +
+		 memcg_events(memcg, PGSCAN_DIRECT) +
+		 memcg_events(memcg, PGSCAN_PROACTIVE) +
+		 memcg_events(memcg, PGSCAN_KHUGEPAGED);
+	pgsteal = memcg_events(memcg, PGSTEAL_KSWAPD) +
+		  memcg_events(memcg, PGSTEAL_DIRECT) +
+		  memcg_events(memcg, PGSTEAL_PROACTIVE) +
+		  memcg_events(memcg, PGSTEAL_KHUGEPAGED);
+
+	memcg_seq_buf_put_name_val(s, "pgscan", pgscan);
+	memcg_seq_buf_put_name_val(s, "pgsteal", pgsteal);
 
 	for (i = 0; i < ARRAY_SIZE(memcg_vm_event_stat); i++) {
+		u64 events;
+
 #ifdef CONFIG_MEMCG_V1
 		if (memcg_vm_event_stat[i] == PGPGIN ||
 		    memcg_vm_event_stat[i] == PGPGOUT)
 			continue;
 #endif
-		seq_buf_printf(s, "%s %lu\n",
-			       vm_event_name(memcg_vm_event_stat[i]),
-			       memcg_events(memcg, memcg_vm_event_stat[i]));
+		events = memcg_events(memcg, memcg_vm_event_stat[i]);
+		memcg_seq_buf_put_name_val(s,
+					   vm_event_name(memcg_vm_event_stat[i]),
+					   events);
 	}
 }
 
@@ -4218,10 +4284,12 @@ static void mem_cgroup_attach(struct cgroup_taskset *tset)
 
 static int seq_puts_memcg_tunable(struct seq_file *m, unsigned long value)
 {
-	if (value == PAGE_COUNTER_MAX)
+	if (value == PAGE_COUNTER_MAX) {
 		seq_puts(m, "max\n");
-	else
-		seq_printf(m, "%llu\n", (u64)value * PAGE_SIZE);
+	} else {
+		seq_put_decimal_ull(m, "", (u64)value * PAGE_SIZE);
+		seq_putc(m, '\n');
+	}
 
 	return 0;
 }
@@ -4247,7 +4315,8 @@ static int peak_show(struct seq_file *sf, void *v, struct page_counter *pc)
 	else
 		peak = max(fd_peak, READ_ONCE(pc->local_watermark));
 
-	seq_printf(sf, "%llu\n", peak * PAGE_SIZE);
+	seq_put_decimal_ull(sf, "", peak * PAGE_SIZE);
+	seq_putc(sf, '\n');
 	return 0;
 }
 
@@ -4480,16 +4549,24 @@ out:
  */
 static void __memory_events_show(struct seq_file *m, atomic_long_t *events)
 {
-	seq_printf(m, "low %lu\n", atomic_long_read(&events[MEMCG_LOW]));
-	seq_printf(m, "high %lu\n", atomic_long_read(&events[MEMCG_HIGH]));
-	seq_printf(m, "max %lu\n", atomic_long_read(&events[MEMCG_MAX]));
-	seq_printf(m, "oom %lu\n", atomic_long_read(&events[MEMCG_OOM]));
-	seq_printf(m, "oom_kill %lu\n",
-		   atomic_long_read(&events[MEMCG_OOM_KILL]));
-	seq_printf(m, "oom_group_kill %lu\n",
-		   atomic_long_read(&events[MEMCG_OOM_GROUP_KILL]));
-	seq_printf(m, "sock_throttled %lu\n",
-		   atomic_long_read(&events[MEMCG_SOCK_THROTTLED]));
+	u64 low, high, max, oom, oom_kill;
+	u64 oom_group_kill, sock_throttled;
+
+	low = atomic_long_read(&events[MEMCG_LOW]);
+	high = atomic_long_read(&events[MEMCG_HIGH]);
+	max = atomic_long_read(&events[MEMCG_MAX]);
+	oom = atomic_long_read(&events[MEMCG_OOM]);
+	oom_kill = atomic_long_read(&events[MEMCG_OOM_KILL]);
+	oom_group_kill = atomic_long_read(&events[MEMCG_OOM_GROUP_KILL]);
+	sock_throttled = atomic_long_read(&events[MEMCG_SOCK_THROTTLED]);
+
+	memcg_seq_put_name_val(m, "low", low);
+	memcg_seq_put_name_val(m, "high", high);
+	memcg_seq_put_name_val(m, "max", max);
+	memcg_seq_put_name_val(m, "oom", oom);
+	memcg_seq_put_name_val(m, "oom_kill", oom_kill);
+	memcg_seq_put_name_val(m, "oom_group_kill", oom_group_kill);
+	memcg_seq_put_name_val(m, "sock_throttled", sock_throttled);
 }
 
 static int memory_events_show(struct seq_file *m, void *v)
@@ -4544,7 +4621,7 @@ static int memory_numa_stat_show(struct seq_file *m, void *v)
 		if (memory_stats[i].idx >= NR_VM_NODE_STAT_ITEMS)
 			continue;
 
-		seq_printf(m, "%s", memory_stats[i].name);
+		seq_puts(m, memory_stats[i].name);
 		for_each_node_state(nid, N_MEMORY) {
 			u64 size;
 			struct lruvec *lruvec;
@@ -4552,7 +4629,10 @@ static int memory_numa_stat_show(struct seq_file *m, void *v)
 			lruvec = mem_cgroup_lruvec(memcg, NODE_DATA(nid));
 			size = lruvec_page_state_output(lruvec,
 							memory_stats[i].idx);
-			seq_printf(m, " N%d=%llu", nid, size);
+
+			seq_put_decimal_ull(m, " N", nid);
+			seq_putc(m, '=');
+			seq_put_decimal_ull(m, "", size);
 		}
 		seq_putc(m, '\n');
 	}
@@ -4565,7 +4645,8 @@ static int memory_oom_group_show(struct seq_file *m, void *v)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
 
-	seq_printf(m, "%d\n", READ_ONCE(memcg->oom_group));
+	seq_put_decimal_ll(m, "", READ_ONCE(memcg->oom_group));
+	seq_putc(m, '\n');
 
 	return 0;
 }
@@ -5372,13 +5453,15 @@ static ssize_t swap_max_write(struct kernfs_open_file *of,
 static int swap_events_show(struct seq_file *m, void *v)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
+	u64 swap_high, swap_max, swap_fail;
 
-	seq_printf(m, "high %lu\n",
-		   atomic_long_read(&memcg->memory_events[MEMCG_SWAP_HIGH]));
-	seq_printf(m, "max %lu\n",
-		   atomic_long_read(&memcg->memory_events[MEMCG_SWAP_MAX]));
-	seq_printf(m, "fail %lu\n",
-		   atomic_long_read(&memcg->memory_events[MEMCG_SWAP_FAIL]));
+	swap_high = atomic_long_read(&memcg->memory_events[MEMCG_SWAP_HIGH]);
+	swap_max = atomic_long_read(&memcg->memory_events[MEMCG_SWAP_MAX]);
+	swap_fail = atomic_long_read(&memcg->memory_events[MEMCG_SWAP_FAIL]);
+
+	memcg_seq_put_name_val(m, "high", swap_high);
+	memcg_seq_put_name_val(m, "max", swap_max);
+	memcg_seq_put_name_val(m, "fail", swap_fail);
 
 	return 0;
 }
@@ -5564,7 +5647,8 @@ static int zswap_writeback_show(struct seq_file *m, void *v)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
 
-	seq_printf(m, "%d\n", READ_ONCE(memcg->zswap_writeback));
+	seq_put_decimal_ll(m, "", READ_ONCE(memcg->zswap_writeback));
+	seq_putc(m, '\n');
 	return 0;
 }
 
