@@ -226,6 +226,7 @@ int ext4_mpage_readpages(struct inode *inode,
 	unsigned relative_block = 0;
 	struct ext4_map_blocks map;
 	unsigned int nr_pages, folio_pages;
+	bool first_folio = true;
 
 	map.m_pblk = 0;
 	map.m_lblk = 0;
@@ -240,6 +241,12 @@ int ext4_mpage_readpages(struct inode *inode,
 
 		if (rac)
 			folio = readahead_folio(rac);
+
+		if (first_folio) {
+			if (ext4_need_verity(inode, folio->index))
+				fsverity_readahead(folio, nr_pages);
+			first_folio = false;
+		}
 
 		folio_pages = folio_nr_pages(folio);
 		prefetchw(&folio->flags);

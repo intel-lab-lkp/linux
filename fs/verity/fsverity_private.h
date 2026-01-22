@@ -159,6 +159,8 @@ static inline void fsverity_init_signature(void)
 
 /* verify.c */
 
+void __fsverity_readahead(struct inode *inode, const struct fsverity_info *vi,
+		loff_t data_start_pos, unsigned long nr_pages);
 void __init fsverity_init_workqueue(void);
 
 #endif /* _FSVERITY_PRIVATE_H */
