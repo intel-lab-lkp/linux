@@ -296,17 +296,9 @@ static struct attribute *pci_drv_attrs[] = {
 };
 ATTRIBUTE_GROUPS(pci_drv);
 
-struct drv_dev_and_id {
-	struct pci_driver *drv;
-	struct pci_dev *dev;
-	const struct pci_device_id *id;
-};
-
-static int local_pci_probe(struct drv_dev_and_id *ddi)
+static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
+			  const struct pci_device_id *id)
 {
-	struct pci_dev *pci_dev = ddi->dev;
-	struct pci_driver *pci_drv = ddi->drv;
-	struct device *dev = &pci_dev->dev;
 	int rc;
 
 	/*
@@ -318,111 +310,23 @@ static int local_pci_probe(struct drv_dev_and_id *ddi)
 	 * count, in its probe routine and pm_runtime_get_noresume() in
 	 * its remove routine.
 	 */
-	pm_runtime_get_sync(dev);
-	pci_dev->driver = pci_drv;
-	rc = pci_drv->probe(pci_dev, ddi->id);
+	pm_runtime_get_sync(&dev->dev);
+	dev->driver = drv;
+	rc = drv->probe(dev, id);
 	if (!rc)
 		return rc;
 	if (rc < 0) {
-		pci_dev->driver = NULL;
-		pm_runtime_put_sync(dev);
+		dev->driver = NULL;
+		pm_runtime_put_sync(&dev->dev);
 		return rc;
 	}
 	/*
 	 * Probe function should return < 0 for failure, 0 for success
 	 * Treat values > 0 as success, but warn.
 	 */
-	pci_warn(pci_dev, "Driver probe function unexpectedly returned %d\n",
+	pci_warn(dev, "Driver probe function unexpectedly returned %d\n",
 		 rc);
 	return 0;
-}
-
-static struct workqueue_struct *pci_probe_wq;
-
-struct pci_probe_arg {
-	struct drv_dev_and_id *ddi;
-	struct work_struct work;
-	int ret;
-};
-
-static void local_pci_probe_callback(struct work_struct *work)
-{
-	struct pci_probe_arg *arg = container_of(work, struct pci_probe_arg, work);
-
-	arg->ret = local_pci_probe(arg->ddi);
-}
-
-static bool pci_physfn_is_probed(struct pci_dev *dev)
-{
-#ifdef CONFIG_PCI_IOV
-	return dev->is_virtfn && dev->physfn->is_probed;
-#else
-	return false;
-#endif
-}
-
-static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
-			  const struct pci_device_id *id)
-{
-	int error, node, cpu;
-	struct drv_dev_and_id ddi = { drv, dev, id };
-
-	/*
-	 * Execute driver initialization on node where the device is
-	 * attached.  This way the driver likely allocates its local memory
-	 * on the right node.
-	 */
-	node = dev_to_node(&dev->dev);
-	dev->is_probed = 1;
-
-	cpu_hotplug_disable();
-	/*
-	 * Prevent nesting work_on_cpu() for the case where a Virtual Function
-	 * device is probed from work_on_cpu() of the Physical device.
-	 */
-	if (node < 0 || node >= MAX_NUMNODES || !node_online(node) ||
-	    pci_physfn_is_probed(dev)) {
-		error = local_pci_probe(&ddi);
-	} else {
-		struct pci_probe_arg arg = { .ddi = &ddi };
-
-		INIT_WORK_ONSTACK(&arg.work, local_pci_probe_callback);
-		/*
-		 * The target election and the enqueue of the work must be within
-		 * the same RCU read side section so that when the workqueue pool
-		 * is flushed after a housekeeping cpumask update, further readers
-		 * are guaranteed to queue the probing work to the appropriate
-		 * targets.
-		 */
-		rcu_read_lock();
-		cpu = cpumask_any_and(cpumask_of_node(node),
-				      housekeeping_cpumask(HK_TYPE_DOMAIN));
-
-		if (cpu < nr_cpu_ids) {
-			struct workqueue_struct *wq = pci_probe_wq;
-
-			if (WARN_ON_ONCE(!wq))
-				wq = system_percpu_wq;
-			queue_work_on(cpu, wq, &arg.work);
-			rcu_read_unlock();
-			flush_work(&arg.work);
-			error = arg.ret;
-		} else {
-			rcu_read_unlock();
-			error = local_pci_probe(&ddi);
-		}
-
-		destroy_work_on_stack(&arg.work);
-	}
-
-	dev->is_probed = 0;
-	cpu_hotplug_enable();
-	return error;
-}
-
-void pci_probe_flush_workqueue(void)
-{
-	flush_workqueue(pci_probe_wq);
 }
 
 /**
@@ -1733,10 +1637,6 @@ EXPORT_SYMBOL(pci_bus_type);
 static int __init pci_driver_init(void)
 {
 	int ret;
-
-	pci_probe_wq = alloc_workqueue("sync_wq", WQ_PERCPU, 0);
-	if (!pci_probe_wq)
-		return -ENOMEM;
 
 	ret = bus_register(&pci_bus_type);
 	if (ret)

@@ -8,7 +8,6 @@
  *
  */
 #include <linux/sched/isolation.h>
-#include <linux/pci.h>
 #include "sched.h"
 
 enum hk_flags {
@@ -144,7 +143,6 @@ int housekeeping_update(struct cpumask *isol_mask)
 
 	synchronize_rcu();
 
-	pci_probe_flush_workqueue();
 	mem_cgroup_flush_workqueue();
 	vmstat_flush_workqueue();
 
