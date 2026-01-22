@@ -162,6 +162,36 @@ config TOUCHSCREEN_AUO_PIXCIR
 	  To compile this driver as a module, choose M here: the
 	  module will be called auo-pixcir-ts.
 
+config TOUCHSCREEN_AXIOM_CORE
+	tristate "TouchNetix Axiom touchscreen"
+	help
+	  Say Y here if you have an Axiom touchscreen connected
+	  to your system. You will also need to select appropriate
+	  bus connection below.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called axiom_core.
+
+config TOUCHSCREEN_AXIOM_I2C
+	tristate "support I2C bus connection"
+	depends on TOUCHSCREEN_AXIOM_CORE && I2C
+	help
+	  Say Y here if the touchscreen is connected via I2C bus.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called axiom_spi.
+
+config TOUCHSCREEN_AXIOM_SPI
+	tristate "support SPI bus connection"
+	depends on TOUCHSCREEN_AXIOM_CORE && SPI
+	help
+	  Say Y here if the touchscreen is connected via SPI bus.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called axiom_spi.
+
 config TOUCHSCREEN_BU21013
 	tristate "BU21013 based touch panel controllers"
 	depends on I2C
