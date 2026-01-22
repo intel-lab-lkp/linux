@@ -7,6 +7,7 @@ tristate "NXP SJA1105 Ethernet switch family support"
 	select PCS_XPCS
 	select PACKING
 	select CRC32
+	select OF_DYNAMIC
 	help
 	  This is the driver for the NXP SJA1105 (5-port) and SJA1110 (10-port)
 	  automotive Ethernet switch family. These are managed over an SPI

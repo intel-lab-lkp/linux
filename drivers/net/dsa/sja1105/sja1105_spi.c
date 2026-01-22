@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
-/* Copyright 2016-2018 NXP
+/* Copyright 2016-2018, 2026 NXP
  * Copyright (c) 2018, Sensor-Technik Wiedemann GmbH
  * Copyright (c) 2018-2019, Vladimir Oltean <olteanv@gmail.com>
  */
+#include <linux/phy/phy-common-props.h>
 #include <linux/spi/spi.h>
 #include <linux/packing.h>
 #include "sja1105.h"
@@ -619,6 +620,28 @@ static const struct sja1105_regs sja1110_regs = {
 		     SJA1105_RSV_ADDR, SJA1105_RSV_ADDR, SJA1105_RSV_ADDR},
 };
 
+/* See port compatibility matrix in Documentation/networking/dsa/sja1105.rst */
+static const struct sja1105_pcs_resource sja1105rs_pcs_resources[] = {
+	{ DEFINE_RES_REG_NAMED(0x0, 0x800000, "direct"), 4,
+	  PHY_POL_INVERT, "nxp,sja1105-pcs"
+	},
+};
+
+static const struct sja1105_pcs_resource sja1110_pcs_resources[] = {
+	{ DEFINE_RES_REG_NAMED(0x705000, 0x1000, "indirect"), 1,
+	  PHY_POL_NORMAL, "nxp,sja1110-pcs"
+	},
+	{ DEFINE_RES_REG_NAMED(0x706000, 0x1000, "indirect"), 2,
+	  PHY_POL_NORMAL, "nxp,sja1110-pcs"
+	},
+	{ DEFINE_RES_REG_NAMED(0x707000, 0x1000, "indirect"), 3,
+	  PHY_POL_NORMAL, "nxp,sja1110-pcs"
+	},
+	{ DEFINE_RES_REG_NAMED(0x708000, 0x1000, "indirect"), 4,
+	  PHY_POL_NORMAL, "nxp,sja1110-pcs"
+	},
+};
+
 const struct sja1105_info sja1105e_info = {
 	.device_id		= SJA1105E_DEVICE_ID,
 	.part_no		= SJA1105ET_PART_NO,
@@ -782,6 +805,8 @@ const struct sja1105_info sja1105r_info = {
 	.supports_rmii		= {true, true, true, true, true},
 	.supports_rgmii		= {true, true, true, true, true},
 	.supports_sgmii		= {false, false, false, false, true},
+	.pcs_resources		= sja1105rs_pcs_resources,
+	.num_pcs_resources	= ARRAY_SIZE(sja1105rs_pcs_resources),
 	.name			= "SJA1105R",
 };
 
@@ -818,6 +843,8 @@ const struct sja1105_info sja1105s_info = {
 	.supports_rmii		= {true, true, true, true, true},
 	.supports_rgmii		= {true, true, true, true, true},
 	.supports_sgmii		= {false, false, false, false, true},
+	.pcs_resources		= sja1105rs_pcs_resources,
+	.num_pcs_resources	= ARRAY_SIZE(sja1105rs_pcs_resources),
 	.name			= "SJA1105S",
 };
 
@@ -869,6 +896,8 @@ const struct sja1105_info sja1110a_info = {
 				   SJA1105_PHY_BASE_T1, SJA1105_PHY_BASE_T1,
 				   SJA1105_PHY_BASE_T1, SJA1105_PHY_BASE_T1,
 				   SJA1105_PHY_BASE_T1},
+	.pcs_resources		= sja1110_pcs_resources,
+	.num_pcs_resources	= ARRAY_SIZE(sja1110_pcs_resources),
 	.name			= "SJA1110A",
 };
 
@@ -920,6 +949,8 @@ const struct sja1105_info sja1110b_info = {
 				   SJA1105_PHY_BASE_T1, SJA1105_PHY_BASE_T1,
 				   SJA1105_PHY_BASE_T1, SJA1105_PHY_BASE_T1,
 				   SJA1105_NO_PHY},
+	.pcs_resources		= &sja1110_pcs_resources[2], /* ports 3 and 4 */
+	.num_pcs_resources	= ARRAY_SIZE(sja1110_pcs_resources) - 2,
 	.name			= "SJA1110B",
 };
 
@@ -971,6 +1002,8 @@ const struct sja1105_info sja1110c_info = {
 				   SJA1105_PHY_BASE_T1, SJA1105_PHY_BASE_T1,
 				   SJA1105_NO_PHY, SJA1105_NO_PHY,
 				   SJA1105_NO_PHY},
+	.pcs_resources		= &sja1110_pcs_resources[3], /* port 4 */
+	.num_pcs_resources	= ARRAY_SIZE(sja1110_pcs_resources) - 3,
 	.name			= "SJA1110C",
 };
 
@@ -1022,5 +1055,7 @@ const struct sja1105_info sja1110d_info = {
 				   SJA1105_PHY_BASE_T1, SJA1105_PHY_BASE_T1,
 				   SJA1105_NO_PHY, SJA1105_NO_PHY,
 				   SJA1105_NO_PHY},
+	.pcs_resources		= sja1110_pcs_resources,
+	.num_pcs_resources	= ARRAY_SIZE(sja1110_pcs_resources),
 	.name			= "SJA1110D",
 };

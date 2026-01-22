@@ -113,6 +113,13 @@ enum sja1105_internal_phy_t {
 	SJA1105_PHY_BASE_T1,
 };
 
+struct sja1105_pcs_resource {
+	struct resource res;
+	int port;
+	u32 tx_polarity;
+	const char *compatible;
+};
+
 struct sja1105_info {
 	u64 device_id;
 	/* Needed for distinction between P and R, and between Q and S
@@ -165,6 +172,8 @@ struct sja1105_info {
 	bool supports_2500basex[SJA1105_MAX_NUM_PORTS];
 	enum sja1105_internal_phy_t internal_phy[SJA1105_MAX_NUM_PORTS];
 	const u64 port_speed[SJA1105_SPEED_MAX];
+	const struct sja1105_pcs_resource *pcs_resources;
+	size_t num_pcs_resources;
 };
 
 enum sja1105_key_type {
@@ -278,6 +287,8 @@ struct sja1105_private {
 	struct sja1105_cbs_entry *cbs;
 	struct mii_bus *mdio_pcs;
 	struct phylink_pcs *pcs[SJA1105_MAX_NUM_PORTS];
+	struct fwnode_handle *pcs_fwnode[SJA1105_MAX_NUM_PORTS];
+	struct of_changeset of_cs;
 	struct sja1105_ptp_data ptp_data;
 	struct sja1105_tas_data tas_data;
 };

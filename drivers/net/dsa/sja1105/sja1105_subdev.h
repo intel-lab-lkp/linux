@@ -5,5 +5,6 @@
 #define _SJA1105_SUBDEV_H
 
 int devm_sja1105_add_subdevs(struct dsa_switch *ds);
+int devm_sja1105_fill_device_tree(struct dsa_switch *ds);
 
 #endif

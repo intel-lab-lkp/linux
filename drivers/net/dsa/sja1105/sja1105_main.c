@@ -3330,6 +3330,13 @@ static int sja1105_probe(struct spi_device *spi)
 		return rc;
 	}
 
+	rc = devm_sja1105_fill_device_tree(ds);
+	if (rc) {
+		dev_err(ds->dev, "Failed to fill device tree: %pe\n",
+			ERR_PTR(rc));
+		return rc;
+	}
+
 	rc = devm_sja1105_add_subdevs(ds);
 	if (rc) {
 		dev_err(ds->dev, "Failed to create child devices: %pe\n",
