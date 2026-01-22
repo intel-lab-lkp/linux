@@ -114,6 +114,8 @@ static void free_fdtable_rcu(struct rcu_head *rcu)
 
 #define BITBIT_NR(nr)	BITS_TO_LONGS(BITS_TO_LONGS(nr))
 #define BITBIT_SIZE(nr)	(BITBIT_NR(nr) * sizeof(long))
+#define BITBITBIT_NR(nr) BITS_TO_LONGS(BITBIT_NR(nr))
+#define BITBITBIT_SIZE(nr) (BITBITBIT_NR(nr) * sizeof(long))
 
 #define fdt_words(fdt) ((fdt)->max_fds / BITS_PER_LONG) // words in ->open_fds
 /*
@@ -132,6 +134,8 @@ static inline void copy_fd_bitmaps(struct fdtable *nfdt, struct fdtable *ofdt,
 			copy_words * BITS_PER_LONG, nwords * BITS_PER_LONG);
 	bitmap_copy_and_extend(nfdt->full_fds_bits, ofdt->full_fds_bits,
 			copy_words, nwords);
+	bitmap_copy_and_extend(nfdt->full_fds_bits_l2, ofdt->full_fds_bits_l2,
+			BITS_TO_LONGS(copy_words), BITS_TO_LONGS(nwords));
 }
 
 /*
@@ -222,7 +226,7 @@ static struct fdtable *alloc_fdtable(unsigned int slots_wanted)
 	fdt->fd = data;
 
 	data = kvmalloc(max_t(size_t,
-				 2 * nr / BITS_PER_BYTE + BITBIT_SIZE(nr), L1_CACHE_BYTES),
+				 2 * nr / BITS_PER_BYTE + BITBIT_SIZE(nr) + BITBITBIT_SIZE(nr), L1_CACHE_BYTES),
 				 GFP_KERNEL_ACCOUNT);
 	if (!data)
 		goto out_arr;
@@ -231,6 +235,8 @@ static struct fdtable *alloc_fdtable(unsigned int slots_wanted)
 	fdt->close_on_exec = data;
 	data += nr / BITS_PER_BYTE;
 	fdt->full_fds_bits = data;
+	data += BITBIT_SIZE(nr);
+	fdt->full_fds_bits_l2 = data;
 
 	return fdt;
 
@@ -335,16 +341,24 @@ static inline void __set_open_fd(unsigned int fd, struct fdtable *fdt, bool set)
 	__set_bit(fd, fdt->open_fds);
 	__set_close_on_exec(fd, fdt, set);
 	fd /= BITS_PER_LONG;
-	if (!~fdt->open_fds[fd])
+	if (!~fdt->open_fds[fd]) {
 		__set_bit(fd, fdt->full_fds_bits);
+		unsigned int idx = fd / BITS_PER_LONG;
+		if (!~fdt->full_fds_bits[idx])
+			__set_bit(idx, fdt->full_fds_bits_l2);
+	}
 }
 
 static inline void __clear_open_fd(unsigned int fd, struct fdtable *fdt)
 {
 	__clear_bit(fd, fdt->open_fds);
 	fd /= BITS_PER_LONG;
-	if (test_bit(fd, fdt->full_fds_bits))
+	if (test_bit(fd, fdt->full_fds_bits)) {
 		__clear_bit(fd, fdt->full_fds_bits);
+		unsigned int idx = fd / BITS_PER_LONG;
+		if (test_bit(idx, fdt->full_fds_bits_l2))
+			__clear_bit(idx, fdt->full_fds_bits_l2);
+	}
 }
 
 static inline bool fd_is_open(unsigned int fd, const struct fdtable *fdt)
@@ -402,6 +416,7 @@ struct files_struct *dup_fd(struct files_struct *oldf, struct fd_range *punch_ho
 	new_fdt->close_on_exec = newf->close_on_exec_init;
 	new_fdt->open_fds = newf->open_fds_init;
 	new_fdt->full_fds_bits = newf->full_fds_bits_init;
+	new_fdt->full_fds_bits_l2 = newf->full_fds_bits_init_l2;
 	new_fdt->fd = &newf->fd_array[0];
 
 	spin_lock(&oldf->file_lock);
@@ -536,6 +551,7 @@ struct files_struct init_files = {
 		.close_on_exec	= init_files.close_on_exec_init,
 		.open_fds	= init_files.open_fds_init,
 		.full_fds_bits	= init_files.full_fds_bits_init,
+		.full_fds_bits_l2 = init_files.full_fds_bits_init_l2,
 	},
 	.file_lock	= __SPIN_LOCK_UNLOCKED(init_files.file_lock),
 	.resize_wait	= __WAIT_QUEUE_HEAD_INITIALIZER(init_files.resize_wait),
@@ -545,22 +561,35 @@ static unsigned int find_next_fd(struct fdtable *fdt, unsigned int start)
 {
 	unsigned int maxfd = fdt->max_fds; /* always multiple of BITS_PER_LONG */
 	unsigned int maxbit = maxfd / BITS_PER_LONG;
+	unsigned int maxbit_l2 = BITBIT_NR(maxfd);
 	unsigned int bitbit = start / BITS_PER_LONG;
+	unsigned int bitbit_l2 = bitbit / BITS_PER_LONG;
 	unsigned int bit;
 
 	/*
-	 * Try to avoid looking at the second level bitmap
+	 * Try to avoid looking at the upper level bitmaps
 	 */
 	bit = find_next_zero_bit(&fdt->open_fds[bitbit], BITS_PER_LONG,
 				 start & (BITS_PER_LONG - 1));
 	if (bit < BITS_PER_LONG)
 		return bit + bitbit * BITS_PER_LONG;
 
-	bitbit = find_next_zero_bit(fdt->full_fds_bits, maxbit, bitbit) * BITS_PER_LONG;
-	if (bitbit >= maxfd)
+	/* Algorithmic Optimization: O(N) -> O(1) via 3rd-level summary bitmap */
+	bitbit_l2 = find_next_zero_bit(fdt->full_fds_bits_l2, maxbit_l2, bitbit_l2);
+	if (bitbit_l2 >= maxbit_l2)
 		return maxfd;
-	if (bitbit > start)
-		start = bitbit;
+
+	if (bitbit_l2 * BITS_PER_LONG > bitbit)
+		bitbit = bitbit_l2 * BITS_PER_LONG;
+
+	bitbit = find_next_zero_bit(fdt->full_fds_bits, maxbit, bitbit);
+	if (bitbit >= maxbit)
+		return maxfd;
+
+	bit = bitbit * BITS_PER_LONG;
+	if (bit > start)
+		start = bit;
+
 	return find_next_zero_bit(fdt->open_fds, maxfd, start);
 }
 

@@ -29,6 +29,7 @@ struct fdtable {
 	unsigned long *close_on_exec;
 	unsigned long *open_fds;
 	unsigned long *full_fds_bits;
+	unsigned long *full_fds_bits_l2;
 	struct rcu_head rcu;
 };
 
@@ -53,6 +54,7 @@ struct files_struct {
 	unsigned long close_on_exec_init[1];
 	unsigned long open_fds_init[1];
 	unsigned long full_fds_bits_init[1];
+	unsigned long full_fds_bits_init_l2[1];
 	struct file __rcu * fd_array[NR_OPEN_DEFAULT];
 };
 
