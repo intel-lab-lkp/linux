@@ -907,6 +907,7 @@ int cxl_add_to_region(struct cxl_endpoint_decoder *cxled);
 struct cxl_dax_region *to_cxl_dax_region(struct device *dev);
 u64 cxl_port_get_spa_cache_alias(struct cxl_port *endpoint, u64 spa);
 bool cxl_region_contains_soft_reserve(const struct resource *res);
+void cxl_region_teardown_all(void);
 #else
 static inline bool is_cxl_pmem_region(struct device *dev)
 {
@@ -933,6 +934,7 @@ static inline bool cxl_region_contains_soft_reserve(const struct resource *res)
 {
 	return false;
 }
+static inline void cxl_region_teardown_all(void) { }
 #endif
 
 void cxl_endpoint_parse_cdat(struct cxl_port *port);

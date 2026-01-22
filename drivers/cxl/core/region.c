@@ -3875,6 +3875,31 @@ static int cxl_region_debugfs_poison_clear(void *data, u64 offset)
 DEFINE_DEBUGFS_ATTRIBUTE(cxl_poison_clear_fops, NULL,
 			 cxl_region_debugfs_poison_clear, "%llx\n");
 
+static int cxl_region_teardown_cb(struct device *dev, void *data)
+{
+	struct cxl_root_decoder *cxlrd;
+	struct cxl_region *cxlr;
+	struct cxl_port *port;
+
+	if (!is_cxl_region(dev))
+		return 0;
+
+	cxlr = to_cxl_region(dev);
+
+	cxlrd = to_cxl_root_decoder(cxlr->dev.parent);
+	port = cxlrd_to_port(cxlrd);
+
+	devm_release_action(port->uport_dev, unregister_region, cxlr);
+
+	return 0;
+}
+
+void cxl_region_teardown_all(void)
+{
+	bus_for_each_dev(&cxl_bus_type, NULL, NULL, cxl_region_teardown_cb);
+}
+EXPORT_SYMBOL_GPL(cxl_region_teardown_all);
+
 static int cxl_region_contains_sr_cb(struct device *dev, void *data)
 {
 	struct resource *res = data;

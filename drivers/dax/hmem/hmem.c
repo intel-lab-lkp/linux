@@ -3,6 +3,7 @@
 #include <linux/memregion.h>
 #include <linux/module.h>
 #include <linux/dax.h>
+#include "../../cxl/cxl.h"
 #include "../bus.h"
 
 static bool region_idle;
@@ -58,9 +59,15 @@ static void release_hmem(void *pdev)
 	platform_device_unregister(pdev);
 }
 
+struct dax_defer_work {
+	struct platform_device *pdev;
+	struct work_struct work;
+};
+
 static int hmem_register_device(struct device *host, int target_nid,
 				const struct resource *res)
 {
+	struct dax_defer_work *work = dev_get_drvdata(host);
 	struct platform_device *pdev;
 	struct memregion_info info;
 	long id;
@@ -69,8 +76,18 @@ static int hmem_register_device(struct device *host, int target_nid,
 	if (IS_ENABLED(CONFIG_DEV_DAX_CXL) &&
 	    region_intersects(res->start, resource_size(res), IORESOURCE_MEM,
 			      IORES_DESC_CXL) != REGION_DISJOINT) {
-		dev_dbg(host, "deferring range to CXL: %pr\n", res);
-		return 0;
+		switch (dax_cxl_mode) {
+		case DAX_CXL_MODE_DEFER:
+			dev_dbg(host, "deferring range to CXL: %pr\n", res);
+			schedule_work(&work->work);
+			return 0;
+		case DAX_CXL_MODE_REGISTER:
+			dev_dbg(host, "registering CXL range: %pr\n", res);
+			break;
+		case DAX_CXL_MODE_DROP:
+			dev_dbg(host, "dropping CXL range: %pr\n", res);
+			return 0;
+		}
 	}
 
 	rc = region_intersects_soft_reserve(res->start, resource_size(res));
@@ -123,8 +140,67 @@ out_put:
 	return rc;
 }
 
+static int cxl_contains_soft_reserve(struct device *host, int target_nid,
+				     const struct resource *res)
+{
+	if (region_intersects(res->start, resource_size(res), IORESOURCE_MEM,
+			      IORES_DESC_CXL) != REGION_DISJOINT) {
+		if (!cxl_region_contains_soft_reserve(res))
+			return 1;
+	}
+
+	return 0;
+}
+
+static void process_defer_work(struct work_struct *_work)
+{
+	struct dax_defer_work *work = container_of(_work, typeof(*work), work);
+	struct platform_device *pdev = work->pdev;
+	int rc;
+
+	/* relies on cxl_acpi and cxl_pci having had a chance to load */
+	wait_for_device_probe();
+
+	rc = walk_hmem_resources(&pdev->dev, cxl_contains_soft_reserve);
+
+	if (!rc) {
+		dax_cxl_mode = DAX_CXL_MODE_DROP;
+		rc = bus_rescan_devices(&cxl_bus_type);
+		if (rc)
+			dev_warn(&pdev->dev, "CXL bus rescan failed: %d\n", rc);
+	} else {
+		dax_cxl_mode = DAX_CXL_MODE_REGISTER;
+		cxl_region_teardown_all();
+	}
+
+	walk_hmem_resources(&pdev->dev, hmem_register_device);
+}
+
+static void kill_defer_work(void *_work)
+{
+	struct dax_defer_work *work = container_of(_work, typeof(*work), work);
+
+	cancel_work_sync(&work->work);
+	kfree(work);
+}
+
 static int dax_hmem_platform_probe(struct platform_device *pdev)
 {
+	struct dax_defer_work *work = kzalloc(sizeof(*work), GFP_KERNEL);
+	int rc;
+
+	if (!work)
+		return -ENOMEM;
+
+	work->pdev = pdev;
+	INIT_WORK(&work->work, process_defer_work);
+
+	rc = devm_add_action_or_reset(&pdev->dev, kill_defer_work, work);
+	if (rc)
+		return rc;
+
+	platform_set_drvdata(pdev, work);
+
 	return walk_hmem_resources(&pdev->dev, hmem_register_device);
 }
 
@@ -174,3 +250,4 @@ MODULE_ALIAS("platform:hmem_platform*");
 MODULE_DESCRIPTION("HMEM DAX: direct access to 'specific purpose' memory");
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Intel Corporation");
+MODULE_IMPORT_NS("CXL");

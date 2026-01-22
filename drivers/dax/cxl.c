@@ -14,6 +14,15 @@ static int cxl_dax_region_probe(struct device *dev)
 	struct dax_region *dax_region;
 	struct dev_dax_data data;
 
+	switch (dax_cxl_mode) {
+	case DAX_CXL_MODE_DEFER:
+		return -EPROBE_DEFER;
+	case DAX_CXL_MODE_REGISTER:
+		return -ENODEV;
+	case DAX_CXL_MODE_DROP:
+		break;
+	}
+
 	if (nid == NUMA_NO_NODE)
 		nid = memory_add_physaddr_to_nid(cxlr_dax->hpa_range.start);
 
