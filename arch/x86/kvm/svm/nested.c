@@ -1466,9 +1466,9 @@ int nested_svm_exit_handled(struct vcpu_svm *svm)
 	return vmexit;
 }
 
-int nested_svm_check_permissions(struct kvm_vcpu *vcpu)
+int __nested_svm_check_permissions(struct kvm_vcpu *vcpu, bool insn_allowed)
 {
-	if (!(vcpu->arch.efer & EFER_SVME) || !is_paging(vcpu)) {
+	if (!insn_allowed || !is_paging(vcpu)) {
 		kvm_queue_exception(vcpu, UD_VECTOR);
 		return 1;
 	}
@@ -1479,6 +1479,11 @@ int nested_svm_check_permissions(struct kvm_vcpu *vcpu)
 	}
 
 	return 0;
+}
+
+int nested_svm_check_permissions(struct kvm_vcpu *vcpu)
+{
+	return __nested_svm_check_permissions(vcpu, vcpu->arch.efer & EFER_SVME);
 }
 
 static bool nested_svm_is_exception_vmexit(struct kvm_vcpu *vcpu, u8 vector,

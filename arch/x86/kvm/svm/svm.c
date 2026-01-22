@@ -2283,9 +2283,19 @@ void svm_set_gif(struct vcpu_svm *svm, bool value)
 
 static int stgi_interception(struct kvm_vcpu *vcpu)
 {
+	bool insn_allowed;
 	int ret;
 
-	if (nested_svm_check_permissions(vcpu))
+	/*
+	 * According to the APM, STGI is allowed even with SVM disabled if SVM
+	 * Lock or device exclusion vector (DEV) are supported. DEV is part of
+	 * the SKINIT architecture.
+	 */
+	insn_allowed = (vcpu->arch.efer & EFER_SVME) ||
+		       guest_cpu_cap_has(vcpu, X86_FEATURE_SVML) ||
+		       guest_cpu_cap_has(vcpu, X86_FEATURE_SKINIT);
+
+	if (__nested_svm_check_permissions(vcpu, insn_allowed))
 		return 1;
 
 	ret = kvm_skip_emulated_instruction(vcpu);
