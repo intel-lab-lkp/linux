@@ -15,6 +15,16 @@ use crate::{
 mod ga102;
 mod tu102;
 
+/// Method used to load data into falcon memory. Some GPU architectures need
+/// PIO and others can use DMA.
+#[expect(unused)]
+pub(crate) enum LoadMethod {
+    /// Programmed I/O
+    Pio,
+    /// Direct Memory Access
+    Dma,
+}
+
 /// Hardware Abstraction Layer for Falcon cores.
 ///
 /// Implements chipset-specific low-level operations. The trait is generic against [`FalconEngine`]
@@ -48,6 +58,10 @@ pub(crate) trait FalconHal<E: FalconEngine>: Send + Sync {
 
     /// Reset the falcon engine.
     fn reset_eng(&self, bar: &Bar0) -> Result;
+
+    /// returns the method needed to load data into Falcon memory
+    #[expect(unused)]
+    fn load_method(&self) -> LoadMethod;
 }
 
 /// Returns a boxed falcon HAL adequate for `chipset`.
