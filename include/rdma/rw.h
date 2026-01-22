@@ -41,13 +41,16 @@ struct rdma_rw_ctx {
 		} iova;
 
 		/* for registering multiple WRs: */
-		struct rdma_rw_reg_ctx {
-			struct ib_sge		sge;
-			struct ib_rdma_wr	wr;
-			struct ib_reg_wr	reg_wr;
-			struct ib_send_wr	inv_wr;
-			struct ib_mr		*mr;
-		} *reg;
+		struct {
+			struct rdma_rw_reg_ctx {
+				struct ib_sge		sge;
+				struct ib_rdma_wr	wr;
+				struct ib_reg_wr	reg_wr;
+				struct ib_send_wr	inv_wr;
+				struct ib_mr		*mr;
+			}			*ctx;
+			struct sg_table		sgt;
+		} reg;
 	};
 };
 
