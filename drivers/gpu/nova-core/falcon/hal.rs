@@ -17,7 +17,6 @@ mod tu102;
 
 /// Method used to load data into falcon memory. Some GPU architectures need
 /// PIO and others can use DMA.
-#[expect(unused)]
 pub(crate) enum LoadMethod {
     /// Programmed I/O
     Pio,
@@ -60,7 +59,6 @@ pub(crate) trait FalconHal<E: FalconEngine>: Send + Sync {
     fn reset_eng(&self, bar: &Bar0) -> Result;
 
     /// returns the method needed to load data into Falcon memory
-    #[expect(unused)]
     fn load_method(&self) -> LoadMethod;
 }
 

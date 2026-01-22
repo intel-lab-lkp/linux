@@ -23,6 +23,7 @@ use kernel::{
 use crate::{
     dma::DmaObject,
     driver::Bar0,
+    falcon::hal::LoadMethod,
     gpu::Chipset,
     num::{
         FromSafeCast,
@@ -242,7 +243,6 @@ pub(crate) enum FalconMem {
     /// Secure Instruction Memory.
     ImemSecure,
     /// Non-Secure Instruction Memory.
-    #[expect(unused)]
     ImemNonSecure,
     /// Data Memory.
     Dmem,
@@ -405,6 +405,131 @@ impl<E: FalconEngine + 'static> Falcon<E> {
 
         regs::NV_PFALCON_FALCON_RM::default()
             .set_value(regs::NV_PMC_BOOT_0::read(bar).into())
+            .write(bar, &E::ID);
+
+        Ok(())
+    }
+
+    /// Write a slice to Falcon memory using programmed I/O (PIO).
+    ///
+    /// Writes `img` to the specified `target_mem` (IMEM or DMEM) starting at `mem_base`.
+    /// For IMEM writes, tags are set for each 256-byte block starting from `start_tag`.
+    /// For DMEM, start_tag is ignored.
+    ///
+    /// Returns `EINVAL` if `img.len()` is not a multiple of 4.
+    fn pio_wr_slice(
+        &self,
+        bar: &Bar0,
+        img: &[u8],
+        mem_base: u16,
+        target_mem: FalconMem,
+        start_tag: u16,
+    ) -> Result {
+        // Rejecting misaligned images here allows us to avoid checking
+        // inside the loops.
+        if img.len() % 4 != 0 {
+            return Err(EINVAL);
+        }
+
+        // NV_PFALCON_FALCON_IMEMC supports up to four ports,
+        // but we only ever use one, so just hard-code it.
+        const PORT: usize = 0;
+
+        match target_mem {
+            FalconMem::ImemSecure | FalconMem::ImemNonSecure => {
+                regs::NV_PFALCON_FALCON_IMEMC::default()
+                    .set_secure(target_mem == FalconMem::ImemSecure)
+                    .set_aincw(true)
+                    .set_offs(mem_base)
+                    .write(bar, &E::ID, PORT);
+
+                for (n, block) in img.chunks(256).enumerate() {
+                    let n = u16::try_from(n)?;
+                    let tag: u16 = start_tag.checked_add(n).ok_or(ERANGE)?;
+                    regs::NV_PFALCON_FALCON_IMEMT::default()
+                        .set_tag(tag)
+                        .write(bar, &E::ID, PORT);
+                    for word in block.chunks_exact(4) {
+                        let w = [word[0], word[1], word[2], word[3]];
+                        regs::NV_PFALCON_FALCON_IMEMD::default()
+                            .set_data(u32::from_le_bytes(w))
+                            .write(bar, &E::ID, PORT);
+                    }
+                }
+            }
+            FalconMem::Dmem => {
+                regs::NV_PFALCON_FALCON_DMEMC::default()
+                    .set_aincw(true)
+                    .set_offs(mem_base)
+                    .write(bar, &E::ID, PORT);
+
+                for word in img.chunks_exact(4) {
+                    let w = [word[0], word[1], word[2], word[3]];
+                    regs::NV_PFALCON_FALCON_DMEMD::default()
+                        .set_data(u32::from_le_bytes(w))
+                        .write(bar, &E::ID, PORT);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Perform a PIO write of a firmware section to falcon memory.
+    ///
+    /// Extracts the data slice specified by `load_offsets` from `fw` and writes it to
+    /// `target_mem` using the given port and tag.
+    fn pio_wr<F: FalconFirmware<Target = E>>(
+        &self,
+        bar: &Bar0,
+        fw: &F,
+        target_mem: FalconMem,
+        load_offsets: &FalconLoadTarget,
+        start_tag: u16,
+    ) -> Result {
+        let start = usize::from_safe_cast(load_offsets.src_start);
+        let len = usize::from_safe_cast(load_offsets.len);
+        let mem_base = u16::try_from(load_offsets.dst_start)?;
+
+        // SAFETY: we are the only user of the firmware image at this stage
+        let data = unsafe { fw.as_slice(start, len).map_err(|_| EINVAL)? };
+
+        self.pio_wr_slice(bar, data, mem_base, target_mem, start_tag)
+    }
+
+    /// Perform a PIO copy into `IMEM` and `DMEM` of `fw`, and prepare the falcon to run it.
+    pub(crate) fn pio_load<F: FalconFirmware<Target = E>>(&self, bar: &Bar0, fw: &F) -> Result {
+        let imem_sec = fw.imem_sec_load_params();
+        let imem_ns = fw.imem_ns_load_params().ok_or(EINVAL)?;
+        let dmem = fw.dmem_load_params();
+
+        regs::NV_PFALCON_FBIF_CTL::read(bar, &E::ID)
+            .set_allow_phys_no_ctx(true)
+            .write(bar, &E::ID);
+
+        regs::NV_PFALCON_FALCON_DMACTL::default().write(bar, &E::ID);
+
+        self.pio_wr(
+            bar,
+            fw,
+            FalconMem::ImemNonSecure,
+            &imem_ns,
+            u16::try_from(imem_ns.dst_start >> 8)?,
+        )?;
+        self.pio_wr(
+            bar,
+            fw,
+            FalconMem::ImemSecure,
+            &imem_sec,
+            u16::try_from(imem_sec.dst_start >> 8)?,
+        )?;
+        self.pio_wr(bar, fw, FalconMem::Dmem, &dmem, 0)?;
+
+        self.hal.program_brom(self, bar, &fw.brom_params())?;
+
+        // Set `BootVec` to start of non-secure code.
+        regs::NV_PFALCON_FALCON_BOOTVEC::default()
+            .set_value(fw.boot_addr())
             .write(bar, &E::ID);
 
         Ok(())
@@ -636,6 +761,14 @@ impl<E: FalconEngine + 'static> Falcon<E> {
     /// Returns `true` if the RISC-V core is active, `false` otherwise.
     pub(crate) fn is_riscv_active(&self, bar: &Bar0) -> bool {
         self.hal.is_riscv_active(bar)
+    }
+
+    // Load a firmware image into Falcon memory
+    pub(crate) fn load<F: FalconFirmware<Target = E>>(&self, bar: &Bar0, fw: &F) -> Result {
+        match self.hal.load_method() {
+            LoadMethod::Pio => self.pio_load(bar, fw),
+            LoadMethod::Dma => self.dma_load(bar, fw),
+        }
     }
 
     /// Write the application version to the OS register.
