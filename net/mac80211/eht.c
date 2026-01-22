@@ -5,6 +5,7 @@
  * Copyright(c) 2021-2025 Intel Corporation
  */
 
+#include "driver-ops.h"
 #include "ieee80211_i.h"
 
 void
@@ -136,17 +137,22 @@ void ieee80211_rx_eml_op_mode_notif(struct ieee80211_sub_if_data *sdata,
 {
 	int hdr_len = offsetof(struct ieee80211_mgmt, u.action.u.eml_omn);
 	enum nl80211_iftype type = ieee80211_vif_type_p2p(&sdata->vif);
+	struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(skb);
 	const struct wiphy_iftype_ext_capab *ift_ext_capa;
 	struct ieee80211_mgmt *mgmt = (void *)skb->data;
 	struct ieee80211_local *local = sdata->local;
 	u8 control = mgmt->u.action.u.eml_omn.control;
 	u8 *ptr = mgmt->u.action.u.eml_omn.variable;
+	struct wiphy *wiphy = local->hw.wiphy;
+	struct link_sta_info *link_sta;
+	__le16 link_bitmap = 0;
+	struct sta_info *sta;
 	u8 act_len = 3; /* action_code + dialog_token + control */
 
 	if (!ieee80211_vif_is_mld(&sdata->vif))
 		return;
 
-	ift_ext_capa = cfg80211_get_iftype_ext_capa(local->hw.wiphy, type);
+	ift_ext_capa = cfg80211_get_iftype_ext_capa(wiphy, type);
 	if (!ift_ext_capa)
 		return;
 
@@ -160,8 +166,10 @@ void ieee80211_rx_eml_op_mode_notif(struct ieee80211_sub_if_data *sdata,
 		return;
 
 	if ((control & IEEE80211_EML_CTRL_EMLSR_MODE) ||
-	    (control & IEEE80211_EML_CTRL_EMLMR_MODE))
+	    (control & IEEE80211_EML_CTRL_EMLMR_MODE)) {
+		link_bitmap = get_unaligned((__le16 *)ptr);
 		act_len += sizeof(__le16); /* eMLSR/eMLMR link_bitmap */
+	}
 
 	if (control & IEEE80211_EML_CTRL_EMLMR_MODE) {
 		u8 mcs_map_count = ptr[3];
@@ -174,6 +182,20 @@ void ieee80211_rx_eml_op_mode_notif(struct ieee80211_sub_if_data *sdata,
 	}
 
 	if (skb->len < hdr_len + act_len)
+		return;
+
+	if (!status->link_valid)
+		return;
+
+	sta = sta_info_get_bss(sdata, mgmt->sa);
+	if (!sta)
+		return;
+
+	link_sta = wiphy_dereference(wiphy, sta->link[status->link_id]);
+	if (!link_sta)
+		return;
+
+	if (drv_set_eml_op_mode(sdata, link_sta->pub, control, link_bitmap))
 		return;
 
 	ieee80211_send_eml_op_mode_notif(sdata, mgmt, act_len);
