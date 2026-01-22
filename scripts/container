@@ -110,7 +110,7 @@ class Runtimes:
     @classmethod
     def get_names(cls):
         """Get a list of all the runtime names"""
-        return list(runtime.name for runtime in cls.runtimes)
+        return [runtime.name for runtime in cls.runtimes]
 
     @classmethod
     def get(cls, name):
