@@ -17,6 +17,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/property.h>
+#include <linux/regmap.h>
 #include <linux/sizes.h>
 
 #include "pcs-xpcs.h"
@@ -29,7 +30,8 @@ struct dw_xpcs_plat {
 	struct mii_bus *bus;
 	bool reg_indir;
 	int reg_width;
-	void __iomem *reg_base;
+	unsigned int base;
+	struct regmap *regmap;
 	struct clk *cclk;
 };
 
@@ -52,7 +54,9 @@ static int xpcs_mmio_read_reg_indirect(struct dw_xpcs_plat *pxpcs,
 				       int dev, int reg)
 {
 	ptrdiff_t csr, ofs;
+	unsigned int addr;
 	u16 page;
+	u32 val;
 	int ret;
 
 	csr = xpcs_mmio_addr_format(dev, reg);
@@ -63,19 +67,21 @@ static int xpcs_mmio_read_reg_indirect(struct dw_xpcs_plat *pxpcs,
 	if (ret)
 		return ret;
 
-	switch (pxpcs->reg_width) {
-	case 4:
-		writel(page, pxpcs->reg_base + (DW_VR_CSR_VIEWPORT << 2));
-		ret = readl(pxpcs->reg_base + (ofs << 2)) & 0xffff;
-		break;
-	default:
-		writew(page, pxpcs->reg_base + (DW_VR_CSR_VIEWPORT << 1));
-		ret = readw(pxpcs->reg_base + (ofs << 1));
-		break;
-	}
+	addr = pxpcs->base + (DW_VR_CSR_VIEWPORT * pxpcs->reg_width);
+	ret = regmap_write(pxpcs->regmap, addr, page);
+	if (ret)
+		goto err_put;
+
+	addr = pxpcs->base + (ofs * pxpcs->reg_width);
+	ret = regmap_read(pxpcs->regmap, addr, &val);
+	if (ret)
+		goto err_put;
 
 	pm_runtime_put(&pxpcs->pdev->dev);
+	return val & 0xffff;
 
+err_put:
+	pm_runtime_put(&pxpcs->pdev->dev);
 	return ret;
 }
 
@@ -83,6 +89,7 @@ static int xpcs_mmio_write_reg_indirect(struct dw_xpcs_plat *pxpcs,
 					int dev, int reg, u16 val)
 {
 	ptrdiff_t csr, ofs;
+	unsigned int addr;
 	u16 page;
 	int ret;
 
@@ -94,26 +101,25 @@ static int xpcs_mmio_write_reg_indirect(struct dw_xpcs_plat *pxpcs,
 	if (ret)
 		return ret;
 
-	switch (pxpcs->reg_width) {
-	case 4:
-		writel(page, pxpcs->reg_base + (DW_VR_CSR_VIEWPORT << 2));
-		writel(val, pxpcs->reg_base + (ofs << 2));
-		break;
-	default:
-		writew(page, pxpcs->reg_base + (DW_VR_CSR_VIEWPORT << 1));
-		writew(val, pxpcs->reg_base + (ofs << 1));
-		break;
-	}
+	addr = pxpcs->base + (DW_VR_CSR_VIEWPORT * pxpcs->reg_width);
+	ret = regmap_write(pxpcs->regmap, addr, page);
+	if (ret)
+		goto err_put;
 
+	addr = pxpcs->base + (ofs * pxpcs->reg_width);
+	ret = regmap_write(pxpcs->regmap, addr, val);
+
+err_put:
 	pm_runtime_put(&pxpcs->pdev->dev);
-
-	return 0;
+	return ret;
 }
 
 static int xpcs_mmio_read_reg_direct(struct dw_xpcs_plat *pxpcs,
 				     int dev, int reg)
 {
+	unsigned int addr;
 	ptrdiff_t csr;
+	u32 val;
 	int ret;
 
 	csr = xpcs_mmio_addr_format(dev, reg);
@@ -122,23 +128,23 @@ static int xpcs_mmio_read_reg_direct(struct dw_xpcs_plat *pxpcs,
 	if (ret)
 		return ret;
 
-	switch (pxpcs->reg_width) {
-	case 4:
-		ret = readl(pxpcs->reg_base + (csr << 2)) & 0xffff;
-		break;
-	default:
-		ret = readw(pxpcs->reg_base + (csr << 1));
-		break;
-	}
+	addr = pxpcs->base + (csr * pxpcs->reg_width);
+	ret = regmap_read(pxpcs->regmap, addr, &val);
+	if (ret)
+		goto err_put;
 
 	pm_runtime_put(&pxpcs->pdev->dev);
+	return val & 0xffff;
 
+err_put:
+	pm_runtime_put(&pxpcs->pdev->dev);
 	return ret;
 }
 
 static int xpcs_mmio_write_reg_direct(struct dw_xpcs_plat *pxpcs,
 				      int dev, int reg, u16 val)
 {
+	unsigned int addr;
 	ptrdiff_t csr;
 	int ret;
 
@@ -148,18 +154,11 @@ static int xpcs_mmio_write_reg_direct(struct dw_xpcs_plat *pxpcs,
 	if (ret)
 		return ret;
 
-	switch (pxpcs->reg_width) {
-	case 4:
-		writel(val, pxpcs->reg_base + (csr << 2));
-		break;
-	default:
-		writew(val, pxpcs->reg_base + (csr << 1));
-		break;
-	}
+	addr = pxpcs->base + (csr * pxpcs->reg_width);
+	ret = regmap_write(pxpcs->regmap, addr, val);
 
 	pm_runtime_put(&pxpcs->pdev->dev);
-
-	return 0;
+	return ret;
 }
 
 static int xpcs_mmio_read_c22(struct mii_bus *bus, int addr, int reg)
@@ -230,11 +229,48 @@ static struct dw_xpcs_plat *xpcs_plat_create_data(struct platform_device *pdev)
 	return pxpcs;
 }
 
+static struct regmap *xpcs_plat_create_regmap(struct dw_xpcs_plat *pxpcs,
+					      const struct resource *res)
+{
+	struct platform_device *pdev = pxpcs->pdev;
+	struct regmap_config config = {};
+	struct device *dev = &pdev->dev;
+	void __iomem *reg_base;
+
+	reg_base = devm_ioremap_resource(dev, res);
+	if (IS_ERR(reg_base)) {
+		dev_err(dev, "Failed to map reg-space\n");
+		return ERR_CAST(reg_base);
+	}
+
+	if (pxpcs->reg_width == 2) {
+		config.reg_bits = 16;
+		config.val_bits = 16;
+		config.reg_stride = 2;
+	} else {
+		config.reg_bits = 32;
+		config.val_bits = 32;
+		config.reg_stride = 4;
+	}
+
+	if (pxpcs->reg_indir)
+		config.max_register = 0xff * pxpcs->reg_width;
+	else
+		config.max_register = 0x1fffff * pxpcs->reg_width;
+
+	config.reg_format_endian = REGMAP_ENDIAN_NATIVE;
+	config.val_format_endian = REGMAP_ENDIAN_NATIVE;
+
+	return devm_regmap_init_mmio(dev, reg_base, &config);
+}
+
 static int xpcs_plat_init_res(struct dw_xpcs_plat *pxpcs)
 {
 	struct platform_device *pdev = pxpcs->pdev;
 	struct device *dev = &pdev->dev;
+	bool have_reg_resource = false;
 	resource_size_t spc_size;
+	struct regmap *regmap;
 	struct resource *res;
 
 	if (!device_property_read_u32(dev, "reg-io-width", &pxpcs->reg_width)) {
@@ -246,8 +282,14 @@ static int xpcs_plat_init_res(struct dw_xpcs_plat *pxpcs)
 		pxpcs->reg_width = 2;
 	}
 
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "direct") ?:
-	      platform_get_resource_byname(pdev, IORESOURCE_MEM, "indirect");
+	res = platform_get_resource_byname(pdev, IORESOURCE_REG, "direct") ?:
+	      platform_get_resource_byname(pdev, IORESOURCE_REG, "indirect");
+	if (res) {
+		have_reg_resource = true;
+	} else {
+		res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "direct") ?:
+		      platform_get_resource_byname(pdev, IORESOURCE_MEM, "indirect");
+	}
 	if (!res) {
 		dev_err(dev, "No reg-space found\n");
 		return -EINVAL;
@@ -266,10 +308,16 @@ static int xpcs_plat_init_res(struct dw_xpcs_plat *pxpcs)
 		return -EINVAL;
 	}
 
-	pxpcs->reg_base = devm_ioremap_resource(dev, res);
-	if (IS_ERR(pxpcs->reg_base)) {
-		dev_err(dev, "Failed to map reg-space\n");
-		return PTR_ERR(pxpcs->reg_base);
+	if (have_reg_resource) {
+		regmap = dev_get_regmap(dev->parent, NULL);
+		pxpcs->base = res->start;
+	} else {
+		regmap = xpcs_plat_create_regmap(pxpcs, res);
+	}
+	pxpcs->regmap = regmap;
+	if (!pxpcs->regmap) {
+		dev_err(dev, "No regmap available\n");
+		return -ENODEV;
 	}
 
 	return 0;
