@@ -6,4 +6,6 @@
 !*.sh
 !.gitignore
 !config
+!config.aarch64
+!config.x86_64
 !Makefile
