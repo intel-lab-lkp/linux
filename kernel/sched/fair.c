@@ -7507,8 +7507,13 @@ static inline void set_idle_cores(int cpu, int val)
 	struct sched_domain_shared *sds;
 
 	sds = rcu_dereference(per_cpu(sd_llc_shared, cpu));
-	if (sds)
+	if (sds) {
 		WRITE_ONCE(sds->has_idle_cores, val);
+		if (val)
+			cpumask_set_cpu(cpu, (struct cpumask *)sds->idle_cores_mask);
+		else
+			cpumask_clear((struct cpumask *)sds->idle_cores_mask);
+	}
 }
 
 static inline bool test_idle_cores(int cpu)
@@ -7678,23 +7683,39 @@ static int select_idle_cpu(struct task_struct *p, struct sched_domain *sd, bool 
 		}
 	}
 
-	for_each_cpu_wrap(cpu, cpus, target + 1) {
-		if (has_idle_core) {
-			i = select_idle_core(p, cpu, cpus, &idle_cpu);
-			if ((unsigned int)i < nr_cpumask_bits)
-				return i;
+	if (has_idle_core) {
+		sd_share = rcu_dereference(per_cpu(sd_llc_shared, target));
+		if (sd_share) {
+			for_each_cpu_wrap(cpu, (struct cpumask *)sd_share->idle_cores_mask, target + 1) {
+				if (!cpumask_test_cpu(cpu, cpus))
+					continue;
 
-		} else {
-			if (--nr <= 0)
-				return -1;
-			idle_cpu = __select_idle_cpu(cpu, p);
-			if ((unsigned int)idle_cpu < nr_cpumask_bits)
-				break;
+				i = select_idle_core(p, cpu, cpus, &idle_cpu);
+				if ((unsigned int)i < nr_cpumask_bits)
+					return i;
+
+				/* Core is no longer idle, clear the hint */
+				cpumask_clear_cpu(cpu, (struct cpumask *)sd_share->idle_cores_mask);
+			}
+
+			/* Searched all hinted cores and found none */
+			set_idle_cores(target, false);
 		}
+		/* If we found an idle CPU during core search, return it */
+		if (idle_cpu != -1)
+			return idle_cpu;
+
+		/* Fall through to any-CPU search if needed */
+		has_idle_core = false;
 	}
 
-	if (has_idle_core)
-		set_idle_cores(target, false);
+	for_each_cpu_wrap(cpu, cpus, target + 1) {
+		if (--nr <= 0)
+			return -1;
+		idle_cpu = __select_idle_cpu(cpu, p);
+		if ((unsigned int)idle_cpu < nr_cpumask_bits)
+			break;
+	}
 
 	return idle_cpu;
 }
