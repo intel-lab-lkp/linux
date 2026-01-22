@@ -495,8 +495,6 @@ static const struct sja1105_regs sja1105et_regs = {
 	.ptpclkval = 0x18, /* Spans 0x18 to 0x19 */
 	.ptpclkrate = 0x1A,
 	.ptpclkcorp = 0x1D,
-	.mdio_100base_tx = SJA1105_RSV_ADDR,
-	.mdio_100base_t1 = SJA1105_RSV_ADDR,
 };
 
 static const struct sja1105_regs sja1105pqrs_regs = {
@@ -534,8 +532,6 @@ static const struct sja1105_regs sja1105pqrs_regs = {
 	.ptpclkrate = 0x1B,
 	.ptpclkcorp = 0x1E,
 	.ptpsyncts = 0x1F,
-	.mdio_100base_tx = SJA1105_RSV_ADDR,
-	.mdio_100base_t1 = SJA1105_RSV_ADDR,
 };
 
 static const struct sja1105_regs sja1110_regs = {
@@ -618,8 +614,6 @@ static const struct sja1105_regs sja1110_regs = {
 	.ptpclkrate = SJA1110_SPI_ADDR(0x74),
 	.ptpclkcorp = SJA1110_SPI_ADDR(0x80),
 	.ptpsyncts = SJA1110_SPI_ADDR(0x84),
-	.mdio_100base_tx = 0x1c2400,
-	.mdio_100base_t1 = 0x1c1000,
 	.pcs_base = {SJA1105_RSV_ADDR, 0x1c1400, 0x1c1800, 0x1c1c00, 0x1c2000,
 		     SJA1105_RSV_ADDR, SJA1105_RSV_ADDR, SJA1105_RSV_ADDR,
 		     SJA1105_RSV_ADDR, SJA1105_RSV_ADDR, SJA1105_RSV_ADDR},

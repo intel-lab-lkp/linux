@@ -91,8 +91,6 @@ struct sja1105_regs {
 	u64 rmii_ref_clk[SJA1105_MAX_NUM_PORTS];
 	u64 rmii_ext_tx_clk[SJA1105_MAX_NUM_PORTS];
 	u64 stats[__MAX_SJA1105_STATS_AREA][SJA1105_MAX_NUM_PORTS];
-	u64 mdio_100base_tx;
-	u64 mdio_100base_t1;
 	u64 pcs_base[SJA1105_MAX_NUM_PORTS];
 };
 
@@ -278,8 +276,6 @@ struct sja1105_private {
 	struct mutex dynamic_config_lock;
 	struct devlink_region **regions;
 	struct sja1105_cbs_entry *cbs;
-	struct mii_bus *mdio_base_t1;
-	struct mii_bus *mdio_base_tx;
 	struct mii_bus *mdio_pcs;
 	struct phylink_pcs *pcs[SJA1105_MAX_NUM_PORTS];
 	struct sja1105_ptp_data ptp_data;

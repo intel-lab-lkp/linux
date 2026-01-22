@@ -5,6 +5,7 @@ sja1105-objs := \
     sja1105_spi.o \
     sja1105_main.o \
     sja1105_mdio.o \
+    sja1105_subdev.o \
     sja1105_flower.o \
     sja1105_ethtool.o \
     sja1105_devlink.o \

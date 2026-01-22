@@ -23,6 +23,7 @@
 #include <linux/units.h>
 
 #include "sja1105.h"
+#include "sja1105_subdev.h"
 #include "sja1105_tas.h"
 
 #define SJA1105_UNKNOWN_MULTICAST	0x010000000000ull
@@ -3326,6 +3327,13 @@ static int sja1105_probe(struct spi_device *spi)
 	rc = sja1105_parse_dt(priv);
 	if (rc < 0) {
 		dev_err(ds->dev, "Failed to parse DT: %d\n", rc);
+		return rc;
+	}
+
+	rc = devm_sja1105_add_subdevs(ds);
+	if (rc) {
+		dev_err(ds->dev, "Failed to create child devices: %pe\n",
+			ERR_PTR(rc));
 		return rc;
 	}
 
