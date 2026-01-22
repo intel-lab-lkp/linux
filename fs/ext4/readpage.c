@@ -96,6 +96,7 @@ static void verity_work(struct work_struct *work)
 	struct bio_post_read_ctx *ctx =
 		container_of(work, struct bio_post_read_ctx, work);
 	struct bio *bio = ctx->bio;
+	struct inode *inode = bio_first_folio_all(bio)->mapping->host;
 
 	/*
 	 * fsverity_verify_bio() may call readahead() again, and although verity
@@ -108,7 +109,7 @@ static void verity_work(struct work_struct *work)
 	mempool_free(ctx, bio_post_read_ctx_pool);
 	bio->bi_private = NULL;
 
-	fsverity_verify_bio(bio);
+	fsverity_verify_bio(*fsverity_info_addr(inode), bio);
 
 	__read_end_io(bio);
 }
@@ -244,7 +245,8 @@ int ext4_mpage_readpages(struct inode *inode,
 
 		if (first_folio) {
 			if (ext4_need_verity(inode, folio->index))
-				fsverity_readahead(folio, nr_pages);
+				fsverity_readahead(*fsverity_info_addr(inode),
+						folio, nr_pages);
 			first_folio = false;
 		}
 
@@ -335,8 +337,11 @@ int ext4_mpage_readpages(struct inode *inode,
 			folio_zero_segment(folio, first_hole << blkbits,
 					  folio_size(folio));
 			if (first_hole == 0) {
+				struct fsverity_info *vi =
+					*fsverity_info_addr(folio->mapping->host);
+
 				if (ext4_need_verity(inode, folio->index) &&
-				    !fsverity_verify_folio(folio))
+				    !fsverity_verify_folio(vi, folio))
 					goto set_error_page;
 				folio_end_read(folio, true);
 				continue;
