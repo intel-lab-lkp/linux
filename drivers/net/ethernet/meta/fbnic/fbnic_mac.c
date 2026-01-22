@@ -143,6 +143,7 @@ static void fbnic_mac_init_qm(struct fbnic_dev *fbd)
 #define FBNIC_DROP_EN_MASK	0x7d
 #define FBNIC_PAUSE_EN_MASK	0x14
 #define FBNIC_ECN_EN_MASK	0x10
+#define FBNIC_PS_EN_MASK	0x01
 
 struct fbnic_fifo_config {
 	unsigned int addr;
@@ -424,13 +425,17 @@ static void fbnic_mac_tx_pause_config(struct fbnic_dev *fbd, bool tx_pause)
 {
 	u32 rxb_pause_ctrl;
 
-	/* Enable generation of pause frames if enabled */
+	/* Enable generation of pause frames based on tx_pause setting */
 	rxb_pause_ctrl = rd32(fbd, FBNIC_RXB_PAUSE_DROP_CTRL);
-	rxb_pause_ctrl &= ~FBNIC_RXB_PAUSE_DROP_CTRL_PAUSE_ENABLE;
-	if (tx_pause)
+	rxb_pause_ctrl &= ~(FBNIC_RXB_PAUSE_DROP_CTRL_PAUSE_ENABLE |
+			    FBNIC_RXB_PAUSE_DROP_CTRL_PS_ENABLE);
+	if (tx_pause) {
 		rxb_pause_ctrl |=
 			FIELD_PREP(FBNIC_RXB_PAUSE_DROP_CTRL_PAUSE_ENABLE,
-				   FBNIC_PAUSE_EN_MASK);
+				   FBNIC_PAUSE_EN_MASK) |
+			FIELD_PREP(FBNIC_RXB_PAUSE_DROP_CTRL_PS_ENABLE,
+				   FBNIC_PS_EN_MASK);
+	}
 	wr32(fbd, FBNIC_RXB_PAUSE_DROP_CTRL, rxb_pause_ctrl);
 }
 
@@ -443,6 +448,33 @@ static int fbnic_mac_get_link_event(struct fbnic_dev *fbd)
 
 	return (intr_mask & FBNIC_SIG_PCS_INTR_LINK_UP) ?
 	       FBNIC_LINK_EVENT_UP : FBNIC_LINK_EVENT_NONE;
+}
+
+static void fbnic_mac_pause_storm_config(struct fbnic_dev *fbd, bool tx_pause)
+{
+	u32 reg;
+
+	wr32(fbd, FBNIC_RXB_PAUSE_STORM_UNIT_WR,
+	     FBNIC_RXB_PAUSE_STORM_CLK_DIV);
+
+	wr32(fbd, FBNIC_RXB_PAUSE_STORM(0),
+	     FIELD_PREP(FBNIC_RXB_PAUSE_STORM_THLD_TIME,
+			FBNIC_MAC_PAUSE_STORM_INTERVAL));
+
+	/* There is a possibility that in transition from tx_pause enable to
+	 * disable, the interrupt status was set and we did not clear it. To
+	 * handle this case, we will clear the interrupt status here.
+	 */
+	wr32(fbd, FBNIC_RXB_ERR_INTR_STS,
+	     FIELD_PREP(FBNIC_RXB_ERR_INTR_STS_PS, FBNIC_PS_EN_MASK));
+
+	/* Unmask the Network to Host PS interrupt if tx_pause is on */
+	reg = rd32(fbd, FBNIC_RXB_ERR_INTR_MASK);
+	reg |= FBNIC_RXB_ERR_INTR_STS_PS;
+	if (tx_pause)
+		reg &= ~FIELD_PREP(FBNIC_RXB_ERR_INTR_STS_PS,
+				   FBNIC_PS_EN_MASK);
+	wr32(fbd, FBNIC_RXB_ERR_INTR_MASK, reg);
 }
 
 static u32 __fbnic_mac_cmd_config_asic(struct fbnic_dev *fbd,
@@ -658,6 +690,7 @@ static void fbnic_mac_link_up_asic(struct fbnic_dev *fbd,
 	u32 cmd_cfg, mac_ctrl;
 
 	fbnic_mac_tx_pause_config(fbd, tx_pause);
+	fbnic_mac_pause_storm_config(fbd, tx_pause);
 
 	cmd_cfg = __fbnic_mac_cmd_config_asic(fbd, tx_pause, rx_pause);
 	mac_ctrl = rd32(fbd, FBNIC_SIG_MAC_IN0);
@@ -917,4 +950,25 @@ int fbnic_mac_init(struct fbnic_dev *fbd)
 	fbd->mac->init_regs(fbd);
 
 	return 0;
+}
+
+void fbnic_mac_rxb_pause_storm_handler(struct fbnic_dev *fbd)
+{
+	u32 rxb_err_sts = rd32(fbd, FBNIC_RXB_ERR_INTR_STS);
+
+	/* Check if pause storm interrupt for network was triggered */
+	if (rxb_err_sts & FBNIC_RXB_ERR_INTR_STS_PS) {
+		wr32(fbd, FBNIC_RXB_PAUSE_STORM(0),
+		     FIELD_PREP(FBNIC_RXB_PAUSE_STORM_THLD_TIME,
+				FBNIC_MAC_PAUSE_STORM_INTERVAL) |
+		     FBNIC_RXB_PAUSE_STORM_FORCE_NORMAL);
+		wrfl(fbd);
+		wr32(fbd, FBNIC_RXB_PAUSE_STORM(0),
+		     FIELD_PREP(FBNIC_RXB_PAUSE_STORM_THLD_TIME,
+				FBNIC_MAC_PAUSE_STORM_INTERVAL));
+
+		/* Write 1 to clear the interrupt status */
+		wr32(fbd, FBNIC_RXB_ERR_INTR_STS,
+		     FIELD_PREP(FBNIC_RXB_ERR_INTR_STS_PS, FBNIC_PS_EN_MASK));
+	}
 }

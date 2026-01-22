@@ -216,6 +216,10 @@ static void fbnic_service_task(struct work_struct *work)
 
 	fbnic_get_hw_stats32(fbd);
 
+	if (!FIELD_GET(FBNIC_MAC_COMMAND_CONFIG_TX_PAUSE_DIS,
+		       rd32(fbd, FBNIC_MAC_COMMAND_CONFIG)))
+		fbnic_mac_rxb_pause_storm_handler(fbd);
+
 	fbnic_fw_check_heartbeat(fbd);
 
 	fbnic_health_check(fbd);
