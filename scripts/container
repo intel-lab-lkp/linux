@@ -86,7 +86,8 @@ class DockerRuntime(CommonRuntime):
     name = 'docker'
 
     def _get_opts(self, container_name):
-        return super()._get_opts(container_name) + [
+        return [
+            *super()._get_opts(container_name),
             '--user', f'{self._uid}:{self._gid}'
         ]
 
@@ -97,7 +98,8 @@ class PodmanRuntime(CommonRuntime):
     name = 'podman'
 
     def _get_opts(self, container_name):
-        return super()._get_opts(container_name) + [
+        return [
+            *super()._get_opts(container_name),
             '--userns', f'keep-id:uid={self._uid},gid={self._gid}',
         ]
 
