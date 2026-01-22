@@ -6932,6 +6932,12 @@ static noinline int smb2_write_pipe(struct ksmbd_work *work)
 		goto out;
 	}
 
+	if (le16_to_cpu(req->DataOffset) <
+	    offsetof(struct smb2_write_req, Buffer)) {
+		err = -EINVAL;
+		goto out;
+	}
+
 	data_buf = (char *)(((char *)&req->hdr.ProtocolId) +
 			   le16_to_cpu(req->DataOffset));
 
