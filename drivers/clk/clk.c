@@ -1171,7 +1171,7 @@ static int clk_core_prepare_lock(struct clk_core *core)
  */
 int clk_prepare(struct clk *clk)
 {
-	if (!clk)
+	if (IS_ERR_OR_NULL(clk))
 		return 0;
 
 	return clk_core_prepare_lock(clk->core);
