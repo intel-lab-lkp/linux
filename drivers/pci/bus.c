@@ -15,6 +15,7 @@
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
 #include <linux/proc_fs.h>
 #include <linux/slab.h>
 
@@ -378,6 +379,12 @@ void pci_bus_add_device(struct pci_dev *dev)
 		}
 		put_device(&pdev->dev);
 	}
+
+	/*
+	 * Enable runtime PM (and potentially suspend) only after we've fully
+	 * configured the PCI state.
+	 */
+	pm_runtime_enable(&dev->dev);
 
 	if (!dn || of_device_is_available(dn))
 		pci_dev_allow_binding(dev);
