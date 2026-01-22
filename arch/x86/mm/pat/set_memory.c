@@ -372,6 +372,19 @@ int cpu_cache_invalidate_memregion(int res_desc)
 {
 	if (WARN_ON_ONCE(!cpu_cache_has_invalidate_memregion()))
 		return -ENXIO;
+
+	if (static_cpu_has(X86_FEATURE_CLFLUSHOPT)) {
+		void *vaddr = memremap(start, len, MEMREMAP_WB);
+
+		if (!vaddr)
+			goto fallback;
+
+		clflush_cache_range(vaddr, len);
+		memunmap(vaddr);
+
+		return 0;
+	}
+fallback:
 	wbinvd_on_all_cpus();
 	return 0;
 }
