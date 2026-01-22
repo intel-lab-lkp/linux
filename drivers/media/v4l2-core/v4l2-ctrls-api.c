@@ -286,8 +286,14 @@ static int prepare_ext_ctrls(struct v4l2_ctrl_handler *hdl,
 
 		if (ctrl->cluster[0]->ncontrols > 1)
 			have_clusters = true;
-		if (ctrl->cluster[0] != ctrl)
+		if (ctrl->cluster[0] != ctrl) {
 			ref = find_ref_lock(hdl, ctrl->cluster[0]->id);
+			if (!ref) {
+				dprintk(vdev, "cannot find control id 0x%x\n",
+					ctrl->cluster[0]->id);
+				return -EINVAL;
+			}
+		}
 		if (ctrl->is_dyn_array) {
 			unsigned int max_size = ctrl->dims[0] * ctrl->elem_size;
 			unsigned int tot_size = ctrl->elem_size;
