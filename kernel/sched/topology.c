@@ -354,6 +354,7 @@ static struct perf_domain *pd_init(int cpu)
 	if (!pd)
 		return NULL;
 	pd->em_pd = obj;
+	pd->max_spare_cap_cpu = -1;
 
 	return pd;
 }

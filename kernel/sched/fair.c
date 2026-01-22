@@ -8205,41 +8205,32 @@ static inline void eenv_pd_busy_time(struct energy_env *eenv,
  * exceed @eenv->cpu_cap.
  */
 static inline unsigned long
-eenv_pd_max_util(struct energy_env *eenv, struct cpumask *pd_cpus,
+eenv_pd_max_util(struct energy_env *eenv, struct perf_domain *pd,
 		 struct task_struct *p, int dst_cpu)
 {
-	unsigned long max_util = 0;
-	int cpu;
+	unsigned long max_util = pd->max_util;
 
-	for_each_cpu(cpu, pd_cpus) {
-		struct task_struct *tsk = (cpu == dst_cpu) ? p : NULL;
-		unsigned long util = cpu_util(cpu, p, dst_cpu, 1);
+	if (dst_cpu >= 0 && cpumask_test_cpu(dst_cpu, perf_domain_span(pd))) {
+		unsigned long util = cpu_util(dst_cpu, p, dst_cpu, 1);
 		unsigned long eff_util, min, max;
 
-		/*
-		 * Performance domain frequency: utilization clamping
-		 * must be considered since it affects the selection
-		 * of the performance domain frequency.
-		 * NOTE: in case RT tasks are running, by default the min
-		 * utilization can be max OPP.
-		 */
-		eff_util = effective_cpu_util(cpu, util, &min, &max);
+		eff_util = effective_cpu_util(dst_cpu, util, &min, &max);
 
 		/* Task's uclamp can modify min and max value */
-		if (tsk && uclamp_is_used()) {
+		if (uclamp_is_used()) {
 			min = max(min, uclamp_eff_value(p, UCLAMP_MIN));
 
 			/*
 			 * If there is no active max uclamp constraint,
 			 * directly use task's one, otherwise keep max.
 			 */
-			if (uclamp_rq_is_idle(cpu_rq(cpu)))
+			if (uclamp_rq_is_idle(cpu_rq(dst_cpu)))
 				max = uclamp_eff_value(p, UCLAMP_MAX);
 			else
 				max = max(max, uclamp_eff_value(p, UCLAMP_MAX));
 		}
 
-		eff_util = sugov_effective_cpu_perf(cpu, eff_util, min, max);
+		eff_util = sugov_effective_cpu_perf(dst_cpu, eff_util, min, max);
 		max_util = max(max_util, eff_util);
 	}
 
@@ -8255,7 +8246,7 @@ static inline unsigned long
 compute_energy(struct energy_env *eenv, struct perf_domain *pd,
 	       struct cpumask *pd_cpus, struct task_struct *p, int dst_cpu)
 {
-	unsigned long max_util = eenv_pd_max_util(eenv, pd_cpus, p, dst_cpu);
+	unsigned long max_util = eenv_pd_max_util(eenv, pd, p, dst_cpu);
 	unsigned long busy_time = eenv->pd_busy_time;
 	unsigned long energy;
 
@@ -8320,7 +8311,7 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu)
 	unsigned long best_actual_cap = 0;
 	unsigned long prev_actual_cap = 0;
 	struct sched_domain *sd;
-	struct perf_domain *pd;
+	struct perf_domain *pd, *tmp_pd;
 	struct energy_env eenv;
 
 	rcu_read_lock();
@@ -8345,6 +8336,23 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu)
 		goto unlock;
 
 	eenv_task_busy_time(&eenv, p, prev_cpu);
+
+	/* Algorithmic Optimization: Pre-calculate max_util for O(1) energy estimation */
+	for (tmp_pd = pd; tmp_pd; tmp_pd = tmp_pd->next) {
+		unsigned long max_u = 0;
+		int i;
+
+		for_each_cpu(i, perf_domain_span(tmp_pd)) {
+			unsigned long util = cpu_util(i, p, -1, 1);
+			unsigned long eff_util, min, max;
+
+			eff_util = effective_cpu_util(i, util, &min, &max);
+			eff_util = sugov_effective_cpu_perf(i, eff_util, min, max);
+			if (eff_util > max_u)
+				max_u = eff_util;
+		}
+		tmp_pd->max_util = max_u;
+	}
 
 	for (; pd; pd = pd->next) {
 		unsigned long util_min = p_util_min, util_max = p_util_max;

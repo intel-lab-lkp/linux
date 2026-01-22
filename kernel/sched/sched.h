@@ -970,6 +970,10 @@ struct perf_domain {
 	struct em_perf_domain *em_pd;
 	struct perf_domain *next;
 	struct rcu_head rcu;
+
+	/* O(1) optimization hints */
+	unsigned long	   max_util;
+	int		   max_spare_cap_cpu;
 };
 
 /*
