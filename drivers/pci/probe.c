@@ -2412,6 +2412,58 @@ static void pci_configure_serr(struct pci_dev *dev)
 	}
 }
 
+static bool pcie_read_root_rcb(struct pci_dev *dev, bool *rcb)
+{
+	struct pci_dev *rp = pcie_find_root_port(dev);
+	u16 lnkctl;
+
+	if (!rp)
+		return false;
+
+	pcie_capability_read_word(rp, PCI_EXP_LNKCTL, &lnkctl);
+
+	*rcb = !!(lnkctl & PCI_EXP_LNKCTL_RCB);
+	return true;
+}
+
+static void pci_configure_rcb(struct pci_dev *dev)
+{
+	u16 lnkctl;
+	bool rcb;
+
+	/*
+	 * Per PCIe r7.0, sec 7.5.3.7, RCB is only meaningful in Root
+	 * Ports (where it is read-only), Endpoints, and Bridges.  It
+	 * may only be set for Endpoints and Bridges if it is set in
+	 * the Root Port. For Endpoints, it is 'RsvdP' for Virtual
+	 * Functions. If the Root Port's RCB cannot be determined, we
+	 * bail out.
+	 */
+	if (!pci_is_pcie(dev) ||
+	    pci_pcie_type(dev) == PCI_EXP_TYPE_ROOT_PORT ||
+	    pci_pcie_type(dev) == PCI_EXP_TYPE_UPSTREAM ||
+	    pci_pcie_type(dev) == PCI_EXP_TYPE_DOWNSTREAM ||
+	    pci_pcie_type(dev) == PCI_EXP_TYPE_RC_EC ||
+	    dev->is_virtfn || !pcie_read_root_rcb(dev, &rcb))
+		return;
+
+	pcie_capability_read_word(dev, PCI_EXP_LNKCTL, &lnkctl);
+	if (rcb) {
+		if (lnkctl & PCI_EXP_LNKCTL_RCB)
+			return;
+
+		lnkctl |= PCI_EXP_LNKCTL_RCB;
+	} else {
+		if (!(lnkctl & PCI_EXP_LNKCTL_RCB))
+			return;
+
+		pci_info(dev, FW_INFO "clearing RCB (RCB not set in Root Port)\n");
+		lnkctl &= ~PCI_EXP_LNKCTL_RCB;
+	}
+
+	pcie_capability_write_word(dev, PCI_EXP_LNKCTL, lnkctl);
+}
+
 static void pci_configure_device(struct pci_dev *dev)
 {
 	pci_configure_mps(dev);
@@ -2421,6 +2473,7 @@ static void pci_configure_device(struct pci_dev *dev)
 	pci_configure_aspm_l1ss(dev);
 	pci_configure_eetlp_prefix(dev);
 	pci_configure_serr(dev);
+	pci_configure_rcb(dev);
 
 	pci_acpi_program_hp_params(dev);
 }
