@@ -673,6 +673,26 @@ void bitmap_release_region(unsigned long *bitmap, unsigned int pos, int order)
 }
 
 /**
+ * bitmap_allocate - allocate bitmap region
+ *	@bitmap: array of unsigned longs corresponding to the bitmap
+ *	@pos: beginning of bit region to allocate
+ *	@len: number of bits to allocate
+ *
+ * Allocate (set bits in) a specified region of a bitmap.
+ *
+ * Returns: 0 on success, or %-EBUSY if specified region wasn't
+ * free (not all bits were zero).
+ */
+static __always_inline
+int bitmap_allocate(unsigned long *bitmap, unsigned int pos, unsigned int len)
+{
+	if (find_next_bit(bitmap, pos + len, pos) < pos + len)
+		return -EBUSY;
+	bitmap_set(bitmap, pos, len);
+	return 0;
+}
+
+/**
  * bitmap_allocate_region - allocate bitmap region
  *	@bitmap: array of unsigned longs corresponding to the bitmap
  *	@pos: beginning of bit region to allocate
@@ -686,12 +706,7 @@ void bitmap_release_region(unsigned long *bitmap, unsigned int pos, int order)
 static __always_inline
 int bitmap_allocate_region(unsigned long *bitmap, unsigned int pos, int order)
 {
-	unsigned int len = BIT(order);
-
-	if (find_next_bit(bitmap, pos + len, pos) < pos + len)
-		return -EBUSY;
-	bitmap_set(bitmap, pos, len);
-	return 0;
+	return bitmap_allocate(bitmap, pos, BIT(order));
 }
 
 /**
