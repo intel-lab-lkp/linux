@@ -34,6 +34,7 @@ pub(crate) type TyrDevice = drm::Device<TyrDriver>;
 
 #[pin_data(PinnedDrop)]
 pub(crate) struct TyrDriver {
+    #[allow(dead_code)]
     device: ARef<TyrDevice>,
 }
 
@@ -200,6 +201,8 @@ struct Clocks {
 
 #[pin_data]
 struct Regulators {
+    #[allow(dead_code)]
     mali: Regulator<regulator::Enabled>,
+    #[allow(dead_code)]
     sram: Regulator<regulator::Enabled>,
 }
