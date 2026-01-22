@@ -1,0 +1,36 @@
+drm drm-fixes 24d479d26b25bce5faea3ddd9fa8f3a6c3129ea7
+	Linux 6.19-rc6
+drm-misc drm-misc-fixes 0a095b64fa5b4b1edfeb2e9b1751e044230c5d73
+	drm/i915/display: Fix color pipeline enum name leak
+drm-rust drm-rust-fixes 0f61b1860cc3f52aef9036d7235ed1f017632193
+	Linux 6.19-rc5
+drm-intel drm-intel-fixes 81d0223832f99c0833e46be114a8310888015f8b
+	drm/i915/guc: make 'guc_hw_reg_state' static as it isn't exported
+drm-xe drm-xe-fixes e27ada4f19e7ffda4c05ce8633daf6daed667eea
+	drm/xe: Select CONFIG_DEVICE_PRIVATE when DRM_XE_GPUSVM is selected
+drm drm-next d62dec8c70934c428f80889c49e09a9d1d93c126
+	Merge tag 'mediatek-drm-next-20260117' of https://git.kernel.org/pub/scm/linux/kernel/git/chunkuang.hu/linux into drm-next
+drm-misc drm-misc-next-fixes 308eeb8ca3fdee54bcd3ec7272c05688e178299a
+	drm/rcar-du: dsi: Handle both DRM_MODE_FLAG_N.SYNC and !DRM_MODE_FLAG_P.SYNC
+drm-intel drm-intel-next-fixes 69f83f167463bad26104af7fbc114ce1f80366b0
+	drm/i915/psr: Don't enable Panel Replay on sink if globally disabled
+drm-xe drm-xe-next-fixes 3f1c07fc21c68bd3bd2df9d2c9441f6485e934d9
+	Merge drm/drm-next into drm-xe-next-fixes
+drm-misc drm-misc-next 68b271a3a94cfd6c7695a96b6398b52feb89e2c2
+	drm/bridge: fix kdoc syntax
+drm-rust drm-rust-next 6ea52b6d8f33ae627f4dcf43b12b6e713a8b9331
+	drm/tyr: use read_poll_timeout
+drm-intel drm-intel-next 37d5f4da49821cd542561d5cfffea35d32f5bef6
+	drm/i915/gvt_mmio_table: Use the gvt versions of the display macros
+drm-intel drm-intel-gt-next 9512d9fc2a7a4fee14854fbb3af89a8bf599f361
+	drm/i915/guc: Recommend GuC v70.53.0 for DG2, MTL
+drm-xe drm-xe-next dc2fc00ba94dee539593228a5e188c8e6a84ba47
+	drm/xe: Use DRM_BUDDY_CONTIGUOUS_ALLOCATION for contiguous allocations
+drm-intel topic/core-for-CI 3d15d7e81d498d56ca6ba3af63f2fa1106da87ad
+	ACPI: PM: s2idle: Add module parameter for LPS0 constraints checking
+drm-xe topic/xe-for-CI 912b9b537ae6e75c352d42f7ac40b50f9aa3d2ce
+	topic/for-xe-CI: drm/xe/cri: Define GuC firmware for CRI
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
+drm-intel topic/drm-intel-plane-color-pipeline 860daa4b0d09a398a0ac9ae6fe67efd73a275968
+	drm/i915/color: Enable Plane Color Pipelines
