@@ -205,6 +205,12 @@
 #define EXTENDED_CAPABILITY		0xe8
 #define SLAVE_CONFIG			0xec
 
+#define DYN_ADDR_LO_BITS 5       /* lower 5 bits of 7-bit dynamic address */
+#define DYN_ADDR_HI_BITS 2       /* upper 2 bits of 7-bit dynamic address */
+#define DYN_ADDR_LO_MASK GENMASK(DYN_ADDR_LO_BITS - 1, 0)
+#define DYN_ADDR_HI_MASK GENMASK(DYN_ADDR_LO_BITS + DYN_ADDR_HI_BITS - 1, DYN_ADDR_LO_BITS)
+#define IBI_SIR_BIT_MOD 32       /* 32-bit vector */
+
 #define DW_I3C_DEV_NACK_RETRY_CNT_MAX	0x3
 #define DEV_ADDR_TABLE_DEV_NACK_RETRY_MASK   GENMASK(30, 29)
 #define DEV_ADDR_TABLE_DYNAMIC_MASK		GENMASK(23, 16)
@@ -217,6 +223,7 @@
 #define DEV_ADDR_TABLE_DYNAMIC_ADDR(x) FIELD_PREP(DEV_ADDR_TABLE_DYNAMIC_MASK, x)
 #define DEV_ADDR_TABLE_STATIC_ADDR(x) FIELD_PREP(DEV_ADDR_TABLE_STATIC_MASK, x)
 #define DEV_ADDR_TABLE_LOC(start, idx)	((start) + ((idx) << 2))
+#define DEV_ADDR_TABLE_GET_DYNAMIC_ADDR(x) FIELD_GET(DEV_ADDR_TABLE_DYNAMIC_MASK, x)
 
 #define I3C_BUS_SDR1_SCL_RATE		8000000
 #define I3C_BUS_SDR2_SCL_RATE		6000000
@@ -263,6 +270,14 @@ struct dw_i3c_i2c_dev_data {
 struct dw_i3c_drvdata {
 	u32 flags;
 };
+
+static inline u32 get_ibi_sir_bit_index(u8 addr)
+{
+	u32 lo = addr & DYN_ADDR_LO_MASK;
+	u32 hi = (addr & DYN_ADDR_HI_MASK) >> DYN_ADDR_LO_BITS;
+
+	return (lo + hi) % IBI_SIR_BIT_MOD;
+}
 
 static bool dw_i3c_master_supports_ccc_cmd(struct i3c_master_controller *m,
 					   const struct i3c_ccc_cmd *cmd)
@@ -1246,11 +1261,21 @@ static void dw_i3c_master_set_sir_enabled(struct dw_i3c_master *master,
 	unsigned long flags;
 	u32 dat_entry, reg;
 	bool global;
+	u8 dynamic_addr;
 
 	dat_entry = DEV_ADDR_TABLE_LOC(master->datstartaddr, idx);
 
 	spin_lock_irqsave(&master->devs_lock, flags);
 	reg = readl(master->regs + dat_entry);
+	dynamic_addr = DEV_ADDR_TABLE_GET_DYNAMIC_ADDR(reg);
+
+	if (!dynamic_addr) {
+		dev_warn(master->dev,
+			 "<%s> unassigned slave device, dynamic addr:%x\n",
+			 __func__, dynamic_addr);
+		goto unlock_out;
+	}
+
 	if (enable) {
 		reg &= ~DEV_ADDR_TABLE_SIR_REJECT;
 		if (dev->info.bcr & I3C_BCR_IBI_PAYLOAD)
@@ -1263,11 +1288,11 @@ static void dw_i3c_master_set_sir_enabled(struct dw_i3c_master *master,
 
 	if (enable) {
 		global = (master->sir_rej_mask == IBI_REQ_REJECT_ALL);
-		master->sir_rej_mask &= ~BIT(idx);
+		master->sir_rej_mask &= ~BIT(get_ibi_sir_bit_index(dynamic_addr));
 	} else {
 		bool hj_rejected = !!(readl(master->regs + DEVICE_CTRL) & DEV_CTRL_HOT_JOIN_NACK);
 
-		master->sir_rej_mask |= BIT(idx);
+		master->sir_rej_mask |= BIT(get_ibi_sir_bit_index(dynamic_addr));
 		global = (master->sir_rej_mask == IBI_REQ_REJECT_ALL) && hj_rejected;
 	}
 	writel(master->sir_rej_mask, master->regs + IBI_SIR_REQ_REJECT);
@@ -1275,7 +1300,7 @@ static void dw_i3c_master_set_sir_enabled(struct dw_i3c_master *master,
 	if (global)
 		dw_i3c_master_enable_sir_signal(master, enable);
 
-
+unlock_out:
 	spin_unlock_irqrestore(&master->devs_lock, flags);
 }
 
