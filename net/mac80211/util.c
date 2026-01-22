@@ -4478,7 +4478,8 @@ int ieee80211_put_eht_cap(struct sk_buff *skb,
 			~IEEE80211_EHT_PHY_CAP6_MCS15_SUPP_160MHZ;
 	}
 
-	if (conn->bw_limit < IEEE80211_CONN_BW_LIMIT_320) {
+	if (conn->bw_limit < IEEE80211_CONN_BW_LIMIT_320 ||
+	    sband->band != NL80211_BAND_6GHZ) {
 		fixed.phy_cap_info[0] &=
 			~IEEE80211_EHT_PHY_CAP0_320MHZ_IN_6GHZ;
 		fixed.phy_cap_info[1] &=
