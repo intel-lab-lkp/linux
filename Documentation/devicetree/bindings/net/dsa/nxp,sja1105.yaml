@@ -85,11 +85,31 @@ properties:
           - compatible
           - reg
 
+  regs:
+    type: object
+    description:
+      Optional container node for peripherals in the switch address space other
+      than the switching IP itself. This node and its children only need to be
+      described if board-specific properties need to be specified, like SerDes
+      lane polarity inversion. If absent, default descriptions are used.
+    additionalProperties: false
+
+    properties:
+      '#address-cells':
+        const: 1
+      '#size-cells':
+        const: 1
+
+    patternProperties:
+      "^ethernet-pcs@[0-9a-f]+$":
+        $ref: /schemas/net/pcs/snps,dw-xpcs.yaml#
+
 patternProperties:
   "^(ethernet-)?ports$":
     additionalProperties: true
     patternProperties:
       "^(ethernet-)?port@[0-9]$":
+        type: object
         allOf:
           - if:
               properties:
@@ -106,6 +126,13 @@ patternProperties:
                   $ref: "#/$defs/internal-delay-ps"
                 tx-internal-delay-ps:
                   $ref: "#/$defs/internal-delay-ps"
+
+        properties:
+          pcs-handle:
+            description:
+              Phandle to a PCS device node from the "regs" container.
+              Can be skipped if the PCS description is missing - in that case,
+              the connection is implicit.
 
 required:
   - compatible
