@@ -810,10 +810,56 @@ static int __driver_probe_device(const struct device_driver *drv, struct device 
 	return ret;
 }
 
+/* Context for NUMA execution */
+struct numa_work_ctx {
+	struct work_struct work;
+	const struct device_driver *drv;
+	struct device *dev;
+	int result;
+};
+
+/* Worker function running on the target node */
+static void __driver_probe_device_node_helper(struct work_struct *work)
+{
+	struct numa_work_ctx *ctx = container_of(work, struct numa_work_ctx, work);
+
+	ctx->result = __driver_probe_device(ctx->drv, ctx->dev);
+}
+
+/*
+ * __driver_probe_device_node - execute __driver_probe_device on a specific NUMA node synchronously
+ * @drv: driver to bind a device to
+ * @dev: device to try to bind to the driver
+ *
+ * Returns the result of the function execution, or -ENODEV if initialization fails.
+ * If the node is invalid or offline, it falls back to local execution.
+ */
+static int __driver_probe_device_node(const struct device_driver *drv, struct device *dev)
+{
+	struct numa_work_ctx ctx;
+	int node = dev_to_node(dev);
+
+	if (node < 0 || node >= MAX_NUMNODES || !node_online(node))
+		return __driver_probe_device(drv, dev);
+
+	ctx.drv = drv;
+	ctx.dev = dev;
+	ctx.result = -ENODEV;
+	INIT_WORK_ONSTACK(&ctx.work, __driver_probe_device_node_helper);
+
+	/* Use system_dfl_wq to allow execution on the specific node. */
+	queue_work_node(node, system_dfl_wq, &ctx.work);
+	flush_work(&ctx.work);
+	destroy_work_on_stack(&ctx.work);
+
+	return ctx.result;
+}
+
 /**
  * driver_probe_device - attempt to bind device & driver together
  * @drv: driver to bind a device to
  * @dev: device to try to bind to the driver
+ * @in_async: true if the caller is running in an asynchronous worker context
  *
  * This function returns -ENODEV if the device is not registered, -EBUSY if it
  * already has a driver, 0 if the device is bound successfully and a positive
@@ -824,13 +870,22 @@ static int __driver_probe_device(const struct device_driver *drv, struct device 
  *
  * If the device has a parent, runtime-resume the parent before driver probing.
  */
-static int driver_probe_device(const struct device_driver *drv, struct device *dev)
+static int driver_probe_device(const struct device_driver *drv, struct device *dev, bool in_async)
 {
 	int trigger_count = atomic_read(&deferred_trigger_count);
 	int ret;
 
 	atomic_inc(&probe_count);
-	ret = __driver_probe_device(drv, dev);
+	/*
+	 * If we are already in an asynchronous worker, invoke __driver_probe_device()
+	 * directly to avoid the overhead of an additional workqueue scheduling.
+	 * The async subsystem manages its own concurrency and placement.
+	 */
+	if (in_async)
+		ret = __driver_probe_device(drv, dev);
+	else
+		ret = __driver_probe_device_node(drv, dev);
+
 	if (ret == -EPROBE_DEFER || ret == EPROBE_DEFER) {
 		driver_deferred_probe_add(dev);
 
@@ -919,6 +974,13 @@ struct device_attach_data {
 	 * driver, we'll encounter one that requests asynchronous probing.
 	 */
 	bool have_async;
+
+	/*
+	 * True when running inside an asynchronous worker context scheduled
+	 * by async_schedule_dev() with callback function
+	 * __device_attach_async_helper().
+	 */
+	bool in_async;
 };
 
 static int __device_attach_driver(struct device_driver *drv, void *_data)
@@ -958,7 +1020,7 @@ static int __device_attach_driver(struct device_driver *drv, void *_data)
 	 * Ignore errors returned by ->probe so that the next driver can try
 	 * its luck.
 	 */
-	ret = driver_probe_device(drv, dev);
+	ret = driver_probe_device(drv, dev, data->in_async);
 	if (ret < 0)
 		return ret;
 	return ret == 0;
@@ -1009,6 +1071,7 @@ static void __device_attach_async_helper(void *_dev, async_cookie_t cookie)
 		.dev		= dev,
 		.check_async	= true,
 		.want_async	= true,
+		.in_async	= true,
 	};
 
 	device_lock(dev);
@@ -1055,6 +1118,7 @@ static int __device_attach(struct device *dev, bool allow_async)
 			.dev = dev,
 			.check_async = allow_async,
 			.want_async = false,
+			.in_async = false,
 		};
 
 		ret = __device_attach_driver_scan(&data, &async);
@@ -1144,7 +1208,7 @@ int device_driver_attach(const struct device_driver *drv, struct device *dev)
 	int ret;
 
 	__device_driver_lock(dev, dev->parent);
-	ret = __driver_probe_device(drv, dev);
+	ret = __driver_probe_device_node(drv, dev);
 	__device_driver_unlock(dev, dev->parent);
 
 	/* also return probe errors as normal negative errnos */
@@ -1165,7 +1229,7 @@ static void __driver_attach_async_helper(void *_dev, async_cookie_t cookie)
 	__device_driver_lock(dev, dev->parent);
 	drv = dev->p->async_driver;
 	dev->p->async_driver = NULL;
-	ret = driver_probe_device(drv, dev);
+	ret = driver_probe_device(drv, dev, true);
 	__device_driver_unlock(dev, dev->parent);
 
 	dev_dbg(dev, "driver %s async attach completed: %d\n", drv->name, ret);
@@ -1233,7 +1297,7 @@ static int __driver_attach(struct device *dev, void *data)
 	}
 
 	__device_driver_lock(dev, dev->parent);
-	driver_probe_device(drv, dev);
+	driver_probe_device(drv, dev, false);
 	__device_driver_unlock(dev, dev->parent);
 
 	return 0;
