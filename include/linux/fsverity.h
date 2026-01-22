@@ -31,13 +31,6 @@ struct fsverity_info;
 /* Verity operations for filesystems */
 struct fsverity_operations {
 	/**
-	 * The offset of the pointer to struct fsverity_info in the
-	 * filesystem-specific part of the inode, relative to the beginning of
-	 * the common part of the inode (the 'struct inode').
-	 */
-	ptrdiff_t inode_info_offs;
-
-	/**
 	 * Begin enabling verity on the given file.
 	 *
 	 * @filp: a readonly file descriptor for the file
@@ -142,40 +135,6 @@ struct fsverity_operations {
 };
 
 #ifdef CONFIG_FS_VERITY
-
-/*
- * Returns the address of the verity info pointer within the filesystem-specific
- * part of the inode.  (To save memory on filesystems that don't support
- * fsverity, a field in 'struct inode' itself is no longer used.)
- */
-static inline struct fsverity_info **
-fsverity_info_addr(const struct inode *inode)
-{
-	VFS_WARN_ON_ONCE(inode->i_sb->s_vop->inode_info_offs == 0);
-	return (void *)inode + inode->i_sb->s_vop->inode_info_offs;
-}
-
-static inline struct fsverity_info *fsverity_get_info(const struct inode *inode)
-{
-	/*
-	 * Since this function can be called on inodes belonging to filesystems
-	 * that don't support fsverity at all, and fsverity_info_addr() doesn't
-	 * work on such filesystems, we have to start with an IS_VERITY() check.
-	 * Checking IS_VERITY() here is also useful to minimize the overhead of
-	 * fsverity_active() on non-verity files.
-	 */
-	if (!IS_VERITY(inode))
-		return NULL;
-
-	/*
-	 * Pairs with the cmpxchg_release() in fsverity_set_info().  I.e.,
-	 * another task may publish the inode's verity info concurrently,
-	 * executing a RELEASE barrier.  Use smp_load_acquire() here to safely
-	 * ACQUIRE the memory the other task published.
-	 */
-	return smp_load_acquire(fsverity_info_addr(inode));
-}
-
 /* enable.c */
 
 int fsverity_ioctl_enable(struct file *filp, const void __user *arg);
@@ -203,11 +162,6 @@ void fsverity_verify_bio(struct fsverity_info *vi, struct bio *bio);
 void fsverity_enqueue_verify_work(struct work_struct *work);
 
 #else /* !CONFIG_FS_VERITY */
-
-static inline struct fsverity_info *fsverity_get_info(const struct inode *inode)
-{
-	return NULL;
-}
 
 /* enable.c */
 
@@ -289,18 +243,35 @@ static inline bool fsverity_verify_page(struct fsverity_info *vi,
  * fsverity_active() - do reads from the inode need to go through fs-verity?
  * @inode: inode to check
  *
- * This checks whether the inode's verity info has been set.
- *
- * Filesystems call this from ->readahead() to check whether the pages need to
- * be verified or not.  Don't use IS_VERITY() for this purpose; it's subject to
- * a race condition where the file is being read concurrently with
- * FS_IOC_ENABLE_VERITY completing.  (S_VERITY is set before the verity info.)
+ * This checks whether the inode's verity info has been set, and reads need
+ * to verify the verity information.
  *
  * Return: true if reads need to go through fs-verity, otherwise false
  */
 static inline bool fsverity_active(const struct inode *inode)
 {
-	return fsverity_get_info(inode) != NULL;
+	/*
+	 * The memory barrier pairs with the try_cmpxchg in set_mask_bits used
+	 * to set the S_VERITY bit in i_flags.
+	 */
+	smp_mb();
+	return IS_ENABLED(CONFIG_FS_VERITY) && IS_VERITY(inode);
+}
+
+/**
+ * fsverity_get_info - get fsverity information for an inode
+ * @inode: inode to operate on.
+ *
+ * This gets the fsverity_info for @inode if it exists.  Safe to call without
+ * knowin that a fsverity_info exist for @inode, including on file systems that
+ * do not support fsverity.
+ */
+struct fsverity_info *__fsverity_get_info(const struct inode *inode);
+static inline struct fsverity_info *fsverity_get_info(const struct inode *inode)
+{
+	if (!fsverity_active(inode))
+		return NULL;
+	return __fsverity_get_info(inode);
 }
 
 /**
