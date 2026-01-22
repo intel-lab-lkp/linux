@@ -192,13 +192,19 @@ struct handle_to_path_ctx {
 #define FILEID_VALID_USER_FLAGS	(FILEID_IS_CONNECTABLE | FILEID_IS_DIR)
 
 /**
- * struct export_operations - for nfsd to communicate with file systems
+ * struct export_operations
+ *
+ * Methods for nfsd to communicate with file systems:
  * @encode_fh:      encode a file handle fragment from a dentry
  * @fh_to_dentry:   find the implied object and get a dentry for it
  * @fh_to_parent:   find the implied object's parent and get a dentry for it
  * @get_name:       find the name for a given inode in a given directory
  * @get_parent:     find the parent of a given directory
  * @commit_metadata: commit metadata changes to stable storage
+ *
+ * Methods for open_by_handle(2) syscall with special kernel file systems:
+ * @permission:     custom permission for opening a file by handle
+ * @open:           custom open routine for opening file by handle
  *
  * See Documentation/filesystems/nfs/exporting.rst for details on how to use
  * this interface correctly.
@@ -243,14 +249,18 @@ struct handle_to_path_ctx {
  *    is also a directory.  In the event that it cannot be found, or storage
  *    space cannot be allocated, a %ERR_PTR should be returned.
  *
- * permission:
- *    Allow filesystems to specify a custom permission function.
- *
- * open:
- *    Allow filesystems to specify a custom open function.
- *
  * commit_metadata:
  *    @commit_metadata should commit metadata changes to stable storage.
+ *
+ * permission:
+ *    Allow filesystems to specify a custom permission function for the
+ *    open_by_handle_at(2) syscall instead of the default CAP_DAC_READ_SEARCH
+ *    check. This custom permission function is not respected by nfsd.
+ *
+ * open:
+ *    Allow filesystems to specify a custom open function for the
+ *    open_by_handle_at(2) syscall instead of the default file_open_root().
+ *    This custom open function is not respected by nfsd.
  *
  * Locking rules:
  *    get_parent is called with child->d_inode->i_rwsem down
@@ -315,6 +325,15 @@ static inline bool exportfs_can_encode_fid(const struct export_operations *nop)
 static inline bool exportfs_can_decode_fh(const struct export_operations *nop)
 {
 	return nop && nop->fh_to_dentry;
+}
+
+static inline bool exportfs_may_export(const struct export_operations *nop)
+{
+	/*
+	 * Do not allow nfs export for filesystems with custom ->open() and
+	 * ->permission() ops, which nfsd does not respect (e.g. pidfs, nsfs).
+	 */
+	return exportfs_can_decode_fh(nop) && !nop->open && !nop->permission;
 }
 
 static inline bool exportfs_can_encode_fh(const struct export_operations *nop,

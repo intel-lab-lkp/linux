@@ -100,7 +100,8 @@ Filesystem Issues
 
 For a filesystem to be exportable it must:
 
-   1. provide the filehandle fragment routines described below.
+   1. implement all the mandatory routines described below and
+      none of the export incompatible routines below.
    2. make sure that d_splice_alias is used rather than d_add
       when ->lookup finds an inode for a given parent and name.
 
@@ -150,6 +151,16 @@ struct which has the following members:
     supplied, a default implementation is provided which uses vfs_readdir
     to find potential names, and matches inode numbers to find the correct
     match.
+
+  permission: (incompatible for export to remote filesystem)
+    Allow filesystems to specify a custom permission function for the
+    open_by_handle_at(2) syscall instead of the default CAP_DAC_READ_SEARCH
+    check. This custom permission function is not respected by nfsd.
+
+  open: (incompatible for export to remote filesystem)
+    Allow filesystems to specify a custom open function for the
+    open_by_handle_at(2) syscall instead of the default file_open_root().
+    This custom open function is not respected by nfsd.
 
   flags
     Some filesystems may need to be handled differently than others. The
