@@ -1716,16 +1716,16 @@ static void send_ext_msg_udp(struct netconsole_target *nt,
 				   sysdata_len);
 }
 
-static void send_msg_udp(struct netconsole_target *nt, const char *msg,
-			 unsigned int len)
+static void send_msg_udp(struct netconsole_target *nt,
+			 struct nbcon_write_context *wctxt)
 {
-	const char *tmp = msg;
-	int frag, left = len;
+	const char *msg = wctxt->outbuf;
+	int frag, left = wctxt->len;
 
 	while (left > 0) {
 		frag = min(left, MAX_PRINT_CHUNK);
-		send_udp(nt, tmp, frag);
-		tmp += frag;
+		send_udp(nt, msg, frag);
+		msg += frag;
 		left -= frag;
 	}
 }
@@ -1759,7 +1759,7 @@ static void netconsole_write(struct nbcon_write_context *wctxt, bool extended)
 		if (extended)
 			send_ext_msg_udp(nt, wctxt);
 		else
-			send_msg_udp(nt, wctxt->outbuf, wctxt->len);
+			send_msg_udp(nt, wctxt);
 
 		nbcon_exit_unsafe(wctxt);
 	}
