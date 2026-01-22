@@ -18,12 +18,17 @@ use kernel::{
     time::{
         Delta, //
     },
+    transmute::AsBytes, //
 };
 
 use crate::{
     dma::DmaObject,
     driver::Bar0,
     falcon::hal::LoadMethod,
+    firmware::fwsec::{
+        BootloaderDmemDescV2,
+        GenericBootloader, //
+    },
     gpu::Chipset,
     num::{
         FromSafeCast,
@@ -498,7 +503,12 @@ impl<E: FalconEngine + 'static> Falcon<E> {
     }
 
     /// Perform a PIO copy into `IMEM` and `DMEM` of `fw`, and prepare the falcon to run it.
-    pub(crate) fn pio_load<F: FalconFirmware<Target = E>>(&self, bar: &Bar0, fw: &F) -> Result {
+    pub(crate) fn pio_load<F: FalconFirmware<Target = E>>(
+        &self,
+        bar: &Bar0,
+        fw: &F,
+        gbl: Option<&GenericBootloader>,
+    ) -> Result {
         let imem_sec = fw.imem_sec_load_params();
         let imem_ns = fw.imem_ns_load_params().ok_or(EINVAL)?;
         let dmem = fw.dmem_load_params();
@@ -509,21 +519,55 @@ impl<E: FalconEngine + 'static> Falcon<E> {
 
         regs::NV_PFALCON_FALCON_DMACTL::default().write(bar, &E::ID);
 
-        self.pio_wr(
-            bar,
-            fw,
-            FalconMem::ImemNonSecure,
-            &imem_ns,
-            u16::try_from(imem_ns.dst_start >> 8)?,
-        )?;
-        self.pio_wr(
-            bar,
-            fw,
-            FalconMem::ImemSecure,
-            &imem_sec,
-            u16::try_from(imem_sec.dst_start >> 8)?,
-        )?;
-        self.pio_wr(bar, fw, FalconMem::Dmem, &dmem, 0)?;
+        // If the Generic Bootloader was passed, then use it to boot FRTS
+        if let Some(gbl) = gbl {
+            let dst_start = u16::try_from(0x10000 - gbl.desc.code_size)?;
+            let data = &gbl.ucode[..usize::from_safe_cast(gbl.desc.code_size)];
+            let tag = u16::try_from(gbl.desc.start_tag)?;
+
+            self.pio_wr_slice(bar, data, dst_start, FalconMem::ImemNonSecure, tag)?;
+
+            // This structure tells the generic bootloader where to find the FWSEC
+            // image.
+            let dmem_desc = BootloaderDmemDescV2 {
+                reserved: [0; 4],
+                signature: [0; 4],
+                ctx_dma: 4, // FALCON_DMAIDX_PHYS_SYS_NCOH
+                code_dma_base: fw.dma_handle(),
+                non_sec_code_off: imem_ns.dst_start,
+                non_sec_code_size: imem_ns.len,
+                sec_code_off: imem_sec.dst_start,
+                sec_code_size: imem_sec.len,
+                code_entry_point: 0,
+                data_dma_base: fw.dma_handle() + u64::from(dmem.src_start),
+                data_size: dmem.len,
+                argc: 0,
+                argv: 0,
+            };
+
+            regs::NV_PFALCON_FBIF_TRANSCFG::update(bar, &E::ID, 4, |v| {
+                v.set_target(FalconFbifTarget::CoherentSysmem)
+                    .set_mem_type(FalconFbifMemType::Physical)
+            });
+
+            self.pio_wr_slice(bar, dmem_desc.as_bytes(), 0, FalconMem::Dmem, 0)?;
+        } else {
+            self.pio_wr(
+                bar,
+                fw,
+                FalconMem::ImemNonSecure,
+                &imem_ns,
+                u16::try_from(imem_ns.dst_start >> 8)?,
+            )?;
+            self.pio_wr(
+                bar,
+                fw,
+                FalconMem::ImemSecure,
+                &imem_sec,
+                u16::try_from(imem_sec.dst_start >> 8)?,
+            )?;
+            self.pio_wr(bar, fw, FalconMem::Dmem, &dmem, 0)?;
+        }
 
         self.hal.program_brom(self, bar, &fw.brom_params())?;
 
@@ -764,9 +808,14 @@ impl<E: FalconEngine + 'static> Falcon<E> {
     }
 
     // Load a firmware image into Falcon memory
-    pub(crate) fn load<F: FalconFirmware<Target = E>>(&self, bar: &Bar0, fw: &F) -> Result {
+    pub(crate) fn load<F: FalconFirmware<Target = E>>(
+        &self,
+        bar: &Bar0,
+        fw: &F,
+        gbl: Option<&GenericBootloader>,
+    ) -> Result {
         match self.hal.load_method() {
-            LoadMethod::Pio => self.pio_load(bar, fw),
+            LoadMethod::Pio => self.pio_load(bar, fw, gbl),
             LoadMethod::Dma => self.dma_load(bar, fw),
         }
     }
