@@ -4,8 +4,11 @@
 #define _LINUX_RANDOM_H
 
 #include <linux/bug.h>
-#include <linux/kernel.h>
+#include <linux/init.h>
+#include <linux/limits.h>
 #include <linux/list.h>
+#include <linux/log2.h>
+#include <linux/types.h>
 
 #include <uapi/linux/random.h>
 
