@@ -246,6 +246,13 @@ static void __free_pages_ok(struct page *page, unsigned int order,
 			    fpi_t fpi_flags);
 
 /*
+ * Boost watermarks by ~0.1% of zone size on atomic allocation pressure.
+ * This provides zone-proportional safety buffers: ~1MB per 1GB of zone size.
+ * Larger zones under GFP_ATOMIC pressure need proportionally larger reserves.
+ */
+#define ATOMIC_BOOST_SCALE_SHIFT 10
+
+/*
  * results with 256, 32 in the lowmem_reserve sysctl:
  *	1G machine -> (16M dma, 800M-16M normal, 1G-800M high)
  *	1G machine -> (16M dma, 784M normal, 224M high)
@@ -2216,10 +2223,29 @@ static inline bool boost_watermark(struct zone *zone)
 
 	max_boost = max(pageblock_nr_pages, max_boost);
 
-	zone->watermark_boost = min(zone->watermark_boost + pageblock_nr_pages,
+	zone->watermark_boost = min(zone->watermark_boost +
+		max(pageblock_nr_pages, zone_managed_pages(zone) >> ATOMIC_BOOST_SCALE_SHIFT),
 		max_boost);
 
 	return true;
+}
+
+static void boost_zones_for_atomic(struct alloc_context *ac, gfp_t gfp_mask)
+{
+	struct zoneref *z;
+	struct zone *zone;
+	unsigned long now = jiffies;
+
+	for_each_zone_zonelist(zone, z, ac->zonelist, ac->highest_zoneidx) {
+		/* 1 second debounce to avoid spamming boosts in a burst */
+		if (time_after(now, zone->last_boost_jiffies + HZ)) {
+			zone->last_boost_jiffies = now;
+			if (boost_watermark(zone))
+				wakeup_kswapd(zone, gfp_mask, 0, ac->highest_zoneidx);
+			/* Only boost the preferred zone to be precise */
+			break;
+		}
+	}
 }
 
 /*
@@ -4772,6 +4798,10 @@ restart:
 	if (page)
 		goto got_pg;
 
+	/* Proactively boost for atomic requests entering slowpath */
+	if ((gfp_mask & GFP_ATOMIC) && order == 0)
+		boost_zones_for_atomic(ac, gfp_mask);
+
 	/*
 	 * For costly allocations, try direct compaction first, as it's likely
 	 * that we have enough base pages and don't need to reclaim. For non-
@@ -4977,6 +5007,10 @@ nopage:
 		goto retry;
 	}
 fail:
+	/* Boost watermarks on atomic allocation failure to trigger kswapd */
+	if (unlikely(page == NULL && (gfp_mask & GFP_ATOMIC) && order == 0))
+		boost_zones_for_atomic(ac, gfp_mask);
+
 	warn_alloc(gfp_mask, ac->nodemask,
 			"page allocation failure: order:%u", order);
 got_pg:
