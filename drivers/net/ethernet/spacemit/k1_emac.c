@@ -1568,6 +1568,7 @@ static int emac_phy_connect(struct net_device *ndev)
 	struct device *dev = &priv->pdev->dev;
 	struct phy_device *phydev;
 	struct device_node *np;
+	char *irq_str;
 	int ret;
 
 	ret = of_get_phy_mode(dev->of_node, &priv->phy_interface);
@@ -1609,6 +1610,11 @@ static int emac_phy_connect(struct net_device *ndev)
 		ret = -ENODEV;
 		goto err_node_put;
 	}
+
+	irq_str = phy_attached_info_irq(phydev);
+	netdev_info(ndev, "PHY driver [%s] (irq=%s)\n",
+		    phydev->drv->name, irq_str);
+	kfree(irq_str);
 
 	phydev->mac_managed_pm = true;
 
