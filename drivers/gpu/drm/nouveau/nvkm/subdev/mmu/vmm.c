@@ -242,14 +242,17 @@ nvkm_vmm_unref_sptes(struct nvkm_vmm_iter *it, struct nvkm_vmm_pt *pgt,
 		if (pgt->pte[pteb] & NVKM_VMM_PTE_SPARSE) {
 			TRA(it, "LPTE %05x: U -> S %d PTEs", pteb, ptes);
 			pair->func->sparse(vmm, pgt->pt[0], pteb, ptes);
-		} else
-		if (pair->func->invalid) {
-			/* If the MMU supports it, restore the LPTE to the
-			 * INVALID state to tell the MMU there is no point
-			 * trying to fetch the corresponding SPTEs.
-			 */
-			TRA(it, "LPTE %05x: U -> I %d PTEs", pteb, ptes);
-			pair->func->invalid(vmm, pgt->pt[0], pteb, ptes);
+		} else if (!(pgt->pte[pteb] & NVKM_VMM_PTE_BIG_VALID)) {
+			if (pair->func->invalid) {
+				/* If the MMU supports it, restore the LPTE to the
+				 * INVALID state to tell the MMU there is no point
+				 * trying to fetch the corresponding SPTEs.
+				 */
+				TRA(it, "LPTE %05x: U -> I %d PTEs", pteb, ptes);
+				pair->func->invalid(vmm, pgt->pt[0], pteb, ptes);
+			}
+		} else {
+			TRA(it, "LPTE %05x: V %d PTEs", pteb, ptes);
 		}
 	}
 }
@@ -279,6 +282,13 @@ nvkm_vmm_unref_ptes(struct nvkm_vmm_iter *it, bool pfn, u32 ptei, u32 ptes)
 	/* Dual-PTs need special handling, unless PDE becoming invalid. */
 	if (desc->type == SPT && (pgt->refs[0] || pgt->refs[1]))
 		nvkm_vmm_unref_sptes(it, pgt, desc, ptei, ptes);
+
+	if (desc->type == LPT && (pgt->refs[0] || pgt->refs[1])) {
+		for (u32 lpti = ptei; ptes; lpti++) {
+			pgt->pte[lpti] &= ~NVKM_VMM_PTE_BIG_VALID;
+			ptes--;
+		}
+	}
 
 	/* PT no longer needed? Destroy it. */
 	if (!pgt->refs[type]) {
@@ -373,6 +383,13 @@ nvkm_vmm_ref_ptes(struct nvkm_vmm_iter *it, bool pfn, u32 ptei, u32 ptes)
 	/* Dual-PTs need special handling. */
 	if (desc->type == SPT)
 		nvkm_vmm_ref_sptes(it, pgt, desc, ptei, ptes);
+
+	if (desc->type == LPT) {
+		for (u32 lpti = ptei; ptes; lpti++) {
+			pgt->pte[lpti] |= NVKM_VMM_PTE_BIG_VALID;
+			ptes--;
+		}
+	}
 
 	return true;
 }

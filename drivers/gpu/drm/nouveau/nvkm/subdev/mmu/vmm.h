@@ -46,7 +46,8 @@ struct nvkm_vmm_pt {
 	 */
 #define NVKM_VMM_PTE_SPARSE 0x80
 #define NVKM_VMM_PTE_VALID  0x40
-#define NVKM_VMM_PTE_SPTES  0x3f
+#define NVKM_VMM_PTE_BIG_VALID 0x20
+#define NVKM_VMM_PTE_SPTES  0x1f
 	u8 pte[];
 };
 
