@@ -964,6 +964,44 @@ static int __device_attach_driver(struct device_driver *drv, void *_data)
 	return ret == 0;
 }
 
+static int __device_attach_driver_scan(struct device_attach_data *data,
+				       bool *need_async)
+{
+	int ret = 0;
+	struct device *dev = data->dev;
+
+	if (dev->parent)
+		pm_runtime_get_sync(dev->parent);
+
+	ret = bus_for_each_drv(dev->bus, NULL, data,
+			       __device_attach_driver);
+	/*
+	 * When running in an async worker, a NULL need_async is passed
+	 * since we are already in an async worker.
+	 */
+	if (need_async && !ret && data->check_async && data->have_async) {
+		/*
+		 * If we could not find appropriate driver
+		 * synchronously and we are allowed to do
+		 * async probes and there are drivers that
+		 * want to probe asynchronously, we'll
+		 * try them.
+		 */
+		dev_dbg(dev, "scheduling asynchronous probe\n");
+		get_device(dev);
+		*need_async = true;
+	} else {
+		if (!need_async)
+			dev_dbg(dev, "async probe completed\n");
+		pm_request_idle(dev);
+	}
+
+	if (dev->parent)
+		pm_runtime_put(dev->parent);
+
+	return ret;
+}
+
 static void __device_attach_async_helper(void *_dev, async_cookie_t cookie)
 {
 	struct device *dev = _dev;
@@ -984,16 +1022,8 @@ static void __device_attach_async_helper(void *_dev, async_cookie_t cookie)
 	if (dev->p->dead || dev->driver)
 		goto out_unlock;
 
-	if (dev->parent)
-		pm_runtime_get_sync(dev->parent);
+	__device_attach_driver_scan(&data, NULL);
 
-	bus_for_each_drv(dev->bus, NULL, &data, __device_attach_driver);
-	dev_dbg(dev, "async probe completed\n");
-
-	pm_request_idle(dev);
-
-	if (dev->parent)
-		pm_runtime_put(dev->parent);
 out_unlock:
 	device_unlock(dev);
 
@@ -1027,28 +1057,7 @@ static int __device_attach(struct device *dev, bool allow_async)
 			.want_async = false,
 		};
 
-		if (dev->parent)
-			pm_runtime_get_sync(dev->parent);
-
-		ret = bus_for_each_drv(dev->bus, NULL, &data,
-					__device_attach_driver);
-		if (!ret && allow_async && data.have_async) {
-			/*
-			 * If we could not find appropriate driver
-			 * synchronously and we are allowed to do
-			 * async probes and there are drivers that
-			 * want to probe asynchronously, we'll
-			 * try them.
-			 */
-			dev_dbg(dev, "scheduling asynchronous probe\n");
-			get_device(dev);
-			async = true;
-		} else {
-			pm_request_idle(dev);
-		}
-
-		if (dev->parent)
-			pm_runtime_put(dev->parent);
+		ret = __device_attach_driver_scan(&data, &async);
 	}
 out_unlock:
 	device_unlock(dev);
