@@ -40,7 +40,6 @@
 #define __AMDGPU_PL_NUM	(TTM_PL_PRIV + 6)
 
 #define AMDGPU_GTT_MAX_TRANSFER_SIZE	512
-#define AMDGPU_GTT_NUM_TRANSFER_WINDOWS	3
 
 extern const struct attribute_group amdgpu_vram_mgr_attr_group;
 extern const struct attribute_group amdgpu_gtt_mgr_attr_group;
@@ -56,6 +55,7 @@ struct amdgpu_gtt_mgr {
 struct amdgpu_ttm_buffer_entity {
 	struct drm_sched_entity base;
 	struct mutex		lock;
+	struct drm_mm_node	node;
 	u64			gart_window_offs[2];
 };
 
