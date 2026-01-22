@@ -105,7 +105,7 @@ class PodmanRuntime(CommonRuntime):
 class Runtimes:
     """List of all supported runtimes"""
 
-    runtimes = [PodmanRuntime, DockerRuntime]
+    runtimes = (PodmanRuntime, DockerRuntime)
 
     @classmethod
     def get_names(cls):
