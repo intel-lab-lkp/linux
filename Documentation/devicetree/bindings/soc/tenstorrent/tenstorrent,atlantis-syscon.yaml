@@ -1,0 +1,90 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/soc/tenstorrent/tenstorrent,atlantis-syscon.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Tenstorrent Atlantis SoC Syscon
+
+maintainers:
+  - Anirudh Srinivasan <asrinivasan@oss.tenstorrent.com>
+
+description:
+  Multifunctional register block found in Tenstorrent Atlantis SoC whose main function
+  is to control clocks and resets. This Block is instantiated multiple times in the SoC,
+  each block controls clock and resets for a different subsystem.
+
+  RCPU syscon serves low speed IO interfaces on chip
+  PCIe syscon serves all PCIe related functions
+  HSIO syscon serves high speed IO interfaces (Ethernet, USB)
+  MM syscon serves GPU, display and video processing functions
+
+properties:
+  compatible:
+    enum:
+      - tenstorrent,atlantis-syscon-rcpu
+      - tenstorrent,atlantis-syscon-pcie
+      - tenstorrent,atlantis-syscon-mm
+      - tenstorrent,atlantis-syscon-hsio
+
+  reg:
+    maxItems: 1
+
+  clocks:
+    maxItems: 1
+
+  "#clock-cells":
+    const: 1
+    description:
+      See <dt-bindings/clock/tenstorrent,atlantis-syscon.h> for valid indices.
+
+  "#reset-cells":
+    const: 1
+
+  tenstorrent,syscon-rcpu:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      Phandle reference to RCPU syscon, needed by other 3 syscons (PCIe, MM, HSIO)
+      as the control registers for the PLLs that drive these subsystems are in RCPU
+      syscon's range
+
+required:
+  - compatible
+  - reg
+  - clocks
+  - "#clock-cells"
+  - "#reset-cells"
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - tenstorrent,atlantis-syscon-pcie
+              - tenstorrent,atlantis-syscon-mm
+              - tenstorrent,atlantis-syscon-hsio
+    then:
+      required:
+        - tenstorrent,syscon-rcpu
+
+additionalProperties: false
+
+examples:
+  - |
+    syscon_rcpu: system-controller@a8000000 {
+      compatible = "tenstorrent,atlantis-syscon-rcpu";
+      reg = <0xa8000000 0x10000>;
+      clocks = <&osc_24m>;
+      #clock-cells = <1>;
+      #reset-cells = <1>;
+    };
+  - |
+    syscon_hsio: system-controller@e00c0000 {
+      compatible = "tenstorrent,atlantis-syscon-hsio";
+      reg = <0xe00c0000 0x500>;
+      clocks = <&osc_24m>;
+      #clock-cells = <1>;
+      #reset-cells = <1>;
+      tenstorrent,syscon-rcpu = <&syscon_rcpu>;
+    };
