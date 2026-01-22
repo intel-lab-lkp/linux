@@ -209,8 +209,8 @@ static inline void vma_refcount_put(struct vm_area_struct *vma)
 	__vma_lockdep_release_read(vma);
 	detached = __vma_refcount_put(vma, &refcnt);
 	/*
-	 * __vma_enter_locked() may be sleeping waiting for readers to drop
-	 * their reference count, so wake it up if we were the last reader
+	 * __vma_enter_exclusive_locked() may be sleeping waiting for readers to
+	 * drop their reference count, so wake it up if we were the last reader
 	 * blocking it from being acquired.
 	 */
 	if (!detached && are_readers_excluded(refcnt))
