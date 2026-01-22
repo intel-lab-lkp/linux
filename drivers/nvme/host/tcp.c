@@ -19,6 +19,7 @@
 #include <linux/blk-mq.h>
 #include <net/busy_poll.h>
 #include <trace/events/sock.h>
+#include <linux/string_choices.h>
 
 #include "nvme.h"
 #include "fabrics.h"
@@ -1549,8 +1550,8 @@ static int nvme_tcp_init_connection(struct nvme_tcp_queue *queue)
 	    (!queue->data_digest && ctrl_ddgst)) {
 		pr_err("queue %d: data digest mismatch host: %s ctrl: %s\n",
 			nvme_tcp_queue_id(queue),
-			queue->data_digest ? "enabled" : "disabled",
-			ctrl_ddgst ? "enabled" : "disabled");
+			str_enabled_disabled(ctrl_ddgst),
+			str_enabled_disabled(queue->data_digest));
 		goto free_icresp;
 	}
 
@@ -1559,8 +1560,8 @@ static int nvme_tcp_init_connection(struct nvme_tcp_queue *queue)
 	    (!queue->hdr_digest && ctrl_hdgst)) {
 		pr_err("queue %d: header digest mismatch host: %s ctrl: %s\n",
 			nvme_tcp_queue_id(queue),
-			queue->hdr_digest ? "enabled" : "disabled",
-			ctrl_hdgst ? "enabled" : "disabled");
+			str_enabled_disabled(ctrl_hdgst),
+			str_enabled_disabled(queue->hdr_digest));
 		goto free_icresp;
 	}
 
