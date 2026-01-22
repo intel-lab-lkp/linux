@@ -652,10 +652,10 @@ struct bcm_sysport_stats {
 
 struct bcm_sysport_stats64 {
 	/* 64bit stats on 32bit/64bit Machine */
-	u64	rx_packets;
-	u64	rx_bytes;
-	u64	tx_packets;
-	u64	tx_bytes;
+	u64_stats_t	rx_packets;
+	u64_stats_t	rx_bytes;
+	u64_stats_t	tx_packets;
+	u64_stats_t	tx_bytes;
 };
 
 /* Software house keeping helper structure */
@@ -698,8 +698,8 @@ struct bcm_sysport_tx_ring {
 	unsigned int	clean_index;	/* Current clean index */
 	struct bcm_sysport_cb *cbs;	/* Transmit control blocks */
 	struct bcm_sysport_priv *priv;	/* private context backpointer */
-	unsigned long	packets;	/* packets statistics */
-	unsigned long	bytes;		/* bytes statistics */
+	u64_stats_t	packets;	/* packets statistics */
+	u64_stats_t	bytes;		/* bytes statistics */
 	unsigned int	switch_queue;	/* switch port queue number */
 	unsigned int	switch_port;	/* switch port queue number */
 	bool		inspect;	/* inspect switch port and queue */

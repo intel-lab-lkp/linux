@@ -435,8 +435,8 @@ static void bcm_sysport_update_tx_stats(struct bcm_sysport_priv *priv,
 		ring = &priv->tx_rings[q];
 		do {
 			start = u64_stats_fetch_begin(&priv->syncp);
-			bytes = ring->bytes;
-			packets = ring->packets;
+			bytes = u64_stats_read(&ring->bytes);
+			packets = u64_stats_read(&ring->packets);
 		} while (u64_stats_fetch_retry(&priv->syncp, start));
 
 		*tx_bytes += bytes;
@@ -458,8 +458,10 @@ static void bcm_sysport_get_stats(struct net_device *dev,
 	if (netif_running(dev)) {
 		bcm_sysport_update_mib_counters(priv);
 		bcm_sysport_update_tx_stats(priv, &tx_bytes, &tx_packets);
-		stats64->tx_bytes = tx_bytes;
-		stats64->tx_packets = tx_packets;
+		u64_stats_update_begin(&priv->syncp);
+		u64_stats_set(&stats64->tx_bytes, tx_bytes);
+		u64_stats_set(&stats64->tx_packets, tx_packets);
+		u64_stats_update_end(&priv->syncp);
 	}
 
 	for (i =  0, j = 0; i < BCM_SYSPORT_STATS_LEN; i++) {
@@ -482,28 +484,32 @@ static void bcm_sysport_get_stats(struct net_device *dev,
 		    s->type == BCM_SYSPORT_STAT_NETDEV64) {
 			do {
 				start = u64_stats_fetch_begin(syncp);
-				data[i] = *(u64 *)p;
+				data[i] = u64_stats_read((u64_stats_t *)p);
 			} while (u64_stats_fetch_retry(syncp, start));
 		} else
 			data[i] = *(u32 *)p;
 		j++;
 	}
 
-	/* For SYSTEMPORT Lite since we have holes in our statistics, j would
-	 * be equal to BCM_SYSPORT_STATS_LEN at the end of the loop, but it
-	 * needs to point to how many total statistics we have minus the
-	 * number of per TX queue statistics
-	 */
-	j = bcm_sysport_get_sset_count(dev, ETH_SS_STATS) -
-	    dev->num_tx_queues * NUM_SYSPORT_TXQ_STAT;
+	do {
+		/* For SYSTEMPORT Lite since we have holes in our statistics, j
+		 * would be equal to BCM_SYSPORT_STATS_LEN at the end of the
+		 * loop, but it needs to point to how many total statistics we
+		 * have minus the number of per TX queue statistics
+		 */
+		j = bcm_sysport_get_sset_count(dev, ETH_SS_STATS) -
+		    dev->num_tx_queues * NUM_SYSPORT_TXQ_STAT;
 
-	for (i = 0; i < dev->num_tx_queues; i++) {
-		ring = &priv->tx_rings[i];
-		data[j] = ring->packets;
-		j++;
-		data[j] = ring->bytes;
-		j++;
-	}
+		start = u64_stats_fetch_begin(syncp);
+
+		for (i = 0; i < dev->num_tx_queues; i++) {
+			ring = &priv->tx_rings[i];
+			data[j] = u64_stats_read(&ring->packets);
+			j++;
+			data[j] = u64_stats_read(&ring->bytes);
+			j++;
+		}
+	} while (u64_stats_fetch_retry(syncp, start));
 }
 
 static void bcm_sysport_get_wol(struct net_device *dev,
@@ -829,8 +835,8 @@ static unsigned int bcm_sysport_desc_rx(struct bcm_sysport_priv *priv,
 		ndev->stats.rx_packets++;
 		ndev->stats.rx_bytes += len;
 		u64_stats_update_begin(&priv->syncp);
-		stats64->rx_packets++;
-		stats64->rx_bytes += len;
+		u64_stats_inc(&stats64->rx_packets);
+		u64_stats_add(&stats64->rx_bytes, len);
 		u64_stats_update_end(&priv->syncp);
 
 		napi_gro_receive(&priv->napi, skb);
@@ -914,8 +920,8 @@ static unsigned int __bcm_sysport_tx_reclaim(struct bcm_sysport_priv *priv,
 	}
 
 	u64_stats_update_begin(&priv->syncp);
-	ring->packets += pkts_compl;
-	ring->bytes += bytes_compl;
+	u64_stats_add(&ring->packets, pkts_compl);
+	u64_stats_add(&ring->bytes, bytes_compl);
 	u64_stats_update_end(&priv->syncp);
 
 	ring->c_index = c_index;
@@ -1857,8 +1863,8 @@ static void bcm_sysport_get_stats64(struct net_device *dev,
 
 	do {
 		start = u64_stats_fetch_begin(&priv->syncp);
-		stats->rx_packets = stats64->rx_packets;
-		stats->rx_bytes = stats64->rx_bytes;
+		stats->rx_packets = u64_stats_read(&stats64->rx_packets);
+		stats->rx_bytes = u64_stats_read(&stats64->rx_bytes);
 	} while (u64_stats_fetch_retry(&priv->syncp, start));
 }
 
