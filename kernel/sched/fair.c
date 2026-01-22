@@ -2571,8 +2571,9 @@ static int task_numa_migrate(struct task_struct *p)
 	 */
 	ng = deref_curr_numa_group(p);
 	if (env.best_cpu == -1 || (ng && ng->active_nodes > 1)) {
-		for_each_node_state(nid, N_CPU) {
-			if (nid == env.src_nid || nid == p->numa_preferred_nid)
+		for_each_node_mask(nid, p->numa_faults_nodes_mask) {
+			if (nid == env.src_nid || nid == p->numa_preferred_nid ||
+			    !node_state(nid, N_CPU))
 				continue;
 
 			dist = node_distance(env.src_nid, env.dst_nid);
@@ -2925,11 +2926,12 @@ static void task_numa_placement(struct task_struct *p)
 	}
 
 	/* Find the node with the highest number of faults */
-	for_each_online_node(nid) {
+	for_each_node_mask(nid, p->numa_faults_nodes_mask) {
 		/* Keep track of the offsets in numa_faults array */
 		int mem_idx, membuf_idx, cpu_idx, cpubuf_idx;
 		unsigned long faults = 0, group_faults = 0;
 		int priv;
+		bool node_has_faults = false;
 
 		for (priv = 0; priv < NR_NUMA_HINT_FAULT_TYPES; priv++) {
 			long diff, f_diff, f_weight;
@@ -2961,6 +2963,10 @@ static void task_numa_placement(struct task_struct *p)
 			p->numa_faults[cpu_idx] += f_diff;
 			faults += p->numa_faults[mem_idx];
 			p->total_numa_faults += diff;
+
+			if (p->numa_faults[mem_idx] || p->numa_faults[cpu_idx])
+				node_has_faults = true;
+
 			if (ng) {
 				/*
 				 * safe because we can only change our own group
@@ -2985,6 +2991,9 @@ static void task_numa_placement(struct task_struct *p)
 			max_faults = group_faults;
 			max_nid = nid;
 		}
+
+		if (!node_has_faults)
+			node_clear(nid, p->numa_faults_nodes_mask);
 	}
 
 	/* Cannot migrate task to CPU-less node */
@@ -3242,6 +3251,8 @@ void task_numa_fault(int last_cpupid, int mem_node, int pages, int flags)
 
 	p->numa_faults[task_faults_idx(NUMA_MEMBUF, mem_node, priv)] += pages;
 	p->numa_faults[task_faults_idx(NUMA_CPUBUF, cpu_node, priv)] += pages;
+	node_set(mem_node, p->numa_faults_nodes_mask);
+	node_set(cpu_node, p->numa_faults_nodes_mask);
 	p->numa_faults_locality[local] += pages;
 }
 
@@ -3578,6 +3589,7 @@ void init_numa_balancing(u64 clone_flags, struct task_struct *p)
 	/* Protect against double add, see task_tick_numa and task_numa_work */
 	p->numa_work.next		= &p->numa_work;
 	p->numa_faults			= NULL;
+	nodes_clear(p->numa_faults_nodes_mask);
 	p->numa_pages_migrated		= 0;
 	p->total_numa_faults		= 0;
 	RCU_INIT_POINTER(p->numa_group, NULL);
