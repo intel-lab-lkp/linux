@@ -49,6 +49,7 @@ properties:
           - qcom,sm8650-imem
           - qcom,sm8750-imem
           - qcom,x1e80100-imem
+          - qcom,glymur-imem
       - const: syscon
       - const: simple-mfd
 
