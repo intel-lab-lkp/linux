@@ -3008,14 +3008,26 @@ static int sja1105_port_bridge_flags(struct dsa_switch *ds, int port,
 
 static int sja1105_create_pcs(struct dsa_switch *ds, int port)
 {
+	struct dsa_port *dp = dsa_to_port(ds, port);
 	struct sja1105_private *priv = ds->priv;
+	struct fwnode_handle *pcs_fwnode;
 	struct phylink_pcs *pcs;
 
 	if (priv->phy_mode[port] != PHY_INTERFACE_MODE_SGMII &&
 	    priv->phy_mode[port] != PHY_INTERFACE_MODE_2500BASEX)
 		return 0;
 
-	pcs = xpcs_create_pcs_fwnode(priv->pcs_fwnode[port]);
+	pcs_fwnode = fwnode_handle_get(priv->pcs_fwnode[port]);
+	/* priv->pcs_fwnode[port] is only set if the PCS is absent
+	 * from the device tree source. If present, there needs to
+	 * be a pcs-handle to it.
+	 */
+	if (!pcs_fwnode)
+		pcs_fwnode = fwnode_find_reference(of_fwnode_handle(dp->dn),
+						   "pcs-handle", 0);
+
+	pcs = xpcs_create_pcs_fwnode(pcs_fwnode);
+	fwnode_handle_put(pcs_fwnode);
 	if (IS_ERR(pcs))
 		return PTR_ERR(pcs);
 
