@@ -754,7 +754,7 @@ static int kvm_handle_fpu_disabled(struct kvm_vcpu *vcpu, int ecode)
 		return RESUME_HOST;
 	}
 
-	kvm_own_fpu(vcpu);
+	kvm_make_request(KVM_REQ_FPU_LOAD, vcpu);
 
 	return RESUME_GUEST;
 }
@@ -795,7 +795,7 @@ static int kvm_handle_lsx_disabled(struct kvm_vcpu *vcpu, int ecode)
 	if (!kvm_guest_has_lsx(&vcpu->arch))
 		kvm_queue_exception(vcpu, EXCCODE_INE, 0);
 	else
-		kvm_own_lsx(vcpu);
+		kvm_make_request(KVM_REQ_LSX_LOAD, vcpu);
 
 	return RESUME_GUEST;
 }
@@ -813,7 +813,7 @@ static int kvm_handle_lasx_disabled(struct kvm_vcpu *vcpu, int ecode)
 	if (!kvm_guest_has_lasx(&vcpu->arch))
 		kvm_queue_exception(vcpu, EXCCODE_INE, 0);
 	else
-		kvm_own_lasx(vcpu);
+		kvm_make_request(KVM_REQ_LASX_LOAD, vcpu);
 
 	return RESUME_GUEST;
 }
