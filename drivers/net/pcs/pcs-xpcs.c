@@ -1707,6 +1707,18 @@ struct dw_xpcs *xpcs_create_fwnode(struct fwnode_handle *fwnode)
 }
 EXPORT_SYMBOL_GPL(xpcs_create_fwnode);
 
+struct phylink_pcs *xpcs_create_pcs_fwnode(struct fwnode_handle *fwnode)
+{
+	struct dw_xpcs *xpcs;
+
+	xpcs = xpcs_create_fwnode(fwnode);
+	if (IS_ERR(xpcs))
+		return ERR_CAST(xpcs);
+
+	return &xpcs->pcs;
+}
+EXPORT_SYMBOL_GPL(xpcs_create_pcs_fwnode);
+
 void xpcs_destroy(struct dw_xpcs *xpcs)
 {
 	if (!xpcs)
