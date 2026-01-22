@@ -8,6 +8,7 @@ menu "PCS device drivers"
 config PCS_XPCS
 	tristate "Synopsys DesignWare Ethernet XPCS"
 	select PHYLINK
+	select PHY_COMMON_PROPS
 	help
 	  This module provides a driver and helper functions for Synopsys
 	  DesignWare XPCS controllers.

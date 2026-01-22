@@ -11,6 +11,7 @@
 #include <linux/pcs/pcs-xpcs.h>
 #include <linux/mdio.h>
 #include <linux/phy.h>
+#include <linux/phy/phy-common-props.h>
 #include <linux/phylink.h>
 #include <linux/property.h>
 
@@ -908,6 +909,42 @@ static int xpcs_config_2500basex(struct dw_xpcs *xpcs)
 			   BMCR_SPEED1000);
 }
 
+static int xpcs_pma_config(struct dw_xpcs *xpcs, const struct dw_xpcs_compat *compat)
+{
+	struct fwnode_handle *fwnode = dev_fwnode(&xpcs->mdiodev->dev);
+	u32 val = 0, mask;
+	unsigned int pol;
+	int ret;
+
+	mask = DW_VR_MII_DIG_CTRL2_TX_POL_INV | DW_VR_MII_DIG_CTRL2_RX_POL_INV;
+
+	ret = phy_get_manual_rx_polarity(fwnode, phy_modes(compat->interface),
+					 &pol);
+	if (ret)
+		return ret;
+	if (pol == PHY_POL_INVERT)
+		val |= DW_VR_MII_DIG_CTRL2_RX_POL_INV;
+
+	ret = phy_get_manual_tx_polarity(fwnode, phy_modes(compat->interface),
+					 &pol);
+	if (ret)
+		return ret;
+	if (pol == PHY_POL_INVERT)
+		val |= DW_VR_MII_DIG_CTRL2_TX_POL_INV;
+
+	ret = xpcs_modify(xpcs, MDIO_MMD_VEND2, DW_VR_MII_DIG_CTRL2, mask, val);
+	if (ret < 0)
+		return ret;
+
+	if (compat->pma_config) {
+		ret = compat->pma_config(xpcs);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 static int xpcs_do_config(struct dw_xpcs *xpcs, phy_interface_t interface,
 			  const unsigned long *advertising,
 			  unsigned int neg_mode)
@@ -959,13 +996,7 @@ static int xpcs_do_config(struct dw_xpcs *xpcs, phy_interface_t interface,
 		return -EINVAL;
 	}
 
-	if (compat->pma_config) {
-		ret = compat->pma_config(xpcs);
-		if (ret)
-			return ret;
-	}
-
-	return 0;
+	return xpcs_pma_config(xpcs, compat);
 }
 
 static int xpcs_config(struct phylink_pcs *pcs, unsigned int neg_mode,
@@ -1456,7 +1487,6 @@ static const struct dw_xpcs_compat nxp_sja1105_xpcs_compat[] = {
 		.interface = PHY_INTERFACE_MODE_SGMII,
 		.supported = xpcs_sgmii_features,
 		.an_mode = DW_AN_C37_SGMII,
-		.pma_config = nxp_sja1105_sgmii_pma_config,
 	}, {
 	}
 };
