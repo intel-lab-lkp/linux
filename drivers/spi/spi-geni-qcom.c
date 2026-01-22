@@ -167,7 +167,7 @@ static void handle_se_timeout(struct spi_controller *spi,
 		 * doesn`t support CMD Cancel sequnece
 		 */
 		spin_unlock_irq(&mas->lock);
-		goto reset_if_dma;
+		goto abort;
 	}
 
 	reinit_completion(&mas->cancel_done);
@@ -178,6 +178,7 @@ static void handle_se_timeout(struct spi_controller *spi,
 	if (time_left)
 		goto reset_if_dma;
 
+abort:
 	spin_lock_irq(&mas->lock);
 	reinit_completion(&mas->abort_done);
 	geni_se_abort_m_cmd(se);
