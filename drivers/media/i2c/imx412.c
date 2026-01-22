@@ -1037,7 +1037,11 @@ static int imx412_power_on(struct device *dev)
 		goto error_reset;
 	}
 
-	usleep_range(1000, 1200);
+	/*
+	 * Some IMX577 modules require a longer reset settle time.
+	 * Increasing the delay from 1ms to 10ms ensures reliable startup.
+	 */
+	usleep_range(10000, 12000);
 
 	return 0;
 
