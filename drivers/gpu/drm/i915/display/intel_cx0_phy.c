@@ -128,8 +128,8 @@ static void intel_cx0_phy_transaction_end(struct intel_encoder *encoder, struct 
 	intel_display_power_put(display, POWER_DOMAIN_DC_OFF, wakeref);
 }
 
-void intel_clear_response_ready_flag(struct intel_encoder *encoder,
-				     int lane)
+void intel_cx0_clear_response_ready_flag(struct intel_encoder *encoder,
+					 int lane)
 {
 	struct intel_display *display = to_intel_display(encoder);
 
@@ -156,7 +156,7 @@ void intel_cx0_bus_reset(struct intel_encoder *encoder, int lane)
 		return;
 	}
 
-	intel_clear_response_ready_flag(encoder, lane);
+	intel_cx0_clear_response_ready_flag(encoder, lane);
 }
 
 int intel_cx0_wait_for_ack(struct intel_encoder *encoder,
@@ -223,7 +223,7 @@ static int __intel_cx0_read_once(struct intel_encoder *encoder,
 		return -ETIMEDOUT;
 	}
 
-	intel_clear_response_ready_flag(encoder, lane);
+	intel_cx0_clear_response_ready_flag(encoder, lane);
 
 	intel_de_write(display, XELPDP_PORT_M2P_MSGBUS_CTL(display, port, lane),
 		       XELPDP_PORT_M2P_TRANSACTION_PENDING |
@@ -234,7 +234,7 @@ static int __intel_cx0_read_once(struct intel_encoder *encoder,
 	if (ack < 0)
 		return ack;
 
-	intel_clear_response_ready_flag(encoder, lane);
+	intel_cx0_clear_response_ready_flag(encoder, lane);
 
 	/*
 	 * FIXME: Workaround to let HW to settle
@@ -296,7 +296,7 @@ static int __intel_cx0_write_once(struct intel_encoder *encoder,
 		return -ETIMEDOUT;
 	}
 
-	intel_clear_response_ready_flag(encoder, lane);
+	intel_cx0_clear_response_ready_flag(encoder, lane);
 
 	intel_de_write(display, XELPDP_PORT_M2P_MSGBUS_CTL(display, port, lane),
 		       XELPDP_PORT_M2P_TRANSACTION_PENDING |
@@ -326,7 +326,7 @@ static int __intel_cx0_write_once(struct intel_encoder *encoder,
 		return -EINVAL;
 	}
 
-	intel_clear_response_ready_flag(encoder, lane);
+	intel_cx0_clear_response_ready_flag(encoder, lane);
 
 	/*
 	 * FIXME: Workaround to let HW to settle

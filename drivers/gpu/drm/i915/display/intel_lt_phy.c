@@ -1053,7 +1053,7 @@ static int __intel_lt_phy_p2p_write_once(struct intel_encoder *encoder,
 	 * This is the time PHY takes to settle down after programming the PHY.
 	 */
 	udelay(150);
-	intel_clear_response_ready_flag(encoder, lane);
+	intel_cx0_clear_response_ready_flag(encoder, lane);
 	intel_lt_phy_clear_status_p2p(encoder, lane);
 
 	return 0;
