@@ -758,6 +758,29 @@ static ssize_t dev_nack_retry_count_store(struct device *dev,
 
 static DEVICE_ATTR_RW(dev_nack_retry_count);
 
+static ssize_t rescan_store(struct device *dev,
+			    struct device_attribute *attr,
+			    const char *buf, size_t count)
+{
+	struct i3c_master_controller *master = dev_to_i3cmaster(dev);
+	unsigned long val;
+	int ret;
+
+	ret = kstrtoul(buf, 0, &val);
+	if (ret)
+		return ret;
+
+	if (val) {
+		ret = i3c_master_do_daa(master);
+		if (ret)
+			return ret;
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR_WO(rescan);
+
 static struct attribute *i3c_masterdev_attrs[] = {
 	&dev_attr_mode.attr,
 	&dev_attr_current_master.attr,
@@ -769,6 +792,7 @@ static struct attribute *i3c_masterdev_attrs[] = {
 	&dev_attr_dynamic_address.attr,
 	&dev_attr_hdrcap.attr,
 	&dev_attr_hotjoin.attr,
+	&dev_attr_rescan.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(i3c_masterdev);
