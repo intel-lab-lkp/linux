@@ -261,15 +261,37 @@ static int scmi_voltage_descriptors_get(const struct scmi_protocol_handle *ph,
 	return ret;
 }
 
+static inline int
+scmi_voltage_domain_validate_id(const struct scmi_protocol_handle *ph, u32 domain_id)
+{
+	struct voltage_info *vinfo = ph->get_priv(ph);
+
+	if (domain_id >= vinfo->num_domains)
+		return -EINVAL;
+
+	return 0;
+}
+
+static inline struct scmi_voltage_info *
+scmi_voltage_domain_lookup(const struct scmi_protocol_handle *ph, u32 domain_id)
+{
+	struct voltage_info *vinfo = ph->get_priv(ph);
+
+	if (domain_id >= vinfo->num_domains)
+		return ERR_PTR(-EINVAL);
+
+	return vinfo->domains + domain_id;
+}
+
 static int __scmi_voltage_get_u32(const struct scmi_protocol_handle *ph,
 				  u8 cmd_id, u32 domain_id, u32 *value)
 {
 	int ret;
 	struct scmi_xfer *t;
-	struct voltage_info *vinfo = ph->get_priv(ph);
 
-	if (domain_id >= vinfo->num_domains)
-		return -EINVAL;
+	ret = scmi_voltage_domain_validate_id(ph, domain_id);
+	if (ret)
+		return ret;
 
 	ret = ph->xops->xfer_get_init(ph, cmd_id, sizeof(__le32), 0, &t);
 	if (ret)
@@ -289,11 +311,11 @@ static int scmi_voltage_config_set(const struct scmi_protocol_handle *ph,
 {
 	int ret;
 	struct scmi_xfer *t;
-	struct voltage_info *vinfo = ph->get_priv(ph);
 	struct scmi_msg_cmd_config_set *cmd;
 
-	if (domain_id >= vinfo->num_domains)
-		return -EINVAL;
+	ret = scmi_voltage_domain_validate_id(ph, domain_id);
+	if (ret)
+		return ret;
 
 	ret = ph->xops->xfer_get_init(ph, VOLTAGE_CONFIG_SET,
 				     sizeof(*cmd), 0, &t);
@@ -324,25 +346,23 @@ static int scmi_voltage_level_set(const struct scmi_protocol_handle *ph,
 {
 	int ret;
 	struct scmi_xfer *t;
-	struct voltage_info *vinfo = ph->get_priv(ph);
 	struct scmi_msg_cmd_level_set *cmd;
-	struct scmi_voltage_info *v;
+	struct scmi_voltage_info *vi;
 
-	if (domain_id >= vinfo->num_domains)
-		return -EINVAL;
+	vi = scmi_voltage_domain_lookup(ph, domain_id);
+	if (IS_ERR(vi))
+		return PTR_ERR(vi);
 
 	ret = ph->xops->xfer_get_init(ph, VOLTAGE_LEVEL_SET,
 				      sizeof(*cmd), 0, &t);
 	if (ret)
 		return ret;
 
-	v = vinfo->domains + domain_id;
-
 	cmd = t->tx.buf;
 	cmd->domain_id = cpu_to_le32(domain_id);
 	cmd->voltage_level = cpu_to_le32(volt_uV);
 
-	if (!v->async_level_set || mode != SCMI_VOLTAGE_LEVEL_SET_AUTO) {
+	if (!vi->async_level_set || mode != SCMI_VOLTAGE_LEVEL_SET_AUTO) {
 		cmd->flags = cpu_to_le32(0x0);
 		ret = ph->xops->do_xfer(ph, t);
 	} else {
@@ -355,7 +375,7 @@ static int scmi_voltage_level_set(const struct scmi_protocol_handle *ph,
 			if (le32_to_cpu(resp->domain_id) == domain_id)
 				dev_dbg(ph->dev,
 					"Voltage domain %d set async to %d\n",
-					v->id,
+					vi->id,
 					le32_to_cpu(resp->voltage_level));
 			else
 				ret = -EPROTO;
@@ -376,13 +396,16 @@ static int scmi_voltage_level_get(const struct scmi_protocol_handle *ph,
 static const struct scmi_voltage_info * __must_check
 scmi_voltage_info_get(const struct scmi_protocol_handle *ph, u32 domain_id)
 {
-	struct voltage_info *vinfo = ph->get_priv(ph);
+	struct scmi_voltage_info *vi;
 
-	if (domain_id >= vinfo->num_domains ||
-	    !vinfo->domains[domain_id].num_levels)
+	vi = scmi_voltage_domain_lookup(ph, domain_id);
+	if (IS_ERR(vi))
 		return NULL;
 
-	return vinfo->domains + domain_id;
+	if (!vi->num_levels)
+		return NULL;
+
+	return vi;
 }
 
 static int scmi_voltage_domains_num_get(const struct scmi_protocol_handle *ph)
