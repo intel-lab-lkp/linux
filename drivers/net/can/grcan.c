@@ -517,15 +517,27 @@ static void grcan_reset(struct net_device *dev)
 	struct grcan_priv *priv = netdev_priv(dev);
 	struct grcan_registers __iomem *regs = priv->regs;
 	u32 config = grcan_read_reg(&regs->conf);
+	u32 nbtr, fdbtr;
+
+	if (priv->hwcap->fd) {
+		nbtr = grcan_read_reg(&regs->nbtr);
+		fdbtr = grcan_read_reg(&regs->fdbtr);
+	}
 
 	grcan_set_bits(&regs->ctrl, GRCAN_CTRL_RESET);
 	grcan_write_reg(&regs->conf, config);
+	if (priv->hwcap->fd) {
+		grcan_write_reg(&regs->nbtr, nbtr);
+		grcan_write_reg(&regs->fdbtr, fdbtr);
+	}
 
 	priv->eskbp = grcan_read_reg(&regs->txrd);
 	priv->can.state = CAN_STATE_STOPPED;
 
 	/* Turn off hardware filtering - regs->rxcode set to 0 by reset */
 	grcan_write_reg(&regs->rxmask, 0);
+
+	priv->hwcap->set_bittiming(dev);
 }
 
 /* stop device without changing any configurations */
