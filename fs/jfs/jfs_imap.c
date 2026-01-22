@@ -2900,6 +2900,11 @@ int diExtendFS(struct inode *ipimap, struct inode *ipbmap)
 
 		agstart = le64_to_cpu(iagp->agstart);
 		n = agstart >> mp->db_agl2size;
+		if (n < 0 || n >= MAXAG) {
+			release_metapage(bp);
+			jfs_error(ipimap->i_sb, "invalid AG number\n");
+			return -EIO;
+		}
 		iagp->agstart = cpu_to_le64((s64)n << mp->db_agl2size);
 
 		/* compute backed inodes */
