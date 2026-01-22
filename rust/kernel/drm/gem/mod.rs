@@ -5,7 +5,6 @@
 //! C header: [`include/drm/drm_gem.h`](srctree/include/drm/drm_gem.h)
 
 use crate::{
-    alloc::flags::*,
     bindings,
     drm::{
         self,
@@ -14,10 +13,7 @@ use crate::{
             AllocOps, //
         },
     },
-    error::{
-        to_result,
-        Result, //
-    },
+    error::to_result,
     prelude::*,
     sync::aref::{
         ARef,

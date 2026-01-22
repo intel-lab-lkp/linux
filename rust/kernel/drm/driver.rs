@@ -9,14 +9,10 @@ use crate::{
     device,
     devres,
     drm,
-    error::{
-        to_result,
-        Result, //
-    },
+    error::to_result,
     prelude::*,
     sync::aref::ARef, //
 };
-use macros::vtable;
 
 /// Driver use the GEM memory manager. This should be set for all modern drivers.
 pub(crate) const FEAT_GEM: u32 = bindings::drm_driver_feature_DRIVER_GEM;

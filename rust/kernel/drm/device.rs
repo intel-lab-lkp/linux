@@ -12,10 +12,7 @@ use crate::{
         self,
         driver::AllocImpl, //
     },
-    error::{
-        from_err_ptr,
-        Result, //
-    },
+    error::from_err_ptr,
     prelude::*,
     sync::aref::{
         ARef,
