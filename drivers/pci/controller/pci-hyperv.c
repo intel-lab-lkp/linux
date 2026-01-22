@@ -3406,9 +3406,13 @@ static int hv_allocate_config_window(struct hv_pcibus_device *hbus)
 
 	/*
 	 * Set up a region of MMIO space to use for accessing configuration
-	 * space.
+	 * space. Use the high MMIO range to not conflict with the hyperv_drm
+	 * driver (which normally gets MMIO from the low MMIO range) in the
+	 * kdump kernel of a Gen2 VM, which fails to reserve the framebuffer
+	 * MMIO range in vmbus_reserve_fb() due to screen_info.lfb_base being
+	 * zero in the kdump kernel.
 	 */
-	ret = vmbus_allocate_mmio(&hbus->mem_config, hbus->hdev, 0, -1,
+	ret = vmbus_allocate_mmio(&hbus->mem_config, hbus->hdev, SZ_4G, -1,
 				  PCI_CONFIG_MMIO_LENGTH, 0x1000, false);
 	if (ret)
 		return ret;
