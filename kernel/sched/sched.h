@@ -2122,6 +2122,13 @@ struct sched_group_capacity {
 
 	int			id;
 
+	/* O(1) NUMA stats cache */
+	unsigned long		nr_running;
+	unsigned long		load;
+	unsigned long		util;
+	unsigned long		runnable;
+	unsigned long		stats_update;
+
 	unsigned long		cpumask[];		/* Balance mask */
 };
 
