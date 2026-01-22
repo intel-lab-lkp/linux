@@ -410,7 +410,7 @@ void __mlx4_unregister_mac(struct mlx4_dev *dev, u8 port, u64 mac)
 		if (mlx4_set_port_mac_table(dev, dup_port, dup_table->entries))
 			mlx4_warn(dev, "Fail to set mac in duplicate port %d during unregister\n", dup_port);
 
-		--table->total;
+		--dup_table->total;
 	}
 out:
 	if (dup) {
