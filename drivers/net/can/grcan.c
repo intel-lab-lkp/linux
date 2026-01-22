@@ -235,6 +235,9 @@ struct grcan_registers {
 #define GRCAN_TX_BRS  BIT(25)
 #define GRCAN_TX_FDF  BIT(26)
 
+#define GRCAN_RX_BRS  BIT(25)
+#define GRCAN_RX_FDF  BIT(26)
+
 /* Hardware capabilities */
 struct grcan_hwcap {
 	/* CAN-FD capable, indicates GRCANFD IP.
@@ -1235,18 +1238,22 @@ static int grcan_numbds(int len)
 
 static int grcan_receive(struct net_device *dev, int budget)
 {
-	struct grcan_priv *priv = netdev_priv(dev);
-	struct grcan_registers __iomem *regs = priv->regs;
-	struct grcan_dma *dma = &priv->dma;
 	struct net_device_stats *stats = &dev->stats;
-	struct can_frame *cf;
+	struct grcan_priv *priv = netdev_priv(dev);
+	struct grcan_registers __iomem *regs;
+	struct grcan_dma *dma = &priv->dma;
+	u32 bds, copy_len, payload_offset;
+	u32 wr, rd, dlc, startrd;
+	struct canfd_frame *cf;
+	int i, work_done = 0;
 	struct sk_buff *skb;
-	u32 wr, rd, startrd;
-	u32 *slot;
 	u32 rtr, eff;
-	int work_done = 0;
+	u32 *slot;
+	u8 *data;
 
+	regs = priv->regs;
 	rd = grcan_read_reg(&regs->rxrd);
+
 	startrd = rd;
 	for (work_done = 0; work_done < budget; work_done++) {
 		/* Check for packet to receive */
@@ -1254,43 +1261,68 @@ static int grcan_receive(struct net_device *dev, int budget)
 		if (rd == wr)
 			break;
 
-		/* Take care of packet */
-		skb = alloc_can_skb(dev, &cf);
-		if (skb == NULL) {
+		slot = dma->rx.buf + rd;
+
+		if (slot[1] & GRCAN_RX_FDF)
+			skb = alloc_canfd_skb(dev, &cf);
+		else
+			skb = alloc_can_skb(priv->dev, (struct can_frame **)&cf);
+
+		if (unlikely(!skb)) {
 			netdev_err(dev,
 				   "dropping frame: skb allocation failed\n");
 			stats->rx_dropped++;
 			continue;
 		}
 
-		slot = dma->rx.buf + rd;
-		eff = slot[0] & GRCAN_MSG_IDE;
-		rtr = slot[0] & GRCAN_MSG_RTR;
-		if (eff) {
-			cf->can_id = ((slot[0] & GRCAN_MSG_EID)
-				      >> GRCAN_MSG_EID_BIT);
-			cf->can_id |= CAN_EFF_FLAG;
-		} else {
-			cf->can_id = ((slot[0] & GRCAN_MSG_BID)
-				      >> GRCAN_MSG_BID_BIT);
-		}
-		cf->len = can_cc_dlc2len((slot[1] & GRCAN_MSG_DLC)
-					  >> GRCAN_MSG_DLC_BIT);
-		if (rtr) {
-			cf->can_id |= CAN_RTR_FLAG;
-		} else {
-			if (cf->can_dlc > 0)
-				memcpy(cf->data, &slot[2], sizeof(u32));
-			if (cf->can_dlc > 4)
-				memcpy(cf->data + 4, &slot[3], sizeof(u32));
+		dlc = FIELD_GET(GRCAN_MSG_DLC_MASK, slot[1]);
+		if (slot[1] & GRCAN_RX_FDF)
+			cf->len = can_fd_dlc2len(dlc);
+		else
+			cf->len = can_cc_dlc2len(dlc);
 
-			stats->rx_bytes += cf->len;
+		bds = grcan_numbds(cf->len);
+		payload_offset = 0;
+		data = cf->data;
+
+		for (i = 0; i < bds; i++) {
+			slot = dma->rx.buf + rd;
+
+			if (i == 0) {
+				eff = slot[0] & GRCAN_MSG_IDE;
+				rtr = slot[0] & GRCAN_MSG_RTR;
+				if (eff) {
+					cf->can_id = FIELD_GET(GRCAN_MSG_EID_MASK, slot[0]);
+					cf->can_id |= CAN_EFF_FLAG;
+				} else {
+					cf->can_id = FIELD_GET(GRCAN_MSG_BID_MASK, slot[0]);
+				}
+				if (rtr)
+					cf->can_id |= CAN_RTR_FLAG;
+
+				dlc = FIELD_GET(GRCAN_MSG_DLC_MASK, slot[1]);
+				if (slot[1] & GRCAN_RX_FDF)
+					cf->len = can_fd_dlc2len(dlc);
+				else
+					cf->len = can_cc_dlc2len(dlc);
+
+				copy_len = min(cf->len, GRCAN_CLASSIC_DATA_SIZE);
+				memcpy(data, &slot[2], copy_len);
+				payload_offset += copy_len;
+			} else {
+				copy_len =  min(cf->len - payload_offset, GRCAN_MSG_SIZE);
+				memcpy(data + payload_offset, slot, copy_len);
+				payload_offset += copy_len;
+			}
+			rd += GRCAN_MSG_SIZE;
+			if (rd >= dma->rx.size)
+				rd -= dma->rx.size;
 		}
+
+		/* Update statistics and read pointer */
 		stats->rx_packets++;
-
+		stats->rx_bytes += cf->len;
 		netif_receive_skb(skb);
-
-		rd = grcan_ring_add(rd, GRCAN_MSG_SIZE, dma->rx.size);
 	}
 
 	/* Make sure everything is read before allowing hardware to
