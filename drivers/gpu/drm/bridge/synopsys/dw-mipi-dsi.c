@@ -1015,8 +1015,7 @@ static void dw_mipi_dsi_mode_set(struct dw_mipi_dsi *dsi,
 
 	dw_mipi_dsi_wait_for_two_frames(adjusted_mode);
 
-	/* Switch to cmd mode for panel-bridge pre_enable & panel prepare */
-	dw_mipi_dsi_set_mode(dsi, 0);
+	dsi_write(dsi, DSI_PWR_UP, POWERUP);
 
 	if (phy_ops->power_on)
 		phy_ops->power_on(dsi->plat_data->priv_data);
