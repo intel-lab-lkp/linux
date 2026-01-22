@@ -149,8 +149,8 @@ int ena_xmit_common(struct ena_adapter *adapter,
 	}
 
 	u64_stats_update_begin(&ring->syncp);
-	ring->tx_stats.cnt++;
-	ring->tx_stats.bytes += bytes;
+	u64_stats_inc(&ring->tx_stats.cnt);
+	u64_stats_add(&ring->tx_stats.bytes, bytes);
 	u64_stats_update_end(&ring->syncp);
 
 	tx_info->tx_descs = nb_hw_desc;
@@ -1294,9 +1294,9 @@ static int ena_clean_rx_irq(struct ena_ring *rx_ring, struct napi_struct *napi,
 	work_done = budget - res_budget;
 	rx_ring->per_napi_packets += work_done;
 	u64_stats_update_begin(&rx_ring->syncp);
-	rx_ring->rx_stats.bytes += total_len;
-	rx_ring->rx_stats.cnt += work_done;
-	rx_ring->rx_stats.rx_copybreak_pkt += rx_copybreak_pkt;
+	u64_stats_add(&rx_ring->rx_stats.bytes, total_len);
+	u64_stats_add(&rx_ring->rx_stats.cnt, work_done);
+	u64_stats_add(&rx_ring->rx_stats.rx_copybreak_pkt, rx_copybreak_pkt);
 	u64_stats_update_end(&rx_ring->syncp);
 
 	rx_ring->next_to_clean = next_to_clean;
@@ -1349,15 +1349,21 @@ static void ena_adjust_adaptive_rx_intr_moderation(struct ena_napi *ena_napi)
 {
 	struct dim_sample dim_sample;
 	struct ena_ring *rx_ring = ena_napi->rx_ring;
+	u64 packets, bytes;
+	unsigned int start;
 
 	if (!rx_ring->per_napi_packets)
 		return;
 
 	rx_ring->non_empty_napi_events++;
 
-	dim_update_sample(rx_ring->non_empty_napi_events,
-			  rx_ring->rx_stats.cnt,
-			  rx_ring->rx_stats.bytes,
+	do {
+		start = u64_stats_fetch_begin(&rx_ring->syncp);
+		packets = u64_stats_read(&rx_ring->rx_stats.cnt);
+		bytes = u64_stats_read(&rx_ring->rx_stats.bytes);
+	} while (u64_stats_fetch_retry(&rx_ring->syncp, start));
+
+	dim_update_sample(rx_ring->non_empty_napi_events, packets, bytes,
 			  &dim_sample);
 
 	net_dim(&ena_napi->dim, &dim_sample);
@@ -1496,8 +1502,8 @@ static int ena_io_poll(struct napi_struct *napi, int budget)
 	}
 
 	u64_stats_update_begin(&tx_ring->syncp);
-	tx_ring->tx_stats.napi_comp += napi_comp_call;
-	tx_ring->tx_stats.tx_poll++;
+	u64_stats_add(&tx_ring->tx_stats.napi_comp, napi_comp_call);
+	u64_stats_inc(&tx_ring->tx_stats.tx_poll);
 	u64_stats_update_end(&tx_ring->syncp);
 
 	tx_ring->tx_stats.last_napi_jiffies = jiffies;
@@ -2824,8 +2830,8 @@ static void ena_get_stats64(struct net_device *netdev,
 
 		do {
 			start = u64_stats_fetch_begin(&tx_ring->syncp);
-			packets = tx_ring->tx_stats.cnt;
-			bytes = tx_ring->tx_stats.bytes;
+			packets = u64_stats_read(&tx_ring->tx_stats.cnt);
+			bytes = u64_stats_read(&tx_ring->tx_stats.bytes);
 		} while (u64_stats_fetch_retry(&tx_ring->syncp, start));
 
 		stats->tx_packets += packets;
@@ -2839,9 +2845,9 @@ static void ena_get_stats64(struct net_device *netdev,
 
 		do {
 			start = u64_stats_fetch_begin(&rx_ring->syncp);
-			packets = rx_ring->rx_stats.cnt;
-			bytes = rx_ring->rx_stats.bytes;
-			xdp_rx_drops = rx_ring->rx_stats.xdp_drop;
+			packets = u64_stats_read(&rx_ring->rx_stats.cnt);
+			bytes = u64_stats_read(&rx_ring->rx_stats.bytes);
+			xdp_rx_drops = u64_stats_read(&rx_ring->rx_stats.xdp_drop);
 		} while (u64_stats_fetch_retry(&rx_ring->syncp, start));
 
 		stats->rx_packets += packets;
@@ -2851,8 +2857,8 @@ static void ena_get_stats64(struct net_device *netdev,
 
 	do {
 		start = u64_stats_fetch_begin(&adapter->syncp);
-		rx_drops = adapter->dev_stats.rx_drops;
-		tx_drops = adapter->dev_stats.tx_drops;
+		rx_drops = u64_stats_read(&adapter->dev_stats.rx_drops);
+		tx_drops = u64_stats_read(&adapter->dev_stats.tx_drops);
 	} while (u64_stats_fetch_retry(&adapter->syncp, start));
 
 	stats->rx_dropped = rx_drops + total_xdp_rx_drops;
@@ -3380,7 +3386,11 @@ static void ena_fw_reset_device(struct work_struct *work)
 	if (likely(test_bit(ENA_FLAG_TRIGGER_RESET, &adapter->flags))) {
 		rc |= ena_destroy_device(adapter, false);
 		rc |= ena_restore_device(adapter);
-		adapter->dev_stats.reset_fail += !!rc;
+		if (rc) {
+			u64_stats_update_begin(&adapter->syncp);
+			u64_stats_inc(&adapter->dev_stats.reset_fail);
+			u64_stats_update_end(&adapter->syncp);
+		}
 
 		dev_err(&adapter->pdev->dev, "Device reset completed successfully\n");
 	}
@@ -4329,8 +4339,8 @@ static void ena_keep_alive_wd(void *adapter_data,
 	/* These stats are accumulated by the device, so the counters indicate
 	 * all drops since last reset.
 	 */
-	adapter->dev_stats.rx_drops = rx_drops;
-	adapter->dev_stats.tx_drops = tx_drops;
+	u64_stats_set(&adapter->dev_stats.rx_drops, rx_drops);
+	u64_stats_set(&adapter->dev_stats.tx_drops, tx_drops);
 	u64_stats_update_end(&adapter->syncp);
 }
 

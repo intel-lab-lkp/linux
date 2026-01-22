@@ -440,42 +440,42 @@ struct ena_admin_eni_stats {
 	/* The number of packets shaped due to inbound aggregate BW
 	 * allowance being exceeded
 	 */
-	u64 bw_in_allowance_exceeded;
+	u64_stats_t bw_in_allowance_exceeded;
 
 	/* The number of packets shaped due to outbound aggregate BW
 	 * allowance being exceeded
 	 */
-	u64 bw_out_allowance_exceeded;
+	u64_stats_t bw_out_allowance_exceeded;
 
 	/* The number of packets shaped due to PPS allowance being exceeded */
-	u64 pps_allowance_exceeded;
+	u64_stats_t pps_allowance_exceeded;
 
 	/* The number of packets shaped due to connection tracking
 	 * allowance being exceeded and leading to failure in establishment
 	 * of new connections
 	 */
-	u64 conntrack_allowance_exceeded;
+	u64_stats_t conntrack_allowance_exceeded;
 
 	/* The number of packets shaped due to linklocal packet rate
 	 * allowance being exceeded
 	 */
-	u64 linklocal_allowance_exceeded;
+	u64_stats_t linklocal_allowance_exceeded;
 };
 
 struct ena_admin_ena_srd_stats {
 	/* Number of packets transmitted over ENA SRD */
-	u64 ena_srd_tx_pkts;
+	u64_stats_t ena_srd_tx_pkts;
 
 	/* Number of packets transmitted or could have been
 	 * transmitted over ENA SRD
 	 */
-	u64 ena_srd_eligible_tx_pkts;
+	u64_stats_t ena_srd_eligible_tx_pkts;
 
 	/* Number of packets received over ENA SRD */
-	u64 ena_srd_rx_pkts;
+	u64_stats_t ena_srd_rx_pkts;
 
 	/* Percentage of the ENA SRD resources that is in use */
-	u64 ena_srd_resource_utilization;
+	u64_stats_t ena_srd_resource_utilization;
 };
 
 /* ENA SRD Statistics Command */

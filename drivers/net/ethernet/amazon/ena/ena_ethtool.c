@@ -27,12 +27,12 @@ struct ena_hw_metrics {
 
 #define ENA_STAT_ENTRY(stat, stat_type) { \
 	.name = #stat, \
-	.stat_offset = offsetof(struct ena_stats_##stat_type, stat) / sizeof(u64) \
+	.stat_offset = offsetof(struct ena_stats_##stat_type, stat) / sizeof(u64_stats_t) \
 }
 
 #define ENA_STAT_HW_ENTRY(stat, stat_type) { \
 	.name = #stat, \
-	.stat_offset = offsetof(struct ena_admin_##stat_type, stat) / sizeof(u64) \
+	.stat_offset = offsetof(struct ena_admin_##stat_type, stat) / sizeof(u64_stats_t) \
 }
 
 #define ENA_STAT_RX_ENTRY(stat) \
@@ -154,14 +154,14 @@ static const struct ena_stats ena_stats_ena_com_strings[] = {
 #define ENA_STATS_ARRAY_ENA_SRD		ARRAY_SIZE(ena_srd_info_strings)
 #define ENA_METRICS_ARRAY_ENI		ARRAY_SIZE(ena_hw_stats_strings)
 
-static void ena_safe_update_stat(u64 *src, u64 *dst,
+static void ena_safe_update_stat(u64_stats_t *src, u64 *dst,
 				 struct u64_stats_sync *syncp)
 {
 	unsigned int start;
 
 	do {
 		start = u64_stats_fetch_begin(syncp);
-		*(dst) = *src;
+		*dst = u64_stats_read(src);
 	} while (u64_stats_fetch_retry(syncp, start));
 }
 
@@ -169,7 +169,7 @@ static void ena_metrics_stats(struct ena_adapter *adapter, u64 **data)
 {
 	struct ena_com_dev *dev = adapter->ena_dev;
 	const struct ena_stats *ena_stats;
-	u64 *ptr;
+	u64_stats_t *ptr;
 	int i;
 
 	if (ena_com_get_cap(dev, ENA_ADMIN_CUSTOMER_METRICS)) {
@@ -191,7 +191,7 @@ static void ena_metrics_stats(struct ena_adapter *adapter, u64 **data)
 		for (i = 0; i < ENA_STATS_ARRAY_ENI; i++) {
 			ena_stats = &ena_stats_eni_strings[i];
 
-			ptr = (u64 *)&adapter->eni_stats +
+			ptr = (u64_stats_t *)&adapter->eni_stats +
 				ena_stats->stat_offset;
 
 			ena_safe_update_stat(ptr, (*data)++, &adapter->syncp);
@@ -201,14 +201,14 @@ static void ena_metrics_stats(struct ena_adapter *adapter, u64 **data)
 	if (ena_com_get_cap(dev, ENA_ADMIN_ENA_SRD_INFO)) {
 		ena_com_get_ena_srd_info(dev, &adapter->ena_srd_info);
 		/* Get ENA SRD mode */
-		ptr = (u64 *)&adapter->ena_srd_info;
+		ptr = (u64_stats_t *)&adapter->ena_srd_info;
 		ena_safe_update_stat(ptr, (*data)++, &adapter->syncp);
 		for (i = 1; i < ENA_STATS_ARRAY_ENA_SRD; i++) {
 			ena_stats = &ena_srd_info_strings[i];
 			/* Wrapped within an outer struct - need to accommodate an
 			 * additional offset of the ENA SRD mode that was already processed
 			 */
-			ptr = (u64 *)&adapter->ena_srd_info +
+			ptr = (u64_stats_t *)&adapter->ena_srd_info +
 				ena_stats->stat_offset + 1;
 
 			ena_safe_update_stat(ptr, (*data)++, &adapter->syncp);
@@ -221,7 +221,7 @@ static void ena_queue_stats(struct ena_adapter *adapter, u64 **data)
 	const struct ena_stats *ena_stats;
 	struct ena_ring *ring;
 
-	u64 *ptr;
+	u64_stats_t *ptr;
 	int i, j;
 
 	for (i = 0; i < adapter->num_io_queues + adapter->xdp_num_queues; i++) {
@@ -231,7 +231,8 @@ static void ena_queue_stats(struct ena_adapter *adapter, u64 **data)
 		for (j = 0; j < ENA_STATS_ARRAY_TX; j++) {
 			ena_stats = &ena_stats_tx_strings[j];
 
-			ptr = (u64 *)&ring->tx_stats + ena_stats->stat_offset;
+			ptr = (u64_stats_t *)&ring->tx_stats +
+				ena_stats->stat_offset;
 
 			ena_safe_update_stat(ptr, (*data)++, &ring->syncp);
 		}
@@ -243,7 +244,7 @@ static void ena_queue_stats(struct ena_adapter *adapter, u64 **data)
 			for (j = 0; j < ENA_STATS_ARRAY_RX; j++) {
 				ena_stats = &ena_stats_rx_strings[j];
 
-				ptr = (u64 *)&ring->rx_stats +
+				ptr = (u64_stats_t *)&ring->rx_stats +
 					ena_stats->stat_offset;
 
 				ena_safe_update_stat(ptr, (*data)++, &ring->syncp);
@@ -273,13 +274,13 @@ static void ena_get_stats(struct ena_adapter *adapter,
 			  bool hw_stats_needed)
 {
 	const struct ena_stats *ena_stats;
-	u64 *ptr;
+	u64_stats_t *ptr;
 	int i;
 
 	for (i = 0; i < ENA_STATS_ARRAY_GLOBAL; i++) {
 		ena_stats = &ena_stats_global_strings[i];
 
-		ptr = (u64 *)&adapter->dev_stats + ena_stats->stat_offset;
+		ptr = (u64_stats_t *)&adapter->dev_stats + ena_stats->stat_offset;
 
 		ena_safe_update_stat(ptr, data++, &adapter->syncp);
 	}

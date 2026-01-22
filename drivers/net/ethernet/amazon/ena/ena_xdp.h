@@ -85,7 +85,7 @@ static inline int ena_xdp_execute(struct ena_ring *rx_ring, struct xdp_buff *xdp
 	struct bpf_prog *xdp_prog;
 	struct ena_ring *xdp_ring;
 	struct xdp_frame *xdpf;
-	u64 *xdp_stat;
+	u64_stats_t *xdp_stat;
 
 	xdp_prog = READ_ONCE(rx_ring->xdp_bpf_prog);
 

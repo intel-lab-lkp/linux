@@ -461,7 +461,7 @@ int ena_xdp_io_poll(struct napi_struct *napi, int budget)
 	}
 
 	u64_stats_update_begin(&tx_ring->syncp);
-	tx_ring->tx_stats.tx_poll++;
+	u64_stats_inc(&tx_ring->tx_stats.tx_poll);
 	u64_stats_update_end(&tx_ring->syncp);
 	tx_ring->tx_stats.last_napi_jiffies = jiffies;
 
