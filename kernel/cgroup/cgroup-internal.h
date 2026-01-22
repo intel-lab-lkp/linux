@@ -194,6 +194,9 @@ static inline bool notify_on_release(const struct cgroup *cgrp)
 	return test_bit(CGRP_NOTIFY_ON_RELEASE, &cgrp->flags);
 }
 
+/*
+ * refcounted get/put for css_set objects
+ */
 void put_css_set_locked(struct css_set *cset);
 
 static inline void put_css_set(struct css_set *cset)
@@ -213,12 +216,14 @@ static inline void put_css_set(struct css_set *cset)
 	spin_unlock_irqrestore(&css_set_lock, flags);
 }
 
-/*
- * refcounted get/put for css_set objects
- */
 static inline void get_css_set(struct css_set *cset)
 {
 	refcount_inc(&cset->refcount);
+}
+
+static inline bool get_css_set_not_zero(struct css_set *cset)
+{
+	return refcount_inc_not_zero(&cset->refcount);
 }
 
 bool cgroup_ssid_enabled(int ssid);

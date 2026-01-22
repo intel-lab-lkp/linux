@@ -87,7 +87,14 @@
  * cgroup.h can use them for lockdep annotations.
  */
 DEFINE_MUTEX(cgroup_mutex);
-DEFINE_SPINLOCK(css_set_lock);
+__cacheline_aligned DEFINE_SPINLOCK(css_set_lock);
+
+/*
+ * css_set_for_clone_seq synchronizes access to task_struct::cgroup
+ * and cgroup::kill_seq used on clone path
+ */
+static __cacheline_aligned seqcount_spinlock_t css_set_for_clone_seq =
+	SEQCNT_SPINLOCK_ZERO(css_set_for_clone_seq, &css_set_lock);
 
 #if (defined CONFIG_PROVE_RCU || defined CONFIG_LOCKDEP)
 EXPORT_SYMBOL_GPL(cgroup_mutex);
@@ -907,6 +914,7 @@ static void css_set_skip_task_iters(struct css_set *cset,
  * @from_cset: css_set @task currently belongs to (may be NULL)
  * @to_cset: new css_set @task is being moved to (may be NULL)
  * @use_mg_tasks: move to @to_cset->mg_tasks instead of ->tasks
+ * @skip_clone_seq: don't bump css_set_for_clone_seq
  *
  * Move @task from @from_cset to @to_cset.  If @task didn't belong to any
  * css_set, @from_cset can be NULL.  If @task is being disassociated
@@ -918,12 +926,15 @@ static void css_set_skip_task_iters(struct css_set *cset,
  */
 static void css_set_move_task(struct task_struct *task,
 			      struct css_set *from_cset, struct css_set *to_cset,
-			      bool use_mg_tasks)
+			      bool use_mg_tasks, bool skip_clone_seq)
 {
 	lockdep_assert_held(&css_set_lock);
 
 	if (to_cset && !css_set_populated(to_cset))
 		css_set_update_populated(to_cset, true);
+
+	if (!skip_clone_seq)
+		write_seqcount_begin(&css_set_for_clone_seq);
 
 	if (from_cset) {
 		WARN_ON_ONCE(list_empty(&task->cg_list));
@@ -949,6 +960,9 @@ static void css_set_move_task(struct task_struct *task,
 		list_add_tail(&task->cg_list, use_mg_tasks ? &to_cset->mg_tasks :
 							     &to_cset->tasks);
 	}
+
+	if (!skip_clone_seq)
+		write_seqcount_end(&css_set_for_clone_seq);
 }
 
 /*
@@ -2723,7 +2737,7 @@ static int cgroup_migrate_execute(struct cgroup_mgctx *mgctx)
 
 			get_css_set(to_cset);
 			to_cset->nr_tasks++;
-			css_set_move_task(task, from_cset, to_cset, true);
+			css_set_move_task(task, from_cset, to_cset, true, false);
 			from_cset->nr_tasks--;
 			/*
 			 * If the source or destination cgroup is frozen,
@@ -4183,7 +4197,9 @@ static void __cgroup_kill(struct cgroup *cgrp)
 	lockdep_assert_held(&cgroup_mutex);
 
 	spin_lock_irq(&css_set_lock);
+	write_seqcount_begin(&css_set_for_clone_seq);
 	cgrp->kill_seq++;
+	write_seqcount_end(&css_set_for_clone_seq);
 	spin_unlock_irq(&css_set_lock);
 
 	css_task_iter_start(&cgrp->self, CSS_TASK_ITER_PROCS | CSS_TASK_ITER_THREADED, &it);
@@ -6696,14 +6712,26 @@ static int cgroup_css_set_fork(struct kernel_clone_args *kargs)
 
 	cgroup_threadgroup_change_begin(current);
 
-	spin_lock_irq(&css_set_lock);
-	cset = task_css_set(current);
-	get_css_set(cset);
-	if (kargs->cgrp)
-		kargs->kill_seq = kargs->cgrp->kill_seq;
-	else
-		kargs->kill_seq = cset->dfl_cgrp->kill_seq;
-	spin_unlock_irq(&css_set_lock);
+	for (;;) {
+		unsigned seq = raw_read_seqcount_begin(&css_set_for_clone_seq);
+		bool got_ref = false;
+		rcu_read_lock();
+		cset = task_css_set(current);
+		if (kargs->cgrp)
+			kargs->kill_seq = kargs->cgrp->kill_seq;
+		else
+			kargs->kill_seq = cset->dfl_cgrp->kill_seq;
+		if (get_css_set_not_zero(cset))
+			got_ref = true;
+		rcu_read_unlock();
+		if (unlikely(!got_ref || read_seqcount_retry(&css_set_for_clone_seq, seq))) {
+			if (got_ref)
+				put_css_set(cset);
+			cpu_relax();
+			continue;
+		}
+		break;
+	}
 
 	if (!(kargs->flags & CLONE_INTO_CGROUP)) {
 		kargs->cset = cset;
@@ -6907,7 +6935,7 @@ void cgroup_post_fork(struct task_struct *child,
 
 		WARN_ON_ONCE(!list_empty(&child->cg_list));
 		cset->nr_tasks++;
-		css_set_move_task(child, NULL, cset, false);
+		css_set_move_task(child, NULL, cset, false, true);
 	} else {
 		put_css_set(cset);
 		cset = NULL;
@@ -6995,7 +7023,7 @@ static void do_cgroup_task_dead(struct task_struct *tsk)
 
 	WARN_ON_ONCE(list_empty(&tsk->cg_list));
 	cset = task_css_set(tsk);
-	css_set_move_task(tsk, cset, NULL, false);
+	css_set_move_task(tsk, cset, NULL, false, true);
 	cset->nr_tasks--;
 	/* matches the signal->live check in css_task_iter_advance() */
 	if (thread_group_leader(tsk) && atomic_read(&tsk->signal->live))
