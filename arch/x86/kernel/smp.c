@@ -317,7 +317,6 @@ void x86_smp_ops_static_call_update(void)
 	static_call_update(x86_smp_send_reschedule,
 			   smp_ops.smp_send_reschedule);
 }
-EXPORT_SYMBOL_GPL(x86_smp_ops_static_call_update);
 
 int arch_cpu_rescan_dead_smt_siblings(void)
 {
