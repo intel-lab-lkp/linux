@@ -31,6 +31,9 @@
 #define KSZ_PTP_SUBNS_BITS 32
 
 #define KSZ_PTP_INT_START 13
+#define KSZ8463_PTP_PORT1_INT_START 12
+#define KSZ8463_PTP_PORT2_INT_START 14
+#define KSZ8463_PTP_INT_START KSZ8463_PTP_PORT1_INT_START
 
 static int ksz_ptp_tou_gpio(struct ksz_device *dev)
 {
@@ -1102,6 +1105,7 @@ static void ksz_ptp_msg_irq_free(struct ksz_port *port, u8 n)
 static int ksz_ptp_msg_irq_setup(struct irq_domain *domain, struct ksz_port *port,
 				 u8 index, int irq)
 {
+	static const char * const ksz8463_name[] = {"sync-msg", "delay-msg"};
 	u16 ts_reg[] = {REG_PTP_PORT_PDRESP_TS, REG_PTP_PORT_XDELAY_TS,
 			REG_PTP_PORT_SYNC_TS};
 	static const char * const name[] = {"pdresp-msg", "xdreq-msg",
@@ -1115,13 +1119,106 @@ static int ksz_ptp_msg_irq_setup(struct irq_domain *domain, struct ksz_port *por
 		return -EINVAL;
 
 	ptpmsg_irq->port = port;
-	ptpmsg_irq->ts_reg = ops->get_port_addr(port->num, ts_reg[index]);
 
-	strscpy(ptpmsg_irq->name, name[index]);
+	if (ksz_is_ksz8463(port->ksz_dev)) {
+		ts_reg[0] = KSZ8463_REG_PORT_SYNC_TS;
+		ts_reg[1] = KSZ8463_REG_PORT_DREQ_TS;
+		strscpy(ptpmsg_irq->name, ksz8463_name[index]);
+	} else {
+		strscpy(ptpmsg_irq->name, name[index]);
+	}
+
+	ptpmsg_irq->ts_reg = ops->get_port_addr(port->num, ts_reg[index]);
 
 	return request_threaded_irq(ptpmsg_irq->num, NULL,
 				    ksz_ptp_msg_thread_fn, IRQF_ONESHOT,
 				    ptpmsg_irq->name, ptpmsg_irq);
+}
+
+static int ksz8463_ptp_port_irq_setup(struct ksz_irq *ptpirq, struct ksz_port *port, int hw_irq)
+{
+	int ret;
+	int i;
+
+	init_completion(&port->tstamp_msg_comp);
+
+	for (i = 0; i < 2; i++) {
+		ret = ksz_ptp_msg_irq_setup(ptpirq->domain, port, i, hw_irq++);
+		if (ret)
+			goto release_msg_irq;
+	}
+
+	return 0;
+
+release_msg_irq:
+	while (i--)
+		ksz_ptp_msg_irq_free(port, i);
+
+	return ret;
+}
+
+static void ksz8463_ptp_port_irq_teardown(struct ksz_port *port)
+{
+	int i;
+
+	for (i = 0; i < 2; i++)
+		ksz_ptp_msg_irq_free(port, i);
+}
+
+int ksz8463_ptp_irq_setup(struct dsa_switch *ds)
+{
+	struct ksz_device *dev = ds->priv;
+	const struct ksz_dev_ops *ops = dev->dev_ops;
+	struct ksz_port *port1, *port2;
+	struct ksz_irq *ptpirq;
+	int ret;
+	int p;
+
+	port1 = &dev->ports[0];
+	port2 = &dev->ports[1];
+	ptpirq = &port1->ptpirq;
+
+	ptpirq->irq_num = irq_find_mapping(dev->girq.domain, KSZ8463_SRC_PTP_INT);
+	if (!ptpirq->irq_num)
+		return -EINVAL;
+
+	ptpirq->dev = dev;
+	ptpirq->nirqs = 4;
+	ptpirq->reg_mask = ops->get_port_addr(p, KSZ8463_PTP_TS_IER);
+	ptpirq->reg_status = ops->get_port_addr(p, KSZ8463_PTP_TS_ISR);
+	ptpirq->irq0_offset = KSZ8463_PTP_INT_START;
+	snprintf(ptpirq->name, sizeof(ptpirq->name), "ptp-irq-%d", p);
+
+	ptpirq->domain = irq_domain_create_linear(dev_fwnode(dev->dev), ptpirq->nirqs,
+						  &ksz_ptp_irq_domain_ops, ptpirq);
+	if (!ptpirq->domain)
+		return -ENOMEM;
+
+	ret = request_threaded_irq(ptpirq->irq_num, NULL, ksz_ptp_irq_thread_fn,
+				   IRQF_ONESHOT, ptpirq->name, ptpirq);
+	if (ret)
+		goto release_domain;
+
+	ret = ksz8463_ptp_port_irq_setup(ptpirq, port1,
+					 KSZ8463_PTP_PORT1_INT_START - KSZ8463_PTP_INT_START);
+	if (ret)
+		goto release_irq;
+
+	ret = ksz8463_ptp_port_irq_setup(ptpirq, port2,
+					 KSZ8463_PTP_PORT2_INT_START - KSZ8463_PTP_INT_START);
+	if (ret)
+		goto free_port1;
+
+	return 0;
+
+free_port1:
+	ksz8463_ptp_port_irq_teardown(port1);
+release_irq:
+	free_irq(ptpirq->irq_num, ptpirq);
+release_domain:
+	irq_domain_remove(ptpirq->domain);
+
+	return ret;
 }
 
 int ksz_ptp_irq_setup(struct dsa_switch *ds, u8 p)
@@ -1179,6 +1276,19 @@ out:
 	irq_domain_remove(ptpirq->domain);
 
 	return ret;
+}
+
+void ksz8463_ptp_irq_free(struct dsa_switch *ds)
+{
+	struct ksz_device *dev = ds->priv;
+	struct ksz_port *port1 = &dev->ports[0];
+	struct ksz_port *port2 = &dev->ports[1];
+	struct ksz_irq *ptpirq = &port1->ptpirq;
+
+	ksz8463_ptp_port_irq_teardown(port1);
+	ksz8463_ptp_port_irq_teardown(port2);
+	free_irq(ptpirq->irq_num, ptpirq);
+	irq_domain_remove(ptpirq->domain);
 }
 
 void ksz_ptp_irq_free(struct dsa_switch *ds, u8 p)

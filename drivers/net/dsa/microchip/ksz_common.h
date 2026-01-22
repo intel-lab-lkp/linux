@@ -851,6 +851,8 @@ static inline bool ksz_is_sgmii_port(struct ksz_device *dev, int port)
 #define PORT_SRC_PHY_INT		1
 #define PORT_SRC_PTP_INT		2
 
+#define KSZ8463_SRC_PTP_INT		12
+
 #define KSZ8795_HUGE_PACKET_SIZE	2000
 #define KSZ8863_HUGE_PACKET_SIZE	1916
 #define KSZ8863_NORMAL_PACKET_SIZE	1536
