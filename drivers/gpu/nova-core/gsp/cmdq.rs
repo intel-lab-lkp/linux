@@ -227,21 +227,24 @@ impl DmaGspMem {
         // PANIC: per the invariant of `cpu_write_ptr`, `tx` is `< MSGQ_NUM_PAGES`.
         let (before_tx, after_tx) = gsp_mem.cpuq.msgq.data.split_at_mut(tx);
 
-        if rx <= tx {
-            // The area from `tx` up to the end of the ring, and from the beginning of the ring up
-            // to `rx`, minus one unit, belongs to the driver.
-            if rx == 0 {
-                let last = after_tx.len() - 1;
-                (&mut after_tx[..last], &mut before_tx[0..0])
-            } else {
-                (after_tx, &mut before_tx[..rx])
-            }
+        // The area starting at `tx` and ending at `rx - 2` modulo MSGQ_NUM_PAGES, inclusive,
+        // belongs to the driver for writing.
+        if rx == 0 {
+            // Since `rx` is zero, leave an empty slot at end of the buffer.
+            let last = after_tx.len() - 1;
+            (&mut after_tx[..last], &mut before_tx[0..0])
+        } else if rx > tx {
+            // The area is contiguous and we leave an empty slot before `rx`.
+            // PANIC: since `rx > tx` we have `rx - tx - 1 >= 0`
+            // PANIC: since `tx < rx < MSGQ_NUM_PAGES && after_tx.len() == MSGQ_NUM_PAGES - tx`:
+            //   `rx - 1 <= MSGQ_NUM_PAGES` -> `rx - tx - 1 <= MSGQ_NUM_PAGES - tx`
+            //   -> `rx - tx - 1 <= after_tx.len()`
+            (&mut after_tx[..(rx - tx - 1)], &mut before_tx[0..0])
         } else {
-            // The area from `tx` to `rx`, minus one unit, belongs to the driver.
-            //
-            // PANIC: per the invariants of `cpu_write_ptr` and `gsp_read_ptr`, `rx` and `tx` are
-            // `<= MSGQ_NUM_PAGES`, and the test above ensured that `rx > tx`.
-            (after_tx.split_at_mut(rx - tx).0, &mut before_tx[0..0])
+            // The area is discontiguous and we leave an empty slot before `rx`.
+            // PANIC: since `rx != 0 && rx is unsigned` we have `rx - 1 >= 0`
+            // PANIC: since `rx <= tx && before_tx.len() == tx` we have `rx - 1 <= before_tx.len()`
+            (after_tx, &mut before_tx[..(rx - 1)])
         }
     }
 
