@@ -78,6 +78,167 @@ static int devm_of_subdev_add(const struct platform_device_info *pdevinfo)
 	return devm_add_action_or_reset(parent, of_subdev_del, pdev);
 }
 
+static int of_subdev_collect_resources(struct device *parent, struct device_node *np,
+				       size_t address_cells, size_t size_cells,
+				       struct resource **res, size_t *num_res)
+{
+	size_t reg_len;
+	u32 *reg;
+	int err;
+
+	err = of_property_count_u32_elems(np, "reg");
+	if (!err)
+		err = -EINVAL;
+	if (err < 0) {
+		dev_err(parent, "Failed to read subdev %pOF \"reg\" property: %pe\n",
+			np, ERR_PTR(err));
+		return err;
+	}
+	reg_len = err;
+
+	if (reg_len % (address_cells + size_cells)) {
+		dev_err(parent, "Invalid \"reg\" specifier for %pOF\n", np);
+		return -EINVAL;
+	}
+
+	*num_res = reg_len / (address_cells + size_cells);
+	*res = kcalloc(*num_res, sizeof(**res), GFP_KERNEL);
+	if (!*res)
+		return -ENOMEM;
+
+	reg = kcalloc(reg_len, sizeof(*reg), GFP_KERNEL);
+	if (!reg) {
+		kfree(*res);
+		return -ENOMEM;
+	}
+
+	err = of_property_read_u32_array(np, "reg", reg, reg_len);
+	if (err) {
+		kfree(reg);
+		kfree(*res);
+		return err;
+	}
+
+	for (int cur_res = 0; cur_res < *num_res; cur_res++) {
+		int idx, address_cell, size_cell;
+		phys_addr_t start = 0, size = 0;
+
+		for (address_cell = 0; address_cell < address_cells; address_cell++) {
+			idx = cur_res * (address_cells + size_cells) + address_cell;
+			start = (unsigned long long)start << 32 | reg[idx];
+		}
+		for (size_cell = 0; size_cell < size_cells; size_cell++) {
+			idx = cur_res * (address_cells + size_cells) + address_cells + size_cell;
+			size = (unsigned long long)size << 32 | reg[idx];
+		}
+
+		(*res)[cur_res].start = start;
+		(*res)[cur_res].end = start + size - 1;
+		(*res)[cur_res].flags = IORESOURCE_REG;
+		of_property_read_string_index(np, "reg-names", cur_res, &(*res)[cur_res].name);
+	}
+
+	return 0;
+}
+
+/* Custom version of of_device_make_bus_id() which derives the name from the
+ * parent device plus the subdev name and untranslatable address.
+ * We don't set the resource address in the platform ID because that would
+ * print it as decimal rather than hex.
+ */
+static void of_subdev_make_bus_id(char *name, size_t name_len,
+				  const struct device *parent,
+				  struct device_node *child,
+				  const struct resource *res)
+{
+	if (res)
+		snprintf(name, name_len, "%s.%llx.%pOFn", dev_name(parent),
+			 (unsigned long long)res->start, child);
+	else
+		snprintf(name, name_len, "%s.%pOFn", dev_name(parent), child);
+}
+
+/**
+ * devm_of_subdevs_populate() - Populate platform sub-devices from device tree
+ * @parent: Parent device for all created sub-devices
+ * @np: Device tree node containing child nodes to be converted to sub-devices
+ *
+ * The device tree node @np describes the (MMIO-like but untranslatable) linear
+ * address space of device @parent, as can sometimes be found when such device
+ * is accessed through a SPI-to-AHB bridge.
+ *
+ * This function parses the device tree node @np and creates platform devices
+ * for each available child node. It reads the #address-cells and #size-cells
+ * properties to properly parse the "reg" properties of child nodes.
+ *
+ * For each child node, the function:
+ * - Creates a platform device with a name based on the parent and child node
+ * - Auto-detects and attaches resources to sub-devices based on parsed device
+ *   tree "reg" and "reg-names" properties
+ * - Uses the first resource's start address as the platform device ID
+ * - Registers the device with automatic cleanup via devres
+ *
+ * This is similar to of_platform_populate() except it expects to find
+ * IORESOURCE_REG resources rather than IORESOURCE_MEM/IORESOURCE_IO.
+ * It is also similar to mfd_add_devices() except we don't have to specify the
+ * mfd_cells[], but rather, the resources are embedded into the device tree.
+ * More importantly, this allows for the parent to have a hybrid function
+ * (MFD parent + the main function of the device) and a custom device tree
+ * binding, whereas MFD does not.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int devm_of_subdevs_populate(struct device *parent, struct device_node *np)
+{
+	u32 address_cells, size_cells;
+	int err;
+
+	err = of_property_read_u32(np, "#address-cells", &address_cells);
+	if (err)
+		return err;
+
+	err = of_property_read_u32(np, "#size-cells", &size_cells);
+	if (err)
+		return err;
+
+	if (IS_ENABLED(CONFIG_PHYS_ADDR_T_64BIT) ?
+	    (address_cells > 2 || size_cells > 2) :
+	    (address_cells > 1 || size_cells > 1)) {
+		dev_err(parent, "Subdev address space exceeds phys_addr_t possibilities\n");
+		return -EINVAL;
+	}
+
+	for_each_available_child_of_node_scoped(np, child) {
+		struct platform_device_info subdev;
+		struct resource *res;
+		size_t num_res;
+		char name[64];
+
+		err = of_subdev_collect_resources(parent, child, address_cells,
+						  size_cells, &res, &num_res);
+		if (err)
+			return err;
+
+		of_subdev_make_bus_id(name, sizeof(name), parent, child,
+				      num_res ? &res[0] : NULL);
+		subdev = (struct platform_device_info) {
+			.parent = parent,
+			.fwnode = of_fwnode_handle(child),
+			.name = name,
+			.id = PLATFORM_DEVID_NONE,
+			.res = res,
+			.num_res = num_res,
+		};
+
+		err = devm_of_subdev_add(&subdev);
+		kfree(res);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
 static int devm_sja1105_add_mdio_subdev(struct device *parent,
 					struct device_node *np,
 					const struct resource *res,
@@ -139,8 +300,16 @@ static int devm_sja1105_add_mdio_subdevs(struct dsa_switch *ds,
 int devm_sja1105_add_subdevs(struct dsa_switch *ds)
 {
 	struct device_node *switch_node = dev_of_node(ds->dev);
-	struct device_node *mdio_node;
+	struct device_node *regs_node, *mdio_node;
 	int rc = 0;
+
+	regs_node = of_get_available_child_by_name(switch_node, "regs");
+	if (regs_node) {
+		rc = devm_of_subdevs_populate(ds->dev, regs_node);
+		of_node_put(regs_node);
+		if (rc)
+			return rc;
+	}
 
 	mdio_node = of_get_available_child_by_name(switch_node, "mdios");
 	if (mdio_node) {

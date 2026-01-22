@@ -91,11 +91,6 @@ struct sja1105_regs {
 	u64 rmii_ref_clk[SJA1105_MAX_NUM_PORTS];
 	u64 rmii_ext_tx_clk[SJA1105_MAX_NUM_PORTS];
 	u64 stats[__MAX_SJA1105_STATS_AREA][SJA1105_MAX_NUM_PORTS];
-	u64 pcs_base[SJA1105_MAX_NUM_PORTS];
-};
-
-struct sja1105_mdio_private {
-	struct sja1105_private *priv;
 };
 
 enum {
@@ -159,10 +154,6 @@ struct sja1105_info {
 	bool (*rxtstamp)(struct dsa_switch *ds, int port, struct sk_buff *skb);
 	void (*txtstamp)(struct dsa_switch *ds, int port, struct sk_buff *skb);
 	int (*clocking_setup)(struct sja1105_private *priv);
-	int (*pcs_mdio_read_c45)(struct mii_bus *bus, int phy, int mmd,
-				 int reg);
-	int (*pcs_mdio_write_c45)(struct mii_bus *bus, int phy, int mmd,
-				  int reg, u16 val);
 	int (*disable_microcontroller)(struct sja1105_private *priv);
 	const char *name;
 	bool supports_mii[SJA1105_MAX_NUM_PORTS];
@@ -285,7 +276,6 @@ struct sja1105_private {
 	struct mutex dynamic_config_lock;
 	struct devlink_region **regions;
 	struct sja1105_cbs_entry *cbs;
-	struct mii_bus *mdio_pcs;
 	struct phylink_pcs *pcs[SJA1105_MAX_NUM_PORTS];
 	struct fwnode_handle *pcs_fwnode[SJA1105_MAX_NUM_PORTS];
 	struct of_changeset of_cs;
@@ -315,16 +305,6 @@ int sja1105_static_config_reload(struct sja1105_private *priv,
 int sja1105_vlan_filtering(struct dsa_switch *ds, int port, bool enabled,
 			   struct netlink_ext_ack *extack);
 void sja1105_frame_memory_partitioning(struct sja1105_private *priv);
-
-/* From sja1105_mdio.c */
-int sja1105_mdiobus_register(struct dsa_switch *ds);
-void sja1105_mdiobus_unregister(struct dsa_switch *ds);
-int sja1105_pcs_mdio_read_c45(struct mii_bus *bus, int phy, int mmd, int reg);
-int sja1105_pcs_mdio_write_c45(struct mii_bus *bus, int phy, int mmd, int reg,
-			       u16 val);
-int sja1110_pcs_mdio_read_c45(struct mii_bus *bus, int phy, int mmd, int reg);
-int sja1110_pcs_mdio_write_c45(struct mii_bus *bus, int phy, int mmd, int reg,
-			       u16 val);
 
 /* From sja1105_devlink.c */
 int sja1105_devlink_setup(struct dsa_switch *ds);
