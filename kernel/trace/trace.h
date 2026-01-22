@@ -770,6 +770,8 @@ extern unsigned long nsecs_to_usecs(unsigned long nsecs);
 
 extern unsigned long tracing_thresh;
 
+extern struct workqueue_struct *eval_map_wq __initdata;
+
 /* PID filtering */
 
 bool trace_find_filtered_pid(struct trace_pid_list *filtered_pids,

@@ -10775,7 +10775,7 @@ int tracing_init_dentry(void)
 extern struct trace_eval_map *__start_ftrace_eval_maps[];
 extern struct trace_eval_map *__stop_ftrace_eval_maps[];
 
-static struct workqueue_struct *eval_map_wq __initdata;
+struct workqueue_struct *eval_map_wq __initdata;
 static struct work_struct eval_map_work __initdata;
 static struct work_struct tracerfs_init_work __initdata;
 
