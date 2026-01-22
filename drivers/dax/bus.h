@@ -41,6 +41,14 @@ struct dax_device_driver {
 	void (*remove)(struct dev_dax *dev);
 };
 
+enum dax_cxl_mode {
+	DAX_CXL_MODE_DEFER,
+	DAX_CXL_MODE_REGISTER,
+	DAX_CXL_MODE_DROP,
+};
+
+extern enum dax_cxl_mode dax_cxl_mode;
+
 int __dax_driver_register(struct dax_device_driver *dax_drv,
 		struct module *module, const char *mod_name);
 #define dax_driver_register(driver) \

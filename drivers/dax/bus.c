@@ -24,6 +24,9 @@ DECLARE_RWSEM(dax_region_rwsem);
  */
 DECLARE_RWSEM(dax_dev_rwsem);
 
+enum dax_cxl_mode dax_cxl_mode = DAX_CXL_MODE_DEFER;
+EXPORT_SYMBOL_GPL(dax_cxl_mode);
+
 #define DAX_NAME_LEN 30
 struct dax_id {
 	struct list_head list;
