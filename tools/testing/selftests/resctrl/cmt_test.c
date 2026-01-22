@@ -19,12 +19,39 @@
 #define CON_MON_LCC_OCCUP_PATH		\
 	"%s/%s/mon_data/mon_L3_%02d/llc_occupancy"
 
-static int cmt_init(const struct resctrl_val_param *param, int domain_id)
+/*
+ * Initialize capacity bitmasks (CBMs) for control group being tested,
+ * default resource group to prevent its tasks from interfering with test,
+ * and L2 resource of control group to minimize allocations into L2 if
+ * possible to better predict L3 occupancy.
+ */
+static int cmt_init(const struct resctrl_test *test,
+		    const struct user_params *uparams,
+		    const struct resctrl_val_param *param, int domain_id)
 {
+	unsigned long long_mask;
+	char schemata[64];
+	int ret;
+
 	sprintf(llc_occup_path, CON_MON_LCC_OCCUP_PATH, RESCTRL_PATH,
 		param->ctrlgrp, domain_id);
 
-	return 0;
+	ret = get_full_cbm(test->resource, &long_mask);
+	if (ret)
+		return ret;
+
+	snprintf(schemata, sizeof(schemata), "%lx", ~param->mask & long_mask);
+	ret = write_schemata("", schemata, uparams->cpu, test->resource);
+	if (ret)
+		return ret;
+
+	snprintf(schemata, sizeof(schemata), "%lx", param->mask);
+	ret = write_schemata(param->ctrlgrp, schemata, uparams->cpu, test->resource);
+
+	if (!ret && !strcmp(test->resource, "L3") && resctrl_resource_exists("L2"))
+		ret = write_schemata(param->ctrlgrp, "0x1", uparams->cpu, "L2");
+
+	return ret;
 }
 
 static int cmt_setup(const struct resctrl_test *test,
@@ -153,11 +180,11 @@ static int cmt_run_test(const struct resctrl_test *test, const struct user_param
 	span = cache_portion_size(cache_total_size, param.mask, long_mask);
 
 	if (uparams->fill_buf) {
-		fill_buf.buf_size = span;
+		fill_buf.buf_size = span * 2;
 		fill_buf.memflush = uparams->fill_buf->memflush;
 		param.fill_buf = &fill_buf;
 	} else if (!uparams->benchmark_cmd[0]) {
-		fill_buf.buf_size = span;
+		fill_buf.buf_size = span * 2;
 		fill_buf.memflush = true;
 		param.fill_buf = &fill_buf;
 	}
