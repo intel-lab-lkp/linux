@@ -646,7 +646,6 @@ struct map *thread__find_map(struct thread *thread, u8 cpumode, u64 addr,
 	struct machine *machine = maps__machine(maps);
 	bool load_map = false;
 
-	maps__zput(al->maps);
 	map__zput(al->map);
 	thread__zput(al->thread);
 	al->thread = thread__get(thread);
@@ -684,7 +683,6 @@ struct map *thread__find_map(struct thread *thread, u8 cpumode, u64 addr,
 
 		return NULL;
 	}
-	al->maps = maps__get(maps);
 	al->map = maps__find(maps, al->addr);
 	if (al->map != NULL) {
 		/*
