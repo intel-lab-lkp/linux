@@ -675,6 +675,12 @@ static const struct dmi_system_id irq1_edge_low_force_override[] = {
 		},
 	},
 	{
+		/* MECHREVO Wujie 15X Pro */
+		.matches = {
+			DMI_MATCH(DMI_BOARD_NAME, "WUJIE Series-X5SP4NAG"),
+		},
+	},
+	{
 		/* MACHENIKE L16P/L16P */
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "MACHENIKE"),
