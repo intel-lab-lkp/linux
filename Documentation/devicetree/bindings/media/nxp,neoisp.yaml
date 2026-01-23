@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/media/nxp,neoisp.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: NXP NEOISP Image Signal Processing Pipeline
+
+maintainers:
+  - Antoine Bouyer <antoine.bouyer@nxp.com>
+
+description:
+  The NXP NEOISP performs a set of image processing tasks on the RAW camera
+  stream and provides RGB or YUV enhanced image.
+
+properties:
+  compatible:
+    enum:
+      - nxp,neoisp
+      - nxp,imx95-a0-neoisp
+      - nxp,imx95-a1-neoisp
+      - nxp,imx95-b0-neoisp
+
+  reg:
+    items:
+      - description: The configuration registers
+      - description: ISP local memories
+
+  interrupts:
+    maxItems: 1
+
+  clocks:
+    minItems: 1
+
+  clock-names:
+    items:
+      - const: camcm0
+
+  power-domains:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - clocks
+  - clock-names
+  - power-domains
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    isp@4ae00000 {
+      compatible = "nxp,neoisp";
+      reg = <0x4ae00000 0x8000>,
+            <0x4afe0000 0x10000>;
+      interrupts = <GIC_SPI 222 IRQ_TYPE_LEVEL_HIGH>;
+      interrupt-parent = <&gic>;
+      clocks = <&scmi_clk 64>; /* IMX95_CLK_CAMCM0 */
+      clock-names = "camcm0";
+      power-domains = <&scmi_devpd 3>; /* IMX95_PD_CAMERA */
+    };
