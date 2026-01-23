@@ -170,6 +170,21 @@ int timerlat_enable(struct osnoise_tool *tool)
 			return -1;
 	}
 
+	if (params->mode != TRACING_MODE_TRACEFS && params->has_instance_count_fields) {
+		/*
+		 * If the timerlat tracer has instance count fields, it is safe
+		 * to attach the BPF program before starting the trace instances.
+		 *
+		 * The BPF program will ignore any samples that arrive before
+		 * the trace instances are started.
+		 */
+		retval = timerlat_bpf_attach();
+		if (retval) {
+			err_msg("Error attaching BPF program\n");
+			return retval;
+		}
+	}
+
 	/*
 	 * Start the tracers here, after having set all instances.
 	 *
@@ -183,7 +198,15 @@ int timerlat_enable(struct osnoise_tool *tool)
 		trace_instance_start(&tool->aa->trace);
 	if (params->mode == TRACING_MODE_TRACEFS) {
 		trace_instance_start(&tool->trace);
-	} else {
+	} else if (!params->has_instance_count_fields) {
+		/*
+		 * Without instance count fields, play safe and attach the BPF program
+		 * after starting the trace instances.
+		 *
+		 * This might lead to samples being seen only by trace output and
+		 * auto analysis, but it is better than RTLA reporting results over
+		 * threshold that cannot be analyzed further.
+		 */
 		retval = timerlat_bpf_attach();
 		if (retval) {
 			err_msg("Error attaching BPF program\n");
