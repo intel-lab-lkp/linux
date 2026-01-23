@@ -1881,9 +1881,13 @@ void drm_atomic_helper_wait_for_flip_done(struct drm_device *dev,
 			continue;
 
 		ret = wait_for_completion_timeout(&commit->flip_done, 10 * HZ);
-		if (ret == 0)
+		if (!ret) {
 			drm_err(dev, "[CRTC:%d:%s] flip_done timed out\n",
 				crtc->base.id, crtc->name);
+
+			if (crtc->funcs->page_flip_timeout)
+				crtc->funcs->page_flip_timeout(crtc);
+		}
 	}
 
 	if (state->fake_commit)
