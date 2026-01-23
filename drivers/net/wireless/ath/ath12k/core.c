@@ -806,6 +806,18 @@ int ath12k_core_check_smbios(struct ath12k_base *ab)
 	ab->qmi.target.bdf_ext[0] = '\0';
 	dmi_walk(ath12k_core_check_cc_code_bdfext, ab);
 
+	/* If SMBIOS doesn't provide country code, initialize with world domain (00)
+	 * to let firmware use its default regulatory settings
+	 */
+	spin_lock_bh(&ab->base_lock);
+	if (ab->new_alpha2[0] == 0 && ab->new_alpha2[1] == 0) {
+		/* Use world domain - let firmware decide */
+		ab->new_alpha2[0] = '0';
+		ab->new_alpha2[1] = '0';
+		ath12k_info(ab, "No SMBIOS country code, using world regulatory domain\n");
+	}
+	spin_unlock_bh(&ab->base_lock);
+
 	if (ab->qmi.target.bdf_ext[0] == '\0')
 		return -ENODATA;
 
@@ -1532,6 +1544,12 @@ static void ath12k_update_11d(struct work_struct *work)
 	spin_lock_bh(&ab->base_lock);
 	memcpy(&arg.alpha2, &ab->new_alpha2, 2);
 	spin_unlock_bh(&ab->base_lock);
+
+	/* Skip setting country code if it's world domain (00) - let firmware use defaults */
+	if (arg.alpha2[0] == '0' && arg.alpha2[1] == '0') {
+		ath12k_dbg(ab, ATH12K_DBG_WMI, "skip sending world domain to firmware\n");
+		return;
+	}
 
 	ath12k_dbg(ab, ATH12K_DBG_WMI, "update 11d new cc %c%c\n",
 		   arg.alpha2[0], arg.alpha2[1]);
