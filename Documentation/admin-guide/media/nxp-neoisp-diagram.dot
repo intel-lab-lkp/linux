@@ -1,0 +1,22 @@
+digraph G {
+  rankdir = "LR";
+  node [shape=rect];
+  splines = ortho;
+  label = "Neoisp pipeline diagram";
+  {In0, In1 } -> HC -> {HDR_decomp0, HDR_decomp1};
+  HDR_decomp0 -> OBWB0 -> HDR_merge;
+  HDR_decomp1 -> OBWB1 -> HDR_merge;
+  HDR_merge -> RGBIR -> IR_compression;
+  RGBIR -> Statistics;
+  RGBIR -> OBWB2 ->BNR -> Vignetting -> ColorTemp;
+  Vignetting -> Demosaic -> RGB2YUV -> DRC -> AF;
+  DRC-> NR -> EE -> DF -> Gamma -> Packetizer;
+  DRC -> DMAP -> DF[weight=2];
+  DRC -> CCONV -> CAS -> Gamma;
+  {rank = "same"; RGBIR, DRC}
+  {rank = "same"; AF, NR, DMAP}
+  {rank = "same"; IR_compression, Vignetting}
+  IR_compression -> AXIOutDMA;
+  Packetizer -> AXIOutDMA [weight=3];
+  AXIOutDMA -> {"Out0", "Out1"}
+}
