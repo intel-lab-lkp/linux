@@ -2281,6 +2281,19 @@ struct ath12k_base *ath12k_core_alloc(struct device *dev, size_t priv_size,
 	ab->qmi.num_radios = U8_MAX;
 	ab->single_chip_mlo_support = false;
 
+	/* Initialize regulatory frequency ranges to full range.
+	 * These will be updated by ath12k_reg_build_regd() when
+	 * regulatory domain is set. For WCN7850 with self-managed
+	 * regulatory, firmware doesn't call reg_build_regd so we
+	 * need sane defaults to avoid filtering out all channels.
+	 */
+	ab->reg_freq_2ghz.start_freq = 2312000; /* 2.312 GHz */
+	ab->reg_freq_2ghz.end_freq = 2732000;   /* 2.732 GHz */
+	ab->reg_freq_5ghz.start_freq = 5150000; /* 5.150 GHz */
+	ab->reg_freq_5ghz.end_freq = 5945000;   /* 5.945 GHz */
+	ab->reg_freq_6ghz.start_freq = 5945000; /* 5.945 GHz */
+	ab->reg_freq_6ghz.end_freq = 7125000;   /* 7.125 GHz */
+
 	/* Device index used to identify the devices in a group.
 	 *
 	 * In Intra-device MLO, only one device present in a group,
