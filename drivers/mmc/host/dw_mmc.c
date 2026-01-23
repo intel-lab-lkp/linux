@@ -3374,20 +3374,10 @@ int dw_mci_probe(struct dw_mci *host)
 					     "platform data not available\n");
 	}
 
-	host->biu_clk = devm_clk_get(host->dev, "biu");
-	if (IS_ERR(host->biu_clk)) {
-		dev_dbg(host->dev, "biu clock not available\n");
-		ret = PTR_ERR(host->biu_clk);
-		if (ret == -EPROBE_DEFER)
-			return ret;
-
-	} else {
-		ret = clk_prepare_enable(host->biu_clk);
-		if (ret) {
-			dev_err(host->dev, "failed to enable biu clock\n");
-			return ret;
-		}
-	}
+	host->biu_clk = devm_clk_get_optional_enabled(host->dev, "biu");
+	ret = PTR_ERR_OR_ZERO(host->biu_clk);
+	if (ret)
+		return dev_err_probe(host->dev, ret, "failed to get biu clock\n");
 
 	host->ciu_clk = devm_clk_get(host->dev, "ciu");
 	if (IS_ERR(host->ciu_clk)) {
