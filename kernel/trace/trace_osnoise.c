@@ -574,15 +574,21 @@ static void record_timerlat_sample(struct timerlat_sample *sample)
 {
 	struct osnoise_instance *inst;
 	struct trace_buffer *buffer;
-
-	trace_timerlat_sample(sample);
+	int instances_registered = 0;
+	int instances_on = 0;
 
 	rcu_read_lock();
 	list_for_each_entry_rcu(inst, &osnoise_instances, list) {
+		if (tracer_tracing_is_on(inst->tr))
+			instances_on++;
+		instances_registered++;
+
 		buffer = inst->tr->array_buffer.buffer;
 		__record_timerlat_sample(sample, buffer);
 	}
 	rcu_read_unlock();
+
+	trace_timerlat_sample(sample, instances_registered, instances_on);
 }
 
 #ifdef CONFIG_STACKTRACE

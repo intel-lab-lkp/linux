@@ -79,26 +79,32 @@ TRACE_EVENT(osnoise_sample,
 #ifdef CONFIG_TIMERLAT_TRACER
 TRACE_EVENT(timerlat_sample,
 
-	TP_PROTO(struct timerlat_sample *s),
+	TP_PROTO(struct timerlat_sample *s, int instances_registered, int instances_on),
 
-	TP_ARGS(s),
+	TP_ARGS(s, instances_registered, instances_on),
 
 	TP_STRUCT__entry(
 		__field(	u64,		timer_latency	)
 		__field(	unsigned int,	seqnum		)
 		__field(	int,		context		)
+		__field(	int,		instances_registered	)
+		__field(	int,		instances_on		)
 	),
 
 	TP_fast_assign(
 		__entry->timer_latency = s->timer_latency;
 		__entry->seqnum = s->seqnum;
 		__entry->context = s->context;
+		__entry->instances_registered = instances_registered;
+		__entry->instances_on = instances_on;
 	),
 
-	TP_printk("timer_latency=%llu seqnum=%u context=%d",
+	TP_printk("timer_latency=%llu seqnum=%u context=%d instances_registered=%d instances_on=%d",
 		  __entry->timer_latency,
 		  __entry->seqnum,
-		  __entry->context)
+		  __entry->context,
+		  __entry->instances_registered,
+		  __entry->instances_on)
 );
 #endif // CONFIG_TIMERLAT_TRACER
 
