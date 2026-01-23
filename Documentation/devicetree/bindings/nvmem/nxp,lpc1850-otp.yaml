@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/nvmem/nxp,lpc1850-otp.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: NXP LPC18xx / LPC43xx One-Time Programmable (OTP) memory
+
+maintainers:
+  - Srinivas Kandagatla <srini@kernel.org>
+
+description:
+  The internal OTP memory in NXP LPC18xx and LPC43xx microcontrollers
+  provides a dedicated non-volatile storage area designed for permanent,
+  one-time configuration and data storage.The OTP controller manages write
+  protection, programming sequencing, and error detection mechanisms to
+  guarantee reliable and safe permanent programming under software control.
+
+allOf:
+  - $ref: nvmem.yaml#
+
+properties:
+  compatible:
+    const: nxp,lpc1850-otp
+
+  reg:
+    maxItems: 1
+
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 1
+
+required:
+  - compatible
+  - reg
+  - "#address-cells"
+  - "#size-cells"
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    otp@40045000 {
+        compatible = "nxp,lpc1850-otp";
+        reg = <0x40045000 0x1000>;
+        #address-cells = <1>;
+        #size-cells = <1>;
+    };
+...
