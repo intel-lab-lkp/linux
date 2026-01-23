@@ -431,8 +431,10 @@ static int airoha_thermal_probe(struct platform_device *pdev)
 		return -EINVAL;
 
 	priv->chip_scu = syscon_node_to_regmap(chip_scu_np);
-	if (IS_ERR(priv->chip_scu))
+	if (IS_ERR(priv->chip_scu)) {
+		of_node_put(chip_scu_np);
 		return PTR_ERR(priv->chip_scu);
+	}
 
 	of_address_to_resource(chip_scu_np, 0, &priv->scu_adc_res);
 	of_node_put(chip_scu_np);
