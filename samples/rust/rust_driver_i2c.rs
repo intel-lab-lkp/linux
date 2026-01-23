@@ -44,23 +44,21 @@ impl i2c::Driver for SampleDriver {
         idev: &i2c::I2cClient<Core>,
         info: Option<&Self::IdInfo>,
     ) -> impl PinInit<Self, Error> {
-        let dev = idev.as_ref();
-
-        dev_info!(dev, "Probe Rust I2C driver sample.\n");
+        dev_info!(idev, "Probe Rust I2C driver sample.\n");
 
         if let Some(info) = info {
-            dev_info!(dev, "Probed with info: '{}'.\n", info);
+            dev_info!(idev, "Probed with info: '{}'.\n", info);
         }
 
         Ok(Self)
     }
 
     fn shutdown(idev: &i2c::I2cClient<Core>, _this: Pin<&Self>) {
-        dev_info!(idev.as_ref(), "Shutdown Rust I2C driver sample.\n");
+        dev_info!(idev, "Shutdown Rust I2C driver sample.\n");
     }
 
     fn unbind(idev: &i2c::I2cClient<Core>, _this: Pin<&Self>) {
-        dev_info!(idev.as_ref(), "Unbind Rust I2C driver sample.\n");
+        dev_info!(idev, "Unbind Rust I2C driver sample.\n");
     }
 }
 
