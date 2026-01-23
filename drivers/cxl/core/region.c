@@ -838,25 +838,22 @@ static int check_commit_order(struct device *dev, void *data)
 	return 0;
 }
 
-static int match_free_decoder(struct device *dev, const void *data)
+bool is_free_decoder(struct device *dev)
 {
 	struct cxl_port *port = to_cxl_port(dev->parent);
 	struct cxl_decoder *cxld;
 	int rc;
 
-	if (!is_switch_decoder(dev))
-		return 0;
-
 	cxld = to_cxl_decoder(dev);
 
 	if (cxld->id != port->commit_end + 1)
-		return 0;
+		return false;
 
 	if (cxld->region) {
 		dev_dbg(dev->parent,
 			"next decoder to commit (%s) is already reserved (%s)\n",
 			dev_name(dev), dev_name(&cxld->region->dev));
-		return 0;
+		return false;
 	}
 
 	rc = device_for_each_child_reverse_from(dev->parent, dev, NULL,
@@ -865,9 +862,17 @@ static int match_free_decoder(struct device *dev, const void *data)
 		dev_dbg(dev->parent,
 			"unable to allocate %s due to out of order shutdown\n",
 			dev_name(dev));
-		return 0;
+		return false;
 	}
-	return 1;
+	return true;
+}
+
+static int match_free_decoder(struct device *dev, const void *data)
+{
+	if (!is_switch_decoder(dev))
+		return 0;
+
+	return is_free_decoder(dev);
 }
 
 static bool spa_maps_hpa(const struct cxl_region_params *p,

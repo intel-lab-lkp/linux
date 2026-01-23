@@ -287,3 +287,136 @@ err_bridge:
 	cxlr->cxl_nvb = NULL;
 	return rc;
 }
+
+static int match_root_decoder_by_dport(struct device *dev, const void *data)
+{
+	const struct cxl_port *ep_port = data;
+	struct cxl_root_decoder *cxlrd;
+	struct cxl_port *root_port;
+	struct cxl_decoder *cxld;
+	struct cxl_dport *dport;
+	int i;
+
+	if (!is_root_decoder(dev))
+		return 0;
+
+	cxld = to_cxl_decoder(dev);
+	if (!(cxld->flags & CXL_DECODER_F_PMEM))
+		return 0;
+
+	cxlrd = to_cxl_root_decoder(dev);
+
+	root_port = cxlrd_to_port(cxlrd);
+	dport = cxl_find_dport_by_dev(root_port, ep_port->host_bridge);
+	if (!dport)
+		return 0;
+
+	for (i = 0; i < cxlrd->cxlsd.nr_targets; i++)
+		if (dport == cxlrd->cxlsd.target[i])
+			break;
+
+	if (i == cxlrd->cxlsd.nr_targets)
+		return 0;
+
+	return is_root_decoder(dev);
+}
+
+/**
+ * cxl_find_root_decoder_by_port() - find a cxl root decoder on cxl bus
+ * @port: any descendant port in CXL port topology
+ * @cxled: endpoint decoder
+ *
+ * Caller of this function must call put_device() when done as a device ref
+ * is taken via device_find_child()
+ */
+static struct cxl_root_decoder *
+cxl_find_root_decoder_by_port(struct cxl_port *port,
+			      struct cxl_endpoint_decoder *cxled)
+{
+	struct cxl_root *cxl_root __free(put_cxl_root) = find_cxl_root(port);
+	struct cxl_port *ep_port = cxled_to_port(cxled);
+	struct device *dev;
+
+	if (!cxl_root)
+		return NULL;
+
+	dev = device_find_child(&cxl_root->port.dev, ep_port,
+				match_root_decoder_by_dport);
+	if (!dev)
+		return NULL;
+
+	return to_cxl_root_decoder(dev);
+}
+
+static int match_free_ep_decoder(struct device *dev, const void *data)
+{
+	if (!is_endpoint_decoder(dev))
+		return 0;
+
+	return is_free_decoder(dev);
+}
+
+/**
+ * cxl_find_free_ep_decoder() - find a cxl endpoint decoder using cxl port
+ * @port: any descendant port in CXL port topology
+ *
+ * Caller of this function must call put_device() when done as a device ref
+ * is taken via device_find_child()
+ */
+static struct cxl_decoder *cxl_find_free_ep_decoder(struct cxl_port *port)
+{
+	struct device *dev;
+
+	dev = device_find_child(&port->dev, NULL, match_free_ep_decoder);
+	if (!dev)
+		return NULL;
+
+	return to_cxl_decoder(dev);
+}
+
+void create_pmem_region(struct nvdimm *nvdimm)
+{
+	struct cxl_pmem_region_params *params;
+	struct cxl_endpoint_decoder *cxled;
+	struct cxl_nvdimm *cxl_nvd;
+	struct cxl_memdev *cxlmd;
+	struct cxl_region *cxlr;
+
+	if (!nvdimm_has_cxl_region(nvdimm))
+		return;
+
+	lockdep_assert_held(&cxl_rwsem.region);
+	cxl_nvd = nvdimm_provider_data(nvdimm);
+	params = nvdimm_get_cxl_region_param(nvdimm);
+	cxlmd = cxl_nvd->cxlmd;
+
+	/* TODO: Region creation support only for interleave way == 1 */
+	if (!(params->nlabel == 1)) {
+		dev_dbg(&cxlmd->dev,
+				"Region Creation is not supported with iw > 1\n");
+		return;
+	}
+
+	struct cxl_decoder *cxld __free(put_cxl_decoder) =
+		cxl_find_free_ep_decoder(cxlmd->endpoint);
+	if (!cxld) {
+		dev_err(&cxlmd->dev, "CXL endpoint decoder not found\n");
+		return;
+	}
+
+	cxled = to_cxl_endpoint_decoder(&cxld->dev);
+
+	struct cxl_root_decoder *cxlrd __free(put_cxl_root_decoder) =
+		cxl_find_root_decoder_by_port(cxlmd->endpoint, cxled);
+	if (!cxlrd) {
+		dev_err(&cxlmd->dev, "CXL root decoder not found\n");
+		return;
+	}
+
+	cxlr = cxl_create_region(cxlrd, CXL_PARTMODE_PMEM,
+				 atomic_read(&cxlrd->region_id),
+				 params, cxled);
+	if (IS_ERR(cxlr))
+		dev_warn(&cxlmd->dev, "Region Creation failed\n");
+}
+EXPORT_SYMBOL_NS_GPL(create_pmem_region, "CXL");

@@ -46,6 +46,7 @@ struct cxl_region *cxl_create_region(struct cxl_root_decoder *cxlrd,
 				     struct cxl_pmem_region_params *pmem_params,
 				     struct cxl_endpoint_decoder *cxled);
 struct cxl_region *to_cxl_region(struct device *dev);
+bool is_free_decoder(struct device *dev);
 
 #else
 static inline u64 cxl_dpa_to_hpa(struct cxl_region *cxlr,
@@ -86,6 +87,10 @@ cxl_create_region(struct cxl_root_decoder *cxlrd,
 static inline struct cxl_region *to_cxl_region(struct device *dev)
 {
 	return NULL;
+}
+static inline bool is_free_decoder(struct device *dev)
+{
+	return false;
 }
 #define CXL_REGION_ATTR(x) NULL
 #define CXL_REGION_TYPE(x) NULL
