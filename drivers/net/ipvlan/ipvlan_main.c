@@ -905,93 +905,45 @@ static int ipvlan_addr_validator_event(struct net_device *dev,
 	return ret;
 }
 
-#if IS_ENABLED(CONFIG_IPV6)
-static int ipvlan_add_addr6(struct ipvl_dev *ipvlan, struct in6_addr *ip6_addr)
+static int ipvlan_add_addr_event(struct ipvl_dev *ipvlan, const void *iaddr,
+				 bool is_v6)
 {
 	int ret = -EINVAL;
 
 	spin_lock_bh(&ipvlan->port->addrs_lock);
-	if (ipvlan_addr_busy(ipvlan->port, ip6_addr, true))
-		netif_err(ipvlan, ifup, ipvlan->dev,
-			  "Failed to add IPv6=%pI6c addr for %s intf\n",
-			  ip6_addr, ipvlan->dev->name);
-	else
-		ret = ipvlan_add_addr(ipvlan, ip6_addr, true);
-	spin_unlock_bh(&ipvlan->port->addrs_lock);
-	return ret;
-}
-
-static void ipvlan_del_addr6(struct ipvl_dev *ipvlan, struct in6_addr *ip6_addr)
-{
-	return ipvlan_del_addr(ipvlan, ip6_addr, true);
-}
-
-static int ipvlan_addr6_event(struct notifier_block *unused,
-			      unsigned long event, void *ptr)
-{
-	struct inet6_ifaddr *if6 = (struct inet6_ifaddr *)ptr;
-	struct net_device *dev = (struct net_device *)if6->idev->dev;
-	struct ipvl_dev *ipvlan = netdev_priv(dev);
-
-	if (!ipvlan_is_valid_dev(dev))
-		return NOTIFY_DONE;
-
-	switch (event) {
-	case NETDEV_UP:
-		if (ipvlan_add_addr6(ipvlan, &if6->addr))
-			return NOTIFY_BAD;
-		break;
-
-	case NETDEV_DOWN:
-		ipvlan_del_addr6(ipvlan, &if6->addr);
-		break;
+	if (ipvlan_addr_busy(ipvlan->port, iaddr, is_v6)) {
+		if (is_v6) {
+			netif_err(ipvlan, ifup, ipvlan->dev,
+				  "Failed to add IPv6=%pI6c addr on %s intf\n",
+				  iaddr, ipvlan->dev->name);
+		} else {
+			netif_err(ipvlan, ifup, ipvlan->dev,
+				  "Failed to add IPv4=%pI4 on %s intf.\n",
+				  iaddr, ipvlan->dev->name);
+		}
+	} else {
+		ret = ipvlan_add_addr(ipvlan, iaddr, is_v6);
 	}
-
-	return NOTIFY_OK;
-}
-#endif
-
-static int ipvlan_add_addr4(struct ipvl_dev *ipvlan, struct in_addr *ip4_addr)
-{
-	int ret = -EINVAL;
-
-	spin_lock_bh(&ipvlan->port->addrs_lock);
-	if (ipvlan_addr_busy(ipvlan->port, ip4_addr, false))
-		netif_err(ipvlan, ifup, ipvlan->dev,
-			  "Failed to add IPv4=%pI4 on %s intf.\n",
-			  ip4_addr, ipvlan->dev->name);
-	else
-		ret = ipvlan_add_addr(ipvlan, ip4_addr, false);
 	spin_unlock_bh(&ipvlan->port->addrs_lock);
 	return ret;
 }
 
-static void ipvlan_del_addr4(struct ipvl_dev *ipvlan, struct in_addr *ip4_addr)
+static int ipvlan_addr_event(struct net_device *dev, unsigned long event,
+			     const void *iaddr, bool is_v6)
 {
-	return ipvlan_del_addr(ipvlan, ip4_addr, false);
-}
-
-static int ipvlan_addr4_event(struct notifier_block *unused,
-			      unsigned long event, void *ptr)
-{
-	struct in_ifaddr *if4 = (struct in_ifaddr *)ptr;
-	struct net_device *dev = (struct net_device *)if4->ifa_dev->dev;
 	struct ipvl_dev *ipvlan = netdev_priv(dev);
-	struct in_addr ip4_addr;
 
 	if (!ipvlan_is_valid_dev(dev))
 		return NOTIFY_DONE;
 
 	switch (event) {
 	case NETDEV_UP:
-		ip4_addr.s_addr = if4->ifa_address;
-		if (ipvlan_add_addr4(ipvlan, &ip4_addr))
+		if (ipvlan_add_addr_event(ipvlan, iaddr, is_v6))
 			return NOTIFY_BAD;
 		break;
 
 	case NETDEV_DOWN:
-		ip4_addr.s_addr = if4->ifa_address;
-		ipvlan_del_addr4(ipvlan, &ip4_addr);
+		ipvlan_del_addr(ipvlan, iaddr, is_v6);
 		break;
 	}
 
@@ -1001,8 +953,11 @@ static int ipvlan_addr4_event(struct notifier_block *unused,
 static int ipvlan_addr_validator_event_cb(struct notifier_block *nblock,
 					  unsigned long event, void *ptr);
 
+static int ipvlan_addr_event_cb(struct notifier_block *unused,
+				unsigned long event, void *ptr);
+
 static struct notifier_block ipvlan_addr4_notifier_block __read_mostly = {
-	.notifier_call = ipvlan_addr4_event,
+	.notifier_call = ipvlan_addr_event_cb,
 };
 
 static struct notifier_block ipvlan_addr4_vtor_notifier_block __read_mostly = {
@@ -1013,11 +968,10 @@ static struct notifier_block ipvlan_notifier_block __read_mostly = {
 	.notifier_call = ipvlan_device_event,
 };
 
-#if IS_ENABLED(CONFIG_IPV6)
-static struct notifier_block ipvlan_addr6_notifier_block __read_mostly = {
-	.notifier_call = ipvlan_addr6_event,
+static struct notifier_block
+ipvlan_addr6_notifier_block __read_mostly __maybe_unused = {
+	.notifier_call = ipvlan_addr_event_cb,
 };
-#endif
 
 static struct notifier_block
 ipvlan_addr6_vtor_notifier_block __read_mostly __maybe_unused = {
@@ -1043,6 +997,24 @@ static int ipvlan_addr_validator_event_cb(struct notifier_block *nblock,
 	dev = i6vi->i6vi_dev->dev;
 	return ipvlan_addr_validator_event(dev, event, i6vi->extack,
 					   &i6vi->i6vi_addr, true);
+}
+
+static int ipvlan_addr_event_cb(struct notifier_block *nblock,
+				unsigned long event, void *ptr)
+{
+	struct inet6_ifaddr *if6;
+	struct net_device *dev;
+
+	if (nblock == &ipvlan_addr4_notifier_block) {
+		struct in_ifaddr *if4 = (struct in_ifaddr *)ptr;
+
+		dev = if4->ifa_dev->dev;
+		return ipvlan_addr_event(dev, event, &if4->ifa_address, false);
+	}
+
+	if6 = (struct inet6_ifaddr *)ptr;
+	dev = if6->idev->dev;
+	return ipvlan_addr_event(dev, event, &if6->addr, true);
 }
 
 static int __init ipvlan_init_module(void)
