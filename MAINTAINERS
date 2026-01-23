@@ -3727,6 +3727,7 @@ ARM/ZENA CSS PLATFORM
 M:	Debbie Horsfall <debbie.horsfall@arm.com>
 S:	Maintained
 F:	Documentation/devicetree/bindings/arm/arm,zena-css.yaml
+F:	arch/arm64/boot/dts/arm/zena-css*
 
 ARM/ZYNQ ARCHITECTURE
 M:	Michal Simek <michal.simek@amd.com>
