@@ -343,6 +343,8 @@ void amdgpu_reset_get_desc(struct amdgpu_reset_context *rst_ctxt, char *buf,
 	case AMDGPU_RESET_SRC_USERQ:
 		strscpy(buf, "user queue trigger", len);
 		break;
+	case AMDGPU_RESET_SRC_DISPLAY:
+		strscpy(buf, "display hang", len);
 	default:
 		strscpy(buf, "unknown", len);
 	}

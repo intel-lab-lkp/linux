@@ -28,6 +28,7 @@
 
 #include "dc.h"
 #include "amdgpu.h"
+#include "amdgpu_reset.h"
 #include "amdgpu_dm_psr.h"
 #include "amdgpu_dm_replay.h"
 #include "amdgpu_dm_crtc.h"
@@ -578,12 +579,29 @@ amdgpu_dm_atomic_crtc_get_property(struct drm_crtc *crtc,
 }
 #endif
 
+static void amdgpu_dm_crtc_handle_timeout(struct drm_crtc *crtc)
+{
+	struct amdgpu_device *adev = drm_to_adev(crtc->dev);
+	struct amdgpu_reset_context reset_context = {0};
+
+	if (amdgpu_device_should_recover_gpu(adev)) {
+		memset(&reset_context, 0, sizeof(reset_context));
+
+		reset_context.method = AMD_RESET_METHOD_NONE;
+		reset_context.reset_req_dev = adev;
+		reset_context.src = AMDGPU_RESET_SRC_DISPLAY;
+
+		amdgpu_device_gpu_recover(adev, NULL, &reset_context);
+	}
+}
+
 /* Implemented only the options currently available for the driver */
 static const struct drm_crtc_funcs amdgpu_dm_crtc_funcs = {
 	.reset = amdgpu_dm_crtc_reset_state,
 	.destroy = amdgpu_dm_crtc_destroy,
 	.set_config = drm_atomic_helper_set_config,
 	.page_flip = drm_atomic_helper_page_flip,
+	.page_flip_timeout = amdgpu_dm_crtc_handle_timeout,
 	.atomic_duplicate_state = amdgpu_dm_crtc_duplicate_state,
 	.atomic_destroy_state = amdgpu_dm_crtc_destroy_state,
 	.set_crc_source = amdgpu_dm_crtc_set_crc_source,
