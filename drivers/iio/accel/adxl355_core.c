@@ -770,7 +770,8 @@ static int adxl355_probe_trigger(struct iio_dev *indio_dev, int irq)
 
 	ret = devm_request_irq(data->dev, irq,
 			       &iio_trigger_generic_data_rdy_poll,
-			       IRQF_ONESHOT, "adxl355_irq", data->dready_trig);
+			       IRQF_NO_THREAD,
+			       "adxl355_irq", data->dready_trig);
 	if (ret)
 		return dev_err_probe(data->dev, ret, "request irq %d failed\n",
 				     irq);
