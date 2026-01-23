@@ -17,6 +17,9 @@ description: |+
   multiplexer GPIO pins, where the first pin is the least significant
   bit. An active pin is a binary 1, an inactive pin is a binary 0.
 
+  This binding supports GPIO-controlled multiplexers such as the Analog
+  Devices ADG2404 (4:1 mux with enable control).
+
 properties:
   compatible:
     const: gpio-mux
@@ -24,6 +27,18 @@ properties:
   mux-gpios:
     description:
       List of gpios used to control the multiplexer, least significant bit first.
+
+  enable-gpios:
+    description: |
+      Optional GPIO to enable the multiplexer. When present, the mux is
+      disabled before changing address lines and re-enabled after. This
+      prevents glitches where an unintended channel could be briefly activated
+      during address line transitions. When disabled, all outputs enter a
+      high-impedance (high-Z) state rather than holding their previous value.
+      This is suitable for analog multiplexers where downstream capacitance
+      maintains the signal level during the brief disconnection.
+      Required for MUX_IDLE_DISCONNECT idle-state.
+    maxItems: 1
 
   mux-supply:
     description:
@@ -59,6 +74,7 @@ examples:
 
         mux-gpios = <&pioA 0 GPIO_ACTIVE_HIGH>,
               <&pioA 1 GPIO_ACTIVE_HIGH>;
+        enable-gpios = <&pioA 2 GPIO_ACTIVE_HIGH>;
     };
 
     adc-mux {
