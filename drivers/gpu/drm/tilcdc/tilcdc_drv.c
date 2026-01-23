@@ -80,7 +80,7 @@ static const struct drm_mode_config_funcs mode_config_funcs = {
 
 static void modeset_init(struct drm_device *dev)
 {
-	struct tilcdc_drm_private *priv = dev->dev_private;
+	struct tilcdc_drm_private *priv = ddev_to_tilcdc_priv(dev);
 
 	dev->mode_config.min_width = 0;
 	dev->mode_config.min_height = 0;
@@ -106,14 +106,14 @@ static int cpufreq_transition(struct notifier_block *nb,
 static irqreturn_t tilcdc_irq(int irq, void *arg)
 {
 	struct drm_device *dev = arg;
-	struct tilcdc_drm_private *priv = dev->dev_private;
+	struct tilcdc_drm_private *priv = ddev_to_tilcdc_priv(dev);
 
 	return tilcdc_crtc_irq(priv->crtc);
 }
 
 static int tilcdc_irq_install(struct drm_device *dev, unsigned int irq)
 {
-	struct tilcdc_drm_private *priv = dev->dev_private;
+	struct tilcdc_drm_private *priv = ddev_to_tilcdc_priv(dev);
 	int ret;
 
 	ret = request_irq(irq, tilcdc_irq, 0, dev->driver->name, dev);
@@ -127,7 +127,7 @@ static int tilcdc_irq_install(struct drm_device *dev, unsigned int irq)
 
 static void tilcdc_irq_uninstall(struct drm_device *dev)
 {
-	struct tilcdc_drm_private *priv = dev->dev_private;
+	struct tilcdc_drm_private *priv = ddev_to_tilcdc_priv(dev);
 
 	if (!priv->irq_enabled)
 		return;
@@ -175,7 +175,7 @@ static int tilcdc_regs_show(struct seq_file *m, void *arg)
 {
 	struct drm_info_node *node = (struct drm_info_node *) m->private;
 	struct drm_device *dev = node->minor->dev;
-	struct tilcdc_drm_private *priv = dev->dev_private;
+	struct tilcdc_drm_private *priv = ddev_to_tilcdc_priv(dev);
 	unsigned i;
 
 	pm_runtime_get_sync(dev->dev);
@@ -276,7 +276,6 @@ static int tilcdc_pdev_probe(struct platform_device *pdev)
 
 	variant = (uintptr_t)of_device_get_match_data(dev);
 
-	ddev->dev_private = priv;
 	platform_set_drvdata(pdev, priv);
 	ddev = &priv->ddev;
 	ret = drmm_mode_config_init(ddev);
