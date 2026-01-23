@@ -1678,7 +1678,13 @@ static struct device *create_namespace_pmem(struct nd_region *nd_region,
 	int rc = 0;
 	u16 i;
 
-	if (cookie == 0) {
+	/*
+	 * CXL LSA v2.1 utilizes the region label stored in the LSA for
+	 * interleave set configuration. Whereas EFI LSA v1.1 & v1.2
+	 * utilizes interleave-set cookie. i.e, CXL labels skip the
+	 * need for 'interleave-set cookie'
+	 */
+	if (!ndd->cxl && cookie == 0) {
 		dev_dbg(&nd_region->dev, "invalid interleave-set-cookie\n");
 		return ERR_PTR(-ENXIO);
 	}
