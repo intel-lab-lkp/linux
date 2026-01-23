@@ -95,8 +95,6 @@
 //! }
 //! ```
 
-use core::pin::Pin;
-
 use kernel::{
     device::Device,
     fs::{File, Kiocb},
