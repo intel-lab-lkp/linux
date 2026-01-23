@@ -7,14 +7,10 @@
 use crate::{
     bindings,
     drm,
-    error::Result,
     prelude::*,
     types::Opaque, //
 };
-use core::{
-    marker::PhantomData,
-    pin::Pin, //
-};
+use core::marker::PhantomData;
 
 /// Trait that must be implemented by DRM drivers to represent a DRM File (a client instance).
 pub trait DriverFile {
