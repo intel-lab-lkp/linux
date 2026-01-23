@@ -28,6 +28,7 @@ int
 timerlat_apply_config(struct osnoise_tool *tool, struct timerlat_params *params)
 {
 	int retval;
+	struct tep_event *event = NULL;
 
 	/*
 	 * Try to enable BPF, unless disabled explicitly.
@@ -36,10 +37,25 @@ timerlat_apply_config(struct osnoise_tool *tool, struct timerlat_params *params)
 	if (getenv("RTLA_NO_BPF") && strncmp(getenv("RTLA_NO_BPF"), "1", 2) == 0) {
 		debug_msg("RTLA_NO_BPF set, disabling BPF\n");
 		params->mode = TRACING_MODE_TRACEFS;
-	} else if (!tep_find_event_by_name(tool->trace.tep, "osnoise", "timerlat_sample")) {
+	} else if (!(event = tep_find_event_by_name(tool->trace.tep, "osnoise", "timerlat_sample"))) {
 		debug_msg("osnoise:timerlat_sample missing, disabling BPF\n");
 		params->mode = TRACING_MODE_TRACEFS;
+	}
+
+	if (event && tep_find_field(event, "instances_registered") &&
+	    tep_find_field(event, "instances_on")) {
+		params->has_instance_count_fields = true;
+
+		if (!params->no_aa)
+			params->instances_on++;
+		if (params->common.threshold_actions.present[ACTION_TRACE_OUTPUT] ||
+		    params->common.end_actions.present[ACTION_TRACE_OUTPUT])
+			params->instances_on++;
 	} else {
+		params->has_instance_count_fields = false;
+	}
+
+	if (params->mode != TRACING_MODE_TRACEFS) {
 		retval = timerlat_bpf_init(params);
 		if (retval) {
 			debug_msg("Could not enable BPF\n");

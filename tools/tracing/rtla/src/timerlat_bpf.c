@@ -53,6 +53,14 @@ int timerlat_bpf_init(struct timerlat_params *params)
 		bpf_map__set_autocreate(bpf->maps.summary_user, false);
 	}
 
+	if (params->mode == TRACING_MODE_MIXED && params->has_instance_count_fields) {
+		bpf->rodata->instances_on = params->instances_on;
+		bpf->rodata->instances_registered = params->instances_on + 1; /* +1 for the main instance */
+	} else {
+		bpf->rodata->instances_registered = -1;
+		bpf->rodata->instances_on = -1;
+	}
+
 	/* Load and verify BPF program */
 	err = timerlat_bpf__load(bpf);
 	if (err) {

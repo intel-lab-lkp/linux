@@ -12,6 +12,8 @@ char LICENSE[] SEC("license") = "GPL";
 struct trace_event_raw_timerlat_sample {
 	unsigned long long timer_latency;
 	int context;
+	int instances_registered;
+	int instances_on;
 } __attribute__((preserve_access_index));
 
 struct {
@@ -58,6 +60,8 @@ const volatile int entries = 256;
 const volatile int irq_threshold;
 const volatile int thread_threshold;
 const volatile bool aa_only;
+const volatile int instances_registered = -1;
+const volatile int instances_on = -1;
 
 nosubprog unsigned long long map_get(void *map,
 				     unsigned int key)
@@ -142,6 +146,11 @@ int handle_timerlat_sample(struct trace_event_raw_timerlat_sample *tp_args)
 {
 	unsigned long long latency, latency_us;
 	int bucket;
+
+	if ((instances_registered != -1 && tp_args->instances_registered != instances_registered)
+		|| (instances_on != -1 && tp_args->instances_on != instances_on))
+		/* This sample is not seen by all trace instances, filter it out */
+		return 0;
 
 	if (map_get(&stop_tracing, 0))
 		return 0;
