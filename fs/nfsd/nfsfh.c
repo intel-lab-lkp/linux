@@ -244,6 +244,8 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct net *net,
 						data_left, fileid_type, 0,
 						nfsd_acceptable, exp);
 		if (IS_ERR_OR_NULL(dentry)) {
+			struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+
 			trace_nfsd_set_fh_dentry_badhandle(rqstp, fhp,
 					dentry ?  PTR_ERR(dentry) : -ESTALE);
 			switch (PTR_ERR(dentry)) {
@@ -252,6 +254,19 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct net *net,
 				break;
 			default:
 				dentry = ERR_PTR(-ESTALE);
+				/* We limit ESTALE returns to 1 every
+				 * 15 milliseconds (across all threads) to
+				 * prevent a client from guessing the
+				 * correct (32 bit) generation number
+				 * for an given inode in significantly
+				 * less than 1 year.  This ensures clients
+				 * can only access files for which they
+				 * are allowed to access a path from the
+				 * exported root.
+				 */
+				mutex_lock(&nn->estale_rate_limit_mutex);
+				msleep(15);
+				mutex_unlock(&nn->estale_rate_limit_mutex);
 			}
 		}
 	}

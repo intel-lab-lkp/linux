@@ -214,6 +214,8 @@ struct nfsd_net {
 	/* last time an admin-revoke happened for NFSv4.0 */
 	time64_t		nfs40_last_revoke;
 
+	struct mutex		estale_rate_limit_mutex;
+
 #if IS_ENABLED(CONFIG_NFS_LOCALIO)
 	/* Local clients to be invalidated when net is shut down */
 	spinlock_t              local_clients_lock;
