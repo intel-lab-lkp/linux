@@ -15796,6 +15796,15 @@ W:	https://linuxtv.org
 T:	git git://linuxtv.org/media.git
 F:	drivers/media/dvb-frontends/mxl5xx*
 
+MEDIA DRIVERS FOR NXP NEOISP
+M:	Antoine Bouyer <antoine.bouyer@nxp.com>
+S:	Maintained
+F:	Documentation/admin-guide/media/nxp-neoisp*
+F:	Documentation/devicetree/bindings/media/nxp,neoisp.yaml
+F:	Documentation/userspace-api/media/v4l/metafmt-nxp-neoisp.rst
+F:	drivers/media/platform/nxp/neoisp/*
+F:	include/uapi/linux/media/nxp/nxp_neoisp.h
+
 MEDIA DRIVERS FOR NETUP PCI UNIVERSAL DVB devices
 M:	Abylay Ospan <aospan@amazon.com>
 L:	linux-media@vger.kernel.org
