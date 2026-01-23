@@ -88,9 +88,9 @@ struct vkms_connector *vkms_connector_init(struct vkms_device *vkmsdev)
 	return connector;
 }
 
-void vkms_trigger_connector_hotplug(struct vkms_device *vkmsdev)
+void vkms_trigger_connector_hotplug(struct vkms_connector *vkms_connector)
 {
-	struct drm_device *dev = &vkmsdev->drm;
+	struct drm_connector *connector = &vkms_connector->base;
 
-	drm_kms_helper_hotplug_event(dev);
+	drm_kms_helper_connector_hotplug_event(connector);
 }
