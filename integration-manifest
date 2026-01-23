@@ -1,0 +1,36 @@
+drm drm-fixes b91adbe83093629a675c77d39ac638610630b1e8
+	Merge tag 'mediatek-drm-fixes-20260119' of https://git.kernel.org/pub/scm/linux/kernel/git/chunkuang.hu/linux into drm-fixes
+drm-misc drm-misc-fixes 0a095b64fa5b4b1edfeb2e9b1751e044230c5d73
+	drm/i915/display: Fix color pipeline enum name leak
+drm-rust drm-rust-fixes 0f61b1860cc3f52aef9036d7235ed1f017632193
+	Linux 6.19-rc5
+drm-intel drm-intel-fixes 81d0223832f99c0833e46be114a8310888015f8b
+	drm/i915/guc: make 'guc_hw_reg_state' static as it isn't exported
+drm-xe drm-xe-fixes e27ada4f19e7ffda4c05ce8633daf6daed667eea
+	drm/xe: Select CONFIG_DEVICE_PRIVATE when DRM_XE_GPUSVM is selected
+drm drm-next b2c6627e406d00bc53903ff6204aabb0c6a22b1a
+	Merge tag 'drm-misc-next-2026-01-22' of https://gitlab.freedesktop.org/drm/misc/kernel into drm-next
+drm-misc drm-misc-next-fixes 308eeb8ca3fdee54bcd3ec7272c05688e178299a
+	drm/rcar-du: dsi: Handle both DRM_MODE_FLAG_N.SYNC and !DRM_MODE_FLAG_P.SYNC
+drm-intel drm-intel-next-fixes 69f83f167463bad26104af7fbc114ce1f80366b0
+	drm/i915/psr: Don't enable Panel Replay on sink if globally disabled
+drm-xe drm-xe-next-fixes 3f1c07fc21c68bd3bd2df9d2c9441f6485e934d9
+	Merge drm/drm-next into drm-xe-next-fixes
+drm-misc drm-misc-next 15bd2f5d52de890f745ac0c60a44cd27d095bb0d
+	drm/panthor: Add gpu_job_irq tracepoint
+drm-rust drm-rust-next 6ea52b6d8f33ae627f4dcf43b12b6e713a8b9331
+	drm/tyr: use read_poll_timeout
+drm-intel drm-intel-next ced8299146eb4cec326ffe0bc5fc642e94165a5b
+	drm/i915: move GEN7_ERR_INT snapshot to display irq code
+drm-intel drm-intel-gt-next 9512d9fc2a7a4fee14854fbb3af89a8bf599f361
+	drm/i915/guc: Recommend GuC v70.53.0 for DG2, MTL
+drm-xe drm-xe-next 6ef02656c3222b1e12032a40d644ed56806b14fc
+	drm/xe: derive mem copy capability from graphics version
+drm-intel topic/core-for-CI 3d15d7e81d498d56ca6ba3af63f2fa1106da87ad
+	ACPI: PM: s2idle: Add module parameter for LPS0 constraints checking
+drm-xe topic/xe-for-CI 912b9b537ae6e75c352d42f7ac40b50f9aa3d2ce
+	topic/for-xe-CI: drm/xe/cri: Define GuC firmware for CRI
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
+drm-intel topic/drm-intel-plane-color-pipeline 860daa4b0d09a398a0ac9ae6fe67efd73a275968
+	drm/i915/color: Enable Plane Color Pipelines
