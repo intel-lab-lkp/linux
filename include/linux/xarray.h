@@ -1647,6 +1647,15 @@ static inline void xas_set(struct xa_state *xas, unsigned long index)
 }
 
 /**
+ * xas_get_index() - Get XArray operation state for a different index.
+ * @xas: XArray operation state.
+ */
+static inline unsigned long xas_get_index(struct xa_state *xas)
+{
+	return xas->xa_index;
+}
+
+/**
  * xas_advance() - Skip over sibling entries.
  * @xas: XArray operation state.
  * @index: Index of last sibling entry.
