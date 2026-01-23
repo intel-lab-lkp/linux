@@ -588,10 +588,10 @@ enum drx_priority {
 */
 enum drx_coderate {
 		DRX_CODERATE_1DIV2 = 0,	/*< Code rate 1/2nd.      */
-		DRX_CODERATE_2DIV3,	/*< Code rate 2/3nd.      */
-		DRX_CODERATE_3DIV4,	/*< Code rate 3/4nd.      */
-		DRX_CODERATE_5DIV6,	/*< Code rate 5/6nd.      */
-		DRX_CODERATE_7DIV8,	/*< Code rate 7/8nd.      */
+		DRX_CODERATE_2DIV3,	/*< Code rate 2/3rd.      */
+		DRX_CODERATE_3DIV4,	/*< Code rate 3/4th.      */
+		DRX_CODERATE_5DIV6,	/*< Code rate 5/6th.      */
+		DRX_CODERATE_7DIV8,	/*< Code rate 7/8th.      */
 		DRX_CODERATE_UNKNOWN = DRX_UNKNOWN,
 					/*< Code rate unknown.    */
 		DRX_CODERATE_AUTO = DRX_AUTO
@@ -924,7 +924,7 @@ STRUCTS
 /*============================================================================*/
 
 /*
- * struct drxu_code_info	Parameters for microcode upload and verfiy.
+ * struct drxu_code_info	Parameters for microcode upload and verify.
  *
  * @mc_file:	microcode file name
  *
@@ -1220,7 +1220,7 @@ struct drx_version_list {
 /*========================================*/
 
 /*
-* \brief Parameters needed to confiugure a UIO.
+* \brief Parameters needed to configure a UIO.
 *
 * Used by DRX_CTRL_UIO_CFG.
 */
