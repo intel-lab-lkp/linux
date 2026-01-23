@@ -211,6 +211,21 @@ config CXL_REGION
 
 	  If unsure say 'y'
 
+config CXL_PMEM_REGION
+	bool "CXL: Pmem Region Support"
+	default CXL_BUS
+	depends on CXL_REGION
+	depends on ARCH_HAS_PMEM_API
+	depends on PHYS_ADDR_T_64BIT
+	depends on BLK_DEV
+	select LIBNVDIMM
+	help
+	   Enable the CXL core to enumerate and provision CXL pmem regions.
+	   A CXL pmem region need to update region label into LSA. For LSA
+	   update/delete libnvdimm is required.
+
+	   If unsure say 'y'
+
 config CXL_REGION_INVALIDATION_TEST
 	bool "CXL: Region Cache Management Bypass (TEST)"
 	depends on CXL_REGION
