@@ -42,6 +42,8 @@ register/unregister functions::
 
   char *devm_hwmon_sanitize_name(struct device *dev, const char *name);
 
+  int hwmon_update_groups(struct device *dev);
+
   void hwmon_lock(struct device *dev);
   void hwmon_unlock(struct device *dev);
 
@@ -88,6 +90,12 @@ are serialised by the hardware monitoring core. If a driver needs locking
 for other functions such as interrupt handlers or for attributes which are
 fully implemented in the driver, hwmon_lock() and hwmon_unlock() can be used
 to ensure that calls to those functions are serialized.
+
+If the visibility of sysfs attributes changes during runtime, the driver
+needs to call hwmon_update_groups() with the hwmon device as parameter
+to update attribute visibility. If the driver registered thermal zones
+using hwmon_device_register_with_info() and the visibility of thermal
+sensors changes, this call will also update thermal zones as needed.
 
 Using devm_hwmon_device_register_with_info()
 --------------------------------------------

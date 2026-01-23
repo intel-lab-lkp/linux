@@ -330,6 +330,11 @@ static int hwmon_thermal_register_sensors(struct device *dev)
 	return hwmon_thermal_handle_sensors(dev, false);
 }
 
+static int hwmon_thermal_update_sensors(struct device *dev)
+{
+	return hwmon_thermal_handle_sensors(dev, true);
+}
+
 static void hwmon_thermal_notify(struct device *dev, int index)
 {
 	struct hwmon_thermal_data *tzdata = hwmon_thermal_find_tz(dev, index);
@@ -798,6 +803,25 @@ static const int __templates_size[] = {
 	[hwmon_pwm] = ARRAY_SIZE(hwmon_pwm_attr_templates),
 	[hwmon_intrusion] = ARRAY_SIZE(hwmon_intrusion_attr_templates),
 };
+
+int hwmon_update_groups(struct device *dev)
+{
+	struct hwmon_device *hwdev = to_hwmon_device(dev);
+	const struct hwmon_chip_info *chip = hwdev->chip;
+	const struct hwmon_channel_info * const *info;
+	int ret;
+
+	ret = sysfs_update_groups(&dev->kobj, dev->groups);
+	if (ret || !chip)
+		return ret;
+
+	info = chip->info;
+	if (info[0]->type != hwmon_chip || !(info[0]->config[0] & HWMON_C_REGISTER_TZ))
+		return 0;
+
+	return hwmon_thermal_update_sensors(dev);
+}
+EXPORT_SYMBOL_GPL(hwmon_update_groups);
 
 int hwmon_notify_event(struct device *dev, enum hwmon_sensor_types type,
 		       u32 attr, int channel)
