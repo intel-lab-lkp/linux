@@ -168,6 +168,8 @@
 /* #define VERBOSE_DEBUG */
 /* #define DUMP_MSGS */
 
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
 #include <linux/blkdev.h>
 #include <linux/completion.h>
 #include <linux/dcache.h>
