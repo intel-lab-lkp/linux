@@ -925,20 +925,6 @@ static inline struct timer_base *get_timer_cpu_base(u32 tflags, u32 cpu)
 	return per_cpu_ptr(&timer_bases[index], cpu);
 }
 
-static inline struct timer_base *get_timer_this_cpu_base(u32 tflags)
-{
-	int index = tflags & TIMER_PINNED ? BASE_LOCAL : BASE_GLOBAL;
-
-	/*
-	 * If the timer is deferrable and NO_HZ_COMMON is set then we need
-	 * to use the deferrable base.
-	 */
-	if (IS_ENABLED(CONFIG_NO_HZ_COMMON) && (tflags & TIMER_DEFERRABLE))
-		index = BASE_DEF;
-
-	return this_cpu_ptr(&timer_bases[index]);
-}
-
 static inline struct timer_base *get_timer_base(u32 tflags)
 {
 	return get_timer_cpu_base(tflags, tflags & TIMER_CPUMASK);
@@ -1098,7 +1084,7 @@ __mod_timer(struct timer_list *timer, unsigned long expires, unsigned int option
 	if (!ret && (options & MOD_TIMER_PENDING_ONLY))
 		goto out_unlock;
 
-	new_base = get_timer_this_cpu_base(timer->flags);
+	new_base = get_timer_cpu_base(timer->flags, raw_smp_processor_id());
 
 	if (base != new_base) {
 		/*
