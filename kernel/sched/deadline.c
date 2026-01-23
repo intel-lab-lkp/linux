@@ -1617,7 +1617,7 @@ void dl_server_update(struct sched_dl_entity *dl_se, s64 delta_exec)
  *   dl_server_active = 0
  *   dl_throttled = 0
  *   dl_defer_armed = 0
- *   dl_defer_running = 0/1
+ *   dl_defer_running = 0
  *   dl_defer_idle = 0
  *
  * [B] - zero_laxity-wait
@@ -1703,6 +1703,7 @@ void dl_server_update(struct sched_dl_entity *dl_se, s64 delta_exec)
  *       hrtimer_try_to_cancel();
  *       dl_defer_armed = 0;
  *       dl_throttled = 0;
+ *       dl_defer_running = 0;
  *       dl_server_active = 0;
  *       // [A]
  *   return p;
@@ -1810,6 +1811,7 @@ void dl_server_stop(struct sched_dl_entity *dl_se)
 	hrtimer_try_to_cancel(&dl_se->dl_timer);
 	dl_se->dl_defer_armed = 0;
 	dl_se->dl_throttled = 0;
+	dl_se->dl_defer_running = 0;
 	dl_se->dl_defer_idle = 0;
 	dl_se->dl_server_active = 0;
 }
