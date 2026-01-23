@@ -220,7 +220,7 @@ int fscrypt_fname_alloc_buffer(u32 max_encrypted_len,
 	u32 max_presented_len = max_t(u32, FSCRYPT_NOKEY_NAME_MAX_ENCODED,
 				      max_encrypted_len);
 
-	crypto_str->name = kmalloc(max_presented_len + 1, GFP_NOFS);
+	crypto_str->name = kzalloc(max_presented_len + 1, GFP_NOFS);
 	if (!crypto_str->name)
 		return -ENOMEM;
 	crypto_str->len = max_presented_len;
