@@ -39,21 +39,44 @@
  *   spin_lock_bh(...) or other synchronization to get exclusive access
  *   ...
  *   u64_stats_update_begin(&stats->syncp);
- *   u64_stats_add(&stats->bytes64, len); // non atomic operation
- *   u64_stats_inc(&stats->packets64);    // non atomic operation
+ *   u64_stats_add(&stats->bytes64, len);
+ *   u64_stats_inc(&stats->packets64);
  *   u64_stats_update_end(&stats->syncp);
  *
  * While a consumer (reader) should use following template to get consistent
  * snapshot for each variable (but no guarantee on several ones)
  *
- * u64 tbytes, tpackets;
- * unsigned int start;
+ *   u64 tbytes, tpackets;
+ *   unsigned int start;
  *
- * do {
- *         start = u64_stats_fetch_begin(&stats->syncp);
- *         tbytes = u64_stats_read(&stats->bytes64); // non atomic operation
- *         tpackets = u64_stats_read(&stats->packets64); // non atomic operation
- * } while (u64_stats_fetch_retry(&stats->syncp, start));
+ *   do {
+ *           start = u64_stats_fetch_begin(&stats->syncp);
+ *           tbytes = u64_stats_read(&stats->bytes64);
+ *           tpackets = u64_stats_read(&stats->packets64);
+ *   } while (u64_stats_fetch_retry(&stats->syncp, start));
+ *
+ * Remember point #2: update_begin()/update_end() and
+ * fetch_begin()/fetch_retry() are no-ops on 64-bit architectures. u64_stats
+ * _cannot_ be used to protect plain variables against tearing.
+ *
+ *   u64 stats64, cnt;
+ *   struct { u64_stats_t stats[10]; } st, buf;
+ *
+ *   u64_stats_update_begin(&stats->syncp);
+ *   stats64 = cnt;  // no
+ *   stats64 += cnt; // no
+ *   stats64++;      // no
+ *   st = buf;                      // no
+ *   memcpy(&st, &buf, sizeof(st)); // no
+ *   u64_stats_update_end(&stats->syncp);
+ *
+ *   do {
+ *           start = u64_stats_fetch_begin(&stats->syncp);
+ *           cnt = stats64; // no
+ *           buf = st;                               // no
+ *           memcpy(&buf, &st, sizeof(st));          // no
+ *           u64_stats_reads(&buf, &st, sizeof(st)); // use this instead
+ *   } while (u64_stats_fetch_retry(&stats->syncp, start));
  *
  *
  * Example of use in drivers/net/loopback.c, using per_cpu containers,
