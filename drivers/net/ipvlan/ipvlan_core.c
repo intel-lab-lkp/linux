@@ -118,7 +118,7 @@ struct ipvl_addr *ipvlan_find_addr(const struct ipvl_dev *ipvlan,
 	return NULL;
 }
 
-bool ipvlan_addr_busy(struct ipvl_port *port, void *iaddr, bool is_v6)
+bool ipvlan_addr_busy(struct ipvl_port *port, const void *iaddr, bool is_v6)
 {
 	struct ipvl_dev *ipvlan;
 	bool ret = false;

@@ -814,7 +814,8 @@ static int ipvlan_device_event(struct notifier_block *unused,
 }
 
 /* the caller must held the addrs lock */
-static int ipvlan_add_addr(struct ipvl_dev *ipvlan, void *iaddr, bool is_v6)
+static int ipvlan_add_addr(struct ipvl_dev *ipvlan, const void *iaddr,
+			   bool is_v6)
 {
 	struct ipvl_addr *addr;
 
@@ -846,7 +847,8 @@ static int ipvlan_add_addr(struct ipvl_dev *ipvlan, void *iaddr, bool is_v6)
 	return 0;
 }
 
-static void ipvlan_del_addr(struct ipvl_dev *ipvlan, void *iaddr, bool is_v6)
+static void ipvlan_del_addr(struct ipvl_dev *ipvlan, const void *iaddr,
+			    bool is_v6)
 {
 	struct ipvl_addr *addr;
 
