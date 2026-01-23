@@ -1,7 +1,8 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-2.0
 
-. "$(cd "$(dirname "$0")" && pwd)"/test_common.sh
+TDIR=$(cd "$(dirname "$0")" && pwd)
+. $TDIR/test_common.sh
 
 TID="generic_01"
 ERR_CODE=0
@@ -20,7 +21,7 @@ dev_id=$(_add_ublk_dev -t null)
 _check_add_dev $TID $?
 
 dev_t=$(_get_disk_dev_t "$dev_id")
-bpftrace trace/seq_io.bt "$dev_t" "W" 1 > "$UBLK_TMP" 2>&1 &
+bpftrace $TDIR/trace/seq_io.bt "$dev_t" "W" 1 > "$UBLK_TMP" 2>&1 &
 btrace_pid=$!
 sleep 2
 

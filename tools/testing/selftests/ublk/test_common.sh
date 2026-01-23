@@ -43,7 +43,7 @@ _create_backfile() {
 	old_file="${UBLK_BACKFILES[$index]}"
 	[ -f "$old_file" ] && rm -f "$old_file"
 
-	new_file=$(mktemp ublk_file_"${new_size}"_XXXXX)
+	new_file=$(mktemp $TMPDIR/ublk_file_"${new_size}"_XXXXX)
 	truncate -s "${new_size}" "${new_file}"
 	UBLK_BACKFILES["$index"]="$new_file"
 }
@@ -55,6 +55,7 @@ _remove_files() {
 		[ -f "$file" ] && rm -f "$file"
 	done
 	[ -f "$UBLK_TMP" ] && rm -f "$UBLK_TMP"
+	rm -rf "$TMPDIR"
 }
 
 _create_tmp_dir() {
@@ -119,7 +120,7 @@ _prep_test() {
 	local type=$1
 	shift 1
 	modprobe ublk_drv > /dev/null 2>&1
-	UBLK_TMP=$(mktemp ublk_test_XXXXX)
+	UBLK_TMP=$(mktemp $TMPDIR/ublk_test_XXXXX)
 	[ "$UBLK_TEST_QUIET" -eq 0 ] && echo "ublk $type: $*"
 }
 
@@ -358,7 +359,7 @@ run_io_and_recover()
 
 	state=$(_recover_ublk_dev -n "$dev_id" "$@")
 	if [ "$state" != "LIVE" ]; then
-		echo "faile to recover to LIVE($state)"
+		echo "failed to recover to LIVE($state)"
 		return 255
 	fi
 
@@ -382,3 +383,4 @@ UBLK_BACKFILES=()
 export UBLK_PROG
 export UBLK_TEST_QUIET
 export UBLK_TEST_SHOW_RESULT
+export TMPDIR=$(mktemp -d ${TMPDIR:-/tmp}/ublktest-dir.XXXXXX)

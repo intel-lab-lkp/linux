@@ -1,7 +1,8 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-2.0
 
-. "$(cd "$(dirname "$0")" && pwd)"/test_common.sh
+TDIR=$(cd "$(dirname "$0")" && pwd)
+. $TDIR/test_common.sh
 
 TID="generic_12"
 ERR_CODE=0
@@ -21,7 +22,7 @@ dev_id=$(_add_ublk_dev -t null -q 4 -d 16 --nthreads $NTHREADS --per_io_tasks)
 _check_add_dev $TID $?
 
 dev_t=$(_get_disk_dev_t "$dev_id")
-bpftrace trace/count_ios_per_tid.bt "$dev_t" > "$UBLK_TMP" 2>&1 &
+bpftrace $TDIR/trace/count_ios_per_tid.bt "$dev_t" > "$UBLK_TMP" 2>&1 &
 btrace_pid=$!
 sleep 2
 
