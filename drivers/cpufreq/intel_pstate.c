@@ -1140,21 +1140,11 @@ static void hybrid_refresh_cpu_capacity_scaling(void)
 	hybrid_register_all_perf_domains();
 }
 
-static void hybrid_init_cpu_capacity_scaling(bool refresh)
+static void hybrid_init_cpu_capacity_scaling(void)
 {
 	/* Bail out if enabling capacity-aware scheduling is prohibited. */
 	if (no_cas)
 		return;
-
-	/*
-	 * If hybrid_max_perf_cpu is set at this point, the hybrid CPU capacity
-	 * scaling has been enabled already and the driver is just changing the
-	 * operation mode.
-	 */
-	if (refresh) {
-		hybrid_refresh_cpu_capacity_scaling();
-		return;
-	}
 
 	/*
 	 * On hybrid systems, use asym capacity instead of ITMT, but because
@@ -1169,18 +1159,6 @@ static void hybrid_init_cpu_capacity_scaling(bool refresh)
 		 */
 		sched_clear_itmt_support();
 	}
-}
-
-static bool hybrid_clear_max_perf_cpu(void)
-{
-	bool ret;
-
-	guard(mutex)(&hybrid_capacity_lock);
-
-	ret = !!hybrid_max_perf_cpu;
-	hybrid_max_perf_cpu = NULL;
-
-	return ret;
 }
 
 static void __intel_pstate_get_hwp_cap(struct cpudata *cpu)
@@ -3428,7 +3406,6 @@ static void intel_pstate_driver_cleanup(void)
 
 static int intel_pstate_register_driver(struct cpufreq_driver *driver)
 {
-	bool refresh_cpu_cap_scaling;
 	int ret;
 
 	if (driver == &intel_pstate)
@@ -3441,8 +3418,6 @@ static int intel_pstate_register_driver(struct cpufreq_driver *driver)
 
 	arch_set_max_freq_ratio(global.turbo_disabled);
 
-	refresh_cpu_cap_scaling = hybrid_clear_max_perf_cpu();
-
 	intel_pstate_driver = driver;
 	ret = cpufreq_register_driver(intel_pstate_driver);
 	if (ret) {
@@ -3452,7 +3427,7 @@ static int intel_pstate_register_driver(struct cpufreq_driver *driver)
 
 	global.min_perf_pct = min_perf_pct_min();
 
-	hybrid_init_cpu_capacity_scaling(refresh_cpu_cap_scaling);
+	hybrid_init_cpu_capacity_scaling();
 
 	return 0;
 }
