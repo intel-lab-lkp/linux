@@ -948,7 +948,10 @@ static void __pci_config_acs(struct pci_dev *dev, struct pci_acs *caps,
 		}
 
 		if (mask & ~(PCI_ACS_SV | PCI_ACS_TB | PCI_ACS_RR | PCI_ACS_CR |
-			    PCI_ACS_UF | PCI_ACS_EC | PCI_ACS_DT)) {
+			    PCI_ACS_UF | PCI_ACS_EC | PCI_ACS_DT | PCI_ACS_IB |
+			    PCI_ACS_DMAC_RB | PCI_ACS_DMAC_RR |
+			    PCI_ACS_UMAC_RB | PCI_ACS_UMAC_RR |
+			    PCI_ACS_URRC)) {
 			pci_err(dev, "Invalid ACS flags specified\n");
 			return;
 		}
@@ -1007,6 +1010,14 @@ static void pci_std_enable_acs(struct pci_dev *dev, struct pci_acs *caps)
 
 	/* Upstream Forwarding */
 	caps->ctrl |= (caps->cap & PCI_ACS_UF);
+
+	/*
+	 * Downstream and Upstream Port Memory Target Access Redirect,
+	 * Redirect Unclaimed Request Redirect Control
+	 */
+	if (caps->cap & PCI_ACS_ECAP)
+		caps->ctrl |= PCI_ACS_DMAC_RR | PCI_ACS_UMAC_RR |
+			      PCI_ACS_URRC | PCI_ACS_IB;
 
 	/* Enable Translation Blocking for external devices and noats */
 	if (pci_ats_disabled() || dev->external_facing || dev->untrusted)
