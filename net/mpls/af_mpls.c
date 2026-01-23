@@ -1097,7 +1097,7 @@ static void mpls_get_stats(struct mpls_dev *mdev,
 		p = per_cpu_ptr(mdev->stats, i);
 		do {
 			start = u64_stats_fetch_begin(&p->syncp);
-			local = p->stats;
+			u64_stats_reads(&local, &p->stats, sizeof(local));
 		} while (u64_stats_fetch_retry(&p->syncp, start));
 
 		stats->rx_packets	+= local.rx_packets;
