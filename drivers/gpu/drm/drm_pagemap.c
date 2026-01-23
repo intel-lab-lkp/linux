@@ -213,6 +213,7 @@ static void drm_pagemap_get_devmem_page(struct page *page,
  * @npages: Number of system pages or peer pages to map.
  * @dir: Direction of data transfer (e.g., DMA_BIDIRECTIONAL)
  * @mdetails: Details governing the migration behaviour.
+ * @state: DMA IOVA state for mapping.
  *
  * This function maps pages of memory for migration usage in GPU SVM. It
  * iterates over each page frame number provided in @migrate_pfn, maps the
@@ -227,27 +228,46 @@ static int drm_pagemap_migrate_map_pages(struct device *dev,
 					 unsigned long *migrate_pfn,
 					 unsigned long npages,
 					 enum dma_data_direction dir,
-					 const struct drm_pagemap_migrate_details *mdetails)
+					 const struct drm_pagemap_migrate_details *mdetails,
+					 struct dma_iova_state *state)
 {
-	unsigned long num_peer_pages = 0, num_local_pages = 0, i;
+	unsigned long num_peer_pages = 0, num_local_pages = 0, psize, i;
+	struct page *dummy_page = NULL;
+	bool try_alloc = false, device_private = false;
+	int err = 0;
 
 	for (i = 0; i < npages;) {
 		struct page *page = migrate_pfn_to_page(migrate_pfn[i]);
-		dma_addr_t dma_addr;
-		struct folio *folio;
+		dma_addr_t dma_addr = -1;
 		unsigned int order = 0;
 
-		if (!page)
+		/*
+		 * This loop is a bit goofy, but if IOVA linking is used, the
+		 * entire IOVA range must be populated with physical addresses.
+		 * The first page we find, dummy_page, is therefore used to
+		 * ensure every address in the IOVA range is populated.
+		 */
+
+		if (!page && (device_private || !dummy_page))
 			goto next;
 
-		folio = page_folio(page);
-		order = folio_order(folio);
+		if (!page) {
+			page = dummy_page;
+			psize = PAGE_SIZE;
+		} else {
+			struct folio *folio;
+
+			folio = page_folio(page);
+			order = folio_order(folio);
+			psize = page_size(page);
+		}
 
 		if (is_device_private_page(page)) {
 			struct drm_pagemap_zdd *zdd = drm_pagemap_page_zone_device_data(page);
 			struct drm_pagemap *dpagemap = zdd->dpagemap;
 			struct drm_pagemap_addr addr;
 
+			device_private = true;
 			if (dpagemap == local_dpagemap) {
 				if (!mdetails->can_migrate_same_pagemap)
 					goto next;
@@ -263,28 +283,68 @@ static int drm_pagemap_migrate_map_pages(struct device *dev,
 
 			pagemap_addr[i] = addr;
 		} else {
-			dma_addr = dma_map_page(dev, page, 0, page_size(page), dir);
-			if (dma_mapping_error(dev, dma_addr))
-				return -EFAULT;
+			if (!try_alloc) {
+				dma_iova_try_alloc(dev, state, 0,
+						   npages * PAGE_SIZE);
+				try_alloc = true;
+			}
 
-			pagemap_addr[i] =
-				drm_pagemap_addr_encode(dma_addr,
-							DRM_INTERCONNECT_SYSTEM,
-							order, dir);
+			if (dma_use_iova(state)) {
+				bool found_dummy = page && !dummy_page;
+
+				if (found_dummy) {
+					unsigned long j;
+
+					for (j = 0; j < i; ++j) {
+						err = dma_iova_link(dev, state,
+								    page_to_phys(page),
+								    j * PAGE_SIZE,
+								    PAGE_SIZE,
+								    dir, 0);
+						if (err)
+							return err;
+					}
+				}
+
+				err = dma_iova_link(dev, state, page_to_phys(page),
+						    i * PAGE_SIZE, psize,
+						    dir, 0);
+				if (err)
+					return err;
+
+				if (page != dummy_page)
+					dma_addr = state->addr + i * PAGE_SIZE;
+
+				if (found_dummy)
+					dummy_page = page;
+
+			} else {
+				dma_addr = dma_map_page(dev, page, 0, psize, dir);
+				if (dma_mapping_error(dev, dma_addr))
+					return -EFAULT;
+			}
+
+			if (dma_addr != -1)
+				pagemap_addr[i] =
+					drm_pagemap_addr_encode(dma_addr,
+								DRM_INTERCONNECT_SYSTEM,
+								order, dir);
 		}
 
 next:
 		i += NR_PAGES(order);
 	}
 
-	if (num_peer_pages)
+	if (dma_use_iova(state))
+		err = dma_iova_sync(dev, state, 0, npages * PAGE_SIZE);
+	if (!err && num_peer_pages)
 		drm_dbg(local_dpagemap->drm, "Migrating %lu peer pages over interconnect.\n",
 			num_peer_pages);
-	if (num_local_pages)
+	if (!err && num_local_pages)
 		drm_dbg(local_dpagemap->drm, "Migrating %lu local pages over interconnect.\n",
 			num_local_pages);
 
-	return 0;
+	return err;
 }
 
 /**
@@ -295,6 +355,7 @@ next:
  * @pagemap_addr: Array of DMA information corresponding to mapped pages
  * @npages: Number of pages to unmap
  * @dir: Direction of data transfer (e.g., DMA_BIDIRECTIONAL)
+ * @state: DMA IOVA state for mapping.
  *
  * This function unmaps previously mapped pages of memory for GPU Shared Virtual
  * Memory (SVM). It iterates over each DMA address provided in @dma_addr, checks
@@ -304,9 +365,15 @@ static void drm_pagemap_migrate_unmap_pages(struct device *dev,
 					    struct drm_pagemap_addr *pagemap_addr,
 					    unsigned long *migrate_pfn,
 					    unsigned long npages,
-					    enum dma_data_direction dir)
+					    enum dma_data_direction dir,
+					    struct dma_iova_state *state)
 {
 	unsigned long i;
+
+	if (dma_use_iova(state)) {
+		dma_iova_destroy(dev, state, npages * PAGE_SIZE, dir, 0);
+		return;
+	}
 
 	for (i = 0; i < npages;) {
 		struct page *page = migrate_pfn_to_page(migrate_pfn[i]);
@@ -344,12 +411,14 @@ drm_pagemap_migrate_remote_to_local(struct drm_pagemap_devmem *devmem,
 				    struct drm_pagemap_addr pagemap_addr[],
 				    unsigned long npages,
 				    const struct drm_pagemap_devmem_ops *ops,
-				    const struct drm_pagemap_migrate_details *mdetails)
+				    const struct drm_pagemap_migrate_details *mdetails,
+				    struct dma_iova_state *state)
 
 {
 	int err = drm_pagemap_migrate_map_pages(remote_device, remote_dpagemap,
 						pagemap_addr, local_pfns,
-						npages, DMA_FROM_DEVICE, mdetails);
+						npages, DMA_FROM_DEVICE,
+						mdetails, state);
 
 	if (err)
 		goto out;
@@ -358,7 +427,7 @@ drm_pagemap_migrate_remote_to_local(struct drm_pagemap_devmem *devmem,
 			       devmem->pre_migrate_fence);
 out:
 	drm_pagemap_migrate_unmap_pages(remote_device, pagemap_addr, local_pfns,
-					npages, DMA_FROM_DEVICE);
+					npages, DMA_FROM_DEVICE, state);
 	return err;
 }
 
@@ -369,11 +438,12 @@ drm_pagemap_migrate_sys_to_dev(struct drm_pagemap_devmem *devmem,
 			       struct drm_pagemap_addr pagemap_addr[],
 			       unsigned long npages,
 			       const struct drm_pagemap_devmem_ops *ops,
-			       const struct drm_pagemap_migrate_details *mdetails)
+			       const struct drm_pagemap_migrate_details *mdetails,
+			       struct dma_iova_state *state)
 {
 	int err = drm_pagemap_migrate_map_pages(devmem->dev, devmem->dpagemap,
 						pagemap_addr, sys_pfns, npages,
-						DMA_TO_DEVICE, mdetails);
+						DMA_TO_DEVICE, mdetails, state);
 
 	if (err)
 		goto out;
@@ -382,7 +452,7 @@ drm_pagemap_migrate_sys_to_dev(struct drm_pagemap_devmem *devmem,
 				  devmem->pre_migrate_fence);
 out:
 	drm_pagemap_migrate_unmap_pages(devmem->dev, pagemap_addr, sys_pfns, npages,
-					DMA_TO_DEVICE);
+					DMA_TO_DEVICE, state);
 	return err;
 }
 
@@ -410,6 +480,7 @@ static int drm_pagemap_migrate_range(struct drm_pagemap_devmem *devmem,
 				     const struct migrate_range_loc *cur,
 				     const struct drm_pagemap_migrate_details *mdetails)
 {
+	struct dma_iova_state state = {};
 	int ret = 0;
 
 	if (cur->start == 0)
@@ -429,7 +500,8 @@ static int drm_pagemap_migrate_range(struct drm_pagemap_devmem *devmem,
 							  &pages[last->start],
 							  &pagemap_addr[last->start],
 							  cur->start - last->start,
-							  last->ops, mdetails);
+							  last->ops, mdetails,
+							  &state);
 
 	else
 		ret = drm_pagemap_migrate_sys_to_dev(devmem,
@@ -437,7 +509,7 @@ static int drm_pagemap_migrate_range(struct drm_pagemap_devmem *devmem,
 						     &pages[last->start],
 						     &pagemap_addr[last->start],
 						     cur->start - last->start,
-						     last->ops, mdetails);
+						     last->ops, mdetails, &state);
 
 out:
 	*last = *cur;
@@ -955,6 +1027,7 @@ int drm_pagemap_evict_to_ram(struct drm_pagemap_devmem *devmem_allocation)
 {
 	const struct drm_pagemap_devmem_ops *ops = devmem_allocation->ops;
 	struct drm_pagemap_migrate_details mdetails = {};
+	struct dma_iova_state state = {};
 	unsigned long npages, mpages = 0;
 	struct page **pages;
 	unsigned long *src, *dst;
@@ -996,7 +1069,7 @@ retry:
 	err = drm_pagemap_migrate_map_pages(devmem_allocation->dev,
 					    devmem_allocation->dpagemap, pagemap_addr,
 					    dst, npages, DMA_FROM_DEVICE,
-					    &mdetails);
+					    &mdetails, &state);
 	if (err)
 		goto err_finalize;
 
@@ -1013,7 +1086,7 @@ err_finalize:
 	migrate_device_pages(src, dst, npages);
 	migrate_device_finalize(src, dst, npages);
 	drm_pagemap_migrate_unmap_pages(devmem_allocation->dev, pagemap_addr, dst, npages,
-					DMA_FROM_DEVICE);
+					DMA_FROM_DEVICE, &state);
 
 err_free:
 	kvfree(buf);
@@ -1058,6 +1131,7 @@ static int __drm_pagemap_migrate_to_ram(struct vm_area_struct *vas,
 		.fault_page	= page,
 	};
 	struct drm_pagemap_migrate_details mdetails = {};
+	struct dma_iova_state state = {};
 	struct drm_pagemap_zdd *zdd;
 	const struct drm_pagemap_devmem_ops *ops;
 	struct device *dev = NULL;
@@ -1116,7 +1190,7 @@ static int __drm_pagemap_migrate_to_ram(struct vm_area_struct *vas,
 		goto err_finalize;
 
 	err = drm_pagemap_migrate_map_pages(dev, zdd->dpagemap, pagemap_addr, migrate.dst, npages,
-					    DMA_FROM_DEVICE, &mdetails);
+					    DMA_FROM_DEVICE, &mdetails, &state);
 	if (err)
 		goto err_finalize;
 
@@ -1134,7 +1208,8 @@ err_finalize:
 	migrate_vma_finalize(&migrate);
 	if (dev)
 		drm_pagemap_migrate_unmap_pages(dev, pagemap_addr, migrate.dst,
-						npages, DMA_FROM_DEVICE);
+						npages, DMA_FROM_DEVICE,
+						&state);
 err_free:
 	kvfree(buf);
 err_out:
