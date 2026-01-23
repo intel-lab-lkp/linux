@@ -312,16 +312,6 @@ static union nd_lsa_label *to_lsa_label(struct nvdimm_drvdata *ndd, int slot)
 	return (union nd_lsa_label *) label;
 }
 
-static struct nd_namespace_label *to_label(struct nvdimm_drvdata *ndd, int slot)
-{
-	unsigned long label, base;
-
-	base = (unsigned long) nd_label_base(ndd);
-	label = base + sizeof_namespace_label(ndd) * slot;
-
-	return (struct nd_namespace_label *) label;
-}
-
 #define for_each_clear_bit_le(bit, addr, size) \
 	for ((bit) = find_next_zero_bit_le((addr), (size), 0);  \
 	     (bit) < (size);                                    \
@@ -382,7 +372,7 @@ static bool nsl_validate_checksum(struct nvdimm_drvdata *ndd,
 {
 	u64 sum, sum_save;
 
-	if (!ndd->cxl && !efi_namespace_label_has(ndd, checksum))
+	if (!efi_namespace_label_has(ndd, checksum))
 		return true;
 
 	sum_save = nsl_get_checksum(ndd, nd_label);
@@ -397,11 +387,23 @@ static void nsl_calculate_checksum(struct nvdimm_drvdata *ndd,
 {
 	u64 sum;
 
-	if (!ndd->cxl && !efi_namespace_label_has(ndd, checksum))
+	if (!efi_namespace_label_has(ndd, checksum))
 		return;
 	nsl_set_checksum(ndd, nd_label, 0);
 	sum = nd_fletcher64(nd_label, sizeof_namespace_label(ndd), 1);
 	nsl_set_checksum(ndd, nd_label, sum);
+}
+
+static bool region_label_validate_checksum(struct nvdimm_drvdata *ndd,
+				struct cxl_region_label *region_label)
+{
+	u64 sum, sum_save;
+
+	sum_save = __le64_to_cpu(region_label->checksum);
+	region_label->checksum = __cpu_to_le64(0);
+	sum = nd_fletcher64(region_label, sizeof_namespace_label(ndd), 1);
+	region_label->checksum = __cpu_to_le64(sum_save);
+	return sum == sum_save;
 }
 
 static void region_label_calculate_checksum(struct nvdimm_drvdata *ndd,
@@ -415,16 +417,36 @@ static void region_label_calculate_checksum(struct nvdimm_drvdata *ndd,
 }
 
 static bool slot_valid(struct nvdimm_drvdata *ndd,
-		struct nd_namespace_label *nd_label, u32 slot)
+		       union nd_lsa_label *lsa_label, u32 slot)
 {
+	struct cxl_region_label *region_label;
+	struct nd_namespace_label *nd_label;
+	enum label_type type;
 	bool valid;
+	static const char * const label_name[] = {
+		[RG_LABEL_TYPE] = "region",
+		[NS_LABEL_TYPE] = "namespace",
+	};
 
 	/* check that we are written where we expect to be written */
-	if (slot != nsl_get_slot(ndd, nd_label))
-		return false;
-	valid = nsl_validate_checksum(ndd, nd_label);
+	if (is_region_label(ndd, lsa_label)) {
+		region_label = &lsa_label->region_label;
+		type = RG_LABEL_TYPE;
+		if (slot != __le32_to_cpu(region_label->slot))
+			return false;
+		valid = region_label_validate_checksum(ndd, region_label);
+	} else {
+		nd_label = &lsa_label->ns_label;
+		type = NS_LABEL_TYPE;
+		if (slot != nsl_get_slot(ndd, nd_label))
+			return false;
+		valid = nsl_validate_checksum(ndd, nd_label);
+	}
+
 	if (!valid)
-		dev_dbg(ndd->dev, "fail checksum. slot: %d\n", slot);
+		dev_dbg(ndd->dev, "%s label checksum fail. slot: %d\n",
+			label_name[type], slot);
+
 	return valid;
 }
 
@@ -440,14 +462,16 @@ int nd_label_reserve_dpa(struct nvdimm_drvdata *ndd)
 	for_each_clear_bit_le(slot, free, nslot) {
 		struct nd_namespace_label *nd_label;
 		struct nd_region *nd_region = NULL;
+		union nd_lsa_label *lsa_label;
 		struct nd_label_id label_id;
 		struct resource *res;
 		uuid_t label_uuid;
 		u32 flags;
 
-		nd_label = to_label(ndd, slot);
+		lsa_label = to_lsa_label(ndd, slot);
+		nd_label = &lsa_label->ns_label;
 
-		if (!slot_valid(ndd, nd_label, slot))
+		if (!slot_valid(ndd, lsa_label, slot))
 			continue;
 
 		nsl_get_uuid(ndd, nd_label, &label_uuid);
@@ -598,14 +622,26 @@ int nd_label_active_count(struct nvdimm_drvdata *ndd)
 		return 0;
 
 	for_each_clear_bit_le(slot, free, nslot) {
+		struct cxl_region_label *region_label;
 		struct nd_namespace_label *nd_label;
+		union nd_lsa_label *lsa_label;
+		u32 label_slot;
+		u64 size, dpa;
 
-		nd_label = to_label(ndd, slot);
+		lsa_label = to_lsa_label(ndd, slot);
 
-		if (!slot_valid(ndd, nd_label, slot)) {
-			u32 label_slot = nsl_get_slot(ndd, nd_label);
-			u64 size = nsl_get_rawsize(ndd, nd_label);
-			u64 dpa = nsl_get_dpa(ndd, nd_label);
+		if (!slot_valid(ndd, lsa_label, slot)) {
+			if (is_region_label(ndd, lsa_label)) {
+				region_label = &lsa_label->region_label;
+				label_slot = __le32_to_cpu(region_label->slot);
+				size = __le64_to_cpu(region_label->rawsize);
+				dpa = __le64_to_cpu(region_label->dpa);
+			} else {
+				nd_label = &lsa_label->ns_label;
+				label_slot = nsl_get_slot(ndd, nd_label);
+				size = nsl_get_rawsize(ndd, nd_label);
+				dpa = nsl_get_dpa(ndd, nd_label);
+			}
 
 			dev_dbg(ndd->dev,
 				"slot%d invalid slot: %d dpa: %llx size: %llx\n",
@@ -627,10 +663,10 @@ union nd_lsa_label *nd_label_active(struct nvdimm_drvdata *ndd, int n)
 		return NULL;
 
 	for_each_clear_bit_le(slot, free, nslot) {
-		struct nd_namespace_label *nd_label;
+		union nd_lsa_label *lsa_label;
 
-		nd_label = to_label(ndd, slot);
-		if (!slot_valid(ndd, nd_label, slot))
+		lsa_label = to_lsa_label(ndd, slot);
+		if (!slot_valid(ndd, lsa_label, slot))
 			continue;
 
 		if (n-- == 0)
