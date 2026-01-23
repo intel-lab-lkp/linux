@@ -183,6 +183,9 @@ struct as21xxx_led_pattern_info {
 };
 
 struct as21xxx_priv {
+	u8 fw_major_ver;
+	u8 fw_minor_ver;
+
 	bool parity_status;
 	/* Protect concurrent IPC access */
 	struct mutex ipc_lock;
@@ -570,6 +573,7 @@ static int aeon_ipc_sync_parity(struct phy_device *phydev,
 static int aeon_ipc_get_fw_version(struct phy_device *phydev)
 {
 	u16 ret_data[AEON_IPC_DATA_NUM_REGISTERS], data[1];
+	struct as21xxx_priv *priv = phydev->priv;
 	char fw_version[AEON_IPC_DATA_MAX + 1];
 	int ret;
 
@@ -585,6 +589,17 @@ static int aeon_ipc_get_fw_version(struct phy_device *phydev)
 	fw_version[ret] = '\0';
 
 	phydev_info(phydev, "Firmware Version: %s\n", fw_version);
+	/*
+	 * Firmware is the format x.x.x
+	 * Save in priv struct to check validate feature support
+	 * in new firmware version.
+	 */
+	ret = sscanf(fw_version, "%hhu.%hhu", &priv->fw_major_ver,
+		     &priv->fw_minor_ver);
+	if (ret < 2) {
+		priv->fw_major_ver = 0;
+		priv->fw_minor_ver = 0;
+	}
 
 	return 0;
 }
