@@ -903,6 +903,7 @@ __ATTRIBUTE_GROUPS(cxl_rcd);
 static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	struct pci_host_bridge *host_bridge = pci_find_host_bridge(pdev->bus);
+	struct cxl_memdev_attach memdev_attach = { 0 };
 	struct cxl_dpa_info range_info = { 0 };
 	struct cxl_memdev_state *mds;
 	struct cxl_dev_state *cxlds;
@@ -1006,7 +1007,8 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (rc)
 		dev_dbg(&pdev->dev, "No CXL Features discovered\n");
 
-	cxlmd = devm_cxl_add_memdev(cxlds, NULL);
+	memdev_attach.probe = cxl_region_discovery;
+	cxlmd = devm_cxl_add_memdev(cxlds, &memdev_attach);
 	if (IS_ERR(cxlmd))
 		return PTR_ERR(cxlmd);
 
