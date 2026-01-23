@@ -43,3 +43,8 @@ size_t rust_helper_dma_max_mapping_size(struct device *dev)
 {
 	return dma_max_mapping_size(dev);
 }
+
+void rust_helper_dma_set_max_seg_size(struct device *dev, unsigned int size)
+{
+	dma_set_max_seg_size(dev, size);
+}
