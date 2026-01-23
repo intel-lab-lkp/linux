@@ -12,7 +12,7 @@
 #include <linux/string.h>
 #include <linux/nfs_fs.h>
 #include <linux/rcupdate.h>
-#include <linux/lockd/lockd.h>
+#include <linux/lockd/bind.h>
 
 #include "internal.h"
 #include "nfs4_fs.h"
@@ -284,8 +284,12 @@ shutdown_store(struct kobject *kobj, struct kobj_attribute *attr,
 	if (!IS_ERR(server->client_acl))
 		shutdown_client(server->client_acl);
 
-	if (server->nlm_host)
-		shutdown_client(server->nlm_host->h_rpcclnt);
+	if (server->nlm_host) {
+		struct rpc_clnt *nlm_clnt = nlmclnt_rpc_clnt(server->nlm_host);
+
+		if (nlm_clnt)
+			shutdown_client(nlm_clnt);
+	}
 out:
 	shutdown_nfs_client(server->nfs_client);
 	return count;
