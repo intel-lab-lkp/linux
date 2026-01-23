@@ -1423,6 +1423,16 @@ drm_fourcc_canonicalize_nvidia_format_mod(__u64 modifier)
 	DRM_FORMAT_MOD_ARM_CODE(DRM_FORMAT_MOD_ARM_TYPE_MISC, 1ULL)
 
 /*
+ * ARM 64k interleaved modifier
+ *
+ * This is used by ARM Mali v10+ GPUs. It's basically the same as 16x16 block
+ * U-interleaved, but within 64k-byte 1:1 or 2:1 -sided tiles. Tiles themselves
+ * are laid out linearly.
+ */
+#define DRM_FORMAT_MOD_ARM_INTERLEAVED_64K \
+	DRM_FORMAT_MOD_ARM_CODE(DRM_FORMAT_MOD_ARM_TYPE_MISC, 2ULL)
+
+/*
  * Allwinner tiled modifier
  *
  * This tiling mode is implemented by the VPU found on all Allwinner platforms,
