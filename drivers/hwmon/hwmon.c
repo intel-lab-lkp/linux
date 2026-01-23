@@ -276,7 +276,7 @@ static struct hwmon_thermal_data *hwmon_thermal_find_tz(struct device *dev, int 
 	return NULL;
 }
 
-static int hwmon_thermal_register_sensors(struct device *dev)
+static int hwmon_thermal_handle_sensors(struct device *dev, bool update)
 {
 	struct hwmon_device *hwdev = to_hwmon_device(dev);
 	const struct hwmon_chip_info *chip = hwdev->chip;
@@ -294,20 +294,40 @@ static int hwmon_thermal_register_sensors(struct device *dev)
 			continue;
 
 		for (j = 0; info[i]->config[j]; j++) {
+			umode_t mode;
 			int err;
 
-			if (!(info[i]->config[j] & HWMON_T_INPUT) ||
-			    !hwmon_is_visible(chip->ops, drvdata, hwmon_temp,
-					      hwmon_temp_input, j))
+			if (!(info[i]->config[j] & HWMON_T_INPUT))
 				continue;
+			mode = hwmon_is_visible(chip->ops, drvdata, hwmon_temp,
+						hwmon_temp_input, j);
+			if (!mode) {
+				struct hwmon_thermal_data *tzdata;
 
-			err = hwmon_thermal_add_sensor(dev, j);
-			if (err)
-				return err;
+				if (!update)
+					continue;
+				tzdata = hwmon_thermal_find_tz(dev, j);
+				if (tzdata) {
+					devm_thermal_of_zone_unregister(dev, tzdata->tzd);
+					devm_release_action(dev, hwmon_thermal_remove_sensor,
+							    &tzdata->node);
+				}
+			} else {
+				if (!update || !hwmon_thermal_find_tz(dev, j)) {
+					err = hwmon_thermal_add_sensor(dev, j);
+					if (err)
+						return err;
+				}
+			}
 		}
 	}
 
 	return 0;
+}
+
+static int hwmon_thermal_register_sensors(struct device *dev)
+{
+	return hwmon_thermal_handle_sensors(dev, false);
 }
 
 static void hwmon_thermal_notify(struct device *dev, int index)
