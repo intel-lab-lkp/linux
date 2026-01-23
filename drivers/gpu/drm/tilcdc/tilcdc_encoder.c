@@ -37,13 +37,13 @@ int tilcdc_attach_bridge(struct drm_device *ddev, struct drm_bridge *bridge)
 	struct tilcdc_drm_private *priv = ddev_to_tilcdc_priv(ddev);
 	int ret;
 
-	priv->encoder->possible_crtcs = BIT(0);
+	priv->encoder->base.possible_crtcs = BIT(0);
 
-	ret = drm_bridge_attach(priv->encoder, bridge, NULL, 0);
+	ret = drm_bridge_attach(&priv->encoder->base, bridge, NULL, 0);
 	if (ret)
 		return ret;
 
-	priv->connector = tilcdc_encoder_find_connector(ddev, priv->encoder);
+	priv->connector = tilcdc_encoder_find_connector(ddev, &priv->encoder->base);
 	if (!priv->connector)
 		return -ENODEV;
 
@@ -53,6 +53,7 @@ int tilcdc_attach_bridge(struct drm_device *ddev, struct drm_bridge *bridge)
 int tilcdc_encoder_create(struct drm_device *ddev)
 {
 	struct tilcdc_drm_private *priv = ddev_to_tilcdc_priv(ddev);
+	struct tilcdc_encoder *encoder;
 	struct drm_bridge *bridge;
 	struct drm_panel *panel;
 	int ret;
@@ -64,33 +65,20 @@ int tilcdc_encoder_create(struct drm_device *ddev)
 	else if (ret)
 		return ret;
 
-	priv->encoder = devm_kzalloc(ddev->dev, sizeof(*priv->encoder), GFP_KERNEL);
-	if (!priv->encoder)
-		return -ENOMEM;
-
-	ret = drm_simple_encoder_init(ddev, priv->encoder,
-				      DRM_MODE_ENCODER_NONE);
-	if (ret) {
-		dev_err(ddev->dev, "drm_encoder_init() failed %d\n", ret);
-		return ret;
+	encoder = drmm_simple_encoder_alloc(ddev, struct tilcdc_encoder,
+					    base, DRM_MODE_ENCODER_NONE);
+	if (IS_ERR(encoder)) {
+		dev_err(ddev->dev, "drm_encoder_init() failed %pe\n", encoder);
+		return PTR_ERR(encoder);
 	}
+	priv->encoder = encoder;
 
 	if (panel) {
 		bridge = devm_drm_panel_bridge_add_typed(ddev->dev, panel,
 							 DRM_MODE_CONNECTOR_DPI);
-		if (IS_ERR(bridge)) {
-			ret = PTR_ERR(bridge);
-			goto err_encoder_cleanup;
-		}
+		if (IS_ERR(bridge))
+			return PTR_ERR(bridge);
 	}
 
-	ret = tilcdc_attach_bridge(ddev, bridge);
-	if (ret)
-		goto err_encoder_cleanup;
-
-	return 0;
-
-err_encoder_cleanup:
-	drm_encoder_cleanup(priv->encoder);
-	return ret;
+	return tilcdc_attach_bridge(ddev, bridge);
 }

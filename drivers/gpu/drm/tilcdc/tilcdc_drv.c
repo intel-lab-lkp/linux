@@ -392,7 +392,7 @@ static int tilcdc_pdev_probe(struct platform_device *pdev)
 	if (ret) {
 		dev_err(dev, "failed to register cpufreq notifier\n");
 		priv->freq_transition.notifier_call = NULL;
-		goto destroy_crtc;
+		goto disable_pm;
 	}
 #endif
 
@@ -442,9 +442,7 @@ unregister_cpufreq_notif:
 #ifdef CONFIG_CPU_FREQ
 	cpufreq_unregister_notifier(&priv->freq_transition,
 				    CPUFREQ_TRANSITION_NOTIFIER);
-destroy_crtc:
 #endif
-	tilcdc_crtc_destroy(priv->crtc);
 disable_pm:
 	pm_runtime_disable(dev);
 	clk_put(priv->clk);
@@ -466,7 +464,6 @@ static void tilcdc_pdev_remove(struct platform_device *pdev)
 	cpufreq_unregister_notifier(&priv->freq_transition,
 				    CPUFREQ_TRANSITION_NOTIFIER);
 #endif
-	tilcdc_crtc_destroy(priv->crtc);
 	pm_runtime_disable(&pdev->dev);
 	clk_put(priv->clk);
 	destroy_workqueue(priv->wq);

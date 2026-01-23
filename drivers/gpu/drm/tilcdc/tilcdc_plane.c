@@ -14,7 +14,6 @@
 static const struct drm_plane_funcs tilcdc_plane_funcs = {
 	.update_plane	= drm_atomic_helper_update_plane,
 	.disable_plane	= drm_atomic_helper_disable_plane,
-	.destroy	= drm_plane_cleanup,
 	.reset		= drm_atomic_helper_plane_reset,
 	.atomic_duplicate_state = drm_atomic_helper_plane_duplicate_state,
 	.atomic_destroy_state = drm_atomic_helper_plane_destroy_state,
@@ -98,22 +97,20 @@ static const struct drm_plane_helper_funcs plane_helper_funcs = {
 	.atomic_update = tilcdc_plane_atomic_update,
 };
 
-int tilcdc_plane_init(struct drm_device *dev,
-		      struct drm_plane *plane)
+struct tilcdc_plane *tilcdc_plane_init(struct drm_device *dev)
 {
 	struct tilcdc_drm_private *priv = ddev_to_tilcdc_priv(dev);
-	int ret;
+	struct tilcdc_plane *plane;
 
-	ret = drm_universal_plane_init(dev, plane, 1, &tilcdc_plane_funcs,
-				       priv->pixelformats,
-				       priv->num_pixelformats,
-				       NULL, DRM_PLANE_TYPE_PRIMARY, NULL);
-	if (ret) {
-		dev_err(dev->dev, "Failed to initialize plane: %d\n", ret);
-		return ret;
-	}
+	plane = drmm_universal_plane_alloc(dev, struct tilcdc_plane, base,
+					   1, &tilcdc_plane_funcs,
+					   priv->pixelformats,
+					   priv->num_pixelformats,
+					   NULL, DRM_PLANE_TYPE_PRIMARY, NULL);
+	if (IS_ERR(plane))
+		return plane;
 
-	drm_plane_helper_add(plane, &plane_helper_funcs);
+	drm_plane_helper_add(&plane->base, &plane_helper_funcs);
 
-	return 0;
+	return plane;
 }

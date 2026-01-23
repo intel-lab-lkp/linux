@@ -16,6 +16,7 @@
 #include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_gem_dma_helper.h>
+#include <drm/drm_managed.h>
 #include <drm/drm_modeset_helper_vtables.h>
 #include <drm/drm_print.h>
 #include <drm/drm_vblank.h>
@@ -30,7 +31,7 @@
 struct tilcdc_crtc {
 	struct drm_crtc base;
 
-	struct drm_plane primary;
+	struct tilcdc_plane *primary;
 	struct drm_pending_vblank_event *event;
 	struct mutex enable_lock;
 	bool enabled;
@@ -555,16 +556,15 @@ out:
 	drm_modeset_unlock(&crtc->mutex);
 }
 
-void tilcdc_crtc_destroy(struct drm_crtc *crtc)
+static void tilcdc_crtc_destroy(struct drm_device *dev, void *data)
 {
-	struct tilcdc_drm_private *priv = ddev_to_tilcdc_priv(crtc->dev);
+	struct tilcdc_drm_private *priv = (struct tilcdc_drm_private *)data;
 
-	tilcdc_crtc_shutdown(crtc);
+	tilcdc_crtc_shutdown(priv->crtc);
 
 	flush_workqueue(priv->wq);
 
-	of_node_put(crtc->port);
-	drm_crtc_cleanup(crtc);
+	of_node_put(priv->crtc->port);
 }
 
 int tilcdc_crtc_update_fb(struct drm_crtc *crtc,
@@ -714,7 +714,6 @@ static void tilcdc_crtc_reset(struct drm_crtc *crtc)
 }
 
 static const struct drm_crtc_funcs tilcdc_crtc_funcs = {
-	.destroy        = tilcdc_crtc_destroy,
 	.set_config     = drm_atomic_helper_set_config,
 	.page_flip      = drm_atomic_helper_page_flip,
 	.reset		= tilcdc_crtc_reset,
@@ -960,12 +959,31 @@ int tilcdc_crtc_create(struct drm_device *dev)
 {
 	struct tilcdc_drm_private *priv = ddev_to_tilcdc_priv(dev);
 	struct tilcdc_crtc *tilcdc_crtc;
+	struct tilcdc_plane *primary;
 	struct drm_crtc *crtc;
 	int ret;
 
-	tilcdc_crtc = devm_kzalloc(dev->dev, sizeof(*tilcdc_crtc), GFP_KERNEL);
-	if (!tilcdc_crtc)
-		return -ENOMEM;
+	primary = tilcdc_plane_init(dev);
+	if (IS_ERR(primary)) {
+		dev_err(dev->dev, "Failed to initialize plane: %pe\n", primary);
+		return PTR_ERR(primary);
+	}
+
+	tilcdc_crtc = drmm_crtc_alloc_with_planes(dev, struct tilcdc_crtc, base,
+						  &primary->base,
+						  NULL,
+						  &tilcdc_crtc_funcs,
+						  "tilcdc crtc");
+	if (IS_ERR(tilcdc_crtc)) {
+		dev_err(dev->dev, "Failed to init CRTC: %pe\n", tilcdc_crtc);
+		return PTR_ERR(tilcdc_crtc);
+	}
+
+	tilcdc_crtc->primary = primary;
+	priv->crtc = &tilcdc_crtc->base;
+	ret = drmm_add_action_or_reset(dev, tilcdc_crtc_destroy, priv);
+	if (ret)
+		return ret;
 
 	init_completion(&tilcdc_crtc->palette_loaded);
 	tilcdc_crtc->palette_base = dmam_alloc_coherent(dev->dev,
@@ -978,10 +996,6 @@ int tilcdc_crtc_create(struct drm_device *dev)
 
 	crtc = &tilcdc_crtc->base;
 
-	ret = tilcdc_plane_init(dev, &tilcdc_crtc->primary);
-	if (ret < 0)
-		goto fail;
-
 	mutex_init(&tilcdc_crtc->enable_lock);
 
 	init_waitqueue_head(&tilcdc_crtc->frame_done_wq);
@@ -989,20 +1003,7 @@ int tilcdc_crtc_create(struct drm_device *dev)
 	spin_lock_init(&tilcdc_crtc->irq_lock);
 	INIT_WORK(&tilcdc_crtc->recover_work, tilcdc_crtc_recover_work);
 
-	ret = drm_crtc_init_with_planes(dev, crtc,
-					&tilcdc_crtc->primary,
-					NULL,
-					&tilcdc_crtc_funcs,
-					"tilcdc crtc");
-	if (ret < 0)
-		goto fail;
-
 	drm_crtc_helper_add(crtc, &tilcdc_crtc_helper_funcs);
 
-	priv->crtc = crtc;
 	return 0;
-
-fail:
-	tilcdc_crtc_destroy(crtc);
-	return ret;
 }

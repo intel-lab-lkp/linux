@@ -77,7 +77,7 @@ struct tilcdc_drm_private {
 
 	struct drm_crtc *crtc;
 
-	struct drm_encoder *encoder;
+	struct tilcdc_encoder *encoder;
 	struct drm_connector *connector;
 
 	bool irq_enabled;
@@ -91,11 +91,18 @@ int tilcdc_crtc_create(struct drm_device *dev);
 irqreturn_t tilcdc_crtc_irq(struct drm_crtc *crtc);
 void tilcdc_crtc_update_clk(struct drm_crtc *crtc);
 void tilcdc_crtc_shutdown(struct drm_crtc *crtc);
-void tilcdc_crtc_destroy(struct drm_crtc *crtc);
 int tilcdc_crtc_update_fb(struct drm_crtc *crtc,
 		struct drm_framebuffer *fb,
 		struct drm_pending_vblank_event *event);
 
-int tilcdc_plane_init(struct drm_device *dev, struct drm_plane *plane);
+struct tilcdc_plane {
+	struct drm_plane base;
+};
+
+struct tilcdc_encoder {
+	struct drm_encoder base;
+};
+
+struct tilcdc_plane *tilcdc_plane_init(struct drm_device *dev);
 
 #endif /* __TILCDC_DRV_H__ */
