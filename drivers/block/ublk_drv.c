@@ -2806,9 +2806,9 @@ static void ublk_queue_reset_io_flags(struct ublk_queue *ubq)
 	spin_lock(&ubq->cancel_lock);
 	for (j = 0; j < ubq->q_depth; j++)
 		ubq->ios[j].flags &= ~UBLK_IO_FLAG_CANCELED;
+	ubq->canceling = false;
 	spin_unlock(&ubq->cancel_lock);
 	ubq->fail_io = false;
-	ubq->canceling = false;
 }
 
 /* device can only be started after all IOs are ready */
@@ -3064,7 +3064,6 @@ static int __ublk_fetch(struct io_uring_cmd *cmd, struct ublk_device *ub,
 		WRITE_ONCE(io->task, NULL);
 	else
 		WRITE_ONCE(io->task, get_task_struct(current));
-	ublk_mark_io_ready(ub, q_id);
 
 	return 0;
 }
@@ -3083,6 +3082,8 @@ static int ublk_fetch(struct io_uring_cmd *cmd, struct ublk_device *ub,
 	ret = __ublk_fetch(cmd, ub, io, q_id);
 	if (!ret)
 		ret = ublk_config_io_buf(ub, io, cmd, buf_addr, NULL);
+	if (!ret)
+		ublk_mark_io_ready(ub, q_id);
 	mutex_unlock(&ub->mutex);
 	return ret;
 }
@@ -3434,10 +3435,15 @@ static int ublk_batch_unprep_io(struct ublk_queue *ubq,
 
 	/*
 	 * If queue was ready before this decrement, it won't be anymore,
-	 * so we need to decrement the queue ready count too.
+	 * so we need to decrement the queue ready count and restore the
+	 * canceling flag to prevent new requests from being queued.
 	 */
-	if (ublk_queue_ready(ubq))
+	if (ublk_queue_ready(ubq)) {
 		data->ub->nr_queue_ready--;
+		spin_lock(&ubq->cancel_lock);
+		ubq->canceling = true;
+		spin_unlock(&ubq->cancel_lock);
+	}
 	ubq->nr_io_ready--;
 
 	ublk_io_lock(io);
@@ -3483,6 +3489,9 @@ static int ublk_batch_prep_io(struct ublk_queue *ubq,
 	if (!ret)
 		io->buf = buf;
 	ublk_io_unlock(io);
+
+	if (!ret)
+		ublk_mark_io_ready(data->ub, ubq->q_id);
 
 	return ret;
 }
