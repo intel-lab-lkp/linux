@@ -1040,6 +1040,7 @@ nlm4svc_proc_share(struct svc_rqst *rqstp)
 {
 	struct nlm_args *argp = rqstp->rq_argp;
 	struct nlm_res *resp = rqstp->rq_resp;
+	struct nlm_lock	*lock = &argp->lock;
 	struct nlm_host	*host;
 	struct nlm_file	*file;
 
@@ -1054,14 +1055,17 @@ nlm4svc_proc_share(struct svc_rqst *rqstp)
 	}
 
 	/* Obtain client and file */
-	if ((resp->status = nlm4svc_retrieve_args(rqstp, argp, &host, &file)))
+	locks_init_lock(&lock->fl);
+	lock->svid = ~(u32)0;
+	resp->status = nlm4svc_retrieve_args(rqstp, argp, &host, &file);
+	if (resp->status)
 		return resp->status == nlm_drop_reply ? rpc_drop_reply :rpc_success;
 
 	/* Now try to create the share */
 	resp->status = nlmsvc_share_file(host, file, argp);
 
 	dprintk("lockd: SHARE         status %d\n", ntohl(resp->status));
-	nlmsvc_release_lockowner(&argp->lock);
+	nlmsvc_release_lockowner(lock);
 	nlmsvc_release_host(host);
 	nlm_release_file(file);
 	return rpc_success;
@@ -1075,6 +1079,7 @@ nlm4svc_proc_unshare(struct svc_rqst *rqstp)
 {
 	struct nlm_args *argp = rqstp->rq_argp;
 	struct nlm_res *resp = rqstp->rq_resp;
+	struct nlm_lock	*lock = &argp->lock;
 	struct nlm_host	*host;
 	struct nlm_file	*file;
 
@@ -1089,14 +1094,17 @@ nlm4svc_proc_unshare(struct svc_rqst *rqstp)
 	}
 
 	/* Obtain client and file */
-	if ((resp->status = nlm4svc_retrieve_args(rqstp, argp, &host, &file)))
+	locks_init_lock(&lock->fl);
+	lock->svid = ~(u32)0;
+	resp->status = nlm4svc_retrieve_args(rqstp, argp, &host, &file);
+	if (resp->status)
 		return resp->status == nlm_drop_reply ? rpc_drop_reply :rpc_success;
 
 	/* Now try to lock the file */
 	resp->status = nlmsvc_unshare_file(host, file, argp);
 
 	dprintk("lockd: UNSHARE       status %d\n", ntohl(resp->status));
-	nlmsvc_release_lockowner(&argp->lock);
+	nlmsvc_release_lockowner(lock);
 	nlmsvc_release_host(host);
 	nlm_release_file(file);
 	return rpc_success;
