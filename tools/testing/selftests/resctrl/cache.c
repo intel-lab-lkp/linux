@@ -13,7 +13,6 @@ void perf_event_attr_initialize(struct perf_event_attr *pea, __u64 config)
 	pea->read_format = PERF_FORMAT_GROUP;
 	pea->exclude_kernel = 1;
 	pea->exclude_hv = 1;
-	pea->exclude_idle = 1;
 	pea->exclude_callchain_kernel = 1;
 	pea->inherit = 1;
 	pea->exclude_guest = 1;
