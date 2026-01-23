@@ -14,6 +14,8 @@
 #include <linux/swap.h>
 #include <linux/memory-tiers.h>
 #include <linux/mm_inline.h>
+#include <linux/mm.h>
+#include <linux/mmzone.h>
 
 #include "../internal.h"
 #include "ops-common.h"
@@ -146,6 +148,48 @@ static bool damon_pa_invalid_damos_folio(struct folio *folio, struct damos *s)
 		return true;
 	}
 	return false;
+}
+
+/* System total RAM in bytes (denominator for bp computation) */
+static unsigned long damon_pa_totalram_bytes(void)
+{
+	return (unsigned long)totalram_pages() << PAGE_SHIFT;
+}
+
+/*
+ * Compute node-scoped system bp for PA contexts:
+ *   bp = (bytes attributed to goal->nid across monitored PA regions) /
+ *        (system total bytes) * 10000
+ */
+static unsigned long damon_pa_get_node_sys_bp(struct damon_ctx *ctx,
+					      struct damos *scheme,
+					      const struct damos_quota_goal *goal)
+{
+	int nid = goal ? goal->nid : -1;
+	unsigned long node_bytes = 0;
+	unsigned long total_bytes = damon_pa_totalram_bytes();
+	struct damon_target *t;
+	struct damon_region *r;
+
+	if (nid < 0 || !total_bytes)
+		return 0;
+
+	damon_for_each_target(t, ctx) {
+		damon_for_each_region(r, t) {
+			unsigned long start_pfn = r->ar.start >> PAGE_SHIFT;
+			unsigned long end_pfn   = r->ar.end   >> PAGE_SHIFT;
+			unsigned long pfn;
+
+			for (pfn = start_pfn; pfn < end_pfn; pfn++) {
+				if (!pfn_valid(pfn))
+					continue;
+				if (page_to_nid(pfn_to_page(pfn)) == nid)
+					node_bytes += PAGE_SIZE;
+			}
+		}
+	}
+
+	return div64_u64((u64)node_bytes * 10000ULL, total_bytes);
 }
 
 static unsigned long damon_pa_pageout(struct damon_region *r,
@@ -344,6 +388,19 @@ static unsigned long damon_pa_apply_scheme(struct damon_ctx *ctx,
 	return 0;
 }
 
+/* Generic goal-metric provider for PA */
+static unsigned long damon_pa_get_goal_metric(struct damon_ctx *ctx,
+					       struct damos *scheme,
+					       const struct damos_quota_goal *goal)
+{
+	switch (goal ? goal->metric : -1) {
+	case DAMOS_QUOTA_NODE_SYS_BP:
+		return damon_pa_get_node_sys_bp(ctx, scheme, goal);
+	default:
+		return 0;
+	}
+}
+
 static int damon_pa_scheme_score(struct damon_ctx *context,
 		struct damon_target *t, struct damon_region *r,
 		struct damos *scheme)
@@ -378,6 +435,7 @@ static int __init damon_pa_initcall(void)
 		.cleanup = NULL,
 		.apply_scheme = damon_pa_apply_scheme,
 		.get_scheme_score = damon_pa_scheme_score,
+		.get_goal_metric = damon_pa_get_goal_metric,
 	};
 
 	return damon_register_ops(&ops);

@@ -649,6 +649,9 @@ struct damon_operations {
 	bool (*target_valid)(struct damon_target *t);
 	void (*cleanup_target)(struct damon_target *t);
 	void (*cleanup)(struct damon_ctx *context);
+	unsigned long (*get_goal_metric)(struct damon_ctx *ctx,
+				struct damos *scheme,
+				const struct damos_quota_goal *goal);
 };
 
 /*
