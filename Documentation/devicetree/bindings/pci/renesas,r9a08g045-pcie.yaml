@@ -42,7 +42,7 @@ properties:
   interrupt-names:
     items:
       - description: serr
-      - description: ser_cor
+      - description: serr_cor
       - description: serr_nonfatal
       - description: serr_fatal
       - description: axi_err
