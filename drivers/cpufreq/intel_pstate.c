@@ -1234,6 +1234,59 @@ unlock:
 	mutex_unlock(&hybrid_capacity_lock);
 }
 
+static bool hybrid_need_enable_cpu_capacity_scaling(void)
+{
+	guard(mutex)(&hybrid_capacity_lock);
+
+	if (!hybrid_max_perf_cpu && hwp_is_hybrid &&
+		!no_cas && !sched_smt_active())
+		return true;
+	else
+		return false;
+}
+
+static bool hybrid_need_disable_cpu_capacity_scaling(void)
+{
+	guard(mutex)(&hybrid_capacity_lock);
+
+	if (hybrid_max_perf_cpu && sched_smt_active()) {
+		hybrid_max_perf_cpu = NULL;
+		return true;
+	} else {
+		return false;
+	}
+}
+
+static void hybrid_enable_cpu_capacity_scaling_work_fn(struct work_struct *work)
+{
+	if (arch_enable_hybrid_capacity_scale()) {
+		hybrid_refresh_cpu_capacity_scaling();
+		/*
+		 * Disabling ITMT causes sched domains to be rebuilt to disable asym
+		 * packing and enable asym capacity and EAS.
+		 */
+		sched_clear_itmt_support();
+
+	}
+}
+
+static void hybrid_disable_cpu_capacity_scaling_work_fn(struct work_struct *work)
+{
+	unsigned int cpu;
+
+	arch_disable_hybrid_capacity_scale();
+	for_each_possible_cpu(cpu)
+		topology_set_cpu_scale(cpu, arch_scale_cpu_capacity(cpu));
+
+	/* Heterogeneous CPUs have different capabilities, therefore enable
+	 * ITMT when SMT is active.
+	 */
+	sched_set_itmt_support();
+}
+
+static DECLARE_WORK(hybrid_enable_work, hybrid_enable_cpu_capacity_scaling_work_fn);
+static DECLARE_WORK(hybrid_disable_work, hybrid_disable_cpu_capacity_scaling_work_fn);
+
 static void intel_pstate_hwp_set(unsigned int cpu)
 {
 	struct cpudata *cpu_data = all_cpu_data[cpu];
@@ -2967,12 +3020,19 @@ static int intel_cpufreq_cpu_offline(struct cpufreq_policy *policy)
 
 	intel_pstate_exit_perf_limits(policy);
 
+	if (unlikely(hybrid_need_enable_cpu_capacity_scaling()))
+		schedule_work(&hybrid_enable_work);
+
+
 	return 0;
 }
 
 static int intel_pstate_cpu_online(struct cpufreq_policy *policy)
 {
 	struct cpudata *cpu = all_cpu_data[policy->cpu];
+
+	if (unlikely(hybrid_need_disable_cpu_capacity_scaling()))
+		schedule_work(&hybrid_disable_work);
 
 	pr_debug("CPU %d going online\n", cpu->cpu);
 
