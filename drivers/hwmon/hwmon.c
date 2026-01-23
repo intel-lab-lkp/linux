@@ -261,6 +261,21 @@ static int hwmon_thermal_add_sensor(struct device *dev, int index)
 	return 0;
 }
 
+static struct hwmon_thermal_data *hwmon_thermal_find_tz(struct device *dev, int index)
+{
+	struct hwmon_device *hwdev = to_hwmon_device(dev);
+	struct hwmon_thermal_data *tzdata;
+
+	if (!IS_ENABLED(CONFIG_THERMAL_OF))
+		return NULL;
+
+	list_for_each_entry(tzdata, &hwdev->tzdata, node) {
+		if (tzdata->index == index)
+			return tzdata;
+	}
+	return NULL;
+}
+
 static int hwmon_thermal_register_sensors(struct device *dev)
 {
 	struct hwmon_device *hwdev = to_hwmon_device(dev);
@@ -297,18 +312,10 @@ static int hwmon_thermal_register_sensors(struct device *dev)
 
 static void hwmon_thermal_notify(struct device *dev, int index)
 {
-	struct hwmon_device *hwdev = to_hwmon_device(dev);
-	struct hwmon_thermal_data *tzdata;
+	struct hwmon_thermal_data *tzdata = hwmon_thermal_find_tz(dev, index);
 
-	if (!IS_ENABLED(CONFIG_THERMAL_OF))
-		return;
-
-	list_for_each_entry(tzdata, &hwdev->tzdata, node) {
-		if (tzdata->index == index) {
-			thermal_zone_device_update(tzdata->tzd,
-						   THERMAL_EVENT_UNSPECIFIED);
-		}
-	}
+	if (tzdata)
+		thermal_zone_device_update(tzdata->tzd, THERMAL_EVENT_UNSPECIFIED);
 }
 
 static int hwmon_attr_base(enum hwmon_sensor_types type)
