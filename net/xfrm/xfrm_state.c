@@ -881,38 +881,9 @@ xfrm_state_flush_secctx_check(struct net *net, u8 proto, bool task_valid)
 
 	return err;
 }
-
-static inline int
-xfrm_dev_state_flush_secctx_check(struct net *net, struct net_device *dev, bool task_valid)
-{
-	int i, err = 0;
-
-	for (i = 0; i <= net->xfrm.state_hmask; i++) {
-		struct xfrm_state *x;
-		struct xfrm_dev_offload *xso;
-
-		hlist_for_each_entry(x, net->xfrm.state_bydst+i, bydst) {
-			xso = &x->xso;
-
-			if (xso->dev == dev &&
-			   (err = security_xfrm_state_delete(x)) != 0) {
-				xfrm_audit_state_delete(x, 0, task_valid);
-				return err;
-			}
-		}
-	}
-
-	return err;
-}
 #else
 static inline int
 xfrm_state_flush_secctx_check(struct net *net, u8 proto, bool task_valid)
-{
-	return 0;
-}
-
-static inline int
-xfrm_dev_state_flush_secctx_check(struct net *net, struct net_device *dev, bool task_valid)
 {
 	return 0;
 }
@@ -966,9 +937,6 @@ int xfrm_dev_state_flush(struct net *net, struct net_device *dev, bool task_vali
 	int i, err = 0, cnt = 0;
 
 	spin_lock_bh(&net->xfrm.xfrm_state_lock);
-	err = xfrm_dev_state_flush_secctx_check(net, dev, task_valid);
-	if (err)
-		goto out;
 
 	err = -ESRCH;
 	for (i = 0; i <= net->xfrm.state_hmask; i++) {
@@ -997,7 +965,6 @@ restart:
 	if (cnt)
 		err = 0;
 
-out:
 	spin_unlock_bh(&net->xfrm.xfrm_state_lock);
 
 	spin_lock_bh(&xfrm_state_dev_gc_lock);
