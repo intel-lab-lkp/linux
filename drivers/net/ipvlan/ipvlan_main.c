@@ -878,6 +878,33 @@ static bool ipvlan_is_valid_dev(const struct net_device *dev)
 	return true;
 }
 
+static int ipvlan_addr_validator_event(struct net_device *dev,
+				       unsigned long event,
+				       struct netlink_ext_ack *extack,
+				       const void *iaddr,
+				       bool is_v6)
+{
+	struct ipvl_dev *ipvlan = netdev_priv(dev);
+	int ret = NOTIFY_OK;
+
+	if (!ipvlan_is_valid_dev(dev))
+		return NOTIFY_DONE;
+
+	switch (event) {
+	case NETDEV_UP:
+		spin_lock_bh(&ipvlan->port->addrs_lock);
+		if (ipvlan_addr_busy(ipvlan->port, iaddr, is_v6)) {
+			NL_SET_ERR_MSG(extack,
+				       "Address already assigned to an ipvlan device");
+			ret = notifier_from_errno(-EADDRINUSE);
+		}
+		spin_unlock_bh(&ipvlan->port->addrs_lock);
+		break;
+	}
+
+	return ret;
+}
+
 #if IS_ENABLED(CONFIG_IPV6)
 static int ipvlan_add_addr6(struct ipvl_dev *ipvlan, struct in6_addr *ip6_addr)
 {
@@ -921,32 +948,6 @@ static int ipvlan_addr6_event(struct notifier_block *unused,
 	}
 
 	return NOTIFY_OK;
-}
-
-static int ipvlan_addr6_validator_event(struct notifier_block *unused,
-					unsigned long event, void *ptr)
-{
-	struct in6_validator_info *i6vi = (struct in6_validator_info *)ptr;
-	struct net_device *dev = (struct net_device *)i6vi->i6vi_dev->dev;
-	struct ipvl_dev *ipvlan = netdev_priv(dev);
-	int ret = NOTIFY_OK;
-
-	if (!ipvlan_is_valid_dev(dev))
-		return NOTIFY_DONE;
-
-	switch (event) {
-	case NETDEV_UP:
-		spin_lock_bh(&ipvlan->port->addrs_lock);
-		if (ipvlan_addr_busy(ipvlan->port, &i6vi->i6vi_addr, true)) {
-			NL_SET_ERR_MSG(i6vi->extack,
-				       "Address already assigned to an ipvlan device");
-			ret = notifier_from_errno(-EADDRINUSE);
-		}
-		spin_unlock_bh(&ipvlan->port->addrs_lock);
-		break;
-	}
-
-	return ret;
 }
 #endif
 
@@ -997,38 +998,15 @@ static int ipvlan_addr4_event(struct notifier_block *unused,
 	return NOTIFY_OK;
 }
 
-static int ipvlan_addr4_validator_event(struct notifier_block *unused,
-					unsigned long event, void *ptr)
-{
-	struct in_validator_info *ivi = (struct in_validator_info *)ptr;
-	struct net_device *dev = (struct net_device *)ivi->ivi_dev->dev;
-	struct ipvl_dev *ipvlan = netdev_priv(dev);
-	int ret = NOTIFY_OK;
-
-	if (!ipvlan_is_valid_dev(dev))
-		return NOTIFY_DONE;
-
-	switch (event) {
-	case NETDEV_UP:
-		spin_lock_bh(&ipvlan->port->addrs_lock);
-		if (ipvlan_addr_busy(ipvlan->port, &ivi->ivi_addr, false)) {
-			NL_SET_ERR_MSG(ivi->extack,
-				       "Address already assigned to an ipvlan device");
-			ret = notifier_from_errno(-EADDRINUSE);
-		}
-		spin_unlock_bh(&ipvlan->port->addrs_lock);
-		break;
-	}
-
-	return ret;
-}
+static int ipvlan_addr_validator_event_cb(struct notifier_block *nblock,
+					  unsigned long event, void *ptr);
 
 static struct notifier_block ipvlan_addr4_notifier_block __read_mostly = {
 	.notifier_call = ipvlan_addr4_event,
 };
 
 static struct notifier_block ipvlan_addr4_vtor_notifier_block __read_mostly = {
-	.notifier_call = ipvlan_addr4_validator_event,
+	.notifier_call = ipvlan_addr_validator_event_cb,
 };
 
 static struct notifier_block ipvlan_notifier_block __read_mostly = {
@@ -1039,11 +1017,33 @@ static struct notifier_block ipvlan_notifier_block __read_mostly = {
 static struct notifier_block ipvlan_addr6_notifier_block __read_mostly = {
 	.notifier_call = ipvlan_addr6_event,
 };
-
-static struct notifier_block ipvlan_addr6_vtor_notifier_block __read_mostly = {
-	.notifier_call = ipvlan_addr6_validator_event,
-};
 #endif
+
+static struct notifier_block
+ipvlan_addr6_vtor_notifier_block __read_mostly __maybe_unused = {
+	.notifier_call = ipvlan_addr_validator_event_cb,
+};
+
+static int ipvlan_addr_validator_event_cb(struct notifier_block *nblock,
+					  unsigned long event, void *ptr)
+{
+	struct in6_validator_info *i6vi;
+	struct net_device *dev;
+
+	if (nblock == &ipvlan_addr4_vtor_notifier_block) {
+		struct in_validator_info *ivi;
+
+		ivi = (struct in_validator_info *)ptr;
+		dev = ivi->ivi_dev->dev;
+		return ipvlan_addr_validator_event(dev, event, ivi->extack,
+						   &ivi->ivi_addr, false);
+	}
+
+	i6vi = (struct in6_validator_info *)ptr;
+	dev = i6vi->i6vi_dev->dev;
+	return ipvlan_addr_validator_event(dev, event, i6vi->extack,
+					   &i6vi->i6vi_addr, true);
+}
 
 static int __init ipvlan_init_module(void)
 {
