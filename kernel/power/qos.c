@@ -34,6 +34,11 @@
 #include <linux/kernel.h>
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
+#include <linux/cpumask.h>
+#include <linux/cpu.h>
+#include <linux/list.h>
+
+#include <asm/setup.h>
 
 #include <linux/uaccess.h>
 #include <linux/export.h>
@@ -45,6 +50,10 @@
  * held, taken with _irqsave.  One lock to rule them all
  */
 static DEFINE_SPINLOCK(pm_qos_lock);
+
+static LIST_HEAD(pm_qos_boot_list);
+
+static char pm_qos_resume_latency_cmdline[COMMAND_LINE_SIZE] __initdata;
 
 /**
  * pm_qos_read_value - Return the current effective constraint value.
@@ -219,6 +228,144 @@ static struct pm_qos_constraints cpu_latency_constraints = {
 	.no_constraint_value = PM_QOS_CPU_LATENCY_DEFAULT_VALUE,
 	.type = PM_QOS_MIN,
 };
+
+struct pm_qos_boot_entry {
+	struct list_head node;
+	struct cpumask mask;
+	s32 latency;
+};
+
+static int __init pm_qos_latency_us_setup(char *str)
+{
+	strscpy(pm_qos_resume_latency_cmdline, str,
+		sizeof(pm_qos_resume_latency_cmdline));
+	return 1;
+}
+__setup("pm_qos_resume_latency_us=", pm_qos_latency_us_setup);
+
+/* init_pm_qos_latency_us_setup - Parse the pm_qos_latency_us boot parameter.
+ *
+ * Parses the kernel command line option "pm_qos_resume_latency_us=" to establish
+ * per-CPU resume latency constraints. These constraints are applied
+ * immediately when a CPU is registered.
+ *
+ * Syntax: pm_qos_resume_latency_us=<cpu-list>:<value>[,<cpu-list>:<value>...]
+ * Example: pm_qos_resume_latency_us=0-3:0,4-7:20
+ *
+ * The parsing logic enforces a "First Match Wins" policy. If a CPU is
+ * covered by multiple entries in the list, only the first valid entry
+ * applies. Any subsequent overlapping ranges for that CPU are ignored.
+ *
+ * Return: 0 on success, or a negative error code on failure.
+ */
+static int __init init_pm_qos_latency_us_setup(void)
+{
+	char *token, *cmd = pm_qos_resume_latency_cmdline;
+	struct pm_qos_boot_entry *entry, *tentry;
+	cpumask_var_t covered;
+	int ret;
+
+	if (boot_option_idle_override == IDLE_POLL) {
+		pr_warn("pm_qos: Cannot be used with idle=poll\n");
+		return -EINVAL;
+	}
+
+	if (!zalloc_cpumask_var(&covered, GFP_KERNEL)) {
+		pr_warn("pm_qos: Failed to allocate memory for parsing boot parameter\n");
+		return -ENOMEM;
+	}
+
+	while ((token = strsep(&cmd, ",")) != NULL) {
+		char *str_range, *str_val;
+
+		str_range = strsep(&token, ":");
+		str_val = token;
+
+		if (!str_val) {
+			pr_warn("pm_qos: Missing value range %s\n",
+				str_range);
+			continue;
+		}
+
+		entry = kzalloc(sizeof(*entry), GFP_KERNEL);
+		if (!entry) {
+			pr_warn("pm_qos: Failed to allocate memory for boot entry\n");
+			goto cleanup;
+		}
+
+		if (cpulist_parse(str_range, &entry->mask)) {
+			pr_warn("pm_qos: Failed to parse cpulist range %s\n",
+				str_range);
+			kfree(entry);
+			continue;
+		}
+
+		cpumask_andnot(&entry->mask, &entry->mask, covered);
+		if (cpumask_empty(&entry->mask)) {
+			pr_warn("pm_qos: Entry %s already covered, ignoring\n",
+				str_range);
+			kfree(entry);
+			continue;
+		}
+		cpumask_or(covered, covered, &entry->mask);
+
+		if (kstrtos32(str_val, 0, &entry->latency)) {
+			pr_warn("pm_qos: Invalid latency requirement value %s\n",
+				str_val);
+			kfree(entry);
+			continue;
+		}
+
+		if (entry->latency < 0) {
+			pr_warn("pm_qos: Latency requirement cannot be negative: %d\n",
+				entry->latency);
+			kfree(entry);
+			continue;
+		}
+
+		list_add_tail(&entry->node, &pm_qos_boot_list);
+	}
+
+	free_cpumask_var(covered);
+	return 0;
+
+cleanup:
+	list_for_each_entry_safe(entry, tentry, &pm_qos_boot_list, node) {
+		list_del(&entry->node);
+		kfree(entry);
+	}
+
+	free_cpumask_var(covered);
+	return ret;
+}
+early_initcall(init_pm_qos_latency_us_setup);
+
+/**
+ * pm_qos_get_boot_cpu_latency_limit - Get boot-time latency limit for a CPU.
+ * @cpu: Logical CPU number to check.
+ *
+ * Checks the read-only boot-time constraints list to see if a specific
+ * PM QoS latency override was requested for this CPU via the kernel
+ * command line.
+ *
+ * Return: The latency limit in microseconds if a constraint exists,
+ * or PM_QOS_RESUME_LATENCY_NO_CONSTRAINT if no boot override applies.
+ */
+s32 pm_qos_get_boot_cpu_latency_limit(unsigned int cpu)
+{
+	struct pm_qos_boot_entry *entry;
+
+	if (list_empty(&pm_qos_boot_list))
+		return PM_QOS_RESUME_LATENCY_NO_CONSTRAINT;
+
+	list_for_each_entry(entry, &pm_qos_boot_list, node) {
+		if (cpumask_test_cpu(cpu, &entry->mask))
+			return entry->latency;
+	}
+
+	return PM_QOS_RESUME_LATENCY_NO_CONSTRAINT;
+}
+EXPORT_SYMBOL_GPL(pm_qos_get_boot_cpu_latency_limit);
 
 static inline bool cpu_latency_qos_value_invalid(s32 value)
 {
