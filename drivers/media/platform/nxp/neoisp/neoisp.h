@@ -9,6 +9,7 @@
 #define __NXP_NEOISP_H
 
 #include <linux/bits.h>
+#include <linux/debugfs.h>
 #include <linux/media/nxp/nxp_neoisp.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
@@ -232,7 +233,22 @@ struct neoisp_dev_s {
 	struct neoisp_job_s queued_job;
 	bool hw_busy; /* Non-zero if a job is queued or is being started */
 	spinlock_t hw_lock; /* Protects "hw_busy" flag and streaming_map */
+	struct dentry *debugfs_entry;
+	struct debugfs_regset32 *regset;
 };
+
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+void neoisp_debugfs_init(struct neoisp_dev_s *neoispd);
+void neoisp_debugfs_exit(struct neoisp_dev_s *neoispd);
+#else
+static inline void neoisp_debugfs_init(struct neoisp_dev_s *neoispd)
+{
+}
+
+static inline void neoisp_debugfs_exit(struct neoisp_dev_s *neoispd)
+{
+}
+#endif
 
 static inline int neoisp_node_link_is_enabled(struct neoisp_node_s *node)
 {
