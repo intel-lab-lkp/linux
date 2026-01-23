@@ -495,6 +495,8 @@ int get_mask_no_shareable(const char *cache_type, unsigned long *mask)
 		return -1;
 	if (get_shareable_mask(cache_type, &shareable_mask) < 0)
 		return -1;
+	if (full_mask == shareable_mask)
+		shareable_mask = 0;
 
 	len = count_contiguous_bits(full_mask & ~shareable_mask, &start);
 	if (!len)
