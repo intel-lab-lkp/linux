@@ -732,6 +732,17 @@ EXPORT_SYMBOL(drm_helper_probe_single_connector_modes);
  */
 void drm_kms_helper_hotplug_event(struct drm_device *dev)
 {
+	struct drm_connector *connector;
+	struct drm_connector_list_iter conn_iter;
+
+	mutex_lock(&dev->mode_config.mutex);
+	drm_connector_list_iter_begin(dev, &conn_iter);
+	drm_for_each_connector_iter(connector, &conn_iter) {
+		connector->pending_hp = false;
+	}
+	drm_connector_list_iter_end(&conn_iter);
+	mutex_unlock(&dev->mode_config.mutex);
+
 	drm_sysfs_hotplug_event(dev);
 	drm_client_dev_hotplug(dev);
 }
@@ -747,6 +758,10 @@ EXPORT_SYMBOL(drm_kms_helper_hotplug_event);
 void drm_kms_helper_connector_hotplug_event(struct drm_connector *connector)
 {
 	struct drm_device *dev = connector->dev;
+
+	mutex_lock(&dev->mode_config.mutex);
+	connector->pending_hp = false;
+	mutex_unlock(&dev->mode_config.mutex);
 
 	drm_sysfs_connector_hotplug_event(connector);
 	drm_client_dev_hotplug(dev);
@@ -837,6 +852,7 @@ static void output_poll_execute(struct work_struct *work)
 				    old_epoch_counter, connector->epoch_counter);
 
 			changed = true;
+			connector->pending_hp = true;
 		}
 	}
 	drm_connector_list_iter_end(&conn_iter);
@@ -1101,6 +1117,7 @@ bool drm_helper_hpd_irq_event(struct drm_device *dev)
 				first_changed_connector = connector;
 			}
 
+			connector->pending_hp = true;
 			changed++;
 		}
 	}

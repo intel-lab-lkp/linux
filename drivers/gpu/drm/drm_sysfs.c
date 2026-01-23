@@ -216,6 +216,8 @@ static ssize_t status_store(struct device *device,
 			    connector->base.id, connector->name,
 			    old_force, connector->force);
 
+		connector->pending_hp = true;
+
 		connector->funcs->fill_modes(connector,
 					     dev->mode_config.max_width,
 					     dev->mode_config.max_height);

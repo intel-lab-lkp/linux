@@ -2191,6 +2191,9 @@ struct drm_connector {
 	/** @force: a DRM_FORCE_<foo> state for forced mode sets */
 	enum drm_connector_force force;
 
+	/** @pending_hp: true if connector changed since last hotplug event */
+	bool pending_hp;
+
 	/**
 	 * @edid_override: Override EDID set via debugfs.
 	 *
