@@ -1230,7 +1230,8 @@ static int init_labels(struct nd_mapping *nd_mapping, int num_labels,
 	return max(num_labels, old_num_labels);
 }
 
-static int del_labels(struct nd_mapping *nd_mapping, uuid_t *uuid)
+static int del_labels(struct nd_mapping *nd_mapping, uuid_t *uuid,
+		      enum label_type ltype)
 {
 	struct nvdimm_drvdata *ndd = to_ndd(nd_mapping);
 	struct nd_label_ent *label_ent, *e;
@@ -1249,11 +1250,24 @@ static int del_labels(struct nd_mapping *nd_mapping, uuid_t *uuid)
 
 	mutex_lock(&nd_mapping->lock);
 	list_for_each_entry_safe(label_ent, e, &nd_mapping->labels, list) {
-		if (label_ent->label)
+		if ((ltype == NS_LABEL_TYPE && !label_ent->label) ||
+		    (ltype == RG_LABEL_TYPE && !label_ent->region_label))
 			continue;
 		active++;
-		if (!nsl_uuid_equal(ndd, label_ent->label, uuid))
-			continue;
+
+		switch (ltype) {
+		case NS_LABEL_TYPE:
+			if (!nsl_uuid_equal(ndd, label_ent->label, uuid))
+				continue;
+
+			break;
+		case RG_LABEL_TYPE:
+			if (!region_label_uuid_equal(label_ent->region_label, uuid))
+				continue;
+
+			break;
+		}
+
 		active--;
 		slot = to_slot(ndd, label_ent);
 		nd_label_free_slot(ndd, slot);
@@ -1262,10 +1276,12 @@ static int del_labels(struct nd_mapping *nd_mapping, uuid_t *uuid)
 
 		if (uuid_equal(&cxl_namespace_uuid, &label_ent->label_uuid))
 			label_ent->label = NULL;
+		else
+			label_ent->region_label = NULL;
 	}
 	list_splice_tail_init(&list, &nd_mapping->labels);
 
-	if (active == 0) {
+	if ((ltype == NS_LABEL_TYPE) && (active == 0)) {
 		nd_mapping_free_labels(nd_mapping);
 		dev_dbg(ndd->dev, "no more active labels\n");
 	}
@@ -1301,7 +1317,8 @@ int nd_pmem_namespace_label_update(struct nd_region *nd_region,
 		int count = 0;
 
 		if (size == 0) {
-			rc = del_labels(nd_mapping, nspm->uuid);
+			rc = del_labels(nd_mapping, nspm->uuid,
+					NS_LABEL_TYPE);
 			if (rc)
 				return rc;
 			continue;
@@ -1378,6 +1395,51 @@ int nd_pmem_region_label_update(struct nd_region *nd_region)
 
 		WARN_ON_ONCE(!ndd->cxl);
 		rc = __pmem_label_update(nd_region, nd_mapping, NULL, i, 0,
+				RG_LABEL_TYPE);
+		if (rc)
+			return rc;
+	}
+
+	return 0;
+}
+
+int nd_pmem_region_label_delete(struct nd_region *nd_region)
+{
+	struct nd_interleave_set *nd_set = nd_region->nd_set;
+	struct nd_label_ent *label_ent;
+	int i, rc;
+
+	for (i = 0; i < nd_region->ndr_mappings; i++) {
+		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
+		struct nvdimm_drvdata *ndd = to_ndd(nd_mapping);
+
+		/* Find non cxl format supported ndr_mappings */
+		if (!ndd->cxl) {
+			dev_info(&nd_region->dev, "Unsupported region label\n");
+			return -EINVAL;
+		}
+
+		/* Find if any NS label using this region */
+		guard(mutex)(&nd_mapping->lock);
+		list_for_each_entry(label_ent, &nd_mapping->labels, list) {
+			if (!label_ent->label)
+				continue;
+
+			/*
+			 * Check if any available NS labels has same
+			 * region_uuid in LSA
+			 */
+			if (nsl_region_uuid_equal(label_ent->label,
+						&nd_set->uuid)) {
+				dev_dbg(&nd_region->dev,
+					"Region/Namespace label in use\n");
+				return -EBUSY;
+			}
+		}
+	}
+
+	for (i = 0; i < nd_region->ndr_mappings; i++) {
+		rc = del_labels(&nd_region->mapping[i], &nd_set->uuid,
 				RG_LABEL_TYPE);
 		if (rc)
 			return rc;
