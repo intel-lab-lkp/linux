@@ -362,6 +362,7 @@ struct cpsw_common {
 	struct net_device *hw_bridge_dev;
 	bool ale_bypass;
 	u8 base_mac[ETH_ALEN];
+	struct workqueue_struct *cmd_wq;
 };
 
 struct cpsw_ale_ratelimit {
@@ -391,6 +392,7 @@ struct cpsw_priv {
 	u32 tx_packet_min;
 	struct cpsw_ale_ratelimit ale_bc_ratelimit;
 	struct cpsw_ale_ratelimit ale_mc_ratelimit;
+	struct work_struct rx_mode_work;
 };
 
 #define ndev_to_cpsw(ndev) (((struct cpsw_priv *)netdev_priv(ndev))->cpsw)
