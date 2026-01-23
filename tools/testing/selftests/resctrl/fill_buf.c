@@ -35,6 +35,10 @@ static void cl_flush(void *p)
 #if defined(__i386) || defined(__x86_64)
 	asm volatile("clflush (%0)\n\t"
 		     : : "r"(p) : "memory");
+#elif defined(__aarch64__)
+	__asm__ __volatile__("dc civac, %0\n\t"
+		     : : "r" (p) : "memory");
+
 #endif
 }
 

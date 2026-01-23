@@ -113,7 +113,7 @@ static int check_results(struct resctrl_val_param *param, const char *cache_type
 		ret = show_results_info(sum_llc_perf_miss, bits,
 					alloc_size / 64,
 					MIN_DIFF_PERCENT_PER_BIT * (bits - 1),
-					runs, get_vendor() == ARCH_INTEL,
+					runs, (get_vendor() == ARCH_INTEL || get_vendor() == ARCH_ARM),
 					&prev_avg_llc_val);
 		if (ret)
 			fail = 1;
