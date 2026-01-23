@@ -8,6 +8,7 @@
  *    Sai Praneeth Prakhya <sai.praneeth.prakhya@intel.com>,
  *    Fenghua Yu <fenghua.yu@intel.com>
  */
+#include <sys/utsname.h>
 #include "resctrl.h"
 
 /* Volatile memory sink to prevent compiler optimizations */
@@ -26,6 +27,7 @@ static struct resctrl_test *resctrl_tests[] = {
 static int detect_vendor(void)
 {
 	FILE *inf = fopen("/proc/cpuinfo", "r");
+	struct utsname system_info;
 	int vendor_id = 0;
 	char *s = NULL;
 	char *res;
@@ -42,6 +44,11 @@ static int detect_vendor(void)
 		vendor_id = ARCH_INTEL;
 	else if (s && !strcmp(s, ": AuthenticAMD\n"))
 		vendor_id = ARCH_AMD;
+	else {
+		uname(&system_info);
+		if (strstr(system_info.machine, "aarch64") != NULL)
+			vendor_id = ARCH_ARM;
+	}
 
 	fclose(inf);
 	free(res);
