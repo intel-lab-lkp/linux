@@ -1038,6 +1038,10 @@ struct damos_sysfs_qgoal_metric_name damos_sysfs_qgoal_metric_names[] = {
 		.metric = DAMOS_QUOTA_NODE_MEMCG_FREE_BP,
 		.name = "node_memcg_free_bp",
 	},
+	{
+		.metric = DAMOS_QUOTA_NODE_SYS_BP,
+		.name = "node_sys_bp",
+	},
 };
 
 static ssize_t target_metric_show(struct kobject *kobj,
@@ -2564,6 +2568,9 @@ static int damos_sysfs_add_quota_score(
 				damos_destroy_quota_goal(goal);
 				return err;
 			}
+			goal->nid = sysfs_goal->nid;
+			break;
+		case DAMOS_QUOTA_NODE_SYS_BP:
 			goal->nid = sysfs_goal->nid;
 			break;
 		default:
