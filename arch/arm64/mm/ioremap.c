@@ -18,6 +18,7 @@ void __iomem *ioremap_prot(phys_addr_t phys_addr, size_t size,
 			   pgprot_t pgprot)
 {
 	unsigned long last_addr = phys_addr + size - 1;
+	unsigned long new_pgprot_val;
 
 	/* Don't allow outside PHYS_MASK */
 	if (last_addr & ~PHYS_MASK)
@@ -26,6 +27,11 @@ void __iomem *ioremap_prot(phys_addr_t phys_addr, size_t size,
 	/* Don't allow RAM to be mapped. */
 	if (WARN_ON(pfn_is_map_memory(__phys_to_pfn(phys_addr))))
 		return NULL;
+
+	new_pgprot_val = _PAGE_KERNEL & ~(PTE_WRITE | PTE_ATTRINDX_MASK);
+	new_pgprot_val |= (pgprot_val(pgprot) & PTE_WRITE)
+				| (pgprot_val(pgprot) & PTE_ATTRINDX_MASK);
+	pgprot = __pgprot(new_pgprot_val);
 
 	/*
 	 * If a hook is registered (e.g. for confidential computing
