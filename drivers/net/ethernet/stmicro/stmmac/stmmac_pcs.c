@@ -17,6 +17,50 @@
 #define GMAC_ANE_LPA	0x0c	/* ANE link partener ability */
 #define GMAC_TBI	0x14	/* TBI extend status */
 
+static enum ethtool_link_mode_bit_indices dwmac_hd_mode_bits[] = {
+	ETHTOOL_LINK_MODE_10baseT_Half_BIT,
+	ETHTOOL_LINK_MODE_100baseT_Half_BIT,
+	ETHTOOL_LINK_MODE_1000baseT_Half_BIT,
+	ETHTOOL_LINK_MODE_100baseFX_Half_BIT,
+	ETHTOOL_LINK_MODE_10baseT1S_Half_BIT,
+	ETHTOOL_LINK_MODE_10baseT1S_P2MP_Half_BIT,
+};
+
+static int dwmac_integrated_pcs_validate(struct phylink_pcs *pcs,
+					 unsigned long *supported,
+					 const struct phylink_link_state *state)
+{
+	struct stmmac_pcs *spcs = phylink_pcs_to_stmmac_pcs(pcs);
+	size_t i;
+	u32 val;
+
+	if (phy_interface_mode_is_8023z(state->interface)) {
+		/* ESTATUS_1000_XFULL is always set, so full duplex is
+		 * supported. ESTATUS_1000_XHALF depends on core configuration.
+		 */
+		val = readl(spcs->base + GMAC_TBI);
+		if (~val & ESTATUS_1000_XHALF)
+			for (i = 0; i < ARRAY_SIZE(dwmac_hd_mode_bits); i++)
+				linkmode_clear_bit(dwmac_hd_mode_bits[i],
+						   supported);
+
+		return 0;
+	} else if (state->interface == PHY_INTERFACE_MODE_SGMII) {
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
+static unsigned int dwmac_integrated_pcs_inband_caps(struct phylink_pcs *pcs,
+						     phy_interface_t interface)
+{
+	if (phy_interface_mode_is_8023z(interface))
+		return LINK_INBAND_ENABLE | LINK_INBAND_DISABLE;
+
+	return 0;
+}
+
 static int dwmac_integrated_pcs_enable(struct phylink_pcs *pcs)
 {
 	struct stmmac_pcs *spcs = phylink_pcs_to_stmmac_pcs(pcs);
@@ -54,7 +98,23 @@ static void dwmac_integrated_pcs_get_state(struct phylink_pcs *pcs,
 					   unsigned int neg_mode,
 					   struct phylink_link_state *state)
 {
-	state->link = false;
+	struct stmmac_pcs *spcs = phylink_pcs_to_stmmac_pcs(pcs);
+	u32 status, lpa;
+
+	status = readl(spcs->base + GMAC_AN_STATUS);
+
+	if (phy_interface_mode_is_8023z(state->interface)) {
+		/* For 802.3z modes, the PCS block supports the advertisement
+		 * and link partner advertisement registers using standard
+		 * 802.3 format. The status register also has the link status
+		 * and AN complete bits in the same bit location.
+		 */
+		lpa = readl(spcs->base + GMAC_ANE_LPA);
+
+		phylink_mii_c22_pcs_decode_state(state, neg_mode, status, lpa);
+	} else {
+		state->link = false;
+	}
 }
 
 static int dwmac_integrated_pcs_config(struct phylink_pcs *pcs,
@@ -64,6 +124,8 @@ static int dwmac_integrated_pcs_config(struct phylink_pcs *pcs,
 				       bool permit_pause_to_mac)
 {
 	struct stmmac_pcs *spcs = phylink_pcs_to_stmmac_pcs(pcs);
+	bool changed = false, ane = true;
+	u32 adv;
 	int ret;
 
 	if (spcs->interface != interface) {
@@ -74,12 +136,25 @@ static int dwmac_integrated_pcs_config(struct phylink_pcs *pcs,
 		spcs->interface = interface;
 	}
 
-	dwmac_ctrl_ane(spcs->base, 0, 1, spcs->priv->hw->reverse_sgmii_enable);
+	if (phy_interface_mode_is_8023z(interface)) {
+		adv = phylink_mii_c22_pcs_encode_advertisement(interface,
+							       advertising);
+		if (readl(spcs->base + GMAC_ANE_ADV) != adv)
+			changed = true;
+		writel(adv, spcs->base + GMAC_ANE_ADV);
 
-	return 0;
+		ane = neg_mode == PHYLINK_PCS_NEG_INBAND_ENABLED;
+	}
+
+	dwmac_ctrl_ane(spcs->base, 0, ane,
+		       spcs->priv->hw->reverse_sgmii_enable);
+
+	return changed;
 }
 
 static const struct phylink_pcs_ops dwmac_integrated_pcs_ops = {
+	.pcs_validate = dwmac_integrated_pcs_validate,
+	.pcs_inband_caps = dwmac_integrated_pcs_inband_caps,
 	.pcs_enable = dwmac_integrated_pcs_enable,
 	.pcs_disable = dwmac_integrated_pcs_disable,
 	.pcs_get_state = dwmac_integrated_pcs_get_state,
@@ -114,6 +189,9 @@ int stmmac_integrated_pcs_get_phy_intf_sel(struct stmmac_priv *priv,
 	if (interface == PHY_INTERFACE_MODE_SGMII)
 		return PHY_INTF_SEL_SGMII;
 
+	if (phy_interface_mode_is_8023z(interface))
+		return PHY_INTF_SEL_TBI;
+
 	return -EINVAL;
 }
 
@@ -141,6 +219,17 @@ int stmmac_integrated_pcs_init(struct stmmac_priv *priv, unsigned int offset,
 	}
 
 	__set_bit(PHY_INTERFACE_MODE_SGMII, spcs->pcs.supported_interfaces);
+
+	if (readl(spcs->base + GMAC_AN_STATUS) & BMSR_ESTATEN) {
+		__set_bit(PHY_INTERFACE_MODE_1000BASEX,
+			  spcs->pcs.supported_interfaces);
+
+		/* Only allow 2500Base-X if the SerDes has support. */
+		ret = dwmac_serdes_validate(priv, PHY_INTERFACE_MODE_2500BASEX);
+		if (ret == 0)
+			__set_bit(PHY_INTERFACE_MODE_2500BASEX,
+				  spcs->pcs.supported_interfaces);
+	}
 
 	priv->integrated_pcs = spcs;
 
