@@ -121,7 +121,7 @@ bool pci_dpc_recovered(struct pci_dev *pdev)
 	 * but reports indicate that DPC completes within 4 seconds.
 	 */
 	wait_event_timeout(dpc_completed_waitqueue, dpc_completed(pdev),
-			   msecs_to_jiffies(4000));
+			   msecs_to_jiffies(16000));
 
 	return test_and_clear_bit(PCI_DPC_RECOVERED, &pdev->priv_flags);
 }
