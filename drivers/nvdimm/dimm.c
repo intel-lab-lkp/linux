@@ -62,6 +62,7 @@ static int nvdimm_probe(struct device *dev)
 	if (rc < 0)
 		dev_dbg(dev, "failed to unlock dimm: %d\n", rc);
 
+	ndd->cxl = nvdimm_region_label_supported(ndd->dev);
 
 	/*
 	 * EACCES failures reading the namespace label-area-properties
