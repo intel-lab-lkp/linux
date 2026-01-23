@@ -1308,8 +1308,10 @@ static struct idpf_vport *idpf_vport_alloc(struct idpf_adapter *adapter,
 
 free_rss_key:
 	kfree(rss_data->rss_key);
+	rss_data->rss_key = NULL;
 free_vector_idxs:
 	kfree(vport->q_vector_idxs);
+	vport->q_vector_idxs = NULL;
 free_vport:
 	kfree(vport);
 
