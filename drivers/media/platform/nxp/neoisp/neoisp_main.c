@@ -9,6 +9,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
@@ -34,6 +35,9 @@
 
 #define NODE_NAME(node) \
 	(node_desc[(node)->id].ent_name + sizeof(NEOISP_NAME))
+
+static int enable_debugfs;
+module_param_named(enable_debugfs, enable_debugfs, uint, 0600);
 
 static inline bool node_desc_is_output(const struct neoisp_node_desc_s *desc)
 {
@@ -1765,9 +1769,16 @@ static int neoisp_probe(struct platform_device *pdev)
 	if (ret)
 		goto disable_nodes_err;
 
+	if (enable_debugfs) {
+		neoisp_debugfs_init(neoispd);
+		/* Increase pm_runtime counter to prevent suspend */
+		pm_runtime_resume_and_get(&pdev->dev);
+	}
+
 	pm_runtime_mark_last_busy(&pdev->dev);
 	pm_runtime_put_autosuspend(&pdev->dev);
 
+	dev_info(&pdev->dev, "probe: done (%d) debugfs (%x)\n", ret, enable_debugfs);
 	return ret;
 
 disable_nodes_err:
@@ -1785,6 +1796,9 @@ static void neoisp_remove(struct platform_device *pdev)
 {
 	struct neoisp_dev_s *neoispd = platform_get_drvdata(pdev);
 	int i;
+
+	if (enable_debugfs)
+		neoisp_debugfs_exit(neoispd);
 
 	for (i = NEOISP_NODE_GROUPS_COUNT - 1; i >= 0; i--)
 		neoisp_destroy_node_group(&neoispd->node_group[i]);
