@@ -20,6 +20,7 @@
 #include <linux/wait.h>
 #include <linux/mutex.h>
 #include <linux/inetdevice.h>
+#include <linux/vmalloc.h>
 #include <rdma/ib_verbs.h>
 #include <rdma/ib_cache.h>
 
@@ -697,6 +698,18 @@ void smc_ib_put_memory_region(struct ib_mr *mr)
 	ib_dereg_mr(mr);
 }
 
+static inline int smc_buf_get_vm_page_order(struct smc_buf_desc *buf_slot)
+{
+#ifdef CONFIG_HAVE_ARCH_HUGE_VMALLOC
+	struct vm_struct *vm;
+
+	vm = find_vm_area(buf_slot->cpu_addr);
+	return vm ? vm->page_order : 0;
+#else
+	return 0;
+#endif
+}
+
 static int smc_ib_map_mr_sg(struct smc_buf_desc *buf_slot, u8 link_idx)
 {
 	unsigned int offset = 0;
@@ -706,8 +719,9 @@ static int smc_ib_map_mr_sg(struct smc_buf_desc *buf_slot, u8 link_idx)
 	sg_num = ib_map_mr_sg(buf_slot->mr[link_idx],
 			      buf_slot->sgt[link_idx].sgl,
 			      buf_slot->sgt[link_idx].orig_nents,
-			      &offset, PAGE_SIZE);
-
+			      &offset,
+			      buf_slot->is_vm ? PAGE_SIZE << smc_buf_get_vm_page_order(buf_slot) :
+			      PAGE_SIZE << buf_slot->order);
 	return sg_num;
 }
 
@@ -719,7 +733,10 @@ int smc_ib_get_memory_region(struct ib_pd *pd, int access_flags,
 		return 0; /* already done */
 
 	buf_slot->mr[link_idx] =
-		ib_alloc_mr(pd, IB_MR_TYPE_MEM_REG, 1 << buf_slot->order);
+		ib_alloc_mr(pd, IB_MR_TYPE_MEM_REG,
+			    buf_slot->is_vm ?
+			    1 << (buf_slot->order - smc_buf_get_vm_page_order(buf_slot)) : 1);
+
 	if (IS_ERR(buf_slot->mr[link_idx])) {
 		int rc;
 

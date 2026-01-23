@@ -2348,7 +2348,8 @@ static struct smc_buf_desc *smcr_new_buf_create(struct smc_link_group *lgr,
 			goto out;
 		fallthrough;	// try virtually contiguous buf
 	case SMCR_VIRT_CONT_BUFS:
-		buf_desc->cpu_addr = vzalloc(PAGE_SIZE << buf_desc->order);
+		buf_desc->cpu_addr = vmalloc_huge(PAGE_SIZE << buf_desc->order,
+						  GFP_KERNEL | __GFP_ZERO);
 		if (!buf_desc->cpu_addr)
 			goto out;
 		buf_desc->pages = NULL;
