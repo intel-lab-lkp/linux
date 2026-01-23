@@ -561,24 +561,12 @@ struct ethtool_channels {
 /**
  * struct ethtool_pauseparam - Ethernet pause (flow control) parameters
  * @cmd: Command number = %ETHTOOL_GPAUSEPARAM or %ETHTOOL_SPAUSEPARAM
- * @autoneg: Flag to enable autonegotiation of pause frame use
+ * @autoneg: Pause Autonegotiation Mode selector (0 = Forced; 1 = Resolution)
  * @rx_pause: Flag to enable reception of pause frames
  * @tx_pause: Flag to enable transmission of pause frames
  *
- * Drivers should reject a non-zero setting of @autoneg when
- * autoneogotiation is disabled (or not supported) for the link.
- *
- * If the link is autonegotiated, drivers should use
- * mii_advertise_flowctrl() or similar code to set the advertised
- * pause frame capabilities based on the @rx_pause and @tx_pause flags,
- * even if @autoneg is zero.  They should also allow the advertised
- * pause frame capabilities to be controlled directly through the
- * advertising field of &struct ethtool_cmd.
- *
- * If @autoneg is non-zero, the MAC is configured to send and/or
- * receive pause frames according to the result of autonegotiation.
- * Otherwise, it is configured directly based on the @rx_pause and
- * @tx_pause flags.
+ * Refer to Documentation/networking/flow_control.rst for the detailed
+ * semantics of these flags and the expected driver behavior.
  */
 struct ethtool_pauseparam {
 	__u32	cmd;
