@@ -513,7 +513,6 @@ define_all_pci_vendors! {
     QCOM                     = bindings::PCI_VENDOR_ID_QCOM,                     // 0x17cb
     CDNS                     = bindings::PCI_VENDOR_ID_CDNS,                     // 0x17cd
     ARECA                    = bindings::PCI_VENDOR_ID_ARECA,                    // 0x17d3
-    S2IO                     = bindings::PCI_VENDOR_ID_S2IO,                     // 0x17d5
     SITECOM                  = bindings::PCI_VENDOR_ID_SITECOM,                  // 0x182d
     TOPSPIN                  = bindings::PCI_VENDOR_ID_TOPSPIN,                  // 0x1867
     COMMTECH                 = bindings::PCI_VENDOR_ID_COMMTECH,                 // 0x18f7
