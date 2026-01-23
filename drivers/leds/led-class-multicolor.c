@@ -48,6 +48,8 @@ static ssize_t multi_intensity_store(struct device *dev,
 			goto err_out;
 		}
 		offset += nrchars;
+		intensity_value[i] = min(intensity_value[i],
+					 led_cdev->max_brightness);
 	}
 
 	offset++;
