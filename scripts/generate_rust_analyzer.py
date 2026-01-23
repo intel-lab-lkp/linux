@@ -123,10 +123,18 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, core_edit
     append_crate(
         "pin_init_internal",
         srctree / "rust" / "pin-init" / "internal" / "src" / "lib.rs",
-        [],
+        ["std", "proc_macro"],
         cfg=["kernel"],
         is_proc_macro=True,
     )
+    # pin_init_internal uses #[path = "../../../macros/quote.rs"] to include quote.rs
+    crates[-1]["source"] = {
+        "include_dirs": [
+            str(srctree / "rust" / "pin-init" / "internal" / "src"),
+            str(srctree / "rust" / "macros"),
+        ],
+        "exclude_dirs": [],
+    }
 
     append_crate(
         "pin_init",
@@ -190,7 +198,7 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, core_edit
             append_crate(
                 name,
                 path,
-                ["core", "kernel"],
+                ["core", "kernel", "pin_init"],
                 cfg=cfg,
             )
 
