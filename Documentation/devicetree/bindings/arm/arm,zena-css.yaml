@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/arm/arm,zena-css.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Arm Zena Compute Subsystem Platforms
+
+maintainers:
+  - Debbie Horsfall <debbie.horsfall@arm.com>
+
+description:
+  Arm Zena Compute Subsystem (CSS) is a compute platform targeting
+  the automotive sector. Arm Zena CSS is a high-performance Arm
+  Cortex-A720AE Application Processor system augmented with an Arm
+  Cortex-R82AE based Safety Island and real-time domain.
+
+properties:
+  $nodename:
+    const: '/'
+  compatible:
+    oneOf:
+      - description: Arm Zena CSS Platforms
+        items:
+          - enum:
+              - arm,zena-css-fvp
+          - const: arm,zena-css
+
+additionalProperties: true
+
+...

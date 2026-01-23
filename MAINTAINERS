@@ -3723,6 +3723,11 @@ F:	drivers/video/fbdev/vt8500lcdfb.*
 F:	drivers/video/fbdev/wm8505fb*
 F:	drivers/video/fbdev/wmt_ge_rops.*
 
+ARM/ZENA CSS PLATFORM
+M:	Debbie Horsfall <debbie.horsfall@arm.com>
+S:	Maintained
+F:	Documentation/devicetree/bindings/arm/arm,zena-css.yaml
+
 ARM/ZYNQ ARCHITECTURE
 M:	Michal Simek <michal.simek@amd.com>
 L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
