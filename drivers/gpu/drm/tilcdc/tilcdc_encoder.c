@@ -8,6 +8,7 @@
 
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
+#include <drm/drm_bridge_connector.h>
 #include <drm/drm_of.h>
 #include <drm/drm_simple_kms_helper.h>
 
@@ -15,38 +16,32 @@
 #include "tilcdc_encoder.h"
 
 static
-struct drm_connector *tilcdc_encoder_find_connector(struct drm_device *ddev,
-						    struct drm_encoder *encoder)
-{
-	struct drm_connector *connector;
-
-	list_for_each_entry(connector, &ddev->mode_config.connector_list, head) {
-		if (drm_connector_has_possible_encoder(connector, encoder))
-			return connector;
-	}
-
-	drm_err(ddev, "No connector found for %s encoder (id %d)\n",
-		encoder->name, encoder->base.id);
-
-	return NULL;
-}
-
-static
 int tilcdc_attach_bridge(struct drm_device *ddev, struct drm_bridge *bridge)
 {
 	struct tilcdc_drm_private *priv = ddev_to_tilcdc_priv(ddev);
+	struct drm_connector *connector;
 	int ret;
 
 	priv->encoder->base.possible_crtcs = BIT(0);
 
-	ret = drm_bridge_attach(&priv->encoder->base, bridge, NULL, 0);
+	ret = drm_bridge_attach(&priv->encoder->base, bridge, NULL,
+				DRM_BRIDGE_ATTACH_NO_CONNECTOR);
 	if (ret)
 		return ret;
 
-	priv->connector = tilcdc_encoder_find_connector(ddev, &priv->encoder->base);
-	if (!priv->connector)
-		return -ENODEV;
+	connector = drm_bridge_connector_init(ddev, &priv->encoder->base);
+	if (IS_ERR(connector)) {
+		drm_err(ddev, "bridge_connector create failed\n");
+		return PTR_ERR(connector);
+	}
 
+	ret = drm_connector_attach_encoder(connector, &priv->encoder->base);
+	if (ret) {
+		drm_err(ddev, "attaching encoder to connector failed\n");
+		return ret;
+	}
+
+	priv->connector = connector;
 	return 0;
 }
 
