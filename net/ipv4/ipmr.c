@@ -1643,6 +1643,10 @@ int ipmr_ioctl(struct sock *sk, int cmd, void *arg)
 	struct sioc_sg_req *sr;
 	struct mr_table *mrt;
 
+	if (sk->sk_type != SOCK_RAW ||
+	    inet_sk(sk)->inet_num != IPPROTO_IGMP)
+		return -EOPNOTSUPP;
+
 	mrt = ipmr_get_table(net, raw_sk(sk)->ipmr_table ? : RT_TABLE_DEFAULT);
 	if (!mrt)
 		return -ENOENT;
@@ -1710,6 +1714,10 @@ int ipmr_compat_ioctl(struct sock *sk, unsigned int cmd, void __user *arg)
 	struct mfc_cache *c;
 	struct net *net = sock_net(sk);
 	struct mr_table *mrt;
+
+	if (sk->sk_type != SOCK_RAW ||
+	    inet_sk(sk)->inet_num != IPPROTO_IGMP)
+		return -EOPNOTSUPP;
 
 	mrt = ipmr_get_table(net, raw_sk(sk)->ipmr_table ? : RT_TABLE_DEFAULT);
 	if (!mrt)
