@@ -136,6 +136,12 @@ properties:
       - pattern: "^mmc[0-9]+$"
         # LED is triggered by WLAN activity
       - pattern: "^phy[0-9]+tx$"
+        # LED indicates disk activity for a specific ata port
+      - pattern: "^.*-ata[0-9]+-disk-activity$"
+        # LED indicates disk read activity for a specific ata port
+      - pattern: "^.*-ata[0-9]+-disk-read$"
+        # LED indicates disk write activity for a specific ata port
+      - pattern: "^.*-ata[0-9]+-disk-write$"
 
   led-pattern:
     description: |
