@@ -144,6 +144,8 @@ properties:
       Each trigger may parse this property differently:
         - one-shot : two numbers specifying delay on and delay off (in ms),
         - timer : two numbers specifying delay on and delay off (in ms),
+        - disk : three numbers specifying delay on, delay off (in ms)
+          and invert (0 or 1),
         - pattern : the pattern is given by a series of tuples, of
           brightness and duration (in ms).  The exact format is
           described in:
@@ -151,7 +153,7 @@ properties:
     $ref: /schemas/types.yaml#/definitions/uint32-matrix
     items:
       minItems: 2
-      maxItems: 2
+      maxItems: 3
 
   led-max-microamp:
     description:
