@@ -1041,29 +1041,81 @@ static int pcs_parse_one_pinctrl_entry(struct pcs_device *pcs,
 			break;
 		}
 
-		offset = pinctrl_spec.args[0];
-		vals[found].reg = pcs->base + offset;
+		/*
+		 * For legacy (non bit-per-mux) users the first cell is the
+		 * register offset and the second (and optional third) cell is
+		 * the value to be written.
+		 *
+		 * For bit-per-mux users we want a simpler binding where the
+		 * first cell is the pin index and the second cell is the
+		 * function selector. Translate that into register offset,
+		 * value and mask here so the rest of the driver can stay
+		 * Register based.
+		 */
+		if (!pcs->bits_per_mux) {
+			offset = pinctrl_spec.args[0];
+			vals[found].reg = pcs->base + offset;
 
-		switch (pinctrl_spec.args_count) {
-		case 2:
-			vals[found].val = pinctrl_spec.args[1];
-			break;
-		case 3:
-			vals[found].val = (pinctrl_spec.args[1] | pinctrl_spec.args[2]);
-			break;
+			switch (pinctrl_spec.args_count) {
+			case 2:
+				vals[found].val = pinctrl_spec.args[1];
+				break;
+			case 3:
+				vals[found].val = (pinctrl_spec.args[1] |
+						   pinctrl_spec.args[2]);
+				break;
+			}
+
+			dev_dbg(pcs->dev, "%pOFn offset: 0x%x value: 0x%x\n",
+				 pinctrl_spec.np, offset, vals[found].val);
+
+			pin = pcs_get_pin_by_offset(pcs, offset);
+			if (pin < 0) {
+				dev_err(pcs->dev,
+					"could not add functions for %pOFn %ux\n",
+					np, offset);
+				break;
+			}
+			pins[found++] = pin;
+		} else {
+			unsigned int pin_index, func_sel;
+			unsigned int shift, mask, val;
+
+			/* Expect <pin_index func_sel> for bit-per-mux users. */
+			if (pinctrl_spec.args_count < 2) {
+				dev_err(pcs->dev,
+					"invalid args_count for bit-per-mux spec: %i\n",
+					pinctrl_spec.args_count);
+				break;
+			}
+
+			pin_index = pinctrl_spec.args[0];
+			func_sel = pinctrl_spec.args[1];
+
+			if (pin_index >= pcs->desc.npins) {
+				dev_err(pcs->dev,
+					"pin index out of range for %pOFn: %u (npins %u)\n",
+					np, pin_index, pcs->desc.npins);
+				break;
+			}
+
+			offset = pcs_pin_reg_offset_get(pcs, pin_index);
+			shift = pcs_pin_shift_reg_get(pcs, pin_index);
+
+			mask = pcs->fmask << shift;
+			val = (func_sel << shift) & mask;
+
+			vals[found].reg = pcs->base + offset;
+			vals[found].val = val;
+			vals[found].mask = mask;
+
+			dev_dbg(pcs->dev,
+				 "%pOFn pin: %u offset: 0x%x func: 0x%x val: 0x%x mask: 0x%x\n",
+				 pinctrl_spec.np, pin_index, offset,
+				 func_sel, val, mask);
+
+			pins[found++] = pin_index;
 		}
-
-		dev_dbg(pcs->dev, "%pOFn index: 0x%x value: 0x%x\n",
-			pinctrl_spec.np, offset, vals[found].val);
-
-		pin = pcs_get_pin_by_offset(pcs, offset);
-		if (pin < 0) {
-			dev_err(pcs->dev,
-				"could not add functions for %pOFn %ux\n",
-				np, offset);
-			break;
-		}
-		pins[found++] = pin;
 	}
 
 	pgnames[0] = np->name;
@@ -1280,21 +1332,37 @@ static int pcs_dt_node_to_map(struct pinctrl_dev *pctldev,
 	}
 
 	if (pcs->bits_per_mux) {
-		ret = pcs_parse_bits_in_pinctrl_entry(pcs, np_config, map,
-				num_maps, pgnames);
-		if (ret < 0) {
-			dev_err(pcs->dev, "no pins entries for %pOFn\n",
-				np_config);
-			goto free_pgnames;
+		/*
+		 * For bit-per-mux users there are two possible bindings:
+		 * - pinctrl-single,bits: offset/value/mask triples
+		 * - pinctrl-single,pins: <pin_index func_sel> pairs
+		 *
+		 * Prefer the explicit bits binding when present so existing
+		 * users keep their current behaviour, otherwise fall back
+		 * to the per-pin binding.
+		 */
+		if (of_find_property(np_config, "pinctrl-single,bits", NULL)) {
+			ret = pcs_parse_bits_in_pinctrl_entry(pcs, np_config,
+							      map, num_maps,
+							      pgnames);
+		} else if (of_find_property(np_config,
+					    "pinctrl-single,pins", NULL)) {
+			ret = pcs_parse_one_pinctrl_entry(pcs, np_config, map,
+							  num_maps, pgnames);
+		} else {
+			ret = -EINVAL;
 		}
 	} else {
-		ret = pcs_parse_one_pinctrl_entry(pcs, np_config, map,
-				num_maps, pgnames);
-		if (ret < 0) {
-			dev_err(pcs->dev, "no pins entries for %pOFn\n",
-				np_config);
-			goto free_pgnames;
-		}
+		if (of_find_property(np_config, "pinctrl-single,pins", NULL))
+			ret = pcs_parse_one_pinctrl_entry(pcs, np_config, map,
+							  num_maps, pgnames);
+		else
+			ret = -EINVAL;
+	}
+
+	if (ret < 0) {
+		dev_err(pcs->dev, "no pins entries for %pOFn\n", np_config);
+		goto free_pgnames;
 	}
 
 	return 0;
