@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
 use core::{
-    cmp,
     mem,
     sync::atomic::{
         fence,
@@ -267,10 +266,20 @@ impl DmaGspMem {
         // PANIC: per the invariant of `cpu_read_ptr`, `rx` is `< MSGQ_NUM_PAGES`.
         let (before_rx, after_rx) = gsp_mem.gspq.msgq.data.split_at(rx);
 
-        match tx.cmp(&rx) {
-            cmp::Ordering::Equal => (&after_rx[0..0], &after_rx[0..0]),
-            cmp::Ordering::Greater => (&after_rx[..tx], &before_rx[0..0]),
-            cmp::Ordering::Less => (after_rx, &before_rx[..tx]),
+        // The area starting at `rx` and ending at `tx - 1` modulo MSGQ_NUM_PAGES, inclusive,
+        // belongs to the driver for reading.
+        if rx <= tx {
+            // The area is contiguous.
+            // PANIC:
+            // - The index `tx - rx` is non-negative because `rx <= tx` in this branch.
+            // - The index does not exceed `after_rx.len()` (which is `MSGQ_NUM_PAGES - rx`)
+            //   because `tx < MSGQ_NUM_PAGES` by the `gsp_write_ptr` invariant.
+            (&after_rx[..(tx - rx)], &after_rx[0..0])
+        } else {
+            // The area is discontiguous.
+            // PANIC: `tx` does not exceed `before_rx.len()` (which equals `rx`) because
+            //   `tx < rx` in this branch.
+            (after_rx, &before_rx[..tx])
         }
     }
 
