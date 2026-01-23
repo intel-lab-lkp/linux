@@ -2933,6 +2933,14 @@ int mmu_try_to_unsync_pages(struct kvm *kvm, const struct kvm_memory_slot *slot,
 	bool locked = false;
 
 	/*
+	 * If large page is allowed, there is no shadow page in the GFN range,
+	 * because the presence of a shadow page in that range would prevent
+	 * using a large page.
+	 */
+	if (!lpage_info_slot(gfn, slot, PG_LEVEL_2M)->disallow_lpage)
+		return 0;
+
+	/*
 	 * Force write-protection if the page is being tracked.  Note, the page
 	 * track machinery is used to write-protect upper-level shadow pages,
 	 * i.e. this guards the role.level == 4K assertion below!
