@@ -28,6 +28,19 @@ struct vb2_buffer;
 	(offsetof(struct v4l2_isp_params_buffer, data) + (max_params_size))
 
 /**
+ * v4l2_isp_stats_buffer_size - Calculate size of v4l2_isp_stats_buffer
+ * @max_stats_size: The total size of the ISP statistic blocks
+ *
+ * Users of the v4l2 extensible statistics will produce differing sized data
+ * arrays depending on their specific ISP blocks. Drivers and userspace will
+ * need to be able to calculate the appropriate size of the structure to
+ * accommodate all ISP statistics blocks provided by the driver.
+ * This macro provides a convenient tool for the calculation.
+ */
+#define v4l2_isp_stats_buffer_size(max_stats_size) \
+	(offsetof(struct v4l2_isp_stats_buffer, data) + (max_stats_size))
+
+/**
  * v4l2_isp_params_validate_buffer_size - Validate a V4L2 ISP buffer sizes
  * @dev: the driver's device pointer
  * @vb: the videobuf2 buffer
