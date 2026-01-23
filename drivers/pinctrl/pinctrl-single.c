@@ -505,7 +505,8 @@ static int pcs_pinconf_get(struct pinctrl_dev *pctldev,
 			continue;
 		}
 
-		offset = pin * (pcs->width / BITS_PER_BYTE);
+		/* Use the same offset mapping as pinmux (handles bit-per-mux) */
+		offset = pcs_pin_reg_offset_get(pcs, pin);
 		data = pcs->read(pcs->base + offset) & func->conf[i].mask;
 		switch (func->conf[i].param) {
 		/* 4 parameters */
@@ -573,7 +574,8 @@ static int pcs_pinconf_set(struct pinctrl_dev *pctldev,
 			if (param != func->conf[i].param)
 				continue;
 
-			offset = pin * (pcs->width / BITS_PER_BYTE);
+			/* Use the same offset mapping as pinmux (handles bit-per-mux) */
+			offset = pcs_pin_reg_offset_get(pcs, pin);
 			data = pcs->read(pcs->base + offset);
 			arg = pinconf_to_config_argument(configs[j]);
 			switch (param) {
