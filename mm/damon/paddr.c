@@ -300,10 +300,54 @@ static unsigned long damon_pa_deactivate_pages(struct damon_region *r,
 			sz_filter_passed);
 }
 
+static unsigned long damon_pa_node_capacity_bp(int nid)
+{
+	struct pglist_data *pgdat;
+	unsigned long sys_total = damon_pa_totalram_bytes();
+	unsigned long node_pages, node_total;
+
+	if (nid < 0 || !sys_total)
+		return 0;
+	pgdat = NODE_DATA(nid);
+	if (!pgdat)
+		return 0;
+	node_pages = pgdat->node_spanned_pages;
+	node_total = node_pages << PAGE_SHIFT;
+	return div64_u64((u64)node_total * 10000ULL, sys_total);
+}
+
 static unsigned long damon_pa_migrate(struct damon_region *r,
 		unsigned long addr_unit, struct damos *s,
 		unsigned long *sz_filter_passed)
 {
+	/*
+	 * Capacity clamp + directional early-exit for node_sys_bp goals:
+	 * If we are migrating INTO g->nid and the current bp for that node is
+	 * already >= min(target_bp, capacity_bp), skip work this interval.
+	 */
+	{
+		struct damos_quota_goal *g;
+
+		list_for_each_entry(g, &s->quota.goals, list) {
+			unsigned long cap_bp, effective_target_bp;
+
+			if (g->metric != DAMOS_QUOTA_NODE_SYS_BP)
+				continue;
+			if (g->nid < 0)
+				continue;
+
+			cap_bp = damon_pa_node_capacity_bp(g->nid);
+			if (!cap_bp)
+				break;
+
+			effective_target_bp = min(g->target_value, cap_bp);
+			if (s->target_nid == g->nid &&
+			    g->current_value >= effective_target_bp)
+				return 0;
+			break;
+		}
+	}
+
 	phys_addr_t addr, applied;
 	LIST_HEAD(folio_list);
 	struct folio *folio;
