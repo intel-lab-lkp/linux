@@ -125,7 +125,7 @@ static void tilcdc_crtc_load_palette(struct drm_crtc *crtc)
 	ret = wait_for_completion_timeout(&tilcdc_crtc->palette_loaded,
 					  msecs_to_jiffies(50));
 	if (ret == 0)
-		dev_err(dev->dev, "%s: Palette loading timeout", __func__);
+		drm_err(dev, "%s: Palette loading timeout", __func__);
 
 	/* Disable LCDC DMA and DMA Palette Loaded Interrupt. */
 	tilcdc_clear(dev, LCDC_RASTER_CTRL_REG, LCDC_RASTER_ENABLE);
@@ -223,7 +223,7 @@ static void tilcdc_crtc_set_clk(struct drm_crtc *crtc)
 		 */
 		if (!clk_rate) {
 			/* Nothing more we can do. Just bail out. */
-			dev_err(dev->dev,
+			drm_err(dev,
 				"failed to set the pixel clock - unable to read current lcdc clock rate\n");
 			return;
 		}
@@ -240,7 +240,7 @@ static void tilcdc_crtc_set_clk(struct drm_crtc *crtc)
 		real_pclk_rate = clk_rate / clkdiv;
 
 		if (tilcdc_pclk_diff(pclk_rate, real_pclk_rate) > 5) {
-			dev_warn(dev->dev,
+			drm_warn(dev,
 				 "effective pixel clock rate (%luHz) differs from the requested rate (%luHz)\n",
 				 real_pclk_rate, pclk_rate);
 		}
@@ -369,7 +369,7 @@ static void tilcdc_crtc_set_mode(struct drm_crtc *crtc)
 			reg |= LCDC_V2_TFT_24BPP_MODE;
 			break;
 		default:
-			dev_err(dev->dev, "invalid pixel format\n");
+			drm_err(dev, "invalid pixel format\n");
 			return;
 		}
 	}
@@ -482,7 +482,7 @@ static void tilcdc_crtc_off(struct drm_crtc *crtc, bool shutdown)
 				 tilcdc_crtc->frame_done,
 				 msecs_to_jiffies(500));
 	if (ret == 0)
-		dev_err(dev->dev, "%s: timeout waiting for framedone\n",
+		drm_err(dev, "%s: timeout waiting for framedone\n",
 			__func__);
 
 	drm_crtc_vblank_off(crtc);
@@ -543,7 +543,7 @@ static void tilcdc_crtc_recover_work(struct work_struct *work)
 		container_of(work, struct tilcdc_crtc, recover_work);
 	struct drm_crtc *crtc = &tilcdc_crtc->base;
 
-	dev_info(crtc->dev->dev, "%s: Reset CRTC", __func__);
+	drm_info(crtc->dev, "%s: Reset CRTC", __func__);
 
 	drm_modeset_lock(&crtc->mutex, NULL);
 
@@ -575,7 +575,7 @@ int tilcdc_crtc_update_fb(struct drm_crtc *crtc,
 	struct drm_device *dev = crtc->dev;
 
 	if (tilcdc_crtc->event) {
-		dev_err(dev->dev, "already pending page flip!\n");
+		drm_err(dev, "already pending page flip!\n");
 		return -EBUSY;
 	}
 
@@ -707,7 +707,7 @@ static void tilcdc_crtc_reset(struct drm_crtc *crtc)
 					 tilcdc_crtc->frame_done,
 					 msecs_to_jiffies(500));
 		if (ret == 0)
-			dev_err(dev->dev, "%s: timeout waiting for framedone\n",
+			drm_err(dev, "%s: timeout waiting for framedone\n",
 				__func__);
 	}
 	pm_runtime_put_sync(dev->dev);
@@ -895,7 +895,7 @@ irqreturn_t tilcdc_crtc_irq(struct drm_crtc *crtc)
 	}
 
 	if (stat & LCDC_FIFO_UNDERFLOW)
-		dev_err_ratelimited(dev->dev, "%s(0x%08x): FIFO underflow",
+		drm_err_ratelimited(dev, "%s(0x%08x): FIFO underflow",
 				    __func__, stat);
 
 	if (stat & LCDC_PL_LOAD_DONE) {
@@ -909,7 +909,7 @@ irqreturn_t tilcdc_crtc_irq(struct drm_crtc *crtc)
 	}
 
 	if (stat & LCDC_SYNC_LOST) {
-		dev_err_ratelimited(dev->dev, "%s(0x%08x): Sync lost",
+		drm_err_ratelimited(dev, "%s(0x%08x): Sync lost",
 				    __func__, stat);
 		tilcdc_crtc->frame_intact = false;
 		if (priv->rev == 1) {
@@ -923,7 +923,7 @@ irqreturn_t tilcdc_crtc_irq(struct drm_crtc *crtc)
 		} else {
 			if (tilcdc_crtc->sync_lost_count++ >
 			    SYNC_LOST_COUNT_LIMIT) {
-				dev_err(dev->dev,
+				drm_err(dev,
 					"%s(0x%08x): Sync lost flood detected, recovering",
 					__func__, stat);
 				queue_work(system_wq,
@@ -965,7 +965,7 @@ int tilcdc_crtc_create(struct drm_device *dev)
 
 	primary = tilcdc_plane_init(dev);
 	if (IS_ERR(primary)) {
-		dev_err(dev->dev, "Failed to initialize plane: %pe\n", primary);
+		drm_err(dev, "Failed to initialize plane: %pe\n", primary);
 		return PTR_ERR(primary);
 	}
 
@@ -975,7 +975,7 @@ int tilcdc_crtc_create(struct drm_device *dev)
 						  &tilcdc_crtc_funcs,
 						  "tilcdc crtc");
 	if (IS_ERR(tilcdc_crtc)) {
-		dev_err(dev->dev, "Failed to init CRTC: %pe\n", tilcdc_crtc);
+		drm_err(dev, "Failed to init CRTC: %pe\n", tilcdc_crtc);
 		return PTR_ERR(tilcdc_crtc);
 	}
 

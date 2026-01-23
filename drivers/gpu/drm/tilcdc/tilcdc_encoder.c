@@ -25,7 +25,7 @@ struct drm_connector *tilcdc_encoder_find_connector(struct drm_device *ddev,
 			return connector;
 	}
 
-	dev_err(ddev->dev, "No connector found for %s encoder (id %d)\n",
+	drm_err(ddev, "No connector found for %s encoder (id %d)\n",
 		encoder->name, encoder->base.id);
 
 	return NULL;
@@ -68,7 +68,7 @@ int tilcdc_encoder_create(struct drm_device *ddev)
 	encoder = drmm_simple_encoder_alloc(ddev, struct tilcdc_encoder,
 					    base, DRM_MODE_ENCODER_NONE);
 	if (IS_ERR(encoder)) {
-		dev_err(ddev->dev, "drm_encoder_init() failed %pe\n", encoder);
+		drm_err(ddev, "drm_encoder_init() failed %pe\n", encoder);
 		return PTR_ERR(encoder);
 	}
 	priv->encoder = encoder;

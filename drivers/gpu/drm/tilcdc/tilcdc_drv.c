@@ -288,14 +288,14 @@ static int tilcdc_pdev_probe(struct platform_device *pdev)
 
 	priv->mmio = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(priv->mmio)) {
-		dev_err(dev, "failed to request / ioremap\n");
+		drm_err(ddev, "failed to request / ioremap\n");
 		ret = PTR_ERR(priv->mmio);
 		goto free_wq;
 	}
 
 	priv->clk = clk_get(dev, "fck");
 	if (IS_ERR(priv->clk)) {
-		dev_err(dev, "failed to get functional clock\n");
+		drm_err(ddev, "failed to get functional clock\n");
 		ret = -ENODEV;
 		goto free_wq;
 	}
@@ -313,7 +313,7 @@ static int tilcdc_pdev_probe(struct platform_device *pdev)
 		priv->rev = 2;
 		break;
 	default:
-		dev_warn(dev, "Unknown PID Reg value 0x%08x, "
+		drm_warn(ddev, "Unknown PID Reg value 0x%08x, "
 			"defaulting to LCD revision 1\n",
 			tilcdc_read(ddev, LCDC_PID_REG));
 		priv->rev = 1;
@@ -380,7 +380,7 @@ static int tilcdc_pdev_probe(struct platform_device *pdev)
 
 	ret = tilcdc_crtc_create(ddev);
 	if (ret < 0) {
-		dev_err(dev, "failed to create crtc\n");
+		drm_err(ddev, "failed to create crtc\n");
 		goto disable_pm;
 	}
 	modeset_init(ddev);
@@ -390,7 +390,7 @@ static int tilcdc_pdev_probe(struct platform_device *pdev)
 	ret = cpufreq_register_notifier(&priv->freq_transition,
 			CPUFREQ_TRANSITION_NOTIFIER);
 	if (ret) {
-		dev_err(dev, "failed to register cpufreq notifier\n");
+		drm_err(ddev, "failed to register cpufreq notifier\n");
 		priv->freq_transition.notifier_call = NULL;
 		goto disable_pm;
 	}
@@ -401,14 +401,14 @@ static int tilcdc_pdev_probe(struct platform_device *pdev)
 		goto unregister_cpufreq_notif;
 
 	if (!priv->connector) {
-		dev_err(dev, "no encoders/connectors found\n");
+		drm_err(ddev, "no encoders/connectors found\n");
 		ret = -EPROBE_DEFER;
 		goto unregister_cpufreq_notif;
 	}
 
 	ret = drm_vblank_init(ddev, 1);
 	if (ret < 0) {
-		dev_err(dev, "failed to initialize vblank\n");
+		drm_err(ddev, "failed to initialize vblank\n");
 		goto unregister_cpufreq_notif;
 	}
 
@@ -419,7 +419,7 @@ static int tilcdc_pdev_probe(struct platform_device *pdev)
 
 	ret = tilcdc_irq_install(ddev, priv->irq);
 	if (ret < 0) {
-		dev_err(dev, "failed to install IRQ handler\n");
+		drm_err(ddev, "failed to install IRQ handler\n");
 		goto unregister_cpufreq_notif;
 	}
 

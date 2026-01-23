@@ -36,7 +36,7 @@ static int tilcdc_plane_atomic_check(struct drm_plane *plane,
 		return -EINVAL;
 
 	if (new_state->crtc_x || new_state->crtc_y) {
-		dev_err(plane->dev->dev, "%s: crtc position must be zero.",
+		drm_err(plane->dev, "%s: crtc position must be zero.",
 			__func__);
 		return -EINVAL;
 	}
@@ -48,7 +48,7 @@ static int tilcdc_plane_atomic_check(struct drm_plane *plane,
 
 	if (crtc_state->mode.hdisplay != new_state->crtc_w ||
 	    crtc_state->mode.vdisplay != new_state->crtc_h) {
-		dev_err(plane->dev->dev,
+		drm_err(plane->dev,
 			"%s: Size must match mode (%dx%d == %dx%d)", __func__,
 			crtc_state->mode.hdisplay, crtc_state->mode.vdisplay,
 			new_state->crtc_w, new_state->crtc_h);
@@ -58,13 +58,13 @@ static int tilcdc_plane_atomic_check(struct drm_plane *plane,
 	pitch = crtc_state->mode.hdisplay *
 		new_state->fb->format->cpp[0];
 	if (new_state->fb->pitches[0] != pitch) {
-		dev_err(plane->dev->dev,
+		drm_err(plane->dev,
 			"Invalid pitch: fb and crtc widths must be the same");
 		return -EINVAL;
 	}
 
 	if (old_state->fb && new_state->fb->format != old_state->fb->format) {
-		dev_dbg(plane->dev->dev,
+		drm_dbg(plane->dev,
 			"%s(): pixel format change requires mode_change\n",
 			__func__);
 		crtc_state->mode_changed = true;
