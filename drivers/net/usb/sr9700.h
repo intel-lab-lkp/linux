@@ -8,8 +8,6 @@
 #ifndef _SR9700_H
 #define	_SR9700_H
 
-/* sr9700 spec. register table on Linux platform */
-
 /* Network Control Reg */
 #define	SR_NCR			0x00
 #define		NCR_RST			(1 << 0)
@@ -101,9 +99,7 @@
 #define		WCR_LINKEN		(1 << 5)
 /* Physical Address Reg */
 #define	SR_PAR			0x10	/* 0x10 ~ 0x15 6 bytes for PAR */
-/* Multicast Address Reg */
-#define	SR_MAR			0x16	/* 0x16 ~ 0x1D 8 bytes for MAR */
-/* 0x1e unused */
+/* 0x16 --> 0x1E unused */
 /* Phy Reset Reg */
 #define	SR_PRR			0x1F
 #define		PRR_PHY_RST		(1 << 0)
@@ -123,10 +119,7 @@
 #define	SR_RRPAL		0x26
 /* Rx sdram Read Pointer Address High */
 #define	SR_RRPAH		0x27
-/* Vendor ID register */
-#define	SR_VID			0x28	/* 0x28 ~ 0x29 2 bytes for VID */
-/* Product ID register */
-#define	SR_PID			0x2A	/* 0x2A ~ 0x2B 2 bytes for PID */
+/* 0x28 --> 0x2B unused */
 /* CHIP Revision register */
 #define	SR_CHIPR		0x2C
 /* 0x2D --> 0xEF unused */
@@ -143,10 +136,7 @@
 #define		TXC_USBS_EP1RDY		(1 << 5)
 #define		TXC_USBS_SUSFLAG	(1 << 6)
 #define		TXC_USBS_RXFAULT	(1 << 7)
-/* USB Control register */
-#define	SR_USBC			0xF4
-#define		USBC_EP3NAK		(1 << 4)
-#define		USBC_EP3ACK		(1 << 5)
+/* 0xF4 --> 0xFF unused */
 
 /* Register access commands and flags */
 #define	SR_RD_REGS		0x00
@@ -158,9 +148,6 @@
 /* parameters */
 #define	SR_EEPROM_TIMEOUT	1000
 #define	SR_EEPROM_LEN		256
-#define	SR_MCAST_SIZE		8
-#define	SR_MCAST_ADDR_FLAG	0x80
-#define	SR_MCAST_MAX		64
 #define	SR_TX_OVERHEAD		2	/* 2bytes header */
 #define	SR_RX_OVERHEAD		7	/* 3bytes header + 4crc tail */
 
