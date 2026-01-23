@@ -473,9 +473,15 @@ enum cxl_config_state {
 	CXL_CONFIG_COMMIT,
 };
 
+enum region_label_state {
+	CXL_REGION_LABEL_INACTIVE,
+	CXL_REGION_LABEL_ACTIVE,
+};
+
 /**
  * struct cxl_region_params - region settings
  * @state: allow the driver to lockdown further parameter changes
+ * @state_region_label: region label state information
  * @uuid: unique id for persistent regions
  * @interleave_ways: number of endpoints in the region
  * @interleave_granularity: capacity each endpoint contributes to a stripe
@@ -488,6 +494,7 @@ enum cxl_config_state {
  */
 struct cxl_region_params {
 	enum cxl_config_state state;
+	enum region_label_state state_region_label;
 	uuid_t uuid;
 	int interleave_ways;
 	int interleave_granularity;
