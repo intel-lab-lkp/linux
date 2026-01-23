@@ -79,6 +79,14 @@ static inline u64 u64_stats_read(const u64_stats_t *p)
 	return local64_read(&p->v);
 }
 
+static inline void *u64_stats_reads(void *dst, const void *src, size_t len)
+{
+	BUILD_BUG_ON(len % sizeof(u64_stats_t));
+	for (size_t i = 0; i < len; i += sizeof(u64_stats_t))
+		*(u64 *)(dst + i) = u64_stats_read((const u64_stats_t *)(src + i));
+	return dst;
+}
+
 static inline void u64_stats_set(u64_stats_t *p, u64 val)
 {
 	local64_set(&p->v, val);
@@ -110,6 +118,7 @@ static inline bool __u64_stats_fetch_retry(const struct u64_stats_sync *syncp,
 }
 
 #else /* 64 bit */
+#include <linux/string.h>
 
 typedef struct {
 	u64		v;
@@ -118,6 +127,12 @@ typedef struct {
 static inline u64 u64_stats_read(const u64_stats_t *p)
 {
 	return p->v;
+}
+
+static inline void *u64_stats_reads(void *dst, const void *src, size_t len)
+{
+	BUILD_BUG_ON(len % sizeof(u64_stats_t));
+	return memcpy(dst, src, len);
 }
 
 static inline void u64_stats_set(u64_stats_t *p, u64 val)
