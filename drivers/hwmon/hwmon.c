@@ -523,10 +523,12 @@ static struct attribute *hwmon_genattr(const void *drvdata,
 	const char *name;
 	bool is_string = is_string_attr(type, attr);
 
+	/*
+	 * Basic mode sanity check. This is less than perfect since
+	 * attribute visibility and with it the mode can change during
+	 * runtime, but it is the best we can do.
+	 */
 	mode = hwmon_is_visible(ops, drvdata, type, attr, index);
-	if (!mode)
-		return ERR_PTR(-ENOENT);
-
 	if ((mode & 0444) && ((is_string && !ops->read_string) ||
 				 (!is_string && !ops->read)))
 		return ERR_PTR(-EINVAL);
@@ -557,7 +559,7 @@ static struct attribute *hwmon_genattr(const void *drvdata,
 	a = &dattr->attr;
 	sysfs_attr_init(a);
 	a->name = name;
-	a->mode = mode;
+	a->mode = ops->write ? 0644 : 0444;	/* updated when attributes are generated */
 
 	return a;
 }
@@ -896,6 +898,17 @@ __hwmon_create_attrs(const void *drvdata, const struct hwmon_chip_info *chip)
 	return attrs;
 }
 
+static umode_t hwmon_kobj_is_visible(struct kobject *kobj, struct attribute *attr, int n)
+{
+	struct device_attribute *dattr = to_dev_attr(attr);
+	struct hwmon_device_attribute *hattr = to_hwmon_attr(dattr);
+	struct device *dev = kobj_to_dev(kobj);
+	void *drvdata = dev_get_drvdata(dev);
+
+	return hwmon_is_visible(hattr->ops, drvdata, hattr->type, hattr->attr,
+				hattr->index);
+}
+
 static struct device *
 __hwmon_device_register(struct device *dev, const char *name, void *drvdata,
 			const struct hwmon_chip_info *chip,
@@ -946,6 +959,7 @@ __hwmon_device_register(struct device *dev, const char *name, void *drvdata,
 		}
 
 		hwdev->group.attrs = attrs;
+		hwdev->group.is_visible = hwmon_kobj_is_visible;
 		ngroups = 0;
 		hwdev->groups[ngroups++] = &hwdev->group;
 
