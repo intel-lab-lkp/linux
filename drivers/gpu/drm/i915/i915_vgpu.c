@@ -67,6 +67,7 @@ void intel_vgpu_detect(struct drm_i915_private *dev_priv)
 	u64 magic;
 	u16 version_major;
 	void __iomem *shared_area;
+	INIT_LIST_HEAD(&dev_priv->vgpu.entry);
 
 	BUILD_BUG_ON(sizeof(struct vgt_if) != VGT_PVINFO_SIZE);
 
