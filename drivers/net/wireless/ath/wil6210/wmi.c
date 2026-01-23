@@ -1703,7 +1703,9 @@ wmi_evt_auth_status(struct wil6210_vif *vif, int id, void *d, int len)
 	return;
 
 fail:
+	mutex_lock(&wil->mutex);
 	wil6210_disconnect(vif, NULL, WLAN_REASON_PREV_AUTH_NOT_VALID);
+	mutex_unlock(&wil->mutex);
 }
 
 static void
@@ -1832,7 +1834,9 @@ wmi_evt_reassoc_status(struct wil6210_vif *vif, int id, void *d, int len)
 	return;
 
 fail:
+	mutex_lock(&wil->mutex);
 	wil6210_disconnect(vif, NULL, WLAN_REASON_PREV_AUTH_NOT_VALID);
+	mutex_unlock(&wil->mutex);
 }
 
 static void
