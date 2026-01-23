@@ -508,14 +508,16 @@ static int omap_mbox_probe(struct platform_device *pdev)
 		int rx_id,         rx_usr;
 
 		mbox = devm_kzalloc(&pdev->dev, sizeof(*mbox), GFP_KERNEL);
-		if (!mbox)
-			return -ENOMEM;
+		if (!mbox) {
+			ret = -ENOMEM;
+			goto err_put_child;
+		}
 
 		child = of_get_next_available_child(node, child);
 		ret = of_property_read_u32_array(child, "ti,mbox-tx", tmp,
 						 ARRAY_SIZE(tmp));
 		if (ret)
-			return ret;
+			goto err_put_child;
 		tx_id = tmp[0];
 		tx_irq = tmp[1];
 		tx_usr = tmp[2];
@@ -523,14 +525,16 @@ static int omap_mbox_probe(struct platform_device *pdev)
 		ret = of_property_read_u32_array(child, "ti,mbox-rx", tmp,
 						 ARRAY_SIZE(tmp));
 		if (ret)
-			return ret;
+			goto err_put_child;
 		rx_id = tmp[0];
 		/* rx_irq = tmp[1]; */
 		rx_usr = tmp[2];
 
 		if (tx_id >= num_fifos || rx_id >= num_fifos ||
-		    tx_usr >= num_users || rx_usr >= num_users)
-			return -EINVAL;
+		    tx_usr >= num_users || rx_usr >= num_users) {
+			ret = -EINVAL;
+			goto err_put_child;
+		}
 
 		fifo = &mbox->tx_fifo;
 		fifo->msg = MAILBOX_MESSAGE(tx_id);
@@ -554,11 +558,14 @@ static int omap_mbox_probe(struct platform_device *pdev)
 		mbox->parent = mdev;
 		mbox->name = child->name;
 		mbox->irq = platform_get_irq(pdev, tx_irq);
-		if (mbox->irq < 0)
-			return mbox->irq;
+		if (mbox->irq < 0) {
+			ret = mbox->irq;
+			goto err_put_child;
+		}
 		mbox->chan = &chnls[i];
 		chnls[i].con_priv = mbox;
 	}
+	of_node_put(child);
 
 	mutex_init(&mdev->cfg_lock);
 	mdev->dev = &pdev->dev;
@@ -602,6 +609,10 @@ static int omap_mbox_probe(struct platform_device *pdev)
 		return ret;
 
 	return 0;
+
+err_put_child:
+	of_node_put(child);
+	return ret;
 }
 
 static struct platform_driver omap_mbox_driver = {
