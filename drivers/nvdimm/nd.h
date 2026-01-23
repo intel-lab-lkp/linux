@@ -14,6 +14,9 @@
 #include <linux/nd.h>
 #include "label.h"
 
+extern uuid_t cxl_namespace_uuid;
+extern uuid_t cxl_region_uuid;
+
 enum {
 	/*
 	 * Limits the maximum number of block apertures a dimm can
@@ -295,6 +298,57 @@ static inline const u8 *nsl_uuid_raw(struct nvdimm_drvdata *ndd,
 	return nd_label->efi.uuid;
 }
 
+static inline void nsl_set_type(struct nvdimm_drvdata *ndd,
+				struct nd_namespace_label *ns_label)
+{
+	if (!(ndd->cxl && ns_label))
+		return;
+
+	export_uuid(ns_label->cxl.type, &cxl_namespace_uuid);
+}
+
+static inline void nsl_set_alignment(struct nvdimm_drvdata *ndd,
+				     struct nd_namespace_label *ns_label,
+				     u32 align)
+{
+	if (!ndd->cxl)
+		return;
+
+	ns_label->cxl.align = __cpu_to_le32(align);
+}
+
+static inline void nsl_set_region_uuid(struct nvdimm_drvdata *ndd,
+				       struct nd_namespace_label *ns_label,
+				       const uuid_t *uuid)
+{
+	if (!(ndd->cxl && uuid))
+		return;
+
+	export_uuid(ns_label->cxl.region_uuid, uuid);
+}
+
+static inline bool is_region_label(struct nvdimm_drvdata *ndd,
+				   union nd_lsa_label *lsa_label)
+{
+	uuid_t tmp;
+
+	if (!ndd->cxl)
+		return false;
+
+	import_uuid(&tmp, lsa_label->region_label.type);
+	return uuid_equal(&tmp, &cxl_region_uuid);
+}
+
+static inline bool
+region_label_uuid_equal(struct cxl_region_label *region_label,
+			const uuid_t *uuid)
+{
+	uuid_t tmp;
+
+	import_uuid(&tmp, region_label->uuid);
+	return uuid_equal(&tmp, uuid);
+}
+
 bool nsl_validate_type_guid(struct nvdimm_drvdata *ndd,
 			    struct nd_namespace_label *nd_label, guid_t *guid);
 enum nvdimm_claim_class nsl_get_claim_class(struct nvdimm_drvdata *ndd,
@@ -376,7 +430,9 @@ enum nd_label_flags {
 struct nd_label_ent {
 	struct list_head list;
 	unsigned long flags;
+	uuid_t label_uuid;
 	struct nd_namespace_label *label;
+	struct cxl_region_label *region_label;
 };
 
 enum nd_mapping_lock_class {

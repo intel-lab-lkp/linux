@@ -232,6 +232,13 @@ out:
 	return rc;
 }
 
+int nd_region_label_update(struct nd_region *nd_region)
+{
+	guard(nvdimm_bus)(&nd_region->dev);
+	return nd_pmem_region_label_update(nd_region);
+}
+EXPORT_SYMBOL_GPL(nd_region_label_update);
+
 static int nd_namespace_label_update(struct nd_region *nd_region,
 		struct device *dev)
 {
@@ -2122,13 +2129,20 @@ static int init_active_labels(struct nd_region *nd_region)
 		if (!count)
 			continue;
 		for (j = 0; j < count; j++) {
-			struct nd_namespace_label *label;
+			union nd_lsa_label *lsa_label;
 
 			label_ent = kzalloc(sizeof(*label_ent), GFP_KERNEL);
 			if (!label_ent)
 				break;
-			label = nd_label_active(ndd, j);
-			label_ent->label = label;
+
+			lsa_label = nd_label_active(ndd, j);
+			if (is_region_label(ndd, lsa_label)) {
+				label_ent->region_label = &lsa_label->region_label;
+				uuid_copy(&label_ent->label_uuid, &cxl_region_uuid);
+			} else {
+				label_ent->label = &lsa_label->ns_label;
+				uuid_copy(&label_ent->label_uuid, &cxl_namespace_uuid);
+			}
 
 			mutex_lock(&nd_mapping->lock);
 			list_add_tail(&label_ent->list, &nd_mapping->labels);
