@@ -3284,6 +3284,10 @@ static int otx2_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (err)
 		goto err_mcam_flow_del;
 
+	err = otx2_devlink_traps_register(pf);
+	if (err)
+		goto err_unregister_dl;
+
 	/* Initialize SR-IOV resources */
 	err = otx2_sriov_vfcfg_init(pf);
 	if (err)
@@ -3316,6 +3320,8 @@ err_sriov_cleannup:
 	otx2_sriov_vfcfg_cleanup(pf);
 err_pf_sriov_init:
 	otx2_shutdown_tc(pf);
+err_unregister_dl:
+	otx2_unregister_dl(pf);
 err_mcam_flow_del:
 	otx2_mcam_flow_del(pf);
 err_unreg_netdev:
@@ -3516,6 +3522,7 @@ static void otx2_remove(struct pci_dev *pdev)
 	/* Disable link notifications */
 	otx2_cgx_config_linkevents(pf, false);
 
+	otx2_devlink_traps_unregister(pf);
 	otx2_unregister_dl(pf);
 	unregister_netdev(netdev);
 	cn10k_ipsec_clean(pf);
