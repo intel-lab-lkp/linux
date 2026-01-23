@@ -28,7 +28,6 @@
 
 #include "tilcdc_drv.h"
 #include "tilcdc_external.h"
-#include "tilcdc_panel.h"
 #include "tilcdc_regs.h"
 
 enum tilcdc_variant {
@@ -634,7 +633,6 @@ static int __init tilcdc_drm_init(void)
 		return -ENODEV;
 
 	DBG("init");
-	tilcdc_panel_init();
 	return platform_driver_register(&tilcdc_platform_driver);
 }
 
@@ -642,7 +640,6 @@ static void __exit tilcdc_drm_fini(void)
 {
 	DBG("fini");
 	platform_driver_unregister(&tilcdc_platform_driver);
-	tilcdc_panel_fini();
 }
 
 module_init(tilcdc_drm_init);
