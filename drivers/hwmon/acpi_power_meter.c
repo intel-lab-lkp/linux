@@ -75,7 +75,6 @@ struct acpi_power_meter_capabilities {
 struct acpi_power_meter_resource {
 	struct acpi_device	*acpi_dev;
 	acpi_bus_id		name;
-	struct mutex		lock;
 	struct device		*hwmon_dev;
 	struct acpi_power_meter_capabilities	caps;
 	acpi_string		model_number;
@@ -445,8 +444,6 @@ static int power_meter_read(struct device *dev, enum hwmon_sensor_types type,
 	if (type != hwmon_power)
 		return -EINVAL;
 
-	guard(mutex)(&res->lock);
-
 	switch (attr) {
 	case hwmon_power_average:
 		ret = update_meter(res);
@@ -501,7 +498,6 @@ static int power_meter_write(struct device *dev, enum hwmon_sensor_types type,
 	if (type != hwmon_power)
 		return -EINVAL;
 
-	guard(mutex)(&res->lock);
 	switch (attr) {
 	case hwmon_power_cap:
 		ret = set_cap(res, val);
@@ -547,9 +543,9 @@ static ssize_t power1_average_max_store(struct device *dev,
 	if (ret)
 		return ret;
 
-	mutex_lock(&res->lock);
+	hwmon_lock(res->hwmon_dev);
 	ret = set_trip(res, POWER_METER_TRIP_AVERAGE_MAX_IDX, trip);
-	mutex_unlock(&res->lock);
+	hwmon_unlock(res->hwmon_dev);
 
 	return ret == 0 ? count : ret;
 }
@@ -566,9 +562,9 @@ static ssize_t power1_average_min_store(struct device *dev,
 	if (ret)
 		return ret;
 
-	mutex_lock(&res->lock);
+	hwmon_lock(res->hwmon_dev);
 	ret = set_trip(res, POWER_METER_TRIP_AVERAGE_MIN_IDX, trip);
-	mutex_unlock(&res->lock);
+	hwmon_unlock(res->hwmon_dev);
 
 	return ret == 0 ? count : ret;
 }
@@ -825,44 +821,38 @@ static void acpi_power_meter_notify(struct acpi_device *device, u32 event)
 
 	switch (event) {
 	case METER_NOTIFY_CONFIG:
-		mutex_lock(&resource->lock);
+		hwmon_lock(resource->hwmon_dev);
 		free_capabilities(resource);
 		remove_domain_devices(resource);
-		hwmon_device_unregister(resource->hwmon_dev);
 		res = read_capabilities(resource);
 		if (res)
 			dev_err_once(&device->dev, "read capabilities failed.\n");
 		res = read_domain_devices(resource);
 		if (res && res != -ENODEV)
 			dev_err_once(&device->dev, "read domain devices failed.\n");
-		resource->hwmon_dev =
-			hwmon_device_register_with_info(&device->dev,
-							ACPI_POWER_METER_NAME,
-							resource,
-							&power_meter_chip_info,
-							power_extra_groups);
-		if (IS_ERR(resource->hwmon_dev))
-			dev_err_once(&device->dev, "register hwmon device failed.\n");
-		mutex_unlock(&resource->lock);
+		res = hwmon_update_groups(resource->hwmon_dev);
+		if (res)
+			dev_err_once(&device->dev, "Failed to update hardware monitoring data\n");
+		hwmon_unlock(resource->hwmon_dev);
 		break;
 	case METER_NOTIFY_TRIP:
 		sysfs_notify(&device->dev.kobj, NULL, POWER_AVERAGE_NAME);
 		break;
 	case METER_NOTIFY_CAP:
-		mutex_lock(&resource->lock);
+		hwmon_lock(resource->hwmon_dev);
 		res = update_cap(resource);
 		if (res)
 			dev_err_once(&device->dev, "update cap failed when capping value is changed.\n");
-		mutex_unlock(&resource->lock);
+		hwmon_unlock(resource->hwmon_dev);
 		sysfs_notify(&device->dev.kobj, NULL, POWER_CAP_NAME);
 		break;
 	case METER_NOTIFY_INTERVAL:
 		sysfs_notify(&device->dev.kobj, NULL, POWER_AVG_INTERVAL_NAME);
 		break;
 	case METER_NOTIFY_CAPPING:
-		mutex_lock(&resource->lock);
+		hwmon_lock(resource->hwmon_dev);
 		resource->power_alarm = true;
-		mutex_unlock(&resource->lock);
+		hwmon_unlock(resource->hwmon_dev);
 		sysfs_notify(&device->dev.kobj, NULL, POWER_ALARM_NAME);
 		dev_info(&device->dev, "Capping in progress.\n");
 		break;
@@ -889,7 +879,6 @@ static int acpi_power_meter_add(struct acpi_device *device)
 
 	resource->sensors_valid = 0;
 	resource->acpi_dev = device;
-	mutex_init(&resource->lock);
 	strcpy(acpi_device_name(device), ACPI_POWER_METER_DEVICE_NAME);
 	strcpy(acpi_device_class(device), ACPI_POWER_METER_CLASS);
 	device->driver_data = resource;
