@@ -587,14 +587,13 @@ int sas_ata_init(struct domain_device *found_dev)
 
 	ata_host_init(ata_host, ha->dev, &sas_sata_ops);
 
-	ap = ata_port_alloc(ata_host);
+	ap = ata_port_alloc(ata_host, 0);
 	if (!ap) {
 		pr_err("ata_port_alloc failed.\n");
 		rc = -ENODEV;
 		goto free_host;
 	}
 
-	ap->port_no = 0;
 	ap->pio_mask = ATA_PIO4;
 	ap->mwdma_mask = ATA_MWDMA2;
 	ap->udma_mask = ATA_UDMA6;

@@ -159,20 +159,22 @@ static int ledtrig_disk_activate(struct led_classdev *led_cdev)
 	return 0;
 }
 
-static struct led_trigger ledtrig_disk = {
-	.name = "disk-activity",
-	.activate = ledtrig_disk_activate,
-	.groups = ledtrig_disk_groups,
-};
-static struct led_trigger ledtrig_disk_read = {
-	.name = "disk-read",
-	.activate = ledtrig_disk_activate,
-	.groups = ledtrig_disk_groups,
-};
-static struct led_trigger ledtrig_disk_write = {
-	.name = "disk-write",
-	.activate = ledtrig_disk_activate,
-	.groups = ledtrig_disk_groups,
+static struct ledtrig_disk_trigger ledtrig_disk = {
+	.all = {
+		.name = "disk-activity",
+		.activate = ledtrig_disk_activate,
+		.groups = ledtrig_disk_groups,
+	},
+	.read = {
+		.name = "disk-read",
+		.activate = ledtrig_disk_activate,
+		.groups = ledtrig_disk_groups,
+	},
+	.write = {
+		.name = "disk-write",
+		.activate = ledtrig_disk_activate,
+		.groups = ledtrig_disk_groups,
+	},
 };
 
 static void ledtrig_disk_blink_oneshot(struct led_trigger *trig)
@@ -189,21 +191,121 @@ static void ledtrig_disk_blink_oneshot(struct led_trigger *trig)
 	rcu_read_unlock();
 }
 
-void ledtrig_disk_activity(bool write)
+static void ledtrig_disk_trigger_activity(struct ledtrig_disk_trigger *trig, bool write)
 {
-	ledtrig_disk_blink_oneshot(&ledtrig_disk);
+	if (IS_ERR_OR_NULL(trig))
+		return;
+	ledtrig_disk_blink_oneshot(&trig->all);
 	if (write)
-		ledtrig_disk_blink_oneshot(&ledtrig_disk_write);
+		ledtrig_disk_blink_oneshot(&trig->write);
 	else
-		ledtrig_disk_blink_oneshot(&ledtrig_disk_read);
+		ledtrig_disk_blink_oneshot(&trig->read);
+}
+
+void ledtrig_disk_activity(struct ledtrig_disk_trigger *port, bool write)
+{
+	ledtrig_disk_trigger_activity(&ledtrig_disk, write);
+	ledtrig_disk_trigger_activity(port, write);
 }
 EXPORT_SYMBOL(ledtrig_disk_activity);
 
+struct ledtrig_disk_trigger *ledtrig_disk_trigger_register(const char *name)
+{
+	struct ledtrig_disk_trigger *trigger = kzalloc(sizeof(*trigger), GFP_KERNEL);
+	int ret, n;
+
+	if (!trigger)
+		return ERR_PTR(-ENOMEM);
+
+	trigger->all.name = kzalloc(TRIG_NAME_MAX, GFP_KERNEL);
+	if (!trigger->all.name) {
+		ret = -ENOMEM;
+		goto err1;
+	}
+
+	n = snprintf((char *)trigger->all.name, TRIG_NAME_MAX, "%s-disk-activity", name);
+	if (n >= TRIG_NAME_MAX) {
+		ret = -E2BIG;
+		goto err1;
+	}
+
+	trigger->all.activate = ledtrig_disk_activate;
+	trigger->all.groups = ledtrig_disk_groups;
+
+	ret = led_trigger_register(&trigger->all);
+	if (ret)
+		goto err1;
+
+	trigger->read.name = kzalloc(TRIG_NAME_MAX, GFP_KERNEL);
+	if (!trigger->read.name) {
+		ret = -ENOMEM;
+		goto err2;
+	}
+
+	n = snprintf((char *)trigger->read.name, TRIG_NAME_MAX, "%s-disk-read", name);
+	if (n >= TRIG_NAME_MAX) {
+		ret = -E2BIG;
+		goto err2;
+	}
+
+	trigger->read.activate = ledtrig_disk_activate;
+	trigger->read.groups = ledtrig_disk_groups;
+
+	ret = led_trigger_register(&trigger->read);
+	if (ret)
+		goto err2;
+
+	trigger->write.name = kzalloc(TRIG_NAME_MAX, GFP_KERNEL);
+	if (!trigger->write.name) {
+		ret = -ENOMEM;
+		goto err3;
+	}
+
+	n = snprintf((char *)trigger->write.name, TRIG_NAME_MAX, "%s-disk-write", name);
+	if (n >= TRIG_NAME_MAX) {
+		ret = -E2BIG;
+		goto err3;
+	}
+
+	trigger->write.activate = ledtrig_disk_activate;
+	trigger->write.groups = ledtrig_disk_groups;
+
+	ret = led_trigger_register(&trigger->write);
+	if (ret)
+		goto err3;
+
+	return trigger;
+
+err3:
+	led_trigger_unregister(&trigger->read);
+err2:
+	led_trigger_unregister(&trigger->all);
+err1:
+	kfree(trigger->all.name);
+	kfree(trigger->read.name);
+	kfree(trigger->write.name);
+	kfree(trigger);
+
+	return ERR_PTR(ret);
+}
+EXPORT_SYMBOL(ledtrig_disk_trigger_register);
+
+void ledtrig_disk_trigger_unregister(struct ledtrig_disk_trigger *trig)
+{
+	if (IS_ERR_OR_NULL(trig))
+		return;
+
+	led_trigger_unregister(&trig->all);
+	led_trigger_unregister(&trig->read);
+	led_trigger_unregister(&trig->write);
+}
+EXPORT_SYMBOL(ledtrig_disk_trigger_unregister);
+
 static int __init ledtrig_disk_init(void)
 {
-	led_trigger_register(&ledtrig_disk);
-	led_trigger_register(&ledtrig_disk_read);
-	led_trigger_register(&ledtrig_disk_write);
+	led_trigger_register(&ledtrig_disk.all);
+	led_trigger_register(&ledtrig_disk.read);
+	led_trigger_register(&ledtrig_disk.write);
 
 	return 0;
 }

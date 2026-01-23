@@ -940,6 +940,10 @@ struct ata_port {
 #ifdef CONFIG_ATA_ACPI
 	struct ata_acpi_gtm	__acpi_init_gtm; /* use ata_acpi_init_gtm() */
 #endif
+
+#ifdef CONFIG_LEDS_TRIGGER_DISK
+	struct ledtrig_disk_trigger *led_trigger;
+#endif
 };
 
 /* The following initializer overrides a method to NULL whether one of
@@ -1307,7 +1311,7 @@ extern int sata_link_scr_lpm(struct ata_link *link, enum ata_lpm_policy policy,
 			     bool spm_wakeup);
 extern int ata_slave_link_init(struct ata_port *ap);
 extern void ata_port_probe(struct ata_port *ap);
-extern struct ata_port *ata_port_alloc(struct ata_host *host);
+extern struct ata_port *ata_port_alloc(struct ata_host *host, int port_no);
 extern void ata_port_free(struct ata_port *ap);
 extern int ata_tport_add(struct device *parent, struct ata_port *ap);
 extern void ata_tport_delete(struct ata_port *ap);

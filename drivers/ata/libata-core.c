@@ -4921,8 +4921,10 @@ void ata_qc_complete(struct ata_queued_cmd *qc)
 	struct ata_device *dev = qc->dev;
 	struct ata_eh_info *ehi = &dev->link->eh_info;
 
+#ifdef CONFIG_LEDS_TRIGGER_DISK
 	/* Trigger the LED (if available) */
-	ledtrig_disk_activity(!!(qc->tf.flags & ATA_TFLAG_WRITE));
+	ledtrig_disk_activity(ap->led_trigger, !!(qc->tf.flags & ATA_TFLAG_WRITE));
+#endif
 
 	/*
 	 * In order to synchronize EH with the regular execution path, a qc that
@@ -5538,10 +5540,13 @@ int sata_link_init_spd(struct ata_link *link)
  *	LOCKING:
  *	Inherited from calling layer (may sleep).
  */
-struct ata_port *ata_port_alloc(struct ata_host *host)
+struct ata_port *ata_port_alloc(struct ata_host *host, int port_no)
 {
 	struct ata_port *ap;
 	int id;
+#ifdef CONFIG_LEDS_TRIGGER_DISK
+	char name[32];
+#endif
 
 	ap = kzalloc(sizeof(*ap), GFP_KERNEL);
 	if (!ap)
@@ -5557,6 +5562,7 @@ struct ata_port *ata_port_alloc(struct ata_host *host)
 	ap->print_id = id;
 	ap->host = host;
 	ap->dev = host->dev;
+	ap->port_no = port_no;
 
 	mutex_init(&ap->scsi_scan_mutex);
 	INIT_DELAYED_WORK(&ap->hotplug_task, ata_scsi_hotplug);
@@ -5579,6 +5585,11 @@ struct ata_port *ata_port_alloc(struct ata_host *host)
 
 	ata_force_pflags(ap);
 
+#ifdef CONFIG_LEDS_TRIGGER_DISK
+	if (snprintf(name, sizeof(name), "%s-ata%d", dev_name(host->dev), port_no) < sizeof(name))
+		ap->led_trigger = ledtrig_disk_trigger_register(name);
+#endif
+
 	return ap;
 }
 EXPORT_SYMBOL_GPL(ata_port_alloc);
@@ -5587,6 +5598,10 @@ void ata_port_free(struct ata_port *ap)
 {
 	if (!ap)
 		return;
+
+#ifdef CONFIG_LEDS_TRIGGER_DISK
+	ledtrig_disk_trigger_unregister(ap->led_trigger);
+#endif
 
 	kfree(ap->pmp_link);
 	kfree(ap->slave_link);
@@ -5690,11 +5705,10 @@ struct ata_host *ata_host_alloc(struct device *dev, int n_ports)
 	for (i = 0; i < n_ports; i++) {
 		struct ata_port *ap;
 
-		ap = ata_port_alloc(host);
+		ap = ata_port_alloc(host, i);
 		if (!ap)
 			goto err_out;
 
-		ap->port_no = i;
 		host->ports[i] = ap;
 	}
 

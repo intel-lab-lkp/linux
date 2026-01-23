@@ -619,10 +619,22 @@ enum led_trigger_netdev_modes {
 };
 
 /* Trigger specific functions */
+struct ledtrig_disk_trigger {
+	struct led_trigger all;
+	struct led_trigger read;
+	struct led_trigger write;
+};
 #ifdef CONFIG_LEDS_TRIGGER_DISK
-void ledtrig_disk_activity(bool write);
+struct ledtrig_disk_trigger *ledtrig_disk_trigger_register(const char *name);
+void ledtrig_disk_trigger_unregister(struct ledtrig_disk_trigger *trig);
+void ledtrig_disk_activity(struct ledtrig_disk_trigger *port, bool write);
 #else
-static inline void ledtrig_disk_activity(bool write) {}
+static inline struct ledtrig_disk_trigger *ledtrig_disk_trigger_register(const char *name)
+{
+	return ERR_PTR(-EOPNOTSUPP);
+}
+static inline void ledtrig_disk_trigger_unregister(struct ledtrig_disk_trigger *trig) {}
+static inline void ledtrig_disk_activity(struct ledtrig_disk_trigger *port, bool write) {}
 #endif
 
 #ifdef CONFIG_LEDS_TRIGGER_MTD
