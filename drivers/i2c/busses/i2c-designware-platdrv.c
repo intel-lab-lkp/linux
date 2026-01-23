@@ -160,11 +160,9 @@ static int dw_i2c_plat_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	dev->rst = devm_reset_control_get_optional_exclusive(device, NULL);
+	dev->rst = devm_reset_control_get_optional_exclusive_deasserted(device, NULL);
 	if (IS_ERR(dev->rst))
 		return dev_err_probe(device, PTR_ERR(dev->rst), "failed to acquire reset\n");
-
-	reset_control_deassert(dev->rst);
 
 	ret = i2c_dw_fw_parse_and_configure(dev);
 	if (ret)
