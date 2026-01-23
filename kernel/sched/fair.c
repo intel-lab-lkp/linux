@@ -2135,11 +2135,36 @@ static void update_numa_stats(struct task_numa_env *env,
 			      bool find_idle)
 {
 	int cpu, idle_core = -1;
+	struct sched_domain *sd;
+	struct sched_group *sg;
 
 	memset(ns, 0, sizeof(*ns));
 	ns->idle_cpu = -1;
 
 	rcu_read_lock();
+	/* Algorithmic Optimization: Avoid O(N) scan by using cached stats from load balancer */
+	sd = rcu_dereference(per_cpu(sd_numa, env->src_cpu));
+	if (sd && !find_idle) {
+		sg = sd->groups;
+		do {
+			/* Check if this group corresponds to the node we are interested in */
+			if (cpumask_test_cpu(cpumask_first(cpumask_of_node(nid)), sched_group_span(sg))) {
+				/* Use cached stats if they are recent enough (e.g. within 10ms) */
+				if (time_before(jiffies, sg->sgc->stats_update + msecs_to_jiffies(10))) {
+					ns->load = sg->sgc->load;
+					ns->runnable = sg->sgc->runnable;
+					ns->util = sg->sgc->util;
+					ns->nr_running = sg->sgc->nr_running;
+					ns->compute_capacity = sg->sgc->capacity;
+					rcu_read_unlock();
+					goto skip_scan;
+				}
+				break;
+			}
+			sg = sg->next;
+		} while (sg != sd->groups);
+	}
+
 	for_each_cpu(cpu, cpumask_of_node(nid)) {
 		struct rq *rq = cpu_rq(cpu);
 
@@ -2162,6 +2187,7 @@ static void update_numa_stats(struct task_numa_env *env,
 	}
 	rcu_read_unlock();
 
+skip_scan:
 	ns->weight = cpumask_weight(cpumask_of_node(nid));
 
 	ns->node_type = numa_classify(env->imbalance_pct, ns);
@@ -10486,6 +10512,15 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 	if (sgs->group_type == group_overloaded)
 		sgs->avg_load = (sgs->group_load * SCHED_CAPACITY_SCALE) /
 				sgs->group_capacity;
+
+	/* Algorithmic Optimization: Cache group stats for O(1) NUMA lookups */
+	if (env->sd->flags & SD_NUMA) {
+		group->sgc->nr_running = sgs->sum_h_nr_running;
+		group->sgc->load = sgs->group_load;
+		group->sgc->util = sgs->group_util;
+		group->sgc->runnable = sgs->group_runnable;
+		WRITE_ONCE(group->sgc->stats_update, jiffies);
+	}
 }
 
 /**
