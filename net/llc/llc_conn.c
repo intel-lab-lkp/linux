@@ -802,10 +802,15 @@ void llc_conn_handler(struct llc_sap *sap, struct sk_buff *skb)
 	 * in the newly created struct sock private area. -acme
 	 */
 	if (unlikely(sk->sk_state == TCP_LISTEN)) {
-		struct sock *newsk = llc_create_incoming_sock(sk, skb->dev,
-							      &saddr, &daddr);
+		struct sock *newsk;
+
+		if (sk_acceptq_is_full(sk))
+			goto drop_unlock;
+		newsk = llc_create_incoming_sock(sk, skb->dev,
+						 &saddr, &daddr);
 		if (!newsk)
 			goto drop_unlock;
+		sk_acceptq_added(sk);
 		skb_set_owner_r(skb, newsk);
 	} else {
 		/*
