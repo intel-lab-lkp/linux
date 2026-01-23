@@ -770,7 +770,8 @@ static void get_dp_stats(const struct datapath *dp, struct ovs_dp_stats *stats,
 
 		do {
 			start = u64_stats_fetch_begin(&percpu_stats->syncp);
-			local_stats = *percpu_stats;
+			u64_stats_reads(&local_stats, percpu_stats,
+					sizeof(local_stats));
 		} while (u64_stats_fetch_retry(&percpu_stats->syncp, start));
 
 		stats->n_hit += local_stats.n_hit;
