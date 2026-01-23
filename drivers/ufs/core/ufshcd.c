@@ -10236,6 +10236,15 @@ out:
 	hba->clk_gating.is_suspended = false;
 	ufshcd_release(hba);
 	hba->pm_op_in_progress = false;
+
+	if (ret) {
+		/* ufshcd_reset_and_restore() might set host to UFSHCD_STATE_ERROR */
+		scoped_guard(spinlock_irqsave, hba->host->host_lock)
+			hba->ufshcd_state = UFSHCD_STATE_RESET;
+
+		ufshcd_force_error_recovery(hba);
+	}
+
 	return ret;
 }
 
