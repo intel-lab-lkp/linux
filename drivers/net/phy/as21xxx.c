@@ -59,6 +59,10 @@
 #define IPC_CMD_SYS_CPU			0x2  /* SYS_CPU */
 #define IPC_CMD_BULK_DATA		0xa  /* Pass bulk data in ipc registers. */
 #define IPC_CMD_BULK_WRITE		0xc  /* Write bulk data to memory */
+#define IPC_CMD_DBG			0x16
+#define IPC_CMD_POLL			0x17
+#define IPC_CMD_WRITE_BUF		0x18
+#define IPC_CMD_READ_BUF		0x19
 #define IPC_CMD_CFG_PARAM		0x1a /* Write config parameters to memory */
 #define IPC_CMD_NG_TESTMODE		0x1b /* Set NG test mode and tone */
 #define IPC_CMD_TEMP_MON		0x15 /* Temperature monitoring function */
@@ -114,6 +118,12 @@
 
 /* Sub command of CMD_TEMP_MON */
 #define IPC_CMD_TEMP_MON_GET		0x4
+
+/* Sub command of CMD_DBG */
+#define IPC_DBG_DPC			0x8b
+
+#define IPC_DATA_DBG_SEC		GENMASK(15, 8)
+#define IPC_DATA_DBG_CMD		GENMASK(7, 0)
 
 #define AS21XXX_MDIO_AN_C22		0xffe0
 
@@ -451,18 +461,9 @@ static int aeon_ipc_send_cmd(struct phy_device *phydev,
 	return 0;
 }
 
-/* If data is NULL, return 0 or negative error.
- * If data not NULL, return number of Bytes received from IPC or
- * a negative error.
- */
-static int aeon_ipc_send_msg(struct phy_device *phydev,
-			     u16 opcode, u16 *data, unsigned int data_len,
-			     u16 *ret_data)
+static int aeon_ipc_set_msg_data(struct phy_device *phydev, u16 *data,
+				 unsigned int data_len)
 {
-	struct as21xxx_priv *priv = phydev->priv;
-	unsigned int ret_size;
-	u16 cmd, ret_sts;
-	int ret;
 	int i;
 
 	/* IPC have a max of 8 register to transfer data,
@@ -474,6 +475,53 @@ static int aeon_ipc_send_msg(struct phy_device *phydev,
 	for (i = 0; i < data_len / sizeof(u16); i++)
 		phy_write_mmd(phydev, MDIO_MMD_VEND1, VEND1_IPC_DATA(i),
 			      data[i]);
+
+	return 0;
+}
+
+static int
+aeon_ipc_get_msg_ret_data(struct phy_device *phydev, u16 ret_sts,
+			  u16 *ret_data) __must_hold(&priv->ipc_lock)
+{
+	unsigned int ret_size;
+	int ret;
+	int i;
+
+	/* Prevent IPC from stack smashing the kernel.
+	 * We can't trust IPC to return a good value and we always
+	 * preallocate space for 16 Bytes.
+	 */
+	ret_size = FIELD_GET(AEON_IPC_STS_SIZE, ret_sts);
+	if (ret_size > AEON_IPC_DATA_MAX)
+		return -EINVAL;
+
+	/* Read data from IPC data register for ret_size value from IPC */
+	for (i = 0; i < DIV_ROUND_UP(ret_size, sizeof(u16)); i++) {
+		ret = phy_read_mmd(phydev, MDIO_MMD_VEND1, VEND1_IPC_DATA(i));
+		if (ret < 0)
+			return ret;
+
+		ret_data[i] = ret;
+	}
+
+	return ret_size;
+}
+
+/* If data is NULL, return 0 or negative error.
+ * If data not NULL, return number of Bytes received from IPC or
+ * a negative error.
+ */
+static int aeon_ipc_send_msg(struct phy_device *phydev,
+			     u16 opcode, u16 *data, unsigned int data_len,
+			     u16 *ret_data)
+{
+	struct as21xxx_priv *priv = phydev->priv;
+	u16 cmd, ret_sts;
+	int ret;
+
+	ret = aeon_ipc_set_msg_data(phydev, data, data_len);
+	if (ret)
+		return ret;
 
 	cmd = FIELD_PREP(AEON_IPC_CMD_SIZE, data_len) |
 	      FIELD_PREP(AEON_IPC_CMD_OPCODE, opcode);
@@ -490,31 +538,7 @@ static int aeon_ipc_send_msg(struct phy_device *phydev,
 	if (!data)
 		goto out;
 
-	if ((ret_sts & AEON_IPC_STS_STATUS) == AEON_IPC_STS_STATUS_ERROR) {
-		ret = -EINVAL;
-		goto out;
-	}
-
-	/* Prevent IPC from stack smashing the kernel.
-	 * We can't trust IPC to return a good value and we always
-	 * preallocate space for 16 Bytes.
-	 */
-	ret_size = FIELD_GET(AEON_IPC_STS_SIZE, ret_sts);
-	if (ret_size > AEON_IPC_DATA_MAX) {
-		ret = -EINVAL;
-		goto out;
-	}
-
-	/* Read data from IPC data register for ret_size value from IPC */
-	for (i = 0; i < DIV_ROUND_UP(ret_size, sizeof(u16)); i++) {
-		ret = phy_read_mmd(phydev, MDIO_MMD_VEND1, VEND1_IPC_DATA(i));
-		if (ret < 0)
-			goto out;
-
-		ret_data[i] = ret;
-	}
-
-	ret = ret_size;
+	ret = aeon_ipc_get_msg_ret_data(phydev, ret_sts, ret_data);
 
 out:
 	mutex_unlock(&priv->ipc_lock);
@@ -602,6 +626,102 @@ static int aeon_ipc_get_fw_version(struct phy_device *phydev)
 	}
 
 	return 0;
+}
+
+static int aeon_ipc_poll(struct phy_device *phydev)
+{
+	struct as21xxx_priv *priv = phydev->priv;
+	u16 ret_sts;
+	u16 cmd;
+	int ret;
+
+	cmd = FIELD_PREP(AEON_IPC_CMD_SIZE, 0) |
+	      FIELD_PREP(AEON_IPC_CMD_OPCODE, IPC_CMD_POLL);
+
+	mutex_lock(&priv->ipc_lock);
+
+	ret = aeon_ipc_send_cmd(phydev, phydev->priv, cmd, &ret_sts);
+	if (ret)
+		phydev_err(phydev, "Invalid IPC status on IPC poll: %x\n",
+			   ret_sts);
+
+	mutex_unlock(&priv->ipc_lock);
+
+	return ret;
+}
+
+static int aeon_ipc_dbg_cmd(struct phy_device *phydev, u16 dbg_sec,
+			    u16 dbg_cmd, u16 msg_size)
+{
+	u16 data[3];
+
+	data[0] = FIELD_PREP(IPC_DATA_DBG_SEC, dbg_sec) |
+		  FIELD_PREP(IPC_DATA_DBG_CMD, dbg_cmd);
+	data[1] = msg_size;
+
+	return aeon_ipc_send_msg(phydev, IPC_CMD_DBG, data,
+				 sizeof(data), NULL);
+}
+
+static int aeon_ipc_dbg_read_buf(struct phy_device *phydev, u16 *buf)
+{
+	struct as21xxx_priv *priv = phydev->priv;
+	u16 cmd, ret_sts;
+	int ret;
+
+	cmd = FIELD_PREP(AEON_IPC_CMD_SIZE, 0) |
+	      FIELD_PREP(AEON_IPC_CMD_OPCODE, IPC_CMD_READ_BUF);
+
+	mutex_lock(&priv->ipc_lock);
+
+	ret = aeon_ipc_send_cmd(phydev, phydev->priv, cmd, &ret_sts);
+	if (ret)
+		goto out;
+
+	ret = aeon_ipc_get_msg_ret_data(phydev, ret_sts, buf);
+
+out:
+	mutex_unlock(&priv->ipc_lock);
+
+	return ret;
+}
+
+static int aeon_ipc_dbg_write_buf(struct phy_device *phydev, u8 *data,
+				  u8 data_len)
+{
+	u16 msg_data[AEON_IPC_DATA_NUM_REGISTERS];
+	struct as21xxx_priv *priv = phydev->priv;
+	u16 cmd, ret_sts;
+	int ret;
+	int i;
+
+	/* Make sure we don't try to write more data than supported */
+	if (data_len * 2 > AEON_IPC_DATA_MAX)
+		return -EINVAL;
+
+	/* Pack u8 DBG data in u16 buffer */
+	for (i = 0; i < data_len; i += 2) {
+		msg_data[i] = data[i];
+		msg_data[i] |= data[i + 1] << 8;
+	}
+
+	ret = aeon_ipc_set_msg_data(phydev, msg_data, data_len * 2);
+	if (ret)
+		return ret;
+
+	cmd = FIELD_PREP(AEON_IPC_CMD_SIZE, data_len) |
+	      FIELD_PREP(AEON_IPC_CMD_OPCODE, IPC_CMD_WRITE_BUF);
+
+	mutex_lock(&priv->ipc_lock);
+
+	ret = aeon_ipc_send_cmd(phydev, priv, cmd, &ret_sts);
+	if (ret)
+		phydev_err(phydev, "failed to send IPC msg for %x: %d\n",
+			   IPC_CMD_WRITE_BUF, ret);
+
+	mutex_unlock(&priv->ipc_lock);
+
+	return ret;
 }
 
 static int aeon_dpc_ra_enable(struct phy_device *phydev)
