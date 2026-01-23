@@ -303,6 +303,7 @@ static inline long arch_scale_freq_capacity(int cpu)
 #define arch_scale_freq_capacity arch_scale_freq_capacity
 
 bool arch_enable_hybrid_capacity_scale(void);
+void arch_disable_hybrid_capacity_scale(void);
 void arch_set_cpu_capacity(int cpu, unsigned long cap, unsigned long max_cap,
 			   unsigned long cap_freq, unsigned long base_freq);
 
@@ -313,6 +314,7 @@ extern void arch_set_max_freq_ratio(bool turbo_disabled);
 extern void freq_invariance_set_perf_ratio(u64 ratio, bool turbo_disabled);
 #else
 static inline bool arch_enable_hybrid_capacity_scale(void) { return false; }
+static inline void arch_disable_hybrid_capacity_scale(void) { return; }
 static inline void arch_set_cpu_capacity(int cpu, unsigned long cap,
 					 unsigned long max_cap,
 					 unsigned long cap_freq,

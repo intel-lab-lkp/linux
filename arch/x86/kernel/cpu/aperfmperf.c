@@ -362,6 +362,7 @@ struct arch_hybrid_cpu_scale {
 };
 
 static struct arch_hybrid_cpu_scale __percpu *arch_cpu_scale;
+static DEFINE_MUTEX(arch_hybrid_mutex);
 
 /**
  * arch_enable_hybrid_capacity_scale() - Enable hybrid CPU capacity scaling
@@ -375,8 +376,16 @@ bool arch_enable_hybrid_capacity_scale(void)
 {
 	int cpu;
 
+	guard(mutex)(&arch_hybrid_mutex);
+
 	if (static_branch_unlikely(&arch_hybrid_cap_scale_key)) {
 		WARN_ONCE(1, "Hybrid CPU capacity scaling already enabled");
+		return true;
+	}
+
+	if (arch_cpu_scale) {
+		static_branch_enable(&arch_hybrid_cap_scale_key);
+		pr_info("Hybrid CPU capacity scaling enabled\n");
 		return true;
 	}
 
@@ -394,6 +403,20 @@ bool arch_enable_hybrid_capacity_scale(void)
 	pr_info("Hybrid CPU capacity scaling enabled\n");
 
 	return true;
+}
+
+/**
+ * arch_disable_hybrid_capacity_scale() - Disable hybrid CPU capacity scaling
+ */
+void arch_disable_hybrid_capacity_scale(void)
+{
+	guard(mutex)(&arch_hybrid_mutex);
+
+	if (static_branch_unlikely(&arch_hybrid_cap_scale_key)) {
+		static_branch_disable(&arch_hybrid_cap_scale_key);
+		pr_info("Hybrid CPU capacity scaling disable\n");
+		return;
+	}
 }
 
 /**
