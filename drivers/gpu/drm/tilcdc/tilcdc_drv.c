@@ -31,6 +31,11 @@
 #include "tilcdc_panel.h"
 #include "tilcdc_regs.h"
 
+enum tilcdc_variant {
+	AM33XX_TILCDC,
+	DA850_TILCDC,
+};
+
 static LIST_HEAD(module_list);
 
 static const u32 tilcdc_rev1_formats[] = { DRM_FORMAT_RGB565 };
@@ -198,6 +203,7 @@ static int tilcdc_init(const struct drm_driver *ddrv, struct device *dev)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct device_node *node = dev->of_node;
 	struct tilcdc_drm_private *priv;
+	enum tilcdc_variant variant;
 	u32 bpp = 0;
 	int ret;
 
@@ -208,6 +214,8 @@ static int tilcdc_init(const struct drm_driver *ddrv, struct device *dev)
 	ddev = drm_dev_alloc(ddrv, dev);
 	if (IS_ERR(ddev))
 		return PTR_ERR(ddev);
+
+	variant = (uintptr_t)of_device_get_match_data(dev);
 
 	ddev->dev_private = priv;
 	platform_set_drvdata(pdev, ddev);
@@ -308,6 +316,11 @@ static int tilcdc_init(const struct drm_driver *ddrv, struct device *dev)
 		priv->max_pixelclock = TILCDC_DEFAULT_MAX_PIXELCLOCK;
 
 	DBG("Maximum Pixel Clock Value %dKHz", priv->max_pixelclock);
+
+	if (variant == DA850_TILCDC)
+		priv->fifo_th = 16;
+	else
+		priv->fifo_th = 8;
 
 	ret = tilcdc_crtc_create(ddev);
 	if (ret < 0) {
@@ -598,8 +611,8 @@ static void tilcdc_pdev_shutdown(struct platform_device *pdev)
 }
 
 static const struct of_device_id tilcdc_of_match[] = {
-		{ .compatible = "ti,am33xx-tilcdc", },
-		{ .compatible = "ti,da850-tilcdc", },
+		{ .compatible = "ti,am33xx-tilcdc", .data = (void *)AM33XX_TILCDC},
+		{ .compatible = "ti,da850-tilcdc", .data = (void *)DA850_TILCDC},
 		{ },
 };
 MODULE_DEVICE_TABLE(of, tilcdc_of_match);
