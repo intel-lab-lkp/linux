@@ -44,6 +44,31 @@
 	status = "okay";
 };
 
+&optee {
+	bootph-all;
+};
+
+&psci {
+	bootph-all;
+};
+
+&rifsc {
+	bootph-all;
+};
+
+&scmi {
+	bootph-all;
+};
+
+&scmi_clk {
+	bootph-all;
+};
+
+&scmi_reset {
+	bootph-all;
+};
+
 &usart2 {
+	bootph-all;
 	status = "okay";
 };
