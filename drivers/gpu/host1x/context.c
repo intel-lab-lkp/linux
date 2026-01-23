@@ -12,6 +12,7 @@
 
 #include "context.h"
 #include "dev.h"
+#include <linux/host1x_context_bus.h>
 
 static void host1x_memory_context_release(struct device *dev)
 {
