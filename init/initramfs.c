@@ -222,6 +222,7 @@ static __initdata enum state {
 	GotName,
 	CopyFile,
 	GotSymlink,
+	GotMountpoint,
 	Reset
 } state, next_state;
 
@@ -253,6 +254,9 @@ static void __init read_into(char *buf, unsigned size, enum state next)
 		state = Collect;
 	}
 }
+
+#define SYMLINK_BUF_SIZE	(PATH_MAX + N_ALIGN(PATH_MAX) + 1)
+#define NAME_BUF_SIZE		N_ALIGN(PATH_MAX)
 
 static __initdata char *header_buf, *symlink_buf, *name_buf;
 
@@ -355,6 +359,37 @@ static int __init maybe_link(void)
 	return 0;
 }
 
+static int __init maybe_mountpoint(void)
+{
+	static const char mount_magic_name[] __initconst = "!!!MOUNT!!!";
+	const unsigned long mount_magic_len = sizeof(mount_magic_name)-1;
+	unsigned long len = name_len-1;
+	const char *name = collected;
+
+	if (!S_ISREG(mode))
+		return 0;
+	if (len < mount_magic_len)
+		return 0;
+	if (len > mount_magic_len && name[len-mount_magic_len] != '/')
+		return 0;
+	if (memcmp(name+len-mount_magic_len, mount_magic_name, mount_magic_len))
+		return 0;
+
+	/* Factor out the parent directory name and save it in name_buf */
+	len -= mount_magic_len;
+	if (!len)
+		name_buf[len++] = '.';
+	else
+		memmove(name_buf, name, len);
+	name_buf[len] = '\0';
+
+	if (body_len >= SYMLINK_BUF_SIZE)
+		return 1;	/* Option file too large */
+
+	read_into(symlink_buf, body_len, GotMountpoint);
+	return 1;
+}
+
 static __initdata struct file *wfile;
 static __initdata loff_t wfile_pos;
 
@@ -375,6 +410,10 @@ static int __init do_name(void)
 		free_hash();
 		return 0;
 	}
+
+	if (maybe_mountpoint())
+		return 0;
+
 	clean_path(collected, mode);
 	if (S_ISREG(mode)) {
 		int ml = maybe_link();
@@ -392,6 +431,7 @@ static int __init do_name(void)
 			vfs_fchmod(wfile, mode);
 			if (body_len)
 				vfs_truncate(&wfile->f_path, body_len);
+
 			state = CopyFile;
 		}
 	} else if (S_ISDIR(mode)) {
@@ -451,6 +491,56 @@ static int __init do_symlink(void)
 	return 0;
 }
 
+static int __init do_mountpoint(void)
+{
+	int ret;
+	char *p, *ep;
+	const char *opts[3];
+	const char *opstart;
+	unsigned long n;
+
+	state = SkipIt;
+	next_state = Reset;
+
+	memset(opts, 0, sizeof(opts));
+
+	/* Default filesystem type */
+	opts[0] = IS_ENABLED(CONFIG_TMPFS) ? "tmpfs" : "ramfs";
+
+	p = collected;
+	ep = p + body_len;
+	n = 0;
+	opstart = NULL;
+	while (p < ep && n < 3) {
+		char c = *p;
+		if (c <= ' ') {
+			if (opstart) {
+				*p = '\0';
+				opts[n++] = opstart;
+				opstart = NULL;
+			}
+		} else {
+			if (!opstart)
+				opstart = p;
+		}
+		p++;
+	}
+
+	if (!opts[1])
+		opts[1] = opts[0];
+
+	ret = init_mount(opts[0], name_buf, opts[1], 0, opts[2]);
+	if (!ret) {
+		init_chown(name_buf, uid, gid, 0);
+		init_chmod(name_buf, mode); /* S_IFMT is ignored by chmod() */
+		dir_add(name_buf, name_len, mtime);
+	} else {
+		pr_err("initramfs mount %s %s %s failed, error %d\n",
+		       opts[0], name_buf, opts[1], ret);
+	}
+	return 0;
+}
+
 static __initdata int (*actions[])(void) = {
 	[Start]		= do_start,
 	[Collect]	= do_collect,
@@ -459,6 +549,7 @@ static __initdata int (*actions[])(void) = {
 	[GotName]	= do_name,
 	[CopyFile]	= do_copy,
 	[GotSymlink]	= do_symlink,
+	[GotMountpoint] = do_mountpoint,
 	[Reset]		= do_reset,
 };
 
@@ -515,8 +606,8 @@ char * __init unpack_to_rootfs(char *buf, unsigned long len)
 	const char *compress_name;
 	struct {
 		char header[CPIO_HDRLEN];
-		char symlink[PATH_MAX + N_ALIGN(PATH_MAX) + 1];
-		char name[N_ALIGN(PATH_MAX)];
+		char symlink[SYMLINK_BUF_SIZE];
+		char name[NAME_BUF_SIZE];
 	} *bufs = kmalloc(sizeof(*bufs), GFP_KERNEL);
 
 	if (!bufs)
