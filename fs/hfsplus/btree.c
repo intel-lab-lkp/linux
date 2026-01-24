@@ -129,6 +129,68 @@ u32 hfsplus_calc_btree_clump_size(u32 block_size, u32 node_size,
 	return clump_size;
 }
 
+/*
+ * Validate that node 0 (header node) is marked allocated in the bitmap.
+ * This is a fundamental invariant - node 0 must always be allocated.
+ * Returns true if corruption is detected (node 0 bit is unset).
+ * Note: head must be from kmap_local_page(page) that is still mapped.
+ * This function accesses the page through head pointer, so it must be
+ * called before kunmap_local(head).
+ */
+static bool hfsplus_validate_btree_bitmap(struct hfs_btree *tree,
+					  struct hfs_btree_header_rec *head)
+{
+	u8 *page_base;
+	u16 rec_off_tbl_off;
+	__be16 rec_data[2];
+	u16 bitmap_off, bitmap_len;
+	u8 *bitmap_ptr;
+	u8 first_byte;
+	unsigned int node_size = tree->node_size;
+
+	/*
+	 * Get base page pointer. head points to:
+	 * kmap_local_page(page) + sizeof(struct hfs_bnode_desc)
+	 */
+	page_base = (u8 *)head - sizeof(struct hfs_bnode_desc);
+
+	/*
+	 * Calculate offset to record 2 entry in record offset table.
+	 * Record offsets are at end of node: node_size - (rec_num + 2) * 2
+	 * Record 2: (2+2)*2 = 8 bytes from end
+	 */
+	rec_off_tbl_off = node_size - (2 + 2) * 2;
+
+	/* Only validate if record offset table is on the first page */
+	if (rec_off_tbl_off + 4 > node_size || rec_off_tbl_off + 4 > PAGE_SIZE)
+		return false; /* Skip validation if offset table not on first page */
+
+	/* Read record 2 offset table entry (length and offset, both u16) */
+	memcpy(rec_data, page_base + rec_off_tbl_off, 4);
+	bitmap_off = be16_to_cpu(rec_data[1]);
+	bitmap_len = be16_to_cpu(rec_data[0]) - bitmap_off;
+
+	/*
+	 * Validate bitmap offset is within node and after bnode_desc.
+	 * Also ensure bitmap is on the first page.
+	 */
+	if (bitmap_len == 0 ||
+	    bitmap_off < sizeof(struct hfs_bnode_desc) ||
+	    bitmap_off >= node_size ||
+	    bitmap_off >= PAGE_SIZE)
+		return false; /* Skip validation if bitmap not accessible */
+
+	/* Read first byte of bitmap */
+	bitmap_ptr = page_base + bitmap_off;
+	first_byte = bitmap_ptr[0];
+
+	/* Check if node 0's bit (bit 7, MSB) is set */
+	if (!(first_byte & 0x80))
+		return true; /* Corruption detected */
+
+	return false;
+}
+
 /* Get a reference to a B*Tree and do some initial checks */
 struct hfs_btree *hfs_btree_open(struct super_block *sb, u32 id)
 {
@@ -175,6 +237,12 @@ struct hfs_btree *hfs_btree_open(struct super_block *sb, u32 id)
 	tree->node_size = be16_to_cpu(head->node_size);
 	tree->max_key_len = be16_to_cpu(head->max_key_len);
 	tree->depth = be16_to_cpu(head->depth);
+
+	/* Validate bitmap: node 0 must be marked allocated */
+	if (hfsplus_validate_btree_bitmap(tree, head)) {
+		struct hfsplus_sb_info *sbi = HFSPLUS_SB(sb);
+		sbi->btree_bitmap_corrupted = true;
+	}
 
 	/* Verify the tree and set the correct compare function */
 	switch (id) {

@@ -154,6 +154,7 @@ struct hfsplus_sb_info {
 
 	int part, session;
 	unsigned long flags;
+	bool btree_bitmap_corrupted;	/* Bitmap corruption detected during btree open */
 
 	int work_queued;               /* non-zero delayed work is queued */
 	struct delayed_work sync_work; /* FS sync delayed work */
