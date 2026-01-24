@@ -104,6 +104,9 @@
 #include <linux/pidfs.h>
 #include <linux/ptdump.h>
 #include <linux/time_namespace.h>
+#include <linux/timex.h>
+#include <linux/sched/clock.h>
+#include <linux/early_times.h>
 #include <net/net_namespace.h>
 
 #include <asm/io.h>
@@ -158,6 +161,10 @@ static size_t initargs_offs;
 #else
 # define bootconfig_found false
 # define initargs_offs 0
+#endif
+
+#ifdef CONFIG_EARLY_PRINTK_TIMES
+static u64 start_cycles, start_ns;
 #endif
 
 static char *execute_command;
@@ -1118,6 +1125,11 @@ void start_kernel(void)
 	timekeeping_init();
 	time_init();
 
+#ifdef CONFIG_EARLY_PRINTK_TIMES
+	start_cycles = get_cycles();
+	start_ns = local_clock();
+#endif
+
 	/* This must be after timekeeping is initialized */
 	random_init();
 
@@ -1599,6 +1611,20 @@ static int __ref kernel_init(void *unused)
 	rcu_end_inkernel_boot();
 
 	do_sysctl_args();
+
+#ifdef CONFIG_EARLY_PRINTK_TIMES
+	u64 end_cycles, end_ns;
+
+	/* set calibration data for early_printk_times */
+	end_cycles = get_cycles();
+	end_ns = local_clock();
+	clocks_calc_mult_shift(&early_mult, &early_shift,
+		((end_cycles - start_cycles) * NSEC_PER_SEC)/(end_ns - start_ns),
+		NSEC_PER_SEC, 50);
+	early_ts_offset = ((start_cycles * early_mult) >> early_shift) - start_ns;
+	pr_debug("Early printk times: mult=%u, shift=%u, offset=%llu ns\n",
+		early_mult, early_shift, early_ts_offset);
+#endif
 
 	if (ramdisk_execute_command) {
 		ret = run_init_process(ramdisk_execute_command);
