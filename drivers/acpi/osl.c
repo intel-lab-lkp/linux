@@ -12,6 +12,7 @@
 #define pr_fmt(fmt) "ACPI: OSL: " fmt
 
 #include <linux/module.h>
+#include <linux/panic.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/mm.h>
@@ -69,6 +70,10 @@ static struct workqueue_struct *kacpi_hotplug_wq;
 static bool acpi_os_initialized;
 unsigned int acpi_sci_irq = INVALID_ACPI_IRQ;
 bool acpi_permanent_mmap = false;
+
+static bool panic_on_fatal = CONFIG_ACPI_PANIC_ON_FATAL;
+module_param(panic_on_fatal, bool, 0);
+MODULE_PARM_DESC(panic_on_fatal, "Trigger a kernel panic when encountering a fatal ACPI error");
 
 /*
  * This list of permanent mappings is for memory that may be accessed from
@@ -1381,9 +1386,20 @@ acpi_status acpi_os_notify_command_complete(void)
 
 acpi_status acpi_os_signal(u32 function, void *info)
 {
+	struct acpi_signal_fatal_info *fatal_info;
+
 	switch (function) {
 	case ACPI_SIGNAL_FATAL:
-		pr_err("Fatal opcode executed\n");
+		fatal_info = info;
+		if (panic_on_fatal) {
+			panic("Fatal ACPI BIOS error (type 0x%X code 0x%X argument 0x%X)",
+			      fatal_info->type, fatal_info->code, fatal_info->argument);
+		} else {
+			pr_emerg("Fatal ACPI BIOS error (type 0x%X code 0x%X argument 0x%X)\n",
+				 fatal_info->type, fatal_info->code, fatal_info->argument);
+			add_taint(TAINT_FIRMWARE_WORKAROUND, LOCKDEP_STILL_OK);
+		}
+
 		break;
 	case ACPI_SIGNAL_BREAKPOINT:
 		/*
