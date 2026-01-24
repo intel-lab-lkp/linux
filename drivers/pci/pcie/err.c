@@ -253,6 +253,11 @@ pci_ers_result_t pcie_do_recovery(struct pci_dev *dev,
 			pci_warn(bridge, "subordinate device reset failed\n");
 			goto failed;
 		}
+
+		/* Link recovered, report fatal errors of RCiEP or EP */
+		if (state == pci_channel_io_frozen)
+			aer_report_frozen_error(dev);
+
 	}
 
 	if (status == PCI_ERS_RESULT_NEED_RESET) {
