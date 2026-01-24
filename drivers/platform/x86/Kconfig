@@ -113,6 +113,17 @@ config GIGABYTE_WMI
 	  To compile this driver as a module, choose M here: the module will
 	  be called gigabyte-wmi.
 
+config TONGFANG_MIFS_WMI
+	tristate "Tongfang MIFS WMI temperature, fan and GPU controller driver"
+	depends on ACPI_WMI
+	depends on HWMON
+	depends on ACPI_PLATFORM_PROFILE
+	help
+	  The driver for Tongfang laptops
+
+	  Say Y here if you want to support WMI-based features on Tongfang
+	  laptops, such as performance mode switching.
+
 config ACERHDF
 	tristate "Acer Aspire One temperature and fan driver"
 	depends on ACPI_EC && THERMAL
