@@ -1720,39 +1720,23 @@ static int cfi_intelext_write_words (struct mtd_info *mtd, loff_t to , size_t le
 }
 
 
-static int __xipram do_write_buffer(struct map_info *map, struct flchip *chip,
-				    unsigned long adr, const struct kvec **pvec,
-				    unsigned long *pvec_seek, int len)
+static int __xipram do_write_buffer_locked(struct map_info *map, struct flchip *chip,
+					   unsigned long cmd_adr, unsigned long adr,
+					   const struct kvec **pvec,
+					   unsigned long *pvec_seek, int len)
 {
 	struct cfi_private *cfi = map->fldrv_priv;
 	map_word status, write_cmd, datum;
-	unsigned long cmd_adr;
-	int ret, wbufsize, word_gap, words;
+	int ret, word_gap, words;
 	const struct kvec *vec;
 	unsigned long vec_seek;
 	unsigned long initial_adr;
 	int initial_len = len;
 
-	wbufsize = cfi_interleave(cfi) << cfi->cfiq->MaxBufWriteSize;
-	adr += chip->start;
 	initial_adr = adr;
-	cmd_adr = adr & ~(wbufsize-1);
-
-	/* Sharp LH28F640BF chips need the first address for the
-	 * Page Buffer Program command. See Table 5 of
-	 * LH28F320BF, LH28F640BF, LH28F128BF Series (Appendix FUM00701) */
-	if (is_LH28F640BF(cfi))
-		cmd_adr = adr;
 
 	/* Let's determine this according to the interleave only once */
 	write_cmd = (cfi->cfiq->P_ID != P_ID_INTEL_PERFORMANCE) ? CMD(0xe8) : CMD(0xe9);
-
-	mutex_lock(&chip->mutex);
-	ret = get_chip(map, chip, cmd_adr, FL_WRITING);
-	if (ret) {
-		mutex_unlock(&chip->mutex);
-		return ret;
-	}
 
 	XIP_INVAL_CACHED_RANGE(map, initial_adr, initial_len);
 	ENABLE_VPP(map);
@@ -1789,7 +1773,7 @@ static int __xipram do_write_buffer(struct map_info *map, struct flchip *chip,
 		xip_enable(map, chip, cmd_adr);
 		printk(KERN_ERR "%s: Chip not ready for buffer write. Xstatus = %lx, status = %lx\n",
 				map->name, Xstatus.x[0], status.x[0]);
-		goto out;
+		return ret;
 	}
 
 	/* Figure out the number of words to write */
@@ -1853,7 +1837,7 @@ static int __xipram do_write_buffer(struct map_info *map, struct flchip *chip,
 		chip->state = FL_STATUS;
 		xip_enable(map, chip, cmd_adr);
 		printk(KERN_ERR "%s: buffer write error (status timeout)\n", map->name);
-		goto out;
+		return ret;
 	}
 
 	/* check for errors */
@@ -1866,21 +1850,50 @@ static int __xipram do_write_buffer(struct map_info *map, struct flchip *chip,
 		map_write(map, CMD(0x70), cmd_adr);
 		xip_enable(map, chip, cmd_adr);
 
-		if (chipstatus & 0x02) {
-			ret = -EROFS;
-		} else if (chipstatus & 0x08) {
+		if (chipstatus & 0x02)
+			return -EROFS;
+
+		if (chipstatus & 0x08) {
 			printk(KERN_ERR "%s: buffer write error (bad VPP)\n", map->name);
-			ret = -EIO;
-		} else {
-			printk(KERN_ERR "%s: buffer write error (status 0x%lx)\n", map->name, chipstatus);
-			ret = -EINVAL;
+			return  -EIO;
 		}
 
-		goto out;
+		printk(KERN_ERR "%s: buffer write error (status 0x%lx)\n", map->name, chipstatus);
+		return -EINVAL;
 	}
 
 	xip_enable(map, chip, cmd_adr);
- out:	DISABLE_VPP(map);
+	return 0;
+}
+
+static int __xipram do_write_buffer(struct map_info *map, struct flchip *chip,
+				    unsigned long adr, const struct kvec **pvec,
+				    unsigned long *pvec_seek, int len)
+{
+	struct cfi_private *cfi = map->fldrv_priv;
+	unsigned long cmd_adr;
+	int ret, wbufsize;
+
+	wbufsize = cfi_interleave(cfi) << cfi->cfiq->MaxBufWriteSize;
+	adr += chip->start;
+	cmd_adr = adr & ~(wbufsize - 1);
+
+	/* Sharp LH28F640BF chips need the first address for the
+	 * Page Buffer Program command. See Table 5 of
+	 * LH28F320BF, LH28F640BF, LH28F128BF Series (Appendix FUM00701) */
+	if (is_LH28F640BF(cfi))
+		cmd_adr = adr;
+
+	mutex_lock(&chip->mutex);
+	ret = get_chip(map, chip, cmd_adr, FL_WRITING);
+	if (ret) {
+		mutex_unlock(&chip->mutex);
+		return ret;
+	}
+
+	ret = do_write_buffer_locked(map, chip, cmd_adr, adr, pvec, pvec_seek, len);
+
+	DISABLE_VPP(map);
 	put_chip(map, chip, cmd_adr);
 	mutex_unlock(&chip->mutex);
 	return ret;
