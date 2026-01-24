@@ -1529,6 +1529,27 @@ int ocfs2_validate_inode_block(struct super_block *sb,
 		}
 	}
 
+	/*
+	 * Validate bitmap flag consistency with bitmap_blkno.
+	 * A corrupted inode with mismatched i_blkno and BITMAP_FL would
+	 * cause ocfs2_is_cluster_bitmap() to return incorrect results,
+	 * triggering BUG_ON in ocfs2_block_group_search() or
+	 * ocfs2_cluster_group_search().
+	 */
+	if (le64_to_cpu(di->i_blkno) == OCFS2_SB(sb)->bitmap_blkno &&
+	    !(di->i_flags & cpu_to_le32(OCFS2_BITMAP_FL))) {
+		rc = ocfs2_error(sb,
+				 "Invalid dinode #%llu: i_blkno matches bitmap but BITMAP flag not set\n",
+				 (unsigned long long)bh->b_blocknr);
+		goto bail;
+	} else if (di->i_flags & cpu_to_le32(OCFS2_BITMAP_FL) &&
+		   le64_to_cpu(di->i_blkno) != OCFS2_SB(sb)->bitmap_blkno) {
+		rc = ocfs2_error(sb,
+				 "Invalid dinode #%llu: BITMAP flag set but i_blkno does not match bitmap\n",
+				 (unsigned long long)bh->b_blocknr);
+		goto bail;
+	}
+
 	rc = 0;
 
 bail:
