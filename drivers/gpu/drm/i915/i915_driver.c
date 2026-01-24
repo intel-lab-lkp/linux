@@ -629,19 +629,17 @@ static int i915_driver_register(struct drm_i915_private *dev_priv)
 	i915_gem_driver_register(dev_priv);
 	i915_pmu_register(dev_priv);
 
-	intel_vgpu_register(dev_priv);
-
 	/* Reveal our presence to userspace */
 	ret = drm_dev_register(&dev_priv->drm, 0);
 	if (ret) {
 		i915_probe_error(dev_priv,
 				 "Failed to register driver for userspace access!\n");
-		drm_dev_unregister(&dev_priv->drm);
 		i915_pmu_unregister(dev_priv);
 		i915_gem_driver_unregister(dev_priv);
 		return ret;
 	}
 
+	intel_vgpu_register(dev_priv);
 	i915_debugfs_register(dev_priv);
 	i915_setup_sysfs(dev_priv);
 
