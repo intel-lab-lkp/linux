@@ -14,16 +14,33 @@
 #include "internal.h"
 
 int __init init_mount(const char *dev_name, const char *dir_name,
-		const char *type_page, unsigned long flags, void *data_page)
+		      const char *type_page, unsigned long flags,
+		      const char *data_str)
 {
+	struct page *data_page = NULL;
+	char *data_buf = NULL;
 	struct path path;
 	int ret;
 
+	/* path_mount() wants a proper page for data */
+	if (data_str && data_str[0]) {
+		data_page = alloc_page(GFP_KERNEL);
+		if (!data_page)
+			return -ENOMEM;
+		data_buf = page_address(data_page);
+		strscpy_pad(data_buf, data_str, PAGE_SIZE);
+	}
+
 	ret = kern_path(dir_name, LOOKUP_FOLLOW, &path);
 	if (ret)
-		return ret;
-	ret = path_mount(dev_name, &path, type_page, flags, data_page);
+		goto out;
+
+	ret = path_mount(dev_name, &path, type_page, flags, data_buf);
 	path_put(&path);
+
+out:
+	if (data_page)
+		put_page(data_page);
 	return ret;
 }
 

@@ -147,23 +147,12 @@ static int __init split_fs_names(char *page, size_t size)
 }
 
 static int __init do_mount_root(const char *name, const char *fs,
-				 const int flags, const void *data)
+				 const int flags, const char *data)
 {
 	struct super_block *s;
-	struct page *p = NULL;
-	char *data_page = NULL;
 	int ret;
 
-	if (data) {
-		/* init_mount() requires a full page as fifth argument */
-		p = alloc_page(GFP_KERNEL);
-		if (!p)
-			return -ENOMEM;
-		data_page = page_address(p);
-		strscpy_pad(data_page, data, PAGE_SIZE);
-	}
-
-	ret = init_mount(name, "/root", fs, flags, data_page);
+	ret = init_mount(name, "/root", fs, flags, data);
 	if (ret)
 		goto out;
 
@@ -177,8 +166,6 @@ static int __init do_mount_root(const char *name, const char *fs,
 	       MAJOR(ROOT_DEV), MINOR(ROOT_DEV));
 
 out:
-	if (p)
-		put_page(p);
 	return ret;
 }
 
