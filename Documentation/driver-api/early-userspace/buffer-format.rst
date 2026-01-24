@@ -8,14 +8,17 @@ With kernel 2.5.x, the old "initial ramdisk" protocol was complemented
 with an "initial ramfs" protocol.  The initramfs content is passed
 using the same memory buffer protocol used by initrd, but the content
 is different.  The initramfs buffer contains an archive which is
-expanded into a ramfs filesystem; this document details the initramfs
-buffer format.
+expanded into a tmpfs or ramfs filesystem; this document details the
+initramfs buffer format.
 
 The initramfs buffer format is based around the "newc" or "crc" CPIO
 formats, and can be created with the cpio(1) utility.  The cpio
 archive can be compressed using gzip(1), or any other algorithm provided
 via CONFIG_DECOMPRESS_*.  One valid version of an initramfs buffer is
 thus a single .cpio.gz file.
+
+In kernel version XXXX the feature to mount additional filesystems
+during initramfs expansion was introduced, see below.
 
 The full format of the initramfs buffer is defined by the following
 grammar, where::
@@ -130,3 +133,56 @@ a) Separate the different file data sources with a "TRAILER!!!"
    end-of-archive marker, or
 
 b) Make sure c_nlink == 1 for all nondirectory entries.
+
+
+Mounting additional filesystems
+===============================
+
+If a regular file with the special name "!!!MOUNT!!!" is encountered
+during initramfs processing, the file contents is parsed as a mount
+specification in format similar to fstab(5). It should contain of a
+single line in one of the following formats::
+
+	fs_spec fs_vfstype fs_mntops
+	fs_spec fs_vfstype
+	fs_vfstype
+
+
+Comment or blank lines are NOT allowed, and the terminating newline is
+required.
+
+The specified filesystem is then mounted onto the directory in which
+the !!!MOUNT!!! file is located, for example, if the file is named::
+
+	dev/!!!MOUNT!!!
+
+
+then the filesystem will be mounted onto the /dev directory, which
+must already exist.
+
+The mount is performed immediately, before processing any further
+initramfs entries.
+
+The c_mode, c_uid, c_gid, and c_mtime (with CONFIG_INITRAMFS_PRESERVE_MTIME)
+values for the file are applied to the root directory of the newly
+mounted filesystem, if that filesystem is writable and allows those
+operations. Therefore, the !!!MOUNT!!!  file should typically have the
+x permission bit set, as a directory would.
+
+fs_spec or fs_mntops values that require user space support, such as
+LABEL= or UUID=, are not supported. To mount a filesystem that
+requires a block device, the appropriate /dev entry need to have
+been created, or devtmpfs have been mounted, earlier in the initramfs
+image.
+
+A !!!MOUNT!!! entry in the cpio archive root, or multiple !!!MOUNT!!!
+entries for the same path, will cause overmounts. This allows the
+initramfs to be expanded into a tmpfs that is separate from the
+rootfs, and which therefore, unlike the rootfs, can be unmounted.
+
+The special name !!!MOUNT!!! was chosen because the sequence !!!
+already has special meaning in cpio (the TRAILER!!! entry) and because
+! is the lowest-numbered non-blank character in ASCII. Therefore
+creating a sorted cpio archive will naturally end up with the
+!!!MOUNT!!! entry immediately after the directory itself and before
+its contents.
