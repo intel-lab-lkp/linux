@@ -290,6 +290,8 @@ static inline void iwl_free_rxb(struct iwl_rx_cmd_buffer *r)
  *	the firmware state yet
  * @STATUS_TRANS_RESET_IN_PROGRESS: reset is still in progress, don't
  *	attempt another reset yet
+ * @STATUS_SUSPENDED: device is suspended, don't send commands that
+ *	aren't marked accordingly
  */
 enum iwl_trans_status {
 	STATUS_SYNC_HCMD_ACTIVE,
@@ -303,6 +305,7 @@ enum iwl_trans_status {
 	STATUS_IN_SW_RESET,
 	STATUS_RESET_PENDING,
 	STATUS_TRANS_RESET_IN_PROGRESS,
+	STATUS_SUSPENDED,
 };
 
 static inline int
