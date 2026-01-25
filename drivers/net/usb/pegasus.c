@@ -97,14 +97,14 @@ static void async_ctrl_callback(struct urb *urb)
 	usb_free_urb(urb);
 }
 
-static int get_registers(pegasus_t *pegasus, __u16 indx, __u16 size, void *data)
+static int get_registers(struct pegasus *pegasus, __u16 indx, __u16 size, void *data)
 {
 	return usb_control_msg_recv(pegasus->usb, 0, PEGASUS_REQ_GET_REGS,
 				   PEGASUS_REQT_READ, 0, indx, data, size,
 				   1000, GFP_NOIO);
 }
 
-static int set_registers(pegasus_t *pegasus, __u16 indx, __u16 size,
+static int set_registers(struct pegasus *pegasus, __u16 indx, __u16 size,
 			 const void *data)
 {
 	int ret;
@@ -123,7 +123,7 @@ static int set_registers(pegasus_t *pegasus, __u16 indx, __u16 size,
  * specific control request.  'data' is ignored by the device, but it is here to
  * not break the API.
  */
-static int set_register(pegasus_t *pegasus, __u16 indx, __u8 data)
+static int set_register(struct pegasus *pegasus, __u16 indx, __u8 data)
 {
 	void *buf = &data;
 	int ret;
@@ -137,7 +137,7 @@ static int set_register(pegasus_t *pegasus, __u16 indx, __u8 data)
 	return ret;
 }
 
-static int update_eth_regs_async(pegasus_t *pegasus)
+static int update_eth_regs_async(struct pegasus *pegasus)
 {
 	int ret = -ENOMEM;
 	struct urb *async_urb;
@@ -174,7 +174,7 @@ static int update_eth_regs_async(pegasus_t *pegasus)
 	return ret;
 }
 
-static int __mii_op(pegasus_t *p, __u8 phy, __u8 indx, __u16 *regd, __u8 cmd)
+static int __mii_op(struct pegasus *p, __u8 phy, __u8 indx, __u16 *regd, __u8 cmd)
 {
 	int i, ret;
 	__le16 regdi;
@@ -211,20 +211,20 @@ fail:
 }
 
 /* Returns non-negative int on success, error on failure */
-static int read_mii_word(pegasus_t *pegasus, __u8 phy, __u8 indx, __u16 *regd)
+static int read_mii_word(struct pegasus *pegasus, __u8 phy, __u8 indx, __u16 *regd)
 {
 	return __mii_op(pegasus, phy, indx, regd, PHY_READ);
 }
 
 /* Returns zero on success, error on failure */
-static int write_mii_word(pegasus_t *pegasus, __u8 phy, __u8 indx, __u16 *regd)
+static int write_mii_word(struct pegasus *pegasus, __u8 phy, __u8 indx, __u16 *regd)
 {
 	return __mii_op(pegasus, phy, indx, regd, PHY_WRITE);
 }
 
 static int mdio_read(struct net_device *dev, int phy_id, int loc)
 {
-	pegasus_t *pegasus = netdev_priv(dev);
+	struct pegasus *pegasus = netdev_priv(dev);
 	int ret;
 	u16 res;
 
@@ -237,13 +237,13 @@ static int mdio_read(struct net_device *dev, int phy_id, int loc)
 
 static void mdio_write(struct net_device *dev, int phy_id, int loc, int val)
 {
-	pegasus_t *pegasus = netdev_priv(dev);
+	struct pegasus *pegasus = netdev_priv(dev);
 	u16 data = val;
 
 	write_mii_word(pegasus, phy_id, loc, &data);
 }
 
-static int read_eprom_word(pegasus_t *pegasus, __u8 index, __u16 *retdata)
+static int read_eprom_word(struct pegasus *pegasus, __u8 index, __u16 *retdata)
 {
 	int ret, i;
 	__le16 retdatai;
@@ -277,7 +277,7 @@ fail:
 }
 
 #ifdef	PEGASUS_WRITE_EEPROM
-static inline void enable_eprom_write(pegasus_t *pegasus)
+static inline void enable_eprom_write(struct pegasus *pegasus)
 {
 	__u8 tmp;
 
@@ -285,7 +285,7 @@ static inline void enable_eprom_write(pegasus_t *pegasus)
 	set_register(pegasus, EthCtrl2, tmp | EPROM_WR_ENABLE);
 }
 
-static inline void disable_eprom_write(pegasus_t *pegasus)
+static inline void disable_eprom_write(struct pegasus *pegasus)
 {
 	__u8 tmp;
 
@@ -294,7 +294,7 @@ static inline void disable_eprom_write(pegasus_t *pegasus)
 	set_register(pegasus, EthCtrl2, tmp & ~EPROM_WR_ENABLE);
 }
 
-static int write_eprom_word(pegasus_t *pegasus, __u8 index, __u16 data)
+static int write_eprom_word(struct pegasus *pegasus, __u8 index, __u16 data)
 {
 	int i;
 	__u8 tmp, d[4] = { 0x3f, 0, 0, EPROM_WRITE };
@@ -326,7 +326,7 @@ fail:
 }
 #endif	/* PEGASUS_WRITE_EEPROM */
 
-static inline int get_node_id(pegasus_t *pegasus, u8 *id)
+static inline int get_node_id(struct pegasus *pegasus, u8 *id)
 {
 	int i, ret;
 	u16 w16;
@@ -341,7 +341,7 @@ static inline int get_node_id(pegasus_t *pegasus, u8 *id)
 	return 0;
 }
 
-static void set_ethernet_addr(pegasus_t *pegasus)
+static void set_ethernet_addr(struct pegasus *pegasus)
 {
 	int ret;
 	u8 node_id[6];
@@ -369,7 +369,7 @@ err:
 	return;
 }
 
-static inline int reset_mac(pegasus_t *pegasus)
+static inline int reset_mac(struct pegasus *pegasus)
 {
 	int ret, i;
 	__u8 data = 0x8;
@@ -416,7 +416,7 @@ fail:
 
 static int enable_net_traffic(struct net_device *dev, struct usb_device *usb)
 {
-	pegasus_t *pegasus = netdev_priv(dev);
+	struct pegasus *pegasus = netdev_priv(dev);
 	int ret;
 	__u16 linkpart;
 	__u8 data[4];
@@ -456,7 +456,7 @@ fail:
 
 static void read_bulk_callback(struct urb *urb)
 {
-	pegasus_t *pegasus = urb->context;
+	struct pegasus *pegasus = urb->context;
 	struct net_device *net;
 	u8 *buf = urb->transfer_buffer;
 	int rx_status, count = urb->actual_length;
@@ -566,7 +566,7 @@ tl_sched:
 
 static void rx_fixup(struct tasklet_struct *t)
 {
-	pegasus_t *pegasus = from_tasklet(pegasus, t, rx_tl);
+	struct pegasus *pegasus = from_tasklet(pegasus, t, rx_tl);
 	int status;
 
 	if (pegasus->flags & PEGASUS_UNPLUG)
@@ -602,7 +602,7 @@ try_again:
 
 static void write_bulk_callback(struct urb *urb)
 {
-	pegasus_t *pegasus = urb->context;
+	struct pegasus *pegasus = urb->context;
 	struct net_device *net;
 	int status = urb->status;
 
@@ -638,7 +638,7 @@ static void write_bulk_callback(struct urb *urb)
 
 static void intr_callback(struct urb *urb)
 {
-	pegasus_t *pegasus = urb->context;
+	struct pegasus *pegasus = urb->context;
 	struct net_device *net;
 	int res, status = urb->status;
 
@@ -694,7 +694,7 @@ static void intr_callback(struct urb *urb)
 
 static void pegasus_tx_timeout(struct net_device *net, unsigned int txqueue)
 {
-	pegasus_t *pegasus = netdev_priv(net);
+	struct pegasus *pegasus = netdev_priv(net);
 	netif_warn(pegasus, timer, net, "tx timeout\n");
 	usb_unlink_urb(pegasus->tx_urb);
 	net->stats.tx_errors++;
@@ -703,7 +703,7 @@ static void pegasus_tx_timeout(struct net_device *net, unsigned int txqueue)
 static netdev_tx_t pegasus_start_xmit(struct sk_buff *skb,
 					    struct net_device *net)
 {
-	pegasus_t *pegasus = netdev_priv(net);
+	struct pegasus *pegasus = netdev_priv(net);
 	int count = ((skb->len + 2) & 0x3f) ? skb->len + 2 : skb->len + 3;
 	int res;
 	__u16 l16 = skb->len;
@@ -739,14 +739,14 @@ static netdev_tx_t pegasus_start_xmit(struct sk_buff *skb,
 	return NETDEV_TX_OK;
 }
 
-static inline void disable_net_traffic(pegasus_t *pegasus)
+static inline void disable_net_traffic(struct pegasus *pegasus)
 {
 	__le16 tmp = cpu_to_le16(0);
 
 	set_registers(pegasus, EthCtrl0, sizeof(tmp), &tmp);
 }
 
-static inline int get_interrupt_interval(pegasus_t *pegasus)
+static inline int get_interrupt_interval(struct pegasus *pegasus)
 {
 	u16 data;
 	u8 interval;
@@ -776,7 +776,7 @@ static inline int get_interrupt_interval(pegasus_t *pegasus)
 
 static void set_carrier(struct net_device *net)
 {
-	pegasus_t *pegasus = netdev_priv(net);
+	struct pegasus *pegasus = netdev_priv(net);
 	u16 tmp;
 
 	if (read_mii_word(pegasus, pegasus->phy, MII_BMSR, &tmp))
@@ -788,21 +788,21 @@ static void set_carrier(struct net_device *net)
 		netif_carrier_off(net);
 }
 
-static void free_all_urbs(pegasus_t *pegasus)
+static void free_all_urbs(struct pegasus *pegasus)
 {
 	usb_free_urb(pegasus->intr_urb);
 	usb_free_urb(pegasus->tx_urb);
 	usb_free_urb(pegasus->rx_urb);
 }
 
-static void unlink_all_urbs(pegasus_t *pegasus)
+static void unlink_all_urbs(struct pegasus *pegasus)
 {
 	usb_kill_urb(pegasus->intr_urb);
 	usb_kill_urb(pegasus->tx_urb);
 	usb_kill_urb(pegasus->rx_urb);
 }
 
-static int alloc_urbs(pegasus_t *pegasus)
+static int alloc_urbs(struct pegasus *pegasus)
 {
 	int res = -ENOMEM;
 
@@ -827,7 +827,7 @@ static int alloc_urbs(pegasus_t *pegasus)
 
 static int pegasus_open(struct net_device *net)
 {
-	pegasus_t *pegasus = netdev_priv(net);
+	struct pegasus *pegasus = netdev_priv(net);
 	int res=-ENOMEM;
 
 	if (pegasus->rx_skb == NULL)
@@ -880,7 +880,7 @@ exit:
 
 static int pegasus_close(struct net_device *net)
 {
-	pegasus_t *pegasus = netdev_priv(net);
+	struct pegasus *pegasus = netdev_priv(net);
 
 	netif_stop_queue(net);
 	if (!(pegasus->flags & PEGASUS_UNPLUG))
@@ -894,7 +894,7 @@ static int pegasus_close(struct net_device *net)
 static void pegasus_get_drvinfo(struct net_device *dev,
 				struct ethtool_drvinfo *info)
 {
-	pegasus_t *pegasus = netdev_priv(dev);
+	struct pegasus *pegasus = netdev_priv(dev);
 
 	strscpy(info->driver, driver_name, sizeof(info->driver));
 	usb_make_path(pegasus->usb, info->bus_info, sizeof(info->bus_info));
@@ -906,7 +906,7 @@ static void pegasus_get_drvinfo(struct net_device *dev,
 static void
 pegasus_get_wol(struct net_device *dev, struct ethtool_wolinfo *wol)
 {
-	pegasus_t	*pegasus = netdev_priv(dev);
+	struct pegasus *pegasus = netdev_priv(dev);
 
 	wol->supported = WAKE_MAGIC | WAKE_PHY;
 	wol->wolopts = pegasus->wolopts;
@@ -915,7 +915,7 @@ pegasus_get_wol(struct net_device *dev, struct ethtool_wolinfo *wol)
 static int
 pegasus_set_wol(struct net_device *dev, struct ethtool_wolinfo *wol)
 {
-	pegasus_t	*pegasus = netdev_priv(dev);
+	struct pegasus *pegasus = netdev_priv(dev);
 	u8		reg78 = 0x04;
 	int		ret;
 
@@ -952,7 +952,7 @@ static int
 pegasus_get_link_ksettings(struct net_device *dev,
 			   struct ethtool_link_ksettings *ecmd)
 {
-	pegasus_t *pegasus;
+	struct pegasus *pegasus;
 
 	pegasus = netdev_priv(dev);
 	mii_ethtool_get_link_ksettings(&pegasus->mii, ecmd);
@@ -963,31 +963,31 @@ static int
 pegasus_set_link_ksettings(struct net_device *dev,
 			   const struct ethtool_link_ksettings *ecmd)
 {
-	pegasus_t *pegasus = netdev_priv(dev);
+	struct pegasus *pegasus = netdev_priv(dev);
 	return mii_ethtool_set_link_ksettings(&pegasus->mii, ecmd);
 }
 
 static int pegasus_nway_reset(struct net_device *dev)
 {
-	pegasus_t *pegasus = netdev_priv(dev);
+	struct pegasus *pegasus = netdev_priv(dev);
 	return mii_nway_restart(&pegasus->mii);
 }
 
 static u32 pegasus_get_link(struct net_device *dev)
 {
-	pegasus_t *pegasus = netdev_priv(dev);
+	struct pegasus *pegasus = netdev_priv(dev);
 	return mii_link_ok(&pegasus->mii);
 }
 
 static u32 pegasus_get_msglevel(struct net_device *dev)
 {
-	pegasus_t *pegasus = netdev_priv(dev);
+	struct pegasus *pegasus = netdev_priv(dev);
 	return pegasus->msg_enable;
 }
 
 static void pegasus_set_msglevel(struct net_device *dev, u32 v)
 {
-	pegasus_t *pegasus = netdev_priv(dev);
+	struct pegasus *pegasus = netdev_priv(dev);
 	pegasus->msg_enable = v;
 }
 
@@ -1007,7 +1007,7 @@ static int pegasus_siocdevprivate(struct net_device *net, struct ifreq *rq,
 				  void __user *udata, int cmd)
 {
 	__u16 *data = (__u16 *) &rq->ifr_ifru;
-	pegasus_t *pegasus = netdev_priv(net);
+	struct pegasus *pegasus = netdev_priv(net);
 	int res;
 
 	switch (cmd) {
@@ -1031,7 +1031,7 @@ static int pegasus_siocdevprivate(struct net_device *net, struct ifreq *rq,
 
 static void pegasus_set_multicast(struct net_device *net)
 {
-	pegasus_t *pegasus = netdev_priv(net);
+	struct pegasus *pegasus = netdev_priv(net);
 
 	if (net->flags & IFF_PROMISC) {
 		pegasus->eth_regs[EthCtrl2] |= RX_PROMISCUOUS;
@@ -1047,7 +1047,7 @@ static void pegasus_set_multicast(struct net_device *net)
 	update_eth_regs_async(pegasus);
 }
 
-static __u8 mii_phy_probe(pegasus_t *pegasus)
+static __u8 mii_phy_probe(struct pegasus *pegasus)
 {
 	int i, ret;
 	__u16 tmp;
@@ -1065,7 +1065,7 @@ fail:
 	return 0xff;
 }
 
-static inline void setup_pegasus_II(pegasus_t *pegasus)
+static inline void setup_pegasus_II(struct pegasus *pegasus)
 {
 	int ret;
 	__u8 data = 0xa5;
@@ -1104,7 +1104,7 @@ fail:
 
 static void check_carrier(struct work_struct *work)
 {
-	pegasus_t *pegasus = container_of(work, pegasus_t, carrier_check.work);
+	struct pegasus *pegasus = container_of(work, struct pegasus, carrier_check.work);
 	set_carrier(pegasus->net);
 	if (!(pegasus->flags & PEGASUS_UNPLUG)) {
 		queue_delayed_work(system_long_wq, &pegasus->carrier_check,
@@ -1133,7 +1133,7 @@ static int pegasus_probe(struct usb_interface *intf,
 {
 	struct usb_device *dev = interface_to_usbdev(intf);
 	struct net_device *net;
-	pegasus_t *pegasus;
+	struct pegasus *pegasus;
 	int dev_index = id - pegasus_ids;
 	int res = -ENOMEM;
 

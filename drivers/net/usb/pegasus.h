@@ -76,7 +76,7 @@ enum pegasus_registers {
 };
 
 
-typedef struct pegasus {
+struct pegasus {
 	struct usb_device	*usb;
 	struct usb_interface	*intf;
 	struct net_device	*net;
@@ -97,7 +97,7 @@ typedef struct pegasus {
 	__u8			eth_regs[4];
 	__u8			phy;
 	__u8			gpio_res;
-} pegasus_t;
+};
 
 
 struct usb_eth_dev {
