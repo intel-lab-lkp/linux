@@ -4616,6 +4616,10 @@ static int do_open(struct nameidata *nd,
 		if (unlikely(error))
 			return error;
 	}
+
+	if ((open_flag & O_REGULAR) && !d_is_reg(nd->path.dentry))
+		return -ENOTREGULAR;
+
 	if ((nd->flags & LOOKUP_DIRECTORY) && !d_can_lookup(nd->path.dentry))
 		return -ENOTDIR;
 
@@ -4765,6 +4769,8 @@ static int do_o_path(struct nameidata *nd, unsigned flags, struct file *file)
 	struct path path;
 	int error = path_lookupat(nd, flags, &path);
 	if (!error) {
+		if ((file->f_flags & O_REGULAR) && !d_is_reg(path.dentry))
+			return -ENOTREGULAR;
 		audit_inode(nd->name, path.dentry, 0);
 		error = vfs_open(&path, file);
 		path_put(&path);
