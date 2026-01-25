@@ -524,7 +524,7 @@ void noinstr microcode_offline_nmi_handler(void)
 	wait_for_ctrl();
 }
 
-static noinstr bool microcode_update_handler(void)
+static noinstr int microcode_update_handler(void *unused)
 {
 	unsigned int cpu = raw_smp_processor_id();
 
@@ -540,7 +540,7 @@ static noinstr bool microcode_update_handler(void)
 	touch_nmi_watchdog();
 	instrumentation_end();
 
-	return true;
+	return 0;
 }
 
 /*
@@ -561,19 +561,15 @@ bool noinstr microcode_nmi_handler(void)
 		return false;
 
 	raw_cpu_write(ucode_ctrl.nmi_enabled, false);
-	return microcode_update_handler();
+	return microcode_update_handler(NULL) == 0;
 }
 
 static int load_cpus_stopped(void *unused)
 {
-	if (microcode_ops->use_nmi) {
-		/* Enable the NMI handler and raise NMI */
-		this_cpu_write(ucode_ctrl.nmi_enabled, true);
-		apic->send_IPI(smp_processor_id(), NMI_VECTOR);
-	} else {
-		/* Just invoke the handler directly */
-		microcode_update_handler();
-	}
+	/* Enable the NMI handler and raise NMI */
+	this_cpu_write(ucode_ctrl.nmi_enabled, true);
+	apic->send_IPI(smp_processor_id(), NMI_VECTOR);
+
 	return 0;
 }
 
@@ -610,13 +606,13 @@ static int load_late_stop_cpus(bool is_safe)
 	 */
 	store_cpu_caps(&prev_info);
 
-	if (microcode_ops->use_nmi)
+	if (microcode_ops->use_nmi) {
 		static_branch_enable_cpuslocked(&microcode_nmi_handler_enable);
-
-	stop_machine_cpuslocked(load_cpus_stopped, NULL, cpu_online_mask);
-
-	if (microcode_ops->use_nmi)
+		stop_machine_cpuslocked(load_cpus_stopped, NULL, cpu_online_mask);
 		static_branch_disable_cpuslocked(&microcode_nmi_handler_enable);
+	} else {
+		stop_machine_cpuslocked(microcode_update_handler, NULL, cpu_online_mask);
+	}
 
 	/* Analyze the results */
 	for_each_cpu_and(cpu, cpu_present_mask, &cpus_booted_once_mask) {
