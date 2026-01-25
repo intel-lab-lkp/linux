@@ -87,6 +87,22 @@ struct kvm_vcpu_stat {
 struct kvm_arch_memory_slot {
 };
 
+static inline unsigned long kvm_riscv_gstage_mode(unsigned long pgd_levels)
+{
+	switch (pgd_levels) {
+	case 2:
+		return HGATP_MODE_SV32X4;
+	case 3:
+		return HGATP_MODE_SV39X4;
+	case 4:
+		return HGATP_MODE_SV48X4;
+	case 5:
+		return HGATP_MODE_SV57X4;
+	default:
+		return HGATP_MODE_OFF;
+	}
+}
+
 struct kvm_arch {
 	/* G-stage vmid */
 	struct kvm_vmid vmid;
@@ -103,6 +119,9 @@ struct kvm_arch {
 
 	/* KVM_CAP_RISCV_MP_STATE_RESET */
 	bool mp_state_reset;
+
+	unsigned long kvm_riscv_gstage_pgd_levels;
+	bool gstage_mode_user_initialized;
 };
 
 struct kvm_cpu_trap {
