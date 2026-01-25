@@ -8765,6 +8765,24 @@ helpful if user space wants to emulate instructions which are not
 This capability can be enabled dynamically even if VCPUs were already
 created and are running.
 
+7.47 KVM_CAP_RISCV_SET_HGATP_MODE
+---------------------------------
+
+:Architectures: riscv
+:Type: VM
+:Parameters: args[0] contains the requested HGATP mode
+:Returns:
+  - 0 on success.
+  - -EINVAL if args[0] is outside the range of HGATP modes supported by the
+    hardware.
+  - -EBUSY if vCPUs have already been created for the VM, if the VM has any
+    non-empty memslots, or if the capability has already been set for the VM.
+
+This capability allows userspace to explicitly select the HGATP mode for
+the VM. The selected mode must be less than or equal to the maximum HGATP
+mode supported by the hardware. This capability must be enabled before
+creating any vCPUs, and can only be set once per VM.
+
 8. Other capabilities.
 ======================
 
