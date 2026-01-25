@@ -9323,6 +9323,8 @@ static int hpsa_enter_performant_mode(struct ctlr_info *h, u32 trans_support)
 					cfg_offset + bft2_offset,
 					ARRAY_SIZE(bft2) *
 					sizeof(*h->ioaccel2_bft2_regs));
+		if (!h->ioaccel2_bft2_regs)
+			return -ENODEV;
 		for (i = 0; i < ARRAY_SIZE(bft2); i++)
 			writel(bft2[i], &h->ioaccel2_bft2_regs[i]);
 	}
