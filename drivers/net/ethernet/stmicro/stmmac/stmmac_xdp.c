@@ -48,8 +48,10 @@ static int stmmac_xdp_enable_pool(struct stmmac_priv *priv,
 		napi_enable(&ch->rxtx_napi);
 
 		err = stmmac_xsk_wakeup(priv->dev, queue, XDP_WAKEUP_RX);
-		if (err)
+		if (err) {
+			xsk_pool_dma_unmap(pool, STMMAC_RX_DMA_ATTR);
 			return err;
+		}
 	}
 
 	return 0;
