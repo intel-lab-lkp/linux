@@ -1902,6 +1902,21 @@ enum ieee80211_offload_flags {
 	IEEE80211_OFFLOAD_DECAP_ENABLED		= BIT(2),
 };
 
+struct ieee80211_eml_params {
+	u8 control;
+	u16 link_bitmap;
+	union {
+		struct {
+			u16 emlsr_pad_delay;
+			u16 emlsr_trans_delay;
+		};
+		struct {
+			u8 mcs_map_count;
+			u8 mcs_map_bw[9];
+		};
+	};
+};
+
 /**
  * struct ieee80211_vif_cfg - interface configuration
  * @assoc: association status
@@ -4513,6 +4528,9 @@ struct ieee80211_prep_tx_info {
  *      interface with the specified type would be added, and thus drivers that
  *      implement this callback need to handle such cases. The type is the full
  *      &enum nl80211_iftype.
+ * @set_eml_op_mode: Configure eMLSR/eMLMR operation mode in the underlay
+ *	driver according to the parameter received in the EML Operating mode
+ *	notification frame.
  */
 struct ieee80211_ops {
 	void (*tx)(struct ieee80211_hw *hw,
@@ -4908,6 +4926,11 @@ struct ieee80211_ops {
 			struct ieee80211_neg_ttlm *ttlm);
 	void (*prep_add_interface)(struct ieee80211_hw *hw,
 				   enum nl80211_iftype type);
+	int (*set_eml_op_mode)(struct ieee80211_hw *hw,
+			       struct ieee80211_vif *vif,
+			       struct ieee80211_sta *sta,
+			       unsigned int link_id,
+			       struct ieee80211_eml_params *eml_params);
 };
 
 /**

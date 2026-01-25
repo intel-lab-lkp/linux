@@ -558,6 +558,34 @@ struct ieee80211_mle_tdls_common_info {
 
 #define IEEE80211_MLC_PRIO_ACCESS_PRES_AP_MLD_MAC_ADDR	0x0010
 
+#define IEEE80211_EML_CTRL_EMLSR_MODE		BIT(0)
+#define IEEE80211_EML_CTRL_EMLMR_MODE		BIT(1)
+#define IEEE80211_EML_CTRL_EMLSR_PARAM_UPDATE	BIT(2)
+#define IEEE80211_EML_CTRL_INDEV_COEX_ACT	BIT(3)
+
+#define IEEE80211_EML_EMLSR_PAD_DELAY		0x07
+#define IEEE80211_EML_EMLSR_TRANS_DELAY		0x38
+
+static inline u8 ieee80211_get_emlsr_pad_delay_update(u8 param)
+{
+	u8 pad_delay = FIELD_GET(IEEE80211_EML_EMLSR_PAD_DELAY, param);
+
+	if (pad_delay > IEEE80211_EML_CAP_EMLSR_PADDING_DELAY_256US)
+		pad_delay = 0;
+
+	return pad_delay;
+}
+
+static inline u32 ieee80211_get_emlsr_trans_delay_update(u8 param)
+{
+	u16 trans_delay = FIELD_GET(IEEE80211_EML_EMLSR_TRANS_DELAY, param);
+
+	if (trans_delay > IEEE80211_EML_CAP_EMLSR_TRANSITION_DELAY_256US)
+		trans_delay = 0;
+
+	return trans_delay;
+}
+
 /* no fixed fields in PRIO_ACCESS */
 
 /**
