@@ -70,6 +70,7 @@ struct sec_pmic_dev {
 
 	int device_type;
 	int irq;
+	unsigned int revision;
 };
 
 struct sec_platform_data {
