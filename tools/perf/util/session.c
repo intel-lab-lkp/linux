@@ -2728,11 +2728,15 @@ size_t perf_session__fprintf_nr_events(struct perf_session *session, FILE *fp)
 
 size_t perf_session__fprintf(struct perf_session *session, FILE *fp)
 {
-	/*
-	 * FIXME: Here we have to actually print all the machines in this
-	 * session, not just the host...
-	 */
-	return machine__fprintf(&session->machines.host, fp);
+	struct rb_node *nd;
+	struct machine *pos;
+	size_t ret = machine__fprintf(&session->machines.host, fp);
+
+	for (nd = rb_first_cached(&session->machines.guests); nd; nd = rb_next(nd)) {
+		pos = rb_entry(nd, struct machine, rb_node);
+		ret += machine__fprintf(pos, fp);
+	}
+	return ret;
 }
 
 void perf_session__dump_kmaps(struct perf_session *session)
