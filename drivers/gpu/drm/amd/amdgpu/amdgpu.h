@@ -268,6 +268,7 @@ extern int amdgpu_rebar;
 
 extern int amdgpu_wbrf;
 extern int amdgpu_user_queue;
+extern int amdgpu_allm_mode;
 
 extern uint amdgpu_hdmi_hpd_debounce_delay_ms;
 

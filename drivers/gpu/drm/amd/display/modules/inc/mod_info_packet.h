@@ -41,6 +41,7 @@ void set_vsc_packet_colorimetry_data(
 		enum dc_color_space cs,
 		enum color_transfer_func tf);
 
+bool is_hdmi_vic_mode(const struct dc_stream_state *stream);
 void mod_build_vsc_infopacket(const struct dc_stream_state *stream,
 		struct dc_info_packet *info_packet,
 		enum dc_color_space cs,
