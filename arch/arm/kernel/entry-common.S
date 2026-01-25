@@ -71,7 +71,7 @@ __ret_fast_syscall:
 	mov	r0, sp				@ 'regs'
 	bl	do_rseq_syscall
 #endif
-	disable_irq_notrace			@ disable interrupts
+	disable_irq save = 0			@ disable interrupts
 	ldr	r1, [tsk, #TI_FLAGS]		@ re-check for syscall tracing
 	movs	r1, r1, lsl #16
 	beq	no_work_pending
@@ -97,29 +97,27 @@ ENDPROC(ret_fast_syscall)
 
 /*
  * "slow" syscall return path.  "why" tells us if this was a real syscall.
- * IRQs may be enabled here, so always disable them.  Note that we use the
- * "notrace" version to avoid calling into the tracing code unnecessarily.
- * do_work_pending() will update this state if necessary.
+ * IRQs may be enabled here, so always disable them.
  */
 ENTRY(ret_to_user)
 ret_slow_syscall:
 #if IS_ENABLED(CONFIG_DEBUG_RSEQ)
 	/* do_rseq_syscall needs interrupts enabled. */
-	enable_irq_notrace			@ enable interrupts
+	enable_irq save = 0			@ enable interrupts
 	mov	r0, sp				@ 'regs'
 	bl	do_rseq_syscall
 #endif
-	disable_irq_notrace			@ disable interrupts
+	disable_irq save = 0			@ disable interrupts
 ENTRY(ret_to_user_from_irq)
 	ldr	r1, [tsk, #TI_FLAGS]
 	movs	r1, r1, lsl #16
 	bne	slow_work_pending
 no_work_pending:
-	asm_trace_hardirqs_on save = 0
-
 #ifdef CONFIG_CONTEXT_TRACKING_USER
 	bl	user_enter_callable
 #endif
+
+	asm_trace_hardirqs_on save = 0
 
 #ifdef CONFIG_KSTACK_ERASE
 	bl	stackleak_erase_on_task_stack
