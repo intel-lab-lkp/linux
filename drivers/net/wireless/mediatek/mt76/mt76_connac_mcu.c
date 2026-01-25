@@ -2251,7 +2251,7 @@ out:
 
 int mt76_connac_mcu_set_rate_txpower(struct mt76_phy *phy)
 {
-	int err;
+	int err, tx_power;
 
 	if (phy->cap.has_2ghz) {
 		err = mt76_connac_mcu_rate_txpower_band(phy,
@@ -2271,6 +2271,12 @@ int mt76_connac_mcu_set_rate_txpower(struct mt76_phy *phy)
 		if (err < 0)
 			return err;
 	}
+
+	/* Update txpower_cur for accurate reporting via nl80211 */
+	tx_power = 2 * phy->hw->conf.power_level;
+	if (!tx_power)
+		tx_power = 127;
+	phy->txpower_cur = tx_power;
 
 	return 0;
 }
