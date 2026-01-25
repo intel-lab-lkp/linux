@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include <linux/linkage.h>
+#include <linux/tick.h>
 #include <linux/rseq_entry.h>
 #include <linux/irq-entry-common.h>
 #include <linux/kstack_erase.h>
@@ -14,6 +15,8 @@
 asmlinkage __section(".entry.text")
 void arm_exit_to_user_mode_no_work_pending(void)
 {
+	if (IS_ENABLED(CONFIG_GENERIC_ENTRY))
+		tick_nohz_user_enter_prepare();
 	rseq_irqentry_exit_to_user_mode();
 	exit_to_user_mode();
 #ifdef CONFIG_KSTACK_ERASE
