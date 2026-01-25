@@ -386,9 +386,6 @@ static noinstr void default_do_nmi(struct pt_regs *regs)
 	if (stop_machine_nmi_handler_enabled() && stop_machine_nmi_handler())
 		goto out;
 
-	if (microcode_nmi_handler_enabled() && microcode_nmi_handler())
-		goto out;
-
 	/*
 	 * CPU-specific NMI must be processed before non-CPU-specific
 	 * NMI, otherwise we may lose it, because the CPU-specific
