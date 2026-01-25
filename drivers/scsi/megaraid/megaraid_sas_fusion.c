@@ -4282,16 +4282,23 @@ void  megasas_reset_reply_desc(struct megasas_instance *instance)
 	int i, j, count;
 	struct fusion_context *fusion;
 	union MPI2_REPLY_DESCRIPTORS_UNION *reply_desc;
+	struct megasas_irq_context *irq_context;
 
 	fusion = instance->ctrl_context;
 	count = instance->msix_vectors > 0 ? instance->msix_vectors : 1;
 	count += instance->iopoll_q_count;
 
 	for (i = 0 ; i < count ; i++) {
+		irq_context = &instance->irq_context[i];
+		while (!access_irq_context(irq_context))
+			cpu_relax();
+
 		fusion->last_reply_idx[i] = 0;
 		reply_desc = fusion->reply_frames_desc[i];
 		for (j = 0 ; j < fusion->reply_q_depth; j++, reply_desc++)
 			reply_desc->Words = cpu_to_le64(ULLONG_MAX);
+
+		release_irq_context(irq_context);
 	}
 }
 
