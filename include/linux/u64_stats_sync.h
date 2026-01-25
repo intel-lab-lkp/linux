@@ -92,7 +92,7 @@ static inline void u64_stats_set(u64_stats_t *p, u64 val)
 	local64_set(&p->v, val);
 }
 
-static inline void u64_stats_add(u64_stats_t *p, unsigned long val)
+static inline void u64_stats_add(u64_stats_t *p, s64 val)
 {
 	local64_add(val, &p->v);
 }
@@ -140,7 +140,7 @@ static inline void u64_stats_set(u64_stats_t *p, u64 val)
 	p->v = val;
 }
 
-static inline void u64_stats_add(u64_stats_t *p, unsigned long val)
+static inline void u64_stats_add(u64_stats_t *p, s64 val)
 {
 	p->v += val;
 }
