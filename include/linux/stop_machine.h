@@ -142,6 +142,29 @@ int stop_machine(cpu_stop_fn_t fn, void *data, const struct cpumask *cpus);
 int stop_machine_cpuslocked(cpu_stop_fn_t fn, void *data, const struct cpumask *cpus);
 
 /**
+ * stop_machine_nmi: freeze the machine and run this function in NMI context
+ * @fn: the function to run
+ * @data: the data ptr for the @fn()
+ * @cpus: the cpus to run the @fn() on (NULL = any online cpu)
+ *
+ * Like stop_machine() but runs the function in NMI context to avoid any risk of
+ * interruption due to NMIs.
+ *
+ * Protects against CPU hotplug.
+ */
+int stop_machine_nmi(cpu_stop_fn_t fn, void *data, const struct cpumask *cpus);
+
+/**
+ * stop_machine_cpuslocked_nmi: freeze and run this function in NMI context
+ * @fn: the function to run
+ * @data: the data ptr for the @fn()
+ * @cpus: the cpus to run the @fn() on (NULL = any online cpu)
+ *
+ * Same as above. Must be called from within a cpus_read_lock() protected
+ * region. Avoids nested calls to cpus_read_lock().
+ */
+int stop_machine_cpuslocked_nmi(cpu_stop_fn_t fn, void *data, const struct cpumask *cpus);
+/**
  * stop_core_cpuslocked: - stop all threads on just one core
  * @cpu: any cpu in the targeted core
  * @fn: the function to run on each CPU in the core containing @cpu
@@ -160,6 +183,14 @@ int stop_core_cpuslocked(unsigned int cpu, cpu_stop_fn_t fn, void *data);
 
 int stop_machine_from_inactive_cpu(cpu_stop_fn_t fn, void *data,
 				   const struct cpumask *cpus);
+
+bool noinstr stop_machine_nmi_handler(void);
+DECLARE_STATIC_KEY_FALSE(stop_machine_nmi_handler_enable);
+static __always_inline bool stop_machine_nmi_handler_enabled(void)
+{
+	return static_branch_unlikely(&stop_machine_nmi_handler_enable);
+}
+
 #else	/* CONFIG_SMP || CONFIG_HOTPLUG_CPU */
 
 static __always_inline int stop_machine_cpuslocked(cpu_stop_fn_t fn, void *data,
@@ -186,5 +217,24 @@ stop_machine_from_inactive_cpu(cpu_stop_fn_t fn, void *data,
 	return stop_machine(fn, data, cpus);
 }
 
+/* stop_machine_nmi() is only supported in SMP systems. */
+static __always_inline int stop_machine_nmi(cpu_stop_fn_t fn, void *data,
+					const struct cpumask *cpus)
+{
+	return -EINVAL;
+}
+
+static __always_inline bool stop_machine_nmi_handler_enabled(void)
+{
+	return false;
+}
+
+static __always_inline bool stop_machine_nmi_handler(void)
+{
+	return false;
+}
+
 #endif	/* CONFIG_SMP || CONFIG_HOTPLUG_CPU */
+
+void arch_send_self_nmi(void);
 #endif	/* _LINUX_STOP_MACHINE */

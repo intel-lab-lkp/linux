@@ -174,6 +174,8 @@ struct multi_stop_data {
 
 	enum multi_stop_state	state;
 	atomic_t		thread_ack;
+
+	bool			use_nmi;
 };
 
 static void set_state(struct multi_stop_data *msdata,
@@ -195,6 +197,42 @@ static void ack_state(struct multi_stop_data *msdata)
 notrace void __weak stop_machine_yield(const struct cpumask *cpumask)
 {
 	cpu_relax();
+}
+
+struct stop_machine_nmi_ctrl {
+	bool nmi_enabled;
+	struct multi_stop_data *msdata;
+	int err;
+};
+
+DEFINE_STATIC_KEY_FALSE(stop_machine_nmi_handler_enable);
+static DEFINE_PER_CPU(struct stop_machine_nmi_ctrl, stop_machine_nmi_ctrl);
+
+static void enable_nmi_handler(struct multi_stop_data *msdata)
+{
+	this_cpu_write(stop_machine_nmi_ctrl.msdata, msdata);
+	this_cpu_write(stop_machine_nmi_ctrl.nmi_enabled, true);
+}
+
+void __weak arch_send_self_nmi(void)
+{
+	/* Arch code must implement this to support stop_machine_nmi() */
+}
+
+bool noinstr stop_machine_nmi_handler(void)
+{
+	struct multi_stop_data *msdata;
+	int err;
+
+	if (!raw_cpu_read(stop_machine_nmi_ctrl.nmi_enabled))
+		return false;
+
+	raw_cpu_write(stop_machine_nmi_ctrl.nmi_enabled, false);
+
+	msdata = raw_cpu_read(stop_machine_nmi_ctrl.msdata);
+	err = msdata->fn(msdata->data);
+	raw_cpu_write(stop_machine_nmi_ctrl.err, err);
+	return true;
 }
 
 /* This is the cpu_stop function which stops the CPU. */
@@ -234,8 +272,15 @@ static int multi_cpu_stop(void *data)
 				hard_irq_disable();
 				break;
 			case MULTI_STOP_RUN:
-				if (is_active)
-					err = msdata->fn(msdata->data);
+				if (is_active) {
+					if (msdata->use_nmi) {
+						enable_nmi_handler(msdata);
+						arch_send_self_nmi();
+						err = raw_cpu_read(stop_machine_nmi_ctrl.err);
+					} else {
+						err = msdata->fn(msdata->data);
+					}
+				}
 				break;
 			default:
 				break;
@@ -584,14 +629,15 @@ static int __init cpu_stop_init(void)
 }
 early_initcall(cpu_stop_init);
 
-int stop_machine_cpuslocked(cpu_stop_fn_t fn, void *data,
-			    const struct cpumask *cpus)
+static int __stop_machine_cpuslocked(cpu_stop_fn_t fn, void *data,
+			    const struct cpumask *cpus, bool use_nmi)
 {
 	struct multi_stop_data msdata = {
 		.fn = fn,
 		.data = data,
 		.num_threads = num_online_cpus(),
 		.active_cpus = cpus,
+		.use_nmi = use_nmi,
 	};
 
 	lockdep_assert_cpus_held();
@@ -620,6 +666,24 @@ int stop_machine_cpuslocked(cpu_stop_fn_t fn, void *data,
 	return stop_cpus(cpu_online_mask, multi_cpu_stop, &msdata);
 }
 
+int stop_machine_cpuslocked(cpu_stop_fn_t fn, void *data,
+			    const struct cpumask *cpus)
+{
+	return __stop_machine_cpuslocked(fn, data, cpus, false);
+}
+
+int stop_machine_cpuslocked_nmi(cpu_stop_fn_t fn, void *data,
+				const struct cpumask *cpus)
+{
+	int ret;
+
+	static_branch_enable_cpuslocked(&stop_machine_nmi_handler_enable);
+	ret = __stop_machine_cpuslocked(fn, data, cpus, true);
+	static_branch_disable_cpuslocked(&stop_machine_nmi_handler_enable);
+
+	return ret;
+}
+
 int stop_machine(cpu_stop_fn_t fn, void *data, const struct cpumask *cpus)
 {
 	int ret;
@@ -631,6 +695,18 @@ int stop_machine(cpu_stop_fn_t fn, void *data, const struct cpumask *cpus)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(stop_machine);
+
+int stop_machine_nmi(cpu_stop_fn_t fn, void *data, const struct cpumask *cpus)
+{
+	int ret;
+
+	cpus_read_lock();
+	ret = stop_machine_cpuslocked_nmi(fn, data, cpus);
+	cpus_read_unlock();
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(stop_machine_nmi);
 
 #ifdef CONFIG_SCHED_SMT
 int stop_core_cpuslocked(unsigned int cpu, cpu_stop_fn_t fn, void *data)
