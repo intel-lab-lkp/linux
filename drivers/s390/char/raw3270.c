@@ -1325,8 +1325,10 @@ static int raw3270_init(void)
 	if (rc)
 		return rc;
 	rc = class_register(&class3270);
-	if (rc)
+	if (rc) {
+		ccw_driver_unregister(&raw3270_ccw_driver);
 		return rc;
+	}
 	/* Create attributes for early (= console) device. */
 	mutex_lock(&raw3270_mutex);
 	list_for_each_entry(rp, &raw3270_devices, list) {
