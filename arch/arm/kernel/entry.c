@@ -18,6 +18,7 @@ void arm_exit_to_user_mode_no_work_pending(void)
 	if (IS_ENABLED(CONFIG_GENERIC_ENTRY))
 		tick_nohz_user_enter_prepare();
 	rseq_irqentry_exit_to_user_mode();
+	__exit_to_user_mode_validate();
 	exit_to_user_mode();
 #ifdef CONFIG_KSTACK_ERASE
 	stackleak_erase_on_task_stack();
