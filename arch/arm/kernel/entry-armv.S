@@ -403,12 +403,7 @@ ENDPROC(__fiq_abt)
 	zero_fp
 
 	.if	\trace
-#ifdef CONFIG_TRACE_IRQFLAGS
-	bl	trace_hardirqs_off
-#endif
-#ifdef CONFIG_CONTEXT_TRACKING_USER
-	bl	user_exit_callable
-#endif
+	bl	arm_enter_from_user_mode
 	.endif
 	.endm
 

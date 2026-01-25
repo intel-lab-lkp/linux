@@ -6,6 +6,20 @@
 #include <linux/kstack_erase.h>
 
 /*
+ * arm_enter_from_user_mode - Establish state when coming from user mode
+ *
+ * The calling code satisfies (arch_irqs_disabled() && lockdep_hardirqs_enabled()).
+ * When the function returns, the state satisfies (arch_irqs_disabled() &&
+ * !lockdep_hardirqs_enabled()).
+ */
+asmlinkage __section(".entry.text")
+void arm_enter_from_user_mode(void)
+{
+	/* arm32 not uses pt_regs now */
+	enter_from_user_mode(NULL);
+}
+
+/*
  * arm_exit_to_user_mode_no_work_pending - Fixup state when exiting to user mode
  *
  * The calling code satisfies (arch_irqs_disabled() && !lockdep_hardirqs_enabled()).

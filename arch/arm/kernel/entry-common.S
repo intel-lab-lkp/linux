@@ -181,10 +181,8 @@ ENTRY(vector_swi)
 	zero_fp
 	alignment_trap r10, ip, cr_alignment
 	asm_trace_hardirqs_on save=0
-	enable_irq_notrace
-#ifdef CONFIG_CONTEXT_TRACKING_USER
-	bl	user_exit_callable
-#endif
+	bl	arm_enter_from_user_mode
+	enable_irq save=0
 
 	/*
 	 * Get the system call number.
