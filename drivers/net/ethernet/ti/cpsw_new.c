@@ -248,15 +248,23 @@ static int cpsw_purge_all_mc(struct net_device *ndev, const u8 *addr, int num)
 	return 0;
 }
 
-static void cpsw_ndo_set_rx_mode(struct net_device *ndev)
+static void cpsw_ndo_set_rx_mode_work(struct work_struct *work)
 {
-	struct cpsw_priv *priv = netdev_priv(ndev);
+	struct cpsw_priv *priv = container_of(work, struct cpsw_priv, rx_mode_work);
 	struct cpsw_common *cpsw = priv->cpsw;
+	struct net_device *ndev = priv->ndev;
 
+	if (!netif_running(ndev))
+		return;
+
+	rtnl_lock();
+	netif_addr_lock_bh(ndev);
 	if (ndev->flags & IFF_PROMISC) {
 		/* Enable promiscuous mode */
 		cpsw_set_promiscious(ndev, true);
 		cpsw_ale_set_allmulti(cpsw->ale, IFF_ALLMULTI, priv->emac_port);
+		netif_addr_unlock_bh(ndev);
+		rtnl_unlock();
 		return;
 	}
 
@@ -270,6 +278,16 @@ static void cpsw_ndo_set_rx_mode(struct net_device *ndev)
 	/* add/remove mcast address either for real netdev or for vlan */
 	__hw_addr_ref_sync_dev(&ndev->mc, ndev, cpsw_add_mc_addr,
 			       cpsw_del_mc_addr);
+	netif_addr_unlock_bh(ndev);
+	rtnl_unlock();
+}
+
+static void cpsw_ndo_set_rx_mode(struct net_device *ndev)
+{
+	struct cpsw_priv *priv = netdev_priv(ndev);
+	struct cpsw_common *cpsw = priv->cpsw;
+
+	queue_work(cpsw->cmd_wq, &priv->rx_mode_work);
 }
 
 static unsigned int cpsw_rxbuf_total_len(unsigned int len)
@@ -812,6 +830,8 @@ static int cpsw_ndo_stop(struct net_device *ndev)
 	}
 
 	__hw_addr_ref_unsync_dev(&ndev->mc, ndev, cpsw_purge_all_mc);
+
+	cancel_work_sync(&priv->rx_mode_work);
 
 	if (cpsw->usage_count <= 1) {
 		napi_disable(&cpsw->napi_rx);
@@ -1398,6 +1418,7 @@ static int cpsw_create_ports(struct cpsw_common *cpsw)
 		priv->msg_enable = netif_msg_init(debug_level, CPSW_DEBUG);
 		priv->emac_port = i + 1;
 		priv->tx_packet_min = CPSW_MIN_PACKET_SIZE;
+		INIT_WORK(&priv->rx_mode_work, cpsw_ndo_set_rx_mode_work);
 
 		if (is_valid_ether_addr(slave_data->mac_addr)) {
 			ether_addr_copy(priv->mac_addr, slave_data->mac_addr);
@@ -1976,6 +1997,13 @@ static int cpsw_probe(struct platform_device *pdev)
 	}
 	cpsw_split_res(cpsw);
 
+	cpsw->cmd_wq = create_singlethread_workqueue("cpsw_cmd_wq");
+	if (!cpsw->cmd_wq) {
+		dev_err(dev, "error initializing workqueue\n");
+		ret = -ENOMEM;
+		goto clean_cpts;
+	}
+
 	/* setup netdevs */
 	ret = cpsw_create_ports(cpsw);
 	if (ret)
@@ -2042,6 +2070,7 @@ skip_cpts:
 clean_unregister_notifiers:
 	cpsw_unregister_notifiers(cpsw);
 clean_unregister_netdev:
+	destroy_workqueue(cpsw->cmd_wq);
 	cpsw_unregister_ports(cpsw);
 clean_cpts:
 	cpts_release(cpsw->cpts);
@@ -2068,6 +2097,7 @@ static void cpsw_remove(struct platform_device *pdev)
 		return;
 	}
 
+	destroy_workqueue(cpsw->cmd_wq);
 	cpsw_unregister_notifiers(cpsw);
 	cpsw_unregister_devlink(cpsw);
 	cpsw_unregister_ports(cpsw);
