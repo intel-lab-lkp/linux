@@ -113,15 +113,7 @@ ENTRY(ret_to_user_from_irq)
 	movs	r1, r1, lsl #16
 	bne	slow_work_pending
 no_work_pending:
-#ifdef CONFIG_CONTEXT_TRACKING_USER
-	bl	user_enter_callable
-#endif
-
-	asm_trace_hardirqs_on save = 0
-
-#ifdef CONFIG_KSTACK_ERASE
-	bl	stackleak_erase_on_task_stack
-#endif
+	bl	arm_exit_to_user_mode_no_work_pending
 	restore_user_regs fast = 0, offset = 0
 ENDPROC(ret_to_user_from_irq)
 ENDPROC(ret_to_user)
