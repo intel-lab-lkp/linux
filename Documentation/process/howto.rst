@@ -403,7 +403,7 @@ interacting with the list (or any list):
 
 If multiple people respond to your mail, the CC: list of recipients may
 get pretty large. Don't remove anybody from the CC: list without a good
-reason, or don't reply only to the list address. Get used to receiving the
+reason, and don't reply only to the list address. Get used to receiving the
 mail twice, one from the sender and the one from the list, and don't try
 to tune that by adding fancy mail-headers, people will not like it.
 
