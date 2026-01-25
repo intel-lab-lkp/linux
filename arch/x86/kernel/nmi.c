@@ -24,6 +24,7 @@
 #include <linux/export.h>
 #include <linux/atomic.h>
 #include <linux/sched/clock.h>
+#include <linux/stop_machine.h>
 #include <linux/kvm_types.h>
 
 #include <asm/cpu_entry_area.h>
@@ -381,6 +382,9 @@ static noinstr void default_do_nmi(struct pt_regs *regs)
 	__this_cpu_write(last_nmi_rip, regs->ip);
 
 	instrumentation_begin();
+
+	if (stop_machine_nmi_handler_enabled() && stop_machine_nmi_handler())
+		goto out;
 
 	if (microcode_nmi_handler_enabled() && microcode_nmi_handler())
 		goto out;
