@@ -316,7 +316,6 @@ struct microcode_ctrl {
 	bool			nmi_enabled;
 };
 
-DEFINE_STATIC_KEY_FALSE(microcode_nmi_handler_enable);
 static DEFINE_PER_CPU(struct microcode_ctrl, ucode_ctrl);
 static atomic_t late_cpus_in, offline_in_nmi;
 static unsigned int loops_per_usec;
@@ -593,13 +592,10 @@ static int load_late_stop_cpus(bool is_safe)
 	 */
 	store_cpu_caps(&prev_info);
 
-	if (microcode_ops->use_nmi) {
-		static_branch_enable_cpuslocked(&microcode_nmi_handler_enable);
+	if (microcode_ops->use_nmi)
 		stop_machine_cpuslocked_nmi(microcode_nmi_handler, NULL, cpu_online_mask);
-		static_branch_disable_cpuslocked(&microcode_nmi_handler_enable);
-	} else {
+	else
 		stop_machine_cpuslocked(microcode_update_handler, NULL, cpu_online_mask);
-	}
 
 	/* Analyze the results */
 	for_each_cpu_and(cpu, cpu_present_mask, &cpus_booted_once_mask) {
