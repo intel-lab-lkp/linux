@@ -1594,7 +1594,7 @@ static int inetdev_event(struct notifier_block *this, unsigned long event,
 				IN_DEV_CONF_SET(in_dev, NOXFRM, 1);
 				IN_DEV_CONF_SET(in_dev, NOPOLICY, 1);
 			}
-		} else if (event == NETDEV_CHANGEMTU) {
+		} else if (event == NETDEV_CHANGEMTU && dev->reg_state != NETREG_UNREGISTERING) {
 			/* Re-enabling IP */
 			if (inetdev_valid_mtu(dev->mtu))
 				in_dev = inetdev_init(dev);
