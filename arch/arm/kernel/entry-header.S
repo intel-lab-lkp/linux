@@ -361,34 +361,6 @@ ALT_UP_B(.L1_\@)
 #endif	/* !CONFIG_THUMB2_KERNEL */
 	.endm
 
-/*
- * Context tracking subsystem.  Used to instrument transitions
- * between user and kernel mode.
- */
-	.macro ct_user_exit, save = 1
-#ifdef CONFIG_CONTEXT_TRACKING_USER
-	.if	\save
-	stmdb   sp!, {r0-r3, ip, lr}
-	bl	user_exit_callable
-	ldmia	sp!, {r0-r3, ip, lr}
-	.else
-	bl	user_exit_callable
-	.endif
-#endif
-	.endm
-
-	.macro ct_user_enter, save = 1
-#ifdef CONFIG_CONTEXT_TRACKING_USER
-	.if	\save
-	stmdb   sp!, {r0-r3, ip, lr}
-	bl	user_enter_callable
-	ldmia	sp!, {r0-r3, ip, lr}
-	.else
-	bl	user_enter_callable
-	.endif
-#endif
-	.endm
-
 	.macro	invoke_syscall, table, nr, tmp, ret, reload=0
 #ifdef CONFIG_CPU_SPECTRE
 	mov	\tmp, \nr
