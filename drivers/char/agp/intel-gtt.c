@@ -186,8 +186,10 @@ static int i810_setup(void)
 	reg_addr = pci_resource_start(intel_private.pcidev, I810_MMADR_BAR);
 
 	intel_private.registers = ioremap(reg_addr, KB(64));
-	if (!intel_private.registers)
+	if (!intel_private.registers) {
+		free_gatt_pages(intel_private.i81x_gtt_table, I810_GTT_ORDER);
 		return -ENOMEM;
+	}
 
 	writel(virt_to_phys(gtt_table) | I810_PGETBL_ENABLED,
 	       intel_private.registers+I810_PGETBL_CTL);
