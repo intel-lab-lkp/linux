@@ -534,6 +534,13 @@ static int hfsplus_fill_super(struct super_block *sb, struct fs_context *fc)
 		}
 		atomic_set(&sbi->attr_tree_state, HFSPLUS_VALID_ATTR_TREE);
 	}
+
+	/* Check for bitmap corruption and mount read-only if detected */
+	if (sbi->btree_bitmap_corrupted) {
+		pr_warn("HFS+ (device %s): btree bitmap corruption detected, mounting read-only; run fsck.hfsplus to repair\n",
+			sb->s_id);
+		sb->s_flags |= SB_RDONLY;
+	}
 	sb->s_xattr = hfsplus_xattr_handlers;
 
 	inode = hfsplus_iget(sb, HFSPLUS_ALLOC_CNID);
