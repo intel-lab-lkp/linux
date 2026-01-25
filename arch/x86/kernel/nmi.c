@@ -548,7 +548,7 @@ DEFINE_IDTENTRY_RAW(exc_nmi)
 		raw_atomic_long_inc(&nsp->idt_calls);
 
 	if (arch_cpu_is_offline(smp_processor_id())) {
-		if (microcode_nmi_handler_enabled())
+		if (stop_machine_nmi_handler_enabled())
 			microcode_offline_nmi_handler();
 		return;
 	}
@@ -711,7 +711,7 @@ DEFINE_FREDENTRY_NMI(exc_nmi)
 	irqentry_state_t irq_state;
 
 	if (arch_cpu_is_offline(smp_processor_id())) {
-		if (microcode_nmi_handler_enabled())
+		if (stop_machine_nmi_handler_enabled())
 			microcode_offline_nmi_handler();
 		return;
 	}
