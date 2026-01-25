@@ -192,6 +192,8 @@ static int z2_open(struct gendisk *disk, blk_mode_t mode)
 			if (z2ram_map == NULL) {
 				printk(KERN_ERR DEVICE_NAME
 				       ": cannot get mem for z2ram_map\n");
+				if (vaddr)
+					iounmap((void *)vaddr);
 				goto err_out;
 			}
 
