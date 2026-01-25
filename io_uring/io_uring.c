@@ -1812,6 +1812,8 @@ static int io_init_req(struct io_ring_ctx *ctx, struct io_kiocb *req,
 	personality = READ_ONCE(sqe->personality);
 	if (personality) {
 		int ret;
+		if (unlikely(!def->allow_personality))
+			return -EINVAL;
 
 		req->creds = xa_load(&ctx->personalities, personality);
 		if (!req->creds)

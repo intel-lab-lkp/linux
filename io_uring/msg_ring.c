@@ -260,7 +260,7 @@ static int io_msg_send_fd(struct io_kiocb *req, unsigned int issue_flags)
 
 static int __io_msg_ring_prep(struct io_msg *msg, const struct io_uring_sqe *sqe)
 {
-	if (unlikely(sqe->buf_index || sqe->personality))
+	if (unlikely(sqe->buf_index))
 		return -EINVAL;
 
 	msg->src_file = NULL;
