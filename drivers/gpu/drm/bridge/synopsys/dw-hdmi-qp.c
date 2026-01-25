@@ -748,43 +748,6 @@ static struct i2c_adapter *dw_hdmi_qp_i2c_adapter(struct dw_hdmi_qp *hdmi)
 	return adap;
 }
 
-static int dw_hdmi_qp_config_avi_infoframe(struct dw_hdmi_qp *hdmi,
-					   const u8 *buffer, size_t len)
-{
-	u32 val, i, j;
-
-	if (len != HDMI_INFOFRAME_SIZE(AVI)) {
-		dev_err(hdmi->dev, "failed to configure avi infoframe\n");
-		return -EINVAL;
-	}
-
-	/*
-	 * DW HDMI QP IP uses a different byte format from standard AVI info
-	 * frames, though generally the bits are in the correct bytes.
-	 */
-	val = buffer[1] << 8 | buffer[2] << 16;
-	dw_hdmi_qp_write(hdmi, val, PKT_AVI_CONTENTS0);
-
-	for (i = 0; i < 4; i++) {
-		for (j = 0; j < 4; j++) {
-			if (i * 4 + j >= 14)
-				break;
-			if (!j)
-				val = buffer[i * 4 + j + 3];
-			val |= buffer[i * 4 + j + 3] << (8 * j);
-		}
-
-		dw_hdmi_qp_write(hdmi, val, PKT_AVI_CONTENTS1 + i * 4);
-	}
-
-	dw_hdmi_qp_mod(hdmi, 0, PKTSCHED_AVI_FIELDRATE, PKTSCHED_PKT_CONFIG1);
-
-	dw_hdmi_qp_mod(hdmi, PKTSCHED_AVI_TX_EN | PKTSCHED_GCP_TX_EN,
-		       PKTSCHED_AVI_TX_EN | PKTSCHED_GCP_TX_EN, PKTSCHED_PKT_EN);
-
-	return 0;
-}
-
 static int dw_hdmi_qp_config_drm_infoframe(struct dw_hdmi_qp *hdmi,
 					   const u8 *buffer, size_t len)
 {
@@ -1024,10 +987,23 @@ static int dw_hdmi_qp_bridge_write_avi_infoframe(struct drm_bridge *bridge,
 						 const u8 *buffer, size_t len)
 {
 	struct dw_hdmi_qp *hdmi = bridge->driver_private;
+	size_t i;
 
 	dw_hdmi_qp_bridge_clear_avi_infoframe(bridge);
 
-	return dw_hdmi_qp_config_avi_infoframe(hdmi, buffer, len);
+	/* AVI packet header */
+	dw_hdmi_qp_write_pkt(hdmi, buffer, 1, 2, PKT_AVI_CONTENTS0);
+
+	/* AVI packet body */
+	for (i = 0; i < len - 3; i += 4)
+		dw_hdmi_qp_write_pkt(hdmi, buffer + 3, i, min(len - i - 3, 4),
+				     PKT_AVI_CONTENTS1 + i);
+
+	dw_hdmi_qp_mod(hdmi, 0, PKTSCHED_AVI_FIELDRATE, PKTSCHED_PKT_CONFIG1);
+	dw_hdmi_qp_mod(hdmi, PKTSCHED_AVI_TX_EN | PKTSCHED_GCP_TX_EN,
+		       PKTSCHED_AVI_TX_EN | PKTSCHED_GCP_TX_EN, PKTSCHED_PKT_EN);
+
+	return 0;
 }
 
 static int dw_hdmi_qp_bridge_write_hdmi_infoframe(struct drm_bridge *bridge,
