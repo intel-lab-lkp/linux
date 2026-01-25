@@ -12529,8 +12529,9 @@ scsih_pci_slot_reset(struct pci_dev *pdev)
 
 	if (!rc)
 		return PCI_ERS_RESULT_RECOVERED;
-	else
-		return PCI_ERS_RESULT_DISCONNECT;
+
+	mpt3sas_base_unmap_resources(ioc);
+	return PCI_ERS_RESULT_DISCONNECT;
 }
 
 /**
