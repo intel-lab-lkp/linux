@@ -299,8 +299,10 @@ static int vmw_ttm_bind(struct ttm_device *bdev,
 		if (unlikely(vmw_be->mob == NULL)) {
 			vmw_be->mob =
 				vmw_mob_create(ttm->num_pages);
-			if (unlikely(vmw_be->mob == NULL))
+			if (unlikely(vmw_be->mob == NULL)) {
+				vmw_ttm_unmap_dma(vmw_be);
 				return -ENOMEM;
+			}
 		}
 
 		ret = vmw_mob_bind(vmw_be->dev_priv, vmw_be->mob,
