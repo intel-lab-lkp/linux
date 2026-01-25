@@ -1181,6 +1181,7 @@ static int __init tty3215_init(void)
 	tty_set_operations(driver, &tty3215_ops);
 	ret = tty_register_driver(driver);
 	if (ret) {
+		ccw_driver_unregister(&raw3215_ccw_driver);
 		tty_driver_kref_put(driver);
 		return ret;
 	}
