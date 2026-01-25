@@ -164,8 +164,6 @@ static struct usb_driver kaweth_driver = {
 	.disable_hub_initiated_lpm = 1,
 };
 
-typedef __u8 eth_addr_t[6];
-
 /****************************************************************
  *     usb_eth_dev
  ****************************************************************/
@@ -185,7 +183,7 @@ struct kaweth_ethernet_configuration
 	__u8 size;
 	__u8 reserved1;
 	__u8 reserved2;
-	eth_addr_t hw_addr;
+	u8 hw_addr[ETH_ALEN];
 	__u32 statistics_mask;
 	__le16 segment_size;
 	__u16 max_multicast_filters;
@@ -882,7 +880,6 @@ static int kaweth_probe(
 	struct usb_device *udev = interface_to_usbdev(intf);
 	struct kaweth_device *kaweth;
 	struct net_device *netdev;
-	const eth_addr_t bcast_addr = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 	int result = 0;
 	int rv = -EIO;
 
@@ -991,9 +988,7 @@ err_fw:
 	dev_info(dev, "MTU: %d\n", le16_to_cpu(kaweth->configuration.segment_size));
 	dev_info(dev, "Read MAC address %pM\n", kaweth->configuration.hw_addr);
 
-	if(!memcmp(&kaweth->configuration.hw_addr,
-                   &bcast_addr,
-		   sizeof(bcast_addr))) {
+	if (is_broadcast_ether_addr((const u8 *)&kaweth->configuration.hw_addr)) {
 		dev_err(dev, "Firmware not functioning properly, no net device created\n");
 		goto err_free_netdev;
 	}
@@ -1043,7 +1038,7 @@ err_fw:
 	if (!kaweth->rx_buf)
 		goto err_all_but_rxbuf;
 
-	memcpy(netdev->broadcast, &bcast_addr, sizeof(bcast_addr));
+	eth_broadcast_addr(netdev->broadcast);
 	eth_hw_addr_set(netdev, (u8 *)&kaweth->configuration.hw_addr);
 
 	netdev->netdev_ops = &kaweth_netdev_ops;
