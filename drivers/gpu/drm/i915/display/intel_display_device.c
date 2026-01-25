@@ -3,6 +3,7 @@
  * Copyright © 2023 Intel Corporation
  */
 
+#include <linux/dmi.h>
 #include <linux/pci.h>
 
 #include <drm/drm_color_mgmt.h>
@@ -1662,6 +1663,7 @@ struct intel_display *intel_display_device_probe(struct pci_dev *pdev,
 	const struct platform_desc *desc;
 	const struct subplatform_desc *subdesc;
 	enum intel_step step;
+	const char *product_name = dmi_get_system_info(DMI_PRODUCT_NAME);
 
 	display = kzalloc(sizeof(*display), GFP_KERNEL);
 	if (!display)
@@ -1676,6 +1678,11 @@ struct intel_display *intel_display_device_probe(struct pci_dev *pdev,
 
 	if (has_no_display(pdev)) {
 		drm_dbg_kms(display->drm, "Device doesn't have display\n");
+		goto no_display;
+	}
+
+	if (dmi_match(DMI_BOARD_VENDOR, "Apple Inc.") && !strncmp(product_name, "iMac", 4)) {
+		drm_dbg_kms(display->drm, "iMac Detected, Disabling display\n");
 		goto no_display;
 	}
 
