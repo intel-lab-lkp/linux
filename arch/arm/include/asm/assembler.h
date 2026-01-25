@@ -155,8 +155,8 @@ THUMB(	fpreg	.req	r7	)
 	asm_trace_hardirqs_off \save
 	.endm
 
-	.macro enable_irq
-	asm_trace_hardirqs_on
+	.macro enable_irq, save = 1
+	asm_trace_hardirqs_on save = \save
 	enable_irq_notrace
 	.endm
 /*
