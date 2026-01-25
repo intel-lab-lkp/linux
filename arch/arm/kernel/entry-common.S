@@ -180,7 +180,6 @@ ENTRY(vector_swi)
 	reload_current r10, ip
 	zero_fp
 	alignment_trap r10, ip, cr_alignment
-	asm_trace_hardirqs_on save=0
 	bl	arm_enter_from_user_mode
 	enable_irq save=0
 
