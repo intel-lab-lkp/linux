@@ -1223,6 +1223,43 @@ void ceph_allocate_page_array(struct address_space *mapping,
 }
 
 static inline
+void ceph_discard_page_array(struct writeback_control *wbc,
+			     struct ceph_writeback_ctl *ceph_wbc)
+{
+	int i;
+	struct page *page;
+
+	for (i = 0; i < folio_batch_count(&ceph_wbc->fbatch); i++) {
+		struct folio *folio = ceph_wbc->fbatch.folios[i];
+
+		if (!folio)
+			continue;
+
+		page = &folio->page;
+		redirty_page_for_writepage(wbc, page);
+		unlock_page(page);
+	}
+
+	for (i = 0; i < ceph_wbc->locked_pages; i++) {
+		page = ceph_fscrypt_pagecache_page(ceph_wbc->pages[i]);
+
+		if (!page)
+			continue;
+
+		redirty_page_for_writepage(wbc, page);
+		unlock_page(page);
+	}
+
+	if (ceph_wbc->from_pool) {
+		mempool_free(ceph_wbc->pages, ceph_wb_pagevec_pool);
+		ceph_wbc->from_pool = false;
+	} else
+		kfree(ceph_wbc->pages);
+	ceph_wbc->pages = NULL;
+	ceph_wbc->locked_pages = 0;
+}
+
+static inline
 bool is_folio_index_contiguous(const struct ceph_writeback_ctl *ceph_wbc,
 			      const struct folio *folio)
 {
@@ -1453,35 +1490,7 @@ new_request:
 	BUG_ON(len < ceph_fscrypt_page_offset(page) + thp_size(page) - offset);
 
 	if (!ceph_inc_osd_stopping_blocker(fsc->mdsc)) {
-		for (i = 0; i < folio_batch_count(&ceph_wbc->fbatch); i++) {
-			struct folio *folio = ceph_wbc->fbatch.folios[i];
-
-			if (!folio)
-				continue;
-
-			page = &folio->page;
-			redirty_page_for_writepage(wbc, page);
-			unlock_page(page);
-		}
-
-		for (i = 0; i < ceph_wbc->locked_pages; i++) {
-			page = ceph_fscrypt_pagecache_page(ceph_wbc->pages[i]);
-
-			if (!page)
-				continue;
-
-			redirty_page_for_writepage(wbc, page);
-			unlock_page(page);
-		}
-
-		if (ceph_wbc->from_pool) {
-			mempool_free(ceph_wbc->pages, ceph_wb_pagevec_pool);
-			ceph_wbc->from_pool = false;
-		} else
-			kfree(ceph_wbc->pages);
-		ceph_wbc->pages = NULL;
-		ceph_wbc->locked_pages = 0;
-
+		ceph_discard_page_array(wbc, ceph_wbc);
 		ceph_osdc_put_request(req);
 		return -EIO;
 	}
