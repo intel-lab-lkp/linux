@@ -44,6 +44,7 @@
 #include <net/page_pool/helpers.h>
 #include <net/pkt_cls.h>
 #include <net/xdp_sock_drv.h>
+#include "stmmac_platform.h"
 #include "stmmac_ptp.h"
 #include "stmmac_fpe.h"
 #include "stmmac.h"
@@ -7659,11 +7660,65 @@ struct plat_stmmacenet_data *stmmac_plat_dat_alloc(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(stmmac_plat_dat_alloc);
 
+static int stmmac_read_mac_before_reset(struct stmmac_priv *priv,
+					u8 *mac_addr)
+{
+	unsigned int hi_addr, lo_addr;
+	int ret;
+
+	eth_zero_addr(mac_addr);
+
+	/* Deassert reset to allow hardware access */
+	if (priv->plat->stmmac_rst) {
+		ret = reset_control_deassert(priv->plat->stmmac_rst);
+		if (ret)
+			return ret;
+	}
+
+	/* Enable bus clocks to read MAC address */
+	ret = stmmac_bus_clks_config(priv, true);
+	if (ret) {
+		dev_warn(priv->device, "failed to enable clocks: %d\n", ret);
+		goto assert_reset;
+	}
+
+	switch (priv->plat->core_type) {
+	case DWMAC_CORE_GMAC4:
+	case DWMAC_CORE_XGMAC:
+		/* GMAC4/XGMAC: MAC Address0 High/Low Register */
+		hi_addr = 0x300;  /* GMAC_ADDR_HIGH(0) */
+		lo_addr = 0x304;  /* GMAC_ADDR_LOW(0) */
+		break;
+	case DWMAC_CORE_GMAC:
+	case DWMAC_CORE_MAC100:
+		/* GMAC/GMAC3/MAC100: MAC Address0 High/Low Register */
+		hi_addr = 0x40;   /* GMAC_ADDR_HIGH(0) */
+		lo_addr = 0x44;   /* GMAC_ADDR_LOW(0) */
+		break;
+	default:
+		hi_addr = 0;
+	}
+
+	if (hi_addr)
+		stmmac_get_mac_addr(priv->ioaddr, mac_addr, hi_addr, lo_addr);
+
+	ret = 0;
+
+	stmmac_bus_clks_config(priv, false);
+
+assert_reset:
+	if (priv->plat->stmmac_rst)
+		reset_control_assert(priv->plat->stmmac_rst);
+
+	return ret;
+}
+
 static int __stmmac_dvr_probe(struct device *device,
 			      struct plat_stmmacenet_data *plat_dat,
 			      struct stmmac_resources *res)
 {
 	struct net_device *ndev = NULL;
+	u8 saved_mac_addr[ETH_ALEN];
 	struct stmmac_priv *priv;
 	u32 rxq;
 	int i, ret = 0;
@@ -7740,6 +7795,9 @@ static int __stmmac_dvr_probe(struct device *device,
 	if ((phyaddr >= 0) && (phyaddr <= 31))
 		priv->plat->phy_addr = phyaddr;
 
+	/* Save MAC address before reset (if bootloader programmed it) */
+	stmmac_read_mac_before_reset(priv, saved_mac_addr);
+
 	if (priv->plat->stmmac_rst) {
 		ret = reset_control_assert(priv->plat->stmmac_rst);
 		reset_control_deassert(priv->plat->stmmac_rst);
@@ -7768,7 +7826,13 @@ static int __stmmac_dvr_probe(struct device *device,
 	if (priv->synopsys_id < DWMAC_CORE_5_20)
 		priv->plat->dma_cfg->dche = false;
 
-	stmmac_check_ether_addr(priv);
+	if (is_valid_ether_addr(saved_mac_addr))
+		eth_hw_addr_set(priv->dev, saved_mac_addr);
+	else
+		stmmac_check_ether_addr(priv);
+
+	/* Store the MAC address in hardware */
+	stmmac_set_umac_addr(priv, priv->hw, priv->dev->dev_addr, 0);
 
 	ndev->netdev_ops = &stmmac_netdev_ops;
 

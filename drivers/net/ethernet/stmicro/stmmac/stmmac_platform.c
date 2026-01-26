@@ -857,7 +857,7 @@ void stmmac_pltfr_remove(struct platform_device *pdev)
 }
 EXPORT_SYMBOL_GPL(stmmac_pltfr_remove);
 
-static int stmmac_bus_clks_config(struct stmmac_priv *priv, bool enabled)
+int stmmac_bus_clks_config(struct stmmac_priv *priv, bool enabled)
 {
 	struct plat_stmmacenet_data *plat_dat = priv->plat;
 	int ret;
@@ -888,6 +888,7 @@ static int stmmac_bus_clks_config(struct stmmac_priv *priv, bool enabled)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(stmmac_bus_clks_config);
 
 static int __maybe_unused stmmac_runtime_suspend(struct device *dev)
 {
