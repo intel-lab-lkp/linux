@@ -2641,6 +2641,11 @@ int tb_switch_configure(struct tb_switch *sw)
 			return ret;
 
 		ret = usb4_switch_setup(sw);
+		if (ret)
+			return ret;
+
+		ret = tb_switch_wait_for_bit(sw, ROUTER_CS_6, ROUTER_CS_6_RR,
+					     ROUTER_CS_6_RR, 500);
 	} else {
 		if (sw->config.vendor_id != PCI_VENDOR_ID_INTEL)
 			tb_sw_warn(sw, "unknown switch vendor id %#x\n",
