@@ -369,15 +369,26 @@ static int sun6i_mipi_csi2_set_fmt(struct v4l2_subdev *subdev,
 	struct v4l2_mbus_framefmt *mbus_format = &format->format;
 	struct mutex *lock = &csi2_dev->bridge.lock;
 
+	/* The format on the source pad always matches the sink pad. */
+	if (format->pad != SUN6I_MIPI_CSI2_PAD_SINK)
+		return v4l2_subdev_get_fmt(subdev, state, format);
+
 	mutex_lock(lock);
 
 	sun6i_mipi_csi2_mbus_format_prepare(mbus_format);
 
-	if (format->which == V4L2_SUBDEV_FORMAT_TRY)
-		*v4l2_subdev_state_get_format(state, format->pad) =
-			*mbus_format;
-	else
+	if (format->which == V4L2_SUBDEV_FORMAT_TRY) {
+		struct v4l2_mbus_framefmt *fmt;
+
+		fmt = v4l2_subdev_state_get_format(state, format->pad);
+		*fmt = *mbus_format;
+
+		/* Propagate the format to the source pad. */
+		fmt = v4l2_subdev_state_get_format(state, SUN6I_MIPI_CSI2_PAD_SOURCE);
+		*fmt = *mbus_format;
+	} else {
 		csi2_dev->bridge.mbus_format = *mbus_format;
+	}
 
 	mutex_unlock(lock);
 
