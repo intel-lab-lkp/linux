@@ -43,8 +43,9 @@ use crate::{
 /// Local convenience function to return a copy of `S` by reinterpreting the bytes starting at
 /// `offset` in `slice`.
 fn frombytes_at<S: FromBytes + Sized>(slice: &[u8], offset: usize) -> Result<S> {
+    let end = offset.checked_add(size_of::<S>()).ok_or(EINVAL)?;
     slice
-        .get(offset..offset + size_of::<S>())
+        .get(offset..end)
         .and_then(S::from_bytes_copy)
         .ok_or(EINVAL)
 }
