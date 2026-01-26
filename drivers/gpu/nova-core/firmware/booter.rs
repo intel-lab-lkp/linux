@@ -119,14 +119,21 @@ impl<'a> HsFirmwareV2<'a> {
             Some(sig_size) => {
                 let patch_sig =
                     frombytes_at::<u32>(self.fw, self.hdr.patch_sig_offset.into_safe_cast())?;
-                let signatures_start = usize::from_safe_cast(self.hdr.sig_prod_offset + patch_sig);
+
+                let signatures_start = self
+                    .hdr
+                    .sig_prod_offset
+                    .checked_add(patch_sig)
+                    .map(usize::from_safe_cast)
+                    .ok_or(EINVAL)?;
+
+                let signatures_end = signatures_start
+                    .checked_add(usize::from_safe_cast(self.hdr.sig_prod_size))
+                    .ok_or(EINVAL)?;
 
                 self.fw
                     // Get signatures range.
-                    .get(
-                        signatures_start
-                            ..signatures_start + usize::from_safe_cast(self.hdr.sig_prod_size),
-                    )
+                    .get(signatures_start..signatures_end)
                     .ok_or(EINVAL)?
                     .chunks_exact(sig_size.into_safe_cast())
             }
