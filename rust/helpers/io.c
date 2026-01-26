@@ -13,6 +13,11 @@ void __iomem *rust_helper_ioremap_np(phys_addr_t offset, size_t size)
 	return ioremap_np(offset, size);
 }
 
+void __iomem *rust_helper_ioremap_wc(phys_addr_t offset, size_t size)
+{
+	return ioremap_wc(offset, size);
+}
+
 void rust_helper_iounmap(void __iomem *addr)
 {
 	iounmap(addr);
