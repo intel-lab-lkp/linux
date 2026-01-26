@@ -983,9 +983,45 @@ struct kernel_ethtool_ts_info {
  * @get_pause_stats: Report pause frame statistics. Drivers must not zero
  *	statistics which they don't report. The stats structure is initialized
  *	to ETHTOOL_STAT_NOT_SET indicating driver does not report statistics.
- * @get_pauseparam: Report pause parameters
- * @set_pauseparam: Set pause parameters.  Returns a negative error code
- *	or zero.
+ * @get_pauseparam: Report the configured administrative policy for
+ *	link-wide PAUSE (IEEE 802.3 Annex 31B). Drivers must fill struct
+ *	ethtool_pauseparam such that:
+ *	@autoneg:
+ *		This refers to **Pause Autoneg** (IEEE 802.3 Annex 31B) only.
+ *		true  -> the device follows the result of pause autonegotiation
+ *			 when the link allows it;
+ *		false -> the device uses a forced configuration.
+ *	@rx_pause/@tx_pause:
+ *		Represent the desired policy (Administrative State).
+ *		In autoneg mode they describe what is to be advertised;
+ *		in forced mode they describe the MAC configuration to be forced.
+ * @set_pauseparam: Apply a policy for link-wide PAUSE (IEEE 802.3 Annex 31B).
+ *	@rx_pause/@tx_pause:
+ *		Desired state. If @autoneg is true, these define the
+ *		advertisement. If @autoneg is false, these define the
+ *		forced MAC configuration (and preferably the advertisement too).
+ *	@autoneg:
+ *		Select Resolution Mode (true) or Forced Mode (false).
+ *
+ *	**Constraint Checking:**
+ *	Drivers MUST validate that the hardware capabilities support the
+ *	requested mode.
+ *	- If the hardware does not support Autonegotiation (e.g. fixed link),
+ *	  drivers MUST reject @autoneg=1 with -EOPNOTSUPP.
+ *	- If the hardware does not support Forced configuration (e.g. strict AN),
+ *	  drivers MUST reject @autoneg=0 with -EOPNOTSUPP.
+ *
+ *	Provided the hardware capability exists, drivers SHOULD accept a setting
+ *	of @autoneg=1 even if generic link autonegotiation ('ethtool -s') is
+ *	currently disabled. This allows the user to pre-configure the desired
+ *	policy for future link modes. Users should be aware that some drivers
+ *	may strictly enforce the dependency and reject this configuration.
+ *
+ *	New drivers are strongly encouraged to use phylink_ethtool_get_pauseparam()
+ *	and phylink_ethtool_set_pauseparam() which implement this logic
+ *	correctly.
+ *
+ *	See also: Documentation/networking/flow_control.rst
  * @self_test: Run specified self-tests
  * @get_strings: Return a set of strings that describe the requested objects
  * @set_phys_id: Identify the physical devices, e.g. by flashing an LED
