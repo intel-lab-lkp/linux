@@ -3407,8 +3407,10 @@ i915_gem_do_execbuffer(struct drm_device *dev,
 
 #define IN_FENCES (I915_EXEC_FENCE_IN | I915_EXEC_FENCE_SUBMIT)
 	if (args->flags & IN_FENCES) {
-		if ((args->flags & IN_FENCES) == IN_FENCES)
-			return -EINVAL;
+		if ((args->flags & IN_FENCES) == IN_FENCES) {
+			err = -EINVAL;
+			goto err_ext;
+		}
 
 		in_fence = sync_file_get_fence(lower_32_bits(args->rsvd2));
 		if (!in_fence) {
