@@ -1107,6 +1107,7 @@ static void detached_dev_do_request(struct bcache_device *d,
 
 	if (bio_op(orig_bio) == REQ_OP_DISCARD &&
 	    !bdev_max_discard_sectors(dc->bdev)) {
+		bio_end_io_acct(orig_bio, start_time);
 		bio_endio(orig_bio);
 		return;
 	}
@@ -1114,6 +1115,7 @@ static void detached_dev_do_request(struct bcache_device *d,
 	clone_bio = bio_alloc_clone(dc->bdev, orig_bio, GFP_NOIO,
 				    &d->bio_detached);
 	if (!clone_bio) {
+		bio_end_io_acct(orig_bio, start_time);
 		orig_bio->bi_status = BLK_STS_RESOURCE;
 		bio_endio(orig_bio);
 		return;
