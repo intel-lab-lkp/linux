@@ -48,3 +48,10 @@ alias! {
 pub use core::ffi::c_void;
 
 pub use core::ffi::CStr;
+
+pub use pin_init::{
+    zeroed,
+    MaybeZeroable,
+    Zeroable,
+    ZeroableOption, //
+};
