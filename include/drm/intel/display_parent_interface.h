@@ -66,6 +66,13 @@ struct intel_display_pc8_interface {
 	void (*unblock)(struct drm_device *drm);
 };
 
+struct intel_display_pcode_interface {
+	int (*read)(struct drm_device *drm, u32 mbox, u32 *val, u32 *val1);
+	int (*write)(struct drm_device *drm, u32 mbox, u32 val, int timeout_ms);
+	int (*request)(struct drm_device *drm, u32 mbox, u32 request,
+		       u32 reply_mask, u32 reply, int timeout_base_ms);
+};
+
 struct intel_display_rpm_interface {
 	struct ref_tracker *(*get)(const struct drm_device *drm);
 	struct ref_tracker *(*get_raw)(const struct drm_device *drm);
@@ -134,6 +141,9 @@ struct intel_display_parent_interface {
 
 	/** @pc8: PC8 interface. Optional. */
 	const struct intel_display_pc8_interface *pc8;
+
+	/** @pcode: Pcode interface */
+	const struct intel_display_pcode_interface *pcode;
 
 	/** @rpm: Runtime PM functions */
 	const struct intel_display_rpm_interface *rpm;

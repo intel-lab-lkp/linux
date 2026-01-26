@@ -771,6 +771,7 @@ static const struct intel_display_parent_interface parent = {
 	.irq = &i915_display_irq_interface,
 	.panic = &i915_display_panic_interface,
 	.pc8 = &i915_display_pc8_interface,
+	.pcode = &i915_display_pcode_interface,
 	.rpm = &i915_display_rpm_interface,
 	.rps = &i915_display_rps_interface,
 	.stolen = &i915_display_stolen_interface,
