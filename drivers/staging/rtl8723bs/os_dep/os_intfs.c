@@ -259,13 +259,13 @@ static void loadparam(struct adapter *padapter, struct net_device *pnetdev)
 
 	registry_par->notch_filter = (u8)rtw_notch_filter;
 
-	registry_par->RegEnableTxPowerLimit = (u8)rtw_tx_pwr_lmt_enable;
-	registry_par->RegEnableTxPowerByRate = (u8)rtw_tx_pwr_by_rate;
+	registry_par->reg_enable_tx_power_limit = (u8)rtw_tx_pwr_lmt_enable;
+	registry_par->reg_enable_tx_power_by_rate = (u8)rtw_tx_pwr_by_rate;
 
-	registry_par->RegPowerBase = 14;
-	registry_par->TxBBSwing_2G = 0xFF;
-	registry_par->bEn_RFE = 1;
-	registry_par->RFE_Type = 64;
+	registry_par->reg_power_base = 14;
+	registry_par->tx_bb_swing_2g = 0xFF;
+	registry_par->b_en_rfe = 1;
+	registry_par->rfe_type = 64;
 
 	registry_par->qos_opt_enable = (u8)rtw_qos_opt_enable;
 

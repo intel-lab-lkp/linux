@@ -90,7 +90,7 @@ void PHY_TxPowerByRateConfiguration(struct adapter *padapter);
 u8 PHY_GetTxPowerIndexBase(struct adapter *padapter, u8 RFPath, u8 Rate,
 			   enum channel_width BandWidth, u8 Channel);
 
-s8 phy_get_tx_pwr_lmt(struct adapter *adapter, u32 RegPwrTblSel,
+s8 phy_get_tx_pwr_lmt(struct adapter *adapter, u32 reg_pwr_tbl_sel,
 		      enum channel_width Bandwidth, u8 RfPath, u8 DataRate,
 		      u8 Channel);
 
