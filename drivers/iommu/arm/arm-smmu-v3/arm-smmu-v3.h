@@ -806,6 +806,9 @@ struct arm_smmu_device {
 
 	struct rb_root			streams;
 	struct mutex			streams_mutex;
+
+	/* Tracks the cmdq usage count for runtime PM */
+	atomic_t			nr_cmdq_users;
 };
 
 struct arm_smmu_stream {
