@@ -121,6 +121,7 @@ _prep_test() {
 	modprobe ublk_drv > /dev/null 2>&1
 	UBLK_TMP=$(mktemp ublk_test_XXXXX)
 	[ "$UBLK_TEST_QUIET" -eq 0 ] && echo "ublk $type: $*"
+	echo "ublk selftest: $TID starting at $(date --iso-8601=sec)" | tee /dev/kmsg
 }
 
 _remove_test_files()
@@ -165,6 +166,7 @@ _cleanup_test() {
 	"${UBLK_PROG}" del -a
 
 	_remove_files
+	echo "ublk selftest: $TID done at $(date --iso-8601=sec)" | tee /dev/kmsg
 }
 
 _have_feature()
