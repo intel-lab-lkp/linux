@@ -18,6 +18,7 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/pcie-dwc.h>
+#include <linux/pcie-dwc-edma.h>
 #include <linux/platform_device.h>
 #include <linux/sizes.h>
 #include <linux/types.h>
@@ -162,8 +163,12 @@ int dw_pcie_get_resources(struct dw_pcie *pci)
 			pci->edma.reg_base = devm_ioremap_resource(pci->dev, res);
 			if (IS_ERR(pci->edma.reg_base))
 				return PTR_ERR(pci->edma.reg_base);
+			pci->edma_reg_phys = res->start;
+			pci->edma_reg_size = resource_size(res);
 		} else if (pci->atu_size >= 2 * DEFAULT_DBI_DMA_OFFSET) {
 			pci->edma.reg_base = pci->atu_base + DEFAULT_DBI_DMA_OFFSET;
+			pci->edma_reg_phys = pci->atu_phys_addr + DEFAULT_DBI_DMA_OFFSET;
+			pci->edma_reg_size = pci->atu_size - DEFAULT_DBI_DMA_OFFSET;
 		}
 	}
 
@@ -1340,3 +1345,27 @@ resource_size_t dw_pcie_parent_bus_offset(struct dw_pcie *pci,
 
 	return cpu_phys_addr - reg_addr;
 }
+
+int dwc_pcie_edma_get_reg_window(struct pci_epc *epc, phys_addr_t *phys,
+				 resource_size_t *sz)
+{
+	struct dw_pcie_ep *ep;
+	struct dw_pcie *pci;
+
+	if (!epc || !phys || !sz)
+		return -EINVAL;
+
+	ep = epc_get_drvdata(epc);
+	if (!ep)
+		return -ENODEV;
+
+	pci = to_dw_pcie_from_ep(ep);
+	if (!pci->edma_reg_size)
+		return -ENODEV;
+
+	*phys = pci->edma_reg_phys;
+	*sz = pci->edma_reg_size;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(dwc_pcie_edma_get_reg_window);
