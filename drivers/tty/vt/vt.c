@@ -164,6 +164,8 @@ EXPORT_SYMBOL(global_cursor_default);
 
 static int cur_default = CUR_UNDERLINE;
 module_param(cur_default, int, S_IRUGO | S_IWUSR);
+static bool vt_enable = IS_ENABLED(CONFIG_VT_ENABLE) ? true : false;
+module_param_named(enable, vt_enable, bool, S_IRUGO | S_IWUSR);
 
 /*
  * ignore_poke: don't unblank the screen when things are typed.  This is
@@ -3852,6 +3854,9 @@ ATTRIBUTE_GROUPS(vt_dev);
 
 int __init vty_init(const struct file_operations *console_fops)
 {
+	if (!vt_enable)
+		return 0;
+
 	cdev_init(&vc0_cdev, console_fops);
 	if (cdev_add(&vc0_cdev, MKDEV(TTY_MAJOR, 0), 1) ||
 	    register_chrdev_region(MKDEV(TTY_MAJOR, 0), 1, "/dev/vc/0") < 0)

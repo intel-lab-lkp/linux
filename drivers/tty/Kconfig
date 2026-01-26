@@ -41,6 +41,19 @@ config VT
 	  If unsure, say Y, or else you won't be able to do much with your new
 	  shiny Linux system :-)
 
+config VT_ENABLE
+	depends on VT
+	default y
+	bool "enable VT terminal" if EXPERT
+	help
+	  This allows to build the kernel with CONFIG_VT, and choose on the
+	  kernel command line to enable it or not. If set to y, VT will be
+	  enabled by default, but can be disabled with vt.enable=0 on the kernel
+	  command line. Otherwise, use vt.enable=1 to enable VT.
+	  This should help to transition to VT-less system.
+
+	  If unsure, say Y.
+
 config CONSOLE_TRANSLATIONS
 	depends on VT
 	default y
