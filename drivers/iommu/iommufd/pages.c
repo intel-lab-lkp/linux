@@ -289,6 +289,7 @@ static void batch_clear(struct pfn_batch *batch)
 	batch->end = 0;
 	batch->pfns[0] = 0;
 	batch->npfns[0] = 0;
+	batch->kind = BATCH_CPU_MEMORY;
 }
 
 /*
@@ -309,6 +310,7 @@ static void batch_clear_carry(struct pfn_batch *batch, unsigned int keep_pfns)
 			 (batch->npfns[batch->end - 1] - keep_pfns);
 	batch->npfns[0] = keep_pfns;
 	batch->end = 1;
+	batch->kind = BATCH_CPU_MEMORY;
 }
 
 static void batch_skip_carry(struct pfn_batch *batch, unsigned int skip_pfns)
