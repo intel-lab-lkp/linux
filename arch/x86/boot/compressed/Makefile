@@ -12,7 +12,7 @@
 # vmlinux.bin is:
 #	vmlinux stripped of debugging and comments
 # vmlinux.bin.all is:
-#	vmlinux.bin + vmlinux.relocs
+#	vmlinux.bin + vmlinux.relocs (CONFIG_RELOCATABLE_UNCOMPRESSED_KERNEL=n)
 # vmlinux.bin.(gz|bz2|lzma|...) is:
 #	(see scripts/Makefile.lib size_append)
 #	compressed vmlinux.bin.all + u32 size of vmlinux.bin.all
@@ -76,7 +76,7 @@ LDFLAGS_vmlinux += -T
 hostprogs	:= mkpiggy
 HOST_EXTRACFLAGS += -I$(srctree)/tools/include
 
-sed-voffset := -e 's/^\([0-9a-fA-F]*\) [ABbCDGRSTtVW] \(_text\|__start_rodata\|_sinittext\|__inittext_end\|__bss_start\|_end\)$$/\#define VO_\2 _AC(0x\1,UL)/p'
+sed-voffset := -e 's/^\([0-9a-fA-F]*\) [ABbCDGRSTtVW] \(_text\|__start_rodata\|_sinittext\|__inittext_end\|__bss_start\|_end\|__relocation_end\)$$/\#define VO_\2 _AC(0x\1,UL)/p'
 
 quiet_cmd_voffset = VOFFSET $@
       cmd_voffset = $(NM) $< | sed -n $(sed-voffset) > $@
@@ -132,7 +132,9 @@ $(obj)/vmlinux.relocs: vmlinux.unstripped FORCE
 	$(call if_changed,relocs)
 
 vmlinux.bin.all-y := $(obj)/vmlinux.bin
+ifndef CONFIG_RELOCATABLE_UNCOMPRESSED_KERNEL
 vmlinux.bin.all-$(CONFIG_X86_NEED_RELOCS) += $(obj)/vmlinux.relocs
+endif
 
 $(obj)/vmlinux.bin.gz: $(vmlinux.bin.all-y) FORCE
 	$(call if_changed,gzip)

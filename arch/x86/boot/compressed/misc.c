@@ -232,6 +232,14 @@ static void handle_relocations(void *output, unsigned long output_len,
 	}
 	debug_putstr("Performing relocations... ");
 
+#ifdef CONFIG_RELOCATABLE_UNCOMPRESSED_KERNEL
+	/*
+	 * If CONFIG_RELOCATABLE_UNCOMPRESSED_KERNEL is enabled, the relocations is in
+	 * '.data.reloc' section of kernel binary.
+	 */
+	output_len = VO___relocation_end - VO__text;
+#endif
+
 	/*
 	 * Process relocations: 32 bit relocations first then 64 bit after.
 	 * Two sets of binary relocations are added to the end of the kernel
