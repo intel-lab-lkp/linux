@@ -1270,6 +1270,11 @@ F:	drivers/spi/spi-amd-pci.c
 F:	drivers/spi/spi-amd.c
 F:	drivers/spi/spi-amd.h
 
+AMD VERSAL PCI DRIVER
+M:	Yidong Zhang <yidong.zhang@amd.com>
+S:	Supported
+F:	drivers/accel/amd_vpci/
+
 AMD XDNA DRIVER
 M:	Min Ma <mamin506@gmail.com>
 M:	Lizhi Hou <lizhi.hou@amd.com>
