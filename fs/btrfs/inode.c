@@ -481,13 +481,15 @@ static int insert_inline_extent(struct btrfs_trans_handle *trans,
 	ASSERT(size <= sectorsize);
 
 	/*
-	 * The compressed size also needs to be no larger than a sector.
-	 * That's also why we only need one page as the parameter.
+	 * The compressed size also needs to be no larger than a page.
+	 * That's also why we only need one folio as the parameter.
 	 */
-	if (compressed_folio)
+	if (compressed_folio) {
 		ASSERT(compressed_size <= sectorsize);
-	else
+		ASSERT(compressed_size <= PAGE_SIZE);
+	} else {
 		ASSERT(compressed_size == 0);
+	}
 
 	if (compressed_size && compressed_folio)
 		cur_size = compressed_size;
@@ -572,6 +574,18 @@ static bool can_cow_file_range_inline(struct btrfs_inode *inode,
 
 	/* Inline extents must start at offset 0. */
 	if (offset != 0)
+		return false;
+
+	/*
+	 * Even for bs > ps cases, cow_file_range_inline() can only accept a
+	 * single folio.
+	 *
+	 * This can be problematic and cause access beyond page boundary if a
+	 * page sized folio is passed into that function.
+	 * And encoded write is doing exactly that.
+	 * So here limits the inlined extent size to PAGE_SIZE.
+	 */
+	if (size > PAGE_SIZE || compressed_size > PAGE_SIZE)
 		return false;
 
 	/* Inline extents are limited to sectorsize. */
@@ -4034,11 +4048,6 @@ static int btrfs_read_locked_inode(struct btrfs_inode *inode, struct btrfs_path 
 	btrfs_set_inode_mapping_order(inode);
 
 cache_index:
-	ret = btrfs_init_file_extent_tree(inode);
-	if (ret)
-		goto out;
-	btrfs_inode_set_file_extent_range(inode, 0,
-			round_up(i_size_read(vfs_inode), fs_info->sectorsize));
 	/*
 	 * If we were modified in the current generation and evicted from memory
 	 * and then re-read we need to do a full sync since we don't have any
@@ -4125,6 +4134,20 @@ cache_acl:
 				  btrfs_ino(inode), btrfs_root_id(root), ret);
 	}
 
+	/*
+	 * We don't need the path anymore, so release it to avoid holding a read
+	 * lock on a leaf while calling btrfs_init_file_extent_tree(), which can
+	 * allocate memory that triggers reclaim (GFP_KERNEL) and cause a locking
+	 * dependency.
+	 */
+	btrfs_release_path(path);
+
+	ret = btrfs_init_file_extent_tree(inode);
+	if (ret)
+		goto out;
+	btrfs_inode_set_file_extent_range(inode, 0,
+			  round_up(i_size_read(vfs_inode), fs_info->sectorsize));
+
 	if (!maybe_acls)
 		cache_no_acl(vfs_inode);
 
@@ -4157,6 +4180,15 @@ cache_acl:
 
 	return 0;
 out:
+	/*
+	 * We may have a read locked leaf and iget_failed() triggers inode
+	 * eviction which needs to release the delayed inode and that needs
+	 * to lock the delayed inode's mutex. This can cause a ABBA deadlock
+	 * with a task running delayed items, as that require first locking
+	 * the delayed inode's mutex and then modifying its subvolume btree.
+	 * So release the path before iget_failed().
+	 */
+	btrfs_release_path(path);
 	iget_failed(vfs_inode);
 	return ret;
 }
