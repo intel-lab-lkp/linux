@@ -93,6 +93,8 @@ pub mod driver;
 pub mod drm;
 pub mod error;
 pub mod faux;
+#[cfg(CONFIG_FB)]
+pub mod fb;
 #[cfg(CONFIG_RUST_FW_LOADER_ABSTRACTIONS)]
 pub mod firmware;
 pub mod fmt;
