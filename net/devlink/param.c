@@ -252,6 +252,14 @@ devlink_nl_param_value_put(struct sk_buff *msg, enum devlink_param_type type,
 				return -EMSGSIZE;
 		}
 		break;
+	case DEVLINK_PARAM_TYPE_U32_ARRAY:
+		if (val.u32arr.size > __DEVLINK_PARAM_MAX_ARRAY_SIZE)
+			return -EMSGSIZE;
+
+		for (int i = 0; i < val.u32arr.size; i++)
+			if (nla_put_u32(msg, nla_type, val.u32arr.val[i]))
+				return -EMSGSIZE;
+		break;
 	}
 	return 0;
 }
@@ -304,8 +312,10 @@ static int devlink_nl_param_fill(struct sk_buff *msg, struct devlink *devlink,
 				 u32 portid, u32 seq, int flags,
 				 struct netlink_ext_ack *extack)
 {
-	union devlink_param_value default_value[DEVLINK_PARAM_CMODE_MAX + 1];
-	union devlink_param_value param_value[DEVLINK_PARAM_CMODE_MAX + 1];
+	union devlink_param_value __free(kfree)
+		(*default_value)[DEVLINK_PARAM_CMODE_MAX + 1] = { NULL };
+	union devlink_param_value __free(kfree)
+		(*param_value)[DEVLINK_PARAM_CMODE_MAX + 1] = { NULL };
 	bool default_value_set[DEVLINK_PARAM_CMODE_MAX + 1] = {};
 	bool param_value_set[DEVLINK_PARAM_CMODE_MAX + 1] = {};
 	const struct devlink_param *param = param_item->param;
@@ -316,20 +326,28 @@ static int devlink_nl_param_fill(struct sk_buff *msg, struct devlink *devlink,
 	int err;
 	int i;
 
+	default_value = kmalloc(sizeof(*default_value), GFP_KERNEL);
+	if (!default_value)
+		return -ENOMEM;
+
+	param_value = kmalloc(sizeof(*param_value), GFP_KERNEL);
+	if (!param_value)
+		return -ENOMEM;
+
 	/* Get value from driver part to driverinit configuration mode */
 	for (i = 0; i <= DEVLINK_PARAM_CMODE_MAX; i++) {
 		if (!devlink_param_cmode_is_supported(param, i))
 			continue;
 		if (i == DEVLINK_PARAM_CMODE_DRIVERINIT) {
 			if (param_item->driverinit_value_new_valid)
-				param_value[i] = param_item->driverinit_value_new;
+				(*param_value)[i] = param_item->driverinit_value_new;
 			else if (param_item->driverinit_value_valid)
-				param_value[i] = param_item->driverinit_value;
+				(*param_value)[i] = param_item->driverinit_value;
 			else
 				return -EOPNOTSUPP;
 
 			if (param_item->driverinit_value_valid) {
-				default_value[i] = param_item->driverinit_default;
+				(*default_value)[i] = param_item->driverinit_default;
 				default_value_set[i] = true;
 			}
 		} else {
@@ -337,12 +355,12 @@ static int devlink_nl_param_fill(struct sk_buff *msg, struct devlink *devlink,
 			err = devlink_param_get(devlink, param, &ctx, extack);
 			if (err)
 				return err;
-			param_value[i] = ctx.val;
+			(*param_value)[i] = ctx.val;
 
 			err = devlink_param_get_default(devlink, param, &ctx,
 							extack);
 			if (!err) {
-				default_value[i] = ctx.val;
+				(*default_value)[i] = ctx.val;
 				default_value_set[i] = true;
 			} else if (err != -EOPNOTSUPP) {
 				return err;
@@ -383,8 +401,8 @@ static int devlink_nl_param_fill(struct sk_buff *msg, struct devlink *devlink,
 		if (!param_value_set[i])
 			continue;
 		err = devlink_nl_param_value_fill_one(msg, param->type,
-						      i, param_value[i],
-						      default_value[i],
+						      i, (*param_value)[i],
+						      (*default_value)[i],
 						      default_value_set[i]);
 		if (err)
 			goto values_list_nest_cancel;
@@ -507,7 +525,7 @@ devlink_param_value_get_from_info(const struct devlink_param *param,
 				  union devlink_param_value *value)
 {
 	struct nlattr *param_data;
-	int len;
+	int len, cnt, rem;
 
 	param_data = info->attrs[DEVLINK_ATTR_PARAM_VALUE_DATA];
 
@@ -546,6 +564,22 @@ devlink_param_value_get_from_info(const struct devlink_param *param,
 		if (param_data && nla_len(param_data))
 			return -EINVAL;
 		value->vbool = nla_get_flag(param_data);
+		break;
+
+	case DEVLINK_PARAM_TYPE_U32_ARRAY:
+		cnt = 0;
+		nla_for_each_attr_type(param_data,
+				       DEVLINK_ATTR_PARAM_VALUE_DATA,
+				       genlmsg_data(info->genlhdr),
+				       genlmsg_len(info->genlhdr), rem) {
+			if (cnt >= __DEVLINK_PARAM_MAX_ARRAY_SIZE)
+				return -EMSGSIZE;
+
+			value->u32arr.val[cnt] = nla_get_u32(param_data);
+			cnt++;
+		}
+
+		value->u32arr.size = cnt;
 		break;
 	}
 	return 0;
