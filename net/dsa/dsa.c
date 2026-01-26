@@ -1834,6 +1834,39 @@ int dsa_port_simple_hsr_leave(struct dsa_switch *ds, int port,
 }
 EXPORT_SYMBOL_GPL(dsa_port_simple_hsr_leave);
 
+/* dsa_mall_policer_tc_entry_type - map tc_entry to some "known" types
+ * @entry: the tc entry
+ *
+ * A helper to check dsa_mall_policer_tc_entry against some known patterns,
+ * without having to know the exact struct layout.
+ *
+ * Returns: ORs of enum dsa_mall_policer_tc_type with DSA_MALL_POLICER_TC_KNOWN
+ * set if recognized, otherwise 0
+ */
+unsigned long
+dsa_mall_policer_tc_entry_type(struct dsa_mall_policer_tc_entry *entry)
+{
+	bool byte_mode = (entry->burst || entry->rate_bytes_per_sec);
+	bool pkt_mode = (entry->burst_pkt || entry->rate_pkt_ps);
+	unsigned long flags = DSA_MALL_POLICER_TC_KNOWN;
+
+	if (byte_mode == pkt_mode)
+		return 0;
+	if (entry->peakrate_bytes_ps || entry->avrate || entry->overhead)
+		return 0;
+	if (entry->exceed.act_id != FLOW_ACTION_DROP ||
+	    entry->notexceed.act_id != FLOW_ACTION_ACCEPT)
+		return 0;
+
+	if (pkt_mode)
+		flags |= DSA_MALL_POLICER_TC_PKT_MODE;
+	if (entry->mtu)
+		flags |= DSA_MALL_POLICER_TC_MTU;
+
+	return flags;
+}
+EXPORT_SYMBOL_GPL(dsa_mall_policer_tc_entry_type);
+
 static const struct dsa_stubs __dsa_stubs = {
 	.conduit_hwtstamp_validate = __dsa_conduit_hwtstamp_validate,
 };

@@ -1410,4 +1410,18 @@ netdev_tx_t dsa_enqueue_skb(struct sk_buff *skb, struct net_device *dev);
 void dsa_port_phylink_mac_change(struct dsa_switch *ds, int port, bool up);
 bool dsa_supports_eee(struct dsa_switch *ds, int port);
 
+enum dsa_mall_policer_tc_type {
+	/* Pattern recognized, no surprising fields exist */
+	DSA_MALL_POLICER_TC_KNOWN = BIT(0),
+	/* Unset: .burst and .rate_bytes_per_sec valid
+	 * Set: .burst_pkt and .rate_pkt_ps valid
+	 */
+	DSA_MALL_POLICER_TC_PKT_MODE = BIT(1),
+	/* .mtu valid */
+	DSA_MALL_POLICER_TC_MTU = BIT(2),
+};
+
+unsigned long
+dsa_mall_policer_tc_entry_type(struct dsa_mall_policer_tc_entry *entry);
+
 #endif
