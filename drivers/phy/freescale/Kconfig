@@ -66,6 +66,7 @@ config PHY_S32G_SERDES
 	tristate "NXP S32G SERDES support"
 	depends on ARCH_S32 || COMPILE_TEST
 	select GENERIC_PHY
+	select REGMAP
 	help
 	  This option enables support for S23G SerDes PHY used for
 	  PCIe & Ethernet
