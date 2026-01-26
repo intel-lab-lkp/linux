@@ -91,6 +91,8 @@ int set_direct_map_invalid_noflush(const void *addr);
 int set_direct_map_default_noflush(const void *addr);
 int set_direct_map_valid_noflush(const void *addr, unsigned long numpages,
 				 bool valid);
+int folio_zap_direct_map(struct folio *folio);
+int folio_restore_direct_map(struct folio *folio);
 bool kernel_page_present(struct page *page);
 
 extern int kernel_set_to_readonly;

@@ -356,6 +356,18 @@ int set_direct_map_valid_noflush(const void *addr, unsigned long numpages,
 	return set_memory_valid((unsigned long)addr, numpages, valid);
 }
 
+int folio_zap_direct_map(struct folio *folio)
+{
+	return set_direct_map_valid_noflush(folio_address(folio),
+					    folio_nr_pages(folio), false);
+}
+
+int folio_restore_direct_map(struct folio *folio)
+{
+	return set_direct_map_valid_noflush(folio_address(folio),
+					    folio_nr_pages(folio), true);
+}
+
 #ifdef CONFIG_DEBUG_PAGEALLOC
 /*
  * This is - apart from the return value - doing the same

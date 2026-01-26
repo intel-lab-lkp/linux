@@ -402,6 +402,18 @@ int set_direct_map_valid_noflush(const void *addr, unsigned long numpages,
 	return __set_memory((unsigned long)addr, numpages, set, clear);
 }
 
+int folio_zap_direct_map(struct folio *folio)
+{
+	return set_direct_map_valid_noflush(folio_address(folio),
+					    folio_nr_pages(folio), false);
+}
+
+int folio_restore_direct_map(struct folio *folio)
+{
+	return set_direct_map_valid_noflush(folio_address(folio),
+					    folio_nr_pages(folio), true);
+}
+
 #ifdef CONFIG_DEBUG_PAGEALLOC
 static int debug_pagealloc_set_page(pte_t *pte, unsigned long addr, void *data)
 {

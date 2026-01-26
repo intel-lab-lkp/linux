@@ -413,6 +413,18 @@ int set_direct_map_valid_noflush(const void *addr, unsigned long numpages,
 	return __set_memory((unsigned long)addr, numpages, flags);
 }
 
+int folio_zap_direct_map(struct folio *folio)
+{
+	return set_direct_map_valid_noflush(folio_address(folio),
+					    folio_nr_pages(folio), false);
+}
+
+int folio_restore_direct_map(struct folio *folio)
+{
+	return set_direct_map_valid_noflush(folio_address(folio),
+					    folio_nr_pages(folio), true);
+}
+
 bool kernel_page_present(struct page *page)
 {
 	unsigned long addr;
