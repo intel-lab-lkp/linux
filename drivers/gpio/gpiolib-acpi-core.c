@@ -1104,6 +1104,7 @@ acpi_gpio_adr_space_handler(u32 function, acpi_physical_address address,
 		unsigned int pin = agpio->pin_table[i];
 		struct acpi_gpio_connection *conn;
 		struct gpio_desc *desc;
+		u16 vala, valo;
 		bool found;
 
 		mutex_lock(&achip->conn_lock);
@@ -1158,10 +1159,17 @@ acpi_gpio_adr_space_handler(u32 function, acpi_physical_address address,
 
 		mutex_unlock(&achip->conn_lock);
 
-		if (function == ACPI_WRITE)
-			gpiod_set_raw_value_cansleep(desc, !!(*value & BIT(i)));
-		else
-			*value |= (u64)gpiod_get_raw_value_cansleep(desc) << i;
+		vala = i / 64;
+		valo = i % 64;
+
+		if (function == ACPI_WRITE) {
+			gpiod_set_raw_value_cansleep(desc, value[vala] & BIT_ULL(valo));
+		} else {
+			if (gpiod_get_raw_value_cansleep(desc))
+				value[vala] |= BIT_ULL(valo);
+			else
+				value[vala] &= ~BIT_ULL(valo);
+		}
 	}
 
 out:
