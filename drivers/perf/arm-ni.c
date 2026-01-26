@@ -526,6 +526,7 @@ static int arm_ni_init_cd(struct arm_ni *ni, struct arm_ni_node *node, u64 res_s
 {
 	struct arm_ni_cd *cd = ni->cds + node->id;
 	const char *name;
+	static atomic_t id;
 
 	cd->id = node->id;
 	cd->num_units = node->num_components;
@@ -562,6 +563,11 @@ static int arm_ni_init_cd(struct arm_ni *ni, struct arm_ni_node *node, u64 res_s
 		case NI_TMNI:
 		case NI_CMNI:
 			unit->pmusela = arm_ni_get_pmusel(ni, unit_base);
+			if (!unit->pmusela) {
+				dev_info(ni->dev, "No have PMU %d\n", cd->id);
+				devm_kfree(ni->dev, cd->units);
+				return 0;
+			}
 			writel_relaxed(1, unit->pmusela);
 			if (readl_relaxed(unit->pmusela) != 1)
 				dev_info(ni->dev, "No access to node 0x%04x%04x\n", unit->id, unit->type);
@@ -591,7 +597,7 @@ static int arm_ni_init_cd(struct arm_ni *ni, struct arm_ni_node *node, u64 res_s
 	writel_relaxed(U32_MAX, cd->pmu_base + NI_PMCNTENCLR);
 	writel_relaxed(U32_MAX, cd->pmu_base + NI_PMOVSCLR);
 
-	cd->irq = platform_get_irq(to_platform_device(ni->dev), cd->id);
+	cd->irq = platform_get_irq(to_platform_device(ni->dev), atomic_fetch_inc(&id));
 	if (cd->irq < 0)
 		return cd->irq;
 
