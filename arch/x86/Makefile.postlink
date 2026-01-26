@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: GPL-2.0
+# ===========================================================================
+# Post-link x86 pass
+# ===========================================================================
+#
+# 1. Insert relocations into vmlinux
+
+PHONY := __archpost
+__archpost:
+
+-include include/config/auto.conf
+include $(srctree)/scripts/Kbuild.include
+
+CMD_RELOCS = arch/x86/tools/relocs
+quiet_cmd_relocs = RELOCS  $@
+      cmd_relocs = $(CMD_RELOCS) --keep $@
+
+# `@true` prevents complaint when there is nothing to be done
+
+vmlinux vmlinux.unstripped: FORCE
+	@true
+ifeq ($(CONFIG_RELOCATABLE_UNCOMPRESSED_KERNEL),y)
+	$(call if_changed,relocs)
+endif
+
+clean:
+	@true
+
+PHONY += FORCE clean
+
+FORCE:
+
+.PHONY: $(PHONY)

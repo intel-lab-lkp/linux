@@ -289,6 +289,26 @@ SECTIONS
 	}
 #endif
 
+#ifdef CONFIG_RELOCATABLE_UNCOMPRESSED_KERNEL
+	. = ALIGN(4);
+	.data.reloc : AT(ADDR(.data.reloc) - LOAD_OFFSET) {
+		__relocation_start = .;
+		/*
+		 * Space for relocation table
+		 * This needs to be filled so that the
+		 * relocs tool can overwrite the content.
+		 * An invalid value is left at the start of the
+		 * section to abort relocation if the table
+		 * has not been filled in.
+		 */
+		LONG(0xFFFFFFFF);
+		FILL(0);
+		. += CONFIG_RELOCATION_TABLE_SIZE - 4;
+		__relocation_end = .;
+		__pi___relocation_end = .;
+	}
+#endif
+
 	/*
 	 * struct alt_inst entries. From the header (alternative.h):
 	 * "Alternative instructions for different CPU types or capabilities"
