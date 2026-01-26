@@ -113,8 +113,11 @@ vectors, use the following function::
 
   int pci_irq_vector(struct pci_dev *dev, unsigned int nr);
 
-Any allocated resources should be freed before removing the device using
-the following function::
+If the driver enables the device using the resource-managed function
+pcim_enable_device(), the driver shouldn't call pci_free_irq_vectors()
+because the IRQ vectors are automatically managed. Otherwise, the driver
+should free any allocated IRQ vectors before removing the device using the
+following function::
 
   void pci_free_irq_vectors(struct pci_dev *dev);
 
