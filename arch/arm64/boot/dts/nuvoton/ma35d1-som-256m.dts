@@ -18,6 +18,8 @@
 		serial12 = &uart12;
 		serial14 = &uart14;
 		serial16 = &uart16;
+		ethernet0 = &gmac0;
+		ethernet1 = &gmac1;
 	};
 
 	chosen {
@@ -128,4 +130,34 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart16>;
 	status = "okay";
+};
+
+&gmac0 {
+	phy-handle = <&eth_phy0>;
+	status = "okay";
+
+	mdio0: mdio {
+		compatible = "snps,dwmac-mdio";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		eth_phy0: ethernet-phy@0 {
+			reg = <0>;
+		};
+	};
+};
+
+&gmac1 {
+	phy-handle = <&eth_phy1>;
+	status = "okay";
+
+	mdio1: mdio {
+		compatible = "snps,dwmac-mdio";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		eth_phy1: ethernet-phy@1 {
+			reg = <1>;
+		};
+	};
 };
