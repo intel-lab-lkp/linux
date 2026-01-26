@@ -11,6 +11,7 @@
 
 #include <linux/msi.h>
 #include <linux/dma/edma.h>
+#include <linux/workqueue.h>
 
 #include "../virt-dma.h"
 
@@ -82,6 +83,9 @@ struct dw_edma_chan {
 	struct msi_msg			msi;
 
 	enum dw_edma_ch_irq_mode	irq_mode;
+
+	struct delayed_work		poll_work;
+	spinlock_t			poll_lock;
 
 	enum dw_edma_request		request;
 	enum dw_edma_status		status;
