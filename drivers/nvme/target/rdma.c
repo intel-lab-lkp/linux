@@ -767,7 +767,7 @@ static void nvmet_rdma_read_data_done(struct ib_cq *cq, struct ib_wc *wc)
 	}
 
 	if (rsp->req.metadata_len)
-		status = nvmet_rdma_check_pi_status(rsp->rw.reg->mr);
+		status = nvmet_rdma_check_pi_status(rsp->rw.reg.ctx->mr);
 	nvmet_rdma_rw_ctx_destroy(rsp);
 
 	if (unlikely(status))
@@ -808,7 +808,7 @@ static void nvmet_rdma_write_data_done(struct ib_cq *cq, struct ib_wc *wc)
 	 * - if succeeded send good NVMe response
 	 * - if failed send bad NVMe response with appropriate error
 	 */
-	status = nvmet_rdma_check_pi_status(rsp->rw.reg->mr);
+	status = nvmet_rdma_check_pi_status(rsp->rw.reg.ctx->mr);
 	if (unlikely(status))
 		rsp->req.cqe->status = cpu_to_le16(status << 1);
 	nvmet_rdma_rw_ctx_destroy(rsp);
