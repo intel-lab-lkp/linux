@@ -252,6 +252,37 @@ The following briefly shows how a waking task is scheduled and executed.
 
    * Queue the task on the BPF side.
 
+   Once ``ops.enqueue()`` is called, the task enters the "enqueued state".
+   The task remains in this state until ``ops.dequeue()`` is called, which
+   happens in the following cases:
+
+   1. **Regular dispatch workflow**: when the task is successfully
+      dispatched to a DSQ (local, global, or user DSQ), ``ops.dequeue()``
+      is triggered immediately to notify the BPF scheduler.
+
+   2. **Core scheduling pick**: when ``CONFIG_SCHED_CORE`` is enabled and
+      core scheduling picks a task for execution before it has been
+      dispatched, ``ops.dequeue()`` is called with the
+      ``SCX_DEQ_CORE_SCHED_EXEC`` flag.
+
+   3. **Scheduling property change**: when a task property changes (via
+      operations like ``sched_setaffinity()``, ``sched_setscheduler()``,
+      priority changes, CPU migrations, etc.), ``ops.dequeue()`` is called
+      with the ``SCX_DEQ_SCHED_CHANGE`` flag set in ``deq_flags``.
+
+   **Important**: ``ops.dequeue()`` is called for *any* enqueued task,
+   regardless of whether the task is still on a BPF data structure, or it
+   has already been dispatched to a DSQ. This guarantees that every
+   ``ops.enqueue()`` will eventually be followed by a corresponding
+   ``ops.dequeue()``.
+
+   This makes it reliable for BPF schedulers to track the enqueued state
+   and maintain accurate accounting.
+
+   BPF schedulers can choose not to implement ``ops.dequeue()`` if they
+   don't need to track these transitions. The sched_ext core will safely
+   handle all dequeue operations regardless.
+
 3. When a CPU is ready to schedule, it first looks at its local DSQ. If
    empty, it then looks at the global DSQ. If there still isn't a task to
    run, ``ops.dispatch()`` is invoked which can use the following two
@@ -319,6 +350,8 @@ by a sched_ext scheduler:
                 /* Any usable CPU becomes available */
 
                 ops.dispatch(); /* Task is moved to a local DSQ */
+
+                ops.dequeue(); /* Exiting BPF scheduler */
             }
             ops.running();      /* Task starts running on its assigned CPU */
             while (task->scx.slice > 0 && task is runnable)
