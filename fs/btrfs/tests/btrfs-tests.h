@@ -47,6 +47,14 @@ int btrfs_test_free_space_tree(u32 sectorsize, u32 nodesize);
 int btrfs_test_raid_stripe_tree(u32 sectorsize, u32 nodesize);
 int btrfs_test_extent_map(void);
 int btrfs_test_delayed_refs(u32 sectorsize, u32 nodesize);
+#ifdef CONFIG_BLK_DEV_ZONED
+int btrfs_test_zoned(void);
+#else
+static inline int btrfs_test_zoned(void)
+{
+	return 0;
+}
+#endif
 struct inode *btrfs_new_test_inode(void);
 struct btrfs_fs_info *btrfs_alloc_dummy_fs_info(u32 nodesize, u32 sectorsize);
 void btrfs_free_dummy_fs_info(struct btrfs_fs_info *fs_info);
