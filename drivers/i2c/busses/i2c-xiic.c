@@ -1492,10 +1492,8 @@ static int xiic_i2c_probe(struct platform_device *pdev)
 					xiic_process, IRQF_ONESHOT,
 					pdev->name, i2c);
 
-	if (ret < 0) {
-		dev_err_probe(&pdev->dev, ret, "Cannot claim IRQ\n");
+	if (ret < 0)
 		return ret;
-	}
 
 	i2c->singlemaster =
 		of_property_read_bool(pdev->dev.of_node, "single-master");
