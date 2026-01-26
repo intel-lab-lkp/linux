@@ -2011,6 +2011,10 @@ static int felix_port_policer_add(struct dsa_switch *ds, int port,
 		.burst = policer->burst,
 	};
 
+	if (dsa_mall_policer_tc_entry_type(policer) !=
+	    DSA_MALL_POLICER_TC_KNOWN)
+		return -EOPNOTSUPP;
+
 	return ocelot_port_policer_add(ocelot, port, &pol);
 }
 
