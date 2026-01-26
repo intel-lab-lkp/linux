@@ -218,6 +218,7 @@ static int UVERBS_HANDLER(MLX5_IB_METHOD_GET_DATA_DIRECT_SYSFS_PATH)(
 	dev_path_len = strlen(dev_path) + 1;
 	if (dev_path_len > out_len) {
 		ret = -ENOSPC;
+		kfree(dev_path);
 		goto end;
 	}
 
