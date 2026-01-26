@@ -6539,8 +6539,10 @@ static int btrfs_trim_free_extents(struct btrfs_device *device, u64 *trimmed)
 		u64 bytes;
 
 		ret = mutex_lock_interruptible(&fs_info->chunk_mutex);
-		if (ret)
+		if (ret) {
+			ret = -ERESTARTSYS;
 			break;
+		}
 
 		btrfs_find_first_clear_extent_bit(&device->alloc_state, start,
 						  &start, &end,
@@ -6685,10 +6687,14 @@ int btrfs_trim_fs(struct btrfs_fs_info *fs_info, struct fstrim_range *range)
 		ret = btrfs_trim_free_extents(device, &group_trimmed);
 
 		trimmed += group_trimmed;
+		if (ret == -ERESTARTSYS) {
+			dev_ret = -ERESTARTSYS;
+			break;
+		}
 		if (ret) {
 			dev_failed++;
 			dev_ret = ret;
-			break;
+			continue;
 		}
 	}
 	mutex_unlock(&fs_devices->device_list_mutex);
