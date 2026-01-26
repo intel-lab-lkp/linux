@@ -41,6 +41,7 @@ struct ad8366_state {
 	struct spi_device	*spi;
 	struct mutex            lock; /* protect sensor state */
 	struct gpio_desc	*reset_gpio;
+	struct gpio_desc	*enable_gpio;
 	unsigned char		ch[2];
 	const struct ad8366_info *info;
 	/*
@@ -229,6 +230,11 @@ static int ad8366_probe(struct spi_device *spi)
 	if (IS_ERR(st->reset_gpio))
 		return dev_err_probe(dev, PTR_ERR(st->reset_gpio),
 				     "Failed to get reset GPIO\n");
+
+	st->enable_gpio = devm_gpiod_get_optional(dev, "enable", GPIOD_OUT_HIGH);
+	if (IS_ERR(st->enable_gpio))
+		return dev_err_probe(dev, PTR_ERR(st->enable_gpio),
+				     "Failed to get enable GPIO\n");
 
 	indio_dev->name = spi_get_device_id(spi)->name;
 	indio_dev->info = &ad8366_info;
