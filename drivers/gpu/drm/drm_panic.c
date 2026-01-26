@@ -586,6 +586,9 @@ static void draw_panic_screen_kmsg(struct drm_scanout_buffer *sb)
 			end = start;
 			start--;
 		}
+
+		if (yoffset < 0)
+			break;
 	}
 }
 
