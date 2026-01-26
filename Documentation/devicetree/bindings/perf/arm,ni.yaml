@@ -20,7 +20,8 @@ properties:
   interrupts:
     minItems: 1
     maxItems: 32
-    description: Overflow interrupts, one per clock domain, in order of domain ID
+    description: Overflow interrupts, one per clock domain which has a PMU
+      instance, in order of domain ID.
 
 required:
   - compatible
