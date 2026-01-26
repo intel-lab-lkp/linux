@@ -55,7 +55,6 @@
 #include <linux/log2.h>
 #include <linux/platform_device.h>
 #include <linux/mailbox_controller.h>
-#include <linux/mailbox_client.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
 #include <acpi/pcc.h>
 
