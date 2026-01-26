@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "relocs.h"
 
+int show_absolute_syms, show_absolute_relocs, show_reloc_info;
+int as_text, use_real_mode;
+
 void die(char *fmt, ...)
 {
 	va_list ap;
@@ -18,8 +21,6 @@ static void usage(void)
 
 int main(int argc, char **argv)
 {
-	int show_absolute_syms, show_absolute_relocs, show_reloc_info;
-	int as_text, use_real_mode;
 	const char *fname;
 	FILE *fp;
 	int i;
@@ -73,13 +74,9 @@ int main(int argc, char **argv)
 	}
 	rewind(fp);
 	if (e_ident[EI_CLASS] == ELFCLASS64)
-		process_64(fp, use_real_mode, as_text,
-			   show_absolute_syms, show_absolute_relocs,
-			   show_reloc_info);
+		process_64(fp);
 	else
-		process_32(fp, use_real_mode, as_text,
-			   show_absolute_syms, show_absolute_relocs,
-			   show_reloc_info);
+		process_32(fp);
 	fclose(fp);
 	return 0;
 }

@@ -30,10 +30,12 @@ enum symtype {
 	S_NSYMTYPES
 };
 
-void process_32(FILE *fp, int use_real_mode, int as_text,
-		int show_absolute_syms, int show_absolute_relocs,
-		int show_reloc_info);
-void process_64(FILE *fp, int use_real_mode, int as_text,
-		int show_absolute_syms, int show_absolute_relocs,
-		int show_reloc_info);
+extern int show_absolute_syms;
+extern int show_absolute_relocs;
+extern int show_reloc_info;
+extern int as_text;
+extern int use_real_mode;
+
+void process_32(FILE *fp);
+void process_64(FILE *fp);
 #endif /* RELOCS_H */

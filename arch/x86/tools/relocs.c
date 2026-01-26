@@ -127,7 +127,7 @@ static int is_reloc(enum symtype type, const char *sym_name)
 	return sym_regex[type] && !regexec(&sym_regex_c[type], sym_name, 0, NULL, 0);
 }
 
-static void regex_init(int use_real_mode)
+static void regex_init(void)
 {
         char errbuf[128];
         int err;
@@ -950,7 +950,7 @@ static int write32_as_text(uint32_t v, FILE *f)
 	return fprintf(f, "\t.long 0x%08"PRIx32"\n", v) > 0 ? 0 : -1;
 }
 
-static void emit_relocs(int as_text, int use_real_mode)
+static void emit_relocs(void)
 {
 	int i;
 	int (*write_reloc)(uint32_t, FILE *) = write32;
@@ -1049,11 +1049,9 @@ static void print_reloc_info(void)
 # define process process_32
 #endif
 
-void process(FILE *fp, int use_real_mode, int as_text,
-	     int show_absolute_syms, int show_absolute_relocs,
-	     int show_reloc_info)
+void process(FILE *fp)
 {
-	regex_init(use_real_mode);
+	regex_init();
 	read_ehdr(fp);
 	read_shdrs(fp);
 	read_strtabs(fp);
@@ -1075,5 +1073,5 @@ void process(FILE *fp, int use_real_mode, int as_text,
 		return;
 	}
 
-	emit_relocs(as_text, use_real_mode);
+	emit_relocs();
 }
