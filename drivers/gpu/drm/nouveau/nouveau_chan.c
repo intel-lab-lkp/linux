@@ -322,8 +322,10 @@ nouveau_channel_ctor(struct nouveau_cli *cli, bool priv, u64 runm,
 		ret = nvif_mem_ctor(&cli->mmu, "abi16ChanUSERD", NVIF_CLASS_MEM_GF100,
 				    NVIF_MEM_VRAM | NVIF_MEM_COHERENT | NVIF_MEM_MAPPABLE,
 				    0, PAGE_SIZE, NULL, 0, &chan->mem_userd);
-		if (ret)
+		if (ret) {
+			nouveau_channel_del(pchan);
 			return ret;
+		}
 
 		args->huserd = nvif_handle(&chan->mem_userd.object);
 		args->ouserd = 0;
