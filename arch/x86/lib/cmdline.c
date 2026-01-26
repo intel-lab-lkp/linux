@@ -11,6 +11,10 @@
 #include <asm/cmdline.h>
 #include <asm/bug.h>
 
+#ifndef CMDLINE_FUNC_PREFIX
+#define CMDLINE_FUNC_PREFIX
+#endif
+
 static inline int myisspace(u8 c)
 {
 	return c <= ' ';	/* Close enough approximation */
@@ -205,6 +209,7 @@ __cmdline_find_option(const char *cmdline, int max_cmdline_size,
 	return len;
 }
 
+CMDLINE_FUNC_PREFIX
 int cmdline_find_option_bool(const char *cmdline, const char *option)
 {
 	int ret;
@@ -219,6 +224,7 @@ int cmdline_find_option_bool(const char *cmdline, const char *option)
 	return ret;
 }
 
+CMDLINE_FUNC_PREFIX
 int cmdline_find_option(const char *cmdline, const char *option, char *buffer,
 			int bufsize)
 {

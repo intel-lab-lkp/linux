@@ -13,6 +13,10 @@
 #include <asm/e820/api.h>
 #include <asm/shared/io.h>
 
+#ifndef KASLR_FUNC_PREFIX
+#define KASLR_FUNC_PREFIX
+#endif
+
 /*
  * When built for the regular kernel, several functions need to be stubbed out
  * or changed to their regular kernel equivalent.
@@ -46,6 +50,7 @@ static inline u16 i8254(void)
 	return timer;
 }
 
+KASLR_FUNC_PREFIX
 unsigned long kaslr_get_random_long(const char *purpose)
 {
 #ifdef CONFIG_X86_64

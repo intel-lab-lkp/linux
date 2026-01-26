@@ -56,6 +56,7 @@ extern void startup_64_load_idt(void *vc_handler);
 extern void __pi_startup_64_load_idt(void *vc_handler);
 extern void early_setup_idt(void);
 extern void __init do_early_exception(struct pt_regs *regs, int trapnr);
+extern void __init __relocate_kernel(unsigned long p2v_offset, struct boot_params *bp);
 
 #ifdef CONFIG_X86_INTEL_MID
 extern void x86_intel_mid_early_setup(void);

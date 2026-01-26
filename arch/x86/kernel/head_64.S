@@ -97,6 +97,13 @@ SYM_CODE_START_NOALIGN(startup_64)
 	/* Sanitize CPU configuration */
 	call verify_cpu
 
+#ifdef CONFIG_RELOCATABLE_UNCOMPRESSED_KERNEL
+	leaq	common_startup_64(%rip), %rdi
+	subq	.Lcommon_startup_64(%rip), %rdi
+	movq	%r15, %rsi
+	call	__pi___relocate_kernel
+#endif
+
 	/*
 	 * Derive the kernel's physical-to-virtual offset from the physical and
 	 * virtual addresses of common_startup_64().

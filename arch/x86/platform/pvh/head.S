@@ -104,6 +104,17 @@ SYM_CODE_START(pvh_start_xen)
 	wrmsr
 
 	/*
+	 * Fill the identity mapping entries instead of preconstructing them,
+	 * as later relocations in __relocation_kernel() would modify them and
+	 * break the mapping if they are prefilled, due to the generation of
+	 * relocation entries.
+	 */
+	leal rva(pvh_init_top_pgt)(%ebp), %edi
+	addl $(pvh_level3_ident_pgt - __START_KERNEL_map + _KERNPG_TABLE_NOENC), (%edi)
+	leal rva(pvh_level3_ident_pgt)(%ebp), %edi
+	addl $(pvh_level2_ident_pgt - __START_KERNEL_map + _KERNPG_TABLE_NOENC), (%edi)
+
+	/*
 	 * Reuse the non-relocatable symbol emitted for the ELF note to
 	 * subtract the build time physical address of pvh_start_xen() from
 	 * its actual runtime address, without relying on absolute 32-bit ELF
@@ -254,7 +265,6 @@ SYM_DATA_END_LABEL(early_stack, SYM_L_LOCAL, early_stack_end)
  * startup_64 transitions to init_top_pgt.
  */
 SYM_DATA_START_PAGE_ALIGNED(pvh_init_top_pgt)
-	.quad   pvh_level3_ident_pgt - __START_KERNEL_map + _KERNPG_TABLE_NOENC
 	.org    pvh_init_top_pgt + L4_PAGE_OFFSET * 8, 0
 	.quad   pvh_level3_ident_pgt - __START_KERNEL_map + _KERNPG_TABLE_NOENC
 	.org    pvh_init_top_pgt + L4_START_KERNEL * 8, 0
@@ -263,8 +273,7 @@ SYM_DATA_START_PAGE_ALIGNED(pvh_init_top_pgt)
 SYM_DATA_END(pvh_init_top_pgt)
 
 SYM_DATA_START_PAGE_ALIGNED(pvh_level3_ident_pgt)
-	.quad	pvh_level2_ident_pgt - __START_KERNEL_map + _KERNPG_TABLE_NOENC
-	.fill	511, 8, 0
+	.fill	512, 8, 0
 SYM_DATA_END(pvh_level3_ident_pgt)
 SYM_DATA_START_PAGE_ALIGNED(pvh_level2_ident_pgt)
 	/*
