@@ -107,20 +107,6 @@
 /* Constants for DP DSC configurations */
 static const u8 valid_dsc_bpp[] = {6, 8, 10, 12, 15};
 
-/*
- * With Single pipe configuration, HW is capable of supporting maximum of:
- * 2 slices per line for ICL, BMG
- * 4 slices per line for other platforms.
- * For now consider a max of 2 slices per line, which works for all platforms.
- * With this we can have max of 4 DSC Slices per pipe.
- *
- * For higher resolutions where 12 slice support is required with
- * ultrajoiner, only then each pipe can support 3 slices.
- *
- * #TODO Split this better to use 4 slices/dsc engine where supported.
- */
-static const u8 valid_dsc_slicecount[] = {1, 2, 3, 4};
-
 /**
  * intel_dp_is_edp - is the given port attached to an eDP panel (either CPU or PCH)
  * @intel_dp: DP struct
@@ -508,9 +494,14 @@ bool intel_dp_has_joiner(struct intel_dp *intel_dp)
 	struct intel_display *display = to_intel_display(intel_dp);
 	struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);
 	struct intel_encoder *encoder = &intel_dig_port->base;
+	struct intel_connector *connector = intel_dp->attached_connector;
 
 	/* eDP MSO is not compatible with joiner */
 	if (intel_dp->mso_link_count)
+		return false;
+
+	if (intel_dp_is_edp(intel_dp) &&
+	    !connector->panel.vbt.edp.pipe_joiner_enable)
 		return false;
 
 	return DISPLAY_VER(display) >= 12 ||
@@ -959,17 +950,23 @@ u32 get_max_compressed_bpp_with_joiner(struct intel_display *display,
 	return max_bpp;
 }
 
-u8 intel_dp_dsc_get_slice_count(const struct intel_connector *connector,
-				int mode_clock, int mode_hdisplay,
-				int num_joined_pipes)
+static int intel_dp_dsc_min_slice_count(const struct intel_connector *connector,
+					int mode_clock, int mode_hdisplay)
 {
 	struct intel_display *display = to_intel_display(connector);
-	u32 sink_slice_count_mask =
-		drm_dp_dsc_sink_slice_count_mask(connector->dp.dsc_dpcd, false);
-	u8 min_slice_count, i;
+	bool is_edp =
+		connector->base.connector_type == DRM_MODE_CONNECTOR_eDP;
+	int min_slice_count;
 	int max_slice_width;
 	int tp_rgb_yuv444;
 	int tp_yuv422_420;
+
+	/*
+	 * TODO: allow using less than the maximum number of slices
+	 * supported by the eDP sink, to allow using fewer DSC engines.
+	 */
+	if (is_edp)
+		return drm_dp_dsc_sink_max_slice_count(connector->dp.dsc_dpcd, true);
 
 	/*
 	 * TODO: Use the throughput value specific to the actual RGB/YUV
@@ -1011,7 +1008,7 @@ u8 intel_dp_dsc_get_slice_count(const struct intel_connector *connector,
 	 * slice and VDSC engine, whenever we approach close enough to max CDCLK
 	 */
 	if (mode_clock >= ((display->cdclk.max_cdclk_freq * 85) / 100))
-		min_slice_count = max_t(u8, min_slice_count, 2);
+		min_slice_count = max(min_slice_count, 2);
 
 	max_slice_width = drm_dp_dsc_sink_max_slice_width(connector->dp.dsc_dpcd);
 	if (max_slice_width < DP_DSC_MIN_SLICE_WIDTH_VALUE) {
@@ -1021,39 +1018,64 @@ u8 intel_dp_dsc_get_slice_count(const struct intel_connector *connector,
 		return 0;
 	}
 	/* Also take into account max slice width */
-	min_slice_count = max_t(u8, min_slice_count,
-				DIV_ROUND_UP(mode_hdisplay,
-					     max_slice_width));
+	min_slice_count = max(min_slice_count,
+			      DIV_ROUND_UP(mode_hdisplay, max_slice_width));
 
-	/* Find the closest match to the valid slice count values */
-	for (i = 0; i < ARRAY_SIZE(valid_dsc_slicecount); i++) {
-		u8 test_slice_count = valid_dsc_slicecount[i] * num_joined_pipes;
+	return min_slice_count;
+}
 
-		/*
-		 * 3 DSC Slices per pipe need 3 DSC engines, which is supported only
-		 * with Ultrajoiner only for some platforms.
-		 */
-		if (valid_dsc_slicecount[i] == 3 &&
-		    (!HAS_DSC_3ENGINES(display) || num_joined_pipes != 4))
+static bool
+intel_dp_dsc_get_slice_config(const struct intel_connector *connector,
+			      int mode_clock, int mode_hdisplay,
+			      int num_joined_pipes,
+			      struct intel_dsc_slice_config *config_ret)
+{
+	struct intel_display *display = to_intel_display(connector);
+	int min_slice_count =
+		intel_dp_dsc_min_slice_count(connector, mode_clock, mode_hdisplay);
+	bool is_edp =
+		connector->base.connector_type == DRM_MODE_CONNECTOR_eDP;
+	u32 sink_slice_count_mask =
+		drm_dp_dsc_sink_slice_count_mask(connector->dp.dsc_dpcd, is_edp);
+	int slices_per_pipe;
+
+	/*
+	 * Find the closest match to the valid slice count values
+	 *
+	 * Max HW DSC-per-pipe x slice-per-DSC (= slice-per-pipe) capability:
+	 * ICL:  2x2
+	 * BMG:  2x2, or for ultrajoined 4 pipes: 3x1
+	 * TGL+: 2x4 (TODO: Add support for this)
+	 *
+	 * TODO: Explore if it's worth increasing the number of slices (from 1
+	 * to 2 or 3), so that multiple VDSC engines can be used, thus
+	 * reducing the minimum CDCLK requirement, which in turn is determined
+	 * by the 1 pixel per clock VDSC engine throughput in
+	 * intel_vdsc_min_cdclk().
+	 */
+	for (slices_per_pipe = 1; slices_per_pipe <= 4; slices_per_pipe++) {
+		struct intel_dsc_slice_config config;
+		int slices_per_line;
+
+		if (!intel_dsc_get_slice_config(display,
+						num_joined_pipes, slices_per_pipe,
+						&config))
 			continue;
 
-		if (!(drm_dp_dsc_slice_count_to_mask(test_slice_count) &
+		slices_per_line = intel_dsc_line_slice_count(&config);
+
+		if (!(drm_dp_dsc_slice_count_to_mask(slices_per_line) &
 		      sink_slice_count_mask))
 			continue;
 
-		 /*
-		  * Bigjoiner needs small joiner to be enabled.
-		  * So there should be at least 2 dsc slices per pipe,
-		  * whenever bigjoiner is enabled.
-		  */
-		if (num_joined_pipes > 1 && valid_dsc_slicecount[i] < 2)
+		if (mode_hdisplay % slices_per_line)
 			continue;
 
-		if (mode_hdisplay % test_slice_count)
-			continue;
+		if (min_slice_count <= slices_per_line) {
+			*config_ret = config;
 
-		if (min_slice_count <= test_slice_count)
-			return test_slice_count;
+			return true;
+		}
 	}
 
 	/* Print slice count 1,2,4,..24 if bit#0,1,3,..23 is set in the mask. */
@@ -1064,7 +1086,21 @@ u8 intel_dp_dsc_get_slice_count(const struct intel_connector *connector,
 		    min_slice_count,
 		    (int)BITS_PER_TYPE(sink_slice_count_mask), &sink_slice_count_mask);
 
-	return 0;
+	return false;
+}
+
+u8 intel_dp_dsc_get_slice_count(const struct intel_connector *connector,
+				int mode_clock, int mode_hdisplay,
+				int num_joined_pipes)
+{
+	struct intel_dsc_slice_config config;
+
+	if (!intel_dp_dsc_get_slice_config(connector,
+					   mode_clock, mode_hdisplay,
+					   num_joined_pipes, &config))
+		return 0;
+
+	return intel_dsc_line_slice_count(&config);
 }
 
 static bool source_can_output(struct intel_dp *intel_dp,
@@ -1476,9 +1512,13 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 		if (intel_dp_is_edp(intel_dp)) {
 			dsc_max_compressed_bpp =
 				drm_edp_dsc_sink_output_bpp(connector->dp.dsc_dpcd) >> 4;
+
 			dsc_slice_count =
-				drm_dp_dsc_sink_max_slice_count(connector->dp.dsc_dpcd,
-								true);
+				intel_dp_dsc_get_slice_count(connector,
+							     target_clock,
+							     mode->hdisplay,
+							     num_joined_pipes);
+
 			dsc = dsc_max_compressed_bpp && dsc_slice_count;
 		} else if (drm_dp_sink_supports_fec(connector->dp.fec_capability)) {
 			unsigned long bw_overhead_flags = 0;
@@ -2032,12 +2072,14 @@ static int dsc_compute_link_config(struct intel_dp *intel_dp,
 			} else {
 				unsigned long bw_overhead_flags =
 					pipe_config->fec_enable ? DRM_DP_BW_OVERHEAD_FEC : 0;
+				int line_slice_count =
+					intel_dsc_line_slice_count(&pipe_config->dsc.slice_config);
 
 				if (!is_bw_sufficient_for_dsc_config(intel_dp,
 								     link_rate, lane_count,
 								     adjusted_mode->crtc_clock,
 								     adjusted_mode->hdisplay,
-								     pipe_config->dsc.slice_count,
+								     line_slice_count,
 								     dsc_bpp_x16,
 								     bw_overhead_flags))
 					continue;
@@ -2382,47 +2424,10 @@ int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 		}
 	}
 
-	/* Calculate Slice count */
-	if (intel_dp_is_edp(intel_dp)) {
-		pipe_config->dsc.slice_count =
-			drm_dp_dsc_sink_max_slice_count(connector->dp.dsc_dpcd,
-							true);
-		if (!pipe_config->dsc.slice_count) {
-			drm_dbg_kms(display->drm,
-				    "Unsupported Slice Count %d\n",
-				    pipe_config->dsc.slice_count);
-			return -EINVAL;
-		}
-	} else {
-		u8 dsc_dp_slice_count;
-
-		dsc_dp_slice_count =
-			intel_dp_dsc_get_slice_count(connector,
-						     adjusted_mode->crtc_clock,
-						     adjusted_mode->crtc_hdisplay,
-						     num_joined_pipes);
-		if (!dsc_dp_slice_count) {
-			drm_dbg_kms(display->drm,
-				    "Compressed Slice Count not supported\n");
-			return -EINVAL;
-		}
-
-		pipe_config->dsc.slice_count = dsc_dp_slice_count;
-	}
-	/*
-	 * VDSC engine operates at 1 Pixel per clock, so if peak pixel rate
-	 * is greater than the maximum Cdclock and if slice count is even
-	 * then we need to use 2 VDSC instances.
-	 * In case of Ultrajoiner along with 12 slices we need to use 3
-	 * VDSC instances.
-	 */
-	if (pipe_config->joiner_pipes && num_joined_pipes == 4 &&
-	    pipe_config->dsc.slice_count == 12)
-		pipe_config->dsc.num_streams = 3;
-	else if (pipe_config->joiner_pipes || pipe_config->dsc.slice_count > 1)
-		pipe_config->dsc.num_streams = 2;
-	else
-		pipe_config->dsc.num_streams = 1;
+	if (!intel_dp_dsc_get_slice_config(connector, adjusted_mode->crtc_clock,
+					   adjusted_mode->crtc_hdisplay, num_joined_pipes,
+					   &pipe_config->dsc.slice_config))
+		return -EINVAL;
 
 	ret = intel_dp_dsc_compute_params(connector, pipe_config);
 	if (ret < 0) {
@@ -2440,7 +2445,7 @@ int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 		    "Compressed Bpp = " FXP_Q4_FMT " Slice Count = %d\n",
 		    pipe_config->pipe_bpp,
 		    FXP_Q4_ARGS(pipe_config->dsc.compressed_bpp_x16),
-		    pipe_config->dsc.slice_count);
+		    intel_dsc_line_slice_count(&pipe_config->dsc.slice_config));
 
 	return 0;
 }
