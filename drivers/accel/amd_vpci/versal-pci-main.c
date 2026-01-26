@@ -8,6 +8,7 @@
 #include <linux/pci.h>
 
 #include "versal-pci.h"
+#include "versal-pci-comm-chan.h"
 #include "versal-pci-rm-service.h"
 #include "versal-pci-rm-queue.h"
 
@@ -98,6 +99,67 @@ release_firmware:
 	return ret;
 }
 
+int versal_pci_load_xclbin(struct versal_pci_device *vdev, uuid_t *xuuid)
+{
+	const char *xclbin_location = "xilinx/xclbins";
+	char fw_name[128];
+	const struct firmware *fw;
+	struct axlf *xclbin;
+	int ret;
+
+	ret = snprintf(fw_name, sizeof(fw_name), "%s/%pUb_%s.xclbin",
+		       xclbin_location, xuuid, vdev->fw_id);
+	if (ret >= sizeof(fw_name)) {
+		vdev_err(vdev, "uuid is too long");
+		return -EINVAL;
+	}
+
+	vdev_info(vdev, "trying to load %s", fw_name);
+	ret = request_firmware(&fw, fw_name, &vdev->pdev->dev);
+	if (ret) {
+		vdev_warn(vdev, "request xclbin fw %s failed %d", fw_name, ret);
+		return ret;
+	}
+
+	xclbin = (struct axlf *)fw->data;
+	if (memcmp(xclbin->magic, VERSAL_XCLBIN_MAGIC_ID, sizeof(VERSAL_XCLBIN_MAGIC_ID))) {
+		vdev_err(vdev, "Invalid fpga firmware");
+		ret = -EINVAL;
+		goto release_firmware;
+	}
+
+	if (!fw->size ||
+	    fw->size != xclbin->header.length ||
+	    fw->size < sizeof(*xclbin)) {
+		vdev_err(vdev, "Invalid xclbin size %zu", fw->size);
+		ret = -EINVAL;
+		goto release_firmware;
+	}
+
+	if (!uuid_equal(&vdev->intf_uuid, &xclbin->header.rom_uuid)) {
+		vdev_err(vdev, "base shell doesn't match uuid %pUb", &xclbin->header.uuid);
+		ret = -EINVAL;
+		goto release_firmware;
+	}
+
+	ret = versal_pci_upload_fw(vdev, RM_QUEUE_OP_LOAD_XCLBIN,
+				   (char *)xclbin, xclbin->header.length);
+	if (ret) {
+		vdev_err(vdev, "failed to load xclbin %s : %d", fw_name, ret);
+		goto release_firmware;
+	}
+
+	vdev_info(vdev, "Downloaded xclbin %pUb of size %lld Bytes",
+		  &xclbin->header.uuid, xclbin->header.length);
+
+	uuid_copy(&vdev->xclbin_uuid, &xclbin->header.uuid);
+
+release_firmware:
+	release_firmware(fw);
+
+	return ret;
+}
+
 static inline struct versal_pci_device *item_to_vdev(struct config_item *item)
 {
 	return container_of(to_configfs_subsystem(to_config_group(item)),
@@ -160,10 +222,13 @@ static const struct config_item_type versal_pci_cfs_table = {
 static int versal_pci_cfs_init(struct versal_pci_device *vdev)
 {
 	struct configfs_subsystem *subsys = &vdev->cfs_subsys;
+	char dev_name[64];
 
-	snprintf(subsys->su_group.cg_item.ci_namebuf,
-		 sizeof(subsys->su_group.cg_item.ci_namebuf),
-		 "%s%x", DRV_NAME, versal_pci_devid(vdev));
+	snprintf(dev_name, sizeof(dev_name), "%s%x", DRV_NAME, versal_pci_devid(vdev));
+
+	scnprintf(subsys->su_group.cg_item.ci_namebuf,
+		  sizeof(subsys->su_group.cg_item.ci_namebuf),
+		  "%s", dev_name);
 
 	subsys->su_group.cg_item.ci_type = &versal_pci_cfs_table;
 
@@ -185,6 +250,7 @@ static void versal_pci_device_teardown(struct versal_pci_device *vdev)
 {
 	versal_pci_cfs_fini(&vdev->cfs_subsys);
 	versal_pci_fw_fini(vdev);
+	versal_pci_comm_chan_fini(vdev->ccdev);
 	versal_pci_rm_fini(vdev->rdev);
 }
 
@@ -236,6 +302,13 @@ static int versal_pci_device_setup(struct versal_pci_device *vdev)
 		return ret;
 	}
 
+	vdev->ccdev = versal_pci_comm_chan_init(vdev);
+	if (IS_ERR(vdev->ccdev)) {
+		ret = PTR_ERR(vdev->ccdev);
+		vdev_err(vdev, "Failed to init comm channel, err %d", ret);
+		goto rm_fini;
+	}
+
 	ret = versal_pci_fw_init(vdev);
 	if (ret) {
 		vdev_err(vdev, "Failed to init fw, err %d", ret);
@@ -251,6 +324,9 @@ static int versal_pci_device_setup(struct versal_pci_device *vdev)
 	return 0;
 
 comm_chan_fini:
+	versal_pci_comm_chan_fini(vdev->ccdev);
+
+rm_fini:
 	versal_pci_rm_fini(vdev->rdev);
 	versal_pci_fw_fini(vdev);
 

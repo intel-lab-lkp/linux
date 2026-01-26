@@ -26,6 +26,7 @@
 	dev_dbg(&(vdev)->pdev->dev, fmt, ##args)
 
 struct versal_pci_device;
+struct comm_chan_device;
 struct rm_cmd;
 
 struct axlf_header {
@@ -52,13 +53,18 @@ struct versal_pci_device {
 	struct pci_dev			*pdev;
 
 	struct rm_device		*rdev;
+	struct comm_chan_device         *ccdev;
 	struct fw_info			fw;
 
 	void __iomem			*io_regs;
+	uuid_t				xclbin_uuid;
 	uuid_t				intf_uuid;
 	__u8				fw_id[UUID_STRING_LEN + 1];
 
 	struct configfs_subsystem	cfs_subsys;
 };
+
+/* versal pci driver APIs */
+int versal_pci_load_xclbin(struct versal_pci_device *vdev, uuid_t *xclbin_uuid);
 
 #endif	/* __VERSAL_PCI_H */
